@@ -1,6 +1,6 @@
 # OPC 层
 
-状态：契约已写，实现属于计划第 2 项，等第 1 项确认后再开工。
+状态：已实现。人工用 Excel / Word / PowerPoint 打开另存文件的检查见 `docs/checklist-xlsx.md` 的 O1、O2。
 
 OPC 指 Open Packaging Conventions：文件是一个 ZIP，里面有部件、内容类型和关系。ECMA-376 §9 规定 Office 文档用 ZIP 作物理包，且不使用 interleaving。
 

@@ -1,6 +1,6 @@
 # 架构
 
-状态：xlsx 文档待确认。docx / pptx 只定边界，不定第一期实现细节。
+状态：xlsx 已实现，待用 Excel / WPS 按 `docs/checklist-xlsx.md` 打开检查。docx / pptx 只定边界，不定第一期实现细节。
 
 ## 产品形态
 

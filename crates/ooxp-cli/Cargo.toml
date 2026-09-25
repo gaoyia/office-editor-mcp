@@ -1,0 +1,15 @@
+[package]
+name = "ooxp-cli"
+version = { workspace = true }
+edition = { workspace = true }
+license = { workspace = true }
+description = "ooxp 命令行"
+
+[[bin]]
+name = "ooxp"
+path = "src/main.rs"
+
+[dependencies]
+ooxp = { path = "../ooxp" }
+clap = { workspace = true }
+serde_json = { workspace = true }

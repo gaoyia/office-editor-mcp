@@ -20,14 +20,14 @@
 
 这里有两层 JSON，不要混成一层：
 
-- **领域 JSON**：`inspect`、`create`、`apply` 的入参和出参。库和命令行只认这一层。
+- **领域 JSON**：读写 Office 文档用的约定，即 `inspect`、`create`、`apply` 的入参和出参。库和命令行只认这一层。
 - **传输 JSON**：MCP 那一层的协议信封。目前倾向于用 JSON-RPC 2.0（走 stdio），把领域 JSON 放进 RPC 的 `params` 字段里。这只是当前的倾向，不是硬性规定，真正开工做 MCP 时可以重新评估；但不管最后选哪种传输方式，都不允许为了迁就它去改动领域 JSON。
 
 ## 实现上的硬约束
 
 - OPC 层（ZIP 容器、`[Content_Types].xml`、各级 `.rels`）自己写。改内容时只动目标 XML 节点，其余部件按原来的字节写回。
 - **不要**把 `office_oxide` 写进 `Cargo.toml`。想参考它的做法，去它的公开仓库看就行；不要在本仓库放三方包目录，也不要加 git 子模块。
-- 代码还没有开始写。任务怎么拆、每一项是什么状态，都记在 `.plan/` 目录里。
+- 代码按 `.plan/` 推进。xlsx 路径已有实现，docx / pptx 尚未开工。
 - 规格和契约以 `docs/` 为真源：**先改文档，等用户确认，再动代码**。
 
 ## 怎么查 OOXML 规范
@@ -38,19 +38,22 @@
 
 ## 目录结构
 
-仓库根目录现在大致是这样，Rust crate 的目录还没有建：
+仓库根目录现在大致是这样：
 
 ```text
 .
 ├── AGENTS.md                          ← 本文件
+├── Cargo.toml                         ← workspace
+├── crates/
+│   ├── ooxp/                          ← 库：opc、json、xlsx
+│   └── ooxp-cli/                      ← 命令行，二进制名 ooxp
 ├── .agents/
 │   └── rules/
-│       ├── engineering-principles.md  ← 工程原则：质量、文档先行、计划/实施/验证、状态标记
-│       └── output-style.md            ← 输出规范：怎么说话，怎么排版
+│       ├── engineering-principles.md
+│       └── output-style.md
 ├── .plan/
 │   └── 2026年-9月-25日-⚠️-ooxp.md
-│                                      ← 范围、1–6 号子任务、暂缓项、架构要点
-├── docs/                              ← 规格真源。xlsx 契约已写，待确认后再写代码
+├── docs/                              ← 规格真源
 │   ├── architecture.md
 │   ├── json-contract.md
 │   ├── opc.md
@@ -65,15 +68,13 @@
     ├── MS-DOCX.pdf
     ├── MS-XLSX.pdf
     ├── MS-PPTX.pdf
-    ├── pdf_to_md.py                   ← 按 PDF 书签把规范抽成 Markdown，读的是电子文字层，不做 OCR
+    ├── pdf_to_md.py
     └── md/
-        ├── ECMA-376-Part1-5th-2016/   ← 总规范分章：xlsx 公式在 18.17 附近，PPT 动画在 19.5 附近
+        ├── ECMA-376-Part1-5th-2016/
         ├── MS-DOCX/
         ├── MS-XLSX/
         └── MS-PPTX/
 ```
-
-`crates/` 等用户确认 `docs/` 之后、计划表第 2 项开工时才会出现。
 
 ## 建议的开工顺序
 
