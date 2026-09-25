@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "C:/Users/GaoYi-AMD/Desktop/test/manual-check/07-wps-media.docx",
+  "output": "C:/Users/GaoYi-AMD/Desktop/test/manual-check/08-media-applied.docx",
+  "ops": [
+    { "op": "setParaText", "id": "para:00000001", "text": "修订后：样式、列表、插图还在不在" },
+    { "op": "setParaText", "id": "para:00000002", "text": "导语已换。若仍居中且有浅底，说明段落底纹留下了。" },
+    { "op": "setParaText", "id": "para:00000003", "text": "段落样式（已改名）" },
+    { "op": "setParaText", "id": "para:00000004", "text": "引用段已换字。左缩进、斜体、左边框应还在。" },
+    { "op": "setParaText", "id": "para:00000005", "text": "符号列表说明已换。" },
+    { "op": "setParaText", "id": "para:00000006", "text": "甲项已改：项目符号应还在。" },
+    { "op": "setParaText", "id": "para:00000007", "text": "乙项已改：项目符号应还在。" },
+    { "op": "setParaText", "id": "para:00000008", "text": "字符样式（已改名）" },
+    { "op": "setParaText", "id": "para:00000009", "text": "楷体蓝字下划线还在的话，run 样式留下了。" },
+    { "op": "setParaText", "id": "para:0000000A", "text": "删除线和黄底还在的话，这一段也算保住了。" },
+    { "op": "setParaText", "id": "para:0000000B", "text": "插图（已改名）" },
+    { "op": "setParaText", "id": "para:0000000C", "text": "宽图图说已换。蓝图应仍在这段里。" },
+    { "op": "setParaText", "id": "para:0000000D", "text": "方图图说已换。红框小图应还在，并绕排在文字旁。" },
+    { "op": "setParaText", "id": "para:0000000E", "text": "图下这段已换字。上面两张图都不该丢。" },
+    { "op": "setParaText", "id": "para:00000011", "text": "文末已改成新的收束句。" }
+  ]
+}

@@ -4,6 +4,21 @@
 
 检查前用 create 或 apply 在本机生成文件，不要用改过扩展名的 zip 目录冒充。
 
+## 本机结果（2026-09-26）
+
+WPS 文字与 Microsoft Word 16.0 均已打开，用户确认通过。create、inspect、apply 三组都过了，原样保存的 O1 没验成。本机 `Word.Application` 仍被 WPS 抢走，测试是直接启动 `WINWORD.EXE` 再挂 COM。create 产物在 Word 里以兼容模式打开（`CompatibilityMode=12`），无修复提示，原因见计划表的 A11。
+
+| 序号 | 状态 | 结果 |
+| --- | --- | --- |
+| C1 | ✅ | Word 16.0 能打开 `manual-check/office/docx-create.docx`，标题栏无 Repair；以兼容模式打开（`CompatibilityMode=12`） |
+| C2 | ✅ | WPS 此前已过 |
+| C3–C4 | ✅ | 标题 1 / 「标题」，正文 `hello` |
+| I1–I5 | ✅ | `docx:document`、`paraCount=2`、大纲 level 1、「标题」、`para:{hex}` 且 `stable`、无 scope 时没有 `paragraphs` |
+| A1–A5 | ✅ | Word 打开 apply 产物：第二段为「改过的正文」且仍加粗，第一段仍是「第一章」/标题 1，第三段未改 |
+| O1 | ❌ | 没验成。Word 对 Desktop 路径做 `SaveAs2` 会挂起，改到 `%TEMP%` 后 `Save()` 才成功，但那是 Word 自己重写整包，不是清单要的「ooxp 原样保存后未改部件 CRC 不变」 |
+
+这一轮用的样例都没有文本框。带 `mc:AlternateContent` 或 `w:txbxContent` 的文件另有缺陷，见计划表的 A9，那类文件的 I1–I5 现在过不了。
+
 ## create
 
 用 `docs/examples/docx-create.json` 生成 `note.docx`。

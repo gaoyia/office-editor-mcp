@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "action": "inspect",
+  "path": "C:/Users/GaoYi-AMD/Desktop/test/manual-check/02-wps-source.docx",
+  "format": "docx",
+  "scope": { "from": 1, "maxParas": 200 }
+}

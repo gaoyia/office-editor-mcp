@@ -5,3 +5,10 @@
 *.docx
 *.pptx
 !docs/examples/**
+
+# 人工验收：脚本、请求 JSON 和说明入库，Office 产物、素材图与 COM 日志留在本地
+manual-check/**
+!manual-check/**/
+!manual-check/README.md
+!manual-check/**/*.ps1
+!manual-check/**/requests/*.json

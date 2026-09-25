@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "action": "create",
+  "path": "c:/Users/GaoYi-AMD/Desktop/test/manual-check/office/docx-create.docx",
+  "format": "docx",
+  "document": {
+    "paragraphs": [
+      {
+        "text": "标题",
+        "style": "Heading1"
+      },
+      {
+        "text": "hello"
+      }
+    ]
+  }
+}

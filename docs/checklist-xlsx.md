@@ -6,17 +6,17 @@
 
 ## 本机结果（2026-09-26）
 
-文件已从工作区删除，结论留在本清单。本机是 WPS 表格，没有 Microsoft Excel。用户确认：ooxp 打补丁后的工作簿，与 WPS 对同一源文件做同样三处编辑后的工作簿，肉眼一致。WPS COM 把值、公式、数字格式、加粗、字号、字体色、填充、列宽逐格读出，差异数为 0。
+WPS 表格与 Microsoft Excel 16.0 均已打开，用户确认通过。本机 `Excel.Application` 仍被 WPS 抢走，测试是直接启动 `EXCEL.EXE` 再挂 COM。
 
-| 序号 | 结果 |
-| --- | --- |
-| C1 | 未测（无 Excel） |
-| C2–C7 | 通过（WPS 打开 create 产物，格子与公式符合标准） |
-| I1–I6 | 通过（有范围的 inspect 含 A1/A2/A3/B1、无 E1；无 scope 时没有 `cells`） |
-| A1 | WPS 通过；Excel 未测 |
-| A2–A7 | 通过（WPS；ooxp 产物与 WPS 同样编辑后的文件一致） |
-| O1 | xlsx/WPS 能打开；Word、PowerPoint、Excel 未测 |
-| O2 | 通过（上述两份肉眼与 COM 均一致；未改部件 CRC 与打补丁前相同） |
+| 序号 | 状态 | 结果 |
+| --- | --- | --- |
+| C1 | ✅ | Excel 16.0 打开 `manual-check/office/xlsx-create.xlsx`，标题栏无 Repair |
+| C2–C7 | ✅ | WPS 此前已过；Excel：Sheet1、A1=1、A2=hello、A3=TRUE、B1=`=SUM(A1)` 且值为 1 |
+| I1–I6 | ✅ | 有范围的 inspect 含 A1/A2/A3/B1、无 E1；无 scope 时没有 `cells` |
+| A1 | ✅ | Excel 打开 `xlsx-applied.xlsx`，标题栏无 Repair；WPS 此前已过 |
+| A2–A7 | ✅ | Excel：A1=42，B1=`=SUM(A1:A10)` 值为 47，C1 空且数字格式仍是 `0.00`，Sheet2 未动，E1 加粗/红字/黄底/列宽 20 还在，D1 重算为 84 |
+| O1 | ⚠️ | Excel 能打开 create 与 apply 产物。O1 原本要求三种格式都验：Word 那半边见 `checklist-docx.md`，也没验成；PowerPoint 未做 |
+| O2 | ✅ | 未改表与未点名格子的样式还在；未改部件 CRC 与打补丁前相同 |
 
 ## create
 

@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "action": "create",
+  "path": "c:/Users/GaoYi-AMD/Desktop/test/manual-check/office/xlsx-create.xlsx",
+  "format": "xlsx",
+  "workbook": {
+    "sheets": [
+      {
+        "cells": [
+          {
+            "ref": "A1",
+            "value": 1
+          },
+          {
+            "ref": "A2",
+            "value": "hello"
+          },
+          {
+            "ref": "A3",
+            "value": true
+          },
+          {
+            "ref": "B1",
+            "formula": "=SUM(A1)"
+          }
+        ],
+        "name": "Sheet1"
+      }
+    ]
+  }
+}

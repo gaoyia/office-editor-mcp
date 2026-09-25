@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "C:/Users/GaoYi-AMD/Desktop/test/manual-check/05-wps-rich.docx",
+  "output": "C:/Users/GaoYi-AMD/Desktop/test/manual-check/06-rich-applied.docx",
+  "ops": [
+    { "op": "setParaText", "id": "para:00000001", "text": "修订后的总标题：一次改多段，用来看换行和标题层级还在不在" },
+    { "op": "setParaText", "id": "para:00000002", "text": "导语已替换。这里故意写得很长：ooxp 只改可见文字，不重建整篇 document.xml。请看这一段是否仍是正文、是否自动换行，以及下面加粗红字、斜体是否还在。" },
+    { "op": "setParaText", "id": "para:00000003", "text": "第一节（已改名）" },
+    { "op": "setParaText", "id": "para:00000004", "text": "红字加粗还在的话，说明 run 样式留下了。" },
+    { "op": "setParaText", "id": "para:00000005", "text": "斜体还在的话，这一段也算保住了。" },
+    { "op": "setParaText", "id": "para:00000006", "text": "" },
+    { "op": "setParaText", "id": "para:00000009", "text": "文末已改成新的收束句。" }
+  ]
+}

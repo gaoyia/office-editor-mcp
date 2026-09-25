@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "action": "create",
+  "path": "C:/Users/GaoYi-AMD/Desktop/test/manual-check/05-ooxp-rich.docx",
+  "format": "docx",
+  "document": {
+    "paragraphs": [
+      { "style": "Heading1", "text": "原总标题" },
+      { "text": "这是导语，改完后应变成一段很长的说明。" },
+      { "style": "Heading2", "text": "第一节" },
+      { "text": "这一段会被加粗标红，改字后加粗应还在。" },
+      { "text": "这一段会被改成斜体样式后再换字。" },
+      { "text": "这一段会被清空，应留下一个空段落。" },
+      { "text": "这一段不要改，用来对照。" },
+      { "style": "Heading3", "text": "小节" },
+      { "text": "文末原句。" }
+    ]
+  }
+}

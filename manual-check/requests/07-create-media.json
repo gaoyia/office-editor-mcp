@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "action": "create",
+  "path": "C:/Users/GaoYi-AMD/Desktop/test/manual-check/07-ooxp-media.docx",
+  "format": "docx",
+  "document": {
+    "paragraphs": [
+      { "style": "Heading1", "text": "样式与插图" },
+      { "text": "这段会被居中，并加上浅色底纹。" },
+      { "style": "Heading2", "text": "段落样式" },
+      { "text": "这段会做成引用：左缩进、斜体、左边框。" },
+      { "text": "下面两项会做成项目符号。" },
+      { "text": "符号项甲" },
+      { "text": "符号项乙" },
+      { "style": "Heading2", "text": "字符样式" },
+      { "text": "这段会改成楷体、下划线、蓝色。" },
+      { "text": "这段会加黄色高亮和删除线。" },
+      { "style": "Heading2", "text": "插图" },
+      { "text": "【宽图】图说写在图后面，改字后图应还在。" },
+      { "text": "【方图】这张会更小、加边框，改字后边框应还在。" },
+      { "text": "图下这段会改字，两张图都应还在。" },
+      { "text": "这一段不要改，用来对照。" },
+      { "style": "Heading3", "text": "收束" },
+      { "text": "文末原句。" }
+    ]
+  }
+}

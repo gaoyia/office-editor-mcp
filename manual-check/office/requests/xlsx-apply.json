@@ -1,0 +1,1 @@
+{"output":"C:/Users/GaoYi-AMD/Desktop/test/manual-check/office/xlsx-applied.xlsx","path":"C:/Users/GaoYi-AMD/Desktop/test/manual-check/office/xlsx-excel-source.xlsx","schemaVersion":1,"ops":[{"op":"setCell","id":"cell:Sheet1!A1","value":42},{"formula":"=SUM(A1:A10)","op":"setCell","id":"cell:Sheet1!B1"},{"op":"setCell","id":"cell:Sheet1!C1","value":null}],"action":"apply"}

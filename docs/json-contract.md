@@ -51,6 +51,13 @@ id 是给模型用的字符串，必须能从文件内容稳定算出来，不�
 
 标题和正文都是段落，不另编一套 id。页眉、页脚、脚注、尾注、批注、文本框里的段落第一期不进这棵树，也不接受 apply。
 
+「文本框里的段落不算段落」这句要有可执行的判定，否则实现容易一路钻进去。边界按下面两条划：
+
+- 遍历主文档时遇到 `w:txbxContent` 就停住，不再往下走。文本框里的 `w:p` 不计入 `paraCount`，不出现在 `outline` 与 `paragraphs` 里，它们的 `w:t` 也不并进外层段落的 `text`。拿文本框里的 `paraId` 发 apply，报 `IdNotFound`。
+- 遇到 `mc:AlternateContent` 只走第一个 `mc:Choice`；没有 `mc:Choice` 才走 `mc:Fallback`。两支都走会把同一份内容读出两遍，也会让 apply 只改到其中一支、另一支不同步。这条对 `paraCount`、`outline`、`paragraphs`、`text` 和 apply 一律适用。
+
+Word 2010 以后插入文本框、图表、SmartArt 都是 `mc:AlternateContent` 套 `w:txbxContent` 的写法，所以这两条不是边角情况。
+
 同一主文档部件里若出现重复的 `w14:paraId`（违反 MS-DOCX，但现实文件可能有），inspect 照样列出每一段；apply 命中文档顺序中的第一段。
 
 ### pptx（预留，第一期不实现）
@@ -231,14 +238,14 @@ xlsx 与 docx 共用 `scope` 这个字段名，里面的键按格式分，混用
 规则：
 
 - 只读主文档部件（根关系里 `/officeDocument` 那条，常见路径 `/word/document.xml`）。页眉页脚、脚注、批注不读。
-- `paraCount` 是主文档里 `w:p` 的总数，含表格单元格里的段落，始终出现。
+- `paraCount` 是主文档里 `w:p` 的总数，含表格单元格里的段落，不含文本框里的段落，始终出现。
 - `outline` 始终出现。收入满足下面任一条件的段落：`w:pStyle/@w:val` 为 `Heading1`–`Heading9`（大小写不敏感）或 `标题1`–`标题9`；或者 `w:outlineLvl/@w:val` 为 `0`–`8`。树上 `level` 从 1 到 9。`Heading1` / `标题1` / `outlineLvl=0` 都是 `level: 1`。不是标题的段落不进 `outline`。
 - 省略 `scope` 时没有 `paragraphs`、`from`、`truncated`。
 - 给了 `from` 和 `maxParas` 时，`paragraphs` 按文档顺序切片。范围内段落数超过 `maxParas` 则 `truncated` 为 `true`。
 - `style` 取 `w:pStyle/@w:val` 的原文。没有 `pStyle` 则为 `null`（Word 此时按 Normal 显示，树上不猜）。
-- `text` 是可见纯文本：该 `w:p` 内、不在 `w:del` 里的 `w:t` 按顺序拼接；`w:tab` 变成 `\t`，`w:br` 变成 `\n`。`w:instrText`（域指令）不进入。不含 run 级样式。
+- `text` 是可见纯文本：该 `w:p` 内、不在 `w:del` 里的 `w:t` 按顺序拼接；`w:tab` 变成 `\t`，`w:br` 变成 `\n`。`w:instrText`（域指令）不进入。不含 run 级样式。嵌在 `w:txbxContent` 里的 `w:t` 不算，`mc:AlternateContent` 只取一支，判定见上文 docx 那节的边界两条。
 - `stable`：有 `w14:paraId` 为 `true`，否则为 `false`。
-- 第一期不返回修订痕迹、目录域、文本框作为独立节点。含超链接或域的段落仍出现在树上，`text` 只含可见结果。
+- 第一期不返回修订痕迹和目录域。文本框里的段落既不作为独立节点出现，也不并进外层段落的 `text`。含超链接或域的段落仍出现在树上，`text` 只含可见结果。
 
 ## create
 
@@ -426,6 +433,7 @@ create 与 apply 落盘时先写入目标同目录的临时文件，再改名为
 3. 若一个都没有：在 `w:pPr` 之后插入一个新的 `w:r`/`w:t`，文本放进去。
 4. 若有：把完整新文本写入其中第一个 `w:t`（需要保留首尾空格时加 `xml:space="preserve"`）；其余这类 `w:t` 删掉；因此变空、且里面再也没有别的 run 内容的 `w:r` 删掉。第一个 run 上已有的 `w:rPr` 保留。
 5. 含超链接或域的段落仍按上面做。超链接可能不再包住整段新字，域可能被拆掉。验收只用无域、无超链接的段落。页眉页脚里的段落第一期改不到，id 若不在主文档里就 `IdNotFound`。
+6. 不往文本框里写字。第 2 步找 run 的时候，遇到 `w:txbxContent` 停住，遇到 `mc:AlternateContent` 只进第一个 `mc:Choice`（没有就进 `mc:Fallback`），判定与 inspect 那两条边界一致。某一段除文本框之外没有可改的 `w:t` 时走第 3 步插新 run，插在 `w:pPr` 之后、该段其余内容之前。这样 apply 写进去的文本，随后 inspect 读回来必须与写入值相同。
 
 ### 改动范围（docx）
 

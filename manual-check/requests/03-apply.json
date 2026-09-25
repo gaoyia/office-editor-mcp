@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "C:/Users/GaoYi-AMD/Desktop/test/manual-check/02-wps-source.docx",
+  "output": "C:/Users/GaoYi-AMD/Desktop/test/manual-check/03-applied.docx",
+  "ops": [
+    { "op": "setParaText", "id": "para:00000002", "text": "改过的正文" }
+  ]
+}

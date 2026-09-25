@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "action": "create",
+  "path": "C:/Users/GaoYi-AMD/Desktop/test/manual-check/01-create.docx",
+  "format": "docx",
+  "document": {
+    "paragraphs": [
+      { "style": "Heading1", "text": "标题" },
+      { "text": "hello" }
+    ]
+  }
+}
