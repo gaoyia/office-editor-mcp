@@ -2,7 +2,7 @@
 
 本目录是库和命令行的规格真源。行为以这里为准，不以代码或口头约定为准。要改行为，先改这里的文档，等确认后再改代码。
 
-当前 **xlsx** 的契约已经实现。docx 的 inspect / create / apply 规格写在 [json-contract.md](json-contract.md) 和 [checklist-docx.md](checklist-docx.md)，确认后再写代码。pptx 仍只定模块边界和稳定 id。
+当前 **xlsx** 与 **docx** 的契约都已实现。pptx 仍只定模块边界和稳定 id。docx 人工打开见 [checklist-docx.md](checklist-docx.md)。
 
 | 文件 | 内容 |
 | --- | --- |

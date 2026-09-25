@@ -142,7 +142,11 @@ fn row_without_r_is_not_duplicated() {
         3,
         "隐式行号的行被当成新行插了一遍：{data}"
     );
-    assert_eq!(data.matches(r#"<c r="A3""#).count(), 1, "A3 出现了两次：{data}");
+    assert_eq!(
+        data.matches(r#"<c r="A3""#).count(),
+        1,
+        "A3 出现了两次：{data}"
+    );
     assert!(data.contains("<v>999</v>"), "A3 没写进去：{data}");
     assert!(!data.contains("<v>12</v>"), "A3 的旧值还在：{data}");
 }
@@ -215,7 +219,10 @@ fn style_index_and_unknown_attributes_survive() {
     let text = part(&out, "xl/worksheets/sheet1.xml");
     let data = sheet_data_of(&text);
     assert!(data.contains(r#"<c r="A1" s="3"><v>42</v></c>"#), "{data}");
-    assert!(data.contains(r#"<c r="A2" s="3"/>"#), "清空后样式索引没保住：{data}");
+    assert!(
+        data.contains(r#"<c r="A2" s="3"/>"#),
+        "清空后样式索引没保住：{data}"
+    );
     assert!(text.contains(r#"<col min="1" max="1" width="18.5" customWidth="1"/>"#));
     assert!(text.contains(r#"spans="1:3" ht="20" customHeight="1""#));
     assert!(text.contains("<pageMargins"));
@@ -265,8 +272,14 @@ fn calc_chain_and_its_traces_are_removed() {
     assert!(!part(&out, "xl/_rels/workbook.xml.rels").contains("calcChain"));
     let wb = part(&out, "xl/workbook.xml");
     assert!(wb.contains(r#"fullCalcOnLoad="1""#));
-    assert!(wb.contains(r#"calcId="191029""#), "calcPr 上原有属性丢了：{wb}");
-    assert!(wb.contains(r#"iterateCount="42""#), "calcPr 上原有属性丢了：{wb}");
+    assert!(
+        wb.contains(r#"calcId="191029""#),
+        "calcPr 上原有属性丢了：{wb}"
+    );
+    assert!(
+        wb.contains(r#"iterateCount="42""#),
+        "calcPr 上原有属性丢了：{wb}"
+    );
 }
 
 #[test]

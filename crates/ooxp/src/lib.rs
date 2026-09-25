@@ -1,13 +1,16 @@
 //! ooxp：用领域 JSON 对 OOXML 做 inspect / create / apply。
 
+mod dispatch;
+mod docx;
 mod error;
 mod json;
 mod opc;
 mod xlsx;
 mod xml;
 
+pub use dispatch::run;
 pub use error::{Error, ErrorCode};
-pub use json::{run, written_json, RunOutput};
+pub use json::{written_json, RunOutput};
 
 #[cfg(test)]
 mod tests {
@@ -127,5 +130,109 @@ mod tests {
             panic!();
         };
         assert!(tree["sheets"][0].get("cells").is_none());
+    }
+
+    #[test]
+    fn docx_create_inspect_apply_roundtrip() {
+        let path = tmp("note.docx");
+        let req = json!({
+            "schemaVersion": 1,
+            "action": "create",
+            "path": path.to_string_lossy(),
+            "document": {
+                "paragraphs": [
+                    { "style": "Heading1", "text": "标题" },
+                    { "text": "hello" }
+                ]
+            }
+        });
+        run(&req.to_string(), None).unwrap();
+
+        let outline = json!({
+            "schemaVersion": 1,
+            "action": "inspect",
+            "path": path.to_string_lossy()
+        });
+        let RunOutput::Inspect(tree) = run(&outline.to_string(), None).unwrap() else {
+            panic!();
+        };
+        assert_eq!(tree["id"], "docx:document");
+        assert_eq!(tree["paraCount"], 2);
+        assert!(tree.get("paragraphs").is_none());
+        assert_eq!(tree["outline"][0]["level"], 1);
+        assert_eq!(tree["outline"][0]["text"], "标题");
+
+        let scoped = json!({
+            "schemaVersion": 1,
+            "action": "inspect",
+            "path": path.to_string_lossy(),
+            "scope": { "from": 1, "maxParas": 200 }
+        });
+        let RunOutput::Inspect(tree) = run(&scoped.to_string(), None).unwrap() else {
+            panic!();
+        };
+        let paras = tree["paragraphs"].as_array().unwrap();
+        assert_eq!(paras.len(), 2);
+        assert!(paras[0]["id"].as_str().unwrap().starts_with("para:"));
+        assert_eq!(paras[0]["stable"], true);
+        assert_eq!(paras[1]["text"], "hello");
+        let heading_id = paras[0]["id"].as_str().unwrap().to_string();
+
+        let patched = tmp("note.patched.docx");
+        let apply = json!({
+            "schemaVersion": 1,
+            "action": "apply",
+            "path": path.to_string_lossy(),
+            "output": patched.to_string_lossy(),
+            "ops": [{ "op": "setParaText", "id": heading_id, "text": "新标题" }]
+        });
+        run(&apply.to_string(), None).unwrap();
+
+        let again = json!({
+            "schemaVersion": 1,
+            "action": "inspect",
+            "path": patched.to_string_lossy(),
+            "scope": { "from": 1, "maxParas": 10 }
+        });
+        let RunOutput::Inspect(tree) = run(&again.to_string(), None).unwrap() else {
+            panic!();
+        };
+        assert_eq!(tree["paragraphs"][0]["text"], "新标题");
+        assert_eq!(tree["paragraphs"][0]["style"], "Heading1");
+        assert_eq!(tree["paragraphs"][1]["text"], "hello");
+    }
+
+    #[test]
+    fn docx_rejects_set_cell() {
+        let path = tmp("reject.docx");
+        let req = json!({
+            "schemaVersion": 1,
+            "action": "create",
+            "path": path.to_string_lossy(),
+            "document": { "paragraphs": [{ "text": "a" }] }
+        });
+        run(&req.to_string(), None).unwrap();
+        let err = run(
+            &json!({
+                "schemaVersion": 1,
+                "action": "apply",
+                "path": path.to_string_lossy(),
+                "ops": [{ "op": "setCell", "id": "cell:Sheet1!A1", "value": 1 }]
+            })
+            .to_string(),
+            None,
+        )
+        .unwrap_err();
+        assert_eq!(err.code(), ErrorCode::InvalidField);
+    }
+
+    #[test]
+    fn pptx_still_not_implemented() {
+        let err = run(
+            r#"{"schemaVersion":1,"action":"inspect","path":"a.pptx"}"#,
+            None,
+        )
+        .unwrap_err();
+        assert_eq!(err.code(), ErrorCode::NotImplemented);
     }
 }

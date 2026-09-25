@@ -2,8 +2,8 @@
 
 use serde_json::Value;
 
+use super::request::{parse_cell_value, SetCellValue};
 use crate::error::{Error, ErrorCode};
-use crate::json::{parse_cell_value, SetCellValue};
 use crate::opc::{
     ContentTypes, Package, Relationship, Relationships, CONTENT_TYPES_PART, ROOT_RELS_PART,
 };

@@ -4,10 +4,12 @@ mod a1;
 mod apply;
 mod create;
 mod inspect;
+mod request;
 
 pub use apply::apply;
 pub use create::create;
 pub use inspect::inspect;
+pub use request::{parse_ops, parse_scope};
 
 pub const SML_NS: &str = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
 pub const REL_NS: &str = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";

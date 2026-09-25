@@ -2,8 +2,8 @@
 
 use serde_json::{json, Value};
 
+use super::request::InspectScope;
 use crate::error::{Error, ErrorCode};
-use crate::json::InspectScope;
 use crate::opc::{self, Package};
 use crate::xml::{self, Element};
 

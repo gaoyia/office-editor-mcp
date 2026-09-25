@@ -1,6 +1,6 @@
 # 架构
 
-状态：xlsx 已实现，WPS 人工已过，Excel 本机未装。docx 规格已写入本文与 `json-contract.md`，确认前不写实现。pptx 只定边界。
+状态：xlsx 已实现，WPS 人工已过。docx 已实现，待按 `docs/checklist-docx.md` 用 Word / WPS 打开。pptx 只定边界。
 
 ## 产品形态
 
@@ -24,19 +24,20 @@ MCP 是以后的传输层，第一期不做。将来无论用不用 JSON-RPC，�
 
 ## 模块
 
-建议用 Cargo workspace，两个 crate。xlsx 路径已落地。实现 docx 时一并拆掉 `json` 对 `xlsx` 的反向依赖（审计 A1）：信封解析留在 `json`，按 `format` 分发挪到 `lib.rs`（或 `dispatch`），每种格式自己解析自己的 `scope` 与 `ops`。`docx` 和 `pptx` 目录在实现对应项时再填业务。
+建议用 Cargo workspace，两个 crate。xlsx 与 docx 已落地。信封解析在 `json`，按 `format` 分发在 `dispatch`，每种格式自己解析自己的 `scope` 与 `ops`。`pptx` 尚未实现。
 
 ```text
 crates/ooxp/                 库
   opc/                       ZIP、[Content_Types].xml、各级 .rels、按路径读写部件
-  json/                      领域 JSON 的解析、校验、错误
+  json/                      领域 JSON 信封
+  dispatch/                  按 format 分发给 xlsx / docx / pptx
   xlsx/                      工作簿 inspect / apply / create
-  docx/                      文档 inspect / apply / create（规格已写，确认后实现）
+  docx/                      文档 inspect / apply / create
   pptx/                      未实现
 crates/ooxp-cli/             命令行，只依赖 ooxp。二进制名也是 ooxp
 ```
 
-依赖方向只能是：`cli` → 库的门面；`xlsx` / `docx` / `pptx` → `opc` 与 `json`；`opc` 和 `json` 互不依赖格式模块。禁止格式模块直接操作 ZIP 字节而不走 `opc`。`json` 可以依赖格式模块的**公开入口函数**（`inspect` / `create` / `apply`），但不得定义 `SetCellOp`、工作表 `scope` 这类只属于某一种格式的类型；那些类型放在对应格式模块里。实现 docx 时把现状改成这个方向。
+依赖方向只能是：`cli` → 库的门面；`dispatch` → `json` 与各格式模块；`xlsx` / `docx` / `pptx` → `opc` 与 `json`。`json` 不依赖格式模块。禁止格式模块直接操作 ZIP 字节而不走 `opc`。`SetCellOp`、工作表 `scope`、`setParaText` 这类类型放在对应格式模块里。
 
 ### opc
 
@@ -90,4 +91,4 @@ crates/ooxp-cli/             命令行，只依赖 ooxp。二进制名也是 oox
 
 ## 阶段边界
 
-xlsx 第一期已做完（WPS 已验收，Excel 本机未装）。docx 第一期做完的标志：create 能生成 Word 和 WPS 都能打开的文档；inspect 能返回大纲并按范围返回段落文本；apply 能 `setParaText`；命令行能把这三件事跑通。pptx 不在本阶段验收。
+xlsx 第一期已做完（WPS 已验收，Excel 本机未装）。docx 第一期实现已落地，人工打开见 [checklist-docx.md](checklist-docx.md)。pptx 不在本阶段验收。

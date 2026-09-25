@@ -118,6 +118,24 @@ impl Element {
     pub fn push_element(&mut self, el: Element) {
         self.children.push(Node::Element(el));
     }
+
+    /// 前序遍历本元素及子孙。
+    pub fn walk<'a>(&'a self, f: &mut impl FnMut(&'a Element)) {
+        f(self);
+        for n in &self.children {
+            if let Node::Element(e) = n {
+                e.walk(f);
+            }
+        }
+    }
+
+    /// 在 `name` 带前缀时（如 `w:p`）给子元素用同一前缀。
+    pub fn prefixed(&self, local: &str) -> String {
+        match self.name.split_once(':') {
+            Some((pfx, _)) => format!("{pfx}:{local}"),
+            None => local.to_string(),
+        }
+    }
 }
 
 fn collect_text(el: &Element, out: &mut String) {
@@ -302,7 +320,8 @@ mod tests {
 
     #[test]
     fn declaration_survives_roundtrip() {
-        let src = br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><a x="1"><b>t</b></a>"#;
+        let src =
+            br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><a x="1"><b>t</b></a>"#;
         let out = parse(src).unwrap().to_bytes().unwrap();
         let text = String::from_utf8(out).unwrap();
         assert!(text.starts_with(r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>"#));
