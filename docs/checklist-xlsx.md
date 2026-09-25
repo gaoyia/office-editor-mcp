@@ -4,6 +4,20 @@
 
 检查前用 create 或 apply 在本机生成文件，不要用改过扩展名的 zip 目录冒充。
 
+## 本机结果（2026-09-26）
+
+文件已从工作区删除，结论留在本清单。本机是 WPS 表格，没有 Microsoft Excel。用户确认：ooxp 打补丁后的工作簿，与 WPS 对同一源文件做同样三处编辑后的工作簿，肉眼一致。WPS COM 把值、公式、数字格式、加粗、字号、字体色、填充、列宽逐格读出，差异数为 0。
+
+| 序号 | 结果 |
+| --- | --- |
+| C1 | 未测（无 Excel） |
+| C2–C7 | 通过（WPS 打开 create 产物，格子与公式符合标准） |
+| I1–I6 | 通过（有范围的 inspect 含 A1/A2/A3/B1、无 E1；无 scope 时没有 `cells`） |
+| A1 | WPS 通过；Excel 未测 |
+| A2–A7 | 通过（WPS；ooxp 产物与 WPS 同样编辑后的文件一致） |
+| O1 | xlsx/WPS 能打开；Word、PowerPoint、Excel 未测 |
+| O2 | 通过（上述两份肉眼与 COM 均一致；未改部件 CRC 与打补丁前相同） |
+
 ## create
 
 用 `docs/examples/xlsx-create.json` 生成 `book.xlsx`。
