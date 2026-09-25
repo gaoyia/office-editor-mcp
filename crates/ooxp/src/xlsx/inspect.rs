@@ -8,7 +8,7 @@ use crate::opc::{self, Package};
 use crate::xml::{self, Element};
 
 use super::a1;
-use super::{REL_CHARTSHEET, REL_DIALOGSHEET, REL_SHARED_STRINGS, REL_WORKSHEET};
+use super::{REL_CHARTSHEET, REL_DIALOGSHEET, REL_SHARED_STRINGS};
 
 struct SheetMeta {
     name: String,
@@ -99,8 +99,6 @@ fn list_sheets(
             "chartsheet"
         } else if rel.rel_type == REL_DIALOGSHEET || rel.rel_type.ends_with("/dialogsheet") {
             "dialogsheet"
-        } else if rel.rel_type == REL_WORKSHEET || rel.rel_type.ends_with("/worksheet") {
-            "worksheet"
         } else {
             "worksheet"
         };
@@ -239,21 +237,6 @@ fn classify(
     has_f: bool,
     sst: &[String],
 ) -> (&'static str, Value) {
-    if t == "inlineStr"
-        || is_el.is_some()
-            && t != "s"
-            && t != "str"
-            && t != "e"
-            && t != "b"
-            && t != "n"
-            && t != "d"
-            && t != ""
-    {
-        if t == "inlineStr" || (t.is_empty() && is_el.is_some() && v_el.is_none()) {
-            let text = is_el.map(|e| e.text_content()).unwrap_or_default();
-            return ("text", json!(text));
-        }
-    }
     match t {
         "b" => {
             let raw = v_el.map(|e| e.text_content()).unwrap_or_default();
@@ -283,6 +266,10 @@ fn classify(
             ("date", json!(text))
         }
         "n" | "" => {
+            // 省略 t 却给了 <is> 的写法少见但合法，按文本读，别当成没有值的数字。
+            if let (None, Some(is)) = (v_el, is_el) {
+                return ("text", json!(is.text_content()));
+            }
             if v_el.is_none() && is_el.is_none() && !has_f {
                 return ("empty", json!(null));
             }

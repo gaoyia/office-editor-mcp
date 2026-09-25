@@ -48,11 +48,13 @@ pub fn apply(bytes: &[u8], ops: &[SetCellOp]) -> Result<Vec<u8>, Error> {
         let doc = if let Some((_, doc)) = dirty_sheets.iter_mut().find(|(p, _)| p == &part) {
             doc
         } else {
-            let parsed = xml::parse(pkg.get(&part)?)?;
+            let mut parsed = xml::parse(pkg.get(&part)?)?;
+            // 省略 r 的行和单元格按隐式编号补成显式，否则后面插新行会让它们的编号漂移。
+            make_refs_explicit(&mut parsed.root);
             dirty_sheets.push((part.clone(), parsed));
             &mut dirty_sheets.last_mut().unwrap().1
         };
-        apply_set_cell(&mut doc.root, cell, op, &original_name)?;
+        apply_set_cell(&mut doc.root, cell, op, i)?;
         let _ = original_name;
     }
 
@@ -130,12 +132,49 @@ fn parse_cell_id(id: &str, op_index: usize) -> Result<(String, String), Error> {
     Ok((name, a1))
 }
 
+/// SpreadsheetML 允许 `<row>` 和 `<c>` 省略 `r`，此时编号由出现顺序推出（§18.3.1.73、§18.3.1.4）。
+/// 这里把隐式编号写成显式，语义不变，但后续插入新行就不会改变别的行的编号。
+fn make_refs_explicit(worksheet: &mut Element) {
+    let Some(sheet_data) = worksheet.child_by_local_mut("sheetData") else {
+        return;
+    };
+    let mut prev_row = 0u32;
+    for row in sheet_data.element_children_mut() {
+        if row.local_name() != "row" {
+            continue;
+        }
+        let declared = row.attr("r").and_then(|s| s.parse::<u32>().ok());
+        let row_num = declared.unwrap_or(prev_row + 1);
+        if declared.is_none() {
+            row.set_attr("r", row_num.to_string());
+        }
+        prev_row = row_num;
+
+        let mut prev_col = 0u32;
+        for c in row.element_children_mut() {
+            if c.local_name() != "c" {
+                continue;
+            }
+            let declared_col = c
+                .attr("r")
+                .and_then(|s| a1::parse_cell(s).ok())
+                .map(|p| p.col);
+            let col = declared_col.unwrap_or(prev_col + 1);
+            if declared_col.is_none() {
+                c.set_attr("r", a1::format_cell(col, row_num));
+            }
+            prev_col = col;
+        }
+    }
+}
+
 fn apply_set_cell(
     worksheet: &mut Element,
     cell: a1::CellRef,
     op: &SetCellOp,
-    _sheet_name: &str,
+    op_index: usize,
 ) -> Result<(), Error> {
+    reject_shared_formula_master(worksheet, cell, op_index)?;
     let sheet_data = ensure_sheet_data(worksheet);
     if matches!(&op.value, Some(SetCellValue::Null)) {
         clear_cell(sheet_data, cell);
@@ -146,6 +185,72 @@ fn apply_set_cell(
     fill_cell(c, op);
     expand_dimension(worksheet, cell);
     Ok(())
+}
+
+/// 共享公式的主格带 `ref` 和 `si`，从属格只带 `si`（§18.3.1.40）。改写或清空主格会让从属格
+/// 的 `si` 失去定义，Excel 打开时报需要修复。第一期不做公式引用平移，因此直接拒绝这条 op。
+fn reject_shared_formula_master(
+    worksheet: &Element,
+    cell: a1::CellRef,
+    op_index: usize,
+) -> Result<(), Error> {
+    let Some(sheet_data) = worksheet.child_by_local("sheetData") else {
+        return Ok(());
+    };
+    let Some(target) = find_cell(sheet_data, cell) else {
+        return Ok(());
+    };
+    let Some(f) = target.child_by_local("f") else {
+        return Ok(());
+    };
+    if f.attr("t") != Some("shared") || f.attr("ref").is_none() {
+        return Ok(());
+    }
+    let Some(si) = f.attr("si") else {
+        return Ok(());
+    };
+    if !has_shared_dependents(sheet_data, si, cell) {
+        return Ok(());
+    }
+    Err(Error::with_path(
+        ErrorCode::NotImplemented,
+        format!(
+            "{} 是共享公式的主格，改它会让引用同一 si 的单元格失去公式；请先把那些单元格改成各自独立的公式",
+            a1::format_cell(cell.col, cell.row)
+        ),
+        format!("ops[{op_index}].id"),
+    ))
+}
+
+fn find_cell(sheet_data: &Element, cell: a1::CellRef) -> Option<&Element> {
+    for row in sheet_data.children_by_local("row") {
+        if row.attr("r").and_then(|s| s.parse::<u32>().ok()) != Some(cell.row) {
+            continue;
+        }
+        for c in row.children_by_local("c") {
+            if c.attr("r").and_then(|r| a1::parse_cell(r).ok()) == Some(cell) {
+                return Some(c);
+            }
+        }
+    }
+    None
+}
+
+fn has_shared_dependents(sheet_data: &Element, si: &str, master: a1::CellRef) -> bool {
+    for row in sheet_data.children_by_local("row") {
+        for c in row.children_by_local("c") {
+            if c.attr("r").and_then(|r| a1::parse_cell(r).ok()) == Some(master) {
+                continue;
+            }
+            let Some(f) = c.child_by_local("f") else {
+                continue;
+            };
+            if f.attr("t") == Some("shared") && f.attr("si") == Some(si) {
+                return true;
+            }
+        }
+    }
+    false
 }
 
 fn ensure_sheet_data(worksheet: &mut Element) -> &mut Element {

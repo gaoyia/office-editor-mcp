@@ -60,7 +60,8 @@
     },
     "createRequest": {
       "type": "object",
-      "required": ["schemaVersion", "action", "path", "workbook"],
+      "comment": "path 省略时，落盘路径由调用方另给，命令行用 --output。",
+      "required": ["schemaVersion", "action", "workbook"],
       "additionalProperties": false,
       "properties": {
         "schemaVersion": { "const": 1 },

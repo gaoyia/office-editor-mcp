@@ -239,23 +239,17 @@ fn decl_to_string(d: &BytesDecl) -> String {
     s
 }
 
+pub const DEFAULT_DECL: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>"#;
+
 impl Document {
     pub fn to_bytes(&self) -> Result<Vec<u8>, Error> {
+        // 声明单独拼在前面：写进 Writer 内部的 Cursor 会被后续 write_event 从头覆盖。
+        let mut out = Vec::new();
+        out.extend_from_slice(self.decl.as_deref().unwrap_or(DEFAULT_DECL).as_bytes());
         let mut writer = Writer::new(Cursor::new(Vec::new()));
-        if let Some(decl) = &self.decl {
-            // 声明用手写，避免 BytesDecl 构造麻烦。
-            writer
-                .get_mut()
-                .get_mut()
-                .extend_from_slice(decl.as_bytes());
-        } else {
-            writer
-                .get_mut()
-                .get_mut()
-                .extend_from_slice(br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>"#);
-        }
         write_element(&mut writer, &self.root)?;
-        Ok(writer.into_inner().into_inner())
+        out.extend_from_slice(&writer.into_inner().into_inner());
+        Ok(out)
     }
 }
 
@@ -300,4 +294,25 @@ pub fn escape_text(s: &str) -> String {
     s.replace('&', "&amp;")
         .replace('<', "&lt;")
         .replace('>', "&gt;")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn declaration_survives_roundtrip() {
+        let src = br#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><a x="1"><b>t</b></a>"#;
+        let out = parse(src).unwrap().to_bytes().unwrap();
+        let text = String::from_utf8(out).unwrap();
+        assert!(text.starts_with(r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>"#));
+        assert!(text.ends_with(r#"<a x="1"><b>t</b></a>"#));
+    }
+
+    #[test]
+    fn missing_declaration_gets_default() {
+        let out = parse(b"<a/>").unwrap().to_bytes().unwrap();
+        let text = String::from_utf8(out).unwrap();
+        assert_eq!(text, format!("{DEFAULT_DECL}<a/>"));
+    }
 }
