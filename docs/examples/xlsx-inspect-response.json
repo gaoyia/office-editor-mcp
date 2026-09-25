@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "format": "xlsx",
+  "id": "xlsx:workbook",
+  "sheets": [
+    {
+      "id": "sheet:Sheet1",
+      "name": "Sheet1",
+      "kind": "worksheet",
+      "truncated": false,
+      "range": "A1:D20",
+      "cells": [
+        {
+          "id": "cell:Sheet1!A1",
+          "ref": "A1",
+          "type": "number",
+          "value": 1,
+          "formula": null
+        },
+        {
+          "id": "cell:Sheet1!A2",
+          "ref": "A2",
+          "type": "text",
+          "value": "hello",
+          "formula": null
+        },
+        {
+          "id": "cell:Sheet1!A3",
+          "ref": "A3",
+          "type": "boolean",
+          "value": true,
+          "formula": null
+        },
+        {
+          "id": "cell:Sheet1!B1",
+          "ref": "B1",
+          "type": "number",
+          "value": null,
+          "formula": "=SUM(A1)"
+        }
+      ]
+    }
+  ]
+}

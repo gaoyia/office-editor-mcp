@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "action": "inspect",
+  "path": "book.xlsx",
+  "format": "xlsx",
+  "scope": {
+    "sheet": "Sheet1",
+    "range": "A1:D20"
+  }
+}

@@ -1,0 +1,282 @@
+# 领域 JSON 契约
+
+`schemaVersion` 固定为 `1`。库和命令行只认这一层。MCP 或其他传输信封不许改这里的字段名和含义。机器可读副本见 [json-schema/request.schema.json](json-schema/request.schema.json)，与本文冲突时以本文为准。
+
+第一期把 xlsx 的 inspect、create、apply 写全。docx 和 pptx 只规定稳定 id，遇到这两种格式的请求返回 `NotImplemented`。
+
+## 信封
+
+每份请求都是一个 JSON 对象，必须含：
+
+| 字段 | 类型 | 含义 |
+| --- | --- | --- |
+| `schemaVersion` | 整数 | 必须是 `1` |
+| `action` | 字符串 | `inspect`、`create`、`apply` 之一 |
+
+另外按动作需要 `path`、`format`、`scope`、`workbook`、`ops` 等字段，见下文。禁止在请求里放一整棵 inspect 树来表示「把文档改成这样」。
+
+`format` 取值：`xlsx`、`docx`、`pptx`。可省略，省略时从 `path` 的扩展名推断。推断不出就报 `UnsupportedFormat`。
+
+`path` 是本地文件系统路径。Windows 反斜杠和正斜杠都接受。
+
+## 稳定 id
+
+id 是给模型用的字符串，必须能从文件内容稳定算出来，不能依赖本次运行的内存地址或随机数。
+
+解析规则按格式走。id 里的工作表名、段落 id、形状 id 都按文件里的原文，不做 Unicode 正规化。
+
+### xlsx
+
+| 节点 | id | 例子 |
+| --- | --- | --- |
+| 工作簿 | `xlsx:workbook` | `xlsx:workbook` |
+| 工作表 | `sheet:{name}` | `sheet:Sheet1`、`sheet:销售 2026` |
+| 单元格 | `cell:{name}!{A1}` | `cell:Sheet1!A1`、`cell:销售 2026!BC12` |
+
+`{name}` 是 `workbook.xml` 里 `<sheet name="...">` 的值，不是 `sheetId`，也不是 `r:id`。查找工作表时大小写不敏感，输出 id 时用文件里的原始大小写。
+
+`{A1}` 是大写列字母加行号，例如 `A1`、`AA100`。请求里若写 `a1`，库先规范成 `A1` 再生成 id。
+
+解析单元格 id：从右侧第一个 `!` 切开。右侧必须是合法 A1，左侧是工作表名。这样工作表名里即使含 `!`，也不会切错。
+
+图表工作表、宏表出现在 inspect 的表名单里，但没有单元格 id。它们的 id 仍是 `sheet:{name}`。对它们发 `setCell` 报 `InvalidField`。
+
+### docx（预留，第一期不实现）
+
+段落 id 优先用 `w14:paraId`（十六进制，见 MS-DOCX 扩展）。有该属性时：`para:{paraId}`，例如 `para:3F2A1B00`。
+
+没有 `w14:paraId` 时：`para:index:{n}`，`n` 从 1 起，按 `document.xml` 里 `w:p` 出现顺序。树上同时给 `"stable": false`。这类 id 在增删段落后会变，只够同一次 inspect 之后立刻 apply。
+
+标题和正文都是段落，不另编一套 id。
+
+### pptx（预留，第一期不实现）
+
+| 节点 | id | 例子 |
+| --- | --- | --- |
+| 页 | `slide:{n}` | `slide:1`（从 1 起，按 presentation 关系顺序） |
+| 形状 | `slide:{n}/shape:{shapeId}` | `slide:1/shape:4` |
+
+`shapeId` 是 `p:cNvPr/@id`。apply 不得删形状再重建，以免 id 变化导致动画失效。
+
+## inspect
+
+### 请求
+
+```json
+{
+  "schemaVersion": 1,
+  "action": "inspect",
+  "path": "C:\\data\\book.xlsx",
+  "format": "xlsx",
+  "scope": {
+    "sheet": "Sheet1",
+    "range": "A1:D20",
+    "maxCells": 5000
+  }
+}
+```
+
+| 字段 | 必填 | 含义 |
+| --- | --- | --- |
+| `path` | 是 | 已有文件 |
+| `scope` | 否 | 省略则只返回工作表名单，不含单元格 |
+| `scope.sheet` | 要单元格时必填 | 工作表名 |
+| `scope.range` | 要单元格时必填 | A1 区域，例如 `A1:D20`。单个单元格写成 `B3` 或 `B3:B3` |
+| `scope.maxCells` | 否 | 返回单元格上限，默认 `5000`，允许范围 `1` 到 `20000` |
+
+省略 `scope`、或只给空对象：返回工作簿节点和表名单，每张表不含 `cells`。这是默认截断。
+
+只要想看单元格，就必须同时给 `sheet` 和 `range`。不默认扫第一张表的整张纸。
+
+### 响应（xlsx）
+
+```json
+{
+  "schemaVersion": 1,
+  "format": "xlsx",
+  "id": "xlsx:workbook",
+  "sheets": [
+    {
+      "id": "sheet:Sheet1",
+      "name": "Sheet1",
+      "kind": "worksheet",
+      "truncated": true,
+      "range": "A1:D20",
+      "cells": [
+        {
+          "id": "cell:Sheet1!A1",
+          "ref": "A1",
+          "type": "number",
+          "value": 1,
+          "formula": null
+        },
+        {
+          "id": "cell:Sheet1!B1",
+          "ref": "B1",
+          "type": "text",
+          "value": "hello",
+          "formula": null
+        },
+        {
+          "id": "cell:Sheet1!C1",
+          "ref": "C1",
+          "type": "number",
+          "value": 6,
+          "formula": "=SUM(A1:A10)"
+        }
+      ]
+    },
+    {
+      "id": "sheet:Sheet2",
+      "name": "Sheet2",
+      "kind": "worksheet"
+    }
+  ]
+}
+```
+
+规则：
+
+- `sheets` 始终列出工作簿里全部表（含隐藏表），便于模型知道还有哪些表。未点名的表不带 `cells`、`range`、`truncated`。
+- `kind`：`worksheet`、`chartsheet`、`dialogsheet`。第一期只对 `worksheet` 填单元格。
+- `cells` 稀疏：范围内没有 `<c>` 的格子不出现。
+- 范围内有内容的格子超过 `maxCells` 时，按行优先、从左到右截断，`truncated` 为 `true`。未截断则为 `false`。
+- `type`：`number`、`text`、`boolean`、`error`、`date`、`empty`。对应 SpreadsheetML `ST_CellType`（§18.18.11）的映射见下表。
+- `value` 是缓存显示值，不是库算出来的。公式格的 `value` 来自 `<v>`，可能过期。没有 `<v>` 时 `value` 为 `null`。
+- `formula`：有公式则返回以 `=` 开头的字符串。XML 里 `<f>` 不含 `=`，由库补上。没有公式则为 `null`。
+- 共享公式（`<f t="shared">`）：主单元格返回其公式文本；从属单元格若 XML 里没有文本，第一期 `formula` 为 `null`，并多一个 `"shared": true`。以后可以改成展开成该格的 A1 公式，不改 id 规则。
+- 内联字符串（`t="inlineStr"`）和共享字符串（`t="s"`）在树上都是 `type: "text"`，`value` 为拼接后的可见纯文本，不含 run 级样式。
+
+类型映射：
+
+| XML `t` | 树上 `type` | `value` JSON 类型 |
+| --- | --- | --- |
+| 缺省或 `n` | `number` | 数字。解析失败则当 `text` 并把原文放进去 |
+| `s` 或 `inlineStr` 或 `str` | `text` | 字符串 |
+| `b` | `boolean` | `true` / `false`（XML 里 `1`/`0`） |
+| `e` | `error` | 字符串，例如 `"#DIV/0!"` |
+| `d` | `date` | 字符串，ISO 8601 原文 |
+| 有 `r` 但无 `v`/`is`/`f` | `empty` | `null` |
+
+日期序列值（`t` 缺省、单元格看起来像日期）第一期仍标 `number`，不根据样式猜日期。这是有意的，避免做半套日期引擎。
+
+## create
+
+只有 create 允许从 JSON 生成整包。
+
+```json
+{
+  "schemaVersion": 1,
+  "action": "create",
+  "path": "C:\\out\\book.xlsx",
+  "format": "xlsx",
+  "workbook": {
+    "sheets": [
+      {
+        "name": "Sheet1",
+        "cells": [
+          { "ref": "A1", "value": 1 },
+          { "ref": "A2", "value": "hello" },
+          { "ref": "A3", "value": true },
+          { "ref": "B1", "formula": "=SUM(A1)" }
+        ]
+      }
+    ]
+  }
+}
+```
+
+| 字段 | 含义 |
+| --- | --- |
+| `path` | 输出路径。已存在则覆盖 |
+| `workbook.sheets` | 至少一张表 |
+| `sheets[].name` | 工作表名。Excel 限制：最长 31 个字符，不含 `:*?/[]\\`，不能叫 `History`，同一工作簿内不重复 |
+| `cells[].ref` | A1 地址 |
+| `cells[].value` | 数字、字符串、布尔、或 `null`。`null` 表示不写这个格 |
+| `cells[].formula` | 以 `=` 开头的公式文本。库不求值 |
+
+`value` 和 `formula` 不能在同一格同时出现。要公式就只写 `formula`。公式格不写缓存 `<v>`，并在 `workbook.xml` 的 `calcPr` 上设 `fullCalcOnLoad="1"`，让 Excel 打开时重算。
+
+文本写入共享字符串表（`t="s"`），这是 Office 新建文件的常见写法。布尔写成 `t="b"`。数字不写 `t`（默认为 `n`）。
+
+行与单元格按行号、列号升序写出。补上 `sheetData` 和合理的 `dimension`。
+
+最小 `styles.xml` 必须生成，见 [opc.md](opc.md)。不要生成图表、透视表、条件格式。
+
+## apply
+
+apply 的入参是操作列表，不是树。下面这种写法非法，必须报 `InvalidField`：
+
+```json
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "book.xlsx",
+  "sheets": [],
+  "cells": []
+}
+```
+
+合法请求：
+
+```json
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "C:\\data\\book.xlsx",
+  "output": "C:\\data\\book.patched.xlsx",
+  "ops": [
+    { "op": "setCell", "id": "cell:Sheet1!A1", "value": 42 },
+    { "op": "setCell", "id": "cell:Sheet1!B1", "formula": "=SUM(A1:A10)" },
+    { "op": "setCell", "id": "cell:Sheet1!C1", "value": null }
+  ]
+}
+```
+
+| 字段 | 必填 | 含义 |
+| --- | --- | --- |
+| `path` | 是 | 源文件 |
+| `output` | 否 | 省略则覆盖 `path` |
+| `ops` | 是 | 非空数组。按数组顺序执行，中途失败则整次 apply 不写文件 |
+
+### setCell（第一期唯一的 op）
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"setCell"` |
+| `id` | 单元格 id |
+| `value` | 与 create 相同。`null` 表示清空该格的值和公式 |
+| `formula` | 以 `=` 开头。不能与 `value` 同时出现 |
+
+不认识的 `op` 报 `UnsupportedOp`，不要忽略。
+
+空单元格：目标格子在 XML 里还不存在时，`setCell` 按需插入 `<row>` 和 `<c>`，插在正确的行列顺序上。找不到工作表才报 `IdNotFound`。
+
+清空：去掉 `<f>`、`<v>`、`<is>`，保留 `<c>` 上的 `r`、`s` 以及不认识的属性。这样常见数字格式和字体还能在。若清空后 `<c>` 只剩 `r`（没有 `s` 也没有其他属性），可以把整个 `<c>` 删掉。
+
+改已有格子：保留 `s` 和未知属性。把文本从共享字符串改成新文本时，写成 `t="inlineStr"`，不要去改 `sharedStrings.xml` 里的旧项。改共享字符串会牵动所有引用同一索引的格子。
+
+数字、布尔按类型改 `t` 和 `<v>`。写入公式时：`<f>` 存去掉前导 `=` 的文本，`t` 若原先是 `s`/`inlineStr`/`b` 则去掉，删除 `<v>` 和 `<is>`。
+
+### 重算标记
+
+任意一条 `setCell` 成功之后，必须让打开文件的 Excel 重算。第一期用这两步，两步都做：
+
+1. 在 `/xl/workbook.xml` 的 `<calcPr>` 上设置 `fullCalcOnLoad="1"`。没有 `<calcPr>` 就建一个。其余 `calcPr` 属性保留。依据 ECMA-376 §18.2.2。
+2. 若存在 `/xl/calcChain.xml`，删除该部件、内容类型 Override、以及 workbook 关系里指向它的那条。过期计算链会让部分 Excel 版本沿用旧顺序。
+
+不在库里求值，不写新的缓存 `<v>`。
+
+### 改动范围
+
+只允许变脏的部件：
+
+- 目标工作表 XML
+- `/xl/workbook.xml`（仅 `calcPr`）
+- 可能被删除的 `/xl/calcChain.xml` 以及因此修改的关系与内容类型
+
+`styles.xml`、其他工作表、主题、绘图一律原样写回。
+
+## 两层 JSON
+
+领域 JSON 就是本文。传输层（将来的 MCP）可以把本文整个对象放进 RPC 的 `params`。不许把 JSON-RPC 的 `jsonrpc`、`method`、`id` 塞进领域对象，也不许让单元格字段去迁就 RPC。

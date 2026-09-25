@@ -48,8 +48,17 @@
 │       ├── engineering-principles.md  ← 工程原则：质量、文档先行、计划/实施/验证、状态标记
 │       └── output-style.md            ← 输出规范：怎么说话，怎么排版
 ├── .plan/
-│   └── 2026年-9月-25日-❌-office-json-rust.md
+│   └── 2026年-9月-25日-⚠️-ooxp.md
 │                                      ← 范围、1–6 号子任务、暂缓项、架构要点
+├── docs/                              ← 规格真源。xlsx 契约已写，待确认后再写代码
+│   ├── architecture.md
+│   ├── json-contract.md
+│   ├── opc.md
+│   ├── errors.md
+│   ├── cli.md
+│   ├── checklist-xlsx.md
+│   ├── examples/
+│   └── json-schema/
 ├── .bugfix-reports/                   ← 严重缺陷记录（计划中的目录，现在还不存在）
 └── standards/                         ← OOXML 规范原件与抽取结果
     ├── ECMA-376-Part1-5th-2016.pdf
@@ -64,12 +73,7 @@
         └── MS-PPTX/
 ```
 
-下面两个路径还没有落盘，属于计划里的东西：
-
-```text
-docs/                                  ← 架构文档与领域契约（schemaVersion: 1），是规格的真源
-src/ 或 crates/                        ← 库与命令行的代码（计划表第 2 项开始才会出现）
-```
+`crates/` 等用户确认 `docs/` 之后、计划表第 2 项开工时才会出现。
 
 ## 建议的开工顺序
 

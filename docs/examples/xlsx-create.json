@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "action": "create",
+  "path": "book.xlsx",
+  "format": "xlsx",
+  "workbook": {
+    "sheets": [
+      {
+        "name": "Sheet1",
+        "cells": [
+          { "ref": "A1", "value": 1 },
+          { "ref": "A2", "value": "hello" },
+          { "ref": "A3", "value": true },
+          { "ref": "B1", "formula": "=SUM(A1)" }
+        ]
+      }
+    ]
+  }
+}

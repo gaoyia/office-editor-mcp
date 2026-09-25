@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "book.xlsx",
+  "output": "book.patched.xlsx",
+  "ops": [
+    { "op": "setCell", "id": "cell:Sheet1!A1", "value": 42 },
+    { "op": "setCell", "id": "cell:Sheet1!B1", "formula": "=SUM(A1:A10)" },
+    { "op": "setCell", "id": "cell:Sheet1!C1", "value": null }
+  ]
+}

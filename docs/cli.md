@@ -1,0 +1,36 @@
+# 命令行
+
+二进制名：`ooxp`。它只做三件事：读入一份领域 JSON，交给库，把结果写到 stdout 或磁盘。
+
+## 调用
+
+```text
+ooxp [--input <文件|->] [--output <文件>]
+```
+
+| 参数 | 含义 |
+| --- | --- |
+| `--input` | 领域 JSON 的路径。值为 `-` 或省略该参数时，从 stdin 读 |
+| `--output` | 仅当请求里没有 `path`（create）或没有 `output`（apply）时作为落盘路径。inspect 忽略此参数 |
+
+第一期不提供子命令。动作完全由 JSON 的 `action` 决定。
+
+stdin 与 `--input` 同时有数据时，以 `--input` 为准；`--input` 指向普通文件时不要再读 stdin。
+
+## 标准流
+
+| 动作 | stdout | stderr | 退出码 |
+| --- | --- | --- | --- |
+| inspect 成功 | 领域树 JSON，UTF-8，末尾换行 | 空 | 0 |
+| create / apply 成功 | `{ "ok": true, "path": "...", ... }` | 空 | 0 |
+| 失败 | 空 | `{ "ok": false, "error": { ... } }` | 见 [errors.md](errors.md) |
+
+JSON 打印用稳定的字段顺序，不要求 pretty-print。调试时可以加 `--pretty`，让 stdout 带缩进。默认紧凑一行，方便管道。
+
+## 编码与路径
+
+输入输出 JSON 均为 UTF-8。路径按操作系统原样传给库，命令行自己不做 glob。
+
+## 与 MCP 的关系
+
+本表不含 MCP。将来 MCP 进程可以内部调用同一个库，不必再经过本 CLI。本 CLI 也不解析 JSON-RPC。
