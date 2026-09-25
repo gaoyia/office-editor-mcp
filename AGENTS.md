@@ -1,63 +1,76 @@
 # AGENTS.md
 
-给在本仓库工作的编码助手：先读本文和 `.agents/rules/engineering-principles.md`，再改代码。
+在本仓库动手改代码之前，请先读完这份文件，再读 `.agents/rules/engineering-principles.md`（工程原则）和 `.agents/rules/output-style.md`（输出规范）。
 
-## 背景
+## 这个仓库要做什么
 
-本仓库要做一个 **Rust 库 + 命令行**，最终再包一层 **MCP**（给 AI 操作本地 Office 文件）。
+做一个 **Rust 库，外加一个命令行工具**，用来读写本地的 Office 文件；等库和命令行稳定下来，再在外面包一层 **MCP 服务**，交给 AI 调用。
 
-只支持现代 OOXML：`.docx`、`.xlsx`、`.pptx`。不支持 `.doc` / `.xls` / `.ppt`。不实现 Word 排版引擎、Excel 公式计算引擎、PPT 完整动画时间轴。
+只支持新版的 OOXML 格式，也就是 `.docx`、`.xlsx`、`.pptx`。老的二进制格式 `.doc`、`.xls`、`.ppt` 一概不管。另外有三件事明确不做：不写 Word 的排版引擎，不写 Excel 的公式计算引擎，不做 PowerPoint 完整的动画时间轴。
 
-交互已经定死：
+终极目标是这三种格式都能全功能增、删、改、查，也就是计划文档里说的「全量」。但那是远期的事，第一期只做 `.plan/` 里列出的那几项。设计的时候往全量的方向留余地，不要做出以后堵死路的决定；验收的时候只按第一期的清单验收。
 
-1. `inspect` 返回带稳定 id 的精简 JSON 树（给模型看，按范围截断，不要默认吐全书）。
-2. `apply` 按树上的 id 打补丁；真源始终是 ZIP 里的 XML，不是把 JSON 当完整文档再生成。
-3. `create` 才允许从 JSON 生成新文件。
+## 已经定下来的交互方式
 
-领域 JSON（`inspect` / `create` / `apply`）与 MCP 用的 JSON-RPC 2.0 是两层：RPC 的 `params` 里放领域 JSON。CLI 只认领域 JSON。（由模型实现的时候取舍是否使用JSON-RPC 2.0，只是一个可能的取舍方案）
+下面三个动作是整套设计的地基，实现的时候不要改：
 
-实现约束：自研 OPC + 定点改 XML；**不要**把 `office_oxide` 加进 Cargo 依赖。需要对照时自行查阅其仓库即可，不要在本仓库建三方包目录或子模块。
+1. `inspect`：返回一棵精简的 JSON 树，树上每个节点都带一个稳定 id，专门给模型看。要按调用方给的范围截断，默认不要把整份文件的内容全部返回。
+2. `apply`：拿树上的 id 去打补丁。文件的唯一可信来源（下文称「真源」）始终是 ZIP 包里的那些 XML，绝对不能把 JSON 树当成完整文档、改完之后整包重新生成。
+3. `create`：只有新建文件的时候，才允许完全由 JSON 生成内容。
 
-当前实现尚未开工。任务拆分与状态见 `.plan/`。规格与契约以 `docs` 为真源：先更新文档、用户确认后再写代码。
+这里有两层 JSON，不要混成一层：
 
-规范检索用 `standards/md/` 分章 Markdown，当作提示与条款索引。不要整本打开 `ECMA-376-Part1-5th-2016.pdf`（五千页），也不要对规范 PDF 跑 OCR。
+- **领域 JSON**：`inspect`、`create`、`apply` 的入参和出参。库和命令行只认这一层。
+- **传输 JSON**：MCP 那一层的协议信封。目前倾向于用 JSON-RPC 2.0（走 stdio），把领域 JSON 放进 RPC 的 `params` 字段里。这只是当前的倾向，不是硬性规定，真正开工做 MCP 时可以重新评估；但不管最后选哪种传输方式，都不允许为了迁就它去改动领域 JSON。
+
+## 实现上的硬约束
+
+- OPC 层（ZIP 容器、`[Content_Types].xml`、各级 `.rels`）自己写。改内容时只动目标 XML 节点，其余部件按原来的字节写回。
+- **不要**把 `office_oxide` 写进 `Cargo.toml`。想参考它的做法，去它的公开仓库看就行；不要在本仓库放三方包目录，也不要加 git 子模块。
+- 代码还没有开始写。任务怎么拆、每一项是什么状态，都记在 `.plan/` 目录里。
+- 规格和契约以 `docs/` 为真源：**先改文档，等用户确认，再动代码**。
+
+## 怎么查 OOXML 规范
+
+查规范请用 `standards/md/` 下面按章节切好的 Markdown，把它当成线索和条款索引来用：先打开对应的 `standards/md/*/00-index.md`，找到条款号，再去读那一章的文件。
+
+`ECMA-376-Part1-5th-2016.pdf` 有五千多页，不要整本打开。也不要对任何一份规范 PDF 跑 OCR，这些 PDF 本身就带电子文字层，直接抽文字即可。
 
 ## 目录结构
 
-仓库根目录目前大致如下（Rust crate 布局尚未创建）。
+仓库根目录现在大致是这样，Rust crate 的目录还没有建：
 
 ```text
 .
 ├── AGENTS.md                          ← 本文件
 ├── .agents/
 │   └── rules/
-│       └── engineering-principles.md  ← 质量、文档先行、计划/实施/验证、状态标记
+│       ├── engineering-principles.md  ← 工程原则：质量、文档先行、计划/实施/验证、状态标记
+│       └── output-style.md            ← 输出规范：怎么说话，怎么排版
 ├── .plan/
 │   └── 2026年-9月-25日-❌-office-json-rust.md
-│                                      ← 范围、序号 1–6 子任务、暂缓项、架构要点
-├── .bugfix-reports/                   ← 计划中的严重缺陷记录目录（可尚不存在）
-└── standards/                         ← OOXML 规范与抽取结果
+│                                      ← 范围、1–6 号子任务、暂缓项、架构要点
+├── .bugfix-reports/                   ← 严重缺陷记录（计划中的目录，现在还不存在）
+└── standards/                         ← OOXML 规范原件与抽取结果
     ├── ECMA-376-Part1-5th-2016.pdf
     ├── MS-DOCX.pdf
     ├── MS-XLSX.pdf
     ├── MS-PPTX.pdf
-    ├── pdf_to_md.py                   ← 按书签把 PDF 抽成 md（电子文字层，非 OCR）
+    ├── pdf_to_md.py                   ← 按 PDF 书签把规范抽成 Markdown，读的是电子文字层，不做 OCR
     └── md/
-        ├── ECMA-376-Part1-5th-2016/   ← 总规范分章；xlsx 公式约 18.17；PPT 动画约 19.5
+        ├── ECMA-376-Part1-5th-2016/   ← 总规范分章：xlsx 公式在 18.17 附近，PPT 动画在 19.5 附近
         ├── MS-DOCX/
         ├── MS-XLSX/
         └── MS-PPTX/
 ```
 
-计划中、尚未落盘的路径：
+下面两个路径还没有落盘，属于计划里的东西：
 
 ```text
-docs/                                  ← 架构与领域契约（schemaVersion: 1），真源见工程原则
-src/ 或 crates/                        ← 自研库 + CLI（计划项 2 起）
+docs/                                  ← 架构文档与领域契约（schemaVersion: 1），是规格的真源
+src/ 或 crates/                        ← 库与命令行的代码（计划表第 2 项开始才会出现）
 ```
 
-## 建议开工顺序
+## 建议的开工顺序
 
-见计划表：**1 文档 → 2 OPC → 3.1 / 3.2 xlsx → 6 CLI**（先把 Excel 路线跑通），再 **4 docx、5 pptx**。MCP 用同一套领域 JSON，不要在第一期和 OPC 实现缠在一起。
-
-查规范时优先打开对应 `standards/md/*/00-index.md`，再读分章文件。
+按计划表来：**1 文档 → 2 OPC → 3.1 和 3.2（xlsx）→ 6 命令行**，先把 Excel 这一条路整个跑通，再回头做 **4（docx）** 和 **5（pptx）**。MCP 用的是同一套领域 JSON，第一期不要把它和 OPC 的实现混在一起做。
