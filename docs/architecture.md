@@ -1,6 +1,6 @@
 # 架构
 
-状态：xlsx 已实现，待用 Excel / WPS 按 `docs/checklist-xlsx.md` 打开检查。docx / pptx 只定边界，不定第一期实现细节。
+状态：xlsx 已实现，WPS 人工已过，Excel 本机未装。docx 规格已写入本文与 `json-contract.md`，确认前不写实现。pptx 只定边界。
 
 ## 产品形态
 
@@ -24,19 +24,19 @@ MCP 是以后的传输层，第一期不做。将来无论用不用 JSON-RPC，�
 
 ## 模块
 
-建议用 Cargo workspace，两个 crate。第一期只实现 `opc`、`json`、`xlsx`、`cli`。`docx` 和 `pptx` 目录可以先建空模块，但不写业务。
+建议用 Cargo workspace，两个 crate。xlsx 路径已落地。实现 docx 时一并拆掉 `json` 对 `xlsx` 的反向依赖（审计 A1）：信封解析留在 `json`，按 `format` 分发挪到 `lib.rs`（或 `dispatch`），每种格式自己解析自己的 `scope` 与 `ops`。`docx` 和 `pptx` 目录在实现对应项时再填业务。
 
 ```text
 crates/ooxp/                 库
   opc/                       ZIP、[Content_Types].xml、各级 .rels、按路径读写部件
   json/                      领域 JSON 的解析、校验、错误
   xlsx/                      工作簿 inspect / apply / create
-  docx/                      第一期不实现
-  pptx/                      第一期不实现
+  docx/                      文档 inspect / apply / create（规格已写，确认后实现）
+  pptx/                      未实现
 crates/ooxp-cli/             命令行，只依赖 ooxp。二进制名也是 ooxp
 ```
 
-依赖方向只能是：`cli` → 库的门面；`xlsx` / `docx` / `pptx` → `opc` 与 `json`；`opc` 和 `json` 互不依赖格式模块。禁止格式模块直接操作 ZIP 字节而不走 `opc`。
+依赖方向只能是：`cli` → 库的门面；`xlsx` / `docx` / `pptx` → `opc` 与 `json`；`opc` 和 `json` 互不依赖格式模块。禁止格式模块直接操作 ZIP 字节而不走 `opc`。`json` 可以依赖格式模块的**公开入口函数**（`inspect` / `create` / `apply`），但不得定义 `SetCellOp`、工作表 `scope` 这类只属于某一种格式的类型；那些类型放在对应格式模块里。实现 docx 时把现状改成这个方向。
 
 ### opc
 
@@ -50,12 +50,13 @@ crates/ooxp-cli/             命令行，只依赖 ooxp。二进制名也是 oox
 
 读 `xl/workbook.xml` 拿工作表名单和关系。按范围读对应 `sheetN.xml`，需要时再读 `xl/sharedStrings.xml`。apply 只改目标工作表 XML，以及为了重算而改的 `workbook.xml` 里 `calcPr`，必要时删掉 `xl/calcChain.xml`。不改 `styles.xml`，不求值公式。
 
-### docx / pptx
+### docx
 
-第一期不实现。模块职责预留如下，避免以后把格式逻辑塞进 `opc`。
+主文档由根关系里 `/officeDocument` 指向，常见路径 `/word/document.xml`。inspect 读该部件里的 `w:p`，返回大纲和按范围截断的段落。apply 只改被点名的 `w:p` 里的可见文本，不整篇从 JSON 重建。create 生成最小 Transitional 包，含 `styles.xml`（Normal 与 Heading1–3）。页眉页脚、修订、复杂表格结构第一期不改。
 
-- docx：主文档在 `word/document.xml`。inspect 返回大纲和段落。apply 按段落 id 改可见文本，不整篇重建。
-- pptx：幻灯片在 `ppt/slides/slideN.xml`。inspect 按页列出形状文本。apply 按页加形状改文字，不删形状重建，以免动画绑定失效。不改 `<p:timing>`。
+### pptx
+
+尚未实现。幻灯片在 `ppt/slides/slideN.xml`。inspect 按页列出形状文本。apply 按页加形状改文字，不删形状重建，以免动画绑定失效。不改 `<p:timing>`。
 
 ### cli
 
@@ -65,11 +66,11 @@ crates/ooxp-cli/             命令行，只依赖 ooxp。二进制名也是 oox
 
 ### inspect
 
-调用方给出路径和范围。库打开 OPC 包，定位格式入口部件（xlsx 是 Workbook 部件）。按范围读必要的 XML，生成带 id 的树。默认不读完全部单元格。包不写回。
+调用方给出路径和范围。库打开 OPC 包，定位格式入口部件（xlsx 是 Workbook，docx 是 Main Document）。按范围读必要的 XML，生成带 id 的树。xlsx 默认不读完全部单元格，docx 默认不返回 `paragraphs`。包不写回。
 
 ### apply
 
-调用方给出路径和 `ops`。库打开包，按每条 op 的 id 找到 XML 节点，只改这些节点。xlsx 在改了单元格之后，把工作簿标成打开时需要重算。保存时只重写脏部件。
+调用方给出路径和 `ops`。库打开包，按每条 op 的 id 找到 XML 节点，只改这些节点。xlsx 在改了单元格之后，把工作簿标成打开时需要重算。docx 只改被点名的段落。保存时只重写脏部件。
 
 ### create
 
@@ -78,7 +79,7 @@ crates/ooxp-cli/             命令行，只依赖 ooxp。二进制名也是 oox
 ## 硬约束
 
 - 自己实现 OPC。不要把 `office_oxide` 写进 `Cargo.toml`，不要加它的 git 子模块，不要在仓库里放它的源码目录。
-- 查规范用 `standards/md/` 的章节索引。xlsx 单元格见 ECMA-376 §18.3.1.4，公式见 §18.3.1.96 与 §18.17，共享字符串见 §18.4，计算属性见 §18.2.2，包结构见 §9 与 §12.2。
+- 查规范用 `standards/md/` 的章节索引。xlsx 单元格见 ECMA-376 §18.3.1.4，公式见 §18.3.1.96 与 §18.17，共享字符串见 §18.4，计算属性见 §18.2.2。docx 主文档见 §11.3.10，段落见 §17.3.1.22，样式见 §17.7，`w14:paraId` 见 MS-DOCX §2.6.2.3。包结构见 §9 与 §12.2。
 - 不实现 Excel 计算引擎、Word 排版引擎、PowerPoint 完整动画时间轴。
 - 不支持 `.doc`、`.xls`、`.ppt`。
 - XML 编辑是手术刀：不认识的命名空间、属性、子元素，只要没被当前 op 点到，就原样保留。
@@ -89,4 +90,4 @@ crates/ooxp-cli/             命令行，只依赖 ooxp。二进制名也是 oox
 
 ## 阶段边界
 
-xlsx 第一期做完的标志：create 能生成 Excel 和 WPS 都能打开的工作簿；inspect 能按范围返回值和公式字符串；apply 能 `setCell`；命令行能把这三件事跑通。docx 和 pptx 不在本阶段验收。
+xlsx 第一期已做完（WPS 已验收，Excel 本机未装）。docx 第一期做完的标志：create 能生成 Word 和 WPS 都能打开的文档；inspect 能返回大纲并按范围返回段落文本；apply 能 `setParaText`；命令行能把这三件事跑通。pptx 不在本阶段验收。

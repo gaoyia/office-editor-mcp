@@ -2,7 +2,7 @@
 
 `schemaVersion` 固定为 `1`。库和命令行只认这一层。MCP 或其他传输信封不许改这里的字段名和含义。机器可读副本见 [json-schema/request.schema.json](json-schema/request.schema.json)，与本文冲突时以本文为准。
 
-第一期把 xlsx 的 inspect、create、apply 写全。docx 和 pptx 只规定稳定 id，遇到这两种格式的请求返回 `NotImplemented`。
+xlsx 的 inspect、create、apply 已经定稿。docx 的三套动作按本文写全，待确认后实现。pptx 仍只规定稳定 id，请求返回 `NotImplemented`。
 
 ## 信封
 
@@ -13,7 +13,7 @@
 | `schemaVersion` | 整数 | 必须是 `1` |
 | `action` | 字符串 | `inspect`、`create`、`apply` 之一 |
 
-另外按动作需要 `path`、`format`、`scope`、`workbook`、`ops` 等字段，见下文。禁止在请求里放一整棵 inspect 树来表示「把文档改成这样」。
+另外按动作需要 `path`、`format`、`scope`、`workbook`、`document`、`ops` 等字段，见下文。禁止在请求里放一整棵 inspect 树来表示「把文档改成这样」。create 的 xlsx 用 `workbook`，docx 用 `document`，二者不能同时出现。
 
 `format` 取值：`xlsx`、`docx`、`pptx`。可省略，省略时从 `path` 的扩展名推断。推断不出就报 `UnsupportedFormat`。
 
@@ -41,13 +41,17 @@ id 是给模型用的字符串，必须能从文件内容稳定算出来，不�
 
 图表工作表、宏表出现在 inspect 的表名单里，但没有单元格 id。它们的 id 仍是 `sheet:{name}`。对它们发 `setCell` 报 `InvalidField`。
 
-### docx（预留，第一期不实现）
+### docx
 
-段落 id 优先用 `w14:paraId`（十六进制，见 MS-DOCX 扩展）。有该属性时：`para:{paraId}`，例如 `para:3F2A1B00`。
+文档根节点 id 固定为 `docx:document`。
 
-没有 `w14:paraId` 时：`para:index:{n}`，`n` 从 1 起，按 `document.xml` 里 `w:p` 出现顺序。树上同时给 `"stable": false`。这类 id 在增删段落后会变，只够同一次 inspect 之后立刻 apply。
+段落 id 优先用 `w14:paraId`（十六进制，MS-DOCX §2.6.2.3，命名空间 `http://schemas.microsoft.com/office/word/2010/wordml`）。有该属性时：`para:{paraId}`，例如 `para:3F2A1B00`。输出用文件里的原始大小写。请求里的十六进制按大小写不敏感匹配。
 
-标题和正文都是段落，不另编一套 id。
+没有 `w14:paraId` 时：`para:index:{n}`，`n` 从 1 起，按主文档部件里 `w:p` 的文档顺序（含表格单元格里的段落）。树上同时给 `"stable": false`。这类 id 在增删段落后会变，只够同一次 inspect 之后立刻 apply。
+
+标题和正文都是段落，不另编一套 id。页眉、页脚、脚注、尾注、批注、文本框里的段落第一期不进这棵树，也不接受 apply。
+
+同一主文档部件里若出现重复的 `w14:paraId`（违反 MS-DOCX，但现实文件可能有），inspect 照样列出每一段；apply 命中文档顺序中的第一段。
 
 ### pptx（预留，第一期不实现）
 
@@ -76,6 +80,10 @@ id 是给模型用的字符串，必须能从文件内容稳定算出来，不�
 }
 ```
 
+xlsx 与 docx 共用 `scope` 这个字段名，里面的键按格式分，混用报 `InvalidField`。
+
+#### xlsx 的 scope
+
 | 字段 | 必填 | 含义 |
 | --- | --- | --- |
 | `path` | 是 | 已有文件 |
@@ -87,6 +95,27 @@ id 是给模型用的字符串，必须能从文件内容稳定算出来，不�
 省略 `scope`、或只给空对象：返回工作簿节点和表名单，每张表不含 `cells`。这是默认截断。
 
 只要想看单元格，就必须同时给 `sheet` 和 `range`。不默认扫第一张表的整张纸。
+
+#### docx 的 scope
+
+```json
+{
+  "schemaVersion": 1,
+  "action": "inspect",
+  "path": "C:\\data\\note.docx",
+  "format": "docx",
+  "scope": { "from": 1, "maxParas": 200 }
+}
+```
+
+| 字段 | 必填 | 含义 |
+| --- | --- | --- |
+| `path` | 是 | 已有文件 |
+| `scope` | 否 | 省略或空对象：只返回 `outline` 和 `paraCount`，没有 `paragraphs` |
+| `scope.from` | 要段落正文时必填 | 从第几段开始，从 1 起，按主文档 `w:p` 顺序 |
+| `scope.maxParas` | 要段落正文时必填 | 本次最多返回多少段，允许范围 `1` 到 `5000` |
+
+只要想看段落正文，就必须同时给 `from` 和 `maxParas`。不默认把全文倒出来。`from` 超出 `paraCount` 时 `paragraphs` 为空数组，`truncated` 为 `false`，不报错。
 
 ### 响应（xlsx）
 
@@ -160,9 +189,62 @@ id 是给模型用的字符串，必须能从文件内容稳定算出来，不�
 
 日期序列值（`t` 缺省、单元格看起来像日期）第一期仍标 `number`，不根据样式猜日期。这是有意的，避免做半套日期引擎。
 
+### 响应（docx）
+
+```json
+{
+  "schemaVersion": 1,
+  "format": "docx",
+  "id": "docx:document",
+  "paraCount": 4,
+  "outline": [
+    {
+      "id": "para:3F2A1B00",
+      "index": 1,
+      "level": 1,
+      "style": "Heading1",
+      "text": "标题"
+    }
+  ],
+  "from": 1,
+  "truncated": false,
+  "paragraphs": [
+    {
+      "id": "para:3F2A1B00",
+      "index": 1,
+      "style": "Heading1",
+      "level": 1,
+      "text": "标题",
+      "stable": true
+    },
+    {
+      "id": "para:index:2",
+      "index": 2,
+      "style": "Normal",
+      "text": "hello",
+      "stable": false
+    }
+  ]
+}
+```
+
+规则：
+
+- 只读主文档部件（根关系里 `/officeDocument` 那条，常见路径 `/word/document.xml`）。页眉页脚、脚注、批注不读。
+- `paraCount` 是主文档里 `w:p` 的总数，含表格单元格里的段落，始终出现。
+- `outline` 始终出现。收入满足下面任一条件的段落：`w:pStyle/@w:val` 为 `Heading1`–`Heading9`（大小写不敏感）或 `标题1`–`标题9`；或者 `w:outlineLvl/@w:val` 为 `0`–`8`。树上 `level` 从 1 到 9。`Heading1` / `标题1` / `outlineLvl=0` 都是 `level: 1`。不是标题的段落不进 `outline`。
+- 省略 `scope` 时没有 `paragraphs`、`from`、`truncated`。
+- 给了 `from` 和 `maxParas` 时，`paragraphs` 按文档顺序切片。范围内段落数超过 `maxParas` 则 `truncated` 为 `true`。
+- `style` 取 `w:pStyle/@w:val` 的原文。没有 `pStyle` 则为 `null`（Word 此时按 Normal 显示，树上不猜）。
+- `text` 是可见纯文本：该 `w:p` 内、不在 `w:del` 里的 `w:t` 按顺序拼接；`w:tab` 变成 `\t`，`w:br` 变成 `\n`。`w:instrText`（域指令）不进入。不含 run 级样式。
+- `stable`：有 `w14:paraId` 为 `true`，否则为 `false`。
+- 第一期不返回修订痕迹、目录域、文本框作为独立节点。含超链接或域的段落仍出现在树上，`text` 只含可见结果。
+
 ## create
 
 只有 create 允许从 JSON 生成整包。
+
+### xlsx
 
 ```json
 {
@@ -203,6 +285,36 @@ id 是给模型用的字符串，必须能从文件内容稳定算出来，不�
 
 最小 `styles.xml` 必须生成，见 [opc.md](opc.md)。不要生成图表、透视表、条件格式。
 
+### docx
+
+```json
+{
+  "schemaVersion": 1,
+  "action": "create",
+  "path": "C:\\out\\note.docx",
+  "format": "docx",
+  "document": {
+    "paragraphs": [
+      { "style": "Heading1", "text": "标题" },
+      { "text": "hello" }
+    ]
+  }
+}
+```
+
+| 字段 | 含义 |
+| --- | --- |
+| `path` | 输出路径。已存在则覆盖。省略时必须由调用方另给落盘路径，命令行用 `--output` |
+| `document.paragraphs` | 段落列表。可空；空则生成一个空的 `w:p`，否则 Word 可能打不开 |
+| `paragraphs[].text` | 可见文本，可空字符串。省略当作 `""` |
+| `paragraphs[].style` | 段落样式 id。省略或 `Normal` 表示正文。第一期只允许 `Normal`、`Heading1`、`Heading2`、`Heading3`（大小写不敏感，写出时用这里的 canonical 形式） |
+
+不能同时给 `workbook` 和 `document`。xlsx 路径必须用 `workbook`，docx 路径必须用 `document`，对不上报 `InvalidField`。
+
+create 写出 Transitional 最小包，见 [opc.md](opc.md)。每个 `w:p` 都带唯一的 `w14:paraId` 和 `w14:textId`（取值大于 0、小于 `0x80000000`，MS-DOCX §2.6.2.3 / §2.6.2.4），并在根元素上把 `w14` 列入 `mc:Ignorable`。这样随后 inspect 得到的 id 都是 `para:{paraId}`，`stable` 为 `true`。
+
+标题段写出 `<w:pStyle w:val="Heading1"/>` 这类引用，样式定义放在 `/word/styles.xml`。不要生成页眉页脚、目录、修订。
+
 ## apply
 
 apply 的入参是操作列表，不是树。下面这种写法非法，必须报 `InvalidField`：
@@ -239,7 +351,7 @@ apply 的入参是操作列表，不是树。下面这种写法非法，必须�
 | `output` | 否 | 省略则覆盖 `path` |
 | `ops` | 是 | 非空数组。按数组顺序执行，中途失败则整次 apply 不写文件 |
 
-### setCell（第一期唯一的 op）
+### setCell
 
 | 字段 | 含义 |
 | --- | --- |
@@ -248,7 +360,7 @@ apply 的入参是操作列表，不是树。下面这种写法非法，必须�
 | `value` | 与 create 相同。`null` 表示清空该格的值和公式 |
 | `formula` | 以 `=` 开头。不能与 `value` 同时出现 |
 
-不认识的 `op` 报 `UnsupportedOp`，不要忽略。
+不认识的 `op` 报 `UnsupportedOp`，不要忽略。第一期 xlsx 只认 `setCell`，docx 只认 `setParaText`。对 docx 发 `setCell`、对 xlsx 发 `setParaText` 报 `InvalidField`。
 
 空单元格：目标格子在 XML 里还不存在时，`setCell` 按需插入 `<row>` 和 `<c>`，插在正确的行列顺序上。找不到工作表才报 `IdNotFound`。
 
@@ -282,6 +394,42 @@ apply 的入参是操作列表，不是树。下面这种写法非法，必须�
 `styles.xml`、其他工作表、主题、绘图一律原样写回，字节不变。
 
 被改的部件是整份重新序列化的，不是按字节做定点替换。因此保证到这个程度：XML 声明、元素与属性的顺序、未知命名空间的元素与属性、文本内容都保留；注释、处理指令和 DOCTYPE 会丢，CDATA 会变成等价的转义文本。Office 的工作表部件不带这些东西，所以第一期接受这个代价。
+
+### setParaText（docx 第一期唯一的 op）
+
+```json
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "C:\\data\\note.docx",
+  "output": "C:\\data\\note.patched.docx",
+  "ops": [
+    { "op": "setParaText", "id": "para:3F2A1B00", "text": "新标题" }
+  ]
+}
+```
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"setParaText"` |
+| `id` | 段落 id（`para:…` 或 `para:index:n`） |
+| `text` | 新的可见纯文本，字符串，可空。必填 |
+
+找不到该段落报 `IdNotFound`。第一期不插入、不删除段落。
+
+替换规则（手术刀，不整篇重建 `document.xml`）：
+
+1. 只改命中的那一个 `w:p`。`w:pPr`、书签、绘图、`w:hyperlink` 外壳、不认识的子元素都留着。
+2. 在该段里找出不位于 `w:del` 中的、含 `w:t` 的 run。
+3. 若一个都没有：在 `w:pPr` 之后插入一个新的 `w:r`/`w:t`，文本放进去。
+4. 若有：把完整新文本写入其中第一个 `w:t`（需要保留首尾空格时加 `xml:space="preserve"`）；其余这类 `w:t` 删掉；因此变空、且里面再也没有别的 run 内容的 `w:r` 删掉。第一个 run 上已有的 `w:rPr` 保留。
+5. 含超链接或域的段落仍按上面做。超链接可能不再包住整段新字，域可能被拆掉。验收只用无域、无超链接的段落。页眉页脚里的段落第一期改不到，id 若不在主文档里就 `IdNotFound`。
+
+### 改动范围（docx）
+
+只允许变脏的部件：主文档 XML（通常是 `/word/document.xml`）。`styles.xml`、页眉页脚、主题、编号一律原样写回。
+
+被改部件同样整份重序列化，保留程度与 xlsx 工作表相同：元素与属性顺序、未知命名空间保留；注释、处理指令、DOCTYPE 会丢。
 
 ## 两层 JSON
 

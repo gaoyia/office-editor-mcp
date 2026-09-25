@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "note.docx",
+  "output": "note.patched.docx",
+  "ops": [
+    { "op": "setParaText", "id": "para:3F2A1B00", "text": "新标题" }
+  ]
+}

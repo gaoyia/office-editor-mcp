@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "action": "inspect",
+  "path": "note.docx",
+  "format": "docx",
+  "scope": { "from": 1, "maxParas": 200 }
+}

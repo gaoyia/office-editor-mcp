@@ -27,7 +27,7 @@
 
 - OPC 层（ZIP 容器、`[Content_Types].xml`、各级 `.rels`）自己写。改内容时只动目标 XML 节点，其余部件按原来的字节写回。
 - **不要**把 `office_oxide` 写进 `Cargo.toml`。想参考它的做法，去它的公开仓库看就行；不要在本仓库放三方包目录，也不要加 git 子模块。
-- 代码按 `.plan/` 推进。xlsx 路径已有实现，docx / pptx 尚未开工。
+- 代码按 `.plan/` 推进。xlsx 路径已有实现，docx 规格待确认，pptx 尚未开工。
 - 规格和契约以 `docs/` 为真源：**先改文档，等用户确认，再动代码**。
 
 ## 怎么查 OOXML 规范
@@ -60,6 +60,7 @@
 │   ├── errors.md
 │   ├── cli.md
 │   ├── checklist-xlsx.md
+│   ├── checklist-docx.md
 │   ├── examples/
 │   └── json-schema/
 ├── .bugfix-reports/                   ← 严重缺陷记录（计划中的目录，现在还不存在）
@@ -78,4 +79,4 @@
 
 ## 建议的开工顺序
 
-按计划表来：**1 文档 → 2 OPC → 3.1 和 3.2（xlsx）→ 6 命令行**，先把 Excel 这一条路整个跑通，再回头做 **4（docx）** 和 **5（pptx）**。MCP 用的是同一套领域 JSON，第一期不要把它和 OPC 的实现混在一起做。
+按计划表来：**1 文档 → 2 OPC → 3.1 和 3.2（xlsx）→ 6 命令行**，先把 Excel 这一条路整个跑通，再回头做 **4（docx）** 和 **5（pptx）**。当前停在 4 的文档阶段：docx 契约已写入 `docs/`，确认后再写代码。MCP 用的是同一套领域 JSON，第一期不要把它和 OPC 的实现混在一起做。

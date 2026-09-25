@@ -29,7 +29,7 @@ OPC 指 Open Packaging Conventions：文件是一个 ZIP，里面有部件、内
 
 ## 读与改
 
-按规范化路径取出未压缩字节。调用方（xlsx 模块）改完后把新字节交还给 opc，并标记该路径为脏。同一路径多次标记，以最后一次字节为准。
+按规范化路径取出未压缩字节。调用方（xlsx / docx 模块）改完后把新字节交还给 opc，并标记该路径为脏。同一路径多次标记，以最后一次字节为准。
 
 禁止在 opc 层解析 SpreadsheetML 语义。opc 不认识单元格、段落、形状。
 
@@ -90,6 +90,45 @@ worksheet 关系 Type：
 SpreadsheetML 主命名空间：
 
 `http://schemas.openxmlformats.org/spreadsheetml/2006/main`
+
+## create 时的最小包（docx）
+
+docx create 同样生成 Transitional 包，命名空间用 2006 那套。
+
+必有部件：
+
+| 路径 | 作用 |
+| --- | --- |
+| `/[Content_Types].xml` | 内容类型 |
+| `/_rels/.rels` | 指向 Main Document，以及可选的核心属性 |
+| `/word/document.xml` | 主文档，至少一个 `w:p` |
+| `/word/_rels/document.xml.rels` | 指向 styles |
+| `/word/styles.xml` | 至少含 Normal、Heading1、Heading2、Heading3 |
+
+可选但 create 要写：
+
+| 路径 | 作用 |
+| --- | --- |
+| `/docProps/core.xml` | 核心文件属性 |
+| `/docProps/app.xml` | Application 写成 `ooxp` |
+
+Main Document 的 Content Type：
+
+`application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml`
+
+Style Definitions：
+
+`application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml`
+
+WordprocessingML 主命名空间：
+
+`http://schemas.openxmlformats.org/wordprocessingml/2006/main`
+
+`w14` 命名空间（paraId）：
+
+`http://schemas.microsoft.com/office/word/2010/wordml`
+
+根元素须把 `w14` 列入 `mc:Ignorable`，依据 MS-DOCX §2.2.4。
 
 ## 验收（第 2 项）
 
