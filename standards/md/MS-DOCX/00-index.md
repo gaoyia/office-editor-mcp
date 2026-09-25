@@ -1,0 +1,25 @@
+# Index
+
+Source: `MS-DOCX.pdf`, 119 pages.
+
+- [1 Introduction](0010-1-Introduction.md) (p.10-13)
+- [2.1 Part Enumerations](0014-2.1-Part-Enumerations.md) (p.14-14)
+- [2.2 Extensions](0014-2.2-Extensions.md) (p.14-16)
+- [2.3 compatSetting elements](0017-2.3-compatSetting-elements.md) (p.17-20)
+- [2.4 numFmt Extensions](0021-2.4-numFmt-Extensions.md) (p.21-27)
+- [2.5 http://schemas.microsoft.com/office/word/2012/wordml](0028-2.5-http-schemas.microsoft.com-office-word-2012-wordml.md) (p.28-37)
+- [2.6 http://schemas.microsoft.com/office/word/2010/wordml](0038-2.6-http-schemas.microsoft.com-office-word-2010-wordml.md) (p.38-85)
+- [2.7 http://schemas.microsoft.com/office/word/2015/wordml/symex](0086-2.7-http-schemas.microsoft.com-office-word-2015-wordml-symex.md) (p.86-86)
+- [2.8 http://schemas.microsoft.com/office/word/2016/wordml/cid](0087-2.8-http-schemas.microsoft.com-office-word-2016-wordml-cid.md) (p.87-88)
+- [2.9 http://schemas.microsoft.com/office/word/2018/wordml](0089-2.9-http-schemas.microsoft.com-office-word-2018-wordml.md) (p.89-89)
+- [2.10 http://schemas.microsoft.com/office/word/2018/wordml/cex](0090-2.10-http-schemas.microsoft.com-office-word-2018-wordml-cex.md) (p.90-91)
+- [2.11 http://schemas.microsoft.com/office/word/2020/wordml/sdtdatahash](0092-2.11-http-schemas.microsoft.com-office-word-2020-wordml-sdtdatahash.md) (p.92-92)
+- [2.12 http://schemas.microsoft.com/office/word/2023/wordml/word16du](0092-2.12-http-schemas.microsoft.com-office-word-2023-wordml-word16du.md) (p.92-92)
+- [2.13 http://schemas.microsoft.com/office/word/2024/wordml/sdtformatlock](0093-2.13-http-schemas.microsoft.com-office-word-2024-wordml-sdtformatlock.md) (p.93-93)
+- [2.14 http://schemas.microsoft.com/office/word/2026/wordml/cei](0093-2.14-http-schemas.microsoft.com-office-word-2026-wordml-cei.md) (p.93-94)
+- [3 Structure Examples](0095-3-Structure-Examples.md) (p.95-96)
+- [4 Security Considerations](0097-4-Security-Considerations.md) (p.97-97)
+- [5 Appendix A: Full XML Schemas](0098-5-Appendix-A-Full-XML-Schemas.md) (p.98-110)
+- [6 Appendix B: Product Behavior](0111-6-Appendix-B-Product-Behavior.md) (p.111-113)
+- [7 Change Tracking](0114-7-Change-Tracking.md) (p.114-114)
+- [8 Index](0115-8-Index.md) (p.115-119)
