@@ -59,23 +59,62 @@ tx.push_element(build_para(ppr, rpr, text));
 
 新建 run 时的前缀从 `txBody` 内部的元素借，不写死 `a:`。`txBody` 自己是 `p:` 前缀，拿它去拼会生成 `p:p`、`p:r` 这种不存在的元素。
 
+## 第一版修法自己又踩了两个坑
+
+上面那版把操作放在 run 这一级，当天就被指出还有洞，实测确认了两处，都与 `a:br` 有关。
+
+**洞一：换行拆错了层级。** 第一版把 `\n` 拆成 `a:t` 加 `a:br` 一起塞进同一个 `a:r`，写入 `甲\n乙` 得到 `<a:r><a:rPr b="1"/><a:t>甲</a:t><a:br/><a:t>乙</a:t></a:r>`。查 ECMA-376 §A.4 才发现这是双重违规：
+
+```xsd
+<xsd:group name="EG_TextRun">
+  <xsd:choice>
+    <xsd:element name="r" type="CT_RegularTextRun"/>
+    <xsd:element name="br" type="CT_TextLineBreak"/>
+    <xsd:element name="fld" type="CT_TextField"/>
+  </xsd:choice>
+</xsd:group>
+
+<xsd:complexType name="CT_RegularTextRun">
+  <xsd:sequence>
+    <xsd:element name="rPr" type="CT_TextCharacterProperties" minOccurs="0" maxOccurs="1"/>
+    <xsd:element name="t" type="xsd:string" minOccurs="1" maxOccurs="1"/>
+  </xsd:sequence>
+</xsd:complexType>
+```
+
+`a:br` 与 `a:r` 平级、同为 `a:p` 的子元素，而 `a:r` 只允许一个可选 `a:rPr` 加**恰好一个** `a:t`。讽刺的是被替换掉的旧实现在这一点上是对的：它把 `a:br` 放在 `a:p` 下、每行一个独立的 `a:r`。修一个缺陷时把原本正确的部分改坏了。
+
+**洞二：原有的 `a:br` 不清。** 第一版只删 `a:t`，段落里已有的 `a:br` 留在原处。源文件本来就有换行（`<a:r><a:t>上</a:t></a:r><a:br/><a:r><a:t>下</a:t></a:r>`，这正是 PowerPoint 的写法），改成单行 `新文本` 之后产物是 `<a:r>…<a:t>新文本</a:t></a:r><a:br/>`，inspect 读回来是 `新文本\n`，比写入值多一个换行，违反契约第 9 条。
+
+两个洞的根子是同一个：**`a:br` 是可见文本的一部分**，inspect 早就把它读成 `\n`，所以它必须和 `a:t` 一样进入「写入」和「清理」两个环节，而且它的归属层级是段落、不是 run。第二版因此把整个操作提到段落级：第一个有文本 run 的段落收下全部新文本，换行在段落里插 `a:br` 加新 `a:r`（沿用第一个 run 的 `a:rPr`），其余段落只清可见内容、留住自己和 `a:pPr`。
+
+契约第 5 条原本只写「`text` 中的 `\n` 拆成 `a:t` 加 `a:br`」，既没说层级、也没提清理 `a:br`，我正是照着这句实现的。第 5 条与第 9 条（写进去能原样读回）因此自相矛盾。已把这条拆成第 5 到第 7 条，写明层级依据与 `a:br` 必须一并清掉的理由。
+
 ## 教训
 
 同一份契约的同类条款，如果两种格式的实现做法不一样，先别急着判断哪个对，但这个不一致本身就值得追。这次是 pptx 错、docx 对；反过来的情况同样可能。
 
-「改文字」这个操作的边界要划在 run 上，不要划在段落上。段落承载对齐、缩进、列表级别这些用户看得见的东西，删段落重建的代价远大于省下的那几行代码。
+段落不是可丢弃的容器。它承载对齐、缩进、列表级别这些用户看得见的东西，删段落重建的代价远大于省下的那几行代码。
 
 从别处克隆属性来「保留格式」是个陷阱。要保留就原地别动，一旦开始跨节点搬运，就必须回答「搬的是谁的属性、搬到谁头上」，而这个问题在多段落场景下没有正确答案。
 
+**改这类替换逻辑之前，先把 inspect 读了哪些元素列全，写入侧必须逐一对应。** 这次两轮返工都出在 `a:br`：inspect 把它读成 `\n`，写入侧却先是漏了清理、后又拆错层级。凡是 inspect 会读进 `text` 的元素（pptx 是 `a:t` 与 `a:br`，docx 是 `w:t`、`w:tab`、`w:br`），apply 都要回答两个问题——新文本怎么生成它、旧的怎么清掉——漏一个就破坏读写一致。
+
+**动手插入元素之前先查 schema 的层级，别照着契约的散文措辞猜。** 契约那句「拆成 `a:t` 加 `a:br`」写在讲 run 的段落里，读起来像是放进 run，实际 `a:br` 属于段落级。查一次 §A.4 的 `EG_TextRun` 只要几分钟，比返工便宜。
+
+**修 A 的时候顺手改掉了原本正确的 B。** 旧实现虽然压段落，但换行的层级是对的。重写时应该先把旧实现里哪些行为是对的列出来，作为新实现的验收项，而不是整块替换后只验证自己关心的那一条。
+
 ## 回归测试
 
-`crates/ooxp/tests/pptx_fidelity.rs` 新增 2 项，样本就是审计时那个三段落形状：
+`crates/ooxp/tests/pptx_fidelity.rs` 从 5 项加到 9 项。样本两个：审计时那个三段落形状，以及一个用段落级 `a:br` 换行的形状。
 
-- `apply_keeps_sibling_paragraphs_and_their_ppr`：段落数仍是 3，第一段精确匹配 `<a:p><a:r><a:rPr b="1"/><a:t>新文本</a:t></a:r></a:p>`（既核对 `b="1"` 还在，也核对没有凭空多出 `a:pPr`），第二段的 `algn="ctr"` 仍在，inspect 读回来等于写入值
-- `apply_splits_newline_into_br_inside_one_run`：`\n` 拆成 `<a:t>上</a:t><a:br/><a:t>下</a:t>`，段落数不变，写进去的文本能原样读回来
+- `apply_keeps_sibling_paragraphs_and_their_ppr`：段落数仍是 3，第一段精确匹配 `<a:p><a:r><a:rPr b="1"/><a:t>新文本</a:t></a:r></a:p>`（既核对 `b="1"` 还在，也核对没有凭空多出 `a:pPr`），第二段的 `algn="ctr"` 仍在，读回值等于写入值
+- `apply_puts_br_between_runs_not_inside`：换行拆成 `<a:r>…<a:t>上</a:t></a:r><a:br/><a:r><a:rPr b="1"/><a:t>下</a:t></a:r>`，新 run 带上了 `rPr`；另有一条 `!contains("<a:br/><a:t>")` 专门盯住「`a:br` 跑进 run 里」这个形状
+- `apply_single_line_clears_existing_br`：源文件本来两行，改成单行之后产物里没有任何 `a:br`，读回值是单行
+- `apply_multiline_then_single_line_roundtrips`：单行改三行、再改回单行，每一步的读回值都等于写入值
 
-这两项在旧实现下都会失败：旧实现的第一段是 `<a:p><a:pPr algn="ctr"/><a:r>…`，段落数是 1。
+覆盖关系：前两项在第一版实现下会失败（第一段是 `<a:p><a:pPr algn="ctr"/><a:r>…`，段落数 1；`a:br` 在 run 内），后两项在第二版之前会失败（残留 `a:br` 让读回值多一个 `\n`）。
 
 ## 还没解决的
 
-样本仍是手工写的 XML，不是 PowerPoint 亲手存的文件。带 `a:fld`（域）的形状按契约第 3 条只改 `a:r`、不动域里的 `a:t`，因此「写进去的文本能原样读回」这条在有域时不成立，契约第 6 条已声明验收只用无域文本框，但这个口子仍然开着。审计的其他遗留项记在 `.plan/2026年-9月-25日-⚠️-ooxp.md` 的「审计遗留」表里。
+样本仍是手工写的 XML，不是 PowerPoint 亲手存的文件，`manual-check/office` 的 pptx 用例这一轮也没重跑。带 `a:fld`（域）的形状按契约第 3 条只收 `a:r`、不动域里的 `a:t`，所以「写进去能原样读回」在有域时不成立，契约第 8 条已声明验收只用无域文本框，这个口子记在 A14。审计的其他遗留项记在 `.plan/2026年-9月-25日-⚠️-ooxp.md` 的「审计遗留」表里。

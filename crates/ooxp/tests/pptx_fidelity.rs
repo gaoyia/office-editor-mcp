@@ -217,7 +217,10 @@ const MULTI_PRES_RELS: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone
 
 const MULTI_SLIDE: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:cSld name="三段"><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/><p:sp><p:nvSpPr><p:cNvPr id="2" name="三段"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr/><p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr b="1"/><a:t>第一段</a:t></a:r></a:p><a:p><a:pPr algn="ctr"/><a:r><a:t>第二段</a:t></a:r></a:p><a:p><a:r><a:rPr i="1"/><a:t>第三段</a:t></a:r></a:p></p:txBody></p:sp></p:spTree></p:cSld></p:sld>"#;
 
-fn write_multi_sample(tag: &str) -> PathBuf {
+/// 一个段落里用段落级 `a:br` 换行，这是 PowerPoint 的写法：`a:br` 与 `a:r` 平级。
+const BR_SLIDE: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:cSld name="带换行"><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/><p:sp><p:nvSpPr><p:cNvPr id="2" name="换行框"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr/><p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr b="1"/><a:t>上</a:t></a:r><a:br/><a:r><a:t>下</a:t></a:r></a:p></p:txBody></p:sp></p:spTree></p:cSld></p:sld>"#;
+
+fn write_slide_sample(tag: &str, slide: &str) -> PathBuf {
     let n = SEQ.fetch_add(1, Ordering::Relaxed);
     let path = tmp_dir().join(format!("{tag}-{n}.pptx"));
     let mut cursor = Cursor::new(Vec::new());
@@ -229,7 +232,7 @@ fn write_multi_sample(tag: &str) -> PathBuf {
             ("_rels/.rels", ROOT_RELS),
             ("ppt/presentation.xml", MULTI_PRES),
             ("ppt/_rels/presentation.xml.rels", MULTI_PRES_RELS),
-            ("ppt/slides/slide1.xml", MULTI_SLIDE),
+            ("ppt/slides/slide1.xml", slide),
         ] {
             zip.start_file(name, opt).unwrap();
             zip.write_all(body.as_bytes()).unwrap();
@@ -238,6 +241,31 @@ fn write_multi_sample(tag: &str) -> PathBuf {
     }
     std::fs::write(&path, cursor.into_inner()).unwrap();
     path
+}
+
+fn write_multi_sample(tag: &str) -> PathBuf {
+    write_slide_sample(tag, MULTI_SLIDE)
+}
+
+/// 读回来的文本必须和写进去的一模一样，这是契约「setShapeText」第 7 条。
+fn read_back(path: &Path) -> String {
+    let RunOutput::Inspect(tree) = run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "inspect",
+            "path": path.to_string_lossy(),
+            "scope": { "slide": 1 }
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap() else {
+        panic!();
+    };
+    tree["slides"][0]["shapes"][0]["text"]
+        .as_str()
+        .unwrap()
+        .to_string()
 }
 
 fn count_paras(xml: &str) -> usize {
@@ -291,8 +319,10 @@ fn apply_keeps_sibling_paragraphs_and_their_ppr() {
     assert_eq!(tree["slides"][0]["shapes"][0]["text"], "新文本");
 }
 
+/// `a:br` 与 `a:r` 平级（`EG_TextRun`，§A.4），`CT_RegularTextRun` 只允许一个 `a:t`。
+/// 换行拆错层级会生成不合 schema 的 run。
 #[test]
-fn apply_splits_newline_into_br_inside_one_run() {
+fn apply_puts_br_between_runs_not_inside() {
     let src = write_multi_sample("br");
     let out = tmp_dir().join("br-applied.pptx");
     run(
@@ -310,24 +340,70 @@ fn apply_splits_newline_into_br_inside_one_run() {
 
     let slide = part(&out, "ppt/slides/slide1.xml");
     assert!(
-        slide.contains(r#"<a:t>上</a:t><a:br/><a:t>下</a:t>"#),
-        "换行要拆成 a:t 加 a:br：{slide}"
+        slide.contains(
+            r#"<a:r><a:rPr b="1"/><a:t>上</a:t></a:r><a:br/><a:r><a:rPr b="1"/><a:t>下</a:t></a:r>"#
+        ),
+        "换行要在段落级拆成 a:br 加新的 a:r，rPr 跟着走：{slide}"
+    );
+    assert!(
+        !slide.contains("<a:br/><a:t>"),
+        "a:br 不能待在 a:r 里面：{slide}"
     );
     assert_eq!(count_paras(&slide), 3);
+    assert_eq!(read_back(&out), "上\n下");
+}
 
-    // 契约要求写进去的文本能原样读回来。
-    let RunOutput::Inspect(tree) = run(
+/// 源文件本来就有 `a:br`，改成单行文本时它必须被清掉。inspect 把 `a:br` 读成 `\n`，
+/// 留一个下来读回值就比写入值多一个换行。
+#[test]
+fn apply_single_line_clears_existing_br() {
+    let src = write_slide_sample("existing-br", BR_SLIDE);
+    assert_eq!(read_back(&src), "上\n下", "样本本身应当是两行");
+
+    let out = tmp_dir().join("existing-br-applied.pptx");
+    run(
         &json!({
             "schemaVersion": 1,
-            "action": "inspect",
-            "path": out.to_string_lossy(),
-            "scope": { "slide": 1 }
+            "action": "apply",
+            "path": src.to_string_lossy(),
+            "output": out.to_string_lossy(),
+            "ops": [{ "op": "setShapeText", "id": "slide:1/shape:2", "text": "单行" }]
         })
         .to_string(),
         None,
     )
-    .unwrap() else {
-        panic!();
-    };
-    assert_eq!(tree["slides"][0]["shapes"][0]["text"], "上\n下");
+    .unwrap();
+
+    let slide = part(&out, "ppt/slides/slide1.xml");
+    assert!(!slide.contains("<a:br/>"), "原有的 a:br 没清掉：{slide}");
+    assert_eq!(read_back(&out), "单行");
+    assert_eq!(count_paras(&slide), 1);
+}
+
+/// 换行写进去再改回单行，来回一趟都要对得上。
+#[test]
+fn apply_multiline_then_single_line_roundtrips() {
+    let src = write_slide_sample("roundtrip", BR_SLIDE);
+    let two = tmp_dir().join("rt-two.pptx");
+    let one = tmp_dir().join("rt-one.pptx");
+    for (from, to, text) in [
+        (&src, &two, "甲\n乙\n丙"),
+        (&two, &one, "只剩一行"),
+    ] {
+        run(
+            &json!({
+                "schemaVersion": 1,
+                "action": "apply",
+                "path": from.to_string_lossy(),
+                "output": to.to_string_lossy(),
+                "ops": [{ "op": "setShapeText", "id": "slide:1/shape:2", "text": text }]
+            })
+            .to_string(),
+            None,
+        )
+        .unwrap();
+        assert_eq!(read_back(to), text);
+    }
+    let slide = part(&one, "ppt/slides/slide1.xml");
+    assert!(!slide.contains("<a:br/>"));
 }

@@ -236,92 +236,161 @@ fn ids_match(file: &str, req: &str) -> bool {
     }
 }
 
-/// 按 `docs/json-contract.md` 的替换规则原地改：新文本写进第一个含 `a:t` 的 `a:r`，
-/// 其余这类 `a:t` 删掉，因此变空的 `a:r` 删掉。
+/// 按 `docs/json-contract.md` 的替换规则原地改：第一个有文本 run 的段落收下全部新文本，
+/// 其余段落只清掉可见内容，段落本身与 `a:pPr` 留着。
 ///
-/// 段落本身、`a:pPr`、`a:bodyPr`、`a:lstStyle` 一概不动。早先的写法是把所有 `a:p`
-/// 删掉重建一个，还拿「整个 txBody 里第一个 pPr」当新段落的属性，结果多段形状被压成
-/// 一段，而且第一段会白捡后面某段的对齐方式。
+/// 换行必须在段落这一级处理。`a:br` 与 `a:r` 平级（`EG_TextRun`，ECMA-376 §A.4），
+/// 而 `CT_RegularTextRun` 只允许一个可选 `a:rPr` 加恰好一个 `a:t`，
+/// 所以既不能把 `a:br` 塞进 run 里，也不能让一个 run 带多个 `a:t`。
 pub fn set_txbody_text(tx: &mut Element, text: &str) {
+    let lines: Vec<&str> = text.split('\n').collect();
     let mut filled = false;
-    rewrite_runs(tx, &mut filled, text);
+    rewrite_paras(tx, &mut filled, &lines);
     if !filled {
-        append_text_run(tx, text);
+        append_text_para(tx, &lines);
     }
 }
 
-fn rewrite_runs(el: &mut Element, filled: &mut bool, text: &str) {
+fn rewrite_paras(el: &mut Element, filled: &mut bool, lines: &[&str]) {
     if el.local_name() == "AlternateContent" {
         if let Some(i) = first_alt_child_index(el) {
             if let Node::Element(child) = &mut el.children[i] {
-                rewrite_runs(child, filled, text);
+                rewrite_paras(child, filled, lines);
             }
         }
         return;
     }
-    // 只认 `a:r`。`a:fld` 里的 `a:t` 不动，契约只让改 run。
-    if el.local_name() == "r" {
-        if el.element_children().any(|e| e.local_name() == "t") {
-            if *filled {
-                remove_all_t(el);
-            } else {
-                fill_first_run(el, text);
-                *filled = true;
-            }
+    if el.local_name() == "p" {
+        if !*filled && el.element_children().any(is_text_run) {
+            fill_para(el, lines);
+            *filled = true;
+        } else {
+            strip_para(el);
         }
         return;
     }
-    let mut drop = Vec::new();
-    for (i, child) in el.children.iter_mut().enumerate() {
+    for child in el.children.as_mut_slice() {
         if let Node::Element(e) = child {
-            let was_run = e.local_name() == "r";
-            rewrite_runs(e, filled, text);
-            if was_run && is_empty_run(e) {
-                drop.push(i);
+            rewrite_paras(e, filled, lines);
+        }
+    }
+}
+
+fn is_text_run(e: &Element) -> bool {
+    e.local_name() == "r" && e.element_children().any(|c| c.local_name() == "t")
+}
+
+/// 清掉本段的可见内容：`a:t` 和 `a:br` 都删，因此变空的 `a:r` 删。
+/// `a:br` 一并删是因为 inspect 把它读成 `\n`，留一个下来读回值就和写入值差一个换行。
+/// `a:pPr`、`a:endParaRPr`、`a:fld` 留着。
+fn strip_para(p: &mut Element) {
+    let mut i = p.children.len();
+    while i > 0 {
+        i -= 1;
+        let Node::Element(e) = &mut p.children[i] else {
+            continue;
+        };
+        match e.local_name() {
+            "br" => {
+                p.children.remove(i);
+            }
+            "r" => {
+                remove_all_t(e);
+                if is_empty_run(e) {
+                    p.children.remove(i);
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+/// 第一行写进第一个文本 run 的 `a:t`，余下每行在段落里插一个 `a:br` 加一个新 `a:r`。
+fn fill_para(p: &mut Element, lines: &[&str]) {
+    // 先把除第一个文本 run 以外的可见内容清干净，免得回填时和旧内容混在一起。
+    let mut seen = false;
+    let mut i = 0;
+    while i < p.children.len() {
+        let Node::Element(e) = &mut p.children[i] else {
+            i += 1;
+            continue;
+        };
+        match e.local_name() {
+            "r" if is_text_run(e) && !seen => {
+                seen = true;
+                i += 1;
+            }
+            "br" => {
+                p.children.remove(i);
+            }
+            "r" => {
+                remove_all_t(e);
+                if is_empty_run(e) {
+                    p.children.remove(i);
+                } else {
+                    i += 1;
+                }
+            }
+            _ => i += 1,
+        }
+    }
+
+    let Some(at) = p.children.iter().position(
+        |n| matches!(n, Node::Element(e) if is_text_run(e)),
+    ) else {
+        return;
+    };
+    let (rpr, t_name) = {
+        let Node::Element(run) = &mut p.children[at] else {
+            return;
+        };
+        let t_name = match run.element_children().find(|c| c.local_name() == "t") {
+            Some(t) => t.name.clone(),
+            None => return,
+        };
+        (fill_single_line(run, lines[0]), t_name)
+    };
+
+    let proto = Element::new(t_name.clone());
+    let mut ins = at + 1;
+    for line in &lines[1..] {
+        p.children
+            .insert(ins, Node::Element(Element::new(proto.prefixed("br"))));
+        ins += 1;
+        let mut run = Element::new(proto.prefixed("r"));
+        if let Some(pr) = &rpr {
+            run.push_element(pr.clone());
+        }
+        let mut t = Element::new(t_name.clone());
+        apply_t_text(&mut t, line);
+        run.push_element(t);
+        p.children.insert(ins, Node::Element(run));
+        ins += 1;
+    }
+}
+
+/// 文本写进第一个 `a:t`，多余的 `a:t` 删掉。返回 `a:rPr` 的副本，给后续行的新 run 用。
+fn fill_single_line(run: &mut Element, line: &str) -> Option<Element> {
+    let mut seen = false;
+    let mut drop = Vec::new();
+    for (i, child) in run.children.iter_mut().enumerate() {
+        if let Node::Element(e) = child {
+            if e.local_name() == "t" {
+                if seen {
+                    drop.push(i);
+                } else {
+                    apply_t_text(e, line);
+                    seen = true;
+                }
             }
         }
     }
     for i in drop.into_iter().rev() {
-        el.children.remove(i);
+        run.children.remove(i);
     }
-}
-
-/// 文本里的 `\n` 拆成 `a:t` 加 `a:br`，都放在这一个 run 里。原有的 `a:rPr` 留着。
-fn fill_first_run(r: &mut Element, text: &str) {
-    let Some(pos) = r
-        .children
-        .iter()
-        .position(|n| matches!(n, Node::Element(e) if e.local_name() == "t"))
-    else {
-        return;
-    };
-    let t_name = match &r.children[pos] {
-        Node::Element(e) => e.name.clone(),
-        Node::Text(_) => return,
-    };
-    let proto = Element::new(t_name.clone());
-    // 从后往前删，pos 之前的下标不受影响。
-    let mut i = r.children.len();
-    while i > 0 {
-        i -= 1;
-        if let Node::Element(e) = &r.children[i] {
-            if e.local_name() == "t" {
-                r.children.remove(i);
-            }
-        }
-    }
-    let mut at = pos;
-    for (n, line) in text.split('\n').enumerate() {
-        if n > 0 {
-            r.children
-                .insert(at, Node::Element(Element::new(proto.prefixed("br"))));
-            at += 1;
-        }
-        let mut t = Element::new(t_name.clone());
-        apply_t_text(&mut t, line);
-        r.children.insert(at, Node::Element(t));
-        at += 1;
-    }
+    run.element_children()
+        .find(|e| e.local_name() == "rPr")
+        .cloned()
 }
 
 fn remove_all_t(r: &mut Element) {
@@ -335,9 +404,9 @@ fn is_empty_run(r: &Element) -> bool {
     !r.element_children().any(|e| e.local_name() != "rPr")
 }
 
-/// 一个含 `a:t` 的 run 都没有时才走这里：补一个 run。
-/// 已有段落就挂在第一段末尾，没有段落才新建一段，免得凭空多出一段。
-fn append_text_run(tx: &mut Element, text: &str) {
+/// 一个文本 run 都没有时才走这里。已有段落就挂在第一段末尾，没有段落才新建一段，
+/// 免得凭空多出一段。
+fn append_text_para(tx: &mut Element, lines: &[&str]) {
     // txBody 自己是 `p:` 前缀，段落和 run 是 `a:` 前缀，前缀只能从里面的元素借。
     let sample = tx
         .element_children()
@@ -346,24 +415,32 @@ fn append_text_run(tx: &mut Element, text: &str) {
         .map(|e| e.name.clone())
         .unwrap_or_else(|| "a:bodyPr".to_string());
     let proto = Element::new(sample);
-    let mut run = Element::new(proto.prefixed("r"));
-    for (n, line) in text.split('\n').enumerate() {
+    let mut built: Vec<Element> = Vec::new();
+    for (n, line) in lines.iter().enumerate() {
         if n > 0 {
-            run.push_element(Element::new(proto.prefixed("br")));
+            built.push(Element::new(proto.prefixed("br")));
         }
+        let mut run = Element::new(proto.prefixed("r"));
         let mut t = Element::new(proto.prefixed("t"));
         apply_t_text(&mut t, line);
         run.push_element(t);
+        built.push(run);
     }
     let existing = tx.children.iter_mut().find_map(|n| match n {
         Node::Element(e) if e.local_name() == "p" => Some(e),
         _ => None,
     });
     match existing {
-        Some(p) => p.push_element(run),
+        Some(p) => {
+            for el in built {
+                p.push_element(el);
+            }
+        }
         None => {
             let mut p = Element::new(proto.prefixed("p"));
-            p.push_element(run);
+            for el in built {
+                p.push_element(el);
+            }
             tx.push_element(p);
         }
     }
