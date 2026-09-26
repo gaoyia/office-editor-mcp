@@ -5,6 +5,7 @@ mod create;
 mod export;
 mod hf;
 mod inspect;
+mod notes;
 mod para;
 mod picture;
 mod request;
@@ -33,6 +34,10 @@ pub const REL_FOOTER: &str =
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer";
 pub const REL_IMAGE: &str =
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image";
+pub const REL_FOOTNOTES: &str =
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/footnotes";
+pub const REL_ENDNOTES: &str =
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/endnotes";
 pub const WP_NS: &str = "http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing";
 pub const A_NS: &str = "http://schemas.openxmlformats.org/drawingml/2006/main";
 pub const PIC_NS: &str = "http://schemas.openxmlformats.org/drawingml/2006/picture";
@@ -51,5 +56,9 @@ pub const CT_HEADER: &str =
     "application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml";
 pub const CT_FOOTER: &str =
     "application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml";
+pub const CT_FOOTNOTES: &str =
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.footnotes+xml";
+pub const CT_ENDNOTES: &str =
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.endnotes+xml";
 pub const CT_CORE: &str = "application/vnd.openxmlformats-package.core-properties+xml";
 pub const CT_APP: &str = "application/vnd.openxmlformats-officedocument.extended-properties+xml";

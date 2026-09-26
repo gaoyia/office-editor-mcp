@@ -22,5 +22,9 @@
   "txbxLinkPara": "链接段",
   "txbxGroupPara": "组合段",
   "txbxInnerNew": "框内改字",
-  "txbxNewPara": "框内新段"
+  "txbxNewPara": "框内新段",
+  "footnoteSrc": "脚注原文",
+  "endnoteSrc": "尾注原文",
+  "footnoteNew": "改过的注文",
+  "footnoteInsert": "新插入的脚注"
 }

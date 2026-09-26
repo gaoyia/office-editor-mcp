@@ -6,7 +6,7 @@ use crate::error::{Error, ErrorKind, IdReason, ScopeNeed, TypeName};
 use crate::json;
 
 use super::hf::{HfKind, HfType};
-use super::para::{self, ParaTarget, TxbxTarget};
+use super::para::{self, BodyPara, NoteIdTarget, NoteKind, ParaTarget, TxbxTarget};
 use super::picture::{self, AlignH, AlignV, PicKind, PicTarget, WrapKind, WrapPos};
 
 #[derive(Debug, Clone)]
@@ -22,6 +22,8 @@ pub struct InspectScope {
     pub text_boxes: bool,
     /// 为 true 时展开框内段落。
     pub text_box_content: bool,
+    /// 为 true 时列出脚注、尾注与分隔符。
+    pub notes: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -141,10 +143,22 @@ pub struct SetTextBoxDirectionOp {
 }
 
 #[derive(Debug, Clone)]
+pub enum InsertParaPlace {
+    TextBox {
+        box_target: TxbxTarget,
+        after: Option<ParaTarget>,
+    },
+    Note {
+        kind: NoteKind,
+        note_id: String,
+        after: Option<BodyPara>,
+    },
+}
+
+#[derive(Debug, Clone)]
 pub struct InsertParaOp {
     pub id: String,
-    pub after: Option<ParaTarget>,
-    pub box_target: TxbxTarget,
+    pub place: InsertParaPlace,
     pub text: String,
 }
 
@@ -160,6 +174,36 @@ pub struct SetTextBoxLinkOp {
     pub target: TxbxTarget,
     pub next: Option<TxbxTarget>,
     pub next_id: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct InsertNoteOp {
+    pub id: String,
+    pub host: ParaTarget,
+    pub text: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct DeleteNoteOp {
+    pub id: String,
+    pub kind: NoteKind,
+    pub note_id: String,
+}
+
+#[derive(Debug, Clone)]
+pub enum NoteNumberTarget {
+    Document,
+    Section(usize),
+}
+
+#[derive(Debug, Clone)]
+pub struct SetNoteNumberingOp {
+    pub id: String,
+    pub target: NoteNumberTarget,
+    pub kind: NoteKind,
+    pub num_fmt: Option<String>,
+    pub num_start: Option<u32>,
+    pub num_restart: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -182,6 +226,11 @@ pub enum DocxOp {
     InsertPara(InsertParaOp),
     DeletePara(DeleteParaOp),
     SetTextBoxLink(SetTextBoxLinkOp),
+    InsertFootnote(InsertNoteOp),
+    InsertEndnote(InsertNoteOp),
+    DeleteFootnote(DeleteNoteOp),
+    DeleteEndnote(DeleteNoteOp),
+    SetNoteNumbering(SetNoteNumberingOp),
 }
 
 pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
@@ -209,6 +258,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
             "pictures",
             "textBoxes",
             "textBoxContent",
+            "notes",
         ],
     )?;
 
@@ -216,6 +266,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
     let pictures = parse_bool_field(obj.get("pictures"), "pictures")?;
     let text_boxes = parse_bool_field(obj.get("textBoxes"), "textBoxes")?;
     let text_box_content = parse_bool_field(obj.get("textBoxContent"), "textBoxContent")?;
+    let notes = parse_bool_field(obj.get("notes"), "notes")?;
     if text_box_content && !text_boxes {
         return Err(Error::with_path(
             ErrorKind::ScopeFieldRequires {
@@ -233,6 +284,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
                 && !obj.contains_key("pictures")
                 && !obj.contains_key("textBoxes")
                 && !obj.contains_key("textBoxContent")
+                && !obj.contains_key("notes")
             {
                 return Ok(None);
             }
@@ -243,6 +295,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
                 pictures,
                 text_boxes,
                 text_box_content,
+                notes,
             }))
         }
         (Some(f), Some(m)) => {
@@ -290,6 +343,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
                 pictures,
                 text_boxes,
                 text_box_content,
+                notes,
             }))
         }
         _ => Err(Error::with_path(
@@ -371,6 +425,29 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<DocxOp>, Error> {
             "insertPara" => out.push(DocxOp::InsertPara(parse_insert_para(obj, i)?)),
             "deletePara" => out.push(DocxOp::DeletePara(parse_delete_para(obj, i)?)),
             "setTextBoxLink" => out.push(DocxOp::SetTextBoxLink(parse_set_txbx_link(obj, i)?)),
+            "insertFootnote" => out.push(DocxOp::InsertFootnote(parse_insert_note(
+                obj,
+                i,
+                NoteKind::Footnote,
+            )?)),
+            "insertEndnote" => out.push(DocxOp::InsertEndnote(parse_insert_note(
+                obj,
+                i,
+                NoteKind::Endnote,
+            )?)),
+            "deleteFootnote" => out.push(DocxOp::DeleteFootnote(parse_delete_note(
+                obj,
+                i,
+                NoteKind::Footnote,
+            )?)),
+            "deleteEndnote" => out.push(DocxOp::DeleteEndnote(parse_delete_note(
+                obj,
+                i,
+                NoteKind::Endnote,
+            )?)),
+            "setNoteNumbering" => {
+                out.push(DocxOp::SetNoteNumbering(parse_set_note_numbering(obj, i)?))
+            }
             _ => {
                 return Err(Error::with_path(
                     ErrorKind::UnsupportedOp {
@@ -1272,6 +1349,34 @@ fn parse_insert_para(
     deny_keys(obj, i, &["op", "id", "text"])?;
     let id = require_id(obj, i)?;
     let path = format!("ops[{i}].id");
+    let text = parse_optional_text(obj, i)?;
+    if let Some(note) = para::parse_note_id_at(&id, &path)? {
+        let place = match note {
+            NoteIdTarget::Sep => {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidId {
+                        reason: crate::error::IdReason::NoteSep,
+                    },
+                    path,
+                ));
+            }
+            NoteIdTarget::Container { kind, note_id } => InsertParaPlace::Note {
+                kind,
+                note_id,
+                after: None,
+            },
+            NoteIdTarget::Para {
+                kind,
+                note_id,
+                para,
+            } => InsertParaPlace::Note {
+                kind,
+                note_id,
+                after: Some(para),
+            },
+        };
+        return Ok(InsertParaOp { id, place, text });
+    }
     if !id.contains("/txbx:") {
         return Err(Error::with_path(
             ErrorKind::InvalidId {
@@ -1280,36 +1385,26 @@ fn parse_insert_para(
             path,
         ));
     }
-    let text = match obj.get("text") {
-        None => String::new(),
-        Some(Value::String(s)) => s.clone(),
-        Some(_) => {
-            return Err(Error::with_path(
-                ErrorKind::WrongType {
-                    field: "text".into(),
-                    expected: TypeName::String,
-                },
-                format!("ops[{i}].text"),
-            ));
-        }
-    };
     if let Ok(box_target) = para::parse_txbx_id_at(&id, &path) {
         return Ok(InsertParaOp {
             id,
-            after: None,
-            box_target,
+            place: InsertParaPlace::TextBox {
+                box_target,
+                after: None,
+            },
             text,
         });
     }
     match para::parse_para_id_at(&id, &path)? {
         ParaTarget::InTextBox { host, key, para } => Ok(InsertParaOp {
             id,
-            after: Some(ParaTarget::InTextBox {
-                host: host.clone(),
-                key: key.clone(),
-                para,
-            }),
-            box_target: TxbxTarget { host, key },
+            place: InsertParaPlace::TextBox {
+                box_target: TxbxTarget {
+                    host: host.clone(),
+                    key: key.clone(),
+                },
+                after: Some(ParaTarget::InTextBox { host, key, para }),
+            },
             text,
         }),
         _ => Err(Error::with_path(
@@ -1328,6 +1423,34 @@ fn parse_delete_para(
     deny_keys(obj, i, &["op", "id"])?;
     let id = require_id(obj, i)?;
     let path = format!("ops[{i}].id");
+    if let Some(note) = para::parse_note_id_at(&id, &path)? {
+        return match note {
+            NoteIdTarget::Sep => Err(Error::with_path(
+                ErrorKind::InvalidId {
+                    reason: crate::error::IdReason::NoteSep,
+                },
+                path,
+            )),
+            NoteIdTarget::Container { .. } => Err(Error::with_path(
+                ErrorKind::InvalidId {
+                    reason: crate::error::IdReason::InsertParaNeedsBox,
+                },
+                path,
+            )),
+            NoteIdTarget::Para {
+                kind,
+                note_id,
+                para,
+            } => Ok(DeleteParaOp {
+                id,
+                inner: ParaTarget::InNote {
+                    kind,
+                    note_id,
+                    para,
+                },
+            }),
+        };
+    }
     if !id.contains("/txbx:") {
         return Err(Error::with_path(
             ErrorKind::InvalidId {
@@ -1392,5 +1515,229 @@ fn parse_set_txbx_link(
         target,
         next,
         next_id,
+    })
+}
+
+fn parse_optional_text(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<String, Error> {
+    match obj.get("text") {
+        None => Ok(String::new()),
+        Some(Value::String(s)) => Ok(s.clone()),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "text".into(),
+                expected: TypeName::String,
+            },
+            format!("ops[{i}].text"),
+        )),
+    }
+}
+
+fn parse_insert_note(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+    _kind: NoteKind,
+) -> Result<InsertNoteOp, Error> {
+    deny_keys(obj, i, &["op", "id", "text"])?;
+    let id = require_id(obj, i)?;
+    let path = format!("ops[{i}].id");
+    if para::parse_note_id_at(&id, &path)?.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: crate::error::IdReason::NotePrefix,
+            },
+            path,
+        ));
+    }
+    let host = para::parse_para_id_at(&id, &path)?;
+    if matches!(host, ParaTarget::InNote { .. }) {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: crate::error::IdReason::NotePrefix,
+            },
+            path,
+        ));
+    }
+    Ok(InsertNoteOp {
+        id,
+        host,
+        text: parse_optional_text(obj, i)?,
+    })
+}
+
+fn parse_delete_note(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+    kind: NoteKind,
+) -> Result<DeleteNoteOp, Error> {
+    deny_keys(obj, i, &["op", "id"])?;
+    let id = require_id(obj, i)?;
+    let path = format!("ops[{i}].id");
+    let Some(note) = para::parse_note_id_at(&id, &path)? else {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: crate::error::IdReason::NotePrefix,
+            },
+            path,
+        ));
+    };
+    match note {
+        NoteIdTarget::Sep => Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: crate::error::IdReason::NoteSep,
+            },
+            path,
+        )),
+        NoteIdTarget::Para { .. } => Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: crate::error::IdReason::NotePrefix,
+            },
+            path,
+        )),
+        NoteIdTarget::Container {
+            kind: parsed,
+            note_id,
+        } => {
+            if parsed != kind {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidId {
+                        reason: crate::error::IdReason::NotePrefix,
+                    },
+                    path,
+                ));
+            }
+            Ok(DeleteNoteOp { id, kind, note_id })
+        }
+    }
+}
+
+fn parse_set_note_numbering(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<SetNoteNumberingOp, Error> {
+    deny_keys(
+        obj,
+        i,
+        &["op", "id", "kind", "numFmt", "numStart", "numRestart"],
+    )?;
+    let id = require_id(obj, i)?;
+    let target = if id == "docx:document" {
+        NoteNumberTarget::Document
+    } else {
+        NoteNumberTarget::Section(parse_section_id(&id, i)?)
+    };
+    let kind_s = obj.get("kind").and_then(Value::as_str).ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::MissingField {
+                field: "kind".into(),
+            },
+            format!("ops[{i}].kind"),
+        )
+    })?;
+    let kind = NoteKind::parse(kind_s).ok_or_else(|| {
+        Error::with_path(ErrorKind::InvalidNoteKind, format!("ops[{i}].kind"))
+    })?;
+    let num_fmt = match obj.get("numFmt") {
+        None => None,
+        Some(Value::String(s)) => {
+            if !matches!(
+                s.as_str(),
+                "decimal" | "upperRoman" | "lowerRoman" | "upperLetter" | "lowerLetter" | "chicago"
+            ) {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidNoteNumFmt,
+                    format!("ops[{i}].numFmt"),
+                ));
+            }
+            Some(s.clone())
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "numFmt".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].numFmt"),
+            ));
+        }
+    };
+    let num_start = match obj.get("numStart") {
+        None => None,
+        Some(Value::Number(n)) => {
+            let u = n.as_u64().ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::WrongType {
+                        field: "numStart".into(),
+                        expected: TypeName::Integer,
+                    },
+                    format!("ops[{i}].numStart"),
+                )
+            })?;
+            if u < 1 {
+                return Err(Error::with_path(
+                    ErrorKind::MinValue {
+                        field: "numStart".into(),
+                        min: 1,
+                    },
+                    format!("ops[{i}].numStart"),
+                ));
+            }
+            if u > u32::MAX as u64 {
+                return Err(Error::with_path(
+                    ErrorKind::MinValue {
+                        field: "numStart".into(),
+                        min: 1,
+                    },
+                    format!("ops[{i}].numStart"),
+                ));
+            }
+            Some(u as u32)
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "numStart".into(),
+                    expected: TypeName::Integer,
+                },
+                format!("ops[{i}].numStart"),
+            ));
+        }
+    };
+    let num_restart = match obj.get("numRestart") {
+        None => None,
+        Some(Value::String(s)) => {
+            if !matches!(s.as_str(), "continuous" | "eachSect" | "eachPage") {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidNoteRestart,
+                    format!("ops[{i}].numRestart"),
+                ));
+            }
+            Some(s.clone())
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "numRestart".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].numRestart"),
+            ));
+        }
+    };
+    if num_fmt.is_none() && num_start.is_none() && num_restart.is_none() {
+        return Err(Error::with_path(
+            ErrorKind::NeedNoteNumberingField,
+            format!("ops[{i}]"),
+        ));
+    }
+    Ok(SetNoteNumberingOp {
+        id,
+        target,
+        kind,
+        num_fmt,
+        num_start,
+        num_restart,
     })
 }

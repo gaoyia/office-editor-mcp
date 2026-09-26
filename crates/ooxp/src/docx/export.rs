@@ -18,7 +18,7 @@ pub fn export_media(bytes: &[u8], id: &str) -> Result<ExportedMedia, Error> {
     let doc_part = opc::office_document_part(&pkg)?;
     let doc_xml = xml::parse(pkg.get(&doc_part)?)?;
     let catalog = hf::catalog(&pkg, &doc_part, &doc_xml.root)?;
-    let part_name = picture::part_for_pic(&catalog, &doc_part, &target, id, "id")?;
+    let part_name = picture::part_for_pic(&pkg, &catalog, &doc_part, &target, id, "id")?;
     let xml_doc = if part_name == doc_part {
         doc_xml
     } else {

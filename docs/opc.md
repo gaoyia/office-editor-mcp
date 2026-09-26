@@ -116,6 +116,8 @@ docx create 同样生成 Transitional 包，命名空间用 2006 那套。
 | `/word/footer1.xml` | 仅当 `document.footers` 含默认页脚 |
 | `/word/media/imageN.ext` | 仅当段落或页眉页脚声明了 `pictures` |
 
+apply 插入脚注或尾注时，可能新建 `/word/footnotes.xml` 或 `/word/endnotes.xml`（CT 分别为 `…footnotes+xml` / `…endnotes+xml`），并在主文档 `.rels` 与 `[Content_Types].xml` 上补关系与 Override。create 不写这两份部件。
+
 Main Document 的 Content Type：
 
 `application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml`

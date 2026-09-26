@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "note.docx",
+  "output": "note.patched.docx",
+  "ops": [
+    { "op": "insertFootnote", "id": "para:3F2A1B00", "text": "注文" },
+    { "op": "setParaText", "id": "footnote:2/para:00FF00AA", "text": "改过的注文" },
+    { "op": "setNoteNumbering", "id": "docx:document", "kind": "footnote", "numFmt": "upperRoman" },
+    { "op": "deleteEndnote", "id": "endnote:2" }
+  ]
+}

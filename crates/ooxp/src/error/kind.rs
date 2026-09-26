@@ -67,10 +67,16 @@ pub(crate) enum IdReason {
     SetParaOnBox,
     /// insertTextBox 必须是宿主段落
     InsertNeedsHostPara,
-    /// 正文（框外）插删段
+    /// 正文（框外、注外）插删段
     InsertParaBody,
-    /// insertPara / deletePara 必须是框或框内段
+    /// insertPara / deletePara 必须是框、框内段、注或注内段
     InsertParaNeedsBox,
+    /// 脚注/尾注 id 形态不对
+    NotePrefix,
+    /// 注容器 id，缺少 /para:…
+    NoteContainer,
+    /// 分隔符 id，禁止 apply
+    NoteSep,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -208,6 +214,12 @@ define_error_kinds! {
     PictureNotFound { id: String } => vec![Self::PictureNotFound { id: "header:default:1/pic:1".into() }],
     TextBoxNotFound { id: String } => vec![Self::TextBoxNotFound { id: "para:3F2A1B00/txbx:8".into() }],
     LastTextBoxPara => vec![Self::LastTextBoxPara],
+    LastNotePara => vec![Self::LastNotePara],
+    NoteNotFound { id: String } => vec![Self::NoteNotFound { id: "footnote:2".into() }],
+    NeedNoteNumberingField => vec![Self::NeedNoteNumberingField],
+    InvalidNoteKind => vec![Self::InvalidNoteKind],
+    InvalidNoteNumFmt => vec![Self::InvalidNoteNumFmt],
+    InvalidNoteRestart => vec![Self::InvalidNoteRestart],
     TextBoxLinkCrossPart => vec![Self::TextBoxLinkCrossPart],
     InvalidHexColor => vec![Self::InvalidHexColor],
     InvalidTextBoxDirection => vec![Self::InvalidTextBoxDirection],
@@ -313,6 +325,9 @@ impl IdReason {
             Self::InsertNeedsHostPara,
             Self::InsertParaBody,
             Self::InsertParaNeedsBox,
+            Self::NotePrefix,
+            Self::NoteContainer,
+            Self::NoteSep,
         ]
     }
 }
@@ -418,6 +433,11 @@ impl ErrorKind {
             | Self::CannotLinkFirstSection
             | Self::HfTypeInactive { .. }
             | Self::LastTextBoxPara
+            | Self::LastNotePara
+            | Self::NeedNoteNumberingField
+            | Self::InvalidNoteKind
+            | Self::InvalidNoteNumFmt
+            | Self::InvalidNoteRestart
             | Self::TextBoxLinkCrossPart
             | Self::InvalidHexColor
             | Self::InvalidTextBoxDirection => InvalidField,
@@ -431,7 +451,8 @@ impl ErrorKind {
             | Self::ShapeNotFound { .. }
             | Self::ShapeHasNoText { .. }
             | Self::PictureNotFound { .. }
-            | Self::TextBoxNotFound { .. } => IdNotFound,
+            | Self::TextBoxNotFound { .. }
+            | Self::NoteNotFound { .. } => IdNotFound,
             Self::ScopeRequired { .. } => ScopeRequired,
             Self::SharedFormulaMaster { .. } => NotImplemented,
             Self::OpcOpen { .. } => OpcOpen,

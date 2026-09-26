@@ -95,10 +95,17 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::TxbxIndexFromOne => "txbx:index 从 1 起".into(),
             IdReason::SetParaOnBox => "setParaText 的 id 必须是段落 id，不能是文本框 id".into(),
             IdReason::InsertNeedsHostPara => "insertTextBox 的 id 必须是宿主段落 id".into(),
-            IdReason::InsertParaBody => "insertPara 与 deletePara 只允许用在文本框内".into(),
+            IdReason::InsertParaBody => {
+                "insertPara 与 deletePara 只允许用在文本框或脚注、尾注内".into()
+            }
             IdReason::InsertParaNeedsBox => {
-                "insertPara / deletePara 的 id 必须是文本框或框内段落".into()
-            },
+                "insertPara / deletePara 的 id 必须是文本框、框内段落、注或注内段落".into()
+            }
+            IdReason::NotePrefix => "脚注、尾注 id 必须是 footnote:… 或 endnote:…".into(),
+            IdReason::NoteContainer => {
+                "注 id 必须带 /para:…（该 id 本身不是段落）".into()
+            }
+            IdReason::NoteSep => "分隔符 id 不能用于 apply".into(),
         },
         ErrorKind::SheetNotFound { name } => format!("找不到工作表：{name}"),
         ErrorKind::ParaNotFound { id } => format!("找不到段落：{id}"),
@@ -109,6 +116,19 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::PictureNotFound { id } => format!("找不到图：{id}"),
         ErrorKind::TextBoxNotFound { id } => format!("找不到文本框：{id}"),
         ErrorKind::LastTextBoxPara => "文本框内至少要留一段，不能删掉最后一段".into(),
+        ErrorKind::LastNotePara => "脚注、尾注内至少要留一段，不能删掉最后一段".into(),
+        ErrorKind::NoteNotFound { id } => format!("找不到脚注或尾注：{id}"),
+        ErrorKind::NeedNoteNumberingField => {
+            "setNoteNumbering 至少要给 numFmt、numStart 或 numRestart 之一".into()
+        }
+        ErrorKind::InvalidNoteKind => "kind 必须是 footnote 或 endnote".into(),
+        ErrorKind::InvalidNoteNumFmt => {
+            "numFmt 必须是 decimal、upperRoman、lowerRoman、upperLetter、lowerLetter 或 chicago"
+                .into()
+        }
+        ErrorKind::InvalidNoteRestart => {
+            "numRestart 必须是 continuous、eachSect 或 eachPage".into()
+        }
         ErrorKind::TextBoxLinkCrossPart => "链接文本框必须在同一部件里".into(),
         ErrorKind::InvalidHexColor => "color 必须是六位 RGB 十六进制或 null".into(),
         ErrorKind::InvalidTextBoxDirection => "direction 必须是 horizontal 或 vertical".into(),

@@ -25,6 +25,7 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 | B1–B7 | ✅ | Word 16.0：根上 `pictureCount=2`；第二段行内+浮动；换/插/删无修复；尺寸 144 磅；行内改浮动 `square`；改字后图还在 |
 | E1–E4 | ✅ | 库测试：页眉图 / 正文图导出字节与 `/word/media/…` 一致，`contentType` 为 `image/png`；换图后再导出得到新文件；段落 id 报 `InvalidId`，缺图报 `IdNotFound`。不强制开 Word |
 | T1–T9 | ✅ | Word 16.0：`docx-textbox.ps1`，13 PASS / 0 FAIL。行内+浮动+链接+组合；框内改字、插删框、尺寸 144 磅、绕排、红填蓝边、框内插删段与插图、断开再接上。标题栏无 Repair |
+| N1–N6 | ✅ | Word 16.0：`docx-notes.ps1`，7 PASS / 0 FAIL。计数与名单、改注文、插删脚注、编号 `NumberStyle=1`（大写罗马）、注内插图。标题栏无 Repair |
 | O1 | 🚫 | 领域层不做原样保存，与 xlsx 清单相同。零脏写回见 OPC 库测试。Word 另存 create 产物见 `docx-O1-word-resave`。此前记的 `SaveAs2` 挂起，拆分后重跑没再出现，一秒内返回 |
 
 ## create
@@ -153,6 +154,19 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 | T7 | 填色描边 | `setTextBoxFill` / `setTextBoxLine` 后可见变化，无修复 |
 | T8 | 框内段与图 | 框内插删段、插图与正文图规则相同 |
 | T9 | 链接 | `setTextBoxLink` 断开或接上后 Word 能继续编辑链条 |
+
+## 脚注与尾注
+
+准备一份 Word 亲手另存的样例：至少一条用户脚注、一条用户尾注。不要用库 `create` 产物当唯一样例（create 不写注）。手测脚本为 `manual-check/office/cases/docx-notes.ps1`。
+
+| 序号 | 检查 | 通过标准 |
+| --- | --- | --- |
+| N1 | 计数与名单 | 无 `notes` 时根上有 `footnoteCount` / `endnoteCount`、没有名单；`notes: true` 时用户注 id 为 `footnote:{id}` / `endnote:{id}`，`host` 对，分隔符只在 `noteSeparators` |
+| N2 | 改注文 | 对注内段落 `setParaText` 后 Word 无修复，正文未改 |
+| N3 | 插入 | `insertFootnote` 后 Word 能看见引用与注文，无修复 |
+| N4 | 删除 | `deleteFootnote` 后引用与注文都消失，无修复 |
+| N5 | 编号 | `setNoteNumbering` 改 `numFmt` 后 Word 打开时编号样式变了（允许打开时才重画） |
+| N6 | 注内图 | 注内 `replacePicture` 或 `insertPicture` 后 Word 无修复 |
 
 ## 原样保存（opc 验收）
 

@@ -7,7 +7,8 @@ use crate::opc::{self, Package};
 use crate::xml;
 
 use super::hf::{self, HfKind, HfPart};
-use super::para;
+use super::notes;
+use super::para::{self, NoteKind};
 use super::picture;
 use super::request::InspectScope;
 use super::textbox;
@@ -51,6 +52,8 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     let picture_count = body_picture_count(&paras)?;
     let body_boxes = collect_body_boxes(&paras)?;
     let text_box_count = body_boxes.len();
+    let footnote_count = notes::user_count(&pkg, &part, NoteKind::Footnote)?;
+    let endnote_count = notes::user_count(&pkg, &part, NoteKind::Endnote)?;
 
     let mut tree = json!({
         "schemaVersion": 1,
@@ -59,6 +62,8 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         "paraCount": para_count,
         "pictureCount": picture_count,
         "textBoxCount": text_box_count,
+        "footnoteCount": footnote_count,
+        "endnoteCount": endnote_count,
         "outline": outline,
         "headers": headers,
         "footers": footers,
@@ -66,6 +71,29 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     });
 
     if let Some(scope) = scope {
+        if scope.notes {
+            let (footnotes, fn_seps) = notes_array(
+                &pkg,
+                &part,
+                &doc.root,
+                &catalog,
+                NoteKind::Footnote,
+                expand_pics,
+            )?;
+            let (endnotes, en_seps) = notes_array(
+                &pkg,
+                &part,
+                &doc.root,
+                &catalog,
+                NoteKind::Endnote,
+                expand_pics,
+            )?;
+            let mut seps = fn_seps;
+            seps.extend(en_seps);
+            tree["footnotes"] = footnotes;
+            tree["endnotes"] = endnotes;
+            tree["noteSeparators"] = Value::Array(seps);
+        }
         if let (Some(from), Some(max_paras)) = (scope.from, scope.max_paras) {
             let start = from as usize;
             let mut paragraphs = Vec::new();
@@ -265,6 +293,20 @@ fn body_para_json(
             expand_pics,
         )?);
     }
+    let fn_refs = notes::refs_in_para(p, NoteKind::Footnote);
+    if !fn_refs.is_empty() {
+        node["footnoteRef"] = json!(fn_refs
+            .into_iter()
+            .map(|nid| NoteKind::Footnote.inspect_id(&nid))
+            .collect::<Vec<_>>());
+    }
+    let en_refs = notes::refs_in_para(p, NoteKind::Endnote);
+    if !en_refs.is_empty() {
+        node["endnoteRef"] = json!(en_refs
+            .into_iter()
+            .map(|nid| NoteKind::Endnote.inspect_id(&nid))
+            .collect::<Vec<_>>());
+    }
     Ok(node)
 }
 
@@ -306,4 +348,70 @@ fn para_json(
         node["textBoxCount"] = json!(n);
     }
     node
+}
+
+fn notes_array(
+    pkg: &crate::opc::Package,
+    doc_part: &str,
+    doc_root: &crate::xml::Element,
+    catalog: &[HfPart],
+    kind: NoteKind,
+    expand_pics: bool,
+) -> Result<(Value, Vec<Value>), Error> {
+    let hosts = notes::collect_hosts(pkg, doc_part, doc_root, catalog, kind)?;
+    let Some(part) = notes::part_name(pkg, doc_part, kind)? else {
+        return Ok((Value::Array(Vec::new()), Vec::new()));
+    };
+    let doc = crate::xml::parse(pkg.get(&part)?)?;
+    let mut users = Vec::new();
+    for note in notes::user_notes(&doc.root, kind) {
+        let note_id = note.attr_local("id").unwrap_or("").to_string();
+        let inspect_id = kind.inspect_id(&note_id);
+        let host: Vec<String> = hosts
+            .iter()
+            .filter(|(nid, _)| notes::ids_match(nid, &note_id))
+            .map(|(_, pid)| pid.clone())
+            .collect();
+        let paras = para::collect_paragraphs(note);
+        let mut pic_count = 0usize;
+        let mut para_nodes = Vec::new();
+        let mut all_pics = Vec::new();
+        for (i, p) in paras.iter().enumerate() {
+            let index = i + 1;
+            let (pid, _) = para::para_stable_id_in(&inspect_id, p, index);
+            let pics = picture::collect_pictures(p, &pid)?;
+            pic_count += pics.len();
+            let mut node = para_json(p, index, Some(&inspect_id), Some(pics.len()), Some(0));
+            if expand_pics {
+                node["pictures"] = Value::Array(picture::pictures_json(&pics));
+            }
+            all_pics.extend(pics);
+            para_nodes.push(node);
+        }
+        let mut node = json!({
+            "id": inspect_id,
+            "noteId": note_id,
+            "type": "normal",
+            "host": host,
+            "paraCount": paras.len(),
+            "pictureCount": pic_count,
+        });
+        if expand_pics {
+            node["pictures"] = Value::Array(picture::pictures_json(&all_pics));
+        }
+        node["paragraphs"] = Value::Array(para_nodes);
+        users.push(node);
+    }
+    let mut seps = Vec::new();
+    for sep in notes::seps(&doc.root, kind) {
+        let note_id = sep.attr_local("id").unwrap_or("").to_string();
+        let typ = notes::sep_type(sep).unwrap_or("separator");
+        seps.push(json!({
+            "id": format!("{}:sep:{typ}", kind.as_str()),
+            "kind": kind.as_str(),
+            "type": typ,
+            "noteId": note_id,
+        }));
+    }
+    Ok((Value::Array(users), seps))
 }

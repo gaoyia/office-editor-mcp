@@ -175,7 +175,10 @@ mod tests {
         assert_eq!(tree["paraCount"], 2);
         assert_eq!(tree["pictureCount"], 0);
         assert_eq!(tree["textBoxCount"], 0);
+        assert_eq!(tree["footnoteCount"], 0);
+        assert_eq!(tree["endnoteCount"], 0);
         assert!(tree.get("paragraphs").is_none());
+        assert!(tree.get("footnotes").is_none());
         assert_eq!(tree["headers"], json!([]));
         assert_eq!(tree["footers"], json!([]));
         assert_eq!(tree["sections"][0]["id"], "section:1");
@@ -364,9 +367,33 @@ mod tests {
         let err = run(
             &json!({
                 "schemaVersion": 1,
+                "action": "inspect",
+                "path": path.to_string_lossy(),
+                "scope": { "notes": true }
+            })
+            .to_string(),
+            None,
+        )
+        .unwrap_err();
+        assert_eq!(err.code(), ErrorCode::InvalidField);
+        let err = run(
+            &json!({
+                "schemaVersion": 1,
                 "action": "apply",
                 "path": path.to_string_lossy(),
                 "ops": [{ "op": "replacePicture", "id": "header:default:1/pic:1", "file": "a.png" }]
+            })
+            .to_string(),
+            None,
+        )
+        .unwrap_err();
+        assert_eq!(err.code(), ErrorCode::InvalidField);
+        let err = run(
+            &json!({
+                "schemaVersion": 1,
+                "action": "apply",
+                "path": path.to_string_lossy(),
+                "ops": [{ "op": "insertFootnote", "id": "para:1", "text": "x" }]
             })
             .to_string(),
             None,
@@ -759,6 +786,8 @@ mod tests {
                 "paraCount",
                 "pictureCount",
                 "textBoxCount",
+                "footnoteCount",
+                "endnoteCount",
                 "outline",
                 "headers",
                 "footers",

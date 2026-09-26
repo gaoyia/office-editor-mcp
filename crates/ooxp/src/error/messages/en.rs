@@ -109,11 +109,20 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::SetParaOnBox => "setParaText id must be a paragraph id, not a text box id".into(),
             IdReason::InsertNeedsHostPara => "insertTextBox id must be a host paragraph id".into(),
             IdReason::InsertParaBody => {
-                "insertPara and deletePara are only allowed inside a text box".into()
+                "insertPara and deletePara are only allowed inside a text box or a note".into()
             }
             IdReason::InsertParaNeedsBox => {
-                "insertPara / deletePara id must be a text box or a paragraph inside a text box"
+                "insertPara / deletePara id must be a text box, a paragraph inside a text box, a note, or a paragraph inside a note"
                     .into()
+            }
+            IdReason::NotePrefix => {
+                "Footnote/endnote id must be footnote:… or endnote:…".into()
+            }
+            IdReason::NoteContainer => {
+                "Note id must include /para:… (that id alone is not a paragraph)".into()
+            }
+            IdReason::NoteSep => {
+                "Separator ids cannot be used with apply".into()
             },
         },
         ErrorKind::SheetNotFound { name } => format!("Sheet not found: {name}"),
@@ -126,6 +135,21 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::TextBoxNotFound { id } => format!("Text box not found: {id}"),
         ErrorKind::LastTextBoxPara => {
             "Cannot delete the last paragraph in a text box".into()
+        }
+        ErrorKind::LastNotePara => {
+            "Cannot delete the last paragraph in a footnote or endnote".into()
+        }
+        ErrorKind::NoteNotFound { id } => format!("Footnote or endnote not found: {id}"),
+        ErrorKind::NeedNoteNumberingField => {
+            "setNoteNumbering needs at least one of numFmt, numStart, or numRestart".into()
+        }
+        ErrorKind::InvalidNoteKind => "kind must be footnote or endnote".into(),
+        ErrorKind::InvalidNoteNumFmt => {
+            "numFmt must be decimal, upperRoman, lowerRoman, upperLetter, lowerLetter, or chicago"
+                .into()
+        }
+        ErrorKind::InvalidNoteRestart => {
+            "numRestart must be continuous, eachSect, or eachPage".into()
         }
         ErrorKind::TextBoxLinkCrossPart => {
             "Text boxes in a link chain must be in the same part".into()

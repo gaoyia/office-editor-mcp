@@ -7,11 +7,13 @@ use crate::opc::{self, rels_part_name, ContentTypes, Package, Relationship, Rela
 use crate::xml::{self, Document, Element, Node};
 
 use super::hf::{self, HfKind};
-use super::para::{self, HostPara, ParaTarget};
+use super::notes;
+use super::para::{self, HostPara, NoteKind, ParaTarget};
 use super::picture;
 use super::request::{
-    DeleteParaOp, DeletePictureOp, DeleteTextBoxOp, DocxOp, InsertParaOp, InsertPictureOp,
-    InsertTextBoxOp, ReplacePictureOp, SetHfDistanceOp, SetHfLinkOp, SetParaTextOp,
+    DeleteNoteOp, DeleteParaOp, DeletePictureOp, DeleteTextBoxOp, DocxOp, InsertNoteOp,
+    InsertParaOp, InsertParaPlace, InsertPictureOp, InsertTextBoxOp, NoteNumberTarget,
+    ReplacePictureOp, SetHfDistanceOp, SetHfLinkOp, SetNoteNumberingOp, SetParaTextOp,
     SetPictureSizeOp, SetPictureWrapOp, SetTextBoxDirectionOp, SetTextBoxFillOp, SetTextBoxLineOp,
     SetTextBoxLinkOp, SetTextBoxSizeOp, SetTextBoxWrapOp,
 };
@@ -96,6 +98,39 @@ pub fn apply(bytes: &[u8], ops: &[DocxOp]) -> Result<Vec<u8>, Error> {
             DocxOp::SetTextBoxLink(op) => {
                 apply_txbx_link(&mut pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
             }
+            DocxOp::InsertFootnote(op) => {
+                apply_insert_note(
+                    &mut pkg,
+                    &mut docs,
+                    &mut dirty,
+                    &doc_part,
+                    &catalog,
+                    op,
+                    NoteKind::Footnote,
+                    i,
+                )?;
+            }
+            DocxOp::InsertEndnote(op) => {
+                apply_insert_note(
+                    &mut pkg,
+                    &mut docs,
+                    &mut dirty,
+                    &doc_part,
+                    &catalog,
+                    op,
+                    NoteKind::Endnote,
+                    i,
+                )?;
+            }
+            DocxOp::DeleteFootnote(op) => {
+                apply_delete_note(&mut pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
+            }
+            DocxOp::DeleteEndnote(op) => {
+                apply_delete_note(&mut pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
+            }
+            DocxOp::SetNoteNumbering(op) => {
+                apply_note_numbering(&mut pkg, &mut docs, &mut dirty, &doc_part, op, i)?;
+            }
         }
     }
 
@@ -165,6 +200,33 @@ fn apply_para_text(
                 )
             })?;
             let el = para::find_paragraph_in_txbx_mut(content, para).ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::ParaNotFound { id: op.id.clone() },
+                    format!("ops[{i}].id"),
+                )
+            })?;
+            para::set_visible_text(el, &op.text);
+            dirty.insert(part_name, ());
+        }
+        ParaTarget::InNote {
+            kind,
+            note_id,
+            para,
+        } => {
+            let part_name = notes::part_name(pkg, doc_part, *kind)?.ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::ParaNotFound { id: op.id.clone() },
+                    format!("ops[{i}].id"),
+                )
+            })?;
+            let doc = load_part(pkg, docs, &part_name)?;
+            let note = notes::find_user_note_mut(&mut doc.root, *kind, note_id).ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::ParaNotFound { id: op.id.clone() },
+                    format!("ops[{i}].id"),
+                )
+            })?;
+            let el = para::find_paragraph_mut(note, para).ok_or_else(|| {
                 Error::with_path(
                     ErrorKind::ParaNotFound { id: op.id.clone() },
                     format!("ops[{i}].id"),
@@ -387,6 +449,7 @@ fn load_part<'a>(
 }
 
 fn part_for_pic(
+    pkg: &Package,
     catalog: &[hf::HfPart],
     doc_part: &str,
     target: &picture::PicTarget,
@@ -407,6 +470,14 @@ fn part_for_pic(
                 )
             })?;
             Ok(item.part.clone())
+        }
+        picture::PicTarget::InNote { kind, .. } => {
+            notes::part_name(pkg, doc_part, *kind)?.ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::PictureNotFound { id: id.to_string() },
+                    format!("ops[{i}].id"),
+                )
+            })
         }
     }
 }
@@ -430,6 +501,16 @@ fn find_target_drawing_mut<'a>(
             let host_p = para::find_paragraph_mut(root, host.body())?;
             let content = textbox::find_txbx_content_by_key_mut(host_p, box_key)?;
             let inner = para::find_paragraph_in_txbx_mut(content, para)?;
+            picture::find_drawing_mut(inner, key)
+        }
+        picture::PicTarget::InNote {
+            kind,
+            note_id,
+            para,
+            key,
+        } => {
+            let note = notes::find_user_note_mut(root, *kind, note_id)?;
+            let inner = para::find_paragraph_mut(note, para)?;
             picture::find_drawing_mut(inner, key)
         }
     }
@@ -459,6 +540,18 @@ fn remove_target_picture(root: &mut Element, target: &picture::PicTarget) -> boo
                 None => false,
             }
         }
+        picture::PicTarget::InNote {
+            kind,
+            note_id,
+            para,
+            key,
+        } => match notes::find_user_note_mut(root, *kind, note_id) {
+            Some(note) => match para::find_paragraph_mut(note, para) {
+                Some(inner) => picture::remove_picture(inner, key),
+                None => false,
+            },
+            None => false,
+        },
     }
 }
 
@@ -471,7 +564,7 @@ fn apply_replace_pic(
     op: &ReplacePictureOp,
     i: usize,
 ) -> Result<(), Error> {
-    let part_name = part_for_pic(catalog, doc_part, &op.target, &op.id, i)?;
+    let part_name = part_for_pic(pkg, catalog, doc_part, &op.target, &op.id, i)?;
     let doc = load_part(pkg, docs, &part_name)?;
     let drawing = find_target_drawing_mut(&mut doc.root, &op.target).ok_or_else(|| {
         Error::with_path(
@@ -523,6 +616,12 @@ fn apply_insert_pic(
             kind, hf_type, n, ..
         } => part_for_hf(catalog, *kind, *hf_type, *n, &op.id, i)?,
         ParaTarget::InTextBox { host, .. } => part_for_host(catalog, doc_part, host, &op.id, i)?,
+        ParaTarget::InNote { kind, .. } => notes::part_name(pkg, doc_part, *kind)?.ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::ParaNotFound { id: op.id.clone() },
+                format!("ops[{i}].id"),
+            )
+        })?,
     };
     {
         let doc = load_part(pkg, docs, &part_name)?;
@@ -567,7 +666,7 @@ fn apply_delete_pic(
     op: &DeletePictureOp,
     i: usize,
 ) -> Result<(), Error> {
-    let part_name = part_for_pic(catalog, doc_part, &op.target, &op.id, i)?;
+    let part_name = part_for_pic(pkg, catalog, doc_part, &op.target, &op.id, i)?;
     let (rid, media) = {
         let doc = load_part(pkg, docs, &part_name)?;
         let rid = {
@@ -612,7 +711,7 @@ fn apply_pic_size(
     op: &SetPictureSizeOp,
     i: usize,
 ) -> Result<(), Error> {
-    let part_name = part_for_pic(catalog, doc_part, &op.target, &op.id, i)?;
+    let part_name = part_for_pic(pkg, catalog, doc_part, &op.target, &op.id, i)?;
     let doc = load_part(pkg, docs, &part_name)?;
     let drawing = find_target_drawing_mut(&mut doc.root, &op.target).ok_or_else(|| {
         Error::with_path(
@@ -639,7 +738,7 @@ fn apply_pic_wrap(
     op: &SetPictureWrapOp,
     i: usize,
 ) -> Result<(), Error> {
-    let part_name = part_for_pic(catalog, doc_part, &op.target, &op.id, i)?;
+    let part_name = part_for_pic(pkg, catalog, doc_part, &op.target, &op.id, i)?;
     let doc = load_part(pkg, docs, &part_name)?;
     picture::ensure_drawing_ns(&mut doc.root);
     let drawing = find_target_drawing_mut(&mut doc.root, &op.target).ok_or_else(|| {
@@ -705,6 +804,14 @@ fn find_insert_para_mut<'a>(root: &'a mut Element, target: &ParaTarget) -> Optio
             let host_p = para::find_paragraph_mut(root, host.body())?;
             let content = textbox::find_txbx_content_by_key_mut(host_p, key)?;
             para::find_paragraph_in_txbx_mut(content, para)
+        }
+        ParaTarget::InNote {
+            kind,
+            note_id,
+            para,
+        } => {
+            let note = notes::find_user_note_mut(root, *kind, note_id)?;
+            para::find_paragraph_mut(note, para)
         }
     }
 }
@@ -895,45 +1002,91 @@ fn apply_insert_para(
     op: &InsertParaOp,
     i: usize,
 ) -> Result<(), Error> {
-    let part_name = part_for_txbx(catalog, doc_part, &op.box_target, &op.id, i)?;
-    let doc = load_part(pkg, docs, &part_name)?;
-    let new_id = para::next_para_hex(&doc.root);
-    let host = para::find_paragraph_mut(&mut doc.root, op.box_target.host.body())
-        .ok_or_else(|| txbx_missing(&op.id, i))?;
-    let content = textbox::find_txbx_content_by_key_mut(host, &op.box_target.key)
-        .ok_or_else(|| txbx_missing(&op.id, i))?;
-    let new_p = para::new_paragraph(content, &new_id, &op.text);
-    if let Some(ParaTarget::InTextBox { para, .. }) = &op.after {
-        let mut idx = 0usize;
-        let mut insert_at = None;
-        for (j, n) in content.children.iter().enumerate() {
-            if let Node::Element(e) = n {
-                if e.local_name() == "p" {
-                    idx += 1;
-                    let hit = match para {
-                        para::BodyPara::Index(n) => idx == *n,
-                        para::BodyPara::Hex(hex) => e
-                            .attr_local("paraId")
-                            .is_some_and(|id| id.eq_ignore_ascii_case(hex)),
-                    };
-                    if hit {
-                        insert_at = Some(j + 1);
-                        break;
-                    }
+    match &op.place {
+        InsertParaPlace::TextBox { box_target, after } => {
+            let part_name = part_for_txbx(catalog, doc_part, box_target, &op.id, i)?;
+            let doc = load_part(pkg, docs, &part_name)?;
+            let new_id = para::next_para_hex(&doc.root);
+            let host = para::find_paragraph_mut(&mut doc.root, box_target.host.body())
+                .ok_or_else(|| txbx_missing(&op.id, i))?;
+            let content = textbox::find_txbx_content_by_key_mut(host, &box_target.key)
+                .ok_or_else(|| txbx_missing(&op.id, i))?;
+            let new_p = para::new_paragraph(content, &new_id, &op.text);
+            if let Some(ParaTarget::InTextBox { para, .. }) = after {
+                insert_p_after(content, para, new_p).map_err(|_| {
+                    Error::with_path(
+                        ErrorKind::ParaNotFound { id: op.id.clone() },
+                        format!("ops[{i}].id"),
+                    )
+                })?;
+            } else {
+                content.children.push(Node::Element(new_p));
+            }
+            dirty.insert(part_name, ());
+            Ok(())
+        }
+        InsertParaPlace::Note {
+            kind,
+            note_id,
+            after,
+        } => {
+            let part_name = notes::part_name(pkg, doc_part, *kind)?.ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::NoteNotFound { id: op.id.clone() },
+                    format!("ops[{i}].id"),
+                )
+            })?;
+            let doc = load_part(pkg, docs, &part_name)?;
+            let new_id = para::next_para_hex(&doc.root);
+            let note = notes::find_user_note_mut(&mut doc.root, *kind, note_id).ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::NoteNotFound { id: op.id.clone() },
+                    format!("ops[{i}].id"),
+                )
+            })?;
+            let new_p = para::new_paragraph(note, &new_id, &op.text);
+            if let Some(para) = after {
+                insert_p_after(note, para, new_p).map_err(|_| {
+                    Error::with_path(
+                        ErrorKind::ParaNotFound { id: op.id.clone() },
+                        format!("ops[{i}].id"),
+                    )
+                })?;
+            } else {
+                note.children.push(Node::Element(new_p));
+            }
+            dirty.insert(part_name, ());
+            Ok(())
+        }
+    }
+}
+
+fn insert_p_after(
+    parent: &mut Element,
+    para: &para::BodyPara,
+    new_p: Element,
+) -> Result<(), ()> {
+    let mut idx = 0usize;
+    let mut insert_at = None;
+    for (j, n) in parent.children.iter().enumerate() {
+        if let Node::Element(e) = n {
+            if e.local_name() == "p" {
+                idx += 1;
+                let hit = match para {
+                    para::BodyPara::Index(n) => idx == *n,
+                    para::BodyPara::Hex(hex) => e
+                        .attr_local("paraId")
+                        .is_some_and(|id| id.eq_ignore_ascii_case(hex)),
+                };
+                if hit {
+                    insert_at = Some(j + 1);
+                    break;
                 }
             }
         }
-        let at = insert_at.ok_or_else(|| {
-            Error::with_path(
-                ErrorKind::ParaNotFound { id: op.id.clone() },
-                format!("ops[{i}].id"),
-            )
-        })?;
-        content.children.insert(at, Node::Element(new_p));
-    } else {
-        content.children.push(Node::Element(new_p));
     }
-    dirty.insert(part_name, ());
+    let at = insert_at.ok_or(())?;
+    parent.children.insert(at, Node::Element(new_p));
     Ok(())
 }
 
@@ -946,38 +1099,85 @@ fn apply_delete_para(
     op: &DeleteParaOp,
     i: usize,
 ) -> Result<(), Error> {
-    let ParaTarget::InTextBox { host, key, para } = &op.inner else {
-        return Err(Error::with_path(
+    match &op.inner {
+        ParaTarget::InTextBox { host, key, para } => {
+            let part_name = part_for_host(catalog, doc_part, host, &op.id, i)?;
+            let doc = load_part(pkg, docs, &part_name)?;
+            let host_p = para::find_paragraph_mut(&mut doc.root, host.body()).ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::ParaNotFound { id: op.id.clone() },
+                    format!("ops[{i}].id"),
+                )
+            })?;
+            let content = textbox::find_txbx_content_by_key_mut(host_p, key).ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::ParaNotFound { id: op.id.clone() },
+                    format!("ops[{i}].id"),
+                )
+            })?;
+            let count = para::collect_paragraphs_in_txbx(content).len();
+            if count <= 1 {
+                return Err(Error::with_path(
+                    ErrorKind::LastTextBoxPara,
+                    format!("ops[{i}].id"),
+                ));
+            }
+            remove_p_at(content, para).map_err(|_| {
+                Error::with_path(
+                    ErrorKind::ParaNotFound { id: op.id.clone() },
+                    format!("ops[{i}].id"),
+                )
+            })?;
+            dirty.insert(part_name, ());
+            Ok(())
+        }
+        ParaTarget::InNote {
+            kind,
+            note_id,
+            para,
+        } => {
+            let part_name = notes::part_name(pkg, doc_part, *kind)?.ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::NoteNotFound { id: op.id.clone() },
+                    format!("ops[{i}].id"),
+                )
+            })?;
+            let doc = load_part(pkg, docs, &part_name)?;
+            let note = notes::find_user_note_mut(&mut doc.root, *kind, note_id).ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::NoteNotFound { id: op.id.clone() },
+                    format!("ops[{i}].id"),
+                )
+            })?;
+            let count = para::collect_paragraphs(note).len();
+            if count <= 1 {
+                return Err(Error::with_path(
+                    ErrorKind::LastNotePara,
+                    format!("ops[{i}].id"),
+                ));
+            }
+            remove_p_at(note, para).map_err(|_| {
+                Error::with_path(
+                    ErrorKind::ParaNotFound { id: op.id.clone() },
+                    format!("ops[{i}].id"),
+                )
+            })?;
+            dirty.insert(part_name, ());
+            Ok(())
+        }
+        _ => Err(Error::with_path(
             ErrorKind::InvalidId {
                 reason: crate::error::IdReason::InsertParaNeedsBox,
             },
             format!("ops[{i}].id"),
-        ));
-    };
-    let part_name = part_for_host(catalog, doc_part, host, &op.id, i)?;
-    let doc = load_part(pkg, docs, &part_name)?;
-    let host_p = para::find_paragraph_mut(&mut doc.root, host.body()).ok_or_else(|| {
-        Error::with_path(
-            ErrorKind::ParaNotFound { id: op.id.clone() },
-            format!("ops[{i}].id"),
-        )
-    })?;
-    let content = textbox::find_txbx_content_by_key_mut(host_p, key).ok_or_else(|| {
-        Error::with_path(
-            ErrorKind::ParaNotFound { id: op.id.clone() },
-            format!("ops[{i}].id"),
-        )
-    })?;
-    let count = para::collect_paragraphs_in_txbx(content).len();
-    if count <= 1 {
-        return Err(Error::with_path(
-            ErrorKind::LastTextBoxPara,
-            format!("ops[{i}].id"),
-        ));
+        )),
     }
+}
+
+fn remove_p_at(parent: &mut Element, para: &para::BodyPara) -> Result<(), ()> {
     let mut idx = 0usize;
     let mut remove_at = None;
-    for (j, n) in content.children.iter().enumerate() {
+    for (j, n) in parent.children.iter().enumerate() {
         if let Node::Element(e) = n {
             if e.local_name() == "p" {
                 idx += 1;
@@ -994,14 +1194,8 @@ fn apply_delete_para(
             }
         }
     }
-    let at = remove_at.ok_or_else(|| {
-        Error::with_path(
-            ErrorKind::ParaNotFound { id: op.id.clone() },
-            format!("ops[{i}].id"),
-        )
-    })?;
-    content.children.remove(at);
-    dirty.insert(part_name, ());
+    let at = remove_at.ok_or(())?;
+    parent.children.remove(at);
     Ok(())
 }
 
@@ -1059,5 +1253,200 @@ fn apply_txbx_link(
     }
     textbox::apply_link(&mut doc.root, &op.target, op.next.as_ref())?;
     dirty.insert(part_a, ());
+    Ok(())
+}
+
+fn apply_insert_note(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &InsertNoteOp,
+    kind: NoteKind,
+    i: usize,
+) -> Result<(), Error> {
+    let host_part = match &op.host {
+        ParaTarget::Body(_) => doc_part.to_string(),
+        ParaTarget::HeaderFooter {
+            kind: hf_kind,
+            hf_type,
+            n,
+            ..
+        } => part_for_hf(catalog, *hf_kind, *hf_type, *n, &op.id, i)?,
+        ParaTarget::InTextBox { host, .. } => part_for_host(catalog, doc_part, host, &op.id, i)?,
+        ParaTarget::InNote { .. } => {
+            return Err(Error::with_path(
+                ErrorKind::InvalidId {
+                    reason: crate::error::IdReason::NotePrefix,
+                },
+                format!("ops[{i}].id"),
+            ));
+        }
+    };
+    {
+        let doc = load_part(pkg, docs, &host_part)?;
+        if find_insert_para_mut(&mut doc.root, &op.host).is_none() {
+            return Err(Error::with_path(
+                ErrorKind::ParaNotFound { id: op.id.clone() },
+                format!("ops[{i}].id"),
+            ));
+        }
+    }
+    let notes_part = notes::ensure_part(pkg, docs, dirty, doc_part, kind)?;
+    let (w_id, para_hex) = {
+        let doc = load_part(pkg, docs, &notes_part)?;
+        let w_id = notes::next_user_id(&doc.root, kind);
+        let para_hex = para::next_para_hex(&doc.root);
+        notes::append_user_note(&mut doc.root, kind, &w_id, &para_hex, &op.text);
+        dirty.insert(notes_part.clone(), ());
+        (w_id, para_hex)
+    };
+    let _ = para_hex;
+    let doc = load_part(pkg, docs, &host_part)?;
+    let p = find_insert_para_mut(&mut doc.root, &op.host).ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::ParaNotFound { id: op.id.clone() },
+            format!("ops[{i}].id"),
+        )
+    })?;
+    notes::append_reference(p, kind, &w_id);
+    dirty.insert(host_part, ());
+    Ok(())
+}
+
+fn apply_delete_note(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &DeleteNoteOp,
+    i: usize,
+) -> Result<(), Error> {
+    let notes_part = notes::part_name(pkg, doc_part, op.kind)?.ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::NoteNotFound { id: op.id.clone() },
+            format!("ops[{i}].id"),
+        )
+    })?;
+    let (embeds, media) = {
+        let doc = load_part(pkg, docs, &notes_part)?;
+        if notes::find_user_note(&doc.root, op.kind, &op.note_id).is_none() {
+            let is_sep = notes::seps(&doc.root, op.kind).iter().any(|e| {
+                notes::ids_match(e.attr_local("id").unwrap_or(""), &op.note_id)
+            });
+            return Err(Error::with_path(
+                if is_sep {
+                    ErrorKind::InvalidId {
+                        reason: crate::error::IdReason::NoteSep,
+                    }
+                } else {
+                    ErrorKind::NoteNotFound { id: op.id.clone() }
+                },
+                format!("ops[{i}].id"),
+            ));
+        }
+        let note = notes::find_user_note(&doc.root, op.kind, &op.note_id).unwrap();
+        let embeds = notes::collect_blip_embeds(note);
+        let mut media = Vec::new();
+        for rid in &embeds {
+            if let Ok(m) = picture::resolve_embed(pkg, &notes_part, rid) {
+                media.push(m);
+            }
+        }
+        (embeds, media)
+    };
+    {
+        let doc = load_part(pkg, docs, &notes_part)?;
+        notes::remove_user_note(&mut doc.root, op.kind, &op.note_id);
+        dirty.insert(notes_part.clone(), ());
+    }
+    {
+        let doc = load_part(pkg, docs, doc_part)?;
+        notes::remove_references(&mut doc.root, op.kind, &op.note_id);
+        dirty.insert(doc_part.to_string(), ());
+    }
+    for item in catalog {
+        let doc = load_part(pkg, docs, &item.part)?;
+        notes::remove_references(&mut doc.root, op.kind, &op.note_id);
+        dirty.insert(item.part.clone(), ());
+    }
+    let notes_root = &docs.get(&notes_part).unwrap().root;
+    for rid in embeds {
+        picture::remove_rel_if_unused(pkg, &notes_part, &rid, notes_root)?;
+    }
+    for m in media {
+        if !picture::media_still_used(pkg, &m)? {
+            pkg.remove(&m);
+        }
+    }
+    Ok(())
+}
+
+fn apply_note_numbering(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    op: &SetNoteNumberingOp,
+    i: usize,
+) -> Result<(), Error> {
+    match op.target {
+        NoteNumberTarget::Document => {
+            let settings = notes::settings_part_name(pkg, doc_part)?.ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::PartMissing {
+                        name: "/word/settings.xml".into(),
+                    },
+                    format!("ops[{i}].id"),
+                )
+            })?;
+            let doc = load_part(pkg, docs, &settings)?;
+            notes::apply_numbering(
+                &mut doc.root,
+                op.kind,
+                op.num_fmt.as_deref(),
+                op.num_start,
+                op.num_restart.as_deref(),
+            );
+            dirty.insert(settings, ());
+            // Word 16.0 读的是节上的 numFmt；只写 settings 时 COM NumberStyle 仍是阿拉伯。
+            let n_sects = hf::collect_sect_prs(&load_part(pkg, docs, doc_part)?.root).len();
+            for n in 1..=n_sects {
+                let doc = load_part(pkg, docs, doc_part)?;
+                let Some(sect) = hf::find_sect_pr_mut(&mut doc.root, n) else {
+                    continue;
+                };
+                notes::apply_numbering(
+                    sect,
+                    op.kind,
+                    op.num_fmt.as_deref(),
+                    op.num_start,
+                    op.num_restart.as_deref(),
+                );
+            }
+            if n_sects > 0 {
+                dirty.insert(doc_part.to_string(), ());
+            }
+        }
+        NoteNumberTarget::Section(n) => {
+            let doc = load_part(pkg, docs, doc_part)?;
+            let sect = hf::find_sect_pr_mut(&mut doc.root, n).ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::SectionNotFound { id: op.id.clone() },
+                    format!("ops[{i}].id"),
+                )
+            })?;
+            notes::apply_numbering(
+                sect,
+                op.kind,
+                op.num_fmt.as_deref(),
+                op.num_start,
+                op.num_restart.as_deref(),
+            );
+            dirty.insert(doc_part.to_string(), ());
+        }
+    }
     Ok(())
 }

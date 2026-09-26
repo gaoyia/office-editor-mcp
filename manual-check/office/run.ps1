@@ -35,6 +35,7 @@ $order = @(
     'docx-picture'
     'docx-body-picture'
     'docx-textbox'
+    'docx-notes'
     'pptx-apply'
     'opc-resave'
 )

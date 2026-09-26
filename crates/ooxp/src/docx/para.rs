@@ -22,6 +22,93 @@ pub enum ParaTarget {
         key: TxbxKey,
         para: BodyPara,
     },
+    /// 脚注或尾注里的段落。
+    InNote {
+        kind: NoteKind,
+        note_id: String,
+        para: BodyPara,
+    },
+}
+
+/// 脚注或尾注。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NoteKind {
+    Footnote,
+    Endnote,
+}
+
+impl NoteKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Footnote => "footnote",
+            Self::Endnote => "endnote",
+        }
+    }
+
+    pub fn parse(s: &str) -> Option<Self> {
+        match s {
+            "footnote" => Some(Self::Footnote),
+            "endnote" => Some(Self::Endnote),
+            _ => None,
+        }
+    }
+
+    pub fn item_local(self) -> &'static str {
+        self.as_str()
+    }
+
+    pub fn reference_local(self) -> &'static str {
+        match self {
+            Self::Footnote => "footnoteReference",
+            Self::Endnote => "endnoteReference",
+        }
+    }
+
+    pub fn ref_mark_local(self) -> &'static str {
+        match self {
+            Self::Footnote => "footnoteRef",
+            Self::Endnote => "endnoteRef",
+        }
+    }
+
+    pub fn pr_local(self) -> &'static str {
+        match self {
+            Self::Footnote => "footnotePr",
+            Self::Endnote => "endnotePr",
+        }
+    }
+
+    pub fn rel_suffix(self) -> &'static str {
+        match self {
+            Self::Footnote => "/footnotes",
+            Self::Endnote => "/endnotes",
+        }
+    }
+
+    pub fn file_name(self) -> &'static str {
+        match self {
+            Self::Footnote => "footnotes.xml",
+            Self::Endnote => "endnotes.xml",
+        }
+    }
+
+    pub fn ref_style(self) -> &'static str {
+        match self {
+            Self::Footnote => "FootnoteReference",
+            Self::Endnote => "EndnoteReference",
+        }
+    }
+
+    pub fn inspect_id(self, note_id: &str) -> String {
+        format!("{}:{note_id}", self.as_str())
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum NoteIdTarget {
+    Container { kind: NoteKind, note_id: String },
+    Para { kind: NoteKind, note_id: String, para: BodyPara },
+    Sep,
 }
 
 #[derive(Debug, Clone)]
@@ -106,6 +193,31 @@ pub fn parse_para_id_at(id: &str, path: &str) -> Result<ParaTarget, Error> {
         let para = parse_body_para(inner, &path)?;
         return Ok(ParaTarget::InTextBox { host, key, para });
     }
+    if let Some(note) = parse_note_id_at(id, &path)? {
+        return match note {
+            NoteIdTarget::Sep => Err(Error::with_path(
+                ErrorKind::InvalidId {
+                    reason: IdReason::NoteSep,
+                },
+                path,
+            )),
+            NoteIdTarget::Container { .. } => Err(Error::with_path(
+                ErrorKind::InvalidId {
+                    reason: IdReason::NoteContainer,
+                },
+                path,
+            )),
+            NoteIdTarget::Para {
+                kind,
+                note_id,
+                para,
+            } => Ok(ParaTarget::InNote {
+                kind,
+                note_id,
+                para,
+            }),
+        };
+    }
     match parse_host_para_id(id, &path)? {
         HostPara::Body(p) => Ok(ParaTarget::Body(p)),
         HostPara::HeaderFooter {
@@ -179,7 +291,84 @@ pub fn parse_txbx_id_at(id: &str, path: &str) -> Result<TxbxTarget, Error> {
 
 fn looks_like_para_or_hf(id: &str) -> bool {
     id.starts_with("para:")
+        || id.starts_with("footnote:")
+        || id.starts_with("endnote:")
         || HfKind::parse(id.split_once(':').map(|(k, _)| k).unwrap_or("")).is_some()
+}
+
+pub fn parse_note_id_at(id: &str, path: &str) -> Result<Option<NoteIdTarget>, Error> {
+    let path = path.to_string();
+    let (kind, rest) = if let Some(rest) = id.strip_prefix("footnote:") {
+        (NoteKind::Footnote, rest)
+    } else if let Some(rest) = id.strip_prefix("endnote:") {
+        (NoteKind::Endnote, rest)
+    } else {
+        return Ok(None);
+    };
+    if rest.starts_with("sep:") {
+        let sep_type = rest.strip_prefix("sep:").unwrap_or("");
+        if !matches!(
+            sep_type,
+            "separator" | "continuationSeparator" | "continuationNotice"
+        ) {
+            return Err(Error::with_path(
+                ErrorKind::InvalidId {
+                    reason: IdReason::NoteSep,
+                },
+                path,
+            ));
+        }
+        return Ok(Some(NoteIdTarget::Sep));
+    }
+    if rest.is_empty() {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::NotePrefix,
+            },
+            path,
+        ));
+    }
+    let (note_id, tail) = match rest.split_once('/') {
+        Some((nid, t)) => (nid, Some(t)),
+        None => (rest, None),
+    };
+    if note_id.is_empty() {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::NotePrefix,
+            },
+            path,
+        ));
+    }
+    match tail {
+        None => Ok(Some(NoteIdTarget::Container {
+            kind,
+            note_id: note_id.to_string(),
+        })),
+        Some(t) => {
+            let inner = t.strip_prefix("para:").ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::InvalidId {
+                        reason: IdReason::NotePrefix,
+                    },
+                    path.clone(),
+                )
+            })?;
+            if inner.contains('/') {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidId {
+                        reason: IdReason::ParaPrefix,
+                    },
+                    path.clone(),
+                ));
+            }
+            Ok(Some(NoteIdTarget::Para {
+                kind,
+                note_id: note_id.to_string(),
+                para: parse_body_para(inner, &path)?,
+            }))
+        }
+    }
 }
 
 fn parse_host_para_id(id: &str, path: &str) -> Result<HostPara, Error> {

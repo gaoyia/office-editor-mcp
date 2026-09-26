@@ -12,6 +12,7 @@ use crate::opc::{
 use crate::xml::{Element, Node};
 
 use super::hf::{HfKind, HfType};
+use super::notes;
 use super::para::{self, BodyPara, HostPara, ParaTarget, TxbxKey};
 use super::{A_NS, PIC_NS, REL_IMAGE, REL_NS, WP_NS};
 
@@ -167,6 +168,12 @@ pub enum PicTarget {
         para: BodyPara,
         key: PicKey,
     },
+    InNote {
+        kind: para::NoteKind,
+        note_id: String,
+        para: BodyPara,
+        key: PicKey,
+    },
 }
 
 pub struct PicInfo {
@@ -245,6 +252,8 @@ pub fn parse_pic_id_at(id: &str, path: &str) -> Result<PicTarget, Error> {
     let path = path.to_string();
     let Some((left, key_s)) = id.rsplit_once("/pic:") else {
         if id.starts_with("para:")
+            || id.starts_with("footnote:")
+            || id.starts_with("endnote:")
             || HfKind::parse(id.split_once(':').map(|(k, _)| k).unwrap_or("")).is_some()
         {
             return Err(Error::with_path(
@@ -289,7 +298,9 @@ pub fn parse_pic_id_at(id: &str, path: &str) -> Result<PicTarget, Error> {
     if left.starts_with("para:") {
         match para::parse_para_id_at(left, &path)? {
             ParaTarget::Body(p) => return Ok(PicTarget::Body { para: p, key }),
-            ParaTarget::HeaderFooter { .. } | ParaTarget::InTextBox { .. } => {
+            ParaTarget::HeaderFooter { .. }
+            | ParaTarget::InTextBox { .. }
+            | ParaTarget::InNote { .. } => {
                 return Err(Error::with_path(
                     ErrorKind::InvalidId {
                         reason: IdReason::PicPrefix,
@@ -341,6 +352,30 @@ pub fn parse_pic_id_at(id: &str, path: &str) -> Result<PicTarget, Error> {
             });
         }
     }
+    if left.starts_with("footnote:") || left.starts_with("endnote:") {
+        match para::parse_para_id_at(left, &path)? {
+            ParaTarget::InNote {
+                kind,
+                note_id,
+                para,
+            } => {
+                return Ok(PicTarget::InNote {
+                    kind,
+                    note_id,
+                    para,
+                    key,
+                });
+            }
+            _ => {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidId {
+                        reason: IdReason::PicPrefix,
+                    },
+                    path,
+                ));
+            }
+        }
+    }
     Err(Error::with_path(
         ErrorKind::InvalidId {
             reason: IdReason::PicPrefix,
@@ -367,6 +402,27 @@ pub fn parse_insert_para_id(id: &str, op_index: usize) -> Result<ParaTarget, Err
                 },
                 path,
             ));
+        }
+    }
+    if let Some(note) = para::parse_note_id_at(id, &path)? {
+        match note {
+            para::NoteIdTarget::Sep => {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidId {
+                        reason: IdReason::NoteSep,
+                    },
+                    path,
+                ));
+            }
+            para::NoteIdTarget::Container { .. } => {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidId {
+                        reason: IdReason::InsertNeedsPara,
+                    },
+                    path,
+                ));
+            }
+            para::NoteIdTarget::Para { .. } => {}
         }
     }
     para::parse_para_id(id, op_index)
@@ -431,10 +487,21 @@ pub fn find_target_drawing<'a>(root: &'a Element, target: &PicTarget) -> Option<
             let inner = para::find_paragraph_in_txbx(content, para)?;
             find_drawing(inner, key)
         }
+        PicTarget::InNote {
+            kind,
+            note_id,
+            para,
+            key,
+        } => {
+            let note = notes::find_user_note(root, *kind, note_id)?;
+            let inner = para::find_paragraph(note, para)?;
+            find_drawing(inner, key)
+        }
     }
 }
 
 pub fn part_for_pic(
+    pkg: &Package,
     catalog: &[super::hf::HfPart],
     doc_part: &str,
     target: &PicTarget,
@@ -474,6 +541,12 @@ pub fn part_for_pic(
             })?;
             Ok(item.part.clone())
         }
+        PicTarget::InNote { kind, .. } => notes::part_name(pkg, doc_part, *kind)?.ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::PictureNotFound { id: id.to_string() },
+                field_path.to_string(),
+            )
+        }),
     }
 }
 
@@ -1462,5 +1535,6 @@ pub fn body_para_of(target: &ParaTarget) -> Option<&BodyPara> {
         ParaTarget::HeaderFooter { para, .. } => Some(para),
         ParaTarget::Body(p) => Some(p),
         ParaTarget::InTextBox { para, .. } => Some(para),
+        ParaTarget::InNote { para, .. } => Some(para),
     }
 }

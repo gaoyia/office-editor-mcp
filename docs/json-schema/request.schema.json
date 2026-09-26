@@ -66,6 +66,7 @@
         "pictures": { "type": "boolean" },
         "textBoxes": { "type": "boolean" },
         "textBoxContent": { "type": "boolean" },
+        "notes": { "type": "boolean" },
         "slide": { "type": "integer", "minimum": 1 },
         "maxShapes": { "type": "integer", "minimum": 1, "maximum": 5000 }
       },
@@ -306,6 +307,11 @@
               { "$ref": "#/$defs/insertParaOp" },
               { "$ref": "#/$defs/deleteParaOp" },
               { "$ref": "#/$defs/setTextBoxLinkOp" },
+              { "$ref": "#/$defs/insertFootnoteOp" },
+              { "$ref": "#/$defs/insertEndnoteOp" },
+              { "$ref": "#/$defs/deleteFootnoteOp" },
+              { "$ref": "#/$defs/deleteEndnoteOp" },
+              { "$ref": "#/$defs/setNoteNumberingOp" },
               { "$ref": "#/$defs/setShapeTextOp" }
             ]
           }
@@ -542,6 +548,59 @@
         "op": { "const": "setTextBoxLink" },
         "id": { "type": "string", "minLength": 1 },
         "next": { "type": ["string", "null"] }
+      }
+    },
+    "insertFootnoteOp": {
+      "type": "object",
+      "required": ["op", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "insertFootnote" },
+        "id": { "type": "string", "minLength": 1 },
+        "text": { "type": "string" }
+      }
+    },
+    "insertEndnoteOp": {
+      "type": "object",
+      "required": ["op", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "insertEndnote" },
+        "id": { "type": "string", "minLength": 1 },
+        "text": { "type": "string" }
+      }
+    },
+    "deleteFootnoteOp": {
+      "type": "object",
+      "required": ["op", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "deleteFootnote" },
+        "id": { "type": "string", "minLength": 1 }
+      }
+    },
+    "deleteEndnoteOp": {
+      "type": "object",
+      "required": ["op", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "deleteEndnote" },
+        "id": { "type": "string", "minLength": 1 }
+      }
+    },
+    "setNoteNumberingOp": {
+      "type": "object",
+      "required": ["op", "id", "kind"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "setNoteNumbering" },
+        "id": { "type": "string", "minLength": 1 },
+        "kind": { "enum": ["footnote", "endnote"] },
+        "numFmt": {
+          "enum": ["decimal", "upperRoman", "lowerRoman", "upperLetter", "lowerLetter", "chicago"]
+        },
+        "numStart": { "type": "integer", "minimum": 1 },
+        "numRestart": { "enum": ["continuous", "eachSect", "eachPage"] }
       }
     },
     "setShapeTextOp": {

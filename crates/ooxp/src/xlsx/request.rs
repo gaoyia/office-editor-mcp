@@ -125,6 +125,11 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<SetCellOp>, Error> {
             || op_name == "insertPara"
             || op_name == "deletePara"
             || op_name == "setTextBoxLink"
+            || op_name == "insertFootnote"
+            || op_name == "insertEndnote"
+            || op_name == "deleteFootnote"
+            || op_name == "deleteEndnote"
+            || op_name == "setNoteNumbering"
         {
             return Err(Error::with_path(
                 ErrorKind::OpNotForFormat {

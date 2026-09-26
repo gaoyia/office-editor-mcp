@@ -574,3 +574,48 @@ function Ensure-DocxWordTextBoxSource([switch]$Force) {
     Write-Log "saved word textbox source $path"
     return $path
 }
+
+# 正文第二段有一条用户脚注和一条用户尾注。骨架用 ooxp create，引用由 Word COM 插入后 Save。
+function Ensure-DocxWordNotesSource([switch]$Force) {
+    $path = Get-OutPath 'docx-word-notes-source.docx'
+    if ((Test-Path $path) -and -not $Force) { return $path }
+
+    $tmpDir = Join-Path $env:TEMP 'ooxp-office'
+    New-Item -ItemType Directory -Force -Path $tmpDir | Out-Null
+    $skel = Join-Path $tmpDir 'docx-word-notes-skel.docx'
+    $S = $global:OoxpStrings
+    Invoke-OoxpRequest @{
+        schemaVersion = 1; action = 'create'
+        path = $skel.Replace('\', '/'); format = 'docx'
+        document = @{
+            paragraphs = @(
+                @{ style = 'Heading1'; text = $S.chapter1 }
+                @{ text = $S.para2src }
+                @{ text = $S.para3keep }
+            )
+        }
+    } 'docx-notes-skel-create' | Out-Null
+
+    $word = Ensure-MsWord (Ensure-DocxCreate)
+    Close-WordDocByPath $word $skel
+    $doc = Open-WordDoc $word $skel
+    $missing = [System.Type]::Missing
+    $p2 = $doc.Paragraphs.Item(2)
+    $rng = $p2.Range
+    $rng.Collapse(0)
+    [void]$doc.Footnotes.Add($rng, $missing, $S.footnoteSrc)
+    Release-Com $rng
+    Release-Com $p2
+    $p2 = $doc.Paragraphs.Item(2)
+    $rng = $p2.Range
+    $rng.Collapse(0)
+    [void]$doc.Endnotes.Add($rng, $missing, $S.endnoteSrc)
+    Release-Com $rng
+    Release-Com $p2
+    Write-Log 'word Save() 原地覆盖 TEMP 里的脚注尾注样例'
+    $doc.Save()
+    Close-WordDoc $doc
+    Copy-Item -Force $skel $path
+    Write-Log "saved word notes source $path"
+    return $path
+}
