@@ -9,8 +9,8 @@ use crate::opc::{
 use crate::xml;
 
 use super::{
-    CT_APP, CT_CORE, CT_DOCUMENT, CT_STYLES, MC_NS, REL_APP, REL_CORE, REL_NS, REL_OFFICE_DOCUMENT,
-    REL_STYLES, W14_NS, WML_NS,
+    CT_APP, CT_CORE, CT_DOCUMENT, CT_SETTINGS, CT_STYLES, MC_NS, REL_APP, REL_CORE, REL_NS,
+    REL_OFFICE_DOCUMENT, REL_SETTINGS, REL_STYLES, W14_NS, WML_NS,
 };
 
 struct NewPara {
@@ -77,6 +77,7 @@ pub fn create(document: &Value) -> Result<Vec<u8>, Error> {
         overrides: vec![
             ("/word/document.xml".into(), CT_DOCUMENT.into()),
             ("/word/styles.xml".into(), CT_STYLES.into()),
+            ("/word/settings.xml".into(), CT_SETTINGS.into()),
             ("/docProps/core.xml".into(), CT_CORE.into()),
             ("/docProps/app.xml".into(), CT_APP.into()),
         ],
@@ -113,6 +114,13 @@ pub fn create(document: &Value) -> Result<Vec<u8>, Error> {
         target_mode: None,
         extra: Vec::new(),
     });
+    doc_rels.push(Relationship {
+        id: "rId2".into(),
+        rel_type: REL_SETTINGS.into(),
+        target: "settings.xml".into(),
+        target_mode: None,
+        extra: Vec::new(),
+    });
 
     pkg.set(CONTENT_TYPES_PART, types.to_xml().into_bytes())?;
     pkg.set(ROOT_RELS_PART, root_rels.to_xml().into_bytes())?;
@@ -122,6 +130,7 @@ pub fn create(document: &Value) -> Result<Vec<u8>, Error> {
         doc_rels.to_xml().into_bytes(),
     )?;
     pkg.set("/word/styles.xml", styles_xml().into_bytes())?;
+    pkg.set("/word/settings.xml", settings_xml().into_bytes())?;
     pkg.set("/docProps/core.xml", core_xml().into_bytes())?;
     pkg.set("/docProps/app.xml", app_xml().into_bytes())?;
     pkg.save_to_vec()
@@ -234,6 +243,12 @@ fn styles_xml() -> String {
         h1 = heading_style("Heading1", "heading 1", "0", "32"),
         h2 = heading_style("Heading2", "heading 2", "1", "26"),
         h3 = heading_style("Heading3", "heading 3", "2", "24"),
+    )
+}
+
+fn settings_xml() -> String {
+    format!(
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:settings xmlns:w="{WML_NS}"><w:compat><w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="15"/></w:compat></w:settings>"#
     )
 }
 

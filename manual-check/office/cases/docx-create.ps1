@@ -16,11 +16,11 @@ $t1 = Get-ParaText $p1
 $t2 = Get-ParaText $p2
 # 要读这份文档自己的标题栏。$word.ActiveWindow 可能是别的文档的窗口。
 $caption = [string]$doc.ActiveWindow.Caption
-# create 产物缺 settings.xml 里的 compatibilityMode，Word 会按兼容模式打开，见计划表 A11。
+# create 产物写 settings.xml 的 compatibilityMode=15，Word 应按非兼容模式打开。
 $compat = $null
 try { $compat = $doc.CompatibilityMode } catch {}
 
-Add-Check 'docx-C1' ($caption -notmatch 'Repair') "$caption compat=$compat"
+Add-Check 'docx-C1' (($caption -notmatch 'Repair') -and ([int]$compat -eq 15)) "$caption compat=$compat"
 Add-Skip  'docx-C2' 'WPS 打开，归 WPS 那一轮'
 
 $styleOk = ($p1.Style.NameLocal -eq $S.heading1) -or ($p1.Style.NameLocal -eq 'Heading 1')

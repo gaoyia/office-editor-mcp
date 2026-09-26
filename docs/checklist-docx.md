@@ -6,7 +6,7 @@
 
 ## 本机结果（2026-09-26）
 
-WPS 文字与 Microsoft Word 16.0 均已打开，用户确认通过。create、inspect、apply 三组都过了，原样保存的 O1 验不了。本机 `Word.Application` 仍被 WPS 抢走，测试是直接启动 `WINWORD.EXE` 再挂 COM。create 产物在 Word 里以兼容模式打开（`CompatibilityMode=12`），无修复提示，原因见计划表的 A11。
+WPS 文字与 Microsoft Word 16.0 均已打开，用户确认通过。create、inspect、apply 三组都过了，原样保存的 O1 验不了。本机 `Word.Application` 仍被 WPS 抢走，测试是直接启动 `WINWORD.EXE` 再挂 COM。当时 create 产物以兼容模式打开（`CompatibilityMode=12`）；A11 已补 `word/settings.xml`，新产物应为 `CompatibilityMode=15`，尚未用 Word 重跑 C1。
 
 C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，跑 `pwsh -File manual-check\office\run.ps1 -Case 'docx-*'` 即可复现，逐条结果落在 `manual-check/office/out/office-results.csv`。
 
@@ -27,7 +27,7 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 
 | 序号 | 检查 | 通过标准 |
 | --- | --- | --- |
-| C1 | Word 打开 | 无修复提示、无「文件损坏」 |
+| C1 | Word 打开 | 无修复提示、无「文件损坏」；`CompatibilityMode` 为 `15` |
 | C2 | WPS 打开 | 同上 |
 | C3 | 第一段 | 样式为标题 1，文字为 `标题` |
 | C4 | 第二段 | 正文，文字为 `hello` |

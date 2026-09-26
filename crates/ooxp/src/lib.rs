@@ -26,6 +26,16 @@ mod tests {
         dir.join(name)
     }
 
+    fn part_text(path: &std::path::Path, name: &str) -> String {
+        let pkg = crate::opc::Package::open_bytes(fs::read(path).unwrap()).unwrap();
+        String::from_utf8(pkg.get(name).unwrap().to_vec()).unwrap()
+    }
+
+    fn part_bytes(path: &std::path::Path, name: &str) -> Vec<u8> {
+        let pkg = crate::opc::Package::open_bytes(fs::read(path).unwrap()).unwrap();
+        pkg.get(name).unwrap().to_vec()
+    }
+
     #[test]
     fn create_inspect_apply_roundtrip() {
         let path = tmp("book.xlsx");
@@ -201,6 +211,53 @@ mod tests {
         assert_eq!(tree["paragraphs"][0]["text"], "新标题");
         assert_eq!(tree["paragraphs"][0]["style"], "Heading1");
         assert_eq!(tree["paragraphs"][1]["text"], "hello");
+        assert_eq!(
+            part_bytes(&path, "/word/settings.xml"),
+            part_bytes(&patched, "/word/settings.xml")
+        );
+    }
+
+    #[test]
+    fn docx_create_writes_compatibility_mode_15() {
+        let path = tmp("settings.docx");
+        run(
+            &json!({
+                "schemaVersion": 1,
+                "action": "create",
+                "path": path.to_string_lossy(),
+                "document": { "paragraphs": [{ "text": "a" }] }
+            })
+            .to_string(),
+            None,
+        )
+        .unwrap();
+        let settings = part_text(&path, "/word/settings.xml");
+        assert!(settings.contains(r#"w:name="compatibilityMode""#));
+        assert!(settings.contains(r#"w:uri="http://schemas.microsoft.com/office/word""#));
+        assert!(settings.contains(r#"w:val="15""#));
+        let types = part_text(&path, "/[Content_Types].xml");
+        assert!(types.contains("/word/settings.xml"));
+        let rels = part_text(&path, "/word/_rels/document.xml.rels");
+        assert!(rels.contains("/settings"));
+    }
+
+    #[test]
+    fn xlsx_create_styles_use_rgb_not_theme() {
+        let path = tmp("styles-rgb.xlsx");
+        run(
+            &json!({
+                "schemaVersion": 1,
+                "action": "create",
+                "path": path.to_string_lossy(),
+                "workbook": { "sheets": [{ "name": "Sheet1" }] }
+            })
+            .to_string(),
+            None,
+        )
+        .unwrap();
+        let styles = part_text(&path, "/xl/styles.xml");
+        assert!(styles.contains(r#"<color rgb="FF000000"/>"#));
+        assert!(!styles.contains("theme="));
     }
 
     #[test]
