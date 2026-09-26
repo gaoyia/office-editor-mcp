@@ -9,7 +9,7 @@
   "ok": false,
   "error": {
     "code": "IdNotFound",
-    "message": "找不到工作表：Sheet9",
+    "message": "Sheet not found: Sheet9",
     "path": "ops[0].id"
   }
 }
@@ -59,9 +59,9 @@
 | `InvalidId` | id 字符串不符合该格式的生成规则 | 2 |
 | `IdNotFound` | id 语法对，但文件里没有这个工作表、段落或形状 | 3 |
 | `ScopeRequired` | inspect 要单元格却没给 `sheet`+`range`，要段落正文却没给 `from`+`maxParas`，或要形状却没给 `slide` | 2 |
-| `TruncatedLimit` | 仅当调用方把 `maxCells` 设成 `0` 这类无意义值 | 2 |
+| `TruncatedLimit` | `maxCells`、`maxParas`、`maxShapes` 超出允许范围，例如设成 `0` | 2 |
 | `OpcOpen` | 不是 ZIP，或缺少 `[Content_Types].xml` / 根关系 | 3 |
-| `OpcPartMissing` | 入口部件或目标工作表部件不存在 | 3 |
+| `OpcPartMissing` | 入口部件不存在，目标工作表或幻灯片部件不存在，关系 id 找不到，或者关系指向外部资源 | 3 |
 | `XmlBroken` | 目标部件不是能解析的 XML | 3 |
 | `Io` | 读盘、写盘、创建目录失败 | 4 |
 | `NotImplemented` | 第一期明确不做的动作。目前：对共享公式的主单元格发 `setCell` | 2 |

@@ -10,7 +10,7 @@ mod xlsx;
 mod xml;
 
 pub use dispatch::run;
-pub use error::{peek_lang, Error, ErrorCode, Lang};
+pub use error::{io_path, peek_lang, Error, ErrorCode, Lang};
 pub use json::{written_json, RunOutput};
 
 #[cfg(test)]

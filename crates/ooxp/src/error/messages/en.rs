@@ -66,7 +66,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::ParaIndexFromOne => "para:index starts at 1".into(),
             IdReason::ParaIdNotHex => "paraId must be hexadecimal".into(),
             IdReason::ShapePrefix => "Shape id must start with slide:".into(),
-            IdReason::ShapeForm => "setShapeText id must be slide:{n}/shape:…".into(),
+            IdReason::ShapeForm => "setShapeText id must be slide:N/shape:…".into(),
             IdReason::SlideIndexNotInt => "Slide index must be a positive integer".into(),
             IdReason::SlideIndexFromOne => "Slide index starts at 1".into(),
             IdReason::ShapeEmpty => "shape must not be empty".into(),

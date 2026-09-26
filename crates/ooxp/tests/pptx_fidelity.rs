@@ -116,7 +116,7 @@ fn inspect_skips_fallback_and_pictures() {
     let shapes = tree["slides"][1]["shapes"].as_array().unwrap();
     let texts: Vec<_> = shapes.iter().map(|s| s["text"].as_str().unwrap()).collect();
     assert_eq!(texts, ["choice", "grouped", "dup"]);
-    assert!(!texts.iter().any(|t| *t == "fallback"));
+    assert!(!texts.contains(&"fallback"));
     assert_eq!(shapes[0]["id"], "slide:2/shape:4");
     assert_eq!(shapes[2]["id"], "slide:2/shape:4");
 }
@@ -205,4 +205,129 @@ fn apply_preserves_run_bold() {
     let slide1 = part(&out, "ppt/slides/slide1.xml");
     assert!(slide1.contains(r#"<a:rPr b="1"/>"#));
     assert!(slide1.contains("仍粗"));
+}
+
+/// 单页样本，一个形状三段：第一段没有 `a:pPr`，第二段居中，第三段斜体。
+/// 专门用来核对改文字不会压掉别的段落，也不会把别段的 `a:pPr` 搬到第一段。
+const MULTI_CT: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/ppt/presentation.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml"/><Override PartName="/ppt/slides/slide1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/></Types>"#;
+
+const MULTI_PRES: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><p:presentation xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:sldIdLst><p:sldId id="256" r:id="rId2"/></p:sldIdLst><p:sldSz cx="12192000" cy="6858000"/><p:notesSz cx="6858000" cy="9144000"/></p:presentation>"#;
+
+const MULTI_PRES_RELS: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide1.xml"/></Relationships>"#;
+
+const MULTI_SLIDE: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:cSld name="三段"><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/><p:sp><p:nvSpPr><p:cNvPr id="2" name="三段"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr/><p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr b="1"/><a:t>第一段</a:t></a:r></a:p><a:p><a:pPr algn="ctr"/><a:r><a:t>第二段</a:t></a:r></a:p><a:p><a:r><a:rPr i="1"/><a:t>第三段</a:t></a:r></a:p></p:txBody></p:sp></p:spTree></p:cSld></p:sld>"#;
+
+fn write_multi_sample(tag: &str) -> PathBuf {
+    let n = SEQ.fetch_add(1, Ordering::Relaxed);
+    let path = tmp_dir().join(format!("{tag}-{n}.pptx"));
+    let mut cursor = Cursor::new(Vec::new());
+    {
+        let mut zip = ZipWriter::new(&mut cursor);
+        let opt = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
+        for (name, body) in [
+            ("[Content_Types].xml", MULTI_CT),
+            ("_rels/.rels", ROOT_RELS),
+            ("ppt/presentation.xml", MULTI_PRES),
+            ("ppt/_rels/presentation.xml.rels", MULTI_PRES_RELS),
+            ("ppt/slides/slide1.xml", MULTI_SLIDE),
+        ] {
+            zip.start_file(name, opt).unwrap();
+            zip.write_all(body.as_bytes()).unwrap();
+        }
+        zip.finish().unwrap();
+    }
+    std::fs::write(&path, cursor.into_inner()).unwrap();
+    path
+}
+
+fn count_paras(xml: &str) -> usize {
+    // `<a:p` 也是 `<a:pPr` 的前缀，只能按这两种收尾形式数。
+    xml.matches("<a:p>").count() + xml.matches("<a:p/>").count()
+}
+
+#[test]
+fn apply_keeps_sibling_paragraphs_and_their_ppr() {
+    let src = write_multi_sample("multi");
+    let out = tmp_dir().join("multi-applied.pptx");
+    run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "apply",
+            "path": src.to_string_lossy(),
+            "output": out.to_string_lossy(),
+            "ops": [{ "op": "setShapeText", "id": "slide:1/shape:2", "text": "新文本" }]
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap();
+
+    let slide = part(&out, "ppt/slides/slide1.xml");
+    assert_eq!(count_paras(&slide), 3, "三段不能被压成一段：{slide}");
+    // 第一段原样只换字：自己的 b=1 留着，且没有凭空多出 a:pPr。
+    assert!(
+        slide.contains(r#"<a:p><a:r><a:rPr b="1"/><a:t>新文本</a:t></a:r></a:p>"#),
+        "第一段被改坏了：{slide}"
+    );
+    // 第二段的居中留在它自己身上，没被搬走。
+    assert!(slide.contains(r#"<a:pPr algn="ctr"/>"#));
+    assert!(!slide.contains("第一段"));
+    assert!(!slide.contains("第二段"));
+    assert!(!slide.contains("第三段"));
+
+    let RunOutput::Inspect(tree) = run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "inspect",
+            "path": out.to_string_lossy(),
+            "scope": { "slide": 1 }
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap() else {
+        panic!();
+    };
+    assert_eq!(tree["slides"][0]["shapes"][0]["text"], "新文本");
+}
+
+#[test]
+fn apply_splits_newline_into_br_inside_one_run() {
+    let src = write_multi_sample("br");
+    let out = tmp_dir().join("br-applied.pptx");
+    run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "apply",
+            "path": src.to_string_lossy(),
+            "output": out.to_string_lossy(),
+            "ops": [{ "op": "setShapeText", "id": "slide:1/shape:2", "text": "上\n下" }]
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap();
+
+    let slide = part(&out, "ppt/slides/slide1.xml");
+    assert!(
+        slide.contains(r#"<a:t>上</a:t><a:br/><a:t>下</a:t>"#),
+        "换行要拆成 a:t 加 a:br：{slide}"
+    );
+    assert_eq!(count_paras(&slide), 3);
+
+    // 契约要求写进去的文本能原样读回来。
+    let RunOutput::Inspect(tree) = run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "inspect",
+            "path": out.to_string_lossy(),
+            "scope": { "slide": 1 }
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap() else {
+        panic!();
+    };
+    assert_eq!(tree["slides"][0]["shapes"][0]["text"], "上\n下");
 }

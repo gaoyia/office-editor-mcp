@@ -302,8 +302,10 @@ mod tests {
                     !text.is_empty(),
                     "{kind:?} 在 {lang:?} 下得到空文案"
                 );
+                // 文案里一律不许出现花括号：真漏了替换是 bug，写成模板给人看也会被
+                // 当成 bug。要举例 id 的形状就写 `slide:N`。
                 assert!(
-                    !text.contains('{') || text.contains("slide:{n}"),
+                    !text.contains('{'),
                     "{kind:?} 在 {lang:?} 下仍有未替换占位符：{text}"
                 );
             }

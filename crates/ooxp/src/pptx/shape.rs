@@ -127,10 +127,7 @@ pub fn list_slides(
             .and_then(|c| c.attr("name"))
             .filter(|s| !s.is_empty())
             .map(str::to_string);
-        let hidden = match doc.root.attr("show") {
-            Some("0") | Some("false") | Some("FALSE") => true,
-            _ => false,
-        };
+        let hidden = matches!(doc.root.attr("show"), Some("0") | Some("false") | Some("FALSE"));
         out.push(SlideMeta {
             index: i + 1,
             part,
@@ -239,49 +236,137 @@ fn ids_match(file: &str, req: &str) -> bool {
     }
 }
 
+/// 按 `docs/json-contract.md` 的替换规则原地改：新文本写进第一个含 `a:t` 的 `a:r`，
+/// 其余这类 `a:t` 删掉，因此变空的 `a:r` 删掉。
+///
+/// 段落本身、`a:pPr`、`a:bodyPr`、`a:lstStyle` 一概不动。早先的写法是把所有 `a:p`
+/// 删掉重建一个，还拿「整个 txBody 里第一个 pPr」当新段落的属性，结果多段形状被压成
+/// 一段，而且第一段会白捡后面某段的对齐方式。
 pub fn set_txbody_text(tx: &mut Element, text: &str) {
-    let ppr = first_named_clone(tx, "pPr");
-    let rpr = first_named_clone(tx, "rPr");
-    tx.children.retain(|n| match n {
-        Node::Element(e) => {
-            let name = e.local_name();
-            name != "p" && name != "AlternateContent"
+    let mut filled = false;
+    rewrite_runs(tx, &mut filled, text);
+    if !filled {
+        append_text_run(tx, text);
+    }
+}
+
+fn rewrite_runs(el: &mut Element, filled: &mut bool, text: &str) {
+    if el.local_name() == "AlternateContent" {
+        if let Some(i) = first_alt_child_index(el) {
+            if let Node::Element(child) = &mut el.children[i] {
+                rewrite_runs(child, filled, text);
+            }
         }
+        return;
+    }
+    // 只认 `a:r`。`a:fld` 里的 `a:t` 不动，契约只让改 run。
+    if el.local_name() == "r" {
+        if el.element_children().any(|e| e.local_name() == "t") {
+            if *filled {
+                remove_all_t(el);
+            } else {
+                fill_first_run(el, text);
+                *filled = true;
+            }
+        }
+        return;
+    }
+    let mut drop = Vec::new();
+    for (i, child) in el.children.iter_mut().enumerate() {
+        if let Node::Element(e) = child {
+            let was_run = e.local_name() == "r";
+            rewrite_runs(e, filled, text);
+            if was_run && is_empty_run(e) {
+                drop.push(i);
+            }
+        }
+    }
+    for i in drop.into_iter().rev() {
+        el.children.remove(i);
+    }
+}
+
+/// 文本里的 `\n` 拆成 `a:t` 加 `a:br`，都放在这一个 run 里。原有的 `a:rPr` 留着。
+fn fill_first_run(r: &mut Element, text: &str) {
+    let Some(pos) = r
+        .children
+        .iter()
+        .position(|n| matches!(n, Node::Element(e) if e.local_name() == "t"))
+    else {
+        return;
+    };
+    let t_name = match &r.children[pos] {
+        Node::Element(e) => e.name.clone(),
+        Node::Text(_) => return,
+    };
+    let proto = Element::new(t_name.clone());
+    // 从后往前删，pos 之前的下标不受影响。
+    let mut i = r.children.len();
+    while i > 0 {
+        i -= 1;
+        if let Node::Element(e) = &r.children[i] {
+            if e.local_name() == "t" {
+                r.children.remove(i);
+            }
+        }
+    }
+    let mut at = pos;
+    for (n, line) in text.split('\n').enumerate() {
+        if n > 0 {
+            r.children
+                .insert(at, Node::Element(Element::new(proto.prefixed("br"))));
+            at += 1;
+        }
+        let mut t = Element::new(t_name.clone());
+        apply_t_text(&mut t, line);
+        r.children.insert(at, Node::Element(t));
+        at += 1;
+    }
+}
+
+fn remove_all_t(r: &mut Element) {
+    r.children.retain(|n| match n {
+        Node::Element(e) => e.local_name() != "t",
         Node::Text(_) => true,
     });
-    tx.push_element(build_para(ppr, rpr, text));
 }
 
-fn first_named_clone(root: &Element, local: &str) -> Option<Element> {
-    let mut found = None;
-    walk_choice(root, &mut |e| {
-        if found.is_none() && e.local_name() == local {
-            found = Some(e.clone());
-        }
-    });
-    found
+fn is_empty_run(r: &Element) -> bool {
+    !r.element_children().any(|e| e.local_name() != "rPr")
 }
 
-fn build_para(ppr: Option<Element>, rpr: Option<Element>, text: &str) -> Element {
-    let mut p = Element::new("a:p");
-    if let Some(pr) = ppr {
-        p.push_element(pr);
-    }
-    let lines: Vec<&str> = text.split('\n').collect();
-    for (i, line) in lines.iter().enumerate() {
-        if i > 0 {
-            p.push_element(Element::new("a:br"));
+/// 一个含 `a:t` 的 run 都没有时才走这里：补一个 run。
+/// 已有段落就挂在第一段末尾，没有段落才新建一段，免得凭空多出一段。
+fn append_text_run(tx: &mut Element, text: &str) {
+    // txBody 自己是 `p:` 前缀，段落和 run 是 `a:` 前缀，前缀只能从里面的元素借。
+    let sample = tx
+        .element_children()
+        .find(|e| e.local_name() == "p")
+        .or_else(|| tx.element_children().next())
+        .map(|e| e.name.clone())
+        .unwrap_or_else(|| "a:bodyPr".to_string());
+    let proto = Element::new(sample);
+    let mut run = Element::new(proto.prefixed("r"));
+    for (n, line) in text.split('\n').enumerate() {
+        if n > 0 {
+            run.push_element(Element::new(proto.prefixed("br")));
         }
-        let mut r = Element::new("a:r");
-        if let Some(pr) = &rpr {
-            r.push_element(pr.clone());
-        }
-        let mut t = Element::new("a:t");
+        let mut t = Element::new(proto.prefixed("t"));
         apply_t_text(&mut t, line);
-        r.push_element(t);
-        p.push_element(r);
+        run.push_element(t);
     }
-    p
+    let existing = tx.children.iter_mut().find_map(|n| match n {
+        Node::Element(e) if e.local_name() == "p" => Some(e),
+        _ => None,
+    });
+    match existing {
+        Some(p) => p.push_element(run),
+        None => {
+            let mut p = Element::new(proto.prefixed("p"));
+            p.push_element(run);
+            tx.push_element(p);
+        }
+    }
 }
 
 fn apply_t_text(t: &mut Element, text: &str) {

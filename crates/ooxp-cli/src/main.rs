@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 use clap::Parser;
-use ooxp::{peek_lang, run, written_json, Error, Lang, RunOutput};
+use ooxp::{io_path, peek_lang, run, written_json, Error, Lang, RunOutput};
 
 #[derive(Parser, Debug)]
 #[command(name = "ooxp", about = "用领域 JSON 读写 OOXML 文件")]
@@ -75,6 +75,9 @@ fn read_input(input: Option<&str>) -> Result<String, Error> {
                 .map_err(Error::from)?;
             Ok(buf)
         }
-        Some(path) => std::fs::read_to_string(path).map_err(Error::from),
+        // 带上路径，否则读不到文件时只剩一句 I/O failed，看不出是哪个文件。
+        Some(path) => {
+            std::fs::read_to_string(path).map_err(|e| io_path(e, PathBuf::from(path)))
+        }
     }
 }

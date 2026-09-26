@@ -119,16 +119,6 @@ impl Element {
         self.children.push(Node::Element(el));
     }
 
-    /// 前序遍历本元素及子孙。docx 段落不能走这条：它没有文本框和 AlternateContent 边界。
-    pub fn walk<'a>(&'a self, f: &mut impl FnMut(&'a Element)) {
-        f(self);
-        for n in &self.children {
-            if let Node::Element(e) = n {
-                e.walk(f);
-            }
-        }
-    }
-
     /// 在 `name` 带前缀时（如 `w:p`）给子元素用同一前缀。
     pub fn prefixed(&self, local: &str) -> String {
         match self.name.split_once(':') {

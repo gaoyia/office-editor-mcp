@@ -58,7 +58,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::ParaIndexFromOne => "para:index 从 1 起".into(),
             IdReason::ParaIdNotHex => "paraId 必须是十六进制".into(),
             IdReason::ShapePrefix => "形状 id 必须以 slide: 开头".into(),
-            IdReason::ShapeForm => "setShapeText 的 id 必须是 slide:{n}/shape:…".into(),
+            IdReason::ShapeForm => "setShapeText 的 id 必须是 slide:N/shape:…".into(),
             IdReason::SlideIndexNotInt => "slide 序号必须是正整数".into(),
             IdReason::SlideIndexFromOne => "slide 序号从 1 起".into(),
             IdReason::ShapeEmpty => "shape 后面不能为空".into(),
