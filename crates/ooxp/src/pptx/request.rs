@@ -138,6 +138,12 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<SetShapeTextOp>, Error> {
             || op_name == "deleteFootnote"
             || op_name == "deleteEndnote"
             || op_name == "setNoteNumbering"
+            || op_name == "insertComment"
+            || op_name == "replyComment"
+            || op_name == "deleteComment"
+            || op_name == "setCommentText"
+            || op_name == "setCommentMeta"
+            || op_name == "setCommentDone"
         {
             return Err(Error::with_path(
                 ErrorKind::OpNotForFormat {

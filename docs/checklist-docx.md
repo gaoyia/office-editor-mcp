@@ -26,6 +26,7 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 | E1–E4 | ✅ | 库测试：页眉图 / 正文图导出字节与 `/word/media/…` 一致，`contentType` 为 `image/png`；换图后再导出得到新文件；段落 id 报 `InvalidId`，缺图报 `IdNotFound`。不强制开 Word |
 | T1–T9 | ✅ | Word 16.0：`docx-textbox.ps1`，13 PASS / 0 FAIL。行内+浮动+链接+组合；框内改字、插删框、尺寸 144 磅、绕排、红填蓝边、框内插删段与插图、断开再接上。标题栏无 Repair |
 | N1–N6 | ✅ | Word 16.0：`docx-notes.ps1`，7 PASS / 0 FAIL。计数与名单、改注文、插删脚注、编号 `NumberStyle=1`（大写罗马）、注内插图。标题栏无 Repair |
+| Cmt1–Cmt7 | ✅ | Word 16.0：`docx-comments.ps1`，8 PASS / 0 FAIL。计数与名单、改字、插删、回复线程（`Comments.Count=4` 且 `Replies=1`）、完成标记、批注内插图。标题栏无 Repair |
 | O1 | 🚫 | 领域层不做原样保存，与 xlsx 清单相同。零脏写回见 OPC 库测试。Word 另存 create 产物见 `docx-O1-word-resave`。此前记的 `SaveAs2` 挂起，拆分后重跑没再出现，一秒内返回 |
 
 ## create
@@ -167,6 +168,20 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 | N4 | 删除 | `deleteFootnote` 后引用与注文都消失，无修复 |
 | N5 | 编号 | `setNoteNumbering` 改 `numFmt` 后 Word 打开时编号样式变了（允许打开时才重画） |
 | N6 | 注内图 | 注内 `replacePicture` 或 `insertPicture` 后 Word 无修复 |
+
+## 批注
+
+准备一份 Word 亲手另存的样例：至少两条根批注、一条回复。不要用库 `create` 产物当唯一样例（create 不写批注）。手测脚本为 `manual-check/office/cases/docx-comments.ps1`。编号用 Cmt，避免和 create 的 C 组重号。
+
+| 序号 | 检查 | 通过标准 |
+| --- | --- | --- |
+| Cmt1 | 计数与名单 | 无 `comments` 时根上有 `commentCount`、没有名单；`comments: true` 时 id 为 `comment:{id}`，`start` / `end` / `parent` / `done` 对 |
+| Cmt2 | 改字 | `setCommentText` 后 Word 无修复，正文未改 |
+| Cmt3 | 插入 | `insertComment` 后审阅窗格能看见新批注，无修复 |
+| Cmt4 | 删除 | `deleteComment` 后范围标记与回复都消失，无修复 |
+| Cmt5 | 回复 | `replyComment` 后 `parent` 指向父批注，Word 能看见线程 |
+| Cmt6 | 完成 | `setCommentDone` 后 COM `Comment.Done` 为 true，或 UI 显示已解决 |
+| Cmt7 | 批注内图 | 批注内 `insertPicture` 后 Word 无修复 |
 
 ## 原样保存（opc 验收）
 

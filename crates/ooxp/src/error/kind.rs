@@ -77,6 +77,10 @@ pub(crate) enum IdReason {
     NoteContainer,
     /// 分隔符 id，禁止 apply
     NoteSep,
+    /// 批注 id 形态不对
+    CommentPrefix,
+    /// 批注容器 id，缺少 /para:…
+    CommentContainer,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -220,6 +224,13 @@ define_error_kinds! {
     InvalidNoteKind => vec![Self::InvalidNoteKind],
     InvalidNoteNumFmt => vec![Self::InvalidNoteNumFmt],
     InvalidNoteRestart => vec![Self::InvalidNoteRestart],
+    LastCommentPara => vec![Self::LastCommentPara],
+    CommentNotFound { id: String } => vec![Self::CommentNotFound { id: "comment:0".into() }],
+    NeedCommentParaId => vec![Self::NeedCommentParaId],
+    NeedCommentMetaField => vec![Self::NeedCommentMetaField],
+    CommentRangeCrossPart => vec![Self::CommentRangeCrossPart],
+    CommentRangeReversed => vec![Self::CommentRangeReversed],
+    InkComment { id: String } => vec![Self::InkComment { id: "comment:0".into() }],
     TextBoxLinkCrossPart => vec![Self::TextBoxLinkCrossPart],
     InvalidHexColor => vec![Self::InvalidHexColor],
     InvalidTextBoxDirection => vec![Self::InvalidTextBoxDirection],
@@ -328,6 +339,8 @@ impl IdReason {
             Self::NotePrefix,
             Self::NoteContainer,
             Self::NoteSep,
+            Self::CommentPrefix,
+            Self::CommentContainer,
         ]
     }
 }
@@ -438,6 +451,11 @@ impl ErrorKind {
             | Self::InvalidNoteKind
             | Self::InvalidNoteNumFmt
             | Self::InvalidNoteRestart
+            | Self::LastCommentPara
+            | Self::NeedCommentParaId
+            | Self::NeedCommentMetaField
+            | Self::CommentRangeCrossPart
+            | Self::CommentRangeReversed
             | Self::TextBoxLinkCrossPart
             | Self::InvalidHexColor
             | Self::InvalidTextBoxDirection => InvalidField,
@@ -452,9 +470,10 @@ impl ErrorKind {
             | Self::ShapeHasNoText { .. }
             | Self::PictureNotFound { .. }
             | Self::TextBoxNotFound { .. }
-            | Self::NoteNotFound { .. } => IdNotFound,
+            | Self::NoteNotFound { .. }
+            | Self::CommentNotFound { .. } => IdNotFound,
             Self::ScopeRequired { .. } => ScopeRequired,
-            Self::SharedFormulaMaster { .. } => NotImplemented,
+            Self::SharedFormulaMaster { .. } | Self::InkComment { .. } => NotImplemented,
             Self::OpcOpen { .. } => OpcOpen,
             Self::PartMissing { .. }
             | Self::RelNotFound { .. }

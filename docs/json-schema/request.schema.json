@@ -67,6 +67,7 @@
         "textBoxes": { "type": "boolean" },
         "textBoxContent": { "type": "boolean" },
         "notes": { "type": "boolean" },
+        "comments": { "type": "boolean" },
         "slide": { "type": "integer", "minimum": 1 },
         "maxShapes": { "type": "integer", "minimum": 1, "maximum": 5000 }
       },
@@ -312,6 +313,12 @@
               { "$ref": "#/$defs/deleteFootnoteOp" },
               { "$ref": "#/$defs/deleteEndnoteOp" },
               { "$ref": "#/$defs/setNoteNumberingOp" },
+              { "$ref": "#/$defs/insertCommentOp" },
+              { "$ref": "#/$defs/deleteCommentOp" },
+              { "$ref": "#/$defs/replyCommentOp" },
+              { "$ref": "#/$defs/setCommentTextOp" },
+              { "$ref": "#/$defs/setCommentMetaOp" },
+              { "$ref": "#/$defs/setCommentDoneOp" },
               { "$ref": "#/$defs/setShapeTextOp" }
             ]
           }
@@ -601,6 +608,79 @@
         },
         "numStart": { "type": "integer", "minimum": 1 },
         "numRestart": { "enum": ["continuous", "eachSect", "eachPage"] }
+      }
+    },
+    "insertCommentOp": {
+      "type": "object",
+      "required": ["op", "start", "end"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "insertComment" },
+        "start": { "type": "string", "minLength": 1 },
+        "end": { "type": "string", "minLength": 1 },
+        "text": { "type": "string" },
+        "author": { "type": "string" },
+        "initials": { "type": "string" },
+        "date": { "type": "string", "minLength": 1 }
+      }
+    },
+    "deleteCommentOp": {
+      "type": "object",
+      "required": ["op", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "deleteComment" },
+        "id": { "type": "string", "minLength": 1 }
+      }
+    },
+    "replyCommentOp": {
+      "type": "object",
+      "required": ["op", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "replyComment" },
+        "id": { "type": "string", "minLength": 1 },
+        "text": { "type": "string" },
+        "author": { "type": "string" },
+        "initials": { "type": "string" },
+        "date": { "type": "string", "minLength": 1 }
+      }
+    },
+    "setCommentTextOp": {
+      "type": "object",
+      "required": ["op", "id", "text"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "setCommentText" },
+        "id": { "type": "string", "minLength": 1 },
+        "text": { "type": "string" }
+      }
+    },
+    "setCommentMetaOp": {
+      "type": "object",
+      "required": ["op", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "setCommentMeta" },
+        "id": { "type": "string", "minLength": 1 },
+        "author": { "type": "string" },
+        "initials": { "type": "string" },
+        "date": { "type": "string", "minLength": 1 }
+      },
+      "anyOf": [
+        { "required": ["author"] },
+        { "required": ["initials"] },
+        { "required": ["date"] }
+      ]
+    },
+    "setCommentDoneOp": {
+      "type": "object",
+      "required": ["op", "id", "done"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "setCommentDone" },
+        "id": { "type": "string", "minLength": 1 },
+        "done": { "type": "boolean" }
       }
     },
     "setShapeTextOp": {

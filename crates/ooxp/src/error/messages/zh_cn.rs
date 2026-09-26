@@ -96,16 +96,20 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::SetParaOnBox => "setParaText 的 id 必须是段落 id，不能是文本框 id".into(),
             IdReason::InsertNeedsHostPara => "insertTextBox 的 id 必须是宿主段落 id".into(),
             IdReason::InsertParaBody => {
-                "insertPara 与 deletePara 只允许用在文本框或脚注、尾注内".into()
+                "insertPara 与 deletePara 只允许用在文本框、脚注、尾注或批注内".into()
             }
             IdReason::InsertParaNeedsBox => {
-                "insertPara / deletePara 的 id 必须是文本框、框内段落、注或注内段落".into()
+                "insertPara / deletePara 的 id 必须是文本框、框内段落、注、注内段落、批注或批注内段落".into()
             }
             IdReason::NotePrefix => "脚注、尾注 id 必须是 footnote:… 或 endnote:…".into(),
             IdReason::NoteContainer => {
                 "注 id 必须带 /para:…（该 id 本身不是段落）".into()
             }
             IdReason::NoteSep => "分隔符 id 不能用于 apply".into(),
+            IdReason::CommentPrefix => "批注 id 必须是 comment:…".into(),
+            IdReason::CommentContainer => {
+                "批注 id 必须带 /para:…（该 id 本身不是段落）".into()
+            },
         },
         ErrorKind::SheetNotFound { name } => format!("找不到工作表：{name}"),
         ErrorKind::ParaNotFound { id } => format!("找不到段落：{id}"),
@@ -129,6 +133,21 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::InvalidNoteRestart => {
             "numRestart 必须是 continuous、eachSect 或 eachPage".into()
         }
+        ErrorKind::LastCommentPara => "批注内至少要留一段，不能删掉最后一段".into(),
+        ErrorKind::CommentNotFound { id } => format!("找不到批注：{id}"),
+        ErrorKind::NeedCommentParaId => {
+            "批注最后一段必须有 w14:paraId，才能写 commentsExtended".into()
+        }
+        ErrorKind::NeedCommentMetaField => {
+            "setCommentMeta 至少要给 author、initials 或 date 之一".into()
+        }
+        ErrorKind::CommentRangeCrossPart => {
+            "insertComment 的 start 与 end 必须在同一部件".into()
+        }
+        ErrorKind::CommentRangeReversed => {
+            "insertComment 的 start 不能晚于 end".into()
+        }
+        ErrorKind::InkComment { id } => format!("墨迹批注除删除外不能编辑：{id}"),
         ErrorKind::TextBoxLinkCrossPart => "链接文本框必须在同一部件里".into(),
         ErrorKind::InvalidHexColor => "color 必须是六位 RGB 十六进制或 null".into(),
         ErrorKind::InvalidTextBoxDirection => "direction 必须是 horizontal 或 vertical".into(),

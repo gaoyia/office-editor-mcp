@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "note.docx",
+  "output": "note.patched.docx",
+  "ops": [
+    { "op": "insertComment", "start": "para:3F2A1B00", "end": "para:3F2A1B00", "text": "新批注" },
+    { "op": "setCommentText", "id": "comment:0", "text": "改过的批注" },
+    { "op": "replyComment", "id": "comment:0", "text": "回复" },
+    { "op": "setCommentDone", "id": "comment:0", "done": true },
+    { "op": "deleteComment", "id": "comment:1" }
+  ]
+}

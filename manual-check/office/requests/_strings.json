@@ -26,5 +26,10 @@
   "footnoteSrc": "脚注原文",
   "endnoteSrc": "尾注原文",
   "footnoteNew": "改过的注文",
-  "footnoteInsert": "新插入的脚注"
+  "footnoteInsert": "新插入的脚注",
+  "commentA": "批注甲",
+  "commentB": "批注乙",
+  "commentReply": "回复乙",
+  "commentNew": "新批注",
+  "commentTextNew": "改过的批注"
 }

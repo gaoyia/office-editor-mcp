@@ -141,6 +141,8 @@ fn inspect_counts_without_lists() {
     let tree = inspect(&path, json!({}));
     assert_eq!(tree["footnoteCount"], 1);
     assert_eq!(tree["endnoteCount"], 1);
+    assert_eq!(tree["commentCount"], 0);
+    assert!(tree.get("comments").is_none());
     assert!(tree.get("footnotes").is_none());
     assert!(tree.get("endnotes").is_none());
     assert!(tree.get("noteSeparators").is_none());
@@ -155,6 +157,7 @@ fn inspect_counts_without_lists() {
             "textBoxCount",
             "footnoteCount",
             "endnoteCount",
+            "commentCount",
             "outline",
             "headers",
             "footers",

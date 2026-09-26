@@ -6,7 +6,7 @@ use crate::error::{Error, ErrorKind, IdReason, ScopeNeed, TypeName};
 use crate::json;
 
 use super::hf::{HfKind, HfType};
-use super::para::{self, BodyPara, NoteIdTarget, NoteKind, ParaTarget, TxbxTarget};
+use super::para::{self, BodyPara, CommentIdTarget, NoteIdTarget, NoteKind, ParaTarget, TxbxTarget};
 use super::picture::{self, AlignH, AlignV, PicKind, PicTarget, WrapKind, WrapPos};
 
 #[derive(Debug, Clone)]
@@ -24,6 +24,8 @@ pub struct InspectScope {
     pub text_box_content: bool,
     /// 为 true 时列出脚注、尾注与分隔符。
     pub notes: bool,
+    /// 为 true 时列出批注。
+    pub comments: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -153,6 +155,10 @@ pub enum InsertParaPlace {
         note_id: String,
         after: Option<BodyPara>,
     },
+    Comment {
+        comment_id: String,
+        after: Option<BodyPara>,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -207,6 +213,57 @@ pub struct SetNoteNumberingOp {
 }
 
 #[derive(Debug, Clone)]
+pub struct InsertCommentOp {
+    pub start: String,
+    pub end: String,
+    pub start_target: ParaTarget,
+    pub end_target: ParaTarget,
+    pub text: String,
+    pub author: String,
+    pub initials: String,
+    pub date: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ReplyCommentOp {
+    pub id: String,
+    pub comment_id: String,
+    pub text: String,
+    pub author: String,
+    pub initials: String,
+    pub date: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct DeleteCommentOp {
+    pub id: String,
+    pub comment_id: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetCommentTextOp {
+    pub id: String,
+    pub comment_id: String,
+    pub text: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetCommentMetaOp {
+    pub id: String,
+    pub comment_id: String,
+    pub author: Option<String>,
+    pub initials: Option<String>,
+    pub date: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetCommentDoneOp {
+    pub id: String,
+    pub comment_id: String,
+    pub done: bool,
+}
+
+#[derive(Debug, Clone)]
 pub enum DocxOp {
     SetParaText(SetParaTextOp),
     SetHeaderFooterDistance(SetHfDistanceOp),
@@ -231,6 +288,12 @@ pub enum DocxOp {
     DeleteFootnote(DeleteNoteOp),
     DeleteEndnote(DeleteNoteOp),
     SetNoteNumbering(SetNoteNumberingOp),
+    InsertComment(InsertCommentOp),
+    ReplyComment(ReplyCommentOp),
+    DeleteComment(DeleteCommentOp),
+    SetCommentText(SetCommentTextOp),
+    SetCommentMeta(SetCommentMetaOp),
+    SetCommentDone(SetCommentDoneOp),
 }
 
 pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
@@ -259,6 +322,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
             "textBoxes",
             "textBoxContent",
             "notes",
+            "comments",
         ],
     )?;
 
@@ -267,6 +331,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
     let text_boxes = parse_bool_field(obj.get("textBoxes"), "textBoxes")?;
     let text_box_content = parse_bool_field(obj.get("textBoxContent"), "textBoxContent")?;
     let notes = parse_bool_field(obj.get("notes"), "notes")?;
+    let comments = parse_bool_field(obj.get("comments"), "comments")?;
     if text_box_content && !text_boxes {
         return Err(Error::with_path(
             ErrorKind::ScopeFieldRequires {
@@ -285,6 +350,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
                 && !obj.contains_key("textBoxes")
                 && !obj.contains_key("textBoxContent")
                 && !obj.contains_key("notes")
+                && !obj.contains_key("comments")
             {
                 return Ok(None);
             }
@@ -296,6 +362,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
                 text_boxes,
                 text_box_content,
                 notes,
+                comments,
             }))
         }
         (Some(f), Some(m)) => {
@@ -344,6 +411,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
                 text_boxes,
                 text_box_content,
                 notes,
+                comments,
             }))
         }
         _ => Err(Error::with_path(
@@ -448,6 +516,12 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<DocxOp>, Error> {
             "setNoteNumbering" => {
                 out.push(DocxOp::SetNoteNumbering(parse_set_note_numbering(obj, i)?))
             }
+            "insertComment" => out.push(DocxOp::InsertComment(parse_insert_comment(obj, i)?)),
+            "replyComment" => out.push(DocxOp::ReplyComment(parse_reply_comment(obj, i)?)),
+            "deleteComment" => out.push(DocxOp::DeleteComment(parse_delete_comment(obj, i)?)),
+            "setCommentText" => out.push(DocxOp::SetCommentText(parse_set_comment_text(obj, i)?)),
+            "setCommentMeta" => out.push(DocxOp::SetCommentMeta(parse_set_comment_meta(obj, i)?)),
+            "setCommentDone" => out.push(DocxOp::SetCommentDone(parse_set_comment_done(obj, i)?)),
             _ => {
                 return Err(Error::with_path(
                     ErrorKind::UnsupportedOp {
@@ -1377,6 +1451,19 @@ fn parse_insert_para(
         };
         return Ok(InsertParaOp { id, place, text });
     }
+    if let Some(comment) = para::parse_comment_id_at(&id, &path)? {
+        let place = match comment {
+            CommentIdTarget::Container { comment_id } => InsertParaPlace::Comment {
+                comment_id,
+                after: None,
+            },
+            CommentIdTarget::Para { comment_id, para } => InsertParaPlace::Comment {
+                comment_id,
+                after: Some(para),
+            },
+        };
+        return Ok(InsertParaOp { id, place, text });
+    }
     if !id.contains("/txbx:") {
         return Err(Error::with_path(
             ErrorKind::InvalidId {
@@ -1448,6 +1535,20 @@ fn parse_delete_para(
                     note_id,
                     para,
                 },
+            }),
+        };
+    }
+    if let Some(comment) = para::parse_comment_id_at(&id, &path)? {
+        return match comment {
+            CommentIdTarget::Container { .. } => Err(Error::with_path(
+                ErrorKind::InvalidId {
+                    reason: crate::error::IdReason::InsertParaNeedsBox,
+                },
+                path,
+            )),
+            CommentIdTarget::Para { comment_id, para } => Ok(DeleteParaOp {
+                id,
+                inner: ParaTarget::InComment { comment_id, para },
             }),
         };
     }
@@ -1552,7 +1653,7 @@ fn parse_insert_note(
         ));
     }
     let host = para::parse_para_id_at(&id, &path)?;
-    if matches!(host, ParaTarget::InNote { .. }) {
+    if matches!(host, ParaTarget::InNote { .. } | ParaTarget::InComment { .. }) {
         return Err(Error::with_path(
             ErrorKind::InvalidId {
                 reason: crate::error::IdReason::NotePrefix,
@@ -1739,5 +1840,246 @@ fn parse_set_note_numbering(
         num_fmt,
         num_start,
         num_restart,
+    })
+}
+
+fn parse_comment_anchor(id: &str, path: &str) -> Result<ParaTarget, Error> {
+    if para::parse_comment_id_at(id, path)?.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: crate::error::IdReason::CommentPrefix,
+            },
+            path.to_string(),
+        ));
+    }
+    para::parse_para_id_at(id, path)
+}
+
+fn parse_comment_container(id: &str, path: &str) -> Result<String, Error> {
+    let Some(comment) = para::parse_comment_id_at(id, path)? else {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: crate::error::IdReason::CommentPrefix,
+            },
+            path.to_string(),
+        ));
+    };
+    match comment {
+        CommentIdTarget::Container { comment_id } => Ok(comment_id),
+        CommentIdTarget::Para { .. } => Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: crate::error::IdReason::CommentPrefix,
+            },
+            path.to_string(),
+        )),
+    }
+}
+
+fn parse_optional_attr(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+    field: &str,
+) -> Result<Option<String>, Error> {
+    match obj.get(field) {
+        None => Ok(None),
+        Some(Value::String(s)) if !s.is_empty() => Ok(Some(s.clone())),
+        Some(Value::String(_)) => Err(Error::with_path(
+            ErrorKind::MissingField {
+                field: field.into(),
+            },
+            format!("ops[{i}].{field}"),
+        )),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::String,
+            },
+            format!("ops[{i}].{field}"),
+        )),
+    }
+}
+
+fn parse_insert_comment(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<InsertCommentOp, Error> {
+    deny_keys(
+        obj,
+        i,
+        &["op", "start", "end", "text", "author", "initials", "date"],
+    )?;
+    let start = match obj.get("start") {
+        Some(Value::String(s)) if !s.is_empty() => s.clone(),
+        Some(Value::String(_)) | None => {
+            return Err(Error::with_path(
+                ErrorKind::MissingField {
+                    field: "start".into(),
+                },
+                format!("ops[{i}].start"),
+            ));
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "start".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].start"),
+            ));
+        }
+    };
+    let end = match obj.get("end") {
+        Some(Value::String(s)) if !s.is_empty() => s.clone(),
+        Some(Value::String(_)) | None => {
+            return Err(Error::with_path(
+                ErrorKind::MissingField {
+                    field: "end".into(),
+                },
+                format!("ops[{i}].end"),
+            ));
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "end".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].end"),
+            ));
+        }
+    };
+    let start_target = parse_comment_anchor(&start, &format!("ops[{i}].start"))?;
+    let end_target = parse_comment_anchor(&end, &format!("ops[{i}].end"))?;
+    Ok(InsertCommentOp {
+        start,
+        end,
+        start_target,
+        end_target,
+        text: parse_optional_text(obj, i)?,
+        author: parse_optional_attr(obj, i, "author")?.unwrap_or_else(|| "ooxp".into()),
+        initials: parse_optional_attr(obj, i, "initials")?.unwrap_or_else(|| "oo".into()),
+        date: parse_optional_attr(obj, i, "date")?,
+    })
+}
+
+fn parse_reply_comment(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<ReplyCommentOp, Error> {
+    deny_keys(obj, i, &["op", "id", "text", "author", "initials", "date"])?;
+    let id = require_id(obj, i)?;
+    let comment_id = parse_comment_container(&id, &format!("ops[{i}].id"))?;
+    Ok(ReplyCommentOp {
+        id,
+        comment_id,
+        text: parse_optional_text(obj, i)?,
+        author: parse_optional_attr(obj, i, "author")?.unwrap_or_else(|| "ooxp".into()),
+        initials: parse_optional_attr(obj, i, "initials")?.unwrap_or_else(|| "oo".into()),
+        date: parse_optional_attr(obj, i, "date")?,
+    })
+}
+
+fn parse_delete_comment(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<DeleteCommentOp, Error> {
+    deny_keys(obj, i, &["op", "id"])?;
+    let id = require_id(obj, i)?;
+    let comment_id = parse_comment_container(&id, &format!("ops[{i}].id"))?;
+    Ok(DeleteCommentOp { id, comment_id })
+}
+
+fn parse_set_comment_text(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<SetCommentTextOp, Error> {
+    deny_keys(obj, i, &["op", "id", "text"])?;
+    let id = require_id(obj, i)?;
+    let comment_id = parse_comment_container(&id, &format!("ops[{i}].id"))?;
+    let text = match obj.get("text") {
+        Some(Value::String(s)) => s.clone(),
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "text".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].text"),
+            ));
+        }
+        None => {
+            return Err(Error::with_path(
+                ErrorKind::OpRequiresField {
+                    op: "setCommentText".into(),
+                    field: "text".into(),
+                },
+                format!("ops[{i}].text"),
+            ));
+        }
+    };
+    Ok(SetCommentTextOp {
+        id,
+        comment_id,
+        text,
+    })
+}
+
+fn parse_set_comment_meta(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<SetCommentMetaOp, Error> {
+    deny_keys(obj, i, &["op", "id", "author", "initials", "date"])?;
+    let id = require_id(obj, i)?;
+    let comment_id = parse_comment_container(&id, &format!("ops[{i}].id"))?;
+    let author = parse_optional_attr(obj, i, "author")?;
+    let initials = parse_optional_attr(obj, i, "initials")?;
+    let date = parse_optional_attr(obj, i, "date")?;
+    if author.is_none() && initials.is_none() && date.is_none() {
+        return Err(Error::with_path(
+            ErrorKind::NeedCommentMetaField,
+            format!("ops[{i}]"),
+        ));
+    }
+    Ok(SetCommentMetaOp {
+        id,
+        comment_id,
+        author,
+        initials,
+        date,
+    })
+}
+
+fn parse_set_comment_done(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<SetCommentDoneOp, Error> {
+    deny_keys(obj, i, &["op", "id", "done"])?;
+    let id = require_id(obj, i)?;
+    let comment_id = parse_comment_container(&id, &format!("ops[{i}].id"))?;
+    let done = match obj.get("done") {
+        Some(Value::Bool(b)) => *b,
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "done".into(),
+                    expected: TypeName::Boolean,
+                },
+                format!("ops[{i}].done"),
+            ));
+        }
+        None => {
+            return Err(Error::with_path(
+                ErrorKind::OpRequiresField {
+                    op: "setCommentDone".into(),
+                    field: "done".into(),
+                },
+                format!("ops[{i}].done"),
+            ));
+        }
+    };
+    Ok(SetCommentDoneOp {
+        id,
+        comment_id,
+        done,
     })
 }

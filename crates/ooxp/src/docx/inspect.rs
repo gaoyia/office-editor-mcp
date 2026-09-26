@@ -7,6 +7,7 @@ use crate::opc::{self, Package};
 use crate::xml;
 
 use super::hf::{self, HfKind, HfPart};
+use super::comments;
 use super::notes;
 use super::para::{self, NoteKind};
 use super::picture;
@@ -54,6 +55,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     let text_box_count = body_boxes.len();
     let footnote_count = notes::user_count(&pkg, &part, NoteKind::Footnote)?;
     let endnote_count = notes::user_count(&pkg, &part, NoteKind::Endnote)?;
+    let comment_count = comments::count(&pkg, &part)?;
 
     let mut tree = json!({
         "schemaVersion": 1,
@@ -64,6 +66,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         "textBoxCount": text_box_count,
         "footnoteCount": footnote_count,
         "endnoteCount": endnote_count,
+        "commentCount": comment_count,
         "outline": outline,
         "headers": headers,
         "footers": footers,
@@ -94,6 +97,10 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
             tree["endnotes"] = endnotes;
             tree["noteSeparators"] = Value::Array(seps);
         }
+        let coverage = load_coverage(&pkg, &part, &doc.root, &catalog)?;
+        if scope.comments {
+            tree["comments"] = comments_array(&pkg, &part, &coverage, expand_pics)?;
+        }
         if let (Some(from), Some(max_paras)) = (scope.from, scope.max_paras) {
             let start = from as usize;
             let mut paragraphs = Vec::new();
@@ -118,6 +125,9 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
             tree["from"] = json!(from);
             tree["truncated"] = json!(truncated);
             tree["paragraphs"] = Value::Array(paragraphs);
+        }
+        if let Some(cov) = coverage.as_ref() {
+            stamp_comment_ids(&mut tree, cov);
         }
     }
 
@@ -414,4 +424,157 @@ fn notes_array(
         }));
     }
     Ok((Value::Array(users), seps))
+}
+
+fn load_coverage(
+    pkg: &crate::opc::Package,
+    doc_part: &str,
+    doc_root: &crate::xml::Element,
+    catalog: &[HfPart],
+) -> Result<Option<comments::CommentCoverage>, Error> {
+    let Some(part) = comments::part_name(pkg, doc_part)? else {
+        return Ok(None);
+    };
+    let Ok(bytes) = pkg.get(&part) else {
+        return Ok(None);
+    };
+    let comments_doc = crate::xml::parse(bytes)?;
+    let extended = if let Some(ex_part) = comments::extended_part_name(pkg, doc_part)? {
+        pkg.get(&ex_part)
+            .ok()
+            .and_then(|b| crate::xml::parse(b).ok())
+    } else {
+        None
+    };
+    let cov = comments::collect_coverage(
+        pkg,
+        doc_part,
+        doc_root,
+        catalog,
+        &comments_doc.root,
+        extended.as_ref().map(|d| &d.root),
+    )?;
+    Ok(Some(cov))
+}
+
+fn comments_array(
+    pkg: &crate::opc::Package,
+    doc_part: &str,
+    coverage: &Option<comments::CommentCoverage>,
+    expand_pics: bool,
+) -> Result<Value, Error> {
+    let Some(part) = comments::part_name(pkg, doc_part)? else {
+        return Ok(Value::Array(Vec::new()));
+    };
+    let comments_doc = crate::xml::parse(pkg.get(&part)?)?;
+    let extended = if let Some(ex_part) = comments::extended_part_name(pkg, doc_part)? {
+        pkg.get(&ex_part)
+            .ok()
+            .and_then(|b| crate::xml::parse(b).ok())
+    } else {
+        None
+    };
+    let mut out = Vec::new();
+    for comment in comments::comment_elements(&comments_doc.root) {
+        let w_id = comment.attr_local("id").unwrap_or("").to_string();
+        let inspect_id = comments::inspect_id(&w_id);
+        let (done, parent) = comments::done_and_parent(
+            comment,
+            &comments_doc.root,
+            extended.as_ref().map(|d| &d.root),
+        );
+        let kind = if comments::is_ink(comment) {
+            "ink"
+        } else {
+            "normal"
+        };
+        let paras = para::collect_paragraphs(comment);
+        let mut pic_count = 0usize;
+        let mut para_nodes = Vec::new();
+        let mut all_pics = Vec::new();
+        for (i, p) in paras.iter().enumerate() {
+            let index = i + 1;
+            let (pid, _) = para::para_stable_id_in(&inspect_id, p, index);
+            let pics = picture::collect_pictures(p, &pid)?;
+            pic_count += pics.len();
+            let mut node = para_json(p, index, Some(&inspect_id), Some(pics.len()), Some(0));
+            if expand_pics {
+                node["pictures"] = Value::Array(picture::pictures_json(&pics));
+            }
+            all_pics.extend(pics);
+            para_nodes.push(node);
+        }
+        let start = coverage
+            .as_ref()
+            .and_then(|c| c.start.get(&w_id))
+            .cloned()
+            .flatten();
+        let end = coverage
+            .as_ref()
+            .and_then(|c| c.end.get(&w_id))
+            .cloned()
+            .flatten();
+        let mut node = json!({
+            "id": inspect_id,
+            "commentId": w_id,
+            "author": comment.attr_local("author"),
+            "initials": comment.attr_local("initials"),
+            "date": comment.attr_local("date"),
+            "done": done,
+            "parent": parent,
+            "kind": kind,
+            "start": start,
+            "end": end,
+            "paraCount": paras.len(),
+            "pictureCount": pic_count,
+        });
+        if expand_pics {
+            node["pictures"] = Value::Array(picture::pictures_json(&all_pics));
+        }
+        node["paragraphs"] = Value::Array(para_nodes);
+        out.push(node);
+    }
+    Ok(Value::Array(out))
+}
+
+fn stamp_comment_ids(tree: &mut Value, coverage: &comments::CommentCoverage) {
+    stamp_value(tree, coverage);
+}
+
+fn stamp_value(v: &mut Value, coverage: &comments::CommentCoverage) {
+    match v {
+        Value::Object(map) => {
+            if let Some(Value::String(id)) = map.get("id") {
+                if map.contains_key("text") && map.contains_key("stable") {
+                    if let Some(ids) = coverage.on_para.get(id) {
+                        if !ids.is_empty() {
+                            let listed: Vec<String> =
+                                ids.iter().map(|c| comments::inspect_id(c)).collect();
+                            map.insert("commentIds".into(), json!(listed));
+                        }
+                    }
+                }
+            }
+            for (k, child) in map.iter_mut() {
+                if matches!(
+                    k.as_str(),
+                    "paragraphs"
+                        | "textBoxes"
+                        | "headers"
+                        | "footers"
+                        | "footnotes"
+                        | "endnotes"
+                        | "comments"
+                ) {
+                    stamp_value(child, coverage);
+                }
+            }
+        }
+        Value::Array(arr) => {
+            for x in arr {
+                stamp_value(x, coverage);
+            }
+        }
+        _ => {}
+    }
 }

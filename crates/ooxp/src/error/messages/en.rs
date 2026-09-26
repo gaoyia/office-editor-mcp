@@ -109,10 +109,10 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::SetParaOnBox => "setParaText id must be a paragraph id, not a text box id".into(),
             IdReason::InsertNeedsHostPara => "insertTextBox id must be a host paragraph id".into(),
             IdReason::InsertParaBody => {
-                "insertPara and deletePara are only allowed inside a text box or a note".into()
+                "insertPara and deletePara are only allowed inside a text box, a note, or a comment".into()
             }
             IdReason::InsertParaNeedsBox => {
-                "insertPara / deletePara id must be a text box, a paragraph inside a text box, a note, or a paragraph inside a note"
+                "insertPara / deletePara id must be a text box, a paragraph inside a text box, a note, a paragraph inside a note, a comment, or a paragraph inside a comment"
                     .into()
             }
             IdReason::NotePrefix => {
@@ -123,6 +123,10 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             }
             IdReason::NoteSep => {
                 "Separator ids cannot be used with apply".into()
+            },
+            IdReason::CommentPrefix => "Comment id must be comment:…".into(),
+            IdReason::CommentContainer => {
+                "Comment id must include /para:… (that id alone is not a paragraph)".into()
             },
         },
         ErrorKind::SheetNotFound { name } => format!("Sheet not found: {name}"),
@@ -150,6 +154,25 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         }
         ErrorKind::InvalidNoteRestart => {
             "numRestart must be continuous, eachSect, or eachPage".into()
+        }
+        ErrorKind::LastCommentPara => {
+            "Cannot delete the last paragraph in a comment".into()
+        }
+        ErrorKind::CommentNotFound { id } => format!("Comment not found: {id}"),
+        ErrorKind::NeedCommentParaId => {
+            "The last paragraph of the comment must have w14:paraId to write commentsExtended".into()
+        }
+        ErrorKind::NeedCommentMetaField => {
+            "setCommentMeta needs at least one of author, initials, or date".into()
+        }
+        ErrorKind::CommentRangeCrossPart => {
+            "insertComment start and end must be in the same part".into()
+        }
+        ErrorKind::CommentRangeReversed => {
+            "insertComment start must not come after end".into()
+        }
+        ErrorKind::InkComment { id } => {
+            format!("Ink comments cannot be edited except deleteComment: {id}")
         }
         ErrorKind::TextBoxLinkCrossPart => {
             "Text boxes in a link chain must be in the same part".into()

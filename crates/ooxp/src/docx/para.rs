@@ -28,6 +28,11 @@ pub enum ParaTarget {
         note_id: String,
         para: BodyPara,
     },
+    /// 批注里的段落。
+    InComment {
+        comment_id: String,
+        para: BodyPara,
+    },
 }
 
 /// 脚注或尾注。
@@ -109,6 +114,12 @@ pub enum NoteIdTarget {
     Container { kind: NoteKind, note_id: String },
     Para { kind: NoteKind, note_id: String, para: BodyPara },
     Sep,
+}
+
+#[derive(Debug, Clone)]
+pub enum CommentIdTarget {
+    Container { comment_id: String },
+    Para { comment_id: String, para: BodyPara },
 }
 
 #[derive(Debug, Clone)]
@@ -218,6 +229,20 @@ pub fn parse_para_id_at(id: &str, path: &str) -> Result<ParaTarget, Error> {
             }),
         };
     }
+    if let Some(comment) = parse_comment_id_at(id, &path)? {
+        return match comment {
+            CommentIdTarget::Container { .. } => Err(Error::with_path(
+                ErrorKind::InvalidId {
+                    reason: IdReason::CommentContainer,
+                },
+                path,
+            )),
+            CommentIdTarget::Para { comment_id, para } => Ok(ParaTarget::InComment {
+                comment_id,
+                para,
+            }),
+        };
+    }
     match parse_host_para_id(id, &path)? {
         HostPara::Body(p) => Ok(ParaTarget::Body(p)),
         HostPara::HeaderFooter {
@@ -293,6 +318,7 @@ fn looks_like_para_or_hf(id: &str) -> bool {
     id.starts_with("para:")
         || id.starts_with("footnote:")
         || id.starts_with("endnote:")
+        || id.starts_with("comment:")
         || HfKind::parse(id.split_once(':').map(|(k, _)| k).unwrap_or("")).is_some()
 }
 
@@ -365,6 +391,60 @@ pub fn parse_note_id_at(id: &str, path: &str) -> Result<Option<NoteIdTarget>, Er
             Ok(Some(NoteIdTarget::Para {
                 kind,
                 note_id: note_id.to_string(),
+                para: parse_body_para(inner, &path)?,
+            }))
+        }
+    }
+}
+
+pub fn parse_comment_id_at(id: &str, path: &str) -> Result<Option<CommentIdTarget>, Error> {
+    let path = path.to_string();
+    let Some(rest) = id.strip_prefix("comment:") else {
+        return Ok(None);
+    };
+    if rest.is_empty() {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::CommentPrefix,
+            },
+            path,
+        ));
+    }
+    let (comment_id, tail) = match rest.split_once('/') {
+        Some((cid, t)) => (cid, Some(t)),
+        None => (rest, None),
+    };
+    if comment_id.is_empty() {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::CommentPrefix,
+            },
+            path,
+        ));
+    }
+    match tail {
+        None => Ok(Some(CommentIdTarget::Container {
+            comment_id: comment_id.to_string(),
+        })),
+        Some(t) => {
+            let inner = t.strip_prefix("para:").ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::InvalidId {
+                        reason: IdReason::CommentPrefix,
+                    },
+                    path.clone(),
+                )
+            })?;
+            if inner.contains('/') {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidId {
+                        reason: IdReason::ParaPrefix,
+                    },
+                    path.clone(),
+                ));
+            }
+            Ok(Some(CommentIdTarget::Para {
+                comment_id: comment_id.to_string(),
                 para: parse_body_para(inner, &path)?,
             }))
         }

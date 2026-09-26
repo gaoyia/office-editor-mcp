@@ -619,3 +619,57 @@ function Ensure-DocxWordNotesSource([switch]$Force) {
     Write-Log "saved word notes source $path"
     return $path
 }
+
+function Ensure-DocxWordCommentsSource([switch]$Force) {
+    $path = Get-OutPath 'docx-word-comments-source.docx'
+    if ((Test-Path $path) -and -not $Force) { return $path }
+
+    $tmpDir = Join-Path $env:TEMP 'ooxp-office'
+    New-Item -ItemType Directory -Force -Path $tmpDir | Out-Null
+    $skel = Join-Path $tmpDir 'docx-word-comments-skel.docx'
+    $S = $global:OoxpStrings
+    Invoke-OoxpRequest @{
+        schemaVersion = 1; action = 'create'
+        path = $skel.Replace('\', '/'); format = 'docx'
+        document = @{
+            paragraphs = @(
+                @{ style = 'Heading1'; text = $S.chapter1 }
+                @{ text = $S.para2src }
+                @{ text = $S.para3keep }
+            )
+        }
+    } 'docx-comments-skel-create' | Out-Null
+
+    $word = Ensure-MsWord (Ensure-DocxCreate)
+    Close-WordDocByPath $word $skel
+    $doc = Open-WordDoc $word $skel
+    try { $word.UserName = 'Alice' } catch {}
+    try { $word.UserInitials = 'A' } catch {}
+    $p1 = $doc.Paragraphs.Item(1)
+    $rng1 = $p1.Range
+    $c1 = $doc.Comments.Add($rng1, $S.commentA)
+    try { $c1.Author = 'Alice' } catch {}
+    try { $c1.Initial = 'A' } catch {}
+    Release-Com $rng1
+    Release-Com $p1
+    $p2 = $doc.Paragraphs.Item(2)
+    $rng2 = $p2.Range
+    $c2 = $doc.Comments.Add($rng2, $S.commentB)
+    try { $c2.Author = 'Bob' } catch {}
+    try { $c2.Initial = 'B' } catch {}
+    Release-Com $rng2
+    Release-Com $p2
+    $replies = $c1.Replies
+    $cr = $c1.Range
+    [void]$replies.Add($cr, $S.commentReply)
+    Release-Com $cr
+    Release-Com $replies
+    Release-Com $c2
+    Release-Com $c1
+    Write-Log 'word Save() 原地覆盖 TEMP 里的批注样例'
+    $doc.Save()
+    Close-WordDoc $doc
+    Copy-Item -Force $skel $path
+    Write-Log "saved word comments source $path"
+    return $path
+}

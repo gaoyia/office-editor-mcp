@@ -1,6 +1,7 @@
 //! docx：inspect / create / apply / exportMedia。
 
 mod apply;
+mod comments;
 mod create;
 mod export;
 mod hf;
@@ -38,6 +39,11 @@ pub const REL_FOOTNOTES: &str =
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/footnotes";
 pub const REL_ENDNOTES: &str =
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/endnotes";
+pub const REL_COMMENTS: &str =
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/comments";
+pub const REL_COMMENTS_EXTENDED: &str =
+    "http://schemas.microsoft.com/office/2011/relationships/commentsExtended";
+pub const REL_PEOPLE: &str = "http://schemas.microsoft.com/office/2011/relationships/people";
 pub const WP_NS: &str = "http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing";
 pub const A_NS: &str = "http://schemas.openxmlformats.org/drawingml/2006/main";
 pub const PIC_NS: &str = "http://schemas.openxmlformats.org/drawingml/2006/picture";
@@ -60,5 +66,10 @@ pub const CT_FOOTNOTES: &str =
     "application/vnd.openxmlformats-officedocument.wordprocessingml.footnotes+xml";
 pub const CT_ENDNOTES: &str =
     "application/vnd.openxmlformats-officedocument.wordprocessingml.endnotes+xml";
+pub const CT_COMMENTS: &str =
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.comments+xml";
+pub const CT_COMMENTS_EXTENDED: &str = "application/vnd.ms-word.commentsExtended+xml";
+pub const CT_PEOPLE: &str =
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.people+xml";
 pub const CT_CORE: &str = "application/vnd.openxmlformats-package.core-properties+xml";
 pub const CT_APP: &str = "application/vnd.openxmlformats-officedocument.extended-properties+xml";

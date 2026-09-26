@@ -174,6 +174,11 @@ pub enum PicTarget {
         para: BodyPara,
         key: PicKey,
     },
+    InComment {
+        comment_id: String,
+        para: BodyPara,
+        key: PicKey,
+    },
 }
 
 pub struct PicInfo {
@@ -254,6 +259,7 @@ pub fn parse_pic_id_at(id: &str, path: &str) -> Result<PicTarget, Error> {
         if id.starts_with("para:")
             || id.starts_with("footnote:")
             || id.starts_with("endnote:")
+            || id.starts_with("comment:")
             || HfKind::parse(id.split_once(':').map(|(k, _)| k).unwrap_or("")).is_some()
         {
             return Err(Error::with_path(
@@ -300,7 +306,8 @@ pub fn parse_pic_id_at(id: &str, path: &str) -> Result<PicTarget, Error> {
             ParaTarget::Body(p) => return Ok(PicTarget::Body { para: p, key }),
             ParaTarget::HeaderFooter { .. }
             | ParaTarget::InTextBox { .. }
-            | ParaTarget::InNote { .. } => {
+            | ParaTarget::InNote { .. }
+            | ParaTarget::InComment { .. } => {
                 return Err(Error::with_path(
                     ErrorKind::InvalidId {
                         reason: IdReason::PicPrefix,
@@ -376,6 +383,25 @@ pub fn parse_pic_id_at(id: &str, path: &str) -> Result<PicTarget, Error> {
             }
         }
     }
+    if left.starts_with("comment:") {
+        match para::parse_para_id_at(left, &path)? {
+            ParaTarget::InComment { comment_id, para } => {
+                return Ok(PicTarget::InComment {
+                    comment_id,
+                    para,
+                    key,
+                });
+            }
+            _ => {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidId {
+                        reason: IdReason::PicPrefix,
+                    },
+                    path,
+                ));
+            }
+        }
+    }
     Err(Error::with_path(
         ErrorKind::InvalidId {
             reason: IdReason::PicPrefix,
@@ -423,6 +449,19 @@ pub fn parse_insert_para_id(id: &str, op_index: usize) -> Result<ParaTarget, Err
                 ));
             }
             para::NoteIdTarget::Para { .. } => {}
+        }
+    }
+    if let Some(comment) = para::parse_comment_id_at(id, &path)? {
+        match comment {
+            para::CommentIdTarget::Container { .. } => {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidId {
+                        reason: IdReason::InsertNeedsPara,
+                    },
+                    path,
+                ));
+            }
+            para::CommentIdTarget::Para { .. } => {}
         }
     }
     para::parse_para_id(id, op_index)
@@ -497,6 +536,15 @@ pub fn find_target_drawing<'a>(root: &'a Element, target: &PicTarget) -> Option<
             let inner = para::find_paragraph(note, para)?;
             find_drawing(inner, key)
         }
+        PicTarget::InComment {
+            comment_id,
+            para,
+            key,
+        } => {
+            let comment = super::comments::find_comment(root, comment_id)?;
+            let inner = para::find_paragraph(comment, para)?;
+            find_drawing(inner, key)
+        }
     }
 }
 
@@ -547,6 +595,14 @@ pub fn part_for_pic(
                 field_path.to_string(),
             )
         }),
+        PicTarget::InComment { .. } => {
+            super::comments::part_name(pkg, doc_part)?.ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::PictureNotFound { id: id.to_string() },
+                    field_path.to_string(),
+                )
+            })
+        }
     }
 }
 
@@ -1536,5 +1592,6 @@ pub fn body_para_of(target: &ParaTarget) -> Option<&BodyPara> {
         ParaTarget::Body(p) => Some(p),
         ParaTarget::InTextBox { para, .. } => Some(para),
         ParaTarget::InNote { para, .. } => Some(para),
+        ParaTarget::InComment { para, .. } => Some(para),
     }
 }
