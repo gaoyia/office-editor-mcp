@@ -102,6 +102,10 @@ pub(crate) enum IdReason {
     InsertChartNeedsPara,
     /// xlsx 的 insertChart 必须用 sheet:工作表名
     InsertChartNeedsSheet,
+    /// insertChartSheet 必须用 xlsx:workbook
+    InsertChartSheetNeedsWorkbook,
+    /// deleteChartSheet 必须用图表工作表 sheet:工作表名
+    DeleteChartSheetNeedsChartsheet,
     /// xlsx 图表 id 必须是 sheet:工作表名/chart:…
     SheetChartPrefix,
     /// 工作表 id，缺少 /chart:…
@@ -236,6 +240,7 @@ define_error_kinds! {
     InspectWorksheetOnly => vec![Self::InspectWorksheetOnly],
     InsertPictureWorksheetOnly => vec![Self::InsertPictureWorksheetOnly],
     InsertChartWorksheetOnly => vec![Self::InsertChartWorksheetOnly],
+    DataSheetMustBeWorksheet => vec![Self::DataSheetMustBeWorksheet],
     TwoCellPictureSize => vec![Self::TwoCellPictureSize],
     TwoCellChartSize => vec![Self::TwoCellChartSize],
     DeleteChartsheetLast => vec![Self::DeleteChartsheetLast],
@@ -425,6 +430,8 @@ impl IdReason {
             Self::SeriesIndexNotInt,
             Self::InsertChartNeedsPara,
             Self::InsertChartNeedsSheet,
+            Self::InsertChartSheetNeedsWorkbook,
+            Self::DeleteChartSheetNeedsChartsheet,
             Self::SheetChartPrefix,
             Self::SheetChartContainer,
             Self::SmartArtPrefix,
@@ -570,6 +577,7 @@ impl ErrorKind {
             | Self::InvalidTextBoxDirection
             | Self::InsertPictureWorksheetOnly
             | Self::InsertChartWorksheetOnly
+            | Self::DataSheetMustBeWorksheet
             | Self::InvalidXlsxAnchor
             | Self::InvalidXlsxEditAs => InvalidField,
             Self::OutOfRange { .. } => TruncatedLimit,

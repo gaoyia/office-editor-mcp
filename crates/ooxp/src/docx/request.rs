@@ -505,6 +505,8 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<DocxOp>, Error> {
             || op_name == "setPictureAnchor"
             || op_name == "setChartAnchor"
             || op_name == "setHeaderFooterText"
+            || op_name == "insertChartSheet"
+            || op_name == "deleteChartSheet"
         {
             return Err(Error::with_path(
                 ErrorKind::OpNotForFormat {

@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "book.xlsx",
+  "output": "book.chartsheet.xlsx",
+  "ops": [
+    {
+      "op": "insertChartSheet",
+      "id": "xlsx:workbook",
+      "name": "Chart1",
+      "dataFrom": "A10",
+      "type": "col",
+      "series": [
+        { "name": "S1", "categories": ["a", "b", "c"], "values": [1, 2, 3] }
+      ]
+    }
+  ]
+}

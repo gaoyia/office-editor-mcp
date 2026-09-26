@@ -427,6 +427,8 @@
               { "$ref": "#/$defs/setCommentMetaOp" },
               { "$ref": "#/$defs/setCommentDoneOp" },
               { "$ref": "#/$defs/insertChartOp" },
+              { "$ref": "#/$defs/insertChartSheetOp" },
+              { "$ref": "#/$defs/deleteChartSheetOp" },
               { "$ref": "#/$defs/deleteChartOp" },
               { "$ref": "#/$defs/setChartTitleOp" },
               { "$ref": "#/$defs/setChartSeriesOp" },
@@ -929,6 +931,41 @@
         "toOffX": { "type": "integer", "minimum": 0 },
         "toOffY": { "type": "integer", "minimum": 0 },
         "dataFrom": { "type": "string", "minLength": 1 }
+      }
+    },
+    "insertChartSheetOp": {
+      "type": "object",
+      "required": ["op", "id", "name", "type", "series", "dataFrom"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "insertChartSheet" },
+        "id": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 },
+        "dataSheet": { "type": "string", "minLength": 1 },
+        "type": { "$ref": "#/$defs/insertChartType" },
+        "title": { "type": "string" },
+        "series": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "allOf": [
+              { "$ref": "#/$defs/chartSeriesData" },
+              { "required": ["values"] }
+            ]
+          }
+        },
+        "cx": { "type": "integer", "minimum": 1 },
+        "cy": { "type": "integer", "minimum": 1 },
+        "dataFrom": { "type": "string", "minLength": 1 }
+      }
+    },
+    "deleteChartSheetOp": {
+      "type": "object",
+      "required": ["op", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "deleteChartSheet" },
+        "id": { "type": "string", "minLength": 1 }
       }
     },
     "deleteChartOp": {

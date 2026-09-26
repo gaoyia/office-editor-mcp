@@ -138,6 +138,12 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::InsertChartNeedsSheet => {
                 "xlsx 的 insertChart 的 id 必须是 sheet:工作表名".into()
             }
+            IdReason::InsertChartSheetNeedsWorkbook => {
+                "insertChartSheet 的 id 必须是 xlsx:workbook".into()
+            }
+            IdReason::DeleteChartSheetNeedsChartsheet => {
+                "deleteChartSheet 的 id 必须是图表工作表 sheet:工作表名".into()
+            }
             IdReason::SheetChartPrefix => {
                 "xlsx 图表 id 必须是 sheet:工作表名/chart:…".into()
             }
@@ -249,6 +255,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::InspectWorksheetOnly => "只能对工作表读单元格".into(),
         ErrorKind::InsertPictureWorksheetOnly => "只能往工作表 insertPicture".into(),
         ErrorKind::InsertChartWorksheetOnly => "只能往工作表 insertChart".into(),
+        ErrorKind::DataSheetMustBeWorksheet => {
+            "insertChartSheet 的数据必须写到普通工作表上".into()
+        }
         ErrorKind::TwoCellPictureSize => {
             "twoCell 图的显示尺寸由起止格决定，请用 setPictureAnchor 改 to".into()
         }

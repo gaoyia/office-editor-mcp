@@ -158,6 +158,12 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::InsertChartNeedsSheet => {
                 "xlsx insertChart id must be sheet:name".into()
             }
+            IdReason::InsertChartSheetNeedsWorkbook => {
+                "insertChartSheet id must be xlsx:workbook".into()
+            }
+            IdReason::DeleteChartSheetNeedsChartsheet => {
+                "deleteChartSheet id must be a chartsheet sheet:name".into()
+            }
             IdReason::SheetChartPrefix => {
                 "xlsx chart id must be sheet:name/chart:…".into()
             }
@@ -293,6 +299,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::InspectWorksheetOnly => "Cells can only be read from worksheets".into(),
         ErrorKind::InsertPictureWorksheetOnly => "insertPicture only applies to worksheets".into(),
         ErrorKind::InsertChartWorksheetOnly => "insertChart only applies to worksheets".into(),
+        ErrorKind::DataSheetMustBeWorksheet => {
+            "insertChartSheet data must be written to a worksheet".into()
+        }
         ErrorKind::TwoCellPictureSize => {
             "twoCell picture size is defined by the anchor cells; use setPictureAnchor to change the to cell"
                 .into()

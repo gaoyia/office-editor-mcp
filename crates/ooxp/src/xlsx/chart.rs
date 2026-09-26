@@ -1221,7 +1221,7 @@ fn cnv_of_frame(frame: &Element) -> (Option<String>, String) {
     (raw, name)
 }
 
-fn build_graphic_frame(cnv: u32, name: &str, rid: &str, cx: i64, cy: i64) -> Element {
+pub(crate) fn build_graphic_frame(cnv: u32, name: &str, rid: &str, cx: i64, cy: i64) -> Element {
     let mut nv = Element::new("xdr:nvGraphicFramePr");
     nv.push_element(
         Element::new("xdr:cNvPr")
@@ -1258,7 +1258,7 @@ fn build_graphic_frame(cnv: u32, name: &str, rid: &str, cx: i64, cy: i64) -> Ele
     frame
 }
 
-fn next_chart_part(pkg: &Package) -> String {
+pub(crate) fn next_chart_part(pkg: &Package) -> String {
     let mut n = 1u32;
     loop {
         let name = format!("/xl/charts/chart{n}.xml");
@@ -1269,7 +1269,11 @@ fn next_chart_part(pkg: &Package) -> String {
     }
 }
 
-fn add_chart_rel(pkg: &mut Package, drawing_part: &str, chart_part: &str) -> Result<String, Error> {
+pub(crate) fn add_chart_rel(
+    pkg: &mut Package,
+    drawing_part: &str,
+    chart_part: &str,
+) -> Result<String, Error> {
     let mut rels = Relationships::from_package(pkg, drawing_part)?;
     let rid = rels.next_rid();
     rels.push(Relationship {
@@ -1283,7 +1287,7 @@ fn add_chart_rel(pkg: &mut Package, drawing_part: &str, chart_part: &str) -> Res
     Ok(rid)
 }
 
-fn chart_still_used(pkg: &Package, chart_part: &str) -> Result<bool, Error> {
+pub(crate) fn chart_still_used(pkg: &Package, chart_part: &str) -> Result<bool, Error> {
     for name in pkg.part_names() {
         if !name.ends_with(".rels") {
             continue;
@@ -1317,7 +1321,7 @@ fn source_from_rels(rels_part: &str) -> Option<String> {
     }
 }
 
-fn remove_chart_tree(pkg: &mut Package, chart_part: &str) -> Result<(), Error> {
+pub(crate) fn remove_chart_tree(pkg: &mut Package, chart_part: &str) -> Result<(), Error> {
     if let Ok(rels) = Relationships::from_package(pkg, chart_part) {
         for r in &rels.rels {
             if r.is_external() {

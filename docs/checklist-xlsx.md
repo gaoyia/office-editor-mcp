@@ -118,3 +118,14 @@ Office 另存 create 产物是打开冒烟，见 `manual-check/office/cases/opc-
 | Xh3 | 工作表图不混 | 源文件若另有工作表图，`pictures: true` 且不开 `headerFooter` 时名单不含 `hf:` |
 | Xh4 | 插页眉图 | 对 `sheet:…/hf:odd:header` 发 `insertPicture` 后 Excel 无修复（允许页眉图在打印预览里才看见） |
 | Xh5 | 换页眉图 | 若 Xh4 写出了 DrawingML 页眉图，则 `replacePicture` 后无修复；源文件只有 VML 页眉图时本条记跳过，不测换 VML |
+
+## 图表工作表
+
+准备一份 Excel 亲手另存、至少有一张 `worksheet` 的工作簿；手测里再用 `insertChartSheet` 加一张。源文件不要用库 `create` 产物当唯一样例。脚本建议 `manual-check/office/cases/xlsx-chartsheet.ps1`。编号用 Xs。
+
+| 序号 | 检查 | 通过标准 |
+| --- | --- | --- |
+| Xs1 | 插入 | `insertChartSheet` 后表名单多一张 `kind: chartsheet`，`chartCount` 为 1，Excel 无修复 |
+| Xs2 | 数据 | 点名的普通表 `dataFrom` 一带有数据表，图上的值对得上 |
+| Xs3 | 删除 | `deleteChartSheet` 后该表消失，数据单元格还在，无修复 |
+| Xs4 | 拒普通表 | 对 `worksheet` 发 `deleteChartSheet` 得到 `InvalidId`。不强制开 Excel |

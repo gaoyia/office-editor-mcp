@@ -7,6 +7,7 @@ use crate::xml::{self, Document, Element, Node};
 
 use super::a1;
 use super::chart;
+use super::chartsheet;
 use super::hf;
 use super::picture;
 use super::REL_CALC_CHAIN;
@@ -17,10 +18,11 @@ pub fn apply(bytes: &[u8], ops: &[XlsxOp]) -> Result<Vec<u8>, Error> {
     let mut wb_doc = xml::parse(pkg.get(&wb_part)?)?;
     let wb_rels = Relationships::from_package(&pkg, &wb_part)?;
 
-    let sheet_index = sheet_index(&wb_doc.root, &wb_rels, &wb_part)?;
+    let mut sheet_index = sheet_index(&wb_doc.root, &wb_rels, &wb_part)?;
 
     let mut dirty_sheets: Vec<(String, Document)> = Vec::new();
     let mut touched_cells = false;
+    let mut workbook_dirty = false;
 
     for (i, op) in ops.iter().enumerate() {
         match op {
@@ -110,6 +112,31 @@ pub fn apply(bytes: &[u8], ops: &[XlsxOp]) -> Result<Vec<u8>, Error> {
                 chart::insert_chart(&mut pkg, &part, &op.sheet, &mut dirty_sheets, op, i)?;
                 touched_cells = true;
             }
+            XlsxOp::InsertChartSheet(op) => {
+                chartsheet::insert(
+                    &mut pkg,
+                    &mut wb_doc,
+                    &wb_part,
+                    &mut sheet_index,
+                    &mut dirty_sheets,
+                    op,
+                    i,
+                )?;
+                workbook_dirty = true;
+                touched_cells = true;
+            }
+            XlsxOp::DeleteChartSheet(op) => {
+                chartsheet::delete(
+                    &mut pkg,
+                    &mut wb_doc,
+                    &wb_part,
+                    &mut sheet_index,
+                    &mut dirty_sheets,
+                    op,
+                    i,
+                )?;
+                workbook_dirty = true;
+            }
             XlsxOp::DeleteChart(op) => {
                 let (part, kind) = require_named_sheet(&sheet_index, &op.target.sheet, i)?;
                 load_dirty(&pkg, &mut dirty_sheets, &part, false)?;
@@ -185,8 +212,11 @@ pub fn apply(bytes: &[u8], ops: &[XlsxOp]) -> Result<Vec<u8>, Error> {
 
     if touched_cells {
         mark_full_calc(&mut wb_doc.root);
-        pkg.set(&wb_part, wb_doc.to_bytes()?)?;
         remove_calc_chain(&mut pkg, &wb_part)?;
+        workbook_dirty = true;
+    }
+    if workbook_dirty {
+        pkg.set(&wb_part, wb_doc.to_bytes()?)?;
     }
 
     pkg.save_to_vec()

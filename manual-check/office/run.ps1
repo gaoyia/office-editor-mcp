@@ -32,6 +32,7 @@ $order = @(
     'xlsx-apply'
     'xlsx-pictures'
     'xlsx-charts'
+    'xlsx-chartsheet'
     'xlsx-headerfooter'
     'docx-apply'
     'docx-headerfooter'

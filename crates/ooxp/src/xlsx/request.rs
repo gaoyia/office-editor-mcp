@@ -2,7 +2,7 @@
 
 use serde_json::Value;
 
-use crate::error::{Error, ErrorKind, ScopeNeed, TypeName};
+use crate::error::{Error, ErrorKind, IdReason, ScopeNeed, SheetNameReason, TypeName};
 use crate::json;
 
 use crate::chart::{ChartType, NewSeries};
@@ -240,6 +240,23 @@ pub struct InsertChartOp {
 }
 
 #[derive(Debug, Clone)]
+pub struct InsertChartSheetOp {
+    pub name: String,
+    pub data_sheet: Option<String>,
+    pub chart_type: ChartType,
+    pub title: Option<String>,
+    pub series: Vec<NewSeries>,
+    pub cx: Option<i64>,
+    pub cy: Option<i64>,
+    pub data_from: a1::CellRef,
+}
+
+#[derive(Debug, Clone)]
+pub struct DeleteChartSheetOp {
+    pub sheet: String,
+}
+
+#[derive(Debug, Clone)]
 pub struct DeleteChartOp {
     pub id: String,
     pub target: SheetChartId,
@@ -347,6 +364,8 @@ pub enum XlsxOp {
     SetPictureSize(SetPictureSizeOp),
     SetPictureAnchor(SetPictureAnchorOp),
     InsertChart(InsertChartOp),
+    InsertChartSheet(InsertChartSheetOp),
+    DeleteChartSheet(DeleteChartSheetOp),
     DeleteChart(DeleteChartOp),
     SetChartTitle(SetChartTitleOp),
     SetChartSeries(SetChartSeriesOp),
@@ -472,6 +491,8 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<XlsxOp>, Error> {
             "setPictureSize" => XlsxOp::SetPictureSize(parse_set_pic_size(obj, i)?),
             "setPictureAnchor" => XlsxOp::SetPictureAnchor(parse_set_pic_anchor(obj, i)?),
             "insertChart" => XlsxOp::InsertChart(parse_insert_chart(obj, i)?),
+            "insertChartSheet" => XlsxOp::InsertChartSheet(parse_insert_chart_sheet(obj, i)?),
+            "deleteChartSheet" => XlsxOp::DeleteChartSheet(parse_delete_chart_sheet(obj, i)?),
             "deleteChart" => XlsxOp::DeleteChart(parse_delete_chart(obj, i)?),
             "setChartTitle" => XlsxOp::SetChartTitle(parse_set_chart_title(obj, i)?),
             "setChartSeries" => XlsxOp::SetChartSeries(parse_set_chart_series(obj, i)?),
@@ -1165,60 +1186,10 @@ fn parse_insert_chart(
     let id = require_id(obj, i)?;
     let sheet = chart::parse_insert_sheet_id(&id, i)?;
     let chart_type = parse_chart_type_field(obj.get("type"), i, true)?;
-    let title = match obj.get("title") {
-        None | Some(Value::Null) => None,
-        Some(Value::String(s)) => Some(s.clone()),
-        Some(_) => {
-            return Err(Error::with_path(
-                ErrorKind::WrongType {
-                    field: "title".into(),
-                    expected: TypeName::String,
-                },
-                format!("ops[{i}].title"),
-            ));
-        }
-    };
-    let series = parse_insert_series(obj.get("series"), i, chart_type)?;
-    if chart_type.needs_one_series() && series.len() != 1 {
-        return Err(Error::with_path(
-            ErrorKind::PieNeedsOneSeries,
-            format!("ops[{i}].series"),
-        ));
-    }
-    if chart_type == ChartType::Combo {
-        let kinds: std::collections::HashSet<&str> = series
-            .iter()
-            .filter_map(|s| s.series_type.map(ChartType::as_str))
-            .collect();
-        if series.iter().any(|s| s.series_type.is_none()) || kinds.len() < 2 {
-            return Err(Error::with_path(
-                ErrorKind::InvalidComboSeriesType,
-                format!("ops[{i}].series"),
-            ));
-        }
-    } else if series.iter().any(|s| s.series_type.is_some()) {
-        return Err(Error::with_path(
-            ErrorKind::InvalidComboSeriesType,
-            format!("ops[{i}].series"),
-        ));
-    }
-    if chart_type != ChartType::Bubble && series.iter().any(|s| s.sizes.is_some()) {
-        return Err(Error::with_path(
-            ErrorKind::SizesOnNonBubble,
-            format!("ops[{i}].series"),
-        ));
-    }
-    let cx = parse_emu_field(obj.get("cx"), i, "cx")?;
-    let cy = parse_emu_field(obj.get("cy"), i, "cy")?;
-    if cx.is_some() != cy.is_some() {
-        return Err(Error::with_path(
-            ErrorKind::OpRequiresField {
-                op: "insertChart".into(),
-                field: "cx and cy together".into(),
-            },
-            format!("ops[{i}]"),
-        ));
-    }
+    let title = parse_chart_title_field(obj.get("title"), i)?;
+    let series = parse_insert_series(obj.get("series"), i, chart_type, "insertChart")?;
+    validate_insert_series(chart_type, &series, i)?;
+    let (cx, cy) = parse_chart_size_pair(obj, i, "insertChart")?;
     let from = parse_required_a1(obj, i, "from")?;
     let data_from = parse_required_a1(obj, i, "dataFrom")?;
     let anchor = match obj.get("anchor") {
@@ -1270,17 +1241,245 @@ fn parse_insert_chart(
     })
 }
 
+fn parse_insert_chart_sheet(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<InsertChartSheetOp, Error> {
+    deny_keys(
+        obj,
+        i,
+        &[
+            "op",
+            "id",
+            "name",
+            "dataSheet",
+            "type",
+            "title",
+            "series",
+            "cx",
+            "cy",
+            "dataFrom",
+        ],
+    )?;
+    let id = require_id(obj, i)?;
+    if id != "xlsx:workbook" {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::InsertChartSheetNeedsWorkbook,
+            },
+            format!("ops[{i}].id"),
+        ));
+    }
+    let name = match obj.get("name") {
+        Some(Value::String(s)) => {
+            validate_sheet_name(s, format!("ops[{i}].name"))?;
+            s.clone()
+        }
+        None => {
+            return Err(Error::with_path(
+                ErrorKind::InvalidSheetName {
+                    reason: SheetNameReason::Missing,
+                },
+                format!("ops[{i}].name"),
+            ));
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "name".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].name"),
+            ));
+        }
+    };
+    let data_sheet = match obj.get("dataSheet") {
+        None | Some(Value::Null) => None,
+        Some(Value::String(s)) if !s.is_empty() => Some(s.clone()),
+        Some(Value::String(_)) => {
+            return Err(Error::with_path(
+                ErrorKind::MissingField {
+                    field: "dataSheet".into(),
+                },
+                format!("ops[{i}].dataSheet"),
+            ));
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "dataSheet".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].dataSheet"),
+            ));
+        }
+    };
+    let chart_type = parse_chart_type_field(obj.get("type"), i, true)?;
+    let title = parse_chart_title_field(obj.get("title"), i)?;
+    let series = parse_insert_series(obj.get("series"), i, chart_type, "insertChartSheet")?;
+    validate_insert_series(chart_type, &series, i)?;
+    let (cx, cy) = parse_chart_size_pair(obj, i, "insertChartSheet")?;
+    let data_from = parse_required_a1(obj, i, "dataFrom")?;
+    Ok(InsertChartSheetOp {
+        name,
+        data_sheet,
+        chart_type,
+        title,
+        series,
+        cx,
+        cy,
+        data_from,
+    })
+}
+
+fn parse_delete_chart_sheet(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<DeleteChartSheetOp, Error> {
+    deny_keys(obj, i, &["op", "id"])?;
+    let id = require_id(obj, i)?;
+    Ok(DeleteChartSheetOp {
+        sheet: parse_sheet_only_id(&id, i, IdReason::DeleteChartSheetNeedsChartsheet)?,
+    })
+}
+
+fn parse_sheet_only_id(id: &str, op_index: usize, reason: IdReason) -> Result<String, Error> {
+    if id.contains("/chart:")
+        || id.contains("/pic:")
+        || id.contains("/hf:")
+        || id.starts_with("cell:")
+    {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId { reason },
+            format!("ops[{op_index}].id"),
+        ));
+    }
+    let Some(name) = id.strip_prefix("sheet:") else {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId { reason },
+            format!("ops[{op_index}].id"),
+        ));
+    };
+    if name.is_empty() || name.contains('/') {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId { reason },
+            format!("ops[{op_index}].id"),
+        ));
+    }
+    Ok(name.to_string())
+}
+
+pub(crate) fn validate_sheet_name(name: &str, path: impl Into<String>) -> Result<(), Error> {
+    let path = path.into();
+    if name.is_empty() || name.len() > 31 {
+        return Err(Error::with_path(
+            ErrorKind::InvalidSheetName {
+                reason: SheetNameReason::Length,
+            },
+            path,
+        ));
+    }
+    if name.eq_ignore_ascii_case("History") {
+        return Err(Error::with_path(
+            ErrorKind::InvalidSheetName {
+                reason: SheetNameReason::History,
+            },
+            path,
+        ));
+    }
+    if name.contains([':', '*', '?', '/', '[', ']', '\\']) {
+        return Err(Error::with_path(
+            ErrorKind::InvalidSheetName {
+                reason: SheetNameReason::IllegalChars,
+            },
+            path,
+        ));
+    }
+    Ok(())
+}
+
+fn parse_chart_title_field(v: Option<&Value>, i: usize) -> Result<Option<String>, Error> {
+    match v {
+        None | Some(Value::Null) => Ok(None),
+        Some(Value::String(s)) => Ok(Some(s.clone())),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "title".into(),
+                expected: TypeName::String,
+            },
+            format!("ops[{i}].title"),
+        )),
+    }
+}
+
+fn validate_insert_series(
+    chart_type: ChartType,
+    series: &[NewSeries],
+    i: usize,
+) -> Result<(), Error> {
+    if chart_type.needs_one_series() && series.len() != 1 {
+        return Err(Error::with_path(
+            ErrorKind::PieNeedsOneSeries,
+            format!("ops[{i}].series"),
+        ));
+    }
+    if chart_type == ChartType::Combo {
+        let kinds: std::collections::HashSet<&str> = series
+            .iter()
+            .filter_map(|s| s.series_type.map(ChartType::as_str))
+            .collect();
+        if series.iter().any(|s| s.series_type.is_none()) || kinds.len() < 2 {
+            return Err(Error::with_path(
+                ErrorKind::InvalidComboSeriesType,
+                format!("ops[{i}].series"),
+            ));
+        }
+    } else if series.iter().any(|s| s.series_type.is_some()) {
+        return Err(Error::with_path(
+            ErrorKind::InvalidComboSeriesType,
+            format!("ops[{i}].series"),
+        ));
+    }
+    if chart_type != ChartType::Bubble && series.iter().any(|s| s.sizes.is_some()) {
+        return Err(Error::with_path(
+            ErrorKind::SizesOnNonBubble,
+            format!("ops[{i}].series"),
+        ));
+    }
+    Ok(())
+}
+
+fn parse_chart_size_pair(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+    op: &str,
+) -> Result<(Option<i64>, Option<i64>), Error> {
+    let cx = parse_emu_field(obj.get("cx"), i, "cx")?;
+    let cy = parse_emu_field(obj.get("cy"), i, "cy")?;
+    if cx.is_some() != cy.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: op.into(),
+                field: "cx and cy together".into(),
+            },
+            format!("ops[{i}]"),
+        ));
+    }
+    Ok((cx, cy))
+}
+
 fn parse_insert_series(
     v: Option<&Value>,
     i: usize,
     _chart_type: ChartType,
+    op: &str,
 ) -> Result<Vec<NewSeries>, Error> {
     let arr = match v {
         Some(Value::Array(a)) if !a.is_empty() => a,
         Some(Value::Array(_)) | None => {
             return Err(Error::with_path(
                 ErrorKind::OpRequiresField {
-                    op: "insertChart".into(),
+                    op: op.into(),
                     field: "series".into(),
                 },
                 format!("ops[{i}].series"),
@@ -1328,7 +1527,7 @@ fn parse_insert_series(
             .ok_or_else(|| {
                 Error::with_path(
                     ErrorKind::OpRequiresField {
-                        op: "insertChart".into(),
+                        op: op.into(),
                         field: "series[].values".into(),
                     },
                     format!("ops[{i}].series[{j}].values"),

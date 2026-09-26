@@ -3,6 +3,7 @@
 pub(crate) mod a1;
 mod apply;
 mod chart;
+mod chartsheet;
 mod create;
 mod hf;
 mod inspect;
@@ -46,6 +47,8 @@ pub const CT_WORKBOOK: &str =
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml";
 pub const CT_WORKSHEET: &str =
     "application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml";
+pub const CT_CHARTSHEET: &str =
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.chartsheet+xml";
 pub const CT_STYLES: &str =
     "application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml";
 pub const CT_SHARED_STRINGS: &str =

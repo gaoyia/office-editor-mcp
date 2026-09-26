@@ -234,7 +234,7 @@ fn parse_sheet(v: &Value, i: usize) -> Result<NewSheet, Error> {
             format!("workbook.sheets[{i}].name"),
         )
     })?;
-    validate_sheet_name(name, i)?;
+    super::request::validate_sheet_name(name, format!("workbook.sheets[{i}].name"))?;
     let mut cells = Vec::new();
     if let Some(arr) = obj.get("cells") {
         let arr = arr.as_array().ok_or_else(|| {
@@ -903,35 +903,6 @@ fn parse_off(v: Option<&Value>, prefix: &str, field: &str) -> Result<Option<i64>
             path,
         )),
     }
-}
-
-fn validate_sheet_name(name: &str, i: usize) -> Result<(), Error> {
-    let path = format!("workbook.sheets[{i}].name");
-    if name.is_empty() || name.len() > 31 {
-        return Err(Error::with_path(
-            ErrorKind::InvalidSheetName {
-                reason: SheetNameReason::Length,
-            },
-            path,
-        ));
-    }
-    if name.eq_ignore_ascii_case("History") {
-        return Err(Error::with_path(
-            ErrorKind::InvalidSheetName {
-                reason: SheetNameReason::History,
-            },
-            path,
-        ));
-    }
-    if name.contains([':', '*', '?', '/', '[', ']', '\\']) {
-        return Err(Error::with_path(
-            ErrorKind::InvalidSheetName {
-                reason: SheetNameReason::IllegalChars,
-            },
-            path,
-        ));
-    }
-    Ok(())
 }
 
 fn parse_new_cell(v: &Value, i: usize, j: usize) -> Result<Option<NewCell>, Error> {

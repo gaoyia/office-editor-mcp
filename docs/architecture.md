@@ -53,7 +53,7 @@ crates/ooxp-cli/             命令行，只依赖 ooxp。二进制名也是 oox
 
 ### xlsx
 
-读 `xl/workbook.xml` 拿工作表名单和关系。按范围读对应 `sheetN.xml`，需要时再读 `xl/sharedStrings.xml`。工作簿与每张 `worksheet` 始终带 `pictureCount`。工作簿、每张 `worksheet` 与每张 `chartsheet` 始终带 `chartCount`。每张表始终带 `hasHeaderFooter`。`scope.pictures` 为 true 时读该表 `<drawing>` 指向的 drawing 部件，列出 `xdr:pic`，不读媒体字节。`scope.charts` 为 true 时列出 `xdr:graphicFrame` 里的图表，系列一次倒出；数值优先读 `c:f` 指向的单元格。`scope.headerFooter` 为 true 时展开六个页眉页脚槽位的原文；同时 `pictures: true` 时再列出 `drawingHF` 里的图。apply 可改目标单元格，也可换、插、删工作表图，并可改 `oneCell` / `absolute` 的尺寸与锚点。也可插、删、改工作表图表：改系列时写本表单元格并回写 cache，插图时在 `dataFrom` 写下数据表。也可按槽位改页眉页脚原文，并可对 `worksheet` 的页眉槽位插、换、删 DrawingML 图。插图或插图表可能新建 `/xl/drawings/drawingN.xml`、`/xl/media/…`、`/xl/charts/chartN.xml` 以及工作表上的 `<drawing>`。往页眉插图可能新建另一份 drawing 并写 `<drawingHF>`。改单元格之后，把工作簿标成打开时需要重算，必要时删掉 `xl/calcChain.xml`。不改 `styles.xml`，不求值公式。不算列宽行高。不写 embedding，不对 xlsx 做 `exportChartData`。不编辑 `legacyDrawingHF` / VML。create 本期不写页眉页脚。
+读 `xl/workbook.xml` 拿工作表名单和关系。按范围读对应 `sheetN.xml`，需要时再读 `xl/sharedStrings.xml`。工作簿与每张 `worksheet` 始终带 `pictureCount`。工作簿、每张 `worksheet` 与每张 `chartsheet` 始终带 `chartCount`。每张表始终带 `hasHeaderFooter`。`scope.pictures` 为 true 时读该表 `<drawing>` 指向的 drawing 部件，列出 `xdr:pic`，不读媒体字节。`scope.charts` 为 true 时列出 `xdr:graphicFrame` 里的图表，系列一次倒出；数值优先读 `c:f` 指向的单元格。`scope.headerFooter` 为 true 时展开六个页眉页脚槽位的原文；同时 `pictures: true` 时再列出 `drawingHF` 里的图。apply 可改目标单元格，也可换、插、删工作表图，并可改 `oneCell` / `absolute` 的尺寸与锚点。也可插、删、改工作表图表：改系列时写本表单元格并回写 cache，插图时在 `dataFrom` 写下数据表。也可新建或删除图表工作表：数据仍写在点名的普通表上，图表工作表本身没有 `sheetData`。也可按槽位改页眉页脚原文，并可对 `worksheet` 的页眉槽位插、换、删 DrawingML 图。插图或插图表可能新建 `/xl/drawings/drawingN.xml`、`/xl/media/…`、`/xl/charts/chartN.xml` 以及工作表上的 `<drawing>`。`insertChartSheet` 再新建 `/xl/chartsheets/sheetN.xml`。往页眉插图可能新建另一份 drawing 并写 `<drawingHF>`。改单元格之后，把工作簿标成打开时需要重算，必要时删掉 `xl/calcChain.xml`。不改 `styles.xml`，不求值公式。不算列宽行高。不写 embedding，不对 xlsx 做 `exportChartData`。不编辑 `legacyDrawingHF` / VML。create 本期不写页眉页脚，也不写 `kind: chartsheet`。
 
 ### docx
 
@@ -75,7 +75,7 @@ crates/ooxp-cli/             命令行，只依赖 ooxp。二进制名也是 oox
 
 ### apply
 
-调用方给出路径和 `ops`。库打开包，按每条 op 的 id 找到 XML 节点，只改这些节点。xlsx 在改了单元格之后，把工作簿标成打开时需要重算。xlsx 也可改被点名的工作表图（换、插、删、改尺寸、改锚点），也可插删改工作表图表，脏 drawing、chart 部件、工作表 XML、关系与媒体。xlsx 也可改工作表上的页眉页脚原文，并可对 `worksheet` 页眉槽位插换删 DrawingML 图，脏 `headerFooter` / `drawingHF` 与对应 drawing。docx 可改被点名的段落，可改节上页眉页脚距边界，也可改节上页眉页脚是否链接前节，也可改页眉、页脚、正文、注或批注里被点名的 DrawingML 图与文本框，也可插删脚注尾注并改编号属性，也可插删回复批注并改完成标记，也可插删改嵌入图表，也可插删改 SmartArt。pptx 只改被点名形状的可见文字，且只让那一张幻灯片部件变脏。保存时只重写脏部件。
+调用方给出路径和 `ops`。库打开包，按每条 op 的 id 找到 XML 节点，只改这些节点。xlsx 在改了单元格之后，把工作簿标成打开时需要重算。xlsx 也可改被点名的工作表图（换、插、删、改尺寸、改锚点），也可插删改工作表图表，脏 drawing、chart 部件、工作表 XML、关系与媒体。xlsx 也可新建或删除图表工作表，脏 workbook 的 `sheets`、chartsheet 部件及其 drawing / chart。xlsx 也可改工作表上的页眉页脚原文，并可对 `worksheet` 页眉槽位插换删 DrawingML 图，脏 `headerFooter` / `drawingHF` 与对应 drawing。docx 可改被点名的段落，可改节上页眉页脚距边界，也可改节上页眉页脚是否链接前节，也可改页眉、页脚、正文、注或批注里被点名的 DrawingML 图与文本框，也可插删脚注尾注并改编号属性，也可插删回复批注并改完成标记，也可插删改嵌入图表，也可插删改 SmartArt。pptx 只改被点名形状的可见文字，且只让那一张幻灯片部件变脏。保存时只重写脏部件。
 
 ### create
 
