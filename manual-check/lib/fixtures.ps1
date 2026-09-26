@@ -9,6 +9,32 @@ function Ensure-XlsxCreate([switch]$Force) {
     return $path
 }
 
+# 一张 oneCell（B2）加一张 twoCell（D2:F8）。
+function Ensure-XlsxCreatePictures([switch]$Force) {
+    $path = Get-OutPath 'xlsx-create-pictures.xlsx'
+    if ((Test-Path $path) -and -not $Force) { return $path }
+    $png = Ensure-OoxpPngA
+    $file = $png.Replace('\', '/')
+    $req = @{
+        schemaVersion = 1; action = 'create'
+        path = $path.Replace('\', '/'); format = 'xlsx'
+        workbook = @{
+            sheets = @(
+                @{
+                    name = 'Sheet1'
+                    cells = @(@{ ref = 'A1'; value = 1 })
+                    pictures = @(
+                        @{ file = $file; from = 'B2' }
+                        @{ file = $file; from = 'D2'; to = 'F8'; anchor = 'twoCell' }
+                    )
+                }
+            )
+        }
+    }
+    Invoke-OoxpRequest $req 'xlsx-create-pictures' | Out-Null
+    return $path
+}
+
 function Ensure-DocxCreate([switch]$Force) {
     $path = Get-OutPath 'docx-create.docx'
     if ((Test-Path $path) -and -not $Force) { return $path }

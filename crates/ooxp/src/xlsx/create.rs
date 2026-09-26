@@ -2,7 +2,8 @@
 
 use serde_json::Value;
 
-use super::request::{parse_cell_value, SetCellValue};
+use super::picture::{self, AnchorKind};
+use super::request::{parse_cell_value, InsertPictureOp, SetCellValue};
 use crate::error::{Error, ErrorKind, SheetNameReason, TypeName};
 use crate::opc::{
     ContentTypes, Package, Relationship, Relationships, CONTENT_TYPES_PART, ROOT_RELS_PART,
@@ -25,6 +26,7 @@ struct NewCell {
 struct NewSheet {
     name: String,
     cells: Vec<NewCell>,
+    pictures: Vec<InsertPictureOp>,
 }
 
 pub fn create(workbook: &Value) -> Result<Vec<u8>, Error> {
@@ -196,6 +198,7 @@ pub fn create(workbook: &Value) -> Result<Vec<u8>, Error> {
             sheet_xml(sh, &sst)?.into_bytes(),
         )?;
     }
+    attach_pictures(&mut pkg, &sheets)?;
     pkg.save_to_vec()
 }
 
@@ -210,7 +213,7 @@ fn parse_sheet(v: &Value, i: usize) -> Result<NewSheet, Error> {
         )
     })?;
     for k in obj.keys() {
-        if !matches!(k.as_str(), "name" | "cells") {
+        if !matches!(k.as_str(), "name" | "cells" | "pictures") {
             return Err(Error::with_path(
                 ErrorKind::UnknownField { field: k.clone() },
                 format!("workbook.sheets[{i}].{k}"),
@@ -244,10 +247,274 @@ fn parse_sheet(v: &Value, i: usize) -> Result<NewSheet, Error> {
         }
     }
     cells.sort_by_key(|c| (c.refer.row, c.refer.col));
+    let pictures = parse_pictures(obj.get("pictures"), i, name)?;
     Ok(NewSheet {
         name: name.to_string(),
         cells,
+        pictures,
     })
+}
+
+fn attach_pictures(pkg: &mut Package, sheets: &[NewSheet]) -> Result<(), Error> {
+    for (i, sh) in sheets.iter().enumerate() {
+        if sh.pictures.is_empty() {
+            continue;
+        }
+        let part = format!("/xl/worksheets/sheet{}.xml", i + 1);
+        let mut doc = xml::parse(pkg.get(&part)?)?;
+        for (j, op) in sh.pictures.iter().enumerate() {
+            picture::insert_picture(
+                pkg,
+                &mut doc,
+                &part,
+                op,
+                &format!("workbook.sheets[{i}].pictures[{j}].file"),
+            )?;
+        }
+        pkg.set(&part, doc.to_bytes()?)?;
+    }
+    Ok(())
+}
+
+fn parse_pictures(
+    v: Option<&Value>,
+    sheet_i: usize,
+    sheet: &str,
+) -> Result<Vec<InsertPictureOp>, Error> {
+    let Some(v) = v else {
+        return Ok(Vec::new());
+    };
+    let prefix = format!("workbook.sheets[{sheet_i}].pictures");
+    let arr = v.as_array().ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::WrongType {
+                field: "pictures".into(),
+                expected: TypeName::Array,
+            },
+            prefix.clone(),
+        )
+    })?;
+    let mut out = Vec::new();
+    for (j, item) in arr.iter().enumerate() {
+        out.push(parse_picture(item, &format!("{prefix}[{j}]"), sheet)?);
+    }
+    Ok(out)
+}
+
+fn parse_picture(v: &Value, prefix: &str, sheet: &str) -> Result<InsertPictureOp, Error> {
+    let obj = v.as_object().ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::WrongType {
+                field: "pictures".into(),
+                expected: TypeName::Object,
+            },
+            prefix.to_string(),
+        )
+    })?;
+    for k in obj.keys() {
+        if !matches!(
+            k.as_str(),
+            "file" | "from" | "to" | "anchor" | "cx" | "cy" | "fromOffX" | "fromOffY" | "toOffX"
+                | "toOffY"
+        ) {
+            return Err(Error::with_path(
+                ErrorKind::UnknownField { field: k.clone() },
+                format!("{prefix}.{k}"),
+            ));
+        }
+    }
+    let file = match obj.get("file") {
+        Some(Value::String(s)) if !s.is_empty() => s.clone(),
+        Some(Value::String(_)) | None => {
+            return Err(Error::with_path(
+                ErrorKind::MissingField {
+                    field: "file".into(),
+                },
+                format!("{prefix}.file"),
+            ));
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "file".into(),
+                    expected: TypeName::NonEmptyString,
+                },
+                format!("{prefix}.file"),
+            ));
+        }
+    };
+    let from = match obj.get("from") {
+        Some(Value::String(s)) => a1::parse_cell(s).map_err(|e| e.at(format!("{prefix}.from")))?,
+        None => {
+            return Err(Error::with_path(
+                ErrorKind::MissingField {
+                    field: "from".into(),
+                },
+                format!("{prefix}.from"),
+            ));
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "from".into(),
+                    expected: TypeName::String,
+                },
+                format!("{prefix}.from"),
+            ));
+        }
+    };
+    let cx = parse_emu(obj.get("cx"), prefix, "cx")?;
+    let cy = parse_emu(obj.get("cy"), prefix, "cy")?;
+    if cx.is_some() != cy.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "create".into(),
+                field: "cx and cy together".into(),
+            },
+            prefix.to_string(),
+        ));
+    }
+    let anchor = match obj.get("anchor") {
+        None => AnchorKind::OneCell,
+        Some(Value::String(s)) => AnchorKind::parse_insert(s).ok_or_else(|| {
+            Error::with_path(ErrorKind::InvalidXlsxAnchor, format!("{prefix}.anchor"))
+        })?,
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "anchor".into(),
+                    expected: TypeName::String,
+                },
+                format!("{prefix}.anchor"),
+            ));
+        }
+    };
+    let to = match obj.get("to") {
+        None => None,
+        Some(Value::String(s)) => Some(a1::parse_cell(s).map_err(|e| e.at(format!("{prefix}.to")))?),
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "to".into(),
+                    expected: TypeName::String,
+                },
+                format!("{prefix}.to"),
+            ));
+        }
+    };
+    if anchor == AnchorKind::TwoCell && to.is_none() {
+        return Err(Error::with_path(
+            ErrorKind::MissingField { field: "to".into() },
+            format!("{prefix}.to"),
+        ));
+    }
+    if anchor == AnchorKind::OneCell && to.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::UnknownField {
+                field: "to".into(),
+            },
+            format!("{prefix}.to"),
+        ));
+    }
+    Ok(InsertPictureOp {
+        sheet: sheet.to_string(),
+        file,
+        cx,
+        cy,
+        from,
+        to,
+        anchor,
+        from_off_x: parse_off(obj.get("fromOffX"), prefix, "fromOffX")?.unwrap_or(0),
+        from_off_y: parse_off(obj.get("fromOffY"), prefix, "fromOffY")?.unwrap_or(0),
+        to_off_x: parse_off(obj.get("toOffX"), prefix, "toOffX")?.unwrap_or(0),
+        to_off_y: parse_off(obj.get("toOffY"), prefix, "toOffY")?.unwrap_or(0),
+    })
+}
+
+fn parse_emu(v: Option<&Value>, prefix: &str, field: &str) -> Result<Option<i64>, Error> {
+    let Some(v) = v else {
+        return Ok(None);
+    };
+    let path = format!("{prefix}.{field}");
+    match v {
+        Value::Number(n) => {
+            if let Some(u) = n.as_u64() {
+                if u == 0 || u > i64::MAX as u64 {
+                    return Err(Error::with_path(
+                        ErrorKind::MinValue {
+                            field: field.into(),
+                            min: 1,
+                        },
+                        path,
+                    ));
+                }
+                return Ok(Some(u as i64));
+            }
+            Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: field.into(),
+                    expected: TypeName::Integer,
+                },
+                path,
+            ))
+        }
+        _ => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::Integer,
+            },
+            path,
+        )),
+    }
+}
+
+fn parse_off(v: Option<&Value>, prefix: &str, field: &str) -> Result<Option<i64>, Error> {
+    let Some(v) = v else {
+        return Ok(None);
+    };
+    let path = format!("{prefix}.{field}");
+    match v {
+        Value::Number(n) => {
+            if let Some(u) = n.as_u64() {
+                if u > i64::MAX as u64 {
+                    return Err(Error::with_path(
+                        ErrorKind::WrongType {
+                            field: field.into(),
+                            expected: TypeName::Integer,
+                        },
+                        path,
+                    ));
+                }
+                return Ok(Some(u as i64));
+            }
+            if let Some(i64v) = n.as_i64() {
+                if i64v < 0 {
+                    return Err(Error::with_path(
+                        ErrorKind::MinValue {
+                            field: field.into(),
+                            min: 0,
+                        },
+                        path,
+                    ));
+                }
+                return Ok(Some(i64v));
+            }
+            Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: field.into(),
+                    expected: TypeName::Integer,
+                },
+                path,
+            ))
+        }
+        _ => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::Integer,
+            },
+            path,
+        )),
+    }
 }
 
 fn validate_sheet_name(name: &str, i: usize) -> Result<(), Error> {

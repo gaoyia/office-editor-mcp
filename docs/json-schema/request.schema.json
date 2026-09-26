@@ -131,7 +131,28 @@
         "cells": {
           "type": "array",
           "items": { "$ref": "#/$defs/xlsxCellCreate" }
+        },
+        "pictures": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/xlsxPictureCreate" }
         }
+      }
+    },
+    "xlsxPictureCreate": {
+      "type": "object",
+      "required": ["file", "from"],
+      "additionalProperties": false,
+      "properties": {
+        "file": { "type": "string", "minLength": 1 },
+        "from": { "type": "string", "minLength": 1 },
+        "to": { "type": "string", "minLength": 1 },
+        "anchor": { "enum": ["oneCell", "twoCell"] },
+        "cx": { "type": "integer", "minimum": 1 },
+        "cy": { "type": "integer", "minimum": 1 },
+        "fromOffX": { "type": "integer", "minimum": 0 },
+        "fromOffY": { "type": "integer", "minimum": 0 },
+        "toOffX": { "type": "integer", "minimum": 0 },
+        "toOffY": { "type": "integer", "minimum": 0 }
       }
     },
     "xlsxCellCreate": {

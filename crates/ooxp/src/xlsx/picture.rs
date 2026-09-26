@@ -330,9 +330,9 @@ pub fn insert_picture(
     sheet_doc: &mut Document,
     sheet_part: &str,
     op: &InsertPictureOp,
-    op_index: usize,
+    file_field: &str,
 ) -> Result<(), Error> {
-    let image = read_image(&op.file).map_err(|e| e.at(format!("ops[{op_index}].file")))?;
+    let image = read_image(&op.file).map_err(|e| e.at(file_field))?;
     let (cx, cy) = match (op.cx, op.cy) {
         (Some(x), Some(y)) => (x, y),
         _ => (image.cx, image.cy),

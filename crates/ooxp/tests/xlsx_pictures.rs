@@ -490,3 +490,138 @@ fn insert_into_excel_like_drawing_adds_r_ns_and_short_rel() {
         "不应再写出 ../../xl/media/ 这种绕路 Target"
     );
 }
+
+#[test]
+fn create_writes_one_cell_and_two_cell() {
+    let png = write_png("create", PNG_1X1);
+    let path = tmp("create-pics").with_extension("xlsx");
+    run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "create",
+            "path": path.to_string_lossy(),
+            "workbook": {
+                "sheets": [{
+                    "name": "Sheet1",
+                    "cells": [{ "ref": "A1", "value": 1 }],
+                    "pictures": [
+                        { "file": png.to_string_lossy(), "from": "B2" },
+                        {
+                            "file": png.to_string_lossy(),
+                            "from": "D2",
+                            "to": "F8",
+                            "anchor": "twoCell"
+                        }
+                    ]
+                }]
+            }
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap();
+
+    let tree = inspect_pics(&path);
+    assert_eq!(tree["pictureCount"], 2);
+    assert_eq!(tree["sheets"][0]["pictureCount"], 2);
+    let pics = tree["sheets"][0]["pictures"].as_array().unwrap();
+    assert_eq!(pics[0]["id"], "sheet:Sheet1/pic:1");
+    assert_eq!(pics[0]["anchor"], "oneCell");
+    assert_eq!(pics[0]["from"], "B2");
+    assert_eq!(pics[1]["id"], "sheet:Sheet1/pic:2");
+    assert_eq!(pics[1]["anchor"], "twoCell");
+    assert_eq!(pics[1]["from"], "D2");
+    assert_eq!(pics[1]["to"], "F8");
+    assert!(part_names(&path).iter().any(|n| n == "xl/drawings/drawing1.xml"));
+    assert!(part_names(&path).iter().any(|n| n.starts_with("xl/media/")));
+    let drawing = String::from_utf8(part_bytes(&path, "xl/drawings/drawing1.xml")).unwrap();
+    assert!(drawing.contains("xdr:clientData"));
+    assert!(!drawing.contains("externalData"));
+}
+
+#[test]
+fn create_rejects_kind_wrap_and_missing_from() {
+    let png = write_png("bad", PNG_1X1);
+    let err = run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "create",
+            "path": tmp("kind").with_extension("xlsx").to_string_lossy(),
+            "workbook": {
+                "sheets": [{
+                    "name": "Sheet1",
+                    "pictures": [{
+                        "file": png.to_string_lossy(),
+                        "from": "B2",
+                        "kind": "inline"
+                    }]
+                }]
+            }
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+    assert_eq!(
+        err.field_path(),
+        Some("workbook.sheets[0].pictures[0].kind")
+    );
+
+    let err = run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "create",
+            "path": tmp("nofrom").with_extension("xlsx").to_string_lossy(),
+            "workbook": {
+                "sheets": [{
+                    "name": "Sheet1",
+                    "pictures": [{ "file": png.to_string_lossy() }]
+                }]
+            }
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+    assert_eq!(
+        err.field_path(),
+        Some("workbook.sheets[0].pictures[0].from")
+    );
+
+    let err = run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "create",
+            "path": tmp("charts").with_extension("xlsx").to_string_lossy(),
+            "workbook": {
+                "sheets": [{ "name": "Sheet1", "charts": [] }]
+            }
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+    assert_eq!(err.field_path(), Some("workbook.sheets[0].charts"));
+}
+
+#[test]
+fn create_empty_pictures_writes_no_drawing() {
+    let path = tmp("empty-pics").with_extension("xlsx");
+    run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "create",
+            "path": path.to_string_lossy(),
+            "workbook": {
+                "sheets": [{ "name": "Sheet1", "cells": [{ "ref": "A1", "value": 1 }], "pictures": [] }]
+            }
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap();
+    assert!(!part_names(&path).iter().any(|n| n.contains("drawings")));
+}

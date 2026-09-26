@@ -64,7 +64,7 @@ pub fn apply(bytes: &[u8], ops: &[XlsxOp]) -> Result<Vec<u8>, Error> {
                 }
                 load_dirty(&pkg, &mut dirty_sheets, &part, false)?;
                 let doc = dirty_of(&mut dirty_sheets, &part);
-                picture::insert_picture(&mut pkg, doc, &part, op, i)?;
+                picture::insert_picture(&mut pkg, doc, &part, op, &format!("ops[{i}].file"))?;
             }
             XlsxOp::DeletePicture(op) => {
                 let part = require_sheet_part(&sheet_index, &op.target.sheet, i)?;
