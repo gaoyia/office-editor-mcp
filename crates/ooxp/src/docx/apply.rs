@@ -6,6 +6,7 @@ use crate::error::{Error, ErrorKind};
 use crate::opc::{self, rels_part_name, ContentTypes, Package, Relationship, Relationships};
 use crate::xml::{self, Document, Element, Node};
 
+use super::charts;
 use super::comments;
 use super::hf::{self, HfKind};
 use super::notes;
@@ -150,6 +151,42 @@ pub fn apply(bytes: &[u8], ops: &[DocxOp]) -> Result<Vec<u8>, Error> {
             }
             DocxOp::SetCommentDone(op) => {
                 apply_set_comment_done(&mut pkg, &mut docs, &mut dirty, &doc_part, op, i)?;
+            }
+            DocxOp::InsertChart(op) => {
+                charts::apply_insert(&mut pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
+            }
+            DocxOp::DeleteChart(op) => {
+                charts::apply_delete(&mut pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
+            }
+            DocxOp::SetChartTitle(op) => {
+                charts::apply_title(&mut pkg, &mut docs, &doc_part, &catalog, op, i)?;
+            }
+            DocxOp::SetChartSeries(op) => {
+                charts::apply_series(&mut pkg, &mut docs, &doc_part, &catalog, op, i)?;
+            }
+            DocxOp::AddChartSeries(op) => {
+                charts::apply_add_series(&mut pkg, &mut docs, &doc_part, &catalog, op, i)?;
+            }
+            DocxOp::DeleteChartSeries(op) => {
+                charts::apply_delete_series(&mut pkg, &mut docs, &doc_part, &catalog, op, i)?;
+            }
+            DocxOp::SetChartType(op) => {
+                charts::apply_type(&mut pkg, &mut docs, &doc_part, &catalog, op, i)?;
+            }
+            DocxOp::SetChartAxisTitle(op) => {
+                charts::apply_axis_title(&mut pkg, &mut docs, &doc_part, &catalog, op, i)?;
+            }
+            DocxOp::SetChartLegend(op) => {
+                charts::apply_legend(&mut pkg, &mut docs, &doc_part, &catalog, op, i)?;
+            }
+            DocxOp::SetChartDataLabels(op) => {
+                charts::apply_data_labels(&mut pkg, &mut docs, &doc_part, &catalog, op, i)?;
+            }
+            DocxOp::SetChartSize(op) => {
+                charts::apply_size(&mut pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
+            }
+            DocxOp::SetChartWrap(op) => {
+                charts::apply_wrap(&mut pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
             }
         }
     }

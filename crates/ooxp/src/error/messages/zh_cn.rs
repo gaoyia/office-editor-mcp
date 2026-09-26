@@ -110,6 +110,19 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::CommentContainer => {
                 "批注 id 必须带 /para:…（该 id 本身不是段落）".into()
             },
+            IdReason::ChartPrefix => {
+                "图表 id 必须是段落 id 加上 /chart:…".into()
+            }
+            IdReason::ChartContainer => {
+                "段落 id 必须带 /chart:…（该 id 本身不是图表）".into()
+            }
+            IdReason::ChartIndexNotInt => "chart:index 后面必须是正整数".into(),
+            IdReason::ChartIndexFromOne => "chart:index 从 1 起".into(),
+            IdReason::SeriesPrefix => "系列 id 必须是图表 id 加上 /series:n".into(),
+            IdReason::SeriesIndexNotInt => "series 后面必须是从 0 起的整数".into(),
+            IdReason::InsertChartNeedsPara => {
+                "insertChart 的 id 必须是正文或页眉页脚段落 id".into()
+            },
         },
         ErrorKind::SheetNotFound { name } => format!("找不到工作表：{name}"),
         ErrorKind::ParaNotFound { id } => format!("找不到段落：{id}"),
@@ -148,6 +161,25 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             "insertComment 的 start 不能晚于 end".into()
         }
         ErrorKind::InkComment { id } => format!("墨迹批注除删除外不能编辑：{id}"),
+        ErrorKind::ChartNotFound { id } => format!("找不到图表：{id}"),
+        ErrorKind::ChartSeriesNotFound { id } => format!("找不到图表系列：{id}"),
+        ErrorKind::NeedChartSeriesField => {
+            "setChartSeries 至少要给 name、categories 或 values 之一".into()
+        }
+        ErrorKind::LastChartSeries => "不能删光图表里的全部系列，整张去掉请用 deleteChart".into(),
+        ErrorKind::RestrictedChart { id } => {
+            format!("组合图、扩展图、次轴、趋势线、误差线或透视图表除删除与改尺寸绕排外不能编辑：{id}")
+        }
+        ErrorKind::InvalidChartType => {
+            "type 必须是 bar、col、line、pie、area 或 scatter".into()
+        }
+        ErrorKind::InvalidChartAxis => "axis 必须是 cat 或 val，且图表里要有对应主轴".into(),
+        ErrorKind::InvalidLegendPos => "pos 必须是 b、t、l、r 或 tr".into(),
+        ErrorKind::PieNeedsOneSeries => "饼图必须恰好一条系列".into(),
+        ErrorKind::ChartTypeNotConvertible => "这种图表类型无法无损转换".into(),
+        ErrorKind::NeedChartCategories => {
+            "addChartSeries 省略 categories 时图表里必须已有系列可抄".into()
+        }
         ErrorKind::TextBoxLinkCrossPart => "链接文本框必须在同一部件里".into(),
         ErrorKind::InvalidHexColor => "color 必须是六位 RGB 十六进制或 null".into(),
         ErrorKind::InvalidTextBoxDirection => "direction 必须是 horizontal 或 vertical".into(),

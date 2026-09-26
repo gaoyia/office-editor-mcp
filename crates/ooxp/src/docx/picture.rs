@@ -1009,7 +1009,7 @@ fn matches_key(drawing: &Element, key: &PicKey, index: usize) -> bool {
     }
 }
 
-fn walk_drawings(
+pub(crate) fn walk_drawings(
     el: &Element,
     f: &mut impl FnMut(&Element) -> Result<(), Error>,
 ) -> Result<(), Error> {

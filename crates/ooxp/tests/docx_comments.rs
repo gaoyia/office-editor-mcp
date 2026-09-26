@@ -201,6 +201,7 @@ fn inspect_counts_without_list() {
             "footnoteCount",
             "endnoteCount",
             "commentCount",
+            "chartCount",
             "outline",
             "headers",
             "footers",

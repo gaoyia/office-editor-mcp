@@ -116,7 +116,7 @@ docx create 同样生成 Transitional 包，命名空间用 2006 那套。
 | `/word/footer1.xml` | 仅当 `document.footers` 含默认页脚 |
 | `/word/media/imageN.ext` | 仅当段落或页眉页脚声明了 `pictures` |
 
-apply 插入脚注或尾注时，可能新建 `/word/footnotes.xml` 或 `/word/endnotes.xml`（CT 分别为 `…footnotes+xml` / `…endnotes+xml`），并在主文档 `.rels` 与 `[Content_Types].xml` 上补关系与 Override。apply 插入批注时，可能新建 `/word/comments.xml`（CT `…comments+xml`）、`/word/commentsExtended.xml`（CT `application/vnd.ms-word.commentsExtended+xml`）、`/word/people.xml`（CT `application/vnd.openxmlformats-officedocument.wordprocessingml.people+xml`）。`commentsIds` / `commentsExtensible` 只在原包已有时补条目，create 与默认插入都不新建这两份。`replyComment` 还会在父批注范围上再套一套范围标记，因此可能脏主文档或页眉页脚、注部件。create 不写脚注、尾注、批注部件。
+apply 插入脚注或尾注时，可能新建 `/word/footnotes.xml` 或 `/word/endnotes.xml`（CT 分别为 `…footnotes+xml` / `…endnotes+xml`），并在主文档 `.rels` 与 `[Content_Types].xml` 上补关系与 Override。apply 插入批注时，可能新建 `/word/comments.xml`（CT `…comments+xml`）、`/word/commentsExtended.xml`（CT `application/vnd.ms-word.commentsExtended+xml`）、`/word/people.xml`（CT `application/vnd.openxmlformats-officedocument.wordprocessingml.people+xml`）。`commentsIds` / `commentsExtensible` 只在原包已有时补条目，create 与默认插入都不新建这两份。`replyComment` 还会在父批注范围上再套一套范围标记，因此可能脏主文档或页眉页脚、注部件。apply 插入图表时，可能新建 `/word/charts/chartN.xml`（CT `application/vnd.openxmlformats-officedocument.drawingml.chart+xml`）、chart 的 `.rels`，以及 `/word/embeddings/….xlsx`（CT `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`），并在宿主 `.rels` 与 `[Content_Types].xml` 上补关系与 Override。create 不写脚注、尾注、批注、图表部件。
 
 Main Document 的 Content Type：
 

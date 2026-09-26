@@ -6,6 +6,7 @@ use crate::error::Error;
 use crate::opc::{self, Package};
 use crate::xml;
 
+use super::charts;
 use super::hf::{self, HfKind, HfPart};
 use super::comments;
 use super::notes;
@@ -41,6 +42,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     let expand_pics = scope.as_ref().is_some_and(|s| s.pictures);
     let expand_txbx = scope.as_ref().is_some_and(|s| s.text_boxes);
     let expand_txbx_content = scope.as_ref().is_some_and(|s| s.text_box_content);
+    let expand_charts = scope.as_ref().is_some_and(|s| s.charts);
     let (headers, footers) = hf_arrays(
         &pkg,
         &catalog,
@@ -48,6 +50,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         expand_pics,
         expand_txbx,
         expand_txbx_content,
+        expand_charts,
     )?;
     let sections = section_nodes(&pkg, &part, &doc.root)?;
     let picture_count = body_picture_count(&paras)?;
@@ -56,6 +59,10 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     let footnote_count = notes::user_count(&pkg, &part, NoteKind::Footnote)?;
     let endnote_count = notes::user_count(&pkg, &part, NoteKind::Endnote)?;
     let comment_count = comments::count(&pkg, &part)?;
+    let mut body_chart_count = 0usize;
+    for p in &paras {
+        body_chart_count += charts::count_charts(p)?;
+    }
 
     let mut tree = json!({
         "schemaVersion": 1,
@@ -67,6 +74,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         "footnoteCount": footnote_count,
         "endnoteCount": endnote_count,
         "commentCount": comment_count,
+        "chartCount": body_chart_count,
         "outline": outline,
         "headers": headers,
         "footers": footers,
@@ -100,6 +108,9 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         let coverage = load_coverage(&pkg, &part, &doc.root, &catalog)?;
         if scope.comments {
             tree["comments"] = comments_array(&pkg, &part, &coverage, expand_pics)?;
+        }
+        if scope.charts {
+            tree["charts"] = Value::Array(charts::collect_body(&pkg, &part, &paras)?);
         }
         if let (Some(from), Some(max_paras)) = (scope.from, scope.max_paras) {
             let start = from as usize;
@@ -208,11 +219,20 @@ fn hf_arrays(
     pictures: bool,
     text_boxes: bool,
     text_box_content: bool,
+    expand_charts: bool,
 ) -> Result<(Vec<Value>, Vec<Value>), Error> {
     let mut headers = Vec::new();
     let mut footers = Vec::new();
     for item in catalog {
-        let node = hf_node(pkg, item, expand, pictures, text_boxes, text_box_content)?;
+        let node = hf_node(
+            pkg,
+            item,
+            expand,
+            pictures,
+            text_boxes,
+            text_box_content,
+            expand_charts,
+        )?;
         match item.kind {
             HfKind::Header => headers.push(node),
             HfKind::Footer => footers.push(node),
@@ -228,6 +248,7 @@ fn hf_node(
     pictures: bool,
     text_boxes: bool,
     text_box_content: bool,
+    expand_charts: bool,
 ) -> Result<Value, Error> {
     let bytes = pkg.get(&item.part)?;
     let doc = xml::parse(bytes)?;
@@ -239,6 +260,10 @@ fn hf_node(
         boxes.extend(textbox::collect_textboxes(p, &id)?);
     }
     textbox::resolve_links(&mut boxes);
+    let mut chart_count = 0usize;
+    for p in &paras {
+        chart_count += charts::count_charts(p)?;
+    }
     let mut node = json!({
         "id": item.id,
         "type": item.hf_type.as_str(),
@@ -246,6 +271,7 @@ fn hf_node(
         "paraCount": paras.len(),
         "pictureCount": pics.len(),
         "textBoxCount": boxes.len(),
+        "chartCount": chart_count,
     });
     if pictures {
         node["pictures"] = Value::Array(picture::pictures_json(&pics));
@@ -264,6 +290,9 @@ fn hf_node(
             )?);
         }
         node["textBoxes"] = Value::Array(listed);
+    }
+    if expand_charts {
+        node["charts"] = Value::Array(charts::collect_hf(pkg, item, &paras)?);
     }
     if expand {
         let mut paragraphs = Vec::new();

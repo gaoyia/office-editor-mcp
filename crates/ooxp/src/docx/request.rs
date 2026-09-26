@@ -5,6 +5,7 @@ use serde_json::Value;
 use crate::error::{Error, ErrorKind, IdReason, ScopeNeed, TypeName};
 use crate::json;
 
+use super::charts::{self, ChartType, NewSeries};
 use super::hf::{HfKind, HfType};
 use super::para::{self, BodyPara, CommentIdTarget, NoteIdTarget, NoteKind, ParaTarget, TxbxTarget};
 use super::picture::{self, AlignH, AlignV, PicKind, PicTarget, WrapKind, WrapPos};
@@ -26,6 +27,8 @@ pub struct InspectScope {
     pub notes: bool,
     /// 为 true 时列出批注。
     pub comments: bool,
+    /// 为 true 时列出嵌入图表。
+    pub charts: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -294,6 +297,18 @@ pub enum DocxOp {
     SetCommentText(SetCommentTextOp),
     SetCommentMeta(SetCommentMetaOp),
     SetCommentDone(SetCommentDoneOp),
+    InsertChart(charts::InsertChartOp),
+    DeleteChart(charts::DeleteChartOp),
+    SetChartTitle(charts::SetChartTitleOp),
+    SetChartSeries(charts::SetChartSeriesOp),
+    AddChartSeries(charts::AddChartSeriesOp),
+    DeleteChartSeries(charts::DeleteChartSeriesOp),
+    SetChartType(charts::SetChartTypeOp),
+    SetChartAxisTitle(charts::SetChartAxisTitleOp),
+    SetChartLegend(charts::SetChartLegendOp),
+    SetChartDataLabels(charts::SetChartDataLabelsOp),
+    SetChartSize(charts::SetChartSizeOp),
+    SetChartWrap(charts::SetChartWrapOp),
 }
 
 pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
@@ -323,6 +338,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
             "textBoxContent",
             "notes",
             "comments",
+            "charts",
         ],
     )?;
 
@@ -332,6 +348,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
     let text_box_content = parse_bool_field(obj.get("textBoxContent"), "textBoxContent")?;
     let notes = parse_bool_field(obj.get("notes"), "notes")?;
     let comments = parse_bool_field(obj.get("comments"), "comments")?;
+    let charts = parse_bool_field(obj.get("charts"), "charts")?;
     if text_box_content && !text_boxes {
         return Err(Error::with_path(
             ErrorKind::ScopeFieldRequires {
@@ -351,6 +368,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
                 && !obj.contains_key("textBoxContent")
                 && !obj.contains_key("notes")
                 && !obj.contains_key("comments")
+                && !obj.contains_key("charts")
             {
                 return Ok(None);
             }
@@ -363,6 +381,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
                 text_box_content,
                 notes,
                 comments,
+                charts,
             }))
         }
         (Some(f), Some(m)) => {
@@ -412,6 +431,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
                 text_box_content,
                 notes,
                 comments,
+                charts,
             }))
         }
         _ => Err(Error::with_path(
@@ -522,6 +542,24 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<DocxOp>, Error> {
             "setCommentText" => out.push(DocxOp::SetCommentText(parse_set_comment_text(obj, i)?)),
             "setCommentMeta" => out.push(DocxOp::SetCommentMeta(parse_set_comment_meta(obj, i)?)),
             "setCommentDone" => out.push(DocxOp::SetCommentDone(parse_set_comment_done(obj, i)?)),
+            "insertChart" => out.push(DocxOp::InsertChart(parse_insert_chart(obj, i)?)),
+            "deleteChart" => out.push(DocxOp::DeleteChart(parse_delete_chart(obj, i)?)),
+            "setChartTitle" => out.push(DocxOp::SetChartTitle(parse_set_chart_title(obj, i)?)),
+            "setChartSeries" => out.push(DocxOp::SetChartSeries(parse_set_chart_series(obj, i)?)),
+            "addChartSeries" => out.push(DocxOp::AddChartSeries(parse_add_chart_series(obj, i)?)),
+            "deleteChartSeries" => {
+                out.push(DocxOp::DeleteChartSeries(parse_delete_chart_series(obj, i)?))
+            }
+            "setChartType" => out.push(DocxOp::SetChartType(parse_set_chart_type(obj, i)?)),
+            "setChartAxisTitle" => {
+                out.push(DocxOp::SetChartAxisTitle(parse_set_chart_axis_title(obj, i)?))
+            }
+            "setChartLegend" => out.push(DocxOp::SetChartLegend(parse_set_chart_legend(obj, i)?)),
+            "setChartDataLabels" => {
+                out.push(DocxOp::SetChartDataLabels(parse_set_chart_data_labels(obj, i)?))
+            }
+            "setChartSize" => out.push(DocxOp::SetChartSize(parse_set_chart_size(obj, i)?)),
+            "setChartWrap" => out.push(DocxOp::SetChartWrap(parse_set_chart_wrap(obj, i)?)),
             _ => {
                 return Err(Error::with_path(
                     ErrorKind::UnsupportedOp {
@@ -2082,4 +2120,639 @@ fn parse_set_comment_done(
         comment_id,
         done,
     })
+}
+
+fn parse_insert_chart(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<charts::InsertChartOp, Error> {
+    deny_keys(
+        obj,
+        i,
+        &[
+            "op", "id", "type", "title", "series", "kind", "wrap", "cx", "cy",
+        ],
+    )?;
+    let id = require_id(obj, i)?;
+    let para = charts::parse_insert_para_id(&id, i)?;
+    let chart_type = parse_chart_type_field(obj.get("type"), i, true)?;
+    let title = match obj.get("title") {
+        None | Some(Value::Null) => None,
+        Some(Value::String(s)) => Some(s.clone()),
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "title".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].title"),
+            ));
+        }
+    };
+    let series = parse_insert_series(obj.get("series"), i)?;
+    if chart_type == ChartType::Pie && series.len() != 1 {
+        return Err(Error::with_path(
+            ErrorKind::PieNeedsOneSeries,
+            format!("ops[{i}].series"),
+        ));
+    }
+    let kind = match obj.get("kind") {
+        None => PicKind::Anchor,
+        Some(Value::String(s)) => picture::parse_pic_kind(s).ok_or_else(|| {
+            Error::with_path(ErrorKind::InvalidPicKind, format!("ops[{i}].kind"))
+        })?,
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "kind".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].kind"),
+            ));
+        }
+    };
+    let wrap = match obj.get("wrap") {
+        None | Some(Value::Null) => {
+            if kind == PicKind::Anchor {
+                Some(WrapKind::Square)
+            } else {
+                None
+            }
+        }
+        Some(Value::String(s)) => Some(picture::parse_wrap(s).ok_or_else(|| {
+            Error::with_path(ErrorKind::InvalidPicWrap, format!("ops[{i}].wrap"))
+        })?),
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "wrap".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].wrap"),
+            ));
+        }
+    };
+    if kind == PicKind::Inline && wrap.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::InvalidPicWrap,
+            format!("ops[{i}].wrap"),
+        ));
+    }
+    let cx = parse_emu_field(obj.get("cx"), i, "cx")?;
+    let cy = parse_emu_field(obj.get("cy"), i, "cy")?;
+    if cx.is_some() != cy.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "insertChart".into(),
+                field: "cx and cy together".into(),
+            },
+            format!("ops[{i}]"),
+        ));
+    }
+    Ok(charts::InsertChartOp {
+        id,
+        para,
+        chart_type,
+        title,
+        series,
+        kind,
+        wrap,
+        pos: WrapPos::default(),
+        cx: cx.unwrap_or(charts::default_cx()),
+        cy: cy.unwrap_or(charts::default_cy()),
+    })
+}
+
+fn parse_insert_series(v: Option<&Value>, i: usize) -> Result<Vec<NewSeries>, Error> {
+    let arr = match v {
+        Some(Value::Array(a)) if !a.is_empty() => a,
+        Some(Value::Array(_)) | None => {
+            return Err(Error::with_path(
+                ErrorKind::OpRequiresField {
+                    op: "insertChart".into(),
+                    field: "series".into(),
+                },
+                format!("ops[{i}].series"),
+            ));
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "series".into(),
+                    expected: TypeName::Array,
+                },
+                format!("ops[{i}].series"),
+            ));
+        }
+    };
+    let mut out = Vec::new();
+    for (j, item) in arr.iter().enumerate() {
+        let obj = item.as_object().ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::WrongType {
+                    field: format!("series[{j}]"),
+                    expected: TypeName::Object,
+                },
+                format!("ops[{i}].series[{j}]"),
+            )
+        })?;
+        deny_keys(obj, i, &["name", "categories", "values"])?;
+        let name = match obj.get("name") {
+            None | Some(Value::Null) => None,
+            Some(Value::String(s)) => Some(s.clone()),
+            Some(_) => {
+                return Err(Error::with_path(
+                    ErrorKind::WrongType {
+                        field: format!("series[{j}].name"),
+                        expected: TypeName::String,
+                    },
+                    format!("ops[{i}].series[{j}].name"),
+                ));
+            }
+        };
+        let categories = parse_datum_list(obj.get("categories"), i, &format!("series[{j}].categories"))?;
+        let values = parse_datum_list(obj.get("values"), i, &format!("series[{j}].values"))?
+            .filter(|v| !v.is_empty())
+            .ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::OpRequiresField {
+                        op: "insertChart".into(),
+                        field: "series[].values".into(),
+                    },
+                    format!("ops[{i}].series[{j}].values"),
+                )
+            })?;
+        out.push(NewSeries {
+            name,
+            categories,
+            values,
+        });
+    }
+    Ok(out)
+}
+
+fn parse_delete_chart(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<charts::DeleteChartOp, Error> {
+    deny_keys(obj, i, &["op", "id"])?;
+    let id = require_id(obj, i)?;
+    let target = charts::parse_chart_id(&id, i)?;
+    Ok(charts::DeleteChartOp { id, target })
+}
+
+fn parse_set_chart_title(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<charts::SetChartTitleOp, Error> {
+    deny_keys(obj, i, &["op", "id", "title"])?;
+    let id = require_id(obj, i)?;
+    let target = charts::parse_chart_id(&id, i)?;
+    let title = match obj.get("title") {
+        Some(Value::String(s)) => s.clone(),
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "title".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].title"),
+            ));
+        }
+        None => {
+            return Err(Error::with_path(
+                ErrorKind::OpRequiresField {
+                    op: "setChartTitle".into(),
+                    field: "title".into(),
+                },
+                format!("ops[{i}].title"),
+            ));
+        }
+    };
+    Ok(charts::SetChartTitleOp { id, target, title })
+}
+
+fn parse_set_chart_series(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<charts::SetChartSeriesOp, Error> {
+    deny_keys(obj, i, &["op", "id", "name", "categories", "values"])?;
+    let id = require_id(obj, i)?;
+    let target = charts::parse_series_id(&id, i)?;
+    let name = match obj.get("name") {
+        None | Some(Value::Null) => None,
+        Some(Value::String(s)) => Some(s.clone()),
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "name".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].name"),
+            ));
+        }
+    };
+    let categories = parse_datum_list(obj.get("categories"), i, "categories")?;
+    let values = parse_datum_list(obj.get("values"), i, "values")?;
+    if name.is_none() && categories.is_none() && values.is_none() {
+        return Err(Error::with_path(
+            ErrorKind::NeedChartSeriesField,
+            format!("ops[{i}]"),
+        ));
+    }
+    Ok(charts::SetChartSeriesOp {
+        id,
+        target,
+        name,
+        categories,
+        values,
+    })
+}
+
+fn parse_add_chart_series(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<charts::AddChartSeriesOp, Error> {
+    deny_keys(obj, i, &["op", "id", "name", "categories", "values"])?;
+    let id = require_id(obj, i)?;
+    let target = charts::parse_chart_id(&id, i)?;
+    let name = match obj.get("name") {
+        None | Some(Value::Null) => None,
+        Some(Value::String(s)) => Some(s.clone()),
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "name".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].name"),
+            ));
+        }
+    };
+    let categories = parse_datum_list(obj.get("categories"), i, "categories")?;
+    let values = parse_datum_list(obj.get("values"), i, "values")?
+        .filter(|v| !v.is_empty())
+        .ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::OpRequiresField {
+                    op: "addChartSeries".into(),
+                    field: "values".into(),
+                },
+                format!("ops[{i}].values"),
+            )
+        })?;
+    Ok(charts::AddChartSeriesOp {
+        id,
+        target,
+        name,
+        categories,
+        values,
+    })
+}
+
+fn parse_delete_chart_series(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<charts::DeleteChartSeriesOp, Error> {
+    deny_keys(obj, i, &["op", "id"])?;
+    let id = require_id(obj, i)?;
+    let target = charts::parse_series_id(&id, i)?;
+    Ok(charts::DeleteChartSeriesOp { id, target })
+}
+
+fn parse_set_chart_type(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<charts::SetChartTypeOp, Error> {
+    deny_keys(obj, i, &["op", "id", "type"])?;
+    let id = require_id(obj, i)?;
+    let target = charts::parse_chart_id(&id, i)?;
+    let chart_type = parse_chart_type_field(obj.get("type"), i, true)?;
+    Ok(charts::SetChartTypeOp {
+        id,
+        target,
+        chart_type,
+    })
+}
+
+fn parse_set_chart_axis_title(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<charts::SetChartAxisTitleOp, Error> {
+    deny_keys(obj, i, &["op", "id", "axis", "title"])?;
+    let id = require_id(obj, i)?;
+    let target = charts::parse_chart_id(&id, i)?;
+    let axis = match obj.get("axis") {
+        Some(Value::String(s)) if s == "cat" || s == "val" => s.clone(),
+        Some(Value::String(_)) => {
+            return Err(Error::with_path(
+                ErrorKind::InvalidChartAxis,
+                format!("ops[{i}].axis"),
+            ));
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "axis".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].axis"),
+            ));
+        }
+        None => {
+            return Err(Error::with_path(
+                ErrorKind::OpRequiresField {
+                    op: "setChartAxisTitle".into(),
+                    field: "axis".into(),
+                },
+                format!("ops[{i}].axis"),
+            ));
+        }
+    };
+    let title = match obj.get("title") {
+        Some(Value::String(s)) => s.clone(),
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "title".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].title"),
+            ));
+        }
+        None => {
+            return Err(Error::with_path(
+                ErrorKind::OpRequiresField {
+                    op: "setChartAxisTitle".into(),
+                    field: "title".into(),
+                },
+                format!("ops[{i}].title"),
+            ));
+        }
+    };
+    Ok(charts::SetChartAxisTitleOp {
+        id,
+        target,
+        axis,
+        title,
+    })
+}
+
+fn parse_set_chart_legend(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<charts::SetChartLegendOp, Error> {
+    deny_keys(obj, i, &["op", "id", "show", "pos"])?;
+    let id = require_id(obj, i)?;
+    let target = charts::parse_chart_id(&id, i)?;
+    let show = parse_required_bool(obj.get("show"), i, "setChartLegend", "show")?;
+    let pos = match obj.get("pos") {
+        None | Some(Value::Null) => None,
+        Some(Value::String(s)) if matches!(s.as_str(), "b" | "t" | "l" | "r" | "tr") => {
+            Some(s.clone())
+        }
+        Some(Value::String(_)) => {
+            return Err(Error::with_path(
+                ErrorKind::InvalidLegendPos,
+                format!("ops[{i}].pos"),
+            ));
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "pos".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].pos"),
+            ));
+        }
+    };
+    Ok(charts::SetChartLegendOp {
+        id,
+        target,
+        show,
+        pos,
+    })
+}
+
+fn parse_set_chart_data_labels(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<charts::SetChartDataLabelsOp, Error> {
+    deny_keys(obj, i, &["op", "id", "show"])?;
+    let id = require_id(obj, i)?;
+    let target = charts::parse_chart_id(&id, i)?;
+    let show = parse_required_bool(obj.get("show"), i, "setChartDataLabels", "show")?;
+    Ok(charts::SetChartDataLabelsOp { id, target, show })
+}
+
+fn parse_set_chart_size(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<charts::SetChartSizeOp, Error> {
+    deny_keys(obj, i, &["op", "id", "cx", "cy"])?;
+    let id = require_id(obj, i)?;
+    let target = charts::parse_chart_id(&id, i)?;
+    let cx = parse_emu_field(obj.get("cx"), i, "cx")?;
+    let cy = parse_emu_field(obj.get("cy"), i, "cy")?;
+    if cx.is_none() && cy.is_none() {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "setChartSize".into(),
+                field: "cx or cy".into(),
+            },
+            format!("ops[{i}]"),
+        ));
+    }
+    Ok(charts::SetChartSizeOp { id, target, cx, cy })
+}
+
+fn parse_set_chart_wrap(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<charts::SetChartWrapOp, Error> {
+    deny_keys(
+        obj,
+        i,
+        &[
+            "op", "id", "kind", "wrap", "alignH", "alignV", "offsetX", "offsetY",
+        ],
+    )?;
+    let id = require_id(obj, i)?;
+    let target = charts::parse_chart_id(&id, i)?;
+    let kind = match obj.get("kind") {
+        Some(Value::String(s)) => picture::parse_pic_kind(s)
+            .ok_or_else(|| Error::with_path(ErrorKind::InvalidPicKind, format!("ops[{i}].kind")))?,
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "kind".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].kind"),
+            ));
+        }
+        None => {
+            return Err(Error::with_path(
+                ErrorKind::OpRequiresField {
+                    op: "setChartWrap".into(),
+                    field: "kind".into(),
+                },
+                format!("ops[{i}].kind"),
+            ));
+        }
+    };
+    let wrap = match obj.get("wrap") {
+        None | Some(Value::Null) => None,
+        Some(Value::String(s)) => Some(picture::parse_wrap(s).ok_or_else(|| {
+            Error::with_path(ErrorKind::InvalidPicWrap, format!("ops[{i}].wrap"))
+        })?),
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "wrap".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].wrap"),
+            ));
+        }
+    };
+    if kind == PicKind::Inline && wrap.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::InvalidPicWrap,
+            format!("ops[{i}].wrap"),
+        ));
+    }
+    if kind == PicKind::Anchor && wrap.is_none() {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "setChartWrap".into(),
+                field: "wrap".into(),
+            },
+            format!("ops[{i}].wrap"),
+        ));
+    }
+    let align_h = parse_align_h_field(obj.get("alignH"), i)?;
+    let align_v = parse_align_v_field(obj.get("alignV"), i)?;
+    let offset_x = parse_i64_field(obj.get("offsetX"), i, "offsetX")?;
+    let offset_y = parse_i64_field(obj.get("offsetY"), i, "offsetY")?;
+    if align_h.is_some() && offset_x.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::MutuallyExclusive {
+                a: "alignH".into(),
+                b: "offsetX".into(),
+            },
+            format!("ops[{i}]"),
+        ));
+    }
+    if align_v.is_some() && offset_y.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::MutuallyExclusive {
+                a: "alignV".into(),
+                b: "offsetY".into(),
+            },
+            format!("ops[{i}]"),
+        ));
+    }
+    Ok(charts::SetChartWrapOp {
+        id,
+        target,
+        kind,
+        wrap,
+        pos: WrapPos {
+            align_h,
+            align_v,
+            offset_x,
+            offset_y,
+        },
+    })
+}
+
+fn parse_chart_type_field(v: Option<&Value>, i: usize, required: bool) -> Result<ChartType, Error> {
+    match v {
+        Some(Value::String(s)) => ChartType::parse(s).ok_or_else(|| {
+            Error::with_path(ErrorKind::InvalidChartType, format!("ops[{i}].type"))
+        }),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "type".into(),
+                expected: TypeName::String,
+            },
+            format!("ops[{i}].type"),
+        )),
+        None if required => Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "insertChart".into(),
+                field: "type".into(),
+            },
+            format!("ops[{i}].type"),
+        )),
+        None => Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "setChartType".into(),
+                field: "type".into(),
+            },
+            format!("ops[{i}].type"),
+        )),
+    }
+}
+
+fn parse_required_bool(
+    v: Option<&Value>,
+    i: usize,
+    op: &str,
+    field: &str,
+) -> Result<bool, Error> {
+    match v {
+        Some(Value::Bool(b)) => Ok(*b),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::Boolean,
+            },
+            format!("ops[{i}].{field}"),
+        )),
+        None => Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: op.into(),
+                field: field.into(),
+            },
+            format!("ops[{i}].{field}"),
+        )),
+    }
+}
+
+fn parse_datum_list(
+    v: Option<&Value>,
+    i: usize,
+    field: &str,
+) -> Result<Option<Vec<Value>>, Error> {
+    match v {
+        None | Some(Value::Null) => Ok(None),
+        Some(Value::Array(a)) => {
+            let mut out = Vec::new();
+            for (j, item) in a.iter().enumerate() {
+                match item {
+                    Value::String(_) | Value::Number(_) => out.push(item.clone()),
+                    _ => {
+                        return Err(Error::with_path(
+                            ErrorKind::WrongType {
+                                field: format!("{field}[{j}]"),
+                                expected: TypeName::String,
+                            },
+                            format!("ops[{i}].{field}[{j}]"),
+                        ));
+                    }
+                }
+            }
+            Ok(Some(out))
+        }
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::Array,
+            },
+            format!("ops[{i}].{field}"),
+        )),
+    }
 }

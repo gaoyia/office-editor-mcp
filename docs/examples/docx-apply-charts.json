@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "note.docx",
+  "output": "note.patched.docx",
+  "ops": [
+    { "op": "setChartTitle", "id": "para:3F2A1B00/chart:7", "title": "销量" },
+    { "op": "setChartSeries", "id": "para:3F2A1B00/chart:7/series:0", "values": [10, 20, 30] },
+    { "op": "setChartType", "id": "para:3F2A1B00/chart:7", "type": "line" },
+    { "op": "insertChart", "id": "para:00A1B2C3", "type": "pie", "series": [{ "name": "份额", "categories": ["A", "B"], "values": [1, 2] }] },
+    { "op": "deleteChart", "id": "para:3F2A1B00/chart:7" }
+  ]
+}

@@ -1,4 +1,4 @@
-//! ooxp：用领域 JSON 对 OOXML 做 inspect / create / apply / exportMedia。
+//! ooxp：用领域 JSON 对 OOXML 做 inspect / create / apply / exportMedia / exportChartData。
 
 mod dispatch;
 mod docx;
@@ -178,7 +178,9 @@ mod tests {
         assert_eq!(tree["footnoteCount"], 0);
         assert_eq!(tree["endnoteCount"], 0);
         assert_eq!(tree["commentCount"], 0);
+        assert_eq!(tree["chartCount"], 0);
         assert!(tree.get("comments").is_none());
+        assert!(tree.get("charts").is_none());
         assert!(tree.get("paragraphs").is_none());
         assert!(tree.get("footnotes").is_none());
         assert_eq!(tree["headers"], json!([]));
@@ -791,6 +793,7 @@ mod tests {
                 "footnoteCount",
                 "endnoteCount",
                 "commentCount",
+                "chartCount",
                 "outline",
                 "headers",
                 "footers",

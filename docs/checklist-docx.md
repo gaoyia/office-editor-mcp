@@ -27,6 +27,7 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 | T1–T9 | ✅ | Word 16.0：`docx-textbox.ps1`，13 PASS / 0 FAIL。行内+浮动+链接+组合；框内改字、插删框、尺寸 144 磅、绕排、红填蓝边、框内插删段与插图、断开再接上。标题栏无 Repair |
 | N1–N6 | ✅ | Word 16.0：`docx-notes.ps1`，7 PASS / 0 FAIL。计数与名单、改注文、插删脚注、编号 `NumberStyle=1`（大写罗马）、注内插图。标题栏无 Repair |
 | Cmt1–Cmt7 | ✅ | Word 16.0：`docx-comments.ps1`，8 PASS / 0 FAIL。计数与名单、改字、插删、回复线程（`Comments.Count=4` 且 `Replies=1`）、完成标记、批注内插图。标题栏无 Repair |
+| Ch1–Ch8 | ✅ | Word 16.0：`docx-charts.ps1`，9 PASS / 0 FAIL。计数与名单（COM 系列值对得上）、改系列为 11/22/33/44、插饼图、删除、改折线、关图例开标签、组合图 `NotImplemented` 且未写文件、`exportChartData` 与 embedding 字节一致。标题栏无 Repair |
 | O1 | 🚫 | 领域层不做原样保存，与 xlsx 清单相同。零脏写回见 OPC 库测试。Word 另存 create 产物见 `docx-O1-word-resave`。此前记的 `SaveAs2` 挂起，拆分后重跑没再出现，一秒内返回 |
 
 ## create
@@ -182,6 +183,21 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 | Cmt5 | 回复 | `replyComment` 后 `parent` 指向父批注，Word 能看见线程 |
 | Cmt6 | 完成 | `setCommentDone` 后 COM `Comment.Done` 为 true，或 UI 显示已解决 |
 | Cmt7 | 批注内图 | 批注内 `insertPicture` 后 Word 无修复 |
+
+## 嵌入图表
+
+准备一份 Word 亲手另存的样例：至少一张柱形图（带标题与两个系列）。不要用库 `create` 产物当唯一样例（create 不写图表）。手测脚本为 `manual-check/office/cases/docx-charts.ps1`。编号用 Ch，避免和 create 的 C 组、批注的 Cmt 组重号。
+
+| 序号 | 检查 | 通过标准 |
+| --- | --- | --- |
+| Ch1 | 计数与名单 | ✅ 无 `charts` 时根上有 `chartCount`、没有名单；`charts: true` 时 id 为 `{段落}/chart:{docPrId}`，`type` / `title` / 系列值与数据表一致 |
+| Ch2 | 改系列 | ✅ `setChartSeries` 后 Word 无修复，数据表是新值 |
+| Ch3 | 插入 | ✅ `insertChart` 一张饼图后 Word 能看见，无修复 |
+| Ch4 | 删除 | ✅ `deleteChart` 后图与数据都消失，无修复 |
+| Ch5 | 改类型 | ✅ `setChartType` 为 `line` 后 Word 按折线显示（允许样式重置） |
+| Ch6 | 图例与标签 | ✅ `setChartLegend` / `setChartDataLabels` 后 Word 无修复，开关能对上 |
+| Ch7 | 组合图 | ✅ 对组合图发 `setChartType` 得到 `NotImplemented`，文件未写坏 |
+| Ch8 | 导出数据 | ✅ `exportChartData` 写出的 xlsx 与 embedding 部件字节一致。不强制开 Word |
 
 ## 原样保存（opc 验收）
 

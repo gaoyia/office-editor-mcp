@@ -1,6 +1,7 @@
 //! docx：inspect / create / apply / exportMedia。
 
 mod apply;
+mod charts;
 mod comments;
 mod create;
 mod export;
@@ -13,10 +14,15 @@ mod request;
 mod textbox;
 
 pub use apply::apply;
+pub use charts::export_chart_data;
 pub use create::create;
 pub use export::export_media;
 pub use inspect::inspect;
 pub use request::{parse_ops, parse_scope};
+
+pub const REL_CHART: &str =
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart";
+pub const CT_CHART: &str = "application/vnd.openxmlformats-officedocument.drawingml.chart+xml";
 
 pub const WML_NS: &str = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
 pub const W14_NS: &str = "http://schemas.microsoft.com/office/word/2010/wordml";

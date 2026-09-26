@@ -27,9 +27,12 @@
   "endnoteSrc": "尾注原文",
   "footnoteNew": "改过的注文",
   "footnoteInsert": "新插入的脚注",
-  "commentA": "批注甲",
-  "commentB": "批注乙",
-  "commentReply": "回复乙",
-  "commentNew": "新批注",
-  "commentTextNew": "改过的批注"
+    "commentA": "批注甲",
+    "commentB": "批注乙",
+    "commentReply": "回复乙",
+    "commentNew": "新批注",
+    "commentTextNew": "改过的批注",
+    "chartTitle": "销量",
+    "chartSer1": "系列甲",
+    "chartSer2": "系列乙"
 }

@@ -6,7 +6,7 @@
   "required": ["schemaVersion", "action"],
   "properties": {
     "schemaVersion": { "const": 1 },
-    "action": { "enum": ["inspect", "create", "apply", "exportMedia"] }
+    "action": { "enum": ["inspect", "create", "apply", "exportMedia", "exportChartData"] }
   },
   "allOf": [
     {
@@ -36,6 +36,13 @@
         "required": ["action"]
       },
       "then": { "$ref": "#/$defs/exportMediaRequest" }
+    },
+    {
+      "if": {
+        "properties": { "action": { "const": "exportChartData" } },
+        "required": ["action"]
+      },
+      "then": { "$ref": "#/$defs/exportChartDataRequest" }
     }
   ],
   "$defs": {
@@ -68,6 +75,7 @@
         "textBoxContent": { "type": "boolean" },
         "notes": { "type": "boolean" },
         "comments": { "type": "boolean" },
+        "charts": { "type": "boolean" },
         "slide": { "type": "integer", "minimum": 1 },
         "maxShapes": { "type": "integer", "minimum": 1, "maximum": 5000 }
       },
@@ -319,6 +327,18 @@
               { "$ref": "#/$defs/setCommentTextOp" },
               { "$ref": "#/$defs/setCommentMetaOp" },
               { "$ref": "#/$defs/setCommentDoneOp" },
+              { "$ref": "#/$defs/insertChartOp" },
+              { "$ref": "#/$defs/deleteChartOp" },
+              { "$ref": "#/$defs/setChartTitleOp" },
+              { "$ref": "#/$defs/setChartSeriesOp" },
+              { "$ref": "#/$defs/addChartSeriesOp" },
+              { "$ref": "#/$defs/deleteChartSeriesOp" },
+              { "$ref": "#/$defs/setChartTypeOp" },
+              { "$ref": "#/$defs/setChartAxisTitleOp" },
+              { "$ref": "#/$defs/setChartLegendOp" },
+              { "$ref": "#/$defs/setChartDataLabelsOp" },
+              { "$ref": "#/$defs/setChartSizeOp" },
+              { "$ref": "#/$defs/setChartWrapOp" },
               { "$ref": "#/$defs/setShapeTextOp" }
             ]
           }
@@ -681,6 +701,211 @@
         "op": { "const": "setCommentDone" },
         "id": { "type": "string", "minLength": 1 },
         "done": { "type": "boolean" }
+      }
+    },
+    "chartType": { "enum": ["bar", "col", "line", "pie", "area", "scatter"] },
+    "chartSeriesData": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string" },
+        "categories": {
+          "type": "array",
+          "items": { "type": ["string", "number"] }
+        },
+        "values": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": ["string", "number"] }
+        }
+      }
+    },
+    "insertChartOp": {
+      "type": "object",
+      "required": ["op", "id", "type", "series"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "insertChart" },
+        "id": { "type": "string", "minLength": 1 },
+        "type": { "$ref": "#/$defs/chartType" },
+        "title": { "type": "string" },
+        "series": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "allOf": [
+              { "$ref": "#/$defs/chartSeriesData" },
+              { "required": ["values"] }
+            ]
+          }
+        },
+        "kind": { "enum": ["inline", "anchor"] },
+        "wrap": {
+          "type": ["string", "null"],
+          "enum": ["square", "tight", "through", "topAndBottom", "none", null]
+        },
+        "cx": { "type": "integer", "minimum": 1 },
+        "cy": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "deleteChartOp": {
+      "type": "object",
+      "required": ["op", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "deleteChart" },
+        "id": { "type": "string", "minLength": 1 }
+      }
+    },
+    "setChartTitleOp": {
+      "type": "object",
+      "required": ["op", "id", "title"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "setChartTitle" },
+        "id": { "type": "string", "minLength": 1 },
+        "title": { "type": "string" }
+      }
+    },
+    "setChartSeriesOp": {
+      "type": "object",
+      "required": ["op", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "setChartSeries" },
+        "id": { "type": "string", "minLength": 1 },
+        "name": { "type": "string" },
+        "categories": {
+          "type": "array",
+          "items": { "type": ["string", "number"] }
+        },
+        "values": {
+          "type": "array",
+          "items": { "type": ["string", "number"] }
+        }
+      },
+      "anyOf": [
+        { "required": ["name"] },
+        { "required": ["categories"] },
+        { "required": ["values"] }
+      ]
+    },
+    "addChartSeriesOp": {
+      "type": "object",
+      "required": ["op", "id", "values"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "addChartSeries" },
+        "id": { "type": "string", "minLength": 1 },
+        "name": { "type": "string" },
+        "categories": {
+          "type": "array",
+          "items": { "type": ["string", "number"] }
+        },
+        "values": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": ["string", "number"] }
+        }
+      }
+    },
+    "deleteChartSeriesOp": {
+      "type": "object",
+      "required": ["op", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "deleteChartSeries" },
+        "id": { "type": "string", "minLength": 1 }
+      }
+    },
+    "setChartTypeOp": {
+      "type": "object",
+      "required": ["op", "id", "type"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "setChartType" },
+        "id": { "type": "string", "minLength": 1 },
+        "type": { "$ref": "#/$defs/chartType" }
+      }
+    },
+    "setChartAxisTitleOp": {
+      "type": "object",
+      "required": ["op", "id", "axis", "title"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "setChartAxisTitle" },
+        "id": { "type": "string", "minLength": 1 },
+        "axis": { "enum": ["cat", "val"] },
+        "title": { "type": "string" }
+      }
+    },
+    "setChartLegendOp": {
+      "type": "object",
+      "required": ["op", "id", "show"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "setChartLegend" },
+        "id": { "type": "string", "minLength": 1 },
+        "show": { "type": "boolean" },
+        "pos": { "enum": ["b", "t", "l", "r", "tr"] }
+      }
+    },
+    "setChartDataLabelsOp": {
+      "type": "object",
+      "required": ["op", "id", "show"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "setChartDataLabels" },
+        "id": { "type": "string", "minLength": 1 },
+        "show": { "type": "boolean" }
+      }
+    },
+    "setChartSizeOp": {
+      "type": "object",
+      "required": ["op", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "setChartSize" },
+        "id": { "type": "string", "minLength": 1 },
+        "cx": { "type": "integer", "minimum": 1 },
+        "cy": { "type": "integer", "minimum": 1 }
+      },
+      "anyOf": [
+        { "required": ["cx"] },
+        { "required": ["cy"] }
+      ]
+    },
+    "setChartWrapOp": {
+      "type": "object",
+      "required": ["op", "id", "kind"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "setChartWrap" },
+        "id": { "type": "string", "minLength": 1 },
+        "kind": { "enum": ["inline", "anchor"] },
+        "wrap": {
+          "type": ["string", "null"],
+          "enum": ["square", "tight", "through", "topAndBottom", "none", null]
+        },
+        "alignH": { "enum": ["left", "center", "right"] },
+        "alignV": { "enum": ["top", "center", "bottom"] },
+        "offsetX": { "type": "integer" },
+        "offsetY": { "type": "integer" }
+      }
+    },
+    "exportChartDataRequest": {
+      "type": "object",
+      "comment": "output 省略时，落盘路径由调用方另给，命令行用 --output。不得默认写成源 path。",
+      "required": ["schemaVersion", "action", "path", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "schemaVersion": { "const": 1 },
+        "action": { "const": "exportChartData" },
+        "path": { "type": "string", "minLength": 1 },
+        "format": { "$ref": "#/$defs/format" },
+        "id": { "type": "string", "minLength": 1 },
+        "output": { "type": "string", "minLength": 1 },
+        "locale": { "type": "string" }
       }
     },
     "setShapeTextOp": {

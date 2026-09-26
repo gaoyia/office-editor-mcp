@@ -51,28 +51,28 @@
 | --- | --- | --- |
 | `InvalidJson` | 入参不是 JSON，或缺 `schemaVersion` / `action` | 2 |
 | `UnsupportedSchema` | `schemaVersion` 不是 `1` | 2 |
-| `UnsupportedAction` | `action` 不是 `inspect` / `create` / `apply` / `exportMedia` | 2 |
+| `UnsupportedAction` | `action` 不是 `inspect` / `create` / `apply` / `exportMedia` / `exportChartData` | 2 |
 | `UnsupportedFormat` | 扩展名或 `format` 不是 `xlsx` / `docx` / `pptx` | 2 |
 | `UnsupportedOp` | apply 遇到第一期不认识的 `op` | 2 |
 | `InvalidField` | 字段类型不对、互斥字段同时出现、sheet 名非法、对不上格式的 op 或 scope 键 | 2 |
 | `InvalidRange` | A1 区域解析失败，或起止颠倒 | 2 |
 | `InvalidId` | id 字符串不符合该格式的生成规则 | 2 |
-| `IdNotFound` | id 语法对，但文件里没有这个工作表、段落、节、页眉页脚、图、形状、用户注或批注 | 3 |
+| `IdNotFound` | id 语法对，但文件里没有这个工作表、段落、节、页眉页脚、图、形状、用户注、批注或图表 | 3 |
 | `ScopeRequired` | inspect 要单元格却没给 `sheet`+`range`，要段落正文却没给 `from`+`maxParas`，或要形状却没给 `slide` | 2 |
 | `TruncatedLimit` | `maxCells`、`maxParas`、`maxShapes` 超出允许范围，例如设成 `0` | 2 |
 | `OpcOpen` | 不是 ZIP，或缺少 `[Content_Types].xml` / 根关系 | 3 |
 | `OpcPartMissing` | 入口部件不存在，目标工作表或幻灯片部件不存在，关系 id 找不到，或者关系指向外部资源 | 3 |
 | `XmlBroken` | 目标部件不是能解析的 XML；xlsx 里 `t="s"` 的索引越界或不是整数；create 写文本时共享字符串表里没有对应项 | 3 |
 | `Io` | 读盘、写盘、创建目录失败 | 4 |
-| `NotImplemented` | 第一期明确不做的动作。目前：对共享公式的主单元格发 `setCell`；对墨迹批注发除 `deleteComment` 以外的批注编辑 op | 2 |
+| `NotImplemented` | 第一期明确不做的动作。目前：对共享公式的主单元格发 `setCell`；对墨迹批注发除 `deleteComment` 以外的批注编辑 op；对组合图 / `other` / `chartex` / 次轴 / 趋势线 / 误差线 / 透视图表发除 `deleteChart`、`setChartSize`、`setChartWrap` 以外的图表 op；`setChartType` 不能无损转换 | 2 |
 
-找不到单元格时，`setCell` 的语义是新建该单元格，因此空单元格不是 `IdNotFound`。找不到工作表才是 `IdNotFound`。找不到段落时，`setParaText` 报 `IdNotFound`，不新建段落；正文 `para:` 只匹配主文档，页眉页脚要用带容器前缀的 id，注内要用带注前缀的 id，批注内要用带批注前缀的 id。对页眉或页脚容器 id、框 id、注容器 id 或批注容器 id（没有 `/para:`）发 `setParaText` 报 `InvalidId`。找不到节时，`setHeaderFooterDistance` 与 `setHeaderFooterLink` 报 `IdNotFound`；id 不是 `section:{n}` 报 `InvalidId`。对第一节发 `setHeaderFooterLink` 且 `linked: true`，或该类型对本节不生效，报 `InvalidField`。找不到图时，图片 op 报 `IdNotFound`，不新建图（`insertPicture` 除外）。`insertPicture` 的 `id` 必须是段落 id；对图 id、容器 id、注容器 id、批注容器 id 或 `section:{n}` 发该 op 报 `InvalidId`。`replacePicture` / `deletePicture` / `setPictureSize` / `setPictureWrap` 的 `id` 必须是图 id；对段落 id、容器 id 或 `section:{n}` 发这四个 op 报 `InvalidId`。读不到图片 `file` 报 `Io`。create 的 `pictures[]` 缺 `file` 报 `MissingField`；只给 `cx` 或只给 `cy` 报 `InvalidField`。create 的页眉页脚 `type` 不是 `default`，或同一侧写了两项，报 `InvalidField`。xlsx / pptx 的 create 对象上出现 `pictures` 报 `InvalidField`。找不到形状时，`setShapeText` 报 `IdNotFound`，不新建形状。对幻灯片 id（`slide:{n}`，没有 `/shape:`）发 `setShapeText` 报 `InvalidId`。xlsx / pptx 的 `scope` 里出现 `pictures`、`textBoxes`、`textBoxContent`、`notes` 或 `comments` 报 `InvalidField`。对 xlsx / pptx 发 `exportMedia`、文本框 op、脚注尾注 op 或批注 op 报 `InvalidField`。找不到文本框时，框专用 op 报 `IdNotFound`。对宿主段落 id 发框专用 op（`insertTextBox` 除外）报 `InvalidId`。对框 id 发 `setParaText` 报 `InvalidId`。框内、注内或批注内只剩一段时 `deletePara` 报 `InvalidField`。只给 `textBoxContent`、不给 `textBoxes` 报 `InvalidField`。找不到用户注时，`deleteFootnote` / `deleteEndnote` 报 `IdNotFound`。对分隔符 id 发任何 apply 报 `InvalidId`。`setNoteNumbering` 的 id 不是 `docx:document` 或 `section:{n}` 报 `InvalidId`；三个编号字段一个都不给、或枚举不认识，报 `InvalidField`。找不到批注时，`deleteComment` / `replyComment` / `setCommentText` / `setCommentMeta` / `setCommentDone` 报 `IdNotFound`。对批注容器 id 发 `setParaText` 报 `InvalidId`。`insertComment` 的 `start` / `end` 不在同一部件或起止颠倒报 `InvalidField`。`setCommentMeta` 三个字段一个都不给报 `InvalidField`。对墨迹批注发除 `deleteComment` 以外的批注编辑 op 报 `NotImplemented`。`exportMedia` 找不到图报 `IdNotFound`；`id` 不是图 id 报 `InvalidId`；关系指向外部资源报 `OpcPartMissing`。
+找不到单元格时，`setCell` 的语义是新建该单元格，因此空单元格不是 `IdNotFound`。找不到工作表才是 `IdNotFound`。找不到段落时，`setParaText` 报 `IdNotFound`，不新建段落；正文 `para:` 只匹配主文档，页眉页脚要用带容器前缀的 id，注内要用带注前缀的 id，批注内要用带批注前缀的 id。对页眉或页脚容器 id、框 id、注容器 id 或批注容器 id（没有 `/para:`）发 `setParaText` 报 `InvalidId`。找不到节时，`setHeaderFooterDistance` 与 `setHeaderFooterLink` 报 `IdNotFound`；id 不是 `section:{n}` 报 `InvalidId`。对第一节发 `setHeaderFooterLink` 且 `linked: true`，或该类型对本节不生效，报 `InvalidField`。找不到图时，图片 op 报 `IdNotFound`，不新建图（`insertPicture` 除外）。`insertPicture` 的 `id` 必须是段落 id；对图 id、容器 id、注容器 id、批注容器 id 或 `section:{n}` 发该 op 报 `InvalidId`。`replacePicture` / `deletePicture` / `setPictureSize` / `setPictureWrap` 的 `id` 必须是图 id；对段落 id、容器 id 或 `section:{n}` 发这四个 op 报 `InvalidId`。读不到图片 `file` 报 `Io`。create 的 `pictures[]` 缺 `file` 报 `MissingField`；只给 `cx` 或只给 `cy` 报 `InvalidField`。create 的页眉页脚 `type` 不是 `default`，或同一侧写了两项，报 `InvalidField`。xlsx / pptx 的 create 对象上出现 `pictures` 报 `InvalidField`。找不到形状时，`setShapeText` 报 `IdNotFound`，不新建形状。对幻灯片 id（`slide:{n}`，没有 `/shape:`）发 `setShapeText` 报 `InvalidId`。xlsx / pptx 的 `scope` 里出现 `pictures`、`textBoxes`、`textBoxContent`、`notes`、`comments` 或 `charts` 报 `InvalidField`。对 xlsx / pptx 发 `exportMedia`、`exportChartData`、文本框 op、脚注尾注 op、批注 op 或图表 op 报 `InvalidField`。找不到文本框时，框专用 op 报 `IdNotFound`。对宿主段落 id 发框专用 op（`insertTextBox` 除外）报 `InvalidId`。对框 id 发 `setParaText` 报 `InvalidId`。框内、注内或批注内只剩一段时 `deletePara` 报 `InvalidField`。只给 `textBoxContent`、不给 `textBoxes` 报 `InvalidField`。找不到用户注时，`deleteFootnote` / `deleteEndnote` 报 `IdNotFound`。对分隔符 id 发任何 apply 报 `InvalidId`。`setNoteNumbering` 的 id 不是 `docx:document` 或 `section:{n}` 报 `InvalidId`；三个编号字段一个都不给、或枚举不认识，报 `InvalidField`。找不到批注时，`deleteComment` / `replyComment` / `setCommentText` / `setCommentMeta` / `setCommentDone` 报 `IdNotFound`。对批注容器 id 发 `setParaText` 报 `InvalidId`。`insertComment` 的 `start` / `end` 不在同一部件或起止颠倒报 `InvalidField`。`setCommentMeta` 三个字段一个都不给报 `InvalidField`。对墨迹批注发除 `deleteComment` 以外的批注编辑 op 报 `NotImplemented`。找不到图表时，图表 op 报 `IdNotFound`（`insertChart` 除外）。`insertChart` 的 `id` 必须是段落 id；`setChartSeries` / `deleteChartSeries` 的 `id` 必须是系列 id。`deleteChartSeries` 删光时报 `InvalidField`。组合图 / `other` / `chartex` 以及带次轴、趋势线、误差线或透视标记的图，除 `deleteChart`、`setChartSize`、`setChartWrap` 外报 `NotImplemented`。`exportMedia` 找不到图报 `IdNotFound`；`id` 不是图 id 报 `InvalidId`；关系指向外部资源报 `OpcPartMissing`。`exportChartData` 找不到图报表 `IdNotFound`；`id` 不是图表 id 报 `InvalidId`；没有 embedding 报 `OpcPartMissing`。
 
 ## 成功形态
 
 inspect 成功：stdout 是领域树，见 [json-contract.md](json-contract.md)。不要再包一层 `{ "ok": true, "tree": ... }`，以免和树本身的字段打架。
 
-create / apply / exportMedia 成功：stdout 为一行 JSON：
+create / apply / exportMedia / exportChartData 成功：stdout 为一行 JSON：
 
 ```json
 {
@@ -82,9 +82,9 @@ create / apply / exportMedia 成功：stdout 为一行 JSON：
 }
 ```
 
-`opsApplied` 仅 apply 出现，等于实际执行的 op 条数。create 与 `exportMedia` 省略该字段。
+`opsApplied` 仅 apply 出现，等于实际执行的 op 条数。create、`exportMedia` 与 `exportChartData` 省略该字段。
 
-`exportMedia` 成功时再带 `contentType`（取自包内 `[Content_Types].xml`）。没有对应 Default / Override 时省略该字段：
+`exportMedia` 与 `exportChartData` 成功时再带 `contentType`（取自包内 `[Content_Types].xml`）。没有对应 Default / Override 时省略该字段：
 
 ```json
 {

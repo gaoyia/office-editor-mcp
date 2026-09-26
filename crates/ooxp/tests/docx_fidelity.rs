@@ -977,6 +977,7 @@ fn inspect_lists_header_pictures() {
             "paraCount",
             "pictureCount",
             "textBoxCount",
+            "chartCount",
             "pictures"
         ]
     );

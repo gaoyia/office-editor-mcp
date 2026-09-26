@@ -1,6 +1,6 @@
 //! xlsx：inspect / create / apply。
 
-mod a1;
+pub(crate) mod a1;
 mod apply;
 mod create;
 mod inspect;

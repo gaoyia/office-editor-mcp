@@ -30,6 +30,7 @@ pub enum Action {
     Create,
     Apply,
     ExportMedia,
+    ExportChartData,
 }
 
 pub struct Request {
@@ -70,6 +71,7 @@ pub fn parse_request(input_json: &str) -> Result<Request, Error> {
         "create" => Action::Create,
         "apply" => Action::Apply,
         "exportMedia" => Action::ExportMedia,
+        "exportChartData" => Action::ExportChartData,
         other => {
             return Err(Error::new(ErrorKind::UnsupportedAction {
                 action: other.to_string(),

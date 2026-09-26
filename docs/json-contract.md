@@ -2,7 +2,7 @@
 
 `schemaVersion` 固定为 `1`。库和命令行只认这一层。MCP 或其他传输信封不许改这里的字段名和含义。机器可读副本见 [json-schema/request.schema.json](json-schema/request.schema.json)，与本文冲突时以本文为准。
 
-xlsx、docx、pptx 的 inspect、create、apply 已经按本文实现。docx 另有 `exportMedia`。人工打开只认 Microsoft Office，见三份 checklist。
+xlsx、docx、pptx 的 inspect、create、apply 已经按本文实现。docx 另有 `exportMedia` 与 `exportChartData`。人工打开只认 Microsoft Office，见三份 checklist。
 
 ## 信封
 
@@ -11,10 +11,10 @@ xlsx、docx、pptx 的 inspect、create、apply 已经按本文实现。docx 另
 | 字段 | 类型 | 含义 |
 | --- | --- | --- |
 | `schemaVersion` | 整数 | 必须是 `1` |
-| `action` | 字符串 | `inspect`、`create`、`apply`、`exportMedia` 之一 |
+| `action` | 字符串 | `inspect`、`create`、`apply`、`exportMedia`、`exportChartData` 之一 |
 | `locale` | 字符串 | 可选。错误 `message` 的语言偏好，见 [errors.md](errors.md) |
 
-`locale` 不属于动作参数，四种动作都认。取值宽松匹配：`zh`、`zh-CN`、`zh-Hans`、`zh-SG` 出中文；`en` 及其地区变体出英文；不认识的标签（包括空串）退回英文，不报 `InvalidField`。这是信封里唯一一处对未知取值不报错的字段：语言只影响呈现，不该挡下文档操作。优先级是请求 `locale` 高于命令行 `--lang`，再高于环境变量 `OOXP_LANG`，都没有时是英文。
+`locale` 不属于动作参数，五种动作都认。取值宽松匹配：`zh`、`zh-CN`、`zh-Hans`、`zh-SG` 出中文；`en` 及其地区变体出英文；不认识的标签（包括空串）退回英文，不报 `InvalidField`。这是信封里唯一一处对未知取值不报错的字段：语言只影响呈现，不该挡下文档操作。优先级是请求 `locale` 高于命令行 `--lang`，再高于环境变量 `OOXP_LANG`，都没有时是英文。
 
 另外按动作需要 `path`、`format`、`scope`、`workbook`、`document`、`presentation`、`ops`、`id`、`output` 等字段，见下文。禁止在请求里放一整棵 inspect 树来表示「把文档改成这样」。create 的 xlsx 用 `workbook`，docx 用 `document`，pptx 用 `presentation`，三者不能同时出现。
 
@@ -52,7 +52,7 @@ id 是给模型用的字符串，必须能从文件内容稳定算出来，不�
 
 没有 `w14:paraId` 时：`para:index:{n}`，`n` 从 1 起，按主文档部件里 `w:p` 的文档顺序（含表格单元格里的段落）。树上同时给 `"stable": false`。这类 id 在增删段落后会变，只够同一次 inspect 之后立刻 apply。
 
-标题和正文都是段落，不另编一套 id。脚注、尾注、批注都是独立故事：根上始终有计数；给了对应 `scope` 才列出名单，并可 apply。分隔符三条不进用户名单，禁止 apply。文本框是独立节点：框本身、框内段落与框内图按下面规则进树，并可 apply。页眉、页脚按下面规则进树，可按 id 改字；节上的页眉页脚距边界、以及是否链接到前一节，都可以读写。页眉、页脚、正文、注和批注里的 DrawingML 图片可查、换、插、删，并可改尺寸与绕排。apply 不做新建页眉。不写入 `titlePg` / `evenAndOddHeaders`。`create` 可在正文和默认页眉页脚上写 DrawingML 图，也可写文本框；不写脚注、尾注、批注。带图字段见下文 create。
+标题和正文都是段落，不另编一套 id。脚注、尾注、批注都是独立故事：根上始终有计数；给了对应 `scope` 才列出名单，并可 apply。分隔符三条不进用户名单，禁止 apply。文本框是独立节点：框本身、框内段落与框内图按下面规则进树，并可 apply。页眉、页脚按下面规则进树，可按 id 改字；节上的页眉页脚距边界、以及是否链接到前一节，都可以读写。页眉、页脚、正文、注和批注里的 DrawingML 图片可查、换、插、删，并可改尺寸与绕排。apply 不做新建页眉。不写入 `titlePg` / `evenAndOddHeaders`。`create` 可在正文和默认页眉页脚上写 DrawingML 图，也可写文本框；不写脚注、尾注、批注、图表。带图字段见下文 create。嵌入图表不是 `pic:pic`：根上始终有 `chartCount`；给了 `scope.charts` 才列出名单，并可 apply。框内、注内、批注内的图表本期不进树、不接受 apply。
 
 页眉、页脚 id 按部件编，不按节编。`w:sectPr` 里的 `w:headerReference` / `w:footerReference`（§17.10.2、§17.10.5）经主文档关系解到部件路径。同一部件只出一个容器节点；多个节引用同一部件时，`sections` 列出所有节号。后一节某类型引用省略时按规范继承前节（§17.10.2）；`even` 是否继承还看 `settings.xml` 的 `w:evenAndOddHeaders`（§17.10.1），`first` 是否继承还看该节的 `w:titlePg`（§17.10.6）。OOXML 没有「链接到前一节」元素；Word UI 的勾选就是这种省略。inspect 在每个节上用 `headerLink` / `footerLink` 标出该类型是显式引用、继承前节，还是对本节不生效。apply 用 `setHeaderFooterLink` 断开或重新链接。两节显式指向同一部件不算链接，两边都是 `false`。
 
@@ -76,6 +76,9 @@ id 是给模型用的字符串，必须能从文件内容稳定算出来，不�
 | 批注 | `comment:{id}` | `comment:0` |
 | 批注内段落 | `{批注 id}/para:{paraId}` 或 `{批注 id}/para:index:{k}` | `comment:0/para:3F2A1B00` |
 | 批注内图 | `{批注内段落 id}/pic:{docPrId}` | `comment:0/para:3F2A1B00/pic:1` |
+| 正文图表 | `{段落 id}/chart:{docPrId}` 或 `{段落 id}/chart:index:{k}` | `para:3F2A1B00/chart:7` |
+| 页眉/页脚图表 | `{页眉或页脚段落 id}/chart:{docPrId}` | `header:default:1/para:AA/chart:7` |
+| 图表系列 | `{图表 id}/series:{idx}` | `para:3F2A1B00/chart:7/series:0` |
 
 节号 `{n}` 从 1 起，按主文档里 `w:sectPr` 的文档顺序（与页眉目录相同）。距边界挂在节上，不挂在页眉部件节点上。页眉页脚图挂在容器上，不挂在节上。正文图挂在它所在的主文档段落上，不挂在文档根上。对 `section:{n}` 发 `setParaText` 或图片 op 报 `InvalidId`。
 
@@ -86,6 +89,10 @@ id 是给模型用的字符串，必须能从文件内容稳定算出来，不�
 脚注、尾注的 `{id}` 取 `w:footnote/@w:id` / `w:endnote/@w:id` 的原文（ECMA-376 §17.11.2）。输出用文件里的原始数字写法。请求里若双方都能解析成十进制整数，按数值匹配（`2` 与 `02` 视为同一条）；否则按原文精确比。同一文件里脚注 id 与尾注 id 可以都是 `2`，靠前缀区分。只把 `w:type` 为 `normal` 或未写 type 的当作用户注（§17.18.33 `ST_FtnEdn`）。`separator`、`continuationSeparator`、`continuationNotice` 是分隔符，id 写成 `footnote:sep:{type}` / `endnote:sep:{type}`，只出现在 `noteSeparators`，对它们发任何 apply 报 `InvalidId`。同一侧重复 `w:id` 时 inspect 都列出，apply 命中该部件文档顺序第一处。
 
 批注的 `{id}` 取 `w:comment/@w:id` 的原文（ECMA-376 §17.13.4.2）。匹配规则与脚注 `w:id` 相同。同一文件里批注 id 与脚注 id 可以都是 `0`，靠前缀区分。重复 `w:id` 时 inspect 都列出，apply 命中 `comments.xml` 文档顺序第一处。范围标记 `w:commentRangeStart` / `w:commentRangeEnd` / `w:commentReference` 的 `w:id` 与 `w:comment/@w:id` 按数值对应（§17.13.4.4、§17.13.4.3、§17.13.4.5）。线程关系靠 `commentsExtended` 的 `paraIdParent` 挂到父批注（MS-DOCX §2.5.3.1）。Word 16 给回复也写一套范围标记，套在父批注范围上：`commentRangeStart` 紧跟父 start 之后，`commentRangeEnd` 与 `commentReference` 紧跟父 `commentReference` 所在 run 之后。inspect 读到回复自己的标记就用；没有标记时沿用线程根。`commentEx/@paraId` 是该批注**最后一段**的 `w14:paraId`，不是第一段，也不是宿主段落。
+
+图表的 `{docPrId}` 取该 `w:drawing` 里 `wp:docPr/@id` 的原文，匹配规则与图相同。没有该属性时用 `chart:index:{k}`，`stable` 为 `false`。正文的 `{k}` 只在该段内从 1 计；页眉页脚的 `{k}` 只在该部件内从 1 计。系列 `{idx}` 从 0 起，按 chart 部件里 `c:ser` 的文档顺序，不跟 `c:idx/@val`。只认 `a:graphicData/@uri` 为 `http://schemas.openxmlformats.org/drawingml/2006/chart`（可带尾斜杠）的 drawing（ECMA-376 §21.2）。Office 2016 以后的 chartex URI（`http://schemas.microsoft.com/office/drawing/2014/chartex`）也列入，`type` 为 `chartex`。VML 图表不编。`w:drawing` 里同时有 `pic:pic` 和图表的，各走各的名单。正文图表只收主文档段落的子孙，遇 `w:txbxContent` 停住；表格单元格里的段落与正文段落同一套规则。页眉页脚图表挂在它所在的页眉或页脚段落上，名单出现在该容器的 `charts` 上。框内、注内、批注内的图表本期不进树、不接受 apply。
+
+`insertChart` 的 `id` 必须是段落 id（正文或页眉页脚段落）。对图 id、图表 id、系列 id、容器 id、框 id、注容器 id、批注容器 id 或 `section:{n}` 发 `insertChart` 报 `InvalidId`。`deleteChart` / `setChartTitle` / `setChartType` / `setChartAxisTitle` / `setChartLegend` / `setChartDataLabels` / `setChartSize` / `setChartWrap` / `addChartSeries` 的 `id` 必须是图表 id。`setChartSeries` / `deleteChartSeries` 的 `id` 必须是系列 id。对不上的 id 形态报 `InvalidId`。
 
 图的 `{docPrId}` 取该 `w:drawing` 里 `wp:docPr/@id` 的原文（ECMA-376 §20.4）。输出用文件里的原始大小写与数字写法。请求里若双方都能解析成十进制整数，按数值匹配（`1` 与 `01` 视为同一处）；否则按原文精确比。同一归属范围内重复 `docPr/@id` 时，inspect 都列出，apply 命中该范围内文档顺序第一处。页眉页脚的范围是该容器部件；正文的范围是该段。没有 `docPr/@id` 时用 `pic:index:{k}`，树上 `"stable": false`。页眉页脚的 `{k}` 只在该部件内从 1 计；正文的 `{k}` 只在该段内从 1 计。两种 `{k}` 都计入该范围内所有被收入的图，不只是缺 id 的那些。只认 DrawingML 的 `pic:pic` 且带 `a:blip` 的 `w:drawing`。VML / `w:pict`、图表、SmartArt、文本框不进宿主段落的 `pictures`。框内图走框内段落上的 `pictures`，id 带框前缀。`mc:AlternateContent` 仍只进 Choice。正文图只收主文档段落的子孙，遇 `w:txbxContent` 停住，表格单元格里的段落与正文段落同一套规则。
 
@@ -98,7 +105,7 @@ id 是给模型用的字符串，必须能从文件内容稳定算出来，不�
 「宿主段落遇到框就停住」仍成立，否则外层 `paraCount` 会把框内段算进去。边界按下面两条划：
 
 - 遍历宿主段落（正文或页眉页脚）时遇到 `w:txbxContent` 就停住，不再往下走。框内 `w:p` 不计入宿主 `paraCount`，不出现在 `outline` 与宿主 `paragraphs` 里，它们的 `w:t` 也不并进外层段落的 `text`。拿框内 `paraId` 当正文 `para:` 发 apply，报 `IdNotFound`。框内段落必须用带框前缀的 id。
-- 遇到 `mc:AlternateContent` 只走第一个 `mc:Choice`；没有 `mc:Choice` 才走 `mc:Fallback`。两支都走会把同一份内容读出两遍，也会让 apply 只改到其中一支、另一支不同步。这条对 `paraCount`、`outline`、`paragraphs`、`text`、页眉页脚、`pictureCount`、`pictures`、`textBoxCount`、`textBoxes` 和 apply 一律适用。
+- 遇到 `mc:AlternateContent` 只走第一个 `mc:Choice`；没有 `mc:Choice` 才走 `mc:Fallback`。两支都走会把同一份内容读出两遍，也会让 apply 只改到其中一支、另一支不同步。这条对 `paraCount`、`outline`、`paragraphs`、`text`、页眉页脚、`pictureCount`、`pictures`、`textBoxCount`、`textBoxes`、`chartCount`、`charts` 和 apply 一律适用。
 
 Word 2010 以后插入文本框、图表、SmartArt 都是 `mc:AlternateContent` 套 `w:txbxContent` 的写法，所以这两条不是边角情况。
 
@@ -176,14 +183,14 @@ xlsx、docx、pptx 共用 `scope` 这个字段名，里面的键按格式分，�
   "action": "inspect",
   "path": "C:\\data\\note.docx",
   "format": "docx",
-      "scope": { "from": 1, "maxParas": 200, "headerFooter": true, "pictures": true, "textBoxes": true, "notes": true, "comments": true }
+      "scope": { "from": 1, "maxParas": 200, "headerFooter": true, "pictures": true, "textBoxes": true, "notes": true, "comments": true, "charts": true }
 }
 ```
 
 | 字段 | 必填 | 含义 |
 | --- | --- | --- |
 | `path` | 是 | 已有文件 |
-| `scope` | 否 | 省略或空对象：返回 `outline`、`paraCount`、`pictureCount`、`textBoxCount`、`footnoteCount`、`endnoteCount`、`commentCount`、`headers`、`footers`、`sections`；正文没有 `paragraphs`；页眉页脚容器不带 `paragraphs`；没有 `footnotes` / `endnotes` / `noteSeparators` / `comments` |
+| `scope` | 否 | 省略或空对象：返回 `outline`、`paraCount`、`pictureCount`、`textBoxCount`、`footnoteCount`、`endnoteCount`、`commentCount`、`chartCount`、`headers`、`footers`、`sections`；正文没有 `paragraphs`；页眉页脚容器不带 `paragraphs`；没有 `footnotes` / `endnotes` / `noteSeparators` / `comments` / `charts` |
 | `scope.from` | 要正文段落时必填 | 从第几段开始，从 1 起，按主文档 `w:p` 顺序 |
 | `scope.maxParas` | 要正文段落时必填 | 本次最多返回多少段，允许范围 `1` 到 `5000` |
 | `scope.headerFooter` | 否 | 为 `true` 时给每个页眉、页脚节点填 `paragraphs`。省略或 `false` 则容器上没有 `paragraphs` |
@@ -192,8 +199,9 @@ xlsx、docx、pptx 共用 `scope` 这个字段名，里面的键按格式分，�
 | `scope.textBoxContent` | 否 | 为 `true` 且该节点已有 `textBoxes` 时，每个框再带全部 `paragraphs`；若同时 `pictures: true`，框内段再带 `pictures`。省略或 `false` 则框上只有计数，没有框内名单。不与 `from` / `maxParas` 抢正文切片 |
 | `scope.notes` | 否 | 为 `true` 时列出全部用户脚注、尾注（`footnotes` / `endnotes`）以及分隔符（`noteSeparators`）。每条用户注带全部注内段落，不再用 `from` / `maxParas` 切。省略或 `false` 则只有两个计数，没有这三份名单 |
 | `scope.comments` | 否 | 为 `true` 时列出全部批注（`comments`）。每条带全部批注内段落，不再用 `from` / `maxParas` 切。省略或 `false` 则只有 `commentCount`，没有名单 |
+| `scope.charts` | 否 | 为 `true` 时列出正文图表（根上 `charts`）以及每个页眉、页脚容器上的 `charts`。不依赖 `from` / `maxParas`。省略或 `false` 则只有 `chartCount`，没有名单。不把 embedding 字节放进树 |
 
-`from` / `maxParas` 只切正文，`headerFooter` 只管页眉页脚段落，`pictures` 只展开图名单，`textBoxes` 只展开框名单，`notes` 只展开脚注尾注，`comments` 只展开批注。六者独立，可只开一边。只要想看正文段落，就必须同时给 `from` 和 `maxParas`。不默认把全文倒出来。正文图与正文框名单只出现在已切出的段落上，不挂到文档根。`from` 超出 `paraCount` 时正文 `paragraphs` 为空数组，`truncated` 为 `false`，不报错。页眉页脚通常很短，给了对应键就返回该部件全部段落、图或框，都不再单独分页。框通常短，给了 `textBoxContent: true` 就返回该框全部段落，不再单独分页。用户注和批注通常不多，给了 `notes: true` 或 `comments: true` 就返回全部名单，每条倒出全部段落，不再单独分页。xlsx / pptx 的 `scope` 里出现 `headerFooter`、`pictures`、`textBoxes`、`textBoxContent`、`notes` 或 `comments` 报 `InvalidField`。只给 `textBoxContent`、不给 `textBoxes` 报 `InvalidField`。
+`from` / `maxParas` 只切正文，`headerFooter` 只管页眉页脚段落，`pictures` 只展开图名单，`textBoxes` 只展开框名单，`notes` 只展开脚注尾注，`comments` 只展开批注，`charts` 只展开图表名单。七者独立，可只开一边。只要想看正文段落，就必须同时给 `from` 和 `maxParas`。不默认把全文倒出来。正文图与正文框名单只出现在已切出的段落上，不挂到文档根。正文图表名单挂在文档根上，不挂在段落上。`from` 超出 `paraCount` 时正文 `paragraphs` 为空数组，`truncated` 为 `false`，不报错。页眉页脚通常很短，给了对应键就返回该部件全部段落、图、框或图表，都不再单独分页。框通常短，给了 `textBoxContent: true` 就返回该框全部段落，不再单独分页。用户注和批注通常不多，给了 `notes: true` 或 `comments: true` 就返回全部名单，每条倒出全部段落，不再单独分页。图表通常不多，给了 `charts: true` 就返回全部名单，每张带全部系列，不再单独分页。xlsx / pptx 的 `scope` 里出现 `headerFooter`、`pictures`、`textBoxes`、`textBoxContent`、`notes`、`comments` 或 `charts` 报 `InvalidField`。只给 `textBoxContent`、不给 `textBoxes` 报 `InvalidField`。
 
 #### pptx 的 scope
 
@@ -301,6 +309,7 @@ xlsx、docx、pptx 共用 `scope` 这个字段名，里面的键按格式分，�
   "footnoteCount": 0,
   "endnoteCount": 0,
   "commentCount": 0,
+  "chartCount": 0,
   "outline": [
     {
       "id": "para:3F2A1B00",
@@ -317,7 +326,8 @@ xlsx、docx、pptx 共用 `scope` 这个字段名，里面的键按格式分，�
       "sections": [1],
       "paraCount": 1,
       "pictureCount": 0,
-      "textBoxCount": 0
+      "textBoxCount": 0,
+      "chartCount": 0
     }
   ],
   "footers": [
@@ -328,6 +338,7 @@ xlsx、docx、pptx 共用 `scope` 这个字段名，里面的键按格式分，�
       "paraCount": 1,
       "pictureCount": 0,
       "textBoxCount": 0,
+      "chartCount": 0,
       "paragraphs": [
         {
           "id": "footer:default:1/para:00FF00AA",
@@ -378,24 +389,26 @@ xlsx、docx、pptx 共用 `scope` 这个字段名，里面的键按格式分，�
 规则：
 
 - 主文档部件（根关系里 `/officeDocument` 那条，常见路径 `/word/document.xml`）始终读。页眉、页脚部件按节引用与继承解析后读。脚注、尾注、批注部件按主文档关系去读（常见 `/word/footnotes.xml`、`/word/endnotes.xml`、`/word/comments.xml`）；没有对应关系则对应计数为 0。`commentsExtended`、`people`、`commentsIds`、`commentsExtensible` 有则读，没有不报错。
-- 文档根字段顺序：`id`、`paraCount`、`pictureCount`、`textBoxCount`、`footnoteCount`、`endnoteCount`、`commentCount`、`outline`、`headers`、`footers`、`sections`，有注名单时再跟 `footnotes`、`endnotes`、`noteSeparators`，有批注名单时再跟 `comments`，有正文切片时再跟 `from`、`truncated`、`paragraphs`。
+- 文档根字段顺序：`id`、`paraCount`、`pictureCount`、`textBoxCount`、`footnoteCount`、`endnoteCount`、`commentCount`、`chartCount`、`outline`、`headers`、`footers`、`sections`，有注名单时再跟 `footnotes`、`endnotes`、`noteSeparators`，有批注名单时再跟 `comments`，有图表名单时再跟 `charts`，有正文切片时再跟 `from`、`truncated`、`paragraphs`。
 - `paraCount` 是主文档里 `w:p` 的总数，含表格单元格里的段落，不含文本框里的段落，始终出现。
 - 文档根上的 `pictureCount` 始终出现，只计主文档里被收入的 DrawingML 图片个数（判定见上文 docx 图 id 那节），不含页眉页脚，也不含框内图、注内图、批注内图。根上不挂正文 `pictures`。
 - 文档根上的 `textBoxCount` 始终出现，只计主文档里被收入的文本框个数，不含页眉页脚。根上不挂正文 `textBoxes`。
 - 文档根上的 `footnoteCount` / `endnoteCount` 始终出现，只计用户注（`normal` 或未写 type），不含分隔符。没有注部件则为 `0`。根上不挂注名单，除非给了 `scope.notes`。
 - 文档根上的 `commentCount` 始终出现，计 `comments.xml` 里全部 `w:comment`（含回复与墨迹）。没有批注部件则为 `0`。根上不挂批注名单，除非给了 `scope.comments`。
+- 文档根上的 `chartCount` 始终出现，只计主文档里被收入的图表个数（判定见上文 docx 图表 id 那节），不含页眉页脚，也不含框内、注内、批注内的图表。没有图表则为 `0`。根上不挂正文 `charts`，除非给了 `scope.charts`。
 - `outline` 始终出现，只含主文档标题段。收入满足下面任一条件的段落：`w:pStyle/@w:val` 为 `Heading1`–`Heading9`（大小写不敏感）或 `标题1`–`标题9`；或者 `w:outlineLvl/@w:val` 为 `0`–`8`。树上 `level` 从 1 到 9。`Heading1` / `标题1` / `outlineLvl=0` 都是 `level: 1`。不是标题的段落不进 `outline`。页眉页脚段落不进 `outline`。
-- `headers`、`footers` 始终出现。没有引用则为空数组。容器字段顺序：`id`、`type`、`sections`、`paraCount`、`pictureCount`、`textBoxCount`，有图名单时再跟 `pictures`，有框名单时再跟 `textBoxes`，有段落时再跟 `paragraphs`。`sections` 是从 1 起的节号数组，按主文档里 `w:sectPr` 的文档顺序。容器上的 `paraCount` 是该部件内 `w:p` 的个数（边界与正文相同）。`pictureCount` 始终出现，是该部件内被收入的 DrawingML 图片个数（不含框内图）。`textBoxCount` 始终出现，是该部件内被收入的文本框个数。
+- `headers`、`footers` 始终出现。没有引用则为空数组。容器字段顺序：`id`、`type`、`sections`、`paraCount`、`pictureCount`、`textBoxCount`、`chartCount`，有图名单时再跟 `pictures`，有框名单时再跟 `textBoxes`，有图表名单时再跟 `charts`，有段落时再跟 `paragraphs`。`sections` 是从 1 起的节号数组，按主文档里 `w:sectPr` 的文档顺序。容器上的 `paraCount` 是该部件内 `w:p` 的个数（边界与正文相同）。`pictureCount` 始终出现，是该部件内被收入的 DrawingML 图片个数（不含框内图）。`textBoxCount` 始终出现，是该部件内被收入的文本框个数。`chartCount` 始终出现，是该部件内被收入的图表个数（不含框内图表）。
 - 文档根上的 `sections` 始终出现。每个 `w:sectPr` 一项，字段顺序：`id`、`index`、`headerDistance`、`footerDistance`、`headerLink`、`footerLink`。`headerDistance` / `footerDistance` 取该节 `w:pgMar` 的 `w:header` / `w:footer`（§17.6.11），单位 twip，JSON 整数。缺 `w:pgMar` 或缺对应属性则为 `null`，不猜默认值。属性存在但不是非负整数报 `XmlBroken`。不返回 `top` / `bottom` / `left` / `right` / `gutter`。
 - `headerLink` / `footerLink` 始终出现，键顺序为 `default`、`even`、`first`。每个键的取值：`true` 表示该类型对本节生效，且本节 `sectPr` 没有对应引用（继承前节；前节也没有部件、规范要求空白时仍是 `true`）；`false` 表示该类型生效，且本节有显式引用；`null` 表示该类型对本节不生效。`even` 是否生效看整篇 `w:evenAndOddHeaders`；`first` 是否生效看本节 `w:titlePg`。第一节的 `default` 只能是 `false`（没有前节可链）。第一节生效的 `even` / `first` 若无引用也是 `false`（空白，不是链接）。两节显式指向同一部件时两边都是 `false`。`headers` / `footers` 仍按部件去重；断开链接后会出现新的容器 id。
 - 省略 `scope`、或没有 `from`/`maxParas` 时，没有正文 `paragraphs`、`from`、`truncated`。
 - 给了 `from` 和 `maxParas` 时，正文 `paragraphs` 按文档顺序切片。范围内段落数超过 `maxParas` 则 `truncated` 为 `true`。切片里每段始终有 `pictureCount` 与 `textBoxCount`。段落字段顺序：`id`、`index`、`style`、`level`（标题才有）、`text`、`stable`、`pictureCount`、`textBoxCount`，有图名单时再跟 `pictures`，有框名单时再跟 `textBoxes`，该段有脚注或尾注引用时再跟 `footnoteRef` / `endnoteRef`（注 id 数组，按引用在该段内的文档顺序），该段落落在批注范围内时再跟 `commentIds`（批注 id 数组，按范围开始在文档中的顺序；同一段重叠多条都列出）。没有引用或范围则没有这些键。已展开的页眉页脚、框内、注内段落同样可以带 `commentIds`。
-- `scope.headerFooter` 为 `true` 时，每个页眉、页脚节点带 `paragraphs`；否则容器上没有该字段。页眉页脚段落节点不带 `pictureCount` / `pictures` / `textBoxCount` / `textBoxes`，图与框仍挂在容器上。
+- `scope.headerFooter` 为 `true` 时，每个页眉、页脚节点带 `paragraphs`；否则容器上没有该字段。页眉页脚段落节点不带 `pictureCount` / `pictures` / `textBoxCount` / `textBoxes` / `chartCount` / `charts`，图、框与图表仍挂在容器上。
 - `scope.pictures` 为 `true` 时，每个页眉、页脚节点带 `pictures`；若同时给了 `from` 与 `maxParas`，切片里每段也带 `pictures`。否则这些节点上都没有该字段。不把媒体字节放进树。每张图的字段顺序：`id`、`docPrId`、`name`、`kind`、`cx`、`cy`、`wrap`、`stable`。
 - `scope.textBoxes` 为 `true` 时，每个页眉、页脚节点带 `textBoxes`；若同时给了 `from` 与 `maxParas`，切片里每段也带 `textBoxes`。否则这些节点上都没有该字段。只给 `textBoxes`、不给 `from` / `maxParas`：只展开页眉页脚容器上的框。每个框的字段顺序：`id`、`docPrId`、`name`、`kind`、`cx`、`cy`、`wrap`、`link`、`paraCount`、`pictureCount`、`stable`，有框内段名单时再跟 `paragraphs`，有框内图名单时再跟 `pictures`。
 - `scope.notes` 为 `true` 时，根上带 `footnotes`、`endnotes`、`noteSeparators`。没有用户注时前两个为空数组；没有分隔符时 `noteSeparators` 为空数组。用户注按部件内文档顺序。每条用户注字段顺序：`id`、`noteId`、`type`、`host`、`paraCount`、`pictureCount`，有图名单时再跟 `pictures`，然后 `paragraphs`。`noteId` 是 `w:id` 原文。`type` 恒为 `normal`。`host` 是引用所在段落 id 的数组：在主文档、页眉、页脚和文本框里找 `w:footnoteReference` / `w:endnoteReference`，按文档顺序，id 规则与该段落本身相同。一条注被引用多次则 `host` 有多项；没有任何引用则为 `[]`，注仍列出。`paraCount` / `pictureCount` 只计该注元素内、遇 `w:txbxContent` 停住之后的段落与图，规则与正文相同。注内段落字段顺序与正文段落相同，id 带注前缀。注内图的字段顺序与宿主图相同。注内文本框本期不进树、不接受 apply。
 - `noteSeparators` 每项字段顺序：`id`、`kind`、`type`、`noteId`。`kind` 为 `footnote` 或 `endnote`。`type` 为 `separator`、`continuationSeparator` 或 `continuationNotice`。对 `noteSeparators` 里的 id 发 apply 报 `InvalidId`。
 - `scope.comments` 为 `true` 时，根上带 `comments`。没有批注时为空数组。按 `comments.xml` 里 `w:comment` 的文档顺序。每条字段顺序：`id`、`commentId`、`author`、`initials`、`date`、`done`、`parent`、`kind`、`start`、`end`、`paraCount`、`pictureCount`，有图名单时再跟 `pictures`，然后 `paragraphs`。`commentId` 是 `w:id` 原文。`author` / `initials` / `date` 取对应属性原文，缺则为 `null`。`done` 取 `commentEx/@done`：`1` / `true` / `on` 为 `true`，其余或没有 `commentEx` 为 `false`。`parent` 用 `paraIdParent` 对上父批注最后一段的 `w14:paraId`，再写成 `comment:{id}`；对不上或没有则为 `null`。根批注的 `parent` 为 `null`。`kind` 为 `normal`；批注内出现 `inkml:ink` 或等价墨迹标记则为 `ink`。`start` / `end` 是范围落在的段落 id（正文、页眉、页脚、框内或注内，规则与该段落本身相同）。从配对的 `commentRangeStart` 走到 `commentRangeEnd`，路径上经过的每个 `w:p` 都算在范围内；`start` 是第一个，`end` 是最后一个。回复有自己的范围标记时按自己的标记算；没有时沿用线程根的 `start` / `end`，并出现在那些段的 `commentIds` 里。找不到对应段（残缺标记）则该侧为 `null`，该批注仍列出，不报 `XmlBroken`。`paraCount` / `pictureCount` 只计该 `w:comment` 内、遇 `w:txbxContent` 停住之后的段落与图，规则与正文相同。批注内段落字段顺序与正文段落相同，id 带批注前缀。批注内图的字段顺序与宿主图相同。批注内文本框本期不进树、不接受 apply。
+- `scope.charts` 为 `true` 时，根上带 `charts`（正文），每个页眉、页脚容器带 `charts`。没有图表时为空数组。正文按主文档段落文档顺序，同一段内按 drawing 顺序。每张字段顺序：`id`、`docPrId`、`name`、`kind`、`cx`、`cy`、`wrap`、`type`、`title`、`catAxisTitle`、`valAxisTitle`、`series`、`legend`、`dataLabels`、`flags`、`stable`。`kind` / `cx` / `cy` / `wrap` / `docPrId` / `name` / `stable` 规则与图相同。`type` 为 `bar`、`col`、`line`、`pie`、`area`、`scatter`、`combo`、`chartex` 或 `other`。`barChart` / `bar3DChart` 看 `c:barDir`：`bar` 为 `bar`，`col` 或缺省为 `col`。`lineChart` / `line3DChart` 为 `line`，`pieChart` / `pie3DChart` 为 `pie`，`areaChart` / `area3DChart` 为 `area`，`scatterChart` 为 `scatter`。`plotArea` 里出现两种及以上系列包裹（例如 `barChart` 加 `lineChart`）则为 `combo`。其余（圆环、雷达、气泡、股价、曲面、chartex 以外的扩展）为 `other`。`title` 取 `c:title` 可见文本（`c:tx` 的 `c:rich` 里 `a:t` 拼接，或 `c:strRef` 的 cache）；没有标题、或 `c:autoTitleDeleted/@val` 为真则为 `null`。`catAxisTitle` / `valAxisTitle` 取主分类轴、主数值轴的 `c:title`，规则与图表标题相同；没有则为 `null`。散点图的横轴当分类轴。`series` 按 `c:ser` 顺序。每条字段顺序：`id`、`index`、`name`、`categories`、`values`，cache 与 embedding 不一致时再跟 `cacheStale: true`。`index` 是从 0 起的出现序号。`name` 取系列 `c:tx` 的 cache 或字面量，缺则为 `null`。`categories` / `values` 取 `c:cat` / `c:val`（散点图为 `c:xVal` / `c:yVal`）的 cache 或字面量；没有 cache 再读 embedding 里公式指向的单元格。全是数字则 JSON 数字，否则字符串。没有数据则为 `[]`。cache 与 embedding 都有且对不上时以 embedding 为准，并标 `cacheStale`。`legend` 为 `{ "show": bool, "pos": ... }`。没有 `c:legend` 则 `show` 为 `false`、`pos` 为 `null`；有则 `show` 为 `true`，`pos` 取 `c:legendPos/@val`（`b` / `t` / `l` / `r` / `tr`），缺属性则为 `null`。`dataLabels` 为 `{ "show": bool }`：`plotArea` 或任一系列带 `c:dLbls`，且其中至少一个 `c:showVal` / `c:showCatName` / `c:showSerName` / `c:showPercent` 为 `1` / `true` / `on` 时为 `true`，否则 `false`。`flags` 是字符串数组，可能含 `secondaryAxis`（出现 `c:overlay` 为 1 的轴，或系列 `c:axId` 指向次轴）、`trendline`（`c:trendline`）、`errorBars`（`c:errBars`）、`pivot`（`c:pivotSource` 或等价透视引用）。没有这些则为 `[]`。不把图表画成图，不读图表的渲染缓存图。xlsx / pptx 的 `scope` 里出现 `charts` 报 `InvalidField`。
 - `link` 始终出现。未链接则为 `{ "prev": null, "next": null }`。链接时 `prev` / `next` 是相邻框的 id，没有那一端则为 `null`。
 - 框内 `paragraphs` 的字段顺序与正文段落相同（含 `pictureCount`）。框内图的字段顺序与宿主图相同，id 带框前缀。
 - `kind`：`inline`（`wp:inline`）或 `anchor`（`wp:anchor`）。
@@ -562,7 +575,7 @@ xlsx、docx、pptx 共用 `scope` 这个字段名，里面的键按格式分，�
 
 create 写出 Transitional 最小包，见 [opc.md](opc.md)。每个 `w:p` 都带唯一的 `w14:paraId` 和 `w14:textId`（取值大于 0、小于 `0x80000000`，MS-DOCX §2.6.2.3 / §2.6.2.4），并在根元素上把 `w14` 列入 `mc:Ignorable`。这样随后 inspect 得到的 id 都是 `para:{paraId}`，`stable` 为 `true`。图的 `wp:docPr/@id` 在该部件内从 `1` 起递增，与 `insertPicture` 同一套写入。
 
-标题段写出 `<w:pStyle w:val="Heading1"/>` 这类引用，样式定义放在 `/word/styles.xml`。同时写 `/word/settings.xml`，含 `<w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="15"/>`（MS-DOCX §2.3.5）。缺这项时 Word 按兼容模式打开（默认 12）。`textBoxes` 写成浮动 `square` 的 `wps:wsp`，与 `insertTextBox` 同一套最小 Choice。给了 `headers` / `footers` 时写 `/word/header1.xml` 或 `/word/footer1.xml`，并在第一节 `sectPr` 上挂 `default` 引用。不要生成多节、目录、修订、脚注、尾注、批注。默认页眉页脚带框不在本期 create。不写入 `titlePg` / `evenAndOddHeaders`。
+标题段写出 `<w:pStyle w:val="Heading1"/>` 这类引用，样式定义放在 `/word/styles.xml`。同时写 `/word/settings.xml`，含 `<w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="15"/>`（MS-DOCX §2.3.5）。缺这项时 Word 按兼容模式打开（默认 12）。`textBoxes` 写成浮动 `square` 的 `wps:wsp`，与 `insertTextBox` 同一套最小 Choice。给了 `headers` / `footers` 时写 `/word/header1.xml` 或 `/word/footer1.xml`，并在第一节 `sectPr` 上挂 `default` 引用。不要生成多节、目录、修订、脚注、尾注、批注、图表。默认页眉页脚带框不在本期 create。不写入 `titlePg` / `evenAndOddHeaders`。
 
 ### pptx
 
@@ -650,7 +663,7 @@ create 与 apply 落盘时先写入目标同目录的临时文件，再改名为
 | `value` | 与 create 相同。`null` 表示清空该格的值和公式 |
 | `formula` | 以 `=` 开头。不能与 `value` 同时出现 |
 
-不认识的 `op` 报 `UnsupportedOp`，不要忽略。xlsx 只认 `setCell`。docx 认 `setParaText`、`setHeaderFooterDistance`、`setHeaderFooterLink`、图片 op、文本框 op、`insertPara` / `deletePara`、脚注尾注 op（`insertFootnote`、`insertEndnote`、`deleteFootnote`、`deleteEndnote`、`setNoteNumbering`）、以及批注 op（`insertComment`、`deleteComment`、`replyComment`、`setCommentText`、`setCommentMeta`、`setCommentDone`）。pptx 只认 `setShapeText`。对不上格式的 op（例如对 pptx 发 `setCell` / `setParaText`，或对 xlsx / pptx 发页眉、图片、文本框、注或批注的 op）报 `InvalidField`。
+不认识的 `op` 报 `UnsupportedOp`，不要忽略。xlsx 只认 `setCell`。docx 认 `setParaText`、`setHeaderFooterDistance`、`setHeaderFooterLink`、图片 op、文本框 op、`insertPara` / `deletePara`、脚注尾注 op（`insertFootnote`、`insertEndnote`、`deleteFootnote`、`deleteEndnote`、`setNoteNumbering`）、批注 op（`insertComment`、`deleteComment`、`replyComment`、`setCommentText`、`setCommentMeta`、`setCommentDone`）、以及图表 op（`insertChart`、`deleteChart`、`setChartTitle`、`setChartSeries`、`addChartSeries`、`deleteChartSeries`、`setChartType`、`setChartAxisTitle`、`setChartLegend`、`setChartDataLabels`、`setChartSize`、`setChartWrap`）。pptx 只认 `setShapeText`。对不上格式的 op（例如对 pptx 发 `setCell` / `setParaText`，或对 xlsx / pptx 发页眉、图片、文本框、注、批注或图表的 op）报 `InvalidField`。
 
 空单元格：目标格子在 XML 里还不存在时，`setCell` 按需插入 `<row>` 和 `<c>`，插在正确的行列顺序上。找不到工作表才报 `IdNotFound`。
 
@@ -1091,9 +1104,132 @@ create 与 apply 落盘时先写入目标同目录的临时文件，再改名为
 
 只改被点名这一条的 `done`，不自动改回复。没有 `commentsExtended` 则按 Word 16 最小集新建，并为文件里每条批注补 `commentEx`（默认 `done="0"`），再改被点名的那条。父批注最后一段没有 `w14:paraId` 时报 `InvalidField`。xlsx / pptx 上发此 op 报 `InvalidField`。
 
+### 图表 op 的共同限制
+
+`type` 为 `combo`、`other` 或 `chartex`，或 `flags` 含 `secondaryAxis`、`trendline`、`errorBars`、`pivot` 时，除 `deleteChart`、`setChartSize`、`setChartWrap` 外一律报 `NotImplemented`，不写文件。xlsx / pptx 上发任何图表 op 报 `InvalidField`。
+
+改系列数据时必须同时改 chart 部件里的 cache（`c:numCache` / `c:strCache` / `c:numLit` / `c:strLit`）以及 embedding 工作簿里公式指向的单元格。没有 embedding 则只改字面量。不在库里求值公式，不改 `c:f` 里工作表名以外的结构，除非新数据的点数与公式区域长度不同：那时把公式区域扩到或收到新长度，并改 embedding 里对应格子。未点名的系列不动。
+
+### setChartTitle
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"setChartTitle"` |
+| `id` | 图表 id |
+| `title` | 字符串。空串表示去掉标题（写 `c:autoTitleDeleted val="1"`，去掉 `c:title`） |
+
+找不到该图报表 `IdNotFound`。id 不是图表 id 报 `InvalidId`。
+
+### setChartSeries
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"setChartSeries"` |
+| `id` | 系列 id，例如 `para:3F2A1B00/chart:7/series:0` |
+| `name` | 可选。系列名 |
+| `categories` | 可选。分类数组，元素为字符串或数字 |
+| `values` | 可选。数值数组，元素为字符串或数字 |
+
+`name`、`categories`、`values` 至少给一个，否则报 `InvalidField`。只给的字段改，其余保留。`categories` 与 `values` 都给时长度可以不同。找不到该系列报 `IdNotFound`。id 不是系列 id 报 `InvalidId`。
+
+### addChartSeries
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"addChartSeries"` |
+| `id` | 图表 id |
+| `name` | 可选。省略当作 `"系列{n}"`，`n` 为从 1 起的新序号 |
+| `categories` | 可选。省略则抄已有第一条系列的分类；图表还没有系列且仍省略，报 `InvalidField` |
+| `values` | 必须。非空数组 |
+
+在 chart 部件末尾追加一条 `c:ser`，`c:idx` / `c:order` 取尚未占用的最小值。样式能从最后一条系列抄则抄，抄不了就用最小默认。有 embedding 则在工作表右侧追加一列。id 不是图表 id 报 `InvalidId`。
+
+### deleteChartSeries
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"deleteChartSeries"` |
+| `id` | 系列 id |
+
+删掉该 `c:ser`，并同步 embedding 里对应列（若能从公式定位）。删完后一条都不剩时报 `InvalidField`（要整张去掉请用 `deleteChart`）。找不到报 `IdNotFound`。id 不是系列 id 报 `InvalidId`。
+
+### setChartType
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"setChartType"` |
+| `id` | 图表 id |
+| `type` | `bar`、`col`、`line`、`pie`、`area` 或 `scatter` |
+
+不认识的枚举报 `InvalidField`。只改系列的包裹元素（`c:barChart` 等）和 `c:barDir`。`bar` 与 `col` 只改 `barDir`。`bar` / `col` / `line` / `area` 互换时留下 `c:ser`。转成 `pie` 时必须恰好一条系列，否则 `NotImplemented`。与 `scatter` 互转：分类当 `xVal`、数值当 `yVal`，或反过来；系列结构对不上则 `NotImplemented`。不要写出 Word 要修复的包。id 不是图表 id 报 `InvalidId`。找不到报 `IdNotFound`。
+
+### setChartAxisTitle
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"setChartAxisTitle"` |
+| `id` | 图表 id |
+| `axis` | `cat`（主分类轴 / 散点图横轴）或 `val`（主数值轴） |
+| `title` | 字符串。空串表示去掉该轴标题 |
+
+`axis` 不认识报 `InvalidField`。找不到对应主轴报 `InvalidField`。id 不是图表 id 报 `InvalidId`。找不到图报表 `IdNotFound`。
+
+### setChartLegend
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"setChartLegend"` |
+| `id` | 图表 id |
+| `show` | 布尔。`false` 时去掉 `c:legend` |
+| `pos` | 可选。`b`、`t`、`l`、`r`、`tr`。`show` 为 `true` 且省略时：已有图例则保留原位置，没有则写 `r` |
+
+`show` 为 `false` 时忽略 `pos`。不认识的 `pos` 报 `InvalidField`。id 不是图表 id 报 `InvalidId`。
+
+### setChartDataLabels
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"setChartDataLabels"` |
+| `id` | 图表 id |
+| `show` | 布尔 |
+
+`true`：在 `plotArea` 写 `c:dLbls`，`c:showVal` 为 `1`，不调标签坐标。`false`：去掉 `plotArea` 与各系列上的 `c:dLbls`。id 不是图表 id 报 `InvalidId`。
+
+### insertChart
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"insertChart"` |
+| `id` | 宿主段落 id：正文或页眉页脚段落 |
+| `type` | `bar`、`col`、`line`、`pie`、`area` 或 `scatter` |
+| `title` | 可选。图表标题 |
+| `series` | 必须。非空数组。每项可含 `name`、`categories`、`values`；`values` 必填且非空 |
+| `kind` | 可选。`inline` 或 `anchor`，缺省 `anchor` |
+| `wrap` | 可选。浮动时的绕排，缺省 `square`。行内必须省略或为 `null` |
+| `cx` / `cy` | 可选。EMU，正整数。都省略则用 `5486400` × `3200400`。只给一个报 `InvalidField` |
+
+在该段末插入 `w:drawing`，默认浮动。新建 `/word/charts/chartN.xml`（`N` 从 1 起尚未占用）、chart 的 `.rels`、一份最小 embedding xlsx（工作表名 `Sheet1`，分类从 `A2` 起，系列名在第 1 行，数值从 `B2` 起向右），以及主文档或页眉页脚关系、`[Content_Types].xml` Override。chart 的 Content Type 为 `application/vnd.openxmlformats-officedocument.drawingml.chart+xml`。关系 Type 为 `http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart`。embedding 关系 Type 为 `http://schemas.openxmlformats.org/officeDocument/2006/relationships/package`。`wp:docPr/@id` 取该部件已有 `docPr` 的最大整数加 1，至少为 1。不强制写 chart colors / style 部件，也不强制套 `mc:AlternateContent`。`type` 不认识或 `series` 为空报 `InvalidField`。`pie` 只允许恰好一条系列，否则报 `InvalidField`。对图 id、图表 id、系列 id、容器 id、框 id、注 id、批注 id 或 `section:{n}` 发此 op 报 `InvalidId`。找不到段落报 `IdNotFound`。
+
+### deleteChart
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"deleteChart"` |
+| `id` | 图表 id |
+
+删掉对应 `w:drawing`。若在 `mc:AlternateContent` 的 Choice 里，整段 `AlternateContent` 删掉。所在 `w:r` 若删完后只剩 `w:rPr` 或空，把该 run 也删掉。重新解析关系之后，若该 chart 部件、专属 colors / style、embedding 再无人引用，删掉这些部件、关系条目和对应内容类型。找不到报 `IdNotFound`。id 不是图表 id 报 `InvalidId`。
+
+### setChartSize
+
+字段与 `setPictureSize` 相同，`id` 为图表 id。改宿主 `wp:extent`（以及 `a:ext` 若有），规则与图相同。
+
+### setChartWrap
+
+字段与 `setPictureWrap` 相同，`id` 为图表 id。改宿主 `wp:inline` / `wp:anchor` 与绕排，规则与图相同。
+
 ### 改动范围（docx）
 
-允许变脏的部件：主文档 XML（通常是 `/word/document.xml`）及其 `.rels`，被 `setParaText`、图片 op 或文本框 op 点名的页眉、页脚部件及其 `.rels`，`setHeaderFooterLink` 改到的主文档关系、`[Content_Types].xml`、新建或删除的 header/footer 部件及其 `.rels`，脚注 / 尾注部件及其 `.rels`，批注部件 `/word/comments.xml`、`commentsExtended.xml`、`people.xml`，以及文件里已有的 `commentsIds.xml` / `commentsExtensible.xml`，`setNoteNumbering` 在整篇上改到的 `settings.xml` 与主文档（各节 `sectPr`），以及新媒体或被删的 `/word/media/…`。`setHeaderFooterDistance` 只脏主文档。正文图片 op 与文本框 op 脏主文档与主文档 `.rels`。一次 `ops` 可以混用 `setParaText`、`setHeaderFooterDistance`、`setHeaderFooterLink`、图片 op、文本框 op、脚注尾注 op 与批注 op。`styles.xml`、未点名的页眉页脚、主题、编号定义（`numbering.xml`）一律原样写回。未点名的 `settings.xml` 也原样写回。`setNoteNumbering` 只点名某一节时只脏主文档，不改 `settings.xml`。`replyComment` 会脏出现父批注范围标记的宿主部件（常见是主文档）。只改批注文本、元数据或完成标记时，未出现范围标记的宿主部件（常见是主文档）原字节写回。
+允许变脏的部件：主文档 XML（通常是 `/word/document.xml`）及其 `.rels`，被 `setParaText`、图片 op、文本框 op 或图表 op 点名的页眉、页脚部件及其 `.rels`，`setHeaderFooterLink` 改到的主文档关系、`[Content_Types].xml`、新建或删除的 header/footer 部件及其 `.rels`，脚注 / 尾注部件及其 `.rels`，批注部件 `/word/comments.xml`、`commentsExtended.xml`、`people.xml`，以及文件里已有的 `commentsIds.xml` / `commentsExtensible.xml`，图表部件 `/word/charts/…` 及其 `.rels`，embedding `/word/embeddings/…`，`setNoteNumbering` 在整篇上改到的 `settings.xml` 与主文档（各节 `sectPr`），以及新媒体或被删的 `/word/media/…`。`setHeaderFooterDistance` 只脏主文档。正文图片 op、文本框 op 与图表 op 脏主文档与主文档 `.rels`。一次 `ops` 可以混用 `setParaText`、`setHeaderFooterDistance`、`setHeaderFooterLink`、图片 op、文本框 op、脚注尾注 op、批注 op 与图表 op。`styles.xml`、未点名的页眉页脚、主题、编号定义（`numbering.xml`）一律原样写回。未点名的 `settings.xml` 也原样写回。`setNoteNumbering` 只点名某一节时只脏主文档，不改 `settings.xml`。`replyComment` 会脏出现父批注范围标记的宿主部件（常见是主文档）。只改批注文本、元数据或完成标记时，未出现范围标记的宿主部件（常见是主文档）原字节写回。只改图表 cache / 标题 / 图例、且宿主 drawing 未动时，未点名的正文段落字节按「drawing 未动」验收。
 
 被改部件同样整份重序列化，保留程度与 xlsx 工作表相同：元素与属性顺序、未知命名空间保留；注释、处理指令、DOCTYPE 会丢。
 
@@ -1163,6 +1299,33 @@ create 与 apply 落盘时先写入目标同目录的临时文件，再改名为
 写出的是该媒体部件的原字节。`contentType` 取自 `[Content_Types].xml` 对该部件的 Default 或 Override；都没有则省略该字段。扩展名由调用方自己定，库不按类型改名。
 
 xlsx / pptx 本期报 `InvalidField`。以后若要导出 pptx 的 `p:pic`，另开，不改本动作字段名。文本框里的图用框内段落上的图 id，同一动作能导出。脚注、尾注里的图用注内段落上的图 id，同一动作能导出。批注里的图用批注内段落上的图 id，同一动作能导出。嵌入图表的工作簿另走 `exportChartData`，不在本动作。
+
+成功时 stdout 见 [errors.md](errors.md)。源包不写回。
+
+## exportChartData
+
+按图表 id 把 embedding 工作簿原字节写到本地。不读进 inspect 树，不转码。
+
+```json
+{
+  "schemaVersion": 1,
+  "action": "exportChartData",
+  "path": "C:\\data\\note.docx",
+  "id": "para:3F2A1B00/chart:7",
+  "output": "C:\\out\\chart.xlsx"
+}
+```
+
+| 字段 | 必填 | 含义 |
+| --- | --- | --- |
+| `path` | 是 | 源 docx |
+| `id` | 是 | 图表 id，与 inspect 的 `charts[].id` 相同 |
+| `output` | 否 | 本地目标路径。省略时用命令行 `--output`。两者都缺报 `MissingField`。不得默认写成源 `path` |
+| `format` | 否 | 可省略，从 `path` 扩展名推断 |
+
+`id` 必须是图表 id。对系列 id、段落 id、图 id 报 `InvalidId`。找不到该图报表 `IdNotFound`。没有 embedding 报 `OpcPartMissing`。关系指向外部资源同样报 `OpcPartMissing`，不下载 http。xlsx / pptx 本期报 `InvalidField`。
+
+写出的是 embedding 部件的原字节。`contentType` 取自 `[Content_Types].xml`；没有则省略。
 
 成功时 stdout 见 [errors.md](errors.md)。源包不写回。
 

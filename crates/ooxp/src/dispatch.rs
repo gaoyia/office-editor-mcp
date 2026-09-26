@@ -17,6 +17,7 @@ pub fn run(input_json: &str, cli_output: Option<&Path>) -> Result<RunOutput, Err
         Action::Create => run_create(&req, cli_output),
         Action::Apply => run_apply(&req, cli_output),
         Action::ExportMedia => run_export_media(&req, cli_output),
+        Action::ExportChartData => run_export_chart_data(&req, cli_output),
     }
 }
 
@@ -269,6 +270,65 @@ fn run_export_media(req: &Request, cli_output: Option<&Path>) -> Result<RunOutpu
             ErrorKind::ActionNotForFormat {
                 format: "pptx".into(),
                 action: "exportMedia".into(),
+            },
+            "action",
+        )),
+    }
+}
+
+fn run_export_chart_data(req: &Request, cli_output: Option<&Path>) -> Result<RunOutput, Error> {
+    deny_unknown(
+        &req.obj,
+        &[
+            "schemaVersion",
+            "action",
+            "path",
+            "format",
+            "id",
+            "output",
+            "locale",
+        ],
+    )?;
+    let path = str_field(&req.obj, "path")?;
+    let format = req.obj.get("format").and_then(serde_json::Value::as_str);
+    let fmt = infer_format(path, format)?;
+    let id = str_field(&req.obj, "id")?;
+    let out = req
+        .obj
+        .get("output")
+        .and_then(serde_json::Value::as_str)
+        .map(PathBuf::from)
+        .or_else(|| cli_output.map(Path::to_path_buf))
+        .ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::MissingField {
+                    field: "output".into(),
+                },
+                "output",
+            )
+        })?;
+    match fmt {
+        Format::Docx => {
+            let bytes = fs::read(path).map_err(|e| io_path(e, PathBuf::from(path)))?;
+            let exported = docx::export_chart_data(&bytes, id)?;
+            write_atomic(&out, &exported.bytes)?;
+            Ok(RunOutput::Written {
+                path: out,
+                ops_applied: None,
+                content_type: exported.content_type,
+            })
+        }
+        Format::Xlsx => Err(Error::with_path(
+            ErrorKind::ActionNotForFormat {
+                format: "xlsx".into(),
+                action: "exportChartData".into(),
+            },
+            "action",
+        )),
+        Format::Pptx => Err(Error::with_path(
+            ErrorKind::ActionNotForFormat {
+                format: "pptx".into(),
+                action: "exportChartData".into(),
             },
             "action",
         )),

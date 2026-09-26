@@ -673,3 +673,99 @@ function Ensure-DocxWordCommentsSource([switch]$Force) {
     Write-Log "saved word comments source $path"
     return $path
 }
+
+function Ensure-DocxWordChartsSource([switch]$Force) {
+    $path = Get-OutPath 'docx-word-charts-source.docx'
+    if ((Test-Path $path) -and -not $Force) { return $path }
+
+    $tmpDir = Join-Path $env:TEMP 'ooxp-office'
+    New-Item -ItemType Directory -Force -Path $tmpDir | Out-Null
+    $skel = Join-Path $tmpDir 'docx-word-charts-skel.docx'
+    $S = $global:OoxpStrings
+    Invoke-OoxpRequest @{
+        schemaVersion = 1; action = 'create'
+        path = $skel.Replace('\', '/'); format = 'docx'
+        document = @{
+            paragraphs = @(
+                @{ style = 'Heading1'; text = $S.chapter1 }
+                @{ text = $S.para2src }
+                @{ text = $S.para3keep }
+            )
+        }
+    } 'docx-charts-skel-create' | Out-Null
+
+    $word = Ensure-MsWord (Ensure-DocxCreate)
+    Close-WordDocByPath $word $skel
+    $doc = Open-WordDoc $word $skel
+    $xlColumnClustered = 51
+    $xlLine = 4
+
+    function Add-WordChart($document, [int]$paraIndex, [int]$chartType) {
+        $p = $document.Paragraphs.Item($paraIndex)
+        $rng = $p.Range
+        $ish = $null
+        $before = [int]$document.InlineShapes.Count
+        try {
+            $ish = $document.InlineShapes.AddChart2(-1, $chartType, $rng)
+        } catch {
+            Write-Log ("AddChart2 报错：" + $_.Exception.Message)
+            if ([int]$document.InlineShapes.Count -gt $before) {
+                $ish = $document.InlineShapes.Item($before + 1)
+            } else {
+                $ish = $document.InlineShapes.AddChart($chartType, $rng)
+            }
+        }
+        Release-Com $rng
+        Release-Com $p
+        return $ish
+    }
+
+    $ish1 = Add-WordChart $doc 2 $xlColumnClustered
+    Start-Sleep -Seconds 1
+    $ch1 = $ish1.Chart
+    try {
+        $ch1.HasTitle = $true
+        $ch1.ChartTitle.Text = $S.chartTitle
+    } catch {
+        Write-Log ("设柱形图标题失败：" + $_.Exception.Message)
+    }
+    Release-Com $ch1
+    Release-Com $ish1
+
+    $nPara = [int]$doc.Paragraphs.Count
+    $comboPara = if ($nPara -ge 3) { 3 } else { $nPara }
+    $ish2 = Add-WordChart $doc $comboPara $xlColumnClustered
+    Start-Sleep -Seconds 1
+    $ch2 = $ish2.Chart
+    $converted = $false
+    try {
+        $s2 = $ch2.SeriesCollection(2)
+        $s2.ChartType = $xlLine
+        $converted = $true
+        Release-Com $s2
+        Write-Log '已把第二系列改成折线（SeriesCollection）'
+    } catch {
+        Write-Log ("SeriesCollection(2) 失败：" + $_.Exception.Message)
+        try {
+            $s2 = $ch2.FullSeriesCollection(2)
+            $s2.ChartType = $xlLine
+            $converted = $true
+            Release-Com $s2
+            Write-Log '已把第二系列改成折线（FullSeriesCollection）'
+        } catch {
+            Write-Log ("FullSeriesCollection(2) 失败：" + $_.Exception.Message)
+        }
+    }
+    if (-not $converted) {
+        Write-Log '组合图样例没转成 combo，Ch7 可能失败'
+    }
+    Release-Com $ch2
+    Release-Com $ish2
+
+    Write-Log 'word Save() 原地覆盖 TEMP 里的图表样例'
+    $doc.Save()
+    Close-WordDoc $doc
+    Copy-Item -Force $skel $path
+    Write-Log "saved word charts source $path"
+    return $path
+}

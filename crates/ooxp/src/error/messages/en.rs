@@ -128,6 +128,21 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::CommentContainer => {
                 "Comment id must include /para:… (that id alone is not a paragraph)".into()
             },
+            IdReason::ChartPrefix => {
+                "Chart id must be a paragraph id plus /chart:…".into()
+            }
+            IdReason::ChartContainer => {
+                "Paragraph id must include /chart:… (that id alone is not a chart)".into()
+            }
+            IdReason::ChartIndexNotInt => {
+                "chart:index must be followed by a positive integer".into()
+            }
+            IdReason::ChartIndexFromOne => "chart:index starts at 1".into(),
+            IdReason::SeriesPrefix => "Series id must be a chart id plus /series:n".into(),
+            IdReason::SeriesIndexNotInt => "series must be followed by an integer starting at 0".into(),
+            IdReason::InsertChartNeedsPara => {
+                "insertChart id must be a body or header/footer paragraph id".into()
+            },
         },
         ErrorKind::SheetNotFound { name } => format!("Sheet not found: {name}"),
         ErrorKind::ParaNotFound { id } => format!("Paragraph not found: {id}"),
@@ -173,6 +188,31 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         }
         ErrorKind::InkComment { id } => {
             format!("Ink comments cannot be edited except deleteComment: {id}")
+        }
+        ErrorKind::ChartNotFound { id } => format!("Chart not found: {id}"),
+        ErrorKind::ChartSeriesNotFound { id } => format!("Chart series not found: {id}"),
+        ErrorKind::NeedChartSeriesField => {
+            "setChartSeries needs at least one of name, categories, or values".into()
+        }
+        ErrorKind::LastChartSeries => {
+            "Cannot delete the last series in a chart; use deleteChart to remove the chart".into()
+        }
+        ErrorKind::RestrictedChart { id } => {
+            format!("Combo, extended, secondary-axis, trendline, error-bar, or pivot charts cannot be edited except delete and size/wrap: {id}")
+        }
+        ErrorKind::InvalidChartType => {
+            "type must be bar, col, line, pie, area, or scatter".into()
+        }
+        ErrorKind::InvalidChartAxis => {
+            "axis must be cat or val, and the chart must have that primary axis".into()
+        }
+        ErrorKind::InvalidLegendPos => "pos must be b, t, l, r, or tr".into(),
+        ErrorKind::PieNeedsOneSeries => "A pie chart must have exactly one series".into(),
+        ErrorKind::ChartTypeNotConvertible => {
+            "This chart type cannot be converted without loss".into()
+        }
+        ErrorKind::NeedChartCategories => {
+            "addChartSeries with omitted categories needs an existing series to copy from".into()
         }
         ErrorKind::TextBoxLinkCrossPart => {
             "Text boxes in a link chain must be in the same part".into()

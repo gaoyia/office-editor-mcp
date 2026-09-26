@@ -81,6 +81,17 @@ pub(crate) enum IdReason {
     CommentPrefix,
     /// 批注容器 id，缺少 /para:…
     CommentContainer,
+    /// 图表 id 必须是 {段落}/chart:…
+    ChartPrefix,
+    /// 段落 id，缺少 /chart:…
+    ChartContainer,
+    ChartIndexNotInt,
+    ChartIndexFromOne,
+    /// 系列 id 必须是 {图表}/series:{n}
+    SeriesPrefix,
+    SeriesIndexNotInt,
+    /// insertChart 必须用正文或页眉页脚段落 id
+    InsertChartNeedsPara,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -231,6 +242,19 @@ define_error_kinds! {
     CommentRangeCrossPart => vec![Self::CommentRangeCrossPart],
     CommentRangeReversed => vec![Self::CommentRangeReversed],
     InkComment { id: String } => vec![Self::InkComment { id: "comment:0".into() }],
+    ChartNotFound { id: String } => vec![Self::ChartNotFound { id: "para:1/chart:1".into() }],
+    ChartSeriesNotFound { id: String } => {
+        vec![Self::ChartSeriesNotFound { id: "para:1/chart:1/series:0".into() }]
+    },
+    NeedChartSeriesField => vec![Self::NeedChartSeriesField],
+    LastChartSeries => vec![Self::LastChartSeries],
+    RestrictedChart { id: String } => vec![Self::RestrictedChart { id: "para:1/chart:1".into() }],
+    InvalidChartType => vec![Self::InvalidChartType],
+    InvalidChartAxis => vec![Self::InvalidChartAxis],
+    InvalidLegendPos => vec![Self::InvalidLegendPos],
+    PieNeedsOneSeries => vec![Self::PieNeedsOneSeries],
+    ChartTypeNotConvertible => vec![Self::ChartTypeNotConvertible],
+    NeedChartCategories => vec![Self::NeedChartCategories],
     TextBoxLinkCrossPart => vec![Self::TextBoxLinkCrossPart],
     InvalidHexColor => vec![Self::InvalidHexColor],
     InvalidTextBoxDirection => vec![Self::InvalidTextBoxDirection],
@@ -341,6 +365,13 @@ impl IdReason {
             Self::NoteSep,
             Self::CommentPrefix,
             Self::CommentContainer,
+            Self::ChartPrefix,
+            Self::ChartContainer,
+            Self::ChartIndexNotInt,
+            Self::ChartIndexFromOne,
+            Self::SeriesPrefix,
+            Self::SeriesIndexNotInt,
+            Self::InsertChartNeedsPara,
         ]
     }
 }
@@ -456,6 +487,13 @@ impl ErrorKind {
             | Self::NeedCommentMetaField
             | Self::CommentRangeCrossPart
             | Self::CommentRangeReversed
+            | Self::NeedChartSeriesField
+            | Self::LastChartSeries
+            | Self::InvalidChartType
+            | Self::InvalidChartAxis
+            | Self::InvalidLegendPos
+            | Self::PieNeedsOneSeries
+            | Self::NeedChartCategories
             | Self::TextBoxLinkCrossPart
             | Self::InvalidHexColor
             | Self::InvalidTextBoxDirection => InvalidField,
@@ -471,9 +509,14 @@ impl ErrorKind {
             | Self::PictureNotFound { .. }
             | Self::TextBoxNotFound { .. }
             | Self::NoteNotFound { .. }
-            | Self::CommentNotFound { .. } => IdNotFound,
+            | Self::CommentNotFound { .. }
+            | Self::ChartNotFound { .. }
+            | Self::ChartSeriesNotFound { .. } => IdNotFound,
             Self::ScopeRequired { .. } => ScopeRequired,
-            Self::SharedFormulaMaster { .. } | Self::InkComment { .. } => NotImplemented,
+            Self::SharedFormulaMaster { .. }
+            | Self::InkComment { .. }
+            | Self::RestrictedChart { .. }
+            | Self::ChartTypeNotConvertible => NotImplemented,
             Self::OpcOpen { .. } => OpcOpen,
             Self::PartMissing { .. }
             | Self::RelNotFound { .. }

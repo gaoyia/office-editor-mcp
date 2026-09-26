@@ -144,6 +144,18 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<SetShapeTextOp>, Error> {
             || op_name == "setCommentText"
             || op_name == "setCommentMeta"
             || op_name == "setCommentDone"
+            || op_name == "insertChart"
+            || op_name == "deleteChart"
+            || op_name == "setChartTitle"
+            || op_name == "setChartSeries"
+            || op_name == "addChartSeries"
+            || op_name == "deleteChartSeries"
+            || op_name == "setChartType"
+            || op_name == "setChartAxisTitle"
+            || op_name == "setChartLegend"
+            || op_name == "setChartDataLabels"
+            || op_name == "setChartSize"
+            || op_name == "setChartWrap"
         {
             return Err(Error::with_path(
                 ErrorKind::OpNotForFormat {
