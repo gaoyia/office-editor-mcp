@@ -55,7 +55,7 @@ crates/ooxp-cli/             命令行，只依赖 ooxp。二进制名也是 oox
 
 ### docx
 
-主文档由根关系里 `/officeDocument` 指向，常见路径 `/word/document.xml`。inspect 读该部件里的 `w:p`，返回大纲和按范围截断的段落；并始终列出页眉、页脚容器、各节距边界，以及每节是否链接到前一节。apply 可改被点名段落的可见文本（主文档或页眉页脚部件），可改节上 `w:pgMar` 的页眉/页脚距离，也可断开或重新链接某节某类型的页眉页脚。不整篇从 JSON 重建。create 生成最小 Transitional 包，含 `styles.xml`（Normal 与 Heading1–3）和 `settings.xml`（`compatibilityMode` 为 15），不写页眉页脚，也不生成多节。修订、复杂表格结构、页眉页脚图文混排不做。不写入 `titlePg` / `evenAndOddHeaders`。
+主文档由根关系里 `/officeDocument` 指向，常见路径 `/word/document.xml`。inspect 读该部件里的 `w:p`，返回大纲和按范围截断的段落；并始终列出页眉、页脚容器、各节距边界，以及每节是否链接到前一节。页眉页脚容器始终带 `pictureCount`；`scope.pictures` 为 true 时再列出图。apply 可改被点名段落的可见文本（主文档或页眉页脚部件），可改节上 `w:pgMar` 的页眉/页脚距离，也可断开或重新链接某节某类型的页眉页脚（断链时抄走 header/footer 自己的 `.rels`，媒体仍共用）。页眉页脚里的 DrawingML 图片可换、插、删，并可改尺寸与绕排。不整篇从 JSON 重建。create 生成最小 Transitional 包，含 `styles.xml`（Normal 与 Heading1–3）和 `settings.xml`（`compatibilityMode` 为 15），不写页眉页脚，也不生成多节。修订、复杂表格结构、正文里的图不做。不写入 `titlePg` / `evenAndOddHeaders`。
 
 ### pptx
 

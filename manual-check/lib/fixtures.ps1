@@ -235,3 +235,100 @@ function Ensure-PptxPptSource([switch]$Force) {
     Write-Log "saved ppt source $path"
     return $path
 }
+
+function Write-OoxpPng([string]$path, [byte[]]$bytes) {
+    $dir = Split-Path -Parent $path
+    if ($dir) { New-Item -ItemType Directory -Force -Path $dir | Out-Null }
+    [IO.File]::WriteAllBytes($path, $bytes)
+    return $path
+}
+
+# 两张 1×1 PNG，换图用第二张。
+function Ensure-OoxpPngA([switch]$Force) {
+    $path = Get-OutPath 'pic-a.png'
+    if ((Test-Path $path) -and -not $Force) { return $path }
+    $bytes = [byte[]]@(
+        0x89,0x50,0x4E,0x47,0x0D,0x0A,0x1A,0x0A,0x00,0x00,0x00,0x0D,0x49,0x48,0x44,
+        0x52,0x00,0x00,0x00,0x01,0x00,0x00,0x00,0x01,0x08,0x02,0x00,0x00,0x00,0x90,
+        0x77,0x53,0xDE,0x00,0x00,0x00,0x0C,0x49,0x44,0x41,0x54,0x08,0xD7,0x63,0xF8,
+        0xCF,0xC0,0x00,0x00,0x03,0x01,0x01,0x00,0x18,0xDD,0x8D,0xB4,0x00,0x00,0x00,
+        0x00,0x49,0x45,0x4E,0x44,0xAE,0x42,0x60,0x82
+    )
+    return Write-OoxpPng $path $bytes
+}
+
+function Ensure-OoxpPngB([switch]$Force) {
+    $path = Get-OutPath 'pic-b.png'
+    if ((Test-Path $path) -and -not $Force) { return $path }
+    $bytes = [byte[]]@(
+        0x89,0x50,0x4E,0x47,0x0D,0x0A,0x1A,0x0A,0x00,0x00,0x00,0x0D,0x49,0x48,0x44,
+        0x52,0x00,0x00,0x00,0x01,0x00,0x00,0x00,0x01,0x08,0x02,0x00,0x00,0x00,0x90,
+        0x77,0x53,0xDE,0x00,0x00,0x00,0x0C,0x49,0x44,0x41,0x54,0x08,0xD7,0x63,0x60,
+        0x60,0x60,0x00,0x00,0x00,0x04,0x00,0x01,0xA3,0x0A,0x15,0xE3,0x00,0x00,0x00,
+        0x00,0x49,0x45,0x4E,0x44,0xAE,0x42,0x60,0x82
+    )
+    return Write-OoxpPng $path $bytes
+}
+
+# 两节、第二节默认页眉链接前节；页眉里有行内图和浮动图。
+function Ensure-DocxWordPictureSource([switch]$Force) {
+    $path = Get-OutPath 'docx-word-picture-source.docx'
+    if ((Test-Path $path) -and -not $Force) { return $path }
+
+    $pngA = Ensure-OoxpPngA
+    $tmpDir = Join-Path $env:TEMP 'ooxp-office'
+    New-Item -ItemType Directory -Force -Path $tmpDir | Out-Null
+    $tmp = Join-Path $tmpDir 'docx-word-picture-source.docx'
+    $S = $global:OoxpStrings
+    $req = @{
+        schemaVersion = 1; action = 'create'
+        path = $tmp.Replace('\', '/'); format = 'docx'
+        document = @{
+            paragraphs = @(
+                @{ style = 'Heading1'; text = $S.chapter1 }
+                @{ text = $S.para2src }
+            )
+        }
+    }
+    Invoke-OoxpRequest $req 'docx-picture-source-create' | Out-Null
+
+    $word = Ensure-MsWord (Ensure-DocxCreate)
+    $doc = Open-WordDoc $word $tmp
+    $p1 = $doc.Paragraphs.Item(1)
+    $r = $p1.Range
+    $r.Collapse(0) | Out-Null
+    $r.InsertBreak(2)
+    Release-Com $r
+    Release-Com $p1
+
+    $sec1 = $doc.Sections.Item(1)
+    $hdr1 = $sec1.Headers.Item(1)
+    $hdr1.Range.Text = $S.headerSrc
+    $inlines = $hdr1.Range.InlineShapes
+    $inline = $inlines.AddPicture($pngA, $false, $true)
+    $shapes = $hdr1.Shapes
+    $float = $shapes.AddPicture($pngA, $false, $true, 20, 8, 48, 36)
+    $wrap = $float.WrapFormat
+    # wdWrapSquare = 0
+    $wrap.Type = 0
+    $sec2 = $doc.Sections.Item(2)
+    $hdr2 = $sec2.Headers.Item(1)
+    if (-not [bool]$hdr2.LinkToPrevious) {
+        $hdr2.LinkToPrevious = $true
+    }
+    Write-Log 'word Save() 原地覆盖 TEMP 里的带图页眉样例'
+    $doc.Save()
+    Release-Com $wrap
+    Release-Com $float
+    Release-Com $shapes
+    Release-Com $inline
+    Release-Com $inlines
+    Release-Com $hdr2
+    Release-Com $sec2
+    Release-Com $hdr1
+    Release-Com $sec1
+    Close-WordDoc $doc
+    Copy-Item -Force $tmp $path
+    Write-Log "saved word picture source $path"
+    return $path
+}

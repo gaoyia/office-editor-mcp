@@ -82,6 +82,20 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::SectionPrefix => "Section id must be section:N".into(),
             IdReason::SectionIndexNotInt => "section index must be a positive integer".into(),
             IdReason::SectionIndexFromOne => "section index starts at 1".into(),
+            IdReason::PicPrefix => {
+                "Picture id must be header:…/pic:… or footer:…/pic:…".into()
+            }
+            IdReason::PicContainer => {
+                "Header/footer id must include /pic:… (container id alone is not a picture)".into()
+            }
+            IdReason::PicIndexNotInt => "pic:index must be followed by a positive integer".into(),
+            IdReason::PicIndexFromOne => "pic:index starts at 1".into(),
+            IdReason::PicBodyNotYet => {
+                "Pictures in the document body are not supported yet".into()
+            }
+            IdReason::InsertNeedsPara => {
+                "insertPicture id must be a header or footer paragraph id".into()
+            }
         },
         ErrorKind::SheetNotFound { name } => format!("Sheet not found: {name}"),
         ErrorKind::ParaNotFound { id } => format!("Paragraph not found: {id}"),
@@ -89,6 +103,13 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::SlideNotFound { n } => format!("Slide not found: slide:{n}"),
         ErrorKind::ShapeNotFound { id } => format!("Shape not found: {id}"),
         ErrorKind::ShapeHasNoText { id } => format!("Shape has no text box: {id}"),
+        ErrorKind::PictureNotFound { id } => format!("Picture not found: {id}"),
+        ErrorKind::InvalidPicKind => "kind must be inline or anchor".into(),
+        ErrorKind::InvalidPicWrap => {
+            "wrap must be square, tight, through, topAndBottom, or none".into()
+        }
+        ErrorKind::InvalidPicAlign => "alignH must be left/center/right; alignV must be top/center/bottom".into(),
+        ErrorKind::InvalidImageFile => "file is not a recognized bitmap (PNG, JPEG, GIF, or BMP)".into(),
         ErrorKind::SetCellWorksheetOnly => "setCell only applies to worksheets".into(),
         ErrorKind::InspectWorksheetOnly => "Cells can only be read from worksheets".into(),
         ErrorKind::SharedFormulaMaster { cell } => format!(

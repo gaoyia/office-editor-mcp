@@ -5,6 +5,7 @@ mod create;
 mod hf;
 mod inspect;
 mod para;
+mod picture;
 mod request;
 
 pub use apply::apply;
@@ -27,6 +28,11 @@ pub const REL_HEADER: &str =
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/header";
 pub const REL_FOOTER: &str =
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer";
+pub const REL_IMAGE: &str =
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image";
+pub const WP_NS: &str = "http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing";
+pub const A_NS: &str = "http://schemas.openxmlformats.org/drawingml/2006/main";
+pub const PIC_NS: &str = "http://schemas.openxmlformats.org/drawingml/2006/picture";
 pub const REL_CORE: &str =
     "http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties";
 pub const REL_APP: &str =

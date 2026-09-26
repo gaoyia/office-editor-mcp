@@ -122,6 +122,11 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<SetShapeTextOp>, Error> {
             || op_name == "setParaText"
             || op_name == "setHeaderFooterDistance"
             || op_name == "setHeaderFooterLink"
+            || op_name == "replacePicture"
+            || op_name == "insertPicture"
+            || op_name == "deletePicture"
+            || op_name == "setPictureSize"
+            || op_name == "setPictureWrap"
         {
             return Err(Error::with_path(
                 ErrorKind::OpNotForFormat {

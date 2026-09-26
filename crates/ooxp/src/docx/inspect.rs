@@ -8,6 +8,7 @@ use crate::xml;
 
 use super::hf::{self, HfKind, HfPart};
 use super::para;
+use super::picture;
 use super::request::InspectScope;
 
 pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error> {
@@ -34,7 +35,8 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
 
     let catalog = hf::catalog(&pkg, &part, &doc.root)?;
     let expand_hf = scope.as_ref().is_some_and(|s| s.header_footer);
-    let (headers, footers) = hf_arrays(&pkg, &catalog, expand_hf)?;
+    let expand_pics = scope.as_ref().is_some_and(|s| s.pictures);
+    let (headers, footers) = hf_arrays(&pkg, &catalog, expand_hf, expand_pics)?;
     let sections = section_nodes(&pkg, &part, &doc.root)?;
 
     let mut tree = json!({
@@ -119,11 +121,12 @@ fn hf_arrays(
     pkg: &Package,
     catalog: &[HfPart],
     expand: bool,
+    pictures: bool,
 ) -> Result<(Vec<Value>, Vec<Value>), Error> {
     let mut headers = Vec::new();
     let mut footers = Vec::new();
     for item in catalog {
-        let node = hf_node(pkg, item, expand)?;
+        let node = hf_node(pkg, item, expand, pictures)?;
         match item.kind {
             HfKind::Header => headers.push(node),
             HfKind::Footer => footers.push(node),
@@ -132,16 +135,21 @@ fn hf_arrays(
     Ok((headers, footers))
 }
 
-fn hf_node(pkg: &Package, item: &HfPart, expand: bool) -> Result<Value, Error> {
+fn hf_node(pkg: &Package, item: &HfPart, expand: bool, pictures: bool) -> Result<Value, Error> {
     let bytes = pkg.get(&item.part)?;
     let doc = xml::parse(bytes)?;
     let paras = para::collect_paragraphs(&doc.root);
+    let pics = picture::collect_pictures(&doc.root, &item.id)?;
     let mut node = json!({
         "id": item.id,
         "type": item.hf_type.as_str(),
         "sections": item.sections,
         "paraCount": paras.len(),
+        "pictureCount": pics.len(),
     });
+    if pictures {
+        node["pictures"] = Value::Array(picture::pictures_json(&pics));
+    }
     if expand {
         let mut paragraphs = Vec::new();
         for (i, p) in paras.iter().enumerate() {

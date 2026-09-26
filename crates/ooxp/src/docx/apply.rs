@@ -1,14 +1,18 @@
-//! 按 id 改段落文本、节上距边界，或页眉页脚是否链接前节。
+//! 按 id 改段落文本、节上距边界、页眉页脚是否链接前节，或页眉页脚里的图。
 
 use std::collections::{HashMap, HashSet};
 
 use crate::error::{Error, ErrorKind};
-use crate::opc::{self, ContentTypes, Package, Relationship, Relationships};
+use crate::opc::{self, rels_part_name, ContentTypes, Package, Relationship, Relationships};
 use crate::xml::{self, Document, Element, Node};
 
 use super::hf::{self, HfKind};
 use super::para::{self, ParaTarget};
-use super::request::{DocxOp, SetHfDistanceOp, SetHfLinkOp, SetParaTextOp};
+use super::picture;
+use super::request::{
+    DeletePictureOp, DocxOp, InsertPictureOp, ReplacePictureOp, SetHfDistanceOp, SetHfLinkOp,
+    SetParaTextOp, SetPictureSizeOp, SetPictureWrapOp,
+};
 use super::{CT_FOOTER, CT_HEADER, REL_FOOTER, REL_HEADER};
 
 pub fn apply(bytes: &[u8], ops: &[DocxOp]) -> Result<Vec<u8>, Error> {
@@ -43,6 +47,21 @@ pub fn apply(bytes: &[u8], ops: &[DocxOp]) -> Result<Vec<u8>, Error> {
                     op,
                     i,
                 )?;
+            }
+            DocxOp::ReplacePicture(op) => {
+                apply_replace_pic(&mut pkg, &mut docs, &mut dirty, &catalog, op, i)?;
+            }
+            DocxOp::InsertPicture(op) => {
+                apply_insert_pic(&mut pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
+            }
+            DocxOp::DeletePicture(op) => {
+                apply_delete_pic(&mut pkg, &mut docs, &mut dirty, &catalog, op, i)?;
+            }
+            DocxOp::SetPictureSize(op) => {
+                apply_pic_size(&mut pkg, &mut docs, &mut dirty, &catalog, op, i)?;
+            }
+            DocxOp::SetPictureWrap(op) => {
+                apply_pic_wrap(&mut pkg, &mut docs, &mut dirty, &catalog, op, i)?;
             }
         }
     }
@@ -211,11 +230,14 @@ fn unlink_section(
         op.hf_type,
     )?;
     let bytes = match inherited {
-        Some(src) => current_part_bytes(pkg, docs, &src)?,
+        Some(ref src) => current_part_bytes(pkg, docs, src)?,
         None => hf::minimal_hf_xml(op.kind),
     };
     let new_part = hf::next_unused_hf_part(pkg, op.kind);
     pkg.set(&new_part, bytes)?;
+    if let Some(src) = &inherited {
+        picture::copy_part_rels(pkg, src, &new_part)?;
+    }
 
     let mut rels = Relationships::from_package(pkg, doc_part)?;
     let rid = rels.next_rid();
@@ -287,6 +309,7 @@ fn relink_section(
     cts.write_to(pkg)?;
 
     pkg.remove(&old);
+    pkg.remove(&rels_part_name(&old));
     removed.insert(old.clone());
     docs.remove(&old);
     dirty.remove(&old);
@@ -302,4 +325,252 @@ fn current_part_bytes(
         return doc.to_bytes();
     }
     Ok(pkg.get(part)?.to_vec())
+}
+
+fn load_part<'a>(
+    pkg: &Package,
+    docs: &'a mut HashMap<String, Document>,
+    part_name: &str,
+) -> Result<&'a mut Document, Error> {
+    if !docs.contains_key(part_name) {
+        let parsed = xml::parse(pkg.get(part_name)?)?;
+        docs.insert(part_name.to_string(), parsed);
+    }
+    Ok(docs.get_mut(part_name).unwrap())
+}
+
+fn hf_part_for_pic(
+    catalog: &[hf::HfPart],
+    target: &picture::PicTarget,
+    id: &str,
+    i: usize,
+) -> Result<String, Error> {
+    let container_id = format!(
+        "{}:{}:{}",
+        target.kind.as_str(),
+        target.hf_type.as_str(),
+        target.n
+    );
+    let item = hf::find_by_id(catalog, &container_id).ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::PictureNotFound {
+                id: id.to_string(),
+            },
+            format!("ops[{i}].id"),
+        )
+    })?;
+    Ok(item.part.clone())
+}
+
+fn apply_replace_pic(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    catalog: &[hf::HfPart],
+    op: &ReplacePictureOp,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name = hf_part_for_pic(catalog, &op.target, &op.id, i)?;
+    let doc = load_part(pkg, docs, &part_name)?;
+    let drawing = picture::find_drawing_mut(&mut doc.root, &op.target.key).ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::PictureNotFound {
+                id: op.id.clone(),
+            },
+            format!("ops[{i}].id"),
+        )
+    })?;
+    let rid = picture::blip_embed(drawing).ok_or_else(|| {
+        Error::xml_detail(
+            crate::error::XmlIssue::Parse,
+            format!("{} missing a:blip/@r:embed", op.id),
+        )
+    })?;
+    let old_media = picture::resolve_embed(pkg, &part_name, &rid)?;
+    let image = picture::read_image(&op.file)?;
+    let old_ext = old_media.rsplit('.').next().unwrap_or("");
+    if old_ext.eq_ignore_ascii_case(&image.ext) {
+        pkg.set(&old_media, image.bytes)?;
+        let mut cts = ContentTypes::from_package(pkg)?;
+        cts.ensure_default(&image.ext, &image.content_type);
+        cts.write_to(pkg)?;
+        return Ok(());
+    }
+    let new_media = picture::next_media_part(pkg, &image.ext);
+    pkg.set(&new_media, image.bytes)?;
+    picture::update_rel_target(pkg, &part_name, &rid, &new_media)?;
+    let mut cts = ContentTypes::from_package(pkg)?;
+    cts.ensure_default(&image.ext, &image.content_type);
+    cts.write_to(pkg)?;
+    if !picture::media_still_used(pkg, &old_media)? {
+        pkg.remove(&old_media);
+    }
+    let _ = dirty;
+    Ok(())
+}
+
+fn apply_insert_pic(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    _doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &InsertPictureOp,
+    i: usize,
+) -> Result<(), Error> {
+    let ParaTarget::HeaderFooter {
+        kind,
+        hf_type,
+        n,
+        para,
+    } = &op.para
+    else {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: crate::error::IdReason::PicBodyNotYet,
+            },
+            format!("ops[{i}].id"),
+        ));
+    };
+    let container_id = format!("{}:{}:{n}", kind.as_str(), hf_type.as_str());
+    let item = hf::find_by_id(catalog, &container_id).ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::ParaNotFound {
+                id: op.id.clone(),
+            },
+            format!("ops[{i}].id"),
+        )
+    })?;
+    let part_name = item.part.clone();
+    let image = picture::read_image(&op.file)?;
+    let (cx, cy) = match (op.cx, op.cy) {
+        (Some(x), Some(y)) => (x, y),
+        _ => (image.cx, image.cy),
+    };
+    let media = picture::next_media_part(pkg, &image.ext);
+    pkg.set(&media, image.bytes)?;
+    let rid = picture::add_image_rel(pkg, &part_name, &media)?;
+    let mut cts = ContentTypes::from_package(pkg)?;
+    cts.ensure_default(&image.ext, &image.content_type);
+    cts.write_to(pkg)?;
+
+    let doc = load_part(pkg, docs, &part_name)?;
+    picture::ensure_drawing_ns(&mut doc.root);
+    let doc_pr = picture::next_docpr_id(&doc.root);
+    let name = format!("图片 {doc_pr}");
+    let p = para::find_paragraph_mut(&mut doc.root, para).ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::ParaNotFound {
+                id: op.id.clone(),
+            },
+            format!("ops[{i}].id"),
+        )
+    })?;
+    let drawing = picture::build_inline_drawing(doc_pr, &name, &rid, cx, cy);
+    picture::insert_drawing_into_para(p, drawing);
+    dirty.insert(part_name, ());
+    Ok(())
+}
+
+fn apply_delete_pic(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    catalog: &[hf::HfPart],
+    op: &DeletePictureOp,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name = hf_part_for_pic(catalog, &op.target, &op.id, i)?;
+    let (rid, media) = {
+        let doc = load_part(pkg, docs, &part_name)?;
+        let rid = {
+            let drawing =
+                picture::find_drawing_mut(&mut doc.root, &op.target.key).ok_or_else(|| {
+                    Error::with_path(
+                        ErrorKind::PictureNotFound {
+                            id: op.id.clone(),
+                        },
+                        format!("ops[{i}].id"),
+                    )
+                })?;
+            picture::blip_embed(drawing)
+        };
+        let media = match rid.as_deref() {
+            Some(r) => picture::resolve_embed(pkg, &part_name, r).ok(),
+            None => None,
+        };
+        if !picture::remove_picture(&mut doc.root, &op.target.key) {
+            return Err(Error::with_path(
+                ErrorKind::PictureNotFound {
+                    id: op.id.clone(),
+                },
+                format!("ops[{i}].id"),
+            ));
+        }
+        (rid, media)
+    };
+    dirty.insert(part_name.clone(), ());
+    if let Some(r) = rid {
+        picture::remove_rel_if_unused(pkg, &part_name, &r, &docs.get(&part_name).unwrap().root)?;
+    }
+    if let Some(m) = media {
+        if !picture::media_still_used(pkg, &m)? {
+            pkg.remove(&m);
+        }
+    }
+    Ok(())
+}
+
+fn apply_pic_size(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    catalog: &[hf::HfPart],
+    op: &SetPictureSizeOp,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name = hf_part_for_pic(catalog, &op.target, &op.id, i)?;
+    let doc = load_part(pkg, docs, &part_name)?;
+    let drawing = picture::find_drawing_mut(&mut doc.root, &op.target.key).ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::PictureNotFound {
+                id: op.id.clone(),
+            },
+            format!("ops[{i}].id"),
+        )
+    })?;
+    if !picture::set_extent(drawing, op.cx, op.cy) {
+        return Err(Error::with_path(
+            ErrorKind::PictureNotFound {
+                id: op.id.clone(),
+            },
+            format!("ops[{i}].id"),
+        ));
+    }
+    dirty.insert(part_name, ());
+    Ok(())
+}
+
+fn apply_pic_wrap(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    catalog: &[hf::HfPart],
+    op: &SetPictureWrapOp,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name = hf_part_for_pic(catalog, &op.target, &op.id, i)?;
+    let doc = load_part(pkg, docs, &part_name)?;
+    picture::ensure_drawing_ns(&mut doc.root);
+    let drawing = picture::find_drawing_mut(&mut doc.root, &op.target.key).ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::PictureNotFound {
+                id: op.id.clone(),
+            },
+            format!("ops[{i}].id"),
+        )
+    })?;
+    picture::apply_wrap(drawing, op.kind, op.wrap, &op.pos).map_err(|e| e.at(format!("ops[{i}]")))?;
+    dirty.insert(part_name, ());
+    Ok(())
 }

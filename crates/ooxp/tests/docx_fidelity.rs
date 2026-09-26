@@ -344,7 +344,9 @@ fn inspect_lists_headers_footers_and_shared_sections() {
     assert_eq!(headers[0]["type"], "default");
     assert_eq!(headers[0]["sections"], json!([1, 2]));
     assert_eq!(headers[0]["paraCount"], 1);
+    assert_eq!(headers[0]["pictureCount"], 0);
     assert!(headers[0].get("paragraphs").is_none());
+    assert!(headers[0].get("pictures").is_none());
     assert_eq!(headers[1]["id"], "header:even:1");
     assert_eq!(headers[1]["sections"], json!([1, 2]));
     assert_eq!(headers[2]["id"], "header:first:1");
@@ -855,4 +857,330 @@ fn unlink_blank_writes_minimal_header() {
     assert_eq!(tree["headers"][0]["paraCount"], 1);
     assert_eq!(tree["headers"][0]["paragraphs"][0]["text"], "");
     assert!(zip_has_part(&out, "word/header1.xml"));
+}
+
+// —— 页眉页脚图文混排 ——
+
+/// 1×1 红 PNG。
+const PNG_1X1: &[u8] = &[
+    0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44,
+    0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x02, 0x00, 0x00, 0x00, 0x90,
+    0x77, 0x53, 0xDE, 0x00, 0x00, 0x00, 0x0C, 0x49, 0x44, 0x41, 0x54, 0x08, 0xD7, 0x63, 0xF8,
+    0xCF, 0xC0, 0x00, 0x00, 0x03, 0x01, 0x01, 0x00, 0x18, 0xDD, 0x8D, 0xB4, 0x00, 0x00, 0x00,
+    0x00, 0x49, 0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82,
+];
+
+/// 另一份 1×1 PNG，字节不同，用来换图。
+const PNG_1X1_B: &[u8] = &[
+    0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44,
+    0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x02, 0x00, 0x00, 0x00, 0x90,
+    0x77, 0x53, 0xDE, 0x00, 0x00, 0x00, 0x0C, 0x49, 0x44, 0x41, 0x54, 0x08, 0xD7, 0x63, 0x60,
+    0x60, 0x60, 0x00, 0x00, 0x00, 0x04, 0x00, 0x01, 0xA3, 0x0A, 0x15, 0xE3, 0x00, 0x00, 0x00,
+    0x00, 0x49, 0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82,
+];
+
+const PIC_CT: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="png" ContentType="image/png"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/><Override PartName="/word/settings.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml"/><Override PartName="/word/header1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/></Types>"#;
+
+const PIC_DOC_RELS: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/settings" Target="settings.xml"/><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="header1.xml"/></Relationships>"#;
+
+const PIC_SETTINGS: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:settings xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"/>"#;
+
+/// 两节：第一节显式 default 页眉，第二节继承。页眉里行内图 + 浮动图，另有一张无 pic 的 drawing 不应进名单。
+const PIC_DOCUMENT: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:body><w:p><w:pPr><w:sectPr><w:headerReference w:type="default" r:id="rId3"/></w:sectPr></w:pPr></w:p><w:p><w:r><w:t>二</w:t></w:r></w:p><w:sectPr><w:pgSz w:w="11906" w:h="16838"/></w:sectPr></w:body></w:document>"#;
+
+const PIC_HEADER: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"><w:p w14:paraId="AAAA1001"><w:r><w:t>带图页眉</w:t></w:r><w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="9525" cy="9525"/><wp:docPr id="1" name="图片 1"/><wp:cNvGraphicFramePr/><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic><pic:nvPicPr><pic:cNvPr id="0" name="图片 1"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="rId1"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="9525" cy="9525"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r><w:r><w:drawing><wp:anchor distT="0" distB="0" distL="114300" distR="114300" simplePos="0" relativeHeight="1" behindDoc="0" locked="0" layoutInCell="1" allowOverlap="1"><wp:simplePos x="0" y="0"/><wp:positionH relativeFrom="margin"><wp:align>left</wp:align></wp:positionH><wp:positionV relativeFrom="margin"><wp:align>top</wp:align></wp:positionV><wp:extent cx="19050" cy="9525"/><wp:wrapSquare wrapText="bothSides"/><wp:docPr id="2" name="图片 2"/><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic><pic:nvPicPr><pic:cNvPr id="0" name="图片 2"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="rId2"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="19050" cy="9525"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:anchor></w:drawing></w:r><w:r><w:drawing><wp:inline><wp:extent cx="1" cy="1"/><wp:docPr id="99" name="不是图"/><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/chart"/></a:graphic></wp:inline></w:drawing></w:r></w:p></w:hdr>"#;
+
+const PIC_HEADER_RELS: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/image1.png"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/image2.png"/></Relationships>"#;
+
+fn write_pic_sample(tag: &str) -> PathBuf {
+    let n = SEQ.fetch_add(1, Ordering::Relaxed);
+    let path = tmp_dir().join(format!("{tag}-{n}.docx"));
+    let mut cursor = Cursor::new(Vec::new());
+    {
+        let mut zip = ZipWriter::new(&mut cursor);
+        let opt = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
+        let texts: &[(&str, &[u8])] = &[
+            ("[Content_Types].xml", PIC_CT.as_bytes()),
+            ("_rels/.rels", ROOT_RELS.as_bytes()),
+            ("word/document.xml", PIC_DOCUMENT.as_bytes()),
+            ("word/_rels/document.xml.rels", PIC_DOC_RELS.as_bytes()),
+            ("word/styles.xml", STYLES.as_bytes()),
+            ("word/settings.xml", PIC_SETTINGS.as_bytes()),
+            ("word/header1.xml", PIC_HEADER.as_bytes()),
+            ("word/_rels/header1.xml.rels", PIC_HEADER_RELS.as_bytes()),
+            ("word/media/image1.png", PNG_1X1),
+            ("word/media/image2.png", PNG_1X1),
+        ];
+        for (name, body) in texts {
+            zip.start_file(*name, opt).unwrap();
+            zip.write_all(body).unwrap();
+        }
+        zip.finish().unwrap();
+    }
+    std::fs::write(&path, cursor.into_inner()).unwrap();
+    path
+}
+
+fn inspect_pics(path: &Path) -> serde_json::Value {
+    let RunOutput::Inspect(tree) = run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "inspect",
+            "path": path.to_string_lossy(),
+            "scope": { "pictures": true }
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap() else {
+        panic!("inspect 应返回树");
+    };
+    tree
+}
+
+fn write_temp_png(tag: &str, bytes: &[u8]) -> PathBuf {
+    let n = SEQ.fetch_add(1, Ordering::Relaxed);
+    let path = tmp_dir().join(format!("{tag}-{n}.png"));
+    std::fs::write(&path, bytes).unwrap();
+    path
+}
+
+fn object_keys(v: &serde_json::Value) -> Vec<&str> {
+    v.as_object()
+        .unwrap()
+        .keys()
+        .map(String::as_str)
+        .collect()
+}
+
+#[test]
+fn inspect_lists_header_pictures() {
+    let path = write_pic_sample("pic-list");
+    let tree0 = inspect_hf(&path, false);
+    assert_eq!(tree0["headers"][0]["pictureCount"], 2);
+    assert!(tree0["headers"][0].get("pictures").is_none());
+
+    let tree = inspect_pics(&path);
+    let pics = tree["headers"][0]["pictures"].as_array().unwrap();
+    assert_eq!(pics.len(), 2);
+    assert_eq!(
+        object_keys(&pics[0]),
+        ["id", "docPrId", "name", "kind", "cx", "cy", "wrap", "stable"]
+    );
+    assert_eq!(pics[0]["id"], "header:default:1/pic:1");
+    assert_eq!(pics[0]["docPrId"], "1");
+    assert_eq!(pics[0]["name"], "图片 1");
+    assert_eq!(pics[0]["kind"], "inline");
+    assert_eq!(pics[0]["cx"], 9525);
+    assert_eq!(pics[0]["cy"], 9525);
+    assert!(pics[0]["wrap"].is_null());
+    assert_eq!(pics[0]["stable"], true);
+    assert_eq!(pics[1]["id"], "header:default:1/pic:2");
+    assert_eq!(pics[1]["kind"], "anchor");
+    assert_eq!(pics[1]["wrap"], "square");
+    assert_eq!(pics[1]["cx"], 19050);
+    assert_eq!(
+        object_keys(&tree["headers"][0]),
+        ["id", "type", "sections", "paraCount", "pictureCount", "pictures"]
+    );
+}
+
+#[test]
+fn unlink_copies_header_rels_and_shares_media() {
+    let path = write_pic_sample("pic-unlink");
+    let out = tmp_dir().join("pic-unlink-out.docx");
+    apply_ops(
+        &path,
+        &out,
+        json!([{
+            "op": "setHeaderFooterLink",
+            "id": "section:2",
+            "kind": "header",
+            "type": "default",
+            "linked": false
+        }]),
+    )
+    .unwrap();
+    assert!(zip_has_part(&out, "word/header2.xml"));
+    assert!(zip_has_part(&out, "word/_rels/header2.xml.rels"));
+    assert!(zip_has_part(&out, "word/media/image1.png"));
+    let rels = String::from_utf8(part_bytes(&out, "word/_rels/header2.xml.rels")).unwrap();
+    assert!(rels.contains("media/image1.png"));
+    let tree = inspect_pics(&out);
+    let headers = tree["headers"].as_array().unwrap();
+    assert_eq!(headers.len(), 2);
+    assert_eq!(headers[0]["pictureCount"], 2);
+    assert_eq!(headers[1]["pictureCount"], 2);
+    let edited = tmp_dir().join("pic-unlink-edit.docx");
+    apply_ops(
+        &out,
+        &edited,
+        json!([{
+            "op": "setParaText",
+            "id": "header:default:2/para:AAAA1001",
+            "text": "第二节页眉"
+        }]),
+    )
+    .unwrap();
+    let after = inspect_pics(&edited);
+    let h1 = after["headers"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|h| h["id"] == "header:default:1")
+        .unwrap();
+    let h2 = after["headers"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|h| h["id"] == "header:default:2")
+        .unwrap();
+    assert_eq!(h1["pictureCount"], 2);
+    assert_eq!(h2["pictureCount"], 2);
+}
+
+#[test]
+fn replace_picture_keeps_wrap_and_changes_bytes() {
+    let path = write_pic_sample("pic-replace");
+    let png = write_temp_png("rep", PNG_1X1_B);
+    let out = tmp_dir().join("pic-replace-out.docx");
+    apply_ops(
+        &path,
+        &out,
+        json!([{
+            "op": "replacePicture",
+            "id": "header:default:1/pic:1",
+            "file": png.to_string_lossy()
+        }]),
+    )
+    .unwrap();
+    assert_eq!(part_bytes(&out, "word/media/image1.png"), PNG_1X1_B);
+    let tree = inspect_pics(&out);
+    let pics = tree["headers"][0]["pictures"].as_array().unwrap();
+    assert_eq!(pics[0]["kind"], "inline");
+    assert!(pics[0]["wrap"].is_null());
+    assert_eq!(pics[1]["kind"], "anchor");
+    assert_eq!(pics[1]["wrap"], "square");
+}
+
+#[test]
+fn insert_and_delete_picture() {
+    let path = write_pic_sample("pic-insdel");
+    let png = write_temp_png("ins", PNG_1X1);
+    let inserted = tmp_dir().join("pic-ins.docx");
+    apply_ops(
+        &path,
+        &inserted,
+        json!([{
+            "op": "insertPicture",
+            "id": "header:default:1/para:AAAA1001",
+            "file": png.to_string_lossy()
+        }]),
+    )
+    .unwrap();
+    let tree = inspect_pics(&inserted);
+    assert_eq!(tree["headers"][0]["pictureCount"], 3);
+    let pics = tree["headers"][0]["pictures"].as_array().unwrap();
+    let last = pics.last().unwrap();
+    assert_eq!(last["kind"], "inline");
+    assert_eq!(last["id"], "header:default:1/pic:100");
+    assert!(zip_has_part(&inserted, "word/media/image3.png"));
+
+    let deleted = tmp_dir().join("pic-del.docx");
+    apply_ops(
+        &inserted,
+        &deleted,
+        json!([{
+            "op": "deletePicture",
+            "id": "header:default:1/pic:100"
+        }]),
+    )
+    .unwrap();
+    let after = inspect_pics(&deleted);
+    assert_eq!(after["headers"][0]["pictureCount"], 2);
+    assert!(!zip_has_part(&deleted, "word/media/image3.png"));
+}
+
+#[test]
+fn set_picture_size_and_wrap() {
+    let path = write_pic_sample("pic-sizewrap");
+    let out = tmp_dir().join("pic-sizewrap-out.docx");
+    apply_ops(
+        &path,
+        &out,
+        json!([
+            {
+                "op": "setPictureSize",
+                "id": "header:default:1/pic:1",
+                "cx": 19050,
+                "cy": 19050
+            },
+            {
+                "op": "setPictureWrap",
+                "id": "header:default:1/pic:1",
+                "kind": "anchor",
+                "wrap": "square",
+                "alignH": "right",
+                "alignV": "bottom"
+            }
+        ]),
+    )
+    .unwrap();
+    let tree = inspect_pics(&out);
+    let pic = &tree["headers"][0]["pictures"][0];
+    assert_eq!(pic["kind"], "anchor");
+    assert_eq!(pic["wrap"], "square");
+    assert_eq!(pic["cx"], 19050);
+    assert_eq!(pic["cy"], 19050);
+    let xml = String::from_utf8(part_bytes(&out, "word/header1.xml")).unwrap();
+    assert!(xml.contains("wp:anchor"));
+    assert!(xml.contains("wrapSquare"));
+    assert!(xml.contains(">right<"));
+    assert!(xml.contains(">bottom<"));
+
+    let back = tmp_dir().join("pic-inline-out.docx");
+    apply_ops(
+        &out,
+        &back,
+        json!([{
+            "op": "setPictureWrap",
+            "id": "header:default:1/pic:1",
+            "kind": "inline"
+        }]),
+    )
+    .unwrap();
+    let tree2 = inspect_pics(&back);
+    assert_eq!(tree2["headers"][0]["pictures"][0]["kind"], "inline");
+    assert!(tree2["headers"][0]["pictures"][0]["wrap"].is_null());
+}
+
+#[test]
+fn picture_id_errors() {
+    let path = write_pic_sample("pic-err");
+    let out = tmp_dir().join("pic-err-out.docx");
+    let err = apply_ops(
+        &path,
+        &out,
+        json!([{ "op": "deletePicture", "id": "header:default:1" }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidId);
+    let err = apply_ops(
+        &path,
+        &out,
+        json!([{
+            "op": "insertPicture",
+            "id": "para:AAAA0001",
+            "file": "x.png"
+        }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidId);
+    let err = apply_ops(
+        &path,
+        &out,
+        json!([{ "op": "deletePicture", "id": "header:default:1/pic:9" }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::IdNotFound);
 }

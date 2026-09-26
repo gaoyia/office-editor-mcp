@@ -47,6 +47,16 @@ pub(crate) enum IdReason {
     SectionPrefix,
     SectionIndexNotInt,
     SectionIndexFromOne,
+    /// 图片 id 必须是 header:…/pic:… 或 footer:…/pic:…
+    PicPrefix,
+    /// 页眉/页脚容器 id，缺少 `/pic:…`
+    PicContainer,
+    PicIndexNotInt,
+    PicIndexFromOne,
+    /// 正文里的图本期不做
+    PicBodyNotYet,
+    /// insertPicture 必须用页眉页脚段落 id
+    InsertNeedsPara,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -167,6 +177,11 @@ define_error_kinds! {
     InvalidParaStyle => vec![Self::InvalidParaStyle],
     InvalidHfKind => vec![Self::InvalidHfKind],
     InvalidHfType => vec![Self::InvalidHfType],
+    InvalidPicKind => vec![Self::InvalidPicKind],
+    InvalidPicWrap => vec![Self::InvalidPicWrap],
+    InvalidPicAlign => vec![Self::InvalidPicAlign],
+    InvalidImageFile => vec![Self::InvalidImageFile],
+    PictureNotFound { id: String } => vec![Self::PictureNotFound { id: "header:default:1/pic:1".into() }],
     CannotLinkFirstSection => vec![Self::CannotLinkFirstSection],
     HfTypeInactive { kind: String, hf_type: String } => vec![Self::HfTypeInactive {
         kind: "header".into(),
@@ -252,6 +267,12 @@ impl IdReason {
             Self::SectionPrefix,
             Self::SectionIndexNotInt,
             Self::SectionIndexFromOne,
+            Self::PicPrefix,
+            Self::PicContainer,
+            Self::PicIndexNotInt,
+            Self::PicIndexFromOne,
+            Self::PicBodyNotYet,
+            Self::InsertNeedsPara,
         ]
     }
 }
@@ -337,6 +358,10 @@ impl ErrorKind {
             | Self::InvalidParaStyle
             | Self::InvalidHfKind
             | Self::InvalidHfType
+            | Self::InvalidPicKind
+            | Self::InvalidPicWrap
+            | Self::InvalidPicAlign
+            | Self::InvalidImageFile
             | Self::CannotLinkFirstSection
             | Self::HfTypeInactive { .. } => InvalidField,
             Self::OutOfRange { .. } => TruncatedLimit,
@@ -347,7 +372,8 @@ impl ErrorKind {
             | Self::SectionNotFound { .. }
             | Self::SlideNotFound { .. }
             | Self::ShapeNotFound { .. }
-            | Self::ShapeHasNoText { .. } => IdNotFound,
+            | Self::ShapeHasNoText { .. }
+            | Self::PictureNotFound { .. } => IdNotFound,
             Self::ScopeRequired { .. } => ScopeRequired,
             Self::SharedFormulaMaster { .. } => NotImplemented,
             Self::OpcOpen { .. } => OpcOpen,

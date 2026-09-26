@@ -5,6 +5,7 @@ use crate::xml::{Element, Node};
 
 use super::hf::{HfKind, HfType};
 
+#[derive(Debug, Clone)]
 pub enum ParaTarget {
     /// 主文档里的段落。
     Body(BodyPara),

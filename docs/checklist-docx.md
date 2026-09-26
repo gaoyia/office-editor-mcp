@@ -20,6 +20,7 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 | HF1–HF5 | ✅ | Word 另存带页眉页脚样例：名单与展开、改页眉后打开无修复，页眉变「新页眉」、正文与页脚未改 |
 | D1–D4 | ✅ | Word 16.0：`section:1` 原距离 708/708；apply 后 HeaderDistance=72 磅、FooterDistance=36 磅，正文未改 |
 | L1–L4 | ✅ | Word 16.0：第二节 `headerLink.default` 为 true 且 `LinkToPrevious`；断开后无修复且不再链接；改第二节页眉后第一节仍是原文；正文未改 |
+| P1–P7 | ✅ | Word 16.0：inspect 列出行内图与浮动图；断链后第二节仍见同一张图；换/插/删无修复；尺寸 144 磅；行内改浮动 `square` |
 | O1 | 🚫 | 领域层不做原样保存，与 xlsx 清单相同。零脏写回见 OPC 库测试。Word 另存 create 产物见 `docx-O1-word-resave`。此前记的 `SaveAs2` 挂起，拆分后重跑没再出现，一秒内返回 |
 
 这一轮手测样例没有文本框。带 `mc:AlternateContent` 或 `w:txbxContent` 的边界已由 `crates/ooxp/tests/docx_fidelity.rs` 覆盖；带文本框样例的 Word 手测尚未另加。
@@ -65,7 +66,7 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 
 | 序号 | 检查 | 通过标准 |
 | --- | --- | --- |
-| HF1 | 名单 | 无 scope 时也有 `headers`、`footers`；容器带 `id`、`type`、`sections`、`paraCount`，不带 `paragraphs` |
+| HF1 | 名单 | 无 scope 时也有 `headers`、`footers`；容器带 `id`、`type`、`sections`、`paraCount`、`pictureCount`，不带 `paragraphs`、`pictures` |
 | HF2 | 展开 | `headerFooter: true` 时页眉节点有 `paragraphs`，段落 id 形如 `header:default:1/para:…` |
 | HF3 | 打开 | apply 改页眉后 Word 能打开，无修复提示 |
 | HF4 | 目标 | 页眉可见文字变成请求里的 `text`；正文未改 |
@@ -92,6 +93,20 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 | L2 | 打开 | 断开后 Word 能打开，无修复提示；COM 读第二节 `LinkToPrevious` 为 `false` |
 | L3 | 目标 | 改第二节页眉后，第一节页眉仍是原文 |
 | L4 | 正文 | 正文段落文字未改 |
+
+## 页眉页脚图文混排
+
+准备一份 Word 亲手另存的样例：默认页眉里同时有一张行内图和一张浮动图（`wrapSquare`）。不要用库 `create` 产物。另备一张本地 PNG 供换图、插图。手测脚本 `manual-check/office/cases/docx-picture.ps1`。
+
+| 序号 | 检查 | 通过标准 |
+| --- | --- | --- |
+| P1 | 名单 | 无 scope 时容器有 `pictureCount`、没有 `pictures`；`pictures: true` 时两张图都有 id，`kind` 分别为 `inline` 与 `anchor`，浮动 `wrap` 为 `square` |
+| P2 | 断链 | 两节样例、第二节链着带图页眉；断开后 Word 无修复，第二节仍能看见同一张图 |
+| P3 | 换图 | `replacePicture` 后 Word 无修复；位置与绕排不变；可见图已换成新文件 |
+| P4 | 插图 | `insertPicture` 往页眉段落插行内图，Word 能看见且无修复 |
+| P5 | 删图 | `deletePicture` 后该图消失，Word 无修复 |
+| P6 | 尺寸 | `setPictureSize` 后 COM 或目视尺寸对上（允许 EMU 换算误差） |
+| P7 | 绕排 | `setPictureWrap` 把行内改成浮动 `square` 后，Word 按四周型显示 |
 
 ## 原样保存（opc 验收）
 

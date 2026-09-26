@@ -72,6 +72,16 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::SectionPrefix => "节 id 必须是 section:N".into(),
             IdReason::SectionIndexNotInt => "section 序号必须是正整数".into(),
             IdReason::SectionIndexFromOne => "section 序号从 1 起".into(),
+            IdReason::PicPrefix => {
+                "图片 id 必须是 header:…/pic:… 或 footer:…/pic:…".into()
+            }
+            IdReason::PicContainer => {
+                "页眉页脚 id 必须带 /pic:…（容器 id 本身不是图）".into()
+            }
+            IdReason::PicIndexNotInt => "pic:index 后面必须是正整数".into(),
+            IdReason::PicIndexFromOne => "pic:index 从 1 起".into(),
+            IdReason::PicBodyNotYet => "正文里的图本期不支持".into(),
+            IdReason::InsertNeedsPara => "insertPicture 的 id 必须是页眉或页脚段落 id".into(),
         },
         ErrorKind::SheetNotFound { name } => format!("找不到工作表：{name}"),
         ErrorKind::ParaNotFound { id } => format!("找不到段落：{id}"),
@@ -79,6 +89,13 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::SlideNotFound { n } => format!("找不到幻灯片：slide:{n}"),
         ErrorKind::ShapeNotFound { id } => format!("找不到形状：{id}"),
         ErrorKind::ShapeHasNoText { id } => format!("形状没有文本框：{id}"),
+        ErrorKind::PictureNotFound { id } => format!("找不到图：{id}"),
+        ErrorKind::InvalidPicKind => "kind 必须是 inline 或 anchor".into(),
+        ErrorKind::InvalidPicWrap => {
+            "wrap 必须是 square、tight、through、topAndBottom 或 none".into()
+        }
+        ErrorKind::InvalidPicAlign => "alignH 只允许 left/center/right，alignV 只允许 top/center/bottom".into(),
+        ErrorKind::InvalidImageFile => "file 不是本库认的位图（PNG、JPEG、GIF 或 BMP）".into(),
         ErrorKind::SetCellWorksheetOnly => "只能对工作表 setCell".into(),
         ErrorKind::InspectWorksheetOnly => "只能对工作表读单元格".into(),
         ErrorKind::SharedFormulaMaster { cell } => format!(

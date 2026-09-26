@@ -56,6 +56,7 @@
         "from": { "type": "integer", "minimum": 1 },
         "maxParas": { "type": "integer", "minimum": 1, "maximum": 5000 },
         "headerFooter": { "type": "boolean" },
+        "pictures": { "type": "boolean" },
         "slide": { "type": "integer", "minimum": 1 },
         "maxShapes": { "type": "integer", "minimum": 1, "maximum": 5000 }
       },
@@ -200,6 +201,11 @@
               { "$ref": "#/$defs/setParaTextOp" },
               { "$ref": "#/$defs/setHeaderFooterDistanceOp" },
               { "$ref": "#/$defs/setHeaderFooterLinkOp" },
+              { "$ref": "#/$defs/replacePictureOp" },
+              { "$ref": "#/$defs/insertPictureOp" },
+              { "$ref": "#/$defs/deletePictureOp" },
+              { "$ref": "#/$defs/setPictureSizeOp" },
+              { "$ref": "#/$defs/setPictureWrapOp" },
               { "$ref": "#/$defs/setShapeTextOp" }
             ]
           }
@@ -261,6 +267,70 @@
         "kind": { "enum": ["header", "footer"] },
         "type": { "enum": ["default", "even", "first"] },
         "linked": { "type": "boolean" }
+      }
+    },
+    "replacePictureOp": {
+      "type": "object",
+      "required": ["op", "id", "file"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "replacePicture" },
+        "id": { "type": "string", "minLength": 1 },
+        "file": { "type": "string", "minLength": 1 }
+      }
+    },
+    "insertPictureOp": {
+      "type": "object",
+      "required": ["op", "id", "file"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "insertPicture" },
+        "id": { "type": "string", "minLength": 1 },
+        "file": { "type": "string", "minLength": 1 },
+        "cx": { "type": "integer", "minimum": 1 },
+        "cy": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "deletePictureOp": {
+      "type": "object",
+      "required": ["op", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "deletePicture" },
+        "id": { "type": "string", "minLength": 1 }
+      }
+    },
+    "setPictureSizeOp": {
+      "type": "object",
+      "required": ["op", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "setPictureSize" },
+        "id": { "type": "string", "minLength": 1 },
+        "cx": { "type": "integer", "minimum": 1 },
+        "cy": { "type": "integer", "minimum": 1 }
+      },
+      "anyOf": [
+        { "required": ["cx"] },
+        { "required": ["cy"] }
+      ]
+    },
+    "setPictureWrapOp": {
+      "type": "object",
+      "required": ["op", "id", "kind"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "setPictureWrap" },
+        "id": { "type": "string", "minLength": 1 },
+        "kind": { "enum": ["inline", "anchor"] },
+        "wrap": {
+          "type": ["string", "null"],
+          "enum": ["square", "tight", "through", "topAndBottom", "none", null]
+        },
+        "alignH": { "enum": ["left", "center", "right"] },
+        "alignV": { "enum": ["top", "center", "bottom"] },
+        "offsetX": { "type": "integer" },
+        "offsetY": { "type": "integer" }
       }
     },
     "setShapeTextOp": {

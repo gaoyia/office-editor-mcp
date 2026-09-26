@@ -3,5 +3,5 @@
   "action": "inspect",
   "path": "note.docx",
   "format": "docx",
-  "scope": { "headerFooter": true }
+  "scope": { "headerFooter": true, "pictures": true }
 }

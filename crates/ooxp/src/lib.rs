@@ -304,6 +304,46 @@ mod tests {
     }
 
     #[test]
+    fn xlsx_rejects_pictures_scope_and_ops() {
+        let path = tmp("pic-reject.xlsx");
+        run(
+            &json!({
+                "schemaVersion": 1,
+                "action": "create",
+                "path": path.to_string_lossy(),
+                "workbook": { "sheets": [{ "name": "Sheet1", "cells": [{ "ref": "A1", "value": 1 }] }] }
+            })
+            .to_string(),
+            None,
+        )
+        .unwrap();
+        let err = run(
+            &json!({
+                "schemaVersion": 1,
+                "action": "inspect",
+                "path": path.to_string_lossy(),
+                "scope": { "pictures": true }
+            })
+            .to_string(),
+            None,
+        )
+        .unwrap_err();
+        assert_eq!(err.code(), ErrorCode::InvalidField);
+        let err = run(
+            &json!({
+                "schemaVersion": 1,
+                "action": "apply",
+                "path": path.to_string_lossy(),
+                "ops": [{ "op": "replacePicture", "id": "header:default:1/pic:1", "file": "a.png" }]
+            })
+            .to_string(),
+            None,
+        )
+        .unwrap_err();
+        assert_eq!(err.code(), ErrorCode::InvalidField);
+    }
+
+    #[test]
     fn pptx_create_inspect_apply_roundtrip() {
         let path = tmp("deck.pptx");
         let req = json!({

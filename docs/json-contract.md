@@ -52,7 +52,7 @@ id 是给模型用的字符串，必须能从文件内容稳定算出来，不�
 
 没有 `w14:paraId` 时：`para:index:{n}`，`n` 从 1 起，按主文档部件里 `w:p` 的文档顺序（含表格单元格里的段落）。树上同时给 `"stable": false`。这类 id 在增删段落后会变，只够同一次 inspect 之后立刻 apply。
 
-标题和正文都是段落，不另编一套 id。脚注、尾注、批注、文本框里的段落不进这棵树，也不接受 apply。页眉、页脚按下面规则进树，可按 id 改字；节上的页眉页脚距边界、以及是否链接到前一节，都可以读写。不做新建页眉或图文混排。不写入 `titlePg` / `evenAndOddHeaders`。
+标题和正文都是段落，不另编一套 id。脚注、尾注、批注、文本框里的段落不进这棵树，也不接受 apply。页眉、页脚按下面规则进树，可按 id 改字；节上的页眉页脚距边界、以及是否链接到前一节，都可以读写。页眉页脚里的 DrawingML 图片可查、换、插、删，并可改尺寸与绕排。不做新建页眉。不写入 `titlePg` / `evenAndOddHeaders`。正文里的图本期不实现。
 
 页眉、页脚 id 按部件编，不按节编。`w:sectPr` 里的 `w:headerReference` / `w:footerReference`（§17.10.2、§17.10.5）经主文档关系解到部件路径。同一部件只出一个容器节点；多个节引用同一部件时，`sections` 列出所有节号。后一节某类型引用省略时按规范继承前节（§17.10.2）；`even` 是否继承还看 `settings.xml` 的 `w:evenAndOddHeaders`（§17.10.1），`first` 是否继承还看该节的 `w:titlePg`（§17.10.6）。OOXML 没有「链接到前一节」元素；Word UI 的勾选就是这种省略。inspect 在每个节上用 `headerLink` / `footerLink` 标出该类型是显式引用、继承前节，还是对本节不生效。apply 用 `setHeaderFooterLink` 断开或重新链接。两节显式指向同一部件不算链接，两边都是 `false`。
 
@@ -62,12 +62,17 @@ id 是给模型用的字符串，必须能从文件内容稳定算出来，不�
 | 页眉容器 | `header:{type}:{n}` | `header:default:1`、`header:first:1` |
 | 页脚容器 | `footer:{type}:{n}` | `footer:default:1`、`footer:even:1` |
 | 页眉/页脚段落 | `{容器 id}/para:{paraId}` 或 `{容器 id}/para:index:{k}` | `header:default:1/para:3F2A1B00` |
+| 页眉/页脚图 | `{容器 id}/pic:{docPrId}` 或 `{容器 id}/pic:index:{k}` | `header:default:1/pic:1` |
 
-节号 `{n}` 从 1 起，按主文档里 `w:sectPr` 的文档顺序（与页眉目录相同）。距边界挂在节上，不挂在页眉部件节点上。对 `section:{n}` 发 `setParaText` 报 `InvalidId`。
+节号 `{n}` 从 1 起，按主文档里 `w:sectPr` 的文档顺序（与页眉目录相同）。距边界挂在节上，不挂在页眉部件节点上。图挂在页眉/页脚容器上，不挂在节上。对 `section:{n}` 发 `setParaText` 或图片 op 报 `InvalidId`。
 
 `{type}` 取引用上 `w:type` 的原文，只允许 `default`、`even`、`first`（`ST_HdrFtr`，§17.18.36）。缺失或不是这三项报 `XmlBroken`。`{n}` 在同一 `kind`（header 或 footer）与 `{type}` 下，按该部件首次出现的顺序从 1 起。页眉页脚段落没有 `w14:paraId` 时用 `para:index:{k}`，`k` 只在该部件内从 1 计。
 
 正文段落 id 仍是 `para:{paraId}` / `para:index:{n}`，只表示主文档部件。对容器 id（没有 `/para:`）发 `setParaText` 报 `InvalidId`。拿正文 `para:` 去改页眉页脚里同 hex 的段落报 `IdNotFound`。
+
+图的 `{docPrId}` 取该 `w:drawing` 里 `wp:docPr/@id` 的原文（ECMA-376 §20.4）。输出用文件里的原始大小写与数字写法。请求里若双方都能解析成十进制整数，按数值匹配（`1` 与 `01` 视为同一处）；否则按原文精确比。同一部件内重复 `docPr/@id` 时，inspect 都列出，apply 命中文档顺序第一处。没有 `docPr/@id` 时用 `{容器}/pic:index:{k}`，`k` 只在该部件内从 1 计（该部件里所有被收入的图，不只是缺 id 的那些），树上 `"stable": false`。只认 DrawingML 的 `pic:pic` 且带 `a:blip` 的 `w:drawing`。VML / `w:pict`、图表、SmartArt、文本框不进 `pictures`，也不接受图片 op。`mc:AlternateContent` 仍只进 Choice。
+
+对容器 id（没有 `/pic:`）发 `replacePicture` / `deletePicture` / `setPictureSize` / `setPictureWrap` 报 `InvalidId`。对正文 `para:…` 或 `para:…/pic:…` 发图片 op，以及往正文段落发 `insertPicture`，本期报 `InvalidId`（正文复用另开）。`insertPicture` 的 `id` 必须是页眉或页脚段落 id。
 
 「文本框里的段落不算段落」这句要有可执行的判定，否则实现容易一路钻进去。边界按下面两条划：
 
@@ -150,7 +155,7 @@ xlsx、docx、pptx 共用 `scope` 这个字段名，里面的键按格式分，�
   "action": "inspect",
   "path": "C:\\data\\note.docx",
   "format": "docx",
-  "scope": { "from": 1, "maxParas": 200, "headerFooter": true }
+  "scope": { "from": 1, "maxParas": 200, "headerFooter": true, "pictures": true }
 }
 ```
 
@@ -161,8 +166,9 @@ xlsx、docx、pptx 共用 `scope` 这个字段名，里面的键按格式分，�
 | `scope.from` | 要正文段落时必填 | 从第几段开始，从 1 起，按主文档 `w:p` 顺序 |
 | `scope.maxParas` | 要正文段落时必填 | 本次最多返回多少段，允许范围 `1` 到 `5000` |
 | `scope.headerFooter` | 否 | 为 `true` 时给每个页眉、页脚节点填 `paragraphs`。省略或 `false` 则容器上没有 `paragraphs` |
+| `scope.pictures` | 否 | 为 `true` 时给每个页眉、页脚节点填 `pictures`。省略或 `false` 则容器上没有 `pictures`。不读媒体字节 |
 
-`from` / `maxParas` 只切正文，`headerFooter` 只管页眉页脚，两者独立，可只开一边。只要想看正文段落，就必须同时给 `from` 和 `maxParas`。不默认把全文倒出来。`from` 超出 `paraCount` 时正文 `paragraphs` 为空数组，`truncated` 为 `false`，不报错。页眉页脚通常很短，给了 `headerFooter: true` 就返回该部件全部段落，不再单独分页。xlsx / pptx 的 `scope` 里出现 `headerFooter` 报 `InvalidField`。
+`from` / `maxParas` 只切正文，`headerFooter` 只管页眉页脚段落，`pictures` 只管页眉页脚里的图，三者独立，可只开一边。只要想看正文段落，就必须同时给 `from` 和 `maxParas`。不默认把全文倒出来。`from` 超出 `paraCount` 时正文 `paragraphs` 为空数组，`truncated` 为 `false`，不报错。页眉页脚通常很短，给了 `headerFooter: true` 就返回该部件全部段落，给了 `pictures: true` 就返回该部件全部图，都不再单独分页。xlsx / pptx 的 `scope` 里出现 `headerFooter` 或 `pictures` 报 `InvalidField`。
 
 #### pptx 的 scope
 
@@ -279,7 +285,8 @@ xlsx、docx、pptx 共用 `scope` 这个字段名，里面的键按格式分，�
       "id": "header:default:1",
       "type": "default",
       "sections": [1],
-      "paraCount": 1
+      "paraCount": 1,
+      "pictureCount": 0
     }
   ],
   "footers": [
@@ -288,6 +295,7 @@ xlsx、docx、pptx 共用 `scope` 这个字段名，里面的键按格式分，�
       "type": "default",
       "sections": [1],
       "paraCount": 1,
+      "pictureCount": 0,
       "paragraphs": [
         {
           "id": "footer:default:1/para:00FF00AA",
@@ -336,12 +344,18 @@ xlsx、docx、pptx 共用 `scope` 这个字段名，里面的键按格式分，�
 - 主文档部件（根关系里 `/officeDocument` 那条，常见路径 `/word/document.xml`）始终读。页眉、页脚部件按节引用与继承解析后读；脚注、批注不读。
 - `paraCount` 是主文档里 `w:p` 的总数，含表格单元格里的段落，不含文本框里的段落，始终出现。
 - `outline` 始终出现，只含主文档标题段。收入满足下面任一条件的段落：`w:pStyle/@w:val` 为 `Heading1`–`Heading9`（大小写不敏感）或 `标题1`–`标题9`；或者 `w:outlineLvl/@w:val` 为 `0`–`8`。树上 `level` 从 1 到 9。`Heading1` / `标题1` / `outlineLvl=0` 都是 `level: 1`。不是标题的段落不进 `outline`。页眉页脚段落不进 `outline`。
-- `headers`、`footers` 始终出现。没有引用则为空数组。容器字段顺序：`id`、`type`、`sections`、`paraCount`，有段落时再跟 `paragraphs`。`sections` 是从 1 起的节号数组，按主文档里 `w:sectPr` 的文档顺序。容器上的 `paraCount` 是该部件内 `w:p` 的个数（边界与正文相同）。
+- `headers`、`footers` 始终出现。没有引用则为空数组。容器字段顺序：`id`、`type`、`sections`、`paraCount`、`pictureCount`，有图名单时再跟 `pictures`，有段落时再跟 `paragraphs`。`sections` 是从 1 起的节号数组，按主文档里 `w:sectPr` 的文档顺序。容器上的 `paraCount` 是该部件内 `w:p` 的个数（边界与正文相同）。`pictureCount` 始终出现，是该部件内被收入的 DrawingML 图片个数（判定见上文 docx 图 id 那节）。
 - 文档根上的 `sections` 始终出现。每个 `w:sectPr` 一项，字段顺序：`id`、`index`、`headerDistance`、`footerDistance`、`headerLink`、`footerLink`。`headerDistance` / `footerDistance` 取该节 `w:pgMar` 的 `w:header` / `w:footer`（§17.6.11），单位 twip，JSON 整数。缺 `w:pgMar` 或缺对应属性则为 `null`，不猜默认值。属性存在但不是非负整数报 `XmlBroken`。不返回 `top` / `bottom` / `left` / `right` / `gutter`。
 - `headerLink` / `footerLink` 始终出现，键顺序为 `default`、`even`、`first`。每个键的取值：`true` 表示该类型对本节生效，且本节 `sectPr` 没有对应引用（继承前节；前节也没有部件、规范要求空白时仍是 `true`）；`false` 表示该类型生效，且本节有显式引用；`null` 表示该类型对本节不生效。`even` 是否生效看整篇 `w:evenAndOddHeaders`；`first` 是否生效看本节 `w:titlePg`。第一节的 `default` 只能是 `false`（没有前节可链）。第一节生效的 `even` / `first` 若无引用也是 `false`（空白，不是链接）。两节显式指向同一部件时两边都是 `false`。`headers` / `footers` 仍按部件去重；断开链接后会出现新的容器 id。
 - 省略 `scope`、或没有 `from`/`maxParas` 时，没有正文 `paragraphs`、`from`、`truncated`。
 - 给了 `from` 和 `maxParas` 时，正文 `paragraphs` 按文档顺序切片。范围内段落数超过 `maxParas` 则 `truncated` 为 `true`。
 - `scope.headerFooter` 为 `true` 时，每个页眉、页脚节点带 `paragraphs`；否则容器上没有该字段。
+- `scope.pictures` 为 `true` 时，每个页眉、页脚节点带 `pictures`；否则容器上没有该字段。不把媒体字节放进树。每张图的字段顺序：`id`、`docPrId`、`name`、`kind`、`cx`、`cy`、`wrap`、`stable`。
+- `kind`：`inline`（`wp:inline`）或 `anchor`（`wp:anchor`）。
+- `cx` / `cy`：`wp:extent` 的值，单位 EMU，JSON 整数。缺则为 `null`。属性存在但不是整数报 `XmlBroken`。
+- `wrap`：行内为 `null`；浮动取子元素 `wrapSquare` / `wrapTight` / `wrapThrough` / `wrapTopAndBottom` / `wrapNone`，对应 `square` / `tight` / `through` / `topAndBottom` / `none`。没有这些子元素则为 `null`。
+- `docPrId` 取 `wp:docPr/@id` 的原文；没有该属性则为 `null`。`name` 取 `wp:docPr/@name` 的原文；没有则为 `null`。
+- `stable`：有 `wp:docPr/@id` 为 `true`，否则为 `false`。
 - `style` 取 `w:pStyle/@w:val` 的原文。没有 `pStyle` 则为 `null`（Word 此时按 Normal 显示，树上不猜）。
 - `text` 是可见纯文本：该 `w:p` 内、不在 `w:del` 里的 `w:t` 按顺序拼接；`w:tab` 变成 `\t`，`w:br` 变成 `\n`。`w:instrText`（域指令）不进入。不含 run 级样式。嵌在 `w:txbxContent` 里的 `w:t` 不算，`mc:AlternateContent` 只取一支，判定见上文 docx 那节的边界两条。
 - `stable`：有 `w14:paraId` 为 `true`，否则为 `false`。
@@ -564,7 +578,7 @@ create 与 apply 落盘时先写入目标同目录的临时文件，再改名为
 | `value` | 与 create 相同。`null` 表示清空该格的值和公式 |
 | `formula` | 以 `=` 开头。不能与 `value` 同时出现 |
 
-不认识的 `op` 报 `UnsupportedOp`，不要忽略。xlsx 只认 `setCell`，docx 认 `setParaText`、`setHeaderFooterDistance` 与 `setHeaderFooterLink`，pptx 只认 `setShapeText`。对不上格式的 op（例如对 pptx 发 `setCell` / `setParaText`，或对 xlsx / pptx 发 `setHeaderFooterDistance` / `setHeaderFooterLink`）报 `InvalidField`。
+不认识的 `op` 报 `UnsupportedOp`，不要忽略。xlsx 只认 `setCell`，docx 认 `setParaText`、`setHeaderFooterDistance`、`setHeaderFooterLink`、`replacePicture`、`insertPicture`、`deletePicture`、`setPictureSize` 与 `setPictureWrap`，pptx 只认 `setShapeText`。对不上格式的 op（例如对 pptx 发 `setCell` / `setParaText`，或对 xlsx / pptx 发 `setHeaderFooterDistance` / `setHeaderFooterLink` / 图片 op）报 `InvalidField`。
 
 空单元格：目标格子在 XML 里还不存在时，`setCell` 按需插入 `<row>` 和 `<c>`，插在正确的行列顺序上。找不到工作表才报 `IdNotFound`。
 
@@ -679,15 +693,138 @@ create 与 apply 落盘时先写入目标同目录的临时文件，再改名为
 
 第一节上 `linked: true` 报 `InvalidField`。该类型对本节不生效时报 `InvalidField`（不替用户打开首页不同或奇偶页）。节不存在报 `IdNotFound`。id 不是 `section:{n}` 报 `InvalidId`。xlsx / pptx 上发此 op 报 `InvalidField`。已经是目标状态则空操作，仍计入 `opsApplied`，不脏任何部件。
 
-`linked: false`：若前节有可继承的该类型部件，把该部件字节复制到新路径（`/word/headerN.xml` 或 `/word/footerN.xml`，`N` 取未占用序号）；写入主文档关系、`[Content_Types].xml` 的 Override，以及本节一条引用。若前节没有部件（空白），写一份最小 `w:hdr` / `w:ftr`（一个空 `w:p`），再挂引用。
+`linked: false`：若前节有可继承的该类型部件，把该部件字节复制到新路径（`/word/headerN.xml` 或 `/word/footerN.xml`，`N` 取未占用序号）；写入主文档关系、`[Content_Types].xml` 的 Override，以及本节一条引用。若源部件有自己的 `.rels`，把该关系文件原样抄到新部件对应路径（`Target` 仍指向同一 `/word/media/…` 等，不复制媒体字节）。若前节没有部件（空白），写一份最小 `w:hdr` / `w:ftr`（一个空 `w:p`），再挂引用。
 
-`linked: true`：删掉本节该类型引用。重新按继承解析之后，若该部件没有任何节再用，删掉部件、对应关系和 Override。
+`linked: true`：删掉本节该类型引用。重新按继承解析之后，若该部件没有任何节再用，删掉部件、对应关系、该部件自己的 `.rels` 和 Override。媒体部件若仍被其它页眉页脚引用则留下。
 
-不写入 `titlePg` / `evenAndOddHeaders`。不复制页眉页脚部件自己的关系（图、超链接等）；第一期不做图文混排。
+不写入 `titlePg` / `evenAndOddHeaders`。未点名的其它页眉页脚字节仍不变。
+
+### replacePicture
+
+```json
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "C:\\data\\note.docx",
+  "output": "C:\\data\\note.pic.docx",
+  "ops": [
+    { "op": "replacePicture", "id": "header:default:1/pic:1", "file": "C:\\img\\logo.png" }
+  ]
+}
+```
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"replacePicture"` |
+| `id` | 图 id，必须是 `{容器}/pic:{docPrId}` 或 `{容器}/pic:index:{k}` |
+| `file` | 本地图片路径，与信封 `path` 一样认正斜杠和反斜杠。不把 base64 放进领域 JSON |
+
+找不到该图报 `IdNotFound`。读不到 `file` 报 `Io`。文件不是本库认的位图（见下）报 `InvalidField`。xlsx / pptx 上发此 op 报 `InvalidField`。
+
+只换媒体字节与内容类型，不改 `wp:inline` / `wp:anchor`、绕排和位置。`a:blip/@r:embed` 的关系 id 保持不变。扩展名变了就写新的 `/word/media/imageN.*`，改同一条关系的 `Target`，并更新 `[Content_Types].xml` 的 Default 或 Override；旧媒体若重新解析后无人引用则删掉。认 PNG、JPEG（`.jpg` / `.jpeg`）、GIF、BMP；按文件头判断，扩展名只用来给新媒体取名。
+
+### insertPicture
+
+```json
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "C:\\data\\note.docx",
+  "output": "C:\\data\\note.ins.docx",
+  "ops": [
+    { "op": "insertPicture", "id": "header:default:1/para:3F2A1B00", "file": "C:\\img\\logo.png" }
+  ]
+}
+```
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"insertPicture"` |
+| `id` | 页眉或页脚段落 id |
+| `file` | 本地图片路径 |
+| `cx` | 可选。宽度，EMU，正整数 |
+| `cy` | 可选。高度，EMU，正整数 |
+
+找不到该段落报 `IdNotFound`。`id` 不是页眉页脚段落 id 报 `InvalidId`。`cx` / `cy` 都省略时，按 PNG / JPEG / GIF / BMP 的像素尺寸、96 dpi 换算成 EMU（`px × 914400 / 96`）；读不出尺寸则用 1 英寸见方（`914400`）。只给一个时报 `InvalidField`。插入 `wp:inline`，挂在该段末尾一个新的 `w:r` 里。写入该部件关系、`/word/media/imageN.*` 与内容类型。`wp:docPr/@id` 取该部件已有 `docPr` 的最大整数加 1，至少为 1。xlsx / pptx 上发此 op 报 `InvalidField`。
+
+### deletePicture
+
+```json
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "C:\\data\\note.docx",
+  "ops": [
+    { "op": "deletePicture", "id": "header:default:1/pic:1" }
+  ]
+}
+```
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"deletePicture"` |
+| `id` | 图 id |
+
+找不到该图报 `IdNotFound`。按图 id 删掉对应的 `w:drawing`。若该图在 `mc:AlternateContent` 的 Choice 里，整段 `AlternateContent` 删掉（避免 Fallback 的 VML 把图留住）。所在 `w:r` 若删完后只剩 `w:rPr` 或空，把该 run 也删掉。重新解析包内关系之后，若该媒体与该关系再无人引用，删掉媒体部件、关系条目和对应内容类型。xlsx / pptx 上发此 op 报 `InvalidField`。
+
+### setPictureSize
+
+```json
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "C:\\data\\note.docx",
+  "ops": [
+    { "op": "setPictureSize", "id": "header:default:1/pic:1", "cx": 2441542, "cy": 1828800 }
+  ]
+}
+```
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"setPictureSize"` |
+| `id` | 图 id |
+| `cx` | 可选。宽度，EMU，正整数 |
+| `cy` | 可选。高度，EMU，正整数 |
+
+`cx` 与 `cy` 至少给一个，否则报 `InvalidField`。只改被点名的那一侧，另一侧保持原值。写入 `wp:extent`；若 `pic:spPr/a:xfrm/a:ext` 存在，一并改。找不到该图报 `IdNotFound`。xlsx / pptx 上发此 op 报 `InvalidField`。
+
+### setPictureWrap
+
+```json
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "C:\\data\\note.docx",
+  "ops": [
+    {
+      "op": "setPictureWrap",
+      "id": "header:default:1/pic:1",
+      "kind": "anchor",
+      "wrap": "square",
+      "alignH": "left",
+      "alignV": "top"
+    }
+  ]
+}
+```
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"setPictureWrap"` |
+| `id` | 图 id |
+| `kind` | `inline` 或 `anchor` |
+| `wrap` | `kind` 为 `anchor` 时必填：`square` / `tight` / `through` / `topAndBottom` / `none`。`kind` 为 `inline` 时必须省略或为 `null` |
+| `alignH` | 可选。相对页边水平对齐：`left` / `center` / `right`。只在 `kind` 为 `anchor` 时有意义 |
+| `alignV` | 可选。相对页边垂直对齐：`top` / `center` / `bottom` |
+| `offsetX` | 可选。相对页边水平偏移，EMU 整数（可负）。与 `alignH` 不能同时出现 |
+| `offsetY` | 可选。相对页边垂直偏移，EMU 整数（可负）。与 `alignV` 不能同时出现 |
+
+行内改浮动或反过来。位置只支持相对页边（`wp:positionH/@relativeFrom` 与 `wp:positionV/@relativeFrom` 都写 `margin`），不做任意 Dist，也不写其它 `relativeFrom`。改成浮动且没给对齐或偏移时，水平默认 `alignH: "left"`，垂直默认 `alignV: "top"`。已经是浮动、只改 `wrap` 时，未点名的位置属性原样留下。`behindDoc`：`wrap` 为 `none` 时写成 `1`（衬于文字下方），其余为 `0`。xlsx / pptx 上发此 op 报 `InvalidField`。
 
 ### 改动范围（docx）
 
-允许变脏的部件：主文档 XML（通常是 `/word/document.xml`），被 `setParaText` 点名的页眉、页脚部件，以及 `setHeaderFooterLink` 改到的主文档关系、`[Content_Types].xml`、新建或删除的 header/footer 部件。`setHeaderFooterDistance` 只脏主文档。一次 `ops` 可以混用 `setParaText`、`setHeaderFooterDistance` 与 `setHeaderFooterLink`。`styles.xml`、`settings.xml`、未点名的页眉页脚、主题、编号一律原样写回。
+允许变脏的部件：主文档 XML（通常是 `/word/document.xml`），被 `setParaText` 或图片 op 点名的页眉、页脚部件及其 `.rels`，`setHeaderFooterLink` 改到的主文档关系、`[Content_Types].xml`、新建或删除的 header/footer 部件及其 `.rels`，以及新媒体或被删的 `/word/media/…`。`setHeaderFooterDistance` 只脏主文档。一次 `ops` 可以混用 `setParaText`、`setHeaderFooterDistance`、`setHeaderFooterLink` 与图片 op。`styles.xml`、`settings.xml`、未点名的页眉页脚、主题、编号一律原样写回。主文档仅在正文图片（另开）时因图而变脏。
 
 被改部件同样整份重序列化，保留程度与 xlsx 工作表相同：元素与属性顺序、未知命名空间保留；注释、处理指令、DOCTYPE 会丢。
 

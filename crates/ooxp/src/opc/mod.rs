@@ -6,7 +6,7 @@ mod package;
 mod rels;
 
 pub use content_types::{ContentTypes, CONTENT_TYPES_PART};
-pub use names::resolve_rel_target;
+pub use names::{rels_part_name, resolve_rel_target, split_dir_file};
 pub use package::Package;
 pub use rels::{office_document_part, resolve_id, Relationship, Relationships};
 

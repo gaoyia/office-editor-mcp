@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "note.docx",
+  "output": "note.pic.docx",
+  "ops": [
+    {
+      "op": "replacePicture",
+      "id": "header:default:1/pic:1",
+      "file": "C:\\img\\logo.png"
+    }
+  ]
+}

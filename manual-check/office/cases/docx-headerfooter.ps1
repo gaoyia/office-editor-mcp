@@ -23,7 +23,9 @@ $h0 = $headers0 | Where-Object { $_.type -eq 'default' } | Select-Object -First 
 $f0 = $footers0 | Where-Object { $_.type -eq 'default' } | Select-Object -First 1
 $h0ok = $null -ne $h0 -and ($h0.id -like 'header:default:*') -and
         ($null -ne $h0.sections) -and ($null -ne $h0.paraCount) -and
-        -not ($h0.PSObject.Properties.Name -contains 'paragraphs')
+        ($null -ne $h0.pictureCount) -and
+        -not ($h0.PSObject.Properties.Name -contains 'paragraphs') -and
+        -not ($h0.PSObject.Properties.Name -contains 'pictures')
 $f0ok = $null -ne $f0 -and ($f0.id -like 'footer:default:*') -and
         -not ($f0.PSObject.Properties.Name -contains 'paragraphs')
 Add-Check 'docx-HF1' ($hasH -and $hasF -and $h0ok -and $f0ok) "headers=$($headers0.Count) footers=$($footers0.Count) h0=$($h0.id)"
