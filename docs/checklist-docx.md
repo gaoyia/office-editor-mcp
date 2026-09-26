@@ -6,16 +6,18 @@
 
 ## 本机结果（2026-09-26）
 
-WPS 文字与 Microsoft Word 16.0 均已打开，用户确认通过。create、inspect、apply 三组都过了，原样保存的 O1 没验成。本机 `Word.Application` 仍被 WPS 抢走，测试是直接启动 `WINWORD.EXE` 再挂 COM。create 产物在 Word 里以兼容模式打开（`CompatibilityMode=12`），无修复提示，原因见计划表的 A11。
+WPS 文字与 Microsoft Word 16.0 均已打开，用户确认通过。create、inspect、apply 三组都过了，原样保存的 O1 验不了。本机 `Word.Application` 仍被 WPS 抢走，测试是直接启动 `WINWORD.EXE` 再挂 COM。create 产物在 Word 里以兼容模式打开（`CompatibilityMode=12`），无修复提示，原因见计划表的 A11。
+
+C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，跑 `pwsh -File manual-check\office\run.ps1 -Case 'docx-*'` 即可复现，逐条结果落在 `manual-check/office/out/office-results.csv`。
 
 | 序号 | 状态 | 结果 |
 | --- | --- | --- |
-| C1 | ✅ | Word 16.0 能打开 `manual-check/office/docx-create.docx`，标题栏无 Repair；以兼容模式打开（`CompatibilityMode=12`） |
+| C1 | ✅ | Word 16.0 能打开 `manual-check/office/out/docx-create.docx`，标题栏无 Repair；以兼容模式打开（`CompatibilityMode=12`） |
 | C2 | ✅ | WPS 此前已过 |
 | C3–C4 | ✅ | 标题 1 / 「标题」，正文 `hello` |
 | I1–I5 | ✅ | `docx:document`、`paraCount=2`、大纲 level 1、「标题」、`para:{hex}` 且 `stable`、无 scope 时没有 `paragraphs` |
 | A1–A5 | ✅ | Word 打开 apply 产物：第二段为「改过的正文」且仍加粗，第一段仍是「第一章」/标题 1，第三段未改 |
-| O1 | ❌ | 没验成。Word 对 Desktop 路径做 `SaveAs2` 会挂起，改到 `%TEMP%` 后 `Save()` 才成功，但那是 Word 自己重写整包，不是清单要的「ooxp 原样保存后未改部件 CRC 不变」 |
+| O1 | ⚠️ | 验不了：O1 要的是「ooxp 打开再原样保存，未改部件 CRC 不变」，可 ooxp 第一期没有「什么都不改地保存」这个动作。退一步只验到 Word 能把 create 产物另存成功（`docx-O1-word-resave`）。此前记的 `SaveAs2` 挂起，拆分后重跑没再出现，一秒内返回 |
 
 这一轮用的样例都没有文本框。带 `mc:AlternateContent` 或 `w:txbxContent` 的文件另有缺陷，见计划表的 A9，那类文件的 I1–I5 现在过不了。
 

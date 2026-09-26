@@ -1,0 +1,32 @@
+# docx create：docs/checklist-docx.md 的 C1、C3、C4。
+# C2 是 WPS 打开，归 WPS 那一轮。
+
+$ErrorActionPreference = 'Stop'
+. ([IO.Path]::Combine($PSScriptRoot, '..', '..', 'lib', 'bootstrap.ps1'))
+if (-not $global:OoxpSuiteName) { Initialize-Suite -Name 'office' }
+
+$S = $global:OoxpStrings
+$path = Ensure-DocxCreate
+$word = Ensure-MsWord $path
+$doc = Open-WordDoc $word $path
+
+$p1 = $doc.Paragraphs.Item(1)
+$p2 = $doc.Paragraphs.Item(2)
+$t1 = Get-ParaText $p1
+$t2 = Get-ParaText $p2
+# 要读这份文档自己的标题栏。$word.ActiveWindow 可能是别的文档的窗口。
+$caption = [string]$doc.ActiveWindow.Caption
+# create 产物缺 settings.xml 里的 compatibilityMode，Word 会按兼容模式打开，见计划表 A11。
+$compat = $null
+try { $compat = $doc.CompatibilityMode } catch {}
+
+Add-Check 'docx-C1' ($caption -notmatch 'Repair') "$caption compat=$compat"
+Add-Skip  'docx-C2' 'WPS 打开，归 WPS 那一轮'
+
+$styleOk = ($p1.Style.NameLocal -eq $S.heading1) -or ($p1.Style.NameLocal -eq 'Heading 1')
+Add-Check 'docx-C3' ($styleOk -and $t1 -eq $S.title) "style=$($p1.Style.NameLocal) text=$t1"
+Add-Check 'docx-C4' ($t2 -eq $S.hello) "text=$t2"
+
+Release-Com $p1
+Release-Com $p2
+Close-WordDoc $doc

@@ -1,14 +1,58 @@
 # 人工验收
 
-`docs/checklist-xlsx.md` 与 `docs/checklist-docx.md` 要求在本机用 Excel、Word、WPS 亲手打开文件。这个目录放的是那几轮验收用的请求 JSON 和驱动脚本。
+`docs/checklist-xlsx.md` 与 `docs/checklist-docx.md` 要求在本机用 Excel、Word、WPS 亲手打开文件。这个目录放的就是那几轮验收的用例脚本。
 
-入库的只有三类：本文件、`requests/` 下的请求 JSON、`*.ps1` 脚本。Office 产物、素材图、COM 日志和 CSV 对比结果都不入库，跑一遍就会重新生成。素材图 `ooxp-pic-wide.png` 与 `ooxp-pic-square.png` 原先是两张外部大图，现在 `_wps-style-media.ps1` 会在缺图时自己画：一张 1200×300 的宽图、一张 600×600 的方图，各约 25KB，不必自备图片。
+## 目录
 
-怎么复现：先在仓库根目录 `cargo build`，再用 `pwsh` 跑脚本。`office/requests/_office-checklist.ps1` 是 Microsoft Office 那一轮，`requests/_wps-*.ps1` 是 WPS 那一轮。脚本走 COM，本机得装了对应软件。两家的 `Excel.Application` 和 `Word.Application` 会互相抢注册，脚本的做法是直接启动 `EXCEL.EXE` 或 `WINWORD.EXE` 再挂上去。
+```text
+manual-check/
+├── lib/                  公共库，两轮共用
+│   ├── bootstrap.ps1     用例只 dot-source 这一个
+│   ├── common.ps1        路径、日志、结果表、调 ooxp
+│   ├── office-com.ps1    绕开 WPS 抢注册，从窗口句柄挂 Office 的 COM
+│   └── fixtures.ps1      用例要用的输入文件，谁缺谁造
+├── office/               Microsoft Office 这一轮
+│   ├── run.ps1           驱动
+│   ├── cases/            一个文件对应清单里的一节
+│   ├── requests/         手写的请求模板，只有三份
+│   └── out/              产物、日志、生成的请求，都不入库
+└── requests/             WPS 那一轮，还没拆
+```
 
-有两处换机器会踩：一是 `*.ps1` 与请求 JSON 里的路径都是写死的 `C:/Users/GaoYi-AMD/Desktop/test/...`，得先改成自己的仓库位置；二是脚本吃的是 ooxp 的产物，所以顺序不能颠倒。以 07/08 这一组为例：先 `ooxp --input requests/07-create-media.json` 写出 `07-ooxp-media.docx`，再跑 `_wps-style-media.ps1` 让 WPS 铺样式和插图，最后 `ooxp --input requests/08-apply-media.json` 打那 15 条 `setParaText`。
+入库的是用例脚本、`requests/` 下手写的请求 JSON 和本文件。Office 产物、素材图、COM 日志和 CSV 都不入库，跑一遍就会重新生成。
 
-## 07 / 08 这一组：改字之后样式和插图还在不在
+## 跑 Microsoft Office 这一轮
+
+先在仓库根目录 `cargo build`，然后：
+
+```powershell
+pwsh -File manual-check\office\run.ps1                  # 全跑，约 10 秒
+pwsh -File manual-check\office\run.ps1 -Case docx-apply  # 只跑一个
+pwsh -File manual-check\office\run.ps1 -Case 'xlsx-*'    # 按通配符挑
+pwsh -File manual-check\office\run.ps1 -List             # 只看有哪些用例
+```
+
+结果打在屏幕上，同时写进 `office/out/office-results.csv`，逐条日志在 `office/out/com-log.txt`。每个用例套独立的 try/catch，一个塌了不影响后面的，所以不必再为了跑完剩下的去复制脚本。
+
+用例顺序有讲究：`xlsx-inspect` 和 `docx-inspect` 只调 ooxp、不开 Office，放最前面；`opc-resave` 里 Word 的 `SaveAs2` 曾经挂过，放最后并套了 60 秒超时。
+
+几件踩过的坑，都写进注释了，改脚本前先看一眼：
+
+- 本机装了 WPS，`New-Object -ComObject Word.Application` 会被 WPS 抢走。`lib/office-com.ps1` 的做法是直接启动 `WINWORD.EXE` / `EXCEL.EXE`，枚举窗口，再用 `AccessibleObjectFromWindow` 从文档子窗口取原生对象模型。
+- 启动时必须带一个文档。空的 Excel 进程没有 `EXCEL7` 子窗口，`AccessibleObjectFromWindow` 会返回 `hr=0x80004005`。
+- 读 ooxp 的输出不能用 `cmd /c`。ooxp 吐 UTF-8，cmd 按控制台代码页解，中文会坏：偶数长度的悄悄判错，奇数长度的直接把 JSON 撕坏。`Invoke-Ooxp` 显式按 UTF-8 读，并检查退出码。
+- 判断「有没有弹修复提示」要读被测文档自己的标题栏（`$doc.ActiveWindow.Caption`、`$wb.Windows.Item(1).Caption`），不能读 `$app.ActiveWindow`，那可能是别的文档的窗口。
+- apply 的目标文件若正被 Office 开着，ooxp 写不进去。xlsx 用 `Close-AllWorkbooks`，docx 用 `Close-WordDocByPath`。
+
+拆分前的旧脚本（`_office-checklist.ps1` 等七个）已经删掉，需要时从 git 历史取：`git show be936f2:manual-check/office/requests/_office-checklist.ps1`。
+
+## WPS 那一轮
+
+还是老样子，没拆：`requests/_wps-*.ps1`，路径写死成 `C:/Users/GaoYi-AMD/Desktop/test/...`，换机器要先改。脚本吃的是 ooxp 的产物，顺序不能颠倒。以 07/08 这一组为例：先 `ooxp --input requests/07-create-media.json` 写出骨架文档，再跑 `_wps-style-media.ps1` 让 WPS 铺样式和插图，最后 `ooxp --input requests/08-apply-media.json` 打那 15 条 `setParaText`。
+
+素材图 `ooxp-pic-wide.png` 与 `ooxp-pic-square.png` 不入库，`_wps-style-media.ps1` 会在缺图时自己画：一张 1200×300 的宽图、一张 600×600 的方图，各约 25KB，不必自备图片。
+
+### 07 / 08 这一组：改字之后样式和插图还在不在
 
 请并排看这两份：左边是 WPS 加过样式和插图的源文件，右边是 ooxp 一次改了 15 段文字之后。
 

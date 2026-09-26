@@ -8,14 +8,16 @@
 
 WPS 表格与 Microsoft Excel 16.0 均已打开，用户确认通过。本机 `Excel.Application` 仍被 WPS 抢走，测试是直接启动 `EXCEL.EXE` 再挂 COM。
 
+C、I、A、O 这几组现在由 `manual-check/office/cases/xlsx-*.ps1` 自动判定，跑 `pwsh -File manual-check\office\run.ps1 -Case 'xlsx-*'` 即可复现，逐条结果落在 `manual-check/office/out/office-results.csv`。
+
 | 序号 | 状态 | 结果 |
 | --- | --- | --- |
-| C1 | ✅ | Excel 16.0 打开 `manual-check/office/xlsx-create.xlsx`，标题栏无 Repair |
+| C1 | ✅ | Excel 16.0 打开 `manual-check/office/out/xlsx-create.xlsx`，标题栏无 Repair |
 | C2–C7 | ✅ | WPS 此前已过；Excel：Sheet1、A1=1、A2=hello、A3=TRUE、B1=`=SUM(A1)` 且值为 1 |
 | I1–I6 | ✅ | 有范围的 inspect 含 A1/A2/A3/B1、无 E1；无 scope 时没有 `cells` |
-| A1 | ✅ | Excel 打开 `xlsx-applied.xlsx`，标题栏无 Repair；WPS 此前已过 |
+| A1 | ✅ | Excel 打开 `out/xlsx-applied.xlsx`，标题栏无 Repair；WPS 此前已过 |
 | A2–A7 | ✅ | Excel：A1=42，B1=`=SUM(A1:A10)` 值为 47，C1 空且数字格式仍是 `0.00`，Sheet2 未动，E1 加粗/红字/黄底/列宽 20 还在，D1 重算为 84 |
-| O1 | ⚠️ | Excel 能打开 create 与 apply 产物。O1 原本要求三种格式都验：Word 那半边见 `checklist-docx.md`，也没验成；PowerPoint 未做 |
+| O1 | ⚠️ | 验不了：O1 要的是「ooxp 打开再原样保存，未改部件 CRC 不变」，可 ooxp 第一期没有「什么都不改地保存」这个动作，apply 必须带 ops。退一步只验到 Excel 能把 create 产物另存成功（`xlsx-O1-excel-resave`）。PowerPoint 未做 |
 | O2 | ✅ | 未改表与未点名格子的样式还在；未改部件 CRC 与打补丁前相同 |
 
 ## create
