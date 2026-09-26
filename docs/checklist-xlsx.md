@@ -8,7 +8,7 @@
 
 Microsoft Excel 16.0 已打开，用户确认通过。本机若装了 WPS，`Excel.Application` 会被抢走，测试仍直接启动 `EXCEL.EXE` 再挂 COM。
 
-C、I、A、O、Xp 这几组现在由 `manual-check/office/cases/xlsx-*.ps1` 自动判定，跑 `pwsh -File manual-check\office\run.ps1 -Case 'xlsx-*'` 即可复现，逐条结果落在 `manual-check/office/out/office-results.csv`。2026-09-27 补跑 `xlsx-pictures.ps1`，Xp1–Xp7 通过。
+C、I、A、O、Xp、Xc 这几组现在由 `manual-check/office/cases/xlsx-*.ps1` 自动判定，跑 `pwsh -File manual-check\office\run.ps1 -Case 'xlsx-*'` 即可复现，逐条结果落在 `manual-check/office/out/office-results.csv`。2026-09-27 补跑 `xlsx-pictures.ps1`，Xp1–Xp7 通过。同日补跑 `xlsx-charts.ps1`，Xc1–Xc7 通过。
 
 | 序号 | 状态 | 结果 |
 | --- | --- | --- |
@@ -20,6 +20,7 @@ C、I、A、O、Xp 这几组现在由 `manual-check/office/cases/xlsx-*.ps1` 自
 | O1 | 🚫 | 领域层不做原样保存：三个动作里没有「只保存」，`apply` 的 `ops` 必须非空。零脏写回见 OPC 库测试。Excel 另存 create 产物见 `xlsx-O1-excel-resave` |
 | O2 | ✅ | 未改表与未点名格子的样式还在；未改部件 CRC 与打补丁前相同 |
 | Xp1–Xp7 | ✅ | Excel 16.0：无 `pictures` 时 `pictureCount=3`；名单含 `oneCell` 与 `twoCell`；换/插/删无修复；`oneCell` 尺寸 144 磅；锚点改到 F12；export 与 `/xl/media/…` 字节一致 |
+| Xc1–Xc7 | ✅ | Excel 16.0：无 `charts` 时 `chartCount=1`、没有名单；名单 id 为 `sheet:Sheet1/chart:2`，系列 10/20/30 与单元格一致；改系列为 100/200/300 无修复；`insertChart` 插 `oneCell` 且 `A10` 一带有数据表；删图后数据格还在；改折线 COM 认 line；`oneCell` 改到 F20、尺寸 144×72 磅；`exportChartData` 得 `InvalidField` |
 
 ## create
 
@@ -82,3 +83,17 @@ Office 另存 create 产物是打开冒烟，见 `manual-check/office/cases/opc-
 | Xp5 | 尺寸 | 对 `oneCell` `setPictureSize` 后 COM 或目视尺寸对上（允许 EMU 换算误差） |
 | Xp6 | 锚点 | `setPictureAnchor` 把 `from` 改到另一格后，图跟着走，无修复 |
 | Xp7 | 导出 | `exportMedia` 写出的文件与 `/xl/media/…` 字节一致。不强制开 Excel |
+
+## 工作表图表
+
+准备一份 Excel 亲手另存的样例：某张 `worksheet` 上至少有一张 DrawingML 柱形图，系列公式指向本表单元格。不要用库 `create` 产物当带图样例。手测脚本建议 `manual-check/office/cases/xlsx-charts.ps1`。编号用 Xc。Excel 16.0 插入的图通常是 `twoCellAnchor`；真 `oneCell` 由 `insertChart` 或 `setChartAnchor` 写入后再让 Excel 打开。
+
+| 序号 | 检查 | 通过标准 |
+| --- | --- | --- |
+| Xc1 | 计数与名单 | 无 `charts` 时工作簿与目标表有 `chartCount`、没有 `charts`；`charts: true` 时 id 为 `sheet:…/chart:…`，`type` / 系列值与工作表一致 |
+| Xc2 | 改系列 | `setChartSeries` 后 Excel 无修复，单元格与图上的值都是新值 |
+| Xc3 | 插图 | `insertChart` 往 `worksheet` 插图，Excel 能看见且无修复；`dataFrom` 一带有数据表 |
+| Xc4 | 删图 | `deleteChart` 后该图消失，数据单元格还在，无修复 |
+| Xc5 | 改类型 | `setChartType` 改为折线后按折线显示（允许样式重置），无修复 |
+| Xc6 | 尺寸或锚点 | 对 `oneCell` `setChartSize` 或 `setChartAnchor` 后位置或尺寸对上，无修复 |
+| Xc7 | 导出 | 对 xlsx 发 `exportChartData` 得到 `InvalidField`。不强制开 Excel |

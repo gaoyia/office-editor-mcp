@@ -6,6 +6,7 @@ use crate::opc::{self, ContentTypes, Package, Relationships};
 use crate::xml::{self, Document, Element, Node};
 
 use super::a1;
+use super::chart;
 use super::picture;
 use super::REL_CALC_CHAIN;
 
@@ -79,6 +80,84 @@ pub fn apply(bytes: &[u8], ops: &[XlsxOp]) -> Result<Vec<u8>, Error> {
                 let part = require_sheet_part(&sheet_index, &op.target.sheet, i)?;
                 picture::set_picture_anchor(&mut pkg, &part, op, i)?;
             }
+            XlsxOp::InsertChart(op) => {
+                let (part, kind) = require_named_sheet(&sheet_index, &op.sheet, i)?;
+                if kind != "worksheet" {
+                    return Err(Error::with_path(
+                        ErrorKind::InsertChartWorksheetOnly,
+                        format!("ops[{i}].id"),
+                    ));
+                }
+                load_dirty(&pkg, &mut dirty_sheets, &part, false)?;
+                chart::insert_chart(&mut pkg, &part, &op.sheet, &mut dirty_sheets, op, i)?;
+                touched_cells = true;
+            }
+            XlsxOp::DeleteChart(op) => {
+                let (part, kind) = require_named_sheet(&sheet_index, &op.target.sheet, i)?;
+                load_dirty(&pkg, &mut dirty_sheets, &part, false)?;
+                let doc = dirty_of(&mut dirty_sheets, &part);
+                chart::delete_chart(&mut pkg, doc, &part, kind, op, i)?;
+            }
+            XlsxOp::SetChartTitle(op) => {
+                let part = require_sheet_part(&sheet_index, &op.target.sheet, i)?;
+                chart::set_chart_title(&mut pkg, &part, op, i)?;
+            }
+            XlsxOp::SetChartSeries(op) => {
+                let part = require_sheet_part(&sheet_index, &op.target.sheet, i)?;
+                if chart::set_chart_series(
+                    &mut pkg,
+                    &part,
+                    &op.target.sheet,
+                    &sheet_index,
+                    &mut dirty_sheets,
+                    op,
+                    i,
+                )? {
+                    touched_cells = true;
+                }
+            }
+            XlsxOp::AddChartSeries(op) => {
+                let part = require_sheet_part(&sheet_index, &op.target.sheet, i)?;
+                if chart::add_chart_series(
+                    &mut pkg,
+                    &part,
+                    &op.target.sheet,
+                    &sheet_index,
+                    &mut dirty_sheets,
+                    op,
+                    i,
+                )? {
+                    touched_cells = true;
+                }
+            }
+            XlsxOp::DeleteChartSeries(op) => {
+                let part = require_sheet_part(&sheet_index, &op.target.sheet, i)?;
+                chart::delete_chart_series(&mut pkg, &part, op, i)?;
+            }
+            XlsxOp::SetChartType(op) => {
+                let part = require_sheet_part(&sheet_index, &op.target.sheet, i)?;
+                chart::set_chart_type(&mut pkg, &part, op, i)?;
+            }
+            XlsxOp::SetChartAxisTitle(op) => {
+                let part = require_sheet_part(&sheet_index, &op.target.sheet, i)?;
+                chart::set_chart_axis_title(&mut pkg, &part, op, i)?;
+            }
+            XlsxOp::SetChartLegend(op) => {
+                let part = require_sheet_part(&sheet_index, &op.target.sheet, i)?;
+                chart::set_chart_legend(&mut pkg, &part, op, i)?;
+            }
+            XlsxOp::SetChartDataLabels(op) => {
+                let part = require_sheet_part(&sheet_index, &op.target.sheet, i)?;
+                chart::set_chart_data_labels(&mut pkg, &part, op, i)?;
+            }
+            XlsxOp::SetChartSize(op) => {
+                let part = require_sheet_part(&sheet_index, &op.target.sheet, i)?;
+                chart::set_chart_size(&mut pkg, &part, op, i)?;
+            }
+            XlsxOp::SetChartAnchor(op) => {
+                let part = require_sheet_part(&sheet_index, &op.target.sheet, i)?;
+                chart::set_chart_anchor(&mut pkg, &part, op, i)?;
+            }
         }
     }
 
@@ -122,7 +201,7 @@ fn require_sheet_part(
     Ok(require_named_sheet(index, name, op_index)?.0)
 }
 
-fn load_dirty(
+pub(crate) fn load_dirty(
     pkg: &Package,
     dirty: &mut Vec<(String, Document)>,
     part: &str,
@@ -143,7 +222,7 @@ fn load_dirty(
     Ok(())
 }
 
-fn dirty_of<'a>(dirty: &'a mut [(String, Document)], part: &str) -> &'a mut Document {
+pub(crate) fn dirty_of<'a>(dirty: &'a mut [(String, Document)], part: &str) -> &'a mut Document {
     &mut dirty.iter_mut().find(|(p, _)| p == part).unwrap().1
 }
 
@@ -260,7 +339,7 @@ fn make_refs_explicit(worksheet: &mut Element) {
     }
 }
 
-fn apply_set_cell(
+pub(crate) fn apply_set_cell(
     worksheet: &mut Element,
     cell: a1::CellRef,
     op: &SetCellOp,
@@ -277,6 +356,25 @@ fn apply_set_cell(
     fill_cell(c, op);
     expand_dimension(worksheet, cell);
     Ok(())
+}
+
+pub(crate) fn write_json_cell(
+    worksheet: &mut Element,
+    cell: a1::CellRef,
+    value: &serde_json::Value,
+    op_index: usize,
+) -> Result<(), Error> {
+    let parsed = super::request::parse_cell_value(value, &format!("ops[{op_index}]"))?;
+    apply_set_cell(
+        worksheet,
+        cell,
+        &SetCellOp {
+            id: String::new(),
+            value: Some(parsed),
+            formula: None,
+        },
+        op_index,
+    )
 }
 
 /// 共享公式的主格带 `ref` 和 `si`，从属格只带 `si`（§18.3.1.40）。改写或清空主格会让从属格
@@ -312,7 +410,7 @@ fn reject_shared_formula_master(
     ))
 }
 
-fn find_cell(sheet_data: &Element, cell: a1::CellRef) -> Option<&Element> {
+pub(crate) fn find_cell(sheet_data: &Element, cell: a1::CellRef) -> Option<&Element> {
     for row in sheet_data.children_by_local("row") {
         if row.attr("r").and_then(|s| s.parse::<u32>().ok()) != Some(cell.row) {
             continue;
@@ -542,7 +640,7 @@ fn expand_dimension(worksheet: &mut Element, cell: a1::CellRef) {
     );
 }
 
-fn mark_full_calc(workbook: &mut Element) {
+pub(crate) fn mark_full_calc(workbook: &mut Element) {
     if let Some(calc) = workbook.child_by_local_mut("calcPr") {
         calc.set_attr("fullCalcOnLoad", "1");
         return;
@@ -550,7 +648,7 @@ fn mark_full_calc(workbook: &mut Element) {
     workbook.push_element(Element::new("calcPr").with_attr("fullCalcOnLoad", "1"));
 }
 
-fn remove_calc_chain(pkg: &mut Package, wb_part: &str) -> Result<(), Error> {
+pub(crate) fn remove_calc_chain(pkg: &mut Package, wb_part: &str) -> Result<(), Error> {
     let mut rels = Relationships::from_package(pkg, wb_part)?;
     let targets: Vec<String> = rels
         .rels

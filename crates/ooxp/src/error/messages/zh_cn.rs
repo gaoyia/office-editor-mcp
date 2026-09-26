@@ -128,6 +128,15 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::InsertChartNeedsPara => {
                 "insertChart 的 id 必须是正文或页眉页脚段落 id".into()
             }
+            IdReason::InsertChartNeedsSheet => {
+                "xlsx 的 insertChart 的 id 必须是 sheet:工作表名".into()
+            }
+            IdReason::SheetChartPrefix => {
+                "xlsx 图表 id 必须是 sheet:工作表名/chart:…".into()
+            }
+            IdReason::SheetChartContainer => {
+                "工作表 id 必须带 /chart:…（该 id 本身不是图表）".into()
+            }
             IdReason::SmartArtPrefix => {
                 "SmartArt id 必须是段落 id 加上 /smartdiagram:…".into()
             }
@@ -232,8 +241,18 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::SetCellWorksheetOnly => "只能对工作表 setCell".into(),
         ErrorKind::InspectWorksheetOnly => "只能对工作表读单元格".into(),
         ErrorKind::InsertPictureWorksheetOnly => "只能往工作表 insertPicture".into(),
+        ErrorKind::InsertChartWorksheetOnly => "只能往工作表 insertChart".into(),
         ErrorKind::TwoCellPictureSize => {
             "twoCell 图的显示尺寸由起止格决定，请用 setPictureAnchor 改 to".into()
+        }
+        ErrorKind::TwoCellChartSize => {
+            "twoCell 图表的显示尺寸由起止格决定，请用 setChartAnchor 改 to".into()
+        }
+        ErrorKind::DeleteChartsheetLast => {
+            "不能删掉图表工作表上仅剩的图表，否则会留下空的图表工作表".into()
+        }
+        ErrorKind::ChartFormulaNotA1 => {
+            "系列公式不是连续 A1 区域（命名区域、三维引用或不连续区域本期不写）".into()
         }
         ErrorKind::PictureAnchorAbsolute => {
             "absolute 锚点不能与 oneCell / twoCell 互转，只能改 posX / posY 或尺寸".into()

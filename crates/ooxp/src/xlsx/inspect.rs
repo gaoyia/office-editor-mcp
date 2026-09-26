@@ -8,6 +8,7 @@ use crate::opc::{self, Package};
 use crate::xml::{self, Element};
 
 use super::a1;
+use super::chart;
 use super::picture;
 use super::{REL_CHARTSHEET, REL_DIALOGSHEET, REL_SHARED_STRINGS};
 
@@ -26,10 +27,16 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     let sheets = list_sheets(&wb.root, &rels, &wb_part, &pkg)?;
     let sst = load_shared_strings(&pkg, &wb_part, &rels)?;
     let want_pictures = scope.as_ref().is_some_and(|s| s.pictures);
+    let want_charts = scope.as_ref().is_some_and(|s| s.charts);
     let cells_scope = scope.as_ref().and_then(|s| s.cells.as_ref());
+    let sheet_parts: Vec<(String, String)> = sheets
+        .iter()
+        .map(|s| (s.name.clone(), s.part.clone()))
+        .collect();
 
     let mut sheet_json = Vec::new();
     let mut picture_count = 0usize;
+    let mut chart_count = 0usize;
     for sh in &sheets {
         let mut obj = Map::new();
         obj.insert("id".into(), json!(format!("sheet:{}", sh.name)));
@@ -39,8 +46,15 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
             let pics = picture::collect_sheet_pictures(&pkg, &sh.part, &sh.name)?;
             picture_count += pics.len();
             obj.insert("pictureCount".into(), json!(pics.len()));
+            let charts =
+                chart::collect_sheet_charts(&pkg, &sh.part, &sh.name, &sst, &sheet_parts)?;
+            chart_count += charts.len();
+            obj.insert("chartCount".into(), json!(charts.len()));
             if want_pictures {
                 obj.insert("pictures".into(), Value::Array(picture::pictures_json(&pics)));
+            }
+            if want_charts {
+                obj.insert("charts".into(), Value::Array(chart::charts_json(&charts)));
             }
             if let Some(cs) = cells_scope {
                 if sh.name.eq_ignore_ascii_case(&cs.sheet) {
@@ -49,6 +63,22 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
                     obj.insert("truncated".into(), json!(truncated));
                     obj.insert("range".into(), json!(range));
                     obj.insert("cells".into(), Value::Array(cells));
+                }
+            }
+        } else if sh.kind == "chartsheet" {
+            let charts =
+                chart::collect_sheet_charts(&pkg, &sh.part, &sh.name, &sst, &sheet_parts)?;
+            chart_count += charts.len();
+            obj.insert("chartCount".into(), json!(charts.len()));
+            if want_charts {
+                obj.insert("charts".into(), Value::Array(chart::charts_json(&charts)));
+            }
+            if let Some(cs) = cells_scope {
+                if sh.name.eq_ignore_ascii_case(&cs.sheet) {
+                    return Err(Error::with_path(
+                        ErrorKind::InspectWorksheetOnly,
+                        "scope.sheet",
+                    ));
                 }
             }
         } else if let Some(cs) = cells_scope {
@@ -81,6 +111,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     root.insert("format".into(), json!("xlsx"));
     root.insert("id".into(), json!("xlsx:workbook"));
     root.insert("pictureCount".into(), json!(picture_count));
+    root.insert("chartCount".into(), json!(chart_count));
     root.insert("sheets".into(), Value::Array(sheet_json));
     Ok(Value::Object(root))
 }
@@ -132,7 +163,7 @@ pub(crate) fn list_sheets(
     Ok(out)
 }
 
-fn load_shared_strings(
+pub(crate) fn load_shared_strings(
     pkg: &Package,
     wb_part: &str,
     rels: &opc::Relationships,
@@ -255,7 +286,7 @@ fn cell_to_json(c: &Element, sheet_name: &str, sst: &[String]) -> Result<Value, 
     Ok(obj)
 }
 
-fn classify(
+pub(crate) fn classify(
     t: &str,
     v_el: Option<&Element>,
     is_el: Option<&Element>,

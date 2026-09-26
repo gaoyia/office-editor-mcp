@@ -148,6 +148,15 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::InsertChartNeedsPara => {
                 "insertChart id must be a body or header/footer paragraph id".into()
             }
+            IdReason::InsertChartNeedsSheet => {
+                "xlsx insertChart id must be sheet:name".into()
+            }
+            IdReason::SheetChartPrefix => {
+                "xlsx chart id must be sheet:name/chart:…".into()
+            }
+            IdReason::SheetChartContainer => {
+                "Sheet id must include /chart:… (that id alone is not a chart)".into()
+            }
             IdReason::SmartArtPrefix => {
                 "SmartArt id must be a paragraph id plus /smartdiagram:…".into()
             }
@@ -276,8 +285,21 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::SetCellWorksheetOnly => "setCell only applies to worksheets".into(),
         ErrorKind::InspectWorksheetOnly => "Cells can only be read from worksheets".into(),
         ErrorKind::InsertPictureWorksheetOnly => "insertPicture only applies to worksheets".into(),
+        ErrorKind::InsertChartWorksheetOnly => "insertChart only applies to worksheets".into(),
         ErrorKind::TwoCellPictureSize => {
             "twoCell picture size is defined by the anchor cells; use setPictureAnchor to change the to cell"
+                .into()
+        }
+        ErrorKind::TwoCellChartSize => {
+            "twoCell chart size is defined by the anchor cells; use setChartAnchor to change the to cell"
+                .into()
+        }
+        ErrorKind::DeleteChartsheetLast => {
+            "cannot delete the last chart on a chartsheet; that would leave an empty chartsheet"
+                .into()
+        }
+        ErrorKind::ChartFormulaNotA1 => {
+            "series formula is not a contiguous A1 range (named ranges, 3-D references, and non-contiguous ranges are not written)"
                 .into()
         }
         ErrorKind::PictureAnchorAbsolute => {

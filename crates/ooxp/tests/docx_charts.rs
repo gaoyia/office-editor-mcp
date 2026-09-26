@@ -592,8 +592,8 @@ fn xlsx_and_pptx_reject_charts() {
         None,
     )
     .unwrap_err();
-    assert_eq!(err.code(), ErrorCode::InvalidField);
-    let err = run(
+    assert_eq!(err.code(), ErrorCode::InvalidId);
+    let RunOutput::Inspect(tree) = run(
         &json!({
             "schemaVersion": 1,
             "action": "inspect",
@@ -603,8 +603,11 @@ fn xlsx_and_pptx_reject_charts() {
         .to_string(),
         None,
     )
-    .unwrap_err();
-    assert_eq!(err.code(), ErrorCode::InvalidField);
+    .unwrap() else {
+        panic!("xlsx 现在认 scope.charts");
+    };
+    assert_eq!(tree["chartCount"], 0);
+    assert_eq!(tree["sheets"][0]["charts"], json!([]));
     let err = run(
         &json!({
             "schemaVersion": 1,

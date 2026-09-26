@@ -157,6 +157,7 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<SetShapeTextOp>, Error> {
             || op_name == "setChartDataLabels"
             || op_name == "setChartSize"
             || op_name == "setChartWrap"
+            || op_name == "setChartAnchor"
             || op_name == "insertSmartArt"
             || op_name == "deleteSmartArt"
             || op_name == "setSmartArtText"

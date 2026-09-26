@@ -191,6 +191,143 @@ function Ensure-XlsxExcelPictureSource([switch]$Force) {
     return $path
 }
 
+# 工作表图表手测源文件：Excel 亲手插一张柱形图，系列公式指向本表单元格。
+# 不要用库 create / insertChart 产物冒充。Excel 16 插入通常是 twoCellAnchor。
+function Test-XlsxChartSource([string]$xlsx, [string]$reqName) {
+    $tree = Invoke-OoxpTree @{
+        schemaVersion = 1; action = 'inspect'
+        path = $xlsx.Replace('\', '/'); format = 'xlsx'
+        scope = @{ charts = $true }
+    } $reqName
+    $sheet = @($tree.sheets) | Where-Object { $_.kind -eq 'worksheet' } | Select-Object -First 1
+    $charts = @()
+    if ($sheet -and ($sheet.PSObject.Properties.Name -contains 'charts')) {
+        $charts = @($sheet.charts)
+    }
+    $col = $charts | Where-Object { [string]$_.type -eq 'col' } | Select-Object -First 1
+    $nVal = 0
+    $valRef = ''
+    if ($col) {
+        $ser = @($col.series) | Select-Object -First 1
+        if ($ser) {
+            $nVal = @($ser.values).Count
+            if ($null -ne $ser.valRef) { $valRef = [string]$ser.valRef }
+        }
+    }
+    return [pscustomobject]@{
+        chartCount = [int]$tree.chartCount
+        n = $charts.Count
+        type = $(if ($col) { [string]$col.type } else { '' })
+        id = $(if ($col) { [string]$col.id } else { '' })
+        nVal = $nVal
+        valRef = $valRef
+        ok = ($tree.chartCount -ge 1) -and ($null -ne $col) -and ($nVal -ge 2) -and ($valRef.Length -gt 0)
+    }
+}
+
+function Write-XlsxChartZipHint([string]$xlsx) {
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $z = [IO.Compression.ZipFile]::OpenRead($xlsx)
+    try {
+        $hits = @($z.Entries | Where-Object { ($_.FullName -replace '\\', '/') -match 'xl/(drawings|charts)/' })
+        Write-Log ("chart zip: " + (($hits | ForEach-Object { $_.FullName }) -join ', '))
+        $draw = $hits |
+            Where-Object { ($_.FullName -replace '\\', '/') -like 'xl/drawings/drawing*.xml' } |
+            Select-Object -First 1
+        if (-not $draw) { return }
+        $ms = New-Object IO.MemoryStream
+        $es = $draw.Open()
+        try { $es.CopyTo($ms) } finally { $es.Dispose() }
+        $txt = [Text.Encoding]::UTF8.GetString($ms.ToArray())
+        $ms.Dispose()
+        $snip = if ($txt.Length -gt 500) { $txt.Substring(0, 500) } else { $txt }
+        Write-Log ("drawing snip: $snip")
+    }
+    finally { $z.Dispose() }
+}
+
+function Ensure-XlsxExcelChartSource([switch]$Force) {
+    $path = Get-OutPath 'xlsx-excel-chart-source.xlsx'
+    if ((Test-Path $path) -and -not $Force) {
+        $cached = Test-XlsxChartSource $path 'xlsx-chart-source-cache-check'
+        if ($cached.ok) { return $path }
+        Write-Log "缓存的 chart source 不合格（count=$($cached.chartCount) type=$($cached.type) nVal=$($cached.nVal) valRef=$($cached.valRef)），重建"
+    }
+
+    $tmpDir = Join-Path $env:TEMP 'ooxp-office'
+    New-Item -ItemType Directory -Force -Path $tmpDir | Out-Null
+    $excelSaved = Join-Path $tmpDir 'xlsx-excel-chart-excel.xlsx'
+
+    $excel = Ensure-MsExcel (Ensure-XlsxCreate)
+    $wb = $excel.Workbooks.Add()
+    $s1 = $wb.Worksheets.Item(1)
+    $s1.Name = 'Sheet1'
+    $s1.Range('B1').Value2 = 'S1'
+    $s1.Range('A2').Value2 = 'A'
+    $s1.Range('B2').Value2 = 10
+    $s1.Range('A3').Value2 = 'B'
+    $s1.Range('B3').Value2 = 20
+    $s1.Range('A4').Value2 = 'C'
+    $s1.Range('B4').Value2 = 30
+    $rng = $s1.Range('A1:B4')
+    try { [void]$rng.Select() } catch {}
+
+    # xlColumnClustered = 51；xlColumns = 2。不要用 Charts.Add，那会建成图表工作表。
+    $xlColumnClustered = 51
+    $xlColumns = 2
+    $hostObj = $null
+    $shapes = $s1.Shapes
+    try {
+        try {
+            $hostObj = $shapes.AddChart2(-1, $xlColumnClustered, 240, 20, 360, 200)
+        }
+        catch {
+            Write-Log ("AddChart2 报错：" + $_.Exception.Message)
+            $cos = $null
+            try { $cos = $s1.ChartObjects() } catch { $cos = $s1.ChartObjects }
+            try {
+                $hostObj = $cos.Add(240, 20, 360, 200)
+            }
+            finally { Release-Com $cos }
+        }
+    }
+    finally { Release-Com $shapes }
+
+    if (-not $hostObj) { throw 'Excel 没有插入工作表柱形图' }
+    $ch = $hostObj.Chart
+    try {
+        $ch.SetSourceData($rng, $xlColumns)
+        try { $ch.ChartType = $xlColumnClustered } catch {}
+        try {
+            $ch.HasTitle = $true
+            $title = $ch.ChartTitle
+            try { $title.Text = $global:OoxpStrings.chartTitle } finally { Release-Com $title }
+        }
+        catch {
+            Write-Log ("设图表标题失败：" + $_.Exception.Message)
+        }
+    }
+    finally { Release-Com $ch }
+
+    if (Test-Path $excelSaved) { Remove-Item $excelSaved -Force }
+    $wb.SaveAs($excelSaved, 51)
+    $wb.Close($false)
+    Release-Com $hostObj
+    Release-Com $rng
+    Release-Com $s1
+    Release-Com $wb
+
+    $check = Test-XlsxChartSource $excelSaved 'xlsx-chart-source-saved-inspect'
+    if (-not $check.ok) {
+        Write-XlsxChartZipHint $excelSaved
+        throw "Excel 另存的柱形图不合格：count=$($check.chartCount) type=$($check.type) nVal=$($check.nVal) valRef=$($check.valRef) id=$($check.id)"
+    }
+
+    Copy-Item -Force $excelSaved $path
+    Write-Log "saved excel chart source $path id=$($check.id) valRef=$($check.valRef)"
+    return $path
+}
+
 # 同理，docx 的 apply 源文件要经 Word 的手。
 # 这里走「%TEMP% 里原地 Save() 再复制回 out」而不是直接 SaveAs2：
 # SaveAs2 曾经挂住过一次（见 checklist-docx.md 的 O1），原因没查清，

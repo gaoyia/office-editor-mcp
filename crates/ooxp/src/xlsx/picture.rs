@@ -669,7 +669,7 @@ fn lookup_sheet_part(pkg: &Package, sheet_name: &str, field_path: &str) -> Resul
         })
 }
 
-fn drawing_parts(pkg: &Package, sheet_part: &str) -> Result<Vec<String>, Error> {
+pub(crate) fn drawing_parts(pkg: &Package, sheet_part: &str) -> Result<Vec<String>, Error> {
     let rels = Relationships::from_package(pkg, sheet_part)?;
     let mut out = Vec::new();
     for rel in rels
@@ -707,7 +707,7 @@ fn find_drawing_for(
     ))
 }
 
-fn walk_anchors<F>(root: &Element, f: &mut F) -> Result<(), Error>
+pub(crate) fn walk_anchors<F>(root: &Element, f: &mut F) -> Result<(), Error>
 where
     F: FnMut(&Element, AnchorKind) -> Result<(), Error>,
 {
@@ -739,7 +739,7 @@ where
     Ok(())
 }
 
-fn walk_anchors_mut<F>(el: &mut Element, f: &mut F) -> bool
+pub(crate) fn walk_anchors_mut<F>(el: &mut Element, f: &mut F) -> bool
 where
     F: FnMut(&mut Element, AnchorKind) -> bool,
 {
@@ -785,7 +785,7 @@ fn has_blip(el: &Element) -> bool {
     found
 }
 
-fn walk_all(el: &Element, f: &mut impl FnMut(&Element)) {
+pub(crate) fn walk_all(el: &Element, f: &mut impl FnMut(&Element)) {
     f(el);
     for c in el.element_children() {
         walk_all(c, f);
@@ -861,7 +861,7 @@ fn cnv_of(pic: &Element) -> (Option<String>, String) {
     (raw, name)
 }
 
-fn read_marker(el: Option<&Element>) -> (Option<a1::CellRef>, i64, i64) {
+pub(crate) fn read_marker(el: Option<&Element>) -> (Option<a1::CellRef>, i64, i64) {
     let Some(el) = el else {
         return (None, 0, 0);
     };
@@ -892,21 +892,21 @@ fn read_marker(el: Option<&Element>) -> (Option<a1::CellRef>, i64, i64) {
     (Some(cell), col_off, row_off)
 }
 
-fn read_ext(anchor: &Element) -> (Option<i64>, Option<i64>) {
+pub(crate) fn read_ext(anchor: &Element) -> (Option<i64>, Option<i64>) {
     let ext = anchor.child_by_local("ext");
     let cx = ext.and_then(|e| e.attr_local("cx")).and_then(|s| s.parse().ok());
     let cy = ext.and_then(|e| e.attr_local("cy")).and_then(|s| s.parse().ok());
     (cx, cy)
 }
 
-fn read_pos(anchor: &Element) -> (Option<i64>, Option<i64>) {
+pub(crate) fn read_pos(anchor: &Element) -> (Option<i64>, Option<i64>) {
     let pos = anchor.child_by_local("pos");
     let x = pos.and_then(|e| e.attr_local("x")).and_then(|s| s.parse().ok());
     let y = pos.and_then(|e| e.attr_local("y")).and_then(|s| s.parse().ok());
     (x, y)
 }
 
-fn parse_edit_as(s: Option<&str>) -> EditAs {
+pub(crate) fn parse_edit_as(s: Option<&str>) -> EditAs {
     match s {
         Some("oneCell") => EditAs::OneCell,
         Some("absolute") => EditAs::Absolute,
@@ -1172,7 +1172,7 @@ fn update_absolute_pos(
     })
 }
 
-fn drawing_is_empty(root: &Element) -> bool {
+pub(crate) fn drawing_is_empty(root: &Element) -> bool {
     !root.element_children().any(|c| {
         AnchorKind::from_local(c.local_name()).is_some()
             || c.local_name() == "AlternateContent"
@@ -1183,7 +1183,7 @@ fn drawing_is_empty(root: &Element) -> bool {
     })
 }
 
-fn ensure_drawing_part(
+pub(crate) fn ensure_drawing_part(
     pkg: &mut Package,
     sheet_doc: &mut Document,
     sheet_part: &str,
@@ -1250,7 +1250,7 @@ fn insert_drawing_el(worksheet: &mut Element, rid: &str) {
     );
 }
 
-fn remove_drawing_ref(
+pub(crate) fn remove_drawing_ref(
     worksheet: &mut Element,
     sheet_part: &str,
     pkg: &mut Package,
@@ -1277,7 +1277,7 @@ fn next_drawing_part(pkg: &Package) -> String {
     }
 }
 
-fn next_cnv_id(pkg: &Package, sheet_part: &str) -> Result<u32, Error> {
+pub(crate) fn next_cnv_id(pkg: &Package, sheet_part: &str) -> Result<u32, Error> {
     let mut max = 0u32;
     for part in drawing_parts(pkg, sheet_part)? {
         let doc = xml::parse(pkg.get(&part)?)?;
@@ -1305,7 +1305,7 @@ fn next_media_part(pkg: &Package, ext: &str) -> String {
     }
 }
 
-fn rel_target_from(source_part: &str, target_opc: &str) -> String {
+pub(crate) fn rel_target_from(source_part: &str, target_opc: &str) -> String {
     let src_dir = split_dir_file(source_part).0;
     let tgt = target_opc.trim_start_matches('/');
     let src = src_dir.trim_start_matches('/');
@@ -1389,14 +1389,14 @@ fn source_from_rels(rels_part: &str) -> Option<String> {
     }
 }
 
-fn ensure_xmlns(root: &mut Element, prefix: &str, ns: &str) {
+pub(crate) fn ensure_xmlns(root: &mut Element, prefix: &str, ns: &str) {
     let key = format!("xmlns:{prefix}");
     if root.attr(&key).is_none() && root.attr("xmlns") != Some(ns) {
         root.set_attr(&key, ns);
     }
 }
 
-fn set_attr_local(el: &mut Element, local: &str, value: &str) {
+pub(crate) fn set_attr_local(el: &mut Element, local: &str, value: &str) {
     if let Some((k, _)) = el.attrs.iter().find(|(k, _)| {
         k.rsplit(':').next().unwrap_or(k) == local
     }) {
@@ -1407,7 +1407,7 @@ fn set_attr_local(el: &mut Element, local: &str, value: &str) {
     el.set_attr(local, value);
 }
 
-fn find_local_mut<'a>(el: &'a mut Element, local: &str) -> Option<&'a mut Element> {
+pub(crate) fn find_local_mut<'a>(el: &'a mut Element, local: &str) -> Option<&'a mut Element> {
     if el.local_name() == local {
         return Some(el);
     }
@@ -1425,7 +1425,7 @@ fn contains_local(el: &Element, local: &str) -> bool {
     el.local_name() == local || el.element_children().any(|c| contains_local(c, local))
 }
 
-fn build_anchor(
+pub(crate) fn build_anchor(
     kind: AnchorKind,
     from: a1::CellRef,
     to: Option<a1::CellRef>,
@@ -1481,7 +1481,7 @@ fn build_anchor(
     let pic = match existing_pic {
         Some(mut pic) => {
             if kind != AnchorKind::TwoCell {
-                set_pic_ext(&mut pic, cx, cy);
+                set_body_ext(&mut pic, cx, cy);
             }
             pic
         }
@@ -1492,7 +1492,7 @@ fn build_anchor(
     anchor
 }
 
-fn set_pic_ext(pic: &mut Element, cx: i64, cy: i64) {
+fn set_body_ext(pic: &mut Element, cx: i64, cy: i64) {
     if let Some(xfrm) = find_local_mut(pic, "xfrm") {
         if let Some(ext) = xfrm.child_by_local_mut("ext") {
             set_attr_local(ext, "cx", &cx.to_string());

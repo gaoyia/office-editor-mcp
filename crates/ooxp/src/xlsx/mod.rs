@@ -2,6 +2,7 @@
 
 pub(crate) mod a1;
 mod apply;
+mod chart;
 mod create;
 mod inspect;
 mod picture;

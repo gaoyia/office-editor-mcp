@@ -1,5 +1,6 @@
 //! ooxp：用领域 JSON 对 OOXML 做 inspect / create / apply / exportMedia / exportChartData。
 
+mod chart;
 mod dispatch;
 mod docx;
 mod error;
@@ -146,8 +147,11 @@ mod tests {
         };
         assert!(tree["sheets"][0].get("cells").is_none());
         assert_eq!(tree["pictureCount"], 0);
+        assert_eq!(tree["chartCount"], 0);
         assert_eq!(tree["sheets"][0]["pictureCount"], 0);
+        assert_eq!(tree["sheets"][0]["chartCount"], 0);
         assert!(tree["sheets"][0].get("pictures").is_none());
+        assert!(tree["sheets"][0].get("charts").is_none());
     }
 
     #[test]
@@ -762,11 +766,11 @@ mod tests {
         };
         assert_eq!(
             object_keys(&tree),
-            ["schemaVersion", "format", "id", "pictureCount", "sheets"]
+            ["schemaVersion", "format", "id", "pictureCount", "chartCount", "sheets"]
         );
         assert_eq!(
             object_keys(&tree["sheets"][0]),
-            ["id", "name", "kind", "pictureCount", "truncated", "range", "cells"]
+            ["id", "name", "kind", "pictureCount", "chartCount", "truncated", "range", "cells"]
         );
         assert_eq!(
             object_keys(&tree["sheets"][0]["cells"][0]),

@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "book.xlsx",
+  "output": "book.chart.xlsx",
+  "ops": [
+    {
+      "op": "setChartSeries",
+      "id": "sheet:Sheet1/chart:2/series:0",
+      "values": [10, 20, 30]
+    },
+    {
+      "op": "insertChart",
+      "id": "sheet:Sheet1",
+      "type": "col",
+      "from": "E2",
+      "dataFrom": "A10",
+      "title": "销量",
+      "series": [
+        {
+          "name": "Q1",
+          "categories": ["甲", "乙", "丙"],
+          "values": [1, 2, 3]
+        }
+      ]
+    }
+  ]
+}

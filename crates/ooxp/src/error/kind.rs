@@ -98,6 +98,12 @@ pub(crate) enum IdReason {
     SeriesIndexNotInt,
     /// insertChart 必须用正文或页眉页脚段落 id
     InsertChartNeedsPara,
+    /// xlsx 的 insertChart 必须用 sheet:工作表名
+    InsertChartNeedsSheet,
+    /// xlsx 图表 id 必须是 sheet:工作表名/chart:…
+    SheetChartPrefix,
+    /// 工作表 id，缺少 /chart:…
+    SheetChartContainer,
     /// SmartArt id 必须是 {段落}/smartdiagram:…
     SmartArtPrefix,
     /// 段落 id，缺少 /smartdiagram:…
@@ -227,7 +233,11 @@ define_error_kinds! {
     SetCellWorksheetOnly => vec![Self::SetCellWorksheetOnly],
     InspectWorksheetOnly => vec![Self::InspectWorksheetOnly],
     InsertPictureWorksheetOnly => vec![Self::InsertPictureWorksheetOnly],
+    InsertChartWorksheetOnly => vec![Self::InsertChartWorksheetOnly],
     TwoCellPictureSize => vec![Self::TwoCellPictureSize],
+    TwoCellChartSize => vec![Self::TwoCellChartSize],
+    DeleteChartsheetLast => vec![Self::DeleteChartsheetLast],
+    ChartFormulaNotA1 => vec![Self::ChartFormulaNotA1],
     PictureAnchorAbsolute => vec![Self::PictureAnchorAbsolute],
     InvalidXlsxAnchor => vec![Self::InvalidXlsxAnchor],
     InvalidXlsxEditAs => vec![Self::InvalidXlsxEditAs],
@@ -411,6 +421,9 @@ impl IdReason {
             Self::SeriesPrefix,
             Self::SeriesIndexNotInt,
             Self::InsertChartNeedsPara,
+            Self::InsertChartNeedsSheet,
+            Self::SheetChartPrefix,
+            Self::SheetChartContainer,
             Self::SmartArtPrefix,
             Self::SmartArtContainer,
             Self::SmartArtIndexNotInt,
@@ -553,6 +566,7 @@ impl ErrorKind {
             | Self::InvalidHexColor
             | Self::InvalidTextBoxDirection
             | Self::InsertPictureWorksheetOnly
+            | Self::InsertChartWorksheetOnly
             | Self::InvalidXlsxAnchor
             | Self::InvalidXlsxEditAs => InvalidField,
             Self::OutOfRange { .. } => TruncatedLimit,
@@ -579,6 +593,9 @@ impl ErrorKind {
             | Self::ChartTypeNotConvertible
             | Self::SmartArtLayoutNotConvertible
             | Self::TwoCellPictureSize
+            | Self::TwoCellChartSize
+            | Self::DeleteChartsheetLast
+            | Self::ChartFormulaNotA1
             | Self::PictureAnchorAbsolute => NotImplemented,
             Self::OpcOpen { .. } => OpcOpen,
             Self::PartMissing { .. }
