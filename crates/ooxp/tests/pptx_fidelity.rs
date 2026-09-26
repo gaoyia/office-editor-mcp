@@ -208,7 +208,7 @@ fn apply_preserves_run_bold() {
 }
 
 /// 单页样本，一个形状三段：第一段没有 `a:pPr`，第二段居中，第三段斜体。
-/// 专门用来核对改文字不会压掉别的段落，也不会把别段的 `a:pPr` 搬到第一段。
+/// 用来核对写入部落在第一段、不把别段的 `a:pPr` 搬过来，掏空的兄弟段则删掉。
 const MULTI_CT: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/ppt/presentation.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml"/><Override PartName="/ppt/slides/slide1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/></Types>"#;
 
 const MULTI_PRES: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><p:presentation xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:sldIdLst><p:sldId id="256" r:id="rId2"/></p:sldIdLst><p:sldSz cx="12192000" cy="6858000"/><p:notesSz cx="6858000" cy="9144000"/></p:presentation>"#;
@@ -219,6 +219,12 @@ const MULTI_SLIDE: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="ye
 
 /// 一个段落里用段落级 `a:br` 换行，这是 PowerPoint 的写法：`a:br` 与 `a:r` 平级。
 const BR_SLIDE: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:cSld name="带换行"><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/><p:sp><p:nvSpPr><p:cNvPr id="2" name="换行框"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr/><p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr b="1"/><a:t>上</a:t></a:r><a:br/><a:r><a:t>下</a:t></a:r></a:p></p:txBody></p:sp></p:spTree></p:cSld></p:sld>"#;
+
+/// 第一段空、只有右对齐；第二段有字。写入应落在第二段，空的第一段删掉。
+const LEADING_EMPTY_SLIDE: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:cSld name="前空"><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/><p:sp><p:nvSpPr><p:cNvPr id="2" name="前空"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr/><p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:pPr algn="r"/></a:p><a:p><a:pPr algn="l"/><a:r><a:t>正文</a:t></a:r></a:p></p:txBody></p:sp></p:spTree></p:cSld></p:sld>"#;
+
+/// 第二段是页码域。契约第 8 条不清域，这段不能当空段删掉。
+const FLD_SLIDE: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:cSld name="带域"><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/><p:sp><p:nvSpPr><p:cNvPr id="2" name="带域"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr/><p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:t>标题</a:t></a:r></a:p><a:p><a:fld id="{00000000-0000-0000-0000-000000000001}" type="slidenum"><a:t>1</a:t></a:fld></a:p></p:txBody></p:sp></p:spTree></p:cSld></p:sld>"#;
 
 fn write_slide_sample(tag: &str, slide: &str) -> PathBuf {
     let n = SEQ.fetch_add(1, Ordering::Relaxed);
@@ -247,7 +253,7 @@ fn write_multi_sample(tag: &str) -> PathBuf {
     write_slide_sample(tag, MULTI_SLIDE)
 }
 
-/// 读回来的文本必须和写进去的一模一样，这是契约「setShapeText」第 7 条。
+/// 读回来的文本必须和写进去的一模一样，这是契约「setShapeText」第 9 条。
 fn read_back(path: &Path) -> String {
     let RunOutput::Inspect(tree) = run(
         &json!({
@@ -274,7 +280,7 @@ fn count_paras(xml: &str) -> usize {
 }
 
 #[test]
-fn apply_keeps_sibling_paragraphs_and_their_ppr() {
+fn apply_keeps_written_para_and_drops_empty_siblings() {
     let src = write_multi_sample("multi");
     let out = tmp_dir().join("multi-applied.pptx");
     run(
@@ -291,32 +297,21 @@ fn apply_keeps_sibling_paragraphs_and_their_ppr() {
     .unwrap();
 
     let slide = part(&out, "ppt/slides/slide1.xml");
-    assert_eq!(count_paras(&slide), 3, "三段不能被压成一段：{slide}");
+    assert_eq!(count_paras(&slide), 1, "掏空的兄弟段应删掉：{slide}");
     // 第一段原样只换字：自己的 b=1 留着，且没有凭空多出 a:pPr。
     assert!(
         slide.contains(r#"<a:p><a:r><a:rPr b="1"/><a:t>新文本</a:t></a:r></a:p>"#),
         "第一段被改坏了：{slide}"
     );
-    // 第二段的居中留在它自己身上，没被搬走。
-    assert!(slide.contains(r#"<a:pPr algn="ctr"/>"#));
+    // 第二段的居中不能搬到写入段，空段删掉后也不该再出现。
+    assert!(
+        !slide.contains(r#"<a:pPr algn="ctr"/>"#),
+        "别段的对齐还在：{slide}"
+    );
     assert!(!slide.contains("第一段"));
     assert!(!slide.contains("第二段"));
     assert!(!slide.contains("第三段"));
-
-    let RunOutput::Inspect(tree) = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": out.to_string_lossy(),
-            "scope": { "slide": 1 }
-        })
-        .to_string(),
-        None,
-    )
-    .unwrap() else {
-        panic!();
-    };
-    assert_eq!(tree["slides"][0]["shapes"][0]["text"], "新文本");
+    assert_eq!(read_back(&out), "新文本");
 }
 
 /// `a:br` 与 `a:r` 平级（`EG_TextRun`，§A.4），`CT_RegularTextRun` 只允许一个 `a:t`。
@@ -349,7 +344,7 @@ fn apply_puts_br_between_runs_not_inside() {
         !slide.contains("<a:br/><a:t>"),
         "a:br 不能待在 a:r 里面：{slide}"
     );
-    assert_eq!(count_paras(&slide), 3);
+    assert_eq!(count_paras(&slide), 1);
     assert_eq!(read_back(&out), "上\n下");
 }
 
@@ -406,4 +401,61 @@ fn apply_multiline_then_single_line_roundtrips() {
     }
     let slide = part(&one, "ppt/slides/slide1.xml");
     assert!(!slide.contains("<a:br/>"));
+}
+
+#[test]
+fn apply_drops_leading_empty_para() {
+    let src = write_slide_sample("leading-empty", LEADING_EMPTY_SLIDE);
+    let out = tmp_dir().join("leading-empty-applied.pptx");
+    run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "apply",
+            "path": src.to_string_lossy(),
+            "output": out.to_string_lossy(),
+            "ops": [{ "op": "setShapeText", "id": "slide:1/shape:2", "text": "新" }]
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap();
+
+    let slide = part(&out, "ppt/slides/slide1.xml");
+    assert_eq!(count_paras(&slide), 1, "空的前段应删掉：{slide}");
+    assert!(
+        slide.contains(r#"<a:p><a:pPr algn="l"/><a:r><a:t>新</a:t></a:r></a:p>"#),
+        "写入段自己的对齐应留下：{slide}"
+    );
+    assert!(
+        !slide.contains(r#"algn="r""#),
+        "空的前段对齐还在：{slide}"
+    );
+    assert_eq!(read_back(&out), "新");
+}
+
+#[test]
+fn apply_keeps_sibling_that_still_has_field() {
+    let src = write_slide_sample("fld", FLD_SLIDE);
+    let out = tmp_dir().join("fld-applied.pptx");
+    run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "apply",
+            "path": src.to_string_lossy(),
+            "output": out.to_string_lossy(),
+            "ops": [{ "op": "setShapeText", "id": "slide:1/shape:2", "text": "新" }]
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap();
+
+    let slide = part(&out, "ppt/slides/slide1.xml");
+    assert_eq!(count_paras(&slide), 2, "含域的兄弟段应留下：{slide}");
+    assert!(
+        slide.contains(r#"<a:fld id="{00000000-0000-0000-0000-000000000001}" type="slidenum"><a:t>1</a:t></a:fld>"#),
+        "域被清掉了：{slide}"
+    );
+    assert!(slide.contains("<a:t>新</a:t>"), "写入文本不见了：{slide}");
+    assert!(!slide.contains("标题"));
 }

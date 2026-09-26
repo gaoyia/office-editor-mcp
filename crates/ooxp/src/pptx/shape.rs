@@ -237,7 +237,7 @@ fn ids_match(file: &str, req: &str) -> bool {
 }
 
 /// 按 `docs/json-contract.md` 的替换规则原地改：第一个有文本 run 的段落收下全部新文本，
-/// 其余段落只清掉可见内容，段落本身与 `a:pPr` 留着。
+/// 其余段落清掉可见内容；清完后只剩 `a:pPr` / `a:endParaRPr` 的段删掉。
 ///
 /// 换行必须在段落这一级处理。`a:br` 与 `a:r` 平级（`EG_TextRun`，ECMA-376 §A.4），
 /// 而 `CT_RegularTextRun` 只允许一个可选 `a:rPr` 加恰好一个 `a:t`，
@@ -249,6 +249,7 @@ pub fn set_txbody_text(tx: &mut Element, text: &str) {
     if !filled {
         append_text_para(tx, &lines);
     }
+    prune_empty_paras(tx);
 }
 
 fn rewrite_paras(el: &mut Element, filled: &mut bool, lines: &[&str]) {
@@ -282,7 +283,7 @@ fn is_text_run(e: &Element) -> bool {
 
 /// 清掉本段的可见内容：`a:t` 和 `a:br` 都删，因此变空的 `a:r` 删。
 /// `a:br` 一并删是因为 inspect 把它读成 `\n`，留一个下来读回值就和写入值差一个换行。
-/// `a:pPr`、`a:endParaRPr`、`a:fld` 留着。
+/// `a:pPr`、`a:endParaRPr`、`a:fld` 留着；随后由 `prune_empty_paras` 决定空段是否删除。
 fn strip_para(p: &mut Element) {
     let mut i = p.children.len();
     while i > 0 {
@@ -303,6 +304,57 @@ fn strip_para(p: &mut Element) {
             _ => {}
         }
     }
+}
+
+/// 清完之后只剩 `a:pPr` / `a:endParaRPr` 的段删掉。
+/// 含 `a:r`、`a:br`、`a:fld` 或其它不认识的子元素的段留下（域按契约第 8 条不清）。
+/// `CT_TextBody` 至少留一段（§A.4，`minOccurs="1"`）；从后往前删，优先保住前面的写入段。
+fn prune_empty_paras(el: &mut Element) {
+    if el.local_name() == "AlternateContent" {
+        if let Some(i) = first_alt_child_index(el) {
+            if let Node::Element(child) = &mut el.children[i] {
+                prune_empty_paras(child);
+            }
+        }
+        return;
+    }
+    for child in el.children.as_mut_slice() {
+        if let Node::Element(e) = child {
+            if e.local_name() != "p" {
+                prune_empty_paras(e);
+            }
+        }
+    }
+    let mut remaining = el
+        .children
+        .iter()
+        .filter(|n| matches!(n, Node::Element(e) if e.local_name() == "p"))
+        .count();
+    if remaining <= 1 {
+        return;
+    }
+    let mut i = el.children.len();
+    while i > 0 {
+        i -= 1;
+        let Node::Element(e) = &el.children[i] else {
+            continue;
+        };
+        if e.local_name() != "p" {
+            continue;
+        }
+        if remaining <= 1 {
+            break;
+        }
+        if is_prunable_para(e) {
+            el.children.remove(i);
+            remaining -= 1;
+        }
+    }
+}
+
+fn is_prunable_para(p: &Element) -> bool {
+    !p.element_children()
+        .any(|e| !matches!(e.local_name(), "pPr" | "endParaRPr"))
 }
 
 /// 第一行写进第一个文本 run 的 `a:t`，余下每行在段落里插一个 `a:br` 加一个新 `a:r`。

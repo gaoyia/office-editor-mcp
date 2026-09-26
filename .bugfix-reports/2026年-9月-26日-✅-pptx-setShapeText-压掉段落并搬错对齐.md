@@ -86,7 +86,9 @@ tx.push_element(build_para(ppr, rpr, text));
 
 **洞二：原有的 `a:br` 不清。** 第一版只删 `a:t`，段落里已有的 `a:br` 留在原处。源文件本来就有换行（`<a:r><a:t>上</a:t></a:r><a:br/><a:r><a:t>下</a:t></a:r>`，这正是 PowerPoint 的写法），改成单行 `新文本` 之后产物是 `<a:r>…<a:t>新文本</a:t></a:r><a:br/>`，inspect 读回来是 `新文本\n`，比写入值多一个换行，违反契约第 9 条。
 
-两个洞的根子是同一个：**`a:br` 是可见文本的一部分**，inspect 早就把它读成 `\n`，所以它必须和 `a:t` 一样进入「写入」和「清理」两个环节，而且它的归属层级是段落、不是 run。第二版因此把整个操作提到段落级：第一个有文本 run 的段落收下全部新文本，换行在段落里插 `a:br` 加新 `a:r`（沿用第一个 run 的 `a:rPr`），其余段落只清可见内容、留住自己和 `a:pPr`。
+两个洞的根子是同一个：**`a:br` 是可见文本的一部分**，inspect 早就把它读成 `\n`，所以它必须和 `a:t` 一样进入「写入」和「清理」两个环节，而且它的归属层级是段落、不是 run。第二版因此把整个操作提到段落级：第一个有文本 run 的段落收下全部新文本，换行在段落里插 `a:br` 加新 `a:r`（沿用第一个 run 的 `a:rPr`），其余段落只清可见内容。
+
+**洞三：空的兄弟段留下，PowerPoint 多出空行。** 第二版把「不许整段重建、不许搬别段的 `a:pPr`」推成了「清空后的兄弟 `a:p` 也必须留下」。这是把 docx `setParaText`（id 是一段）套到了 pptx `setShapeText`（id 是整个形状）上。`\n` 对应的是段落里的 `a:br`，inspect 也不在 `a:p` 之间插入换行。ECMA-376 §21.1.2.2.6 把段落定为文本框里最高一层分隔，空的 `a:p` 仍是一段，PowerPoint 会画成空行。`CT_TextBody` 的 `a:p` 只需 `minOccurs="1"`。契约第 7 条已改成：写入段原地保留；清完后只剩 `a:pPr` / `a:endParaRPr` 的段删掉；含 `a:fld` 的段按第 8 条留下。计划记为 A15。
 
 契约第 5 条原本只写「`text` 中的 `\n` 拆成 `a:t` 加 `a:br`」，既没说层级、也没提清理 `a:br`，我正是照着这句实现的。第 5 条与第 9 条（写进去能原样读回）因此自相矛盾。已把这条拆成第 5 到第 7 条，写明层级依据与 `a:br` 必须一并清掉的理由。
 
@@ -106,15 +108,17 @@ tx.push_element(build_para(ppr, rpr, text));
 
 ## 回归测试
 
-`crates/ooxp/tests/pptx_fidelity.rs` 从 5 项加到 9 项。样本两个：审计时那个三段落形状，以及一个用段落级 `a:br` 换行的形状。
+`crates/ooxp/tests/pptx_fidelity.rs` 里与本缺陷相关的 apply 项现在是 6 项。样本包括审计时那个三段落形状、段落级 `a:br`、前段为空、以及带 `a:fld` 的兄弟段。
 
-- `apply_keeps_sibling_paragraphs_and_their_ppr`：段落数仍是 3，第一段精确匹配 `<a:p><a:r><a:rPr b="1"/><a:t>新文本</a:t></a:r></a:p>`（既核对 `b="1"` 还在，也核对没有凭空多出 `a:pPr`），第二段的 `algn="ctr"` 仍在，读回值等于写入值
-- `apply_puts_br_between_runs_not_inside`：换行拆成 `<a:r>…<a:t>上</a:t></a:r><a:br/><a:r><a:rPr b="1"/><a:t>下</a:t></a:r>`，新 run 带上了 `rPr`；另有一条 `!contains("<a:br/><a:t>")` 专门盯住「`a:br` 跑进 run 里」这个形状
+- `apply_keeps_written_para_and_drops_empty_siblings`：写入后只剩一段，精确匹配 `<a:p><a:r><a:rPr b="1"/><a:t>新文本</a:t></a:r></a:p>`（`b="1"` 还在，没有凭空多出 `a:pPr`，也没有第二段留下的 `algn="ctr"`），读回值等于写入值
+- `apply_puts_br_between_runs_not_inside`：换行拆成 `<a:r>…<a:t>上</a:t></a:r><a:br/><a:r><a:rPr b="1"/><a:t>下</a:t></a:r>`，新 run 带上了 `rPr`；另有一条 `!contains("<a:br/><a:t>")` 专门盯住「`a:br` 跑进 run 里」这个形状；段落数是 1
 - `apply_single_line_clears_existing_br`：源文件本来两行，改成单行之后产物里没有任何 `a:br`，读回值是单行
 - `apply_multiline_then_single_line_roundtrips`：单行改三行、再改回单行，每一步的读回值都等于写入值
+- `apply_drops_leading_empty_para`：第一段本来就是空的，写入落在第二段，空的第一段删掉
+- `apply_keeps_sibling_that_still_has_field`：兄弟段里还有 `a:fld`，这段留下
 
-覆盖关系：前两项在第一版实现下会失败（第一段是 `<a:p><a:pPr algn="ctr"/><a:r>…`，段落数 1；`a:br` 在 run 内），后两项在第二版之前会失败（残留 `a:br` 让读回值多一个 `\n`）。
+覆盖关系：前两项在第一版实现下会失败（第一段是 `<a:p><a:pPr algn="ctr"/><a:r>…`，`a:br` 在 run 内）。清 `a:br` 的两项在第二版之前会失败。空段两项在第二版「留住兄弟段」下会失败（段落数仍是 3，或空的前段还在）。
 
 ## 还没解决的
 
-样本仍是手工写的 XML，不是 PowerPoint 亲手存的文件，`manual-check/office` 的 pptx 用例这一轮也没重跑。带 `a:fld`（域）的形状按契约第 3 条只收 `a:r`、不动域里的 `a:t`，所以「写进去能原样读回」在有域时不成立，契约第 8 条已声明验收只用无域文本框，这个口子记在 A14。审计的其他遗留项记在 `.plan/2026年-9月-25日-⚠️-ooxp.md` 的「审计遗留」表里。
+样本仍是手工写的 XML，不是 PowerPoint 亲手存的文件。带 `a:fld`（域）的形状按契约第 3 条只收 `a:r`、不动域里的 `a:t`，所以「写进去能原样读回」在有域时不成立，契约第 8 条已声明验收只用无域文本框，这个口子记在 A14。空的兄弟段已按 A15 删掉。审计的其他遗留项记在 `.plan/2026年-9月-25日-⚠️-ooxp.md` 的「审计遗留」表里。
