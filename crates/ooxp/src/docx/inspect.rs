@@ -21,17 +21,13 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         let index = i + 1;
         if let Some(level) = para::heading_level(p) {
             let (id, _) = para::para_stable_id(p, index);
-            let mut item = json!({
+            outline.push(json!({
                 "id": id,
                 "index": index,
                 "level": level,
+                "style": para::p_style(p),
                 "text": para::visible_text(p),
-            });
-            match para::p_style(p) {
-                Some(s) => item["style"] = json!(s),
-                None => item["style"] = json!(null),
-            }
-            outline.push(item);
+            }));
         }
     }
 
@@ -67,18 +63,24 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
 
 fn para_json(p: &crate::xml::Element, index: usize) -> Value {
     let (id, stable) = para::para_stable_id(p, index);
-    let mut obj = json!({
-        "id": id,
-        "index": index,
-        "text": para::visible_text(p),
-        "stable": stable,
-    });
-    match para::p_style(p) {
-        Some(s) => obj["style"] = json!(s),
-        None => obj["style"] = json!(null),
-    }
+    let style = para::p_style(p);
+    let text = para::visible_text(p);
     if let Some(level) = para::heading_level(p) {
-        obj["level"] = json!(level);
+        json!({
+            "id": id,
+            "index": index,
+            "style": style,
+            "level": level,
+            "text": text,
+            "stable": stable,
+        })
+    } else {
+        json!({
+            "id": id,
+            "index": index,
+            "style": style,
+            "text": text,
+            "stable": stable,
+        })
     }
-    obj
 }

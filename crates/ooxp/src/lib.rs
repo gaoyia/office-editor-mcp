@@ -36,6 +36,14 @@ mod tests {
         pkg.get(name).unwrap().to_vec()
     }
 
+    fn object_keys(v: &serde_json::Value) -> Vec<&str> {
+        v.as_object()
+            .unwrap()
+            .keys()
+            .map(String::as_str)
+            .collect()
+    }
+
     #[test]
     fn create_inspect_apply_roundtrip() {
         let path = tmp("book.xlsx");
@@ -531,5 +539,145 @@ mod tests {
             .to_string();
         assert!(msg.contains("Cannot access"));
         assert!(!msg.contains("系统找不到"));
+    }
+
+    #[test]
+    fn inspect_field_order_matches_contract() {
+        let xlsx = tmp("order.xlsx");
+        run(
+            &json!({
+                "schemaVersion": 1,
+                "action": "create",
+                "path": xlsx.to_string_lossy(),
+                "workbook": { "sheets": [{ "name": "Sheet1", "cells": [{ "ref": "A1", "value": 1 }] }] }
+            })
+            .to_string(),
+            None,
+        )
+        .unwrap();
+        let RunOutput::Inspect(tree) = run(
+            &json!({
+                "schemaVersion": 1,
+                "action": "inspect",
+                "path": xlsx.to_string_lossy(),
+                "scope": { "sheet": "Sheet1", "range": "A1" }
+            })
+            .to_string(),
+            None,
+        )
+        .unwrap() else {
+            panic!();
+        };
+        assert_eq!(
+            object_keys(&tree),
+            ["schemaVersion", "format", "id", "sheets"]
+        );
+        assert_eq!(
+            object_keys(&tree["sheets"][0]),
+            ["id", "name", "kind", "truncated", "range", "cells"]
+        );
+        assert_eq!(
+            object_keys(&tree["sheets"][0]["cells"][0]),
+            ["id", "ref", "type", "value", "formula"]
+        );
+
+        let docx = tmp("order.docx");
+        run(
+            &json!({
+                "schemaVersion": 1,
+                "action": "create",
+                "path": docx.to_string_lossy(),
+                "document": { "paragraphs": [
+                    { "style": "Heading1", "text": "标题" },
+                    { "text": "hello" }
+                ] }
+            })
+            .to_string(),
+            None,
+        )
+        .unwrap();
+        let RunOutput::Inspect(tree) = run(
+            &json!({
+                "schemaVersion": 1,
+                "action": "inspect",
+                "path": docx.to_string_lossy(),
+                "scope": { "from": 1, "maxParas": 10 }
+            })
+            .to_string(),
+            None,
+        )
+        .unwrap() else {
+            panic!();
+        };
+        assert_eq!(
+            object_keys(&tree),
+            [
+                "schemaVersion",
+                "format",
+                "id",
+                "paraCount",
+                "outline",
+                "from",
+                "truncated",
+                "paragraphs"
+            ]
+        );
+        assert_eq!(
+            object_keys(&tree["outline"][0]),
+            ["id", "index", "level", "style", "text"]
+        );
+        assert_eq!(
+            object_keys(&tree["paragraphs"][0]),
+            ["id", "index", "style", "level", "text", "stable"]
+        );
+        assert_eq!(
+            object_keys(&tree["paragraphs"][1]),
+            ["id", "index", "style", "text", "stable"]
+        );
+
+        let pptx = tmp("order.pptx");
+        run(
+            &json!({
+                "schemaVersion": 1,
+                "action": "create",
+                "path": pptx.to_string_lossy(),
+                "presentation": { "slides": [
+                    { "shapes": [{ "text": "标题" }] },
+                    { "shapes": [{ "text": "第二页" }] }
+                ] }
+            })
+            .to_string(),
+            None,
+        )
+        .unwrap();
+        let RunOutput::Inspect(tree) = run(
+            &json!({
+                "schemaVersion": 1,
+                "action": "inspect",
+                "path": pptx.to_string_lossy(),
+                "scope": { "slide": 1 }
+            })
+            .to_string(),
+            None,
+        )
+        .unwrap() else {
+            panic!();
+        };
+        assert_eq!(
+            object_keys(&tree),
+            ["schemaVersion", "format", "id", "slideCount", "slides"]
+        );
+        assert_eq!(
+            object_keys(&tree["slides"][0]),
+            ["id", "index", "name", "hidden", "truncated", "shapes"]
+        );
+        assert_eq!(
+            object_keys(&tree["slides"][1]),
+            ["id", "index", "name", "hidden"]
+        );
+        assert_eq!(
+            object_keys(&tree["slides"][0]["shapes"][0]),
+            ["id", "shapeId", "name", "text", "stable"]
+        );
     }
 }

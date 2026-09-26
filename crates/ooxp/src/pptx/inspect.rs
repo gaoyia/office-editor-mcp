@@ -21,12 +21,9 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         let mut obj = json!({
             "id": format!("slide:{}", s.index),
             "index": s.index,
+            "name": s.name,
             "hidden": s.hidden,
         });
-        match &s.name {
-            Some(n) => obj["name"] = json!(n),
-            None => obj["name"] = json!(null),
-        }
         if let Some(scope) = &scope {
             if scope.slide as usize == s.index {
                 let doc = xml::parse(pkg.get(&s.part)?)?;
