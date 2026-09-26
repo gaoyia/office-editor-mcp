@@ -5,6 +5,8 @@ use serde_json::Value;
 use crate::error::{Error, ErrorKind, IdReason, ScopeNeed, TypeName};
 use crate::json;
 
+use super::hf::{HfKind, HfType};
+
 #[derive(Debug, Clone)]
 pub struct InspectScope {
     /// 正文切片起点；与 `max_paras` 成对出现。
@@ -29,9 +31,19 @@ pub struct SetHfDistanceOp {
 }
 
 #[derive(Debug, Clone)]
+pub struct SetHfLinkOp {
+    pub id: String,
+    pub n: usize,
+    pub kind: HfKind,
+    pub hf_type: HfType,
+    pub linked: bool,
+}
+
+#[derive(Debug, Clone)]
 pub enum DocxOp {
     SetParaText(SetParaTextOp),
     SetHeaderFooterDistance(SetHfDistanceOp),
+    SetHeaderFooterLink(SetHfLinkOp),
 }
 
 pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
@@ -169,6 +181,9 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<DocxOp>, Error> {
             "setHeaderFooterDistance" => {
                 out.push(DocxOp::SetHeaderFooterDistance(parse_set_hf_distance(obj, i)?))
             }
+            "setHeaderFooterLink" => {
+                out.push(DocxOp::SetHeaderFooterLink(parse_set_hf_link(obj, i)?))
+            }
             _ => {
                 return Err(Error::with_path(
                     ErrorKind::UnsupportedOp {
@@ -274,6 +289,107 @@ fn parse_set_hf_distance(
         n,
         header_distance,
         footer_distance,
+    })
+}
+
+fn parse_set_hf_link(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<SetHfLinkOp, Error> {
+    for k in obj.keys() {
+        if !matches!(k.as_str(), "op" | "id" | "kind" | "type" | "linked") {
+            return Err(Error::with_path(
+                ErrorKind::UnknownField { field: k.clone() },
+                format!("ops[{i}].{k}"),
+            ));
+        }
+    }
+    let id = obj
+        .get("id")
+        .and_then(Value::as_str)
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::MissingField {
+                    field: "id".into(),
+                },
+                format!("ops[{i}].id"),
+            )
+        })?;
+    let n = parse_section_id(id, i)?;
+    let kind = match obj.get("kind") {
+        Some(Value::String(s)) => HfKind::parse(s).ok_or_else(|| {
+            Error::with_path(ErrorKind::InvalidHfKind, format!("ops[{i}].kind"))
+        })?,
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "kind".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].kind"),
+            ));
+        }
+        None => {
+            return Err(Error::with_path(
+                ErrorKind::OpRequiresField {
+                    op: "setHeaderFooterLink".into(),
+                    field: "kind".into(),
+                },
+                format!("ops[{i}].kind"),
+            ));
+        }
+    };
+    let hf_type = match obj.get("type") {
+        Some(Value::String(s)) => HfType::parse(s).ok_or_else(|| {
+            Error::with_path(ErrorKind::InvalidHfType, format!("ops[{i}].type"))
+        })?,
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "type".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].type"),
+            ));
+        }
+        None => {
+            return Err(Error::with_path(
+                ErrorKind::OpRequiresField {
+                    op: "setHeaderFooterLink".into(),
+                    field: "type".into(),
+                },
+                format!("ops[{i}].type"),
+            ));
+        }
+    };
+    let linked = match obj.get("linked") {
+        Some(Value::Bool(b)) => *b,
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "linked".into(),
+                    expected: TypeName::Boolean,
+                },
+                format!("ops[{i}].linked"),
+            ));
+        }
+        None => {
+            return Err(Error::with_path(
+                ErrorKind::OpRequiresField {
+                    op: "setHeaderFooterLink".into(),
+                    field: "linked".into(),
+                },
+                format!("ops[{i}].linked"),
+            ));
+        }
+    };
+    Ok(SetHfLinkOp {
+        id: id.to_string(),
+        n,
+        kind,
+        hf_type,
+        linked,
     })
 }
 

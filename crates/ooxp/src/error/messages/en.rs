@@ -105,6 +105,14 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::InvalidParaStyle => {
             "style must be Normal, Heading1, Heading2, or Heading3".into()
         }
+        ErrorKind::InvalidHfKind => "kind must be header or footer".into(),
+        ErrorKind::InvalidHfType => "type must be default, even, or first".into(),
+        ErrorKind::CannotLinkFirstSection => {
+            "The first section cannot link to a previous section".into()
+        }
+        ErrorKind::HfTypeInactive { kind, hf_type } => {
+            format!("{kind} type {hf_type} is not active on this section")
+        }
         ErrorKind::OpcOpen { reason } => match reason {
             OpcReason::EmptyPartName => "Part name must not be empty".into(),
             OpcReason::InvalidPartName { name } => format!("Invalid part name: {name}"),

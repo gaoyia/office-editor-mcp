@@ -52,9 +52,9 @@ id 是给模型用的字符串，必须能从文件内容稳定算出来，不�
 
 没有 `w14:paraId` 时：`para:index:{n}`，`n` 从 1 起，按主文档部件里 `w:p` 的文档顺序（含表格单元格里的段落）。树上同时给 `"stable": false`。这类 id 在增删段落后会变，只够同一次 inspect 之后立刻 apply。
 
-标题和正文都是段落，不另编一套 id。脚注、尾注、批注、文本框里的段落不进这棵树，也不接受 apply。页眉、页脚按下面规则进树，可按 id 改字；节上的页眉页脚距边界可读写。不做新建页眉、链接到前一节或图文混排。
+标题和正文都是段落，不另编一套 id。脚注、尾注、批注、文本框里的段落不进这棵树，也不接受 apply。页眉、页脚按下面规则进树，可按 id 改字；节上的页眉页脚距边界、以及是否链接到前一节，都可以读写。不做新建页眉或图文混排。不写入 `titlePg` / `evenAndOddHeaders`。
 
-页眉、页脚 id 按部件编，不按节编。`w:sectPr` 里的 `w:headerReference` / `w:footerReference`（§17.10.2、§17.10.5）经主文档关系解到部件路径。同一部件只出一个容器节点；多个节引用同一部件时，`sections` 列出所有节号。后一节某类型引用省略时按规范继承前节（§17.10.2）；`even` 是否继承还看 `settings.xml` 的 `w:evenAndOddHeaders`（§17.10.1），`first` 是否继承还看该节的 `w:titlePg`（§17.10.6）。
+页眉、页脚 id 按部件编，不按节编。`w:sectPr` 里的 `w:headerReference` / `w:footerReference`（§17.10.2、§17.10.5）经主文档关系解到部件路径。同一部件只出一个容器节点；多个节引用同一部件时，`sections` 列出所有节号。后一节某类型引用省略时按规范继承前节（§17.10.2）；`even` 是否继承还看 `settings.xml` 的 `w:evenAndOddHeaders`（§17.10.1），`first` 是否继承还看该节的 `w:titlePg`（§17.10.6）。OOXML 没有「链接到前一节」元素；Word UI 的勾选就是这种省略。inspect 在每个节上用 `headerLink` / `footerLink` 标出该类型是显式引用、继承前节，还是对本节不生效。apply 用 `setHeaderFooterLink` 断开或重新链接。两节显式指向同一部件不算链接，两边都是 `false`。
 
 | 节点 | id | 例子 |
 | --- | --- | --- |
@@ -304,7 +304,9 @@ xlsx、docx、pptx 共用 `scope` 这个字段名，里面的键按格式分，�
       "id": "section:1",
       "index": 1,
       "headerDistance": 708,
-      "footerDistance": 708
+      "footerDistance": 708,
+      "headerLink": { "default": false, "even": null, "first": null },
+      "footerLink": { "default": false, "even": null, "first": null }
     }
   ],
   "from": 1,
@@ -335,7 +337,8 @@ xlsx、docx、pptx 共用 `scope` 这个字段名，里面的键按格式分，�
 - `paraCount` 是主文档里 `w:p` 的总数，含表格单元格里的段落，不含文本框里的段落，始终出现。
 - `outline` 始终出现，只含主文档标题段。收入满足下面任一条件的段落：`w:pStyle/@w:val` 为 `Heading1`–`Heading9`（大小写不敏感）或 `标题1`–`标题9`；或者 `w:outlineLvl/@w:val` 为 `0`–`8`。树上 `level` 从 1 到 9。`Heading1` / `标题1` / `outlineLvl=0` 都是 `level: 1`。不是标题的段落不进 `outline`。页眉页脚段落不进 `outline`。
 - `headers`、`footers` 始终出现。没有引用则为空数组。容器字段顺序：`id`、`type`、`sections`、`paraCount`，有段落时再跟 `paragraphs`。`sections` 是从 1 起的节号数组，按主文档里 `w:sectPr` 的文档顺序。容器上的 `paraCount` 是该部件内 `w:p` 的个数（边界与正文相同）。
-- 文档根上的 `sections` 始终出现。每个 `w:sectPr` 一项，字段顺序：`id`、`index`、`headerDistance`、`footerDistance`。`headerDistance` / `footerDistance` 取该节 `w:pgMar` 的 `w:header` / `w:footer`（§17.6.11），单位 twip，JSON 整数。缺 `w:pgMar` 或缺对应属性则为 `null`，不猜默认值。属性存在但不是非负整数报 `XmlBroken`。不返回 `top` / `bottom` / `left` / `right` / `gutter`。
+- 文档根上的 `sections` 始终出现。每个 `w:sectPr` 一项，字段顺序：`id`、`index`、`headerDistance`、`footerDistance`、`headerLink`、`footerLink`。`headerDistance` / `footerDistance` 取该节 `w:pgMar` 的 `w:header` / `w:footer`（§17.6.11），单位 twip，JSON 整数。缺 `w:pgMar` 或缺对应属性则为 `null`，不猜默认值。属性存在但不是非负整数报 `XmlBroken`。不返回 `top` / `bottom` / `left` / `right` / `gutter`。
+- `headerLink` / `footerLink` 始终出现，键顺序为 `default`、`even`、`first`。每个键的取值：`true` 表示该类型对本节生效，且本节 `sectPr` 没有对应引用（继承前节；前节也没有部件、规范要求空白时仍是 `true`）；`false` 表示该类型生效，且本节有显式引用；`null` 表示该类型对本节不生效。`even` 是否生效看整篇 `w:evenAndOddHeaders`；`first` 是否生效看本节 `w:titlePg`。第一节的 `default` 只能是 `false`（没有前节可链）。第一节生效的 `even` / `first` 若无引用也是 `false`（空白，不是链接）。两节显式指向同一部件时两边都是 `false`。`headers` / `footers` 仍按部件去重；断开链接后会出现新的容器 id。
 - 省略 `scope`、或没有 `from`/`maxParas` 时，没有正文 `paragraphs`、`from`、`truncated`。
 - 给了 `from` 和 `maxParas` 时，正文 `paragraphs` 按文档顺序切片。范围内段落数超过 `maxParas` 则 `truncated` 为 `true`。
 - `scope.headerFooter` 为 `true` 时，每个页眉、页脚节点带 `paragraphs`；否则容器上没有该字段。
@@ -561,7 +564,7 @@ create 与 apply 落盘时先写入目标同目录的临时文件，再改名为
 | `value` | 与 create 相同。`null` 表示清空该格的值和公式 |
 | `formula` | 以 `=` 开头。不能与 `value` 同时出现 |
 
-不认识的 `op` 报 `UnsupportedOp`，不要忽略。xlsx 只认 `setCell`，docx 认 `setParaText` 与 `setHeaderFooterDistance`，pptx 只认 `setShapeText`。对不上格式的 op（例如对 pptx 发 `setCell` / `setParaText`，或对 xlsx / pptx 发 `setHeaderFooterDistance`）报 `InvalidField`。
+不认识的 `op` 报 `UnsupportedOp`，不要忽略。xlsx 只认 `setCell`，docx 认 `setParaText`、`setHeaderFooterDistance` 与 `setHeaderFooterLink`，pptx 只认 `setShapeText`。对不上格式的 op（例如对 pptx 发 `setCell` / `setParaText`，或对 xlsx / pptx 发 `setHeaderFooterDistance` / `setHeaderFooterLink`）报 `InvalidField`。
 
 空单元格：目标格子在 XML 里还不存在时，`setCell` 按需插入 `<row>` 和 `<c>`，插在正确的行列顺序上。找不到工作表才报 `IdNotFound`。
 
@@ -652,9 +655,39 @@ create 与 apply 落盘时先写入目标同目录的临时文件，再改名为
 
 只改目标节 `w:pgMar` 上被点名的属性。没有 `w:pgMar` 时插入一个，只写本次给出的字段，不补 `top` / `left` / `right` / `bottom` / `gutter`。已有的其它边距属性原样留下。
 
+### setHeaderFooterLink
+
+```json
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "C:\\data\\note.docx",
+  "output": "C:\\data\\note.link.docx",
+  "ops": [
+    { "op": "setHeaderFooterLink", "id": "section:2", "kind": "header", "type": "default", "linked": false }
+  ]
+}
+```
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"setHeaderFooterLink"` |
+| `id` | 节 id，必须是 `section:{n}` |
+| `kind` | `header` 或 `footer` |
+| `type` | `default`、`even` 或 `first` |
+| `linked` | `true` 重新链接（删掉本节该类型引用）；`false` 断开 |
+
+第一节上 `linked: true` 报 `InvalidField`。该类型对本节不生效时报 `InvalidField`（不替用户打开首页不同或奇偶页）。节不存在报 `IdNotFound`。id 不是 `section:{n}` 报 `InvalidId`。xlsx / pptx 上发此 op 报 `InvalidField`。已经是目标状态则空操作，仍计入 `opsApplied`，不脏任何部件。
+
+`linked: false`：若前节有可继承的该类型部件，把该部件字节复制到新路径（`/word/headerN.xml` 或 `/word/footerN.xml`，`N` 取未占用序号）；写入主文档关系、`[Content_Types].xml` 的 Override，以及本节一条引用。若前节没有部件（空白），写一份最小 `w:hdr` / `w:ftr`（一个空 `w:p`），再挂引用。
+
+`linked: true`：删掉本节该类型引用。重新按继承解析之后，若该部件没有任何节再用，删掉部件、对应关系和 Override。
+
+不写入 `titlePg` / `evenAndOddHeaders`。不复制页眉页脚部件自己的关系（图、超链接等）；第一期不做图文混排。
+
 ### 改动范围（docx）
 
-允许变脏的部件：主文档 XML（通常是 `/word/document.xml`），以及被 `setParaText` 点名的页眉、页脚部件。`setHeaderFooterDistance` 只脏主文档。一次 `ops` 可以混用 `setParaText` 与 `setHeaderFooterDistance`。`styles.xml`、`settings.xml`、未点名的页眉页脚、主题、编号一律原样写回。
+允许变脏的部件：主文档 XML（通常是 `/word/document.xml`），被 `setParaText` 点名的页眉、页脚部件，以及 `setHeaderFooterLink` 改到的主文档关系、`[Content_Types].xml`、新建或删除的 header/footer 部件。`setHeaderFooterDistance` 只脏主文档。一次 `ops` 可以混用 `setParaText`、`setHeaderFooterDistance` 与 `setHeaderFooterLink`。`styles.xml`、`settings.xml`、未点名的页眉页脚、主题、编号一律原样写回。
 
 被改部件同样整份重序列化，保留程度与 xlsx 工作表相同：元素与属性顺序、未知命名空间保留；注释、处理指令、DOCTYPE 会丢。
 

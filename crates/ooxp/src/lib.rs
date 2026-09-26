@@ -183,6 +183,12 @@ mod tests {
         assert_eq!(tree["sections"][0]["id"], "section:1");
         assert_eq!(tree["sections"][0]["headerDistance"], 708);
         assert_eq!(tree["sections"][0]["footerDistance"], 708);
+        assert_eq!(tree["sections"][0]["headerLink"]["default"], false);
+        assert!(tree["sections"][0]["headerLink"]["even"].is_null());
+        assert!(tree["sections"][0]["headerLink"]["first"].is_null());
+        assert_eq!(tree["sections"][0]["footerLink"]["default"], false);
+        assert!(tree["sections"][0]["footerLink"]["even"].is_null());
+        assert!(tree["sections"][0]["footerLink"]["first"].is_null());
         assert_eq!(tree["outline"][0]["level"], 1);
         assert_eq!(tree["outline"][0]["text"], "标题");
 
@@ -644,7 +650,22 @@ mod tests {
         );
         assert_eq!(
             object_keys(&tree["sections"][0]),
-            ["id", "index", "headerDistance", "footerDistance"]
+            [
+                "id",
+                "index",
+                "headerDistance",
+                "footerDistance",
+                "headerLink",
+                "footerLink"
+            ]
+        );
+        assert_eq!(
+            object_keys(&tree["sections"][0]["headerLink"]),
+            ["default", "even", "first"]
+        );
+        assert_eq!(
+            object_keys(&tree["sections"][0]["footerLink"]),
+            ["default", "even", "first"]
         );
 
         let pptx = tmp("order.pptx");

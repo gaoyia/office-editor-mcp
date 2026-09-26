@@ -165,6 +165,13 @@ define_error_kinds! {
         .map(|reason| Self::InvalidSheetName { reason })
         .collect::<Vec<_>>(),
     InvalidParaStyle => vec![Self::InvalidParaStyle],
+    InvalidHfKind => vec![Self::InvalidHfKind],
+    InvalidHfType => vec![Self::InvalidHfType],
+    CannotLinkFirstSection => vec![Self::CannotLinkFirstSection],
+    HfTypeInactive { kind: String, hf_type: String } => vec![Self::HfTypeInactive {
+        kind: "header".into(),
+        hf_type: "even".into(),
+    }],
     OpcOpen { reason: OpcReason } => OpcReason::all_samples()
         .into_iter()
         .map(|reason| Self::OpcOpen { reason })
@@ -327,7 +334,11 @@ impl ErrorKind {
             | Self::NeedAtLeastOneSheet
             | Self::DuplicateSheetName { .. }
             | Self::InvalidSheetName { .. }
-            | Self::InvalidParaStyle => InvalidField,
+            | Self::InvalidParaStyle
+            | Self::InvalidHfKind
+            | Self::InvalidHfType
+            | Self::CannotLinkFirstSection
+            | Self::HfTypeInactive { .. } => InvalidField,
             Self::OutOfRange { .. } => TruncatedLimit,
             Self::InvalidRange { .. } => InvalidRange,
             Self::InvalidId { .. } => InvalidId,

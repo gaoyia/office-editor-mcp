@@ -590,3 +590,269 @@ fn apply_distance_bad_id_is_invalid() {
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidId);
 }
+
+// —— 链接前节 ——
+
+/// 两节都显式指向同一 default 页眉，不算链接。
+const SHARED_EXPLICIT_DOCUMENT: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:body><w:p><w:pPr><w:sectPr><w:headerReference w:type="default" r:id="rId3"/></w:sectPr></w:pPr></w:p><w:p><w:r><w:t>二</w:t></w:r></w:p><w:sectPr><w:headerReference w:type="default" r:id="rId3"/></w:sectPr></w:body></w:document>"#;
+
+const SHARED_EXPLICIT_CT: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/><Override PartName="/word/header1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/></Types>"#;
+
+const SHARED_EXPLICIT_RELS: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="header1.xml"/></Relationships>"#;
+
+fn write_shared_explicit(tag: &str) -> PathBuf {
+    let n = SEQ.fetch_add(1, Ordering::Relaxed);
+    let path = tmp_dir().join(format!("{tag}-{n}.docx"));
+    let mut cursor = Cursor::new(Vec::new());
+    {
+        let mut zip = ZipWriter::new(&mut cursor);
+        let opt = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
+        for (name, body) in [
+            ("[Content_Types].xml", SHARED_EXPLICIT_CT),
+            ("_rels/.rels", ROOT_RELS),
+            ("word/document.xml", SHARED_EXPLICIT_DOCUMENT),
+            ("word/_rels/document.xml.rels", SHARED_EXPLICIT_RELS),
+            ("word/styles.xml", STYLES),
+            ("word/header1.xml", HF_HEADER1),
+        ] {
+            zip.start_file(name, opt).unwrap();
+            zip.write_all(body.as_bytes()).unwrap();
+        }
+        zip.finish().unwrap();
+    }
+    std::fs::write(&path, cursor.into_inner()).unwrap();
+    path
+}
+
+fn zip_has_part(path: &Path, name: &str) -> bool {
+    let bytes = std::fs::read(path).unwrap();
+    let mut zip = ZipArchive::new(Cursor::new(bytes)).unwrap();
+    let ok = zip.by_name(name).is_ok();
+    ok
+}
+
+#[test]
+fn inspect_section_link_flags() {
+    let path = write_hf_sample("link-flags");
+    let tree = inspect_hf(&path, false);
+    let s1 = &tree["sections"][0];
+    let s2 = &tree["sections"][1];
+    assert_eq!(s1["headerLink"]["default"], false);
+    assert_eq!(s1["headerLink"]["even"], false);
+    assert_eq!(s1["headerLink"]["first"], false);
+    assert_eq!(s1["footerLink"]["default"], false);
+    assert_eq!(s1["footerLink"]["even"], false);
+    assert_eq!(s1["footerLink"]["first"], false);
+    assert_eq!(s2["headerLink"]["default"], true);
+    assert_eq!(s2["headerLink"]["even"], true);
+    assert!(s2["headerLink"]["first"].is_null());
+    assert_eq!(s2["footerLink"]["default"], true);
+    assert_eq!(s2["footerLink"]["even"], true);
+    assert!(s2["footerLink"]["first"].is_null());
+}
+
+#[test]
+fn inspect_two_explicit_same_part_is_not_link() {
+    let path = write_shared_explicit("link-shared");
+    let tree = inspect_hf(&path, false);
+    assert_eq!(tree["sections"][0]["headerLink"]["default"], false);
+    assert_eq!(tree["sections"][1]["headerLink"]["default"], false);
+    assert_eq!(tree["headers"][0]["sections"], json!([1, 2]));
+}
+
+#[test]
+fn unlink_copies_part_and_edit_does_not_touch_previous() {
+    let path = write_hf_sample("link-unlink");
+    let out = tmp_dir().join("link-unlink-out.docx");
+    apply_ops(
+        &path,
+        &out,
+        json!([{
+            "op": "setHeaderFooterLink",
+            "id": "section:2",
+            "kind": "header",
+            "type": "default",
+            "linked": false
+        }]),
+    )
+    .unwrap();
+    let tree = inspect_hf(&out, true);
+    assert_eq!(tree["sections"][1]["headerLink"]["default"], false);
+    let headers = tree["headers"].as_array().unwrap();
+    let defaults: Vec<_> = headers
+        .iter()
+        .filter(|h| h["type"] == "default")
+        .collect();
+    assert_eq!(defaults.len(), 2);
+    assert_eq!(defaults[0]["sections"], json!([1]));
+    assert_eq!(defaults[1]["sections"], json!([2]));
+    assert_eq!(defaults[0]["paragraphs"][0]["text"], "默认页眉");
+    assert_eq!(defaults[1]["paragraphs"][0]["text"], "默认页眉");
+    assert!(zip_has_part(&out, "word/header4.xml"));
+
+    let edited = tmp_dir().join("link-unlink-edit.docx");
+    let new_id = defaults[1]["paragraphs"][0]["id"].as_str().unwrap();
+    apply(&out, &edited, new_id, "第二节页眉").unwrap();
+    let after = inspect_hf(&edited, true);
+    let defs: Vec<_> = after["headers"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|h| h["type"] == "default")
+        .collect();
+    assert_eq!(defs[0]["paragraphs"][0]["text"], "默认页眉");
+    assert_eq!(defs[1]["paragraphs"][0]["text"], "第二节页眉");
+}
+
+#[test]
+fn relink_drops_orphan_part() {
+    let path = write_hf_sample("link-relink");
+    let mid = tmp_dir().join("link-relink-mid.docx");
+    let out = tmp_dir().join("link-relink-out.docx");
+    apply_ops(
+        &path,
+        &mid,
+        json!([{
+            "op": "setHeaderFooterLink",
+            "id": "section:2",
+            "kind": "header",
+            "type": "default",
+            "linked": false
+        }]),
+    )
+    .unwrap();
+    assert!(zip_has_part(&mid, "word/header4.xml"));
+    apply_ops(
+        &mid,
+        &out,
+        json!([{
+            "op": "setHeaderFooterLink",
+            "id": "section:2",
+            "kind": "header",
+            "type": "default",
+            "linked": true
+        }]),
+    )
+    .unwrap();
+    let tree = inspect_hf(&out, false);
+    assert_eq!(tree["sections"][1]["headerLink"]["default"], true);
+    let defaults: Vec<_> = tree["headers"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|h| h["type"] == "default")
+        .collect();
+    assert_eq!(defaults.len(), 1);
+    assert_eq!(defaults[0]["sections"], json!([1, 2]));
+    assert!(!zip_has_part(&out, "word/header4.xml"));
+    let cts = part(&out, "[Content_Types].xml");
+    assert!(!cts.contains("/word/header4.xml"));
+    let rels = part(&out, "word/_rels/document.xml.rels");
+    assert!(!rels.contains("header4.xml"));
+}
+
+#[test]
+fn first_section_cannot_link() {
+    let path = write_hf_sample("link-first");
+    let out = tmp_dir().join("link-first-out.docx");
+    let err = apply_ops(
+        &path,
+        &out,
+        json!([{
+            "op": "setHeaderFooterLink",
+            "id": "section:1",
+            "kind": "header",
+            "type": "default",
+            "linked": true
+        }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+}
+
+#[test]
+fn inactive_even_cannot_link() {
+    let path = write_sample("link-even-off");
+    let out = tmp_dir().join("link-even-off-out.docx");
+    let err = apply_ops(
+        &path,
+        &out,
+        json!([{
+            "op": "setHeaderFooterLink",
+            "id": "section:1",
+            "kind": "header",
+            "type": "even",
+            "linked": false
+        }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+}
+
+#[test]
+fn link_missing_section_is_not_found() {
+    let path = write_hf_sample("link-miss");
+    let out = tmp_dir().join("link-miss-out.docx");
+    let err = apply_ops(
+        &path,
+        &out,
+        json!([{
+            "op": "setHeaderFooterLink",
+            "id": "section:9",
+            "kind": "header",
+            "type": "default",
+            "linked": false
+        }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::IdNotFound);
+}
+
+#[test]
+fn link_already_target_is_noop() {
+    let path = write_hf_sample("link-noop");
+    let before_doc = part_bytes(&path, "word/document.xml");
+    let before_rels = part_bytes(&path, "word/_rels/document.xml.rels");
+    let out = tmp_dir().join("link-noop-out.docx");
+    apply_ops(
+        &path,
+        &out,
+        json!([{
+            "op": "setHeaderFooterLink",
+            "id": "section:2",
+            "kind": "header",
+            "type": "default",
+            "linked": true
+        }]),
+    )
+    .unwrap();
+    assert_eq!(before_doc, part_bytes(&out, "word/document.xml"));
+    assert_eq!(before_rels, part_bytes(&out, "word/_rels/document.xml.rels"));
+    let tree = inspect_hf(&out, false);
+    assert_eq!(tree["sections"][1]["headerLink"]["default"], true);
+}
+
+#[test]
+fn unlink_blank_writes_minimal_header() {
+    let path = write_sample("link-blank");
+    let out = tmp_dir().join("link-blank-out.docx");
+    apply_ops(
+        &path,
+        &out,
+        json!([{
+            "op": "setHeaderFooterLink",
+            "id": "section:1",
+            "kind": "header",
+            "type": "default",
+            "linked": false
+        }]),
+    )
+    .unwrap();
+    let tree = inspect_hf(&out, true);
+    assert_eq!(tree["sections"][0]["headerLink"]["default"], false);
+    assert_eq!(tree["headers"].as_array().unwrap().len(), 1);
+    assert_eq!(tree["headers"][0]["id"], "header:default:1");
+    assert_eq!(tree["headers"][0]["paraCount"], 1);
+    assert_eq!(tree["headers"][0]["paragraphs"][0]["text"], "");
+    assert!(zip_has_part(&out, "word/header1.xml"));
+}

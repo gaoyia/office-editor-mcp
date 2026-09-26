@@ -55,7 +55,7 @@ crates/ooxp-cli/             命令行，只依赖 ooxp。二进制名也是 oox
 
 ### docx
 
-主文档由根关系里 `/officeDocument` 指向，常见路径 `/word/document.xml`。inspect 读该部件里的 `w:p`，返回大纲和按范围截断的段落；并始终列出页眉、页脚容器与各节距边界。apply 可改被点名段落的可见文本（主文档或页眉页脚部件），也可改节上 `w:pgMar` 的页眉/页脚距离，不整篇从 JSON 重建。create 生成最小 Transitional 包，含 `styles.xml`（Normal 与 Heading1–3）和 `settings.xml`（`compatibilityMode` 为 15），不写页眉页脚。修订、复杂表格结构、页眉页脚的链接前节与图文混排不做。
+主文档由根关系里 `/officeDocument` 指向，常见路径 `/word/document.xml`。inspect 读该部件里的 `w:p`，返回大纲和按范围截断的段落；并始终列出页眉、页脚容器、各节距边界，以及每节是否链接到前一节。apply 可改被点名段落的可见文本（主文档或页眉页脚部件），可改节上 `w:pgMar` 的页眉/页脚距离，也可断开或重新链接某节某类型的页眉页脚。不整篇从 JSON 重建。create 生成最小 Transitional 包，含 `styles.xml`（Normal 与 Heading1–3）和 `settings.xml`（`compatibilityMode` 为 15），不写页眉页脚，也不生成多节。修订、复杂表格结构、页眉页脚图文混排不做。不写入 `titlePg` / `evenAndOddHeaders`。
 
 ### pptx
 
@@ -73,7 +73,7 @@ crates/ooxp-cli/             命令行，只依赖 ooxp。二进制名也是 oox
 
 ### apply
 
-调用方给出路径和 `ops`。库打开包，按每条 op 的 id 找到 XML 节点，只改这些节点。xlsx 在改了单元格之后，把工作簿标成打开时需要重算。docx 可改被点名的段落，也可改节上页眉页脚距边界。pptx 只改被点名形状的可见文字，且只让那一张幻灯片部件变脏。保存时只重写脏部件。
+调用方给出路径和 `ops`。库打开包，按每条 op 的 id 找到 XML 节点，只改这些节点。xlsx 在改了单元格之后，把工作簿标成打开时需要重算。docx 可改被点名的段落，可改节上页眉页脚距边界，也可改节上页眉页脚是否链接前节。pptx 只改被点名形状的可见文字，且只让那一张幻灯片部件变脏。保存时只重写脏部件。
 
 ### create
 

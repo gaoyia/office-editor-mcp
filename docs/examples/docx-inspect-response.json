@@ -19,7 +19,9 @@
       "id": "section:1",
       "index": 1,
       "headerDistance": 708,
-      "footerDistance": 708
+      "footerDistance": 708,
+      "headerLink": { "default": false, "even": null, "first": null },
+      "footerLink": { "default": false, "even": null, "first": null }
     }
   ],
   "from": 1,

@@ -23,10 +23,8 @@ pub const REL_STYLES: &str =
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles";
 pub const REL_SETTINGS: &str =
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/settings";
-#[allow(dead_code)]
 pub const REL_HEADER: &str =
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/header";
-#[allow(dead_code)]
 pub const REL_FOOTER: &str =
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer";
 pub const REL_CORE: &str =
@@ -40,10 +38,8 @@ pub const CT_STYLES: &str =
     "application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml";
 pub const CT_SETTINGS: &str =
     "application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml";
-#[allow(dead_code)]
 pub const CT_HEADER: &str =
     "application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml";
-#[allow(dead_code)]
 pub const CT_FOOTER: &str =
     "application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml";
 pub const CT_CORE: &str = "application/vnd.openxmlformats-package.core-properties+xml";

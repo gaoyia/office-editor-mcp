@@ -113,6 +113,7 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<SetCellOp>, Error> {
         if op_name == "setParaText"
             || op_name == "setShapeText"
             || op_name == "setHeaderFooterDistance"
+            || op_name == "setHeaderFooterLink"
         {
             return Err(Error::with_path(
                 ErrorKind::OpNotForFormat {

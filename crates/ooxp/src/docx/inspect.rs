@@ -35,7 +35,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     let catalog = hf::catalog(&pkg, &part, &doc.root)?;
     let expand_hf = scope.as_ref().is_some_and(|s| s.header_footer);
     let (headers, footers) = hf_arrays(&pkg, &catalog, expand_hf)?;
-    let sections = section_nodes(&doc.root)?;
+    let sections = section_nodes(&pkg, &part, &doc.root)?;
 
     let mut tree = json!({
         "schemaVersion": 1,
@@ -72,17 +72,44 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     Ok(tree)
 }
 
-fn section_nodes(root: &crate::xml::Element) -> Result<Vec<Value>, Error> {
+fn section_nodes(
+    pkg: &Package,
+    doc_part: &str,
+    root: &crate::xml::Element,
+) -> Result<Vec<Value>, Error> {
     let sects = hf::collect_sect_prs(root);
+    let links = hf::section_link_states(pkg, doc_part, root)?;
     let mut out = Vec::new();
     for (i, sect) in sects.iter().enumerate() {
         let index = i + 1;
         let pg = sect.child_by_local("pgMar");
+        let link = links.get(i).copied().unwrap_or(hf::SectionLinkState {
+            header: hf::HfLinkTriple {
+                default: Some(false),
+                even: None,
+                first: None,
+            },
+            footer: hf::HfLinkTriple {
+                default: Some(false),
+                even: None,
+                first: None,
+            },
+        });
         out.push(json!({
             "id": format!("section:{index}"),
             "index": index,
             "headerDistance": hf::twip_attr(pg, "header")?,
             "footerDistance": hf::twip_attr(pg, "footer")?,
+            "headerLink": {
+                "default": link.header.default,
+                "even": link.header.even,
+                "first": link.header.first,
+            },
+            "footerLink": {
+                "default": link.footer.default,
+                "even": link.footer.even,
+                "first": link.footer.first,
+            },
         }));
     }
     Ok(out)

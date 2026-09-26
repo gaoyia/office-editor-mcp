@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "note.docx",
+  "output": "note.link.docx",
+  "ops": [
+    {
+      "op": "setHeaderFooterLink",
+      "id": "section:2",
+      "kind": "header",
+      "type": "default",
+      "linked": false
+    }
+  ]
+}

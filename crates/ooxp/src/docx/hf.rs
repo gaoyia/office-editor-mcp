@@ -4,7 +4,9 @@ use std::collections::HashMap;
 
 use crate::error::{Error, XmlIssue};
 use crate::opc::{self, Package, Relationships};
-use crate::xml::Element;
+use crate::xml::{Element, Node};
+
+use super::WML_NS;
 
 /// 页眉或页脚。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -117,6 +119,246 @@ pub fn find_by_id<'a>(items: &'a [HfPart], id: &str) -> Option<&'a HfPart> {
     items.iter().find(|h| h.id == id)
 }
 
+/// 一节上三种类型的链接状态：`Some(true)` 继承，`Some(false)` 显式，`None` 不生效。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct HfLinkTriple {
+    pub default: Option<bool>,
+    pub even: Option<bool>,
+    pub first: Option<bool>,
+}
+
+/// 一节的页眉、页脚链接状态。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SectionLinkState {
+    pub header: HfLinkTriple,
+    pub footer: HfLinkTriple,
+}
+
+/// 按节给出 `headerLink` / `footerLink`。
+pub fn section_link_states(
+    pkg: &Package,
+    doc_part: &str,
+    doc_root: &Element,
+) -> Result<Vec<SectionLinkState>, Error> {
+    let rels = Relationships::from_package(pkg, doc_part)?;
+    let even_and_odd = read_even_and_odd(pkg, doc_part, &rels)?;
+    let sects = collect_sect_prs(doc_root);
+    let mut out = Vec::with_capacity(sects.len());
+    for (i, sect) in sects.iter().enumerate() {
+        let sec_num = (i + 1) as u32;
+        let title_pg = bool_prop(sect, "titlePg");
+        let eh = explicit_refs(sect, "headerReference", HfKind::Header, doc_part, &rels)?;
+        let ef = explicit_refs(sect, "footerReference", HfKind::Footer, doc_part, &rels)?;
+        out.push(SectionLinkState {
+            header: link_triple(sec_num, &eh, title_pg, even_and_odd),
+            footer: link_triple(sec_num, &ef, title_pg, even_and_odd),
+        });
+    }
+    Ok(out)
+}
+
+fn link_triple(
+    sec_num: u32,
+    explicit: &HashMap<HfType, String>,
+    title_pg: bool,
+    even_and_odd: bool,
+) -> HfLinkTriple {
+    HfLinkTriple {
+        default: link_flag(
+            sec_num,
+            HfType::Default,
+            explicit.contains_key(&HfType::Default),
+            title_pg,
+            even_and_odd,
+        ),
+        even: link_flag(
+            sec_num,
+            HfType::Even,
+            explicit.contains_key(&HfType::Even),
+            title_pg,
+            even_and_odd,
+        ),
+        first: link_flag(
+            sec_num,
+            HfType::First,
+            explicit.contains_key(&HfType::First),
+            title_pg,
+            even_and_odd,
+        ),
+    }
+}
+
+fn link_flag(
+    sec_num: u32,
+    hf_type: HfType,
+    has_explicit: bool,
+    title_pg: bool,
+    even_and_odd: bool,
+) -> Option<bool> {
+    if !type_is_active(hf_type, title_pg, even_and_odd) {
+        return None;
+    }
+    if has_explicit {
+        return Some(false);
+    }
+    if sec_num == 1 {
+        return Some(false);
+    }
+    Some(true)
+}
+
+pub fn type_is_active(hf_type: HfType, title_pg: bool, even_and_odd: bool) -> bool {
+    match hf_type {
+        HfType::Default => true,
+        HfType::Even => even_and_odd,
+        HfType::First => title_pg,
+    }
+}
+
+pub fn even_and_odd_headers(pkg: &Package, doc_part: &str) -> Result<bool, Error> {
+    let rels = Relationships::from_package(pkg, doc_part)?;
+    read_even_and_odd(pkg, doc_part, &rels)
+}
+
+pub fn has_explicit_ref(sect: &Element, kind: HfKind, hf_type: HfType) -> bool {
+    let local = ref_local(kind);
+    sect.element_children().any(|c| {
+        c.local_name() == local && HfType::parse(c.attr_local("type").unwrap_or("")) == Some(hf_type)
+    })
+}
+
+/// 从第 1 节走到 `section_n` 之前，取出该类型最后一次显式引用的部件。
+pub fn inherited_part_path(
+    pkg: &Package,
+    doc_part: &str,
+    root: &Element,
+    section_n: usize,
+    kind: HfKind,
+    hf_type: HfType,
+) -> Result<Option<String>, Error> {
+    let rels = Relationships::from_package(pkg, doc_part)?;
+    let sects = collect_sect_prs(root);
+    let local = ref_local(kind);
+    let mut prev: Option<String> = None;
+    for sect in sects.iter().take(section_n.saturating_sub(1)) {
+        let map = explicit_refs(sect, local, kind, doc_part, &rels)?;
+        if let Some(p) = map.get(&hf_type) {
+            prev = Some(p.clone());
+        }
+    }
+    Ok(prev)
+}
+
+/// 本节该类型显式引用的部件路径。
+pub fn explicit_part_path(
+    pkg: &Package,
+    doc_part: &str,
+    root: &Element,
+    section_n: usize,
+    kind: HfKind,
+    hf_type: HfType,
+) -> Result<Option<String>, Error> {
+    let rels = Relationships::from_package(pkg, doc_part)?;
+    let sects = collect_sect_prs(root);
+    let Some(sect) = sects.get(section_n.saturating_sub(1)) else {
+        return Ok(None);
+    };
+    let map = explicit_refs(sect, ref_local(kind), kind, doc_part, &rels)?;
+    Ok(map.get(&hf_type).cloned())
+}
+
+pub fn next_unused_hf_part(pkg: &Package, kind: HfKind) -> String {
+    let stem = match kind {
+        HfKind::Header => "header",
+        HfKind::Footer => "footer",
+    };
+    let mut n = 1u32;
+    loop {
+        let name = format!("/word/{stem}{n}.xml");
+        if !pkg.contains(&name) {
+            return name;
+        }
+        n += 1;
+    }
+}
+
+pub fn minimal_hf_xml(kind: HfKind) -> Vec<u8> {
+    let tag = match kind {
+        HfKind::Header => "hdr",
+        HfKind::Footer => "ftr",
+    };
+    format!(
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:{tag} xmlns:w="{WML_NS}"><w:p/></w:{tag}>"#
+    )
+    .into_bytes()
+}
+
+/// 源部件与目标部件同目录时写相对文件名，否则写去掉前导 `/` 的路径。
+pub fn same_dir_rel_target(source_part: &str, target_opc: &str) -> String {
+    let src_file = source_part.rsplit('/').next().unwrap_or(source_part);
+    let src_dir = source_part
+        .strip_suffix(src_file)
+        .unwrap_or("/");
+    let tgt_file = target_opc.rsplit('/').next().unwrap_or(target_opc);
+    let tgt_dir = target_opc
+        .strip_suffix(tgt_file)
+        .unwrap_or("/");
+    if src_dir == tgt_dir {
+        tgt_file.to_string()
+    } else {
+        target_opc.trim_start_matches('/').to_string()
+    }
+}
+
+pub fn rid_attr_name(sect: &Element) -> String {
+    for child in sect.element_children() {
+        let loc = child.local_name();
+        if loc != "headerReference" && loc != "footerReference" {
+            continue;
+        }
+        if let Some((k, _)) = child.attrs.iter().find(|(k, _)| {
+            k.rsplit(':').next().unwrap_or(k) == "id"
+        }) {
+            return k.clone();
+        }
+    }
+    "r:id".into()
+}
+
+pub fn insert_hf_ref(sect: &mut Element, kind: HfKind, hf_type: HfType, rid_attr: &str, rid: &str) {
+    let local = ref_local(kind);
+    let mut el = Element::new(sect.prefixed(local));
+    el.set_attr(&sect.prefixed("type"), hf_type.as_str());
+    el.set_attr(rid_attr, rid);
+    let mut last_ref = None;
+    for (i, n) in sect.children.iter().enumerate() {
+        if let Node::Element(e) = n {
+            if e.local_name() == "headerReference" || e.local_name() == "footerReference" {
+                last_ref = Some(i);
+            }
+        }
+    }
+    let idx = last_ref.map(|i| i + 1).unwrap_or(0);
+    sect.children.insert(idx, Node::Element(el));
+}
+
+pub fn remove_hf_ref(sect: &mut Element, kind: HfKind, hf_type: HfType) {
+    let local = ref_local(kind);
+    sect.children.retain(|n| match n {
+        Node::Element(e) if e.local_name() == local => {
+            HfType::parse(e.attr_local("type").unwrap_or("")) != Some(hf_type)
+        }
+        _ => true,
+    });
+}
+
+fn ref_local(kind: HfKind) -> &'static str {
+    match kind {
+        HfKind::Header => "headerReference",
+        HfKind::Footer => "footerReference",
+    }
+}
+
 fn resolve_section(
     kind: HfKind,
     sec_num: u32,
@@ -227,7 +469,7 @@ fn explicit_refs(
     Ok(map)
 }
 
-fn bool_prop(el: &Element, local: &str) -> bool {
+pub(crate) fn bool_prop(el: &Element, local: &str) -> bool {
     let Some(child) = el.child_by_local(local) else {
         return false;
     };

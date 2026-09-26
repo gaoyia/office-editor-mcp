@@ -12,5 +12,6 @@
   "shape2new": "改过的正文",
   "headerSrc": "页眉原文",
   "footerSrc": "页脚原文",
-  "headerNew": "新页眉"
+  "headerNew": "新页眉",
+  "headerSec2New": "第二节页眉"
 }

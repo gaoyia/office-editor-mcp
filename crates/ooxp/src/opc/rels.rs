@@ -105,7 +105,6 @@ impl Relationships {
         });
     }
 
-    #[allow(dead_code)]
     pub fn next_rid(&self) -> String {
         let mut max = 0u32;
         for r in &self.rels {

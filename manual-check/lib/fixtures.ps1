@@ -142,6 +142,57 @@ function Ensure-DocxWordHeaderSource([switch]$Force) {
     return $path
 }
 
+# 两节且第二节默认页眉勾着「链接到前一节」。create 不写多节，必须经 Word 的手。
+function Ensure-DocxWordLinkSource([switch]$Force) {
+    $path = Get-OutPath 'docx-word-link-source.docx'
+    if ((Test-Path $path) -and -not $Force) { return $path }
+
+    $tmpDir = Join-Path $env:TEMP 'ooxp-office'
+    New-Item -ItemType Directory -Force -Path $tmpDir | Out-Null
+    $tmp = Join-Path $tmpDir 'docx-word-link-source.docx'
+    $S = $global:OoxpStrings
+    $req = @{
+        schemaVersion = 1; action = 'create'
+        path = $tmp.Replace('\', '/'); format = 'docx'
+        document = @{
+            paragraphs = @(
+                @{ style = 'Heading1'; text = $S.chapter1 }
+                @{ text = $S.para2src }
+            )
+        }
+    }
+    Invoke-OoxpRequest $req 'docx-link-source-create' | Out-Null
+
+    $word = Ensure-MsWord (Ensure-DocxCreate)
+    $doc = Open-WordDoc $word $tmp
+    $p1 = $doc.Paragraphs.Item(1)
+    $r = $p1.Range
+    $r.Collapse(0) | Out-Null
+    # wdSectionBreakNextPage = 2
+    $r.InsertBreak(2)
+    Release-Com $r
+    Release-Com $p1
+
+    $sec1 = $doc.Sections.Item(1)
+    $hdr1 = $sec1.Headers.Item(1)
+    $hdr1.Range.Text = $S.headerSrc
+    $sec2 = $doc.Sections.Item(2)
+    $hdr2 = $sec2.Headers.Item(1)
+    if (-not [bool]$hdr2.LinkToPrevious) {
+        $hdr2.LinkToPrevious = $true
+    }
+    Write-Log 'word Save() 原地覆盖 TEMP 里的两节链接样例'
+    $doc.Save()
+    Release-Com $hdr2
+    Release-Com $sec2
+    Release-Com $hdr1
+    Release-Com $sec1
+    Close-WordDoc $doc
+    Copy-Item -Force $tmp $path
+    Write-Log "saved word link source $path"
+    return $path
+}
+
 # apply 的 pptx 源文件要经 PowerPoint 的手。同样走 TEMP 里 Save() 再拷回。
 function Ensure-PptxPptSource([switch]$Force) {
     $path = Get-OutPath 'pptx-ppt-source.pptx'

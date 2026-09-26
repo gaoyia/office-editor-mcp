@@ -199,6 +199,7 @@
               { "$ref": "#/$defs/setCellOp" },
               { "$ref": "#/$defs/setParaTextOp" },
               { "$ref": "#/$defs/setHeaderFooterDistanceOp" },
+              { "$ref": "#/$defs/setHeaderFooterLinkOp" },
               { "$ref": "#/$defs/setShapeTextOp" }
             ]
           }
@@ -249,6 +250,18 @@
         { "required": ["headerDistance"] },
         { "required": ["footerDistance"] }
       ]
+    },
+    "setHeaderFooterLinkOp": {
+      "type": "object",
+      "required": ["op", "id", "kind", "type", "linked"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "setHeaderFooterLink" },
+        "id": { "type": "string", "minLength": 1 },
+        "kind": { "enum": ["header", "footer"] },
+        "type": { "enum": ["default", "even", "first"] },
+        "linked": { "type": "boolean" }
+      }
     },
     "setShapeTextOp": {
       "type": "object",

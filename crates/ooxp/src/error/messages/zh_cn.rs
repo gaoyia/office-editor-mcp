@@ -93,6 +93,12 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             SheetNameReason::IllegalChars => "工作表名含有非法字符".into(),
         },
         ErrorKind::InvalidParaStyle => "style 只允许 Normal、Heading1、Heading2、Heading3".into(),
+        ErrorKind::InvalidHfKind => "kind 必须是 header 或 footer".into(),
+        ErrorKind::InvalidHfType => "type 必须是 default、even 或 first".into(),
+        ErrorKind::CannotLinkFirstSection => "第一节不能链接到前一节".into(),
+        ErrorKind::HfTypeInactive { kind, hf_type } => {
+            format!("本节未启用这种 {kind}（{hf_type}）")
+        }
         ErrorKind::OpcOpen { reason } => match reason {
             OpcReason::EmptyPartName => "部件名不能为空".into(),
             OpcReason::InvalidPartName { name } => format!("非法部件名：{name}"),
