@@ -353,7 +353,23 @@
         "shapes": {
           "type": "array",
           "items": { "$ref": "#/$defs/pptxShapeCreate" }
+        },
+        "pictures": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/pptxPictureCreate" }
         }
+      }
+    },
+    "pptxPictureCreate": {
+      "type": "object",
+      "required": ["file"],
+      "additionalProperties": false,
+      "properties": {
+        "file": { "type": "string", "minLength": 1 },
+        "x": { "type": "integer", "minimum": 0 },
+        "y": { "type": "integer", "minimum": 0 },
+        "cx": { "type": "integer", "minimum": 1 },
+        "cy": { "type": "integer", "minimum": 1 }
       }
     },
     "pptxShapeCreate": {

@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "action": "create",
+  "path": "deck.pptx",
+  "format": "pptx",
+  "presentation": {
+    "slides": [
+      {
+        "shapes": [{ "text": "标题" }],
+        "pictures": [
+          { "file": "pic.png", "x": 914400, "y": 1828800, "cx": 1828800, "cy": 1828800 },
+          { "file": "pic.png", "x": 3657600, "y": 1828800, "cx": 1828800, "cy": 1828800 }
+        ]
+      }
+    ]
+  }
+}

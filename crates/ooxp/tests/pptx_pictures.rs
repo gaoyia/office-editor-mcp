@@ -436,3 +436,163 @@ fn set_shape_text_does_not_touch_picture() {
     };
     assert_eq!(scoped["slides"][0]["shapes"][0]["text"], "新标题");
 }
+
+#[test]
+fn create_writes_two_pictures() {
+    let png = write_png("create", PNG_1X1);
+    let path = tmp("create-pics").with_extension("pptx");
+    run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "create",
+            "path": path.to_string_lossy(),
+            "presentation": {
+                "slides": [{
+                    "shapes": [{ "text": "标题" }],
+                    "pictures": [
+                        {
+                            "file": png.to_string_lossy(),
+                            "x": 914400,
+                            "y": 1828800,
+                            "cx": 1828800,
+                            "cy": 1828800
+                        },
+                        {
+                            "file": png.to_string_lossy(),
+                            "x": 3657600,
+                            "y": 1828800,
+                            "cx": 1828800,
+                            "cy": 1828800
+                        }
+                    ]
+                }]
+            }
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap();
+
+    let tree = inspect_pics(&path);
+    assert_eq!(tree["pictureCount"], 2);
+    assert_eq!(tree["slides"][0]["pictureCount"], 2);
+    let pics = tree["slides"][0]["pictures"].as_array().unwrap();
+    assert_eq!(pics[0]["id"], "slide:1/pic:3");
+    assert_eq!(pics[0]["x"], 914400);
+    assert_eq!(pics[0]["y"], 1828800);
+    assert_eq!(pics[0]["cx"], 1828800);
+    assert_eq!(pics[0]["cy"], 1828800);
+    assert_eq!(pics[1]["id"], "slide:1/pic:4");
+    assert_eq!(pics[1]["x"], 3657600);
+    assert!(part_names(&path)
+        .iter()
+        .any(|n| n.starts_with("ppt/media/")));
+    let rels = String::from_utf8(part_bytes(&path, "ppt/slides/_rels/slide1.xml.rels")).unwrap();
+    assert!(rels.contains("/image"), "页关系应含 image：{rels}");
+}
+
+#[test]
+fn create_empty_pictures_writes_no_pic() {
+    let path = tmp("empty-pics").with_extension("pptx");
+    run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "create",
+            "path": path.to_string_lossy(),
+            "presentation": {
+                "slides": [{ "shapes": [{ "text": "a" }], "pictures": [] }]
+            }
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap();
+    let tree = inspect_pics(&path);
+    assert_eq!(tree["pictureCount"], 0);
+    assert_eq!(tree["slides"][0]["pictures"], json!([]));
+    assert!(!part_names(&path).iter().any(|n| n.contains("media")));
+}
+
+#[test]
+fn create_rejects_kind_one_size_and_shape_pictures() {
+    let png = write_png("bad", PNG_1X1);
+    let err = run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "create",
+            "path": tmp("kind").with_extension("pptx").to_string_lossy(),
+            "presentation": {
+                "slides": [{
+                    "pictures": [{
+                        "file": png.to_string_lossy(),
+                        "kind": "inline"
+                    }]
+                }]
+            }
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+    assert_eq!(
+        err.field_path(),
+        Some("presentation.slides[0].pictures[0].kind")
+    );
+
+    let err = run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "create",
+            "path": tmp("onesz").with_extension("pptx").to_string_lossy(),
+            "presentation": {
+                "slides": [{
+                    "pictures": [{ "file": png.to_string_lossy(), "cx": 914400 }]
+                }]
+            }
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+    assert_eq!(err.field_path(), Some("presentation.slides[0].pictures[0]"));
+
+    let err = run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "create",
+            "path": tmp("shapepic").with_extension("pptx").to_string_lossy(),
+            "presentation": {
+                "slides": [{
+                    "shapes": [{ "text": "a", "pictures": [] }]
+                }]
+            }
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+    assert_eq!(
+        err.field_path(),
+        Some("presentation.slides[0].shapes[0].pictures")
+    );
+
+    let err = run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "create",
+            "path": tmp("nofile").with_extension("pptx").to_string_lossy(),
+            "presentation": { "slides": [{ "pictures": [{ "x": 0, "y": 0 }] }] }
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+    assert_eq!(
+        err.field_path(),
+        Some("presentation.slides[0].pictures[0].file")
+    );
+}

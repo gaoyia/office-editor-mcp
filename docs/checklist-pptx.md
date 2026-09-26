@@ -8,12 +8,13 @@ C、I、A、Pp 各组由 `manual-check/office/cases/pptx-*.ps1` 自动判定，�
 
 ## 本机结果（2026-09-27）
 
-Microsoft PowerPoint 16.0 已打开，C1、C3、C4、I1–I5、A1–A5、Pp1–Pp7 均 PASS。本机若装了 WPS，`PowerPoint.Application` 会被抢走，测试仍直接启动 `POWERPNT.EXE`，从 `mdiClass` 挂 COM。O1 已放弃。2026-09-27 补跑 `pptx-pictures.ps1`，Pp1–Pp7 通过。
+Microsoft PowerPoint 16.0 已打开，C1、C3、C4、C5–C7、I1–I5、A1–A5、Pp1–Pp7 均 PASS。本机若装了 WPS，`PowerPoint.Application` 会被抢走，测试仍直接启动 `POWERPNT.EXE`，从 `mdiClass` 挂 COM。O1 已放弃。2026-09-27 补跑 `pptx-pictures.ps1`，Pp1–Pp7 通过。同日补跑 `pptx-create-pictures.ps1`，C5–C7 通过。
 
 | 序号 | 状态 | 结果 |
 | --- | --- | --- |
 | C1 | ✅ | PowerPoint 16.0 能打开 `manual-check/office/out/pptx-create.pptx`，标题栏无 Repair |
 | C3–C4 | ✅ | 第一页 `标题` / `hello`，第二页 `第二页` |
+| C5–C7 | ✅ | PowerPoint 16.0：inspect 第一张 `slide:1/pic:3`；同一页第二张 `slide:1/pic:4`；打开无 Repair，Type=13 的图为 2 |
 | I1–I5 | ✅ | `pptx:presentation`、`slideCount=2`、无 scope 时没有 `shapes`、仍有 `pictureCount`、形状 id 为 `slide:1/shape:2` 且 `stable` |
 | A1–A5 | ✅ | 目标框为「改过的正文」且仍加粗（`Bold=-1`），同页另一框与第二页未改 |
 | Pp1–Pp7 | ✅ | PowerPoint 16.0：无 `pictures` 时 `pictureCount=1`；名单 id 为 `slide:1/pic:5`；换/插/删无修复；尺寸 144 磅；位置 72×108 磅；export 与 `/ppt/media/…` 字节一致 |
@@ -28,6 +29,9 @@ Microsoft PowerPoint 16.0 已打开，C1、C3、C4、I1–I5、A1–A5、Pp1–P
 | C1 | PowerPoint 打开 | 无修复提示、无「文件损坏」 |
 | C3 | 第一页 | 两个文本框，可见文字分别为 `标题`、`hello` |
 | C4 | 第二页 | 一个文本框，可见文字为 `第二页` |
+| C5 | 带图 id | 用 `docs/examples/pptx-create-pictures.json`（换成本机 PNG）生成；inspect `pictures: true` 时第一张 id 为 `slide:1/pic:3` |
+| C6 | 同一页第二张 | 同上，名单里有两张图 |
+| C7 | PowerPoint 打开带图产物 | 无修复；图能看见 |
 
 ## inspect
 

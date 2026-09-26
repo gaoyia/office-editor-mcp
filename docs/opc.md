@@ -166,7 +166,7 @@ pptx create 同样生成 Transitional 包，命名空间用 2006 那套。不能
 | `/ppt/_rels/presentation.xml.rels` | 指向 slideMaster、各 slide、presProps |
 | `/ppt/presProps.xml` | Presentation Properties（§13.3.7，包内应当恰好一份） |
 | `/ppt/slides/slideN.xml` | 每一页 |
-| `/ppt/slides/_rels/slideN.xml.rels` | 指向 slideLayout1 |
+| `/ppt/slides/_rels/slideN.xml.rels` | 指向 slideLayout1；有图时再加 image 关系 |
 | `/ppt/slideLayouts/slideLayout1.xml` | 一张空白版式 |
 | `/ppt/slideLayouts/_rels/slideLayout1.xml.rels` | 指向 slideMaster1 |
 | `/ppt/slideMasters/slideMaster1.xml` | 一张母版 |
@@ -179,6 +179,7 @@ pptx create 同样生成 Transitional 包，命名空间用 2006 那套。不能
 | --- | --- |
 | `/docProps/core.xml` | 核心文件属性 |
 | `/docProps/app.xml` | Application 写成 `ooxp`，Slides 与页数一致 |
+| `/ppt/media/imageN.*` | 给了 `slides[].pictures` 时写入 |
 
 第一期不写备注、讲义、`viewProps`、`tableStyles`、动画。
 
@@ -240,7 +241,7 @@ DrawingML 主命名空间：
 
 `http://schemas.openxmlformats.org/drawingml/2006/main`
 
-apply 插入幻灯片图时，可能新建 `/ppt/media/imageN.*`，并在该页 `.rels` 补一条 image 关系（Type 以 `/image` 结尾）。`p:pic` 写在该页 `p:spTree` 里，位置与尺寸在 `p:spPr/a:xfrm`。create 本期不写图。
+apply 插入幻灯片图时，可能新建 `/ppt/media/imageN.*`，并在该页 `.rels` 补一条 image 关系（Type 以 `/image` 结尾）。`p:pic` 写在该页 `p:spTree` 里，位置与尺寸在 `p:spPr/a:xfrm`。create 给了 `slides[].pictures` 时同样写入。
 
 ## 验收（第 2 项）
 

@@ -9,6 +9,8 @@ use crate::opc::{
 use crate::xml;
 
 use super::{
+    picture,
+    request::{self, InsertPictureOp},
     CT_APP, CT_CORE, CT_PRESENTATION, CT_PRES_PROPS, CT_SLIDE, CT_SLIDE_LAYOUT, CT_SLIDE_MASTER,
     CT_THEME, DML_NS, PML_NS, REL_APP, REL_CORE, REL_NS, REL_OFFICE_DOCUMENT, REL_PRES_PROPS,
     REL_SLIDE, REL_SLIDE_LAYOUT, REL_SLIDE_MASTER, REL_THEME,
@@ -16,6 +18,7 @@ use super::{
 
 struct NewSlide {
     shapes: Vec<String>,
+    pictures: Vec<InsertPictureOp>,
 }
 
 pub fn create(presentation: &Value) -> Result<Vec<u8>, Error> {
@@ -61,6 +64,7 @@ pub fn create(presentation: &Value) -> Result<Vec<u8>, Error> {
     if slides.is_empty() {
         slides.push(NewSlide {
             shapes: vec![String::new()],
+            pictures: Vec::new(),
         });
     }
     for s in &mut slides {
@@ -182,6 +186,8 @@ pub fn create(presentation: &Value) -> Result<Vec<u8>, Error> {
         )?;
     }
 
+    attach_pictures(&mut pkg, &slides)?;
+
     pkg.set("/docProps/core.xml", core_xml().into_bytes())?;
     pkg.set("/docProps/app.xml", app_xml(slides.len()).into_bytes())?;
     pkg.save_to_vec()
@@ -198,7 +204,7 @@ fn parse_slide(v: &Value, i: usize) -> Result<NewSlide, Error> {
         )
     })?;
     for k in obj.keys() {
-        if k != "shapes" {
+        if !matches!(k.as_str(), "shapes" | "pictures") {
             return Err(Error::with_path(
                 ErrorKind::UnknownField { field: k.clone() },
                 format!("presentation.slides[{i}].{k}"),
@@ -220,7 +226,60 @@ fn parse_slide(v: &Value, i: usize) -> Result<NewSlide, Error> {
             shapes.push(parse_shape(sh, i, j)?);
         }
     }
-    Ok(NewSlide { shapes })
+    let pictures = parse_pictures(obj.get("pictures"), i)?;
+    Ok(NewSlide { shapes, pictures })
+}
+
+fn parse_pictures(v: Option<&Value>, slide_i: usize) -> Result<Vec<InsertPictureOp>, Error> {
+    let Some(v) = v else {
+        return Ok(Vec::new());
+    };
+    let prefix = format!("presentation.slides[{slide_i}].pictures");
+    let arr = v.as_array().ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::WrongType {
+                field: "pictures".into(),
+                expected: TypeName::Array,
+            },
+            prefix.clone(),
+        )
+    })?;
+    let mut out = Vec::new();
+    for (j, item) in arr.iter().enumerate() {
+        out.push(request::parse_create_picture(
+            item,
+            &format!("{prefix}[{j}]"),
+            slide_i + 1,
+        )?);
+    }
+    Ok(out)
+}
+
+fn attach_pictures(pkg: &mut Package, slides: &[NewSlide]) -> Result<(), Error> {
+    if slides.iter().all(|s| s.pictures.is_empty()) {
+        return Ok(());
+    }
+    let pres = xml::parse(pkg.get("/ppt/presentation.xml")?)?;
+    for (i, slide) in slides.iter().enumerate() {
+        if slide.pictures.is_empty() {
+            continue;
+        }
+        let n = i + 1;
+        let part = format!("/ppt/slides/slide{n}.xml");
+        let mut doc = xml::parse(pkg.get(&part)?)?;
+        for (j, op) in slide.pictures.iter().enumerate() {
+            picture::insert_picture(
+                pkg,
+                &mut doc,
+                &part,
+                &pres.root,
+                op,
+                &format!("presentation.slides[{i}].pictures[{j}].file"),
+            )?;
+        }
+        pkg.set(&part, doc.to_bytes()?)?;
+    }
+    Ok(())
 }
 
 fn parse_shape(v: &Value, slide: usize, i: usize) -> Result<String, Error> {

@@ -61,7 +61,7 @@ crates/ooxp-cli/             命令行，只依赖 ooxp。二进制名也是 oox
 
 ### pptx
 
-入口由根关系里 `/officeDocument` 指向，常见路径 `/ppt/presentation.xml`。幻灯片顺序跟 `p:sldIdLst`，不跟文件名。inspect 默认只返回页名单与各页 `pictureCount`；要形状必须给 `scope.slide`，要图名单必须给 `scope.pictures`。apply 可改被点名形状的 `p:txBody` 可见文字，也可换、插、删幻灯片上的 `p:pic` 并改尺寸与画布坐标；不删形状重建，不改 `<p:timing>`。`exportMedia` 按图 id 写出 `/ppt/media/…`。create 生成最小 Transitional 包，必含 theme、slideMaster、slideLayout、presentation、各页 slide、presProps。备注、母版内容、动画第一期不进树也不改。`mc:AlternateContent` 只走第一个 `Choice`。
+入口由根关系里 `/officeDocument` 指向，常见路径 `/ppt/presentation.xml`。幻灯片顺序跟 `p:sldIdLst`，不跟文件名。inspect 默认只返回页名单与各页 `pictureCount`；要形状必须给 `scope.slide`，要图名单必须给 `scope.pictures`。apply 可改被点名形状的 `p:txBody` 可见文字，也可换、插、删幻灯片上的 `p:pic` 并改尺寸与画布坐标；不删形状重建，不改 `<p:timing>`。`exportMedia` 按图 id 写出 `/ppt/media/…`。create 生成最小 Transitional 包，必含 theme、slideMaster、slideLayout、presentation、各页 slide、presProps。给了 `slides[].pictures` 时复用 `insertPicture`，写入 `/ppt/media/…` 与该页 `p:pic`。备注、母版内容、动画第一期不进树也不改。`mc:AlternateContent` 只走第一个 `Choice`。
 
 ### cli
 
@@ -79,7 +79,7 @@ crates/ooxp-cli/             命令行，只依赖 ooxp。二进制名也是 oox
 
 ### create
 
-调用方给出格式、输出路径和内容对象。库在内存里生成一套最小可打开的 Transitional 部件，打成新 ZIP。不读取任何已有文件当模板，除非以后另开「从模板复制」的动作。xlsx 的 `sheets[].pictures` 复用 `insertPicture`，`sheets[].charts` 复用 `insertChart`（数据写本表单元格，不写 embedding）。docx 段落与默认页眉页脚上的 `pictures` 同样复用插图。docx create 仍不写图表。
+调用方给出格式、输出路径和内容对象。库在内存里生成一套最小可打开的 Transitional 部件，打成新 ZIP。不读取任何已有文件当模板，除非以后另开「从模板复制」的动作。xlsx 的 `sheets[].pictures` 复用 `insertPicture`，`sheets[].charts` 复用 `insertChart`（数据写本表单元格，不写 embedding）。docx 段落与默认页眉页脚上的 `pictures` 同样复用插图。pptx 的 `slides[].pictures` 复用 `insertPicture`。docx create 仍不写图表。pptx create 仍不写图表。
 
 ### exportMedia
 

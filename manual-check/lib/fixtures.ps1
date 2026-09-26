@@ -116,6 +116,31 @@ function Ensure-PptxCreate([switch]$Force) {
     return $path
 }
 
+# 一页一个文本框加两张图。cNvPr：spTree=1，文本框=2，图从 3 起。
+function Ensure-PptxCreatePictures([switch]$Force) {
+    $path = Get-OutPath 'pptx-create-pictures.pptx'
+    if ((Test-Path $path) -and -not $Force) { return $path }
+    $png = Ensure-OoxpPngA
+    $file = $png.Replace('\', '/')
+    $req = @{
+        schemaVersion = 1; action = 'create'
+        path = $path.Replace('\', '/'); format = 'pptx'
+        presentation = @{
+            slides = @(
+                @{
+                    shapes = @(@{ text = '标题' })
+                    pictures = @(
+                        @{ file = $file; x = 914400; y = 1828800; cx = 1828800; cy = 1828800 }
+                        @{ file = $file; x = 3657600; y = 1828800; cx = 1828800; cy = 1828800 }
+                    )
+                }
+            )
+        }
+    }
+    Invoke-OoxpRequest $req 'pptx-create-pictures' | Out-Null
+    return $path
+}
+
 # apply 的源文件要由 Excel 亲手存出来，不能拿 ooxp 自己的产物冒充，
 # 否则等于自己造自己读，测不到真实文件的写法。
 function Ensure-XlsxExcelSource([switch]$Force) {

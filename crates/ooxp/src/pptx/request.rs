@@ -432,11 +432,88 @@ fn require_file(obj: &Map<String, Value>, i: usize, op: &str) -> Result<String, 
     }
 }
 
+pub(crate) fn parse_create_picture(
+    v: &Value,
+    prefix: &str,
+    slide: usize,
+) -> Result<InsertPictureOp, Error> {
+    let obj = v.as_object().ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::WrongType {
+                field: "pictures".into(),
+                expected: TypeName::Object,
+            },
+            prefix.to_string(),
+        )
+    })?;
+    for k in obj.keys() {
+        if !matches!(k.as_str(), "file" | "x" | "y" | "cx" | "cy") {
+            return Err(Error::with_path(
+                ErrorKind::UnknownField { field: k.clone() },
+                format!("{prefix}.{k}"),
+            ));
+        }
+    }
+    let file = match obj.get("file") {
+        Some(Value::String(s)) if !s.is_empty() => s.clone(),
+        Some(Value::String(_)) | None => {
+            return Err(Error::with_path(
+                ErrorKind::MissingField {
+                    field: "file".into(),
+                },
+                format!("{prefix}.file"),
+            ));
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "file".into(),
+                    expected: TypeName::NonEmptyString,
+                },
+                format!("{prefix}.file"),
+            ));
+        }
+    };
+    let x = parse_off_at(obj.get("x"), &format!("{prefix}.x"), "x")?;
+    let y = parse_off_at(obj.get("y"), &format!("{prefix}.y"), "y")?;
+    if x.is_some() != y.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "create".into(),
+                field: "x and y together".into(),
+            },
+            prefix.to_string(),
+        ));
+    }
+    let cx = parse_emu_at(obj.get("cx"), &format!("{prefix}.cx"), "cx")?;
+    let cy = parse_emu_at(obj.get("cy"), &format!("{prefix}.cy"), "cy")?;
+    if cx.is_some() != cy.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "create".into(),
+                field: "cx and cy together".into(),
+            },
+            prefix.to_string(),
+        ));
+    }
+    Ok(InsertPictureOp {
+        slide,
+        file,
+        x,
+        y,
+        cx,
+        cy,
+    })
+}
+
 fn parse_emu_field(v: Option<&Value>, i: usize, field: &str) -> Result<Option<i64>, Error> {
+    parse_emu_at(v, &format!("ops[{i}].{field}"), field)
+}
+
+fn parse_emu_at(v: Option<&Value>, path: &str, field: &str) -> Result<Option<i64>, Error> {
     let Some(v) = v else {
         return Ok(None);
     };
-    let path = format!("ops[{i}].{field}");
     match v {
         Value::Number(n) => {
             if let Some(u) = n.as_u64() {
@@ -446,7 +523,7 @@ fn parse_emu_field(v: Option<&Value>, i: usize, field: &str) -> Result<Option<i6
                             field: field.into(),
                             min: 1,
                         },
-                        path,
+                        path.to_string(),
                     ));
                 }
                 return Ok(Some(u as i64));
@@ -456,7 +533,7 @@ fn parse_emu_field(v: Option<&Value>, i: usize, field: &str) -> Result<Option<i6
                     field: field.into(),
                     expected: TypeName::Integer,
                 },
-                path,
+                path.to_string(),
             ))
         }
         _ => Err(Error::with_path(
@@ -464,16 +541,19 @@ fn parse_emu_field(v: Option<&Value>, i: usize, field: &str) -> Result<Option<i6
                 field: field.into(),
                 expected: TypeName::Integer,
             },
-            path,
+            path.to_string(),
         )),
     }
 }
 
 fn parse_off_field(v: Option<&Value>, i: usize, field: &str) -> Result<Option<i64>, Error> {
+    parse_off_at(v, &format!("ops[{i}].{field}"), field)
+}
+
+fn parse_off_at(v: Option<&Value>, path: &str, field: &str) -> Result<Option<i64>, Error> {
     let Some(v) = v else {
         return Ok(None);
     };
-    let path = format!("ops[{i}].{field}");
     match v {
         Value::Number(n) => {
             if let Some(u) = n.as_u64() {
