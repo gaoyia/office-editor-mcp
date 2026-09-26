@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "action": "exportMedia",
+  "path": "book.xlsx",
+  "id": "sheet:Sheet1/pic:2",
+  "output": "C:\\out\\sheet1-pic.png"
+}

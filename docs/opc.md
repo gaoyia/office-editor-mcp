@@ -91,6 +91,8 @@ SpreadsheetML 主命名空间：
 
 `http://schemas.openxmlformats.org/spreadsheetml/2006/main`
 
+apply 插入工作表图时，可能新建 `/xl/drawings/drawingN.xml`（CT `application/vnd.openxmlformats-officedocument.drawing+xml`）、drawing 的 `.rels`，以及 `/xl/media/imageN.*`。工作表 `.rels` 补一条 drawing 关系（Type 以 `/drawing` 结尾），工作表 XML 写 `<drawing r:id="…"/>`。drawing 命名空间是 `http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing`（`xdr`）。create 不写这些部件。
+
 ## create 时的最小包（docx）
 
 docx create 同样生成 Transitional 包，命名空间用 2006 那套。

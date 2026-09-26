@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "book.xlsx",
+  "output": "book.pic.xlsx",
+  "ops": [
+    {
+      "op": "replacePicture",
+      "id": "sheet:Sheet1/pic:2",
+      "file": "C:\\img\\logo.png"
+    },
+    {
+      "op": "insertPicture",
+      "id": "sheet:Sheet1",
+      "file": "C:\\img\\logo.png",
+      "from": "B2",
+      "anchor": "oneCell"
+    }
+  ]
+}

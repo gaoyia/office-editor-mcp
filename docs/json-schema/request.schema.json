@@ -349,6 +349,7 @@
               { "$ref": "#/$defs/deletePictureOp" },
               { "$ref": "#/$defs/setPictureSizeOp" },
               { "$ref": "#/$defs/setPictureWrapOp" },
+              { "$ref": "#/$defs/setPictureAnchorOp" },
               { "$ref": "#/$defs/insertTextBoxOp" },
               { "$ref": "#/$defs/deleteTextBoxOp" },
               { "$ref": "#/$defs/setTextBoxSizeOp" },
@@ -474,7 +475,14 @@
         "id": { "type": "string", "minLength": 1 },
         "file": { "type": "string", "minLength": 1 },
         "cx": { "type": "integer", "minimum": 1 },
-        "cy": { "type": "integer", "minimum": 1 }
+        "cy": { "type": "integer", "minimum": 1 },
+        "from": { "type": "string", "minLength": 1 },
+        "to": { "type": "string", "minLength": 1 },
+        "anchor": { "enum": ["oneCell", "twoCell"] },
+        "fromOffX": { "type": "integer", "minimum": 0 },
+        "fromOffY": { "type": "integer", "minimum": 0 },
+        "toOffX": { "type": "integer", "minimum": 0 },
+        "toOffY": { "type": "integer", "minimum": 0 }
       }
     },
     "deletePictureOp": {
@@ -518,6 +526,41 @@
         "offsetX": { "type": "integer" },
         "offsetY": { "type": "integer" }
       }
+    },
+    "setPictureAnchorOp": {
+      "type": "object",
+      "required": ["op", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "setPictureAnchor" },
+        "id": { "type": "string", "minLength": 1 },
+        "anchor": { "enum": ["oneCell", "twoCell"] },
+        "from": { "type": "string", "minLength": 1 },
+        "to": { "type": "string", "minLength": 1 },
+        "fromOffX": { "type": "integer", "minimum": 0 },
+        "fromOffY": { "type": "integer", "minimum": 0 },
+        "toOffX": { "type": "integer", "minimum": 0 },
+        "toOffY": { "type": "integer", "minimum": 0 },
+        "posX": { "type": "integer" },
+        "posY": { "type": "integer" },
+        "editAs": { "enum": ["twoCell", "oneCell", "absolute"] },
+        "cx": { "type": "integer", "minimum": 1 },
+        "cy": { "type": "integer", "minimum": 1 }
+      },
+      "anyOf": [
+        { "required": ["anchor"] },
+        { "required": ["from"] },
+        { "required": ["to"] },
+        { "required": ["fromOffX"] },
+        { "required": ["fromOffY"] },
+        { "required": ["toOffX"] },
+        { "required": ["toOffY"] },
+        { "required": ["posX"] },
+        { "required": ["posY"] },
+        { "required": ["editAs"] },
+        { "required": ["cx"] },
+        { "required": ["cy"] }
+      ]
     },
     "insertTextBoxOp": {
       "type": "object",

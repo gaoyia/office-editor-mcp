@@ -19,6 +19,7 @@ C、I、A、O 这几组现在由 `manual-check/office/cases/xlsx-*.ps1` 自动�
 | A2–A7 | ✅ | Excel：A1=42，B1=`=SUM(A1:A10)` 值为 47，C1 空且数字格式仍是 `0.00`，Sheet2 未动，E1 加粗/红字/黄底/列宽 20 还在，D1 重算为 84 |
 | O1 | 🚫 | 领域层不做原样保存：三个动作里没有「只保存」，`apply` 的 `ops` 必须非空。零脏写回见 OPC 库测试。Excel 另存 create 产物见 `xlsx-O1-excel-resave` |
 | O2 | ✅ | 未改表与未点名格子的样式还在；未改部件 CRC 与打补丁前相同 |
+| Xp1–Xp7 | ❌ | 工作表图。契约已写，确认并实现后再跑 `xlsx-pictures.ps1` |
 
 ## create
 
@@ -44,7 +45,7 @@ C、I、A、O 这几组现在由 `manual-check/office/cases/xlsx-*.ps1` 自动�
 | I3 | A1 | `type` 为 `number`，`value` 为 `1` |
 | I4 | A2 | `type` 为 `text`，`value` 为 `hello` |
 | I5 | B1 | `formula` 为 `=SUM(A1)` |
-| I6 | 无 scope | 只发 path 时没有 `cells` 字段 |
+| I6 | 无 scope | 只发 path 时没有 `cells` 字段，仍有 `pictureCount` |
 
 ## apply
 
@@ -67,3 +68,17 @@ O1（用领域 JSON 打开再原样写出）第一期放弃。三个动作没有
 O2 仍按 apply 验收：没点名的表和样式看起来不变。
 
 Office 另存 create 产物是打开冒烟，见 `manual-check/office/cases/opc-resave.ps1`，不顶替 O1。
+
+## 工作表图
+
+准备一份 Excel 亲手另存的样例：某张 `worksheet` 上至少各有一张 `oneCell` 与一张 `twoCell` 的 DrawingML 图。不要用库 `create` 产物当带图样例。另备一张本地 PNG 供换图、插图。手测脚本建议 `manual-check/office/cases/xlsx-pictures.ps1`。编号用 Xp，避免和 create 的 C 组、inspect 的 I 组重号。
+
+| 序号 | 检查 | 通过标准 |
+| --- | --- | --- |
+| Xp1 | 计数与名单 | 无 `pictures` 时工作簿与目标表有 `pictureCount`、没有 `pictures`；`pictures: true` 时 id 为 `sheet:…/pic:…`，`anchor` / `from` 与工作表一致 |
+| Xp2 | 换图 | `replacePicture` 后 Excel 无修复；锚点不变 |
+| Xp3 | 插图 | `insertPicture` 往 `worksheet` 插 `oneCell`，Excel 能看见且无修复 |
+| Xp4 | 删图 | `deletePicture` 后该图消失，无修复 |
+| Xp5 | 尺寸 | 对 `oneCell` `setPictureSize` 后 COM 或目视尺寸对上（允许 EMU 换算误差） |
+| Xp6 | 锚点 | `setPictureAnchor` 把 `from` 改到另一格后，图跟着走，无修复 |
+| Xp7 | 导出 | `exportMedia` 写出的文件与 `/xl/media/…` 字节一致。不强制开 Excel |

@@ -2,7 +2,7 @@
 
 `schemaVersion` 固定为 `1`。库和命令行只认这一层。MCP 或其他传输信封不许改这里的字段名和含义。机器可读副本见 [json-schema/request.schema.json](json-schema/request.schema.json)，与本文冲突时以本文为准。
 
-xlsx、docx、pptx 的 inspect、create、apply 已经按本文实现。docx 另有 `exportMedia` 与 `exportChartData`。人工打开只认 Microsoft Office，见三份 checklist。
+xlsx、docx、pptx 的 inspect、create、apply 已经按本文实现。docx 另有 `exportMedia` 与 `exportChartData`。xlsx 的 `exportMedia` 认工作表图 id。人工打开只认 Microsoft Office，见三份 checklist。
 
 ## 信封
 
@@ -35,6 +35,7 @@ id 是给模型用的字符串，必须能从文件内容稳定算出来，不�
 | 工作簿 | `xlsx:workbook` | `xlsx:workbook` |
 | 工作表 | `sheet:{name}` | `sheet:Sheet1`、`sheet:销售 2026` |
 | 单元格 | `cell:{name}!{A1}` | `cell:Sheet1!A1`、`cell:销售 2026!BC12` |
+| 工作表图 | `sheet:{name}/pic:{cNvPrId}` 或 `sheet:{name}/pic:index:{k}` | `sheet:Sheet1/pic:2` |
 
 `{name}` 是 `workbook.xml` 里 `<sheet name="...">` 的值，不是 `sheetId`，也不是 `r:id`。查找工作表时大小写不敏感，输出 id 时用文件里的原始大小写。
 
@@ -42,7 +43,13 @@ id 是给模型用的字符串，必须能从文件内容稳定算出来，不�
 
 解析单元格 id：从右侧第一个 `!` 切开。右侧必须是合法 A1，左侧是工作表名。这样工作表名里即使含 `!`，也不会切错。
 
-图表工作表、宏表出现在 inspect 的表名单里，但没有单元格 id。它们的 id 仍是 `sheet:{name}`。对它们发 `setCell` 报 `InvalidField`。
+图表工作表、宏表出现在 inspect 的表名单里，但没有单元格 id。它们的 id 仍是 `sheet:{name}`。对它们发 `setCell` 报 `InvalidField`。对它们发 `insertPicture` 报 `InvalidField`。
+
+工作表图挂在该 `worksheet` 上，不挂在单元格上，也不挂在工作簿根上。图的 `{cNvPrId}` 取该 `xdr:pic` 里 `xdr:cNvPr/@id` 的原文（ECMA-376 §20.5.2.8）。输出用文件里的原始大小写与数字写法。请求里若双方都能解析成十进制整数，按数值匹配（`1` 与 `01` 视为同一处）；否则按原文精确比。同一张表内重复 `cNvPr/@id` 时，inspect 都列出，apply 命中该表文档顺序第一处。没有 `cNvPr/@id` 时用 `pic:index:{k}`，树上 `"stable": false`。`{k}` 只在该表全部 drawing 部件内从 1 计，计入该表所有被收入的图，不只是缺 id 的那些。
+
+只认锚点（`xdr:twoCellAnchor` / `xdr:oneCellAnchor` / `xdr:absoluteAnchor`）的直接子元素 `xdr:pic` 且带 `a:blip`。组合 `xdr:grpSp` 里的图、`xdr:graphicFrame`（图表、SmartArt）、`xdr:sp`、连接线不进 `pictures`。VML / `legacyDrawing`（批注框、旧式控件）不编。页眉页脚图本期不进树。`mc:AlternateContent` 只进第一个 `Choice`。一张表可以有多个 drawing 关系，按工作表 `.rels` 文档顺序拼接后再编号。
+
+`insertPicture` 的 `id` 必须是 `sheet:{name}`，且该表 `kind` 为 `worksheet`。对图 id、单元格 id 或 `xlsx:workbook` 发 `insertPicture` 报 `InvalidId`。对 `chartsheet` / `dialogsheet` 发 `insertPicture` 报 `InvalidField`。`replacePicture` / `deletePicture` / `setPictureSize` / `setPictureAnchor` 的 `id` 必须是图 id。对工作表 id 或单元格 id 发这四个 op 报 `InvalidId`。`setPictureWrap` 是 Word 绕排，xlsx 上报 `InvalidField`。
 
 ### docx
 
@@ -179,10 +186,11 @@ xlsx、docx、pptx 共用 `scope` 这个字段名，里面的键按格式分，�
 | `scope.sheet` | 要单元格时必填 | 工作表名 |
 | `scope.range` | 要单元格时必填 | A1 区域，例如 `A1:D20`。单个单元格写成 `B3` 或 `B3:B3` |
 | `scope.maxCells` | 否 | 返回单元格上限，默认 `5000`，允许范围 `1` 到 `20000` |
+| `scope.pictures` | 否 | 为 `true` 时给每张 `worksheet` 填 `pictures`。省略或 `false` 则只有 `pictureCount`，没有名单。不读媒体字节。不依赖 `sheet` / `range` |
 
-省略 `scope`、或只给空对象：返回工作簿节点和表名单，每张表不含 `cells`。这是默认截断。
+省略 `scope`、或只给空对象：返回工作簿节点和表名单，每张表不含 `cells`，也没有 `pictures`。工作簿与每张 `worksheet` 仍有 `pictureCount`。这是默认截断。
 
-只要想看单元格，就必须同时给 `sheet` 和 `range`。不默认扫第一张表的整张纸。
+只要想看单元格，就必须同时给 `sheet` 和 `range`。不默认扫第一张表的整张纸。只要想看图名单，就给 `pictures: true`。两者独立，可只开一边。
 
 #### docx 的 scope
 
@@ -211,7 +219,7 @@ xlsx、docx、pptx 共用 `scope` 这个字段名，里面的键按格式分，�
 | `scope.charts` | 否 | 为 `true` 时列出正文图表（根上 `charts`）以及每个页眉、页脚容器上的 `charts`。不依赖 `from` / `maxParas`。省略或 `false` 则只有 `chartCount`，没有名单。不把 embedding 字节放进树 |
 | `scope.smartArt` | 否 | 为 `true` 时列出正文 SmartArt（根上 `smartArts`）以及每个页眉、页脚容器上的 `smartArts`。不依赖 `from` / `maxParas`。省略或 `false` 则只有 `smartArtCount`，没有名单。不把图示画成图，不读 Fallback 位图 |
 
-`from` / `maxParas` 只切正文，`headerFooter` 只管页眉页脚段落，`pictures` 只展开图名单，`textBoxes` 只展开框名单，`notes` 只展开脚注尾注，`comments` 只展开批注，`charts` 只展开图表名单，`smartArt` 只展开图示名单。八者独立，可只开一边。只要想看正文段落，就必须同时给 `from` 和 `maxParas`。不默认把全文倒出来。正文图与正文框名单只出现在已切出的段落上，不挂到文档根。正文图表名单与正文 SmartArt 名单挂在文档根上，不挂在段落上。`from` 超出 `paraCount` 时正文 `paragraphs` 为空数组，`truncated` 为 `false`，不报错。页眉页脚通常很短，给了对应键就返回该部件全部段落、图、框、图表或 SmartArt，都不再单独分页。框通常短，给了 `textBoxContent: true` 就返回该框全部段落，不再单独分页。用户注和批注通常不多，给了 `notes: true` 或 `comments: true` 就返回全部名单，每条倒出全部段落，不再单独分页。图表通常不多，给了 `charts: true` 就返回全部名单，每张带全部系列，不再单独分页。SmartArt 通常不多，给了 `smartArt: true` 就返回全部名单，每张带全部可见点，不再单独分页。xlsx / pptx 的 `scope` 里出现 `headerFooter`、`pictures`、`textBoxes`、`textBoxContent`、`notes`、`comments`、`charts` 或 `smartArt` 报 `InvalidField`。只给 `textBoxContent`、不给 `textBoxes` 报 `InvalidField`。
+`from` / `maxParas` 只切正文，`headerFooter` 只管页眉页脚段落，`pictures` 只展开图名单，`textBoxes` 只展开框名单，`notes` 只展开脚注尾注，`comments` 只展开批注，`charts` 只展开图表名单，`smartArt` 只展开图示名单。八者独立，可只开一边。只要想看正文段落，就必须同时给 `from` 和 `maxParas`。不默认把全文倒出来。正文图与正文框名单只出现在已切出的段落上，不挂到文档根。正文图表名单与正文 SmartArt 名单挂在文档根上，不挂在段落上。`from` 超出 `paraCount` 时正文 `paragraphs` 为空数组，`truncated` 为 `false`，不报错。页眉页脚通常很短，给了对应键就返回该部件全部段落、图、框、图表或 SmartArt，都不再单独分页。框通常短，给了 `textBoxContent: true` 就返回该框全部段落，不再单独分页。用户注和批注通常不多，给了 `notes: true` 或 `comments: true` 就返回全部名单，每条倒出全部段落，不再单独分页。图表通常不多，给了 `charts: true` 就返回全部名单，每张带全部系列，不再单独分页。SmartArt 通常不多，给了 `smartArt: true` 就返回全部名单，每张带全部可见点，不再单独分页。xlsx 的 `scope` 里出现 `headerFooter`、`textBoxes`、`textBoxContent`、`notes`、`comments`、`charts` 或 `smartArt` 报 `InvalidField`。pptx 的 `scope` 里出现 `headerFooter`、`pictures`、`textBoxes`、`textBoxContent`、`notes`、`comments`、`charts` 或 `smartArt` 报 `InvalidField`。只给 `textBoxContent`、不给 `textBoxes` 报 `InvalidField`。
 
 #### pptx 的 scope
 
@@ -241,11 +249,13 @@ xlsx、docx、pptx 共用 `scope` 这个字段名，里面的键按格式分，�
   "schemaVersion": 1,
   "format": "xlsx",
   "id": "xlsx:workbook",
+  "pictureCount": 0,
   "sheets": [
     {
       "id": "sheet:Sheet1",
       "name": "Sheet1",
       "kind": "worksheet",
+      "pictureCount": 0,
       "truncated": true,
       "range": "A1:D20",
       "cells": [
@@ -275,7 +285,8 @@ xlsx、docx、pptx 共用 `scope` 这个字段名，里面的键按格式分，�
     {
       "id": "sheet:Sheet2",
       "name": "Sheet2",
-      "kind": "worksheet"
+      "kind": "worksheet",
+      "pictureCount": 0
     }
   ]
 }
@@ -283,8 +294,16 @@ xlsx、docx、pptx 共用 `scope` 这个字段名，里面的键按格式分，�
 
 规则：
 
+- 工作簿字段顺序：`id`、`pictureCount`、`sheets`。`pictureCount` 始终出现，等于各 `worksheet` 的 `pictureCount` 之和，不含 `chartsheet` / `dialogsheet`。
 - `sheets` 始终列出工作簿里全部表（含隐藏表），便于模型知道还有哪些表。未点名的表不带 `cells`、`range`、`truncated`。
-- `kind`：`worksheet`、`chartsheet`、`dialogsheet`。第一期只对 `worksheet` 填单元格。
+- `kind`：`worksheet`、`chartsheet`、`dialogsheet`。第一期只对 `worksheet` 填单元格与图。
+- `worksheet` 字段顺序：`id`、`name`、`kind`、`pictureCount`，有图名单时再跟 `pictures`，有单元格切片时再跟 `truncated`、`range`、`cells`。`pictureCount` 始终出现，是该表被收入的 `xdr:pic` 个数（判定见上文 xlsx 图 id 那节）。没有图则为 `0`。`chartsheet` / `dialogsheet` 没有 `pictureCount`，也没有 `pictures`。
+- `scope.pictures` 为 `true` 时，每张 `worksheet` 带 `pictures`。没有图时为空数组。按该表 drawing 部件顺序、同一部件内按锚点文档顺序。每张字段顺序：`id`、`cNvPrId`、`name`、`anchor`，然后按锚点种类跟位置字段，最后 `stable`。`cNvPrId` 是 `xdr:cNvPr/@id` 原文，没有则为 `null`。`name` 取 `xdr:cNvPr/@name`，没有则为 `""`。`anchor` 为 `twoCell`、`oneCell` 或 `absolute`。
+- `twoCell`（§20.5.2.33）再跟 `from`、`fromOffX`、`fromOffY`、`to`、`toOffX`、`toOffY`、`editAs`。不报 `cx` / `cy`（显示尺寸由起止格与列宽行高决定，库不算）。`editAs` 取 `twoCellAnchor/@editAs`：`twoCell`、`oneCell` 或 `absolute`；缺省当作 `twoCell`。
+- `oneCell`（§20.5.2.24）再跟 `from`、`fromOffX`、`fromOffY`、`cx`、`cy`。`cx` / `cy` 取 `xdr:ext`，没有则为 `null`。
+- `absolute`（§20.5.2.1）再跟 `posX`、`posY`、`cx`、`cy`。`posX` / `posY` 取 `xdr:pos`。
+- `from` / `to` 是 A1（列字母加大写行号）。XML 里 `xdr:col` / `xdr:row` 从 0 计（§20.5.3.1、§20.5.3.3），树上换成 A1，与单元格 id 同一套写法。`fromOffX` / `fromOffY` / `toOffX` / `toOffY` 是 EMU 整数，取 `colOff` / `rowOff`，缺省为 `0`。
+- 不把媒体字节放进树。xlsx 的 `scope` 里出现 `charts` 仍报 `InvalidField`（工作表图表另开）。
 - `cells` 稀疏：范围内没有 `<c>` 的格子不出现。
 - 范围内有内容的格子超过 `maxCells` 时，按行优先、从左到右截断，`truncated` 为 `true`。未截断则为 `false`。
 - `type`：`number`、`text`、`boolean`、`error`、`date`、`empty`。对应 SpreadsheetML `ST_CellType`（§18.18.11）的映射见下表。
@@ -537,7 +556,7 @@ xlsx、docx、pptx 共用 `scope` 这个字段名，里面的键按格式分，�
 
 行与单元格按行号、列号升序写出。补上 `sheetData` 和合理的 `dimension`。
 
-最小 `styles.xml` 必须生成，见 [opc.md](opc.md)。默认字体颜色写 `<color rgb="FF000000"/>`，不引用 theme，包里也不生成 theme 部件。不要生成图表、透视表、条件格式。
+最小 `styles.xml` 必须生成，见 [opc.md](opc.md)。默认字体颜色写 `<color rgb="FF000000"/>`，不引用 theme，包里也不生成 theme 部件。不要生成图表、透视表、条件格式、工作表图。
 
 ### docx
 
@@ -683,7 +702,7 @@ create 与 apply 落盘时先写入目标同目录的临时文件，再改名为
 | `value` | 与 create 相同。`null` 表示清空该格的值和公式 |
 | `formula` | 以 `=` 开头。不能与 `value` 同时出现 |
 
-不认识的 `op` 报 `UnsupportedOp`，不要忽略。xlsx 只认 `setCell`。docx 认 `setParaText`、`setHeaderFooterDistance`、`setHeaderFooterLink`、图片 op、文本框 op、`insertPara` / `deletePara`、脚注尾注 op（`insertFootnote`、`insertEndnote`、`deleteFootnote`、`deleteEndnote`、`setNoteNumbering`）、批注 op（`insertComment`、`deleteComment`、`replyComment`、`setCommentText`、`setCommentMeta`、`setCommentDone`）、图表 op（`insertChart`、`deleteChart`、`setChartTitle`、`setChartSeries`、`addChartSeries`、`deleteChartSeries`、`setChartType`、`setChartAxisTitle`、`setChartLegend`、`setChartDataLabels`、`setChartSize`、`setChartWrap`）、以及 SmartArt op（`insertSmartArt`、`deleteSmartArt`、`setSmartArtText`、`addSmartArtPoint`、`deleteSmartArtPoint`、`setSmartArtSize`、`setSmartArtWrap`、`setSmartArtColors`、`setSmartArtStyle`、`setSmartArtLayout`）。pptx 只认 `setShapeText`。对不上格式的 op（例如对 pptx 发 `setCell` / `setParaText`，或对 xlsx / pptx 发页眉、图片、文本框、注、批注、图表或 SmartArt 的 op）报 `InvalidField`。
+不认识的 `op` 报 `UnsupportedOp`，不要忽略。xlsx 认 `setCell`、`replacePicture`、`insertPicture`、`deletePicture`、`setPictureSize`、`setPictureAnchor`。docx 认 `setParaText`、`setHeaderFooterDistance`、`setHeaderFooterLink`、图片 op（含 `setPictureWrap`，不含 `setPictureAnchor`）、文本框 op、`insertPara` / `deletePara`、脚注尾注 op（`insertFootnote`、`insertEndnote`、`deleteFootnote`、`deleteEndnote`、`setNoteNumbering`）、批注 op（`insertComment`、`deleteComment`、`replyComment`、`setCommentText`、`setCommentMeta`、`setCommentDone`）、图表 op（`insertChart`、`deleteChart`、`setChartTitle`、`setChartSeries`、`addChartSeries`、`deleteChartSeries`、`setChartType`、`setChartAxisTitle`、`setChartLegend`、`setChartDataLabels`、`setChartSize`、`setChartWrap`）、以及 SmartArt op（`insertSmartArt`、`deleteSmartArt`、`setSmartArtText`、`addSmartArtPoint`、`deleteSmartArtPoint`、`setSmartArtSize`、`setSmartArtWrap`、`setSmartArtColors`、`setSmartArtStyle`、`setSmartArtLayout`）。pptx 只认 `setShapeText`。对不上格式的 op（例如对 pptx 发 `setCell` / `setParaText`，对 xlsx 发 `setPictureWrap` 或页眉、文本框、注、批注、图表、SmartArt 的 op，对 docx 发 `setPictureAnchor`，或对 pptx 发图片 op）报 `InvalidField`。
 
 空单元格：目标格子在 XML 里还不存在时，`setCell` 按需插入 `<row>` 和 `<c>`，插在正确的行列顺序上。找不到工作表才报 `IdNotFound`。
 
@@ -821,12 +840,12 @@ create 与 apply 落盘时先写入目标同目录的临时文件，再改名为
 | 字段 | 含义 |
 | --- | --- |
 | `op` | 必须是 `"replacePicture"` |
-| `id` | 图 id：页眉页脚为 `{容器}/pic:…`；正文为 `{段落 id}/pic:…` |
+| `id` | 图 id：docx 为 `{容器}/pic:…` 或 `{段落 id}/pic:…`；xlsx 为 `sheet:{name}/pic:…` |
 | `file` | 本地图片路径，与信封 `path` 一样认正斜杠和反斜杠。不把 base64 放进领域 JSON |
 
-找不到该图报 `IdNotFound`。读不到 `file` 报 `Io`。文件不是本库认的位图（见下）报 `InvalidField`。xlsx / pptx 上发此 op 报 `InvalidField`。
+找不到该图报 `IdNotFound`。读不到 `file` 报 `Io`。文件不是本库认的位图（见下）报 `InvalidField`。pptx 上发此 op 报 `InvalidField`。
 
-只换媒体字节与内容类型，不改 `wp:inline` / `wp:anchor`、绕排和位置。`a:blip/@r:embed` 的关系 id 保持不变。扩展名变了就写新的 `/word/media/imageN.*`，改同一条关系的 `Target`，并更新 `[Content_Types].xml` 的 Default 或 Override；旧媒体若重新解析后无人引用则删掉。认 PNG、JPEG（`.jpg` / `.jpeg`）、GIF、BMP；按文件头判断，扩展名只用来给新媒体取名。
+只换媒体字节与内容类型，不改锚点、绕排和位置。`a:blip/@r:embed` 的关系 id 保持不变。docx 扩展名变了就写新的 `/word/media/imageN.*`；xlsx 写新的 `/xl/media/imageN.*`。改同一条关系的 `Target`，并更新 `[Content_Types].xml` 的 Default 或 Override；旧媒体若重新解析后无人引用则删掉。认 PNG、JPEG（`.jpg` / `.jpeg`）、GIF、BMP；按文件头判断，扩展名只用来给新媒体取名。
 
 ### insertPicture
 
@@ -845,12 +864,21 @@ create 与 apply 落盘时先写入目标同目录的临时文件，再改名为
 | 字段 | 含义 |
 | --- | --- |
 | `op` | 必须是 `"insertPicture"` |
-| `id` | 段落 id：正文用 `para:…` / `para:index:{n}`；页眉页脚用 `{容器}/para:…` |
+| `id` | docx：段落 id（正文用 `para:…` / `para:index:{n}`，页眉页脚用 `{容器}/para:…`）。xlsx：工作表 id `sheet:{name}` |
 | `file` | 本地图片路径 |
 | `cx` | 可选。宽度，EMU，正整数 |
 | `cy` | 可选。高度，EMU，正整数 |
+| `from` | xlsx 必填。左上角单元格，A1。docx 上出现报 `InvalidField` |
+| `to` | xlsx 且 `anchor` 为 `twoCell` 时必填。右下角单元格，A1。docx 上出现报 `InvalidField` |
+| `anchor` | xlsx 可选。`oneCell`（缺省）或 `twoCell`。不认 `absolute`。docx 上出现报 `InvalidField` |
+| `fromOffX` / `fromOffY` | xlsx 可选。相对 `from` 的 EMU 偏移，缺省 `0`，不得为负。docx 上出现报 `InvalidField` |
+| `toOffX` / `toOffY` | xlsx 且 `twoCell` 时可选。相对 `to` 的 EMU 偏移，缺省 `0`，不得为负。docx 上出现报 `InvalidField` |
 
-找不到该段落报 `IdNotFound`。`id` 不是段落 id 报 `InvalidId`。`cx` / `cy` 都省略时，按 PNG / JPEG / GIF / BMP 的像素尺寸、96 dpi 换算成 EMU（`px × 914400 / 96`）；读不出尺寸则用 1 英寸见方（`914400`）。只给一个时报 `InvalidField`。插入 `wp:inline`，挂在该段末尾一个新的 `w:r` 里。写入该部件关系、`/word/media/imageN.*` 与内容类型。`wp:docPr/@id` 取该部件已有 `docPr` 的最大整数加 1，至少为 1。xlsx / pptx 上发此 op 报 `InvalidField`。
+docx：找不到该段落报 `IdNotFound`。`id` 不是段落 id 报 `InvalidId`。`cx` / `cy` 都省略时，按 PNG / JPEG / GIF / BMP 的像素尺寸、96 dpi 换算成 EMU（`px × 914400 / 96`）；读不出尺寸则用 1 英寸见方（`914400`）。只给一个时报 `InvalidField`。插入 `wp:inline`，挂在该段末尾一个新的 `w:r` 里。写入该部件关系、`/word/media/imageN.*` 与内容类型。`wp:docPr/@id` 取该部件已有 `docPr` 的最大整数加 1，至少为 1。
+
+xlsx：找不到该表报 `IdNotFound`。`id` 不是 `sheet:{name}` 报 `InvalidId`。该表不是 `worksheet` 报 `InvalidField`。必须给 `from`，否则报 `MissingField`。`from` / `to` 不是合法 A1 报 `InvalidRange`。`anchor` 为 `twoCell` 却没有 `to` 报 `InvalidField`。`anchor` 为 `absolute` 或不认识报 `InvalidField`。`cx` / `cy` 规则与 docx 相同；`twoCell` 也要写 `xdr:pic` 里的 `a:ext`（给 Excel 一个内部尺寸），显示尺寸仍由起止格决定。没有 drawing 部件则新建 `/xl/drawings/drawingN.xml`、工作表关系、`[Content_Types].xml` 的 Override，并在工作表上写 `<drawing r:id="…"/>`。新媒体写入 `/xl/media/imageN.*`。`xdr:cNvPr/@id` 取该表已有 `cNvPr` 的最大整数加 1，至少为 1。锚点必须带空的 `xdr:clientData`（§20.5.2.3）。
+
+pptx 上发此 op 报 `InvalidField`。
 
 ### deletePicture
 
@@ -870,7 +898,7 @@ create 与 apply 落盘时先写入目标同目录的临时文件，再改名为
 | `op` | 必须是 `"deletePicture"` |
 | `id` | 图 id |
 
-找不到该图报 `IdNotFound`。按图 id 删掉对应的 `w:drawing`。若该图在 `mc:AlternateContent` 的 Choice 里，整段 `AlternateContent` 删掉（避免 Fallback 的 VML 把图留住）。所在 `w:r` 若删完后只剩 `w:rPr` 或空，把该 run 也删掉。重新解析包内关系之后，若该媒体与该关系再无人引用，删掉媒体部件、关系条目和对应内容类型。xlsx / pptx 上发此 op 报 `InvalidField`。
+找不到该图报 `IdNotFound`。docx：按图 id 删掉对应的 `w:drawing`。若该图在 `mc:AlternateContent` 的 Choice 里，整段 `AlternateContent` 删掉（避免 Fallback 的 VML 把图留住）。所在 `w:r` 若删完后只剩 `w:rPr` 或空，把该 run 也删掉。xlsx：按图 id 删掉包含该 `xdr:pic` 的整个锚点。drawing 部件删空后去掉该部件、工作表上的 `<drawing>` 和对应关系。重新解析包内关系之后，若该媒体与该关系再无人引用，删掉媒体部件、关系条目和对应内容类型。pptx 上发此 op 报 `InvalidField`。
 
 ### setPictureSize
 
@@ -892,7 +920,7 @@ create 与 apply 落盘时先写入目标同目录的临时文件，再改名为
 | `cx` | 可选。宽度，EMU，正整数 |
 | `cy` | 可选。高度，EMU，正整数 |
 
-`cx` 与 `cy` 至少给一个，否则报 `InvalidField`。只改被点名的那一侧，另一侧保持原值。写入 `wp:extent`；若 `pic:spPr/a:xfrm/a:ext` 存在，一并改。找不到该图报 `IdNotFound`。xlsx / pptx 上发此 op 报 `InvalidField`。
+`cx` 与 `cy` 至少给一个，否则报 `InvalidField`。只改被点名的那一侧，另一侧保持原值。docx：写入 `wp:extent`；若 `pic:spPr/a:xfrm/a:ext` 存在，一并改。xlsx：`anchor` 为 `oneCell` 或 `absolute` 时写入 `xdr:ext`；若 `xdr:spPr/a:xfrm/a:ext` 存在，一并改。`anchor` 为 `twoCell` 时报 `NotImplemented`，不写文件。找不到该图报 `IdNotFound`。pptx 上发此 op 报 `InvalidField`。
 
 ### setPictureWrap
 
@@ -925,7 +953,43 @@ create 与 apply 落盘时先写入目标同目录的临时文件，再改名为
 | `offsetX` | 可选。相对页边水平偏移，EMU 整数（可负）。与 `alignH` 不能同时出现 |
 | `offsetY` | 可选。相对页边垂直偏移，EMU 整数（可负）。与 `alignV` 不能同时出现 |
 
-行内改浮动或反过来。位置只支持相对页边（`wp:positionH/@relativeFrom` 与 `wp:positionV/@relativeFrom` 都写 `margin`），不做任意 Dist，也不写其它 `relativeFrom`。改成浮动且没给对齐或偏移时，水平默认 `alignH: "left"`，垂直默认 `alignV: "top"`。已经是浮动、只改 `wrap` 时，未点名的位置属性原样留下。`behindDoc`：`wrap` 为 `none` 时写成 `1`（衬于文字下方），其余为 `0`。xlsx / pptx 上发此 op 报 `InvalidField`。
+行内改浮动或反过来。位置只支持相对页边（`wp:positionH/@relativeFrom` 与 `wp:positionV/@relativeFrom` 都写 `margin`），不做任意 Dist，也不写其它 `relativeFrom`。改成浮动且没给对齐或偏移时，水平默认 `alignH: "left"`，垂直默认 `alignV: "top"`。已经是浮动、只改 `wrap` 时，未点名的位置属性原样留下。`behindDoc`：`wrap` 为 `none` 时写成 `1`（衬于文字下方），其余为 `0`。xlsx / pptx 上发此 op 报 `InvalidField`。xlsx 改锚点请用 `setPictureAnchor`。
+
+### setPictureAnchor
+
+```json
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "C:\\data\\book.xlsx",
+  "ops": [
+    {
+      "op": "setPictureAnchor",
+      "id": "sheet:Sheet1/pic:2",
+      "anchor": "oneCell",
+      "from": "C3"
+    }
+  ]
+}
+```
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"setPictureAnchor"` |
+| `id` | xlsx 图 id |
+| `anchor` | 可选。`oneCell` 或 `twoCell`。写成 `absolute` 报 `NotImplemented` |
+| `from` | 可选。左上角 A1 |
+| `to` | 可选。`twoCell` 的右下角 A1 |
+| `fromOffX` / `fromOffY` / `toOffX` / `toOffY` | 可选。EMU，不得为负 |
+| `posX` / `posY` | 可选。仅当现有锚点已是 `absolute` 时改位置，EMU |
+| `editAs` | 可选。只对 `twoCell`：`twoCell` / `oneCell` / `absolute` |
+| `cx` / `cy` | 从 `twoCell` 转到 `oneCell` 时必填（库不算列宽行高）。已经是 `oneCell` 时请用 `setPictureSize` |
+
+`anchor`、位置字段、`editAs`、`cx` / `cy` 至少给一类，否则报 `InvalidField`。找不到该图报 `IdNotFound`。`id` 不是 xlsx 图 id 报 `InvalidId`。docx / pptx 上发此 op 报 `InvalidField`。
+
+`oneCell` ↔ `twoCell` 可以互转：改锚点元素名，留下 `xdr:pic` 与 `xdr:clientData`。转到 `twoCell` 必须有 `to`（请求给，或原来就是 `twoCell` 已有）。转到 `oneCell` 必须有 `cx` 与 `cy`（请求给，或原来就是 `oneCell` 已有）。与 `absolute` 互转报 `NotImplemented`，不写文件。已有 `absolute` 只许改 `posX` / `posY`；改 `from` / `to` / `anchor` 报 `NotImplemented`。
+
+未点名的位置属性原样留下。`from` / `to` 不是合法 A1 报 `InvalidRange`。
 
 ### insertTextBox
 
@@ -1420,16 +1484,16 @@ Content Type：data 为 `application/vnd.openxmlformats-officedocument.drawingml
 
 | 字段 | 必填 | 含义 |
 | --- | --- | --- |
-| `path` | 是 | 源 docx |
+| `path` | 是 | 源 docx 或 xlsx |
 | `id` | 是 | 图 id，与 inspect 的 `pictures[].id` 相同 |
 | `output` | 否 | 本地目标路径。省略时用命令行 `--output`。两者都缺报 `MissingField`。不得默认写成源 `path`，以免把图片字节盖掉文档 |
 | `format` | 否 | 可省略，从 `path` 扩展名推断 |
 
-`id` 必须是图 id。对段落 id、页眉页脚容器 id 或 `section:{n}` 报 `InvalidId`。找不到该图报 `IdNotFound`。优先走 `a:blip/@r:embed`；只有 `@r:link`、没有 embed 时按外部关系处理，报 `OpcPartMissing`，不下载 http。embed 指向外部关系同样报 `OpcPartMissing`。
+`id` 必须是图 id。对段落 id、工作表 id、单元格 id、页眉页脚容器 id 或 `section:{n}` 报 `InvalidId`。找不到该图报 `IdNotFound`。优先走 `a:blip/@r:embed`；只有 `@r:link`、没有 embed 时按外部关系处理，报 `OpcPartMissing`，不下载 http。embed 指向外部关系同样报 `OpcPartMissing`。
 
 写出的是该媒体部件的原字节。`contentType` 取自 `[Content_Types].xml` 对该部件的 Default 或 Override；都没有则省略该字段。扩展名由调用方自己定，库不按类型改名。
 
-xlsx / pptx 本期报 `InvalidField`。以后若要导出 pptx 的 `p:pic`，另开，不改本动作字段名。文本框里的图用框内段落上的图 id，同一动作能导出。脚注、尾注里的图用注内段落上的图 id，同一动作能导出。批注里的图用批注内段落上的图 id，同一动作能导出。嵌入图表的工作簿另走 `exportChartData`，不在本动作。
+pptx 本期报 `InvalidField`。以后若要导出 pptx 的 `p:pic`，另开，不改本动作字段名。xlsx 用工作表图 id，写出 `/xl/media/…`。docx 文本框里的图用框内段落上的图 id，同一动作能导出。脚注、尾注里的图用注内段落上的图 id，同一动作能导出。批注里的图用批注内段落上的图 id，同一动作能导出。嵌入图表的工作簿另走 `exportChartData`，不在本动作。
 
 成功时 stdout 见 [errors.md](errors.md)。源包不写回。
 

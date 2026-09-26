@@ -2,11 +2,13 @@
   "schemaVersion": 1,
   "format": "xlsx",
   "id": "xlsx:workbook",
+  "pictureCount": 0,
   "sheets": [
     {
       "id": "sheet:Sheet1",
       "name": "Sheet1",
       "kind": "worksheet",
+      "pictureCount": 0,
       "truncated": false,
       "range": "A1:D20",
       "cells": [
