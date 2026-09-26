@@ -145,6 +145,9 @@ mod tests {
             panic!();
         };
         assert!(tree["sheets"][0].get("cells").is_none());
+        assert_eq!(tree["pictureCount"], 0);
+        assert_eq!(tree["sheets"][0]["pictureCount"], 0);
+        assert!(tree["sheets"][0].get("pictures").is_none());
     }
 
     #[test]
@@ -345,7 +348,7 @@ mod tests {
     }
 
     #[test]
-    fn xlsx_rejects_pictures_scope_and_ops() {
+    fn xlsx_rejects_docx_picture_id_and_foreign_ops() {
         let path = tmp("pic-reject.xlsx");
         run(
             &json!({
@@ -358,7 +361,7 @@ mod tests {
             None,
         )
         .unwrap();
-        let err = run(
+        let RunOutput::Inspect(tree) = run(
             &json!({
                 "schemaVersion": 1,
                 "action": "inspect",
@@ -368,8 +371,11 @@ mod tests {
             .to_string(),
             None,
         )
-        .unwrap_err();
-        assert_eq!(err.code(), ErrorCode::InvalidField);
+        .unwrap() else {
+            panic!("pictures: true 应合法");
+        };
+        assert_eq!(tree["pictureCount"], 0);
+        assert_eq!(tree["sheets"][0]["pictures"], json!([]));
         let err = run(
             &json!({
                 "schemaVersion": 1,
@@ -393,7 +399,7 @@ mod tests {
             None,
         )
         .unwrap_err();
-        assert_eq!(err.code(), ErrorCode::InvalidField);
+        assert_eq!(err.code(), ErrorCode::InvalidId);
         let err = run(
             &json!({
                 "schemaVersion": 1,
@@ -406,10 +412,22 @@ mod tests {
         )
         .unwrap_err();
         assert_eq!(err.code(), ErrorCode::InvalidField);
+        let err = run(
+            &json!({
+                "schemaVersion": 1,
+                "action": "apply",
+                "path": path.to_string_lossy(),
+                "ops": [{ "op": "setPictureWrap", "id": "sheet:Sheet1/pic:1", "kind": "inline" }]
+            })
+            .to_string(),
+            None,
+        )
+        .unwrap_err();
+        assert_eq!(err.code(), ErrorCode::InvalidField);
     }
 
     #[test]
-    fn xlsx_and_pptx_reject_export_media() {
+    fn pptx_rejects_export_media_xlsx_rejects_docx_id() {
         let xlsx = tmp("export-reject.xlsx");
         run(
             &json!({
@@ -434,7 +452,7 @@ mod tests {
             None,
         )
         .unwrap_err();
-        assert_eq!(err.code(), ErrorCode::InvalidField);
+        assert_eq!(err.code(), ErrorCode::InvalidId);
 
         let pptx = tmp("export-reject.pptx");
         run(
@@ -744,11 +762,11 @@ mod tests {
         };
         assert_eq!(
             object_keys(&tree),
-            ["schemaVersion", "format", "id", "sheets"]
+            ["schemaVersion", "format", "id", "pictureCount", "sheets"]
         );
         assert_eq!(
             object_keys(&tree["sheets"][0]),
-            ["id", "name", "kind", "truncated", "range", "cells"]
+            ["id", "name", "kind", "pictureCount", "truncated", "range", "cells"]
         );
         assert_eq!(
             object_keys(&tree["sheets"][0]["cells"][0]),

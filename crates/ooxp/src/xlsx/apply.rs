@@ -1,14 +1,15 @@
-//! 按 id 改单元格，并标记打开时重算。
+//! 按 id 改单元格或工作表图，改单元格时标记打开时重算。
 
-use super::request::{SetCellOp, SetCellValue};
+use super::request::{SetCellOp, SetCellValue, XlsxOp};
 use crate::error::{Error, ErrorKind, IdReason, RelSource};
 use crate::opc::{self, ContentTypes, Package, Relationships};
 use crate::xml::{self, Document, Element, Node};
 
 use super::a1;
+use super::picture;
 use super::REL_CALC_CHAIN;
 
-pub fn apply(bytes: &[u8], ops: &[SetCellOp]) -> Result<Vec<u8>, Error> {
+pub fn apply(bytes: &[u8], ops: &[XlsxOp]) -> Result<Vec<u8>, Error> {
     let mut pkg = Package::open_bytes(bytes.to_vec())?;
     let wb_part = opc::office_document_part(&pkg)?;
     let mut wb_doc = xml::parse(pkg.get(&wb_part)?)?;
@@ -17,53 +18,133 @@ pub fn apply(bytes: &[u8], ops: &[SetCellOp]) -> Result<Vec<u8>, Error> {
     let sheet_index = sheet_index(&wb_doc.root, &wb_rels, &wb_part)?;
 
     let mut dirty_sheets: Vec<(String, Document)> = Vec::new();
+    let mut touched_cells = false;
 
     for (i, op) in ops.iter().enumerate() {
-        let (sheet_name, a1) = parse_cell_id(&op.id, i)?;
-        let meta = sheet_index
-            .iter()
-            .find(|(n, _, k)| n.eq_ignore_ascii_case(&sheet_name) && *k == "worksheet")
-            .ok_or_else(|| {
-                if sheet_index
+        match op {
+            XlsxOp::SetCell(op) => {
+                touched_cells = true;
+                let (sheet_name, a1) = parse_cell_id(&op.id, i)?;
+                let meta = sheet_index
                     .iter()
-                    .any(|(n, _, _)| n.eq_ignore_ascii_case(&sheet_name))
-                {
-                    Error::with_path(ErrorKind::SetCellWorksheetOnly, format!("ops[{i}].id"))
-                } else {
-                    Error::with_path(
-                        ErrorKind::SheetNotFound {
-                            name: sheet_name.clone(),
-                        },
+                    .find(|(n, _, k)| n.eq_ignore_ascii_case(&sheet_name) && *k == "worksheet")
+                    .ok_or_else(|| {
+                        if sheet_index
+                            .iter()
+                            .any(|(n, _, _)| n.eq_ignore_ascii_case(&sheet_name))
+                        {
+                            Error::with_path(ErrorKind::SetCellWorksheetOnly, format!("ops[{i}].id"))
+                        } else {
+                            Error::with_path(
+                                ErrorKind::SheetNotFound {
+                                    name: sheet_name.clone(),
+                                },
+                                format!("ops[{i}].id"),
+                            )
+                        }
+                    })?;
+                let part = meta.1.clone();
+                let cell = a1::parse_cell(&a1)?;
+                load_dirty(&pkg, &mut dirty_sheets, &part, true)?;
+                let doc = dirty_of(&mut dirty_sheets, &part);
+                apply_set_cell(&mut doc.root, cell, op, i)?;
+            }
+            XlsxOp::ReplacePicture(op) => {
+                let part = require_sheet_part(&sheet_index, &op.target.sheet, i)?;
+                picture::replace_picture(&mut pkg, &part, op, i)?;
+            }
+            XlsxOp::InsertPicture(op) => {
+                let (part, kind) = require_named_sheet(&sheet_index, &op.sheet, i)?;
+                if kind != "worksheet" {
+                    return Err(Error::with_path(
+                        ErrorKind::InsertPictureWorksheetOnly,
                         format!("ops[{i}].id"),
-                    )
+                    ));
                 }
-            })?;
-        let original_name = meta.0.clone();
-        let part = meta.1.clone();
-        let cell = a1::parse_cell(&a1)?;
-
-        let doc = if let Some((_, doc)) = dirty_sheets.iter_mut().find(|(p, _)| p == &part) {
-            doc
-        } else {
-            let mut parsed = xml::parse(pkg.get(&part)?)?;
-            // 省略 r 的行和单元格按隐式编号补成显式，否则后面插新行会让它们的编号漂移。
-            make_refs_explicit(&mut parsed.root);
-            dirty_sheets.push((part.clone(), parsed));
-            &mut dirty_sheets.last_mut().unwrap().1
-        };
-        apply_set_cell(&mut doc.root, cell, op, i)?;
-        let _ = original_name;
+                load_dirty(&pkg, &mut dirty_sheets, &part, false)?;
+                let doc = dirty_of(&mut dirty_sheets, &part);
+                picture::insert_picture(&mut pkg, doc, &part, op, i)?;
+            }
+            XlsxOp::DeletePicture(op) => {
+                let part = require_sheet_part(&sheet_index, &op.target.sheet, i)?;
+                load_dirty(&pkg, &mut dirty_sheets, &part, false)?;
+                let doc = dirty_of(&mut dirty_sheets, &part);
+                picture::delete_picture(&mut pkg, doc, &part, op, i)?;
+            }
+            XlsxOp::SetPictureSize(op) => {
+                let part = require_sheet_part(&sheet_index, &op.target.sheet, i)?;
+                picture::set_picture_size(&mut pkg, &part, op, i)?;
+            }
+            XlsxOp::SetPictureAnchor(op) => {
+                let part = require_sheet_part(&sheet_index, &op.target.sheet, i)?;
+                picture::set_picture_anchor(&mut pkg, &part, op, i)?;
+            }
+        }
     }
 
     for (part, doc) in dirty_sheets {
         pkg.set(&part, doc.to_bytes()?)?;
     }
 
-    mark_full_calc(&mut wb_doc.root);
-    pkg.set(&wb_part, wb_doc.to_bytes()?)?;
-    remove_calc_chain(&mut pkg, &wb_part)?;
+    if touched_cells {
+        mark_full_calc(&mut wb_doc.root);
+        pkg.set(&wb_part, wb_doc.to_bytes()?)?;
+        remove_calc_chain(&mut pkg, &wb_part)?;
+    }
 
     pkg.save_to_vec()
+}
+
+fn require_named_sheet(
+    index: &[(String, String, &'static str)],
+    name: &str,
+    op_index: usize,
+) -> Result<(String, &'static str), Error> {
+    index
+        .iter()
+        .find(|(n, _, _)| n.eq_ignore_ascii_case(name))
+        .map(|(_, part, kind)| (part.clone(), *kind))
+        .ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::SheetNotFound {
+                    name: name.to_string(),
+                },
+                format!("ops[{op_index}].id"),
+            )
+        })
+}
+
+fn require_sheet_part(
+    index: &[(String, String, &'static str)],
+    name: &str,
+    op_index: usize,
+) -> Result<String, Error> {
+    Ok(require_named_sheet(index, name, op_index)?.0)
+}
+
+fn load_dirty(
+    pkg: &Package,
+    dirty: &mut Vec<(String, Document)>,
+    part: &str,
+    make_explicit: bool,
+) -> Result<(), Error> {
+    if let Some((_, doc)) = dirty.iter_mut().find(|(p, _)| p == part) {
+        if make_explicit {
+            make_refs_explicit(&mut doc.root);
+        }
+        return Ok(());
+    }
+    let mut parsed = xml::parse(pkg.get(part)?)?;
+    if make_explicit {
+        // 省略 r 的行和单元格按隐式编号补成显式，否则后面插新行会让它们的编号漂移。
+        make_refs_explicit(&mut parsed.root);
+    }
+    dirty.push((part.to_string(), parsed));
+    Ok(())
+}
+
+fn dirty_of<'a>(dirty: &'a mut [(String, Document)], part: &str) -> &'a mut Document {
+    &mut dirty.iter_mut().find(|(p, _)| p == part).unwrap().1
 }
 
 fn sheet_index(

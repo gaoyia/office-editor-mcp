@@ -123,6 +123,7 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<SetShapeTextOp>, Error> {
             || op_name == "deletePicture"
             || op_name == "setPictureSize"
             || op_name == "setPictureWrap"
+            || op_name == "setPictureAnchor"
             || op_name == "insertTextBox"
             || op_name == "deleteTextBox"
             || op_name == "setTextBoxSize"

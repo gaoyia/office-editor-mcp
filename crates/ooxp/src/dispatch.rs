@@ -259,13 +259,16 @@ fn run_export_media(req: &Request, cli_output: Option<&Path>) -> Result<RunOutpu
                 content_type: exported.content_type,
             })
         }
-        Format::Xlsx => Err(Error::with_path(
-            ErrorKind::ActionNotForFormat {
-                format: "xlsx".into(),
-                action: "exportMedia".into(),
-            },
-            "action",
-        )),
+        Format::Xlsx => {
+            let bytes = fs::read(path).map_err(|e| io_path(e, PathBuf::from(path)))?;
+            let exported = xlsx::export_media(&bytes, id)?;
+            write_atomic(&out, &exported.bytes)?;
+            Ok(RunOutput::Written {
+                path: out,
+                ops_applied: None,
+                content_type: exported.content_type,
+            })
+        }
         Format::Pptx => Err(Error::with_path(
             ErrorKind::ActionNotForFormat {
                 format: "pptx".into(),

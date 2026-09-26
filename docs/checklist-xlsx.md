@@ -8,7 +8,7 @@
 
 Microsoft Excel 16.0 已打开，用户确认通过。本机若装了 WPS，`Excel.Application` 会被抢走，测试仍直接启动 `EXCEL.EXE` 再挂 COM。
 
-C、I、A、O 这几组现在由 `manual-check/office/cases/xlsx-*.ps1` 自动判定，跑 `pwsh -File manual-check\office\run.ps1 -Case 'xlsx-*'` 即可复现，逐条结果落在 `manual-check/office/out/office-results.csv`。
+C、I、A、O、Xp 这几组现在由 `manual-check/office/cases/xlsx-*.ps1` 自动判定，跑 `pwsh -File manual-check\office\run.ps1 -Case 'xlsx-*'` 即可复现，逐条结果落在 `manual-check/office/out/office-results.csv`。2026-09-27 补跑 `xlsx-pictures.ps1`，Xp1–Xp7 通过。
 
 | 序号 | 状态 | 结果 |
 | --- | --- | --- |
@@ -19,7 +19,7 @@ C、I、A、O 这几组现在由 `manual-check/office/cases/xlsx-*.ps1` 自动�
 | A2–A7 | ✅ | Excel：A1=42，B1=`=SUM(A1:A10)` 值为 47，C1 空且数字格式仍是 `0.00`，Sheet2 未动，E1 加粗/红字/黄底/列宽 20 还在，D1 重算为 84 |
 | O1 | 🚫 | 领域层不做原样保存：三个动作里没有「只保存」，`apply` 的 `ops` 必须非空。零脏写回见 OPC 库测试。Excel 另存 create 产物见 `xlsx-O1-excel-resave` |
 | O2 | ✅ | 未改表与未点名格子的样式还在；未改部件 CRC 与打补丁前相同 |
-| Xp1–Xp7 | ❌ | 工作表图。契约已写，确认并实现后再跑 `xlsx-pictures.ps1` |
+| Xp1–Xp7 | ✅ | Excel 16.0：无 `pictures` 时 `pictureCount=3`；名单含 `oneCell` 与 `twoCell`；换/插/删无修复；`oneCell` 尺寸 144 磅；锚点改到 F12；export 与 `/xl/media/…` 字节一致 |
 
 ## create
 
@@ -71,7 +71,7 @@ Office 另存 create 产物是打开冒烟，见 `manual-check/office/cases/opc-
 
 ## 工作表图
 
-准备一份 Excel 亲手另存的样例：某张 `worksheet` 上至少各有一张 `oneCell` 与一张 `twoCell` 的 DrawingML 图。不要用库 `create` 产物当带图样例。另备一张本地 PNG 供换图、插图。手测脚本建议 `manual-check/office/cases/xlsx-pictures.ps1`。编号用 Xp，避免和 create 的 C 组、inspect 的 I 组重号。
+准备一份 Excel 亲手另存的样例：某张 `worksheet` 上至少各有一张 `oneCell` 与一张 `twoCell` 的 DrawingML 图。不要用库 `create` 产物当带图样例。另备一张本地 PNG 供换图、插图。手测脚本建议 `manual-check/office/cases/xlsx-pictures.ps1`。编号用 Xp，避免和 create 的 C 组、inspect 的 I 组重号。Excel 16.0 的 `Shapes.AddPicture` 只写 `twoCellAnchor`（`Placement` 只改 `editAs`），真 `oneCellAnchor` 由 ooxp 插入后再让 Excel `Save()`。
 
 | 序号 | 检查 | 通过标准 |
 | --- | --- | --- |

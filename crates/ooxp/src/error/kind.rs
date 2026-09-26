@@ -57,6 +57,12 @@ pub(crate) enum IdReason {
     PicIndexFromOne,
     /// insertPicture 必须用段落 id
     InsertNeedsPara,
+    /// xlsx 图 id 必须是 sheet:{name}/pic:…
+    SheetPicPrefix,
+    /// 工作表 id，缺少 /pic:…
+    SheetPicContainer,
+    /// xlsx insertPicture 必须用 sheet:{name}
+    InsertNeedsSheet,
     /// 框 id 必须是 {段落}/txbx:…
     TxbxPrefix,
     /// 段落 id，缺少 /txbx:
@@ -220,6 +226,11 @@ define_error_kinds! {
     ShapeHasNoText { id: String } => vec![Self::ShapeHasNoText { id: "slide:1/shape:2".into() }],
     SetCellWorksheetOnly => vec![Self::SetCellWorksheetOnly],
     InspectWorksheetOnly => vec![Self::InspectWorksheetOnly],
+    InsertPictureWorksheetOnly => vec![Self::InsertPictureWorksheetOnly],
+    TwoCellPictureSize => vec![Self::TwoCellPictureSize],
+    PictureAnchorAbsolute => vec![Self::PictureAnchorAbsolute],
+    InvalidXlsxAnchor => vec![Self::InvalidXlsxAnchor],
+    InvalidXlsxEditAs => vec![Self::InvalidXlsxEditAs],
     SharedFormulaMaster { cell: String } => vec![Self::SharedFormulaMaster { cell: "A1".into() }],
     NeedAtLeastOneSheet => vec![Self::NeedAtLeastOneSheet],
     DuplicateSheetName { name: String } => vec![Self::DuplicateSheetName { name: "Sheet1".into() }],
@@ -377,6 +388,9 @@ impl IdReason {
             Self::PicIndexNotInt,
             Self::PicIndexFromOne,
             Self::InsertNeedsPara,
+            Self::SheetPicPrefix,
+            Self::SheetPicContainer,
+            Self::InsertNeedsSheet,
             Self::TxbxPrefix,
             Self::TxbxContainer,
             Self::TxbxIndexNotInt,
@@ -537,7 +551,10 @@ impl ErrorKind {
             | Self::SmartArtListDepth
             | Self::TextBoxLinkCrossPart
             | Self::InvalidHexColor
-            | Self::InvalidTextBoxDirection => InvalidField,
+            | Self::InvalidTextBoxDirection
+            | Self::InsertPictureWorksheetOnly
+            | Self::InvalidXlsxAnchor
+            | Self::InvalidXlsxEditAs => InvalidField,
             Self::OutOfRange { .. } => TruncatedLimit,
             Self::InvalidRange { .. } => InvalidRange,
             Self::InvalidId { .. } => InvalidId,
@@ -560,7 +577,9 @@ impl ErrorKind {
             | Self::InkComment { .. }
             | Self::RestrictedChart { .. }
             | Self::ChartTypeNotConvertible
-            | Self::SmartArtLayoutNotConvertible => NotImplemented,
+            | Self::SmartArtLayoutNotConvertible
+            | Self::TwoCellPictureSize
+            | Self::PictureAnchorAbsolute => NotImplemented,
             Self::OpcOpen { .. } => OpcOpen,
             Self::PartMissing { .. }
             | Self::RelNotFound { .. }

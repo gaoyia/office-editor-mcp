@@ -87,6 +87,11 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::PicIndexNotInt => "pic:index 后面必须是正整数".into(),
             IdReason::PicIndexFromOne => "pic:index 从 1 起".into(),
             IdReason::InsertNeedsPara => "insertPicture 的 id 必须是段落 id".into(),
+            IdReason::SheetPicPrefix => "xlsx 图 id 必须是 sheet:工作表名/pic:…".into(),
+            IdReason::SheetPicContainer => {
+                "工作表 id 必须带 /pic:…（该 id 本身不是图）".into()
+            }
+            IdReason::InsertNeedsSheet => "xlsx 的 insertPicture 的 id 必须是 sheet:工作表名".into(),
             IdReason::TxbxPrefix => "文本框 id 必须是段落 id 加上 /txbx:…".into(),
             IdReason::TxbxContainer => {
                 "段落 id 必须带 /txbx:…（该 id 本身不是文本框）".into()
@@ -226,6 +231,15 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::InvalidImageFile => "file 不是本库认的位图（PNG、JPEG、GIF 或 BMP）".into(),
         ErrorKind::SetCellWorksheetOnly => "只能对工作表 setCell".into(),
         ErrorKind::InspectWorksheetOnly => "只能对工作表读单元格".into(),
+        ErrorKind::InsertPictureWorksheetOnly => "只能往工作表 insertPicture".into(),
+        ErrorKind::TwoCellPictureSize => {
+            "twoCell 图的显示尺寸由起止格决定，请用 setPictureAnchor 改 to".into()
+        }
+        ErrorKind::PictureAnchorAbsolute => {
+            "absolute 锚点不能与 oneCell / twoCell 互转，只能改 posX / posY 或尺寸".into()
+        }
+        ErrorKind::InvalidXlsxAnchor => "anchor 必须是 oneCell 或 twoCell".into(),
+        ErrorKind::InvalidXlsxEditAs => "editAs 必须是 twoCell、oneCell 或 absolute".into(),
         ErrorKind::SharedFormulaMaster { cell } => format!(
             "{cell} 是共享公式的主格，改它会让引用同一 si 的单元格失去公式；请先把那些单元格改成各自独立的公式"
         ),

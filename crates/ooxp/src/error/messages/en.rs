@@ -98,6 +98,11 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::PicIndexNotInt => "pic:index must be followed by a positive integer".into(),
             IdReason::PicIndexFromOne => "pic:index starts at 1".into(),
             IdReason::InsertNeedsPara => "insertPicture id must be a paragraph id".into(),
+            IdReason::SheetPicPrefix => "xlsx picture id must be sheet:name/pic:…".into(),
+            IdReason::SheetPicContainer => {
+                "Sheet id must include /pic:… (that id alone is not a picture)".into()
+            }
+            IdReason::InsertNeedsSheet => "xlsx insertPicture id must be sheet:name".into(),
             IdReason::TxbxPrefix => {
                 "Text box id must be a paragraph id plus /txbx:…".into()
             }
@@ -270,6 +275,17 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::InvalidImageFile => "file is not a recognized bitmap (PNG, JPEG, GIF, or BMP)".into(),
         ErrorKind::SetCellWorksheetOnly => "setCell only applies to worksheets".into(),
         ErrorKind::InspectWorksheetOnly => "Cells can only be read from worksheets".into(),
+        ErrorKind::InsertPictureWorksheetOnly => "insertPicture only applies to worksheets".into(),
+        ErrorKind::TwoCellPictureSize => {
+            "twoCell picture size is defined by the anchor cells; use setPictureAnchor to change the to cell"
+                .into()
+        }
+        ErrorKind::PictureAnchorAbsolute => {
+            "absolute anchors cannot convert to or from oneCell / twoCell; only posX / posY or size may change"
+                .into()
+        }
+        ErrorKind::InvalidXlsxAnchor => "anchor must be oneCell or twoCell".into(),
+        ErrorKind::InvalidXlsxEditAs => "editAs must be twoCell, oneCell, or absolute".into(),
         ErrorKind::SharedFormulaMaster { cell } => format!(
             "{cell} is a shared formula master; changing it would leave dependents with the same si without a formula. Change those cells to independent formulas first"
         ),

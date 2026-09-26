@@ -1,19 +1,20 @@
 //! 从工作簿读出带 id 的精简树。
 
-use serde_json::{json, Value};
+use serde_json::{json, Map, Value};
 
-use super::request::InspectScope;
+use super::request::{CellScope, InspectScope};
 use crate::error::{Error, ErrorKind, RelSource};
 use crate::opc::{self, Package};
 use crate::xml::{self, Element};
 
 use super::a1;
+use super::picture;
 use super::{REL_CHARTSHEET, REL_DIALOGSHEET, REL_SHARED_STRINGS};
 
-struct SheetMeta {
-    name: String,
-    kind: &'static str,
-    part: String,
+pub(crate) struct SheetMeta {
+    pub(crate) name: String,
+    pub(crate) kind: &'static str,
+    pub(crate) part: String,
 }
 
 pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error> {
@@ -24,55 +25,67 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
 
     let sheets = list_sheets(&wb.root, &rels, &wb_part, &pkg)?;
     let sst = load_shared_strings(&pkg, &wb_part, &rels)?;
+    let want_pictures = scope.as_ref().is_some_and(|s| s.pictures);
+    let cells_scope = scope.as_ref().and_then(|s| s.cells.as_ref());
 
     let mut sheet_json = Vec::new();
+    let mut picture_count = 0usize;
     for sh in &sheets {
-        let mut obj = json!({
-            "id": format!("sheet:{}", sh.name),
-            "name": sh.name,
-            "kind": sh.kind,
-        });
-        if let Some(scope) = &scope {
-            if sh.name.eq_ignore_ascii_case(&scope.sheet) {
-                if sh.kind != "worksheet" {
-                    return Err(Error::with_path(
-                        ErrorKind::InspectWorksheetOnly,
-                        "scope.sheet",
-                    ));
+        let mut obj = Map::new();
+        obj.insert("id".into(), json!(format!("sheet:{}", sh.name)));
+        obj.insert("name".into(), json!(sh.name));
+        obj.insert("kind".into(), json!(sh.kind));
+        if sh.kind == "worksheet" {
+            let pics = picture::collect_sheet_pictures(&pkg, &sh.part, &sh.name)?;
+            picture_count += pics.len();
+            obj.insert("pictureCount".into(), json!(pics.len()));
+            if want_pictures {
+                obj.insert("pictures".into(), Value::Array(picture::pictures_json(&pics)));
+            }
+            if let Some(cs) = cells_scope {
+                if sh.name.eq_ignore_ascii_case(&cs.sheet) {
+                    let (cells, truncated, range) =
+                        inspect_cells(&pkg, &sh.part, &sh.name, cs, &sst)?;
+                    obj.insert("truncated".into(), json!(truncated));
+                    obj.insert("range".into(), json!(range));
+                    obj.insert("cells".into(), Value::Array(cells));
                 }
-                let (cells, truncated, range) =
-                    inspect_cells(&pkg, &sh.part, &sh.name, scope, &sst)?;
-                obj["truncated"] = json!(truncated);
-                obj["range"] = json!(range);
-                obj["cells"] = Value::Array(cells);
+            }
+        } else if let Some(cs) = cells_scope {
+            if sh.name.eq_ignore_ascii_case(&cs.sheet) {
+                return Err(Error::with_path(
+                    ErrorKind::InspectWorksheetOnly,
+                    "scope.sheet",
+                ));
             }
         }
-        sheet_json.push(obj);
+        sheet_json.push(Value::Object(obj));
     }
 
-    if let Some(scope) = &scope {
+    if let Some(cs) = cells_scope {
         if !sheets
             .iter()
-            .any(|s| s.name.eq_ignore_ascii_case(&scope.sheet))
+            .any(|s| s.name.eq_ignore_ascii_case(&cs.sheet))
         {
             return Err(Error::with_path(
                 ErrorKind::SheetNotFound {
-                    name: scope.sheet.clone(),
+                    name: cs.sheet.clone(),
                 },
                 "scope.sheet",
             ));
         }
     }
 
-    Ok(json!({
-        "schemaVersion": 1,
-        "format": "xlsx",
-        "id": "xlsx:workbook",
-        "sheets": sheet_json,
-    }))
+    let mut root = Map::new();
+    root.insert("schemaVersion".into(), json!(1));
+    root.insert("format".into(), json!("xlsx"));
+    root.insert("id".into(), json!("xlsx:workbook"));
+    root.insert("pictureCount".into(), json!(picture_count));
+    root.insert("sheets".into(), Value::Array(sheet_json));
+    Ok(Value::Object(root))
 }
 
-fn list_sheets(
+pub(crate) fn list_sheets(
     workbook: &Element,
     rels: &opc::Relationships,
     wb_part: &str,
@@ -151,7 +164,7 @@ fn inspect_cells(
     pkg: &Package,
     part: &str,
     sheet_name: &str,
-    scope: &InspectScope,
+    scope: &CellScope,
     sst: &[String],
 ) -> Result<(Vec<Value>, bool, String), Error> {
     let (start, end) = a1::parse_range(&scope.range)?;

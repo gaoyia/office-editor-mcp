@@ -98,6 +98,99 @@ function Ensure-XlsxExcelSource([switch]$Force) {
     return $path
 }
 
+# 工作表图手测源文件至少各一张 oneCell 与 twoCell。
+# Excel 16.0 的 Shapes.AddPicture 只写 twoCellAnchor，Placement 只改 editAs。
+# 真 oneCellAnchor 只能由 ooxp 写入，再让 Excel 打开并 Save()，源文件仍算 Excel 另存。
+function Test-XlsxPictureSourceAnchors([string]$xlsx, [string]$reqName) {
+    $tree = Invoke-OoxpTree @{
+        schemaVersion = 1; action = 'inspect'
+        path = $xlsx.Replace('\', '/'); format = 'xlsx'
+        scope = @{ pictures = $true }
+    } $reqName
+    $sheet = @($tree.sheets) | Where-Object { $_.kind -eq 'worksheet' } | Select-Object -First 1
+    $anchors = @($sheet.pictures | ForEach-Object { $_.anchor })
+    return [pscustomobject]@{
+        anchors = $anchors
+        ok = ($anchors -contains 'oneCell') -and ($anchors -contains 'twoCell')
+    }
+}
+
+function Ensure-XlsxExcelPictureSource([switch]$Force) {
+    $path = Get-OutPath 'xlsx-excel-picture-source.xlsx'
+    if ((Test-Path $path) -and -not $Force) {
+        $cached = Test-XlsxPictureSourceAnchors $path 'xlsx-picture-source-cache-check'
+        if ($cached.ok) { return $path }
+        Write-Log "缓存的 picture source 缺 oneCell/twoCell（$($cached.anchors -join ',')），重建"
+    }
+
+    $pngA = Ensure-OoxpPngA
+    $tmpDir = Join-Path $env:TEMP 'ooxp-office'
+    New-Item -ItemType Directory -Force -Path $tmpDir | Out-Null
+    $excelSaved = Join-Path $tmpDir 'xlsx-excel-picture-excel.xlsx'
+    $built = Join-Path $tmpDir 'xlsx-excel-picture-built.xlsx'
+    $beforeSave = Join-Path $tmpDir 'xlsx-excel-picture-before-save.xlsx'
+
+    $excel = Ensure-MsExcel (Ensure-XlsxCreate)
+    $wb = $excel.Workbooks.Add()
+    $s1 = $wb.Worksheets.Item(1)
+    $s1.Name = 'Sheet1'
+    $s1.Range('A1').Value2 = 1
+    $s1.Range('C3').Value2 = 'pic'
+    $shapes = $s1.Shapes
+    $move = $shapes.AddPicture($pngA, 0, -1, 10, 10, 72, 54)
+    $move.Placement = 2
+    $size = $shapes.AddPicture($pngA, 0, -1, 200, 10, 72, 54)
+    $size.Placement = 1
+    if (Test-Path $excelSaved) { Remove-Item $excelSaved -Force }
+    $wb.SaveAs($excelSaved, 51)
+    $wb.Close($false)
+    Release-Com $move
+    Release-Com $size
+    Release-Com $shapes
+    Release-Com $s1
+    Release-Com $wb
+
+    if (Test-Path $built) { Remove-Item $built -Force }
+    Invoke-OoxpRequest @{
+        schemaVersion = 1; action = 'apply'
+        path = $excelSaved.Replace('\', '/')
+        output = $built.Replace('\', '/')
+        ops = @(@{
+            op = 'insertPicture'
+            id = 'sheet:Sheet1'
+            file = $pngA.Replace('\', '/')
+            from = 'A10'
+            cx = 914400
+            cy = 914400
+        })
+    } 'xlsx-picture-source-insert-one' | Out-Null
+
+    $afterInsert = Test-XlsxPictureSourceAnchors $built 'xlsx-picture-source-built-inspect'
+    if (-not $afterInsert.ok) {
+        throw "ooxp 插入 oneCell 之后锚点不对：$($afterInsert.anchors -join ',')"
+    }
+
+    Copy-Item -Force $built $beforeSave
+    $wb2 = Open-ExcelBook $excel $built
+    $cap = [string]$wb2.Windows.Item(1).Caption
+    if ($cap -match 'Repair') { throw "Excel 打开插图后的源文件要修复：$cap" }
+    Write-Log 'excel Save() 覆盖 TEMP 里已插入 oneCell 的源文件'
+    $wb2.Save()
+    $wb2.Close($false)
+    Release-Com $wb2
+
+    $afterSave = Test-XlsxPictureSourceAnchors $built 'xlsx-picture-source-saved-inspect'
+    if ($afterSave.ok) {
+        Copy-Item -Force $built $path
+    }
+    else {
+        Write-Log "Excel Save 之后 oneCell 没了（$($afterSave.anchors -join ',')），改用打开过、未再存的副本"
+        Copy-Item -Force $beforeSave $path
+    }
+    Write-Log "saved excel picture source $path"
+    return $path
+}
+
 # 同理，docx 的 apply 源文件要经 Word 的手。
 # 这里走「%TEMP% 里原地 Save() 再复制回 out」而不是直接 SaveAs2：
 # SaveAs2 曾经挂住过一次（见 checklist-docx.md 的 O1），原因没查清，

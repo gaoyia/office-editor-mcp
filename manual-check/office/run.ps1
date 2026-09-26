@@ -28,6 +28,7 @@ $order = @(
     'docx-create-pictures'
     'pptx-create'
     'xlsx-apply'
+    'xlsx-pictures'
     'docx-apply'
     'docx-headerfooter'
     'docx-distance'

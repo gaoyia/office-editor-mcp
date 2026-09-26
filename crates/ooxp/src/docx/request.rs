@@ -498,7 +498,7 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<DocxOp>, Error> {
                 format!("ops[{i}].op"),
             )
         })?;
-        if op_name == "setCell" || op_name == "setShapeText" {
+        if op_name == "setCell" || op_name == "setShapeText" || op_name == "setPictureAnchor" {
             return Err(Error::with_path(
                 ErrorKind::OpNotForFormat {
                     format: "docx".into(),
