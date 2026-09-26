@@ -770,6 +770,143 @@ function Ensure-DocxWordChartsSource([switch]$Force) {
     return $path
 }
 
+function Inject-PivotSourceOnStandaloneCol([string]$docx) {
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $tmp = "$docx.inject.zip"
+    Copy-Item -Force $docx $tmp
+    $z = [IO.Compression.ZipFile]::Open($tmp, 'Update')
+    try {
+        $targets = @($z.Entries | Where-Object { $_.FullName -replace '\\', '/' -like 'word/charts/chart*.xml' })
+        foreach ($entry in $targets) {
+            $sr = New-Object IO.StreamReader($entry.Open())
+            $xml = $sr.ReadToEnd()
+            $sr.Dispose()
+            $isCol = $xml.Contains('<c:barChart') -and $xml.Contains('val="col"')
+            $isCombo = $xml.Contains('<c:lineChart') -or $xml.Contains('<c:doughnutChart') -or $xml.Contains('<c:radarChart') -or $xml.Contains('<c:bubbleChart') -or $xml.Contains('<c:stockChart')
+            if (-not $isCol -or $isCombo -or $xml.Contains('pivotSource')) { continue }
+            $patched = $xml -replace '<c:chartSpace([^>]*)>', '<c:chartSpace$1><c:pivotSource><c:name>[0]!Pivot</c:name><c:fmtId val="0"/></c:pivotSource>'
+            if ($patched -eq $xml) { continue }
+            $name = $entry.FullName
+            $entry.Delete()
+            $nw = $z.CreateEntry($name)
+            $sw = New-Object IO.StreamWriter($nw.Open())
+            $sw.Write($patched)
+            $sw.Dispose()
+            Write-Log "已向 $name 写入 pivotSource"
+            break
+        }
+    }
+    finally { $z.Dispose() }
+    Move-Item -Force $tmp $docx
+}
+
+# 源文件由 Word AddChart2 另存圆环、雷达、气泡、柱线组合、股价，再向一张独立柱形写入 pivotSource。
+function Ensure-DocxWordChartsExtSource([switch]$Force) {
+    $path = Get-OutPath 'docx-word-charts-ext-source.docx'
+    if ((Test-Path $path) -and -not $Force) { return $path }
+
+    $tmpDir = Join-Path $env:TEMP 'ooxp-office'
+    New-Item -ItemType Directory -Force -Path $tmpDir | Out-Null
+    $skel = Join-Path $tmpDir 'docx-word-charts-ext-skel.docx'
+    $S = $global:OoxpStrings
+    Invoke-OoxpRequest @{
+        schemaVersion = 1; action = 'create'
+        path = $skel.Replace('\', '/'); format = 'docx'
+        document = @{
+            paragraphs = @(
+                @{ style = 'Heading1'; text = $S.chapter1 }
+                @{ text = $S.para2src }
+                @{ text = $S.para3keep }
+                @{ text = $S.chartTitle }
+                @{ text = $S.chartSer1 }
+                @{ text = $S.chartSer2 }
+                @{ text = $S.page2 }
+            )
+        }
+    } 'docx-charts-ext-skel-create' | Out-Null
+
+    $word = Ensure-MsWord (Ensure-DocxCreate)
+    Close-WordDocByPath $word $skel
+    $doc = Open-WordDoc $word $skel
+
+    $xlDoughnut = -4120
+    $xlRadarMarkers = 81
+    $xlBubble = 15
+    $xlColumnClustered = 51
+    $xlLine = 4
+    $xlStockHLC = 88
+
+    function Add-WordChart($document, [int]$paraIndex, [int]$chartType) {
+        $p = $document.Paragraphs.Item($paraIndex)
+        $rng = $p.Range
+        $ish = $null
+        $before = [int]$document.InlineShapes.Count
+        try {
+            $ish = $document.InlineShapes.AddChart2(-1, $chartType, $rng)
+        } catch {
+            Write-Log ("AddChart2($chartType) 报错：" + $_.Exception.Message)
+            if ([int]$document.InlineShapes.Count -gt $before) {
+                $ish = $document.InlineShapes.Item($before + 1)
+            } else {
+                try { $ish = $document.InlineShapes.AddChart($chartType, $rng) } catch {
+                    Write-Log ("AddChart($chartType) 也失败：" + $_.Exception.Message)
+                }
+            }
+        }
+        Release-Com $rng
+        Release-Com $p
+        return $ish
+    }
+
+    $specs = @(
+        @{ i = 2; t = $xlDoughnut; n = 'doughnut' }
+        @{ i = 3; t = $xlRadarMarkers; n = 'radar' }
+        @{ i = 4; t = $xlBubble; n = 'bubble' }
+        @{ i = 5; t = $xlColumnClustered; n = 'combo' }
+        @{ i = 6; t = $xlStockHLC; n = 'stock' }
+        @{ i = 7; t = $xlColumnClustered; n = 'pivot-col' }
+    )
+    foreach ($spec in $specs) {
+        $ish = Add-WordChart $doc ([int]$spec.i) ([int]$spec.t)
+        if (-not $ish) {
+            Write-Log "未插入 $($spec.n)"
+            continue
+        }
+        Start-Sleep -Seconds 1
+        if ($spec.n -eq 'combo') {
+            $ch = $ish.Chart
+            $converted = $false
+            try {
+                $s2 = $ch.SeriesCollection(2)
+                $s2.ChartType = $xlLine
+                $converted = $true
+                Release-Com $s2
+            } catch {
+                try {
+                    $s2 = $ch.FullSeriesCollection(2)
+                    $s2.ChartType = $xlLine
+                    $converted = $true
+                    Release-Com $s2
+                } catch {
+                    Write-Log ("组合图第二系列改折线失败：" + $_.Exception.Message)
+                }
+            }
+            Release-Com $ch
+            if (-not $converted) { Write-Log '组合图样例没转成 combo，Cx5/Cx6 可能失败' }
+        }
+        Release-Com $ish
+        Write-Log "已插入 $($spec.n)"
+    }
+
+    Write-Log 'word Save() 原地覆盖 TEMP 里的扩展图表样例'
+    $doc.Save()
+    Close-WordDoc $doc
+    Copy-Item -Force $skel $path
+    Inject-PivotSourceOnStandaloneCol $path
+    Write-Log "saved word charts ext source $path"
+    return $path
+}
+
 function Find-OfficeSmartArtLayout($word, [string[]]$uniqueIds, [string[]]$nameNeedles) {
     $layouts = $word.SmartArtLayouts
     try {

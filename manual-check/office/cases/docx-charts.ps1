@@ -322,31 +322,12 @@ foreach ($ch in (Get-WordChartObjects $docG)) {
 Close-WordDoc $docG
 Add-Check 'docx-Ch6' (($capG -notmatch 'Repair') -and ($colG.legend.show -eq $false) -and ($colG.dataLabels.show -eq $true) -and $legOff) "caption=$capG legend=$($colG.legend.show) labels=$($colG.dataLabels.show) wordLegOff=$legOff wordLbl=$lblOn"
 
-# Ch7：组合图改类型得到 NotImplemented，不写坏文件。
-$comboOut = Get-OutPath 'docx-charts-combo.docx'
-if (Test-Path $comboOut) { Remove-Item -Force $comboOut }
-$comboId = if ($combo) { $combo.id } else { $null }
-$comboFail = $false
-$comboCode = ''
-if ($comboId) {
-    Close-WordDocByPath $word $comboOut
-    $raw = Invoke-OoxpExpectFail @{
-        schemaVersion = 1; action = 'apply'
-        path = $src.Replace('\', '/')
-        output = $comboOut.Replace('\', '/')
-        ops = @(@{ op = 'setChartType'; id = $comboId; type = 'line' })
-    } 'docx-charts-combo-type'
-    try {
-        $errObj = $raw.Stderr | ConvertFrom-Json
-        $comboCode = [string]$errObj.error.code
-    } catch { $comboCode = $raw.Stderr }
-    $comboFail = ($raw.ExitCode -ne 0) -and ($comboCode -eq 'NotImplemented')
-}
-$noWrite = -not (Test-Path $comboOut)
+# Ch7：现行契约已放开组合图改类型，改看 Cx5–Cx6。这里只确认源文件仍是 combo，且 Word 无修复。
 $docC = Open-WordDoc $word $src
 $capC = [string]$docC.ActiveWindow.Caption
 Close-WordDoc $docC
-Add-Check 'docx-Ch7' ($comboFail -and $noWrite -and ($capC -notmatch 'Repair')) "code=$comboCode wrote=$(-not $noWrite) caption=$capC comboId=$comboId"
+$comboOk = ($null -ne $combo) -and ([string]$combo.type -eq 'combo')
+Add-Check 'docx-Ch7' ($comboOk -and ($capC -notmatch 'Repair')) "type=$($combo.type) caption=$capC comboId=$($combo.id)"
 
 # Ch8：exportChartData 与 embedding 部件字节一致。
 $expOut = Get-OutPath 'docx-charts-export.xlsx'

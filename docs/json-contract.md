@@ -422,7 +422,7 @@ xlsx、docx、pptx 共用 `scope` 这个字段名，里面的键按格式分，�
 - `scope.notes` 为 `true` 时，根上带 `footnotes`、`endnotes`、`noteSeparators`。没有用户注时前两个为空数组；没有分隔符时 `noteSeparators` 为空数组。用户注按部件内文档顺序。每条用户注字段顺序：`id`、`noteId`、`type`、`host`、`paraCount`、`pictureCount`，有图名单时再跟 `pictures`，然后 `paragraphs`。`noteId` 是 `w:id` 原文。`type` 恒为 `normal`。`host` 是引用所在段落 id 的数组：在主文档、页眉、页脚和文本框里找 `w:footnoteReference` / `w:endnoteReference`，按文档顺序，id 规则与该段落本身相同。一条注被引用多次则 `host` 有多项；没有任何引用则为 `[]`，注仍列出。`paraCount` / `pictureCount` 只计该注元素内、遇 `w:txbxContent` 停住之后的段落与图，规则与正文相同。注内段落字段顺序与正文段落相同，id 带注前缀。注内图的字段顺序与宿主图相同。注内文本框本期不进树、不接受 apply。
 - `noteSeparators` 每项字段顺序：`id`、`kind`、`type`、`noteId`。`kind` 为 `footnote` 或 `endnote`。`type` 为 `separator`、`continuationSeparator` 或 `continuationNotice`。对 `noteSeparators` 里的 id 发 apply 报 `InvalidId`。
 - `scope.comments` 为 `true` 时，根上带 `comments`。没有批注时为空数组。按 `comments.xml` 里 `w:comment` 的文档顺序。每条字段顺序：`id`、`commentId`、`author`、`initials`、`date`、`done`、`parent`、`kind`、`start`、`end`、`paraCount`、`pictureCount`，有图名单时再跟 `pictures`，然后 `paragraphs`。`commentId` 是 `w:id` 原文。`author` / `initials` / `date` 取对应属性原文，缺则为 `null`。`done` 取 `commentEx/@done`：`1` / `true` / `on` 为 `true`，其余或没有 `commentEx` 为 `false`。`parent` 用 `paraIdParent` 对上父批注最后一段的 `w14:paraId`，再写成 `comment:{id}`；对不上或没有则为 `null`。根批注的 `parent` 为 `null`。`kind` 为 `normal`；批注内出现 `inkml:ink` 或等价墨迹标记则为 `ink`。`start` / `end` 是范围落在的段落 id（正文、页眉、页脚、框内或注内，规则与该段落本身相同）。从配对的 `commentRangeStart` 走到 `commentRangeEnd`，路径上经过的每个 `w:p` 都算在范围内；`start` 是第一个，`end` 是最后一个。回复有自己的范围标记时按自己的标记算；没有时沿用线程根的 `start` / `end`，并出现在那些段的 `commentIds` 里。找不到对应段（残缺标记）则该侧为 `null`，该批注仍列出，不报 `XmlBroken`。`paraCount` / `pictureCount` 只计该 `w:comment` 内、遇 `w:txbxContent` 停住之后的段落与图，规则与正文相同。批注内段落字段顺序与正文段落相同，id 带批注前缀。批注内图的字段顺序与宿主图相同。批注内文本框本期不进树、不接受 apply。
-- `scope.charts` 为 `true` 时，根上带 `charts`（正文），每个页眉、页脚容器带 `charts`。没有图表时为空数组。正文按主文档段落文档顺序，同一段内按 drawing 顺序。每张字段顺序：`id`、`docPrId`、`name`、`kind`、`cx`、`cy`、`wrap`、`type`、`title`、`catAxisTitle`、`valAxisTitle`、`series`、`legend`、`dataLabels`、`flags`、`stable`。`kind` / `cx` / `cy` / `wrap` / `docPrId` / `name` / `stable` 规则与图相同。`type` 为 `bar`、`col`、`line`、`pie`、`area`、`scatter`、`combo`、`chartex` 或 `other`。`barChart` / `bar3DChart` 看 `c:barDir`：`bar` 为 `bar`，`col` 或缺省为 `col`。`lineChart` / `line3DChart` 为 `line`，`pieChart` / `pie3DChart` 为 `pie`，`areaChart` / `area3DChart` 为 `area`，`scatterChart` 为 `scatter`。`plotArea` 里出现两种及以上系列包裹（例如 `barChart` 加 `lineChart`）则为 `combo`。其余（圆环、雷达、气泡、股价、曲面、chartex 以外的扩展）为 `other`。`title` 取 `c:title` 可见文本（`c:tx` 的 `c:rich` 里 `a:t` 拼接，或 `c:strRef` 的 cache）；没有标题、或 `c:autoTitleDeleted/@val` 为真则为 `null`。`catAxisTitle` / `valAxisTitle` 取主分类轴、主数值轴的 `c:title`，规则与图表标题相同；没有则为 `null`。散点图的横轴当分类轴。`series` 按 `c:ser` 顺序。每条字段顺序：`id`、`index`、`name`、`categories`、`values`，cache 与 embedding 不一致时再跟 `cacheStale: true`。`index` 是从 0 起的出现序号。`name` 取系列 `c:tx` 的 cache 或字面量，缺则为 `null`。`categories` / `values` 取 `c:cat` / `c:val`（散点图为 `c:xVal` / `c:yVal`）的 cache 或字面量；没有 cache 再读 embedding 里公式指向的单元格。全是数字则 JSON 数字，否则字符串。没有数据则为 `[]`。cache 与 embedding 都有且对不上时以 embedding 为准，并标 `cacheStale`。`legend` 为 `{ "show": bool, "pos": ... }`。没有 `c:legend` 则 `show` 为 `false`、`pos` 为 `null`；有则 `show` 为 `true`，`pos` 取 `c:legendPos/@val`（`b` / `t` / `l` / `r` / `tr`），缺属性则为 `null`。`dataLabels` 为 `{ "show": bool }`：`plotArea` 或任一系列带 `c:dLbls`，且其中至少一个 `c:showVal` / `c:showCatName` / `c:showSerName` / `c:showPercent` 为 `1` / `true` / `on` 时为 `true`，否则 `false`。`flags` 是字符串数组，可能含 `secondaryAxis`（出现 `c:overlay` 为 1 的轴，或系列 `c:axId` 指向次轴）、`trendline`（`c:trendline`）、`errorBars`（`c:errBars`）、`pivot`（`c:pivotSource` 或等价透视引用）。没有这些则为 `[]`。不把图表画成图，不读图表的渲染缓存图。xlsx / pptx 的 `scope` 里出现 `charts` 报 `InvalidField`。
+- `scope.charts` 为 `true` 时，根上带 `charts`（正文），每个页眉、页脚容器带 `charts`。没有图表时为空数组。正文按主文档段落文档顺序，同一段内按 drawing 顺序。每张字段顺序：`id`、`docPrId`、`name`、`kind`、`cx`、`cy`、`wrap`、`type`、`title`、`catAxisTitle`、`valAxisTitle`、`series`、`legend`、`dataLabels`、`flags`、`stable`。`kind` / `cx` / `cy` / `wrap` / `docPrId` / `name` / `stable` 规则与图相同。`type` 为 `bar`、`col`、`line`、`pie`、`area`、`scatter`、`doughnut`、`radar`、`bubble`、`combo`、`chartex` 或 `other`。`barChart` / `bar3DChart` 看 `c:barDir`：`bar` 为 `bar`，`col` 或缺省为 `col`。`lineChart` / `line3DChart` 为 `line`，`pieChart` / `pie3DChart` 为 `pie`，`areaChart` / `area3DChart` 为 `area`，`scatterChart` 为 `scatter`，`doughnutChart` 为 `doughnut`，`radarChart` 为 `radar`，`bubbleChart` 为 `bubble`。`plotArea` 里出现两种及以上系列包裹（例如 `barChart` 加 `lineChart`）则为 `combo`。其余（股价、曲面、复合饼图、chartex 以外的扩展）为 `other`。`title` 取 `c:title` 可见文本（`c:tx` 的 `c:rich` 里 `a:t` 拼接，或 `c:strRef` 的 cache）；没有标题、或 `c:autoTitleDeleted/@val` 为真则为 `null`。`catAxisTitle` / `valAxisTitle` 取主分类轴、主数值轴的 `c:title`，规则与图表标题相同；没有则为 `null`。散点图的横轴当分类轴。`series` 按 `c:ser` 顺序。每条字段顺序：`id`、`index`、`name`、`categories`、`values`，气泡图再跟 `sizes`，cache 与 embedding 不一致时再跟 `cacheStale: true`。`index` 是从 0 起的出现序号。`name` 取系列 `c:tx` 的 cache 或字面量，缺则为 `null`。`categories` / `values` 取 `c:cat` / `c:val`（散点图、气泡图为 `c:xVal` / `c:yVal`）的 cache 或字面量；没有 cache 再读 embedding 里公式指向的单元格。气泡图的 `sizes` 取 `c:bubbleSize`，规则与 `values` 相同；没有则为 `[]`。非气泡系列不出现 `sizes`。全是数字则 JSON 数字，否则字符串。没有数据则为 `[]`。cache 与 embedding 都有且对不上时以 embedding 为准，并标 `cacheStale`。`legend` 为 `{ "show": bool, "pos": ... }`。没有 `c:legend` 则 `show` 为 `false`、`pos` 为 `null`；有则 `show` 为 `true`，`pos` 取 `c:legendPos/@val`（`b` / `t` / `l` / `r` / `tr`），缺属性则为 `null`。`dataLabels` 为 `{ "show": bool }`：`plotArea` 或任一系列带 `c:dLbls`，且其中至少一个 `c:showVal` / `c:showCatName` / `c:showSerName` / `c:showPercent` 为 `1` / `true` / `on` 时为 `true`，否则 `false`。`flags` 是字符串数组，可能含 `secondaryAxis`（出现 `c:overlay` 为 1 的轴，或系列 `c:axId` 指向次轴）、`trendline`（`c:trendline`）、`errorBars`（`c:errBars`）、`pivot`（`c:pivotSource` 或等价透视引用）。没有这些则为 `[]`。不把图表画成图，不读图表的渲染缓存图。xlsx / pptx 的 `scope` 里出现 `charts` 报 `InvalidField`。
 - `scope.smartArt` 为 `true` 时，根上带 `smartArts`（正文），每个页眉、页脚容器带 `smartArts`。没有图示时为空数组。正文按主文档段落文档顺序，同一段内按 drawing 顺序。每张字段顺序：`id`、`docPrId`、`name`、`kind`、`cx`、`cy`、`wrap`、`layout`、`colors`、`style`、`points`、`stable`。`kind` / `cx` / `cy` / `wrap` / `docPrId` / `name` / `stable` 规则与图相同。`layout` 取 layout 部件根元素 `dgm:layoutDef/@uniqueId` 的原文；没有该部件或没有该属性则为 `null`。`colors` 取 colors 部件 `dgm:colorsDef/@uniqueId`；`style` 取 quickStyle 部件 `dgm:styleDef/@uniqueId`；缺则为 `null`。`points` 按 data 部件 `ptLst` 文档顺序，只含可见点（判定见上文 SmartArt id 那节）。每条字段顺序：`id`、`modelId`、`role`、`text`、`parent`。`modelId` 是 `dgm:pt/@modelId` 原文。`role` 为 `node` 或 `asst`（`type` 缺省当作 `node`）。`text` 取该点 `dgm:t` 里 `a:t` 按文档顺序拼接；`a:br` 变成 `\n`；没有 `dgm:t` 则为 `""`。`parent` 规则见上文。缺少 `r:dm` 或 data 部件解析失败时该图示仍列出，`points` 为 `[]`，`layout` / `colors` / `style` 能读则读、不能则为 `null`，不报 `XmlBroken`。不读 Fallback 位图，不把图示画成图。xlsx / pptx 的 `scope` 里出现 `smartArt` 报 `InvalidField`。
 - `link` 始终出现。未链接则为 `{ "prev": null, "next": null }`。链接时 `prev` / `next` 是相邻框的 id，没有那一端则为 `null`。
 - 框内 `paragraphs` 的字段顺序与正文段落相同（含 `pictureCount`）。框内图的字段顺序与宿主图相同，id 带框前缀。
@@ -1126,7 +1126,7 @@ create 与 apply 落盘时先写入目标同目录的临时文件，再改名为
 
 ### 图表 op 的共同限制
 
-`type` 为 `combo`、`other` 或 `chartex`，或 `flags` 含 `secondaryAxis`、`trendline`、`errorBars`、`pivot` 时，除 `deleteChart`、`setChartSize`、`setChartWrap` 外一律报 `NotImplemented`，不写文件。xlsx / pptx 上发任何图表 op 报 `InvalidField`。
+`type` 为 `other` 或 `chartex`，或 `flags` 含 `secondaryAxis`、`trendline`、`errorBars` 时，除 `deleteChart`、`setChartSize`、`setChartWrap` 外一律报 `NotImplemented`，不写文件。`flags` 含 `pivot` 时：`setChartSeries`、`addChartSeries`、`deleteChartSeries`、`setChartType` 报 `NotImplemented`；`setChartTitle`、`setChartAxisTitle`、`setChartLegend`、`setChartDataLabels`、`deleteChart`、`setChartSize`、`setChartWrap` 可以。`type` 为 `combo` 不再整张锁死，系列留在原来的包裹里改。xlsx / pptx 上发任何图表 op 报 `InvalidField`。`insertChart` 不能插入透视图表。
 
 改系列数据时必须同时改 chart 部件里的 cache（`c:numCache` / `c:strCache` / `c:numLit` / `c:strLit`）以及 embedding 工作簿里公式指向的单元格。没有 embedding 则只改字面量。不在库里求值公式，不改 `c:f` 里工作表名以外的结构，除非新数据的点数与公式区域长度不同：那时把公式区域扩到或收到新长度，并改 embedding 里对应格子。未点名的系列不动。
 
@@ -1147,10 +1147,11 @@ create 与 apply 落盘时先写入目标同目录的临时文件，再改名为
 | `op` | 必须是 `"setChartSeries"` |
 | `id` | 系列 id，例如 `para:3F2A1B00/chart:7/series:0` |
 | `name` | 可选。系列名 |
-| `categories` | 可选。分类数组，元素为字符串或数字 |
-| `values` | 可选。数值数组，元素为字符串或数字 |
+| `categories` | 可选。分类数组，元素为字符串或数字。气泡图对应 `c:xVal` |
+| `values` | 可选。数值数组，元素为字符串或数字。气泡图对应 `c:yVal` |
+| `sizes` | 可选。气泡大小数组，对应 `c:bubbleSize`。只对气泡系列有意义 |
 
-`name`、`categories`、`values` 至少给一个，否则报 `InvalidField`。只给的字段改，其余保留。`categories` 与 `values` 都给时长度可以不同。找不到该系列报 `IdNotFound`。id 不是系列 id 报 `InvalidId`。
+`name`、`categories`、`values`、`sizes` 至少给一个，否则报 `InvalidField`。只给的字段改，其余保留。`categories` 与 `values` 都给时长度可以不同。对非气泡系列给 `sizes` 报 `InvalidField`。找不到该系列报 `IdNotFound`。id 不是系列 id 报 `InvalidId`。
 
 ### addChartSeries
 
@@ -1161,8 +1162,10 @@ create 与 apply 落盘时先写入目标同目录的临时文件，再改名为
 | `name` | 可选。省略当作 `"系列{n}"`，`n` 为从 1 起的新序号 |
 | `categories` | 可选。省略则抄已有第一条系列的分类；图表还没有系列且仍省略，报 `InvalidField` |
 | `values` | 必须。非空数组 |
+| `sizes` | 可选。只对气泡图有意义；省略则写成与 `values` 等长的 `1` |
+| `type` | 可选。只对组合图有意义：`bar`、`col`、`line`、`area` 或 `scatter`。省略则抄最后一条系列的包裹。对单类型图给 `type` 报 `InvalidField` |
 
-在 chart 部件末尾追加一条 `c:ser`，`c:idx` / `c:order` 取尚未占用的最小值。样式能从最后一条系列抄则抄，抄不了就用最小默认。有 embedding 则在工作表右侧追加一列。id 不是图表 id 报 `InvalidId`。
+在 chart 部件末尾追加一条 `c:ser`，`c:idx` / `c:order` 取尚未占用的最小值。样式能从最后一条系列抄则抄，抄不了就用最小默认。有 embedding 则在工作表右侧追加一列。不能用本 op 把单类型图加成组合图。id 不是图表 id 报 `InvalidId`。
 
 ### deleteChartSeries
 
@@ -1179,9 +1182,9 @@ create 与 apply 落盘时先写入目标同目录的临时文件，再改名为
 | --- | --- |
 | `op` | 必须是 `"setChartType"` |
 | `id` | 图表 id |
-| `type` | `bar`、`col`、`line`、`pie`、`area` 或 `scatter` |
+| `type` | `bar`、`col`、`line`、`pie`、`area`、`scatter`、`doughnut`、`radar` 或 `bubble` |
 
-不认识的枚举报 `InvalidField`。只改系列的包裹元素（`c:barChart` 等）和 `c:barDir`。`bar` 与 `col` 只改 `barDir`。`bar` / `col` / `line` / `area` 互换时留下 `c:ser`。转成 `pie` 时必须恰好一条系列，否则 `NotImplemented`。与 `scatter` 互转：分类当 `xVal`、数值当 `yVal`，或反过来；系列结构对不上则 `NotImplemented`。不要写出 Word 要修复的包。id 不是图表 id 报 `InvalidId`。找不到报 `IdNotFound`。
+不认识的枚举、或值为 `combo`，报 `InvalidField`。只改系列的包裹元素（`c:barChart` 等）和 `c:barDir`。`bar` 与 `col` 只改 `barDir`。`bar` / `col` / `line` / `area` / `radar` 互换时留下 `c:ser`。`pie` ↔ `doughnut` 只换包裹，必须恰好一条系列，否则 `NotImplemented`。转成 `pie` 或 `doughnut` 时必须恰好一条系列，否则 `NotImplemented`。与 `scatter` 互转：分类当 `xVal`、数值当 `yVal`，或反过来；系列结构对不上则 `NotImplemented`。`scatter` → `bubble`：留下 `xVal` / `yVal`，补上与 `yVal` 等长的 `bubbleSize`（值均为 `1`）。`bubble` → `scatter`：丢掉 `bubbleSize`。组合图收到单一类型时，把所有包裹收成那一种；对不上（例如多系列转饼）则 `NotImplemented`。单一类型不能经本 op 变成 `combo`，请用 `insertChart`。不要写出 Word 要修复的包。id 不是图表 id 报 `InvalidId`。找不到报 `IdNotFound`。
 
 ### setChartAxisTitle
 
@@ -1221,14 +1224,14 @@ create 与 apply 落盘时先写入目标同目录的临时文件，再改名为
 | --- | --- |
 | `op` | 必须是 `"insertChart"` |
 | `id` | 宿主段落 id：正文或页眉页脚段落 |
-| `type` | `bar`、`col`、`line`、`pie`、`area` 或 `scatter` |
+| `type` | `bar`、`col`、`line`、`pie`、`area`、`scatter`、`doughnut`、`radar`、`bubble` 或 `combo` |
 | `title` | 可选。图表标题 |
-| `series` | 必须。非空数组。每项可含 `name`、`categories`、`values`；`values` 必填且非空 |
+| `series` | 必须。非空数组。每项可含 `name`、`categories`、`values`、`sizes`、`type`；`values` 必填且非空 |
 | `kind` | 可选。`inline` 或 `anchor`，缺省 `anchor` |
 | `wrap` | 可选。浮动时的绕排，缺省 `square`。行内必须省略或为 `null` |
 | `cx` / `cy` | 可选。EMU，正整数。都省略则用 `5486400` × `3200400`。只给一个报 `InvalidField` |
 
-在该段末插入 `w:drawing`，默认浮动。新建 `/word/charts/chartN.xml`（`N` 从 1 起尚未占用）、chart 的 `.rels`、一份最小 embedding xlsx（工作表名 `Sheet1`，分类从 `A2` 起，系列名在第 1 行，数值从 `B2` 起向右），以及主文档或页眉页脚关系、`[Content_Types].xml` Override。chart 的 Content Type 为 `application/vnd.openxmlformats-officedocument.drawingml.chart+xml`。关系 Type 为 `http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart`。embedding 关系 Type 为 `http://schemas.openxmlformats.org/officeDocument/2006/relationships/package`。`wp:docPr/@id` 取该部件已有 `docPr` 的最大整数加 1，至少为 1。不强制写 chart colors / style 部件，也不强制套 `mc:AlternateContent`。`type` 不认识或 `series` 为空报 `InvalidField`。`pie` 只允许恰好一条系列，否则报 `InvalidField`。对图 id、图表 id、系列 id、容器 id、框 id、注 id、批注 id 或 `section:{n}` 发此 op 报 `InvalidId`。找不到段落报 `IdNotFound`。
+在该段末插入 `w:drawing`，默认浮动。新建 `/word/charts/chartN.xml`（`N` 从 1 起尚未占用）、chart 的 `.rels`、一份最小 embedding xlsx（工作表名 `Sheet1`，分类从 `A2` 起，系列名在第 1 行，数值从 `B2` 起向右），以及主文档或页眉页脚关系、`[Content_Types].xml` Override。chart 的 Content Type 为 `application/vnd.openxmlformats-officedocument.drawingml.chart+xml`。关系 Type 为 `http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart`。embedding 关系 Type 为 `http://schemas.openxmlformats.org/officeDocument/2006/relationships/package`。`wp:docPr/@id` 取该部件已有 `docPr` 的最大整数加 1，至少为 1。不强制写 chart colors / style 部件，也不强制套 `mc:AlternateContent`。`type` 不认识或 `series` 为空报 `InvalidField`。`pie` 与 `doughnut` 只允许恰好一条系列，否则报 `InvalidField`。`bubble` 的 `sizes` 省略则写成与 `values` 等长的 `1`。`type` 为 `combo` 时，每条系列必须带 `type`（`bar`、`col`、`line`、`area` 或 `scatter`），且至少出现两种不同包裹，否则报 `InvalidField`；`combo` 的系列 `type` 不能是 `pie`、`doughnut`、`radar`、`bubble`。对非组合图的系列给 `type` 报 `InvalidField`。对图 id、图表 id、系列 id、容器 id、框 id、注 id、批注 id 或 `section:{n}` 发此 op 报 `InvalidId`。找不到段落报 `IdNotFound`。
 
 ### deleteChart
 

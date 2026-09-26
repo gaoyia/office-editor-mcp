@@ -263,6 +263,8 @@ define_error_kinds! {
     InvalidChartAxis => vec![Self::InvalidChartAxis],
     InvalidLegendPos => vec![Self::InvalidLegendPos],
     PieNeedsOneSeries => vec![Self::PieNeedsOneSeries],
+    SizesOnNonBubble => vec![Self::SizesOnNonBubble],
+    InvalidComboSeriesType => vec![Self::InvalidComboSeriesType],
     ChartTypeNotConvertible => vec![Self::ChartTypeNotConvertible],
     NeedChartCategories => vec![Self::NeedChartCategories],
     SmartArtNotFound { id: String } => vec![Self::SmartArtNotFound { id: "para:1/smartdiagram:1".into() }],
@@ -522,6 +524,8 @@ impl ErrorKind {
             | Self::InvalidChartAxis
             | Self::InvalidLegendPos
             | Self::PieNeedsOneSeries
+            | Self::SizesOnNonBubble
+            | Self::InvalidComboSeriesType
             | Self::NeedChartCategories
             | Self::LastSmartArtPoint
             | Self::InvalidSmartArtLayout

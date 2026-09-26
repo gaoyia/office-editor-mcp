@@ -1,5 +1,4 @@
 # docx create：docs/checklist-docx.md 的 C1、C3、C4。
-# C2 是 WPS 打开。验收只认官方 Office，不再跑。
 
 $ErrorActionPreference = 'Stop'
 . ([IO.Path]::Combine($PSScriptRoot, '..', '..', 'lib', 'bootstrap.ps1'))
@@ -21,7 +20,6 @@ $compat = $null
 try { $compat = $doc.CompatibilityMode } catch {}
 
 Add-Check 'docx-C1' (($caption -notmatch 'Repair') -and ([int]$compat -eq 15)) "$caption compat=$compat"
-Add-Skip  'docx-C2' '验收只认 Microsoft Word，不再跑 WPS'
 
 $styleOk = ($p1.Style.NameLocal -eq $S.heading1) -or ($p1.Style.NameLocal -eq 'Heading 1')
 Add-Check 'docx-C3' ($styleOk -and $t1 -eq $S.title) "style=$($p1.Style.NameLocal) text=$t1"

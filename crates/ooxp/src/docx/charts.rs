@@ -46,7 +46,7 @@ const WRAPPERS: &[&str] = &[
     "surface3DChart",
 ];
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ChartType {
     Bar,
     Col,
@@ -54,6 +54,10 @@ pub enum ChartType {
     Pie,
     Area,
     Scatter,
+    Doughnut,
+    Radar,
+    Bubble,
+    Combo,
 }
 
 impl ChartType {
@@ -63,6 +67,21 @@ impl ChartType {
             "col" => Some(Self::Col),
             "line" => Some(Self::Line),
             "pie" => Some(Self::Pie),
+            "area" => Some(Self::Area),
+            "scatter" => Some(Self::Scatter),
+            "doughnut" => Some(Self::Doughnut),
+            "radar" => Some(Self::Radar),
+            "bubble" => Some(Self::Bubble),
+            "combo" => Some(Self::Combo),
+            _ => None,
+        }
+    }
+
+    pub fn parse_combo_series(s: &str) -> Option<Self> {
+        match s {
+            "bar" => Some(Self::Bar),
+            "col" => Some(Self::Col),
+            "line" => Some(Self::Line),
             "area" => Some(Self::Area),
             "scatter" => Some(Self::Scatter),
             _ => None,
@@ -77,6 +96,10 @@ impl ChartType {
             Self::Pie => "pie",
             Self::Area => "area",
             Self::Scatter => "scatter",
+            Self::Doughnut => "doughnut",
+            Self::Radar => "radar",
+            Self::Bubble => "bubble",
+            Self::Combo => "combo",
         }
     }
 
@@ -87,8 +110,31 @@ impl ChartType {
             Self::Pie => "pieChart",
             Self::Area => "areaChart",
             Self::Scatter => "scatterChart",
+            Self::Doughnut => "doughnutChart",
+            Self::Radar => "radarChart",
+            Self::Bubble => "bubbleChart",
+            Self::Combo => "barChart",
         }
     }
+
+    fn is_xy(self) -> bool {
+        matches!(self, Self::Scatter | Self::Bubble)
+    }
+
+    fn no_axes(self) -> bool {
+        matches!(self, Self::Pie | Self::Doughnut)
+    }
+
+    pub fn needs_one_series(self) -> bool {
+        matches!(self, Self::Pie | Self::Doughnut)
+    }
+}
+
+/// 哪一类图表 op，用来套分层限制。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ChartRestrict {
+    Decorate,
+    Data,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -137,6 +183,8 @@ pub struct NewSeries {
     pub name: Option<String>,
     pub categories: Option<Vec<Value>>,
     pub values: Vec<Value>,
+    pub sizes: Option<Vec<Value>>,
+    pub series_type: Option<ChartType>,
 }
 
 #[derive(Debug, Clone)]
@@ -173,6 +221,7 @@ pub struct SetChartSeriesOp {
     pub name: Option<String>,
     pub categories: Option<Vec<Value>>,
     pub values: Option<Vec<Value>>,
+    pub sizes: Option<Vec<Value>>,
 }
 
 #[derive(Debug, Clone)]
@@ -182,6 +231,8 @@ pub struct AddChartSeriesOp {
     pub name: Option<String>,
     pub categories: Option<Vec<Value>>,
     pub values: Vec<Value>,
+    pub sizes: Option<Vec<Value>>,
+    pub series_type: Option<ChartType>,
 }
 
 #[derive(Debug, Clone)]
@@ -494,12 +545,17 @@ pub fn apply_insert(
             ));
         }
     }
-    let cats = shared_categories(&op.series);
-    let embed = build_embedding(&op.series, &cats)?;
+    let series = normalize_insert_series(op.chart_type, &op.series);
+    let cats = shared_categories(&series);
+    let embed = build_embedding(op.chart_type, &series, &cats)?;
     let embed_part = next_numbered(pkg, "/word/embeddings", "Microsoft_Excel_Worksheet", ".xlsx");
     let chart_part = next_numbered(pkg, "/word/charts", "chart", ".xml");
     pkg.set(&embed_part, embed)?;
-    let chart_xml = build_chart_xml(op.chart_type, op.title.as_deref(), &op.series, &cats);
+    let chart_xml = if op.chart_type == ChartType::Combo {
+        build_combo_chart_xml(op.title.as_deref(), &series, &cats)
+    } else {
+        build_chart_xml(op.chart_type, op.title.as_deref(), &series, &cats)
+    };
     pkg.set(&chart_part, chart_xml.into_bytes())?;
 
     let mut chart_rels = Relationships { rels: Vec::new() };
@@ -600,7 +656,7 @@ pub fn apply_title(
     i: usize,
 ) -> Result<(), Error> {
     let mut space = load_chart_space(pkg, docs, doc_part, catalog, &op.target, &op.id, i)?;
-    reject_restricted(&space.0.root, &op.id, i)?;
+    reject_restricted(&space.0.root, &op.id, i, ChartRestrict::Decorate)?;
     set_chart_title(&mut space.0.root, &op.title);
     pkg.set(&space.1, space.0.to_bytes()?)?;
     Ok(())
@@ -616,12 +672,18 @@ pub fn apply_series(
 ) -> Result<(), Error> {
     let (mut space, chart_part, host) =
         load_chart_space_host(pkg, docs, doc_part, catalog, &op.target.chart, &op.id, i)?;
-    reject_restricted(&space.root, &op.id, i)?;
+    reject_restricted(&space.root, &op.id, i, ChartRestrict::Data)?;
     let n = series_count(&space.root);
     if op.target.index >= n {
         return Err(Error::with_path(
             ErrorKind::ChartSeriesNotFound { id: op.id.clone() },
             format!("ops[{i}].id"),
+        ));
+    }
+    if op.sizes.is_some() && !series_is_bubble(&space.root, op.target.index) {
+        return Err(Error::with_path(
+            ErrorKind::SizesOnNonBubble,
+            format!("ops[{i}].sizes"),
         ));
     }
     write_series(
@@ -632,6 +694,7 @@ pub fn apply_series(
         op.name.as_deref(),
         op.categories.as_deref(),
         op.values.as_deref(),
+        op.sizes.as_deref(),
         i,
     )?;
     pkg.set(&chart_part, space.to_bytes()?)?;
@@ -649,11 +712,24 @@ pub fn apply_add_series(
 ) -> Result<(), Error> {
     let (mut space, chart_part, _) =
         load_chart_space_host(pkg, docs, doc_part, catalog, &op.target, &op.id, i)?;
-    reject_restricted(&space.root, &op.id, i)?;
-    if inspect_type(&space.root, false) == "pie" {
+    reject_restricted(&space.root, &op.id, i, ChartRestrict::Data)?;
+    let ty = inspect_type(&space.root, false);
+    if ty == "pie" {
         return Err(Error::with_path(
             ErrorKind::PieNeedsOneSeries,
             format!("ops[{i}]"),
+        ));
+    }
+    if op.series_type.is_some() && ty != "combo" {
+        return Err(Error::with_path(
+            ErrorKind::InvalidComboSeriesType,
+            format!("ops[{i}].type"),
+        ));
+    }
+    if op.sizes.is_some() && ty != "bubble" {
+        return Err(Error::with_path(
+            ErrorKind::SizesOnNonBubble,
+            format!("ops[{i}].sizes"),
         ));
     }
     add_series(
@@ -663,6 +739,8 @@ pub fn apply_add_series(
         op.name.as_deref(),
         op.categories.as_deref(),
         &op.values,
+        op.sizes.as_deref(),
+        op.series_type,
         i,
     )?;
     pkg.set(&chart_part, space.to_bytes()?)?;
@@ -679,7 +757,7 @@ pub fn apply_delete_series(
 ) -> Result<(), Error> {
     let (mut space, chart_part, _) =
         load_chart_space_host(pkg, docs, doc_part, catalog, &op.target.chart, &op.id, i)?;
-    reject_restricted(&space.root, &op.id, i)?;
+    reject_restricted(&space.root, &op.id, i, ChartRestrict::Data)?;
     let n = series_count(&space.root);
     if op.target.index >= n {
         return Err(Error::with_path(
@@ -708,7 +786,13 @@ pub fn apply_type(
 ) -> Result<(), Error> {
     let (mut space, chart_part, _) =
         load_chart_space_host(pkg, docs, doc_part, catalog, &op.target, &op.id, i)?;
-    reject_restricted(&space.root, &op.id, i)?;
+    reject_restricted(&space.root, &op.id, i, ChartRestrict::Data)?;
+    if op.chart_type == ChartType::Combo {
+        return Err(Error::with_path(
+            ErrorKind::InvalidChartType,
+            format!("ops[{i}].type"),
+        ));
+    }
     convert_type(&mut space.root, op.chart_type, i)?;
     pkg.set(&chart_part, space.to_bytes()?)?;
     Ok(())
@@ -724,7 +808,7 @@ pub fn apply_axis_title(
 ) -> Result<(), Error> {
     let (mut space, chart_part, _) =
         load_chart_space_host(pkg, docs, doc_part, catalog, &op.target, &op.id, i)?;
-    reject_restricted(&space.root, &op.id, i)?;
+    reject_restricted(&space.root, &op.id, i, ChartRestrict::Decorate)?;
     set_axis_title(&mut space.root, &op.axis, &op.title, i)?;
     pkg.set(&chart_part, space.to_bytes()?)?;
     Ok(())
@@ -740,7 +824,7 @@ pub fn apply_legend(
 ) -> Result<(), Error> {
     let (mut space, chart_part, _) =
         load_chart_space_host(pkg, docs, doc_part, catalog, &op.target, &op.id, i)?;
-    reject_restricted(&space.root, &op.id, i)?;
+    reject_restricted(&space.root, &op.id, i, ChartRestrict::Decorate)?;
     set_legend(&mut space.root, op.show, op.pos.as_deref());
     pkg.set(&chart_part, space.to_bytes()?)?;
     Ok(())
@@ -756,7 +840,7 @@ pub fn apply_data_labels(
 ) -> Result<(), Error> {
     let (mut space, chart_part, _) =
         load_chart_space_host(pkg, docs, doc_part, catalog, &op.target, &op.id, i)?;
-    reject_restricted(&space.root, &op.id, i)?;
+    reject_restricted(&space.root, &op.id, i, ChartRestrict::Decorate)?;
     set_data_labels(&mut space.root, op.show);
     pkg.set(&chart_part, space.to_bytes()?)?;
     Ok(())
@@ -874,7 +958,7 @@ fn chart_json(
                         ty = inspect_type(&doc.root, false);
                     }
                     title = json!(chart_title(&doc.root));
-                    let (c, v) = axis_titles(&doc.root, ty == "scatter");
+                    let (c, v) = axis_titles(&doc.root, uses_xy_axes(&ty));
                     cat_axis = json!(c);
                     val_axis = json!(v);
                     series = series_json(&id, &doc.root, embed.as_deref())?;
@@ -907,27 +991,47 @@ fn chart_json(
 
 fn series_json(chart_id: &str, space: &Element, embed: Option<&[u8]>) -> Result<Vec<Value>, Error> {
     let mut out = Vec::new();
-    for (index, ser) in collect_sers(space).into_iter().enumerate() {
-        let scatter = ancestor_is(ser, "scatterChart");
-        let name = series_name(ser);
-        let (cat_local, val_local) = if scatter {
+    let mut index = 0usize;
+    let Some(plot) = plot_area(space) else {
+        return Ok(out);
+    };
+    for wrap in plot.element_children() {
+        if !WRAPPERS.contains(&wrap.local_name()) {
+            continue;
+        }
+        let bubble = wrap.local_name() == "bubbleChart";
+        let xy = bubble || wrap.local_name() == "scatterChart";
+        let (cat_local, val_local) = if xy {
             ("xVal", "yVal")
         } else {
             ("cat", "val")
         };
-        let (cats, cat_stale) = read_pts(ser, cat_local, embed);
-        let (vals, val_stale) = read_pts(ser, val_local, embed);
-        let mut node = json!({
-            "id": format!("{chart_id}/series:{index}"),
-            "index": index,
-            "name": name,
-            "categories": cats,
-            "values": vals,
-        });
-        if cat_stale || val_stale {
-            node["cacheStale"] = json!(true);
+        for ser in wrap.element_children() {
+            if ser.local_name() != "ser" {
+                continue;
+            }
+            let name = series_name(ser);
+            let (cats, cat_stale) = read_pts(ser, cat_local, embed);
+            let (vals, val_stale) = read_pts(ser, val_local, embed);
+            let mut node = json!({
+                "id": format!("{chart_id}/series:{index}"),
+                "index": index,
+                "name": name,
+                "categories": cats,
+                "values": vals,
+            });
+            let mut stale = cat_stale || val_stale;
+            if bubble {
+                let (sizes, size_stale) = read_pts(ser, "bubbleSize", embed);
+                node["sizes"] = json!(sizes);
+                stale |= size_stale;
+            }
+            if stale {
+                node["cacheStale"] = json!(true);
+            }
+            out.push(node);
+            index += 1;
         }
-        out.push(node);
     }
     Ok(out)
 }
@@ -1129,8 +1233,10 @@ fn wrapper_kind(el: &Element) -> Option<&'static str> {
         "pieChart" | "pie3DChart" => Some("pie"),
         "areaChart" | "area3DChart" => Some("area"),
         "scatterChart" => Some("scatter"),
-        "ofPieChart" | "doughnutChart" | "bubbleChart" | "radarChart" | "stockChart"
-        | "surfaceChart" | "surface3DChart" => Some("other"),
+        "doughnutChart" => Some("doughnut"),
+        "radarChart" => Some("radar"),
+        "bubbleChart" => Some("bubble"),
+        "ofPieChart" | "stockChart" | "surfaceChart" | "surface3DChart" => Some("other"),
         _ => None,
     }
 }
@@ -1257,14 +1363,14 @@ fn secondary_axis(space: &Element, ty: &str) -> bool {
     }) {
         return true;
     }
-    if ty == "pie" || ty == "other" || ty == "chartex" {
+    if matches!(ty, "pie" | "doughnut" | "other" | "chartex") {
         return false;
     }
     let val_n = plot
         .element_children()
         .filter(|c| matches!(c.local_name(), "valAx" | "dateAx"))
         .count();
-    if ty == "scatter" {
+    if uses_xy_axes(ty) {
         val_n > 2
     } else {
         val_n > 1
@@ -1697,11 +1803,6 @@ fn join_t(el: &Element) -> String {
     s
 }
 
-fn ancestor_is(el: &Element, _local: &str) -> bool {
-    // ser 的父就是包裹；用父名在 collect 时已知。这里按子元素判断。
-    el.child_by_local("xVal").is_some() || el.child_by_local("yVal").is_some()
-}
-
 fn part_for_para(
     catalog: &[HfPart],
     doc_part: &str,
@@ -1813,23 +1914,95 @@ fn load_chart_space_host(
     Ok((space, chart_part, host))
 }
 
-fn reject_restricted(space: &Element, id: &str, i: usize) -> Result<(), Error> {
+fn reject_restricted(
+    space: &Element,
+    id: &str,
+    i: usize,
+    class: ChartRestrict,
+) -> Result<(), Error> {
     let ty = inspect_type(space, false);
     let flags = flags_json(space, &ty);
-    let blocked = matches!(ty.as_str(), "combo" | "other" | "chartex")
+    let hard = matches!(ty.as_str(), "other" | "chartex")
         || flags.iter().any(|f| {
             matches!(
                 f.as_str(),
-                Some("secondaryAxis" | "trendline" | "errorBars" | "pivot")
+                Some("secondaryAxis" | "trendline" | "errorBars")
             )
         });
-    if blocked {
+    if hard {
+        return Err(Error::with_path(
+            ErrorKind::RestrictedChart { id: id.to_string() },
+            format!("ops[{i}].id"),
+        ));
+    }
+    if class == ChartRestrict::Data
+        && flags.iter().any(|f| f.as_str() == Some("pivot"))
+    {
         return Err(Error::with_path(
             ErrorKind::RestrictedChart { id: id.to_string() },
             format!("ops[{i}].id"),
         ));
     }
     Ok(())
+}
+
+fn uses_xy_axes(ty: &str) -> bool {
+    matches!(ty, "scatter" | "bubble")
+}
+
+fn series_is_bubble(space: &Element, index: usize) -> bool {
+    let mut seen = 0usize;
+    let Some(plot) = plot_area(space) else {
+        return false;
+    };
+    for wrap in plot.element_children() {
+        if !WRAPPERS.contains(&wrap.local_name()) {
+            continue;
+        }
+        for c in wrap.element_children() {
+            if c.local_name() == "ser" {
+                if seen == index {
+                    return wrap.local_name() == "bubbleChart";
+                }
+                seen += 1;
+            }
+        }
+    }
+    false
+}
+
+fn last_series_type(space: &Element) -> Option<ChartType> {
+    let plot = plot_area(space)?;
+    let mut last = None;
+    for wrap in plot.element_children() {
+        if !WRAPPERS.contains(&wrap.local_name()) {
+            continue;
+        }
+        let ty = wrapper_kind(wrap).and_then(ChartType::parse);
+        for c in wrap.element_children() {
+            if c.local_name() == "ser" {
+                last = ty;
+            }
+        }
+    }
+    last
+}
+
+fn normalize_insert_series(ty: ChartType, series: &[NewSeries]) -> Vec<NewSeries> {
+    series
+        .iter()
+        .map(|s| {
+            let mut s = s.clone();
+            if ty == ChartType::Bubble && s.sizes.is_none() {
+                s.sizes = Some(ones(s.values.len()));
+            }
+            s
+        })
+        .collect()
+}
+
+fn ones(n: usize) -> Vec<Value> {
+    (0..n).map(|_| json!(1)).collect()
 }
 
 fn ensure_chart_ns(root: &mut Element) {
@@ -1893,20 +2066,39 @@ fn shared_categories(series: &[NewSeries]) -> Vec<Value> {
     (1..=n).map(|i| json!(i.to_string())).collect()
 }
 
-fn build_embedding(series: &[NewSeries], cats: &[Value]) -> Result<Vec<u8>, Error> {
+fn build_embedding(ty: ChartType, series: &[NewSeries], cats: &[Value]) -> Result<Vec<u8>, Error> {
     let mut cells = Vec::new();
     for (i, cat) in cats.iter().enumerate() {
         cells.push(json!({ "ref": format!("A{}", i + 2), "value": cat }));
     }
-    for (si, s) in series.iter().enumerate() {
-        let col = xlsx::a1::col_to_letters((si as u32) + 2);
-        let name = s
-            .name
-            .clone()
-            .unwrap_or_else(|| format!("系列{}", si + 1));
-        cells.push(json!({ "ref": format!("{col}1"), "value": name }));
-        for (ri, v) in s.values.iter().enumerate() {
-            cells.push(json!({ "ref": format!("{}{}", col, ri + 2), "value": v }));
+    if ty == ChartType::Bubble {
+        for (si, s) in series.iter().enumerate() {
+            let y_col = xlsx::a1::col_to_letters((si as u32) * 2 + 2);
+            let sz_col = xlsx::a1::col_to_letters((si as u32) * 2 + 3);
+            let name = s
+                .name
+                .clone()
+                .unwrap_or_else(|| format!("系列{}", si + 1));
+            cells.push(json!({ "ref": format!("{y_col}1"), "value": name }));
+            for (ri, v) in s.values.iter().enumerate() {
+                cells.push(json!({ "ref": format!("{}{}", y_col, ri + 2), "value": v }));
+            }
+            let sizes = s.sizes.clone().unwrap_or_else(|| ones(s.values.len()));
+            for (ri, v) in sizes.iter().enumerate() {
+                cells.push(json!({ "ref": format!("{}{}", sz_col, ri + 2), "value": v }));
+            }
+        }
+    } else {
+        for (si, s) in series.iter().enumerate() {
+            let col = xlsx::a1::col_to_letters((si as u32) + 2);
+            let name = s
+                .name
+                .clone()
+                .unwrap_or_else(|| format!("系列{}", si + 1));
+            cells.push(json!({ "ref": format!("{col}1"), "value": name }));
+            for (ri, v) in s.values.iter().enumerate() {
+                cells.push(json!({ "ref": format!("{}{}", col, ri + 2), "value": v }));
+            }
         }
     }
     xlsx::create(&json!({ "sheets": [{ "name": "Sheet1", "cells": cells }] }))
@@ -1918,18 +2110,33 @@ fn build_chart_xml(
     series: &[NewSeries],
     cats: &[Value],
 ) -> String {
-    let scatter = ty == ChartType::Scatter;
-    let pie = ty == ChartType::Pie;
+    let xy = ty.is_xy();
     let mut sers = String::new();
     for (i, ser) in series.iter().enumerate() {
-        let col = xlsx::a1::col_to_letters((i as u32) + 2);
+        let (val_col, size_col) = if ty == ChartType::Bubble {
+            (
+                xlsx::a1::col_to_letters((i as u32) * 2 + 2),
+                Some(xlsx::a1::col_to_letters((i as u32) * 2 + 3)),
+            )
+        } else {
+            (xlsx::a1::col_to_letters((i as u32) + 2), None)
+        };
         let name = ser
             .name
             .clone()
             .unwrap_or_else(|| format!("系列{}", i + 1));
         let cat_ref = format!("Sheet1!$A$2:$A${}", cats.len() + 1);
-        let val_ref = format!("Sheet1!${col}$2:${col}${}", ser.values.len() + 1);
-        let name_ref = format!("Sheet1!${col}$1");
+        let val_ref = format!("Sheet1!${val_col}$2:${val_col}${}", ser.values.len() + 1);
+        let name_ref = format!("Sheet1!${val_col}$1");
+        let sizes = ser.sizes.as_deref();
+        let size_ref = size_col.map(|c| {
+            let n = sizes.map(|s| s.len()).unwrap_or(ser.values.len());
+            format!("Sheet1!${c}$2:${c}${}", n + 1)
+        });
+        let size_pair = match (sizes, size_ref.as_deref()) {
+            (Some(sz), Some(r)) => Some((sz, r)),
+            _ => None,
+        };
         sers.push_str(&ser_xml(
             i as u32,
             &name,
@@ -1938,30 +2145,77 @@ fn build_chart_xml(
             cats,
             &val_ref,
             &ser.values,
-            scatter,
+            xy,
+            size_pair,
         ));
     }
     let wrapper = ty.wrapper();
-    let extra = match ty {
-        ChartType::Bar => r#"<c:barDir val="bar"/><c:grouping val="clustered"/><c:varyColors val="0"/>"#,
-        ChartType::Col => r#"<c:barDir val="col"/><c:grouping val="clustered"/><c:varyColors val="0"/>"#,
-        ChartType::Line => r#"<c:grouping val="standard"/><c:varyColors val="0"/>"#,
-        ChartType::Area => r#"<c:grouping val="standard"/><c:varyColors val="0"/>"#,
-        ChartType::Pie => r#"<c:varyColors val="1"/>"#,
-        ChartType::Scatter => r#"<c:scatterStyle val="lineMarker"/><c:varyColors val="0"/>"#,
-    };
-    let axes = if pie {
+    let extra = wrapper_prefix_xml(ty);
+    let suffix = wrapper_suffix_xml(ty);
+    let axes = if ty.no_axes() {
         String::new()
-    } else if scatter {
+    } else if xy {
         ax_pair_scatter()
     } else {
         ax_pair()
     };
-    let ax_ids = if pie {
+    let ax_ids = if ty.no_axes() {
         String::new()
     } else {
         r#"<c:axId val="1"/><c:axId val="2"/>"#.into()
     };
+    chart_space_xml(title, &format!("<c:{wrapper}>{extra}{sers}<c:dLbls><c:showLegendKey val=\"0\"/><c:showVal val=\"0\"/><c:showCatName val=\"0\"/><c:showSerName val=\"0\"/><c:showPercent val=\"0\"/></c:dLbls>{suffix}{ax_ids}</c:{wrapper}>"), &axes)
+}
+
+fn build_combo_chart_xml(title: Option<&str>, series: &[NewSeries], cats: &[Value]) -> String {
+    let mut groups: Vec<(ChartType, Vec<(usize, &NewSeries)>)> = Vec::new();
+    for (i, s) in series.iter().enumerate() {
+        let ty = s.series_type.unwrap_or(ChartType::Col);
+        if let Some((_, items)) = groups.iter_mut().find(|(t, _)| *t == ty) {
+            items.push((i, s));
+        } else {
+            groups.push((ty, vec![(i, s)]));
+        }
+    }
+    let mut wrappers = String::new();
+    for (ty, items) in &groups {
+        let mut sers = String::new();
+        for (i, ser) in items {
+            let col = xlsx::a1::col_to_letters((*i as u32) + 2);
+            let name = ser
+                .name
+                .clone()
+                .unwrap_or_else(|| format!("系列{}", *i + 1));
+            let cat_ref = format!("Sheet1!$A$2:$A${}", cats.len() + 1);
+            let val_ref = format!("Sheet1!${col}$2:${col}${}", ser.values.len() + 1);
+            let name_ref = format!("Sheet1!${col}$1");
+            sers.push_str(&ser_xml(
+                *i as u32,
+                &name,
+                &name_ref,
+                &cat_ref,
+                cats,
+                &val_ref,
+                &ser.values,
+                ty.is_xy(),
+                None,
+            ));
+        }
+        let extra = wrapper_prefix_xml(*ty);
+        wrappers.push_str(&format!(
+            "<c:{w}>{extra}{sers}<c:axId val=\"1\"/><c:axId val=\"2\"/></c:{w}>",
+            w = ty.wrapper()
+        ));
+    }
+    let axes = if groups.iter().all(|(t, _)| t.is_xy()) {
+        ax_pair_scatter()
+    } else {
+        ax_pair()
+    };
+    chart_space_xml(title, &wrappers, &axes)
+}
+
+fn chart_space_xml(title: Option<&str>, plot_body: &str, axes: &str) -> String {
     let title_xml = match title {
         Some(t) if !t.is_empty() => format!(
             r#"<c:autoTitleDeleted val="0"/>{}"#,
@@ -1970,8 +2224,30 @@ fn build_chart_xml(
         _ => r#"<c:autoTitleDeleted val="1"/>"#.into(),
     };
     format!(
-        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><c:chartSpace xmlns:c="{CHART_NS}" xmlns:a="{A_NS}" xmlns:r="{REL_NS}"><c:chart>{title_xml}<c:plotArea><c:layout/><c:{wrapper}>{extra}{sers}<c:dLbls><c:showLegendKey val="0"/><c:showVal val="0"/><c:showCatName val="0"/><c:showSerName val="0"/><c:showPercent val="0"/></c:dLbls>{ax_ids}</c:{wrapper}>{axes}</c:plotArea><c:legend><c:legendPos val="r"/><c:overlay val="0"/></c:legend><c:plotVisOnly val="1"/></c:chart><c:externalData r:id="rId1"><c:autoUpdate val="0"/></c:externalData></c:chartSpace>"#
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><c:chartSpace xmlns:c="{CHART_NS}" xmlns:a="{A_NS}" xmlns:r="{REL_NS}"><c:chart>{title_xml}<c:plotArea><c:layout/>{plot_body}{axes}</c:plotArea><c:legend><c:legendPos val="r"/><c:overlay val="0"/></c:legend><c:plotVisOnly val="1"/></c:chart><c:externalData r:id="rId1"><c:autoUpdate val="0"/></c:externalData></c:chartSpace>"#
     )
+}
+
+fn wrapper_prefix_xml(ty: ChartType) -> &'static str {
+    match ty {
+        ChartType::Bar => r#"<c:barDir val="bar"/><c:grouping val="clustered"/><c:varyColors val="0"/>"#,
+        ChartType::Col => r#"<c:barDir val="col"/><c:grouping val="clustered"/><c:varyColors val="0"/>"#,
+        ChartType::Line => r#"<c:grouping val="standard"/><c:varyColors val="0"/>"#,
+        ChartType::Area => r#"<c:grouping val="standard"/><c:varyColors val="0"/>"#,
+        ChartType::Pie | ChartType::Doughnut => r#"<c:varyColors val="1"/>"#,
+        ChartType::Scatter => r#"<c:scatterStyle val="lineMarker"/><c:varyColors val="0"/>"#,
+        ChartType::Radar => r#"<c:radarStyle val="marker"/><c:varyColors val="0"/>"#,
+        ChartType::Bubble => r#"<c:varyColors val="0"/>"#,
+        ChartType::Combo => r#"<c:barDir val="col"/><c:grouping val="clustered"/><c:varyColors val="0"/>"#,
+    }
+}
+
+fn wrapper_suffix_xml(ty: ChartType) -> &'static str {
+    match ty {
+        ChartType::Doughnut => r#"<c:holeSize val="50"/>"#,
+        ChartType::Bubble => r#"<c:bubbleScale val="100"/><c:showNegBubbles val="0"/>"#,
+        _ => "",
+    }
 }
 
 fn ser_xml(
@@ -1982,19 +2258,28 @@ fn ser_xml(
     cats: &[Value],
     val_ref: &str,
     vals: &[Value],
-    scatter: bool,
+    xy: bool,
+    sizes: Option<(&[Value], &str)>,
 ) -> String {
-    let (cat_tag, val_tag) = if scatter {
+    let (cat_tag, val_tag) = if xy {
         ("c:xVal", "c:yVal")
     } else {
         ("c:cat", "c:val")
     };
-    format!(
-        r#"<c:ser><c:idx val="{idx}"/><c:order val="{idx}"/><c:tx>{}</c:tx><{cat_tag}>{}</{cat_tag}><{val_tag}>{}</{val_tag}></c:ser>"#,
+    let mut body = format!(
+        r#"<c:ser><c:idx val="{idx}"/><c:order val="{idx}"/><c:tx>{}</c:tx><{cat_tag}>{}</{cat_tag}><{val_tag}>{}</{val_tag}>"#,
         str_ref(name_ref, &[json!(name)]),
         str_or_num_ref(cat_ref, cats),
         str_or_num_ref(val_ref, vals),
-    )
+    );
+    if let Some((sz, sz_ref)) = sizes {
+        body.push_str(&format!(
+            "<c:bubbleSize>{}</c:bubbleSize><c:bubble3D val=\"0\"/>",
+            str_or_num_ref(sz_ref, sz)
+        ));
+    }
+    body.push_str("</c:ser>");
+    body
 }
 
 fn str_ref(f: &str, pts: &[Value]) -> String {
@@ -2191,7 +2476,7 @@ fn set_chart_title(space: &mut Element, title: &str) {
 }
 
 fn set_axis_title(space: &mut Element, axis: &str, title: &str, i: usize) -> Result<(), Error> {
-    let scatter = inspect_type(space, false) == "scatter";
+    let scatter = uses_xy_axes(&inspect_type(space, false));
     let plot = plot_area_mut(space).ok_or_else(|| {
         Error::with_path(ErrorKind::InvalidChartAxis, format!("ops[{i}].axis"))
     })?;
@@ -2331,6 +2616,7 @@ fn write_series(
     name: Option<&str>,
     cats: Option<&[Value]>,
     vals: Option<&[Value]>,
+    sizes: Option<&[Value]>,
     i: usize,
 ) -> Result<(), Error> {
     if index >= series_count(space) {
@@ -2361,6 +2647,9 @@ fn write_series(
             };
             set_pts(ser, local, v);
         }
+        if let Some(s) = sizes {
+            set_pts(ser, "bubbleSize", s);
+        }
         ser.clone()
     });
     let Some(ser) = embed_snapshot else {
@@ -2374,7 +2663,7 @@ fn write_series(
     if let Some(embed_rid) = external_data_rid(space) {
         let embed_part = crate::opc::resolve_id(pkg, chart_part, &embed_rid)?;
         let bytes = pkg.get(&embed_part)?.to_vec();
-        let updated = patch_embed(&bytes, &ser, name, cats, vals)?;
+        let updated = patch_embed(&bytes, &ser, name, cats, vals, sizes)?;
         pkg.set(&embed_part, updated)?;
     }
     Ok(())
@@ -2457,6 +2746,7 @@ fn default_formula(local: &str, n: usize) -> String {
     let end = n.max(1) + 1;
     match local {
         "cat" | "xVal" => format!("Sheet1!$A$2:$A${end}"),
+        "bubbleSize" => format!("Sheet1!$C$2:$C${end}"),
         _ => format!("Sheet1!$B$2:$B${end}"),
     }
 }
@@ -2492,6 +2782,7 @@ fn patch_embed(
     name: Option<&str>,
     cats: Option<&[Value]>,
     vals: Option<&[Value]>,
+    sizes: Option<&[Value]>,
 ) -> Result<Vec<u8>, Error> {
     let mut ops = Vec::new();
     if let Some(n) = name {
@@ -2511,6 +2802,9 @@ fn patch_embed(
     }
     if let Some(v) = vals {
         push_range_ops(&mut ops, ser, "val", "yVal", v);
+    }
+    if let Some(s) = sizes {
+        push_range_ops(&mut ops, ser, "bubbleSize", "bubbleSize", s);
     }
     if ops.is_empty() {
         return Ok(bytes.to_vec());
@@ -2549,9 +2843,12 @@ fn add_series(
     name: Option<&str>,
     cats: Option<&[Value]>,
     vals: &[Value],
+    sizes: Option<&[Value]>,
+    series_type: Option<ChartType>,
     i: usize,
 ) -> Result<(), Error> {
     let n = series_count(space);
+    let ty = inspect_type(space, false);
     let cats_owned: Vec<Value> = if let Some(c) = cats {
         c.to_vec()
     } else if n > 0 {
@@ -2578,7 +2875,13 @@ fn add_series(
     let name = name
         .map(str::to_string)
         .unwrap_or_else(|| format!("系列{}", n + 1));
-    let col = xlsx::a1::col_to_letters((n as u32) + 2);
+    let y_col_n = next_free_col(space);
+    let col = xlsx::a1::col_to_letters(y_col_n);
+    let size_col_n = if ty == "bubble" {
+        Some(next_free_col_after(space, y_col_n))
+    } else {
+        None
+    };
     let cat_ref = formula_of(
         collect_sers(space)
             .first()
@@ -2588,7 +2891,25 @@ fn add_series(
     .unwrap_or_else(|| format!("Sheet1!$A$2:$A${}", cats_owned.len() + 1));
     let val_ref = format!("Sheet1!${col}$2:${col}${}", vals.len() + 1);
     let name_ref = format!("Sheet1!${col}$1");
-    let scatter = inspect_type(space, false) == "scatter";
+    let xy = uses_xy_axes(&ty)
+        || series_type.is_some_and(ChartType::is_xy)
+        || last_series_type(space).is_some_and(ChartType::is_xy);
+    let sizes_owned = if ty == "bubble" {
+        Some(sizes.map(|s| s.to_vec()).unwrap_or_else(|| ones(vals.len())))
+    } else {
+        None
+    };
+    let size_pair = match (sizes_owned.as_deref(), size_col_n.as_ref()) {
+        (Some(sz), Some(cn)) => {
+            let letters = xlsx::a1::col_to_letters(*cn);
+            let r = format!("Sheet1!${letters}$2:${letters}${}", sz.len() + 1);
+            Some((sz, r))
+        }
+        _ => None,
+    };
+    let size_pair_ref = size_pair
+        .as_ref()
+        .map(|(sz, r)| (*sz, r.as_str()));
     let xml = ser_xml(
         idx,
         &name,
@@ -2597,7 +2918,8 @@ fn add_series(
         &cats_owned,
         &val_ref,
         vals,
-        scatter,
+        xy,
+        size_pair_ref,
     );
     let wrapped = format!(r#"<c:root xmlns:c="{CHART_NS}">{xml}</c:root>"#);
     let doc = xml::parse(wrapped.as_bytes())?;
@@ -2615,21 +2937,7 @@ fn add_series(
                 child: "c:ser".into(),
             })
         })?;
-    if let Some(plot) = plot_area_mut(space) {
-        if let Some(w) = plot
-            .element_children_mut()
-            .find(|c| WRAPPERS.contains(&c.local_name()))
-        {
-            let at = w
-                .children
-                .iter()
-                .position(|n| {
-                    matches!(n, Node::Element(e) if e.local_name() == "dLbls" || e.local_name() == "axId")
-                })
-                .unwrap_or(w.children.len());
-            w.children.insert(at, Node::Element(ser_el));
-        }
-    }
+    insert_ser(space, ser_el, series_type);
     if let Some(embed_rid) = external_data_rid(space) {
         let embed_part = crate::opc::resolve_id(pkg, chart_part, &embed_rid)?;
         let bytes = pkg.get(&embed_part)?.to_vec();
@@ -2645,11 +2953,121 @@ fn add_series(
                 "value": v
             }));
         }
+        if let (Some(sz), Some(cn)) = (sizes_owned.as_ref(), size_col_n) {
+            let letters = xlsx::a1::col_to_letters(cn);
+            for (ri, v) in sz.iter().enumerate() {
+                ops.push(json!({
+                    "op": "setCell",
+                    "id": format!("cell:Sheet1!{letters}{}", ri + 2),
+                    "value": v
+                }));
+            }
+        }
         let parsed = xlsx::parse_ops(&ops)?;
         let updated = xlsx::apply(&bytes, &parsed)?;
         pkg.set(&embed_part, updated)?;
     }
     Ok(())
+}
+
+fn next_free_col(space: &Element) -> u32 {
+    next_free_col_after(space, 0)
+}
+
+fn next_free_col_after(space: &Element, after: u32) -> u32 {
+    let mut used: HashSet<u32> = HashSet::new();
+    for ser in collect_sers(space) {
+        for local in ["tx", "cat", "val", "xVal", "yVal", "bubbleSize"] {
+            if let Some(f) = ser.child_by_local(local).and_then(formula_of) {
+                if let Some((_, range)) = parse_chart_formula(&f) {
+                    if let Ok((start, end)) = xlsx::a1::parse_range(&range) {
+                        for c in start.col..=end.col {
+                            used.insert(c);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    ((after + 1).max(1)..).find(|c| !used.contains(c)).unwrap_or(after + 1)
+}
+
+fn insert_ser(space: &mut Element, ser_el: Element, series_type: Option<ChartType>) {
+    let want = series_type.or_else(|| last_series_type(space));
+    let Some(plot) = plot_area_mut(space) else {
+        return;
+    };
+    let target_i = want.and_then(|ty| {
+        plot.element_children().enumerate().find_map(|(i, w)| {
+            if !WRAPPERS.contains(&w.local_name()) {
+                return None;
+            }
+            if wrapper_kind(w) == Some(ty.as_str()) {
+                Some(i)
+            } else {
+                None
+            }
+        })
+    });
+    if let Some(i) = target_i {
+        if let Node::Element(w) = &mut plot.children[i] {
+            push_ser_into_wrapper(w, ser_el);
+            return;
+        }
+    }
+    if let Some(ty) = series_type {
+        let ax_ids: Vec<String> = plot
+            .element_children()
+            .find(|c| WRAPPERS.contains(&c.local_name()))
+            .map(|w| {
+                w.element_children()
+                    .filter(|c| c.local_name() == "axId")
+                    .filter_map(|c| c.attr_local("val").map(str::to_string))
+                    .take(2)
+                    .collect()
+            })
+            .unwrap_or_default();
+        let mut w = Element::new(format!("c:{}", ty.wrapper()));
+        for p in wrapper_prefix_els(ty) {
+            w.push_element(p);
+        }
+        w.push_element(ser_el);
+        if !ty.no_axes() {
+            let a = ax_ids.first().map(String::as_str).unwrap_or("1");
+            let b = ax_ids.get(1).map(String::as_str).unwrap_or("2");
+            w.push_element(Element::new("c:axId").with_attr("val", a));
+            w.push_element(Element::new("c:axId").with_attr("val", b));
+        }
+        for s in wrapper_suffix_els(ty) {
+            w.push_element(s);
+        }
+        let at = plot
+            .children
+            .iter()
+            .position(|n| {
+                matches!(n, Node::Element(e) if matches!(e.local_name(), "catAx" | "valAx" | "dateAx" | "serAx"))
+            })
+            .unwrap_or(plot.children.len());
+        plot.children.insert(at, Node::Element(w));
+        return;
+    }
+    if let Some(w) = plot
+        .element_children_mut()
+        .find(|c| WRAPPERS.contains(&c.local_name()))
+    {
+        push_ser_into_wrapper(w, ser_el);
+    }
+}
+
+fn push_ser_into_wrapper(w: &mut Element, ser_el: Element) {
+    let at = w
+        .children
+        .iter()
+        .position(|n| {
+            matches!(n, Node::Element(e) if matches!(e.local_name(), "dLbls" | "axId" | "holeSize" | "bubbleScale" | "showNegBubbles"))
+        })
+        .unwrap_or(w.children.len());
+    w.children.insert(at, Node::Element(ser_el));
 }
 
 fn unused_idx(space: &Element) -> u32 {
@@ -2689,6 +3107,12 @@ fn remove_series_at(space: &mut Element, index: usize) {
 }
 
 fn convert_type(space: &mut Element, target: ChartType, i: usize) -> Result<(), Error> {
+    if target == ChartType::Combo {
+        return Err(Error::with_path(
+            ErrorKind::InvalidChartType,
+            format!("ops[{i}].type"),
+        ));
+    }
     let current = inspect_type(space, false);
     if current == target.as_str() {
         if matches!(target, ChartType::Bar | ChartType::Col) {
@@ -2701,172 +3125,295 @@ fn convert_type(space: &mut Element, target: ChartType, i: usize) -> Result<(), 
         set_bar_dir(space, target);
         return Ok(());
     }
-    if target == ChartType::Pie && series_count(space) != 1 {
+    if target.needs_one_series() && series_count(space) != 1 {
         return Err(Error::with_path(
             ErrorKind::ChartTypeNotConvertible,
             format!("ops[{i}].type"),
         ));
     }
-    let from_scatter = current == "scatter";
-    let to_scatter = target == ChartType::Scatter;
-    if (from_scatter || to_scatter) && !scatter_convertible(space, from_scatter, to_scatter) {
+    let from_xy = uses_xy_axes(&current) || (current == "combo" && any_ser_xy(space));
+    let to_xy = target.is_xy();
+    if to_xy && !from_xy && !all_sers_have_cat_val(space) {
         return Err(Error::with_path(
             ErrorKind::ChartTypeNotConvertible,
             format!("ops[{i}].type"),
         ));
     }
-    let Some(plot) = plot_area_mut(space) else {
+    if from_xy && !to_xy && current != "combo" && !all_sers_have_xy(space) {
         return Err(Error::with_path(
             ErrorKind::ChartTypeNotConvertible,
             format!("ops[{i}].type"),
         ));
-    };
-    let wrap_i = plot.children.iter().position(|n| {
-        matches!(n, Node::Element(e) if WRAPPERS.contains(&e.local_name()))
-    });
-    let Some(wrap_i) = wrap_i else {
+    }
+    if current == "combo" && to_xy && !all_sers_have_cat_or_xy(space) {
         return Err(Error::with_path(
             ErrorKind::ChartTypeNotConvertible,
             format!("ops[{i}].type"),
         ));
-    };
-    let Node::Element(wrap) = &mut plot.children[wrap_i] else {
-        return Err(Error::with_path(
-            ErrorKind::ChartTypeNotConvertible,
-            format!("ops[{i}].type"),
-        ));
-    };
-    wrap.name = format!("c:{}", target.wrapper());
-    wrap.children.retain(|n| match n {
-        Node::Element(e) => {
-            !matches!(e.local_name(), "barDir" | "grouping" | "scatterStyle" | "varyColors")
+    }
+    {
+        let Some(plot) = plot_area_mut(space) else {
+            return Err(Error::with_path(
+                ErrorKind::ChartTypeNotConvertible,
+                format!("ops[{i}].type"),
+            ));
+        };
+        let (insert_at, mut sers, ax_ids) = extract_wrapper_sers(plot);
+        for ser in &mut sers {
+            reshape_ser(ser, target);
         }
-        _ => true,
-    });
-    let mut prefix = Vec::new();
-    match target {
-        ChartType::Bar => {
-            prefix.push(Element::new("c:barDir").with_attr("val", "bar"));
-            prefix.push(Element::new("c:grouping").with_attr("val", "clustered"));
-            prefix.push(Element::new("c:varyColors").with_attr("val", "0"));
+        let wrap = build_type_wrapper(target, sers, &ax_ids);
+        let at = insert_at.unwrap_or(plot.children.len());
+        plot.children.insert(at, Node::Element(wrap));
+    }
+    retarget_axes(space, target, from_xy);
+    Ok(())
+}
+
+fn extract_wrapper_sers(plot: &mut Element) -> (Option<usize>, Vec<Element>, Vec<String>) {
+    let mut first = None;
+    let mut sers = Vec::new();
+    let mut ax_ids = Vec::new();
+    let mut i = 0;
+    while i < plot.children.len() {
+        let is_wrap = matches!(
+            &plot.children[i],
+            Node::Element(e) if WRAPPERS.contains(&e.local_name())
+        );
+        if !is_wrap {
+            i += 1;
+            continue;
         }
-        ChartType::Col => {
-            prefix.push(Element::new("c:barDir").with_attr("val", "col"));
-            prefix.push(Element::new("c:grouping").with_attr("val", "clustered"));
-            prefix.push(Element::new("c:varyColors").with_attr("val", "0"));
+        if first.is_none() {
+            first = Some(i);
         }
-        ChartType::Line | ChartType::Area => {
-            prefix.push(Element::new("c:grouping").with_attr("val", "standard"));
-            prefix.push(Element::new("c:varyColors").with_attr("val", "0"));
-        }
-        ChartType::Pie => {
-            prefix.push(Element::new("c:varyColors").with_attr("val", "1"));
-        }
-        ChartType::Scatter => {
-            prefix.push(Element::new("c:scatterStyle").with_attr("val", "lineMarker"));
-            prefix.push(Element::new("c:varyColors").with_attr("val", "0"));
+        if let Node::Element(w) = plot.children.remove(i) {
+            for n in w.children {
+                if let Node::Element(c) = n {
+                    if c.local_name() == "ser" {
+                        sers.push(c);
+                    } else if c.local_name() == "axId" && ax_ids.len() < 2 {
+                        if let Some(v) = c.attr_local("val") {
+                            ax_ids.push(v.to_string());
+                        }
+                    }
+                }
+            }
         }
     }
-    for el in prefix.into_iter().rev() {
-        wrap.children.insert(0, Node::Element(el));
+    (first, sers, ax_ids)
+}
+
+fn build_type_wrapper(ty: ChartType, sers: Vec<Element>, ax_ids: &[String]) -> Element {
+    let mut w = Element::new(format!("c:{}", ty.wrapper()));
+    for p in wrapper_prefix_els(ty) {
+        w.push_element(p);
     }
-    for c in wrap.element_children_mut() {
-        if c.local_name() == "ser" {
-            rename_ser_xy(c, to_scatter, from_scatter);
+    for s in sers {
+        w.push_element(s);
+    }
+    for s in wrapper_suffix_els(ty) {
+        w.push_element(s);
+    }
+    if !ty.no_axes() {
+        let a = ax_ids.first().map(String::as_str).unwrap_or("1");
+        let b = ax_ids.get(1).map(String::as_str).unwrap_or("2");
+        w.push_element(Element::new("c:axId").with_attr("val", a));
+        w.push_element(Element::new("c:axId").with_attr("val", b));
+    }
+    w
+}
+
+fn wrapper_prefix_els(ty: ChartType) -> Vec<Element> {
+    match ty {
+        ChartType::Bar => vec![
+            Element::new("c:barDir").with_attr("val", "bar"),
+            Element::new("c:grouping").with_attr("val", "clustered"),
+            Element::new("c:varyColors").with_attr("val", "0"),
+        ],
+        ChartType::Col => vec![
+            Element::new("c:barDir").with_attr("val", "col"),
+            Element::new("c:grouping").with_attr("val", "clustered"),
+            Element::new("c:varyColors").with_attr("val", "0"),
+        ],
+        ChartType::Line | ChartType::Area => vec![
+            Element::new("c:grouping").with_attr("val", "standard"),
+            Element::new("c:varyColors").with_attr("val", "0"),
+        ],
+        ChartType::Pie | ChartType::Doughnut => {
+            vec![Element::new("c:varyColors").with_attr("val", "1")]
         }
+        ChartType::Scatter => vec![
+            Element::new("c:scatterStyle").with_attr("val", "lineMarker"),
+            Element::new("c:varyColors").with_attr("val", "0"),
+        ],
+        ChartType::Radar => vec![
+            Element::new("c:radarStyle").with_attr("val", "marker"),
+            Element::new("c:varyColors").with_attr("val", "0"),
+        ],
+        ChartType::Bubble => vec![Element::new("c:varyColors").with_attr("val", "0")],
+        ChartType::Combo => vec![
+            Element::new("c:barDir").with_attr("val", "col"),
+            Element::new("c:grouping").with_attr("val", "clustered"),
+            Element::new("c:varyColors").with_attr("val", "0"),
+        ],
     }
-    if target == ChartType::Pie {
-        wrap.children.retain(|n| match n {
-            Node::Element(e) => e.local_name() != "axId",
+}
+
+fn wrapper_suffix_els(ty: ChartType) -> Vec<Element> {
+    match ty {
+        ChartType::Doughnut => vec![Element::new("c:holeSize").with_attr("val", "50")],
+        ChartType::Bubble => vec![
+            Element::new("c:bubbleScale").with_attr("val", "100"),
+            Element::new("c:showNegBubbles").with_attr("val", "0"),
+        ],
+        _ => Vec::new(),
+    }
+}
+
+fn reshape_ser(ser: &mut Element, target: ChartType) {
+    let is_xy = ser.child_by_local("xVal").is_some() || ser.child_by_local("yVal").is_some();
+    let is_bubble = ser.child_by_local("bubbleSize").is_some();
+    let want_xy = target.is_xy();
+    let want_bubble = target == ChartType::Bubble;
+    if want_xy && !is_xy {
+        rename_local(ser, "cat", "c:xVal");
+        rename_local(ser, "val", "c:yVal");
+    }
+    if !want_xy && is_xy {
+        rename_local(ser, "xVal", "c:cat");
+        rename_local(ser, "yVal", "c:val");
+    }
+    if want_bubble && !is_bubble {
+        append_bubble_size_ones(ser);
+    }
+    if !want_bubble && is_bubble {
+        ser.children.retain(|n| match n {
+            Node::Element(e) => e.local_name() != "bubbleSize" && e.local_name() != "bubble3D",
             _ => true,
         });
-    } else if wrap.element_children().all(|c| c.local_name() != "axId") {
-        wrap.push_element(Element::new("c:axId").with_attr("val", "1"));
-        wrap.push_element(Element::new("c:axId").with_attr("val", "2"));
     }
-    // 轴
-    let plot = plot_area_mut(space).unwrap();
-    if target == ChartType::Pie {
+}
+
+fn rename_local(ser: &mut Element, from: &str, to: &str) {
+    for c in ser.element_children_mut() {
+        if c.local_name() == from {
+            c.name = to.into();
+        }
+    }
+}
+
+fn append_bubble_size_ones(ser: &mut Element) {
+    if ser.child_by_local("bubbleSize").is_some() {
+        return;
+    }
+    let n = ser_val_count(ser).max(1);
+    let pts = ones(n);
+    let xml = format!(
+        r#"<c:bubbleSize xmlns:c="{CHART_NS}"><c:numLit><c:formatCode>General</c:formatCode><c:ptCount val="{n}"/>{}</c:numLit></c:bubbleSize>"#,
+        pts.iter()
+            .enumerate()
+            .map(|(i, _)| format!(r#"<c:pt idx="{i}"><c:v>1</c:v></c:pt>"#))
+            .collect::<String>()
+    );
+    if let Ok(doc) = xml::parse(xml.as_bytes()) {
+        let at = ser
+            .children
+            .iter()
+            .position(|n| matches!(n, Node::Element(e) if e.local_name() == "yVal" || e.local_name() == "val"))
+            .map(|i| i + 1)
+            .unwrap_or(ser.children.len());
+        ser.children.insert(at, Node::Element(doc.root));
+        ser.push_element(Element::new("c:bubble3D").with_attr("val", "0"));
+    }
+}
+
+fn ser_val_count(ser: &Element) -> usize {
+    let el = ser
+        .child_by_local("yVal")
+        .or_else(|| ser.child_by_local("val"));
+    el.and_then(cache_values).map(|v| v.len()).unwrap_or(0)
+}
+
+fn any_ser_xy(space: &Element) -> bool {
+    collect_sers(space)
+        .iter()
+        .any(|s| s.child_by_local("xVal").is_some() || s.child_by_local("yVal").is_some())
+}
+
+fn all_sers_have_cat_val(space: &Element) -> bool {
+    collect_sers(space)
+        .iter()
+        .all(|s| s.child_by_local("cat").is_some() && s.child_by_local("val").is_some())
+}
+
+fn all_sers_have_xy(space: &Element) -> bool {
+    collect_sers(space)
+        .iter()
+        .all(|s| s.child_by_local("xVal").is_some() && s.child_by_local("yVal").is_some())
+}
+
+fn all_sers_have_cat_or_xy(space: &Element) -> bool {
+    collect_sers(space).iter().all(|s| {
+        (s.child_by_local("cat").is_some() && s.child_by_local("val").is_some())
+            || (s.child_by_local("xVal").is_some() && s.child_by_local("yVal").is_some())
+    })
+}
+
+fn retarget_axes(space: &mut Element, target: ChartType, from_xy: bool) {
+    let Some(plot) = plot_area_mut(space) else {
+        return;
+    };
+    if target.no_axes() {
         plot.children.retain(|n| match n {
             Node::Element(e) => {
                 !matches!(e.local_name(), "catAx" | "valAx" | "dateAx" | "serAx")
             }
             _ => true,
         });
-    } else {
-        let has_cat = plot
-            .element_children()
-            .any(|c| c.local_name() == "catAx");
+        return;
+    }
+    let has_cat = plot.element_children().any(|c| c.local_name() == "catAx");
+    let val_n = plot
+        .element_children()
+        .filter(|c| c.local_name() == "valAx")
+        .count();
+    if target.is_xy() {
+        for c in plot.element_children_mut() {
+            if c.local_name() == "catAx" {
+                c.name = "c:valAx".into();
+            }
+        }
         let val_n = plot
             .element_children()
             .filter(|c| c.local_name() == "valAx")
             .count();
-        if to_scatter {
-            for c in plot.element_children_mut() {
-                if c.local_name() == "catAx" {
-                    c.name = "c:valAx".into();
-                }
-            }
-        } else if from_scatter {
-            let mut first = true;
-            for c in plot.element_children_mut() {
-                if c.local_name() == "valAx" && first {
-                    c.name = "c:catAx".into();
-                    first = false;
-                }
-            }
-        } else if !has_cat && val_n == 0 {
-            let xml = format!(
-                r#"<c:plotArea xmlns:c="{CHART_NS}">{}</c:plotArea>"#,
-                if target == ChartType::Scatter {
-                    ax_pair_scatter()
-                } else {
-                    ax_pair()
-                }
-            );
-            if let Ok(doc) = xml::parse(xml.as_bytes()) {
-                for n in doc.root.children {
-                    plot.children.push(n);
-                }
+        if val_n == 0 {
+            append_axes(plot, &ax_pair_scatter());
+        } else if val_n == 1 {
+            append_axes(plot, r#"<c:valAx><c:axId val="2"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="l"/><c:majorGridlines/><c:numFmt formatCode="General" sourceLinked="1"/><c:crossAx val="1"/><c:crosses val="autoZero"/></c:valAx>"#);
+        }
+    } else if from_xy {
+        let mut first = true;
+        for c in plot.element_children_mut() {
+            if c.local_name() == "valAx" && first {
+                c.name = "c:catAx".into();
+                first = false;
             }
         }
+        if plot.element_children().all(|c| c.local_name() != "valAx") {
+            append_axes(plot, r#"<c:valAx><c:axId val="2"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="l"/><c:majorGridlines/><c:numFmt formatCode="General" sourceLinked="1"/><c:crossAx val="1"/><c:crosses val="autoZero"/><c:crossBetween val="between"/></c:valAx>"#);
+        }
+    } else if !has_cat && val_n == 0 {
+        append_axes(plot, &ax_pair());
     }
-    Ok(())
 }
 
-fn scatter_convertible(space: &Element, from_scatter: bool, to_scatter: bool) -> bool {
-    for ser in collect_sers(space) {
-        if to_scatter && !from_scatter {
-            if ser.child_by_local("cat").is_none() || ser.child_by_local("val").is_none() {
-                return false;
-            }
-        }
-        if from_scatter && !to_scatter {
-            if ser.child_by_local("xVal").is_none() || ser.child_by_local("yVal").is_none() {
-                return false;
-            }
-        }
-    }
-    true
-}
-
-fn rename_ser_xy(ser: &mut Element, to_scatter: bool, from_scatter: bool) {
-    for c in ser.element_children_mut() {
-        if to_scatter && !from_scatter {
-            if c.local_name() == "cat" {
-                c.name = "c:xVal".into();
-            }
-            if c.local_name() == "val" {
-                c.name = "c:yVal".into();
-            }
-        }
-        if from_scatter && !to_scatter {
-            if c.local_name() == "xVal" {
-                c.name = "c:cat".into();
-            }
-            if c.local_name() == "yVal" {
-                c.name = "c:val".into();
-            }
+fn append_axes(plot: &mut Element, xml: &str) {
+    let wrapped = format!(r#"<c:plotArea xmlns:c="{CHART_NS}">{xml}</c:plotArea>"#);
+    if let Ok(doc) = xml::parse(wrapped.as_bytes()) {
+        for n in doc.root.children {
+            plot.children.push(n);
         }
     }
 }

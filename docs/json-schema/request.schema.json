@@ -756,12 +756,21 @@
         "done": { "type": "boolean" }
       }
     },
-    "chartType": { "enum": ["bar", "col", "line", "pie", "area", "scatter"] },
+    "chartType": {
+      "enum": ["bar", "col", "line", "pie", "area", "scatter", "doughnut", "radar", "bubble"]
+    },
+    "insertChartType": {
+      "enum": [
+        "bar", "col", "line", "pie", "area", "scatter", "doughnut", "radar", "bubble", "combo"
+      ]
+    },
+    "comboSeriesType": { "enum": ["bar", "col", "line", "area", "scatter"] },
     "chartSeriesData": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
         "name": { "type": "string" },
+        "type": { "$ref": "#/$defs/comboSeriesType" },
         "categories": {
           "type": "array",
           "items": { "type": ["string", "number"] }
@@ -769,6 +778,10 @@
         "values": {
           "type": "array",
           "minItems": 1,
+          "items": { "type": ["string", "number"] }
+        },
+        "sizes": {
+          "type": "array",
           "items": { "type": ["string", "number"] }
         }
       }
@@ -780,7 +793,7 @@
       "properties": {
         "op": { "const": "insertChart" },
         "id": { "type": "string", "minLength": 1 },
-        "type": { "$ref": "#/$defs/chartType" },
+        "type": { "$ref": "#/$defs/insertChartType" },
         "title": { "type": "string" },
         "series": {
           "type": "array",
@@ -835,12 +848,17 @@
         "values": {
           "type": "array",
           "items": { "type": ["string", "number"] }
+        },
+        "sizes": {
+          "type": "array",
+          "items": { "type": ["string", "number"] }
         }
       },
       "anyOf": [
         { "required": ["name"] },
         { "required": ["categories"] },
-        { "required": ["values"] }
+        { "required": ["values"] },
+        { "required": ["sizes"] }
       ]
     },
     "addChartSeriesOp": {
@@ -859,7 +877,12 @@
           "type": "array",
           "minItems": 1,
           "items": { "type": ["string", "number"] }
-        }
+        },
+        "sizes": {
+          "type": "array",
+          "items": { "type": ["string", "number"] }
+        },
+        "type": { "$ref": "#/$defs/comboSeriesType" }
       }
     },
     "deleteChartSeriesOp": {

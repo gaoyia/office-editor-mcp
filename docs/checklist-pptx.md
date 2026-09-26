@@ -8,12 +8,11 @@ C、I、A 三组由 `manual-check/office/cases/pptx-*.ps1` 自动判定，跑 `p
 
 ## 本机结果（2026-09-26）
 
-Microsoft PowerPoint 16.0 已打开，C1、C3、C4、I1–I5、A1–A5 均 PASS。本机若装了 WPS，`PowerPoint.Application` 会被抢走，测试仍直接启动 `POWERPNT.EXE`，从 `mdiClass` 挂 COM。C2（WPS 打开）已放弃。O1 已放弃。
+Microsoft PowerPoint 16.0 已打开，C1、C3、C4、I1–I5、A1–A5 均 PASS。本机若装了 WPS，`PowerPoint.Application` 会被抢走，测试仍直接启动 `POWERPNT.EXE`，从 `mdiClass` 挂 COM。O1 已放弃。
 
 | 序号 | 状态 | 结果 |
 | --- | --- | --- |
 | C1 | ✅ | PowerPoint 16.0 能打开 `manual-check/office/out/pptx-create.pptx`，标题栏无 Repair |
-| C2 | 🚫 | 不再要求 WPS。验收只认 Microsoft PowerPoint |
 | C3–C4 | ✅ | 第一页 `标题` / `hello`，第二页 `第二页` |
 | I1–I5 | ✅ | `pptx:presentation`、`slideCount=2`、无 scope 时没有 `shapes`、形状 id 为 `slide:1/shape:2` 且 `stable` |
 | A1–A5 | ✅ | 目标框为「改过的正文」且仍加粗（`Bold=-1`），同页另一框与第二页未改 |
@@ -26,7 +25,6 @@ Microsoft PowerPoint 16.0 已打开，C1、C3、C4、I1–I5、A1–A5 均 PASS�
 | 序号 | 检查 | 通过标准 |
 | --- | --- | --- |
 | C1 | PowerPoint 打开 | 无修复提示、无「文件损坏」 |
-| C2 | WPS 打开 | 🚫 第一期不跑。验收只认 Microsoft PowerPoint |
 | C3 | 第一页 | 两个文本框，可见文字分别为 `标题`、`hello` |
 | C4 | 第二页 | 一个文本框，可见文字为 `第二页` |
 

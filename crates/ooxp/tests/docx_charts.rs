@@ -283,6 +283,10 @@ fn inspect_lists_type_title_and_series() {
     assert_eq!(s0["categories"], json!(["甲", "乙", "丙"]));
     assert_eq!(nums(&s0["values"]), vec![1, 2, 3]);
     assert!(s0.get("cacheStale").is_none());
+    assert_eq!(
+        object_keys(s0),
+        ["id", "index", "name", "categories", "values"]
+    );
     let s1 = &c["series"][1];
     assert_eq!(s1["name"], "系列乙");
     assert_eq!(nums(&s1["values"]), vec![10, 20, 30]);
@@ -419,26 +423,54 @@ fn set_type_to_line() {
 }
 
 #[test]
-fn combo_set_type_is_not_implemented_and_file_untouched() {
-    let path = write_sample("combo", true);
+fn combo_set_series_keeps_wrappers() {
+    let path = write_sample("combo-ser", true);
     let tree = inspect(&path, json!({ "charts": true }));
     assert_eq!(tree["charts"][0]["type"], "combo");
-    let before = std::fs::read(&path).unwrap();
-    let err = apply_err(
-        &path,
-        json!([{ "op": "setChartType", "id": "para:AAAA0001/chart:7", "type": "line" }]),
-    );
-    assert_eq!(err.code(), ErrorCode::NotImplemented);
-    assert_eq!(std::fs::read(&path).unwrap(), before);
-    let size_out = tmp_dir().join("combo-size.docx");
+    let out = tmp_dir().join("combo-ser-out.docx");
     apply(
         &path,
-        &size_out,
-        json!([{ "op": "setChartSize", "id": "para:AAAA0001/chart:7", "cx": 1000000, "cy": 1000000 }]),
+        &out,
+        json!([{
+            "op": "setChartSeries",
+            "id": "para:AAAA0001/chart:7/series:0",
+            "values": [4, 5, 6]
+        }]),
     );
-    let tree = inspect(&size_out, json!({ "charts": true }));
-    assert_eq!(tree["charts"][0]["cx"], 1000000);
+    let tree = inspect(&out, json!({ "charts": true }));
     assert_eq!(tree["charts"][0]["type"], "combo");
+    assert_eq!(nums(&tree["charts"][0]["series"][0]["values"]), vec![4, 5, 6]);
+    assert_eq!(nums(&tree["charts"][0]["series"][1]["values"]), vec![10, 20, 30]);
+    let xml = part_text(&out, "word/charts/chart1.xml");
+    assert!(xml.contains("barChart"));
+    assert!(xml.contains("lineChart"));
+}
+
+#[test]
+fn combo_set_type_collapses_to_col() {
+    let path = write_sample("combo-col", true);
+    let out = tmp_dir().join("combo-col-out.docx");
+    apply(
+        &path,
+        &out,
+        json!([{ "op": "setChartType", "id": "para:AAAA0001/chart:7", "type": "col" }]),
+    );
+    let tree = inspect(&out, json!({ "charts": true }));
+    assert_eq!(tree["charts"][0]["type"], "col");
+    assert_eq!(tree["charts"][0]["series"].as_array().unwrap().len(), 2);
+    let xml = part_text(&out, "word/charts/chart1.xml");
+    assert!(xml.contains("barChart"));
+    assert!(!xml.contains("lineChart"));
+}
+
+#[test]
+fn combo_set_type_combo_is_invalid_field() {
+    let path = write_sample("combo-bad", true);
+    let err = apply_err(
+        &path,
+        json!([{ "op": "setChartType", "id": "para:AAAA0001/chart:7", "type": "combo" }]),
+    );
+    assert_eq!(err.code(), ErrorCode::InvalidField);
 }
 
 #[test]
@@ -635,4 +667,354 @@ fn pie_insert_requires_one_series() {
         json!([{ "op": "insertChart", "id": "para:AAAA0001/chart:7", "type": "col", "series": [{ "values": [1] }] }]),
     );
     assert_eq!(err.code(), ErrorCode::InvalidId);
+}
+
+const BUBBLE_SER: &str = r#"<c:ser><c:idx val="0"/><c:order val="0"/><c:tx><c:strRef><c:f>Sheet1!$B$1</c:f><c:strCache><c:ptCount val="1"/><c:pt idx="0"><c:v>系列甲</c:v></c:pt></c:strCache></c:strRef></c:tx><c:xVal><c:strRef><c:f>Sheet1!$A$2:$A$4</c:f><c:strCache><c:ptCount val="3"/><c:pt idx="0"><c:v>甲</c:v></c:pt><c:pt idx="1"><c:v>乙</c:v></c:pt><c:pt idx="2"><c:v>丙</c:v></c:pt></c:strCache></c:strRef></c:xVal><c:yVal><c:numRef><c:f>Sheet1!$B$2:$B$4</c:f><c:numCache><c:formatCode>General</c:formatCode><c:ptCount val="3"/><c:pt idx="0"><c:v>1</c:v></c:pt><c:pt idx="1"><c:v>2</c:v></c:pt><c:pt idx="2"><c:v>3</c:v></c:pt></c:numCache></c:numRef></c:yVal><c:bubbleSize><c:numRef><c:f>Sheet1!$C$2:$C$4</c:f><c:numCache><c:formatCode>General</c:formatCode><c:ptCount val="3"/><c:pt idx="0"><c:v>4</c:v></c:pt><c:pt idx="1"><c:v>5</c:v></c:pt><c:pt idx="2"><c:v>6</c:v></c:pt></c:numCache></c:numRef></c:bubbleSize></c:ser>"#;
+
+const XY_AXES: &str = r#"<c:valAx><c:axId val="1"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="b"/><c:crossAx val="2"/></c:valAx><c:valAx><c:axId val="2"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="l"/><c:crossAx val="1"/></c:valAx>"#;
+
+fn embed_xlsx_bubble() -> Vec<u8> {
+    let path = tmp_dir().join(format!(
+        "embed-b-{}.xlsx",
+        SEQ.fetch_add(1, Ordering::Relaxed)
+    ));
+    run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "create",
+            "path": path.to_string_lossy(),
+            "workbook": {
+                "sheets": [{
+                    "name": "Sheet1",
+                    "cells": [
+                        { "ref": "A2", "value": "甲" },
+                        { "ref": "A3", "value": "乙" },
+                        { "ref": "A4", "value": "丙" },
+                        { "ref": "B1", "value": "系列甲" },
+                        { "ref": "B2", "value": 1 },
+                        { "ref": "B3", "value": 2 },
+                        { "ref": "B4", "value": 3 },
+                        { "ref": "C2", "value": 4 },
+                        { "ref": "C3", "value": 5 },
+                        { "ref": "C4", "value": 6 }
+                    ]
+                }]
+            }
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap();
+    std::fs::read(&path).unwrap()
+}
+
+fn chart_xml_kind(kind: &str) -> String {
+    let (plot, axes, extra) = match kind {
+        "doughnut" => (
+            format!(r#"<c:doughnutChart><c:varyColors val="1"/>{SER0}<c:holeSize val="50"/></c:doughnutChart>"#),
+            String::new(),
+            "",
+        ),
+        "radar" => (
+            format!(r#"<c:radarChart><c:radarStyle val="marker"/>{SER0}{SER1}<c:axId val="1"/><c:axId val="2"/></c:radarChart>"#),
+            AXES.to_string(),
+            "",
+        ),
+        "bubble" => (
+            format!(r#"<c:bubbleChart><c:varyColors val="0"/>{BUBBLE_SER}<c:bubbleScale val="100"/><c:axId val="1"/><c:axId val="2"/></c:bubbleChart>"#),
+            XY_AXES.to_string(),
+            "",
+        ),
+        "stock" => (
+            format!(r#"<c:stockChart>{SER0}{SER1}<c:axId val="1"/><c:axId val="2"/></c:stockChart>"#),
+            AXES.to_string(),
+            "",
+        ),
+        "pivot" => (
+            format!(r#"<c:barChart><c:barDir val="col"/><c:grouping val="clustered"/>{SER0}{SER1}<c:axId val="1"/><c:axId val="2"/></c:barChart>"#),
+            AXES.to_string(),
+            r#"<c:pivotSource><c:name>[0]!Pivot</c:name><c:fmtId val="0"/></c:pivotSource>"#,
+        ),
+        _ => panic!("未知 kind {kind}"),
+    };
+    format!(
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">{extra}<c:chart><c:title><c:tx><c:rich><a:bodyPr/><a:lstStyle/><a:p><a:r><a:t>销量</a:t></a:r></a:p></c:rich></c:tx></c:title><c:autoTitleDeleted val="0"/><c:plotArea><c:layout/>{plot}{axes}</c:plotArea><c:legend><c:legendPos val="r"/><c:overlay val="0"/></c:legend><c:plotVisOnly val="1"/></c:chart><c:externalData r:id="rId1"><c:autoUpdate val="0"/></c:externalData></c:chartSpace>"#
+    )
+}
+
+fn write_kind(tag: &str, kind: &str) -> PathBuf {
+    let embed = if kind == "bubble" {
+        embed_xlsx_bubble()
+    } else {
+        embed_xlsx()
+    };
+    let doc = document_xml();
+    let chart = chart_xml_kind(kind);
+    write_zip(
+        tag,
+        &[
+            ("[Content_Types].xml", CT.as_bytes()),
+            ("_rels/.rels", ROOT_RELS.as_bytes()),
+            ("word/document.xml", doc.as_bytes()),
+            ("word/_rels/document.xml.rels", DOC_RELS.as_bytes()),
+            ("word/styles.xml", STYLES.as_bytes()),
+            ("word/charts/chart1.xml", chart.as_bytes()),
+            ("word/charts/_rels/chart1.xml.rels", CHART_RELS.as_bytes()),
+            (
+                "word/embeddings/Microsoft_Excel_Worksheet1.xlsx",
+                &embed,
+            ),
+        ],
+    )
+}
+
+#[test]
+fn inspect_doughnut_radar_bubble_types() {
+    let d = write_kind("d", "doughnut");
+    let r = write_kind("r", "radar");
+    let b = write_kind("b", "bubble");
+    let td = inspect(&d, json!({ "charts": true }));
+    let tr = inspect(&r, json!({ "charts": true }));
+    let tb = inspect(&b, json!({ "charts": true }));
+    assert_eq!(td["charts"][0]["type"], "doughnut");
+    assert_eq!(tr["charts"][0]["type"], "radar");
+    assert_eq!(tb["charts"][0]["type"], "bubble");
+    let s = &tb["charts"][0]["series"][0];
+    assert_eq!(
+        object_keys(s),
+        ["id", "index", "name", "categories", "values", "sizes"]
+    );
+    assert_eq!(s["categories"], json!(["甲", "乙", "丙"]));
+    assert_eq!(nums(&s["values"]), vec![1, 2, 3]);
+    assert_eq!(nums(&s["sizes"]), vec![4, 5, 6]);
+}
+
+#[test]
+fn set_doughnut_and_radar_series() {
+    let path = write_kind("dn-set", "doughnut");
+    let out = tmp_dir().join("dn-set-out.docx");
+    apply(
+        &path,
+        &out,
+        json!([{
+            "op": "setChartSeries",
+            "id": "para:AAAA0001/chart:7/series:0",
+            "values": [9, 8, 7]
+        }]),
+    );
+    let tree = inspect(&out, json!({ "charts": true }));
+    assert_eq!(tree["charts"][0]["type"], "doughnut");
+    assert_eq!(nums(&tree["charts"][0]["series"][0]["values"]), vec![9, 8, 7]);
+
+    let path = write_kind("rd-set", "radar");
+    let out = tmp_dir().join("rd-set-out.docx");
+    apply(
+        &path,
+        &out,
+        json!([{
+            "op": "setChartSeries",
+            "id": "para:AAAA0001/chart:7/series:0",
+            "values": [11, 12, 13]
+        }]),
+    );
+    let tree = inspect(&out, json!({ "charts": true }));
+    assert_eq!(tree["charts"][0]["type"], "radar");
+    assert_eq!(nums(&tree["charts"][0]["series"][0]["values"]), vec![11, 12, 13]);
+}
+
+#[test]
+fn set_bubble_values_and_sizes() {
+    let path = write_kind("bb-set", "bubble");
+    let out = tmp_dir().join("bb-set-out.docx");
+    apply(
+        &path,
+        &out,
+        json!([{
+            "op": "setChartSeries",
+            "id": "para:AAAA0001/chart:7/series:0",
+            "values": [10, 20, 30],
+            "sizes": [40, 50, 60]
+        }]),
+    );
+    let tree = inspect(&out, json!({ "charts": true }));
+    let s = &tree["charts"][0]["series"][0];
+    assert_eq!(nums(&s["values"]), vec![10, 20, 30]);
+    assert_eq!(nums(&s["sizes"]), vec![40, 50, 60]);
+    let err = apply_err(
+        &write_sample("sizes-col", false),
+        json!([{
+            "op": "setChartSeries",
+            "id": "para:AAAA0001/chart:7/series:0",
+            "sizes": [1, 2, 3]
+        }]),
+    );
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+}
+
+#[test]
+fn insert_doughnut_radar_bubble_combo() {
+    let path = write_sample("ins-ext", false);
+    let out = tmp_dir().join("ins-ext-out.docx");
+    apply(
+        &path,
+        &out,
+        json!([
+            {
+                "op": "insertChart",
+                "id": "para:AAAA0001",
+                "type": "doughnut",
+                "title": "环",
+                "series": [{ "name": "环", "categories": ["A", "B"], "values": [1, 2] }]
+            },
+            {
+                "op": "insertChart",
+                "id": "para:AAAA0001",
+                "type": "radar",
+                "series": [{ "name": "雷", "categories": ["A", "B"], "values": [3, 4] }]
+            },
+            {
+                "op": "insertChart",
+                "id": "para:AAAA0001",
+                "type": "bubble",
+                "series": [{ "name": "泡", "categories": [1, 2], "values": [3, 4], "sizes": [5, 6] }]
+            },
+            {
+                "op": "insertChart",
+                "id": "para:AAAA0001",
+                "type": "combo",
+                "series": [
+                    { "type": "col", "name": "柱", "categories": ["A", "B"], "values": [1, 2] },
+                    { "type": "line", "name": "线", "categories": ["A", "B"], "values": [3, 4] }
+                ]
+            }
+        ]),
+    );
+    let tree = inspect(&out, json!({ "charts": true }));
+    let types: Vec<&str> = tree["charts"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|c| c["type"].as_str().unwrap())
+        .collect();
+    assert!(types.contains(&"doughnut"));
+    assert!(types.contains(&"radar"));
+    assert!(types.contains(&"bubble"));
+    assert!(types.contains(&"combo"));
+    let bubble = tree["charts"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c["type"] == "bubble")
+        .unwrap();
+    assert_eq!(nums(&bubble["series"][0]["sizes"]), vec![5, 6]);
+    let combo = tree["charts"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c["type"] == "combo")
+        .unwrap();
+    assert_eq!(combo["series"].as_array().unwrap().len(), 2);
+}
+
+#[test]
+fn insert_doughnut_two_series_and_combo_rules() {
+    let path = write_sample("ins-bad", false);
+    let err = apply_err(
+        &path,
+        json!([{
+            "op": "insertChart",
+            "id": "para:AAAA0001",
+            "type": "doughnut",
+            "series": [{ "values": [1] }, { "values": [2] }]
+        }]),
+    );
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+    let err = apply_err(
+        &path,
+        json!([{
+            "op": "insertChart",
+            "id": "para:AAAA0001",
+            "type": "combo",
+            "series": [
+                { "type": "col", "values": [1, 2] },
+                { "type": "col", "values": [3, 4] }
+            ]
+        }]),
+    );
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+    let err = apply_err(
+        &path,
+        json!([{
+            "op": "insertChart",
+            "id": "para:AAAA0001",
+            "type": "col",
+            "series": [{ "type": "line", "values": [1, 2] }]
+        }]),
+    );
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+}
+
+#[test]
+fn set_type_pie_doughnut_and_scatter_bubble() {
+    let path = write_kind("pie-dn", "doughnut");
+    let out = tmp_dir().join("pie-dn-out.docx");
+    apply(
+        &path,
+        &out,
+        json!([{ "op": "setChartType", "id": "para:AAAA0001/chart:7", "type": "pie" }]),
+    );
+    assert_eq!(inspect(&out, json!({ "charts": true }))["charts"][0]["type"], "pie");
+
+    let path = write_kind("bb-sc", "bubble");
+    let out = tmp_dir().join("bb-sc-out.docx");
+    apply(
+        &path,
+        &out,
+        json!([{ "op": "setChartType", "id": "para:AAAA0001/chart:7", "type": "scatter" }]),
+    );
+    let tree = inspect(&out, json!({ "charts": true }));
+    assert_eq!(tree["charts"][0]["type"], "scatter");
+    assert!(tree["charts"][0]["series"][0].get("sizes").is_none());
+}
+
+#[test]
+fn pivot_title_ok_series_blocked() {
+    let path = write_kind("pv", "pivot");
+    let tree = inspect(&path, json!({ "charts": true }));
+    assert_eq!(tree["charts"][0]["flags"], json!(["pivot"]));
+    let out = tmp_dir().join("pv-title.docx");
+    apply(
+        &path,
+        &out,
+        json!([{ "op": "setChartTitle", "id": "para:AAAA0001/chart:7", "title": "透视标题" }]),
+    );
+    assert_eq!(
+        inspect(&out, json!({ "charts": true }))["charts"][0]["title"],
+        "透视标题"
+    );
+    let before = std::fs::read(&path).unwrap();
+    let err = apply_err(
+        &path,
+        json!([{
+            "op": "setChartSeries",
+            "id": "para:AAAA0001/chart:7/series:0",
+            "values": [1, 2, 3]
+        }]),
+    );
+    assert_eq!(err.code(), ErrorCode::NotImplemented);
+    assert_eq!(std::fs::read(&path).unwrap(), before);
+}
+
+#[test]
+fn stock_set_type_is_not_implemented() {
+    let path = write_kind("st", "stock");
+    let tree = inspect(&path, json!({ "charts": true }));
+    assert_eq!(tree["charts"][0]["type"], "other");
+    let before = std::fs::read(&path).unwrap();
+    let err = apply_err(
+        &path,
+        json!([{ "op": "setChartType", "id": "para:AAAA0001/chart:7", "type": "col" }]),
+    );
+    assert_eq!(err.code(), ErrorCode::NotImplemented);
+    assert_eq!(std::fs::read(&path).unwrap(), before);
 }

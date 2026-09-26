@@ -178,18 +178,22 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::ChartNotFound { id } => format!("找不到图表：{id}"),
         ErrorKind::ChartSeriesNotFound { id } => format!("找不到图表系列：{id}"),
         ErrorKind::NeedChartSeriesField => {
-            "setChartSeries 至少要给 name、categories 或 values 之一".into()
+            "setChartSeries 至少要给 name、categories、values 或 sizes 之一".into()
         }
         ErrorKind::LastChartSeries => "不能删光图表里的全部系列，整张去掉请用 deleteChart".into(),
         ErrorKind::RestrictedChart { id } => {
-            format!("组合图、扩展图、次轴、趋势线、误差线或透视图表除删除与改尺寸绕排外不能编辑：{id}")
+            format!("此图表不能按此操作编辑：{id}")
         }
         ErrorKind::InvalidChartType => {
-            "type 必须是 bar、col、line、pie、area 或 scatter".into()
+            "type 必须是 bar、col、line、pie、area、scatter、doughnut、radar 或 bubble；insertChart 还可为 combo".into()
         }
         ErrorKind::InvalidChartAxis => "axis 必须是 cat 或 val，且图表里要有对应主轴".into(),
         ErrorKind::InvalidLegendPos => "pos 必须是 b、t、l、r 或 tr".into(),
-        ErrorKind::PieNeedsOneSeries => "饼图必须恰好一条系列".into(),
+        ErrorKind::PieNeedsOneSeries => "饼图与圆环图必须恰好一条系列".into(),
+        ErrorKind::SizesOnNonBubble => "sizes 只对气泡系列有意义".into(),
+        ErrorKind::InvalidComboSeriesType => {
+            "系列 type 必须是 bar、col、line、area 或 scatter，且只有组合图才能带".into()
+        }
         ErrorKind::ChartTypeNotConvertible => "这种图表类型无法无损转换".into(),
         ErrorKind::NeedChartCategories => {
             "addChartSeries 省略 categories 时图表里必须已有系列可抄".into()

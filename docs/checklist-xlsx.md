@@ -6,14 +6,13 @@
 
 ## 本机结果（2026-09-26）
 
-Microsoft Excel 16.0 已打开，用户确认通过。本机若装了 WPS，`Excel.Application` 会被抢走，测试仍直接启动 `EXCEL.EXE` 再挂 COM。C2（WPS 打开）已放弃。
+Microsoft Excel 16.0 已打开，用户确认通过。本机若装了 WPS，`Excel.Application` 会被抢走，测试仍直接启动 `EXCEL.EXE` 再挂 COM。
 
 C、I、A、O 这几组现在由 `manual-check/office/cases/xlsx-*.ps1` 自动判定，跑 `pwsh -File manual-check\office\run.ps1 -Case 'xlsx-*'` 即可复现，逐条结果落在 `manual-check/office/out/office-results.csv`。
 
 | 序号 | 状态 | 结果 |
 | --- | --- | --- |
 | C1 | ✅ | Excel 16.0 打开 `manual-check/office/out/xlsx-create.xlsx`，标题栏无 Repair |
-| C2 | 🚫 | 不再要求 WPS。此前 WPS 表格已打开过，不作为验收条件 |
 | C3–C7 | ✅ | Excel：Sheet1、A1=1、A2=hello、A3=TRUE、B1=`=SUM(A1)` 且值为 1 |
 | I1–I6 | ✅ | 有范围的 inspect 含 A1/A2/A3/B1、无 E1；无 scope 时没有 `cells` |
 | A1 | ✅ | Excel 打开 `out/xlsx-applied.xlsx`，标题栏无 Repair |
@@ -28,7 +27,6 @@ C、I、A、O 这几组现在由 `manual-check/office/cases/xlsx-*.ps1` 自动�
 | 序号 | 检查 | 通过标准 |
 | --- | --- | --- |
 | C1 | Excel 打开 | 无修复提示、无「文件损坏」 |
-| C2 | WPS 打开 | 🚫 第一期不跑。验收只认 Microsoft Excel |
 | C3 | 工作表名 | 存在 `Sheet1` |
 | C4 | A1 | 数字 `1` |
 | C5 | A2 | 文本 `hello` |

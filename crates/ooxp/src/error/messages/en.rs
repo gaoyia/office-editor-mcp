@@ -208,22 +208,28 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::ChartNotFound { id } => format!("Chart not found: {id}"),
         ErrorKind::ChartSeriesNotFound { id } => format!("Chart series not found: {id}"),
         ErrorKind::NeedChartSeriesField => {
-            "setChartSeries needs at least one of name, categories, or values".into()
+            "setChartSeries needs at least one of name, categories, values, or sizes".into()
         }
         ErrorKind::LastChartSeries => {
             "Cannot delete the last series in a chart; use deleteChart to remove the chart".into()
         }
         ErrorKind::RestrictedChart { id } => {
-            format!("Combo, extended, secondary-axis, trendline, error-bar, or pivot charts cannot be edited except delete and size/wrap: {id}")
+            format!("This chart cannot be edited with this operation: {id}")
         }
         ErrorKind::InvalidChartType => {
-            "type must be bar, col, line, pie, area, or scatter".into()
+            "type must be bar, col, line, pie, area, scatter, doughnut, radar, or bubble; insertChart also allows combo".into()
         }
         ErrorKind::InvalidChartAxis => {
             "axis must be cat or val, and the chart must have that primary axis".into()
         }
         ErrorKind::InvalidLegendPos => "pos must be b, t, l, r, or tr".into(),
-        ErrorKind::PieNeedsOneSeries => "A pie chart must have exactly one series".into(),
+        ErrorKind::PieNeedsOneSeries => {
+            "A pie or doughnut chart must have exactly one series".into()
+        }
+        ErrorKind::SizesOnNonBubble => "sizes is only valid on a bubble series".into(),
+        ErrorKind::InvalidComboSeriesType => {
+            "series type must be bar, col, line, area, or scatter, and only combo charts may use it".into()
+        }
         ErrorKind::ChartTypeNotConvertible => {
             "This chart type cannot be converted without loss".into()
         }

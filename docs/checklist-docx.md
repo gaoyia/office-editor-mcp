@@ -6,14 +6,13 @@
 
 ## 本机结果（2026-09-26）
 
-Microsoft Word 16.0 已打开，用户确认通过。create、inspect、apply 三组都过了。O1 已放弃，见下表。本机若装了 WPS，`Word.Application` 会被抢走，测试仍直接启动 `WINWORD.EXE` 再挂 COM。A11 补过 `word/settings.xml` 之后，2026-09-26 用新 `docx-create.docx` 重跑，Word 报 `CompatibilityMode=15`。C2（WPS 打开）已放弃。
+Microsoft Word 16.0 已打开，用户确认通过。create、inspect、apply 三组都过了。O1 已放弃，见下表。本机若装了 WPS，`Word.Application` 会被抢走，测试仍直接启动 `WINWORD.EXE` 再挂 COM。A11 补过 `word/settings.xml` 之后，2026-09-26 用新 `docx-create.docx` 重跑，Word 报 `CompatibilityMode=15`。
 
 C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，跑 `pwsh -File manual-check\office\run.ps1 -Case 'docx-*'` 即可复现，逐条结果落在 `manual-check/office/out/office-results.csv`。
 
 | 序号 | 状态 | 结果 |
 | --- | --- | --- |
 | C1 | ✅ | Word 16.0 能打开 `manual-check/office/out/docx-create.docx`，标题栏无 Repair；`CompatibilityMode=15` |
-| C2 | 🚫 | 不再要求 WPS。此前 WPS 文字已打开过，不作为验收条件 |
 | C3–C4 | ✅ | 标题 1 / 「标题」，正文 `hello` |
 | C5–C7 | ✅ | Word 16.0：`docx-create-pictures.ps1`，4 PASS / 0 FAIL。第二段行内图 `para:00000002/pic:1`；默认页眉浮动 `square`；标题栏无 Repair，正文与页眉都能看见图 |
 | I1–I5 | ✅ | `docx:document`、`paraCount=2`、大纲 level 1、「标题」、`para:{hex}` 且 `stable`、无 scope 时没有 `paragraphs`，仍有 `pictureCount` |
@@ -27,7 +26,8 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 | T1–T9 | ✅ | Word 16.0：`docx-textbox.ps1`，13 PASS / 0 FAIL。行内+浮动+链接+组合；框内改字、插删框、尺寸 144 磅、绕排、红填蓝边、框内插删段与插图、断开再接上。标题栏无 Repair |
 | N1–N6 | ✅ | Word 16.0：`docx-notes.ps1`，7 PASS / 0 FAIL。计数与名单、改注文、插删脚注、编号 `NumberStyle=1`（大写罗马）、注内插图。标题栏无 Repair |
 | Cmt1–Cmt7 | ✅ | Word 16.0：`docx-comments.ps1`，8 PASS / 0 FAIL。计数与名单、改字、插删、回复线程（`Comments.Count=4` 且 `Replies=1`）、完成标记、批注内插图。标题栏无 Repair |
-| Ch1–Ch8 | ✅ | Word 16.0：`docx-charts.ps1`，9 PASS / 0 FAIL。计数与名单（COM 系列值对得上）、改系列为 11/22/33/44、插饼图、删除、改折线、关图例开标签、组合图 `NotImplemented` 且未写文件、`exportChartData` 与 embedding 字节一致。标题栏无 Repair |
+| Ch1–Ch8 | ✅ | Word 16.0：`docx-charts.ps1`，9 PASS / 0 FAIL。计数与名单（COM 系列值对得上）、改系列为 11/22/33/44、插饼图、删除、改折线、关图例开标签、组合图当时 `NotImplemented` 且未写文件、`exportChartData` 与 embedding 字节一致。标题栏无 Repair。组合图改数与改类型见下方 Cx 组 |
+| Cx1–Cx8 | ✅ | Word 16.0：`docx-charts-ext.ps1`，8 PASS / 0 FAIL。圆环 / 雷达 / 气泡各自有 `type`；改数、插入、组合图改数与收成柱形、透视改标题、股价仍 `NotImplemented`。标题栏无 Repair |
 | O1 | 🚫 | 领域层不做原样保存，与 xlsx 清单相同。零脏写回见 OPC 库测试。Word 另存 create 产物见 `docx-O1-word-resave`。此前记的 `SaveAs2` 挂起，拆分后重跑没再出现，一秒内返回 |
 
 ## create
@@ -37,7 +37,6 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 | 序号 | 检查 | 通过标准 |
 | --- | --- | --- |
 | C1 | Word 打开 | 无修复提示、无「文件损坏」；`CompatibilityMode` 为 `15` |
-| C2 | WPS 打开 | 🚫 第一期不跑。验收只认 Microsoft Word |
 | C3 | 第一段 | 样式为标题 1，文字为 `标题` |
 | C4 | 第二段 | 正文，文字为 `hello` |
 | C5 | 带图正文 | 用 `docs/examples/docx-create-pictures.json`（换成本机 PNG）生成；第二段有行内图，inspect id 为 `para:…/pic:1` |
@@ -196,8 +195,23 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 | Ch4 | 删除 | ✅ `deleteChart` 后图与数据都消失，无修复 |
 | Ch5 | 改类型 | ✅ `setChartType` 为 `line` 后 Word 按折线显示（允许样式重置） |
 | Ch6 | 图例与标签 | ✅ `setChartLegend` / `setChartDataLabels` 后 Word 无修复，开关能对上 |
-| Ch7 | 组合图 | ✅ 对组合图发 `setChartType` 得到 `NotImplemented`，文件未写坏 |
+| Ch7 | 组合图 | ✅ 当时对组合图发 `setChartType` 得到 `NotImplemented`，文件未写坏。现行契约已放开，改看 Cx5–Cx6 |
 | Ch8 | 导出数据 | ✅ `exportChartData` 写出的 xlsx 与 embedding 部件字节一致。不强制开 Word |
+
+## 扩展图表
+
+准备一份 Word 亲手另存的样例：至少各一张圆环、雷达、气泡、柱线组合，以及一张带 `flags.pivot` 的图（可用 Excel 透视图表粘进 Word 再另存）。不要用库 `create` 产物当唯一样例。手测脚本为 `manual-check/office/cases/docx-charts-ext.ps1`。编号用 Cx。
+
+| 序号 | 检查 | 通过标准 |
+| --- | --- | --- |
+| Cx1 | 类型 | ✅ 圆环 / 雷达 / 气泡的 `type` 分别为 `doughnut` / `radar` / `bubble`，不再是 `other`；气泡系列有 `sizes`，值与数据表一致 |
+| Cx2 | 改圆环或雷达 | ✅ `setChartSeries` 后 Word 无修复，数据表是新值 |
+| Cx3 | 改气泡 | ✅ `setChartSeries` 改 `values` 与 `sizes` 后 Word 无修复 |
+| Cx4 | 插入 | ✅ `insertChart` 一张圆环、一张雷达后 Word 能看见，无修复 |
+| Cx5 | 组合图改数 | ✅ 组合图 `setChartSeries` 后两条系列的值都对，无修复 |
+| Cx6 | 组合图改类型 | ✅ 组合图 `setChartType` 为 `col` 后变成柱形，无修复 |
+| Cx7 | 透视图表 | ✅ `setChartTitle` 能改；`setChartSeries` 得到 `NotImplemented`，文件未写坏 |
+| Cx8 | 仍受限 | ✅ 对股价或曲面图（`type=other`）发 `setChartType` 得到 `NotImplemented`，文件未写坏 |
 
 ## SmartArt
 

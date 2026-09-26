@@ -1,5 +1,7 @@
 //! docx 自己的 scope 与 ops 解析。
 
+use std::collections::HashSet;
+
 use serde_json::Value;
 
 use crate::error::{Error, ErrorKind, IdReason, ScopeNeed, TypeName};
@@ -2196,10 +2198,33 @@ fn parse_insert_chart(
             ));
         }
     };
-    let series = parse_insert_series(obj.get("series"), i)?;
-    if chart_type == ChartType::Pie && series.len() != 1 {
+    let series = parse_insert_series(obj.get("series"), i, chart_type)?;
+    if chart_type.needs_one_series() && series.len() != 1 {
         return Err(Error::with_path(
             ErrorKind::PieNeedsOneSeries,
+            format!("ops[{i}].series"),
+        ));
+    }
+    if chart_type == ChartType::Combo {
+        let kinds: HashSet<&str> = series
+            .iter()
+            .filter_map(|s| s.series_type.map(ChartType::as_str))
+            .collect();
+        if series.iter().any(|s| s.series_type.is_none()) || kinds.len() < 2 {
+            return Err(Error::with_path(
+                ErrorKind::InvalidComboSeriesType,
+                format!("ops[{i}].series"),
+            ));
+        }
+    } else if series.iter().any(|s| s.series_type.is_some()) {
+        return Err(Error::with_path(
+            ErrorKind::InvalidComboSeriesType,
+            format!("ops[{i}].series"),
+        ));
+    }
+    if chart_type != ChartType::Bubble && series.iter().any(|s| s.sizes.is_some()) {
+        return Err(Error::with_path(
+            ErrorKind::SizesOnNonBubble,
             format!("ops[{i}].series"),
         ));
     }
@@ -2270,7 +2295,11 @@ fn parse_insert_chart(
     })
 }
 
-fn parse_insert_series(v: Option<&Value>, i: usize) -> Result<Vec<NewSeries>, Error> {
+fn parse_insert_series(
+    v: Option<&Value>,
+    i: usize,
+    _chart_type: ChartType,
+) -> Result<Vec<NewSeries>, Error> {
     let arr = match v {
         Some(Value::Array(a)) if !a.is_empty() => a,
         Some(Value::Array(_)) | None => {
@@ -2303,7 +2332,7 @@ fn parse_insert_series(v: Option<&Value>, i: usize) -> Result<Vec<NewSeries>, Er
                 format!("ops[{i}].series[{j}]"),
             )
         })?;
-        deny_keys(obj, i, &["name", "categories", "values"])?;
+        deny_keys(obj, i, &["name", "categories", "values", "sizes", "type"])?;
         let name = match obj.get("name") {
             None | Some(Value::Null) => None,
             Some(Value::String(s)) => Some(s.clone()),
@@ -2329,10 +2358,18 @@ fn parse_insert_series(v: Option<&Value>, i: usize) -> Result<Vec<NewSeries>, Er
                     format!("ops[{i}].series[{j}].values"),
                 )
             })?;
+        let sizes = parse_datum_list(obj.get("sizes"), i, &format!("series[{j}].sizes"))?;
+        let series_type = parse_optional_combo_series_type(
+            obj.get("type"),
+            i,
+            &format!("series[{j}].type"),
+        )?;
         out.push(NewSeries {
             name,
             categories,
             values,
+            sizes,
+            series_type,
         });
     }
     Ok(out)
@@ -2383,7 +2420,7 @@ fn parse_set_chart_series(
     obj: &serde_json::Map<String, Value>,
     i: usize,
 ) -> Result<charts::SetChartSeriesOp, Error> {
-    deny_keys(obj, i, &["op", "id", "name", "categories", "values"])?;
+    deny_keys(obj, i, &["op", "id", "name", "categories", "values", "sizes"])?;
     let id = require_id(obj, i)?;
     let target = charts::parse_series_id(&id, i)?;
     let name = match obj.get("name") {
@@ -2401,7 +2438,8 @@ fn parse_set_chart_series(
     };
     let categories = parse_datum_list(obj.get("categories"), i, "categories")?;
     let values = parse_datum_list(obj.get("values"), i, "values")?;
-    if name.is_none() && categories.is_none() && values.is_none() {
+    let sizes = parse_datum_list(obj.get("sizes"), i, "sizes")?;
+    if name.is_none() && categories.is_none() && values.is_none() && sizes.is_none() {
         return Err(Error::with_path(
             ErrorKind::NeedChartSeriesField,
             format!("ops[{i}]"),
@@ -2413,6 +2451,7 @@ fn parse_set_chart_series(
         name,
         categories,
         values,
+        sizes,
     })
 }
 
@@ -2420,7 +2459,7 @@ fn parse_add_chart_series(
     obj: &serde_json::Map<String, Value>,
     i: usize,
 ) -> Result<charts::AddChartSeriesOp, Error> {
-    deny_keys(obj, i, &["op", "id", "name", "categories", "values"])?;
+    deny_keys(obj, i, &["op", "id", "name", "categories", "values", "sizes", "type"])?;
     let id = require_id(obj, i)?;
     let target = charts::parse_chart_id(&id, i)?;
     let name = match obj.get("name") {
@@ -2448,12 +2487,16 @@ fn parse_add_chart_series(
                 format!("ops[{i}].values"),
             )
         })?;
+    let sizes = parse_datum_list(obj.get("sizes"), i, "sizes")?;
+    let series_type = parse_optional_combo_series_type(obj.get("type"), i, "type")?;
     Ok(charts::AddChartSeriesOp {
         id,
         target,
         name,
         categories,
         values,
+        sizes,
+        series_type,
     })
 }
 
@@ -2475,6 +2518,12 @@ fn parse_set_chart_type(
     let id = require_id(obj, i)?;
     let target = charts::parse_chart_id(&id, i)?;
     let chart_type = parse_chart_type_field(obj.get("type"), i, true)?;
+    if chart_type == ChartType::Combo {
+        return Err(Error::with_path(
+            ErrorKind::InvalidChartType,
+            format!("ops[{i}].type"),
+        ));
+    }
     Ok(charts::SetChartTypeOp {
         id,
         target,
@@ -2713,6 +2762,28 @@ fn parse_set_chart_wrap(
             offset_y,
         },
     })
+}
+
+fn parse_optional_combo_series_type(
+    v: Option<&Value>,
+    i: usize,
+    field: &str,
+) -> Result<Option<ChartType>, Error> {
+    match v {
+        None | Some(Value::Null) => Ok(None),
+        Some(Value::String(s)) => ChartType::parse_combo_series(s)
+            .map(Some)
+            .ok_or_else(|| {
+                Error::with_path(ErrorKind::InvalidComboSeriesType, format!("ops[{i}].{field}"))
+            }),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::String,
+            },
+            format!("ops[{i}].{field}"),
+        )),
+    }
 }
 
 fn parse_chart_type_field(v: Option<&Value>, i: usize, required: bool) -> Result<ChartType, Error> {
