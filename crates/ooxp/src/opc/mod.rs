@@ -8,6 +8,6 @@ mod rels;
 pub use content_types::{ContentTypes, CONTENT_TYPES_PART};
 pub use names::resolve_rel_target;
 pub use package::Package;
-pub use rels::{office_document_part, Relationship, Relationships};
+pub use rels::{office_document_part, resolve_id, Relationship, Relationships};
 
 pub const ROOT_RELS_PART: &str = "/_rels/.rels";

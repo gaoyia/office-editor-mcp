@@ -89,10 +89,10 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<SetCellOp>, Error> {
         let op_name = obj.get("op").and_then(Value::as_str).ok_or_else(|| {
             Error::with_path(ErrorCode::InvalidField, "缺少 op", format!("ops[{i}].op"))
         })?;
-        if op_name == "setParaText" {
+        if op_name == "setParaText" || op_name == "setShapeText" {
             return Err(Error::with_path(
                 ErrorCode::InvalidField,
-                "xlsx 不支持 setParaText",
+                format!("xlsx 不支持 {op_name}"),
                 format!("ops[{i}].op"),
             ));
         }

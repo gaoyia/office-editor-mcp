@@ -4,7 +4,7 @@
 #   .\run.ps1 -Case docx-apply     只跑一个
 #   .\run.ps1 -Case xlsx-*         按通配符挑
 #   .\run.ps1 -List                只看有哪些用例
-#   .\run.ps1 -CloseOffice         跑完关掉 Word 和 Excel，不留进程
+#   .\run.ps1 -CloseOffice         跑完关掉 Word、Excel 和 PowerPoint，不留进程
 #
 # 每个用例套独立的 try/catch，一个塌了不影响后面的。
 # 顺序有讲究：inspect 组不用开 Office，先跑；opc-resave 里 Word 可能挂住，放最后。
@@ -22,10 +22,13 @@ $ErrorActionPreference = 'Stop'
 $order = @(
     'xlsx-inspect'
     'docx-inspect'
+    'pptx-inspect'
     'xlsx-create'
     'docx-create'
+    'pptx-create'
     'xlsx-apply'
     'docx-apply'
+    'pptx-apply'
     'opc-resave'
 )
 
@@ -69,7 +72,7 @@ Save-Results 'office-results.csv'
 Close-OfficeApps -Quit:$CloseOffice
 if ($CloseOffice) {
     Start-Sleep -Seconds 2
-    $left = @(Get-Process EXCEL, WINWORD -ErrorAction SilentlyContinue |
+    $left = @(Get-Process EXCEL, WINWORD, POWERPNT -ErrorAction SilentlyContinue |
         Where-Object { $_.Path -like '*Microsoft Office*' })
     Write-Log ("收尾后剩下的 Office 进程数：" + $left.Count)
 }

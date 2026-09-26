@@ -1,6 +1,6 @@
 # 人工验收
 
-`docs/checklist-xlsx.md` 与 `docs/checklist-docx.md` 要求在本机用 Excel、Word、WPS 亲手打开文件。这个目录放的就是那几轮验收的用例脚本。
+`docs/checklist-xlsx.md`、`docs/checklist-docx.md` 与 `docs/checklist-pptx.md` 要求在本机用 Excel、Word、PowerPoint、WPS 亲手打开文件。这个目录放的就是那几轮验收的用例脚本。
 
 ## 目录
 
@@ -30,14 +30,14 @@ manual-check/
 先在仓库根目录 `cargo build`，然后：
 
 ```powershell
-pwsh -File manual-check\office\run.ps1                  # 全跑，约 10 秒
+pwsh -File manual-check\office\run.ps1                  # 全跑
 pwsh -File manual-check\office\run.ps1 -Case docx-apply  # 只跑一个
-pwsh -File manual-check\office\run.ps1 -Case 'xlsx-*'    # 按通配符挑
+pwsh -File manual-check\office\run.ps1 -Case 'pptx-*'    # 按通配符挑
 pwsh -File manual-check\office\run.ps1 -List             # 只看有哪些用例
-pwsh -File manual-check\office\run.ps1 -CloseOffice      # 跑完关掉 Word 和 Excel
+pwsh -File manual-check\office\run.ps1 -CloseOffice      # 跑完关掉 Word、Excel 和 PowerPoint
 ```
 
-默认跑完把 `xlsx-applied.xlsx` 和 `docx-applied.docx` 留在 Office 里，方便接着用肉眼过清单。看完想收拾干净，就加 `-CloseOffice`。
+默认跑完把 `xlsx-applied.xlsx`、`docx-applied.docx` 和 `pptx-applied.pptx` 留在 Office 里，方便接着用肉眼过清单。看完想收拾干净，就加 `-CloseOffice`。
 
 结果打在屏幕上，同时写进 `office/out/office-results.csv`，逐条日志在 `office/out/com-log.txt`。每个用例套独立的 try/catch，一个塌了不影响后面的，所以不必再为了跑完剩下的去复制脚本。
 
@@ -45,7 +45,7 @@ pwsh -File manual-check\office\run.ps1 -CloseOffice      # 跑完关掉 Word 和
 
 几件踩过的坑，都写进注释了，改脚本前先看一眼：
 
-- 本机装了 WPS，`New-Object -ComObject Word.Application` 会被 WPS 抢走。`lib/office-com.ps1` 的做法是直接启动 `WINWORD.EXE` / `EXCEL.EXE`，枚举窗口，再用 `AccessibleObjectFromWindow` 从文档子窗口取原生对象模型。
+- 本机装了 WPS，`New-Object -ComObject Word.Application` 会被 WPS 抢走。`lib/office-com.ps1` 的做法是直接启动 `WINWORD.EXE` / `EXCEL.EXE` / `POWERPNT.EXE`，枚举窗口，再用 `AccessibleObjectFromWindow` 从文档子窗口取原生对象模型。PowerPoint 顶层窗口类是 `PPTFrameClass`，子窗口类是 `mdiClass`（Office 16 没有 `paneClassDC`）。
 - 启动时必须带一个文档。空的 Excel 进程没有 `EXCEL7` 子窗口，`AccessibleObjectFromWindow` 会返回 `hr=0x80004005`。
 - 读 ooxp 的输出不能用 `cmd /c`。ooxp 吐 UTF-8，cmd 按控制台代码页解，中文会坏：偶数长度的悄悄判错，奇数长度的直接把 JSON 撕坏。`Invoke-Ooxp` 显式按 UTF-8 读，并检查退出码。
 - 判断「有没有弹修复提示」要读被测文档自己的标题栏（`$doc.ActiveWindow.Caption`、`$wb.Windows.Item(1).Caption`），不能读 `$app.ActiveWindow`，那可能是别的文档的窗口。

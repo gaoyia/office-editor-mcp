@@ -5,5 +5,9 @@
   "chapter1": "第一章",
   "para2src": "第二段原文",
   "para3keep": "第三段不要改",
-  "para2new": "改过的正文"
+  "para2new": "改过的正文",
+  "page2": "第二页",
+  "shape2src": "第二框原文",
+  "page2keep": "第二页不要改",
+  "shape2new": "改过的正文"
 }

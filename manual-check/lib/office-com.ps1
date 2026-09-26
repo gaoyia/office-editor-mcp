@@ -167,6 +167,56 @@ function Open-WordDoc($word, [string]$path) {
     return $word.Documents.Open($path)
 }
 
+function Ensure-MsPpt([string]$seedDeck) {
+    if ($global:OoxpPpt) { return $global:OoxpPpt }
+    Start-Process -FilePath (Get-OfficeExe 'POWERPNT.EXE') -ArgumentList ('"' + $seedDeck + '"')
+    $p = Wait-OfficeProcess 'POWERPNT' 40
+    # Office 16 的 Native OM 在 mdiClass 上，paneClassDC 这个类本机没有。
+    $app = Bind-OfficeApp $p 'PPTFrameClass' 'mdiClass'
+    $app.DisplayAlerts = 1
+    Write-Log ("PowerPoint Name=$($app.Name) Ver=$($app.Version) Path=$($app.Path) Pid=$($p.Id)")
+    $global:OoxpPpt = $app
+    $global:OoxpPptPid = $p.Id
+    return $app
+}
+
+function Open-PptPres($ppt, [string]$path) {
+    foreach ($pres in @($ppt.Presentations)) {
+        if ($pres.FullName -and ($pres.FullName -ieq $path)) { return $pres }
+    }
+    return $ppt.Presentations.Open($path, $false, $false, $true)
+}
+
+function Close-PptPres($pres) {
+    if ($null -ne $pres) {
+        try { $pres.Close() } catch {}
+        Release-Com $pres
+    }
+}
+
+function Close-PptPresByPath($ppt, [string]$path) {
+    foreach ($pres in @($ppt.Presentations)) {
+        if ($pres.FullName -and ($pres.FullName -ieq $path)) {
+            Write-Log "先关掉 PowerPoint 里开着的 $path"
+            Close-PptPres $pres
+            return
+        }
+    }
+}
+
+function Get-PptCaption($pres) {
+    try {
+        return [string]$pres.Windows.Item(1).Caption
+    } catch {
+        return ''
+    }
+}
+
+function Get-ShapeText($shape) {
+    if ([int]$shape.HasTextFrame -eq 0) { return $null }
+    return [string]$shape.TextFrame.TextRange.Text
+}
+
 function Close-AllWorkbooks($excel) {
     foreach ($wb in @($excel.Workbooks)) {
         try { $wb.Close($false) } catch {}
@@ -239,9 +289,21 @@ function Close-OfficeApps([switch]$Quit) {
                 Close-WordDoc $d
             }
         }
+
+        $ppt = Get-Variable -Name 'OoxpPpt' -Scope Global -ValueOnly -ErrorAction SilentlyContinue
+        if ($ppt) {
+            foreach ($pres in @($ppt.Presentations)) {
+                $full = [string]$pres.FullName
+                if ($full -and -not $full.StartsWith($global:OoxpOutDir, [StringComparison]::OrdinalIgnoreCase)) {
+                    Write-Log "PowerPoint 里还开着本轮之外的文稿，不关它：$full"
+                    continue
+                }
+                Close-PptPres $pres
+            }
+        }
     }
 
-    foreach ($name in 'OoxpExcel', 'OoxpWord') {
+    foreach ($name in 'OoxpExcel', 'OoxpWord', 'OoxpPpt') {
         $app = Get-Variable -Name $name -Scope Global -ValueOnly -ErrorAction SilentlyContinue
         if (-not $app) { continue }
         if ($Quit) {
@@ -265,7 +327,7 @@ function Close-OfficeApps([switch]$Quit) {
 # 进程照样占着两百多兆不走，下一轮还得靠它开文档。文档此时已经全部关掉，
 # 也确认过没有本轮之外的工作簿，硬杀不会丢东西。只杀这一轮绑过的那个 PID。
 function Stop-LingeringOffice {
-    foreach ($pair in @(@('OoxpExcelPid', 'Excel'), @('OoxpWordPid', 'Word'))) {
+    foreach ($pair in @(@('OoxpExcelPid', 'Excel'), @('OoxpWordPid', 'Word'), @('OoxpPptPid', 'PowerPoint'))) {
         # 变量不能叫 $pid，那是 PowerShell 的只读自动变量。
         $procId = Get-Variable -Name $pair[0] -Scope Global -ValueOnly -ErrorAction SilentlyContinue
         if (-not $procId) { continue }

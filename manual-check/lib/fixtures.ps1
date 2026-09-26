@@ -17,6 +17,14 @@ function Ensure-DocxCreate([switch]$Force) {
     return $path
 }
 
+function Ensure-PptxCreate([switch]$Force) {
+    $path = Get-OutPath 'pptx-create.pptx'
+    if ((Test-Path $path) -and -not $Force) { return $path }
+    $req = Get-RequestTemplate 'pptx-create' 'pptx-create.pptx'
+    Invoke-OoxpRequest $req 'pptx-create' | Out-Null
+    return $path
+}
+
 # apply 的源文件要由 Excel 亲手存出来，不能拿 ooxp 自己的产物冒充，
 # 否则等于自己造自己读，测不到真实文件的写法。
 function Ensure-XlsxExcelSource([switch]$Force) {
@@ -91,5 +99,41 @@ function Ensure-DocxWordSource([switch]$Force) {
     Close-WordDoc $doc
     Copy-Item -Force $tmp $path
     Write-Log "saved word source $path"
+    return $path
+}
+
+# apply 的 pptx 源文件要经 PowerPoint 的手。同样走 TEMP 里 Save() 再拷回。
+function Ensure-PptxPptSource([switch]$Force) {
+    $path = Get-OutPath 'pptx-ppt-source.pptx'
+    if ((Test-Path $path) -and -not $Force) { return $path }
+
+    $tmpDir = Join-Path $env:TEMP 'ooxp-office'
+    New-Item -ItemType Directory -Force -Path $tmpDir | Out-Null
+    $tmp = Join-Path $tmpDir 'pptx-ppt-source.pptx'
+    $S = $global:OoxpStrings
+    $req = @{
+        schemaVersion = 1; action = 'create'
+        path = $tmp.Replace('\', '/'); format = 'pptx'
+        presentation = @{
+            slides = @(
+                @{ shapes = @(@{ text = $S.chapter1 }, @{ text = $S.shape2src }) }
+                @{ shapes = @(@{ text = $S.page2keep }) }
+            )
+        }
+    }
+    Invoke-OoxpRequest $req 'pptx-source-create' | Out-Null
+
+    $ppt = Ensure-MsPpt (Ensure-PptxCreate)
+    $pres = Open-PptPres $ppt $tmp
+    $s1 = $pres.Slides.Item(1)
+    $box2 = $s1.Shapes.Item('文本框 2')
+    $box2.TextFrame.TextRange.Font.Bold = $true
+    Write-Log 'PowerPoint Save() 原地覆盖 TEMP 里的源文件'
+    $pres.Save()
+    Close-PptPres $pres
+    Release-Com $box2
+    Release-Com $s1
+    Copy-Item -Force $tmp $path
+    Write-Log "saved ppt source $path"
     return $path
 }

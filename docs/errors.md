@@ -36,7 +36,7 @@
 | `OpcPartMissing` | 入口部件或目标工作表部件不存在 | 3 |
 | `XmlBroken` | 目标部件不是能解析的 XML | 3 |
 | `Io` | 读盘、写盘、创建目录失败 | 4 |
-| `NotImplemented` | 第一期明确不做的动作。目前：对共享公式的主单元格发 `setCell`。pptx 契约确认并实现之后，请求 pptx 不再走这个码 | 2 |
+| `NotImplemented` | 第一期明确不做的动作。目前：对共享公式的主单元格发 `setCell` | 2 |
 
 找不到单元格时，`setCell` 的语义是新建该单元格，因此空单元格不是 `IdNotFound`。找不到工作表才是 `IdNotFound`。找不到段落时，`setParaText` 报 `IdNotFound`，第一期不新建段落。找不到形状时，`setShapeText` 报 `IdNotFound`，第一期不新建形状。对幻灯片 id（`slide:{n}`，没有 `/shape:`）发 `setShapeText` 报 `InvalidId`。
 

@@ -2,7 +2,22 @@
 
 代码阶段的单元测试覆盖 JSON 解析和 XML 不变量。下面这些必须用 PowerPoint 和 WPS 演示各打开一次，不能只靠测试绿。
 
-检查前用 create 或 apply 在本机生成文件，不要用改过扩展名的 zip 目录冒充。本机若 `PowerPoint.Application` 被 WPS 抢走，直接启动 `POWERPNT.EXE` 再挂 COM，不要走被抢的 ProgID。
+检查前用 create 或 apply 在本机生成文件，不要用改过扩展名的 zip 目录冒充。本机若 `PowerPoint.Application` 被 WPS 抢走，直接启动 `POWERPNT.EXE` 再挂 COM，不要走被抢的 ProgID。Office 16 的对象模型在 `mdiClass` 上。
+
+C、I、A 三组由 `manual-check/office/cases/pptx-*.ps1` 自动判定，跑 `pwsh -File manual-check\office\run.ps1 -Case 'pptx-*'` 即可复现。O1 与 xlsx / docx 一样记 SKIP。
+
+## 本机结果（2026-09-26）
+
+Microsoft PowerPoint 16.0 已打开，C1、C3、C4、I1–I5、A1–A5 均 PASS。本机 `PowerPoint.Application` 仍被 WPS 抢走，测试是直接启动 `POWERPNT.EXE`，从 `mdiClass` 挂 COM。C2 留给 WPS。O1 记 SKIP。
+
+| 序号 | 状态 | 结果 |
+| --- | --- | --- |
+| C1 | ✅ | PowerPoint 16.0 能打开 `manual-check/office/out/pptx-create.pptx`，标题栏无 Repair |
+| C2 | ⏭️ | 留给 WPS 那一轮 |
+| C3–C4 | ✅ | 第一页 `标题` / `hello`，第二页 `第二页` |
+| I1–I5 | ✅ | `pptx:presentation`、`slideCount=2`、无 scope 时没有 `shapes`、形状 id 为 `slide:1/shape:2` 且 `stable` |
+| A1–A5 | ✅ | 目标框为「改过的正文」且仍加粗（`Bold=-1`），同页另一框与第二页未改 |
+| O1 | ⚠️ | 与 xlsx / docx 相同：ooxp 没有「什么都不改地保存」 |
 
 ## create
 

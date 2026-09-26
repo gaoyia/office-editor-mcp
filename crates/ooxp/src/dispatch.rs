@@ -8,7 +8,7 @@ use crate::json::{
     self, deny_unknown, infer_format, require_ops, str_field, write_atomic, Action, Format,
     Request, RunOutput,
 };
-use crate::{docx, xlsx};
+use crate::{docx, pptx, xlsx};
 
 pub fn run(input_json: &str, cli_output: Option<&Path>) -> Result<RunOutput, Error> {
     let req = json::parse_request(input_json)?;
@@ -27,9 +27,6 @@ fn run_inspect(req: &Request) -> Result<RunOutput, Error> {
     let path = str_field(&req.obj, "path")?;
     let format = req.obj.get("format").and_then(serde_json::Value::as_str);
     let fmt = infer_format(path, format)?;
-    if matches!(fmt, Format::Pptx) {
-        return Err(Error::new(ErrorCode::NotImplemented, "第一期未实现 pptx"));
-    }
     let bytes = fs::read(path).map_err(|e| io_path(e, PathBuf::from(path)))?;
     let tree = match fmt {
         Format::Xlsx => {
@@ -41,7 +38,8 @@ fn run_inspect(req: &Request) -> Result<RunOutput, Error> {
             docx::inspect(&bytes, scope)?
         }
         Format::Pptx => {
-            return Err(Error::new(ErrorCode::NotImplemented, "第一期未实现 pptx"));
+            let scope = pptx::parse_scope(req.obj.get("scope"))?;
+            pptx::inspect(&bytes, scope)?
         }
     };
     Ok(RunOutput::Inspect(tree))
@@ -57,6 +55,7 @@ fn run_create(req: &Request, cli_output: Option<&Path>) -> Result<RunOutput, Err
             "format",
             "workbook",
             "document",
+            "presentation",
         ],
     )?;
     let path = req
@@ -68,25 +67,27 @@ fn run_create(req: &Request, cli_output: Option<&Path>) -> Result<RunOutput, Err
         .ok_or_else(|| Error::with_path(ErrorCode::InvalidField, "缺少 path", "path"))?;
     let format = req.obj.get("format").and_then(serde_json::Value::as_str);
     let fmt = infer_format(&path.to_string_lossy(), format)?;
-    if matches!(fmt, Format::Pptx) {
-        return Err(Error::new(ErrorCode::NotImplemented, "第一期未实现 pptx"));
-    }
     let has_wb = req.obj.contains_key("workbook");
     let has_doc = req.obj.contains_key("document");
-    if has_wb && has_doc {
+    let has_pres = req.obj.contains_key("presentation");
+    let content_count = [has_wb, has_doc, has_pres]
+        .into_iter()
+        .filter(|b| *b)
+        .count();
+    if content_count > 1 {
         return Err(Error::with_path(
             ErrorCode::InvalidField,
-            "workbook 和 document 不能同时出现",
-            "document",
+            "workbook、document、presentation 不能同时出现",
+            "presentation",
         ));
     }
     let bytes = match fmt {
         Format::Xlsx => {
-            if has_doc {
+            if has_doc || has_pres {
                 return Err(Error::with_path(
                     ErrorCode::InvalidField,
                     "xlsx 的 create 必须用 workbook",
-                    "document",
+                    if has_doc { "document" } else { "presentation" },
                 ));
             }
             let workbook = req.obj.get("workbook").ok_or_else(|| {
@@ -99,11 +100,11 @@ fn run_create(req: &Request, cli_output: Option<&Path>) -> Result<RunOutput, Err
             xlsx::create(workbook)?
         }
         Format::Docx => {
-            if has_wb {
+            if has_wb || has_pres {
                 return Err(Error::with_path(
                     ErrorCode::InvalidField,
                     "docx 的 create 必须用 document",
-                    "workbook",
+                    if has_wb { "workbook" } else { "presentation" },
                 ));
             }
             let document = req.obj.get("document").ok_or_else(|| {
@@ -116,7 +117,21 @@ fn run_create(req: &Request, cli_output: Option<&Path>) -> Result<RunOutput, Err
             docx::create(document)?
         }
         Format::Pptx => {
-            return Err(Error::new(ErrorCode::NotImplemented, "第一期未实现 pptx"));
+            if has_wb || has_doc {
+                return Err(Error::with_path(
+                    ErrorCode::InvalidField,
+                    "pptx 的 create 必须用 presentation",
+                    if has_wb { "workbook" } else { "document" },
+                ));
+            }
+            let presentation = req.obj.get("presentation").ok_or_else(|| {
+                Error::with_path(
+                    ErrorCode::InvalidField,
+                    "create 必须有 presentation",
+                    "presentation",
+                )
+            })?;
+            pptx::create(presentation)?
         }
     };
     write_atomic(&path, &bytes)?;
@@ -134,9 +149,6 @@ fn run_apply(req: &Request, cli_output: Option<&Path>) -> Result<RunOutput, Erro
     let path = str_field(&req.obj, "path")?;
     let format = req.obj.get("format").and_then(serde_json::Value::as_str);
     let fmt = infer_format(path, format)?;
-    if matches!(fmt, Format::Pptx) {
-        return Err(Error::new(ErrorCode::NotImplemented, "第一期未实现 pptx"));
-    }
     let out = req
         .obj
         .get("output")
@@ -158,7 +170,9 @@ fn run_apply(req: &Request, cli_output: Option<&Path>) -> Result<RunOutput, Erro
             (docx::apply(&bytes, &parsed)?, n)
         }
         Format::Pptx => {
-            return Err(Error::new(ErrorCode::NotImplemented, "第一期未实现 pptx"));
+            let parsed = pptx::parse_ops(ops)?;
+            let n = parsed.len();
+            (pptx::apply(&bytes, &parsed)?, n)
         }
     };
     write_atomic(&out, &out_bytes)?;

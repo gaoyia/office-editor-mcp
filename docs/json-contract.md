@@ -2,7 +2,7 @@
 
 `schemaVersion` 固定为 `1`。库和命令行只认这一层。MCP 或其他传输信封不许改这里的字段名和含义。机器可读副本见 [json-schema/request.schema.json](json-schema/request.schema.json)，与本文冲突时以本文为准。
 
-xlsx 与 docx 的 inspect、create、apply 已经定稿并实现。pptx 的三套动作按本文写全，待确认后实现；确认之前请求仍返回 `NotImplemented`。
+xlsx、docx、pptx 的 inspect、create、apply 已经按本文实现。pptx 的 PowerPoint / WPS 演示人工打开见 [checklist-pptx.md](checklist-pptx.md)。
 
 ## 信封
 

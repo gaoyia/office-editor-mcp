@@ -148,7 +148,6 @@ impl Relationships {
     }
 }
 
-#[allow(dead_code)]
 pub fn resolve_id(pkg: &Package, source_part: &str, rid: &str) -> Result<String, Error> {
     let rels = Relationships::from_package(pkg, source_part)?;
     let rel = rels.find_by_id(rid).ok_or_else(|| {

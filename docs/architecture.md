@@ -1,6 +1,6 @@
 # 架构
 
-状态：xlsx 与 docx 第一期已实现，并已通过 Excel / Word / WPS 人工打开。pptx 的领域契约已写入 `docs/`，待确认后再写代码。
+状态：xlsx 与 docx 第一期已实现，并已通过 Excel / Word / WPS 人工打开。pptx 第一期已实现，并已通过 PowerPoint 16.0 人工打开；WPS 演示未跑。
 
 ## 产品形态
 
@@ -24,7 +24,7 @@ MCP 是以后的传输层，第一期不做。将来无论用不用 JSON-RPC，�
 
 ## 模块
 
-建议用 Cargo workspace，两个 crate。xlsx 与 docx 已落地。信封解析在 `json`，按 `format` 分发在 `dispatch`，每种格式自己解析自己的 `scope` 与 `ops`。`pptx` 按确认后的契约实现，确认之前请求返回 `NotImplemented`。
+建议用 Cargo workspace，两个 crate。xlsx、docx、pptx 已落地。信封解析在 `json`，按 `format` 分发在 `dispatch`，每种格式自己解析自己的 `scope` 与 `ops`。
 
 ```text
 crates/ooxp/                 库
@@ -33,7 +33,7 @@ crates/ooxp/                 库
   dispatch/                  按 format 分发给 xlsx / docx / pptx
   xlsx/                      工作簿 inspect / apply / create
   docx/                      文档 inspect / apply / create
-  pptx/                      演示文稿 inspect / apply / create（确认契约后落地）
+  pptx/                      演示文稿 inspect / apply / create
 crates/ooxp-cli/             命令行，只依赖 ooxp。二进制名也是 ooxp
 ```
 
@@ -57,7 +57,7 @@ crates/ooxp-cli/             命令行，只依赖 ooxp。二进制名也是 oox
 
 ### pptx
 
-入口由根关系里 `/officeDocument` 指向，常见路径 `/ppt/presentation.xml`。幻灯片顺序跟 `p:sldIdLst`，不跟文件名。inspect 默认只返回页名单；要形状必须给 `scope.slide`。apply 只改被点名形状的 `p:txBody` 可见文字，不删形状重建，不改 `<p:timing>`。create 生成最小 Transitional 包，必含 theme、slideMaster、slideLayout、presentation、各页 slide、presProps。备注、母版内容、动画第一期不进树也不改。
+入口由根关系里 `/officeDocument` 指向，常见路径 `/ppt/presentation.xml`。幻灯片顺序跟 `p:sldIdLst`，不跟文件名。inspect 默认只返回页名单；要形状必须给 `scope.slide`。apply 只改被点名形状的 `p:txBody` 可见文字，不删形状重建，不改 `<p:timing>`。create 生成最小 Transitional 包，必含 theme、slideMaster、slideLayout、presentation、各页 slide、presProps。备注、母版内容、动画第一期不进树也不改。`mc:AlternateContent` 只走第一个 `Choice`。
 
 ### cli
 
@@ -91,4 +91,4 @@ crates/ooxp-cli/             命令行，只依赖 ooxp。二进制名也是 oox
 
 ## 阶段边界
 
-xlsx 与 docx 第一期已做完，人工打开见 [checklist-xlsx.md](checklist-xlsx.md)、[checklist-docx.md](checklist-docx.md)。pptx 契约确认并实现之后，按 [checklist-pptx.md](checklist-pptx.md) 用 PowerPoint / WPS 演示验收。
+xlsx 与 docx 第一期已做完，人工打开见 [checklist-xlsx.md](checklist-xlsx.md)、[checklist-docx.md](checklist-docx.md)。pptx 第一期实现已落地，人工打开见 [checklist-pptx.md](checklist-pptx.md)。

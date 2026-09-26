@@ -2,7 +2,7 @@
 
 本目录是库和命令行的规格真源。行为以这里为准，不以代码或口头约定为准。要改行为，先改这里的文档，等确认后再改代码。
 
-当前 **xlsx** 与 **docx** 的契约都已实现。**pptx** 的 inspect / create / apply 已写入契约，待确认后再写代码。docx 人工打开见 [checklist-docx.md](checklist-docx.md)。pptx 确认后按 [checklist-pptx.md](checklist-pptx.md) 验收。
+当前 **xlsx**、**docx**、**pptx** 的契约都已实现。xlsx / docx 已通过 Excel、Word、WPS 人工打开。pptx 已通过 PowerPoint 16.0，见 [checklist-pptx.md](checklist-pptx.md)。WPS 演示未跑。
 
 | 文件 | 内容 |
 | --- | --- |

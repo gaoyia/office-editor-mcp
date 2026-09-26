@@ -13,6 +13,7 @@ if (-not $global:OoxpSuiteName) { Initialize-Suite -Name 'office' }
 
 Add-Skip 'xlsx-O1' 'ooxp 没有「不改任何东西地保存」这个动作，CRC 不变这条验不了'
 Add-Skip 'docx-O1' 'ooxp 没有「不改任何东西地保存」这个动作，CRC 不变这条验不了'
+Add-Skip 'pptx-O1' 'ooxp 没有「不改任何东西地保存」这个动作，CRC 不变这条验不了'
 
 # Excel 另存：读得动就说明 create 产物结构没问题。
 $book = Ensure-XlsxCreate
@@ -24,6 +25,15 @@ $wb.SaveCopyAs($resaved)
 $wb.Close($false)
 Release-Com $wb
 Add-Check 'xlsx-O1-excel-resave' (Test-Path $resaved) $resaved
+
+$deck = Ensure-PptxCreate
+$ppt = Ensure-MsPpt $deck
+$pres = Open-PptPres $ppt $deck
+$pptResaved = Get-OutPath 'pptx-create-ppt-resaved.pptx'
+if (Test-Path $pptResaved) { Remove-Item $pptResaved -Force }
+$pres.SaveCopyAs($pptResaved)
+Close-PptPres $pres
+Add-Check 'pptx-O1-ppt-resave' (Test-Path $pptResaved) $pptResaved
 
 # Word 另存：已知会挂，用后台任务隔离，超时就记 SKIP，别拖死整轮。
 $docxCreate = Ensure-DocxCreate

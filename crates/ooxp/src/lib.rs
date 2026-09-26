@@ -5,6 +5,7 @@ mod docx;
 mod error;
 mod json;
 mod opc;
+mod pptx;
 mod xlsx;
 mod xml;
 
@@ -227,12 +228,224 @@ mod tests {
     }
 
     #[test]
-    fn pptx_still_not_implemented() {
+    fn pptx_create_inspect_apply_roundtrip() {
+        let path = tmp("deck.pptx");
+        let req = json!({
+            "schemaVersion": 1,
+            "action": "create",
+            "path": path.to_string_lossy(),
+            "presentation": {
+                "slides": [
+                    { "shapes": [{ "text": "标题" }, { "text": "hello" }] },
+                    { "shapes": [{ "text": "第二页" }] }
+                ]
+            }
+        });
+        run(&req.to_string(), None).unwrap();
+
+        let outline = json!({
+            "schemaVersion": 1,
+            "action": "inspect",
+            "path": path.to_string_lossy()
+        });
+        let RunOutput::Inspect(tree) = run(&outline.to_string(), None).unwrap() else {
+            panic!();
+        };
+        assert_eq!(tree["id"], "pptx:presentation");
+        assert_eq!(tree["slideCount"], 2);
+        assert!(tree["slides"][0].get("shapes").is_none());
+
+        let scoped = json!({
+            "schemaVersion": 1,
+            "action": "inspect",
+            "path": path.to_string_lossy(),
+            "scope": { "slide": 1, "maxShapes": 200 }
+        });
+        let RunOutput::Inspect(tree) = run(&scoped.to_string(), None).unwrap() else {
+            panic!();
+        };
+        let shapes = tree["slides"][0]["shapes"].as_array().unwrap();
+        assert_eq!(shapes.len(), 2);
+        assert_eq!(shapes[0]["id"], "slide:1/shape:2");
+        assert_eq!(shapes[0]["stable"], true);
+        assert_eq!(shapes[0]["text"], "标题");
+        assert_eq!(shapes[1]["text"], "hello");
+        assert!(tree["slides"][1].get("shapes").is_none());
+
+        let patched = tmp("deck.patched.pptx");
+        let apply = json!({
+            "schemaVersion": 1,
+            "action": "apply",
+            "path": path.to_string_lossy(),
+            "output": patched.to_string_lossy(),
+            "ops": [{ "op": "setShapeText", "id": "slide:1/shape:2", "text": "新标题" }]
+        });
+        run(&apply.to_string(), None).unwrap();
+
+        let again = json!({
+            "schemaVersion": 1,
+            "action": "inspect",
+            "path": patched.to_string_lossy(),
+            "scope": { "slide": 1, "maxShapes": 10 }
+        });
+        let RunOutput::Inspect(tree) = run(&again.to_string(), None).unwrap() else {
+            panic!();
+        };
+        assert_eq!(tree["slides"][0]["shapes"][0]["text"], "新标题");
+        assert_eq!(tree["slides"][0]["shapes"][1]["text"], "hello");
+
+        let page2 = json!({
+            "schemaVersion": 1,
+            "action": "inspect",
+            "path": patched.to_string_lossy(),
+            "scope": { "slide": 2 }
+        });
+        let RunOutput::Inspect(tree) = run(&page2.to_string(), None).unwrap() else {
+            panic!();
+        };
+        assert_eq!(tree["slides"][1]["shapes"][0]["text"], "第二页");
+    }
+
+    #[test]
+    fn pptx_rejects_set_cell() {
+        let path = tmp("reject.pptx");
+        let req = json!({
+            "schemaVersion": 1,
+            "action": "create",
+            "path": path.to_string_lossy(),
+            "presentation": { "slides": [{ "shapes": [{ "text": "a" }] }] }
+        });
+        run(&req.to_string(), None).unwrap();
         let err = run(
-            r#"{"schemaVersion":1,"action":"inspect","path":"a.pptx"}"#,
+            &json!({
+                "schemaVersion": 1,
+                "action": "apply",
+                "path": path.to_string_lossy(),
+                "ops": [{ "op": "setCell", "id": "cell:Sheet1!A1", "value": 1 }]
+            })
+            .to_string(),
             None,
         )
         .unwrap_err();
-        assert_eq!(err.code(), ErrorCode::NotImplemented);
+        assert_eq!(err.code(), ErrorCode::InvalidField);
+    }
+
+    #[test]
+    fn pptx_empty_slides_still_one_page() {
+        let path = tmp("empty.pptx");
+        run(
+            &json!({
+                "schemaVersion": 1,
+                "action": "create",
+                "path": path.to_string_lossy(),
+                "presentation": { "slides": [] }
+            })
+            .to_string(),
+            None,
+        )
+        .unwrap();
+        let RunOutput::Inspect(tree) = run(
+            &json!({
+                "schemaVersion": 1,
+                "action": "inspect",
+                "path": path.to_string_lossy(),
+                "scope": { "slide": 1 }
+            })
+            .to_string(),
+            None,
+        )
+        .unwrap() else {
+            panic!();
+        };
+        assert_eq!(tree["slideCount"], 1);
+        assert_eq!(tree["slides"][0]["shapes"][0]["text"], "");
+    }
+
+    #[test]
+    fn pptx_newline_roundtrip() {
+        let path = tmp("nl.pptx");
+        run(
+            &json!({
+                "schemaVersion": 1,
+                "action": "create",
+                "path": path.to_string_lossy(),
+                "presentation": { "slides": [{ "shapes": [{ "text": "上\n下" }] }] }
+            })
+            .to_string(),
+            None,
+        )
+        .unwrap();
+        let RunOutput::Inspect(tree) = run(
+            &json!({
+                "schemaVersion": 1,
+                "action": "inspect",
+                "path": path.to_string_lossy(),
+                "scope": { "slide": 1 }
+            })
+            .to_string(),
+            None,
+        )
+        .unwrap() else {
+            panic!();
+        };
+        assert_eq!(tree["slides"][0]["shapes"][0]["text"], "上\n下");
+    }
+
+    #[test]
+    fn pptx_scope_slide_out_of_range_has_no_shapes() {
+        let path = tmp("oor.pptx");
+        run(
+            &json!({
+                "schemaVersion": 1,
+                "action": "create",
+                "path": path.to_string_lossy(),
+                "presentation": { "slides": [{ "shapes": [{ "text": "a" }] }] }
+            })
+            .to_string(),
+            None,
+        )
+        .unwrap();
+        let RunOutput::Inspect(tree) = run(
+            &json!({
+                "schemaVersion": 1,
+                "action": "inspect",
+                "path": path.to_string_lossy(),
+                "scope": { "slide": 9 }
+            })
+            .to_string(),
+            None,
+        )
+        .unwrap() else {
+            panic!();
+        };
+        assert!(tree["slides"][0].get("shapes").is_none());
+    }
+
+    #[test]
+    fn pptx_apply_slide_id_is_invalid() {
+        let path = tmp("badid.pptx");
+        run(
+            &json!({
+                "schemaVersion": 1,
+                "action": "create",
+                "path": path.to_string_lossy(),
+                "presentation": { "slides": [{ "shapes": [{ "text": "a" }] }] }
+            })
+            .to_string(),
+            None,
+        )
+        .unwrap();
+        let err = run(
+            &json!({
+                "schemaVersion": 1,
+                "action": "apply",
+                "path": path.to_string_lossy(),
+                "ops": [{ "op": "setShapeText", "id": "slide:1", "text": "x" }]
+            })
+            .to_string(),
+            None,
+        )
+        .unwrap_err();
+        assert_eq!(err.code(), ErrorCode::InvalidId);
     }
 }
