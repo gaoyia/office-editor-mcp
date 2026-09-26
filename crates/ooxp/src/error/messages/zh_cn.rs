@@ -39,6 +39,12 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         },
         ErrorKind::UnsupportedOp { op } => format!("不支持的 op：{op}"),
         ErrorKind::OpNotForFormat { format, op } => format!("{format} 不支持 {op}"),
+        ErrorKind::ScopeFieldRequires { field, required } => {
+            format!("{field} 必须同时有 {required}")
+        }
+        ErrorKind::ActionNotForFormat { format, action } => {
+            format!("{format} 不支持 {action}")
+        }
         ErrorKind::SetCellNeedsValueOrFormula => "setCell 必须有 value 或 formula".into(),
         ErrorKind::FormulaMustStartWithEquals => "formula 必须以 = 开头".into(),
         ErrorKind::InvalidCellValue => "单元格值必须是数字、字符串、布尔或 null".into(),
@@ -73,15 +79,26 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::SectionIndexNotInt => "section 序号必须是正整数".into(),
             IdReason::SectionIndexFromOne => "section 序号从 1 起".into(),
             IdReason::PicPrefix => {
-                "图片 id 必须是 header:…/pic:… 或 footer:…/pic:…".into()
+                "图片 id 必须是 header:…/pic:…、footer:…/pic:… 或 para:…/pic:…".into()
             }
             IdReason::PicContainer => {
-                "页眉页脚 id 必须带 /pic:…（容器 id 本身不是图）".into()
+                "段落或页眉页脚 id 必须带 /pic:…（该 id 本身不是图）".into()
             }
             IdReason::PicIndexNotInt => "pic:index 后面必须是正整数".into(),
             IdReason::PicIndexFromOne => "pic:index 从 1 起".into(),
-            IdReason::PicBodyNotYet => "正文里的图本期不支持".into(),
-            IdReason::InsertNeedsPara => "insertPicture 的 id 必须是页眉或页脚段落 id".into(),
+            IdReason::InsertNeedsPara => "insertPicture 的 id 必须是段落 id".into(),
+            IdReason::TxbxPrefix => "文本框 id 必须是段落 id 加上 /txbx:…".into(),
+            IdReason::TxbxContainer => {
+                "段落 id 必须带 /txbx:…（该 id 本身不是文本框）".into()
+            }
+            IdReason::TxbxIndexNotInt => "txbx:index 后面必须是正整数".into(),
+            IdReason::TxbxIndexFromOne => "txbx:index 从 1 起".into(),
+            IdReason::SetParaOnBox => "setParaText 的 id 必须是段落 id，不能是文本框 id".into(),
+            IdReason::InsertNeedsHostPara => "insertTextBox 的 id 必须是宿主段落 id".into(),
+            IdReason::InsertParaBody => "insertPara 与 deletePara 只允许用在文本框内".into(),
+            IdReason::InsertParaNeedsBox => {
+                "insertPara / deletePara 的 id 必须是文本框或框内段落".into()
+            },
         },
         ErrorKind::SheetNotFound { name } => format!("找不到工作表：{name}"),
         ErrorKind::ParaNotFound { id } => format!("找不到段落：{id}"),
@@ -90,6 +107,11 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::ShapeNotFound { id } => format!("找不到形状：{id}"),
         ErrorKind::ShapeHasNoText { id } => format!("形状没有文本框：{id}"),
         ErrorKind::PictureNotFound { id } => format!("找不到图：{id}"),
+        ErrorKind::TextBoxNotFound { id } => format!("找不到文本框：{id}"),
+        ErrorKind::LastTextBoxPara => "文本框内至少要留一段，不能删掉最后一段".into(),
+        ErrorKind::TextBoxLinkCrossPart => "链接文本框必须在同一部件里".into(),
+        ErrorKind::InvalidHexColor => "color 必须是六位 RGB 十六进制或 null".into(),
+        ErrorKind::InvalidTextBoxDirection => "direction 必须是 horizontal 或 vertical".into(),
         ErrorKind::InvalidPicKind => "kind 必须是 inline 或 anchor".into(),
         ErrorKind::InvalidPicWrap => {
             "wrap 必须是 square、tight、through、topAndBottom 或 none".into()

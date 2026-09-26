@@ -1,4 +1,4 @@
-//! 页眉页脚里的 DrawingML 图片：收集、定位、换媒体、插删、改尺寸与绕排。
+//! 页眉、页脚和正文里的 DrawingML 图片：收集、定位、换媒体、插删、改尺寸与绕排。
 
 use std::path::{Path, PathBuf};
 
@@ -11,7 +11,7 @@ use crate::opc::{
 use crate::xml::{Element, Node};
 
 use super::hf::{HfKind, HfType};
-use super::para::{self, BodyPara, ParaTarget};
+use super::para::{self, BodyPara, HostPara, ParaTarget, TxbxKey};
 use super::{A_NS, PIC_NS, REL_IMAGE, REL_NS, WP_NS};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -78,7 +78,7 @@ impl WrapKind {
         }
     }
 
-    fn from_local(name: &str) -> Option<Self> {
+    pub fn from_local(name: &str) -> Option<Self> {
         match name {
             "wrapSquare" => Some(Self::Square),
             "wrapTight" => Some(Self::Tight),
@@ -149,11 +149,23 @@ pub enum PicKey {
 }
 
 #[derive(Debug, Clone)]
-pub struct PicTarget {
-    pub kind: HfKind,
-    pub hf_type: HfType,
-    pub n: u32,
-    pub key: PicKey,
+pub enum PicTarget {
+    HeaderFooter {
+        kind: HfKind,
+        hf_type: HfType,
+        n: u32,
+        key: PicKey,
+    },
+    Body {
+        para: BodyPara,
+        key: PicKey,
+    },
+    InTextBox {
+        host: HostPara,
+        box_key: TxbxKey,
+        para: BodyPara,
+        key: PicKey,
+    },
 }
 
 pub struct PicInfo {
@@ -225,22 +237,71 @@ pub fn pictures_json(pics: &[PicInfo]) -> Vec<Value> {
 }
 
 pub fn parse_pic_id(id: &str, op_index: usize) -> Result<PicTarget, Error> {
-    let path = format!("ops[{op_index}].id");
-    if id.starts_with("para:") || id.contains("/para:") && !id.contains("/pic:") {
+    parse_pic_id_at(id, &format!("ops[{op_index}].id"))
+}
+
+pub fn parse_pic_id_at(id: &str, path: &str) -> Result<PicTarget, Error> {
+    let path = path.to_string();
+    let Some((left, key_s)) = id.rsplit_once("/pic:") else {
+        if id.starts_with("para:")
+            || HfKind::parse(id.split_once(':').map(|(k, _)| k).unwrap_or(""))
+                .is_some()
+        {
+            return Err(Error::with_path(
+                ErrorKind::InvalidId {
+                    reason: IdReason::PicContainer,
+                },
+                path,
+            ));
+        }
         return Err(Error::with_path(
             ErrorKind::InvalidId {
-                reason: IdReason::PicBodyNotYet,
+                reason: IdReason::PicPrefix,
             },
             path,
         ));
+    };
+    let key = parse_pic_key(key_s, &path)?;
+    if left.contains("/txbx:") {
+        match para::parse_para_id_at(left, &path)? {
+            ParaTarget::InTextBox {
+                host,
+                key: box_key,
+                para,
+            } => {
+                return Ok(PicTarget::InTextBox {
+                    host,
+                    box_key,
+                    para,
+                    key,
+                });
+            }
+            _ => {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidId {
+                        reason: IdReason::PicPrefix,
+                    },
+                    path,
+                ));
+            }
+        }
     }
-    if let Some((kind_s, rest)) = id.split_once(':') {
+    if left.starts_with("para:") {
+        match para::parse_para_id_at(left, &path)? {
+            ParaTarget::Body(p) => return Ok(PicTarget::Body { para: p, key }),
+            ParaTarget::HeaderFooter { .. } | ParaTarget::InTextBox { .. } => {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidId {
+                        reason: IdReason::PicPrefix,
+                    },
+                    path,
+                ));
+            }
+        }
+    }
+    if let Some((kind_s, rest)) = left.split_once(':') {
         if let Some(kind) = HfKind::parse(kind_s) {
-            let (container, pic_part) = match rest.split_once('/') {
-                Some((c, p)) => (c, Some(p)),
-                None => (rest, None),
-            };
-            let Some((type_s, n_s)) = container.split_once(':') else {
+            let Some((type_s, n_s)) = rest.split_once(':') else {
                 return Err(Error::with_path(
                     ErrorKind::InvalidId {
                         reason: IdReason::PicPrefix,
@@ -272,24 +333,7 @@ pub fn parse_pic_id(id: &str, op_index: usize) -> Result<PicTarget, Error> {
                     path,
                 ));
             }
-            let Some(pic_part) = pic_part else {
-                return Err(Error::with_path(
-                    ErrorKind::InvalidId {
-                        reason: IdReason::PicContainer,
-                    },
-                    path,
-                ));
-            };
-            let key_s = pic_part.strip_prefix("pic:").ok_or_else(|| {
-                Error::with_path(
-                    ErrorKind::InvalidId {
-                        reason: IdReason::PicPrefix,
-                    },
-                    path.clone(),
-                )
-            })?;
-            let key = parse_pic_key(key_s, &path)?;
-            return Ok(PicTarget {
+            return Ok(PicTarget::HeaderFooter {
                 kind,
                 hf_type,
                 n,
@@ -307,7 +351,7 @@ pub fn parse_pic_id(id: &str, op_index: usize) -> Result<PicTarget, Error> {
 
 pub fn parse_insert_para_id(id: &str, op_index: usize) -> Result<ParaTarget, Error> {
     let path = format!("ops[{op_index}].id");
-    if id.contains("/pic:") || id.starts_with("para:") && id.contains("/pic:") {
+    if id.contains("/pic:") {
         return Err(Error::with_path(
             ErrorKind::InvalidId {
                 reason: IdReason::InsertNeedsPara,
@@ -315,24 +359,17 @@ pub fn parse_insert_para_id(id: &str, op_index: usize) -> Result<ParaTarget, Err
             path,
         ));
     }
-    if id.starts_with("para:") {
-        return Err(Error::with_path(
-            ErrorKind::InvalidId {
-                reason: IdReason::PicBodyNotYet,
-            },
-            path,
-        ));
+    if let Some((_, after)) = id.split_once("/txbx:") {
+        if !after.contains("/para:") {
+            return Err(Error::with_path(
+                ErrorKind::InvalidId {
+                    reason: IdReason::InsertNeedsPara,
+                },
+                path,
+            ));
+        }
     }
-    let target = para::parse_para_id(id, op_index)?;
-    match target {
-        ParaTarget::Body(_) => Err(Error::with_path(
-            ErrorKind::InvalidId {
-                reason: IdReason::PicBodyNotYet,
-            },
-            path,
-        )),
-        other => Ok(other),
-    }
+    para::parse_para_id(id, op_index)
 }
 
 fn parse_pic_key(rest: &str, path: &str) -> Result<PicKey, Error> {
@@ -366,12 +403,89 @@ fn parse_pic_key(rest: &str, path: &str) -> Result<PicKey, Error> {
     Ok(PicKey::DocPr(rest.to_string()))
 }
 
+pub fn find_drawing<'a>(root: &'a Element, key: &PicKey) -> Option<&'a Element> {
+    let mut idx = 0usize;
+    find_drawing_walk(root, &mut idx, key)
+}
+
 pub fn find_drawing_mut<'a>(
     root: &'a mut Element,
     key: &PicKey,
 ) -> Option<&'a mut Element> {
     let mut idx = 0usize;
     find_drawing_mut_walk(root, &mut idx, key)
+}
+
+pub fn find_target_drawing<'a>(root: &'a Element, target: &PicTarget) -> Option<&'a Element> {
+    match target {
+        PicTarget::HeaderFooter { key, .. } => find_drawing(root, key),
+        PicTarget::Body { para, key } => {
+            let p = para::find_paragraph(root, para)?;
+            find_drawing(p, key)
+        }
+        PicTarget::InTextBox {
+            host,
+            box_key,
+            para,
+            key,
+        } => {
+            let host_p = para::find_paragraph(root, host.body())?;
+            let content = super::textbox::find_txbx_content_by_key(host_p, box_key)?;
+            let inner = para::find_paragraph_in_txbx(content, para)?;
+            find_drawing(inner, key)
+        }
+    }
+}
+
+pub fn part_for_pic(
+    catalog: &[super::hf::HfPart],
+    doc_part: &str,
+    target: &PicTarget,
+    id: &str,
+    field_path: &str,
+) -> Result<String, Error> {
+    match target {
+        PicTarget::Body { .. } | PicTarget::InTextBox { host: HostPara::Body(_), .. } => {
+            Ok(doc_part.to_string())
+        }
+        PicTarget::InTextBox {
+            host: HostPara::HeaderFooter {
+                kind,
+                hf_type,
+                n,
+                ..
+            },
+            ..
+        } => {
+            let container_id = format!("{}:{}:{n}", kind.as_str(), hf_type.as_str());
+            let item = super::hf::find_by_id(catalog, &container_id).ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::PictureNotFound {
+                        id: id.to_string(),
+                    },
+                    field_path.to_string(),
+                )
+            })?;
+            Ok(item.part.clone())
+        }
+        PicTarget::HeaderFooter {
+            kind,
+            hf_type,
+            n,
+            ..
+        } => {
+            let container_id = format!("{}:{}:{n}", kind.as_str(), hf_type.as_str());
+            let item = super::hf::find_by_id(catalog, &container_id).ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::PictureNotFound {
+                        id: id.to_string(),
+                    },
+                    field_path.to_string(),
+                )
+            })?;
+            Ok(item.part.clone())
+        }
+    }
 }
 
 pub fn remove_picture(root: &mut Element, key: &PicKey) -> bool {
@@ -508,6 +622,21 @@ pub fn blip_embed(drawing: &Element) -> Option<String> {
         }
     });
     found
+}
+
+pub fn blip_link(drawing: &Element) -> Option<String> {
+    let mut found = None;
+    walk_all(drawing, &mut |e| {
+        if e.local_name() == "blip" && found.is_none() {
+            found = e.attr_local("link").map(str::to_string);
+        }
+    });
+    found
+}
+
+/// 优先 embed，没有才用 link。
+pub fn blip_rid(drawing: &Element) -> Option<String> {
+    blip_embed(drawing).or_else(|| blip_link(drawing))
 }
 
 pub fn resolve_embed(pkg: &Package, part: &str, rid: &str) -> Result<String, Error> {
@@ -671,7 +800,8 @@ fn parse_emu_attr(el: Option<&Element>, local: &str) -> Result<Option<i64>, Erro
 fn is_picture(drawing: &Element) -> bool {
     let mut has_pic = false;
     let mut has_blip = false;
-    walk_all(drawing, &mut |e| {
+    // 框内图不算外层 drawing 的图：遇 txbxContent 停住，与 collect 边界一致。
+    walk_outside_txbx(drawing, &mut |e| {
         match e.local_name() {
             "pic" => has_pic = true,
             "blip" => has_blip = true,
@@ -679,6 +809,18 @@ fn is_picture(drawing: &Element) -> bool {
         }
     });
     has_pic && has_blip
+}
+
+fn walk_outside_txbx(el: &Element, f: &mut impl FnMut(&Element)) {
+    if el.local_name() == "txbxContent" {
+        return;
+    }
+    f(el);
+    for n in &el.children {
+        if let Node::Element(e) = n {
+            walk_outside_txbx(e, f);
+        }
+    }
 }
 
 fn frame(drawing: &Element) -> Option<&Element> {
@@ -757,6 +899,39 @@ fn first_alt_child_index(el: &Element) -> Option<usize> {
         }
     }
     fallback
+}
+
+fn find_drawing_walk<'a>(
+    el: &'a Element,
+    idx: &mut usize,
+    key: &PicKey,
+) -> Option<&'a Element> {
+    if el.local_name() == "txbxContent" {
+        return None;
+    }
+    if el.local_name() == "AlternateContent" {
+        if let Some(i) = first_alt_child_index(el) {
+            if let Node::Element(e) = &el.children[i] {
+                return find_drawing_walk(e, idx, key);
+            }
+        }
+        return None;
+    }
+    if el.local_name() == "drawing" && is_picture(el) {
+        *idx += 1;
+        if matches_key(el, key, *idx) {
+            return Some(el);
+        }
+        return None;
+    }
+    for n in &el.children {
+        if let Node::Element(e) = n {
+            if let Some(found) = find_drawing_walk(e, idx, key) {
+                return Some(found);
+            }
+        }
+    }
+    None
 }
 
 fn find_drawing_mut_walk<'a>(
@@ -1265,6 +1440,7 @@ pub fn container_id(kind: HfKind, hf_type: HfType, n: u32) -> String {
 pub fn body_para_of(target: &ParaTarget) -> Option<&BodyPara> {
     match target {
         ParaTarget::HeaderFooter { para, .. } => Some(para),
-        ParaTarget::Body(_) => None,
+        ParaTarget::Body(p) => Some(p),
+        ParaTarget::InTextBox { para, .. } => Some(para),
     }
 }

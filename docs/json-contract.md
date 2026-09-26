@@ -2,7 +2,7 @@
 
 `schemaVersion` 固定为 `1`。库和命令行只认这一层。MCP 或其他传输信封不许改这里的字段名和含义。机器可读副本见 [json-schema/request.schema.json](json-schema/request.schema.json)，与本文冲突时以本文为准。
 
-xlsx、docx、pptx 的 inspect、create、apply 已经按本文实现。人工打开只认 Microsoft Office，见三份 checklist。
+xlsx、docx、pptx 的 inspect、create、apply 已经按本文实现。docx 另有 `exportMedia`。人工打开只认 Microsoft Office，见三份 checklist。
 
 ## 信封
 
@@ -11,12 +11,12 @@ xlsx、docx、pptx 的 inspect、create、apply 已经按本文实现。人工�
 | 字段 | 类型 | 含义 |
 | --- | --- | --- |
 | `schemaVersion` | 整数 | 必须是 `1` |
-| `action` | 字符串 | `inspect`、`create`、`apply` 之一 |
+| `action` | 字符串 | `inspect`、`create`、`apply`、`exportMedia` 之一 |
 | `locale` | 字符串 | 可选。错误 `message` 的语言偏好，见 [errors.md](errors.md) |
 
-`locale` 不属于动作参数，三种动作都认。取值宽松匹配：`zh`、`zh-CN`、`zh-Hans`、`zh-SG` 出中文；`en` 及其地区变体出英文；不认识的标签（包括空串）退回英文，不报 `InvalidField`。这是信封里唯一一处对未知取值不报错的字段：语言只影响呈现，不该挡下文档操作。优先级是请求 `locale` 高于命令行 `--lang`，再高于环境变量 `OOXP_LANG`，都没有时是英文。
+`locale` 不属于动作参数，四种动作都认。取值宽松匹配：`zh`、`zh-CN`、`zh-Hans`、`zh-SG` 出中文；`en` 及其地区变体出英文；不认识的标签（包括空串）退回英文，不报 `InvalidField`。这是信封里唯一一处对未知取值不报错的字段：语言只影响呈现，不该挡下文档操作。优先级是请求 `locale` 高于命令行 `--lang`，再高于环境变量 `OOXP_LANG`，都没有时是英文。
 
-另外按动作需要 `path`、`format`、`scope`、`workbook`、`document`、`presentation`、`ops` 等字段，见下文。禁止在请求里放一整棵 inspect 树来表示「把文档改成这样」。create 的 xlsx 用 `workbook`，docx 用 `document`，pptx 用 `presentation`，三者不能同时出现。
+另外按动作需要 `path`、`format`、`scope`、`workbook`、`document`、`presentation`、`ops`、`id`、`output` 等字段，见下文。禁止在请求里放一整棵 inspect 树来表示「把文档改成这样」。create 的 xlsx 用 `workbook`，docx 用 `document`，pptx 用 `presentation`，三者不能同时出现。
 
 `format` 取值：`xlsx`、`docx`、`pptx`。可省略，省略时从 `path` 的扩展名推断。推断不出就报 `UnsupportedFormat`。
 
@@ -52,7 +52,7 @@ id 是给模型用的字符串，必须能从文件内容稳定算出来，不�
 
 没有 `w14:paraId` 时：`para:index:{n}`，`n` 从 1 起，按主文档部件里 `w:p` 的文档顺序（含表格单元格里的段落）。树上同时给 `"stable": false`。这类 id 在增删段落后会变，只够同一次 inspect 之后立刻 apply。
 
-标题和正文都是段落，不另编一套 id。脚注、尾注、批注、文本框里的段落不进这棵树，也不接受 apply。页眉、页脚按下面规则进树，可按 id 改字；节上的页眉页脚距边界、以及是否链接到前一节，都可以读写。页眉、页脚和正文里的 DrawingML 图片可查、换、插、删，并可改尺寸与绕排。不做新建页眉。不写入 `titlePg` / `evenAndOddHeaders`。`create` 不生成带图文档。
+标题和正文都是段落，不另编一套 id。脚注、尾注、批注里的段落不进这棵树，也不接受 apply。文本框是独立节点：框本身、框内段落与框内图按下面规则进树，并可 apply。页眉、页脚按下面规则进树，可按 id 改字；节上的页眉页脚距边界、以及是否链接到前一节，都可以读写。页眉、页脚和正文里的 DrawingML 图片可查、换、插、删，并可改尺寸与绕排。不做新建页眉。不写入 `titlePg` / `evenAndOddHeaders`。`create` 本期仍不生成带图文档；带文本框见下文 create。
 
 页眉、页脚 id 按部件编，不按节编。`w:sectPr` 里的 `w:headerReference` / `w:footerReference`（§17.10.2、§17.10.5）经主文档关系解到部件路径。同一部件只出一个容器节点；多个节引用同一部件时，`sections` 列出所有节号。后一节某类型引用省略时按规范继承前节（§17.10.2）；`even` 是否继承还看 `settings.xml` 的 `w:evenAndOddHeaders`（§17.10.1），`first` 是否继承还看该节的 `w:titlePg`（§17.10.6）。OOXML 没有「链接到前一节」元素；Word UI 的勾选就是这种省略。inspect 在每个节上用 `headerLink` / `footerLink` 标出该类型是显式引用、继承前节，还是对本节不生效。apply 用 `setHeaderFooterLink` 断开或重新链接。两节显式指向同一部件不算链接，两边都是 `false`。
 
@@ -64,6 +64,10 @@ id 是给模型用的字符串，必须能从文件内容稳定算出来，不�
 | 页眉/页脚段落 | `{容器 id}/para:{paraId}` 或 `{容器 id}/para:index:{k}` | `header:default:1/para:3F2A1B00` |
 | 页眉/页脚图 | `{容器 id}/pic:{docPrId}` 或 `{容器 id}/pic:index:{k}` | `header:default:1/pic:1` |
 | 正文图 | `{段落 id}/pic:{docPrId}` 或 `{段落 id}/pic:index:{k}` | `para:3F2A1B00/pic:1` |
+| 正文文本框 | `{段落 id}/txbx:{docPrId}` 或 `{段落 id}/txbx:index:{k}` | `para:3F2A1B00/txbx:8` |
+| 页眉/页脚文本框 | `{页眉或页脚段落 id}/txbx:{docPrId}` | `header:default:1/para:AA/txbx:8` |
+| 框内段落 | `{框 id}/para:{paraId}` 或 `{框 id}/para:index:{k}` | `para:3F2A1B00/txbx:8/para:00FF00AA` |
+| 框内图 | `{框内段落 id}/pic:{docPrId}` | `para:3F2A1B00/txbx:8/para:00FF00AA/pic:1` |
 
 节号 `{n}` 从 1 起，按主文档里 `w:sectPr` 的文档顺序（与页眉目录相同）。距边界挂在节上，不挂在页眉部件节点上。页眉页脚图挂在容器上，不挂在节上。正文图挂在它所在的主文档段落上，不挂在文档根上。对 `section:{n}` 发 `setParaText` 或图片 op 报 `InvalidId`。
 
@@ -71,14 +75,18 @@ id 是给模型用的字符串，必须能从文件内容稳定算出来，不�
 
 正文段落 id 仍是 `para:{paraId}` / `para:index:{n}`，只表示主文档部件。对容器 id（没有 `/para:`）发 `setParaText` 报 `InvalidId`。拿正文 `para:` 去改页眉页脚里同 hex 的段落报 `IdNotFound`。
 
-图的 `{docPrId}` 取该 `w:drawing` 里 `wp:docPr/@id` 的原文（ECMA-376 §20.4）。输出用文件里的原始大小写与数字写法。请求里若双方都能解析成十进制整数，按数值匹配（`1` 与 `01` 视为同一处）；否则按原文精确比。同一归属范围内重复 `docPr/@id` 时，inspect 都列出，apply 命中该范围内文档顺序第一处。页眉页脚的范围是该容器部件；正文的范围是该段。没有 `docPr/@id` 时用 `pic:index:{k}`，树上 `"stable": false`。页眉页脚的 `{k}` 只在该部件内从 1 计；正文的 `{k}` 只在该段内从 1 计。两种 `{k}` 都计入该范围内所有被收入的图，不只是缺 id 的那些。只认 DrawingML 的 `pic:pic` 且带 `a:blip` 的 `w:drawing`。VML / `w:pict`、图表、SmartArt、文本框不进 `pictures`，也不接受图片 op。`mc:AlternateContent` 仍只进 Choice。正文图只收主文档段落的子孙，遇 `w:txbxContent` 停住，表格单元格里的段落与正文段落同一套规则。
+图的 `{docPrId}` 取该 `w:drawing` 里 `wp:docPr/@id` 的原文（ECMA-376 §20.4）。输出用文件里的原始大小写与数字写法。请求里若双方都能解析成十进制整数，按数值匹配（`1` 与 `01` 视为同一处）；否则按原文精确比。同一归属范围内重复 `docPr/@id` 时，inspect 都列出，apply 命中该范围内文档顺序第一处。页眉页脚的范围是该容器部件；正文的范围是该段。没有 `docPr/@id` 时用 `pic:index:{k}`，树上 `"stable": false`。页眉页脚的 `{k}` 只在该部件内从 1 计；正文的 `{k}` 只在该段内从 1 计。两种 `{k}` 都计入该范围内所有被收入的图，不只是缺 id 的那些。只认 DrawingML 的 `pic:pic` 且带 `a:blip` 的 `w:drawing`。VML / `w:pict`、图表、SmartArt、文本框不进宿主段落的 `pictures`。框内图走框内段落上的 `pictures`，id 带框前缀。`mc:AlternateContent` 仍只进 Choice。正文图只收主文档段落的子孙，遇 `w:txbxContent` 停住，表格单元格里的段落与正文段落同一套规则。
 
-`insertPicture` 的 `id` 必须是段落 id：正文用 `para:…` / `para:index:{n}`，页眉页脚用 `{容器}/para:…`。对图 id、容器 id 或 `section:{n}` 发 `insertPicture` 报 `InvalidId`。`replacePicture` / `deletePicture` / `setPictureSize` / `setPictureWrap` 的 `id` 必须是图 id。对段落 id、容器 id 或 `section:{n}` 发这四个 op 报 `InvalidId`。
+`insertPicture` 的 `id` 必须是段落 id：正文用 `para:…` / `para:index:{n}`，页眉页脚用 `{容器}/para:…`，框内用 `{框 id}/para:…`。对图 id、容器 id、框 id 或 `section:{n}` 发 `insertPicture` 报 `InvalidId`。`replacePicture` / `deletePicture` / `setPictureSize` / `setPictureWrap` 的 `id` 必须是图 id。对段落 id、容器 id、框 id 或 `section:{n}` 发这四个 op 报 `InvalidId`。
 
-「文本框里的段落不算段落」这句要有可执行的判定，否则实现容易一路钻进去。边界按下面两条划：
+文本框只认 DrawingML：`w:drawing` 里有 `w:txbxContent`，或 `wps:wsp` / `wps:txbx`（MS-DOCX WordprocessingShape）。常包在 `mc:AlternateContent` 里，只进 Choice。VML `v:textbox` / `w:pict` 不编、不改。组合 `wpg:wgp` 本身不进树，只展开里面符合条件的框。框的 `{docPrId}` 取该 `w:drawing` 里 `wp:docPr/@id`，规则与图相同。组合里的框取该 `wps:wsp` 的 `cNvPr/@id`；再没有则 `txbx:index:{k}`。`k` 只在该宿主段内从 1 计，`stable` 为 `false`。页眉页脚框挂在它所在的页眉或页脚段落上，不挂在节上。
 
-- 遍历主文档或页眉页脚部件时遇到 `w:txbxContent` 就停住，不再往下走。文本框里的 `w:p` 不计入任何 `paraCount`，不出现在 `outline` 与 `paragraphs` 里，它们的 `w:t` 也不并进外层段落的 `text`。拿文本框里的 `paraId` 发 apply，报 `IdNotFound`。
-- 遇到 `mc:AlternateContent` 只走第一个 `mc:Choice`；没有 `mc:Choice` 才走 `mc:Fallback`。两支都走会把同一份内容读出两遍，也会让 apply 只改到其中一支、另一支不同步。这条对 `paraCount`、`outline`、`paragraphs`、`text`、页眉页脚、`pictureCount`、`pictures` 和 apply 一律适用。
+链接框：`wps:txbx` 是链的第一框（§20.4.2.37），后续框用 `linkedTxbx`（§20.4.2.34），同一 `id` 为同一故事，`seq` 为顺序。树上 `link.prev` / `link.next` 是相邻框的图 id 风格框 id；未链接则为 `null`。不把后继框的字并进当前框。
+
+「宿主段落遇到框就停住」仍成立，否则外层 `paraCount` 会把框内段算进去。边界按下面两条划：
+
+- 遍历宿主段落（正文或页眉页脚）时遇到 `w:txbxContent` 就停住，不再往下走。框内 `w:p` 不计入宿主 `paraCount`，不出现在 `outline` 与宿主 `paragraphs` 里，它们的 `w:t` 也不并进外层段落的 `text`。拿框内 `paraId` 当正文 `para:` 发 apply，报 `IdNotFound`。框内段落必须用带框前缀的 id。
+- 遇到 `mc:AlternateContent` 只走第一个 `mc:Choice`；没有 `mc:Choice` 才走 `mc:Fallback`。两支都走会把同一份内容读出两遍，也会让 apply 只改到其中一支、另一支不同步。这条对 `paraCount`、`outline`、`paragraphs`、`text`、页眉页脚、`pictureCount`、`pictures`、`textBoxCount`、`textBoxes` 和 apply 一律适用。
 
 Word 2010 以后插入文本框、图表、SmartArt 都是 `mc:AlternateContent` 套 `w:txbxContent` 的写法，所以这两条不是边角情况。
 
@@ -156,20 +164,22 @@ xlsx、docx、pptx 共用 `scope` 这个字段名，里面的键按格式分，�
   "action": "inspect",
   "path": "C:\\data\\note.docx",
   "format": "docx",
-  "scope": { "from": 1, "maxParas": 200, "headerFooter": true, "pictures": true }
+      "scope": { "from": 1, "maxParas": 200, "headerFooter": true, "pictures": true, "textBoxes": true }
 }
 ```
 
 | 字段 | 必填 | 含义 |
 | --- | --- | --- |
 | `path` | 是 | 已有文件 |
-| `scope` | 否 | 省略或空对象：返回 `outline`、`paraCount`、`pictureCount`、`headers`、`footers`、`sections`；正文没有 `paragraphs`；页眉页脚容器不带 `paragraphs` |
+| `scope` | 否 | 省略或空对象：返回 `outline`、`paraCount`、`pictureCount`、`textBoxCount`、`headers`、`footers`、`sections`；正文没有 `paragraphs`；页眉页脚容器不带 `paragraphs` |
 | `scope.from` | 要正文段落时必填 | 从第几段开始，从 1 起，按主文档 `w:p` 顺序 |
 | `scope.maxParas` | 要正文段落时必填 | 本次最多返回多少段，允许范围 `1` 到 `5000` |
 | `scope.headerFooter` | 否 | 为 `true` 时给每个页眉、页脚节点填 `paragraphs`。省略或 `false` 则容器上没有 `paragraphs` |
 | `scope.pictures` | 否 | 为 `true` 时给每个页眉、页脚节点填 `pictures`；若同时给了 `from` 与 `maxParas`，切片里每段也填 `pictures`。省略或 `false` 则这些节点上都没有 `pictures`。不读媒体字节 |
+| `scope.textBoxes` | 否 | 为 `true` 时给每个页眉、页脚节点填 `textBoxes`；若同时给了 `from` 与 `maxParas`，切片里每段也填 `textBoxes`。省略或 `false` 则这些节点上都没有 `textBoxes` |
+| `scope.textBoxContent` | 否 | 为 `true` 且该节点已有 `textBoxes` 时，每个框再带全部 `paragraphs`；若同时 `pictures: true`，框内段再带 `pictures`。省略或 `false` 则框上只有计数，没有框内名单。不与 `from` / `maxParas` 抢正文切片 |
 
-`from` / `maxParas` 只切正文，`headerFooter` 只管页眉页脚段落，`pictures` 只展开图名单。三者独立，可只开一边。只要想看正文段落，就必须同时给 `from` 和 `maxParas`。不默认把全文倒出来。正文图名单只出现在已切出的段落上，不挂到文档根，也不另设 `pictureFrom` / `pictureMax`。`from` 超出 `paraCount` 时正文 `paragraphs` 为空数组，`truncated` 为 `false`，不报错。页眉页脚通常很短，给了 `headerFooter: true` 就返回该部件全部段落，给了 `pictures: true` 就返回该部件全部图，都不再单独分页。xlsx / pptx 的 `scope` 里出现 `headerFooter` 或 `pictures` 报 `InvalidField`。
+`from` / `maxParas` 只切正文，`headerFooter` 只管页眉页脚段落，`pictures` 只展开图名单，`textBoxes` 只展开框名单。四者独立，可只开一边。只要想看正文段落，就必须同时给 `from` 和 `maxParas`。不默认把全文倒出来。正文图与正文框名单只出现在已切出的段落上，不挂到文档根。`from` 超出 `paraCount` 时正文 `paragraphs` 为空数组，`truncated` 为 `false`，不报错。页眉页脚通常很短，给了对应键就返回该部件全部段落、图或框，都不再单独分页。框通常短，给了 `textBoxContent: true` 就返回该框全部段落，不再单独分页。xlsx / pptx 的 `scope` 里出现 `headerFooter`、`pictures`、`textBoxes` 或 `textBoxContent` 报 `InvalidField`。只给 `textBoxContent`、不给 `textBoxes` 报 `InvalidField`。
 
 #### pptx 的 scope
 
@@ -273,6 +283,7 @@ xlsx、docx、pptx 共用 `scope` 这个字段名，里面的键按格式分，�
   "id": "docx:document",
   "paraCount": 4,
   "pictureCount": 0,
+  "textBoxCount": 0,
   "outline": [
     {
       "id": "para:3F2A1B00",
@@ -288,7 +299,8 @@ xlsx、docx、pptx 共用 `scope` 这个字段名，里面的键按格式分，�
       "type": "default",
       "sections": [1],
       "paraCount": 1,
-      "pictureCount": 0
+      "pictureCount": 0,
+      "textBoxCount": 0
     }
   ],
   "footers": [
@@ -298,6 +310,7 @@ xlsx、docx、pptx 共用 `scope` 这个字段名，里面的键按格式分，�
       "sections": [1],
       "paraCount": 1,
       "pictureCount": 0,
+      "textBoxCount": 0,
       "paragraphs": [
         {
           "id": "footer:default:1/para:00FF00AA",
@@ -329,7 +342,8 @@ xlsx、docx、pptx 共用 `scope` 这个字段名，里面的键按格式分，�
       "level": 1,
       "text": "标题",
       "stable": true,
-      "pictureCount": 0
+      "pictureCount": 0,
+      "textBoxCount": 0
     },
     {
       "id": "para:index:2",
@@ -337,7 +351,8 @@ xlsx、docx、pptx 共用 `scope` 这个字段名，里面的键按格式分，�
       "style": "Normal",
       "text": "hello",
       "stable": false,
-      "pictureCount": 0
+      "pictureCount": 0,
+      "textBoxCount": 0
     }
   ]
 }
@@ -346,17 +361,21 @@ xlsx、docx、pptx 共用 `scope` 这个字段名，里面的键按格式分，�
 规则：
 
 - 主文档部件（根关系里 `/officeDocument` 那条，常见路径 `/word/document.xml`）始终读。页眉、页脚部件按节引用与继承解析后读；脚注、批注不读。
-- 文档根字段顺序：`id`、`paraCount`、`pictureCount`、`outline`、`headers`、`footers`、`sections`，有正文切片时再跟 `from`、`truncated`、`paragraphs`。
+- 文档根字段顺序：`id`、`paraCount`、`pictureCount`、`textBoxCount`、`outline`、`headers`、`footers`、`sections`，有正文切片时再跟 `from`、`truncated`、`paragraphs`。
 - `paraCount` 是主文档里 `w:p` 的总数，含表格单元格里的段落，不含文本框里的段落，始终出现。
-- 文档根上的 `pictureCount` 始终出现，只计主文档里被收入的 DrawingML 图片个数（判定见上文 docx 图 id 那节），不含页眉页脚。根上不挂正文 `pictures`。
+- 文档根上的 `pictureCount` 始终出现，只计主文档里被收入的 DrawingML 图片个数（判定见上文 docx 图 id 那节），不含页眉页脚，也不含框内图。根上不挂正文 `pictures`。
+- 文档根上的 `textBoxCount` 始终出现，只计主文档里被收入的文本框个数，不含页眉页脚。根上不挂正文 `textBoxes`。
 - `outline` 始终出现，只含主文档标题段。收入满足下面任一条件的段落：`w:pStyle/@w:val` 为 `Heading1`–`Heading9`（大小写不敏感）或 `标题1`–`标题9`；或者 `w:outlineLvl/@w:val` 为 `0`–`8`。树上 `level` 从 1 到 9。`Heading1` / `标题1` / `outlineLvl=0` 都是 `level: 1`。不是标题的段落不进 `outline`。页眉页脚段落不进 `outline`。
-- `headers`、`footers` 始终出现。没有引用则为空数组。容器字段顺序：`id`、`type`、`sections`、`paraCount`、`pictureCount`，有图名单时再跟 `pictures`，有段落时再跟 `paragraphs`。`sections` 是从 1 起的节号数组，按主文档里 `w:sectPr` 的文档顺序。容器上的 `paraCount` 是该部件内 `w:p` 的个数（边界与正文相同）。`pictureCount` 始终出现，是该部件内被收入的 DrawingML 图片个数（判定见上文 docx 图 id 那节）。
+- `headers`、`footers` 始终出现。没有引用则为空数组。容器字段顺序：`id`、`type`、`sections`、`paraCount`、`pictureCount`、`textBoxCount`，有图名单时再跟 `pictures`，有框名单时再跟 `textBoxes`，有段落时再跟 `paragraphs`。`sections` 是从 1 起的节号数组，按主文档里 `w:sectPr` 的文档顺序。容器上的 `paraCount` 是该部件内 `w:p` 的个数（边界与正文相同）。`pictureCount` 始终出现，是该部件内被收入的 DrawingML 图片个数（不含框内图）。`textBoxCount` 始终出现，是该部件内被收入的文本框个数。
 - 文档根上的 `sections` 始终出现。每个 `w:sectPr` 一项，字段顺序：`id`、`index`、`headerDistance`、`footerDistance`、`headerLink`、`footerLink`。`headerDistance` / `footerDistance` 取该节 `w:pgMar` 的 `w:header` / `w:footer`（§17.6.11），单位 twip，JSON 整数。缺 `w:pgMar` 或缺对应属性则为 `null`，不猜默认值。属性存在但不是非负整数报 `XmlBroken`。不返回 `top` / `bottom` / `left` / `right` / `gutter`。
 - `headerLink` / `footerLink` 始终出现，键顺序为 `default`、`even`、`first`。每个键的取值：`true` 表示该类型对本节生效，且本节 `sectPr` 没有对应引用（继承前节；前节也没有部件、规范要求空白时仍是 `true`）；`false` 表示该类型生效，且本节有显式引用；`null` 表示该类型对本节不生效。`even` 是否生效看整篇 `w:evenAndOddHeaders`；`first` 是否生效看本节 `w:titlePg`。第一节的 `default` 只能是 `false`（没有前节可链）。第一节生效的 `even` / `first` 若无引用也是 `false`（空白，不是链接）。两节显式指向同一部件时两边都是 `false`。`headers` / `footers` 仍按部件去重；断开链接后会出现新的容器 id。
 - 省略 `scope`、或没有 `from`/`maxParas` 时，没有正文 `paragraphs`、`from`、`truncated`。
-- 给了 `from` 和 `maxParas` 时，正文 `paragraphs` 按文档顺序切片。范围内段落数超过 `maxParas` 则 `truncated` 为 `true`。切片里每段始终有 `pictureCount`。段落字段顺序：`id`、`index`、`style`、`level`（标题才有）、`text`、`stable`、`pictureCount`，有图名单时再跟 `pictures`。
-- `scope.headerFooter` 为 `true` 时，每个页眉、页脚节点带 `paragraphs`；否则容器上没有该字段。页眉页脚段落节点不带 `pictureCount` / `pictures`，图仍挂在容器上。
+- 给了 `from` 和 `maxParas` 时，正文 `paragraphs` 按文档顺序切片。范围内段落数超过 `maxParas` 则 `truncated` 为 `true`。切片里每段始终有 `pictureCount` 与 `textBoxCount`。段落字段顺序：`id`、`index`、`style`、`level`（标题才有）、`text`、`stable`、`pictureCount`、`textBoxCount`，有图名单时再跟 `pictures`，有框名单时再跟 `textBoxes`。
+- `scope.headerFooter` 为 `true` 时，每个页眉、页脚节点带 `paragraphs`；否则容器上没有该字段。页眉页脚段落节点不带 `pictureCount` / `pictures` / `textBoxCount` / `textBoxes`，图与框仍挂在容器上。
 - `scope.pictures` 为 `true` 时，每个页眉、页脚节点带 `pictures`；若同时给了 `from` 与 `maxParas`，切片里每段也带 `pictures`。否则这些节点上都没有该字段。不把媒体字节放进树。每张图的字段顺序：`id`、`docPrId`、`name`、`kind`、`cx`、`cy`、`wrap`、`stable`。
+- `scope.textBoxes` 为 `true` 时，每个页眉、页脚节点带 `textBoxes`；若同时给了 `from` 与 `maxParas`，切片里每段也带 `textBoxes`。否则这些节点上都没有该字段。只给 `textBoxes`、不给 `from` / `maxParas`：只展开页眉页脚容器上的框。每个框的字段顺序：`id`、`docPrId`、`name`、`kind`、`cx`、`cy`、`wrap`、`link`、`paraCount`、`pictureCount`、`stable`，有框内段名单时再跟 `paragraphs`，有框内图名单时再跟 `pictures`。
+- `link` 始终出现。未链接则为 `{ "prev": null, "next": null }`。链接时 `prev` / `next` 是相邻框的 id，没有那一端则为 `null`。
+- 框内 `paragraphs` 的字段顺序与正文段落相同（含 `pictureCount`）。框内图的字段顺序与宿主图相同，id 带框前缀。
 - `kind`：`inline`（`wp:inline`）或 `anchor`（`wp:anchor`）。
 - `cx` / `cy`：`wp:extent` 的值，单位 EMU，JSON 整数。缺则为 `null`。属性存在但不是整数报 `XmlBroken`。
 - `wrap`：行内为 `null`；浮动取子元素 `wrapSquare` / `wrapTight` / `wrapThrough` / `wrapTopAndBottom` / `wrapNone`，对应 `square` / `tight` / `through` / `topAndBottom` / `none`。没有这些子元素则为 `null`。
@@ -365,7 +384,7 @@ xlsx、docx、pptx 共用 `scope` 这个字段名，里面的键按格式分，�
 - `style` 取 `w:pStyle/@w:val` 的原文。没有 `pStyle` 则为 `null`（Word 此时按 Normal 显示，树上不猜）。
 - `text` 是可见纯文本：该 `w:p` 内、不在 `w:del` 里的 `w:t` 按顺序拼接；`w:tab` 变成 `\t`，`w:br` 变成 `\n`。`w:instrText`（域指令）不进入。不含 run 级样式。嵌在 `w:txbxContent` 里的 `w:t` 不算，`mc:AlternateContent` 只取一支，判定见上文 docx 那节的边界两条。
 - `stable`：有 `w14:paraId` 为 `true`，否则为 `false`。
-- 不返回修订痕迹和目录域。文本框里的段落既不作为独立节点出现，也不并进外层段落的 `text`。含超链接或域的段落仍出现在树上，`text` 只含可见结果。页码域按同一规则：inspect 不收域指令与缓存，apply 验收只用无域、无超链接的页眉页脚段落。
+- 不返回修订痕迹和目录域。文本框里的段落不并进外层段落的 `text`；它们只出现在对应框的 `paragraphs` 里（需 `textBoxContent`）。含超链接或域的段落仍出现在树上，`text` 只含可见结果。页码域按同一规则：inspect 不收域指令与缓存，apply 验收只用无域、无超链接的页眉页脚段落。
 
 ### 响应（pptx）
 
@@ -493,10 +512,15 @@ xlsx、docx、pptx 共用 `scope` 这个字段名，里面的键按格式分，�
 | `document.paragraphs` | 段落列表。可空；空则生成一个空的 `w:p`，否则 Word 可能打不开 |
 | `paragraphs[].text` | 可见文本，可空字符串。省略当作 `""` |
 | `paragraphs[].style` | 段落样式 id。省略或 `Normal` 表示正文。第一期只允许 `Normal`、`Heading1`、`Heading2`、`Heading3`（大小写不敏感，写出时用这里的 canonical 形式） |
+| `paragraphs[].textBoxes` | 可选。该段上的文本框列表。省略则不写框 |
+
+| `textBoxes[].text` | 框内第一段可见文本，可空。省略当作 `""` |
+| `textBoxes[].cx` | 可选。宽度，EMU。省略为 `1828800` |
+| `textBoxes[].cy` | 可选。高度，EMU。省略为 `914400` |
 
 create 写出 Transitional 最小包，见 [opc.md](opc.md)。每个 `w:p` 都带唯一的 `w14:paraId` 和 `w14:textId`（取值大于 0、小于 `0x80000000`，MS-DOCX §2.6.2.3 / §2.6.2.4），并在根元素上把 `w14` 列入 `mc:Ignorable`。这样随后 inspect 得到的 id 都是 `para:{paraId}`，`stable` 为 `true`。
 
-标题段写出 `<w:pStyle w:val="Heading1"/>` 这类引用，样式定义放在 `/word/styles.xml`。同时写 `/word/settings.xml`，含 `<w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="15"/>`（MS-DOCX §2.3.5）。缺这项时 Word 按兼容模式打开（默认 12）。不要生成页眉页脚、目录、修订。
+标题段写出 `<w:pStyle w:val="Heading1"/>` 这类引用，样式定义放在 `/word/styles.xml`。同时写 `/word/settings.xml`，含 `<w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="15"/>`（MS-DOCX §2.3.5）。缺这项时 Word 按兼容模式打开（默认 12）。`textBoxes` 写成浮动 `square` 的 `wps:wsp`，与 `insertTextBox` 同一套最小 Choice。不要生成页眉页脚、目录、修订。默认页眉页脚带框不在本期 create。
 
 ### pptx
 
@@ -828,9 +852,102 @@ create 与 apply 落盘时先写入目标同目录的临时文件，再改名为
 
 行内改浮动或反过来。位置只支持相对页边（`wp:positionH/@relativeFrom` 与 `wp:positionV/@relativeFrom` 都写 `margin`），不做任意 Dist，也不写其它 `relativeFrom`。改成浮动且没给对齐或偏移时，水平默认 `alignH: "left"`，垂直默认 `alignV: "top"`。已经是浮动、只改 `wrap` 时，未点名的位置属性原样留下。`behindDoc`：`wrap` 为 `none` 时写成 `1`（衬于文字下方），其余为 `0`。xlsx / pptx 上发此 op 报 `InvalidField`。
 
+### insertTextBox
+
+```json
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "C:\\data\\note.docx",
+  "ops": [
+    { "op": "insertTextBox", "id": "para:3F2A1B00", "cx": 1828800, "cy": 914400 }
+  ]
+}
+```
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"insertTextBox"` |
+| `id` | 宿主段落 id（正文或页眉页脚段落） |
+| `cx` | 可选。宽度，EMU，正整数 |
+| `cy` | 可选。高度，EMU，正整数 |
+| `text` | 可选。框内第一段可见文本，省略则为空段 |
+
+`id` 必须是段落 id，对图 id、框 id、容器 id 或 `section:{n}` 报 `InvalidId`。找不到该段报 `IdNotFound`。`cx` / `cy` 都省略时用 2 英寸宽、1 英寸高（`1828800` / `914400`）。只给一个时报 `InvalidField`。插入浮动 `anchor` + `wrapSquare`，挂在该段末尾一个新的 `w:r` 里，写成 `mc:AlternateContent`（Choice 为 `wps:wsp` / `wps:txbx`，Fallback 为空白 `w:pict`，不编 VML 几何）。`wp:docPr/@id` 取该部件已有 `docPr` 的最大整数加 1。xlsx / pptx 上发此 op 报 `InvalidField`。
+
+### deleteTextBox
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"deleteTextBox"` |
+| `id` | 框 id |
+
+找不到该框报 `IdNotFound`。对段落 id、图 id、容器 id 或 `section:{n}` 报 `InvalidId`。按框 id 删掉对应的 `w:drawing`；若在 `mc:AlternateContent` 的 Choice 里，整段 `AlternateContent` 删掉。所在 `w:r` 若删完后只剩 `w:rPr` 或空，把该 run 也删掉。链接链从中间删时，把前一框的 `next` 接到后一框、后一框的 `prev` 接到前一框，并改写 `wps:txbx` / `linkedTxbx` 的 `id` 与 `seq`。xlsx / pptx 上发此 op 报 `InvalidField`。
+
+### setTextBoxSize
+
+字段与 `setPictureSize` 相同，`id` 必须是框 id。写入该框 `wp:extent`；若 `wps:spPr/a:xfrm/a:ext` 存在，一并改。
+
+### setTextBoxWrap
+
+字段与 `setPictureWrap` 相同，`id` 必须是框 id。行内 / 浮动与绕排规则同图片。
+
+### setTextBoxFill
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"setTextBoxFill"` |
+| `id` | 框 id |
+| `color` | RGB 六位十六进制，如 `"FF0000"`；`null` 表示无填充 |
+
+写入 `wps:spPr` 的 `a:solidFill/a:srgbClr`；`color` 为 `null` 时写成 `a:noFill`。不要 theme 色。xlsx / pptx 上发此 op 报 `InvalidField`。
+
+### setTextBoxLine
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"setTextBoxLine"` |
+| `id` | 框 id |
+| `color` | RGB 六位十六进制；`null` 表示无边框 |
+| `width` | 可选。线宽，EMU，正整数。无边框时必须省略 |
+
+`color` 为 `null` 时写成 `a:ln/a:noFill`。有颜色时写成 `a:ln` 加 `a:solidFill`。xlsx / pptx 上发此 op 报 `InvalidField`。
+
+### setTextBoxDirection
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"setTextBoxDirection"` |
+| `id` | 框 id |
+| `direction` | `horizontal` 或 `vertical` |
+
+`horizontal` 对应横排（去掉或写成从左到右）；`vertical` 对应竖排，写入 `wps:bodyPr/@vert` 为 `eaVert`。xlsx / pptx 上发此 op 报 `InvalidField`。
+
+### insertPara / deletePara（仅框内）
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | `"insertPara"` 或 `"deletePara"` |
+| `id` | `insertPara` 用框 id（插到框末）或框内段落 id（插到该段之后）；`deletePara` 必须是框内段落 id |
+| `text` | 仅 `insertPara`。可选，新段可见文本 |
+
+正文（框外）插删段仍报 `InvalidId`。框内只剩一段时 `deletePara` 报 `InvalidField`（`w:txbxContent` 至少留一段）。新段带新的 `w14:paraId`。xlsx / pptx 上发此 op 报 `InvalidField`。
+
+### setTextBoxLink
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"setTextBoxLink"` |
+| `id` | 框 id |
+| `next` | 后一框的 id；`null` 表示断开与后一框的链接 |
+
+把 `id` 接到 `next` 前面，或断开。两框必须在同一部件（同一主文档，或同一页眉页脚部件）。跨部件链接报 `InvalidField`。断开时后一框变成独立故事（自己的 `wps:txbx`）。`next` 可以是没有 `w:txbxContent` 的溢出后继框（Word 常只留 `wps:linkedTxbx`）。xlsx / pptx 上发此 op 报 `InvalidField`。
+
+`setParaText` 接受框内段落 id。对框 id 发 `setParaText` 报 `InvalidId`。
+
 ### 改动范围（docx）
 
-允许变脏的部件：主文档 XML（通常是 `/word/document.xml`）及其 `.rels`，被 `setParaText` 或图片 op 点名的页眉、页脚部件及其 `.rels`，`setHeaderFooterLink` 改到的主文档关系、`[Content_Types].xml`、新建或删除的 header/footer 部件及其 `.rels`，以及新媒体或被删的 `/word/media/…`。`setHeaderFooterDistance` 只脏主文档。正文图片 op 脏主文档与主文档 `.rels`。一次 `ops` 可以混用 `setParaText`、`setHeaderFooterDistance`、`setHeaderFooterLink` 与图片 op。`styles.xml`、`settings.xml`、未点名的页眉页脚、主题、编号一律原样写回。
+允许变脏的部件：主文档 XML（通常是 `/word/document.xml`）及其 `.rels`，被 `setParaText`、图片 op 或文本框 op 点名的页眉、页脚部件及其 `.rels`，`setHeaderFooterLink` 改到的主文档关系、`[Content_Types].xml`、新建或删除的 header/footer 部件及其 `.rels`，以及新媒体或被删的 `/word/media/…`。`setHeaderFooterDistance` 只脏主文档。正文图片 op 与文本框 op 脏主文档与主文档 `.rels`。一次 `ops` 可以混用 `setParaText`、`setHeaderFooterDistance`、`setHeaderFooterLink`、图片 op 与文本框 op。`styles.xml`、`settings.xml`、未点名的页眉页脚、主题、编号一律原样写回。
 
 被改部件同样整份重序列化，保留程度与 xlsx 工作表相同：元素与属性顺序、未知命名空间保留；注释、处理指令、DOCTYPE 会丢。
 
@@ -873,6 +990,35 @@ create 与 apply 落盘时先写入目标同目录的临时文件，再改名为
 只允许变脏的部件：被改的那一张幻灯片 XML（通常是 `/ppt/slides/slideN.xml`，N 以关系目标为准）。`presentation.xml`、其他页、母版、版式、主题、备注、`presProps` 一律原样写回。
 
 被改部件同样整份重序列化，保留程度与 xlsx 工作表相同：元素与属性顺序、未知命名空间保留；注释、处理指令、DOCTYPE 会丢。
+
+## exportMedia
+
+按图 id 把 OPC 里的媒体部件原样写到本地文件。不读进 inspect 树，不做转码、缩放或预览。
+
+```json
+{
+  "schemaVersion": 1,
+  "action": "exportMedia",
+  "path": "C:\\data\\note.docx",
+  "id": "para:3F2A1B00/pic:1",
+  "output": "C:\\out\\logo.png"
+}
+```
+
+| 字段 | 必填 | 含义 |
+| --- | --- | --- |
+| `path` | 是 | 源 docx |
+| `id` | 是 | 图 id，与 inspect 的 `pictures[].id` 相同 |
+| `output` | 否 | 本地目标路径。省略时用命令行 `--output`。两者都缺报 `MissingField`。不得默认写成源 `path`，以免把图片字节盖掉文档 |
+| `format` | 否 | 可省略，从 `path` 扩展名推断 |
+
+`id` 必须是图 id。对段落 id、页眉页脚容器 id 或 `section:{n}` 报 `InvalidId`。找不到该图报 `IdNotFound`。优先走 `a:blip/@r:embed`；只有 `@r:link`、没有 embed 时按外部关系处理，报 `OpcPartMissing`，不下载 http。embed 指向外部关系同样报 `OpcPartMissing`。
+
+写出的是该媒体部件的原字节。`contentType` 取自 `[Content_Types].xml` 对该部件的 Default 或 Override；都没有则省略该字段。扩展名由调用方自己定，库不按类型改名。
+
+xlsx / pptx 本期报 `InvalidField`。以后若要导出 pptx 的 `p:pic`，另开，不改本动作字段名。文本框里的图用框内段落上的图 id，同一动作能导出。脚注、尾注、批注里的图：容器进树之后同一动作能导出；本期这些图不在树上，对它们的 id 报 `IdNotFound`。嵌入图表的工作簿另走 `exportChartData`，不在本动作。
+
+成功时 stdout 见 [errors.md](errors.md)。源包不写回。
 
 ## 两层 JSON
 

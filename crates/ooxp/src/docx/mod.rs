@@ -1,15 +1,18 @@
-//! docx：inspect / create / apply。
+//! docx：inspect / create / apply / exportMedia。
 
 mod apply;
 mod create;
+mod export;
 mod hf;
 mod inspect;
 mod para;
 mod picture;
 mod request;
+mod textbox;
 
 pub use apply::apply;
 pub use create::create;
+pub use export::export_media;
 pub use inspect::inspect;
 pub use request::{parse_ops, parse_scope};
 

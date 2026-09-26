@@ -127,6 +127,7 @@ fn inspect_skips_textbox_and_does_not_double_alternate() {
     let path = write_sample("inspect");
     let tree = inspect_all(&path);
     assert_eq!(tree["paraCount"], 9);
+    assert_eq!(tree["textBoxCount"], 3);
     assert_eq!(
         texts(&tree),
         vec![
@@ -345,6 +346,7 @@ fn inspect_lists_headers_footers_and_shared_sections() {
     assert_eq!(headers[0]["sections"], json!([1, 2]));
     assert_eq!(headers[0]["paraCount"], 1);
     assert_eq!(headers[0]["pictureCount"], 0);
+    assert_eq!(headers[0]["textBoxCount"], 0);
     assert!(headers[0].get("paragraphs").is_none());
     assert!(headers[0].get("pictures").is_none());
     assert_eq!(headers[1]["id"], "header:even:1");
@@ -981,7 +983,7 @@ fn inspect_lists_header_pictures() {
     assert_eq!(pics[1]["cx"], 19050);
     assert_eq!(
         object_keys(&tree["headers"][0]),
-        ["id", "type", "sections", "paraCount", "pictureCount", "pictures"]
+        ["id", "type", "sections", "paraCount", "pictureCount", "textBoxCount", "pictures"]
     );
 }
 
@@ -1170,7 +1172,7 @@ fn picture_id_errors() {
         &out,
         json!([{
             "op": "insertPicture",
-            "id": "para:AAAA0001",
+            "id": "header:default:1/pic:1",
             "file": "x.png"
         }]),
     )
@@ -1179,8 +1181,870 @@ fn picture_id_errors() {
     let err = apply_ops(
         &path,
         &out,
+        json!([{ "op": "deletePicture", "id": "para:index:2" }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidId);
+    let err = apply_ops(
+        &path,
+        &out,
+        json!([{
+            "op": "insertPicture",
+            "id": "para:AAAA0001",
+            "file": "x.png"
+        }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::IdNotFound);
+    let err = apply_ops(
+        &path,
+        &out,
         json!([{ "op": "deletePicture", "id": "header:default:1/pic:9" }]),
     )
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::IdNotFound);
+}
+
+// —— 正文图 ——
+
+const BODY_PIC_CT: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="png" ContentType="image/png"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/><Override PartName="/word/settings.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml"/></Types>"#;
+
+const BODY_PIC_RELS: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/settings" Target="settings.xml"/><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/image1.png"/><Relationship Id="rId4" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/image2.png"/></Relationships>"#;
+
+/// 一段正文：行内图 + 浮动图，另有一张无 pic 的 drawing 不进名单。
+const BODY_PIC_DOCUMENT: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"><w:body><w:p w14:paraId="BBBB2001"><w:r><w:t>带图正文</w:t></w:r><w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="9525" cy="9525"/><wp:docPr id="1" name="图片 1"/><wp:cNvGraphicFramePr/><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic><pic:nvPicPr><pic:cNvPr id="0" name="图片 1"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="rId3"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="9525" cy="9525"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r><w:r><w:drawing><wp:anchor distT="0" distB="0" distL="114300" distR="114300" simplePos="0" relativeHeight="1" behindDoc="0" locked="0" layoutInCell="1" allowOverlap="1"><wp:simplePos x="0" y="0"/><wp:positionH relativeFrom="margin"><wp:align>left</wp:align></wp:positionH><wp:positionV relativeFrom="margin"><wp:align>top</wp:align></wp:positionV><wp:extent cx="19050" cy="9525"/><wp:wrapSquare wrapText="bothSides"/><wp:docPr id="2" name="图片 2"/><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic><pic:nvPicPr><pic:cNvPr id="0" name="图片 2"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="rId4"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="19050" cy="9525"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:anchor></w:drawing></w:r><w:r><w:drawing><wp:inline><wp:extent cx="1" cy="1"/><wp:docPr id="99" name="不是图"/><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/chart"/></a:graphic></wp:inline></w:drawing></w:r></w:p><w:sectPr><w:pgSz w:w="11906" w:h="16838"/></w:sectPr></w:body></w:document>"#;
+
+fn write_body_pic_sample(tag: &str) -> PathBuf {
+    let n = SEQ.fetch_add(1, Ordering::Relaxed);
+    let path = tmp_dir().join(format!("{tag}-{n}.docx"));
+    let mut cursor = Cursor::new(Vec::new());
+    {
+        let mut zip = ZipWriter::new(&mut cursor);
+        let opt = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
+        let texts: &[(&str, &[u8])] = &[
+            ("[Content_Types].xml", BODY_PIC_CT.as_bytes()),
+            ("_rels/.rels", ROOT_RELS.as_bytes()),
+            ("word/document.xml", BODY_PIC_DOCUMENT.as_bytes()),
+            ("word/_rels/document.xml.rels", BODY_PIC_RELS.as_bytes()),
+            ("word/styles.xml", STYLES.as_bytes()),
+            ("word/settings.xml", PIC_SETTINGS.as_bytes()),
+            ("word/media/image1.png", PNG_1X1),
+            ("word/media/image2.png", PNG_1X1),
+        ];
+        for (name, body) in texts {
+            zip.start_file(*name, opt).unwrap();
+            zip.write_all(body).unwrap();
+        }
+        zip.finish().unwrap();
+    }
+    std::fs::write(&path, cursor.into_inner()).unwrap();
+    path
+}
+
+fn inspect_body_pics(path: &Path) -> serde_json::Value {
+    let RunOutput::Inspect(tree) = run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "inspect",
+            "path": path.to_string_lossy(),
+            "scope": { "from": 1, "maxParas": 20, "pictures": true }
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap() else {
+        panic!("inspect 应返回树");
+    };
+    tree
+}
+
+#[test]
+fn inspect_lists_body_pictures() {
+    let path = write_body_pic_sample("body-pic-list");
+    let tree0 = run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "inspect",
+            "path": path.to_string_lossy()
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap();
+    let RunOutput::Inspect(tree0) = tree0 else {
+        panic!("inspect 应返回树");
+    };
+    assert_eq!(tree0["pictureCount"], 2);
+    assert!(tree0.get("paragraphs").is_none());
+
+    let only_pics = inspect_pics(&path);
+    assert_eq!(only_pics["pictureCount"], 2);
+    assert!(only_pics.get("paragraphs").is_none());
+
+    let tree = inspect_body_pics(&path);
+    let p = &tree["paragraphs"][0];
+    assert_eq!(p["id"], "para:BBBB2001");
+    assert_eq!(p["pictureCount"], 2);
+    assert_eq!(p["textBoxCount"], 0);
+    let pics = p["pictures"].as_array().unwrap();
+    assert_eq!(pics.len(), 2);
+    assert_eq!(pics[0]["id"], "para:BBBB2001/pic:1");
+    assert_eq!(pics[0]["kind"], "inline");
+    assert!(pics[0]["wrap"].is_null());
+    assert_eq!(pics[1]["id"], "para:BBBB2001/pic:2");
+    assert_eq!(pics[1]["kind"], "anchor");
+    assert_eq!(pics[1]["wrap"], "square");
+    assert_eq!(
+        object_keys(p),
+        [
+            "id",
+            "index",
+            "style",
+            "text",
+            "stable",
+            "pictureCount",
+            "textBoxCount",
+            "pictures"
+        ]
+    );
+}
+
+#[test]
+fn replace_body_picture_keeps_wrap() {
+    let path = write_body_pic_sample("body-pic-replace");
+    let png = write_temp_png("body-rep", PNG_1X1_B);
+    let out = tmp_dir().join("body-pic-replace-out.docx");
+    apply_ops(
+        &path,
+        &out,
+        json!([{
+            "op": "replacePicture",
+            "id": "para:BBBB2001/pic:1",
+            "file": png.to_string_lossy()
+        }]),
+    )
+    .unwrap();
+    assert_eq!(part_bytes(&out, "word/media/image1.png"), PNG_1X1_B);
+    let tree = inspect_body_pics(&out);
+    let pics = tree["paragraphs"][0]["pictures"].as_array().unwrap();
+    assert_eq!(pics[0]["kind"], "inline");
+    assert_eq!(pics[1]["kind"], "anchor");
+    assert_eq!(pics[1]["wrap"], "square");
+}
+
+#[test]
+fn insert_and_delete_body_picture() {
+    let path = write_body_pic_sample("body-pic-insdel");
+    let png = write_temp_png("body-ins", PNG_1X1);
+    let inserted = tmp_dir().join("body-pic-ins.docx");
+    apply_ops(
+        &path,
+        &inserted,
+        json!([{
+            "op": "insertPicture",
+            "id": "para:BBBB2001",
+            "file": png.to_string_lossy()
+        }]),
+    )
+    .unwrap();
+    let tree = inspect_body_pics(&inserted);
+    assert_eq!(tree["pictureCount"], 3);
+    assert_eq!(tree["paragraphs"][0]["pictureCount"], 3);
+    let pics = tree["paragraphs"][0]["pictures"].as_array().unwrap();
+    let last = pics.last().unwrap();
+    assert_eq!(last["kind"], "inline");
+    assert_eq!(last["id"], "para:BBBB2001/pic:100");
+    assert!(zip_has_part(&inserted, "word/media/image3.png"));
+
+    let deleted = tmp_dir().join("body-pic-del.docx");
+    apply_ops(
+        &inserted,
+        &deleted,
+        json!([{
+            "op": "deletePicture",
+            "id": "para:BBBB2001/pic:100"
+        }]),
+    )
+    .unwrap();
+    let after = inspect_body_pics(&deleted);
+    assert_eq!(after["pictureCount"], 2);
+    assert!(!zip_has_part(&deleted, "word/media/image3.png"));
+}
+
+#[test]
+fn set_body_picture_size_and_wrap() {
+    let path = write_body_pic_sample("body-pic-sizewrap");
+    let out = tmp_dir().join("body-pic-sizewrap-out.docx");
+    apply_ops(
+        &path,
+        &out,
+        json!([
+            {
+                "op": "setPictureSize",
+                "id": "para:BBBB2001/pic:1",
+                "cx": 19050,
+                "cy": 19050
+            },
+            {
+                "op": "setPictureWrap",
+                "id": "para:BBBB2001/pic:1",
+                "kind": "anchor",
+                "wrap": "square",
+                "alignH": "right",
+                "alignV": "bottom"
+            }
+        ]),
+    )
+    .unwrap();
+    let tree = inspect_body_pics(&out);
+    let pic = &tree["paragraphs"][0]["pictures"][0];
+    assert_eq!(pic["kind"], "anchor");
+    assert_eq!(pic["wrap"], "square");
+    assert_eq!(pic["cx"], 19050);
+    assert_eq!(pic["cy"], 19050);
+}
+
+#[test]
+fn set_para_text_keeps_body_pictures() {
+    let path = write_body_pic_sample("body-pic-text");
+    let out = tmp_dir().join("body-pic-text-out.docx");
+    apply_ops(
+        &path,
+        &out,
+        json!([{
+            "op": "setParaText",
+            "id": "para:BBBB2001",
+            "text": "改过的正文"
+        }]),
+    )
+    .unwrap();
+    let tree = inspect_body_pics(&out);
+    assert_eq!(tree["paragraphs"][0]["text"], "改过的正文");
+    assert_eq!(tree["paragraphs"][0]["pictureCount"], 2);
+    let pics = tree["paragraphs"][0]["pictures"].as_array().unwrap();
+    assert_eq!(pics[0]["id"], "para:BBBB2001/pic:1");
+    assert_eq!(pics[1]["id"], "para:BBBB2001/pic:2");
+}
+
+fn export_pic(path: &Path, id: &str, output: &Path) -> Result<RunOutput, ooxp::Error> {
+    run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "exportMedia",
+            "path": path.to_string_lossy(),
+            "id": id,
+            "output": output.to_string_lossy()
+        })
+        .to_string(),
+        None,
+    )
+}
+
+#[test]
+fn export_header_picture_bytes_match() {
+    let path = write_pic_sample("export-hdr");
+    let out = tmp_dir().join("export-hdr.png");
+    let result = export_pic(&path, "header:default:1/pic:1", &out).unwrap();
+    let RunOutput::Written {
+        path: written,
+        ops_applied,
+        content_type,
+    } = result
+    else {
+        panic!("exportMedia 应写出文件");
+    };
+    assert_eq!(written, out);
+    assert!(ops_applied.is_none());
+    assert_eq!(content_type.as_deref(), Some("image/png"));
+    assert_eq!(std::fs::read(&out).unwrap(), PNG_1X1);
+    assert_eq!(std::fs::read(&out).unwrap(), part_bytes(&path, "word/media/image1.png"));
+}
+
+#[test]
+fn export_body_picture_bytes_match() {
+    let path = write_body_pic_sample("export-body");
+    let out = tmp_dir().join("export-body.png");
+    let result = export_pic(&path, "para:BBBB2001/pic:2", &out).unwrap();
+    let RunOutput::Written { content_type, .. } = result else {
+        panic!("exportMedia 应写出文件");
+    };
+    assert_eq!(content_type.as_deref(), Some("image/png"));
+    assert_eq!(std::fs::read(&out).unwrap(), PNG_1X1);
+    assert_eq!(std::fs::read(&out).unwrap(), part_bytes(&path, "word/media/image2.png"));
+}
+
+#[test]
+fn export_after_replace_gets_new_bytes() {
+    let path = write_pic_sample("export-rep");
+    let png = write_temp_png("export-rep-src", PNG_1X1_B);
+    let replaced = tmp_dir().join("export-rep.docx");
+    apply_ops(
+        &path,
+        &replaced,
+        json!([{
+            "op": "replacePicture",
+            "id": "header:default:1/pic:1",
+            "file": png.to_string_lossy()
+        }]),
+    )
+    .unwrap();
+    let out = tmp_dir().join("export-rep.png");
+    export_pic(&replaced, "header:default:1/pic:1", &out).unwrap();
+    assert_eq!(std::fs::read(&out).unwrap(), PNG_1X1_B);
+}
+
+#[test]
+fn export_rejects_para_id_and_missing_pic() {
+    let path = write_body_pic_sample("export-err");
+    let out = tmp_dir().join("export-err.png");
+    let err = export_pic(&path, "para:BBBB2001", &out).unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidId);
+    let err = export_pic(&path, "para:BBBB2001/pic:9", &out).unwrap_err();
+    assert_eq!(err.code(), ErrorCode::IdNotFound);
+    let err = export_pic(&path, "header:default:1/pic:1", &out).unwrap_err();
+    assert_eq!(err.code(), ErrorCode::IdNotFound);
+}
+
+#[test]
+fn export_rejects_external_rel() {
+    let n = SEQ.fetch_add(1, Ordering::Relaxed);
+    let path = tmp_dir().join(format!("export-ext-{n}.docx"));
+    let mut cursor = Cursor::new(Vec::new());
+    {
+        let mut zip = ZipWriter::new(&mut cursor);
+        let opt = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
+        let ext_rels = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="https://example.com/x.png" TargetMode="External"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/image2.png"/></Relationships>"#;
+        let texts: &[(&str, &[u8])] = &[
+            ("[Content_Types].xml", PIC_CT.as_bytes()),
+            ("_rels/.rels", ROOT_RELS.as_bytes()),
+            ("word/document.xml", PIC_DOCUMENT.as_bytes()),
+            ("word/_rels/document.xml.rels", PIC_DOC_RELS.as_bytes()),
+            ("word/styles.xml", STYLES.as_bytes()),
+            ("word/settings.xml", PIC_SETTINGS.as_bytes()),
+            ("word/header1.xml", PIC_HEADER.as_bytes()),
+            ("word/_rels/header1.xml.rels", ext_rels.as_bytes()),
+            ("word/media/image2.png", PNG_1X1),
+        ];
+        for (name, body) in texts {
+            zip.start_file(*name, opt).unwrap();
+            zip.write_all(body).unwrap();
+        }
+        zip.finish().unwrap();
+    }
+    std::fs::write(&path, cursor.into_inner()).unwrap();
+    let out = tmp_dir().join("export-ext.png");
+    let err = export_pic(&path, "header:default:1/pic:1", &out).unwrap_err();
+    assert_eq!(err.code(), ErrorCode::OpcPartMissing);
+}
+
+#[test]
+fn export_missing_output_is_invalid_field() {
+    let path = write_pic_sample("export-noout");
+    let err = run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "exportMedia",
+            "path": path.to_string_lossy(),
+            "id": "header:default:1/pic:1"
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+}
+
+const TXBX_CT: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/></Types>"#;
+
+const TXBX_DOCUMENT: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml" xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:wps="http://schemas.microsoft.com/office/word/2010/wordprocessingShape" mc:Ignorable="w14"><w:body><w:p w14:paraId="CCCC3001"><w:r><w:t>带框</w:t></w:r><mc:AlternateContent><mc:Choice Requires="wps"><w:drawing><wp:anchor distT="0" distB="0" distL="114300" distR="114300" simplePos="0" relativeHeight="1" behindDoc="0" locked="0" layoutInCell="1" allowOverlap="1"><wp:simplePos x="0" y="0"/><wp:positionH relativeFrom="margin"><wp:align>left</wp:align></wp:positionH><wp:positionV relativeFrom="margin"><wp:align>top</wp:align></wp:positionV><wp:extent cx="1828800" cy="914400"/><wp:wrapSquare wrapText="bothSides"/><wp:docPr id="8" name="文本框 1"/><a:graphic><a:graphicData uri="http://schemas.microsoft.com/office/word/2010/wordprocessingShape"><wps:wsp><wps:txbx id="1"><w:txbxContent><w:p w14:paraId="DDDD4001"><w:r><w:t>框内字</w:t></w:r></w:p></w:txbxContent></wps:txbx></wps:wsp></a:graphicData></a:graphic></wp:anchor></w:drawing></mc:Choice><mc:Fallback><w:pict/></mc:Fallback></mc:AlternateContent></w:p><w:p w14:paraId="CCCC3002"><w:r><w:t>第二框</w:t></w:r><w:drawing><wp:anchor distT="0" distB="0" distL="0" distR="0" simplePos="0" relativeHeight="1" behindDoc="0" locked="0" layoutInCell="1" allowOverlap="1"><wp:simplePos x="0" y="0"/><wp:positionH relativeFrom="margin"><wp:align>left</wp:align></wp:positionH><wp:positionV relativeFrom="margin"><wp:align>top</wp:align></wp:positionV><wp:extent cx="914400" cy="914400"/><wp:wrapSquare wrapText="bothSides"/><wp:docPr id="9" name="文本框 2"/><a:graphic><a:graphicData uri="http://schemas.microsoft.com/office/word/2010/wordprocessingShape"><wps:wsp><wps:linkedTxbx id="1" seq="1"><w:txbxContent><w:p w14:paraId="DDDD4002"><w:r><w:t>链上</w:t></w:r></w:p></w:txbxContent></wps:linkedTxbx></wps:wsp></a:graphicData></a:graphic></wp:anchor></w:drawing></w:p><w:sectPr><w:pgSz w:w="11906" w:h="16838"/></w:sectPr></w:body></w:document>"#;
+
+fn write_txbx_sample(tag: &str) -> PathBuf {
+    let n = SEQ.fetch_add(1, Ordering::Relaxed);
+    let path = tmp_dir().join(format!("{tag}-{n}.docx"));
+    let mut cursor = Cursor::new(Vec::new());
+    {
+        let mut zip = ZipWriter::new(&mut cursor);
+        let opt = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
+        let texts: &[(&str, &[u8])] = &[
+            ("[Content_Types].xml", TXBX_CT.as_bytes()),
+            ("_rels/.rels", ROOT_RELS.as_bytes()),
+            ("word/document.xml", TXBX_DOCUMENT.as_bytes()),
+            ("word/_rels/document.xml.rels", DOC_RELS.as_bytes()),
+            ("word/styles.xml", STYLES.as_bytes()),
+        ];
+        for (name, body) in texts {
+            zip.start_file(*name, opt).unwrap();
+            zip.write_all(body).unwrap();
+        }
+        zip.finish().unwrap();
+    }
+    std::fs::write(&path, cursor.into_inner()).unwrap();
+    path
+}
+
+#[test]
+fn inspect_lists_body_textboxes() {
+    let path = write_txbx_sample("txbx-list");
+    let tree0 = run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "inspect",
+            "path": path.to_string_lossy()
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap();
+    let RunOutput::Inspect(tree0) = tree0 else {
+        panic!("inspect 应返回树");
+    };
+    assert_eq!(tree0["textBoxCount"], 2);
+    assert!(tree0.get("paragraphs").is_none());
+
+    let only_box = run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "inspect",
+            "path": path.to_string_lossy(),
+            "scope": { "textBoxes": true }
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap();
+    let RunOutput::Inspect(only_box) = only_box else {
+        panic!();
+    };
+    assert_eq!(only_box["textBoxCount"], 2);
+    assert!(only_box.get("paragraphs").is_none());
+
+    let tree = run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "inspect",
+            "path": path.to_string_lossy(),
+            "scope": { "from": 1, "maxParas": 10, "textBoxes": true, "textBoxContent": true }
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap();
+    let RunOutput::Inspect(tree) = tree else {
+        panic!();
+    };
+    let p0 = &tree["paragraphs"][0];
+    assert_eq!(p0["id"], "para:CCCC3001");
+    assert_eq!(p0["text"], "带框");
+    assert_eq!(p0["textBoxCount"], 1);
+    let boxes = p0["textBoxes"].as_array().unwrap();
+    assert_eq!(boxes.len(), 1);
+    assert_eq!(boxes[0]["id"], "para:CCCC3001/txbx:8");
+    assert_eq!(boxes[0]["kind"], "anchor");
+    assert_eq!(boxes[0]["wrap"], "square");
+    assert_eq!(boxes[0]["link"]["prev"], serde_json::Value::Null);
+    assert_eq!(boxes[0]["link"]["next"], "para:CCCC3002/txbx:9");
+    assert_eq!(boxes[0]["paraCount"], 1);
+    assert_eq!(
+        boxes[0]["paragraphs"][0]["id"],
+        "para:CCCC3001/txbx:8/para:DDDD4001"
+    );
+    assert_eq!(boxes[0]["paragraphs"][0]["text"], "框内字");
+
+    let p1 = &tree["paragraphs"][1];
+    assert_eq!(p1["textBoxCount"], 1);
+    assert_eq!(p1["textBoxes"][0]["id"], "para:CCCC3002/txbx:9");
+    assert_eq!(p1["textBoxes"][0]["link"]["prev"], "para:CCCC3001/txbx:8");
+    assert!(p1["textBoxes"][0]["link"]["next"].is_null());
+}
+
+#[test]
+fn inspect_text_box_content_requires_text_boxes() {
+    let path = write_txbx_sample("txbx-scope");
+    let err = run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "inspect",
+            "path": path.to_string_lossy(),
+            "scope": { "textBoxContent": true }
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+}
+
+fn inspect_boxes(path: &Path) -> serde_json::Value {
+    let RunOutput::Inspect(tree) = run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "inspect",
+            "path": path.to_string_lossy(),
+            "scope": { "from": 1, "maxParas": 20, "textBoxes": true, "textBoxContent": true }
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap() else {
+        panic!("inspect 应返回树");
+    };
+    tree
+}
+
+#[test]
+fn set_para_text_inside_textbox() {
+    let path = write_txbx_sample("txbx-set");
+    let out = tmp_dir().join("txbx-set-out.docx");
+    apply_ops(
+        &path,
+        &out,
+        json!([{
+            "op": "setParaText",
+            "id": "para:CCCC3001/txbx:8/para:DDDD4001",
+            "text": "改过的框内"
+        }]),
+    )
+    .unwrap();
+    let tree = inspect_boxes(&out);
+    assert_eq!(tree["paragraphs"][0]["text"], "带框");
+    assert_eq!(
+        tree["paragraphs"][0]["textBoxes"][0]["paragraphs"][0]["text"],
+        "改过的框内"
+    );
+}
+
+#[test]
+fn set_para_text_on_box_id_is_invalid() {
+    let path = write_txbx_sample("txbx-set-box");
+    let out = tmp_dir().join("txbx-set-box-out.docx");
+    let err = apply_ops(
+        &path,
+        &out,
+        json!([{ "op": "setParaText", "id": "para:CCCC3001/txbx:8", "text": "x" }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidId);
+}
+
+#[test]
+fn insert_and_delete_textbox() {
+    let path = write_txbx_sample("txbx-ins");
+    let out = tmp_dir().join("txbx-ins-out.docx");
+    apply_ops(
+        &path,
+        &out,
+        json!([{
+            "op": "insertTextBox",
+            "id": "para:CCCC3002",
+            "text": "新框"
+        }]),
+    )
+    .unwrap();
+    let tree = inspect_boxes(&out);
+    assert_eq!(tree["textBoxCount"], 3);
+    let boxes = tree["paragraphs"][1]["textBoxes"].as_array().unwrap();
+    assert_eq!(boxes.len(), 2);
+    let new_id = boxes
+        .iter()
+        .find(|b| b["paragraphs"][0]["text"] == "新框")
+        .unwrap()["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let out2 = tmp_dir().join("txbx-del-out.docx");
+    apply_ops(
+        &out,
+        &out2,
+        json!([{ "op": "deleteTextBox", "id": new_id }]),
+    )
+    .unwrap();
+    let tree2 = inspect_boxes(&out2);
+    assert_eq!(tree2["textBoxCount"], 2);
+    assert_eq!(tree2["paragraphs"][1]["textBoxCount"], 1);
+}
+
+#[test]
+fn set_textbox_size_fill_direction() {
+    let path = write_txbx_sample("txbx-style");
+    let out = tmp_dir().join("txbx-style-out.docx");
+    apply_ops(
+        &path,
+        &out,
+        json!([
+            { "op": "setTextBoxSize", "id": "para:CCCC3001/txbx:8", "cx": 2000000, "cy": 1000000 },
+            { "op": "setTextBoxFill", "id": "para:CCCC3001/txbx:8", "color": "FF0000" },
+            { "op": "setTextBoxLine", "id": "para:CCCC3001/txbx:8", "color": "00FF00", "width": 12700 },
+            { "op": "setTextBoxDirection", "id": "para:CCCC3001/txbx:8", "direction": "vertical" },
+            { "op": "setTextBoxWrap", "id": "para:CCCC3001/txbx:8", "kind": "inline" }
+        ]),
+    )
+    .unwrap();
+    let tree = inspect_boxes(&out);
+    assert_eq!(tree["paragraphs"][0]["textBoxes"][0]["cx"], 2000000);
+    assert_eq!(tree["paragraphs"][0]["textBoxes"][0]["cy"], 1000000);
+    assert_eq!(tree["paragraphs"][0]["textBoxes"][0]["kind"], "inline");
+    let xml = part(&out, "word/document.xml");
+    assert!(xml.contains("FF0000"));
+    assert!(xml.contains("eaVert"));
+}
+
+#[test]
+fn insert_and_delete_para_in_textbox() {
+    let path = write_txbx_sample("txbx-para");
+    let out = tmp_dir().join("txbx-para-out.docx");
+    apply_ops(
+        &path,
+        &out,
+        json!([{
+            "op": "insertPara",
+            "id": "para:CCCC3001/txbx:8",
+            "text": "第二段"
+        }]),
+    )
+    .unwrap();
+    let tree = inspect_boxes(&out);
+    assert_eq!(tree["paragraphs"][0]["textBoxes"][0]["paraCount"], 2);
+    assert_eq!(
+        tree["paragraphs"][0]["textBoxes"][0]["paragraphs"][1]["text"],
+        "第二段"
+    );
+    let second = tree["paragraphs"][0]["textBoxes"][0]["paragraphs"][1]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let out2 = tmp_dir().join("txbx-para-del.docx");
+    apply_ops(
+        &out,
+        &out2,
+        json!([{ "op": "deletePara", "id": second }]),
+    )
+    .unwrap();
+    let tree2 = inspect_boxes(&out2);
+    assert_eq!(tree2["paragraphs"][0]["textBoxes"][0]["paraCount"], 1);
+    let last = tree2["paragraphs"][0]["textBoxes"][0]["paragraphs"][0]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let err = apply_ops(
+        &out2,
+        &tmp_dir().join("txbx-para-last.docx"),
+        json!([{ "op": "deletePara", "id": last }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+    let err = apply_ops(
+        &path,
+        &tmp_dir().join("txbx-para-body.docx"),
+        json!([{ "op": "insertPara", "id": "para:CCCC3001", "text": "x" }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidId);
+}
+
+#[test]
+fn set_textbox_link_unlink() {
+    let path = write_txbx_sample("txbx-link");
+    let out = tmp_dir().join("txbx-unlink.docx");
+    apply_ops(
+        &path,
+        &out,
+        json!([{
+            "op": "setTextBoxLink",
+            "id": "para:CCCC3001/txbx:8",
+            "next": null
+        }]),
+    )
+    .unwrap();
+    let tree = inspect_boxes(&out);
+    assert!(tree["paragraphs"][0]["textBoxes"][0]["link"]["next"].is_null());
+    assert!(tree["paragraphs"][1]["textBoxes"][0]["link"]["prev"].is_null());
+    let out2 = tmp_dir().join("txbx-relink.docx");
+    apply_ops(
+        &out,
+        &out2,
+        json!([{
+            "op": "setTextBoxLink",
+            "id": "para:CCCC3001/txbx:8",
+            "next": "para:CCCC3002/txbx:9"
+        }]),
+    )
+    .unwrap();
+    let tree2 = inspect_boxes(&out2);
+    assert_eq!(
+        tree2["paragraphs"][0]["textBoxes"][0]["link"]["next"],
+        "para:CCCC3002/txbx:9"
+    );
+    assert_eq!(
+        tree2["paragraphs"][1]["textBoxes"][0]["link"]["prev"],
+        "para:CCCC3001/txbx:8"
+    );
+}
+
+#[test]
+fn set_textbox_link_empty_overflow() {
+    let xml = TXBX_DOCUMENT.replace(
+        "<wps:linkedTxbx id=\"1\" seq=\"1\"><w:txbxContent><w:p w14:paraId=\"DDDD4002\"><w:r><w:t>链上</w:t></w:r></w:p></w:txbxContent></wps:linkedTxbx>",
+        "<wps:linkedTxbx id=\"1\" seq=\"1\"/>",
+    );
+    let n = SEQ.fetch_add(1, Ordering::Relaxed);
+    let path = tmp_dir().join(format!("txbx-overflow-{n}.docx"));
+    let mut cursor = Cursor::new(Vec::new());
+    {
+        let mut zip = ZipWriter::new(&mut cursor);
+        let opt = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
+        for (name, body) in [
+            ("[Content_Types].xml", TXBX_CT),
+            ("_rels/.rels", ROOT_RELS),
+            ("word/document.xml", xml.as_str()),
+            ("word/_rels/document.xml.rels", DOC_RELS),
+            ("word/styles.xml", STYLES),
+        ] {
+            zip.start_file(name, opt).unwrap();
+            zip.write_all(body.as_bytes()).unwrap();
+        }
+        zip.finish().unwrap();
+    }
+    std::fs::write(&path, cursor.into_inner()).unwrap();
+    let unlinked = tmp_dir().join("txbx-overflow-unlink.docx");
+    apply_ops(
+        &path,
+        &unlinked,
+        json!([{
+            "op": "setTextBoxLink",
+            "id": "para:CCCC3001/txbx:8",
+            "next": null
+        }]),
+    )
+    .unwrap();
+    let relinked = tmp_dir().join("txbx-overflow-relink.docx");
+    apply_ops(
+        &unlinked,
+        &relinked,
+        json!([{
+            "op": "setTextBoxLink",
+            "id": "para:CCCC3001/txbx:8",
+            "next": "para:CCCC3002/txbx:9"
+        }]),
+    )
+    .unwrap();
+    let tree = inspect_boxes(&relinked);
+    assert_eq!(
+        tree["paragraphs"][0]["textBoxes"][0]["link"]["next"],
+        "para:CCCC3002/txbx:9"
+    );
+    assert_eq!(
+        tree["paragraphs"][1]["textBoxes"][0]["link"]["prev"],
+        "para:CCCC3001/txbx:8"
+    );
+}
+
+#[test]
+fn inspect_expands_group_textboxes() {
+    const GROUP_DOC: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml" xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:wps="http://schemas.microsoft.com/office/word/2010/wordprocessingShape" xmlns:wpg="http://schemas.microsoft.com/office/word/2010/wordprocessingGroup" mc:Ignorable="w14"><w:body><w:p w14:paraId="EEEE5001"><w:r><w:t>组合</w:t></w:r><w:drawing><wp:anchor distT="0" distB="0" distL="0" distR="0" simplePos="0" relativeHeight="1" behindDoc="0" locked="0" layoutInCell="1" allowOverlap="1"><wp:simplePos x="0" y="0"/><wp:positionH relativeFrom="margin"><wp:align>left</wp:align></wp:positionH><wp:positionV relativeFrom="margin"><wp:align>top</wp:align></wp:positionV><wp:extent cx="2000000" cy="1000000"/><wp:wrapSquare wrapText="bothSides"/><wp:docPr id="10" name="组合 1"/><a:graphic><a:graphicData uri="http://schemas.microsoft.com/office/word/2010/wordprocessingGroup"><wpg:wgp><wps:wsp><wps:cNvPr id="11" name="框A"/><wps:txbx><w:txbxContent><w:p w14:paraId="FFFF6001"><w:r><w:t>组内</w:t></w:r></w:p></w:txbxContent></wps:txbx></wps:wsp></wpg:wgp></a:graphicData></a:graphic></wp:anchor></w:drawing></w:p><w:sectPr><w:pgSz w:w="11906" w:h="16838"/></w:sectPr></w:body></w:document>"#;
+    let n = SEQ.fetch_add(1, Ordering::Relaxed);
+    let path = tmp_dir().join(format!("txbx-group-{n}.docx"));
+    let mut cursor = Cursor::new(Vec::new());
+    {
+        let mut zip = ZipWriter::new(&mut cursor);
+        let opt = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
+        for (name, body) in [
+            ("[Content_Types].xml", TXBX_CT),
+            ("_rels/.rels", ROOT_RELS),
+            ("word/document.xml", GROUP_DOC),
+            ("word/_rels/document.xml.rels", DOC_RELS),
+            ("word/styles.xml", STYLES),
+        ] {
+            zip.start_file(name, opt).unwrap();
+            zip.write_all(body.as_bytes()).unwrap();
+        }
+        zip.finish().unwrap();
+    }
+    std::fs::write(&path, cursor.into_inner()).unwrap();
+    let tree = inspect_boxes(&path);
+    assert_eq!(tree["textBoxCount"], 1);
+    assert_eq!(tree["paragraphs"][0]["textBoxes"][0]["id"], "para:EEEE5001/txbx:11");
+    assert_eq!(
+        tree["paragraphs"][0]["textBoxes"][0]["paragraphs"][0]["text"],
+        "组内"
+    );
+}
+
+#[test]
+fn create_document_with_textbox() {
+    let path = tmp_dir().join(format!(
+        "txbx-create-{}.docx",
+        SEQ.fetch_add(1, Ordering::Relaxed)
+    ));
+    run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "create",
+            "path": path.to_string_lossy(),
+            "document": {
+                "paragraphs": [
+                    { "text": "外层", "textBoxes": [{ "text": "框字", "cx": 1828800, "cy": 914400 }] }
+                ]
+            }
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap();
+    let tree = inspect_boxes(&path);
+    assert_eq!(tree["textBoxCount"], 1);
+    assert_eq!(tree["paragraphs"][0]["text"], "外层");
+    assert_eq!(tree["paragraphs"][0]["textBoxes"][0]["kind"], "anchor");
+    assert_eq!(tree["paragraphs"][0]["textBoxes"][0]["wrap"], "square");
+    assert_eq!(
+        tree["paragraphs"][0]["textBoxes"][0]["paragraphs"][0]["text"],
+        "框字"
+    );
+}
+
+#[test]
+fn insert_picture_inside_textbox() {
+    let path = write_txbx_sample("txbx-pic");
+    let png = write_temp_png("txbx-pic", PNG_1X1);
+    let out = tmp_dir().join("txbx-pic-out.docx");
+    apply_ops(
+        &path,
+        &out,
+        json!([{
+            "op": "insertPicture",
+            "id": "para:CCCC3001/txbx:8/para:DDDD4001",
+            "file": png.to_string_lossy()
+        }]),
+    )
+    .unwrap();
+    let RunOutput::Inspect(tree) = run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "inspect",
+            "path": out.to_string_lossy(),
+            "scope": { "from": 1, "maxParas": 20, "pictures": true, "textBoxes": true, "textBoxContent": true }
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap() else {
+        panic!();
+    };
+    assert_eq!(tree["paragraphs"][0]["pictureCount"], 0);
+    assert!(tree["paragraphs"][0]["pictures"]
+        .as_array()
+        .map(|a| a.is_empty())
+        .unwrap_or(true));
+    assert_eq!(tree["paragraphs"][0]["textBoxes"][0]["pictureCount"], 1);
+    assert_eq!(
+        tree["paragraphs"][0]["textBoxes"][0]["paragraphs"][0]["pictureCount"],
+        1
+    );
+    let pic_id = tree["paragraphs"][0]["textBoxes"][0]["paragraphs"][0]["pictures"][0]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    assert!(pic_id.starts_with("para:CCCC3001/txbx:8/para:DDDD4001/pic:"));
+    let exported = tmp_dir().join("txbx-pic-export.png");
+    export_pic(&out, &pic_id, &exported).unwrap();
+    assert_eq!(std::fs::read(&exported).unwrap(), PNG_1X1);
 }

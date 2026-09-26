@@ -43,6 +43,12 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         },
         ErrorKind::UnsupportedOp { op } => format!("Unsupported op: {op}"),
         ErrorKind::OpNotForFormat { format, op } => format!("{format} does not support {op}"),
+        ErrorKind::ScopeFieldRequires { field, required } => {
+            format!("{field} requires {required}")
+        }
+        ErrorKind::ActionNotForFormat { format, action } => {
+            format!("{format} does not support {action}")
+        }
         ErrorKind::SetCellNeedsValueOrFormula => "setCell requires value or formula".into(),
         ErrorKind::FormulaMustStartWithEquals => "formula must start with =".into(),
         ErrorKind::InvalidCellValue => {
@@ -83,19 +89,32 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::SectionIndexNotInt => "section index must be a positive integer".into(),
             IdReason::SectionIndexFromOne => "section index starts at 1".into(),
             IdReason::PicPrefix => {
-                "Picture id must be header:…/pic:… or footer:…/pic:…".into()
+                "Picture id must be header:…/pic:…, footer:…/pic:…, or para:…/pic:…".into()
             }
             IdReason::PicContainer => {
-                "Header/footer id must include /pic:… (container id alone is not a picture)".into()
+                "Paragraph or header/footer id must include /pic:… (that id alone is not a picture)"
+                    .into()
             }
             IdReason::PicIndexNotInt => "pic:index must be followed by a positive integer".into(),
             IdReason::PicIndexFromOne => "pic:index starts at 1".into(),
-            IdReason::PicBodyNotYet => {
-                "Pictures in the document body are not supported yet".into()
+            IdReason::InsertNeedsPara => "insertPicture id must be a paragraph id".into(),
+            IdReason::TxbxPrefix => {
+                "Text box id must be a paragraph id plus /txbx:…".into()
             }
-            IdReason::InsertNeedsPara => {
-                "insertPicture id must be a header or footer paragraph id".into()
+            IdReason::TxbxContainer => {
+                "Paragraph id must include /txbx:… (that id alone is not a text box)".into()
             }
+            IdReason::TxbxIndexNotInt => "txbx:index must be followed by a positive integer".into(),
+            IdReason::TxbxIndexFromOne => "txbx:index starts at 1".into(),
+            IdReason::SetParaOnBox => "setParaText id must be a paragraph id, not a text box id".into(),
+            IdReason::InsertNeedsHostPara => "insertTextBox id must be a host paragraph id".into(),
+            IdReason::InsertParaBody => {
+                "insertPara and deletePara are only allowed inside a text box".into()
+            }
+            IdReason::InsertParaNeedsBox => {
+                "insertPara / deletePara id must be a text box or a paragraph inside a text box"
+                    .into()
+            },
         },
         ErrorKind::SheetNotFound { name } => format!("Sheet not found: {name}"),
         ErrorKind::ParaNotFound { id } => format!("Paragraph not found: {id}"),
@@ -104,6 +123,15 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::ShapeNotFound { id } => format!("Shape not found: {id}"),
         ErrorKind::ShapeHasNoText { id } => format!("Shape has no text box: {id}"),
         ErrorKind::PictureNotFound { id } => format!("Picture not found: {id}"),
+        ErrorKind::TextBoxNotFound { id } => format!("Text box not found: {id}"),
+        ErrorKind::LastTextBoxPara => {
+            "Cannot delete the last paragraph in a text box".into()
+        }
+        ErrorKind::TextBoxLinkCrossPart => {
+            "Text boxes in a link chain must be in the same part".into()
+        }
+        ErrorKind::InvalidHexColor => "color must be a 6-digit RGB hex value or null".into(),
+        ErrorKind::InvalidTextBoxDirection => "direction must be horizontal or vertical".into(),
         ErrorKind::InvalidPicKind => "kind must be inline or anchor".into(),
         ErrorKind::InvalidPicWrap => {
             "wrap must be square, tight, through, topAndBottom, or none".into()

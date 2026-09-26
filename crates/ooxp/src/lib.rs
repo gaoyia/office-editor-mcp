@@ -1,4 +1,4 @@
-//! ooxp：用领域 JSON 对 OOXML 做 inspect / create / apply。
+//! ooxp：用领域 JSON 对 OOXML 做 inspect / create / apply / exportMedia。
 
 mod dispatch;
 mod docx;
@@ -177,6 +177,8 @@ mod tests {
         };
         assert_eq!(tree["id"], "docx:document");
         assert_eq!(tree["paraCount"], 2);
+        assert_eq!(tree["pictureCount"], 0);
+        assert_eq!(tree["textBoxCount"], 0);
         assert!(tree.get("paragraphs").is_none());
         assert_eq!(tree["headers"], json!([]));
         assert_eq!(tree["footers"], json!([]));
@@ -335,6 +337,61 @@ mod tests {
                 "action": "apply",
                 "path": path.to_string_lossy(),
                 "ops": [{ "op": "replacePicture", "id": "header:default:1/pic:1", "file": "a.png" }]
+            })
+            .to_string(),
+            None,
+        )
+        .unwrap_err();
+        assert_eq!(err.code(), ErrorCode::InvalidField);
+    }
+
+    #[test]
+    fn xlsx_and_pptx_reject_export_media() {
+        let xlsx = tmp("export-reject.xlsx");
+        run(
+            &json!({
+                "schemaVersion": 1,
+                "action": "create",
+                "path": xlsx.to_string_lossy(),
+                "workbook": { "sheets": [{ "name": "Sheet1" }] }
+            })
+            .to_string(),
+            None,
+        )
+        .unwrap();
+        let err = run(
+            &json!({
+                "schemaVersion": 1,
+                "action": "exportMedia",
+                "path": xlsx.to_string_lossy(),
+                "id": "header:default:1/pic:1",
+                "output": tmp("export-reject.png").to_string_lossy()
+            })
+            .to_string(),
+            None,
+        )
+        .unwrap_err();
+        assert_eq!(err.code(), ErrorCode::InvalidField);
+
+        let pptx = tmp("export-reject.pptx");
+        run(
+            &json!({
+                "schemaVersion": 1,
+                "action": "create",
+                "path": pptx.to_string_lossy(),
+                "presentation": { "slides": [{ "shapes": [{ "text": "a" }] }] }
+            })
+            .to_string(),
+            None,
+        )
+        .unwrap();
+        let err = run(
+            &json!({
+                "schemaVersion": 1,
+                "action": "exportMedia",
+                "path": pptx.to_string_lossy(),
+                "id": "slide:1/shape:2",
+                "output": tmp("export-reject-ppt.png").to_string_lossy()
             })
             .to_string(),
             None,
@@ -667,6 +724,8 @@ mod tests {
                 "format",
                 "id",
                 "paraCount",
+                "pictureCount",
+                "textBoxCount",
                 "outline",
                 "headers",
                 "footers",
@@ -682,11 +741,11 @@ mod tests {
         );
         assert_eq!(
             object_keys(&tree["paragraphs"][0]),
-            ["id", "index", "style", "level", "text", "stable"]
+            ["id", "index", "style", "level", "text", "stable", "pictureCount", "textBoxCount"]
         );
         assert_eq!(
             object_keys(&tree["paragraphs"][1]),
-            ["id", "index", "style", "text", "stable"]
+            ["id", "index", "style", "text", "stable", "pictureCount", "textBoxCount"]
         );
         assert_eq!(
             object_keys(&tree["sections"][0]),

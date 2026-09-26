@@ -332,3 +332,213 @@ function Ensure-DocxWordPictureSource([switch]$Force) {
     Write-Log "saved word picture source $path"
     return $path
 }
+
+# 正文某段同时有行内图和浮动图。
+function Ensure-DocxWordBodyPictureSource([switch]$Force) {
+    $path = Get-OutPath 'docx-word-body-picture-source.docx'
+    if ((Test-Path $path) -and -not $Force) { return $path }
+
+    $pngA = Ensure-OoxpPngA
+    $tmpDir = Join-Path $env:TEMP 'ooxp-office'
+    New-Item -ItemType Directory -Force -Path $tmpDir | Out-Null
+    $tmp = Join-Path $tmpDir 'docx-word-body-picture-source.docx'
+    $S = $global:OoxpStrings
+    $req = @{
+        schemaVersion = 1; action = 'create'
+        path = $tmp.Replace('\', '/'); format = 'docx'
+        document = @{
+            paragraphs = @(
+                @{ style = 'Heading1'; text = $S.chapter1 }
+                @{ text = $S.para2src }
+            )
+        }
+    }
+    Invoke-OoxpRequest $req 'docx-body-picture-source-create' | Out-Null
+
+    $word = Ensure-MsWord (Ensure-DocxCreate)
+    $doc = Open-WordDoc $word $tmp
+    $p2 = $doc.Paragraphs.Item(2)
+    $r = $p2.Range
+    $inlines = $doc.InlineShapes
+    $inline = $inlines.AddPicture($pngA, $false, $true, $r)
+    $r2 = $p2.Range
+    $inline2 = $inlines.AddPicture($pngA, $false, $true, $r2)
+    $float = $inline2.ConvertToShape()
+    $wrap = $float.WrapFormat
+    $wrap.Type = 0
+    Write-Log 'word Save() 原地覆盖 TEMP 里的带图正文样例'
+    $doc.Save()
+    Release-Com $wrap
+    Release-Com $float
+    Release-Com $inline2
+    Release-Com $inline
+    Release-Com $inlines
+    Release-Com $r2
+    Release-Com $r
+    Release-Com $p2
+    Close-WordDoc $doc
+    Copy-Item -Force $tmp $path
+    Write-Log "saved word body picture source $path"
+    return $path
+}
+
+# 从 inspect 树里按框内第一段文字找框。链接后继框常被 Word 写成空段，对不上文字。
+function Find-TreeTextBox($tree, [string]$text) {
+    foreach ($p in @($tree.paragraphs)) {
+        foreach ($b in @($p.textBoxes)) {
+            $paras = @($b.paragraphs)
+            if ($paras.Count -and ([string]$paras[0].text -eq $text)) { return $b }
+        }
+    }
+    return $null
+}
+
+function Find-TreeTextBoxById($tree, [string]$id) {
+    if (-not $id) { return $null }
+    foreach ($p in @($tree.paragraphs)) {
+        foreach ($b in @($p.textBoxes)) {
+            if ($b.id -eq $id) { return $b }
+        }
+    }
+    return $null
+}
+
+# 正文有行内框、浮动框、一对链接框，以及组合里的框。
+# 框用 ooxp 写成 DrawingML（Word COM 的 AddTextbox 在本机可能落到 VML，inspect 不收）。
+# 骨架和收尾都经 Word Save()，组合也由 Word 亲手 Group。
+function Ensure-DocxWordTextBoxSource([switch]$Force) {
+    $path = Get-OutPath 'docx-word-textbox-source.docx'
+    if ((Test-Path $path) -and -not $Force) { return $path }
+
+    $tmpDir = Join-Path $env:TEMP 'ooxp-office'
+    New-Item -ItemType Directory -Force -Path $tmpDir | Out-Null
+    $skel = Join-Path $tmpDir 'docx-word-textbox-skel.docx'
+    $built = Join-Path $tmpDir 'docx-word-textbox-built.docx'
+    $linked = Join-Path $tmpDir 'docx-word-textbox-linked.docx'
+    $S = $global:OoxpStrings
+    $req = @{
+        schemaVersion = 1; action = 'create'
+        path = $skel.Replace('\', '/'); format = 'docx'
+        document = @{
+            paragraphs = @(
+                @{ style = 'Heading1'; text = $S.chapter1 }
+                @{ text = $S.para2src }
+                @{ text = $S.txbxLinkPara }
+                @{ text = $S.txbxGroupPara }
+            )
+        }
+    }
+    Invoke-OoxpRequest $req 'docx-textbox-skel-create' | Out-Null
+
+    $word = Ensure-MsWord (Ensure-DocxCreate)
+    $doc = Open-WordDoc $word $skel
+    Write-Log 'word Save() 原地覆盖 TEMP 里的文本框骨架'
+    $doc.Save()
+    Close-WordDoc $doc
+
+    $treeS = Invoke-OoxpTree @{
+        schemaVersion = 1; action = 'inspect'
+        path = $skel.Replace('\', '/'); format = 'docx'
+        scope = @{ from = 1; maxParas = 20 }
+    } 'docx-textbox-skel-inspect'
+    $paras = @($treeS.paragraphs)
+    if ($paras.Count -lt 4) { throw "文本框骨架段落不足 $($paras.Count)" }
+    $p2 = $paras[1].id
+    $p3 = $paras[2].id
+    $p4 = $paras[3].id
+
+    Invoke-OoxpRequest @{
+        schemaVersion = 1; action = 'apply'
+        path = $skel.Replace('\', '/')
+        output = $built.Replace('\', '/')
+        ops = @(
+            @{ op = 'insertTextBox'; id = $p2; text = $S.txbxInline; cx = 1371600; cy = 548640 }
+            @{ op = 'insertTextBox'; id = $p2; text = $S.txbxFloat }
+            @{ op = 'insertTextBox'; id = $p3; text = $S.txbxLinkA }
+            @{ op = 'insertTextBox'; id = $p3; text = $S.txbxLinkB }
+            @{ op = 'insertTextBox'; id = $p4; text = $S.txbxGroup }
+        )
+    } 'docx-textbox-insert-boxes' | Out-Null
+
+    $treeB = Invoke-OoxpTree @{
+        schemaVersion = 1; action = 'inspect'
+        path = $built.Replace('\', '/'); format = 'docx'
+        scope = @{ from = 1; maxParas = 20; textBoxes = $true; textBoxContent = $true }
+    } 'docx-textbox-built-inspect'
+    $bInline = Find-TreeTextBox $treeB $S.txbxInline
+    $bLinkA = Find-TreeTextBox $treeB $S.txbxLinkA
+    $bLinkB = Find-TreeTextBox $treeB $S.txbxLinkB
+    if (-not $bInline -or -not $bLinkA -or -not $bLinkB) {
+        throw 'insertTextBox 之后找不到行内框或链接框'
+    }
+
+    Invoke-OoxpRequest @{
+        schemaVersion = 1; action = 'apply'
+        path = $built.Replace('\', '/')
+        output = $linked.Replace('\', '/')
+        ops = @(
+            @{ op = 'setTextBoxWrap'; id = $bInline.id; kind = 'inline' }
+            @{ op = 'setTextBoxLink'; id = $bLinkA.id; next = $bLinkB.id }
+        )
+    } 'docx-textbox-wrap-link' | Out-Null
+
+    Close-WordDocByPath $word $linked
+    $doc2 = Open-WordDoc $word $linked
+    $shapes = $doc2.Shapes
+    $target = $null
+    for ($i = 1; $i -le [int]$shapes.Count; $i++) {
+        $sh = $shapes.Item($i)
+        $t = ''
+        $tf = $null
+        $tr = $null
+        try {
+            $tf = $sh.TextFrame
+            if ([int]$tf.HasText -ne 0) {
+                $tr = $tf.TextRange
+                $t = ([string]$tr.Text).Trim()
+            }
+        } catch {}
+        Release-Com $tr
+        Release-Com $tf
+        if ($t -eq $S.txbxGroup) {
+            $target = $sh
+            break
+        }
+        Release-Com $sh
+    }
+    if ($target) {
+        $rect = $null
+        $sr = $null
+        $grp = $null
+        try {
+            $iTarget = $null
+            for ($i = 1; $i -le [int]$shapes.Count; $i++) {
+                $s = $shapes.Item($i)
+                if ($s.Name -eq $target.Name) { $iTarget = $i }
+                if ($s -ne $target) { Release-Com $s }
+            }
+            $rect = $shapes.AddShape(1, 220, 260, 36, 36)
+            $arr = New-Object 'System.Object[]' 2
+            $arr[0] = $iTarget
+            $arr[1] = [int]$shapes.Count
+            $sr = $shapes.Range($arr)
+            $grp = $sr.Group()
+            Write-Log ("word Group 组合框 + 矩形，名=$($grp.Name)")
+        } catch {
+            Write-Log "word Group 失败：$($_.Exception.Message)"
+        }
+        Release-Com $grp
+        Release-Com $sr
+        Release-Com $rect
+        Release-Com $target
+    } else {
+        Write-Log 'word 找不到组合框形状，跳过 Group'
+    }
+    Write-Log 'word Save() 原地覆盖 TEMP 里的文本框样例'
+    $doc2.Save()
+    Release-Com $shapes
+    Close-WordDoc $doc2
+    Copy-Item -Force $linked $path
+    Write-Log "saved word textbox source $path"
+    return $path
+}

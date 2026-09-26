@@ -13,7 +13,7 @@ struct Cli {
     /// 领域 JSON 路径。`-` 或省略时从 stdin 读。
     #[arg(long)]
     input: Option<String>,
-    /// create 缺 path、或 apply 缺 output 时的落盘路径。
+    /// create 缺 path、或 apply / exportMedia 缺 output 时的落盘路径。
     #[arg(long)]
     output: Option<PathBuf>,
     /// 错误文案语言。请求里的 locale 优先。
@@ -59,8 +59,15 @@ fn real_main(cli: &Cli) -> Result<(), (Error, Option<Lang>)> {
             };
             println!("{text}");
         }
-        RunOutput::Written { path, ops_applied } => {
-            println!("{}", written_json(&path, ops_applied, cli.pretty));
+        RunOutput::Written {
+            path,
+            ops_applied,
+            content_type,
+        } => {
+            println!(
+                "{}",
+                written_json(&path, ops_applied, content_type.as_deref(), cli.pretty)
+            );
         }
     }
     Ok(())

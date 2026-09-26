@@ -32,6 +32,8 @@ $order = @(
     'docx-distance'
     'docx-link'
     'docx-picture'
+    'docx-body-picture'
+    'docx-textbox'
     'pptx-apply'
     'opc-resave'
 )

@@ -15,15 +15,16 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 | C1 | ✅ | Word 16.0 能打开 `manual-check/office/out/docx-create.docx`，标题栏无 Repair；`CompatibilityMode=15` |
 | C2 | 🚫 | 不再要求 WPS。此前 WPS 文字已打开过，不作为验收条件 |
 | C3–C4 | ✅ | 标题 1 / 「标题」，正文 `hello` |
-| I1–I5 | ✅ | `docx:document`、`paraCount=2`、大纲 level 1、「标题」、`para:{hex}` 且 `stable`、无 scope 时没有 `paragraphs` |
+| I1–I5 | ✅ | `docx:document`、`paraCount=2`、大纲 level 1、「标题」、`para:{hex}` 且 `stable`、无 scope 时没有 `paragraphs`，仍有 `pictureCount` |
 | A1–A5 | ✅ | Word 打开 apply 产物：第二段为「改过的正文」且仍加粗，第一段仍是「第一章」/标题 1，第三段未改 |
 | HF1–HF5 | ✅ | Word 另存带页眉页脚样例：名单与展开、改页眉后打开无修复，页眉变「新页眉」、正文与页脚未改 |
 | D1–D4 | ✅ | Word 16.0：`section:1` 原距离 708/708；apply 后 HeaderDistance=72 磅、FooterDistance=36 磅，正文未改 |
 | L1–L4 | ✅ | Word 16.0：第二节 `headerLink.default` 为 true 且 `LinkToPrevious`；断开后无修复且不再链接；改第二节页眉后第一节仍是原文；正文未改 |
 | P1–P7 | ✅ | Word 16.0：inspect 列出行内图与浮动图；断链后第二节仍见同一张图；换/插/删无修复；尺寸 144 磅；行内改浮动 `square` |
+| B1–B7 | ✅ | Word 16.0：根上 `pictureCount=2`；第二段行内+浮动；换/插/删无修复；尺寸 144 磅；行内改浮动 `square`；改字后图还在 |
+| E1–E4 | ✅ | 库测试：页眉图 / 正文图导出字节与 `/word/media/…` 一致，`contentType` 为 `image/png`；换图后再导出得到新文件；段落 id 报 `InvalidId`，缺图报 `IdNotFound`。不强制开 Word |
+| T1–T9 | ✅ | Word 16.0：`docx-textbox.ps1`，13 PASS / 0 FAIL。行内+浮动+链接+组合；框内改字、插删框、尺寸 144 磅、绕排、红填蓝边、框内插删段与插图、断开再接上。标题栏无 Repair |
 | O1 | 🚫 | 领域层不做原样保存，与 xlsx 清单相同。零脏写回见 OPC 库测试。Word 另存 create 产物见 `docx-O1-word-resave`。此前记的 `SaveAs2` 挂起，拆分后重跑没再出现，一秒内返回 |
-
-这一轮手测样例没有文本框。带 `mc:AlternateContent` 或 `w:txbxContent` 的边界已由 `crates/ooxp/tests/docx_fidelity.rs` 覆盖；带文本框样例的 Word 手测尚未另加。
 
 ## create
 
@@ -121,6 +122,33 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 | B5 | 尺寸 | `setPictureSize` 后 COM 或目视尺寸对上（允许 EMU 换算误差） |
 | B6 | 绕排 | `setPictureWrap` 把行内改成浮动 `square` 后，Word 按四周型显示 |
 | B7 | 改字 | 对该段 `setParaText` 后文字已改、图还在，Word 无修复 |
+
+## 导出媒体
+
+对带图样例发 `exportMedia`。不必开 Word，比对导出文件与 ZIP 内 `/word/media/…` 的字节即可。手测脚本不强制。
+
+| 序号 | 检查 | 通过标准 |
+| --- | --- | --- |
+| E1 | 页眉图 | 对页眉图 id 导出，字节与 `/word/media/…` 一致，`contentType` 与内容类型相符 |
+| E2 | 换图后 | `replacePicture` 后再导出，得到的是新文件 |
+| E3 | 正文图 | 对正文图 id 同样能导出，字节一致 |
+| E4 | 错 id | 对段落 id 报 `InvalidId`；对不存在的图 id 报 `IdNotFound` |
+
+## 文本框
+
+准备一份 Word 亲手另存的样例：正文有行内框、浮动框，其中一对链接框；另有组合里的框。不要用库 `create` 产物当唯一样例。手测脚本 `manual-check/office/cases/docx-textbox.ps1`。
+
+| 序号 | 检查 | 通过标准 |
+| --- | --- | --- |
+| T1 | 名单 | 无 scope 时根上有 `textBoxCount`、没有正文 `textBoxes`；`from`+`maxParas`+`textBoxes` 时目标段有框 id，形如 `para:…/txbx:…` |
+| T2 | 框内 | `textBoxContent` 时框内段落 id 带框前缀，`text` 对，不并进宿主 `text` |
+| T3 | 链接 | 链接框的 `link.prev` / `link.next` 互指 |
+| T4 | 改字 | 对框内段落 `setParaText` 后 Word 无修复，框还在 |
+| T5 | 插删框 | `insertTextBox` / `deleteTextBox` 后 Word 无修复 |
+| T6 | 尺寸绕排 | `setTextBoxSize` / `setTextBoxWrap` 后 COM 或目视对上 |
+| T7 | 填色描边 | `setTextBoxFill` / `setTextBoxLine` 后可见变化，无修复 |
+| T8 | 框内段与图 | 框内插删段、插图与正文图规则相同 |
+| T9 | 链接 | `setTextBoxLink` 断开或接上后 Word 能继续编辑链条 |
 
 ## 原样保存（opc 验收）
 

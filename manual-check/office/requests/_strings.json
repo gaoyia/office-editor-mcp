@@ -13,5 +13,14 @@
   "headerSrc": "页眉原文",
   "footerSrc": "页脚原文",
   "headerNew": "新页眉",
-  "headerSec2New": "第二节页眉"
+  "headerSec2New": "第二节页眉",
+  "txbxInline": "行内框",
+  "txbxFloat": "浮动框",
+  "txbxLinkA": "链接框甲",
+  "txbxLinkB": "链接框乙",
+  "txbxGroup": "组合框",
+  "txbxLinkPara": "链接段",
+  "txbxGroupPara": "组合段",
+  "txbxInnerNew": "框内改字",
+  "txbxNewPara": "框内新段"
 }

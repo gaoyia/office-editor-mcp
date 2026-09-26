@@ -22,6 +22,8 @@ MCP 是以后的传输层，第一期不做。将来无论用不用 JSON-RPC，�
 
 禁止把 inspect 树当成完整文档模型，改完之后整包重新生成。apply 的入参只能是操作列表，不能是整棵树。
 
+docx 另有只读动作 `exportMedia`：按图 id 把媒体部件原字节写到本地。它不改上述三个动作的语义，也不把字节塞进 inspect 树。xlsx / pptx 本期报 `InvalidField`。
+
 ## 模块
 
 建议用 Cargo workspace，两个 crate。xlsx、docx、pptx 已落地。信封解析在 `json`，按 `format` 分发在 `dispatch`，每种格式自己解析自己的 `scope` 与 `ops`。
@@ -55,7 +57,7 @@ crates/ooxp-cli/             命令行，只依赖 ooxp。二进制名也是 oox
 
 ### docx
 
-主文档由根关系里 `/officeDocument` 指向，常见路径 `/word/document.xml`。inspect 读该部件里的 `w:p`，返回大纲和按范围截断的段落；并始终列出页眉、页脚容器、各节距边界，以及每节是否链接到前一节。文档根始终带正文 `pictureCount`。页眉页脚容器始终带 `pictureCount`。`scope.pictures` 为 true 时列出页眉页脚图；同时给了正文切片则段落上也列出图。apply 可改被点名段落的可见文本（主文档或页眉页脚部件），可改节上 `w:pgMar` 的页眉/页脚距离，也可断开或重新链接某节某类型的页眉页脚（断链时抄走 header/footer 自己的 `.rels`，媒体仍共用）。页眉、页脚和正文里的 DrawingML 图片可换、插、删，并可改尺寸与绕排。不整篇从 JSON 重建。create 生成最小 Transitional 包，含 `styles.xml`（Normal 与 Heading1–3）和 `settings.xml`（`compatibilityMode` 为 15），不写页眉页脚，也不生成多节，也不写图。修订、复杂表格结构不做。不写入 `titlePg` / `evenAndOddHeaders`。
+主文档由根关系里 `/officeDocument` 指向，常见路径 `/word/document.xml`。inspect 读该部件里的 `w:p`，返回大纲和按范围截断的段落；并始终列出页眉、页脚容器、各节距边界，以及每节是否链接到前一节。文档根始终带正文 `pictureCount` 与 `textBoxCount`。页眉页脚容器始终带这两项。`scope.pictures` / `scope.textBoxes` 为 true 时列出页眉页脚图或框；同时给了正文切片则段落上也列出。`scope.textBoxContent` 再展开框内段落。apply 可改被点名段落的可见文本（主文档、页眉页脚或框内），可改节上 `w:pgMar` 的页眉/页脚距离，也可断开或重新链接某节某类型的页眉页脚（断链时抄走 header/footer 自己的 `.rels`，媒体仍共用）。页眉、页脚和正文里的 DrawingML 图片可换、插、删，并可改尺寸与绕排。文本框可插、删，可改尺寸、绕排、填色、描边、横竖排与链接。`exportMedia` 按图 id 写出 `/word/media/…` 原字节。不整篇从 JSON 重建。create 生成最小 Transitional 包，含 `styles.xml`（Normal 与 Heading1–3）和 `settings.xml`（`compatibilityMode` 为 15），不写页眉页脚，也不生成多节；段落上可带文本框，仍不写图。修订、复杂表格结构不做。不写入 `titlePg` / `evenAndOddHeaders`。
 
 ### pptx
 
@@ -63,21 +65,25 @@ crates/ooxp-cli/             命令行，只依赖 ooxp。二进制名也是 oox
 
 ### cli
 
-从文件或 stdin 读入一份领域 JSON，按 `action` 分发。inspect 把树打到 stdout。create 和 apply 写出目标文件。契约见 [cli.md](cli.md)。
+从文件或 stdin 读入一份领域 JSON，按 `action` 分发。inspect 把树打到 stdout。create 和 apply 写出目标 Office 文件。`exportMedia` 写出媒体文件。契约见 [cli.md](cli.md)。
 
 ## 数据流
 
 ### inspect
 
-调用方给出路径和范围。库打开 OPC 包，定位格式入口部件（xlsx 是 Workbook，docx 是 Main Document，pptx 是 Presentation）。按范围读必要的 XML，生成带 id 的树。xlsx 默认不读完全部单元格，docx 默认不返回正文 `paragraphs` 也不展开页眉页脚段落或任何 `pictures`，pptx 默认不返回 `shapes`。包不写回。
+调用方给出路径和范围。库打开 OPC 包，定位格式入口部件（xlsx 是 Workbook，docx 是 Main Document，pptx 是 Presentation）。按范围读必要的 XML，生成带 id 的树。xlsx 默认不读完全部单元格，docx 默认不返回正文 `paragraphs` 也不展开页眉页脚段落、任何 `pictures` 或 `textBoxes`，pptx 默认不返回 `shapes`。包不写回。
 
 ### apply
 
-调用方给出路径和 `ops`。库打开包，按每条 op 的 id 找到 XML 节点，只改这些节点。xlsx 在改了单元格之后，把工作簿标成打开时需要重算。docx 可改被点名的段落，可改节上页眉页脚距边界，也可改节上页眉页脚是否链接前节，也可改页眉、页脚或正文里被点名的 DrawingML 图。pptx 只改被点名形状的可见文字，且只让那一张幻灯片部件变脏。保存时只重写脏部件。
+调用方给出路径和 `ops`。库打开包，按每条 op 的 id 找到 XML 节点，只改这些节点。xlsx 在改了单元格之后，把工作簿标成打开时需要重算。docx 可改被点名的段落，可改节上页眉页脚距边界，也可改节上页眉页脚是否链接前节，也可改页眉、页脚或正文里被点名的 DrawingML 图与文本框。pptx 只改被点名形状的可见文字，且只让那一张幻灯片部件变脏。保存时只重写脏部件。
 
 ### create
 
 调用方给出格式、输出路径和内容对象。库在内存里生成一套最小可打开的 Transitional 部件，打成新 ZIP。不读取任何已有文件当模板，除非以后另开「从模板复制」的动作。
+
+### exportMedia
+
+调用方给出源 docx、图 id 和本地目标路径。库打开包，按图 id 找到 `a:blip` 的关系，把目标媒体部件原字节写出。包不写回。xlsx / pptx 本期直接拒绝。
 
 ## 硬约束
 

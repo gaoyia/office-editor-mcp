@@ -120,6 +120,11 @@ impl Element {
         self.children = vec![Node::Text(text.into())];
     }
 
+    pub fn with_text(mut self, text: impl Into<String>) -> Self {
+        self.set_text(text);
+        self
+    }
+
     pub fn push_element(&mut self, el: Element) {
         self.children.push(Node::Element(el));
     }

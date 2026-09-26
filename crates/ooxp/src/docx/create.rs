@@ -8,14 +8,22 @@ use crate::opc::{
 };
 use crate::xml;
 
+use super::textbox::{self, DEFAULT_CX, DEFAULT_CY, WPS_NS};
 use super::{
-    CT_APP, CT_CORE, CT_DOCUMENT, CT_SETTINGS, CT_STYLES, MC_NS, REL_APP, REL_CORE, REL_NS,
-    REL_OFFICE_DOCUMENT, REL_SETTINGS, REL_STYLES, W14_NS, WML_NS,
+    A_NS, CT_APP, CT_CORE, CT_DOCUMENT, CT_SETTINGS, CT_STYLES, MC_NS, REL_APP, REL_CORE, REL_NS,
+    REL_OFFICE_DOCUMENT, REL_SETTINGS, REL_STYLES, W14_NS, WML_NS, WP_NS,
 };
+
+struct NewBox {
+    text: String,
+    cx: i64,
+    cy: i64,
+}
 
 struct NewPara {
     text: String,
     style: Option<&'static str>,
+    boxes: Vec<NewBox>,
 }
 
 pub fn create(document: &Value) -> Result<Vec<u8>, Error> {
@@ -62,6 +70,7 @@ pub fn create(document: &Value) -> Result<Vec<u8>, Error> {
         paras.push(NewPara {
             text: String::new(),
             style: None,
+            boxes: Vec::new(),
         });
     }
 
@@ -147,7 +156,7 @@ fn parse_para(v: &Value, i: usize) -> Result<NewPara, Error> {
         )
     })?;
     for k in obj.keys() {
-        if !matches!(k.as_str(), "text" | "style") {
+        if !matches!(k.as_str(), "text" | "style" | "textBoxes") {
             return Err(Error::with_path(
                 ErrorKind::UnknownField { field: k.clone() },
                 format!("document.paragraphs[{i}].{k}"),
@@ -180,7 +189,106 @@ fn parse_para(v: &Value, i: usize) -> Result<NewPara, Error> {
             ));
         }
     };
-    Ok(NewPara { text, style })
+    let boxes = parse_boxes(obj.get("textBoxes"), i)?;
+    Ok(NewPara {
+        text,
+        style,
+        boxes,
+    })
+}
+
+fn parse_boxes(v: Option<&Value>, i: usize) -> Result<Vec<NewBox>, Error> {
+    let Some(v) = v else {
+        return Ok(Vec::new());
+    };
+    let arr = v.as_array().ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::WrongType {
+                field: format!("document.paragraphs[{i}].textBoxes"),
+                expected: TypeName::Array,
+            },
+            format!("document.paragraphs[{i}].textBoxes"),
+        )
+    })?;
+    let mut out = Vec::new();
+    for (j, b) in arr.iter().enumerate() {
+        let obj = b.as_object().ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::WrongType {
+                    field: format!("document.paragraphs[{i}].textBoxes[{j}]"),
+                    expected: TypeName::Object,
+                },
+                format!("document.paragraphs[{i}].textBoxes[{j}]"),
+            )
+        })?;
+        for k in obj.keys() {
+            if !matches!(k.as_str(), "text" | "cx" | "cy") {
+                return Err(Error::with_path(
+                    ErrorKind::UnknownField { field: k.clone() },
+                    format!("document.paragraphs[{i}].textBoxes[{j}].{k}"),
+                ));
+            }
+        }
+        let text = match obj.get("text") {
+            None => String::new(),
+            Some(Value::String(s)) => s.clone(),
+            Some(_) => {
+                return Err(Error::with_path(
+                    ErrorKind::WrongType {
+                        field: "text".into(),
+                        expected: TypeName::String,
+                    },
+                    format!("document.paragraphs[{i}].textBoxes[{j}].text"),
+                ));
+            }
+        };
+        let cx = parse_create_emu(obj.get("cx"), i, j, "cx")?.unwrap_or(DEFAULT_CX);
+        let cy = parse_create_emu(obj.get("cy"), i, j, "cy")?.unwrap_or(DEFAULT_CY);
+        out.push(NewBox { text, cx, cy });
+    }
+    Ok(out)
+}
+
+fn parse_create_emu(
+    v: Option<&Value>,
+    i: usize,
+    j: usize,
+    field: &str,
+) -> Result<Option<i64>, Error> {
+    let Some(v) = v else {
+        return Ok(None);
+    };
+    let path = format!("document.paragraphs[{i}].textBoxes[{j}].{field}");
+    match v {
+        Value::Number(n) => {
+            if let Some(u) = n.as_u64() {
+                if u == 0 || u > i64::MAX as u64 {
+                    return Err(Error::with_path(
+                        ErrorKind::MinValue {
+                            field: field.into(),
+                            min: 1,
+                        },
+                        path,
+                    ));
+                }
+                return Ok(Some(u as i64));
+            }
+            Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: field.into(),
+                    expected: TypeName::Integer,
+                },
+                path,
+            ))
+        }
+        _ => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::Integer,
+            },
+            path,
+        )),
+    }
 }
 
 fn canonicalize_style(s: &str, i: usize) -> Result<Option<&'static str>, Error> {
@@ -200,6 +308,8 @@ fn canonicalize_style(s: &str, i: usize) -> Result<Option<&'static str>, Error> 
 
 fn document_xml(paras: &[NewPara]) -> String {
     let mut body = String::new();
+    let mut next_para = paras.len() as u32 + 1;
+    let mut doc_pr = 1u32;
     for (i, p) in paras.iter().enumerate() {
         let id = format!("{:08X}", i as u32 + 1);
         let style = if let Some(s) = p.style {
@@ -217,15 +327,25 @@ fn document_xml(paras: &[NewPara]) -> String {
         } else {
             format!("<w:r><w:t{space}>{}</w:t></w:r>", xml::escape_text(&p.text))
         };
+        let mut boxes = String::new();
+        for b in &p.boxes {
+            let inner_id = format!("{:08X}", next_para);
+            next_para += 1;
+            boxes.push_str(&format!(
+                "<w:r>{}</w:r>",
+                textbox::textbox_ac_xml(doc_pr, b.cx, b.cy, &b.text, &inner_id)
+            ));
+            doc_pr += 1;
+        }
         body.push_str(&format!(
-            r#"<w:p w14:paraId="{id}" w14:textId="{id}">{style}{t}</w:p>"#
+            r#"<w:p w14:paraId="{id}" w14:textId="{id}">{style}{t}{boxes}</w:p>"#
         ));
     }
     body.push_str(
         r#"<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="708" w:footer="708" w:gutter="0"/></w:sectPr>"#,
     );
     format!(
-        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="{WML_NS}" xmlns:r="{REL_NS}" xmlns:w14="{W14_NS}" xmlns:mc="{MC_NS}" mc:Ignorable="w14"><w:body>{body}</w:body></w:document>"#
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="{WML_NS}" xmlns:r="{REL_NS}" xmlns:w14="{W14_NS}" xmlns:mc="{MC_NS}" xmlns:wp="{WP_NS}" xmlns:a="{A_NS}" xmlns:wps="{WPS_NS}" mc:Ignorable="w14"><w:body>{body}</w:body></w:document>"#
     )
 }
 

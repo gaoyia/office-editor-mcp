@@ -51,7 +51,7 @@
 | --- | --- | --- |
 | `InvalidJson` | 入参不是 JSON，或缺 `schemaVersion` / `action` | 2 |
 | `UnsupportedSchema` | `schemaVersion` 不是 `1` | 2 |
-| `UnsupportedAction` | `action` 不是 `inspect` / `create` / `apply` | 2 |
+| `UnsupportedAction` | `action` 不是 `inspect` / `create` / `apply` / `exportMedia` | 2 |
 | `UnsupportedFormat` | 扩展名或 `format` 不是 `xlsx` / `docx` / `pptx` | 2 |
 | `UnsupportedOp` | apply 遇到第一期不认识的 `op` | 2 |
 | `InvalidField` | 字段类型不对、互斥字段同时出现、sheet 名非法、对不上格式的 op 或 scope 键 | 2 |
@@ -66,13 +66,13 @@
 | `Io` | 读盘、写盘、创建目录失败 | 4 |
 | `NotImplemented` | 第一期明确不做的动作。目前：对共享公式的主单元格发 `setCell` | 2 |
 
-找不到单元格时，`setCell` 的语义是新建该单元格，因此空单元格不是 `IdNotFound`。找不到工作表才是 `IdNotFound`。找不到段落时，`setParaText` 报 `IdNotFound`，不新建段落；正文 `para:` 只匹配主文档，页眉页脚要用带容器前缀的 id。对页眉或页脚容器 id（没有 `/para:`）发 `setParaText` 报 `InvalidId`。找不到节时，`setHeaderFooterDistance` 与 `setHeaderFooterLink` 报 `IdNotFound`；id 不是 `section:{n}` 报 `InvalidId`。对第一节发 `setHeaderFooterLink` 且 `linked: true`，或该类型对本节不生效，报 `InvalidField`。找不到图时，图片 op 报 `IdNotFound`，不新建图（`insertPicture` 除外）。`insertPicture` 的 `id` 必须是段落 id；对图 id、容器 id 或 `section:{n}` 发该 op 报 `InvalidId`。`replacePicture` / `deletePicture` / `setPictureSize` / `setPictureWrap` 的 `id` 必须是图 id；对段落 id、容器 id 或 `section:{n}` 发这四个 op 报 `InvalidId`。读不到图片 `file` 报 `Io`。找不到形状时，`setShapeText` 报 `IdNotFound`，不新建形状。对幻灯片 id（`slide:{n}`，没有 `/shape:`）发 `setShapeText` 报 `InvalidId`。xlsx / pptx 的 `scope` 里出现 `pictures` 报 `InvalidField`。
+找不到单元格时，`setCell` 的语义是新建该单元格，因此空单元格不是 `IdNotFound`。找不到工作表才是 `IdNotFound`。找不到段落时，`setParaText` 报 `IdNotFound`，不新建段落；正文 `para:` 只匹配主文档，页眉页脚要用带容器前缀的 id。对页眉或页脚容器 id（没有 `/para:`）发 `setParaText` 报 `InvalidId`。找不到节时，`setHeaderFooterDistance` 与 `setHeaderFooterLink` 报 `IdNotFound`；id 不是 `section:{n}` 报 `InvalidId`。对第一节发 `setHeaderFooterLink` 且 `linked: true`，或该类型对本节不生效，报 `InvalidField`。找不到图时，图片 op 报 `IdNotFound`，不新建图（`insertPicture` 除外）。`insertPicture` 的 `id` 必须是段落 id；对图 id、容器 id 或 `section:{n}` 发该 op 报 `InvalidId`。`replacePicture` / `deletePicture` / `setPictureSize` / `setPictureWrap` 的 `id` 必须是图 id；对段落 id、容器 id 或 `section:{n}` 发这四个 op 报 `InvalidId`。读不到图片 `file` 报 `Io`。找不到形状时，`setShapeText` 报 `IdNotFound`，不新建形状。对幻灯片 id（`slide:{n}`，没有 `/shape:`）发 `setShapeText` 报 `InvalidId`。xlsx / pptx 的 `scope` 里出现 `pictures`、`textBoxes` 或 `textBoxContent` 报 `InvalidField`。对 xlsx / pptx 发 `exportMedia` 或文本框 op 报 `InvalidField`。找不到文本框时，框专用 op 报 `IdNotFound`。对宿主段落 id 发框专用 op（`insertTextBox` 除外）报 `InvalidId`。对框 id 发 `setParaText` 报 `InvalidId`。框内只剩一段时 `deletePara` 报 `InvalidField`。只给 `textBoxContent`、不给 `textBoxes` 报 `InvalidField`。`exportMedia` 找不到图报 `IdNotFound`；`id` 不是图 id 报 `InvalidId`；关系指向外部资源报 `OpcPartMissing`。
 
 ## 成功形态
 
 inspect 成功：stdout 是领域树，见 [json-contract.md](json-contract.md)。不要再包一层 `{ "ok": true, "tree": ... }`，以免和树本身的字段打架。
 
-create / apply 成功：stdout 为一行 JSON：
+create / apply / exportMedia 成功：stdout 为一行 JSON：
 
 ```json
 {
@@ -82,4 +82,14 @@ create / apply 成功：stdout 为一行 JSON：
 }
 ```
 
-`opsApplied` 仅 apply 出现，等于实际执行的 op 条数。create 省略该字段。
+`opsApplied` 仅 apply 出现，等于实际执行的 op 条数。create 与 `exportMedia` 省略该字段。
+
+`exportMedia` 成功时再带 `contentType`（取自包内 `[Content_Types].xml`）。没有对应 Default / Override 时省略该字段：
+
+```json
+{
+  "ok": true,
+  "path": "C:\\out\\logo.png",
+  "contentType": "image/png"
+}
+```

@@ -47,16 +47,28 @@ pub(crate) enum IdReason {
     SectionPrefix,
     SectionIndexNotInt,
     SectionIndexFromOne,
-    /// 图片 id 必须是 header:…/pic:… 或 footer:…/pic:…
+    /// 图片 id 必须是 {容器}/pic:… 或 para:…/pic:…
     PicPrefix,
-    /// 页眉/页脚容器 id，缺少 `/pic:…`
+    /// 段落或容器 id，缺少 `/pic:…`
     PicContainer,
     PicIndexNotInt,
     PicIndexFromOne,
-    /// 正文里的图本期不做
-    PicBodyNotYet,
-    /// insertPicture 必须用页眉页脚段落 id
+    /// insertPicture 必须用段落 id
     InsertNeedsPara,
+    /// 框 id 必须是 {段落}/txbx:…
+    TxbxPrefix,
+    /// 段落 id，缺少 /txbx:
+    TxbxContainer,
+    TxbxIndexNotInt,
+    TxbxIndexFromOne,
+    /// 对框 id 发 setParaText
+    SetParaOnBox,
+    /// insertTextBox 必须是宿主段落
+    InsertNeedsHostPara,
+    /// 正文（框外）插删段
+    InsertParaBody,
+    /// insertPara / deletePara 必须是框或框内段
+    InsertParaNeedsBox,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -147,6 +159,14 @@ define_error_kinds! {
         .collect::<Vec<_>>(),
     UnsupportedOp { op: String } => vec![Self::UnsupportedOp { op: "merge".into() }],
     OpNotForFormat { format: String, op: String } => vec![Self::OpNotForFormat { format: "xlsx".into(), op: "setParaText".into() }],
+    ScopeFieldRequires { field: String, required: String } => vec![Self::ScopeFieldRequires {
+        field: "textBoxContent".into(),
+        required: "textBoxes".into(),
+    }],
+    ActionNotForFormat { format: String, action: String } => vec![Self::ActionNotForFormat {
+        format: "xlsx".into(),
+        action: "exportMedia".into(),
+    }],
     SetCellNeedsValueOrFormula => vec![Self::SetCellNeedsValueOrFormula],
     FormulaMustStartWithEquals => vec![Self::FormulaMustStartWithEquals],
     InvalidCellValue => vec![Self::InvalidCellValue],
@@ -182,6 +202,11 @@ define_error_kinds! {
     InvalidPicAlign => vec![Self::InvalidPicAlign],
     InvalidImageFile => vec![Self::InvalidImageFile],
     PictureNotFound { id: String } => vec![Self::PictureNotFound { id: "header:default:1/pic:1".into() }],
+    TextBoxNotFound { id: String } => vec![Self::TextBoxNotFound { id: "para:3F2A1B00/txbx:8".into() }],
+    LastTextBoxPara => vec![Self::LastTextBoxPara],
+    TextBoxLinkCrossPart => vec![Self::TextBoxLinkCrossPart],
+    InvalidHexColor => vec![Self::InvalidHexColor],
+    InvalidTextBoxDirection => vec![Self::InvalidTextBoxDirection],
     CannotLinkFirstSection => vec![Self::CannotLinkFirstSection],
     HfTypeInactive { kind: String, hf_type: String } => vec![Self::HfTypeInactive {
         kind: "header".into(),
@@ -271,8 +296,15 @@ impl IdReason {
             Self::PicContainer,
             Self::PicIndexNotInt,
             Self::PicIndexFromOne,
-            Self::PicBodyNotYet,
             Self::InsertNeedsPara,
+            Self::TxbxPrefix,
+            Self::TxbxContainer,
+            Self::TxbxIndexNotInt,
+            Self::TxbxIndexFromOne,
+            Self::SetParaOnBox,
+            Self::InsertNeedsHostPara,
+            Self::InsertParaBody,
+            Self::InsertParaNeedsBox,
         ]
     }
 }
@@ -346,6 +378,8 @@ impl ErrorKind {
             | Self::CreateNeedsObject { .. }
             | Self::CreateMissingObject { .. }
             | Self::OpNotForFormat { .. }
+            | Self::ActionNotForFormat { .. }
+            | Self::ScopeFieldRequires { .. }
             | Self::SetCellNeedsValueOrFormula
             | Self::FormulaMustStartWithEquals
             | Self::InvalidCellValue
@@ -363,7 +397,11 @@ impl ErrorKind {
             | Self::InvalidPicAlign
             | Self::InvalidImageFile
             | Self::CannotLinkFirstSection
-            | Self::HfTypeInactive { .. } => InvalidField,
+            | Self::HfTypeInactive { .. }
+            | Self::LastTextBoxPara
+            | Self::TextBoxLinkCrossPart
+            | Self::InvalidHexColor
+            | Self::InvalidTextBoxDirection => InvalidField,
             Self::OutOfRange { .. } => TruncatedLimit,
             Self::InvalidRange { .. } => InvalidRange,
             Self::InvalidId { .. } => InvalidId,
@@ -373,7 +411,8 @@ impl ErrorKind {
             | Self::SlideNotFound { .. }
             | Self::ShapeNotFound { .. }
             | Self::ShapeHasNoText { .. }
-            | Self::PictureNotFound { .. } => IdNotFound,
+            | Self::PictureNotFound { .. }
+            | Self::TextBoxNotFound { .. } => IdNotFound,
             Self::ScopeRequired { .. } => ScopeRequired,
             Self::SharedFormulaMaster { .. } => NotImplemented,
             Self::OpcOpen { .. } => OpcOpen,

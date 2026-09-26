@@ -37,4 +37,5 @@ $noParas = -not ($tree2.PSObject.Properties.Name -contains 'paragraphs')
 $hasOl = $tree2.PSObject.Properties.Name -contains 'outline'
 $hasHf = ($tree2.PSObject.Properties.Name -contains 'headers') -and ($tree2.PSObject.Properties.Name -contains 'footers')
 $hasSec = $tree2.PSObject.Properties.Name -contains 'sections'
-Add-Check 'docx-I5' ($noParas -and $hasOl -and $hasHf -and $hasSec -and ($tree2.paraCount -eq 2)) "noParas=$noParas outline=$hasOl hf=$hasHf sections=$hasSec count=$($tree2.paraCount)"
+$hasPic = $tree2.PSObject.Properties.Name -contains 'pictureCount'
+Add-Check 'docx-I5' ($noParas -and $hasOl -and $hasHf -and $hasSec -and $hasPic -and ($tree2.paraCount -eq 2)) "noParas=$noParas outline=$hasOl hf=$hasHf sections=$hasSec pics=$hasPic count=$($tree2.paraCount)"

@@ -18,9 +18,11 @@
 2. `apply`：拿树上的 id 去打补丁。文件的唯一可信来源（下文称「真源」）始终是 ZIP 包里的那些 XML，绝对不能把 JSON 树当成完整文档、改完之后整包重新生成。
 3. `create`：只有新建文件的时候，才允许完全由 JSON 生成内容。
 
+docx 另有只读动作 `exportMedia`：按图 id 把媒体部件原字节写到本地。它不改上述三个动作的语义，也不把字节塞进 inspect 树。
+
 这里有两层 JSON，不要混成一层：
 
-- **领域 JSON**：读写 Office 文档用的约定，即 `inspect`、`create`、`apply` 的入参和出参。库和命令行只认这一层。
+- **领域 JSON**：读写 Office 文档用的约定，即 `inspect`、`create`、`apply`、`exportMedia` 的入参和出参。库和命令行只认这一层。
 - **传输 JSON**：MCP 那一层的协议信封。目前倾向于用 JSON-RPC 2.0（走 stdio），把领域 JSON 放进 RPC 的 `params` 字段里。这只是当前的倾向，不是硬性规定，真正开工做 MCP 时可以重新评估；但不管最后选哪种传输方式，都不允许为了迁就它去改动领域 JSON。
 
 ## 实现上的硬约束

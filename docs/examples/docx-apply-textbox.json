@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "note.docx",
+  "ops": [
+    { "op": "insertTextBox", "id": "para:3F2A1B00", "text": "框内" },
+    { "op": "setParaText", "id": "para:3F2A1B00/txbx:8/para:00FF00AA", "text": "改字" },
+    { "op": "setTextBoxSize", "id": "para:3F2A1B00/txbx:8", "cx": 1828800, "cy": 914400 }
+  ]
+}

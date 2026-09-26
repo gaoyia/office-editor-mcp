@@ -119,6 +119,16 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<SetCellOp>, Error> {
             || op_name == "deletePicture"
             || op_name == "setPictureSize"
             || op_name == "setPictureWrap"
+            || op_name == "insertTextBox"
+            || op_name == "deleteTextBox"
+            || op_name == "setTextBoxSize"
+            || op_name == "setTextBoxWrap"
+            || op_name == "setTextBoxFill"
+            || op_name == "setTextBoxLine"
+            || op_name == "setTextBoxDirection"
+            || op_name == "insertPara"
+            || op_name == "deletePara"
+            || op_name == "setTextBoxLink"
         {
             return Err(Error::with_path(
                 ErrorKind::OpNotForFormat {

@@ -7,7 +7,7 @@ use crate::json;
 
 use super::hf::{HfKind, HfType};
 use super::picture::{self, AlignH, AlignV, PicKind, PicTarget, WrapKind, WrapPos};
-use super::para::ParaTarget;
+use super::para::{self, ParaTarget, TxbxTarget};
 
 #[derive(Debug, Clone)]
 pub struct InspectScope {
@@ -18,6 +18,10 @@ pub struct InspectScope {
     pub header_footer: bool,
     /// 为 true 时列出页眉页脚里的图。
     pub pictures: bool,
+    /// 为 true 时列出文本框。
+    pub text_boxes: bool,
+    /// 为 true 时展开框内段落。
+    pub text_box_content: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -83,6 +87,82 @@ pub struct SetPictureWrapOp {
 }
 
 #[derive(Debug, Clone)]
+pub struct InsertTextBoxOp {
+    pub id: String,
+    pub host: para::HostPara,
+    pub cx: Option<i64>,
+    pub cy: Option<i64>,
+    pub text: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct DeleteTextBoxOp {
+    pub id: String,
+    pub target: TxbxTarget,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetTextBoxSizeOp {
+    pub id: String,
+    pub target: TxbxTarget,
+    pub cx: Option<i64>,
+    pub cy: Option<i64>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetTextBoxWrapOp {
+    pub id: String,
+    pub target: TxbxTarget,
+    pub kind: PicKind,
+    pub wrap: Option<WrapKind>,
+    pub pos: WrapPos,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetTextBoxFillOp {
+    pub id: String,
+    pub target: TxbxTarget,
+    pub color: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetTextBoxLineOp {
+    pub id: String,
+    pub target: TxbxTarget,
+    pub color: Option<String>,
+    pub width: Option<i64>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetTextBoxDirectionOp {
+    pub id: String,
+    pub target: TxbxTarget,
+    pub vertical: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct InsertParaOp {
+    pub id: String,
+    pub after: Option<ParaTarget>,
+    pub box_target: TxbxTarget,
+    pub text: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct DeleteParaOp {
+    pub id: String,
+    pub inner: ParaTarget,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetTextBoxLinkOp {
+    pub id: String,
+    pub target: TxbxTarget,
+    pub next: Option<TxbxTarget>,
+    pub next_id: Option<String>,
+}
+
+#[derive(Debug, Clone)]
 pub enum DocxOp {
     SetParaText(SetParaTextOp),
     SetHeaderFooterDistance(SetHfDistanceOp),
@@ -92,6 +172,16 @@ pub enum DocxOp {
     DeletePicture(DeletePictureOp),
     SetPictureSize(SetPictureSizeOp),
     SetPictureWrap(SetPictureWrapOp),
+    InsertTextBox(InsertTextBoxOp),
+    DeleteTextBox(DeleteTextBoxOp),
+    SetTextBoxSize(SetTextBoxSizeOp),
+    SetTextBoxWrap(SetTextBoxWrapOp),
+    SetTextBoxFill(SetTextBoxFillOp),
+    SetTextBoxLine(SetTextBoxLineOp),
+    SetTextBoxDirection(SetTextBoxDirectionOp),
+    InsertPara(InsertParaOp),
+    DeletePara(DeleteParaOp),
+    SetTextBoxLink(SetTextBoxLinkOp),
 }
 
 pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
@@ -112,15 +202,40 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
     if obj.is_empty() {
         return Ok(None);
     }
-    json::deny_unknown(obj, &["from", "maxParas", "headerFooter", "pictures"])?;
+    json::deny_unknown(
+        obj,
+        &[
+            "from",
+            "maxParas",
+            "headerFooter",
+            "pictures",
+            "textBoxes",
+            "textBoxContent",
+        ],
+    )?;
 
     let header_footer = parse_header_footer(obj.get("headerFooter"))?;
     let pictures = parse_bool_field(obj.get("pictures"), "pictures")?;
+    let text_boxes = parse_bool_field(obj.get("textBoxes"), "textBoxes")?;
+    let text_box_content = parse_bool_field(obj.get("textBoxContent"), "textBoxContent")?;
+    if text_box_content && !text_boxes {
+        return Err(Error::with_path(
+            ErrorKind::ScopeFieldRequires {
+                field: "textBoxContent".into(),
+                required: "textBoxes".into(),
+            },
+            "scope.textBoxContent",
+        ));
+    }
     let from = obj.get("from");
     let max = obj.get("maxParas");
     match (from, max) {
         (None, None) => {
-            if !obj.contains_key("headerFooter") && !obj.contains_key("pictures") {
+            if !obj.contains_key("headerFooter")
+                && !obj.contains_key("pictures")
+                && !obj.contains_key("textBoxes")
+                && !obj.contains_key("textBoxContent")
+            {
                 return Ok(None);
             }
             Ok(Some(InspectScope {
@@ -128,6 +243,8 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
                 max_paras: None,
                 header_footer,
                 pictures,
+                text_boxes,
+                text_box_content,
             }))
         }
         (Some(f), Some(m)) => {
@@ -173,6 +290,8 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
                 max_paras: Some(max as u32),
                 header_footer,
                 pictures,
+                text_boxes,
+                text_box_content,
             }))
         }
         _ => Err(Error::with_path(
@@ -244,6 +363,18 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<DocxOp>, Error> {
             "deletePicture" => out.push(DocxOp::DeletePicture(parse_delete_pic(obj, i)?)),
             "setPictureSize" => out.push(DocxOp::SetPictureSize(parse_set_pic_size(obj, i)?)),
             "setPictureWrap" => out.push(DocxOp::SetPictureWrap(parse_set_pic_wrap(obj, i)?)),
+            "insertTextBox" => out.push(DocxOp::InsertTextBox(parse_insert_txbx(obj, i)?)),
+            "deleteTextBox" => out.push(DocxOp::DeleteTextBox(parse_delete_txbx(obj, i)?)),
+            "setTextBoxSize" => out.push(DocxOp::SetTextBoxSize(parse_set_txbx_size(obj, i)?)),
+            "setTextBoxWrap" => out.push(DocxOp::SetTextBoxWrap(parse_set_txbx_wrap(obj, i)?)),
+            "setTextBoxFill" => out.push(DocxOp::SetTextBoxFill(parse_set_txbx_fill(obj, i)?)),
+            "setTextBoxLine" => out.push(DocxOp::SetTextBoxLine(parse_set_txbx_line(obj, i)?)),
+            "setTextBoxDirection" => {
+                out.push(DocxOp::SetTextBoxDirection(parse_set_txbx_dir(obj, i)?))
+            }
+            "insertPara" => out.push(DocxOp::InsertPara(parse_insert_para(obj, i)?)),
+            "deletePara" => out.push(DocxOp::DeletePara(parse_delete_para(obj, i)?)),
+            "setTextBoxLink" => out.push(DocxOp::SetTextBoxLink(parse_set_txbx_link(obj, i)?)),
             _ => {
                 return Err(Error::with_path(
                     ErrorKind::UnsupportedOp {
@@ -856,4 +987,432 @@ fn parse_i64_field(v: Option<&Value>, i: usize, field: &str) -> Result<Option<i6
             path,
         )),
     }
+}
+
+fn parse_insert_txbx(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<InsertTextBoxOp, Error> {
+    deny_keys(obj, i, &["op", "id", "cx", "cy", "text"])?;
+    let id = require_id(obj, i)?;
+    let host = para::parse_host_para_id_at(&id, &format!("ops[{i}].id"))?;
+    let cx = parse_emu_field(obj.get("cx"), i, "cx")?;
+    let cy = parse_emu_field(obj.get("cy"), i, "cy")?;
+    if cx.is_some() != cy.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "insertTextBox".into(),
+                field: "cx and cy together".into(),
+            },
+            format!("ops[{i}]"),
+        ));
+    }
+    let text = match obj.get("text") {
+        None => String::new(),
+        Some(Value::String(s)) => s.clone(),
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "text".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].text"),
+            ));
+        }
+    };
+    Ok(InsertTextBoxOp {
+        id,
+        host,
+        cx,
+        cy,
+        text,
+    })
+}
+
+fn parse_delete_txbx(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<DeleteTextBoxOp, Error> {
+    deny_keys(obj, i, &["op", "id"])?;
+    let id = require_id(obj, i)?;
+    let target = para::parse_txbx_id(&id, i)?;
+    Ok(DeleteTextBoxOp { id, target })
+}
+
+fn parse_set_txbx_size(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<SetTextBoxSizeOp, Error> {
+    deny_keys(obj, i, &["op", "id", "cx", "cy"])?;
+    let id = require_id(obj, i)?;
+    let target = para::parse_txbx_id(&id, i)?;
+    let cx = parse_emu_field(obj.get("cx"), i, "cx")?;
+    let cy = parse_emu_field(obj.get("cy"), i, "cy")?;
+    if cx.is_none() && cy.is_none() {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "setTextBoxSize".into(),
+                field: "cx or cy".into(),
+            },
+            format!("ops[{i}]"),
+        ));
+    }
+    Ok(SetTextBoxSizeOp {
+        id,
+        target,
+        cx,
+        cy,
+    })
+}
+
+fn parse_set_txbx_wrap(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<SetTextBoxWrapOp, Error> {
+    deny_keys(
+        obj,
+        i,
+        &["op", "id", "kind", "wrap", "alignH", "alignV", "offsetX", "offsetY"],
+    )?;
+    let id = require_id(obj, i)?;
+    let target = para::parse_txbx_id(&id, i)?;
+    let kind = match obj.get("kind") {
+        Some(Value::String(s)) => picture::parse_pic_kind(s).ok_or_else(|| {
+            Error::with_path(ErrorKind::InvalidPicKind, format!("ops[{i}].kind"))
+        })?,
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "kind".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].kind"),
+            ));
+        }
+        None => {
+            return Err(Error::with_path(
+                ErrorKind::OpRequiresField {
+                    op: "setTextBoxWrap".into(),
+                    field: "kind".into(),
+                },
+                format!("ops[{i}].kind"),
+            ));
+        }
+    };
+    let wrap = match obj.get("wrap") {
+        None | Some(Value::Null) => None,
+        Some(Value::String(s)) => Some(picture::parse_wrap(s).ok_or_else(|| {
+            Error::with_path(ErrorKind::InvalidPicWrap, format!("ops[{i}].wrap"))
+        })?),
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "wrap".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].wrap"),
+            ));
+        }
+    };
+    if kind == PicKind::Inline && wrap.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::InvalidPicWrap,
+            format!("ops[{i}].wrap"),
+        ));
+    }
+    if kind == PicKind::Anchor && wrap.is_none() {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "setTextBoxWrap".into(),
+                field: "wrap".into(),
+            },
+            format!("ops[{i}].wrap"),
+        ));
+    }
+    let align_h = parse_align_h_field(obj.get("alignH"), i)?;
+    let align_v = parse_align_v_field(obj.get("alignV"), i)?;
+    let offset_x = parse_i64_field(obj.get("offsetX"), i, "offsetX")?;
+    let offset_y = parse_i64_field(obj.get("offsetY"), i, "offsetY")?;
+    if align_h.is_some() && offset_x.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::MutuallyExclusive {
+                a: "alignH".into(),
+                b: "offsetX".into(),
+            },
+            format!("ops[{i}]"),
+        ));
+    }
+    if align_v.is_some() && offset_y.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::MutuallyExclusive {
+                a: "alignV".into(),
+                b: "offsetY".into(),
+            },
+            format!("ops[{i}]"),
+        ));
+    }
+    Ok(SetTextBoxWrapOp {
+        id,
+        target,
+        kind,
+        wrap,
+        pos: WrapPos {
+            align_h,
+            align_v,
+            offset_x,
+            offset_y,
+        },
+    })
+}
+
+fn parse_color_field(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+    required: bool,
+) -> Result<Option<String>, Error> {
+    match obj.get("color") {
+        None if required => Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "setTextBoxFill".into(),
+                field: "color".into(),
+            },
+            format!("ops[{i}].color"),
+        )),
+        None => Ok(None),
+        Some(Value::Null) => Ok(None),
+        Some(Value::String(s)) => {
+            if s.len() == 6 && s.chars().all(|c| c.is_ascii_hexdigit()) {
+                Ok(Some(s.clone()))
+            } else {
+                Err(Error::with_path(
+                    ErrorKind::InvalidHexColor,
+                    format!("ops[{i}].color"),
+                ))
+            }
+        }
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "color".into(),
+                expected: TypeName::String,
+            },
+            format!("ops[{i}].color"),
+        )),
+    }
+}
+
+fn parse_set_txbx_fill(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<SetTextBoxFillOp, Error> {
+    deny_keys(obj, i, &["op", "id", "color"])?;
+    let id = require_id(obj, i)?;
+    let target = para::parse_txbx_id(&id, i)?;
+    let color = parse_color_field(obj, i, true)?;
+    Ok(SetTextBoxFillOp { id, target, color })
+}
+
+fn parse_set_txbx_line(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<SetTextBoxLineOp, Error> {
+    deny_keys(obj, i, &["op", "id", "color", "width"])?;
+    let id = require_id(obj, i)?;
+    let target = para::parse_txbx_id(&id, i)?;
+    if !obj.contains_key("color") {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "setTextBoxLine".into(),
+                field: "color".into(),
+            },
+            format!("ops[{i}].color"),
+        ));
+    }
+    let color = parse_color_field(obj, i, false)?;
+    let width = parse_emu_field(obj.get("width"), i, "width")?;
+    if color.is_none() && width.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::UnknownField {
+                field: "width".into(),
+            },
+            format!("ops[{i}].width"),
+        ));
+    }
+    Ok(SetTextBoxLineOp {
+        id,
+        target,
+        color,
+        width,
+    })
+}
+
+fn parse_set_txbx_dir(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<SetTextBoxDirectionOp, Error> {
+    deny_keys(obj, i, &["op", "id", "direction"])?;
+    let id = require_id(obj, i)?;
+    let target = para::parse_txbx_id(&id, i)?;
+    let vertical = match obj.get("direction") {
+        Some(Value::String(s)) if s == "horizontal" => false,
+        Some(Value::String(s)) if s == "vertical" => true,
+        Some(Value::String(_)) => {
+            return Err(Error::with_path(
+                ErrorKind::InvalidTextBoxDirection,
+                format!("ops[{i}].direction"),
+            ));
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "direction".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].direction"),
+            ));
+        }
+        None => {
+            return Err(Error::with_path(
+                ErrorKind::OpRequiresField {
+                    op: "setTextBoxDirection".into(),
+                    field: "direction".into(),
+                },
+                format!("ops[{i}].direction"),
+            ));
+        }
+    };
+    Ok(SetTextBoxDirectionOp {
+        id,
+        target,
+        vertical,
+    })
+}
+
+fn parse_insert_para(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<InsertParaOp, Error> {
+    deny_keys(obj, i, &["op", "id", "text"])?;
+    let id = require_id(obj, i)?;
+    let path = format!("ops[{i}].id");
+    if !id.contains("/txbx:") {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: crate::error::IdReason::InsertParaBody,
+            },
+            path,
+        ));
+    }
+    let text = match obj.get("text") {
+        None => String::new(),
+        Some(Value::String(s)) => s.clone(),
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "text".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].text"),
+            ));
+        }
+    };
+    if let Ok(box_target) = para::parse_txbx_id_at(&id, &path) {
+        return Ok(InsertParaOp {
+            id,
+            after: None,
+            box_target,
+            text,
+        });
+    }
+    match para::parse_para_id_at(&id, &path)? {
+        ParaTarget::InTextBox { host, key, para } => Ok(InsertParaOp {
+            id,
+            after: Some(ParaTarget::InTextBox {
+                host: host.clone(),
+                key: key.clone(),
+                para,
+            }),
+            box_target: TxbxTarget { host, key },
+            text,
+        }),
+        _ => Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: crate::error::IdReason::InsertParaNeedsBox,
+            },
+            path,
+        )),
+    }
+}
+
+fn parse_delete_para(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<DeleteParaOp, Error> {
+    deny_keys(obj, i, &["op", "id"])?;
+    let id = require_id(obj, i)?;
+    let path = format!("ops[{i}].id");
+    if !id.contains("/txbx:") {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: crate::error::IdReason::InsertParaBody,
+            },
+            path,
+        ));
+    }
+    match para::parse_para_id_at(&id, &path) {
+        Ok(inner @ ParaTarget::InTextBox { .. }) => Ok(DeleteParaOp { id, inner }),
+        Ok(_) | Err(_) => Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: crate::error::IdReason::InsertParaNeedsBox,
+            },
+            path,
+        )),
+    }
+}
+
+fn parse_set_txbx_link(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<SetTextBoxLinkOp, Error> {
+    deny_keys(obj, i, &["op", "id", "next"])?;
+    let id = require_id(obj, i)?;
+    let target = para::parse_txbx_id(&id, i)?;
+    let (next, next_id) = match obj.get("next") {
+        None => {
+            return Err(Error::with_path(
+                ErrorKind::OpRequiresField {
+                    op: "setTextBoxLink".into(),
+                    field: "next".into(),
+                },
+                format!("ops[{i}].next"),
+            ));
+        }
+        Some(Value::Null) => (None, None),
+        Some(Value::String(s)) if !s.is_empty() => {
+            let n = para::parse_txbx_id_at(s, &format!("ops[{i}].next"))?;
+            (Some(n), Some(s.clone()))
+        }
+        Some(Value::String(_)) => {
+            return Err(Error::with_path(
+                ErrorKind::MissingField {
+                    field: "next".into(),
+                },
+                format!("ops[{i}].next"),
+            ));
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "next".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].next"),
+            ));
+        }
+    };
+    Ok(SetTextBoxLinkOp {
+        id,
+        target,
+        next,
+        next_id,
+    })
 }

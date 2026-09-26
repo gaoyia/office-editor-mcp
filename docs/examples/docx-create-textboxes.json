@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "action": "create",
+  "path": "note.docx",
+  "document": {
+    "paragraphs": [
+      { "text": "外层", "textBoxes": [{ "text": "框字" }] }
+    ]
+  }
+}

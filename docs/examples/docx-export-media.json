@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "action": "exportMedia",
+  "path": "note.docx",
+  "format": "docx",
+  "id": "para:3F2A1B00/pic:1",
+  "output": "C:\\out\\logo.png"
+}

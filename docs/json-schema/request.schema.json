@@ -6,7 +6,7 @@
   "required": ["schemaVersion", "action"],
   "properties": {
     "schemaVersion": { "const": 1 },
-    "action": { "enum": ["inspect", "create", "apply"] }
+    "action": { "enum": ["inspect", "create", "apply", "exportMedia"] }
   },
   "allOf": [
     {
@@ -29,6 +29,13 @@
         "required": ["action"]
       },
       "then": { "$ref": "#/$defs/applyRequest" }
+    },
+    {
+      "if": {
+        "properties": { "action": { "const": "exportMedia" } },
+        "required": ["action"]
+      },
+      "then": { "$ref": "#/$defs/exportMediaRequest" }
     }
   ],
   "$defs": {
@@ -57,6 +64,8 @@
         "maxParas": { "type": "integer", "minimum": 1, "maximum": 5000 },
         "headerFooter": { "type": "boolean" },
         "pictures": { "type": "boolean" },
+        "textBoxes": { "type": "boolean" },
+        "textBoxContent": { "type": "boolean" },
         "slide": { "type": "integer", "minimum": 1 },
         "maxShapes": { "type": "integer", "minimum": 1, "maximum": 5000 }
       },
@@ -65,7 +74,8 @@
         "sheet": ["range"],
         "from": ["maxParas"],
         "maxParas": ["from"],
-        "maxShapes": ["slide"]
+        "maxShapes": ["slide"],
+        "textBoxContent": ["textBoxes"]
       }
     },
     "createRequest": {
@@ -150,7 +160,20 @@
         "style": {
           "type": "string",
           "enum": ["Normal", "Heading1", "Heading2", "Heading3"]
+        },
+        "textBoxes": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/docxTextBoxCreate" }
         }
+      }
+    },
+    "docxTextBoxCreate": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "text": { "type": "string" },
+        "cx": { "type": "integer", "minimum": 1 },
+        "cy": { "type": "integer", "minimum": 1 }
       }
     },
     "pptxPresentation": {
@@ -181,6 +204,21 @@
         "text": { "type": "string" }
       }
     },
+    "exportMediaRequest": {
+      "type": "object",
+      "comment": "output 省略时，落盘路径由调用方另给，命令行用 --output。不得默认写成源 path。",
+      "required": ["schemaVersion", "action", "path", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "schemaVersion": { "const": 1 },
+        "action": { "const": "exportMedia" },
+        "path": { "type": "string", "minLength": 1 },
+        "format": { "$ref": "#/$defs/format" },
+        "id": { "type": "string", "minLength": 1 },
+        "output": { "type": "string", "minLength": 1 },
+        "locale": { "type": "string" }
+      }
+    },
     "applyRequest": {
       "type": "object",
       "required": ["schemaVersion", "action", "path", "ops"],
@@ -206,6 +244,16 @@
               { "$ref": "#/$defs/deletePictureOp" },
               { "$ref": "#/$defs/setPictureSizeOp" },
               { "$ref": "#/$defs/setPictureWrapOp" },
+              { "$ref": "#/$defs/insertTextBoxOp" },
+              { "$ref": "#/$defs/deleteTextBoxOp" },
+              { "$ref": "#/$defs/setTextBoxSizeOp" },
+              { "$ref": "#/$defs/setTextBoxWrapOp" },
+              { "$ref": "#/$defs/setTextBoxFillOp" },
+              { "$ref": "#/$defs/setTextBoxLineOp" },
+              { "$ref": "#/$defs/setTextBoxDirectionOp" },
+              { "$ref": "#/$defs/insertParaOp" },
+              { "$ref": "#/$defs/deleteParaOp" },
+              { "$ref": "#/$defs/setTextBoxLinkOp" },
               { "$ref": "#/$defs/setShapeTextOp" }
             ]
           }
@@ -331,6 +379,117 @@
         "alignV": { "enum": ["top", "center", "bottom"] },
         "offsetX": { "type": "integer" },
         "offsetY": { "type": "integer" }
+      }
+    },
+    "insertTextBoxOp": {
+      "type": "object",
+      "required": ["op", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "insertTextBox" },
+        "id": { "type": "string", "minLength": 1 },
+        "cx": { "type": "integer", "minimum": 1 },
+        "cy": { "type": "integer", "minimum": 1 },
+        "text": { "type": "string" }
+      }
+    },
+    "deleteTextBoxOp": {
+      "type": "object",
+      "required": ["op", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "deleteTextBox" },
+        "id": { "type": "string", "minLength": 1 }
+      }
+    },
+    "setTextBoxSizeOp": {
+      "type": "object",
+      "required": ["op", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "setTextBoxSize" },
+        "id": { "type": "string", "minLength": 1 },
+        "cx": { "type": "integer", "minimum": 1 },
+        "cy": { "type": "integer", "minimum": 1 }
+      },
+      "anyOf": [{ "required": ["cx"] }, { "required": ["cy"] }]
+    },
+    "setTextBoxWrapOp": {
+      "type": "object",
+      "required": ["op", "id", "kind"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "setTextBoxWrap" },
+        "id": { "type": "string", "minLength": 1 },
+        "kind": { "enum": ["inline", "anchor"] },
+        "wrap": {
+          "type": ["string", "null"],
+          "enum": ["square", "tight", "through", "topAndBottom", "none", null]
+        },
+        "alignH": { "enum": ["left", "center", "right"] },
+        "alignV": { "enum": ["top", "center", "bottom"] },
+        "offsetX": { "type": "integer" },
+        "offsetY": { "type": "integer" }
+      }
+    },
+    "setTextBoxFillOp": {
+      "type": "object",
+      "required": ["op", "id", "color"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "setTextBoxFill" },
+        "id": { "type": "string", "minLength": 1 },
+        "color": { "type": ["string", "null"] }
+      }
+    },
+    "setTextBoxLineOp": {
+      "type": "object",
+      "required": ["op", "id", "color"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "setTextBoxLine" },
+        "id": { "type": "string", "minLength": 1 },
+        "color": { "type": ["string", "null"] },
+        "width": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "setTextBoxDirectionOp": {
+      "type": "object",
+      "required": ["op", "id", "direction"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "setTextBoxDirection" },
+        "id": { "type": "string", "minLength": 1 },
+        "direction": { "enum": ["horizontal", "vertical"] }
+      }
+    },
+    "insertParaOp": {
+      "type": "object",
+      "required": ["op", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "insertPara" },
+        "id": { "type": "string", "minLength": 1 },
+        "text": { "type": "string" }
+      }
+    },
+    "deleteParaOp": {
+      "type": "object",
+      "required": ["op", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "deletePara" },
+        "id": { "type": "string", "minLength": 1 }
+      }
+    },
+    "setTextBoxLinkOp": {
+      "type": "object",
+      "required": ["op", "id", "next"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "setTextBoxLink" },
+        "id": { "type": "string", "minLength": 1 },
+        "next": { "type": ["string", "null"] }
       }
     },
     "setShapeTextOp": {

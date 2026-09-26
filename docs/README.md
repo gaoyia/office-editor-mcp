@@ -9,7 +9,7 @@
 | [architecture.md](architecture.md) | 模块划分、数据流、硬约束 |
 | [errors.md](errors.md) | 错误码与 CLI 输出形态 |
 | [opc.md](opc.md) | ZIP / Content Types / 关系部件的读写契约 |
-| [json-contract.md](json-contract.md) | 领域 JSON：信封、id、inspect / create / apply |
+| [json-contract.md](json-contract.md) | 领域 JSON：信封、id、inspect / create / apply / exportMedia |
 | [cli.md](cli.md) | 命令行入参、出参、退出码 |
 | [checklist-xlsx.md](checklist-xlsx.md) | 人工用 Microsoft Excel 打开工作簿的检查清单 |
 | [checklist-docx.md](checklist-docx.md) | 人工用 Microsoft Word 打开文档的检查清单 |

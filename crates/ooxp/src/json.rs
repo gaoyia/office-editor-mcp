@@ -13,6 +13,7 @@ pub enum RunOutput {
     Written {
         path: PathBuf,
         ops_applied: Option<usize>,
+        content_type: Option<String>,
     },
 }
 
@@ -28,6 +29,7 @@ pub enum Action {
     Inspect,
     Create,
     Apply,
+    ExportMedia,
 }
 
 pub struct Request {
@@ -70,6 +72,7 @@ pub fn parse_request(input_json: &str) -> Result<Request, Error> {
         "inspect" => Action::Inspect,
         "create" => Action::Create,
         "apply" => Action::Apply,
+        "exportMedia" => Action::ExportMedia,
         other => {
             return Err(Error::new(ErrorKind::UnsupportedAction {
                 action: other.to_string(),
@@ -219,13 +222,21 @@ pub fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), Error> {
     Ok(())
 }
 
-pub fn written_json(path: &Path, ops_applied: Option<usize>, pretty: bool) -> String {
+pub fn written_json(
+    path: &Path,
+    ops_applied: Option<usize>,
+    content_type: Option<&str>,
+    pretty: bool,
+) -> String {
     let mut body = json!({
         "ok": true,
         "path": path.display().to_string(),
     });
     if let Some(n) = ops_applied {
         body["opsApplied"] = json!(n);
+    }
+    if let Some(ct) = content_type {
+        body["contentType"] = json!(ct);
     }
     if pretty {
         serde_json::to_string_pretty(&body).unwrap()

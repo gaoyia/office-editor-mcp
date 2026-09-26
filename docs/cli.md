@@ -11,7 +11,7 @@ ooxp [--input <文件|->] [--output <文件>] [--lang <标签>] [--pretty]
 | 参数 | 含义 |
 | --- | --- |
 | `--input` | 领域 JSON 的路径。值为 `-` 或省略该参数时，从 stdin 读 |
-| `--output` | 仅当请求里没有 `path`（create）或没有 `output`（apply）时作为落盘路径。inspect 忽略此参数 |
+| `--output` | 仅当请求里没有 `path`（create）或没有 `output`（apply / exportMedia）时作为落盘路径。inspect 忽略此参数。`exportMedia` 不得把源 `path` 当默认输出 |
 | `--lang` | 错误 `message` 的语言。请求里写了 `locale` 时以请求为准 |
 | `--pretty` | stdout 的 JSON 带缩进。默认紧凑一行 |
 
@@ -26,7 +26,7 @@ stdin 与 `--input` 同时有数据时，以 `--input` 为准；`--input` 指向
 | 动作 | stdout | stderr | 退出码 |
 | --- | --- | --- | --- |
 | inspect 成功 | 领域树 JSON，UTF-8，末尾换行 | 空 | 0 |
-| create / apply 成功 | `{ "ok": true, "path": "...", ... }` | 空 | 0 |
+| create / apply / exportMedia 成功 | `{ "ok": true, "path": "...", ... }` | 空 | 0 |
 | 失败 | 空 | `{ "ok": false, "error": { ... } }` | 见 [errors.md](errors.md) |
 
 JSON 打印用稳定的字段顺序，不要求 pretty-print。调试时可以加 `--pretty`，让 stdout 带缩进。默认紧凑一行，方便管道。
