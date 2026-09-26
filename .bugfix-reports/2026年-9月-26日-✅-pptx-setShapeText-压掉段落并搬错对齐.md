@@ -115,10 +115,11 @@ tx.push_element(build_para(ppr, rpr, text));
 - `apply_single_line_clears_existing_br`：源文件本来两行，改成单行之后产物里没有任何 `a:br`，读回值是单行
 - `apply_multiline_then_single_line_roundtrips`：单行改三行、再改回单行，每一步的读回值都等于写入值
 - `apply_drops_leading_empty_para`：第一段本来就是空的，写入落在第二段，空的第一段删掉
-- `apply_keeps_sibling_that_still_has_field`：兄弟段里还有 `a:fld`，这段留下
+- `inspect_skips_field_cached_text`：带页码域的形状，inspect 的 `text` 只有用户字
+- `apply_keeps_sibling_that_still_has_field`：兄弟段里还有 `a:fld`，这段留下，读回值等于写入值
 
 覆盖关系：前两项在第一版实现下会失败（第一段是 `<a:p><a:pPr algn="ctr"/><a:r>…`，`a:br` 在 run 内）。清 `a:br` 的两项在第二版之前会失败。空段两项在第二版「留住兄弟段」下会失败（段落数仍是 3，或空的前段还在）。
 
 ## 还没解决的
 
-样本仍是手工写的 XML，不是 PowerPoint 亲手存的文件。带 `a:fld`（域）的形状按契约第 3 条只收 `a:r`、不动域里的 `a:t`，所以「写进去能原样读回」在有域时不成立，契约第 8 条已声明验收只用无域文本框，这个口子记在 A14。空的兄弟段已按 A15 删掉。审计的其他遗留项记在 `.plan/2026年-9月-25日-⚠️-ooxp.md` 的「审计遗留」表里。
+样本仍是手工写的 XML，不是 PowerPoint 亲手存的文件。空的兄弟段已按 A15 删掉。域已按 A14 从 inspect 的 `text` 里排除，apply 仍不改 `a:fld`。审计的其他遗留项记在 `.plan/2026年-9月-25日-⚠️-ooxp.md` 的「审计遗留」表里。

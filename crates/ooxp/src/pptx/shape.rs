@@ -180,12 +180,34 @@ pub fn visible_text(sp: &Element) -> String {
         return String::new();
     };
     let mut out = String::new();
-    walk_choice(tx, &mut |e| match e.local_name() {
-        "t" => out.push_str(&e.text_content()),
+    collect_visible_text(tx, &mut out);
+    out
+}
+
+/// 只收 `a:r` 里的 `a:t` 和段落级 `a:br`。
+/// `a:fld` 是生成文本（§21.1.2.2.4），缓存的 `a:t` 不进 inspect 的 `text`。
+fn collect_visible_text(el: &Element, out: &mut String) {
+    if el.local_name() == "AlternateContent" {
+        if let Some(i) = first_alt_child_index(el) {
+            if let Node::Element(child) = &el.children[i] {
+                collect_visible_text(child, out);
+            }
+        }
+        return;
+    }
+    if el.local_name() == "fld" {
+        return;
+    }
+    match el.local_name() {
+        "t" => out.push_str(&el.text_content()),
         "br" => out.push('\n'),
         _ => {}
-    });
-    out
+    }
+    for n in &el.children {
+        if let Node::Element(e) = n {
+            collect_visible_text(e, out);
+        }
+    }
 }
 
 pub fn find_shape_mut<'a>(root: &'a mut Element, target: &ShapeKey) -> Option<&'a mut Element> {

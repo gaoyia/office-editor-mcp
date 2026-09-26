@@ -223,7 +223,7 @@ const BR_SLIDE: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?
 /// 第一段空、只有右对齐；第二段有字。写入应落在第二段，空的第一段删掉。
 const LEADING_EMPTY_SLIDE: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:cSld name="前空"><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/><p:sp><p:nvSpPr><p:cNvPr id="2" name="前空"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr/><p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:pPr algn="r"/></a:p><a:p><a:pPr algn="l"/><a:r><a:t>正文</a:t></a:r></a:p></p:txBody></p:sp></p:spTree></p:cSld></p:sld>"#;
 
-/// 第二段是页码域。契约第 8 条不清域，这段不能当空段删掉。
+/// 第二段是页码域。inspect 不收域缓存，apply 也不动这段。
 const FLD_SLIDE: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:cSld name="带域"><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/><p:sp><p:nvSpPr><p:cNvPr id="2" name="带域"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr/><p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:t>标题</a:t></a:r></a:p><a:p><a:fld id="{00000000-0000-0000-0000-000000000001}" type="slidenum"><a:t>1</a:t></a:fld></a:p></p:txBody></p:sp></p:spTree></p:cSld></p:sld>"#;
 
 fn write_slide_sample(tag: &str, slide: &str) -> PathBuf {
@@ -434,8 +434,15 @@ fn apply_drops_leading_empty_para() {
 }
 
 #[test]
+fn inspect_skips_field_cached_text() {
+    let src = write_slide_sample("fld-inspect", FLD_SLIDE);
+    assert_eq!(read_back(&src), "标题", "域里的缓存字不应进 text");
+}
+
+#[test]
 fn apply_keeps_sibling_that_still_has_field() {
     let src = write_slide_sample("fld", FLD_SLIDE);
+    assert_eq!(read_back(&src), "标题");
     let out = tmp_dir().join("fld-applied.pptx");
     run(
         &json!({
@@ -458,4 +465,5 @@ fn apply_keeps_sibling_that_still_has_field() {
     );
     assert!(slide.contains("<a:t>新</a:t>"), "写入文本不见了：{slide}");
     assert!(!slide.contains("标题"));
+    assert_eq!(read_back(&out), "新");
 }
