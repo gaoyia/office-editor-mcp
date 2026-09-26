@@ -1,6 +1,6 @@
 # OPC 层
 
-状态：已实现。人工用 Excel / Word / PowerPoint 打开另存文件的检查见 `docs/checklist-xlsx.md` 的 O1、O2。
+状态：已实现。零脏保存由库测试覆盖三种格式。Office 打开 create / apply 产物见三份清单。领域 JSON 没有「只保存不改」的动作，清单 O1 已放弃。
 
 OPC 指 Open Packaging Conventions：文件是一个 ZIP，里面有部件、内容类型和关系。ECMA-376 §9 规定 Office 文档用 ZIP 作物理包，且不使用 interleaving。
 
@@ -231,4 +231,8 @@ DrawingML 主命名空间：
 
 ## 验收（第 2 项）
 
-打开一份 Excel、一份 Word、一份 PowerPoint 各另存一次，不改任何部件，再交给原软件打开。三份都要能打开，内容看起来与另存前相同。这一项在用户确认文档之后、实现 opc 时再做。
+零脏保存：`open` 之后不调用 `set` / `remove`，再 `save`。每个部件的未压缩字节、以及 ZIP 里该条目的 CRC，都与打开时相同。库测试对 Excel 另存的 xlsx、以及 create 写出的 docx / pptx 各跑一遍。
+
+领域 JSON 的三个动作不含原样保存。`apply` 的 `ops` 必须非空，见 [json-contract.md](json-contract.md)。命令行不能做「打开再原样写出」。这一条第一期放弃，原因写在三份清单的 O1。
+
+Office 打开 create / apply 产物、以及 Office 自己另存 create 产物，见 `docs/checklist-xlsx.md`、`docs/checklist-docx.md`、`docs/checklist-pptx.md` 与 `manual-check/office/cases/opc-resave.ps1`。那是打开冒烟，不是零脏保存。

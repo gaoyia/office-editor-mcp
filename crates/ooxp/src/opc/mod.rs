@@ -11,3 +11,6 @@ pub use package::Package;
 pub use rels::{office_document_part, resolve_id, Relationship, Relationships};
 
 pub const ROOT_RELS_PART: &str = "/_rels/.rels";
+
+#[cfg(test)]
+mod identity_save;

@@ -6,7 +6,7 @@
 
 ## 本机结果（2026-09-26）
 
-WPS 文字与 Microsoft Word 16.0 均已打开，用户确认通过。create、inspect、apply 三组都过了，原样保存的 O1 验不了。本机 `Word.Application` 仍被 WPS 抢走，测试是直接启动 `WINWORD.EXE` 再挂 COM。当时 create 产物以兼容模式打开（`CompatibilityMode=12`）；A11 已补 `word/settings.xml`，新产物应为 `CompatibilityMode=15`，尚未用 Word 重跑 C1。
+WPS 文字与 Microsoft Word 16.0 均已打开，用户确认通过。create、inspect、apply 三组都过了。O1 已放弃，见下表。本机 `Word.Application` 仍被 WPS 抢走，测试是直接启动 `WINWORD.EXE` 再挂 COM。当时 create 产物以兼容模式打开（`CompatibilityMode=12`）；A11 已补 `word/settings.xml`，新产物应为 `CompatibilityMode=15`，尚未用 Word 重跑 C1。
 
 C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，跑 `pwsh -File manual-check\office\run.ps1 -Case 'docx-*'` 即可复现，逐条结果落在 `manual-check/office/out/office-results.csv`。
 
@@ -17,7 +17,7 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 | C3–C4 | ✅ | 标题 1 / 「标题」，正文 `hello` |
 | I1–I5 | ✅ | `docx:document`、`paraCount=2`、大纲 level 1、「标题」、`para:{hex}` 且 `stable`、无 scope 时没有 `paragraphs` |
 | A1–A5 | ✅ | Word 打开 apply 产物：第二段为「改过的正文」且仍加粗，第一段仍是「第一章」/标题 1，第三段未改 |
-| O1 | ⚠️ | 验不了：O1 要的是「ooxp 打开再原样保存，未改部件 CRC 不变」，可 ooxp 第一期没有「什么都不改地保存」这个动作。退一步只验到 Word 能把 create 产物另存成功（`docx-O1-word-resave`）。此前记的 `SaveAs2` 挂起，拆分后重跑没再出现，一秒内返回 |
+| O1 | 🚫 | 领域层不做原样保存，与 xlsx 清单相同。零脏写回见 OPC 库测试。Word 另存 create 产物见 `docx-O1-word-resave`。此前记的 `SaveAs2` 挂起，拆分后重跑没再出现，一秒内返回 |
 
 这一轮手测样例没有文本框。带 `mc:AlternateContent` 或 `w:txbxContent` 的边界已由 `crates/ooxp/tests/docx_fidelity.rs` 覆盖；带文本框样例的 Word / WPS 手测尚未另加。
 
@@ -58,4 +58,4 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 
 ## 原样保存（opc 验收）
 
-xlsx 那份清单的 O1 / O2 对 Word 同样适用：打开样例再保存、一个未改部件都不改，Word 能打开，未改区域肉眼无差异。
+与 xlsx 清单相同：O1 第一期放弃；零脏写回在 OPC 层验收；O2 按 apply 看未改区域。

@@ -17,7 +17,7 @@ C、I、A、O 这几组现在由 `manual-check/office/cases/xlsx-*.ps1` 自动�
 | I1–I6 | ✅ | 有范围的 inspect 含 A1/A2/A3/B1、无 E1；无 scope 时没有 `cells` |
 | A1 | ✅ | Excel 打开 `out/xlsx-applied.xlsx`，标题栏无 Repair；WPS 此前已过 |
 | A2–A7 | ✅ | Excel：A1=42，B1=`=SUM(A1:A10)` 值为 47，C1 空且数字格式仍是 `0.00`，Sheet2 未动，E1 加粗/红字/黄底/列宽 20 还在，D1 重算为 84 |
-| O1 | ⚠️ | 验不了：O1 要的是「ooxp 打开再原样保存，未改部件 CRC 不变」，可 ooxp 第一期没有「什么都不改地保存」这个动作，apply 必须带 ops。退一步只验到 Excel 能把 create 产物另存成功（`xlsx-O1-excel-resave`）。PowerPoint 未做 |
+| O1 | 🚫 | 领域层不做原样保存：三个动作里没有「只保存」，`apply` 的 `ops` 必须非空。零脏写回见 OPC 库测试。Excel 另存 create 产物见 `xlsx-O1-excel-resave` |
 | O2 | ✅ | 未改表与未点名格子的样式还在；未改部件 CRC 与打补丁前相同 |
 
 ## create
@@ -61,11 +61,10 @@ C、I、A、O 这几组现在由 `manual-check/office/cases/xlsx-*.ps1` 自动�
 | A6 | 未改样式 | 未点名的格子字体、填充、列宽看起来不变 |
 | A7 | 重算 | 依赖 A1 的其他公式在打开后得到新结果，而不是旧缓存 |
 
-## 原样保存（opc 验收，实现第 2 项时做）
+## 原样保存（opc 验收）
 
-打开样例再保存，一个部件都不改。
+O1（用领域 JSON 打开再原样写出）第一期放弃。三个动作没有「只保存」，`apply` 不许空 `ops`。零脏写回在 OPC 层验收，见 `docs/opc.md`。
 
-| 序号 | 检查 | 通过标准 |
-| --- | --- | --- |
-| O1 | Excel / Word / PowerPoint 都能打开另存后的文件 | 无修复提示 |
-| O2 | 未改区域 | 与另存前对比，肉眼无差异 |
+O2 仍按 apply 验收：没点名的表和样式看起来不变。
+
+Office 另存 create 产物是打开冒烟，见 `manual-check/office/cases/opc-resave.ps1`，不顶替 O1。

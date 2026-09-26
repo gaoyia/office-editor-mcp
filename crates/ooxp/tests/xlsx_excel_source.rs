@@ -2,7 +2,7 @@
 //!
 //! 文件是 `tests/fixtures/excel-source.xlsx`。不要用库自己的 `create` 产物冒充。
 //! A1（Office 打开无 Repair）仍靠 `manual-check/office/cases/xlsx-apply.ps1`。
-//! O1 第一期没有「什么都不改地保存」，验不了。
+//! O1 已放弃，见 `docs/opc.md`。
 
 use std::io::{Cursor, Read};
 use std::path::{Path, PathBuf};

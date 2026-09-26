@@ -1,9 +1,5 @@
-# 原样保存：docs/checklist-xlsx.md 与 checklist-docx.md 的 O1。
-#
-# O1 真正要验的是「ooxp 打开样例再原样保存，未改部件的 CRC 不变」，
-# 可 ooxp 第一期没有「什么都不改地保存」这个动作，apply 必须带 ops。
-# 所以这里只能退一步：让 Office 自己另存一份，看它读不读得动 ooxp 的产物。
-# 这不等于 O1 通过，O1 仍记 SKIP。
+# Office 另存 create 产物：打开冒烟，不顶替已放弃的清单 O1。
+# 零脏写回在 OPC 库测试里验。O1 记 SKIP，与三份清单的 🚫 一致。
 #
 # Word 对本目录做 SaveAs2 会挂住，所以放在最后一个用例，并套 60 秒超时。
 
