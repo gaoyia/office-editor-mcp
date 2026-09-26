@@ -1,9 +1,10 @@
 # Microsoft Office 这一轮的驱动。
 #
-#   .\run.ps1                      全跑
+#   .\run.ps1                      全跑，跑完把文件留在 Office 里给人看
 #   .\run.ps1 -Case docx-apply     只跑一个
 #   .\run.ps1 -Case xlsx-*         按通配符挑
 #   .\run.ps1 -List                只看有哪些用例
+#   .\run.ps1 -CloseOffice         跑完关掉 Word 和 Excel，不留进程
 #
 # 每个用例套独立的 try/catch，一个塌了不影响后面的。
 # 顺序有讲究：inspect 组不用开 Office，先跑；opc-resave 里 Word 可能挂住，放最后。
@@ -11,7 +12,8 @@
 [CmdletBinding()]
 param(
     [string[]]$Case = @('*'),
-    [switch]$List
+    [switch]$List,
+    [switch]$CloseOffice
 )
 
 $ErrorActionPreference = 'Stop'
@@ -41,6 +43,13 @@ if (-not $selected.Count) {
 Initialize-Suite -Name 'office' -Fresh
 Write-Log ("本轮用例：" + ($selected -join ', '))
 
+$zombies = @(Get-ZombieOfficeProcess)
+if ($zombies.Count) {
+    Write-Log ("上一次跑剩下的无窗口 Office 进程：" +
+        (($zombies | ForEach-Object { "$($_.Name)/$($_.Id)" }) -join ' ') +
+        "。它们不影响本轮，但会白占内存，可以用 -CloseOffice 收尾避免。")
+}
+
 $broken = @()
 foreach ($name in $selected) {
     $file = Join-Path $casesDir "$name.ps1"
@@ -57,6 +66,14 @@ foreach ($name in $selected) {
 }
 
 Save-Results 'office-results.csv'
+Close-OfficeApps -Quit:$CloseOffice
+if ($CloseOffice) {
+    Start-Sleep -Seconds 2
+    $left = @(Get-Process EXCEL, WINWORD -ErrorAction SilentlyContinue |
+        Where-Object { $_.Path -like '*Microsoft Office*' })
+    Write-Log ("收尾后剩下的 Office 进程数：" + $left.Count)
+}
+
 $failCount = Show-Results
 if ($broken.Count) {
     Write-Host ("抛异常的用例：" + ($broken -join ', '))

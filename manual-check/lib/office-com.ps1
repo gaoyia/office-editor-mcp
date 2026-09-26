@@ -133,8 +133,9 @@ function Ensure-MsExcel([string]$seedBook) {
     $app = Bind-OfficeApp $p 'XLMAIN' 'EXCEL7'
     $app.DisplayAlerts = $false
     $app.AskToUpdateLinks = $false
-    Write-Log ("Excel Name=$($app.Name) Ver=$($app.Version) Path=$($app.Path)")
+    Write-Log ("Excel Name=$($app.Name) Ver=$($app.Version) Path=$($app.Path) Pid=$($p.Id)")
     $global:OoxpExcel = $app
+    $global:OoxpExcelPid = $p.Id
     return $app
 }
 
@@ -146,8 +147,9 @@ function Ensure-MsWord([string]$seedDoc) {
     $app.DisplayAlerts = 0
     try { $app.Options.ConfirmConversions = $false } catch {}
     try { $app.Options.BackgroundSave = $false } catch {}
-    Write-Log ("Word Name=$($app.Name) Ver=$($app.Version) Path=$($app.Path)")
+    Write-Log ("Word Name=$($app.Name) Ver=$($app.Version) Path=$($app.Path) Pid=$($p.Id)")
     $global:OoxpWord = $app
+    $global:OoxpWordPid = $p.Id
     return $app
 }
 
@@ -188,6 +190,111 @@ function Close-WordDocByPath($word, [string]$path) {
             return
         }
     }
+}
+
+# 跑完收尾。
+#
+# 不松开 Application 级的引用，Excel 会以为还有自动化客户端连着：
+# 你把窗口关掉之后它不退出，变成一个两百多兆、没有窗口的进程赖在内存里。
+# 那种进程还会毒害下一次运行——Get-Process 找得到它，可它没有文档子窗口，
+# AccessibleObjectFromWindow 只会返回 hr=0x80004005。
+#
+# 默认只松引用，窗口留着给人肉眼看；加 -Quit 就连 Word / Excel 一起关掉。
+function Close-OfficeApps([switch]$Quit) {
+    if ($Quit) {
+        # 顺序很讲究。用例里留下的工作簿、工作表、段落都是 COM 包装对象，
+        # 只要还有一个活着，Excel 就当作「客户端还连着」，Quit 会被直接无视。
+        # 所以先强制回收这些零散引用，再关文档，最后才 Quit。
+        [GC]::Collect()
+        [GC]::WaitForPendingFinalizers()
+        [GC]::Collect()
+
+        $excel = Get-Variable -Name 'OoxpExcel' -Scope Global -ValueOnly -ErrorAction SilentlyContinue
+        if ($excel) {
+            # 别把用户自己开着的表格一起关掉：只要发现 out 目录之外的工作簿就不动手。
+            $foreign = @()
+            foreach ($wb in @($excel.Workbooks)) {
+                $full = [string]$wb.FullName
+                if ($full -and -not $full.StartsWith($global:OoxpOutDir, [StringComparison]::OrdinalIgnoreCase)) {
+                    $foreign += $full
+                }
+            }
+            if ($foreign.Count) {
+                Write-Log ("Excel 里还开着本轮之外的工作簿，不关它：" + ($foreign -join '; '))
+                $Quit = $false
+            }
+            else {
+                Close-AllWorkbooks $excel
+            }
+        }
+
+        $word = Get-Variable -Name 'OoxpWord' -Scope Global -ValueOnly -ErrorAction SilentlyContinue
+        if ($word) {
+            foreach ($d in @($word.Documents)) {
+                $full = [string]$d.FullName
+                if ($full -and -not $full.StartsWith($global:OoxpOutDir, [StringComparison]::OrdinalIgnoreCase)) {
+                    Write-Log "Word 里还开着本轮之外的文档，不关它：$full"
+                    continue
+                }
+                Close-WordDoc $d
+            }
+        }
+    }
+
+    foreach ($name in 'OoxpExcel', 'OoxpWord') {
+        $app = Get-Variable -Name $name -Scope Global -ValueOnly -ErrorAction SilentlyContinue
+        if (-not $app) { continue }
+        if ($Quit) {
+            # DisplayAlerts 早已关掉，Quit 不会因为「要不要保存」卡住。
+            try { $app.DisplayAlerts = $false } catch {}
+            try { $app.Quit() } catch { Write-Log "$name Quit 失败：$($_.Exception.Message)" }
+        }
+        Release-Com $app
+        Set-Variable -Name $name -Scope Global -Value $null
+    }
+    [GC]::Collect()
+    [GC]::WaitForPendingFinalizers()
+    [GC]::Collect()
+
+    if ($Quit) { Stop-LingeringOffice }
+}
+
+# Quit 之后的兜底。
+#
+# 有些实例（多半是上一轮异常留下、被我们复用的那个）根本不理 Quit：窗口关了，
+# 进程照样占着两百多兆不走，下一轮还得靠它开文档。文档此时已经全部关掉，
+# 也确认过没有本轮之外的工作簿，硬杀不会丢东西。只杀这一轮绑过的那个 PID。
+function Stop-LingeringOffice {
+    foreach ($pair in @(@('OoxpExcelPid', 'Excel'), @('OoxpWordPid', 'Word'))) {
+        # 变量不能叫 $pid，那是 PowerShell 的只读自动变量。
+        $procId = Get-Variable -Name $pair[0] -Scope Global -ValueOnly -ErrorAction SilentlyContinue
+        if (-not $procId) { continue }
+        $until = (Get-Date).AddSeconds(8)
+        do {
+            $p = Get-Process -Id $procId -ErrorAction SilentlyContinue
+            if (-not $p) { break }
+            Start-Sleep -Milliseconds 500
+        } while ((Get-Date) -lt $until)
+
+        if ($p) {
+            $p.Refresh()
+            if ($p.MainWindowHandle -ne [IntPtr]::Zero) {
+                Write-Log "$($pair[1]) 进程 $procId 关不掉，但它还有窗口，留着不动。"
+            }
+            else {
+                Write-Log "$($pair[1]) 进程 $procId 不理 Quit，窗口已经没了，直接结束它。"
+                try { Stop-Process -Id $procId -Force -ErrorAction Stop }
+                catch { Write-Log "结束 $procId 失败：$($_.Exception.Message)" }
+            }
+        }
+        Set-Variable -Name $pair[0] -Scope Global -Value $null
+    }
+}
+
+# 没有窗口的 Office 进程是上一次跑剩下的，留着只会让绑定白等 25 秒。
+function Get-ZombieOfficeProcess {
+    Get-Process EXCEL, WINWORD, POWERPNT -ErrorAction SilentlyContinue |
+        Where-Object { $_.Path -like '*Microsoft Office*' -and $_.MainWindowHandle -eq [IntPtr]::Zero }
 }
 
 # 段落可见文本：Word 的 Range 末尾带段落标记，比对前要去掉。

@@ -30,7 +30,10 @@ pwsh -File manual-check\office\run.ps1                  # 全跑，约 10 秒
 pwsh -File manual-check\office\run.ps1 -Case docx-apply  # 只跑一个
 pwsh -File manual-check\office\run.ps1 -Case 'xlsx-*'    # 按通配符挑
 pwsh -File manual-check\office\run.ps1 -List             # 只看有哪些用例
+pwsh -File manual-check\office\run.ps1 -CloseOffice      # 跑完关掉 Word 和 Excel
 ```
+
+默认跑完把 `xlsx-applied.xlsx` 和 `docx-applied.docx` 留在 Office 里，方便接着用肉眼过清单。看完想收拾干净，就加 `-CloseOffice`。
 
 结果打在屏幕上，同时写进 `office/out/office-results.csv`，逐条日志在 `office/out/com-log.txt`。每个用例套独立的 try/catch，一个塌了不影响后面的，所以不必再为了跑完剩下的去复制脚本。
 
@@ -43,6 +46,9 @@ pwsh -File manual-check\office\run.ps1 -List             # 只看有哪些用例
 - 读 ooxp 的输出不能用 `cmd /c`。ooxp 吐 UTF-8，cmd 按控制台代码页解，中文会坏：偶数长度的悄悄判错，奇数长度的直接把 JSON 撕坏。`Invoke-Ooxp` 显式按 UTF-8 读，并检查退出码。
 - 判断「有没有弹修复提示」要读被测文档自己的标题栏（`$doc.ActiveWindow.Caption`、`$wb.Windows.Item(1).Caption`），不能读 `$app.ActiveWindow`，那可能是别的文档的窗口。
 - apply 的目标文件若正被 Office 开着，ooxp 写不进去。xlsx 用 `Close-AllWorkbooks`，docx 用 `Close-WordDocByPath`。
+- 手动把 Excel 窗口关掉并不等于进程退出。它常常留成一个两百多兆、没有窗口的进程，下一轮 `Get-Process` 找得到它，可它没有 `EXCEL7` 子窗口，绑定就白等 25 秒然后报 `hr=0x80004005`。`run.ps1` 开头会把这种进程报出来，`-CloseOffice` 负责收拾。
+- 收尾的顺序不能颠倒：先 `[GC]::Collect()` 回收用例留下的工作簿等 COM 包装对象，再关文档，最后才 `Quit`。反过来做，Excel 会当作还有客户端连着，直接无视 `Quit`。
+- 有的实例连正确顺序的 `Quit` 也不理。`Stop-LingeringOffice` 只对这一轮绑过的那个 PID 兜底：等 8 秒，确认窗口已经没了才结束进程。要是 Excel 里还开着 `out/` 之外的工作簿，整个关闭动作直接跳过，不碰你自己的文件。
 
 拆分前的旧脚本（`_office-checklist.ps1` 等七个）已经删掉，需要时从 git 历史取：`git show be936f2:manual-check/office/requests/_office-checklist.ps1`。
 
