@@ -40,7 +40,7 @@
 
 不把 base64 写进 create JSON。多节、`first` / `even`、`titlePg` 仍不做。
 
-文本框、图表、SmartArt 的 create 写在各自计划里，不要塞进本字段表。
+文本框与 SmartArt 的 create 已写在各自计划并过。图表的 create 仍不写。
 
 ## 不做
 
@@ -52,4 +52,4 @@
 
 - 两段正文、第二段一张行内 PNG，Word 打开无修复；inspect 有 `para:…/pic:…`。
 - 默认页眉一张浮动 `square`，Word 能看见。
-- 缺 `file`、只给一个尺寸、xlsx 上带 `pictures` 键，报错类别对。
+- 缺 `file`、只给一个尺寸报错类别对。`workbook` 根上的 `pictures` 仍报 `InvalidField`；`sheets[].pictures` 见 `.plan/2026年-9月-27日-✅-xlsx-create带图.md`。
