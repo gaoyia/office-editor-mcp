@@ -19,7 +19,11 @@ manual-check/
 └── requests/             WPS 那一轮，还没拆
 ```
 
-入库的是用例脚本、`requests/` 下手写的请求 JSON 和本文件。Office 产物、素材图、COM 日志和 CSV 都不入库，跑一遍就会重新生成。
+入库的是用例脚本、`requests/` 下手写的请求 JSON 和本文件。下面这些都不入库，删了再跑就会重新生成：
+
+- `office/out/`：Office 这一轮的工作簿、文档、生成的请求、日志、结果表
+- 根目录的 `*.docx`、`inspect-*.json`、`compare-*.csv`、`opc-crc-*.csv`、`wps-com-log.txt`、`ooxp-pic-*.png`：WPS 那一轮写在根下的产物
+- `office/legacy/`、`_office-*.ps1`：拆分前的探测脚本
 
 ## 跑 Microsoft Office 这一轮
 
