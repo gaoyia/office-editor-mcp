@@ -46,7 +46,7 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 | I2 | 大纲 | `outline` 含第一段，`level` 为 `1`，`text` 为 `标题` |
 | I3 | 段落 id | 两段都有 `para:{hex}`，`stable` 为 `true` |
 | I4 | 第二段 | `text` 为 `hello` |
-| I5 | 无 scope | 只发 path 时没有 `paragraphs` 字段，仍有 `outline`、`paraCount`、`headers`、`footers`、`sections` |
+| I5 | 无 scope | 只发 path 时没有 `paragraphs` 字段，仍有 `outline`、`paraCount`、`pictureCount`、`headers`、`footers`、`sections` |
 
 ## apply
 
@@ -107,6 +107,20 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 | P5 | 删图 | `deletePicture` 后该图消失，Word 无修复 |
 | P6 | 尺寸 | `setPictureSize` 后 COM 或目视尺寸对上（允许 EMU 换算误差） |
 | P7 | 绕排 | `setPictureWrap` 把行内改成浮动 `square` 后，Word 按四周型显示 |
+
+## 正文图
+
+准备一份 Word 亲手另存的样例：正文某段同时有一张行内图和一张浮动图（`wrapSquare`）。不要用库 `create` 产物。另备一张本地 PNG 供换图、插图。手测脚本 `manual-check/office/cases/docx-body-picture.ps1`。
+
+| 序号 | 检查 | 通过标准 |
+| --- | --- | --- |
+| B1 | 名单 | 无 scope 时根上有 `pictureCount`、没有正文 `pictures`；`from`+`maxParas`+`pictures` 时目标段两张图都有 id，形如 `para:…/pic:…`，`kind` 分别为 `inline` 与 `anchor`，浮动 `wrap` 为 `square` |
+| B2 | 换图 | `replacePicture` 后 Word 无修复；位置与绕排不变；可见图已换成新文件 |
+| B3 | 插图 | `insertPicture` 往正文段落插行内图，Word 能看见且无修复 |
+| B4 | 删图 | `deletePicture` 后该图消失，Word 无修复 |
+| B5 | 尺寸 | `setPictureSize` 后 COM 或目视尺寸对上（允许 EMU 换算误差） |
+| B6 | 绕排 | `setPictureWrap` 把行内改成浮动 `square` 后，Word 按四周型显示 |
+| B7 | 改字 | 对该段 `setParaText` 后文字已改、图还在，Word 无修复 |
 
 ## 原样保存（opc 验收）
 

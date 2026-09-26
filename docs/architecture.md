@@ -55,7 +55,7 @@ crates/ooxp-cli/             命令行，只依赖 ooxp。二进制名也是 oox
 
 ### docx
 
-主文档由根关系里 `/officeDocument` 指向，常见路径 `/word/document.xml`。inspect 读该部件里的 `w:p`，返回大纲和按范围截断的段落；并始终列出页眉、页脚容器、各节距边界，以及每节是否链接到前一节。页眉页脚容器始终带 `pictureCount`；`scope.pictures` 为 true 时再列出图。apply 可改被点名段落的可见文本（主文档或页眉页脚部件），可改节上 `w:pgMar` 的页眉/页脚距离，也可断开或重新链接某节某类型的页眉页脚（断链时抄走 header/footer 自己的 `.rels`，媒体仍共用）。页眉页脚里的 DrawingML 图片可换、插、删，并可改尺寸与绕排。不整篇从 JSON 重建。create 生成最小 Transitional 包，含 `styles.xml`（Normal 与 Heading1–3）和 `settings.xml`（`compatibilityMode` 为 15），不写页眉页脚，也不生成多节。修订、复杂表格结构、正文里的图不做。不写入 `titlePg` / `evenAndOddHeaders`。
+主文档由根关系里 `/officeDocument` 指向，常见路径 `/word/document.xml`。inspect 读该部件里的 `w:p`，返回大纲和按范围截断的段落；并始终列出页眉、页脚容器、各节距边界，以及每节是否链接到前一节。文档根始终带正文 `pictureCount`。页眉页脚容器始终带 `pictureCount`。`scope.pictures` 为 true 时列出页眉页脚图；同时给了正文切片则段落上也列出图。apply 可改被点名段落的可见文本（主文档或页眉页脚部件），可改节上 `w:pgMar` 的页眉/页脚距离，也可断开或重新链接某节某类型的页眉页脚（断链时抄走 header/footer 自己的 `.rels`，媒体仍共用）。页眉、页脚和正文里的 DrawingML 图片可换、插、删，并可改尺寸与绕排。不整篇从 JSON 重建。create 生成最小 Transitional 包，含 `styles.xml`（Normal 与 Heading1–3）和 `settings.xml`（`compatibilityMode` 为 15），不写页眉页脚，也不生成多节，也不写图。修订、复杂表格结构不做。不写入 `titlePg` / `evenAndOddHeaders`。
 
 ### pptx
 
@@ -69,11 +69,11 @@ crates/ooxp-cli/             命令行，只依赖 ooxp。二进制名也是 oox
 
 ### inspect
 
-调用方给出路径和范围。库打开 OPC 包，定位格式入口部件（xlsx 是 Workbook，docx 是 Main Document，pptx 是 Presentation）。按范围读必要的 XML，生成带 id 的树。xlsx 默认不读完全部单元格，docx 默认不返回正文 `paragraphs` 也不展开页眉页脚段落，pptx 默认不返回 `shapes`。包不写回。
+调用方给出路径和范围。库打开 OPC 包，定位格式入口部件（xlsx 是 Workbook，docx 是 Main Document，pptx 是 Presentation）。按范围读必要的 XML，生成带 id 的树。xlsx 默认不读完全部单元格，docx 默认不返回正文 `paragraphs` 也不展开页眉页脚段落或任何 `pictures`，pptx 默认不返回 `shapes`。包不写回。
 
 ### apply
 
-调用方给出路径和 `ops`。库打开包，按每条 op 的 id 找到 XML 节点，只改这些节点。xlsx 在改了单元格之后，把工作簿标成打开时需要重算。docx 可改被点名的段落，可改节上页眉页脚距边界，也可改节上页眉页脚是否链接前节。pptx 只改被点名形状的可见文字，且只让那一张幻灯片部件变脏。保存时只重写脏部件。
+调用方给出路径和 `ops`。库打开包，按每条 op 的 id 找到 XML 节点，只改这些节点。xlsx 在改了单元格之后，把工作簿标成打开时需要重算。docx 可改被点名的段落，可改节上页眉页脚距边界，也可改节上页眉页脚是否链接前节，也可改页眉、页脚或正文里被点名的 DrawingML 图。pptx 只改被点名形状的可见文字，且只让那一张幻灯片部件变脏。保存时只重写脏部件。
 
 ### create
 

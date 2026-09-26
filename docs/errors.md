@@ -66,7 +66,7 @@
 | `Io` | 读盘、写盘、创建目录失败 | 4 |
 | `NotImplemented` | 第一期明确不做的动作。目前：对共享公式的主单元格发 `setCell` | 2 |
 
-找不到单元格时，`setCell` 的语义是新建该单元格，因此空单元格不是 `IdNotFound`。找不到工作表才是 `IdNotFound`。找不到段落时，`setParaText` 报 `IdNotFound`，不新建段落；正文 `para:` 只匹配主文档，页眉页脚要用带容器前缀的 id。对页眉或页脚容器 id（没有 `/para:`）发 `setParaText` 报 `InvalidId`。找不到节时，`setHeaderFooterDistance` 与 `setHeaderFooterLink` 报 `IdNotFound`；id 不是 `section:{n}` 报 `InvalidId`。对第一节发 `setHeaderFooterLink` 且 `linked: true`，或该类型对本节不生效，报 `InvalidField`。找不到图时，图片 op 报 `IdNotFound`，不新建图（`insertPicture` 除外）。对容器 id（没有 `/pic:`）发 `replacePicture` / `deletePicture` / `setPictureSize` / `setPictureWrap` 报 `InvalidId`。对正文段落或 `para:…/pic:…` 发图片 op 报 `InvalidId`。`insertPicture` 的 `id` 必须是页眉或页脚段落 id。读不到图片 `file` 报 `Io`。找不到形状时，`setShapeText` 报 `IdNotFound`，不新建形状。对幻灯片 id（`slide:{n}`，没有 `/shape:`）发 `setShapeText` 报 `InvalidId`。xlsx / pptx 的 `scope` 里出现 `pictures` 报 `InvalidField`。
+找不到单元格时，`setCell` 的语义是新建该单元格，因此空单元格不是 `IdNotFound`。找不到工作表才是 `IdNotFound`。找不到段落时，`setParaText` 报 `IdNotFound`，不新建段落；正文 `para:` 只匹配主文档，页眉页脚要用带容器前缀的 id。对页眉或页脚容器 id（没有 `/para:`）发 `setParaText` 报 `InvalidId`。找不到节时，`setHeaderFooterDistance` 与 `setHeaderFooterLink` 报 `IdNotFound`；id 不是 `section:{n}` 报 `InvalidId`。对第一节发 `setHeaderFooterLink` 且 `linked: true`，或该类型对本节不生效，报 `InvalidField`。找不到图时，图片 op 报 `IdNotFound`，不新建图（`insertPicture` 除外）。`insertPicture` 的 `id` 必须是段落 id；对图 id、容器 id 或 `section:{n}` 发该 op 报 `InvalidId`。`replacePicture` / `deletePicture` / `setPictureSize` / `setPictureWrap` 的 `id` 必须是图 id；对段落 id、容器 id 或 `section:{n}` 发这四个 op 报 `InvalidId`。读不到图片 `file` 报 `Io`。找不到形状时，`setShapeText` 报 `IdNotFound`，不新建形状。对幻灯片 id（`slide:{n}`，没有 `/shape:`）发 `setShapeText` 报 `InvalidId`。xlsx / pptx 的 `scope` 里出现 `pictures` 报 `InvalidField`。
 
 ## 成功形态
 
