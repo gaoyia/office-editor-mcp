@@ -72,4 +72,4 @@ Excel 打开这种文件会报需要修复。更隐蔽的是清空操作：`clea
 
 ## 还没解决的
 
-仿造的样例终究不是 Excel 亲手存的文件。真实样例入库、以及 `docs/checklist-xlsx.md` 的人工验收，仍然欠着。审计的其他遗留项记在 `.plan/2026年-9月-25日-⚠️-ooxp.md` 的「审计遗留」表里。
+仿造的样例终究不是 Excel 亲手存的文件。真实样例已放进 `crates/ooxp/tests/fixtures/excel-source.xlsx`，清单 A2–A7 的 XML 与 O2 由 `xlsx_excel_source.rs` 回归。A1 仍靠 `manual-check/office/cases/xlsx-apply.ps1`。审计的其他遗留项记在 `.plan/2026年-9月-25日-⚠️-ooxp.md` 的「审计遗留」表里。

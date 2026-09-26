@@ -5,6 +5,7 @@
 *.docx
 *.pptx
 !docs/examples/**
+!crates/ooxp/tests/fixtures/**
 
 # 人工验收：用例脚本、手写的请求 JSON 和说明入库
 manual-check/**

@@ -49,7 +49,7 @@ C、I、A、O 这几组现在由 `manual-check/office/cases/xlsx-*.ps1` 自动�
 
 ## apply
 
-准备一份 Excel 亲手另存的样例（含两张表、若干样式、一张表里有公式）。对它执行 `docs/examples/xlsx-apply.json` 里的操作，必要时改 id 里的表名。
+准备一份 Excel 亲手另存的样例（含两张表、若干样式、一张表里有公式）。仓库里那份是 `crates/ooxp/tests/fixtures/excel-source.xlsx`，由 Excel 16.0 `SaveAs` 写出，重做跑 `manual-check/office/export-excel-fixture.ps1`。对它执行 `docs/examples/xlsx-apply.json` 里的操作，必要时改 id 里的表名。库测试 `xlsx_excel_source.rs` 覆盖下面 A2–A7 的 XML 与 O2；A1 仍要 Office 打开。
 
 | 序号 | 检查 | 通过标准 |
 | --- | --- | --- |
