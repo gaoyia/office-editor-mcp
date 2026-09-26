@@ -3,6 +3,7 @@
 mod apply;
 mod charts;
 mod comments;
+mod smartart;
 mod create;
 mod export;
 mod hf;

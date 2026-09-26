@@ -76,6 +76,7 @@
         "notes": { "type": "boolean" },
         "comments": { "type": "boolean" },
         "charts": { "type": "boolean" },
+        "smartArt": { "type": "boolean" },
         "slide": { "type": "integer", "minimum": 1 },
         "maxShapes": { "type": "integer", "minimum": 1, "maximum": 5000 }
       },
@@ -191,6 +192,10 @@
         "pictures": {
           "type": "array",
           "items": { "$ref": "#/$defs/docxPictureCreate" }
+        },
+        "smartArts": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/docxSmartArtCreate" }
         }
       }
     },
@@ -210,6 +215,10 @@
         "pictures": {
           "type": "array",
           "items": { "$ref": "#/$defs/docxPictureCreate" }
+        },
+        "smartArts": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/docxSmartArtCreate" }
         }
       }
     },
@@ -236,6 +245,40 @@
         "text": { "type": "string" },
         "cx": { "type": "integer", "minimum": 1 },
         "cy": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "smartArtLayout": { "enum": ["list", "org"] },
+    "smartArtRole": { "enum": ["node", "asst"] },
+    "smartArtColors": {
+      "enum": ["accent1", "accent2", "accent3", "accent4", "accent5", "accent6"]
+    },
+    "smartArtStyle": { "enum": ["simple", "subtle", "intense"] },
+    "docxSmartArtCreate": {
+      "type": "object",
+      "required": ["layout"],
+      "additionalProperties": false,
+      "properties": {
+        "layout": { "$ref": "#/$defs/smartArtLayout" },
+        "points": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/smartArtPointInput" }
+        },
+        "kind": { "enum": ["inline", "anchor"] },
+        "wrap": {
+          "type": ["string", "null"],
+          "enum": ["square", "tight", "through", "topAndBottom", "none", null]
+        },
+        "cx": { "type": "integer", "minimum": 1 },
+        "cy": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "smartArtPointInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "text": { "type": "string" },
+        "parent": { "type": ["integer", "null"], "minimum": 0 },
+        "role": { "$ref": "#/$defs/smartArtRole" }
       }
     },
     "pptxPresentation": {
@@ -339,6 +382,16 @@
               { "$ref": "#/$defs/setChartDataLabelsOp" },
               { "$ref": "#/$defs/setChartSizeOp" },
               { "$ref": "#/$defs/setChartWrapOp" },
+              { "$ref": "#/$defs/insertSmartArtOp" },
+              { "$ref": "#/$defs/deleteSmartArtOp" },
+              { "$ref": "#/$defs/setSmartArtTextOp" },
+              { "$ref": "#/$defs/addSmartArtPointOp" },
+              { "$ref": "#/$defs/deleteSmartArtPointOp" },
+              { "$ref": "#/$defs/setSmartArtSizeOp" },
+              { "$ref": "#/$defs/setSmartArtWrapOp" },
+              { "$ref": "#/$defs/setSmartArtColorsOp" },
+              { "$ref": "#/$defs/setSmartArtStyleOp" },
+              { "$ref": "#/$defs/setSmartArtLayoutOp" },
               { "$ref": "#/$defs/setShapeTextOp" }
             ]
           }
@@ -891,6 +944,129 @@
         "alignV": { "enum": ["top", "center", "bottom"] },
         "offsetX": { "type": "integer" },
         "offsetY": { "type": "integer" }
+      }
+    },
+    "insertSmartArtOp": {
+      "type": "object",
+      "required": ["op", "id", "layout"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "insertSmartArt" },
+        "id": { "type": "string", "minLength": 1 },
+        "layout": { "$ref": "#/$defs/smartArtLayout" },
+        "points": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/smartArtPointInput" }
+        },
+        "kind": { "enum": ["inline", "anchor"] },
+        "wrap": {
+          "type": ["string", "null"],
+          "enum": ["square", "tight", "through", "topAndBottom", "none", null]
+        },
+        "cx": { "type": "integer", "minimum": 1 },
+        "cy": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "deleteSmartArtOp": {
+      "type": "object",
+      "required": ["op", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "deleteSmartArt" },
+        "id": { "type": "string", "minLength": 1 }
+      }
+    },
+    "setSmartArtTextOp": {
+      "type": "object",
+      "required": ["op", "id", "text"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "setSmartArtText" },
+        "id": { "type": "string", "minLength": 1 },
+        "text": { "type": "string" }
+      }
+    },
+    "addSmartArtPointOp": {
+      "type": "object",
+      "required": ["op", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "addSmartArtPoint" },
+        "id": { "type": "string", "minLength": 1 },
+        "text": { "type": "string" },
+        "role": { "$ref": "#/$defs/smartArtRole" }
+      }
+    },
+    "deleteSmartArtPointOp": {
+      "type": "object",
+      "required": ["op", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "deleteSmartArtPoint" },
+        "id": { "type": "string", "minLength": 1 }
+      }
+    },
+    "setSmartArtSizeOp": {
+      "type": "object",
+      "required": ["op", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "setSmartArtSize" },
+        "id": { "type": "string", "minLength": 1 },
+        "cx": { "type": "integer", "minimum": 1 },
+        "cy": { "type": "integer", "minimum": 1 }
+      },
+      "anyOf": [
+        { "required": ["cx"] },
+        { "required": ["cy"] }
+      ]
+    },
+    "setSmartArtWrapOp": {
+      "type": "object",
+      "required": ["op", "id", "kind"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "setSmartArtWrap" },
+        "id": { "type": "string", "minLength": 1 },
+        "kind": { "enum": ["inline", "anchor"] },
+        "wrap": {
+          "type": ["string", "null"],
+          "enum": ["square", "tight", "through", "topAndBottom", "none", null]
+        },
+        "alignH": { "enum": ["left", "center", "right"] },
+        "alignV": { "enum": ["top", "center", "bottom"] },
+        "offsetX": { "type": "integer" },
+        "offsetY": { "type": "integer" }
+      }
+    },
+    "setSmartArtColorsOp": {
+      "type": "object",
+      "required": ["op", "id", "colors"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "setSmartArtColors" },
+        "id": { "type": "string", "minLength": 1 },
+        "colors": { "$ref": "#/$defs/smartArtColors" }
+      }
+    },
+    "setSmartArtStyleOp": {
+      "type": "object",
+      "required": ["op", "id", "style"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "setSmartArtStyle" },
+        "id": { "type": "string", "minLength": 1 },
+        "style": { "$ref": "#/$defs/smartArtStyle" }
+      }
+    },
+    "setSmartArtLayoutOp": {
+      "type": "object",
+      "required": ["op", "id", "layout"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "setSmartArtLayout" },
+        "id": { "type": "string", "minLength": 1 },
+        "layout": { "$ref": "#/$defs/smartArtLayout" }
       }
     },
     "exportChartDataRequest": {

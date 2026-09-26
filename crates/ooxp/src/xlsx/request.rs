@@ -148,6 +148,16 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<SetCellOp>, Error> {
             || op_name == "setChartDataLabels"
             || op_name == "setChartSize"
             || op_name == "setChartWrap"
+            || op_name == "insertSmartArt"
+            || op_name == "deleteSmartArt"
+            || op_name == "setSmartArtText"
+            || op_name == "addSmartArtPoint"
+            || op_name == "deleteSmartArtPoint"
+            || op_name == "setSmartArtSize"
+            || op_name == "setSmartArtWrap"
+            || op_name == "setSmartArtColors"
+            || op_name == "setSmartArtStyle"
+            || op_name == "setSmartArtLayout"
         {
             return Err(Error::with_path(
                 ErrorKind::OpNotForFormat {

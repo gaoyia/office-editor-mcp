@@ -142,6 +142,22 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::SeriesIndexNotInt => "series must be followed by an integer starting at 0".into(),
             IdReason::InsertChartNeedsPara => {
                 "insertChart id must be a body or header/footer paragraph id".into()
+            }
+            IdReason::SmartArtPrefix => {
+                "SmartArt id must be a paragraph id plus /smartdiagram:…".into()
+            }
+            IdReason::SmartArtContainer => {
+                "Paragraph id must include /smartdiagram:… (that id alone is not a SmartArt)".into()
+            }
+            IdReason::SmartArtIndexNotInt => {
+                "smartdiagram:index must be followed by a positive integer".into()
+            }
+            IdReason::SmartArtIndexFromOne => "smartdiagram:index starts at 1".into(),
+            IdReason::SmartArtPtPrefix => {
+                "SmartArt point id must be a diagram id plus /pt:modelId".into()
+            }
+            IdReason::InsertSmartArtNeedsPara => {
+                "insertSmartArt id must be a body or header/footer paragraph id".into()
             },
         },
         ErrorKind::SheetNotFound { name } => format!("Sheet not found: {name}"),
@@ -213,6 +229,27 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         }
         ErrorKind::NeedChartCategories => {
             "addChartSeries with omitted categories needs an existing series to copy from".into()
+        }
+        ErrorKind::SmartArtNotFound { id } => format!("SmartArt not found: {id}"),
+        ErrorKind::SmartArtPointNotFound { id } => format!("SmartArt point not found: {id}"),
+        ErrorKind::LastSmartArtPoint => {
+            "Cannot delete the last visible SmartArt point; use deleteSmartArt to remove the diagram".into()
+        }
+        ErrorKind::InvalidSmartArtLayout => "layout must be list or org".into(),
+        ErrorKind::InvalidSmartArtRole => "role must be node or asst".into(),
+        ErrorKind::InvalidSmartArtColors => {
+            "colors must be accent1, accent2, accent3, accent4, accent5, or accent6".into()
+        }
+        ErrorKind::InvalidSmartArtStyle => "style must be simple, subtle, or intense".into(),
+        ErrorKind::SmartArtLayoutNotConvertible => {
+            "This SmartArt layout cannot be converted without loss".into()
+        }
+        ErrorKind::SmartArtPointParent => {
+            "points[].parent must be an index in the same array and must not form a cycle".into()
+        }
+        ErrorKind::SmartArtAsstOnList => "list layout does not accept asst points".into(),
+        ErrorKind::SmartArtListDepth => {
+            "list layout only accepts top-level points (parent must be omitted or null)".into()
         }
         ErrorKind::TextBoxLinkCrossPart => {
             "Text boxes in a link chain must be in the same part".into()

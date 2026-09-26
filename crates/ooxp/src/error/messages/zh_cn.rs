@@ -122,6 +122,20 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::SeriesIndexNotInt => "series 后面必须是从 0 起的整数".into(),
             IdReason::InsertChartNeedsPara => {
                 "insertChart 的 id 必须是正文或页眉页脚段落 id".into()
+            }
+            IdReason::SmartArtPrefix => {
+                "SmartArt id 必须是段落 id 加上 /smartdiagram:…".into()
+            }
+            IdReason::SmartArtContainer => {
+                "段落 id 必须带 /smartdiagram:…（该 id 本身不是 SmartArt）".into()
+            }
+            IdReason::SmartArtIndexNotInt => "smartdiagram:index 后面必须是正整数".into(),
+            IdReason::SmartArtIndexFromOne => "smartdiagram:index 从 1 起".into(),
+            IdReason::SmartArtPtPrefix => {
+                "SmartArt 点 id 必须是图示 id 加上 /pt:modelId".into()
+            }
+            IdReason::InsertSmartArtNeedsPara => {
+                "insertSmartArt 的 id 必须是正文或页眉页脚段落 id".into()
             },
         },
         ErrorKind::SheetNotFound { name } => format!("找不到工作表：{name}"),
@@ -180,6 +194,23 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::NeedChartCategories => {
             "addChartSeries 省略 categories 时图表里必须已有系列可抄".into()
         }
+        ErrorKind::SmartArtNotFound { id } => format!("找不到 SmartArt：{id}"),
+        ErrorKind::SmartArtPointNotFound { id } => format!("找不到 SmartArt 点：{id}"),
+        ErrorKind::LastSmartArtPoint => {
+            "不能删光 SmartArt 里的全部可见点，整张去掉请用 deleteSmartArt".into()
+        }
+        ErrorKind::InvalidSmartArtLayout => "layout 必须是 list 或 org".into(),
+        ErrorKind::InvalidSmartArtRole => "role 必须是 node 或 asst".into(),
+        ErrorKind::InvalidSmartArtColors => {
+            "colors 必须是 accent1、accent2、accent3、accent4、accent5 或 accent6".into()
+        }
+        ErrorKind::InvalidSmartArtStyle => "style 必须是 simple、subtle 或 intense".into(),
+        ErrorKind::SmartArtLayoutNotConvertible => "这种 SmartArt 版式无法无损转换".into(),
+        ErrorKind::SmartArtPointParent => {
+            "points[].parent 必须是本数组下标，且不能成环".into()
+        }
+        ErrorKind::SmartArtAsstOnList => "list 版式不能带 asst 点".into(),
+        ErrorKind::SmartArtListDepth => "list 版式只接受顶层点（parent 必须省略或为 null）".into(),
         ErrorKind::TextBoxLinkCrossPart => "链接文本框必须在同一部件里".into(),
         ErrorKind::InvalidHexColor => "color 必须是六位 RGB 十六进制或 null".into(),
         ErrorKind::InvalidTextBoxDirection => "direction 必须是 horizontal 或 vertical".into(),

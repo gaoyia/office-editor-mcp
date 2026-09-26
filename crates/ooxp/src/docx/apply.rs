@@ -7,6 +7,7 @@ use crate::opc::{self, rels_part_name, ContentTypes, Package, Relationship, Rela
 use crate::xml::{self, Document, Element, Node};
 
 use super::charts;
+use super::smartart;
 use super::comments;
 use super::hf::{self, HfKind};
 use super::notes;
@@ -187,6 +188,36 @@ pub fn apply(bytes: &[u8], ops: &[DocxOp]) -> Result<Vec<u8>, Error> {
             }
             DocxOp::SetChartWrap(op) => {
                 charts::apply_wrap(&mut pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
+            }
+            DocxOp::InsertSmartArt(op) => {
+                smartart::apply_insert(&mut pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
+            }
+            DocxOp::DeleteSmartArt(op) => {
+                smartart::apply_delete(&mut pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
+            }
+            DocxOp::SetSmartArtText(op) => {
+                smartart::apply_text(&mut pkg, &mut docs, &doc_part, &catalog, op, i)?;
+            }
+            DocxOp::AddSmartArtPoint(op) => {
+                smartart::apply_add_point(&mut pkg, &mut docs, &doc_part, &catalog, op, i)?;
+            }
+            DocxOp::DeleteSmartArtPoint(op) => {
+                smartart::apply_delete_point(&mut pkg, &mut docs, &doc_part, &catalog, op, i)?;
+            }
+            DocxOp::SetSmartArtSize(op) => {
+                smartart::apply_size(&mut pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
+            }
+            DocxOp::SetSmartArtWrap(op) => {
+                smartart::apply_wrap(&mut pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
+            }
+            DocxOp::SetSmartArtColors(op) => {
+                smartart::apply_colors(&mut pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
+            }
+            DocxOp::SetSmartArtStyle(op) => {
+                smartart::apply_style(&mut pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
+            }
+            DocxOp::SetSmartArtLayout(op) => {
+                smartart::apply_layout(&mut pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
             }
         }
     }

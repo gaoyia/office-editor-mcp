@@ -92,6 +92,16 @@ pub(crate) enum IdReason {
     SeriesIndexNotInt,
     /// insertChart 必须用正文或页眉页脚段落 id
     InsertChartNeedsPara,
+    /// SmartArt id 必须是 {段落}/smartdiagram:…
+    SmartArtPrefix,
+    /// 段落 id，缺少 /smartdiagram:…
+    SmartArtContainer,
+    SmartArtIndexNotInt,
+    SmartArtIndexFromOne,
+    /// 点 id 必须是 {图示}/pt:{modelId}
+    SmartArtPtPrefix,
+    /// insertSmartArt 必须用正文或页眉页脚段落 id
+    InsertSmartArtNeedsPara,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -255,6 +265,19 @@ define_error_kinds! {
     PieNeedsOneSeries => vec![Self::PieNeedsOneSeries],
     ChartTypeNotConvertible => vec![Self::ChartTypeNotConvertible],
     NeedChartCategories => vec![Self::NeedChartCategories],
+    SmartArtNotFound { id: String } => vec![Self::SmartArtNotFound { id: "para:1/smartdiagram:1".into() }],
+    SmartArtPointNotFound { id: String } => {
+        vec![Self::SmartArtPointNotFound { id: "para:1/smartdiagram:1/pt:2".into() }]
+    },
+    LastSmartArtPoint => vec![Self::LastSmartArtPoint],
+    InvalidSmartArtLayout => vec![Self::InvalidSmartArtLayout],
+    InvalidSmartArtRole => vec![Self::InvalidSmartArtRole],
+    InvalidSmartArtColors => vec![Self::InvalidSmartArtColors],
+    InvalidSmartArtStyle => vec![Self::InvalidSmartArtStyle],
+    SmartArtLayoutNotConvertible => vec![Self::SmartArtLayoutNotConvertible],
+    SmartArtPointParent => vec![Self::SmartArtPointParent],
+    SmartArtAsstOnList => vec![Self::SmartArtAsstOnList],
+    SmartArtListDepth => vec![Self::SmartArtListDepth],
     TextBoxLinkCrossPart => vec![Self::TextBoxLinkCrossPart],
     InvalidHexColor => vec![Self::InvalidHexColor],
     InvalidTextBoxDirection => vec![Self::InvalidTextBoxDirection],
@@ -372,6 +395,12 @@ impl IdReason {
             Self::SeriesPrefix,
             Self::SeriesIndexNotInt,
             Self::InsertChartNeedsPara,
+            Self::SmartArtPrefix,
+            Self::SmartArtContainer,
+            Self::SmartArtIndexNotInt,
+            Self::SmartArtIndexFromOne,
+            Self::SmartArtPtPrefix,
+            Self::InsertSmartArtNeedsPara,
         ]
     }
 }
@@ -494,6 +523,14 @@ impl ErrorKind {
             | Self::InvalidLegendPos
             | Self::PieNeedsOneSeries
             | Self::NeedChartCategories
+            | Self::LastSmartArtPoint
+            | Self::InvalidSmartArtLayout
+            | Self::InvalidSmartArtRole
+            | Self::InvalidSmartArtColors
+            | Self::InvalidSmartArtStyle
+            | Self::SmartArtPointParent
+            | Self::SmartArtAsstOnList
+            | Self::SmartArtListDepth
             | Self::TextBoxLinkCrossPart
             | Self::InvalidHexColor
             | Self::InvalidTextBoxDirection => InvalidField,
@@ -511,12 +548,15 @@ impl ErrorKind {
             | Self::NoteNotFound { .. }
             | Self::CommentNotFound { .. }
             | Self::ChartNotFound { .. }
-            | Self::ChartSeriesNotFound { .. } => IdNotFound,
+            | Self::ChartSeriesNotFound { .. }
+            | Self::SmartArtNotFound { .. }
+            | Self::SmartArtPointNotFound { .. } => IdNotFound,
             Self::ScopeRequired { .. } => ScopeRequired,
             Self::SharedFormulaMaster { .. }
             | Self::InkComment { .. }
             | Self::RestrictedChart { .. }
-            | Self::ChartTypeNotConvertible => NotImplemented,
+            | Self::ChartTypeNotConvertible
+            | Self::SmartArtLayoutNotConvertible => NotImplemented,
             Self::OpcOpen { .. } => OpcOpen,
             Self::PartMissing { .. }
             | Self::RelNotFound { .. }

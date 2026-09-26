@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "action": "create",
+  "path": "note.docx",
+  "format": "docx",
+  "document": {
+    "paragraphs": [
+      { "style": "Heading1", "text": "标题" },
+      {
+        "text": "",
+        "smartArts": [
+          {
+            "layout": "list",
+            "points": [{ "text": "甲" }, { "text": "乙" }, { "text": "丙" }]
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -769,3 +769,122 @@ function Ensure-DocxWordChartsSource([switch]$Force) {
     Write-Log "saved word charts source $path"
     return $path
 }
+
+function Find-OfficeSmartArtLayout($word, [string[]]$uniqueIds, [string[]]$nameNeedles) {
+    $layouts = $word.SmartArtLayouts
+    try {
+        foreach ($uid in $uniqueIds) {
+            try {
+                $lay = $layouts.Item($uid)
+                if ($null -ne $lay) {
+                    Write-Log "SmartArt 版式按 uniqueId 命中 $uid"
+                    return $lay
+                }
+            } catch {}
+        }
+        $n = [int]$layouts.Count
+        Write-Log "SmartArtLayouts.Count=$n，改按名称找：$($nameNeedles -join ',')"
+        for ($i = 1; $i -le $n; $i++) {
+            $lay = $layouts.Item($i)
+            $name = ''
+            try { $name = [string]$lay.Name } catch {}
+            $hit = $false
+            foreach ($needle in $nameNeedles) {
+                if ($name -like "*$needle*") { $hit = $true; break }
+            }
+            if ($hit) {
+                Write-Log "SmartArt 版式按名称命中 i=$i name=$name"
+                return $lay
+            }
+            Release-Com $lay
+        }
+        throw "找不到 SmartArt 版式（needles=$($nameNeedles -join ','))"
+    }
+    finally { Release-Com $layouts }
+}
+
+function Add-WordSmartArt($document, $layout, [int]$paraIndex, [double]$top) {
+    $p = $document.Paragraphs.Item($paraIndex)
+    $rng = $p.Range
+    $shapes = $document.Shapes
+    try {
+        return $shapes.AddSmartArt($layout, 50, $top, 400, 200, $rng)
+    }
+    finally {
+        Release-Com $rng
+        Release-Com $p
+        Release-Com $shapes
+    }
+}
+
+function Set-WordSmartArtTexts($shp, [string[]]$texts) {
+    $sa = $shp.SmartArt
+    try {
+        $nodes = $sa.AllNodes
+        try {
+            $n = [int]$nodes.Count
+            $limit = [Math]::Min($n, $texts.Count)
+            for ($i = 0; $i -lt $limit; $i++) {
+                $node = $nodes.Item($i + 1)
+                try {
+                    $tf = $node.TextFrame2
+                    try {
+                        $tr = $tf.TextRange
+                        try { $tr.Text = $texts[$i] } finally { Release-Com $tr }
+                    } finally { Release-Com $tf }
+                } finally { Release-Com $node }
+            }
+        } finally { Release-Com $nodes }
+    } finally { Release-Com $sa }
+}
+
+# 源文件由 Word AddSmartArt 另存列表型 + 循环型。不要用 create 产物当唯一样例。
+function Ensure-DocxWordSmartArtSource([switch]$Force) {
+    $path = Get-OutPath 'docx-word-smartart-source.docx'
+    if ((Test-Path $path) -and -not $Force) { return $path }
+
+    $tmpDir = Join-Path $env:TEMP 'ooxp-office'
+    New-Item -ItemType Directory -Force -Path $tmpDir | Out-Null
+    $skel = Join-Path $tmpDir 'docx-word-smartart-skel.docx'
+    $S = $global:OoxpStrings
+    Invoke-OoxpRequest @{
+        schemaVersion = 1; action = 'create'
+        path = $skel.Replace('\', '/'); format = 'docx'
+        document = @{
+            paragraphs = @(
+                @{ style = 'Heading1'; text = $S.chapter1 }
+                @{ text = $S.para2src }
+                @{ text = $S.para3keep }
+            )
+        }
+    } 'docx-smartart-skel-create' | Out-Null
+
+    $word = Ensure-MsWord (Ensure-DocxCreate)
+    Close-WordDocByPath $word $skel
+    $doc = Open-WordDoc $word $skel
+
+    $listLay = Find-OfficeSmartArtLayout $word @(
+        'urn:microsoft.com/office/officeart/2005/8/layout/default'
+    ) @('基本块列表', 'Basic Block List', '块列表', 'Block List')
+    $cycleLay = Find-OfficeSmartArtLayout $word @(
+        'urn:microsoft.com/office/officeart/2005/8/layout/cycle2'
+    ) @('基本循环', 'Basic Cycle', '循环', 'Cycle')
+
+    $ish1 = Add-WordSmartArt $doc $listLay 2 80
+    Start-Sleep -Seconds 1
+    Set-WordSmartArtTexts $ish1 @($S.saItem1, $S.saItem2, $S.saItem3)
+    Release-Com $ish1
+    Release-Com $listLay
+
+    $ish2 = Add-WordSmartArt $doc $cycleLay 3 320
+    Start-Sleep -Seconds 1
+    Release-Com $ish2
+    Release-Com $cycleLay
+
+    Write-Log 'word Save() 原地覆盖 TEMP 里的 SmartArt 样例'
+    $doc.Save()
+    Close-WordDoc $doc
+    Copy-Item -Force $skel $path
+    Write-Log "saved word smartart source $path"
+    return $path
+}

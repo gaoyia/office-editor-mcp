@@ -159,6 +159,7 @@ fn inspect_counts_without_lists() {
             "endnoteCount",
             "commentCount",
             "chartCount",
+            "smartArtCount",
             "outline",
             "headers",
             "footers",

@@ -8,6 +8,7 @@ use crate::xml;
 
 use super::charts;
 use super::hf::{self, HfKind, HfPart};
+use super::smartart;
 use super::comments;
 use super::notes;
 use super::para::{self, NoteKind};
@@ -43,6 +44,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     let expand_txbx = scope.as_ref().is_some_and(|s| s.text_boxes);
     let expand_txbx_content = scope.as_ref().is_some_and(|s| s.text_box_content);
     let expand_charts = scope.as_ref().is_some_and(|s| s.charts);
+    let expand_smartart = scope.as_ref().is_some_and(|s| s.smart_art);
     let (headers, footers) = hf_arrays(
         &pkg,
         &catalog,
@@ -51,6 +53,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         expand_txbx,
         expand_txbx_content,
         expand_charts,
+        expand_smartart,
     )?;
     let sections = section_nodes(&pkg, &part, &doc.root)?;
     let picture_count = body_picture_count(&paras)?;
@@ -60,8 +63,10 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     let endnote_count = notes::user_count(&pkg, &part, NoteKind::Endnote)?;
     let comment_count = comments::count(&pkg, &part)?;
     let mut body_chart_count = 0usize;
+    let mut body_smartart_count = 0usize;
     for p in &paras {
         body_chart_count += charts::count_charts(p)?;
+        body_smartart_count += smartart::count_smartarts(p)?;
     }
 
     let mut tree = json!({
@@ -75,6 +80,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         "endnoteCount": endnote_count,
         "commentCount": comment_count,
         "chartCount": body_chart_count,
+        "smartArtCount": body_smartart_count,
         "outline": outline,
         "headers": headers,
         "footers": footers,
@@ -111,6 +117,9 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         }
         if scope.charts {
             tree["charts"] = Value::Array(charts::collect_body(&pkg, &part, &paras)?);
+        }
+        if scope.smart_art {
+            tree["smartArts"] = Value::Array(smartart::collect_body(&pkg, &part, &paras)?);
         }
         if let (Some(from), Some(max_paras)) = (scope.from, scope.max_paras) {
             let start = from as usize;
@@ -220,6 +229,7 @@ fn hf_arrays(
     text_boxes: bool,
     text_box_content: bool,
     expand_charts: bool,
+    expand_smartart: bool,
 ) -> Result<(Vec<Value>, Vec<Value>), Error> {
     let mut headers = Vec::new();
     let mut footers = Vec::new();
@@ -232,6 +242,7 @@ fn hf_arrays(
             text_boxes,
             text_box_content,
             expand_charts,
+            expand_smartart,
         )?;
         match item.kind {
             HfKind::Header => headers.push(node),
@@ -249,6 +260,7 @@ fn hf_node(
     text_boxes: bool,
     text_box_content: bool,
     expand_charts: bool,
+    expand_smartart: bool,
 ) -> Result<Value, Error> {
     let bytes = pkg.get(&item.part)?;
     let doc = xml::parse(bytes)?;
@@ -261,8 +273,10 @@ fn hf_node(
     }
     textbox::resolve_links(&mut boxes);
     let mut chart_count = 0usize;
+    let mut smart_art_count = 0usize;
     for p in &paras {
         chart_count += charts::count_charts(p)?;
+        smart_art_count += smartart::count_smartarts(p)?;
     }
     let mut node = json!({
         "id": item.id,
@@ -272,6 +286,7 @@ fn hf_node(
         "pictureCount": pics.len(),
         "textBoxCount": boxes.len(),
         "chartCount": chart_count,
+        "smartArtCount": smart_art_count,
     });
     if pictures {
         node["pictures"] = Value::Array(picture::pictures_json(&pics));
@@ -293,6 +308,9 @@ fn hf_node(
     }
     if expand_charts {
         node["charts"] = Value::Array(charts::collect_hf(pkg, item, &paras)?);
+    }
+    if expand_smartart {
+        node["smartArts"] = Value::Array(smartart::collect_hf(pkg, item, &paras)?);
     }
     if expand {
         let mut paragraphs = Vec::new();

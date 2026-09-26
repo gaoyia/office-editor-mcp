@@ -199,6 +199,21 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 | Ch7 | 组合图 | ✅ 对组合图发 `setChartType` 得到 `NotImplemented`，文件未写坏 |
 | Ch8 | 导出数据 | ✅ `exportChartData` 写出的 xlsx 与 embedding 部件字节一致。不强制开 Word |
 
+## SmartArt
+
+准备一份 Word 亲手另存的样例：至少一张列表型 SmartArt（可见点不少于 3 个）。不要用库 `create` 产物当唯一样例。手测脚本为 `manual-check/office/cases/docx-smartart.ps1`。编号用 Sa。
+
+| 序号 | 检查 | 通过标准 |
+| --- | --- | --- |
+| Sa1 | 计数与名单 | 无 `smartArt` 时根上有 `smartArtCount`、没有名单；`smartArt: true` 时 id 为 `{段落}/smartdiagram:{docPrId}`，点文本与 Word 里能看见的字一致 |
+| Sa2 | 改字 | `setSmartArtText` 后 Word 无修复，目标点的字变了 |
+| Sa3 | 插入 | `insertSmartArt` 一张 `list` 后 Word 能看见，无修复 |
+| Sa4 | 删除 | `deleteSmartArt` 后图示与 Fallback 位图都消失，无修复 |
+| Sa5 | 增点 | `addSmartArtPoint` 后 Word 打开重排，可见条数多 1 |
+| Sa6 | 删点 | `deleteSmartArtPoint` 后 Word 打开重排，目标点及其子点消失 |
+| Sa7 | 版式 | 对不在 `list` / `org` 家族的图示发 `setSmartArtLayout` 得到 `NotImplemented`，文件未写坏 |
+| Sa8 | 尺寸 | `setSmartArtSize` 后宿主尺寸能对上，无修复 |
+
 ## 原样保存（opc 验收）
 
 与 xlsx 清单相同：O1 第一期放弃；零脏写回在 OPC 层验收；O2 按 apply 看未改区域。

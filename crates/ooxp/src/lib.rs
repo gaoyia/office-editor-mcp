@@ -179,8 +179,10 @@ mod tests {
         assert_eq!(tree["endnoteCount"], 0);
         assert_eq!(tree["commentCount"], 0);
         assert_eq!(tree["chartCount"], 0);
+        assert_eq!(tree["smartArtCount"], 0);
         assert!(tree.get("comments").is_none());
         assert!(tree.get("charts").is_none());
+        assert!(tree.get("smartArts").is_none());
         assert!(tree.get("paragraphs").is_none());
         assert!(tree.get("footnotes").is_none());
         assert_eq!(tree["headers"], json!([]));
@@ -794,6 +796,7 @@ mod tests {
                 "endnoteCount",
                 "commentCount",
                 "chartCount",
+                "smartArtCount",
                 "outline",
                 "headers",
                 "footers",

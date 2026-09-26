@@ -978,6 +978,7 @@ fn inspect_lists_header_pictures() {
             "pictureCount",
             "textBoxCount",
             "chartCount",
+            "smartArtCount",
             "pictures"
         ]
     );

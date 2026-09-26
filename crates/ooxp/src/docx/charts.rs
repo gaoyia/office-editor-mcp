@@ -399,7 +399,12 @@ pub fn parse_series_id(id: &str, op_index: usize) -> Result<SeriesTarget, Error>
 
 pub fn parse_insert_para_id(id: &str, op_index: usize) -> Result<ParaTarget, Error> {
     let path = format!("ops[{op_index}].id");
-    if id.contains("/chart:") || id.contains("/series:") || id.contains("/pic:") {
+    if id.contains("/chart:")
+        || id.contains("/series:")
+        || id.contains("/pic:")
+        || id.contains("/smartdiagram:")
+        || id.contains("/pt:")
+    {
         return Err(Error::with_path(
             ErrorKind::InvalidId {
                 reason: IdReason::InsertChartNeedsPara,

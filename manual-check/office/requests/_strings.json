@@ -34,5 +34,12 @@
     "commentTextNew": "改过的批注",
     "chartTitle": "销量",
     "chartSer1": "系列甲",
-    "chartSer2": "系列乙"
+    "chartSer2": "系列乙",
+    "saItem1": "甲",
+    "saItem2": "乙",
+    "saItem3": "丙",
+    "saItemNew": "新条目",
+    "saInsert1": "插入甲",
+    "saInsert2": "插入乙",
+    "saPointNew": "丁"
 }

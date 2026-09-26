@@ -9,6 +9,7 @@ use crate::opc::{
 use crate::xml::{self, Element, Node};
 
 use super::picture::{self, PicKind, WrapKind, WrapPos};
+use super::smartart::{self, InsertSpec};
 use super::textbox::{self, DEFAULT_CX, DEFAULT_CY, WPS_NS};
 use super::{
     A_NS, CT_APP, CT_CORE, CT_DOCUMENT, CT_FOOTER, CT_HEADER, CT_SETTINGS, CT_STYLES, MC_NS,
@@ -36,6 +37,7 @@ struct NewPara {
     style: Option<&'static str>,
     boxes: Vec<NewBox>,
     pictures: Vec<NewPic>,
+    smart_arts: Vec<InsertSpec>,
 }
 
 impl NewPara {
@@ -45,11 +47,16 @@ impl NewPara {
             style: None,
             boxes: Vec::new(),
             pictures: Vec::new(),
+            smart_arts: Vec::new(),
         }
     }
 
     fn has_pictures(&self) -> bool {
         !self.pictures.is_empty()
+    }
+
+    fn has_smartarts(&self) -> bool {
+        !self.smart_arts.is_empty()
     }
 }
 
@@ -220,11 +227,14 @@ pub fn create(document: &Value) -> Result<Vec<u8>, Error> {
     pkg.set("/docProps/app.xml", app_xml().into_bytes())?;
 
     attach_pictures(&mut pkg, "/word/document.xml", &paras)?;
+    attach_smartarts(&mut pkg, "/word/document.xml", &paras)?;
     if let Some(h) = &header {
         attach_pictures(&mut pkg, "/word/header1.xml", h)?;
+        attach_smartarts(&mut pkg, "/word/header1.xml", h)?;
     }
     if let Some(f) = &footer {
         attach_pictures(&mut pkg, "/word/footer1.xml", f)?;
+        attach_smartarts(&mut pkg, "/word/footer1.xml", f)?;
     }
 
     pkg.save_to_vec()
@@ -331,8 +341,8 @@ fn parse_para(v: &Value, path: &str, kind: ParaKind, i: usize) -> Result<NewPara
         )
     })?;
     let allowed = match kind {
-        ParaKind::Body => ["text", "style", "textBoxes", "pictures"].as_slice(),
-        ParaKind::HeaderFooter => ["text", "pictures"].as_slice(),
+        ParaKind::Body => ["text", "style", "textBoxes", "pictures", "smartArts"].as_slice(),
+        ParaKind::HeaderFooter => ["text", "pictures", "smartArts"].as_slice(),
     };
     for k in obj.keys() {
         if !allowed.contains(&k.as_str()) {
@@ -376,11 +386,13 @@ fn parse_para(v: &Value, path: &str, kind: ParaKind, i: usize) -> Result<NewPara
         ParaKind::HeaderFooter => Vec::new(),
     };
     let pictures = parse_pictures(obj.get("pictures"), path)?;
+    let smart_arts = parse_smartarts(obj.get("smartArts"), path)?;
     Ok(NewPara {
         text,
         style,
         boxes,
         pictures,
+        smart_arts,
     })
 }
 
@@ -789,6 +801,59 @@ fn hf_xml(tag: &str, paras: &[NewPara]) -> String {
         r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:{tag} {}>{body}</w:{tag}>"#,
         story_xmlns()
     )
+}
+
+fn parse_smartarts(v: Option<&Value>, prefix: &str) -> Result<Vec<InsertSpec>, Error> {
+    let Some(v) = v else {
+        return Ok(Vec::new());
+    };
+    let path = format!("{prefix}.smartArts");
+    let arr = v.as_array().ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::WrongType {
+                field: "smartArts".into(),
+                expected: TypeName::Array,
+            },
+            path.clone(),
+        )
+    })?;
+    let mut out = Vec::new();
+    for (j, item) in arr.iter().enumerate() {
+        let item_path = format!("{path}[{j}]");
+        let obj = item.as_object().ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::WrongType {
+                    field: item_path.clone(),
+                    expected: TypeName::Object,
+                },
+                item_path.clone(),
+            )
+        })?;
+        for k in obj.keys() {
+            if !matches!(k.as_str(), "layout" | "points" | "kind" | "wrap" | "cx" | "cy") {
+                return Err(Error::with_path(
+                    ErrorKind::UnknownField { field: k.clone() },
+                    format!("{item_path}.{k}"),
+                ));
+            }
+        }
+        out.push(smartart::parse_spec(obj, &item_path)?);
+    }
+    Ok(out)
+}
+
+fn attach_smartarts(pkg: &mut Package, part: &str, paras: &[NewPara]) -> Result<(), Error> {
+    if !paras.iter().any(NewPara::has_smartarts) {
+        return Ok(());
+    }
+    let mut doc = xml::parse(pkg.get(part)?)?;
+    for (i, para) in paras.iter().enumerate() {
+        for spec in &para.smart_arts {
+            smartart::attach_to_para(pkg, part, &mut doc.root, i, spec)?;
+        }
+    }
+    pkg.set(part, doc.to_bytes()?)?;
+    Ok(())
 }
 
 fn attach_pictures(pkg: &mut Package, part: &str, paras: &[NewPara]) -> Result<(), Error> {

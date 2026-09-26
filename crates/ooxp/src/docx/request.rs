@@ -29,6 +29,8 @@ pub struct InspectScope {
     pub comments: bool,
     /// 为 true 时列出嵌入图表。
     pub charts: bool,
+    /// 为 true 时列出 SmartArt。
+    pub smart_art: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -309,6 +311,16 @@ pub enum DocxOp {
     SetChartDataLabels(charts::SetChartDataLabelsOp),
     SetChartSize(charts::SetChartSizeOp),
     SetChartWrap(charts::SetChartWrapOp),
+    InsertSmartArt(super::smartart::InsertSmartArtOp),
+    DeleteSmartArt(super::smartart::DeleteSmartArtOp),
+    SetSmartArtText(super::smartart::SetSmartArtTextOp),
+    AddSmartArtPoint(super::smartart::AddSmartArtPointOp),
+    DeleteSmartArtPoint(super::smartart::DeleteSmartArtPointOp),
+    SetSmartArtSize(super::smartart::SetSmartArtSizeOp),
+    SetSmartArtWrap(super::smartart::SetSmartArtWrapOp),
+    SetSmartArtColors(super::smartart::SetSmartArtColorsOp),
+    SetSmartArtStyle(super::smartart::SetSmartArtStyleOp),
+    SetSmartArtLayout(super::smartart::SetSmartArtLayoutOp),
 }
 
 pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
@@ -339,6 +351,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
             "notes",
             "comments",
             "charts",
+            "smartArt",
         ],
     )?;
 
@@ -349,6 +362,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
     let notes = parse_bool_field(obj.get("notes"), "notes")?;
     let comments = parse_bool_field(obj.get("comments"), "comments")?;
     let charts = parse_bool_field(obj.get("charts"), "charts")?;
+    let smart_art = parse_bool_field(obj.get("smartArt"), "smartArt")?;
     if text_box_content && !text_boxes {
         return Err(Error::with_path(
             ErrorKind::ScopeFieldRequires {
@@ -369,6 +383,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
                 && !obj.contains_key("notes")
                 && !obj.contains_key("comments")
                 && !obj.contains_key("charts")
+                && !obj.contains_key("smartArt")
             {
                 return Ok(None);
             }
@@ -382,6 +397,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
                 notes,
                 comments,
                 charts,
+                smart_art,
             }))
         }
         (Some(f), Some(m)) => {
@@ -432,6 +448,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
                 notes,
                 comments,
                 charts,
+                smart_art,
             }))
         }
         _ => Err(Error::with_path(
@@ -560,6 +577,36 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<DocxOp>, Error> {
             }
             "setChartSize" => out.push(DocxOp::SetChartSize(parse_set_chart_size(obj, i)?)),
             "setChartWrap" => out.push(DocxOp::SetChartWrap(parse_set_chart_wrap(obj, i)?)),
+            "insertSmartArt" => {
+                out.push(DocxOp::InsertSmartArt(parse_insert_smartart(obj, i)?))
+            }
+            "deleteSmartArt" => {
+                out.push(DocxOp::DeleteSmartArt(parse_delete_smartart(obj, i)?))
+            }
+            "setSmartArtText" => {
+                out.push(DocxOp::SetSmartArtText(parse_set_smartart_text(obj, i)?))
+            }
+            "addSmartArtPoint" => {
+                out.push(DocxOp::AddSmartArtPoint(parse_add_smartart_point(obj, i)?))
+            }
+            "deleteSmartArtPoint" => out.push(DocxOp::DeleteSmartArtPoint(
+                parse_delete_smartart_point(obj, i)?,
+            )),
+            "setSmartArtSize" => {
+                out.push(DocxOp::SetSmartArtSize(parse_set_smartart_size(obj, i)?))
+            }
+            "setSmartArtWrap" => {
+                out.push(DocxOp::SetSmartArtWrap(parse_set_smartart_wrap(obj, i)?))
+            }
+            "setSmartArtColors" => {
+                out.push(DocxOp::SetSmartArtColors(parse_set_smartart_colors(obj, i)?))
+            }
+            "setSmartArtStyle" => {
+                out.push(DocxOp::SetSmartArtStyle(parse_set_smartart_style(obj, i)?))
+            }
+            "setSmartArtLayout" => {
+                out.push(DocxOp::SetSmartArtLayout(parse_set_smartart_layout(obj, i)?))
+            }
             _ => {
                 return Err(Error::with_path(
                     ErrorKind::UnsupportedOp {
@@ -2755,4 +2802,254 @@ fn parse_datum_list(
             format!("ops[{i}].{field}"),
         )),
     }
+}
+
+fn parse_insert_smartart(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<super::smartart::InsertSmartArtOp, Error> {
+    deny_keys(
+        obj,
+        i,
+        &["op", "id", "layout", "points", "kind", "wrap", "cx", "cy"],
+    )?;
+    let id = require_id(obj, i)?;
+    let para = super::smartart::parse_insert_para_id(&id, i)?;
+    let spec = super::smartart::parse_spec(obj, &format!("ops[{i}]"))?;
+    Ok(super::smartart::InsertSmartArtOp { id, para, spec })
+}
+
+fn parse_delete_smartart(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<super::smartart::DeleteSmartArtOp, Error> {
+    deny_keys(obj, i, &["op", "id"])?;
+    let id = require_id(obj, i)?;
+    let target = super::smartart::parse_diagram_id(&id, i)?;
+    Ok(super::smartart::DeleteSmartArtOp { id, target })
+}
+
+fn parse_set_smartart_text(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<super::smartart::SetSmartArtTextOp, Error> {
+    deny_keys(obj, i, &["op", "id", "text"])?;
+    let id = require_id(obj, i)?;
+    let target = super::smartart::parse_point_id(&id, i)?;
+    let text = match obj.get("text") {
+        Some(Value::String(s)) => s.clone(),
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "text".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].text"),
+            ));
+        }
+        None => {
+            return Err(Error::with_path(
+                ErrorKind::OpRequiresField {
+                    op: "setSmartArtText".into(),
+                    field: "text".into(),
+                },
+                format!("ops[{i}].text"),
+            ));
+        }
+    };
+    Ok(super::smartart::SetSmartArtTextOp { id, target, text })
+}
+
+fn parse_add_smartart_point(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<super::smartart::AddSmartArtPointOp, Error> {
+    deny_keys(obj, i, &["op", "id", "text", "role"])?;
+    let id = require_id(obj, i)?;
+    let parent = super::smartart::parse_add_parent(&id, i)?;
+    let text = match obj.get("text") {
+        None | Some(Value::Null) => String::new(),
+        Some(Value::String(s)) => s.clone(),
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "text".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].text"),
+            ));
+        }
+    };
+    let role = super::smartart::parse_role_field(obj.get("role"), &format!("ops[{i}].role"))?;
+    Ok(super::smartart::AddSmartArtPointOp {
+        id,
+        parent,
+        text,
+        role,
+    })
+}
+
+fn parse_delete_smartart_point(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<super::smartart::DeleteSmartArtPointOp, Error> {
+    deny_keys(obj, i, &["op", "id"])?;
+    let id = require_id(obj, i)?;
+    let target = super::smartart::parse_point_id(&id, i)?;
+    Ok(super::smartart::DeleteSmartArtPointOp { id, target })
+}
+
+fn parse_set_smartart_size(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<super::smartart::SetSmartArtSizeOp, Error> {
+    deny_keys(obj, i, &["op", "id", "cx", "cy"])?;
+    let id = require_id(obj, i)?;
+    let target = super::smartart::parse_diagram_id(&id, i)?;
+    let cx = parse_emu_field(obj.get("cx"), i, "cx")?;
+    let cy = parse_emu_field(obj.get("cy"), i, "cy")?;
+    if cx.is_none() && cy.is_none() {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "setSmartArtSize".into(),
+                field: "cx or cy".into(),
+            },
+            format!("ops[{i}]"),
+        ));
+    }
+    Ok(super::smartart::SetSmartArtSizeOp { id, target, cx, cy })
+}
+
+fn parse_set_smartart_wrap(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<super::smartart::SetSmartArtWrapOp, Error> {
+    deny_keys(
+        obj,
+        i,
+        &[
+            "op", "id", "kind", "wrap", "alignH", "alignV", "offsetX", "offsetY",
+        ],
+    )?;
+    let id = require_id(obj, i)?;
+    let target = super::smartart::parse_diagram_id(&id, i)?;
+    let kind = match obj.get("kind") {
+        Some(Value::String(s)) => picture::parse_pic_kind(s)
+            .ok_or_else(|| Error::with_path(ErrorKind::InvalidPicKind, format!("ops[{i}].kind")))?,
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "kind".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].kind"),
+            ));
+        }
+        None => {
+            return Err(Error::with_path(
+                ErrorKind::OpRequiresField {
+                    op: "setSmartArtWrap".into(),
+                    field: "kind".into(),
+                },
+                format!("ops[{i}].kind"),
+            ));
+        }
+    };
+    let wrap = match obj.get("wrap") {
+        None | Some(Value::Null) => None,
+        Some(Value::String(s)) => Some(picture::parse_wrap(s).ok_or_else(|| {
+            Error::with_path(ErrorKind::InvalidPicWrap, format!("ops[{i}].wrap"))
+        })?),
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "wrap".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].wrap"),
+            ));
+        }
+    };
+    if kind == PicKind::Inline && wrap.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::InvalidPicWrap,
+            format!("ops[{i}].wrap"),
+        ));
+    }
+    if kind == PicKind::Anchor && wrap.is_none() {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "setSmartArtWrap".into(),
+                field: "wrap".into(),
+            },
+            format!("ops[{i}].wrap"),
+        ));
+    }
+    let align_h = parse_align_h_field(obj.get("alignH"), i)?;
+    let align_v = parse_align_v_field(obj.get("alignV"), i)?;
+    let offset_x = parse_i64_field(obj.get("offsetX"), i, "offsetX")?;
+    let offset_y = parse_i64_field(obj.get("offsetY"), i, "offsetY")?;
+    if align_h.is_some() && offset_x.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::MutuallyExclusive {
+                a: "alignH".into(),
+                b: "offsetX".into(),
+            },
+            format!("ops[{i}]"),
+        ));
+    }
+    if align_v.is_some() && offset_y.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::MutuallyExclusive {
+                a: "alignV".into(),
+                b: "offsetY".into(),
+            },
+            format!("ops[{i}]"),
+        ));
+    }
+    Ok(super::smartart::SetSmartArtWrapOp {
+        id,
+        target,
+        kind,
+        wrap,
+        pos: WrapPos {
+            align_h,
+            align_v,
+            offset_x,
+            offset_y,
+        },
+    })
+}
+
+fn parse_set_smartart_colors(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<super::smartart::SetSmartArtColorsOp, Error> {
+    deny_keys(obj, i, &["op", "id", "colors"])?;
+    let id = require_id(obj, i)?;
+    let target = super::smartart::parse_diagram_id(&id, i)?;
+    let colors = super::smartart::parse_colors_field(obj.get("colors"), &format!("ops[{i}].colors"))?;
+    Ok(super::smartart::SetSmartArtColorsOp { id, target, colors })
+}
+
+fn parse_set_smartart_style(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<super::smartart::SetSmartArtStyleOp, Error> {
+    deny_keys(obj, i, &["op", "id", "style"])?;
+    let id = require_id(obj, i)?;
+    let target = super::smartart::parse_diagram_id(&id, i)?;
+    let style = super::smartart::parse_style_field(obj.get("style"), &format!("ops[{i}].style"))?;
+    Ok(super::smartart::SetSmartArtStyleOp { id, target, style })
+}
+
+fn parse_set_smartart_layout(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<super::smartart::SetSmartArtLayoutOp, Error> {
+    deny_keys(obj, i, &["op", "id", "layout"])?;
+    let id = require_id(obj, i)?;
+    let target = super::smartart::parse_diagram_id(&id, i)?;
+    let layout = super::smartart::parse_layout_field(obj.get("layout"), &format!("ops[{i}].layout"))?;
+    Ok(super::smartart::SetSmartArtLayoutOp { id, target, layout })
 }
