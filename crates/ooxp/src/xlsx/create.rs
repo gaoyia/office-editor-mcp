@@ -1,9 +1,13 @@
 //! 从领域 JSON 生成 Transitional 工作簿。
 
+use std::collections::HashSet;
+
 use serde_json::Value;
 
+use super::chart;
 use super::picture::{self, AnchorKind};
-use super::request::{parse_cell_value, InsertPictureOp, SetCellValue};
+use super::request::{parse_cell_value, InsertChartOp, InsertPictureOp, SetCellValue};
+use crate::chart::{ChartType, NewSeries};
 use crate::error::{Error, ErrorKind, SheetNameReason, TypeName};
 use crate::opc::{
     ContentTypes, Package, Relationship, Relationships, CONTENT_TYPES_PART, ROOT_RELS_PART,
@@ -27,6 +31,7 @@ struct NewSheet {
     name: String,
     cells: Vec<NewCell>,
     pictures: Vec<InsertPictureOp>,
+    charts: Vec<InsertChartOp>,
 }
 
 pub fn create(workbook: &Value) -> Result<Vec<u8>, Error> {
@@ -199,6 +204,7 @@ pub fn create(workbook: &Value) -> Result<Vec<u8>, Error> {
         )?;
     }
     attach_pictures(&mut pkg, &sheets)?;
+    attach_charts(&mut pkg, &sheets)?;
     pkg.save_to_vec()
 }
 
@@ -213,7 +219,7 @@ fn parse_sheet(v: &Value, i: usize) -> Result<NewSheet, Error> {
         )
     })?;
     for k in obj.keys() {
-        if !matches!(k.as_str(), "name" | "cells" | "pictures") {
+        if !matches!(k.as_str(), "name" | "cells" | "pictures" | "charts") {
             return Err(Error::with_path(
                 ErrorKind::UnknownField { field: k.clone() },
                 format!("workbook.sheets[{i}].{k}"),
@@ -248,10 +254,12 @@ fn parse_sheet(v: &Value, i: usize) -> Result<NewSheet, Error> {
     }
     cells.sort_by_key(|c| (c.refer.row, c.refer.col));
     let pictures = parse_pictures(obj.get("pictures"), i, name)?;
+    let charts = parse_charts(obj.get("charts"), i, name)?;
     Ok(NewSheet {
         name: name.to_string(),
         cells,
         pictures,
+        charts,
     })
 }
 
@@ -272,6 +280,23 @@ fn attach_pictures(pkg: &mut Package, sheets: &[NewSheet]) -> Result<(), Error> 
             )?;
         }
         pkg.set(&part, doc.to_bytes()?)?;
+    }
+    Ok(())
+}
+
+fn attach_charts(pkg: &mut Package, sheets: &[NewSheet]) -> Result<(), Error> {
+    for (i, sh) in sheets.iter().enumerate() {
+        if sh.charts.is_empty() {
+            continue;
+        }
+        let part = format!("/xl/worksheets/sheet{}.xml", i + 1);
+        let mut dirty = Vec::new();
+        for op in &sh.charts {
+            chart::insert_chart(pkg, &part, &sh.name, &mut dirty, op, i)?;
+        }
+        for (p, doc) in dirty {
+            pkg.set(&p, doc.to_bytes()?)?;
+        }
     }
     Ok(())
 }
@@ -301,6 +326,360 @@ fn parse_pictures(
     Ok(out)
 }
 
+fn parse_charts(
+    v: Option<&Value>,
+    sheet_i: usize,
+    sheet: &str,
+) -> Result<Vec<InsertChartOp>, Error> {
+    let Some(v) = v else {
+        return Ok(Vec::new());
+    };
+    let prefix = format!("workbook.sheets[{sheet_i}].charts");
+    let arr = v.as_array().ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::WrongType {
+                field: "charts".into(),
+                expected: TypeName::Array,
+            },
+            prefix.clone(),
+        )
+    })?;
+    let mut out = Vec::new();
+    for (j, item) in arr.iter().enumerate() {
+        out.push(parse_chart(item, &format!("{prefix}[{j}]"), sheet)?);
+    }
+    Ok(out)
+}
+
+fn parse_chart(v: &Value, prefix: &str, sheet: &str) -> Result<InsertChartOp, Error> {
+    let obj = v.as_object().ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::WrongType {
+                field: "charts".into(),
+                expected: TypeName::Object,
+            },
+            prefix.to_string(),
+        )
+    })?;
+    for k in obj.keys() {
+        if matches!(k.as_str(), "kind" | "wrap") {
+            return Err(Error::with_path(
+                ErrorKind::UnknownField { field: k.clone() },
+                format!("{prefix}.{k}"),
+            ));
+        }
+        if !matches!(
+            k.as_str(),
+            "type"
+                | "title"
+                | "series"
+                | "from"
+                | "to"
+                | "anchor"
+                | "cx"
+                | "cy"
+                | "fromOffX"
+                | "fromOffY"
+                | "toOffX"
+                | "toOffY"
+                | "dataFrom"
+        ) {
+            return Err(Error::with_path(
+                ErrorKind::UnknownField { field: k.clone() },
+                format!("{prefix}.{k}"),
+            ));
+        }
+    }
+    let chart_type = match obj.get("type") {
+        Some(Value::String(s)) => ChartType::parse(s).ok_or_else(|| {
+            Error::with_path(ErrorKind::InvalidChartType, format!("{prefix}.type"))
+        })?,
+        None => {
+            return Err(Error::with_path(
+                ErrorKind::MissingField {
+                    field: "type".into(),
+                },
+                format!("{prefix}.type"),
+            ));
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "type".into(),
+                    expected: TypeName::String,
+                },
+                format!("{prefix}.type"),
+            ));
+        }
+    };
+    let title = match obj.get("title") {
+        None | Some(Value::Null) => None,
+        Some(Value::String(s)) => Some(s.clone()),
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "title".into(),
+                    expected: TypeName::String,
+                },
+                format!("{prefix}.title"),
+            ));
+        }
+    };
+    let series = parse_chart_series(obj.get("series"), prefix, chart_type)?;
+    if chart_type.needs_one_series() && series.len() != 1 {
+        return Err(Error::with_path(
+            ErrorKind::PieNeedsOneSeries,
+            format!("{prefix}.series"),
+        ));
+    }
+    if chart_type == ChartType::Combo {
+        let kinds: HashSet<&str> = series
+            .iter()
+            .filter_map(|s| s.series_type.map(ChartType::as_str))
+            .collect();
+        if series.iter().any(|s| s.series_type.is_none()) || kinds.len() < 2 {
+            return Err(Error::with_path(
+                ErrorKind::InvalidComboSeriesType,
+                format!("{prefix}.series"),
+            ));
+        }
+    } else if series.iter().any(|s| s.series_type.is_some()) {
+        return Err(Error::with_path(
+            ErrorKind::InvalidComboSeriesType,
+            format!("{prefix}.series"),
+        ));
+    }
+    if chart_type != ChartType::Bubble && series.iter().any(|s| s.sizes.is_some()) {
+        return Err(Error::with_path(
+            ErrorKind::SizesOnNonBubble,
+            format!("{prefix}.series"),
+        ));
+    }
+    let cx = parse_emu(obj.get("cx"), prefix, "cx")?;
+    let cy = parse_emu(obj.get("cy"), prefix, "cy")?;
+    if cx.is_some() != cy.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "create".into(),
+                field: "cx and cy together".into(),
+            },
+            prefix.to_string(),
+        ));
+    }
+    let from = parse_required_a1_field(obj.get("from"), prefix, "from")?;
+    let data_from = parse_required_a1_field(obj.get("dataFrom"), prefix, "dataFrom")?;
+    let anchor = match obj.get("anchor") {
+        None => AnchorKind::OneCell,
+        Some(Value::String(s)) => AnchorKind::parse_insert(s).ok_or_else(|| {
+            Error::with_path(ErrorKind::InvalidXlsxAnchor, format!("{prefix}.anchor"))
+        })?,
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "anchor".into(),
+                    expected: TypeName::String,
+                },
+                format!("{prefix}.anchor"),
+            ));
+        }
+    };
+    let to = match obj.get("to") {
+        None => None,
+        Some(Value::String(s)) => {
+            Some(a1::parse_cell(s).map_err(|e| e.at(format!("{prefix}.to")))?)
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "to".into(),
+                    expected: TypeName::String,
+                },
+                format!("{prefix}.to"),
+            ));
+        }
+    };
+    if anchor == AnchorKind::TwoCell && to.is_none() {
+        return Err(Error::with_path(
+            ErrorKind::MissingField { field: "to".into() },
+            format!("{prefix}.to"),
+        ));
+    }
+    if anchor == AnchorKind::OneCell && to.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::UnknownField { field: "to".into() },
+            format!("{prefix}.to"),
+        ));
+    }
+    Ok(InsertChartOp {
+        sheet: sheet.to_string(),
+        chart_type,
+        title,
+        series,
+        cx,
+        cy,
+        from,
+        to,
+        anchor,
+        from_off_x: parse_off(obj.get("fromOffX"), prefix, "fromOffX")?.unwrap_or(0),
+        from_off_y: parse_off(obj.get("fromOffY"), prefix, "fromOffY")?.unwrap_or(0),
+        to_off_x: parse_off(obj.get("toOffX"), prefix, "toOffX")?.unwrap_or(0),
+        to_off_y: parse_off(obj.get("toOffY"), prefix, "toOffY")?.unwrap_or(0),
+        data_from,
+    })
+}
+
+fn parse_chart_series(
+    v: Option<&Value>,
+    prefix: &str,
+    _chart_type: ChartType,
+) -> Result<Vec<NewSeries>, Error> {
+    let arr = match v {
+        Some(Value::Array(a)) if !a.is_empty() => a,
+        Some(Value::Array(_)) | None => {
+            return Err(Error::with_path(
+                ErrorKind::MissingField {
+                    field: "series".into(),
+                },
+                format!("{prefix}.series"),
+            ));
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "series".into(),
+                    expected: TypeName::Array,
+                },
+                format!("{prefix}.series"),
+            ));
+        }
+    };
+    let mut out = Vec::new();
+    for (j, item) in arr.iter().enumerate() {
+        let obj = item.as_object().ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::WrongType {
+                    field: format!("series[{j}]"),
+                    expected: TypeName::Object,
+                },
+                format!("{prefix}.series[{j}]"),
+            )
+        })?;
+        for k in obj.keys() {
+            if !matches!(
+                k.as_str(),
+                "name" | "categories" | "values" | "sizes" | "type"
+            ) {
+                return Err(Error::with_path(
+                    ErrorKind::UnknownField { field: k.clone() },
+                    format!("{prefix}.series[{j}].{k}"),
+                ));
+            }
+        }
+        let name = match obj.get("name") {
+            None | Some(Value::Null) => None,
+            Some(Value::String(s)) => Some(s.clone()),
+            Some(_) => {
+                return Err(Error::with_path(
+                    ErrorKind::WrongType {
+                        field: format!("series[{j}].name"),
+                        expected: TypeName::String,
+                    },
+                    format!("{prefix}.series[{j}].name"),
+                ));
+            }
+        };
+        let categories = parse_chart_datum_list(
+            obj.get("categories"),
+            &format!("{prefix}.series[{j}].categories"),
+        )?;
+        let values =
+            parse_chart_datum_list(obj.get("values"), &format!("{prefix}.series[{j}].values"))?
+                .filter(|v| !v.is_empty())
+                .ok_or_else(|| {
+                    Error::with_path(
+                        ErrorKind::MissingField {
+                            field: "series[].values".into(),
+                        },
+                        format!("{prefix}.series[{j}].values"),
+                    )
+                })?;
+        let sizes =
+            parse_chart_datum_list(obj.get("sizes"), &format!("{prefix}.series[{j}].sizes"))?;
+        let series_type = match obj.get("type") {
+            None | Some(Value::Null) => None,
+            Some(Value::String(s)) => Some(ChartType::parse_combo_series(s).ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::InvalidComboSeriesType,
+                    format!("{prefix}.series[{j}].type"),
+                )
+            })?),
+            Some(_) => {
+                return Err(Error::with_path(
+                    ErrorKind::WrongType {
+                        field: format!("series[{j}].type"),
+                        expected: TypeName::String,
+                    },
+                    format!("{prefix}.series[{j}].type"),
+                ));
+            }
+        };
+        out.push(NewSeries {
+            name,
+            categories,
+            values,
+            sizes,
+            series_type,
+        });
+    }
+    Ok(out)
+}
+
+fn parse_chart_datum_list(v: Option<&Value>, path: &str) -> Result<Option<Vec<Value>>, Error> {
+    match v {
+        None | Some(Value::Null) => Ok(None),
+        Some(Value::Array(a)) => {
+            for (j, item) in a.iter().enumerate() {
+                if !matches!(
+                    item,
+                    Value::Null | Value::Bool(_) | Value::Number(_) | Value::String(_)
+                ) {
+                    return Err(Error::with_path(
+                        ErrorKind::InvalidCellValue,
+                        format!("{path}[{j}]"),
+                    ));
+                }
+            }
+            Ok(Some(a.clone()))
+        }
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: path.rsplit('.').next().unwrap_or("series").into(),
+                expected: TypeName::Array,
+            },
+            path.to_string(),
+        )),
+    }
+}
+
+fn parse_required_a1_field(v: Option<&Value>, prefix: &str, field: &str) -> Result<CellRef, Error> {
+    match v {
+        Some(Value::String(s)) => a1::parse_cell(s).map_err(|e| e.at(format!("{prefix}.{field}"))),
+        None => Err(Error::with_path(
+            ErrorKind::MissingField {
+                field: field.into(),
+            },
+            format!("{prefix}.{field}"),
+        )),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::String,
+            },
+            format!("{prefix}.{field}"),
+        )),
+    }
+}
+
 fn parse_picture(v: &Value, prefix: &str, sheet: &str) -> Result<InsertPictureOp, Error> {
     let obj = v.as_object().ok_or_else(|| {
         Error::with_path(
@@ -314,7 +693,15 @@ fn parse_picture(v: &Value, prefix: &str, sheet: &str) -> Result<InsertPictureOp
     for k in obj.keys() {
         if !matches!(
             k.as_str(),
-            "file" | "from" | "to" | "anchor" | "cx" | "cy" | "fromOffX" | "fromOffY" | "toOffX"
+            "file"
+                | "from"
+                | "to"
+                | "anchor"
+                | "cx"
+                | "cy"
+                | "fromOffX"
+                | "fromOffY"
+                | "toOffX"
                 | "toOffY"
         ) {
             return Err(Error::with_path(
@@ -391,7 +778,9 @@ fn parse_picture(v: &Value, prefix: &str, sheet: &str) -> Result<InsertPictureOp
     };
     let to = match obj.get("to") {
         None => None,
-        Some(Value::String(s)) => Some(a1::parse_cell(s).map_err(|e| e.at(format!("{prefix}.to")))?),
+        Some(Value::String(s)) => {
+            Some(a1::parse_cell(s).map_err(|e| e.at(format!("{prefix}.to")))?)
+        }
         Some(_) => {
             return Err(Error::with_path(
                 ErrorKind::WrongType {
@@ -410,9 +799,7 @@ fn parse_picture(v: &Value, prefix: &str, sheet: &str) -> Result<InsertPictureOp
     }
     if anchor == AnchorKind::OneCell && to.is_some() {
         return Err(Error::with_path(
-            ErrorKind::UnknownField {
-                field: "to".into(),
-            },
+            ErrorKind::UnknownField { field: "to".into() },
             format!("{prefix}.to"),
         ));
     }

@@ -70,8 +70,9 @@ xlsx create 生成 Transitional 包，命名空间用 Office 默认的 2006 那�
 | --- | --- |
 | `/docProps/core.xml` | 核心文件属性，dc:title 可空 |
 | `/docProps/app.xml` | Application 写成 `ooxp`，Sheet 名单与 workbook 一致 |
-| `/xl/drawings/drawingN.xml` | 仅当某张表声明了 `pictures` |
+| `/xl/drawings/drawingN.xml` | 仅当某张表声明了 `pictures` 或 `charts` |
 | `/xl/media/imageN.ext` | 仅当某张表声明了 `pictures` |
+| `/xl/charts/chartN.xml` | 仅当某张表声明了 `charts` |
 
 Workbook 的 Content Type：
 
@@ -93,7 +94,7 @@ SpreadsheetML 主命名空间：
 
 `http://schemas.openxmlformats.org/spreadsheetml/2006/main`
 
-apply 插入工作表图时，可能新建 `/xl/drawings/drawingN.xml`（CT `application/vnd.openxmlformats-officedocument.drawing+xml`）、drawing 的 `.rels`，以及 `/xl/media/imageN.*`。工作表 `.rels` 补一条 drawing 关系（Type 以 `/drawing` 结尾），工作表 XML 写 `<drawing r:id="…"/>`。drawing 命名空间是 `http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing`（`xdr`）。apply 插入工作表图表时，可能再新建 `/xl/charts/chartN.xml`（CT `application/vnd.openxmlformats-officedocument.drawingml.chart+xml`）及 chart 的 `.rels`；drawing 关系 Type 以 `/chart` 结尾。不写 embedding。create 声明了 `sheets[].pictures` 时按同一套规则写 drawing 与 media，仍不写 chart 部件。
+apply 插入工作表图时，可能新建 `/xl/drawings/drawingN.xml`（CT `application/vnd.openxmlformats-officedocument.drawing+xml`）、drawing 的 `.rels`，以及 `/xl/media/imageN.*`。工作表 `.rels` 补一条 drawing 关系（Type 以 `/drawing` 结尾），工作表 XML 写 `<drawing r:id="…"/>`。drawing 命名空间是 `http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing`（`xdr`）。apply 插入工作表图表时，可能再新建 `/xl/charts/chartN.xml`（CT `application/vnd.openxmlformats-officedocument.drawingml.chart+xml`）及 chart 的 `.rels`；drawing 关系 Type 以 `/chart` 结尾。不写 embedding。create 声明了 `sheets[].pictures` 或 `sheets[].charts` 时按同一套规则写 drawing、media 与 chart 部件。
 
 ## create 时的最小包（docx）
 

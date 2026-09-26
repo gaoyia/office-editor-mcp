@@ -5,7 +5,7 @@
 
 从 `.plan/2026年-9月-27日-❌-xlsx-图与图表路线.md` 拆出序号 2。`create` 是唯一允许整包生成的动作。本期让新建工作簿能带 SpreadsheetDrawing 的 `xdr:pic`。复用 `insertPicture` 的写入，不另做生成器。
 
-前置：`.plan/2026年-9月-27日-✅-xlsx-工作表图.md`。`create` 带图表见 `.plan/2026年-9月-27日-❌-xlsx-create带图表.md`。
+前置：`.plan/2026年-9月-27日-✅-xlsx-工作表图.md`。`create` 带图表见 `.plan/2026年-9月-27日-✅-xlsx-create带图表.md`。
 
 契约真源：`docs/json-contract.md`、`docs/json-schema/request.schema.json`、`docs/errors.md`、`docs/architecture.md`、`docs/opc.md`、`docs/checklist-xlsx.md`。
 
@@ -29,7 +29,7 @@
 - 图只挂在 `workbook.sheets[]` 上，字段名 `pictures`。不挂在 `workbook` 根上，也不挂在单元格上。
 - 每项字段与 xlsx `insertPicture` 相同，但不含 `id`：`file` 必须；`from` 必须（A1）；`anchor` 可选，缺省 `oneCell`；`twoCell` 必须再给 `to`；`cx` / `cy` / `fromOffX` / `fromOffY` / `toOffX` / `toOffY` 规则与 `insertPicture` 相同。
 - `kind` / `wrap` / `alignH` / `alignV` / `offsetX` / `offsetY` 是 Word 绕排，xlsx create 上出现报 `InvalidField`。
-- `workbook` 根上、`cells[]` 上出现 `pictures`，或 `sheets[]` 上出现 `smartArts`，报 `InvalidField`。`sheets[].charts` 见 `.plan/2026年-9月-27日-❌-xlsx-create带图表.md`（未开时仍拒绝）。
+- `workbook` 根上、`cells[]` 上出现 `pictures`，或 `sheets[]` 上出现 `smartArts`，报 `InvalidField`。`sheets[].charts` 见 `.plan/2026年-9月-27日-✅-xlsx-create带图表.md`。
 - 不把 base64 写进 create JSON。认 PNG / JPEG / GIF / BMP，按文件头判断。缺 `file` 或 `from` 报 `MissingField`。只给一个尺寸报 `InvalidField`。
 - 省略 `pictures` 或给空数组：该表不写 drawing，行为与现在无图 create 相同。
 - 一张表上的图写入同一份 drawing 部件。`xdr:cNvPr/@id` 从 `1` 起按数组顺序递增。多张表各写各的 `drawingN.xml`。
@@ -39,7 +39,7 @@
 ## 不做
 
 - 从已有文件当模板复制
-- create 带图表（另开，见 `.plan/2026年-9月-27日-❌-xlsx-create带图表.md`）
+- create 带图表（另开，见 `.plan/2026年-9月-27日-✅-xlsx-create带图表.md`）
 - 嵌入 SVG 转 DrawingML、生成 VML
 - 按列宽行高去算 `twoCell` 显示尺寸
 

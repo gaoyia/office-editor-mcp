@@ -79,7 +79,7 @@ crates/ooxp-cli/             命令行，只依赖 ooxp。二进制名也是 oox
 
 ### create
 
-调用方给出格式、输出路径和内容对象。库在内存里生成一套最小可打开的 Transitional 部件，打成新 ZIP。不读取任何已有文件当模板，除非以后另开「从模板复制」的动作。xlsx 的 `sheets[].pictures` 复用 `insertPicture` 的写入，生成 `/xl/drawings/…` 与 `/xl/media/…`。docx 段落与默认页眉页脚上的 `pictures` 同样复用插图。create 不写图表。
+调用方给出格式、输出路径和内容对象。库在内存里生成一套最小可打开的 Transitional 部件，打成新 ZIP。不读取任何已有文件当模板，除非以后另开「从模板复制」的动作。xlsx 的 `sheets[].pictures` 复用 `insertPicture`，`sheets[].charts` 复用 `insertChart`（数据写本表单元格，不写 embedding）。docx 段落与默认页眉页脚上的 `pictures` 同样复用插图。docx create 仍不写图表。
 
 ### exportMedia
 

@@ -379,3 +379,89 @@ fn insert_requires_sheet_and_data_from() {
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);
 }
+
+#[test]
+fn create_writes_worksheet_chart() {
+    let path = tmp("create-chart");
+    run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "create",
+            "path": path.to_string_lossy(),
+            "workbook": {
+                "sheets": [{
+                    "name": "Sheet1",
+                    "charts": [{
+                        "type": "col",
+                        "title": "销量",
+                        "from": "E2",
+                        "dataFrom": "A10",
+                        "series": [{
+                            "name": "Q1",
+                            "categories": ["甲", "乙", "丙"],
+                            "values": [1, 2, 3]
+                        }]
+                    }]
+                }]
+            }
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap();
+
+    let tree = inspect_charts(&path);
+    assert_eq!(tree["chartCount"], 1);
+    assert_eq!(tree["sheets"][0]["chartCount"], 1);
+    let c = &tree["sheets"][0]["charts"][0];
+    assert_eq!(c["id"], "sheet:Sheet1/chart:1");
+    assert_eq!(c["type"], "col");
+    assert_eq!(c["from"], "E2");
+    assert_eq!(c["title"], "销量");
+    assert_eq!(c["anchor"], "oneCell");
+    let ser = &c["series"][0];
+    assert_eq!(ser["values"], json!([1, 2, 3]));
+    assert_eq!(ser["categories"], json!(["甲", "乙", "丙"]));
+    assert_eq!(ser["catRef"], "Sheet1!$A$11:$A$13");
+    assert_eq!(ser["valRef"], "Sheet1!$B$11:$B$13");
+
+    let cells = inspect_cells(&path, "A10:B13");
+    let list = cells["sheets"][0]["cells"].as_array().unwrap();
+    assert!(list.iter().any(|c| c["id"] == "cell:Sheet1!B10" && c["value"] == "Q1"));
+    assert!(list.iter().any(|c| c["id"] == "cell:Sheet1!A11" && c["value"] == "甲"));
+    assert!(list.iter().any(|c| c["id"] == "cell:Sheet1!B11" && c["value"] == 1));
+
+    let chart_xml = part_text(&path, "xl/charts/chart1.xml");
+    assert!(chart_xml.contains("Sheet1!$B$11"));
+    assert!(!chart_xml.contains("externalData"));
+    let drawing = part_text(&path, "xl/drawings/drawing1.xml");
+    assert!(drawing.contains("xdr:clientData"));
+}
+
+#[test]
+fn create_rejects_chart_wrap() {
+    let err = run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "create",
+            "path": tmp("create-wrap").to_string_lossy(),
+            "workbook": {
+                "sheets": [{
+                    "name": "Sheet1",
+                    "charts": [{
+                        "type": "col",
+                        "from": "E2",
+                        "dataFrom": "A10",
+                        "wrap": "square",
+                        "series": [{ "values": [1, 2, 3] }]
+                    }]
+                }]
+            }
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+    assert_eq!(err.field_path(), Some("workbook.sheets[0].charts[0].wrap"));
+}

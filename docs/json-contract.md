@@ -564,7 +564,8 @@ xlsx、docx、pptx 共用 `scope` 这个字段名，里面的键按格式分，�
 | `path` | 输出路径。已存在则覆盖。省略时必须由调用方另给一个落盘路径，命令行用 `--output` |
 | `workbook.sheets` | 至少一张表 |
 | `sheets[].name` | 工作表名。Excel 限制：最长 31 个字符，不含 `:*?/[]\\`，不能叫 `History`，同一工作簿内不重复 |
-| `sheets[].pictures` | 可选。该表上的图列表。省略或空数组则不写 drawing |
+| `sheets[].pictures` | 可选。该表上的图列表。省略或空数组则不写图 |
+| `sheets[].charts` | 可选。该表上的图表列表。省略或空数组则不写图表 |
 | `cells[].ref` | A1 地址 |
 | `cells[].value` | 数字、字符串、布尔、或 `null`。`null` 表示不写这个格 |
 | `cells[].formula` | 以 `=` 开头的公式文本。库不求值 |
@@ -575,6 +576,12 @@ xlsx、docx、pptx 共用 `scope` 这个字段名，里面的键按格式分，�
 | `pictures[].anchor` | 可选。`oneCell`（缺省）或 `twoCell`。不认 `absolute` |
 | `pictures[].cx` / `pictures[].cy` | 可选，EMU，正整数。都省则按图片像素以 96 dpi 换算。只给一个时报 `InvalidField`。`twoCell` 也要写 `xdr:pic` 里的 `a:ext`，显示尺寸仍由起止格决定 |
 | `pictures[].fromOffX` / `fromOffY` / `toOffX` / `toOffY` | 可选。与 `insertPicture` 相同 |
+| `charts[].type` | 必须。与 `insertChart` 相同 |
+| `charts[].series` | 必须。非空。字段与 `insertChart` 相同 |
+| `charts[].from` | 必须。图的左上角单元格，A1 |
+| `charts[].dataFrom` | 必须。数据表左上角，A1。按 `setCell` 语义覆盖已有格子，包括同一张表 `cells[]` 里已声明的值 |
+| `charts[].title` | 可选 |
+| `charts[].to` / `anchor` / `cx` / `cy` / 偏移 | 与 `insertChart` 相同。`kind` / `wrap` 报 `InvalidField` |
 
 `value` 和 `formula` 不能在同一格同时出现。要公式就只写 `formula`。公式格不写缓存 `<v>`，并在 `workbook.xml` 的 `calcPr` 上设 `fullCalcOnLoad="1"`，让 Excel 打开时重算。
 
@@ -582,7 +589,7 @@ xlsx、docx、pptx 共用 `scope` 这个字段名，里面的键按格式分，�
 
 行与单元格按行号、列号升序写出。补上 `sheetData` 和合理的 `dimension`。
 
-最小 `styles.xml` 必须生成，见 [opc.md](opc.md)。默认字体颜色写 `<color rgb="FF000000"/>`，不引用 theme，包里也不生成 theme 部件。给了 `sheets[].pictures` 时按 `insertPicture` 同一套规则写 `/xl/drawings/drawingN.xml`、`/xl/media/…` 和工作表 `<drawing>`。`xdr:cNvPr/@id` 从 `1` 起按该表 `pictures` 数组顺序递增。一张表共用一份 drawing。不要生成图表、透视表、条件格式。`workbook` 根上或 `cells[]` 上出现 `pictures`，或 `sheets[]` 上出现 `kind` / `wrap` / `charts` / `smartArts`，报 `InvalidField`。
+最小 `styles.xml` 必须生成，见 [opc.md](opc.md)。默认字体颜色写 `<color rgb="FF000000"/>`，不引用 theme，包里也不生成 theme 部件。给了 `sheets[].pictures` 时按 `insertPicture` 同一套规则写 drawing 与 media。给了 `sheets[].charts` 时按 `insertChart` 同一套规则写 `/xl/charts/chartN.xml`、`xdr:graphicFrame` 和 `dataFrom` 一带单元格，不写 embedding。一张表上的图与图表共用一份 drawing：先写 `pictures`，再写 `charts`。`xdr:cNvPr/@id` 取该表已有全部 `cNvPr` 的最大整数加 1。不要生成透视表、条件格式、图表工作表。`workbook` 根上或 `cells[]` 上出现 `pictures` / `charts`，或 `sheets[]` 上出现 `kind` / `wrap` / `smartArts`，报 `InvalidField`。`sheets[].kind` 仍拒绝。
 
 ### docx
 
@@ -636,7 +643,7 @@ xlsx、docx、pptx 共用 `scope` 这个字段名，里面的键按格式分，�
 | `smartArts[].points` | 可选。与 `insertSmartArt` 相同；省略则用该版式的缺省占位点 |
 | `smartArts[].kind` / `wrap` / `cx` / `cy` | 可选。与 `insertSmartArt` 相同 |
 
-不把 base64 写进 create JSON。xlsx 的图只认 `workbook.sheets[].pictures`。pptx 的 create 对象上出现 `pictures` 或 `smartArts` 报 `InvalidField`（不认识的字段）。xlsx 上出现 `smartArts` 同样报 `InvalidField`。
+不把 base64 写进 create JSON。xlsx 的图只认 `workbook.sheets[].pictures`，图表只认 `workbook.sheets[].charts`。pptx 的 create 对象上出现 `pictures`、`charts` 或 `smartArts` 报 `InvalidField`（不认识的字段）。xlsx 上出现 `smartArts` 同样报 `InvalidField`。docx create 仍不写图表。
 
 create 写出 Transitional 最小包，见 [opc.md](opc.md)。每个 `w:p` 都带唯一的 `w14:paraId` 和 `w14:textId`（取值大于 0、小于 `0x80000000`，MS-DOCX §2.6.2.3 / §2.6.2.4），并在根元素上把 `w14` 列入 `mc:Ignorable`。这样随后 inspect 得到的 id 都是 `para:{paraId}`，`stable` 为 `true`。图的 `wp:docPr/@id` 在该部件内从 `1` 起递增，与 `insertPicture` 同一套写入。
 

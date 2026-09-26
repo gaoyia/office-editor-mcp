@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "action": "create",
+  "path": "book.xlsx",
+  "format": "xlsx",
+  "workbook": {
+    "sheets": [
+      {
+        "name": "Sheet1",
+        "charts": [
+          {
+            "type": "col",
+            "title": "销量",
+            "from": "E2",
+            "dataFrom": "A10",
+            "series": [
+              {
+                "name": "Q1",
+                "categories": ["甲", "乙", "丙"],
+                "values": [1, 2, 3]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -594,9 +594,18 @@ fn create_rejects_kind_wrap_and_missing_from() {
         &json!({
             "schemaVersion": 1,
             "action": "create",
-            "path": tmp("charts").with_extension("xlsx").to_string_lossy(),
+            "path": tmp("chart-kind").with_extension("xlsx").to_string_lossy(),
             "workbook": {
-                "sheets": [{ "name": "Sheet1", "charts": [] }]
+                "sheets": [{
+                    "name": "Sheet1",
+                    "charts": [{
+                        "type": "col",
+                        "from": "E2",
+                        "dataFrom": "A10",
+                        "kind": "inline",
+                        "series": [{ "values": [1, 2, 3] }]
+                    }]
+                }]
             }
         })
         .to_string(),
@@ -604,7 +613,30 @@ fn create_rejects_kind_wrap_and_missing_from() {
     )
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);
-    assert_eq!(err.field_path(), Some("workbook.sheets[0].charts"));
+    assert_eq!(
+        err.field_path(),
+        Some("workbook.sheets[0].charts[0].kind")
+    );
+}
+
+#[test]
+fn create_empty_charts_writes_no_chart() {
+    let path = tmp("empty-charts").with_extension("xlsx");
+    run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "create",
+            "path": path.to_string_lossy(),
+            "workbook": {
+                "sheets": [{ "name": "Sheet1", "cells": [{ "ref": "A1", "value": 1 }], "charts": [] }]
+            }
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap();
+    assert!(!part_names(&path).iter().any(|n| n.contains("charts")));
+    assert!(!part_names(&path).iter().any(|n| n.contains("drawings")));
 }
 
 #[test]
@@ -624,4 +656,59 @@ fn create_empty_pictures_writes_no_drawing() {
     )
     .unwrap();
     assert!(!part_names(&path).iter().any(|n| n.contains("drawings")));
+}
+
+#[test]
+fn create_picture_then_chart_shares_drawing() {
+    let png = write_png("pic-then-chart", PNG_1X1);
+    let path = tmp("pic-then-chart").with_extension("xlsx");
+    run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "create",
+            "path": path.to_string_lossy(),
+            "workbook": {
+                "sheets": [{
+                    "name": "Sheet1",
+                    "pictures": [{ "file": png.to_string_lossy(), "from": "B2" }],
+                    "charts": [{
+                        "type": "col",
+                        "from": "E2",
+                        "dataFrom": "A10",
+                        "series": [{
+                            "name": "Q1",
+                            "categories": ["甲", "乙", "丙"],
+                            "values": [1, 2, 3]
+                        }]
+                    }]
+                }]
+            }
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap();
+    let RunOutput::Inspect(tree) = run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "inspect",
+            "path": path.to_string_lossy(),
+            "scope": { "pictures": true, "charts": true }
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap() else {
+        panic!("inspect 应返回树");
+    };
+    assert_eq!(tree["sheets"][0]["pictures"][0]["id"], "sheet:Sheet1/pic:1");
+    assert_eq!(tree["sheets"][0]["charts"][0]["id"], "sheet:Sheet1/chart:2");
+    let names = part_names(&path);
+    assert_eq!(
+        names
+            .iter()
+            .filter(|n| n.starts_with("xl/drawings/drawing") && n.ends_with(".xml"))
+            .count(),
+        1
+    );
 }

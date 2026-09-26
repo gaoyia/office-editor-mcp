@@ -35,6 +35,39 @@ function Ensure-XlsxCreatePictures([switch]$Force) {
     return $path
 }
 
+function Ensure-XlsxCreateCharts([switch]$Force) {
+    $path = Get-OutPath 'xlsx-create-charts.xlsx'
+    if ((Test-Path $path) -and -not $Force) { return $path }
+    $req = @{
+        schemaVersion = 1; action = 'create'
+        path = $path.Replace('\', '/'); format = 'xlsx'
+        workbook = @{
+            sheets = @(
+                @{
+                    name = 'Sheet1'
+                    charts = @(
+                        @{
+                            type = 'col'
+                            title = '销量'
+                            from = 'E2'
+                            dataFrom = 'A10'
+                            series = @(
+                                @{
+                                    name = 'Q1'
+                                    categories = @('甲', '乙', '丙')
+                                    values = @(1, 2, 3)
+                                }
+                            )
+                        }
+                    )
+                }
+            )
+        }
+    }
+    Invoke-OoxpRequest $req 'xlsx-create-charts' | Out-Null
+    return $path
+}
+
 function Ensure-DocxCreate([switch]$Force) {
     $path = Get-OutPath 'docx-create.docx'
     if ((Test-Path $path) -and -not $Force) { return $path }

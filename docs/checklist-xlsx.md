@@ -8,7 +8,7 @@
 
 Microsoft Excel 16.0 已打开，用户确认通过。本机若装了 WPS，`Excel.Application` 会被抢走，测试仍直接启动 `EXCEL.EXE` 再挂 COM。
 
-C、I、A、O、Xp、Xc 这几组现在由 `manual-check/office/cases/xlsx-*.ps1` 自动判定，跑 `pwsh -File manual-check\office\run.ps1 -Case 'xlsx-*'` 即可复现，逐条结果落在 `manual-check/office/out/office-results.csv`。2026-09-27 补跑 `xlsx-pictures.ps1`，Xp1–Xp7 通过。同日补跑 `xlsx-charts.ps1`，Xc1–Xc7 通过。同日补跑 `xlsx-create-pictures.ps1`，C8–C10 通过。
+C、I、A、O、Xp、Xc 这几组现在由 `manual-check/office/cases/xlsx-*.ps1` 自动判定，跑 `pwsh -File manual-check\office\run.ps1 -Case 'xlsx-*'` 即可复现，逐条结果落在 `manual-check/office/out/office-results.csv`。2026-09-27 补跑 `xlsx-pictures.ps1`，Xp1–Xp7 通过。同日补跑 `xlsx-charts.ps1`，Xc1–Xc7 通过。同日补跑 `xlsx-create-pictures.ps1`，C8–C10 通过。同日补跑 `xlsx-create-charts.ps1`，C11–C13 通过。
 
 | 序号 | 状态 | 结果 |
 | --- | --- | --- |
@@ -22,6 +22,7 @@ C、I、A、O、Xp、Xc 这几组现在由 `manual-check/office/cases/xlsx-*.ps1
 | Xp1–Xp7 | ✅ | Excel 16.0：无 `pictures` 时 `pictureCount=3`；名单含 `oneCell` 与 `twoCell`；换/插/删无修复；`oneCell` 尺寸 144 磅；锚点改到 F12；export 与 `/xl/media/…` 字节一致 |
 | Xc1–Xc7 | ✅ | Excel 16.0：无 `charts` 时 `chartCount=1`、没有名单；名单 id 为 `sheet:Sheet1/chart:2`，系列 10/20/30 与单元格一致；改系列为 100/200/300 无修复；`insertChart` 插 `oneCell` 且 `A10` 一带有数据表；删图后数据格还在；改折线 COM 认 line；`oneCell` 改到 F20、尺寸 144×72 磅；`exportChartData` 得 `InvalidField` |
 | C8–C10 | ✅ | Excel 16.0：inspect 第一张 `sheet:Sheet1/pic:1`、`oneCell`、`from=B2`；第二张 `twoCell`、`D2:F8`；打开无 Repair，Shapes=2 |
+| C11–C13 | ✅ | Excel 16.0：inspect 第一张 `sheet:Sheet1/chart:1`、`type=col`、`from=E2`；系列 1/2/3 与 `A10` 一带单元格一致；打开无 Repair，Shapes=1 且 HasChart |
 
 ## create
 
@@ -38,6 +39,9 @@ C、I、A、O、Xp、Xc 这几组现在由 `manual-check/office/cases/xlsx-*.ps1
 | C8 | 带图 oneCell | 用 `docs/examples/xlsx-create-pictures.json`（换成本机 PNG）生成；inspect `pictures: true` 时第一张 id 为 `sheet:Sheet1/pic:1`，`anchor` 为 `oneCell`，`from` 为 `B2` |
 | C9 | 带图 twoCell | 同上，第二张 `anchor` 为 `twoCell`，`from` / `to` 对上 |
 | C10 | Excel 打开带图产物 | 无修复；两张图都能看见 |
+| C11 | 带图表 | 用 `docs/examples/xlsx-create-charts.json` 生成；inspect `charts: true` 时第一张 id 为 `sheet:Sheet1/chart:1`，`type` 为 `col`，`from` 为 `E2` |
+| C12 | 图表数据 | 同上，系列值与 `dataFrom` 一带单元格一致 |
+| C13 | Excel 打开带图表产物 | 无修复；图能看见 |
 
 ## inspect
 

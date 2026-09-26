@@ -1,6 +1,6 @@
 # xlsx create 带图表
 
-状态：❌ 计划已写，确认后再改 `docs/`  
+状态：✅ 库测试与 Excel 16.0 手测 C11–C13 已过  
 日期：2026-09-27
 
 从 `.plan/2026年-9月-27日-❌-xlsx-图与图表路线.md` 拆出序号 3。`create` 是唯一允许整包生成的动作。本期让新建工作簿能带 SpreadsheetDrawing 的 `xdr:graphicFrame` 和 `/xl/charts/chartN.xml`。复用 `insertChart` 的写入，不另做生成器。
@@ -17,14 +17,14 @@
 
 | 序号 | 项 | 状态 |
 | --- | --- | --- |
-| 1 | 文档先行（本计划 + 契约、错误、架构、清单、示例） | ❌ |
-| 2.1 | `workbook.sheets[].charts`：必填 `from`、`dataFrom`、`type`、`series`；可选锚点与尺寸 | ❌ |
-| 2.2 | 写入 `/xl/charts/chartN.xml`、drawing 上的 `xdr:graphicFrame`、工作表单元格 | ❌ |
-| 3 | 一张表可同时有 `pictures` 与 `charts`；共用一份 drawing；`cNvPr/@id` 按先图后表、数组顺序递增 | ❌ |
-| 4 | 库测试：create 后再 inspect，图表 id、`type`、系列值与 `dataFrom` 一带单元格对 | ❌ |
-| 5 | Excel 16.0 打开 create 产物，无修复，图能看见 | ❌ |
+| 1 | 文档先行（本计划 + 契约、错误、架构、清单、示例） | ✅ |
+| 2.1 | `workbook.sheets[].charts`：必填 `from`、`dataFrom`、`type`、`series`；可选锚点与尺寸 | ✅ |
+| 2.2 | 写入 `/xl/charts/chartN.xml`、drawing 上的 `xdr:graphicFrame`、工作表单元格 | ✅ |
+| 3 | 一张表可同时有 `pictures` 与 `charts`；共用一份 drawing；`cNvPr/@id` 按先图后表、数组顺序递增 | ✅ |
+| 4 | 库测试：create 后再 inspect，图表 id、`type`、系列值与 `dataFrom` 一带单元格对 | ✅ |
+| 5 | Excel 16.0 打开 create 产物，无修复，图能看见 | ✅ |
 
-建议提交顺序：`1 → 2.1 → 2.2 → 3 → 4 → 5`。先改 `docs/`，确认后再动代码。
+建议提交顺序：`1 → 2.1 → 2.2 → 3 → 4 → 5`。文档与代码已按此顺序落地。
 
 ## 已锁定（写入契约后不要改）
 
