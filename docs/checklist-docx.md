@@ -6,13 +6,13 @@
 
 ## 本机结果（2026-09-26）
 
-Microsoft Word 16.0 已打开，用户确认通过。create、inspect、apply 三组都过了。O1 已放弃，见下表。本机若装了 WPS，`Word.Application` 会被抢走，测试仍直接启动 `WINWORD.EXE` 再挂 COM。当时 create 产物以兼容模式打开（`CompatibilityMode=12`）；A11 已补 `word/settings.xml`，新产物应为 `CompatibilityMode=15`，尚未用 Word 重跑 C1。C2（WPS 打开）已放弃。
+Microsoft Word 16.0 已打开，用户确认通过。create、inspect、apply 三组都过了。O1 已放弃，见下表。本机若装了 WPS，`Word.Application` 会被抢走，测试仍直接启动 `WINWORD.EXE` 再挂 COM。A11 补过 `word/settings.xml` 之后，2026-09-26 用新 `docx-create.docx` 重跑，Word 报 `CompatibilityMode=15`。C2（WPS 打开）已放弃。
 
 C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，跑 `pwsh -File manual-check\office\run.ps1 -Case 'docx-*'` 即可复现，逐条结果落在 `manual-check/office/out/office-results.csv`。
 
 | 序号 | 状态 | 结果 |
 | --- | --- | --- |
-| C1 | ✅ | Word 16.0 能打开 `manual-check/office/out/docx-create.docx`，标题栏无 Repair；以兼容模式打开（`CompatibilityMode=12`） |
+| C1 | ✅ | Word 16.0 能打开 `manual-check/office/out/docx-create.docx`，标题栏无 Repair；`CompatibilityMode=15` |
 | C2 | 🚫 | 不再要求 WPS。此前 WPS 文字已打开过，不作为验收条件 |
 | C3–C4 | ✅ | 标题 1 / 「标题」，正文 `hello` |
 | I1–I5 | ✅ | `docx:document`、`paraCount=2`、大纲 level 1、「标题」、`para:{hex}` 且 `stable`、无 scope 时没有 `paragraphs` |
