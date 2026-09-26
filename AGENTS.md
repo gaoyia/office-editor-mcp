@@ -52,7 +52,7 @@
 │       ├── engineering-principles.md
 │       └── output-style.md
 ├── .plan/
-│   └── 2026年-9月-25日-⚠️-ooxp.md
+│   └── 2026年-9月-25日-✅-ooxp.md
 ├── docs/                              ← 规格真源
 │   ├── architecture.md
 │   ├── json-contract.md

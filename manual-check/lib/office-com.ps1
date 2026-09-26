@@ -55,9 +55,9 @@ public static class OoxpOfficeOm {
 }
 
 function Release-Com($obj) {
-    if ($null -ne $obj) {
-        [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject($obj)
-    }
+    if ($null -eq $obj) { return }
+    if (-not [System.Runtime.InteropServices.Marshal]::IsComObject($obj)) { return }
+    [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject($obj)
 }
 
 function Get-OfficeExe([string]$exeName) {
@@ -269,10 +269,14 @@ function Get-ShapeText($shape) {
 }
 
 function Close-AllWorkbooks($excel) {
-    foreach ($wb in @($excel.Workbooks)) {
-        try { $wb.Close($false) } catch {}
-        Release-Com $wb
+    $collection = $excel.Workbooks
+    try {
+        foreach ($wb in @($collection)) {
+            try { $wb.Close($false) } catch {}
+            Release-Com $wb
+        }
     }
+    finally { Release-Com $collection }
 }
 
 function Close-WordDoc($doc) {
@@ -284,13 +288,18 @@ function Close-WordDoc($doc) {
 
 # apply 的目标文件若正被 Word 开着，ooxp 写不进去，所以写之前先关掉。
 function Close-WordDocByPath($word, [string]$path) {
-    foreach ($d in @($word.Documents)) {
-        if ($d.FullName -and ($d.FullName -ieq $path)) {
-            Write-Log "先关掉 Word 里开着的 $path"
-            Close-WordDoc $d
-            return
+    $collection = $word.Documents
+    try {
+        foreach ($d in @($collection)) {
+            if ($d.FullName -and ($d.FullName -ieq $path)) {
+                Write-Log "先关掉 Word 里开着的 $path"
+                Close-WordDoc $d
+                return
+            }
+            Release-Com $d
         }
     }
+    finally { Release-Com $collection }
 }
 
 # 跑完收尾。

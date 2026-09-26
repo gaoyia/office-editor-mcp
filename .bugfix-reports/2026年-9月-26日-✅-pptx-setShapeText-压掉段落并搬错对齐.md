@@ -122,4 +122,4 @@ tx.push_element(build_para(ppr, rpr, text));
 
 ## 还没解决的
 
-样本仍是手工写的 XML，不是 PowerPoint 亲手存的文件。空的兄弟段已按 A15 删掉。域已按 A14 从 inspect 的 `text` 里排除，apply 仍不改 `a:fld`。审计的其他遗留项记在 `.plan/2026年-9月-25日-⚠️-ooxp.md` 的「审计遗留」表里。
+样本仍是手工写的 XML，不是 PowerPoint 亲手存的文件。空的兄弟段已按 A15 删掉。域已按 A14 从 inspect 的 `text` 里排除，apply 仍不改 `a:fld`。审计表已收口，记在 `.plan/2026年-9月-25日-✅-ooxp.md`。
