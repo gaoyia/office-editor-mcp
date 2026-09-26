@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "action": "create",
+  "path": "deck.pptx",
+  "format": "pptx",
+  "presentation": {
+    "slides": [
+      {
+        "shapes": [{ "text": "标题" }],
+        "charts": [
+          {
+            "type": "col",
+            "title": "销量",
+            "x": 914400,
+            "y": 1828800,
+            "cx": 5486400,
+            "cy": 3200400,
+            "series": [
+              {
+                "name": "系列甲",
+                "categories": ["甲", "乙", "丙"],
+                "values": [1, 2, 3]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -600,17 +600,190 @@ fn rejects_foreign_chart_fields_and_set_chart_pos_on_other_formats() {
 }
 
 #[test]
-fn create_rejects_charts_field() {
+fn create_writes_slide_chart() {
+    let path = tmp("create-chart").with_extension("pptx");
+    run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "create",
+            "path": path.to_string_lossy(),
+            "presentation": {
+                "slides": [{
+                    "shapes": [{ "text": "标题" }],
+                    "charts": [{
+                        "type": "col",
+                        "title": "销量",
+                        "x": 914400,
+                        "y": 1828800,
+                        "cx": 5486400,
+                        "cy": 3200400,
+                        "series": [{
+                            "name": "系列甲",
+                            "categories": ["甲", "乙", "丙"],
+                            "values": [1, 2, 3]
+                        }]
+                    }]
+                }]
+            }
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap();
+    let tree = inspect_charts(&path);
+    assert_eq!(tree["chartCount"], 1);
+    assert_eq!(tree["slides"][0]["chartCount"], 1);
+    let c = &tree["slides"][0]["charts"][0];
+    assert_eq!(c["id"], "slide:1/chart:3");
+    assert_eq!(c["type"], "col");
+    assert_eq!(c["title"], "销量");
+    assert_eq!(c["x"], 914400);
+    assert_eq!(c["y"], 1828800);
+    assert_eq!(nums(&c["series"][0]["values"]), vec![1, 2, 3]);
+    let names = part_names(&path);
+    assert!(names.iter().any(|n| n == "ppt/charts/chart1.xml"));
+    assert!(names
+        .iter()
+        .any(|n| n.starts_with("ppt/embeddings/") && n.ends_with(".xlsx")));
+    let embed = part_bytes(&path, &embed_part(&path));
+    let exported = tmp("create-exp").with_extension("xlsx");
+    let RunOutput::Written { .. } = run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "exportChartData",
+            "path": path.to_string_lossy(),
+            "id": "slide:1/chart:3",
+            "output": exported.to_string_lossy()
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap() else {
+        panic!("exportChartData 应写出文件");
+    };
+    assert_eq!(std::fs::read(&exported).unwrap(), embed);
+}
+
+#[test]
+fn create_empty_charts_writes_no_chart() {
+    let path = tmp("empty-charts").with_extension("pptx");
+    run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "create",
+            "path": path.to_string_lossy(),
+            "presentation": {
+                "slides": [{ "shapes": [{ "text": "a" }], "charts": [] }]
+            }
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap();
+    let tree = inspect_charts(&path);
+    assert_eq!(tree["chartCount"], 0);
+    assert_eq!(tree["slides"][0]["charts"], json!([]));
+    assert!(!part_names(&path).iter().any(|n| n.contains("charts/chart")));
+}
+
+#[test]
+fn create_picture_then_chart_ids() {
+    let png = tmp("pic").with_extension("png");
+    std::fs::write(
+        &png,
+        [
+            0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48,
+            0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x02, 0x00, 0x00,
+            0x00, 0x90, 0x77, 0x53, 0xDE, 0x00, 0x00, 0x00, 0x0C, 0x49, 0x44, 0x41, 0x54, 0x08,
+            0xD7, 0x63, 0xF8, 0xCF, 0xC0, 0x00, 0x00, 0x03, 0x01, 0x01, 0x00, 0x18, 0xDD, 0x8D,
+            0xB4, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82,
+        ],
+    )
+    .unwrap();
+    let path = tmp("pic-then-chart").with_extension("pptx");
+    run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "create",
+            "path": path.to_string_lossy(),
+            "presentation": {
+                "slides": [{
+                    "shapes": [{ "text": "标题" }],
+                    "pictures": [{
+                        "file": png.to_string_lossy(),
+                        "x": 0,
+                        "y": 0,
+                        "cx": 914400,
+                        "cy": 914400
+                    }],
+                    "charts": [{
+                        "type": "col",
+                        "series": [{ "categories": ["a", "b"], "values": [1, 2] }]
+                    }]
+                }]
+            }
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap();
+    let tree = inspect_charts(&path);
+    assert_eq!(tree["pictureCount"], 1);
+    assert_eq!(tree["chartCount"], 1);
+    assert_eq!(tree["slides"][0]["charts"][0]["id"], "slide:1/chart:4");
+}
+
+#[test]
+fn create_rejects_data_from_kind_and_root_charts() {
     let err = run(
         &json!({
             "schemaVersion": 1,
             "action": "create",
-            "path": tmp("create-charts").with_extension("pptx").to_string_lossy(),
+            "path": tmp("data-from").with_extension("pptx").to_string_lossy(),
             "presentation": {
                 "slides": [{
-                    "shapes": [{ "text": "a" }],
-                    "charts": [{ "type": "col", "series": [{ "values": [1] }] }]
+                    "charts": [{
+                        "type": "col",
+                        "from": "A1",
+                        "dataFrom": "A10",
+                        "series": [{ "values": [1], "categories": ["a"] }]
+                    }]
                 }]
+            }
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+    let err = run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "create",
+            "path": tmp("kind").with_extension("pptx").to_string_lossy(),
+            "presentation": {
+                "slides": [{
+                    "charts": [{
+                        "type": "col",
+                        "kind": "anchor",
+                        "series": [{ "values": [1], "categories": ["a"] }]
+                    }]
+                }]
+            }
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+    let err = run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "create",
+            "path": tmp("root-charts").with_extension("pptx").to_string_lossy(),
+            "presentation": {
+                "charts": [{ "type": "col", "series": [{ "values": [1] }] }],
+                "slides": [{ "shapes": [{ "text": "a" }] }]
             }
         })
         .to_string(),

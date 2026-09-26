@@ -30,6 +30,7 @@ $order = @(
     'docx-create-pictures'
     'pptx-create'
     'pptx-create-pictures'
+    'pptx-create-charts'
     'xlsx-apply'
     'xlsx-pictures'
     'xlsx-charts'

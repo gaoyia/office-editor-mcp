@@ -4,17 +4,18 @@
 
 检查前用 create 或 apply 在本机生成文件，不要用改过扩展名的 zip 目录冒充。本机若 `PowerPoint.Application` 被 WPS 抢走，直接启动 `POWERPNT.EXE` 再挂 COM，不要走被抢的 ProgID。Office 16 的对象模型在 `mdiClass` 上。
 
-C、I、A、Pp 各组由 `manual-check/office/cases/pptx-*.ps1` 自动判定，跑 `pwsh -File manual-check\office\run.ps1 -Case 'pptx-*'` 即可复现。O1 已放弃，与 xlsx / docx 相同。
+C、I、A、Pp、Pc 各组由 `manual-check/office/cases/pptx-*.ps1` 自动判定，跑 `pwsh -File manual-check\office\run.ps1 -Case 'pptx-*'` 即可复现。O1 已放弃，与 xlsx / docx 相同。
 
 ## 本机结果（2026-09-27）
 
-Microsoft PowerPoint 16.0 已打开，C1、C3、C4、C5–C7、I1–I5、A1–A5、Pp1–Pp7、Pc1–Pc7 均 PASS。本机若装了 WPS，`PowerPoint.Application` 会被抢走，测试仍直接启动 `POWERPNT.EXE`，从 `mdiClass` 挂 COM。O1 已放弃。2026-09-27 补跑 `pptx-pictures.ps1`，Pp1–Pp7 通过。同日补跑 `pptx-create-pictures.ps1`，C5–C7 通过。同日补跑 `pptx-charts.ps1`，Pc1–Pc7 通过。
+Microsoft PowerPoint 16.0 已打开，C1、C3、C4、C5–C10、I1–I5、A1–A5、Pp1–Pp7、Pc1–Pc7 均 PASS。本机若装了 WPS，`PowerPoint.Application` 会被抢走，测试仍直接启动 `POWERPNT.EXE`，从 `mdiClass` 挂 COM。O1 已放弃。2026-09-27 补跑 `pptx-pictures.ps1`，Pp1–Pp7 通过。同日补跑 `pptx-create-pictures.ps1`，C5–C7 通过。同日补跑 `pptx-charts.ps1`，Pc1–Pc7 通过。同日补跑 `pptx-create-charts.ps1`，C8–C10 通过。
 
 | 序号 | 状态 | 结果 |
 | --- | --- | --- |
 | C1 | ✅ | PowerPoint 16.0 能打开 `manual-check/office/out/pptx-create.pptx`，标题栏无 Repair |
 | C3–C4 | ✅ | 第一页 `标题` / `hello`，第二页 `第二页` |
 | C5–C7 | ✅ | PowerPoint 16.0：inspect 第一张 `slide:1/pic:3`；同一页第二张 `slide:1/pic:4`；打开无 Repair，Type=13 的图为 2 |
+| C8–C10 | ✅ | PowerPoint 16.0：inspect 第一张 `slide:1/chart:3`、`type=col`；系列 1,2,3 与 embedding B2/B4 一致；打开无 Repair，charts=1 |
 | I1–I5 | ✅ | `pptx:presentation`、`slideCount=2`、无 scope 时没有 `shapes`、仍有 `pictureCount`、形状 id 为 `slide:1/shape:2` 且 `stable` |
 | A1–A5 | ✅ | 目标框为「改过的正文」且仍加粗（`Bold=-1`），同页另一框与第二页未改 |
 | Pp1–Pp7 | ✅ | PowerPoint 16.0：无 `pictures` 时 `pictureCount=1`；名单 id 为 `slide:1/pic:5`；换/插/删无修复；尺寸 144 磅；位置 72×108 磅；export 与 `/ppt/media/…` 字节一致 |
@@ -33,6 +34,9 @@ Microsoft PowerPoint 16.0 已打开，C1、C3、C4、C5–C7、I1–I5、A1–A5
 | C5 | 带图 id | 用 `docs/examples/pptx-create-pictures.json`（换成本机 PNG）生成；inspect `pictures: true` 时第一张 id 为 `slide:1/pic:3` |
 | C6 | 同一页第二张 | 同上，名单里有两张图 |
 | C7 | PowerPoint 打开带图产物 | 无修复；图能看见 |
+| C8 | 带图表 id | 用 `docs/examples/pptx-create-charts.json` 生成；inspect `charts: true` 时第一张 id 为 `slide:1/chart:3`，`type` 为 `col` |
+| C9 | 系列与 embedding | 系列值与 `exportChartData` 写出的表一致 |
+| C10 | PowerPoint 打开带图表产物 | 无修复；图能看见 |
 
 ## inspect
 

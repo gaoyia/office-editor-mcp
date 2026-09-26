@@ -515,10 +515,10 @@ fn parse_insert_chart(obj: &Map<String, Value>, i: usize) -> Result<InsertChartO
     )?;
     let id = require_id(obj, i)?;
     let slide = chart::parse_insert_slide_id(&id, i)?;
-    let chart_type = parse_chart_type_field(obj.get("type"), i)?;
-    let title = parse_chart_title_field(obj.get("title"), i)?;
-    let series = parse_insert_series(obj.get("series"), i, "insertChart")?;
-    validate_insert_series(chart_type, &series, i)?;
+    let chart_type = parse_chart_type_field(obj.get("type"), &format!("ops[{i}].type"))?;
+    let title = parse_chart_title_field(obj.get("title"), &format!("ops[{i}].title"))?;
+    let series = parse_insert_series(obj.get("series"), &format!("ops[{i}]"), "insertChart")?;
+    validate_insert_series(chart_type, &series, &format!("ops[{i}].series"))?;
     let x = parse_off_field(obj.get("x"), i, "x")?;
     let y = parse_off_field(obj.get("y"), i, "y")?;
     if x.is_some() != y.is_some() {
@@ -609,9 +609,9 @@ fn parse_set_chart_series(obj: &Map<String, Value>, i: usize) -> Result<SetChart
             ));
         }
     };
-    let categories = parse_datum_list(obj.get("categories"), i, "categories")?;
-    let values = parse_datum_list(obj.get("values"), i, "values")?;
-    let sizes = parse_datum_list(obj.get("sizes"), i, "sizes")?;
+    let categories = parse_datum_list(obj.get("categories"), &format!("ops[{i}].categories"))?;
+    let values = parse_datum_list(obj.get("values"), &format!("ops[{i}].values"))?;
+    let sizes = parse_datum_list(obj.get("sizes"), &format!("ops[{i}].sizes"))?;
     if name.is_none() && categories.is_none() && values.is_none() && sizes.is_none() {
         return Err(Error::with_path(
             ErrorKind::NeedChartSeriesField,
@@ -650,8 +650,8 @@ fn parse_add_chart_series(obj: &Map<String, Value>, i: usize) -> Result<AddChart
             ));
         }
     };
-    let categories = parse_datum_list(obj.get("categories"), i, "categories")?;
-    let values = parse_datum_list(obj.get("values"), i, "values")?
+    let categories = parse_datum_list(obj.get("categories"), &format!("ops[{i}].categories"))?;
+    let values = parse_datum_list(obj.get("values"), &format!("ops[{i}].values"))?
         .filter(|v| !v.is_empty())
         .ok_or_else(|| {
             Error::with_path(
@@ -662,8 +662,8 @@ fn parse_add_chart_series(obj: &Map<String, Value>, i: usize) -> Result<AddChart
                 format!("ops[{i}].values"),
             )
         })?;
-    let sizes = parse_datum_list(obj.get("sizes"), i, "sizes")?;
-    let series_type = parse_optional_combo_series_type(obj.get("type"), i, "type")?;
+    let sizes = parse_datum_list(obj.get("sizes"), &format!("ops[{i}].sizes"))?;
+    let series_type = parse_optional_combo_series_type(obj.get("type"), &format!("ops[{i}].type"))?;
     Ok(AddChartSeriesOp {
         id,
         target,
@@ -689,7 +689,7 @@ fn parse_set_chart_type(obj: &Map<String, Value>, i: usize) -> Result<SetChartTy
     deny_keys(obj, i, &["op", "id", "type"])?;
     let id = require_id(obj, i)?;
     let target = chart::parse_chart_id(&id, &format!("ops[{i}].id"))?;
-    let chart_type = parse_chart_type_field(obj.get("type"), i)?;
+    let chart_type = parse_chart_type_field(obj.get("type"), &format!("ops[{i}].type"))?;
     if chart_type == ChartType::Combo {
         return Err(Error::with_path(
             ErrorKind::InvalidChartType,
@@ -847,28 +847,27 @@ fn parse_set_chart_pos(obj: &Map<String, Value>, i: usize) -> Result<SetChartPos
     Ok(SetChartPosOp { id, target, x, y })
 }
 
-fn parse_chart_type_field(v: Option<&Value>, i: usize) -> Result<ChartType, Error> {
+fn parse_chart_type_field(v: Option<&Value>, path: &str) -> Result<ChartType, Error> {
     match v {
         Some(Value::String(s)) => ChartType::parse(s)
-            .ok_or_else(|| Error::with_path(ErrorKind::InvalidChartType, format!("ops[{i}].type"))),
+            .ok_or_else(|| Error::with_path(ErrorKind::InvalidChartType, path.to_string())),
         Some(_) => Err(Error::with_path(
             ErrorKind::WrongType {
                 field: "type".into(),
                 expected: TypeName::String,
             },
-            format!("ops[{i}].type"),
+            path,
         )),
         None => Err(Error::with_path(
-            ErrorKind::OpRequiresField {
-                op: "insertChart".into(),
+            ErrorKind::MissingField {
                 field: "type".into(),
             },
-            format!("ops[{i}].type"),
+            path,
         )),
     }
 }
 
-fn parse_chart_title_field(v: Option<&Value>, i: usize) -> Result<Option<String>, Error> {
+fn parse_chart_title_field(v: Option<&Value>, path: &str) -> Result<Option<String>, Error> {
     match v {
         None | Some(Value::Null) => Ok(None),
         Some(Value::String(s)) => Ok(Some(s.clone())),
@@ -877,7 +876,7 @@ fn parse_chart_title_field(v: Option<&Value>, i: usize) -> Result<Option<String>
                 field: "title".into(),
                 expected: TypeName::String,
             },
-            format!("ops[{i}].title"),
+            path,
         )),
     }
 }
@@ -885,13 +884,10 @@ fn parse_chart_title_field(v: Option<&Value>, i: usize) -> Result<Option<String>
 fn validate_insert_series(
     chart_type: ChartType,
     series: &[NewSeries],
-    i: usize,
+    path: &str,
 ) -> Result<(), Error> {
     if chart_type.needs_one_series() && series.len() != 1 {
-        return Err(Error::with_path(
-            ErrorKind::PieNeedsOneSeries,
-            format!("ops[{i}].series"),
-        ));
+        return Err(Error::with_path(ErrorKind::PieNeedsOneSeries, path));
     }
     if chart_type == ChartType::Combo {
         let kinds: std::collections::HashSet<&str> = series
@@ -899,27 +895,18 @@ fn validate_insert_series(
             .filter_map(|s| s.series_type.map(ChartType::as_str))
             .collect();
         if series.iter().any(|s| s.series_type.is_none()) || kinds.len() < 2 {
-            return Err(Error::with_path(
-                ErrorKind::InvalidComboSeriesType,
-                format!("ops[{i}].series"),
-            ));
+            return Err(Error::with_path(ErrorKind::InvalidComboSeriesType, path));
         }
     } else if series.iter().any(|s| s.series_type.is_some()) {
-        return Err(Error::with_path(
-            ErrorKind::InvalidComboSeriesType,
-            format!("ops[{i}].series"),
-        ));
+        return Err(Error::with_path(ErrorKind::InvalidComboSeriesType, path));
     }
     if chart_type != ChartType::Bubble && series.iter().any(|s| s.sizes.is_some()) {
-        return Err(Error::with_path(
-            ErrorKind::SizesOnNonBubble,
-            format!("ops[{i}].series"),
-        ));
+        return Err(Error::with_path(ErrorKind::SizesOnNonBubble, path));
     }
     Ok(())
 }
 
-fn parse_insert_series(v: Option<&Value>, i: usize, op: &str) -> Result<Vec<NewSeries>, Error> {
+fn parse_insert_series(v: Option<&Value>, base: &str, op: &str) -> Result<Vec<NewSeries>, Error> {
     let arr = match v {
         Some(Value::Array(a)) if !a.is_empty() => a,
         Some(Value::Array(_)) | None => {
@@ -928,7 +915,7 @@ fn parse_insert_series(v: Option<&Value>, i: usize, op: &str) -> Result<Vec<NewS
                     op: op.into(),
                     field: "series".into(),
                 },
-                format!("ops[{i}].series"),
+                format!("{base}.series"),
             ));
         }
         Some(_) => {
@@ -937,7 +924,7 @@ fn parse_insert_series(v: Option<&Value>, i: usize, op: &str) -> Result<Vec<NewS
                     field: "series".into(),
                     expected: TypeName::Array,
                 },
-                format!("ops[{i}].series"),
+                format!("{base}.series"),
             ));
         }
     };
@@ -949,10 +936,14 @@ fn parse_insert_series(v: Option<&Value>, i: usize, op: &str) -> Result<Vec<NewS
                     field: format!("series[{j}]"),
                     expected: TypeName::Object,
                 },
-                format!("ops[{i}].series[{j}]"),
+                format!("{base}.series[{j}]"),
             )
         })?;
-        deny_keys(obj, i, &["name", "categories", "values", "sizes", "type"])?;
+        deny_keys_at(
+            obj,
+            &format!("{base}.series[{j}]"),
+            &["name", "categories", "values", "sizes", "type"],
+        )?;
         let name = match obj.get("name") {
             None | Some(Value::Null) => None,
             Some(Value::String(s)) => Some(s.clone()),
@@ -962,13 +953,15 @@ fn parse_insert_series(v: Option<&Value>, i: usize, op: &str) -> Result<Vec<NewS
                         field: format!("series[{j}].name"),
                         expected: TypeName::String,
                     },
-                    format!("ops[{i}].series[{j}].name"),
+                    format!("{base}.series[{j}].name"),
                 ));
             }
         };
-        let categories =
-            parse_datum_list(obj.get("categories"), i, &format!("series[{j}].categories"))?;
-        let values = parse_datum_list(obj.get("values"), i, &format!("series[{j}].values"))?
+        let categories = parse_datum_list(
+            obj.get("categories"),
+            &format!("{base}.series[{j}].categories"),
+        )?;
+        let values = parse_datum_list(obj.get("values"), &format!("{base}.series[{j}].values"))?
             .filter(|v| !v.is_empty())
             .ok_or_else(|| {
                 Error::with_path(
@@ -976,12 +969,12 @@ fn parse_insert_series(v: Option<&Value>, i: usize, op: &str) -> Result<Vec<NewS
                         op: op.into(),
                         field: "series[].values".into(),
                     },
-                    format!("ops[{i}].series[{j}].values"),
+                    format!("{base}.series[{j}].values"),
                 )
             })?;
-        let sizes = parse_datum_list(obj.get("sizes"), i, &format!("series[{j}].sizes"))?;
+        let sizes = parse_datum_list(obj.get("sizes"), &format!("{base}.series[{j}].sizes"))?;
         let series_type =
-            parse_optional_combo_series_type(obj.get("type"), i, &format!("series[{j}].type"))?;
+            parse_optional_combo_series_type(obj.get("type"), &format!("{base}.series[{j}].type"))?;
         out.push(NewSeries {
             name,
             categories,
@@ -995,28 +988,24 @@ fn parse_insert_series(v: Option<&Value>, i: usize, op: &str) -> Result<Vec<NewS
 
 fn parse_optional_combo_series_type(
     v: Option<&Value>,
-    i: usize,
-    field: &str,
+    path: &str,
 ) -> Result<Option<ChartType>, Error> {
     match v {
         None | Some(Value::Null) => Ok(None),
         Some(Value::String(s)) => Ok(Some(ChartType::parse_combo_series(s).ok_or_else(|| {
-            Error::with_path(
-                ErrorKind::InvalidComboSeriesType,
-                format!("ops[{i}].{field}"),
-            )
+            Error::with_path(ErrorKind::InvalidComboSeriesType, path.to_string())
         })?)),
         Some(_) => Err(Error::with_path(
             ErrorKind::WrongType {
-                field: field.into(),
+                field: "type".into(),
                 expected: TypeName::String,
             },
-            format!("ops[{i}].{field}"),
+            path,
         )),
     }
 }
 
-fn parse_datum_list(v: Option<&Value>, i: usize, field: &str) -> Result<Option<Vec<Value>>, Error> {
+fn parse_datum_list(v: Option<&Value>, path: &str) -> Result<Option<Vec<Value>>, Error> {
     match v {
         None | Some(Value::Null) => Ok(None),
         Some(Value::Array(a)) => {
@@ -1027,7 +1016,7 @@ fn parse_datum_list(v: Option<&Value>, i: usize, field: &str) -> Result<Option<V
                 ) {
                     return Err(Error::with_path(
                         ErrorKind::InvalidCellValue,
-                        format!("ops[{i}].{field}[{j}]"),
+                        format!("{path}[{j}]"),
                     ));
                 }
             }
@@ -1035,10 +1024,10 @@ fn parse_datum_list(v: Option<&Value>, i: usize, field: &str) -> Result<Option<V
         }
         Some(_) => Err(Error::with_path(
             ErrorKind::WrongType {
-                field: field.into(),
+                field: "array".into(),
                 expected: TypeName::Array,
             },
-            format!("ops[{i}].{field}"),
+            path,
         )),
     }
 }
@@ -1064,11 +1053,15 @@ fn parse_required_bool(v: Option<&Value>, i: usize, op: &str, field: &str) -> Re
 }
 
 fn deny_keys(obj: &Map<String, Value>, i: usize, allowed: &[&str]) -> Result<(), Error> {
+    deny_keys_at(obj, &format!("ops[{i}]"), allowed)
+}
+
+fn deny_keys_at(obj: &Map<String, Value>, prefix: &str, allowed: &[&str]) -> Result<(), Error> {
     for k in obj.keys() {
         if !allowed.contains(&k.as_str()) {
             return Err(Error::with_path(
                 ErrorKind::UnknownField { field: k.clone() },
-                format!("ops[{i}].{k}"),
+                format!("{prefix}.{k}"),
             ));
         }
     }
@@ -1106,6 +1099,63 @@ fn require_file(obj: &Map<String, Value>, i: usize, op: &str) -> Result<String, 
             format!("ops[{i}].file"),
         )),
     }
+}
+
+pub(crate) fn parse_create_chart(
+    v: &Value,
+    prefix: &str,
+    slide: usize,
+) -> Result<InsertChartOp, Error> {
+    let obj = v.as_object().ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::WrongType {
+                field: "charts".into(),
+                expected: TypeName::Object,
+            },
+            prefix.to_string(),
+        )
+    })?;
+    deny_keys_at(
+        obj,
+        prefix,
+        &["type", "title", "series", "x", "y", "cx", "cy"],
+    )?;
+    let chart_type = parse_chart_type_field(obj.get("type"), &format!("{prefix}.type"))?;
+    let title = parse_chart_title_field(obj.get("title"), &format!("{prefix}.title"))?;
+    let series = parse_insert_series(obj.get("series"), prefix, "create")?;
+    validate_insert_series(chart_type, &series, &format!("{prefix}.series"))?;
+    let x = parse_off_at(obj.get("x"), &format!("{prefix}.x"), "x")?;
+    let y = parse_off_at(obj.get("y"), &format!("{prefix}.y"), "y")?;
+    if x.is_some() != y.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "create".into(),
+                field: "x and y together".into(),
+            },
+            prefix.to_string(),
+        ));
+    }
+    let cx = parse_emu_at(obj.get("cx"), &format!("{prefix}.cx"), "cx")?;
+    let cy = parse_emu_at(obj.get("cy"), &format!("{prefix}.cy"), "cy")?;
+    if cx.is_some() != cy.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "create".into(),
+                field: "cx and cy together".into(),
+            },
+            prefix.to_string(),
+        ));
+    }
+    Ok(InsertChartOp {
+        slide,
+        chart_type,
+        title,
+        series,
+        x,
+        y,
+        cx,
+        cy,
+    })
 }
 
 pub(crate) fn parse_create_picture(

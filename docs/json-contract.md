@@ -675,7 +675,7 @@ xlsx、docx、pptx 共用 `scope` 这个字段名，里面的键按格式分，�
 | `smartArts[].points` | 可选。与 `insertSmartArt` 相同；省略则用该版式的缺省占位点 |
 | `smartArts[].kind` / `wrap` / `cx` / `cy` | 可选。与 `insertSmartArt` 相同 |
 
-不把 base64 写进 create JSON。xlsx 的图只认 `workbook.sheets[].pictures`，图表只认 `workbook.sheets[].charts`。pptx 的图只认 `presentation.slides[].pictures`。`presentation` 根上或 `shapes[]` 上出现 `pictures`，或 `slides[]` 上出现 `charts` / `smartArts`，报 `InvalidField`。xlsx 上出现 `smartArts` 同样报 `InvalidField`。docx create 仍不写图表。
+不把 base64 写进 create JSON。xlsx 的图只认 `workbook.sheets[].pictures`，图表只认 `workbook.sheets[].charts`。pptx 的图只认 `presentation.slides[].pictures`，图表只认 `presentation.slides[].charts`。`presentation` 根上或 `shapes[]` 上出现 `pictures` / `charts`，或 `slides[]` 上出现 `smartArts`，报 `InvalidField`。xlsx 上出现 `smartArts` 同样报 `InvalidField`。docx create 仍不写图表。
 
 create 写出 Transitional 最小包，见 [opc.md](opc.md)。每个 `w:p` 都带唯一的 `w14:paraId` 和 `w14:textId`（取值大于 0、小于 `0x80000000`，MS-DOCX §2.6.2.3 / §2.6.2.4），并在根元素上把 `w14` 列入 `mc:Ignorable`。这样随后 inspect 得到的 id 都是 `para:{paraId}`，`stable` 为 `true`。图的 `wp:docPr/@id` 在该部件内从 `1` 起递增，与 `insertPicture` 同一套写入。
 
@@ -713,16 +713,21 @@ create 写出 Transitional 最小包，见 [opc.md](opc.md)。每个 `w:p` 都�
 | `presentation.slides` | 页列表。可空；空则生成一页，页上有一个空文本框，否则 PowerPoint 可能打不开 |
 | `slides[].shapes` | 该页文本框列表。可空；空则生成一个空文本框 |
 | `slides[].pictures` | 可选。该页上的图列表。省略或空数组则不写 `p:pic` |
+| `slides[].charts` | 可选。该页上的图表列表。省略或空数组则不写 `p:graphicFrame` |
 | `shapes[].text` | 可见文本，可空字符串。省略当作 `""`。`\n` 写成 `a:br` |
 | `pictures[].file` | 本地路径，与 `insertPicture` 相同，按文件头认 PNG / JPEG / GIF / BMP。缺此字段报 `MissingField` |
 | `pictures[].x` / `pictures[].y` | 可选，EMU，非负整数。必须成对出现或成对省略；只给一个时报 `InvalidField`。缺则放到该页空白处，规则与 pptx `insertPicture` 相同 |
 | `pictures[].cx` / `pictures[].cy` | 可选，EMU，正整数。都省则按图片像素以 96 dpi 换算。只给一个时报 `InvalidField` |
+| `charts[].type` | 必须。与 pptx `insertChart` 相同 |
+| `charts[].series` | 必须。非空。字段与 `insertChart` 相同 |
+| `charts[].title` | 可选 |
+| `charts[].x` / `charts[].y` / `charts[].cx` / `charts[].cy` | 可选。规则与 pptx `insertChart` 相同 |
 
-带图示例见 `docs/examples/pptx-create-pictures.json`。`kind` / `wrap` / `from` / `to` / `anchor` 以及 xlsx 偏移字段出现报 `InvalidField`。
+带图示例见 `docs/examples/pptx-create-pictures.json`。带图表示例见 `docs/examples/pptx-create-charts.json`。`kind` / `wrap` / `from` / `to` / `anchor` / `dataFrom` 以及 xlsx 偏移字段出现报 `InvalidField`。
 
 `workbook`、`document`、`presentation` 三者必须恰好出现一个。xlsx 路径必须用 `workbook`，docx 路径必须用 `document`，pptx 路径必须用 `presentation`，对不上报 `InvalidField`。
 
-create 写出 Transitional 最小包，见 [opc.md](opc.md)。必须带 theme、slideMaster、slideLayout、presentation、各页 slide、presProps，不能只写 ECMA 示例里那个仅含 `notesSz` 的 presentation。幻灯片尺寸用 16:9（`sldSz` 为 `cx="12192000"` `cy="6858000"`）。不要生成动画、切换、备注、图表、SmartArt、批注。给了 `slides[].pictures` 时按 `insertPicture` 同一套规则写 `/ppt/media/…`、该页 `.rels` 与 `p:pic`。先写该页 `shapes`，再按数组顺序写 `pictures`。`p:cNvPr/@id` 取该页已有全部 `cNvPr` 的最大整数加 1，至少为 2。`presentation` 根上或 `shapes[]` 上出现 `pictures`，或 `slides[]` 上出现 `charts` / `smartArts`，报 `InvalidField`。
+create 写出 Transitional 最小包，见 [opc.md](opc.md)。必须带 theme、slideMaster、slideLayout、presentation、各页 slide、presProps，不能只写 ECMA 示例里那个仅含 `notesSz` 的 presentation。幻灯片尺寸用 16:9（`sldSz` 为 `cx="12192000"` `cy="6858000"`）。不要生成动画、切换、备注、SmartArt、批注。给了 `slides[].pictures` 时按 `insertPicture` 同一套规则写 `/ppt/media/…`、该页 `.rels` 与 `p:pic`。给了 `slides[].charts` 时按 `insertChart` 同一套规则写 `/ppt/charts/…`、embedding 与 `p:graphicFrame`。先写该页 `shapes`，再按数组顺序写 `pictures`，再写 `charts`。`p:cNvPr/@id` 取该页已有全部 `cNvPr` 的最大整数加 1，至少为 2。`presentation` 根上或 `shapes[]` 上出现 `pictures` / `charts`，或 `slides[]` 上出现 `smartArts`，报 `InvalidField`。
 
 每个文本框写成带 `p:txBody` 的 `p:sp`，`p:cNvPr/@id` 从 `2` 起在该页内递增（`1` 留给 `spTree`）。随后 inspect 得到的 id 都是 `slide:{n}/shape:{id}`，`stable` 为 `true`。形状纵向错开，避免叠在同一位置。颜色用 RGB，不依赖主题色语义。
 

@@ -141,6 +141,42 @@ function Ensure-PptxCreatePictures([switch]$Force) {
     return $path
 }
 
+# 一页一个文本框加一张柱形图。cNvPr：spTree=1，文本框=2，图表从 3 起。
+function Ensure-PptxCreateCharts([switch]$Force) {
+    $path = Get-OutPath 'pptx-create-charts.pptx'
+    if ((Test-Path $path) -and -not $Force) { return $path }
+    $req = @{
+        schemaVersion = 1; action = 'create'
+        path = $path.Replace('\', '/'); format = 'pptx'
+        presentation = @{
+            slides = @(
+                @{
+                    shapes = @(@{ text = '标题' })
+                    charts = @(
+                        @{
+                            type = 'col'
+                            title = $global:OoxpStrings.chartTitle
+                            x = 914400
+                            y = 1828800
+                            cx = 5486400
+                            cy = 3200400
+                            series = @(
+                                @{
+                                    name = $global:OoxpStrings.chartSer1
+                                    categories = @($global:OoxpStrings.saItem1, $global:OoxpStrings.saItem2, $global:OoxpStrings.saItem3)
+                                    values = @(1, 2, 3)
+                                }
+                            )
+                        }
+                    )
+                }
+            )
+        }
+    }
+    Invoke-OoxpRequest $req 'pptx-create-charts' | Out-Null
+    return $path
+}
+
 # apply 的源文件要由 Excel 亲手存出来，不能拿 ooxp 自己的产物冒充，
 # 否则等于自己造自己读，测不到真实文件的写法。
 function Ensure-XlsxExcelSource([switch]$Force) {
