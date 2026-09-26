@@ -19,7 +19,7 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 | A1–A5 | ✅ | Word 打开 apply 产物：第二段为「改过的正文」且仍加粗，第一段仍是「第一章」/标题 1，第三段未改 |
 | O1 | ⚠️ | 验不了：O1 要的是「ooxp 打开再原样保存，未改部件 CRC 不变」，可 ooxp 第一期没有「什么都不改地保存」这个动作。退一步只验到 Word 能把 create 产物另存成功（`docx-O1-word-resave`）。此前记的 `SaveAs2` 挂起，拆分后重跑没再出现，一秒内返回 |
 
-这一轮用的样例都没有文本框。带 `mc:AlternateContent` 或 `w:txbxContent` 的文件另有缺陷，见计划表的 A9，那类文件的 I1–I5 现在过不了。
+这一轮手测样例没有文本框。带 `mc:AlternateContent` 或 `w:txbxContent` 的边界已由 `crates/ooxp/tests/docx_fidelity.rs` 覆盖；带文本框样例的 Word / WPS 手测尚未另加。
 
 ## create
 

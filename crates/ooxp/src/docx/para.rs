@@ -50,12 +50,48 @@ pub fn parse_para_id(id: &str, op_index: usize) -> Result<ParaTarget, Error> {
 
 pub fn collect_paragraphs(root: &Element) -> Vec<&Element> {
     let mut out = Vec::new();
-    root.walk(&mut |e| {
+    walk_paras(root, &mut |e| {
         if e.local_name() == "p" {
             out.push(e);
         }
     });
     out
+}
+
+/// 遇到 `w:txbxContent` 停住；`mc:AlternateContent` 只进第一个 `Choice`，没有才进 `Fallback`。
+fn walk_paras<'a>(el: &'a Element, f: &mut impl FnMut(&'a Element)) {
+    if el.local_name() == "txbxContent" {
+        return;
+    }
+    if el.local_name() == "AlternateContent" {
+        if let Some(i) = first_alt_child_index(el) {
+            if let Node::Element(child) = &el.children[i] {
+                walk_paras(child, f);
+            }
+        }
+        return;
+    }
+    f(el);
+    for n in &el.children {
+        if let Node::Element(e) = n {
+            walk_paras(e, f);
+        }
+    }
+}
+
+fn first_alt_child_index(el: &Element) -> Option<usize> {
+    let mut fallback = None;
+    for (i, n) in el.children.iter().enumerate() {
+        if let Node::Element(e) = n {
+            if e.local_name() == "Choice" {
+                return Some(i);
+            }
+            if e.local_name() == "Fallback" && fallback.is_none() {
+                fallback = Some(i);
+            }
+        }
+    }
+    fallback
 }
 
 pub fn para_stable_id(p: &Element, index: usize) -> (String, bool) {
@@ -118,6 +154,17 @@ pub fn visible_text(p: &Element) -> String {
 }
 
 fn walk_visible(el: &Element, in_del: bool, out: &mut String) {
+    if el.local_name() == "txbxContent" {
+        return;
+    }
+    if el.local_name() == "AlternateContent" {
+        if let Some(i) = first_alt_child_index(el) {
+            if let Node::Element(child) = &el.children[i] {
+                walk_visible(child, in_del, out);
+            }
+        }
+        return;
+    }
     let in_del = in_del || el.local_name() == "del";
     if el.local_name() == "instrText" {
         return;
@@ -150,6 +197,17 @@ fn find_p_mut<'a>(
     idx: &mut usize,
     target: &ParaTarget,
 ) -> Option<&'a mut Element> {
+    if el.local_name() == "txbxContent" {
+        return None;
+    }
+    if el.local_name() == "AlternateContent" {
+        if let Some(i) = first_alt_child_index(el) {
+            if let Node::Element(e) = &mut el.children[i] {
+                return find_p_mut(e, idx, target);
+            }
+        }
+        return None;
+    }
     if el.local_name() == "p" {
         *idx += 1;
         let hit = match target {
@@ -191,7 +249,15 @@ pub fn set_visible_text(p: &mut Element, text: &str) {
 }
 
 fn rewrite_runs(el: &mut Element, first: &mut bool, text: &str) {
-    if el.local_name() == "del" {
+    if el.local_name() == "del" || el.local_name() == "txbxContent" {
+        return;
+    }
+    if el.local_name() == "AlternateContent" {
+        if let Some(i) = first_alt_child_index(el) {
+            if let Node::Element(e) = &mut el.children[i] {
+                rewrite_runs(e, first, text);
+            }
+        }
         return;
     }
     if el.local_name() == "r" {

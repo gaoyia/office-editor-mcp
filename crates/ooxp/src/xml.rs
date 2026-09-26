@@ -119,7 +119,7 @@ impl Element {
         self.children.push(Node::Element(el));
     }
 
-    /// 前序遍历本元素及子孙。
+    /// 前序遍历本元素及子孙。docx 段落不能走这条：它没有文本框和 AlternateContent 边界。
     pub fn walk<'a>(&'a self, f: &mut impl FnMut(&'a Element)) {
         f(self);
         for n in &self.children {
