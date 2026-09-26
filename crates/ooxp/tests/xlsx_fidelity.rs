@@ -1,7 +1,7 @@
 //! 保真度回归测试。
 //!
 //! 样例刻意照 Excel 真实存盘的写法造：行上省略 `r`、单元格带样式索引 `s`、文本走共享字符串、
-//! 有一组共享公式、有注释、还有一个内容类型只靠 Default 认出来的未知部件。
+//! 有一组共享公式、未改表带注释、还有一个内容类型只靠 Default 认出来的未知部件。
 //! 库自己 `create` 出来的文件不含这些写法，只用它做测试会漏掉真实文件上的问题。
 
 use std::io::{Cursor, Read, Write};
@@ -24,7 +24,7 @@ const WORKBOOK_RELS: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="
 /// 第 3 行故意不写 `r`；A1、A2 带样式索引 `s="3"`；C1 走共享字符串；B1 是共享公式主格，B2 是从属格。
 const SHEET1: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><dimension ref="A1:C3"/><cols><col min="1" max="1" width="18.5" customWidth="1"/></cols><sheetData><row r="1" spans="1:3" ht="20" customHeight="1"><c r="A1" s="3"><v>10</v></c><c r="B1"><f t="shared" ref="B1:B2" si="0">A1*2</f><v>20</v></c><c r="C1" t="s"><v>0</v></c></row><row r="2" spans="1:3"><c r="A2" s="3"><v>11</v></c><c r="B2"><f t="shared" si="0"/><v>22</v></c></row><row spans="1:3"><c r="A3"><v>12</v></c></row></sheetData><pageMargins left="0.7" right="0.7" top="0.75" bottom="0.75" header="0.3" footer="0.3"/></worksheet>"#;
 
-const SHEET2: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><dimension ref="A1"/><sheetData><row r="1"><c r="A1" t="s"><v>1</v></c></row></sheetData></worksheet>"#;
+const SHEET2: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><!-- SHEET2-KEEP --><dimension ref="A1"/><sheetData><row r="1"><c r="A1" t="s"><v>1</v></c></row></sheetData></worksheet>"#;
 
 const SHARED_STRINGS: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="2" uniqueCount="2"><si><t>共享文本</t></si><si><t xml:space="preserve">  带空格  </t></si></sst>"#;
 
@@ -230,6 +230,24 @@ fn style_index_and_unknown_attributes_survive() {
     assert!(text.contains(r#"<col min="1" max="1" width="18.5" customWidth="1"/>"#));
     assert!(text.contains(r#"spans="1:3" ht="20" customHeight="1""#));
     assert!(text.contains("<pageMargins"));
+}
+
+/// 契约「改动范围」：被改工作表整份重序列化，注释丢掉。
+#[test]
+fn dirty_sheet_drops_comments() {
+    let sheet = SHEET1.replacen("<dimension", "<!-- DIRTY-DROP --><dimension", 1);
+    let src = write_with_sheet1("dirty-comment", &sheet);
+    assert!(part(&src, "xl/worksheets/sheet1.xml").contains("<!-- DIRTY-DROP -->"));
+    let out = tmp_dir().join("dirty-comment-out.xlsx");
+    apply(
+        &src,
+        &out,
+        json!([{ "op": "setCell", "id": "cell:Sheet1!A1", "value": 42 }]),
+    )
+    .unwrap();
+    let text = part(&out, "xl/worksheets/sheet1.xml");
+    assert!(!text.contains("<!--"), "脏表注释应丢掉：{text}");
+    assert!(sheet_data_of(&text).contains(r#"<c r="A1" s="3"><v>42</v></c>"#), "{text}");
 }
 
 #[test]
