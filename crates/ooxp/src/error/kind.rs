@@ -8,6 +8,7 @@ pub(crate) enum TypeName {
     Integer,
     String,
     NonEmptyString,
+    Boolean,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -31,6 +32,8 @@ pub(crate) enum RangeReason {
 pub(crate) enum IdReason {
     NotCell { id: String },
     ParaPrefix,
+    /// 页眉/页脚容器 id，缺少 `/para:…`
+    HdrFtrContainer,
     ParaIndexNotInt,
     ParaIndexFromOne,
     ParaIdNotHex,
@@ -192,6 +195,7 @@ impl TypeName {
             Self::Integer,
             Self::String,
             Self::NonEmptyString,
+            Self::Boolean,
         ]
     }
 }
@@ -223,6 +227,7 @@ impl IdReason {
         vec![
             Self::NotCell { id: "x".into() },
             Self::ParaPrefix,
+            Self::HdrFtrContainer,
             Self::ParaIndexNotInt,
             Self::ParaIndexFromOne,
             Self::ParaIdNotHex,

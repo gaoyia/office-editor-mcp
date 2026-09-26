@@ -52,16 +52,28 @@ id 是给模型用的字符串，必须能从文件内容稳定算出来，不�
 
 没有 `w14:paraId` 时：`para:index:{n}`，`n` 从 1 起，按主文档部件里 `w:p` 的文档顺序（含表格单元格里的段落）。树上同时给 `"stable": false`。这类 id 在增删段落后会变，只够同一次 inspect 之后立刻 apply。
 
-标题和正文都是段落，不另编一套 id。页眉、页脚、脚注、尾注、批注、文本框里的段落第一期不进这棵树，也不接受 apply。
+标题和正文都是段落，不另编一套 id。脚注、尾注、批注、文本框里的段落不进这棵树，也不接受 apply。页眉、页脚按下面规则进树，可按 id 改字；不做新建页眉、链接到前一节、距边界或图文混排。
+
+页眉、页脚 id 按部件编，不按节编。`w:sectPr` 里的 `w:headerReference` / `w:footerReference`（§17.10.2、§17.10.5）经主文档关系解到部件路径。同一部件只出一个容器节点；多个节引用同一部件时，`sections` 列出所有节号。后一节某类型引用省略时按规范继承前节（§17.10.2）；`even` 是否继承还看 `settings.xml` 的 `w:evenAndOddHeaders`（§17.10.1），`first` 是否继承还看该节的 `w:titlePg`（§17.10.6）。
+
+| 节点 | id | 例子 |
+| --- | --- | --- |
+| 页眉容器 | `header:{type}:{n}` | `header:default:1`、`header:first:1` |
+| 页脚容器 | `footer:{type}:{n}` | `footer:default:1`、`footer:even:1` |
+| 页眉/页脚段落 | `{容器 id}/para:{paraId}` 或 `{容器 id}/para:index:{k}` | `header:default:1/para:3F2A1B00` |
+
+`{type}` 取引用上 `w:type` 的原文，只允许 `default`、`even`、`first`（`ST_HdrFtr`，§17.18.36）。缺失或不是这三项报 `XmlBroken`。`{n}` 在同一 `kind`（header 或 footer）与 `{type}` 下，按该部件首次出现的顺序从 1 起。页眉页脚段落没有 `w14:paraId` 时用 `para:index:{k}`，`k` 只在该部件内从 1 计。
+
+正文段落 id 仍是 `para:{paraId}` / `para:index:{n}`，只表示主文档部件。对容器 id（没有 `/para:`）发 `setParaText` 报 `InvalidId`。拿正文 `para:` 去改页眉页脚里同 hex 的段落报 `IdNotFound`。
 
 「文本框里的段落不算段落」这句要有可执行的判定，否则实现容易一路钻进去。边界按下面两条划：
 
-- 遍历主文档时遇到 `w:txbxContent` 就停住，不再往下走。文本框里的 `w:p` 不计入 `paraCount`，不出现在 `outline` 与 `paragraphs` 里，它们的 `w:t` 也不并进外层段落的 `text`。拿文本框里的 `paraId` 发 apply，报 `IdNotFound`。
-- 遇到 `mc:AlternateContent` 只走第一个 `mc:Choice`；没有 `mc:Choice` 才走 `mc:Fallback`。两支都走会把同一份内容读出两遍，也会让 apply 只改到其中一支、另一支不同步。这条对 `paraCount`、`outline`、`paragraphs`、`text` 和 apply 一律适用。
+- 遍历主文档或页眉页脚部件时遇到 `w:txbxContent` 就停住，不再往下走。文本框里的 `w:p` 不计入任何 `paraCount`，不出现在 `outline` 与 `paragraphs` 里，它们的 `w:t` 也不并进外层段落的 `text`。拿文本框里的 `paraId` 发 apply，报 `IdNotFound`。
+- 遇到 `mc:AlternateContent` 只走第一个 `mc:Choice`；没有 `mc:Choice` 才走 `mc:Fallback`。两支都走会把同一份内容读出两遍，也会让 apply 只改到其中一支、另一支不同步。这条对 `paraCount`、`outline`、`paragraphs`、`text`、页眉页脚和 apply 一律适用。
 
 Word 2010 以后插入文本框、图表、SmartArt 都是 `mc:AlternateContent` 套 `w:txbxContent` 的写法，所以这两条不是边角情况。
 
-同一主文档部件里若出现重复的 `w14:paraId`（违反 MS-DOCX，但现实文件可能有），inspect 照样列出每一段；apply 命中文档顺序中的第一段。
+同一部件里若出现重复的 `w14:paraId`（违反 MS-DOCX，但现实文件可能有），inspect 照样列出每一段；apply 命中该部件文档顺序中的第一段。
 
 ### pptx
 
@@ -83,7 +95,7 @@ Word 2010 以后插入文本框、图表、SmartArt 都是 `mc:AlternateContent`
 
 apply 不得删形状再重建，以免 `cNvPr/@id` 变化导致绑在形状上的动画失效。不改 `<p:timing>`。
 
-备注页、讲义、幻灯片母版、版式第一期不进这棵树，也不接受 apply，对齐 docx 页眉页脚那条边界。
+备注页、讲义、幻灯片母版、版式第一期不进这棵树，也不接受 apply，对齐 docx 脚注、尾注、批注那条边界。
 
 「文本形状」要有可执行的判定：
 
@@ -135,18 +147,19 @@ xlsx、docx、pptx 共用 `scope` 这个字段名，里面的键按格式分，�
   "action": "inspect",
   "path": "C:\\data\\note.docx",
   "format": "docx",
-  "scope": { "from": 1, "maxParas": 200 }
+  "scope": { "from": 1, "maxParas": 200, "headerFooter": true }
 }
 ```
 
 | 字段 | 必填 | 含义 |
 | --- | --- | --- |
 | `path` | 是 | 已有文件 |
-| `scope` | 否 | 省略或空对象：只返回 `outline` 和 `paraCount`，没有 `paragraphs` |
-| `scope.from` | 要段落正文时必填 | 从第几段开始，从 1 起，按主文档 `w:p` 顺序 |
-| `scope.maxParas` | 要段落正文时必填 | 本次最多返回多少段，允许范围 `1` 到 `5000` |
+| `scope` | 否 | 省略或空对象：返回 `outline`、`paraCount`、`headers`、`footers`；正文没有 `paragraphs`；页眉页脚容器不带 `paragraphs` |
+| `scope.from` | 要正文段落时必填 | 从第几段开始，从 1 起，按主文档 `w:p` 顺序 |
+| `scope.maxParas` | 要正文段落时必填 | 本次最多返回多少段，允许范围 `1` 到 `5000` |
+| `scope.headerFooter` | 否 | 为 `true` 时给每个页眉、页脚节点填 `paragraphs`。省略或 `false` 则容器上没有 `paragraphs` |
 
-只要想看段落正文，就必须同时给 `from` 和 `maxParas`。不默认把全文倒出来。`from` 超出 `paraCount` 时 `paragraphs` 为空数组，`truncated` 为 `false`，不报错。
+`from` / `maxParas` 只切正文，`headerFooter` 只管页眉页脚，两者独立，可只开一边。只要想看正文段落，就必须同时给 `from` 和 `maxParas`。不默认把全文倒出来。`from` 超出 `paraCount` 时正文 `paragraphs` 为空数组，`truncated` 为 `false`，不报错。页眉页脚通常很短，给了 `headerFooter: true` 就返回该部件全部段落，不再单独分页。xlsx / pptx 的 `scope` 里出现 `headerFooter` 报 `InvalidField`。
 
 #### pptx 的 scope
 
@@ -258,6 +271,31 @@ xlsx、docx、pptx 共用 `scope` 这个字段名，里面的键按格式分，�
       "text": "标题"
     }
   ],
+  "headers": [
+    {
+      "id": "header:default:1",
+      "type": "default",
+      "sections": [1],
+      "paraCount": 1
+    }
+  ],
+  "footers": [
+    {
+      "id": "footer:default:1",
+      "type": "default",
+      "sections": [1],
+      "paraCount": 1,
+      "paragraphs": [
+        {
+          "id": "footer:default:1/para:00FF00AA",
+          "index": 1,
+          "style": null,
+          "text": "页脚",
+          "stable": true
+        }
+      ]
+    }
+  ],
   "from": 1,
   "truncated": false,
   "paragraphs": [
@@ -282,15 +320,17 @@ xlsx、docx、pptx 共用 `scope` 这个字段名，里面的键按格式分，�
 
 规则：
 
-- 只读主文档部件（根关系里 `/officeDocument` 那条，常见路径 `/word/document.xml`）。页眉页脚、脚注、批注不读。
+- 主文档部件（根关系里 `/officeDocument` 那条，常见路径 `/word/document.xml`）始终读。页眉、页脚部件按节引用与继承解析后读；脚注、批注不读。
 - `paraCount` 是主文档里 `w:p` 的总数，含表格单元格里的段落，不含文本框里的段落，始终出现。
-- `outline` 始终出现。收入满足下面任一条件的段落：`w:pStyle/@w:val` 为 `Heading1`–`Heading9`（大小写不敏感）或 `标题1`–`标题9`；或者 `w:outlineLvl/@w:val` 为 `0`–`8`。树上 `level` 从 1 到 9。`Heading1` / `标题1` / `outlineLvl=0` 都是 `level: 1`。不是标题的段落不进 `outline`。
-- 省略 `scope` 时没有 `paragraphs`、`from`、`truncated`。
-- 给了 `from` 和 `maxParas` 时，`paragraphs` 按文档顺序切片。范围内段落数超过 `maxParas` 则 `truncated` 为 `true`。
+- `outline` 始终出现，只含主文档标题段。收入满足下面任一条件的段落：`w:pStyle/@w:val` 为 `Heading1`–`Heading9`（大小写不敏感）或 `标题1`–`标题9`；或者 `w:outlineLvl/@w:val` 为 `0`–`8`。树上 `level` 从 1 到 9。`Heading1` / `标题1` / `outlineLvl=0` 都是 `level: 1`。不是标题的段落不进 `outline`。页眉页脚段落不进 `outline`。
+- `headers`、`footers` 始终出现。没有引用则为空数组。容器字段顺序：`id`、`type`、`sections`、`paraCount`，有段落时再跟 `paragraphs`。`sections` 是从 1 起的节号数组，按主文档里 `w:sectPr` 的文档顺序。容器上的 `paraCount` 是该部件内 `w:p` 的个数（边界与正文相同）。
+- 省略 `scope`、或没有 `from`/`maxParas` 时，没有正文 `paragraphs`、`from`、`truncated`。
+- 给了 `from` 和 `maxParas` 时，正文 `paragraphs` 按文档顺序切片。范围内段落数超过 `maxParas` 则 `truncated` 为 `true`。
+- `scope.headerFooter` 为 `true` 时，每个页眉、页脚节点带 `paragraphs`；否则容器上没有该字段。
 - `style` 取 `w:pStyle/@w:val` 的原文。没有 `pStyle` 则为 `null`（Word 此时按 Normal 显示，树上不猜）。
 - `text` 是可见纯文本：该 `w:p` 内、不在 `w:del` 里的 `w:t` 按顺序拼接；`w:tab` 变成 `\t`，`w:br` 变成 `\n`。`w:instrText`（域指令）不进入。不含 run 级样式。嵌在 `w:txbxContent` 里的 `w:t` 不算，`mc:AlternateContent` 只取一支，判定见上文 docx 那节的边界两条。
 - `stable`：有 `w14:paraId` 为 `true`，否则为 `false`。
-- 第一期不返回修订痕迹和目录域。文本框里的段落既不作为独立节点出现，也不并进外层段落的 `text`。含超链接或域的段落仍出现在树上，`text` 只含可见结果。
+- 不返回修订痕迹和目录域。文本框里的段落既不作为独立节点出现，也不并进外层段落的 `text`。含超链接或域的段落仍出现在树上，`text` 只含可见结果。页码域按同一规则：inspect 不收域指令与缓存，apply 验收只用无域、无超链接的页眉页脚段落。
 
 ### 响应（pptx）
 
@@ -561,23 +601,23 @@ create 与 apply 落盘时先写入目标同目录的临时文件，再改名为
 | 字段 | 含义 |
 | --- | --- |
 | `op` | 必须是 `"setParaText"` |
-| `id` | 段落 id（`para:…` 或 `para:index:n`） |
+| `id` | 段落 id：正文用 `para:…` / `para:index:n`；页眉页脚用 `header:…/para:…` 或 `footer:…/para:…` |
 | `text` | 新的可见纯文本，字符串，可空。必填 |
 
-找不到该段落报 `IdNotFound`。第一期不插入、不删除段落。
+找不到该段落报 `IdNotFound`。不插入、不删除段落。对页眉或页脚容器 id（没有 `/para:`）报 `InvalidId`。
 
-替换规则（手术刀，不整篇重建 `document.xml`）：
+替换规则（手术刀，不整篇重建目标部件）：
 
 1. 只改命中的那一个 `w:p`。`w:pPr`、书签、绘图、`w:hyperlink` 外壳、不认识的子元素都留着。
 2. 在该段里找出不位于 `w:del` 中的、含 `w:t` 的 run。
 3. 若一个都没有：在 `w:pPr` 之后插入一个新的 `w:r`/`w:t`，文本放进去。
 4. 若有：把完整新文本写入其中第一个 `w:t`（需要保留首尾空格时加 `xml:space="preserve"`）；其余这类 `w:t` 删掉；因此变空、且里面再也没有别的 run 内容的 `w:r` 删掉。第一个 run 上已有的 `w:rPr` 保留。
-5. 含超链接或域的段落仍按上面做。超链接可能不再包住整段新字，域可能被拆掉。验收只用无域、无超链接的段落。页眉页脚里的段落第一期改不到，id 若不在主文档里就 `IdNotFound`。
+5. 含超链接或域的段落仍按上面做。超链接可能不再包住整段新字，域可能被拆掉。验收只用无域、无超链接的段落（含页眉页脚）。
 6. 不往文本框里写字。第 2 步找 run 的时候，遇到 `w:txbxContent` 停住，遇到 `mc:AlternateContent` 只进第一个 `mc:Choice`（没有就进 `mc:Fallback`），判定与 inspect 那两条边界一致。某一段除文本框之外没有可改的 `w:t` 时走第 3 步插新 run，插在 `w:pPr` 之后、该段其余内容之前。这样 apply 写进去的文本，随后 inspect 读回来必须与写入值相同。
 
 ### 改动范围（docx）
 
-只允许变脏的部件：主文档 XML（通常是 `/word/document.xml`）。`styles.xml`、`settings.xml`、页眉页脚、主题、编号一律原样写回。
+允许变脏的部件：主文档 XML（通常是 `/word/document.xml`），以及被 `setParaText` 点名的页眉、页脚部件。id 落在哪个部件，就只重序列化哪个部件。一次 `ops` 可以同时改正文和页眉页脚。`styles.xml`、`settings.xml`、未点名的页眉页脚、主题、编号一律原样写回。
 
 被改部件同样整份重序列化，保留程度与 xlsx 工作表相同：元素与属性顺序、未知命名空间保留；注释、处理指令、DOCTYPE 会丢。
 

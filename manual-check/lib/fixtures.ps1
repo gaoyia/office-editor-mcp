@@ -102,6 +102,46 @@ function Ensure-DocxWordSource([switch]$Force) {
     return $path
 }
 
+# 带页眉页脚的 Word 另存样例。create 不写页眉，必须经 Word 的手。
+function Ensure-DocxWordHeaderSource([switch]$Force) {
+    $path = Get-OutPath 'docx-word-header-source.docx'
+    if ((Test-Path $path) -and -not $Force) { return $path }
+
+    $tmpDir = Join-Path $env:TEMP 'ooxp-office'
+    New-Item -ItemType Directory -Force -Path $tmpDir | Out-Null
+    $tmp = Join-Path $tmpDir 'docx-word-header-source.docx'
+    $S = $global:OoxpStrings
+    $req = @{
+        schemaVersion = 1; action = 'create'
+        path = $tmp.Replace('\', '/'); format = 'docx'
+        document = @{
+            paragraphs = @(
+                @{ style = 'Heading1'; text = $S.chapter1 }
+                @{ text = $S.para2src }
+            )
+        }
+    }
+    Invoke-OoxpRequest $req 'docx-hf-source-create' | Out-Null
+
+    $word = Ensure-MsWord (Ensure-DocxCreate)
+    $doc = Open-WordDoc $word $tmp
+    $sec = $doc.Sections.Item(1)
+    # wdHeaderFooterPrimary = 1
+    $hdr = $sec.Headers.Item(1)
+    $ftr = $sec.Footers.Item(1)
+    $hdr.Range.Text = $S.headerSrc
+    $ftr.Range.Text = $S.footerSrc
+    Write-Log 'word Save() 原地覆盖 TEMP 里的页眉样例'
+    $doc.Save()
+    Release-Com $hdr
+    Release-Com $ftr
+    Release-Com $sec
+    Close-WordDoc $doc
+    Copy-Item -Force $tmp $path
+    Write-Log "saved word header source $path"
+    return $path
+}
+
 # apply 的 pptx 源文件要经 PowerPoint 的手。同样走 TEMP 里 Save() 再拷回。
 function Ensure-PptxPptSource([switch]$Force) {
     $path = Get-OutPath 'pptx-ppt-source.pptx'

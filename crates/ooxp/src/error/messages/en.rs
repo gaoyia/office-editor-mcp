@@ -61,7 +61,12 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         },
         ErrorKind::InvalidId { reason } => match reason {
             IdReason::NotCell { id } => format!("Not a cell id: {id}"),
-            IdReason::ParaPrefix => "Paragraph id must start with para:".into(),
+            IdReason::ParaPrefix => {
+                "Paragraph id must be para:… or header:…/para:… or footer:…/para:…".into()
+            }
+            IdReason::HdrFtrContainer => {
+                "Header/footer id must include /para:… (container id alone is not a paragraph)".into()
+            }
             IdReason::ParaIndexNotInt => "para:index must be followed by a positive integer".into(),
             IdReason::ParaIndexFromOne => "para:index starts at 1".into(),
             IdReason::ParaIdNotHex => "paraId must be hexadecimal".into(),
@@ -150,5 +155,6 @@ fn type_name(t: TypeName) -> &'static str {
         TypeName::Integer => "an integer",
         TypeName::String => "a string",
         TypeName::NonEmptyString => "a non-empty string",
+        TypeName::Boolean => "a boolean",
     }
 }

@@ -55,6 +55,7 @@
         "maxCells": { "type": "integer", "minimum": 1, "maximum": 20000 },
         "from": { "type": "integer", "minimum": 1 },
         "maxParas": { "type": "integer", "minimum": 1, "maximum": 5000 },
+        "headerFooter": { "type": "boolean" },
         "slide": { "type": "integer", "minimum": 1 },
         "maxShapes": { "type": "integer", "minimum": 1, "maximum": 5000 }
       },

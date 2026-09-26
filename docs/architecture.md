@@ -55,7 +55,7 @@ crates/ooxp-cli/             命令行，只依赖 ooxp。二进制名也是 oox
 
 ### docx
 
-主文档由根关系里 `/officeDocument` 指向，常见路径 `/word/document.xml`。inspect 读该部件里的 `w:p`，返回大纲和按范围截断的段落。apply 只改被点名的 `w:p` 里的可见文本，不整篇从 JSON 重建。create 生成最小 Transitional 包，含 `styles.xml`（Normal 与 Heading1–3）和 `settings.xml`（`compatibilityMode` 为 15）。页眉页脚、修订、复杂表格结构第一期不改。
+主文档由根关系里 `/officeDocument` 指向，常见路径 `/word/document.xml`。inspect 读该部件里的 `w:p`，返回大纲和按范围截断的段落；并始终列出页眉、页脚容器，点名后可读其段落。apply 只改被点名的 `w:p` 里的可见文本，可落在主文档或页眉页脚部件，不整篇从 JSON 重建。create 生成最小 Transitional 包，含 `styles.xml`（Normal 与 Heading1–3）和 `settings.xml`（`compatibilityMode` 为 15），不写页眉页脚。修订、复杂表格结构、页眉页脚的精细编辑（链接前节、距边界、图文混排）不做。
 
 ### pptx
 
@@ -69,11 +69,11 @@ crates/ooxp-cli/             命令行，只依赖 ooxp。二进制名也是 oox
 
 ### inspect
 
-调用方给出路径和范围。库打开 OPC 包，定位格式入口部件（xlsx 是 Workbook，docx 是 Main Document，pptx 是 Presentation）。按范围读必要的 XML，生成带 id 的树。xlsx 默认不读完全部单元格，docx 默认不返回 `paragraphs`，pptx 默认不返回 `shapes`。包不写回。
+调用方给出路径和范围。库打开 OPC 包，定位格式入口部件（xlsx 是 Workbook，docx 是 Main Document，pptx 是 Presentation）。按范围读必要的 XML，生成带 id 的树。xlsx 默认不读完全部单元格，docx 默认不返回正文 `paragraphs` 也不展开页眉页脚段落，pptx 默认不返回 `shapes`。包不写回。
 
 ### apply
 
-调用方给出路径和 `ops`。库打开包，按每条 op 的 id 找到 XML 节点，只改这些节点。xlsx 在改了单元格之后，把工作簿标成打开时需要重算。docx 只改被点名的段落。pptx 只改被点名形状的可见文字，且只让那一张幻灯片部件变脏。保存时只重写脏部件。
+调用方给出路径和 `ops`。库打开包，按每条 op 的 id 找到 XML 节点，只改这些节点。xlsx 在改了单元格之后，把工作簿标成打开时需要重算。docx 只改被点名的段落，可落在主文档或页眉页脚部件。pptx 只改被点名形状的可见文字，且只让那一张幻灯片部件变脏。保存时只重写脏部件。
 
 ### create
 
@@ -82,7 +82,7 @@ crates/ooxp-cli/             命令行，只依赖 ooxp。二进制名也是 oox
 ## 硬约束
 
 - 自己实现 OPC。不要把 `office_oxide` 写进 `Cargo.toml`，不要加它的 git 子模块，不要在仓库里放它的源码目录。
-- 查规范用 `standards/md/` 的章节索引。xlsx 单元格见 ECMA-376 §18.3.1.4，公式见 §18.3.1.96 与 §18.17，共享字符串见 §18.4，计算属性见 §18.2.2。docx 主文档见 §11.3.10，段落见 §17.3.1.22，样式见 §17.7，`w14:paraId` 见 MS-DOCX §2.6.2.3。pptx Presentation 部件见 §13.3.6，幻灯片见 §13.3.8 与 §19.3，页名单见 §19.2.1.34，形状与文本框见 §19.3.1.45 / §19.3.1.51，`cNvPr` 见 §19.3.1.12。包结构见 §9 与 §12.2。
+- 查规范用 `standards/md/` 的章节索引。xlsx 单元格见 ECMA-376 §18.3.1.4，公式见 §18.3.1.96 与 §18.17，共享字符串见 §18.4，计算属性见 §18.2.2。docx 主文档见 §11.3.10，段落见 §17.3.1.22，样式见 §17.7，页眉页脚见 §17.10，`w14:paraId` 见 MS-DOCX §2.6.2.3。pptx Presentation 部件见 §13.3.6，幻灯片见 §13.3.8 与 §19.3，页名单见 §19.2.1.34，形状与文本框见 §19.3.1.45 / §19.3.1.51，`cNvPr` 见 §19.3.1.12。包结构见 §9 与 §12.2。
 - 不实现 Excel 计算引擎、Word 排版引擎、PowerPoint 完整动画时间轴。
 - 不支持 `.doc`、`.xls`、`.ppt`。
 - XML 编辑是手术刀：不认识的命名空间、属性、子元素，只要没被当前 op 点到，就原样保留。

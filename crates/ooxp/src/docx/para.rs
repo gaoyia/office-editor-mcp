@@ -3,28 +3,110 @@
 use crate::error::{Error, ErrorKind, IdReason};
 use crate::xml::{Element, Node};
 
+use super::hf::{HfKind, HfType};
+
 pub enum ParaTarget {
+    /// 主文档里的段落。
+    Body(BodyPara),
+    /// 页眉或页脚部件里的段落。
+    HeaderFooter {
+        kind: HfKind,
+        hf_type: HfType,
+        n: u32,
+        para: BodyPara,
+    },
+}
+
+#[derive(Debug, Clone)]
+pub enum BodyPara {
     Index(usize),
     Hex(String),
 }
 
 pub fn parse_para_id(id: &str, op_index: usize) -> Result<ParaTarget, Error> {
     let path = format!("ops[{op_index}].id");
-    let rest = id.strip_prefix("para:").ok_or_else(|| {
-        Error::with_path(
-            ErrorKind::InvalidId {
-                reason: IdReason::ParaPrefix,
-            },
-            path.clone(),
-        )
-    })?;
+    if let Some(rest) = id.strip_prefix("para:") {
+        return Ok(ParaTarget::Body(parse_body_para(rest, &path)?));
+    }
+    if let Some((kind_s, rest)) = id.split_once(':') {
+        if let Some(kind) = HfKind::parse(kind_s) {
+            // header:default:1 或 header:default:1/para:…
+            let (container, para_part) = match rest.split_once('/') {
+                Some((c, p)) => (c, Some(p)),
+                None => (rest, None),
+            };
+            let Some((type_s, n_s)) = container.split_once(':') else {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidId {
+                        reason: IdReason::ParaPrefix,
+                    },
+                    path,
+                ));
+            };
+            let hf_type = HfType::parse(type_s).ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::InvalidId {
+                        reason: IdReason::ParaPrefix,
+                    },
+                    path.clone(),
+                )
+            })?;
+            let n: u32 = n_s.parse().map_err(|_| {
+                Error::with_path(
+                    ErrorKind::InvalidId {
+                        reason: IdReason::ParaPrefix,
+                    },
+                    path.clone(),
+                )
+            })?;
+            if n < 1 {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidId {
+                        reason: IdReason::ParaPrefix,
+                    },
+                    path,
+                ));
+            }
+            let Some(para_part) = para_part else {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidId {
+                        reason: IdReason::HdrFtrContainer,
+                    },
+                    path,
+                ));
+            };
+            let para_rest = para_part.strip_prefix("para:").ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::InvalidId {
+                        reason: IdReason::ParaPrefix,
+                    },
+                    path.clone(),
+                )
+            })?;
+            return Ok(ParaTarget::HeaderFooter {
+                kind,
+                hf_type,
+                n,
+                para: parse_body_para(para_rest, &path)?,
+            });
+        }
+    }
+    Err(Error::with_path(
+        ErrorKind::InvalidId {
+            reason: IdReason::ParaPrefix,
+        },
+        path,
+    ))
+}
+
+fn parse_body_para(rest: &str, path: &str) -> Result<BodyPara, Error> {
     if let Some(n) = rest.strip_prefix("index:") {
         let idx: usize = n.parse().map_err(|_| {
             Error::with_path(
                 ErrorKind::InvalidId {
                     reason: IdReason::ParaIndexNotInt,
                 },
-                path.clone(),
+                path.to_string(),
             )
         })?;
         if idx < 1 {
@@ -32,20 +114,20 @@ pub fn parse_para_id(id: &str, op_index: usize) -> Result<ParaTarget, Error> {
                 ErrorKind::InvalidId {
                     reason: IdReason::ParaIndexFromOne,
                 },
-                path,
+                path.to_string(),
             ));
         }
-        return Ok(ParaTarget::Index(idx));
+        return Ok(BodyPara::Index(idx));
     }
     if rest.is_empty() || rest.chars().any(|c| !c.is_ascii_hexdigit()) {
         return Err(Error::with_path(
             ErrorKind::InvalidId {
                 reason: IdReason::ParaIdNotHex,
             },
-            path,
+            path.to_string(),
         ));
     }
-    Ok(ParaTarget::Hex(rest.to_string()))
+    Ok(BodyPara::Hex(rest.to_string()))
 }
 
 pub fn collect_paragraphs(root: &Element) -> Vec<&Element> {
@@ -101,6 +183,11 @@ pub fn para_stable_id(p: &Element, index: usize) -> (String, bool) {
     } else {
         (format!("para:index:{index}"), false)
     }
+}
+
+pub fn para_stable_id_in(container_id: &str, p: &Element, index: usize) -> (String, bool) {
+    let (base, stable) = para_stable_id(p, index);
+    (format!("{container_id}/{base}"), stable)
 }
 
 pub fn heading_level(p: &Element) -> Option<u8> {
@@ -187,7 +274,7 @@ fn walk_visible(el: &Element, in_del: bool, out: &mut String) {
 
 pub fn find_paragraph_mut<'a>(
     root: &'a mut Element,
-    target: &ParaTarget,
+    target: &BodyPara,
 ) -> Option<&'a mut Element> {
     let mut idx = 0usize;
     find_p_mut(root, &mut idx, target)
@@ -196,7 +283,7 @@ pub fn find_paragraph_mut<'a>(
 fn find_p_mut<'a>(
     el: &'a mut Element,
     idx: &mut usize,
-    target: &ParaTarget,
+    target: &BodyPara,
 ) -> Option<&'a mut Element> {
     if el.local_name() == "txbxContent" {
         return None;
@@ -212,8 +299,8 @@ fn find_p_mut<'a>(
     if el.local_name() == "p" {
         *idx += 1;
         let hit = match target {
-            ParaTarget::Index(n) => *idx == *n,
-            ParaTarget::Hex(hex) => el
+            BodyPara::Index(n) => *idx == *n,
+            BodyPara::Hex(hex) => el
                 .attr_local("paraId")
                 .is_some_and(|id| id.eq_ignore_ascii_case(hex)),
         };

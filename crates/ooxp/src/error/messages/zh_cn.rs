@@ -53,7 +53,12 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         },
         ErrorKind::InvalidId { reason } => match reason {
             IdReason::NotCell { id } => format!("不是单元格 id：{id}"),
-            IdReason::ParaPrefix => "段落 id 必须以 para: 开头".into(),
+            IdReason::ParaPrefix => {
+                "段落 id 必须是 para:…、header:…/para:… 或 footer:…/para:…".into()
+            }
+            IdReason::HdrFtrContainer => {
+                "页眉页脚 id 必须带 /para:…（容器 id 本身不是段落）".into()
+            }
             IdReason::ParaIndexNotInt => "para:index 后面必须是正整数".into(),
             IdReason::ParaIndexFromOne => "para:index 从 1 起".into(),
             IdReason::ParaIdNotHex => "paraId 必须是十六进制".into(),
@@ -134,5 +139,6 @@ fn type_name(t: TypeName) -> &'static str {
         TypeName::Integer => "整数",
         TypeName::String => "字符串",
         TypeName::NonEmptyString => "非空字符串",
+        TypeName::Boolean => "布尔值",
     }
 }

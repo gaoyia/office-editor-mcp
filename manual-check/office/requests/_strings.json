@@ -9,5 +9,8 @@
   "page2": "第二页",
   "shape2src": "第二框原文",
   "page2keep": "第二页不要改",
-  "shape2new": "改过的正文"
+  "shape2new": "改过的正文",
+  "headerSrc": "页眉原文",
+  "footerSrc": "页脚原文",
+  "headerNew": "新页眉"
 }

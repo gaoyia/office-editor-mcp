@@ -178,6 +178,8 @@ mod tests {
         assert_eq!(tree["id"], "docx:document");
         assert_eq!(tree["paraCount"], 2);
         assert!(tree.get("paragraphs").is_none());
+        assert_eq!(tree["headers"], json!([]));
+        assert_eq!(tree["footers"], json!([]));
         assert_eq!(tree["outline"][0]["level"], 1);
         assert_eq!(tree["outline"][0]["text"], "标题");
 
@@ -617,6 +619,8 @@ mod tests {
                 "id",
                 "paraCount",
                 "outline",
+                "headers",
+                "footers",
                 "from",
                 "truncated",
                 "paragraphs"

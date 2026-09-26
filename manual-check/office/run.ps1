@@ -28,6 +28,7 @@ $order = @(
     'pptx-create'
     'xlsx-apply'
     'docx-apply'
+    'docx-headerfooter'
     'pptx-apply'
     'opc-resave'
 )

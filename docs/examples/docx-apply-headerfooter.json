@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "note.docx",
+  "output": "note.hf.docx",
+  "ops": [
+    {
+      "op": "setParaText",
+      "id": "header:default:1/para:3F2A1B00",
+      "text": "新页眉"
+    }
+  ]
+}

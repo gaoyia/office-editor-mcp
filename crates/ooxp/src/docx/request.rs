@@ -7,8 +7,11 @@ use crate::json;
 
 #[derive(Debug, Clone)]
 pub struct InspectScope {
-    pub from: u32,
-    pub max_paras: u32,
+    /// 正文切片起点；与 `max_paras` 成对出现。
+    pub from: Option<u32>,
+    pub max_paras: Option<u32>,
+    /// 为 true 时展开页眉页脚段落。
+    pub header_footer: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -35,11 +38,22 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
     if obj.is_empty() {
         return Ok(None);
     }
-    json::deny_unknown(obj, &["from", "maxParas"])?;
+    json::deny_unknown(obj, &["from", "maxParas", "headerFooter"])?;
+
+    let header_footer = parse_header_footer(obj.get("headerFooter"))?;
     let from = obj.get("from");
     let max = obj.get("maxParas");
     match (from, max) {
-        (None, None) => Ok(None),
+        (None, None) => {
+            if !obj.contains_key("headerFooter") {
+                return Ok(None);
+            }
+            Ok(Some(InspectScope {
+                from: None,
+                max_paras: None,
+                header_footer,
+            }))
+        }
         (Some(f), Some(m)) => {
             let from = f.as_u64().ok_or_else(|| {
                 Error::with_path(
@@ -79,8 +93,9 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
                 ));
             }
             Ok(Some(InspectScope {
-                from: from as u32,
-                max_paras: max as u32,
+                from: Some(from as u32),
+                max_paras: Some(max as u32),
+                header_footer,
             }))
         }
         _ => Err(Error::with_path(
@@ -88,6 +103,20 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
                 need: ScopeNeed::FromAndMaxParas,
             },
             "scope",
+        )),
+    }
+}
+
+fn parse_header_footer(v: Option<&Value>) -> Result<bool, Error> {
+    match v {
+        None => Ok(false),
+        Some(Value::Bool(b)) => Ok(*b),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "headerFooter".into(),
+                expected: TypeName::Boolean,
+            },
+            "scope.headerFooter",
         )),
     }
 }

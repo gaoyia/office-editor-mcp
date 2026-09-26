@@ -17,6 +17,7 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 | C3–C4 | ✅ | 标题 1 / 「标题」，正文 `hello` |
 | I1–I5 | ✅ | `docx:document`、`paraCount=2`、大纲 level 1、「标题」、`para:{hex}` 且 `stable`、无 scope 时没有 `paragraphs` |
 | A1–A5 | ✅ | Word 打开 apply 产物：第二段为「改过的正文」且仍加粗，第一段仍是「第一章」/标题 1，第三段未改 |
+| HF1–HF5 | ✅ | Word 另存带页眉页脚样例：名单与展开、改页眉后打开无修复，页眉变「新页眉」、正文与页脚未改 |
 | O1 | 🚫 | 领域层不做原样保存，与 xlsx 清单相同。零脏写回见 OPC 库测试。Word 另存 create 产物见 `docx-O1-word-resave`。此前记的 `SaveAs2` 挂起，拆分后重跑没再出现，一秒内返回 |
 
 这一轮手测样例没有文本框。带 `mc:AlternateContent` 或 `w:txbxContent` 的边界已由 `crates/ooxp/tests/docx_fidelity.rs` 覆盖；带文本框样例的 Word 手测尚未另加。
@@ -42,7 +43,7 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 | I2 | 大纲 | `outline` 含第一段，`level` 为 `1`，`text` 为 `标题` |
 | I3 | 段落 id | 两段都有 `para:{hex}`，`stable` 为 `true` |
 | I4 | 第二段 | `text` 为 `hello` |
-| I5 | 无 scope | 只发 path 时没有 `paragraphs` 字段，仍有 `outline` 和 `paraCount` |
+| I5 | 无 scope | 只发 path 时没有 `paragraphs` 字段，仍有 `outline`、`paraCount`、`headers`、`footers` |
 
 ## apply
 
@@ -54,7 +55,19 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 | A2 | 目标段 | 被点名的那段可见文字变成请求里的 `text` |
 | A3 | 未改段 | 第一段标题文字和标题样式还在 |
 | A4 | 样式 | 目标段若原先有加粗等 run 样式，改完后看起来还在（允许整段变成单一 run，但加粗还在） |
-| A5 | 未改部件 | 页眉页脚、样式表看起来不变 |
+| A5 | 未改部件 | 未点名的页眉页脚与样式表看起来不变 |
+
+## 页眉页脚
+
+准备一份 Word 亲手另存的样例：至少有默认页眉与默认页脚，页眉里有一段无域、无超链接的可见文字。不要用库 `create` 产物（create 不写页眉页脚）。对它 `inspect` 时带 `scope.headerFooter: true`，再用返回的页眉段落 id 做 `setParaText`。
+
+| 序号 | 检查 | 通过标准 |
+| --- | --- | --- |
+| HF1 | 名单 | 无 scope 时也有 `headers`、`footers`；容器带 `id`、`type`、`sections`、`paraCount`，不带 `paragraphs` |
+| HF2 | 展开 | `headerFooter: true` 时页眉节点有 `paragraphs`，段落 id 形如 `header:default:1/para:…` |
+| HF3 | 打开 | apply 改页眉后 Word 能打开，无修复提示 |
+| HF4 | 目标 | 页眉可见文字变成请求里的 `text`；正文未改 |
+| HF5 | 未改部件 | 未点名的页脚与 `styles.xml` 看起来不变 |
 
 ## 原样保存（opc 验收）
 

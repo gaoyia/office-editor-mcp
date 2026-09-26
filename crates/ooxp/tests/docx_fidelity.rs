@@ -262,3 +262,152 @@ fn apply_leaves_styles_byte_identical() {
     let after = part_bytes(&out, "word/styles.xml");
     assert_eq!(before, after);
 }
+
+// —— 页眉页脚 ——
+
+const HF_CT: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/><Override PartName="/word/settings.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml"/><Override PartName="/word/header1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/><Override PartName="/word/header2.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/><Override PartName="/word/header3.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/><Override PartName="/word/footer1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/></Types>"#;
+
+const HF_DOC_RELS: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/settings" Target="settings.xml"/><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="header1.xml"/><Relationship Id="rId4" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="header2.xml"/><Relationship Id="rId5" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="header3.xml"/><Relationship Id="rId6" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer1.xml"/></Relationships>"#;
+
+const HF_SETTINGS: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:settings xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:evenAndOddHeaders/></w:settings>"#;
+
+/// 两节：第一节有 default/first/even 页眉与 default 页脚；第二节省略引用，继承 default 页眉。
+const HF_DOCUMENT: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:body><w:p w14:paraId="BODY0001"><w:r><w:t>正文一</w:t></w:r><w:pPr><w:sectPr><w:headerReference w:type="default" r:id="rId3"/><w:headerReference w:type="first" r:id="rId4"/><w:headerReference w:type="even" r:id="rId5"/><w:footerReference w:type="default" r:id="rId6"/><w:titlePg/></w:sectPr></w:pPr></w:p><w:p w14:paraId="BODY0002"><w:r><w:t>正文二</w:t></w:r></w:p><w:sectPr><w:pgSz w:w="11906" w:h="16838"/></w:sectPr></w:body></w:document>"#;
+
+const HF_HEADER1: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml"><w:p w14:paraId="AAAA1001"><w:r><w:t>默认页眉</w:t></w:r></w:p></w:hdr>"#;
+
+const HF_HEADER2: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml"><w:p w14:paraId="AAAA1001"><w:r><w:t>首页页眉</w:t></w:r></w:p></w:hdr>"#;
+
+const HF_HEADER3: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:hdr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml"><w:p w14:paraId="BBBB1001"><w:r><w:t>偶数页眉</w:t></w:r></w:p></w:hdr>"#;
+
+const HF_FOOTER1: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:ftr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml"><w:p w14:paraId="CCCC1001"><w:r><w:t>默认页脚</w:t></w:r></w:p></w:ftr>"#;
+
+fn write_hf_sample(tag: &str) -> PathBuf {
+    let n = SEQ.fetch_add(1, Ordering::Relaxed);
+    let path = tmp_dir().join(format!("{tag}-{n}.docx"));
+    let mut cursor = Cursor::new(Vec::new());
+    {
+        let mut zip = ZipWriter::new(&mut cursor);
+        let opt = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
+        for (name, body) in [
+            ("[Content_Types].xml", HF_CT),
+            ("_rels/.rels", ROOT_RELS),
+            ("word/document.xml", HF_DOCUMENT),
+            ("word/_rels/document.xml.rels", HF_DOC_RELS),
+            ("word/styles.xml", STYLES),
+            ("word/settings.xml", HF_SETTINGS),
+            ("word/header1.xml", HF_HEADER1),
+            ("word/header2.xml", HF_HEADER2),
+            ("word/header3.xml", HF_HEADER3),
+            ("word/footer1.xml", HF_FOOTER1),
+        ] {
+            zip.start_file(name, opt).unwrap();
+            zip.write_all(body.as_bytes()).unwrap();
+        }
+        zip.finish().unwrap();
+    }
+    std::fs::write(&path, cursor.into_inner()).unwrap();
+    path
+}
+
+fn inspect_hf(path: &Path, expand: bool) -> serde_json::Value {
+    let mut scope = json!({});
+    if expand {
+        scope = json!({ "headerFooter": true });
+    }
+    let RunOutput::Inspect(tree) = run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "inspect",
+            "path": path.to_string_lossy(),
+            "scope": scope
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap() else {
+        panic!("inspect 应返回树");
+    };
+    tree
+}
+
+#[test]
+fn inspect_lists_headers_footers_and_shared_sections() {
+    let path = write_hf_sample("hf-list");
+    let tree = inspect_hf(&path, false);
+    assert!(tree.get("paragraphs").is_none());
+    let headers = tree["headers"].as_array().unwrap();
+    let footers = tree["footers"].as_array().unwrap();
+    assert_eq!(headers.len(), 3);
+    assert_eq!(footers.len(), 1);
+    assert_eq!(headers[0]["id"], "header:default:1");
+    assert_eq!(headers[0]["type"], "default");
+    assert_eq!(headers[0]["sections"], json!([1, 2]));
+    assert_eq!(headers[0]["paraCount"], 1);
+    assert!(headers[0].get("paragraphs").is_none());
+    assert_eq!(headers[1]["id"], "header:even:1");
+    assert_eq!(headers[1]["sections"], json!([1, 2]));
+    assert_eq!(headers[2]["id"], "header:first:1");
+    assert_eq!(headers[2]["sections"], json!([1]));
+    assert_eq!(footers[0]["id"], "footer:default:1");
+    // 第二节继承 default 页脚
+    assert_eq!(footers[0]["sections"], json!([1, 2]));
+}
+
+#[test]
+fn inspect_expands_header_footer_paragraphs() {
+    let path = write_hf_sample("hf-expand");
+    let tree = inspect_hf(&path, true);
+    let paras = tree["headers"][0]["paragraphs"].as_array().unwrap();
+    assert_eq!(paras.len(), 1);
+    assert_eq!(paras[0]["id"], "header:default:1/para:AAAA1001");
+    assert_eq!(paras[0]["text"], "默认页眉");
+    assert_eq!(paras[0]["stable"], true);
+    assert_eq!(
+        tree["headers"][2]["paragraphs"][0]["id"],
+        "header:first:1/para:AAAA1001"
+    );
+    assert_eq!(
+        tree["footers"][0]["paragraphs"][0]["text"],
+        "默认页脚"
+    );
+}
+
+#[test]
+fn apply_header_leaves_document_bytes() {
+    let path = write_hf_sample("hf-apply");
+    let before_doc = part_bytes(&path, "word/document.xml");
+    let before_footer = part_bytes(&path, "word/footer1.xml");
+    let before_styles = part_bytes(&path, "word/styles.xml");
+    let out = tmp_dir().join("hf-apply-out.docx");
+    apply(
+        &path,
+        &out,
+        "header:default:1/para:AAAA1001",
+        "新页眉",
+    )
+    .unwrap();
+    assert_eq!(before_doc, part_bytes(&out, "word/document.xml"));
+    assert_eq!(before_footer, part_bytes(&out, "word/footer1.xml"));
+    assert_eq!(before_styles, part_bytes(&out, "word/styles.xml"));
+    let tree = inspect_hf(&out, true);
+    assert_eq!(tree["headers"][0]["paragraphs"][0]["text"], "新页眉");
+    // 首页页眉同 hex 未改
+    assert_eq!(tree["headers"][2]["paragraphs"][0]["text"], "首页页眉");
+}
+
+#[test]
+fn body_para_id_does_not_hit_header() {
+    let path = write_hf_sample("hf-body-id");
+    let out = tmp_dir().join("hf-body-id-out.docx");
+    let err = apply(&path, &out, "para:AAAA1001", "不该写").unwrap_err();
+    assert_eq!(err.code(), ErrorCode::IdNotFound);
+}
+
+#[test]
+fn header_container_id_is_invalid() {
+    let path = write_hf_sample("hf-container");
+    let out = tmp_dir().join("hf-container-out.docx");
+    let err = apply(&path, &out, "header:default:1", "不该写").unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidId);
+}
