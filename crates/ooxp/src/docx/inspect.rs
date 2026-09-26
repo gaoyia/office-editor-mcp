@@ -248,7 +248,10 @@ fn body_para_json(
 ) -> Result<Value, Error> {
     let (id, _) = para::para_stable_id(p, index);
     let pics = picture::collect_pictures(p, &id)?;
-    let mine: Vec<_> = boxes_for_para(all_boxes, &id).into_iter().cloned().collect();
+    let mine: Vec<_> = boxes_for_para(all_boxes, &id)
+        .into_iter()
+        .cloned()
+        .collect();
     let mut node = para_json(p, index, None, Some(pics.len()), Some(mine.len()));
     if expand_pics {
         node["pictures"] = Value::Array(picture::pictures_json(&pics));

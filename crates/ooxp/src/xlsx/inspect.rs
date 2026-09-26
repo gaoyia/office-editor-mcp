@@ -78,14 +78,12 @@ fn list_sheets(
     wb_part: &str,
     pkg: &Package,
 ) -> Result<Vec<SheetMeta>, Error> {
-    let sheets_el = workbook
-        .child_by_local("sheets")
-        .ok_or_else(|| {
-            Error::new(ErrorKind::XmlMissing {
-                parent: "workbook.xml".into(),
-                child: "sheets".into(),
-            })
-        })?;
+    let sheets_el = workbook.child_by_local("sheets").ok_or_else(|| {
+        Error::new(ErrorKind::XmlMissing {
+            parent: "workbook.xml".into(),
+            child: "sheets".into(),
+        })
+    })?;
     let mut out = Vec::new();
     for sh in sheets_el.children_by_local("sheet") {
         let name = sh.attr("name").unwrap_or("").to_string();

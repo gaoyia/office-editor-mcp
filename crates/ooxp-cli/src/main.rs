@@ -77,14 +77,10 @@ fn read_input(input: Option<&str>) -> Result<String, Error> {
     match input {
         None | Some("-") => {
             let mut buf = String::new();
-            io::stdin()
-                .read_to_string(&mut buf)
-                .map_err(Error::from)?;
+            io::stdin().read_to_string(&mut buf).map_err(Error::from)?;
             Ok(buf)
         }
         // 带上路径，否则读不到文件时只剩一句 I/O failed，看不出是哪个文件。
-        Some(path) => {
-            std::fs::read_to_string(path).map_err(|e| io_path(e, PathBuf::from(path)))
-        }
+        Some(path) => std::fs::read_to_string(path).map_err(|e| io_path(e, PathBuf::from(path))),
     }
 }

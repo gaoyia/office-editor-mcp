@@ -360,7 +360,9 @@ fn is_group(drawing: &Element) -> bool {
 fn has_txbx(el: &Element) -> bool {
     let mut found = false;
     walk_all(el, &mut |e| {
-        if e.local_name() == "txbxContent" || e.local_name() == "txbx" || e.local_name() == "linkedTxbx"
+        if e.local_name() == "txbxContent"
+            || e.local_name() == "txbx"
+            || e.local_name() == "linkedTxbx"
         {
             found = true;
         }
@@ -385,25 +387,23 @@ fn find_txbx_content(el: &Element) -> Option<&Element> {
 fn story_of(el: &Element) -> (Option<String>, u32) {
     let mut story = None;
     let mut seq = 0u32;
-    walk_all(el, &mut |e| {
-        match e.local_name() {
-            "txbx" => {
-                if story.is_none() {
-                    story = e.attr_local("id").map(str::to_string);
-                }
+    walk_all(el, &mut |e| match e.local_name() {
+        "txbx" => {
+            if story.is_none() {
+                story = e.attr_local("id").map(str::to_string);
             }
-            "linkedTxbx" => {
-                if story.is_none() {
-                    story = e.attr_local("id").map(str::to_string);
-                }
-                if let Some(s) = e.attr_local("seq") {
-                    if let Ok(n) = s.parse::<u32>() {
-                        seq = n;
-                    }
-                }
-            }
-            _ => {}
         }
+        "linkedTxbx" => {
+            if story.is_none() {
+                story = e.attr_local("id").map(str::to_string);
+            }
+            if let Some(s) = e.attr_local("seq") {
+                if let Ok(n) = s.parse::<u32>() {
+                    seq = n;
+                }
+            }
+        }
+        _ => {}
     });
     (story, seq)
 }
@@ -449,7 +449,9 @@ fn drawing_wrap(drawing: &Element, kind: PicKind) -> Option<WrapKind> {
     let frame = drawing
         .element_children()
         .find(|e| e.local_name() == "anchor")?;
-    frame.element_children().find_map(|c| WrapKind::from_local(c.local_name()))
+    frame
+        .element_children()
+        .find_map(|c| WrapKind::from_local(c.local_name()))
 }
 
 fn drawing_extent(drawing: &Element) -> Result<(Option<i64>, Option<i64>), Error> {
@@ -656,7 +658,8 @@ pub fn apply_link(
     next: Option<&TxbxTarget>,
 ) -> Result<(), Error> {
     if let Some(b) = next {
-        let story = story_id_of_target(root, from).unwrap_or_else(|| next_story_id(root).to_string());
+        let story =
+            story_id_of_target(root, from).unwrap_or_else(|| next_story_id(root).to_string());
         let seq_a = seq_of_target(root, from).unwrap_or(0);
         unlink_after(root, from)?;
         attach_chain(root, b, &story, seq_a + 1)?;
@@ -897,12 +900,7 @@ fn wsp_path(host: &Element, key: &TxbxKey) -> Option<Vec<usize>> {
     }
 }
 
-fn wsp_path_walk(
-    el: &Element,
-    key: &TxbxKey,
-    index: &mut usize,
-    path: &mut Vec<usize>,
-) -> bool {
+fn wsp_path_walk(el: &Element, key: &TxbxKey, index: &mut usize, path: &mut Vec<usize>) -> bool {
     if el.local_name() == "txbxContent" {
         return false;
     }
@@ -1132,7 +1130,8 @@ fn remove_group_wsp(el: &mut Element, key: &TxbxKey, index: &mut usize) -> bool 
     }
     let mut i = 0;
     while i < el.children.len() {
-        let is_wsp = matches!(&el.children[i], Node::Element(c) if c.local_name() == "wsp" && has_txbx(c));
+        let is_wsp =
+            matches!(&el.children[i], Node::Element(c) if c.local_name() == "wsp" && has_txbx(c));
         if is_wsp {
             *index += 1;
             let hit = match &el.children[i] {
@@ -1168,10 +1167,7 @@ fn group_has_wsp(el: &Element) -> bool {
 }
 
 fn is_empty_run(el: &Element) -> bool {
-    el.local_name() == "r"
-        && el
-            .element_children()
-            .all(|c| c.local_name() == "rPr")
+    el.local_name() == "r" && el.element_children().all(|c| c.local_name() == "rPr")
 }
 
 pub fn textbox_ac_xml(doc_pr: u32, cx: i64, cy: i64, text: &str, para_id: &str) -> String {
@@ -1246,7 +1242,11 @@ fn build_textbox_ac(doc_pr: u32, cx: i64, cy: i64, text: &str, para_id: &str) ->
     wsp.push_element(Element::new("wps:cNvSpPr").with_attr("txBox", "1"));
     let mut sp = Element::new("wps:spPr");
     let mut xfrm = Element::new("a:xfrm");
-    xfrm.push_element(Element::new("a:off").with_attr("x", "0").with_attr("y", "0"));
+    xfrm.push_element(
+        Element::new("a:off")
+            .with_attr("x", "0")
+            .with_attr("y", "0"),
+    );
     xfrm.push_element(
         Element::new("a:ext")
             .with_attr("cx", cx.to_string())
@@ -1467,9 +1467,7 @@ fn info_of_target(root: &Element, t: &TxbxTarget) -> Option<TxbxInfo> {
 fn matches_info(doc_pr_id: &Option<String>, id: &str, key: &TxbxKey) -> bool {
     match key {
         TxbxKey::DocPr(d) => doc_pr_id.as_deref() == Some(d.as_str()),
-        TxbxKey::Index(n) => {
-            doc_pr_id.is_none() && id.ends_with(&format!("/txbx:index:{n}"))
-        }
+        TxbxKey::Index(n) => doc_pr_id.is_none() && id.ends_with(&format!("/txbx:index:{n}")),
     }
 }
 
@@ -1578,11 +1576,9 @@ fn write_link_on(
     seq: u32,
     first: bool,
 ) -> Result<(), Error> {
-    let p = para::find_paragraph_mut(root, t.host.body()).ok_or_else(|| {
-        Error::new(ErrorKind::TextBoxNotFound { id: String::new() })
-    })?;
-    with_wsp_mut(p, &t.key, |wsp| set_link_elem(wsp, story, seq, first)).ok_or_else(|| {
-        Error::new(ErrorKind::TextBoxNotFound { id: String::new() })
-    })?;
+    let p = para::find_paragraph_mut(root, t.host.body())
+        .ok_or_else(|| Error::new(ErrorKind::TextBoxNotFound { id: String::new() }))?;
+    with_wsp_mut(p, &t.key, |wsp| set_link_elem(wsp, story, seq, first))
+        .ok_or_else(|| Error::new(ErrorKind::TextBoxNotFound { id: String::new() }))?;
     Ok(())
 }

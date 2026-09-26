@@ -156,6 +156,8 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         }
         ErrorKind::InvalidHfKind => "kind must be header or footer".into(),
         ErrorKind::InvalidHfType => "type must be default, even, or first".into(),
+        ErrorKind::CreateHfOnlyDefault => "create headers/footers type must be default".into(),
+        ErrorKind::CreateHfDuplicate => "create allows only one default header or footer".into(),
         ErrorKind::CannotLinkFirstSection => {
             "The first section cannot link to a previous section".into()
         }

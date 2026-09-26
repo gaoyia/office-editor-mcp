@@ -106,9 +106,15 @@ fn cell_style_index<'a>(sheet: &'a str, addr: &str) -> Option<&'a str> {
 #[test]
 fn fixture_is_excel_saved_workbook() {
     let src = fixture();
-    assert!(src.is_file(), "缺少 {src:?}，请跑 manual-check/office/export-excel-fixture.ps1");
+    assert!(
+        src.is_file(),
+        "缺少 {src:?}，请跑 manual-check/office/export-excel-fixture.ps1"
+    );
     let names = part_names(&src);
-    assert!(names.iter().any(|n| n == "xl/theme/theme1.xml"), "{names:?}");
+    assert!(
+        names.iter().any(|n| n == "xl/theme/theme1.xml"),
+        "{names:?}"
+    );
     let wb = part(&src, "xl/workbook.xml");
     assert!(wb.contains(r#"appName="xl""#), "{wb}");
     assert!(wb.contains(r#"name="Sheet1""#));
@@ -159,14 +165,18 @@ fn apply_leaves_untouched_excel_parts() {
         "xl/theme/theme1.xml",
         "xl/sharedStrings.xml",
     ] {
-        assert_eq!(part_bytes(&src, name), part_bytes(&out, name), "{name} 被动过");
+        assert_eq!(
+            part_bytes(&src, name),
+            part_bytes(&out, name),
+            "{name} 被动过"
+        );
     }
     let sheet = part(&out, "xl/worksheets/sheet1.xml");
-    assert!(sheet.contains(r#"<c r="E1" s="3" t="s"><v>0</v></c>"#), "{sheet}");
     assert!(
-        sheet.contains(r#"width="20.625""#),
-        "E 列宽被改了：{sheet}"
+        sheet.contains(r#"<c r="E1" s="3" t="s"><v>0</v></c>"#),
+        "{sheet}"
     );
+    assert!(sheet.contains(r#"width="20.625""#), "E 列宽被改了：{sheet}");
 }
 
 /// 清单 A7：库不改 D1，只标打开时重算并删掉 calcChain。

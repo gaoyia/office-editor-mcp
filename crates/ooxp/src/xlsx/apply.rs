@@ -71,34 +71,28 @@ fn sheet_index(
     rels: &Relationships,
     wb_part: &str,
 ) -> Result<Vec<(String, String, &'static str)>, Error> {
-    let sheets = workbook
-        .child_by_local("sheets")
-        .ok_or_else(|| {
-            Error::new(ErrorKind::XmlMissing {
-                parent: "workbook.xml".into(),
-                child: "sheets".into(),
-            })
-        })?;
+    let sheets = workbook.child_by_local("sheets").ok_or_else(|| {
+        Error::new(ErrorKind::XmlMissing {
+            parent: "workbook.xml".into(),
+            child: "sheets".into(),
+        })
+    })?;
     let mut out = Vec::new();
     for sh in sheets.children_by_local("sheet") {
         let name = sh.attr("name").unwrap_or("").to_string();
         // `r:id`：前缀只是习惯，任何映射到 relationships 命名空间的前缀都合法。
-        let rid = sh
-            .attr_local("id")
-            .ok_or_else(|| {
-                Error::new(ErrorKind::XmlMissing {
-                    parent: "sheet".into(),
-                    child: "r:id".into(),
-                })
-            })?;
-        let rel = rels
-            .find_by_id(rid)
-            .ok_or_else(|| {
-                Error::new(ErrorKind::RelNotFound {
-                    source: RelSource::Unspecified,
-                    rid: rid.to_string(),
-                })
-            })?;
+        let rid = sh.attr_local("id").ok_or_else(|| {
+            Error::new(ErrorKind::XmlMissing {
+                parent: "sheet".into(),
+                child: "r:id".into(),
+            })
+        })?;
+        let rel = rels.find_by_id(rid).ok_or_else(|| {
+            Error::new(ErrorKind::RelNotFound {
+                source: RelSource::Unspecified,
+                rid: rid.to_string(),
+            })
+        })?;
         let kind = if rel.rel_type.ends_with("/chartsheet") {
             "chartsheet"
         } else if rel.rel_type.ends_with("/dialogsheet") {

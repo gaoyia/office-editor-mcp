@@ -57,7 +57,7 @@ crates/ooxp-cli/             命令行，只依赖 ooxp。二进制名也是 oox
 
 ### docx
 
-主文档由根关系里 `/officeDocument` 指向，常见路径 `/word/document.xml`。inspect 读该部件里的 `w:p`，返回大纲和按范围截断的段落；并始终列出页眉、页脚容器、各节距边界，以及每节是否链接到前一节。文档根始终带正文 `pictureCount` 与 `textBoxCount`。页眉页脚容器始终带这两项。`scope.pictures` / `scope.textBoxes` 为 true 时列出页眉页脚图或框；同时给了正文切片则段落上也列出。`scope.textBoxContent` 再展开框内段落。apply 可改被点名段落的可见文本（主文档、页眉页脚或框内），可改节上 `w:pgMar` 的页眉/页脚距离，也可断开或重新链接某节某类型的页眉页脚（断链时抄走 header/footer 自己的 `.rels`，媒体仍共用）。页眉、页脚和正文里的 DrawingML 图片可换、插、删，并可改尺寸与绕排。文本框可插、删，可改尺寸、绕排、填色、描边、横竖排与链接。`exportMedia` 按图 id 写出 `/word/media/…` 原字节。不整篇从 JSON 重建。create 生成最小 Transitional 包，含 `styles.xml`（Normal 与 Heading1–3）和 `settings.xml`（`compatibilityMode` 为 15），不写页眉页脚，也不生成多节；段落上可带文本框，仍不写图。修订、复杂表格结构不做。不写入 `titlePg` / `evenAndOddHeaders`。
+主文档由根关系里 `/officeDocument` 指向，常见路径 `/word/document.xml`。inspect 读该部件里的 `w:p`，返回大纲和按范围截断的段落；并始终列出页眉、页脚容器、各节距边界，以及每节是否链接到前一节。文档根始终带正文 `pictureCount` 与 `textBoxCount`。页眉页脚容器始终带这两项。`scope.pictures` / `scope.textBoxes` 为 true 时列出页眉页脚图或框；同时给了正文切片则段落上也列出。`scope.textBoxContent` 再展开框内段落。apply 可改被点名段落的可见文本（主文档、页眉页脚或框内），可改节上 `w:pgMar` 的页眉/页脚距离，也可断开或重新链接某节某类型的页眉页脚（断链时抄走 header/footer 自己的 `.rels`，媒体仍共用）。页眉、页脚和正文里的 DrawingML 图片可换、插、删，并可改尺寸与绕排。文本框可插、删，可改尺寸、绕排、填色、描边、横竖排与链接。`exportMedia` 按图 id 写出 `/word/media/…` 原字节。不整篇从 JSON 重建。create 生成最小 Transitional 包，含 `styles.xml`（Normal 与 Heading1–3）和 `settings.xml`（`compatibilityMode` 为 15），不生成多节。段落上可带文本框与 DrawingML 图。给了 `document.headers` / `footers` 时只写默认页眉页脚，并可带图。apply 仍不新建页眉。修订、复杂表格结构不做。不写入 `titlePg` / `evenAndOddHeaders`。
 
 ### pptx
 

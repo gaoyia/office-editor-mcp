@@ -6,12 +6,14 @@ use crate::error::{Error, ErrorKind, TypeName};
 use crate::opc::{
     ContentTypes, Package, Relationship, Relationships, CONTENT_TYPES_PART, ROOT_RELS_PART,
 };
-use crate::xml;
+use crate::xml::{self, Element, Node};
 
+use super::picture::{self, PicKind, WrapKind, WrapPos};
 use super::textbox::{self, DEFAULT_CX, DEFAULT_CY, WPS_NS};
 use super::{
-    A_NS, CT_APP, CT_CORE, CT_DOCUMENT, CT_SETTINGS, CT_STYLES, MC_NS, REL_APP, REL_CORE, REL_NS,
-    REL_OFFICE_DOCUMENT, REL_SETTINGS, REL_STYLES, W14_NS, WML_NS, WP_NS,
+    A_NS, CT_APP, CT_CORE, CT_DOCUMENT, CT_FOOTER, CT_HEADER, CT_SETTINGS, CT_STYLES, MC_NS,
+    PIC_NS, REL_APP, REL_CORE, REL_FOOTER, REL_HEADER, REL_NS, REL_OFFICE_DOCUMENT, REL_SETTINGS,
+    REL_STYLES, W14_NS, WML_NS, WP_NS,
 };
 
 struct NewBox {
@@ -20,10 +22,40 @@ struct NewBox {
     cy: i64,
 }
 
+struct NewPic {
+    file: String,
+    cx: Option<i64>,
+    cy: Option<i64>,
+    kind: PicKind,
+    wrap: Option<WrapKind>,
+    pos: WrapPos,
+}
+
 struct NewPara {
     text: String,
     style: Option<&'static str>,
     boxes: Vec<NewBox>,
+    pictures: Vec<NewPic>,
+}
+
+impl NewPara {
+    fn empty() -> Self {
+        Self {
+            text: String::new(),
+            style: None,
+            boxes: Vec::new(),
+            pictures: Vec::new(),
+        }
+    }
+
+    fn has_pictures(&self) -> bool {
+        !self.pictures.is_empty()
+    }
+}
+
+enum ParaKind {
+    Body,
+    HeaderFooter,
 }
 
 pub fn create(document: &Value) -> Result<Vec<u8>, Error> {
@@ -37,7 +69,7 @@ pub fn create(document: &Value) -> Result<Vec<u8>, Error> {
         )
     })?;
     for k in obj.keys() {
-        if k != "paragraphs" {
+        if !matches!(k.as_str(), "paragraphs" | "headers" | "footers") {
             return Err(Error::with_path(
                 ErrorKind::UnknownField { field: k.clone() },
                 format!("document.{k}"),
@@ -64,17 +96,34 @@ pub fn create(document: &Value) -> Result<Vec<u8>, Error> {
 
     let mut paras = Vec::new();
     for (i, p) in arr.iter().enumerate() {
-        paras.push(parse_para(p, i)?);
+        paras.push(parse_para(
+            p,
+            &format!("document.paragraphs[{i}]"),
+            ParaKind::Body,
+            i,
+        )?);
     }
     if paras.is_empty() {
-        paras.push(NewPara {
-            text: String::new(),
-            style: None,
-            boxes: Vec::new(),
-        });
+        paras.push(NewPara::empty());
     }
 
+    let header = parse_hf_side(obj.get("headers"), "headers")?;
+    let footer = parse_hf_side(obj.get("footers"), "footers")?;
+
     let mut pkg = Package::create();
+    let mut overrides = vec![
+        ("/word/document.xml".into(), CT_DOCUMENT.into()),
+        ("/word/styles.xml".into(), CT_STYLES.into()),
+        ("/word/settings.xml".into(), CT_SETTINGS.into()),
+        ("/docProps/core.xml".into(), CT_CORE.into()),
+        ("/docProps/app.xml".into(), CT_APP.into()),
+    ];
+    if header.is_some() {
+        overrides.push(("/word/header1.xml".into(), CT_HEADER.into()));
+    }
+    if footer.is_some() {
+        overrides.push(("/word/footer1.xml".into(), CT_FOOTER.into()));
+    }
     let types = ContentTypes {
         defaults: vec![
             (
@@ -83,13 +132,7 @@ pub fn create(document: &Value) -> Result<Vec<u8>, Error> {
             ),
             ("xml".into(), "application/xml".into()),
         ],
-        overrides: vec![
-            ("/word/document.xml".into(), CT_DOCUMENT.into()),
-            ("/word/styles.xml".into(), CT_STYLES.into()),
-            ("/word/settings.xml".into(), CT_SETTINGS.into()),
-            ("/docProps/core.xml".into(), CT_CORE.into()),
-            ("/docProps/app.xml".into(), CT_APP.into()),
-        ],
+        overrides,
     };
 
     let mut root_rels = Relationships { rels: Vec::new() };
@@ -130,36 +173,172 @@ pub fn create(document: &Value) -> Result<Vec<u8>, Error> {
         target_mode: None,
         extra: Vec::new(),
     });
+    let (header_rid, footer_rid) = match (header.is_some(), footer.is_some()) {
+        (true, true) => (Some("rId3"), Some("rId4")),
+        (true, false) => (Some("rId3"), None),
+        (false, true) => (None, Some("rId3")),
+        (false, false) => (None, None),
+    };
+    if let Some(id) = header_rid {
+        doc_rels.push(Relationship {
+            id: id.into(),
+            rel_type: REL_HEADER.into(),
+            target: "header1.xml".into(),
+            target_mode: None,
+            extra: Vec::new(),
+        });
+    }
+    if let Some(id) = footer_rid {
+        doc_rels.push(Relationship {
+            id: id.into(),
+            rel_type: REL_FOOTER.into(),
+            target: "footer1.xml".into(),
+            target_mode: None,
+            extra: Vec::new(),
+        });
+    }
 
     pkg.set(CONTENT_TYPES_PART, types.to_xml().into_bytes())?;
     pkg.set(ROOT_RELS_PART, root_rels.to_xml().into_bytes())?;
-    pkg.set("/word/document.xml", document_xml(&paras).into_bytes())?;
+    pkg.set(
+        "/word/document.xml",
+        document_xml(&paras, header_rid, footer_rid).into_bytes(),
+    )?;
     pkg.set(
         "/word/_rels/document.xml.rels",
         doc_rels.to_xml().into_bytes(),
     )?;
+    if let Some(h) = &header {
+        pkg.set("/word/header1.xml", hf_xml("hdr", h).into_bytes())?;
+    }
+    if let Some(f) = &footer {
+        pkg.set("/word/footer1.xml", hf_xml("ftr", f).into_bytes())?;
+    }
     pkg.set("/word/styles.xml", styles_xml().into_bytes())?;
     pkg.set("/word/settings.xml", settings_xml().into_bytes())?;
     pkg.set("/docProps/core.xml", core_xml().into_bytes())?;
     pkg.set("/docProps/app.xml", app_xml().into_bytes())?;
+
+    attach_pictures(&mut pkg, "/word/document.xml", &paras)?;
+    if let Some(h) = &header {
+        attach_pictures(&mut pkg, "/word/header1.xml", h)?;
+    }
+    if let Some(f) = &footer {
+        attach_pictures(&mut pkg, "/word/footer1.xml", f)?;
+    }
+
     pkg.save_to_vec()
 }
 
-fn parse_para(v: &Value, i: usize) -> Result<NewPara, Error> {
-    let obj = v.as_object().ok_or_else(|| {
+fn parse_hf_side(v: Option<&Value>, side: &str) -> Result<Option<Vec<NewPara>>, Error> {
+    let Some(v) = v else {
+        return Ok(None);
+    };
+    let path = format!("document.{side}");
+    let arr = v.as_array().ok_or_else(|| {
         Error::with_path(
             ErrorKind::WrongType {
-                field: format!("document.paragraphs[{i}]"),
+                field: side.into(),
+                expected: TypeName::Array,
+            },
+            path.clone(),
+        )
+    })?;
+    if arr.is_empty() {
+        return Ok(None);
+    }
+    if arr.len() > 1 {
+        return Err(Error::with_path(ErrorKind::CreateHfDuplicate, path));
+    }
+    let obj = arr[0].as_object().ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::WrongType {
+                field: format!("{side}[0]"),
                 expected: TypeName::Object,
             },
-            format!("document.paragraphs[{i}]"),
+            format!("{path}[0]"),
         )
     })?;
     for k in obj.keys() {
-        if !matches!(k.as_str(), "text" | "style" | "textBoxes") {
+        if !matches!(k.as_str(), "type" | "paragraphs") {
             return Err(Error::with_path(
                 ErrorKind::UnknownField { field: k.clone() },
-                format!("document.paragraphs[{i}].{k}"),
+                format!("{path}[0].{k}"),
+            ));
+        }
+    }
+    match obj.get("type") {
+        None => {}
+        Some(Value::String(s)) if s == "default" => {}
+        Some(Value::String(_)) => {
+            return Err(Error::with_path(
+                ErrorKind::CreateHfOnlyDefault,
+                format!("{path}[0].type"),
+            ));
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "type".into(),
+                    expected: TypeName::String,
+                },
+                format!("{path}[0].type"),
+            ));
+        }
+    }
+    Ok(Some(parse_hf_paras(
+        obj.get("paragraphs"),
+        &format!("{path}[0].paragraphs"),
+    )?))
+}
+
+fn parse_hf_paras(v: Option<&Value>, path: &str) -> Result<Vec<NewPara>, Error> {
+    let Some(v) = v else {
+        return Ok(vec![NewPara::empty()]);
+    };
+    let arr = v.as_array().ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::WrongType {
+                field: "paragraphs".into(),
+                expected: TypeName::Array,
+            },
+            path,
+        )
+    })?;
+    if arr.is_empty() {
+        return Ok(vec![NewPara::empty()]);
+    }
+    let mut out = Vec::new();
+    for (i, p) in arr.iter().enumerate() {
+        out.push(parse_para(
+            p,
+            &format!("{path}[{i}]"),
+            ParaKind::HeaderFooter,
+            i,
+        )?);
+    }
+    Ok(out)
+}
+
+fn parse_para(v: &Value, path: &str, kind: ParaKind, i: usize) -> Result<NewPara, Error> {
+    let obj = v.as_object().ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::WrongType {
+                field: path.into(),
+                expected: TypeName::Object,
+            },
+            path,
+        )
+    })?;
+    let allowed = match kind {
+        ParaKind::Body => ["text", "style", "textBoxes", "pictures"].as_slice(),
+        ParaKind::HeaderFooter => ["text", "pictures"].as_slice(),
+    };
+    for k in obj.keys() {
+        if !allowed.contains(&k.as_str()) {
+            return Err(Error::with_path(
+                ErrorKind::UnknownField { field: k.clone() },
+                format!("{path}.{k}"),
             ));
         }
     }
@@ -172,28 +351,36 @@ fn parse_para(v: &Value, i: usize) -> Result<NewPara, Error> {
                     field: "text".into(),
                     expected: TypeName::String,
                 },
-                format!("document.paragraphs[{i}].text"),
+                format!("{path}.text"),
             ));
         }
     };
-    let style = match obj.get("style") {
-        None => None,
-        Some(Value::String(s)) => canonicalize_style(s, i)?,
-        Some(_) => {
-            return Err(Error::with_path(
-                ErrorKind::WrongType {
-                    field: "style".into(),
-                    expected: TypeName::String,
-                },
-                format!("document.paragraphs[{i}].style"),
-            ));
-        }
+    let style = match kind {
+        ParaKind::Body => match obj.get("style") {
+            None => None,
+            Some(Value::String(s)) => canonicalize_style(s, i)?,
+            Some(_) => {
+                return Err(Error::with_path(
+                    ErrorKind::WrongType {
+                        field: "style".into(),
+                        expected: TypeName::String,
+                    },
+                    format!("{path}.style"),
+                ));
+            }
+        },
+        ParaKind::HeaderFooter => None,
     };
-    let boxes = parse_boxes(obj.get("textBoxes"), i)?;
+    let boxes = match kind {
+        ParaKind::Body => parse_boxes(obj.get("textBoxes"), i)?,
+        ParaKind::HeaderFooter => Vec::new(),
+    };
+    let pictures = parse_pictures(obj.get("pictures"), path)?;
     Ok(NewPara {
         text,
         style,
         boxes,
+        pictures,
     })
 }
 
@@ -242,23 +429,219 @@ fn parse_boxes(v: Option<&Value>, i: usize) -> Result<Vec<NewBox>, Error> {
                 ));
             }
         };
-        let cx = parse_create_emu(obj.get("cx"), i, j, "cx")?.unwrap_or(DEFAULT_CX);
-        let cy = parse_create_emu(obj.get("cy"), i, j, "cy")?.unwrap_or(DEFAULT_CY);
+        let prefix = format!("document.paragraphs[{i}].textBoxes[{j}]");
+        let cx = parse_emu(obj.get("cx"), &prefix, "cx")?.unwrap_or(DEFAULT_CX);
+        let cy = parse_emu(obj.get("cy"), &prefix, "cy")?.unwrap_or(DEFAULT_CY);
         out.push(NewBox { text, cx, cy });
     }
     Ok(out)
 }
 
-fn parse_create_emu(
-    v: Option<&Value>,
-    i: usize,
-    j: usize,
-    field: &str,
-) -> Result<Option<i64>, Error> {
+fn parse_pictures(v: Option<&Value>, prefix: &str) -> Result<Vec<NewPic>, Error> {
+    let Some(v) = v else {
+        return Ok(Vec::new());
+    };
+    let path = format!("{prefix}.pictures");
+    let arr = v.as_array().ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::WrongType {
+                field: "pictures".into(),
+                expected: TypeName::Array,
+            },
+            path.clone(),
+        )
+    })?;
+    let mut out = Vec::new();
+    for (j, p) in arr.iter().enumerate() {
+        let item_path = format!("{path}[{j}]");
+        let obj = p.as_object().ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::WrongType {
+                    field: item_path.clone(),
+                    expected: TypeName::Object,
+                },
+                item_path.clone(),
+            )
+        })?;
+        for k in obj.keys() {
+            if !matches!(
+                k.as_str(),
+                "file"
+                    | "cx"
+                    | "cy"
+                    | "kind"
+                    | "wrap"
+                    | "alignH"
+                    | "alignV"
+                    | "offsetX"
+                    | "offsetY"
+            ) {
+                return Err(Error::with_path(
+                    ErrorKind::UnknownField { field: k.clone() },
+                    format!("{item_path}.{k}"),
+                ));
+            }
+        }
+        let file = match obj.get("file") {
+            Some(Value::String(s)) if !s.is_empty() => s.clone(),
+            Some(Value::String(_)) | None => {
+                return Err(Error::with_path(
+                    ErrorKind::MissingField {
+                        field: "file".into(),
+                    },
+                    format!("{item_path}.file"),
+                ));
+            }
+            Some(_) => {
+                return Err(Error::with_path(
+                    ErrorKind::WrongType {
+                        field: "file".into(),
+                        expected: TypeName::NonEmptyString,
+                    },
+                    format!("{item_path}.file"),
+                ));
+            }
+        };
+        let cx = parse_emu(obj.get("cx"), &item_path, "cx")?;
+        let cy = parse_emu(obj.get("cy"), &item_path, "cy")?;
+        if cx.is_some() != cy.is_some() {
+            return Err(Error::with_path(
+                ErrorKind::MissingField {
+                    field: "cx and cy".into(),
+                },
+                item_path.clone(),
+            ));
+        }
+        let kind = match obj.get("kind") {
+            None => PicKind::Inline,
+            Some(Value::String(s)) => picture::parse_pic_kind(s).ok_or_else(|| {
+                Error::with_path(ErrorKind::InvalidPicKind, format!("{item_path}.kind"))
+            })?,
+            Some(_) => {
+                return Err(Error::with_path(
+                    ErrorKind::WrongType {
+                        field: "kind".into(),
+                        expected: TypeName::String,
+                    },
+                    format!("{item_path}.kind"),
+                ));
+            }
+        };
+        let wrap = match obj.get("wrap") {
+            None | Some(Value::Null) => None,
+            Some(Value::String(s)) => Some(picture::parse_wrap(s).ok_or_else(|| {
+                Error::with_path(ErrorKind::InvalidPicWrap, format!("{item_path}.wrap"))
+            })?),
+            Some(_) => {
+                return Err(Error::with_path(
+                    ErrorKind::WrongType {
+                        field: "wrap".into(),
+                        expected: TypeName::String,
+                    },
+                    format!("{item_path}.wrap"),
+                ));
+            }
+        };
+        if kind == PicKind::Inline && wrap.is_some() {
+            return Err(Error::with_path(
+                ErrorKind::InvalidPicWrap,
+                format!("{item_path}.wrap"),
+            ));
+        }
+        if kind == PicKind::Anchor && wrap.is_none() {
+            return Err(Error::with_path(
+                ErrorKind::MissingField {
+                    field: "wrap".into(),
+                },
+                format!("{item_path}.wrap"),
+            ));
+        }
+        let align_h = parse_align_h(obj.get("alignH"), &item_path)?;
+        let align_v = parse_align_v(obj.get("alignV"), &item_path)?;
+        let offset_x = parse_i64(obj.get("offsetX"), &item_path, "offsetX")?;
+        let offset_y = parse_i64(obj.get("offsetY"), &item_path, "offsetY")?;
+        if align_h.is_some() && offset_x.is_some() {
+            return Err(Error::with_path(
+                ErrorKind::MutuallyExclusive {
+                    a: "alignH".into(),
+                    b: "offsetX".into(),
+                },
+                item_path.clone(),
+            ));
+        }
+        if align_v.is_some() && offset_y.is_some() {
+            return Err(Error::with_path(
+                ErrorKind::MutuallyExclusive {
+                    a: "alignV".into(),
+                    b: "offsetY".into(),
+                },
+                item_path.clone(),
+            ));
+        }
+        if kind == PicKind::Inline
+            && (align_h.is_some() || align_v.is_some() || offset_x.is_some() || offset_y.is_some())
+        {
+            return Err(Error::with_path(
+                ErrorKind::UnknownField {
+                    field: "alignH".into(),
+                },
+                item_path,
+            ));
+        }
+        out.push(NewPic {
+            file,
+            cx,
+            cy,
+            kind,
+            wrap,
+            pos: WrapPos {
+                align_h,
+                align_v,
+                offset_x,
+                offset_y,
+            },
+        });
+    }
+    Ok(out)
+}
+
+fn parse_align_h(v: Option<&Value>, item_path: &str) -> Result<Option<picture::AlignH>, Error> {
+    match v {
+        None => Ok(None),
+        Some(Value::String(s)) => picture::parse_align_h(s).map(Some).ok_or_else(|| {
+            Error::with_path(ErrorKind::InvalidPicAlign, format!("{item_path}.alignH"))
+        }),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "alignH".into(),
+                expected: TypeName::String,
+            },
+            format!("{item_path}.alignH"),
+        )),
+    }
+}
+
+fn parse_align_v(v: Option<&Value>, item_path: &str) -> Result<Option<picture::AlignV>, Error> {
+    match v {
+        None => Ok(None),
+        Some(Value::String(s)) => picture::parse_align_v(s).map(Some).ok_or_else(|| {
+            Error::with_path(ErrorKind::InvalidPicAlign, format!("{item_path}.alignV"))
+        }),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "alignV".into(),
+                expected: TypeName::String,
+            },
+            format!("{item_path}.alignV"),
+        )),
+    }
+}
+
+fn parse_emu(v: Option<&Value>, prefix: &str, field: &str) -> Result<Option<i64>, Error> {
     let Some(v) = v else {
         return Ok(None);
     };
-    let path = format!("document.paragraphs[{i}].textBoxes[{j}].{field}");
+    let path = format!("{prefix}.{field}");
     match v {
         Value::Number(n) => {
             if let Some(u) = n.as_u64() {
@@ -291,6 +674,31 @@ fn parse_create_emu(
     }
 }
 
+fn parse_i64(v: Option<&Value>, prefix: &str, field: &str) -> Result<Option<i64>, Error> {
+    let Some(v) = v else {
+        return Ok(None);
+    };
+    let path = format!("{prefix}.{field}");
+    match v {
+        Value::Number(n) => n.as_i64().map(Some).ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::WrongType {
+                    field: field.into(),
+                    expected: TypeName::Integer,
+                },
+                path,
+            )
+        }),
+        _ => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::Integer,
+            },
+            path,
+        )),
+    }
+}
+
 fn canonicalize_style(s: &str, i: usize) -> Result<Option<&'static str>, Error> {
     if s.eq_ignore_ascii_case("Normal") {
         return Ok(None);
@@ -306,47 +714,129 @@ fn canonicalize_style(s: &str, i: usize) -> Result<Option<&'static str>, Error> 
     ))
 }
 
-fn document_xml(paras: &[NewPara]) -> String {
+fn para_xml(p: &NewPara, id: &str, next_para: &mut u32, doc_pr: &mut u32) -> String {
+    let style = if let Some(s) = p.style {
+        format!(r#"<w:pPr><w:pStyle w:val="{s}"/></w:pPr>"#)
+    } else {
+        String::new()
+    };
+    let space = if needs_xml_space(&p.text) {
+        r#" xml:space="preserve""#
+    } else {
+        ""
+    };
+    let t = if p.text.is_empty() {
+        String::new()
+    } else {
+        format!("<w:r><w:t{space}>{}</w:t></w:r>", xml::escape_text(&p.text))
+    };
+    let mut boxes = String::new();
+    for b in &p.boxes {
+        let inner_id = format!("{:08X}", *next_para);
+        *next_para += 1;
+        boxes.push_str(&format!(
+            "<w:r>{}</w:r>",
+            textbox::textbox_ac_xml(*doc_pr, b.cx, b.cy, &b.text, &inner_id)
+        ));
+        *doc_pr += 1;
+    }
+    format!(r#"<w:p w14:paraId="{id}" w14:textId="{id}">{style}{t}{boxes}</w:p>"#)
+}
+
+fn story_xmlns() -> String {
+    format!(
+        r#"xmlns:w="{WML_NS}" xmlns:r="{REL_NS}" xmlns:w14="{W14_NS}" xmlns:mc="{MC_NS}" xmlns:wp="{WP_NS}" xmlns:a="{A_NS}" xmlns:pic="{PIC_NS}" xmlns:wps="{WPS_NS}" mc:Ignorable="w14""#
+    )
+}
+
+fn document_xml(paras: &[NewPara], header_rid: Option<&str>, footer_rid: Option<&str>) -> String {
     let mut body = String::new();
     let mut next_para = paras.len() as u32 + 1;
     let mut doc_pr = 1u32;
     for (i, p) in paras.iter().enumerate() {
         let id = format!("{:08X}", i as u32 + 1);
-        let style = if let Some(s) = p.style {
-            format!(r#"<w:pPr><w:pStyle w:val="{s}"/></w:pPr>"#)
-        } else {
-            String::new()
-        };
-        let space = if needs_xml_space(&p.text) {
-            r#" xml:space="preserve""#
-        } else {
-            ""
-        };
-        let t = if p.text.is_empty() {
-            String::new()
-        } else {
-            format!("<w:r><w:t{space}>{}</w:t></w:r>", xml::escape_text(&p.text))
-        };
-        let mut boxes = String::new();
-        for b in &p.boxes {
-            let inner_id = format!("{:08X}", next_para);
-            next_para += 1;
-            boxes.push_str(&format!(
-                "<w:r>{}</w:r>",
-                textbox::textbox_ac_xml(doc_pr, b.cx, b.cy, &b.text, &inner_id)
-            ));
-            doc_pr += 1;
-        }
-        body.push_str(&format!(
-            r#"<w:p w14:paraId="{id}" w14:textId="{id}">{style}{t}{boxes}</w:p>"#
+        body.push_str(&para_xml(p, &id, &mut next_para, &mut doc_pr));
+    }
+    let mut refs = String::new();
+    if let Some(r) = header_rid {
+        refs.push_str(&format!(
+            r#"<w:headerReference w:type="default" r:id="{r}"/>"#
         ));
     }
-    body.push_str(
-        r#"<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="708" w:footer="708" w:gutter="0"/></w:sectPr>"#,
-    );
+    if let Some(r) = footer_rid {
+        refs.push_str(&format!(
+            r#"<w:footerReference w:type="default" r:id="{r}"/>"#
+        ));
+    }
+    body.push_str(&format!(
+        r#"<w:sectPr>{refs}<w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="708" w:footer="708" w:gutter="0"/></w:sectPr>"#
+    ));
     format!(
-        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="{WML_NS}" xmlns:r="{REL_NS}" xmlns:w14="{W14_NS}" xmlns:mc="{MC_NS}" xmlns:wp="{WP_NS}" xmlns:a="{A_NS}" xmlns:wps="{WPS_NS}" mc:Ignorable="w14"><w:body>{body}</w:body></w:document>"#
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document {}><w:body>{body}</w:body></w:document>"#,
+        story_xmlns()
     )
+}
+
+fn hf_xml(tag: &str, paras: &[NewPara]) -> String {
+    let mut body = String::new();
+    let mut next_para = paras.len() as u32 + 1;
+    let mut doc_pr = 1u32;
+    for (i, p) in paras.iter().enumerate() {
+        let id = format!("{:08X}", i as u32 + 1);
+        body.push_str(&para_xml(p, &id, &mut next_para, &mut doc_pr));
+    }
+    format!(
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:{tag} {}>{body}</w:{tag}>"#,
+        story_xmlns()
+    )
+}
+
+fn attach_pictures(pkg: &mut Package, part: &str, paras: &[NewPara]) -> Result<(), Error> {
+    if !paras.iter().any(NewPara::has_pictures) {
+        return Ok(());
+    }
+    let mut doc = xml::parse(pkg.get(part)?)?;
+    picture::ensure_drawing_ns(&mut doc.root);
+    for (i, para) in paras.iter().enumerate() {
+        for pic in &para.pictures {
+            let (rid, cx, cy) = picture::add_media(pkg, part, &pic.file, pic.cx, pic.cy)?;
+            let doc_pr = picture::next_docpr_id(&doc.root);
+            let p = nth_story_para_mut(&mut doc.root, i).ok_or_else(|| {
+                Error::xml_detail(
+                    crate::error::XmlIssue::Parse,
+                    format!("{part} missing paragraph {i}"),
+                )
+            })?;
+            picture::insert_prepared_drawing(
+                p, doc_pr, &rid, cx, cy, pic.kind, pic.wrap, &pic.pos,
+            )?;
+        }
+    }
+    pkg.set(part, doc.to_bytes()?)?;
+    Ok(())
+}
+
+/// 只数故事层的 `w:p`，不走进文本框。
+fn nth_story_para_mut(root: &mut Element, index: usize) -> Option<&mut Element> {
+    let parent = if root.local_name() == "document" {
+        root.child_by_local_mut("body")?
+    } else {
+        root
+    };
+    let mut n = 0usize;
+    for child in parent.children.iter_mut() {
+        let Node::Element(e) = child else {
+            continue;
+        };
+        if e.local_name() != "p" {
+            continue;
+        }
+        if n == index {
+            return Some(e);
+        }
+        n += 1;
+    }
+    None
 }
 
 fn needs_xml_space(text: &str) -> bool {

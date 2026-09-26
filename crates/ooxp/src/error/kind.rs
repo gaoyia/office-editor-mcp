@@ -30,7 +30,9 @@ pub(crate) enum RangeReason {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum IdReason {
-    NotCell { id: String },
+    NotCell {
+        id: String,
+    },
     ParaPrefix,
     /// 页眉/页脚容器 id，缺少 `/para:…`
     HdrFtrContainer,
@@ -197,6 +199,8 @@ define_error_kinds! {
     InvalidParaStyle => vec![Self::InvalidParaStyle],
     InvalidHfKind => vec![Self::InvalidHfKind],
     InvalidHfType => vec![Self::InvalidHfType],
+    CreateHfOnlyDefault => vec![Self::CreateHfOnlyDefault],
+    CreateHfDuplicate => vec![Self::CreateHfDuplicate],
     InvalidPicKind => vec![Self::InvalidPicKind],
     InvalidPicWrap => vec![Self::InvalidPicWrap],
     InvalidPicAlign => vec![Self::InvalidPicAlign],
@@ -266,8 +270,12 @@ impl RangeReason {
             Self::NotA1 { input: "??".into() },
             Self::RowOutOfRange { row: 0 },
             Self::ColOutOfRange { col: 0 },
-            Self::Reversed { input: "D20:A1".into() },
-            Self::InvalidColLetters { letters: "1A".into() },
+            Self::Reversed {
+                input: "D20:A1".into(),
+            },
+            Self::InvalidColLetters {
+                letters: "1A".into(),
+            },
         ]
     }
 }
@@ -312,7 +320,12 @@ impl IdReason {
 impl SheetNameReason {
     #[cfg(test)]
     fn all_samples() -> Vec<Self> {
-        vec![Self::Missing, Self::Length, Self::History, Self::IllegalChars]
+        vec![
+            Self::Missing,
+            Self::Length,
+            Self::History,
+            Self::IllegalChars,
+        ]
     }
 }
 
@@ -325,8 +338,12 @@ impl OpcReason {
             Self::MissingContentTypes,
             Self::MissingRootRels,
             Self::MissingOfficeDocument,
-            Self::RelTarget { target: "../x".into() },
-            Self::Zip { detail: "bad".into() },
+            Self::RelTarget {
+                target: "../x".into(),
+            },
+            Self::Zip {
+                detail: "bad".into(),
+            },
         ]
     }
 }
@@ -392,6 +409,8 @@ impl ErrorKind {
             | Self::InvalidParaStyle
             | Self::InvalidHfKind
             | Self::InvalidHfType
+            | Self::CreateHfOnlyDefault
+            | Self::CreateHfDuplicate
             | Self::InvalidPicKind
             | Self::InvalidPicWrap
             | Self::InvalidPicAlign

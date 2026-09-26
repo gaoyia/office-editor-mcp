@@ -305,8 +305,8 @@ fn parse_new_cell(v: &Value, i: usize, j: usize) -> Result<Option<NewCell>, Erro
             format!("workbook.sheets[{i}].cells[{j}].ref"),
         )
     })?;
-    let cell = a1::parse_cell(refer)
-        .map_err(|e| e.at(format!("workbook.sheets[{i}].cells[{j}].ref")))?;
+    let cell =
+        a1::parse_cell(refer).map_err(|e| e.at(format!("workbook.sheets[{i}].cells[{j}].ref")))?;
     let has_v = obj.contains_key("value");
     let has_f = obj.contains_key("formula");
     if has_v && has_f {
@@ -434,9 +434,10 @@ fn cell_xml(c: &NewCell, sst: &[String]) -> Result<String, Error> {
             if *b { "1" } else { "0" }
         )),
         Some(SetCellValue::Text(s)) => {
-            let idx = sst.iter().position(|x| x == s).ok_or_else(|| {
-                Error::new(ErrorKind::SharedStringNotInTable { text: s.clone() })
-            })?;
+            let idx = sst
+                .iter()
+                .position(|x| x == s)
+                .ok_or_else(|| Error::new(ErrorKind::SharedStringNotInTable { text: s.clone() }))?;
             Ok(format!(r#"<c r="{}" t="s"><v>{idx}</v></c>"#, c.a1))
         }
         _ => Ok(format!(r#"<c r="{}"/>"#, c.a1)),

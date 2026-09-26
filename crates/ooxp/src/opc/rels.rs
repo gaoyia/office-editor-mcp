@@ -165,13 +165,11 @@ pub fn resolve_id(pkg: &Package, source_part: &str, rid: &str) -> Result<String,
 
 pub fn office_document_part(pkg: &Package) -> Result<String, Error> {
     let rels = Relationships::from_package(pkg, "/")?;
-    let rel = rels
-        .find_office_document()
-        .ok_or_else(|| {
-            Error::new(ErrorKind::OpcOpen {
-                reason: OpcReason::MissingOfficeDocument,
-            })
-        })?;
+    let rel = rels.find_office_document().ok_or_else(|| {
+        Error::new(ErrorKind::OpcOpen {
+            reason: OpcReason::MissingOfficeDocument,
+        })
+    })?;
     resolve_rel_target("/", &rel.target)
 }
 

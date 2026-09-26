@@ -247,7 +247,10 @@ fn dirty_sheet_drops_comments() {
     .unwrap();
     let text = part(&out, "xl/worksheets/sheet1.xml");
     assert!(!text.contains("<!--"), "脏表注释应丢掉：{text}");
-    assert!(sheet_data_of(&text).contains(r#"<c r="A1" s="3"><v>42</v></c>"#), "{text}");
+    assert!(
+        sheet_data_of(&text).contains(r#"<c r="A1" s="3"><v>42</v></c>"#),
+        "{text}"
+    );
 }
 
 #[test]

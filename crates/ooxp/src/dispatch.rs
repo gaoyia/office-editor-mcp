@@ -23,7 +23,14 @@ pub fn run(input_json: &str, cli_output: Option<&Path>) -> Result<RunOutput, Err
 fn run_inspect(req: &Request) -> Result<RunOutput, Error> {
     deny_unknown(
         &req.obj,
-        &["schemaVersion", "action", "path", "format", "scope", "locale"],
+        &[
+            "schemaVersion",
+            "action",
+            "path",
+            "format",
+            "scope",
+            "locale",
+        ],
     )?;
     let path = str_field(&req.obj, "path")?;
     let format = req.obj.get("format").and_then(serde_json::Value::as_str);

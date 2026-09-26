@@ -6,8 +6,8 @@ use crate::error::{Error, ErrorKind, IdReason, ScopeNeed, TypeName};
 use crate::json;
 
 use super::hf::{HfKind, HfType};
-use super::picture::{self, AlignH, AlignV, PicKind, PicTarget, WrapKind, WrapPos};
 use super::para::{self, ParaTarget, TxbxTarget};
+use super::picture::{self, AlignH, AlignV, PicKind, PicTarget, WrapKind, WrapPos};
 
 #[derive(Debug, Clone)]
 pub struct InspectScope {
@@ -188,17 +188,15 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
     let Some(v) = v else {
         return Ok(None);
     };
-    let obj = v
-        .as_object()
-        .ok_or_else(|| {
-            Error::with_path(
-                ErrorKind::WrongType {
-                    field: "scope".into(),
-                    expected: TypeName::Object,
-                },
-                "scope",
-            )
-        })?;
+    let obj = v.as_object().ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::WrongType {
+                field: "scope".into(),
+                expected: TypeName::Object,
+            },
+            "scope",
+        )
+    })?;
     if obj.is_empty() {
         return Ok(None);
     }
@@ -335,9 +333,7 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<DocxOp>, Error> {
         })?;
         let op_name = obj.get("op").and_then(Value::as_str).ok_or_else(|| {
             Error::with_path(
-                ErrorKind::MissingField {
-                    field: "op".into(),
-                },
+                ErrorKind::MissingField { field: "op".into() },
                 format!("ops[{i}].op"),
             )
         })?;
@@ -352,9 +348,9 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<DocxOp>, Error> {
         }
         match op_name {
             "setParaText" => out.push(DocxOp::SetParaText(parse_set_para_text(obj, i)?)),
-            "setHeaderFooterDistance" => {
-                out.push(DocxOp::SetHeaderFooterDistance(parse_set_hf_distance(obj, i)?))
-            }
+            "setHeaderFooterDistance" => out.push(DocxOp::SetHeaderFooterDistance(
+                parse_set_hf_distance(obj, i)?,
+            )),
             "setHeaderFooterLink" => {
                 out.push(DocxOp::SetHeaderFooterLink(parse_set_hf_link(obj, i)?))
             }
@@ -406,9 +402,7 @@ fn parse_set_para_text(
         .filter(|s| !s.is_empty())
         .ok_or_else(|| {
             Error::with_path(
-                ErrorKind::MissingField {
-                    field: "id".into(),
-                },
+                ErrorKind::MissingField { field: "id".into() },
                 format!("ops[{i}].id"),
             )
         })?;
@@ -444,7 +438,10 @@ fn parse_set_hf_distance(
     i: usize,
 ) -> Result<SetHfDistanceOp, Error> {
     for k in obj.keys() {
-        if !matches!(k.as_str(), "op" | "id" | "headerDistance" | "footerDistance") {
+        if !matches!(
+            k.as_str(),
+            "op" | "id" | "headerDistance" | "footerDistance"
+        ) {
             return Err(Error::with_path(
                 ErrorKind::UnknownField { field: k.clone() },
                 format!("ops[{i}].{k}"),
@@ -457,9 +454,7 @@ fn parse_set_hf_distance(
         .filter(|s| !s.is_empty())
         .ok_or_else(|| {
             Error::with_path(
-                ErrorKind::MissingField {
-                    field: "id".into(),
-                },
+                ErrorKind::MissingField { field: "id".into() },
                 format!("ops[{i}].id"),
             )
         })?;
@@ -483,10 +478,7 @@ fn parse_set_hf_distance(
     })
 }
 
-fn parse_set_hf_link(
-    obj: &serde_json::Map<String, Value>,
-    i: usize,
-) -> Result<SetHfLinkOp, Error> {
+fn parse_set_hf_link(obj: &serde_json::Map<String, Value>, i: usize) -> Result<SetHfLinkOp, Error> {
     for k in obj.keys() {
         if !matches!(k.as_str(), "op" | "id" | "kind" | "type" | "linked") {
             return Err(Error::with_path(
@@ -501,17 +493,14 @@ fn parse_set_hf_link(
         .filter(|s| !s.is_empty())
         .ok_or_else(|| {
             Error::with_path(
-                ErrorKind::MissingField {
-                    field: "id".into(),
-                },
+                ErrorKind::MissingField { field: "id".into() },
                 format!("ops[{i}].id"),
             )
         })?;
     let n = parse_section_id(id, i)?;
     let kind = match obj.get("kind") {
-        Some(Value::String(s)) => HfKind::parse(s).ok_or_else(|| {
-            Error::with_path(ErrorKind::InvalidHfKind, format!("ops[{i}].kind"))
-        })?,
+        Some(Value::String(s)) => HfKind::parse(s)
+            .ok_or_else(|| Error::with_path(ErrorKind::InvalidHfKind, format!("ops[{i}].kind")))?,
         Some(_) => {
             return Err(Error::with_path(
                 ErrorKind::WrongType {
@@ -532,9 +521,8 @@ fn parse_set_hf_link(
         }
     };
     let hf_type = match obj.get("type") {
-        Some(Value::String(s)) => HfType::parse(s).ok_or_else(|| {
-            Error::with_path(ErrorKind::InvalidHfType, format!("ops[{i}].type"))
-        })?,
+        Some(Value::String(s)) => HfType::parse(s)
+            .ok_or_else(|| Error::with_path(ErrorKind::InvalidHfType, format!("ops[{i}].type")))?,
         Some(_) => {
             return Err(Error::with_path(
                 ErrorKind::WrongType {
@@ -613,11 +601,7 @@ fn parse_section_id(id: &str, op_index: usize) -> Result<usize, Error> {
     Ok(n)
 }
 
-fn parse_twip_field(
-    v: Option<&Value>,
-    i: usize,
-    field: &str,
-) -> Result<Option<u32>, Error> {
+fn parse_twip_field(v: Option<&Value>, i: usize, field: &str) -> Result<Option<u32>, Error> {
     let Some(v) = v else {
         return Ok(None);
     };
@@ -670,9 +654,7 @@ fn require_id(obj: &serde_json::Map<String, Value>, i: usize) -> Result<String, 
         .map(str::to_string)
         .ok_or_else(|| {
             Error::with_path(
-                ErrorKind::MissingField {
-                    field: "id".into(),
-                },
+                ErrorKind::MissingField { field: "id".into() },
                 format!("ops[{i}].id"),
             )
         })
@@ -698,7 +680,11 @@ fn require_file(obj: &serde_json::Map<String, Value>, i: usize, op: &str) -> Res
     }
 }
 
-fn deny_keys(obj: &serde_json::Map<String, Value>, i: usize, allowed: &[&str]) -> Result<(), Error> {
+fn deny_keys(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+    allowed: &[&str],
+) -> Result<(), Error> {
     for k in obj.keys() {
         if !allowed.contains(&k.as_str()) {
             return Err(Error::with_path(
@@ -777,12 +763,7 @@ fn parse_set_pic_size(
             format!("ops[{i}]"),
         ));
     }
-    Ok(SetPictureSizeOp {
-        id,
-        target,
-        cx,
-        cy,
-    })
+    Ok(SetPictureSizeOp { id, target, cx, cy })
 }
 
 fn parse_set_pic_wrap(
@@ -792,14 +773,15 @@ fn parse_set_pic_wrap(
     deny_keys(
         obj,
         i,
-        &["op", "id", "kind", "wrap", "alignH", "alignV", "offsetX", "offsetY"],
+        &[
+            "op", "id", "kind", "wrap", "alignH", "alignV", "offsetX", "offsetY",
+        ],
     )?;
     let id = require_id(obj, i)?;
     let target = picture::parse_pic_id(&id, i)?;
     let kind = match obj.get("kind") {
-        Some(Value::String(s)) => picture::parse_pic_kind(s).ok_or_else(|| {
-            Error::with_path(ErrorKind::InvalidPicKind, format!("ops[{i}].kind"))
-        })?,
+        Some(Value::String(s)) => picture::parse_pic_kind(s)
+            .ok_or_else(|| Error::with_path(ErrorKind::InvalidPicKind, format!("ops[{i}].kind")))?,
         Some(_) => {
             return Err(Error::with_path(
                 ErrorKind::WrongType {
@@ -898,9 +880,9 @@ fn parse_set_pic_wrap(
 fn parse_align_h_field(v: Option<&Value>, i: usize) -> Result<Option<AlignH>, Error> {
     match v {
         None => Ok(None),
-        Some(Value::String(s)) => picture::parse_align_h(s)
-            .map(Some)
-            .ok_or_else(|| Error::with_path(ErrorKind::InvalidPicAlign, format!("ops[{i}].alignH"))),
+        Some(Value::String(s)) => picture::parse_align_h(s).map(Some).ok_or_else(|| {
+            Error::with_path(ErrorKind::InvalidPicAlign, format!("ops[{i}].alignH"))
+        }),
         Some(_) => Err(Error::with_path(
             ErrorKind::WrongType {
                 field: "alignH".into(),
@@ -914,9 +896,9 @@ fn parse_align_h_field(v: Option<&Value>, i: usize) -> Result<Option<AlignH>, Er
 fn parse_align_v_field(v: Option<&Value>, i: usize) -> Result<Option<AlignV>, Error> {
     match v {
         None => Ok(None),
-        Some(Value::String(s)) => picture::parse_align_v(s)
-            .map(Some)
-            .ok_or_else(|| Error::with_path(ErrorKind::InvalidPicAlign, format!("ops[{i}].alignV"))),
+        Some(Value::String(s)) => picture::parse_align_v(s).map(Some).ok_or_else(|| {
+            Error::with_path(ErrorKind::InvalidPicAlign, format!("ops[{i}].alignV"))
+        }),
         Some(_) => Err(Error::with_path(
             ErrorKind::WrongType {
                 field: "alignV".into(),
@@ -1057,12 +1039,7 @@ fn parse_set_txbx_size(
             format!("ops[{i}]"),
         ));
     }
-    Ok(SetTextBoxSizeOp {
-        id,
-        target,
-        cx,
-        cy,
-    })
+    Ok(SetTextBoxSizeOp { id, target, cx, cy })
 }
 
 fn parse_set_txbx_wrap(
@@ -1072,14 +1049,15 @@ fn parse_set_txbx_wrap(
     deny_keys(
         obj,
         i,
-        &["op", "id", "kind", "wrap", "alignH", "alignV", "offsetX", "offsetY"],
+        &[
+            "op", "id", "kind", "wrap", "alignH", "alignV", "offsetX", "offsetY",
+        ],
     )?;
     let id = require_id(obj, i)?;
     let target = para::parse_txbx_id(&id, i)?;
     let kind = match obj.get("kind") {
-        Some(Value::String(s)) => picture::parse_pic_kind(s).ok_or_else(|| {
-            Error::with_path(ErrorKind::InvalidPicKind, format!("ops[{i}].kind"))
-        })?,
+        Some(Value::String(s)) => picture::parse_pic_kind(s)
+            .ok_or_else(|| Error::with_path(ErrorKind::InvalidPicKind, format!("ops[{i}].kind")))?,
         Some(_) => {
             return Err(Error::with_path(
                 ErrorKind::WrongType {

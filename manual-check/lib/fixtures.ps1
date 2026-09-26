@@ -17,6 +17,38 @@ function Ensure-DocxCreate([switch]$Force) {
     return $path
 }
 
+# 正文第二段行内图 + 默认页眉浮动 square。
+function Ensure-DocxCreatePictures([switch]$Force) {
+    $path = Get-OutPath 'docx-create-pictures.docx'
+    if ((Test-Path $path) -and -not $Force) { return $path }
+    $png = Ensure-OoxpPngA
+    $S = $global:OoxpStrings
+    $file = $png.Replace('\', '/')
+    $req = @{
+        schemaVersion = 1; action = 'create'
+        path = $path.Replace('\', '/'); format = 'docx'
+        document = @{
+            paragraphs = @(
+                @{ style = 'Heading1'; text = $S.title }
+                @{ text = $S.hello; pictures = @(@{ file = $file }) }
+            )
+            headers = @(
+                @{
+                    type = 'default'
+                    paragraphs = @(
+                        @{
+                            text = '页眉'
+                            pictures = @(@{ file = $file; kind = 'anchor'; wrap = 'square' })
+                        }
+                    )
+                }
+            )
+        }
+    }
+    Invoke-OoxpRequest $req 'docx-create-pictures' | Out-Null
+    return $path
+}
+
 function Ensure-PptxCreate([switch]$Force) {
     $path = Get-OutPath 'pptx-create.pptx'
     if ((Test-Path $path) -and -not $Force) { return $path }

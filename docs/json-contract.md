@@ -52,7 +52,7 @@ id 是给模型用的字符串，必须能从文件内容稳定算出来，不�
 
 没有 `w14:paraId` 时：`para:index:{n}`，`n` 从 1 起，按主文档部件里 `w:p` 的文档顺序（含表格单元格里的段落）。树上同时给 `"stable": false`。这类 id 在增删段落后会变，只够同一次 inspect 之后立刻 apply。
 
-标题和正文都是段落，不另编一套 id。脚注、尾注、批注里的段落不进这棵树，也不接受 apply。文本框是独立节点：框本身、框内段落与框内图按下面规则进树，并可 apply。页眉、页脚按下面规则进树，可按 id 改字；节上的页眉页脚距边界、以及是否链接到前一节，都可以读写。页眉、页脚和正文里的 DrawingML 图片可查、换、插、删，并可改尺寸与绕排。不做新建页眉。不写入 `titlePg` / `evenAndOddHeaders`。`create` 本期仍不生成带图文档；带文本框见下文 create。
+标题和正文都是段落，不另编一套 id。脚注、尾注、批注里的段落不进这棵树，也不接受 apply。文本框是独立节点：框本身、框内段落与框内图按下面规则进树，并可 apply。页眉、页脚按下面规则进树，可按 id 改字；节上的页眉页脚距边界、以及是否链接到前一节，都可以读写。页眉、页脚和正文里的 DrawingML 图片可查、换、插、删，并可改尺寸与绕排。apply 不做新建页眉。不写入 `titlePg` / `evenAndOddHeaders`。`create` 可在正文和默认页眉页脚上写 DrawingML 图，也可写文本框；带图字段见下文 create。
 
 页眉、页脚 id 按部件编，不按节编。`w:sectPr` 里的 `w:headerReference` / `w:footerReference`（§17.10.2、§17.10.5）经主文档关系解到部件路径。同一部件只出一个容器节点；多个节引用同一部件时，`sections` 列出所有节号。后一节某类型引用省略时按规范继承前节（§17.10.2）；`even` 是否继承还看 `settings.xml` 的 `w:evenAndOddHeaders`（§17.10.1），`first` 是否继承还看该节的 `w:titlePg`（§17.10.6）。OOXML 没有「链接到前一节」元素；Word UI 的勾选就是这种省略。inspect 在每个节上用 `headerLink` / `footerLink` 标出该类型是显式引用、继承前节，还是对本节不生效。apply 用 `setHeaderFooterLink` 断开或重新链接。两节显式指向同一部件不算链接，两边都是 `false`。
 
@@ -500,7 +500,15 @@ xlsx、docx、pptx 共用 `scope` 这个字段名，里面的键按格式分，�
   "document": {
     "paragraphs": [
       { "style": "Heading1", "text": "标题" },
-      { "text": "hello" }
+      { "text": "hello", "pictures": [{ "file": "C:\\\\img\\\\a.png" }] }
+    ],
+    "headers": [
+      {
+        "type": "default",
+        "paragraphs": [
+          { "text": "页眉", "pictures": [{ "file": "C:\\\\img\\\\a.png", "kind": "anchor", "wrap": "square" }] }
+        ]
+      }
     ]
   }
 }
@@ -513,14 +521,26 @@ xlsx、docx、pptx 共用 `scope` 这个字段名，里面的键按格式分，�
 | `paragraphs[].text` | 可见文本，可空字符串。省略当作 `""` |
 | `paragraphs[].style` | 段落样式 id。省略或 `Normal` 表示正文。第一期只允许 `Normal`、`Heading1`、`Heading2`、`Heading3`（大小写不敏感，写出时用这里的 canonical 形式） |
 | `paragraphs[].textBoxes` | 可选。该段上的文本框列表。省略则不写框 |
+| `paragraphs[].pictures` | 可选。该段上的图列表。省略则不写图 |
+| `document.headers` / `document.footers` | 可选。默认页眉或页脚。省略则不写对应部件 |
+| `headers[].type` / `footers[].type` | 必须是 `"default"`，或省略当作 `default`。`even` / `first` 报 `InvalidField`。同一侧只能有一项 |
+| `headers[].paragraphs` / `footers[].paragraphs` | 可选。空或省略则写一个空的 `w:p`。字段与正文段落相同，但不允许 `style`、不允许 `textBoxes` |
 
 | `textBoxes[].text` | 框内第一段可见文本，可空。省略当作 `""` |
 | `textBoxes[].cx` | 可选。宽度，EMU。省略为 `1828800` |
 | `textBoxes[].cy` | 可选。高度，EMU。省略为 `914400` |
 
-create 写出 Transitional 最小包，见 [opc.md](opc.md)。每个 `w:p` 都带唯一的 `w14:paraId` 和 `w14:textId`（取值大于 0、小于 `0x80000000`，MS-DOCX §2.6.2.3 / §2.6.2.4），并在根元素上把 `w14` 列入 `mc:Ignorable`。这样随后 inspect 得到的 id 都是 `para:{paraId}`，`stable` 为 `true`。
+| `pictures[].file` | 本地路径，与 `insertPicture` 相同，按文件头认 PNG / JPEG / GIF / BMP。缺此字段报 `MissingField` |
+| `pictures[].cx` / `pictures[].cy` | 可选，EMU，正整数。都省则按图片像素以 96 dpi 换算。只给一个时报 `InvalidField` |
+| `pictures[].kind` | 可选。`inline` 或 `anchor`，省略为 `inline` |
+| `pictures[].wrap` | `kind` 为 `anchor` 时必填，枚举与 `setPictureWrap` 相同。`kind` 为 `inline` 时必须省略 |
+| `pictures[].alignH` / `alignV` / `offsetX` / `offsetY` | 仅浮动，规则与 `setPictureWrap` 相同 |
 
-标题段写出 `<w:pStyle w:val="Heading1"/>` 这类引用，样式定义放在 `/word/styles.xml`。同时写 `/word/settings.xml`，含 `<w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="15"/>`（MS-DOCX §2.3.5）。缺这项时 Word 按兼容模式打开（默认 12）。`textBoxes` 写成浮动 `square` 的 `wps:wsp`，与 `insertTextBox` 同一套最小 Choice。不要生成页眉页脚、目录、修订。默认页眉页脚带框不在本期 create。
+不把 base64 写进 create JSON。xlsx / pptx 的 create 对象上出现 `pictures` 报 `InvalidField`（不认识的字段）。
+
+create 写出 Transitional 最小包，见 [opc.md](opc.md)。每个 `w:p` 都带唯一的 `w14:paraId` 和 `w14:textId`（取值大于 0、小于 `0x80000000`，MS-DOCX §2.6.2.3 / §2.6.2.4），并在根元素上把 `w14` 列入 `mc:Ignorable`。这样随后 inspect 得到的 id 都是 `para:{paraId}`，`stable` 为 `true`。图的 `wp:docPr/@id` 在该部件内从 `1` 起递增，与 `insertPicture` 同一套写入。
+
+标题段写出 `<w:pStyle w:val="Heading1"/>` 这类引用，样式定义放在 `/word/styles.xml`。同时写 `/word/settings.xml`，含 `<w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="15"/>`（MS-DOCX §2.3.5）。缺这项时 Word 按兼容模式打开（默认 12）。`textBoxes` 写成浮动 `square` 的 `wps:wsp`，与 `insertTextBox` 同一套最小 Choice。给了 `headers` / `footers` 时写 `/word/header1.xml` 或 `/word/footer1.xml`，并在第一节 `sectPr` 上挂 `default` 引用。不要生成多节、目录、修订。默认页眉页脚带框不在本期 create。不写入 `titlePg` / `evenAndOddHeaders`。
 
 ### pptx
 

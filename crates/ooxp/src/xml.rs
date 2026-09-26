@@ -184,9 +184,7 @@ pub fn parse(bytes: &[u8]) -> Result<Document, Error> {
             Ok(Event::Text(t)) => {
                 let text = t
                     .unescape()
-                    .map_err(|e| {
-                        Error::xml_detail(XmlIssue::TextDecode, e)
-                    })?
+                    .map_err(|e| Error::xml_detail(XmlIssue::TextDecode, e))?
                     .into_owned();
                 if text.is_empty() {
                     buf.clear();
@@ -219,8 +217,7 @@ fn start_to_element(e: &BytesStart<'_>, reader: &Reader<&[u8]>) -> Result<Elemen
     let name = qname_to_string(e.name().as_ref());
     let mut attrs = Vec::new();
     for attr in e.attributes() {
-        let attr = attr
-            .map_err(|err| Error::xml_detail(XmlIssue::AttrRead, err))?;
+        let attr = attr.map_err(|err| Error::xml_detail(XmlIssue::AttrRead, err))?;
         let key = qname_to_string(attr.key.as_ref());
         let value = attr
             .decode_and_unescape_value(reader.decoder())

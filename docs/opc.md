@@ -112,6 +112,9 @@ docx create 同样生成 Transitional 包，命名空间用 2006 那套。
 | --- | --- |
 | `/docProps/core.xml` | 核心文件属性 |
 | `/docProps/app.xml` | Application 写成 `ooxp` |
+| `/word/header1.xml` | 仅当 `document.headers` 含默认页眉 |
+| `/word/footer1.xml` | 仅当 `document.footers` 含默认页脚 |
+| `/word/media/imageN.ext` | 仅当段落或页眉页脚声明了 `pictures` |
 
 Main Document 的 Content Type：
 

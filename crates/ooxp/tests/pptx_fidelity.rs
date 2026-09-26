@@ -381,10 +381,7 @@ fn apply_multiline_then_single_line_roundtrips() {
     let src = write_slide_sample("roundtrip", BR_SLIDE);
     let two = tmp_dir().join("rt-two.pptx");
     let one = tmp_dir().join("rt-one.pptx");
-    for (from, to, text) in [
-        (&src, &two, "甲\n乙\n丙"),
-        (&two, &one, "只剩一行"),
-    ] {
+    for (from, to, text) in [(&src, &two, "甲\n乙\n丙"), (&two, &one, "只剩一行")] {
         run(
             &json!({
                 "schemaVersion": 1,
@@ -426,10 +423,7 @@ fn apply_drops_leading_empty_para() {
         slide.contains(r#"<a:p><a:pPr algn="l"/><a:r><a:t>新</a:t></a:r></a:p>"#),
         "写入段自己的对齐应留下：{slide}"
     );
-    assert!(
-        !slide.contains(r#"algn="r""#),
-        "空的前段对齐还在：{slide}"
-    );
+    assert!(!slide.contains(r#"algn="r""#), "空的前段对齐还在：{slide}");
     assert_eq!(read_back(&out), "新");
 }
 

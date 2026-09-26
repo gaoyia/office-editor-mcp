@@ -25,6 +25,7 @@ $order = @(
     'pptx-inspect'
     'xlsx-create'
     'docx-create'
+    'docx-create-pictures'
     'pptx-create'
     'xlsx-apply'
     'docx-apply'

@@ -149,6 +149,38 @@
         "paragraphs": {
           "type": "array",
           "items": { "$ref": "#/$defs/docxParaCreate" }
+        },
+        "headers": {
+          "type": "array",
+          "maxItems": 1,
+          "items": { "$ref": "#/$defs/docxHfCreate" }
+        },
+        "footers": {
+          "type": "array",
+          "maxItems": 1,
+          "items": { "$ref": "#/$defs/docxHfCreate" }
+        }
+      }
+    },
+    "docxHfCreate": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "default" },
+        "paragraphs": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/docxHfParaCreate" }
+        }
+      }
+    },
+    "docxHfParaCreate": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "text": { "type": "string" },
+        "pictures": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/docxPictureCreate" }
         }
       }
     },
@@ -164,7 +196,27 @@
         "textBoxes": {
           "type": "array",
           "items": { "$ref": "#/$defs/docxTextBoxCreate" }
+        },
+        "pictures": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/docxPictureCreate" }
         }
+      }
+    },
+    "docxPictureCreate": {
+      "type": "object",
+      "required": ["file"],
+      "additionalProperties": false,
+      "properties": {
+        "file": { "type": "string", "minLength": 1 },
+        "cx": { "type": "integer", "minimum": 1 },
+        "cy": { "type": "integer", "minimum": 1 },
+        "kind": { "enum": ["inline", "anchor"] },
+        "wrap": { "enum": ["square", "tight", "through", "topAndBottom", "none"] },
+        "alignH": { "enum": ["left", "center", "right"] },
+        "alignV": { "enum": ["top", "center", "bottom"] },
+        "offsetX": { "type": "integer" },
+        "offsetY": { "type": "integer" }
       }
     },
     "docxTextBoxCreate": {

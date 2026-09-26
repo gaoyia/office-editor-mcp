@@ -1,7 +1,7 @@
 //! docx 保真度：文本框与 AlternateContent 边界、混排 run、修订、表格、重复 paraId。
 //!
-//! 样例刻意照 Word 真实存盘的写法造。库自己 `create` 出来的文件没有文本框，
-//! 只用往返测试会漏掉 A9 那种遍历缺陷。
+//! 样例刻意照 Word 真实存盘的写法造。库自己 `create` 出来的文件没有修订、表格
+//! 和 AlternateContent 双支，只用往返测试会漏掉 A9 那种遍历缺陷。
 
 use std::io::{Cursor, Read, Write};
 use std::path::{Path, PathBuf};
@@ -371,10 +371,7 @@ fn inspect_expands_header_footer_paragraphs() {
         tree["headers"][2]["paragraphs"][0]["id"],
         "header:first:1/para:AAAA1001"
     );
-    assert_eq!(
-        tree["footers"][0]["paragraphs"][0]["text"],
-        "默认页脚"
-    );
+    assert_eq!(tree["footers"][0]["paragraphs"][0]["text"], "默认页脚");
 }
 
 #[test]
@@ -384,13 +381,7 @@ fn apply_header_leaves_document_bytes() {
     let before_footer = part_bytes(&path, "word/footer1.xml");
     let before_styles = part_bytes(&path, "word/styles.xml");
     let out = tmp_dir().join("hf-apply-out.docx");
-    apply(
-        &path,
-        &out,
-        "header:default:1/para:AAAA1001",
-        "新页眉",
-    )
-    .unwrap();
+    apply(&path, &out, "header:default:1/para:AAAA1001", "新页眉").unwrap();
     assert_eq!(before_doc, part_bytes(&out, "word/document.xml"));
     assert_eq!(before_footer, part_bytes(&out, "word/footer1.xml"));
     assert_eq!(before_styles, part_bytes(&out, "word/styles.xml"));
@@ -683,10 +674,7 @@ fn unlink_copies_part_and_edit_does_not_touch_previous() {
     let tree = inspect_hf(&out, true);
     assert_eq!(tree["sections"][1]["headerLink"]["default"], false);
     let headers = tree["headers"].as_array().unwrap();
-    let defaults: Vec<_> = headers
-        .iter()
-        .filter(|h| h["type"] == "default")
-        .collect();
+    let defaults: Vec<_> = headers.iter().filter(|h| h["type"] == "default").collect();
     assert_eq!(defaults.len(), 2);
     assert_eq!(defaults[0]["sections"], json!([1]));
     assert_eq!(defaults[1]["sections"], json!([2]));
@@ -831,7 +819,10 @@ fn link_already_target_is_noop() {
     )
     .unwrap();
     assert_eq!(before_doc, part_bytes(&out, "word/document.xml"));
-    assert_eq!(before_rels, part_bytes(&out, "word/_rels/document.xml.rels"));
+    assert_eq!(
+        before_rels,
+        part_bytes(&out, "word/_rels/document.xml.rels")
+    );
     let tree = inspect_hf(&out, false);
     assert_eq!(tree["sections"][1]["headerLink"]["default"], true);
 }
@@ -865,20 +856,20 @@ fn unlink_blank_writes_minimal_header() {
 
 /// 1×1 红 PNG。
 const PNG_1X1: &[u8] = &[
-    0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44,
-    0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x02, 0x00, 0x00, 0x00, 0x90,
-    0x77, 0x53, 0xDE, 0x00, 0x00, 0x00, 0x0C, 0x49, 0x44, 0x41, 0x54, 0x08, 0xD7, 0x63, 0xF8,
-    0xCF, 0xC0, 0x00, 0x00, 0x03, 0x01, 0x01, 0x00, 0x18, 0xDD, 0x8D, 0xB4, 0x00, 0x00, 0x00,
-    0x00, 0x49, 0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82,
+    0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52,
+    0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x02, 0x00, 0x00, 0x00, 0x90, 0x77, 0x53,
+    0xDE, 0x00, 0x00, 0x00, 0x0C, 0x49, 0x44, 0x41, 0x54, 0x08, 0xD7, 0x63, 0xF8, 0xCF, 0xC0, 0x00,
+    0x00, 0x03, 0x01, 0x01, 0x00, 0x18, 0xDD, 0x8D, 0xB4, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4E,
+    0x44, 0xAE, 0x42, 0x60, 0x82,
 ];
 
 /// 另一份 1×1 PNG，字节不同，用来换图。
 const PNG_1X1_B: &[u8] = &[
-    0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44,
-    0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x02, 0x00, 0x00, 0x00, 0x90,
-    0x77, 0x53, 0xDE, 0x00, 0x00, 0x00, 0x0C, 0x49, 0x44, 0x41, 0x54, 0x08, 0xD7, 0x63, 0x60,
-    0x60, 0x60, 0x00, 0x00, 0x00, 0x04, 0x00, 0x01, 0xA3, 0x0A, 0x15, 0xE3, 0x00, 0x00, 0x00,
-    0x00, 0x49, 0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82,
+    0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52,
+    0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x02, 0x00, 0x00, 0x00, 0x90, 0x77, 0x53,
+    0xDE, 0x00, 0x00, 0x00, 0x0C, 0x49, 0x44, 0x41, 0x54, 0x08, 0xD7, 0x63, 0x60, 0x60, 0x60, 0x00,
+    0x00, 0x00, 0x04, 0x00, 0x01, 0xA3, 0x0A, 0x15, 0xE3, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4E,
+    0x44, 0xAE, 0x42, 0x60, 0x82,
 ];
 
 const PIC_CT: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="png" ContentType="image/png"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/><Override PartName="/word/settings.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml"/><Override PartName="/word/header1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/></Types>"#;
@@ -948,11 +939,7 @@ fn write_temp_png(tag: &str, bytes: &[u8]) -> PathBuf {
 }
 
 fn object_keys(v: &serde_json::Value) -> Vec<&str> {
-    v.as_object()
-        .unwrap()
-        .keys()
-        .map(String::as_str)
-        .collect()
+    v.as_object().unwrap().keys().map(String::as_str).collect()
 }
 
 #[test]
@@ -983,7 +970,15 @@ fn inspect_lists_header_pictures() {
     assert_eq!(pics[1]["cx"], 19050);
     assert_eq!(
         object_keys(&tree["headers"][0]),
-        ["id", "type", "sections", "paraCount", "pictureCount", "textBoxCount", "pictures"]
+        [
+            "id",
+            "type",
+            "sections",
+            "paraCount",
+            "pictureCount",
+            "textBoxCount",
+            "pictures"
+        ]
     );
 }
 
@@ -1457,7 +1452,10 @@ fn export_header_picture_bytes_match() {
     assert!(ops_applied.is_none());
     assert_eq!(content_type.as_deref(), Some("image/png"));
     assert_eq!(std::fs::read(&out).unwrap(), PNG_1X1);
-    assert_eq!(std::fs::read(&out).unwrap(), part_bytes(&path, "word/media/image1.png"));
+    assert_eq!(
+        std::fs::read(&out).unwrap(),
+        part_bytes(&path, "word/media/image1.png")
+    );
 }
 
 #[test]
@@ -1470,7 +1468,10 @@ fn export_body_picture_bytes_match() {
     };
     assert_eq!(content_type.as_deref(), Some("image/png"));
     assert_eq!(std::fs::read(&out).unwrap(), PNG_1X1);
-    assert_eq!(std::fs::read(&out).unwrap(), part_bytes(&path, "word/media/image2.png"));
+    assert_eq!(
+        std::fs::read(&out).unwrap(),
+        part_bytes(&path, "word/media/image2.png")
+    );
 }
 
 #[test]
@@ -1813,12 +1814,7 @@ fn insert_and_delete_para_in_textbox() {
         .unwrap()
         .to_string();
     let out2 = tmp_dir().join("txbx-para-del.docx");
-    apply_ops(
-        &out,
-        &out2,
-        json!([{ "op": "deletePara", "id": second }]),
-    )
-    .unwrap();
+    apply_ops(&out, &out2, json!([{ "op": "deletePara", "id": second }])).unwrap();
     let tree2 = inspect_boxes(&out2);
     assert_eq!(tree2["paragraphs"][0]["textBoxes"][0]["paraCount"], 1);
     let last = tree2["paragraphs"][0]["textBoxes"][0]["paragraphs"][0]["id"]
@@ -1962,7 +1958,10 @@ fn inspect_expands_group_textboxes() {
     std::fs::write(&path, cursor.into_inner()).unwrap();
     let tree = inspect_boxes(&path);
     assert_eq!(tree["textBoxCount"], 1);
-    assert_eq!(tree["paragraphs"][0]["textBoxes"][0]["id"], "para:EEEE5001/txbx:11");
+    assert_eq!(
+        tree["paragraphs"][0]["textBoxes"][0]["id"],
+        "para:EEEE5001/txbx:11"
+    );
     assert_eq!(
         tree["paragraphs"][0]["textBoxes"][0]["paragraphs"][0]["text"],
         "组内"
@@ -1999,6 +1998,194 @@ fn create_document_with_textbox() {
         tree["paragraphs"][0]["textBoxes"][0]["paragraphs"][0]["text"],
         "框字"
     );
+}
+
+fn create_docx_path(tag: &str) -> PathBuf {
+    tmp_dir().join(format!(
+        "{tag}-{}.docx",
+        SEQ.fetch_add(1, Ordering::Relaxed)
+    ))
+}
+
+#[test]
+fn create_body_inline_picture() {
+    let png = write_temp_png("create-body", PNG_1X1);
+    let path = create_docx_path("create-body-pic");
+    run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "create",
+            "path": path.to_string_lossy(),
+            "document": {
+                "paragraphs": [
+                    { "style": "Heading1", "text": "标题" },
+                    { "text": "hello", "pictures": [{ "file": png.to_string_lossy() }] }
+                ]
+            }
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap();
+    let tree = inspect_body_pics(&path);
+    assert_eq!(tree["pictureCount"], 1);
+    assert_eq!(tree["paragraphs"][1]["text"], "hello");
+    assert_eq!(tree["paragraphs"][1]["pictureCount"], 1);
+    let pic = &tree["paragraphs"][1]["pictures"][0];
+    assert_eq!(pic["id"], "para:00000002/pic:1");
+    assert_eq!(pic["kind"], "inline");
+    assert!(pic["wrap"].is_null());
+    assert_eq!(pic["stable"], true);
+    assert_eq!(pic["cx"], 9525);
+    assert_eq!(pic["cy"], 9525);
+    assert!(zip_has_part(&path, "word/media/image1.png"));
+    assert_eq!(part_bytes(&path, "word/media/image1.png"), PNG_1X1);
+}
+
+#[test]
+fn create_header_anchor_and_mixed_body() {
+    let png = write_temp_png("create-hf", PNG_1X1);
+    let path = create_docx_path("create-hf-pic");
+    run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "create",
+            "path": path.to_string_lossy(),
+            "document": {
+                "paragraphs": [
+                    { "text": "甲", "pictures": [{ "file": png.to_string_lossy() }] },
+                    {
+                        "text": "乙",
+                        "pictures": [
+                            { "file": png.to_string_lossy(), "kind": "anchor", "wrap": "square" },
+                            { "file": png.to_string_lossy(), "cx": 19050, "cy": 9525 }
+                        ]
+                    }
+                ],
+                "headers": [{
+                    "type": "default",
+                    "paragraphs": [{
+                        "text": "页眉",
+                        "pictures": [{ "file": png.to_string_lossy(), "kind": "anchor", "wrap": "square" }]
+                    }]
+                }],
+                "footers": [{
+                    "paragraphs": [{ "text": "页脚" }]
+                }]
+            }
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap();
+    let RunOutput::Inspect(tree) = run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "inspect",
+            "path": path.to_string_lossy(),
+            "scope": { "from": 1, "maxParas": 20, "pictures": true, "headerFooter": true }
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap() else {
+        panic!();
+    };
+    assert_eq!(tree["pictureCount"], 3);
+    assert_eq!(tree["headers"][0]["id"], "header:default:1");
+    assert_eq!(tree["headers"][0]["pictureCount"], 1);
+    assert_eq!(
+        tree["headers"][0]["pictures"][0]["id"],
+        "header:default:1/pic:1"
+    );
+    assert_eq!(tree["headers"][0]["pictures"][0]["kind"], "anchor");
+    assert_eq!(tree["headers"][0]["pictures"][0]["wrap"], "square");
+    assert_eq!(tree["headers"][0]["paragraphs"][0]["text"], "页眉");
+    assert_eq!(tree["footers"][0]["id"], "footer:default:1");
+    assert_eq!(tree["footers"][0]["paragraphs"][0]["text"], "页脚");
+    assert_eq!(
+        tree["paragraphs"][0]["pictures"][0]["id"],
+        "para:00000001/pic:1"
+    );
+    assert_eq!(tree["paragraphs"][0]["pictures"][0]["kind"], "inline");
+    assert_eq!(tree["paragraphs"][1]["pictureCount"], 2);
+    assert_eq!(tree["paragraphs"][1]["pictures"][0]["kind"], "anchor");
+    assert_eq!(tree["paragraphs"][1]["pictures"][0]["wrap"], "square");
+    assert_eq!(
+        tree["paragraphs"][1]["pictures"][0]["id"],
+        "para:00000002/pic:2"
+    );
+    assert_eq!(tree["paragraphs"][1]["pictures"][1]["kind"], "inline");
+    assert_eq!(
+        tree["paragraphs"][1]["pictures"][1]["id"],
+        "para:00000002/pic:3"
+    );
+    assert_eq!(tree["paragraphs"][1]["pictures"][1]["cx"], 19050);
+    assert!(zip_has_part(&path, "word/header1.xml"));
+    assert!(zip_has_part(&path, "word/footer1.xml"));
+    assert!(zip_has_part(&path, "word/media/image1.png"));
+}
+
+#[test]
+fn create_pictures_rejects_missing_file_and_one_size() {
+    let png = write_temp_png("create-bad", PNG_1X1);
+    let path = create_docx_path("create-pic-miss");
+    let err = run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "create",
+            "path": path.to_string_lossy(),
+            "document": {
+                "paragraphs": [{ "text": "a", "pictures": [{}] }]
+            }
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+    assert_eq!(
+        err.field_path(),
+        Some("document.paragraphs[0].pictures[0].file")
+    );
+
+    let path2 = create_docx_path("create-pic-size");
+    let err = run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "create",
+            "path": path2.to_string_lossy(),
+            "document": {
+                "paragraphs": [{
+                    "text": "a",
+                    "pictures": [{ "file": png.to_string_lossy(), "cx": 9525 }]
+                }]
+            }
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+    assert_eq!(err.field_path(), Some("document.paragraphs[0].pictures[0]"));
+
+    let path3 = create_docx_path("create-hf-even");
+    let err = run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "create",
+            "path": path3.to_string_lossy(),
+            "document": {
+                "paragraphs": [{ "text": "a" }],
+                "headers": [{ "type": "even", "paragraphs": [{ "text": "偶" }] }]
+            }
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+    assert_eq!(err.field_path(), Some("document.headers[0].type"));
 }
 
 #[test]

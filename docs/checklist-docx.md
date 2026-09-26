@@ -15,6 +15,7 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 | C1 | ✅ | Word 16.0 能打开 `manual-check/office/out/docx-create.docx`，标题栏无 Repair；`CompatibilityMode=15` |
 | C2 | 🚫 | 不再要求 WPS。此前 WPS 文字已打开过，不作为验收条件 |
 | C3–C4 | ✅ | 标题 1 / 「标题」，正文 `hello` |
+| C5–C7 | ✅ | Word 16.0：`docx-create-pictures.ps1`，4 PASS / 0 FAIL。第二段行内图 `para:00000002/pic:1`；默认页眉浮动 `square`；标题栏无 Repair，正文与页眉都能看见图 |
 | I1–I5 | ✅ | `docx:document`、`paraCount=2`、大纲 level 1、「标题」、`para:{hex}` 且 `stable`、无 scope 时没有 `paragraphs`，仍有 `pictureCount` |
 | A1–A5 | ✅ | Word 打开 apply 产物：第二段为「改过的正文」且仍加粗，第一段仍是「第一章」/标题 1，第三段未改 |
 | HF1–HF5 | ✅ | Word 另存带页眉页脚样例：名单与展开、改页眉后打开无修复，页眉变「新页眉」、正文与页脚未改 |
@@ -36,6 +37,9 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 | C2 | WPS 打开 | 🚫 第一期不跑。验收只认 Microsoft Word |
 | C3 | 第一段 | 样式为标题 1，文字为 `标题` |
 | C4 | 第二段 | 正文，文字为 `hello` |
+| C5 | 带图正文 | 用 `docs/examples/docx-create-pictures.json`（换成本机 PNG）生成；第二段有行内图，inspect id 为 `para:…/pic:1` |
+| C6 | 带图页眉 | 同上，默认页眉有浮动 `square`，Word 能看见 |
+| C7 | Word 打开带图产物 | 无修复；图可见 |
 
 ## inspect
 
@@ -63,7 +67,7 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 
 ## 页眉页脚
 
-准备一份 Word 亲手另存的样例：至少有默认页眉与默认页脚，页眉里有一段无域、无超链接的可见文字。不要用库 `create` 产物（create 不写页眉页脚）。对它 `inspect` 时带 `scope.headerFooter: true`，再用返回的页眉段落 id 做 `setParaText`。
+准备一份 Word 亲手另存的样例：至少有默认页眉与默认页脚，页眉里有一段无域、无超链接的可见文字。不要用库 `create` 产物（这两项要测 Word 另存的已有页眉，不要用 create 刚写的默认页眉）。对它 `inspect` 时带 `scope.headerFooter: true`，再用返回的页眉段落 id 做 `setParaText`。
 
 | 序号 | 检查 | 通过标准 |
 | --- | --- | --- |
@@ -86,7 +90,7 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 
 ## 链接前节
 
-准备一份 Word 亲手另存的两节样例：第二节默认页眉勾选「链接到前一节」。不要用库 `create` 产物（create 不写多节或页眉）。对它 `inspect` 后发 `setHeaderFooterLink` 断开第二节默认页眉，再改第二节页眉文字。Word COM 的 `Headers.Item(1).LinkToPrevious` 对应默认页眉。
+准备一份 Word 亲手另存的两节样例：第二节默认页眉勾选「链接到前一节」。不要用库 `create` 产物（create 不写多节）。对它 `inspect` 后发 `setHeaderFooterLink` 断开第二节默认页眉，再改第二节页眉文字。Word COM 的 `Headers.Item(1).LinkToPrevious` 对应默认页眉。
 
 | 序号 | 检查 | 通过标准 |
 | --- | --- | --- |

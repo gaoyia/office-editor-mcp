@@ -37,11 +37,7 @@ mod tests {
     }
 
     fn object_keys(v: &serde_json::Value) -> Vec<&str> {
-        v.as_object()
-            .unwrap()
-            .keys()
-            .map(String::as_str)
-            .collect()
+        v.as_object().unwrap().keys().map(String::as_str).collect()
     }
 
     #[test]
@@ -260,6 +256,40 @@ mod tests {
         assert!(types.contains("/word/settings.xml"));
         let rels = part_text(&path, "/word/_rels/document.xml.rels");
         assert!(rels.contains("/settings"));
+    }
+
+    #[test]
+    fn xlsx_create_rejects_pictures_field() {
+        let err = run(
+            &json!({
+                "schemaVersion": 1,
+                "action": "create",
+                "path": tmp("pic-reject.xlsx").to_string_lossy(),
+                "workbook": { "sheets": [{ "name": "Sheet1" }], "pictures": [] }
+            })
+            .to_string(),
+            None,
+        )
+        .unwrap_err();
+        assert_eq!(err.code(), ErrorCode::InvalidField);
+        assert_eq!(err.field_path(), Some("workbook.pictures"));
+    }
+
+    #[test]
+    fn pptx_create_rejects_pictures_field() {
+        let err = run(
+            &json!({
+                "schemaVersion": 1,
+                "action": "create",
+                "path": tmp("pic-reject.pptx").to_string_lossy(),
+                "presentation": { "slides": [{ "shapes": [{ "text": "a" }] }], "pictures": [] }
+            })
+            .to_string(),
+            None,
+        )
+        .unwrap_err();
+        assert_eq!(err.code(), ErrorCode::InvalidField);
+        assert_eq!(err.field_path(), Some("presentation.pictures"));
     }
 
     #[test]
@@ -624,8 +654,11 @@ mod tests {
 
     #[test]
     fn error_message_defaults_to_english() {
-        let err = run(r#"{"schemaVersion":2,"action":"inspect","path":"x.xlsx"}"#, None)
-            .unwrap_err();
+        let err = run(
+            r#"{"schemaVersion":2,"action":"inspect","path":"x.xlsx"}"#,
+            None,
+        )
+        .unwrap_err();
         let en = err.to_json(Lang::En);
         assert_eq!(en["error"]["code"], "UnsupportedSchema");
         assert_eq!(en["error"]["message"], "schemaVersion must be 1");
@@ -741,11 +774,28 @@ mod tests {
         );
         assert_eq!(
             object_keys(&tree["paragraphs"][0]),
-            ["id", "index", "style", "level", "text", "stable", "pictureCount", "textBoxCount"]
+            [
+                "id",
+                "index",
+                "style",
+                "level",
+                "text",
+                "stable",
+                "pictureCount",
+                "textBoxCount"
+            ]
         );
         assert_eq!(
             object_keys(&tree["paragraphs"][1]),
-            ["id", "index", "style", "text", "stable", "pictureCount", "textBoxCount"]
+            [
+                "id",
+                "index",
+                "style",
+                "text",
+                "stable",
+                "pictureCount",
+                "textBoxCount"
+            ]
         );
         assert_eq!(
             object_keys(&tree["sections"][0]),

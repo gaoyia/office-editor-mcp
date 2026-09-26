@@ -505,18 +505,12 @@ pub fn find_paragraph<'a>(root: &'a Element, target: &BodyPara) -> Option<&'a El
     find_p(root, &mut idx, target)
 }
 
-pub fn find_paragraph_mut<'a>(
-    root: &'a mut Element,
-    target: &BodyPara,
-) -> Option<&'a mut Element> {
+pub fn find_paragraph_mut<'a>(root: &'a mut Element, target: &BodyPara) -> Option<&'a mut Element> {
     let mut idx = 0usize;
     find_p_mut(root, &mut idx, target)
 }
 
-pub fn find_paragraph_in_txbx<'a>(
-    content: &'a Element,
-    target: &BodyPara,
-) -> Option<&'a Element> {
+pub fn find_paragraph_in_txbx<'a>(content: &'a Element, target: &BodyPara) -> Option<&'a Element> {
     let mut idx = 0usize;
     for n in &content.children {
         if let Node::Element(e) = n {

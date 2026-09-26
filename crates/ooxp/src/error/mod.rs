@@ -298,10 +298,7 @@ mod tests {
         for kind in ErrorKind::all_samples() {
             for lang in [Lang::En, Lang::ZhCn] {
                 let text = messages::render(lang, &kind);
-                assert!(
-                    !text.is_empty(),
-                    "{kind:?} 在 {lang:?} 下得到空文案"
-                );
+                assert!(!text.is_empty(), "{kind:?} 在 {lang:?} 下得到空文案");
                 // 文案里一律不许出现花括号：真漏了替换是 bug，写成模板给人看也会被
                 // 当成 bug。要举例 id 的形状就写 `slide:N`。
                 assert!(

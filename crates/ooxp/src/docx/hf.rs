@@ -223,7 +223,8 @@ pub fn even_and_odd_headers(pkg: &Package, doc_part: &str) -> Result<bool, Error
 pub fn has_explicit_ref(sect: &Element, kind: HfKind, hf_type: HfType) -> bool {
     let local = ref_local(kind);
     sect.element_children().any(|c| {
-        c.local_name() == local && HfType::parse(c.attr_local("type").unwrap_or("")) == Some(hf_type)
+        c.local_name() == local
+            && HfType::parse(c.attr_local("type").unwrap_or("")) == Some(hf_type)
     })
 }
 
@@ -296,13 +297,9 @@ pub fn minimal_hf_xml(kind: HfKind) -> Vec<u8> {
 /// 源部件与目标部件同目录时写相对文件名，否则写去掉前导 `/` 的路径。
 pub fn same_dir_rel_target(source_part: &str, target_opc: &str) -> String {
     let src_file = source_part.rsplit('/').next().unwrap_or(source_part);
-    let src_dir = source_part
-        .strip_suffix(src_file)
-        .unwrap_or("/");
+    let src_dir = source_part.strip_suffix(src_file).unwrap_or("/");
     let tgt_file = target_opc.rsplit('/').next().unwrap_or(target_opc);
-    let tgt_dir = target_opc
-        .strip_suffix(tgt_file)
-        .unwrap_or("/");
+    let tgt_dir = target_opc.strip_suffix(tgt_file).unwrap_or("/");
     if src_dir == tgt_dir {
         tgt_file.to_string()
     } else {
@@ -316,9 +313,11 @@ pub fn rid_attr_name(sect: &Element) -> String {
         if loc != "headerReference" && loc != "footerReference" {
             continue;
         }
-        if let Some((k, _)) = child.attrs.iter().find(|(k, _)| {
-            k.rsplit(':').next().unwrap_or(k) == "id"
-        }) {
+        if let Some((k, _)) = child
+            .attrs
+            .iter()
+            .find(|(k, _)| k.rsplit(':').next().unwrap_or(k) == "id")
+        {
             return k.clone();
         }
     }
@@ -430,21 +429,18 @@ fn explicit_refs(
         if child.local_name() != local {
             continue;
         }
-        let type_raw = child.attr_local("type").ok_or_else(|| {
-            Error::xml_detail(XmlIssue::Parse, format!("{local} missing w:type"))
-        })?;
+        let type_raw = child
+            .attr_local("type")
+            .ok_or_else(|| Error::xml_detail(XmlIssue::Parse, format!("{local} missing w:type")))?;
         let hf_type = HfType::parse(type_raw).ok_or_else(|| {
-            Error::xml_detail(
-                XmlIssue::Parse,
-                format!("{local} bad w:type: {type_raw}"),
-            )
+            Error::xml_detail(XmlIssue::Parse, format!("{local} bad w:type: {type_raw}"))
         })?;
-        let rid = child.attr_local("id").ok_or_else(|| {
-            Error::xml_detail(XmlIssue::Parse, format!("{local} missing r:id"))
-        })?;
-        let rel = rels.find_by_id(rid).ok_or_else(|| {
-            Error::xml_detail(XmlIssue::Parse, format!("dangling r:id {rid}"))
-        })?;
+        let rid = child
+            .attr_local("id")
+            .ok_or_else(|| Error::xml_detail(XmlIssue::Parse, format!("{local} missing r:id")))?;
+        let rel = rels
+            .find_by_id(rid)
+            .ok_or_else(|| Error::xml_detail(XmlIssue::Parse, format!("dangling r:id {rid}")))?;
         if rel.is_external() {
             return Err(Error::xml_detail(
                 XmlIssue::Parse,
@@ -461,9 +457,8 @@ fn explicit_refs(
                 format!("r:id {rid} is not a {suffix} relationship"),
             ));
         }
-        let part = opc::resolve_rel_target(doc_part, &rel.target).map_err(|_| {
-            Error::xml_detail(XmlIssue::Parse, format!("bad rel target for {rid}"))
-        })?;
+        let part = opc::resolve_rel_target(doc_part, &rel.target)
+            .map_err(|_| Error::xml_detail(XmlIssue::Parse, format!("bad rel target for {rid}")))?;
         map.entry(hf_type).or_insert(part);
     }
     Ok(map)
@@ -487,11 +482,7 @@ fn read_even_and_odd(
     doc_part: &str,
     doc_rels: &Relationships,
 ) -> Result<bool, Error> {
-    let Some(rel) = doc_rels
-        .find_by_type_suffix("/settings")
-        .into_iter()
-        .next()
-    else {
+    let Some(rel) = doc_rels.find_by_type_suffix("/settings").into_iter().next() else {
         return Ok(false);
     };
     if rel.is_external() {
@@ -545,11 +536,7 @@ pub fn find_sect_pr_mut(root: &mut Element, n: usize) -> Option<&mut Element> {
     find_sect_mut(root, &mut idx, n)
 }
 
-fn find_sect_mut<'a>(
-    el: &'a mut Element,
-    idx: &mut usize,
-    n: usize,
-) -> Option<&'a mut Element> {
+fn find_sect_mut<'a>(el: &'a mut Element, idx: &mut usize, n: usize) -> Option<&'a mut Element> {
     if el.local_name() == "txbxContent" {
         return None;
     }
@@ -589,7 +576,10 @@ pub fn twip_attr(pg_mar: Option<&Element>, local: &str) -> Result<Option<i64>, E
     };
     let t = raw.trim();
     let n: i64 = t.parse().map_err(|_| {
-        Error::xml_detail(XmlIssue::Parse, format!("pgMar/@{local} not an integer: {raw}"))
+        Error::xml_detail(
+            XmlIssue::Parse,
+            format!("pgMar/@{local} not an integer: {raw}"),
+        )
     })?;
     if n < 0 {
         return Err(Error::xml_detail(
@@ -602,9 +592,11 @@ pub fn twip_attr(pg_mar: Option<&Element>, local: &str) -> Result<Option<i64>, E
 
 /// 按 local name 写 twip 属性；已有则改原名，没有则用节前缀补上。
 pub fn set_twip_attr(el: &mut Element, local: &str, value: u32) {
-    if let Some((_, v)) = el.attrs.iter_mut().find(|(k, _)| {
-        k.rsplit(':').next().unwrap_or(k) == local
-    }) {
+    if let Some((_, v)) = el
+        .attrs
+        .iter_mut()
+        .find(|(k, _)| k.rsplit(':').next().unwrap_or(k) == local)
+    {
         *v = value.to_string();
         return;
     }

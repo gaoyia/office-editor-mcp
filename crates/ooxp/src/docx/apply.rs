@@ -125,9 +125,7 @@ fn apply_para_text(
             let doc = load_part(pkg, docs, doc_part)?;
             let el = para::find_paragraph_mut(&mut doc.root, p).ok_or_else(|| {
                 Error::with_path(
-                    ErrorKind::ParaNotFound {
-                        id: op.id.clone(),
-                    },
+                    ErrorKind::ParaNotFound { id: op.id.clone() },
                     format!("ops[{i}].id"),
                 )
             })?;
@@ -144,9 +142,7 @@ fn apply_para_text(
             let doc = load_part(pkg, docs, &part_name)?;
             let el = para::find_paragraph_mut(&mut doc.root, para).ok_or_else(|| {
                 Error::with_path(
-                    ErrorKind::ParaNotFound {
-                        id: op.id.clone(),
-                    },
+                    ErrorKind::ParaNotFound { id: op.id.clone() },
                     format!("ops[{i}].id"),
                 )
             })?;
@@ -158,25 +154,19 @@ fn apply_para_text(
             let doc = load_part(pkg, docs, &part_name)?;
             let host_p = para::find_paragraph_mut(&mut doc.root, host.body()).ok_or_else(|| {
                 Error::with_path(
-                    ErrorKind::ParaNotFound {
-                        id: op.id.clone(),
-                    },
+                    ErrorKind::ParaNotFound { id: op.id.clone() },
                     format!("ops[{i}].id"),
                 )
             })?;
             let content = textbox::find_txbx_content_by_key_mut(host_p, key).ok_or_else(|| {
                 Error::with_path(
-                    ErrorKind::ParaNotFound {
-                        id: op.id.clone(),
-                    },
+                    ErrorKind::ParaNotFound { id: op.id.clone() },
                     format!("ops[{i}].id"),
                 )
             })?;
             let el = para::find_paragraph_in_txbx_mut(content, para).ok_or_else(|| {
                 Error::with_path(
-                    ErrorKind::ParaNotFound {
-                        id: op.id.clone(),
-                    },
+                    ErrorKind::ParaNotFound { id: op.id.clone() },
                     format!("ops[{i}].id"),
                 )
             })?;
@@ -190,9 +180,7 @@ fn apply_para_text(
 fn apply_hf_distance(root: &mut Element, op: &SetHfDistanceOp, i: usize) -> Result<(), Error> {
     let sect = hf::find_sect_pr_mut(root, op.n).ok_or_else(|| {
         Error::with_path(
-            ErrorKind::SectionNotFound {
-                id: op.id.clone(),
-            },
+            ErrorKind::SectionNotFound { id: op.id.clone() },
             format!("ops[{i}].id"),
         )
     })?;
@@ -230,9 +218,7 @@ fn apply_hf_link(
     let sect_count = hf::collect_sect_prs(&docs.get(doc_part).unwrap().root).len();
     if op.n > sect_count {
         return Err(Error::with_path(
-            ErrorKind::SectionNotFound {
-                id: op.id.clone(),
-            },
+            ErrorKind::SectionNotFound { id: op.id.clone() },
             format!("ops[{i}].id"),
         ));
     }
@@ -409,21 +395,14 @@ fn part_for_pic(
 ) -> Result<String, Error> {
     match target {
         picture::PicTarget::Body { .. } => Ok(doc_part.to_string()),
-        picture::PicTarget::InTextBox { host, .. } => {
-            part_for_host(catalog, doc_part, host, id, i)
-        }
+        picture::PicTarget::InTextBox { host, .. } => part_for_host(catalog, doc_part, host, id, i),
         picture::PicTarget::HeaderFooter {
-            kind,
-            hf_type,
-            n,
-            ..
+            kind, hf_type, n, ..
         } => {
             let container_id = format!("{}:{}:{n}", kind.as_str(), hf_type.as_str());
             let item = hf::find_by_id(catalog, &container_id).ok_or_else(|| {
                 Error::with_path(
-                    ErrorKind::PictureNotFound {
-                        id: id.to_string(),
-                    },
+                    ErrorKind::PictureNotFound { id: id.to_string() },
                     format!("ops[{i}].id"),
                 )
             })?;
@@ -496,9 +475,7 @@ fn apply_replace_pic(
     let doc = load_part(pkg, docs, &part_name)?;
     let drawing = find_target_drawing_mut(&mut doc.root, &op.target).ok_or_else(|| {
         Error::with_path(
-            ErrorKind::PictureNotFound {
-                id: op.id.clone(),
-            },
+            ErrorKind::PictureNotFound { id: op.id.clone() },
             format!("ops[{i}].id"),
         )
     })?;
@@ -543,52 +520,40 @@ fn apply_insert_pic(
     let part_name = match &op.para {
         ParaTarget::Body(_) => doc_part.to_string(),
         ParaTarget::HeaderFooter {
-            kind,
-            hf_type,
-            n,
-            ..
+            kind, hf_type, n, ..
         } => part_for_hf(catalog, *kind, *hf_type, *n, &op.id, i)?,
-        ParaTarget::InTextBox { host, .. } => {
-            part_for_host(catalog, doc_part, host, &op.id, i)?
-        }
+        ParaTarget::InTextBox { host, .. } => part_for_host(catalog, doc_part, host, &op.id, i)?,
     };
     {
         let doc = load_part(pkg, docs, &part_name)?;
         if find_insert_para_mut(&mut doc.root, &op.para).is_none() {
             return Err(Error::with_path(
-                ErrorKind::ParaNotFound {
-                    id: op.id.clone(),
-                },
+                ErrorKind::ParaNotFound { id: op.id.clone() },
                 format!("ops[{i}].id"),
             ));
         }
     }
-    let image = picture::read_image(&op.file)?;
-    let (cx, cy) = match (op.cx, op.cy) {
-        (Some(x), Some(y)) => (x, y),
-        _ => (image.cx, image.cy),
-    };
-    let media = picture::next_media_part(pkg, &image.ext);
-    pkg.set(&media, image.bytes)?;
-    let rid = picture::add_image_rel(pkg, &part_name, &media)?;
-    let mut cts = ContentTypes::from_package(pkg)?;
-    cts.ensure_default(&image.ext, &image.content_type);
-    cts.write_to(pkg)?;
+    let (rid, cx, cy) = picture::add_media(pkg, &part_name, &op.file, op.cx, op.cy)?;
 
     let doc = load_part(pkg, docs, &part_name)?;
     picture::ensure_drawing_ns(&mut doc.root);
     let doc_pr = picture::next_docpr_id(&doc.root);
-    let name = format!("图片 {doc_pr}");
     let p = find_insert_para_mut(&mut doc.root, &op.para).ok_or_else(|| {
         Error::with_path(
-            ErrorKind::ParaNotFound {
-                id: op.id.clone(),
-            },
+            ErrorKind::ParaNotFound { id: op.id.clone() },
             format!("ops[{i}].id"),
         )
     })?;
-    let drawing = picture::build_inline_drawing(doc_pr, &name, &rid, cx, cy);
-    picture::insert_drawing_into_para(p, drawing);
+    picture::insert_prepared_drawing(
+        p,
+        doc_pr,
+        &rid,
+        cx,
+        cy,
+        picture::PicKind::Inline,
+        None,
+        &picture::WrapPos::default(),
+    )?;
     dirty.insert(part_name, ());
     Ok(())
 }
@@ -608,9 +573,7 @@ fn apply_delete_pic(
         let rid = {
             let drawing = find_target_drawing_mut(&mut doc.root, &op.target).ok_or_else(|| {
                 Error::with_path(
-                    ErrorKind::PictureNotFound {
-                        id: op.id.clone(),
-                    },
+                    ErrorKind::PictureNotFound { id: op.id.clone() },
                     format!("ops[{i}].id"),
                 )
             })?;
@@ -622,9 +585,7 @@ fn apply_delete_pic(
         };
         if !remove_target_picture(&mut doc.root, &op.target) {
             return Err(Error::with_path(
-                ErrorKind::PictureNotFound {
-                    id: op.id.clone(),
-                },
+                ErrorKind::PictureNotFound { id: op.id.clone() },
                 format!("ops[{i}].id"),
             ));
         }
@@ -655,17 +616,13 @@ fn apply_pic_size(
     let doc = load_part(pkg, docs, &part_name)?;
     let drawing = find_target_drawing_mut(&mut doc.root, &op.target).ok_or_else(|| {
         Error::with_path(
-            ErrorKind::PictureNotFound {
-                id: op.id.clone(),
-            },
+            ErrorKind::PictureNotFound { id: op.id.clone() },
             format!("ops[{i}].id"),
         )
     })?;
     if !picture::set_extent(drawing, op.cx, op.cy) {
         return Err(Error::with_path(
-            ErrorKind::PictureNotFound {
-                id: op.id.clone(),
-            },
+            ErrorKind::PictureNotFound { id: op.id.clone() },
             format!("ops[{i}].id"),
         ));
     }
@@ -687,13 +644,12 @@ fn apply_pic_wrap(
     picture::ensure_drawing_ns(&mut doc.root);
     let drawing = find_target_drawing_mut(&mut doc.root, &op.target).ok_or_else(|| {
         Error::with_path(
-            ErrorKind::PictureNotFound {
-                id: op.id.clone(),
-            },
+            ErrorKind::PictureNotFound { id: op.id.clone() },
             format!("ops[{i}].id"),
         )
     })?;
-    picture::apply_wrap(drawing, op.kind, op.wrap, &op.pos).map_err(|e| e.at(format!("ops[{i}]")))?;
+    picture::apply_wrap(drawing, op.kind, op.wrap, &op.pos)
+        .map_err(|e| e.at(format!("ops[{i}]")))?;
     dirty.insert(part_name, ());
     Ok(())
 }
@@ -709,9 +665,7 @@ fn part_for_hf(
     let container_id = format!("{}:{}:{n}", kind.as_str(), hf_type.as_str());
     let item = hf::find_by_id(catalog, &container_id).ok_or_else(|| {
         Error::with_path(
-            ErrorKind::ParaNotFound {
-                id: id.to_string(),
-            },
+            ErrorKind::ParaNotFound { id: id.to_string() },
             format!("ops[{i}].id"),
         )
     })?;
@@ -728,10 +682,7 @@ fn part_for_host(
     match host {
         HostPara::Body(_) => Ok(doc_part.to_string()),
         HostPara::HeaderFooter {
-            kind,
-            hf_type,
-            n,
-            ..
+            kind, hf_type, n, ..
         } => part_for_hf(catalog, *kind, *hf_type, *n, id, i),
     }
 }
@@ -746,10 +697,7 @@ fn part_for_txbx(
     part_for_host(catalog, doc_part, &target.host, id, i)
 }
 
-fn find_insert_para_mut<'a>(
-    root: &'a mut Element,
-    target: &ParaTarget,
-) -> Option<&'a mut Element> {
+fn find_insert_para_mut<'a>(root: &'a mut Element, target: &ParaTarget) -> Option<&'a mut Element> {
     match target {
         ParaTarget::Body(p) => para::find_paragraph_mut(root, p),
         ParaTarget::HeaderFooter { para, .. } => para::find_paragraph_mut(root, para),
@@ -763,9 +711,7 @@ fn find_insert_para_mut<'a>(
 
 fn txbx_missing(id: &str, i: usize) -> Error {
     Error::with_path(
-        ErrorKind::TextBoxNotFound {
-            id: id.to_string(),
-        },
+        ErrorKind::TextBoxNotFound { id: id.to_string() },
         format!("ops[{i}].id"),
     )
 }
@@ -790,9 +736,7 @@ fn apply_insert_txbx(
     };
     let p = para::find_paragraph_mut(&mut doc.root, op.host.body()).ok_or_else(|| {
         Error::with_path(
-            ErrorKind::ParaNotFound {
-                id: op.id.clone(),
-            },
+            ErrorKind::ParaNotFound { id: op.id.clone() },
             format!("ops[{i}].id"),
         )
     })?;
@@ -981,9 +925,7 @@ fn apply_insert_para(
         }
         let at = insert_at.ok_or_else(|| {
             Error::with_path(
-                ErrorKind::ParaNotFound {
-                    id: op.id.clone(),
-                },
+                ErrorKind::ParaNotFound { id: op.id.clone() },
                 format!("ops[{i}].id"),
             )
         })?;
@@ -1016,17 +958,13 @@ fn apply_delete_para(
     let doc = load_part(pkg, docs, &part_name)?;
     let host_p = para::find_paragraph_mut(&mut doc.root, host.body()).ok_or_else(|| {
         Error::with_path(
-            ErrorKind::ParaNotFound {
-                id: op.id.clone(),
-            },
+            ErrorKind::ParaNotFound { id: op.id.clone() },
             format!("ops[{i}].id"),
         )
     })?;
     let content = textbox::find_txbx_content_by_key_mut(host_p, key).ok_or_else(|| {
         Error::with_path(
-            ErrorKind::ParaNotFound {
-                id: op.id.clone(),
-            },
+            ErrorKind::ParaNotFound { id: op.id.clone() },
             format!("ops[{i}].id"),
         )
     })?;
@@ -1058,9 +996,7 @@ fn apply_delete_para(
     }
     let at = remove_at.ok_or_else(|| {
         Error::with_path(
-            ErrorKind::ParaNotFound {
-                id: op.id.clone(),
-            },
+            ErrorKind::ParaNotFound { id: op.id.clone() },
             format!("ops[{i}].id"),
         )
     })?;

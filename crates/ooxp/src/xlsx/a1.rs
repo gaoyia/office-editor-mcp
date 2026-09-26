@@ -42,15 +42,13 @@ pub fn parse_cell(input: &str) -> Result<CellRef, Error> {
             },
         }));
     }
-    let row: u32 = s[i..]
-        .parse()
-        .map_err(|_| {
-            Error::new(ErrorKind::InvalidRange {
-                reason: RangeReason::NotA1 {
-                    input: input.to_string(),
-                },
-            })
-        })?;
+    let row: u32 = s[i..].parse().map_err(|_| {
+        Error::new(ErrorKind::InvalidRange {
+            reason: RangeReason::NotA1 {
+                input: input.to_string(),
+            },
+        })
+    })?;
     if row == 0 || row > 1_048_576 {
         return Err(Error::new(ErrorKind::InvalidRange {
             reason: RangeReason::RowOutOfRange { row },

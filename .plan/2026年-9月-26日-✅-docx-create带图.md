@@ -1,6 +1,6 @@
 # docx create 带图
 
-状态：❌ 未开始  
+状态：✅ 已通过  
 日期：2026-09-26
 
 `create` 是唯一允许整包生成的动作。本期让新建文档能带 DrawingML 图。复用 `insertPicture` 的写入，不另做生成器。
@@ -15,14 +15,14 @@
 
 | 序号 | 项 | 状态 |
 | --- | --- | --- |
-| 1 | 文档先行：`document.paragraphs` 与页眉页脚上的图字段、示例、清单 | ❌ |
-| 2.1 | 正文段落声明 `pictures`：本地 `file`，可选 `cx`/`cy`/`kind`/`wrap`/位置 | ❌ |
-| 2.2 | 写入 `/word/media/…`、主文档 `.rels`、内容类型、段末或按序 `w:drawing` | ❌ |
-| 3.1 | `document.headers` / `document.footers`：本期允许 create 写默认页眉页脚（只 `default`） | ❌ |
-| 3.2 | 页眉页脚段落同样能带 `pictures` | ❌ |
-| 4 | 多张图、行内与浮动混排；`docPr/@id` 从 1 起在该部件内递增 | ❌ |
-| 5 | 库测试：create 后再 inspect，图 id 与 `kind`/`wrap` 对 | ❌ |
-| 6 | Word 16.0 打开 create 产物，无修复，图能看见 | ❌ |
+| 1 | 文档先行：`document.paragraphs` 与页眉页脚上的图字段、示例、清单 | ✅ |
+| 2.1 | 正文段落声明 `pictures`：本地 `file`，可选 `cx`/`cy`/`kind`/`wrap`/位置 | ✅ |
+| 2.2 | 写入 `/word/media/…`、主文档 `.rels`、内容类型、段末或按序 `w:drawing` | ✅ |
+| 3.1 | `document.headers` / `document.footers`：本期允许 create 写默认页眉页脚（只 `default`） | ✅ |
+| 3.2 | 页眉页脚段落同样能带 `pictures` | ✅ |
+| 4 | 多张图、行内与浮动混排；`docPr/@id` 从 1 起在该部件内递增 | ✅ |
+| 5 | 库测试：create 后再 inspect，图 id 与 `kind`/`wrap` 对 | ✅ |
+| 6 | Word 16.0 打开 create 产物，无修复，图能看见 | ✅ |
 
 建议提交顺序：`1 → 2.1 → 2.2 → 4 → 5 → 3.x → 6`。先正文，再页眉页脚。
 

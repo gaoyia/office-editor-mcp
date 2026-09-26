@@ -6,7 +6,8 @@ use serde_json::{json, Value};
 
 use crate::error::{io_path, Error, ErrorKind, IdReason};
 use crate::opc::{
-    rels_part_name, resolve_rel_target, split_dir_file, Package, Relationship, Relationships,
+    rels_part_name, resolve_rel_target, split_dir_file, ContentTypes, Package, Relationship,
+    Relationships,
 };
 use crate::xml::{Element, Node};
 
@@ -106,7 +107,7 @@ impl AlignH {
         }
     }
 
-    fn parse(s: &str) -> Option<Self> {
+    pub fn parse(s: &str) -> Option<Self> {
         match s {
             "left" => Some(Self::Left),
             "center" => Some(Self::Center),
@@ -132,7 +133,7 @@ impl AlignV {
         }
     }
 
-    fn parse(s: &str) -> Option<Self> {
+    pub fn parse(s: &str) -> Option<Self> {
         match s {
             "top" => Some(Self::Top),
             "center" => Some(Self::Center),
@@ -187,7 +188,7 @@ pub struct ImageFile {
     pub cy: i64,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct WrapPos {
     pub align_h: Option<AlignH>,
     pub align_v: Option<AlignV>,
@@ -244,8 +245,7 @@ pub fn parse_pic_id_at(id: &str, path: &str) -> Result<PicTarget, Error> {
     let path = path.to_string();
     let Some((left, key_s)) = id.rsplit_once("/pic:") else {
         if id.starts_with("para:")
-            || HfKind::parse(id.split_once(':').map(|(k, _)| k).unwrap_or(""))
-                .is_some()
+            || HfKind::parse(id.split_once(':').map(|(k, _)| k).unwrap_or("")).is_some()
         {
             return Err(Error::with_path(
                 ErrorKind::InvalidId {
@@ -408,10 +408,7 @@ pub fn find_drawing<'a>(root: &'a Element, key: &PicKey) -> Option<&'a Element> 
     find_drawing_walk(root, &mut idx, key)
 }
 
-pub fn find_drawing_mut<'a>(
-    root: &'a mut Element,
-    key: &PicKey,
-) -> Option<&'a mut Element> {
+pub fn find_drawing_mut<'a>(root: &'a mut Element, key: &PicKey) -> Option<&'a mut Element> {
     let mut idx = 0usize;
     find_drawing_mut_walk(root, &mut idx, key)
 }
@@ -445,41 +442,33 @@ pub fn part_for_pic(
     field_path: &str,
 ) -> Result<String, Error> {
     match target {
-        PicTarget::Body { .. } | PicTarget::InTextBox { host: HostPara::Body(_), .. } => {
-            Ok(doc_part.to_string())
-        }
+        PicTarget::Body { .. }
+        | PicTarget::InTextBox {
+            host: HostPara::Body(_),
+            ..
+        } => Ok(doc_part.to_string()),
         PicTarget::InTextBox {
             host: HostPara::HeaderFooter {
-                kind,
-                hf_type,
-                n,
-                ..
+                kind, hf_type, n, ..
             },
             ..
         } => {
             let container_id = format!("{}:{}:{n}", kind.as_str(), hf_type.as_str());
             let item = super::hf::find_by_id(catalog, &container_id).ok_or_else(|| {
                 Error::with_path(
-                    ErrorKind::PictureNotFound {
-                        id: id.to_string(),
-                    },
+                    ErrorKind::PictureNotFound { id: id.to_string() },
                     field_path.to_string(),
                 )
             })?;
             Ok(item.part.clone())
         }
         PicTarget::HeaderFooter {
-            kind,
-            hf_type,
-            n,
-            ..
+            kind, hf_type, n, ..
         } => {
             let container_id = format!("{}:{}:{n}", kind.as_str(), hf_type.as_str());
             let item = super::hf::find_by_id(catalog, &container_id).ok_or_else(|| {
                 Error::with_path(
-                    ErrorKind::PictureNotFound {
-                        id: id.to_string(),
-                    },
+                    ErrorKind::PictureNotFound { id: id.to_string() },
                     field_path.to_string(),
                 )
             })?;
@@ -663,6 +652,47 @@ pub fn update_rel_target(
     rels.write_to(pkg, part)
 }
 
+/// 读本地图、写入 `/word/media/…`、挂关系到 `part`、补内容类型。
+/// `cx`/`cy` 都给则用调用方的尺寸；都省则按像素 96 dpi。
+pub fn add_media(
+    pkg: &mut Package,
+    part: &str,
+    file: &str,
+    cx: Option<i64>,
+    cy: Option<i64>,
+) -> Result<(String, i64, i64), Error> {
+    let image = read_image(file)?;
+    let (cx, cy) = match (cx, cy) {
+        (Some(x), Some(y)) => (x, y),
+        _ => (image.cx, image.cy),
+    };
+    let media = next_media_part(pkg, &image.ext);
+    pkg.set(&media, image.bytes)?;
+    let rid = add_image_rel(pkg, part, &media)?;
+    let mut cts = ContentTypes::from_package(pkg)?;
+    cts.ensure_default(&image.ext, &image.content_type);
+    cts.write_to(pkg)?;
+    Ok((rid, cx, cy))
+}
+
+/// 在段末写入一张图。行内只接受 `wrap` 为空；浮动必须带绕排。
+pub fn insert_prepared_drawing(
+    p: &mut Element,
+    doc_pr: u32,
+    rid: &str,
+    cx: i64,
+    cy: i64,
+    kind: PicKind,
+    wrap: Option<WrapKind>,
+    pos: &WrapPos,
+) -> Result<(), Error> {
+    let name = format!("图片 {doc_pr}");
+    let mut drawing = build_inline_drawing(doc_pr, &name, rid, cx, cy);
+    apply_wrap(&mut drawing, kind, wrap, pos)?;
+    insert_drawing_into_para(p, drawing);
+    Ok(())
+}
+
 pub fn add_image_rel(pkg: &mut Package, part: &str, media_opc: &str) -> Result<String, Error> {
     let mut rels = Relationships::from_package(pkg, part)?;
     let rid = rels.next_rid();
@@ -746,18 +776,16 @@ fn pic_info(drawing: &Element, container_id: &str, index: usize) -> Result<PicIn
         _ => PicKind::Inline,
     };
     let doc_pr = frame.and_then(|f| f.child_by_local("docPr"));
-    let raw_id = doc_pr.and_then(|d| d.attr_local("id")).filter(|s| !s.is_empty());
+    let raw_id = doc_pr
+        .and_then(|d| d.attr_local("id"))
+        .filter(|s| !s.is_empty());
     let name = doc_pr
         .and_then(|d| d.attr_local("name"))
         .filter(|s| !s.is_empty())
         .map(str::to_string);
     let (id, stable, doc_pr_id) = match raw_id {
         Some(v) => (format!("{container_id}/pic:{v}"), true, Some(v.to_string())),
-        None => (
-            format!("{container_id}/pic:index:{index}"),
-            false,
-            None,
-        ),
+        None => (format!("{container_id}/pic:index:{index}"), false, None),
     };
     let extent = frame.and_then(|f| f.child_by_local("extent"));
     let cx = parse_emu_attr(extent, "cx")?;
@@ -801,12 +829,10 @@ fn is_picture(drawing: &Element) -> bool {
     let mut has_pic = false;
     let mut has_blip = false;
     // 框内图不算外层 drawing 的图：遇 txbxContent 停住，与 collect 边界一致。
-    walk_outside_txbx(drawing, &mut |e| {
-        match e.local_name() {
-            "pic" => has_pic = true,
-            "blip" => has_blip = true,
-            _ => {}
-        }
+    walk_outside_txbx(drawing, &mut |e| match e.local_name() {
+        "pic" => has_pic = true,
+        "blip" => has_blip = true,
+        _ => {}
     });
     has_pic && has_blip
 }
@@ -854,7 +880,10 @@ fn matches_key(drawing: &Element, key: &PicKey, index: usize) -> bool {
     }
 }
 
-fn walk_drawings(el: &Element, f: &mut impl FnMut(&Element) -> Result<(), Error>) -> Result<(), Error> {
+fn walk_drawings(
+    el: &Element,
+    f: &mut impl FnMut(&Element) -> Result<(), Error>,
+) -> Result<(), Error> {
     if el.local_name() == "txbxContent" {
         return Ok(());
     }
@@ -901,11 +930,7 @@ fn first_alt_child_index(el: &Element) -> Option<usize> {
     fallback
 }
 
-fn find_drawing_walk<'a>(
-    el: &'a Element,
-    idx: &mut usize,
-    key: &PicKey,
-) -> Option<&'a Element> {
+fn find_drawing_walk<'a>(el: &'a Element, idx: &mut usize, key: &PicKey) -> Option<&'a Element> {
     if el.local_name() == "txbxContent" {
         return None;
     }
@@ -1050,10 +1075,7 @@ fn ac_has_match(node: &Node, idx: &mut usize, key: &PicKey) -> bool {
 }
 
 fn is_empty_run(el: &Element) -> bool {
-    el.local_name() == "r"
-        && el
-            .element_children()
-            .all(|c| c.local_name() == "rPr")
+    el.local_name() == "r" && el.element_children().all(|c| c.local_name() == "rPr")
 }
 
 fn embed_still_in(root: &Element, rid: &str) -> bool {
@@ -1088,9 +1110,11 @@ fn ensure_xmlns(el: &mut Element, prefix: &str, uri: &str) {
 }
 
 fn set_attr_local(el: &mut Element, local: &str, value: &str) {
-    if let Some((k, _)) = el.attrs.iter().find(|(k, _)| {
-        k.rsplit(':').next().unwrap_or(k) == local
-    }) {
+    if let Some((k, _)) = el
+        .attrs
+        .iter()
+        .find(|(k, _)| k.rsplit(':').next().unwrap_or(k) == local)
+    {
         let name = k.clone();
         el.set_attr(&name, value);
         return;
@@ -1170,8 +1194,10 @@ fn graphic_el(name: &str, rid: &str, cx: i64, cy: i64) -> Element {
     pic.push_element(fill);
     pic.push_element(sp);
 
-    let mut data = Element::new("a:graphicData")
-        .with_attr("uri", "http://schemas.openxmlformats.org/drawingml/2006/picture");
+    let mut data = Element::new("a:graphicData").with_attr(
+        "uri",
+        "http://schemas.openxmlformats.org/drawingml/2006/picture",
+    );
     data.push_element(pic);
     let mut graphic = Element::new("a:graphic");
     graphic.push_element(data);
@@ -1215,10 +1241,7 @@ fn convert_to_anchor(drawing: &mut Element, wrap: WrapKind, pos: &WrapPos) {
         .with_attr("distR", "114300")
         .with_attr("simplePos", "0")
         .with_attr("relativeHeight", "251658240")
-        .with_attr(
-            "behindDoc",
-            if wrap == WrapKind::None { "1" } else { "0" },
-        )
+        .with_attr("behindDoc", if wrap == WrapKind::None { "1" } else { "0" })
         .with_attr("locked", "0")
         .with_attr("layoutInCell", "1")
         .with_attr("allowOverlap", "1");
@@ -1281,10 +1304,7 @@ fn take_shared_children(frame: &Element) -> Vec<Element> {
 
 fn wrap_el(wrap: WrapKind) -> Element {
     let mut el = Element::new(format!("wp:{}", wrap.local_name()));
-    if matches!(
-        wrap,
-        WrapKind::Square | WrapKind::Tight | WrapKind::Through
-    ) {
+    if matches!(wrap, WrapKind::Square | WrapKind::Tight | WrapKind::Through) {
         el.set_attr("wrapText", "bothSides");
     }
     el

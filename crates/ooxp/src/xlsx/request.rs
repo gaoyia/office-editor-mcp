@@ -31,17 +31,15 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
     let Some(v) = v else {
         return Ok(None);
     };
-    let obj = v
-        .as_object()
-        .ok_or_else(|| {
-            Error::with_path(
-                ErrorKind::WrongType {
-                    field: "scope".into(),
-                    expected: TypeName::Object,
-                },
-                "scope",
-            )
-        })?;
+    let obj = v.as_object().ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::WrongType {
+                field: "scope".into(),
+                expected: TypeName::Object,
+            },
+            "scope",
+        )
+    })?;
     if obj.is_empty() {
         return Ok(None);
     }
@@ -104,9 +102,7 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<SetCellOp>, Error> {
         })?;
         let op_name = obj.get("op").and_then(Value::as_str).ok_or_else(|| {
             Error::with_path(
-                ErrorKind::MissingField {
-                    field: "op".into(),
-                },
+                ErrorKind::MissingField { field: "op".into() },
                 format!("ops[{i}].op"),
             )
         })?;
@@ -160,9 +156,7 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<SetCellOp>, Error> {
             .filter(|s| !s.is_empty())
             .ok_or_else(|| {
                 Error::with_path(
-                    ErrorKind::MissingField {
-                        field: "id".into(),
-                    },
+                    ErrorKind::MissingField { field: "id".into() },
                     format!("ops[{i}].id"),
                 )
             })?;

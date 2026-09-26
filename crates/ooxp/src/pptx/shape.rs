@@ -118,9 +118,8 @@ pub fn list_slides(
         .filter(|e| e.local_name() == "sldId")
         .enumerate()
     {
-        let rid = rid_attr(sld_id).ok_or_else(|| {
-            Error::new(ErrorKind::SlideRelMissing { index: i + 1 })
-        })?;
+        let rid = rid_attr(sld_id)
+            .ok_or_else(|| Error::new(ErrorKind::SlideRelMissing { index: i + 1 }))?;
         let part = opc::resolve_id(pkg, pres_part, rid)?;
         let doc = crate::xml::parse(pkg.get(&part)?)?;
         let name = doc
@@ -129,7 +128,10 @@ pub fn list_slides(
             .and_then(|c| c.attr("name"))
             .filter(|s| !s.is_empty())
             .map(str::to_string);
-        let hidden = matches!(doc.root.attr("show"), Some("0") | Some("false") | Some("FALSE"));
+        let hidden = matches!(
+            doc.root.attr("show"),
+            Some("0") | Some("false") | Some("FALSE")
+        );
         out.push(SlideMeta {
             index: i + 1,
             part,
@@ -411,9 +413,11 @@ fn fill_para(p: &mut Element, lines: &[&str]) {
         }
     }
 
-    let Some(at) = p.children.iter().position(
-        |n| matches!(n, Node::Element(e) if is_text_run(e)),
-    ) else {
+    let Some(at) = p
+        .children
+        .iter()
+        .position(|n| matches!(n, Node::Element(e) if is_text_run(e)))
+    else {
         return;
     };
     let (rpr, t_name) = {

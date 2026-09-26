@@ -26,17 +26,13 @@ pub fn apply(bytes: &[u8], ops: &[SetShapeTextOp]) -> Result<Vec<u8>, Error> {
         let mut doc = xml::parse(pkg.get(&meta.part)?)?;
         let sp = shape::find_shape_mut(&mut doc.root, &target.key).ok_or_else(|| {
             Error::with_path(
-                ErrorKind::ShapeNotFound {
-                    id: op.id.clone(),
-                },
+                ErrorKind::ShapeNotFound { id: op.id.clone() },
                 format!("ops[{i}].id"),
             )
         })?;
         let tx = sp.child_by_local_mut("txBody").ok_or_else(|| {
             Error::with_path(
-                ErrorKind::ShapeHasNoText {
-                    id: op.id.clone(),
-                },
+                ErrorKind::ShapeHasNoText { id: op.id.clone() },
                 format!("ops[{i}].id"),
             )
         })?;

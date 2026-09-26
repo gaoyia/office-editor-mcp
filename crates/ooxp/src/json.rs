@@ -60,14 +60,11 @@ pub fn parse_request(input_json: &str) -> Result<Request, Error> {
         _ => {}
     }
 
-    let action = obj
-        .get("action")
-        .and_then(Value::as_str)
-        .ok_or_else(|| {
-            Error::new(ErrorKind::MissingEnvelopeField {
-                field: "action".into(),
-            })
-        })?;
+    let action = obj.get("action").and_then(Value::as_str).ok_or_else(|| {
+        Error::new(ErrorKind::MissingEnvelopeField {
+            field: "action".into(),
+        })
+    })?;
     let action = match action {
         "inspect" => Action::Inspect,
         "create" => Action::Create,
@@ -144,16 +141,14 @@ pub fn str_field<'a>(obj: &'a Map<String, Value>, key: &str) -> Result<&'a str, 
 }
 
 pub fn require_ops(obj: &Map<String, Value>) -> Result<&[Value], Error> {
-    let ops = obj
-        .get("ops")
-        .ok_or_else(|| {
-            Error::with_path(
-                ErrorKind::MissingField {
-                    field: "ops".into(),
-                },
-                "ops",
-            )
-        })?;
+    let ops = obj.get("ops").ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::MissingField {
+                field: "ops".into(),
+            },
+            "ops",
+        )
+    })?;
     let ops = ops.as_array().ok_or_else(|| {
         Error::with_path(
             ErrorKind::WrongType {

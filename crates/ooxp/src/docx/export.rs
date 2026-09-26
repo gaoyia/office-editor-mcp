@@ -24,14 +24,8 @@ pub fn export_media(bytes: &[u8], id: &str) -> Result<ExportedMedia, Error> {
     } else {
         xml::parse(pkg.get(&part_name)?)?
     };
-    let drawing = picture::find_target_drawing(&xml_doc.root, &target).ok_or_else(|| {
-        Error::with_path(
-            ErrorKind::PictureNotFound {
-                id: id.to_string(),
-            },
-            "id",
-        )
-    })?;
+    let drawing = picture::find_target_drawing(&xml_doc.root, &target)
+        .ok_or_else(|| Error::with_path(ErrorKind::PictureNotFound { id: id.to_string() }, "id"))?;
     let rid = picture::blip_rid(drawing).ok_or_else(|| {
         Error::xml_detail(
             XmlIssue::Parse,

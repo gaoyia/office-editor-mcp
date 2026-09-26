@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "action": "create",
+  "path": "note.docx",
+  "document": {
+    "paragraphs": [
+      { "style": "Heading1", "text": "标题" },
+      { "text": "hello", "pictures": [{ "file": "pic.png" }] }
+    ],
+    "headers": [
+      {
+        "type": "default",
+        "paragraphs": [
+          { "text": "页眉", "pictures": [{ "file": "pic.png", "kind": "anchor", "wrap": "square" }] }
+        ]
+      }
+    ]
+  }
+}
