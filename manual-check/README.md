@@ -1,6 +1,6 @@
 # 人工验收
 
-`docs/checklist-xlsx.md`、`docs/checklist-docx.md` 与 `docs/checklist-pptx.md` 要求在本机用 Excel、Word、PowerPoint、WPS 亲手打开文件。这个目录放的就是那几轮验收的用例脚本。
+`docs/checklist-xlsx.md`、`docs/checklist-docx.md` 与 `docs/checklist-pptx.md` 要求在本机用 Microsoft Excel、Word、PowerPoint 打开文件。验收只认官方 Office，不再要求 WPS。这个目录放的就是那几轮验收的用例脚本。
 
 ## 目录
 

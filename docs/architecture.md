@@ -1,6 +1,6 @@
 # 架构
 
-状态：xlsx 与 docx 第一期已实现，并已通过 Excel / Word / WPS 人工打开。pptx 第一期已实现，并已通过 PowerPoint 16.0 人工打开；WPS 演示未跑。
+状态：xlsx、docx、pptx 第一期已实现，并已通过 Microsoft Office 16.0 人工打开。验收只认官方 Office，不再要求 WPS。
 
 ## 产品形态
 

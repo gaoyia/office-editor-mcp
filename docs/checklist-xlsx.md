@@ -1,21 +1,22 @@
 # xlsx 人工检查清单
 
-代码阶段的单元测试覆盖 JSON 解析和 XML 不变量。下面这些必须用 Excel 和 WPS 各打开一次，不能只靠测试绿。
+代码阶段的单元测试覆盖 JSON 解析和 XML 不变量。下面这些必须用 Microsoft Excel 打开一次，不能只靠测试绿。验收只认官方 Office，不再要求 WPS。
 
 检查前用 create 或 apply 在本机生成文件，不要用改过扩展名的 zip 目录冒充。
 
 ## 本机结果（2026-09-26）
 
-WPS 表格与 Microsoft Excel 16.0 均已打开，用户确认通过。本机 `Excel.Application` 仍被 WPS 抢走，测试是直接启动 `EXCEL.EXE` 再挂 COM。
+Microsoft Excel 16.0 已打开，用户确认通过。本机若装了 WPS，`Excel.Application` 会被抢走，测试仍直接启动 `EXCEL.EXE` 再挂 COM。C2（WPS 打开）已放弃。
 
 C、I、A、O 这几组现在由 `manual-check/office/cases/xlsx-*.ps1` 自动判定，跑 `pwsh -File manual-check\office\run.ps1 -Case 'xlsx-*'` 即可复现，逐条结果落在 `manual-check/office/out/office-results.csv`。
 
 | 序号 | 状态 | 结果 |
 | --- | --- | --- |
 | C1 | ✅ | Excel 16.0 打开 `manual-check/office/out/xlsx-create.xlsx`，标题栏无 Repair |
-| C2–C7 | ✅ | WPS 此前已过；Excel：Sheet1、A1=1、A2=hello、A3=TRUE、B1=`=SUM(A1)` 且值为 1 |
+| C2 | 🚫 | 不再要求 WPS。此前 WPS 表格已打开过，不作为验收条件 |
+| C3–C7 | ✅ | Excel：Sheet1、A1=1、A2=hello、A3=TRUE、B1=`=SUM(A1)` 且值为 1 |
 | I1–I6 | ✅ | 有范围的 inspect 含 A1/A2/A3/B1、无 E1；无 scope 时没有 `cells` |
-| A1 | ✅ | Excel 打开 `out/xlsx-applied.xlsx`，标题栏无 Repair；WPS 此前已过 |
+| A1 | ✅ | Excel 打开 `out/xlsx-applied.xlsx`，标题栏无 Repair |
 | A2–A7 | ✅ | Excel：A1=42，B1=`=SUM(A1:A10)` 值为 47，C1 空且数字格式仍是 `0.00`，Sheet2 未动，E1 加粗/红字/黄底/列宽 20 还在，D1 重算为 84 |
 | O1 | 🚫 | 领域层不做原样保存：三个动作里没有「只保存」，`apply` 的 `ops` 必须非空。零脏写回见 OPC 库测试。Excel 另存 create 产物见 `xlsx-O1-excel-resave` |
 | O2 | ✅ | 未改表与未点名格子的样式还在；未改部件 CRC 与打补丁前相同 |
@@ -27,7 +28,7 @@ C、I、A、O 这几组现在由 `manual-check/office/cases/xlsx-*.ps1` 自动�
 | 序号 | 检查 | 通过标准 |
 | --- | --- | --- |
 | C1 | Excel 打开 | 无修复提示、无「文件损坏」 |
-| C2 | WPS 打开 | 同上 |
+| C2 | WPS 打开 | 🚫 第一期不跑。验收只认 Microsoft Excel |
 | C3 | 工作表名 | 存在 `Sheet1` |
 | C4 | A1 | 数字 `1` |
 | C5 | A2 | 文本 `hello` |
@@ -53,7 +54,7 @@ C、I、A、O 这几组现在由 `manual-check/office/cases/xlsx-*.ps1` 自动�
 
 | 序号 | 检查 | 通过标准 |
 | --- | --- | --- |
-| A1 | 打开 | Excel 与 WPS 都能打开，无修复提示 |
+| A1 | 打开 | Microsoft Excel 能打开，无修复提示 |
 | A2 | 目标格 | `Sheet1!A1` 变成 `42` |
 | A3 | 公式格 | `Sheet1!B1` 公式栏为 `=SUM(A1:A10)`，打开后会重算 |
 | A4 | 清空 | `Sheet1!C1` 值为空，若原先有数字格式，格式还在 |

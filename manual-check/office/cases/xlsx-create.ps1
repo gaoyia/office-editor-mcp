@@ -1,5 +1,5 @@
 # xlsx create：docs/checklist-xlsx.md 的 C1、C3–C7。
-# C2 是 WPS 打开，归 WPS 那一轮。
+# C2 是 WPS 打开。验收只认官方 Office，不再跑。
 
 $ErrorActionPreference = 'Stop'
 . ([IO.Path]::Combine($PSScriptRoot, '..', '..', 'lib', 'bootstrap.ps1'))
@@ -20,7 +20,7 @@ $b1v = $s1.Range('B1').Value2
 $caption = [string]$wb.Windows.Item(1).Caption
 
 Add-Check 'xlsx-C1' ($caption -notmatch 'Repair') $caption
-Add-Skip  'xlsx-C2' 'WPS 打开，归 WPS 那一轮'
+Add-Skip  'xlsx-C2' '验收只认 Microsoft Excel，不再跑 WPS'
 Add-Check 'xlsx-C3' ($s1.Name -eq 'Sheet1') $s1.Name
 Add-Check 'xlsx-C4' ($a1 -eq 1) "A1=$a1"
 Add-Check 'xlsx-C5' ($a2 -eq 'hello') "A2=$a2"
