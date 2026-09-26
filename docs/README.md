@@ -2,7 +2,7 @@
 
 本目录是库和命令行的规格真源。行为以这里为准，不以代码或口头约定为准。要改行为，先改这里的文档，等确认后再改代码。
 
-当前 **xlsx** 与 **docx** 的契约都已实现。pptx 仍只定模块边界和稳定 id。docx 人工打开见 [checklist-docx.md](checklist-docx.md)。
+当前 **xlsx** 与 **docx** 的契约都已实现。**pptx** 的 inspect / create / apply 已写入契约，待确认后再写代码。docx 人工打开见 [checklist-docx.md](checklist-docx.md)。pptx 确认后按 [checklist-pptx.md](checklist-pptx.md) 验收。
 
 | 文件 | 内容 |
 | --- | --- |
@@ -13,6 +13,7 @@
 | [cli.md](cli.md) | 命令行入参、出参、退出码 |
 | [checklist-xlsx.md](checklist-xlsx.md) | 人工用 Excel / WPS 打开工作簿的检查清单 |
 | [checklist-docx.md](checklist-docx.md) | 人工用 Word / WPS 打开文档的检查清单 |
+| [checklist-pptx.md](checklist-pptx.md) | 人工用 PowerPoint / WPS 演示打开文稿的检查清单 |
 | [examples/](examples/) | 可直接拿去跑的请求和响应样例 |
 | [json-schema/request.schema.json](json-schema/request.schema.json) | 请求的 JSON Schema，与 json-contract.md 同步 |
 

@@ -130,6 +130,94 @@ WordprocessingML 主命名空间：
 
 根元素须把 `w14` 列入 `mc:Ignorable`，依据 MS-DOCX §2.2.4。
 
+## create 时的最小包（pptx）
+
+pptx create 同样生成 Transitional 包，命名空间用 2006 那套。不能只写 ECMA-376 §13.3.6 示例里那个仅含 `sldSz` / `notesSz` 的 presentation：PowerPoint 实际打开还要 theme、slideMaster、slideLayout。
+
+必有部件：
+
+| 路径 | 作用 |
+| --- | --- |
+| `/[Content_Types].xml` | 内容类型 |
+| `/_rels/.rels` | 指向 Presentation，以及可选的核心属性 |
+| `/ppt/presentation.xml` | 页名单、母版关系、幻灯片尺寸 |
+| `/ppt/_rels/presentation.xml.rels` | 指向 slideMaster、各 slide、presProps |
+| `/ppt/presProps.xml` | Presentation Properties（§13.3.7，包内应当恰好一份） |
+| `/ppt/slides/slideN.xml` | 每一页 |
+| `/ppt/slides/_rels/slideN.xml.rels` | 指向 slideLayout1 |
+| `/ppt/slideLayouts/slideLayout1.xml` | 一张空白版式 |
+| `/ppt/slideLayouts/_rels/slideLayout1.xml.rels` | 指向 slideMaster1 |
+| `/ppt/slideMasters/slideMaster1.xml` | 一张母版 |
+| `/ppt/slideMasters/_rels/slideMaster1.xml.rels` | 指向 theme1 与 slideLayout1 |
+| `/ppt/theme/theme1.xml` | 最小主题 |
+
+可选但 create 要写：
+
+| 路径 | 作用 |
+| --- | --- |
+| `/docProps/core.xml` | 核心文件属性 |
+| `/docProps/app.xml` | Application 写成 `ooxp`，Slides 与页数一致 |
+
+第一期不写备注、讲义、`viewProps`、`tableStyles`、动画。
+
+`presentation.xml` 里：`p:sldMasterIdLst` 一条、`p:sldIdLst` 按页顺序、`p:sldSz` 为 16:9（`cx="12192000"` `cy="6858000"`）、`p:notesSz` 为 `cx="6858000"` `cy="9144000"`。`p:sldId/@id` 从 256 起递增，与领域 id 的 `slide:{n}` 不是一回事。
+
+Presentation 的 Content Type：
+
+`application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml`
+
+Slide：
+
+`application/vnd.openxmlformats-officedocument.presentationml.slide+xml`
+
+Slide Master：
+
+`application/vnd.openxmlformats-officedocument.presentationml.slideMaster+xml`
+
+Slide Layout：
+
+`application/vnd.openxmlformats-officedocument.presentationml.slideLayout+xml`
+
+Presentation Properties：
+
+`application/vnd.openxmlformats-officedocument.presentationml.presProps+xml`
+
+Theme：
+
+`application/vnd.openxmlformats-officedocument.theme+xml`
+
+根关系 `officeDocument` 的 Type 与 xlsx / docx 相同：
+
+`http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument`
+
+幻灯片关系 Type：
+
+`http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide`
+
+幻灯片母版：
+
+`http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster`
+
+版式：
+
+`http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout`
+
+主题：
+
+`http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme`
+
+Presentation Properties：
+
+`http://schemas.openxmlformats.org/officeDocument/2006/relationships/presProps`
+
+PresentationML 主命名空间：
+
+`http://schemas.openxmlformats.org/presentationml/2006/main`
+
+DrawingML 主命名空间：
+
+`http://schemas.openxmlformats.org/drawingml/2006/main`
+
 ## 验收（第 2 项）
 
 打开一份 Excel、一份 Word、一份 PowerPoint 各另存一次，不改任何部件，再交给原软件打开。三份都要能打开，内容看起来与另存前相同。这一项在用户确认文档之后、实现 opc 时再做。

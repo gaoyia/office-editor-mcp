@@ -1,6 +1,6 @@
 # 架构
 
-状态：xlsx 已实现，WPS 人工已过。docx 已实现，待按 `docs/checklist-docx.md` 用 Word / WPS 打开。pptx 只定边界。
+状态：xlsx 与 docx 第一期已实现，并已通过 Excel / Word / WPS 人工打开。pptx 的领域契约已写入 `docs/`，待确认后再写代码。
 
 ## 产品形态
 
@@ -24,7 +24,7 @@ MCP 是以后的传输层，第一期不做。将来无论用不用 JSON-RPC，�
 
 ## 模块
 
-建议用 Cargo workspace，两个 crate。xlsx 与 docx 已落地。信封解析在 `json`，按 `format` 分发在 `dispatch`，每种格式自己解析自己的 `scope` 与 `ops`。`pptx` 尚未实现。
+建议用 Cargo workspace，两个 crate。xlsx 与 docx 已落地。信封解析在 `json`，按 `format` 分发在 `dispatch`，每种格式自己解析自己的 `scope` 与 `ops`。`pptx` 按确认后的契约实现，确认之前请求返回 `NotImplemented`。
 
 ```text
 crates/ooxp/                 库
@@ -33,7 +33,7 @@ crates/ooxp/                 库
   dispatch/                  按 format 分发给 xlsx / docx / pptx
   xlsx/                      工作簿 inspect / apply / create
   docx/                      文档 inspect / apply / create
-  pptx/                      未实现
+  pptx/                      演示文稿 inspect / apply / create（确认契约后落地）
 crates/ooxp-cli/             命令行，只依赖 ooxp。二进制名也是 ooxp
 ```
 
@@ -57,7 +57,7 @@ crates/ooxp-cli/             命令行，只依赖 ooxp。二进制名也是 oox
 
 ### pptx
 
-尚未实现。幻灯片在 `ppt/slides/slideN.xml`。inspect 按页列出形状文本。apply 按页加形状改文字，不删形状重建，以免动画绑定失效。不改 `<p:timing>`。
+入口由根关系里 `/officeDocument` 指向，常见路径 `/ppt/presentation.xml`。幻灯片顺序跟 `p:sldIdLst`，不跟文件名。inspect 默认只返回页名单；要形状必须给 `scope.slide`。apply 只改被点名形状的 `p:txBody` 可见文字，不删形状重建，不改 `<p:timing>`。create 生成最小 Transitional 包，必含 theme、slideMaster、slideLayout、presentation、各页 slide、presProps。备注、母版内容、动画第一期不进树也不改。
 
 ### cli
 
@@ -67,11 +67,11 @@ crates/ooxp-cli/             命令行，只依赖 ooxp。二进制名也是 oox
 
 ### inspect
 
-调用方给出路径和范围。库打开 OPC 包，定位格式入口部件（xlsx 是 Workbook，docx 是 Main Document）。按范围读必要的 XML，生成带 id 的树。xlsx 默认不读完全部单元格，docx 默认不返回 `paragraphs`。包不写回。
+调用方给出路径和范围。库打开 OPC 包，定位格式入口部件（xlsx 是 Workbook，docx 是 Main Document，pptx 是 Presentation）。按范围读必要的 XML，生成带 id 的树。xlsx 默认不读完全部单元格，docx 默认不返回 `paragraphs`，pptx 默认不返回 `shapes`。包不写回。
 
 ### apply
 
-调用方给出路径和 `ops`。库打开包，按每条 op 的 id 找到 XML 节点，只改这些节点。xlsx 在改了单元格之后，把工作簿标成打开时需要重算。docx 只改被点名的段落。保存时只重写脏部件。
+调用方给出路径和 `ops`。库打开包，按每条 op 的 id 找到 XML 节点，只改这些节点。xlsx 在改了单元格之后，把工作簿标成打开时需要重算。docx 只改被点名的段落。pptx 只改被点名形状的可见文字，且只让那一张幻灯片部件变脏。保存时只重写脏部件。
 
 ### create
 
@@ -80,7 +80,7 @@ crates/ooxp-cli/             命令行，只依赖 ooxp。二进制名也是 oox
 ## 硬约束
 
 - 自己实现 OPC。不要把 `office_oxide` 写进 `Cargo.toml`，不要加它的 git 子模块，不要在仓库里放它的源码目录。
-- 查规范用 `standards/md/` 的章节索引。xlsx 单元格见 ECMA-376 §18.3.1.4，公式见 §18.3.1.96 与 §18.17，共享字符串见 §18.4，计算属性见 §18.2.2。docx 主文档见 §11.3.10，段落见 §17.3.1.22，样式见 §17.7，`w14:paraId` 见 MS-DOCX §2.6.2.3。包结构见 §9 与 §12.2。
+- 查规范用 `standards/md/` 的章节索引。xlsx 单元格见 ECMA-376 §18.3.1.4，公式见 §18.3.1.96 与 §18.17，共享字符串见 §18.4，计算属性见 §18.2.2。docx 主文档见 §11.3.10，段落见 §17.3.1.22，样式见 §17.7，`w14:paraId` 见 MS-DOCX §2.6.2.3。pptx Presentation 部件见 §13.3.6，幻灯片见 §13.3.8 与 §19.3，页名单见 §19.2.1.34，形状与文本框见 §19.3.1.45 / §19.3.1.51，`cNvPr` 见 §19.3.1.12。包结构见 §9 与 §12.2。
 - 不实现 Excel 计算引擎、Word 排版引擎、PowerPoint 完整动画时间轴。
 - 不支持 `.doc`、`.xls`、`.ppt`。
 - XML 编辑是手术刀：不认识的命名空间、属性、子元素，只要没被当前 op 点到，就原样保留。
@@ -91,4 +91,4 @@ crates/ooxp-cli/             命令行，只依赖 ooxp。二进制名也是 oox
 
 ## 阶段边界
 
-xlsx 第一期已做完（WPS 已验收，Excel 本机未装）。docx 第一期实现已落地，人工打开见 [checklist-docx.md](checklist-docx.md)。pptx 不在本阶段验收。
+xlsx 与 docx 第一期已做完，人工打开见 [checklist-xlsx.md](checklist-xlsx.md)、[checklist-docx.md](checklist-docx.md)。pptx 契约确认并实现之后，按 [checklist-pptx.md](checklist-pptx.md) 用 PowerPoint / WPS 演示验收。

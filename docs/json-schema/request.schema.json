@@ -53,18 +53,21 @@
         "range": { "type": "string", "minLength": 1 },
         "maxCells": { "type": "integer", "minimum": 1, "maximum": 20000 },
         "from": { "type": "integer", "minimum": 1 },
-        "maxParas": { "type": "integer", "minimum": 1, "maximum": 5000 }
+        "maxParas": { "type": "integer", "minimum": 1, "maximum": 5000 },
+        "slide": { "type": "integer", "minimum": 1 },
+        "maxShapes": { "type": "integer", "minimum": 1, "maximum": 5000 }
       },
       "dependentRequired": {
         "range": ["sheet"],
         "sheet": ["range"],
         "from": ["maxParas"],
-        "maxParas": ["from"]
+        "maxParas": ["from"],
+        "maxShapes": ["slide"]
       }
     },
     "createRequest": {
       "type": "object",
-      "comment": "path 省略时，落盘路径由调用方另给，命令行用 --output。xlsx 用 workbook，docx 用 document，不能同时出现。",
+      "comment": "path 省略时，落盘路径由调用方另给，命令行用 --output。xlsx 用 workbook，docx 用 document，pptx 用 presentation，三者不能同时出现。",
       "required": ["schemaVersion", "action"],
       "additionalProperties": false,
       "properties": {
@@ -73,11 +76,13 @@
         "path": { "type": "string", "minLength": 1 },
         "format": { "$ref": "#/$defs/format" },
         "workbook": { "$ref": "#/$defs/xlsxWorkbook" },
-        "document": { "$ref": "#/$defs/docxDocument" }
+        "document": { "$ref": "#/$defs/docxDocument" },
+        "presentation": { "$ref": "#/$defs/pptxPresentation" }
       },
       "oneOf": [
         { "required": ["workbook"] },
-        { "required": ["document"] }
+        { "required": ["document"] },
+        { "required": ["presentation"] }
       ]
     },
     "xlsxWorkbook": {
@@ -144,6 +149,34 @@
         }
       }
     },
+    "pptxPresentation": {
+      "type": "object",
+      "required": ["slides"],
+      "additionalProperties": false,
+      "properties": {
+        "slides": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/pptxSlideCreate" }
+        }
+      }
+    },
+    "pptxSlideCreate": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "shapes": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/pptxShapeCreate" }
+        }
+      }
+    },
+    "pptxShapeCreate": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "text": { "type": "string" }
+      }
+    },
     "applyRequest": {
       "type": "object",
       "required": ["schemaVersion", "action", "path", "ops"],
@@ -160,7 +193,8 @@
           "items": {
             "oneOf": [
               { "$ref": "#/$defs/setCellOp" },
-              { "$ref": "#/$defs/setParaTextOp" }
+              { "$ref": "#/$defs/setParaTextOp" },
+              { "$ref": "#/$defs/setShapeTextOp" }
             ]
           }
         }
@@ -192,6 +226,16 @@
       "additionalProperties": false,
       "properties": {
         "op": { "const": "setParaText" },
+        "id": { "type": "string", "minLength": 1 },
+        "text": { "type": "string" }
+      }
+    },
+    "setShapeTextOp": {
+      "type": "object",
+      "required": ["op", "id", "text"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "setShapeText" },
         "id": { "type": "string", "minLength": 1 },
         "text": { "type": "string" }
       }

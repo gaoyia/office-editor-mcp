@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "deck.pptx",
+  "output": "deck.patched.pptx",
+  "ops": [
+    { "op": "setShapeText", "id": "slide:1/shape:2", "text": "新标题" }
+  ]
+}

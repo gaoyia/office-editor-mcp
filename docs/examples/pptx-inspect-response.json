@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "format": "pptx",
+  "id": "pptx:presentation",
+  "slideCount": 2,
+  "slides": [
+    {
+      "id": "slide:1",
+      "index": 1,
+      "name": null,
+      "hidden": false,
+      "truncated": false,
+      "shapes": [
+        {
+          "id": "slide:1/shape:2",
+          "shapeId": "2",
+          "name": "文本框 1",
+          "text": "标题",
+          "stable": true
+        },
+        {
+          "id": "slide:1/shape:3",
+          "shapeId": "3",
+          "name": "文本框 2",
+          "text": "hello",
+          "stable": true
+        }
+      ]
+    },
+    {
+      "id": "slide:2",
+      "index": 2,
+      "name": null,
+      "hidden": false
+    }
+  ]
+}

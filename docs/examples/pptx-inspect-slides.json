@@ -1,0 +1,6 @@
+{
+  "schemaVersion": 1,
+  "action": "inspect",
+  "path": "deck.pptx",
+  "format": "pptx"
+}

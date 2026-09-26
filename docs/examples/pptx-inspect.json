@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "action": "inspect",
+  "path": "deck.pptx",
+  "format": "pptx",
+  "scope": { "slide": 1, "maxShapes": 200 }
+}

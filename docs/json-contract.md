@@ -2,7 +2,7 @@
 
 `schemaVersion` 固定为 `1`。库和命令行只认这一层。MCP 或其他传输信封不许改这里的字段名和含义。机器可读副本见 [json-schema/request.schema.json](json-schema/request.schema.json)，与本文冲突时以本文为准。
 
-xlsx 的 inspect、create、apply 已经定稿。docx 的三套动作按本文写全，待确认后实现。pptx 仍只规定稳定 id，请求返回 `NotImplemented`。
+xlsx 与 docx 的 inspect、create、apply 已经定稿并实现。pptx 的三套动作按本文写全，待确认后实现；确认之前请求仍返回 `NotImplemented`。
 
 ## 信封
 
@@ -13,7 +13,7 @@ xlsx 的 inspect、create、apply 已经定稿。docx 的三套动作按本文�
 | `schemaVersion` | 整数 | 必须是 `1` |
 | `action` | 字符串 | `inspect`、`create`、`apply` 之一 |
 
-另外按动作需要 `path`、`format`、`scope`、`workbook`、`document`、`ops` 等字段，见下文。禁止在请求里放一整棵 inspect 树来表示「把文档改成这样」。create 的 xlsx 用 `workbook`，docx 用 `document`，二者不能同时出现。
+另外按动作需要 `path`、`format`、`scope`、`workbook`、`document`、`presentation`、`ops` 等字段，见下文。禁止在请求里放一整棵 inspect 树来表示「把文档改成这样」。create 的 xlsx 用 `workbook`，docx 用 `document`，pptx 用 `presentation`，三者不能同时出现。
 
 `format` 取值：`xlsx`、`docx`、`pptx`。可省略，省略时从 `path` 的扩展名推断。推断不出就报 `UnsupportedFormat`。
 
@@ -60,14 +60,33 @@ Word 2010 以后插入文本框、图表、SmartArt 都是 `mc:AlternateContent`
 
 同一主文档部件里若出现重复的 `w14:paraId`（违反 MS-DOCX，但现实文件可能有），inspect 照样列出每一段；apply 命中文档顺序中的第一段。
 
-### pptx（预留，第一期不实现）
+### pptx
+
+演示文稿根节点 id 固定为 `pptx:presentation`。
 
 | 节点 | id | 例子 |
 | --- | --- | --- |
-| 页 | `slide:{n}` | `slide:1`（从 1 起，按 presentation 关系顺序） |
+| 页 | `slide:{n}` | `slide:1` |
 | 形状 | `slide:{n}/shape:{shapeId}` | `slide:1/shape:4` |
+| 无 `cNvPr/@id` 的形状 | `slide:{n}/shape:index:{k}` | `slide:1/shape:index:2` |
 
-`shapeId` 是 `p:cNvPr/@id`。apply 不得删形状再重建，以免 id 变化导致动画失效。
+`{n}` 从 1 起，按 Presentation 部件（§13.3.6）里 `p:sldIdLst` / `p:sldId` 的出现顺序（§19.2.1.34），再跟 `r:id` 找到幻灯片部件。`n` 不是文件名里的数字，也不是 `p:sldId/@id`（那是 `ST_SlideId`，常见从 256 起）。隐藏页仍占序号，仍可 inspect 和 apply。
+
+`{shapeId}` 取该形状 `p:nvSpPr/p:cNvPr/@id` 的原文（§19.3.1.12）。输出用文件里的原始数字字符串。请求按十进制数值匹配，不因前导零而失败。
+
+没有 `cNvPr/@id` 时用 `slide:{n}/shape:index:{k}`，`k` 从 1 起，按该页列入树的形状顺序。树上同时给 `"stable": false`。这类 id 在增删形状后会变，只够同一次 inspect 之后立刻 apply。Office 亲手存的文件几乎都有 `cNvPr/@id`。
+
+同一页里若出现重复的 `cNvPr/@id`，inspect 照样列出每一处；apply 命中该页文档顺序中的第一处。
+
+apply 不得删形状再重建，以免 `cNvPr/@id` 变化导致绑在形状上的动画失效。不改 `<p:timing>`。
+
+备注页、讲义、幻灯片母版、版式第一期不进这棵树，也不接受 apply，对齐 docx 页眉页脚那条边界。
+
+「文本形状」要有可执行的判定：
+
+- 只收带 `p:txBody` 的 `p:sp`（§19.3.1.45、§19.3.1.51），含嵌在 `p:grpSp` 里的。标题占位符、正文占位符、自由文本框都算。
+- 不收 `p:pic`、`p:cxnSp`、`p:graphicFrame`（表格、图表、SmartArt 等）、`p:contentPart`。组合本身不进树，只展开里面符合条件的 `p:sp`。
+- 遇到 `mc:AlternateContent` 只走第一个 `mc:Choice`；没有 `mc:Choice` 才走 `mc:Fallback`。两支都走会把同一份内容读出两遍，也会让 apply 只改到其中一支。这条对 `shapes`、`text` 和 apply 一律适用。
 
 ## inspect
 
@@ -87,7 +106,7 @@ Word 2010 以后插入文本框、图表、SmartArt 都是 `mc:AlternateContent`
 }
 ```
 
-xlsx 与 docx 共用 `scope` 这个字段名，里面的键按格式分，混用报 `InvalidField`。
+xlsx、docx、pptx 共用 `scope` 这个字段名，里面的键按格式分，混用报 `InvalidField`。
 
 #### xlsx 的 scope
 
@@ -123,6 +142,27 @@ xlsx 与 docx 共用 `scope` 这个字段名，里面的键按格式分，混用
 | `scope.maxParas` | 要段落正文时必填 | 本次最多返回多少段，允许范围 `1` 到 `5000` |
 
 只要想看段落正文，就必须同时给 `from` 和 `maxParas`。不默认把全文倒出来。`from` 超出 `paraCount` 时 `paragraphs` 为空数组，`truncated` 为 `false`，不报错。
+
+#### pptx 的 scope
+
+```json
+{
+  "schemaVersion": 1,
+  "action": "inspect",
+  "path": "C:\\data\\deck.pptx",
+  "format": "pptx",
+  "scope": { "slide": 1, "maxShapes": 200 }
+}
+```
+
+| 字段 | 必填 | 含义 |
+| --- | --- | --- |
+| `path` | 是 | 已有文件 |
+| `scope` | 否 | 省略或空对象：只返回 `slideCount` 和页名单，没有 `shapes` |
+| `scope.slide` | 要形状时必填 | 页序号，从 1 起，按 `p:sldIdLst` 顺序 |
+| `scope.maxShapes` | 否 | 该页最多返回多少个文本形状，默认 `2000`，允许范围 `1` 到 `5000` |
+
+只要想看形状，就必须给 `slide`。不默认把每一页的文本框都倒出来。只给 `maxShapes`、不给 `slide` 报 `ScopeRequired`。`slide` 小于 `1` 报 `InvalidField`。`slide` 超出 `slideCount` 时各页都不带 `shapes`，不报错。
 
 ### 响应（xlsx）
 
@@ -247,6 +287,64 @@ xlsx 与 docx 共用 `scope` 这个字段名，里面的键按格式分，混用
 - `stable`：有 `w14:paraId` 为 `true`，否则为 `false`。
 - 第一期不返回修订痕迹和目录域。文本框里的段落既不作为独立节点出现，也不并进外层段落的 `text`。含超链接或域的段落仍出现在树上，`text` 只含可见结果。
 
+### 响应（pptx）
+
+```json
+{
+  "schemaVersion": 1,
+  "format": "pptx",
+  "id": "pptx:presentation",
+  "slideCount": 2,
+  "slides": [
+    {
+      "id": "slide:1",
+      "index": 1,
+      "name": null,
+      "hidden": false,
+      "truncated": false,
+      "shapes": [
+        {
+          "id": "slide:1/shape:2",
+          "shapeId": "2",
+          "name": "文本框 1",
+          "text": "标题",
+          "stable": true
+        },
+        {
+          "id": "slide:1/shape:3",
+          "shapeId": "3",
+          "name": "文本框 2",
+          "text": "hello",
+          "stable": true
+        }
+      ]
+    },
+    {
+      "id": "slide:2",
+      "index": 2,
+      "name": null,
+      "hidden": false
+    }
+  ]
+}
+```
+
+规则：
+
+- 只读 Presentation 部件和被点名的幻灯片部件。备注、讲义、母版、版式不读。
+- `slideCount` 是 `p:sldIdLst` 里 `p:sldId` 的个数，始终出现。
+- `slides` 始终列出全部页（含隐藏页）。未点名的页不带 `shapes`、`truncated`。
+- `name` 取 `p:cSld/@name` 的原文。没有该属性则为 `null`。
+- `hidden`：`p:sld/@show` 为 `0` 或 `false` 时为 `true`，其余为 `false`。
+- 省略 `scope` 或只给空对象时，没有 `shapes`、`truncated`。
+- 给了 `scope.slide` 时，只给那一页填 `shapes`。该页带 `p:txBody` 的 `p:sp` 超过 `maxShapes` 则 `truncated` 为 `true`，按该页文档顺序截断。未截断则为 `false`。
+- `scope.slide` 大于 `slideCount` 时，各页都不带 `shapes`，不报错。
+- `shapeId` 是 `cNvPr/@id` 的原文。走 `shape:index:{k}` 时为 `null`。
+- 形状上的 `name` 取 `cNvPr/@name` 的原文。没有则为 `null`。
+- `text` 是可见纯文本：该形状 `p:txBody` 内的 `a:t` 按文档顺序拼接；`a:br` 变成 `\n`。不含 run 级样式。`a:fld` 里的 `a:t` 算可见结果，收进来。`mc:AlternateContent` 只取一支，判定见上文 pptx 那节。
+- `stable`：有 `cNvPr/@id` 为 `true`，否则为 `false`。
+- 第一期不返回动画、切换、备注、母版、版式。图片和图表不作为节点出现。
+
 ## create
 
 只有 create 允许从 JSON 生成整包。
@@ -316,11 +414,48 @@ xlsx 与 docx 共用 `scope` 这个字段名，里面的键按格式分，混用
 | `paragraphs[].text` | 可见文本，可空字符串。省略当作 `""` |
 | `paragraphs[].style` | 段落样式 id。省略或 `Normal` 表示正文。第一期只允许 `Normal`、`Heading1`、`Heading2`、`Heading3`（大小写不敏感，写出时用这里的 canonical 形式） |
 
-不能同时给 `workbook` 和 `document`。xlsx 路径必须用 `workbook`，docx 路径必须用 `document`，对不上报 `InvalidField`。
-
 create 写出 Transitional 最小包，见 [opc.md](opc.md)。每个 `w:p` 都带唯一的 `w14:paraId` 和 `w14:textId`（取值大于 0、小于 `0x80000000`，MS-DOCX §2.6.2.3 / §2.6.2.4），并在根元素上把 `w14` 列入 `mc:Ignorable`。这样随后 inspect 得到的 id 都是 `para:{paraId}`，`stable` 为 `true`。
 
 标题段写出 `<w:pStyle w:val="Heading1"/>` 这类引用，样式定义放在 `/word/styles.xml`。不要生成页眉页脚、目录、修订。
+
+### pptx
+
+```json
+{
+  "schemaVersion": 1,
+  "action": "create",
+  "path": "C:\\out\\deck.pptx",
+  "format": "pptx",
+  "presentation": {
+    "slides": [
+      {
+        "shapes": [
+          { "text": "标题" },
+          { "text": "hello" }
+        ]
+      },
+      {
+        "shapes": [
+          { "text": "第二页" }
+        ]
+      }
+    ]
+  }
+}
+```
+
+| 字段 | 含义 |
+| --- | --- |
+| `path` | 输出路径。已存在则覆盖。省略时必须由调用方另给落盘路径，命令行用 `--output` |
+| `presentation.slides` | 页列表。可空；空则生成一页，页上有一个空文本框，否则 PowerPoint 可能打不开 |
+| `slides[].shapes` | 该页文本框列表。可空；空则生成一个空文本框 |
+| `shapes[].text` | 可见文本，可空字符串。省略当作 `""`。`\n` 写成 `a:br` |
+
+`workbook`、`document`、`presentation` 三者必须恰好出现一个。xlsx 路径必须用 `workbook`，docx 路径必须用 `document`，pptx 路径必须用 `presentation`，对不上报 `InvalidField`。
+
+create 写出 Transitional 最小包，见 [opc.md](opc.md)。必须带 theme、slideMaster、slideLayout、presentation、各页 slide、presProps，不能只写 ECMA 示例里那个仅含 `notesSz` 的 presentation。幻灯片尺寸用 16:9（`sldSz` 为 `cx="12192000"` `cy="6858000"`）。不要生成动画、切换、备注。
+
+每个文本框写成带 `p:txBody` 的 `p:sp`，`p:cNvPr/@id` 从 `2` 起在该页内递增（`1` 留给 `spTree`）。随后 inspect 得到的 id 都是 `slide:{n}/shape:{id}`，`stable` 为 `true`。形状纵向错开，避免叠在同一位置。颜色用 RGB，不依赖主题色语义。
 
 ## apply
 
@@ -369,7 +504,7 @@ create 与 apply 落盘时先写入目标同目录的临时文件，再改名为
 | `value` | 与 create 相同。`null` 表示清空该格的值和公式 |
 | `formula` | 以 `=` 开头。不能与 `value` 同时出现 |
 
-不认识的 `op` 报 `UnsupportedOp`，不要忽略。第一期 xlsx 只认 `setCell`，docx 只认 `setParaText`。对 docx 发 `setCell`、对 xlsx 发 `setParaText` 报 `InvalidField`。
+不认识的 `op` 报 `UnsupportedOp`，不要忽略。第一期 xlsx 只认 `setCell`，docx 只认 `setParaText`，pptx 只认 `setShapeText`。对不上格式的 op（例如对 pptx 发 `setCell` / `setParaText`，或对 xlsx / docx 发 `setShapeText`）报 `InvalidField`。
 
 空单元格：目标格子在 XML 里还不存在时，`setCell` 按需插入 `<row>` 和 `<c>`，插在正确的行列顺序上。找不到工作表才报 `IdNotFound`。
 
@@ -438,6 +573,44 @@ create 与 apply 落盘时先写入目标同目录的临时文件，再改名为
 ### 改动范围（docx）
 
 只允许变脏的部件：主文档 XML（通常是 `/word/document.xml`）。`styles.xml`、页眉页脚、主题、编号一律原样写回。
+
+被改部件同样整份重序列化，保留程度与 xlsx 工作表相同：元素与属性顺序、未知命名空间保留；注释、处理指令、DOCTYPE 会丢。
+
+### setShapeText（pptx 第一期唯一的 op）
+
+```json
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "C:\\data\\deck.pptx",
+  "output": "C:\\data\\deck.patched.pptx",
+  "ops": [
+    { "op": "setShapeText", "id": "slide:1/shape:2", "text": "新标题" }
+  ]
+}
+```
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"setShapeText"` |
+| `id` | 形状 id（`slide:{n}/shape:{shapeId}` 或 `slide:{n}/shape:index:{k}`） |
+| `text` | 新的可见纯文本，字符串，可空。必填。`\\n` 写成 `a:br`，不把字面换行两个字符写进 `a:t` |
+
+找不到该形状报 `IdNotFound`。第一期不插入、不删除形状。对 `slide:{n}`（没有 `/shape:`）发本 op 报 `InvalidId`。
+
+替换规则（手术刀，不整页重建 `p:sp`，更不整份重建演示文稿）：
+
+1. 只改命中的那一个 `p:sp` 的 `p:txBody` 可见文字。`p:nvSpPr`、`p:spPr`（几何与位置）、`p:style`、不认识的子元素都留着。禁止删掉该形状再新建一个。
+2. 不改同页的 `<p:timing>`、`<p:transition>`，也不改其他形状。重序列化该页时这两节必须作为未点名节点原样保留。
+3. 在该 `p:txBody` 里找出含 `a:t` 的 run（`a:r`）。遇到 `mc:AlternateContent` 只进第一个 `mc:Choice`（没有就进 `mc:Fallback`）。
+4. 若一个都没有：在现有 `a:bodyPr` / `a:lstStyle` 之后插入一个 `a:p`/`a:r`/`a:t`，文本放进去；没有 `p:txBody` 则本 op 报 `IdNotFound`（第一期不给无文本框的形状补 `txBody`）。
+5. 若有：把完整新文本写入其中第一个 `a:t`（需要保留首尾空格时加 `xml:space="preserve"`）；`text` 中的 `\n` 拆成 `a:t` 加 `a:br`；其余这类 `a:t` 删掉；因此变空、且里面再也没有别的 run 内容的 `a:r` 删掉。第一个 run 上已有的 `a:rPr` 保留。
+6. 含域（`a:fld`）的形状仍按上面做。域可能被拆掉。验收只用无域的普通文本框。
+7. apply 写进去的文本，随后 inspect 读回来必须与写入值相同。
+
+### 改动范围（pptx）
+
+只允许变脏的部件：被改的那一张幻灯片 XML（通常是 `/ppt/slides/slideN.xml`，N 以关系目标为准）。`presentation.xml`、其他页、母版、版式、主题、备注、`presProps` 一律原样写回。
 
 被改部件同样整份重序列化，保留程度与 xlsx 工作表相同：元素与属性顺序、未知命名空间保留；注释、处理指令、DOCTYPE 会丢。
 

@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "action": "create",
+  "path": "deck.pptx",
+  "format": "pptx",
+  "presentation": {
+    "slides": [
+      {
+        "shapes": [
+          { "text": "标题" },
+          { "text": "hello" }
+        ]
+      },
+      {
+        "shapes": [
+          { "text": "第二页" }
+        ]
+      }
+    ]
+  }
+}
