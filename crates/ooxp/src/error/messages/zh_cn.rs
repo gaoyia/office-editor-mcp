@@ -96,6 +96,15 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::InsertNeedsSheet => {
                 "xlsx 的 insertPicture 的 id 必须是 sheet:工作表名 或页眉槽位 id".into()
             }
+            IdReason::SlidePicPrefix => {
+                "pptx 图 id 必须是 slide:N/pic:…".into()
+            }
+            IdReason::SlidePicContainer => {
+                "页 id 必须带 /pic:…（该 id 本身不是图）".into()
+            }
+            IdReason::InsertNeedsSlide => {
+                "pptx 的 insertPicture 的 id 必须是 slide:N".into()
+            }
             IdReason::HfSlotPrefix => {
                 "xlsx 页眉槽位 id 必须是 sheet:工作表名/hf:odd|even|first:header|footer".into()
             }

@@ -3,13 +3,20 @@
 mod apply;
 mod create;
 mod inspect;
+mod picture;
 mod request;
 mod shape;
 
 pub use apply::apply;
 pub use create::create;
 pub use inspect::inspect;
+pub use picture::export_media;
 pub use request::{parse_ops, parse_scope};
+
+pub struct ExportedMedia {
+    pub bytes: Vec<u8>,
+    pub content_type: Option<String>,
+}
 
 pub const PML_NS: &str = "http://schemas.openxmlformats.org/presentationml/2006/main";
 pub const DML_NS: &str = "http://schemas.openxmlformats.org/drawingml/2006/main";

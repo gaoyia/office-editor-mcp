@@ -1,4 +1,4 @@
-//! 从演示文稿读出页名单和文本形状。
+//! 从演示文稿读出页名单、文本形状和图。
 
 use serde_json::{json, Value};
 
@@ -6,6 +6,7 @@ use crate::error::Error;
 use crate::opc::{self, Package};
 use crate::xml;
 
+use super::picture;
 use super::request::InspectScope;
 use super::shape;
 
@@ -15,18 +16,26 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     let pres = xml::parse(pkg.get(&pres_part)?)?;
     let slides = shape::list_slides(&pkg, &pres_part, &pres.root)?;
     let slide_count = slides.len();
+    let want_pictures = scope.as_ref().is_some_and(|s| s.pictures);
 
     let mut slide_json = Vec::new();
+    let mut picture_count = 0usize;
     for s in &slides {
+        let doc = xml::parse(pkg.get(&s.part)?)?;
+        let pics = picture::collect_pictures(&doc.root, s.index);
+        picture_count += pics.len();
         let mut obj = json!({
             "id": format!("slide:{}", s.index),
             "index": s.index,
             "name": s.name,
             "hidden": s.hidden,
+            "pictureCount": pics.len(),
         });
+        if want_pictures {
+            obj["pictures"] = Value::Array(picture::pictures_json(&pics));
+        }
         if let Some(scope) = &scope {
-            if scope.slide as usize == s.index {
-                let doc = xml::parse(pkg.get(&s.part)?)?;
+            if scope.slide == Some(s.index as u32) {
                 let all = shape::collect_text_shapes(&doc.root);
                 let mut truncated = false;
                 let take = if all.len() as u32 > scope.max_shapes {
@@ -66,6 +75,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         "format": "pptx",
         "id": "pptx:presentation",
         "slideCount": slide_count,
+        "pictureCount": picture_count,
         "slides": slide_json,
     }))
 }

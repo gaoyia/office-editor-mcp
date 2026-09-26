@@ -26,7 +26,10 @@ $tree2 = Invoke-OoxpTree @{
 } 'pptx-inspect-slides'
 
 $noShapes = -not ($tree2.slides[0].PSObject.Properties.Name -contains 'shapes')
-Add-Check 'pptx-I3' ($noShapes -and ($tree2.slideCount -eq 2)) "noShapes=$noShapes count=$($tree2.slideCount)"
+$noPics = -not ($tree2.slides[0].PSObject.Properties.Name -contains 'pictures')
+$hasPc = ($tree2.PSObject.Properties.Name -contains 'pictureCount') -and
+         ($tree2.slides[0].PSObject.Properties.Name -contains 'pictureCount')
+Add-Check 'pptx-I3' ($noShapes -and $noPics -and $hasPc -and ($tree2.slideCount -eq 2) -and ($tree2.pictureCount -eq 0)) "noShapes=$noShapes pc=$($tree2.pictureCount)"
 
 $shapes = @($tree.slides[0].shapes)
 $idOk2 = ($shapes.Count -eq 2) -and $shapes[0].stable -and $shapes[1].stable -and

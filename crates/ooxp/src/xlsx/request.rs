@@ -508,6 +508,7 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<XlsxOp>, Error> {
             "setChartAnchor" => XlsxOp::SetChartAnchor(parse_set_chart_anchor(obj, i)?),
             "setParaText"
             | "setShapeText"
+            | "setPicturePos"
             | "setHeaderFooterDistance"
             | "setHeaderFooterLink"
             | "setPictureWrap"

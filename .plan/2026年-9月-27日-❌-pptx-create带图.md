@@ -5,7 +5,7 @@
 
 从 `.plan/2026年-9月-27日-❌-pptx-编辑路线.md` 拆出序号 1。`create` 是唯一允许整包生成的动作。本期让新建演示文稿能带 `p:pic`。复用 `insertPicture` 的写入，不另做生成器。
 
-前置：`.plan/2026年-9月-27日-❌-pptx-幻灯片图.md`。
+前置：`.plan/2026年-9月-27日-✅-pptx-幻灯片图.md`。
 
 契约真源：`docs/json-contract.md`、`docs/json-schema/request.schema.json`、`docs/errors.md`、`docs/architecture.md`、`docs/opc.md`、`docs/checklist-pptx.md`。
 

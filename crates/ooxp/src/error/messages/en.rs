@@ -107,6 +107,15 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::InsertNeedsSheet => {
                 "xlsx insertPicture id must be sheet:name or sheet:name/hf:kind:side".into()
             }
+            IdReason::SlidePicPrefix => {
+                "pptx picture id must be slide:N/pic:…".into()
+            }
+            IdReason::SlidePicContainer => {
+                "Slide id must include /pic:… (that id alone is not a picture)".into()
+            }
+            IdReason::InsertNeedsSlide => {
+                "pptx insertPicture id must be slide:N".into()
+            }
             IdReason::HfSlotPrefix => {
                 "xlsx header/footer id must be sheet:name/hf:odd|even|first:header|footer".into()
             }

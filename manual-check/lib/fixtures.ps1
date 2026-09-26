@@ -581,6 +581,45 @@ function Ensure-PptxPptSource([switch]$Force) {
     return $path
 }
 
+# PowerPoint 亲手另存的带图样例：第一页一张 p:pic，另有文本框。
+function Ensure-PptxPptPictureSource([switch]$Force) {
+    $path = Get-OutPath 'pptx-ppt-picture-source.pptx'
+    if ((Test-Path $path) -and -not $Force) { return $path }
+
+    $tmpDir = Join-Path $env:TEMP 'ooxp-office'
+    New-Item -ItemType Directory -Force -Path $tmpDir | Out-Null
+    $tmp = Join-Path $tmpDir 'pptx-ppt-picture-source.pptx'
+    $S = $global:OoxpStrings
+    $pngA = Ensure-OoxpPngA
+    $req = @{
+        schemaVersion = 1; action = 'create'
+        path = $tmp.Replace('\', '/'); format = 'pptx'
+        presentation = @{
+            slides = @(
+                @{ shapes = @(@{ text = $S.chapter1 }, @{ text = $S.shape2src }) }
+                @{ shapes = @(@{ text = $S.page2keep }) }
+            )
+        }
+    }
+    Invoke-OoxpRequest $req 'pptx-pic-source-create' | Out-Null
+
+    $ppt = Ensure-MsPpt (Ensure-PptxCreate)
+    $pres = Open-PptPres $ppt $tmp
+    $s1 = Get-PptSlide $pres 1
+    $shapes = $s1.Shapes
+    # LinkToFile=false、SaveWithDocument=true；单位是磅。
+    $pic = $shapes.AddPicture($pngA, 0, -1, 80, 60, 160, 120)
+    Write-Log 'PowerPoint Save() 原地覆盖 TEMP 里的带图源文件'
+    $pres.Save()
+    Close-PptPres $pres
+    Release-Com $pic
+    Release-Com $shapes
+    Release-Com $s1
+    Copy-Item -Force $tmp $path
+    Write-Log "saved ppt picture source $path"
+    return $path
+}
+
 function Write-OoxpPng([string]$path, [byte[]]$bytes) {
     $dir = Split-Path -Parent $path
     if ($dir) { New-Item -ItemType Directory -Force -Path $dir | Out-Null }

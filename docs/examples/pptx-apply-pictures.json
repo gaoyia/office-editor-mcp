@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "deck.pptx",
+  "output": "deck.pic.pptx",
+  "ops": [
+    {
+      "op": "insertPicture",
+      "id": "slide:1",
+      "file": "C:\\img\\logo.png",
+      "x": 914400,
+      "y": 914400,
+      "cx": 1828800,
+      "cy": 1828800
+    },
+    {
+      "op": "setPicturePos",
+      "id": "slide:1/pic:4",
+      "x": 1828800,
+      "y": 914400
+    }
+  ]
+}

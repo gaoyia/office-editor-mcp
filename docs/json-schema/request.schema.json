@@ -405,6 +405,7 @@
               { "$ref": "#/$defs/setPictureSizeOp" },
               { "$ref": "#/$defs/setPictureWrapOp" },
               { "$ref": "#/$defs/setPictureAnchorOp" },
+              { "$ref": "#/$defs/setPicturePosOp" },
               { "$ref": "#/$defs/insertTextBoxOp" },
               { "$ref": "#/$defs/deleteTextBoxOp" },
               { "$ref": "#/$defs/setTextBoxSizeOp" },
@@ -544,6 +545,8 @@
         "file": { "type": "string", "minLength": 1 },
         "cx": { "type": "integer", "minimum": 1 },
         "cy": { "type": "integer", "minimum": 1 },
+        "x": { "type": "integer", "minimum": 0 },
+        "y": { "type": "integer", "minimum": 0 },
         "from": { "type": "string", "minLength": 1 },
         "to": { "type": "string", "minLength": 1 },
         "anchor": { "enum": ["oneCell", "twoCell"] },
@@ -575,6 +578,21 @@
       "anyOf": [
         { "required": ["cx"] },
         { "required": ["cy"] }
+      ]
+    },
+    "setPicturePosOp": {
+      "type": "object",
+      "required": ["op", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "setPicturePos" },
+        "id": { "type": "string", "minLength": 1 },
+        "x": { "type": "integer", "minimum": 0 },
+        "y": { "type": "integer", "minimum": 0 }
+      },
+      "anyOf": [
+        { "required": ["x"] },
+        { "required": ["y"] }
       ]
     },
     "setPictureWrapOp": {

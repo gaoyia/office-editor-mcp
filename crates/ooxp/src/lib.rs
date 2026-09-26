@@ -484,7 +484,7 @@ mod tests {
             None,
         )
         .unwrap_err();
-        assert_eq!(err.code(), ErrorCode::InvalidField);
+        assert_eq!(err.code(), ErrorCode::InvalidId);
     }
 
     #[test]
@@ -513,7 +513,10 @@ mod tests {
         };
         assert_eq!(tree["id"], "pptx:presentation");
         assert_eq!(tree["slideCount"], 2);
+        assert_eq!(tree["pictureCount"], 0);
+        assert_eq!(tree["slides"][0]["pictureCount"], 0);
         assert!(tree["slides"][0].get("shapes").is_none());
+        assert!(tree["slides"][0].get("pictures").is_none());
 
         let scoped = json!({
             "schemaVersion": 1,
@@ -926,15 +929,30 @@ mod tests {
         };
         assert_eq!(
             object_keys(&tree),
-            ["schemaVersion", "format", "id", "slideCount", "slides"]
+            [
+                "schemaVersion",
+                "format",
+                "id",
+                "slideCount",
+                "pictureCount",
+                "slides"
+            ]
         );
         assert_eq!(
             object_keys(&tree["slides"][0]),
-            ["id", "index", "name", "hidden", "truncated", "shapes"]
+            [
+                "id",
+                "index",
+                "name",
+                "hidden",
+                "pictureCount",
+                "truncated",
+                "shapes"
+            ]
         );
         assert_eq!(
             object_keys(&tree["slides"][1]),
-            ["id", "index", "name", "hidden"]
+            ["id", "index", "name", "hidden", "pictureCount"]
         );
         assert_eq!(
             object_keys(&tree["slides"][0]["shapes"][0]),

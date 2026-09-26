@@ -47,6 +47,7 @@ $order = @(
     'docx-charts-ext'
     'docx-smartart'
     'pptx-apply'
+    'pptx-pictures'
     'opc-resave'
 )
 

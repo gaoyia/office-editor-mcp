@@ -240,6 +240,8 @@ DrawingML 主命名空间：
 
 `http://schemas.openxmlformats.org/drawingml/2006/main`
 
+apply 插入幻灯片图时，可能新建 `/ppt/media/imageN.*`，并在该页 `.rels` 补一条 image 关系（Type 以 `/image` 结尾）。`p:pic` 写在该页 `p:spTree` 里，位置与尺寸在 `p:spPr/a:xfrm`。create 本期不写图。
+
 ## 验收（第 2 项）
 
 零脏保存：`open` 之后不调用 `set` / `remove`，再 `save`。每个部件的未压缩字节、以及 ZIP 里该条目的 CRC，都与打开时相同。库测试对 Excel 另存的 xlsx、以及 create 写出的 docx / pptx 各跑一遍。

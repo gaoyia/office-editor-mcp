@@ -4,18 +4,19 @@
 
 检查前用 create 或 apply 在本机生成文件，不要用改过扩展名的 zip 目录冒充。本机若 `PowerPoint.Application` 被 WPS 抢走，直接启动 `POWERPNT.EXE` 再挂 COM，不要走被抢的 ProgID。Office 16 的对象模型在 `mdiClass` 上。
 
-C、I、A 三组由 `manual-check/office/cases/pptx-*.ps1` 自动判定，跑 `pwsh -File manual-check\office\run.ps1 -Case 'pptx-*'` 即可复现。O1 已放弃，与 xlsx / docx 相同。
+C、I、A、Pp 各组由 `manual-check/office/cases/pptx-*.ps1` 自动判定，跑 `pwsh -File manual-check\office\run.ps1 -Case 'pptx-*'` 即可复现。O1 已放弃，与 xlsx / docx 相同。
 
-## 本机结果（2026-09-26）
+## 本机结果（2026-09-27）
 
-Microsoft PowerPoint 16.0 已打开，C1、C3、C4、I1–I5、A1–A5 均 PASS。本机若装了 WPS，`PowerPoint.Application` 会被抢走，测试仍直接启动 `POWERPNT.EXE`，从 `mdiClass` 挂 COM。O1 已放弃。
+Microsoft PowerPoint 16.0 已打开，C1、C3、C4、I1–I5、A1–A5、Pp1–Pp7 均 PASS。本机若装了 WPS，`PowerPoint.Application` 会被抢走，测试仍直接启动 `POWERPNT.EXE`，从 `mdiClass` 挂 COM。O1 已放弃。2026-09-27 补跑 `pptx-pictures.ps1`，Pp1–Pp7 通过。
 
 | 序号 | 状态 | 结果 |
 | --- | --- | --- |
 | C1 | ✅ | PowerPoint 16.0 能打开 `manual-check/office/out/pptx-create.pptx`，标题栏无 Repair |
 | C3–C4 | ✅ | 第一页 `标题` / `hello`，第二页 `第二页` |
-| I1–I5 | ✅ | `pptx:presentation`、`slideCount=2`、无 scope 时没有 `shapes`、形状 id 为 `slide:1/shape:2` 且 `stable` |
+| I1–I5 | ✅ | `pptx:presentation`、`slideCount=2`、无 scope 时没有 `shapes`、仍有 `pictureCount`、形状 id 为 `slide:1/shape:2` 且 `stable` |
 | A1–A5 | ✅ | 目标框为「改过的正文」且仍加粗（`Bold=-1`），同页另一框与第二页未改 |
+| Pp1–Pp7 | ✅ | PowerPoint 16.0：无 `pictures` 时 `pictureCount=1`；名单 id 为 `slide:1/pic:5`；换/插/删无修复；尺寸 144 磅；位置 72×108 磅；export 与 `/ppt/media/…` 字节一致 |
 | O1 | 🚫 | 领域层不做原样保存，与 xlsx 清单相同。零脏写回见 OPC 库测试。PowerPoint 另存 create 产物见 `pptx-O1-ppt-resave` |
 
 ## create
@@ -36,7 +37,7 @@ Microsoft PowerPoint 16.0 已打开，C1、C3、C4、I1–I5、A1–A5 均 PASS�
 | --- | --- | --- |
 | I1 | 根节点 | `id` 为 `pptx:presentation`，`slideCount` 为 `2` |
 | I2 | 页名单 | 两页 id 为 `slide:1`、`slide:2`，`index` 为 `1`、`2` |
-| I3 | 无 scope | 只发 path 时各页都没有 `shapes` 字段，仍有 `slideCount` 和 `slides` |
+| I3 | 无 scope | 只发 path 时各页都没有 `shapes` 字段，仍有 `slideCount`、`pictureCount` 和 `slides` |
 | I4 | 形状 id | 第一页两个形状 id 为 `slide:1/shape:{n}`，`stable` 为 `true` |
 | I5 | 第一页文字 | 两个形状的 `text` 分别为 `标题`、`hello` |
 
@@ -51,6 +52,20 @@ Microsoft PowerPoint 16.0 已打开，C1、C3、C4、I1–I5、A1–A5 均 PASS�
 | A3 | 同页未改形状 | 第一页其余文本框文字和位置还在 |
 | A4 | 样式 | 目标形状若原先有加粗等 run 样式，改完后看起来还在（允许整框变成单一 run，但加粗还在） |
 | A5 | 其余页 | 第二页文字和版式看起来不变；有动画的样例里动画仍绑在原形状上 |
+
+## 幻灯片图
+
+源文件必须是 PowerPoint 亲手另存，至少一张 `p:pic`。另备一张本地 PNG。不要用库 `create` 产物当带图样例。脚本：`manual-check/office/cases/pptx-pictures.ps1`。
+
+| 序号 | 检查 | 通过标准 |
+| --- | --- | --- |
+| Pp1 | inspect | 无 `pictures` 时根与各页有 `pictureCount`、没有名单；`pictures: true` 时 id 为 `slide:…/pic:…` |
+| Pp2 | 换图 | `replacePicture` 后无修复；位置尺寸不变 |
+| Pp3 | 插图 | `insertPicture` 往一页插图，能看见且无修复 |
+| Pp4 | 删图 | `deletePicture` 后该图消失，无修复 |
+| Pp5 | 尺寸 | `setPictureSize` 后 COM 或目视尺寸对上（允许 EMU 误差） |
+| Pp6 | 位置 | `setPicturePos` 后图跟着走，无修复 |
+| Pp7 | 导出 | `exportMedia` 与 `/ppt/media/…` 字节一致。不强制开 PowerPoint |
 
 ## 原样保存（opc 验收）
 
