@@ -82,8 +82,9 @@ fn sheet_index(
     let mut out = Vec::new();
     for sh in sheets.children_by_local("sheet") {
         let name = sh.attr("name").unwrap_or("").to_string();
+        // `r:id`：前缀只是习惯，任何映射到 relationships 命名空间的前缀都合法。
         let rid = sh
-            .attr("id")
+            .attr_local("id")
             .ok_or_else(|| {
                 Error::new(ErrorKind::XmlMissing {
                     parent: "sheet".into(),

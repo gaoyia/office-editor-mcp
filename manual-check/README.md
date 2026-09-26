@@ -49,10 +49,12 @@ pwsh -File manual-check\office\run.ps1 -CloseOffice      # 跑完关掉 Word、E
 - 启动时必须带一个文档。空的 Excel 进程没有 `EXCEL7` 子窗口，`AccessibleObjectFromWindow` 会返回 `hr=0x80004005`。
 - 读 ooxp 的输出不能用 `cmd /c`。ooxp 吐 UTF-8，cmd 按控制台代码页解，中文会坏：偶数长度的悄悄判错，奇数长度的直接把 JSON 撕坏。`Invoke-Ooxp` 显式按 UTF-8 读，并检查退出码。
 - 判断「有没有弹修复提示」要读被测文档自己的标题栏（`$doc.ActiveWindow.Caption`、`$wb.Windows.Item(1).Caption`），不能读 `$app.ActiveWindow`，那可能是别的文档的窗口。
-- apply 的目标文件若正被 Office 开着，ooxp 写不进去。xlsx 用 `Close-AllWorkbooks`，docx 用 `Close-WordDocByPath`。
+- apply 的目标文件若正被 Office 开着，ooxp 写不进去。xlsx 用 `Close-AllWorkbooks`，docx 用 `Close-WordDocByPath`，pptx 用 `Close-PptPresByPath`。
 - 手动把 Excel 窗口关掉并不等于进程退出。它常常留成一个两百多兆、没有窗口的进程，下一轮 `Get-Process` 找得到它，可它没有 `EXCEL7` 子窗口，绑定就白等 25 秒然后报 `hr=0x80004005`。`run.ps1` 开头会把这种进程报出来，`-CloseOffice` 负责收拾。
 - 收尾的顺序不能颠倒：先 `[GC]::Collect()` 回收用例留下的工作簿等 COM 包装对象，再关文档，最后才 `Quit`。反过来做，Excel 会当作还有客户端连着，直接无视 `Quit`。
-- 有的实例连正确顺序的 `Quit` 也不理。`Stop-LingeringOffice` 只对这一轮绑过的那个 PID 兜底：等 8 秒，确认窗口已经没了才结束进程。要是 Excel 里还开着 `out/` 之外的工作簿，整个关闭动作直接跳过，不碰你自己的文件。
+- **别写链式的点**。`$pres.Slides.Item(1)`、`$shape.TextFrame.TextRange.Text`、`$pres.Windows.Item(1).Caption` 这种写法，中间的 `Slides`、`TextFrame`、`TextRange`、`Windows` 全是 COM 包装对象，落地就没人松手了。漏够了 PowerPoint 就认定客户端还连着，`Quit` 一概无视。取形状和幻灯片走 `Get-PptSlide` / `Get-PptShape`，其余情况把中间对象接到变量里，用完逐个 `Release-Com`。
+- 三家收尾一个规矩：只要发现 `out/` 之外还开着文档，这一家就整个不 `Quit`，不碰你自己的文件；一家有，不牵连另外两家。早先只有 Excel 这么做，Word 和 PowerPoint 是跳过那一份、照旧 `Quit`，而 `DisplayAlerts` 已经关掉，会把用户的文档连带关掉还不提示。
+- 有的实例连正确顺序的 `Quit` 也不理，PowerPoint 每轮都这样：文档关掉了，留一个空窗口的进程赖着。`Stop-LingeringOffice` 只对「确认过没有外来文档、并且真的调过 `Quit`」的那几家兜底，等 15 秒仍不退就按 PID 结束它。有这两个前提，剩下的窗口只可能是空的应用窗口。
 
 拆分前的旧脚本（`_office-checklist.ps1` 等七个）已经删掉，需要时从 git 历史取：`git show be936f2:manual-check/office/requests/_office-checklist.ps1`。
 

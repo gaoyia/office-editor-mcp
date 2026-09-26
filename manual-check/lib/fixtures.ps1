@@ -125,12 +125,19 @@ function Ensure-PptxPptSource([switch]$Force) {
 
     $ppt = Ensure-MsPpt (Ensure-PptxCreate)
     $pres = Open-PptPres $ppt $tmp
-    $s1 = $pres.Slides.Item(1)
-    $box2 = $s1.Shapes.Item('文本框 2')
-    $box2.TextFrame.TextRange.Font.Bold = $true
+    $s1 = Get-PptSlide $pres 1
+    $box2 = Get-PptShape $s1 '文本框 2'
+    # 中间的 TextFrame / TextRange / Font 都得留住再松手，链式点过去会漏。
+    $frame2 = $box2.TextFrame
+    $range2 = $frame2.TextRange
+    $font2 = $range2.Font
+    $font2.Bold = $true
     Write-Log 'PowerPoint Save() 原地覆盖 TEMP 里的源文件'
     $pres.Save()
     Close-PptPres $pres
+    Release-Com $font2
+    Release-Com $range2
+    Release-Com $frame2
     Release-Com $box2
     Release-Com $s1
     Copy-Item -Force $tmp $path

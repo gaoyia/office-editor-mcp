@@ -45,35 +45,40 @@ impl Element {
         self.name.rsplit(':').next().unwrap_or(&self.name)
     }
 
-    pub fn attr(&self, local: &str) -> Option<&str> {
+    /// 按属性全名精确匹配，区分大小写。XML 的属性名本来就区分大小写，
+    /// OOXML 的拼写由 schema 定死，所以这里不做任何模糊。
+    /// 前缀可变的属性（`w:val`、`w14:paraId`、`r:id`）用 [`Element::attr_local`]。
+    pub fn attr(&self, name: &str) -> Option<&str> {
+        self.attrs
+            .iter()
+            .find_map(|(k, v)| (k == name).then_some(v.as_str()))
+    }
+
+    /// 只比 local name，忽略前缀，区分大小写。给前缀可变的属性用：
+    /// `r:id` 的前缀只是习惯，任何映射到 relationships 命名空间的前缀都合法。
+    ///
+    /// 同一元素上既有无前缀又有带前缀的同名属性时（例如 `p:sldId` 同时带 `id` 与 `r:id`），
+    /// 本方法命中先出现的那个，这种场合必须改用精确名。
+    pub fn attr_local(&self, local: &str) -> Option<&str> {
         self.attrs.iter().find_map(|(k, v)| {
             let key_local = k.rsplit(':').next().unwrap_or(k);
-            if key_local.eq_ignore_ascii_case(local) || k.eq_ignore_ascii_case(local) {
-                Some(v.as_str())
-            } else {
-                None
-            }
+            (key_local == local).then_some(v.as_str())
         })
     }
 
-    pub fn set_attr(&mut self, key: &str, value: impl Into<String>) {
+    /// 按属性全名精确匹配；有则改值，无则追加。
+    pub fn set_attr(&mut self, name: &str, value: impl Into<String>) {
         let value = value.into();
-        if let Some((_, v)) = self
-            .attrs
-            .iter_mut()
-            .find(|(k, _)| k == key || k.rsplit(':').next().unwrap_or(k).eq_ignore_ascii_case(key))
-        {
+        if let Some((_, v)) = self.attrs.iter_mut().find(|(k, _)| k == name) {
             *v = value;
             return;
         }
-        self.attrs.push((key.to_string(), value));
+        self.attrs.push((name.to_string(), value));
     }
 
-    pub fn remove_attr(&mut self, local: &str) {
-        self.attrs.retain(|(k, _)| {
-            let key_local = k.rsplit(':').next().unwrap_or(k);
-            !key_local.eq_ignore_ascii_case(local) && !k.eq_ignore_ascii_case(local)
-        });
+    /// 按属性全名精确匹配删除。要删 `xml:space` 就写全名，别指望写 `space` 也能删掉。
+    pub fn remove_attr(&mut self, name: &str) {
+        self.attrs.retain(|(k, _)| k != name);
     }
 
     pub fn element_children(&self) -> impl Iterator<Item = &Element> {
@@ -320,5 +325,59 @@ mod tests {
         let out = parse(b"<a/>").unwrap().to_bytes().unwrap();
         let text = String::from_utf8(out).unwrap();
         assert_eq!(text, format!("{DEFAULT_DECL}<a/>"));
+    }
+
+    /// `p:sldId` 是最容易踩的一个：无前缀的 `id` 是幻灯片编号，`r:id` 是关系，
+    /// local name 都叫 `id`。精确名必须能把两者分开。
+    fn sld_id() -> Element {
+        let doc = parse(br#"<p:sldId id="256" r:id="rId2"/>"#).unwrap();
+        doc.root
+    }
+
+    #[test]
+    fn attr_matches_full_name_only() {
+        let el = sld_id();
+        assert_eq!(el.attr("id"), Some("256"));
+        assert_eq!(el.attr("r:id"), Some("rId2"));
+    }
+
+    #[test]
+    fn attr_is_case_sensitive() {
+        let el = sld_id();
+        assert_eq!(el.attr("ID"), None);
+        assert_eq!(el.attr("Id"), None);
+    }
+
+    #[test]
+    fn attr_local_ignores_prefix() {
+        let doc = parse(br#"<w:p w14:paraId="0A1B" w:rsidR="00FF"/>"#).unwrap();
+        assert_eq!(doc.root.attr_local("paraId"), Some("0A1B"));
+        assert_eq!(doc.root.attr("paraId"), None);
+    }
+
+    #[test]
+    fn set_attr_does_not_hijack_prefixed_twin() {
+        let mut el = sld_id();
+        el.set_attr("id", "257");
+        assert_eq!(el.attr("id"), Some("257"));
+        assert_eq!(el.attr("r:id"), Some("rId2"));
+    }
+
+    #[test]
+    fn remove_attr_spares_prefixed_twin() {
+        let mut el = sld_id();
+        el.remove_attr("id");
+        assert_eq!(el.attr("id"), None);
+        assert_eq!(el.attr("r:id"), Some("rId2"));
+    }
+
+    #[test]
+    fn remove_attr_needs_the_prefix_spelled_out() {
+        let doc = parse(br#"<a:t xml:space="preserve"> x </a:t>"#).unwrap();
+        let mut el = doc.root;
+        el.remove_attr("space");
+        assert_eq!(el.attr("xml:space"), Some("preserve"));
+        el.remove_attr("xml:space");
+        assert_eq!(el.attr("xml:space"), None);
     }
 }

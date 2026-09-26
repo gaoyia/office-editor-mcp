@@ -105,10 +105,14 @@ function Bind-OfficeApp($process, [string]$topClass, [string]$childClass) {
             foreach ($h in $order) {
                 try {
                     $om = [OoxpOfficeOm]::FromWindow($h)
-                    $app = $om
+                    # 窗口对象只是引路用的。摸到 Application 之后就得松手：
+                    # 留着它，PowerPoint 会一直当客户端还连着，收尾时 Quit 被无视。
+                    $app = $null
                     try { $app = $om.Application } catch {}
+                    if ($app) { Release-Com $om } else { $app = $om }
                     if ($app.Path -notlike '*Microsoft Office*') {
                         $last = "wrong path $($app.Path)"
+                        Release-Com $app
                         continue
                     }
                     return $app
@@ -180,11 +184,32 @@ function Ensure-MsPpt([string]$seedDeck) {
     return $app
 }
 
+# 下面几个都遵一条规矩：`Presentations`、`Slides`、`Shapes` 这些集合本身也是
+# COM 包装对象，`$pres.Slides.Item(1)` 这种链式写法会把集合漏在原地。漏够了
+# PowerPoint 就认为客户端还连着，收尾时 Quit 被无视，留下一个空窗口进程。
 function Open-PptPres($ppt, [string]$path) {
-    foreach ($pres in @($ppt.Presentations)) {
-        if ($pres.FullName -and ($pres.FullName -ieq $path)) { return $pres }
+    $collection = $ppt.Presentations
+    try {
+        foreach ($pres in @($collection)) {
+            if ($pres.FullName -and ($pres.FullName -ieq $path)) { return $pres }
+            Release-Com $pres
+        }
+        return $collection.Open($path, $false, $false, $true)
     }
-    return $ppt.Presentations.Open($path, $false, $false, $true)
+    finally { Release-Com $collection }
+}
+
+function Get-PptSlide($pres, [int]$index) {
+    $slides = $pres.Slides
+    try { return $slides.Item($index) }
+    finally { Release-Com $slides }
+}
+
+# $key 传索引或形状名都行，Item() 两种都收。
+function Get-PptShape($slide, $key) {
+    $shapes = $slide.Shapes
+    try { return $shapes.Item($key) }
+    finally { Release-Com $shapes }
 }
 
 function Close-PptPres($pres) {
@@ -195,26 +220,52 @@ function Close-PptPres($pres) {
 }
 
 function Close-PptPresByPath($ppt, [string]$path) {
-    foreach ($pres in @($ppt.Presentations)) {
-        if ($pres.FullName -and ($pres.FullName -ieq $path)) {
-            Write-Log "先关掉 PowerPoint 里开着的 $path"
-            Close-PptPres $pres
-            return
+    $collection = $ppt.Presentations
+    try {
+        foreach ($pres in @($collection)) {
+            if ($pres.FullName -and ($pres.FullName -ieq $path)) {
+                Write-Log "先关掉 PowerPoint 里开着的 $path"
+                Close-PptPres $pres
+                return
+            }
+            Release-Com $pres
         }
     }
+    finally { Release-Com $collection }
 }
 
 function Get-PptCaption($pres) {
+    $windows = $null
+    $win = $null
     try {
-        return [string]$pres.Windows.Item(1).Caption
-    } catch {
+        $windows = $pres.Windows
+        $win = $windows.Item(1)
+        return [string]$win.Caption
+    }
+    catch {
         return ''
+    }
+    finally {
+        Release-Com $win
+        Release-Com $windows
     }
 }
 
+# 一行链式点出去，中间的 TextFrame 与 TextRange 都是 COM 包装对象，
+# 没人松手，PowerPoint 就当客户端还连着，收尾时 Quit 会被无视。
 function Get-ShapeText($shape) {
     if ([int]$shape.HasTextFrame -eq 0) { return $null }
-    return [string]$shape.TextFrame.TextRange.Text
+    $frame = $null
+    $range = $null
+    try {
+        $frame = $shape.TextFrame
+        $range = $frame.TextRange
+        return [string]$range.Text
+    }
+    finally {
+        Release-Com $range
+        Release-Com $frame
+    }
 }
 
 function Close-AllWorkbooks($excel) {
@@ -251,6 +302,10 @@ function Close-WordDocByPath($word, [string]$path) {
 #
 # 默认只松引用，窗口留着给人肉眼看；加 -Quit 就连 Word / Excel 一起关掉。
 function Close-OfficeApps([switch]$Quit) {
+    # 三家各自决定能不能 Quit。一家里有用户自己的文档，只影响它自己，
+    # 不牵连另外两家——否则会为了保住 Word 的文档而留下两个僵尸进程。
+    $quitted = @()
+
     if ($Quit) {
         # 顺序很讲究。用例里留下的工作簿、工作表、段落都是 COM 包装对象，
         # 只要还有一个活着，Excel 就当作「客户端还连着」，Quit 会被直接无视。
@@ -258,80 +313,102 @@ function Close-OfficeApps([switch]$Quit) {
         [GC]::Collect()
         [GC]::WaitForPendingFinalizers()
         [GC]::Collect()
-
-        $excel = Get-Variable -Name 'OoxpExcel' -Scope Global -ValueOnly -ErrorAction SilentlyContinue
-        if ($excel) {
-            # 别把用户自己开着的表格一起关掉：只要发现 out 目录之外的工作簿就不动手。
-            $foreign = @()
-            foreach ($wb in @($excel.Workbooks)) {
-                $full = [string]$wb.FullName
-                if ($full -and -not $full.StartsWith($global:OoxpOutDir, [StringComparison]::OrdinalIgnoreCase)) {
-                    $foreign += $full
-                }
-            }
-            if ($foreign.Count) {
-                Write-Log ("Excel 里还开着本轮之外的工作簿，不关它：" + ($foreign -join '; '))
-                $Quit = $false
-            }
-            else {
-                Close-AllWorkbooks $excel
-            }
-        }
-
-        $word = Get-Variable -Name 'OoxpWord' -Scope Global -ValueOnly -ErrorAction SilentlyContinue
-        if ($word) {
-            foreach ($d in @($word.Documents)) {
-                $full = [string]$d.FullName
-                if ($full -and -not $full.StartsWith($global:OoxpOutDir, [StringComparison]::OrdinalIgnoreCase)) {
-                    Write-Log "Word 里还开着本轮之外的文档，不关它：$full"
-                    continue
-                }
-                Close-WordDoc $d
-            }
-        }
-
-        $ppt = Get-Variable -Name 'OoxpPpt' -Scope Global -ValueOnly -ErrorAction SilentlyContinue
-        if ($ppt) {
-            foreach ($pres in @($ppt.Presentations)) {
-                $full = [string]$pres.FullName
-                if ($full -and -not $full.StartsWith($global:OoxpOutDir, [StringComparison]::OrdinalIgnoreCase)) {
-                    Write-Log "PowerPoint 里还开着本轮之外的文稿，不关它：$full"
-                    continue
-                }
-                Close-PptPres $pres
-            }
-        }
     }
 
-    foreach ($name in 'OoxpExcel', 'OoxpWord', 'OoxpPpt') {
-        $app = Get-Variable -Name $name -Scope Global -ValueOnly -ErrorAction SilentlyContinue
+    foreach ($pair in @(@('OoxpExcel', 'Excel'), @('OoxpWord', 'Word'), @('OoxpPpt', 'PowerPoint'))) {
+        $app = Get-Variable -Name $pair[0] -Scope Global -ValueOnly -ErrorAction SilentlyContinue
         if (-not $app) { continue }
-        if ($Quit) {
-            # DisplayAlerts 早已关掉，Quit 不会因为「要不要保存」卡住。
+
+        $mayQuit = $false
+        if ($Quit) { $mayQuit = Close-OwnDocs $app $pair[1] }
+
+        if ($mayQuit) {
+            # 文档此时已经全关，Quit 不会再问「要不要保存」。
             try { $app.DisplayAlerts = $false } catch {}
-            try { $app.Quit() } catch { Write-Log "$name Quit 失败：$($_.Exception.Message)" }
+            try {
+                $app.Quit()
+                $quitted += $pair[0]
+            }
+            catch { Write-Log "$($pair[1]) Quit 失败：$($_.Exception.Message)" }
         }
         Release-Com $app
-        Set-Variable -Name $name -Scope Global -Value $null
+        Set-Variable -Name $pair[0] -Scope Global -Value $null
     }
     [GC]::Collect()
     [GC]::WaitForPendingFinalizers()
     [GC]::Collect()
 
-    if ($Quit) { Stop-LingeringOffice }
+    if ($quitted.Count) { Stop-LingeringOffice $quitted }
+}
+
+# 关掉本轮自己开的文档，并回答「这一家能不能 Quit」。
+#
+# 三家一个规矩：只要发现 out 目录之外的文档，就整家放弃 Quit。原先只有 Excel 这么做，
+# Word 与 PowerPoint 是跳过那一份、照旧 Quit，而 DisplayAlerts 早已关掉，
+# 用户自己开着的文档会被连带关掉，还不提示。
+#
+# 另外，枚举出来的每份文档和文档集合本身都是 COM 包装对象。漏掉一个，
+# PowerPoint 就认为客户端还连着，Quit 被无视，留下一个没有文档的空窗口进程。
+function Close-OwnDocs($app, [string]$kind) {
+    $collection = $null
+    try {
+        $collection = switch ($kind) {
+            'Excel' { $app.Workbooks }
+            'Word' { $app.Documents }
+            'PowerPoint' { $app.Presentations }
+        }
+    }
+    catch {
+        Write-Log "$kind 的文档集合取不到：$($_.Exception.Message)"
+        return $false
+    }
+    if (-not $collection) { return $true }
+
+    $docs = @($collection)
+    $foreign = @()
+    foreach ($d in $docs) {
+        $full = [string]$d.FullName
+        if ($full -and -not $full.StartsWith($global:OoxpOutDir, [StringComparison]::OrdinalIgnoreCase)) {
+            $foreign += $full
+        }
+    }
+
+    if ($foreign.Count) {
+        Write-Log ("$kind 里还开着本轮之外的文档，这一家整个不关：" + ($foreign -join '; '))
+    }
+    else {
+        foreach ($d in $docs) {
+            # PowerPoint 的 Presentation.Close 不收参数，另外两家用 Close($false) 丢弃改动。
+            try {
+                if ($kind -eq 'PowerPoint') { $d.Close() } else { $d.Close($false) }
+            }
+            catch {}
+        }
+    }
+
+    foreach ($d in $docs) { Release-Com $d }
+    Release-Com $collection
+    return ($foreign.Count -eq 0)
 }
 
 # Quit 之后的兜底。
 #
-# 有些实例（多半是上一轮异常留下、被我们复用的那个）根本不理 Quit：窗口关了，
-# 进程照样占着两百多兆不走，下一轮还得靠它开文档。文档此时已经全部关掉，
-# 也确认过没有本轮之外的工作簿，硬杀不会丢东西。只杀这一轮绑过的那个 PID。
-function Stop-LingeringOffice {
-    foreach ($pair in @(@('OoxpExcelPid', 'Excel'), @('OoxpWordPid', 'Word'), @('OoxpPptPid', 'PowerPoint'))) {
+# 有些实例根本不理 Quit：文档关了，进程照样占着两百多兆不走，下一轮还得靠它开文档。
+# PowerPoint 尤其如此，它会留下一个没有文档的空窗口赖着。
+#
+# 只处理 `$quitted` 里那几家，也就是「确认过没有本轮之外的文档、并且真的调过 Quit」的。
+# 有这两个前提，剩下的窗口只可能是空的应用窗口，硬杀不会丢东西。
+# 早先这里遇到「还有窗口」就放手，于是 `-CloseOffice` 明明写着不留进程却留下了一个。
+function Stop-LingeringOffice([string[]]$quitted) {
+    $pidNames = @{ 'OoxpExcel' = 'Excel'; 'OoxpWord' = 'Word'; 'OoxpPpt' = 'PowerPoint' }
+    foreach ($appVar in $quitted) {
         # 变量不能叫 $pid，那是 PowerShell 的只读自动变量。
-        $procId = Get-Variable -Name $pair[0] -Scope Global -ValueOnly -ErrorAction SilentlyContinue
+        $procId = Get-Variable -Name "${appVar}Pid" -Scope Global -ValueOnly -ErrorAction SilentlyContinue
         if (-not $procId) { continue }
-        $until = (Get-Date).AddSeconds(8)
+        $kind = $pidNames[$appVar]
+
+        # Quit 是异步的，先给它 15 秒自己走。
+        $until = (Get-Date).AddSeconds(15)
         do {
             $p = Get-Process -Id $procId -ErrorAction SilentlyContinue
             if (-not $p) { break }
@@ -339,17 +416,11 @@ function Stop-LingeringOffice {
         } while ((Get-Date) -lt $until)
 
         if ($p) {
-            $p.Refresh()
-            if ($p.MainWindowHandle -ne [IntPtr]::Zero) {
-                Write-Log "$($pair[1]) 进程 $procId 关不掉，但它还有窗口，留着不动。"
-            }
-            else {
-                Write-Log "$($pair[1]) 进程 $procId 不理 Quit，窗口已经没了，直接结束它。"
-                try { Stop-Process -Id $procId -Force -ErrorAction Stop }
-                catch { Write-Log "结束 $procId 失败：$($_.Exception.Message)" }
-            }
+            Write-Log "$kind 进程 $procId 不理 Quit，直接结束它。"
+            try { Stop-Process -Id $procId -Force -ErrorAction Stop }
+            catch { Write-Log "结束 $procId 失败：$($_.Exception.Message)" }
         }
-        Set-Variable -Name $pair[0] -Scope Global -Value $null
+        Set-Variable -Name "${appVar}Pid" -Scope Global -Value $null
     }
 }
 

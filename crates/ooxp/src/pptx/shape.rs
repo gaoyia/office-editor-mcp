@@ -91,7 +91,9 @@ pub fn parse_shape_id(id: &str, op_index: usize) -> Result<ShapeTarget, Error> {
     })
 }
 
-/// `r:id` / `rel:id`，不要和 `p:sldId/@id` 弄混。后者的本地名也是 id。
+/// `r:id` / `rel:id`：要的是**带前缀**的那个 id。
+/// 这里不能用 `attr_local("id")`：`p:sldId` 同时带无前缀的 `id`（幻灯片编号）
+/// 和 `r:id`（关系），local name 都是 `id`，只比 local name 会命中前者。
 pub fn rid_attr(el: &Element) -> Option<&str> {
     el.attrs.iter().find_map(|(k, v)| {
         if k.contains(':') && k.rsplit(':').next() == Some("id") {
@@ -525,7 +527,7 @@ fn apply_t_text(t: &mut Element, text: &str) {
     if needs_xml_space(text) {
         t.set_attr("xml:space", "preserve");
     } else {
-        t.remove_attr("space");
+        // `xml` 是 XML 规范的保留前缀，不能重新映射，所以精确名就够了。
         t.remove_attr("xml:space");
     }
 }

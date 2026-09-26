@@ -35,6 +35,24 @@ JSON 打印用稳定的字段顺序，不要求 pretty-print。调试时可以�
 
 输入输出 JSON 均为 UTF-8。路径按操作系统原样传给库，命令行自己不做 glob。
 
+Windows 上不必理会控制台代码页。下面三种情形写出去的东西都是对的：
+
+| 情形 | 实际写出的东西 |
+| --- | --- |
+| 输出接管道或文件 | UTF-8 字节 |
+| 输出接控制台，代码页不是 65001 | Rust 标准库先把 UTF-8 转成 UTF-16 再走 `WriteConsoleW`，显示与代码页无关 |
+| 输出接控制台，代码页是 65001 | UTF-8 字节，控制台按 UTF-8 解释 |
+
+所以本程序不调 `SetConsoleOutputCP`：那会改掉调用方控制台的全局状态，进程退了还得有人复原。
+
+真看到乱码，是读的一方拿非 UTF-8 的方式解码了 UTF-8 字节。PowerShell 里捕获输出之前先把解码方式定下来：
+
+```powershell
+[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+```
+
+用 `ProcessStartInfo` 时改设 `StandardOutputEncoding` 与 `StandardErrorEncoding`，`manual-check/office/` 下的脚本就是这么写的。
+
 ## 与 MCP 的关系
 
 本表不含 MCP。将来 MCP 进程可以内部调用同一个库，不必再经过本 CLI。本 CLI 也不解析 JSON-RPC。

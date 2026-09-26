@@ -23,10 +23,12 @@ fn apply_ops() -> Value {
     ])
 }
 
-fn apply_out() -> PathBuf {
+/// `tag` 按用例取名。测试是并行跑的，共用一个输出路径会撞上 `write_atomic`
+/// 的中间文件：那两个名字由目标路径派生，两个用例同时写就会互相抢改名。
+fn apply_out(tag: &str) -> PathBuf {
     let dir = std::env::temp_dir().join("ooxp-excel-source-tests");
     std::fs::create_dir_all(&dir).unwrap();
-    let out = dir.join("excel-applied.xlsx");
+    let out = dir.join(format!("excel-applied-{tag}.xlsx"));
     run(
         &json!({
             "schemaVersion": 1,
@@ -128,7 +130,7 @@ fn inspect_reads_excel_source() {
 /// 清单 A2 / A3 / A4。
 #[test]
 fn apply_hits_a1_b1_c1() {
-    let out = apply_out();
+    let out = apply_out("a1b1c1");
     let tree = inspect(&out, "Sheet1", "A1:E3");
     assert_eq!(cell(&tree, "cell:Sheet1!A1")["value"], 42);
     assert_eq!(cell(&tree, "cell:Sheet1!B1")["formula"], "=SUM(A1:A10)");
@@ -150,7 +152,7 @@ fn apply_hits_a1_b1_c1() {
 #[test]
 fn apply_leaves_untouched_excel_parts() {
     let src = fixture();
-    let out = apply_out();
+    let out = apply_out("untouched");
     for name in [
         "xl/worksheets/sheet2.xml",
         "xl/styles.xml",
@@ -170,7 +172,7 @@ fn apply_leaves_untouched_excel_parts() {
 /// 清单 A7：库不改 D1，只标打开时重算并删掉 calcChain。
 #[test]
 fn apply_marks_recalc_for_dependent_formula() {
-    let out = apply_out();
+    let out = apply_out("recalc");
     let sheet = part(&out, "xl/worksheets/sheet1.xml");
     assert!(sheet.contains("<f>A1*2</f>"), "D1 公式丢了：{sheet}");
     let names = part_names(&out);

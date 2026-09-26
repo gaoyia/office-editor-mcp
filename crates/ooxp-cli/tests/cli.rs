@@ -72,7 +72,9 @@ fn run_fail(args: &[&str], env_lang: Option<&str>, stdin: &str) -> (i32, serde_j
         .unwrap();
     let out = child.wait_with_output().unwrap();
     let code = out.status.code().unwrap_or(-1);
-    let stderr = String::from_utf8_lossy(&out.stderr);
+    // 严格解码，不用 lossy：stderr 必须是 UTF-8，管道场景不受控制台代码页影响。
+    // 见 `docs/cli.md` 的「编码与路径」。
+    let stderr = String::from_utf8(out.stderr).expect("stderr 不是 UTF-8");
     let json: serde_json::Value = serde_json::from_str(stderr.trim()).unwrap_or_else(|_| {
         panic!("stderr 不是 JSON：{stderr}");
     });

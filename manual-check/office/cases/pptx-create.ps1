@@ -10,11 +10,11 @@ $path = Ensure-PptxCreate
 $ppt = Ensure-MsPpt $path
 $pres = Open-PptPres $ppt $path
 
-$s1 = $pres.Slides.Item(1)
-$s2 = $pres.Slides.Item(2)
-$box1 = $s1.Shapes.Item('文本框 1')
-$box2 = $s1.Shapes.Item('文本框 2')
-$box3 = $s2.Shapes.Item('文本框 1')
+$s1 = Get-PptSlide $pres 1
+$s2 = Get-PptSlide $pres 2
+$box1 = Get-PptShape $s1 '文本框 1'
+$box2 = Get-PptShape $s1 '文本框 2'
+$box3 = Get-PptShape $s2 '文本框 1'
 $t1 = Get-ShapeText $box1
 $t2 = Get-ShapeText $box2
 $t3 = Get-ShapeText $box3

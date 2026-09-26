@@ -95,7 +95,8 @@ fn first_alt_child_index(el: &Element) -> Option<usize> {
 }
 
 pub fn para_stable_id(p: &Element, index: usize) -> (String, bool) {
-    if let Some(id) = p.attr("paraId").filter(|s| !s.is_empty()) {
+    // `w14:paraId`：前缀跟着源文件的命名空间声明走，只能比 local name。
+    if let Some(id) = p.attr_local("paraId").filter(|s| !s.is_empty()) {
         (format!("para:{id}"), true)
     } else {
         (format!("para:index:{index}"), false)
@@ -105,14 +106,14 @@ pub fn para_stable_id(p: &Element, index: usize) -> (String, bool) {
 pub fn heading_level(p: &Element) -> Option<u8> {
     let ppr = p.child_by_local("pPr")?;
     if let Some(ps) = ppr.child_by_local("pStyle") {
-        if let Some(val) = ps.attr("val") {
+        if let Some(val) = ps.attr_local("val") {
             if let Some(n) = parse_heading_style(val) {
                 return Some(n);
             }
         }
     }
     if let Some(ol) = ppr.child_by_local("outlineLvl") {
-        if let Some(val) = ol.attr("val") {
+        if let Some(val) = ol.attr_local("val") {
             if let Ok(n) = val.parse::<u8>() {
                 if n <= 8 {
                     return Some(n + 1);
@@ -143,7 +144,7 @@ fn parse_heading_style(s: &str) -> Option<u8> {
 pub fn p_style(p: &Element) -> Option<String> {
     p.child_by_local("pPr")
         .and_then(|ppr| ppr.child_by_local("pStyle"))
-        .and_then(|ps| ps.attr("val"))
+        .and_then(|ps| ps.attr_local("val"))
         .map(str::to_string)
 }
 
@@ -213,7 +214,7 @@ fn find_p_mut<'a>(
         let hit = match target {
             ParaTarget::Index(n) => *idx == *n,
             ParaTarget::Hex(hex) => el
-                .attr("paraId")
+                .attr_local("paraId")
                 .is_some_and(|id| id.eq_ignore_ascii_case(hex)),
         };
         if hit {
@@ -312,7 +313,7 @@ fn apply_t_text(t: &mut Element, text: &str) {
     if needs_xml_space(text) {
         t.set_attr("xml:space", "preserve");
     } else {
-        t.remove_attr("space");
+        // `xml` 是 XML 规范的保留前缀，不能重新映射，所以精确名就够了。
         t.remove_attr("xml:space");
     }
 }
