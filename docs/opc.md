@@ -245,6 +245,8 @@ apply 插入幻灯片图时，可能新建 `/ppt/media/imageN.*`，并在该页 
 
 apply 插入幻灯片图表时，可能新建 `/ppt/charts/chartN.xml`（CT `application/vnd.openxmlformats-officedocument.drawingml.chart+xml`）、chart 的 `.rels`，以及 `/ppt/embeddings/Microsoft_Excel_WorksheetN.xlsx`（CT `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`）。该页 `.rels` 补一条 chart 关系（Type 以 `/chart` 结尾）。chart 部件写 `c:externalData r:id="rId1"`，关系 Type 为 `http://schemas.openxmlformats.org/officeDocument/2006/relationships/package`。宿主是 `p:graphicFrame`，位置与尺寸在 `p:xfrm`。create 给了 `slides[].charts` 时同样写入。
 
+apply 插入幻灯片 SmartArt 时，可能新建 `/ppt/diagrams/` 下的 data / layout / colors / quickStyle（CT 分别为 `application/vnd.openxmlformats-officedocument.drawingml.diagramData+xml`、`…diagramLayout+xml`、`…diagramColors+xml`、`…diagramQuickStyle+xml`）。该页 `.rels` 补四条 diagram 关系。宿主是 `p:graphicFrame`，`a:graphicData/@uri` 为 diagram URI，`dgm:relIds` 指向这四条。create 给了 `slides[].smartArts` 时同样写入。不写 Fallback 位图，不写 diagram drawing 缓存。改点对不上缓存时删掉该缓存。
+
 ## 验收（第 2 项）
 
 零脏保存：`open` 之后不调用 `set` / `remove`，再 `save`。每个部件的未压缩字节、以及 ZIP 里该条目的 CRC，都与打开时相同。库测试对 Excel 另存的 xlsx、以及 create 写出的 docx / pptx 各跑一遍。

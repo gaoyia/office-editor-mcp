@@ -10,6 +10,7 @@ use super::chart;
 use super::picture;
 use super::request::InspectScope;
 use super::shape;
+use super::smartart;
 
 pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error> {
     let pkg = Package::open_bytes(bytes.to_vec())?;
@@ -19,10 +20,12 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     let slide_count = slides.len();
     let want_pictures = scope.as_ref().is_some_and(|s| s.pictures);
     let want_charts = scope.as_ref().is_some_and(|s| s.charts);
+    let want_smartarts = scope.as_ref().is_some_and(|s| s.smart_art);
 
     let mut slide_json = Vec::new();
     let mut picture_count = 0usize;
     let mut chart_count = 0usize;
+    let mut smart_art_count = 0usize;
     for s in &slides {
         let doc = xml::parse(pkg.get(&s.part)?)?;
         let pics = picture::collect_pictures(&doc.root, s.index);
@@ -37,6 +40,18 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
             .map(|c| c.len())
             .unwrap_or_else(|| chart::count_charts(&doc.root));
         chart_count += n_charts;
+        let smartarts_list = if want_smartarts {
+            Some(smartart::collect_smartarts(
+                &pkg, &doc.root, s.index, &s.part,
+            )?)
+        } else {
+            None
+        };
+        let n_smartarts = smartarts_list
+            .as_ref()
+            .map(|c| c.len())
+            .unwrap_or_else(|| smartart::count_smartarts(&doc.root));
+        smart_art_count += n_smartarts;
         let mut obj = json!({
             "id": format!("slide:{}", s.index),
             "index": s.index,
@@ -44,12 +59,16 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
             "hidden": s.hidden,
             "pictureCount": pics.len(),
             "chartCount": n_charts,
+            "smartArtCount": n_smartarts,
         });
         if want_pictures {
             obj["pictures"] = Value::Array(picture::pictures_json(&pics));
         }
         if let Some(charts) = charts_list {
             obj["charts"] = Value::Array(charts);
+        }
+        if let Some(smartarts) = smartarts_list {
+            obj["smartArts"] = Value::Array(smartarts);
         }
         if let Some(scope) = &scope {
             if scope.slide == Some(s.index as u32) {
@@ -94,6 +113,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         "slideCount": slide_count,
         "pictureCount": picture_count,
         "chartCount": chart_count,
+        "smartArtCount": smart_art_count,
         "slides": slide_json,
     }))
 }

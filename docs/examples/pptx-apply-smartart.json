@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "deck.pptx",
+  "output": "deck.patched.pptx",
+  "ops": [
+    { "op": "setSmartArtText", "id": "slide:1/smartdiagram:3/pt:2", "text": "新条目" },
+    { "op": "addSmartArtPoint", "id": "slide:1/smartdiagram:3", "text": "第四条" },
+    { "op": "setSmartArtSize", "id": "slide:1/smartdiagram:3", "cx": 1828800, "cy": 914400 },
+    { "op": "setSmartArtPos", "id": "slide:1/smartdiagram:3", "x": 914400, "y": 1371600 },
+    { "op": "insertSmartArt", "id": "slide:1", "layout": "list", "points": [{ "text": "甲" }, { "text": "乙" }] },
+    { "op": "deleteSmartArt", "id": "slide:1/smartdiagram:3" }
+  ]
+}

@@ -181,6 +181,15 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             }
             IdReason::InsertSmartArtNeedsPara => {
                 "insertSmartArt 的 id 必须是正文或页眉页脚段落 id".into()
+            }
+            IdReason::SlideSmartArtPrefix => {
+                "pptx SmartArt id 必须是 slide:N/smartdiagram:…".into()
+            }
+            IdReason::SlideSmartArtContainer => {
+                "页 id 必须带 /smartdiagram:…（该 id 本身不是 SmartArt）".into()
+            }
+            IdReason::InsertSmartArtNeedsSlide => {
+                "pptx insertSmartArt 的 id 必须是 slide:N".into()
             },
         },
         ErrorKind::SheetNotFound { name } => format!("找不到工作表：{name}"),

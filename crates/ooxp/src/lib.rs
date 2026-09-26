@@ -9,6 +9,7 @@ mod error;
 mod json;
 mod opc;
 mod pptx;
+mod smartart;
 mod xlsx;
 mod xml;
 
@@ -515,8 +516,10 @@ mod tests {
         assert_eq!(tree["slideCount"], 2);
         assert_eq!(tree["pictureCount"], 0);
         assert_eq!(tree["chartCount"], 0);
+        assert_eq!(tree["smartArtCount"], 0);
         assert_eq!(tree["slides"][0]["pictureCount"], 0);
         assert_eq!(tree["slides"][0]["chartCount"], 0);
+        assert_eq!(tree["slides"][0]["smartArtCount"], 0);
         assert!(tree["slides"][0].get("shapes").is_none());
         assert!(tree["slides"][0].get("pictures").is_none());
 
@@ -938,6 +941,7 @@ mod tests {
                 "slideCount",
                 "pictureCount",
                 "chartCount",
+                "smartArtCount",
                 "slides"
             ]
         );
@@ -950,6 +954,7 @@ mod tests {
                 "hidden",
                 "pictureCount",
                 "chartCount",
+                "smartArtCount",
                 "truncated",
                 "shapes"
             ]
@@ -962,7 +967,8 @@ mod tests {
                 "name",
                 "hidden",
                 "pictureCount",
-                "chartCount"
+                "chartCount",
+                "smartArtCount"
             ]
         );
         assert_eq!(

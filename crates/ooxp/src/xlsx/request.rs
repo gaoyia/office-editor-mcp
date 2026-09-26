@@ -510,6 +510,7 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<XlsxOp>, Error> {
             | "setShapeText"
             | "setPicturePos"
             | "setChartPos"
+            | "setSmartArtPos"
             | "setHeaderFooterDistance"
             | "setHeaderFooterLink"
             | "setPictureWrap"

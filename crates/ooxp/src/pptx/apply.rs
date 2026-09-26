@@ -8,6 +8,7 @@ use super::chart;
 use super::picture;
 use super::request::PptxOp;
 use super::shape;
+use super::smartart;
 
 pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
     let mut pkg = Package::open_bytes(bytes.to_vec())?;
@@ -256,6 +257,133 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                 })?;
                 let mut doc = xml::parse(pkg.get(&meta.part)?)?;
                 chart::apply_pos(&mut doc, op, i)?;
+                pkg.set(&meta.part, doc.to_bytes()?)?;
+            }
+            PptxOp::InsertSmartArt(op) => {
+                let meta = slides.get(op.slide - 1).ok_or_else(|| {
+                    Error::with_path(
+                        ErrorKind::SlideNotFound { n: op.slide as u32 },
+                        format!("ops[{i}].id"),
+                    )
+                })?;
+                let mut doc = xml::parse(pkg.get(&meta.part)?)?;
+                smartart::insert_smartart(&mut pkg, &mut doc, &meta.part, &pres.root, op, i)?;
+                pkg.set(&meta.part, doc.to_bytes()?)?;
+            }
+            PptxOp::DeleteSmartArt(op) => {
+                let meta = slides.get(op.target.slide - 1).ok_or_else(|| {
+                    Error::with_path(
+                        ErrorKind::SlideNotFound {
+                            n: op.target.slide as u32,
+                        },
+                        format!("ops[{i}].id"),
+                    )
+                })?;
+                let mut doc = xml::parse(pkg.get(&meta.part)?)?;
+                smartart::delete_smartart(&mut pkg, &mut doc, &meta.part, op, i)?;
+                pkg.set(&meta.part, doc.to_bytes()?)?;
+            }
+            PptxOp::SetSmartArtText(op) => {
+                let meta = slides.get(op.target.diagram.slide - 1).ok_or_else(|| {
+                    Error::with_path(
+                        ErrorKind::SlideNotFound {
+                            n: op.target.diagram.slide as u32,
+                        },
+                        format!("ops[{i}].id"),
+                    )
+                })?;
+                let doc = xml::parse(pkg.get(&meta.part)?)?;
+                smartart::apply_text(&mut pkg, &doc.root, &meta.part, op, i)?;
+            }
+            PptxOp::AddSmartArtPoint(op) => {
+                let slide = match &op.parent {
+                    smartart::AddParent::Diagram(t) => t.slide,
+                    smartart::AddParent::Point(p) => p.diagram.slide,
+                };
+                let meta = slides.get(slide - 1).ok_or_else(|| {
+                    Error::with_path(
+                        ErrorKind::SlideNotFound { n: slide as u32 },
+                        format!("ops[{i}].id"),
+                    )
+                })?;
+                let doc = xml::parse(pkg.get(&meta.part)?)?;
+                smartart::apply_add_point(&mut pkg, &doc.root, &meta.part, op, i)?;
+            }
+            PptxOp::DeleteSmartArtPoint(op) => {
+                let meta = slides.get(op.target.diagram.slide - 1).ok_or_else(|| {
+                    Error::with_path(
+                        ErrorKind::SlideNotFound {
+                            n: op.target.diagram.slide as u32,
+                        },
+                        format!("ops[{i}].id"),
+                    )
+                })?;
+                let doc = xml::parse(pkg.get(&meta.part)?)?;
+                smartart::apply_delete_point(&mut pkg, &doc.root, &meta.part, op, i)?;
+            }
+            PptxOp::SetSmartArtSize(op) => {
+                let meta = slides.get(op.target.slide - 1).ok_or_else(|| {
+                    Error::with_path(
+                        ErrorKind::SlideNotFound {
+                            n: op.target.slide as u32,
+                        },
+                        format!("ops[{i}].id"),
+                    )
+                })?;
+                let mut doc = xml::parse(pkg.get(&meta.part)?)?;
+                smartart::apply_size(&mut doc, op, i)?;
+                pkg.set(&meta.part, doc.to_bytes()?)?;
+            }
+            PptxOp::SetSmartArtPos(op) => {
+                let meta = slides.get(op.target.slide - 1).ok_or_else(|| {
+                    Error::with_path(
+                        ErrorKind::SlideNotFound {
+                            n: op.target.slide as u32,
+                        },
+                        format!("ops[{i}].id"),
+                    )
+                })?;
+                let mut doc = xml::parse(pkg.get(&meta.part)?)?;
+                smartart::apply_pos(&mut doc, op, i)?;
+                pkg.set(&meta.part, doc.to_bytes()?)?;
+            }
+            PptxOp::SetSmartArtColors(op) => {
+                let meta = slides.get(op.target.slide - 1).ok_or_else(|| {
+                    Error::with_path(
+                        ErrorKind::SlideNotFound {
+                            n: op.target.slide as u32,
+                        },
+                        format!("ops[{i}].id"),
+                    )
+                })?;
+                let mut doc = xml::parse(pkg.get(&meta.part)?)?;
+                smartart::apply_colors(&mut pkg, &mut doc, &meta.part, op, i)?;
+                pkg.set(&meta.part, doc.to_bytes()?)?;
+            }
+            PptxOp::SetSmartArtStyle(op) => {
+                let meta = slides.get(op.target.slide - 1).ok_or_else(|| {
+                    Error::with_path(
+                        ErrorKind::SlideNotFound {
+                            n: op.target.slide as u32,
+                        },
+                        format!("ops[{i}].id"),
+                    )
+                })?;
+                let mut doc = xml::parse(pkg.get(&meta.part)?)?;
+                smartart::apply_style(&mut pkg, &mut doc, &meta.part, op, i)?;
+                pkg.set(&meta.part, doc.to_bytes()?)?;
+            }
+            PptxOp::SetSmartArtLayout(op) => {
+                let meta = slides.get(op.target.slide - 1).ok_or_else(|| {
+                    Error::with_path(
+                        ErrorKind::SlideNotFound {
+                            n: op.target.slide as u32,
+                        },
+                        format!("ops[{i}].id"),
+                    )
+                })?;
+                let mut doc = xml::parse(pkg.get(&meta.part)?)?;
+                smartart::apply_layout(&mut pkg, &mut doc, &meta.part, op, i)?;
                 pkg.set(&meta.part, doc.to_bytes()?)?;
             }
         }

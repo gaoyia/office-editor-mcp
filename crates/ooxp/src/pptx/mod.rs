@@ -7,6 +7,7 @@ mod inspect;
 mod picture;
 mod request;
 mod shape;
+mod smartart;
 
 pub use apply::apply;
 pub use chart::export_chart_data;

@@ -62,7 +62,7 @@ crates/ooxp-cli/             命令行，只依赖 ooxp。二进制名也是 oox
 
 ### pptx
 
-入口由根关系里 `/officeDocument` 指向，常见路径 `/ppt/presentation.xml`。幻灯片顺序跟 `p:sldIdLst`，不跟文件名。inspect 默认只返回页名单与各页 `pictureCount`、`chartCount`；要形状必须给 `scope.slide`，要图名单必须给 `scope.pictures`，要图表名单必须给 `scope.charts`。apply 可改被点名形状的 `p:txBody` 可见文字，也可换、插、删幻灯片上的 `p:pic` 并改尺寸与画布坐标；也可插、删、改幻灯片上的嵌入图表（改系列时 cache 与 embedding 双写）。不删形状重建，不改 `<p:timing>`。`exportMedia` 按图 id 写出 `/ppt/media/…`。`exportChartData` 按图表 id 写出 embedding。create 生成最小 Transitional 包，必含 theme、slideMaster、slideLayout、presentation、各页 slide、presProps。给了 `slides[].pictures` 时复用 `insertPicture`，写入 `/ppt/media/…` 与该页 `p:pic`。给了 `slides[].charts` 时复用 `insertChart`，写入 `/ppt/charts/…`、embedding 与 `p:graphicFrame`。备注、母版内容、动画第一期不进树也不改。`mc:AlternateContent` 只走第一个 `Choice`。
+入口由根关系里 `/officeDocument` 指向，常见路径 `/ppt/presentation.xml`。幻灯片顺序跟 `p:sldIdLst`，不跟文件名。inspect 默认只返回页名单与各页 `pictureCount`、`chartCount`、`smartArtCount`；要形状必须给 `scope.slide`，要图名单必须给 `scope.pictures`，要图表名单必须给 `scope.charts`，要 SmartArt 名单必须给 `scope.smartArt`。apply 可改被点名形状的 `p:txBody` 可见文字，也可换、插、删幻灯片上的 `p:pic` 并改尺寸与画布坐标；也可插、删、改幻灯片上的嵌入图表（改系列时 cache 与 embedding 双写）；也可插、删、改幻灯片上的 SmartArt（改点时写 data 部件，对不上 drawing 缓存则删缓存）。不删形状重建，不改 `<p:timing>`。`exportMedia` 按图 id 写出 `/ppt/media/…`。`exportChartData` 按图表 id 写出 embedding。create 生成最小 Transitional 包，必含 theme、slideMaster、slideLayout、presentation、各页 slide、presProps。给了 `slides[].pictures` 时复用 `insertPicture`，写入 `/ppt/media/…` 与该页 `p:pic`。给了 `slides[].charts` 时复用 `insertChart`，写入 `/ppt/charts/…`、embedding 与 `p:graphicFrame`。给了 `slides[].smartArts` 时复用 `insertSmartArt`，写入 `/ppt/diagrams/…` 与图示 `p:graphicFrame`。备注、母版内容、动画第一期不进树也不改。`mc:AlternateContent` 只走第一个 `Choice`。
 
 ### cli
 
@@ -72,15 +72,15 @@ crates/ooxp-cli/             命令行，只依赖 ooxp。二进制名也是 oox
 
 ### inspect
 
-调用方给出路径和范围。库打开 OPC 包，定位格式入口部件（xlsx 是 Workbook，docx 是 Main Document，pptx 是 Presentation）。按范围读必要的 XML，生成带 id 的树。xlsx 默认不读完全部单元格，也不展开 `pictures`、`charts` 或页眉原文（仍返回 `pictureCount`、`chartCount` 与 `hasHeaderFooter`）。docx 默认不返回正文 `paragraphs` 也不展开页眉页脚段落、任何 `pictures`、`textBoxes`、注名单、批注名单、图表名单或 SmartArt 名单，pptx 默认不返回 `shapes`，也不展开 `pictures` / `charts`（仍返回根与各页 `pictureCount`、`chartCount`）。包不写回。
+调用方给出路径和范围。库打开 OPC 包，定位格式入口部件（xlsx 是 Workbook，docx 是 Main Document，pptx 是 Presentation）。按范围读必要的 XML，生成带 id 的树。xlsx 默认不读完全部单元格，也不展开 `pictures`、`charts` 或页眉原文（仍返回 `pictureCount`、`chartCount` 与 `hasHeaderFooter`）。docx 默认不返回正文 `paragraphs` 也不展开页眉页脚段落、任何 `pictures`、`textBoxes`、注名单、批注名单、图表名单或 SmartArt 名单，pptx 默认不返回 `shapes`，也不展开 `pictures` / `charts` / `smartArts`（仍返回根与各页 `pictureCount`、`chartCount`、`smartArtCount`）。包不写回。
 
 ### apply
 
-调用方给出路径和 `ops`。库打开包，按每条 op 的 id 找到 XML 节点，只改这些节点。xlsx 在改了单元格之后，把工作簿标成打开时需要重算。xlsx 也可改被点名的工作表图（换、插、删、改尺寸、改锚点），也可插删改工作表图表，脏 drawing、chart 部件、工作表 XML、关系与媒体。xlsx 也可新建或删除图表工作表，脏 workbook 的 `sheets`、chartsheet 部件及其 drawing / chart。xlsx 也可改工作表上的页眉页脚原文，并可对 `worksheet` 页眉槽位插换删 DrawingML 图，脏 `headerFooter` / `drawingHF` 与对应 drawing。docx 可改被点名的段落，可改节上页眉页脚距边界，也可改节上页眉页脚是否链接前节，也可改页眉、页脚、正文、注或批注里被点名的 DrawingML 图与文本框，也可插删脚注尾注并改编号属性，也可插删回复批注并改完成标记，也可插删改嵌入图表，也可插删改 SmartArt。pptx 可改被点名形状的可见文字，也可改被点名的幻灯片图（换、插、删、改尺寸、改画布坐标），也可插删改幻灯片图表，脏该页 XML、该页 `.rels`、`/ppt/charts/` 与 embedding。保存时只重写脏部件。
+调用方给出路径和 `ops`。库打开包，按每条 op 的 id 找到 XML 节点，只改这些节点。xlsx 在改了单元格之后，把工作簿标成打开时需要重算。xlsx 也可改被点名的工作表图（换、插、删、改尺寸、改锚点），也可插删改工作表图表，脏 drawing、chart 部件、工作表 XML、关系与媒体。xlsx 也可新建或删除图表工作表，脏 workbook 的 `sheets`、chartsheet 部件及其 drawing / chart。xlsx 也可改工作表上的页眉页脚原文，并可对 `worksheet` 页眉槽位插换删 DrawingML 图，脏 `headerFooter` / `drawingHF` 与对应 drawing。docx 可改被点名的段落，可改节上页眉页脚距边界，也可改节上页眉页脚是否链接前节，也可改页眉、页脚、正文、注或批注里被点名的 DrawingML 图与文本框，也可插删脚注尾注并改编号属性，也可插删回复批注并改完成标记，也可插删改嵌入图表，也可插删改 SmartArt。pptx 可改被点名形状的可见文字，也可改被点名的幻灯片图（换、插、删、改尺寸、改画布坐标），也可插删改幻灯片图表，也可插删改幻灯片 SmartArt，脏该页 XML、该页 `.rels`、`/ppt/charts/`、embedding 与 `/ppt/diagrams/`。保存时只重写脏部件。
 
 ### create
 
-调用方给出格式、输出路径和内容对象。库在内存里生成一套最小可打开的 Transitional 部件，打成新 ZIP。不读取任何已有文件当模板，除非以后另开「从模板复制」的动作。xlsx 的 `sheets[].pictures` 复用 `insertPicture`，`sheets[].charts` 复用 `insertChart`（数据写本表单元格，不写 embedding）。docx 段落与默认页眉页脚上的 `pictures` 同样复用插图。pptx 的 `slides[].pictures` 复用 `insertPicture`，`slides[].charts` 复用 `insertChart`（数据写 embedding）。docx create 仍不写图表。
+调用方给出格式、输出路径和内容对象。库在内存里生成一套最小可打开的 Transitional 部件，打成新 ZIP。不读取任何已有文件当模板，除非以后另开「从模板复制」的动作。xlsx 的 `sheets[].pictures` 复用 `insertPicture`，`sheets[].charts` 复用 `insertChart`（数据写本表单元格，不写 embedding）。docx 段落与默认页眉页脚上的 `pictures` 同样复用插图。pptx 的 `slides[].pictures` 复用 `insertPicture`，`slides[].charts` 复用 `insertChart`（数据写 embedding），`slides[].smartArts` 复用 `insertSmartArt`。docx create 仍不写图表。
 
 ### exportMedia
 

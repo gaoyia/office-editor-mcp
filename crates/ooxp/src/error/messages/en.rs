@@ -203,6 +203,15 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             }
             IdReason::InsertSmartArtNeedsPara => {
                 "insertSmartArt id must be a body or header/footer paragraph id".into()
+            }
+            IdReason::SlideSmartArtPrefix => {
+                "pptx SmartArt id must be slide:N/smartdiagram:…".into()
+            }
+            IdReason::SlideSmartArtContainer => {
+                "Slide id must include /smartdiagram:… (that id alone is not a SmartArt)".into()
+            }
+            IdReason::InsertSmartArtNeedsSlide => {
+                "pptx insertSmartArt id must be slide:N".into()
             },
         },
         ErrorKind::SheetNotFound { name } => format!("Sheet not found: {name}"),

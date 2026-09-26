@@ -464,31 +464,6 @@ fn xlsx_rejects_smartart_scope_and_op() {
     )
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);
-
-    let pptx = tmp_dir().join("deck.pptx");
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": pptx.to_string_lossy(),
-            "presentation": { "slides": [{ "shapes": [{ "text": "a" }] }] }
-        })
-        .to_string(),
-        None,
-    )
-    .unwrap();
-    let err = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": pptx.to_string_lossy(),
-            "scope": { "smartArt": true }
-        })
-        .to_string(),
-        None,
-    )
-    .unwrap_err();
-    assert_eq!(err.code(), ErrorCode::InvalidField);
 }
 
 #[test]

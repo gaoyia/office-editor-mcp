@@ -132,6 +132,12 @@ pub(crate) enum IdReason {
     SmartArtPtPrefix,
     /// insertSmartArt 必须用正文或页眉页脚段落 id
     InsertSmartArtNeedsPara,
+    /// pptx 图示 id 必须是 slide:N/smartdiagram:…
+    SlideSmartArtPrefix,
+    /// 页 id，缺少 /smartdiagram:…
+    SlideSmartArtContainer,
+    /// pptx 的 insertSmartArt 必须用 slide:N
+    InsertSmartArtNeedsSlide,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -458,6 +464,9 @@ impl IdReason {
             Self::SmartArtIndexFromOne,
             Self::SmartArtPtPrefix,
             Self::InsertSmartArtNeedsPara,
+            Self::SlideSmartArtPrefix,
+            Self::SlideSmartArtContainer,
+            Self::InsertSmartArtNeedsSlide,
         ]
     }
 }

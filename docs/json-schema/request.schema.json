@@ -361,7 +361,27 @@
         "charts": {
           "type": "array",
           "items": { "$ref": "#/$defs/pptxChartCreate" }
+        },
+        "smartArts": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/pptxSmartArtCreate" }
         }
+      }
+    },
+    "pptxSmartArtCreate": {
+      "type": "object",
+      "required": ["layout"],
+      "additionalProperties": false,
+      "properties": {
+        "layout": { "$ref": "#/$defs/smartArtLayout" },
+        "points": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/smartArtPointInput" }
+        },
+        "x": { "type": "integer", "minimum": 0 },
+        "y": { "type": "integer", "minimum": 0 },
+        "cx": { "type": "integer", "minimum": 1 },
+        "cy": { "type": "integer", "minimum": 1 }
       }
     },
     "pptxChartCreate": {
@@ -492,6 +512,7 @@
               { "$ref": "#/$defs/addSmartArtPointOp" },
               { "$ref": "#/$defs/deleteSmartArtPointOp" },
               { "$ref": "#/$defs/setSmartArtSizeOp" },
+              { "$ref": "#/$defs/setSmartArtPosOp" },
               { "$ref": "#/$defs/setSmartArtWrapOp" },
               { "$ref": "#/$defs/setSmartArtColorsOp" },
               { "$ref": "#/$defs/setSmartArtStyleOp" },
@@ -1254,6 +1275,8 @@
           "type": ["string", "null"],
           "enum": ["square", "tight", "through", "topAndBottom", "none", null]
         },
+        "x": { "type": "integer", "minimum": 0 },
+        "y": { "type": "integer", "minimum": 0 },
         "cx": { "type": "integer", "minimum": 1 },
         "cy": { "type": "integer", "minimum": 1 }
       }
@@ -1310,6 +1333,21 @@
       "anyOf": [
         { "required": ["cx"] },
         { "required": ["cy"] }
+      ]
+    },
+    "setSmartArtPosOp": {
+      "type": "object",
+      "required": ["op", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "setSmartArtPos" },
+        "id": { "type": "string", "minLength": 1 },
+        "x": { "type": "integer", "minimum": 0 },
+        "y": { "type": "integer", "minimum": 0 }
+      },
+      "anyOf": [
+        { "required": ["x"] },
+        { "required": ["y"] }
       ]
     },
     "setSmartArtWrapOp": {

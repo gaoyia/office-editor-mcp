@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "action": "create",
+  "path": "deck.pptx",
+  "format": "pptx",
+  "presentation": {
+    "slides": [
+      {
+        "shapes": [{ "text": "标题" }],
+        "smartArts": [
+          {
+            "layout": "list",
+            "x": 914400,
+            "y": 1828800,
+            "cx": 5486400,
+            "cy": 3200400,
+            "points": [
+              { "text": "甲" },
+              { "text": "乙" },
+              { "text": "丙" }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

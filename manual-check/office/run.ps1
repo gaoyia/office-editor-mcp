@@ -51,6 +51,7 @@ $order = @(
     'pptx-apply'
     'pptx-pictures'
     'pptx-charts'
+    'pptx-smartart'
     'opc-resave'
 )
 

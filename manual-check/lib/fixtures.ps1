@@ -177,6 +177,36 @@ function Ensure-PptxCreateCharts([switch]$Force) {
     return $path
 }
 
+# 一页一个文本框加一张 list。cNvPr：spTree=1，文本框=2，图示从 3 起。
+function Ensure-PptxCreateSmartArt([switch]$Force) {
+    $path = Get-OutPath 'pptx-create-smartart.pptx'
+    if ((Test-Path $path) -and -not $Force) { return $path }
+    $S = $global:OoxpStrings
+    $req = @{
+        schemaVersion = 1; action = 'create'
+        path = $path.Replace('\', '/'); format = 'pptx'
+        presentation = @{
+            slides = @(
+                @{
+                    shapes = @(@{ text = '标题' })
+                    smartArts = @(
+                        @{
+                            layout = 'list'
+                            points = @(
+                                @{ text = $S.saItem1 }
+                                @{ text = $S.saItem2 }
+                                @{ text = $S.saItem3 }
+                            )
+                        }
+                    )
+                }
+            )
+        }
+    }
+    Invoke-OoxpRequest $req 'pptx-create-smartart' | Out-Null
+    return $path
+}
+
 # apply 的源文件要由 Excel 亲手存出来，不能拿 ooxp 自己的产物冒充，
 # 否则等于自己造自己读，测不到真实文件的写法。
 function Ensure-XlsxExcelSource([switch]$Force) {
@@ -1445,8 +1475,8 @@ function Ensure-DocxWordChartsExtSource([switch]$Force) {
     return $path
 }
 
-function Find-OfficeSmartArtLayout($word, [string[]]$uniqueIds, [string[]]$nameNeedles) {
-    $layouts = $word.SmartArtLayouts
+function Find-OfficeSmartArtLayout($app, [string[]]$uniqueIds, [string[]]$nameNeedles) {
+    $layouts = $app.SmartArtLayouts
     try {
         foreach ($uid in $uniqueIds) {
             try {
@@ -1561,5 +1591,90 @@ function Ensure-DocxWordSmartArtSource([switch]$Force) {
     Close-WordDoc $doc
     Copy-Item -Force $skel $path
     Write-Log "saved word smartart source $path"
+    return $path
+}
+
+function Test-PptxSmartArtSource([string]$pptx, [string]$reqName) {
+    $tree = Invoke-OoxpTree @{
+        schemaVersion = 1; action = 'inspect'
+        path = $pptx.Replace('\', '/'); format = 'pptx'
+        scope = @{ smartArt = $true }
+    } $reqName
+    $slide = @($tree.slides) | Select-Object -First 1
+    $arts = @()
+    if ($slide -and ($slide.PSObject.Properties.Name -contains 'smartArts')) {
+        $arts = @($slide.smartArts)
+    }
+    $first = $arts | Select-Object -First 1
+    $texts = @()
+    if ($first) {
+        foreach ($p in @($first.points)) {
+            $texts += [string]$p.text
+        }
+    }
+    $S = $global:OoxpStrings
+    $hit = 0
+    foreach ($t in @($S.saItem1, $S.saItem2, $S.saItem3)) {
+        if ($texts -contains $t) { $hit++ }
+    }
+    return [pscustomobject]@{
+        smartArtCount = [int]$tree.smartArtCount
+        n = $arts.Count
+        id = if ($first) { [string]$first.id } else { '' }
+        hit = $hit
+        ok = ($tree.smartArtCount -ge 1) -and ([string]$first.id -like 'slide:*/smartdiagram:*') -and ($hit -ge 3)
+    }
+}
+
+# PowerPoint 亲手另存的列表型 SmartArt。不要用库 create 产物当唯一样例。
+function Ensure-PptxPptSmartArtSource([switch]$Force) {
+    $path = Get-OutPath 'pptx-ppt-smartart-source.pptx'
+    if ((Test-Path $path) -and -not $Force) {
+        $cached = Test-PptxSmartArtSource $path 'pptx-smartart-source-cache-check'
+        if ($cached.ok) { return $path }
+        Write-Log "缓存的 pptx SmartArt source 不合格（count=$($cached.smartArtCount) id=$($cached.id) hit=$($cached.hit)），重建"
+    }
+
+    $tmpDir = Join-Path $env:TEMP 'ooxp-office'
+    New-Item -ItemType Directory -Force -Path $tmpDir | Out-Null
+    $tmp = Join-Path $tmpDir 'pptx-ppt-smartart-source.pptx'
+    $S = $global:OoxpStrings
+    Invoke-OoxpRequest @{
+        schemaVersion = 1; action = 'create'
+        path = $tmp.Replace('\', '/'); format = 'pptx'
+        presentation = @{
+            slides = @(
+                @{ shapes = @(@{ text = $S.chapter1 }, @{ text = $S.shape2src }) }
+                @{ shapes = @(@{ text = $S.page2keep }) }
+            )
+        }
+    } 'pptx-smartart-source-create' | Out-Null
+
+    $ppt = Ensure-MsPpt (Ensure-PptxCreate)
+    $pres = Open-PptPres $ppt $tmp
+    $s1 = Get-PptSlide $pres 1
+    $listLay = Find-OfficeSmartArtLayout $ppt @(
+        'urn:microsoft.com/office/officeart/2005/8/layout/default'
+    ) @('基本块列表', 'Basic Block List', '块列表', 'Block List')
+    $shapes = $s1.Shapes
+    $hostObj = $null
+    try {
+        $hostObj = $shapes.AddSmartArt($listLay, 80, 40, 400, 220)
+    }
+    catch {
+        Write-Log ("AddSmartArt 报错：" + $_.Exception.Message)
+    }
+    finally { Release-Com $shapes }
+    if (-not $hostObj) { throw 'PowerPoint 没有插入幻灯片 SmartArt' }
+    Start-Sleep -Seconds 1
+    Set-WordSmartArtTexts $hostObj @($S.saItem1, $S.saItem2, $S.saItem3)
+    Write-Log 'PowerPoint Save() 原地覆盖 TEMP 里的 SmartArt 源文件'
+    $pres.Save()
+    Close-PptPres $pres
+    Release-Com $hostObj
+    Release-Com $s1
+    Release-Com $listLay
+    Copy-Item -Force $tmp $path
+    Write-Log "saved ppt smartart source $path"
     return $path
 }

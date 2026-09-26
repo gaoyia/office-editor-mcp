@@ -5,9 +5,11 @@ use serde_json::{Map, Value};
 use crate::chart::{ChartType, NewSeries};
 use crate::error::{Error, ErrorKind, ScopeNeed, TypeName};
 use crate::json;
+use crate::smartart::{ColorsKind, LayoutKind, NewPoint, Role, StyleKind};
 
 use super::chart;
 use super::picture;
+use super::smartart;
 
 #[derive(Debug, Clone)]
 pub struct InspectScope {
@@ -15,6 +17,7 @@ pub struct InspectScope {
     pub max_shapes: u32,
     pub pictures: bool,
     pub charts: bool,
+    pub smart_art: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -163,6 +166,81 @@ pub struct SetChartPosOp {
 }
 
 #[derive(Debug, Clone)]
+pub struct InsertSmartArtOp {
+    pub slide: usize,
+    pub layout: LayoutKind,
+    pub points: Option<Vec<NewPoint>>,
+    pub x: Option<i64>,
+    pub y: Option<i64>,
+    pub cx: Option<i64>,
+    pub cy: Option<i64>,
+}
+
+#[derive(Debug, Clone)]
+pub struct DeleteSmartArtOp {
+    pub id: String,
+    pub target: smartart::SmartArtTarget,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetSmartArtTextOp {
+    pub id: String,
+    pub target: smartart::PointTarget,
+    pub text: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct AddSmartArtPointOp {
+    pub id: String,
+    pub parent: smartart::AddParent,
+    pub text: String,
+    pub role: Role,
+}
+
+#[derive(Debug, Clone)]
+pub struct DeleteSmartArtPointOp {
+    pub id: String,
+    pub target: smartart::PointTarget,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetSmartArtSizeOp {
+    pub id: String,
+    pub target: smartart::SmartArtTarget,
+    pub cx: Option<i64>,
+    pub cy: Option<i64>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetSmartArtPosOp {
+    pub id: String,
+    pub target: smartart::SmartArtTarget,
+    pub x: Option<i64>,
+    pub y: Option<i64>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetSmartArtColorsOp {
+    pub id: String,
+    pub target: smartart::SmartArtTarget,
+    pub colors: ColorsKind,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetSmartArtStyleOp {
+    pub id: String,
+    pub target: smartart::SmartArtTarget,
+    pub style: StyleKind,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetSmartArtLayoutOp {
+    pub id: String,
+    pub target: smartart::SmartArtTarget,
+    pub layout: LayoutKind,
+}
+
+#[derive(Debug, Clone)]
 pub enum PptxOp {
     SetShapeText(SetShapeTextOp),
     ReplacePicture(ReplacePictureOp),
@@ -182,6 +260,16 @@ pub enum PptxOp {
     SetChartDataLabels(SetChartDataLabelsOp),
     SetChartSize(SetChartSizeOp),
     SetChartPos(SetChartPosOp),
+    InsertSmartArt(InsertSmartArtOp),
+    DeleteSmartArt(DeleteSmartArtOp),
+    SetSmartArtText(SetSmartArtTextOp),
+    AddSmartArtPoint(AddSmartArtPointOp),
+    DeleteSmartArtPoint(DeleteSmartArtPointOp),
+    SetSmartArtSize(SetSmartArtSizeOp),
+    SetSmartArtPos(SetSmartArtPosOp),
+    SetSmartArtColors(SetSmartArtColorsOp),
+    SetSmartArtStyle(SetSmartArtStyleOp),
+    SetSmartArtLayout(SetSmartArtLayoutOp),
 }
 
 pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
@@ -200,9 +288,13 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
     if obj.is_empty() {
         return Ok(None);
     }
-    json::deny_unknown(obj, &["slide", "maxShapes", "pictures", "charts"])?;
+    json::deny_unknown(
+        obj,
+        &["slide", "maxShapes", "pictures", "charts", "smartArt"],
+    )?;
     let pictures = parse_bool_field(obj.get("pictures"), "pictures")?;
     let charts = parse_bool_field(obj.get("charts"), "charts")?;
+    let smart_art = parse_bool_field(obj.get("smartArt"), "smartArt")?;
     let slide = match obj.get("slide") {
         None => None,
         Some(s) => {
@@ -265,6 +357,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
         max_shapes: max_shapes as u32,
         pictures,
         charts,
+        smart_art,
     }))
 }
 
@@ -330,6 +423,18 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<PptxOp>, Error> {
             }
             "setChartSize" => PptxOp::SetChartSize(parse_set_chart_size(obj, i)?),
             "setChartPos" => PptxOp::SetChartPos(parse_set_chart_pos(obj, i)?),
+            "insertSmartArt" => PptxOp::InsertSmartArt(parse_insert_smartart(obj, i)?),
+            "deleteSmartArt" => PptxOp::DeleteSmartArt(parse_delete_smartart(obj, i)?),
+            "setSmartArtText" => PptxOp::SetSmartArtText(parse_set_smartart_text(obj, i)?),
+            "addSmartArtPoint" => PptxOp::AddSmartArtPoint(parse_add_smartart_point(obj, i)?),
+            "deleteSmartArtPoint" => {
+                PptxOp::DeleteSmartArtPoint(parse_delete_smartart_point(obj, i)?)
+            }
+            "setSmartArtSize" => PptxOp::SetSmartArtSize(parse_set_smartart_size(obj, i)?),
+            "setSmartArtPos" => PptxOp::SetSmartArtPos(parse_set_smartart_pos(obj, i)?),
+            "setSmartArtColors" => PptxOp::SetSmartArtColors(parse_set_smartart_colors(obj, i)?),
+            "setSmartArtStyle" => PptxOp::SetSmartArtStyle(parse_set_smartart_style(obj, i)?),
+            "setSmartArtLayout" => PptxOp::SetSmartArtLayout(parse_set_smartart_layout(obj, i)?),
             _ => {
                 return Err(Error::with_path(
                     ErrorKind::UnsupportedOp {
@@ -379,16 +484,7 @@ fn is_foreign_op(op_name: &str) -> bool {
             | "setChartAnchor"
             | "insertChartSheet"
             | "deleteChartSheet"
-            | "insertSmartArt"
-            | "deleteSmartArt"
-            | "setSmartArtText"
-            | "addSmartArtPoint"
-            | "deleteSmartArtPoint"
-            | "setSmartArtSize"
             | "setSmartArtWrap"
-            | "setSmartArtColors"
-            | "setSmartArtStyle"
-            | "setSmartArtLayout"
     )
 }
 
@@ -847,6 +943,193 @@ fn parse_set_chart_pos(obj: &Map<String, Value>, i: usize) -> Result<SetChartPos
     Ok(SetChartPosOp { id, target, x, y })
 }
 
+fn parse_insert_smartart(obj: &Map<String, Value>, i: usize) -> Result<InsertSmartArtOp, Error> {
+    deny_keys(
+        obj,
+        i,
+        &["op", "id", "layout", "points", "x", "y", "cx", "cy"],
+    )?;
+    let id = require_id(obj, i)?;
+    let slide = smartart::parse_insert_slide_id(&id, i)?;
+    let (layout, points) = crate::smartart::parse_layout_and_points(obj, &format!("ops[{i}]"))?;
+    let x = parse_off_field(obj.get("x"), i, "x")?;
+    let y = parse_off_field(obj.get("y"), i, "y")?;
+    if x.is_some() != y.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "insertSmartArt".into(),
+                field: "x and y together".into(),
+            },
+            format!("ops[{i}]"),
+        ));
+    }
+    let cx = parse_emu_field(obj.get("cx"), i, "cx")?;
+    let cy = parse_emu_field(obj.get("cy"), i, "cy")?;
+    if cx.is_some() != cy.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "insertSmartArt".into(),
+                field: "cx and cy together".into(),
+            },
+            format!("ops[{i}]"),
+        ));
+    }
+    Ok(InsertSmartArtOp {
+        slide,
+        layout,
+        points,
+        x,
+        y,
+        cx,
+        cy,
+    })
+}
+
+fn parse_delete_smartart(obj: &Map<String, Value>, i: usize) -> Result<DeleteSmartArtOp, Error> {
+    deny_keys(obj, i, &["op", "id"])?;
+    let id = require_id(obj, i)?;
+    let target = smartart::parse_diagram_id(&id, &format!("ops[{i}].id"))?;
+    Ok(DeleteSmartArtOp { id, target })
+}
+
+fn parse_set_smartart_text(obj: &Map<String, Value>, i: usize) -> Result<SetSmartArtTextOp, Error> {
+    deny_keys(obj, i, &["op", "id", "text"])?;
+    let id = require_id(obj, i)?;
+    let target = smartart::parse_point_id(&id, &format!("ops[{i}].id"))?;
+    let text = match obj.get("text") {
+        Some(Value::String(s)) => s.clone(),
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "text".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].text"),
+            ));
+        }
+        None => {
+            return Err(Error::with_path(
+                ErrorKind::OpRequiresField {
+                    op: "setSmartArtText".into(),
+                    field: "text".into(),
+                },
+                format!("ops[{i}].text"),
+            ));
+        }
+    };
+    Ok(SetSmartArtTextOp { id, target, text })
+}
+
+fn parse_add_smartart_point(
+    obj: &Map<String, Value>,
+    i: usize,
+) -> Result<AddSmartArtPointOp, Error> {
+    deny_keys(obj, i, &["op", "id", "text", "role"])?;
+    let id = require_id(obj, i)?;
+    let parent = smartart::parse_add_parent(&id, &format!("ops[{i}].id"))?;
+    let text = match obj.get("text") {
+        None | Some(Value::Null) => String::new(),
+        Some(Value::String(s)) => s.clone(),
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "text".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].text"),
+            ));
+        }
+    };
+    let role = crate::smartart::parse_role_field(obj.get("role"), &format!("ops[{i}].role"))?;
+    Ok(AddSmartArtPointOp {
+        id,
+        parent,
+        text,
+        role,
+    })
+}
+
+fn parse_delete_smartart_point(
+    obj: &Map<String, Value>,
+    i: usize,
+) -> Result<DeleteSmartArtPointOp, Error> {
+    deny_keys(obj, i, &["op", "id"])?;
+    let id = require_id(obj, i)?;
+    let target = smartart::parse_point_id(&id, &format!("ops[{i}].id"))?;
+    Ok(DeleteSmartArtPointOp { id, target })
+}
+
+fn parse_set_smartart_size(obj: &Map<String, Value>, i: usize) -> Result<SetSmartArtSizeOp, Error> {
+    deny_keys(obj, i, &["op", "id", "cx", "cy"])?;
+    let id = require_id(obj, i)?;
+    let target = smartart::parse_diagram_id(&id, &format!("ops[{i}].id"))?;
+    let cx = parse_emu_field(obj.get("cx"), i, "cx")?;
+    let cy = parse_emu_field(obj.get("cy"), i, "cy")?;
+    if cx.is_none() && cy.is_none() {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "setSmartArtSize".into(),
+                field: "cx or cy".into(),
+            },
+            format!("ops[{i}]"),
+        ));
+    }
+    Ok(SetSmartArtSizeOp { id, target, cx, cy })
+}
+
+fn parse_set_smartart_pos(obj: &Map<String, Value>, i: usize) -> Result<SetSmartArtPosOp, Error> {
+    deny_keys(obj, i, &["op", "id", "x", "y"])?;
+    let id = require_id(obj, i)?;
+    let target = smartart::parse_diagram_id(&id, &format!("ops[{i}].id"))?;
+    let x = parse_off_field(obj.get("x"), i, "x")?;
+    let y = parse_off_field(obj.get("y"), i, "y")?;
+    if x.is_none() && y.is_none() {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "setSmartArtPos".into(),
+                field: "x or y".into(),
+            },
+            format!("ops[{i}]"),
+        ));
+    }
+    Ok(SetSmartArtPosOp { id, target, x, y })
+}
+
+fn parse_set_smartart_colors(
+    obj: &Map<String, Value>,
+    i: usize,
+) -> Result<SetSmartArtColorsOp, Error> {
+    deny_keys(obj, i, &["op", "id", "colors"])?;
+    let id = require_id(obj, i)?;
+    let target = smartart::parse_diagram_id(&id, &format!("ops[{i}].id"))?;
+    let colors =
+        crate::smartart::parse_colors_field(obj.get("colors"), &format!("ops[{i}].colors"))?;
+    Ok(SetSmartArtColorsOp { id, target, colors })
+}
+
+fn parse_set_smartart_style(
+    obj: &Map<String, Value>,
+    i: usize,
+) -> Result<SetSmartArtStyleOp, Error> {
+    deny_keys(obj, i, &["op", "id", "style"])?;
+    let id = require_id(obj, i)?;
+    let target = smartart::parse_diagram_id(&id, &format!("ops[{i}].id"))?;
+    let style = crate::smartart::parse_style_field(obj.get("style"), &format!("ops[{i}].style"))?;
+    Ok(SetSmartArtStyleOp { id, target, style })
+}
+
+fn parse_set_smartart_layout(
+    obj: &Map<String, Value>,
+    i: usize,
+) -> Result<SetSmartArtLayoutOp, Error> {
+    deny_keys(obj, i, &["op", "id", "layout"])?;
+    let id = require_id(obj, i)?;
+    let target = smartart::parse_diagram_id(&id, &format!("ops[{i}].id"))?;
+    let layout =
+        crate::smartart::parse_layout_field(obj.get("layout"), &format!("ops[{i}].layout"))?;
+    Ok(SetSmartArtLayoutOp { id, target, layout })
+}
+
 fn parse_chart_type_field(v: Option<&Value>, path: &str) -> Result<ChartType, Error> {
     match v {
         Some(Value::String(s)) => ChartType::parse(s)
@@ -1151,6 +1434,55 @@ pub(crate) fn parse_create_chart(
         chart_type,
         title,
         series,
+        x,
+        y,
+        cx,
+        cy,
+    })
+}
+
+pub(crate) fn parse_create_smartart(
+    v: &Value,
+    prefix: &str,
+    slide: usize,
+) -> Result<InsertSmartArtOp, Error> {
+    let obj = v.as_object().ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::WrongType {
+                field: "smartArts".into(),
+                expected: TypeName::Object,
+            },
+            prefix.to_string(),
+        )
+    })?;
+    deny_keys_at(obj, prefix, &["layout", "points", "x", "y", "cx", "cy"])?;
+    let (layout, points) = crate::smartart::parse_layout_and_points(obj, prefix)?;
+    let x = parse_off_at(obj.get("x"), &format!("{prefix}.x"), "x")?;
+    let y = parse_off_at(obj.get("y"), &format!("{prefix}.y"), "y")?;
+    if x.is_some() != y.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "create".into(),
+                field: "x and y together".into(),
+            },
+            prefix.to_string(),
+        ));
+    }
+    let cx = parse_emu_at(obj.get("cx"), &format!("{prefix}.cx"), "cx")?;
+    let cy = parse_emu_at(obj.get("cy"), &format!("{prefix}.cy"), "cy")?;
+    if cx.is_some() != cy.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "create".into(),
+                field: "cx and cy together".into(),
+            },
+            prefix.to_string(),
+        ));
+    }
+    Ok(InsertSmartArtOp {
+        slide,
+        layout,
+        points,
         x,
         y,
         cx,
