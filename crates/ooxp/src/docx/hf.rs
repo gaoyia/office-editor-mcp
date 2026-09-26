@@ -266,7 +266,7 @@ fn read_even_and_odd(
     Ok(bool_prop(&doc.root, "evenAndOddHeaders"))
 }
 
-fn collect_sect_prs(root: &Element) -> Vec<&Element> {
+pub fn collect_sect_prs(root: &Element) -> Vec<&Element> {
     let mut out = Vec::new();
     walk_sect(root, &mut |e| {
         if e.local_name() == "sectPr" {
@@ -295,6 +295,78 @@ fn walk_sect<'a>(el: &'a Element, f: &mut impl FnMut(&'a Element)) {
             walk_sect(e, f);
         }
     }
+}
+
+/// 从 1 起找第 `n` 个 `w:sectPr`。
+pub fn find_sect_pr_mut(root: &mut Element, n: usize) -> Option<&mut Element> {
+    let mut idx = 0usize;
+    find_sect_mut(root, &mut idx, n)
+}
+
+fn find_sect_mut<'a>(
+    el: &'a mut Element,
+    idx: &mut usize,
+    n: usize,
+) -> Option<&'a mut Element> {
+    if el.local_name() == "txbxContent" {
+        return None;
+    }
+    if el.local_name() == "AlternateContent" {
+        if let Some(i) = first_alt_child_index(el) {
+            if let crate::xml::Node::Element(e) = &mut el.children[i] {
+                return find_sect_mut(e, idx, n);
+            }
+        }
+        return None;
+    }
+    if el.local_name() == "sectPr" {
+        *idx += 1;
+        if *idx == n {
+            return Some(el);
+        }
+        return None;
+    }
+    let children = el.children.as_mut_slice();
+    for child in children {
+        if let crate::xml::Node::Element(e) = child {
+            if let Some(found) = find_sect_mut(e, idx, n) {
+                return Some(found);
+            }
+        }
+    }
+    None
+}
+
+/// 读 `w:pgMar` 上的 twip 属性；缺则为 `None`。
+pub fn twip_attr(pg_mar: Option<&Element>, local: &str) -> Result<Option<i64>, Error> {
+    let Some(el) = pg_mar else {
+        return Ok(None);
+    };
+    let Some(raw) = el.attr_local(local) else {
+        return Ok(None);
+    };
+    let t = raw.trim();
+    let n: i64 = t.parse().map_err(|_| {
+        Error::xml_detail(XmlIssue::Parse, format!("pgMar/@{local} not an integer: {raw}"))
+    })?;
+    if n < 0 {
+        return Err(Error::xml_detail(
+            XmlIssue::Parse,
+            format!("pgMar/@{local} must be non-negative: {raw}"),
+        ));
+    }
+    Ok(Some(n))
+}
+
+/// 按 local name 写 twip 属性；已有则改原名，没有则用节前缀补上。
+pub fn set_twip_attr(el: &mut Element, local: &str, value: u32) {
+    if let Some((_, v)) = el.attrs.iter_mut().find(|(k, _)| {
+        k.rsplit(':').next().unwrap_or(k) == local
+    }) {
+        *v = value.to_string();
+        return;
+    }
+    el.set_attr(&el.prefixed(local), value.to_string());
 }
 
 fn first_alt_child_index(el: &Element) -> Option<usize> {

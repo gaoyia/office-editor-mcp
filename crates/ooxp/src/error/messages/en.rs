@@ -79,9 +79,13 @@ pub(super) fn render(kind: &ErrorKind) -> String {
                 "shape:index must be followed by a positive integer".into()
             }
             IdReason::ShapeIndexFromOne => "shape:index starts at 1".into(),
+            IdReason::SectionPrefix => "Section id must be section:N".into(),
+            IdReason::SectionIndexNotInt => "section index must be a positive integer".into(),
+            IdReason::SectionIndexFromOne => "section index starts at 1".into(),
         },
         ErrorKind::SheetNotFound { name } => format!("Sheet not found: {name}"),
         ErrorKind::ParaNotFound { id } => format!("Paragraph not found: {id}"),
+        ErrorKind::SectionNotFound { id } => format!("Section not found: {id}"),
         ErrorKind::SlideNotFound { n } => format!("Slide not found: slide:{n}"),
         ErrorKind::ShapeNotFound { id } => format!("Shape not found: {id}"),
         ErrorKind::ShapeHasNoText { id } => format!("Shape has no text box: {id}"),

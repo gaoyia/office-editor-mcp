@@ -180,6 +180,9 @@ mod tests {
         assert!(tree.get("paragraphs").is_none());
         assert_eq!(tree["headers"], json!([]));
         assert_eq!(tree["footers"], json!([]));
+        assert_eq!(tree["sections"][0]["id"], "section:1");
+        assert_eq!(tree["sections"][0]["headerDistance"], 708);
+        assert_eq!(tree["sections"][0]["footerDistance"], 708);
         assert_eq!(tree["outline"][0]["level"], 1);
         assert_eq!(tree["outline"][0]["text"], "标题");
 
@@ -621,6 +624,7 @@ mod tests {
                 "outline",
                 "headers",
                 "footers",
+                "sections",
                 "from",
                 "truncated",
                 "paragraphs"
@@ -637,6 +641,10 @@ mod tests {
         assert_eq!(
             object_keys(&tree["paragraphs"][1]),
             ["id", "index", "style", "text", "stable"]
+        );
+        assert_eq!(
+            object_keys(&tree["sections"][0]),
+            ["id", "index", "headerDistance", "footerDistance"]
         );
 
         let pptx = tmp("order.pptx");

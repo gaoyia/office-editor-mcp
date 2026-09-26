@@ -411,3 +411,182 @@ fn header_container_id_is_invalid() {
     let err = apply(&path, &out, "header:default:1", "不该写").unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidId);
 }
+
+fn apply_ops(path: &Path, out: &Path, ops: serde_json::Value) -> Result<RunOutput, ooxp::Error> {
+    run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "apply",
+            "path": path.to_string_lossy(),
+            "output": out.to_string_lossy(),
+            "ops": ops
+        })
+        .to_string(),
+        None,
+    )
+}
+
+#[test]
+fn inspect_section_distance_null_when_pgmar_missing() {
+    let path = write_hf_sample("dist-null");
+    let tree = inspect_hf(&path, false);
+    let sects = tree["sections"].as_array().unwrap();
+    assert_eq!(sects.len(), 2);
+    assert_eq!(sects[0]["id"], "section:1");
+    assert!(sects[0]["headerDistance"].is_null());
+    assert!(sects[0]["footerDistance"].is_null());
+    assert!(sects[1]["headerDistance"].is_null());
+}
+
+#[test]
+fn apply_header_footer_distance_inserts_pgmar() {
+    let path = write_hf_sample("dist-set");
+    let before_styles = part_bytes(&path, "word/styles.xml");
+    let before_header = part_bytes(&path, "word/header1.xml");
+    let out = tmp_dir().join("dist-set-out.docx");
+    apply_ops(
+        &path,
+        &out,
+        json!([{
+            "op": "setHeaderFooterDistance",
+            "id": "section:1",
+            "headerDistance": 720,
+            "footerDistance": 1440
+        }]),
+    )
+    .unwrap();
+    assert_eq!(before_styles, part_bytes(&out, "word/styles.xml"));
+    assert_eq!(before_header, part_bytes(&out, "word/header1.xml"));
+    let tree = inspect_hf(&out, false);
+    assert_eq!(tree["sections"][0]["headerDistance"], 720);
+    assert_eq!(tree["sections"][0]["footerDistance"], 1440);
+    // 第二节未点名，仍为 null
+    assert!(tree["sections"][1]["headerDistance"].is_null());
+    let xml = part(&out, "word/document.xml");
+    assert!(xml.contains(r#"w:header="720""#));
+    assert!(xml.contains(r#"w:footer="1440""#));
+    assert!(!xml.contains("w:top="), "插入的 pgMar 不补其它边距");
+}
+
+#[test]
+fn apply_distance_only_header_leaves_footer_null() {
+    let path = write_hf_sample("dist-one");
+    let out = tmp_dir().join("dist-one-out.docx");
+    apply_ops(
+        &path,
+        &out,
+        json!([{
+            "op": "setHeaderFooterDistance",
+            "id": "section:1",
+            "headerDistance": 360
+        }]),
+    )
+    .unwrap();
+    let tree = inspect_hf(&out, false);
+    assert_eq!(tree["sections"][0]["headerDistance"], 360);
+    assert!(tree["sections"][0]["footerDistance"].is_null());
+}
+
+#[test]
+fn apply_distance_missing_section_is_not_found() {
+    let path = write_hf_sample("dist-miss");
+    let out = tmp_dir().join("dist-miss-out.docx");
+    let err = apply_ops(
+        &path,
+        &out,
+        json!([{
+            "op": "setHeaderFooterDistance",
+            "id": "section:9",
+            "headerDistance": 720
+        }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::IdNotFound);
+}
+
+#[test]
+fn apply_distance_second_op_keeps_other_attr() {
+    let path = write_hf_sample("dist-keep");
+    let mid = tmp_dir().join("dist-keep-mid.docx");
+    let out = tmp_dir().join("dist-keep-out.docx");
+    apply_ops(
+        &path,
+        &mid,
+        json!([{
+            "op": "setHeaderFooterDistance",
+            "id": "section:1",
+            "headerDistance": 720,
+            "footerDistance": 1440
+        }]),
+    )
+    .unwrap();
+    apply_ops(
+        &mid,
+        &out,
+        json!([{
+            "op": "setHeaderFooterDistance",
+            "id": "section:1",
+            "headerDistance": 360
+        }]),
+    )
+    .unwrap();
+    let tree = inspect_hf(&out, false);
+    assert_eq!(tree["sections"][0]["headerDistance"], 360);
+    assert_eq!(tree["sections"][0]["footerDistance"], 1440);
+}
+
+#[test]
+fn apply_distance_on_create_keeps_page_margins() {
+    let dir = tmp_dir();
+    let n = SEQ.fetch_add(1, Ordering::Relaxed);
+    let created = dir.join(format!("dist-create-{n}.docx"));
+    run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "create",
+            "path": created.to_string_lossy(),
+            "document": { "paragraphs": [{ "text": "a" }] }
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap();
+    let before = part(&created, "word/document.xml");
+    assert!(before.contains(r#"w:top="1440""#));
+    let out = dir.join(format!("dist-create-out-{n}.docx"));
+    apply_ops(
+        &created,
+        &out,
+        json!([{
+            "op": "setHeaderFooterDistance",
+            "id": "section:1",
+            "headerDistance": 1440
+        }]),
+    )
+    .unwrap();
+    let after = part(&out, "word/document.xml");
+    assert!(after.contains(r#"w:header="1440""#));
+    assert!(after.contains(r#"w:footer="708""#));
+    assert!(after.contains(r#"w:top="1440""#));
+    assert!(after.contains(r#"w:left="1440""#));
+    let tree = inspect_hf(&out, false);
+    assert_eq!(tree["sections"][0]["headerDistance"], 1440);
+    assert_eq!(tree["sections"][0]["footerDistance"], 708);
+}
+
+#[test]
+fn apply_distance_bad_id_is_invalid() {
+    let path = write_hf_sample("dist-bad-id");
+    let out = tmp_dir().join("dist-bad-id-out.docx");
+    let err = apply_ops(
+        &path,
+        &out,
+        json!([{
+            "op": "setHeaderFooterDistance",
+            "id": "para:AAAA0001",
+            "headerDistance": 720
+        }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidId);
+}

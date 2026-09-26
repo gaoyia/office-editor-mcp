@@ -110,7 +110,10 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<SetCellOp>, Error> {
                 format!("ops[{i}].op"),
             )
         })?;
-        if op_name == "setParaText" || op_name == "setShapeText" {
+        if op_name == "setParaText"
+            || op_name == "setShapeText"
+            || op_name == "setHeaderFooterDistance"
+        {
             return Err(Error::with_path(
                 ErrorKind::OpNotForFormat {
                     format: "xlsx".into(),

@@ -29,6 +29,7 @@ $order = @(
     'xlsx-apply'
     'docx-apply'
     'docx-headerfooter'
+    'docx-distance'
     'pptx-apply'
     'opc-resave'
 )

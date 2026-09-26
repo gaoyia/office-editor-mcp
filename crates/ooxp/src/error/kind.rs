@@ -44,6 +44,9 @@ pub(crate) enum IdReason {
     ShapeEmpty,
     ShapeIndexNotInt,
     ShapeIndexFromOne,
+    SectionPrefix,
+    SectionIndexNotInt,
+    SectionIndexFromOne,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -148,6 +151,7 @@ define_error_kinds! {
         .collect::<Vec<_>>(),
     SheetNotFound { name: String } => vec![Self::SheetNotFound { name: "Sheet9".into() }],
     ParaNotFound { id: String } => vec![Self::ParaNotFound { id: "para:1".into() }],
+    SectionNotFound { id: String } => vec![Self::SectionNotFound { id: "section:9".into() }],
     SlideNotFound { n: u32 } => vec![Self::SlideNotFound { n: 3 }],
     ShapeNotFound { id: String } => vec![Self::ShapeNotFound { id: "slide:1/shape:2".into() }],
     ShapeHasNoText { id: String } => vec![Self::ShapeHasNoText { id: "slide:1/shape:2".into() }],
@@ -238,6 +242,9 @@ impl IdReason {
             Self::ShapeEmpty,
             Self::ShapeIndexNotInt,
             Self::ShapeIndexFromOne,
+            Self::SectionPrefix,
+            Self::SectionIndexNotInt,
+            Self::SectionIndexFromOne,
         ]
     }
 }
@@ -326,6 +333,7 @@ impl ErrorKind {
             Self::InvalidId { .. } => InvalidId,
             Self::SheetNotFound { .. }
             | Self::ParaNotFound { .. }
+            | Self::SectionNotFound { .. }
             | Self::SlideNotFound { .. }
             | Self::ShapeNotFound { .. }
             | Self::ShapeHasNoText { .. } => IdNotFound,

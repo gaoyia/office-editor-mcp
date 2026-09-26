@@ -35,6 +35,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     let catalog = hf::catalog(&pkg, &part, &doc.root)?;
     let expand_hf = scope.as_ref().is_some_and(|s| s.header_footer);
     let (headers, footers) = hf_arrays(&pkg, &catalog, expand_hf)?;
+    let sections = section_nodes(&doc.root)?;
 
     let mut tree = json!({
         "schemaVersion": 1,
@@ -44,6 +45,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         "outline": outline,
         "headers": headers,
         "footers": footers,
+        "sections": sections,
     });
 
     if let Some(scope) = scope {
@@ -68,6 +70,22 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     }
 
     Ok(tree)
+}
+
+fn section_nodes(root: &crate::xml::Element) -> Result<Vec<Value>, Error> {
+    let sects = hf::collect_sect_prs(root);
+    let mut out = Vec::new();
+    for (i, sect) in sects.iter().enumerate() {
+        let index = i + 1;
+        let pg = sect.child_by_local("pgMar");
+        out.push(json!({
+            "id": format!("section:{index}"),
+            "index": index,
+            "headerDistance": hf::twip_attr(pg, "header")?,
+            "footerDistance": hf::twip_attr(pg, "footer")?,
+        }));
+    }
+    Ok(out)
 }
 
 fn hf_arrays(

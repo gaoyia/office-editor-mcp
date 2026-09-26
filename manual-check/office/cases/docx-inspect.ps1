@@ -36,4 +36,5 @@ $tree2 = Invoke-OoxpTree @{
 $noParas = -not ($tree2.PSObject.Properties.Name -contains 'paragraphs')
 $hasOl = $tree2.PSObject.Properties.Name -contains 'outline'
 $hasHf = ($tree2.PSObject.Properties.Name -contains 'headers') -and ($tree2.PSObject.Properties.Name -contains 'footers')
-Add-Check 'docx-I5' ($noParas -and $hasOl -and $hasHf -and ($tree2.paraCount -eq 2)) "noParas=$noParas outline=$hasOl hf=$hasHf count=$($tree2.paraCount)"
+$hasSec = $tree2.PSObject.Properties.Name -contains 'sections'
+Add-Check 'docx-I5' ($noParas -and $hasOl -and $hasHf -and $hasSec -and ($tree2.paraCount -eq 2)) "noParas=$noParas outline=$hasOl hf=$hasHf sections=$hasSec count=$($tree2.paraCount)"

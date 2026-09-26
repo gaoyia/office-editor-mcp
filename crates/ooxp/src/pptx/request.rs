@@ -118,7 +118,10 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<SetShapeTextOp>, Error> {
                 format!("ops[{i}].op"),
             )
         })?;
-        if op_name == "setCell" || op_name == "setParaText" {
+        if op_name == "setCell"
+            || op_name == "setParaText"
+            || op_name == "setHeaderFooterDistance"
+        {
             return Err(Error::with_path(
                 ErrorKind::OpNotForFormat {
                     format: "pptx".into(),

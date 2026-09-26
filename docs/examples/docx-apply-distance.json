@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "note.docx",
+  "output": "note.dist.docx",
+  "ops": [
+    {
+      "op": "setHeaderFooterDistance",
+      "id": "section:1",
+      "headerDistance": 720,
+      "footerDistance": 1440
+    }
+  ]
+}
