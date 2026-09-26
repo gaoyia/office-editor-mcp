@@ -192,18 +192,7 @@ fn insert_inspect_replace_size_anchor_delete_export() {
     assert_eq!(pics[0]["stable"], true);
     assert_eq!(
         object_keys(&pics[0]),
-        [
-            "id",
-            "cNvPrId",
-            "name",
-            "anchor",
-            "from",
-            "fromOffX",
-            "fromOffY",
-            "cx",
-            "cy",
-            "stable"
-        ]
+        ["id", "cNvPrId", "name", "anchor", "from", "fromOffX", "fromOffY", "cx", "cy", "stable"]
     );
     assert_eq!(part_bytes(&inserted, "xl/media/image1.png"), PNG_1X1);
 
@@ -313,18 +302,8 @@ fn insert_two_cell_and_reject_size() {
     assert_eq!(
         object_keys(pic),
         [
-            "id",
-            "cNvPrId",
-            "name",
-            "anchor",
-            "from",
-            "fromOffX",
-            "fromOffY",
-            "to",
-            "toOffX",
-            "toOffY",
-            "editAs",
-            "stable"
+            "id", "cNvPrId", "name", "anchor", "from", "fromOffX", "fromOffY", "to", "toOffX",
+            "toOffY", "editAs", "stable"
         ]
     );
     let err = apply(
@@ -476,11 +455,8 @@ fn insert_into_excel_like_drawing_adds_r_ns_and_short_rel() {
         ),
         "往无 xmlns:r 的 drawing 插图后应补上关系命名空间"
     );
-    let rels = String::from_utf8(part_bytes(
-        &second,
-        "xl/drawings/_rels/drawing1.xml.rels",
-    ))
-    .unwrap();
+    let rels =
+        String::from_utf8(part_bytes(&second, "xl/drawings/_rels/drawing1.xml.rels")).unwrap();
     assert!(
         rels.contains(r#"Target="../media/image2.png""#),
         "drawing 到媒体的关系应写成 ../media/，实际：{rels}"
@@ -532,7 +508,9 @@ fn create_writes_one_cell_and_two_cell() {
     assert_eq!(pics[1]["anchor"], "twoCell");
     assert_eq!(pics[1]["from"], "D2");
     assert_eq!(pics[1]["to"], "F8");
-    assert!(part_names(&path).iter().any(|n| n == "xl/drawings/drawing1.xml"));
+    assert!(part_names(&path)
+        .iter()
+        .any(|n| n == "xl/drawings/drawing1.xml"));
     assert!(part_names(&path).iter().any(|n| n.starts_with("xl/media/")));
     let drawing = String::from_utf8(part_bytes(&path, "xl/drawings/drawing1.xml")).unwrap();
     assert!(drawing.contains("xdr:clientData"));
@@ -613,10 +591,7 @@ fn create_rejects_kind_wrap_and_missing_from() {
     )
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);
-    assert_eq!(
-        err.field_path(),
-        Some("workbook.sheets[0].charts[0].kind")
-    );
+    assert_eq!(err.field_path(), Some("workbook.sheets[0].charts[0].kind"));
 }
 
 #[test]

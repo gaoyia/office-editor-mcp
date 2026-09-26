@@ -218,7 +218,7 @@ pub fn copy_part_rels(pkg: &mut Package, src_part: &str, dst_part: &str) -> Resu
     pkg.set(&rels_part_name(dst_part), bytes)
 }
 
-pub fn collect_pictures<'a>(root: &'a Element, container_id: &str) -> Result<Vec<PicInfo>, Error> {
+pub fn collect_pictures(root: &Element, container_id: &str) -> Result<Vec<PicInfo>, Error> {
     let mut out = Vec::new();
     let mut index = 0usize;
     walk_drawings(root, &mut |drawing| {
@@ -589,12 +589,14 @@ pub fn part_for_pic(
             })?;
             Ok(item.part.clone())
         }
-        PicTarget::InNote { kind, .. } => notes::part_name(pkg, doc_part, *kind)?.ok_or_else(|| {
-            Error::with_path(
-                ErrorKind::PictureNotFound { id: id.to_string() },
-                field_path.to_string(),
-            )
-        }),
+        PicTarget::InNote { kind, .. } => {
+            notes::part_name(pkg, doc_part, *kind)?.ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::PictureNotFound { id: id.to_string() },
+                    field_path.to_string(),
+                )
+            })
+        }
         PicTarget::InComment { .. } => {
             super::comments::part_name(pkg, doc_part)?.ok_or_else(|| {
                 Error::with_path(
@@ -1570,7 +1572,7 @@ fn jpeg_size(bytes: &[u8]) -> Option<(i64, i64)> {
             break;
         }
         let len = u16::from_be_bytes([bytes[i + 2], bytes[i + 3]]) as usize;
-        if matches!(marker, 0xC0 | 0xC1 | 0xC2) && i + 8 < bytes.len() {
+        if matches!(marker, 0xC0..=0xC2) && i + 8 < bytes.len() {
             let h = u16::from_be_bytes([bytes[i + 5], bytes[i + 6]]) as u32;
             let w = u16::from_be_bytes([bytes[i + 7], bytes[i + 8]]) as u32;
             return Some((px_to_emu(w), px_to_emu(h)));

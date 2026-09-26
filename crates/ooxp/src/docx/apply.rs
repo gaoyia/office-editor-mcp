@@ -7,7 +7,6 @@ use crate::opc::{self, rels_part_name, ContentTypes, Package, Relationship, Rela
 use crate::xml::{self, Document, Element, Node};
 
 use super::charts;
-use super::smartart;
 use super::comments;
 use super::hf::{self, HfKind};
 use super::notes;
@@ -16,11 +15,12 @@ use super::picture;
 use super::request::{
     DeleteCommentOp, DeleteNoteOp, DeleteParaOp, DeletePictureOp, DeleteTextBoxOp, DocxOp,
     InsertCommentOp, InsertNoteOp, InsertParaOp, InsertParaPlace, InsertPictureOp, InsertTextBoxOp,
-    NoteNumberTarget, ReplyCommentOp, ReplacePictureOp, SetCommentDoneOp, SetCommentMetaOp,
+    NoteNumberTarget, ReplacePictureOp, ReplyCommentOp, SetCommentDoneOp, SetCommentMetaOp,
     SetCommentTextOp, SetHfDistanceOp, SetHfLinkOp, SetNoteNumberingOp, SetParaTextOp,
     SetPictureSizeOp, SetPictureWrapOp, SetTextBoxDirectionOp, SetTextBoxFillOp, SetTextBoxLineOp,
     SetTextBoxLinkOp, SetTextBoxSizeOp, SetTextBoxWrapOp,
 };
+use super::smartart;
 use super::textbox;
 use super::{CT_FOOTER, CT_HEADER, REL_FOOTER, REL_HEADER};
 
@@ -190,10 +190,14 @@ pub fn apply(bytes: &[u8], ops: &[DocxOp]) -> Result<Vec<u8>, Error> {
                 charts::apply_wrap(&mut pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
             }
             DocxOp::InsertSmartArt(op) => {
-                smartart::apply_insert(&mut pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
+                smartart::apply_insert(
+                    &mut pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i,
+                )?;
             }
             DocxOp::DeleteSmartArt(op) => {
-                smartart::apply_delete(&mut pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
+                smartart::apply_delete(
+                    &mut pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i,
+                )?;
             }
             DocxOp::SetSmartArtText(op) => {
                 smartart::apply_text(&mut pkg, &mut docs, &doc_part, &catalog, op, i)?;
@@ -211,13 +215,17 @@ pub fn apply(bytes: &[u8], ops: &[DocxOp]) -> Result<Vec<u8>, Error> {
                 smartart::apply_wrap(&mut pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
             }
             DocxOp::SetSmartArtColors(op) => {
-                smartart::apply_colors(&mut pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
+                smartart::apply_colors(
+                    &mut pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i,
+                )?;
             }
             DocxOp::SetSmartArtStyle(op) => {
                 smartart::apply_style(&mut pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
             }
             DocxOp::SetSmartArtLayout(op) => {
-                smartart::apply_layout(&mut pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
+                smartart::apply_layout(
+                    &mut pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i,
+                )?;
             }
         }
     }
@@ -308,12 +316,13 @@ fn apply_para_text(
                 )
             })?;
             let doc = load_part(pkg, docs, &part_name)?;
-            let note = notes::find_user_note_mut(&mut doc.root, *kind, note_id).ok_or_else(|| {
-                Error::with_path(
-                    ErrorKind::ParaNotFound { id: op.id.clone() },
-                    format!("ops[{i}].id"),
-                )
-            })?;
+            let note =
+                notes::find_user_note_mut(&mut doc.root, *kind, note_id).ok_or_else(|| {
+                    Error::with_path(
+                        ErrorKind::ParaNotFound { id: op.id.clone() },
+                        format!("ops[{i}].id"),
+                    )
+                })?;
             let el = para::find_paragraph_mut(note, para).ok_or_else(|| {
                 Error::with_path(
                     ErrorKind::ParaNotFound { id: op.id.clone() },
@@ -331,12 +340,13 @@ fn apply_para_text(
                 )
             })?;
             let doc = load_part(pkg, docs, &part_name)?;
-            let comment = comments::find_comment_mut(&mut doc.root, comment_id).ok_or_else(|| {
-                Error::with_path(
-                    ErrorKind::ParaNotFound { id: op.id.clone() },
-                    format!("ops[{i}].id"),
-                )
-            })?;
+            let comment =
+                comments::find_comment_mut(&mut doc.root, comment_id).ok_or_else(|| {
+                    Error::with_path(
+                        ErrorKind::ParaNotFound { id: op.id.clone() },
+                        format!("ops[{i}].id"),
+                    )
+                })?;
             comments::reject_ink(comment, &op.id, i)?;
             let el = para::find_paragraph_mut(comment, para).ok_or_else(|| {
                 Error::with_path(
@@ -583,20 +593,21 @@ fn part_for_pic(
             })?;
             Ok(item.part.clone())
         }
-        picture::PicTarget::InNote { kind, .. } => {
-            notes::part_name(pkg, doc_part, *kind)?.ok_or_else(|| {
+        picture::PicTarget::InNote { kind, .. } => notes::part_name(pkg, doc_part, *kind)?
+            .ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::PictureNotFound { id: id.to_string() },
+                    format!("ops[{i}].id"),
+                )
+            }),
+        picture::PicTarget::InComment { .. } => {
+            comments::part_name(pkg, doc_part)?.ok_or_else(|| {
                 Error::with_path(
                     ErrorKind::PictureNotFound { id: id.to_string() },
                     format!("ops[{i}].id"),
                 )
             })
         }
-        picture::PicTarget::InComment { .. } => comments::part_name(pkg, doc_part)?.ok_or_else(|| {
-            Error::with_path(
-                ErrorKind::PictureNotFound { id: id.to_string() },
-                format!("ops[{i}].id"),
-            )
-        }),
     }
 }
 
@@ -755,12 +766,14 @@ fn apply_insert_pic(
             kind, hf_type, n, ..
         } => part_for_hf(catalog, *kind, *hf_type, *n, &op.id, i)?,
         ParaTarget::InTextBox { host, .. } => part_for_host(catalog, doc_part, host, &op.id, i)?,
-        ParaTarget::InNote { kind, .. } => notes::part_name(pkg, doc_part, *kind)?.ok_or_else(|| {
-            Error::with_path(
-                ErrorKind::ParaNotFound { id: op.id.clone() },
-                format!("ops[{i}].id"),
-            )
-        })?,
+        ParaTarget::InNote { kind, .. } => {
+            notes::part_name(pkg, doc_part, *kind)?.ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::ParaNotFound { id: op.id.clone() },
+                    format!("ops[{i}].id"),
+                )
+            })?
+        }
         ParaTarget::InComment { .. } => comments::part_name(pkg, doc_part)?.ok_or_else(|| {
             Error::with_path(
                 ErrorKind::ParaNotFound { id: op.id.clone() },
@@ -1200,12 +1213,13 @@ fn apply_insert_para(
             })?;
             let doc = load_part(pkg, docs, &part_name)?;
             let new_id = para::next_para_hex(&doc.root);
-            let note = notes::find_user_note_mut(&mut doc.root, *kind, note_id).ok_or_else(|| {
-                Error::with_path(
-                    ErrorKind::NoteNotFound { id: op.id.clone() },
-                    format!("ops[{i}].id"),
-                )
-            })?;
+            let note =
+                notes::find_user_note_mut(&mut doc.root, *kind, note_id).ok_or_else(|| {
+                    Error::with_path(
+                        ErrorKind::NoteNotFound { id: op.id.clone() },
+                        format!("ops[{i}].id"),
+                    )
+                })?;
             let new_p = para::new_paragraph(note, &new_id, &op.text);
             if let Some(para) = after {
                 insert_p_after(note, para, new_p).map_err(|_| {
@@ -1220,13 +1234,9 @@ fn apply_insert_para(
             dirty.insert(part_name, ());
             Ok(())
         }
-        InsertParaPlace::Comment {
-            comment_id,
-            after,
-        } => {
-            let part_name = comments::part_name(pkg, doc_part)?.ok_or_else(|| {
-                comments::comment_missing(&op.id, i)
-            })?;
+        InsertParaPlace::Comment { comment_id, after } => {
+            let part_name = comments::part_name(pkg, doc_part)?
+                .ok_or_else(|| comments::comment_missing(&op.id, i))?;
             let old_last = {
                 let doc = load_part(pkg, docs, &part_name)?;
                 let comment = comments::find_comment(&doc.root, comment_id)
@@ -1256,11 +1266,7 @@ fn apply_insert_para(
     }
 }
 
-fn insert_p_after(
-    parent: &mut Element,
-    para: &para::BodyPara,
-    new_p: Element,
-) -> Result<(), ()> {
+fn insert_p_after(parent: &mut Element, para: &para::BodyPara, new_p: Element) -> Result<(), ()> {
     let mut idx = 0usize;
     let mut insert_at = None;
     for (j, n) in parent.children.iter().enumerate() {
@@ -1338,12 +1344,13 @@ fn apply_delete_para(
                 )
             })?;
             let doc = load_part(pkg, docs, &part_name)?;
-            let note = notes::find_user_note_mut(&mut doc.root, *kind, note_id).ok_or_else(|| {
-                Error::with_path(
-                    ErrorKind::NoteNotFound { id: op.id.clone() },
-                    format!("ops[{i}].id"),
-                )
-            })?;
+            let note =
+                notes::find_user_note_mut(&mut doc.root, *kind, note_id).ok_or_else(|| {
+                    Error::with_path(
+                        ErrorKind::NoteNotFound { id: op.id.clone() },
+                        format!("ops[{i}].id"),
+                    )
+                })?;
             let count = para::collect_paragraphs(note).len();
             if count <= 1 {
                 return Err(Error::with_path(
@@ -1361,9 +1368,8 @@ fn apply_delete_para(
             Ok(())
         }
         ParaTarget::InComment { comment_id, para } => {
-            let part_name = comments::part_name(pkg, doc_part)?.ok_or_else(|| {
-                comments::comment_missing(&op.id, i)
-            })?;
+            let part_name = comments::part_name(pkg, doc_part)?
+                .ok_or_else(|| comments::comment_missing(&op.id, i))?;
             let old_last = {
                 let doc = load_part(pkg, docs, &part_name)?;
                 let comment = comments::find_comment(&doc.root, comment_id)
@@ -1559,9 +1565,9 @@ fn apply_delete_note(
     let (embeds, media) = {
         let doc = load_part(pkg, docs, &notes_part)?;
         if notes::find_user_note(&doc.root, op.kind, &op.note_id).is_none() {
-            let is_sep = notes::seps(&doc.root, op.kind).iter().any(|e| {
-                notes::ids_match(e.attr_local("id").unwrap_or(""), &op.note_id)
-            });
+            let is_sep = notes::seps(&doc.root, op.kind)
+                .iter()
+                .any(|e| notes::ids_match(e.attr_local("id").unwrap_or(""), &op.note_id));
             return Err(Error::with_path(
                 if is_sep {
                     ErrorKind::InvalidId {
@@ -1691,12 +1697,14 @@ fn part_for_para(
             kind, hf_type, n, ..
         } => part_for_hf(catalog, *kind, *hf_type, *n, id, i),
         ParaTarget::InTextBox { host, .. } => part_for_host(catalog, doc_part, host, id, i),
-        ParaTarget::InNote { kind, .. } => notes::part_name(pkg, doc_part, *kind)?.ok_or_else(|| {
-            Error::with_path(
-                ErrorKind::ParaNotFound { id: id.to_string() },
-                format!("ops[{i}].id"),
-            )
-        }),
+        ParaTarget::InNote { kind, .. } => {
+            notes::part_name(pkg, doc_part, *kind)?.ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::ParaNotFound { id: id.to_string() },
+                    format!("ops[{i}].id"),
+                )
+            })
+        }
         ParaTarget::InComment { .. } => Err(Error::with_path(
             ErrorKind::InvalidId {
                 reason: crate::error::IdReason::CommentPrefix,
@@ -1881,8 +1889,8 @@ fn apply_reply_comment(
     op: &ReplyCommentOp,
     i: usize,
 ) -> Result<(), Error> {
-    let comments_part = comments::part_name(pkg, doc_part)?
-        .ok_or_else(|| comments::comment_missing(&op.id, i))?;
+    let comments_part =
+        comments::part_name(pkg, doc_part)?.ok_or_else(|| comments::comment_missing(&op.id, i))?;
     let (parent_last, p_style, r_style) = {
         let doc = load_part(pkg, docs, &comments_part)?;
         let parent = comments::find_comment(&doc.root, &op.comment_id)
@@ -1945,8 +1953,8 @@ fn apply_delete_comment(
     op: &DeleteCommentOp,
     i: usize,
 ) -> Result<(), Error> {
-    let comments_part = comments::part_name(pkg, doc_part)?
-        .ok_or_else(|| comments::comment_missing(&op.id, i))?;
+    let comments_part =
+        comments::part_name(pkg, doc_part)?.ok_or_else(|| comments::comment_missing(&op.id, i))?;
     {
         let comments_doc = load_part(pkg, docs, &comments_part)?;
         if comments::find_comment(&comments_doc.root, &op.comment_id).is_none() {
@@ -1961,11 +1969,7 @@ fn apply_delete_comment(
     };
     let (ids, last_paras, embeds) = {
         let comments_doc = load_part(pkg, docs, &comments_part)?;
-        let ids = comments::cascade_ids(
-            &comments_doc.root,
-            extended_root.as_ref(),
-            &op.comment_id,
-        );
+        let ids = comments::cascade_ids(&comments_doc.root, extended_root.as_ref(), &op.comment_id);
         let mut last_paras = Vec::new();
         let mut embeds = Vec::new();
         for id in &ids {
@@ -1983,7 +1987,7 @@ fn apply_delete_comment(
         if let Ok(m) = picture::resolve_embed(pkg, &comments_part, rid) {
             media.push(m);
         }
-    };
+    }
     let id_set: HashSet<String> = ids.iter().cloned().collect();
     comments::strip_markers_in_hosts(pkg, docs, dirty, doc_part, catalog, &id_set)?;
     {
@@ -2023,8 +2027,8 @@ fn apply_set_comment_text(
     op: &SetCommentTextOp,
     i: usize,
 ) -> Result<(), Error> {
-    let comments_part = comments::part_name(pkg, doc_part)?
-        .ok_or_else(|| comments::comment_missing(&op.id, i))?;
+    let comments_part =
+        comments::part_name(pkg, doc_part)?.ok_or_else(|| comments::comment_missing(&op.id, i))?;
     let old_last = {
         let doc = load_part(pkg, docs, &comments_part)?;
         let comment = comments::find_comment(&doc.root, &op.comment_id)
@@ -2058,8 +2062,8 @@ fn apply_set_comment_meta(
     op: &SetCommentMetaOp,
     i: usize,
 ) -> Result<(), Error> {
-    let comments_part = comments::part_name(pkg, doc_part)?
-        .ok_or_else(|| comments::comment_missing(&op.id, i))?;
+    let comments_part =
+        comments::part_name(pkg, doc_part)?.ok_or_else(|| comments::comment_missing(&op.id, i))?;
     {
         let doc = load_part(pkg, docs, &comments_part)?;
         let comment = comments::find_comment_mut(&mut doc.root, &op.comment_id)
@@ -2093,8 +2097,8 @@ fn apply_set_comment_done(
     op: &SetCommentDoneOp,
     i: usize,
 ) -> Result<(), Error> {
-    let comments_part = comments::part_name(pkg, doc_part)?
-        .ok_or_else(|| comments::comment_missing(&op.id, i))?;
+    let comments_part =
+        comments::part_name(pkg, doc_part)?.ok_or_else(|| comments::comment_missing(&op.id, i))?;
     let last = {
         let doc = load_part(pkg, docs, &comments_part)?;
         let comment = comments::find_comment(&doc.root, &op.comment_id)

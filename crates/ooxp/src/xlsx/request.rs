@@ -470,18 +470,8 @@ fn parse_insert_pic(
         obj,
         i,
         &[
-            "op",
-            "id",
-            "file",
-            "cx",
-            "cy",
-            "from",
-            "to",
-            "anchor",
-            "fromOffX",
-            "fromOffY",
-            "toOffX",
-            "toOffY",
+            "op", "id", "file", "cx", "cy", "from", "to", "anchor", "fromOffX", "fromOffY",
+            "toOffX", "toOffY",
         ],
     )?;
     let id = require_id(obj, i)?;
@@ -559,9 +549,7 @@ fn parse_insert_pic(
     }
     if anchor == picture::AnchorKind::OneCell && to.is_some() {
         return Err(Error::with_path(
-            ErrorKind::UnknownField {
-                field: "to".into(),
-            },
+            ErrorKind::UnknownField { field: "to".into() },
             format!("ops[{i}].to"),
         ));
     }
@@ -619,20 +607,8 @@ fn parse_set_pic_anchor(
         obj,
         i,
         &[
-            "op",
-            "id",
-            "anchor",
-            "from",
-            "to",
-            "fromOffX",
-            "fromOffY",
-            "toOffX",
-            "toOffY",
-            "posX",
-            "posY",
-            "editAs",
-            "cx",
-            "cy",
+            "op", "id", "anchor", "from", "to", "fromOffX", "fromOffY", "toOffX", "toOffY", "posX",
+            "posY", "editAs", "cx", "cy",
         ],
     )?;
     let id = require_id(obj, i)?;
@@ -961,21 +937,8 @@ fn parse_insert_chart(
         obj,
         i,
         &[
-            "op",
-            "id",
-            "type",
-            "title",
-            "series",
-            "cx",
-            "cy",
-            "from",
-            "to",
-            "anchor",
-            "fromOffX",
-            "fromOffY",
-            "toOffX",
-            "toOffY",
-            "dataFrom",
+            "op", "id", "type", "title", "series", "cx", "cy", "from", "to", "anchor", "fromOffX",
+            "fromOffY", "toOffX", "toOffY", "dataFrom",
         ],
     )?;
     if obj.contains_key("kind") {
@@ -1080,9 +1043,7 @@ fn parse_insert_chart(
     }
     if anchor == picture::AnchorKind::OneCell && to.is_some() {
         return Err(Error::with_path(
-            ErrorKind::UnknownField {
-                field: "to".into(),
-            },
+            ErrorKind::UnknownField { field: "to".into() },
             format!("ops[{i}].to"),
         ));
     }
@@ -1155,7 +1116,8 @@ fn parse_insert_series(
                 ));
             }
         };
-        let categories = parse_datum_list(obj.get("categories"), i, &format!("series[{j}].categories"))?;
+        let categories =
+            parse_datum_list(obj.get("categories"), i, &format!("series[{j}].categories"))?;
         let values = parse_datum_list(obj.get("values"), i, &format!("series[{j}].values"))?
             .filter(|v| !v.is_empty())
             .ok_or_else(|| {
@@ -1168,7 +1130,8 @@ fn parse_insert_series(
                 )
             })?;
         let sizes = parse_datum_list(obj.get("sizes"), i, &format!("series[{j}].sizes"))?;
-        let series_type = parse_optional_combo_series_type(obj.get("type"), i, &format!("series[{j}].type"))?;
+        let series_type =
+            parse_optional_combo_series_type(obj.get("type"), i, &format!("series[{j}].type"))?;
         out.push(NewSeries {
             name,
             categories,
@@ -1225,7 +1188,11 @@ fn parse_set_chart_series(
     obj: &serde_json::Map<String, Value>,
     i: usize,
 ) -> Result<SetChartSeriesOp, Error> {
-    deny_keys(obj, i, &["op", "id", "name", "categories", "values", "sizes"])?;
+    deny_keys(
+        obj,
+        i,
+        &["op", "id", "name", "categories", "values", "sizes"],
+    )?;
     let id = require_id(obj, i)?;
     let (target, index) = chart::parse_series_id(&id, i)?;
     let name = match obj.get("name") {
@@ -1481,20 +1448,8 @@ fn parse_set_chart_anchor(
         obj,
         i,
         &[
-            "op",
-            "id",
-            "anchor",
-            "from",
-            "to",
-            "fromOffX",
-            "fromOffY",
-            "toOffX",
-            "toOffY",
-            "posX",
-            "posY",
-            "editAs",
-            "cx",
-            "cy",
+            "op", "id", "anchor", "from", "to", "fromOffX", "fromOffY", "toOffX", "toOffY", "posX",
+            "posY", "editAs", "cx", "cy",
         ],
     )?;
     let id = require_id(obj, i)?;
@@ -1574,15 +1529,10 @@ fn parse_set_chart_anchor(
     Ok(op)
 }
 
-fn parse_chart_type_field(
-    v: Option<&Value>,
-    i: usize,
-    required: bool,
-) -> Result<ChartType, Error> {
+fn parse_chart_type_field(v: Option<&Value>, i: usize, required: bool) -> Result<ChartType, Error> {
     match v {
-        Some(Value::String(s)) => ChartType::parse(s).ok_or_else(|| {
-            Error::with_path(ErrorKind::InvalidChartType, format!("ops[{i}].type"))
-        }),
+        Some(Value::String(s)) => ChartType::parse(s)
+            .ok_or_else(|| Error::with_path(ErrorKind::InvalidChartType, format!("ops[{i}].type"))),
         Some(_) => Err(Error::with_path(
             ErrorKind::WrongType {
                 field: "type".into(),
@@ -1630,11 +1580,7 @@ fn parse_optional_combo_series_type(
     }
 }
 
-fn parse_datum_list(
-    v: Option<&Value>,
-    i: usize,
-    field: &str,
-) -> Result<Option<Vec<Value>>, Error> {
+fn parse_datum_list(v: Option<&Value>, i: usize, field: &str) -> Result<Option<Vec<Value>>, Error> {
     match v {
         None | Some(Value::Null) => Ok(None),
         Some(Value::Array(a)) => {
@@ -1661,12 +1607,7 @@ fn parse_datum_list(
     }
 }
 
-fn parse_required_bool(
-    v: Option<&Value>,
-    i: usize,
-    op: &str,
-    field: &str,
-) -> Result<bool, Error> {
+fn parse_required_bool(v: Option<&Value>, i: usize, op: &str, field: &str) -> Result<bool, Error> {
     match v {
         Some(Value::Bool(b)) => Ok(*b),
         Some(_) => Err(Error::with_path(

@@ -119,10 +119,7 @@ fn write_sample(tag: &str, combo: bool) -> PathBuf {
             ("word/styles.xml", STYLES.as_bytes()),
             ("word/charts/chart1.xml", chart.as_bytes()),
             ("word/charts/_rels/chart1.xml.rels", CHART_RELS.as_bytes()),
-            (
-                "word/embeddings/Microsoft_Excel_Worksheet1.xlsx",
-                &embed,
-            ),
+            ("word/embeddings/Microsoft_Excel_Worksheet1.xlsx", &embed),
         ],
     )
 }
@@ -234,10 +231,7 @@ fn inspect_lists_type_title_and_series() {
     let path = write_sample("list", false);
     let tree = inspect(&path, json!({ "charts": true }));
     assert_eq!(tree["chartCount"], 1);
-    assert_eq!(
-        object_keys(&tree)[object_keys(&tree).len() - 1],
-        "charts"
-    );
+    assert_eq!(object_keys(&tree)[object_keys(&tree).len() - 1], "charts");
     let c = &tree["charts"][0];
     assert_eq!(c["id"], "para:AAAA0001/chart:7");
     assert_eq!(c["docPrId"], "7");
@@ -351,11 +345,36 @@ fn set_series_updates_cache_and_embedding_leaves_other() {
         .iter()
         .map(|c| (c["ref"].as_str().unwrap().to_string(), c["value"].clone()))
         .collect();
-    assert_eq!(by_ref["B2"].as_i64().or_else(|| by_ref["B2"].as_f64().map(|f| f as i64)), Some(100));
-    assert_eq!(by_ref["B3"].as_i64().or_else(|| by_ref["B3"].as_f64().map(|f| f as i64)), Some(200));
-    assert_eq!(by_ref["B4"].as_i64().or_else(|| by_ref["B4"].as_f64().map(|f| f as i64)), Some(300));
-    assert_eq!(by_ref["C2"].as_i64().or_else(|| by_ref["C2"].as_f64().map(|f| f as i64)), Some(10));
-    assert_eq!(by_ref["C4"].as_i64().or_else(|| by_ref["C4"].as_f64().map(|f| f as i64)), Some(30));
+    assert_eq!(
+        by_ref["B2"]
+            .as_i64()
+            .or_else(|| by_ref["B2"].as_f64().map(|f| f as i64)),
+        Some(100)
+    );
+    assert_eq!(
+        by_ref["B3"]
+            .as_i64()
+            .or_else(|| by_ref["B3"].as_f64().map(|f| f as i64)),
+        Some(200)
+    );
+    assert_eq!(
+        by_ref["B4"]
+            .as_i64()
+            .or_else(|| by_ref["B4"].as_f64().map(|f| f as i64)),
+        Some(300)
+    );
+    assert_eq!(
+        by_ref["C2"]
+            .as_i64()
+            .or_else(|| by_ref["C2"].as_f64().map(|f| f as i64)),
+        Some(10)
+    );
+    assert_eq!(
+        by_ref["C4"]
+            .as_i64()
+            .or_else(|| by_ref["C4"].as_f64().map(|f| f as i64)),
+        Some(30)
+    );
 }
 
 #[test]
@@ -439,8 +458,14 @@ fn combo_set_series_keeps_wrappers() {
     );
     let tree = inspect(&out, json!({ "charts": true }));
     assert_eq!(tree["charts"][0]["type"], "combo");
-    assert_eq!(nums(&tree["charts"][0]["series"][0]["values"]), vec![4, 5, 6]);
-    assert_eq!(nums(&tree["charts"][0]["series"][1]["values"]), vec![10, 20, 30]);
+    assert_eq!(
+        nums(&tree["charts"][0]["series"][0]["values"]),
+        vec![4, 5, 6]
+    );
+    assert_eq!(
+        nums(&tree["charts"][0]["series"][1]["values"]),
+        vec![10, 20, 30]
+    );
     let xml = part_text(&out, "word/charts/chart1.xml");
     assert!(xml.contains("barChart"));
     assert!(xml.contains("lineChart"));
@@ -478,10 +503,7 @@ fn export_chart_data_matches_embedding_bytes() {
     let path = write_sample("exp", false);
     let embed = part_bytes(&path, "word/embeddings/Microsoft_Excel_Worksheet1.xlsx");
     let out = tmp_dir().join("chart-data.xlsx");
-    let RunOutput::Written {
-        content_type,
-        ..
-    } = run(
+    let RunOutput::Written { content_type, .. } = run(
         &json!({
             "schemaVersion": 1,
             "action": "exportChartData",
@@ -714,27 +736,37 @@ fn embed_xlsx_bubble() -> Vec<u8> {
 fn chart_xml_kind(kind: &str) -> String {
     let (plot, axes, extra) = match kind {
         "doughnut" => (
-            format!(r#"<c:doughnutChart><c:varyColors val="1"/>{SER0}<c:holeSize val="50"/></c:doughnutChart>"#),
+            format!(
+                r#"<c:doughnutChart><c:varyColors val="1"/>{SER0}<c:holeSize val="50"/></c:doughnutChart>"#
+            ),
             String::new(),
             "",
         ),
         "radar" => (
-            format!(r#"<c:radarChart><c:radarStyle val="marker"/>{SER0}{SER1}<c:axId val="1"/><c:axId val="2"/></c:radarChart>"#),
+            format!(
+                r#"<c:radarChart><c:radarStyle val="marker"/>{SER0}{SER1}<c:axId val="1"/><c:axId val="2"/></c:radarChart>"#
+            ),
             AXES.to_string(),
             "",
         ),
         "bubble" => (
-            format!(r#"<c:bubbleChart><c:varyColors val="0"/>{BUBBLE_SER}<c:bubbleScale val="100"/><c:axId val="1"/><c:axId val="2"/></c:bubbleChart>"#),
+            format!(
+                r#"<c:bubbleChart><c:varyColors val="0"/>{BUBBLE_SER}<c:bubbleScale val="100"/><c:axId val="1"/><c:axId val="2"/></c:bubbleChart>"#
+            ),
             XY_AXES.to_string(),
             "",
         ),
         "stock" => (
-            format!(r#"<c:stockChart>{SER0}{SER1}<c:axId val="1"/><c:axId val="2"/></c:stockChart>"#),
+            format!(
+                r#"<c:stockChart>{SER0}{SER1}<c:axId val="1"/><c:axId val="2"/></c:stockChart>"#
+            ),
             AXES.to_string(),
             "",
         ),
         "pivot" => (
-            format!(r#"<c:barChart><c:barDir val="col"/><c:grouping val="clustered"/>{SER0}{SER1}<c:axId val="1"/><c:axId val="2"/></c:barChart>"#),
+            format!(
+                r#"<c:barChart><c:barDir val="col"/><c:grouping val="clustered"/>{SER0}{SER1}<c:axId val="1"/><c:axId val="2"/></c:barChart>"#
+            ),
             AXES.to_string(),
             r#"<c:pivotSource><c:name>[0]!Pivot</c:name><c:fmtId val="0"/></c:pivotSource>"#,
         ),
@@ -763,10 +795,7 @@ fn write_kind(tag: &str, kind: &str) -> PathBuf {
             ("word/styles.xml", STYLES.as_bytes()),
             ("word/charts/chart1.xml", chart.as_bytes()),
             ("word/charts/_rels/chart1.xml.rels", CHART_RELS.as_bytes()),
-            (
-                "word/embeddings/Microsoft_Excel_Worksheet1.xlsx",
-                &embed,
-            ),
+            ("word/embeddings/Microsoft_Excel_Worksheet1.xlsx", &embed),
         ],
     )
 }
@@ -807,7 +836,10 @@ fn set_doughnut_and_radar_series() {
     );
     let tree = inspect(&out, json!({ "charts": true }));
     assert_eq!(tree["charts"][0]["type"], "doughnut");
-    assert_eq!(nums(&tree["charts"][0]["series"][0]["values"]), vec![9, 8, 7]);
+    assert_eq!(
+        nums(&tree["charts"][0]["series"][0]["values"]),
+        vec![9, 8, 7]
+    );
 
     let path = write_kind("rd-set", "radar");
     let out = tmp_dir().join("rd-set-out.docx");
@@ -822,7 +854,10 @@ fn set_doughnut_and_radar_series() {
     );
     let tree = inspect(&out, json!({ "charts": true }));
     assert_eq!(tree["charts"][0]["type"], "radar");
-    assert_eq!(nums(&tree["charts"][0]["series"][0]["values"]), vec![11, 12, 13]);
+    assert_eq!(
+        nums(&tree["charts"][0]["series"][0]["values"]),
+        vec![11, 12, 13]
+    );
 }
 
 #[test]
@@ -966,7 +1001,10 @@ fn set_type_pie_doughnut_and_scatter_bubble() {
         &out,
         json!([{ "op": "setChartType", "id": "para:AAAA0001/chart:7", "type": "pie" }]),
     );
-    assert_eq!(inspect(&out, json!({ "charts": true }))["charts"][0]["type"], "pie");
+    assert_eq!(
+        inspect(&out, json!({ "charts": true }))["charts"][0]["type"],
+        "pie"
+    );
 
     let path = write_kind("bb-sc", "bubble");
     let out = tmp_dir().join("bb-sc-out.docx");

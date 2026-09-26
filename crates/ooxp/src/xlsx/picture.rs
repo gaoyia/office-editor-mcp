@@ -202,7 +202,10 @@ pub fn parse_pic_id_at(id: &str, field_path: &str) -> Result<SheetPicId, Error> 
 }
 
 fn invalid_id(reason: IdReason, op_index: usize) -> Error {
-    Error::with_path(ErrorKind::InvalidId { reason }, format!("ops[{op_index}].id"))
+    Error::with_path(
+        ErrorKind::InvalidId { reason },
+        format!("ops[{op_index}].id"),
+    )
 }
 
 pub fn collect_sheet_pictures(
@@ -303,14 +306,8 @@ pub fn replace_picture(
     let path = format!("ops[{op_index}].id");
     let drawing_part = find_drawing_for(pkg, sheet_part, &op.target, &op.id, &path)?;
     let doc = xml::parse(pkg.get(&drawing_part)?)?;
-    let rid = find_blip_embed(&doc.root, &op.target.key).ok_or_else(|| {
-        Error::with_path(
-            ErrorKind::PictureNotFound {
-                id: op.id.clone(),
-            },
-            path,
-        )
-    })?;
+    let rid = find_blip_embed(&doc.root, &op.target.key)
+        .ok_or_else(|| Error::with_path(ErrorKind::PictureNotFound { id: op.id.clone() }, path))?;
     let old_media = crate::opc::resolve_id(pkg, &drawing_part, &rid)?;
     let image = read_image(&op.file).map_err(|e| e.at(format!("ops[{op_index}].file")))?;
     let media = next_media_part(pkg, &image.ext);
@@ -386,18 +383,14 @@ pub fn delete_picture(
     let mut doc = xml::parse(pkg.get(&drawing_part)?)?;
     let rid = find_blip_rid(&doc.root, &op.target.key).ok_or_else(|| {
         Error::with_path(
-            ErrorKind::PictureNotFound {
-                id: op.id.clone(),
-            },
+            ErrorKind::PictureNotFound { id: op.id.clone() },
             path.clone(),
         )
     })?;
     let media = crate::opc::resolve_id(pkg, &drawing_part, &rid).ok();
     if !remove_anchor(&mut doc.root, &op.target.key) {
         return Err(Error::with_path(
-            ErrorKind::PictureNotFound {
-                id: op.id.clone(),
-            },
+            ErrorKind::PictureNotFound { id: op.id.clone() },
             path,
         ));
     }
@@ -437,9 +430,7 @@ pub fn set_picture_size(
     let mut doc = xml::parse(pkg.get(&drawing_part)?)?;
     let kind = find_anchor_kind(&doc.root, &op.target.key).ok_or_else(|| {
         Error::with_path(
-            ErrorKind::PictureNotFound {
-                id: op.id.clone(),
-            },
+            ErrorKind::PictureNotFound { id: op.id.clone() },
             path.clone(),
         )
     })?;
@@ -448,9 +439,7 @@ pub fn set_picture_size(
     }
     if !update_extent(&mut doc.root, &op.target.key, op.cx, op.cy) {
         return Err(Error::with_path(
-            ErrorKind::PictureNotFound {
-                id: op.id.clone(),
-            },
+            ErrorKind::PictureNotFound { id: op.id.clone() },
             path,
         ));
     }
@@ -469,9 +458,7 @@ pub fn set_picture_anchor(
     let mut doc = xml::parse(pkg.get(&drawing_part)?)?;
     let current = find_anchor_kind(&doc.root, &op.target.key).ok_or_else(|| {
         Error::with_path(
-            ErrorKind::PictureNotFound {
-                id: op.id.clone(),
-            },
+            ErrorKind::PictureNotFound { id: op.id.clone() },
             path.clone(),
         )
     })?;
@@ -485,9 +472,7 @@ pub fn set_picture_anchor(
         }
         if !update_absolute_pos(&mut doc.root, &op.target.key, op.pos_x, op.pos_y) {
             return Err(Error::with_path(
-                ErrorKind::PictureNotFound {
-                    id: op.id.clone(),
-                },
+                ErrorKind::PictureNotFound { id: op.id.clone() },
                 path,
             ));
         }
@@ -502,9 +487,7 @@ pub fn set_picture_anchor(
     ensure_xmlns(&mut doc.root, "a", A_NS);
     let snapshot = snapshot_anchor(&doc.root, &op.target.key).ok_or_else(|| {
         Error::with_path(
-            ErrorKind::PictureNotFound {
-                id: op.id.clone(),
-            },
+            ErrorKind::PictureNotFound { id: op.id.clone() },
             path.clone(),
         )
     })?;
@@ -838,8 +821,16 @@ fn pic_info(
         },
         pos_x,
         pos_y,
-        cx: if kind == AnchorKind::TwoCell { None } else { cx },
-        cy: if kind == AnchorKind::TwoCell { None } else { cy },
+        cx: if kind == AnchorKind::TwoCell {
+            None
+        } else {
+            cx
+        },
+        cy: if kind == AnchorKind::TwoCell {
+            None
+        } else {
+            cy
+        },
         edit_as: if kind == AnchorKind::TwoCell {
             Some(parse_edit_as(anchor.attr("editAs")))
         } else {
@@ -894,15 +885,23 @@ pub(crate) fn read_marker(el: Option<&Element>) -> (Option<a1::CellRef>, i64, i6
 
 pub(crate) fn read_ext(anchor: &Element) -> (Option<i64>, Option<i64>) {
     let ext = anchor.child_by_local("ext");
-    let cx = ext.and_then(|e| e.attr_local("cx")).and_then(|s| s.parse().ok());
-    let cy = ext.and_then(|e| e.attr_local("cy")).and_then(|s| s.parse().ok());
+    let cx = ext
+        .and_then(|e| e.attr_local("cx"))
+        .and_then(|s| s.parse().ok());
+    let cy = ext
+        .and_then(|e| e.attr_local("cy"))
+        .and_then(|s| s.parse().ok());
     (cx, cy)
 }
 
 pub(crate) fn read_pos(anchor: &Element) -> (Option<i64>, Option<i64>) {
     let pos = anchor.child_by_local("pos");
-    let x = pos.and_then(|e| e.attr_local("x")).and_then(|s| s.parse().ok());
-    let y = pos.and_then(|e| e.attr_local("y")).and_then(|s| s.parse().ok());
+    let x = pos
+        .and_then(|e| e.attr_local("x"))
+        .and_then(|s| s.parse().ok());
+    let y = pos
+        .and_then(|e| e.attr_local("y"))
+        .and_then(|s| s.parse().ok());
     (x, y)
 }
 
@@ -1291,7 +1290,7 @@ pub(crate) fn next_cnv_id(pkg: &Package, sheet_part: &str) -> Result<u32, Error>
             }
         });
     }
-    Ok(max + 1.max(1))
+    Ok(max + 1)
 }
 
 fn next_media_part(pkg: &Package, ext: &str) -> String {
@@ -1397,9 +1396,11 @@ pub(crate) fn ensure_xmlns(root: &mut Element, prefix: &str, ns: &str) {
 }
 
 pub(crate) fn set_attr_local(el: &mut Element, local: &str, value: &str) {
-    if let Some((k, _)) = el.attrs.iter().find(|(k, _)| {
-        k.rsplit(':').next().unwrap_or(k) == local
-    }) {
+    if let Some((k, _)) = el
+        .attrs
+        .iter()
+        .find(|(k, _)| k.rsplit(':').next().unwrap_or(k) == local)
+    {
         let name = k.clone();
         el.set_attr(&name, value);
         return;
@@ -1450,12 +1451,7 @@ pub(crate) fn build_anchor(
     match kind {
         AnchorKind::TwoCell => {
             anchor.push_element(marker_el("xdr:from", from, from_off_x, from_off_y));
-            anchor.push_element(marker_el(
-                "xdr:to",
-                to.unwrap_or(from),
-                to_off_x,
-                to_off_y,
-            ));
+            anchor.push_element(marker_el("xdr:to", to.unwrap_or(from), to_off_x, to_off_y));
         }
         AnchorKind::OneCell => {
             anchor.push_element(marker_el("xdr:from", from, from_off_x, from_off_y));
@@ -1650,7 +1646,7 @@ fn jpeg_size(bytes: &[u8]) -> Option<(i64, i64)> {
             break;
         }
         let len = u16::from_be_bytes([bytes[i + 2], bytes[i + 3]]) as usize;
-        if matches!(marker, 0xC0 | 0xC1 | 0xC2) && i + 8 < bytes.len() {
+        if matches!(marker, 0xC0..=0xC2) && i + 8 < bytes.len() {
             let h = u16::from_be_bytes([bytes[i + 5], bytes[i + 6]]) as u32;
             let w = u16::from_be_bytes([bytes[i + 7], bytes[i + 8]]) as u32;
             return Some((px_to_emu(w), px_to_emu(h)));

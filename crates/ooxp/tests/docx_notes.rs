@@ -171,22 +171,24 @@ fn inspect_counts_without_lists() {
 #[test]
 fn inspect_notes_lists_hosts_and_separators() {
     let path = write_sample("lists");
-    let tree = inspect(
-        &path,
-        json!({ "from": 1, "maxParas": 20, "notes": true }),
-    );
+    let tree = inspect(&path, json!({ "from": 1, "maxParas": 20, "notes": true }));
     assert_eq!(tree["footnotes"][0]["id"], "footnote:2");
     assert_eq!(tree["footnotes"][0]["noteId"], "2");
     assert_eq!(tree["footnotes"][0]["type"], "normal");
     assert_eq!(tree["footnotes"][0]["host"][0], "para:AAAA0002");
     assert_eq!(tree["footnotes"][0]["paraCount"], 1);
-    assert_eq!(tree["footnotes"][0]["paragraphs"][0]["id"], "footnote:2/para:F00A0002");
+    assert_eq!(
+        tree["footnotes"][0]["paragraphs"][0]["id"],
+        "footnote:2/para:F00A0002"
+    );
     assert_eq!(tree["footnotes"][0]["paragraphs"][0]["text"], "脚注原文");
     assert_eq!(tree["endnotes"][0]["id"], "endnote:2");
     assert_eq!(tree["endnotes"][0]["host"][0], "para:AAAA0002");
     let seps = tree["noteSeparators"].as_array().unwrap();
     assert!(seps.iter().any(|s| s["id"] == "footnote:sep:separator"));
-    assert!(seps.iter().any(|s| s["id"] == "endnote:sep:continuationSeparator"));
+    assert!(seps
+        .iter()
+        .any(|s| s["id"] == "endnote:sep:continuationSeparator"));
     assert_eq!(tree["paragraphs"][1]["footnoteRef"][0], "footnote:2");
     assert_eq!(tree["paragraphs"][1]["endnoteRef"][0], "endnote:2");
     assert!(tree["paragraphs"][0].get("footnoteRef").is_none());
@@ -239,7 +241,10 @@ fn insert_and_delete_footnote() {
             "text": "新脚注"
         }]),
     );
-    let tree = inspect(&inserted, json!({ "from": 1, "maxParas": 20, "notes": true }));
+    let tree = inspect(
+        &inserted,
+        json!({ "from": 1, "maxParas": 20, "notes": true }),
+    );
     assert_eq!(tree["footnoteCount"], 2);
     let new_id = tree["footnotes"][1]["id"].as_str().unwrap();
     assert_eq!(new_id, "footnote:3");
@@ -256,7 +261,10 @@ fn insert_and_delete_footnote() {
         &deleted,
         json!([{ "op": "deleteFootnote", "id": "footnote:3" }]),
     );
-    let tree = inspect(&deleted, json!({ "from": 1, "maxParas": 20, "notes": true }));
+    let tree = inspect(
+        &deleted,
+        json!({ "from": 1, "maxParas": 20, "notes": true }),
+    );
     assert_eq!(tree["footnoteCount"], 1);
     assert!(tree["paragraphs"][2].get("footnoteRef").is_none());
     assert!(part_text(&deleted, "word/footnotes.xml").contains(r#"w:type="separator""#));

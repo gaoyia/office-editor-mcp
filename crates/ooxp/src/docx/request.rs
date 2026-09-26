@@ -9,7 +9,9 @@ use crate::json;
 
 use super::charts::{self, ChartType, NewSeries};
 use super::hf::{HfKind, HfType};
-use super::para::{self, BodyPara, CommentIdTarget, NoteIdTarget, NoteKind, ParaTarget, TxbxTarget};
+use super::para::{
+    self, BodyPara, CommentIdTarget, NoteIdTarget, NoteKind, ParaTarget, TxbxTarget,
+};
 use super::picture::{self, AlignH, AlignV, PicKind, PicTarget, WrapKind, WrapPos};
 
 #[derive(Debug, Clone)]
@@ -570,25 +572,21 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<DocxOp>, Error> {
             "setChartTitle" => out.push(DocxOp::SetChartTitle(parse_set_chart_title(obj, i)?)),
             "setChartSeries" => out.push(DocxOp::SetChartSeries(parse_set_chart_series(obj, i)?)),
             "addChartSeries" => out.push(DocxOp::AddChartSeries(parse_add_chart_series(obj, i)?)),
-            "deleteChartSeries" => {
-                out.push(DocxOp::DeleteChartSeries(parse_delete_chart_series(obj, i)?))
-            }
+            "deleteChartSeries" => out.push(DocxOp::DeleteChartSeries(parse_delete_chart_series(
+                obj, i,
+            )?)),
             "setChartType" => out.push(DocxOp::SetChartType(parse_set_chart_type(obj, i)?)),
-            "setChartAxisTitle" => {
-                out.push(DocxOp::SetChartAxisTitle(parse_set_chart_axis_title(obj, i)?))
-            }
+            "setChartAxisTitle" => out.push(DocxOp::SetChartAxisTitle(parse_set_chart_axis_title(
+                obj, i,
+            )?)),
             "setChartLegend" => out.push(DocxOp::SetChartLegend(parse_set_chart_legend(obj, i)?)),
-            "setChartDataLabels" => {
-                out.push(DocxOp::SetChartDataLabels(parse_set_chart_data_labels(obj, i)?))
-            }
+            "setChartDataLabels" => out.push(DocxOp::SetChartDataLabels(
+                parse_set_chart_data_labels(obj, i)?,
+            )),
             "setChartSize" => out.push(DocxOp::SetChartSize(parse_set_chart_size(obj, i)?)),
             "setChartWrap" => out.push(DocxOp::SetChartWrap(parse_set_chart_wrap(obj, i)?)),
-            "insertSmartArt" => {
-                out.push(DocxOp::InsertSmartArt(parse_insert_smartart(obj, i)?))
-            }
-            "deleteSmartArt" => {
-                out.push(DocxOp::DeleteSmartArt(parse_delete_smartart(obj, i)?))
-            }
+            "insertSmartArt" => out.push(DocxOp::InsertSmartArt(parse_insert_smartart(obj, i)?)),
+            "deleteSmartArt" => out.push(DocxOp::DeleteSmartArt(parse_delete_smartart(obj, i)?)),
             "setSmartArtText" => {
                 out.push(DocxOp::SetSmartArtText(parse_set_smartart_text(obj, i)?))
             }
@@ -604,15 +602,15 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<DocxOp>, Error> {
             "setSmartArtWrap" => {
                 out.push(DocxOp::SetSmartArtWrap(parse_set_smartart_wrap(obj, i)?))
             }
-            "setSmartArtColors" => {
-                out.push(DocxOp::SetSmartArtColors(parse_set_smartart_colors(obj, i)?))
-            }
+            "setSmartArtColors" => out.push(DocxOp::SetSmartArtColors(parse_set_smartart_colors(
+                obj, i,
+            )?)),
             "setSmartArtStyle" => {
                 out.push(DocxOp::SetSmartArtStyle(parse_set_smartart_style(obj, i)?))
             }
-            "setSmartArtLayout" => {
-                out.push(DocxOp::SetSmartArtLayout(parse_set_smartart_layout(obj, i)?))
-            }
+            "setSmartArtLayout" => out.push(DocxOp::SetSmartArtLayout(parse_set_smartart_layout(
+                obj, i,
+            )?)),
             _ => {
                 return Err(Error::with_path(
                     ErrorKind::UnsupportedOp {
@@ -1710,10 +1708,7 @@ fn parse_set_txbx_link(
     })
 }
 
-fn parse_optional_text(
-    obj: &serde_json::Map<String, Value>,
-    i: usize,
-) -> Result<String, Error> {
+fn parse_optional_text(obj: &serde_json::Map<String, Value>, i: usize) -> Result<String, Error> {
     match obj.get("text") {
         None => Ok(String::new()),
         Some(Value::String(s)) => Ok(s.clone()),
@@ -1744,7 +1739,10 @@ fn parse_insert_note(
         ));
     }
     let host = para::parse_para_id_at(&id, &path)?;
-    if matches!(host, ParaTarget::InNote { .. } | ParaTarget::InComment { .. }) {
+    if matches!(
+        host,
+        ParaTarget::InNote { .. } | ParaTarget::InComment { .. }
+    ) {
         return Err(Error::with_path(
             ErrorKind::InvalidId {
                 reason: crate::error::IdReason::NotePrefix,
@@ -1828,9 +1826,8 @@ fn parse_set_note_numbering(
             format!("ops[{i}].kind"),
         )
     })?;
-    let kind = NoteKind::parse(kind_s).ok_or_else(|| {
-        Error::with_path(ErrorKind::InvalidNoteKind, format!("ops[{i}].kind"))
-    })?;
+    let kind = NoteKind::parse(kind_s)
+        .ok_or_else(|| Error::with_path(ErrorKind::InvalidNoteKind, format!("ops[{i}].kind")))?;
     let num_fmt = match obj.get("numFmt") {
         None => None,
         Some(Value::String(s)) => {
@@ -2234,9 +2231,8 @@ fn parse_insert_chart(
     }
     let kind = match obj.get("kind") {
         None => PicKind::Anchor,
-        Some(Value::String(s)) => picture::parse_pic_kind(s).ok_or_else(|| {
-            Error::with_path(ErrorKind::InvalidPicKind, format!("ops[{i}].kind"))
-        })?,
+        Some(Value::String(s)) => picture::parse_pic_kind(s)
+            .ok_or_else(|| Error::with_path(ErrorKind::InvalidPicKind, format!("ops[{i}].kind")))?,
         Some(_) => {
             return Err(Error::with_path(
                 ErrorKind::WrongType {
@@ -2350,7 +2346,8 @@ fn parse_insert_series(
                 ));
             }
         };
-        let categories = parse_datum_list(obj.get("categories"), i, &format!("series[{j}].categories"))?;
+        let categories =
+            parse_datum_list(obj.get("categories"), i, &format!("series[{j}].categories"))?;
         let values = parse_datum_list(obj.get("values"), i, &format!("series[{j}].values"))?
             .filter(|v| !v.is_empty())
             .ok_or_else(|| {
@@ -2363,11 +2360,8 @@ fn parse_insert_series(
                 )
             })?;
         let sizes = parse_datum_list(obj.get("sizes"), i, &format!("series[{j}].sizes"))?;
-        let series_type = parse_optional_combo_series_type(
-            obj.get("type"),
-            i,
-            &format!("series[{j}].type"),
-        )?;
+        let series_type =
+            parse_optional_combo_series_type(obj.get("type"), i, &format!("series[{j}].type"))?;
         out.push(NewSeries {
             name,
             categories,
@@ -2424,7 +2418,11 @@ fn parse_set_chart_series(
     obj: &serde_json::Map<String, Value>,
     i: usize,
 ) -> Result<charts::SetChartSeriesOp, Error> {
-    deny_keys(obj, i, &["op", "id", "name", "categories", "values", "sizes"])?;
+    deny_keys(
+        obj,
+        i,
+        &["op", "id", "name", "categories", "values", "sizes"],
+    )?;
     let id = require_id(obj, i)?;
     let target = charts::parse_series_id(&id, i)?;
     let name = match obj.get("name") {
@@ -2463,7 +2461,11 @@ fn parse_add_chart_series(
     obj: &serde_json::Map<String, Value>,
     i: usize,
 ) -> Result<charts::AddChartSeriesOp, Error> {
-    deny_keys(obj, i, &["op", "id", "name", "categories", "values", "sizes", "type"])?;
+    deny_keys(
+        obj,
+        i,
+        &["op", "id", "name", "categories", "values", "sizes", "type"],
+    )?;
     let id = require_id(obj, i)?;
     let target = charts::parse_chart_id(&id, i)?;
     let name = match obj.get("name") {
@@ -2775,11 +2777,12 @@ fn parse_optional_combo_series_type(
 ) -> Result<Option<ChartType>, Error> {
     match v {
         None | Some(Value::Null) => Ok(None),
-        Some(Value::String(s)) => ChartType::parse_combo_series(s)
-            .map(Some)
-            .ok_or_else(|| {
-                Error::with_path(ErrorKind::InvalidComboSeriesType, format!("ops[{i}].{field}"))
-            }),
+        Some(Value::String(s)) => ChartType::parse_combo_series(s).map(Some).ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::InvalidComboSeriesType,
+                format!("ops[{i}].{field}"),
+            )
+        }),
         Some(_) => Err(Error::with_path(
             ErrorKind::WrongType {
                 field: field.into(),
@@ -2792,9 +2795,8 @@ fn parse_optional_combo_series_type(
 
 fn parse_chart_type_field(v: Option<&Value>, i: usize, required: bool) -> Result<ChartType, Error> {
     match v {
-        Some(Value::String(s)) => ChartType::parse(s).ok_or_else(|| {
-            Error::with_path(ErrorKind::InvalidChartType, format!("ops[{i}].type"))
-        }),
+        Some(Value::String(s)) => ChartType::parse(s)
+            .ok_or_else(|| Error::with_path(ErrorKind::InvalidChartType, format!("ops[{i}].type"))),
         Some(_) => Err(Error::with_path(
             ErrorKind::WrongType {
                 field: "type".into(),
@@ -2819,12 +2821,7 @@ fn parse_chart_type_field(v: Option<&Value>, i: usize, required: bool) -> Result
     }
 }
 
-fn parse_required_bool(
-    v: Option<&Value>,
-    i: usize,
-    op: &str,
-    field: &str,
-) -> Result<bool, Error> {
+fn parse_required_bool(v: Option<&Value>, i: usize, op: &str, field: &str) -> Result<bool, Error> {
     match v {
         Some(Value::Bool(b)) => Ok(*b),
         Some(_) => Err(Error::with_path(
@@ -2844,11 +2841,7 @@ fn parse_required_bool(
     }
 }
 
-fn parse_datum_list(
-    v: Option<&Value>,
-    i: usize,
-    field: &str,
-) -> Result<Option<Vec<Value>>, Error> {
+fn parse_datum_list(v: Option<&Value>, i: usize, field: &str) -> Result<Option<Vec<Value>>, Error> {
     match v {
         None | Some(Value::Null) => Ok(None),
         Some(Value::Array(a)) => {
@@ -3103,7 +3096,8 @@ fn parse_set_smartart_colors(
     deny_keys(obj, i, &["op", "id", "colors"])?;
     let id = require_id(obj, i)?;
     let target = super::smartart::parse_diagram_id(&id, i)?;
-    let colors = super::smartart::parse_colors_field(obj.get("colors"), &format!("ops[{i}].colors"))?;
+    let colors =
+        super::smartart::parse_colors_field(obj.get("colors"), &format!("ops[{i}].colors"))?;
     Ok(super::smartart::SetSmartArtColorsOp { id, target, colors })
 }
 
@@ -3125,6 +3119,7 @@ fn parse_set_smartart_layout(
     deny_keys(obj, i, &["op", "id", "layout"])?;
     let id = require_id(obj, i)?;
     let target = super::smartart::parse_diagram_id(&id, i)?;
-    let layout = super::smartart::parse_layout_field(obj.get("layout"), &format!("ops[{i}].layout"))?;
+    let layout =
+        super::smartart::parse_layout_field(obj.get("layout"), &format!("ops[{i}].layout"))?;
     Ok(super::smartart::SetSmartArtLayoutOp { id, target, layout })
 }

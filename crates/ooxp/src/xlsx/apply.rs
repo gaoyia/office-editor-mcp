@@ -34,7 +34,10 @@ pub fn apply(bytes: &[u8], ops: &[XlsxOp]) -> Result<Vec<u8>, Error> {
                             .iter()
                             .any(|(n, _, _)| n.eq_ignore_ascii_case(&sheet_name))
                         {
-                            Error::with_path(ErrorKind::SetCellWorksheetOnly, format!("ops[{i}].id"))
+                            Error::with_path(
+                                ErrorKind::SetCellWorksheetOnly,
+                                format!("ops[{i}].id"),
+                            )
                         } else {
                             Error::with_path(
                                 ErrorKind::SheetNotFound {

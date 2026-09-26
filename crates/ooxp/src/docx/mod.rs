@@ -3,7 +3,6 @@
 mod apply;
 mod charts;
 mod comments;
-mod smartart;
 mod create;
 mod export;
 mod hf;
@@ -12,6 +11,7 @@ mod notes;
 mod para;
 mod picture;
 mod request;
+mod smartart;
 mod textbox;
 
 pub use apply::apply;

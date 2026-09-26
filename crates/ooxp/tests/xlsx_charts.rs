@@ -185,12 +185,20 @@ fn insert_inspect_series_type_delete() {
 
     let cells = inspect_cells(&inserted, "A10:B13");
     let list = cells["sheets"][0]["cells"].as_array().unwrap();
-    assert!(list.iter().any(|c| c["id"] == "cell:Sheet1!B10" && c["value"] == "Q1"));
-    assert!(list.iter().any(|c| c["id"] == "cell:Sheet1!A11" && c["value"] == "甲"));
-    assert!(list.iter().any(|c| c["id"] == "cell:Sheet1!B11" && c["value"] == 1));
+    assert!(list
+        .iter()
+        .any(|c| c["id"] == "cell:Sheet1!B10" && c["value"] == "Q1"));
+    assert!(list
+        .iter()
+        .any(|c| c["id"] == "cell:Sheet1!A11" && c["value"] == "甲"));
+    assert!(list
+        .iter()
+        .any(|c| c["id"] == "cell:Sheet1!B11" && c["value"] == 1));
 
     let chart_xml = part_text(&inserted, "xl/charts/chart1.xml");
-    assert!(chart_xml.contains("<c:f>Sheet1!$B$11:$B$13</c:f>") || chart_xml.contains("Sheet1!$B$11"));
+    assert!(
+        chart_xml.contains("<c:f>Sheet1!$B$11:$B$13</c:f>") || chart_xml.contains("Sheet1!$B$11")
+    );
     assert!(!chart_xml.contains("externalData"));
 
     let updated = tmp("ser");
@@ -205,10 +213,15 @@ fn insert_inspect_series_type_delete() {
     )
     .unwrap();
     let after = inspect_charts(&updated);
-    assert_eq!(after["sheets"][0]["charts"][0]["series"][0]["values"], json!([10, 20, 30]));
+    assert_eq!(
+        after["sheets"][0]["charts"][0]["series"][0]["values"],
+        json!([10, 20, 30])
+    );
     let cells2 = inspect_cells(&updated, "B11:B13");
     let list2 = cells2["sheets"][0]["cells"].as_array().unwrap();
-    assert!(list2.iter().any(|c| c["id"] == "cell:Sheet1!B11" && c["value"] == 10));
+    assert!(list2
+        .iter()
+        .any(|c| c["id"] == "cell:Sheet1!B11" && c["value"] == 10));
 
     let lined = tmp("line");
     apply(
@@ -235,7 +248,10 @@ fn insert_inspect_series_type_delete() {
         }]),
     )
     .unwrap();
-    assert_eq!(inspect_charts(&titled)["sheets"][0]["charts"][0]["title"], "新标题");
+    assert_eq!(
+        inspect_charts(&titled)["sheets"][0]["charts"][0]["title"],
+        "新标题"
+    );
 
     let sized = tmp("size");
     apply(
@@ -264,7 +280,9 @@ fn insert_inspect_series_type_delete() {
     assert_eq!(after_del["sheets"][0]["charts"], json!([]));
     let cells3 = inspect_cells(&deleted, "A10:B13");
     let list3 = cells3["sheets"][0]["cells"].as_array().unwrap();
-    assert!(list3.iter().any(|c| c["id"] == "cell:Sheet1!B10" && c["value"] == "Q1"));
+    assert!(list3
+        .iter()
+        .any(|c| c["id"] == "cell:Sheet1!B10" && c["value"] == "Q1"));
 }
 
 #[test]
@@ -427,9 +445,15 @@ fn create_writes_worksheet_chart() {
 
     let cells = inspect_cells(&path, "A10:B13");
     let list = cells["sheets"][0]["cells"].as_array().unwrap();
-    assert!(list.iter().any(|c| c["id"] == "cell:Sheet1!B10" && c["value"] == "Q1"));
-    assert!(list.iter().any(|c| c["id"] == "cell:Sheet1!A11" && c["value"] == "甲"));
-    assert!(list.iter().any(|c| c["id"] == "cell:Sheet1!B11" && c["value"] == 1));
+    assert!(list
+        .iter()
+        .any(|c| c["id"] == "cell:Sheet1!B10" && c["value"] == "Q1"));
+    assert!(list
+        .iter()
+        .any(|c| c["id"] == "cell:Sheet1!A11" && c["value"] == "甲"));
+    assert!(list
+        .iter()
+        .any(|c| c["id"] == "cell:Sheet1!B11" && c["value"] == 1));
 
     let chart_xml = part_text(&path, "xl/charts/chart1.xml");
     assert!(chart_xml.contains("Sheet1!$B$11"));

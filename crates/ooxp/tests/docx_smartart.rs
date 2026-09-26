@@ -518,10 +518,7 @@ fn header_smartart_lists_and_set_text() {
         None,
     )
     .unwrap();
-    let tree = inspect(
-        &path,
-        json!({ "headerFooter": true, "smartArt": true }),
-    );
+    let tree = inspect(&path, json!({ "headerFooter": true, "smartArt": true }));
     assert_eq!(tree["smartArtCount"], 0);
     assert!(tree.get("smartArts").is_some());
     assert_eq!(tree["smartArts"].as_array().unwrap().len(), 0);
@@ -541,7 +538,10 @@ fn header_smartart_lists_and_set_text() {
         json!([{ "op": "setSmartArtText", "id": pt, "text": "眉新" }]),
     );
     let tree = inspect(&out, json!({ "headerFooter": true, "smartArt": true }));
-    assert_eq!(tree["headers"][0]["smartArts"][0]["points"][1]["text"], "眉新");
+    assert_eq!(
+        tree["headers"][0]["smartArts"][0]["points"][1]["text"],
+        "眉新"
+    );
 }
 
 #[test]

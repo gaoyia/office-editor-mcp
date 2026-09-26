@@ -29,10 +29,7 @@ pub enum ParaTarget {
         para: BodyPara,
     },
     /// 批注里的段落。
-    InComment {
-        comment_id: String,
-        para: BodyPara,
-    },
+    InComment { comment_id: String, para: BodyPara },
 }
 
 /// 脚注或尾注。
@@ -111,8 +108,15 @@ impl NoteKind {
 
 #[derive(Debug, Clone)]
 pub enum NoteIdTarget {
-    Container { kind: NoteKind, note_id: String },
-    Para { kind: NoteKind, note_id: String, para: BodyPara },
+    Container {
+        kind: NoteKind,
+        note_id: String,
+    },
+    Para {
+        kind: NoteKind,
+        note_id: String,
+        para: BodyPara,
+    },
     Sep,
 }
 
@@ -237,10 +241,9 @@ pub fn parse_para_id_at(id: &str, path: &str) -> Result<ParaTarget, Error> {
                 },
                 path,
             )),
-            CommentIdTarget::Para { comment_id, para } => Ok(ParaTarget::InComment {
-                comment_id,
-                para,
-            }),
+            CommentIdTarget::Para { comment_id, para } => {
+                Ok(ParaTarget::InComment { comment_id, para })
+            }
         };
     }
     match parse_host_para_id(id, &path)? {

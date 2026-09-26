@@ -78,7 +78,10 @@ fn write_sample(tag: &str) -> PathBuf {
             ("word/comments.xml", COMMENTS.as_bytes()),
             ("word/commentsExtended.xml", COMMENTS_EX.as_bytes()),
             ("word/commentsIds.xml", COMMENTS_IDS.as_bytes()),
-            ("word/commentsExtensible.xml", COMMENTS_EXTENSIBLE.as_bytes()),
+            (
+                "word/commentsExtensible.xml",
+                COMMENTS_EXTENSIBLE.as_bytes(),
+            ),
             ("word/people.xml", PEOPLE.as_bytes()),
         ],
     )
@@ -96,7 +99,10 @@ fn write_ink_sample(tag: &str) -> PathBuf {
             ("word/comments.xml", INK_COMMENTS.as_bytes()),
             ("word/commentsExtended.xml", COMMENTS_EX.as_bytes()),
             ("word/commentsIds.xml", COMMENTS_IDS.as_bytes()),
-            ("word/commentsExtensible.xml", COMMENTS_EXTENSIBLE.as_bytes()),
+            (
+                "word/commentsExtensible.xml",
+                COMMENTS_EXTENSIBLE.as_bytes(),
+            ),
             ("word/people.xml", PEOPLE.as_bytes()),
         ],
     )
@@ -228,7 +234,10 @@ fn inspect_lists_parent_range_and_comment_ids() {
     assert_eq!(tree["comments"][0]["kind"], "normal");
     assert_eq!(tree["comments"][0]["start"], "para:AAAA0001");
     assert_eq!(tree["comments"][0]["end"], "para:AAAA0001");
-    assert_eq!(tree["comments"][0]["paragraphs"][0]["id"], "comment:0/para:C0000001");
+    assert_eq!(
+        tree["comments"][0]["paragraphs"][0]["id"],
+        "comment:0/para:C0000001"
+    );
     assert_eq!(tree["comments"][0]["paragraphs"][0]["text"], "批注甲");
 
     assert_eq!(tree["comments"][1]["id"], "comment:1");

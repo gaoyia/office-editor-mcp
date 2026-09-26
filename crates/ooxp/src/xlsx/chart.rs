@@ -151,7 +151,10 @@ pub fn parse_series_id(id: &str, op_index: usize) -> Result<(SheetChartId, usize
 }
 
 fn invalid_id(reason: IdReason, op_index: usize) -> Error {
-    Error::with_path(ErrorKind::InvalidId { reason }, format!("ops[{op_index}].id"))
+    Error::with_path(
+        ErrorKind::InvalidId { reason },
+        format!("ops[{op_index}].id"),
+    )
 }
 
 pub fn collect_sheet_charts(
@@ -320,8 +323,16 @@ fn chart_info(
         },
         pos_x,
         pos_y,
-        cx: if kind == AnchorKind::TwoCell { None } else { cx },
-        cy: if kind == AnchorKind::TwoCell { None } else { cy },
+        cx: if kind == AnchorKind::TwoCell {
+            None
+        } else {
+            cx
+        },
+        cy: if kind == AnchorKind::TwoCell {
+            None
+        } else {
+            cy
+        },
         edit_as: if kind == AnchorKind::TwoCell {
             Some(picture::parse_edit_as(anchor.attr("editAs")))
         } else {
@@ -422,7 +433,10 @@ pub fn insert_chart(
     cts.set_override(&drawing_part, picture::CT_DRAWING)?;
     cts.write_to(pkg)?;
     let cnv = picture::next_cnv_id(pkg, sheet_part)?;
-    let (cx, cy) = (op.cx.unwrap_or(chart::DEFAULT_CX), op.cy.unwrap_or(chart::DEFAULT_CY));
+    let (cx, cy) = (
+        op.cx.unwrap_or(chart::DEFAULT_CX),
+        op.cy.unwrap_or(chart::DEFAULT_CY),
+    );
     let frame = build_graphic_frame(cnv, &format!("图表 {cnv}"), &rid, cx, cy);
     let anchor = picture::build_anchor(
         op.anchor,
@@ -465,19 +479,12 @@ pub fn delete_chart(
     let drawing_part = find_drawing_for(pkg, sheet_part, &op.target, &op.id, &path)?;
     let mut doc = xml::parse(pkg.get(&drawing_part)?)?;
     let rid = find_chart_rid(&doc.root, &op.target.key).ok_or_else(|| {
-        Error::with_path(
-            ErrorKind::ChartNotFound {
-                id: op.id.clone(),
-            },
-            path.clone(),
-        )
+        Error::with_path(ErrorKind::ChartNotFound { id: op.id.clone() }, path.clone())
     })?;
     let chart_part = crate::opc::resolve_id(pkg, &drawing_part, &rid).ok();
     if !remove_chart_anchor(&mut doc.root, &op.target.key) {
         return Err(Error::with_path(
-            ErrorKind::ChartNotFound {
-                id: op.id.clone(),
-            },
+            ErrorKind::ChartNotFound { id: op.id.clone() },
             path,
         ));
     }
@@ -532,9 +539,7 @@ pub fn set_chart_series(
     chart::reject_restricted(&space.root, &op.id, op_index, ChartRestrict::Data)?;
     if op.index >= chart::series_count(&space.root) {
         return Err(Error::with_path(
-            ErrorKind::ChartSeriesNotFound {
-                id: op.id.clone(),
-            },
+            ErrorKind::ChartSeriesNotFound { id: op.id.clone() },
             format!("ops[{op_index}].id"),
         ));
     }
@@ -546,7 +551,10 @@ pub fn set_chart_series(
             sheet_name,
             sheet_index,
             dirty_sheets,
-            snapshot.child_by_local("tx").and_then(chart::formula_of).as_deref(),
+            snapshot
+                .child_by_local("tx")
+                .and_then(chart::formula_of)
+                .as_deref(),
             &[json!(name)],
             true,
             op_index,
@@ -649,11 +657,10 @@ pub fn add_chart_series(
     let cat_ref = chart::parse_a1_formula(cat_f.as_deref().unwrap_or("")).ok_or_else(|| {
         Error::with_path(ErrorKind::ChartFormulaNotA1, format!("ops[{op_index}]"))
     })?;
-    let cats = op.categories.clone().unwrap_or_else(|| {
-        cat_el
-            .and_then(chart::cache_values)
-            .unwrap_or_default()
-    });
+    let cats = op
+        .categories
+        .clone()
+        .unwrap_or_else(|| cat_el.and_then(chart::cache_values).unwrap_or_default());
     if cats.is_empty() {
         return Err(Error::with_path(
             ErrorKind::NeedChartCategories,
@@ -724,16 +731,9 @@ pub fn add_chart_series(
         .clone()
         .unwrap_or_else(|| format!("系列{}", chart::series_count(&space.root) + 1));
     let name_row = start_row.saturating_sub(1).max(1);
-    let name_ref = chart::format_a1_cell(
-        sheet_for_write,
-        CellRef {
-            col,
-            row: name_row,
-        },
-    );
-    let cat_formula = cat_f.unwrap_or_else(|| {
-        chart::format_a1_formula(sheet_for_write, cat_ref.start, cat_ref.end)
-    });
+    let name_ref = chart::format_a1_cell(sheet_for_write, CellRef { col, row: name_row });
+    let cat_formula = cat_f
+        .unwrap_or_else(|| chart::format_a1_formula(sheet_for_write, cat_ref.start, cat_ref.end));
     let val_ref = chart::format_a1_formula(
         sheet_for_write,
         CellRef {
@@ -777,9 +777,7 @@ pub fn delete_chart_series(
     let n = chart::series_count(&space.root);
     if op.index >= n {
         return Err(Error::with_path(
-            ErrorKind::ChartSeriesNotFound {
-                id: op.id.clone(),
-            },
+            ErrorKind::ChartSeriesNotFound { id: op.id.clone() },
             format!("ops[{op_index}].id"),
         ));
     }
@@ -856,21 +854,14 @@ pub fn set_chart_size(
     let drawing_part = find_drawing_for(pkg, sheet_part, &op.target, &op.id, &path)?;
     let mut doc = xml::parse(pkg.get(&drawing_part)?)?;
     let kind = find_anchor_kind(&doc.root, &op.target.key).ok_or_else(|| {
-        Error::with_path(
-            ErrorKind::ChartNotFound {
-                id: op.id.clone(),
-            },
-            path.clone(),
-        )
+        Error::with_path(ErrorKind::ChartNotFound { id: op.id.clone() }, path.clone())
     })?;
     if kind == AnchorKind::TwoCell {
         return Err(Error::with_path(ErrorKind::TwoCellChartSize, path));
     }
     if !update_extent(&mut doc.root, &op.target.key, op.cx, op.cy) {
         return Err(Error::with_path(
-            ErrorKind::ChartNotFound {
-                id: op.id.clone(),
-            },
+            ErrorKind::ChartNotFound { id: op.id.clone() },
             path,
         ));
     }
@@ -888,12 +879,7 @@ pub fn set_chart_anchor(
     let drawing_part = find_drawing_for(pkg, sheet_part, &op.target, &op.id, &path)?;
     let mut doc = xml::parse(pkg.get(&drawing_part)?)?;
     let current = find_anchor_kind(&doc.root, &op.target.key).ok_or_else(|| {
-        Error::with_path(
-            ErrorKind::ChartNotFound {
-                id: op.id.clone(),
-            },
-            path.clone(),
-        )
+        Error::with_path(ErrorKind::ChartNotFound { id: op.id.clone() }, path.clone())
     })?;
     let target_kind = op.anchor.unwrap_or(current);
     if current == AnchorKind::Absolute {
@@ -905,9 +891,7 @@ pub fn set_chart_anchor(
         }
         if !update_absolute_pos(&mut doc.root, &op.target.key, op.pos_x, op.pos_y) {
             return Err(Error::with_path(
-                ErrorKind::ChartNotFound {
-                    id: op.id.clone(),
-                },
+                ErrorKind::ChartNotFound { id: op.id.clone() },
                 path,
             ));
         }
@@ -920,12 +904,7 @@ pub fn set_chart_anchor(
     picture::ensure_xmlns(&mut doc.root, "r", REL_NS);
     picture::ensure_xmlns(&mut doc.root, "a", picture::A_NS);
     let snapshot = snapshot_anchor(&doc.root, &op.target.key).ok_or_else(|| {
-        Error::with_path(
-            ErrorKind::ChartNotFound {
-                id: op.id.clone(),
-            },
-            path.clone(),
-        )
+        Error::with_path(ErrorKind::ChartNotFound { id: op.id.clone() }, path.clone())
     })?;
     let from = op.from.or(snapshot.from).ok_or_else(|| {
         Error::with_path(
@@ -1029,11 +1008,12 @@ fn write_or_resize(
         op_index,
     )?;
     let resized = chart::resize_a1(&refer, values.len());
-    let sheet = resized
-        .sheet
-        .as_deref()
-        .unwrap_or(default_sheet);
-    Ok(Some(chart::format_a1_formula(sheet, resized.start, resized.end)))
+    let sheet = resized.sheet.as_deref().unwrap_or(default_sheet);
+    Ok(Some(chart::format_a1_formula(
+        sheet,
+        resized.start,
+        resized.end,
+    )))
 }
 
 fn write_formula_values(
@@ -1249,7 +1229,11 @@ fn build_graphic_frame(cnv: u32, name: &str, rid: &str, cx: i64, cy: i64) -> Ele
     locks.push_element(Element::new("a:graphicFrameLocks").with_attr("noGrp", "1"));
     nv.push_element(locks);
     let mut xfrm = Element::new("xdr:xfrm");
-    xfrm.push_element(Element::new("a:off").with_attr("x", "0").with_attr("y", "0"));
+    xfrm.push_element(
+        Element::new("a:off")
+            .with_attr("x", "0")
+            .with_attr("y", "0"),
+    );
     xfrm.push_element(
         Element::new("a:ext")
             .with_attr("cx", cx.to_string())
@@ -1376,7 +1360,7 @@ fn remove_chart_anchor_in(el: &mut Element, key: &ChartKey, index: &mut usize) -
             }
             continue;
         }
-        if let Some(_) = AnchorKind::from_local_name(child.local_name()) {
+        if AnchorKind::from_local_name(child.local_name()).is_some() {
             if let Some(frame) = direct_chart_frame(child) {
                 *index += 1;
                 if key_matches(key, &cnv_of_frame(frame).0, *index) {

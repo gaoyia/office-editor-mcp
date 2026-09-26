@@ -217,14 +217,13 @@ pub fn collect_coverage(
             let rb = thread_root(b, &parent_of);
             let oa = start_ord.get(&ra).copied().unwrap_or(usize::MAX);
             let ob = start_ord.get(&rb).copied().unwrap_or(usize::MAX);
-            oa.cmp(&ob)
-                .then_with(|| {
-                    xml_ord
-                        .get(a)
-                        .copied()
-                        .unwrap_or(usize::MAX)
-                        .cmp(&xml_ord.get(b).copied().unwrap_or(usize::MAX))
-                })
+            oa.cmp(&ob).then_with(|| {
+                xml_ord
+                    .get(a)
+                    .copied()
+                    .unwrap_or(usize::MAX)
+                    .cmp(&xml_ord.get(b).copied().unwrap_or(usize::MAX))
+            })
         });
     }
 
@@ -276,10 +275,7 @@ fn comment_ex_by_para(extended: &Element) -> HashMap<String, (bool, Option<Strin
         let Some(pid) = e.attr_local("paraId") else {
             continue;
         };
-        let done = matches!(
-            e.attr_local("done").unwrap_or(""),
-            "1" | "true" | "on"
-        );
+        let done = matches!(e.attr_local("done").unwrap_or(""), "1" | "true" | "on");
         let parent = e
             .attr_local("paraIdParent")
             .filter(|s| !s.is_empty())
@@ -317,7 +313,7 @@ pub fn done_and_parent(
     let parent = parent_para.and_then(|pp| {
         for e in comment_elements(comments_root) {
             if last_para_id(e).is_some_and(|lp| para_ids_match(&lp, &pp)) {
-                return e.attr_local("id").map(|id| inspect_id(id));
+                return e.attr_local("id").map(inspect_id);
             }
         }
         None
@@ -395,15 +391,7 @@ fn walk_stories(
         for note in notes::user_notes(&doc.root, kind) {
             let nid = note.attr_local("id").unwrap_or("");
             let container = kind.inspect_id(nid);
-            walk_container_paras(
-                note,
-                &container,
-                start,
-                end,
-                start_ord,
-                on_para,
-                ord,
-            )?;
+            walk_container_paras(note, &container, start, end, start_ord, on_para, ord)?;
         }
     }
     Ok(())
@@ -425,16 +413,7 @@ fn walk_root_story(
             Some(c) => para::para_stable_id_in(c, p, i + 1),
             None => para::para_stable_id(p, i + 1),
         };
-        apply_markers(
-            p,
-            &pid,
-            &mut active,
-            start,
-            end,
-            start_ord,
-            on_para,
-            ord,
-        );
+        apply_markers(p, &pid, &mut active, start, end, start_ord, on_para, ord);
         let boxes = textbox::collect_textboxes(p, &pid)?;
         for b in boxes {
             let Ok(target) = para::parse_txbx_id_at(&b.id, "host") else {
@@ -443,15 +422,7 @@ fn walk_root_story(
             let Some(content) = textbox::find_txbx_content_by_key(p, &target.key) else {
                 continue;
             };
-            walk_txbx_story(
-                content,
-                &b.id,
-                start,
-                end,
-                start_ord,
-                on_para,
-                ord,
-            );
+            walk_txbx_story(content, &b.id, start, end, start_ord, on_para, ord);
         }
     }
     Ok(())
@@ -470,16 +441,7 @@ fn walk_container_paras(
     let mut active: HashSet<String> = HashSet::new();
     for (i, p) in paras.iter().enumerate() {
         let (pid, _) = para::para_stable_id_in(container_id, p, i + 1);
-        apply_markers(
-            p,
-            &pid,
-            &mut active,
-            start,
-            end,
-            start_ord,
-            on_para,
-            ord,
-        );
+        apply_markers(p, &pid, &mut active, start, end, start_ord, on_para, ord);
         let boxes = textbox::collect_textboxes(p, &pid)?;
         for b in boxes {
             let Ok(target) = para::parse_txbx_id_at(&b.id, "host") else {
@@ -488,15 +450,7 @@ fn walk_container_paras(
             let Some(content) = textbox::find_txbx_content_by_key(p, &target.key) else {
                 continue;
             };
-            walk_txbx_story(
-                content,
-                &b.id,
-                start,
-                end,
-                start_ord,
-                on_para,
-                ord,
-            );
+            walk_txbx_story(content, &b.id, start, end, start_ord, on_para, ord);
         }
     }
     Ok(())
@@ -515,16 +469,7 @@ fn walk_txbx_story(
     let mut active: HashSet<String> = HashSet::new();
     for (i, p) in paras.iter().enumerate() {
         let (pid, _) = para::para_stable_id_in(box_id, p, i + 1);
-        apply_markers(
-            p,
-            &pid,
-            &mut active,
-            start,
-            end,
-            start_ord,
-            on_para,
-            ord,
-        );
+        apply_markers(p, &pid, &mut active, start, end, start_ord, on_para, ord);
     }
 }
 
@@ -565,7 +510,12 @@ fn apply_markers(
     }
 }
 
-fn collect_markers(el: &Element, starts: &mut Vec<String>, ends: &mut Vec<String>, stop_txbx: bool) {
+fn collect_markers(
+    el: &Element,
+    starts: &mut Vec<String>,
+    ends: &mut Vec<String>,
+    stop_txbx: bool,
+) {
     if stop_txbx && el.local_name() == "txbxContent" {
         return;
     }
@@ -1115,12 +1065,7 @@ pub fn ensure_comments_part(
     let parsed = xml::parse(pkg.get(&part)?)?;
     docs.insert(part.clone(), parsed);
     dirty.insert(part.clone(), ());
-    add_rel(
-        pkg,
-        doc_part,
-        super::REL_COMMENTS,
-        "comments.xml",
-    )?;
+    add_rel(pkg, doc_part, super::REL_COMMENTS, "comments.xml")?;
     set_override(pkg, &part, super::CT_COMMENTS)?;
     Ok(part)
 }
@@ -1208,10 +1153,10 @@ pub fn upsert_comment_ex(
     para_id_parent: Option<&str>,
     done: Option<bool>,
 ) {
-    if let Some(existing) = root
-        .element_children_mut()
-        .find(|e| e.local_name() == "commentEx" && para_ids_match(e.attr_local("paraId").unwrap_or(""), para_id))
-    {
+    if let Some(existing) = root.element_children_mut().find(|e| {
+        e.local_name() == "commentEx"
+            && para_ids_match(e.attr_local("paraId").unwrap_or(""), para_id)
+    }) {
         if let Some(p) = para_id_parent {
             set_local_attr(existing, "paraIdParent", p);
         }
@@ -1225,7 +1170,10 @@ pub fn upsert_comment_ex(
     if let Some(p) = para_id_parent {
         ex.set_attr(&root.prefixed("paraIdParent"), p);
     }
-    ex.set_attr(&root.prefixed("done"), if done.unwrap_or(false) { "1" } else { "0" });
+    ex.set_attr(
+        &root.prefixed("done"),
+        if done.unwrap_or(false) { "1" } else { "0" },
+    );
     root.push_element(ex);
 }
 
@@ -1282,7 +1230,8 @@ pub fn fill_missing_comment_ex(comments_root: &Element, ex_root: &mut Element) -
 
 pub fn set_done_on_para(root: &mut Element, para_id: &str, done: bool) -> bool {
     for e in root.element_children_mut() {
-        if e.local_name() == "commentEx" && para_ids_match(e.attr_local("paraId").unwrap_or(""), para_id)
+        if e.local_name() == "commentEx"
+            && para_ids_match(e.attr_local("paraId").unwrap_or(""), para_id)
         {
             set_local_attr(e, "done", if done { "1" } else { "0" });
             return true;

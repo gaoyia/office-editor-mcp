@@ -36,10 +36,7 @@ pub fn ids_match(a: &str, b: &str) -> bool {
 }
 
 pub fn is_user_note(el: &Element) -> bool {
-    match el.attr_local("type") {
-        None | Some("normal") => true,
-        _ => false,
-    }
+    matches!(el.attr_local("type"), None | Some("normal"))
 }
 
 pub fn sep_type(el: &Element) -> Option<&str> {
@@ -86,25 +83,21 @@ pub fn user_count(pkg: &Package, doc_part: &str, kind: NoteKind) -> Result<usize
     Ok(user_notes(&doc.root, kind).len())
 }
 
-pub fn user_notes<'a>(root: &'a Element, kind: NoteKind) -> Vec<&'a Element> {
+pub fn user_notes(root: &Element, kind: NoteKind) -> Vec<&Element> {
     let local = kind.item_local();
     root.element_children()
         .filter(|e| e.local_name() == local && is_user_note(e))
         .collect()
 }
 
-pub fn seps<'a>(root: &'a Element, kind: NoteKind) -> Vec<&'a Element> {
+pub fn seps(root: &Element, kind: NoteKind) -> Vec<&Element> {
     let local = kind.item_local();
     root.element_children()
         .filter(|e| e.local_name() == local && sep_type(e).is_some())
         .collect()
 }
 
-pub fn find_user_note<'a>(
-    root: &'a Element,
-    kind: NoteKind,
-    note_id: &str,
-) -> Option<&'a Element> {
+pub fn find_user_note<'a>(root: &'a Element, kind: NoteKind, note_id: &str) -> Option<&'a Element> {
     user_notes(root, kind)
         .into_iter()
         .find(|e| ids_match(e.attr_local("id").unwrap_or(""), note_id))
@@ -201,13 +194,7 @@ pub fn append_reference(p: &mut Element, kind: NoteKind, w_id: &str) {
     p.children.push(Node::Element(r));
 }
 
-pub fn append_user_note(
-    root: &mut Element,
-    kind: NoteKind,
-    w_id: &str,
-    para_id: &str,
-    text: &str,
-) {
+pub fn append_user_note(root: &mut Element, kind: NoteKind, w_id: &str, para_id: &str, text: &str) {
     ensure_xmlns(root, "w14", W14_NS);
     root.push_element(new_user_note(root, kind, w_id, para_id, text));
 }
@@ -499,7 +486,7 @@ fn ensure_child<'a>(parent: &'a mut Element, local: &str) -> &'a mut Element {
 }
 
 /// `EG_SectPrContents`：`footnotePr` / `endnotePr` 在页眉页脚引用之后、`pgSz` 之前。
-fn ensure_sect_note_pr<'a>(sect: &'a mut Element, kind: NoteKind) -> &'a mut Element {
+fn ensure_sect_note_pr(sect: &mut Element, kind: NoteKind) -> &mut Element {
     let local = kind.pr_local();
     let dest = insert_index_by_order(sect, local, SECT_PR_ORDER);
     if let Some(i) = child_index(sect, local) {
@@ -568,7 +555,10 @@ fn child_index(parent: &Element, local: &str) -> Option<usize> {
 /// `CT_FtnProps` / `CT_EdnProps` 在特殊引用之前：pos、numFmt、numStart、numRestart。
 fn prop_insert_index(parent: &Element, local: &str) -> usize {
     const ORDER: &[&str] = &["pos", "numFmt", "numStart", "numRestart"];
-    let my = ORDER.iter().position(|&x| x == local).unwrap_or(ORDER.len());
+    let my = ORDER
+        .iter()
+        .position(|&x| x == local)
+        .unwrap_or(ORDER.len());
     let mut after_lower = 0usize;
     for (i, n) in parent.children.iter().enumerate() {
         let Node::Element(e) = n else {
@@ -590,7 +580,10 @@ fn prop_insert_index(parent: &Element, local: &str) -> usize {
 }
 
 fn insert_index_by_order(parent: &Element, local: &str, order: &[&str]) -> usize {
-    let my = order.iter().position(|&x| x == local).unwrap_or(order.len());
+    let my = order
+        .iter()
+        .position(|&x| x == local)
+        .unwrap_or(order.len());
     let mut after_lower = 0usize;
     for (i, n) in parent.children.iter().enumerate() {
         let Node::Element(e) = n else {

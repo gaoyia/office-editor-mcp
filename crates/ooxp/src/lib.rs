@@ -1,4 +1,6 @@
 //! ooxp：用领域 JSON 对 OOXML 做 inspect / create / apply / exportMedia / exportChartData。
+// apply / inspect 会同时传入包、脏部件和领域字段，参数经常超过 7 个，不另包一层上下文结构。
+#![allow(clippy::too_many_arguments)]
 
 mod chart;
 mod dispatch;
@@ -766,11 +768,27 @@ mod tests {
         };
         assert_eq!(
             object_keys(&tree),
-            ["schemaVersion", "format", "id", "pictureCount", "chartCount", "sheets"]
+            [
+                "schemaVersion",
+                "format",
+                "id",
+                "pictureCount",
+                "chartCount",
+                "sheets"
+            ]
         );
         assert_eq!(
             object_keys(&tree["sheets"][0]),
-            ["id", "name", "kind", "pictureCount", "chartCount", "truncated", "range", "cells"]
+            [
+                "id",
+                "name",
+                "kind",
+                "pictureCount",
+                "chartCount",
+                "truncated",
+                "range",
+                "cells"
+            ]
         );
         assert_eq!(
             object_keys(&tree["sheets"][0]["cells"][0]),

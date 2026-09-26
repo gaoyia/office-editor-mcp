@@ -46,12 +46,14 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
             let pics = picture::collect_sheet_pictures(&pkg, &sh.part, &sh.name)?;
             picture_count += pics.len();
             obj.insert("pictureCount".into(), json!(pics.len()));
-            let charts =
-                chart::collect_sheet_charts(&pkg, &sh.part, &sh.name, &sst, &sheet_parts)?;
+            let charts = chart::collect_sheet_charts(&pkg, &sh.part, &sh.name, &sst, &sheet_parts)?;
             chart_count += charts.len();
             obj.insert("chartCount".into(), json!(charts.len()));
             if want_pictures {
-                obj.insert("pictures".into(), Value::Array(picture::pictures_json(&pics)));
+                obj.insert(
+                    "pictures".into(),
+                    Value::Array(picture::pictures_json(&pics)),
+                );
             }
             if want_charts {
                 obj.insert("charts".into(), Value::Array(chart::charts_json(&charts)));
@@ -66,8 +68,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
                 }
             }
         } else if sh.kind == "chartsheet" {
-            let charts =
-                chart::collect_sheet_charts(&pkg, &sh.part, &sh.name, &sst, &sheet_parts)?;
+            let charts = chart::collect_sheet_charts(&pkg, &sh.part, &sh.name, &sst, &sheet_parts)?;
             chart_count += charts.len();
             obj.insert("chartCount".into(), json!(charts.len()));
             if want_charts {

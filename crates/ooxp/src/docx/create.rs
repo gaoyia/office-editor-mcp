@@ -830,7 +830,10 @@ fn parse_smartarts(v: Option<&Value>, prefix: &str) -> Result<Vec<InsertSpec>, E
             )
         })?;
         for k in obj.keys() {
-            if !matches!(k.as_str(), "layout" | "points" | "kind" | "wrap" | "cx" | "cy") {
+            if !matches!(
+                k.as_str(),
+                "layout" | "points" | "kind" | "wrap" | "cx" | "cy"
+            ) {
                 return Err(Error::with_path(
                     ErrorKind::UnknownField { field: k.clone() },
                     format!("{item_path}.{k}"),

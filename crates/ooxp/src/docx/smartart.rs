@@ -28,8 +28,7 @@ pub const REL_CS: &str =
 pub const REL_QS: &str =
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/diagramQuickStyle";
 
-pub const CT_DATA: &str =
-    "application/vnd.openxmlformats-officedocument.drawingml.diagramData+xml";
+pub const CT_DATA: &str = "application/vnd.openxmlformats-officedocument.drawingml.diagramData+xml";
 pub const CT_LAYOUT: &str =
     "application/vnd.openxmlformats-officedocument.drawingml.diagramLayout+xml";
 pub const CT_COLORS: &str =
@@ -92,7 +91,6 @@ impl Role {
             _ => None,
         }
     }
-
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -183,7 +181,6 @@ pub enum DiagramTarget {
         key: DiagramKey,
     },
 }
-
 
 #[derive(Debug, Clone)]
 pub struct PointTarget {
@@ -307,9 +304,7 @@ pub fn collect_body(
     for (i, p) in paras.iter().enumerate() {
         let (id, _) = para::para_stable_id(p, i + 1);
         let mut index = 0usize;
-        out.extend(collect_in_para(
-            pkg, doc_part, p, &id, &mut index,
-        )?);
+        out.extend(collect_in_para(pkg, doc_part, p, &id, &mut index)?);
     }
     Ok(out)
 }
@@ -505,9 +500,8 @@ pub fn parse_spec(obj: &Map<String, Value>, path: &str) -> Result<InsertSpec, Er
     let points = parse_points(obj.get("points"), &format!("{path}.points"), layout)?;
     let kind = match obj.get("kind") {
         None => PicKind::Anchor,
-        Some(Value::String(s)) => picture::parse_pic_kind(s).ok_or_else(|| {
-            Error::with_path(ErrorKind::InvalidPicKind, format!("{path}.kind"))
-        })?,
+        Some(Value::String(s)) => picture::parse_pic_kind(s)
+            .ok_or_else(|| Error::with_path(ErrorKind::InvalidPicKind, format!("{path}.kind")))?,
         Some(_) => {
             return Err(Error::with_path(
                 ErrorKind::WrongType {
@@ -518,27 +512,28 @@ pub fn parse_spec(obj: &Map<String, Value>, path: &str) -> Result<InsertSpec, Er
             ));
         }
     };
-    let wrap = match obj.get("wrap") {
-        None | Some(Value::Null) => {
-            if kind == PicKind::Anchor {
-                Some(WrapKind::Square)
-            } else {
-                None
+    let wrap =
+        match obj.get("wrap") {
+            None | Some(Value::Null) => {
+                if kind == PicKind::Anchor {
+                    Some(WrapKind::Square)
+                } else {
+                    None
+                }
             }
-        }
-        Some(Value::String(s)) => Some(picture::parse_wrap(s).ok_or_else(|| {
-            Error::with_path(ErrorKind::InvalidPicWrap, format!("{path}.wrap"))
-        })?),
-        Some(_) => {
-            return Err(Error::with_path(
-                ErrorKind::WrongType {
-                    field: "wrap".into(),
-                    expected: TypeName::String,
-                },
-                format!("{path}.wrap"),
-            ));
-        }
-    };
+            Some(Value::String(s)) => Some(picture::parse_wrap(s).ok_or_else(|| {
+                Error::with_path(ErrorKind::InvalidPicWrap, format!("{path}.wrap"))
+            })?),
+            Some(_) => {
+                return Err(Error::with_path(
+                    ErrorKind::WrongType {
+                        field: "wrap".into(),
+                        expected: TypeName::String,
+                    },
+                    format!("{path}.wrap"),
+                ));
+            }
+        };
     if kind == PicKind::Inline && wrap.is_some() {
         return Err(Error::with_path(
             ErrorKind::InvalidPicWrap,
@@ -862,7 +857,13 @@ pub fn apply_delete(
     op: &DeleteSmartArtOp,
     i: usize,
 ) -> Result<(), Error> {
-    let host = part_for_target(catalog, doc_part, &op.target, &op.id, &format!("ops[{i}].id"))?;
+    let host = part_for_target(
+        catalog,
+        doc_part,
+        &op.target,
+        &op.id,
+        &format!("ops[{i}].id"),
+    )?;
     let (rids, parts, blips) = {
         let doc = load_part(pkg, docs, &host)?;
         let drawing = find_drawing(&doc.root, &op.target).ok_or_else(|| {
@@ -1051,7 +1052,13 @@ pub fn apply_size(
     op: &SetSmartArtSizeOp,
     i: usize,
 ) -> Result<(), Error> {
-    let host = part_for_target(catalog, doc_part, &op.target, &op.id, &format!("ops[{i}].id"))?;
+    let host = part_for_target(
+        catalog,
+        doc_part,
+        &op.target,
+        &op.id,
+        &format!("ops[{i}].id"),
+    )?;
     let doc = load_part(pkg, docs, &host)?;
     let drawing = find_drawing_mut(&mut doc.root, &op.target).ok_or_else(|| {
         Error::with_path(
@@ -1078,7 +1085,13 @@ pub fn apply_wrap(
     op: &SetSmartArtWrapOp,
     i: usize,
 ) -> Result<(), Error> {
-    let host = part_for_target(catalog, doc_part, &op.target, &op.id, &format!("ops[{i}].id"))?;
+    let host = part_for_target(
+        catalog,
+        doc_part,
+        &op.target,
+        &op.id,
+        &format!("ops[{i}].id"),
+    )?;
     let doc = load_part(pkg, docs, &host)?;
     ensure_dgm_ns(&mut doc.root);
     let drawing = find_drawing_mut(&mut doc.root, &op.target).ok_or_else(|| {
@@ -1156,7 +1169,13 @@ pub fn apply_layout(
     op: &SetSmartArtLayoutOp,
     i: usize,
 ) -> Result<(), Error> {
-    let host = part_for_target(catalog, doc_part, &op.target, &op.id, &format!("ops[{i}].id"))?;
+    let host = part_for_target(
+        catalog,
+        doc_part,
+        &op.target,
+        &op.id,
+        &format!("ops[{i}].id"),
+    )?;
     let current = layout_unique_id(pkg, docs, &host, &op.target, &op.id, i)?;
     if current == op.layout.unique_id() {
         return Ok(());
@@ -1304,11 +1323,7 @@ fn smartart_json(
             true,
             Some(v.to_string()),
         ),
-        None => (
-            format!("{para_id}/smartdiagram:index:{index}"),
-            false,
-            None,
-        ),
+        None => (format!("{para_id}/smartdiagram:index:{index}"), false, None),
     };
     let extent = frame.and_then(|f| f.child_by_local("extent"));
     let cx = parse_emu_attr(extent, "cx")?;
@@ -1443,7 +1458,8 @@ fn parent_map(data: &Element) -> HashMap<String, String> {
         let Some(dest) = cxn.attr_local("destId") else {
             continue;
         };
-        map.entry(dest.to_string()).or_insert_with(|| src.to_string());
+        map.entry(dest.to_string())
+            .or_insert_with(|| src.to_string());
     }
     map
 }
@@ -1845,7 +1861,13 @@ impl RelIds {
     }
 
     fn iter(&self) -> impl Iterator<Item = Option<&String>> {
-        [self.dm.as_ref(), self.lo.as_ref(), self.qs.as_ref(), self.cs.as_ref()].into_iter()
+        [
+            self.dm.as_ref(),
+            self.lo.as_ref(),
+            self.qs.as_ref(),
+            self.cs.as_ref(),
+        ]
+        .into_iter()
     }
 }
 
@@ -2038,9 +2060,8 @@ fn build_data_xml(points: &[ResolvedPt]) -> String {
         ));
     }
     let mut cxns = String::new();
-    let mut cxn_id = points.len() as u64 + 1;
     let mut src_ord: HashMap<String, u32> = HashMap::new();
-    for p in points {
+    for (cxn_id, p) in ((points.len() as u64 + 1)..).zip(points) {
         let src = p.parent.clone().unwrap_or_else(|| "0".into());
         let ord = src_ord.entry(src.clone()).or_insert(0);
         cxns.push_str(&format!(
@@ -2051,7 +2072,6 @@ fn build_data_xml(points: &[ResolvedPt]) -> String {
             ord = *ord,
         ));
         *ord += 1;
-        cxn_id += 1;
     }
     format!(
         r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><dgm:dataModel xmlns:dgm="{DGM_NS}" xmlns:a="{A_NS}" xmlns:r="{REL_NS}"><dgm:ptLst>{pts}</dgm:ptLst><dgm:cxnLst>{cxns}</dgm:cxnLst><dgm:bg/><dgm:whole/></dgm:dataModel>"#
@@ -2343,7 +2363,11 @@ fn minimal_t(text: &str) -> Element {
     t.push_element(Element::new("a:lstStyle"));
     let mut p = Element::new("a:p");
     let mut r = Element::new("a:r");
-    r.push_element(Element::new("a:rPr").with_attr("lang", "zh-CN").with_attr("sz", "1100"));
+    r.push_element(
+        Element::new("a:rPr")
+            .with_attr("lang", "zh-CN")
+            .with_attr("sz", "1100"),
+    );
     let mut at = Element::new("a:t");
     apply_t_text(&mut at, text);
     r.push_element(at);
@@ -2773,14 +2797,13 @@ fn remove_rel_if_unused(
 ) -> Result<(), Error> {
     let mut found = false;
     walk_outside_txbx(root, &mut |e| {
-        if e.local_name() == "relIds" {
-            if e.attr_local("dm") == Some(rid)
+        if e.local_name() == "relIds"
+            && (e.attr_local("dm") == Some(rid)
                 || e.attr_local("lo") == Some(rid)
                 || e.attr_local("qs") == Some(rid)
-                || e.attr_local("cs") == Some(rid)
-            {
-                found = true;
-            }
+                || e.attr_local("cs") == Some(rid))
+        {
+            found = true;
         }
     });
     if found {
@@ -2810,7 +2833,11 @@ fn ensure_doc_pt(root: &mut Element) -> String {
     if let Some(lst) = find_local_mut(root, "ptLst") {
         lst.children.insert(
             0,
-            Node::Element(Element::new("dgm:pt").with_attr("type", "doc").with_attr("modelId", &id)),
+            Node::Element(
+                Element::new("dgm:pt")
+                    .with_attr("type", "doc")
+                    .with_attr("modelId", &id),
+            ),
         );
     }
     id
@@ -2870,7 +2897,7 @@ fn new_guid() -> String {
         (b >> 16) as u16,
         ((b as u16) & 0x0fff),
         ((n as u16) & 0x0fff),
-        (n as u64).wrapping_shl(16) | (b as u64 & 0xffff)
+        n.wrapping_shl(16) | (b as u64 & 0xffff)
     )
 }
 

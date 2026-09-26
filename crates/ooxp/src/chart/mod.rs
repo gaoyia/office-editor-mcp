@@ -3,8 +3,8 @@
 use serde_json::{json, Map, Number, Value};
 
 use crate::error::{Error, ErrorKind};
-use crate::xml::{self, Element, Node};
 use crate::xlsx::a1::{self, CellRef};
+use crate::xml::{self, Element, Node};
 
 pub const CHART_NS: &str = "http://schemas.openxmlformats.org/drawingml/2006/chart";
 pub const CHARTEX_NS: &str = "http://schemas.microsoft.com/office/drawing/2014/chartex";
@@ -295,7 +295,11 @@ pub fn reject_restricted(
 }
 
 /// 系列名单。`read_cells` 把 `c:f` 原文读成单元格值；读不到则退回 cache / lit。
-pub fn series_json<F>(chart_id: &str, space: &Element, mut read_cells: F) -> Result<Vec<Value>, Error>
+pub fn series_json<F>(
+    chart_id: &str,
+    space: &Element,
+    mut read_cells: F,
+) -> Result<Vec<Value>, Error>
 where
     F: FnMut(&str) -> Option<Vec<Value>>,
 {
@@ -310,17 +314,13 @@ where
         }
         let bubble = wrap.local_name() == "bubbleChart";
         let xy = bubble || wrap.local_name() == "scatterChart";
-        let (cat_local, val_local) = if xy {
-            ("xVal", "yVal")
-        } else {
-            ("cat", "val")
-        };
+        let (cat_local, val_local) = if xy { ("xVal", "yVal") } else { ("cat", "val") };
         for ser in wrap.element_children() {
             if ser.local_name() != "ser" {
                 continue;
             }
             let name_ref = ser.child_by_local("tx").and_then(formula_of);
-            let name = match name_ref.as_deref().and_then(|f| read_cells(f)) {
+            let name = match name_ref.as_deref().and_then(&mut read_cells) {
                 Some(v) if !v.is_empty() => value_as_name(&v[0]),
                 _ => series_name(ser),
             };
@@ -361,7 +361,7 @@ where
     };
     let cache = cache_values(el);
     let formula = formula_of(el);
-    let cells = formula.as_deref().and_then(|f| read_cells(f));
+    let cells = formula.as_deref().and_then(read_cells);
     let (vals, stale) = match (cache, cells) {
         (Some(c), Some(e)) => {
             let stale = !values_equal(&c, &e);
@@ -684,9 +684,8 @@ pub fn set_chart_title(space: &mut Element, title: &str) {
 
 pub fn set_axis_title(space: &mut Element, axis: &str, title: &str, i: usize) -> Result<(), Error> {
     let scatter = uses_xy_axes(&inspect_type(space, false));
-    let plot = plot_area_mut(space).ok_or_else(|| {
-        Error::with_path(ErrorKind::InvalidChartAxis, format!("ops[{i}].axis"))
-    })?;
+    let plot = plot_area_mut(space)
+        .ok_or_else(|| Error::with_path(ErrorKind::InvalidChartAxis, format!("ops[{i}].axis")))?;
     let mut idxs = Vec::new();
     for (i, n) in plot.children.iter().enumerate() {
         if let Node::Element(e) = n {
@@ -820,7 +819,8 @@ pub fn convert_type(space: &mut Element, target: ChartType, i: usize) -> Result<
         }
         return Ok(());
     }
-    if matches!(current.as_str(), "bar" | "col") && matches!(target, ChartType::Bar | ChartType::Col)
+    if matches!(current.as_str(), "bar" | "col")
+        && matches!(target, ChartType::Bar | ChartType::Col)
     {
         set_bar_dir(space, target);
         return Ok(());
@@ -1034,10 +1034,7 @@ pub fn build_chart_xml(
         } else {
             (origin.col + (i as u32) + 1, None)
         };
-        let name = ser
-            .name
-            .clone()
-            .unwrap_or_else(|| format!("系列{}", i + 1));
+        let name = ser.name.clone().unwrap_or_else(|| format!("系列{}", i + 1));
         let cat_end = CellRef {
             col: origin.col,
             row: origin.row + cats.len() as u32,
@@ -1167,10 +1164,7 @@ pub fn data_table_cells(
         for (si, s) in series.iter().enumerate() {
             let y_col = origin.col + (si as u32) * 2 + 1;
             let sz_col = origin.col + (si as u32) * 2 + 2;
-            let name = s
-                .name
-                .clone()
-                .unwrap_or_else(|| format!("系列{}", si + 1));
+            let name = s.name.clone().unwrap_or_else(|| format!("系列{}", si + 1));
             out.push((
                 CellRef {
                     col: y_col,
@@ -1201,10 +1195,7 @@ pub fn data_table_cells(
     } else {
         for (si, s) in series.iter().enumerate() {
             let col = origin.col + (si as u32) + 1;
-            let name = s
-                .name
-                .clone()
-                .unwrap_or_else(|| format!("系列{}", si + 1));
+            let name = s.name.clone().unwrap_or_else(|| format!("系列{}", si + 1));
             out.push((
                 CellRef {
                     col,
@@ -1739,7 +1730,10 @@ fn retarget_axes(space: &mut Element, target: ChartType, from_xy: bool) {
         if val_n == 0 {
             append_axes(plot, &ax_pair_scatter());
         } else if val_n == 1 {
-            append_axes(plot, r#"<c:valAx><c:axId val="2"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="l"/><c:majorGridlines/><c:numFmt formatCode="General" sourceLinked="1"/><c:crossAx val="1"/><c:crosses val="autoZero"/></c:valAx>"#);
+            append_axes(
+                plot,
+                r#"<c:valAx><c:axId val="2"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="l"/><c:majorGridlines/><c:numFmt formatCode="General" sourceLinked="1"/><c:crossAx val="1"/><c:crosses val="autoZero"/></c:valAx>"#,
+            );
         }
     } else if from_xy {
         let mut first = true;
@@ -1750,7 +1744,10 @@ fn retarget_axes(space: &mut Element, target: ChartType, from_xy: bool) {
             }
         }
         if plot.element_children().all(|c| c.local_name() != "valAx") {
-            append_axes(plot, r#"<c:valAx><c:axId val="2"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="l"/><c:majorGridlines/><c:numFmt formatCode="General" sourceLinked="1"/><c:crossAx val="1"/><c:crosses val="autoZero"/><c:crossBetween val="between"/></c:valAx>"#);
+            append_axes(
+                plot,
+                r#"<c:valAx><c:axId val="2"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="l"/><c:majorGridlines/><c:numFmt formatCode="General" sourceLinked="1"/><c:crossAx val="1"/><c:crosses val="autoZero"/><c:crossBetween val="between"/></c:valAx>"#,
+            );
         }
     } else if !has_cat && val_n == 0 {
         append_axes(plot, &ax_pair());
@@ -1772,7 +1769,11 @@ fn set_bar_dir(space: &mut Element, target: ChartType) {
     };
     for w in plot.element_children_mut() {
         if matches!(w.local_name(), "barChart" | "bar3DChart") {
-            let val = if target == ChartType::Bar { "bar" } else { "col" };
+            let val = if target == ChartType::Bar {
+                "bar"
+            } else {
+                "col"
+            };
             if let Some(d) = w.child_by_local_mut("barDir") {
                 let name = d
                     .attrs
@@ -1826,7 +1827,9 @@ fn values_equal(a: &[Value], b: &[Value]) -> bool {
     if a.len() != b.len() {
         return false;
     }
-    a.iter().zip(b.iter()).all(|(x, y)| value_text(x) == value_text(y))
+    a.iter()
+        .zip(b.iter())
+        .all(|(x, y)| value_text(x) == value_text(y))
 }
 
 fn bool_val(el: Option<&Element>) -> bool {

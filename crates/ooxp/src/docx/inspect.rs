@@ -7,13 +7,13 @@ use crate::opc::{self, Package};
 use crate::xml;
 
 use super::charts;
-use super::hf::{self, HfKind, HfPart};
-use super::smartart;
 use super::comments;
+use super::hf::{self, HfKind, HfPart};
 use super::notes;
 use super::para::{self, NoteKind};
 use super::picture;
 use super::request::InspectScope;
+use super::smartart;
 use super::textbox;
 
 pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error> {
