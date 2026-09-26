@@ -805,6 +805,7 @@ fn parse_picture(v: &Value, prefix: &str, sheet: &str) -> Result<InsertPictureOp
     }
     Ok(InsertPictureOp {
         sheet: sheet.to_string(),
+        hf: None,
         file,
         cx,
         cy,

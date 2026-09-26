@@ -61,8 +61,10 @@ pub(crate) enum IdReason {
     SheetPicPrefix,
     /// 工作表 id，缺少 /pic:…
     SheetPicContainer,
-    /// xlsx insertPicture 必须用 sheet:{name}
+    /// xlsx insertPicture 必须用 sheet:{name} 或页眉槽位 id
     InsertNeedsSheet,
+    /// xlsx 页眉槽位 id 必须是 sheet:{name}/hf:{kind}:{side}
+    HfSlotPrefix,
     /// 框 id 必须是 {段落}/txbx:…
     TxbxPrefix,
     /// 段落 id，缺少 /txbx:
@@ -401,6 +403,7 @@ impl IdReason {
             Self::SheetPicPrefix,
             Self::SheetPicContainer,
             Self::InsertNeedsSheet,
+            Self::HfSlotPrefix,
             Self::TxbxPrefix,
             Self::TxbxContainer,
             Self::TxbxIndexNotInt,

@@ -785,6 +785,7 @@ mod tests {
                 "kind",
                 "pictureCount",
                 "chartCount",
+                "hasHeaderFooter",
                 "truncated",
                 "range",
                 "cells"

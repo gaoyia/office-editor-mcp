@@ -432,7 +432,10 @@ pub fn insert_chart(
     cts.set_override(&chart_part, chart::CT_CHART)?;
     cts.set_override(&drawing_part, picture::CT_DRAWING)?;
     cts.write_to(pkg)?;
-    let cnv = picture::next_cnv_id(pkg, sheet_part)?;
+    let cnv = {
+        let doc = apply::dirty_of(dirty_sheets, sheet_part);
+        picture::next_cnv_id(pkg, sheet_part, &doc.root)?
+    };
     let (cx, cy) = (
         op.cx.unwrap_or(chart::DEFAULT_CX),
         op.cy.unwrap_or(chart::DEFAULT_CY),

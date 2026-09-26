@@ -395,6 +395,7 @@
           "items": {
             "oneOf": [
               { "$ref": "#/$defs/setCellOp" },
+              { "$ref": "#/$defs/setHeaderFooterTextOp" },
               { "$ref": "#/$defs/setParaTextOp" },
               { "$ref": "#/$defs/setHeaderFooterDistanceOp" },
               { "$ref": "#/$defs/setHeaderFooterLinkOp" },
@@ -473,6 +474,16 @@
         { "required": ["value"] },
         { "required": ["formula"] }
       ]
+    },
+    "setHeaderFooterTextOp": {
+      "type": "object",
+      "required": ["op", "id", "text"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "setHeaderFooterText" },
+        "id": { "type": "string", "minLength": 1 },
+        "text": { "type": "string" }
+      }
     },
     "setParaTextOp": {
       "type": "object",

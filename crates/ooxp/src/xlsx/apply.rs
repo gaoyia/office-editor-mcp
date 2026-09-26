@@ -7,6 +7,7 @@ use crate::xml::{self, Document, Element, Node};
 
 use super::a1;
 use super::chart;
+use super::hf;
 use super::picture;
 use super::REL_CALC_CHAIN;
 
@@ -53,8 +54,15 @@ pub fn apply(bytes: &[u8], ops: &[XlsxOp]) -> Result<Vec<u8>, Error> {
                 let doc = dirty_of(&mut dirty_sheets, &part);
                 apply_set_cell(&mut doc.root, cell, op, i)?;
             }
+            XlsxOp::SetHeaderFooterText(op) => {
+                let (part, _kind) = require_named_sheet(&sheet_index, &op.sheet, i)?;
+                load_dirty(&pkg, &mut dirty_sheets, &part, false)?;
+                let doc = dirty_of(&mut dirty_sheets, &part);
+                hf::set_text(&mut doc.root, op);
+            }
             XlsxOp::ReplacePicture(op) => {
-                let part = require_sheet_part(&sheet_index, &op.target.sheet, i)?;
+                let (part, kind) = require_named_sheet(&sheet_index, &op.target.sheet, i)?;
+                reject_hf_pic_sheet(kind, op.target.hf, i)?;
                 picture::replace_picture(&mut pkg, &part, op, i)?;
             }
             XlsxOp::InsertPicture(op) => {
@@ -67,20 +75,27 @@ pub fn apply(bytes: &[u8], ops: &[XlsxOp]) -> Result<Vec<u8>, Error> {
                 }
                 load_dirty(&pkg, &mut dirty_sheets, &part, false)?;
                 let doc = dirty_of(&mut dirty_sheets, &part);
-                picture::insert_picture(&mut pkg, doc, &part, op, &format!("ops[{i}].file"))?;
+                if op.hf.is_some() {
+                    hf::insert_picture(&mut pkg, doc, &part, op, &format!("ops[{i}].file"))?;
+                } else {
+                    picture::insert_picture(&mut pkg, doc, &part, op, &format!("ops[{i}].file"))?;
+                }
             }
             XlsxOp::DeletePicture(op) => {
-                let part = require_sheet_part(&sheet_index, &op.target.sheet, i)?;
+                let (part, kind) = require_named_sheet(&sheet_index, &op.target.sheet, i)?;
+                reject_hf_pic_sheet(kind, op.target.hf, i)?;
                 load_dirty(&pkg, &mut dirty_sheets, &part, false)?;
                 let doc = dirty_of(&mut dirty_sheets, &part);
                 picture::delete_picture(&mut pkg, doc, &part, op, i)?;
             }
             XlsxOp::SetPictureSize(op) => {
-                let part = require_sheet_part(&sheet_index, &op.target.sheet, i)?;
+                let (part, kind) = require_named_sheet(&sheet_index, &op.target.sheet, i)?;
+                reject_hf_pic_sheet(kind, op.target.hf, i)?;
                 picture::set_picture_size(&mut pkg, &part, op, i)?;
             }
             XlsxOp::SetPictureAnchor(op) => {
-                let part = require_sheet_part(&sheet_index, &op.target.sheet, i)?;
+                let (part, kind) = require_named_sheet(&sheet_index, &op.target.sheet, i)?;
+                reject_hf_pic_sheet(kind, op.target.hf, i)?;
                 picture::set_picture_anchor(&mut pkg, &part, op, i)?;
             }
             XlsxOp::InsertChart(op) => {
@@ -202,6 +217,20 @@ fn require_sheet_part(
     op_index: usize,
 ) -> Result<String, Error> {
     Ok(require_named_sheet(index, name, op_index)?.0)
+}
+
+fn reject_hf_pic_sheet(
+    kind: &str,
+    hf: Option<super::request::HfSlot>,
+    op_index: usize,
+) -> Result<(), Error> {
+    if hf.is_some() && kind != "worksheet" {
+        return Err(Error::with_path(
+            ErrorKind::InsertPictureWorksheetOnly,
+            format!("ops[{op_index}].id"),
+        ));
+    }
+    Ok(())
 }
 
 pub(crate) fn load_dirty(

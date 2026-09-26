@@ -4,6 +4,7 @@ pub(crate) mod a1;
 mod apply;
 mod chart;
 mod create;
+mod hf;
 mod inspect;
 mod picture;
 mod request;

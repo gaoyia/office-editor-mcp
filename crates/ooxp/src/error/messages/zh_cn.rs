@@ -87,11 +87,18 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::PicIndexNotInt => "pic:index 后面必须是正整数".into(),
             IdReason::PicIndexFromOne => "pic:index 从 1 起".into(),
             IdReason::InsertNeedsPara => "insertPicture 的 id 必须是段落 id".into(),
-            IdReason::SheetPicPrefix => "xlsx 图 id 必须是 sheet:工作表名/pic:…".into(),
+            IdReason::SheetPicPrefix => {
+                "xlsx 图 id 必须是 sheet:工作表名/pic:… 或 sheet:工作表名/hf:…/pic:…".into()
+            }
             IdReason::SheetPicContainer => {
                 "工作表 id 必须带 /pic:…（该 id 本身不是图）".into()
             }
-            IdReason::InsertNeedsSheet => "xlsx 的 insertPicture 的 id 必须是 sheet:工作表名".into(),
+            IdReason::InsertNeedsSheet => {
+                "xlsx 的 insertPicture 的 id 必须是 sheet:工作表名 或页眉槽位 id".into()
+            }
+            IdReason::HfSlotPrefix => {
+                "xlsx 页眉槽位 id 必须是 sheet:工作表名/hf:odd|even|first:header|footer".into()
+            }
             IdReason::TxbxPrefix => "文本框 id 必须是段落 id 加上 /txbx:…".into(),
             IdReason::TxbxContainer => {
                 "段落 id 必须带 /txbx:…（该 id 本身不是文本框）".into()

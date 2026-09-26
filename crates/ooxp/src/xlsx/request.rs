@@ -11,6 +11,122 @@ use super::a1;
 use super::chart::{self, SheetChartId};
 use super::picture::{self, SheetPicId};
 
+/// 工作表页眉页脚六个槽位之一。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct HfSlot {
+    kind: HfKind,
+    side: HfSide,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum HfKind {
+    Odd,
+    Even,
+    First,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum HfSide {
+    Header,
+    Footer,
+}
+
+impl HfSlot {
+    pub const ODD_HEADER: Self = Self {
+        kind: HfKind::Odd,
+        side: HfSide::Header,
+    };
+    pub const ODD_FOOTER: Self = Self {
+        kind: HfKind::Odd,
+        side: HfSide::Footer,
+    };
+    pub const EVEN_HEADER: Self = Self {
+        kind: HfKind::Even,
+        side: HfSide::Header,
+    };
+    pub const EVEN_FOOTER: Self = Self {
+        kind: HfKind::Even,
+        side: HfSide::Footer,
+    };
+    pub const FIRST_HEADER: Self = Self {
+        kind: HfKind::First,
+        side: HfSide::Header,
+    };
+    pub const FIRST_FOOTER: Self = Self {
+        kind: HfKind::First,
+        side: HfSide::Footer,
+    };
+    pub const ALL: [Self; 6] = [
+        Self::ODD_HEADER,
+        Self::ODD_FOOTER,
+        Self::EVEN_HEADER,
+        Self::EVEN_FOOTER,
+        Self::FIRST_HEADER,
+        Self::FIRST_FOOTER,
+    ];
+
+    pub fn parse(kind: &str, side: &str) -> Option<Self> {
+        let kind = match kind {
+            "odd" => HfKind::Odd,
+            "even" => HfKind::Even,
+            "first" => HfKind::First,
+            _ => return None,
+        };
+        let side = match side {
+            "header" => HfSide::Header,
+            "footer" => HfSide::Footer,
+            _ => return None,
+        };
+        Some(Self { kind, side })
+    }
+
+    pub fn id(self, sheet: &str) -> String {
+        format!("sheet:{sheet}/hf:{}:{}", self.kind_str(), self.side_str())
+    }
+
+    pub fn kind_str(self) -> &'static str {
+        match self.kind {
+            HfKind::Odd => "odd",
+            HfKind::Even => "even",
+            HfKind::First => "first",
+        }
+    }
+
+    pub fn side_str(self) -> &'static str {
+        match self.side {
+            HfSide::Header => "header",
+            HfSide::Footer => "footer",
+        }
+    }
+
+    pub fn xml_local(self) -> &'static str {
+        match (self.kind, self.side) {
+            (HfKind::Odd, HfSide::Header) => "oddHeader",
+            (HfKind::Odd, HfSide::Footer) => "oddFooter",
+            (HfKind::Even, HfSide::Header) => "evenHeader",
+            (HfKind::Even, HfSide::Footer) => "evenFooter",
+            (HfKind::First, HfSide::Header) => "firstHeader",
+            (HfKind::First, HfSide::Footer) => "firstFooter",
+        }
+    }
+
+    pub fn index(self) -> usize {
+        Self::ALL.iter().position(|s| *s == self).unwrap()
+    }
+
+    /// 中、左、右区属性，插入时按这个顺序占空位。
+    pub fn section_attrs(self) -> [&'static str; 3] {
+        match (self.kind, self.side) {
+            (HfKind::Odd, HfSide::Header) => ["cho", "lho", "rho"],
+            (HfKind::Even, HfSide::Header) => ["che", "lhe", "rhe"],
+            (HfKind::First, HfSide::Header) => ["chf", "lhf", "rhf"],
+            (HfKind::Odd, HfSide::Footer) => ["cfo", "lfo", "rfo"],
+            (HfKind::Even, HfSide::Footer) => ["cfe", "lfe", "rfe"],
+            (HfKind::First, HfSide::Footer) => ["cff", "lff", "rff"],
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct CellScope {
     pub sheet: String,
@@ -23,6 +139,7 @@ pub struct InspectScope {
     pub cells: Option<CellScope>,
     pub pictures: bool,
     pub charts: bool,
+    pub header_footer: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -41,6 +158,15 @@ pub struct SetCellOp {
 }
 
 #[derive(Debug, Clone)]
+pub struct SetHeaderFooterTextOp {
+    #[allow(dead_code)]
+    pub id: String,
+    pub sheet: String,
+    pub slot: HfSlot,
+    pub text: String,
+}
+
+#[derive(Debug, Clone)]
 pub struct ReplacePictureOp {
     pub id: String,
     pub target: SheetPicId,
@@ -50,6 +176,7 @@ pub struct ReplacePictureOp {
 #[derive(Debug, Clone)]
 pub struct InsertPictureOp {
     pub sheet: String,
+    pub hf: Option<HfSlot>,
     pub file: String,
     pub cx: Option<i64>,
     pub cy: Option<i64>,
@@ -213,6 +340,7 @@ pub struct SetChartAnchorOp {
 #[derive(Debug, Clone)]
 pub enum XlsxOp {
     SetCell(SetCellOp),
+    SetHeaderFooterText(SetHeaderFooterTextOp),
     ReplacePicture(ReplacePictureOp),
     InsertPicture(InsertPictureOp),
     DeletePicture(DeletePictureOp),
@@ -248,9 +376,20 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
     if obj.is_empty() {
         return Ok(None);
     }
-    json::deny_unknown(obj, &["sheet", "range", "maxCells", "pictures", "charts"])?;
+    json::deny_unknown(
+        obj,
+        &[
+            "sheet",
+            "range",
+            "maxCells",
+            "pictures",
+            "charts",
+            "headerFooter",
+        ],
+    )?;
     let pictures = parse_bool_field(obj.get("pictures"), "pictures")?;
     let charts = parse_bool_field(obj.get("charts"), "charts")?;
+    let header_footer = parse_bool_field(obj.get("headerFooter"), "headerFooter")?;
     let sheet = obj.get("sheet").and_then(Value::as_str);
     let range = obj.get("range").and_then(Value::as_str);
     let max_cells = match obj.get("maxCells") {
@@ -295,13 +434,14 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
             ));
         }
     };
-    if cells.is_none() && !pictures && !charts {
+    if cells.is_none() && !pictures && !charts && !header_footer {
         return Ok(None);
     }
     Ok(Some(InspectScope {
         cells,
         pictures,
         charts,
+        header_footer,
     }))
 }
 
@@ -325,6 +465,7 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<XlsxOp>, Error> {
         })?;
         let parsed = match op_name {
             "setCell" => XlsxOp::SetCell(parse_set_cell(obj, i)?),
+            "setHeaderFooterText" => XlsxOp::SetHeaderFooterText(parse_set_hf_text(obj, i)?),
             "replacePicture" => XlsxOp::ReplacePicture(parse_replace_pic(obj, i)?),
             "insertPicture" => XlsxOp::InsertPicture(parse_insert_pic(obj, i)?),
             "deletePicture" => XlsxOp::DeletePicture(parse_delete_pic(obj, i)?),
@@ -451,6 +592,41 @@ fn parse_set_cell(obj: &serde_json::Map<String, Value>, i: usize) -> Result<SetC
     Ok(SetCellOp { id, value, formula })
 }
 
+fn parse_set_hf_text(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<SetHeaderFooterTextOp, Error> {
+    deny_keys(obj, i, &["op", "id", "text"])?;
+    let id = require_id(obj, i)?;
+    let (sheet, slot) = super::hf::parse_slot_id(&id, i)?;
+    let text = match obj.get("text") {
+        Some(Value::String(s)) => s.clone(),
+        None => {
+            return Err(Error::with_path(
+                ErrorKind::MissingField {
+                    field: "text".into(),
+                },
+                format!("ops[{i}].text"),
+            ));
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "text".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].text"),
+            ));
+        }
+    };
+    Ok(SetHeaderFooterTextOp {
+        id,
+        sheet,
+        slot,
+        text,
+    })
+}
+
 fn parse_replace_pic(
     obj: &serde_json::Map<String, Value>,
     i: usize,
@@ -475,7 +651,7 @@ fn parse_insert_pic(
         ],
     )?;
     let id = require_id(obj, i)?;
-    let sheet = picture::parse_insert_sheet_id(&id, i)?;
+    let (sheet, hf) = picture::parse_insert_sheet_id(&id, i)?;
     let file = require_file(obj, i, "insertPicture")?;
     let cx = parse_emu_field(obj.get("cx"), i, "cx")?;
     let cy = parse_emu_field(obj.get("cy"), i, "cy")?;
@@ -487,6 +663,34 @@ fn parse_insert_pic(
             },
             format!("ops[{i}]"),
         ));
+    }
+    if hf.is_some() {
+        for field in [
+            "from", "to", "anchor", "fromOffX", "fromOffY", "toOffX", "toOffY",
+        ] {
+            if obj.contains_key(field) {
+                return Err(Error::with_path(
+                    ErrorKind::UnknownField {
+                        field: field.into(),
+                    },
+                    format!("ops[{i}].{field}"),
+                ));
+            }
+        }
+        return Ok(InsertPictureOp {
+            sheet,
+            hf,
+            file,
+            cx,
+            cy,
+            from: a1::CellRef { col: 1, row: 1 },
+            to: None,
+            anchor: picture::AnchorKind::OneCell,
+            from_off_x: 0,
+            from_off_y: 0,
+            to_off_x: 0,
+            to_off_y: 0,
+        });
     }
     let from = match obj.get("from") {
         Some(Value::String(s)) => a1::parse_cell(s).map_err(|e| e.at(format!("ops[{i}].from")))?,
@@ -555,6 +759,7 @@ fn parse_insert_pic(
     }
     Ok(InsertPictureOp {
         sheet,
+        hf: None,
         file,
         cx,
         cy,

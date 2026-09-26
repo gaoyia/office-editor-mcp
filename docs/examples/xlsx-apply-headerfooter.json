@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "book.xlsx",
+  "output": "book.hf.xlsx",
+  "ops": [
+    {
+      "op": "setHeaderFooterText",
+      "id": "sheet:Sheet1/hf:odd:header",
+      "text": "&C新页眉"
+    }
+  ]
+}

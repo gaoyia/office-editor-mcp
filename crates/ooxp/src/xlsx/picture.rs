@@ -12,8 +12,10 @@ use crate::opc::{
 use crate::xml::{self, Document, Element, Node, DEFAULT_DECL};
 
 use super::a1;
+use super::hf;
 use super::request::{
-    DeletePictureOp, InsertPictureOp, ReplacePictureOp, SetPictureAnchorOp, SetPictureSizeOp,
+    DeletePictureOp, HfSlot, InsertPictureOp, ReplacePictureOp, SetPictureAnchorOp,
+    SetPictureSizeOp,
 };
 use super::REL_NS;
 
@@ -102,6 +104,7 @@ pub enum PicKey {
 #[derive(Debug, Clone)]
 pub struct SheetPicId {
     pub sheet: String,
+    pub hf: Option<HfSlot>,
     pub key: PicKey,
 }
 
@@ -132,7 +135,7 @@ pub struct ImageFile {
     pub cy: i64,
 }
 
-pub fn parse_insert_sheet_id(id: &str, op_index: usize) -> Result<String, Error> {
+pub fn parse_insert_sheet_id(id: &str, op_index: usize) -> Result<(String, Option<HfSlot>), Error> {
     if id.contains("/pic:") {
         return Err(invalid_id(IdReason::InsertNeedsSheet, op_index));
     }
@@ -142,7 +145,15 @@ pub fn parse_insert_sheet_id(id: &str, op_index: usize) -> Result<String, Error>
     if name.is_empty() {
         return Err(invalid_id(IdReason::InsertNeedsSheet, op_index));
     }
-    Ok(name.to_string())
+    if let Some((sheet, rest)) = name.split_once("/hf:") {
+        if sheet.is_empty() {
+            return Err(invalid_id(IdReason::InsertNeedsSheet, op_index));
+        }
+        let slot =
+            hf::parse_slot(rest).ok_or_else(|| invalid_id(IdReason::InsertNeedsSheet, op_index))?;
+        return Ok((sheet.to_string(), Some(slot)));
+    }
+    Ok((name.to_string(), None))
 }
 
 pub fn parse_pic_id(id: &str, op_index: usize) -> Result<SheetPicId, Error> {
@@ -160,6 +171,27 @@ pub fn parse_pic_id_at(id: &str, field_path: &str) -> Result<SheetPicId, Error> 
                     field_path,
                 ));
             }
+            let (sheet, hf) = if let Some((s, slot_s)) = sheet.split_once("/hf:") {
+                if s.is_empty() {
+                    return Err(Error::with_path(
+                        ErrorKind::InvalidId {
+                            reason: IdReason::SheetPicPrefix,
+                        },
+                        field_path,
+                    ));
+                }
+                let slot = hf::parse_slot(slot_s).ok_or_else(|| {
+                    Error::with_path(
+                        ErrorKind::InvalidId {
+                            reason: IdReason::SheetPicPrefix,
+                        },
+                        field_path,
+                    )
+                })?;
+                (s.to_string(), Some(slot))
+            } else {
+                (sheet.to_string(), None)
+            };
             let key = if let Some(idx) = rest.strip_prefix("index:") {
                 let n: usize = idx.parse().map_err(|_| {
                     Error::with_path(
@@ -181,10 +213,7 @@ pub fn parse_pic_id_at(id: &str, field_path: &str) -> Result<SheetPicId, Error> 
             } else {
                 PicKey::Cnv(rest.to_string())
             };
-            return Ok(SheetPicId {
-                sheet: sheet.to_string(),
-                key,
-            });
+            return Ok(SheetPicId { sheet, hf, key });
         }
         return Err(Error::with_path(
             ErrorKind::InvalidId {
@@ -279,7 +308,12 @@ pub fn export_media(bytes: &[u8], id: &str) -> Result<super::ExportedMedia, Erro
     let sheet_part = lookup_sheet_part(&pkg, &target.sheet, "id")?;
     let drawing_part = find_drawing_for(&pkg, &sheet_part, &target, id, "id")?;
     let doc = xml::parse(pkg.get(&drawing_part)?)?;
-    let rid = find_blip_embed(&doc.root, &target.key).ok_or_else(|| {
+    let hf_el = load_hf_el(&pkg, &sheet_part)?;
+    let search = PicSearch {
+        target: &target,
+        hf_el: hf_el.as_ref(),
+    };
+    let rid = find_blip_embed(&doc.root, &search).ok_or_else(|| {
         Error::with_path(
             ErrorKind::PartMissing {
                 name: format!("{id} a:blip/@r:embed"),
@@ -306,7 +340,12 @@ pub fn replace_picture(
     let path = format!("ops[{op_index}].id");
     let drawing_part = find_drawing_for(pkg, sheet_part, &op.target, &op.id, &path)?;
     let doc = xml::parse(pkg.get(&drawing_part)?)?;
-    let rid = find_blip_embed(&doc.root, &op.target.key)
+    let hf_el = load_hf_el(pkg, sheet_part)?;
+    let search = PicSearch {
+        target: &op.target,
+        hf_el: hf_el.as_ref(),
+    };
+    let rid = find_blip_embed(&doc.root, &search)
         .ok_or_else(|| Error::with_path(ErrorKind::PictureNotFound { id: op.id.clone() }, path))?;
     let old_media = crate::opc::resolve_id(pkg, &drawing_part, &rid)?;
     let image = read_image(&op.file).map_err(|e| e.at(format!("ops[{op_index}].file")))?;
@@ -339,7 +378,7 @@ pub fn insert_picture(
     // Excel 存的 wsDr 常常只在 a:blip 上写 xmlns:r，根上没有。新锚点用 r:embed，必须把关系命名空间补到根上。
     ensure_xmlns(&mut draw_doc.root, "r", REL_NS);
     ensure_xmlns(&mut draw_doc.root, "a", A_NS);
-    let cnv = next_cnv_id(pkg, sheet_part)?;
+    let cnv = next_cnv_id(pkg, sheet_part, &sheet_doc.root)?;
     let media = next_media_part(pkg, &image.ext);
     pkg.set(&media, image.bytes)?;
     let rid = add_image_rel(pkg, &drawing_part, &media)?;
@@ -381,23 +420,58 @@ pub fn delete_picture(
     let path = format!("ops[{op_index}].id");
     let drawing_part = find_drawing_for(pkg, sheet_part, &op.target, &op.id, &path)?;
     let mut doc = xml::parse(pkg.get(&drawing_part)?)?;
-    let rid = find_blip_rid(&doc.root, &op.target.key).ok_or_else(|| {
+    let hf_el = load_hf_el(pkg, sheet_part)?;
+    let search = PicSearch {
+        target: &op.target,
+        hf_el: hf_el.as_ref(),
+    };
+    let cnv_for_hf = match &op.target.key {
+        PicKey::Cnv(s) => Some(s.clone()),
+        PicKey::Index(_) => None,
+    };
+    let rid = find_blip_rid(&doc.root, &search).ok_or_else(|| {
         Error::with_path(
             ErrorKind::PictureNotFound { id: op.id.clone() },
             path.clone(),
         )
     })?;
     let media = crate::opc::resolve_id(pkg, &drawing_part, &rid).ok();
-    if !remove_anchor(&mut doc.root, &op.target.key) {
+    let cnv_for_hf = cnv_for_hf.or_else(|| {
+        // index 命中时从当前 drawing 再找一次 cNvPr。
+        let mut found = None;
+        let mut index = 0usize;
+        let _ = walk_anchors(&doc.root, &mut |anchor, _| {
+            let Some(pic) = direct_pic(anchor) else {
+                return Ok(());
+            };
+            if !has_blip(pic) {
+                return Ok(());
+            }
+            let cnv = cnv_of(pic).0;
+            if search.hit(&cnv, &mut index) {
+                found = cnv;
+            }
+            Ok(())
+        });
+        found
+    });
+    if !remove_anchor(&mut doc.root, &search) {
         return Err(Error::with_path(
             ErrorKind::PictureNotFound { id: op.id.clone() },
             path,
         ));
     }
+    if let Some(cnv) = cnv_for_hf {
+        hf::clear_cnv_attrs(&mut sheet_doc.root, &cnv);
+    }
     if drawing_is_empty(&doc.root) {
         pkg.remove(&drawing_part);
         pkg.remove(&rels_part_name(&drawing_part));
-        remove_drawing_ref(&mut sheet_doc.root, sheet_part, pkg, &drawing_part)?;
+        if op.target.hf.is_some() {
+            hf::remove_drawing_hf_ref(&mut sheet_doc.root, sheet_part, pkg, &drawing_part)?;
+        } else {
+            remove_drawing_ref(&mut sheet_doc.root, sheet_part, pkg, &drawing_part)?;
+        }
         let mut cts = ContentTypes::from_package(pkg)?;
         cts.remove_override(&drawing_part);
         cts.write_to(pkg)?;
@@ -428,7 +502,12 @@ pub fn set_picture_size(
     let path = format!("ops[{op_index}].id");
     let drawing_part = find_drawing_for(pkg, sheet_part, &op.target, &op.id, &path)?;
     let mut doc = xml::parse(pkg.get(&drawing_part)?)?;
-    let kind = find_anchor_kind(&doc.root, &op.target.key).ok_or_else(|| {
+    let hf_el = load_hf_el(pkg, sheet_part)?;
+    let search = PicSearch {
+        target: &op.target,
+        hf_el: hf_el.as_ref(),
+    };
+    let kind = find_anchor_kind(&doc.root, &search).ok_or_else(|| {
         Error::with_path(
             ErrorKind::PictureNotFound { id: op.id.clone() },
             path.clone(),
@@ -437,7 +516,7 @@ pub fn set_picture_size(
     if kind == AnchorKind::TwoCell {
         return Err(Error::with_path(ErrorKind::TwoCellPictureSize, path));
     }
-    if !update_extent(&mut doc.root, &op.target.key, op.cx, op.cy) {
+    if !update_extent(&mut doc.root, &search, op.cx, op.cy) {
         return Err(Error::with_path(
             ErrorKind::PictureNotFound { id: op.id.clone() },
             path,
@@ -456,7 +535,12 @@ pub fn set_picture_anchor(
     let path = format!("ops[{op_index}].id");
     let drawing_part = find_drawing_for(pkg, sheet_part, &op.target, &op.id, &path)?;
     let mut doc = xml::parse(pkg.get(&drawing_part)?)?;
-    let current = find_anchor_kind(&doc.root, &op.target.key).ok_or_else(|| {
+    let hf_el = load_hf_el(pkg, sheet_part)?;
+    let search = PicSearch {
+        target: &op.target,
+        hf_el: hf_el.as_ref(),
+    };
+    let current = find_anchor_kind(&doc.root, &search).ok_or_else(|| {
         Error::with_path(
             ErrorKind::PictureNotFound { id: op.id.clone() },
             path.clone(),
@@ -470,7 +554,7 @@ pub fn set_picture_anchor(
         {
             return Err(Error::with_path(ErrorKind::PictureAnchorAbsolute, path));
         }
-        if !update_absolute_pos(&mut doc.root, &op.target.key, op.pos_x, op.pos_y) {
+        if !update_absolute_pos(&mut doc.root, &search, op.pos_x, op.pos_y) {
             return Err(Error::with_path(
                 ErrorKind::PictureNotFound { id: op.id.clone() },
                 path,
@@ -485,7 +569,7 @@ pub fn set_picture_anchor(
     // 转锚点会重写 xdr:pic；Excel 原 drawing 根上常常没有 xmlns:r。
     ensure_xmlns(&mut doc.root, "r", REL_NS);
     ensure_xmlns(&mut doc.root, "a", A_NS);
-    let snapshot = snapshot_anchor(&doc.root, &op.target.key).ok_or_else(|| {
+    let snapshot = snapshot_anchor(&doc.root, &search).ok_or_else(|| {
         Error::with_path(
             ErrorKind::PictureNotFound { id: op.id.clone() },
             path.clone(),
@@ -546,7 +630,7 @@ pub fn set_picture_anchor(
     let edit_as = op.edit_as.unwrap_or(snapshot.edit_as);
     replace_anchor(
         &mut doc.root,
-        &op.target.key,
+        &search,
         build_anchor(
             target_kind,
             from,
@@ -586,7 +670,7 @@ struct AnchorSnap {
     pic: Element,
 }
 
-fn snapshot_anchor(root: &Element, key: &PicKey) -> Option<AnchorSnap> {
+fn snapshot_anchor(root: &Element, search: &PicSearch<'_>) -> Option<AnchorSnap> {
     let mut index = 0usize;
     let mut found = None;
     let _ = walk_anchors(root, &mut |anchor, kind| {
@@ -599,8 +683,7 @@ fn snapshot_anchor(root: &Element, key: &PicKey) -> Option<AnchorSnap> {
         if !has_blip(pic) {
             return Ok(());
         }
-        index += 1;
-        if !key_matches(key, &cnv_of(pic).0, index) {
+        if !search.hit(&cnv_of(pic).0, &mut index) {
             return Ok(());
         }
         let (from, from_off_x, from_off_y) = read_marker(anchor.child_by_local("from"));
@@ -653,14 +736,52 @@ fn lookup_sheet_part(pkg: &Package, sheet_name: &str, field_path: &str) -> Resul
 }
 
 pub(crate) fn drawing_parts(pkg: &Package, sheet_part: &str) -> Result<Vec<String>, Error> {
+    let doc = xml::parse(pkg.get(sheet_part)?)?;
+    drawing_parts_from(pkg, sheet_part, &doc.root)
+}
+
+pub(crate) fn drawing_hf_parts(pkg: &Package, sheet_part: &str) -> Result<Vec<String>, Error> {
+    let doc = xml::parse(pkg.get(sheet_part)?)?;
+    drawing_hf_parts_from(pkg, sheet_part, &doc.root)
+}
+
+/// 按当前工作表根上的 `<drawing r:id>` 找 SpreadsheetDrawing，不跟 `drawingHF`。
+/// apply / create 连续插入时真源是内存里的表 XML，包里那份可能还没写回。
+pub(crate) fn drawing_parts_from(
+    pkg: &Package,
+    sheet_part: &str,
+    root: &Element,
+) -> Result<Vec<String>, Error> {
+    parts_from_root(pkg, sheet_part, root, "drawing")
+}
+
+pub(crate) fn drawing_hf_parts_from(
+    pkg: &Package,
+    sheet_part: &str,
+    root: &Element,
+) -> Result<Vec<String>, Error> {
+    parts_from_root(pkg, sheet_part, root, "drawingHF")
+}
+
+fn parts_from_root(
+    pkg: &Package,
+    sheet_part: &str,
+    root: &Element,
+    local: &str,
+) -> Result<Vec<String>, Error> {
     let rels = Relationships::from_package(pkg, sheet_part)?;
     let mut out = Vec::new();
-    for rel in rels
-        .rels
-        .iter()
-        .filter(|r| r.rel_type == REL_DRAWING || r.rel_type.ends_with("/drawing"))
-    {
+    for el in root.children_by_local(local) {
+        let Some(rid) = el.attr_local("id") else {
+            continue;
+        };
+        let Some(rel) = rels.find_by_id(rid) else {
+            continue;
+        };
         if rel.is_external() {
+            continue;
+        }
+        if !(rel.rel_type == REL_DRAWING || rel.rel_type.ends_with("/drawing")) {
             continue;
         }
         let part = resolve_rel_target(sheet_part, &rel.target)?;
@@ -671,6 +792,33 @@ pub(crate) fn drawing_parts(pkg: &Package, sheet_part: &str) -> Result<Vec<Strin
     Ok(out)
 }
 
+fn load_hf_el(pkg: &Package, sheet_part: &str) -> Result<Option<Element>, Error> {
+    let doc = xml::parse(pkg.get(sheet_part)?)?;
+    Ok(doc.root.child_by_local("drawingHF").cloned())
+}
+
+struct PicSearch<'a> {
+    target: &'a SheetPicId,
+    hf_el: Option<&'a Element>,
+}
+
+impl PicSearch<'_> {
+    fn hit(&self, cnv: &Option<String>, index: &mut usize) -> bool {
+        if !self.in_list(cnv) {
+            return false;
+        }
+        *index += 1;
+        key_matches(&self.target.key, cnv, *index)
+    }
+
+    fn in_list(&self, cnv: &Option<String>) -> bool {
+        match self.target.hf {
+            None => true,
+            Some(slot) => hf::slot_for_cnv(self.hf_el, cnv.as_deref()) == slot,
+        }
+    }
+}
+
 fn find_drawing_for(
     pkg: &Package,
     sheet_part: &str,
@@ -678,9 +826,19 @@ fn find_drawing_for(
     id: &str,
     field_path: &str,
 ) -> Result<String, Error> {
-    for part in drawing_parts(pkg, sheet_part)? {
+    let hf_el = load_hf_el(pkg, sheet_part)?;
+    let search = PicSearch {
+        target,
+        hf_el: hf_el.as_ref(),
+    };
+    let parts = if target.hf.is_some() {
+        drawing_hf_parts(pkg, sheet_part)?
+    } else {
+        drawing_parts(pkg, sheet_part)?
+    };
+    for part in parts {
         let doc = xml::parse(pkg.get(&part)?)?;
-        if find_blip_rid(&doc.root, &target.key).is_some() {
+        if find_blip_rid(&doc.root, &search).is_some() {
             return Ok(part);
         }
     }
@@ -752,13 +910,13 @@ where
     false
 }
 
-fn direct_pic(anchor: &Element) -> Option<&Element> {
+pub(crate) fn direct_pic(anchor: &Element) -> Option<&Element> {
     anchor
         .element_children()
         .find(|c| c.local_name() == "pic" && has_blip(c))
 }
 
-fn has_blip(el: &Element) -> bool {
+pub(crate) fn has_blip(el: &Element) -> bool {
     let mut found = false;
     walk_all(el, &mut |e| {
         if e.local_name() == "blip" {
@@ -782,11 +940,21 @@ fn pic_info(
     sheet_name: &str,
     index: usize,
 ) -> Result<PicInfo, Error> {
+    pic_info_at(anchor, kind, pic, &format!("sheet:{sheet_name}"), index)
+}
+
+pub(crate) fn pic_info_at(
+    anchor: &Element,
+    kind: AnchorKind,
+    pic: &Element,
+    id_base: &str,
+    index: usize,
+) -> Result<PicInfo, Error> {
     let (raw_id, name) = cnv_of(pic);
     let stable = raw_id.is_some();
     let id = match &raw_id {
-        Some(v) => format!("sheet:{sheet_name}/pic:{v}"),
-        None => format!("sheet:{sheet_name}/pic:index:{index}"),
+        Some(v) => format!("{id_base}/pic:{v}"),
+        None => format!("{id_base}/pic:index:{index}"),
     };
     let (from, from_off_x, from_off_y) = read_marker(anchor.child_by_local("from"));
     let (to, to_off_x, to_off_y) = read_marker(anchor.child_by_local("to"));
@@ -840,7 +1008,7 @@ fn pic_info(
     })
 }
 
-fn cnv_of(pic: &Element) -> (Option<String>, String) {
+pub(crate) fn cnv_of(pic: &Element) -> (Option<String>, String) {
     let mut raw = None;
     let mut name = String::new();
     walk_all(pic, &mut |e| {
@@ -926,15 +1094,15 @@ fn blip_rid(pic: &Element) -> Option<String> {
     found
 }
 
-fn find_blip_rid(root: &Element, key: &PicKey) -> Option<String> {
-    find_blip_attr(root, key, false)
+fn find_blip_rid(root: &Element, search: &PicSearch<'_>) -> Option<String> {
+    find_blip_attr(root, search, false)
 }
 
-fn find_blip_embed(root: &Element, key: &PicKey) -> Option<String> {
-    find_blip_attr(root, key, true)
+fn find_blip_embed(root: &Element, search: &PicSearch<'_>) -> Option<String> {
+    find_blip_attr(root, search, true)
 }
 
-fn find_blip_attr(root: &Element, key: &PicKey, embed_only: bool) -> Option<String> {
+fn find_blip_attr(root: &Element, search: &PicSearch<'_>, embed_only: bool) -> Option<String> {
     let mut index = 0usize;
     let mut rid = None;
     let _ = walk_anchors(root, &mut |anchor, _| {
@@ -947,8 +1115,7 @@ fn find_blip_attr(root: &Element, key: &PicKey, embed_only: bool) -> Option<Stri
         if !has_blip(pic) {
             return Ok(());
         }
-        index += 1;
-        if key_matches(key, &cnv_of(pic).0, index) {
+        if search.hit(&cnv_of(pic).0, &mut index) {
             rid = if embed_only {
                 blip_embed(pic)
             } else {
@@ -970,7 +1137,7 @@ fn blip_embed(pic: &Element) -> Option<String> {
     found
 }
 
-fn find_anchor_kind(root: &Element, key: &PicKey) -> Option<AnchorKind> {
+fn find_anchor_kind(root: &Element, search: &PicSearch<'_>) -> Option<AnchorKind> {
     let mut index = 0usize;
     let mut kind = None;
     let _ = walk_anchors(root, &mut |anchor, k| {
@@ -983,8 +1150,7 @@ fn find_anchor_kind(root: &Element, key: &PicKey) -> Option<AnchorKind> {
         if !has_blip(pic) {
             return Ok(());
         }
-        index += 1;
-        if key_matches(key, &cnv_of(pic).0, index) {
+        if search.hit(&cnv_of(pic).0, &mut index) {
             kind = Some(k);
         }
         Ok(())
@@ -1008,7 +1174,7 @@ fn key_matches(key: &PicKey, raw: &Option<String>, index: usize) -> bool {
     }
 }
 
-fn pics_match_in(el: &Element, key: &PicKey, index: &mut usize) -> bool {
+fn pics_match_in(el: &Element, search: &PicSearch<'_>, index: &mut usize) -> bool {
     let mut matched = false;
     let _ = walk_anchors(el, &mut |anchor, _| {
         let Some(pic) = direct_pic(anchor) else {
@@ -1017,8 +1183,7 @@ fn pics_match_in(el: &Element, key: &PicKey, index: &mut usize) -> bool {
         if !has_blip(pic) {
             return Ok(());
         }
-        *index += 1;
-        if key_matches(key, &cnv_of(pic).0, *index) {
+        if search.hit(&cnv_of(pic).0, index) {
             matched = true;
         }
         Ok(())
@@ -1026,11 +1191,11 @@ fn pics_match_in(el: &Element, key: &PicKey, index: &mut usize) -> bool {
     matched
 }
 
-fn remove_anchor(root: &mut Element, key: &PicKey) -> bool {
-    remove_anchor_in(root, key, &mut 0)
+fn remove_anchor(root: &mut Element, search: &PicSearch<'_>) -> bool {
+    remove_anchor_in(root, search, &mut 0)
 }
 
-fn remove_anchor_in(el: &mut Element, key: &PicKey, index: &mut usize) -> bool {
+fn remove_anchor_in(el: &mut Element, search: &PicSearch<'_>, index: &mut usize) -> bool {
     if el.local_name() == "grpSp" {
         return false;
     }
@@ -1042,22 +1207,19 @@ fn remove_anchor_in(el: &mut Element, key: &PicKey, index: &mut usize) -> bool {
                 .child_by_local("Choice")
                 .or_else(|| child.child_by_local("Fallback"));
             if let Some(branch) = branch {
-                if pics_match_in(branch, key, index) {
+                if pics_match_in(branch, search, index) {
                     drop = Some(i);
                     break;
                 }
             }
         } else if AnchorKind::from_local(child.local_name()).is_some() {
             if let Some(pic) = direct_pic(child) {
-                if has_blip(pic) {
-                    *index += 1;
-                    if key_matches(key, &cnv_of(pic).0, *index) {
-                        drop = Some(i);
-                        break;
-                    }
+                if has_blip(pic) && search.hit(&cnv_of(pic).0, index) {
+                    drop = Some(i);
+                    break;
                 }
             }
-        } else if remove_anchor_in(child, key, index) {
+        } else if remove_anchor_in(child, search, index) {
             return true;
         }
     }
@@ -1068,13 +1230,13 @@ fn remove_anchor_in(el: &mut Element, key: &PicKey, index: &mut usize) -> bool {
     false
 }
 
-fn replace_anchor(root: &mut Element, key: &PicKey, new_anchor: Element) {
-    replace_anchor_in(root, key, &mut 0, new_anchor);
+fn replace_anchor(root: &mut Element, search: &PicSearch<'_>, new_anchor: Element) {
+    replace_anchor_in(root, search, &mut 0, new_anchor);
 }
 
 fn replace_anchor_in(
     el: &mut Element,
-    key: &PicKey,
+    search: &PicSearch<'_>,
     index: &mut usize,
     new_anchor: Element,
 ) -> bool {
@@ -1083,7 +1245,7 @@ fn replace_anchor_in(
     }
     if el.local_name() == "AlternateContent" {
         if let Some(choice) = el.child_by_local_mut("Choice") {
-            return replace_anchor_in(choice, key, index, new_anchor);
+            return replace_anchor_in(choice, search, index, new_anchor);
         }
         return false;
     }
@@ -1091,22 +1253,24 @@ fn replace_anchor_in(
         let Node::Element(child) = n else { continue };
         if AnchorKind::from_local(child.local_name()).is_some() {
             if let Some(pic) = direct_pic(child) {
-                if has_blip(pic) {
-                    *index += 1;
-                    if key_matches(key, &cnv_of(pic).0, *index) {
-                        *child = new_anchor;
-                        return true;
-                    }
+                if has_blip(pic) && search.hit(&cnv_of(pic).0, index) {
+                    *child = new_anchor;
+                    return true;
                 }
             }
-        } else if replace_anchor_in(child, key, index, new_anchor.clone()) {
+        } else if replace_anchor_in(child, search, index, new_anchor.clone()) {
             return true;
         }
     }
     false
 }
 
-fn update_extent(root: &mut Element, key: &PicKey, cx: Option<i64>, cy: Option<i64>) -> bool {
+fn update_extent(
+    root: &mut Element,
+    search: &PicSearch<'_>,
+    cx: Option<i64>,
+    cy: Option<i64>,
+) -> bool {
     let mut index = 0usize;
     walk_anchors_mut(root, &mut |anchor, _| {
         let Some(pic) = direct_pic(anchor) else {
@@ -1115,8 +1279,7 @@ fn update_extent(root: &mut Element, key: &PicKey, cx: Option<i64>, cy: Option<i
         if !has_blip(pic) {
             return false;
         }
-        index += 1;
-        if !key_matches(key, &cnv_of(pic).0, index) {
+        if !search.hit(&cnv_of(pic).0, &mut index) {
             return false;
         }
         if let Some(ext) = anchor.child_by_local_mut("ext") {
@@ -1143,7 +1306,7 @@ fn update_extent(root: &mut Element, key: &PicKey, cx: Option<i64>, cy: Option<i
 
 fn update_absolute_pos(
     root: &mut Element,
-    key: &PicKey,
+    search: &PicSearch<'_>,
     pos_x: Option<i64>,
     pos_y: Option<i64>,
 ) -> bool {
@@ -1155,8 +1318,7 @@ fn update_absolute_pos(
         if !has_blip(pic) {
             return false;
         }
-        index += 1;
-        if !key_matches(key, &cnv_of(pic).0, index) {
+        if !search.hit(&cnv_of(pic).0, &mut index) {
             return false;
         }
         if let Some(pos) = anchor.child_by_local_mut("pos") {
@@ -1187,7 +1349,10 @@ pub(crate) fn ensure_drawing_part(
     sheet_doc: &mut Document,
     sheet_part: &str,
 ) -> Result<String, Error> {
-    if let Some(part) = drawing_parts(pkg, sheet_part)?.into_iter().next() {
+    if let Some(part) = drawing_parts_from(pkg, sheet_part, &sheet_doc.root)?
+        .into_iter()
+        .next()
+    {
         return Ok(part);
     }
     let part = next_drawing_part(pkg);
@@ -1265,7 +1430,7 @@ pub(crate) fn remove_drawing_ref(
     Ok(())
 }
 
-fn next_drawing_part(pkg: &Package) -> String {
+pub(crate) fn next_drawing_part(pkg: &Package) -> String {
     let mut n = 1u32;
     loop {
         let name = format!("/xl/drawings/drawing{n}.xml");
@@ -1276,24 +1441,33 @@ fn next_drawing_part(pkg: &Package) -> String {
     }
 }
 
-pub(crate) fn next_cnv_id(pkg: &Package, sheet_part: &str) -> Result<u32, Error> {
+pub(crate) fn next_cnv_id(
+    pkg: &Package,
+    sheet_part: &str,
+    sheet_root: &Element,
+) -> Result<u32, Error> {
     let mut max = 0u32;
-    for part in drawing_parts(pkg, sheet_part)? {
-        let doc = xml::parse(pkg.get(&part)?)?;
-        walk_all(&doc.root, &mut |e| {
-            if e.local_name() == "cNvPr" {
-                if let Some(id) = e.attr_local("id") {
-                    if let Ok(n) = id.parse::<u32>() {
-                        max = max.max(n);
+    let mut scan = |parts: Vec<String>| -> Result<(), Error> {
+        for part in parts {
+            let doc = xml::parse(pkg.get(&part)?)?;
+            walk_all(&doc.root, &mut |e| {
+                if e.local_name() == "cNvPr" {
+                    if let Some(id) = e.attr_local("id") {
+                        if let Ok(n) = id.parse::<u32>() {
+                            max = max.max(n);
+                        }
                     }
                 }
-            }
-        });
-    }
+            });
+        }
+        Ok(())
+    };
+    scan(drawing_parts_from(pkg, sheet_part, sheet_root)?)?;
+    scan(drawing_hf_parts_from(pkg, sheet_part, sheet_root)?)?;
     Ok(max + 1)
 }
 
-fn next_media_part(pkg: &Package, ext: &str) -> String {
+pub(crate) fn next_media_part(pkg: &Package, ext: &str) -> String {
     let mut n = 1u32;
     loop {
         let name = format!("/xl/media/image{n}.{ext}");
@@ -1328,7 +1502,11 @@ pub(crate) fn rel_target_from(source_part: &str, target_opc: &str) -> String {
     format!("{}{rest}", "../".repeat(up))
 }
 
-fn add_image_rel(pkg: &mut Package, part: &str, media_opc: &str) -> Result<String, Error> {
+pub(crate) fn add_image_rel(
+    pkg: &mut Package,
+    part: &str,
+    media_opc: &str,
+) -> Result<String, Error> {
     let mut rels = Relationships::from_package(pkg, part)?;
     let rid = rels.next_rid();
     rels.push(Relationship {
@@ -1548,7 +1726,7 @@ fn build_pic(cnv: u32, name: &str, rid: &str, cx: i64, cy: i64) -> Element {
     pic
 }
 
-fn read_image(path: &str) -> Result<ImageFile, Error> {
+pub(crate) fn read_image(path: &str) -> Result<ImageFile, Error> {
     let p = PathBuf::from(path);
     let bytes = std::fs::read(&p).map_err(|e| io_path(e, p.clone()))?;
     classify_image(bytes, &p)

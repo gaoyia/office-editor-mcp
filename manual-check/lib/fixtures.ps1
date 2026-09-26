@@ -157,6 +157,30 @@ function Ensure-XlsxExcelSource([switch]$Force) {
     return $path
 }
 
+function Ensure-XlsxExcelHeaderFooterSource([switch]$Force) {
+    $path = Get-OutPath 'xlsx-excel-headerfooter-source.xlsx'
+    if ((Test-Path $path) -and -not $Force) { return $path }
+
+    $excel = Ensure-MsExcel (Ensure-XlsxCreate)
+    $wb = $excel.Workbooks.Add()
+    $s1 = $wb.Worksheets.Item(1)
+    $s1.Name = 'Sheet1'
+    $s1.Range('A1').Value2 = 1
+    $ps = $s1.PageSetup
+    try {
+        $ps.CenterHeader = 'Xh页眉'
+        $ps.CenterFooter = 'Xh页脚'
+    }
+    finally { Release-Com $ps }
+    if (Test-Path $path) { Remove-Item $path -Force }
+    $wb.SaveAs($path, 51)
+    $wb.Close($false)
+    Release-Com $s1
+    Release-Com $wb
+    Write-Log "saved excel headerfooter source $path"
+    return $path
+}
+
 # 工作表图手测源文件至少各一张 oneCell 与 twoCell。
 # Excel 16.0 的 Shapes.AddPicture 只写 twoCellAnchor，Placement 只改 editAs。
 # 真 oneCellAnchor 只能由 ooxp 写入，再让 Excel 打开并 Save()，源文件仍算 Excel 另存。

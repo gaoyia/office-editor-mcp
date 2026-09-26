@@ -118,6 +118,7 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<SetShapeTextOp>, Error> {
             || op_name == "setParaText"
             || op_name == "setHeaderFooterDistance"
             || op_name == "setHeaderFooterLink"
+            || op_name == "setHeaderFooterText"
             || op_name == "replacePicture"
             || op_name == "insertPicture"
             || op_name == "deletePicture"

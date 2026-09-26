@@ -98,11 +98,18 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::PicIndexNotInt => "pic:index must be followed by a positive integer".into(),
             IdReason::PicIndexFromOne => "pic:index starts at 1".into(),
             IdReason::InsertNeedsPara => "insertPicture id must be a paragraph id".into(),
-            IdReason::SheetPicPrefix => "xlsx picture id must be sheet:name/pic:…".into(),
+            IdReason::SheetPicPrefix => {
+                "xlsx picture id must be sheet:name/pic:… or sheet:name/hf:…/pic:…".into()
+            }
             IdReason::SheetPicContainer => {
                 "Sheet id must include /pic:… (that id alone is not a picture)".into()
             }
-            IdReason::InsertNeedsSheet => "xlsx insertPicture id must be sheet:name".into(),
+            IdReason::InsertNeedsSheet => {
+                "xlsx insertPicture id must be sheet:name or sheet:name/hf:kind:side".into()
+            }
+            IdReason::HfSlotPrefix => {
+                "xlsx header/footer id must be sheet:name/hf:odd|even|first:header|footer".into()
+            }
             IdReason::TxbxPrefix => {
                 "Text box id must be a paragraph id plus /txbx:…".into()
             }

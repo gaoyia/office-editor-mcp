@@ -9,6 +9,7 @@ use crate::xml::{self, Element};
 
 use super::a1;
 use super::chart;
+use super::hf;
 use super::picture;
 use super::{REL_CHARTSHEET, REL_DIALOGSHEET, REL_SHARED_STRINGS};
 
@@ -28,6 +29,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     let sst = load_shared_strings(&pkg, &wb_part, &rels)?;
     let want_pictures = scope.as_ref().is_some_and(|s| s.pictures);
     let want_charts = scope.as_ref().is_some_and(|s| s.charts);
+    let want_header_footer = scope.as_ref().is_some_and(|s| s.header_footer);
     let cells_scope = scope.as_ref().and_then(|s| s.cells.as_ref());
     let sheet_parts: Vec<(String, String)> = sheets
         .iter()
@@ -42,6 +44,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         obj.insert("id".into(), json!(format!("sheet:{}", sh.name)));
         obj.insert("name".into(), json!(sh.name));
         obj.insert("kind".into(), json!(sh.kind));
+        let sheet_doc = xml::parse(pkg.get(&sh.part)?)?;
         if sh.kind == "worksheet" {
             let pics = picture::collect_sheet_pictures(&pkg, &sh.part, &sh.name)?;
             picture_count += pics.len();
@@ -49,6 +52,21 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
             let charts = chart::collect_sheet_charts(&pkg, &sh.part, &sh.name, &sst, &sheet_parts)?;
             chart_count += charts.len();
             obj.insert("chartCount".into(), json!(charts.len()));
+            let has_hf = hf::has_header_footer(&sheet_doc.root);
+            obj.insert("hasHeaderFooter".into(), json!(has_hf));
+            if want_header_footer {
+                obj.insert(
+                    "headerFooters".into(),
+                    Value::Array(hf::inspect_slots(
+                        &pkg,
+                        &sh.part,
+                        &sh.name,
+                        &sheet_doc.root,
+                        sh.kind,
+                        want_pictures,
+                    )?),
+                );
+            }
             if want_pictures {
                 obj.insert(
                     "pictures".into(),
@@ -71,6 +89,23 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
             let charts = chart::collect_sheet_charts(&pkg, &sh.part, &sh.name, &sst, &sheet_parts)?;
             chart_count += charts.len();
             obj.insert("chartCount".into(), json!(charts.len()));
+            obj.insert(
+                "hasHeaderFooter".into(),
+                json!(hf::has_header_footer(&sheet_doc.root)),
+            );
+            if want_header_footer {
+                obj.insert(
+                    "headerFooters".into(),
+                    Value::Array(hf::inspect_slots(
+                        &pkg,
+                        &sh.part,
+                        &sh.name,
+                        &sheet_doc.root,
+                        sh.kind,
+                        false,
+                    )?),
+                );
+            }
             if want_charts {
                 obj.insert("charts".into(), Value::Array(chart::charts_json(&charts)));
             }
@@ -82,12 +117,31 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
                     ));
                 }
             }
-        } else if let Some(cs) = cells_scope {
-            if sh.name.eq_ignore_ascii_case(&cs.sheet) {
-                return Err(Error::with_path(
-                    ErrorKind::InspectWorksheetOnly,
-                    "scope.sheet",
-                ));
+        } else {
+            obj.insert(
+                "hasHeaderFooter".into(),
+                json!(hf::has_header_footer(&sheet_doc.root)),
+            );
+            if want_header_footer {
+                obj.insert(
+                    "headerFooters".into(),
+                    Value::Array(hf::inspect_slots(
+                        &pkg,
+                        &sh.part,
+                        &sh.name,
+                        &sheet_doc.root,
+                        sh.kind,
+                        false,
+                    )?),
+                );
+            }
+            if let Some(cs) = cells_scope {
+                if sh.name.eq_ignore_ascii_case(&cs.sheet) {
+                    return Err(Error::with_path(
+                        ErrorKind::InspectWorksheetOnly,
+                        "scope.sheet",
+                    ));
+                }
             }
         }
         sheet_json.push(Value::Object(obj));

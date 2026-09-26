@@ -382,4 +382,13 @@ mod tests {
         el.remove_attr("xml:space");
         assert_eq!(el.attr("xml:space"), None);
     }
+
+    #[test]
+    fn text_ampersand_roundtrips_escaped() {
+        let doc = parse(b"<oddHeader>&amp;Cfoo</oddHeader>").unwrap();
+        assert_eq!(doc.root.text_content(), "&Cfoo");
+        let out = String::from_utf8(doc.to_bytes().unwrap()).unwrap();
+        assert!(out.contains("&amp;Cfoo"), "{out}");
+        assert!(!out.contains("&amp;amp;"), "{out}");
+    }
 }
