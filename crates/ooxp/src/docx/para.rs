@@ -1,6 +1,6 @@
 //! 主文档里的段落：定位、可见文本、大纲级别。
 
-use crate::error::{Error, ErrorCode};
+use crate::error::{Error, ErrorKind, IdReason};
 use crate::xml::{Element, Node};
 
 pub enum ParaTarget {
@@ -12,23 +12,26 @@ pub fn parse_para_id(id: &str, op_index: usize) -> Result<ParaTarget, Error> {
     let path = format!("ops[{op_index}].id");
     let rest = id.strip_prefix("para:").ok_or_else(|| {
         Error::with_path(
-            ErrorCode::InvalidId,
-            "段落 id 必须以 para: 开头",
+            ErrorKind::InvalidId {
+                reason: IdReason::ParaPrefix,
+            },
             path.clone(),
         )
     })?;
     if let Some(n) = rest.strip_prefix("index:") {
         let idx: usize = n.parse().map_err(|_| {
             Error::with_path(
-                ErrorCode::InvalidId,
-                "para:index 后面必须是正整数",
+                ErrorKind::InvalidId {
+                    reason: IdReason::ParaIndexNotInt,
+                },
                 path.clone(),
             )
         })?;
         if idx < 1 {
             return Err(Error::with_path(
-                ErrorCode::InvalidId,
-                "para:index 从 1 起",
+                ErrorKind::InvalidId {
+                    reason: IdReason::ParaIndexFromOne,
+                },
                 path,
             ));
         }
@@ -36,8 +39,9 @@ pub fn parse_para_id(id: &str, op_index: usize) -> Result<ParaTarget, Error> {
     }
     if rest.is_empty() || rest.chars().any(|c| !c.is_ascii_hexdigit()) {
         return Err(Error::with_path(
-            ErrorCode::InvalidId,
-            "paraId 必须是十六进制",
+            ErrorKind::InvalidId {
+                reason: IdReason::ParaIdNotHex,
+            },
             path,
         ));
     }

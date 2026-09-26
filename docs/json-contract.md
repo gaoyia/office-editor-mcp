@@ -12,6 +12,9 @@ xlsx、docx、pptx 的 inspect、create、apply 已经按本文实现。pptx 的
 | --- | --- | --- |
 | `schemaVersion` | 整数 | 必须是 `1` |
 | `action` | 字符串 | `inspect`、`create`、`apply` 之一 |
+| `locale` | 字符串 | 可选。错误 `message` 的语言偏好，见 [errors.md](errors.md) |
+
+`locale` 不属于动作参数，三种动作都认。取值宽松匹配：`zh`、`zh-CN`、`zh-Hans`、`zh-SG` 出中文；`en` 及其地区变体出英文；不认识的标签（包括空串）退回英文，不报 `InvalidField`。这是信封里唯一一处对未知取值不报错的字段：语言只影响呈现，不该挡下文档操作。优先级是请求 `locale` 高于命令行 `--lang`，再高于环境变量 `OOXP_LANG`，都没有时是英文。
 
 另外按动作需要 `path`、`format`、`scope`、`workbook`、`document`、`presentation`、`ops` 等字段，见下文。禁止在请求里放一整棵 inspect 树来表示「把文档改成这样」。create 的 xlsx 用 `workbook`，docx 用 `document`，pptx 用 `presentation`，三者不能同时出现。
 

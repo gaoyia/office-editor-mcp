@@ -3,7 +3,7 @@
 use serde_json::{json, Value};
 
 use super::request::InspectScope;
-use crate::error::{Error, ErrorCode};
+use crate::error::{Error, ErrorKind, RelSource};
 use crate::opc::{self, Package};
 use crate::xml::{self, Element};
 
@@ -36,8 +36,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
             if sh.name.eq_ignore_ascii_case(&scope.sheet) {
                 if sh.kind != "worksheet" {
                     return Err(Error::with_path(
-                        ErrorCode::InvalidField,
-                        "只能对工作表读单元格",
+                        ErrorKind::InspectWorksheetOnly,
                         "scope.sheet",
                     ));
                 }
@@ -57,8 +56,9 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
             .any(|s| s.name.eq_ignore_ascii_case(&scope.sheet))
         {
             return Err(Error::with_path(
-                ErrorCode::IdNotFound,
-                format!("找不到工作表：{}", scope.sheet),
+                ErrorKind::SheetNotFound {
+                    name: scope.sheet.clone(),
+                },
                 "scope.sheet",
             ));
         }
@@ -80,20 +80,30 @@ fn list_sheets(
 ) -> Result<Vec<SheetMeta>, Error> {
     let sheets_el = workbook
         .child_by_local("sheets")
-        .ok_or_else(|| Error::new(ErrorCode::XmlBroken, "workbook.xml 缺少 sheets"))?;
+        .ok_or_else(|| {
+            Error::new(ErrorKind::XmlMissing {
+                parent: "workbook.xml".into(),
+                child: "sheets".into(),
+            })
+        })?;
     let mut out = Vec::new();
     for sh in sheets_el.children_by_local("sheet") {
         let name = sh.attr("name").unwrap_or("").to_string();
         let rid = sh
             .attr("id")
             .or_else(|| sh.attr("r:id"))
-            .ok_or_else(|| Error::new(ErrorCode::XmlBroken, "sheet 缺少 r:id"))?
+            .ok_or_else(|| {
+                Error::new(ErrorKind::XmlMissing {
+                    parent: "sheet".into(),
+                    child: "r:id".into(),
+                })
+            })?
             .to_string();
         let rel = rels.find_by_id(&rid).ok_or_else(|| {
-            Error::new(
-                ErrorCode::OpcPartMissing,
-                format!("workbook 关系里没有 {rid}"),
-            )
+            Error::new(ErrorKind::RelNotFound {
+                source: RelSource::Workbook,
+                rid: rid.clone(),
+            })
         })?;
         let kind = if rel.rel_type == REL_CHARTSHEET || rel.rel_type.ends_with("/chartsheet") {
             "chartsheet"
@@ -104,10 +114,7 @@ fn list_sheets(
         };
         let part = opc::resolve_rel_target(wb_part, &rel.target)?;
         if !pkg.contains(&part) {
-            return Err(Error::new(
-                ErrorCode::OpcPartMissing,
-                format!("找不到工作表部件 {part}"),
-            ));
+            return Err(Error::new(ErrorKind::PartMissing { name: part }));
         }
         out.push(SheetMeta { name, kind, part });
     }

@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 use clap::Parser;
-use ooxp::{run, written_json, RunOutput};
+use ooxp::{peek_lang, run, written_json, Error, Lang, RunOutput};
 
 #[derive(Parser, Debug)]
 #[command(name = "ooxp", about = "用领域 JSON 读写 OOXML 文件")]
@@ -16,6 +16,9 @@ struct Cli {
     /// create 缺 path、或 apply 缺 output 时的落盘路径。
     #[arg(long)]
     output: Option<PathBuf>,
+    /// 错误文案语言。请求里的 locale 优先。
+    #[arg(long)]
+    lang: Option<String>,
     /// 把 stdout 的 JSON 缩进打印。
     #[arg(long)]
     pretty: bool,
@@ -23,19 +26,30 @@ struct Cli {
 
 fn main() -> ExitCode {
     let cli = Cli::parse();
-    match real_main(cli) {
+    let fallback = Lang::resolve(
+        None,
+        cli.lang.as_deref(),
+        std::env::var("OOXP_LANG").ok().as_deref(),
+    );
+    match real_main(&cli) {
         Ok(()) => ExitCode::SUCCESS,
-        Err(err) => {
-            let payload = err.to_json();
+        Err((err, lang)) => {
+            let lang = lang.unwrap_or(fallback);
+            let payload = err.to_json(lang);
             eprintln!("{}", serde_json::to_string(&payload).unwrap());
             ExitCode::from(err.exit_code() as u8)
         }
     }
 }
 
-fn real_main(cli: Cli) -> Result<(), ooxp::Error> {
-    let json_text = read_input(cli.input.as_deref())?;
-    let out = run(&json_text, cli.output.as_deref())?;
+fn real_main(cli: &Cli) -> Result<(), (Error, Option<Lang>)> {
+    let json_text = read_input(cli.input.as_deref()).map_err(|e| (e, None))?;
+    let lang = Lang::resolve(
+        peek_lang(&json_text),
+        cli.lang.as_deref(),
+        std::env::var("OOXP_LANG").ok().as_deref(),
+    );
+    let out = run(&json_text, cli.output.as_deref()).map_err(|e| (e, Some(lang)))?;
     match out {
         RunOutput::Inspect(tree) => {
             let text = if cli.pretty {
@@ -52,15 +66,15 @@ fn real_main(cli: Cli) -> Result<(), ooxp::Error> {
     Ok(())
 }
 
-fn read_input(input: Option<&str>) -> Result<String, ooxp::Error> {
+fn read_input(input: Option<&str>) -> Result<String, Error> {
     match input {
         None | Some("-") => {
             let mut buf = String::new();
             io::stdin()
                 .read_to_string(&mut buf)
-                .map_err(ooxp::Error::from)?;
+                .map_err(Error::from)?;
             Ok(buf)
         }
-        Some(path) => std::fs::read_to_string(path).map_err(ooxp::Error::from),
+        Some(path) => std::fs::read_to_string(path).map_err(Error::from),
     }
 }

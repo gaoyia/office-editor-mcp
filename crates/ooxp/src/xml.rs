@@ -5,7 +5,7 @@ use std::io::Cursor;
 use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, BytesText, Event};
 use quick_xml::{Reader, Writer};
 
-use crate::error::{Error, ErrorCode};
+use crate::error::{Error, XmlIssue};
 
 #[derive(Clone, Debug)]
 pub struct Document {
@@ -174,7 +174,7 @@ pub fn parse(bytes: &[u8]) -> Result<Document, Error> {
             Ok(Event::End(_)) => {
                 let finished = stack
                     .pop()
-                    .ok_or_else(|| Error::new(ErrorCode::XmlBroken, "XML 结束标签多于开始标签"))?;
+                    .ok_or_else(|| Error::xml(XmlIssue::UnbalancedEnd))?;
                 if let Some(parent) = stack.last_mut() {
                     parent.push_element(finished);
                 } else {
@@ -185,7 +185,7 @@ pub fn parse(bytes: &[u8]) -> Result<Document, Error> {
                 let text = t
                     .unescape()
                     .map_err(|e| {
-                        Error::new(ErrorCode::XmlBroken, format!("XML 文本无法解码：{e}"))
+                        Error::xml_detail(XmlIssue::TextDecode, e)
                     })?
                     .into_owned();
                 if text.is_empty() {
@@ -205,16 +205,13 @@ pub fn parse(bytes: &[u8]) -> Result<Document, Error> {
             Ok(Event::Comment(_)) | Ok(Event::PI(_)) | Ok(Event::DocType(_)) => {}
             Ok(Event::Eof) => break,
             Err(e) => {
-                return Err(Error::new(
-                    ErrorCode::XmlBroken,
-                    format!("XML 解析失败：{e}"),
-                ));
+                return Err(Error::xml_detail(XmlIssue::Parse, e));
             }
         }
         buf.clear();
     }
 
-    let root = root.ok_or_else(|| Error::new(ErrorCode::XmlBroken, "XML 没有根元素"))?;
+    let root = root.ok_or_else(|| Error::xml(XmlIssue::NoRoot))?;
     Ok(Document { decl, root })
 }
 
@@ -223,11 +220,11 @@ fn start_to_element(e: &BytesStart<'_>, reader: &Reader<&[u8]>) -> Result<Elemen
     let mut attrs = Vec::new();
     for attr in e.attributes() {
         let attr = attr
-            .map_err(|err| Error::new(ErrorCode::XmlBroken, format!("XML 属性无法读取：{err}")))?;
+            .map_err(|err| Error::xml_detail(XmlIssue::AttrRead, err))?;
         let key = qname_to_string(attr.key.as_ref());
         let value = attr
             .decode_and_unescape_value(reader.decoder())
-            .map_err(|err| Error::new(ErrorCode::XmlBroken, format!("XML 属性值无法解码：{err}")))?
+            .map_err(|err| Error::xml_detail(XmlIssue::AttrDecode, err))?
             .into_owned();
         attrs.push((key, value));
     }
@@ -279,25 +276,25 @@ fn write_element(writer: &mut Writer<Cursor<Vec<u8>>>, el: &Element) -> Result<(
     if el.children.is_empty() {
         writer
             .write_event(Event::Empty(start))
-            .map_err(|e| Error::new(ErrorCode::XmlBroken, format!("写出 XML 失败：{e}")))?;
+            .map_err(|e| Error::xml_detail(XmlIssue::Write, e))?;
         return Ok(());
     }
     writer
         .write_event(Event::Start(start))
-        .map_err(|e| Error::new(ErrorCode::XmlBroken, format!("写出 XML 失败：{e}")))?;
+        .map_err(|e| Error::xml_detail(XmlIssue::Write, e))?;
     for child in &el.children {
         match child {
             Node::Text(t) => {
                 writer
                     .write_event(Event::Text(BytesText::new(t)))
-                    .map_err(|e| Error::new(ErrorCode::XmlBroken, format!("写出 XML 失败：{e}")))?;
+                    .map_err(|e| Error::xml_detail(XmlIssue::Write, e))?;
             }
             Node::Element(e) => write_element(writer, e)?,
         }
     }
     writer
         .write_event(Event::End(BytesEnd::new(el.name.as_str())))
-        .map_err(|e| Error::new(ErrorCode::XmlBroken, format!("写出 XML 失败：{e}")))?;
+        .map_err(|e| Error::xml_detail(XmlIssue::Write, e))?;
     Ok(())
 }
 

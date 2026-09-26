@@ -1,6 +1,6 @@
 //! 幻灯片里的文本形状：定位、可见文字、AlternateContent 只走一支。
 
-use crate::error::{Error, ErrorCode};
+use crate::error::{Error, ErrorKind, IdReason};
 use crate::opc::{self, Package};
 use crate::xml::{Element, Node};
 
@@ -25,47 +25,58 @@ pub fn parse_shape_id(id: &str, op_index: usize) -> Result<ShapeTarget, Error> {
     let path = format!("ops[{op_index}].id");
     let rest = id.strip_prefix("slide:").ok_or_else(|| {
         Error::with_path(
-            ErrorCode::InvalidId,
-            "形状 id 必须以 slide: 开头",
+            ErrorKind::InvalidId {
+                reason: IdReason::ShapePrefix,
+            },
             path.clone(),
         )
     })?;
     let (n, after) = rest.split_once("/shape:").ok_or_else(|| {
         Error::with_path(
-            ErrorCode::InvalidId,
-            "setShapeText 的 id 必须是 slide:{n}/shape:…",
+            ErrorKind::InvalidId {
+                reason: IdReason::ShapeForm,
+            },
             path.clone(),
         )
     })?;
     let slide: usize = n.parse().map_err(|_| {
-        Error::with_path(ErrorCode::InvalidId, "slide 序号必须是正整数", path.clone())
+        Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::SlideIndexNotInt,
+            },
+            path.clone(),
+        )
     })?;
     if slide < 1 {
         return Err(Error::with_path(
-            ErrorCode::InvalidId,
-            "slide 序号从 1 起",
+            ErrorKind::InvalidId {
+                reason: IdReason::SlideIndexFromOne,
+            },
             path,
         ));
     }
     if after.is_empty() {
         return Err(Error::with_path(
-            ErrorCode::InvalidId,
-            "shape 后面不能为空",
+            ErrorKind::InvalidId {
+                reason: IdReason::ShapeEmpty,
+            },
             path,
         ));
     }
     if let Some(k) = after.strip_prefix("index:") {
         let idx: usize = k.parse().map_err(|_| {
             Error::with_path(
-                ErrorCode::InvalidId,
-                "shape:index 后面必须是正整数",
+                ErrorKind::InvalidId {
+                    reason: IdReason::ShapeIndexNotInt,
+                },
                 path.clone(),
             )
         })?;
         if idx < 1 {
             return Err(Error::with_path(
-                ErrorCode::InvalidId,
-                "shape:index 从 1 起",
+                ErrorKind::InvalidId {
+                    reason: IdReason::ShapeIndexFromOne,
+                },
                 path,
             ));
         }
@@ -106,10 +117,7 @@ pub fn list_slides(
         .enumerate()
     {
         let rid = rid_attr(sld_id).ok_or_else(|| {
-            Error::new(
-                ErrorCode::OpcPartMissing,
-                format!("p:sldId 缺少关系 id（第 {} 页）", i + 1),
-            )
+            Error::new(ErrorKind::SlideRelMissing { index: i + 1 })
         })?;
         let part = opc::resolve_id(pkg, pres_part, rid)?;
         let doc = crate::xml::parse(pkg.get(&part)?)?;

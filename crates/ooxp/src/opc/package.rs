@@ -6,7 +6,7 @@ use std::io::{Cursor, Read, Write};
 use zip::write::SimpleFileOptions;
 use zip::{CompressionMethod, ZipArchive, ZipWriter};
 
-use crate::error::{Error, ErrorCode};
+use crate::error::{Error, ErrorKind, OpcReason};
 
 use super::names::{normalize_part_name, zip_name_from_opc};
 use super::{CONTENT_TYPES_PART, ROOT_RELS_PART};
@@ -72,13 +72,14 @@ impl Package {
             parts,
         };
         if !pkg.contains(CONTENT_TYPES_PART) {
-            return Err(Error::new(
-                ErrorCode::OpcOpen,
-                "包内缺少 [Content_Types].xml",
-            ));
+            return Err(Error::new(ErrorKind::OpcOpen {
+                reason: OpcReason::MissingContentTypes,
+            }));
         }
         if !pkg.contains(ROOT_RELS_PART) {
-            return Err(Error::new(ErrorCode::OpcOpen, "包内缺少 /_rels/.rels"));
+            return Err(Error::new(ErrorKind::OpcOpen {
+                reason: OpcReason::MissingRootRels,
+            }));
         }
         Ok(pkg)
     }
@@ -92,7 +93,11 @@ impl Package {
             .get(name)
             .filter(|p| !p.deleted)
             .map(|p| p.data.as_slice())
-            .ok_or_else(|| Error::new(ErrorCode::OpcPartMissing, format!("找不到部件 {name}")))
+            .ok_or_else(|| {
+                Error::new(ErrorKind::PartMissing {
+                    name: name.to_string(),
+                })
+            })
     }
 
     /// 列出未删除部件，顺序为原顺序再加新建。
@@ -194,6 +199,7 @@ impl Package {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::error::ErrorCode;
     use crate::opc::CONTENT_TYPES_PART;
 
     fn minimal_package_bytes() -> Vec<u8> {

@@ -1,6 +1,6 @@
 //! 按段落 id 替换可见文本。
 
-use crate::error::{Error, ErrorCode};
+use crate::error::{Error, ErrorKind};
 use crate::opc::{self, Package};
 use crate::xml;
 
@@ -16,8 +16,9 @@ pub fn apply(bytes: &[u8], ops: &[SetParaTextOp]) -> Result<Vec<u8>, Error> {
         let target = para::parse_para_id(&op.id, i)?;
         let p = para::find_paragraph_mut(&mut doc.root, &target).ok_or_else(|| {
             Error::with_path(
-                ErrorCode::IdNotFound,
-                format!("找不到段落：{}", op.id),
+                ErrorKind::ParaNotFound {
+                    id: op.id.clone(),
+                },
                 format!("ops[{i}].id"),
             )
         })?;

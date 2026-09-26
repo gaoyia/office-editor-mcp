@@ -2,7 +2,7 @@
 
 use serde_json::Value;
 
-use crate::error::{Error, ErrorCode};
+use crate::error::{Error, ErrorKind, TypeName};
 use crate::opc::{
     ContentTypes, Package, Relationship, Relationships, CONTENT_TYPES_PART, ROOT_RELS_PART,
 };
@@ -21,31 +21,35 @@ struct NewSlide {
 pub fn create(presentation: &Value) -> Result<Vec<u8>, Error> {
     let obj = presentation.as_object().ok_or_else(|| {
         Error::with_path(
-            ErrorCode::InvalidField,
-            "presentation 必须是对象",
+            ErrorKind::WrongType {
+                field: "presentation".into(),
+                expected: TypeName::Object,
+            },
             "presentation",
         )
     })?;
     for k in obj.keys() {
         if k != "slides" {
             return Err(Error::with_path(
-                ErrorCode::InvalidField,
-                format!("不认识的字段：{k}"),
+                ErrorKind::UnknownField { field: k.clone() },
                 format!("presentation.{k}"),
             ));
         }
     }
     let arr = obj.get("slides").ok_or_else(|| {
         Error::with_path(
-            ErrorCode::InvalidField,
-            "缺少 slides",
+            ErrorKind::MissingField {
+                field: "slides".into(),
+            },
             "presentation.slides",
         )
     })?;
     let arr = arr.as_array().ok_or_else(|| {
         Error::with_path(
-            ErrorCode::InvalidField,
-            "slides 必须是数组",
+            ErrorKind::WrongType {
+                field: "slides".into(),
+                expected: TypeName::Array,
+            },
             "presentation.slides",
         )
     })?;
@@ -186,16 +190,17 @@ pub fn create(presentation: &Value) -> Result<Vec<u8>, Error> {
 fn parse_slide(v: &Value, i: usize) -> Result<NewSlide, Error> {
     let obj = v.as_object().ok_or_else(|| {
         Error::with_path(
-            ErrorCode::InvalidField,
-            "页必须是对象",
+            ErrorKind::WrongType {
+                field: format!("presentation.slides[{i}]"),
+                expected: TypeName::Object,
+            },
             format!("presentation.slides[{i}]"),
         )
     })?;
     for k in obj.keys() {
         if k != "shapes" {
             return Err(Error::with_path(
-                ErrorCode::InvalidField,
-                format!("不认识的字段：{k}"),
+                ErrorKind::UnknownField { field: k.clone() },
                 format!("presentation.slides[{i}].{k}"),
             ));
         }
@@ -204,8 +209,10 @@ fn parse_slide(v: &Value, i: usize) -> Result<NewSlide, Error> {
     if let Some(arr) = obj.get("shapes") {
         let arr = arr.as_array().ok_or_else(|| {
             Error::with_path(
-                ErrorCode::InvalidField,
-                "shapes 必须是数组",
+                ErrorKind::WrongType {
+                    field: format!("presentation.slides[{i}].shapes"),
+                    expected: TypeName::Array,
+                },
                 format!("presentation.slides[{i}].shapes"),
             )
         })?;
@@ -219,16 +226,17 @@ fn parse_slide(v: &Value, i: usize) -> Result<NewSlide, Error> {
 fn parse_shape(v: &Value, slide: usize, i: usize) -> Result<String, Error> {
     let obj = v.as_object().ok_or_else(|| {
         Error::with_path(
-            ErrorCode::InvalidField,
-            "形状必须是对象",
+            ErrorKind::WrongType {
+                field: format!("presentation.slides[{slide}].shapes[{i}]"),
+                expected: TypeName::Object,
+            },
             format!("presentation.slides[{slide}].shapes[{i}]"),
         )
     })?;
     for k in obj.keys() {
         if k != "text" {
             return Err(Error::with_path(
-                ErrorCode::InvalidField,
-                format!("不认识的字段：{k}"),
+                ErrorKind::UnknownField { field: k.clone() },
                 format!("presentation.slides[{slide}].shapes[{i}].{k}"),
             ));
         }
@@ -237,8 +245,10 @@ fn parse_shape(v: &Value, slide: usize, i: usize) -> Result<String, Error> {
         None => Ok(String::new()),
         Some(Value::String(s)) => Ok(s.clone()),
         Some(_) => Err(Error::with_path(
-            ErrorCode::InvalidField,
-            "text 必须是字符串",
+            ErrorKind::WrongType {
+                field: "text".into(),
+                expected: TypeName::String,
+            },
             format!("presentation.slides[{slide}].shapes[{i}].text"),
         )),
     }

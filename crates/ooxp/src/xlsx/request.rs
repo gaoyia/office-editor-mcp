@@ -2,7 +2,7 @@
 
 use serde_json::Value;
 
-use crate::error::{Error, ErrorCode};
+use crate::error::{Error, ErrorKind, ScopeNeed, TypeName};
 use crate::json;
 
 #[derive(Debug, Clone)]
@@ -33,7 +33,15 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
     };
     let obj = v
         .as_object()
-        .ok_or_else(|| Error::with_path(ErrorCode::InvalidField, "scope 必须是对象", "scope"))?;
+        .ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::WrongType {
+                    field: "scope".into(),
+                    expected: TypeName::Object,
+                },
+                "scope",
+            )
+        })?;
     if obj.is_empty() {
         return Ok(None);
     }
@@ -45,8 +53,10 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
         Some(Value::Number(n)) => n.as_u64(),
         Some(_) => {
             return Err(Error::with_path(
-                ErrorCode::InvalidField,
-                "maxCells 必须是整数",
+                ErrorKind::WrongType {
+                    field: "maxCells".into(),
+                    expected: TypeName::Integer,
+                },
                 "scope.maxCells",
             ));
         }
@@ -57,8 +67,11 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
             let max = m.unwrap_or(5000);
             if !(1..=20000).contains(&max) {
                 return Err(Error::with_path(
-                    ErrorCode::TruncatedLimit,
-                    "maxCells 允许范围是 1 到 20000",
+                    ErrorKind::OutOfRange {
+                        field: "maxCells".into(),
+                        min: 1,
+                        max: 20000,
+                    },
                     "scope.maxCells",
                 ));
             }
@@ -69,8 +82,9 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
             }))
         }
         _ => Err(Error::with_path(
-            ErrorCode::ScopeRequired,
-            "看单元格时必须同时给 sheet 和 range",
+            ErrorKind::ScopeRequired {
+                need: ScopeNeed::SheetAndRange,
+            },
             "scope",
         )),
     }
@@ -81,33 +95,42 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<SetCellOp>, Error> {
     for (i, op) in ops.iter().enumerate() {
         let obj = op.as_object().ok_or_else(|| {
             Error::with_path(
-                ErrorCode::InvalidField,
-                "ops 的每一项必须是对象",
+                ErrorKind::WrongType {
+                    field: format!("ops[{i}]"),
+                    expected: TypeName::Object,
+                },
                 format!("ops[{i}]"),
             )
         })?;
         let op_name = obj.get("op").and_then(Value::as_str).ok_or_else(|| {
-            Error::with_path(ErrorCode::InvalidField, "缺少 op", format!("ops[{i}].op"))
+            Error::with_path(
+                ErrorKind::MissingField {
+                    field: "op".into(),
+                },
+                format!("ops[{i}].op"),
+            )
         })?;
         if op_name == "setParaText" || op_name == "setShapeText" {
             return Err(Error::with_path(
-                ErrorCode::InvalidField,
-                format!("xlsx 不支持 {op_name}"),
+                ErrorKind::OpNotForFormat {
+                    format: "xlsx".into(),
+                    op: op_name.to_string(),
+                },
                 format!("ops[{i}].op"),
             ));
         }
         if op_name != "setCell" {
             return Err(Error::with_path(
-                ErrorCode::UnsupportedOp,
-                format!("不支持的 op：{op_name}"),
+                ErrorKind::UnsupportedOp {
+                    op: op_name.to_string(),
+                },
                 format!("ops[{i}].op"),
             ));
         }
         for k in obj.keys() {
             if !matches!(k.as_str(), "op" | "id" | "value" | "formula") {
                 return Err(Error::with_path(
-                    ErrorCode::InvalidField,
-                    format!("不认识的字段：{k}"),
+                    ErrorKind::UnknownField { field: k.clone() },
                     format!("ops[{i}].{k}"),
                 ));
             }
@@ -117,36 +140,43 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<SetCellOp>, Error> {
             .and_then(Value::as_str)
             .filter(|s| !s.is_empty())
             .ok_or_else(|| {
-                Error::with_path(ErrorCode::InvalidField, "缺少 id", format!("ops[{i}].id"))
+                Error::with_path(
+                    ErrorKind::MissingField {
+                        field: "id".into(),
+                    },
+                    format!("ops[{i}].id"),
+                )
             })?;
         let has_value = obj.contains_key("value");
         let has_formula = obj.contains_key("formula");
         if has_value && has_formula {
             return Err(Error::with_path(
-                ErrorCode::InvalidField,
-                "value 和 formula 不能同时出现",
+                ErrorKind::MutuallyExclusive {
+                    a: "value".into(),
+                    b: "formula".into(),
+                },
                 format!("ops[{i}]"),
             ));
         }
         if !has_value && !has_formula {
             return Err(Error::with_path(
-                ErrorCode::InvalidField,
-                "setCell 必须有 value 或 formula",
+                ErrorKind::SetCellNeedsValueOrFormula,
                 format!("ops[{i}]"),
             ));
         }
         let formula = if has_formula {
             let f = obj.get("formula").and_then(Value::as_str).ok_or_else(|| {
                 Error::with_path(
-                    ErrorCode::InvalidField,
-                    "formula 必须是字符串",
+                    ErrorKind::WrongType {
+                        field: "formula".into(),
+                        expected: TypeName::String,
+                    },
                     format!("ops[{i}].formula"),
                 )
             })?;
             if !f.starts_with('=') {
                 return Err(Error::with_path(
-                    ErrorCode::InvalidField,
-                    "formula 必须以 = 开头",
+                    ErrorKind::FormulaMustStartWithEquals,
                     format!("ops[{i}].formula"),
                 ));
             }
@@ -174,10 +204,6 @@ pub fn parse_cell_value(v: &Value, path: &str) -> Result<SetCellValue, Error> {
         Value::Bool(b) => Ok(SetCellValue::Bool(*b)),
         Value::Number(n) => Ok(SetCellValue::Number(n.clone())),
         Value::String(s) => Ok(SetCellValue::Text(s.clone())),
-        _ => Err(Error::with_path(
-            ErrorCode::InvalidField,
-            "单元格值必须是数字、字符串、布尔或 null",
-            path,
-        )),
+        _ => Err(Error::with_path(ErrorKind::InvalidCellValue, path)),
     }
 }

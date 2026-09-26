@@ -5,13 +5,17 @@
 ## 调用
 
 ```text
-ooxp [--input <文件|->] [--output <文件>]
+ooxp [--input <文件|->] [--output <文件>] [--lang <标签>] [--pretty]
 ```
 
 | 参数 | 含义 |
 | --- | --- |
 | `--input` | 领域 JSON 的路径。值为 `-` 或省略该参数时，从 stdin 读 |
 | `--output` | 仅当请求里没有 `path`（create）或没有 `output`（apply）时作为落盘路径。inspect 忽略此参数 |
+| `--lang` | 错误 `message` 的语言。请求里写了 `locale` 时以请求为准 |
+| `--pretty` | stdout 的 JSON 带缩进。默认紧凑一行 |
+
+请求没有 `locale`、命令行也没给 `--lang` 时，读环境变量 `OOXP_LANG`。再没有就用英文。标签匹配规则见 [errors.md](errors.md)。`--help` 本身不翻译。
 
 第一期不提供子命令。动作完全由 JSON 的 `action` 决定。
 

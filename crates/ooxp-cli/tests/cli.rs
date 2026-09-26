@@ -1,6 +1,7 @@
 use std::fs;
+use std::io::Write;
 use std::path::PathBuf;
-use std::process::Command;
+use std::process::{Command, Stdio};
 
 fn tmp(name: &str) -> PathBuf {
     let dir = std::env::temp_dir().join("ooxp-cli-tests");
@@ -49,4 +50,87 @@ fn cli_create_then_inspect() {
     let stdout = String::from_utf8(out.stdout).unwrap();
     assert!(stdout.contains("cell:Sheet1!A1"));
     assert!(stdout.contains("\"value\":1"));
+}
+
+fn run_fail(args: &[&str], env_lang: Option<&str>, stdin: &str) -> (i32, serde_json::Value) {
+    let bin = env!("CARGO_BIN_EXE_ooxp");
+    let mut cmd = Command::new(bin);
+    cmd.args(args)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .env_remove("OOXP_LANG");
+    if let Some(v) = env_lang {
+        cmd.env("OOXP_LANG", v);
+    }
+    let mut child = cmd.spawn().unwrap();
+    child
+        .stdin
+        .as_mut()
+        .unwrap()
+        .write_all(stdin.as_bytes())
+        .unwrap();
+    let out = child.wait_with_output().unwrap();
+    let code = out.status.code().unwrap_or(-1);
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    let json: serde_json::Value = serde_json::from_str(stderr.trim()).unwrap_or_else(|_| {
+        panic!("stderr 不是 JSON：{stderr}");
+    });
+    (code, json)
+}
+
+#[test]
+fn error_default_is_english() {
+    let (code, json) = run_fail(
+        &["--input", "-"],
+        None,
+        r#"{"schemaVersion":2,"action":"inspect","path":"x.xlsx"}"#,
+    );
+    assert_eq!(code, 2);
+    assert_eq!(json["error"]["code"], "UnsupportedSchema");
+    assert_eq!(json["error"]["message"], "schemaVersion must be 1");
+}
+
+#[test]
+fn locale_beats_lang_flag() {
+    let (code, json) = run_fail(
+        &["--input", "-", "--lang", "en"],
+        Some("en"),
+        r#"{"schemaVersion":2,"action":"inspect","path":"x.xlsx","locale":"zh-CN"}"#,
+    );
+    assert_eq!(code, 2);
+    assert_eq!(json["error"]["message"], "schemaVersion 必须是 1");
+}
+
+#[test]
+fn lang_flag_beats_env() {
+    let (code, json) = run_fail(
+        &["--input", "-", "--lang", "zh-CN"],
+        Some("en"),
+        r#"{"schemaVersion":2,"action":"inspect","path":"x.xlsx"}"#,
+    );
+    assert_eq!(code, 2);
+    assert_eq!(json["error"]["message"], "schemaVersion 必须是 1");
+}
+
+#[test]
+fn env_lang_used_when_no_locale_or_flag() {
+    let (code, json) = run_fail(
+        &["--input", "-"],
+        Some("zh-Hans"),
+        r#"{"schemaVersion":2,"action":"inspect","path":"x.xlsx"}"#,
+    );
+    assert_eq!(code, 2);
+    assert_eq!(json["error"]["message"], "schemaVersion 必须是 1");
+}
+
+#[test]
+fn unknown_locale_falls_back_to_english() {
+    let (code, json) = run_fail(
+        &["--input", "-"],
+        None,
+        r#"{"schemaVersion":2,"action":"inspect","path":"x.xlsx","locale":"ja"}"#,
+    );
+    assert_eq!(code, 2);
+    assert_eq!(json["error"]["message"], "schemaVersion must be 1");
 }

@@ -3,7 +3,7 @@
 use serde_json::Value;
 
 use super::request::{parse_cell_value, SetCellValue};
-use crate::error::{Error, ErrorCode};
+use crate::error::{Error, ErrorKind, SheetNameReason, TypeName};
 use crate::opc::{
     ContentTypes, Package, Relationship, Relationships, CONTENT_TYPES_PART, ROOT_RELS_PART,
 };
@@ -29,31 +29,42 @@ struct NewSheet {
 
 pub fn create(workbook: &Value) -> Result<Vec<u8>, Error> {
     let obj = workbook.as_object().ok_or_else(|| {
-        Error::with_path(ErrorCode::InvalidField, "workbook 必须是对象", "workbook")
+        Error::with_path(
+            ErrorKind::WrongType {
+                field: "workbook".into(),
+                expected: TypeName::Object,
+            },
+            "workbook",
+        )
     })?;
     for k in obj.keys() {
         if k != "sheets" {
             return Err(Error::with_path(
-                ErrorCode::InvalidField,
-                format!("不认识的字段：{k}"),
+                ErrorKind::UnknownField { field: k.clone() },
                 format!("workbook.{k}"),
             ));
         }
     }
     let sheets_v = obj.get("sheets").ok_or_else(|| {
-        Error::with_path(ErrorCode::InvalidField, "缺少 sheets", "workbook.sheets")
+        Error::with_path(
+            ErrorKind::MissingField {
+                field: "sheets".into(),
+            },
+            "workbook.sheets",
+        )
     })?;
     let sheets_arr = sheets_v.as_array().ok_or_else(|| {
         Error::with_path(
-            ErrorCode::InvalidField,
-            "sheets 必须是数组",
+            ErrorKind::WrongType {
+                field: "sheets".into(),
+                expected: TypeName::Array,
+            },
             "workbook.sheets",
         )
     })?;
     if sheets_arr.is_empty() {
         return Err(Error::with_path(
-            ErrorCode::InvalidField,
-            "至少需要一张工作表",
+            ErrorKind::NeedAtLeastOneSheet,
             "workbook.sheets",
         ));
     }
@@ -65,8 +76,9 @@ pub fn create(workbook: &Value) -> Result<Vec<u8>, Error> {
         let lower = sheets[i].name.to_ascii_lowercase();
         if names_lower.contains(&lower) {
             return Err(Error::with_path(
-                ErrorCode::InvalidField,
-                format!("工作表名重复：{}", sheets[i].name),
+                ErrorKind::DuplicateSheetName {
+                    name: sheets[i].name.clone(),
+                },
                 format!("workbook.sheets[{i}].name"),
             ));
         }
@@ -190,24 +202,26 @@ pub fn create(workbook: &Value) -> Result<Vec<u8>, Error> {
 fn parse_sheet(v: &Value, i: usize) -> Result<NewSheet, Error> {
     let obj = v.as_object().ok_or_else(|| {
         Error::with_path(
-            ErrorCode::InvalidField,
-            "工作表必须是对象",
+            ErrorKind::WrongType {
+                field: format!("workbook.sheets[{i}]"),
+                expected: TypeName::Object,
+            },
             format!("workbook.sheets[{i}]"),
         )
     })?;
     for k in obj.keys() {
         if !matches!(k.as_str(), "name" | "cells") {
             return Err(Error::with_path(
-                ErrorCode::InvalidField,
-                format!("不认识的字段：{k}"),
+                ErrorKind::UnknownField { field: k.clone() },
                 format!("workbook.sheets[{i}].{k}"),
             ));
         }
     }
     let name = obj.get("name").and_then(Value::as_str).ok_or_else(|| {
         Error::with_path(
-            ErrorCode::InvalidField,
-            "缺少工作表名",
+            ErrorKind::InvalidSheetName {
+                reason: SheetNameReason::Missing,
+            },
             format!("workbook.sheets[{i}].name"),
         )
     })?;
@@ -216,8 +230,10 @@ fn parse_sheet(v: &Value, i: usize) -> Result<NewSheet, Error> {
     if let Some(arr) = obj.get("cells") {
         let arr = arr.as_array().ok_or_else(|| {
             Error::with_path(
-                ErrorCode::InvalidField,
-                "cells 必须是数组",
+                ErrorKind::WrongType {
+                    field: format!("workbook.sheets[{i}].cells"),
+                    expected: TypeName::Array,
+                },
                 format!("workbook.sheets[{i}].cells"),
             )
         })?;
@@ -238,22 +254,25 @@ fn validate_sheet_name(name: &str, i: usize) -> Result<(), Error> {
     let path = format!("workbook.sheets[{i}].name");
     if name.is_empty() || name.len() > 31 {
         return Err(Error::with_path(
-            ErrorCode::InvalidField,
-            "工作表名长度必须是 1 到 31 个字符",
+            ErrorKind::InvalidSheetName {
+                reason: SheetNameReason::Length,
+            },
             path,
         ));
     }
     if name.eq_ignore_ascii_case("History") {
         return Err(Error::with_path(
-            ErrorCode::InvalidField,
-            "工作表不能叫 History",
+            ErrorKind::InvalidSheetName {
+                reason: SheetNameReason::History,
+            },
             path,
         ));
     }
     if name.contains([':', '*', '?', '/', '[', ']', '\\']) {
         return Err(Error::with_path(
-            ErrorCode::InvalidField,
-            "工作表名含有非法字符",
+            ErrorKind::InvalidSheetName {
+                reason: SheetNameReason::IllegalChars,
+            },
             path,
         ));
     }
@@ -263,40 +282,39 @@ fn validate_sheet_name(name: &str, i: usize) -> Result<(), Error> {
 fn parse_new_cell(v: &Value, i: usize, j: usize) -> Result<Option<NewCell>, Error> {
     let obj = v.as_object().ok_or_else(|| {
         Error::with_path(
-            ErrorCode::InvalidField,
-            "单元格必须是对象",
+            ErrorKind::WrongType {
+                field: format!("workbook.sheets[{i}].cells[{j}]"),
+                expected: TypeName::Object,
+            },
             format!("workbook.sheets[{i}].cells[{j}]"),
         )
     })?;
     for k in obj.keys() {
         if !matches!(k.as_str(), "ref" | "value" | "formula") {
             return Err(Error::with_path(
-                ErrorCode::InvalidField,
-                format!("不认识的字段：{k}"),
+                ErrorKind::UnknownField { field: k.clone() },
                 format!("workbook.sheets[{i}].cells[{j}].{k}"),
             ));
         }
     }
     let refer = obj.get("ref").and_then(Value::as_str).ok_or_else(|| {
         Error::with_path(
-            ErrorCode::InvalidField,
-            "缺少 ref",
+            ErrorKind::MissingField {
+                field: "ref".into(),
+            },
             format!("workbook.sheets[{i}].cells[{j}].ref"),
         )
     })?;
-    let cell = a1::parse_cell(refer).map_err(|e| {
-        Error::with_path(
-            e.code(),
-            e.to_string(),
-            format!("workbook.sheets[{i}].cells[{j}].ref"),
-        )
-    })?;
+    let cell = a1::parse_cell(refer)
+        .map_err(|e| e.at(format!("workbook.sheets[{i}].cells[{j}].ref")))?;
     let has_v = obj.contains_key("value");
     let has_f = obj.contains_key("formula");
     if has_v && has_f {
         return Err(Error::with_path(
-            ErrorCode::InvalidField,
-            "value 和 formula 不能同时出现",
+            ErrorKind::MutuallyExclusive {
+                a: "value".into(),
+                b: "formula".into(),
+            },
             format!("workbook.sheets[{i}].cells[{j}]"),
         ));
     }
@@ -306,15 +324,16 @@ fn parse_new_cell(v: &Value, i: usize, j: usize) -> Result<Option<NewCell>, Erro
     let formula = if has_f {
         let f = obj.get("formula").and_then(Value::as_str).ok_or_else(|| {
             Error::with_path(
-                ErrorCode::InvalidField,
-                "formula 必须是字符串",
+                ErrorKind::WrongType {
+                    field: "formula".into(),
+                    expected: TypeName::String,
+                },
                 format!("workbook.sheets[{i}].cells[{j}].formula"),
             )
         })?;
         if !f.starts_with('=') {
             return Err(Error::with_path(
-                ErrorCode::InvalidField,
-                "formula 必须以 = 开头",
+                ErrorKind::FormulaMustStartWithEquals,
                 format!("workbook.sheets[{i}].cells[{j}].formula"),
             ));
         }

@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 
 use serde_json::{json, Map, Value};
 
-use crate::error::{io_path, Error, ErrorCode};
+use crate::error::{io_path, Error, ErrorKind, TypeName};
 
 #[derive(Debug)]
 pub enum RunOutput {
@@ -36,22 +36,24 @@ pub struct Request {
 }
 
 pub fn parse_request(input_json: &str) -> Result<Request, Error> {
-    let value: Value = serde_json::from_str(input_json)
-        .map_err(|e| Error::new(ErrorCode::InvalidJson, format!("入参不是 JSON：{e}")))?;
+    let value: Value = serde_json::from_str(input_json).map_err(|e| {
+        Error::new(ErrorKind::InvalidJsonParse {
+            detail: e.to_string(),
+        })
+    })?;
     let obj = value
         .as_object()
         .cloned()
-        .ok_or_else(|| Error::new(ErrorCode::InvalidJson, "入参必须是 JSON 对象"))?;
+        .ok_or_else(|| Error::new(ErrorKind::InvalidJsonNotObject))?;
 
     match obj.get("schemaVersion") {
         None => {
-            return Err(Error::new(ErrorCode::InvalidJson, "缺少 schemaVersion"));
+            return Err(Error::new(ErrorKind::MissingEnvelopeField {
+                field: "schemaVersion".into(),
+            }));
         }
         Some(v) if v.as_u64() != Some(1) && v.as_i64() != Some(1) => {
-            return Err(Error::new(
-                ErrorCode::UnsupportedSchema,
-                "schemaVersion 必须是 1",
-            ));
+            return Err(Error::new(ErrorKind::UnsupportedSchema));
         }
         _ => {}
     }
@@ -59,16 +61,19 @@ pub fn parse_request(input_json: &str) -> Result<Request, Error> {
     let action = obj
         .get("action")
         .and_then(Value::as_str)
-        .ok_or_else(|| Error::new(ErrorCode::InvalidJson, "缺少 action"))?;
+        .ok_or_else(|| {
+            Error::new(ErrorKind::MissingEnvelopeField {
+                field: "action".into(),
+            })
+        })?;
     let action = match action {
         "inspect" => Action::Inspect,
         "create" => Action::Create,
         "apply" => Action::Apply,
         other => {
-            return Err(Error::new(
-                ErrorCode::UnsupportedAction,
-                format!("不支持的 action：{other}"),
-            ));
+            return Err(Error::new(ErrorKind::UnsupportedAction {
+                action: other.to_string(),
+            }));
         }
     };
     Ok(Request { action, obj })
@@ -78,8 +83,7 @@ pub fn deny_unknown(obj: &Map<String, Value>, allowed: &[&str]) -> Result<(), Er
     for k in obj.keys() {
         if !allowed.contains(&k.as_str()) {
             return Err(Error::with_path(
-                ErrorCode::InvalidField,
-                format!("不认识的字段：{k}"),
+                ErrorKind::UnknownField { field: k.clone() },
                 k.clone(),
             ));
         }
@@ -100,10 +104,9 @@ pub fn infer_format(path: &str, format: Option<&str>) -> Result<Format, Error> {
         "xlsx" => Ok(Format::Xlsx),
         "docx" => Ok(Format::Docx),
         "pptx" => Ok(Format::Pptx),
-        _ => Err(Error::new(
-            ErrorCode::UnsupportedFormat,
-            format!("无法从路径推断格式：{path}"),
-        )),
+        _ => Err(Error::new(ErrorKind::CannotInferFormat {
+            path: path.to_string(),
+        })),
     }
 }
 
@@ -112,10 +115,9 @@ pub fn parse_format(s: &str) -> Result<Format, Error> {
         "xlsx" => Ok(Format::Xlsx),
         "docx" => Ok(Format::Docx),
         "pptx" => Ok(Format::Pptx),
-        other => Err(Error::new(
-            ErrorCode::UnsupportedFormat,
-            format!("不支持的 format：{other}"),
-        )),
+        other => Err(Error::new(ErrorKind::UnsupportedFormat {
+            format: other.to_string(),
+        })),
     }
 }
 
@@ -123,13 +125,16 @@ pub fn str_field<'a>(obj: &'a Map<String, Value>, key: &str) -> Result<&'a str, 
     match obj.get(key) {
         Some(Value::String(s)) if !s.is_empty() => Ok(s),
         Some(_) => Err(Error::with_path(
-            ErrorCode::InvalidField,
-            format!("{key} 必须是非空字符串"),
+            ErrorKind::WrongType {
+                field: key.to_string(),
+                expected: TypeName::NonEmptyString,
+            },
             key,
         )),
         None => Err(Error::with_path(
-            ErrorCode::InvalidField,
-            format!("缺少 {key}"),
+            ErrorKind::MissingField {
+                field: key.to_string(),
+            },
             key,
         )),
     }
@@ -138,14 +143,28 @@ pub fn str_field<'a>(obj: &'a Map<String, Value>, key: &str) -> Result<&'a str, 
 pub fn require_ops(obj: &Map<String, Value>) -> Result<&[Value], Error> {
     let ops = obj
         .get("ops")
-        .ok_or_else(|| Error::with_path(ErrorCode::InvalidField, "apply 必须有 ops", "ops"))?;
-    let ops = ops
-        .as_array()
-        .ok_or_else(|| Error::with_path(ErrorCode::InvalidField, "ops 必须是数组", "ops"))?;
+        .ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::MissingField {
+                    field: "ops".into(),
+                },
+                "ops",
+            )
+        })?;
+    let ops = ops.as_array().ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::WrongType {
+                field: "ops".into(),
+                expected: TypeName::Array,
+            },
+            "ops",
+        )
+    })?;
     if ops.is_empty() {
         return Err(Error::with_path(
-            ErrorCode::InvalidField,
-            "ops 不能为空",
+            ErrorKind::EmptyArray {
+                field: "ops".into(),
+            },
             "ops",
         ));
     }

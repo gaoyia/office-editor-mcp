@@ -2,7 +2,7 @@
 
 use serde_json::Value;
 
-use crate::error::{Error, ErrorCode};
+use crate::error::{Error, ErrorKind, TypeName};
 use crate::opc::{
     ContentTypes, Package, Relationship, Relationships, CONTENT_TYPES_PART, ROOT_RELS_PART,
 };
@@ -20,28 +20,36 @@ struct NewPara {
 
 pub fn create(document: &Value) -> Result<Vec<u8>, Error> {
     let obj = document.as_object().ok_or_else(|| {
-        Error::with_path(ErrorCode::InvalidField, "document 必须是对象", "document")
+        Error::with_path(
+            ErrorKind::WrongType {
+                field: "document".into(),
+                expected: TypeName::Object,
+            },
+            "document",
+        )
     })?;
     for k in obj.keys() {
         if k != "paragraphs" {
             return Err(Error::with_path(
-                ErrorCode::InvalidField,
-                format!("不认识的字段：{k}"),
+                ErrorKind::UnknownField { field: k.clone() },
                 format!("document.{k}"),
             ));
         }
     }
     let arr = obj.get("paragraphs").ok_or_else(|| {
         Error::with_path(
-            ErrorCode::InvalidField,
-            "缺少 paragraphs",
+            ErrorKind::MissingField {
+                field: "paragraphs".into(),
+            },
             "document.paragraphs",
         )
     })?;
     let arr = arr.as_array().ok_or_else(|| {
         Error::with_path(
-            ErrorCode::InvalidField,
-            "paragraphs 必须是数组",
+            ErrorKind::WrongType {
+                field: "paragraphs".into(),
+                expected: TypeName::Array,
+            },
             "document.paragraphs",
         )
     })?;
@@ -122,16 +130,17 @@ pub fn create(document: &Value) -> Result<Vec<u8>, Error> {
 fn parse_para(v: &Value, i: usize) -> Result<NewPara, Error> {
     let obj = v.as_object().ok_or_else(|| {
         Error::with_path(
-            ErrorCode::InvalidField,
-            "段落必须是对象",
+            ErrorKind::WrongType {
+                field: format!("document.paragraphs[{i}]"),
+                expected: TypeName::Object,
+            },
             format!("document.paragraphs[{i}]"),
         )
     })?;
     for k in obj.keys() {
         if !matches!(k.as_str(), "text" | "style") {
             return Err(Error::with_path(
-                ErrorCode::InvalidField,
-                format!("不认识的字段：{k}"),
+                ErrorKind::UnknownField { field: k.clone() },
                 format!("document.paragraphs[{i}].{k}"),
             ));
         }
@@ -141,8 +150,10 @@ fn parse_para(v: &Value, i: usize) -> Result<NewPara, Error> {
         Some(Value::String(s)) => s.clone(),
         Some(_) => {
             return Err(Error::with_path(
-                ErrorCode::InvalidField,
-                "text 必须是字符串",
+                ErrorKind::WrongType {
+                    field: "text".into(),
+                    expected: TypeName::String,
+                },
                 format!("document.paragraphs[{i}].text"),
             ));
         }
@@ -152,8 +163,10 @@ fn parse_para(v: &Value, i: usize) -> Result<NewPara, Error> {
         Some(Value::String(s)) => canonicalize_style(s, i)?,
         Some(_) => {
             return Err(Error::with_path(
-                ErrorCode::InvalidField,
-                "style 必须是字符串",
+                ErrorKind::WrongType {
+                    field: "style".into(),
+                    expected: TypeName::String,
+                },
                 format!("document.paragraphs[{i}].style"),
             ));
         }
@@ -171,8 +184,7 @@ fn canonicalize_style(s: &str, i: usize) -> Result<Option<&'static str>, Error> 
         }
     }
     Err(Error::with_path(
-        ErrorCode::InvalidField,
-        "style 只允许 Normal、Heading1、Heading2、Heading3",
+        ErrorKind::InvalidParaStyle,
         format!("document.paragraphs[{i}].style"),
     ))
 }

@@ -1,7 +1,7 @@
 //! 按 id 改单元格，并标记打开时重算。
 
 use super::request::{SetCellOp, SetCellValue};
-use crate::error::{Error, ErrorCode};
+use crate::error::{Error, ErrorKind, IdReason, RelSource};
 use crate::opc::{self, ContentTypes, Package, Relationships};
 use crate::xml::{self, Document, Element, Node};
 
@@ -28,15 +28,12 @@ pub fn apply(bytes: &[u8], ops: &[SetCellOp]) -> Result<Vec<u8>, Error> {
                     .iter()
                     .any(|(n, _, _)| n.eq_ignore_ascii_case(&sheet_name))
                 {
-                    Error::with_path(
-                        ErrorCode::InvalidField,
-                        "只能对工作表 setCell",
-                        format!("ops[{i}].id"),
-                    )
+                    Error::with_path(ErrorKind::SetCellWorksheetOnly, format!("ops[{i}].id"))
                 } else {
                     Error::with_path(
-                        ErrorCode::IdNotFound,
-                        format!("找不到工作表：{sheet_name}"),
+                        ErrorKind::SheetNotFound {
+                            name: sheet_name.clone(),
+                        },
                         format!("ops[{i}].id"),
                     )
                 }
@@ -76,16 +73,31 @@ fn sheet_index(
 ) -> Result<Vec<(String, String, &'static str)>, Error> {
     let sheets = workbook
         .child_by_local("sheets")
-        .ok_or_else(|| Error::new(ErrorCode::XmlBroken, "workbook.xml 缺少 sheets"))?;
+        .ok_or_else(|| {
+            Error::new(ErrorKind::XmlMissing {
+                parent: "workbook.xml".into(),
+                child: "sheets".into(),
+            })
+        })?;
     let mut out = Vec::new();
     for sh in sheets.children_by_local("sheet") {
         let name = sh.attr("name").unwrap_or("").to_string();
         let rid = sh
             .attr("id")
-            .ok_or_else(|| Error::new(ErrorCode::XmlBroken, "sheet 缺少 r:id"))?;
+            .ok_or_else(|| {
+                Error::new(ErrorKind::XmlMissing {
+                    parent: "sheet".into(),
+                    child: "r:id".into(),
+                })
+            })?;
         let rel = rels
             .find_by_id(rid)
-            .ok_or_else(|| Error::new(ErrorCode::OpcPartMissing, format!("没有关系 {rid}")))?;
+            .ok_or_else(|| {
+                Error::new(ErrorKind::RelNotFound {
+                    source: RelSource::Unspecified,
+                    rid: rid.to_string(),
+                })
+            })?;
         let kind = if rel.rel_type.ends_with("/chartsheet") {
             "chartsheet"
         } else if rel.rel_type.ends_with("/dialogsheet") {
@@ -102,30 +114,34 @@ fn sheet_index(
 fn parse_cell_id(id: &str, op_index: usize) -> Result<(String, String), Error> {
     let rest = id.strip_prefix("cell:").ok_or_else(|| {
         Error::with_path(
-            ErrorCode::InvalidId,
-            format!("不是单元格 id：{id}"),
+            ErrorKind::InvalidId {
+                reason: IdReason::NotCell { id: id.to_string() },
+            },
             format!("ops[{op_index}].id"),
         )
     })?;
     let bang = rest.rfind('!').ok_or_else(|| {
         Error::with_path(
-            ErrorCode::InvalidId,
-            format!("不是单元格 id：{id}"),
+            ErrorKind::InvalidId {
+                reason: IdReason::NotCell { id: id.to_string() },
+            },
             format!("ops[{op_index}].id"),
         )
     })?;
     let name = rest[..bang].to_string();
     if name.is_empty() {
         return Err(Error::with_path(
-            ErrorCode::InvalidId,
-            format!("不是单元格 id：{id}"),
+            ErrorKind::InvalidId {
+                reason: IdReason::NotCell { id: id.to_string() },
+            },
             format!("ops[{op_index}].id"),
         ));
     }
     let a1 = a1::normalize_a1(&rest[bang + 1..]).map_err(|_| {
         Error::with_path(
-            ErrorCode::InvalidId,
-            format!("不是单元格 id：{id}"),
+            ErrorKind::InvalidId {
+                reason: IdReason::NotCell { id: id.to_string() },
+            },
             format!("ops[{op_index}].id"),
         )
     })?;
@@ -213,11 +229,9 @@ fn reject_shared_formula_master(
         return Ok(());
     }
     Err(Error::with_path(
-        ErrorCode::NotImplemented,
-        format!(
-            "{} 是共享公式的主格，改它会让引用同一 si 的单元格失去公式；请先把那些单元格改成各自独立的公式",
-            a1::format_cell(cell.col, cell.row)
-        ),
+        ErrorKind::SharedFormulaMaster {
+            cell: a1::format_cell(cell.col, cell.row),
+        },
         format!("ops[{op_index}].id"),
     ))
 }

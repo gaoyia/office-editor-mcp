@@ -1,6 +1,6 @@
 //! 部件关系 `.rels`
 
-use crate::error::{Error, ErrorCode};
+use crate::error::{Error, ErrorCode, ErrorKind, OpcReason, RelSource};
 use crate::xml;
 
 use super::names::{normalize_part_name, rels_part_name, resolve_rel_target};
@@ -151,16 +151,15 @@ impl Relationships {
 pub fn resolve_id(pkg: &Package, source_part: &str, rid: &str) -> Result<String, Error> {
     let rels = Relationships::from_package(pkg, source_part)?;
     let rel = rels.find_by_id(rid).ok_or_else(|| {
-        Error::new(
-            ErrorCode::OpcPartMissing,
-            format!("{source_part} 没有关系 {rid}"),
-        )
+        Error::new(ErrorKind::RelNotFound {
+            source: RelSource::Part(source_part.to_string()),
+            rid: rid.to_string(),
+        })
     })?;
     if rel.is_external() {
-        return Err(Error::new(
-            ErrorCode::OpcPartMissing,
-            format!("{rid} 指向外部资源"),
-        ));
+        return Err(Error::new(ErrorKind::ExternalRel {
+            rid: rid.to_string(),
+        }));
     }
     resolve_rel_target(source_part, &rel.target)
 }
@@ -169,7 +168,11 @@ pub fn office_document_part(pkg: &Package) -> Result<String, Error> {
     let rels = Relationships::from_package(pkg, "/")?;
     let rel = rels
         .find_office_document()
-        .ok_or_else(|| Error::new(ErrorCode::OpcOpen, "根关系里没有 officeDocument"))?;
+        .ok_or_else(|| {
+            Error::new(ErrorKind::OpcOpen {
+                reason: OpcReason::MissingOfficeDocument,
+            })
+        })?;
     resolve_rel_target("/", &rel.target)
 }
 

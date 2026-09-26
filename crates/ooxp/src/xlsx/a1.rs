@@ -1,6 +1,6 @@
 //! A1 地址与区域。
 
-use crate::error::{Error, ErrorCode};
+use crate::error::{Error, ErrorKind, RangeReason};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct CellRef {
@@ -11,7 +11,9 @@ pub struct CellRef {
 pub fn parse_cell(input: &str) -> Result<CellRef, Error> {
     let s = input.trim();
     if s.is_empty() {
-        return Err(Error::new(ErrorCode::InvalidRange, "空的单元格地址"));
+        return Err(Error::new(ErrorKind::InvalidRange {
+            reason: RangeReason::Empty,
+        }));
     }
     let bytes = s.as_bytes();
     let mut i = 0;
@@ -23,35 +25,41 @@ pub fn parse_cell(input: &str) -> Result<CellRef, Error> {
         i += 1;
     }
     if i == col_start {
-        return Err(Error::new(
-            ErrorCode::InvalidRange,
-            format!("不是 A1 地址：{input}"),
-        ));
+        return Err(Error::new(ErrorKind::InvalidRange {
+            reason: RangeReason::NotA1 {
+                input: input.to_string(),
+            },
+        }));
     }
     let col = letters_to_col(&s[col_start..i])?;
     if i < bytes.len() && bytes[i] == b'$' {
         i += 1;
     }
     if i >= bytes.len() || !bytes[i].is_ascii_digit() {
-        return Err(Error::new(
-            ErrorCode::InvalidRange,
-            format!("不是 A1 地址：{input}"),
-        ));
+        return Err(Error::new(ErrorKind::InvalidRange {
+            reason: RangeReason::NotA1 {
+                input: input.to_string(),
+            },
+        }));
     }
     let row: u32 = s[i..]
         .parse()
-        .map_err(|_| Error::new(ErrorCode::InvalidRange, format!("不是 A1 地址：{input}")))?;
+        .map_err(|_| {
+            Error::new(ErrorKind::InvalidRange {
+                reason: RangeReason::NotA1 {
+                    input: input.to_string(),
+                },
+            })
+        })?;
     if row == 0 || row > 1_048_576 {
-        return Err(Error::new(
-            ErrorCode::InvalidRange,
-            format!("行号超出范围：{row}"),
-        ));
+        return Err(Error::new(ErrorKind::InvalidRange {
+            reason: RangeReason::RowOutOfRange { row },
+        }));
     }
     if col == 0 || col > 16_384 {
-        return Err(Error::new(
-            ErrorCode::InvalidRange,
-            format!("列号超出范围：{col}"),
-        ));
+        return Err(Error::new(ErrorKind::InvalidRange {
+            reason: RangeReason::ColOutOfRange { col },
+        }));
     }
     Ok(CellRef { col, row })
 }
@@ -62,10 +70,11 @@ pub fn parse_range(input: &str) -> Result<(CellRef, CellRef), Error> {
         let start = parse_cell(a)?;
         let end = parse_cell(b)?;
         if start.col > end.col || start.row > end.row {
-            return Err(Error::new(
-                ErrorCode::InvalidRange,
-                format!("区域起止颠倒：{input}"),
-            ));
+            return Err(Error::new(ErrorKind::InvalidRange {
+                reason: RangeReason::Reversed {
+                    input: input.to_string(),
+                },
+            }));
         }
         Ok((start, end))
     } else {
@@ -78,10 +87,11 @@ pub fn letters_to_col(letters: &str) -> Result<u32, Error> {
     let mut n: u32 = 0;
     for ch in letters.chars() {
         if !ch.is_ascii_alphabetic() {
-            return Err(Error::new(
-                ErrorCode::InvalidRange,
-                format!("非法列字母：{letters}"),
-            ));
+            return Err(Error::new(ErrorKind::InvalidRange {
+                reason: RangeReason::InvalidColLetters {
+                    letters: letters.to_string(),
+                },
+            }));
         }
         let d = (ch.to_ascii_uppercase() as u8 - b'A' + 1) as u32;
         n = n.saturating_mul(26).saturating_add(d);

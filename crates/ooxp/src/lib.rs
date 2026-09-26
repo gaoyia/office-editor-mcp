@@ -10,7 +10,7 @@ mod xlsx;
 mod xml;
 
 pub use dispatch::run;
-pub use error::{Error, ErrorCode};
+pub use error::{peek_lang, Error, ErrorCode, Lang};
 pub use json::{written_json, RunOutput};
 
 #[cfg(test)]
@@ -447,5 +447,32 @@ mod tests {
         )
         .unwrap_err();
         assert_eq!(err.code(), ErrorCode::InvalidId);
+    }
+
+    #[test]
+    fn error_message_defaults_to_english() {
+        let err = run(r#"{"schemaVersion":2,"action":"inspect","path":"x.xlsx"}"#, None)
+            .unwrap_err();
+        let en = err.to_json(Lang::En);
+        assert_eq!(en["error"]["code"], "UnsupportedSchema");
+        assert_eq!(en["error"]["message"], "schemaVersion must be 1");
+        let zh = err.to_json(Lang::ZhCn);
+        assert_eq!(zh["error"]["message"], "schemaVersion 必须是 1");
+    }
+
+    #[test]
+    fn locale_is_accepted_on_inspect() {
+        let err = run(
+            r#"{"schemaVersion":1,"action":"inspect","path":"no-such-ooxp.xlsx","locale":"zh-CN"}"#,
+            None,
+        )
+        .unwrap_err();
+        assert_eq!(err.code(), ErrorCode::Io);
+        let msg = err.to_json(Lang::En)["error"]["message"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        assert!(msg.contains("Cannot access"));
+        assert!(!msg.contains("系统找不到"));
     }
 }

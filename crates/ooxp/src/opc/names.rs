@@ -1,20 +1,23 @@
 //! OPC 部件名规范化。
 
-use crate::error::{Error, ErrorCode};
+use crate::error::{Error, ErrorKind, OpcReason};
 
 /// 把 ZIP 条目名或任意路径收成以 `/` 开头的 OPC 名。
 pub fn normalize_part_name(name: &str) -> Result<String, Error> {
     let unified = name.replace('\\', "/");
     let trimmed = unified.trim_start_matches('/');
     if trimmed.is_empty() {
-        return Err(Error::new(ErrorCode::OpcOpen, "部件名不能为空"));
+        return Err(Error::new(ErrorKind::OpcOpen {
+            reason: OpcReason::EmptyPartName,
+        }));
     }
     for seg in trimmed.split('/') {
         if seg.is_empty() || seg == "." || seg == ".." {
-            return Err(Error::new(
-                ErrorCode::OpcOpen,
-                format!("非法部件名：{name}"),
-            ));
+            return Err(Error::new(ErrorKind::OpcOpen {
+                reason: OpcReason::InvalidPartName {
+                    name: name.to_string(),
+                },
+            }));
         }
     }
     Ok(format!("/{trimmed}"))
@@ -83,10 +86,11 @@ pub fn resolve_rel_target(source_part: &str, target: &str) -> Result<String, Err
         segs.push(seg);
     }
     if segs.is_empty() {
-        return Err(Error::new(
-            ErrorCode::OpcOpen,
-            format!("无法解析关系目标：{target}"),
-        ));
+        return Err(Error::new(ErrorKind::OpcOpen {
+            reason: OpcReason::RelTarget {
+                target: target.to_string(),
+            },
+        }));
     }
     normalize_part_name(&segs.join("/"))
 }

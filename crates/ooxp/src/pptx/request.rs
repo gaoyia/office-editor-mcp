@@ -2,7 +2,7 @@
 
 use serde_json::Value;
 
-use crate::error::{Error, ErrorCode};
+use crate::error::{Error, ErrorKind, ScopeNeed, TypeName};
 use crate::json;
 
 #[derive(Debug, Clone)]
@@ -23,7 +23,15 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
     };
     let obj = v
         .as_object()
-        .ok_or_else(|| Error::with_path(ErrorCode::InvalidField, "scope 必须是对象", "scope"))?;
+        .ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::WrongType {
+                    field: "scope".into(),
+                    expected: TypeName::Object,
+                },
+                "scope",
+            )
+        })?;
     if obj.is_empty() {
         return Ok(None);
     }
@@ -33,18 +41,27 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
     match (slide, max) {
         (None, None) => Ok(None),
         (None, Some(_)) => Err(Error::with_path(
-            ErrorCode::ScopeRequired,
-            "看形状时必须给 slide",
+            ErrorKind::ScopeRequired {
+                need: ScopeNeed::Slide,
+            },
             "scope.slide",
         )),
         (Some(s), m) => {
             let slide = s.as_u64().ok_or_else(|| {
-                Error::with_path(ErrorCode::InvalidField, "slide 必须是整数", "scope.slide")
+                Error::with_path(
+                    ErrorKind::WrongType {
+                        field: "slide".into(),
+                        expected: TypeName::Integer,
+                    },
+                    "scope.slide",
+                )
             })?;
             if slide < 1 {
                 return Err(Error::with_path(
-                    ErrorCode::InvalidField,
-                    "slide 从 1 起",
+                    ErrorKind::MinValue {
+                        field: "slide".into(),
+                        min: 1,
+                    },
                     "scope.slide",
                 ));
             }
@@ -53,15 +70,20 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
                 Some(v) => {
                     let n = v.as_u64().ok_or_else(|| {
                         Error::with_path(
-                            ErrorCode::InvalidField,
-                            "maxShapes 必须是整数",
+                            ErrorKind::WrongType {
+                                field: "maxShapes".into(),
+                                expected: TypeName::Integer,
+                            },
                             "scope.maxShapes",
                         )
                     })?;
                     if !(1..=5000).contains(&n) {
                         return Err(Error::with_path(
-                            ErrorCode::TruncatedLimit,
-                            "maxShapes 允许范围是 1 到 5000",
+                            ErrorKind::OutOfRange {
+                                field: "maxShapes".into(),
+                                min: 1,
+                                max: 5000,
+                            },
                             "scope.maxShapes",
                         ));
                     }
@@ -81,33 +103,42 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<SetShapeTextOp>, Error> {
     for (i, op) in ops.iter().enumerate() {
         let obj = op.as_object().ok_or_else(|| {
             Error::with_path(
-                ErrorCode::InvalidField,
-                "ops 的每一项必须是对象",
+                ErrorKind::WrongType {
+                    field: format!("ops[{i}]"),
+                    expected: TypeName::Object,
+                },
                 format!("ops[{i}]"),
             )
         })?;
         let op_name = obj.get("op").and_then(Value::as_str).ok_or_else(|| {
-            Error::with_path(ErrorCode::InvalidField, "缺少 op", format!("ops[{i}].op"))
+            Error::with_path(
+                ErrorKind::MissingField {
+                    field: "op".into(),
+                },
+                format!("ops[{i}].op"),
+            )
         })?;
         if op_name == "setCell" || op_name == "setParaText" {
             return Err(Error::with_path(
-                ErrorCode::InvalidField,
-                format!("pptx 不支持 {op_name}"),
+                ErrorKind::OpNotForFormat {
+                    format: "pptx".into(),
+                    op: op_name.to_string(),
+                },
                 format!("ops[{i}].op"),
             ));
         }
         if op_name != "setShapeText" {
             return Err(Error::with_path(
-                ErrorCode::UnsupportedOp,
-                format!("不支持的 op：{op_name}"),
+                ErrorKind::UnsupportedOp {
+                    op: op_name.to_string(),
+                },
                 format!("ops[{i}].op"),
             ));
         }
         for k in obj.keys() {
             if !matches!(k.as_str(), "op" | "id" | "text") {
                 return Err(Error::with_path(
-                    ErrorCode::InvalidField,
-                    format!("不认识的字段：{k}"),
+                    ErrorKind::UnknownField { field: k.clone() },
                     format!("ops[{i}].{k}"),
                 ));
             }
@@ -117,21 +148,30 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<SetShapeTextOp>, Error> {
             .and_then(Value::as_str)
             .filter(|s| !s.is_empty())
             .ok_or_else(|| {
-                Error::with_path(ErrorCode::InvalidField, "缺少 id", format!("ops[{i}].id"))
+                Error::with_path(
+                    ErrorKind::MissingField {
+                        field: "id".into(),
+                    },
+                    format!("ops[{i}].id"),
+                )
             })?;
         let text = match obj.get("text") {
             Some(Value::String(s)) => s.clone(),
             Some(_) => {
                 return Err(Error::with_path(
-                    ErrorCode::InvalidField,
-                    "text 必须是字符串",
+                    ErrorKind::WrongType {
+                        field: "text".into(),
+                        expected: TypeName::String,
+                    },
                     format!("ops[{i}].text"),
                 ));
             }
             None => {
                 return Err(Error::with_path(
-                    ErrorCode::InvalidField,
-                    "setShapeText 必须有 text",
+                    ErrorKind::OpRequiresField {
+                        op: "setShapeText".into(),
+                        field: "text".into(),
+                    },
                     format!("ops[{i}].text"),
                 ));
             }

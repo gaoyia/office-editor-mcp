@@ -1,0 +1,132 @@
+//! 中文错误文案。现有句子照搬，只统一标点。
+
+use super::super::kind::{
+    ErrorKind, IdReason, OpcReason, RangeReason, RelSource, ScopeNeed, SheetNameReason, TypeName,
+    XmlIssue,
+};
+
+pub(super) fn render(kind: &ErrorKind) -> String {
+    match kind {
+        ErrorKind::InvalidJsonParse { detail } => format!("入参不是 JSON：{detail}"),
+        ErrorKind::InvalidJsonNotObject => "入参必须是 JSON 对象".into(),
+        ErrorKind::MissingEnvelopeField { field } => format!("缺少 {field}"),
+        ErrorKind::UnsupportedSchema => "schemaVersion 必须是 1".into(),
+        ErrorKind::UnsupportedAction { action } => format!("不支持的 action：{action}"),
+        ErrorKind::UnknownField { field } => format!("不认识的字段：{field}"),
+        ErrorKind::CannotInferFormat { path } => format!("无法从路径推断格式：{path}"),
+        ErrorKind::UnsupportedFormat { format } => format!("不支持的 format：{format}"),
+        ErrorKind::MissingField { field } => format!("缺少 {field}"),
+        ErrorKind::WrongType { field, expected } => {
+            format!("{field} 必须是{}", type_name(*expected))
+        }
+        ErrorKind::EmptyArray { field } => format!("{field} 不能为空"),
+        ErrorKind::OutOfRange { field, min, max } => {
+            format!("{field} 允许范围是 {min} 到 {max}")
+        }
+        ErrorKind::MinValue { field, min } => format!("{field} 从 {min} 起"),
+        ErrorKind::MutuallyExclusive { a, b } => format!("{a} 和 {b} 不能同时出现"),
+        ErrorKind::ContentObjectsExclusive => {
+            "workbook、document、presentation 不能同时出现".into()
+        }
+        ErrorKind::CreateNeedsObject { format, field } => {
+            format!("{format} 的 create 必须用 {field}")
+        }
+        ErrorKind::CreateMissingObject { field } => format!("create 必须有 {field}"),
+        ErrorKind::ScopeRequired { need } => match need {
+            ScopeNeed::SheetAndRange => "看单元格时必须同时给 sheet 和 range".into(),
+            ScopeNeed::FromAndMaxParas => "看段落正文时必须同时给 from 和 maxParas".into(),
+            ScopeNeed::Slide => "看形状时必须给 slide".into(),
+        },
+        ErrorKind::UnsupportedOp { op } => format!("不支持的 op：{op}"),
+        ErrorKind::OpNotForFormat { format, op } => format!("{format} 不支持 {op}"),
+        ErrorKind::SetCellNeedsValueOrFormula => "setCell 必须有 value 或 formula".into(),
+        ErrorKind::FormulaMustStartWithEquals => "formula 必须以 = 开头".into(),
+        ErrorKind::InvalidCellValue => "单元格值必须是数字、字符串、布尔或 null".into(),
+        ErrorKind::OpRequiresField { op, field } => format!("{op} 必须有 {field}"),
+        ErrorKind::InvalidRange { reason } => match reason {
+            RangeReason::Empty => "空的单元格地址".into(),
+            RangeReason::NotA1 { input } => format!("不是 A1 地址：{input}"),
+            RangeReason::RowOutOfRange { row } => format!("行号超出范围：{row}"),
+            RangeReason::ColOutOfRange { col } => format!("列号超出范围：{col}"),
+            RangeReason::Reversed { input } => format!("区域起止颠倒：{input}"),
+            RangeReason::InvalidColLetters { letters } => format!("非法列字母：{letters}"),
+        },
+        ErrorKind::InvalidId { reason } => match reason {
+            IdReason::NotCell { id } => format!("不是单元格 id：{id}"),
+            IdReason::ParaPrefix => "段落 id 必须以 para: 开头".into(),
+            IdReason::ParaIndexNotInt => "para:index 后面必须是正整数".into(),
+            IdReason::ParaIndexFromOne => "para:index 从 1 起".into(),
+            IdReason::ParaIdNotHex => "paraId 必须是十六进制".into(),
+            IdReason::ShapePrefix => "形状 id 必须以 slide: 开头".into(),
+            IdReason::ShapeForm => "setShapeText 的 id 必须是 slide:{n}/shape:…".into(),
+            IdReason::SlideIndexNotInt => "slide 序号必须是正整数".into(),
+            IdReason::SlideIndexFromOne => "slide 序号从 1 起".into(),
+            IdReason::ShapeEmpty => "shape 后面不能为空".into(),
+            IdReason::ShapeIndexNotInt => "shape:index 后面必须是正整数".into(),
+            IdReason::ShapeIndexFromOne => "shape:index 从 1 起".into(),
+        },
+        ErrorKind::SheetNotFound { name } => format!("找不到工作表：{name}"),
+        ErrorKind::ParaNotFound { id } => format!("找不到段落：{id}"),
+        ErrorKind::SlideNotFound { n } => format!("找不到幻灯片：slide:{n}"),
+        ErrorKind::ShapeNotFound { id } => format!("找不到形状：{id}"),
+        ErrorKind::ShapeHasNoText { id } => format!("形状没有文本框：{id}"),
+        ErrorKind::SetCellWorksheetOnly => "只能对工作表 setCell".into(),
+        ErrorKind::InspectWorksheetOnly => "只能对工作表读单元格".into(),
+        ErrorKind::SharedFormulaMaster { cell } => format!(
+            "{cell} 是共享公式的主格，改它会让引用同一 si 的单元格失去公式；请先把那些单元格改成各自独立的公式"
+        ),
+        ErrorKind::NeedAtLeastOneSheet => "至少需要一张工作表".into(),
+        ErrorKind::DuplicateSheetName { name } => format!("工作表名重复：{name}"),
+        ErrorKind::InvalidSheetName { reason } => match reason {
+            SheetNameReason::Missing => "缺少工作表名".into(),
+            SheetNameReason::Length => "工作表名长度必须是 1 到 31 个字符".into(),
+            SheetNameReason::History => "工作表不能叫 History".into(),
+            SheetNameReason::IllegalChars => "工作表名含有非法字符".into(),
+        },
+        ErrorKind::InvalidParaStyle => "style 只允许 Normal、Heading1、Heading2、Heading3".into(),
+        ErrorKind::OpcOpen { reason } => match reason {
+            OpcReason::EmptyPartName => "部件名不能为空".into(),
+            OpcReason::InvalidPartName { name } => format!("非法部件名：{name}"),
+            OpcReason::MissingContentTypes => "包内缺少 [Content_Types].xml".into(),
+            OpcReason::MissingRootRels => "包内缺少 /_rels/.rels".into(),
+            OpcReason::MissingOfficeDocument => "根关系里没有 officeDocument".into(),
+            OpcReason::RelTarget { target } => format!("无法解析关系目标：{target}"),
+            OpcReason::Zip { detail } => format!("无法作为 ZIP 打开：{detail}"),
+        },
+        ErrorKind::PartMissing { name } => format!("找不到部件 {name}"),
+        ErrorKind::RelNotFound { source, rid } => match source {
+            RelSource::Unspecified => format!("没有关系 {rid}"),
+            RelSource::Workbook => format!("workbook 关系里没有 {rid}"),
+            RelSource::Part(part) => format!("{part} 没有关系 {rid}"),
+        },
+        ErrorKind::ExternalRel { rid } => format!("{rid} 指向外部资源"),
+        ErrorKind::SlideRelMissing { index } => {
+            format!("p:sldId 缺少关系 id（第 {index} 页）")
+        }
+        ErrorKind::XmlBroken { issue, detail } => match (issue, detail) {
+            (XmlIssue::UnbalancedEnd, _) => "XML 结束标签多于开始标签".into(),
+            (XmlIssue::NoRoot, _) => "XML 没有根元素".into(),
+            (XmlIssue::TextDecode, Some(d)) => format!("XML 文本无法解码：{d}"),
+            (XmlIssue::TextDecode, None) => "XML 文本无法解码".into(),
+            (XmlIssue::Parse, Some(d)) => format!("XML 解析失败：{d}"),
+            (XmlIssue::Parse, None) => "XML 解析失败".into(),
+            (XmlIssue::AttrRead, Some(d)) => format!("XML 属性无法读取：{d}"),
+            (XmlIssue::AttrRead, None) => "XML 属性无法读取".into(),
+            (XmlIssue::AttrDecode, Some(d)) => format!("XML 属性值无法解码：{d}"),
+            (XmlIssue::AttrDecode, None) => "XML 属性值无法解码".into(),
+            (XmlIssue::Write, Some(d)) => format!("写出 XML 失败：{d}"),
+            (XmlIssue::Write, None) => "写出 XML 失败".into(),
+        },
+        ErrorKind::XmlMissing { parent, child } => format!("{parent} 缺少 {child}"),
+    }
+}
+
+fn type_name(t: TypeName) -> &'static str {
+    match t {
+        TypeName::Object => "对象",
+        TypeName::Array => "数组",
+        TypeName::Integer => "整数",
+        TypeName::String => "字符串",
+        TypeName::NonEmptyString => "非空字符串",
+    }
+}

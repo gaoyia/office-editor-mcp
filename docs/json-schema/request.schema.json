@@ -42,7 +42,8 @@
         "action": { "const": "inspect" },
         "path": { "type": "string", "minLength": 1 },
         "format": { "$ref": "#/$defs/format" },
-        "scope": { "$ref": "#/$defs/inspectScope" }
+        "scope": { "$ref": "#/$defs/inspectScope" },
+        "locale": { "type": "string" }
       }
     },
     "inspectScope": {
@@ -77,7 +78,8 @@
         "format": { "$ref": "#/$defs/format" },
         "workbook": { "$ref": "#/$defs/xlsxWorkbook" },
         "document": { "$ref": "#/$defs/docxDocument" },
-        "presentation": { "$ref": "#/$defs/pptxPresentation" }
+        "presentation": { "$ref": "#/$defs/pptxPresentation" },
+        "locale": { "type": "string" }
       },
       "oneOf": [
         { "required": ["workbook"] },
@@ -187,6 +189,7 @@
         "path": { "type": "string", "minLength": 1 },
         "format": { "$ref": "#/$defs/format" },
         "output": { "type": "string", "minLength": 1 },
+        "locale": { "type": "string" },
         "ops": {
           "type": "array",
           "minItems": 1,

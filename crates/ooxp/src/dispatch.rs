@@ -3,7 +3,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use crate::error::{io_path, Error, ErrorCode};
+use crate::error::{io_path, Error, ErrorKind};
 use crate::json::{
     self, deny_unknown, infer_format, require_ops, str_field, write_atomic, Action, Format,
     Request, RunOutput,
@@ -22,7 +22,7 @@ pub fn run(input_json: &str, cli_output: Option<&Path>) -> Result<RunOutput, Err
 fn run_inspect(req: &Request) -> Result<RunOutput, Error> {
     deny_unknown(
         &req.obj,
-        &["schemaVersion", "action", "path", "format", "scope"],
+        &["schemaVersion", "action", "path", "format", "scope", "locale"],
     )?;
     let path = str_field(&req.obj, "path")?;
     let format = req.obj.get("format").and_then(serde_json::Value::as_str);
@@ -56,6 +56,7 @@ fn run_create(req: &Request, cli_output: Option<&Path>) -> Result<RunOutput, Err
             "workbook",
             "document",
             "presentation",
+            "locale",
         ],
     )?;
     let path = req
@@ -64,7 +65,14 @@ fn run_create(req: &Request, cli_output: Option<&Path>) -> Result<RunOutput, Err
         .and_then(serde_json::Value::as_str)
         .map(PathBuf::from)
         .or_else(|| cli_output.map(Path::to_path_buf))
-        .ok_or_else(|| Error::with_path(ErrorCode::InvalidField, "缺少 path", "path"))?;
+        .ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::MissingField {
+                    field: "path".into(),
+                },
+                "path",
+            )
+        })?;
     let format = req.obj.get("format").and_then(serde_json::Value::as_str);
     let fmt = infer_format(&path.to_string_lossy(), format)?;
     let has_wb = req.obj.contains_key("workbook");
@@ -76,8 +84,7 @@ fn run_create(req: &Request, cli_output: Option<&Path>) -> Result<RunOutput, Err
         .count();
     if content_count > 1 {
         return Err(Error::with_path(
-            ErrorCode::InvalidField,
-            "workbook、document、presentation 不能同时出现",
+            ErrorKind::ContentObjectsExclusive,
             "presentation",
         ));
     }
@@ -85,15 +92,18 @@ fn run_create(req: &Request, cli_output: Option<&Path>) -> Result<RunOutput, Err
         Format::Xlsx => {
             if has_doc || has_pres {
                 return Err(Error::with_path(
-                    ErrorCode::InvalidField,
-                    "xlsx 的 create 必须用 workbook",
+                    ErrorKind::CreateNeedsObject {
+                        format: "xlsx".into(),
+                        field: "workbook".into(),
+                    },
                     if has_doc { "document" } else { "presentation" },
                 ));
             }
             let workbook = req.obj.get("workbook").ok_or_else(|| {
                 Error::with_path(
-                    ErrorCode::InvalidField,
-                    "create 必须有 workbook",
+                    ErrorKind::CreateMissingObject {
+                        field: "workbook".into(),
+                    },
                     "workbook",
                 )
             })?;
@@ -102,15 +112,18 @@ fn run_create(req: &Request, cli_output: Option<&Path>) -> Result<RunOutput, Err
         Format::Docx => {
             if has_wb || has_pres {
                 return Err(Error::with_path(
-                    ErrorCode::InvalidField,
-                    "docx 的 create 必须用 document",
+                    ErrorKind::CreateNeedsObject {
+                        format: "docx".into(),
+                        field: "document".into(),
+                    },
                     if has_wb { "workbook" } else { "presentation" },
                 ));
             }
             let document = req.obj.get("document").ok_or_else(|| {
                 Error::with_path(
-                    ErrorCode::InvalidField,
-                    "create 必须有 document",
+                    ErrorKind::CreateMissingObject {
+                        field: "document".into(),
+                    },
                     "document",
                 )
             })?;
@@ -119,15 +132,18 @@ fn run_create(req: &Request, cli_output: Option<&Path>) -> Result<RunOutput, Err
         Format::Pptx => {
             if has_wb || has_doc {
                 return Err(Error::with_path(
-                    ErrorCode::InvalidField,
-                    "pptx 的 create 必须用 presentation",
+                    ErrorKind::CreateNeedsObject {
+                        format: "pptx".into(),
+                        field: "presentation".into(),
+                    },
                     if has_wb { "workbook" } else { "document" },
                 ));
             }
             let presentation = req.obj.get("presentation").ok_or_else(|| {
                 Error::with_path(
-                    ErrorCode::InvalidField,
-                    "create 必须有 presentation",
+                    ErrorKind::CreateMissingObject {
+                        field: "presentation".into(),
+                    },
                     "presentation",
                 )
             })?;
@@ -144,7 +160,15 @@ fn run_create(req: &Request, cli_output: Option<&Path>) -> Result<RunOutput, Err
 fn run_apply(req: &Request, cli_output: Option<&Path>) -> Result<RunOutput, Error> {
     deny_unknown(
         &req.obj,
-        &["schemaVersion", "action", "path", "format", "output", "ops"],
+        &[
+            "schemaVersion",
+            "action",
+            "path",
+            "format",
+            "output",
+            "ops",
+            "locale",
+        ],
     )?;
     let path = str_field(&req.obj, "path")?;
     let format = req.obj.get("format").and_then(serde_json::Value::as_str);

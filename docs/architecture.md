@@ -28,6 +28,8 @@ MCP 是以后的传输层，第一期不做。将来无论用不用 JSON-RPC，�
 
 ```text
 crates/ooxp/                 库
+  error/                     错误身份、错误码、按语言渲染
+    messages/                en.rs、zh_cn.rs；每种语言一个穷尽 match
   opc/                       ZIP、[Content_Types].xml、各级 .rels、按路径读写部件
   json/                      领域 JSON 信封
   dispatch/                  按 format 分发给 xlsx / docx / pptx
@@ -37,7 +39,7 @@ crates/ooxp/                 库
 crates/ooxp-cli/             命令行，只依赖 ooxp。二进制名也是 ooxp
 ```
 
-依赖方向只能是：`cli` → 库的门面；`dispatch` → `json` 与各格式模块；`xlsx` / `docx` / `pptx` → `opc` 与 `json`。`json` 不依赖格式模块。禁止格式模块直接操作 ZIP 字节而不走 `opc`。`SetCellOp`、工作表 `scope`、`setParaText` 这类类型放在对应格式模块里。
+依赖方向只能是：`cli` → 库的门面；`dispatch` → `json` 与各格式模块；`xlsx` / `docx` / `pptx` → `opc` 与 `json`。`json` 不依赖格式模块。各模块只依赖 `error`，`error` 不反向依赖 `json`、`opc` 或任何格式模块。禁止格式模块直接操作 ZIP 字节而不走 `opc`。`SetCellOp`、工作表 `scope`、`setParaText` 这类类型放在对应格式模块里。
 
 ### opc
 
