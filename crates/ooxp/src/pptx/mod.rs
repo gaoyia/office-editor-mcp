@@ -1,6 +1,7 @@
 //! pptx：inspect / create / apply。
 
 mod apply;
+mod chart;
 mod create;
 mod inspect;
 mod picture;
@@ -8,6 +9,7 @@ mod request;
 mod shape;
 
 pub use apply::apply;
+pub use chart::export_chart_data;
 pub use create::create;
 pub use inspect::inspect;
 pub use picture::export_media;

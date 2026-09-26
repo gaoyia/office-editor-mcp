@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "deck.pptx",
+  "output": "deck.patched.pptx",
+  "ops": [
+    { "op": "setChartTitle", "id": "slide:1/chart:5", "title": "销量" },
+    { "op": "setChartSeries", "id": "slide:1/chart:5/series:0", "values": [10, 20, 30] },
+    { "op": "setChartType", "id": "slide:1/chart:5", "type": "line" },
+    { "op": "setChartSize", "id": "slide:1/chart:5", "cx": 1828800, "cy": 914400 },
+    { "op": "setChartPos", "id": "slide:1/chart:5", "x": 914400, "y": 1371600 },
+    { "op": "insertChart", "id": "slide:1", "type": "col", "title": "新增", "series": [
+      { "name": "系列甲", "categories": ["A", "B", "C"], "values": [1, 2, 3] }
+    ] },
+    { "op": "deleteChart", "id": "slide:1/chart:5" }
+  ]
+}

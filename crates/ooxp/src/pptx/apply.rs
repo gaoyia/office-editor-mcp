@@ -1,9 +1,10 @@
-//! 按形状 id 替换可见文本，并处理幻灯片图。
+//! 按形状 id 替换可见文本，并处理幻灯片图与图表。
 
 use crate::error::{Error, ErrorKind};
 use crate::opc::{self, Package};
 use crate::xml;
 
+use super::chart;
 use super::picture;
 use super::request::PptxOp;
 use super::shape;
@@ -109,6 +110,152 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                 })?;
                 let mut doc = xml::parse(pkg.get(&meta.part)?)?;
                 picture::set_picture_pos(&mut doc, op, i)?;
+                pkg.set(&meta.part, doc.to_bytes()?)?;
+            }
+            PptxOp::InsertChart(op) => {
+                let meta = slides.get(op.slide - 1).ok_or_else(|| {
+                    Error::with_path(
+                        ErrorKind::SlideNotFound { n: op.slide as u32 },
+                        format!("ops[{i}].id"),
+                    )
+                })?;
+                let mut doc = xml::parse(pkg.get(&meta.part)?)?;
+                chart::insert_chart(&mut pkg, &mut doc, &meta.part, &pres.root, op, i)?;
+                pkg.set(&meta.part, doc.to_bytes()?)?;
+            }
+            PptxOp::DeleteChart(op) => {
+                let meta = slides.get(op.target.slide - 1).ok_or_else(|| {
+                    Error::with_path(
+                        ErrorKind::SlideNotFound {
+                            n: op.target.slide as u32,
+                        },
+                        format!("ops[{i}].id"),
+                    )
+                })?;
+                let mut doc = xml::parse(pkg.get(&meta.part)?)?;
+                chart::delete_chart(&mut pkg, &mut doc, &meta.part, op, i)?;
+                pkg.set(&meta.part, doc.to_bytes()?)?;
+            }
+            PptxOp::SetChartTitle(op) => {
+                let meta = slides.get(op.target.slide - 1).ok_or_else(|| {
+                    Error::with_path(
+                        ErrorKind::SlideNotFound {
+                            n: op.target.slide as u32,
+                        },
+                        format!("ops[{i}].id"),
+                    )
+                })?;
+                let doc = xml::parse(pkg.get(&meta.part)?)?;
+                chart::apply_title(&mut pkg, &doc.root, &meta.part, op, i)?;
+            }
+            PptxOp::SetChartSeries(op) => {
+                let meta = slides.get(op.target.slide - 1).ok_or_else(|| {
+                    Error::with_path(
+                        ErrorKind::SlideNotFound {
+                            n: op.target.slide as u32,
+                        },
+                        format!("ops[{i}].id"),
+                    )
+                })?;
+                let doc = xml::parse(pkg.get(&meta.part)?)?;
+                chart::apply_series(&mut pkg, &doc.root, &meta.part, op, i)?;
+            }
+            PptxOp::AddChartSeries(op) => {
+                let meta = slides.get(op.target.slide - 1).ok_or_else(|| {
+                    Error::with_path(
+                        ErrorKind::SlideNotFound {
+                            n: op.target.slide as u32,
+                        },
+                        format!("ops[{i}].id"),
+                    )
+                })?;
+                let doc = xml::parse(pkg.get(&meta.part)?)?;
+                chart::apply_add_series(&mut pkg, &doc.root, &meta.part, op, i)?;
+            }
+            PptxOp::DeleteChartSeries(op) => {
+                let meta = slides.get(op.target.slide - 1).ok_or_else(|| {
+                    Error::with_path(
+                        ErrorKind::SlideNotFound {
+                            n: op.target.slide as u32,
+                        },
+                        format!("ops[{i}].id"),
+                    )
+                })?;
+                let doc = xml::parse(pkg.get(&meta.part)?)?;
+                chart::apply_delete_series(&mut pkg, &doc.root, &meta.part, op, i)?;
+            }
+            PptxOp::SetChartType(op) => {
+                let meta = slides.get(op.target.slide - 1).ok_or_else(|| {
+                    Error::with_path(
+                        ErrorKind::SlideNotFound {
+                            n: op.target.slide as u32,
+                        },
+                        format!("ops[{i}].id"),
+                    )
+                })?;
+                let doc = xml::parse(pkg.get(&meta.part)?)?;
+                chart::apply_type(&mut pkg, &doc.root, &meta.part, op, i)?;
+            }
+            PptxOp::SetChartAxisTitle(op) => {
+                let meta = slides.get(op.target.slide - 1).ok_or_else(|| {
+                    Error::with_path(
+                        ErrorKind::SlideNotFound {
+                            n: op.target.slide as u32,
+                        },
+                        format!("ops[{i}].id"),
+                    )
+                })?;
+                let doc = xml::parse(pkg.get(&meta.part)?)?;
+                chart::apply_axis_title(&mut pkg, &doc.root, &meta.part, op, i)?;
+            }
+            PptxOp::SetChartLegend(op) => {
+                let meta = slides.get(op.target.slide - 1).ok_or_else(|| {
+                    Error::with_path(
+                        ErrorKind::SlideNotFound {
+                            n: op.target.slide as u32,
+                        },
+                        format!("ops[{i}].id"),
+                    )
+                })?;
+                let doc = xml::parse(pkg.get(&meta.part)?)?;
+                chart::apply_legend(&mut pkg, &doc.root, &meta.part, op, i)?;
+            }
+            PptxOp::SetChartDataLabels(op) => {
+                let meta = slides.get(op.target.slide - 1).ok_or_else(|| {
+                    Error::with_path(
+                        ErrorKind::SlideNotFound {
+                            n: op.target.slide as u32,
+                        },
+                        format!("ops[{i}].id"),
+                    )
+                })?;
+                let doc = xml::parse(pkg.get(&meta.part)?)?;
+                chart::apply_data_labels(&mut pkg, &doc.root, &meta.part, op, i)?;
+            }
+            PptxOp::SetChartSize(op) => {
+                let meta = slides.get(op.target.slide - 1).ok_or_else(|| {
+                    Error::with_path(
+                        ErrorKind::SlideNotFound {
+                            n: op.target.slide as u32,
+                        },
+                        format!("ops[{i}].id"),
+                    )
+                })?;
+                let mut doc = xml::parse(pkg.get(&meta.part)?)?;
+                chart::apply_size(&mut doc, op, i)?;
+                pkg.set(&meta.part, doc.to_bytes()?)?;
+            }
+            PptxOp::SetChartPos(op) => {
+                let meta = slides.get(op.target.slide - 1).ok_or_else(|| {
+                    Error::with_path(
+                        ErrorKind::SlideNotFound {
+                            n: op.target.slide as u32,
+                        },
+                        format!("ops[{i}].id"),
+                    )
+                })?;
+                let mut doc = xml::parse(pkg.get(&meta.part)?)?;
+                chart::apply_pos(&mut doc, op, i)?;
                 pkg.set(&meta.part, doc.to_bytes()?)?;
             }
         }

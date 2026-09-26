@@ -5,7 +5,7 @@
 
 从 `.plan/2026年-9月-27日-❌-pptx-编辑路线.md` 拆出序号 3。复用 `insertChart` 的写入，不另做生成器。数据写 embedding，不写演示文稿里的工作表。
 
-前置：`.plan/2026年-9月-27日-❌-pptx-幻灯片图表.md`、`.plan/2026年-9月-27日-✅-pptx-create带图.md`。
+前置：`.plan/2026年-9月-27日-✅-pptx-幻灯片图表.md`、`.plan/2026年-9月-27日-✅-pptx-create带图.md`。
 
 契约真源：`docs/json-contract.md`、`docs/json-schema/request.schema.json`、`docs/errors.md`、`docs/architecture.md`、`docs/opc.md`、`docs/checklist-pptx.md`。
 

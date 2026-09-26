@@ -337,7 +337,7 @@ fn remove_pic_in(el: &mut Element, idx: &mut usize, key: &PicKey) -> bool {
     false
 }
 
-fn next_cnv_id(root: &Element) -> u32 {
+pub(crate) fn next_cnv_id(root: &Element) -> u32 {
     let mut max = 1u32;
     shape::walk_choice(root, &mut |e| {
         if e.local_name() != "cNvPr" {
@@ -393,7 +393,12 @@ fn occupied_boxes(root: &Element) -> Vec<BoxEmu> {
     out
 }
 
-fn vacant_pos(pres_root: &Element, slide_root: &Element, pic_cx: i64, pic_cy: i64) -> (i64, i64) {
+pub(crate) fn vacant_pos(
+    pres_root: &Element,
+    slide_root: &Element,
+    pic_cx: i64,
+    pic_cy: i64,
+) -> (i64, i64) {
     let (slide_cx, slide_cy) = slide_size(pres_root);
     let boxes = occupied_boxes(slide_root);
     if boxes.is_empty() {
@@ -625,7 +630,7 @@ fn ensure_xfrm(pic: &mut Element) -> &mut Element {
     ensure_child(sp_pr, "xfrm")
 }
 
-fn ensure_child<'a>(parent: &'a mut Element, local: &str) -> &'a mut Element {
+pub(crate) fn ensure_child<'a>(parent: &'a mut Element, local: &str) -> &'a mut Element {
     if parent.child_by_local(local).is_none() {
         let child = Element::new(parent.prefixed(local));
         parent.push_element(child);
@@ -633,7 +638,7 @@ fn ensure_child<'a>(parent: &'a mut Element, local: &str) -> &'a mut Element {
     parent.child_by_local_mut(local).expect("刚插入的子元素")
 }
 
-fn insert_into_sp_tree(root: &mut Element, pic: Element) -> Result<(), Error> {
+pub(crate) fn insert_into_sp_tree(root: &mut Element, pic: Element) -> Result<(), Error> {
     let tree = root
         .child_by_local_mut("cSld")
         .and_then(|c| c.child_by_local_mut("spTree"))
@@ -707,7 +712,7 @@ fn next_media_part(pkg: &Package, ext: &str) -> String {
     }
 }
 
-fn rel_target_from(source_part: &str, target_opc: &str) -> String {
+pub(crate) fn rel_target_from(source_part: &str, target_opc: &str) -> String {
     let src_dir = split_dir_file(source_part).0;
     let tgt = target_opc.trim_start_matches('/');
     let src = src_dir.trim_start_matches('/');
@@ -758,7 +763,7 @@ fn update_rel_target(
     rels.write_to(pkg, part)
 }
 
-fn media_still_used(pkg: &Package, media_opc: &str) -> Result<bool, Error> {
+pub(crate) fn media_still_used(pkg: &Package, media_opc: &str) -> Result<bool, Error> {
     for name in pkg.part_names() {
         if !name.ends_with(".rels") {
             continue;
@@ -792,14 +797,14 @@ fn source_from_rels(rels_part: &str) -> Option<String> {
     }
 }
 
-fn ensure_xmlns(root: &mut Element, prefix: &str, ns: &str) {
+pub(crate) fn ensure_xmlns(root: &mut Element, prefix: &str, ns: &str) {
     let key = format!("xmlns:{prefix}");
     if root.attr(&key).is_none() && root.attr("xmlns") != Some(ns) {
         root.set_attr(&key, ns);
     }
 }
 
-fn set_attr_local(el: &mut Element, local: &str, value: &str) {
+pub(crate) fn set_attr_local(el: &mut Element, local: &str, value: &str) {
     if let Some((k, _)) = el
         .attrs
         .iter()

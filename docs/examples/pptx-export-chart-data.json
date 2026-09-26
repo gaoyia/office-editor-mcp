@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "action": "exportChartData",
+  "path": "deck.pptx",
+  "id": "slide:1/chart:5",
+  "output": "chart.xlsx"
+}

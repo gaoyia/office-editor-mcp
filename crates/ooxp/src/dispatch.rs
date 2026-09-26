@@ -331,12 +331,15 @@ fn run_export_chart_data(req: &Request, cli_output: Option<&Path>) -> Result<Run
             },
             "action",
         )),
-        Format::Pptx => Err(Error::with_path(
-            ErrorKind::ActionNotForFormat {
-                format: "pptx".into(),
-                action: "exportChartData".into(),
-            },
-            "action",
-        )),
+        Format::Pptx => {
+            let bytes = fs::read(path).map_err(|e| io_path(e, PathBuf::from(path)))?;
+            let exported = pptx::export_chart_data(&bytes, id)?;
+            write_atomic(&out, &exported.bytes)?;
+            Ok(RunOutput::Written {
+                path: out,
+                ops_applied: None,
+                content_type: exported.content_type,
+            })
+        }
     }
 }

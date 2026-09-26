@@ -167,6 +167,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::InsertChartNeedsSheet => {
                 "xlsx insertChart id must be sheet:name".into()
             }
+            IdReason::InsertChartNeedsSlide => {
+                "pptx insertChart id must be slide:N".into()
+            }
             IdReason::InsertChartSheetNeedsWorkbook => {
                 "insertChartSheet id must be xlsx:workbook".into()
             }
@@ -178,6 +181,12 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             }
             IdReason::SheetChartContainer => {
                 "Sheet id must include /chart:… (that id alone is not a chart)".into()
+            }
+            IdReason::SlideChartPrefix => {
+                "pptx chart id must be slide:N/chart:…".into()
+            }
+            IdReason::SlideChartContainer => {
+                "Slide id must include /chart:… (that id alone is not a chart)".into()
             }
             IdReason::SmartArtPrefix => {
                 "SmartArt id must be a paragraph id plus /smartdiagram:…".into()

@@ -645,6 +645,131 @@ function Ensure-PptxPptPictureSource([switch]$Force) {
     return $path
 }
 
+function Test-PptxChartSource([string]$pptx, [string]$reqName) {
+    $tree = Invoke-OoxpTree @{
+        schemaVersion = 1; action = 'inspect'
+        path = $pptx.Replace('\', '/'); format = 'pptx'
+        scope = @{ charts = $true }
+    } $reqName
+    $slide = @($tree.slides) | Select-Object -First 1
+    $charts = @()
+    if ($slide -and ($slide.PSObject.Properties.Name -contains 'charts')) {
+        $charts = @($slide.charts)
+    }
+    $col = $charts | Where-Object { [string]$_.type -eq 'col' } | Select-Object -First 1
+    if (-not $col) { $col = $charts | Select-Object -First 1 }
+    $nVal = 0
+    $id = ''
+    $type = ''
+    if ($col) {
+        $id = [string]$col.id
+        $type = [string]$col.type
+        $ser = @($col.series) | Select-Object -First 1
+        if ($ser) { $nVal = @($ser.values).Count }
+    }
+    return [pscustomobject]@{
+        chartCount = [int]$tree.chartCount
+        n = $charts.Count
+        type = $type
+        id = $id
+        nVal = $nVal
+        ok = ($tree.chartCount -ge 1) -and ($id -like 'slide:*/chart:*') -and ($nVal -ge 2)
+    }
+}
+
+function Write-PptxChartZipHint([string]$pptx) {
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $z = [IO.Compression.ZipFile]::OpenRead($pptx)
+    try {
+        $hits = @($z.Entries | Where-Object {
+            $n = $_.FullName -replace '\\', '/'
+            $n -like 'ppt/charts/*' -or $n -like 'ppt/embeddings/*' -or $n -like 'ppt/slides/*'
+        })
+        Write-Log ("chart zip: " + (($hits | ForEach-Object { $_.FullName }) -join ', '))
+    }
+    finally { $z.Dispose() }
+}
+
+# PowerPoint 亲手另存的带图表样例：第一页一张柱形图，数据在 embedding 里。
+function Ensure-PptxPptChartSource([switch]$Force) {
+    $path = Get-OutPath 'pptx-ppt-chart-source.pptx'
+    if ((Test-Path $path) -and -not $Force) {
+        $cached = Test-PptxChartSource $path 'pptx-chart-source-cache-check'
+        if ($cached.ok) { return $path }
+        Write-Log "缓存的 pptx chart source 不合格（count=$($cached.chartCount) type=$($cached.type) nVal=$($cached.nVal) id=$($cached.id)），重建"
+    }
+
+    $tmpDir = Join-Path $env:TEMP 'ooxp-office'
+    New-Item -ItemType Directory -Force -Path $tmpDir | Out-Null
+    $tmp = Join-Path $tmpDir 'pptx-ppt-chart-source.pptx'
+    $S = $global:OoxpStrings
+    $req = @{
+        schemaVersion = 1; action = 'create'
+        path = $tmp.Replace('\', '/'); format = 'pptx'
+        presentation = @{
+            slides = @(
+                @{ shapes = @(@{ text = $S.chapter1 }, @{ text = $S.shape2src }) }
+                @{ shapes = @(@{ text = $S.page2keep }) }
+            )
+        }
+    }
+    Invoke-OoxpRequest $req 'pptx-chart-source-create' | Out-Null
+
+    $ppt = Ensure-MsPpt (Ensure-PptxCreate)
+    $pres = Open-PptPres $ppt $tmp
+    $s1 = Get-PptSlide $pres 1
+    $shapes = $s1.Shapes
+    $xlColumnClustered = 51
+    $hostObj = $null
+    try {
+        try {
+            $hostObj = $shapes.AddChart2(-1, $xlColumnClustered, 80, 40, 360, 220)
+        }
+        catch {
+            Write-Log ("AddChart2 报错：" + $_.Exception.Message)
+            try {
+                $hostObj = $shapes.AddChart($xlColumnClustered, 80, 40, 360, 220)
+            }
+            catch {
+                Write-Log ("AddChart 报错：" + $_.Exception.Message)
+            }
+        }
+    }
+    finally { Release-Com $shapes }
+
+    if (-not $hostObj) { throw 'PowerPoint 没有插入幻灯片柱形图' }
+    Start-Sleep -Seconds 1
+    $ch = $null
+    try { $ch = $hostObj.Chart } catch {
+        Write-Log ("取 Chart 失败：" + $_.Exception.Message)
+    }
+    if ($ch) {
+        try {
+            $ch.HasTitle = $true
+            $title = $ch.ChartTitle
+            try { $title.Text = $S.chartTitle } finally { Release-Com $title }
+        }
+        catch {
+            Write-Log ("设图表标题失败：" + $_.Exception.Message)
+        }
+        Release-Com $ch
+    }
+    Write-Log 'PowerPoint Save() 原地覆盖 TEMP 里的带图表源文件'
+    $pres.Save()
+    Close-PptPres $pres
+    Release-Com $hostObj
+    Release-Com $s1
+    Copy-Item -Force $tmp $path
+    Write-Log "saved ppt chart source $path"
+
+    $check = Test-PptxChartSource $path 'pptx-chart-source-saved-inspect'
+    if (-not $check.ok) {
+        Write-PptxChartZipHint $path
+        throw "PowerPoint 另存的图表源不合格：count=$($check.chartCount) type=$($check.type) nVal=$($check.nVal) id=$($check.id)"
+    }
+    return $path
+}
+
 function Write-OoxpPng([string]$path, [byte[]]$bytes) {
     $dir = Split-Path -Parent $path
     if ($dir) { New-Item -ItemType Directory -Force -Path $dir | Out-Null }

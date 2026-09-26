@@ -147,6 +147,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::InsertChartNeedsSheet => {
                 "xlsx 的 insertChart 的 id 必须是 sheet:工作表名".into()
             }
+            IdReason::InsertChartNeedsSlide => {
+                "pptx 的 insertChart 的 id 必须是 slide:N".into()
+            }
             IdReason::InsertChartSheetNeedsWorkbook => {
                 "insertChartSheet 的 id 必须是 xlsx:workbook".into()
             }
@@ -158,6 +161,12 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             }
             IdReason::SheetChartContainer => {
                 "工作表 id 必须带 /chart:…（该 id 本身不是图表）".into()
+            }
+            IdReason::SlideChartPrefix => {
+                "pptx 图表 id 必须是 slide:N/chart:…".into()
+            }
+            IdReason::SlideChartContainer => {
+                "页 id 必须带 /chart:…（该 id 本身不是图表）".into()
             }
             IdReason::SmartArtPrefix => {
                 "SmartArt id 必须是段落 id 加上 /smartdiagram:…".into()

@@ -243,6 +243,8 @@ DrawingML 主命名空间：
 
 apply 插入幻灯片图时，可能新建 `/ppt/media/imageN.*`，并在该页 `.rels` 补一条 image 关系（Type 以 `/image` 结尾）。`p:pic` 写在该页 `p:spTree` 里，位置与尺寸在 `p:spPr/a:xfrm`。create 给了 `slides[].pictures` 时同样写入。
 
+apply 插入幻灯片图表时，可能新建 `/ppt/charts/chartN.xml`（CT `application/vnd.openxmlformats-officedocument.drawingml.chart+xml`）、chart 的 `.rels`，以及 `/ppt/embeddings/Microsoft_Excel_WorksheetN.xlsx`（CT `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`）。该页 `.rels` 补一条 chart 关系（Type 以 `/chart` 结尾）。chart 部件写 `c:externalData r:id="rId1"`，关系 Type 为 `http://schemas.openxmlformats.org/officeDocument/2006/relationships/package`。宿主是 `p:graphicFrame`，位置与尺寸在 `p:xfrm`。pptx create 本期不写图表。
+
 ## 验收（第 2 项）
 
 零脏保存：`open` 之后不调用 `set` / `remove`，再 `save`。每个部件的未压缩字节、以及 ZIP 里该条目的 CRC，都与打开时相同。库测试对 Excel 另存的 xlsx、以及 create 写出的 docx / pptx 各跑一遍。

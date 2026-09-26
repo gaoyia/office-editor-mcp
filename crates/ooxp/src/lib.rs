@@ -514,7 +514,9 @@ mod tests {
         assert_eq!(tree["id"], "pptx:presentation");
         assert_eq!(tree["slideCount"], 2);
         assert_eq!(tree["pictureCount"], 0);
+        assert_eq!(tree["chartCount"], 0);
         assert_eq!(tree["slides"][0]["pictureCount"], 0);
+        assert_eq!(tree["slides"][0]["chartCount"], 0);
         assert!(tree["slides"][0].get("shapes").is_none());
         assert!(tree["slides"][0].get("pictures").is_none());
 
@@ -935,6 +937,7 @@ mod tests {
                 "id",
                 "slideCount",
                 "pictureCount",
+                "chartCount",
                 "slides"
             ]
         );
@@ -946,13 +949,21 @@ mod tests {
                 "name",
                 "hidden",
                 "pictureCount",
+                "chartCount",
                 "truncated",
                 "shapes"
             ]
         );
         assert_eq!(
             object_keys(&tree["slides"][1]),
-            ["id", "index", "name", "hidden", "pictureCount"]
+            [
+                "id",
+                "index",
+                "name",
+                "hidden",
+                "pictureCount",
+                "chartCount"
+            ]
         );
         assert_eq!(
             object_keys(&tree["slides"][0]["shapes"][0]),

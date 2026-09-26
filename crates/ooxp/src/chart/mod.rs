@@ -1,10 +1,16 @@
-//! `c:chart` 部件（§21.2）：类型、标题、系列 cache、图例与标签。不含 Word embedding，也不含 xlsx 锚点。
+//! `c:chart` 部件（§21.2）：类型、标题、系列 cache、图例与标签。embedding 在 `embed`。不含 xlsx 锚点。
+
+pub mod embed;
 
 use serde_json::{json, Map, Number, Value};
 
 use crate::error::{Error, ErrorKind};
 use crate::xlsx::a1::{self, CellRef};
 use crate::xml::{self, Element, Node};
+
+pub fn col_letters(col: u32) -> String {
+    a1::col_to_letters(col)
+}
 
 pub const CHART_NS: &str = "http://schemas.openxmlformats.org/drawingml/2006/chart";
 pub const CHARTEX_NS: &str = "http://schemas.microsoft.com/office/drawing/2014/chartex";
@@ -402,6 +408,13 @@ pub fn cache_values(el: &Element) -> Option<Vec<Value>> {
 
 pub fn formula_of(el: &Element) -> Option<String> {
     find_desc(el, "f").map(|f| f.text_content())
+}
+
+pub fn external_data_rid(space: &Element) -> Option<String> {
+    space
+        .child_by_local("externalData")
+        .and_then(|e| e.attr_local("id"))
+        .map(str::to_string)
 }
 
 pub fn series_name(ser: &Element) -> Option<String> {

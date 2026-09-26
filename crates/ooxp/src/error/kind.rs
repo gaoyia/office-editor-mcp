@@ -108,6 +108,8 @@ pub(crate) enum IdReason {
     InsertChartNeedsPara,
     /// xlsx 的 insertChart 必须用 sheet:工作表名
     InsertChartNeedsSheet,
+    /// pptx 的 insertChart 必须用 slide:N
+    InsertChartNeedsSlide,
     /// insertChartSheet 必须用 xlsx:workbook
     InsertChartSheetNeedsWorkbook,
     /// deleteChartSheet 必须用图表工作表 sheet:工作表名
@@ -116,6 +118,10 @@ pub(crate) enum IdReason {
     SheetChartPrefix,
     /// 工作表 id，缺少 /chart:…
     SheetChartContainer,
+    /// pptx 图表 id 必须是 slide:N/chart:…
+    SlideChartPrefix,
+    /// 页 id，缺少 /chart:…
+    SlideChartContainer,
     /// SmartArt id 必须是 {段落}/smartdiagram:…
     SmartArtPrefix,
     /// 段落 id，缺少 /smartdiagram:…
@@ -439,10 +445,13 @@ impl IdReason {
             Self::SeriesIndexNotInt,
             Self::InsertChartNeedsPara,
             Self::InsertChartNeedsSheet,
+            Self::InsertChartNeedsSlide,
             Self::InsertChartSheetNeedsWorkbook,
             Self::DeleteChartSheetNeedsChartsheet,
             Self::SheetChartPrefix,
             Self::SheetChartContainer,
+            Self::SlideChartPrefix,
+            Self::SlideChartContainer,
             Self::SmartArtPrefix,
             Self::SmartArtContainer,
             Self::SmartArtIndexNotInt,

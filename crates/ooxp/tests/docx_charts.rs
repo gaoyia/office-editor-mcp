@@ -668,7 +668,22 @@ fn xlsx_and_pptx_reject_charts() {
         None,
     )
     .unwrap_err();
-    assert_eq!(err.code(), ErrorCode::InvalidField);
+    assert_eq!(err.code(), ErrorCode::InvalidId);
+    let RunOutput::Inspect(tree) = run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "inspect",
+            "path": pptx.to_string_lossy(),
+            "scope": { "charts": true }
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap() else {
+        panic!("pptx 现在认 scope.charts");
+    };
+    assert_eq!(tree["chartCount"], 0);
+    assert_eq!(tree["slides"][0]["charts"], json!([]));
 }
 
 #[test]
