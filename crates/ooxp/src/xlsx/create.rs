@@ -193,7 +193,7 @@ pub fn create(workbook: &Value) -> Result<Vec<u8>, Error> {
     for (i, sh) in sheets.iter().enumerate() {
         pkg.set(
             &format!("/xl/worksheets/sheet{}.xml", i + 1),
-            sheet_xml(sh, &sst).into_bytes(),
+            sheet_xml(sh, &sst)?.into_bytes(),
         )?;
     }
     pkg.save_to_vec()
@@ -381,7 +381,7 @@ fn workbook_xml(sheets: &[NewSheet], has_formula: bool) -> String {
     )
 }
 
-fn sheet_xml(sheet: &NewSheet, sst: &[String]) -> String {
+fn sheet_xml(sheet: &NewSheet, sst: &[String]) -> Result<String, Error> {
     use std::collections::BTreeMap;
     let mut rows: BTreeMap<u32, Vec<&NewCell>> = BTreeMap::new();
     for c in &sheet.cells {
@@ -403,19 +403,19 @@ fn sheet_xml(sheet: &NewSheet, sst: &[String]) -> String {
     for (r, cells) in rows {
         let mut inner = String::new();
         for c in cells {
-            inner.push_str(&cell_xml(c, sst));
+            inner.push_str(&cell_xml(c, sst)?);
         }
         data.push_str(&format!(r#"<row r="{r}">{inner}</row>"#));
     }
-    format!(
+    Ok(format!(
         r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="{SML_NS}" xmlns:r="{REL_NS}"><dimension ref="{dim}"/><sheetData>{data}</sheetData></worksheet>"#
-    )
+    ))
 }
 
-fn cell_xml(c: &NewCell, sst: &[String]) -> String {
+fn cell_xml(c: &NewCell, sst: &[String]) -> Result<String, Error> {
     if let Some(f) = &c.formula {
         let body = xml::escape_text(f.strip_prefix('=').unwrap_or(f));
-        return format!(r#"<c r="{}"><f>{body}</f></c>"#, c.a1);
+        return Ok(format!(r#"<c r="{}"><f>{body}</f></c>"#, c.a1));
     }
     match c.value.as_ref() {
         Some(SetCellValue::Number(n)) => {
@@ -426,20 +426,20 @@ fn cell_xml(c: &NewCell, sst: &[String]) -> String {
             } else {
                 n.to_string()
             };
-            format!(r#"<c r="{}"><v>{v}</v></c>"#, c.a1)
+            Ok(format!(r#"<c r="{}"><v>{v}</v></c>"#, c.a1))
         }
-        Some(SetCellValue::Bool(b)) => {
-            format!(
-                r#"<c r="{}" t="b"><v>{}</v></c>"#,
-                c.a1,
-                if *b { "1" } else { "0" }
-            )
-        }
+        Some(SetCellValue::Bool(b)) => Ok(format!(
+            r#"<c r="{}" t="b"><v>{}</v></c>"#,
+            c.a1,
+            if *b { "1" } else { "0" }
+        )),
         Some(SetCellValue::Text(s)) => {
-            let idx = sst.iter().position(|x| x == s).unwrap_or(0);
-            format!(r#"<c r="{}" t="s"><v>{idx}</v></c>"#, c.a1)
+            let idx = sst.iter().position(|x| x == s).ok_or_else(|| {
+                Error::new(ErrorKind::SharedStringNotInTable { text: s.clone() })
+            })?;
+            Ok(format!(r#"<c r="{}" t="s"><v>{idx}</v></c>"#, c.a1))
         }
-        _ => format!(r#"<c r="{}"/>"#, c.a1),
+        _ => Ok(format!(r#"<c r="{}"/>"#, c.a1)),
     }
 }
 

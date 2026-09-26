@@ -174,6 +174,13 @@ define_error_kinds! {
         .map(|issue| Self::XmlBroken { issue, detail: Some("x".into()) })
         .collect::<Vec<_>>(),
     XmlMissing { parent: String, child: String } => vec![Self::XmlMissing { parent: "workbook.xml".into(), child: "sheets".into() }],
+    SharedStringIndex { cell: String, index: String } => vec![Self::SharedStringIndex {
+        cell: "Sheet1!A1".into(),
+        index: "9".into(),
+    }],
+    SharedStringNotInTable { text: String } => {
+        vec![Self::SharedStringNotInTable { text: "hello".into() }]
+    },
 }
 
 impl TypeName {
@@ -324,7 +331,10 @@ impl ErrorKind {
             | Self::RelNotFound { .. }
             | Self::ExternalRel { .. }
             | Self::SlideRelMissing { .. } => OpcPartMissing,
-            Self::XmlBroken { .. } | Self::XmlMissing { .. } => XmlBroken,
+            Self::XmlBroken { .. }
+            | Self::XmlMissing { .. }
+            | Self::SharedStringIndex { .. }
+            | Self::SharedStringNotInTable { .. } => XmlBroken,
         }
     }
 }

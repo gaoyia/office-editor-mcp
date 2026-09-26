@@ -118,6 +118,12 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             (XmlIssue::Write, None) => "写出 XML 失败".into(),
         },
         ErrorKind::XmlMissing { parent, child } => format!("{parent} 缺少 {child}"),
+        ErrorKind::SharedStringIndex { cell, index } => {
+            format!("共享字符串索引 {index} 不存在（单元格 {cell}）")
+        }
+        ErrorKind::SharedStringNotInTable { text } => {
+            format!("共享字符串表里没有 {text}")
+        }
     }
 }
 

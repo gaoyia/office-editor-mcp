@@ -221,7 +221,14 @@ fn cell_to_json(c: &Element, sheet_name: &str, sst: &[String]) -> Result<Value, 
         }
     }
 
-    let (ty, value) = classify(t, v_el, is_el, f_el.is_some(), sst);
+    let (ty, value) = classify(
+        t,
+        v_el,
+        is_el,
+        f_el.is_some(),
+        sst,
+        &format!("{sheet_name}!{refer}"),
+    )?;
 
     let id = format!("cell:{sheet_name}!{refer}");
     let mut obj = json!({
@@ -243,58 +250,69 @@ fn classify(
     is_el: Option<&Element>,
     has_f: bool,
     sst: &[String],
-) -> (&'static str, Value) {
+    cell: &str,
+) -> Result<(&'static str, Value), Error> {
     match t {
         "b" => {
             let raw = v_el.map(|e| e.text_content()).unwrap_or_default();
             let b = raw == "1" || raw.eq_ignore_ascii_case("true");
-            ("boolean", json!(b))
+            Ok(("boolean", json!(b)))
         }
         "s" => {
             let raw = v_el.map(|e| e.text_content()).unwrap_or_default();
-            let idx: usize = raw.trim().parse().unwrap_or(usize::MAX);
-            let text = sst.get(idx).cloned().unwrap_or_default();
-            ("text", json!(text))
+            let idx: usize = raw.trim().parse().map_err(|_| {
+                Error::new(ErrorKind::SharedStringIndex {
+                    cell: cell.to_string(),
+                    index: raw.trim().to_string(),
+                })
+            })?;
+            let text = sst.get(idx).cloned().ok_or_else(|| {
+                Error::new(ErrorKind::SharedStringIndex {
+                    cell: cell.to_string(),
+                    index: idx.to_string(),
+                })
+            })?;
+            Ok(("text", json!(text)))
         }
         "inlineStr" => {
             let text = is_el.map(|e| e.text_content()).unwrap_or_default();
-            ("text", json!(text))
+            Ok(("text", json!(text)))
         }
         "str" => {
             let text = v_el.map(|e| e.text_content()).unwrap_or_default();
-            ("text", json!(text))
+            Ok(("text", json!(text)))
         }
         "e" => {
             let text = v_el.map(|e| e.text_content()).unwrap_or_default();
-            ("error", json!(text))
+            Ok(("error", json!(text)))
         }
         "d" => {
             let text = v_el.map(|e| e.text_content()).unwrap_or_default();
-            ("date", json!(text))
+            Ok(("date", json!(text)))
         }
         "n" | "" => {
             // 省略 t 却给了 <is> 的写法少见但合法，按文本读，别当成没有值的数字。
             if let (None, Some(is)) = (v_el, is_el) {
-                return ("text", json!(is.text_content()));
+                return Ok(("text", json!(is.text_content())));
             }
             if v_el.is_none() && is_el.is_none() && !has_f {
-                return ("empty", json!(null));
+                return Ok(("empty", json!(null)));
             }
             if v_el.is_none() {
-                return ("number", json!(null));
+                return Ok(("number", json!(null)));
             }
             let raw = v_el.unwrap().text_content();
             if let Ok(n) = raw.trim().parse::<i64>() {
-                return ("number", json!(n));
+                return Ok(("number", json!(n)));
             }
             if let Ok(n) = raw.trim().parse::<f64>() {
-                return ("number", json!(n));
+                return Ok(("number", json!(n)));
             }
-            ("text", json!(raw))
+            Ok(("text", json!(raw)))
         }
         _ => {
             let raw = v_el.or(is_el).map(|e| e.text_content()).unwrap_or_default();
-            ("text", json!(raw))
+            Ok(("text", json!(raw)))
         }
     }
 }

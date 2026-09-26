@@ -134,6 +134,12 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             (XmlIssue::Write, None) => "Failed to write XML".into(),
         },
         ErrorKind::XmlMissing { parent, child } => format!("{parent} is missing {child}"),
+        ErrorKind::SharedStringIndex { cell, index } => {
+            format!("Shared string index {index} is missing at cell {cell}")
+        }
+        ErrorKind::SharedStringNotInTable { text } => {
+            format!("Shared string table has no entry for {text}")
+        }
     }
 }
 

@@ -44,6 +44,10 @@ fn tmp_dir() -> PathBuf {
 
 /// 每个用例一份独立样例，避免用例之间互相踩文件。
 fn write_sample(tag: &str) -> PathBuf {
+    write_with_sheet1(tag, SHEET1)
+}
+
+fn write_with_sheet1(tag: &str, sheet1: &str) -> PathBuf {
     let n = SEQ.fetch_add(1, Ordering::Relaxed);
     let path = tmp_dir().join(format!("{tag}-{n}.xlsx"));
     let mut cursor = Cursor::new(Vec::new());
@@ -55,7 +59,7 @@ fn write_sample(tag: &str) -> PathBuf {
             ("_rels/.rels", ROOT_RELS),
             ("xl/workbook.xml", WORKBOOK),
             ("xl/_rels/workbook.xml.rels", WORKBOOK_RELS),
-            ("xl/worksheets/sheet1.xml", SHEET1),
+            ("xl/worksheets/sheet1.xml", sheet1),
             ("xl/worksheets/sheet2.xml", SHEET2),
             ("xl/sharedStrings.xml", SHARED_STRINGS),
             ("xl/calcChain.xml", CALC_CHAIN),
@@ -323,4 +327,35 @@ fn inspect_reads_shared_string_and_shared_formula() {
     assert_eq!(find("cell:Sheet1!B1")["formula"], "=A1*2");
     assert_eq!(find("cell:Sheet1!B2")["shared"], true);
     assert_eq!(find("cell:Sheet1!A3")["value"], 12);
+}
+
+#[test]
+fn inspect_bad_shared_string_index_is_xml_broken() {
+    let src = write_with_sheet1(
+        "bad-sst",
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData><row r="1"><c r="A1" t="s"><v>99</v></c></row></sheetData></worksheet>"#,
+    );
+    let req = json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": src.to_string_lossy(),
+        "scope": { "sheet": "Sheet1", "range": "A1" },
+    });
+    let err = run(&req.to_string(), None).unwrap_err();
+    assert_eq!(err.code(), ErrorCode::XmlBroken);
+}
+
+#[test]
+fn apply_clear_missing_cell_counts_as_applied() {
+    let src = write_sample("clear-missing");
+    let out = tmp_dir().join("clear-missing-out.xlsx");
+    let RunOutput::Written { ops_applied, .. } = apply(
+        &src,
+        &out,
+        json!([{ "op": "setCell", "id": "cell:Sheet1!Z99", "value": null }]),
+    )
+    .unwrap() else {
+        panic!("apply 应写出文件");
+    };
+    assert_eq!(ops_applied, Some(1));
 }

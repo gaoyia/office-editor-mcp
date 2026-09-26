@@ -62,7 +62,7 @@
 | `TruncatedLimit` | `maxCells`、`maxParas`、`maxShapes` 超出允许范围，例如设成 `0` | 2 |
 | `OpcOpen` | 不是 ZIP，或缺少 `[Content_Types].xml` / 根关系 | 3 |
 | `OpcPartMissing` | 入口部件不存在，目标工作表或幻灯片部件不存在，关系 id 找不到，或者关系指向外部资源 | 3 |
-| `XmlBroken` | 目标部件不是能解析的 XML | 3 |
+| `XmlBroken` | 目标部件不是能解析的 XML；xlsx 里 `t="s"` 的索引越界或不是整数；create 写文本时共享字符串表里没有对应项 | 3 |
 | `Io` | 读盘、写盘、创建目录失败 | 4 |
 | `NotImplemented` | 第一期明确不做的动作。目前：对共享公式的主单元格发 `setCell` | 2 |
 
