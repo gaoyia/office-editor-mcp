@@ -25,6 +25,7 @@ use super::smartart;
 use super::styles;
 use super::tbl;
 use super::textbox;
+use super::watermark;
 
 pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error> {
     let pkg = Package::open_bytes(bytes.to_vec())?;
@@ -113,6 +114,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         "chartCount": body_chart_count,
         "smartArtCount": body_smartart_count,
         "oleObjectCount": body_ole_count,
+        "watermarkCount": watermark::count_in_headers(&pkg, &catalog)?,
         "tableCount": body_table_count,
         "revisionCount": revision::count_revisions(&doc.root),
         "hyperlinkCount": link::count_hyperlinks(&doc.root),
@@ -189,6 +191,9 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         }
         if scope.ole_objects {
             tree["oleObjects"] = Value::Array(ole::collect_body(&pkg, &part, &paras)?);
+        }
+        if scope.watermarks {
+            tree["watermarks"] = Value::Array(watermark::list_all(&pkg, &catalog)?);
         }
         if scope.tables {
             tree["tables"] =
@@ -405,6 +410,11 @@ fn hf_node(pkg: &Package, item: &HfPart, expand: &HfExpand) -> Result<Value, Err
         "chartCount": chart_count,
         "smartArtCount": smart_art_count,
         "oleObjectCount": ole_count,
+        "watermarkCount": if item.kind == HfKind::Header {
+            watermark::collect(&doc.root, &item.id).len()
+        } else {
+            0
+        },
         "tableCount": tbl::count_tables(&doc.root),
         "revisionCount": revision::count_revisions(&doc.root),
         "hyperlinkCount": link::count_hyperlinks(&doc.root),

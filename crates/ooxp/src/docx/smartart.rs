@@ -161,6 +161,9 @@ pub struct SetSmartArtLayoutOp {
 pub fn count_smartarts(root: &Element) -> Result<usize, Error> {
     let mut n = 0usize;
     picture::walk_drawings(root, &mut |d| {
+        if super::watermark::is_watermark_drawing(d) {
+            return Ok(());
+        }
         if is_smartart(d) {
             n += 1;
         }
@@ -202,6 +205,9 @@ pub fn collect_in_para(
 ) -> Result<Vec<Value>, Error> {
     let mut out = Vec::new();
     picture::walk_drawings(para, &mut |drawing| {
+        if super::watermark::is_watermark_drawing(drawing) {
+            return Ok(());
+        }
         if !is_smartart(drawing) {
             return Ok(());
         }

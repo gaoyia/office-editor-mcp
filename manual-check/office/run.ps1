@@ -67,6 +67,7 @@ $order = @(
     'docx-docprops'
     'docx-ole'
     'docx-protect'
+    'docx-watermark'
     'xlsx-docprops'
     'pptx-docprops'
     'pptx-apply'

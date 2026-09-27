@@ -78,6 +78,7 @@
         "charts": { "type": "boolean" },
         "smartArt": { "type": "boolean" },
         "oleObjects": { "type": "boolean" },
+        "watermarks": { "type": "boolean" },
         "tables": { "type": "boolean" },
         "revisions": { "type": "boolean" },
         "hyperlinks": { "type": "boolean" },
@@ -243,7 +244,11 @@
           "items": { "$ref": "#/$defs/docxHfCreate" }
         },
         "props": { "$ref": "#/$defs/createProps" },
-        "protection": { "$ref": "#/$defs/createProtection" }
+        "protection": { "$ref": "#/$defs/createProtection" },
+        "watermarks": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/createWatermark" }
+        }
       }
     },
     "docxHfCreate": {
@@ -686,6 +691,8 @@
               { "$ref": "#/$defs/insertOleOp" },
               { "$ref": "#/$defs/deleteOleOp" },
               { "$ref": "#/$defs/setProtectionOp" },
+              { "$ref": "#/$defs/insertWatermarkOp" },
+              { "$ref": "#/$defs/deleteWatermarkOp" },
               { "$ref": "#/$defs/setNotesTextOp" },
               { "$ref": "#/$defs/setShapeTextOp" },
               { "$ref": "#/$defs/setPropsOp" },
@@ -2320,6 +2327,42 @@
         { "required": ["edit"] },
         { "required": ["formatting"] },
         { "required": ["readOnlyRecommended"] }
+      ]
+    },
+    "insertWatermarkOp": {
+      "type": "object",
+      "required": ["op", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "insertWatermark" },
+        "id": { "type": "string", "minLength": 1 },
+        "text": { "type": "string", "minLength": 1 },
+        "file": { "type": "string", "minLength": 1 }
+      },
+      "oneOf": [
+        { "required": ["text"], "not": { "required": ["file"] } },
+        { "required": ["file"], "not": { "required": ["text"] } }
+      ]
+    },
+    "deleteWatermarkOp": {
+      "type": "object",
+      "required": ["op", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "deleteWatermark" },
+        "id": { "type": "string", "minLength": 1 }
+      }
+    },
+    "createWatermark": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "text": { "type": "string", "minLength": 1 },
+        "file": { "type": "string", "minLength": 1 }
+      },
+      "oneOf": [
+        { "required": ["text"], "not": { "required": ["file"] } },
+        { "required": ["file"], "not": { "required": ["text"] } }
       ]
     },
     "setPropsOp": {

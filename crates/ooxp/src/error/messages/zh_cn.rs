@@ -210,6 +210,17 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::InsertOleNeedsPara => {
                 "insertOle 的 id 必须是正文或页眉页脚段落 id".into()
             }
+            IdReason::InsertWatermarkNeedsDocument => {
+                "insertWatermark 的 id 必须是 docx:document".into()
+            }
+            IdReason::WatermarkPrefix => {
+                "水印 id 必须是页眉容器 id 加上 /watermark:…".into()
+            }
+            IdReason::WatermarkContainer => {
+                "页眉容器 id 必须带 /watermark:…（该 id 本身不是水印）".into()
+            }
+            IdReason::WatermarkIndexNotInt => "watermark:index 后面必须是正整数".into(),
+            IdReason::WatermarkIndexFromOne => "watermark:index 从 1 起".into(),
             IdReason::EvenOddNeedsDocument => {
                 "setEvenAndOddHeaders 的 id 必须是 docx:document".into()
             }
@@ -394,6 +405,10 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         }
         ErrorKind::SmartArtNotFound { id } => format!("找不到 SmartArt：{id}"),
         ErrorKind::OleNotFound { id } => format!("找不到嵌入对象：{id}"),
+        ErrorKind::WatermarkNotFound { id } => format!("找不到水印：{id}"),
+        ErrorKind::WatermarkNeedTextOrFile => {
+            "insertWatermark 必须恰好给 text 或 file 之一".into()
+        }
         ErrorKind::SmartArtPointNotFound { id } => format!("找不到 SmartArt 点：{id}"),
         ErrorKind::LastSmartArtPoint => {
             "不能删光 SmartArt 里的全部可见点，整张去掉请用 deleteSmartArt".into()

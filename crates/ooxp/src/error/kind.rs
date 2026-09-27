@@ -150,6 +150,14 @@ pub(crate) enum IdReason {
     OleIndexFromOne,
     /// insertOle 必须用正文或页眉页脚段落 id
     InsertOleNeedsPara,
+    /// insertWatermark 必须用 docx:document
+    InsertWatermarkNeedsDocument,
+    /// 水印 id 必须是 {页眉容器}/watermark:…
+    WatermarkPrefix,
+    /// 页眉容器 id，缺少 /watermark:…
+    WatermarkContainer,
+    WatermarkIndexNotInt,
+    WatermarkIndexFromOne,
     /// setEvenAndOddHeaders 必须用 docx:document
     EvenOddNeedsDocument,
     /// setMirrorMargins / setGutterAtTop 必须用 docx:document
@@ -437,6 +445,8 @@ define_error_kinds! {
     SmartArtAsstOnList => vec![Self::SmartArtAsstOnList],
     SmartArtListDepth => vec![Self::SmartArtListDepth],
     OleNotFound { id: String } => vec![Self::OleNotFound { id: "para:1/ole:_1".into() }],
+    WatermarkNotFound { id: String } => vec![Self::WatermarkNotFound { id: "header:default:1/watermark:1".into() }],
+    WatermarkNeedTextOrFile => vec![Self::WatermarkNeedTextOrFile],
     TextBoxLinkCrossPart => vec![Self::TextBoxLinkCrossPart],
     InvalidHexColor => vec![Self::InvalidHexColor],
     InvalidTextBoxDirection => vec![Self::InvalidTextBoxDirection],
@@ -648,6 +658,11 @@ impl IdReason {
             Self::OleIndexNotInt,
             Self::OleIndexFromOne,
             Self::InsertOleNeedsPara,
+            Self::InsertWatermarkNeedsDocument,
+            Self::WatermarkPrefix,
+            Self::WatermarkContainer,
+            Self::WatermarkIndexNotInt,
+            Self::WatermarkIndexFromOne,
             Self::EvenOddNeedsDocument,
             Self::SettingsNeedDocument,
             Self::TablePrefix,
@@ -890,6 +905,7 @@ impl ErrorKind {
             | Self::GraphicInRestrictedStory
             | Self::NeedPropsField
             | Self::NeedProtectionField
+            | Self::WatermarkNeedTextOrFile
             | Self::InvalidProtectionEdit
             | Self::InvalidCustomPropType
             | Self::EmptyCustomPropName => InvalidField,
@@ -911,6 +927,7 @@ impl ErrorKind {
             | Self::SmartArtNotFound { .. }
             | Self::SmartArtPointNotFound { .. }
             | Self::OleNotFound { .. }
+            | Self::WatermarkNotFound { .. }
             | Self::TableNotFound { .. }
             | Self::RevisionNotFound { .. }
             | Self::HyperlinkNotFound { .. }

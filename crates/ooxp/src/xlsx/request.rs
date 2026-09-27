@@ -609,6 +609,8 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<XlsxOp>, Error> {
             | "setSmartArtLayout"
             | "insertOle"
             | "deleteOle"
+            | "insertWatermark"
+            | "deleteWatermark"
             | "setProtection" => {
                 return Err(Error::with_path(
                     ErrorKind::OpNotForFormat {

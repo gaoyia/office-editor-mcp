@@ -44,6 +44,7 @@ use super::smartart;
 use super::styles;
 use super::tbl;
 use super::textbox;
+use super::watermark;
 use super::{CT_FOOTER, CT_HEADER, REL_FOOTER, REL_HEADER, REL_HYPERLINK};
 
 pub fn apply(bytes: &[u8], ops: &[DocxOp]) -> Result<Vec<u8>, Error> {
@@ -334,6 +335,13 @@ pub fn apply(bytes: &[u8], ops: &[DocxOp]) -> Result<Vec<u8>, Error> {
             }
             DocxOp::DeleteOle(op) => {
                 ole::apply_delete(&mut pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
+            }
+            DocxOp::InsertWatermark(op) => {
+                watermark::apply_insert(&mut pkg, &mut docs, &mut dirty, &doc_part, op, i)?;
+                refresh_hf_catalog(&pkg, &docs, &doc_part, &mut catalog)?;
+            }
+            DocxOp::DeleteWatermark(op) => {
+                watermark::apply_delete(&mut pkg, &mut docs, &mut dirty, &doc_part, op, i)?;
             }
             DocxOp::SetProtection(op) => {
                 protect::apply(&mut pkg, &mut docs, &mut dirty, &doc_part, op, i)?;

@@ -38,6 +38,8 @@ pub struct InspectScope {
     pub smart_art: bool,
     /// 为 true 时列出嵌入对象。
     pub ole_objects: bool,
+    /// 为 true 时列出页眉 DrawingML 水印。
+    pub watermarks: bool,
     /// 为 true 时列出表格。
     pub tables: bool,
     /// 为 true 时列出修订痕迹。
@@ -822,6 +824,8 @@ pub enum DocxOp {
     SetSmartArtLayout(super::smartart::SetSmartArtLayoutOp),
     InsertOle(super::ole::InsertOleOp),
     DeleteOle(super::ole::DeleteOleOp),
+    InsertWatermark(super::watermark::InsertWatermarkOp),
+    DeleteWatermark(super::watermark::DeleteWatermarkOp),
     SetProtection(super::protect::SetProtectionOp),
     SetProps(crate::props::SetPropsOp),
     SetCustomProp(crate::props::SetCustomPropOp),
@@ -858,6 +862,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
             "charts",
             "smartArt",
             "oleObjects",
+            "watermarks",
             "tables",
             "revisions",
             "hyperlinks",
@@ -881,6 +886,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
     let charts = parse_bool_field(obj.get("charts"), "charts")?;
     let smart_art = parse_bool_field(obj.get("smartArt"), "smartArt")?;
     let ole_objects = parse_bool_field(obj.get("oleObjects"), "oleObjects")?;
+    let watermarks = parse_bool_field(obj.get("watermarks"), "watermarks")?;
     let tables = parse_bool_field(obj.get("tables"), "tables")?;
     let revisions = parse_bool_field(obj.get("revisions"), "revisions")?;
     let hyperlinks = parse_bool_field(obj.get("hyperlinks"), "hyperlinks")?;
@@ -914,6 +920,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
                 && !obj.contains_key("charts")
                 && !obj.contains_key("smartArt")
                 && !obj.contains_key("oleObjects")
+                && !obj.contains_key("watermarks")
                 && !obj.contains_key("tables")
                 && !obj.contains_key("revisions")
                 && !obj.contains_key("hyperlinks")
@@ -940,6 +947,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
                 charts,
                 smart_art,
                 ole_objects,
+                watermarks,
                 tables,
                 revisions,
                 hyperlinks,
@@ -1003,6 +1011,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
                 charts,
                 smart_art,
                 ole_objects,
+                watermarks,
                 tables,
                 revisions,
                 hyperlinks,
@@ -1243,6 +1252,12 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<DocxOp>, Error> {
             )?)),
             "insertOle" => out.push(DocxOp::InsertOle(parse_insert_ole(obj, i)?)),
             "deleteOle" => out.push(DocxOp::DeleteOle(parse_delete_ole(obj, i)?)),
+            "insertWatermark" => out.push(DocxOp::InsertWatermark(super::watermark::parse_insert(
+                obj, i,
+            )?)),
+            "deleteWatermark" => out.push(DocxOp::DeleteWatermark(super::watermark::parse_delete(
+                obj, i,
+            )?)),
             "setProtection" => out.push(DocxOp::SetProtection(super::protect::parse_op(obj, i)?)),
             "setProps" => out.push(DocxOp::SetProps(crate::props::parse_set_props(
                 obj,

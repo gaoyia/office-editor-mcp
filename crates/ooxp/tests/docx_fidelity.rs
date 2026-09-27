@@ -1154,6 +1154,7 @@ fn inspect_lists_header_pictures() {
             "chartCount",
             "smartArtCount",
             "oleObjectCount",
+            "watermarkCount",
             "tableCount",
             "revisionCount",
             "hyperlinkCount",

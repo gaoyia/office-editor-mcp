@@ -317,6 +317,9 @@ pub fn default_cy() -> i64 {
 pub fn count_charts(root: &Element) -> Result<usize, Error> {
     let mut n = 0usize;
     picture::walk_drawings(root, &mut |d| {
+        if super::watermark::is_watermark_drawing(d) {
+            return Ok(());
+        }
         if is_chart(d) {
             n += 1;
         }
@@ -334,6 +337,9 @@ pub fn collect_in_para(
     let mut out = Vec::new();
     let mut index = 0usize;
     picture::walk_drawings(para, &mut |drawing| {
+        if super::watermark::is_watermark_drawing(drawing) {
+            return Ok(());
+        }
         if !is_chart(drawing) {
             return Ok(());
         }

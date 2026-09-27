@@ -136,7 +136,7 @@ pub fn create(document: &Value) -> Result<Vec<u8>, Error> {
     for k in obj.keys() {
         if !matches!(
             k.as_str(),
-            "paragraphs" | "headers" | "footers" | "tables" | "props" | "protection"
+            "paragraphs" | "headers" | "footers" | "tables" | "props" | "protection" | "watermarks"
         ) {
             return Err(Error::with_path(
                 ErrorKind::UnknownField { field: k.clone() },
@@ -321,9 +321,10 @@ pub fn create(document: &Value) -> Result<Vec<u8>, Error> {
 
     let bytes = pkg.save_to_vec()?;
     let bytes = apply_follow_ups(bytes, &paras, &header_items, &footer_items)?;
-    if obj.get("protection").is_some() {
+    if obj.get("protection").is_some() || obj.get("watermarks").is_some() {
         let mut pkg = crate::opc::Package::open_bytes(bytes)?;
         super::protect::apply_create(&mut pkg, obj.get("protection"))?;
+        super::watermark::apply_create(&mut pkg, obj.get("watermarks"))?;
         pkg.save_to_vec()
     } else {
         Ok(bytes)

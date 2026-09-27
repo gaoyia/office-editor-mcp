@@ -41,6 +41,9 @@ pub fn collect_textboxes(root: &Element, host_para_id: &str) -> Result<Vec<TxbxI
     let mut out = Vec::new();
     let mut index = 0usize;
     walk_host(root, &mut |drawing| {
+        if super::watermark::is_watermark_drawing(drawing) {
+            return Ok(());
+        }
         if is_group(drawing) {
             collect_group_boxes(drawing, host_para_id, &mut index, &mut out)?;
         } else if is_textbox(drawing) {

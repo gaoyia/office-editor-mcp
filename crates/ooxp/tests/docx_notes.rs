@@ -161,6 +161,7 @@ fn inspect_counts_without_lists() {
             "chartCount",
             "smartArtCount",
             "oleObjectCount",
+            "watermarkCount",
             "tableCount",
             "revisionCount",
             "hyperlinkCount",

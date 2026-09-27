@@ -858,6 +858,7 @@ mod tests {
                 "chartCount",
                 "smartArtCount",
                 "oleObjectCount",
+                "watermarkCount",
                 "tableCount",
                 "revisionCount",
                 "hyperlinkCount",

@@ -25,6 +25,7 @@ mod smartart;
 mod styles;
 mod tbl;
 mod textbox;
+mod watermark;
 
 pub use apply::apply;
 pub use charts::export_chart_data;

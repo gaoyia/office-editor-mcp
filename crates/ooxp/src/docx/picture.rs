@@ -222,6 +222,9 @@ pub fn collect_pictures(root: &Element, container_id: &str) -> Result<Vec<PicInf
     let mut out = Vec::new();
     let mut index = 0usize;
     walk_drawings(root, &mut |drawing| {
+        if super::watermark::is_watermark_drawing(drawing) {
+            return Ok(());
+        }
         if !is_picture(drawing) {
             return Ok(());
         }

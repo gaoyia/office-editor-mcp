@@ -71,7 +71,7 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 | I2 | 大纲 | `outline` 含第一段，`level` 为 `1`，`text` 为 `标题` |
 | I3 | 段落 id | 两段都有 `para:{hex}`，`stable` 为 `true` |
 | I4 | 第二段 | `text` 为 `hello` |
-| I5 | 无 scope | 只发 path 时没有 `paragraphs` 字段，仍有 `outline`、`paraCount`、`pictureCount`、`tableCount`、`revisionCount`、`hyperlinkCount`、`bookmarkCount`、`fieldCount`、`tocCount`、`mathCount`、`contentControlCount`、`headers`、`footers`、`sections`、`props`、`protection` |
+| I5 | 无 scope | 只发 path 时没有 `paragraphs` 字段，仍有 `outline`、`paraCount`、`pictureCount`、`tableCount`、`revisionCount`、`hyperlinkCount`、`bookmarkCount`、`fieldCount`、`tocCount`、`mathCount`、`contentControlCount`、`headers`、`footers`、`sections`、`props`、`protection`、`watermarkCount` |
 
 ## apply
 
@@ -495,6 +495,18 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 | Pr4 | 只读推荐 | Word 勾选只读推荐另存后，`readOnlyRecommended` 为 true |
 | Pr5 | 有密码 | Word 带密码保护另存后，`hasPassword` 为 true，树 JSON 不含该明文；对其发改 `enforced` 得 `NotImplemented`，不写文件 |
 | Pr6 | 拒错 id | 对段落 id 发 `setProtection` 得 `InvalidId`；一个字段都不给得 `InvalidField`。不强制开 Word |
+
+## 水印
+
+页眉里的 DrawingML 水印。不认、不改 Word 自带的 VML 水印。手测脚本 `manual-check/office/cases/docx-watermark.ps1`。
+
+| 序号 | 检查 | 通过标准 |
+| --- | --- | --- |
+| Wm1 | 文字 | 对无页眉文件 `insertWatermark` 且 `text` 为 `CONFIDENTIAL` 后，无 scope 时 `watermarkCount` 为 1；`scope.watermarks` 时 `kind` 为 `text`，id 形如 `header:default:1/watermark:…`。Word 页眉形状可见该字，标题栏无 Repair |
+| Wm2 | 关掉 | `deleteWatermark` 且 id 为 `docx:document` 后 `watermarkCount` 为 0，Word 无修复 |
+| Wm3 | 图片 | 插入 PNG 水印后 Word 无修复，树上 `kind` 为 `picture` |
+| Wm4 | 普通图 | 往页眉插一张普通图后 `watermarkCount` 仍为 0，该图进 `pictures` |
+| Wm5 | 拒错 | 对段落 id 发 `insertWatermark` 得 `InvalidId`；`text` 与 `file` 都给得 `InvalidField`。不强制开 Word |
 
 ## 原样保存（opc 验收）
 

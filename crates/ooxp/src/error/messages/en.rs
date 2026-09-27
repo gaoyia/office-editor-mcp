@@ -233,6 +233,19 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::InsertOleNeedsPara => {
                 "insertOle id must be a body or header/footer paragraph id".into()
             }
+            IdReason::InsertWatermarkNeedsDocument => {
+                "insertWatermark id must be docx:document".into()
+            }
+            IdReason::WatermarkPrefix => {
+                "Watermark id must be a header container id plus /watermark:…".into()
+            }
+            IdReason::WatermarkContainer => {
+                "Header id must include /watermark:… (that id alone is not a watermark)".into()
+            }
+            IdReason::WatermarkIndexNotInt => {
+                "watermark:index must be followed by a positive integer".into()
+            }
+            IdReason::WatermarkIndexFromOne => "watermark:index starts at 1".into(),
             IdReason::EvenOddNeedsDocument => {
                 "setEvenAndOddHeaders id must be docx:document".into()
             }
@@ -448,6 +461,10 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         }
         ErrorKind::SmartArtNotFound { id } => format!("SmartArt not found: {id}"),
         ErrorKind::OleNotFound { id } => format!("Embedded object not found: {id}"),
+        ErrorKind::WatermarkNotFound { id } => format!("Watermark not found: {id}"),
+        ErrorKind::WatermarkNeedTextOrFile => {
+            "insertWatermark requires exactly one of text or file".into()
+        }
         ErrorKind::SmartArtPointNotFound { id } => format!("SmartArt point not found: {id}"),
         ErrorKind::LastSmartArtPoint => {
             "Cannot delete the last visible SmartArt point; use deleteSmartArt to remove the diagram".into()
