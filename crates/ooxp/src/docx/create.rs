@@ -10,8 +10,12 @@ use crate::opc::{
 };
 use crate::xml::{self, Element, Node};
 
+use super::apply;
+use super::charts::{self, ChartType, InsertChartOp, NewSeries};
 use super::hf::{HfKind, HfType};
+use super::para;
 use super::picture::{self, PicKind, WrapKind, WrapPos};
+use super::request::{DocxOp, InsertCommentOp, InsertNoteOp};
 use super::sect::SectionBreakType;
 use super::smartart::{self, InsertSpec};
 use super::tbl;
@@ -37,12 +41,33 @@ struct NewPic {
     pos: WrapPos,
 }
 
+struct CreateChart {
+    chart_type: ChartType,
+    title: Option<String>,
+    series: Vec<NewSeries>,
+    kind: PicKind,
+    wrap: Option<WrapKind>,
+    cx: i64,
+    cy: i64,
+}
+
+struct NewComment {
+    text: String,
+    author: String,
+    initials: String,
+    date: Option<String>,
+}
+
 struct NewPara {
     text: String,
     style: Option<&'static str>,
     boxes: Vec<NewBox>,
     pictures: Vec<NewPic>,
     smart_arts: Vec<InsertSpec>,
+    charts: Vec<CreateChart>,
+    footnote: Option<String>,
+    endnote: Option<String>,
+    comments: Vec<NewComment>,
     section_type: Option<SectionBreakType>,
 }
 
@@ -54,6 +79,10 @@ impl NewPara {
             boxes: Vec::new(),
             pictures: Vec::new(),
             smart_arts: Vec::new(),
+            charts: Vec::new(),
+            footnote: None,
+            endnote: None,
+            comments: Vec::new(),
             section_type: None,
         }
     }
@@ -64,6 +93,13 @@ impl NewPara {
 
     fn has_smartarts(&self) -> bool {
         !self.smart_arts.is_empty()
+    }
+
+    fn has_follow_ups(&self) -> bool {
+        !self.charts.is_empty()
+            || self.footnote.is_some()
+            || self.endnote.is_some()
+            || !self.comments.is_empty()
     }
 }
 
@@ -275,7 +311,8 @@ pub fn create(document: &Value) -> Result<Vec<u8>, Error> {
         attach_smartarts(&mut pkg, &part, &item.paras)?;
     }
 
-    pkg.save_to_vec()
+    let bytes = pkg.save_to_vec()?;
+    apply_follow_ups(bytes, &paras, &header_items, &footer_items)
 }
 
 fn parse_hf_side(v: Option<&Value>, side: &str) -> Result<Vec<HfCreateItem>, Error> {
@@ -394,10 +431,23 @@ fn parse_para(v: &Value, path: &str, kind: ParaKind, i: usize) -> Result<NewPara
             "textBoxes",
             "pictures",
             "smartArts",
+            "charts",
+            "footnote",
+            "endnote",
+            "comments",
             "sectionType",
         ]
         .as_slice(),
-        ParaKind::HeaderFooter => ["text", "pictures", "smartArts"].as_slice(),
+        ParaKind::HeaderFooter => [
+            "text",
+            "pictures",
+            "smartArts",
+            "charts",
+            "footnote",
+            "endnote",
+            "comments",
+        ]
+        .as_slice(),
     };
     for k in obj.keys() {
         if !allowed.contains(&k.as_str()) {
@@ -442,6 +492,10 @@ fn parse_para(v: &Value, path: &str, kind: ParaKind, i: usize) -> Result<NewPara
     };
     let pictures = parse_pictures(obj.get("pictures"), path)?;
     let smart_arts = parse_smartarts(obj.get("smartArts"), path)?;
+    let charts = parse_charts(obj.get("charts"), path)?;
+    let footnote = parse_optional_str(obj.get("footnote"), path, "footnote")?;
+    let endnote = parse_optional_str(obj.get("endnote"), path, "endnote")?;
+    let comments = parse_comments(obj.get("comments"), path)?;
     let section_type = match kind {
         ParaKind::Body => parse_create_section_type(obj.get("sectionType"), path)?,
         ParaKind::HeaderFooter => None,
@@ -452,6 +506,10 @@ fn parse_para(v: &Value, path: &str, kind: ParaKind, i: usize) -> Result<NewPara
         boxes,
         pictures,
         smart_arts,
+        charts,
+        footnote,
+        endnote,
+        comments,
         section_type,
     })
 }
@@ -1123,6 +1181,490 @@ fn attach_pictures(pkg: &mut Package, part: &str, paras: &[NewPara]) -> Result<(
     }
     pkg.set(part, doc.to_bytes()?)?;
     Ok(())
+}
+
+fn parse_optional_str(v: Option<&Value>, path: &str, field: &str) -> Result<Option<String>, Error> {
+    match v {
+        None => Ok(None),
+        Some(Value::String(s)) => Ok(Some(s.clone())),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::String,
+            },
+            format!("{path}.{field}"),
+        )),
+    }
+}
+
+fn parse_comments(v: Option<&Value>, prefix: &str) -> Result<Vec<NewComment>, Error> {
+    let Some(v) = v else {
+        return Ok(Vec::new());
+    };
+    let path = format!("{prefix}.comments");
+    let arr = v.as_array().ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::WrongType {
+                field: "comments".into(),
+                expected: TypeName::Array,
+            },
+            path.clone(),
+        )
+    })?;
+    let mut out = Vec::new();
+    for (j, item) in arr.iter().enumerate() {
+        let item_path = format!("{path}[{j}]");
+        let obj = item.as_object().ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::WrongType {
+                    field: item_path.clone(),
+                    expected: TypeName::Object,
+                },
+                item_path.clone(),
+            )
+        })?;
+        for k in obj.keys() {
+            if !matches!(k.as_str(), "text" | "author" | "initials" | "date") {
+                return Err(Error::with_path(
+                    ErrorKind::UnknownField { field: k.clone() },
+                    format!("{item_path}.{k}"),
+                ));
+            }
+        }
+        let text = match obj.get("text") {
+            None => String::new(),
+            Some(Value::String(s)) => s.clone(),
+            Some(_) => {
+                return Err(Error::with_path(
+                    ErrorKind::WrongType {
+                        field: "text".into(),
+                        expected: TypeName::String,
+                    },
+                    format!("{item_path}.text"),
+                ));
+            }
+        };
+        let author = parse_comment_attr(obj.get("author"), &item_path, "author")?
+            .unwrap_or_else(|| "ooxp".into());
+        let initials = parse_comment_attr(obj.get("initials"), &item_path, "initials")?
+            .unwrap_or_else(|| "oo".into());
+        let date = parse_comment_attr(obj.get("date"), &item_path, "date")?;
+        out.push(NewComment {
+            text,
+            author,
+            initials,
+            date,
+        });
+    }
+    Ok(out)
+}
+
+fn parse_comment_attr(v: Option<&Value>, path: &str, field: &str) -> Result<Option<String>, Error> {
+    match v {
+        None => Ok(None),
+        Some(Value::String(s)) if !s.is_empty() => Ok(Some(s.clone())),
+        Some(Value::String(_)) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::NonEmptyString,
+            },
+            format!("{path}.{field}"),
+        )),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::String,
+            },
+            format!("{path}.{field}"),
+        )),
+    }
+}
+
+fn parse_charts(v: Option<&Value>, prefix: &str) -> Result<Vec<CreateChart>, Error> {
+    let Some(v) = v else {
+        return Ok(Vec::new());
+    };
+    let path = format!("{prefix}.charts");
+    let arr = v.as_array().ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::WrongType {
+                field: "charts".into(),
+                expected: TypeName::Array,
+            },
+            path.clone(),
+        )
+    })?;
+    let mut out = Vec::new();
+    for (j, item) in arr.iter().enumerate() {
+        let item_path = format!("{path}[{j}]");
+        out.push(parse_one_chart(item, &item_path)?);
+    }
+    Ok(out)
+}
+
+fn parse_one_chart(v: &Value, path: &str) -> Result<CreateChart, Error> {
+    let obj = v.as_object().ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::WrongType {
+                field: path.into(),
+                expected: TypeName::Object,
+            },
+            path,
+        )
+    })?;
+    for k in obj.keys() {
+        if !matches!(
+            k.as_str(),
+            "type" | "title" | "series" | "kind" | "wrap" | "cx" | "cy"
+        ) {
+            return Err(Error::with_path(
+                ErrorKind::UnknownField { field: k.clone() },
+                format!("{path}.{k}"),
+            ));
+        }
+    }
+    let chart_type = match obj.get("type") {
+        Some(Value::String(s)) => ChartType::parse(s)
+            .ok_or_else(|| Error::with_path(ErrorKind::InvalidChartType, format!("{path}.type")))?,
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "type".into(),
+                    expected: TypeName::String,
+                },
+                format!("{path}.type"),
+            ));
+        }
+        None => {
+            return Err(Error::with_path(
+                ErrorKind::MissingField {
+                    field: "type".into(),
+                },
+                format!("{path}.type"),
+            ));
+        }
+    };
+    let title = match obj.get("title") {
+        None | Some(Value::Null) => None,
+        Some(Value::String(s)) => Some(s.clone()),
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "title".into(),
+                    expected: TypeName::String,
+                },
+                format!("{path}.title"),
+            ));
+        }
+    };
+    let series = parse_create_series(obj.get("series"), path)?;
+    if chart_type.needs_one_series() && series.len() != 1 {
+        return Err(Error::with_path(
+            ErrorKind::PieNeedsOneSeries,
+            format!("{path}.series"),
+        ));
+    }
+    if chart_type == ChartType::Combo {
+        let kinds: HashSet<&str> = series
+            .iter()
+            .filter_map(|s| s.series_type.map(ChartType::as_str))
+            .collect();
+        if series.iter().any(|s| s.series_type.is_none()) || kinds.len() < 2 {
+            return Err(Error::with_path(
+                ErrorKind::InvalidComboSeriesType,
+                format!("{path}.series"),
+            ));
+        }
+    } else if series.iter().any(|s| s.series_type.is_some()) {
+        return Err(Error::with_path(
+            ErrorKind::InvalidComboSeriesType,
+            format!("{path}.series"),
+        ));
+    }
+    if chart_type != ChartType::Bubble && series.iter().any(|s| s.sizes.is_some()) {
+        return Err(Error::with_path(
+            ErrorKind::SizesOnNonBubble,
+            format!("{path}.series"),
+        ));
+    }
+    let kind = match obj.get("kind") {
+        None => PicKind::Anchor,
+        Some(Value::String(s)) => picture::parse_pic_kind(s)
+            .ok_or_else(|| Error::with_path(ErrorKind::InvalidPicKind, format!("{path}.kind")))?,
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "kind".into(),
+                    expected: TypeName::String,
+                },
+                format!("{path}.kind"),
+            ));
+        }
+    };
+    let wrap =
+        match obj.get("wrap") {
+            None | Some(Value::Null) => {
+                if kind == PicKind::Anchor {
+                    Some(WrapKind::Square)
+                } else {
+                    None
+                }
+            }
+            Some(Value::String(s)) => Some(picture::parse_wrap(s).ok_or_else(|| {
+                Error::with_path(ErrorKind::InvalidPicWrap, format!("{path}.wrap"))
+            })?),
+            Some(_) => {
+                return Err(Error::with_path(
+                    ErrorKind::WrongType {
+                        field: "wrap".into(),
+                        expected: TypeName::String,
+                    },
+                    format!("{path}.wrap"),
+                ));
+            }
+        };
+    if kind == PicKind::Inline && wrap.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::InvalidPicWrap,
+            format!("{path}.wrap"),
+        ));
+    }
+    let cx = parse_emu(obj.get("cx"), path, "cx")?;
+    let cy = parse_emu(obj.get("cy"), path, "cy")?;
+    if cx.is_some() != cy.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::MissingField {
+                field: "cx and cy".into(),
+            },
+            path.to_string(),
+        ));
+    }
+    Ok(CreateChart {
+        chart_type,
+        title,
+        series,
+        kind,
+        wrap,
+        cx: cx.unwrap_or(charts::default_cx()),
+        cy: cy.unwrap_or(charts::default_cy()),
+    })
+}
+
+fn parse_create_series(v: Option<&Value>, path: &str) -> Result<Vec<NewSeries>, Error> {
+    let arr = match v {
+        Some(Value::Array(a)) if !a.is_empty() => a,
+        Some(Value::Array(_)) | None => {
+            return Err(Error::with_path(
+                ErrorKind::MissingField {
+                    field: "series".into(),
+                },
+                format!("{path}.series"),
+            ));
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "series".into(),
+                    expected: TypeName::Array,
+                },
+                format!("{path}.series"),
+            ));
+        }
+    };
+    let mut out = Vec::new();
+    for (j, item) in arr.iter().enumerate() {
+        let item_path = format!("{path}.series[{j}]");
+        let obj = item.as_object().ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::WrongType {
+                    field: format!("series[{j}]"),
+                    expected: TypeName::Object,
+                },
+                item_path.clone(),
+            )
+        })?;
+        for k in obj.keys() {
+            if !matches!(
+                k.as_str(),
+                "name" | "categories" | "values" | "sizes" | "type"
+            ) {
+                return Err(Error::with_path(
+                    ErrorKind::UnknownField { field: k.clone() },
+                    format!("{item_path}.{k}"),
+                ));
+            }
+        }
+        let name = match obj.get("name") {
+            None | Some(Value::Null) => None,
+            Some(Value::String(s)) => Some(s.clone()),
+            Some(_) => {
+                return Err(Error::with_path(
+                    ErrorKind::WrongType {
+                        field: "name".into(),
+                        expected: TypeName::String,
+                    },
+                    format!("{item_path}.name"),
+                ));
+            }
+        };
+        let categories =
+            parse_datum_list(obj.get("categories"), &format!("{item_path}.categories"))?;
+        let values = parse_datum_list(obj.get("values"), &format!("{item_path}.values"))?
+            .filter(|v| !v.is_empty())
+            .ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::MissingField {
+                        field: "values".into(),
+                    },
+                    format!("{item_path}.values"),
+                )
+            })?;
+        let sizes = parse_datum_list(obj.get("sizes"), &format!("{item_path}.sizes"))?;
+        let series_type = match obj.get("type") {
+            None | Some(Value::Null) => None,
+            Some(Value::String(s)) => Some(ChartType::parse_combo_series(s).ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::InvalidComboSeriesType,
+                    format!("{item_path}.type"),
+                )
+            })?),
+            Some(_) => {
+                return Err(Error::with_path(
+                    ErrorKind::WrongType {
+                        field: "type".into(),
+                        expected: TypeName::String,
+                    },
+                    format!("{item_path}.type"),
+                ));
+            }
+        };
+        out.push(NewSeries {
+            name,
+            categories,
+            values,
+            sizes,
+            series_type,
+        });
+    }
+    Ok(out)
+}
+
+fn parse_datum_list(v: Option<&Value>, path: &str) -> Result<Option<Vec<Value>>, Error> {
+    match v {
+        None | Some(Value::Null) => Ok(None),
+        Some(Value::Array(a)) => {
+            let mut out = Vec::new();
+            for (j, item) in a.iter().enumerate() {
+                match item {
+                    Value::String(_) | Value::Number(_) => out.push(item.clone()),
+                    _ => {
+                        return Err(Error::with_path(
+                            ErrorKind::WrongType {
+                                field: format!("[{j}]"),
+                                expected: TypeName::String,
+                            },
+                            format!("{path}[{j}]"),
+                        ));
+                    }
+                }
+            }
+            Ok(Some(out))
+        }
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "array".into(),
+                expected: TypeName::Array,
+            },
+            path.to_string(),
+        )),
+    }
+}
+
+fn apply_follow_ups(
+    bytes: Vec<u8>,
+    paras: &[NewPara],
+    headers: &[HfCreateItem],
+    footers: &[HfCreateItem],
+) -> Result<Vec<u8>, Error> {
+    let need = paras.iter().any(NewPara::has_follow_ups)
+        || headers
+            .iter()
+            .any(|h| h.paras.iter().any(NewPara::has_follow_ups))
+        || footers
+            .iter()
+            .any(|h| h.paras.iter().any(NewPara::has_follow_ups));
+    if !need {
+        return Ok(bytes);
+    }
+    let mut ops = Vec::new();
+    push_story_ops(&mut ops, paras, None)?;
+    for item in headers {
+        push_story_ops(&mut ops, &item.paras, Some((HfKind::Header, item.hf_type)))?;
+    }
+    for item in footers {
+        push_story_ops(&mut ops, &item.paras, Some((HfKind::Footer, item.hf_type)))?;
+    }
+    apply::apply(&bytes, &ops)
+}
+
+fn push_story_ops(
+    ops: &mut Vec<DocxOp>,
+    paras: &[NewPara],
+    hf: Option<(HfKind, HfType)>,
+) -> Result<(), Error> {
+    for (i, p) in paras.iter().enumerate() {
+        let id = story_para_id(hf, i);
+        let host = para::parse_para_id_at(&id, "document")?;
+        for ch in &p.charts {
+            ops.push(DocxOp::InsertChart(InsertChartOp {
+                id: id.clone(),
+                para: host.clone(),
+                chart_type: ch.chart_type,
+                title: ch.title.clone(),
+                series: ch.series.clone(),
+                kind: ch.kind,
+                wrap: ch.wrap,
+                pos: WrapPos::default(),
+                cx: ch.cx,
+                cy: ch.cy,
+            }));
+        }
+        if let Some(text) = &p.footnote {
+            ops.push(DocxOp::InsertFootnote(InsertNoteOp {
+                id: id.clone(),
+                host: host.clone(),
+                text: text.clone(),
+            }));
+        }
+        if let Some(text) = &p.endnote {
+            ops.push(DocxOp::InsertEndnote(InsertNoteOp {
+                id: id.clone(),
+                host: host.clone(),
+                text: text.clone(),
+            }));
+        }
+        for c in &p.comments {
+            ops.push(DocxOp::InsertComment(InsertCommentOp {
+                start: id.clone(),
+                end: id.clone(),
+                start_target: host.clone(),
+                end_target: host.clone(),
+                text: c.text.clone(),
+                author: c.author.clone(),
+                initials: c.initials.clone(),
+                date: c.date.clone(),
+            }));
+        }
+    }
+    Ok(())
+}
+
+fn story_para_id(hf: Option<(HfKind, HfType)>, index: usize) -> String {
+    let hex = format!("{:08X}", index as u32 + 1);
+    match hf {
+        None => format!("para:{hex}"),
+        Some((kind, hf_type)) => format!("{}:{}:1/para:{hex}", kind.as_str(), hf_type.as_str()),
+    }
 }
 
 /// 只数故事层的 `w:p`，不走进文本框。

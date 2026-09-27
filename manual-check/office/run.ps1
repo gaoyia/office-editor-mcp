@@ -28,6 +28,7 @@ $order = @(
     'xlsx-create-charts'
     'docx-create'
     'docx-create-pictures'
+    'docx-create-full'
     'pptx-create'
     'pptx-create-pictures'
     'pptx-create-charts'

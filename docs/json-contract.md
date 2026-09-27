@@ -73,7 +73,7 @@ xlsx 页眉页脚是工作表上的 `headerFooter`（ECMA-376 §18.3.1.46），�
 
 没有 `w14:paraId` 时：`para:index:{n}`，`n` 从 1 起，按主文档部件里 `w:p` 的文档顺序（含表格单元格里的段落）。树上同时给 `"stable": false`。这类 id 在增删段落后会变，只够同一次 inspect 之后立刻 apply。
 
-标题和正文都是段落，不另编一套 id。脚注、尾注、批注都是独立故事：根上始终有计数；给了对应 `scope` 才列出名单，并可 apply。分隔符三条不进用户名单，禁止 apply。文本框是独立节点：框本身、框内段落与框内图按下面规则进树，并可 apply。页眉、页脚按下面规则进树，可按 id 改字；节上的页眉页脚距边界、页面边距、纸张、分栏、垂直对齐、行号、文档网格、装订线侧，以及是否链接到前一节，都可以读写。整篇的镜像边距与装订线在上，写在 `settings.xml`。页眉、页脚、正文、注和批注里的 DrawingML 图片可查、换、插、删，并可改尺寸与绕排。正文与页眉页脚里的 `w:tbl` 可查、插、删，并可插删行与列、合并与拆分单元格。正文与页眉页脚里的 run 级插入、删除与段落/run 属性修订可按范围列出，并可接受或拒绝被点名的一条。apply 可用 `insertHeaderFooter` 为某节某类型新建页眉或页脚部件，可用 `setTitlePage` 写本节 `w:titlePg`，可用 `setEvenAndOddHeaders` 写整篇 `w:evenAndOddHeaders`，可用 `insertSection` 在某段之后插入分节符，可用 `deleteSection` 删掉非末节并把内容并进下一节，可用 `insertToc` 插入目录域、用 `deleteToc` 删掉目录块，可用 `insertMath` / `setMath` / `deleteMath` 插改删 OMML 公式，可用 `insertContentControl` / `setContentControl` / `deleteContentControl` 插改删内容控件。`create` 可在正文和页眉页脚上写 DrawingML 图，也可写文本框与 SmartArt；页眉页脚允许 `default` / `even` / `first`；不写脚注、尾注、批注、图表、修订。带图字段见下文 create。嵌入图表不是 `pic:pic`：根上始终有 `chartCount`；给了 `scope.charts` 才列出名单，并可 apply。SmartArt 不是 `pic:pic`：根上始终有 `smartArtCount`；给了 `scope.smartArt` 才列出名单，并可 apply。框内、注内、批注内的图表与 SmartArt 本期不进树、不接受 apply。
+标题和正文都是段落，不另编一套 id。脚注、尾注、批注都是独立故事：根上始终有计数；给了对应 `scope` 才列出名单，并可 apply。分隔符三条不进用户名单，禁止 apply。文本框是独立节点：框本身、框内段落与框内图按下面规则进树，并可 apply。页眉、页脚按下面规则进树，可按 id 改字；节上的页眉页脚距边界、页面边距、纸张、分栏、垂直对齐、行号、文档网格、装订线侧，以及是否链接到前一节，都可以读写。整篇的镜像边距与装订线在上，写在 `settings.xml`。页眉、页脚、正文、注和批注里的 DrawingML 图片可查、换、插、删，并可改尺寸与绕排。正文与页眉页脚里的 `w:tbl` 可查、插、删，并可插删行与列、合并与拆分单元格。正文与页眉页脚里的 run 级插入、删除与段落/run 属性修订可按范围列出，并可接受或拒绝被点名的一条。apply 可用 `insertHeaderFooter` 为某节某类型新建页眉或页脚部件，可用 `setTitlePage` 写本节 `w:titlePg`，可用 `setEvenAndOddHeaders` 写整篇 `w:evenAndOddHeaders`，可用 `insertSection` 在某段之后插入分节符，可用 `deleteSection` 删掉非末节并把内容并进下一节，可用 `insertToc` 插入目录域、用 `deleteToc` 删掉目录块，可用 `insertMath` / `setMath` / `deleteMath` 插改删 OMML 公式，可用 `insertContentControl` / `setContentControl` / `deleteContentControl` 插改删内容控件。`create` 可在正文和页眉页脚上写 DrawingML 图，也可写文本框、SmartArt、图表、脚注、尾注与批注；页眉页脚允许 `default` / `even` / `first`；不写修订。字段见下文 create。嵌入图表不是 `pic:pic`：根上始终有 `chartCount`；给了 `scope.charts` 才列出名单，并可 apply。SmartArt 不是 `pic:pic`：根上始终有 `smartArtCount`；给了 `scope.smartArt` 才列出名单，并可 apply。框内、注内、批注内的图表与 SmartArt 本期不进树、不接受 apply。
 
 页眉、页脚 id 按部件编，不按节编。`w:sectPr` 里的 `w:headerReference` / `w:footerReference`（§17.10.2、§17.10.5）经主文档关系解到部件路径。同一部件只出一个容器节点；多个节引用同一部件时，`sections` 列出所有节号。后一节某类型引用省略时按规范继承前节（§17.10.2）；`even` 是否继承还看 `settings.xml` 的 `w:evenAndOddHeaders`（§17.10.1），`first` 是否继承还看该节的 `w:titlePg`（§17.10.6）。OOXML 没有「链接到前一节」元素；Word UI 的勾选就是这种省略。inspect 在每个节上用 `headerLink` / `footerLink` 标出该类型是显式引用、继承前节，还是对本节不生效。apply 用 `setHeaderFooterLink` 断开或重新链接；用 `insertHeaderFooter` 在空白槽位新建部件。两节显式指向同一部件不算链接，两边都是 `false`。
 
@@ -813,6 +813,8 @@ xlsx、docx、pptx 共用 `scope` 这个字段名，里面的键按格式分，�
 }
 ```
 
+带图表、注、批注与两节的示例见 `docs/examples/docx-create-full.json`。
+
 | 字段 | 含义 |
 | --- | --- |
 | `path` | 输出路径。已存在则覆盖。省略时必须由调用方另给落盘路径，命令行用 `--output` |
@@ -823,10 +825,14 @@ xlsx、docx、pptx 共用 `scope` 这个字段名，里面的键按格式分，�
 | `paragraphs[].textBoxes` | 可选。该段上的文本框列表。省略则不写框 |
 | `paragraphs[].pictures` | 可选。该段上的图列表。省略则不写图 |
 | `paragraphs[].smartArts` | 可选。该段上的 SmartArt 列表。省略则不写图示。字段与 `insertSmartArt` 相同，但不含 `id` |
+| `paragraphs[].charts` | 可选。该段上的图表列表。省略则不写图表。字段与 `insertChart` 相同，但不含 `op` / `id`，也不含 `from` / `to` / `anchor` / `dataFrom` / `x` / `y`。出现这些 xlsx / pptx 字段报 `InvalidField`。缺省与 `insertChart` 相同：`kind` 为 `anchor`，`wrap` 为 `square`。页眉页脚段落同样允许 |
+| `paragraphs[].footnote` | 可选。字符串。在该段末插入一条脚注，规则与 `insertFootnote` 的 `text` 相同，可空。省略则不写。页眉页脚段落同样允许 |
+| `paragraphs[].endnote` | 可选。字符串。在该段末插入一条尾注，规则与 `insertEndnote` 相同。可与 `footnote` 同时出现。页眉页脚段落同样允许 |
+| `paragraphs[].comments` | 可选。该段上的批注列表。每条范围的 start 与 end 都是该段自身，不跨段。不写回复。页眉页脚段落同样允许 |
 | `document.headers` / `document.footers` | 可选。页眉或页脚。省略则不写对应部件 |
 | `document.tables` | 可选。正文表列表。省略或空数组则不写 `w:tbl` |
 | `headers[].type` / `footers[].type` | `default`、`even` 或 `first`；省略当作 `default`。同一侧同一 `type` 只能出现一次，否则报 `InvalidField`。给了 `even` 则写入整篇 `w:evenAndOddHeaders`；给了 `first` 则第一节写入 `w:titlePg` |
-| `headers[].paragraphs` / `footers[].paragraphs` | 可选。空或省略则写一个空的 `w:p`。字段与正文段落相同，但不允许 `style`、不允许 `textBoxes`；允许 `pictures` 与 `smartArts` |
+| `headers[].paragraphs` / `footers[].paragraphs` | 可选。空或省略则写一个空的 `w:p`。字段与正文段落相同，但不允许 `style`、不允许 `textBoxes`、不允许 `sectionType`；允许 `pictures`、`smartArts`、`charts`、`footnote`、`endnote`、`comments` |
 | `headers[].tables` / `footers[].tables` | 可选。该部件里的表，规则与 `document.tables` 相同，`after` 相对该部件的 `paragraphs` |
 
 | `tables[].cells` | 必须。二维字符串数组。至少一行一列，至多 500 行、63 列（Word 列上限）。每一行的长度必须相同，否则报 `InvalidField`。每个字符串是该格第一段可见文本，可空 |
@@ -846,11 +852,21 @@ xlsx、docx、pptx 共用 `scope` 这个字段名，里面的键按格式分，�
 | `smartArts[].points` | 可选。与 `insertSmartArt` 相同；省略则用该版式的缺省占位点 |
 | `smartArts[].kind` / `wrap` / `cx` / `cy` | 可选。与 `insertSmartArt` 相同 |
 
-不把 base64 写进 create JSON。xlsx 的图只认 `workbook.sheets[].pictures`，图表只认 `workbook.sheets[].charts`。pptx 的图只认 `presentation.slides[].pictures`，图表只认 `presentation.slides[].charts`，SmartArt 只认 `presentation.slides[].smartArts`。`presentation` 根上或 `shapes[]` 上出现 `pictures` / `charts` / `smartArts` 报 `InvalidField`。xlsx 上出现 `smartArts` 同样报 `InvalidField`。docx create 仍不写图表。
+| `charts[].type` | 必须。与 `insertChart` 相同 |
+| `charts[].series` | 必须。非空。字段与 `insertChart` 相同 |
+| `charts[].title` | 可选 |
+| `charts[].kind` / `wrap` / `cx` / `cy` | 可选。与 docx `insertChart` 相同 |
+
+| `comments[].text` | 可选。新批注第一段可见文本，省略当作 `""` |
+| `comments[].author` | 可选。省略当作 `"ooxp"` |
+| `comments[].initials` | 可选。省略当作 `"oo"` |
+| `comments[].date` | 可选。`xsd:dateTime` 字符串。省略则不写 `w:date` |
+
+不把 base64 写进 create JSON。xlsx 的图只认 `workbook.sheets[].pictures`，图表只认 `workbook.sheets[].charts`。pptx 的图只认 `presentation.slides[].pictures`，图表只认 `presentation.slides[].charts`，SmartArt 只认 `presentation.slides[].smartArts`。`presentation` 根上或 `shapes[]` 上出现 `pictures` / `charts` / `smartArts` 报 `InvalidField`。xlsx 上出现 `smartArts` 同样报 `InvalidField`。
 
 create 写出 Transitional 最小包，见 [opc.md](opc.md)。每个 `w:p` 都带唯一的 `w14:paraId` 和 `w14:textId`（取值大于 0、小于 `0x80000000`，MS-DOCX §2.6.2.3 / §2.6.2.4），并在根元素上把 `w14` 列入 `mc:Ignorable`。这样随后 inspect 得到的 id 都是 `para:{paraId}`，`stable` 为 `true`。图的 `wp:docPr/@id` 在该部件内从 `1` 起递增，与 `insertPicture` 同一套写入。
 
-标题段写出 `<w:pStyle w:val="Heading1"/>` 这类引用，样式定义放在 `/word/styles.xml`。同时写 `/word/settings.xml`，含 `<w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="15"/>`（MS-DOCX §2.3.5）。缺这项时 Word 按兼容模式打开（默认 12）。`textBoxes` 写成浮动 `square` 的 `wps:wsp`，与 `insertTextBox` 同一套最小 Choice。`smartArts` 复用 `insertSmartArt` 的四件套生成。给了 `headers` / `footers` 时按出现顺序写 `/word/headerN.xml` 或 `/word/footerN.xml`，并在第一节 `sectPr` 上挂对应 `w:type` 的引用。若第一节在某段上结束，引用写在该段的 `sectPr` 上，不要留在 `w:body`。给了 `even` 则 `settings.xml` 含 `<w:evenAndOddHeaders/>`。给了 `first` 则第一节 `sectPr` 含 `<w:titlePg/>`。给了 `paragraphs[].sectionType` 时写出对应中间节；末节的 `sectPr` 仍在 `w:body` 末尾。不要生成目录、修订、脚注、尾注、批注、图表。默认页眉页脚带框不在本期 create。给了 `tables` 时写出带单线边框的 `w:tbl`，每列 `gridCol` 宽 1440 twip，每格一段，带新的 `w14:paraId`。不写 `tblStyle`。不算列宽。
+标题段写出 `<w:pStyle w:val="Heading1"/>` 这类引用，样式定义放在 `/word/styles.xml`。同时写 `/word/settings.xml`，含 `<w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="15"/>`（MS-DOCX §2.3.5）。缺这项时 Word 按兼容模式打开（默认 12）。`textBoxes` 写成浮动 `square` 的 `wps:wsp`，与 `insertTextBox` 同一套最小 Choice。`smartArts` 复用 `insertSmartArt` 的四件套生成。给了 `headers` / `footers` 时按出现顺序写 `/word/headerN.xml` 或 `/word/footerN.xml`，并在第一节 `sectPr` 上挂对应 `w:type` 的引用。若第一节在某段上结束，引用写在该段的 `sectPr` 上，不要留在 `w:body`。给了 `even` 则 `settings.xml` 含 `<w:evenAndOddHeaders/>`。给了 `first` 则第一节 `sectPr` 含 `<w:titlePg/>`。给了 `paragraphs[].sectionType` 时写出对应中间节；末节的 `sectPr` 仍在 `w:body` 末尾。给了 `paragraphs[].charts` 时按 `insertChart` 同一套规则写 `/word/charts/…`、embedding 与宿主 `w:drawing`。给了 `footnote` / `endnote` 时按对应 insert 同一套规则写注部件、分隔符与引用 run。给了 `comments` 时按 `insertComment` 同一套规则写 `comments.xml`、`commentsExtended.xml`、`people.xml` 与范围标记。同一段上先写骨架里的文字 / 图 / 框 / SmartArt，再图表，再脚注，再尾注，再批注。不要生成目录、修订、超链接、书签、域、编号、公式、内容控件，也不写批注回复。默认页眉页脚带框不在本期 create。给了 `tables` 时写出带单线边框的 `w:tbl`，每列 `gridCol` 宽 1440 twip，每格一段，带新的 `w14:paraId`。不写 `tblStyle`。不算列宽。框内、表内、注内本期 create 不写图表或注。
 
 ### pptx
 

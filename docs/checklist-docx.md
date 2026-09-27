@@ -42,6 +42,7 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 | Tc1–Tc5 | ✅ | Word 16.0：`docx-toc.ps1`，5 PASS / 0 FAIL。无 `scope.tocs` 时只有 `tocCount`；插入后 `toc:1` / `kind=toc` 且 `fields` 含 TOC；打开无修复；更新域后可见「第一章」；删后 `tocCount=0` 标题还在；`kind=tof` 树上为 `tof`。标题栏无 Repair |
 | Mm1–Mm6 | ✅ | Word 16.0：`docx-math.ps1`，6 PASS / 0 FAIL。无 `scope.maths` 时只有 `mathCount`；inline 插入后 `math:1` / `kind=inline`；打开无修复且 `OMaths.Count=1`、`Type=1`；`setMath` 后仍是公式；display `Type=0`；删后 `mathCount=0` 标题还在；页眉 `mathCount=1` 且无修复。标题栏无 Repair |
 | Cc1–Cc6 | ✅ | Word 16.0：`docx-sdt.ps1`，6 PASS / 0 FAIL。无 `scope.contentControls` 时只有 `contentControlCount`；plainText 插入后 `sdt:1` / `kind=plainText`；打开无修复且 `ContentControls.Count=1`、`Type=1`；`setContentControl` 后仍是纯文本控件；下拉 `Type=4`；删后 `contentControlCount=0` 标题与原文还在；页眉 `contentControlCount=1` 且无修复。标题栏无 Repair |
+| Cf1–Cf6 | ✅ | Word 16.0：`docx-create-full.ps1`，6 PASS / 0 FAIL。两节、饼图、脚注、尾注、批注；标题栏无 Repair。`commentsExtended` 的 CT 须为 `…wordprocessingml.commentsExtended+xml` |
 | O1 | 🚫 | 领域层不做原样保存，与 xlsx 清单相同。零脏写回见 OPC 库测试。Word 另存 create 产物见 `docx-O1-word-resave`。此前记的 `SaveAs2` 挂起，拆分后重跑没再出现，一秒内返回 |
 
 ## create
@@ -56,6 +57,7 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 | C5 | 带图正文 | 用 `docs/examples/docx-create-pictures.json`（换成本机 PNG）生成；第二段有行内图，inspect id 为 `para:…/pic:1` |
 | C6 | 带图页眉 | 同上，默认页眉有浮动 `square`，Word 能看见 |
 | C7 | Word 打开带图产物 | 无修复；图可见 |
+| C8 | 补齐 | 用 `docs/examples/docx-create-full.json` 生成：两节、饼图、一条脚注、一条尾注、一条批注。inspect 对得上；Word 无修复。见下方 Cf 组 |
 
 ## inspect
 
@@ -172,7 +174,7 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 
 ## 脚注与尾注
 
-准备一份 Word 亲手另存的样例：至少一条用户脚注、一条用户尾注。不要用库 `create` 产物当唯一样例（create 不写注）。手测脚本为 `manual-check/office/cases/docx-notes.ps1`。
+准备一份 Word 亲手另存的样例：至少一条用户脚注、一条用户尾注。不要用库 `create` 产物当唯一样例；apply 手测仍用 Word 另存。手测脚本为 `manual-check/office/cases/docx-notes.ps1`。
 
 | 序号 | 检查 | 通过标准 |
 | --- | --- | --- |
@@ -185,7 +187,7 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 
 ## 批注
 
-准备一份 Word 亲手另存的样例：至少两条根批注、一条回复。不要用库 `create` 产物当唯一样例（create 不写批注）。手测脚本为 `manual-check/office/cases/docx-comments.ps1`。编号用 Cmt，避免和 create 的 C 组重号。
+准备一份 Word 亲手另存的样例：至少两条根批注、一条回复。不要用库 `create` 产物当唯一样例；apply 手测仍用 Word 另存。手测脚本为 `manual-check/office/cases/docx-comments.ps1`。编号用 Cmt，避免和 create 的 C 组重号。
 
 | 序号 | 检查 | 通过标准 |
 | --- | --- | --- |
@@ -199,7 +201,7 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 
 ## 嵌入图表
 
-准备一份 Word 亲手另存的样例：至少一张柱形图（带标题与两个系列）。不要用库 `create` 产物当唯一样例（create 不写图表）。手测脚本为 `manual-check/office/cases/docx-charts.ps1`。编号用 Ch，避免和 create 的 C 组、批注的 Cmt 组重号。
+准备一份 Word 亲手另存的样例：至少一张柱形图（带标题与两个系列）。不要用库 `create` 产物当唯一样例；apply 手测仍用 Word 另存。手测脚本为 `manual-check/office/cases/docx-charts.ps1`。编号用 Ch，避免和 create 的 C 组、批注的 Cmt 组重号。
 
 | 序号 | 检查 | 通过标准 |
 | --- | --- | --- |
@@ -428,6 +430,19 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 | Cc4 | 下拉 | `kind` 为 `dropDown` 的插入产物树上 `kind` 为 `dropDown`，Word 无修复 |
 | Cc5 | 删除 | `deleteContentControl` 且 `keep` 为 `content` 之后 `contentControlCount` 为 0，原文字还在，标题段还在，Word 无修复 |
 | Cc6 | 页眉 | 默认页眉插入一条纯文本控件后，容器上 `contentControlCount` 为 1，Word 无修复 |
+
+## create 补齐
+
+`paragraphs[].charts` / `footnote` / `endnote` / `comments` 与已有 `sectionType` 写进同一份 create JSON。手测脚本 `manual-check/office/cases/docx-create-full.ps1`。
+
+| 序号 | 检查 | 通过标准 |
+| --- | --- | --- |
+| Cf1 | 节 | `sections` 长度为 2；第一段带 `sectionType` 对应的分节 |
+| Cf2 | 图表 | `chartCount` 为 1，给了 `scope.charts` 时 `type` 为 `pie` |
+| Cf3 | 脚注 | `footnoteCount` 为 1，注内可见文字为写入的原文 |
+| Cf4 | 尾注 | `endnoteCount` 为 1，注内可见文字为写入的原文 |
+| Cf5 | 批注 | `commentCount` 为 1，批注内可见文字为写入的原文 |
+| Cf6 | 打开 | Word 打开后无修复；能看见饼图、脚注、尾注与批注 |
 
 ## 原样保存（opc 验收）
 

@@ -108,6 +108,46 @@ function Ensure-DocxCreatePictures([switch]$Force) {
     return $path
 }
 
+# 两节、饼图、一条脚注、一条尾注、一条批注。内容与 docs/examples/docx-create-full.json 相同。
+function Ensure-DocxCreateFull([switch]$Force) {
+    $path = Get-OutPath 'docx-create-full.docx'
+    if ((Test-Path $path) -and -not $Force) { return $path }
+    $req = @{
+        schemaVersion = 1; action = 'create'
+        path = $path.Replace('\', '/'); format = 'docx'
+        document = @{
+            paragraphs = @(
+                @{
+                    style = 'Heading1'
+                    text = '第一章'
+                    sectionType = 'nextPage'
+                    footnote = '脚注一'
+                    comments = @(@{ text = '批注一'; author = 'ooxp'; initials = 'oo' })
+                }
+                @{
+                    text = 'hello'
+                    endnote = '尾注一'
+                    charts = @(
+                        @{
+                            type = 'pie'
+                            title = '份额'
+                            series = @(
+                                @{
+                                    name = 'S1'
+                                    categories = @('甲', '乙')
+                                    values = @(3, 1)
+                                }
+                            )
+                        }
+                    )
+                }
+            )
+        }
+    }
+    Invoke-OoxpRequest $req 'docx-create-full' | Out-Null
+    return $path
+}
+
 function Ensure-PptxCreate([switch]$Force) {
     $path = Get-OutPath 'pptx-create.pptx'
     if ((Test-Path $path) -and -not $Force) { return $path }

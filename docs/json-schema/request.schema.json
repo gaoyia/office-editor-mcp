@@ -288,6 +288,16 @@
         "smartArts": {
           "type": "array",
           "items": { "$ref": "#/$defs/docxSmartArtCreate" }
+        },
+        "charts": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/docxChartCreate" }
+        },
+        "footnote": { "type": "string" },
+        "endnote": { "type": "string" },
+        "comments": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/docxCommentCreate" }
         }
       }
     },
@@ -314,7 +324,53 @@
         "smartArts": {
           "type": "array",
           "items": { "$ref": "#/$defs/docxSmartArtCreate" }
+        },
+        "charts": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/docxChartCreate" }
+        },
+        "footnote": { "type": "string" },
+        "endnote": { "type": "string" },
+        "comments": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/docxCommentCreate" }
         }
+      }
+    },
+    "docxChartCreate": {
+      "type": "object",
+      "required": ["type", "series"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "$ref": "#/$defs/insertChartType" },
+        "title": { "type": "string" },
+        "series": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "allOf": [
+              { "$ref": "#/$defs/chartSeriesData" },
+              { "required": ["values"] }
+            ]
+          }
+        },
+        "kind": { "enum": ["inline", "anchor"] },
+        "wrap": {
+          "type": ["string", "null"],
+          "enum": ["square", "tight", "through", "topAndBottom", "none", null]
+        },
+        "cx": { "type": "integer", "minimum": 1 },
+        "cy": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "docxCommentCreate": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "text": { "type": "string" },
+        "author": { "type": "string" },
+        "initials": { "type": "string" },
+        "date": { "type": "string", "minLength": 1 }
       }
     },
     "docxPictureCreate": {

@@ -92,7 +92,9 @@ pub const CT_ENDNOTES: &str =
     "application/vnd.openxmlformats-officedocument.wordprocessingml.endnotes+xml";
 pub const CT_COMMENTS: &str =
     "application/vnd.openxmlformats-officedocument.wordprocessingml.comments+xml";
-pub const CT_COMMENTS_EXTENDED: &str = "application/vnd.ms-word.commentsExtended+xml";
+// Word 16.0 另存用这条；`vnd.ms-word.commentsExtended+xml` 会被当成损坏。
+pub const CT_COMMENTS_EXTENDED: &str =
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.commentsExtended+xml";
 pub const CT_PEOPLE: &str =
     "application/vnd.openxmlformats-officedocument.wordprocessingml.people+xml";
 pub const CT_CORE: &str = "application/vnd.openxmlformats-package.core-properties+xml";
