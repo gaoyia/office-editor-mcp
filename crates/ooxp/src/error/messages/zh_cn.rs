@@ -204,10 +204,29 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             }
             IdReason::SettingsNeedDocument => {
                 "setMirrorMargins / setGutterAtTop 的 id 必须是 docx:document".into()
-            },
+            }
+            IdReason::TablePrefix => {
+                "表 id 必须是 table:N，或页眉页脚容器 id 加上 /table:N".into()
+            }
+            IdReason::TableIndexNotInt => "table 序号必须是正整数".into(),
+            IdReason::TableIndexFromOne => "table 序号从 1 起".into(),
+            IdReason::TableCellForm => {
+                "单元格 id 必须是 table:N/rRcC，行 id 必须是 table:N/row:R".into()
+            }
+            IdReason::InsertTableAnchor => {
+                "insertTable 的 id 必须是段落、文档根、页眉页脚、表或单元格".into()
+            }
+            IdReason::DeleteTableNeedsTable => "deleteTable 的 id 必须是表 id".into(),
+            IdReason::NeedTableId => "id 必须是表 id".into(),
+            IdReason::InsertRowNeedsTableOrRow => {
+                "insertRow 的 id 必须是表 id 或行 id".into()
+            }
+            IdReason::DeleteRowNeedsRow => "deleteRow 的 id 必须是行 id".into(),
+            IdReason::SplitNeedsCell => "splitCells 的 id 必须是单元格 id".into(),
         },
         ErrorKind::SheetNotFound { name } => format!("找不到工作表：{name}"),
         ErrorKind::ParaNotFound { id } => format!("找不到段落：{id}"),
+        ErrorKind::TableNotFound { id } => format!("找不到表：{id}"),
         ErrorKind::SectionNotFound { id } => format!("找不到节：{id}"),
         ErrorKind::SlideNotFound { n } => format!("找不到幻灯片：slide:{n}"),
         ErrorKind::ShapeNotFound { id } => format!("找不到形状：{id}"),
@@ -348,6 +367,14 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             "本节该页眉页脚仍链接前节，请用 setHeaderFooterLink 断开".into()
         }
         ErrorKind::InvalidSectValue { field } => format!("{field} 不是允许的取值"),
+        ErrorKind::LastTableRow => "表里至少要留一行，不能删掉最后一行".into(),
+        ErrorKind::LastTableCol => "表里至少要留一列，不能删掉最后一列".into(),
+        ErrorKind::SplitContinueCell => "splitCells 必须点名 restart 格，不能点 continue 格".into(),
+        ErrorKind::NothingToSplit => "这一格没有合并".into(),
+        ErrorKind::TableHasRevision => "表、行或单元格上有修订痕迹时不能改结构".into(),
+        ErrorKind::TableGridMismatch => "这一行占的网格列数对不上 colCount，不能改结构".into(),
+        ErrorKind::MergeNotSimple => "mergeCells 需要一块尚未合并、对齐网格的矩形".into(),
+        ErrorKind::NeedTableCellsMatch => "cells 必须是 rows×cols 的字符串数组".into(),
         ErrorKind::OpcOpen { reason } => match reason {
             OpcReason::EmptyPartName => "部件名不能为空".into(),
             OpcReason::InvalidPartName { name } => format!("非法部件名：{name}"),

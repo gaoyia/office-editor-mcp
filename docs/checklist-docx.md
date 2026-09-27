@@ -32,6 +32,7 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 | Ip1–Ip5 | ✅ | Word 16.0：`docx-body-para.ps1`，5 PASS / 0 FAIL。插在第二段之后、插到文档末、删第二段、最后一段 `InvalidField`、默认页眉插一段。标题栏无 Repair |
 | Nh1–Nh7 | ✅ | Word 16.0：`docx-new-header.ps1`，7 PASS / 0 FAIL。新建默认页眉、首页不同、奇偶页、第二节 even 独立、create even/first、类型未生效与已链接均 `InvalidField`。标题栏无 Repair |
 | Sp1–Sp8 | ✅ | Word 16.0：`docx-section.ps1`，8 PASS / 0 FAIL。四边距与横向纸张、距边界仍独立、分栏、垂直对齐与行号、镜像边距。标题栏无 Repair |
+| Tb1–Tb8 | ✅ | Word 16.0：`docx-table.ps1`，8 PASS / 0 FAIL。名单、改字、增行增列、删表、create 2×2、合并、最后一行 `InvalidField`。标题栏无 Repair |
 | O1 | 🚫 | 领域层不做原样保存，与 xlsx 清单相同。零脏写回见 OPC 库测试。Word 另存 create 产物见 `docx-O1-word-resave`。此前记的 `SaveAs2` 挂起，拆分后重跑没再出现，一秒内返回 |
 
 ## create
@@ -57,7 +58,7 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 | I2 | 大纲 | `outline` 含第一段，`level` 为 `1`，`text` 为 `标题` |
 | I3 | 段落 id | 两段都有 `para:{hex}`，`stable` 为 `true` |
 | I4 | 第二段 | `text` 为 `hello` |
-| I5 | 无 scope | 只发 path 时没有 `paragraphs` 字段，仍有 `outline`、`paraCount`、`pictureCount`、`headers`、`footers`、`sections` |
+| I5 | 无 scope | 只发 path 时没有 `paragraphs` 字段，仍有 `outline`、`paraCount`、`pictureCount`、`tableCount`、`headers`、`footers`、`sections` |
 
 ## apply
 
@@ -272,6 +273,21 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 | Sp6 | 分栏 | `setColumns` 等宽两栏后 COM `TextColumns.Count` 为 2；Word 无修复 |
 | Sp7 | 垂直对齐与行号 | `setVerticalAlign` 为 `center`、`setLineNumbering` 的 `countBy` 为 1 后，COM 对得上；Word 无修复 |
 | Sp8 | 镜像边距 | `setMirrorMargins` 为 true 后 COM `MirrorMargins` 为 true；Word 无修复 |
+
+## 表格
+
+准备一份 Word 亲手另存的样例：正文有一张 2×2 简单表，格子里是无域、无超链接的可见文字。`inspect` 带 `scope.tables: true`。手测脚本 `manual-check/office/cases/docx-table.ps1`。
+
+| 序号 | 检查 | 通过标准 |
+| --- | --- | --- |
+| Tb1 | 名单 | 无 scope 时仍有 `tableCount`；给了 `scope.tables` 后有 `table:1`，两行两列，单元格带段落 id |
+| Tb2 | 改字 | 对格子里的段落 `setParaText` 后 Word 无修复，该格可见新字，其余格与正文未改 |
+| Tb3 | 增行 | `insertRow` 后 COM `Tables(1).Rows.Count` 加 1；Word 无修复 |
+| Tb4 | 增列 | `insertCol` 的 `after` 为 1 后 COM `Columns.Count` 加 1；Word 无修复 |
+| Tb5 | 删表 | `deleteTable` 后 `tableCount` 为 0；Word 无修复 |
+| Tb6 | create | create 带 2×2 表，Word 能打开，无修复；COM 表数为 1 |
+| Tb7 | 合并 | `mergeCells` 合并第一行两格后 Word 无修复；COM 第一行单元格数变为 1 |
+| Tb8 | 最后一行 | 对仅剩一行的表 `deleteRow` 得 `InvalidField`，文件未写坏 |
 
 ## 原样保存（opc 验收）
 

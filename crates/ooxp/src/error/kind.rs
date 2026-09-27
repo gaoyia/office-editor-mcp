@@ -146,6 +146,17 @@ pub(crate) enum IdReason {
     EvenOddNeedsDocument,
     /// setMirrorMargins / setGutterAtTop 必须用 docx:document
     SettingsNeedDocument,
+    /// 表 id 必须是 table:N 或 {容器}/table:N
+    TablePrefix,
+    TableIndexNotInt,
+    TableIndexFromOne,
+    TableCellForm,
+    InsertTableAnchor,
+    DeleteTableNeedsTable,
+    NeedTableId,
+    InsertRowNeedsTableOrRow,
+    DeleteRowNeedsRow,
+    SplitNeedsCell,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -348,6 +359,15 @@ define_error_kinds! {
     }],
     HfInsertWhileLinked => vec![Self::HfInsertWhileLinked],
     InvalidSectValue { field: String } => vec![Self::InvalidSectValue { field: "orient".into() }],
+    TableNotFound { id: String } => vec![Self::TableNotFound { id: "table:1".into() }],
+    LastTableRow => vec![Self::LastTableRow],
+    LastTableCol => vec![Self::LastTableCol],
+    SplitContinueCell => vec![Self::SplitContinueCell],
+    NothingToSplit => vec![Self::NothingToSplit],
+    TableHasRevision => vec![Self::TableHasRevision],
+    TableGridMismatch => vec![Self::TableGridMismatch],
+    MergeNotSimple => vec![Self::MergeNotSimple],
+    NeedTableCellsMatch => vec![Self::NeedTableCellsMatch],
     OpcOpen { reason: OpcReason } => OpcReason::all_samples()
         .into_iter()
         .map(|reason| Self::OpcOpen { reason })
@@ -485,6 +505,16 @@ impl IdReason {
             Self::InsertSmartArtNeedsSlide,
             Self::EvenOddNeedsDocument,
             Self::SettingsNeedDocument,
+            Self::TablePrefix,
+            Self::TableIndexNotInt,
+            Self::TableIndexFromOne,
+            Self::TableCellForm,
+            Self::InsertTableAnchor,
+            Self::DeleteTableNeedsTable,
+            Self::NeedTableId,
+            Self::InsertRowNeedsTableOrRow,
+            Self::DeleteRowNeedsRow,
+            Self::SplitNeedsCell,
         ]
     }
 }
@@ -590,6 +620,11 @@ impl ErrorKind {
             | Self::HfTypeInactive { .. }
             | Self::HfInsertWhileLinked
             | Self::InvalidSectValue { .. }
+            | Self::LastTableRow
+            | Self::LastTableCol
+            | Self::SplitContinueCell
+            | Self::NothingToSplit
+            | Self::NeedTableCellsMatch
             | Self::LastTextBoxPara
             | Self::LastNotePara
             | Self::NeedNoteNumberingField
@@ -644,7 +679,8 @@ impl ErrorKind {
             | Self::ChartNotFound { .. }
             | Self::ChartSeriesNotFound { .. }
             | Self::SmartArtNotFound { .. }
-            | Self::SmartArtPointNotFound { .. } => IdNotFound,
+            | Self::SmartArtPointNotFound { .. }
+            | Self::TableNotFound { .. } => IdNotFound,
             Self::ScopeRequired { .. } => ScopeRequired,
             Self::SharedFormulaMaster { .. }
             | Self::InkComment { .. }
@@ -658,7 +694,10 @@ impl ErrorKind {
             | Self::TwoCellChartSize
             | Self::DeleteChartsheetLast
             | Self::ChartFormulaNotA1
-            | Self::PictureAnchorAbsolute => NotImplemented,
+            | Self::PictureAnchorAbsolute
+            | Self::TableHasRevision
+            | Self::TableGridMismatch
+            | Self::MergeNotSimple => NotImplemented,
             Self::OpcOpen { .. } => OpcOpen,
             Self::PartMissing { .. }
             | Self::RelNotFound { .. }

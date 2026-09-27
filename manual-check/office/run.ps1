@@ -40,6 +40,7 @@ $order = @(
     'docx-body-para'
     'docx-new-header'
     'docx-section'
+    'docx-table'
     'docx-headerfooter'
     'docx-distance'
     'docx-link'

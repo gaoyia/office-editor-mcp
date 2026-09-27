@@ -1155,6 +1155,7 @@ fn inspect_lists_header_pictures() {
             "textBoxCount",
             "chartCount",
             "smartArtCount",
+            "tableCount",
             "pictures"
         ]
     );
@@ -2795,4 +2796,164 @@ fn create_first_and_even_headers() {
     assert!(texts.contains(&("first", "首")));
     assert!(part(&path, "word/settings.xml").contains("evenAndOddHeaders"));
     assert!(part(&path, "word/document.xml").contains("titlePg"));
+}
+
+fn inspect_tables(path: &Path) -> serde_json::Value {
+    let RunOutput::Inspect(tree) = run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "inspect",
+            "path": path.to_string_lossy(),
+            "scope": { "tables": true, "from": 1, "maxParas": 200 }
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap() else {
+        panic!("inspect 应返回树");
+    };
+    tree
+}
+
+#[test]
+fn inspect_tables_lists_cell_paragraphs() {
+    let path = write_sample("tbl-list");
+    let bare = run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "inspect",
+            "path": path.to_string_lossy()
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap();
+    let RunOutput::Inspect(bare) = bare else {
+        panic!();
+    };
+    assert_eq!(bare["tableCount"], 1);
+    assert!(bare.get("tables").is_none());
+    let tree = inspect_tables(&path);
+    assert_eq!(tree["tableCount"], 1);
+    let t = &tree["tables"][0];
+    assert_eq!(t["id"], "table:1");
+    assert_eq!(t["index"], 1);
+    assert_eq!(t["rowCount"], 1);
+    assert_eq!(t["colCount"], 1);
+    assert_eq!(t["nested"], false);
+    assert_eq!(t["rows"][0]["id"], "table:1/row:1");
+    let cell = &t["rows"][0]["cells"][0];
+    assert_eq!(cell["id"], "table:1/r1c1");
+    assert_eq!(cell["gridSpan"], 1);
+    assert!(cell["vMerge"].is_null());
+    assert_eq!(cell["paragraphs"][0]["id"], "para:AAAA0005");
+    assert_eq!(cell["paragraphs"][0]["text"], "表内");
+}
+
+#[test]
+fn apply_insert_row_col_and_delete_table() {
+    let path = write_sample("tbl-ops");
+    let mid = tmp_dir().join("tbl-ops-mid.docx");
+    apply_ops(
+        &path,
+        &mid,
+        json!([
+            { "op": "insertRow", "id": "table:1" },
+            { "op": "insertCol", "id": "table:1", "after": 1 }
+        ]),
+    )
+    .unwrap();
+    let tree = inspect_tables(&mid);
+    assert_eq!(tree["tables"][0]["rowCount"], 2);
+    assert_eq!(tree["tables"][0]["colCount"], 2);
+    let out = tmp_dir().join("tbl-ops-del.docx");
+    apply_ops(
+        &mid,
+        &out,
+        json!([{ "op": "deleteTable", "id": "table:1" }]),
+    )
+    .unwrap();
+    let gone = inspect_tables(&out);
+    assert_eq!(gone["tableCount"], 0);
+    assert_eq!(gone["tables"], json!([]));
+}
+
+#[test]
+fn apply_insert_table_then_merge() {
+    let path = write_sample("tbl-merge");
+    let out = tmp_dir().join("tbl-merge-out.docx");
+    apply_ops(
+        &path,
+        &out,
+        json!([
+            {
+                "op": "insertTable",
+                "id": "docx:document",
+                "rows": 2,
+                "cols": 2,
+                "cells": [["A1", "B1"], ["A2", "B2"]]
+            },
+            {
+                "op": "mergeCells",
+                "id": "table:2",
+                "startRow": 1,
+                "startCol": 1,
+                "endRow": 1,
+                "endCol": 2
+            }
+        ]),
+    )
+    .unwrap();
+    let tree = inspect_tables(&out);
+    assert_eq!(tree["tableCount"], 2);
+    let t = &tree["tables"][1];
+    assert_eq!(t["id"], "table:2");
+    assert_eq!(t["rowCount"], 2);
+    assert_eq!(t["colCount"], 2);
+    assert_eq!(t["rows"][0]["cells"].as_array().unwrap().len(), 1);
+    assert_eq!(t["rows"][0]["cells"][0]["gridSpan"], 2);
+    assert_eq!(t["rows"][0]["cells"][0]["paragraphs"][0]["text"], "A1");
+}
+
+#[test]
+fn delete_last_table_row_is_invalid_field() {
+    let path = write_sample("tbl-last-row");
+    let out = tmp_dir().join("tbl-last-row-out.docx");
+    let err = apply_ops(
+        &path,
+        &out,
+        json!([{ "op": "deleteRow", "id": "table:1/row:1" }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+}
+
+#[test]
+fn create_document_with_table() {
+    let path = create_docx_path("create-tbl");
+    run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "create",
+            "path": path.to_string_lossy(),
+            "document": {
+                "paragraphs": [{ "text": "前" }],
+                "tables": [{
+                    "cells": [["A1", "B1"], ["A2", "B2"]]
+                }]
+            }
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap();
+    let tree = inspect_tables(&path);
+    assert_eq!(tree["tableCount"], 1);
+    assert_eq!(tree["tables"][0]["rowCount"], 2);
+    assert_eq!(tree["tables"][0]["colCount"], 2);
+    assert_eq!(
+        tree["tables"][0]["rows"][0]["cells"][0]["paragraphs"][0]["text"],
+        "A1"
+    );
+    assert_eq!(tree["paragraphs"][0]["text"], "前");
 }

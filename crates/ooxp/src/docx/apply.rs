@@ -13,18 +13,20 @@ use super::notes;
 use super::para::{self, HostPara, NoteKind, ParaTarget};
 use super::picture;
 use super::request::{
-    DeleteCommentOp, DeleteNoteOp, DeleteParaOp, DeletePictureOp, DeleteTextBoxOp, DocxOp,
-    InsertCommentOp, InsertHeaderFooterOp, InsertNoteOp, InsertParaOp, InsertParaPlace,
-    InsertPictureOp, InsertTextBoxOp, NoteNumberTarget, ReplacePictureOp, ReplyCommentOp,
+    DeleteColOp, DeleteCommentOp, DeleteNoteOp, DeleteParaOp, DeletePictureOp, DeleteRowOp,
+    DeleteTableOp, DeleteTextBoxOp, DocxOp, InsertColOp, InsertCommentOp, InsertHeaderFooterOp,
+    InsertNoteOp, InsertParaOp, InsertParaPlace, InsertPictureOp, InsertRowOp, InsertTableOp,
+    InsertTextBoxOp, MergeCellsOp, NoteNumberTarget, ReplacePictureOp, ReplyCommentOp,
     SetColumnsOp, SetCommentDoneOp, SetCommentMetaOp, SetCommentTextOp, SetDocGridOp,
     SetEvenAndOddHeadersOp, SetGutterAtTopOp, SetHfDistanceOp, SetHfLinkOp, SetLineNumberingOp,
     SetMirrorMarginsOp, SetNoteNumberingOp, SetPageMarginOp, SetPageSizeOp, SetParaTextOp,
     SetPictureSizeOp, SetPictureWrapOp, SetRtlGutterOp, SetTextBoxDirectionOp, SetTextBoxFillOp,
     SetTextBoxLineOp, SetTextBoxLinkOp, SetTextBoxSizeOp, SetTextBoxWrapOp, SetTitlePageOp,
-    SetVerticalAlignOp,
+    SetVerticalAlignOp, SplitCellsOp,
 };
 use super::sect;
 use super::smartart;
+use super::tbl;
 use super::textbox;
 use super::{CT_FOOTER, CT_HEADER, REL_FOOTER, REL_HEADER};
 
@@ -271,6 +273,30 @@ pub fn apply(bytes: &[u8], ops: &[DocxOp]) -> Result<Vec<u8>, Error> {
                     &mut pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i,
                 )?;
             }
+            DocxOp::InsertTable(op) => {
+                apply_insert_table(&pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
+            }
+            DocxOp::DeleteTable(op) => {
+                apply_delete_table(&pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
+            }
+            DocxOp::InsertRow(op) => {
+                apply_insert_row(&pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
+            }
+            DocxOp::DeleteRow(op) => {
+                apply_delete_row(&pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
+            }
+            DocxOp::InsertCol(op) => {
+                apply_insert_col(&pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
+            }
+            DocxOp::DeleteCol(op) => {
+                apply_delete_col(&pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
+            }
+            DocxOp::MergeCells(op) => {
+                apply_merge_cells(&pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
+            }
+            DocxOp::SplitCells(op) => {
+                apply_split_cells(&pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
+            }
         }
     }
 
@@ -283,6 +309,143 @@ pub fn apply(bytes: &[u8], ops: &[DocxOp]) -> Result<Vec<u8>, Error> {
     }
 
     pkg.save_to_vec()
+}
+
+fn apply_insert_table(
+    pkg: &Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &InsertTableOp,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name = tbl::part_for_anchor(catalog, doc_part, &op.anchor, &op.id, i)?;
+    let doc = load_part(pkg, docs, &part_name)?;
+    tbl::apply_insert_table(&mut doc.root, &op.anchor, &op.cells, &op.id, i)?;
+    dirty.insert(part_name, ());
+    Ok(())
+}
+
+fn apply_delete_table(
+    pkg: &Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &DeleteTableOp,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name = tbl::part_for_story(catalog, doc_part, op.target.story(), &op.id, i)?;
+    let doc = load_part(pkg, docs, &part_name)?;
+    tbl::apply_delete_table(&mut doc.root, &op.target, &op.id, i)?;
+    dirty.insert(part_name, ());
+    Ok(())
+}
+
+fn apply_insert_row(
+    pkg: &Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &InsertRowOp,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name = tbl::part_for_story(catalog, doc_part, op.target.story(), &op.id, i)?;
+    let doc = load_part(pkg, docs, &part_name)?;
+    tbl::apply_insert_row(&mut doc.root, &op.target, &op.id, i)?;
+    dirty.insert(part_name, ());
+    Ok(())
+}
+
+fn apply_delete_row(
+    pkg: &Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &DeleteRowOp,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name = tbl::part_for_story(catalog, doc_part, op.target.story(), &op.id, i)?;
+    let doc = load_part(pkg, docs, &part_name)?;
+    tbl::apply_delete_row(&mut doc.root, &op.target, &op.id, i)?;
+    dirty.insert(part_name, ());
+    Ok(())
+}
+
+fn apply_insert_col(
+    pkg: &Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &InsertColOp,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name = tbl::part_for_story(catalog, doc_part, op.target.story(), &op.id, i)?;
+    let doc = load_part(pkg, docs, &part_name)?;
+    tbl::apply_insert_col(&mut doc.root, &op.target, op.after, &op.id, i)?;
+    dirty.insert(part_name, ());
+    Ok(())
+}
+
+fn apply_delete_col(
+    pkg: &Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &DeleteColOp,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name = tbl::part_for_story(catalog, doc_part, op.target.story(), &op.id, i)?;
+    let doc = load_part(pkg, docs, &part_name)?;
+    tbl::apply_delete_col(&mut doc.root, &op.target, op.col, &op.id, i)?;
+    dirty.insert(part_name, ());
+    Ok(())
+}
+
+fn apply_merge_cells(
+    pkg: &Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &MergeCellsOp,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name = tbl::part_for_story(catalog, doc_part, op.target.story(), &op.id, i)?;
+    let doc = load_part(pkg, docs, &part_name)?;
+    tbl::apply_merge(
+        &mut doc.root,
+        &op.target,
+        op.start_row,
+        op.start_col,
+        op.end_row,
+        op.end_col,
+        &op.id,
+        i,
+    )?;
+    dirty.insert(part_name, ());
+    Ok(())
+}
+
+fn apply_split_cells(
+    pkg: &Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &SplitCellsOp,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name = tbl::part_for_story(catalog, doc_part, op.target.story(), &op.id, i)?;
+    let doc = load_part(pkg, docs, &part_name)?;
+    tbl::apply_split(&mut doc.root, &op.target, &op.id, i)?;
+    dirty.insert(part_name, ());
+    Ok(())
 }
 
 fn apply_para_text(

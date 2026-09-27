@@ -13,6 +13,7 @@ use super::para::{
     self, BodyPara, CommentIdTarget, NoteIdTarget, NoteKind, ParaTarget, TxbxTarget,
 };
 use super::picture::{self, AlignH, AlignV, PicKind, PicTarget, WrapKind, WrapPos};
+use super::tbl::{self, InsertAnchor, TableRef};
 
 #[derive(Debug, Clone)]
 pub struct InspectScope {
@@ -35,6 +36,8 @@ pub struct InspectScope {
     pub charts: bool,
     /// 为 true 时列出 SmartArt。
     pub smart_art: bool,
+    /// 为 true 时列出表格。
+    pub tables: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -392,6 +395,61 @@ pub struct SetCommentDoneOp {
 }
 
 #[derive(Debug, Clone)]
+pub struct InsertTableOp {
+    pub id: String,
+    pub anchor: InsertAnchor,
+    pub cells: Vec<Vec<String>>,
+}
+
+#[derive(Debug, Clone)]
+pub struct DeleteTableOp {
+    pub id: String,
+    pub target: TableRef,
+}
+
+#[derive(Debug, Clone)]
+pub struct InsertRowOp {
+    pub id: String,
+    pub target: TableRef,
+}
+
+#[derive(Debug, Clone)]
+pub struct DeleteRowOp {
+    pub id: String,
+    pub target: TableRef,
+}
+
+#[derive(Debug, Clone)]
+pub struct InsertColOp {
+    pub id: String,
+    pub target: TableRef,
+    pub after: u32,
+}
+
+#[derive(Debug, Clone)]
+pub struct DeleteColOp {
+    pub id: String,
+    pub target: TableRef,
+    pub col: u32,
+}
+
+#[derive(Debug, Clone)]
+pub struct MergeCellsOp {
+    pub id: String,
+    pub target: TableRef,
+    pub start_row: usize,
+    pub start_col: usize,
+    pub end_row: usize,
+    pub end_col: usize,
+}
+
+#[derive(Debug, Clone)]
+pub struct SplitCellsOp {
+    pub id: String,
+    pub target: TableRef,
+}
+
+#[derive(Debug, Clone)]
 pub enum DocxOp {
     SetParaText(SetParaTextOp),
     SetHeaderFooterDistance(SetHfDistanceOp),
@@ -422,6 +480,14 @@ pub enum DocxOp {
     SetTextBoxDirection(SetTextBoxDirectionOp),
     InsertPara(InsertParaOp),
     DeletePara(DeleteParaOp),
+    InsertTable(InsertTableOp),
+    DeleteTable(DeleteTableOp),
+    InsertRow(InsertRowOp),
+    DeleteRow(DeleteRowOp),
+    InsertCol(InsertColOp),
+    DeleteCol(DeleteColOp),
+    MergeCells(MergeCellsOp),
+    SplitCells(SplitCellsOp),
     SetTextBoxLink(SetTextBoxLinkOp),
     InsertFootnote(InsertNoteOp),
     InsertEndnote(InsertNoteOp),
@@ -487,6 +553,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
             "comments",
             "charts",
             "smartArt",
+            "tables",
         ],
     )?;
 
@@ -498,6 +565,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
     let comments = parse_bool_field(obj.get("comments"), "comments")?;
     let charts = parse_bool_field(obj.get("charts"), "charts")?;
     let smart_art = parse_bool_field(obj.get("smartArt"), "smartArt")?;
+    let tables = parse_bool_field(obj.get("tables"), "tables")?;
     if text_box_content && !text_boxes {
         return Err(Error::with_path(
             ErrorKind::ScopeFieldRequires {
@@ -519,6 +587,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
                 && !obj.contains_key("comments")
                 && !obj.contains_key("charts")
                 && !obj.contains_key("smartArt")
+                && !obj.contains_key("tables")
             {
                 return Ok(None);
             }
@@ -533,6 +602,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
                 comments,
                 charts,
                 smart_art,
+                tables,
             }))
         }
         (Some(f), Some(m)) => {
@@ -584,6 +654,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
                 comments,
                 charts,
                 smart_art,
+                tables,
             }))
         }
         _ => Err(Error::with_path(
@@ -695,6 +766,14 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<DocxOp>, Error> {
             }
             "insertPara" => out.push(DocxOp::InsertPara(parse_insert_para(obj, i)?)),
             "deletePara" => out.push(DocxOp::DeletePara(parse_delete_para(obj, i)?)),
+            "insertTable" => out.push(DocxOp::InsertTable(parse_insert_table(obj, i)?)),
+            "deleteTable" => out.push(DocxOp::DeleteTable(parse_delete_table(obj, i)?)),
+            "insertRow" => out.push(DocxOp::InsertRow(parse_insert_row(obj, i)?)),
+            "deleteRow" => out.push(DocxOp::DeleteRow(parse_delete_row(obj, i)?)),
+            "insertCol" => out.push(DocxOp::InsertCol(parse_insert_col(obj, i)?)),
+            "deleteCol" => out.push(DocxOp::DeleteCol(parse_delete_col(obj, i)?)),
+            "mergeCells" => out.push(DocxOp::MergeCells(parse_merge_cells(obj, i)?)),
+            "splitCells" => out.push(DocxOp::SplitCells(parse_split_cells(obj, i)?)),
             "setTextBoxLink" => out.push(DocxOp::SetTextBoxLink(parse_set_txbx_link(obj, i)?)),
             "insertFootnote" => out.push(DocxOp::InsertFootnote(parse_insert_note(
                 obj,
@@ -1485,6 +1564,135 @@ fn parse_set_gutter_at_top(
     let gutter_at_top =
         parse_required_bool(obj.get("gutterAtTop"), i, "setGutterAtTop", "gutterAtTop")?;
     Ok(SetGutterAtTopOp { id, gutter_at_top })
+}
+
+fn parse_insert_table(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<InsertTableOp, Error> {
+    deny_keys(obj, i, &["op", "id", "rows", "cols", "cells"])?;
+    let id = require_op_id(obj, i)?;
+    let anchor = tbl::parse_insert_anchor(&id, i)?;
+    let rows = tbl::parse_dim(obj.get("rows"), i, "rows", tbl::max_rows())?;
+    let cols = tbl::parse_dim(obj.get("cols"), i, "cols", tbl::max_cols())?;
+    let cells = tbl::parse_cells_field(obj.get("cells"), i, rows, cols)?;
+    Ok(InsertTableOp { id, anchor, cells })
+}
+
+fn parse_delete_table(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<DeleteTableOp, Error> {
+    deny_keys(obj, i, &["op", "id"])?;
+    let id = require_op_id(obj, i)?;
+    let target = tbl::parse_table_only(&id, i, IdReason::DeleteTableNeedsTable)?;
+    Ok(DeleteTableOp { id, target })
+}
+
+fn parse_insert_row(obj: &serde_json::Map<String, Value>, i: usize) -> Result<InsertRowOp, Error> {
+    deny_keys(obj, i, &["op", "id"])?;
+    let id = require_op_id(obj, i)?;
+    let target = tbl::parse_table_or_row(&id, i)?;
+    Ok(InsertRowOp { id, target })
+}
+
+fn parse_delete_row(obj: &serde_json::Map<String, Value>, i: usize) -> Result<DeleteRowOp, Error> {
+    deny_keys(obj, i, &["op", "id"])?;
+    let id = require_op_id(obj, i)?;
+    let target = tbl::parse_row_ref(&id, i)?;
+    Ok(DeleteRowOp { id, target })
+}
+
+fn parse_insert_col(obj: &serde_json::Map<String, Value>, i: usize) -> Result<InsertColOp, Error> {
+    deny_keys(obj, i, &["op", "id", "after"])?;
+    let id = require_op_id(obj, i)?;
+    let target = tbl::parse_table_only(&id, i, IdReason::NeedTableId)?;
+    let after = parse_col_after(obj.get("after"), i)?;
+    Ok(InsertColOp { id, target, after })
+}
+
+fn parse_delete_col(obj: &serde_json::Map<String, Value>, i: usize) -> Result<DeleteColOp, Error> {
+    deny_keys(obj, i, &["op", "id", "col"])?;
+    let id = require_op_id(obj, i)?;
+    let target = tbl::parse_table_only(&id, i, IdReason::NeedTableId)?;
+    let col = tbl::parse_dim(obj.get("col"), i, "col", tbl::max_cols())? as u32;
+    Ok(DeleteColOp { id, target, col })
+}
+
+fn parse_merge_cells(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<MergeCellsOp, Error> {
+    deny_keys(
+        obj,
+        i,
+        &["op", "id", "startRow", "startCol", "endRow", "endCol"],
+    )?;
+    let id = require_op_id(obj, i)?;
+    let target = tbl::parse_table_only(&id, i, IdReason::NeedTableId)?;
+    let start_row = tbl::parse_dim(obj.get("startRow"), i, "startRow", tbl::max_rows())?;
+    let start_col = tbl::parse_dim(obj.get("startCol"), i, "startCol", tbl::max_cols())?;
+    let end_row = tbl::parse_dim(obj.get("endRow"), i, "endRow", tbl::max_rows())?;
+    let end_col = tbl::parse_dim(obj.get("endCol"), i, "endCol", tbl::max_cols())?;
+    Ok(MergeCellsOp {
+        id,
+        target,
+        start_row,
+        start_col,
+        end_row,
+        end_col,
+    })
+}
+
+fn parse_split_cells(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<SplitCellsOp, Error> {
+    deny_keys(obj, i, &["op", "id"])?;
+    let id = require_op_id(obj, i)?;
+    let target = tbl::parse_cell_ref(&id, i)?;
+    Ok(SplitCellsOp { id, target })
+}
+
+fn parse_col_after(v: Option<&Value>, i: usize) -> Result<u32, Error> {
+    let path = format!("ops[{i}].after");
+    match v {
+        Some(Value::Number(n)) => {
+            let Some(u) = n.as_u64() else {
+                if n.as_i64().is_some_and(|x| x < 0) {
+                    return Err(Error::with_path(
+                        ErrorKind::MinValue {
+                            field: "after".into(),
+                            min: 0,
+                        },
+                        path,
+                    ));
+                }
+                return Err(Error::with_path(
+                    ErrorKind::WrongType {
+                        field: "after".into(),
+                        expected: TypeName::Integer,
+                    },
+                    path,
+                ));
+            };
+            Ok(u as u32)
+        }
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "after".into(),
+                expected: TypeName::Integer,
+            },
+            path,
+        )),
+        None => Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "insertCol".into(),
+                field: "after".into(),
+            },
+            path,
+        )),
+    }
 }
 
 fn require_op_id(obj: &serde_json::Map<String, Value>, i: usize) -> Result<String, Error> {

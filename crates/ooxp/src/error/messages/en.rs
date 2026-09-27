@@ -225,10 +225,29 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             }
             IdReason::SettingsNeedDocument => {
                 "setMirrorMargins / setGutterAtTop id must be docx:document".into()
-            },
+            }
+            IdReason::TablePrefix => {
+                "Table id must be table:N or a header/footer container id plus /table:N".into()
+            }
+            IdReason::TableIndexNotInt => "table index must be a positive integer".into(),
+            IdReason::TableIndexFromOne => "table index starts at 1".into(),
+            IdReason::TableCellForm => {
+                "Cell id must be table:N/rRcC; row id must be table:N/row:R".into()
+            }
+            IdReason::InsertTableAnchor => {
+                "insertTable id must be a paragraph, document, header/footer, table, or cell".into()
+            }
+            IdReason::DeleteTableNeedsTable => "deleteTable id must be a table id".into(),
+            IdReason::NeedTableId => "id must be a table id".into(),
+            IdReason::InsertRowNeedsTableOrRow => {
+                "insertRow id must be a table id or a row id".into()
+            }
+            IdReason::DeleteRowNeedsRow => "deleteRow id must be a row id".into(),
+            IdReason::SplitNeedsCell => "splitCells id must be a cell id".into(),
         },
         ErrorKind::SheetNotFound { name } => format!("Sheet not found: {name}"),
         ErrorKind::ParaNotFound { id } => format!("Paragraph not found: {id}"),
+        ErrorKind::TableNotFound { id } => format!("Table not found: {id}"),
         ErrorKind::SectionNotFound { id } => format!("Section not found: {id}"),
         ErrorKind::SlideNotFound { n } => format!("Slide not found: slide:{n}"),
         ErrorKind::ShapeNotFound { id } => format!("Shape not found: {id}"),
@@ -406,6 +425,24 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             "This section inherits that header/footer; use setHeaderFooterLink to unlink".into()
         }
         ErrorKind::InvalidSectValue { field } => format!("{field} is not an allowed value"),
+        ErrorKind::LastTableRow => "Cannot delete the last row in a table".into(),
+        ErrorKind::LastTableCol => "Cannot delete the last column in a table".into(),
+        ErrorKind::SplitContinueCell => {
+            "splitCells must target the restart cell, not a continue cell".into()
+        }
+        ErrorKind::NothingToSplit => "This cell is not merged".into(),
+        ErrorKind::TableHasRevision => {
+            "Cannot change a table that has revision marks on the table, row, or cell".into()
+        }
+        ErrorKind::TableGridMismatch => {
+            "Cannot change a table whose row grid spans do not match colCount".into()
+        }
+        ErrorKind::MergeNotSimple => {
+            "mergeCells needs a rectangle of unmerged cells that line up on the grid".into()
+        }
+        ErrorKind::NeedTableCellsMatch => {
+            "cells must be a rows×cols array of strings".into()
+        },
         ErrorKind::OpcOpen { reason } => match reason {
             OpcReason::EmptyPartName => "Part name must not be empty".into(),
             OpcReason::InvalidPartName { name } => format!("Invalid part name: {name}"),

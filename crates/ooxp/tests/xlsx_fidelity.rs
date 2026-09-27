@@ -380,3 +380,38 @@ fn apply_clear_missing_cell_counts_as_applied() {
     };
     assert_eq!(ops_applied, Some(1));
 }
+
+#[test]
+fn insert_table_is_not_for_xlsx() {
+    let src = write_sample("tbl-foreign");
+    let out = tmp_dir().join("tbl-foreign-out.xlsx");
+    let err = apply(
+        &src,
+        &out,
+        json!([{
+            "op": "insertTable",
+            "id": "docx:document",
+            "rows": 1,
+            "cols": 1
+        }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+}
+
+#[test]
+fn scope_tables_is_not_for_xlsx() {
+    let src = write_sample("tbl-scope");
+    let err = run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "inspect",
+            "path": src.to_string_lossy(),
+            "scope": { "tables": true }
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+}

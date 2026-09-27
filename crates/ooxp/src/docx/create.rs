@@ -13,6 +13,7 @@ use crate::xml::{self, Element, Node};
 use super::hf::{HfKind, HfType};
 use super::picture::{self, PicKind, WrapKind, WrapPos};
 use super::smartart::{self, InsertSpec};
+use super::tbl;
 use super::textbox::{self, DEFAULT_CX, DEFAULT_CY, WPS_NS};
 use super::{
     A_NS, CT_APP, CT_CORE, CT_DOCUMENT, CT_FOOTER, CT_HEADER, CT_SETTINGS, CT_STYLES, MC_NS,
@@ -71,6 +72,12 @@ enum ParaKind {
 struct HfCreateItem {
     hf_type: HfType,
     paras: Vec<NewPara>,
+    tables: Vec<NewTable>,
+}
+
+struct NewTable {
+    after: u32,
+    cells: Vec<Vec<String>>,
 }
 
 pub fn create(document: &Value) -> Result<Vec<u8>, Error> {
@@ -84,7 +91,7 @@ pub fn create(document: &Value) -> Result<Vec<u8>, Error> {
         )
     })?;
     for k in obj.keys() {
-        if !matches!(k.as_str(), "paragraphs" | "headers" | "footers") {
+        if !matches!(k.as_str(), "paragraphs" | "headers" | "footers" | "tables") {
             return Err(Error::with_path(
                 ErrorKind::UnknownField { field: k.clone() },
                 format!("document.{k}"),
@@ -121,6 +128,7 @@ pub fn create(document: &Value) -> Result<Vec<u8>, Error> {
     if paras.is_empty() {
         paras.push(NewPara::empty());
     }
+    let tables = parse_tables(obj.get("tables"), "document.tables", paras.len())?;
 
     let header_items = parse_hf_side(obj.get("headers"), "headers")?;
     let footer_items = parse_hf_side(obj.get("footers"), "footers")?;
@@ -223,7 +231,7 @@ pub fn create(document: &Value) -> Result<Vec<u8>, Error> {
     pkg.set(ROOT_RELS_PART, root_rels.to_xml().into_bytes())?;
     pkg.set(
         "/word/document.xml",
-        document_xml(&paras, &hf_refs, need_first).into_bytes(),
+        document_xml(&paras, &tables, &hf_refs, need_first).into_bytes(),
     )?;
     pkg.set(
         "/word/_rels/document.xml.rels",
@@ -231,11 +239,11 @@ pub fn create(document: &Value) -> Result<Vec<u8>, Error> {
     )?;
     for (i, item) in header_items.iter().enumerate() {
         let part = format!("/word/header{}.xml", i + 1);
-        pkg.set(&part, hf_xml("hdr", &item.paras).into_bytes())?;
+        pkg.set(&part, hf_xml("hdr", &item.paras, &item.tables).into_bytes())?;
     }
     for (i, item) in footer_items.iter().enumerate() {
         let part = format!("/word/footer{}.xml", i + 1);
-        pkg.set(&part, hf_xml("ftr", &item.paras).into_bytes())?;
+        pkg.set(&part, hf_xml("ftr", &item.paras, &item.tables).into_bytes())?;
     }
     pkg.set("/word/styles.xml", styles_xml().into_bytes())?;
     pkg.set("/word/settings.xml", settings_xml(need_even).into_bytes())?;
@@ -289,7 +297,7 @@ fn parse_hf_side(v: Option<&Value>, side: &str) -> Result<Vec<HfCreateItem>, Err
             )
         })?;
         for k in obj.keys() {
-            if !matches!(k.as_str(), "type" | "paragraphs") {
+            if !matches!(k.as_str(), "type" | "paragraphs" | "tables") {
                 return Err(Error::with_path(
                     ErrorKind::UnknownField { field: k.clone() },
                     format!("{item_path}.{k}"),
@@ -314,9 +322,16 @@ fn parse_hf_side(v: Option<&Value>, side: &str) -> Result<Vec<HfCreateItem>, Err
         if !seen.insert(hf_type) {
             return Err(Error::with_path(ErrorKind::CreateHfDuplicate, path));
         }
+        let paras = parse_hf_paras(obj.get("paragraphs"), &format!("{item_path}.paragraphs"))?;
+        let tables = parse_tables(
+            obj.get("tables"),
+            &format!("{item_path}.tables"),
+            paras.len(),
+        )?;
         out.push(HfCreateItem {
             hf_type,
-            paras: parse_hf_paras(obj.get("paragraphs"), &format!("{item_path}.paragraphs"))?,
+            paras,
+            tables,
         });
     }
     Ok(out)
@@ -781,14 +796,12 @@ fn story_xmlns() -> String {
     )
 }
 
-fn document_xml(paras: &[NewPara], refs: &[(HfKind, HfType, String)], title_pg: bool) -> String {
-    let mut body = String::new();
-    let mut next_para = paras.len() as u32 + 1;
-    let mut doc_pr = 1u32;
-    for (i, p) in paras.iter().enumerate() {
-        let id = format!("{:08X}", i as u32 + 1);
-        body.push_str(&para_xml(p, &id, &mut next_para, &mut doc_pr));
-    }
+fn document_xml(
+    paras: &[NewPara],
+    tables: &[NewTable],
+    refs: &[(HfKind, HfType, String)],
+    title_pg: bool,
+) -> String {
     let mut refs_xml = String::new();
     for (kind, hf_type, rid) in refs {
         let tag = match kind {
@@ -801,27 +814,146 @@ fn document_xml(paras: &[NewPara], refs: &[(HfKind, HfType, String)], title_pg: 
         ));
     }
     let title = if title_pg { "<w:titlePg/>" } else { "" };
-    body.push_str(&format!(
-        r#"<w:sectPr>{refs_xml}<w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="708" w:footer="708" w:gutter="0"/>{title}</w:sectPr>"#
-    ));
+    let body = emit_story_blocks(paras, tables);
     format!(
-        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document {}><w:body>{body}</w:body></w:document>"#,
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document {}><w:body>{body}<w:sectPr>{refs_xml}<w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="708" w:footer="708" w:gutter="0"/>{title}</w:sectPr></w:body></w:document>"#,
         story_xmlns()
     )
 }
 
-fn hf_xml(tag: &str, paras: &[NewPara]) -> String {
-    let mut body = String::new();
-    let mut next_para = paras.len() as u32 + 1;
-    let mut doc_pr = 1u32;
-    for (i, p) in paras.iter().enumerate() {
-        let id = format!("{:08X}", i as u32 + 1);
-        body.push_str(&para_xml(p, &id, &mut next_para, &mut doc_pr));
-    }
+fn hf_xml(tag: &str, paras: &[NewPara], tables: &[NewTable]) -> String {
+    let body = emit_story_blocks(paras, tables);
     format!(
         r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:{tag} {}>{body}</w:{tag}>"#,
         story_xmlns()
     )
+}
+
+fn emit_story_blocks(paras: &[NewPara], tables: &[NewTable]) -> String {
+    let mut para_xmls = Vec::new();
+    let mut next_para = paras.len() as u32 + 1;
+    let mut doc_pr = 1u32;
+    for (i, p) in paras.iter().enumerate() {
+        let id = format!("{:08X}", i as u32 + 1);
+        para_xmls.push(para_xml(p, &id, &mut next_para, &mut doc_pr));
+    }
+    let mut table_xmls = Vec::new();
+    for t in tables {
+        let n = t.cells.iter().map(|r| r.len()).sum::<usize>();
+        let mut ids = Vec::with_capacity(n);
+        for _ in 0..n {
+            ids.push(format!("{:08X}", next_para));
+            next_para = next_para.saturating_add(1);
+        }
+        table_xmls.push(tbl::table_xml(&t.cells, &ids));
+    }
+    let mut body = String::new();
+    append_tables_after(&mut body, tables, &table_xmls, 0);
+    for (i, xml) in para_xmls.iter().enumerate() {
+        body.push_str(xml);
+        append_tables_after(&mut body, tables, &table_xmls, i as u32 + 1);
+    }
+    body
+}
+
+fn append_tables_after(body: &mut String, tables: &[NewTable], xmls: &[String], after: u32) {
+    for (i, t) in tables.iter().enumerate() {
+        if t.after == after {
+            body.push_str(&xmls[i]);
+        }
+    }
+}
+
+fn parse_tables(v: Option<&Value>, path: &str, para_n: usize) -> Result<Vec<NewTable>, Error> {
+    let Some(v) = v else {
+        return Ok(Vec::new());
+    };
+    let arr = v.as_array().ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::WrongType {
+                field: "tables".into(),
+                expected: TypeName::Array,
+            },
+            path,
+        )
+    })?;
+    let mut out = Vec::new();
+    for (i, item) in arr.iter().enumerate() {
+        let item_path = format!("{path}[{i}]");
+        let obj = item.as_object().ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::WrongType {
+                    field: item_path.clone(),
+                    expected: TypeName::Object,
+                },
+                item_path.clone(),
+            )
+        })?;
+        for k in obj.keys() {
+            if !matches!(k.as_str(), "cells" | "after") {
+                return Err(Error::with_path(
+                    ErrorKind::UnknownField { field: k.clone() },
+                    format!("{item_path}.{k}"),
+                ));
+            }
+        }
+        let cells_v = obj.get("cells").ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::MissingField {
+                    field: "cells".into(),
+                },
+                format!("{item_path}.cells"),
+            )
+        })?;
+        let cells = tbl::parse_create_cells(cells_v, &format!("{item_path}.cells"))?;
+        let after = parse_table_after(obj.get("after"), &format!("{item_path}.after"), para_n)?;
+        out.push(NewTable { after, cells });
+    }
+    Ok(out)
+}
+
+fn parse_table_after(v: Option<&Value>, path: &str, para_n: usize) -> Result<u32, Error> {
+    match v {
+        None => Ok(para_n as u32),
+        Some(Value::Number(n)) => {
+            let Some(u) = n.as_u64() else {
+                if n.as_i64().is_some_and(|x| x < 0) {
+                    return Err(Error::with_path(
+                        ErrorKind::MinValue {
+                            field: "after".into(),
+                            min: 0,
+                        },
+                        path,
+                    ));
+                }
+                return Err(Error::with_path(
+                    ErrorKind::WrongType {
+                        field: "after".into(),
+                        expected: TypeName::Integer,
+                    },
+                    path,
+                ));
+            };
+            if u > para_n as u64 {
+                return Err(Error::with_path(
+                    ErrorKind::OutOfRange {
+                        field: "after".into(),
+                        min: 0,
+                        max: para_n as i64,
+                    },
+                    path,
+                ));
+            }
+            Ok(u as u32)
+        }
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "after".into(),
+                expected: TypeName::Integer,
+            },
+            path,
+        )),
+    }
 }
 
 fn parse_smartarts(v: Option<&Value>, prefix: &str) -> Result<Vec<InsertSpec>, Error> {

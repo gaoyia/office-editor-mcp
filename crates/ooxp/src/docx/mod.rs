@@ -13,6 +13,7 @@ mod picture;
 mod request;
 mod sect;
 mod smartart;
+mod tbl;
 mod textbox;
 
 pub use apply::apply;

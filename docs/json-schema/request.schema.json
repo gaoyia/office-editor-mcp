@@ -77,6 +77,7 @@
         "comments": { "type": "boolean" },
         "charts": { "type": "boolean" },
         "smartArt": { "type": "boolean" },
+        "tables": { "type": "boolean" },
         "slide": { "type": "integer", "minimum": 1 },
         "maxShapes": { "type": "integer", "minimum": 1, "maximum": 5000 }
       },
@@ -215,6 +216,10 @@
           "type": "array",
           "items": { "$ref": "#/$defs/docxParaCreate" }
         },
+        "tables": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/docxTableCreate" }
+        },
         "headers": {
           "type": "array",
           "maxItems": 3,
@@ -235,6 +240,29 @@
         "paragraphs": {
           "type": "array",
           "items": { "$ref": "#/$defs/docxHfParaCreate" }
+        },
+        "tables": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/docxTableCreate" }
+        }
+      }
+    },
+    "docxTableCreate": {
+      "type": "object",
+      "required": ["cells"],
+      "additionalProperties": false,
+      "properties": {
+        "after": { "type": "integer", "minimum": 0 },
+        "cells": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 500,
+          "items": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 63,
+            "items": { "type": "string" }
+          }
         }
       }
     },
@@ -490,6 +518,14 @@
               { "$ref": "#/$defs/setTextBoxDirectionOp" },
               { "$ref": "#/$defs/insertParaOp" },
               { "$ref": "#/$defs/deleteParaOp" },
+              { "$ref": "#/$defs/insertTableOp" },
+              { "$ref": "#/$defs/deleteTableOp" },
+              { "$ref": "#/$defs/insertRowOp" },
+              { "$ref": "#/$defs/deleteRowOp" },
+              { "$ref": "#/$defs/insertColOp" },
+              { "$ref": "#/$defs/deleteColOp" },
+              { "$ref": "#/$defs/mergeCellsOp" },
+              { "$ref": "#/$defs/splitCellsOp" },
               { "$ref": "#/$defs/setTextBoxLinkOp" },
               { "$ref": "#/$defs/insertFootnoteOp" },
               { "$ref": "#/$defs/insertEndnoteOp" },
@@ -990,6 +1026,93 @@
       "additionalProperties": false,
       "properties": {
         "op": { "const": "deletePara" },
+        "id": { "type": "string", "minLength": 1 }
+      }
+    },
+    "insertTableOp": {
+      "type": "object",
+      "required": ["op", "id", "rows", "cols"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "insertTable" },
+        "id": { "type": "string", "minLength": 1 },
+        "rows": { "type": "integer", "minimum": 1, "maximum": 500 },
+        "cols": { "type": "integer", "minimum": 1, "maximum": 63 },
+        "cells": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        }
+      }
+    },
+    "deleteTableOp": {
+      "type": "object",
+      "required": ["op", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "deleteTable" },
+        "id": { "type": "string", "minLength": 1 }
+      }
+    },
+    "insertRowOp": {
+      "type": "object",
+      "required": ["op", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "insertRow" },
+        "id": { "type": "string", "minLength": 1 }
+      }
+    },
+    "deleteRowOp": {
+      "type": "object",
+      "required": ["op", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "deleteRow" },
+        "id": { "type": "string", "minLength": 1 }
+      }
+    },
+    "insertColOp": {
+      "type": "object",
+      "required": ["op", "id", "after"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "insertCol" },
+        "id": { "type": "string", "minLength": 1 },
+        "after": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "deleteColOp": {
+      "type": "object",
+      "required": ["op", "id", "col"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "deleteCol" },
+        "id": { "type": "string", "minLength": 1 },
+        "col": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "mergeCellsOp": {
+      "type": "object",
+      "required": ["op", "id", "startRow", "startCol", "endRow", "endCol"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "mergeCells" },
+        "id": { "type": "string", "minLength": 1 },
+        "startRow": { "type": "integer", "minimum": 1 },
+        "startCol": { "type": "integer", "minimum": 1 },
+        "endRow": { "type": "integer", "minimum": 1 },
+        "endCol": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "splitCellsOp": {
+      "type": "object",
+      "required": ["op", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "splitCells" },
         "id": { "type": "string", "minLength": 1 }
       }
     },

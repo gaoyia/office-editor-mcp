@@ -14,6 +14,7 @@ use super::para::{self, NoteKind};
 use super::picture;
 use super::request::InspectScope;
 use super::smartart;
+use super::tbl;
 use super::textbox;
 
 pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error> {
@@ -45,6 +46,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     let expand_txbx_content = scope.as_ref().is_some_and(|s| s.text_box_content);
     let expand_charts = scope.as_ref().is_some_and(|s| s.charts);
     let expand_smartart = scope.as_ref().is_some_and(|s| s.smart_art);
+    let expand_tables = scope.as_ref().is_some_and(|s| s.tables);
     let (headers, footers) = hf_arrays(
         &pkg,
         &catalog,
@@ -54,6 +56,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         expand_txbx_content,
         expand_charts,
         expand_smartart,
+        expand_tables,
     )?;
     let sections = section_nodes(&pkg, &part, &doc.root)?;
     let (mirror_margins, gutter_at_top) = super::sect::document_flags(&pkg, &part)?;
@@ -69,6 +72,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         body_chart_count += charts::count_charts(p)?;
         body_smartart_count += smartart::count_smartarts(p)?;
     }
+    let body_table_count = tbl::count_tables(&doc.root);
 
     let mut tree = json!({
         "schemaVersion": 1,
@@ -82,6 +86,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         "commentCount": comment_count,
         "chartCount": body_chart_count,
         "smartArtCount": body_smartart_count,
+        "tableCount": body_table_count,
         "outline": outline,
         "headers": headers,
         "footers": footers,
@@ -123,6 +128,9 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         }
         if scope.smart_art {
             tree["smartArts"] = Value::Array(smartart::collect_body(&pkg, &part, &paras)?);
+        }
+        if scope.tables {
+            tree["tables"] = Value::Array(tbl::tables_json(&doc.root, None, expand_pics)?);
         }
         if let (Some(from), Some(max_paras)) = (scope.from, scope.max_paras) {
             let start = from as usize;
@@ -247,6 +255,7 @@ fn hf_arrays(
     text_box_content: bool,
     expand_charts: bool,
     expand_smartart: bool,
+    expand_tables: bool,
 ) -> Result<(Vec<Value>, Vec<Value>), Error> {
     let mut headers = Vec::new();
     let mut footers = Vec::new();
@@ -260,6 +269,7 @@ fn hf_arrays(
             text_box_content,
             expand_charts,
             expand_smartart,
+            expand_tables,
         )?;
         match item.kind {
             HfKind::Header => headers.push(node),
@@ -278,6 +288,7 @@ fn hf_node(
     text_box_content: bool,
     expand_charts: bool,
     expand_smartart: bool,
+    expand_tables: bool,
 ) -> Result<Value, Error> {
     let bytes = pkg.get(&item.part)?;
     let doc = xml::parse(bytes)?;
@@ -304,6 +315,7 @@ fn hf_node(
         "textBoxCount": boxes.len(),
         "chartCount": chart_count,
         "smartArtCount": smart_art_count,
+        "tableCount": tbl::count_tables(&doc.root),
     });
     if pictures {
         node["pictures"] = Value::Array(picture::pictures_json(&pics));
@@ -328,6 +340,9 @@ fn hf_node(
     }
     if expand_smartart {
         node["smartArts"] = Value::Array(smartart::collect_hf(pkg, item, &paras)?);
+    }
+    if expand_tables {
+        node["tables"] = Value::Array(tbl::tables_json(&doc.root, Some(&item.id), pictures)?);
     }
     if expand {
         let mut paragraphs = Vec::new();
