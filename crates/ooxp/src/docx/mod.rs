@@ -17,6 +17,7 @@ mod request;
 mod revision;
 mod sect;
 mod smartart;
+mod styles;
 mod tbl;
 mod textbox;
 

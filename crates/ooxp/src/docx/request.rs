@@ -48,6 +48,8 @@ pub struct InspectScope {
     pub fields: bool,
     /// 为 true 时列出编号定义。
     pub numbering: bool,
+    /// 为 true 时列出样式定义。
+    pub styles: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -558,6 +560,26 @@ pub struct SetParaNumberingOp {
 }
 
 #[derive(Debug, Clone)]
+pub struct SetStyleOp {
+    pub id: String,
+    pub style_id: String,
+    pub font: Option<String>,
+    pub east_asia_font: Option<String>,
+    pub sz: Option<u32>,
+    pub bold: Option<bool>,
+    pub color: Option<String>,
+    pub before: Option<u32>,
+    pub after: Option<u32>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetParaStyleOp {
+    pub id: String,
+    pub para: ParaTarget,
+    pub style: Option<String>,
+}
+
+#[derive(Debug, Clone)]
 pub enum DocxOp {
     SetParaText(SetParaTextOp),
     SetHeaderFooterDistance(SetHfDistanceOp),
@@ -610,6 +632,8 @@ pub enum DocxOp {
     InsertNumbering(InsertNumberingOp),
     SetNumbering(SetNumberingOp),
     SetParaNumbering(SetParaNumberingOp),
+    SetStyle(SetStyleOp),
+    SetParaStyle(SetParaStyleOp),
     SetTextBoxLink(SetTextBoxLinkOp),
     InsertFootnote(InsertNoteOp),
     InsertEndnote(InsertNoteOp),
@@ -681,6 +705,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
             "bookmarks",
             "fields",
             "numbering",
+            "styles",
         ],
     )?;
 
@@ -698,6 +723,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
     let bookmarks = parse_bool_field(obj.get("bookmarks"), "bookmarks")?;
     let fields = parse_bool_field(obj.get("fields"), "fields")?;
     let numbering = parse_bool_field(obj.get("numbering"), "numbering")?;
+    let styles = parse_bool_field(obj.get("styles"), "styles")?;
     if text_box_content && !text_boxes {
         return Err(Error::with_path(
             ErrorKind::ScopeFieldRequires {
@@ -725,6 +751,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
                 && !obj.contains_key("bookmarks")
                 && !obj.contains_key("fields")
                 && !obj.contains_key("numbering")
+                && !obj.contains_key("styles")
             {
                 return Ok(None);
             }
@@ -745,6 +772,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
                 bookmarks,
                 fields,
                 numbering,
+                styles,
             }))
         }
         (Some(f), Some(m)) => {
@@ -802,6 +830,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
                 bookmarks,
                 fields,
                 numbering,
+                styles,
             }))
         }
         _ => Err(Error::with_path(
@@ -937,6 +966,8 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<DocxOp>, Error> {
             "setParaNumbering" => {
                 out.push(DocxOp::SetParaNumbering(parse_set_para_numbering(obj, i)?))
             }
+            "setStyle" => out.push(DocxOp::SetStyle(parse_set_style(obj, i)?)),
+            "setParaStyle" => out.push(DocxOp::SetParaStyle(parse_set_para_style(obj, i)?)),
             "setTextBoxLink" => out.push(DocxOp::SetTextBoxLink(parse_set_txbx_link(obj, i)?)),
             "insertFootnote" => out.push(DocxOp::InsertFootnote(parse_insert_note(
                 obj,
@@ -2410,6 +2441,244 @@ fn parse_set_para_numbering(
         num,
         ilvl,
     })
+}
+
+fn parse_set_style(obj: &serde_json::Map<String, Value>, i: usize) -> Result<SetStyleOp, Error> {
+    deny_keys(
+        obj,
+        i,
+        &[
+            "op",
+            "id",
+            "font",
+            "eastAsiaFont",
+            "sz",
+            "bold",
+            "color",
+            "before",
+            "after",
+        ],
+    )?;
+    let id = require_op_id(obj, i)?;
+    let style_id = super::styles::parse_style_ref(&id, &format!("ops[{i}].id"))?;
+    let font = parse_nonempty_opt_string(obj, i, "font")?;
+    let east_asia_font = parse_nonempty_opt_string(obj, i, "eastAsiaFont")?;
+    let sz = parse_opt_u32_range(obj, i, "sz", 2, 3276)?;
+    let bold = match obj.get("bold") {
+        None => None,
+        Some(Value::Bool(b)) => Some(*b),
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "bold".into(),
+                    expected: TypeName::Boolean,
+                },
+                format!("ops[{i}].bold"),
+            ));
+        }
+    };
+    let color = match obj.get("color") {
+        None => None,
+        Some(Value::String(s)) => {
+            if !is_rgb_hex(s) {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidStyleColor,
+                    format!("ops[{i}].color"),
+                ));
+            }
+            Some(s.clone())
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "color".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].color"),
+            ));
+        }
+    };
+    let before = parse_opt_u32_min(obj, i, "before", 0)?;
+    let after = parse_opt_u32_min(obj, i, "after", 0)?;
+    if font.is_none()
+        && east_asia_font.is_none()
+        && sz.is_none()
+        && bold.is_none()
+        && color.is_none()
+        && before.is_none()
+        && after.is_none()
+    {
+        return Err(Error::with_path(
+            ErrorKind::NeedSetStyleField,
+            format!("ops[{i}]"),
+        ));
+    }
+    Ok(SetStyleOp {
+        id,
+        style_id,
+        font,
+        east_asia_font,
+        sz,
+        bold,
+        color,
+        before,
+        after,
+    })
+}
+
+fn parse_set_para_style(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<SetParaStyleOp, Error> {
+    deny_keys(obj, i, &["op", "id", "style"])?;
+    let id = require_op_id(obj, i)?;
+    let para = parse_story_para_at(
+        &id,
+        &format!("ops[{i}].id"),
+        IdReason::SetParaStyleNeedsPara,
+    )?;
+    let style = match obj.get("style") {
+        Some(Value::Null) => None,
+        Some(Value::String(s)) => Some(super::styles::parse_style_ref(
+            s,
+            &format!("ops[{i}].style"),
+        )?),
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "style".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].style"),
+            ));
+        }
+        None => {
+            return Err(Error::with_path(
+                ErrorKind::NeedSetParaStyleStyle,
+                format!("ops[{i}].style"),
+            ));
+        }
+    };
+    Ok(SetParaStyleOp { id, para, style })
+}
+
+fn parse_nonempty_opt_string(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+    field: &str,
+) -> Result<Option<String>, Error> {
+    match obj.get(field) {
+        None => Ok(None),
+        Some(Value::String(s)) => {
+            if s.is_empty() {
+                return Err(Error::with_path(
+                    ErrorKind::EmptyStyleFont,
+                    format!("ops[{i}].{field}"),
+                ));
+            }
+            Ok(Some(s.clone()))
+        }
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::String,
+            },
+            format!("ops[{i}].{field}"),
+        )),
+    }
+}
+
+fn parse_opt_u32_range(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+    field: &str,
+    min: u64,
+    max: u64,
+) -> Result<Option<u32>, Error> {
+    match obj.get(field) {
+        None => Ok(None),
+        Some(Value::Number(n)) => {
+            let u = n.as_u64().ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::WrongType {
+                        field: field.into(),
+                        expected: TypeName::Integer,
+                    },
+                    format!("ops[{i}].{field}"),
+                )
+            })?;
+            if u < min {
+                return Err(Error::with_path(
+                    ErrorKind::MinValue {
+                        field: field.into(),
+                        min: min as i64,
+                    },
+                    format!("ops[{i}].{field}"),
+                ));
+            }
+            if u > max {
+                return Err(Error::with_path(
+                    ErrorKind::OutOfRange {
+                        field: field.into(),
+                        min: min as i64,
+                        max: max as i64,
+                    },
+                    format!("ops[{i}].{field}"),
+                ));
+            }
+            Ok(Some(u as u32))
+        }
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::Integer,
+            },
+            format!("ops[{i}].{field}"),
+        )),
+    }
+}
+
+fn parse_opt_u32_min(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+    field: &str,
+    min: u64,
+) -> Result<Option<u32>, Error> {
+    match obj.get(field) {
+        None => Ok(None),
+        Some(Value::Number(n)) => {
+            let u = n.as_u64().ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::WrongType {
+                        field: field.into(),
+                        expected: TypeName::Integer,
+                    },
+                    format!("ops[{i}].{field}"),
+                )
+            })?;
+            if u < min {
+                return Err(Error::with_path(
+                    ErrorKind::MinValue {
+                        field: field.into(),
+                        min: min as i64,
+                    },
+                    format!("ops[{i}].{field}"),
+                ));
+            }
+            Ok(Some(u as u32))
+        }
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::Integer,
+            },
+            format!("ops[{i}].{field}"),
+        )),
+    }
+}
+
+fn is_rgb_hex(s: &str) -> bool {
+    s.len() == 6 && s.bytes().all(|b| b.is_ascii_hexdigit())
 }
 
 fn parse_col_after(v: Option<&Value>, i: usize) -> Result<u32, Error> {

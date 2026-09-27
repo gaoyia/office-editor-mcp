@@ -287,6 +287,10 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::SetParaNumberingNeedsPara => {
                 "setParaNumbering id must be a body or header/footer paragraph id".into()
             }
+            IdReason::StylePrefix => "Style id must be style: plus a non-empty styleId".into(),
+            IdReason::SetParaStyleNeedsPara => {
+                "setParaStyle id must be a body or header/footer paragraph id".into()
+            }
         },
         ErrorKind::SheetNotFound { name } => format!("Sheet not found: {name}"),
         ErrorKind::ParaNotFound { id } => format!("Paragraph not found: {id}"),
@@ -532,6 +536,17 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             .into(),
         ErrorKind::NeedSetParaNumberingNum => {
             "setParaNumbering requires num (a num: id or null)".into()
+        }
+        ErrorKind::StyleNotFound { id } => format!("Style not found: {id}"),
+        ErrorKind::SetStyleNeedsParagraph => "setStyle and setParaStyle require a paragraph style".into(),
+        ErrorKind::NeedSetStyleField => {
+            "setStyle requires at least one of font, eastAsiaFont, sz, bold, color, before, or after"
+                .into()
+        }
+        ErrorKind::EmptyStyleFont => "font and eastAsiaFont must not be empty".into(),
+        ErrorKind::InvalidStyleColor => "color must be six hexadecimal RGB digits".into(),
+        ErrorKind::NeedSetParaStyleStyle => {
+            "setParaStyle requires style (a style: id or null)".into()
         }
         ErrorKind::OpcOpen { reason } => match reason {
             OpcReason::EmptyPartName => "Part name must not be empty".into(),

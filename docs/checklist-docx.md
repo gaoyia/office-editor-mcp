@@ -37,6 +37,7 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 | Hb1–Hb7 | ✅ | Word 16.0：`docx-hyperlink.ps1`，7 PASS / 0 FAIL。名单、改 URL、插链、删链、插书签、删书签、带链段 `setParaText` 得 `NotImplemented`。标题栏无 Repair |
 | Fd1–Fd7 | ✅ | Word 16.0：`docx-field.ps1`，7 PASS / 0 FAIL。名单、改 PAGE 为 DATE、插 DATE、删域留结果、删域留指令、页眉 PAGE、带域段 `setParaText` 得 `NotImplemented`。标题栏无 Repair |
 | Nl1–Nl6 | ✅ | Word 16.0：`docx-numbering.ps1`，6 PASS / 0 FAIL。名单、段上 `num`/`ilvl`、插 decimal 定义、绑两段、改 bullet、解绑。标题栏无 Repair |
+| St1–St6 | ✅ | Word 16.0：`docx-style.ps1`，6 PASS / 0 FAIL。名单、换 Heading2、大纲对得上、改 Normal 为 24 磅、去掉 Heading1 加粗、解绑。标题栏无 Repair |
 | O1 | 🚫 | 领域层不做原样保存，与 xlsx 清单相同。零脏写回见 OPC 库测试。Word 另存 create 产物见 `docx-O1-word-resave`。此前记的 `SaveAs2` 挂起，拆分后重跑没再出现，一秒内返回 |
 
 ## create
@@ -346,6 +347,19 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 | Nl4 | 套用 | 两段绑同一实例后 Word 能看见编号，无修复 |
 | Nl5 | 改格式 | `setNumbering` 把该级 `numFmt` 改成 `bullet` 后 Word 无修复 |
 | Nl6 | 解绑 | `setParaNumbering` 且 `num` 为 `null` 后该段无编号，无修复 |
+
+## 样式
+
+`inspect` 带 `scope.styles: true`。手测脚本 `manual-check/office/cases/docx-style.ps1`。段落或 run 上的直接格式不在本组。
+
+| 序号 | 检查 | 通过标准 |
+| --- | --- | --- |
+| St1 | 名单 | 无 scope 时仍有 `styleCount` 且没有 `styles`；给了 `scope.styles` 后能列出 `style:Normal` 与 Heading |
+| St2 | 换样式 | `setParaStyle` 把正文段换成 `style:Heading2` 后该段 `style` 为 `Heading2`，`outline` 含 `level` 2 |
+| St3 | 大纲 | Word 打开后该段样式为标题 2，无修复 |
+| St4 | 改 Normal | `setStyle` 把 Normal 的 `sz` 改成 48 后，未点名段 Word 字号约为 24 磅，无修复 |
+| St5 | 改标题 | `setStyle` 去掉 Heading1 加粗后，标题段 Word 不再加粗，无修复 |
+| St6 | 去掉 | `setParaStyle` 且 `style` 为 `null` 后该段树上 `style` 为 `null`，无修复 |
 
 ## 原样保存（opc 验收）
 

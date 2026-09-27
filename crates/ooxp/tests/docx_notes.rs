@@ -166,6 +166,7 @@ fn inspect_counts_without_lists() {
             "bookmarkCount",
             "fieldCount",
             "numberingCount",
+            "styleCount",
             "outline",
             "headers",
             "footers",

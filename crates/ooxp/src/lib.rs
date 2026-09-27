@@ -861,6 +861,7 @@ mod tests {
                 "bookmarkCount",
                 "fieldCount",
                 "numberingCount",
+                "styleCount",
                 "outline",
                 "headers",
                 "footers",

@@ -18,6 +18,7 @@ use super::picture;
 use super::request::InspectScope;
 use super::revision;
 use super::smartart;
+use super::styles;
 use super::tbl;
 use super::textbox;
 
@@ -103,6 +104,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         "bookmarkCount": link::count_bookmarks(&doc.root),
         "fieldCount": field::count_fields(&doc.root),
         "numberingCount": numbering::count_nums(&pkg, &part)?,
+        "styleCount": styles::count_styles(&pkg, &part)?,
         "outline": outline,
         "headers": headers,
         "footers": footers,
@@ -163,6 +165,9 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         }
         if scope.numbering {
             tree["numberings"] = Value::Array(numbering::numberings_json(&pkg, &part)?);
+        }
+        if scope.styles {
+            tree["styles"] = Value::Array(styles::styles_json(&pkg, &part)?);
         }
         if let (Some(from), Some(max_paras)) = (scope.from, scope.max_paras) {
             let start = from as usize;

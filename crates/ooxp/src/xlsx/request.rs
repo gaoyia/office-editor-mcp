@@ -558,6 +558,8 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<XlsxOp>, Error> {
             | "insertNumbering"
             | "setNumbering"
             | "setParaNumbering"
+            | "setStyle"
+            | "setParaStyle"
             | "setTextBoxLink"
             | "insertFootnote"
             | "insertEndnote"

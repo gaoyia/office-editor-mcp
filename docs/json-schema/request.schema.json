@@ -83,6 +83,7 @@
         "bookmarks": { "type": "boolean" },
         "fields": { "type": "boolean" },
         "numbering": { "type": "boolean" },
+        "styles": { "type": "boolean" },
         "slide": { "type": "integer", "minimum": 1 },
         "maxShapes": { "type": "integer", "minimum": 1, "maximum": 5000 }
       },
@@ -545,6 +546,8 @@
               { "$ref": "#/$defs/insertNumberingOp" },
               { "$ref": "#/$defs/setNumberingOp" },
               { "$ref": "#/$defs/setParaNumberingOp" },
+              { "$ref": "#/$defs/setStyleOp" },
+              { "$ref": "#/$defs/setParaStyleOp" },
               { "$ref": "#/$defs/setTextBoxLinkOp" },
               { "$ref": "#/$defs/insertFootnoteOp" },
               { "$ref": "#/$defs/insertEndnoteOp" },
@@ -1288,6 +1291,37 @@
           ]
         },
         "ilvl": { "type": "integer", "minimum": 0, "maximum": 8 }
+      }
+    },
+    "setStyleOp": {
+      "type": "object",
+      "required": ["op", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "setStyle" },
+        "id": { "type": "string", "minLength": 1 },
+        "font": { "type": "string", "minLength": 1 },
+        "eastAsiaFont": { "type": "string", "minLength": 1 },
+        "sz": { "type": "integer", "minimum": 2, "maximum": 3276 },
+        "bold": { "type": "boolean" },
+        "color": { "type": "string", "pattern": "^[0-9A-Fa-f]{6}$" },
+        "before": { "type": "integer", "minimum": 0 },
+        "after": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "setParaStyleOp": {
+      "type": "object",
+      "required": ["op", "id", "style"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "setParaStyle" },
+        "id": { "type": "string", "minLength": 1 },
+        "style": {
+          "oneOf": [
+            { "type": "string", "minLength": 1 },
+            { "type": "null" }
+          ]
+        }
       }
     },
     "setTextBoxLinkOp": {

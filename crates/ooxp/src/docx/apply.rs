@@ -25,13 +25,15 @@ use super::request::{
     SetCommentMetaOp, SetCommentTextOp, SetDocGridOp, SetEvenAndOddHeadersOp, SetFieldOp,
     SetGutterAtTopOp, SetHfDistanceOp, SetHfLinkOp, SetHyperlinkOp, SetLineNumberingOp,
     SetMirrorMarginsOp, SetNoteNumberingOp, SetNumberingOp, SetPageMarginOp, SetPageSizeOp,
-    SetParaNumberingOp, SetParaTextOp, SetPictureSizeOp, SetPictureWrapOp, SetRtlGutterOp,
-    SetTextBoxDirectionOp, SetTextBoxFillOp, SetTextBoxLineOp, SetTextBoxLinkOp, SetTextBoxSizeOp,
-    SetTextBoxWrapOp, SetTitlePageOp, SetVerticalAlignOp, SplitCellsOp,
+    SetParaNumberingOp, SetParaStyleOp, SetParaTextOp, SetPictureSizeOp, SetPictureWrapOp,
+    SetRtlGutterOp, SetStyleOp, SetTextBoxDirectionOp, SetTextBoxFillOp, SetTextBoxLineOp,
+    SetTextBoxLinkOp, SetTextBoxSizeOp, SetTextBoxWrapOp, SetTitlePageOp, SetVerticalAlignOp,
+    SplitCellsOp,
 };
 use super::revision;
 use super::sect;
 use super::smartart;
+use super::styles;
 use super::tbl;
 use super::textbox;
 use super::{CT_FOOTER, CT_HEADER, REL_FOOTER, REL_HEADER, REL_HYPERLINK};
@@ -352,6 +354,12 @@ pub fn apply(bytes: &[u8], ops: &[DocxOp]) -> Result<Vec<u8>, Error> {
             }
             DocxOp::SetParaNumbering(op) => {
                 apply_set_para_numbering(&pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
+            }
+            DocxOp::SetStyle(op) => {
+                apply_set_style(&pkg, &mut docs, &mut dirty, &doc_part, op, i)?;
+            }
+            DocxOp::SetParaStyle(op) => {
+                apply_set_para_style(&pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
             }
         }
     }
@@ -783,6 +791,78 @@ fn apply_set_para_numbering(
     match op.num {
         Some(n) => numbering::bind_para(el, n, op.ilvl),
         None => numbering::unbind_para(el),
+    }
+    dirty.insert(part_name, ());
+    Ok(())
+}
+
+fn apply_set_style(
+    pkg: &Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    op: &SetStyleOp,
+    i: usize,
+) -> Result<(), Error> {
+    let Some(part) = styles::styles_part(pkg, doc_part)? else {
+        return Err(styles::missing_style(&op.id, i));
+    };
+    let doc = load_part(pkg, docs, &part)?;
+    styles::set_style_props(
+        &mut doc.root,
+        &op.style_id,
+        styles::StylePatch {
+            font: op.font.as_deref(),
+            east_asia_font: op.east_asia_font.as_deref(),
+            sz: op.sz,
+            bold: op.bold,
+            color: op.color.as_deref(),
+            before: op.before,
+            after: op.after,
+        },
+        &op.id,
+        i,
+    )?;
+    dirty.insert(part, ());
+    Ok(())
+}
+
+fn apply_set_para_style(
+    pkg: &Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &SetParaStyleOp,
+    i: usize,
+) -> Result<(), Error> {
+    if let Some(style_id) = op.style.as_deref() {
+        let style_part = styles::styles_part(pkg, doc_part)?
+            .ok_or_else(|| styles::missing_para_style(&format!("style:{style_id}"), i))?;
+        {
+            let style_doc = load_part(pkg, docs, &style_part)?;
+            let Some(el) = styles::find_style(&style_doc.root, style_id) else {
+                return Err(styles::missing_para_style(&format!("style:{style_id}"), i));
+            };
+            if !styles::is_paragraph_style(el) {
+                return Err(Error::with_path(
+                    ErrorKind::SetStyleNeedsParagraph,
+                    format!("ops[{i}].style"),
+                ));
+            }
+        }
+    }
+    let part_name = part_for_para(pkg, catalog, doc_part, &op.para, &op.id, i)?;
+    let doc = load_part(pkg, docs, &part_name)?;
+    let el = find_insert_para_mut(&mut doc.root, &op.para).ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::ParaNotFound { id: op.id.clone() },
+            format!("ops[{i}].id"),
+        )
+    })?;
+    match op.style.as_deref() {
+        Some(s) => styles::bind_para(el, s),
+        None => styles::unbind_para(el),
     }
     dirty.insert(part_name, ());
     Ok(())

@@ -263,6 +263,10 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::SetParaNumberingNeedsPara => {
                 "setParaNumbering 的 id 必须是正文或页眉页脚段落 id".into()
             }
+            IdReason::StylePrefix => "样式 id 必须是 style: 加上非空的 styleId".into(),
+            IdReason::SetParaStyleNeedsPara => {
+                "setParaStyle 的 id 必须是正文或页眉页脚段落 id".into()
+            }
         },
         ErrorKind::SheetNotFound { name } => format!("找不到工作表：{name}"),
         ErrorKind::ParaNotFound { id } => format!("找不到段落：{id}"),
@@ -451,6 +455,16 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::InvalidIlvl => "ilvl 必须是 0 到 8 的整数，且该抽象定义上要有这一级".into(),
         ErrorKind::NeedSetParaNumberingNum => {
             "setParaNumbering 必须有 num（num: 实例 id 或 null）".into()
+        }
+        ErrorKind::StyleNotFound { id } => format!("找不到样式：{id}"),
+        ErrorKind::SetStyleNeedsParagraph => "setStyle 与 setParaStyle 只接受段落样式".into(),
+        ErrorKind::NeedSetStyleField => {
+            "setStyle 至少要给 font、eastAsiaFont、sz、bold、color、before 或 after 之一".into()
+        }
+        ErrorKind::EmptyStyleFont => "font 与 eastAsiaFont 不能为空".into(),
+        ErrorKind::InvalidStyleColor => "color 必须是六位 RGB 十六进制".into(),
+        ErrorKind::NeedSetParaStyleStyle => {
+            "setParaStyle 必须有 style（style: 样式 id 或 null）".into()
         }
         ErrorKind::OpcOpen { reason } => match reason {
             OpcReason::EmptyPartName => "部件名不能为空".into(),

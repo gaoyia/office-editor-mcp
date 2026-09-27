@@ -190,6 +190,10 @@ pub(crate) enum IdReason {
     AbstractNumIndexNotInt,
     /// setParaNumbering 必须用正文或页眉页脚段落 id
     SetParaNumberingNeedsPara,
+    /// 样式 id 必须是 style:{styleId}
+    StylePrefix,
+    /// setParaStyle 必须用正文或页眉页脚段落 id
+    SetParaStyleNeedsPara,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -425,6 +429,12 @@ define_error_kinds! {
     NeedSetNumberingField => vec![Self::NeedSetNumberingField],
     InvalidIlvl => vec![Self::InvalidIlvl],
     NeedSetParaNumberingNum => vec![Self::NeedSetParaNumberingNum],
+    StyleNotFound { id: String } => vec![Self::StyleNotFound { id: "style:Normal".into() }],
+    SetStyleNeedsParagraph => vec![Self::SetStyleNeedsParagraph],
+    NeedSetStyleField => vec![Self::NeedSetStyleField],
+    EmptyStyleFont => vec![Self::EmptyStyleFont],
+    InvalidStyleColor => vec![Self::InvalidStyleColor],
+    NeedSetParaStyleStyle => vec![Self::NeedSetParaStyleStyle],
     OpcOpen { reason: OpcReason } => OpcReason::all_samples()
         .into_iter()
         .map(|reason| Self::OpcOpen { reason })
@@ -594,6 +604,8 @@ impl IdReason {
             Self::AbstractNumPrefix,
             Self::AbstractNumIndexNotInt,
             Self::SetParaNumberingNeedsPara,
+            Self::StylePrefix,
+            Self::SetParaStyleNeedsPara,
         ]
     }
 }
@@ -719,6 +731,11 @@ impl ErrorKind {
             | Self::NeedSetNumberingField
             | Self::InvalidIlvl
             | Self::NeedSetParaNumberingNum
+            | Self::SetStyleNeedsParagraph
+            | Self::NeedSetStyleField
+            | Self::EmptyStyleFont
+            | Self::InvalidStyleColor
+            | Self::NeedSetParaStyleStyle
             | Self::LastTextBoxPara
             | Self::LastNotePara
             | Self::NeedNoteNumberingField
@@ -780,7 +797,8 @@ impl ErrorKind {
             | Self::BookmarkNotFound { .. }
             | Self::FieldNotFound { .. }
             | Self::NumberingNotFound { .. }
-            | Self::AbstractNumNotFound { .. } => IdNotFound,
+            | Self::AbstractNumNotFound { .. }
+            | Self::StyleNotFound { .. } => IdNotFound,
             Self::ScopeRequired { .. } => ScopeRequired,
             Self::SharedFormulaMaster { .. }
             | Self::InkComment { .. }
