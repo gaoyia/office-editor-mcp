@@ -9,27 +9,29 @@ use crate::xml::{self, Document, Element, Node};
 use super::charts;
 use super::comments;
 use super::hf::{self, HfKind};
+use super::link;
 use super::notes;
-use super::para::{self, HostPara, NoteKind, ParaTarget};
+use super::para::{self, BodyPara, HostPara, NoteKind, ParaTarget};
 use super::picture;
 use super::request::{
-    DeleteColOp, DeleteCommentOp, DeleteNoteOp, DeleteParaOp, DeletePictureOp, DeleteRowOp,
-    DeleteTableOp, DeleteTextBoxOp, DocxOp, InsertColOp, InsertCommentOp, InsertHeaderFooterOp,
-    InsertNoteOp, InsertParaOp, InsertParaPlace, InsertPictureOp, InsertRowOp, InsertTableOp,
-    InsertTextBoxOp, MergeCellsOp, NoteNumberTarget, ReplacePictureOp, ReplyCommentOp, RevisionOp,
+    DeleteBookmarkOp, DeleteColOp, DeleteCommentOp, DeleteHyperlinkOp, DeleteNoteOp, DeleteParaOp,
+    DeletePictureOp, DeleteRowOp, DeleteTableOp, DeleteTextBoxOp, DocxOp, InsertBookmarkOp,
+    InsertColOp, InsertCommentOp, InsertHeaderFooterOp, InsertHyperlinkOp, InsertNoteOp,
+    InsertParaOp, InsertParaPlace, InsertPictureOp, InsertRowOp, InsertTableOp, InsertTextBoxOp,
+    MergeCellsOp, NoteNumberTarget, ReplacePictureOp, ReplyCommentOp, RevisionOp, SetBookmarkOp,
     SetColumnsOp, SetCommentDoneOp, SetCommentMetaOp, SetCommentTextOp, SetDocGridOp,
-    SetEvenAndOddHeadersOp, SetGutterAtTopOp, SetHfDistanceOp, SetHfLinkOp, SetLineNumberingOp,
-    SetMirrorMarginsOp, SetNoteNumberingOp, SetPageMarginOp, SetPageSizeOp, SetParaTextOp,
-    SetPictureSizeOp, SetPictureWrapOp, SetRtlGutterOp, SetTextBoxDirectionOp, SetTextBoxFillOp,
-    SetTextBoxLineOp, SetTextBoxLinkOp, SetTextBoxSizeOp, SetTextBoxWrapOp, SetTitlePageOp,
-    SetVerticalAlignOp, SplitCellsOp,
+    SetEvenAndOddHeadersOp, SetGutterAtTopOp, SetHfDistanceOp, SetHfLinkOp, SetHyperlinkOp,
+    SetLineNumberingOp, SetMirrorMarginsOp, SetNoteNumberingOp, SetPageMarginOp, SetPageSizeOp,
+    SetParaTextOp, SetPictureSizeOp, SetPictureWrapOp, SetRtlGutterOp, SetTextBoxDirectionOp,
+    SetTextBoxFillOp, SetTextBoxLineOp, SetTextBoxLinkOp, SetTextBoxSizeOp, SetTextBoxWrapOp,
+    SetTitlePageOp, SetVerticalAlignOp, SplitCellsOp,
 };
 use super::revision;
 use super::sect;
 use super::smartart;
 use super::tbl;
 use super::textbox;
-use super::{CT_FOOTER, CT_HEADER, REL_FOOTER, REL_HEADER};
+use super::{CT_FOOTER, CT_HEADER, REL_FOOTER, REL_HEADER, REL_HYPERLINK};
 
 pub fn apply(bytes: &[u8], ops: &[DocxOp]) -> Result<Vec<u8>, Error> {
     let mut pkg = Package::open_bytes(bytes.to_vec())?;
@@ -308,6 +310,28 @@ pub fn apply(bytes: &[u8], ops: &[DocxOp]) -> Result<Vec<u8>, Error> {
                     &pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, false, i,
                 )?;
             }
+            DocxOp::InsertHyperlink(op) => {
+                apply_insert_hyperlink(
+                    &mut pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i,
+                )?;
+            }
+            DocxOp::SetHyperlink(op) => {
+                apply_set_hyperlink(&mut pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
+            }
+            DocxOp::DeleteHyperlink(op) => {
+                apply_delete_hyperlink(
+                    &mut pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i,
+                )?;
+            }
+            DocxOp::InsertBookmark(op) => {
+                apply_insert_bookmark(&pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
+            }
+            DocxOp::SetBookmark(op) => {
+                apply_set_bookmark(&pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
+            }
+            DocxOp::DeleteBookmark(op) => {
+                apply_delete_bookmark(&pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
+            }
         }
     }
 
@@ -332,6 +356,16 @@ fn refuse_set_text_if_revision(el: &Element, i: usize) -> Result<(), Error> {
     Ok(())
 }
 
+fn refuse_set_text_if_hyperlink(el: &Element, i: usize) -> Result<(), Error> {
+    if link::para_blocks_set_text(el) {
+        return Err(Error::with_path(
+            ErrorKind::SetParaTextHasHyperlink,
+            format!("ops[{i}].id"),
+        ));
+    }
+    Ok(())
+}
+
 fn apply_rev(
     pkg: &Package,
     docs: &mut HashMap<String, Document>,
@@ -345,6 +379,247 @@ fn apply_rev(
     let part_name = revision::part_for_story(catalog, doc_part, &op.target.story, &op.id, i)?;
     let doc = load_part(pkg, docs, &part_name)?;
     revision::apply_revision(&mut doc.root, op.target.n, accept, &op.id, i)?;
+    dirty.insert(part_name, ());
+    Ok(())
+}
+
+fn push_hyperlink_rel(rels: &mut Relationships, url: &str) -> String {
+    let id = rels.next_rid();
+    rels.push(Relationship {
+        id: id.clone(),
+        rel_type: REL_HYPERLINK.to_string(),
+        target: url.to_string(),
+        target_mode: Some("External".into()),
+        extra: Vec::new(),
+    });
+    id
+}
+
+fn drop_rel_if_unused(
+    pkg: &mut Package,
+    root: &Element,
+    part: &str,
+    rid: &str,
+) -> Result<(), Error> {
+    if link::rid_used(root, rid) {
+        return Ok(());
+    }
+    let mut rels = Relationships::from_package(pkg, part)?;
+    rels.remove_by_id(rid);
+    rels.write_to(pkg, part)
+}
+
+fn apply_insert_hyperlink(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &InsertHyperlinkOp,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name = part_for_para(pkg, catalog, doc_part, &op.para, &op.id, i)?;
+    {
+        let doc = load_part(pkg, docs, &part_name)?;
+        if find_insert_para_mut(&mut doc.root, &op.para).is_none() {
+            return Err(Error::with_path(
+                ErrorKind::ParaNotFound { id: op.id.clone() },
+                format!("ops[{i}].id"),
+            ));
+        }
+    }
+    let rid = if let Some(url) = op.url.as_deref() {
+        let mut rels = Relationships::from_package(pkg, &part_name)?;
+        let rid = push_hyperlink_rel(&mut rels, url);
+        rels.write_to(pkg, &part_name)?;
+        Some(rid)
+    } else {
+        None
+    };
+    let doc = load_part(pkg, docs, &part_name)?;
+    let el = find_insert_para_mut(&mut doc.root, &op.para).ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::ParaNotFound { id: op.id.clone() },
+            format!("ops[{i}].id"),
+        )
+    })?;
+    link::insert_hyperlink_el(
+        el,
+        &op.text,
+        rid.as_deref(),
+        op.anchor.as_deref(),
+        op.tooltip.as_deref(),
+    );
+    dirty.insert(part_name, ());
+    Ok(())
+}
+
+fn apply_set_hyperlink(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &SetHyperlinkOp,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name = link::part_for_story(catalog, doc_part, &op.target.story, || {
+        link::missing_link_err(&op.id, i)
+    })?;
+    let old_rid = {
+        let doc = load_part(pkg, docs, &part_name)?;
+        let el = link::hyperlink_at_mut(&mut doc.root, op.target.n, &op.id, i)?;
+        link::r_id(el).map(str::to_string)
+    };
+    if let Some(url) = op.url.as_deref() {
+        let mut rels = Relationships::from_package(pkg, &part_name)?;
+        let rid = if let Some(existing) = old_rid.clone() {
+            if let Some(rel) = rels.rels.iter_mut().find(|r| r.id == existing) {
+                rel.target = url.to_string();
+                existing
+            } else {
+                rels.push(Relationship {
+                    id: existing.clone(),
+                    rel_type: REL_HYPERLINK.to_string(),
+                    target: url.to_string(),
+                    target_mode: Some("External".into()),
+                    extra: Vec::new(),
+                });
+                existing
+            }
+        } else {
+            push_hyperlink_rel(&mut rels, url)
+        };
+        rels.write_to(pkg, &part_name)?;
+        let doc = load_part(pkg, docs, &part_name)?;
+        let el = link::hyperlink_at_mut(&mut doc.root, op.target.n, &op.id, i)?;
+        link::set_hyperlink_url(el, &rid);
+    }
+    if let Some(anchor) = op.anchor.as_deref() {
+        {
+            let doc = load_part(pkg, docs, &part_name)?;
+            let el = link::hyperlink_at_mut(&mut doc.root, op.target.n, &op.id, i)?;
+            link::set_hyperlink_anchor(el, anchor);
+        }
+        if let Some(rid) = old_rid.as_deref() {
+            let doc = load_part(pkg, docs, &part_name)?;
+            drop_rel_if_unused(pkg, &doc.root, &part_name, rid)?;
+        }
+    }
+    if let Some(text) = op.text.as_deref() {
+        let doc = load_part(pkg, docs, &part_name)?;
+        let el = link::hyperlink_at_mut(&mut doc.root, op.target.n, &op.id, i)?;
+        para::set_visible_text(el, text);
+    }
+    if let Some(tooltip) = op.tooltip.as_ref() {
+        let doc = load_part(pkg, docs, &part_name)?;
+        let el = link::hyperlink_at_mut(&mut doc.root, op.target.n, &op.id, i)?;
+        link::set_hyperlink_tooltip(el, tooltip.as_deref());
+    }
+    dirty.insert(part_name, ());
+    Ok(())
+}
+
+fn apply_delete_hyperlink(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &DeleteHyperlinkOp,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name = link::part_for_story(catalog, doc_part, &op.target.story, || {
+        link::missing_link_err(&op.id, i)
+    })?;
+    let old_rid = {
+        let doc = load_part(pkg, docs, &part_name)?;
+        let el = link::hyperlink_at_mut(&mut doc.root, op.target.n, &op.id, i)?;
+        link::r_id(el).map(str::to_string)
+    };
+    {
+        let doc = load_part(pkg, docs, &part_name)?;
+        link::unwrap_hyperlink(&mut doc.root, op.target.n, &op.id, i)?;
+    }
+    if let Some(rid) = old_rid {
+        let doc = load_part(pkg, docs, &part_name)?;
+        drop_rel_if_unused(pkg, &doc.root, &part_name, &rid)?;
+    }
+    dirty.insert(part_name, ());
+    Ok(())
+}
+
+fn story_body_para(target: &ParaTarget) -> Option<&BodyPara> {
+    match target {
+        ParaTarget::Body(p) | ParaTarget::HeaderFooter { para: p, .. } => Some(p),
+        _ => None,
+    }
+}
+
+fn apply_insert_bookmark(
+    pkg: &Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &InsertBookmarkOp,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name = part_for_para(pkg, catalog, doc_part, &op.start, &op.id, i)?;
+    let start = story_body_para(&op.start).ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::InvalidId {
+                reason: crate::error::IdReason::InsertBookmarkNeedsPara,
+            },
+            format!("ops[{i}].id"),
+        )
+    })?;
+    let end = story_body_para(&op.end).ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::InvalidId {
+                reason: crate::error::IdReason::InsertBookmarkNeedsPara,
+            },
+            format!("ops[{i}].end"),
+        )
+    })?;
+    let doc = load_part(pkg, docs, &part_name)?;
+    link::insert_bookmark(&mut doc.root, start, end, op.name.as_deref(), &op.id, i)?;
+    dirty.insert(part_name, ());
+    Ok(())
+}
+
+fn apply_set_bookmark(
+    pkg: &Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &SetBookmarkOp,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name = link::part_for_story(catalog, doc_part, &op.target.story, || {
+        link::missing_bookmark_err(&op.id, i)
+    })?;
+    let doc = load_part(pkg, docs, &part_name)?;
+    link::set_bookmark_name(&mut doc.root, op.target.n, &op.name, &op.id, i)?;
+    dirty.insert(part_name, ());
+    Ok(())
+}
+
+fn apply_delete_bookmark(
+    pkg: &Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &DeleteBookmarkOp,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name = link::part_for_story(catalog, doc_part, &op.target.story, || {
+        link::missing_bookmark_err(&op.id, i)
+    })?;
+    let doc = load_part(pkg, docs, &part_name)?;
+    link::delete_bookmark(&mut doc.root, op.target.n, &op.id, i)?;
     dirty.insert(part_name, ());
     Ok(())
 }
@@ -506,6 +781,7 @@ fn apply_para_text(
                 )
             })?;
             refuse_set_text_if_revision(el, i)?;
+            refuse_set_text_if_hyperlink(el, i)?;
             para::set_visible_text(el, &op.text);
             dirty.insert(doc_part.to_string(), ());
         }
@@ -524,6 +800,7 @@ fn apply_para_text(
                 )
             })?;
             refuse_set_text_if_revision(el, i)?;
+            refuse_set_text_if_hyperlink(el, i)?;
             para::set_visible_text(el, &op.text);
             dirty.insert(part_name, ());
         }

@@ -196,15 +196,11 @@ fn apply_preserves_first_run_bold() {
 }
 
 #[test]
-fn apply_keeps_hyperlink_shell() {
+fn apply_hyperlink_blocks_set_para_text() {
     let path = write_sample("link");
     let out = tmp_dir().join("link-out.docx");
-    apply(&path, &out, "para:AAAA0003", "新链接").unwrap();
-    let tree = inspect_all(&out);
-    assert_eq!(tree["paragraphs"][2]["text"], "新链接");
-    let xml = part(&out, "word/document.xml");
-    assert!(xml.contains("<w:hyperlink"));
-    assert!(xml.contains("r:id=\"rId9\""));
+    let err = apply(&path, &out, "para:AAAA0003", "新链接").unwrap_err();
+    assert_eq!(err.code(), ErrorCode::NotImplemented);
 }
 
 #[test]
@@ -1159,6 +1155,8 @@ fn inspect_lists_header_pictures() {
             "smartArtCount",
             "tableCount",
             "revisionCount",
+            "hyperlinkCount",
+            "bookmarkCount",
             "pictures"
         ]
     );

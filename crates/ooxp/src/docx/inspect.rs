@@ -3,12 +3,13 @@
 use serde_json::{json, Value};
 
 use crate::error::Error;
-use crate::opc::{self, Package};
+use crate::opc::{self, Package, Relationships};
 use crate::xml;
 
 use super::charts;
 use super::comments;
 use super::hf::{self, HfKind, HfPart};
+use super::link;
 use super::notes;
 use super::para::{self, NoteKind};
 use super::picture;
@@ -49,18 +50,21 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     let expand_smartart = scope.as_ref().is_some_and(|s| s.smart_art);
     let expand_tables = scope.as_ref().is_some_and(|s| s.tables);
     let expand_revisions = scope.as_ref().is_some_and(|s| s.revisions);
-    let (headers, footers) = hf_arrays(
-        &pkg,
-        &catalog,
-        expand_hf,
-        expand_pics,
-        expand_txbx,
-        expand_txbx_content,
-        expand_charts,
-        expand_smartart,
-        expand_tables,
-        expand_revisions,
-    )?;
+    let expand_hyperlinks = scope.as_ref().is_some_and(|s| s.hyperlinks);
+    let expand_bookmarks = scope.as_ref().is_some_and(|s| s.bookmarks);
+    let hf_expand = HfExpand {
+        paragraphs: expand_hf,
+        pictures: expand_pics,
+        text_boxes: expand_txbx,
+        text_box_content: expand_txbx_content,
+        charts: expand_charts,
+        smart_art: expand_smartart,
+        tables: expand_tables,
+        revisions: expand_revisions,
+        hyperlinks: expand_hyperlinks,
+        bookmarks: expand_bookmarks,
+    };
+    let (headers, footers) = hf_arrays(&pkg, &catalog, &hf_expand)?;
     let sections = section_nodes(&pkg, &part, &doc.root)?;
     let (mirror_margins, gutter_at_top) = super::sect::document_flags(&pkg, &part)?;
     let picture_count = body_picture_count(&paras)?;
@@ -91,6 +95,8 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         "smartArtCount": body_smartart_count,
         "tableCount": body_table_count,
         "revisionCount": revision::count_revisions(&doc.root),
+        "hyperlinkCount": link::count_hyperlinks(&doc.root),
+        "bookmarkCount": link::count_bookmarks(&doc.root),
         "outline": outline,
         "headers": headers,
         "footers": footers,
@@ -138,6 +144,13 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         }
         if scope.revisions {
             tree["revisions"] = Value::Array(revision::revisions_json(&doc.root, None)?);
+        }
+        if scope.hyperlinks {
+            let rels = Relationships::from_package(&pkg, &part)?;
+            tree["hyperlinks"] = Value::Array(link::hyperlinks_json(&doc.root, None, &rels)?);
+        }
+        if scope.bookmarks {
+            tree["bookmarks"] = Value::Array(link::bookmarks_json(&doc.root, None)?);
         }
         if let (Some(from), Some(max_paras)) = (scope.from, scope.max_paras) {
             let start = from as usize;
@@ -253,33 +266,28 @@ fn boxes_for_para<'a>(all: &'a [textbox::TxbxInfo], para_id: &str) -> Vec<&'a te
     all.iter().filter(|b| b.id.starts_with(&prefix)).collect()
 }
 
-fn hf_arrays(
-    pkg: &Package,
-    catalog: &[HfPart],
-    expand: bool,
+struct HfExpand {
+    paragraphs: bool,
     pictures: bool,
     text_boxes: bool,
     text_box_content: bool,
-    expand_charts: bool,
-    expand_smartart: bool,
-    expand_tables: bool,
-    expand_revisions: bool,
+    charts: bool,
+    smart_art: bool,
+    tables: bool,
+    revisions: bool,
+    hyperlinks: bool,
+    bookmarks: bool,
+}
+
+fn hf_arrays(
+    pkg: &Package,
+    catalog: &[HfPart],
+    expand: &HfExpand,
 ) -> Result<(Vec<Value>, Vec<Value>), Error> {
     let mut headers = Vec::new();
     let mut footers = Vec::new();
     for item in catalog {
-        let node = hf_node(
-            pkg,
-            item,
-            expand,
-            pictures,
-            text_boxes,
-            text_box_content,
-            expand_charts,
-            expand_smartart,
-            expand_tables,
-            expand_revisions,
-        )?;
+        let node = hf_node(pkg, item, expand)?;
         match item.kind {
             HfKind::Header => headers.push(node),
             HfKind::Footer => footers.push(node),
@@ -288,18 +296,7 @@ fn hf_arrays(
     Ok((headers, footers))
 }
 
-fn hf_node(
-    pkg: &Package,
-    item: &HfPart,
-    expand: bool,
-    pictures: bool,
-    text_boxes: bool,
-    text_box_content: bool,
-    expand_charts: bool,
-    expand_smartart: bool,
-    expand_tables: bool,
-    expand_revisions: bool,
-) -> Result<Value, Error> {
+fn hf_node(pkg: &Package, item: &HfPart, expand: &HfExpand) -> Result<Value, Error> {
     let bytes = pkg.get(&item.part)?;
     let doc = xml::parse(bytes)?;
     let paras = para::collect_paragraphs(&doc.root);
@@ -327,11 +324,13 @@ fn hf_node(
         "smartArtCount": smart_art_count,
         "tableCount": tbl::count_tables(&doc.root),
         "revisionCount": revision::count_revisions(&doc.root),
+        "hyperlinkCount": link::count_hyperlinks(&doc.root),
+        "bookmarkCount": link::count_bookmarks(&doc.root),
     });
-    if pictures {
+    if expand.pictures {
         node["pictures"] = Value::Array(picture::pictures_json(&pics));
     }
-    if text_boxes {
+    if expand.text_boxes {
         let mut listed = Vec::new();
         for (i, p) in paras.iter().enumerate() {
             let (id, _) = para::para_stable_id_in(&item.id, p, i + 1);
@@ -340,25 +339,36 @@ fn hf_node(
                 p,
                 &id,
                 &mine,
-                text_box_content,
-                pictures,
+                expand.text_box_content,
+                expand.pictures,
             )?);
         }
         node["textBoxes"] = Value::Array(listed);
     }
-    if expand_charts {
+    if expand.charts {
         node["charts"] = Value::Array(charts::collect_hf(pkg, item, &paras)?);
     }
-    if expand_smartart {
+    if expand.smart_art {
         node["smartArts"] = Value::Array(smartart::collect_hf(pkg, item, &paras)?);
     }
-    if expand_tables {
-        node["tables"] = Value::Array(tbl::tables_json(&doc.root, Some(&item.id), pictures)?);
+    if expand.tables {
+        node["tables"] = Value::Array(tbl::tables_json(
+            &doc.root,
+            Some(&item.id),
+            expand.pictures,
+        )?);
     }
-    if expand_revisions {
+    if expand.revisions {
         node["revisions"] = Value::Array(revision::revisions_json(&doc.root, Some(&item.id))?);
     }
-    if expand {
+    if expand.hyperlinks {
+        let rels = Relationships::from_package(pkg, &item.part)?;
+        node["hyperlinks"] = Value::Array(link::hyperlinks_json(&doc.root, Some(&item.id), &rels)?);
+    }
+    if expand.bookmarks {
+        node["bookmarks"] = Value::Array(link::bookmarks_json(&doc.root, Some(&item.id))?);
+    }
+    if expand.paragraphs {
         let mut paragraphs = Vec::new();
         for (i, p) in paras.iter().enumerate() {
             let index = i + 1;

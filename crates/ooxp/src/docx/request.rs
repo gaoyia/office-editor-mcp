@@ -40,6 +40,10 @@ pub struct InspectScope {
     pub tables: bool,
     /// 为 true 时列出修订痕迹。
     pub revisions: bool,
+    /// 为 true 时列出超链接。
+    pub hyperlinks: bool,
+    /// 为 true 时列出书签。
+    pub bookmarks: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -458,6 +462,53 @@ pub struct RevisionOp {
 }
 
 #[derive(Debug, Clone)]
+pub struct InsertHyperlinkOp {
+    pub id: String,
+    pub para: ParaTarget,
+    pub text: String,
+    pub url: Option<String>,
+    pub anchor: Option<String>,
+    pub tooltip: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetHyperlinkOp {
+    pub id: String,
+    pub target: super::link::LinkRef,
+    pub url: Option<String>,
+    pub anchor: Option<String>,
+    pub text: Option<String>,
+    pub tooltip: Option<Option<String>>,
+}
+
+#[derive(Debug, Clone)]
+pub struct DeleteHyperlinkOp {
+    pub id: String,
+    pub target: super::link::LinkRef,
+}
+
+#[derive(Debug, Clone)]
+pub struct InsertBookmarkOp {
+    pub id: String,
+    pub start: ParaTarget,
+    pub end: ParaTarget,
+    pub name: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetBookmarkOp {
+    pub id: String,
+    pub target: super::link::BookmarkRef,
+    pub name: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct DeleteBookmarkOp {
+    pub id: String,
+    pub target: super::link::BookmarkRef,
+}
+
+#[derive(Debug, Clone)]
 pub enum DocxOp {
     SetParaText(SetParaTextOp),
     SetHeaderFooterDistance(SetHfDistanceOp),
@@ -498,6 +549,12 @@ pub enum DocxOp {
     SplitCells(SplitCellsOp),
     AcceptRevision(RevisionOp),
     RejectRevision(RevisionOp),
+    InsertHyperlink(InsertHyperlinkOp),
+    SetHyperlink(SetHyperlinkOp),
+    DeleteHyperlink(DeleteHyperlinkOp),
+    InsertBookmark(InsertBookmarkOp),
+    SetBookmark(SetBookmarkOp),
+    DeleteBookmark(DeleteBookmarkOp),
     SetTextBoxLink(SetTextBoxLinkOp),
     InsertFootnote(InsertNoteOp),
     InsertEndnote(InsertNoteOp),
@@ -565,6 +622,8 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
             "smartArt",
             "tables",
             "revisions",
+            "hyperlinks",
+            "bookmarks",
         ],
     )?;
 
@@ -578,6 +637,8 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
     let smart_art = parse_bool_field(obj.get("smartArt"), "smartArt")?;
     let tables = parse_bool_field(obj.get("tables"), "tables")?;
     let revisions = parse_bool_field(obj.get("revisions"), "revisions")?;
+    let hyperlinks = parse_bool_field(obj.get("hyperlinks"), "hyperlinks")?;
+    let bookmarks = parse_bool_field(obj.get("bookmarks"), "bookmarks")?;
     if text_box_content && !text_boxes {
         return Err(Error::with_path(
             ErrorKind::ScopeFieldRequires {
@@ -601,6 +662,8 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
                 && !obj.contains_key("smartArt")
                 && !obj.contains_key("tables")
                 && !obj.contains_key("revisions")
+                && !obj.contains_key("hyperlinks")
+                && !obj.contains_key("bookmarks")
             {
                 return Ok(None);
             }
@@ -617,6 +680,8 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
                 smart_art,
                 tables,
                 revisions,
+                hyperlinks,
+                bookmarks,
             }))
         }
         (Some(f), Some(m)) => {
@@ -670,6 +735,8 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
                 smart_art,
                 tables,
                 revisions,
+                hyperlinks,
+                bookmarks,
             }))
         }
         _ => Err(Error::with_path(
@@ -791,6 +858,12 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<DocxOp>, Error> {
             "splitCells" => out.push(DocxOp::SplitCells(parse_split_cells(obj, i)?)),
             "acceptRevision" => out.push(DocxOp::AcceptRevision(parse_revision_op(obj, i)?)),
             "rejectRevision" => out.push(DocxOp::RejectRevision(parse_revision_op(obj, i)?)),
+            "insertHyperlink" => out.push(DocxOp::InsertHyperlink(parse_insert_hyperlink(obj, i)?)),
+            "setHyperlink" => out.push(DocxOp::SetHyperlink(parse_set_hyperlink(obj, i)?)),
+            "deleteHyperlink" => out.push(DocxOp::DeleteHyperlink(parse_delete_hyperlink(obj, i)?)),
+            "insertBookmark" => out.push(DocxOp::InsertBookmark(parse_insert_bookmark(obj, i)?)),
+            "setBookmark" => out.push(DocxOp::SetBookmark(parse_set_bookmark(obj, i)?)),
+            "deleteBookmark" => out.push(DocxOp::DeleteBookmark(parse_delete_bookmark(obj, i)?)),
             "setTextBoxLink" => out.push(DocxOp::SetTextBoxLink(parse_set_txbx_link(obj, i)?)),
             "insertFootnote" => out.push(DocxOp::InsertFootnote(parse_insert_note(
                 obj,
@@ -1676,6 +1749,294 @@ fn parse_revision_op(obj: &serde_json::Map<String, Value>, i: usize) -> Result<R
     let id = require_op_id(obj, i)?;
     let target = super::revision::parse_rev_ref(&id, &format!("ops[{i}].id"))?;
     Ok(RevisionOp { id, target })
+}
+
+fn parse_story_para_at(id: &str, path: &str, reason: IdReason) -> Result<ParaTarget, Error> {
+    let target = para::parse_para_id_at(id, path)?;
+    match target {
+        ParaTarget::Body(_) | ParaTarget::HeaderFooter { .. } => Ok(target),
+        _ => Err(Error::with_path(
+            ErrorKind::InvalidId { reason },
+            path.to_string(),
+        )),
+    }
+}
+
+fn same_story(a: &ParaTarget, b: &ParaTarget) -> bool {
+    match (a, b) {
+        (ParaTarget::Body(_), ParaTarget::Body(_)) => true,
+        (
+            ParaTarget::HeaderFooter {
+                kind: k1,
+                hf_type: t1,
+                n: n1,
+                ..
+            },
+            ParaTarget::HeaderFooter {
+                kind: k2,
+                hf_type: t2,
+                n: n2,
+                ..
+            },
+        ) => k1 == k2 && t1 == t2 && n1 == n2,
+        _ => false,
+    }
+}
+
+fn optional_op_string(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+    field: &str,
+) -> Result<Option<String>, Error> {
+    match obj.get(field) {
+        None => Ok(None),
+        Some(Value::String(s)) => Ok(Some(s.clone())),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::String,
+            },
+            format!("ops[{i}].{field}"),
+        )),
+    }
+}
+
+fn parse_insert_hyperlink(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<InsertHyperlinkOp, Error> {
+    deny_keys(obj, i, &["op", "id", "text", "url", "anchor", "tooltip"])?;
+    let id = require_op_id(obj, i)?;
+    let para = parse_story_para_at(&id, &format!("ops[{i}].id"), IdReason::InsertLinkNeedsPara)?;
+    let text = match obj.get("text") {
+        Some(Value::String(s)) => s.clone(),
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "text".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].text"),
+            ));
+        }
+        None => {
+            return Err(Error::with_path(
+                ErrorKind::OpRequiresField {
+                    op: "insertHyperlink".into(),
+                    field: "text".into(),
+                },
+                format!("ops[{i}].text"),
+            ));
+        }
+    };
+    let url = optional_op_string(obj, i, "url")?;
+    let anchor = optional_op_string(obj, i, "anchor")?;
+    match (&url, &anchor) {
+        (Some(_), Some(_)) => {
+            return Err(Error::with_path(
+                ErrorKind::MutuallyExclusive {
+                    a: "url".into(),
+                    b: "anchor".into(),
+                },
+                format!("ops[{i}]"),
+            ));
+        }
+        (None, None) => {
+            return Err(Error::with_path(
+                ErrorKind::HyperlinkNeedTarget,
+                format!("ops[{i}]"),
+            ));
+        }
+        _ => {}
+    }
+    if let Some(u) = url.as_deref() {
+        if u.is_empty() {
+            return Err(Error::with_path(
+                ErrorKind::EmptyHyperlinkUrl,
+                format!("ops[{i}].url"),
+            ));
+        }
+    }
+    if let Some(a) = anchor.as_deref() {
+        super::link::check_bookmark_name(a, i, "anchor")?;
+    }
+    let tooltip = optional_op_string(obj, i, "tooltip")?;
+    Ok(InsertHyperlinkOp {
+        id,
+        para,
+        text,
+        url,
+        anchor,
+        tooltip,
+    })
+}
+
+fn parse_set_hyperlink(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<SetHyperlinkOp, Error> {
+    deny_keys(obj, i, &["op", "id", "url", "anchor", "text", "tooltip"])?;
+    let id = require_op_id(obj, i)?;
+    let target = super::link::parse_link_ref(&id, &format!("ops[{i}].id"))?;
+    let url = optional_op_string(obj, i, "url")?;
+    let anchor = optional_op_string(obj, i, "anchor")?;
+    let text = optional_op_string(obj, i, "text")?;
+    let tooltip = match obj.get("tooltip") {
+        None => None,
+        Some(Value::Null) => Some(None),
+        Some(Value::String(s)) => Some(Some(s.clone())),
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "tooltip".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].tooltip"),
+            ));
+        }
+    };
+    if url.is_some() && anchor.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::MutuallyExclusive {
+                a: "url".into(),
+                b: "anchor".into(),
+            },
+            format!("ops[{i}]"),
+        ));
+    }
+    if url.is_none() && anchor.is_none() && text.is_none() && tooltip.is_none() {
+        return Err(Error::with_path(
+            ErrorKind::NeedSetHyperlinkField,
+            format!("ops[{i}]"),
+        ));
+    }
+    if let Some(u) = url.as_deref() {
+        if u.is_empty() {
+            return Err(Error::with_path(
+                ErrorKind::EmptyHyperlinkUrl,
+                format!("ops[{i}].url"),
+            ));
+        }
+    }
+    if let Some(a) = anchor.as_deref() {
+        super::link::check_bookmark_name(a, i, "anchor")?;
+    }
+    Ok(SetHyperlinkOp {
+        id,
+        target,
+        url,
+        anchor,
+        text,
+        tooltip,
+    })
+}
+
+fn parse_delete_hyperlink(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<DeleteHyperlinkOp, Error> {
+    deny_keys(obj, i, &["op", "id"])?;
+    let id = require_op_id(obj, i)?;
+    let target = super::link::parse_link_ref(&id, &format!("ops[{i}].id"))?;
+    Ok(DeleteHyperlinkOp { id, target })
+}
+
+fn parse_insert_bookmark(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<InsertBookmarkOp, Error> {
+    deny_keys(obj, i, &["op", "id", "name", "end"])?;
+    let id = require_op_id(obj, i)?;
+    let start = parse_story_para_at(
+        &id,
+        &format!("ops[{i}].id"),
+        IdReason::InsertBookmarkNeedsPara,
+    )?;
+    let end = match obj.get("end") {
+        None => start.clone(),
+        Some(Value::String(s)) if !s.is_empty() => parse_story_para_at(
+            s,
+            &format!("ops[{i}].end"),
+            IdReason::InsertBookmarkNeedsPara,
+        )?,
+        Some(Value::String(_)) => {
+            return Err(Error::with_path(
+                ErrorKind::InvalidId {
+                    reason: IdReason::InsertBookmarkNeedsPara,
+                },
+                format!("ops[{i}].end"),
+            ));
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "end".into(),
+                    expected: TypeName::NonEmptyString,
+                },
+                format!("ops[{i}].end"),
+            ));
+        }
+    };
+    if !same_story(&start, &end) {
+        return Err(Error::with_path(
+            ErrorKind::BookmarkRangeCrossStory,
+            format!("ops[{i}].end"),
+        ));
+    }
+    let name = optional_op_string(obj, i, "name")?;
+    if let Some(n) = name.as_deref() {
+        super::link::check_bookmark_name(n, i, "name")?;
+    }
+    Ok(InsertBookmarkOp {
+        id,
+        start,
+        end,
+        name,
+    })
+}
+
+fn parse_set_bookmark(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<SetBookmarkOp, Error> {
+    deny_keys(obj, i, &["op", "id", "name"])?;
+    let id = require_op_id(obj, i)?;
+    let target = super::link::parse_bookmark_ref(&id, &format!("ops[{i}].id"))?;
+    let name = match obj.get("name") {
+        Some(Value::String(s)) => {
+            super::link::check_bookmark_name(s, i, "name")?;
+            s.clone()
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "name".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].name"),
+            ));
+        }
+        None => {
+            return Err(Error::with_path(
+                ErrorKind::OpRequiresField {
+                    op: "setBookmark".into(),
+                    field: "name".into(),
+                },
+                format!("ops[{i}].name"),
+            ));
+        }
+    };
+    Ok(SetBookmarkOp { id, target, name })
+}
+
+fn parse_delete_bookmark(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<DeleteBookmarkOp, Error> {
+    deny_keys(obj, i, &["op", "id"])?;
+    let id = require_op_id(obj, i)?;
+    let target = super::link::parse_bookmark_ref(&id, &format!("ops[{i}].id"))?;
+    Ok(DeleteBookmarkOp { id, target })
 }
 
 fn parse_col_after(v: Option<&Value>, i: usize) -> Result<u32, Error> {

@@ -7,6 +7,7 @@ mod create;
 mod export;
 mod hf;
 mod inspect;
+mod link;
 mod notes;
 mod para;
 mod picture;
@@ -45,6 +46,8 @@ pub const REL_FOOTER: &str =
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer";
 pub const REL_IMAGE: &str =
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image";
+pub const REL_HYPERLINK: &str =
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink";
 pub const REL_FOOTNOTES: &str =
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/footnotes";
 pub const REL_ENDNOTES: &str =

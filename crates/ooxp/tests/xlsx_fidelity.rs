@@ -445,3 +445,33 @@ fn scope_revisions_is_not_for_xlsx() {
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);
 }
+
+#[test]
+fn scope_hyperlinks_is_not_for_xlsx() {
+    let src = write_sample("hl-scope");
+    let err = run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "inspect",
+            "path": src.to_string_lossy(),
+            "scope": { "hyperlinks": true }
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+}
+
+#[test]
+fn insert_hyperlink_is_not_for_xlsx() {
+    let src = write_sample("hl-foreign");
+    let out = tmp_dir().join("hl-foreign-out.xlsx");
+    let err = apply(
+        &src,
+        &out,
+        json!([{ "op": "insertHyperlink", "id": "para:1", "text": "x", "url": "https://example.com" }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+}

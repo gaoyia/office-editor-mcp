@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "note.docx",
+  "output": "note.link.docx",
+  "ops": [
+    {
+      "op": "insertHyperlink",
+      "id": "para:AAAA0001",
+      "text": "示例",
+      "url": "https://example.com"
+    },
+    {
+      "op": "setHyperlink",
+      "id": "link:1",
+      "url": "https://example.org"
+    },
+    {
+      "op": "insertBookmark",
+      "id": "para:AAAA0001",
+      "name": "SrcBm"
+    },
+    {
+      "op": "deleteHyperlink",
+      "id": "link:1"
+    },
+    {
+      "op": "setBookmark",
+      "id": "bookmark:1",
+      "name": "NewBm"
+    },
+    {
+      "op": "deleteBookmark",
+      "id": "bookmark:1"
+    }
+  ]
+}

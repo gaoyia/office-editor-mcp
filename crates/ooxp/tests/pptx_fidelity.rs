@@ -497,3 +497,39 @@ fn scope_revisions_is_not_for_pptx() {
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);
 }
+
+#[test]
+fn scope_bookmarks_is_not_for_pptx() {
+    let src = write_sample("bm-scope");
+    let err = run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "inspect",
+            "path": src.to_string_lossy(),
+            "scope": { "bookmarks": true }
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+}
+
+#[test]
+fn delete_bookmark_is_not_for_pptx() {
+    let src = write_sample("bm-foreign");
+    let out = tmp_dir().join("bm-foreign-out.pptx");
+    let err = run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "apply",
+            "path": src.to_string_lossy(),
+            "output": out.to_string_lossy(),
+            "ops": [{ "op": "deleteBookmark", "id": "bookmark:1" }]
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+}

@@ -1028,7 +1028,7 @@ pub fn new_paragraph(parent: &Element, para_id: &str, text: &str) -> Element {
     p
 }
 
-fn new_text_run(parent: &Element, text: &str) -> Element {
+pub(crate) fn new_text_run(parent: &Element, text: &str) -> Element {
     let mut t = Element::new(parent.prefixed("t"));
     apply_t_text(&mut t, text);
     let mut r = Element::new(parent.prefixed("r"));

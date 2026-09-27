@@ -228,6 +228,22 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             }
             IdReason::RevIndexNotInt => "修订序号必须是正整数".into(),
             IdReason::RevIndexFromOne => "修订序号从 1 起".into(),
+            IdReason::LinkPrefix => {
+                "超链接 id 必须是 link:N，或页眉页脚容器 id 加上 /link:N".into()
+            }
+            IdReason::LinkIndexNotInt => "超链接序号必须是正整数".into(),
+            IdReason::LinkIndexFromOne => "超链接序号从 1 起".into(),
+            IdReason::InsertLinkNeedsPara => {
+                "insertHyperlink 的 id 必须是正文或页眉页脚段落 id".into()
+            }
+            IdReason::BookmarkPrefix => {
+                "书签 id 必须是 bookmark:N，或页眉页脚容器 id 加上 /bookmark:N".into()
+            }
+            IdReason::BookmarkIndexNotInt => "书签序号必须是正整数".into(),
+            IdReason::BookmarkIndexFromOne => "书签序号从 1 起".into(),
+            IdReason::InsertBookmarkNeedsPara => {
+                "insertBookmark 的 id 与 end 必须是正文或页眉页脚段落 id".into()
+            }
         },
         ErrorKind::SheetNotFound { name } => format!("找不到工作表：{name}"),
         ErrorKind::ParaNotFound { id } => format!("找不到段落：{id}"),
@@ -382,6 +398,22 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::NeedTableCellsMatch => "cells 必须是 rows×cols 的字符串数组".into(),
         ErrorKind::RevisionNotFound { id } => format!("找不到修订：{id}"),
         ErrorKind::SetParaTextHasRevision => "不能改带修订痕迹的段落的可见文本".into(),
+        ErrorKind::HyperlinkNotFound { id } => format!("找不到超链接：{id}"),
+        ErrorKind::BookmarkNotFound { id } => format!("找不到书签：{id}"),
+        ErrorKind::SetParaTextHasHyperlink => "不能改带超链接的段落的可见文本".into(),
+        ErrorKind::HyperlinkNeedTarget => "必须恰好给 url 或 anchor 之一".into(),
+        ErrorKind::EmptyHyperlinkUrl => "url 不能为空".into(),
+        ErrorKind::InvalidBookmarkName => {
+            "书签名不能为空、不能含空白、不能以下划线开头".into()
+        }
+        ErrorKind::BookmarkNameTaken => "书签名已被占用".into(),
+        ErrorKind::BookmarkRangeReversed => "insertBookmark 的 end 不能早于起始段".into(),
+        ErrorKind::BookmarkRangeCrossStory => {
+            "insertBookmark 的 end 必须与 id 在同一故事".into()
+        }
+        ErrorKind::NeedSetHyperlinkField => {
+            "setHyperlink 至少要给 url、anchor、text 或 tooltip 之一".into()
+        }
         ErrorKind::OpcOpen { reason } => match reason {
             OpcReason::EmptyPartName => "部件名不能为空".into(),
             OpcReason::InvalidPartName { name } => format!("非法部件名：{name}"),

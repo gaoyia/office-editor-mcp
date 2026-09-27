@@ -34,6 +34,7 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 | Sp1–Sp8 | ✅ | Word 16.0：`docx-section.ps1`，8 PASS / 0 FAIL。四边距与横向纸张、距边界仍独立、分栏、垂直对齐与行号、镜像边距。标题栏无 Repair |
 | Tb1–Tb8 | ✅ | Word 16.0：`docx-table.ps1`，8 PASS / 0 FAIL。名单、改字、增行增列、删表、create 2×2、合并、最后一行 `InvalidField`。标题栏无 Repair |
 | Rv1–Rv6 | ✅ | Word 16.0：`docx-revision.ps1`，6 PASS / 0 FAIL。名单、接受删除、拒绝插入、接受插入、拒绝删除、带修订段 `setParaText` 得 `NotImplemented`。标题栏无 Repair |
+| Hb1–Hb7 | ✅ | Word 16.0：`docx-hyperlink.ps1`，7 PASS / 0 FAIL。名单、改 URL、插链、删链、插书签、删书签、带链段 `setParaText` 得 `NotImplemented`。标题栏无 Repair |
 | O1 | 🚫 | 领域层不做原样保存，与 xlsx 清单相同。零脏写回见 OPC 库测试。Word 另存 create 产物见 `docx-O1-word-resave`。此前记的 `SaveAs2` 挂起，拆分后重跑没再出现，一秒内返回 |
 
 ## create
@@ -59,7 +60,7 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 | I2 | 大纲 | `outline` 含第一段，`level` 为 `1`，`text` 为 `标题` |
 | I3 | 段落 id | 两段都有 `para:{hex}`，`stable` 为 `true` |
 | I4 | 第二段 | `text` 为 `hello` |
-| I5 | 无 scope | 只发 path 时没有 `paragraphs` 字段，仍有 `outline`、`paraCount`、`pictureCount`、`tableCount`、`revisionCount`、`headers`、`footers`、`sections` |
+| I5 | 无 scope | 只发 path 时没有 `paragraphs` 字段，仍有 `outline`、`paraCount`、`pictureCount`、`tableCount`、`revisionCount`、`hyperlinkCount`、`bookmarkCount`、`headers`、`footers`、`sections` |
 
 ## apply
 
@@ -302,6 +303,20 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 | Rv4 | 接受插入 | `acceptRevision` 点名插入后，Word 无修复，插入字留下且不再标修订 |
 | Rv5 | 拒绝删除 | `rejectRevision` 点名删除后，Word 无修复，被删的字重新可见 |
 | Rv6 | 改字拒绝 | 对仍带本期修订的段发 `setParaText` 得 `NotImplemented`，文件未写坏 |
+
+## 超链接与书签
+
+准备一份带超链接与书签的样例：Word 给第一段加外部 URL，给第二段加用户书签，另存。`inspect` 带 `scope.hyperlinks: true` 与 `scope.bookmarks: true`。手测脚本 `manual-check/office/cases/docx-hyperlink.ps1`。
+
+| 序号 | 检查 | 通过标准 |
+| --- | --- | --- |
+| Hb1 | 名单 | 无 scope 时仍有 `hyperlinkCount` / `bookmarkCount` 且没有名单；给了对应 scope 后能列出 `link:` 与 `bookmark:`，链带 `url`，书签带 `name` |
+| Hb2 | 改 URL | `setHyperlink` 改外部地址后 Word 无修复，COM `Hyperlinks(1).Address` 是新地址 |
+| Hb3 | 插链 | 对无链段 `insertHyperlink` 后 Word 无修复，能看见新链 |
+| Hb4 | 删链 | `deleteHyperlink` 后字还在、链消失，无修复 |
+| Hb5 | 插书签 | `insertBookmark` 后 COM 能按名找到，无修复 |
+| Hb6 | 删书签 | `deleteBookmark` 后该书签消失，无修复 |
+| Hb7 | 改字拒绝 | 对仍带本期超链接的段发 `setParaText` 得 `NotImplemented`，文件未写坏 |
 
 ## 原样保存（opc 验收）
 

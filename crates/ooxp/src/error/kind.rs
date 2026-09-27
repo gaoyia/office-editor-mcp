@@ -161,6 +161,18 @@ pub(crate) enum IdReason {
     RevPrefix,
     RevIndexNotInt,
     RevIndexFromOne,
+    /// 超链接 id 必须是 link:N 或 {容器}/link:N
+    LinkPrefix,
+    LinkIndexNotInt,
+    LinkIndexFromOne,
+    /// insertHyperlink 必须用正文或页眉页脚段落 id
+    InsertLinkNeedsPara,
+    /// 书签 id 必须是 bookmark:N 或 {容器}/bookmark:N
+    BookmarkPrefix,
+    BookmarkIndexNotInt,
+    BookmarkIndexFromOne,
+    /// insertBookmark 必须用正文或页眉页脚段落 id
+    InsertBookmarkNeedsPara,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -374,6 +386,16 @@ define_error_kinds! {
     NeedTableCellsMatch => vec![Self::NeedTableCellsMatch],
     RevisionNotFound { id: String } => vec![Self::RevisionNotFound { id: "rev:1".into() }],
     SetParaTextHasRevision => vec![Self::SetParaTextHasRevision],
+    HyperlinkNotFound { id: String } => vec![Self::HyperlinkNotFound { id: "link:1".into() }],
+    BookmarkNotFound { id: String } => vec![Self::BookmarkNotFound { id: "bookmark:1".into() }],
+    SetParaTextHasHyperlink => vec![Self::SetParaTextHasHyperlink],
+    HyperlinkNeedTarget => vec![Self::HyperlinkNeedTarget],
+    EmptyHyperlinkUrl => vec![Self::EmptyHyperlinkUrl],
+    InvalidBookmarkName => vec![Self::InvalidBookmarkName],
+    BookmarkNameTaken => vec![Self::BookmarkNameTaken],
+    BookmarkRangeReversed => vec![Self::BookmarkRangeReversed],
+    BookmarkRangeCrossStory => vec![Self::BookmarkRangeCrossStory],
+    NeedSetHyperlinkField => vec![Self::NeedSetHyperlinkField],
     OpcOpen { reason: OpcReason } => OpcReason::all_samples()
         .into_iter()
         .map(|reason| Self::OpcOpen { reason })
@@ -524,6 +546,14 @@ impl IdReason {
             Self::RevPrefix,
             Self::RevIndexNotInt,
             Self::RevIndexFromOne,
+            Self::LinkPrefix,
+            Self::LinkIndexNotInt,
+            Self::LinkIndexFromOne,
+            Self::InsertLinkNeedsPara,
+            Self::BookmarkPrefix,
+            Self::BookmarkIndexNotInt,
+            Self::BookmarkIndexFromOne,
+            Self::InsertBookmarkNeedsPara,
         ]
     }
 }
@@ -634,6 +664,13 @@ impl ErrorKind {
             | Self::SplitContinueCell
             | Self::NothingToSplit
             | Self::NeedTableCellsMatch
+            | Self::HyperlinkNeedTarget
+            | Self::EmptyHyperlinkUrl
+            | Self::InvalidBookmarkName
+            | Self::BookmarkNameTaken
+            | Self::BookmarkRangeReversed
+            | Self::BookmarkRangeCrossStory
+            | Self::NeedSetHyperlinkField
             | Self::LastTextBoxPara
             | Self::LastNotePara
             | Self::NeedNoteNumberingField
@@ -690,7 +727,9 @@ impl ErrorKind {
             | Self::SmartArtNotFound { .. }
             | Self::SmartArtPointNotFound { .. }
             | Self::TableNotFound { .. }
-            | Self::RevisionNotFound { .. } => IdNotFound,
+            | Self::RevisionNotFound { .. }
+            | Self::HyperlinkNotFound { .. }
+            | Self::BookmarkNotFound { .. } => IdNotFound,
             Self::ScopeRequired { .. } => ScopeRequired,
             Self::SharedFormulaMaster { .. }
             | Self::InkComment { .. }
@@ -708,7 +747,8 @@ impl ErrorKind {
             | Self::TableHasRevision
             | Self::TableGridMismatch
             | Self::MergeNotSimple
-            | Self::SetParaTextHasRevision => NotImplemented,
+            | Self::SetParaTextHasRevision
+            | Self::SetParaTextHasHyperlink => NotImplemented,
             Self::OpcOpen { .. } => OpcOpen,
             Self::PartMissing { .. }
             | Self::RelNotFound { .. }

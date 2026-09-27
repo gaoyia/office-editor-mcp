@@ -211,6 +211,8 @@ fn inspect_counts_without_list() {
             "smartArtCount",
             "tableCount",
             "revisionCount",
+            "hyperlinkCount",
+            "bookmarkCount",
             "outline",
             "headers",
             "footers",

@@ -249,6 +249,23 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             }
             IdReason::RevIndexNotInt => "revision index must be a positive integer".into(),
             IdReason::RevIndexFromOne => "revision index starts at 1".into(),
+            IdReason::LinkPrefix => {
+                "Hyperlink id must be link:N or a header/footer container id plus /link:N".into()
+            }
+            IdReason::LinkIndexNotInt => "hyperlink index must be a positive integer".into(),
+            IdReason::LinkIndexFromOne => "hyperlink index starts at 1".into(),
+            IdReason::InsertLinkNeedsPara => {
+                "insertHyperlink id must be a body or header/footer paragraph id".into()
+            }
+            IdReason::BookmarkPrefix => {
+                "Bookmark id must be bookmark:N or a header/footer container id plus /bookmark:N"
+                    .into()
+            }
+            IdReason::BookmarkIndexNotInt => "bookmark index must be a positive integer".into(),
+            IdReason::BookmarkIndexFromOne => "bookmark index starts at 1".into(),
+            IdReason::InsertBookmarkNeedsPara => {
+                "insertBookmark id and end must be a body or header/footer paragraph id".into()
+            }
         },
         ErrorKind::SheetNotFound { name } => format!("Sheet not found: {name}"),
         ErrorKind::ParaNotFound { id } => format!("Paragraph not found: {id}"),
@@ -451,6 +468,27 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::RevisionNotFound { id } => format!("Revision not found: {id}"),
         ErrorKind::SetParaTextHasRevision => {
             "Cannot change visible text in a paragraph that contains tracked revisions".into()
+        }
+        ErrorKind::HyperlinkNotFound { id } => format!("Hyperlink not found: {id}"),
+        ErrorKind::BookmarkNotFound { id } => format!("Bookmark not found: {id}"),
+        ErrorKind::SetParaTextHasHyperlink => {
+            "Cannot change visible text in a paragraph that contains a hyperlink".into()
+        }
+        ErrorKind::HyperlinkNeedTarget => "exactly one of url or anchor is required".into(),
+        ErrorKind::EmptyHyperlinkUrl => "url must not be empty".into(),
+        ErrorKind::InvalidBookmarkName => {
+            "bookmark name must not be empty, contain whitespace, or start with an underscore"
+                .into()
+        }
+        ErrorKind::BookmarkNameTaken => "bookmark name is already taken".into(),
+        ErrorKind::BookmarkRangeReversed => {
+            "insertBookmark end must not precede the start paragraph".into()
+        }
+        ErrorKind::BookmarkRangeCrossStory => {
+            "insertBookmark end must be in the same story as id".into()
+        }
+        ErrorKind::NeedSetHyperlinkField => {
+            "setHyperlink requires at least one of url, anchor, text, or tooltip".into()
         }
         ErrorKind::OpcOpen { reason } => match reason {
             OpcReason::EmptyPartName => "Part name must not be empty".into(),
