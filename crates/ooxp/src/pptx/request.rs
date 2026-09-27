@@ -699,6 +699,7 @@ fn is_foreign_op(op_name: &str) -> bool {
             | "renameSheet"
             | "moveSheet"
             | "setSheetHidden"
+            | "setCellStyle"
             | "setSmartArtWrap"
             | "insertOle"
             | "deleteOle"

@@ -637,6 +637,12 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             "setRunFormat 至少要给 bold、italic、underline、sz、color、font 或 eastAsiaFont 之一"
                 .into()
         }
+        ErrorKind::NeedSetCellStyleField => {
+            "setCellStyle 至少要给 numFmt、font、fill、border 或 align 之一".into()
+        }
+        ErrorKind::InvalidCellStyle { field } => {
+            format!("setCellStyle 的 {field} 不合法")
+        }
         ErrorKind::InvalidAlign => {
             "align 必须是 left、center、right、both、distribute、start 或 end".into()
         }

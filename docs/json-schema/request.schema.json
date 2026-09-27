@@ -581,6 +581,7 @@
           "items": {
             "oneOf": [
               { "$ref": "#/$defs/setCellOp" },
+              { "$ref": "#/$defs/setCellStyleOp" },
               { "$ref": "#/$defs/setHeaderFooterTextOp" },
               { "$ref": "#/$defs/setParaTextOp" },
               { "$ref": "#/$defs/setHeaderFooterDistanceOp" },
@@ -733,6 +734,85 @@
       "oneOf": [
         { "required": ["value"] },
         { "required": ["formula"] }
+      ]
+    },
+    "cellColor": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "rgb": { "type": "string", "pattern": "^[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?$" },
+        "theme": { "type": "integer", "minimum": 0 },
+        "indexed": { "type": "integer", "minimum": 0 },
+        "tint": { "type": "number" }
+      }
+    },
+    "cellBorderSide": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "style": { "type": "string", "minLength": 1 },
+        "color": { "$ref": "#/$defs/cellColor" }
+      }
+    },
+    "setCellStyleOp": {
+      "type": "object",
+      "required": ["op", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "setCellStyle" },
+        "id": { "type": "string", "minLength": 1 },
+        "numFmt": { "type": ["string", "null"], "minLength": 1 },
+        "font": {
+          "type": ["object", "null"],
+          "additionalProperties": false,
+          "properties": {
+            "name": { "type": "string", "minLength": 1 },
+            "sz": { "type": "number", "exclusiveMinimum": 0, "maximum": 409 },
+            "bold": { "type": "boolean" },
+            "italic": { "type": "boolean" },
+            "underline": {
+              "type": ["boolean", "string", "null"]
+            },
+            "color": { "$ref": "#/$defs/cellColor" }
+          }
+        },
+        "fill": {
+          "type": ["object", "null"],
+          "additionalProperties": false,
+          "properties": {
+            "pattern": { "type": "string", "minLength": 1 },
+            "fg": { "$ref": "#/$defs/cellColor" },
+            "bg": { "$ref": "#/$defs/cellColor" }
+          }
+        },
+        "border": {
+          "type": ["object", "null"],
+          "additionalProperties": false,
+          "properties": {
+            "style": { "type": "string", "minLength": 1 },
+            "color": { "$ref": "#/$defs/cellColor" },
+            "left": { "$ref": "#/$defs/cellBorderSide" },
+            "right": { "$ref": "#/$defs/cellBorderSide" },
+            "top": { "$ref": "#/$defs/cellBorderSide" },
+            "bottom": { "$ref": "#/$defs/cellBorderSide" }
+          }
+        },
+        "align": {
+          "type": ["object", "null"],
+          "additionalProperties": false,
+          "properties": {
+            "horizontal": { "type": "string", "minLength": 1 },
+            "vertical": { "type": "string", "minLength": 1 },
+            "wrap": { "type": "boolean" }
+          }
+        }
+      },
+      "anyOf": [
+        { "required": ["numFmt"] },
+        { "required": ["font"] },
+        { "required": ["fill"] },
+        { "required": ["border"] },
+        { "required": ["align"] }
       ]
     },
     "setHeaderFooterTextOp": {

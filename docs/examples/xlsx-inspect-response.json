@@ -34,28 +34,32 @@
           "ref": "A1",
           "type": "number",
           "value": 1,
-          "formula": null
+          "formula": null,
+          "numFmt": "General"
         },
         {
           "id": "cell:Sheet1!A2",
           "ref": "A2",
           "type": "text",
           "value": "hello",
-          "formula": null
+          "formula": null,
+          "numFmt": "General"
         },
         {
           "id": "cell:Sheet1!A3",
           "ref": "A3",
           "type": "boolean",
           "value": true,
-          "formula": null
+          "formula": null,
+          "numFmt": "General"
         },
         {
           "id": "cell:Sheet1!B1",
           "ref": "B1",
           "type": "number",
           "value": null,
-          "formula": "=SUM(A1)"
+          "formula": "=SUM(A1)",
+          "numFmt": "General"
         }
       ]
     }

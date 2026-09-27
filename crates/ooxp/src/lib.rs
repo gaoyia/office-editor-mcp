@@ -813,7 +813,7 @@ mod tests {
         );
         assert_eq!(
             object_keys(&tree["sheets"][0]["cells"][0]),
-            ["id", "ref", "type", "value", "formula"]
+            ["id", "ref", "type", "value", "formula", "numFmt"]
         );
 
         let docx = tmp("order.docx");

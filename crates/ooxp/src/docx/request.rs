@@ -1090,6 +1090,7 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<DocxOp>, Error> {
             || op_name == "renameSheet"
             || op_name == "moveSheet"
             || op_name == "setSheetHidden"
+            || op_name == "setCellStyle"
             || op_name == "setPicturePos"
             || op_name == "setChartPos"
             || op_name == "setSmartArtPos"

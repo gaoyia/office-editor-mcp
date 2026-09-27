@@ -554,6 +554,8 @@ define_error_kinds! {
     NeedSetParaStyleStyle => vec![Self::NeedSetParaStyleStyle],
     NeedSetParaFormatField => vec![Self::NeedSetParaFormatField],
     NeedSetRunFormatField => vec![Self::NeedSetRunFormatField],
+    NeedSetCellStyleField => vec![Self::NeedSetCellStyleField],
+    InvalidCellStyle { field: String } => vec![Self::InvalidCellStyle { field: "numFmt".into() }],
     InvalidAlign => vec![Self::InvalidAlign],
     InvalidLineRule => vec![Self::InvalidLineRule],
     InvalidUnderline => vec![Self::InvalidUnderline],
@@ -912,6 +914,8 @@ impl ErrorKind {
             | Self::NeedSetParaStyleStyle
             | Self::NeedSetParaFormatField
             | Self::NeedSetRunFormatField
+            | Self::NeedSetCellStyleField
+            | Self::InvalidCellStyle { .. }
             | Self::InvalidAlign
             | Self::InvalidLineRule
             | Self::InvalidUnderline

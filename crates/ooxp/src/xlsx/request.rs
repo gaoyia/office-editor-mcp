@@ -157,6 +157,79 @@ pub struct SetCellOp {
     pub formula: Option<String>,
 }
 
+/// 省略 / `null` / 有值。`null` 表示把该分量重置为默认。
+#[derive(Debug, Clone)]
+pub enum Patch<T> {
+    Absent,
+    Clear,
+    Set(T),
+}
+
+impl<T> Patch<T> {
+    fn is_absent(&self) -> bool {
+        matches!(self, Self::Absent)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ColorSpec {
+    pub rgb: Option<String>,
+    pub theme: Option<u32>,
+    pub indexed: Option<u32>,
+    pub tint: Option<f64>,
+}
+
+#[derive(Debug, Clone)]
+pub struct FontPatch {
+    pub name: Option<String>,
+    pub sz: Option<f64>,
+    pub bold: Option<bool>,
+    pub italic: Option<bool>,
+    /// `None` 省略；`Some(None)` 去掉下划线；`Some(Some(v))` 写入。
+    pub underline: Option<Option<String>>,
+    pub color: Option<ColorSpec>,
+}
+
+#[derive(Debug, Clone)]
+pub struct FillPatch {
+    pub pattern: Option<String>,
+    pub fg: Option<ColorSpec>,
+    pub bg: Option<ColorSpec>,
+}
+
+#[derive(Debug, Clone)]
+pub struct BorderSidePatch {
+    pub style: Option<String>,
+    pub color: Option<ColorSpec>,
+}
+
+#[derive(Debug, Clone)]
+pub struct BorderPatch {
+    pub style: Option<String>,
+    pub color: Option<ColorSpec>,
+    pub left: Option<BorderSidePatch>,
+    pub right: Option<BorderSidePatch>,
+    pub top: Option<BorderSidePatch>,
+    pub bottom: Option<BorderSidePatch>,
+}
+
+#[derive(Debug, Clone)]
+pub struct AlignPatch {
+    pub horizontal: Option<String>,
+    pub vertical: Option<String>,
+    pub wrap: Option<bool>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetCellStyleOp {
+    pub id: String,
+    pub num_fmt: Patch<String>,
+    pub font: Patch<FontPatch>,
+    pub fill: Patch<FillPatch>,
+    pub border: Patch<BorderPatch>,
+    pub align: Patch<AlignPatch>,
+}
+
 #[derive(Debug, Clone)]
 pub struct SetHeaderFooterTextOp {
     #[allow(dead_code)]
@@ -444,6 +517,7 @@ pub struct SetChartSeriesAxisOp {
 #[derive(Debug, Clone)]
 pub enum XlsxOp {
     SetCell(SetCellOp),
+    SetCellStyle(Box<SetCellStyleOp>),
     SetHeaderFooterText(SetHeaderFooterTextOp),
     ReplacePicture(ReplacePictureOp),
     InsertPicture(InsertPictureOp),
@@ -586,6 +660,7 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<XlsxOp>, Error> {
         })?;
         let parsed = match op_name {
             "setCell" => XlsxOp::SetCell(parse_set_cell(obj, i)?),
+            "setCellStyle" => XlsxOp::SetCellStyle(Box::new(parse_set_cell_style(obj, i)?)),
             "setHeaderFooterText" => XlsxOp::SetHeaderFooterText(parse_set_hf_text(obj, i)?),
             "replacePicture" => XlsxOp::ReplacePicture(parse_replace_pic(obj, i)?),
             "insertPicture" => XlsxOp::InsertPicture(parse_insert_pic(obj, i)?),
@@ -792,6 +867,507 @@ fn parse_set_cell(obj: &serde_json::Map<String, Value>, i: usize) -> Result<SetC
     };
     Ok(SetCellOp { id, value, formula })
 }
+
+fn parse_set_cell_style(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<SetCellStyleOp, Error> {
+    deny_keys(
+        obj,
+        i,
+        &["op", "id", "numFmt", "font", "fill", "border", "align"],
+    )?;
+    let id = require_id(obj, i)?;
+    let num_fmt = parse_patch_string(obj, i, "numFmt")?;
+    let font = parse_patch_object(obj, i, "font", parse_font_patch)?;
+    let fill = parse_patch_object(obj, i, "fill", parse_fill_patch)?;
+    let border = parse_patch_object(obj, i, "border", parse_border_patch)?;
+    let align = parse_patch_object(obj, i, "align", parse_align_patch)?;
+    if num_fmt.is_absent()
+        && font.is_absent()
+        && fill.is_absent()
+        && border.is_absent()
+        && align.is_absent()
+    {
+        return Err(Error::with_path(
+            ErrorKind::NeedSetCellStyleField,
+            format!("ops[{i}]"),
+        ));
+    }
+    Ok(SetCellStyleOp {
+        id,
+        num_fmt,
+        font,
+        fill,
+        border,
+        align,
+    })
+}
+
+fn parse_patch_string(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+    field: &str,
+) -> Result<Patch<String>, Error> {
+    match obj.get(field) {
+        None => Ok(Patch::Absent),
+        Some(Value::Null) => Ok(Patch::Clear),
+        Some(Value::String(s)) if !s.is_empty() => Ok(Patch::Set(s.clone())),
+        Some(Value::String(_)) => Err(Error::with_path(
+            ErrorKind::InvalidCellStyle {
+                field: field.into(),
+            },
+            format!("ops[{i}].{field}"),
+        )),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::String,
+            },
+            format!("ops[{i}].{field}"),
+        )),
+    }
+}
+
+fn parse_patch_object<T>(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+    field: &str,
+    parse: impl Fn(&serde_json::Map<String, Value>, usize, &str) -> Result<T, Error>,
+) -> Result<Patch<T>, Error> {
+    match obj.get(field) {
+        None => Ok(Patch::Absent),
+        Some(Value::Null) => Ok(Patch::Clear),
+        Some(Value::Object(m)) => Ok(Patch::Set(parse(m, i, field)?)),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::Object,
+            },
+            format!("ops[{i}].{field}"),
+        )),
+    }
+}
+
+fn deny_sub_keys(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+    prefix: &str,
+    allowed: &[&str],
+) -> Result<(), Error> {
+    for k in obj.keys() {
+        if !allowed.contains(&k.as_str()) {
+            return Err(Error::with_path(
+                ErrorKind::UnknownField { field: k.clone() },
+                format!("ops[{i}].{prefix}.{k}"),
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn parse_font_patch(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+    prefix: &str,
+) -> Result<FontPatch, Error> {
+    deny_sub_keys(
+        obj,
+        i,
+        prefix,
+        &["name", "sz", "bold", "italic", "underline", "color"],
+    )?;
+    let name = match obj.get("name") {
+        None => None,
+        Some(Value::String(s)) if !s.is_empty() => Some(s.clone()),
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::InvalidCellStyle {
+                    field: "name".into(),
+                },
+                format!("ops[{i}].{prefix}.name"),
+            ));
+        }
+    };
+    let sz = match obj.get("sz") {
+        None => None,
+        Some(Value::Number(n)) => {
+            let v = n.as_f64().unwrap_or(f64::NAN);
+            if !v.is_finite() || v <= 0.0 || v > 409.0 {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidCellStyle { field: "sz".into() },
+                    format!("ops[{i}].{prefix}.sz"),
+                ));
+            }
+            Some(v)
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "sz".into(),
+                    expected: TypeName::Integer,
+                },
+                format!("ops[{i}].{prefix}.sz"),
+            ));
+        }
+    };
+    let bold = parse_sub_bool(obj, i, prefix, "bold")?;
+    let italic = parse_sub_bool(obj, i, prefix, "italic")?;
+    let underline = match obj.get("underline") {
+        None => None,
+        Some(Value::Null) | Some(Value::Bool(false)) => Some(None),
+        Some(Value::Bool(true)) => Some(Some("single".into())),
+        Some(Value::String(s)) => {
+            if matches!(
+                s.as_str(),
+                "single" | "double" | "singleAccounting" | "doubleAccounting" | "none"
+            ) {
+                if s == "none" {
+                    Some(None)
+                } else {
+                    Some(Some(s.clone()))
+                }
+            } else {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidCellStyle {
+                        field: "underline".into(),
+                    },
+                    format!("ops[{i}].{prefix}.underline"),
+                ));
+            }
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::InvalidCellStyle {
+                    field: "underline".into(),
+                },
+                format!("ops[{i}].{prefix}.underline"),
+            ));
+        }
+    };
+    let color = parse_opt_color(obj, i, prefix, "color")?;
+    Ok(FontPatch {
+        name,
+        sz,
+        bold,
+        italic,
+        underline,
+        color,
+    })
+}
+
+fn parse_fill_patch(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+    prefix: &str,
+) -> Result<FillPatch, Error> {
+    deny_sub_keys(obj, i, prefix, &["pattern", "fg", "bg"])?;
+    let pattern = match obj.get("pattern") {
+        None => None,
+        Some(Value::String(s)) => {
+            if s == "gradient" || !PATTERN_TYPES.contains(&s.as_str()) {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidCellStyle {
+                        field: "pattern".into(),
+                    },
+                    format!("ops[{i}].{prefix}.pattern"),
+                ));
+            }
+            Some(s.clone())
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::InvalidCellStyle {
+                    field: "pattern".into(),
+                },
+                format!("ops[{i}].{prefix}.pattern"),
+            ));
+        }
+    };
+    Ok(FillPatch {
+        pattern,
+        fg: parse_opt_color(obj, i, prefix, "fg")?,
+        bg: parse_opt_color(obj, i, prefix, "bg")?,
+    })
+}
+
+fn parse_border_patch(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+    prefix: &str,
+) -> Result<BorderPatch, Error> {
+    deny_sub_keys(
+        obj,
+        i,
+        prefix,
+        &["style", "color", "left", "right", "top", "bottom"],
+    )?;
+    Ok(BorderPatch {
+        style: parse_opt_border_style(obj, i, prefix, "style")?,
+        color: parse_opt_color(obj, i, prefix, "color")?,
+        left: parse_opt_border_side(obj, i, prefix, "left")?,
+        right: parse_opt_border_side(obj, i, prefix, "right")?,
+        top: parse_opt_border_side(obj, i, prefix, "top")?,
+        bottom: parse_opt_border_side(obj, i, prefix, "bottom")?,
+    })
+}
+
+fn parse_opt_border_side(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+    prefix: &str,
+    field: &str,
+) -> Result<Option<BorderSidePatch>, Error> {
+    let path = format!("{prefix}.{field}");
+    match obj.get(field) {
+        None => Ok(None),
+        Some(Value::Object(m)) => {
+            deny_sub_keys(m, i, &path, &["style", "color"])?;
+            Ok(Some(BorderSidePatch {
+                style: parse_opt_border_style(m, i, &path, "style")?,
+                color: parse_opt_color(m, i, &path, "color")?,
+            }))
+        }
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::Object,
+            },
+            format!("ops[{i}].{path}"),
+        )),
+    }
+}
+
+fn parse_opt_border_style(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+    prefix: &str,
+    field: &str,
+) -> Result<Option<String>, Error> {
+    match obj.get(field) {
+        None => Ok(None),
+        Some(Value::String(s)) if BORDER_STYLES.contains(&s.as_str()) => Ok(Some(s.clone())),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::InvalidCellStyle {
+                field: "style".into(),
+            },
+            format!("ops[{i}].{prefix}.{field}"),
+        )),
+    }
+}
+
+fn parse_align_patch(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+    prefix: &str,
+) -> Result<AlignPatch, Error> {
+    deny_sub_keys(obj, i, prefix, &["horizontal", "vertical", "wrap"])?;
+    let horizontal = match obj.get("horizontal") {
+        None => None,
+        Some(Value::String(s)) if H_ALIGN.contains(&s.as_str()) => Some(s.clone()),
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::InvalidCellStyle {
+                    field: "horizontal".into(),
+                },
+                format!("ops[{i}].{prefix}.horizontal"),
+            ));
+        }
+    };
+    let vertical = match obj.get("vertical") {
+        None => None,
+        Some(Value::String(s)) if V_ALIGN.contains(&s.as_str()) => Some(s.clone()),
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::InvalidCellStyle {
+                    field: "vertical".into(),
+                },
+                format!("ops[{i}].{prefix}.vertical"),
+            ));
+        }
+    };
+    Ok(AlignPatch {
+        horizontal,
+        vertical,
+        wrap: parse_sub_bool(obj, i, prefix, "wrap")?,
+    })
+}
+
+fn parse_sub_bool(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+    prefix: &str,
+    field: &str,
+) -> Result<Option<bool>, Error> {
+    match obj.get(field) {
+        None => Ok(None),
+        Some(Value::Bool(b)) => Ok(Some(*b)),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::Boolean,
+            },
+            format!("ops[{i}].{prefix}.{field}"),
+        )),
+    }
+}
+
+fn parse_opt_color(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+    prefix: &str,
+    field: &str,
+) -> Result<Option<ColorSpec>, Error> {
+    let path = format!("{prefix}.{field}");
+    match obj.get(field) {
+        None => Ok(None),
+        Some(Value::Object(m)) => Ok(Some(parse_color_spec(m, i, &path)?)),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::Object,
+            },
+            format!("ops[{i}].{path}"),
+        )),
+    }
+}
+
+fn parse_color_spec(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+    prefix: &str,
+) -> Result<ColorSpec, Error> {
+    deny_sub_keys(obj, i, prefix, &["rgb", "theme", "indexed", "tint"])?;
+    let rgb = match obj.get("rgb") {
+        None => None,
+        Some(Value::String(s)) if is_cell_rgb(s) => Some(s.to_ascii_uppercase()),
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::InvalidCellStyle {
+                    field: "color".into(),
+                },
+                format!("ops[{i}].{prefix}.rgb"),
+            ));
+        }
+    };
+    let theme = parse_opt_u32_field(obj, i, prefix, "theme")?;
+    let indexed = parse_opt_u32_field(obj, i, prefix, "indexed")?;
+    let tint = match obj.get("tint") {
+        None => None,
+        Some(Value::Number(n)) => n.as_f64(),
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::InvalidCellStyle {
+                    field: "tint".into(),
+                },
+                format!("ops[{i}].{prefix}.tint"),
+            ));
+        }
+    };
+    let kinds = [rgb.is_some(), theme.is_some(), indexed.is_some()]
+        .into_iter()
+        .filter(|b| *b)
+        .count();
+    if kinds != 1 || (tint.is_some() && theme.is_none()) {
+        return Err(Error::with_path(
+            ErrorKind::InvalidCellStyle {
+                field: "color".into(),
+            },
+            format!("ops[{i}].{prefix}"),
+        ));
+    }
+    Ok(ColorSpec {
+        rgb,
+        theme,
+        indexed,
+        tint,
+    })
+}
+
+fn parse_opt_u32_field(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+    prefix: &str,
+    field: &str,
+) -> Result<Option<u32>, Error> {
+    match obj.get(field) {
+        None => Ok(None),
+        Some(Value::Number(n)) => {
+            if let Some(u) = n.as_u64().filter(|v| *v <= u32::MAX as u64) {
+                Ok(Some(u as u32))
+            } else {
+                Err(Error::with_path(
+                    ErrorKind::InvalidCellStyle {
+                        field: field.into(),
+                    },
+                    format!("ops[{i}].{prefix}.{field}"),
+                ))
+            }
+        }
+        Some(_) => Err(Error::with_path(
+            ErrorKind::InvalidCellStyle {
+                field: field.into(),
+            },
+            format!("ops[{i}].{prefix}.{field}"),
+        )),
+    }
+}
+
+fn is_cell_rgb(s: &str) -> bool {
+    (s.len() == 6 || s.len() == 8) && s.chars().all(|c| c.is_ascii_hexdigit())
+}
+
+const PATTERN_TYPES: &[&str] = &[
+    "none",
+    "solid",
+    "mediumGray",
+    "darkGray",
+    "lightGray",
+    "darkHorizontal",
+    "darkVertical",
+    "darkDown",
+    "darkUp",
+    "darkGrid",
+    "darkTrellis",
+    "lightHorizontal",
+    "lightVertical",
+    "lightDown",
+    "lightUp",
+    "lightGrid",
+    "lightTrellis",
+    "gray125",
+    "gray0625",
+];
+
+const BORDER_STYLES: &[&str] = &[
+    "none",
+    "thin",
+    "medium",
+    "dashed",
+    "dotted",
+    "thick",
+    "double",
+    "hair",
+    "mediumDashed",
+    "dashDot",
+    "mediumDashDot",
+    "dashDotDot",
+    "mediumDashDotDot",
+    "slantDashDot",
+];
+
+const H_ALIGN: &[&str] = &[
+    "general",
+    "left",
+    "center",
+    "right",
+    "fill",
+    "justify",
+    "centerContinuous",
+    "distributed",
+];
+
+const V_ALIGN: &[&str] = &["top", "center", "bottom", "justify", "distributed"];
 
 fn parse_set_hf_text(
     obj: &serde_json::Map<String, Value>,

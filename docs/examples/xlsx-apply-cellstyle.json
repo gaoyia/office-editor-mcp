@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "C:\\data\\book.xlsx",
+  "output": "C:\\data\\book.style.xlsx",
+  "ops": [
+    { "op": "setCell", "id": "cell:Sheet1!A1", "value": 1.2 },
+    {
+      "op": "setCellStyle",
+      "id": "cell:Sheet1!A1",
+      "numFmt": "0.00",
+      "fill": { "pattern": "solid", "fg": { "rgb": "FFFFFF00" } }
+    }
+  ]
+}

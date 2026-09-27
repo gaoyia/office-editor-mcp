@@ -772,6 +772,12 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             "setRunFormat requires at least one of bold, italic, underline, sz, color, font, or eastAsiaFont"
                 .into()
         }
+        ErrorKind::NeedSetCellStyleField => {
+            "setCellStyle requires at least one of numFmt, font, fill, border, or align".into()
+        }
+        ErrorKind::InvalidCellStyle { field } => {
+            format!("{field} is not a valid setCellStyle value")
+        }
         ErrorKind::InvalidAlign => {
             "align must be left, center, right, both, distribute, start, or end".into()
         }

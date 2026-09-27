@@ -12,6 +12,7 @@ use super::hf;
 use super::inspect;
 use super::picture;
 use super::sheets;
+use super::style;
 use super::REL_CALC_CHAIN;
 
 pub fn apply(bytes: &[u8], ops: &[XlsxOp]) -> Result<Vec<u8>, Error> {
@@ -23,6 +24,7 @@ pub fn apply(bytes: &[u8], ops: &[XlsxOp]) -> Result<Vec<u8>, Error> {
     let mut sheet_index = sheet_index(&wb_doc.root, &wb_rels, &wb_part)?;
 
     let mut dirty_sheets: Vec<(String, Document)> = Vec::new();
+    let mut styles_doc: Option<(String, Document)> = None;
     let mut touched_cells = false;
     let mut workbook_dirty = false;
 
@@ -57,6 +59,36 @@ pub fn apply(bytes: &[u8], ops: &[XlsxOp]) -> Result<Vec<u8>, Error> {
                 load_dirty(&pkg, &mut dirty_sheets, &part, true)?;
                 let doc = dirty_of(&mut dirty_sheets, &part);
                 apply_set_cell(&mut doc.root, cell, op, i)?;
+            }
+            XlsxOp::SetCellStyle(op) => {
+                let (sheet_name, a1) = parse_cell_id(&op.id, i)?;
+                let meta = sheet_index
+                    .iter()
+                    .find(|(n, _, k)| n.eq_ignore_ascii_case(&sheet_name) && *k == "worksheet")
+                    .ok_or_else(|| {
+                        if sheet_index
+                            .iter()
+                            .any(|(n, _, _)| n.eq_ignore_ascii_case(&sheet_name))
+                        {
+                            Error::with_path(
+                                ErrorKind::SetCellWorksheetOnly,
+                                format!("ops[{i}].id"),
+                            )
+                        } else {
+                            Error::with_path(
+                                ErrorKind::SheetNotFound {
+                                    name: sheet_name.clone(),
+                                },
+                                format!("ops[{i}].id"),
+                            )
+                        }
+                    })?;
+                let part = meta.1.clone();
+                let cell = a1::parse_cell(&a1)?;
+                load_dirty(&pkg, &mut dirty_sheets, &part, true)?;
+                let styles_root = style::ensure_styles(&mut pkg, &wb_part, &mut styles_doc)?;
+                let doc = dirty_of(&mut dirty_sheets, &part);
+                style::apply_set_cell_style(&mut doc.root, styles_root, cell, op, i)?;
             }
             XlsxOp::SetHeaderFooterText(op) => {
                 let (part, _kind) = require_named_sheet(&sheet_index, &op.sheet, i)?;
@@ -274,6 +306,9 @@ pub fn apply(bytes: &[u8], ops: &[XlsxOp]) -> Result<Vec<u8>, Error> {
     }
 
     for (part, doc) in dirty_sheets {
+        pkg.set(&part, doc.to_bytes()?)?;
+    }
+    if let Some((part, doc)) = styles_doc {
         pkg.set(&part, doc.to_bytes()?)?;
     }
 
@@ -564,14 +599,14 @@ fn has_shared_dependents(sheet_data: &Element, si: &str, master: a1::CellRef) ->
     false
 }
 
-fn ensure_sheet_data(worksheet: &mut Element) -> &mut Element {
+pub(crate) fn ensure_sheet_data(worksheet: &mut Element) -> &mut Element {
     if worksheet.child_by_local("sheetData").is_none() {
         worksheet.push_element(Element::new("sheetData"));
     }
     worksheet.child_by_local_mut("sheetData").unwrap()
 }
 
-fn ensure_cell(sheet_data: &mut Element, cell: a1::CellRef) -> &mut Element {
+pub(crate) fn ensure_cell(sheet_data: &mut Element, cell: a1::CellRef) -> &mut Element {
     let row_pos = find_row_insert_pos(sheet_data, cell.row);
     if row_pos.1 {
         // 已有该行，row_pos.0 是索引
@@ -730,7 +765,7 @@ fn number_xml(n: &serde_json::Number) -> String {
     n.to_string()
 }
 
-fn expand_dimension(worksheet: &mut Element, cell: a1::CellRef) {
+pub(crate) fn expand_dimension(worksheet: &mut Element, cell: a1::CellRef) {
     let Some(dim) = worksheet.child_by_local_mut("dimension") else {
         return;
     };

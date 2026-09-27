@@ -11,6 +11,7 @@ use super::a1;
 use super::chart;
 use super::hf;
 use super::picture;
+use super::style;
 use super::{REL_CHARTSHEET, REL_DIALOGSHEET, REL_SHARED_STRINGS};
 
 /// 按 workbook 关系 Type 判定表种类。`/macrosheet` 与 `/xlMacrosheet` 都算宏表。
@@ -49,6 +50,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
 
     let sheets = list_sheets(&wb.root, &rels, &wb_part, &pkg)?;
     let sst = load_shared_strings(&pkg, &wb_part, &rels)?;
+    let styles = style::load_for_inspect(&pkg, &wb_part, &rels)?;
     let want_pictures = scope.as_ref().is_some_and(|s| s.pictures);
     let want_charts = scope.as_ref().is_some_and(|s| s.charts);
     let want_header_footer = scope.as_ref().is_some_and(|s| s.header_footer);
@@ -102,7 +104,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
             if let Some(cs) = cells_scope {
                 if sh.name.eq_ignore_ascii_case(&cs.sheet) {
                     let (cells, truncated, range) =
-                        inspect_cells(&pkg, &sh.part, &sh.name, cs, &sst)?;
+                        inspect_cells(&pkg, &sh.part, &sh.name, cs, &sst, &styles)?;
                     obj.insert("truncated".into(), json!(truncated));
                     obj.insert("range".into(), json!(range));
                     obj.insert("cells".into(), Value::Array(cells));
@@ -276,6 +278,7 @@ fn inspect_cells(
     sheet_name: &str,
     scope: &CellScope,
     sst: &[String],
+    styles: &style::Stylebook,
 ) -> Result<(Vec<Value>, bool, String), Error> {
     let (start, end) = a1::parse_range(&scope.range)?;
     let range_norm = format!(
@@ -305,13 +308,18 @@ fn inspect_cells(
                 truncated = true;
                 break 'rows;
             }
-            cells.push(cell_to_json(c, sheet_name, sst)?);
+            cells.push(cell_to_json(c, sheet_name, sst, styles)?);
         }
     }
     Ok((cells, truncated, range_norm))
 }
 
-fn cell_to_json(c: &Element, sheet_name: &str, sst: &[String]) -> Result<Value, Error> {
+fn cell_to_json(
+    c: &Element,
+    sheet_name: &str,
+    sst: &[String],
+    styles: &style::Stylebook,
+) -> Result<Value, Error> {
     let raw_ref = c.attr("r").unwrap_or("");
     let pref = a1::parse_cell(raw_ref)?;
     let refer = a1::format_cell(pref.col, pref.row);
@@ -359,6 +367,7 @@ fn cell_to_json(c: &Element, sheet_name: &str, sst: &[String]) -> Result<Value, 
         "value": value,
         "formula": formula,
     });
+    style::attach_style(&mut obj, c, styles);
     if shared && formula.is_null() {
         obj["shared"] = json!(true);
     }

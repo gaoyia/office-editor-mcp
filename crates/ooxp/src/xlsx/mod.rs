@@ -10,6 +10,7 @@ mod inspect;
 mod picture;
 mod request;
 mod sheets;
+mod style;
 
 pub use apply::apply;
 pub use create::create;
