@@ -36,6 +36,8 @@ pub struct InspectScope {
     pub charts: bool,
     /// 为 true 时列出 SmartArt。
     pub smart_art: bool,
+    /// 为 true 时列出嵌入对象。
+    pub ole_objects: bool,
     /// 为 true 时列出表格。
     pub tables: bool,
     /// 为 true 时列出修订痕迹。
@@ -818,6 +820,8 @@ pub enum DocxOp {
     SetSmartArtColors(super::smartart::SetSmartArtColorsOp),
     SetSmartArtStyle(super::smartart::SetSmartArtStyleOp),
     SetSmartArtLayout(super::smartart::SetSmartArtLayoutOp),
+    InsertOle(super::ole::InsertOleOp),
+    DeleteOle(super::ole::DeleteOleOp),
     SetProps(crate::props::SetPropsOp),
     SetCustomProp(crate::props::SetCustomPropOp),
     DeleteCustomProp(crate::props::DeleteCustomPropOp),
@@ -852,6 +856,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
             "comments",
             "charts",
             "smartArt",
+            "oleObjects",
             "tables",
             "revisions",
             "hyperlinks",
@@ -874,6 +879,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
     let comments = parse_bool_field(obj.get("comments"), "comments")?;
     let charts = parse_bool_field(obj.get("charts"), "charts")?;
     let smart_art = parse_bool_field(obj.get("smartArt"), "smartArt")?;
+    let ole_objects = parse_bool_field(obj.get("oleObjects"), "oleObjects")?;
     let tables = parse_bool_field(obj.get("tables"), "tables")?;
     let revisions = parse_bool_field(obj.get("revisions"), "revisions")?;
     let hyperlinks = parse_bool_field(obj.get("hyperlinks"), "hyperlinks")?;
@@ -906,6 +912,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
                 && !obj.contains_key("comments")
                 && !obj.contains_key("charts")
                 && !obj.contains_key("smartArt")
+                && !obj.contains_key("oleObjects")
                 && !obj.contains_key("tables")
                 && !obj.contains_key("revisions")
                 && !obj.contains_key("hyperlinks")
@@ -931,6 +938,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
                 comments,
                 charts,
                 smart_art,
+                ole_objects,
                 tables,
                 revisions,
                 hyperlinks,
@@ -993,6 +1001,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
                 comments,
                 charts,
                 smart_art,
+                ole_objects,
                 tables,
                 revisions,
                 hyperlinks,
@@ -1231,6 +1240,8 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<DocxOp>, Error> {
             "setSmartArtLayout" => out.push(DocxOp::SetSmartArtLayout(parse_set_smartart_layout(
                 obj, i,
             )?)),
+            "insertOle" => out.push(DocxOp::InsertOle(parse_insert_ole(obj, i)?)),
+            "deleteOle" => out.push(DocxOp::DeleteOle(parse_delete_ole(obj, i)?)),
             "setProps" => out.push(DocxOp::SetProps(crate::props::parse_set_props(
                 obj,
                 i,
@@ -5312,6 +5323,27 @@ fn parse_delete_chart(
     let id = require_id(obj, i)?;
     let target = charts::parse_chart_id(&id, i)?;
     Ok(charts::DeleteChartOp { id, target })
+}
+
+fn parse_insert_ole(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<super::ole::InsertOleOp, Error> {
+    deny_keys(obj, i, &["op", "id", "file"])?;
+    let id = require_id(obj, i)?;
+    let para = super::ole::parse_insert_para_id(&id, i)?;
+    let file = require_file(obj, i, "insertOle")?;
+    Ok(super::ole::InsertOleOp { id, para, file })
+}
+
+fn parse_delete_ole(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<super::ole::DeleteOleOp, Error> {
+    deny_keys(obj, i, &["op", "id"])?;
+    let id = require_id(obj, i)?;
+    let target = super::ole::parse_ole_id(&id, i)?;
+    Ok(super::ole::DeleteOleOp { id, target })
 }
 
 fn parse_set_chart_title(

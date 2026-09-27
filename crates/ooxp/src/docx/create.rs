@@ -13,6 +13,7 @@ use crate::xml::{self, Element, Node};
 use super::apply;
 use super::charts::{self, ChartType, InsertChartOp, NewSeries};
 use super::hf::{HfKind, HfType};
+use super::ole::InsertOleOp;
 use super::para;
 use super::picture::{self, PicKind, WrapKind, WrapPos};
 use super::request::{DocxOp, InsertCommentOp, InsertNoteOp};
@@ -65,6 +66,7 @@ struct NewPara {
     pictures: Vec<NewPic>,
     smart_arts: Vec<InsertSpec>,
     charts: Vec<CreateChart>,
+    ole_objects: Vec<String>,
     footnote: Option<String>,
     endnote: Option<String>,
     comments: Vec<NewComment>,
@@ -80,6 +82,7 @@ impl NewPara {
             pictures: Vec::new(),
             smart_arts: Vec::new(),
             charts: Vec::new(),
+            ole_objects: Vec::new(),
             footnote: None,
             endnote: None,
             comments: Vec::new(),
@@ -97,6 +100,7 @@ impl NewPara {
 
     fn has_follow_ups(&self) -> bool {
         !self.charts.is_empty()
+            || !self.ole_objects.is_empty()
             || self.footnote.is_some()
             || self.endnote.is_some()
             || !self.comments.is_empty()
@@ -436,6 +440,7 @@ fn parse_para(v: &Value, path: &str, kind: ParaKind, i: usize) -> Result<NewPara
             "pictures",
             "smartArts",
             "charts",
+            "oleObjects",
             "footnote",
             "endnote",
             "comments",
@@ -447,6 +452,7 @@ fn parse_para(v: &Value, path: &str, kind: ParaKind, i: usize) -> Result<NewPara
             "pictures",
             "smartArts",
             "charts",
+            "oleObjects",
             "footnote",
             "endnote",
             "comments",
@@ -497,6 +503,7 @@ fn parse_para(v: &Value, path: &str, kind: ParaKind, i: usize) -> Result<NewPara
     let pictures = parse_pictures(obj.get("pictures"), path)?;
     let smart_arts = parse_smartarts(obj.get("smartArts"), path)?;
     let charts = parse_charts(obj.get("charts"), path)?;
+    let ole_objects = parse_ole_objects(obj.get("oleObjects"), path)?;
     let footnote = parse_optional_str(obj.get("footnote"), path, "footnote")?;
     let endnote = parse_optional_str(obj.get("endnote"), path, "endnote")?;
     let comments = parse_comments(obj.get("comments"), path)?;
@@ -511,6 +518,7 @@ fn parse_para(v: &Value, path: &str, kind: ParaKind, i: usize) -> Result<NewPara
         pictures,
         smart_arts,
         charts,
+        ole_objects,
         footnote,
         endnote,
         comments,
@@ -1284,6 +1292,65 @@ fn parse_comment_attr(v: Option<&Value>, path: &str, field: &str) -> Result<Opti
     }
 }
 
+fn parse_ole_objects(v: Option<&Value>, prefix: &str) -> Result<Vec<String>, Error> {
+    let Some(v) = v else {
+        return Ok(Vec::new());
+    };
+    let path = format!("{prefix}.oleObjects");
+    let arr = v.as_array().ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::WrongType {
+                field: "oleObjects".into(),
+                expected: TypeName::Array,
+            },
+            path.clone(),
+        )
+    })?;
+    let mut out = Vec::new();
+    for (j, item) in arr.iter().enumerate() {
+        let item_path = format!("{path}[{j}]");
+        let obj = item.as_object().ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::WrongType {
+                    field: item_path.clone(),
+                    expected: TypeName::Object,
+                },
+                item_path.clone(),
+            )
+        })?;
+        for k in obj.keys() {
+            if k.as_str() != "file" {
+                return Err(Error::with_path(
+                    ErrorKind::UnknownField { field: k.clone() },
+                    format!("{item_path}.{k}"),
+                ));
+            }
+        }
+        let file = match obj.get("file") {
+            Some(Value::String(s)) if !s.is_empty() => s.clone(),
+            Some(Value::String(_)) | None => {
+                return Err(Error::with_path(
+                    ErrorKind::MissingField {
+                        field: "file".into(),
+                    },
+                    format!("{item_path}.file"),
+                ));
+            }
+            Some(_) => {
+                return Err(Error::with_path(
+                    ErrorKind::WrongType {
+                        field: "file".into(),
+                        expected: TypeName::NonEmptyString,
+                    },
+                    format!("{item_path}.file"),
+                ));
+            }
+        };
+        out.push(file);
+    }
+    Ok(out)
+}
+
 fn parse_charts(v: Option<&Value>, prefix: &str) -> Result<Vec<CreateChart>, Error> {
     let Some(v) = v else {
         return Ok(Vec::new());
@@ -1631,6 +1698,13 @@ fn push_story_ops(
                 pos: WrapPos::default(),
                 cx: ch.cx,
                 cy: ch.cy,
+            }));
+        }
+        for file in &p.ole_objects {
+            ops.push(DocxOp::InsertOle(InsertOleOp {
+                id: id.clone(),
+                para: host.clone(),
+                file: file.clone(),
             }));
         }
         if let Some(text) = &p.footnote {

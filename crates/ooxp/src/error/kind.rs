@@ -142,6 +142,14 @@ pub(crate) enum IdReason {
     SlideSmartArtContainer,
     /// pptx 的 insertSmartArt 必须用 slide:N
     InsertSmartArtNeedsSlide,
+    /// OLE id 必须是 {段落}/ole:…
+    OlePrefix,
+    /// 段落 id，缺少 /ole:…
+    OleContainer,
+    OleIndexNotInt,
+    OleIndexFromOne,
+    /// insertOle 必须用正文或页眉页脚段落 id
+    InsertOleNeedsPara,
     /// setEvenAndOddHeaders 必须用 docx:document
     EvenOddNeedsDocument,
     /// setMirrorMargins / setGutterAtTop 必须用 docx:document
@@ -424,6 +432,7 @@ define_error_kinds! {
     SmartArtPointParent => vec![Self::SmartArtPointParent],
     SmartArtAsstOnList => vec![Self::SmartArtAsstOnList],
     SmartArtListDepth => vec![Self::SmartArtListDepth],
+    OleNotFound { id: String } => vec![Self::OleNotFound { id: "para:1/ole:_1".into() }],
     TextBoxLinkCrossPart => vec![Self::TextBoxLinkCrossPart],
     InvalidHexColor => vec![Self::InvalidHexColor],
     InvalidTextBoxDirection => vec![Self::InvalidTextBoxDirection],
@@ -630,6 +639,11 @@ impl IdReason {
             Self::SlideSmartArtPrefix,
             Self::SlideSmartArtContainer,
             Self::InsertSmartArtNeedsSlide,
+            Self::OlePrefix,
+            Self::OleContainer,
+            Self::OleIndexNotInt,
+            Self::OleIndexFromOne,
+            Self::InsertOleNeedsPara,
             Self::EvenOddNeedsDocument,
             Self::SettingsNeedDocument,
             Self::TablePrefix,
@@ -890,6 +904,7 @@ impl ErrorKind {
             | Self::ChartSeriesNotFound { .. }
             | Self::SmartArtNotFound { .. }
             | Self::SmartArtPointNotFound { .. }
+            | Self::OleNotFound { .. }
             | Self::TableNotFound { .. }
             | Self::RevisionNotFound { .. }
             | Self::HyperlinkNotFound { .. }

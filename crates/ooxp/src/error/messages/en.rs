@@ -220,6 +220,19 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::InsertSmartArtNeedsSlide => {
                 "pptx insertSmartArt id must be slide:N".into()
             }
+            IdReason::OlePrefix => {
+                "OLE id must be a paragraph id plus /ole:…".into()
+            }
+            IdReason::OleContainer => {
+                "Paragraph id must include /ole:… (that id alone is not an embedded object)".into()
+            }
+            IdReason::OleIndexNotInt => {
+                "ole:index must be followed by a positive integer".into()
+            }
+            IdReason::OleIndexFromOne => "ole:index starts at 1".into(),
+            IdReason::InsertOleNeedsPara => {
+                "insertOle id must be a body or header/footer paragraph id".into()
+            }
             IdReason::EvenOddNeedsDocument => {
                 "setEvenAndOddHeaders id must be docx:document".into()
             }
@@ -434,6 +447,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             "addChartSeries with omitted categories needs an existing series to copy from".into()
         }
         ErrorKind::SmartArtNotFound { id } => format!("SmartArt not found: {id}"),
+        ErrorKind::OleNotFound { id } => format!("Embedded object not found: {id}"),
         ErrorKind::SmartArtPointNotFound { id } => format!("SmartArt point not found: {id}"),
         ErrorKind::LastSmartArtPoint => {
             "Cannot delete the last visible SmartArt point; use deleteSmartArt to remove the diagram".into()

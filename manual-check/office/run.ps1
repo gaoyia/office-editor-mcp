@@ -65,6 +65,7 @@ $order = @(
     'docx-smartart'
     'docx-container-drawing'
     'docx-docprops'
+    'docx-ole'
     'xlsx-docprops'
     'pptx-docprops'
     'pptx-apply'

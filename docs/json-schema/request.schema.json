@@ -77,6 +77,7 @@
         "comments": { "type": "boolean" },
         "charts": { "type": "boolean" },
         "smartArt": { "type": "boolean" },
+        "oleObjects": { "type": "boolean" },
         "tables": { "type": "boolean" },
         "revisions": { "type": "boolean" },
         "hyperlinks": { "type": "boolean" },
@@ -295,6 +296,10 @@
           "type": "array",
           "items": { "$ref": "#/$defs/docxChartCreate" }
         },
+        "oleObjects": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/docxOleCreate" }
+        },
         "footnote": { "type": "string" },
         "endnote": { "type": "string" },
         "comments": {
@@ -331,12 +336,24 @@
           "type": "array",
           "items": { "$ref": "#/$defs/docxChartCreate" }
         },
+        "oleObjects": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/docxOleCreate" }
+        },
         "footnote": { "type": "string" },
         "endnote": { "type": "string" },
         "comments": {
           "type": "array",
           "items": { "$ref": "#/$defs/docxCommentCreate" }
         }
+      }
+    },
+    "docxOleCreate": {
+      "type": "object",
+      "required": ["file"],
+      "additionalProperties": false,
+      "properties": {
+        "file": { "type": "string", "minLength": 1 }
       }
     },
     "docxChartCreate": {
@@ -665,6 +682,8 @@
               { "$ref": "#/$defs/setSmartArtColorsOp" },
               { "$ref": "#/$defs/setSmartArtStyleOp" },
               { "$ref": "#/$defs/setSmartArtLayoutOp" },
+              { "$ref": "#/$defs/insertOleOp" },
+              { "$ref": "#/$defs/deleteOleOp" },
               { "$ref": "#/$defs/setNotesTextOp" },
               { "$ref": "#/$defs/setShapeTextOp" },
               { "$ref": "#/$defs/setPropsOp" },
@@ -2072,6 +2091,25 @@
       "additionalProperties": false,
       "properties": {
         "op": { "const": "deleteSmartArt" },
+        "id": { "type": "string", "minLength": 1 }
+      }
+    },
+    "insertOleOp": {
+      "type": "object",
+      "required": ["op", "id", "file"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "insertOle" },
+        "id": { "type": "string", "minLength": 1 },
+        "file": { "type": "string", "minLength": 1 }
+      }
+    },
+    "deleteOleOp": {
+      "type": "object",
+      "required": ["op", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "deleteOle" },
         "id": { "type": "string", "minLength": 1 }
       }
     },

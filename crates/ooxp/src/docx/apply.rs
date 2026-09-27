@@ -15,6 +15,7 @@ use super::link;
 use super::math;
 use super::notes;
 use super::numbering;
+use super::ole;
 use super::para::{self, BodyPara, HostPara, NoteKind, ParaTarget};
 use super::picture;
 use super::request::{
@@ -326,6 +327,12 @@ pub fn apply(bytes: &[u8], ops: &[DocxOp]) -> Result<Vec<u8>, Error> {
                 smartart::apply_layout(
                     &mut pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i,
                 )?;
+            }
+            DocxOp::InsertOle(op) => {
+                ole::apply_insert(&mut pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
+            }
+            DocxOp::DeleteOle(op) => {
+                ole::apply_delete(&mut pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
             }
             DocxOp::SetProps(op) => {
                 crate::props::apply_set_props(&mut pkg, op, i)?;

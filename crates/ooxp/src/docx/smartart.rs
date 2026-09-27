@@ -1218,7 +1218,7 @@ fn para_matches(p: &Element, index: usize, para: &BodyPara) -> bool {
 }
 
 fn find_walk<'a>(el: &'a Element, idx: &mut usize, key: &DiagramKey) -> Option<&'a Element> {
-    if el.local_name() == "txbxContent" {
+    if el.local_name() == "txbxContent" || el.local_name() == "object" {
         return None;
     }
     if el.local_name() == "AlternateContent" {
@@ -1251,7 +1251,7 @@ fn find_walk_mut<'a>(
     idx: &mut usize,
     key: &DiagramKey,
 ) -> Option<&'a mut Element> {
-    if el.local_name() == "txbxContent" {
+    if el.local_name() == "txbxContent" || el.local_name() == "object" {
         return None;
     }
     if el.local_name() == "AlternateContent" {
@@ -1301,7 +1301,7 @@ fn remove_smartart(root: &mut Element, target: &DiagramTarget) -> bool {
 }
 
 fn remove_walk(el: &mut Element, idx: &mut usize, key: &DiagramKey) -> bool {
-    if el.local_name() == "txbxContent" {
+    if el.local_name() == "txbxContent" || el.local_name() == "object" {
         return false;
     }
     let mut i = 0;
@@ -1337,7 +1337,7 @@ fn remove_walk(el: &mut Element, idx: &mut usize, key: &DiagramKey) -> bool {
             i += 1;
             continue;
         }
-        if local == "txbxContent" {
+        if local == "txbxContent" || local == "object" {
             i += 1;
             continue;
         }
@@ -1416,7 +1416,7 @@ fn parse_emu_attr(el: Option<&Element>, local: &str) -> Result<Option<i64>, Erro
 }
 
 fn walk_outside_txbx(el: &Element, f: &mut impl FnMut(&Element)) {
-    if el.local_name() == "txbxContent" {
+    if el.local_name() == "txbxContent" || el.local_name() == "object" {
         return;
     }
     f(el);

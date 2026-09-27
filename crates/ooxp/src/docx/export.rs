@@ -13,6 +13,9 @@ pub struct ExportedMedia {
 }
 
 pub fn export_media(bytes: &[u8], id: &str) -> Result<ExportedMedia, Error> {
+    if id.contains("/ole:") {
+        return super::ole::export_media(bytes, id);
+    }
     let pkg = Package::open_bytes(bytes.to_vec())?;
     let target = picture::parse_pic_id_at(id, "id")?;
     let doc_part = opc::office_document_part(&pkg)?;

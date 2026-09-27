@@ -857,6 +857,7 @@ mod tests {
                 "commentCount",
                 "chartCount",
                 "smartArtCount",
+                "oleObjectCount",
                 "tableCount",
                 "revisionCount",
                 "hyperlinkCount",

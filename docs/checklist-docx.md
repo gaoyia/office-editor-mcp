@@ -471,6 +471,18 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 | Dp4 | 删除 | `deleteCustomProp` 后名单没有该项 |
 | Dp5 | 拒错 id | 对段落 id 发 `setProps` 得 `InvalidId`；一个字段都不给得 `InvalidField`。不强制开 Word |
 
+## 嵌入对象
+
+正文与页眉页脚里的 OLE / 包嵌入。样例由 Word `InlineShapes.AddOLEObject` 另存嵌入 xlsx。手测脚本 `manual-check/office/cases/docx-ole.ps1`。
+
+| 序号 | 检查 | 通过标准 |
+| --- | --- | --- |
+| Ol1 | 名单 | 无 scope 时根上有 `oleObjectCount`、没有 `oleObjects`；`scope.oleObjects` 时正文有一条，`progId` 含 `Excel`，id 形如 `para:…/ole:…` |
+| Ol2 | 导出 | 对该 OLE id 发 `exportMedia`，字节与 ZIP 内 embeddings 部件一致 |
+| Ol3 | 删除 | `deleteOle` 后 `oleObjectCount` 为 0，Word 无修复 |
+| Ol4 | 插入 | 对段落发 `insertOle` 写入本地 xlsx 后 Word 无修复，树上能看见 |
+| Ol5 | 拒错 id | 对段落 id 发 `deleteOle`、对 OLE id 发 `insertOle` 得 `InvalidId`。不强制开 Word |
+
 ## 原样保存（opc 验收）
 
 与 xlsx 清单相同：O1 第一期放弃；零脏写回在 OPC 层验收；O2 按 apply 看未改区域。

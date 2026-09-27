@@ -1617,7 +1617,7 @@ fn find_target_para<'a>(root: &'a Element, target: &ChartTarget) -> Option<&'a E
 }
 
 fn find_chart_walk<'a>(el: &'a Element, idx: &mut usize, key: &ChartKey) -> Option<&'a Element> {
-    if el.local_name() == "txbxContent" {
+    if el.local_name() == "txbxContent" || el.local_name() == "object" {
         return None;
     }
     if el.local_name() == "AlternateContent" {
@@ -1691,7 +1691,7 @@ fn find_chart_mut_walk<'a>(
     idx: &mut usize,
     key: &ChartKey,
 ) -> Option<&'a mut Element> {
-    if el.local_name() == "txbxContent" {
+    if el.local_name() == "txbxContent" || el.local_name() == "object" {
         return None;
     }
     if el.local_name() == "AlternateContent" {
@@ -1732,7 +1732,7 @@ fn remove_chart(root: &mut Element, key: &ChartKey) -> bool {
 }
 
 fn remove_chart_walk(el: &mut Element, idx: &mut usize, key: &ChartKey) -> bool {
-    if el.local_name() == "txbxContent" {
+    if el.local_name() == "txbxContent" || el.local_name() == "object" {
         return false;
     }
     let mut i = 0;
@@ -1768,7 +1768,7 @@ fn remove_chart_walk(el: &mut Element, idx: &mut usize, key: &ChartKey) -> bool 
             i += 1;
             continue;
         }
-        if local == "txbxContent" {
+        if local == "txbxContent" || local == "object" {
             i += 1;
             continue;
         }
@@ -1854,7 +1854,7 @@ fn bool_val(el: Option<&Element>) -> bool {
 }
 
 fn walk_outside_txbx(el: &Element, f: &mut impl FnMut(&Element)) {
-    if el.local_name() == "txbxContent" {
+    if el.local_name() == "txbxContent" || el.local_name() == "object" {
         return;
     }
     f(el);

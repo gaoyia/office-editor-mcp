@@ -199,6 +199,17 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::InsertSmartArtNeedsSlide => {
                 "pptx insertSmartArt 的 id 必须是 slide:N".into()
             }
+            IdReason::OlePrefix => {
+                "OLE id 必须是段落 id 加上 /ole:…".into()
+            }
+            IdReason::OleContainer => {
+                "段落 id 必须带 /ole:…（该 id 本身不是嵌入对象）".into()
+            }
+            IdReason::OleIndexNotInt => "ole:index 后面必须是正整数".into(),
+            IdReason::OleIndexFromOne => "ole:index 从 1 起".into(),
+            IdReason::InsertOleNeedsPara => {
+                "insertOle 的 id 必须是正文或页眉页脚段落 id".into()
+            }
             IdReason::EvenOddNeedsDocument => {
                 "setEvenAndOddHeaders 的 id 必须是 docx:document".into()
             }
@@ -382,6 +393,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             "addChartSeries 省略 categories 时图表里必须已有系列可抄".into()
         }
         ErrorKind::SmartArtNotFound { id } => format!("找不到 SmartArt：{id}"),
+        ErrorKind::OleNotFound { id } => format!("找不到嵌入对象：{id}"),
         ErrorKind::SmartArtPointNotFound { id } => format!("找不到 SmartArt 点：{id}"),
         ErrorKind::LastSmartArtPoint => {
             "不能删光 SmartArt 里的全部可见点，整张去掉请用 deleteSmartArt".into()

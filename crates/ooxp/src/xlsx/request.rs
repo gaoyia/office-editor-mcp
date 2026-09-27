@@ -606,7 +606,9 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<XlsxOp>, Error> {
             | "setSmartArtWrap"
             | "setSmartArtColors"
             | "setSmartArtStyle"
-            | "setSmartArtLayout" => {
+            | "setSmartArtLayout"
+            | "insertOle"
+            | "deleteOle" => {
                 return Err(Error::with_path(
                     ErrorKind::OpNotForFormat {
                         format: "xlsx".into(),

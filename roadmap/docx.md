@@ -56,6 +56,7 @@ xlsx 见 [`roadmap/xlsx.md`](xlsx.md)。pptx 见 [`roadmap/pptx.md`](pptx.md)。
 | 23 | `.plan/2026年-9月-27日-✅-docx-create补齐.md` | 图表、注、批注、多节相关 apply 已过 |
 | 24 | `.plan/2026年-9月-27日-✅-docx-容器内drawing.md` | 文本框、注、批注、图表、SmartArt 已过 |
 | 25 | `.plan/2026年-9月-27日-✅-docx-文档属性.md` | 无 |
+| 26 | `.plan/2026年-9月-27日-✅-docx-OLE.md` | 导出媒体已过 |
 
 页眉改字、距边界、链接前节、图文混排已过，见对应 ✅ 计划。第一期段落改字见总计划。
 
@@ -63,9 +64,8 @@ xlsx 见 [`roadmap/xlsx.md`](xlsx.md)。pptx 见 [`roadmap/pptx.md`](pptx.md)。
 
 | 序 | 计划 | 前置 |
 | --- | --- | --- |
-| 0 | `.plan/2026年-9月-27日-❌-docx-OLE.md` | 导出媒体已过 |
-| 1 | `.plan/2026年-9月-27日-❌-docx-保护.md` | 无 |
-| 2 | `.plan/2026年-9月-27日-❌-docx-水印.md` | 图或文本框已过 |
+| 0 | `.plan/2026年-9月-27日-❌-docx-保护.md` | 无 |
+| 1 | `.plan/2026年-9月-27日-❌-docx-水印.md` | 图或文本框已过 |
 
 0 可并行。
 
@@ -81,4 +81,4 @@ xlsx 见 [`roadmap/xlsx.md`](xlsx.md)。pptx 见 [`roadmap/pptx.md`](pptx.md)。
 
 ## 怎么算 Word 全量做完
 
-已过表保持 ✅，待做 0–2 与 C1–C3 都 ✅，`docs/` 与实现一致，Word 16.0 手测过对应清单。永不做的条目不算欠账。
+已过表保持 ✅，待做 0–1 与 C1–C3 都 ✅，`docs/` 与实现一致，Word 16.0 手测过对应清单。永不做的条目不算欠账。

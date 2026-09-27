@@ -15,6 +15,7 @@ use super::link;
 use super::math;
 use super::notes;
 use super::numbering;
+use super::ole;
 use super::para::{self, NoteKind};
 use super::picture;
 use super::request::InspectScope;
@@ -54,6 +55,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     let expand_txbx_content = scope.as_ref().is_some_and(|s| s.text_box_content);
     let expand_charts = scope.as_ref().is_some_and(|s| s.charts);
     let expand_smartart = scope.as_ref().is_some_and(|s| s.smart_art);
+    let expand_ole = scope.as_ref().is_some_and(|s| s.ole_objects);
     let expand_tables = scope.as_ref().is_some_and(|s| s.tables);
     let expand_revisions = scope.as_ref().is_some_and(|s| s.revisions);
     let expand_hyperlinks = scope.as_ref().is_some_and(|s| s.hyperlinks);
@@ -69,6 +71,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         text_box_content: expand_txbx_content,
         charts: expand_charts,
         smart_art: expand_smartart,
+        ole_objects: expand_ole,
         tables: expand_tables,
         revisions: expand_revisions,
         hyperlinks: expand_hyperlinks,
@@ -89,9 +92,11 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     let comment_count = comments::count(&pkg, &part)?;
     let mut body_chart_count = 0usize;
     let mut body_smartart_count = 0usize;
+    let mut body_ole_count = 0usize;
     for p in &paras {
         body_chart_count += charts::count_charts(p)?;
         body_smartart_count += smartart::count_smartarts(p)?;
+        body_ole_count += ole::count_in(&pkg, &part, p)?;
     }
     let body_table_count = tbl::count_tables(&doc.root);
 
@@ -107,6 +112,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         "commentCount": comment_count,
         "chartCount": body_chart_count,
         "smartArtCount": body_smartart_count,
+        "oleObjectCount": body_ole_count,
         "tableCount": body_table_count,
         "revisionCount": revision::count_revisions(&doc.root),
         "hyperlinkCount": link::count_hyperlinks(&doc.root),
@@ -179,6 +185,9 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         }
         if scope.smart_art {
             tree["smartArts"] = Value::Array(smartart::collect_body(&pkg, &part, &paras)?);
+        }
+        if scope.ole_objects {
+            tree["oleObjects"] = Value::Array(ole::collect_body(&pkg, &part, &paras)?);
         }
         if scope.tables {
             tree["tables"] =
@@ -338,6 +347,7 @@ struct HfExpand {
     text_box_content: bool,
     charts: bool,
     smart_art: bool,
+    ole_objects: bool,
     tables: bool,
     revisions: bool,
     hyperlinks: bool,
@@ -378,9 +388,11 @@ fn hf_node(pkg: &Package, item: &HfPart, expand: &HfExpand) -> Result<Value, Err
     textbox::resolve_links(&mut boxes);
     let mut chart_count = 0usize;
     let mut smart_art_count = 0usize;
+    let mut ole_count = 0usize;
     for p in &paras {
         chart_count += charts::count_charts(p)?;
         smart_art_count += smartart::count_smartarts(p)?;
+        ole_count += ole::count_in(pkg, &item.part, p)?;
     }
     let mut node = json!({
         "id": item.id,
@@ -391,6 +403,7 @@ fn hf_node(pkg: &Package, item: &HfPart, expand: &HfExpand) -> Result<Value, Err
         "textBoxCount": boxes.len(),
         "chartCount": chart_count,
         "smartArtCount": smart_art_count,
+        "oleObjectCount": ole_count,
         "tableCount": tbl::count_tables(&doc.root),
         "revisionCount": revision::count_revisions(&doc.root),
         "hyperlinkCount": link::count_hyperlinks(&doc.root),
@@ -427,6 +440,9 @@ fn hf_node(pkg: &Package, item: &HfPart, expand: &HfExpand) -> Result<Value, Err
     }
     if expand.smart_art {
         node["smartArts"] = Value::Array(smartart::collect_hf(pkg, item, &paras)?);
+    }
+    if expand.ole_objects {
+        node["oleObjects"] = Value::Array(ole::collect_hf(pkg, item, &paras)?);
     }
     if expand.tables {
         node["tables"] = Value::Array(tbl::tables_json(

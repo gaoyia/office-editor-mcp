@@ -623,6 +623,8 @@ fn is_foreign_op(op_name: &str) -> bool {
             | "insertChartSheet"
             | "deleteChartSheet"
             | "setSmartArtWrap"
+            | "insertOle"
+            | "deleteOle"
     )
 }
 

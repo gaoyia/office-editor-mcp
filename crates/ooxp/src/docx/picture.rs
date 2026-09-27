@@ -987,7 +987,7 @@ fn is_picture(drawing: &Element) -> bool {
 }
 
 fn walk_outside_txbx(el: &Element, f: &mut impl FnMut(&Element)) {
-    if el.local_name() == "txbxContent" {
+    if el.local_name() == "txbxContent" || el.local_name() == "object" {
         return;
     }
     f(el);
@@ -1033,7 +1033,7 @@ pub(crate) fn walk_drawings(
     el: &Element,
     f: &mut impl FnMut(&Element) -> Result<(), Error>,
 ) -> Result<(), Error> {
-    if el.local_name() == "txbxContent" {
+    if el.local_name() == "txbxContent" || el.local_name() == "object" {
         return Ok(());
     }
     if el.local_name() == "AlternateContent" {
@@ -1080,7 +1080,7 @@ fn first_alt_child_index(el: &Element) -> Option<usize> {
 }
 
 fn find_drawing_walk<'a>(el: &'a Element, idx: &mut usize, key: &PicKey) -> Option<&'a Element> {
-    if el.local_name() == "txbxContent" {
+    if el.local_name() == "txbxContent" || el.local_name() == "object" {
         return None;
     }
     if el.local_name() == "AlternateContent" {
@@ -1113,7 +1113,7 @@ fn find_drawing_mut_walk<'a>(
     idx: &mut usize,
     key: &PicKey,
 ) -> Option<&'a mut Element> {
-    if el.local_name() == "txbxContent" {
+    if el.local_name() == "txbxContent" || el.local_name() == "object" {
         return None;
     }
     if el.local_name() == "AlternateContent" {
@@ -1143,7 +1143,7 @@ fn find_drawing_mut_walk<'a>(
 }
 
 fn remove_picture_walk(el: &mut Element, idx: &mut usize, key: &PicKey) -> bool {
-    if el.local_name() == "txbxContent" {
+    if el.local_name() == "txbxContent" || el.local_name() == "object" {
         return false;
     }
     let mut i = 0;
@@ -1183,7 +1183,7 @@ fn remove_picture_walk(el: &mut Element, idx: &mut usize, key: &PicKey) -> bool 
             i += 1;
             continue;
         }
-        if local == "txbxContent" {
+        if local == "txbxContent" || local == "object" {
             i += 1;
             continue;
         }
