@@ -451,6 +451,19 @@ fn ranges_overlap(a0: CellRef, a1: CellRef, b0: CellRef, b1: CellRef) -> bool {
     !(a1.col < b0.col || b1.col < a0.col || a1.row < b0.row || b1.row < a0.row)
 }
 
+pub(crate) fn range_overlaps_table(
+    pkg: &Package,
+    wb_doc: &Document,
+    sheet_index: &[(String, String, &'static str)],
+    dirty_sheets: &[(String, Document)],
+    sheet_part: &str,
+    start: CellRef,
+    end: CellRef,
+) -> Result<bool, Error> {
+    let taken = collect_workbook_tables(pkg, wb_doc, sheet_index, dirty_sheets)?;
+    Ok(ranges_overlap_any(&taken, sheet_part, start, end))
+}
+
 fn name_taken(taken: &[TableMeta], name: &str, skip: Option<(&str, usize)>) -> bool {
     taken.iter().any(|t| {
         if let Some((part, idx)) = skip {

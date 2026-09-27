@@ -602,6 +602,8 @@
               { "$ref": "#/$defs/setDefinedNameOp" },
               { "$ref": "#/$defs/deleteDefinedNameOp" },
               { "$ref": "#/$defs/setPrintSetupOp" },
+              { "$ref": "#/$defs/setSheetViewOp" },
+              { "$ref": "#/$defs/setAutoFilterOp" },
               { "$ref": "#/$defs/setHeaderFooterTextOp" },
               { "$ref": "#/$defs/setParaTextOp" },
               { "$ref": "#/$defs/setHeaderFooterDistanceOp" },
@@ -1439,6 +1441,35 @@
         { "required": ["rowBreaks"] },
         { "required": ["colBreaks"] }
       ]
+    },
+    "setSheetViewOp": {
+      "type": "object",
+      "required": ["op", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "setSheetView" },
+        "id": { "type": "string", "minLength": 1 },
+        "zoom": { "type": "integer", "minimum": 10, "maximum": 400 },
+        "frozenRows": { "type": "integer", "minimum": 0, "maximum": 1048575 },
+        "frozenCols": { "type": "integer", "minimum": 0, "maximum": 16383 },
+        "activeCell": { "type": "string", "minLength": 1 }
+      },
+      "anyOf": [
+        { "required": ["zoom"] },
+        { "required": ["frozenRows"] },
+        { "required": ["frozenCols"] },
+        { "required": ["activeCell"] }
+      ]
+    },
+    "setAutoFilterOp": {
+      "type": "object",
+      "required": ["op", "id", "ref"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "setAutoFilter" },
+        "id": { "type": "string", "minLength": 1 },
+        "ref": { "type": ["string", "null"], "minLength": 1 }
+      }
     },
     "setHeaderFooterTextOp": {
       "type": "object",

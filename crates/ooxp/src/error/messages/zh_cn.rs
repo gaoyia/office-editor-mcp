@@ -742,6 +742,16 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::InvalidPrintSetup { field } => {
             format!("打印设置的 {field} 不合法")
         }
+        ErrorKind::NeedSetSheetViewField => {
+            "setSheetView 除 op 与 id 外至少要给一个字段".into()
+        }
+        ErrorKind::InvalidSheetView { field } => {
+            format!("视图的 {field} 不合法")
+        }
+        ErrorKind::NeedSetAutoFilterField => "setAutoFilter 必须给 ref".into(),
+        ErrorKind::InvalidAutoFilter { field } => {
+            format!("工作表筛选的 {field} 不合法")
+        }
         ErrorKind::InvalidAlign => {
             "align 必须是 left、center、right、both、distribute、start 或 end".into()
         }

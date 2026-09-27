@@ -19,6 +19,7 @@ mod sheets;
 mod style;
 mod table;
 mod validation;
+mod view;
 
 pub use apply::apply;
 pub use create::create;

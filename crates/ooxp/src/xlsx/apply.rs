@@ -385,6 +385,46 @@ pub fn apply(bytes: &[u8], ops: &[XlsxOp]) -> Result<Vec<u8>, Error> {
                     workbook_dirty = true;
                 }
             }
+            XlsxOp::SetSheetView(op) => {
+                let (part, kind) = require_named_sheet(&sheet_index, &op.sheet, i)?;
+                if kind == "dialogsheet" || kind == "macrosheet" {
+                    return Err(Error::with_path(
+                        ErrorKind::DialogOrMacroSheet,
+                        format!("ops[{i}].id"),
+                    ));
+                }
+                load_dirty(&pkg, &mut dirty_sheets, &part, false)?;
+                let doc = dirty_of(&mut dirty_sheets, &part);
+                super::view::apply_view(&mut doc.root, kind, op, i)?;
+            }
+            XlsxOp::SetAutoFilter(op) => {
+                let (part, kind) = require_named_sheet(&sheet_index, &op.sheet, i)?;
+                if kind == "dialogsheet" || kind == "macrosheet" {
+                    return Err(Error::with_path(
+                        ErrorKind::DialogOrMacroSheet,
+                        format!("ops[{i}].id"),
+                    ));
+                }
+                load_dirty(&pkg, &mut dirty_sheets, &part, false)?;
+                let overlap = match op.refer.as_deref() {
+                    Some(raw) => {
+                        let (start, end) = super::a1::parse_range(raw)
+                            .map_err(|e| e.at(format!("ops[{i}].ref")))?;
+                        super::table::range_overlaps_table(
+                            &pkg,
+                            &wb_doc,
+                            &sheet_index,
+                            &dirty_sheets,
+                            &part,
+                            start,
+                            end,
+                        )?
+                    }
+                    None => false,
+                };
+                let doc = dirty_of(&mut dirty_sheets, &part);
+                super::view::apply_filter(&mut doc.root, kind, op, overlap, i)?;
+            }
             XlsxOp::DeleteChart(op) => {
                 let (part, kind) = require_named_sheet(&sheet_index, &op.target.sheet, i)?;
                 load_dirty(&pkg, &mut dirty_sheets, &part, false)?;

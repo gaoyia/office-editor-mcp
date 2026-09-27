@@ -772,6 +772,31 @@ impl SetPrintSetupOp {
 }
 
 #[derive(Debug, Clone)]
+pub struct SetSheetViewOp {
+    pub sheet: String,
+    pub zoom: Option<u32>,
+    pub frozen_rows: Option<u32>,
+    pub frozen_cols: Option<u32>,
+    pub active_cell: Option<String>,
+}
+
+impl SetSheetViewOp {
+    fn has_patch(&self) -> bool {
+        self.zoom.is_some()
+            || self.frozen_rows.is_some()
+            || self.frozen_cols.is_some()
+            || self.active_cell.is_some()
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct SetAutoFilterOp {
+    pub sheet: String,
+    /// `None` 删除工作表级筛选；`Some` 写入规范化前的原文，apply 再解析。
+    pub refer: Option<String>,
+}
+
+#[derive(Debug, Clone)]
 pub struct SetHeaderFooterTextOp {
     #[allow(dead_code)]
     pub id: String,
@@ -1093,6 +1118,8 @@ pub enum XlsxOp {
     SetDefinedName(SetDefinedNameOp),
     DeleteDefinedName(DeleteDefinedNameOp),
     SetPrintSetup(SetPrintSetupOp),
+    SetSheetView(SetSheetViewOp),
+    SetAutoFilter(SetAutoFilterOp),
     DeleteChart(DeleteChartOp),
     SetChartTitle(SetChartTitleOp),
     SetChartSeries(SetChartSeriesOp),
@@ -1266,6 +1293,8 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<XlsxOp>, Error> {
             "setDefinedName" => XlsxOp::SetDefinedName(parse_set_defined_name(obj, i)?),
             "deleteDefinedName" => XlsxOp::DeleteDefinedName(parse_delete_defined_name(obj, i)?),
             "setPrintSetup" => XlsxOp::SetPrintSetup(parse_set_print_setup(obj, i)?),
+            "setSheetView" => XlsxOp::SetSheetView(parse_set_sheet_view(obj, i)?),
+            "setAutoFilter" => XlsxOp::SetAutoFilter(parse_set_auto_filter(obj, i)?),
             "deleteChart" => XlsxOp::DeleteChart(parse_delete_chart(obj, i)?),
             "setChartTitle" => XlsxOp::SetChartTitle(parse_set_chart_title(obj, i)?),
             "setChartSeries" => XlsxOp::SetChartSeries(parse_set_chart_series(obj, i)?),
@@ -3636,6 +3665,130 @@ fn parse_set_print_setup(
         ));
     }
     Ok(op)
+}
+
+fn parse_set_sheet_view(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<SetSheetViewOp, Error> {
+    deny_keys(
+        obj,
+        i,
+        &["op", "id", "zoom", "frozenRows", "frozenCols", "activeCell"],
+    )?;
+    let id = require_id(obj, i)?;
+    let sheet = parse_sheet_only_id(&id, i, "id", IdReason::SheetOpNeedsSheet)?;
+    let op = SetSheetViewOp {
+        sheet,
+        zoom: parse_view_u32(obj, i, "zoom", 10, 400)?,
+        frozen_rows: parse_view_u32(obj, i, "frozenRows", 0, 1_048_575)?,
+        frozen_cols: parse_view_u32(obj, i, "frozenCols", 0, 16_383)?,
+        active_cell: parse_view_cell(obj, i)?,
+    };
+    if !op.has_patch() {
+        return Err(Error::with_path(
+            ErrorKind::NeedSetSheetViewField,
+            format!("ops[{i}]"),
+        ));
+    }
+    Ok(op)
+}
+
+fn parse_set_auto_filter(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<SetAutoFilterOp, Error> {
+    deny_keys(obj, i, &["op", "id", "ref"])?;
+    let id = require_id(obj, i)?;
+    let sheet = parse_sheet_only_id(&id, i, "id", IdReason::SheetOpNeedsSheet)?;
+    let refer = match obj.get("ref") {
+        None => {
+            return Err(Error::with_path(
+                ErrorKind::NeedSetAutoFilterField,
+                format!("ops[{i}]"),
+            ));
+        }
+        Some(Value::Null) => None,
+        Some(Value::String(s)) => {
+            if s.trim().is_empty() {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidAutoFilter {
+                        field: "ref".into(),
+                    },
+                    format!("ops[{i}].ref"),
+                ));
+            }
+            Some(s.clone())
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "ref".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].ref"),
+            ));
+        }
+    };
+    Ok(SetAutoFilterOp { sheet, refer })
+}
+
+fn parse_view_u32(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+    field: &str,
+    min: u32,
+    max: u32,
+) -> Result<Option<u32>, Error> {
+    match obj.get(field) {
+        None => Ok(None),
+        Some(Value::Number(n)) => {
+            let v = n.as_u64().and_then(|x| u32::try_from(x).ok());
+            let Some(v) = v.filter(|x| *x >= min && *x <= max) else {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidSheetView {
+                        field: field.into(),
+                    },
+                    format!("ops[{i}].{field}"),
+                ));
+            };
+            Ok(Some(v))
+        }
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::Integer,
+            },
+            format!("ops[{i}].{field}"),
+        )),
+    }
+}
+
+fn parse_view_cell(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<Option<String>, Error> {
+    match obj.get("activeCell") {
+        None => Ok(None),
+        Some(Value::String(s)) => {
+            let cell = a1::parse_cell(s).map_err(|_| {
+                Error::with_path(
+                    ErrorKind::InvalidSheetView {
+                        field: "activeCell".into(),
+                    },
+                    format!("ops[{i}].activeCell"),
+                )
+            })?;
+            Ok(Some(a1::format_cell(cell.col, cell.row)))
+        }
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "activeCell".into(),
+                expected: TypeName::String,
+            },
+            format!("ops[{i}].activeCell"),
+        )),
+    }
 }
 
 fn parse_print_inch(

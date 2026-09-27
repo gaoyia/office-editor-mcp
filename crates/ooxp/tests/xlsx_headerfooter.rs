@@ -152,7 +152,9 @@ fn summary_without_scope() {
             "tableCount",
             "pivotCount",
             "hasHeaderFooter",
-            "print"
+            "print",
+            "view",
+            "autoFilter"
         ]
     );
 }

@@ -894,6 +894,16 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::InvalidPrintSetup { field } => {
             format!("{field} is not a valid setPrintSetup value")
         }
+        ErrorKind::NeedSetSheetViewField => {
+            "setSheetView requires a field besides op and id".into()
+        }
+        ErrorKind::InvalidSheetView { field } => {
+            format!("{field} is not a valid setSheetView value")
+        }
+        ErrorKind::NeedSetAutoFilterField => "setAutoFilter requires ref".into(),
+        ErrorKind::InvalidAutoFilter { field } => {
+            format!("{field} is not a valid setAutoFilter value")
+        }
         ErrorKind::InvalidAlign => {
             "align must be left, center, right, both, distribute, start, or end".into()
         }

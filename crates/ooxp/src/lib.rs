@@ -813,6 +813,8 @@ mod tests {
                 "pivotCount",
                 "hasHeaderFooter",
                 "print",
+                "view",
+                "autoFilter",
                 "truncated",
                 "range",
                 "cells",

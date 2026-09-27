@@ -97,6 +97,11 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
                 "print".into(),
                 super::print::inspect(&sheet_doc.root, &wb.root, sheet_id as u32, &sh.name),
             );
+            obj.insert("view".into(), super::view::inspect_view(&sheet_doc.root));
+            obj.insert(
+                "autoFilter".into(),
+                super::view::inspect_filter(&sheet_doc.root),
+            );
             if want_header_footer {
                 obj.insert(
                     "headerFooters".into(),
@@ -161,6 +166,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
                 "print".into(),
                 super::print::inspect(&sheet_doc.root, &wb.root, sheet_id as u32, &sh.name),
             );
+            obj.insert("view".into(), super::view::inspect_view(&sheet_doc.root));
             if want_header_footer {
                 obj.insert(
                     "headerFooters".into(),

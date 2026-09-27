@@ -633,6 +633,14 @@ define_error_kinds! {
     InvalidPrintSetup { field: String } => {
         vec![Self::InvalidPrintSetup { field: "left".into() }]
     },
+    NeedSetSheetViewField => vec![Self::NeedSetSheetViewField],
+    InvalidSheetView { field: String } => {
+        vec![Self::InvalidSheetView { field: "zoom".into() }]
+    },
+    NeedSetAutoFilterField => vec![Self::NeedSetAutoFilterField],
+    InvalidAutoFilter { field: String } => {
+        vec![Self::InvalidAutoFilter { field: "ref".into() }]
+    },
     InvalidAlign => vec![Self::InvalidAlign],
     InvalidLineRule => vec![Self::InvalidLineRule],
     InvalidUnderline => vec![Self::InvalidUnderline],
@@ -1030,6 +1038,10 @@ impl ErrorKind {
             | Self::InvalidDefinedName { .. }
             | Self::NeedSetPrintSetupField
             | Self::InvalidPrintSetup { .. }
+            | Self::NeedSetSheetViewField
+            | Self::InvalidSheetView { .. }
+            | Self::NeedSetAutoFilterField
+            | Self::InvalidAutoFilter { .. }
             | Self::InvalidAlign
             | Self::InvalidLineRule
             | Self::InvalidUnderline
