@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "C:\\data\\book.xlsx",
+  "output": "C:\\data\\book.validation.xlsx",
+  "ops": [
+    { "op": "insertDataValidation", "id": "sheet:Sheet1", "sqref": "A1", "type": "list", "formula1": "1,2,3" },
+    { "op": "setDataValidation", "id": "sheet:Sheet1/dv:1", "sqref": ["A1", "C1"] },
+    { "op": "deleteDataValidation", "id": "sheet:Sheet1/dv:1" }
+  ]
+}

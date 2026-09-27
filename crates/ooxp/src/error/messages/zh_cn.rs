@@ -181,6 +181,11 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::SheetOpNeedsSheet => {
                 "id 必须是 sheet:工作表名".into()
             }
+            IdReason::SheetDvPrefix => {
+                "数据验证 id 必须是 sheet:工作表名/dv:n，n 从 1 起".into()
+            }
+            IdReason::DvIndexNotInt => "dv 后面必须是正整数".into(),
+            IdReason::DvIndexFromOne => "dv 序号从 1 起".into(),
             IdReason::SheetChartPrefix => {
                 "xlsx 图表 id 必须是 sheet:工作表名/chart:…".into()
             }
@@ -666,7 +671,17 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::InvalidRowHeight => "height 必须大于 0 且不超过 409".into(),
         ErrorKind::MergeNeedsMultipleCells => "mergeRange 至少要两格".into(),
         ErrorKind::RowRangeReversed => "toRow 不能小于 row".into(),
-        ErrorKind::LayoutWorksheetOnly => "只能对工作表改列宽、行高或合并".into(),
+        ErrorKind::LayoutWorksheetOnly => "只能对工作表改列宽、行高、合并或数据验证".into(),
+        ErrorKind::NeedSetDataValidationField => {
+            "setDataValidation 除 op 与 id 外至少要给一个字段".into()
+        }
+        ErrorKind::NeedDataValidationFormula { field } => {
+            format!("数据验证必须有 {field}")
+        }
+        ErrorKind::InvalidDataValidation { field } => {
+            format!("数据验证的 {field} 不合法")
+        }
+        ErrorKind::DataValidationNotFound { id } => format!("找不到数据验证：{id}"),
         ErrorKind::InvalidAlign => {
             "align 必须是 left、center、right、both、distribute、start 或 end".into()
         }

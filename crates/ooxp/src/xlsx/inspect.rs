@@ -13,6 +13,7 @@ use super::formula;
 use super::hf;
 use super::picture;
 use super::style;
+use super::validation;
 use super::{REL_CHARTSHEET, REL_DIALOGSHEET, REL_SHARED_STRINGS};
 
 /// 按 workbook 关系 Type 判定表种类。`/macrosheet` 与 `/xlMacrosheet` 都算宏表。
@@ -78,6 +79,8 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
             let charts = chart::collect_sheet_charts(&pkg, &sh.part, &sh.name, &sst, &sheet_parts)?;
             chart_count += charts.len();
             obj.insert("chartCount".into(), json!(charts.len()));
+            let dv_count = validation::count(&sheet_doc.root);
+            obj.insert("dataValidationCount".into(), json!(dv_count));
             let has_hf = hf::has_header_footer(&sheet_doc.root);
             obj.insert("hasHeaderFooter".into(), json!(has_hf));
             if want_header_footer {
@@ -114,6 +117,10 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
                     obj.insert("cols".into(), cols);
                     obj.insert("rows".into(), rows);
                     obj.insert("merges".into(), merges);
+                    obj.insert(
+                        "dataValidations".into(),
+                        validation::inspect(&sheet_doc.root, &sh.name),
+                    );
                 }
             }
         } else if sh.kind == "chartsheet" {

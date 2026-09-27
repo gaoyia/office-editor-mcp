@@ -75,6 +75,7 @@ $order = @(
     'xlsx-cellstyle'
     'xlsx-layout'
     'xlsx-formula'
+    'xlsx-validation'
     'pptx-docprops'
     'pptx-apply'
     'pptx-pictures'

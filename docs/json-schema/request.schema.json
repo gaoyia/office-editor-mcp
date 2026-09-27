@@ -586,6 +586,9 @@
               { "$ref": "#/$defs/setRowHeightOp" },
               { "$ref": "#/$defs/mergeRangeOp" },
               { "$ref": "#/$defs/unmergeRangeOp" },
+              { "$ref": "#/$defs/insertDataValidationOp" },
+              { "$ref": "#/$defs/setDataValidationOp" },
+              { "$ref": "#/$defs/deleteDataValidationOp" },
               { "$ref": "#/$defs/setHeaderFooterTextOp" },
               { "$ref": "#/$defs/setParaTextOp" },
               { "$ref": "#/$defs/setHeaderFooterDistanceOp" },
@@ -869,6 +872,115 @@
         "op": { "const": "unmergeRange" },
         "id": { "type": "string", "minLength": 1 },
         "range": { "type": "string", "minLength": 1 }
+      }
+    },
+    "insertDataValidationOp": {
+      "type": "object",
+      "required": ["op", "id", "sqref", "type"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "insertDataValidation" },
+        "id": { "type": "string", "minLength": 1 },
+        "sqref": {
+          "oneOf": [
+            { "type": "string", "minLength": 1 },
+            {
+              "type": "array",
+              "minItems": 1,
+              "items": { "type": "string", "minLength": 1 }
+            }
+          ]
+        },
+        "type": {
+          "enum": ["none", "whole", "decimal", "list", "date", "time", "textLength", "custom"]
+        },
+        "operator": {
+          "enum": [
+            "between",
+            "notBetween",
+            "equal",
+            "notEqual",
+            "lessThan",
+            "lessThanOrEqual",
+            "greaterThan",
+            "greaterThanOrEqual"
+          ]
+        },
+        "formula1": { "type": "string" },
+        "formula2": { "type": "string" },
+        "allowBlank": { "type": "boolean" },
+        "dropdown": { "type": "boolean" },
+        "showInputMessage": { "type": "boolean" },
+        "showErrorMessage": { "type": "boolean" },
+        "errorStyle": { "enum": ["stop", "warning", "information"] },
+        "errorTitle": { "type": "string" },
+        "error": { "type": "string" },
+        "promptTitle": { "type": "string" },
+        "prompt": { "type": "string" }
+      }
+    },
+    "setDataValidationOp": {
+      "type": "object",
+      "required": ["op", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "setDataValidation" },
+        "id": { "type": "string", "minLength": 1 },
+        "sqref": {
+          "oneOf": [
+            { "type": "string", "minLength": 1 },
+            {
+              "type": "array",
+              "minItems": 1,
+              "items": { "type": "string", "minLength": 1 }
+            }
+          ]
+        },
+        "type": {
+          "enum": ["none", "whole", "decimal", "list", "date", "time", "textLength", "custom"]
+        },
+        "operator": {
+          "oneOf": [
+            {
+              "enum": [
+                "between",
+                "notBetween",
+                "equal",
+                "notEqual",
+                "lessThan",
+                "lessThanOrEqual",
+                "greaterThan",
+                "greaterThanOrEqual"
+              ]
+            },
+            { "type": "null" }
+          ]
+        },
+        "formula1": { "type": ["string", "null"] },
+        "formula2": { "type": ["string", "null"] },
+        "allowBlank": { "type": "boolean" },
+        "dropdown": { "type": "boolean" },
+        "showInputMessage": { "type": "boolean" },
+        "showErrorMessage": { "type": "boolean" },
+        "errorStyle": {
+          "oneOf": [
+            { "enum": ["stop", "warning", "information"] },
+            { "type": "null" }
+          ]
+        },
+        "errorTitle": { "type": ["string", "null"] },
+        "error": { "type": ["string", "null"] },
+        "promptTitle": { "type": ["string", "null"] },
+        "prompt": { "type": ["string", "null"] }
+      }
+    },
+    "deleteDataValidationOp": {
+      "type": "object",
+      "required": ["op", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "deleteDataValidation" },
+        "id": { "type": "string", "minLength": 1 }
       }
     },
     "setHeaderFooterTextOp": {

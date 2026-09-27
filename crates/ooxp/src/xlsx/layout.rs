@@ -425,7 +425,7 @@ fn set_merge_count(parent: &mut Element) {
     parent.set_attr("count", n.to_string());
 }
 
-fn insert_child_ordered(root: &mut Element, el: Element, local: &str) {
+pub(crate) fn insert_child_ordered(root: &mut Element, el: Element, local: &str) {
     let want = WORKSHEET_CHILD_ORDER
         .iter()
         .position(|n| *n == local)

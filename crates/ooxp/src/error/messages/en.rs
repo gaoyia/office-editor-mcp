@@ -206,6 +206,11 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::SheetOpNeedsSheet => {
                 "id must be sheet:name".into()
             }
+            IdReason::SheetDvPrefix => {
+                "data validation id must be sheet:name/dv:n, n starting at 1".into()
+            }
+            IdReason::DvIndexNotInt => "dv must be followed by a positive integer".into(),
+            IdReason::DvIndexFromOne => "dv index starts at 1".into(),
             IdReason::SheetChartPrefix => {
                 "xlsx chart id must be sheet:name/chart:…".into()
             }
@@ -808,7 +813,20 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         }
         ErrorKind::RowRangeReversed => "toRow must not be less than row".into(),
         ErrorKind::LayoutWorksheetOnly => {
-            "column width, row height, and merge ops only apply to worksheets".into()
+            "column width, row height, merge, and data validation ops only apply to worksheets"
+                .into()
+        }
+        ErrorKind::NeedSetDataValidationField => {
+            "setDataValidation requires a field besides op and id".into()
+        }
+        ErrorKind::NeedDataValidationFormula { field } => {
+            format!("data validation requires {field}")
+        }
+        ErrorKind::InvalidDataValidation { field } => {
+            format!("{field} is not a valid data validation value")
+        }
+        ErrorKind::DataValidationNotFound { id } => {
+            format!("Data validation not found: {id}")
         }
         ErrorKind::InvalidAlign => {
             "align must be left, center, right, both, distribute, start, or end".into()

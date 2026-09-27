@@ -225,6 +225,24 @@ pub fn apply(bytes: &[u8], ops: &[XlsxOp]) -> Result<Vec<u8>, Error> {
                 let doc = dirty_of(&mut dirty_sheets, &part);
                 layout::apply_unmerge_range(&mut doc.root, op);
             }
+            XlsxOp::InsertDataValidation(op) => {
+                let part = require_layout_worksheet(&sheet_index, &op.sheet, i)?;
+                load_dirty(&pkg, &mut dirty_sheets, &part, true)?;
+                let doc = dirty_of(&mut dirty_sheets, &part);
+                super::validation::apply_insert(&mut doc.root, op, i)?;
+            }
+            XlsxOp::SetDataValidation(op) => {
+                let part = require_layout_worksheet(&sheet_index, &op.sheet, i)?;
+                load_dirty(&pkg, &mut dirty_sheets, &part, true)?;
+                let doc = dirty_of(&mut dirty_sheets, &part);
+                super::validation::apply_set(&mut doc.root, op, i)?;
+            }
+            XlsxOp::DeleteDataValidation(op) => {
+                let part = require_layout_worksheet(&sheet_index, &op.sheet, i)?;
+                load_dirty(&pkg, &mut dirty_sheets, &part, true)?;
+                let doc = dirty_of(&mut dirty_sheets, &part);
+                super::validation::apply_delete(&mut doc.root, op, i)?;
+            }
             XlsxOp::DeleteChart(op) => {
                 let (part, kind) = require_named_sheet(&sheet_index, &op.target.sheet, i)?;
                 load_dirty(&pkg, &mut dirty_sheets, &part, false)?;

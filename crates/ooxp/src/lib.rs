@@ -805,13 +805,15 @@ mod tests {
                 "hidden",
                 "pictureCount",
                 "chartCount",
+                "dataValidationCount",
                 "hasHeaderFooter",
                 "truncated",
                 "range",
                 "cells",
                 "cols",
                 "rows",
-                "merges"
+                "merges",
+                "dataValidations"
             ]
         );
         assert_eq!(

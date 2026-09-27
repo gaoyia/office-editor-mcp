@@ -13,6 +13,7 @@ mod picture;
 mod request;
 mod sheets;
 mod style;
+mod validation;
 
 pub use apply::apply;
 pub use create::create;

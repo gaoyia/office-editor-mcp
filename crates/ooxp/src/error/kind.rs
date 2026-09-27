@@ -130,8 +130,12 @@ pub(crate) enum IdReason {
     DeleteChartSheetNeedsChartsheet,
     /// deleteSheet 必须用普通工作表 sheet:工作表名
     DeleteSheetNeedsWorksheet,
-    /// renameSheet / moveSheet / setSheetHidden 必须用 sheet:工作表名
+    /// renameSheet / moveSheet / setSheetHidden / insertDataValidation 必须用 sheet:工作表名
     SheetOpNeedsSheet,
+    /// setDataValidation / deleteDataValidation 必须用 sheet:工作表名/dv:n
+    SheetDvPrefix,
+    DvIndexNotInt,
+    DvIndexFromOne,
     /// xlsx 图表 id 必须是 sheet:工作表名/chart:…
     SheetChartPrefix,
     /// 工作表 id，缺少 /chart:…
@@ -568,6 +572,16 @@ define_error_kinds! {
     MergeNeedsMultipleCells => vec![Self::MergeNeedsMultipleCells],
     RowRangeReversed => vec![Self::RowRangeReversed],
     LayoutWorksheetOnly => vec![Self::LayoutWorksheetOnly],
+    NeedSetDataValidationField => vec![Self::NeedSetDataValidationField],
+    NeedDataValidationFormula { field: String } => {
+        vec![Self::NeedDataValidationFormula { field: "formula1".into() }]
+    },
+    InvalidDataValidation { field: String } => {
+        vec![Self::InvalidDataValidation { field: "type".into() }]
+    },
+    DataValidationNotFound { id: String } => {
+        vec![Self::DataValidationNotFound { id: "sheet:Sheet1/dv:1".into() }]
+    },
     InvalidAlign => vec![Self::InvalidAlign],
     InvalidLineRule => vec![Self::InvalidLineRule],
     InvalidUnderline => vec![Self::InvalidUnderline],
@@ -703,6 +717,9 @@ impl IdReason {
             Self::DeleteChartSheetNeedsChartsheet,
             Self::DeleteSheetNeedsWorksheet,
             Self::SheetOpNeedsSheet,
+            Self::SheetDvPrefix,
+            Self::DvIndexNotInt,
+            Self::DvIndexFromOne,
             Self::SheetChartPrefix,
             Self::SheetChartContainer,
             Self::SlideChartPrefix,
@@ -937,6 +954,9 @@ impl ErrorKind {
             | Self::MergeNeedsMultipleCells
             | Self::RowRangeReversed
             | Self::LayoutWorksheetOnly
+            | Self::NeedSetDataValidationField
+            | Self::NeedDataValidationFormula { .. }
+            | Self::InvalidDataValidation { .. }
             | Self::InvalidAlign
             | Self::InvalidLineRule
             | Self::InvalidUnderline
@@ -1031,7 +1051,8 @@ impl ErrorKind {
             | Self::AbstractNumNotFound { .. }
             | Self::StyleNotFound { .. }
             | Self::RunNotFound { .. }
-            | Self::CustomPropNotFound { .. } => IdNotFound,
+            | Self::CustomPropNotFound { .. }
+            | Self::DataValidationNotFound { .. } => IdNotFound,
             Self::ScopeRequired { .. } => ScopeRequired,
             Self::SharedFormulaMaster { .. }
             | Self::DataTableFormula { .. }

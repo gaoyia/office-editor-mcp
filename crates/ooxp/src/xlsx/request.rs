@@ -173,6 +173,10 @@ impl<T> Patch<T> {
     fn is_absent(&self) -> bool {
         matches!(self, Self::Absent)
     }
+
+    pub(crate) fn is_present(&self) -> bool {
+        !matches!(self, Self::Absent)
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -263,6 +267,167 @@ pub struct UnmergeRangeOp {
     pub sheet: String,
     pub start: a1::CellRef,
     pub end: a1::CellRef,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DvType {
+    None,
+    Whole,
+    Decimal,
+    List,
+    Date,
+    Time,
+    TextLength,
+    Custom,
+}
+
+impl DvType {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::None => "none",
+            Self::Whole => "whole",
+            Self::Decimal => "decimal",
+            Self::List => "list",
+            Self::Date => "date",
+            Self::Time => "time",
+            Self::TextLength => "textLength",
+            Self::Custom => "custom",
+        }
+    }
+
+    pub fn parse(s: &str) -> Option<Self> {
+        Some(match s {
+            "none" => Self::None,
+            "whole" => Self::Whole,
+            "decimal" => Self::Decimal,
+            "list" => Self::List,
+            "date" => Self::Date,
+            "time" => Self::Time,
+            "textLength" => Self::TextLength,
+            "custom" => Self::Custom,
+            _ => return None,
+        })
+    }
+
+    pub fn needs_formula1(self) -> bool {
+        !matches!(self, Self::None)
+    }
+
+    pub fn allows_operator(self) -> bool {
+        matches!(
+            self,
+            Self::Whole | Self::Decimal | Self::Date | Self::Time | Self::TextLength
+        )
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DvOperator {
+    Between,
+    NotBetween,
+    Equal,
+    NotEqual,
+    LessThan,
+    LessThanOrEqual,
+    GreaterThan,
+    GreaterThanOrEqual,
+}
+
+impl DvOperator {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Between => "between",
+            Self::NotBetween => "notBetween",
+            Self::Equal => "equal",
+            Self::NotEqual => "notEqual",
+            Self::LessThan => "lessThan",
+            Self::LessThanOrEqual => "lessThanOrEqual",
+            Self::GreaterThan => "greaterThan",
+            Self::GreaterThanOrEqual => "greaterThanOrEqual",
+        }
+    }
+
+    pub fn parse(s: &str) -> Option<Self> {
+        Some(match s {
+            "between" => Self::Between,
+            "notBetween" => Self::NotBetween,
+            "equal" => Self::Equal,
+            "notEqual" => Self::NotEqual,
+            "lessThan" => Self::LessThan,
+            "lessThanOrEqual" => Self::LessThanOrEqual,
+            "greaterThan" => Self::GreaterThan,
+            "greaterThanOrEqual" => Self::GreaterThanOrEqual,
+            _ => return None,
+        })
+    }
+
+    pub fn needs_formula2(self) -> bool {
+        matches!(self, Self::Between | Self::NotBetween)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct InsertDataValidationOp {
+    pub sheet: String,
+    pub sqref: Vec<(a1::CellRef, a1::CellRef)>,
+    pub type_: DvType,
+    pub operator: Option<DvOperator>,
+    pub formula1: Option<String>,
+    pub formula2: Option<String>,
+    pub allow_blank: bool,
+    pub dropdown: Option<bool>,
+    pub show_input_message: bool,
+    pub show_error_message: bool,
+    pub error_style: Option<String>,
+    pub error_title: Option<String>,
+    pub error: Option<String>,
+    pub prompt_title: Option<String>,
+    pub prompt: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetDataValidationOp {
+    pub sheet: String,
+    pub index: usize,
+    pub sqref: Option<Vec<(a1::CellRef, a1::CellRef)>>,
+    pub type_: Option<DvType>,
+    pub operator: Patch<DvOperator>,
+    pub formula1: Patch<String>,
+    pub formula2: Patch<String>,
+    pub allow_blank: Option<bool>,
+    pub dropdown: Option<bool>,
+    pub show_input_message: Option<bool>,
+    pub show_error_message: Option<bool>,
+    pub error_style: Patch<String>,
+    pub error_title: Patch<String>,
+    pub error: Patch<String>,
+    pub prompt_title: Patch<String>,
+    pub prompt: Patch<String>,
+}
+
+impl SetDataValidationOp {
+    pub fn has_patch(&self) -> bool {
+        self.sqref.is_some()
+            || self.type_.is_some()
+            || self.operator.is_present()
+            || self.formula1.is_present()
+            || self.formula2.is_present()
+            || self.allow_blank.is_some()
+            || self.dropdown.is_some()
+            || self.show_input_message.is_some()
+            || self.show_error_message.is_some()
+            || self.error_style.is_present()
+            || self.error_title.is_present()
+            || self.error.is_present()
+            || self.prompt_title.is_present()
+            || self.prompt.is_present()
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct DeleteDataValidationOp {
+    pub sheet: String,
+    pub index: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -571,6 +736,9 @@ pub enum XlsxOp {
     SetRowHeight(SetRowHeightOp),
     MergeRange(MergeRangeOp),
     UnmergeRange(UnmergeRangeOp),
+    InsertDataValidation(InsertDataValidationOp),
+    SetDataValidation(SetDataValidationOp),
+    DeleteDataValidation(DeleteDataValidationOp),
     DeleteChart(DeleteChartOp),
     SetChartTitle(SetChartTitleOp),
     SetChartSeries(SetChartSeriesOp),
@@ -718,6 +886,13 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<XlsxOp>, Error> {
             "setRowHeight" => XlsxOp::SetRowHeight(parse_set_row_height(obj, i)?),
             "mergeRange" => XlsxOp::MergeRange(parse_merge_range(obj, i)?),
             "unmergeRange" => XlsxOp::UnmergeRange(parse_unmerge_range(obj, i)?),
+            "insertDataValidation" => {
+                XlsxOp::InsertDataValidation(parse_insert_data_validation(obj, i)?)
+            }
+            "setDataValidation" => XlsxOp::SetDataValidation(parse_set_data_validation(obj, i)?),
+            "deleteDataValidation" => {
+                XlsxOp::DeleteDataValidation(parse_delete_data_validation(obj, i)?)
+            }
             "deleteChart" => XlsxOp::DeleteChart(parse_delete_chart(obj, i)?),
             "setChartTitle" => XlsxOp::SetChartTitle(parse_set_chart_title(obj, i)?),
             "setChartSeries" => XlsxOp::SetChartSeries(parse_set_chart_series(obj, i)?),
@@ -2481,6 +2656,515 @@ fn parse_unmerge_range(
     Ok(UnmergeRangeOp { sheet, start, end })
 }
 
+const DV_KEYS: &[&str] = &[
+    "op",
+    "id",
+    "sqref",
+    "type",
+    "operator",
+    "formula1",
+    "formula2",
+    "allowBlank",
+    "dropdown",
+    "showInputMessage",
+    "showErrorMessage",
+    "errorStyle",
+    "errorTitle",
+    "error",
+    "promptTitle",
+    "prompt",
+];
+
+fn parse_insert_data_validation(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<InsertDataValidationOp, Error> {
+    deny_keys(obj, i, DV_KEYS)?;
+    let id = require_id(obj, i)?;
+    let sheet = parse_sheet_only_id(&id, i, "id", IdReason::SheetOpNeedsSheet)?;
+    let sqref = parse_sqref_field(obj.get("sqref"), i, true)?;
+    let type_ = parse_dv_type_field(obj.get("type"), i, true)?.ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::MissingField {
+                field: "type".into(),
+            },
+            format!("ops[{i}].type"),
+        )
+    })?;
+    let operator = parse_dv_operator_field(obj.get("operator"), i, false)?;
+    let formula1 = parse_dv_formula_opt(obj.get("formula1"), i, "formula1")?;
+    let formula2 = parse_dv_formula_opt(obj.get("formula2"), i, "formula2")?;
+    let dropdown = parse_opt_bool(obj, i, "dropdown")?;
+    check_dv_fields(
+        type_,
+        operator,
+        formula1.as_deref(),
+        formula2.as_deref(),
+        dropdown,
+        i,
+    )?;
+    Ok(InsertDataValidationOp {
+        sheet,
+        sqref,
+        type_,
+        operator,
+        formula1,
+        formula2,
+        allow_blank: parse_opt_bool(obj, i, "allowBlank")?.unwrap_or(true),
+        dropdown,
+        show_input_message: parse_opt_bool(obj, i, "showInputMessage")?.unwrap_or(true),
+        show_error_message: parse_opt_bool(obj, i, "showErrorMessage")?.unwrap_or(true),
+        error_style: parse_dv_error_style_opt(obj.get("errorStyle"), i)?,
+        error_title: parse_dv_string_opt(obj.get("errorTitle"), i, "errorTitle")?,
+        error: parse_dv_string_opt(obj.get("error"), i, "error")?,
+        prompt_title: parse_dv_string_opt(obj.get("promptTitle"), i, "promptTitle")?,
+        prompt: parse_dv_string_opt(obj.get("prompt"), i, "prompt")?,
+    })
+}
+
+fn parse_set_data_validation(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<SetDataValidationOp, Error> {
+    deny_keys(obj, i, DV_KEYS)?;
+    let id = require_id(obj, i)?;
+    let (sheet, index) = parse_dv_id(&id, i)?;
+    let sqref = if obj.contains_key("sqref") {
+        Some(parse_sqref_field(obj.get("sqref"), i, true)?)
+    } else {
+        None
+    };
+    let type_ = parse_dv_type_field(obj.get("type"), i, false)?;
+    let operator = parse_dv_operator_patch(obj.get("operator"), i)?;
+    let formula1 = parse_dv_formula_patch(obj.get("formula1"), i, "formula1")?;
+    let formula2 = parse_dv_formula_patch(obj.get("formula2"), i, "formula2")?;
+    let op = SetDataValidationOp {
+        sheet,
+        index,
+        sqref,
+        type_,
+        operator,
+        formula1,
+        formula2,
+        allow_blank: parse_opt_bool(obj, i, "allowBlank")?,
+        dropdown: parse_opt_bool(obj, i, "dropdown")?,
+        show_input_message: parse_opt_bool(obj, i, "showInputMessage")?,
+        show_error_message: parse_opt_bool(obj, i, "showErrorMessage")?,
+        error_style: parse_dv_error_style_patch(obj.get("errorStyle"), i)?,
+        error_title: parse_dv_string_patch(obj.get("errorTitle"), i, "errorTitle")?,
+        error: parse_dv_string_patch(obj.get("error"), i, "error")?,
+        prompt_title: parse_dv_string_patch(obj.get("promptTitle"), i, "promptTitle")?,
+        prompt: parse_dv_string_patch(obj.get("prompt"), i, "prompt")?,
+    };
+    if !op.has_patch() {
+        return Err(Error::with_path(
+            ErrorKind::NeedSetDataValidationField,
+            format!("ops[{i}]"),
+        ));
+    }
+    Ok(op)
+}
+
+fn parse_delete_data_validation(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<DeleteDataValidationOp, Error> {
+    deny_keys(obj, i, &["op", "id"])?;
+    let id = require_id(obj, i)?;
+    let (sheet, index) = parse_dv_id(&id, i)?;
+    Ok(DeleteDataValidationOp { sheet, index })
+}
+
+fn parse_dv_id(id: &str, op_index: usize) -> Result<(String, usize), Error> {
+    let Some(rest) = id.strip_prefix("sheet:") else {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::SheetDvPrefix,
+            },
+            format!("ops[{op_index}].id"),
+        ));
+    };
+    let Some((name, nstr)) = rest.split_once("/dv:") else {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::SheetDvPrefix,
+            },
+            format!("ops[{op_index}].id"),
+        ));
+    };
+    if name.is_empty() || name.contains('/') {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::SheetDvPrefix,
+            },
+            format!("ops[{op_index}].id"),
+        ));
+    }
+    if nstr.is_empty() || !nstr.bytes().all(|b| b.is_ascii_digit()) {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::DvIndexNotInt,
+            },
+            format!("ops[{op_index}].id"),
+        ));
+    }
+    let n: usize = nstr.parse().map_err(|_| {
+        Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::DvIndexNotInt,
+            },
+            format!("ops[{op_index}].id"),
+        )
+    })?;
+    if n == 0 {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::DvIndexFromOne,
+            },
+            format!("ops[{op_index}].id"),
+        ));
+    }
+    Ok((name.to_string(), n))
+}
+
+fn parse_sqref_field(
+    v: Option<&Value>,
+    i: usize,
+    required: bool,
+) -> Result<Vec<(a1::CellRef, a1::CellRef)>, Error> {
+    let Some(v) = v else {
+        if required {
+            return Err(Error::with_path(
+                ErrorKind::MissingField {
+                    field: "sqref".into(),
+                },
+                format!("ops[{i}].sqref"),
+            ));
+        }
+        return Ok(Vec::new());
+    };
+    let parts: Vec<&str> = match v {
+        Value::String(s) => s.split_whitespace().collect(),
+        Value::Array(arr) => {
+            let mut out = Vec::new();
+            for (j, item) in arr.iter().enumerate() {
+                let Some(s) = item.as_str() else {
+                    return Err(Error::with_path(
+                        ErrorKind::WrongType {
+                            field: "sqref".into(),
+                            expected: TypeName::String,
+                        },
+                        format!("ops[{i}].sqref[{j}]"),
+                    ));
+                };
+                if s.trim().is_empty() {
+                    return Err(Error::with_path(
+                        ErrorKind::InvalidRange {
+                            reason: crate::error::RangeReason::Empty,
+                        },
+                        format!("ops[{i}].sqref[{j}]"),
+                    ));
+                }
+                out.push(s);
+            }
+            return parse_sqref_parts(&out, i);
+        }
+        _ => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "sqref".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].sqref"),
+            ));
+        }
+    };
+    if parts.is_empty() {
+        return Err(Error::with_path(
+            ErrorKind::InvalidRange {
+                reason: crate::error::RangeReason::Empty,
+            },
+            format!("ops[{i}].sqref"),
+        ));
+    }
+    parse_sqref_parts(&parts, i)
+}
+
+fn parse_sqref_parts(parts: &[&str], i: usize) -> Result<Vec<(a1::CellRef, a1::CellRef)>, Error> {
+    let mut out = Vec::new();
+    for p in parts {
+        let range = a1::parse_range(p).map_err(|e| e.at(format!("ops[{i}].sqref")))?;
+        out.push(range);
+    }
+    Ok(out)
+}
+
+fn parse_dv_type_field(
+    v: Option<&Value>,
+    i: usize,
+    required: bool,
+) -> Result<Option<DvType>, Error> {
+    match v {
+        None if required => Err(Error::with_path(
+            ErrorKind::MissingField {
+                field: "type".into(),
+            },
+            format!("ops[{i}].type"),
+        )),
+        None => Ok(None),
+        Some(Value::String(s)) => DvType::parse(s).map(Some).ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::InvalidDataValidation {
+                    field: "type".into(),
+                },
+                format!("ops[{i}].type"),
+            )
+        }),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "type".into(),
+                expected: TypeName::String,
+            },
+            format!("ops[{i}].type"),
+        )),
+    }
+}
+
+fn parse_dv_operator_field(
+    v: Option<&Value>,
+    i: usize,
+    _required: bool,
+) -> Result<Option<DvOperator>, Error> {
+    match v {
+        None | Some(Value::Null) => Ok(None),
+        Some(Value::String(s)) => DvOperator::parse(s).map(Some).ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::InvalidDataValidation {
+                    field: "operator".into(),
+                },
+                format!("ops[{i}].operator"),
+            )
+        }),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "operator".into(),
+                expected: TypeName::String,
+            },
+            format!("ops[{i}].operator"),
+        )),
+    }
+}
+
+fn parse_dv_operator_patch(v: Option<&Value>, i: usize) -> Result<Patch<DvOperator>, Error> {
+    match v {
+        None => Ok(Patch::Absent),
+        Some(Value::Null) => Ok(Patch::Clear),
+        Some(Value::String(s)) => {
+            let op = DvOperator::parse(s).ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::InvalidDataValidation {
+                        field: "operator".into(),
+                    },
+                    format!("ops[{i}].operator"),
+                )
+            })?;
+            Ok(Patch::Set(op))
+        }
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "operator".into(),
+                expected: TypeName::String,
+            },
+            format!("ops[{i}].operator"),
+        )),
+    }
+}
+
+fn strip_formula_eq(s: &str) -> String {
+    let t = s.trim();
+    t.strip_prefix('=')
+        .map(|r| r.trim_start().to_string())
+        .unwrap_or_else(|| t.to_string())
+}
+
+fn parse_dv_formula_opt(v: Option<&Value>, i: usize, field: &str) -> Result<Option<String>, Error> {
+    match v {
+        None => Ok(None),
+        Some(Value::Null) => Ok(None),
+        Some(Value::String(s)) => {
+            let t = strip_formula_eq(s);
+            if t.is_empty() {
+                Ok(None)
+            } else {
+                Ok(Some(t))
+            }
+        }
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::String,
+            },
+            format!("ops[{i}].{field}"),
+        )),
+    }
+}
+
+fn parse_dv_formula_patch(
+    v: Option<&Value>,
+    i: usize,
+    field: &str,
+) -> Result<Patch<String>, Error> {
+    match v {
+        None => Ok(Patch::Absent),
+        Some(Value::Null) => Ok(Patch::Clear),
+        Some(Value::String(s)) => {
+            let t = strip_formula_eq(s);
+            if t.is_empty() {
+                Ok(Patch::Clear)
+            } else {
+                Ok(Patch::Set(t))
+            }
+        }
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::String,
+            },
+            format!("ops[{i}].{field}"),
+        )),
+    }
+}
+
+fn parse_dv_string_opt(v: Option<&Value>, i: usize, field: &str) -> Result<Option<String>, Error> {
+    match v {
+        None => Ok(None),
+        Some(Value::Null) => Ok(None),
+        Some(Value::String(s)) => Ok(Some(s.clone())),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::String,
+            },
+            format!("ops[{i}].{field}"),
+        )),
+    }
+}
+
+fn parse_dv_string_patch(v: Option<&Value>, i: usize, field: &str) -> Result<Patch<String>, Error> {
+    match v {
+        None => Ok(Patch::Absent),
+        Some(Value::Null) => Ok(Patch::Clear),
+        Some(Value::String(s)) => Ok(Patch::Set(s.clone())),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::String,
+            },
+            format!("ops[{i}].{field}"),
+        )),
+    }
+}
+
+fn parse_dv_error_style_opt(v: Option<&Value>, i: usize) -> Result<Option<String>, Error> {
+    match v {
+        None | Some(Value::Null) => Ok(None),
+        Some(Value::String(s)) if matches!(s.as_str(), "stop" | "warning" | "information") => {
+            Ok(Some(s.clone()))
+        }
+        Some(Value::String(_)) => Err(Error::with_path(
+            ErrorKind::InvalidDataValidation {
+                field: "errorStyle".into(),
+            },
+            format!("ops[{i}].errorStyle"),
+        )),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "errorStyle".into(),
+                expected: TypeName::String,
+            },
+            format!("ops[{i}].errorStyle"),
+        )),
+    }
+}
+
+fn parse_dv_error_style_patch(v: Option<&Value>, i: usize) -> Result<Patch<String>, Error> {
+    match v {
+        None => Ok(Patch::Absent),
+        Some(Value::Null) => Ok(Patch::Clear),
+        Some(Value::String(s)) if matches!(s.as_str(), "stop" | "warning" | "information") => {
+            Ok(Patch::Set(s.clone()))
+        }
+        Some(Value::String(_)) => Err(Error::with_path(
+            ErrorKind::InvalidDataValidation {
+                field: "errorStyle".into(),
+            },
+            format!("ops[{i}].errorStyle"),
+        )),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "errorStyle".into(),
+                expected: TypeName::String,
+            },
+            format!("ops[{i}].errorStyle"),
+        )),
+    }
+}
+
+pub(crate) fn check_dv_fields(
+    type_: DvType,
+    operator: Option<DvOperator>,
+    formula1: Option<&str>,
+    formula2: Option<&str>,
+    dropdown: Option<bool>,
+    i: usize,
+) -> Result<(), Error> {
+    if dropdown.is_some() && type_ != DvType::List {
+        return Err(Error::with_path(
+            ErrorKind::InvalidDataValidation {
+                field: "dropdown".into(),
+            },
+            format!("ops[{i}].dropdown"),
+        ));
+    }
+    if operator.is_some() && !type_.allows_operator() {
+        return Err(Error::with_path(
+            ErrorKind::InvalidDataValidation {
+                field: "operator".into(),
+            },
+            format!("ops[{i}].operator"),
+        ));
+    }
+    let f1_ok = formula1.is_some_and(|s| !s.is_empty());
+    if type_.needs_formula1() && !f1_ok {
+        return Err(Error::with_path(
+            ErrorKind::NeedDataValidationFormula {
+                field: "formula1".into(),
+            },
+            format!("ops[{i}].formula1"),
+        ));
+    }
+    let needs_f2 =
+        type_.allows_operator() && operator.unwrap_or(DvOperator::Between).needs_formula2();
+    let f2_ok = formula2.is_some_and(|s| !s.is_empty());
+    if needs_f2 && !f2_ok {
+        return Err(Error::with_path(
+            ErrorKind::NeedDataValidationFormula {
+                field: "formula2".into(),
+            },
+            format!("ops[{i}].formula2"),
+        ));
+    }
+    if !needs_f2 && f2_ok {
+        return Err(Error::with_path(
+            ErrorKind::InvalidDataValidation {
+                field: "formula2".into(),
+            },
+            format!("ops[{i}].formula2"),
+        ));
+    }
+    Ok(())
+}
+
 fn parse_op_range(
     obj: &serde_json::Map<String, Value>,
     i: usize,
@@ -2637,6 +3321,7 @@ fn parse_sheet_only_id(
     if id.contains("/chart:")
         || id.contains("/pic:")
         || id.contains("/hf:")
+        || id.contains("/dv:")
         || id.starts_with("cell:")
     {
         return Err(Error::with_path(

@@ -122,6 +122,7 @@ fn inspect_lists_hidden() {
             "hidden",
             "pictureCount",
             "chartCount",
+            "dataValidationCount",
             "hasHeaderFooter"
         ]
     );
