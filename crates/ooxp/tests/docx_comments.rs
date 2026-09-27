@@ -224,7 +224,8 @@ fn inspect_counts_without_list() {
             "footers",
             "sections",
             "mirrorMargins",
-            "gutterAtTop"
+            "gutterAtTop",
+            "props"
         ]
     );
 }

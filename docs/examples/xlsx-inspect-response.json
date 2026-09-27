@@ -4,6 +4,20 @@
   "id": "xlsx:workbook",
   "pictureCount": 0,
   "chartCount": 0,
+  "props": {
+    "title": "",
+    "subject": null,
+    "creator": "ooxp",
+    "description": null,
+    "keywords": null,
+    "category": null,
+    "lastModifiedBy": null,
+    "created": null,
+    "modified": null,
+    "company": null,
+    "manager": null,
+    "custom": []
+  },
   "sheets": [
     {
       "id": "sheet:Sheet1",

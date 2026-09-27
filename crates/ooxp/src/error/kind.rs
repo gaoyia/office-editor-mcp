@@ -220,6 +220,10 @@ pub(crate) enum IdReason {
     SdtIndexFromOne,
     /// insertContentControl 必须是正文或页眉页脚段落 id，或 docx:document
     InsertSdtNeedsPara,
+    /// setProps / setCustomProp 必须用格式根
+    SetPropsNeedsRoot,
+    /// deleteCustomProp 必须用 prop:{name}
+    CustomPropPrefix,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -350,6 +354,10 @@ define_error_kinds! {
     InvalidXlsxEditAs => vec![Self::InvalidXlsxEditAs],
     NotesSlideImage => vec![Self::NotesSlideImage],
     GraphicInRestrictedStory => vec![Self::GraphicInRestrictedStory],
+    NeedPropsField => vec![Self::NeedPropsField],
+    InvalidCustomPropType => vec![Self::InvalidCustomPropType],
+    EmptyCustomPropName => vec![Self::EmptyCustomPropName],
+    CustomPropNotFound { id: String } => vec![Self::CustomPropNotFound { id: "prop:Editor".into() }],
     SharedFormulaMaster { cell: String } => vec![Self::SharedFormulaMaster { cell: "A1".into() }],
     NeedAtLeastOneSheet => vec![Self::NeedAtLeastOneSheet],
     DuplicateSheetName { name: String } => vec![Self::DuplicateSheetName { name: "Sheet1".into() }],
@@ -675,6 +683,8 @@ impl IdReason {
             Self::SdtIndexNotInt,
             Self::SdtIndexFromOne,
             Self::InsertSdtNeedsPara,
+            Self::SetPropsNeedsRoot,
+            Self::CustomPropPrefix,
         ]
     }
 }
@@ -859,7 +869,10 @@ impl ErrorKind {
             | Self::InvalidXlsxAnchor
             | Self::InvalidXlsxEditAs
             | Self::NotesSlideImage
-            | Self::GraphicInRestrictedStory => InvalidField,
+            | Self::GraphicInRestrictedStory
+            | Self::NeedPropsField
+            | Self::InvalidCustomPropType
+            | Self::EmptyCustomPropName => InvalidField,
             Self::OutOfRange { .. } => TruncatedLimit,
             Self::InvalidRange { .. } => InvalidRange,
             Self::InvalidId { .. } => InvalidId,
@@ -888,7 +901,8 @@ impl ErrorKind {
             | Self::NumberingNotFound { .. }
             | Self::AbstractNumNotFound { .. }
             | Self::StyleNotFound { .. }
-            | Self::RunNotFound { .. } => IdNotFound,
+            | Self::RunNotFound { .. }
+            | Self::CustomPropNotFound { .. } => IdNotFound,
             Self::ScopeRequired { .. } => ScopeRequired,
             Self::SharedFormulaMaster { .. }
             | Self::InkComment { .. }

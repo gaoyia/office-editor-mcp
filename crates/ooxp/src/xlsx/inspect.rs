@@ -167,6 +167,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     root.insert("id".into(), json!("xlsx:workbook"));
     root.insert("pictureCount".into(), json!(picture_count));
     root.insert("chartCount".into(), json!(chart_count));
+    root.insert("props".into(), crate::props::inspect(&pkg)?);
     root.insert("sheets".into(), Value::Array(sheet_json));
     Ok(Value::Object(root))
 }

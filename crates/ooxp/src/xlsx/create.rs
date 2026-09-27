@@ -45,7 +45,7 @@ pub fn create(workbook: &Value) -> Result<Vec<u8>, Error> {
         )
     })?;
     for k in obj.keys() {
-        if k != "sheets" {
+        if k != "sheets" && k != "props" {
             return Err(Error::with_path(
                 ErrorKind::UnknownField { field: k.clone() },
                 format!("workbook.{k}"),
@@ -194,6 +194,7 @@ pub fn create(workbook: &Value) -> Result<Vec<u8>, Error> {
     pkg.set("/xl/styles.xml", styles_xml().into_bytes())?;
     pkg.set("/docProps/core.xml", core_xml().into_bytes())?;
     pkg.set("/docProps/app.xml", app_xml(&sheets).into_bytes())?;
+    crate::props::apply_create(&mut pkg, obj.get("props"), "workbook.props")?;
     if !sst.is_empty() {
         pkg.set("/xl/sharedStrings.xml", sst_xml(&sst).into_bytes())?;
     }

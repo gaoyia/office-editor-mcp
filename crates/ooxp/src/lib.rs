@@ -9,6 +9,7 @@ mod error;
 mod json;
 mod opc;
 mod pptx;
+mod props;
 mod smartart;
 mod xlsx;
 mod xml;
@@ -791,6 +792,7 @@ mod tests {
                 "id",
                 "pictureCount",
                 "chartCount",
+                "props",
                 "sheets"
             ]
         );
@@ -871,6 +873,7 @@ mod tests {
                 "sections",
                 "mirrorMargins",
                 "gutterAtTop",
+                "props",
                 "from",
                 "truncated",
                 "paragraphs"
@@ -985,6 +988,7 @@ mod tests {
                 "chartCount",
                 "smartArtCount",
                 "commentCount",
+                "props",
                 "slides"
             ]
         );

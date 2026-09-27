@@ -123,6 +123,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         "sections": sections,
         "mirrorMargins": mirror_margins,
         "gutterAtTop": gutter_at_top,
+        "props": crate::props::inspect(&pkg)?,
     });
 
     if let Some(scope) = scope {

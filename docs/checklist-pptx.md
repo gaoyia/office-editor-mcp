@@ -8,7 +8,7 @@ C、I、A、Pp、Pc、Psa、Pn、Pcm 各组由 `manual-check/office/cases/pptx-*
 
 ## 本机结果（2026-09-27）
 
-Microsoft PowerPoint 16.0 已打开，C1、C3、C4、C5–C10、I1–I5、A1–A5、Pp1–Pp7、Pc1–Pc7、Psa1–Psa6、Pn1–Pn4、Pcm1–Pcm5 均 PASS。本机若装了 WPS，`PowerPoint.Application` 会被抢走，测试仍直接启动 `POWERPNT.EXE`，从 `mdiClass` 挂 COM。O1 已放弃。2026-09-27 补跑 `pptx-pictures.ps1`，Pp1–Pp7 通过。同日补跑 `pptx-create-pictures.ps1`，C5–C7 通过。同日补跑 `pptx-charts.ps1`，Pc1–Pc7 通过。同日补跑 `pptx-create-charts.ps1`，C8–C10 通过。同日补跑 `pptx-smartart.ps1`，Psa1–Psa6 通过。同日补跑 `pptx-notes.ps1`，Pn1–Pn4 通过。同日补跑 `pptx-comments.ps1`，Pcm1–Pcm5 通过。
+Microsoft PowerPoint 16.0 已打开，C1、C3、C4、C5–C10、I1–I5、A1–A5、Pp1–Pp7、Pc1–Pc7、Psa1–Psa6、Pn1–Pn4、Pcm1–Pcm5 均 PASS。本机若装了 WPS，`PowerPoint.Application` 会被抢走，测试仍直接启动 `POWERPNT.EXE`，从 `mdiClass` 挂 COM。O1 已放弃。2026-09-27 补跑 `pptx-pictures.ps1`，Pp1–Pp7 通过。同日补跑 `pptx-create-pictures.ps1`，C5–C7 通过。同日补跑 `pptx-charts.ps1`，Pc1–Pc7 通过。同日补跑 `pptx-create-charts.ps1`，C8–C10 通过。同日补跑 `pptx-smartart.ps1`，Psa1–Psa6 通过。同日补跑 `pptx-notes.ps1`，Pn1–Pn4 通过。同日补跑 `pptx-comments.ps1`，Pcm1–Pcm5 通过。同日补跑 `pptx-docprops.ps1`，Pd1–Pd5 通过。
 
 | 序号 | 状态 | 结果 |
 | --- | --- | --- |
@@ -23,6 +23,7 @@ Microsoft PowerPoint 16.0 已打开，C1、C3、C4、C5–C10、I1–I5、A1–A
 | Psa1–Psa6 | ✅ | PowerPoint 16.0：另存列表型 id 为 `slide:1/smartdiagram:4`，点字与屏幕一致；改字 / 增删点 / 删整张无修复；create `list` 为 `slide:1/smartdiagram:3`；跨家族 `NotImplemented` 且源文件未写坏 |
 | Pn1–Pn4 | ✅ | PowerPoint 16.0：无 `notes` 时有 `hasNotes`；展开后 `notes.id` 为 `slide:1/notes`；`setNotesText` 后备注窗格是新字且无修复；改备注不改幻灯片字；往备注插图无修复 |
 | Pcm1–Pcm5 | ✅ | PowerPoint 16.0：无 `comments` 时有 `commentCount`；展开后 id 为 `slide:…/comment:{guid}`；改字 / 插入 / 删除无修复；回复与完成标记能看见 |
+| Pd1–Pd5 | ✅ | PowerPoint 16.0：`pptx-docprops.ps1`，5 PASS / 0 FAIL。根上 `props`、`creator=ooxp`；只改标题后面板标题是新字、公司名还在；自定义 `prop:部门`；删后名单空；形状 id 发 `setProps` 为 `InvalidId`。无 Repair |
 | O1 | 🚫 | 领域层不做原样保存，与 xlsx 清单相同。零脏写回见 OPC 库测试。PowerPoint 另存 create 产物见 `pptx-O1-ppt-resave` |
 
 ## create
@@ -128,6 +129,18 @@ Microsoft PowerPoint 16.0 已打开，C1、C3、C4、C5–C10、I1–I5、A1–A
 | Pcm3 | 插入 | `insertComment` 后审阅窗格能看见新批注，无修复 |
 | Pcm4 | 删除 | `deleteComment` 后该条消失，无修复 |
 | Pcm5 | 回复与完成 | `replyComment` 后线程能看见回复；`setCommentDone` 后完成标记对上，无修复 |
+
+## 文档属性
+
+与 docx 同一套字段。脚本 `manual-check/office/cases/pptx-docprops.ps1`。编号用 Pd（不要跟图片的 Pp 组混）。
+
+| 序号 | 检查 | 通过标准 |
+| --- | --- | --- |
+| Pd1 | inspect | 无 scope 时根上有 `props`；create 产物 `creator` 为 `ooxp` |
+| Pd2 | 改标题 | `setProps` 只改 `title` 后 PowerPoint 文件属性标题是新字；未点名的公司名还在；无 Repair |
+| Pd3 | 自定义 | `setCustomProp` 后树上 id 为 `prop:…`；PowerPoint 自定义属性能看见 |
+| Pd4 | 删除 | `deleteCustomProp` 后名单没有该项 |
+| Pd5 | 拒错 id | 对形状 id 发 `setProps` 得 `InvalidId`。不强制开 PowerPoint |
 
 ## 原样保存（opc 验收）
 

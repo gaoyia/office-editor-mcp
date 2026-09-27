@@ -477,6 +477,15 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                 smartart::apply_layout(&mut pkg, &mut doc, &meta.part, op, i)?;
                 pkg.set(&meta.part, doc.to_bytes()?)?;
             }
+            PptxOp::SetProps(op) => {
+                crate::props::apply_set_props(&mut pkg, op, i)?;
+            }
+            PptxOp::SetCustomProp(op) => {
+                crate::props::apply_set_custom_prop(&mut pkg, op, i)?;
+            }
+            PptxOp::DeleteCustomProp(op) => {
+                crate::props::apply_delete_custom_prop(&mut pkg, op, i)?;
+            }
         }
     }
 

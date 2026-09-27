@@ -818,6 +818,9 @@ pub enum DocxOp {
     SetSmartArtColors(super::smartart::SetSmartArtColorsOp),
     SetSmartArtStyle(super::smartart::SetSmartArtStyleOp),
     SetSmartArtLayout(super::smartart::SetSmartArtLayoutOp),
+    SetProps(crate::props::SetPropsOp),
+    SetCustomProp(crate::props::SetCustomPropOp),
+    DeleteCustomProp(crate::props::DeleteCustomPropOp),
 }
 
 pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
@@ -1228,6 +1231,17 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<DocxOp>, Error> {
             "setSmartArtLayout" => out.push(DocxOp::SetSmartArtLayout(parse_set_smartart_layout(
                 obj, i,
             )?)),
+            "setProps" => out.push(DocxOp::SetProps(crate::props::parse_set_props(
+                obj,
+                i,
+                "docx:document",
+            )?)),
+            "setCustomProp" => out.push(DocxOp::SetCustomProp(
+                crate::props::parse_set_custom_prop(obj, i, "docx:document")?,
+            )),
+            "deleteCustomProp" => out.push(DocxOp::DeleteCustomProp(
+                crate::props::parse_delete_custom_prop(obj, i)?,
+            )),
             _ => {
                 return Err(Error::with_path(
                     ErrorKind::UnsupportedOp {

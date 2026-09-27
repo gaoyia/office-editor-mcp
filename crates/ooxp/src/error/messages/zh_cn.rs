@@ -296,6 +296,11 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::InsertSdtNeedsPara => {
                 "insertContentControl 的 id 必须是正文或页眉页脚段落 id，或 docx:document".into()
             }
+            IdReason::SetPropsNeedsRoot => {
+                "setProps / setCustomProp 的 id 必须是 xlsx:workbook、docx:document 或 pptx:presentation"
+                    .into()
+            }
+            IdReason::CustomPropPrefix => "deleteCustomProp 的 id 必须是 prop:NAME".into(),
         },
         ErrorKind::SheetNotFound { name } => format!("找不到工作表：{name}"),
         ErrorKind::ParaNotFound { id } => format!("找不到段落：{id}"),
@@ -430,6 +435,15 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::GraphicInRestrictedStory => {
             "不能把图形对象放到文本框、标注、批注、脚注或尾注中".into()
         }
+        ErrorKind::NeedPropsField => {
+            "setProps 至少要给 title、subject、creator、description、keywords、category、company、manager 之一"
+                .into()
+        }
+        ErrorKind::InvalidCustomPropType => {
+            "自定义属性 type 必须是 lpwstr、i4、r8 或 bool，且必须与 value 对得上".into()
+        }
+        ErrorKind::EmptyCustomPropName => "自定义属性 name 必须是非空字符串".into(),
+        ErrorKind::CustomPropNotFound { id } => format!("找不到自定义属性：{id}"),
         ErrorKind::SharedFormulaMaster { cell } => format!(
             "{cell} 是共享公式的主格，改它会让引用同一 si 的单元格失去公式；请先把那些单元格改成各自独立的公式"
         ),

@@ -3,6 +3,20 @@
   "format": "pptx",
   "id": "pptx:presentation",
   "slideCount": 2,
+  "props": {
+    "title": "",
+    "subject": null,
+    "creator": "ooxp",
+    "description": null,
+    "keywords": null,
+    "category": null,
+    "lastModifiedBy": null,
+    "created": null,
+    "modified": null,
+    "company": null,
+    "manager": null,
+    "custom": []
+  },
   "slides": [
     {
       "id": "slide:1",

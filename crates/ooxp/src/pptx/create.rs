@@ -34,7 +34,7 @@ pub fn create(presentation: &Value) -> Result<Vec<u8>, Error> {
         )
     })?;
     for k in obj.keys() {
-        if k != "slides" {
+        if k != "slides" && k != "props" {
             return Err(Error::with_path(
                 ErrorKind::UnknownField { field: k.clone() },
                 format!("presentation.{k}"),
@@ -196,6 +196,7 @@ pub fn create(presentation: &Value) -> Result<Vec<u8>, Error> {
 
     pkg.set("/docProps/core.xml", core_xml().into_bytes())?;
     pkg.set("/docProps/app.xml", app_xml(slides.len()).into_bytes())?;
+    crate::props::apply_create(&mut pkg, obj.get("props"), "presentation.props")?;
     pkg.save_to_vec()
 }
 

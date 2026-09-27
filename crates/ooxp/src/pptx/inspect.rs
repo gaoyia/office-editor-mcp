@@ -145,6 +145,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         "chartCount": chart_count,
         "smartArtCount": smart_art_count,
         "commentCount": comment_count,
+        "props": crate::props::inspect(&pkg)?,
         "slides": slide_json,
     }))
 }

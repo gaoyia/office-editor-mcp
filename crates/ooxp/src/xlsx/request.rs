@@ -377,6 +377,9 @@ pub enum XlsxOp {
     SetChartDataLabels(SetChartDataLabelsOp),
     SetChartSize(SetChartSizeOp),
     SetChartAnchor(SetChartAnchorOp),
+    SetProps(crate::props::SetPropsOp),
+    SetCustomProp(crate::props::SetCustomPropOp),
+    DeleteCustomProp(crate::props::DeleteCustomPropOp),
 }
 
 pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
@@ -506,6 +509,15 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<XlsxOp>, Error> {
             }
             "setChartSize" => XlsxOp::SetChartSize(parse_set_chart_size(obj, i)?),
             "setChartAnchor" => XlsxOp::SetChartAnchor(parse_set_chart_anchor(obj, i)?),
+            "setProps" => XlsxOp::SetProps(crate::props::parse_set_props(obj, i, "xlsx:workbook")?),
+            "setCustomProp" => XlsxOp::SetCustomProp(crate::props::parse_set_custom_prop(
+                obj,
+                i,
+                "xlsx:workbook",
+            )?),
+            "deleteCustomProp" => {
+                XlsxOp::DeleteCustomProp(crate::props::parse_delete_custom_prop(obj, i)?)
+            }
             "setParaText"
             | "setShapeText"
             | "setNotesText"

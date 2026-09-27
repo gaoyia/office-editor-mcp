@@ -447,3 +447,56 @@ function Get-ParaText($para) {
     Release-Com $r
     return $text
 }
+
+# pwsh 取不了 Office DocumentProperties.Item（空引用）。
+# Explorer 属性页走同一套 OPC core/app，按列名取标题和公司。
+function Get-ShellFileProp([string]$path, [string[]]$names) {
+    $sh = New-Object -ComObject Shell.Application
+    try {
+        $dir = [IO.Path]::GetDirectoryName($path)
+        $leaf = [IO.Path]::GetFileName($path)
+        $folder = $sh.NameSpace($dir)
+        try {
+            $item = $folder.ParseName($leaf)
+            if ($null -eq $item) { return $null }
+            try {
+                for ($i = 0; $i -lt 80; $i++) {
+                    $n = [string]$folder.GetDetailsOf($null, $i)
+                    if ($names -contains $n) {
+                        return [string]$folder.GetDetailsOf($item, $i)
+                    }
+                }
+                return $null
+            }
+            finally { Release-Com $item }
+        }
+        finally { Release-Com $folder }
+    }
+    finally { Release-Com $sh }
+}
+
+function Get-ZipPartText([string]$path, [string]$part) {
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $zip = [IO.Compression.ZipFile]::OpenRead($path)
+    try {
+        $e = $zip.GetEntry($part.TrimStart('/').Replace('\', '/'))
+        if ($null -eq $e) { return $null }
+        $st = $e.Open()
+        try {
+            $sr = New-Object IO.StreamReader($st, [Text.Encoding]::UTF8)
+            try { return $sr.ReadToEnd() }
+            finally { $sr.Dispose() }
+        }
+        finally { $st.Dispose() }
+    }
+    finally { $zip.Dispose() }
+}
+
+function Get-CustomPropFromZip([string]$path, [string]$name) {
+    $xml = Get-ZipPartText $path 'docProps/custom.xml'
+    if ([string]::IsNullOrEmpty($xml)) { return $null }
+    $pat = 'name="' + [regex]::Escape($name) + '"[^>]*>\s*<[^>]+>([^<]*)'
+    $m = [regex]::Match($xml, $pat)
+    if ($m.Success) { return $m.Groups[1].Value }
+    return $null
+}

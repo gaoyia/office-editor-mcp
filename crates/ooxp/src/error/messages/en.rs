@@ -326,6 +326,11 @@ pub(super) fn render(kind: &ErrorKind) -> String {
                 "insertContentControl id must be a body or header/footer paragraph id, or docx:document"
                     .into()
             }
+            IdReason::SetPropsNeedsRoot => {
+                "setProps / setCustomProp id must be xlsx:workbook, docx:document, or pptx:presentation"
+                    .into()
+            }
+            IdReason::CustomPropPrefix => "deleteCustomProp id must be prop:NAME".into(),
         },
         ErrorKind::SheetNotFound { name } => format!("Sheet not found: {name}"),
         ErrorKind::ParaNotFound { id } => format!("Paragraph not found: {id}"),
@@ -496,6 +501,16 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             "Cannot place a graphic object in a text box, callout, comment, footnote, or endnote"
                 .into()
         }
+        ErrorKind::NeedPropsField => {
+            "setProps requires at least one of title, subject, creator, description, keywords, category, company, manager"
+                .into()
+        }
+        ErrorKind::InvalidCustomPropType => {
+            "custom property type must be lpwstr, i4, r8, or bool, and must match value"
+                .into()
+        }
+        ErrorKind::EmptyCustomPropName => "custom property name must be a non-empty string".into(),
+        ErrorKind::CustomPropNotFound { id } => format!("custom property not found: {id}"),
         ErrorKind::SharedFormulaMaster { cell } => format!(
             "{cell} is a shared formula master; changing it would leave dependents with the same si without a formula. Change those cells to independent formulas first"
         ),

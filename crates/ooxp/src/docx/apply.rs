@@ -327,6 +327,15 @@ pub fn apply(bytes: &[u8], ops: &[DocxOp]) -> Result<Vec<u8>, Error> {
                     &mut pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i,
                 )?;
             }
+            DocxOp::SetProps(op) => {
+                crate::props::apply_set_props(&mut pkg, op, i)?;
+            }
+            DocxOp::SetCustomProp(op) => {
+                crate::props::apply_set_custom_prop(&mut pkg, op, i)?;
+            }
+            DocxOp::DeleteCustomProp(op) => {
+                crate::props::apply_delete_custom_prop(&mut pkg, op, i)?;
+            }
             DocxOp::InsertTable(op) => {
                 apply_insert_table(&pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
             }

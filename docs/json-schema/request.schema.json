@@ -130,7 +130,8 @@
           "type": "array",
           "minItems": 1,
           "items": { "$ref": "#/$defs/xlsxSheetCreate" }
-        }
+        },
+        "props": { "$ref": "#/$defs/createProps" }
       }
     },
     "xlsxSheetCreate": {
@@ -239,7 +240,8 @@
           "type": "array",
           "maxItems": 3,
           "items": { "$ref": "#/$defs/docxHfCreate" }
-        }
+        },
+        "props": { "$ref": "#/$defs/createProps" }
       }
     },
     "docxHfCreate": {
@@ -440,7 +442,8 @@
         "slides": {
           "type": "array",
           "items": { "$ref": "#/$defs/pptxSlideCreate" }
-        }
+        },
+        "props": { "$ref": "#/$defs/createProps" }
       }
     },
     "pptxSlideCreate": {
@@ -663,7 +666,10 @@
               { "$ref": "#/$defs/setSmartArtStyleOp" },
               { "$ref": "#/$defs/setSmartArtLayoutOp" },
               { "$ref": "#/$defs/setNotesTextOp" },
-              { "$ref": "#/$defs/setShapeTextOp" }
+              { "$ref": "#/$defs/setShapeTextOp" },
+              { "$ref": "#/$defs/setPropsOp" },
+              { "$ref": "#/$defs/setCustomPropOp" },
+              { "$ref": "#/$defs/deleteCustomPropOp" }
             ]
           }
         }
@@ -2210,6 +2216,83 @@
         "op": { "const": "setShapeText" },
         "id": { "type": "string", "minLength": 1 },
         "text": { "type": "string" }
+      }
+    },
+    "nullableString": { "type": ["string", "null"] },
+    "createProps": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "title": { "$ref": "#/$defs/nullableString" },
+        "subject": { "$ref": "#/$defs/nullableString" },
+        "creator": { "$ref": "#/$defs/nullableString" },
+        "description": { "$ref": "#/$defs/nullableString" },
+        "keywords": { "$ref": "#/$defs/nullableString" },
+        "category": { "$ref": "#/$defs/nullableString" },
+        "company": { "$ref": "#/$defs/nullableString" },
+        "manager": { "$ref": "#/$defs/nullableString" },
+        "custom": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/createCustomProp" }
+        }
+      }
+    },
+    "createCustomProp": {
+      "type": "object",
+      "required": ["name", "value"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "value": { "type": ["string", "number", "boolean"] },
+        "type": { "enum": ["lpwstr", "i4", "r8", "bool"] }
+      }
+    },
+    "setPropsOp": {
+      "type": "object",
+      "required": ["op", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "setProps" },
+        "id": { "type": "string", "minLength": 1 },
+        "title": { "$ref": "#/$defs/nullableString" },
+        "subject": { "$ref": "#/$defs/nullableString" },
+        "creator": { "$ref": "#/$defs/nullableString" },
+        "description": { "$ref": "#/$defs/nullableString" },
+        "keywords": { "$ref": "#/$defs/nullableString" },
+        "category": { "$ref": "#/$defs/nullableString" },
+        "company": { "$ref": "#/$defs/nullableString" },
+        "manager": { "$ref": "#/$defs/nullableString" }
+      },
+      "anyOf": [
+        { "required": ["title"] },
+        { "required": ["subject"] },
+        { "required": ["creator"] },
+        { "required": ["description"] },
+        { "required": ["keywords"] },
+        { "required": ["category"] },
+        { "required": ["company"] },
+        { "required": ["manager"] }
+      ]
+    },
+    "setCustomPropOp": {
+      "type": "object",
+      "required": ["op", "id", "name", "value"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "setCustomProp" },
+        "id": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 },
+        "value": { "type": ["string", "number", "boolean"] },
+        "type": { "enum": ["lpwstr", "i4", "r8", "bool"] }
+      }
+    },
+    "deleteCustomPropOp": {
+      "type": "object",
+      "required": ["op", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "deleteCustomProp" },
+        "id": { "type": "string", "minLength": 1 }
       }
     }
   }

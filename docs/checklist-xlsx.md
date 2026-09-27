@@ -8,7 +8,7 @@
 
 Microsoft Excel 16.0 已打开，用户确认通过。本机若装了 WPS，`Excel.Application` 会被抢走，测试仍直接启动 `EXCEL.EXE` 再挂 COM。
 
-C、I、A、O、Xp、Xc、Xh 这几组现在由 `manual-check/office/cases/xlsx-*.ps1` 自动判定，跑 `pwsh -File manual-check\office\run.ps1 -Case 'xlsx-*'` 即可复现，逐条结果落在 `manual-check/office/out/office-results.csv`。2026-09-27 补跑 `xlsx-pictures.ps1`，Xp1–Xp7 通过。同日补跑 `xlsx-charts.ps1`，Xc1–Xc7 通过。同日补跑 `xlsx-create-pictures.ps1`，C8–C10 通过。同日补跑 `xlsx-create-charts.ps1`，C11–C13 通过。同日补跑 `xlsx-headerfooter.ps1`，Xh1–Xh5 通过。
+C、I、A、O、Xp、Xc、Xh 这几组现在由 `manual-check/office/cases/xlsx-*.ps1` 自动判定，跑 `pwsh -File manual-check\office\run.ps1 -Case 'xlsx-*'` 即可复现，逐条结果落在 `manual-check/office/out/office-results.csv`。2026-09-27 补跑 `xlsx-pictures.ps1`，Xp1–Xp7 通过。同日补跑 `xlsx-charts.ps1`，Xc1–Xc7 通过。同日补跑 `xlsx-create-pictures.ps1`，C8–C10 通过。同日补跑 `xlsx-create-charts.ps1`，C11–C13 通过。同日补跑 `xlsx-headerfooter.ps1`，Xh1–Xh5 通过。同日补跑 `xlsx-docprops.ps1`，Xd1–Xd5 通过。
 
 | 序号 | 状态 | 结果 |
 | --- | --- | --- |
@@ -24,6 +24,7 @@ C、I、A、O、Xp、Xc、Xh 这几组现在由 `manual-check/office/cases/xlsx-
 | C8–C10 | ✅ | Excel 16.0：inspect 第一张 `sheet:Sheet1/pic:1`、`oneCell`、`from=B2`；第二张 `twoCell`、`D2:F8`；打开无 Repair，Shapes=2 |
 | C11–C13 | ✅ | Excel 16.0：inspect 第一张 `sheet:Sheet1/chart:1`、`type=col`、`from=E2`；系列 1/2/3 与 `A10` 一带单元格一致；打开无 Repair，Shapes=1 且 HasChart |
 | Xh1–Xh5 | ✅ | Excel 16.0：无 `headerFooter` 时有 `hasHeaderFooter`、没有名单；展开六槽，奇数页页眉原文含 `Xh页眉`；`setHeaderFooterText` 后 PageSetup 为新字且无 Repair；只开 `pictures` 时名单不含 `hf:`；往 `hf:odd:header` 插图 id 为 `…/pic:2`，换图后无 Repair |
+| Xd1–Xd5 | ✅ | Excel 16.0：`xlsx-docprops.ps1`，5 PASS / 0 FAIL。根上 `props`、`creator=ooxp`；只改标题后面板标题是新字、公司名还在；自定义 `prop:部门`；删后名单空；单元格 id 发 `setProps` 为 `InvalidId`。无 Repair |
 
 ## create
 
@@ -55,7 +56,7 @@ C、I、A、O、Xp、Xc、Xh 这几组现在由 `manual-check/office/cases/xlsx-
 | I3 | A1 | `type` 为 `number`，`value` 为 `1` |
 | I4 | A2 | `type` 为 `text`，`value` 为 `hello` |
 | I5 | B1 | `formula` 为 `=SUM(A1)` |
-| I6 | 无 scope | 只发 path 时没有 `cells` 字段，仍有 `pictureCount` |
+| I6 | 无 scope | 只发 path 时没有 `cells` 字段，仍有 `pictureCount`、`props` |
 
 ## apply
 
@@ -129,3 +130,15 @@ Office 另存 create 产物是打开冒烟，见 `manual-check/office/cases/opc-
 | Xs2 | 数据 | 点名的普通表 `dataFrom` 一带有数据表，图上的值对得上 |
 | Xs3 | 删除 | `deleteChartSheet` 后该表消失，数据单元格还在，无修复 |
 | Xs4 | 拒普通表 | 对 `worksheet` 发 `deleteChartSheet` 得到 `InvalidId`。不强制开 Excel |
+
+## 文档属性
+
+与 docx 同一套字段。脚本 `manual-check/office/cases/xlsx-docprops.ps1`。编号用 Xd（不要跟页眉图的 Xp 组混）。
+
+| 序号 | 检查 | 通过标准 |
+| --- | --- | --- |
+| Xd1 | inspect | 无 scope 时根上有 `props`；create 产物 `creator` 为 `ooxp` |
+| Xd2 | 改标题 | `setProps` 只改 `title` 后 Excel 文件属性标题是新字；未点名的公司名还在；无 Repair |
+| Xd3 | 自定义 | `setCustomProp` 后树上 id 为 `prop:…`；Excel 自定义属性能看见 |
+| Xd4 | 删除 | `deleteCustomProp` 后名单没有该项 |
+| Xd5 | 拒错 id | 对单元格 id 发 `setProps` 得 `InvalidId`。不强制开 Excel |

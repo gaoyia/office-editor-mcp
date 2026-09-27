@@ -333,6 +333,9 @@ pub enum PptxOp {
     SetSmartArtColors(SetSmartArtColorsOp),
     SetSmartArtStyle(SetSmartArtStyleOp),
     SetSmartArtLayout(SetSmartArtLayoutOp),
+    SetProps(crate::props::SetPropsOp),
+    SetCustomProp(crate::props::SetCustomPropOp),
+    DeleteCustomProp(crate::props::DeleteCustomPropOp),
 }
 
 pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
@@ -517,6 +520,17 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<PptxOp>, Error> {
             "setSmartArtColors" => PptxOp::SetSmartArtColors(parse_set_smartart_colors(obj, i)?),
             "setSmartArtStyle" => PptxOp::SetSmartArtStyle(parse_set_smartart_style(obj, i)?),
             "setSmartArtLayout" => PptxOp::SetSmartArtLayout(parse_set_smartart_layout(obj, i)?),
+            "setProps" => {
+                PptxOp::SetProps(crate::props::parse_set_props(obj, i, "pptx:presentation")?)
+            }
+            "setCustomProp" => PptxOp::SetCustomProp(crate::props::parse_set_custom_prop(
+                obj,
+                i,
+                "pptx:presentation",
+            )?),
+            "deleteCustomProp" => {
+                PptxOp::DeleteCustomProp(crate::props::parse_delete_custom_prop(obj, i)?)
+            }
             _ => {
                 return Err(Error::with_path(
                     ErrorKind::UnsupportedOp {

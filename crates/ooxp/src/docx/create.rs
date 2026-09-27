@@ -130,7 +130,10 @@ pub fn create(document: &Value) -> Result<Vec<u8>, Error> {
         )
     })?;
     for k in obj.keys() {
-        if !matches!(k.as_str(), "paragraphs" | "headers" | "footers" | "tables") {
+        if !matches!(
+            k.as_str(),
+            "paragraphs" | "headers" | "footers" | "tables" | "props"
+        ) {
             return Err(Error::with_path(
                 ErrorKind::UnknownField { field: k.clone() },
                 format!("document.{k}"),
@@ -297,6 +300,7 @@ pub fn create(document: &Value) -> Result<Vec<u8>, Error> {
     pkg.set("/word/settings.xml", settings_xml(need_even).into_bytes())?;
     pkg.set("/docProps/core.xml", core_xml().into_bytes())?;
     pkg.set("/docProps/app.xml", app_xml().into_bytes())?;
+    crate::props::apply_create(&mut pkg, obj.get("props"), "document.props")?;
 
     attach_pictures(&mut pkg, "/word/document.xml", &paras)?;
     attach_smartarts(&mut pkg, "/word/document.xml", &paras)?;

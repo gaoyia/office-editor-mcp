@@ -56,6 +56,20 @@
   ],
   "mirrorMargins": null,
   "gutterAtTop": null,
+  "props": {
+    "title": "",
+    "subject": null,
+    "creator": "ooxp",
+    "description": null,
+    "keywords": null,
+    "category": null,
+    "lastModifiedBy": null,
+    "created": null,
+    "modified": null,
+    "company": null,
+    "manager": null,
+    "custom": []
+  },
   "from": 1,
   "truncated": false,
   "paragraphs": [

@@ -44,6 +44,7 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 | Cc1–Cc6 | ✅ | Word 16.0：`docx-sdt.ps1`，6 PASS / 0 FAIL。无 `scope.contentControls` 时只有 `contentControlCount`；plainText 插入后 `sdt:1` / `kind=plainText`；打开无修复且 `ContentControls.Count=1`、`Type=1`；`setContentControl` 后仍是纯文本控件；下拉 `Type=4`；删后 `contentControlCount=0` 标题与原文还在；页眉 `contentControlCount=1` 且无修复。标题栏无 Repair |
 | Cf1–Cf6 | ✅ | Word 16.0：`docx-create-full.ps1`，6 PASS / 0 FAIL。两节、饼图、脚注、尾注、批注；标题栏无 Repair。`commentsExtended` 的 CT 须为 `…wordprocessingml.commentsExtended+xml` |
 | Cd1–Cd6 | ✅ | Word 16.0：`docx-container-drawing.ps1`，6 PASS / 0 FAIL。批注内柱形图；注内与批注内 `insertTextBox` 为 `InvalidField`；框内图表根计数不含该图。标题栏无 Repair |
+| Dp1–Dp5 | ✅ | Word 16.0：`docx-docprops.ps1`，5 PASS / 0 FAIL。根上 `props`、`creator=ooxp`；只改标题后面板标题是新字、公司名还在；自定义 `prop:部门`；删后名单空；错 id 为 `InvalidId`。标题栏无 Repair |
 | O1 | 🚫 | 领域层不做原样保存，与 xlsx 清单相同。零脏写回见 OPC 库测试。Word 另存 create 产物见 `docx-O1-word-resave`。此前记的 `SaveAs2` 挂起，拆分后重跑没再出现，一秒内返回 |
 
 ## create
@@ -70,7 +71,7 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 | I2 | 大纲 | `outline` 含第一段，`level` 为 `1`，`text` 为 `标题` |
 | I3 | 段落 id | 两段都有 `para:{hex}`，`stable` 为 `true` |
 | I4 | 第二段 | `text` 为 `hello` |
-| I5 | 无 scope | 只发 path 时没有 `paragraphs` 字段，仍有 `outline`、`paraCount`、`pictureCount`、`tableCount`、`revisionCount`、`hyperlinkCount`、`bookmarkCount`、`fieldCount`、`tocCount`、`mathCount`、`contentControlCount`、`headers`、`footers`、`sections` |
+| I5 | 无 scope | 只发 path 时没有 `paragraphs` 字段，仍有 `outline`、`paraCount`、`pictureCount`、`tableCount`、`revisionCount`、`hyperlinkCount`、`bookmarkCount`、`fieldCount`、`tocCount`、`mathCount`、`contentControlCount`、`headers`、`footers`、`sections`、`props` |
 
 ## apply
 
@@ -457,6 +458,18 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 | Cd4 | 批注内文本框 | 对批注段落发 `insertTextBox` 报 `InvalidField`，不写输出文件 |
 | Cd5 | 框内图表 | 正文框内段落上 `insertChart` 后，框上 `chartCount` 为 1，根上 `chartCount` 不含该图 |
 | Cd6 | 容器 id | 对批注容器 id 发 `insertChart`、对框 id 发 `insertTextBox` 均 `InvalidId` |
+
+## 文档属性
+
+三种格式共用字段与 op。脚本 `manual-check/office/cases/docx-docprops.ps1`、`xlsx-docprops.ps1`、`pptx-docprops.ps1`。编号用 Dp / Xd / Pd（不要跟页眉图的 Xp、幻灯片图的 Pp 混）。
+
+| 序号 | 检查 | 通过标准 |
+| --- | --- | --- |
+| Dp1 | inspect | 无 scope 时根上有 `props`；create 产物 `creator` 为 `ooxp`，`title` 为 `""` |
+| Dp2 | 改标题 | `setProps` 只改 `title` 后 Word 文件属性标题是新字；未点名的公司名还在；标题栏无 Repair |
+| Dp3 | 自定义 | `setCustomProp` 后树上 id 为 `prop:…`；Word 自定义属性能看见 |
+| Dp4 | 删除 | `deleteCustomProp` 后名单没有该项 |
+| Dp5 | 拒错 id | 对段落 id 发 `setProps` 得 `InvalidId`；一个字段都不给得 `InvalidField`。不强制开 Word |
 
 ## 原样保存（opc 验收）
 

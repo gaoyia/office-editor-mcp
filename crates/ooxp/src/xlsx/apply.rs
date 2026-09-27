@@ -203,6 +203,15 @@ pub fn apply(bytes: &[u8], ops: &[XlsxOp]) -> Result<Vec<u8>, Error> {
                 let part = require_sheet_part(&sheet_index, &op.target.sheet, i)?;
                 chart::set_chart_anchor(&mut pkg, &part, op, i)?;
             }
+            XlsxOp::SetProps(op) => {
+                crate::props::apply_set_props(&mut pkg, op, i)?;
+            }
+            XlsxOp::SetCustomProp(op) => {
+                crate::props::apply_set_custom_prop(&mut pkg, op, i)?;
+            }
+            XlsxOp::DeleteCustomProp(op) => {
+                crate::props::apply_delete_custom_prop(&mut pkg, op, i)?;
+            }
         }
     }
 

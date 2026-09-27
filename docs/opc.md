@@ -70,6 +70,7 @@ xlsx create 生成 Transitional 包，命名空间用 Office 默认的 2006 那�
 | --- | --- |
 | `/docProps/core.xml` | 核心文件属性，dc:title 可空 |
 | `/docProps/app.xml` | Application 写成 `ooxp`，Sheet 名单与 workbook 一致 |
+| `/docProps/custom.xml` | 仅当 `workbook.props.custom` 非空，或 apply 的 `setCustomProp` 新建了自定义属性 |
 | `/xl/drawings/drawingN.xml` | 仅当某张表声明了 `pictures` 或 `charts` |
 | `/xl/media/imageN.ext` | 仅当某张表声明了 `pictures` |
 | `/xl/charts/chartN.xml` | 仅当某张表声明了 `charts` |
@@ -94,7 +95,7 @@ SpreadsheetML 主命名空间：
 
 `http://schemas.openxmlformats.org/spreadsheetml/2006/main`
 
-apply 插入工作表图时，可能新建 `/xl/drawings/drawingN.xml`（CT `application/vnd.openxmlformats-officedocument.drawing+xml`）、drawing 的 `.rels`，以及 `/xl/media/imageN.*`。工作表 `.rels` 补一条 drawing 关系（Type 以 `/drawing` 结尾），工作表 XML 写 `<drawing r:id="…"/>`。往页眉槽位插图时写 `<drawingHF r:id="…"/>`（ECMA-376 §18.3.1.37），关系 Type 同样以 `/drawing` 结尾，drawing 内容类型相同；不改 `legacyDrawingHF`。drawing 命名空间是 `http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing`（`xdr`）。apply 插入工作表图表时，可能再新建 `/xl/charts/chartN.xml`（CT `application/vnd.openxmlformats-officedocument.drawingml.chart+xml`）及 chart 的 `.rels`；drawing 关系 Type 以 `/chart` 结尾。不写 embedding。`insertChartSheet` 再新建 `/xl/chartsheets/sheetN.xml`（CT `application/vnd.openxmlformats-officedocument.spreadsheetml.chartsheet+xml`），workbook 关系 Type 以 `/chartsheet` 结尾；drawing 上写一张 `absoluteAnchor` 的 `xdr:graphicFrame`。create 声明了 `sheets[].pictures` 或 `sheets[].charts` 时按同一套规则写 drawing、media 与 chart 部件。create 本期不写 `headerFooter` / `drawingHF`，也不写图表工作表。
+apply 插入工作表图时，可能新建 `/xl/drawings/drawingN.xml`（CT `application/vnd.openxmlformats-officedocument.drawing+xml`）、drawing 的 `.rels`，以及 `/xl/media/imageN.*`。工作表 `.rels` 补一条 drawing 关系（Type 以 `/drawing` 结尾），工作表 XML 写 `<drawing r:id="…"/>`。往页眉槽位插图时写 `<drawingHF r:id="…"/>`（ECMA-376 §18.3.1.37），关系 Type 同样以 `/drawing` 结尾，drawing 内容类型相同；不改 `legacyDrawingHF`。drawing 命名空间是 `http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing`（`xdr`）。apply 插入工作表图表时，可能再新建 `/xl/charts/chartN.xml`（CT `application/vnd.openxmlformats-officedocument.drawingml.chart+xml`）及 chart 的 `.rels`；drawing 关系 Type 以 `/chart` 结尾。不写 embedding。`insertChartSheet` 再新建 `/xl/chartsheets/sheetN.xml`（CT `application/vnd.openxmlformats-officedocument.spreadsheetml.chartsheet+xml`），workbook 关系 Type 以 `/chartsheet` 结尾；drawing 上写一张 `absoluteAnchor` 的 `xdr:graphicFrame`。create 声明了 `sheets[].pictures` 或 `sheets[].charts` 时按同一套规则写 drawing、media 与 chart 部件。create 本期不写 `headerFooter` / `drawingHF`，也不写图表工作表。`setProps` / `setCustomProp` 可能新建 `/docProps/core.xml`、`/docProps/app.xml`、`/docProps/custom.xml`（三种格式相同）。core 关系 Type 为 `http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties`，CT `application/vnd.openxmlformats-package.core-properties+xml`。app 关系 Type 为 `http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties`，CT `application/vnd.openxmlformats-officedocument.extended-properties+xml`。custom 关系 Type 为 `http://schemas.openxmlformats.org/officeDocument/2006/relationships/custom-properties`，CT `application/vnd.openxmlformats-officedocument.custom-properties+xml`。`deleteCustomProp` 删光后去掉 custom 部件、根关系和 Override。定位这些部件用根 `.rels` 的 Type 后缀，不要写死路径。
 
 ## create 时的最小包（docx）
 
@@ -117,6 +118,7 @@ docx create 同样生成 Transitional 包，命名空间用 2006 那套。
 | --- | --- |
 | `/docProps/core.xml` | 核心文件属性 |
 | `/docProps/app.xml` | Application 写成 `ooxp` |
+| `/docProps/custom.xml` | 仅当 `document.props.custom` 非空，或 apply 的 `setCustomProp` 新建了自定义属性 |
 | `/word/header1.xml` | 仅当 `document.headers` 含默认页眉 |
 | `/word/footer1.xml` | 仅当 `document.footers` 含默认页脚 |
 | `/word/media/imageN.ext` | 仅当段落或页眉页脚声明了 `pictures` |
@@ -179,6 +181,7 @@ pptx create 同样生成 Transitional 包，命名空间用 2006 那套。不能
 | --- | --- |
 | `/docProps/core.xml` | 核心文件属性 |
 | `/docProps/app.xml` | Application 写成 `ooxp`，Slides 与页数一致 |
+| `/docProps/custom.xml` | 仅当 `presentation.props.custom` 非空，或 apply 的 `setCustomProp` 新建了自定义属性 |
 | `/ppt/media/imageN.*` | 给了 `slides[].pictures` 时写入 |
 
 第一期 create 不写备注、批注、讲义、`viewProps`、`tableStyles`、动画。apply 的 `setNotesText` 或往备注插图时，可能新建 `/ppt/notesMasters/notesMaster1.xml` 与 `/ppt/notesSlides/notesSlideN.xml`。apply 插入现代批注时，可能新建 `/ppt/comments/modernComment_{sldId}_N.xml` 与 `/ppt/authors.xml`。
