@@ -234,3 +234,15 @@ Office 另存 create 产物是打开冒烟，见 `manual-check/office/cases/opc-
 | Xn3 | 色阶 | 写入两色 `colorScale` 后 Excel 认色阶、无修复 |
 | Xn4 | 删除 | `deleteConditionalFormat` 后该范围不再有条件格式，Excel 无修复 |
 | Xn5 | 缺字段 | 只给 `op` 与 `id` 的 `insertConditionalFormat` 得 `InvalidField`，未写文件。不强制开 Excel |
+
+## 工作表表格
+
+用库 create 产物再 apply。脚本 `manual-check/office/cases/xlsx-table.ps1`。编号用 Xt。
+
+| 序号 | 检查 | 通过标准 |
+| --- | --- | --- |
+| Xt1 | inspect | 有单元格范围时表上有 `tableCount` 与 `tables`；create 默认为 `0` 与空数组 |
+| Xt2 | 建成表 | `insertSheetTable` 给 `A1:C3` 写列名后，Excel 无修复；COM `ListObjects` 能看见表，列名对 |
+| Xt3 | 改范围 | `setSheetTable` 把 `ref` 改到 `A1:C4` 后 Excel 仍认该表、无修复 |
+| Xt4 | 删除 | `deleteSheetTable` 后数据还在、不再有表，Excel 无修复 |
+| Xt5 | 缺字段 | 只给 `op` 与 `id` 的 `insertSheetTable` 得 `InvalidField`，未写文件。不强制开 Excel |

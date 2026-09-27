@@ -592,6 +592,9 @@
               { "$ref": "#/$defs/insertConditionalFormatOp" },
               { "$ref": "#/$defs/setConditionalFormatOp" },
               { "$ref": "#/$defs/deleteConditionalFormatOp" },
+              { "$ref": "#/$defs/insertSheetTableOp" },
+              { "$ref": "#/$defs/setSheetTableOp" },
+              { "$ref": "#/$defs/deleteSheetTableOp" },
               { "$ref": "#/$defs/setHeaderFooterTextOp" },
               { "$ref": "#/$defs/setParaTextOp" },
               { "$ref": "#/$defs/setHeaderFooterDistanceOp" },
@@ -1214,6 +1217,47 @@
       "additionalProperties": false,
       "properties": {
         "op": { "const": "deleteConditionalFormat" },
+        "id": { "type": "string", "minLength": 1 }
+      }
+    },
+    "insertSheetTableOp": {
+      "type": "object",
+      "required": ["op", "id", "ref"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "insertSheetTable" },
+        "id": { "type": "string", "minLength": 1 },
+        "ref": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 },
+        "columns": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "setSheetTableOp": {
+      "type": "object",
+      "required": ["op", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "setSheetTable" },
+        "id": { "type": "string", "minLength": 1 },
+        "ref": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 },
+        "columns": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "deleteSheetTableOp": {
+      "type": "object",
+      "required": ["op", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "deleteSheetTable" },
         "id": { "type": "string", "minLength": 1 }
       }
     },

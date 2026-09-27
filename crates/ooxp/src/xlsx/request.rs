@@ -612,6 +612,35 @@ pub struct DeleteConditionalFormatOp {
 }
 
 #[derive(Debug, Clone)]
+pub struct InsertSheetTableOp {
+    pub sheet: String,
+    pub range: (a1::CellRef, a1::CellRef),
+    pub name: Option<String>,
+    pub columns: Option<Vec<String>>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetSheetTableOp {
+    pub sheet: String,
+    pub index: usize,
+    pub range: Option<(a1::CellRef, a1::CellRef)>,
+    pub name: Option<String>,
+    pub columns: Option<Vec<String>>,
+}
+
+impl SetSheetTableOp {
+    pub fn has_patch(&self) -> bool {
+        self.range.is_some() || self.name.is_some() || self.columns.is_some()
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct DeleteSheetTableOp {
+    pub sheet: String,
+    pub index: usize,
+}
+
+#[derive(Debug, Clone)]
 pub struct SetHeaderFooterTextOp {
     #[allow(dead_code)]
     pub id: String,
@@ -923,6 +952,9 @@ pub enum XlsxOp {
     InsertConditionalFormat(InsertConditionalFormatOp),
     SetConditionalFormat(SetConditionalFormatOp),
     DeleteConditionalFormat(DeleteConditionalFormatOp),
+    InsertSheetTable(InsertSheetTableOp),
+    SetSheetTable(SetSheetTableOp),
+    DeleteSheetTable(DeleteSheetTableOp),
     DeleteChart(DeleteChartOp),
     SetChartTitle(SetChartTitleOp),
     SetChartSeries(SetChartSeriesOp),
@@ -1086,6 +1118,9 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<XlsxOp>, Error> {
             "deleteConditionalFormat" => {
                 XlsxOp::DeleteConditionalFormat(parse_delete_conditional_format(obj, i)?)
             }
+            "insertSheetTable" => XlsxOp::InsertSheetTable(parse_insert_sheet_table(obj, i)?),
+            "setSheetTable" => XlsxOp::SetSheetTable(parse_set_sheet_table(obj, i)?),
+            "deleteSheetTable" => XlsxOp::DeleteSheetTable(parse_delete_sheet_table(obj, i)?),
             "deleteChart" => XlsxOp::DeleteChart(parse_delete_chart(obj, i)?),
             "setChartTitle" => XlsxOp::SetChartTitle(parse_set_chart_title(obj, i)?),
             "setChartSeries" => XlsxOp::SetChartSeries(parse_set_chart_series(obj, i)?),
@@ -3110,6 +3145,254 @@ fn parse_delete_conditional_format(
     Ok(DeleteConditionalFormatOp { sheet, index })
 }
 
+fn parse_insert_sheet_table(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<InsertSheetTableOp, Error> {
+    deny_keys(obj, i, &["op", "id", "ref", "name", "columns"])?;
+    let id = require_id(obj, i)?;
+    let sheet = parse_sheet_only_id(&id, i, "id", IdReason::SheetOpNeedsSheet)?;
+    let range = parse_table_ref(obj.get("ref"), i, true)?.ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::MissingField {
+                field: "ref".into(),
+            },
+            format!("ops[{i}].ref"),
+        )
+    })?;
+    Ok(InsertSheetTableOp {
+        sheet,
+        range,
+        name: parse_table_name(obj.get("name"), i)?,
+        columns: parse_table_columns(obj.get("columns"), i)?,
+    })
+}
+
+fn parse_set_sheet_table(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<SetSheetTableOp, Error> {
+    deny_keys(obj, i, &["op", "id", "ref", "name", "columns"])?;
+    let id = require_id(obj, i)?;
+    let (sheet, index) = parse_table_id(&id, i)?;
+    let op = SetSheetTableOp {
+        sheet,
+        index,
+        range: parse_table_ref(obj.get("ref"), i, false)?,
+        name: parse_table_name(obj.get("name"), i)?,
+        columns: parse_table_columns(obj.get("columns"), i)?,
+    };
+    if !op.has_patch() {
+        return Err(Error::with_path(
+            ErrorKind::NeedSetSheetTableField,
+            format!("ops[{i}]"),
+        ));
+    }
+    Ok(op)
+}
+
+fn parse_delete_sheet_table(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<DeleteSheetTableOp, Error> {
+    deny_keys(obj, i, &["op", "id"])?;
+    let id = require_id(obj, i)?;
+    let (sheet, index) = parse_table_id(&id, i)?;
+    Ok(DeleteSheetTableOp { sheet, index })
+}
+
+fn parse_table_id(id: &str, op_index: usize) -> Result<(String, usize), Error> {
+    let Some(rest) = id.strip_prefix("sheet:") else {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::SheetTablePrefix,
+            },
+            format!("ops[{op_index}].id"),
+        ));
+    };
+    let Some((name, nstr)) = rest.split_once("/table:") else {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::SheetTablePrefix,
+            },
+            format!("ops[{op_index}].id"),
+        ));
+    };
+    if name.is_empty() || name.contains('/') {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::SheetTablePrefix,
+            },
+            format!("ops[{op_index}].id"),
+        ));
+    }
+    if nstr.is_empty() || !nstr.chars().all(|c| c.is_ascii_digit()) {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::TableIndexNotInt,
+            },
+            format!("ops[{op_index}].id"),
+        ));
+    }
+    let n: usize = nstr.parse().map_err(|_| {
+        Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::TableIndexNotInt,
+            },
+            format!("ops[{op_index}].id"),
+        )
+    })?;
+    if n == 0 {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::TableIndexFromOne,
+            },
+            format!("ops[{op_index}].id"),
+        ));
+    }
+    Ok((name.to_string(), n))
+}
+
+fn parse_table_ref(
+    v: Option<&Value>,
+    i: usize,
+    required: bool,
+) -> Result<Option<(a1::CellRef, a1::CellRef)>, Error> {
+    match v {
+        None if required => Err(Error::with_path(
+            ErrorKind::MissingField {
+                field: "ref".into(),
+            },
+            format!("ops[{i}].ref"),
+        )),
+        None => Ok(None),
+        Some(Value::Null) => Err(Error::with_path(
+            ErrorKind::InvalidSheetTable {
+                field: "ref".into(),
+            },
+            format!("ops[{i}].ref"),
+        )),
+        Some(Value::String(s)) => {
+            let (start, end) = a1::parse_range(s).map_err(|e| e.at(format!("ops[{i}].ref")))?;
+            if start.row == end.row {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidSheetTable {
+                        field: "ref".into(),
+                    },
+                    format!("ops[{i}].ref"),
+                ));
+            }
+            Ok(Some((start, end)))
+        }
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "ref".into(),
+                expected: TypeName::String,
+            },
+            format!("ops[{i}].ref"),
+        )),
+    }
+}
+
+fn parse_table_name(v: Option<&Value>, i: usize) -> Result<Option<String>, Error> {
+    match v {
+        None => Ok(None),
+        Some(Value::Null) => Err(Error::with_path(
+            ErrorKind::InvalidSheetTable {
+                field: "name".into(),
+            },
+            format!("ops[{i}].name"),
+        )),
+        Some(Value::String(s)) => {
+            if s.is_empty() || s.chars().any(char::is_whitespace) {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidSheetTable {
+                        field: "name".into(),
+                    },
+                    format!("ops[{i}].name"),
+                ));
+            }
+            Ok(Some(s.clone()))
+        }
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "name".into(),
+                expected: TypeName::String,
+            },
+            format!("ops[{i}].name"),
+        )),
+    }
+}
+
+fn parse_table_columns(v: Option<&Value>, i: usize) -> Result<Option<Vec<String>>, Error> {
+    match v {
+        None => Ok(None),
+        Some(Value::Null) => Err(Error::with_path(
+            ErrorKind::InvalidSheetTable {
+                field: "columns".into(),
+            },
+            format!("ops[{i}].columns"),
+        )),
+        Some(Value::Array(arr)) if arr.is_empty() => Err(Error::with_path(
+            ErrorKind::InvalidSheetTable {
+                field: "columns".into(),
+            },
+            format!("ops[{i}].columns"),
+        )),
+        Some(Value::Array(arr)) => {
+            let mut out = Vec::new();
+            for (j, item) in arr.iter().enumerate() {
+                let Some(s) = item.as_str() else {
+                    return Err(Error::with_path(
+                        ErrorKind::WrongType {
+                            field: "columns".into(),
+                            expected: TypeName::String,
+                        },
+                        format!("ops[{i}].columns[{j}]"),
+                    ));
+                };
+                if s.is_empty() {
+                    return Err(Error::with_path(
+                        ErrorKind::InvalidSheetTable {
+                            field: "columns".into(),
+                        },
+                        format!("ops[{i}].columns[{j}]"),
+                    ));
+                }
+                out.push(s.to_string());
+            }
+            if has_table_col_dup(&out) {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidSheetTable {
+                        field: "columns".into(),
+                    },
+                    format!("ops[{i}].columns"),
+                ));
+            }
+            Ok(Some(out))
+        }
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "columns".into(),
+                expected: TypeName::Array,
+            },
+            format!("ops[{i}].columns"),
+        )),
+    }
+}
+
+fn has_table_col_dup(cols: &[String]) -> bool {
+    let mut seen = Vec::new();
+    for c in cols {
+        let k = c.to_ascii_lowercase();
+        if seen.iter().any(|s: &String| s == &k) {
+            return true;
+        }
+        seen.push(k);
+    }
+    false
+}
+
 fn parse_cf_id(id: &str, op_index: usize) -> Result<(String, usize), Error> {
     let Some(rest) = id.strip_prefix("sheet:") else {
         return Err(Error::with_path(
@@ -4454,6 +4737,7 @@ fn parse_sheet_only_id(
         || id.contains("/hf:")
         || id.contains("/dv:")
         || id.contains("/cf:")
+        || id.contains("/table:")
         || id.starts_with("cell:")
     {
         return Err(Error::with_path(

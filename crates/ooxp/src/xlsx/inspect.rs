@@ -14,6 +14,7 @@ use super::formula;
 use super::hf;
 use super::picture;
 use super::style;
+use super::table;
 use super::validation;
 use super::{REL_CHARTSHEET, REL_DIALOGSHEET, REL_SHARED_STRINGS};
 
@@ -84,6 +85,8 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
             obj.insert("dataValidationCount".into(), json!(dv_count));
             let cf_count = cf::count(&sheet_doc.root);
             obj.insert("conditionalFormatCount".into(), json!(cf_count));
+            let table_count = table::count(&sheet_doc.root);
+            obj.insert("tableCount".into(), json!(table_count));
             let has_hf = hf::has_header_footer(&sheet_doc.root);
             obj.insert("hasHeaderFooter".into(), json!(has_hf));
             if want_header_footer {
@@ -127,6 +130,10 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
                     obj.insert(
                         "conditionalFormats".into(),
                         cf::inspect(&sheet_doc.root, &sh.name, &styles),
+                    );
+                    obj.insert(
+                        "tables".into(),
+                        table::inspect(&pkg, &sh.part, &sheet_doc.root, &sh.name)?,
                     );
                 }
             }

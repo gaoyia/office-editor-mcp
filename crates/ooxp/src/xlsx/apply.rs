@@ -278,6 +278,38 @@ pub fn apply(bytes: &[u8], ops: &[XlsxOp]) -> Result<Vec<u8>, Error> {
                 let doc = dirty_of(&mut dirty_sheets, &part);
                 super::cf::apply_delete(&mut doc.root, op, i)?;
             }
+            XlsxOp::InsertSheetTable(op) => {
+                let part = require_layout_worksheet(&sheet_index, &op.sheet, i)?;
+                load_dirty(&pkg, &mut dirty_sheets, &part, true)?;
+                super::table::apply_insert(
+                    &mut pkg,
+                    &wb_doc,
+                    &wb_part,
+                    &sheet_index,
+                    &mut dirty_sheets,
+                    &part,
+                    op,
+                    i,
+                )?;
+            }
+            XlsxOp::SetSheetTable(op) => {
+                let part = require_layout_worksheet(&sheet_index, &op.sheet, i)?;
+                load_dirty(&pkg, &mut dirty_sheets, &part, true)?;
+                super::table::apply_set(
+                    &mut pkg,
+                    &wb_doc,
+                    &sheet_index,
+                    &mut dirty_sheets,
+                    &part,
+                    op,
+                    i,
+                )?;
+            }
+            XlsxOp::DeleteSheetTable(op) => {
+                let part = require_layout_worksheet(&sheet_index, &op.sheet, i)?;
+                load_dirty(&pkg, &mut dirty_sheets, &part, true)?;
+                super::table::apply_delete(&mut pkg, &mut dirty_sheets, &part, op, i)?;
+            }
             XlsxOp::DeleteChart(op) => {
                 let (part, kind) = require_named_sheet(&sheet_index, &op.target.sheet, i)?;
                 load_dirty(&pkg, &mut dirty_sheets, &part, false)?;

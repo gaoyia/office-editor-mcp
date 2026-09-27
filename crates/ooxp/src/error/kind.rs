@@ -130,7 +130,7 @@ pub(crate) enum IdReason {
     DeleteChartSheetNeedsChartsheet,
     /// deleteSheet 必须用普通工作表 sheet:工作表名
     DeleteSheetNeedsWorksheet,
-    /// renameSheet / moveSheet / setSheetHidden / insertDataValidation / insertConditionalFormat 必须用 sheet:工作表名
+    /// renameSheet / moveSheet / setSheetHidden / insertDataValidation / insertConditionalFormat / insertSheetTable 必须用 sheet:工作表名
     SheetOpNeedsSheet,
     /// setDataValidation / deleteDataValidation 必须用 sheet:工作表名/dv:n
     SheetDvPrefix,
@@ -140,6 +140,8 @@ pub(crate) enum IdReason {
     SheetCfPrefix,
     CfIndexNotInt,
     CfIndexFromOne,
+    /// setSheetTable / deleteSheetTable 必须用 sheet:工作表名/table:n
+    SheetTablePrefix,
     /// xlsx 图表 id 必须是 sheet:工作表名/chart:…
     SheetChartPrefix,
     /// 工作表 id，缺少 /chart:…
@@ -596,6 +598,13 @@ define_error_kinds! {
     ConditionalFormatNotFound { id: String } => {
         vec![Self::ConditionalFormatNotFound { id: "sheet:Sheet1/cf:1".into() }]
     },
+    NeedSetSheetTableField => vec![Self::NeedSetSheetTableField],
+    InvalidSheetTable { field: String } => {
+        vec![Self::InvalidSheetTable { field: "ref".into() }]
+    },
+    SheetTableNotFound { id: String } => {
+        vec![Self::SheetTableNotFound { id: "sheet:Sheet1/table:1".into() }]
+    },
     InvalidAlign => vec![Self::InvalidAlign],
     InvalidLineRule => vec![Self::InvalidLineRule],
     InvalidUnderline => vec![Self::InvalidUnderline],
@@ -737,6 +746,7 @@ impl IdReason {
             Self::SheetCfPrefix,
             Self::CfIndexNotInt,
             Self::CfIndexFromOne,
+            Self::SheetTablePrefix,
             Self::SheetChartPrefix,
             Self::SheetChartContainer,
             Self::SlideChartPrefix,
@@ -977,6 +987,8 @@ impl ErrorKind {
             | Self::NeedSetConditionalFormatField
             | Self::NeedConditionalFormatFormula { .. }
             | Self::InvalidConditionalFormat { .. }
+            | Self::NeedSetSheetTableField
+            | Self::InvalidSheetTable { .. }
             | Self::InvalidAlign
             | Self::InvalidLineRule
             | Self::InvalidUnderline
@@ -1073,7 +1085,8 @@ impl ErrorKind {
             | Self::RunNotFound { .. }
             | Self::CustomPropNotFound { .. }
             | Self::DataValidationNotFound { .. }
-            | Self::ConditionalFormatNotFound { .. } => IdNotFound,
+            | Self::ConditionalFormatNotFound { .. }
+            | Self::SheetTableNotFound { .. } => IdNotFound,
             Self::ScopeRequired { .. } => ScopeRequired,
             Self::SharedFormulaMaster { .. }
             | Self::DataTableFormula { .. }

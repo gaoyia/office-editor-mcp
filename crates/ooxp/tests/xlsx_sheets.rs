@@ -124,6 +124,7 @@ fn inspect_lists_hidden() {
             "chartCount",
             "dataValidationCount",
             "conditionalFormatCount",
+            "tableCount",
             "hasHeaderFooter"
         ]
     );

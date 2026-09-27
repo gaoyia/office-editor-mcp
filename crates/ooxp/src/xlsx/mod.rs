@@ -14,6 +14,7 @@ mod picture;
 mod request;
 mod sheets;
 mod style;
+mod table;
 mod validation;
 
 pub use apply::apply;
