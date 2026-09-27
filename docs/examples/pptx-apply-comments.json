@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "deck.pptx",
+  "output": "deck.comments.pptx",
+  "ops": [
+    { "op": "insertComment", "id": "slide:1", "text": "新批注", "author": "Alice", "initials": "A", "x": 914400, "y": 914400 },
+    { "op": "setCommentText", "id": "slide:1/comment:{A1B2C3D4-E5F6-4789-ABCD-EF1234567890}", "text": "改过的批注" },
+    { "op": "replyComment", "id": "slide:1/comment:{A1B2C3D4-E5F6-4789-ABCD-EF1234567890}", "text": "回复乙" },
+    { "op": "setCommentDone", "id": "slide:1/comment:{A1B2C3D4-E5F6-4789-ABCD-EF1234567890}", "done": true },
+    { "op": "deleteComment", "id": "slide:1/comment:{A1B2C3D4-E5F6-4789-ABCD-EF1234567890}" }
+  ]
+}

@@ -4,11 +4,11 @@
 
 检查前用 create 或 apply 在本机生成文件，不要用改过扩展名的 zip 目录冒充。本机若 `PowerPoint.Application` 被 WPS 抢走，直接启动 `POWERPNT.EXE` 再挂 COM，不要走被抢的 ProgID。Office 16 的对象模型在 `mdiClass` 上。
 
-C、I、A、Pp、Pc、Psa、Pn 各组由 `manual-check/office/cases/pptx-*.ps1` 自动判定，跑 `pwsh -File manual-check\office\run.ps1 -Case 'pptx-*'` 即可复现。O1 已放弃，与 xlsx / docx 相同。
+C、I、A、Pp、Pc、Psa、Pn、Pcm 各组由 `manual-check/office/cases/pptx-*.ps1` 自动判定，跑 `pwsh -File manual-check\office\run.ps1 -Case 'pptx-*'` 即可复现。O1 已放弃，与 xlsx / docx 相同。
 
 ## 本机结果（2026-09-27）
 
-Microsoft PowerPoint 16.0 已打开，C1、C3、C4、C5–C10、I1–I5、A1–A5、Pp1–Pp7、Pc1–Pc7、Psa1–Psa6、Pn1–Pn4 均 PASS。本机若装了 WPS，`PowerPoint.Application` 会被抢走，测试仍直接启动 `POWERPNT.EXE`，从 `mdiClass` 挂 COM。O1 已放弃。2026-09-27 补跑 `pptx-pictures.ps1`，Pp1–Pp7 通过。同日补跑 `pptx-create-pictures.ps1`，C5–C7 通过。同日补跑 `pptx-charts.ps1`，Pc1–Pc7 通过。同日补跑 `pptx-create-charts.ps1`，C8–C10 通过。同日补跑 `pptx-smartart.ps1`，Psa1–Psa6 通过。同日补跑 `pptx-notes.ps1`，Pn1–Pn4 通过。
+Microsoft PowerPoint 16.0 已打开，C1、C3、C4、C5–C10、I1–I5、A1–A5、Pp1–Pp7、Pc1–Pc7、Psa1–Psa6、Pn1–Pn4、Pcm1–Pcm5 均 PASS。本机若装了 WPS，`PowerPoint.Application` 会被抢走，测试仍直接启动 `POWERPNT.EXE`，从 `mdiClass` 挂 COM。O1 已放弃。2026-09-27 补跑 `pptx-pictures.ps1`，Pp1–Pp7 通过。同日补跑 `pptx-create-pictures.ps1`，C5–C7 通过。同日补跑 `pptx-charts.ps1`，Pc1–Pc7 通过。同日补跑 `pptx-create-charts.ps1`，C8–C10 通过。同日补跑 `pptx-smartart.ps1`，Psa1–Psa6 通过。同日补跑 `pptx-notes.ps1`，Pn1–Pn4 通过。同日补跑 `pptx-comments.ps1`，Pcm1–Pcm5 通过。
 
 | 序号 | 状态 | 结果 |
 | --- | --- | --- |
@@ -22,6 +22,7 @@ Microsoft PowerPoint 16.0 已打开，C1、C3、C4、C5–C10、I1–I5、A1–A
 | Pc1–Pc7 | ✅ | PowerPoint 16.0：无 `charts` 时 `chartCount=1`；名单 id 为 `slide:1/chart:4`；改系列 / 插 / 删无修复；折线类型对上；尺寸 144×72 磅、位置 72×108 磅；export 与 embedding 字节一致 |
 | Psa1–Psa6 | ✅ | PowerPoint 16.0：另存列表型 id 为 `slide:1/smartdiagram:4`，点字与屏幕一致；改字 / 增删点 / 删整张无修复；create `list` 为 `slide:1/smartdiagram:3`；跨家族 `NotImplemented` 且源文件未写坏 |
 | Pn1–Pn4 | ✅ | PowerPoint 16.0：无 `notes` 时有 `hasNotes`；展开后 `notes.id` 为 `slide:1/notes`；`setNotesText` 后备注窗格是新字且无修复；改备注不改幻灯片字；往备注插图无修复 |
+| Pcm1–Pcm5 | ✅ | PowerPoint 16.0：无 `comments` 时有 `commentCount`；展开后 id 为 `slide:…/comment:{guid}`；改字 / 插入 / 删除无修复；回复与完成标记能看见 |
 | O1 | 🚫 | 领域层不做原样保存，与 xlsx 清单相同。零脏写回见 OPC 库测试。PowerPoint 另存 create 产物见 `pptx-O1-ppt-resave` |
 
 ## create
@@ -115,6 +116,18 @@ Microsoft PowerPoint 16.0 已打开，C1、C3、C4、C5–C10、I1–I5、A1–A
 | Pn2 | 改字 | `setNotesText` 后备注窗格是新字，无修复 |
 | Pn3 | 互不影响 | 改备注后幻灯片上的 `setShapeText` 目标仍是原字；改幻灯片形状不改备注 |
 | Pn4 | 备注插图 | 往 `slide:{n}/notes` 插图后无修复，图在备注页上 |
+
+## 批注
+
+源文件必须是 PowerPoint 亲手另存，第一页至少两条线程化批注，其中一条带回复。不要用库 `create` 产物当带批注的唯一样例。脚本：`manual-check/office/cases/pptx-comments.ps1`。
+
+| 序号 | 检查 | 通过标准 |
+| --- | --- | --- |
+| Pcm1 | inspect | 无 `comments` 时根与各页有 `commentCount`、没有名单；`comments: true` 时 id 为 `slide:…/comment:{guid}`，作者与文字与审阅窗格对得上，回复挂在 `replies` |
+| Pcm2 | 改字 | `setCommentText` 后无修复，目标批注是新字 |
+| Pcm3 | 插入 | `insertComment` 后审阅窗格能看见新批注，无修复 |
+| Pcm4 | 删除 | `deleteComment` 后该条消失，无修复 |
+| Pcm5 | 回复与完成 | `replyComment` 后线程能看见回复；`setCommentDone` 后完成标记对上，无修复 |
 
 ## 原样保存（opc 验收）
 

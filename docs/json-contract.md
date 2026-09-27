@@ -2,7 +2,7 @@
 
 `schemaVersion` 固定为 `1`。库和命令行只认这一层。MCP 或其他传输信封不许改这里的字段名和含义。机器可读副本见 [json-schema/request.schema.json](json-schema/request.schema.json)，与本文冲突时以本文为准。
 
-xlsx、docx、pptx 的 inspect、create、apply 已经按本文实现。docx 另有 `exportMedia` 与 `exportChartData`。xlsx 的 `exportMedia` 认工作表图 id 与页眉页脚图 id。pptx 的 `exportMedia` 认幻灯片图 id 与备注图 id，写出 `/ppt/media/…`。xlsx 的 `scope.charts` 与图表 op 认工作表 / 图表工作表上的图；`scope.headerFooter` 展开工作表上的页眉页脚槽位。pptx 的 `scope.charts` 与图表 op 认幻灯片上的 `p:graphicFrame`；`exportChartData` 认幻灯片图表 id，写出 embedding。pptx 的 `scope.smartArt` 与 SmartArt op 认幻灯片上的 diagram `p:graphicFrame`。xlsx 的 `exportChartData` 仍拒绝。xlsx 的 `scope.smartArt` 与 SmartArt op 仍拒绝。人工打开只认 Microsoft Office，见三份 checklist。
+xlsx、docx、pptx 的 inspect、create、apply 已经按本文实现。docx 另有 `exportMedia` 与 `exportChartData`。xlsx 的 `exportMedia` 认工作表图 id 与页眉页脚图 id。pptx 的 `exportMedia` 认幻灯片图 id 与备注图 id，写出 `/ppt/media/…`。xlsx 的 `scope.charts` 与图表 op 认工作表 / 图表工作表上的图；`scope.headerFooter` 展开工作表上的页眉页脚槽位。pptx 的 `scope.charts` 与图表 op 认幻灯片上的 `p:graphicFrame`；`exportChartData` 认幻灯片图表 id，写出 embedding。pptx 的 `scope.smartArt` 与 SmartArt op 认幻灯片上的 diagram `p:graphicFrame`。pptx 的 `scope.comments` 与批注 op 认该页 2018 线程化批注（`p188:cmLst`），不认 ECMA-376 §19.4 旧式部件。xlsx 的 `exportChartData` 仍拒绝。xlsx 的 `scope.smartArt` 与 SmartArt op 仍拒绝。xlsx 的 `scope.comments` 与批注 op 仍拒绝。人工打开只认 Microsoft Office，见三份 checklist。
 
 ## 信封
 
@@ -163,6 +163,8 @@ Word 2010 以后插入文本框、图表、SmartArt 都是 `mc:AlternateContent`
 | 无 `cNvPr/@id` 的备注形状 | `slide:{n}/notes/shape:index:{k}` | `slide:1/notes/shape:index:1` |
 | 备注图 | `slide:{n}/notes/pic:{cNvPrId}` | `slide:1/notes/pic:5` |
 | 无 `cNvPr/@id` 的备注图 | `slide:{n}/notes/pic:index:{k}` | `slide:1/notes/pic:index:1` |
+| 批注 | `slide:{n}/comment:{guid}` | `slide:1/comment:{A1B2C3D4-E5F6-4789-ABCD-EF1234567890}` |
+| 批注回复 | `{批注 id}/reply:{guid}` | `slide:1/comment:{A1B2C3D4-E5F6-4789-ABCD-EF1234567890}/reply:{11111111-2222-4333-8444-555555555555}` |
 
 `{n}` 从 1 起，按 Presentation 部件（§13.3.6）里 `p:sldIdLst` / `p:sldId` 的出现顺序（§19.2.1.34），再跟 `r:id` 找到幻灯片部件。`n` 不是文件名里的数字，也不是 `p:sldId/@id`（那是 `ST_SlideId`，常见从 256 起）。隐藏页仍占序号，仍可 inspect 和 apply。
 
@@ -178,9 +180,11 @@ SmartArt id 的 `{cNvPrId}` 取该 `p:graphicFrame` 的 `p:nvGraphicFramePr/p:cN
 
 同一页里若出现重复的 `cNvPr/@id`，inspect 照样列出每一处；apply 命中该页文档顺序中的第一处。
 
+批注 `{guid}` 取该页现代批注部件里 `p188:cm/@id` 的原文（MS-PPTX 2018/8），含花括号。回复 `{guid}` 取同一条 `p188:cm` 里 `p188:reply/@id` 的原文。按文件原文精确匹配，不因大小写或有无花括号而放宽。同一页多条批注共用一个 comments 部件。ECMA-376 §19.4 旧式 `/ppt/comments/commentN.xml` 与 `commentAuthors` 不进树、不接受 apply；只有旧式时 `commentCount` 为 `0`，`scope.comments` 为空数组。insert 只写现代部件。
+
 apply 不得删形状再重建，以免 `cNvPr/@id` 变化导致绑在形状上的动画失效。不改 `<p:timing>`。
 
-讲义、幻灯片母版、版式第一期不进这棵树，也不接受 apply。备注页始终给出 `hasNotes`；`scope.notes: true` 时展开该页 `notesSlide` 上的文本形状。xlsx / pptx 的批注另开，不走 docx 这套 `comment:` id。
+讲义、幻灯片母版、版式第一期不进这棵树，也不接受 apply。备注页始终给出 `hasNotes`；`scope.notes: true` 时展开该页 `notesSlide` 上的文本形状。xlsx 的批注另开，不走 docx 这套 `comment:` id。pptx 批注走 `slide:{n}/comment:{guid}`，不走 `comment:{w:id}`。
 
 「文本形状」要有可执行的判定：
 
@@ -254,7 +258,7 @@ xlsx、docx、pptx 共用 `scope` 这个字段名，里面的键按格式分，�
 | `scope.charts` | 否 | 为 `true` 时列出正文图表（根上 `charts`）以及每个页眉、页脚容器上的 `charts`。不依赖 `from` / `maxParas`。省略或 `false` 则只有 `chartCount`，没有名单。不把 embedding 字节放进树 |
 | `scope.smartArt` | 否 | 为 `true` 时列出正文 SmartArt（根上 `smartArts`）以及每个页眉、页脚容器上的 `smartArts`。不依赖 `from` / `maxParas`。省略或 `false` 则只有 `smartArtCount`，没有名单。不把图示画成图，不读 Fallback 位图 |
 
-`from` / `maxParas` 只切正文，`headerFooter` 只管页眉页脚段落，`pictures` 只展开图名单，`textBoxes` 只展开框名单，`notes` 只展开脚注尾注，`comments` 只展开批注，`charts` 只展开图表名单，`smartArt` 只展开图示名单。八者独立，可只开一边。只要想看正文段落，就必须同时给 `from` 和 `maxParas`。不默认把全文倒出来。正文图与正文框名单只出现在已切出的段落上，不挂到文档根。正文图表名单与正文 SmartArt 名单挂在文档根上，不挂在段落上。`from` 超出 `paraCount` 时正文 `paragraphs` 为空数组，`truncated` 为 `false`，不报错。页眉页脚通常很短，给了对应键就返回该部件全部段落、图、框、图表或 SmartArt，都不再单独分页。框通常短，给了 `textBoxContent: true` 就返回该框全部段落，不再单独分页。用户注和批注通常不多，给了 `notes: true` 或 `comments: true` 就返回全部名单，每条倒出全部段落，不再单独分页。图表通常不多，给了 `charts: true` 就返回全部名单，每张带全部系列，不再单独分页。SmartArt 通常不多，给了 `smartArt: true` 就返回全部名单，每张带全部可见点，不再单独分页。xlsx 的 `scope` 里出现 `textBoxes`、`textBoxContent`、`notes`、`comments` 或 `smartArt` 报 `InvalidField`。pptx 的 `scope` 里出现 `headerFooter`、`textBoxes`、`textBoxContent` 或 `comments` 报 `InvalidField`。pptx 认 `scope.pictures`、`scope.charts`、`scope.smartArt` 与 `scope.notes`。只给 `textBoxContent`、不给 `textBoxes` 报 `InvalidField`。
+`from` / `maxParas` 只切正文，`headerFooter` 只管页眉页脚段落，`pictures` 只展开图名单，`textBoxes` 只展开框名单，`notes` 只展开脚注尾注，`comments` 只展开批注，`charts` 只展开图表名单，`smartArt` 只展开图示名单。八者独立，可只开一边。只要想看正文段落，就必须同时给 `from` 和 `maxParas`。不默认把全文倒出来。正文图与正文框名单只出现在已切出的段落上，不挂到文档根。正文图表名单与正文 SmartArt 名单挂在文档根上，不挂在段落上。`from` 超出 `paraCount` 时正文 `paragraphs` 为空数组，`truncated` 为 `false`，不报错。页眉页脚通常很短，给了对应键就返回该部件全部段落、图、框、图表或 SmartArt，都不再单独分页。框通常短，给了 `textBoxContent: true` 就返回该框全部段落，不再单独分页。用户注和批注通常不多，给了 `notes: true` 或 `comments: true` 就返回全部名单，每条倒出全部段落，不再单独分页。图表通常不多，给了 `charts: true` 就返回全部名单，每张带全部系列，不再单独分页。SmartArt 通常不多，给了 `smartArt: true` 就返回全部名单，每张带全部可见点，不再单独分页。xlsx 的 `scope` 里出现 `textBoxes`、`textBoxContent`、`notes`、`comments` 或 `smartArt` 报 `InvalidField`。pptx 的 `scope` 里出现 `headerFooter`、`textBoxes` 或 `textBoxContent` 报 `InvalidField`。pptx 认 `scope.pictures`、`scope.charts`、`scope.smartArt`、`scope.notes` 与 `scope.comments`。只给 `textBoxContent`、不给 `textBoxes` 报 `InvalidField`。
 
 #### pptx 的 scope
 
@@ -271,15 +275,16 @@ xlsx、docx、pptx 共用 `scope` 这个字段名，里面的键按格式分，�
 | 字段 | 必填 | 含义 |
 | --- | --- | --- |
 | `path` | 是 | 已有文件 |
-| `scope` | 否 | 省略或空对象：返回 `slideCount`、`pictureCount`、`chartCount`、`smartArtCount` 和页名单；各页有这三项计数和 `hasNotes`，没有 `shapes`，也没有 `pictures` / `charts` / `smartArts` 名单，也没有 `notes` 对象 |
+| `scope` | 否 | 省略或空对象：返回 `slideCount`、`pictureCount`、`chartCount`、`smartArtCount`、`commentCount` 和页名单；各页有这四项计数和 `hasNotes`，没有 `shapes`，也没有 `pictures` / `charts` / `smartArts` 名单，也没有 `notes` 对象，也没有 `comments` 名单 |
 | `scope.slide` | 要形状时必填 | 页序号，从 1 起，按 `p:sldIdLst` 顺序 |
 | `scope.maxShapes` | 否 | 该页最多返回多少个文本形状，默认 `2000`，允许范围 `1` 到 `5000`。不管备注形状 |
 | `scope.pictures` | 否 | 为 `true` 时给每页填 `pictures`。若同时 `notes: true` 且该页有备注对象，备注上也填 `pictures`。省略或 `false` 则只有计数，没有名单。不读媒体字节。不依赖 `scope.slide` |
 | `scope.charts` | 否 | 为 `true` 时给每页填 `charts`。省略或 `false` 则只有 `chartCount`，没有名单。不把 chart 部件或 embedding 字节放进树。不依赖 `scope.slide` / `pictures`。备注里的图表本期不进树 |
 | `scope.smartArt` | 否 | 为 `true` 时给每页填 `smartArts`。省略或 `false` 则只有 `smartArtCount`，没有名单。不把图示画成图，不读 Fallback 位图。不依赖 `scope.slide` / `pictures` / `charts`。备注里的 SmartArt 本期不进树 |
 | `scope.notes` | 否 | 为 `true` 时给每页填 `notes`。有备注页则为对象，没有则为 `null`。省略或 `false` 则只有 `hasNotes`，不倒出备注形状。不依赖 `scope.slide` |
+| `scope.comments` | 否 | 为 `true` 时给每页填 `comments`。没有现代批注时为空数组。省略或 `false` 则只有 `commentCount`，没有名单。不依赖 `scope.slide`。不读 ECMA-376 §19.4 旧式 `commentN.xml` |
 
-只要想看形状，就必须给 `slide`。不默认把每一页的文本框都倒出来。只给 `maxShapes`、不给 `slide` 报 `ScopeRequired`。只给 `pictures: true`、`charts: true`、`smartArt: true` 或 `notes: true`、不给 `slide` 合法，各页都带对应名单、都不带幻灯片 `shapes`。`slide` 小于 `1` 报 `InvalidField`。`slide` 超出 `slideCount` 时各页都不带 `shapes`，不报错；图名单、图表名单、SmartArt 名单与备注对象仍按各自键决定。
+只要想看形状，就必须给 `slide`。不默认把每一页的文本框都倒出来。只给 `maxShapes`、不给 `slide` 报 `ScopeRequired`。只给 `pictures: true`、`charts: true`、`smartArt: true`、`notes: true` 或 `comments: true`、不给 `slide` 合法，各页都带对应名单、都不带幻灯片 `shapes`。`slide` 小于 `1` 报 `InvalidField`。`slide` 超出 `slideCount` 时各页都不带 `shapes`，不报错；图名单、图表名单、SmartArt 名单、备注对象与批注名单仍按各自键决定。
 
 ### 响应（xlsx）
 
@@ -513,6 +518,7 @@ xlsx、docx、pptx 共用 `scope` 这个字段名，里面的键按格式分，�
   "pictureCount": 0,
   "chartCount": 0,
   "smartArtCount": 0,
+  "commentCount": 0,
   "slides": [
     {
       "id": "slide:1",
@@ -523,6 +529,7 @@ xlsx、docx、pptx 共用 `scope` 这个字段名，里面的键按格式分，�
       "pictureCount": 0,
       "chartCount": 0,
       "smartArtCount": 0,
+      "commentCount": 0,
       "truncated": false,
       "shapes": [
         {
@@ -549,7 +556,8 @@ xlsx、docx、pptx 共用 `scope` 这个字段名，里面的键按格式分，�
       "hasNotes": false,
       "pictureCount": 0,
       "chartCount": 0,
-      "smartArtCount": 0
+      "smartArtCount": 0,
+      "commentCount": 0
     }
   ]
 }
@@ -557,28 +565,30 @@ xlsx、docx、pptx 共用 `scope` 这个字段名，里面的键按格式分，�
 
 规则：
 
-- 读 Presentation 部件、各页幻灯片及其 `.rels`（用 `.rels` 判断 `hasNotes`）。`scope.notes` 为 `true` 且该页有 notesSlide 关系时再读 `/ppt/notesSlides/…`。讲义、母版、版式不读。备注里的图表与 SmartArt 本期不进树。
+- 读 Presentation 部件、各页幻灯片及其 `.rels`（用 `.rels` 判断 `hasNotes`，用现代 comments 关系判断批注）。`scope.notes` 为 `true` 且该页有 notesSlide 关系时再读 `/ppt/notesSlides/…`。`scope.comments` 为 `true` 且该页有现代 comments 关系时再读该 comments 部件与 `/ppt/authors.xml`。讲义、母版、版式不读。备注里的图表与 SmartArt 本期不进树。批注内图本期不进树。
 - `slideCount` 是 `p:sldIdLst` 里 `p:sldId` 的个数，始终出现。
 - `pictureCount` 在演示文稿根上始终出现，等于各页幻灯片 `p:pic`（带 `a:blip`）之和，不含备注图。每页始终有自己的 `pictureCount`，同样只计该页幻灯片。
 - `chartCount` 在演示文稿根上始终出现，等于各页被收入的图表之和。每页始终有自己的 `chartCount`。
 - `smartArtCount` 在演示文稿根上始终出现，等于各页被收入的 SmartArt 之和。每页始终有自己的 `smartArtCount`。
+- `commentCount` 在演示文稿根上始终出现，等于各页 `p188:cm` 之和，不含 `p188:reply`。每页始终有自己的 `commentCount`，只计该页。旧式 §19.4 批注不计。
 - `hasNotes` 在每页始终出现：该页 `.rels` 有 Type 以 `/notesSlide` 结尾的关系则为 `true`，否则为 `false`。
 - `slides` 始终列出全部页（含隐藏页）。未点名的页不带 `shapes`、`truncated`。
 - `name` 取 `p:cSld/@name` 的原文。没有该属性则为 `null`。
 - `hidden`：`p:sld/@show` 为 `0` 或 `false` 时为 `true`，其余为 `false`。
-- 省略 `scope` 或只给空对象时，没有 `shapes`、`truncated`，也没有 `pictures` / `charts` / `smartArts` 名单，也没有 `notes`。
+- 省略 `scope` 或只给空对象时，没有 `shapes`、`truncated`，也没有 `pictures` / `charts` / `smartArts` 名单，也没有 `notes`，也没有 `comments`。
 - 给了 `scope.slide` 时，只给那一页填 `shapes`。该页带 `p:txBody` 的 `p:sp` 超过 `maxShapes` 则 `truncated` 为 `true`，按该页文档顺序截断。未截断则为 `false`。备注形状不算进 `maxShapes`。
 - `scope.slide` 大于 `slideCount` 时，各页都不带 `shapes`，不报错。
 - `scope.pictures` 为 `true` 时，每页带 `pictures`。没有图时为空数组。不依赖 `scope.slide`。每张字段顺序：`id`、`cNvPrId`、`name`、`x`、`y`、`cx`、`cy`、`stable`。`cNvPrId` 是 `p:cNvPr/@id` 原文，没有则为 `null`。`name` 取 `p:cNvPr/@name`，没有则为 `""`。`x` / `y` 取 `p:spPr/a:xfrm/a:off` 的 EMU；`cx` / `cy` 取 `a:ext`。缺对应属性则为 `null`。不读媒体字节。幻灯片图 id 为 `slide:{n}/pic:…`。
 - `scope.charts` 为 `true` 时，每页带 `charts`。没有图表时为空数组。不依赖 `scope.slide`。每张字段顺序：`id`、`cNvPrId`、`name`、`x`、`y`、`cx`、`cy`、`type`、`title`、`catAxisTitle`、`valAxisTitle`、`series`、`legend`、`dataLabels`、`flags`、`stable`。`cNvPrId` / `name` / `stable` 规则与图相同。`x` / `y` / `cx` / `cy` 取 graphicFrame 的 `p:xfrm`。`type` / `title` / 轴标题 / `series` / `legend` / `dataLabels` / `flags` 规则与 docx 图表相同；系列值优先读 embedding 单元格，读不到再退回 cache。
 - `scope.smartArt` 为 `true` 时，每页带 `smartArts`。没有图示时为空数组。不依赖 `scope.slide`。每张字段顺序：`id`、`cNvPrId`、`name`、`x`、`y`、`cx`、`cy`、`layout`、`colors`、`style`、`points`、`stable`。`cNvPrId` / `name` / `stable` 规则与图相同。`x` / `y` / `cx` / `cy` 取 graphicFrame 的 `p:xfrm`。`layout` / `colors` / `style` / `points` 规则与 docx SmartArt 相同。pptx 没有 `kind` / `wrap`。
 - `scope.notes` 为 `true` 时，每页带 `notes`。没有 notesSlide 关系则为 `null`。有则为对象，字段顺序：`id`、`pictureCount`，有图名单时再跟 `pictures`，然后 `shapes`。`id` 为 `slide:{n}/notes`。`pictureCount` 只计该备注页上被收入的 `p:pic`，不并进幻灯片 `pictures`。备注形状判定与幻灯片形状相同（带 `p:txBody` 的 `p:sp`），id 为 `slide:{n}/notes/shape:…`。字段顺序与幻灯片形状相同：`id`、`shapeId`、`name`、`text`、`stable`。备注形状一次倒出，不用 `maxShapes`。
-- 页对象字段顺序：`id`、`index`、`name`、`hidden`、`hasNotes`、`pictureCount`、`chartCount`、`smartArtCount`，然后按需 `pictures`，再按需 `charts`，再按需 `smartArts`，再按需 `notes`，再按需 `truncated` 与 `shapes`。根对象字段顺序：`schemaVersion`、`format`、`id`、`slideCount`、`pictureCount`、`chartCount`、`smartArtCount`、`slides`。
+- `scope.comments` 为 `true` 时，每页带 `comments`。没有现代批注时为空数组。不依赖 `scope.slide`。按该页 `p188:cmLst` 里 `p188:cm` 的文档顺序。每条字段顺序：`id`、`commentId`、`author`、`initials`、`date`、`done`、`kind`、`x`、`y`、`text`、`replies`。`commentId` 是 `p188:cm/@id` 原文。`author` / `initials` 按 `authorId` 去 `/ppt/authors.xml` 的 `p188:author` 取 `name` / `initials`，对不上则为 `null`。`date` 取 `created` 原文，缺则为 `null`。`done`：`status` 为 `resolved` 或 `closed` 为 `true`；缺 `status`（即 active）为 `false`。`kind` 为 `normal`；该 `cm` 内出现墨迹标记（本地名为 `ink`）则为 `ink`。`x` / `y` 取 `p188:pos` 的 EMU，缺则为 `null`。`text` 取 `p188:txBody` 可见纯文本，规则与形状 `text` 相同。回复嵌在 `replies` 里，不单独占 `commentCount`。回复字段顺序：`id`、`commentId`、`author`、`initials`、`date`、`done`、`kind`、`text`（无 `x` / `y`）。回复 `id` 为 `{父批注 id}/reply:{guid}`。
+- 页对象字段顺序：`id`、`index`、`name`、`hidden`、`hasNotes`、`pictureCount`、`chartCount`、`smartArtCount`、`commentCount`，然后按需 `pictures`，再按需 `charts`，再按需 `smartArts`，再按需 `notes`，再按需 `comments`，再按需 `truncated` 与 `shapes`。根对象字段顺序：`schemaVersion`、`format`、`id`、`slideCount`、`pictureCount`、`chartCount`、`smartArtCount`、`commentCount`、`slides`。
 - `shapeId` 是 `cNvPr/@id` 的原文。走 `shape:index:{k}` 时为 `null`。
 - 形状上的 `name` 取 `cNvPr/@name` 的原文。没有则为 `null`。
 - `text` 是可见纯文本：该形状 `p:txBody` 内、位于 `a:r` 里的 `a:t` 按文档顺序拼接；`a:br` 变成 `\n`。不含 run 级样式。`a:fld` 是应用程序更新的生成文本（§21.1.2.2.4），域里的 `a:t` 是缓存，不进入。`mc:AlternateContent` 只取一支，判定见上文 pptx 那节。
 - `stable`：有 `cNvPr/@id` 为 `true`，否则为 `false`。
-- 第一期不返回动画、切换、讲义、母版、版式。批注另开。
+- 第一期不返回动画、切换、讲义、母版、版式。批注内图本期不进树。对批注 id 发 `insertPicture` 报 `InvalidId`。
 
 ## create
 
@@ -803,7 +813,7 @@ create 与 apply 落盘时先写入目标同目录的临时文件，再改名为
 | `value` | 与 create 相同。`null` 表示清空该格的值和公式 |
 | `formula` | 以 `=` 开头。不能与 `value` 同时出现 |
 
-不认识的 `op` 报 `UnsupportedOp`，不要忽略。xlsx 认 `setCell`、`setHeaderFooterText`、`replacePicture`、`insertPicture`、`deletePicture`、`setPictureSize`、`setPictureAnchor`、以及图表 op（`insertChart`、`insertChartSheet`、`deleteChartSheet`、`deleteChart`、`setChartTitle`、`setChartSeries`、`addChartSeries`、`deleteChartSeries`、`setChartType`、`setChartAxisTitle`、`setChartLegend`、`setChartDataLabels`、`setChartSize`、`setChartAnchor`；不含 `setChartWrap`）。docx 认 `setParaText`、`setHeaderFooterDistance`、`setHeaderFooterLink`、图片 op（含 `setPictureWrap`，不含 `setPictureAnchor`）、文本框 op、`insertPara` / `deletePara`、脚注尾注 op（`insertFootnote`、`insertEndnote`、`deleteFootnote`、`deleteEndnote`、`setNoteNumbering`）、批注 op（`insertComment`、`deleteComment`、`replyComment`、`setCommentText`、`setCommentMeta`、`setCommentDone`）、图表 op（`insertChart`、`deleteChart`、`setChartTitle`、`setChartSeries`、`addChartSeries`、`deleteChartSeries`、`setChartType`、`setChartAxisTitle`、`setChartLegend`、`setChartDataLabels`、`setChartSize`、`setChartWrap`；不含 `setChartAnchor`、`insertChartSheet`、`deleteChartSheet`）、以及 SmartArt op（`insertSmartArt`、`deleteSmartArt`、`setSmartArtText`、`addSmartArtPoint`、`deleteSmartArtPoint`、`setSmartArtSize`、`setSmartArtWrap`、`setSmartArtColors`、`setSmartArtStyle`、`setSmartArtLayout`）。pptx 认 `setShapeText`、`setNotesText`、`replacePicture`、`insertPicture`、`deletePicture`、`setPictureSize`、`setPicturePos`、以及图表 op（`insertChart`、`deleteChart`、`setChartTitle`、`setChartSeries`、`addChartSeries`、`deleteChartSeries`、`setChartType`、`setChartAxisTitle`、`setChartLegend`、`setChartDataLabels`、`setChartSize`、`setChartPos`；不含 `setChartWrap`、`setChartAnchor`、`insertChartSheet`、`deleteChartSheet`）、以及 SmartArt op（`insertSmartArt`、`deleteSmartArt`、`setSmartArtText`、`addSmartArtPoint`、`deleteSmartArtPoint`、`setSmartArtSize`、`setSmartArtPos`、`setSmartArtColors`、`setSmartArtStyle`、`setSmartArtLayout`；不含 `setSmartArtWrap`）。对不上格式的 op（例如对 pptx 发 `setCell` / `setParaText`，对 xlsx 发 `setPictureWrap`、`setChartWrap` 或 `setHeaderFooterDistance` / `setHeaderFooterLink`、文本框、注、批注、SmartArt 的 op 或 `setNotesText`，对 docx / pptx 发 `setHeaderFooterText`、`insertChartSheet` 或 `deleteChartSheet`，对 docx 发 `setPictureAnchor` / `setChartAnchor` / `setSmartArtPos` / `setNotesText`，对 pptx 发 `setPictureWrap` / `setPictureAnchor` / `setChartWrap` / `setChartAnchor` / `setSmartArtWrap`，或对 docx / xlsx 发 `setPicturePos` / `setChartPos` / `setSmartArtPos` / `setNotesText`）报 `InvalidField`。
+不认识的 `op` 报 `UnsupportedOp`，不要忽略。xlsx 认 `setCell`、`setHeaderFooterText`、`replacePicture`、`insertPicture`、`deletePicture`、`setPictureSize`、`setPictureAnchor`、以及图表 op（`insertChart`、`insertChartSheet`、`deleteChartSheet`、`deleteChart`、`setChartTitle`、`setChartSeries`、`addChartSeries`、`deleteChartSeries`、`setChartType`、`setChartAxisTitle`、`setChartLegend`、`setChartDataLabels`、`setChartSize`、`setChartAnchor`；不含 `setChartWrap`）。docx 认 `setParaText`、`setHeaderFooterDistance`、`setHeaderFooterLink`、图片 op（含 `setPictureWrap`，不含 `setPictureAnchor`）、文本框 op、`insertPara` / `deletePara`、脚注尾注 op（`insertFootnote`、`insertEndnote`、`deleteFootnote`、`deleteEndnote`、`setNoteNumbering`）、批注 op（`insertComment`、`deleteComment`、`replyComment`、`setCommentText`、`setCommentMeta`、`setCommentDone`）、图表 op（`insertChart`、`deleteChart`、`setChartTitle`、`setChartSeries`、`addChartSeries`、`deleteChartSeries`、`setChartType`、`setChartAxisTitle`、`setChartLegend`、`setChartDataLabels`、`setChartSize`、`setChartWrap`；不含 `setChartAnchor`、`insertChartSheet`、`deleteChartSheet`）、以及 SmartArt op（`insertSmartArt`、`deleteSmartArt`、`setSmartArtText`、`addSmartArtPoint`、`deleteSmartArtPoint`、`setSmartArtSize`、`setSmartArtWrap`、`setSmartArtColors`、`setSmartArtStyle`、`setSmartArtLayout`）。pptx 认 `setShapeText`、`setNotesText`、批注 op（`insertComment`、`deleteComment`、`replyComment`、`setCommentText`、`setCommentMeta`、`setCommentDone`）、`replacePicture`、`insertPicture`、`deletePicture`、`setPictureSize`、`setPicturePos`、以及图表 op（`insertChart`、`deleteChart`、`setChartTitle`、`setChartSeries`、`addChartSeries`、`deleteChartSeries`、`setChartType`、`setChartAxisTitle`、`setChartLegend`、`setChartDataLabels`、`setChartSize`、`setChartPos`；不含 `setChartWrap`、`setChartAnchor`、`insertChartSheet`、`deleteChartSheet`）、以及 SmartArt op（`insertSmartArt`、`deleteSmartArt`、`setSmartArtText`、`addSmartArtPoint`、`deleteSmartArtPoint`、`setSmartArtSize`、`setSmartArtPos`、`setSmartArtColors`、`setSmartArtStyle`、`setSmartArtLayout`；不含 `setSmartArtWrap`）。对不上格式的 op（例如对 pptx 发 `setCell` / `setParaText`，对 xlsx 发 `setPictureWrap`、`setChartWrap` 或 `setHeaderFooterDistance` / `setHeaderFooterLink`、文本框、注、批注、SmartArt 的 op 或 `setNotesText`，对 docx / pptx 发 `setHeaderFooterText`、`insertChartSheet` 或 `deleteChartSheet`，对 docx 发 `setPictureAnchor` / `setChartAnchor` / `setSmartArtPos` / `setNotesText`，对 pptx 发 `setPictureWrap` / `setPictureAnchor` / `setChartWrap` / `setChartAnchor` / `setSmartArtWrap`，或对 docx / xlsx 发 `setPicturePos` / `setChartPos` / `setSmartArtPos` / `setNotesText`）报 `InvalidField`。
 
 空单元格：目标格子在 XML 里还不存在时，`setCell` 按需插入 `<row>` 和 `<c>`，插在正确的行列顺序上。找不到工作表才报 `IdNotFound`。
 
@@ -1270,48 +1280,50 @@ pptx：找不到该页报 `IdNotFound`。`id` 必须是 `slide:{n}` 或 `slide:{
 | 字段 | 含义 |
 | --- | --- |
 | `op` | 必须是 `"insertComment"` |
-| `start` | 范围起始段落 id：正文、页眉页脚、框内或注内 |
-| `end` | 范围结束段落 id，可与 `start` 相同 |
+| `start` | docx：范围起始段落 id：正文、页眉页脚、框内或注内。pptx 上出现报 `InvalidField` |
+| `end` | docx：范围结束段落 id，可与 `start` 相同。pptx 上出现报 `InvalidField` |
+| `id` | pptx：页 id `slide:{n}`。docx 上出现报 `InvalidField` |
+| `x` / `y` | pptx 可选。画布坐标，EMU，非负整数，必须成对。docx 上出现报 `InvalidField` |
 | `text` | 可选。新批注第一段的可见文本，省略当作 `""` |
 | `author` | 可选。省略当作 `"ooxp"` |
 | `initials` | 可选。省略当作 `"oo"` |
-| `date` | 可选。`xsd:dateTime` 字符串，例如 `2026-08-31T12:00:00Z`。省略则不写 `w:date` |
+| `date` | 可选。`xsd:dateTime` 字符串。docx 省略则不写 `w:date`；pptx 省略则写入当前 UTC（无尾 `Z`） |
 
 `start` 与 `end` 必须在同一部件，且 `start` 在文档顺序上不得晚于 `end`，否则报 `InvalidField`。不提供字符偏移。在 `start` 段 `w:pPr` 之后插入 `w:commentRangeStart`；在 `end` 段已有内容之后插入 `w:commentRangeEnd`，再跟一个含 `w:commentReference` 的 run（`rStyle` 为 `CommentReference`）。跨段时中间段落整段落在范围内，不另写标记。
 
 分配尚未占用的 `w:id`（十进制，常见从 `0` 起）。没有 `/word/comments.xml` 则新建该部件、主文档关系、内容类型 Override。同时按 Word 16.0 最小集补 `/word/commentsExtended.xml` 与 `/word/people.xml`（已有则改，没有则建）。新 `w:comment` 至少一段，带新的 `w14:paraId`，第一段含 `w:annotationRef`，段落样式引用 `CommentText`，再跟 `text`。不在 `styles.xml` 里新建这些样式。`commentEx/@paraId` 写成该批注最后一段的 `paraId`，`done` 为 `0`。`people` 里没有该 `author` 则追加一条。`commentsIds` / `commentsExtensible` 只在文件里已有时给这条根批注补一项；没有这两份部件则不新建。
 
-对图 id、容器 id、注 id、批注 id 或 `section:{n}` 作 `start` / `end` 报 `InvalidId`。xlsx / pptx 上发此 op 报 `InvalidField`。
+对图 id、容器 id、注 id、批注 id 或 `section:{n}` 作 `start` / `end` 报 `InvalidId`。xlsx 上发此 op 报 `InvalidField`。pptx 不认 `start` / `end`；出现这两个字段报 `InvalidField`。pptx 的 `id` 必须是 `slide:{n}`，对备注容器 id、图 id、形状 id 或 `pptx:presentation` 报 `InvalidId`。可选 `x` / `y` 为 EMU 非负整数，必须成对出现或成对省略；只给一个时报 `InvalidField`。缺坐标则放到该页空白处，规则与 pptx `insertPicture` 相同。写入该页现代批注部件（MS-PPTX 2018/8 `p188:cmLst`，内容类型 `application/vnd.ms-powerpoint.comments+xml`），幻灯片 `.rels` 的 Type 为 `http://schemas.microsoft.com/office/2018/10/relationships/comments`（必须比完整 URI，不要把 2006 旧式 comments 关系当成现代批注）。没有则新建 comments 部件，并在幻灯片 `p:extLst` 写入 `p188:commentRel`（uri `{6950BFC3-D8DA-4A85-94F7-54DA5524770B}`）。没有 `/ppt/authors.xml` 则新建（内容类型 `application/vnd.ms-powerpoint.authors+xml`），presentation `.rels` 的 Type 为 `http://schemas.microsoft.com/office/2018/10/relationships/authors`。按 `name` 加 `initials` 复用已有 `p188:author`；否则新建，`providerId` 为 `None`，`userId` 取新 GUID 的十六进制前 16 位。`author` / `initials` 缺省 `"ooxp"` / `"oo"`。`date` 省略则写入当前 UTC `xsd:dateTime`（无尾 `Z`，与 PowerPoint 16 另存一致）。新 `p188:cm/@id` 为带花括号的 GUID。`pc:sldMk/@sldId` 取该页 `p:sldId/@id`（无前缀那一项）。不写 ECMA-376 §19.4 旧式 `commentAuthors`。同一页多条批注共用一个 comments 部件。`create` 本期不写批注。
 
 ### replyComment
 
 | 字段 | 含义 |
 | --- | --- |
 | `op` | 必须是 `"replyComment"` |
-| `id` | 父批注 id，例如 `comment:0` |
+| `id` | 父批注 id。docx 为 `comment:0`；pptx 为 `slide:{n}/comment:{guid}` |
 | `text` | 可选。新回复第一段的可见文本，省略当作 `""` |
 | `author` / `initials` / `date` | 与 `insertComment` 相同 |
 
-新增一条 `w:comment` 和新的 `commentEx`，`paraIdParent` 为父批注当前最后一段的 `paraId`。在父批注已有的范围上再套一套相同范围的标记（`commentRangeStart` 插在父 start 之后，`commentRangeEnd` 与 `commentReference` 插在父 `commentReference` 所在 run 之后），与 Word 16 `Replies.Add` 一致；`rStyle` 抄父引用 run。找不到父批注的范围标记时仍写 `comment` 与 `commentEx`，不报错。inspect 的 `start` / `end` 因此与线程根相同。父批注最后一段没有 `w14:paraId` 时报 `InvalidField`。父 id 不是批注容器 id 报 `InvalidId`。找不到父批注报 `IdNotFound`。对 `kind` 为 `ink` 的批注发此 op 报 `NotImplemented`。xlsx / pptx 上发此 op 报 `InvalidField`。
+新增一条 `w:comment` 和新的 `commentEx`，`paraIdParent` 为父批注当前最后一段的 `paraId`。在父批注已有的范围上再套一套相同范围的标记（`commentRangeStart` 插在父 start 之后，`commentRangeEnd` 与 `commentReference` 插在父 `commentReference` 所在 run 之后），与 Word 16 `Replies.Add` 一致；`rStyle` 抄父引用 run。找不到父批注的范围标记时仍写 `comment` 与 `commentEx`，不报错。inspect 的 `start` / `end` 因此与线程根相同。父批注最后一段没有 `w14:paraId` 时报 `InvalidField`。父 id 不是批注容器 id 报 `InvalidId`。找不到父批注报 `IdNotFound`。对 `kind` 为 `ink` 的批注发此 op 报 `NotImplemented`。xlsx 上发此 op 报 `InvalidField`。pptx 的 `id` 必须是父批注容器 id（`slide:{n}/comment:{guid}`），不能是回复 id；对回复 id 报 `InvalidId`。写入该 `p188:cm` 的 `p188:replyLst`。新回复 `id` 为 `{父 id}/reply:{guid}`。找不到父批注报 `IdNotFound`。对 `kind` 为 `ink` 的批注发此 op 报 `NotImplemented`。
 
 ### deleteComment
 
 | 字段 | 含义 |
 | --- | --- |
 | `op` | 必须是 `"deleteComment"` |
-| `id` | 批注 id，例如 `comment:0` |
+| `id` | 批注 id。docx 为 `comment:0`；pptx 为 `slide:{n}/comment:{guid}` 或回复 id |
 
-去掉该批注在主文档、页眉、页脚、文本框和注里所有匹配的范围标记与 `commentReference`，再去掉 `comments.xml` 里该条。子回复级联删除（`paraIdParent` 链指向它的都删），清单里验回复不残留。已经不存在报 `IdNotFound`。id 不是批注容器 id 报 `InvalidId`。批注内图按图片规则收。删光批注后仍保留 `comments.xml` 空壳和已有的 extended / people 部件，不拆掉整个 part。xlsx / pptx 上发此 op 报 `InvalidField`。
+去掉该批注在主文档、页眉、页脚、文本框和注里所有匹配的范围标记与 `commentReference`，再去掉 `comments.xml` 里该条。子回复级联删除（`paraIdParent` 链指向它的都删），清单里验回复不残留。已经不存在报 `IdNotFound`。id 不是批注容器 id 报 `InvalidId`。批注内图按图片规则收。删光批注后仍保留 `comments.xml` 空壳和已有的 extended / people 部件，不拆掉整个 part。xlsx 上发此 op 报 `InvalidField`。pptx 的 `id` 可以是 `slide:{n}/comment:{guid}` 或回复 id。删父 `p188:cm` 即级联丢掉其 `replyLst`。删回复只去掉对应 `p188:reply`。已经不存在报 `IdNotFound`。id 不是上述两种报 `InvalidId`。删光后仍保留空的 `p188:cmLst` 与 `authors.xml` 空壳，不拆 part。墨迹批注可以删。
 
 ### setCommentText
 
 | 字段 | 含义 |
 | --- | --- |
 | `op` | 必须是 `"setCommentText"` |
-| `id` | 批注容器 id，例如 `comment:0` |
+| `id` | 批注容器 id。docx 为 `comment:0`；pptx 为 `slide:{n}/comment:{guid}` 或回复 id |
 | `text` | 新的可见纯文本，字符串，可空 |
 
-只改该 `w:comment` 的可见文本，不改范围标记。留下第一段（含 `annotationRef`），按 `setParaText` 的规则改这段的可见 `w:t`，删掉后面多出来的 `w:p`。随后把 `commentEx/@paraId` 和指向旧最后一段的 `paraIdParent` 改成留下的那一段。id 不是批注容器 id 报 `InvalidId`。对批注内段落 id 请用 `setParaText`。对 `kind` 为 `ink` 的批注报 `NotImplemented`。xlsx / pptx 上发此 op 报 `InvalidField`。
+只改该 `w:comment` 的可见文本，不改范围标记。留下第一段（含 `annotationRef`），按 `setParaText` 的规则改这段的可见 `w:t`，删掉后面多出来的 `w:p`。随后把 `commentEx/@paraId` 和指向旧最后一段的 `paraIdParent` 改成留下的那一段。id 不是批注容器 id 报 `InvalidId`。对批注内段落 id 请用 `setParaText`。对 `kind` 为 `ink` 的批注报 `NotImplemented`。xlsx 上发此 op 报 `InvalidField`。pptx 的 `id` 可以是批注容器 id 或回复 id。只改对应 `p188:txBody` 的可见文本，规则与 `setShapeText` 相同。对 `kind` 为 `ink` 的批注报 `NotImplemented`。
 
 ### setCommentMeta
 
@@ -1323,7 +1335,7 @@ pptx：找不到该页报 `IdNotFound`。`id` 必须是 `slide:{n}` 或 `slide:{
 | `initials` | 可选 |
 | `date` | 可选。`xsd:dateTime` 字符串 |
 
-`author`、`initials`、`date` 至少给一个，否则报 `InvalidField`。只改被点名的属性，其余不动。改 `author` 时若 `people.xml` 里还没有这个作者则补一条，不删旧作者。id 不是批注容器 id 报 `InvalidId`。xlsx / pptx 上发此 op 报 `InvalidField`。
+`author`、`initials`、`date` 至少给一个，否则报 `InvalidField`。只改被点名的属性，其余不动。改 `author` 时若 `people.xml` 里还没有这个作者则补一条，不删旧作者。id 不是批注容器 id 报 `InvalidId`。xlsx 上发此 op 报 `InvalidField`。pptx 的 `id` 可以是批注容器 id 或回复 id。改作者或缩写时按新的 `name` / `initials` 指向（必要时新建）一条 `p188:author`，只改该 `cm` 或 `reply` 的 `authorId`，不改共享的那条 author 记录，以免误伤同作者其它批注。对 `kind` 为 `ink` 的批注报 `NotImplemented`。
 
 ### setCommentDone
 
@@ -1333,7 +1345,7 @@ pptx：找不到该页报 `IdNotFound`。`id` 必须是 `slide:{n}` 或 `slide:{
 | `id` | 批注容器 id |
 | `done` | 布尔。`true` 写成 `commentEx/@done="1"`，`false` 写成 `"0"` |
 
-只改被点名这一条的 `done`，不自动改回复。没有 `commentsExtended` 则按 Word 16 最小集新建，并为文件里每条批注补 `commentEx`（默认 `done="0"`），再改被点名的那条。父批注最后一段没有 `w14:paraId` 时报 `InvalidField`。xlsx / pptx 上发此 op 报 `InvalidField`。
+只改被点名这一条的 `done`，不自动改回复。没有 `commentsExtended` 则按 Word 16 最小集新建，并为文件里每条批注补 `commentEx`（默认 `done="0"`），再改被点名的那条。父批注最后一段没有 `w14:paraId` 时报 `InvalidField`。xlsx 上发此 op 报 `InvalidField`。pptx 的 `id` 可以是批注容器 id 或回复 id。`done: true` 写 `status="resolved"`；`false` 去掉 `status`（与另存样例默认无 status、即 active 一致）。对 `kind` 为 `ink` 的批注报 `NotImplemented`。
 
 ### 图表 op 的共同限制
 
@@ -1706,11 +1718,11 @@ Content Type：data 为 `application/vnd.openxmlformats-officedocument.drawingml
 
 只改备注页上占位符 `p:ph/@type` 为 `body` 的那个文本框。文档顺序中第一个 `body` 占位符命中。找不到该页报 `IdNotFound`。`id` 不是上述两种报 `InvalidId`。没有 notesSlide 时新建最小 Transitional 备注页：若包内还没有 notesMaster，则补 `/ppt/notesMasters/notesMaster1.xml`（指向已有 theme）、presentation 关系、`p:notesMasterIdLst` 与内容类型；再写 `/ppt/notesSlides/notesSlideN.xml`，该页 `.rels` 指向 notesMaster 与对应幻灯片。新建的备注页含 `sldImg`、`body`、`sldNum` 三个占位符，结构对照 PowerPoint 16.0 另存样例，不写 `p14:creationId`。已有备注页却没有 `body` 占位符时，补一个 `body` 再写字。不改 `sldImg` 缩略图占位符。xlsx / docx 上发此 op 报 `InvalidField`。`create` 本期不写备注。
 
-示例见 `docs/examples/pptx-apply-notes.json`。inspect 示例见 `docs/examples/pptx-inspect-notes.json`。
+示例见 `docs/examples/pptx-apply-notes.json`。inspect 示例见 `docs/examples/pptx-inspect-notes.json`。批注示例见 `docs/examples/pptx-apply-comments.json` 与 `docs/examples/pptx-inspect-comments.json`。
 
 ### 改动范围（pptx）
 
-允许变脏的部件：被改的那一张幻灯片 XML（通常是 `/ppt/slides/slideN.xml`，N 以关系目标为准）及其 `.rels`，被改的 notesSlide 及其 `.rels`，必要时 `presentation.xml` 及其 `.rels`、新建的 notesMaster 及其 `.rels`，`[Content_Types].xml`，以及新建或被删的 `/ppt/media/…`、`/ppt/charts/…`、embedding、`/ppt/diagrams/…` 及可选 drawing 缓存。`setShapeText` 只脏目标宿主 XML（幻灯片或 notesSlide）。`setNotesText` 可脏 notesSlide、该页 `.rels`、notesMaster、presentation。图片 op 还可脏该宿主关系与媒体。图表 op 还可脏 chart 部件、embedding。SmartArt op 还可脏四件套与缓存。其他页、幻灯片母版、版式、主题、`presProps` 一律原样写回。一次 `ops` 可以混用 `setShapeText`、`setNotesText`、图片 op、图表 op 与 SmartArt op。只改 SmartArt 点文字或增删点、且宿主 graphicFrame 未动时，该页 XML 按「drawing 未动」验收。
+允许变脏的部件：被改的那一张幻灯片 XML（通常是 `/ppt/slides/slideN.xml`，N 以关系目标为准）及其 `.rels`，被改的 notesSlide 及其 `.rels`，必要时 `presentation.xml` 及其 `.rels`、新建的 notesMaster 及其 `.rels`，`[Content_Types].xml`，以及新建或被删的 `/ppt/media/…`、`/ppt/charts/…`、embedding、`/ppt/diagrams/…` 及可选 drawing 缓存，以及现代批注部件 `/ppt/comments/modernComment_*.xml` 与 `/ppt/authors.xml`。`setShapeText` 只脏目标宿主 XML（幻灯片或 notesSlide）。`setNotesText` 可脏 notesSlide、该页 `.rels`、notesMaster、presentation。图片 op 还可脏该宿主关系与媒体。图表 op 还可脏 chart 部件、embedding。SmartArt op 还可脏四件套与缓存。批注 op 还可脏该页 comments 部件、幻灯片 XML（新建时的 `commentRel`）、presentation `.rels` 与 authors。其他页、幻灯片母版、版式、主题、`presProps` 一律原样写回。一次 `ops` 可以混用 `setShapeText`、`setNotesText`、批注 op、图片 op、图表 op 与 SmartArt op。只改 SmartArt 点文字或增删点、且宿主 graphicFrame 未动时，该页 XML 按「drawing 未动」验收。
 
 被改部件同样整份重序列化，保留程度与 xlsx 工作表相同：元素与属性顺序、未知命名空间保留；注释、处理指令、DOCTYPE 会丢。
 

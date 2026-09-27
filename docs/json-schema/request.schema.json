@@ -880,17 +880,24 @@
     },
     "insertCommentOp": {
       "type": "object",
-      "required": ["op", "start", "end"],
+      "required": ["op"],
       "additionalProperties": false,
       "properties": {
         "op": { "const": "insertComment" },
+        "id": { "type": "string", "minLength": 1 },
         "start": { "type": "string", "minLength": 1 },
         "end": { "type": "string", "minLength": 1 },
         "text": { "type": "string" },
         "author": { "type": "string" },
         "initials": { "type": "string" },
-        "date": { "type": "string", "minLength": 1 }
-      }
+        "date": { "type": "string", "minLength": 1 },
+        "x": { "type": "integer", "minimum": 0 },
+        "y": { "type": "integer", "minimum": 0 }
+      },
+      "oneOf": [
+        { "required": ["start", "end"] },
+        { "required": ["id"] }
+      ]
     },
     "deleteCommentOp": {
       "type": "object",

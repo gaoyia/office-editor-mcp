@@ -158,6 +158,7 @@ fn inspect_chart_count_without_list() {
             "pictureCount",
             "chartCount",
             "smartArtCount",
+            "commentCount",
             "slides"
         ]
     );

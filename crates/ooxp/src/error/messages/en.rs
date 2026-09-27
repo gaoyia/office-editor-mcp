@@ -121,6 +121,12 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::SetNotesTextNeedsSlide => {
                 "setNotesText id must be slide:N or slide:N/notes".into()
             }
+            IdReason::PptxCommentForm => {
+                "pptx comment id must be slide:N/comment:GUID or …/reply:GUID".into()
+            }
+            IdReason::InsertCommentNeedsSlide => {
+                "pptx insertComment id must be slide:N".into()
+            }
             IdReason::HfSlotPrefix => {
                 "xlsx header/footer id must be sheet:name/hf:odd|even|first:header|footer".into()
             }

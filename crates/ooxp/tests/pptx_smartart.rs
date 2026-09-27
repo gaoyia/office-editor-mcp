@@ -140,6 +140,7 @@ fn inspect_count_without_list() {
             "pictureCount",
             "chartCount",
             "smartArtCount",
+            "commentCount",
             "slides"
         ]
     );

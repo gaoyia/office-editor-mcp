@@ -5,6 +5,7 @@ use crate::opc::{self, Package};
 use crate::xml;
 
 use super::chart;
+use super::comments;
 use super::notes;
 use super::picture;
 use super::request::PptxOp;
@@ -71,6 +72,35 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                     )
                 })?;
                 notes::apply_set_notes_text(&mut pkg, &pres_part, &mut pres, &meta.part, op, i)?;
+            }
+            PptxOp::InsertComment(op) => {
+                let meta = slides.get(op.slide - 1).ok_or_else(|| {
+                    Error::with_path(
+                        ErrorKind::SlideNotFound { n: op.slide as u32 },
+                        format!("ops[{i}].id"),
+                    )
+                })?;
+                comments::apply_insert(&mut pkg, &pres_part, &pres, meta, op, i)?;
+            }
+            PptxOp::ReplyComment(op) => {
+                let meta = comment_slide_meta(&slides, &op.id, i)?;
+                comments::apply_reply(&mut pkg, &pres_part, meta, op, i)?;
+            }
+            PptxOp::DeleteComment(op) => {
+                let meta = comment_slide_meta(&slides, &op.id, i)?;
+                comments::apply_delete(&mut pkg, meta, op, i)?;
+            }
+            PptxOp::SetCommentText(op) => {
+                let meta = comment_slide_meta(&slides, &op.id, i)?;
+                comments::apply_set_text(&mut pkg, meta, op, i)?;
+            }
+            PptxOp::SetCommentMeta(op) => {
+                let meta = comment_slide_meta(&slides, &op.id, i)?;
+                comments::apply_set_meta(&mut pkg, &pres_part, meta, op, i)?;
+            }
+            PptxOp::SetCommentDone(op) => {
+                let meta = comment_slide_meta(&slides, &op.id, i)?;
+                comments::apply_set_done(&mut pkg, meta, op, i)?;
             }
             PptxOp::ReplacePicture(op) => {
                 let meta = slides.get(op.target.slide - 1).ok_or_else(|| {
@@ -451,6 +481,22 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
     }
 
     pkg.save_to_vec()
+}
+
+fn comment_slide_meta<'a>(
+    slides: &'a [shape::SlideMeta],
+    id: &str,
+    i: usize,
+) -> Result<&'a shape::SlideMeta, Error> {
+    let target = comments::parse_comment_id(id, &format!("ops[{i}].id"))?;
+    slides.get(target.slide - 1).ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::SlideNotFound {
+                n: target.slide as u32,
+            },
+            format!("ops[{i}].id"),
+        )
+    })
 }
 
 fn pic_host_part(

@@ -110,6 +110,12 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::SetNotesTextNeedsSlide => {
                 "setNotesText 的 id 必须是 slide:N 或 slide:N/notes".into()
             }
+            IdReason::PptxCommentForm => {
+                "pptx 批注 id 必须是 slide:N/comment:GUID 或 …/reply:GUID".into()
+            }
+            IdReason::InsertCommentNeedsSlide => {
+                "pptx 的 insertComment 的 id 必须是 slide:N".into()
+            }
             IdReason::HfSlotPrefix => {
                 "xlsx 页眉槽位 id 必须是 sheet:工作表名/hf:odd|even|first:header|footer".into()
             }

@@ -71,6 +71,10 @@ pub(crate) enum IdReason {
     InsertNeedsSlide,
     /// setNotesText 必须用 slide:N 或 slide:N/notes
     SetNotesTextNeedsSlide,
+    /// pptx 批注 id 必须是 slide:N/comment:…
+    PptxCommentForm,
+    /// pptx insertComment 必须用 slide:N
+    InsertCommentNeedsSlide,
     /// xlsx 页眉槽位 id 必须是 sheet:{name}/hf:{kind}:{side}
     HfSlotPrefix,
     /// 框 id 必须是 {段落}/txbx:…
@@ -433,6 +437,8 @@ impl IdReason {
             Self::SlidePicContainer,
             Self::InsertNeedsSlide,
             Self::SetNotesTextNeedsSlide,
+            Self::PptxCommentForm,
+            Self::InsertCommentNeedsSlide,
             Self::HfSlotPrefix,
             Self::TxbxPrefix,
             Self::TxbxContainer,

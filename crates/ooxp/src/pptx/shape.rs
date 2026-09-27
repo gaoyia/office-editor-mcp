@@ -186,6 +186,10 @@ pub fn visible_text(sp: &Element) -> String {
     let Some(tx) = sp.child_by_local("txBody") else {
         return String::new();
     };
+    txbody_visible_text(tx)
+}
+
+pub fn txbody_visible_text(tx: &Element) -> String {
     let mut out = String::new();
     collect_visible_text(tx, &mut out);
     out

@@ -1774,3 +1774,91 @@ function Ensure-PptxPptNotesSource([switch]$Force) {
     Write-Log "saved ppt notes source $path"
     return $path
 }
+
+function Test-PptxCommentsSource([string]$pptx, [string]$reqName) {
+    $tree = Invoke-OoxpTree @{
+        schemaVersion = 1; action = 'inspect'
+        path = $pptx.Replace('\', '/'); format = 'pptx'
+        scope = @{ comments = $true }
+    } $reqName
+    $S = $global:OoxpStrings
+    $count = 0
+    try { $count = [int]$tree.commentCount } catch { $count = 0 }
+    $slide = @($tree.slides) | Select-Object -First 1
+    $comments = @()
+    if ($slide -and ($slide.PSObject.Properties.Name -contains 'comments')) {
+        $comments = @($slide.comments)
+    }
+    $texts = @()
+    $replyHit = $false
+    foreach ($c in $comments) {
+        $texts += [string]$c.text
+        $id = [string]$c.id
+        if ($id -notlike 'slide:1/comment:{*}') { continue }
+        foreach ($r in @($c.replies)) {
+            if (([string]$r.text).Trim() -eq $S.commentReply) { $replyHit = $true }
+        }
+    }
+    $hitA = $texts -contains $S.commentA
+    $hitB = $texts -contains $S.commentB
+    return [pscustomobject]@{
+        commentCount = $count
+        hitA = $hitA
+        hitB = $hitB
+        replyHit = $replyHit
+        ok = ($count -ge 2) -and $hitA -and $hitB -and $replyHit
+    }
+}
+
+# PowerPoint 亲手另存：第一页两条线程化批注，其中一条带回复。不要用库 create 产物当带批注的唯一样例。
+function Ensure-PptxPptCommentSource([switch]$Force) {
+    $path = Get-OutPath 'pptx-ppt-comments-source.pptx'
+    if ((Test-Path $path) -and -not $Force) {
+        $cached = Test-PptxCommentsSource $path 'pptx-comments-source-cache-check'
+        if ($cached.ok) { return $path }
+        Write-Log "缓存的 pptx 批注 source 不合格（count=$($cached.commentCount) a=$($cached.hitA) b=$($cached.hitB) reply=$($cached.replyHit)），重建"
+    }
+
+    $tmpDir = Join-Path $env:TEMP 'ooxp-office'
+    New-Item -ItemType Directory -Force -Path $tmpDir | Out-Null
+    $tmp = Join-Path $tmpDir 'pptx-ppt-comments-source.pptx'
+    $S = $global:OoxpStrings
+    Invoke-OoxpRequest @{
+        schemaVersion = 1; action = 'create'
+        path = $tmp.Replace('\', '/'); format = 'pptx'
+        presentation = @{
+            slides = @(
+                @{ shapes = @(@{ text = $S.chapter1 }, @{ text = $S.shape2src }) }
+                @{ shapes = @(@{ text = $S.page2keep }) }
+            )
+        }
+    } 'pptx-comments-source-create' | Out-Null
+
+    $ppt = Ensure-MsPpt (Ensure-PptxCreate)
+    $pres = Open-PptPres $ppt $tmp
+    $s1 = Get-PptSlide $pres 1
+    $comments = $s1.Comments
+    $c1 = $null
+    $c2 = $null
+    $replies = $null
+    $r1 = $null
+    try {
+        $c1 = $comments.Add(72, 72, 'Alice', 'A', $S.commentA)
+        $c2 = $comments.Add(144, 144, 'Bob', 'B', $S.commentB)
+        $replies = $c1.Replies
+        $r1 = $replies.Add(72, 90, 'Alice', 'A', $S.commentReply)
+    } finally {
+        Release-Com $r1
+        Release-Com $replies
+        Release-Com $c2
+        Release-Com $c1
+        Release-Com $comments
+    }
+    Write-Log 'PowerPoint Save() 原地覆盖 TEMP 里的批注源文件'
+    $pres.Save()
+    Close-PptPres $pres
+    Release-Com $s1
+    Copy-Item -Force $tmp $path
+    Write-Log "saved ppt comments source $path"
+    return $path
+}

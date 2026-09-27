@@ -8,6 +8,7 @@ use crate::json;
 use crate::smartart::{ColorsKind, LayoutKind, NewPoint, Role, StyleKind};
 
 use super::chart;
+use super::comments;
 use super::picture;
 use super::smartart;
 
@@ -19,6 +20,7 @@ pub struct InspectScope {
     pub charts: bool,
     pub smart_art: bool,
     pub notes: bool,
+    pub comments: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -32,6 +34,51 @@ pub struct SetNotesTextOp {
     pub slide: usize,
     pub id: String,
     pub text: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct InsertCommentOp {
+    pub slide: usize,
+    pub text: String,
+    pub author: String,
+    pub initials: String,
+    pub date: Option<String>,
+    pub x: Option<i64>,
+    pub y: Option<i64>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ReplyCommentOp {
+    pub id: String,
+    pub text: String,
+    pub author: String,
+    pub initials: String,
+    pub date: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct DeleteCommentOp {
+    pub id: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetCommentTextOp {
+    pub id: String,
+    pub text: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetCommentMetaOp {
+    pub id: String,
+    pub author: Option<String>,
+    pub initials: Option<String>,
+    pub date: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetCommentDoneOp {
+    pub id: String,
+    pub done: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -253,6 +300,12 @@ pub struct SetSmartArtLayoutOp {
 pub enum PptxOp {
     SetShapeText(SetShapeTextOp),
     SetNotesText(SetNotesTextOp),
+    InsertComment(InsertCommentOp),
+    ReplyComment(ReplyCommentOp),
+    DeleteComment(DeleteCommentOp),
+    SetCommentText(SetCommentTextOp),
+    SetCommentMeta(SetCommentMetaOp),
+    SetCommentDone(SetCommentDoneOp),
     ReplacePicture(ReplacePictureOp),
     InsertPicture(InsertPictureOp),
     DeletePicture(DeletePictureOp),
@@ -307,12 +360,14 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
             "charts",
             "smartArt",
             "notes",
+            "comments",
         ],
     )?;
     let pictures = parse_bool_field(obj.get("pictures"), "pictures")?;
     let charts = parse_bool_field(obj.get("charts"), "charts")?;
     let smart_art = parse_bool_field(obj.get("smartArt"), "smartArt")?;
     let notes = parse_bool_field(obj.get("notes"), "notes")?;
+    let comments = parse_bool_field(obj.get("comments"), "comments")?;
     let slide = match obj.get("slide") {
         None => None,
         Some(s) => {
@@ -377,6 +432,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
         charts,
         smart_art,
         notes,
+        comments,
     }))
 }
 
@@ -424,6 +480,12 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<PptxOp>, Error> {
         let parsed = match op_name {
             "setShapeText" => PptxOp::SetShapeText(parse_set_shape_text(obj, i)?),
             "setNotesText" => PptxOp::SetNotesText(parse_set_notes_text(obj, i)?),
+            "insertComment" => PptxOp::InsertComment(parse_insert_comment(obj, i)?),
+            "replyComment" => PptxOp::ReplyComment(parse_reply_comment(obj, i)?),
+            "deleteComment" => PptxOp::DeleteComment(parse_delete_comment(obj, i)?),
+            "setCommentText" => PptxOp::SetCommentText(parse_set_comment_text(obj, i)?),
+            "setCommentMeta" => PptxOp::SetCommentMeta(parse_set_comment_meta(obj, i)?),
+            "setCommentDone" => PptxOp::SetCommentDone(parse_set_comment_done(obj, i)?),
             "replacePicture" => PptxOp::ReplacePicture(parse_replace_pic(obj, i)?),
             "insertPicture" => PptxOp::InsertPicture(parse_insert_pic(obj, i)?),
             "deletePicture" => PptxOp::DeletePicture(parse_delete_pic(obj, i)?),
@@ -494,12 +556,6 @@ fn is_foreign_op(op_name: &str) -> bool {
             | "deleteFootnote"
             | "deleteEndnote"
             | "setNoteNumbering"
-            | "insertComment"
-            | "replyComment"
-            | "deleteComment"
-            | "setCommentText"
-            | "setCommentMeta"
-            | "setCommentDone"
             | "setChartWrap"
             | "setChartAnchor"
             | "insertChartSheet"
@@ -565,6 +621,218 @@ fn parse_set_notes_text(obj: &Map<String, Value>, i: usize) -> Result<SetNotesTe
         }
     };
     Ok(SetNotesTextOp { slide, id, text })
+}
+
+fn parse_optional_text(obj: &Map<String, Value>, i: usize) -> Result<String, Error> {
+    match obj.get("text") {
+        None => Ok(String::new()),
+        Some(Value::String(s)) => Ok(s.clone()),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "text".into(),
+                expected: TypeName::String,
+            },
+            format!("ops[{i}].text"),
+        )),
+    }
+}
+
+fn parse_optional_str(
+    obj: &Map<String, Value>,
+    i: usize,
+    field: &str,
+    default: &str,
+) -> Result<String, Error> {
+    match obj.get(field) {
+        None => Ok(default.to_string()),
+        Some(Value::String(s)) => Ok(s.clone()),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::String,
+            },
+            format!("ops[{i}].{field}"),
+        )),
+    }
+}
+
+fn parse_optional_date(obj: &Map<String, Value>, i: usize) -> Result<Option<String>, Error> {
+    match obj.get("date") {
+        None => Ok(None),
+        Some(Value::String(s)) if !s.is_empty() => Ok(Some(s.clone())),
+        Some(Value::String(_)) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "date".into(),
+                expected: TypeName::NonEmptyString,
+            },
+            format!("ops[{i}].date"),
+        )),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "date".into(),
+                expected: TypeName::String,
+            },
+            format!("ops[{i}].date"),
+        )),
+    }
+}
+
+fn parse_insert_comment(obj: &Map<String, Value>, i: usize) -> Result<InsertCommentOp, Error> {
+    deny_keys(
+        obj,
+        i,
+        &["op", "id", "text", "author", "initials", "date", "x", "y"],
+    )?;
+    let id = require_id(obj, i)?;
+    let slide = comments::parse_insert_slide(&id, i)?;
+    let text = parse_optional_text(obj, i)?;
+    let author = parse_optional_str(obj, i, "author", "ooxp")?;
+    let initials = parse_optional_str(obj, i, "initials", "oo")?;
+    let date = parse_optional_date(obj, i)?;
+    let x = parse_off_field(obj.get("x"), i, "x")?;
+    let y = parse_off_field(obj.get("y"), i, "y")?;
+    if x.is_some() != y.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "insertComment".into(),
+                field: "x and y together".into(),
+            },
+            format!("ops[{i}]"),
+        ));
+    }
+    Ok(InsertCommentOp {
+        slide,
+        text,
+        author,
+        initials,
+        date,
+        x,
+        y,
+    })
+}
+
+fn parse_reply_comment(obj: &Map<String, Value>, i: usize) -> Result<ReplyCommentOp, Error> {
+    deny_keys(obj, i, &["op", "id", "text", "author", "initials", "date"])?;
+    let id = require_id(obj, i)?;
+    let _ = comments::parse_comment_id(&id, &format!("ops[{i}].id"))?;
+    Ok(ReplyCommentOp {
+        id,
+        text: parse_optional_text(obj, i)?,
+        author: parse_optional_str(obj, i, "author", "ooxp")?,
+        initials: parse_optional_str(obj, i, "initials", "oo")?,
+        date: parse_optional_date(obj, i)?,
+    })
+}
+
+fn parse_delete_comment(obj: &Map<String, Value>, i: usize) -> Result<DeleteCommentOp, Error> {
+    deny_keys(obj, i, &["op", "id"])?;
+    let id = require_id(obj, i)?;
+    let _ = comments::parse_comment_id(&id, &format!("ops[{i}].id"))?;
+    Ok(DeleteCommentOp { id })
+}
+
+fn parse_set_comment_text(obj: &Map<String, Value>, i: usize) -> Result<SetCommentTextOp, Error> {
+    deny_keys(obj, i, &["op", "id", "text"])?;
+    let id = require_id(obj, i)?;
+    let _ = comments::parse_comment_id(&id, &format!("ops[{i}].id"))?;
+    let text = match obj.get("text") {
+        Some(Value::String(s)) => s.clone(),
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "text".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].text"),
+            ));
+        }
+        None => {
+            return Err(Error::with_path(
+                ErrorKind::OpRequiresField {
+                    op: "setCommentText".into(),
+                    field: "text".into(),
+                },
+                format!("ops[{i}].text"),
+            ));
+        }
+    };
+    Ok(SetCommentTextOp { id, text })
+}
+
+fn parse_set_comment_meta(obj: &Map<String, Value>, i: usize) -> Result<SetCommentMetaOp, Error> {
+    deny_keys(obj, i, &["op", "id", "author", "initials", "date"])?;
+    let id = require_id(obj, i)?;
+    let _ = comments::parse_comment_id(&id, &format!("ops[{i}].id"))?;
+    let author = match obj.get("author") {
+        None => None,
+        Some(Value::String(s)) => Some(s.clone()),
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "author".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].author"),
+            ));
+        }
+    };
+    let initials = match obj.get("initials") {
+        None => None,
+        Some(Value::String(s)) => Some(s.clone()),
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "initials".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].initials"),
+            ));
+        }
+    };
+    let date = parse_optional_date(obj, i)?;
+    if author.is_none() && initials.is_none() && date.is_none() {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "setCommentMeta".into(),
+                field: "author, initials, or date".into(),
+            },
+            format!("ops[{i}]"),
+        ));
+    }
+    Ok(SetCommentMetaOp {
+        id,
+        author,
+        initials,
+        date,
+    })
+}
+
+fn parse_set_comment_done(obj: &Map<String, Value>, i: usize) -> Result<SetCommentDoneOp, Error> {
+    deny_keys(obj, i, &["op", "id", "done"])?;
+    let id = require_id(obj, i)?;
+    let _ = comments::parse_comment_id(&id, &format!("ops[{i}].id"))?;
+    let done = match obj.get("done") {
+        Some(Value::Bool(b)) => *b,
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "done".into(),
+                    expected: TypeName::Boolean,
+                },
+                format!("ops[{i}].done"),
+            ));
+        }
+        None => {
+            return Err(Error::with_path(
+                ErrorKind::OpRequiresField {
+                    op: "setCommentDone".into(),
+                    field: "done".into(),
+                },
+                format!("ops[{i}].done"),
+            ));
+        }
+    };
+    Ok(SetCommentDoneOp { id, done })
 }
 
 fn parse_replace_pic(obj: &Map<String, Value>, i: usize) -> Result<ReplacePictureOp, Error> {

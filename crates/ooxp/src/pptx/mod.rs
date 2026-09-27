@@ -2,6 +2,7 @@
 
 mod apply;
 mod chart;
+mod comments;
 mod create;
 mod inspect;
 mod notes;

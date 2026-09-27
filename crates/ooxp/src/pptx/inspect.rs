@@ -7,6 +7,7 @@ use crate::opc::{self, Package};
 use crate::xml;
 
 use super::chart;
+use super::comments;
 use super::notes;
 use super::picture;
 use super::request::InspectScope;
@@ -23,11 +24,13 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     let want_charts = scope.as_ref().is_some_and(|s| s.charts);
     let want_smartarts = scope.as_ref().is_some_and(|s| s.smart_art);
     let want_notes = scope.as_ref().is_some_and(|s| s.notes);
+    let want_comments = scope.as_ref().is_some_and(|s| s.comments);
 
     let mut slide_json = Vec::new();
     let mut picture_count = 0usize;
     let mut chart_count = 0usize;
     let mut smart_art_count = 0usize;
+    let mut comment_count = 0usize;
     for s in &slides {
         let doc = xml::parse(pkg.get(&s.part)?)?;
         let host = format!("slide:{}", s.index);
@@ -56,6 +59,16 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
             .unwrap_or_else(|| smartart::count_smartarts(&doc.root));
         smart_art_count += n_smartarts;
         let has = notes::has_notes(&pkg, &s.part)?;
+        let comments_list = if want_comments {
+            Some(comments::collect_on_slide(&pkg, &s.part, s.index)?)
+        } else {
+            None
+        };
+        let n_comments = match &comments_list {
+            Some(list) => list.len(),
+            None => comments::count_on_slide(&pkg, &s.part)?,
+        };
+        comment_count += n_comments;
         let mut obj = Map::new();
         obj.insert("id".into(), json!(host));
         obj.insert("index".into(), json!(s.index));
@@ -65,6 +78,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         obj.insert("pictureCount".into(), json!(pics.len()));
         obj.insert("chartCount".into(), json!(n_charts));
         obj.insert("smartArtCount".into(), json!(n_smartarts));
+        obj.insert("commentCount".into(), json!(n_comments));
         if want_pictures {
             obj.insert(
                 "pictures".into(),
@@ -82,6 +96,9 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
                 "notes".into(),
                 notes::notes_json(&pkg, &s.part, s.index, want_pictures)?,
             );
+        }
+        if let Some(list) = comments_list {
+            obj.insert("comments".into(), Value::Array(list));
         }
         if let Some(scope) = &scope {
             if scope.slide == Some(s.index as u32) {
@@ -127,6 +144,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         "pictureCount": picture_count,
         "chartCount": chart_count,
         "smartArtCount": smart_art_count,
+        "commentCount": comment_count,
         "slides": slide_json,
     }))
 }

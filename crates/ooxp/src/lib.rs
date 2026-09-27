@@ -517,9 +517,11 @@ mod tests {
         assert_eq!(tree["pictureCount"], 0);
         assert_eq!(tree["chartCount"], 0);
         assert_eq!(tree["smartArtCount"], 0);
+        assert_eq!(tree["commentCount"], 0);
         assert_eq!(tree["slides"][0]["pictureCount"], 0);
         assert_eq!(tree["slides"][0]["chartCount"], 0);
         assert_eq!(tree["slides"][0]["smartArtCount"], 0);
+        assert_eq!(tree["slides"][0]["commentCount"], 0);
         assert_eq!(tree["slides"][0]["hasNotes"], false);
         assert!(tree["slides"][0].get("shapes").is_none());
         assert!(tree["slides"][0].get("pictures").is_none());
@@ -944,6 +946,7 @@ mod tests {
                 "pictureCount",
                 "chartCount",
                 "smartArtCount",
+                "commentCount",
                 "slides"
             ]
         );
@@ -958,6 +961,7 @@ mod tests {
                 "pictureCount",
                 "chartCount",
                 "smartArtCount",
+                "commentCount",
                 "truncated",
                 "shapes"
             ]
@@ -972,7 +976,8 @@ mod tests {
                 "hasNotes",
                 "pictureCount",
                 "chartCount",
-                "smartArtCount"
+                "smartArtCount",
+                "commentCount"
             ]
         );
         assert_eq!(
