@@ -1,14 +1,17 @@
 //! 幻灯片 SmartArt：名单、插删、改点、画布坐标与 create。
 
-use std::io::{Cursor, Read};
+use std::io::{Cursor, Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU32, Ordering};
 
 use ooxp::{run, ErrorCode, RunOutput};
 use serde_json::{json, Value};
-use zip::ZipArchive;
+use zip::write::SimpleFileOptions;
+use zip::{CompressionMethod, ZipArchive, ZipWriter};
 
 const UID_LIST: &str = "urn:microsoft.com/office/officeart/2005/8/layout/default";
+const UID_ORG: &str = "urn:microsoft.com/office/officeart/2005/8/layout/orgChart1";
+const UID_CYCLE: &str = "urn:microsoft.com/office/officeart/2005/8/layout/cycle2";
 
 static SEQ: AtomicU32 = AtomicU32::new(0);
 
@@ -103,6 +106,30 @@ fn part_text(path: &Path, name: &str) -> String {
     let mut out = Vec::new();
     file.read_to_end(&mut out).unwrap();
     String::from_utf8(out).unwrap()
+}
+
+fn rewrite_part(path: &Path, name: &str, f: impl FnOnce(Vec<u8>) -> Vec<u8>) {
+    let bytes = std::fs::read(path).unwrap();
+    let mut zip_in = ZipArchive::new(Cursor::new(bytes)).unwrap();
+    let mut out = Cursor::new(Vec::new());
+    let mut transform = Some(f);
+    {
+        let mut zip_out = ZipWriter::new(&mut out);
+        let opt = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
+        for i in 0..zip_in.len() {
+            let mut file = zip_in.by_index(i).unwrap();
+            let n = file.name().to_string();
+            let mut data = Vec::new();
+            file.read_to_end(&mut data).unwrap();
+            if n == name {
+                data = transform.take().expect("部件只应出现一次")(data);
+            }
+            zip_out.start_file(&n, opt).unwrap();
+            zip_out.write_all(&data).unwrap();
+        }
+        zip_out.finish().unwrap();
+    }
+    std::fs::write(path, out.into_inner()).unwrap();
 }
 
 fn insert_list(src: &Path, out: &Path) {
@@ -272,16 +299,32 @@ fn set_text_add_delete_point_size_pos_layout() {
     let tree = inspect_smart(&same);
     assert_eq!(tree["slides"][0]["smartArts"][0]["layout"], UID_LIST);
 
-    let err = apply(
+    let org = tmp("lay-org").with_extension("pptx");
+    apply(
         &same,
-        &tmp("lay-bad").with_extension("pptx"),
+        &org,
         json!([{ "op": "setSmartArtLayout", "id": id, "layout": "org" }]),
     )
-    .unwrap_err();
-    assert_eq!(err.code(), ErrorCode::NotImplemented);
+    .unwrap();
+    let tree = inspect_smart(&org);
+    assert_eq!(tree["slides"][0]["smartArts"][0]["layout"], UID_ORG);
+    assert!(!tree["slides"][0]["smartArts"][0]["points"]
+        .as_array()
+        .unwrap()
+        .is_empty());
+
+    let cyc = tmp("lay-cyc").with_extension("pptx");
+    apply(
+        &org,
+        &cyc,
+        json!([{ "op": "setSmartArtLayout", "id": id, "layout": "cycle" }]),
+    )
+    .unwrap();
+    let tree = inspect_smart(&cyc);
+    assert_eq!(tree["slides"][0]["smartArts"][0]["layout"], UID_CYCLE);
 
     let gone = tmp("del").with_extension("pptx");
-    apply(&same, &gone, json!([{ "op": "deleteSmartArt", "id": id }])).unwrap();
+    apply(&cyc, &gone, json!([{ "op": "deleteSmartArt", "id": id }])).unwrap();
     let tree = inspect_smart(&gone);
     assert_eq!(tree["smartArtCount"], 0);
     assert_eq!(tree["slides"][0]["smartArts"], json!([]));
@@ -290,6 +333,37 @@ fn set_text_add_delete_point_size_pos_layout() {
     let slide = part_text(&gone, "ppt/slides/slide1.xml");
     assert!(!slide.contains("graphicFrame"));
     assert!(!slide.contains("Fallback"));
+}
+
+#[test]
+fn set_layout_rejects_unknown_family() {
+    let src = create_deck("unk0");
+    let with = tmp("unk-in").with_extension("pptx");
+    insert_list(&src, &with);
+    let layout = part_names(&with)
+        .into_iter()
+        .find(|n| n.contains("diagrams/layout") && n.ends_with(".xml"))
+        .expect("应有 layout 部件");
+    rewrite_part(&with, &layout, |data| {
+        String::from_utf8(data)
+            .unwrap()
+            .replace(
+                UID_LIST,
+                "urn:microsoft.com/office/officeart/2005/8/layout/pyramid1",
+            )
+            .into_bytes()
+    });
+    let id = inspect_smart(&with)["slides"][0]["smartArts"][0]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let err = apply(
+        &with,
+        &tmp("unk-out").with_extension("pptx"),
+        json!([{ "op": "setSmartArtLayout", "id": id, "layout": "list" }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::NotImplemented);
 }
 
 #[test]

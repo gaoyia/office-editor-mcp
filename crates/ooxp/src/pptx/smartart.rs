@@ -5,8 +5,8 @@ use serde_json::{json, Map, Value};
 use crate::error::{Error, ErrorKind, IdReason};
 use crate::opc::{rels_part_name, Package, Relationships};
 use crate::smartart::{
-    self, colors_xml, style_xml, LayoutKind, Role, CT_COLORS, CT_LAYOUT, CT_STYLE, DEFAULT_CX,
-    DEFAULT_CY, DGM_NS, REL_CS, REL_LO, REL_QS,
+    self, colors_xml, style_xml, Role, CT_COLORS, CT_LAYOUT, CT_STYLE, DEFAULT_CX, DEFAULT_CY,
+    DGM_NS, REL_CS, REL_LO, REL_QS,
 };
 use crate::xml::{self, Document, Element, Node};
 
@@ -842,7 +842,7 @@ pub fn apply_add_point(
         AddParent::Point(p) => (p.diagram.clone(), Some(p.model_id.clone()), op.id.clone()),
     };
     let layout_uid = layout_unique_id(pkg, slide_root, slide_part, &diagram.key, &id, i).ok();
-    if smartart::family_of(layout_uid.as_deref().unwrap_or("")) == Some(LayoutKind::List) {
+    if smartart::family_of(layout_uid.as_deref().unwrap_or("")).is_some_and(|k| k.is_flat()) {
         if op.role == Role::Asst {
             return Err(Error::with_path(
                 ErrorKind::SmartArtAsstOnList,
@@ -1015,9 +1015,7 @@ pub fn apply_layout(
     if current == op.layout.unique_id() {
         return Ok(());
     }
-    let cur_fam = smartart::family_of(&current);
-    let tgt_fam = Some(op.layout);
-    if cur_fam != tgt_fam {
+    if smartart::family_of(&current).is_none() {
         return Err(Error::with_path(
             ErrorKind::SmartArtLayoutNotConvertible,
             format!("ops[{i}].layout"),
@@ -1037,8 +1035,14 @@ pub fn apply_layout(
         op.layout.unique_id(),
         op.layout.layout_xml(),
     )?;
-    if let Ok(data) = data_part_of(pkg, &slide_doc.root, slide_part, &op.target.key, &op.id, i) {
-        smartart::drop_drawing_caches(pkg, slide_part, &data)?;
+    if let Ok(data_part) = data_part_of(pkg, &slide_doc.root, slide_part, &op.target.key, &op.id, i)
+    {
+        if op.layout.is_flat() {
+            let mut data = xml::parse(pkg.get(&data_part)?)?;
+            smartart::demote_asst(&mut data.root);
+            pkg.set(&data_part, data.to_bytes()?)?;
+        }
+        smartart::drop_drawing_caches(pkg, slide_part, &data_part)?;
     }
     Ok(())
 }
@@ -1057,18 +1061,24 @@ fn retarget(
     unique_id: &str,
     xml_body: &str,
 ) -> Result<(), Error> {
-    let frame = find_frame_mut(&mut slide_doc.root, &target.key)
-        .ok_or_else(|| not_found(id, format!("ops[{i}].id")))?;
-    smartart::retarget_satellite(
-        pkg,
-        slide_part,
-        DIAGRAMS_DIR,
-        frame,
-        attr,
-        rel_type,
-        ct,
-        stem,
-        unique_id,
-        xml_body,
-    )
+    let leftover = {
+        let frame = find_frame_mut(&mut slide_doc.root, &target.key)
+            .ok_or_else(|| not_found(id, format!("ops[{i}].id")))?;
+        smartart::retarget_satellite(
+            pkg,
+            slide_part,
+            DIAGRAMS_DIR,
+            frame,
+            attr,
+            rel_type,
+            ct,
+            stem,
+            unique_id,
+            xml_body,
+        )?
+    };
+    if let Some((old_rid, old_part)) = leftover {
+        smartart::drop_replaced_satellite(pkg, slide_part, &slide_doc.root, &old_rid, &old_part)?;
+    }
+    Ok(())
 }

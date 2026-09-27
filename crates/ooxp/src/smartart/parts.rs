@@ -112,6 +112,8 @@ pub fn family_of(uid: &str) -> Option<LayoutKind> {
         Some(LayoutKind::List)
     } else if tail == "orgchart1" || tail.starts_with("orgchart") {
         Some(LayoutKind::Org)
+    } else if tail == "cycle2" || tail.starts_with("cycle") {
+        Some(LayoutKind::Cycle)
     } else {
         None
     }
@@ -185,6 +187,7 @@ pub fn set_rid_attr(el: &mut Element, local: &str, rid: &str) {
 }
 
 /// 换 colors / style / layout 卫星部件。`host_el` 是含 `dgm:relIds` 的宿主节点。
+/// 若换了关系 id，返回旧 `(rid, 部件)`，调用方在宿主 XML 的可变借用结束后再 `drop_replaced_satellite`。
 pub fn retarget_satellite(
     pkg: &mut Package,
     host: &str,
@@ -196,9 +199,10 @@ pub fn retarget_satellite(
     stem: &str,
     unique_id: &str,
     xml_body: &str,
-) -> Result<(), Error> {
-    let old_part = rel_ids(host_el)
-        .get(attr)
+) -> Result<Option<(String, String)>, Error> {
+    let old_rid = rel_ids(host_el).get(attr).cloned();
+    let old_part = old_rid
+        .as_ref()
         .and_then(|rid| crate::opc::resolve_id(pkg, host, rid).ok());
     let part = if let Some(existing) = find_part_by_unique_id(pkg, unique_id) {
         existing
@@ -236,12 +240,41 @@ pub fn retarget_satellite(
     if let Some(rel) = find_rel_ids_mut(host_el) {
         set_rid_attr(rel, attr, &rid);
     }
-    if let Some(old) = old_part {
-        if old != part {
-            drop_unused(pkg, &old)?;
+    match (old_rid, old_part) {
+        (Some(old_rid), Some(old)) if old_rid != rid || old != part => Ok(Some((old_rid, old))),
+        _ => Ok(None),
+    }
+}
+
+fn rid_used_in(el: &Element, rid: &str) -> bool {
+    if el.attrs.iter().any(|(_, v)| v == rid) {
+        return true;
+    }
+    el.element_children().any(|c| rid_used_in(c, rid))
+}
+
+/// 宿主 XML 不再引用旧 rid 时，从 `.rels` 摘掉并卸无主卫星部件。
+pub fn drop_replaced_satellite(
+    pkg: &mut Package,
+    host: &str,
+    host_root: &Element,
+    old_rid: &str,
+    old_part: &str,
+) -> Result<(), Error> {
+    if rid_used_in(host_root, old_rid) {
+        return Ok(());
+    }
+    let mut rels = Relationships::from_package(pkg, host)?;
+    let before = rels.rels.len();
+    rels.remove_by_id(old_rid);
+    if rels.rels.len() != before {
+        if rels.rels.is_empty() {
+            pkg.remove(&rels_part_name(host));
+        } else {
+            rels.write_to(pkg, host)?;
         }
     }
-    Ok(())
+    drop_unused(pkg, old_part)
 }
 
 fn find_part_by_unique_id(pkg: &Package, unique_id: &str) -> Option<String> {

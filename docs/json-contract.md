@@ -974,7 +974,7 @@ docx 根上始终带 `protection`，不要另给 scope 键。来源是 `/word/se
 | `pictures[].wrap` | `kind` 为 `anchor` 时必填，枚举与 `setPictureWrap` 相同。`kind` 为 `inline` 时必须省略 |
 | `pictures[].alignH` / `alignV` / `offsetX` / `offsetY` | 仅浮动，规则与 `setPictureWrap` 相同 |
 
-| `smartArts[].layout` | 必须。`list` 或 `org`，与 `insertSmartArt` 相同 |
+| `smartArts[].layout` | 必须。`list`、`org` 或 `cycle`，与 `insertSmartArt` 相同 |
 | `smartArts[].points` | 可选。与 `insertSmartArt` 相同；省略则用该版式的缺省占位点 |
 | `smartArts[].kind` / `wrap` / `cx` / `cy` | 可选。与 `insertSmartArt` 相同 |
 
@@ -1037,7 +1037,7 @@ create 写出 Transitional 最小包，见 [opc.md](opc.md)。每个 `w:p` 都�
 | `charts[].series` | 必须。非空。字段与 `insertChart` 相同 |
 | `charts[].title` | 可选 |
 | `charts[].x` / `charts[].y` / `charts[].cx` / `charts[].cy` | 可选。规则与 pptx `insertChart` 相同 |
-| `smartArts[].layout` | 必须。`list` 或 `org`，与 pptx `insertSmartArt` 相同 |
+| `smartArts[].layout` | 必须。`list`、`org` 或 `cycle`，与 pptx `insertSmartArt` 相同 |
 | `smartArts[].points` | 可选。与 `insertSmartArt` 相同；省略则用该版式的缺省占位点 |
 | `smartArts[].x` / `smartArts[].y` / `smartArts[].cx` / `smartArts[].cy` | 可选。规则与 pptx `insertSmartArt` 相同 |
 
@@ -2734,16 +2734,17 @@ xlsx：按图表 id 删掉包含该 `xdr:graphicFrame` 的整个锚点。不删�
 
 ### SmartArt op 的共同限制
 
-xlsx / pptx 上发任何 SmartArt op 报 `InvalidField`。改点只动 data 部件里对应 `dgm:pt` 的 `dgm:t`，以及必要的 `cxnLst`。不自己算版式坐标、连接线或形状几何。包里若有 diagram drawing 缓存（常见 `/word/diagrams/drawingN.xml`，关系 Type 含 `diagramDrawing`）：改字时同步改缓存里对应形状的可见 `a:t`；对不上 modelId 则删掉该缓存部件及其关系，让 Word 打开时重排。插入不写这份缓存。
+xlsx 上发任何 SmartArt op 报 `InvalidField`。pptx 认同一套 SmartArt op。改点只动 data 部件里对应 `dgm:pt` 的 `dgm:t`，以及必要的 `cxnLst`。不自己算版式坐标、连接线或形状几何。包里若有 diagram drawing 缓存（常见 `/word/diagrams/drawingN.xml`，关系 Type 含 `diagramDrawing`）：改字时同步改缓存里对应形状的可见 `a:t`；对不上 modelId 则删掉该缓存部件及其关系，让 Word 打开时重排。插入不写这份缓存。
 
-库内模板写在 `crates/ooxp` 资源里，不从 Office 安装目录抄。两份 layout 短名与 uniqueId：
+库内模板写在 `crates/ooxp` 资源里，不从 Office 安装目录抄。三份 layout 短名与 uniqueId：
 
 | 短名 | uniqueId |
 | --- | --- |
 | `list` | `urn:microsoft.com/office/officeart/2005/8/layout/default` |
 | `org` | `urn:microsoft.com/office/officeart/2005/8/layout/orgChart1` |
+| `cycle` | `urn:microsoft.com/office/officeart/2005/8/layout/cycle2` |
 
-家族按 uniqueId 最后一个 `/` 之后的末段判定（大小写不敏感）：`default`，或以 `hList` / `vList` 开头，属 `list`；`orgChart1`，或以 `orgChart` 开头，属 `org`。其余 uniqueId 不属于这两族。
+家族按 uniqueId 最后一个 `/` 之后的末段判定（大小写不敏感）：`default`，或以 `hList` / `vList` 开头，属 `list`；`orgChart1`，或以 `orgChart` 开头，属 `org`；`cycle2`，或以 `cycle` 开头，属 `cycle`。其余 uniqueId 不属于这三族。
 
 ### setSmartArtText
 
@@ -2764,7 +2765,7 @@ xlsx / pptx 上发任何 SmartArt op 报 `InvalidField`。改点只动 data 部�
 | `text` | 可选。省略当作 `""` |
 | `role` | 可选。`node` 或 `asst`，缺省 `node` |
 
-在 data 部件追加一个可见 `dgm:pt`，并追加一条 `type` 为 `parOf`（或省略 type）的 `cxn`：`srcId` 为父点 `modelId`（图示 id 时父为 `type="doc"` 的点），`destId` 为新点。不手写 `pres` / `parTrans` / `sibTrans`。现有 `modelId` 都能解析成非负整数时，新点与新连接用尚未占用的最小正整数；否则新点写新的大写 GUID（带花括号），连接 `modelId` 同样不与已有 pt / cxn 冲突。`role` 为 `asst` 且当前 layout 属 `list` 家族时报 `InvalidField`。找不到父点或图示报 `IdNotFound`。id 不是图示 id 或点 id 报 `InvalidId`。缺少 data 部件报 `OpcPartMissing`。
+在 data 部件追加一个可见 `dgm:pt`，并追加一条 `type` 为 `parOf`（或省略 type）的 `cxn`：`srcId` 为父点 `modelId`（图示 id 时父为 `type="doc"` 的点），`destId` 为新点。不手写 `pres` / `parTrans` / `sibTrans`。现有 `modelId` 都能解析成非负整数时，新点与新连接用尚未占用的最小正整数；否则新点写新的大写 GUID（带花括号），连接 `modelId` 同样不与已有 pt / cxn 冲突。`role` 为 `asst` 且当前 layout 属 `list` / `cycle` 家族时报 `InvalidField`。找不到父点或图示报 `IdNotFound`。id 不是图示 id 或点 id 报 `InvalidId`。缺少 data 部件报 `OpcPartMissing`。
 
 ### deleteSmartArtPoint
 
@@ -2781,7 +2782,7 @@ xlsx / pptx 上发任何 SmartArt op 报 `InvalidField`。改点只动 data 部�
 | --- | --- |
 | `op` | 必须是 `"insertSmartArt"` |
 | `id` | docx：宿主段落 id，正文、页眉页脚、框内、注内或批注内段落。pptx：页 id `slide:{n}` |
-| `layout` | `list` 或 `org` |
+| `layout` | `list`、`org` 或 `cycle` |
 | `points` | 可选。可见点数组。每项可含 `text`、`parent`、`role`。`parent` 是本数组里从 0 起的下标，表示父点；省略或 `null` 表示挂到文档根点下 |
 | `kind` | docx 可选。`inline` 或 `anchor`，缺省 `anchor`。pptx 上出现报 `InvalidField` |
 | `wrap` | docx 可选。浮动时的绕排，缺省 `square`。行内必须省略或为 `null`。pptx 上出现报 `InvalidField` |
@@ -2794,7 +2795,7 @@ pptx：在该页 `p:spTree` 插入 `p:graphicFrame`。新建 `/ppt/diagrams/` �
 
 `dgm:relIds` 的 `r:dm` / `r:lo` / `r:qs` / `r:cs` 指向这四条。不强制套 `mc:AlternateContent`，不写 Fallback 位图，不写 diagram drawing 缓存。
 
-省略 `points` 时：`list` 写三个可见点，文本为 `文本 1`、`文本 2`、`文本 3`，都挂在文档根点下；`org` 写一个根点 `文本 1`，再写两个子点 `文本 2`、`文本 3`。给了 `points` 则按数组顺序写；`parent` 越界、指向自身或成环报 `InvalidField`。`layout` 不认识报 `InvalidField`。`list` 上出现 `role` 为 `asst`，或 `parent` 指向另一个可见点（深度大于 1）报 `InvalidField`。
+省略 `points` 时：`list` / `cycle` 写三个可见点，文本为 `文本 1`、`文本 2`、`文本 3`，都挂在文档根点下；`org` 写一个根点 `文本 1`，再写两个子点 `文本 2`、`文本 3`。给了 `points` 则按数组顺序写；`parent` 越界、指向自身或成环报 `InvalidField`。`layout` 不认识报 `InvalidField`。`list` / `cycle` 上出现 `role` 为 `asst`，或 `parent` 指向另一个可见点（深度大于 1）报 `InvalidField`。
 
 Content Type：data 为 `application/vnd.openxmlformats-officedocument.drawingml.diagramData+xml`，layout 为 `…diagramLayout+xml`，colors 为 `…diagramColors+xml`，quickStyle 为 `…diagramQuickStyle+xml`。关系 Type 分别为 `http://schemas.openxmlformats.org/officeDocument/2006/relationships/diagramData`、`…/diagramLayout`、`…/diagramColors`、`…/diagramQuickStyle`。
 
@@ -2845,9 +2846,9 @@ Content Type：data 为 `application/vnd.openxmlformats-officedocument.drawingml
 | --- | --- |
 | `op` | 必须是 `"setSmartArtLayout"` |
 | `id` | 图示 id |
-| `layout` | `list` 或 `org` |
+| `layout` | `list`、`org` 或 `cycle` |
 
-不认识的短名报 `InvalidField`。当前 uniqueId 已经是目标那一条：空操作，仍计入 `opsApplied`。当前与目标属同一家族：把 layout 部件换成库内对应模板，并改 `r:lo`；可见点与 `parOf` 连接不动。否则（跨家族，或当前 uniqueId 不在两族里）报 `NotImplemented`，不写文件。不要写出 Word 要修复的包。找不到图示报 `IdNotFound`。id 不是图示 id 报 `InvalidId`。
+不认识的短名报 `InvalidField`。当前 uniqueId 已经是目标那一条：空操作，仍计入 `opsApplied`。当前 uniqueId 属于库内 `list` / `org` / `cycle` 三族之一：把 layout 部件换成库内对应模板，并改 `r:lo`；可见点与 `parOf` 连接不动。目标是 `list` 或 `cycle` 时，助手点改成普通节点，以免文字在新版式里消失。删掉 diagram drawing 缓存，让 Office 打开时重排。当前 uniqueId 不在这三族里报 `NotImplemented`，不写文件。不要写出 Word / PowerPoint 要修复的包。找不到图示报 `IdNotFound`。id 不是图示 id 报 `InvalidId`。
 
 ### 改动范围（docx）
 

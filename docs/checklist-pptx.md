@@ -8,7 +8,7 @@ C、I、A、Pp、Pc、Psa、Pn、Pcm 各组由 `manual-check/office/cases/pptx-*
 
 ## 本机结果（2026-09-27）
 
-Microsoft PowerPoint 16.0 已打开，C1、C3、C4、C5–C10、I1–I5、A1–A5、Pp1–Pp7、Pc1–Pc7、Psa1–Psa6、Pn1–Pn4、Pcm1–Pcm5 均 PASS。本机若装了 WPS，`PowerPoint.Application` 会被抢走，测试仍直接启动 `POWERPNT.EXE`，从 `mdiClass` 挂 COM。O1 已放弃。2026-09-27 补跑 `pptx-pictures.ps1`，Pp1–Pp7 通过。同日补跑 `pptx-create-pictures.ps1`，C5–C7 通过。同日补跑 `pptx-charts.ps1`，Pc1–Pc7 通过。同日补跑 `pptx-create-charts.ps1`，C8–C10 通过。同日补跑 `pptx-smartart.ps1`，Psa1–Psa6 通过。同日补跑 `pptx-notes.ps1`，Pn1–Pn4 通过。同日补跑 `pptx-comments.ps1`，Pcm1–Pcm5 通过。同日补跑 `pptx-docprops.ps1`，Pd1–Pd5 通过。同日补跑 `pptx-charts-remain.ps1`，Pr1–Pr3 通过。
+Microsoft PowerPoint 16.0 已打开，C1、C3、C4、C5–C10、I1–I5、A1–A5、Pp1–Pp7、Pc1–Pc7、Psa1–Psa7、Pn1–Pn4、Pcm1–Pcm5 均 PASS。本机若装了 WPS，`PowerPoint.Application` 会被抢走，测试仍直接启动 `POWERPNT.EXE`，从 `mdiClass` 挂 COM。O1 已放弃。2026-09-27 补跑 `pptx-pictures.ps1`，Pp1–Pp7 通过。同日补跑 `pptx-create-pictures.ps1`，C5–C7 通过。同日补跑 `pptx-charts.ps1`，Pc1–Pc7 通过。同日补跑 `pptx-create-charts.ps1`，C8–C10 通过。同日补跑 `pptx-smartart.ps1`，Psa1–Psa7 通过。同日补跑 `pptx-notes.ps1`，Pn1–Pn4 通过。同日补跑 `pptx-comments.ps1`，Pcm1–Pcm5 通过。同日补跑 `pptx-docprops.ps1`，Pd1–Pd5 通过。同日补跑 `pptx-charts-remain.ps1`，Pr1–Pr3 通过。
 
 | 序号 | 状态 | 结果 |
 | --- | --- | --- |
@@ -20,7 +20,7 @@ Microsoft PowerPoint 16.0 已打开，C1、C3、C4、C5–C10、I1–I5、A1–A
 | A1–A5 | ✅ | 目标框为「改过的正文」且仍加粗（`Bold=-1`），同页另一框与第二页未改 |
 | Pp1–Pp7 | ✅ | PowerPoint 16.0：无 `pictures` 时 `pictureCount=1`；名单 id 为 `slide:1/pic:5`；换/插/删无修复；尺寸 144 磅；位置 72×108 磅；export 与 `/ppt/media/…` 字节一致 |
 | Pc1–Pc7 | ✅ | PowerPoint 16.0：无 `charts` 时 `chartCount=1`；名单 id 为 `slide:1/chart:4`；改系列 / 插 / 删无修复；折线类型对上；尺寸 144×72 磅、位置 72×108 磅；export 与 embedding 字节一致 |
-| Psa1–Psa6 | ✅ | PowerPoint 16.0：另存列表型 id 为 `slide:1/smartdiagram:4`，点字与屏幕一致；改字 / 增删点 / 删整张无修复；create `list` 为 `slide:1/smartdiagram:3`；跨家族 `NotImplemented` 且源文件未写坏 |
+| Psa1–Psa7 | ✅ | PowerPoint 16.0：`pptx-smartart.ps1`，7 PASS / 0 FAIL。另存列表型 id 为 `slide:1/smartdiagram:4`；改字 / 增删点 / 删整张无修复；create `list` 为 `slide:1/smartdiagram:3`；列表改成组织图后文字还在、无修复；库外 uniqueId 得 `NotImplemented` 且未写文件 |
 | Pn1–Pn4 | ✅ | PowerPoint 16.0：无 `notes` 时有 `hasNotes`；展开后 `notes.id` 为 `slide:1/notes`；`setNotesText` 后备注窗格是新字且无修复；改备注不改幻灯片字；往备注插图无修复 |
 | Pcm1–Pcm5 | ✅ | PowerPoint 16.0：无 `comments` 时有 `commentCount`；展开后 id 为 `slide:…/comment:{guid}`；改字 / 插入 / 删除无修复；回复与完成标记能看见 |
 | Pd1–Pd5 | ✅ | PowerPoint 16.0：`pptx-docprops.ps1`，5 PASS / 0 FAIL。根上 `props`、`creator=ooxp`；只改标题后面板标题是新字、公司名还在；自定义 `prop:部门`；删后名单空；形状 id 发 `setProps` 为 `InvalidId`。无 Repair |
@@ -116,7 +116,8 @@ Microsoft PowerPoint 16.0 已打开，C1、C3、C4、C5–C10、I1–I5、A1–A
 | Psa3 | 增删点 | 增删点后条数对，PowerPoint 重排 |
 | Psa4 | 删整张 | 删除整张后 Fallback 也不在（有则必须一起少） |
 | Psa5 | create | 带一张 `list`，打开无修复 |
-| Psa6 | 跨家族 | 不支持的 layout 转换得 `NotImplemented`，文件未写坏 |
+| Psa6 | 跨家族 | 列表改成组织图后可见点文字还在，无修复 |
+| Psa7 | 库外版式 | 当前 uniqueId 不在库内三族时 `setSmartArtLayout` 得 `NotImplemented`，文件未写坏 |
 
 ## 备注
 

@@ -1,4 +1,4 @@
-# pptx 幻灯片 SmartArt：docs/checklist-pptx.md 的 Psa1–Psa6。
+# pptx 幻灯片 SmartArt：docs/checklist-pptx.md 的 Psa1–Psa7。
 # 源文件：PowerPoint 亲手另存列表型。不要用库 create 产物当唯一样例。
 
 $ErrorActionPreference = 'Stop'
@@ -9,6 +9,54 @@ $S = $global:OoxpStrings
 $src = Ensure-PptxPptSmartArtSource
 $ppt = Ensure-MsPpt $src
 Close-PptPresByPath $ppt $src
+
+function Test-OrgFamily([string]$uid) {
+    if ([string]::IsNullOrEmpty($uid)) { return $false }
+    return ($uid -split '/')[-1].ToLowerInvariant().StartsWith('orgchart')
+}
+
+function Find-ZipPartContaining([string]$zipPath, [string]$prefix, [string]$needle) {
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $zip = [IO.Compression.ZipFile]::OpenRead($zipPath)
+    try {
+        foreach ($e in $zip.Entries) {
+            $n = $e.FullName -replace '\\', '/'
+            if ($n -like $prefix) {
+                $ms = New-Object IO.MemoryStream
+                $es = $e.Open()
+                $es.CopyTo($ms)
+                $es.Dispose()
+                $text = [Text.Encoding]::UTF8.GetString($ms.ToArray())
+                if ($text.Contains($needle)) { return $n }
+            }
+        }
+    }
+    finally { $zip.Dispose() }
+    return $null
+}
+
+function Rewrite-ZipPart([string]$zipPath, [string]$part, [scriptblock]$edit) {
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $zip = [IO.Compression.ZipFile]::Open($zipPath, 'Update')
+    try {
+        $entry = $zip.Entries | Where-Object { ($_.FullName -replace '\\', '/') -eq $part } | Select-Object -First 1
+        if (-not $entry) { throw "zip 里没有 $part" }
+        $ms = New-Object IO.MemoryStream
+        $es = $entry.Open()
+        $es.CopyTo($ms)
+        $es.Dispose()
+        $text = [Text.Encoding]::UTF8.GetString($ms.ToArray())
+        $text2 = & $edit $text
+        $name = $entry.FullName
+        $entry.Delete()
+        $newEntry = $zip.CreateEntry($name)
+        $bytes = [Text.Encoding]::UTF8.GetBytes($text2)
+        $ws = $newEntry.Open()
+        $ws.Write($bytes, 0, $bytes.Length)
+        $ws.Dispose()
+    }
+    finally { $zip.Dispose() }
+}
 
 function Normalize-SaText([string]$t) {
     if ($null -eq $t) { return '' }
@@ -294,24 +342,61 @@ Release-Com $sC
 Close-PptPres $presC
 Add-Check 'pptx-Psa5' (($capC -notmatch 'Repair') -and ($null -ne $cArt) -and ($cArt.id -eq 'slide:1/smartdiagram:3') -and ($nC -ge 1)) "caption=$capC id=$($cArt.id) ppt=$nC"
 
-# Psa6：对列表发 org 得 NotImplemented，源文件仍能打开。
+# Psa6：列表改成组织图，文字还在，无修复。
 $comboOut = Get-OutPath 'pptx-smartart-layout.pptx'
 if (Test-Path $comboOut) { Remove-Item -Force $comboOut }
 Close-PptPresByPath $ppt $comboOut
-$raw = Invoke-OoxpExpectFail @{
+Invoke-OoxpRequest @{
     schemaVersion = 1; action = 'apply'
     path = $src.Replace('\', '/')
     output = $comboOut.Replace('\', '/')
     ops = @(@{ op = 'setSmartArtLayout'; id = $listId; layout = 'org' })
-} 'pptx-smartart-layout-org'
-$cycleCode = ''
-try {
-    $errObj = $raw.Stderr | ConvertFrom-Json
-    $cycleCode = [string]$errObj.error.code
-} catch { $cycleCode = $raw.Stderr }
-$cycleFail = ($raw.ExitCode -ne 0) -and ($cycleCode -eq 'NotImplemented')
-$noWrite = -not (Test-Path $comboOut)
-$presF = Open-PptPres $ppt $src
+} 'pptx-smartart-layout-org' | Out-Null
+$treeL = Invoke-OoxpTree @{
+    schemaVersion = 1; action = 'inspect'
+    path = $comboOut.Replace('\', '/'); format = 'pptx'
+    scope = @{ smartArt = $true }
+} 'pptx-smartart-layout-inspect'
+$after = @($treeL.slides[0].smartArts) | Where-Object { $_.id -eq $listId } | Select-Object -First 1
+$layOk = $after -and (Test-OrgFamily ([string]$after.layout))
+$ptsAfter = if ($after) { @($after.points) } else { @() }
+$textOk = $ptsAfter.Count -ge 3
+$inspectKeep = @($known | Where-Object { @($ptsAfter | ForEach-Object { Normalize-SaText ([string]$_.text) }) -contains $_ }).Count -ge 3
+$presF = Open-PptPres $ppt $comboOut
 $capF = Get-PptCaption $presF
+$sF = Get-PptSlide $presF 1
+$comKeep = $false
+foreach ($shp in (Get-PptSmartArtShapes $sF)) {
+    try {
+        $ct = @(Get-SmartArtTexts $shp)
+        if ((@($known | Where-Object { $ct -contains $_ }).Count) -ge 3) { $comKeep = $true }
+    } catch {}
+    Release-Com $shp
+}
+Release-Com $sF
 Close-PptPres $presF
-Add-Check 'pptx-Psa6' ($cycleFail -and $noWrite -and ($capF -notmatch 'Repair')) "code=$cycleCode wrote=$(-not $noWrite) caption=$capF id=$listId"
+Add-Check 'pptx-Psa6' (($capF -notmatch 'Repair') -and $layOk -and $textOk -and $inspectKeep -and $comKeep) "caption=$capF layout=$($after.layout) pts=$($ptsAfter.Count) inspectKeep=$inspectKeep comKeep=$comKeep"
+
+# Psa7：库外 uniqueId 仍拒绝。
+$unk = Get-OutPath 'pptx-smartart-unknown.pptx'
+Copy-Item -Force $src $unk
+$unkOut = Get-OutPath 'pptx-smartart-unknown-out.pptx'
+if (Test-Path $unkOut) { Remove-Item -Force $unkOut }
+$layUid = [string]$list.layout
+$layPart = Find-ZipPartContaining $unk '*diagrams/layout*.xml' $layUid
+if ($layPart) {
+    Rewrite-ZipPart $unk $layPart {
+        param($t)
+        [regex]::Replace($t, 'uniqueId="[^"]+"', 'uniqueId="urn:microsoft.com/office/officeart/2005/8/layout/pyramid1"', 1)
+    }
+}
+$raw = Invoke-OoxpExpectFail @{
+    schemaVersion = 1; action = 'apply'
+    path = $unk.Replace('\', '/')
+    output = $unkOut.Replace('\', '/')
+    ops = @(@{ op = 'setSmartArtLayout'; id = $listId; layout = 'org' })
+} 'pptx-smartart-layout-unknown'
+$unkCode = ''
+try { $unkCode = [string](($raw.Stderr | ConvertFrom-Json).error.code) } catch { $unkCode = $raw.Stderr }
+$noWrite = -not (Test-Path $unkOut)
+Add-Check 'pptx-Psa7' (($null -ne $layPart) -and ($unkCode -eq 'NotImplemented') -and $noWrite) "part=$layPart code=$unkCode wrote=$(-not $noWrite)"

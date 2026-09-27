@@ -523,7 +523,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::LastSmartArtPoint => {
             "Cannot delete the last visible SmartArt point; use deleteSmartArt to remove the diagram".into()
         }
-        ErrorKind::InvalidSmartArtLayout => "layout must be list or org".into(),
+        ErrorKind::InvalidSmartArtLayout => "layout must be list, org, or cycle".into(),
         ErrorKind::InvalidSmartArtRole => "role must be node or asst".into(),
         ErrorKind::InvalidSmartArtColors => {
             "colors must be accent1, accent2, accent3, accent4, accent5, or accent6".into()
@@ -535,9 +535,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::SmartArtPointParent => {
             "points[].parent must be an index in the same array and must not form a cycle".into()
         }
-        ErrorKind::SmartArtAsstOnList => "list layout does not accept asst points".into(),
+        ErrorKind::SmartArtAsstOnList => "list / cycle layout does not accept asst points".into(),
         ErrorKind::SmartArtListDepth => {
-            "list layout only accepts top-level points (parent must be omitted or null)".into()
+            "list / cycle layout only accepts top-level points (parent must be omitted or null)".into()
         }
         ErrorKind::TextBoxLinkCrossPart => {
             "Text boxes in a link chain must be in the same part".into()

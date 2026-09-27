@@ -10,13 +10,13 @@ use serde_json::{Map, Value};
 use crate::error::{Error, ErrorKind, TypeName};
 
 pub use data::{
-    append_par_of, append_visible_pt, delete_points_and_cxns, descendants_of, ensure_doc_pt,
-    find_visible_pt, find_visible_pt_mut, next_model_ids, points_json, set_point_text,
-    sync_drawing_text, unique_id_of, visible_model_ids, RelIds,
+    append_par_of, append_visible_pt, delete_points_and_cxns, demote_asst, descendants_of,
+    ensure_doc_pt, find_visible_pt, find_visible_pt_mut, next_model_ids, points_json,
+    set_point_text, sync_drawing_text, unique_id_of, visible_model_ids, RelIds,
 };
 pub use parts::{
-    collect_drawing_caches, drop_drawing_caches, drop_unused, family_of, find_local,
-    find_local_mut, rel_ids, retarget_satellite, write_four_parts,
+    collect_drawing_caches, drop_drawing_caches, drop_replaced_satellite, drop_unused, family_of,
+    find_local, find_local_mut, rel_ids, retarget_satellite, write_four_parts,
 };
 
 pub const DGM_NS: &str = "http://schemas.openxmlformats.org/drawingml/2006/diagram";
@@ -45,14 +45,17 @@ pub const DEFAULT_CY: i64 = 3_200_400;
 
 const UID_LIST: &str = "urn:microsoft.com/office/officeart/2005/8/layout/default";
 const UID_ORG: &str = "urn:microsoft.com/office/officeart/2005/8/layout/orgChart1";
+const UID_CYCLE: &str = "urn:microsoft.com/office/officeart/2005/8/layout/cycle2";
 
 const LAYOUT_LIST: &str = include_str!("../../templates/smartart/layout-list.xml");
 const LAYOUT_ORG: &str = include_str!("../../templates/smartart/layout-org.xml");
+const LAYOUT_CYCLE: &str = include_str!("../../templates/smartart/layout-cycle.xml");
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LayoutKind {
     List,
     Org,
+    Cycle,
 }
 
 impl LayoutKind {
@@ -60,6 +63,7 @@ impl LayoutKind {
         match s {
             "list" => Some(Self::List),
             "org" => Some(Self::Org),
+            "cycle" => Some(Self::Cycle),
             _ => None,
         }
     }
@@ -68,6 +72,7 @@ impl LayoutKind {
         match self {
             Self::List => UID_LIST,
             Self::Org => UID_ORG,
+            Self::Cycle => UID_CYCLE,
         }
     }
 
@@ -75,7 +80,13 @@ impl LayoutKind {
         match self {
             Self::List => LAYOUT_LIST,
             Self::Org => LAYOUT_ORG,
+            Self::Cycle => LAYOUT_CYCLE,
         }
+    }
+
+    /// 列表与循环都是一层子点，不要 asst，也不要更深的 parent。
+    pub fn is_flat(self) -> bool {
+        matches!(self, Self::List | Self::Cycle)
     }
 }
 
@@ -333,7 +344,7 @@ pub fn parse_points(
 
 pub fn validate_points(layout: LayoutKind, points: &[NewPoint], path: &str) -> Result<(), Error> {
     for (i, p) in points.iter().enumerate() {
-        if layout == LayoutKind::List && p.role == Role::Asst {
+        if layout.is_flat() && p.role == Role::Asst {
             return Err(Error::with_path(
                 ErrorKind::SmartArtAsstOnList,
                 format!("{path}[{i}].role"),
@@ -346,7 +357,7 @@ pub fn validate_points(layout: LayoutKind, points: &[NewPoint], path: &str) -> R
                     format!("{path}[{i}].parent"),
                 ));
             }
-            if layout == LayoutKind::List {
+            if layout.is_flat() {
                 return Err(Error::with_path(
                     ErrorKind::SmartArtListDepth,
                     format!("{path}[{i}].parent"),

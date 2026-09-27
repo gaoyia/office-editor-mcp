@@ -70,7 +70,7 @@ docx 见 [`roadmap/docx.md`](docx.md)。pptx 见 [`roadmap/pptx.md`](pptx.md)。
 
 | 序 | 计划 | 前置 |
 | --- | --- | --- |
-| C2 | `.plan/2026年-9月-27日-❌-SmartArt跨家族.md` | 形状与 SmartArt 待做序号 12 已过 |
+| C2 | `.plan/2026年-9月-27日-✅-SmartArt跨家族.md` | Word / PowerPoint 已过；表上换族等序号 12 |
 
 xlsx 没有 Word / PowerPoint 那种墨迹批注计划；批注走待做序号 11。
 

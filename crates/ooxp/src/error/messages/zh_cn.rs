@@ -447,7 +447,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::LastSmartArtPoint => {
             "不能删光 SmartArt 里的全部可见点，整张去掉请用 deleteSmartArt".into()
         }
-        ErrorKind::InvalidSmartArtLayout => "layout 必须是 list 或 org".into(),
+        ErrorKind::InvalidSmartArtLayout => "layout 必须是 list、org 或 cycle".into(),
         ErrorKind::InvalidSmartArtRole => "role 必须是 node 或 asst".into(),
         ErrorKind::InvalidSmartArtColors => {
             "colors 必须是 accent1、accent2、accent3、accent4、accent5 或 accent6".into()
@@ -457,8 +457,8 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::SmartArtPointParent => {
             "points[].parent 必须是本数组下标，且不能成环".into()
         }
-        ErrorKind::SmartArtAsstOnList => "list 版式不能带 asst 点".into(),
-        ErrorKind::SmartArtListDepth => "list 版式只接受顶层点（parent 必须省略或为 null）".into(),
+        ErrorKind::SmartArtAsstOnList => "list / cycle 版式不能带 asst 点".into(),
+        ErrorKind::SmartArtListDepth => "list / cycle 版式只接受顶层点（parent 必须省略或为 null）".into(),
         ErrorKind::TextBoxLinkCrossPart => "链接文本框必须在同一部件里".into(),
         ErrorKind::InvalidHexColor => "color 必须是六位 RGB 十六进制或 null".into(),
         ErrorKind::InvalidTextBoxDirection => "direction 必须是 horizontal 或 vertical".into(),

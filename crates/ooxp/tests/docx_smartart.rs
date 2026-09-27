@@ -75,6 +75,10 @@ fn style_xml() -> String {
 
 fn write_sample(tag: &str, cycle: bool) -> PathBuf {
     let uid = if cycle { UID_CYCLE } else { UID_LIST };
+    write_layout(tag, uid)
+}
+
+fn write_layout(tag: &str, uid: &str) -> PathBuf {
     let doc = document_xml();
     let data = data_xml();
     let layout = layout_xml(uid);
@@ -344,7 +348,7 @@ fn list_rejects_asst_and_nested() {
 }
 
 #[test]
-fn set_layout_same_family_and_reject_cycle() {
+fn set_layout_cross_family_and_reject_unknown() {
     let path = write_sample("lay", false);
     let out = tmp_dir().join("lay-out.docx");
     apply_ops(
@@ -353,15 +357,36 @@ fn set_layout_same_family_and_reject_cycle() {
         json!([{
             "op": "setSmartArtLayout",
             "id": "para:AAAA0001/smartdiagram:4",
-            "layout": "list"
+            "layout": "cycle"
         }]),
     );
     let tree = inspect(&out, json!({ "smartArt": true }));
-    assert_eq!(tree["smartArts"][0]["layout"], UID_LIST);
+    assert_eq!(tree["smartArts"][0]["layout"], UID_CYCLE);
+    assert!(!tree["smartArts"][0]["points"]
+        .as_array()
+        .unwrap()
+        .is_empty());
 
     let cycle = write_sample("cycle", true);
-    let err = apply_err(
+    let out2 = tmp_dir().join("cycle-list.docx");
+    apply_ops(
         &cycle,
+        &out2,
+        json!([{
+            "op": "setSmartArtLayout",
+            "id": "para:AAAA0001/smartdiagram:4",
+            "layout": "list"
+        }]),
+    );
+    let tree2 = inspect(&out2, json!({ "smartArt": true }));
+    assert_eq!(tree2["smartArts"][0]["layout"], UID_LIST);
+
+    let unknown = write_layout(
+        "unk",
+        "urn:microsoft.com/office/officeart/2005/8/layout/pyramid1",
+    );
+    let err = apply_err(
+        &unknown,
         json!([{
             "op": "setSmartArtLayout",
             "id": "para:AAAA0001/smartdiagram:4",

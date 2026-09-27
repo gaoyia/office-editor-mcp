@@ -8,7 +8,7 @@
 
 Microsoft Word 16.0 已打开，用户确认通过。create、inspect、apply 三组都过了。O1 已放弃，见下表。本机若装了 WPS，`Word.Application` 会被抢走，测试仍直接启动 `WINWORD.EXE` 再挂 COM。A11 补过 `word/settings.xml` 之后，2026-09-26 用新 `docx-create.docx` 重跑，Word 报 `CompatibilityMode=15`。
 
-C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，跑 `pwsh -File manual-check\office\run.ps1 -Case 'docx-*'` 即可复现，逐条结果落在 `manual-check/office/out/office-results.csv`。2026-09-27 补跑 `docx-charts-remain.ps1`，Cr1–Cr6 通过。同日重跑 `docx-charts-ext.ps1`，Cx8 股价 `type=stock`。
+C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，跑 `pwsh -File manual-check\office\run.ps1 -Case 'docx-*'` 即可复现，逐条结果落在 `manual-check/office/out/office-results.csv`。2026-09-27 补跑 `docx-charts-remain.ps1`，Cr1–Cr6 通过。同日重跑 `docx-charts-ext.ps1`，Cx8 股价 `type=stock`。同日重跑 `docx-smartart.ps1`，Sa1–Sa9 通过。
 
 | 序号 | 状态 | 结果 |
 | --- | --- | --- |
@@ -29,7 +29,7 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 | Ch1–Ch8 | ✅ | Word 16.0：`docx-charts.ps1`，9 PASS / 0 FAIL。计数与名单（COM 系列值对得上）、改系列为 11/22/33/44、插饼图、删除、改折线、关图例开标签、组合图当时 `NotImplemented` 且未写文件、`exportChartData` 与 embedding 字节一致。标题栏无 Repair。组合图改数与改类型见下方 Cx 组 |
 | Cx1–Cx8 | ✅ | Word 16.0：`docx-charts-ext.ps1`，8 PASS / 0 FAIL。圆环 / 雷达 / 气泡各自有 `type`；改数、插入、组合图改数与收成柱形、透视改标题、股价 `type=stock` 且改类型 `NotImplemented`。标题栏无 Repair |
 | Cr1–Cr6 | ✅ | Word 16.0：`docx-charts-remain.ps1`，6 PASS / 0 FAIL。股价 `type=stock` 且改数为 10..50；趋势线 / 误差线增删改；次轴 COM `AxisGroup=2`。标题栏无 Repair |
-| Sa1–Sa8 | ✅ | Word 16.0：`docx-smartart.ps1`。列表型 SmartArt 改字、插删、增删点、跨家族 `NotImplemented` |
+| Sa1–Sa9 | ✅ | Word 16.0：`docx-smartart.ps1`，10 PASS / 0 FAIL。列表型改字、插删、增删点、尺寸；列表改成循环后文字还在、无修复；库外 uniqueId 得 `NotImplemented` 且未写文件 |
 | Ip1–Ip5 | ✅ | Word 16.0：`docx-body-para.ps1`，5 PASS / 0 FAIL。插在第二段之后、插到文档末、删第二段、最后一段 `InvalidField`、默认页眉插一段。标题栏无 Repair |
 | Nh1–Nh7 | ✅ | Word 16.0：`docx-new-header.ps1`，7 PASS / 0 FAIL。新建默认页眉、首页不同、奇偶页、第二节 even 独立、create even/first、类型未生效与已链接均 `InvalidField`。标题栏无 Repair |
 | Sp1–Sp8 | ✅ | Word 16.0：`docx-section.ps1`，8 PASS / 0 FAIL。四边距与横向纸张、距边界仍独立、分栏、垂直对齐与行号、镜像边距。标题栏无 Repair |
@@ -257,8 +257,9 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 | Sa4 | 删除 | `deleteSmartArt` 后图示与 Fallback 位图都消失，无修复 |
 | Sa5 | 增点 | `addSmartArtPoint` 后 Word 打开重排，可见条数多 1 |
 | Sa6 | 删点 | `deleteSmartArtPoint` 后 Word 打开重排，目标点及其子点消失 |
-| Sa7 | 版式 | 对不在 `list` / `org` 家族的图示发 `setSmartArtLayout` 得到 `NotImplemented`，文件未写坏 |
+| Sa7 | 跨家族 | 列表改成循环后可见点文字还在，Word 无修复 |
 | Sa8 | 尺寸 | `setSmartArtSize` 后宿主尺寸能对上，无修复 |
+| Sa9 | 库外版式 | 当前 uniqueId 不在库内三族时 `setSmartArtLayout` 得 `NotImplemented`，文件未写坏 |
 
 ## 正文插删段落
 

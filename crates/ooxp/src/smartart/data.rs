@@ -65,7 +65,7 @@ fn resolve_points(layout: LayoutKind, points: Option<&[NewPoint]>) -> Vec<Resolv
             .collect();
     }
     match layout {
-        LayoutKind::List => (1..=3)
+        LayoutKind::List | LayoutKind::Cycle => (1..=3)
             .map(|i| ResolvedPt {
                 model_id: i.to_string(),
                 parent: None,
@@ -261,6 +261,20 @@ pub fn find_visible_pt_mut<'a>(root: &'a mut Element, model_id: &str) -> Option<
         }
     }
     None
+}
+
+/// 列表与循环版式不展示助手点，跨族时改成普通节点以保住文字。
+pub fn demote_asst(data: &mut Element) {
+    let Some(lst) = find_local_mut(data, "ptLst") else {
+        return;
+    };
+    for child in lst.children.as_mut_slice() {
+        if let Node::Element(e) = child {
+            if e.local_name() == "pt" && e.attr_local("type") == Some("asst") {
+                e.set_attr("type", "node");
+            }
+        }
+    }
 }
 
 pub fn set_point_text(pt: &mut Element, text: &str) {

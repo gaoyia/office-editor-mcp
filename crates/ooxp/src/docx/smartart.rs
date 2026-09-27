@@ -638,7 +638,7 @@ pub fn apply_add_point(
         &format!("ops[{i}].id"),
     )?;
     let layout_uid = layout_unique_id(pkg, docs, &host, &diagram, &id, i).ok();
-    if smartart::family_of(layout_uid.as_deref().unwrap_or("")) == Some(LayoutKind::List) {
+    if smartart::family_of(layout_uid.as_deref().unwrap_or("")).is_some_and(|k| k.is_flat()) {
         if op.role == Role::Asst {
             return Err(Error::with_path(
                 ErrorKind::SmartArtAsstOnList,
@@ -852,9 +852,7 @@ pub fn apply_layout(
     if current == op.layout.unique_id() {
         return Ok(());
     }
-    let cur_fam = smartart::family_of(&current);
-    let tgt_fam = Some(op.layout);
-    if cur_fam != tgt_fam {
+    if smartart::family_of(&current).is_none() {
         return Err(Error::with_path(
             ErrorKind::SmartArtLayoutNotConvertible,
             format!("ops[{i}].layout"),
@@ -876,8 +874,13 @@ pub fn apply_layout(
         op.layout.unique_id(),
         op.layout.layout_xml(),
     )?;
-    if let Ok(data) = data_part_of(pkg, docs, &host, &op.target, &op.id, i) {
-        smartart::drop_drawing_caches(pkg, &host, &data)?;
+    if let Ok(data_part) = data_part_of(pkg, docs, &host, &op.target, &op.id, i) {
+        if op.layout.is_flat() {
+            let mut data = xml::parse(pkg.get(&data_part)?)?;
+            smartart::demote_asst(&mut data.root);
+            pkg.set(&data_part, data.to_bytes()?)?;
+        }
+        smartart::drop_drawing_caches(pkg, &host, &data_part)?;
     }
     Ok(())
 }
@@ -900,24 +903,29 @@ fn retarget_satellite(
 ) -> Result<(), Error> {
     let host = part_for_target(pkg, catalog, doc_part, target, id, &format!("ops[{i}].id"))?;
     let doc = load_part(pkg, docs, &host)?;
-    let drawing = find_drawing_mut(&mut doc.root, target).ok_or_else(|| {
-        Error::with_path(
-            ErrorKind::SmartArtNotFound { id: id.to_string() },
-            format!("ops[{i}].id"),
-        )
-    })?;
-    smartart::retarget_satellite(
-        pkg,
-        &host,
-        "/word/diagrams",
-        drawing,
-        attr,
-        rel_type,
-        ct,
-        stem,
-        unique_id,
-        xml_body,
-    )?;
+    let leftover = {
+        let drawing = find_drawing_mut(&mut doc.root, target).ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::SmartArtNotFound { id: id.to_string() },
+                format!("ops[{i}].id"),
+            )
+        })?;
+        smartart::retarget_satellite(
+            pkg,
+            &host,
+            "/word/diagrams",
+            drawing,
+            attr,
+            rel_type,
+            ct,
+            stem,
+            unique_id,
+            xml_body,
+        )?
+    };
+    if let Some((old_rid, old_part)) = leftover {
+        smartart::drop_replaced_satellite(pkg, &host, &doc.root, &old_rid, &old_part)?;
+    }
     dirty.insert(host, ());
     Ok(())
 }

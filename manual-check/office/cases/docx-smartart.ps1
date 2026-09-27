@@ -1,4 +1,4 @@
-# docx SmartArt：docs/checklist-docx.md 的 Sa1–Sa8。
+# docx SmartArt：docs/checklist-docx.md 的 Sa1–Sa9。
 # 源文件由 Word AddSmartArt 另存列表型和循环型。不要用 create 产物当唯一样例。
 # 增删点和改尺寸先打在 Word 亲手插的列表上，再插库内列表、删掉 Word 那张（才能看到 Fallback 一起走）。
 
@@ -19,6 +19,54 @@ function Test-ListFamily([string]$uid) {
 function Test-OrgFamily([string]$uid) {
     if ([string]::IsNullOrEmpty($uid)) { return $false }
     return ($uid -split '/')[-1].ToLowerInvariant().StartsWith('orgchart')
+}
+
+function Test-CycleFamily([string]$uid) {
+    if ([string]::IsNullOrEmpty($uid)) { return $false }
+    return ($uid -split '/')[-1].ToLowerInvariant().StartsWith('cycle')
+}
+
+function Find-ZipPartContaining([string]$zipPath, [string]$prefix, [string]$needle) {
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $zip = [IO.Compression.ZipFile]::OpenRead($zipPath)
+    try {
+        foreach ($e in $zip.Entries) {
+            $n = $e.FullName -replace '\\', '/'
+            if ($n -like $prefix) {
+                $ms = New-Object IO.MemoryStream
+                $es = $e.Open()
+                $es.CopyTo($ms)
+                $es.Dispose()
+                $text = [Text.Encoding]::UTF8.GetString($ms.ToArray())
+                if ($text.Contains($needle)) { return $n }
+            }
+        }
+    }
+    finally { $zip.Dispose() }
+    return $null
+}
+
+function Rewrite-ZipPart([string]$zipPath, [string]$part, [scriptblock]$edit) {
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $zip = [IO.Compression.ZipFile]::Open($zipPath, 'Update')
+    try {
+        $entry = $zip.Entries | Where-Object { ($_.FullName -replace '\\', '/') -eq $part } | Select-Object -First 1
+        if (-not $entry) { throw "zip 里没有 $part" }
+        $ms = New-Object IO.MemoryStream
+        $es = $entry.Open()
+        $es.CopyTo($ms)
+        $es.Dispose()
+        $text = [Text.Encoding]::UTF8.GetString($ms.ToArray())
+        $text2 = & $edit $text
+        $name = $entry.FullName
+        $entry.Delete()
+        $newEntry = $zip.CreateEntry($name)
+        $bytes = [Text.Encoding]::UTF8.GetBytes($text2)
+        $ws = $newEntry.Open()
+        $ws.Write($bytes, 0, $bytes.Length)
+        $ws.Dispose()
+    }
+    finally { $zip.Dispose() }
 }
 
 function Normalize-SaText([string]$t) {
@@ -401,28 +449,59 @@ Close-WordDoc $docD
 $fbOk = ($fb0 -eq 0) -or ($fb1 -lt $fb0)
 Add-Check 'docx-Sa4' (($capD -notmatch 'Repair') -and ($null -eq $stillList) -and $fbOk -and (-not $wordStill)) "caption=$capD still=$($stillList.id) fb=$fb0->$fb1 wordStill=$wordStill"
 
-# Sa7：循环图改成 list 得到 NotImplemented，不写坏文件。
+# Sa7：列表改成循环，文字还在，Word 无修复。
 $comboOut = Get-OutPath 'docx-smartart-layout.docx'
 if (Test-Path $comboOut) { Remove-Item -Force $comboOut }
-$cycleId = if ($cycle) { $cycle.id } else { $null }
-$cycleFail = $false
-$cycleCode = ''
-if ($cycleId) {
-    Close-WordDocByPath $word $comboOut
-    $raw = Invoke-OoxpExpectFail @{
-        schemaVersion = 1; action = 'apply'
-        path = $src.Replace('\', '/')
-        output = $comboOut.Replace('\', '/')
-        ops = @(@{ op = 'setSmartArtLayout'; id = $cycleId; layout = 'list' })
-    } 'docx-smartart-layout-cycle'
-    try {
-        $errObj = $raw.Stderr | ConvertFrom-Json
-        $cycleCode = [string]$errObj.error.code
-    } catch { $cycleCode = $raw.Stderr }
-    $cycleFail = ($raw.ExitCode -ne 0) -and ($cycleCode -eq 'NotImplemented')
-}
-$noWrite = -not (Test-Path $comboOut)
-$docC = Open-WordDoc $word $src
+Close-WordDocByPath $word $comboOut
+Invoke-OoxpRequest @{
+    schemaVersion = 1; action = 'apply'
+    path = $src.Replace('\', '/')
+    output = $comboOut.Replace('\', '/')
+    ops = @(@{ op = 'setSmartArtLayout'; id = $listId; layout = 'cycle' })
+} 'docx-smartart-layout-cycle' | Out-Null
+$treeL = Invoke-OoxpTree @{
+    schemaVersion = 1; action = 'inspect'
+    path = $comboOut.Replace('\', '/'); format = 'docx'
+    scope = @{ smartArt = $true }
+} 'docx-smartart-layout-inspect'
+$after = @($treeL.smartArts) | Where-Object { $_.id -eq $listId } | Select-Object -First 1
+$layOk = $after -and (Test-CycleFamily ([string]$after.layout))
+$ptsAfter = if ($after) { @($after.points) } else { @() }
+$textOk = $ptsAfter.Count -ge 3
+$inspectKeep = @($known | Where-Object { @($ptsAfter | ForEach-Object { Normalize-SaText ([string]$_.text) }) -contains $_ }).Count -ge 3
+$docC = Open-WordDoc $word $comboOut
 $capC = [string]$docC.ActiveWindow.Caption
+$comKeep = $false
+foreach ($shp in (Get-WordSmartArtShapes $docC)) {
+    try {
+        $ct = @(Get-SmartArtTexts $shp)
+        if ((@($known | Where-Object { $ct -contains $_ }).Count) -ge 3) { $comKeep = $true }
+    } catch {}
+    Release-Com $shp
+}
 Close-WordDoc $docC
-Add-Check 'docx-Sa7' ($cycleFail -and $noWrite -and ($capC -notmatch 'Repair')) "code=$cycleCode wrote=$(-not $noWrite) caption=$capC cycleId=$cycleId"
+Add-Check 'docx-Sa7' (($capC -notmatch 'Repair') -and $layOk -and $textOk -and $inspectKeep -and $comKeep) "caption=$capC layout=$($after.layout) pts=$($ptsAfter.Count) inspectKeep=$inspectKeep comKeep=$comKeep"
+
+# Sa9：库外 uniqueId 仍拒绝。
+$unk = Get-OutPath 'docx-smartart-unknown.docx'
+Copy-Item -Force $src $unk
+$unkOut = Get-OutPath 'docx-smartart-unknown-out.docx'
+if (Test-Path $unkOut) { Remove-Item -Force $unkOut }
+$layUid = [string]$list.layout
+$layPart = Find-ZipPartContaining $unk '*diagrams/layout*.xml' $layUid
+if ($layPart) {
+    Rewrite-ZipPart $unk $layPart {
+        param($t)
+        [regex]::Replace($t, 'uniqueId="[^"]+"', 'uniqueId="urn:microsoft.com/office/officeart/2005/8/layout/pyramid1"', 1)
+    }
+}
+$raw = Invoke-OoxpExpectFail @{
+    schemaVersion = 1; action = 'apply'
+    path = $unk.Replace('\', '/')
+    output = $unkOut.Replace('\', '/')
+    ops = @(@{ op = 'setSmartArtLayout'; id = $listId; layout = 'list' })
+} 'docx-smartart-layout-unknown'
+$unkCode = ''
+try { $unkCode = [string](($raw.Stderr | ConvertFrom-Json).error.code) } catch { $unkCode = $raw.Stderr }
+$noWrite = -not (Test-Path $unkOut)
+Add-Check 'docx-Sa9' (($null -ne $layPart) -and ($unkCode -eq 'NotImplemented') -and $noWrite) "part=$layPart code=$unkCode wrote=$(-not $noWrite)"

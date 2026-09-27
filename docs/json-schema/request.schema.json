@@ -423,7 +423,7 @@
         "cy": { "type": "integer", "minimum": 1 }
       }
     },
-    "smartArtLayout": { "enum": ["list", "org"] },
+    "smartArtLayout": { "enum": ["list", "org", "cycle"] },
     "smartArtRole": { "enum": ["node", "asst"] },
     "smartArtColors": {
       "enum": ["accent1", "accent2", "accent3", "accent4", "accent5", "accent6"]
