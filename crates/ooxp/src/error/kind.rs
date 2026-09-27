@@ -142,6 +142,10 @@ pub(crate) enum IdReason {
     CfIndexFromOne,
     /// setSheetTable / deleteSheetTable 必须用 sheet:工作表名/table:n
     SheetTablePrefix,
+    /// setPivotTable / deletePivotTable 必须用 sheet:工作表名/pivot:n
+    SheetPivotPrefix,
+    PivotIndexNotInt,
+    PivotIndexFromOne,
     /// xlsx 图表 id 必须是 sheet:工作表名/chart:…
     SheetChartPrefix,
     /// 工作表 id，缺少 /chart:…
@@ -605,6 +609,13 @@ define_error_kinds! {
     SheetTableNotFound { id: String } => {
         vec![Self::SheetTableNotFound { id: "sheet:Sheet1/table:1".into() }]
     },
+    NeedSetPivotTableField => vec![Self::NeedSetPivotTableField],
+    InvalidPivotTable { field: String } => {
+        vec![Self::InvalidPivotTable { field: "source".into() }]
+    },
+    PivotTableNotFound { id: String } => {
+        vec![Self::PivotTableNotFound { id: "sheet:Sheet1/pivot:1".into() }]
+    },
     InvalidAlign => vec![Self::InvalidAlign],
     InvalidLineRule => vec![Self::InvalidLineRule],
     InvalidUnderline => vec![Self::InvalidUnderline],
@@ -747,6 +758,9 @@ impl IdReason {
             Self::CfIndexNotInt,
             Self::CfIndexFromOne,
             Self::SheetTablePrefix,
+            Self::SheetPivotPrefix,
+            Self::PivotIndexNotInt,
+            Self::PivotIndexFromOne,
             Self::SheetChartPrefix,
             Self::SheetChartContainer,
             Self::SlideChartPrefix,
@@ -989,6 +1003,8 @@ impl ErrorKind {
             | Self::InvalidConditionalFormat { .. }
             | Self::NeedSetSheetTableField
             | Self::InvalidSheetTable { .. }
+            | Self::NeedSetPivotTableField
+            | Self::InvalidPivotTable { .. }
             | Self::InvalidAlign
             | Self::InvalidLineRule
             | Self::InvalidUnderline
@@ -1086,7 +1102,8 @@ impl ErrorKind {
             | Self::CustomPropNotFound { .. }
             | Self::DataValidationNotFound { .. }
             | Self::ConditionalFormatNotFound { .. }
-            | Self::SheetTableNotFound { .. } => IdNotFound,
+            | Self::SheetTableNotFound { .. }
+            | Self::PivotTableNotFound { .. } => IdNotFound,
             Self::ScopeRequired { .. } => ScopeRequired,
             Self::SharedFormulaMaster { .. }
             | Self::DataTableFormula { .. }

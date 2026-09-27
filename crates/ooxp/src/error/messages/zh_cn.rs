@@ -194,6 +194,11 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::SheetTablePrefix => {
                 "工作表表格 id 必须是 sheet:工作表名/table:n，n 从 1 起".into()
             }
+            IdReason::SheetPivotPrefix => {
+                "透视表 id 必须是 sheet:工作表名/pivot:n，n 从 1 起".into()
+            }
+            IdReason::PivotIndexNotInt => "pivot 后面必须是正整数".into(),
+            IdReason::PivotIndexFromOne => "pivot 序号从 1 起".into(),
             IdReason::SheetChartPrefix => {
                 "xlsx 图表 id 必须是 sheet:工作表名/chart:…".into()
             }
@@ -680,7 +685,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::MergeNeedsMultipleCells => "mergeRange 至少要两格".into(),
         ErrorKind::RowRangeReversed => "toRow 不能小于 row".into(),
         ErrorKind::LayoutWorksheetOnly => {
-            "只能对工作表改列宽、行高、合并、数据验证、条件格式或表格".into()
+            "只能对工作表改列宽、行高、合并、数据验证、条件格式、表格或透视表".into()
         }
         ErrorKind::NeedSetDataValidationField => {
             "setDataValidation 除 op 与 id 外至少要给一个字段".into()
@@ -709,6 +714,13 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             format!("工作表表格的 {field} 不合法")
         }
         ErrorKind::SheetTableNotFound { id } => format!("找不到工作表表格：{id}"),
+        ErrorKind::NeedSetPivotTableField => {
+            "setPivotTable 除 op 与 id 外至少要给一个字段".into()
+        }
+        ErrorKind::InvalidPivotTable { field } => {
+            format!("透视表的 {field} 不合法")
+        }
+        ErrorKind::PivotTableNotFound { id } => format!("找不到透视表：{id}"),
         ErrorKind::InvalidAlign => {
             "align 必须是 left、center、right、both、distribute、start 或 end".into()
         }

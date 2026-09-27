@@ -150,6 +150,7 @@ fn summary_without_scope() {
             "dataValidationCount",
             "conditionalFormatCount",
             "tableCount",
+            "pivotCount",
             "hasHeaderFooter"
         ]
     );

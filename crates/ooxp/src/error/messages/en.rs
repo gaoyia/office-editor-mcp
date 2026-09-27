@@ -219,6 +219,11 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::SheetTablePrefix => {
                 "sheet table id must be sheet:name/table:n, n starting at 1".into()
             }
+            IdReason::SheetPivotPrefix => {
+                "pivot table id must be sheet:name/pivot:n, n starting at 1".into()
+            }
+            IdReason::PivotIndexNotInt => "pivot must be followed by a positive integer".into(),
+            IdReason::PivotIndexFromOne => "pivot index starts at 1".into(),
             IdReason::SheetChartPrefix => {
                 "xlsx chart id must be sheet:name/chart:…".into()
             }
@@ -821,7 +826,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         }
         ErrorKind::RowRangeReversed => "toRow must not be less than row".into(),
         ErrorKind::LayoutWorksheetOnly => {
-            "column width, row height, merge, data validation, conditional format, and sheet table ops only apply to worksheets"
+            "column width, row height, merge, data validation, conditional format, sheet table, and pivot table ops only apply to worksheets"
                 .into()
         }
         ErrorKind::NeedSetDataValidationField => {
@@ -856,6 +861,15 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         }
         ErrorKind::SheetTableNotFound { id } => {
             format!("Sheet table not found: {id}")
+        }
+        ErrorKind::NeedSetPivotTableField => {
+            "setPivotTable requires a field besides op and id".into()
+        }
+        ErrorKind::InvalidPivotTable { field } => {
+            format!("{field} is not a valid pivot table value")
+        }
+        ErrorKind::PivotTableNotFound { id } => {
+            format!("Pivot table not found: {id}")
         }
         ErrorKind::InvalidAlign => {
             "align must be left, center, right, both, distribute, start, or end".into()

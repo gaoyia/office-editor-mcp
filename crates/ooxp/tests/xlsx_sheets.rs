@@ -125,6 +125,7 @@ fn inspect_lists_hidden() {
             "dataValidationCount",
             "conditionalFormatCount",
             "tableCount",
+            "pivotCount",
             "hasHeaderFooter"
         ]
     );

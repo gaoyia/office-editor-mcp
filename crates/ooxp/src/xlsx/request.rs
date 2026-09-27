@@ -641,6 +641,55 @@ pub struct DeleteSheetTableOp {
 }
 
 #[derive(Debug, Clone)]
+pub struct PivotSource {
+    pub sheet: Option<String>,
+    pub range: (a1::CellRef, a1::CellRef),
+}
+
+#[derive(Debug, Clone)]
+pub struct InsertPivotTableOp {
+    pub sheet: String,
+    pub source: PivotSource,
+    pub location: a1::CellRef,
+    pub name: Option<String>,
+    pub rows: Vec<String>,
+    pub cols: Vec<String>,
+    pub filters: Vec<String>,
+    pub values: Vec<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetPivotTableOp {
+    pub sheet: String,
+    pub index: usize,
+    pub source: Option<PivotSource>,
+    pub location: Option<a1::CellRef>,
+    pub name: Option<String>,
+    pub rows: Option<Vec<String>>,
+    pub cols: Option<Vec<String>>,
+    pub filters: Option<Vec<String>>,
+    pub values: Option<Vec<String>>,
+}
+
+impl SetPivotTableOp {
+    pub fn has_patch(&self) -> bool {
+        self.source.is_some()
+            || self.location.is_some()
+            || self.name.is_some()
+            || self.rows.is_some()
+            || self.cols.is_some()
+            || self.filters.is_some()
+            || self.values.is_some()
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct DeletePivotTableOp {
+    pub sheet: String,
+    pub index: usize,
+}
+
+#[derive(Debug, Clone)]
 pub struct SetHeaderFooterTextOp {
     #[allow(dead_code)]
     pub id: String,
@@ -955,6 +1004,9 @@ pub enum XlsxOp {
     InsertSheetTable(InsertSheetTableOp),
     SetSheetTable(SetSheetTableOp),
     DeleteSheetTable(DeleteSheetTableOp),
+    InsertPivotTable(InsertPivotTableOp),
+    SetPivotTable(SetPivotTableOp),
+    DeletePivotTable(DeletePivotTableOp),
     DeleteChart(DeleteChartOp),
     SetChartTitle(SetChartTitleOp),
     SetChartSeries(SetChartSeriesOp),
@@ -1121,6 +1173,9 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<XlsxOp>, Error> {
             "insertSheetTable" => XlsxOp::InsertSheetTable(parse_insert_sheet_table(obj, i)?),
             "setSheetTable" => XlsxOp::SetSheetTable(parse_set_sheet_table(obj, i)?),
             "deleteSheetTable" => XlsxOp::DeleteSheetTable(parse_delete_sheet_table(obj, i)?),
+            "insertPivotTable" => XlsxOp::InsertPivotTable(parse_insert_pivot_table(obj, i)?),
+            "setPivotTable" => XlsxOp::SetPivotTable(parse_set_pivot_table(obj, i)?),
+            "deletePivotTable" => XlsxOp::DeletePivotTable(parse_delete_pivot_table(obj, i)?),
             "deleteChart" => XlsxOp::DeleteChart(parse_delete_chart(obj, i)?),
             "setChartTitle" => XlsxOp::SetChartTitle(parse_set_chart_title(obj, i)?),
             "setChartSeries" => XlsxOp::SetChartSeries(parse_set_chart_series(obj, i)?),
@@ -3201,6 +3256,396 @@ fn parse_delete_sheet_table(
     Ok(DeleteSheetTableOp { sheet, index })
 }
 
+fn parse_insert_pivot_table(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<InsertPivotTableOp, Error> {
+    deny_keys(
+        obj,
+        i,
+        &[
+            "op", "id", "source", "location", "name", "rows", "cols", "filters", "values",
+        ],
+    )?;
+    let id = require_id(obj, i)?;
+    let sheet = parse_sheet_only_id(&id, i, "id", IdReason::SheetOpNeedsSheet)?;
+    let source = parse_pivot_source(obj.get("source"), i, true)?.ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::MissingField {
+                field: "source".into(),
+            },
+            format!("ops[{i}].source"),
+        )
+    })?;
+    let location = parse_pivot_location(obj.get("location"), i, true)?.ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::MissingField {
+                field: "location".into(),
+            },
+            format!("ops[{i}].location"),
+        )
+    })?;
+    let values = parse_pivot_fields(obj.get("values"), i, "values", true)?.ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::MissingField {
+                field: "values".into(),
+            },
+            format!("ops[{i}].values"),
+        )
+    })?;
+    if values.is_empty() {
+        return Err(Error::with_path(
+            ErrorKind::InvalidPivotTable {
+                field: "values".into(),
+            },
+            format!("ops[{i}].values"),
+        ));
+    }
+    Ok(InsertPivotTableOp {
+        sheet,
+        source,
+        location,
+        name: parse_pivot_name(obj.get("name"), i)?,
+        rows: parse_pivot_fields(obj.get("rows"), i, "rows", false)?.unwrap_or_default(),
+        cols: parse_pivot_fields(obj.get("cols"), i, "cols", false)?.unwrap_or_default(),
+        filters: parse_pivot_fields(obj.get("filters"), i, "filters", false)?.unwrap_or_default(),
+        values,
+    })
+}
+
+fn parse_set_pivot_table(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<SetPivotTableOp, Error> {
+    deny_keys(
+        obj,
+        i,
+        &[
+            "op", "id", "source", "location", "name", "rows", "cols", "filters", "values",
+        ],
+    )?;
+    let id = require_id(obj, i)?;
+    let (sheet, index) = parse_pivot_id(&id, i)?;
+    let values = parse_pivot_fields(obj.get("values"), i, "values", false)?;
+    if values.as_ref().is_some_and(|v| v.is_empty()) {
+        return Err(Error::with_path(
+            ErrorKind::InvalidPivotTable {
+                field: "values".into(),
+            },
+            format!("ops[{i}].values"),
+        ));
+    }
+    let op = SetPivotTableOp {
+        sheet,
+        index,
+        source: parse_pivot_source(obj.get("source"), i, false)?,
+        location: parse_pivot_location(obj.get("location"), i, false)?,
+        name: parse_pivot_name(obj.get("name"), i)?,
+        rows: parse_pivot_fields(obj.get("rows"), i, "rows", false)?,
+        cols: parse_pivot_fields(obj.get("cols"), i, "cols", false)?,
+        filters: parse_pivot_fields(obj.get("filters"), i, "filters", false)?,
+        values,
+    };
+    if !op.has_patch() {
+        return Err(Error::with_path(
+            ErrorKind::NeedSetPivotTableField,
+            format!("ops[{i}]"),
+        ));
+    }
+    Ok(op)
+}
+
+fn parse_delete_pivot_table(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<DeletePivotTableOp, Error> {
+    deny_keys(obj, i, &["op", "id"])?;
+    let id = require_id(obj, i)?;
+    let (sheet, index) = parse_pivot_id(&id, i)?;
+    Ok(DeletePivotTableOp { sheet, index })
+}
+
+fn parse_pivot_name(v: Option<&Value>, i: usize) -> Result<Option<String>, Error> {
+    match v {
+        None => Ok(None),
+        Some(Value::Null) => Err(Error::with_path(
+            ErrorKind::InvalidPivotTable {
+                field: "name".into(),
+            },
+            format!("ops[{i}].name"),
+        )),
+        Some(Value::String(s)) => {
+            if s.is_empty() || s.chars().any(char::is_whitespace) {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidPivotTable {
+                        field: "name".into(),
+                    },
+                    format!("ops[{i}].name"),
+                ));
+            }
+            Ok(Some(s.clone()))
+        }
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "name".into(),
+                expected: TypeName::String,
+            },
+            format!("ops[{i}].name"),
+        )),
+    }
+}
+
+fn parse_pivot_id(id: &str, op_index: usize) -> Result<(String, usize), Error> {
+    let Some(rest) = id.strip_prefix("sheet:") else {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::SheetPivotPrefix,
+            },
+            format!("ops[{op_index}].id"),
+        ));
+    };
+    let Some((name, nstr)) = rest.split_once("/pivot:") else {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::SheetPivotPrefix,
+            },
+            format!("ops[{op_index}].id"),
+        ));
+    };
+    if name.is_empty() || name.contains('/') {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::SheetPivotPrefix,
+            },
+            format!("ops[{op_index}].id"),
+        ));
+    }
+    if nstr.is_empty() || !nstr.chars().all(|c| c.is_ascii_digit()) {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::PivotIndexNotInt,
+            },
+            format!("ops[{op_index}].id"),
+        ));
+    }
+    let n: usize = nstr.parse().map_err(|_| {
+        Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::PivotIndexNotInt,
+            },
+            format!("ops[{op_index}].id"),
+        )
+    })?;
+    if n == 0 {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::PivotIndexFromOne,
+            },
+            format!("ops[{op_index}].id"),
+        ));
+    }
+    Ok((name.to_string(), n))
+}
+
+fn parse_pivot_source(
+    v: Option<&Value>,
+    i: usize,
+    required: bool,
+) -> Result<Option<PivotSource>, Error> {
+    match v {
+        None if required => Err(Error::with_path(
+            ErrorKind::MissingField {
+                field: "source".into(),
+            },
+            format!("ops[{i}].source"),
+        )),
+        None => Ok(None),
+        Some(Value::Null) => Err(Error::with_path(
+            ErrorKind::InvalidPivotTable {
+                field: "source".into(),
+            },
+            format!("ops[{i}].source"),
+        )),
+        Some(Value::Object(obj)) => {
+            deny_keys_at(obj, i, "source", &["sheet", "ref"])?;
+            let sheet = match obj.get("sheet") {
+                None => None,
+                Some(Value::Null) => {
+                    return Err(Error::with_path(
+                        ErrorKind::InvalidPivotTable {
+                            field: "source".into(),
+                        },
+                        format!("ops[{i}].source.sheet"),
+                    ));
+                }
+                Some(Value::String(s)) if s.is_empty() => {
+                    return Err(Error::with_path(
+                        ErrorKind::InvalidPivotTable {
+                            field: "source".into(),
+                        },
+                        format!("ops[{i}].source.sheet"),
+                    ));
+                }
+                Some(Value::String(s)) => Some(s.clone()),
+                Some(_) => {
+                    return Err(Error::with_path(
+                        ErrorKind::WrongType {
+                            field: "sheet".into(),
+                            expected: TypeName::String,
+                        },
+                        format!("ops[{i}].source.sheet"),
+                    ));
+                }
+            };
+            let refer = match obj.get("ref") {
+                Some(Value::String(s)) => s.as_str(),
+                None => {
+                    return Err(Error::with_path(
+                        ErrorKind::MissingField {
+                            field: "ref".into(),
+                        },
+                        format!("ops[{i}].source.ref"),
+                    ));
+                }
+                Some(_) => {
+                    return Err(Error::with_path(
+                        ErrorKind::WrongType {
+                            field: "ref".into(),
+                            expected: TypeName::String,
+                        },
+                        format!("ops[{i}].source.ref"),
+                    ));
+                }
+            };
+            let (start, end) =
+                a1::parse_range(refer).map_err(|e| e.at(format!("ops[{i}].source.ref")))?;
+            if start.row == end.row {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidPivotTable {
+                        field: "source".into(),
+                    },
+                    format!("ops[{i}].source.ref"),
+                ));
+            }
+            Ok(Some(PivotSource {
+                sheet,
+                range: (start, end),
+            }))
+        }
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "source".into(),
+                expected: TypeName::Object,
+            },
+            format!("ops[{i}].source"),
+        )),
+    }
+}
+
+fn parse_pivot_location(
+    v: Option<&Value>,
+    i: usize,
+    required: bool,
+) -> Result<Option<a1::CellRef>, Error> {
+    match v {
+        None if required => Err(Error::with_path(
+            ErrorKind::MissingField {
+                field: "location".into(),
+            },
+            format!("ops[{i}].location"),
+        )),
+        None => Ok(None),
+        Some(Value::Null) => Err(Error::with_path(
+            ErrorKind::InvalidPivotTable {
+                field: "location".into(),
+            },
+            format!("ops[{i}].location"),
+        )),
+        Some(Value::String(s)) => {
+            let (start, _) = a1::parse_range(s).map_err(|e| e.at(format!("ops[{i}].location")))?;
+            Ok(Some(start))
+        }
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "location".into(),
+                expected: TypeName::String,
+            },
+            format!("ops[{i}].location"),
+        )),
+    }
+}
+
+fn parse_pivot_fields(
+    v: Option<&Value>,
+    i: usize,
+    field: &str,
+    required: bool,
+) -> Result<Option<Vec<String>>, Error> {
+    match v {
+        None if required => Err(Error::with_path(
+            ErrorKind::MissingField {
+                field: field.into(),
+            },
+            format!("ops[{i}].{field}"),
+        )),
+        None => Ok(None),
+        Some(Value::Null) => Err(Error::with_path(
+            ErrorKind::InvalidPivotTable {
+                field: field.into(),
+            },
+            format!("ops[{i}].{field}"),
+        )),
+        Some(Value::Array(arr)) => {
+            let mut out = Vec::new();
+            for (j, item) in arr.iter().enumerate() {
+                let Some(s) = item.as_str() else {
+                    return Err(Error::with_path(
+                        ErrorKind::WrongType {
+                            field: field.into(),
+                            expected: TypeName::String,
+                        },
+                        format!("ops[{i}].{field}[{j}]"),
+                    ));
+                };
+                if s.is_empty() {
+                    return Err(Error::with_path(
+                        ErrorKind::InvalidPivotTable {
+                            field: field.into(),
+                        },
+                        format!("ops[{i}].{field}[{j}]"),
+                    ));
+                }
+                out.push(s.to_string());
+            }
+            Ok(Some(out))
+        }
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::Array,
+            },
+            format!("ops[{i}].{field}"),
+        )),
+    }
+}
+
+fn deny_keys_at(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+    prefix: &str,
+    allowed: &[&str],
+) -> Result<(), Error> {
+    for k in obj.keys() {
+        if !allowed.contains(&k.as_str()) {
+            return Err(Error::with_path(
+                ErrorKind::UnknownField { field: k.clone() },
+                format!("ops[{i}].{prefix}.{k}"),
+            ));
+        }
+    }
+    Ok(())
+}
+
 fn parse_table_id(id: &str, op_index: usize) -> Result<(String, usize), Error> {
     let Some(rest) = id.strip_prefix("sheet:") else {
         return Err(Error::with_path(
@@ -4738,6 +5183,7 @@ fn parse_sheet_only_id(
         || id.contains("/dv:")
         || id.contains("/cf:")
         || id.contains("/table:")
+        || id.contains("/pivot:")
         || id.starts_with("cell:")
     {
         return Err(Error::with_path(

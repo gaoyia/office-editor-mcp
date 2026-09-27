@@ -310,6 +310,50 @@ pub fn apply(bytes: &[u8], ops: &[XlsxOp]) -> Result<Vec<u8>, Error> {
                 load_dirty(&pkg, &mut dirty_sheets, &part, true)?;
                 super::table::apply_delete(&mut pkg, &mut dirty_sheets, &part, op, i)?;
             }
+            XlsxOp::InsertPivotTable(op) => {
+                let part = require_layout_worksheet(&sheet_index, &op.sheet, i)?;
+                load_dirty(&pkg, &mut dirty_sheets, &part, true)?;
+                super::pivot::apply_insert(
+                    &mut pkg,
+                    &mut wb_doc,
+                    &wb_part,
+                    &sheet_index,
+                    &mut dirty_sheets,
+                    &part,
+                    op,
+                    i,
+                )?;
+                workbook_dirty = true;
+            }
+            XlsxOp::SetPivotTable(op) => {
+                let part = require_layout_worksheet(&sheet_index, &op.sheet, i)?;
+                load_dirty(&pkg, &mut dirty_sheets, &part, true)?;
+                if super::pivot::apply_set(
+                    &mut pkg,
+                    &mut wb_doc,
+                    &wb_part,
+                    &sheet_index,
+                    &mut dirty_sheets,
+                    &part,
+                    op,
+                    i,
+                )? {
+                    workbook_dirty = true;
+                }
+            }
+            XlsxOp::DeletePivotTable(op) => {
+                let part = require_layout_worksheet(&sheet_index, &op.sheet, i)?;
+                super::pivot::apply_delete(
+                    &mut pkg,
+                    &mut wb_doc,
+                    &wb_part,
+                    &sheet_index,
+                    &part,
+                    op,
+                    i,
+                )?;
+                workbook_dirty = true;
+            }
             XlsxOp::DeleteChart(op) => {
                 let (part, kind) = require_named_sheet(&sheet_index, &op.target.sheet, i)?;
                 load_dirty(&pkg, &mut dirty_sheets, &part, false)?;

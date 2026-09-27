@@ -808,6 +808,7 @@ mod tests {
                 "dataValidationCount",
                 "conditionalFormatCount",
                 "tableCount",
+                "pivotCount",
                 "hasHeaderFooter",
                 "truncated",
                 "range",
@@ -817,7 +818,8 @@ mod tests {
                 "merges",
                 "dataValidations",
                 "conditionalFormats",
-                "tables"
+                "tables",
+                "pivots"
             ]
         );
         assert_eq!(

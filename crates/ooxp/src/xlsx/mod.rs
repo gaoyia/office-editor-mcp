@@ -11,6 +11,7 @@ mod hf;
 mod inspect;
 mod layout;
 mod picture;
+mod pivot;
 mod request;
 mod sheets;
 mod style;

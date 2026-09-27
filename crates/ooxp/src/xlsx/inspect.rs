@@ -13,6 +13,7 @@ use super::chart;
 use super::formula;
 use super::hf;
 use super::picture;
+use super::pivot;
 use super::style;
 use super::table;
 use super::validation;
@@ -87,6 +88,8 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
             obj.insert("conditionalFormatCount".into(), json!(cf_count));
             let table_count = table::count(&sheet_doc.root);
             obj.insert("tableCount".into(), json!(table_count));
+            let pivot_count = pivot::count(&pkg, &sh.part)?;
+            obj.insert("pivotCount".into(), json!(pivot_count));
             let has_hf = hf::has_header_footer(&sheet_doc.root);
             obj.insert("hasHeaderFooter".into(), json!(has_hf));
             if want_header_footer {
@@ -134,6 +137,10 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
                     obj.insert(
                         "tables".into(),
                         table::inspect(&pkg, &sh.part, &sheet_doc.root, &sh.name)?,
+                    );
+                    obj.insert(
+                        "pivots".into(),
+                        pivot::inspect(&pkg, &wb_part, &sh.part, &sh.name)?,
                     );
                 }
             }
