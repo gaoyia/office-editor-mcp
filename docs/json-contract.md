@@ -1,6 +1,6 @@
 # 领域 JSON 契约
 
-`schemaVersion` 固定为 `1`。库和命令行只认这一层。MCP 或其他传输信封不许改这里的字段名和含义。机器可读副本见 [json-schema/request.schema.json](json-schema/request.schema.json)，与本文冲突时以本文为准。
+`schemaVersion` 固定为 `1`。库和命令行只认这一层。外部 MCP 也必须整份使用这一层，不许改字段名和含义，不许拆扁成工具参数。机器可读副本见 [json-schema/request.schema.json](json-schema/request.schema.json)，与本文冲突时以本文为准。
 
 xlsx、docx、pptx 的 inspect、create、apply 已经按本文实现。docx 另有 `exportMedia` 与 `exportChartData`。xlsx 的 `exportMedia` 认工作表图 id 与页眉页脚图 id。pptx 的 `exportMedia` 认幻灯片图 id 与备注图 id，写出 `/ppt/media/…`。xlsx 的 `scope.charts` 与图表 op 认工作表 / 图表工作表上的图；`scope.headerFooter` 展开工作表上的页眉页脚槽位。pptx 的 `scope.charts` 与图表 op 认幻灯片上的 `p:graphicFrame`；`exportChartData` 认幻灯片图表 id，写出 embedding。pptx 的 `scope.smartArt` 与 SmartArt op 认幻灯片上的 diagram `p:graphicFrame`。pptx 的 `scope.comments` 与批注 op 认该页 2018 线程化批注（`p188:cmLst`），不认 ECMA-376 §19.4 旧式部件。xlsx 的 `exportChartData` 仍拒绝。xlsx 的 `scope.smartArt` 与 SmartArt op 仍拒绝。xlsx 的 `scope.comments` 与批注 op 仍拒绝。人工打开只认 Microsoft Office，见三份 checklist。
 
@@ -14,7 +14,7 @@ xlsx、docx、pptx 的 inspect、create、apply 已经按本文实现。docx 另
 | `action` | 字符串 | `inspect`、`create`、`apply`、`exportMedia`、`exportChartData` 之一 |
 | `locale` | 字符串 | 可选。错误 `message` 的语言偏好，见 [errors.md](errors.md) |
 
-`locale` 不属于动作参数，五种动作都认。取值宽松匹配：`zh`、`zh-CN`、`zh-Hans`、`zh-SG` 出中文；`en` 及其地区变体出英文；不认识的标签（包括空串）退回英文，不报 `InvalidField`。这是信封里唯一一处对未知取值不报错的字段：语言只影响呈现，不该挡下文档操作。优先级是请求 `locale` 高于命令行 `--lang`，再高于环境变量 `OOXP_LANG`，都没有时是英文。
+`locale` 不属于动作参数，五种动作都认。取值宽松匹配：`zh`、`zh-CN`、`zh-Hans`、`zh-SG` 出中文；`en` 及其地区变体出英文；不认识的标签（包括空串）退回英文，不报 `InvalidField`。这是信封里唯一一处对未知取值不报错的字段：语言只影响呈现，不该挡下文档操作。优先级是请求 `locale` 高于命令行 `--lang`，再高于环境变量 `OOXP_LANG`，都没有时是英文。外部 MCP 没有后两档，只能写请求里的 `locale`。
 
 另外按动作需要 `path`、`format`、`scope`、`workbook`、`document`、`presentation`、`ops`、`id`、`output` 等字段，见下文。禁止在请求里放一整棵 inspect 树来表示「把文档改成这样」。create 的 xlsx 用 `workbook`，docx 用 `document`，pptx 用 `presentation`，三者不能同时出现。
 
@@ -1784,4 +1784,4 @@ xlsx 用工作表图 id 或页眉图 id，写出 `/xl/media/…`。pptx 用幻�
 
 ## 两层 JSON
 
-领域 JSON 就是本文。传输层（将来的 MCP）可以把本文整个对象放进 RPC 的 `params`。不许把 JSON-RPC 的 `jsonrpc`、`method`、`id` 塞进领域对象，也不许让单元格字段去迁就 RPC。
+领域 JSON 就是本文，本仓库只认这一层。外部 MCP 可以把本文整个对象放进自己的信封（例如 RPC 的 `params`）。本仓库不实现、不解析那一层信封。不许把 JSON-RPC 的 `jsonrpc`、`method`、`id` 塞进领域对象，也不许让单元格或段落字段去迁就 RPC。

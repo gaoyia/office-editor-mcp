@@ -3,7 +3,7 @@
 状态：✅ 库测试与 Excel 16.0 手测 C11–C13 已过  
 日期：2026-09-27
 
-从 `.plan/2026年-9月-27日-❌-xlsx-图与图表路线.md` 拆出序号 3。`create` 是唯一允许整包生成的动作。本期让新建工作簿能带 SpreadsheetDrawing 的 `xdr:graphicFrame` 和 `/xl/charts/chartN.xml`。复用 `insertChart` 的写入，不另做生成器。
+从 `roadmap/xlsx.md` 已过序号 3。`create` 是唯一允许整包生成的动作。本期让新建工作簿能带 SpreadsheetDrawing 的 `xdr:graphicFrame` 和 `/xl/charts/chartN.xml`。复用 `insertChart` 的写入，不另做生成器。
 
 前置：`.plan/2026年-9月-27日-✅-xlsx-工作表图表.md`、`.plan/2026年-9月-27日-✅-xlsx-create带图.md`。
 

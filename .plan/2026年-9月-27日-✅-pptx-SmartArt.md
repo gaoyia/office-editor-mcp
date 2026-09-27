@@ -3,7 +3,7 @@
 状态：✅ 文档、实现、库测试与 PowerPoint 16.0 手测 Psa1–Psa6 已过  
 日期：2026-09-27
 
-从 `.plan/2026年-9月-27日-❌-pptx-编辑路线.md` 拆出序号 4。SmartArt 不是图片。改数据模型里的字和点，不实现版式算法。PowerPoint 打开时自己重排。
+从 `roadmap/pptx.md` 拆出序号 4。SmartArt 不是图片。改数据模型里的字和点，不实现版式算法。PowerPoint 打开时自己重排。
 
 规范线索：宿主 `p:graphicFrame` 的 diagram URI，`dgm:relIds` 指向 data / layout / colors / quickStyle（ECMA-376 §21.4）。常见路径 `/ppt/diagrams/…`。`mc:AlternateContent` 只进 Choice，不编辑 Fallback 图。
 

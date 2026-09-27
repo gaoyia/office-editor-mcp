@@ -3,7 +3,7 @@
 状态：✅ 已通过  
 日期：2026-09-27
 
-从 `.plan/2026年-9月-27日-❌-xlsx-图与图表路线.md` 拆出序号 2。`create` 是唯一允许整包生成的动作。本期让新建工作簿能带 SpreadsheetDrawing 的 `xdr:pic`。复用 `insertPicture` 的写入，不另做生成器。
+从 `roadmap/xlsx.md` 已过序号 2。`create` 是唯一允许整包生成的动作。本期让新建工作簿能带 SpreadsheetDrawing 的 `xdr:pic`。复用 `insertPicture` 的写入，不另做生成器。
 
 前置：`.plan/2026年-9月-27日-✅-xlsx-工作表图.md`。`create` 带图表见 `.plan/2026年-9月-27日-✅-xlsx-create带图表.md`。
 

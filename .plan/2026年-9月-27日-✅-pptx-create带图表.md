@@ -3,7 +3,7 @@
 状态：✅ 文档、实现、库测试与 PowerPoint 16.0 手测 C8–C10 已过  
 日期：2026-09-27
 
-从 `.plan/2026年-9月-27日-❌-pptx-编辑路线.md` 拆出序号 3。复用 `insertChart` 的写入，不另做生成器。数据写 embedding，不写演示文稿里的工作表。
+从 `roadmap/pptx.md` 拆出序号 3。复用 `insertChart` 的写入，不另做生成器。数据写 embedding，不写演示文稿里的工作表。
 
 前置：`.plan/2026年-9月-27日-✅-pptx-幻灯片图表.md`、`.plan/2026年-9月-27日-✅-pptx-create带图.md`。
 

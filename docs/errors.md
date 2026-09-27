@@ -41,6 +41,8 @@
 | 3 | 环境变量 | `OOXP_LANG` |
 | 4 | 默认 | `en` |
 
+外部 MCP 只能走第 1 档。`--lang` 和 `OOXP_LANG` 只属于本 CLI。
+
 第一期只做 `en` 与 `zh-CN`。语言标签宽松匹配：先按连字符切开取首段，再看后面的地区或字形段。`zh`、`zh-CN`、`zh-Hans`、`zh-SG` 归到中文；`en`、`en-US`、`en-GB` 归到英文；`ja`、空串、乱码以及其它不认识的标签都退回英文，**不报错**。语言是呈现偏好，为了一个不认识的标签把整个文档操作拒掉，代价不成比例。
 
 `Error` 的 `Display` 恒用英文。这是 Rust 的 `Display` 不带参数导致的：`unwrap()` 的 panic 和上层 `anyhow` 打印都是英文。要中文请走 `to_json(lang)`。
