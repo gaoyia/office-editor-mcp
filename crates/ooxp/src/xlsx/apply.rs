@@ -203,6 +203,34 @@ pub fn apply(bytes: &[u8], ops: &[XlsxOp]) -> Result<Vec<u8>, Error> {
                 let part = require_sheet_part(&sheet_index, &op.target.sheet, i)?;
                 chart::set_chart_anchor(&mut pkg, &part, op, i)?;
             }
+            XlsxOp::InsertTrendline(op) => {
+                let part = require_sheet_part(&sheet_index, &op.target.sheet, i)?;
+                chart::insert_trendline(&mut pkg, &part, op, i)?;
+            }
+            XlsxOp::SetTrendline(op) => {
+                let part = require_sheet_part(&sheet_index, &op.target.sheet, i)?;
+                chart::set_trendline(&mut pkg, &part, op, i)?;
+            }
+            XlsxOp::DeleteTrendline(op) => {
+                let part = require_sheet_part(&sheet_index, &op.target.sheet, i)?;
+                chart::delete_trendline(&mut pkg, &part, op, i)?;
+            }
+            XlsxOp::InsertErrorBars(op) => {
+                let part = require_sheet_part(&sheet_index, &op.target.sheet, i)?;
+                chart::insert_error_bars(&mut pkg, &part, op, i)?;
+            }
+            XlsxOp::SetErrorBars(op) => {
+                let part = require_sheet_part(&sheet_index, &op.target.sheet, i)?;
+                chart::set_error_bars(&mut pkg, &part, op, i)?;
+            }
+            XlsxOp::DeleteErrorBars(op) => {
+                let part = require_sheet_part(&sheet_index, &op.target.sheet, i)?;
+                chart::delete_error_bars(&mut pkg, &part, op, i)?;
+            }
+            XlsxOp::SetChartSeriesAxis(op) => {
+                let part = require_sheet_part(&sheet_index, &op.target.sheet, i)?;
+                chart::set_series_axis(&mut pkg, &part, op, i)?;
+            }
             XlsxOp::SetProps(op) => {
                 crate::props::apply_set_props(&mut pkg, op, i)?;
             }

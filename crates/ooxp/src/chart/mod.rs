@@ -1,6 +1,7 @@
 //! `c:chart` 部件（§21.2）：类型、标题、系列 cache、图例与标签。embedding 在 `embed`。不含 xlsx 锚点。
 
 pub mod embed;
+pub mod remain;
 
 use serde_json::{json, Map, Number, Value};
 
@@ -149,6 +150,37 @@ pub struct A1Ref {
     pub end: CellRef,
 }
 
+#[derive(Debug, Clone)]
+pub struct DefinedName {
+    pub name: String,
+    pub local_sheet: Option<u32>,
+    pub formula: String,
+}
+
+/// 图表 `c:f` 解析结果。直接连续 A1 可以扩收；命名区域与并集不能改公式。
+#[derive(Debug, Clone)]
+pub enum FormulaTarget {
+    DirectA1(A1Ref),
+    NamedA1(A1Ref),
+    Union(Vec<A1Ref>),
+}
+
+impl FormulaTarget {
+    pub fn cells(&self) -> Vec<(Option<String>, CellRef)> {
+        match self {
+            Self::DirectA1(a) | Self::NamedA1(a) => walk_a1_on(a),
+            Self::Union(parts) => parts.iter().flat_map(walk_a1_on).collect(),
+        }
+    }
+}
+
+fn walk_a1_on(refer: &A1Ref) -> Vec<(Option<String>, CellRef)> {
+    walk_a1(refer)
+        .into_iter()
+        .map(|c| (refer.sheet.clone(), c))
+        .collect()
+}
+
 pub fn inspect_type(space: &Element, _chartex: bool) -> String {
     let Some(plot) = plot_area(space) else {
         return "other".into();
@@ -186,7 +218,9 @@ pub fn wrapper_kind(el: &Element) -> Option<&'static str> {
         "doughnutChart" => Some("doughnut"),
         "radarChart" => Some("radar"),
         "bubbleChart" => Some("bubble"),
-        "ofPieChart" | "stockChart" | "surfaceChart" | "surface3DChart" => Some("other"),
+        "ofPieChart" => Some("ofPie"),
+        "stockChart" => Some("stock"),
+        "surfaceChart" | "surface3DChart" => Some("surface"),
         _ => None,
     }
 }
@@ -278,13 +312,7 @@ pub fn reject_restricted(
 ) -> Result<(), Error> {
     let ty = inspect_type(space, false);
     let flags = flags_json(space, &ty);
-    let hard = matches!(ty.as_str(), "other" | "chartex")
-        || flags.iter().any(|f| {
-            matches!(
-                f.as_str(),
-                Some("secondaryAxis" | "trendline" | "errorBars")
-            )
-        });
+    let hard = matches!(ty.as_str(), "other" | "chartex");
     if hard {
         return Err(Error::with_path(
             ErrorKind::RestrictedChart { id: id.to_string() },
@@ -348,6 +376,7 @@ where
                 node.insert("sizeRef".into(), json!(size_ref));
                 stale |= size_stale;
             }
+            remain::attach_series_extras(&mut node, space, ser, chart_id, index);
             if stale {
                 node.insert("cacheStale".into(), json!(true));
             }
@@ -469,6 +498,163 @@ pub fn parse_a1_formula(f: &str) -> Option<A1Ref> {
     }
     let (start, end) = a1::parse_range(&range.replace('$', "")).ok()?;
     Some(A1Ref { sheet, start, end })
+}
+
+pub fn parse_defined_names(wb: &Element) -> Vec<DefinedName> {
+    let Some(dns) = wb.child_by_local("definedNames") else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    for el in dns.element_children() {
+        if el.local_name() != "definedName" {
+            continue;
+        }
+        let Some(name) = el.attr_local("name").filter(|s| !s.is_empty()) else {
+            continue;
+        };
+        let formula = el.text_content();
+        if formula.trim().is_empty() {
+            continue;
+        }
+        let local_sheet = el
+            .attr_local("localSheetId")
+            .and_then(|s| s.parse::<u32>().ok());
+        out.push(DefinedName {
+            name: name.to_string(),
+            local_sheet,
+            formula,
+        });
+    }
+    out
+}
+
+pub fn resolve_chart_formula(
+    f: &str,
+    names: &[DefinedName],
+    sheets: &[String],
+    default_sheet: &str,
+) -> Option<FormulaTarget> {
+    if let Some(a) = parse_a1_formula(f) {
+        return Some(FormulaTarget::DirectA1(a));
+    }
+    if let Some(parts) = parse_union_a1(f) {
+        return Some(FormulaTarget::Union(parts));
+    }
+    lookup_defined_name(f, names, sheets, default_sheet)
+}
+
+fn parse_union_a1(f: &str) -> Option<Vec<A1Ref>> {
+    let s = f.trim().trim_start_matches('=').trim();
+    if !has_unquoted(s, ',') {
+        return None;
+    }
+    let mut out = Vec::new();
+    for part in split_unquoted(s, ',') {
+        out.push(parse_a1_formula(part.trim())?);
+    }
+    if out.len() < 2 {
+        None
+    } else {
+        Some(out)
+    }
+}
+
+fn split_unquoted(s: &str, ch: char) -> Vec<&str> {
+    let mut out = Vec::new();
+    let mut in_q = false;
+    let mut start = 0usize;
+    for (i, c) in s.char_indices() {
+        if c == '\'' {
+            in_q = !in_q;
+        } else if c == ch && !in_q {
+            out.push(&s[start..i]);
+            start = i + c.len_utf8();
+        }
+    }
+    out.push(&s[start..]);
+    out
+}
+
+fn lookup_defined_name(
+    f: &str,
+    names: &[DefinedName],
+    sheets: &[String],
+    default_sheet: &str,
+) -> Option<FormulaTarget> {
+    let s = f.trim().trim_start_matches('=').trim();
+    if s.is_empty() || s.contains('(') || s.contains('+') || s.contains('*') || s.contains('/') {
+        return None;
+    }
+    let (sheet_hint, name) = split_name_ref(s)?;
+    if sheet_hint.as_ref().is_some_and(|n| n.contains(':')) {
+        return None;
+    }
+    let sheet_idx = sheet_hint.as_ref().and_then(|n| {
+        sheets
+            .iter()
+            .position(|s| s.eq_ignore_ascii_case(n))
+            .map(|i| i as u32)
+    });
+    let default_idx = sheets
+        .iter()
+        .position(|s| s.eq_ignore_ascii_case(default_sheet))
+        .map(|i| i as u32);
+    let matches: Vec<&DefinedName> = names
+        .iter()
+        .filter(|n| n.name.eq_ignore_ascii_case(&name))
+        .collect();
+    let prefer = sheet_idx.or(if sheet_hint.is_none() {
+        default_idx
+    } else {
+        None
+    });
+    let picked = if let Some(idx) = prefer {
+        matches
+            .iter()
+            .copied()
+            .find(|n| n.local_sheet == Some(idx))
+            .or_else(|| matches.iter().copied().find(|n| n.local_sheet.is_none()))
+    } else {
+        matches.iter().copied().find(|n| n.local_sheet.is_none())
+    }?;
+    if let Some(a) = parse_a1_formula(&picked.formula) {
+        Some(FormulaTarget::NamedA1(a))
+    } else {
+        parse_union_a1(&picked.formula).map(FormulaTarget::Union)
+    }
+}
+
+fn split_name_ref(s: &str) -> Option<(Option<String>, String)> {
+    if has_unquoted(s, ',') {
+        return None;
+    }
+    if let Some(rest) = s.strip_prefix('\'') {
+        let end = rest.find('\'')?;
+        let sheet = rest[..end].replace("''", "'");
+        let after = rest[end + 1..].trim();
+        if after.starts_with(':') {
+            return None;
+        }
+        let name = after.trim_start_matches('!').trim();
+        if name.is_empty() || name.contains(':') || name.contains(' ') {
+            return None;
+        }
+        return Some((Some(sheet), name.to_string()));
+    }
+    if let Some((a, b)) = s.split_once('!') {
+        if a.contains(':') {
+            return None;
+        }
+        let name = b.trim();
+        if name.is_empty() || name.contains(':') || name.contains(' ') {
+            return None;
+        }
+        return Some((Some(a.to_string()), name.to_string()));
+    }
+    if s.contains(':') || s.contains(' ') {
+        return None;
+    }
+    Some((None, s.to_string()))
 }
 
 pub fn format_a1_formula(sheet: &str, start: CellRef, end: CellRef) -> String {
@@ -826,6 +1012,15 @@ pub fn convert_type(space: &mut Element, target: ChartType, i: usize) -> Result<
         ));
     }
     let current = inspect_type(space, false);
+    if matches!(
+        current.as_str(),
+        "stock" | "surface" | "ofPie" | "other" | "chartex"
+    ) {
+        return Err(Error::with_path(
+            ErrorKind::ChartTypeNotConvertible,
+            format!("ops[{i}].type"),
+        ));
+    }
     if current == target.as_str() {
         if matches!(target, ChartType::Bar | ChartType::Col) {
             set_bar_dir(space, target);
@@ -1534,12 +1729,11 @@ fn secondary_axis(space: &Element, ty: &str) -> bool {
         return false;
     };
     if plot.element_children().any(|c| {
-        matches!(c.local_name(), "catAx" | "valAx" | "dateAx" | "serAx")
-            && bool_val(c.child_by_local("overlay"))
+        matches!(c.local_name(), "valAx" | "dateAx") && bool_val(c.child_by_local("overlay"))
     }) {
         return true;
     }
-    if matches!(ty, "pie" | "doughnut" | "other" | "chartex") {
+    if matches!(ty, "pie" | "doughnut" | "ofPie" | "other" | "chartex") {
         return false;
     }
     let val_n = plot
@@ -1845,7 +2039,7 @@ fn values_equal(a: &[Value], b: &[Value]) -> bool {
         .all(|(x, y)| value_text(x) == value_text(y))
 }
 
-fn bool_val(el: Option<&Element>) -> bool {
+pub(crate) fn bool_val(el: Option<&Element>) -> bool {
     matches!(
         el.and_then(|e| e.attr_local("val")).unwrap_or("0"),
         "1" | "true" | "on" | "True"

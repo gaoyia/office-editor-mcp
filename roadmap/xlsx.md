@@ -37,6 +37,7 @@ docx 见 [`roadmap/docx.md`](docx.md)。pptx 见 [`roadmap/pptx.md`](pptx.md)。
 | 3 | `.plan/2026年-9月-27日-✅-xlsx-create带图表.md` | 工作表图表；create 带图 |
 | 4 | `.plan/2026年-9月-27日-✅-xlsx-页眉页脚.md` | 无 |
 | 5 | `.plan/2026年-9月-27日-✅-xlsx-图表工作表.md` | 工作表图表 |
+| C1 | `.plan/2026年-9月-27日-✅-图表剩余.md` | 工作表图表已过 |
 
 0 与 1 不要合成一份。Excel 图表数据在本工作簿单元格里，和 Word embedding 不是一回事。页眉是工作表上的 `headerFooter` 加可选 `drawingHF`，不是 Word 的 header 部件。图表工作表是 `chartsheet` 部件。第一期单元格读写见总计划。
 
@@ -69,7 +70,6 @@ docx 见 [`roadmap/docx.md`](docx.md)。pptx 见 [`roadmap/pptx.md`](pptx.md)。
 
 | 序 | 计划 | 前置 |
 | --- | --- | --- |
-| C1 | `.plan/2026年-9月-27日-❌-图表剩余.md` | 工作表图表已过 |
 | C2 | `.plan/2026年-9月-27日-❌-SmartArt跨家族.md` | 形状与 SmartArt 待做序号 12 已过 |
 
 xlsx 没有 Word / PowerPoint 那种墨迹批注计划；批注走待做序号 11。

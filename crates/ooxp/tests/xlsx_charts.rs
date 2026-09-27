@@ -182,6 +182,7 @@ fn insert_inspect_series_type_delete() {
     assert_eq!(ser["values"], json!([1, 2, 3]));
     assert_eq!(ser["catRef"], "Sheet1!$A$11:$A$13");
     assert_eq!(ser["valRef"], "Sheet1!$B$11:$B$13");
+    assert_eq!(ser["axis"], "primary");
 
     let cells = inspect_cells(&inserted, "A10:B13");
     let list = cells["sheets"][0]["cells"].as_array().unwrap();
@@ -488,4 +489,209 @@ fn create_rejects_chart_wrap() {
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);
     assert_eq!(err.field_path(), Some("workbook.sheets[0].charts[0].wrap"));
+}
+
+fn insert_col(tag: &str) -> PathBuf {
+    let src = create_book(tag);
+    let inserted = tmp(&format!("{tag}-ins"));
+    apply(
+        &src,
+        &inserted,
+        json!([{
+            "op": "insertChart",
+            "id": "sheet:Sheet1",
+            "type": "col",
+            "from": "E2",
+            "dataFrom": "A10",
+            "series": [{
+                "name": "Q1",
+                "categories": ["甲", "乙", "丙"],
+                "values": [1, 2, 3]
+            }, {
+                "name": "Q2",
+                "categories": ["甲", "乙", "丙"],
+                "values": [4, 5, 6]
+            }]
+        }]),
+    )
+    .unwrap();
+    inserted
+}
+
+fn rewrite_part(src: &Path, dest: &Path, part: &str, f: impl FnOnce(String) -> String) {
+    use std::io::{Cursor, Read, Write};
+    use zip::write::SimpleFileOptions;
+    let bytes = std::fs::read(src).unwrap();
+    let mut zin = zip::ZipArchive::new(Cursor::new(bytes)).unwrap();
+    let mut buf = Cursor::new(Vec::new());
+    let mut transform = Some(f);
+    {
+        let mut zout = zip::ZipWriter::new(&mut buf);
+        let opt = SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
+        for i in 0..zin.len() {
+            let mut file = zin.by_index(i).unwrap();
+            let name = file.name().to_string();
+            let mut data = Vec::new();
+            file.read_to_end(&mut data).unwrap();
+            if name == part || name.replace('\\', "/") == part {
+                data = transform.take().expect("部件只应出现一次")(
+                    String::from_utf8(data).unwrap(),
+                )
+                .into_bytes();
+            }
+            zout.start_file(&name, opt).unwrap();
+            zout.write_all(&data).unwrap();
+        }
+        zout.finish().unwrap();
+    }
+    std::fs::write(dest, buf.into_inner()).unwrap();
+}
+
+#[test]
+fn trendline_and_secondary_axis() {
+    let src = insert_col("tl");
+    let out = tmp("tl-out");
+    apply(
+        &src,
+        &out,
+        json!([
+            {
+                "op": "insertTrendline",
+                "id": "sheet:Sheet1/chart:1/series:0",
+                "type": "linear"
+            },
+            {
+                "op": "setChartSeriesAxis",
+                "id": "sheet:Sheet1/chart:1/series:1",
+                "axis": "secondary"
+            }
+        ]),
+    )
+    .unwrap();
+    let tree = inspect_charts(&out);
+    let c = &tree["sheets"][0]["charts"][0];
+    assert_eq!(c["series"][0]["trendlines"][0]["type"], "linear");
+    assert_eq!(c["series"][0]["axis"], "primary");
+    assert_eq!(c["series"][1]["axis"], "secondary");
+    let flags = c["flags"].as_array().unwrap();
+    assert!(flags.iter().any(|f| f == "trendline"));
+    assert!(flags.iter().any(|f| f == "secondaryAxis"));
+    let xml = part_text(&out, "xl/charts/chart1.xml");
+    let second = xml.split("<c:barChart>").nth(2).unwrap_or("");
+    let wrap_end = second.find("</c:barChart>").unwrap_or(second.len());
+    let wrap = &second[..wrap_end];
+    let ser_at = wrap.find("<c:ser>").unwrap_or(usize::MAX);
+    let dl_at = wrap.find("<c:dLbls>").unwrap_or(usize::MAX);
+    assert!(ser_at < dl_at, "次轴包裹里 ser 必须在 dLbls 之前：{wrap}");
+    assert!(
+        !wrap.contains(r#"<c:axId val="1"/>"#),
+        "次轴包裹不能共用主分类轴：{wrap}"
+    );
+    assert!(
+        xml.contains(r#"<c:delete val="1"/>"#),
+        "次轴必须带隐藏分类轴"
+    );
+}
+
+#[test]
+fn named_range_set_series() {
+    let src = insert_col("nm");
+    let named = tmp("nm-named");
+    rewrite_part(&src, &named, "xl/workbook.xml", |s| {
+        s.replace(
+            "</workbook>",
+            r#"<definedNames><definedName name="ChartVals">Sheet1!$B$11:$B$13</definedName></definedNames></workbook>"#,
+        )
+    });
+    let named2 = tmp("nm-cf");
+    rewrite_part(&named, &named2, "xl/charts/chart1.xml", |s| {
+        s.replacen("Sheet1!$B$11:$B$13", "ChartVals", 1)
+    });
+    let tree = inspect_charts(&named2);
+    assert_eq!(
+        tree["sheets"][0]["charts"][0]["series"][0]["values"],
+        json!([1, 2, 3])
+    );
+    assert_eq!(
+        tree["sheets"][0]["charts"][0]["series"][0]["valRef"],
+        "ChartVals"
+    );
+    let out = tmp("nm-out");
+    apply(
+        &named2,
+        &out,
+        json!([{
+            "op": "setChartSeries",
+            "id": "sheet:Sheet1/chart:1/series:0",
+            "values": [9, 8, 7]
+        }]),
+    )
+    .unwrap();
+    let cells = inspect_cells(&out, "B11:B13");
+    let list = cells["sheets"][0]["cells"].as_array().unwrap();
+    assert!(list
+        .iter()
+        .any(|c| c["id"] == "cell:Sheet1!B11" && c["value"] == 9));
+    assert!(list
+        .iter()
+        .any(|c| c["id"] == "cell:Sheet1!B13" && c["value"] == 7));
+    let xml = part_text(&out, "xl/charts/chart1.xml");
+    assert!(xml.contains("ChartVals"));
+    let err = apply(
+        &out,
+        &tmp("nm-bad"),
+        json!([{
+            "op": "setChartSeries",
+            "id": "sheet:Sheet1/chart:1/series:0",
+            "values": [1, 2]
+        }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::NotImplemented);
+}
+
+#[test]
+fn union_formula_and_3d_reject() {
+    let src = insert_col("un");
+    let union = tmp("un-cf");
+    rewrite_part(&src, &union, "xl/charts/chart1.xml", |s| {
+        s.replacen("Sheet1!$B$11:$B$13", "Sheet1!$B$11,Sheet1!$B$13", 1)
+    });
+    let out = tmp("un-out");
+    apply(
+        &union,
+        &out,
+        json!([{
+            "op": "setChartSeries",
+            "id": "sheet:Sheet1/chart:1/series:0",
+            "values": [11, 13]
+        }]),
+    )
+    .unwrap();
+    let cells = inspect_cells(&out, "B11:B13");
+    let list = cells["sheets"][0]["cells"].as_array().unwrap();
+    assert!(list
+        .iter()
+        .any(|c| c["id"] == "cell:Sheet1!B11" && c["value"] == 11));
+    assert!(list
+        .iter()
+        .any(|c| c["id"] == "cell:Sheet1!B13" && c["value"] == 13));
+    let xml = part_text(&out, "xl/charts/chart1.xml");
+    assert!(xml.contains("Sheet1!$B$11,Sheet1!$B$13"));
+
+    let three = tmp("3d-cf");
+    rewrite_part(&src, &three, "xl/charts/chart1.xml", |s| {
+        s.replacen("Sheet1!$B$11:$B$13", "Sheet1:Sheet2!$B$11", 1)
+    });
+    let err = apply(
+        &three,
+        &tmp("3d-out"),
+        json!([{
+            "op": "setChartSeries",
+            "id": "sheet:Sheet1/chart:1/series:0",
+            "values": [1]
+        }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::NotImplemented);
 }

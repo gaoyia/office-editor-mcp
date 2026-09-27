@@ -168,6 +168,20 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::ChartIndexFromOne => "chart:index starts at 1".into(),
             IdReason::SeriesPrefix => "Series id must be a chart id plus /series:n".into(),
             IdReason::SeriesIndexNotInt => "series must be followed by an integer starting at 0".into(),
+            IdReason::TrendlinePrefix => {
+                "Trendline id must be a series id plus /trendline:k starting at 1".into()
+            }
+            IdReason::TrendlineIndexNotInt => {
+                "trendline must be followed by a positive integer".into()
+            }
+            IdReason::TrendlineIndexFromOne => "trendline index starts at 1".into(),
+            IdReason::ErrorBarsPrefix => {
+                "Error bars id must be a series id plus /errorBars:k starting at 1".into()
+            }
+            IdReason::ErrorBarsIndexNotInt => {
+                "errorBars must be followed by a positive integer".into()
+            }
+            IdReason::ErrorBarsIndexFromOne => "errorBars index starts at 1".into(),
             IdReason::InsertChartNeedsPara => {
                 "insertChart id must be a body or header/footer paragraph id".into()
             }
@@ -430,9 +444,49 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         }
         ErrorKind::ChartNotFound { id } => format!("Chart not found: {id}"),
         ErrorKind::ChartSeriesNotFound { id } => format!("Chart series not found: {id}"),
+        ErrorKind::TrendlineNotFound { id } => format!("Trendline not found: {id}"),
+        ErrorKind::ErrorBarsNotFound { id } => format!("Error bars not found: {id}"),
         ErrorKind::NeedChartSeriesField => {
             "setChartSeries needs at least one of name, categories, values, or sizes".into()
         }
+        ErrorKind::NeedTrendlineField => {
+            "setTrendline needs at least one of type, order, period, displayRSquared, displayEquation, or name".into()
+        }
+        ErrorKind::NeedErrorBarsField => {
+            "setErrorBars needs at least one of dir, barType, valType, or value".into()
+        }
+        ErrorKind::InvalidTrendlineType => {
+            "type must be linear, exp, log, poly, power, or movingAvg".into()
+        }
+        ErrorKind::TrendlineOrderNotPoly => "order is only valid when type is poly".into(),
+        ErrorKind::TrendlinePeriodNotMovingAvg => {
+            "period is only valid when type is movingAvg".into()
+        }
+        ErrorKind::TrendlineNotSupported => {
+            "This chart type does not support trendlines".into()
+        }
+        ErrorKind::InvalidErrorBars => {
+            "dir must be x or y; barType must be both, plus, or minus; valType must be stdErr, stdDev, fixedVal, or percentage".into()
+        }
+        ErrorKind::CustomErrorBars => {
+            "Custom error bars (cust / lCaps) are not implemented".into()
+        }
+        ErrorKind::NeedErrorBarsValue => {
+            "value is required when valType is stdDev, fixedVal, or percentage".into()
+        }
+        ErrorKind::ErrorBarsValueOnStdErr => {
+            "value is not allowed when valType is stdErr".into()
+        }
+        ErrorKind::ErrorBarsNotSupported => {
+            "This chart type does not support error bars".into()
+        }
+        ErrorKind::ErrorBarsDuplicateDir => {
+            "This series already has error bars in that direction".into()
+        }
+        ErrorKind::SecondaryAxisNotSupported => {
+            "This chart type does not support a secondary axis".into()
+        }
+        ErrorKind::InvalidSeriesAxis => "axis must be primary or secondary".into(),
         ErrorKind::LastChartSeries => {
             "Cannot delete the last series in a chart; use deleteChart to remove the chart".into()
         }

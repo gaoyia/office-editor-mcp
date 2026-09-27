@@ -673,6 +673,13 @@
               { "$ref": "#/$defs/setChartAxisTitleOp" },
               { "$ref": "#/$defs/setChartLegendOp" },
               { "$ref": "#/$defs/setChartDataLabelsOp" },
+              { "$ref": "#/$defs/insertTrendlineOp" },
+              { "$ref": "#/$defs/setTrendlineOp" },
+              { "$ref": "#/$defs/deleteTrendlineOp" },
+              { "$ref": "#/$defs/insertErrorBarsOp" },
+              { "$ref": "#/$defs/setErrorBarsOp" },
+              { "$ref": "#/$defs/deleteErrorBarsOp" },
+              { "$ref": "#/$defs/setChartSeriesAxisOp" },
               { "$ref": "#/$defs/setChartSizeOp" },
               { "$ref": "#/$defs/setChartPosOp" },
               { "$ref": "#/$defs/setChartWrapOp" },
@@ -1986,6 +1993,107 @@
         "op": { "const": "setChartDataLabels" },
         "id": { "type": "string", "minLength": 1 },
         "show": { "type": "boolean" }
+      }
+    },
+    "trendlineType": {
+      "enum": ["linear", "exp", "log", "poly", "power", "movingAvg"]
+    },
+    "insertTrendlineOp": {
+      "type": "object",
+      "required": ["op", "id", "type"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "insertTrendline" },
+        "id": { "type": "string", "minLength": 1 },
+        "type": { "$ref": "#/$defs/trendlineType" },
+        "order": { "type": "integer", "minimum": 2, "maximum": 6 },
+        "period": { "type": "integer", "minimum": 2 },
+        "displayRSquared": { "type": "boolean" },
+        "displayEquation": { "type": "boolean" },
+        "name": { "type": "string" }
+      }
+    },
+    "setTrendlineOp": {
+      "type": "object",
+      "required": ["op", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "setTrendline" },
+        "id": { "type": "string", "minLength": 1 },
+        "type": { "$ref": "#/$defs/trendlineType" },
+        "order": { "type": "integer", "minimum": 2, "maximum": 6 },
+        "period": { "type": "integer", "minimum": 2 },
+        "displayRSquared": { "type": "boolean" },
+        "displayEquation": { "type": "boolean" },
+        "name": { "type": "string" }
+      },
+      "anyOf": [
+        { "required": ["type"] },
+        { "required": ["order"] },
+        { "required": ["period"] },
+        { "required": ["displayRSquared"] },
+        { "required": ["displayEquation"] },
+        { "required": ["name"] }
+      ]
+    },
+    "deleteTrendlineOp": {
+      "type": "object",
+      "required": ["op", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "deleteTrendline" },
+        "id": { "type": "string", "minLength": 1 }
+      }
+    },
+    "insertErrorBarsOp": {
+      "type": "object",
+      "required": ["op", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "insertErrorBars" },
+        "id": { "type": "string", "minLength": 1 },
+        "dir": { "enum": ["x", "y"] },
+        "barType": { "enum": ["both", "plus", "minus"] },
+        "valType": { "enum": ["stdErr", "stdDev", "fixedVal", "percentage"] },
+        "value": { "type": "number" }
+      }
+    },
+    "setErrorBarsOp": {
+      "type": "object",
+      "required": ["op", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "setErrorBars" },
+        "id": { "type": "string", "minLength": 1 },
+        "dir": { "enum": ["x", "y"] },
+        "barType": { "enum": ["both", "plus", "minus"] },
+        "valType": { "enum": ["stdErr", "stdDev", "fixedVal", "percentage"] },
+        "value": { "type": "number" }
+      },
+      "anyOf": [
+        { "required": ["dir"] },
+        { "required": ["barType"] },
+        { "required": ["valType"] },
+        { "required": ["value"] }
+      ]
+    },
+    "deleteErrorBarsOp": {
+      "type": "object",
+      "required": ["op", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "deleteErrorBars" },
+        "id": { "type": "string", "minLength": 1 }
+      }
+    },
+    "setChartSeriesAxisOp": {
+      "type": "object",
+      "required": ["op", "id", "axis"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "setChartSeriesAxis" },
+        "id": { "type": "string", "minLength": 1 },
+        "axis": { "enum": ["primary", "secondary"] }
       }
     },
     "setChartSizeOp": {

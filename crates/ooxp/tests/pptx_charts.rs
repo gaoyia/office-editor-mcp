@@ -223,6 +223,7 @@ fn insert_inspect_series_pos_type_delete_export() {
     assert_eq!(ser["name"], "系列甲");
     assert_eq!(ser["categories"], json!(["甲", "乙", "丙"]));
     assert_eq!(nums(&ser["values"]), vec![1, 2, 3]);
+    assert_eq!(ser["axis"], "primary");
     assert!(ser.get("cacheStale").is_none());
 
     let names = part_names(&inserted);
@@ -794,4 +795,101 @@ fn create_rejects_data_from_kind_and_root_charts() {
     )
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);
+}
+
+fn insert_col_deck(tag: &str) -> PathBuf {
+    let src = create_deck(tag);
+    let inserted = tmp(&format!("{tag}-ins")).with_extension("pptx");
+    apply(
+        &src,
+        &inserted,
+        json!([{
+            "op": "insertChart",
+            "id": "slide:1",
+            "type": "col",
+            "title": "销量",
+            "series": [
+                { "name": "系列甲", "categories": ["甲", "乙", "丙"], "values": [1, 2, 3] },
+                { "name": "系列乙", "categories": ["甲", "乙", "丙"], "values": [4, 5, 6] }
+            ]
+        }]),
+    )
+    .unwrap();
+    inserted
+}
+
+#[test]
+fn trendline_set_delete_and_axis() {
+    let src = insert_col_deck("tl");
+    let out = tmp("tl-out").with_extension("pptx");
+    apply(
+        &src,
+        &out,
+        json!([{
+            "op": "insertTrendline",
+            "id": "slide:1/chart:3/series:0",
+            "type": "linear"
+        }]),
+    )
+    .unwrap();
+    let tree = inspect_charts(&out);
+    let ser = &tree["slides"][0]["charts"][0]["series"][0];
+    assert_eq!(ser["axis"], "primary");
+    assert_eq!(ser["trendlines"][0]["type"], "linear");
+    let tl_id = ser["trendlines"][0]["id"].as_str().unwrap().to_string();
+    let out2 = tmp("tl-set").with_extension("pptx");
+    apply(
+        &out,
+        &out2,
+        json!([{ "op": "setTrendline", "id": tl_id, "type": "exp" }]),
+    )
+    .unwrap();
+    let tree2 = inspect_charts(&out2);
+    assert_eq!(
+        tree2["slides"][0]["charts"][0]["series"][0]["trendlines"][0]["type"],
+        "exp"
+    );
+    let tl_id2 = tree2["slides"][0]["charts"][0]["series"][0]["trendlines"][0]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let out3 = tmp("tl-del").with_extension("pptx");
+    apply(
+        &out2,
+        &out3,
+        json!([{ "op": "deleteTrendline", "id": tl_id2 }]),
+    )
+    .unwrap();
+    let tree3 = inspect_charts(&out3);
+    assert!(tree3["slides"][0]["charts"][0]["series"][0]
+        .get("trendlines")
+        .is_none());
+    let out4 = tmp("ax").with_extension("pptx");
+    apply(
+        &src,
+        &out4,
+        json!([{
+            "op": "setChartSeriesAxis",
+            "id": "slide:1/chart:3/series:1",
+            "axis": "secondary"
+        }]),
+    )
+    .unwrap();
+    let tree4 = inspect_charts(&out4);
+    assert_eq!(
+        tree4["slides"][0]["charts"][0]["series"][1]["axis"],
+        "secondary"
+    );
+    let xml = String::from_utf8(part_bytes(&out4, "ppt/charts/chart1.xml")).unwrap();
+    let second = xml.split("<c:barChart>").nth(2).unwrap_or("");
+    let wrap_end = second.find("</c:barChart>").unwrap_or(second.len());
+    let wrap = &second[..wrap_end];
+    assert!(
+        !wrap.contains(r#"<c:axId val="1"/>"#),
+        "次轴包裹不能共用主分类轴：{wrap}"
+    );
+    assert!(
+        xml.contains(r#"<c:delete val="1"/>"#),
+        "次轴必须带隐藏分类轴"
+    );
 }

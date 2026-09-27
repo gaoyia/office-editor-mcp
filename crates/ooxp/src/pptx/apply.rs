@@ -350,6 +350,90 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                 chart::apply_pos(&mut doc, op, i)?;
                 pkg.set(&meta.part, doc.to_bytes()?)?;
             }
+            PptxOp::InsertTrendline(op) => {
+                let meta = slides.get(op.target.slide - 1).ok_or_else(|| {
+                    Error::with_path(
+                        ErrorKind::SlideNotFound {
+                            n: op.target.slide as u32,
+                        },
+                        format!("ops[{i}].id"),
+                    )
+                })?;
+                let doc = xml::parse(pkg.get(&meta.part)?)?;
+                chart::apply_insert_trendline(&mut pkg, &doc.root, &meta.part, op, i)?;
+            }
+            PptxOp::SetTrendline(op) => {
+                let meta = slides.get(op.target.slide - 1).ok_or_else(|| {
+                    Error::with_path(
+                        ErrorKind::SlideNotFound {
+                            n: op.target.slide as u32,
+                        },
+                        format!("ops[{i}].id"),
+                    )
+                })?;
+                let doc = xml::parse(pkg.get(&meta.part)?)?;
+                chart::apply_set_trendline(&mut pkg, &doc.root, &meta.part, op, i)?;
+            }
+            PptxOp::DeleteTrendline(op) => {
+                let meta = slides.get(op.target.slide - 1).ok_or_else(|| {
+                    Error::with_path(
+                        ErrorKind::SlideNotFound {
+                            n: op.target.slide as u32,
+                        },
+                        format!("ops[{i}].id"),
+                    )
+                })?;
+                let doc = xml::parse(pkg.get(&meta.part)?)?;
+                chart::apply_delete_trendline(&mut pkg, &doc.root, &meta.part, op, i)?;
+            }
+            PptxOp::InsertErrorBars(op) => {
+                let meta = slides.get(op.target.slide - 1).ok_or_else(|| {
+                    Error::with_path(
+                        ErrorKind::SlideNotFound {
+                            n: op.target.slide as u32,
+                        },
+                        format!("ops[{i}].id"),
+                    )
+                })?;
+                let doc = xml::parse(pkg.get(&meta.part)?)?;
+                chart::apply_insert_error_bars(&mut pkg, &doc.root, &meta.part, op, i)?;
+            }
+            PptxOp::SetErrorBars(op) => {
+                let meta = slides.get(op.target.slide - 1).ok_or_else(|| {
+                    Error::with_path(
+                        ErrorKind::SlideNotFound {
+                            n: op.target.slide as u32,
+                        },
+                        format!("ops[{i}].id"),
+                    )
+                })?;
+                let doc = xml::parse(pkg.get(&meta.part)?)?;
+                chart::apply_set_error_bars(&mut pkg, &doc.root, &meta.part, op, i)?;
+            }
+            PptxOp::DeleteErrorBars(op) => {
+                let meta = slides.get(op.target.slide - 1).ok_or_else(|| {
+                    Error::with_path(
+                        ErrorKind::SlideNotFound {
+                            n: op.target.slide as u32,
+                        },
+                        format!("ops[{i}].id"),
+                    )
+                })?;
+                let doc = xml::parse(pkg.get(&meta.part)?)?;
+                chart::apply_delete_error_bars(&mut pkg, &doc.root, &meta.part, op, i)?;
+            }
+            PptxOp::SetChartSeriesAxis(op) => {
+                let meta = slides.get(op.target.slide - 1).ok_or_else(|| {
+                    Error::with_path(
+                        ErrorKind::SlideNotFound {
+                            n: op.target.slide as u32,
+                        },
+                        format!("ops[{i}].id"),
+                    )
+                })?;
+                let doc = xml::parse(pkg.get(&meta.part)?)?;
+                chart::apply_series_axis(&mut pkg, &doc.root, &meta.part, op, i)?;
+            }
             PptxOp::InsertSmartArt(op) => {
                 let meta = slides.get(op.slide - 1).ok_or_else(|| {
                     Error::with_path(

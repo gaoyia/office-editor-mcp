@@ -295,7 +295,7 @@ fn inspect_lists_type_title_and_series() {
     assert!(s0.get("cacheStale").is_none());
     assert_eq!(
         object_keys(s0),
-        ["id", "index", "name", "categories", "values"]
+        ["id", "index", "name", "categories", "values", "axis"]
     );
     let s1 = &c["series"][1];
     assert_eq!(s1["name"], "系列乙");
@@ -794,6 +794,20 @@ fn chart_xml_kind(kind: &str) -> String {
             AXES.to_string(),
             "",
         ),
+        "ofPie" => (
+            format!(r#"<c:ofPieChart><c:ofPieType val="pie"/>{SER0}</c:ofPieChart>"#),
+            String::new(),
+            "",
+        ),
+        "surface" => (
+            format!(
+                r#"<c:surfaceChart>{SER0}{SER1}<c:axId val="1"/><c:axId val="2"/><c:axId val="3"/></c:surfaceChart>"#
+            ),
+            format!(
+                r#"{AXES}<c:serAx><c:axId val="3"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="b"/><c:crossAx val="2"/></c:serAx>"#
+            ),
+            "",
+        ),
         "pivot" => (
             format!(
                 r#"<c:barChart><c:barDir val="col"/><c:grouping val="clustered"/>{SER0}{SER1}<c:axId val="1"/><c:axId val="2"/></c:barChart>"#
@@ -845,7 +859,15 @@ fn inspect_doughnut_radar_bubble_types() {
     let s = &tb["charts"][0]["series"][0];
     assert_eq!(
         object_keys(s),
-        ["id", "index", "name", "categories", "values", "sizes"]
+        [
+            "id",
+            "index",
+            "name",
+            "categories",
+            "values",
+            "sizes",
+            "axis"
+        ]
     );
     assert_eq!(s["categories"], json!(["甲", "乙", "丙"]));
     assert_eq!(nums(&s["values"]), vec![1, 2, 3]);
@@ -1081,7 +1103,8 @@ fn pivot_title_ok_series_blocked() {
 fn stock_set_type_is_not_implemented() {
     let path = write_kind("st", "stock");
     let tree = inspect(&path, json!({ "charts": true }));
-    assert_eq!(tree["charts"][0]["type"], "other");
+    assert_eq!(tree["charts"][0]["type"], "stock");
+    assert_eq!(tree["charts"][0]["series"][0]["axis"], "primary");
     let before = std::fs::read(&path).unwrap();
     let err = apply_err(
         &path,
@@ -1089,4 +1112,181 @@ fn stock_set_type_is_not_implemented() {
     );
     assert_eq!(err.code(), ErrorCode::NotImplemented);
     assert_eq!(std::fs::read(&path).unwrap(), before);
+}
+
+#[test]
+fn of_pie_and_surface_types() {
+    let p = write_kind("of", "ofPie");
+    let s = write_kind("sf", "surface");
+    assert_eq!(
+        inspect(&p, json!({ "charts": true }))["charts"][0]["type"],
+        "ofPie"
+    );
+    assert_eq!(
+        inspect(&s, json!({ "charts": true }))["charts"][0]["type"],
+        "surface"
+    );
+}
+
+#[test]
+fn stock_set_series_and_reject_add() {
+    let path = write_kind("st-ser", "stock");
+    let out = tmp_dir().join("st-ser-out.docx");
+    apply(
+        &path,
+        &out,
+        json!([{
+            "op": "setChartSeries",
+            "id": "para:AAAA0001/chart:7/series:0",
+            "values": [7, 8, 9]
+        }]),
+    );
+    let tree = inspect(&out, json!({ "charts": true }));
+    assert_eq!(tree["charts"][0]["type"], "stock");
+    assert_eq!(
+        nums(&tree["charts"][0]["series"][0]["values"]),
+        vec![7, 8, 9]
+    );
+    let err = apply_err(
+        &out,
+        json!([{
+            "op": "addChartSeries",
+            "id": "para:AAAA0001/chart:7",
+            "values": [1, 2, 3]
+        }]),
+    );
+    assert_eq!(err.code(), ErrorCode::NotImplemented);
+}
+
+#[test]
+fn trendline_insert_set_delete() {
+    let path = write_sample("tl", false);
+    let out = tmp_dir().join("tl-out.docx");
+    apply(
+        &path,
+        &out,
+        json!([{
+            "op": "insertTrendline",
+            "id": "para:AAAA0001/chart:7/series:0",
+            "type": "linear"
+        }]),
+    );
+    let tree = inspect(&out, json!({ "charts": true }));
+    let s0 = &tree["charts"][0]["series"][0];
+    assert_eq!(s0["axis"], "primary");
+    assert_eq!(
+        s0["trendlines"][0]["id"],
+        "para:AAAA0001/chart:7/series:0/trendline:1"
+    );
+    assert_eq!(s0["trendlines"][0]["type"], "linear");
+    let flags = tree["charts"][0]["flags"].as_array().unwrap();
+    assert!(flags.iter().any(|f| f == "trendline"));
+    let out2 = tmp_dir().join("tl-set.docx");
+    apply(
+        &out,
+        &out2,
+        json!([{
+            "op": "setTrendline",
+            "id": "para:AAAA0001/chart:7/series:0/trendline:1",
+            "type": "exp"
+        }]),
+    );
+    let tree2 = inspect(&out2, json!({ "charts": true }));
+    assert_eq!(
+        tree2["charts"][0]["series"][0]["trendlines"][0]["type"],
+        "exp"
+    );
+    let out3 = tmp_dir().join("tl-del.docx");
+    apply(
+        &out2,
+        &out3,
+        json!([{
+            "op": "deleteTrendline",
+            "id": "para:AAAA0001/chart:7/series:0/trendline:1"
+        }]),
+    );
+    let tree3 = inspect(&out3, json!({ "charts": true }));
+    assert!(tree3["charts"][0]["series"][0].get("trendlines").is_none());
+}
+
+#[test]
+fn error_bars_insert_delete() {
+    let path = write_sample("eb", false);
+    let out = tmp_dir().join("eb-out.docx");
+    apply(
+        &path,
+        &out,
+        json!([{
+            "op": "insertErrorBars",
+            "id": "para:AAAA0001/chart:7/series:0",
+            "valType": "fixedVal",
+            "value": 1.5
+        }]),
+    );
+    let tree = inspect(&out, json!({ "charts": true }));
+    let eb = &tree["charts"][0]["series"][0]["errorBars"][0];
+    assert_eq!(eb["id"], "para:AAAA0001/chart:7/series:0/errorBars:1");
+    assert_eq!(eb["dir"], "y");
+    assert_eq!(eb["valType"], "fixedVal");
+    assert_eq!(eb["value"], 1.5);
+    let out2 = tmp_dir().join("eb-del.docx");
+    apply(
+        &out,
+        &out2,
+        json!([{
+            "op": "deleteErrorBars",
+            "id": "para:AAAA0001/chart:7/series:0/errorBars:1"
+        }]),
+    );
+    let tree2 = inspect(&out2, json!({ "charts": true }));
+    assert!(tree2["charts"][0]["series"][0].get("errorBars").is_none());
+}
+
+#[test]
+fn series_secondary_axis() {
+    let path = write_sample("ax", false);
+    let out = tmp_dir().join("ax-out.docx");
+    apply(
+        &path,
+        &out,
+        json!([{
+            "op": "setChartSeriesAxis",
+            "id": "para:AAAA0001/chart:7/series:1",
+            "axis": "secondary"
+        }]),
+    );
+    let tree = inspect(&out, json!({ "charts": true }));
+    assert_eq!(tree["charts"][0]["series"][0]["axis"], "primary");
+    assert_eq!(tree["charts"][0]["series"][1]["axis"], "secondary");
+    let flags = tree["charts"][0]["flags"].as_array().unwrap();
+    assert!(flags.iter().any(|f| f == "secondaryAxis"));
+    let xml = part_text(&out, "word/charts/chart1.xml");
+    let second = xml.split("<c:barChart>").nth(2).unwrap_or("");
+    let wrap_end = second.find("</c:barChart>").unwrap_or(second.len());
+    let wrap = &second[..wrap_end];
+    let ser_at = wrap.find("<c:ser>").unwrap_or(usize::MAX);
+    let dl_at = wrap.find("<c:dLbls>").unwrap_or(usize::MAX);
+    assert!(ser_at < dl_at, "次轴包裹里 ser 必须在 dLbls 之前：{wrap}");
+    assert!(
+        !wrap.contains(r#"<c:axId val="1"/>"#),
+        "次轴包裹不能共用主分类轴：{wrap}"
+    );
+    assert!(
+        xml.contains(r#"<c:delete val="1"/>"#),
+        "次轴必须带隐藏分类轴"
+    );
+}
+
+#[test]
+fn pie_rejects_trendline() {
+    let path = write_kind("pie-tl", "doughnut");
+    let err = apply_err(
+        &path,
+        json!([{
+            "op": "insertTrendline",
+            "id": "para:AAAA0001/chart:7/series:0",
+            "type": "linear"
+        }]),
+    );
+    assert_eq!(err.code(), ErrorCode::InvalidField);
 }

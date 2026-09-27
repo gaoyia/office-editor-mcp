@@ -305,6 +305,57 @@ pub struct SetChartWrapOp {
     pub pos: WrapPos,
 }
 
+#[derive(Debug, Clone)]
+pub struct InsertTrendlineOp {
+    pub id: String,
+    pub target: SeriesTarget,
+    pub spec: crate::chart::remain::TrendlineWrite,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetTrendlineOp {
+    pub id: String,
+    pub target: SeriesTarget,
+    pub tl_index: usize,
+    pub spec: crate::chart::remain::TrendlineWrite,
+}
+
+#[derive(Debug, Clone)]
+pub struct DeleteTrendlineOp {
+    pub id: String,
+    pub target: SeriesTarget,
+    pub tl_index: usize,
+}
+
+#[derive(Debug, Clone)]
+pub struct InsertErrorBarsOp {
+    pub id: String,
+    pub target: SeriesTarget,
+    pub spec: crate::chart::remain::ErrorBarsWrite,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetErrorBarsOp {
+    pub id: String,
+    pub target: SeriesTarget,
+    pub eb_index: usize,
+    pub spec: crate::chart::remain::ErrorBarsWrite,
+}
+
+#[derive(Debug, Clone)]
+pub struct DeleteErrorBarsOp {
+    pub id: String,
+    pub target: SeriesTarget,
+    pub eb_index: usize,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetChartSeriesAxisOp {
+    pub id: String,
+    pub target: SeriesTarget,
+    pub secondary: bool,
+}
+
 pub fn default_cx() -> i64 {
     DEFAULT_CX
 }
@@ -472,6 +523,30 @@ pub fn parse_series_id(id: &str, op_index: usize) -> Result<SeriesTarget, Error>
     })?;
     let chart = parse_chart_id_at(left, &path)?;
     Ok(SeriesTarget { chart, index })
+}
+
+pub fn parse_trendline_id(id: &str, op_index: usize) -> Result<(SeriesTarget, usize), Error> {
+    let path = format!("ops[{op_index}].id");
+    let (left, k) = crate::chart::remain::parse_member_id(
+        id,
+        "trendline",
+        crate::chart::remain::IdFromOne::Trendline,
+    )
+    .map_err(|reason| Error::with_path(ErrorKind::InvalidId { reason }, path))?;
+    let series = parse_series_id(left, op_index)?;
+    Ok((series, k))
+}
+
+pub fn parse_error_bars_id(id: &str, op_index: usize) -> Result<(SeriesTarget, usize), Error> {
+    let path = format!("ops[{op_index}].id");
+    let (left, k) = crate::chart::remain::parse_member_id(
+        id,
+        "errorBars",
+        crate::chart::remain::IdFromOne::ErrorBars,
+    )
+    .map_err(|reason| Error::with_path(ErrorKind::InvalidId { reason }, path))?;
+    let series = parse_series_id(left, op_index)?;
+    Ok((series, k))
 }
 
 pub fn parse_insert_para_id(id: &str, op_index: usize) -> Result<ParaTarget, Error> {
@@ -754,6 +829,7 @@ pub fn apply_add_series(
     let (mut space, chart_part, _) =
         load_chart_space_host(pkg, docs, doc_part, catalog, &op.target, &op.id, i)?;
     reject_restricted(&space.root, &op.id, i, ChartRestrict::Data)?;
+    crate::chart::remain::reject_structure_edit(&space.root, &op.id, i)?;
     let ty = inspect_type(&space.root, false);
     if ty == "pie" {
         return Err(Error::with_path(
@@ -799,6 +875,7 @@ pub fn apply_delete_series(
     let (mut space, chart_part, _) =
         load_chart_space_host(pkg, docs, doc_part, catalog, &op.target.chart, &op.id, i)?;
     reject_restricted(&space.root, &op.id, i, ChartRestrict::Data)?;
+    crate::chart::remain::reject_structure_edit(&space.root, &op.id, i)?;
     let n = series_count(&space.root);
     if op.target.index >= n {
         return Err(Error::with_path(
@@ -883,6 +960,150 @@ pub fn apply_data_labels(
         load_chart_space_host(pkg, docs, doc_part, catalog, &op.target, &op.id, i)?;
     reject_restricted(&space.root, &op.id, i, ChartRestrict::Decorate)?;
     set_data_labels(&mut space.root, op.show);
+    pkg.set(&chart_part, space.to_bytes()?)?;
+    Ok(())
+}
+
+pub fn apply_insert_trendline(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    doc_part: &str,
+    catalog: &[HfPart],
+    op: &InsertTrendlineOp,
+    i: usize,
+) -> Result<(), Error> {
+    let (mut space, chart_part, _) =
+        load_chart_space_host(pkg, docs, doc_part, catalog, &op.target.chart, &op.id, i)?;
+    reject_restricted(&space.root, &op.id, i, ChartRestrict::Decorate)?;
+    crate::chart::remain::insert_trendline(&mut space.root, &op.id, op.target.index, &op.spec, i)?;
+    pkg.set(&chart_part, space.to_bytes()?)?;
+    Ok(())
+}
+
+pub fn apply_set_trendline(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    doc_part: &str,
+    catalog: &[HfPart],
+    op: &SetTrendlineOp,
+    i: usize,
+) -> Result<(), Error> {
+    let (mut space, chart_part, _) =
+        load_chart_space_host(pkg, docs, doc_part, catalog, &op.target.chart, &op.id, i)?;
+    reject_restricted(&space.root, &op.id, i, ChartRestrict::Decorate)?;
+    crate::chart::remain::set_trendline(
+        &mut space.root,
+        &op.id,
+        op.target.index,
+        op.tl_index,
+        &op.spec,
+        i,
+    )?;
+    pkg.set(&chart_part, space.to_bytes()?)?;
+    Ok(())
+}
+
+pub fn apply_delete_trendline(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    doc_part: &str,
+    catalog: &[HfPart],
+    op: &DeleteTrendlineOp,
+    i: usize,
+) -> Result<(), Error> {
+    let (mut space, chart_part, _) =
+        load_chart_space_host(pkg, docs, doc_part, catalog, &op.target.chart, &op.id, i)?;
+    reject_restricted(&space.root, &op.id, i, ChartRestrict::Decorate)?;
+    crate::chart::remain::delete_trendline(
+        &mut space.root,
+        &op.id,
+        op.target.index,
+        op.tl_index,
+        i,
+    )?;
+    pkg.set(&chart_part, space.to_bytes()?)?;
+    Ok(())
+}
+
+pub fn apply_insert_error_bars(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    doc_part: &str,
+    catalog: &[HfPart],
+    op: &InsertErrorBarsOp,
+    i: usize,
+) -> Result<(), Error> {
+    let (mut space, chart_part, _) =
+        load_chart_space_host(pkg, docs, doc_part, catalog, &op.target.chart, &op.id, i)?;
+    reject_restricted(&space.root, &op.id, i, ChartRestrict::Decorate)?;
+    crate::chart::remain::insert_error_bars(&mut space.root, &op.id, op.target.index, &op.spec, i)?;
+    pkg.set(&chart_part, space.to_bytes()?)?;
+    Ok(())
+}
+
+pub fn apply_set_error_bars(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    doc_part: &str,
+    catalog: &[HfPart],
+    op: &SetErrorBarsOp,
+    i: usize,
+) -> Result<(), Error> {
+    let (mut space, chart_part, _) =
+        load_chart_space_host(pkg, docs, doc_part, catalog, &op.target.chart, &op.id, i)?;
+    reject_restricted(&space.root, &op.id, i, ChartRestrict::Decorate)?;
+    crate::chart::remain::set_error_bars(
+        &mut space.root,
+        &op.id,
+        op.target.index,
+        op.eb_index,
+        &op.spec,
+        i,
+    )?;
+    pkg.set(&chart_part, space.to_bytes()?)?;
+    Ok(())
+}
+
+pub fn apply_delete_error_bars(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    doc_part: &str,
+    catalog: &[HfPart],
+    op: &DeleteErrorBarsOp,
+    i: usize,
+) -> Result<(), Error> {
+    let (mut space, chart_part, _) =
+        load_chart_space_host(pkg, docs, doc_part, catalog, &op.target.chart, &op.id, i)?;
+    reject_restricted(&space.root, &op.id, i, ChartRestrict::Decorate)?;
+    crate::chart::remain::delete_error_bars(
+        &mut space.root,
+        &op.id,
+        op.target.index,
+        op.eb_index,
+        i,
+    )?;
+    pkg.set(&chart_part, space.to_bytes()?)?;
+    Ok(())
+}
+
+pub fn apply_series_axis(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    doc_part: &str,
+    catalog: &[HfPart],
+    op: &SetChartSeriesAxisOp,
+    i: usize,
+) -> Result<(), Error> {
+    let (mut space, chart_part, _) =
+        load_chart_space_host(pkg, docs, doc_part, catalog, &op.target.chart, &op.id, i)?;
+    reject_restricted(&space.root, &op.id, i, ChartRestrict::Decorate)?;
+    crate::chart::remain::set_series_axis(
+        &mut space.root,
+        &op.id,
+        op.target.index,
+        op.secondary,
+        i,
+    )?;
     pkg.set(&chart_part, space.to_bytes()?)?;
     Ok(())
 }
@@ -1073,10 +1294,12 @@ fn series_json(chart_id: &str, space: &Element, embed: Option<&[u8]>) -> Result<
                 node["sizes"] = json!(sizes);
                 stale |= size_stale;
             }
+            let mut map = node.as_object().cloned().unwrap_or_default();
+            crate::chart::remain::attach_series_extras(&mut map, space, ser, chart_id, index);
             if stale {
-                node["cacheStale"] = json!(true);
+                map.insert("cacheStale".into(), json!(true));
             }
-            out.push(node);
+            out.push(Value::Object(map));
             index += 1;
         }
     }
@@ -1278,7 +1501,9 @@ fn wrapper_kind(el: &Element) -> Option<&'static str> {
         "doughnutChart" => Some("doughnut"),
         "radarChart" => Some("radar"),
         "bubbleChart" => Some("bubble"),
-        "ofPieChart" | "stockChart" | "surfaceChart" | "surface3DChart" => Some("other"),
+        "ofPieChart" => Some("ofPie"),
+        "stockChart" => Some("stock"),
+        "surfaceChart" | "surface3DChart" => Some("surface"),
         _ => None,
     }
 }
@@ -1404,12 +1629,11 @@ fn secondary_axis(space: &Element, ty: &str) -> bool {
         return false;
     };
     if plot.element_children().any(|c| {
-        matches!(c.local_name(), "catAx" | "valAx" | "dateAx" | "serAx")
-            && bool_val(c.child_by_local("overlay"))
+        matches!(c.local_name(), "valAx" | "dateAx") && bool_val(c.child_by_local("overlay"))
     }) {
         return true;
     }
-    if matches!(ty, "pie" | "doughnut" | "other" | "chartex") {
+    if matches!(ty, "pie" | "doughnut" | "ofPie" | "other" | "chartex") {
         return false;
     }
     let val_n = plot
@@ -2155,13 +2379,7 @@ fn reject_restricted(
 ) -> Result<(), Error> {
     let ty = inspect_type(space, false);
     let flags = flags_json(space, &ty);
-    let hard = matches!(ty.as_str(), "other" | "chartex")
-        || flags.iter().any(|f| {
-            matches!(
-                f.as_str(),
-                Some("secondaryAxis" | "trendline" | "errorBars")
-            )
-        });
+    let hard = matches!(ty.as_str(), "other" | "chartex");
     if hard {
         return Err(Error::with_path(
             ErrorKind::RestrictedChart { id: id.to_string() },
@@ -3343,6 +3561,15 @@ fn convert_type(space: &mut Element, target: ChartType, i: usize) -> Result<(), 
         ));
     }
     let current = inspect_type(space, false);
+    if matches!(
+        current.as_str(),
+        "stock" | "surface" | "ofPie" | "other" | "chartex"
+    ) {
+        return Err(Error::with_path(
+            ErrorKind::ChartTypeNotConvertible,
+            format!("ops[{i}].type"),
+        ));
+    }
     if current == target.as_str() {
         if matches!(target, ChartType::Bar | ChartType::Col) {
             set_bar_dir(space, target);

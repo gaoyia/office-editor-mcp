@@ -14,9 +14,10 @@ use super::apply::{self, write_json_cell};
 use super::inspect;
 use super::picture::{self, AnchorKind, EditAs};
 use super::request::{
-    AddChartSeriesOp, DeleteChartOp, DeleteChartSeriesOp, InsertChartOp, SetChartAnchorOp,
-    SetChartAxisTitleOp, SetChartDataLabelsOp, SetChartLegendOp, SetChartSeriesOp, SetChartSizeOp,
-    SetChartTitleOp, SetChartTypeOp,
+    AddChartSeriesOp, DeleteChartOp, DeleteChartSeriesOp, DeleteErrorBarsOp, DeleteTrendlineOp,
+    InsertChartOp, InsertErrorBarsOp, InsertTrendlineOp, SetChartAnchorOp, SetChartAxisTitleOp,
+    SetChartDataLabelsOp, SetChartLegendOp, SetChartSeriesAxisOp, SetChartSeriesOp, SetChartSizeOp,
+    SetChartTitleOp, SetChartTypeOp, SetErrorBarsOp, SetTrendlineOp,
 };
 use super::REL_NS;
 
@@ -148,6 +149,36 @@ pub fn parse_series_id(id: &str, op_index: usize) -> Result<(SheetChartId, usize
     })?;
     let target = parse_chart_id_at(chart, &path)?;
     Ok((target, index))
+}
+
+pub fn parse_trendline_id(
+    id: &str,
+    op_index: usize,
+) -> Result<(SheetChartId, usize, usize), Error> {
+    let path = format!("ops[{op_index}].id");
+    let (left, k) = crate::chart::remain::parse_member_id(
+        id,
+        "trendline",
+        crate::chart::remain::IdFromOne::Trendline,
+    )
+    .map_err(|reason| Error::with_path(ErrorKind::InvalidId { reason }, path))?;
+    let (target, index) = parse_series_id(left, op_index)?;
+    Ok((target, index, k))
+}
+
+pub fn parse_error_bars_id(
+    id: &str,
+    op_index: usize,
+) -> Result<(SheetChartId, usize, usize), Error> {
+    let path = format!("ops[{op_index}].id");
+    let (left, k) = crate::chart::remain::parse_member_id(
+        id,
+        "errorBars",
+        crate::chart::remain::IdFromOne::ErrorBars,
+    )
+    .map_err(|reason| Error::with_path(ErrorKind::InvalidId { reason }, path))?;
+    let (target, index) = parse_series_id(left, op_index)?;
+    Ok((target, index, k))
 }
 
 fn invalid_id(reason: IdReason, op_index: usize) -> Error {
@@ -357,19 +388,48 @@ fn read_formula_cells(
     sst: &[String],
     sheets: &[(String, String)],
 ) -> Option<Vec<Value>> {
-    let refer = chart::parse_a1_formula(formula)?;
-    let sheet = refer.sheet.as_deref().unwrap_or(default_sheet);
-    let part = sheets
-        .iter()
-        .find(|(n, _)| n.eq_ignore_ascii_case(sheet))
-        .map(|(_, p)| p.as_str())?;
-    let doc = xml::parse(pkg.get(part).ok()?).ok()?;
-    let sheet_data = doc.root.child_by_local("sheetData")?;
+    let (names, order) = formula_ctx(pkg);
+    let target = chart::resolve_chart_formula(formula, &names, &order, default_sheet)?;
     let mut out = Vec::new();
-    for cell in chart::walk_a1(&refer) {
+    let mut docs: Vec<(String, Document)> = Vec::new();
+    for (sheet_opt, cell) in target.cells() {
+        let sheet = sheet_opt.as_deref().unwrap_or(default_sheet);
+        let part = sheets
+            .iter()
+            .find(|(n, _)| n.eq_ignore_ascii_case(sheet))
+            .map(|(_, p)| p.as_str())?;
+        if !docs.iter().any(|(p, _)| p == part) {
+            docs.push((part.to_string(), xml::parse(pkg.get(part).ok()?).ok()?));
+        }
+        let doc = docs.iter().find(|(p, _)| p == part).map(|(_, d)| d)?;
+        let sheet_data = doc.root.child_by_local("sheetData")?;
         out.push(cell_cached(sheet_data, cell, sheet, sst).unwrap_or(Value::Null));
     }
     Some(out)
+}
+
+fn formula_ctx(pkg: &Package) -> (Vec<chart::DefinedName>, Vec<String>) {
+    let Ok(wb_part) = crate::opc::office_document_part(pkg) else {
+        return (Vec::new(), Vec::new());
+    };
+    let Ok(bytes) = pkg.get(&wb_part) else {
+        return (Vec::new(), Vec::new());
+    };
+    let Ok(wb) = xml::parse(bytes) else {
+        return (Vec::new(), Vec::new());
+    };
+    let names = chart::parse_defined_names(&wb.root);
+    let sheets = wb
+        .root
+        .child_by_local("sheets")
+        .map(|s| {
+            s.element_children()
+                .filter(|c| c.local_name() == "sheet")
+                .filter_map(|c| c.attr_local("name").map(str::to_string))
+                .collect()
+        })
+        .unwrap_or_default();
+    (names, sheets)
 }
 
 fn cell_cached(sheet_data: &Element, cell: CellRef, sheet: &str, sst: &[String]) -> Option<Value> {
@@ -641,6 +701,7 @@ pub fn add_chart_series(
 ) -> Result<bool, Error> {
     let (mut space, chart_part) = load_space(pkg, sheet_part, &op.target, &op.id, op_index)?;
     chart::reject_restricted(&space.root, &op.id, op_index, ChartRestrict::Data)?;
+    chart::remain::reject_structure_edit(&space.root, &op.id, op_index)?;
     let col = chart::next_val_col_from_formulas(&space.root).ok_or_else(|| {
         Error::with_path(ErrorKind::ChartFormulaNotA1, format!("ops[{op_index}]"))
     })?;
@@ -777,6 +838,7 @@ pub fn delete_chart_series(
 ) -> Result<(), Error> {
     let (mut space, chart_part) = load_space(pkg, sheet_part, &op.target, &op.id, op_index)?;
     chart::reject_restricted(&space.root, &op.id, op_index, ChartRestrict::Data)?;
+    chart::remain::reject_structure_edit(&space.root, &op.id, op_index)?;
     let n = chart::series_count(&space.root);
     if op.index >= n {
         return Err(Error::with_path(
@@ -843,6 +905,111 @@ pub fn set_chart_data_labels(
     let (mut space, chart_part) = load_space(pkg, sheet_part, &op.target, &op.id, op_index)?;
     chart::reject_restricted(&space.root, &op.id, op_index, ChartRestrict::Decorate)?;
     chart::set_data_labels(&mut space.root, op.show);
+    pkg.set(&chart_part, space.to_bytes()?)?;
+    Ok(())
+}
+
+pub fn insert_trendline(
+    pkg: &mut Package,
+    sheet_part: &str,
+    op: &InsertTrendlineOp,
+    op_index: usize,
+) -> Result<(), Error> {
+    let (mut space, chart_part) = load_space(pkg, sheet_part, &op.target, &op.id, op_index)?;
+    chart::reject_restricted(&space.root, &op.id, op_index, ChartRestrict::Decorate)?;
+    chart::remain::insert_trendline(&mut space.root, &op.id, op.index, &op.spec, op_index)?;
+    pkg.set(&chart_part, space.to_bytes()?)?;
+    Ok(())
+}
+
+pub fn set_trendline(
+    pkg: &mut Package,
+    sheet_part: &str,
+    op: &SetTrendlineOp,
+    op_index: usize,
+) -> Result<(), Error> {
+    let (mut space, chart_part) = load_space(pkg, sheet_part, &op.target, &op.id, op_index)?;
+    chart::reject_restricted(&space.root, &op.id, op_index, ChartRestrict::Decorate)?;
+    chart::remain::set_trendline(
+        &mut space.root,
+        &op.id,
+        op.index,
+        op.tl_index,
+        &op.spec,
+        op_index,
+    )?;
+    pkg.set(&chart_part, space.to_bytes()?)?;
+    Ok(())
+}
+
+pub fn delete_trendline(
+    pkg: &mut Package,
+    sheet_part: &str,
+    op: &DeleteTrendlineOp,
+    op_index: usize,
+) -> Result<(), Error> {
+    let (mut space, chart_part) = load_space(pkg, sheet_part, &op.target, &op.id, op_index)?;
+    chart::reject_restricted(&space.root, &op.id, op_index, ChartRestrict::Decorate)?;
+    chart::remain::delete_trendline(&mut space.root, &op.id, op.index, op.tl_index, op_index)?;
+    pkg.set(&chart_part, space.to_bytes()?)?;
+    Ok(())
+}
+
+pub fn insert_error_bars(
+    pkg: &mut Package,
+    sheet_part: &str,
+    op: &InsertErrorBarsOp,
+    op_index: usize,
+) -> Result<(), Error> {
+    let (mut space, chart_part) = load_space(pkg, sheet_part, &op.target, &op.id, op_index)?;
+    chart::reject_restricted(&space.root, &op.id, op_index, ChartRestrict::Decorate)?;
+    chart::remain::insert_error_bars(&mut space.root, &op.id, op.index, &op.spec, op_index)?;
+    pkg.set(&chart_part, space.to_bytes()?)?;
+    Ok(())
+}
+
+pub fn set_error_bars(
+    pkg: &mut Package,
+    sheet_part: &str,
+    op: &SetErrorBarsOp,
+    op_index: usize,
+) -> Result<(), Error> {
+    let (mut space, chart_part) = load_space(pkg, sheet_part, &op.target, &op.id, op_index)?;
+    chart::reject_restricted(&space.root, &op.id, op_index, ChartRestrict::Decorate)?;
+    chart::remain::set_error_bars(
+        &mut space.root,
+        &op.id,
+        op.index,
+        op.eb_index,
+        &op.spec,
+        op_index,
+    )?;
+    pkg.set(&chart_part, space.to_bytes()?)?;
+    Ok(())
+}
+
+pub fn delete_error_bars(
+    pkg: &mut Package,
+    sheet_part: &str,
+    op: &DeleteErrorBarsOp,
+    op_index: usize,
+) -> Result<(), Error> {
+    let (mut space, chart_part) = load_space(pkg, sheet_part, &op.target, &op.id, op_index)?;
+    chart::reject_restricted(&space.root, &op.id, op_index, ChartRestrict::Decorate)?;
+    chart::remain::delete_error_bars(&mut space.root, &op.id, op.index, op.eb_index, op_index)?;
+    pkg.set(&chart_part, space.to_bytes()?)?;
+    Ok(())
+}
+
+pub fn set_series_axis(
+    pkg: &mut Package,
+    sheet_part: &str,
+    op: &SetChartSeriesAxisOp,
+    op_index: usize,
+) -> Result<(), Error> {
+    let (mut space, chart_part) = load_space(pkg, sheet_part, &op.target, &op.id, op_index)?;
+    chart::reject_restricted(&space.root, &op.id, op_index, ChartRestrict::Decorate)?;
+    chart::remain::set_series_axis(&mut space.root, &op.id, op.index, op.secondary, op_index)?;
     pkg.set(&chart_part, space.to_bytes()?)?;
     Ok(())
 }
@@ -996,27 +1163,52 @@ fn write_or_resize(
     let Some(raw) = formula else {
         return Ok(None);
     };
-    let refer = chart::parse_a1_formula(raw).ok_or_else(|| {
-        Error::with_path(ErrorKind::ChartFormulaNotA1, format!("ops[{op_index}]"))
-    })?;
-    *wrote = true;
-    write_formula_values(
-        pkg,
-        default_sheet,
-        sheet_index,
-        dirty_sheets,
-        Some(raw),
-        values,
-        false,
-        op_index,
-    )?;
-    let resized = chart::resize_a1(&refer, values.len());
-    let sheet = resized.sheet.as_deref().unwrap_or(default_sheet);
-    Ok(Some(chart::format_a1_formula(
-        sheet,
-        resized.start,
-        resized.end,
-    )))
+    let (names, order) = formula_ctx(pkg);
+    let target =
+        chart::resolve_chart_formula(raw, &names, &order, default_sheet).ok_or_else(|| {
+            Error::with_path(ErrorKind::ChartFormulaNotA1, format!("ops[{op_index}]"))
+        })?;
+    match target {
+        chart::FormulaTarget::DirectA1(refer) => {
+            *wrote = true;
+            write_resolved_cells(
+                pkg,
+                default_sheet,
+                sheet_index,
+                dirty_sheets,
+                &chart::FormulaTarget::DirectA1(chart::resize_a1(&refer, values.len())),
+                values,
+                op_index,
+            )?;
+            let resized = chart::resize_a1(&refer, values.len());
+            let sheet = resized.sheet.as_deref().unwrap_or(default_sheet);
+            Ok(Some(chart::format_a1_formula(
+                sheet,
+                resized.start,
+                resized.end,
+            )))
+        }
+        other => {
+            let cells = other.cells();
+            if cells.len() != values.len() {
+                return Err(Error::with_path(
+                    ErrorKind::ChartFormulaNotA1,
+                    format!("ops[{op_index}]"),
+                ));
+            }
+            *wrote = true;
+            write_resolved_cells(
+                pkg,
+                default_sheet,
+                sheet_index,
+                dirty_sheets,
+                &other,
+                values,
+                op_index,
+            )?;
+            Ok(None)
+        }
+    }
 }
 
 fn write_formula_values(
@@ -1032,22 +1224,67 @@ fn write_formula_values(
     let Some(raw) = formula else {
         return Ok(false);
     };
-    let refer = chart::parse_a1_formula(raw).ok_or_else(|| {
-        Error::with_path(ErrorKind::ChartFormulaNotA1, format!("ops[{op_index}]"))
-    })?;
-    let sheet = refer.sheet.as_deref().unwrap_or(default_sheet);
-    let part = sheet_part_by_name(sheet_index, sheet, op_index)?;
-    apply::load_dirty(pkg, dirty_sheets, &part, true)?;
-    let doc = apply::dirty_of(dirty_sheets, &part);
-    if single {
-        write_json_cell(&mut doc.root, refer.start, &values[0], op_index)?;
-    } else {
-        let resized = chart::resize_a1(&refer, values.len());
-        for (cell, value) in chart::walk_a1(&resized).into_iter().zip(values.iter()) {
-            write_json_cell(&mut doc.root, cell, value, op_index)?;
+    let (names, order) = formula_ctx(pkg);
+    let target =
+        chart::resolve_chart_formula(raw, &names, &order, default_sheet).ok_or_else(|| {
+            Error::with_path(ErrorKind::ChartFormulaNotA1, format!("ops[{op_index}]"))
+        })?;
+    match target {
+        chart::FormulaTarget::DirectA1(refer) => {
+            let part_sheet = refer.sheet.as_deref().unwrap_or(default_sheet);
+            let part = sheet_part_by_name(sheet_index, part_sheet, op_index)?;
+            apply::load_dirty(pkg, dirty_sheets, &part, true)?;
+            let doc = apply::dirty_of(dirty_sheets, &part);
+            if single {
+                write_json_cell(&mut doc.root, refer.start, &values[0], op_index)?;
+            } else {
+                let resized = chart::resize_a1(&refer, values.len());
+                for (cell, value) in chart::walk_a1(&resized).into_iter().zip(values.iter()) {
+                    write_json_cell(&mut doc.root, cell, value, op_index)?;
+                }
+            }
+            Ok(true)
+        }
+        other => {
+            let cells = other.cells();
+            let expect = if single { 1 } else { values.len() };
+            if cells.len() != expect {
+                return Err(Error::with_path(
+                    ErrorKind::ChartFormulaNotA1,
+                    format!("ops[{op_index}]"),
+                ));
+            }
+            write_resolved_cells(
+                pkg,
+                default_sheet,
+                sheet_index,
+                dirty_sheets,
+                &other,
+                if single { &values[..1] } else { values },
+                op_index,
+            )?;
+            Ok(true)
         }
     }
-    Ok(true)
+}
+
+fn write_resolved_cells(
+    pkg: &mut Package,
+    default_sheet: &str,
+    sheet_index: &[(String, String, &'static str)],
+    dirty_sheets: &mut Vec<(String, Document)>,
+    target: &chart::FormulaTarget,
+    values: &[Value],
+    op_index: usize,
+) -> Result<(), Error> {
+    for ((sheet_opt, cell), value) in target.cells().into_iter().zip(values.iter()) {
+        let sheet = sheet_opt.as_deref().unwrap_or(default_sheet);
+        let part = sheet_part_by_name(sheet_index, sheet, op_index)?;
+        apply::load_dirty(pkg, dirty_sheets, &part, true)?;
+        let doc = apply::dirty_of(dirty_sheets, &part);
+        write_json_cell(&mut doc.root, cell, value, op_index)?;
+    }
+    Ok(())
 }
 
 fn sheet_part_by_name(

@@ -108,6 +108,14 @@ pub(crate) enum IdReason {
     /// 系列 id 必须是 {图表}/series:{n}
     SeriesPrefix,
     SeriesIndexNotInt,
+    /// 趋势线 id 必须是 {系列}/trendline:{k}，k 从 1 起
+    TrendlinePrefix,
+    TrendlineIndexNotInt,
+    TrendlineIndexFromOne,
+    /// 误差线 id 必须是 {系列}/errorBars:{k}，k 从 1 起
+    ErrorBarsPrefix,
+    ErrorBarsIndexNotInt,
+    ErrorBarsIndexFromOne,
     /// insertChart 必须用正文或页眉页脚段落 id
     InsertChartNeedsPara,
     /// xlsx 的 insertChart 必须用 sheet:工作表名
@@ -420,7 +428,27 @@ define_error_kinds! {
     ChartSeriesNotFound { id: String } => {
         vec![Self::ChartSeriesNotFound { id: "para:1/chart:1/series:0".into() }]
     },
+    TrendlineNotFound { id: String } => {
+        vec![Self::TrendlineNotFound { id: "para:1/chart:1/series:0/trendline:1".into() }]
+    },
+    ErrorBarsNotFound { id: String } => {
+        vec![Self::ErrorBarsNotFound { id: "para:1/chart:1/series:0/errorBars:1".into() }]
+    },
     NeedChartSeriesField => vec![Self::NeedChartSeriesField],
+    NeedTrendlineField => vec![Self::NeedTrendlineField],
+    NeedErrorBarsField => vec![Self::NeedErrorBarsField],
+    InvalidTrendlineType => vec![Self::InvalidTrendlineType],
+    TrendlineOrderNotPoly => vec![Self::TrendlineOrderNotPoly],
+    TrendlinePeriodNotMovingAvg => vec![Self::TrendlinePeriodNotMovingAvg],
+    TrendlineNotSupported => vec![Self::TrendlineNotSupported],
+    InvalidErrorBars => vec![Self::InvalidErrorBars],
+    CustomErrorBars => vec![Self::CustomErrorBars],
+    NeedErrorBarsValue => vec![Self::NeedErrorBarsValue],
+    ErrorBarsValueOnStdErr => vec![Self::ErrorBarsValueOnStdErr],
+    ErrorBarsNotSupported => vec![Self::ErrorBarsNotSupported],
+    ErrorBarsDuplicateDir => vec![Self::ErrorBarsDuplicateDir],
+    SecondaryAxisNotSupported => vec![Self::SecondaryAxisNotSupported],
+    InvalidSeriesAxis => vec![Self::InvalidSeriesAxis],
     LastChartSeries => vec![Self::LastChartSeries],
     RestrictedChart { id: String } => vec![Self::RestrictedChart { id: "para:1/chart:1".into() }],
     InvalidChartType => vec![Self::InvalidChartType],
@@ -635,6 +663,12 @@ impl IdReason {
             Self::ChartIndexFromOne,
             Self::SeriesPrefix,
             Self::SeriesIndexNotInt,
+            Self::TrendlinePrefix,
+            Self::TrendlineIndexNotInt,
+            Self::TrendlineIndexFromOne,
+            Self::ErrorBarsPrefix,
+            Self::ErrorBarsIndexNotInt,
+            Self::ErrorBarsIndexFromOne,
             Self::InsertChartNeedsPara,
             Self::InsertChartNeedsSheet,
             Self::InsertChartNeedsSlide,
@@ -877,6 +911,19 @@ impl ErrorKind {
             | Self::CommentRangeCrossPart
             | Self::CommentRangeReversed
             | Self::NeedChartSeriesField
+            | Self::NeedTrendlineField
+            | Self::NeedErrorBarsField
+            | Self::InvalidTrendlineType
+            | Self::TrendlineOrderNotPoly
+            | Self::TrendlinePeriodNotMovingAvg
+            | Self::TrendlineNotSupported
+            | Self::InvalidErrorBars
+            | Self::NeedErrorBarsValue
+            | Self::ErrorBarsValueOnStdErr
+            | Self::ErrorBarsNotSupported
+            | Self::ErrorBarsDuplicateDir
+            | Self::SecondaryAxisNotSupported
+            | Self::InvalidSeriesAxis
             | Self::LastChartSeries
             | Self::InvalidChartType
             | Self::InvalidChartAxis
@@ -924,6 +971,8 @@ impl ErrorKind {
             | Self::CommentNotFound { .. }
             | Self::ChartNotFound { .. }
             | Self::ChartSeriesNotFound { .. }
+            | Self::TrendlineNotFound { .. }
+            | Self::ErrorBarsNotFound { .. }
             | Self::SmartArtNotFound { .. }
             | Self::SmartArtPointNotFound { .. }
             | Self::OleNotFound { .. }
@@ -949,6 +998,7 @@ impl ErrorKind {
             | Self::SectionBreakPara
             | Self::RestrictedChart { .. }
             | Self::ChartTypeNotConvertible
+            | Self::CustomErrorBars
             | Self::SmartArtLayoutNotConvertible
             | Self::TwoCellPictureSize
             | Self::TwoCellChartSize

@@ -149,6 +149,14 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::ChartIndexFromOne => "chart:index 从 1 起".into(),
             IdReason::SeriesPrefix => "系列 id 必须是图表 id 加上 /series:n".into(),
             IdReason::SeriesIndexNotInt => "series 后面必须是从 0 起的整数".into(),
+            IdReason::TrendlinePrefix => "趋势线 id 必须是系列 id 加上 /trendline:k，k 从 1 起".into(),
+            IdReason::TrendlineIndexNotInt => "trendline 后面必须是正整数".into(),
+            IdReason::TrendlineIndexFromOne => "trendline 从 1 起".into(),
+            IdReason::ErrorBarsPrefix => {
+                "误差线 id 必须是系列 id 加上 /errorBars:k，k 从 1 起".into()
+            }
+            IdReason::ErrorBarsIndexNotInt => "errorBars 后面必须是正整数".into(),
+            IdReason::ErrorBarsIndexFromOne => "errorBars 从 1 起".into(),
             IdReason::InsertChartNeedsPara => {
                 "insertChart 的 id 必须是正文或页眉页脚段落 id".into()
             }
@@ -382,9 +390,35 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::InkComment { id } => format!("墨迹批注除删除外不能编辑：{id}"),
         ErrorKind::ChartNotFound { id } => format!("找不到图表：{id}"),
         ErrorKind::ChartSeriesNotFound { id } => format!("找不到图表系列：{id}"),
+        ErrorKind::TrendlineNotFound { id } => format!("找不到趋势线：{id}"),
+        ErrorKind::ErrorBarsNotFound { id } => format!("找不到误差线：{id}"),
         ErrorKind::NeedChartSeriesField => {
             "setChartSeries 至少要给 name、categories、values 或 sizes 之一".into()
         }
+        ErrorKind::NeedTrendlineField => {
+            "setTrendline 至少要给 type、order、period、displayRSquared、displayEquation 或 name 之一".into()
+        }
+        ErrorKind::NeedErrorBarsField => {
+            "setErrorBars 至少要给 dir、barType、valType 或 value 之一".into()
+        }
+        ErrorKind::InvalidTrendlineType => {
+            "type 必须是 linear、exp、log、poly、power 或 movingAvg".into()
+        }
+        ErrorKind::TrendlineOrderNotPoly => "order 只对 poly 有意义".into(),
+        ErrorKind::TrendlinePeriodNotMovingAvg => "period 只对 movingAvg 有意义".into(),
+        ErrorKind::TrendlineNotSupported => "这种图表类型不支持趋势线".into(),
+        ErrorKind::InvalidErrorBars => {
+            "dir 必须是 x 或 y；barType 必须是 both、plus 或 minus；valType 必须是 stdErr、stdDev、fixedVal 或 percentage".into()
+        }
+        ErrorKind::CustomErrorBars => "自定义误差线（cust / lCaps）本期不做".into(),
+        ErrorKind::NeedErrorBarsValue => {
+            "valType 为 stdDev、fixedVal 或 percentage 时必须给 value".into()
+        }
+        ErrorKind::ErrorBarsValueOnStdErr => "valType 为 stdErr 时不能给 value".into(),
+        ErrorKind::ErrorBarsNotSupported => "这种图表类型不支持误差线".into(),
+        ErrorKind::ErrorBarsDuplicateDir => "该系列这个方向已经有误差线".into(),
+        ErrorKind::SecondaryAxisNotSupported => "这种图表类型不支持次轴".into(),
+        ErrorKind::InvalidSeriesAxis => "axis 必须是 primary 或 secondary".into(),
         ErrorKind::LastChartSeries => "不能删光图表里的全部系列，整张去掉请用 deleteChart".into(),
         ErrorKind::RestrictedChart { id } => {
             format!("此图表不能按此操作编辑：{id}")

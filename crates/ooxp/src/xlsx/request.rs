@@ -355,6 +355,64 @@ pub struct SetChartAnchorOp {
 }
 
 #[derive(Debug, Clone)]
+pub struct InsertTrendlineOp {
+    pub id: String,
+    pub target: SheetChartId,
+    pub index: usize,
+    pub spec: crate::chart::remain::TrendlineWrite,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetTrendlineOp {
+    pub id: String,
+    pub target: SheetChartId,
+    pub index: usize,
+    pub tl_index: usize,
+    pub spec: crate::chart::remain::TrendlineWrite,
+}
+
+#[derive(Debug, Clone)]
+pub struct DeleteTrendlineOp {
+    pub id: String,
+    pub target: SheetChartId,
+    pub index: usize,
+    pub tl_index: usize,
+}
+
+#[derive(Debug, Clone)]
+pub struct InsertErrorBarsOp {
+    pub id: String,
+    pub target: SheetChartId,
+    pub index: usize,
+    pub spec: crate::chart::remain::ErrorBarsWrite,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetErrorBarsOp {
+    pub id: String,
+    pub target: SheetChartId,
+    pub index: usize,
+    pub eb_index: usize,
+    pub spec: crate::chart::remain::ErrorBarsWrite,
+}
+
+#[derive(Debug, Clone)]
+pub struct DeleteErrorBarsOp {
+    pub id: String,
+    pub target: SheetChartId,
+    pub index: usize,
+    pub eb_index: usize,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetChartSeriesAxisOp {
+    pub id: String,
+    pub target: SheetChartId,
+    pub index: usize,
+    pub secondary: bool,
+}
+
+#[derive(Debug, Clone)]
 pub enum XlsxOp {
     SetCell(SetCellOp),
     SetHeaderFooterText(SetHeaderFooterTextOp),
@@ -377,6 +435,13 @@ pub enum XlsxOp {
     SetChartDataLabels(SetChartDataLabelsOp),
     SetChartSize(SetChartSizeOp),
     SetChartAnchor(SetChartAnchorOp),
+    InsertTrendline(InsertTrendlineOp),
+    SetTrendline(SetTrendlineOp),
+    DeleteTrendline(DeleteTrendlineOp),
+    InsertErrorBars(InsertErrorBarsOp),
+    SetErrorBars(SetErrorBarsOp),
+    DeleteErrorBars(DeleteErrorBarsOp),
+    SetChartSeriesAxis(SetChartSeriesAxisOp),
     SetProps(crate::props::SetPropsOp),
     SetCustomProp(crate::props::SetCustomPropOp),
     DeleteCustomProp(crate::props::DeleteCustomPropOp),
@@ -509,6 +574,13 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<XlsxOp>, Error> {
             }
             "setChartSize" => XlsxOp::SetChartSize(parse_set_chart_size(obj, i)?),
             "setChartAnchor" => XlsxOp::SetChartAnchor(parse_set_chart_anchor(obj, i)?),
+            "insertTrendline" => XlsxOp::InsertTrendline(parse_insert_trendline(obj, i)?),
+            "setTrendline" => XlsxOp::SetTrendline(parse_set_trendline(obj, i)?),
+            "deleteTrendline" => XlsxOp::DeleteTrendline(parse_delete_trendline(obj, i)?),
+            "insertErrorBars" => XlsxOp::InsertErrorBars(parse_insert_error_bars(obj, i)?),
+            "setErrorBars" => XlsxOp::SetErrorBars(parse_set_error_bars(obj, i)?),
+            "deleteErrorBars" => XlsxOp::DeleteErrorBars(parse_delete_error_bars(obj, i)?),
+            "setChartSeriesAxis" => XlsxOp::SetChartSeriesAxis(parse_set_series_axis(obj, i)?),
             "setProps" => XlsxOp::SetProps(crate::props::parse_set_props(obj, i, "xlsx:workbook")?),
             "setCustomProp" => XlsxOp::SetCustomProp(crate::props::parse_set_custom_prop(
                 obj,
@@ -2000,6 +2072,144 @@ fn parse_set_chart_anchor(
         ));
     }
     Ok(op)
+}
+
+fn parse_insert_trendline(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<InsertTrendlineOp, Error> {
+    deny_keys(
+        obj,
+        i,
+        &[
+            "op",
+            "id",
+            "type",
+            "order",
+            "period",
+            "displayRSquared",
+            "displayEquation",
+            "name",
+        ],
+    )?;
+    let id = require_id(obj, i)?;
+    let (target, index) = chart::parse_series_id(&id, i)?;
+    let spec = crate::chart::remain::parse_trendline_write(obj, i, true)?;
+    Ok(InsertTrendlineOp {
+        id,
+        target,
+        index,
+        spec,
+    })
+}
+
+fn parse_set_trendline(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<SetTrendlineOp, Error> {
+    deny_keys(
+        obj,
+        i,
+        &[
+            "op",
+            "id",
+            "type",
+            "order",
+            "period",
+            "displayRSquared",
+            "displayEquation",
+            "name",
+        ],
+    )?;
+    let id = require_id(obj, i)?;
+    let (target, index, tl_index) = chart::parse_trendline_id(&id, i)?;
+    let spec = crate::chart::remain::parse_trendline_write(obj, i, false)?;
+    Ok(SetTrendlineOp {
+        id,
+        target,
+        index,
+        tl_index,
+        spec,
+    })
+}
+
+fn parse_delete_trendline(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<DeleteTrendlineOp, Error> {
+    deny_keys(obj, i, &["op", "id"])?;
+    let id = require_id(obj, i)?;
+    let (target, index, tl_index) = chart::parse_trendline_id(&id, i)?;
+    Ok(DeleteTrendlineOp {
+        id,
+        target,
+        index,
+        tl_index,
+    })
+}
+
+fn parse_insert_error_bars(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<InsertErrorBarsOp, Error> {
+    deny_keys(obj, i, &["op", "id", "dir", "barType", "valType", "value"])?;
+    let id = require_id(obj, i)?;
+    let (target, index) = chart::parse_series_id(&id, i)?;
+    let spec = crate::chart::remain::parse_error_bars_write(obj, i, true)?;
+    Ok(InsertErrorBarsOp {
+        id,
+        target,
+        index,
+        spec,
+    })
+}
+
+fn parse_set_error_bars(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<SetErrorBarsOp, Error> {
+    deny_keys(obj, i, &["op", "id", "dir", "barType", "valType", "value"])?;
+    let id = require_id(obj, i)?;
+    let (target, index, eb_index) = chart::parse_error_bars_id(&id, i)?;
+    let spec = crate::chart::remain::parse_error_bars_write(obj, i, false)?;
+    Ok(SetErrorBarsOp {
+        id,
+        target,
+        index,
+        eb_index,
+        spec,
+    })
+}
+
+fn parse_delete_error_bars(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<DeleteErrorBarsOp, Error> {
+    deny_keys(obj, i, &["op", "id"])?;
+    let id = require_id(obj, i)?;
+    let (target, index, eb_index) = chart::parse_error_bars_id(&id, i)?;
+    Ok(DeleteErrorBarsOp {
+        id,
+        target,
+        index,
+        eb_index,
+    })
+}
+
+fn parse_set_series_axis(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<SetChartSeriesAxisOp, Error> {
+    deny_keys(obj, i, &["op", "id", "axis"])?;
+    let id = require_id(obj, i)?;
+    let (target, index) = chart::parse_series_id(&id, i)?;
+    let secondary = crate::chart::remain::parse_series_axis(obj, i)?;
+    Ok(SetChartSeriesAxisOp {
+        id,
+        target,
+        index,
+        secondary,
+    })
 }
 
 fn parse_chart_type_field(v: Option<&Value>, i: usize, required: bool) -> Result<ChartType, Error> {

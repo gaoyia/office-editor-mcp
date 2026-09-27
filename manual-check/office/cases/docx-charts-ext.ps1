@@ -121,7 +121,8 @@ $doughnut = Find-ChartByType $tree 'doughnut'
 $radar = Find-ChartByType $tree 'radar'
 $bubble = Find-ChartByType $tree 'bubble'
 $combo = Find-ChartByType $tree 'combo'
-$other = Find-ChartByType $tree 'other'
+$stock = Find-ChartByType $tree 'stock'
+if (-not $stock) { $stock = Find-ChartByType $tree 'other' }
 $pivot = $null
 foreach ($c in @($tree.charts)) {
     $flags = @($c.flags)
@@ -339,17 +340,17 @@ if ($pivot) {
 }
 Add-Check 'docx-Cx7' $pvOk $pvDetail
 
-# Cx8：股价/曲面仍受限。
+# Cx8：股价 type=stock，改类型仍拒绝。
 $otOut = Get-OutPath 'docx-charts-ext-other.docx'
 $otOk = $false
-$otDetail = 'no-other'
-if ($other) {
+$otDetail = 'no-stock'
+if ($stock) {
     if (Test-Path $otOut) { Remove-Item -Force $otOut }
     $raw = Invoke-OoxpExpectFail @{
         schemaVersion = 1; action = 'apply'
         path = $src.Replace('\', '/')
         output = $otOut.Replace('\', '/')
-        ops = @(@{ op = 'setChartType'; id = $other.id; type = 'col' })
+        ops = @(@{ op = 'setChartType'; id = $stock.id; type = 'col' })
     } 'docx-charts-ext-other'
     $code = ''
     try { $code = [string](($raw.Stderr | ConvertFrom-Json).error.code) } catch { $code = $raw.Stderr }
@@ -357,7 +358,7 @@ if ($other) {
     $docOt = Open-WordDoc $word $src
     $capOt = [string]$docOt.ActiveWindow.Caption
     Close-WordDoc $docOt
-    $otOk = ($code -eq 'NotImplemented') -and $noWrite -and ($capOt -notmatch 'Repair')
-    $otDetail = "type=$($other.type) code=$code wrote=$(-not $noWrite) caption=$capOt"
+    $otOk = ($stock.type -eq 'stock') -and ($code -eq 'NotImplemented') -and $noWrite -and ($capOt -notmatch 'Repair')
+    $otDetail = "type=$($stock.type) code=$code wrote=$(-not $noWrite) caption=$capOt"
 }
 Add-Check 'docx-Cx8' $otOk $otDetail

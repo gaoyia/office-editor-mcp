@@ -39,6 +39,7 @@ pptx 模块不要引用 `docx::` 或 `xlsx::`。`c:chart`（§21.2）用 `crates
 | 4 | `.plan/2026年-9月-27日-✅-pptx-SmartArt.md` | 无（不要跟 `pic` 绑） |
 | 5 | `.plan/2026年-9月-27日-✅-pptx-备注.md` | 幻灯片图 |
 | 6 | `.plan/2026年-9月-27日-✅-pptx-批注.md` | 幻灯片图 |
+| C1 | `.plan/2026年-9月-27日-✅-图表剩余.md` | 幻灯片图表已过 |
 
 0 与 2 不要合成一份。图是 `p:pic`，图表是 `p:graphicFrame`，位置是画布 `a:xfrm`。第一期页名单和 `setShapeText` 见总计划。
 
@@ -65,7 +66,6 @@ pptx 模块不要引用 `docx::` 或 `xlsx::`。`c:chart`（§21.2）用 `crates
 
 | 序 | 计划 | 前置 |
 | --- | --- | --- |
-| C1 | `.plan/2026年-9月-27日-❌-图表剩余.md` | 幻灯片图表已过 |
 | C2 | `.plan/2026年-9月-27日-❌-SmartArt跨家族.md` | SmartArt 已过 |
 | C3 | `.plan/2026年-9月-27日-❌-批注墨迹.md` | 批注已过 |
 

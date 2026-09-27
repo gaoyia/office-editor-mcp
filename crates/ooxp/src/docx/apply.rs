@@ -292,6 +292,27 @@ pub fn apply(bytes: &[u8], ops: &[DocxOp]) -> Result<Vec<u8>, Error> {
             DocxOp::SetChartWrap(op) => {
                 charts::apply_wrap(&mut pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
             }
+            DocxOp::InsertTrendline(op) => {
+                charts::apply_insert_trendline(&mut pkg, &mut docs, &doc_part, &catalog, op, i)?;
+            }
+            DocxOp::SetTrendline(op) => {
+                charts::apply_set_trendline(&mut pkg, &mut docs, &doc_part, &catalog, op, i)?;
+            }
+            DocxOp::DeleteTrendline(op) => {
+                charts::apply_delete_trendline(&mut pkg, &mut docs, &doc_part, &catalog, op, i)?;
+            }
+            DocxOp::InsertErrorBars(op) => {
+                charts::apply_insert_error_bars(&mut pkg, &mut docs, &doc_part, &catalog, op, i)?;
+            }
+            DocxOp::SetErrorBars(op) => {
+                charts::apply_set_error_bars(&mut pkg, &mut docs, &doc_part, &catalog, op, i)?;
+            }
+            DocxOp::DeleteErrorBars(op) => {
+                charts::apply_delete_error_bars(&mut pkg, &mut docs, &doc_part, &catalog, op, i)?;
+            }
+            DocxOp::SetChartSeriesAxis(op) => {
+                charts::apply_series_axis(&mut pkg, &mut docs, &doc_part, &catalog, op, i)?;
+            }
             DocxOp::InsertSmartArt(op) => {
                 smartart::apply_insert(
                     &mut pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i,
