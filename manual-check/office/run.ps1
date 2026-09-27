@@ -44,6 +44,7 @@ $order = @(
     'docx-revision'
     'docx-hyperlink'
     'docx-field'
+    'docx-numbering'
     'docx-headerfooter'
     'docx-distance'
     'docx-link'

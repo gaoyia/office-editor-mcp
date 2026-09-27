@@ -36,6 +36,7 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 | Rv1–Rv6 | ✅ | Word 16.0：`docx-revision.ps1`，6 PASS / 0 FAIL。名单、接受删除、拒绝插入、接受插入、拒绝删除、带修订段 `setParaText` 得 `NotImplemented`。标题栏无 Repair |
 | Hb1–Hb7 | ✅ | Word 16.0：`docx-hyperlink.ps1`，7 PASS / 0 FAIL。名单、改 URL、插链、删链、插书签、删书签、带链段 `setParaText` 得 `NotImplemented`。标题栏无 Repair |
 | Fd1–Fd7 | ✅ | Word 16.0：`docx-field.ps1`，7 PASS / 0 FAIL。名单、改 PAGE 为 DATE、插 DATE、删域留结果、删域留指令、页眉 PAGE、带域段 `setParaText` 得 `NotImplemented`。标题栏无 Repair |
+| Nl1–Nl6 | ✅ | Word 16.0：`docx-numbering.ps1`，6 PASS / 0 FAIL。名单、段上 `num`/`ilvl`、插 decimal 定义、绑两段、改 bullet、解绑。标题栏无 Repair |
 | O1 | 🚫 | 领域层不做原样保存，与 xlsx 清单相同。零脏写回见 OPC 库测试。Word 另存 create 产物见 `docx-O1-word-resave`。此前记的 `SaveAs2` 挂起，拆分后重跑没再出现，一秒内返回 |
 
 ## create
@@ -332,6 +333,19 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 | Fd5 | 删域留指令 | `deleteField` 且 `keep` 为 `instr` 后指令字还在、域消失，无修复 |
 | Fd6 | 页眉 PAGE | 默认页眉里的 PAGE 能列出，id 带 `header:` 前缀 |
 | Fd7 | 改字拒绝 | 对仍带本期域的段发 `setParaText` 得 `NotImplemented`，文件未写坏 |
+
+## 编号列表
+
+准备一份无编号的 create 产物，再用 `insertNumbering` / `setParaNumbering` 写入。`inspect` 带 `scope.numbering: true`。手测脚本 `manual-check/office/cases/docx-numbering.ps1`。脚注编号与节行号不在本组。
+
+| 序号 | 检查 | 通过标准 |
+| --- | --- | --- |
+| Nl1 | 名单 | 无 scope 时仍有 `numberingCount` 且没有 `numberings`；给了 `scope.numbering` 后能列出 `num:`，带 `levels` |
+| Nl2 | 段上编号 | `setParaNumbering` 绑定后该段有 `num` 与 `ilvl` |
+| Nl3 | 插定义 | `insertNumbering`（`decimal`）后 Word 无修复，`numberingCount` 增加 |
+| Nl4 | 套用 | 两段绑同一实例后 Word 能看见编号，无修复 |
+| Nl5 | 改格式 | `setNumbering` 把该级 `numFmt` 改成 `bullet` 后 Word 无修复 |
+| Nl6 | 解绑 | `setParaNumbering` 且 `num` 为 `null` 后该段无编号，无修复 |
 
 ## 原样保存（opc 验收）
 

@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "note.docx",
+  "output": "note.numbering.docx",
+  "ops": [
+    {
+      "op": "insertNumbering",
+      "id": "docx:document",
+      "kind": "decimal"
+    },
+    {
+      "op": "setParaNumbering",
+      "id": "para:AAAA0001",
+      "num": "num:1",
+      "ilvl": 0
+    },
+    {
+      "op": "setNumbering",
+      "id": "abstractNum:1",
+      "ilvl": 0,
+      "numFmt": "bullet",
+      "lvlText": "·"
+    },
+    {
+      "op": "setParaNumbering",
+      "id": "para:AAAA0001",
+      "num": null
+    }
+  ]
+}

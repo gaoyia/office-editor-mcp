@@ -179,6 +179,17 @@ pub(crate) enum IdReason {
     FieldIndexFromOne,
     /// insertField 必须用正文或页眉页脚段落 id
     InsertFieldNeedsPara,
+    /// insertNumbering 必须用 docx:document
+    InsertNumberingNeedsDocument,
+    /// 编号实例 id 必须是 num:N
+    NumPrefix,
+    NumIndexNotInt,
+    NumIndexFromOne,
+    /// 抽象编号 id 必须是 abstractNum:N
+    AbstractNumPrefix,
+    AbstractNumIndexNotInt,
+    /// setParaNumbering 必须用正文或页眉页脚段落 id
+    SetParaNumberingNeedsPara,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -407,6 +418,13 @@ define_error_kinds! {
     EmptyFieldInstr => vec![Self::EmptyFieldInstr],
     InvalidFieldKeep => vec![Self::InvalidFieldKeep],
     NeedSetFieldInstr => vec![Self::NeedSetFieldInstr],
+    NumberingNotFound { id: String } => vec![Self::NumberingNotFound { id: "num:1".into() }],
+    AbstractNumNotFound { id: String } => vec![Self::AbstractNumNotFound { id: "abstractNum:1".into() }],
+    InvalidNumberingKind => vec![Self::InvalidNumberingKind],
+    InvalidListNumFmt => vec![Self::InvalidListNumFmt],
+    NeedSetNumberingField => vec![Self::NeedSetNumberingField],
+    InvalidIlvl => vec![Self::InvalidIlvl],
+    NeedSetParaNumberingNum => vec![Self::NeedSetParaNumberingNum],
     OpcOpen { reason: OpcReason } => OpcReason::all_samples()
         .into_iter()
         .map(|reason| Self::OpcOpen { reason })
@@ -569,6 +587,13 @@ impl IdReason {
             Self::FieldIndexNotInt,
             Self::FieldIndexFromOne,
             Self::InsertFieldNeedsPara,
+            Self::InsertNumberingNeedsDocument,
+            Self::NumPrefix,
+            Self::NumIndexNotInt,
+            Self::NumIndexFromOne,
+            Self::AbstractNumPrefix,
+            Self::AbstractNumIndexNotInt,
+            Self::SetParaNumberingNeedsPara,
         ]
     }
 }
@@ -689,6 +714,11 @@ impl ErrorKind {
             | Self::EmptyFieldInstr
             | Self::InvalidFieldKeep
             | Self::NeedSetFieldInstr
+            | Self::InvalidNumberingKind
+            | Self::InvalidListNumFmt
+            | Self::NeedSetNumberingField
+            | Self::InvalidIlvl
+            | Self::NeedSetParaNumberingNum
             | Self::LastTextBoxPara
             | Self::LastNotePara
             | Self::NeedNoteNumberingField
@@ -748,7 +778,9 @@ impl ErrorKind {
             | Self::RevisionNotFound { .. }
             | Self::HyperlinkNotFound { .. }
             | Self::BookmarkNotFound { .. }
-            | Self::FieldNotFound { .. } => IdNotFound,
+            | Self::FieldNotFound { .. }
+            | Self::NumberingNotFound { .. }
+            | Self::AbstractNumNotFound { .. } => IdNotFound,
             Self::ScopeRequired { .. } => ScopeRequired,
             Self::SharedFormulaMaster { .. }
             | Self::InkComment { .. }

@@ -12,6 +12,7 @@ use super::field;
 use super::hf::{self, HfKind, HfPart};
 use super::link;
 use super::notes;
+use super::numbering;
 use super::para::{self, NoteKind};
 use super::picture;
 use super::request::InspectScope;
@@ -101,6 +102,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         "hyperlinkCount": link::count_hyperlinks(&doc.root),
         "bookmarkCount": link::count_bookmarks(&doc.root),
         "fieldCount": field::count_fields(&doc.root),
+        "numberingCount": numbering::count_nums(&pkg, &part)?,
         "outline": outline,
         "headers": headers,
         "footers": footers,
@@ -158,6 +160,9 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         }
         if scope.fields {
             tree["fields"] = Value::Array(field::fields_json(&doc.root, None)?);
+        }
+        if scope.numbering {
+            tree["numberings"] = Value::Array(numbering::numberings_json(&pkg, &part)?);
         }
         if let (Some(from), Some(max_paras)) = (scope.from, scope.max_paras) {
             let start = from as usize;
@@ -466,6 +471,9 @@ fn para_json(
             "stable": stable,
         })
     };
+    if let Some(obj) = node.as_object_mut() {
+        numbering::stamp_para(obj, p);
+    }
     if let Some(n) = picture_count {
         node["pictureCount"] = json!(n);
     }

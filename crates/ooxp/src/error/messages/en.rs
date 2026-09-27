@@ -274,6 +274,19 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::InsertFieldNeedsPara => {
                 "insertField id must be a body or header/footer paragraph id".into()
             }
+            IdReason::InsertNumberingNeedsDocument => {
+                "insertNumbering id must be docx:document".into()
+            }
+            IdReason::NumPrefix => "Numbering instance id must be num:N".into(),
+            IdReason::NumIndexNotInt => "num id must be a positive integer".into(),
+            IdReason::NumIndexFromOne => "num id starts at 1".into(),
+            IdReason::AbstractNumPrefix => "Abstract numbering id must be abstractNum:N".into(),
+            IdReason::AbstractNumIndexNotInt => {
+                "abstractNum id must be an integer".into()
+            }
+            IdReason::SetParaNumberingNeedsPara => {
+                "setParaNumbering id must be a body or header/footer paragraph id".into()
+            }
         },
         ErrorKind::SheetNotFound { name } => format!("Sheet not found: {name}"),
         ErrorKind::ParaNotFound { id } => format!("Paragraph not found: {id}"),
@@ -505,6 +518,21 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::EmptyFieldInstr => "instr must not be empty".into(),
         ErrorKind::InvalidFieldKeep => "keep must be result or instr".into(),
         ErrorKind::NeedSetFieldInstr => "setField requires instr".into(),
+        ErrorKind::NumberingNotFound { id } => format!("Numbering instance not found: {id}"),
+        ErrorKind::AbstractNumNotFound { id } => format!("Abstract numbering not found: {id}"),
+        ErrorKind::InvalidNumberingKind => "kind must be decimal or bullet".into(),
+        ErrorKind::InvalidListNumFmt => {
+            "numFmt must be decimal, bullet, lowerLetter, upperLetter, lowerRoman, or upperRoman"
+                .into()
+        }
+        ErrorKind::NeedSetNumberingField => {
+            "setNumbering requires at least one of numFmt, start, or lvlText".into()
+        }
+        ErrorKind::InvalidIlvl => "ilvl must be an integer from 0 to 8, and that level must exist"
+            .into(),
+        ErrorKind::NeedSetParaNumberingNum => {
+            "setParaNumbering requires num (a num: id or null)".into()
+        }
         ErrorKind::OpcOpen { reason } => match reason {
             OpcReason::EmptyPartName => "Part name must not be empty".into(),
             OpcReason::InvalidPartName { name } => format!("Invalid part name: {name}"),

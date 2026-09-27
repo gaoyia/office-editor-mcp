@@ -82,6 +82,7 @@
         "hyperlinks": { "type": "boolean" },
         "bookmarks": { "type": "boolean" },
         "fields": { "type": "boolean" },
+        "numbering": { "type": "boolean" },
         "slide": { "type": "integer", "minimum": 1 },
         "maxShapes": { "type": "integer", "minimum": 1, "maximum": 5000 }
       },
@@ -541,6 +542,9 @@
               { "$ref": "#/$defs/insertFieldOp" },
               { "$ref": "#/$defs/setFieldOp" },
               { "$ref": "#/$defs/deleteFieldOp" },
+              { "$ref": "#/$defs/insertNumberingOp" },
+              { "$ref": "#/$defs/setNumberingOp" },
+              { "$ref": "#/$defs/setParaNumberingOp" },
               { "$ref": "#/$defs/setTextBoxLinkOp" },
               { "$ref": "#/$defs/insertFootnoteOp" },
               { "$ref": "#/$defs/insertEndnoteOp" },
@@ -1243,6 +1247,47 @@
         "op": { "const": "deleteField" },
         "id": { "type": "string", "minLength": 1 },
         "keep": { "enum": ["result", "instr"] }
+      }
+    },
+    "insertNumberingOp": {
+      "type": "object",
+      "required": ["op", "id", "kind"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "insertNumbering" },
+        "id": { "const": "docx:document" },
+        "kind": { "enum": ["decimal", "bullet"] }
+      }
+    },
+    "setNumberingOp": {
+      "type": "object",
+      "required": ["op", "id", "ilvl"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "setNumbering" },
+        "id": { "type": "string", "minLength": 1 },
+        "ilvl": { "type": "integer", "minimum": 0, "maximum": 8 },
+        "numFmt": {
+          "enum": ["decimal", "bullet", "lowerLetter", "upperLetter", "lowerRoman", "upperRoman"]
+        },
+        "start": { "type": "integer", "minimum": 1 },
+        "lvlText": { "type": "string" }
+      }
+    },
+    "setParaNumberingOp": {
+      "type": "object",
+      "required": ["op", "id", "num"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "setParaNumbering" },
+        "id": { "type": "string", "minLength": 1 },
+        "num": {
+          "oneOf": [
+            { "type": "string", "minLength": 1 },
+            { "type": "null" }
+          ]
+        },
+        "ilvl": { "type": "integer", "minimum": 0, "maximum": 8 }
       }
     },
     "setTextBoxLinkOp": {

@@ -252,6 +252,17 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::InsertFieldNeedsPara => {
                 "insertField 的 id 必须是正文或页眉页脚段落 id".into()
             }
+            IdReason::InsertNumberingNeedsDocument => {
+                "insertNumbering 的 id 必须是 docx:document".into()
+            }
+            IdReason::NumPrefix => "编号实例 id 必须是 num:N".into(),
+            IdReason::NumIndexNotInt => "num 后面必须是正整数".into(),
+            IdReason::NumIndexFromOne => "num 序号从 1 起".into(),
+            IdReason::AbstractNumPrefix => "抽象编号 id 必须是 abstractNum:N".into(),
+            IdReason::AbstractNumIndexNotInt => "abstractNum 后面必须是整数".into(),
+            IdReason::SetParaNumberingNeedsPara => {
+                "setParaNumbering 的 id 必须是正文或页眉页脚段落 id".into()
+            }
         },
         ErrorKind::SheetNotFound { name } => format!("找不到工作表：{name}"),
         ErrorKind::ParaNotFound { id } => format!("找不到段落：{id}"),
@@ -427,6 +438,20 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::EmptyFieldInstr => "instr 不能为空".into(),
         ErrorKind::InvalidFieldKeep => "keep 只能是 result 或 instr".into(),
         ErrorKind::NeedSetFieldInstr => "setField 必须有 instr".into(),
+        ErrorKind::NumberingNotFound { id } => format!("找不到编号实例：{id}"),
+        ErrorKind::AbstractNumNotFound { id } => format!("找不到抽象编号：{id}"),
+        ErrorKind::InvalidNumberingKind => "kind 只能是 decimal 或 bullet".into(),
+        ErrorKind::InvalidListNumFmt => {
+            "numFmt 只能是 decimal、bullet、lowerLetter、upperLetter、lowerRoman 或 upperRoman"
+                .into()
+        }
+        ErrorKind::NeedSetNumberingField => {
+            "setNumbering 至少要给 numFmt、start 或 lvlText 之一".into()
+        }
+        ErrorKind::InvalidIlvl => "ilvl 必须是 0 到 8 的整数，且该抽象定义上要有这一级".into(),
+        ErrorKind::NeedSetParaNumberingNum => {
+            "setParaNumbering 必须有 num（num: 实例 id 或 null）".into()
+        }
         ErrorKind::OpcOpen { reason } => match reason {
             OpcReason::EmptyPartName => "部件名不能为空".into(),
             OpcReason::InvalidPartName { name } => format!("非法部件名：{name}"),

@@ -10,6 +10,7 @@ mod hf;
 mod inspect;
 mod link;
 mod notes;
+mod numbering;
 mod para;
 mod picture;
 mod request;
@@ -39,6 +40,8 @@ pub const REL_OFFICE_DOCUMENT: &str =
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument";
 pub const REL_STYLES: &str =
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles";
+pub const REL_NUMBERING: &str =
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering";
 pub const REL_SETTINGS: &str =
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/settings";
 pub const REL_HEADER: &str =
@@ -70,6 +73,8 @@ pub const CT_DOCUMENT: &str =
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml";
 pub const CT_STYLES: &str =
     "application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml";
+pub const CT_NUMBERING: &str =
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml";
 pub const CT_SETTINGS: &str =
     "application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml";
 pub const CT_HEADER: &str =

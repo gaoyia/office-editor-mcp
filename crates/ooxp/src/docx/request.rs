@@ -46,6 +46,8 @@ pub struct InspectScope {
     pub bookmarks: bool,
     /// 为 true 时列出域。
     pub fields: bool,
+    /// 为 true 时列出编号定义。
+    pub numbering: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -533,6 +535,29 @@ pub struct DeleteFieldOp {
 }
 
 #[derive(Debug, Clone)]
+pub struct InsertNumberingOp {
+    pub kind: super::numbering::NumberingKind,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetNumberingOp {
+    pub id: String,
+    pub abstract_id: u32,
+    pub ilvl: u32,
+    pub num_fmt: Option<String>,
+    pub start: Option<u32>,
+    pub lvl_text: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetParaNumberingOp {
+    pub id: String,
+    pub para: ParaTarget,
+    pub num: Option<u32>,
+    pub ilvl: u32,
+}
+
+#[derive(Debug, Clone)]
 pub enum DocxOp {
     SetParaText(SetParaTextOp),
     SetHeaderFooterDistance(SetHfDistanceOp),
@@ -582,6 +607,9 @@ pub enum DocxOp {
     InsertField(InsertFieldOp),
     SetField(SetFieldOp),
     DeleteField(DeleteFieldOp),
+    InsertNumbering(InsertNumberingOp),
+    SetNumbering(SetNumberingOp),
+    SetParaNumbering(SetParaNumberingOp),
     SetTextBoxLink(SetTextBoxLinkOp),
     InsertFootnote(InsertNoteOp),
     InsertEndnote(InsertNoteOp),
@@ -652,6 +680,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
             "hyperlinks",
             "bookmarks",
             "fields",
+            "numbering",
         ],
     )?;
 
@@ -668,6 +697,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
     let hyperlinks = parse_bool_field(obj.get("hyperlinks"), "hyperlinks")?;
     let bookmarks = parse_bool_field(obj.get("bookmarks"), "bookmarks")?;
     let fields = parse_bool_field(obj.get("fields"), "fields")?;
+    let numbering = parse_bool_field(obj.get("numbering"), "numbering")?;
     if text_box_content && !text_boxes {
         return Err(Error::with_path(
             ErrorKind::ScopeFieldRequires {
@@ -694,6 +724,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
                 && !obj.contains_key("hyperlinks")
                 && !obj.contains_key("bookmarks")
                 && !obj.contains_key("fields")
+                && !obj.contains_key("numbering")
             {
                 return Ok(None);
             }
@@ -713,6 +744,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
                 hyperlinks,
                 bookmarks,
                 fields,
+                numbering,
             }))
         }
         (Some(f), Some(m)) => {
@@ -769,6 +801,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
                 hyperlinks,
                 bookmarks,
                 fields,
+                numbering,
             }))
         }
         _ => Err(Error::with_path(
@@ -899,6 +932,11 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<DocxOp>, Error> {
             "insertField" => out.push(DocxOp::InsertField(parse_insert_field(obj, i)?)),
             "setField" => out.push(DocxOp::SetField(parse_set_field(obj, i)?)),
             "deleteField" => out.push(DocxOp::DeleteField(parse_delete_field(obj, i)?)),
+            "insertNumbering" => out.push(DocxOp::InsertNumbering(parse_insert_numbering(obj, i)?)),
+            "setNumbering" => out.push(DocxOp::SetNumbering(parse_set_numbering(obj, i)?)),
+            "setParaNumbering" => {
+                out.push(DocxOp::SetParaNumbering(parse_set_para_numbering(obj, i)?))
+            }
             "setTextBoxLink" => out.push(DocxOp::SetTextBoxLink(parse_set_txbx_link(obj, i)?)),
             "insertFootnote" => out.push(DocxOp::InsertFootnote(parse_insert_note(
                 obj,
@@ -2160,6 +2198,218 @@ fn parse_delete_field(
         }
     };
     Ok(DeleteFieldOp { id, target, keep })
+}
+
+fn parse_insert_numbering(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<InsertNumberingOp, Error> {
+    deny_keys(obj, i, &["op", "id", "kind"])?;
+    let id = require_op_id(obj, i)?;
+    if id != "docx:document" {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::InsertNumberingNeedsDocument,
+            },
+            format!("ops[{i}].id"),
+        ));
+    }
+    let kind = match obj.get("kind").and_then(Value::as_str) {
+        Some(s) => super::numbering::parse_kind(s).ok_or_else(|| {
+            Error::with_path(ErrorKind::InvalidNumberingKind, format!("ops[{i}].kind"))
+        })?,
+        None => {
+            return Err(Error::with_path(
+                ErrorKind::OpRequiresField {
+                    op: "insertNumbering".into(),
+                    field: "kind".into(),
+                },
+                format!("ops[{i}].kind"),
+            ));
+        }
+    };
+    Ok(InsertNumberingOp { kind })
+}
+
+fn parse_set_numbering(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<SetNumberingOp, Error> {
+    deny_keys(obj, i, &["op", "id", "ilvl", "numFmt", "start", "lvlText"])?;
+    let id = require_op_id(obj, i)?;
+    let abstract_id = super::numbering::parse_abstract_ref(&id, &format!("ops[{i}].id"))?;
+    let ilvl = match obj.get("ilvl") {
+        Some(Value::Number(n)) => n.as_u64().ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::WrongType {
+                    field: "ilvl".into(),
+                    expected: TypeName::Integer,
+                },
+                format!("ops[{i}].ilvl"),
+            )
+        })? as u32,
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "ilvl".into(),
+                    expected: TypeName::Integer,
+                },
+                format!("ops[{i}].ilvl"),
+            ));
+        }
+        None => {
+            return Err(Error::with_path(
+                ErrorKind::OpRequiresField {
+                    op: "setNumbering".into(),
+                    field: "ilvl".into(),
+                },
+                format!("ops[{i}].ilvl"),
+            ));
+        }
+    };
+    if ilvl > 8 {
+        return Err(Error::with_path(
+            ErrorKind::InvalidIlvl,
+            format!("ops[{i}].ilvl"),
+        ));
+    }
+    let num_fmt = match obj.get("numFmt") {
+        None => None,
+        Some(Value::String(s)) => {
+            if !super::numbering::NUM_FMT_SET.contains(&s.as_str()) {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidListNumFmt,
+                    format!("ops[{i}].numFmt"),
+                ));
+            }
+            Some(s.clone())
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "numFmt".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].numFmt"),
+            ));
+        }
+    };
+    let start = match obj.get("start") {
+        None => None,
+        Some(Value::Number(n)) => {
+            let u = n.as_u64().ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::WrongType {
+                        field: "start".into(),
+                        expected: TypeName::Integer,
+                    },
+                    format!("ops[{i}].start"),
+                )
+            })?;
+            if u < 1 {
+                return Err(Error::with_path(
+                    ErrorKind::MinValue {
+                        field: "start".into(),
+                        min: 1,
+                    },
+                    format!("ops[{i}].start"),
+                ));
+            }
+            Some(u as u32)
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "start".into(),
+                    expected: TypeName::Integer,
+                },
+                format!("ops[{i}].start"),
+            ));
+        }
+    };
+    let lvl_text = optional_op_string(obj, i, "lvlText")?;
+    if num_fmt.is_none() && start.is_none() && lvl_text.is_none() {
+        return Err(Error::with_path(
+            ErrorKind::NeedSetNumberingField,
+            format!("ops[{i}]"),
+        ));
+    }
+    Ok(SetNumberingOp {
+        id,
+        abstract_id,
+        ilvl,
+        num_fmt,
+        start,
+        lvl_text,
+    })
+}
+
+fn parse_set_para_numbering(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<SetParaNumberingOp, Error> {
+    deny_keys(obj, i, &["op", "id", "num", "ilvl"])?;
+    let id = require_op_id(obj, i)?;
+    let para = parse_story_para_at(
+        &id,
+        &format!("ops[{i}].id"),
+        IdReason::SetParaNumberingNeedsPara,
+    )?;
+    let num = match obj.get("num") {
+        Some(Value::Null) => None,
+        Some(Value::String(s)) => Some(super::numbering::parse_num_ref(
+            s,
+            &format!("ops[{i}].num"),
+        )?),
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "num".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].num"),
+            ));
+        }
+        None => {
+            return Err(Error::with_path(
+                ErrorKind::NeedSetParaNumberingNum,
+                format!("ops[{i}].num"),
+            ));
+        }
+    };
+    let ilvl = match obj.get("ilvl") {
+        None => 0,
+        Some(Value::Number(n)) => n.as_u64().ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::WrongType {
+                    field: "ilvl".into(),
+                    expected: TypeName::Integer,
+                },
+                format!("ops[{i}].ilvl"),
+            )
+        })? as u32,
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "ilvl".into(),
+                    expected: TypeName::Integer,
+                },
+                format!("ops[{i}].ilvl"),
+            ));
+        }
+    };
+    if ilvl > 8 {
+        return Err(Error::with_path(
+            ErrorKind::InvalidIlvl,
+            format!("ops[{i}].ilvl"),
+        ));
+    }
+    Ok(SetParaNumberingOp {
+        id,
+        para,
+        num,
+        ilvl,
+    })
 }
 
 fn parse_col_after(v: Option<&Value>, i: usize) -> Result<u32, Error> {

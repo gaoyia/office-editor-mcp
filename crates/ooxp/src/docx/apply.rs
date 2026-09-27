@@ -12,21 +12,22 @@ use super::field;
 use super::hf::{self, HfKind};
 use super::link;
 use super::notes;
+use super::numbering;
 use super::para::{self, BodyPara, HostPara, NoteKind, ParaTarget};
 use super::picture;
 use super::request::{
     DeleteBookmarkOp, DeleteColOp, DeleteCommentOp, DeleteFieldOp, DeleteHyperlinkOp, DeleteNoteOp,
     DeleteParaOp, DeletePictureOp, DeleteRowOp, DeleteTableOp, DeleteTextBoxOp, DocxOp,
     InsertBookmarkOp, InsertColOp, InsertCommentOp, InsertFieldOp, InsertHeaderFooterOp,
-    InsertHyperlinkOp, InsertNoteOp, InsertParaOp, InsertParaPlace, InsertPictureOp, InsertRowOp,
-    InsertTableOp, InsertTextBoxOp, MergeCellsOp, NoteNumberTarget, ReplacePictureOp,
-    ReplyCommentOp, RevisionOp, SetBookmarkOp, SetColumnsOp, SetCommentDoneOp, SetCommentMetaOp,
-    SetCommentTextOp, SetDocGridOp, SetEvenAndOddHeadersOp, SetFieldOp, SetGutterAtTopOp,
-    SetHfDistanceOp, SetHfLinkOp, SetHyperlinkOp, SetLineNumberingOp, SetMirrorMarginsOp,
-    SetNoteNumberingOp, SetPageMarginOp, SetPageSizeOp, SetParaTextOp, SetPictureSizeOp,
-    SetPictureWrapOp, SetRtlGutterOp, SetTextBoxDirectionOp, SetTextBoxFillOp, SetTextBoxLineOp,
-    SetTextBoxLinkOp, SetTextBoxSizeOp, SetTextBoxWrapOp, SetTitlePageOp, SetVerticalAlignOp,
-    SplitCellsOp,
+    InsertHyperlinkOp, InsertNoteOp, InsertNumberingOp, InsertParaOp, InsertParaPlace,
+    InsertPictureOp, InsertRowOp, InsertTableOp, InsertTextBoxOp, MergeCellsOp, NoteNumberTarget,
+    ReplacePictureOp, ReplyCommentOp, RevisionOp, SetBookmarkOp, SetColumnsOp, SetCommentDoneOp,
+    SetCommentMetaOp, SetCommentTextOp, SetDocGridOp, SetEvenAndOddHeadersOp, SetFieldOp,
+    SetGutterAtTopOp, SetHfDistanceOp, SetHfLinkOp, SetHyperlinkOp, SetLineNumberingOp,
+    SetMirrorMarginsOp, SetNoteNumberingOp, SetNumberingOp, SetPageMarginOp, SetPageSizeOp,
+    SetParaNumberingOp, SetParaTextOp, SetPictureSizeOp, SetPictureWrapOp, SetRtlGutterOp,
+    SetTextBoxDirectionOp, SetTextBoxFillOp, SetTextBoxLineOp, SetTextBoxLinkOp, SetTextBoxSizeOp,
+    SetTextBoxWrapOp, SetTitlePageOp, SetVerticalAlignOp, SplitCellsOp,
 };
 use super::revision;
 use super::sect;
@@ -342,6 +343,15 @@ pub fn apply(bytes: &[u8], ops: &[DocxOp]) -> Result<Vec<u8>, Error> {
             }
             DocxOp::DeleteField(op) => {
                 apply_delete_field(&pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
+            }
+            DocxOp::InsertNumbering(op) => {
+                apply_insert_numbering(&mut pkg, &mut docs, &mut dirty, &doc_part, op)?;
+            }
+            DocxOp::SetNumbering(op) => {
+                apply_set_numbering(&pkg, &mut docs, &mut dirty, &doc_part, op, i)?;
+            }
+            DocxOp::SetParaNumbering(op) => {
+                apply_set_para_numbering(&pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
             }
         }
     }
@@ -699,6 +709,81 @@ fn apply_delete_field(
     })?;
     let doc = load_part(pkg, docs, &part_name)?;
     field::delete_field(&mut doc.root, op.target.n, op.keep, &op.id, i)?;
+    dirty.insert(part_name, ());
+    Ok(())
+}
+
+fn apply_insert_numbering(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    op: &InsertNumberingOp,
+) -> Result<(), Error> {
+    let part = numbering::ensure_part(pkg, docs, dirty, doc_part)?;
+    let doc = load_part(pkg, docs, &part)?;
+    numbering::insert_definition(&mut doc.root, op.kind);
+    dirty.insert(part, ());
+    Ok(())
+}
+
+fn apply_set_numbering(
+    pkg: &Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    op: &SetNumberingOp,
+    i: usize,
+) -> Result<(), Error> {
+    let Some(part) = numbering::numbering_part(pkg, doc_part)? else {
+        return Err(numbering::missing_abstract(&op.id, i));
+    };
+    let doc = load_part(pkg, docs, &part)?;
+    numbering::set_level(
+        &mut doc.root,
+        op.abstract_id,
+        op.ilvl,
+        op.num_fmt.as_deref(),
+        op.start,
+        op.lvl_text.as_deref(),
+        &op.id,
+        i,
+    )?;
+    dirty.insert(part, ());
+    Ok(())
+}
+
+fn apply_set_para_numbering(
+    pkg: &Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &SetParaNumberingOp,
+    i: usize,
+) -> Result<(), Error> {
+    if let Some(num_id) = op.num {
+        let num_part = numbering::numbering_part(pkg, doc_part)?
+            .ok_or_else(|| numbering::missing_num(&format!("num:{num_id}"), i))?;
+        {
+            let num_doc = load_part(pkg, docs, &num_part)?;
+            if !numbering::num_exists(&num_doc.root, num_id) {
+                return Err(numbering::missing_num(&format!("num:{num_id}"), i));
+            }
+        }
+    }
+    let part_name = part_for_para(pkg, catalog, doc_part, &op.para, &op.id, i)?;
+    let doc = load_part(pkg, docs, &part_name)?;
+    let el = find_insert_para_mut(&mut doc.root, &op.para).ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::ParaNotFound { id: op.id.clone() },
+            format!("ops[{i}].id"),
+        )
+    })?;
+    match op.num {
+        Some(n) => numbering::bind_para(el, n, op.ilvl),
+        None => numbering::unbind_para(el),
+    }
     dirty.insert(part_name, ());
     Ok(())
 }
