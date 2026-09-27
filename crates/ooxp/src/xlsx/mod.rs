@@ -7,6 +7,7 @@ mod chartsheet;
 mod create;
 mod hf;
 mod inspect;
+mod layout;
 mod picture;
 mod request;
 mod sheets;

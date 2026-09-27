@@ -73,6 +73,7 @@ $order = @(
     'xlsx-docprops'
     'xlsx-sheets'
     'xlsx-cellstyle'
+    'xlsx-layout'
     'pptx-docprops'
     'pptx-apply'
     'pptx-pictures'

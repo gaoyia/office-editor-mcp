@@ -10,6 +10,7 @@ use super::chart;
 use super::chartsheet;
 use super::hf;
 use super::inspect;
+use super::layout;
 use super::picture;
 use super::sheets;
 use super::style;
@@ -199,6 +200,30 @@ pub fn apply(bytes: &[u8], ops: &[XlsxOp]) -> Result<Vec<u8>, Error> {
                 sheets::set_hidden(&mut wb_doc, &sheet_index, op, i)?;
                 workbook_dirty = true;
             }
+            XlsxOp::SetColWidth(op) => {
+                let part = require_layout_worksheet(&sheet_index, &op.sheet, i)?;
+                load_dirty(&pkg, &mut dirty_sheets, &part, true)?;
+                let doc = dirty_of(&mut dirty_sheets, &part);
+                layout::apply_set_col_width(&mut doc.root, op)?;
+            }
+            XlsxOp::SetRowHeight(op) => {
+                let part = require_layout_worksheet(&sheet_index, &op.sheet, i)?;
+                load_dirty(&pkg, &mut dirty_sheets, &part, true)?;
+                let doc = dirty_of(&mut dirty_sheets, &part);
+                layout::apply_set_row_height(&mut doc.root, op)?;
+            }
+            XlsxOp::MergeRange(op) => {
+                let part = require_layout_worksheet(&sheet_index, &op.sheet, i)?;
+                load_dirty(&pkg, &mut dirty_sheets, &part, true)?;
+                let doc = dirty_of(&mut dirty_sheets, &part);
+                layout::apply_merge_range(&mut doc.root, op, i)?;
+            }
+            XlsxOp::UnmergeRange(op) => {
+                let part = require_layout_worksheet(&sheet_index, &op.sheet, i)?;
+                load_dirty(&pkg, &mut dirty_sheets, &part, true)?;
+                let doc = dirty_of(&mut dirty_sheets, &part);
+                layout::apply_unmerge_range(&mut doc.root, op);
+            }
             XlsxOp::DeleteChart(op) => {
                 let (part, kind) = require_named_sheet(&sheet_index, &op.target.sheet, i)?;
                 load_dirty(&pkg, &mut dirty_sheets, &part, false)?;
@@ -349,6 +374,31 @@ fn require_sheet_part(
     op_index: usize,
 ) -> Result<String, Error> {
     Ok(require_named_sheet(index, name, op_index)?.0)
+}
+
+fn require_layout_worksheet(
+    index: &[(String, String, &'static str)],
+    name: &str,
+    op_index: usize,
+) -> Result<String, Error> {
+    let meta = index
+        .iter()
+        .find(|(n, _, k)| n.eq_ignore_ascii_case(name) && *k == "worksheet");
+    if let Some((_, part, _)) = meta {
+        return Ok(part.clone());
+    }
+    if index.iter().any(|(n, _, _)| n.eq_ignore_ascii_case(name)) {
+        return Err(Error::with_path(
+            ErrorKind::LayoutWorksheetOnly,
+            format!("ops[{op_index}].id"),
+        ));
+    }
+    Err(Error::with_path(
+        ErrorKind::SheetNotFound {
+            name: name.to_string(),
+        },
+        format!("ops[{op_index}].id"),
+    ))
 }
 
 fn reject_hf_pic_sheet(
@@ -537,7 +587,7 @@ pub(crate) fn write_json_cell(
 
 /// 共享公式的主格带 `ref` 和 `si`，从属格只带 `si`（§18.3.1.40）。改写或清空主格会让从属格
 /// 的 `si` 失去定义，Excel 打开时报需要修复。第一期不做公式引用平移，因此直接拒绝这条 op。
-fn reject_shared_formula_master(
+pub(crate) fn reject_shared_formula_master(
     worksheet: &Element,
     cell: a1::CellRef,
     op_index: usize,
@@ -607,14 +657,7 @@ pub(crate) fn ensure_sheet_data(worksheet: &mut Element) -> &mut Element {
 }
 
 pub(crate) fn ensure_cell(sheet_data: &mut Element, cell: a1::CellRef) -> &mut Element {
-    let row_pos = find_row_insert_pos(sheet_data, cell.row);
-    if row_pos.1 {
-        // 已有该行，row_pos.0 是索引
-    } else {
-        let mut row = Element::new("row");
-        row.set_attr("r", cell.row.to_string());
-        sheet_data.children.insert(row_pos.0, Node::Element(row));
-    }
+    let _ = ensure_row(sheet_data, cell.row);
     let row_idx = find_row_insert_pos(sheet_data, cell.row).0;
     let Node::Element(row) = &mut sheet_data.children[row_idx] else {
         unreachable!();
@@ -630,6 +673,24 @@ pub(crate) fn ensure_cell(sheet_data: &mut Element, cell: a1::CellRef) -> &mut E
         unreachable!();
     };
     c
+}
+
+pub(crate) fn ensure_row(sheet_data: &mut Element, row: u32) -> &mut Element {
+    let row_pos = find_row_insert_pos(sheet_data, row);
+    if !row_pos.1 {
+        let mut el = Element::new("row");
+        el.set_attr("r", row.to_string());
+        sheet_data.children.insert(row_pos.0, Node::Element(el));
+    }
+    let row_idx = find_row_insert_pos(sheet_data, row).0;
+    let Node::Element(row_el) = &mut sheet_data.children[row_idx] else {
+        unreachable!();
+    };
+    row_el
+}
+
+pub(crate) fn find_row_index(sheet_data: &Element, row: u32) -> Option<usize> {
+    find_row_insert_pos(sheet_data, row).found_then()
 }
 
 fn find_row_insert_pos(sheet_data: &Element, row: u32) -> (usize, bool) {
@@ -669,7 +730,7 @@ fn find_cell_insert_pos(row: &Element, col: u32) -> (usize, bool) {
     (row.children.len(), false)
 }
 
-fn clear_cell(sheet_data: &mut Element, cell: a1::CellRef) {
+pub(crate) fn clear_cell(sheet_data: &mut Element, cell: a1::CellRef) {
     let Some(row_idx) = find_row_insert_pos(sheet_data, cell.row).found_then() else {
         return;
     };

@@ -111,6 +111,48 @@ pub fn format_cell(col: u32, row: u32) -> String {
     format!("{}{row}", col_to_letters(col))
 }
 
+/// 列字母或列区间，例如 `A`、`A:C`。不要带行号。
+pub fn parse_col_span(input: &str) -> Result<(u32, u32), Error> {
+    let s = input.trim();
+    if s.is_empty() {
+        return Err(Error::new(ErrorKind::InvalidRange {
+            reason: RangeReason::Empty,
+        }));
+    }
+    let (left, right) = match s.split_once(':') {
+        Some((a, b)) => (a, b),
+        None => (s, s),
+    };
+    let start = parse_col_letters(left)?;
+    let end = parse_col_letters(right)?;
+    if start > end {
+        return Err(Error::new(ErrorKind::InvalidRange {
+            reason: RangeReason::Reversed {
+                input: input.to_string(),
+            },
+        }));
+    }
+    Ok((start, end))
+}
+
+fn parse_col_letters(input: &str) -> Result<u32, Error> {
+    let s = input.trim();
+    if s.is_empty() || !s.bytes().all(|b| b.is_ascii_alphabetic()) {
+        return Err(Error::new(ErrorKind::InvalidRange {
+            reason: RangeReason::InvalidColLetters {
+                letters: input.to_string(),
+            },
+        }));
+    }
+    let col = letters_to_col(s)?;
+    if col == 0 || col > 16_384 {
+        return Err(Error::new(ErrorKind::InvalidRange {
+            reason: RangeReason::ColOutOfRange { col },
+        }));
+    }
+    Ok(col)
+}
+
 pub fn normalize_a1(input: &str) -> Result<String, Error> {
     let c = parse_cell(input)?;
     Ok(format_cell(c.col, c.row))
@@ -138,5 +180,13 @@ mod tests {
         let (a, b) = parse_range("A1:D20").unwrap();
         assert_eq!(a, CellRef { col: 1, row: 1 });
         assert_eq!(b, CellRef { col: 4, row: 20 });
+    }
+
+    #[test]
+    fn col_span_letters() {
+        assert_eq!(parse_col_span("A").unwrap(), (1, 1));
+        assert_eq!(parse_col_span("a:c").unwrap(), (1, 3));
+        assert!(parse_col_span("A1").is_err());
+        assert!(parse_col_span("C:A").is_err());
     }
 }

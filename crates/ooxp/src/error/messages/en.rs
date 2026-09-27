@@ -778,6 +778,23 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::InvalidCellStyle { field } => {
             format!("{field} is not a valid setCellStyle value")
         }
+        ErrorKind::NeedSetColWidthField => {
+            "setColWidth requires at least one of width or bestFit".into()
+        }
+        ErrorKind::InvalidColWidth => {
+            "width must be greater than 0 and at most 255".into()
+        }
+        ErrorKind::NeedSetRowHeightField => "setRowHeight requires height".into(),
+        ErrorKind::InvalidRowHeight => {
+            "height must be greater than 0 and at most 409".into()
+        }
+        ErrorKind::MergeNeedsMultipleCells => {
+            "mergeRange needs at least two cells".into()
+        }
+        ErrorKind::RowRangeReversed => "toRow must not be less than row".into(),
+        ErrorKind::LayoutWorksheetOnly => {
+            "column width, row height, and merge ops only apply to worksheets".into()
+        }
         ErrorKind::InvalidAlign => {
             "align must be left, center, right, both, distribute, start, or end".into()
         }

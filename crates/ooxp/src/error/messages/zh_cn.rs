@@ -643,6 +643,15 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::InvalidCellStyle { field } => {
             format!("setCellStyle 的 {field} 不合法")
         }
+        ErrorKind::NeedSetColWidthField => {
+            "setColWidth 至少要给 width 或 bestFit 之一".into()
+        }
+        ErrorKind::InvalidColWidth => "width 必须大于 0 且不超过 255".into(),
+        ErrorKind::NeedSetRowHeightField => "setRowHeight 必须有 height".into(),
+        ErrorKind::InvalidRowHeight => "height 必须大于 0 且不超过 409".into(),
+        ErrorKind::MergeNeedsMultipleCells => "mergeRange 至少要两格".into(),
+        ErrorKind::RowRangeReversed => "toRow 不能小于 row".into(),
+        ErrorKind::LayoutWorksheetOnly => "只能对工作表改列宽、行高或合并".into(),
         ErrorKind::InvalidAlign => {
             "align 必须是 left、center、right、both、distribute、start 或 end".into()
         }

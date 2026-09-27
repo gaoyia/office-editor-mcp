@@ -556,6 +556,13 @@ define_error_kinds! {
     NeedSetRunFormatField => vec![Self::NeedSetRunFormatField],
     NeedSetCellStyleField => vec![Self::NeedSetCellStyleField],
     InvalidCellStyle { field: String } => vec![Self::InvalidCellStyle { field: "numFmt".into() }],
+    NeedSetColWidthField => vec![Self::NeedSetColWidthField],
+    InvalidColWidth => vec![Self::InvalidColWidth],
+    NeedSetRowHeightField => vec![Self::NeedSetRowHeightField],
+    InvalidRowHeight => vec![Self::InvalidRowHeight],
+    MergeNeedsMultipleCells => vec![Self::MergeNeedsMultipleCells],
+    RowRangeReversed => vec![Self::RowRangeReversed],
+    LayoutWorksheetOnly => vec![Self::LayoutWorksheetOnly],
     InvalidAlign => vec![Self::InvalidAlign],
     InvalidLineRule => vec![Self::InvalidLineRule],
     InvalidUnderline => vec![Self::InvalidUnderline],
@@ -916,6 +923,13 @@ impl ErrorKind {
             | Self::NeedSetRunFormatField
             | Self::NeedSetCellStyleField
             | Self::InvalidCellStyle { .. }
+            | Self::NeedSetColWidthField
+            | Self::InvalidColWidth
+            | Self::NeedSetRowHeightField
+            | Self::InvalidRowHeight
+            | Self::MergeNeedsMultipleCells
+            | Self::RowRangeReversed
+            | Self::LayoutWorksheetOnly
             | Self::InvalidAlign
             | Self::InvalidLineRule
             | Self::InvalidUnderline

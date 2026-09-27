@@ -104,10 +104,15 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
             if let Some(cs) = cells_scope {
                 if sh.name.eq_ignore_ascii_case(&cs.sheet) {
                     let (cells, truncated, range) =
-                        inspect_cells(&pkg, &sh.part, &sh.name, cs, &sst, &styles)?;
+                        inspect_cells(&sheet_doc.root, &sh.name, cs, &sst, &styles)?;
+                    let (start, end) = a1::parse_range(&cs.range)?;
+                    let (cols, rows, merges) = super::layout::inspect(&sheet_doc.root, start, end);
                     obj.insert("truncated".into(), json!(truncated));
                     obj.insert("range".into(), json!(range));
                     obj.insert("cells".into(), Value::Array(cells));
+                    obj.insert("cols".into(), cols);
+                    obj.insert("rows".into(), rows);
+                    obj.insert("merges".into(), merges);
                 }
             }
         } else if sh.kind == "chartsheet" {
@@ -273,8 +278,7 @@ pub(crate) fn load_shared_strings(
 }
 
 fn inspect_cells(
-    pkg: &Package,
-    part: &str,
+    root: &Element,
     sheet_name: &str,
     scope: &CellScope,
     sst: &[String],
@@ -286,8 +290,7 @@ fn inspect_cells(
         a1::format_cell(start.col, start.row),
         a1::format_cell(end.col, end.row)
     );
-    let doc = xml::parse(pkg.get(part)?)?;
-    let Some(sheet_data) = doc.root.child_by_local("sheetData") else {
+    let Some(sheet_data) = root.child_by_local("sheetData") else {
         return Ok((Vec::new(), false, range_norm));
     };
 

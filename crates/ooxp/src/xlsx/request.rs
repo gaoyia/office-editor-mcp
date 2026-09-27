@@ -231,6 +231,37 @@ pub struct SetCellStyleOp {
 }
 
 #[derive(Debug, Clone)]
+pub struct SetColWidthOp {
+    pub sheet: String,
+    pub min_col: u32,
+    pub max_col: u32,
+    pub width: Patch<f64>,
+    pub best_fit: Option<bool>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetRowHeightOp {
+    pub sheet: String,
+    pub row: u32,
+    pub to_row: u32,
+    pub height: Patch<f64>,
+}
+
+#[derive(Debug, Clone)]
+pub struct MergeRangeOp {
+    pub sheet: String,
+    pub start: a1::CellRef,
+    pub end: a1::CellRef,
+}
+
+#[derive(Debug, Clone)]
+pub struct UnmergeRangeOp {
+    pub sheet: String,
+    pub start: a1::CellRef,
+    pub end: a1::CellRef,
+}
+
+#[derive(Debug, Clone)]
 pub struct SetHeaderFooterTextOp {
     #[allow(dead_code)]
     pub id: String,
@@ -532,6 +563,10 @@ pub enum XlsxOp {
     RenameSheet(RenameSheetOp),
     MoveSheet(MoveSheetOp),
     SetSheetHidden(SetSheetHiddenOp),
+    SetColWidth(SetColWidthOp),
+    SetRowHeight(SetRowHeightOp),
+    MergeRange(MergeRangeOp),
+    UnmergeRange(UnmergeRangeOp),
     DeleteChart(DeleteChartOp),
     SetChartTitle(SetChartTitleOp),
     SetChartSeries(SetChartSeriesOp),
@@ -675,6 +710,10 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<XlsxOp>, Error> {
             "renameSheet" => XlsxOp::RenameSheet(parse_rename_sheet(obj, i)?),
             "moveSheet" => XlsxOp::MoveSheet(parse_move_sheet(obj, i)?),
             "setSheetHidden" => XlsxOp::SetSheetHidden(parse_set_sheet_hidden(obj, i)?),
+            "setColWidth" => XlsxOp::SetColWidth(parse_set_col_width(obj, i)?),
+            "setRowHeight" => XlsxOp::SetRowHeight(parse_set_row_height(obj, i)?),
+            "mergeRange" => XlsxOp::MergeRange(parse_merge_range(obj, i)?),
+            "unmergeRange" => XlsxOp::UnmergeRange(parse_unmerge_range(obj, i)?),
             "deleteChart" => XlsxOp::DeleteChart(parse_delete_chart(obj, i)?),
             "setChartTitle" => XlsxOp::SetChartTitle(parse_set_chart_title(obj, i)?),
             "setChartSeries" => XlsxOp::SetChartSeries(parse_set_chart_series(obj, i)?),
@@ -2161,6 +2200,251 @@ fn parse_set_sheet_hidden(
         sheet: parse_sheet_only_id(&id, i, "id", IdReason::SheetOpNeedsSheet)?,
         hidden: parse_required_bool(obj.get("hidden"), i, "setSheetHidden", "hidden")?,
     })
+}
+
+fn parse_set_col_width(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<SetColWidthOp, Error> {
+    deny_keys(obj, i, &["op", "id", "col", "width", "bestFit"])?;
+    let id = require_id(obj, i)?;
+    let sheet = parse_sheet_only_id(&id, i, "id", IdReason::SheetOpNeedsSheet)?;
+    let col = match obj.get("col") {
+        Some(Value::String(s)) => s,
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "col".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].col"),
+            ));
+        }
+        None => {
+            return Err(Error::with_path(
+                ErrorKind::MissingField {
+                    field: "col".into(),
+                },
+                format!("ops[{i}].col"),
+            ));
+        }
+    };
+    let (min_col, max_col) = a1::parse_col_span(col).map_err(|e| e.at(format!("ops[{i}].col")))?;
+    let width = parse_patch_dim(obj, i, "width", 255.0, ErrorKind::InvalidColWidth)?;
+    let best_fit = match obj.get("bestFit") {
+        None => None,
+        Some(Value::Bool(b)) => Some(*b),
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "bestFit".into(),
+                    expected: TypeName::Boolean,
+                },
+                format!("ops[{i}].bestFit"),
+            ));
+        }
+    };
+    if width.is_absent() && best_fit.is_none() {
+        return Err(Error::with_path(
+            ErrorKind::NeedSetColWidthField,
+            format!("ops[{i}]"),
+        ));
+    }
+    Ok(SetColWidthOp {
+        sheet,
+        min_col,
+        max_col,
+        width,
+        best_fit,
+    })
+}
+
+fn parse_set_row_height(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<SetRowHeightOp, Error> {
+    deny_keys(obj, i, &["op", "id", "row", "toRow", "height"])?;
+    let id = require_id(obj, i)?;
+    let sheet = parse_sheet_only_id(&id, i, "id", IdReason::SheetOpNeedsSheet)?;
+    let row = parse_required_row(obj, i, "row")?;
+    let to_row = match obj.get("toRow") {
+        None => row,
+        Some(_) => parse_required_row(obj, i, "toRow")?,
+    };
+    if to_row < row {
+        return Err(Error::with_path(
+            ErrorKind::RowRangeReversed,
+            format!("ops[{i}].toRow"),
+        ));
+    }
+    let height = match obj.get("height") {
+        None => {
+            return Err(Error::with_path(
+                ErrorKind::NeedSetRowHeightField,
+                format!("ops[{i}].height"),
+            ));
+        }
+        Some(Value::Null) => Patch::Clear,
+        Some(Value::Number(n)) => {
+            let Some(v) = n.as_f64() else {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidRowHeight,
+                    format!("ops[{i}].height"),
+                ));
+            };
+            if !(v > 0.0 && v <= 409.0) {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidRowHeight,
+                    format!("ops[{i}].height"),
+                ));
+            }
+            Patch::Set(v)
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "height".into(),
+                    expected: TypeName::Integer,
+                },
+                format!("ops[{i}].height"),
+            ));
+        }
+    };
+    Ok(SetRowHeightOp {
+        sheet,
+        row,
+        to_row,
+        height,
+    })
+}
+
+fn parse_merge_range(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<MergeRangeOp, Error> {
+    deny_keys(obj, i, &["op", "id", "range"])?;
+    let id = require_id(obj, i)?;
+    let sheet = parse_sheet_only_id(&id, i, "id", IdReason::SheetOpNeedsSheet)?;
+    let (start, end) = parse_op_range(obj, i)?;
+    if start == end {
+        return Err(Error::with_path(
+            ErrorKind::MergeNeedsMultipleCells,
+            format!("ops[{i}].range"),
+        ));
+    }
+    Ok(MergeRangeOp { sheet, start, end })
+}
+
+fn parse_unmerge_range(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<UnmergeRangeOp, Error> {
+    deny_keys(obj, i, &["op", "id", "range"])?;
+    let id = require_id(obj, i)?;
+    let sheet = parse_sheet_only_id(&id, i, "id", IdReason::SheetOpNeedsSheet)?;
+    let (start, end) = parse_op_range(obj, i)?;
+    Ok(UnmergeRangeOp { sheet, start, end })
+}
+
+fn parse_op_range(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<(a1::CellRef, a1::CellRef), Error> {
+    let raw = match obj.get("range") {
+        Some(Value::String(s)) => s,
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "range".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].range"),
+            ));
+        }
+        None => {
+            return Err(Error::with_path(
+                ErrorKind::MissingField {
+                    field: "range".into(),
+                },
+                format!("ops[{i}].range"),
+            ));
+        }
+    };
+    a1::parse_range(raw).map_err(|e| e.at(format!("ops[{i}].range")))
+}
+
+fn parse_required_row(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+    field: &str,
+) -> Result<u32, Error> {
+    match obj.get(field) {
+        Some(Value::Number(n)) => {
+            let v = n
+                .as_u64()
+                .or_else(|| n.as_i64().filter(|x| *x >= 0).map(|x| x as u64));
+            let Some(v) = v else {
+                return Err(Error::with_path(
+                    ErrorKind::WrongType {
+                        field: field.into(),
+                        expected: TypeName::Integer,
+                    },
+                    format!("ops[{i}].{field}"),
+                ));
+            };
+            if !(1..=1_048_576).contains(&v) {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidRange {
+                        reason: crate::error::RangeReason::RowOutOfRange { row: v as u32 },
+                    },
+                    format!("ops[{i}].{field}"),
+                ));
+            }
+            Ok(v as u32)
+        }
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::Integer,
+            },
+            format!("ops[{i}].{field}"),
+        )),
+        None => Err(Error::with_path(
+            ErrorKind::MissingField {
+                field: field.into(),
+            },
+            format!("ops[{i}].{field}"),
+        )),
+    }
+}
+
+fn parse_patch_dim(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+    field: &str,
+    max: f64,
+    invalid: ErrorKind,
+) -> Result<Patch<f64>, Error> {
+    match obj.get(field) {
+        None => Ok(Patch::Absent),
+        Some(Value::Null) => Ok(Patch::Clear),
+        Some(Value::Number(n)) => {
+            let Some(v) = n.as_f64() else {
+                return Err(Error::with_path(invalid, format!("ops[{i}].{field}")));
+            };
+            if !(v > 0.0 && v <= max) {
+                return Err(Error::with_path(invalid, format!("ops[{i}].{field}")));
+            }
+            Ok(Patch::Set(v))
+        }
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::Integer,
+            },
+            format!("ops[{i}].{field}"),
+        )),
+    }
 }
 
 fn parse_new_sheet_name(obj: &serde_json::Map<String, Value>, i: usize) -> Result<String, Error> {

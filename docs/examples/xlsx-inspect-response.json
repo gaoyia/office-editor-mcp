@@ -61,7 +61,10 @@
           "formula": "=SUM(A1)",
           "numFmt": "General"
         }
-      ]
+      ],
+      "cols": [],
+      "rows": [],
+      "merges": []
     }
   ]
 }

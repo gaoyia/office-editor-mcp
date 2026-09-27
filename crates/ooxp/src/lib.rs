@@ -808,7 +808,10 @@ mod tests {
                 "hasHeaderFooter",
                 "truncated",
                 "range",
-                "cells"
+                "cells",
+                "cols",
+                "rows",
+                "merges"
             ]
         );
         assert_eq!(

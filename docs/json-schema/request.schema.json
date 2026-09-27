@@ -582,6 +582,10 @@
             "oneOf": [
               { "$ref": "#/$defs/setCellOp" },
               { "$ref": "#/$defs/setCellStyleOp" },
+              { "$ref": "#/$defs/setColWidthOp" },
+              { "$ref": "#/$defs/setRowHeightOp" },
+              { "$ref": "#/$defs/mergeRangeOp" },
+              { "$ref": "#/$defs/unmergeRangeOp" },
               { "$ref": "#/$defs/setHeaderFooterTextOp" },
               { "$ref": "#/$defs/setParaTextOp" },
               { "$ref": "#/$defs/setHeaderFooterDistanceOp" },
@@ -814,6 +818,54 @@
         { "required": ["border"] },
         { "required": ["align"] }
       ]
+    },
+    "setColWidthOp": {
+      "type": "object",
+      "required": ["op", "id", "col"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "setColWidth" },
+        "id": { "type": "string", "minLength": 1 },
+        "col": { "type": "string", "minLength": 1 },
+        "width": { "type": ["number", "null"], "exclusiveMinimum": 0, "maximum": 255 },
+        "bestFit": { "type": "boolean" }
+      },
+      "anyOf": [
+        { "required": ["width"] },
+        { "required": ["bestFit"] }
+      ]
+    },
+    "setRowHeightOp": {
+      "type": "object",
+      "required": ["op", "id", "row", "height"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "setRowHeight" },
+        "id": { "type": "string", "minLength": 1 },
+        "row": { "type": "integer", "minimum": 1, "maximum": 1048576 },
+        "toRow": { "type": "integer", "minimum": 1, "maximum": 1048576 },
+        "height": { "type": ["number", "null"], "exclusiveMinimum": 0, "maximum": 409 }
+      }
+    },
+    "mergeRangeOp": {
+      "type": "object",
+      "required": ["op", "id", "range"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "mergeRange" },
+        "id": { "type": "string", "minLength": 1 },
+        "range": { "type": "string", "minLength": 1 }
+      }
+    },
+    "unmergeRangeOp": {
+      "type": "object",
+      "required": ["op", "id", "range"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "unmergeRange" },
+        "id": { "type": "string", "minLength": 1 },
+        "range": { "type": "string", "minLength": 1 }
+      }
     },
     "setHeaderFooterTextOp": {
       "type": "object",

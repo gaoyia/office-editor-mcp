@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "C:\\data\\book.xlsx",
+  "output": "C:\\data\\book.layout.xlsx",
+  "ops": [
+    { "op": "setColWidth", "id": "sheet:Sheet1", "col": "A", "width": 20 },
+    { "op": "setRowHeight", "id": "sheet:Sheet1", "row": 1, "height": 30 },
+    { "op": "mergeRange", "id": "sheet:Sheet1", "range": "A1:B2" }
+  ]
+}
