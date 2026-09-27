@@ -1264,15 +1264,25 @@ pub fn para_has_sect_pr(p: &Element) -> bool {
 }
 
 pub fn take_ppr_sect_pr(p: &mut Element) -> Option<Element> {
-    let ppr = p.child_by_local_mut("pPr")?;
-    let i = ppr
-        .children
-        .iter()
-        .position(|n| matches!(n, Node::Element(e) if e.local_name() == "sectPr"))?;
-    match ppr.children.remove(i) {
-        Node::Element(e) => Some(e),
-        _ => None,
+    let taken = {
+        let ppr = p.child_by_local_mut("pPr")?;
+        let i = ppr
+            .children
+            .iter()
+            .position(|n| matches!(n, Node::Element(e) if e.local_name() == "sectPr"))?;
+        match ppr.children.remove(i) {
+            Node::Element(e) => e,
+            _ => return None,
+        }
+    };
+    let empty_ppr = p
+        .child_by_local("pPr")
+        .is_some_and(|ppr| ppr.element_children().next().is_none());
+    if empty_ppr {
+        p.children
+            .retain(|n| !matches!(n, Node::Element(e) if e.local_name() == "pPr"));
     }
+    Some(taken)
 }
 
 pub fn put_ppr_sect_pr(p: &mut Element, sect: Element) {

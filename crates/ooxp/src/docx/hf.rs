@@ -534,6 +534,81 @@ pub fn collect_sect_prs(root: &Element) -> Vec<&Element> {
     out
 }
 
+/// 每个 `w:sectPr` 从部件根走到该元素的子节点下标路径。
+pub fn collect_sect_pr_paths(root: &Element) -> Vec<Vec<usize>> {
+    let mut out = Vec::new();
+    let mut path = Vec::new();
+    walk_sect_paths(root, &mut path, &mut out);
+    out
+}
+
+fn walk_sect_paths(el: &Element, path: &mut Vec<usize>, out: &mut Vec<Vec<usize>>) {
+    if el.local_name() == "txbxContent" {
+        return;
+    }
+    if el.local_name() == "AlternateContent" {
+        if let Some(i) = first_alt_child_index(el) {
+            path.push(i);
+            if let crate::xml::Node::Element(child) = &el.children[i] {
+                walk_sect_paths(child, path, out);
+            }
+            path.pop();
+        }
+        return;
+    }
+    if el.local_name() == "sectPr" {
+        out.push(path.clone());
+        return;
+    }
+    for (i, n) in el.children.iter().enumerate() {
+        if let crate::xml::Node::Element(e) = n {
+            path.push(i);
+            walk_sect_paths(e, path, out);
+            path.pop();
+        }
+    }
+}
+
+/// 把 `from` 上有、`to` 上没有的页眉页脚引用抄过去。
+pub fn copy_missing_hf_refs(from: &Element, to: &mut Element) {
+    let mut missing: Vec<Element> = Vec::new();
+    for child in from.element_children() {
+        let local = child.local_name();
+        if local != "headerReference" && local != "footerReference" {
+            continue;
+        }
+        let ty = child.attr_local("type").unwrap_or("");
+        let exists = to
+            .element_children()
+            .any(|e| e.local_name() == local && e.attr_local("type").unwrap_or("") == ty);
+        if !exists {
+            missing.push(child.clone());
+        }
+    }
+    for el in missing {
+        let mut last_ref = None;
+        for (i, n) in to.children.iter().enumerate() {
+            if let crate::xml::Node::Element(e) = n {
+                if e.local_name() == "headerReference" || e.local_name() == "footerReference" {
+                    last_ref = Some(i);
+                }
+            }
+        }
+        let idx = last_ref.map(|i| i + 1).unwrap_or(0);
+        to.children.insert(idx, crate::xml::Node::Element(el));
+    }
+}
+
+/// 去掉 `headerReference` / `footerReference`。
+pub fn strip_hf_refs(sect: &mut Element) {
+    sect.children.retain(|n| match n {
+        crate::xml::Node::Element(e) => {
+            !matches!(e.local_name(), "headerReference" | "footerReference")
+        }
+        _ => true,
+    });
+}
+
 /// 遇到 `w:txbxContent` 停住；`mc:AlternateContent` 只进一支。
 fn walk_sect<'a>(el: &'a Element, f: &mut impl FnMut(&'a Element)) {
     if el.local_name() == "txbxContent" {

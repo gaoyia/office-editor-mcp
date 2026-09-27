@@ -271,6 +271,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::RunPrefix => "run id 必须是段落 id 加上 /run:N".into(),
             IdReason::RunIndexNotInt => "run 序号必须是整数".into(),
             IdReason::RunIndexFromOne => "run 序号从 1 起".into(),
+            IdReason::InsertSectionNeedsBodyPara => {
+                "insertSection 的 id 必须是 w:body 的直接子段落，或 docx:document".into()
+            }
         },
         ErrorKind::SheetNotFound { name } => format!("找不到工作表：{name}"),
         ErrorKind::ParaNotFound { id } => format!("找不到段落：{id}"),
@@ -304,6 +307,13 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         }
         ErrorKind::ParaHasRevision => "不能删除带修订标记的段落".into(),
         ErrorKind::SectionBreakPara => "不能删除带分节符的段落，先把节属性挪走".into(),
+        ErrorKind::CannotDeleteLastSection => "不能删除最后一节，文档至少要留一节".into(),
+        ErrorKind::InvalidSectionType => {
+            "分节类型必须是 nextPage、continuous、evenPage、oddPage 或 nextColumn".into()
+        }
+        ErrorKind::SectionTypeOnLastPara => {
+            "最后一段不能带 sectionType，末节的 sectPr 仍在 w:body".into()
+        }
         ErrorKind::CommentNotFound { id } => format!("找不到批注：{id}"),
         ErrorKind::NeedCommentParaId => {
             "批注最后一段必须有 w14:paraId，才能写 commentsExtended".into()

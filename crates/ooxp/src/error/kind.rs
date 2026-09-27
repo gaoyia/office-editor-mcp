@@ -200,6 +200,8 @@ pub(crate) enum IdReason {
     RunPrefix,
     RunIndexNotInt,
     RunIndexFromOne,
+    /// insertSection 必须是主文档 body 的直接子段落或 docx:document
+    InsertSectionNeedsBodyPara,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -358,6 +360,9 @@ define_error_kinds! {
     CrossParaMarker => vec![Self::CrossParaMarker],
     ParaHasRevision => vec![Self::ParaHasRevision],
     SectionBreakPara => vec![Self::SectionBreakPara],
+    CannotDeleteLastSection => vec![Self::CannotDeleteLastSection],
+    InvalidSectionType => vec![Self::InvalidSectionType],
+    SectionTypeOnLastPara => vec![Self::SectionTypeOnLastPara],
     CommentNotFound { id: String } => vec![Self::CommentNotFound { id: "comment:0".into() }],
     NeedCommentParaId => vec![Self::NeedCommentParaId],
     NeedCommentMetaField => vec![Self::NeedCommentMetaField],
@@ -622,6 +627,7 @@ impl IdReason {
             Self::RunPrefix,
             Self::RunIndexNotInt,
             Self::RunIndexFromOne,
+            Self::InsertSectionNeedsBodyPara,
         ]
     }
 }
@@ -718,6 +724,9 @@ impl ErrorKind {
             | Self::InvalidParaStyle
             | Self::InvalidHfKind
             | Self::InvalidHfType
+            | Self::InvalidSectionType
+            | Self::SectionTypeOnLastPara
+            | Self::CannotDeleteLastSection
             | Self::CreateHfDuplicate
             | Self::InvalidPicKind
             | Self::InvalidPicWrap

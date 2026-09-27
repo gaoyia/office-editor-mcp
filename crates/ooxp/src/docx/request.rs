@@ -611,11 +611,32 @@ pub struct SetRunFormatOp {
 }
 
 #[derive(Debug, Clone)]
+pub enum InsertSectionPlace {
+    After(para::BodyPara),
+    EndOfDocument,
+}
+
+#[derive(Debug, Clone)]
+pub struct InsertSectionOp {
+    pub id: String,
+    pub place: InsertSectionPlace,
+    pub break_type: super::sect::SectionBreakType,
+}
+
+#[derive(Debug, Clone)]
+pub struct DeleteSectionOp {
+    pub id: String,
+    pub n: usize,
+}
+
+#[derive(Debug, Clone)]
 pub enum DocxOp {
     SetParaText(SetParaTextOp),
     SetHeaderFooterDistance(SetHfDistanceOp),
     SetHeaderFooterLink(SetHfLinkOp),
     InsertHeaderFooter(InsertHeaderFooterOp),
+    InsertSection(InsertSectionOp),
+    DeleteSection(DeleteSectionOp),
     SetTitlePage(SetTitlePageOp),
     SetEvenAndOddHeaders(SetEvenAndOddHeadersOp),
     SetPageMargin(SetPageMarginOp),
@@ -945,6 +966,8 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<DocxOp>, Error> {
                 out.push(DocxOp::SetHeaderFooterLink(parse_set_hf_link(obj, i)?))
             }
             "insertHeaderFooter" => out.push(DocxOp::InsertHeaderFooter(parse_insert_hf(obj, i)?)),
+            "insertSection" => out.push(DocxOp::InsertSection(parse_insert_section(obj, i)?)),
+            "deleteSection" => out.push(DocxOp::DeleteSection(parse_delete_section(obj, i)?)),
             "setTitlePage" => out.push(DocxOp::SetTitlePage(parse_set_title_page(obj, i)?)),
             "setEvenAndOddHeaders" => out.push(DocxOp::SetEvenAndOddHeaders(
                 parse_set_even_and_odd(obj, i)?,
@@ -1305,6 +1328,59 @@ fn parse_insert_hf(
         kind,
         hf_type,
     })
+}
+
+fn parse_insert_section(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<InsertSectionOp, Error> {
+    deny_keys(obj, i, &["op", "id", "type"])?;
+    let id = require_op_id(obj, i)?;
+    let break_type = match obj.get("type") {
+        None => super::sect::SectionBreakType::NextPage,
+        Some(Value::String(s)) => super::sect::parse_section_break_type(s)
+            .map_err(|kind| Error::with_path(kind, format!("ops[{i}].type")))?,
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "type".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].type"),
+            ));
+        }
+    };
+    let path = format!("ops[{i}].id");
+    let place = if id == "docx:document" {
+        InsertSectionPlace::EndOfDocument
+    } else {
+        match para::parse_para_id_at(&id, &path)? {
+            ParaTarget::Body(p) => InsertSectionPlace::After(p),
+            _ => {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidId {
+                        reason: IdReason::InsertSectionNeedsBodyPara,
+                    },
+                    path,
+                ));
+            }
+        }
+    };
+    Ok(InsertSectionOp {
+        id,
+        place,
+        break_type,
+    })
+}
+
+fn parse_delete_section(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<DeleteSectionOp, Error> {
+    deny_keys(obj, i, &["op", "id"])?;
+    let id = require_op_id(obj, i)?;
+    let n = parse_section_id(&id, i)?;
+    Ok(DeleteSectionOp { id, n })
 }
 
 fn parse_set_title_page(

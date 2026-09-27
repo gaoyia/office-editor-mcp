@@ -1,15 +1,364 @@
-//! 节上的页面边距、纸张、分栏、对齐、行号、网格与装订线。
+//! 节上的页面边距、纸张、分栏、对齐、行号、网格与装订线；插删分节符。
 
 use serde_json::{json, Value};
 
-use crate::error::{Error, XmlIssue};
+use crate::error::{Error, ErrorKind, IdReason, XmlIssue};
 use crate::opc::Package;
 use crate::xml::{Element, Node};
 
 use super::hf;
 use super::notes;
+use super::para::{self, BodyPara};
 
-/// `w:cols/@w:equalWidth` 一类 OnOff 属性。
+/// `ST_SectionMark`（ECMA-376 §17.18.77）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SectionBreakType {
+    NextPage,
+    Continuous,
+    EvenPage,
+    OddPage,
+    NextColumn,
+}
+
+impl SectionBreakType {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::NextPage => "nextPage",
+            Self::Continuous => "continuous",
+            Self::EvenPage => "evenPage",
+            Self::OddPage => "oddPage",
+            Self::NextColumn => "nextColumn",
+        }
+    }
+
+    pub fn parse(s: &str) -> Option<Self> {
+        match s {
+            "nextPage" => Some(Self::NextPage),
+            "continuous" => Some(Self::Continuous),
+            "evenPage" => Some(Self::EvenPage),
+            "oddPage" => Some(Self::OddPage),
+            "nextColumn" => Some(Self::NextColumn),
+            _ => None,
+        }
+    }
+}
+
+pub fn parse_section_break_type(raw: &str) -> Result<SectionBreakType, ErrorKind> {
+    SectionBreakType::parse(raw).ok_or(ErrorKind::InvalidSectionType)
+}
+
+/// 在点名段之后插入分节符；`after` 为 `None` 表示文档末尾。
+pub fn insert_section_break(
+    root: &mut Element,
+    after: Option<&BodyPara>,
+    ty: SectionBreakType,
+    err_id: &str,
+    op_i: usize,
+) -> Result<(), Error> {
+    match after {
+        Some(para) => insert_after_para(root, para, ty, err_id, op_i),
+        None => insert_at_end(root, ty, err_id, op_i),
+    }
+}
+
+fn insert_after_para(
+    root: &mut Element,
+    para: &BodyPara,
+    ty: SectionBreakType,
+    err_id: &str,
+    op_i: usize,
+) -> Result<(), Error> {
+    let path = para::find_paragraph_path(root, para).ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::ParaNotFound {
+                id: err_id.to_string(),
+            },
+            format!("ops[{op_i}].id"),
+        )
+    })?;
+    let parent =
+        para::element_at(root, &path[..path.len().saturating_sub(1)]).ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::ParaNotFound {
+                    id: err_id.to_string(),
+                },
+                format!("ops[{op_i}].id"),
+            )
+        })?;
+    if parent.local_name() != "body" {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::InsertSectionNeedsBodyPara,
+            },
+            format!("ops[{op_i}].id"),
+        ));
+    }
+
+    let dest_path = dest_sect_path(root, &path)
+        .ok_or_else(|| Error::xml_detail(XmlIssue::Parse, "document body has no sectPr"))?;
+    let dest_on_this = dest_path.starts_with(&path) && dest_path.len() > path.len();
+
+    if dest_on_this {
+        let dest = para::element_at(root, &dest_path).expect("dest path");
+        let mut clone = dest.clone();
+        hf::strip_hf_refs(&mut clone);
+        set_section_type(&mut clone, ty);
+        insert_empty_after(root, &path, clone, err_id, op_i)?;
+    } else {
+        let dest = para::element_at(root, &dest_path).expect("dest path");
+        let mut clone = dest.clone();
+        set_section_type(&mut clone, ty);
+        let p = para::element_at_mut(root, &path).expect("para path");
+        para::put_ppr_sect_pr(p, clone);
+        let dest = para::element_at_mut(root, &dest_path).expect("dest path");
+        hf::strip_hf_refs(dest);
+        if is_body_level_sect(root, &dest_path) && !has_block_between(root, &path, &dest_path) {
+            insert_empty_before_dest(root, &dest_path)?;
+        }
+    }
+    Ok(())
+}
+
+fn insert_at_end(
+    root: &mut Element,
+    ty: SectionBreakType,
+    _err_id: &str,
+    op_i: usize,
+) -> Result<(), Error> {
+    let (sect_idx, mut clone, prev_plain) = {
+        let body = para::story_body_mut(root).ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::XmlMissing {
+                    parent: "document".into(),
+                    child: "body".into(),
+                },
+                format!("ops[{op_i}].id"),
+            )
+        })?;
+        let sect_idx = body
+            .children
+            .iter()
+            .position(|n| matches!(n, Node::Element(e) if e.local_name() == "sectPr"))
+            .ok_or_else(|| Error::xml_detail(XmlIssue::Parse, "document body has no sectPr"))?;
+        let dest = match &body.children[sect_idx] {
+            Node::Element(e) => e.clone(),
+            _ => unreachable!(),
+        };
+        let prev_plain = sect_idx >= 1
+            && matches!(
+                &body.children[sect_idx - 1],
+                Node::Element(e) if e.local_name() == "p" && !para::para_has_sect_pr(e)
+            );
+        (sect_idx, dest, prev_plain)
+    };
+    set_section_type(&mut clone, ty);
+
+    let empty_id = para::next_para_hex(root);
+    {
+        let body = para::story_body_mut(root).unwrap();
+        let empty = para::new_paragraph(body, &empty_id, "");
+        body.children.insert(sect_idx, Node::Element(empty));
+    }
+
+    if prev_plain {
+        let body = para::story_body_mut(root).unwrap();
+        let p = match &mut body.children[sect_idx - 1] {
+            Node::Element(e) => e,
+            _ => unreachable!(),
+        };
+        para::put_ppr_sect_pr(p, clone);
+    } else {
+        let mid_id = para::next_para_hex(root);
+        let body = para::story_body_mut(root).unwrap();
+        let mut mid = para::new_paragraph(body, &mid_id, "");
+        para::put_ppr_sect_pr(&mut mid, clone);
+        let cur_sect = body
+            .children
+            .iter()
+            .position(|n| matches!(n, Node::Element(e) if e.local_name() == "sectPr"))
+            .unwrap();
+        body.children.insert(cur_sect - 1, Node::Element(mid));
+    }
+
+    let body = para::story_body_mut(root).unwrap();
+    let cur_sect = body
+        .children
+        .iter()
+        .position(|n| matches!(n, Node::Element(e) if e.local_name() == "sectPr"))
+        .unwrap();
+    if let Node::Element(sect) = &mut body.children[cur_sect] {
+        hf::strip_hf_refs(sect);
+    }
+    Ok(())
+}
+
+fn dest_sect_path(root: &Element, para_path: &[usize]) -> Option<Vec<usize>> {
+    hf::collect_sect_pr_paths(root)
+        .into_iter()
+        .find(|p| p.as_slice() >= para_path)
+}
+
+fn is_body_level_sect(root: &Element, dest_path: &[usize]) -> bool {
+    if dest_path.is_empty() {
+        return false;
+    }
+    para::element_at(root, &dest_path[..dest_path.len() - 1])
+        .is_some_and(|p| p.local_name() == "body")
+}
+
+fn has_block_between(root: &Element, para_path: &[usize], dest_path: &[usize]) -> bool {
+    if para_path.len() != dest_path.len() {
+        return true;
+    }
+    if para_path.len() < 2 {
+        return true;
+    }
+    if para_path[..para_path.len() - 1] != dest_path[..dest_path.len() - 1] {
+        return true;
+    }
+    let parent = match para::element_at(root, &para_path[..para_path.len() - 1]) {
+        Some(p) => p,
+        None => return true,
+    };
+    let i = *para_path.last().unwrap();
+    let j = *dest_path.last().unwrap();
+    if j <= i + 1 {
+        return false;
+    }
+    parent.children[i + 1..j]
+        .iter()
+        .any(|n| matches!(n, Node::Element(e) if e.local_name() == "p" || e.local_name() == "tbl"))
+}
+
+fn insert_empty_after(
+    root: &mut Element,
+    para_path: &[usize],
+    sect: Element,
+    err_id: &str,
+    op_i: usize,
+) -> Result<(), Error> {
+    let new_id = para::next_para_hex(root);
+    let host = para::element_at(root, para_path).ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::ParaNotFound {
+                id: err_id.to_string(),
+            },
+            format!("ops[{op_i}].id"),
+        )
+    })?;
+    let mut new_p = para::new_paragraph(host, &new_id, "");
+    para::put_ppr_sect_pr(&mut new_p, sect);
+    let (parent, idx) = para::parent_and_index_mut(root, para_path).ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::ParaNotFound {
+                id: err_id.to_string(),
+            },
+            format!("ops[{op_i}].id"),
+        )
+    })?;
+    parent.children.insert(idx + 1, Node::Element(new_p));
+    Ok(())
+}
+
+fn insert_empty_before_dest(root: &mut Element, dest_path: &[usize]) -> Result<(), Error> {
+    let new_id = para::next_para_hex(root);
+    let parent_path = &dest_path[..dest_path.len() - 1];
+    let parent = para::element_at(root, parent_path)
+        .ok_or_else(|| Error::xml_detail(XmlIssue::Parse, "missing parent of body sectPr"))?;
+    let new_p = para::new_paragraph(parent, &new_id, "");
+    let (parent, idx) = para::parent_and_index_mut(root, dest_path)
+        .ok_or_else(|| Error::xml_detail(XmlIssue::Parse, "missing body sectPr"))?;
+    parent.children.insert(idx, Node::Element(new_p));
+    Ok(())
+}
+
+fn set_section_type(sect: &mut Element, ty: SectionBreakType) {
+    let el = hf::ensure_child_in_order(sect, "type", hf::TITLE_PG_ORDER);
+    hf::set_local_attr(el, "val", ty.as_str());
+}
+
+/// 删掉结束第 `n` 节（从 1 计、不能是最后一节）的段上 `sectPr`。
+pub fn delete_section_break(
+    root: &mut Element,
+    n: usize,
+    err_id: &str,
+    op_i: usize,
+) -> Result<(), Error> {
+    let paths = hf::collect_sect_pr_paths(root);
+    if paths.len() < 2 {
+        return Err(Error::with_path(
+            ErrorKind::CannotDeleteLastSection,
+            format!("ops[{op_i}].id"),
+        ));
+    }
+    if n < 1 || n > paths.len() {
+        return Err(Error::with_path(
+            ErrorKind::SectionNotFound {
+                id: err_id.to_string(),
+            },
+            format!("ops[{op_i}].id"),
+        ));
+    }
+    if n == paths.len() {
+        return Err(Error::with_path(
+            ErrorKind::CannotDeleteLastSection,
+            format!("ops[{op_i}].id"),
+        ));
+    }
+    let dest_path = &paths[n - 1];
+    if is_body_level_sect(root, dest_path) {
+        return Err(Error::with_path(
+            ErrorKind::CannotDeleteLastSection,
+            format!("ops[{op_i}].id"),
+        ));
+    }
+    let taken = {
+        let dest = para::element_at(root, dest_path).ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::SectionNotFound {
+                    id: err_id.to_string(),
+                },
+                format!("ops[{op_i}].id"),
+            )
+        })?;
+        dest.clone()
+    };
+    let next_path = paths[n].clone();
+    let next = para::element_at_mut(root, &next_path).ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::SectionNotFound {
+                id: err_id.to_string(),
+            },
+            format!("ops[{op_i}].id"),
+        )
+    })?;
+    hf::copy_missing_hf_refs(&taken, next);
+
+    let p_path = para_path_of_sect(dest_path).ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::CannotDeleteLastSection,
+            format!("ops[{op_i}].id"),
+        )
+    })?;
+    let p = para::element_at_mut(root, &p_path).ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::SectionNotFound {
+                id: err_id.to_string(),
+            },
+            format!("ops[{op_i}].id"),
+        )
+    })?;
+    para::take_ppr_sect_pr(p);
+    Ok(())
+}
+
+fn para_path_of_sect(sect_path: &[usize]) -> Option<Vec<usize>> {
+    if sect_path.len() < 2 {
+        return None;
+    }
+    Some(sect_path[..sect_path.len() - 2].to_vec())
+}
+
 pub fn on_off_attr(el: &Element, local: &str, elem: &str) -> Result<Option<bool>, Error> {
     let Some(raw) = el.attr_local(local) else {
         return Ok(None);

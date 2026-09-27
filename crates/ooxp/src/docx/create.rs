@@ -12,6 +12,7 @@ use crate::xml::{self, Element, Node};
 
 use super::hf::{HfKind, HfType};
 use super::picture::{self, PicKind, WrapKind, WrapPos};
+use super::sect::SectionBreakType;
 use super::smartart::{self, InsertSpec};
 use super::tbl;
 use super::textbox::{self, DEFAULT_CX, DEFAULT_CY, WPS_NS};
@@ -42,6 +43,7 @@ struct NewPara {
     boxes: Vec<NewBox>,
     pictures: Vec<NewPic>,
     smart_arts: Vec<InsertSpec>,
+    section_type: Option<SectionBreakType>,
 }
 
 impl NewPara {
@@ -52,6 +54,7 @@ impl NewPara {
             boxes: Vec::new(),
             pictures: Vec::new(),
             smart_arts: Vec::new(),
+            section_type: None,
         }
     }
 
@@ -124,6 +127,15 @@ pub fn create(document: &Value) -> Result<Vec<u8>, Error> {
             ParaKind::Body,
             i,
         )?);
+    }
+    if let Some(last) = paras.last() {
+        if last.section_type.is_some() {
+            let i = paras.len() - 1;
+            return Err(Error::with_path(
+                ErrorKind::SectionTypeOnLastPara,
+                format!("document.paragraphs[{i}].sectionType"),
+            ));
+        }
     }
     if paras.is_empty() {
         paras.push(NewPara::empty());
@@ -376,7 +388,15 @@ fn parse_para(v: &Value, path: &str, kind: ParaKind, i: usize) -> Result<NewPara
         )
     })?;
     let allowed = match kind {
-        ParaKind::Body => ["text", "style", "textBoxes", "pictures", "smartArts"].as_slice(),
+        ParaKind::Body => [
+            "text",
+            "style",
+            "textBoxes",
+            "pictures",
+            "smartArts",
+            "sectionType",
+        ]
+        .as_slice(),
         ParaKind::HeaderFooter => ["text", "pictures", "smartArts"].as_slice(),
     };
     for k in obj.keys() {
@@ -422,13 +442,37 @@ fn parse_para(v: &Value, path: &str, kind: ParaKind, i: usize) -> Result<NewPara
     };
     let pictures = parse_pictures(obj.get("pictures"), path)?;
     let smart_arts = parse_smartarts(obj.get("smartArts"), path)?;
+    let section_type = match kind {
+        ParaKind::Body => parse_create_section_type(obj.get("sectionType"), path)?,
+        ParaKind::HeaderFooter => None,
+    };
     Ok(NewPara {
         text,
         style,
         boxes,
         pictures,
         smart_arts,
+        section_type,
     })
+}
+
+fn parse_create_section_type(
+    v: Option<&Value>,
+    path: &str,
+) -> Result<Option<SectionBreakType>, Error> {
+    match v {
+        None => Ok(None),
+        Some(Value::String(s)) => Ok(Some(SectionBreakType::parse(s).ok_or_else(|| {
+            Error::with_path(ErrorKind::InvalidSectionType, format!("{path}.sectionType"))
+        })?)),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "sectionType".into(),
+                expected: TypeName::String,
+            },
+            format!("{path}.sectionType"),
+        )),
+    }
 }
 
 fn parse_boxes(v: Option<&Value>, i: usize) -> Result<Vec<NewBox>, Error> {
@@ -761,11 +805,28 @@ fn canonicalize_style(s: &str, i: usize) -> Result<Option<&'static str>, Error> 
     ))
 }
 
-fn para_xml(p: &NewPara, id: &str, next_para: &mut u32, doc_pr: &mut u32) -> String {
-    let style = if let Some(s) = p.style {
-        format!(r#"<w:pPr><w:pStyle w:val="{s}"/></w:pPr>"#)
-    } else {
+fn para_xml(
+    p: &NewPara,
+    id: &str,
+    next_para: &mut u32,
+    doc_pr: &mut u32,
+    first_break: bool,
+    refs_xml: &str,
+    title_pg: bool,
+) -> String {
+    let mut ppr_inner = String::new();
+    if let Some(s) = p.style {
+        ppr_inner.push_str(&format!(r#"<w:pStyle w:val="{s}"/>"#));
+    }
+    if let Some(ty) = p.section_type {
+        let refs = if first_break { refs_xml } else { "" };
+        let title = first_break && title_pg;
+        ppr_inner.push_str(&sect_pr_inner_xml(Some(ty.as_str()), refs, title));
+    }
+    let ppr = if ppr_inner.is_empty() {
         String::new()
+    } else {
+        format!("<w:pPr>{ppr_inner}</w:pPr>")
     };
     let space = if needs_xml_space(&p.text) {
         r#" xml:space="preserve""#
@@ -787,7 +848,17 @@ fn para_xml(p: &NewPara, id: &str, next_para: &mut u32, doc_pr: &mut u32) -> Str
         ));
         *doc_pr += 1;
     }
-    format!(r#"<w:p w14:paraId="{id}" w14:textId="{id}">{style}{t}{boxes}</w:p>"#)
+    format!(r#"<w:p w14:paraId="{id}" w14:textId="{id}">{ppr}{t}{boxes}</w:p>"#)
+}
+
+fn sect_pr_inner_xml(ty: Option<&str>, refs_xml: &str, title_pg: bool) -> String {
+    let type_xml = ty
+        .map(|t| format!(r#"<w:type w:val="{t}"/>"#))
+        .unwrap_or_default();
+    let title = if title_pg { "<w:titlePg/>" } else { "" };
+    format!(
+        r#"<w:sectPr>{refs_xml}{type_xml}<w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="708" w:footer="708" w:gutter="0"/>{title}</w:sectPr>"#
+    )
 }
 
 fn story_xmlns() -> String {
@@ -813,29 +884,46 @@ fn document_xml(
             hf_type.as_str()
         ));
     }
-    let title = if title_pg { "<w:titlePg/>" } else { "" };
-    let body = emit_story_blocks(paras, tables);
+    let first_break = paras.iter().position(|p| p.section_type.is_some());
+    let body = emit_story_blocks(paras, tables, first_break, &refs_xml, title_pg);
+    let last_refs = if first_break.is_some() { "" } else { &refs_xml };
+    let last_title = first_break.is_none() && title_pg;
+    let last_sect = sect_pr_inner_xml(None, last_refs, last_title);
     format!(
-        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document {}><w:body>{body}<w:sectPr>{refs_xml}<w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="708" w:footer="708" w:gutter="0"/>{title}</w:sectPr></w:body></w:document>"#,
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document {}><w:body>{body}{last_sect}</w:body></w:document>"#,
         story_xmlns()
     )
 }
 
 fn hf_xml(tag: &str, paras: &[NewPara], tables: &[NewTable]) -> String {
-    let body = emit_story_blocks(paras, tables);
+    let body = emit_story_blocks(paras, tables, None, "", false);
     format!(
         r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:{tag} {}>{body}</w:{tag}>"#,
         story_xmlns()
     )
 }
 
-fn emit_story_blocks(paras: &[NewPara], tables: &[NewTable]) -> String {
+fn emit_story_blocks(
+    paras: &[NewPara],
+    tables: &[NewTable],
+    first_break: Option<usize>,
+    refs_xml: &str,
+    title_pg: bool,
+) -> String {
     let mut para_xmls = Vec::new();
     let mut next_para = paras.len() as u32 + 1;
     let mut doc_pr = 1u32;
     for (i, p) in paras.iter().enumerate() {
         let id = format!("{:08X}", i as u32 + 1);
-        para_xmls.push(para_xml(p, &id, &mut next_para, &mut doc_pr));
+        para_xmls.push(para_xml(
+            p,
+            &id,
+            &mut next_para,
+            &mut doc_pr,
+            first_break == Some(i),
+            refs_xml,
+            title_pg,
+        ));
     }
     let mut table_xmls = Vec::new();
     for t in tables {

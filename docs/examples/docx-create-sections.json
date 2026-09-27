@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "action": "create",
+  "path": "note-sections.docx",
+  "format": "docx",
+  "document": {
+    "paragraphs": [
+      { "text": "第一节", "sectionType": "nextPage" },
+      { "text": "第二节" }
+    ]
+  }
+}

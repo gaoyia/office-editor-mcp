@@ -38,6 +38,7 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 | Fd1–Fd7 | ✅ | Word 16.0：`docx-field.ps1`，7 PASS / 0 FAIL。名单、改 PAGE 为 DATE、插 DATE、删域留结果、删域留指令、页眉 PAGE、带域段 `setParaText` 得 `NotImplemented`。标题栏无 Repair |
 | Nl1–Nl6 | ✅ | Word 16.0：`docx-numbering.ps1`，6 PASS / 0 FAIL。名单、段上 `num`/`ilvl`、插 decimal 定义、绑两段、改 bullet、解绑。标题栏无 Repair |
 | St1–St6 | ✅ | Word 16.0：`docx-style.ps1`，6 PASS / 0 FAIL。名单、换 Heading2、大纲对得上、改 Normal 为 24 磅、去掉 Heading1 加粗、解绑。标题栏无 Repair |
+| Sc1–Sc6 | ✅ | Word 16.0：`docx-insert-section.ps1`，6 PASS / 0 FAIL。插节后两节且第二节 `headerLink.default`；打开无修复；断链后两节页眉能独立改字；删节后只剩一节、无孤儿 `headerN.xml`；create 带 `sectionType` 为两节。标题栏无 Repair |
 | O1 | 🚫 | 领域层不做原样保存，与 xlsx 清单相同。零脏写回见 OPC 库测试。Word 另存 create 产物见 `docx-O1-word-resave`。此前记的 `SaveAs2` 挂起，拆分后重跑没再出现，一秒内返回 |
 
 ## create
@@ -102,7 +103,7 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 
 ## 链接前节
 
-准备一份 Word 亲手另存的两节样例：第二节默认页眉勾选「链接到前一节」。不要用库 `create` 产物（create 不写多节）。对它 `inspect` 后发 `setHeaderFooterLink` 断开第二节默认页眉，再改第二节页眉文字。Word COM 的 `Headers.Item(1).LinkToPrevious` 对应默认页眉。
+准备一份 Word 亲手另存的两节样例：第二节默认页眉勾选「链接到前一节」。不要用库 `create` 产物（本组仍要求 Word 另存的两节样例）。对它 `inspect` 后发 `setHeaderFooterLink` 断开第二节默认页眉，再改第二节页眉文字。Word COM 的 `Headers.Item(1).LinkToPrevious` 对应默认页眉。
 
 | 序号 | 检查 | 通过标准 |
 | --- | --- | --- |
@@ -373,6 +374,19 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 | Pf4 | run 加粗 | `setRunFormat` 把第一段第一个 run 设为加粗后 Word 该 run 加粗，无修复 |
 | Pf5 | 未点名 | 同一段未点名的 run 颜色还在 |
 | Pf6 | 间距 | `setParaFormat` 写 `before` / `after` 后 Word 段前段后距对得上（允许 0.05 磅误差），无修复 |
+
+## 插删节
+
+`insertSection` 在某段之后写入分节符；`deleteSection` 删掉非末节。create 可用 `paragraphs[].sectionType` 写多节。手测脚本 `manual-check/office/cases/docx-insert-section.ps1`。新建页眉的具体 XML 不在本组，断开链接仍走 `setHeaderFooterLink`。
+
+| 序号 | 检查 | 通过标准 |
+| --- | --- | --- |
+| Sc1 | 插节 | `insertSection` 之后树上有两节；第二节 `headerLink.default` 为 `true` |
+| Sc2 | 打开 | Word 打开后无修复；能看见分节 |
+| Sc3 | 断开 | 对第二节发 `setHeaderFooterLink` 且 `linked: false` 后，两节页眉能独立改字，无修复 |
+| Sc4 | 删节 | `deleteSection` 且 `id` 为 `section:1` 后只剩一节，Word 无修复 |
+| Sc5 | 孤儿 | 删节后包里没有未被引用的 `/word/headerN.xml` |
+| Sc6 | create | 带 `sectionType` 的 create 产物树上有两节，Word 无修复 |
 
 ## 原样保存（opc 验收）
 

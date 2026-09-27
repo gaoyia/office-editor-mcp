@@ -297,6 +297,9 @@
           "type": "string",
           "enum": ["Normal", "Heading1", "Heading2", "Heading3"]
         },
+        "sectionType": {
+          "enum": ["nextPage", "continuous", "evenPage", "oddPage", "nextColumn"]
+        },
         "textBoxes": {
           "type": "array",
           "items": { "$ref": "#/$defs/docxTextBoxCreate" }
@@ -507,6 +510,8 @@
               { "$ref": "#/$defs/setGutterAtTopOp" },
               { "$ref": "#/$defs/setHeaderFooterLinkOp" },
               { "$ref": "#/$defs/insertHeaderFooterOp" },
+              { "$ref": "#/$defs/insertSectionOp" },
+              { "$ref": "#/$defs/deleteSectionOp" },
               { "$ref": "#/$defs/setTitlePageOp" },
               { "$ref": "#/$defs/setEvenAndOddHeadersOp" },
               { "$ref": "#/$defs/replacePictureOp" },
@@ -673,6 +678,25 @@
         "id": { "type": "string", "minLength": 1 },
         "kind": { "enum": ["header", "footer"] },
         "type": { "enum": ["default", "even", "first"] }
+      }
+    },
+    "insertSectionOp": {
+      "type": "object",
+      "required": ["op", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "insertSection" },
+        "id": { "type": "string", "minLength": 1 },
+        "type": { "enum": ["nextPage", "continuous", "evenPage", "oddPage", "nextColumn"] }
+      }
+    },
+    "deleteSectionOp": {
+      "type": "object",
+      "required": ["op", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "deleteSection" },
+        "id": { "type": "string", "minLength": 1 }
       }
     },
     "setTitlePageOp": {

@@ -297,6 +297,10 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::RunPrefix => "Run id must be a paragraph id plus /run:N".into(),
             IdReason::RunIndexNotInt => "Run index must be an integer".into(),
             IdReason::RunIndexFromOne => "Run index is 1-based".into(),
+            IdReason::InsertSectionNeedsBodyPara => {
+                "insertSection id must be a direct child paragraph of w:body, or docx:document"
+                    .into()
+            }
         },
         ErrorKind::SheetNotFound { name } => format!("Sheet not found: {name}"),
         ErrorKind::ParaNotFound { id } => format!("Paragraph not found: {id}"),
@@ -339,6 +343,15 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         }
         ErrorKind::SectionBreakPara => {
             "Cannot delete a paragraph that carries a section break; move section properties first".into()
+        }
+        ErrorKind::CannotDeleteLastSection => {
+            "Cannot delete the last section; a document must keep at least one".into()
+        }
+        ErrorKind::InvalidSectionType => {
+            "section type must be nextPage, continuous, evenPage, oddPage, or nextColumn".into()
+        }
+        ErrorKind::SectionTypeOnLastPara => {
+            "the last paragraph must not have sectionType; the last section stays on w:body".into()
         }
         ErrorKind::CommentNotFound { id } => format!("Comment not found: {id}"),
         ErrorKind::NeedCommentParaId => {

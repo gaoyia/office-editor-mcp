@@ -73,7 +73,7 @@ xlsx 页眉页脚是工作表上的 `headerFooter`（ECMA-376 §18.3.1.46），�
 
 没有 `w14:paraId` 时：`para:index:{n}`，`n` 从 1 起，按主文档部件里 `w:p` 的文档顺序（含表格单元格里的段落）。树上同时给 `"stable": false`。这类 id 在增删段落后会变，只够同一次 inspect 之后立刻 apply。
 
-标题和正文都是段落，不另编一套 id。脚注、尾注、批注都是独立故事：根上始终有计数；给了对应 `scope` 才列出名单，并可 apply。分隔符三条不进用户名单，禁止 apply。文本框是独立节点：框本身、框内段落与框内图按下面规则进树，并可 apply。页眉、页脚按下面规则进树，可按 id 改字；节上的页眉页脚距边界、页面边距、纸张、分栏、垂直对齐、行号、文档网格、装订线侧，以及是否链接到前一节，都可以读写。整篇的镜像边距与装订线在上，写在 `settings.xml`。页眉、页脚、正文、注和批注里的 DrawingML 图片可查、换、插、删，并可改尺寸与绕排。正文与页眉页脚里的 `w:tbl` 可查、插、删，并可插删行与列、合并与拆分单元格。正文与页眉页脚里的 run 级插入、删除与段落/run 属性修订可按范围列出，并可接受或拒绝被点名的一条。apply 可用 `insertHeaderFooter` 为某节某类型新建页眉或页脚部件，可用 `setTitlePage` 写本节 `w:titlePg`，可用 `setEvenAndOddHeaders` 写整篇 `w:evenAndOddHeaders`。`create` 可在正文和页眉页脚上写 DrawingML 图，也可写文本框与 SmartArt；页眉页脚允许 `default` / `even` / `first`；不写脚注、尾注、批注、图表、修订。带图字段见下文 create。嵌入图表不是 `pic:pic`：根上始终有 `chartCount`；给了 `scope.charts` 才列出名单，并可 apply。SmartArt 不是 `pic:pic`：根上始终有 `smartArtCount`；给了 `scope.smartArt` 才列出名单，并可 apply。框内、注内、批注内的图表与 SmartArt 本期不进树、不接受 apply。
+标题和正文都是段落，不另编一套 id。脚注、尾注、批注都是独立故事：根上始终有计数；给了对应 `scope` 才列出名单，并可 apply。分隔符三条不进用户名单，禁止 apply。文本框是独立节点：框本身、框内段落与框内图按下面规则进树，并可 apply。页眉、页脚按下面规则进树，可按 id 改字；节上的页眉页脚距边界、页面边距、纸张、分栏、垂直对齐、行号、文档网格、装订线侧，以及是否链接到前一节，都可以读写。整篇的镜像边距与装订线在上，写在 `settings.xml`。页眉、页脚、正文、注和批注里的 DrawingML 图片可查、换、插、删，并可改尺寸与绕排。正文与页眉页脚里的 `w:tbl` 可查、插、删，并可插删行与列、合并与拆分单元格。正文与页眉页脚里的 run 级插入、删除与段落/run 属性修订可按范围列出，并可接受或拒绝被点名的一条。apply 可用 `insertHeaderFooter` 为某节某类型新建页眉或页脚部件，可用 `setTitlePage` 写本节 `w:titlePg`，可用 `setEvenAndOddHeaders` 写整篇 `w:evenAndOddHeaders`，可用 `insertSection` 在某段之后插入分节符，可用 `deleteSection` 删掉非末节并把内容并进下一节。`create` 可在正文和页眉页脚上写 DrawingML 图，也可写文本框与 SmartArt；页眉页脚允许 `default` / `even` / `first`；不写脚注、尾注、批注、图表、修订。带图字段见下文 create。嵌入图表不是 `pic:pic`：根上始终有 `chartCount`；给了 `scope.charts` 才列出名单，并可 apply。SmartArt 不是 `pic:pic`：根上始终有 `smartArtCount`；给了 `scope.smartArt` 才列出名单，并可 apply。框内、注内、批注内的图表与 SmartArt 本期不进树、不接受 apply。
 
 页眉、页脚 id 按部件编，不按节编。`w:sectPr` 里的 `w:headerReference` / `w:footerReference`（§17.10.2、§17.10.5）经主文档关系解到部件路径。同一部件只出一个容器节点；多个节引用同一部件时，`sections` 列出所有节号。后一节某类型引用省略时按规范继承前节（§17.10.2）；`even` 是否继承还看 `settings.xml` 的 `w:evenAndOddHeaders`（§17.10.1），`first` 是否继承还看该节的 `w:titlePg`（§17.10.6）。OOXML 没有「链接到前一节」元素；Word UI 的勾选就是这种省略。inspect 在每个节上用 `headerLink` / `footerLink` 标出该类型是显式引用、继承前节，还是对本节不生效。apply 用 `setHeaderFooterLink` 断开或重新链接；用 `insertHeaderFooter` 在空白槽位新建部件。两节显式指向同一部件不算链接，两边都是 `false`。
 
@@ -122,7 +122,7 @@ xlsx 页眉页脚是工作表上的 `headerFooter`（ECMA-376 §18.3.1.46），�
 | 样式 | `style:{styleId}` | `style:Normal` |
 | 段落内 run | `{段落 id}/run:{n}` | `para:3F2A1B00/run:1`、`header:default:1/para:AA/run:2` |
 
-节号 `{n}` 从 1 起，按主文档里 `w:sectPr` 的文档顺序（与页眉目录相同）。距边界挂在节上，不挂在页眉部件节点上。页眉页脚图挂在容器上，不挂在节上。正文图挂在它所在的主文档段落上，不挂在文档根上。对 `section:{n}` 发 `setParaText` 或图片 op 报 `InvalidId`。
+节号 `{n}` 从 1 起，按主文档里 `w:sectPr` 的文档顺序（与页眉目录相同）。`insertSection` / `deleteSection` 之后旧的 `section:{n}` 会变，只够同一次 inspect 之后立刻 apply。距边界挂在节上，不挂在页眉部件节点上。页眉页脚图挂在容器上，不挂在节上。正文图挂在它所在的主文档段落上，不挂在文档根上。对 `section:{n}` 发 `setParaText` 或图片 op 报 `InvalidId`。`insertSection` 的 `id` 必须是主文档 `w:body` 的直接子段落 id，或 `docx:document`。`deleteSection` 的 `id` 必须是 `section:{n}`。对页眉页脚、框内、注内、批注内、表格单元格内的段落 id，或容器 id、表 id、run id 发 `insertSection` 报 `InvalidId`。
 
 `{type}` 取引用上 `w:type` 的原文，只允许 `default`、`even`、`first`（`ST_HdrFtr`，§17.18.36）。缺失或不是这三项报 `XmlBroken`。`{n}` 在同一 `kind`（header 或 footer）与 `{type}` 下，按该部件首次出现的顺序从 1 起。页眉页脚段落没有 `w14:paraId` 时用 `para:index:{k}`，`k` 只在该部件内从 1 计。
 
@@ -162,7 +162,7 @@ SmartArt 的 `{docPrId}` 取该 `w:drawing` 里 `wp:docPr/@id` 的原文，匹�
 
 直接格式写在该段自己的 `w:pPr` 或该 run 自己的 `w:rPr` 上，不改 `styles.xml`。run 的 `{n}` 从 1 起，按该段内被收入的 `w:r` 文档顺序。遇 `w:txbxContent` 停住；`mc:AlternateContent` 只进 Choice；`w:del` 里的 run 不编。`w:ins`、`w:hyperlink` 里的 run 要编。增删 run 之后 `{n}` 会变，只够同一次 inspect 之后立刻 apply。对 run id 发 `setParaText` / `setParaFormat` 报 `InvalidId`。对段落 id 发 `setRunFormat` 报 `InvalidId`。
 
-`insertHyperlink` 的 `id` 必须是段落 id（正文或页眉页脚）。`setHyperlink` / `deleteHyperlink` 的 `id` 必须是超链接 id。`insertBookmark` 的 `id` 必须是起始段落 id；可选 `end` 为同一故事里的结束段落 id。`setBookmark` / `deleteBookmark` 的 `id` 必须是书签 id。`insertField` 的 `id` 必须是段落 id（正文或页眉页脚）。`setField` / `deleteField` 的 `id` 必须是域 id。`insertNumbering` 的 `id` 必须是 `docx:document`。`setNumbering` 的 `id` 必须是抽象编号 id。`setParaNumbering` 的 `id` 必须是段落 id（正文或页眉页脚）。`setStyle` 的 `id` 必须是样式 id。`setParaStyle` 的 `id` 必须是段落 id（正文或页眉页脚）。`setParaFormat` 的 `id` 必须是段落 id（正文、页眉页脚、框内、注内或批注内）。`setRunFormat` 的 `id` 必须是 run id。对不上的 id 形态报 `InvalidId`。
+`insertHyperlink` 的 `id` 必须是段落 id（正文或页眉页脚）。`setHyperlink` / `deleteHyperlink` 的 `id` 必须是超链接 id。`insertBookmark` 的 `id` 必须是起始段落 id；可选 `end` 为同一故事里的结束段落 id。`setBookmark` / `deleteBookmark` 的 `id` 必须是书签 id。`insertField` 的 `id` 必须是段落 id（正文或页眉页脚）。`setField` / `deleteField` 的 `id` 必须是域 id。`insertNumbering` 的 `id` 必须是 `docx:document`。`setNumbering` 的 `id` 必须是抽象编号 id。`setParaNumbering` 的 `id` 必须是段落 id（正文或页眉页脚）。`setStyle` 的 `id` 必须是样式 id。`setParaStyle` 的 `id` 必须是段落 id（正文或页眉页脚）。`setParaFormat` 的 `id` 必须是段落 id（正文、页眉页脚、框内、注内或批注内）。`setRunFormat` 的 `id` 必须是 run id。`insertSection` 的 `id` 必须是主文档 `w:body` 的直接子段落 id 或 `docx:document`。`deleteSection` 的 `id` 必须是 `section:{n}`。对不上的 id 形态报 `InvalidId`。
 
 图的 `{docPrId}` 取该 `w:drawing` 里 `wp:docPr/@id` 的原文（ECMA-376 §20.4）。输出用文件里的原始大小写与数字写法。请求里若双方都能解析成十进制整数，按数值匹配（`1` 与 `01` 视为同一处）；否则按原文精确比。同一归属范围内重复 `docPr/@id` 时，inspect 都列出，apply 命中该范围内文档顺序第一处。页眉页脚的范围是该容器部件；正文的范围是该段。没有 `docPr/@id` 时用 `pic:index:{k}`，树上 `"stable": false`。页眉页脚的 `{k}` 只在该部件内从 1 计；正文的 `{k}` 只在该段内从 1 计。两种 `{k}` 都计入该范围内所有被收入的图，不只是缺 id 的那些。只认 DrawingML 的 `pic:pic` 且带 `a:blip` 的 `w:drawing`。VML / `w:pict`、图表、SmartArt、文本框不进宿主段落的 `pictures`。框内图走框内段落上的 `pictures`，id 带框前缀。`mc:AlternateContent` 仍只进 Choice。正文图只收主文档段落的子孙，遇 `w:txbxContent` 停住，表格单元格里的段落与正文段落同一套规则。
 
@@ -792,6 +792,7 @@ xlsx、docx、pptx 共用 `scope` 这个字段名，里面的键按格式分，�
 | `document.paragraphs` | 段落列表。可空；空则生成一个空的 `w:p`，否则 Word 可能打不开 |
 | `paragraphs[].text` | 可见文本，可空字符串。省略当作 `""` |
 | `paragraphs[].style` | 段落样式 id。省略或 `Normal` 表示正文。第一期只允许 `Normal`、`Heading1`、`Heading2`、`Heading3`（大小写不敏感，写出时用这里的 canonical 形式） |
+| `paragraphs[].sectionType` | 可选。该段是非末节的末段，取值与 `insertSection` 的 `type` 相同。在该段 `pPr` 写出 `w:sectPr`（含 `w:type` 与默认 `pgSz` / `pgMar`）。最后一段禁止带此字段，否则报 `InvalidField`。省略则该段不是分节末段。页眉、页脚段落不允许此字段 |
 | `paragraphs[].textBoxes` | 可选。该段上的文本框列表。省略则不写框 |
 | `paragraphs[].pictures` | 可选。该段上的图列表。省略则不写图 |
 | `paragraphs[].smartArts` | 可选。该段上的 SmartArt 列表。省略则不写图示。字段与 `insertSmartArt` 相同，但不含 `id` |
@@ -822,7 +823,7 @@ xlsx、docx、pptx 共用 `scope` 这个字段名，里面的键按格式分，�
 
 create 写出 Transitional 最小包，见 [opc.md](opc.md)。每个 `w:p` 都带唯一的 `w14:paraId` 和 `w14:textId`（取值大于 0、小于 `0x80000000`，MS-DOCX §2.6.2.3 / §2.6.2.4），并在根元素上把 `w14` 列入 `mc:Ignorable`。这样随后 inspect 得到的 id 都是 `para:{paraId}`，`stable` 为 `true`。图的 `wp:docPr/@id` 在该部件内从 `1` 起递增，与 `insertPicture` 同一套写入。
 
-标题段写出 `<w:pStyle w:val="Heading1"/>` 这类引用，样式定义放在 `/word/styles.xml`。同时写 `/word/settings.xml`，含 `<w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="15"/>`（MS-DOCX §2.3.5）。缺这项时 Word 按兼容模式打开（默认 12）。`textBoxes` 写成浮动 `square` 的 `wps:wsp`，与 `insertTextBox` 同一套最小 Choice。`smartArts` 复用 `insertSmartArt` 的四件套生成。给了 `headers` / `footers` 时按出现顺序写 `/word/headerN.xml` 或 `/word/footerN.xml`，并在第一节 `sectPr` 上挂对应 `w:type` 的引用。给了 `even` 则 `settings.xml` 含 `<w:evenAndOddHeaders/>`。给了 `first` 则第一节 `sectPr` 含 `<w:titlePg/>`。不要生成多节、目录、修订、脚注、尾注、批注、图表。默认页眉页脚带框不在本期 create。给了 `tables` 时写出带单线边框的 `w:tbl`，每列 `gridCol` 宽 1440 twip，每格一段，带新的 `w14:paraId`。不写 `tblStyle`。不算列宽。
+标题段写出 `<w:pStyle w:val="Heading1"/>` 这类引用，样式定义放在 `/word/styles.xml`。同时写 `/word/settings.xml`，含 `<w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="15"/>`（MS-DOCX §2.3.5）。缺这项时 Word 按兼容模式打开（默认 12）。`textBoxes` 写成浮动 `square` 的 `wps:wsp`，与 `insertTextBox` 同一套最小 Choice。`smartArts` 复用 `insertSmartArt` 的四件套生成。给了 `headers` / `footers` 时按出现顺序写 `/word/headerN.xml` 或 `/word/footerN.xml`，并在第一节 `sectPr` 上挂对应 `w:type` 的引用。若第一节在某段上结束，引用写在该段的 `sectPr` 上，不要留在 `w:body`。给了 `even` 则 `settings.xml` 含 `<w:evenAndOddHeaders/>`。给了 `first` 则第一节 `sectPr` 含 `<w:titlePg/>`。给了 `paragraphs[].sectionType` 时写出对应中间节；末节的 `sectPr` 仍在 `w:body` 末尾。不要生成目录、修订、脚注、尾注、批注、图表。默认页眉页脚带框不在本期 create。给了 `tables` 时写出带单线边框的 `w:tbl`，每列 `gridCol` 宽 1440 twip，每格一段，带新的 `w14:paraId`。不写 `tblStyle`。不算列宽。
 
 ### pptx
 
@@ -925,7 +926,7 @@ create 与 apply 落盘时先写入目标同目录的临时文件，再改名为
 | `value` | 与 create 相同。`null` 表示清空该格的值和公式 |
 | `formula` | 以 `=` 开头。不能与 `value` 同时出现 |
 
-不认识的 `op` 报 `UnsupportedOp`，不要忽略。xlsx 认 `setCell`、`setHeaderFooterText`、`replacePicture`、`insertPicture`、`deletePicture`、`setPictureSize`、`setPictureAnchor`、以及图表 op（`insertChart`、`insertChartSheet`、`deleteChartSheet`、`deleteChart`、`setChartTitle`、`setChartSeries`、`addChartSeries`、`deleteChartSeries`、`setChartType`、`setChartAxisTitle`、`setChartLegend`、`setChartDataLabels`、`setChartSize`、`setChartAnchor`；不含 `setChartWrap`）。docx 认 `setParaText`、`setHeaderFooterDistance`、`setPageMargin`、`setPageSize`、`setColumns`、`setVerticalAlign`、`setLineNumbering`、`setDocGrid`、`setRtlGutter`、`setMirrorMargins`、`setGutterAtTop`、`setHeaderFooterLink`、`insertHeaderFooter`、`setTitlePage`、`setEvenAndOddHeaders`、图片 op（含 `setPictureWrap`，不含 `setPictureAnchor`）、文本框 op、`insertPara` / `deletePara`、表格 op（`insertTable`、`deleteTable`、`insertRow`、`deleteRow`、`insertCol`、`deleteCol`、`mergeCells`、`splitCells`）、修订 op（`acceptRevision`、`rejectRevision`）、超链接与书签 op（`insertHyperlink`、`setHyperlink`、`deleteHyperlink`、`insertBookmark`、`setBookmark`、`deleteBookmark`）、域 op（`insertField`、`setField`、`deleteField`）、编号 op（`insertNumbering`、`setNumbering`、`setParaNumbering`）、样式 op（`setStyle`、`setParaStyle`）、直接格式 op（`setParaFormat`、`setRunFormat`）、脚注尾注 op（`insertFootnote`、`insertEndnote`、`deleteFootnote`、`deleteEndnote`、`setNoteNumbering`）、批注 op（`insertComment`、`deleteComment`、`replyComment`、`setCommentText`、`setCommentMeta`、`setCommentDone`）、图表 op（`insertChart`、`deleteChart`、`setChartTitle`、`setChartSeries`、`addChartSeries`、`deleteChartSeries`、`setChartType`、`setChartAxisTitle`、`setChartLegend`、`setChartDataLabels`、`setChartSize`、`setChartWrap`；不含 `setChartAnchor`、`insertChartSheet`、`deleteChartSheet`）、以及 SmartArt op（`insertSmartArt`、`deleteSmartArt`、`setSmartArtText`、`addSmartArtPoint`、`deleteSmartArtPoint`、`setSmartArtSize`、`setSmartArtWrap`、`setSmartArtColors`、`setSmartArtStyle`、`setSmartArtLayout`）。pptx 认 `setShapeText`、`setNotesText`、批注 op（`insertComment`、`deleteComment`、`replyComment`、`setCommentText`、`setCommentMeta`、`setCommentDone`）、`replacePicture`、`insertPicture`、`deletePicture`、`setPictureSize`、`setPicturePos`、以及图表 op（`insertChart`、`deleteChart`、`setChartTitle`、`setChartSeries`、`addChartSeries`、`deleteChartSeries`、`setChartType`、`setChartAxisTitle`、`setChartLegend`、`setChartDataLabels`、`setChartSize`、`setChartPos`；不含 `setChartWrap`、`setChartAnchor`、`insertChartSheet`、`deleteChartSheet`）、以及 SmartArt op（`insertSmartArt`、`deleteSmartArt`、`setSmartArtText`、`addSmartArtPoint`、`deleteSmartArtPoint`、`setSmartArtSize`、`setSmartArtPos`、`setSmartArtColors`、`setSmartArtStyle`、`setSmartArtLayout`；不含 `setSmartArtWrap`）。对不上格式的 op（例如对 pptx 发 `setCell` / `setParaText`，对 xlsx 发 `setPictureWrap`、`setChartWrap` 或 `setHeaderFooterDistance` / `setPageMargin` / `setPageSize` / `setColumns` / `setVerticalAlign` / `setLineNumbering` / `setDocGrid` / `setRtlGutter` / `setMirrorMargins` / `setGutterAtTop` / `setHeaderFooterLink` / `insertHeaderFooter` / `setTitlePage` / `setEvenAndOddHeaders`、文本框、注、批注、SmartArt 的 op、表格 op、修订 op、超链接与书签 op、域 op、编号 op、样式 op、直接格式 op 或 `setNotesText`，对 docx / pptx 发 `setHeaderFooterText`、`insertChartSheet` 或 `deleteChartSheet`，对 docx 发 `setPictureAnchor` / `setChartAnchor` / `setSmartArtPos` / `setNotesText`，对 pptx 发 `setPictureWrap` / `setPictureAnchor` / `setChartWrap` / `setChartAnchor` / `setSmartArtWrap`，或对 docx / xlsx 发 `setPicturePos` / `setChartPos` / `setSmartArtPos` / `setNotesText`）报 `InvalidField`。
+不认识的 `op` 报 `UnsupportedOp`，不要忽略。xlsx 认 `setCell`、`setHeaderFooterText`、`replacePicture`、`insertPicture`、`deletePicture`、`setPictureSize`、`setPictureAnchor`、以及图表 op（`insertChart`、`insertChartSheet`、`deleteChartSheet`、`deleteChart`、`setChartTitle`、`setChartSeries`、`addChartSeries`、`deleteChartSeries`、`setChartType`、`setChartAxisTitle`、`setChartLegend`、`setChartDataLabels`、`setChartSize`、`setChartAnchor`；不含 `setChartWrap`）。docx 认 `setParaText`、`setHeaderFooterDistance`、`setPageMargin`、`setPageSize`、`setColumns`、`setVerticalAlign`、`setLineNumbering`、`setDocGrid`、`setRtlGutter`、`setMirrorMargins`、`setGutterAtTop`、`setHeaderFooterLink`、`insertHeaderFooter`、`setTitlePage`、`setEvenAndOddHeaders`、图片 op（含 `setPictureWrap`，不含 `setPictureAnchor`）、文本框 op、`insertPara` / `deletePara`、表格 op（`insertTable`、`deleteTable`、`insertRow`、`deleteRow`、`insertCol`、`deleteCol`、`mergeCells`、`splitCells`）、修订 op（`acceptRevision`、`rejectRevision`）、超链接与书签 op（`insertHyperlink`、`setHyperlink`、`deleteHyperlink`、`insertBookmark`、`setBookmark`、`deleteBookmark`）、域 op（`insertField`、`setField`、`deleteField`）、编号 op（`insertNumbering`、`setNumbering`、`setParaNumbering`）、样式 op（`setStyle`、`setParaStyle`）、直接格式 op（`setParaFormat`、`setRunFormat`）、节结构 op（`insertSection`、`deleteSection`）、脚注尾注 op（`insertFootnote`、`insertEndnote`、`deleteFootnote`、`deleteEndnote`、`setNoteNumbering`）、批注 op（`insertComment`、`deleteComment`、`replyComment`、`setCommentText`、`setCommentMeta`、`setCommentDone`）、图表 op（`insertChart`、`deleteChart`、`setChartTitle`、`setChartSeries`、`addChartSeries`、`deleteChartSeries`、`setChartType`、`setChartAxisTitle`、`setChartLegend`、`setChartDataLabels`、`setChartSize`、`setChartWrap`；不含 `setChartAnchor`、`insertChartSheet`、`deleteChartSheet`）、以及 SmartArt op（`insertSmartArt`、`deleteSmartArt`、`setSmartArtText`、`addSmartArtPoint`、`deleteSmartArtPoint`、`setSmartArtSize`、`setSmartArtWrap`、`setSmartArtColors`、`setSmartArtStyle`、`setSmartArtLayout`）。pptx 认 `setShapeText`、`setNotesText`、批注 op（`insertComment`、`deleteComment`、`replyComment`、`setCommentText`、`setCommentMeta`、`setCommentDone`）、`replacePicture`、`insertPicture`、`deletePicture`、`setPictureSize`、`setPicturePos`、以及图表 op（`insertChart`、`deleteChart`、`setChartTitle`、`setChartSeries`、`addChartSeries`、`deleteChartSeries`、`setChartType`、`setChartAxisTitle`、`setChartLegend`、`setChartDataLabels`、`setChartSize`、`setChartPos`；不含 `setChartWrap`、`setChartAnchor`、`insertChartSheet`、`deleteChartSheet`）、以及 SmartArt op（`insertSmartArt`、`deleteSmartArt`、`setSmartArtText`、`addSmartArtPoint`、`deleteSmartArtPoint`、`setSmartArtSize`、`setSmartArtPos`、`setSmartArtColors`、`setSmartArtStyle`、`setSmartArtLayout`；不含 `setSmartArtWrap`）。对不上格式的 op（例如对 pptx 发 `setCell` / `setParaText`，对 xlsx 发 `setPictureWrap`、`setChartWrap` 或 `setHeaderFooterDistance` / `setPageMargin` / `setPageSize` / `setColumns` / `setVerticalAlign` / `setLineNumbering` / `setDocGrid` / `setRtlGutter` / `setMirrorMargins` / `setGutterAtTop` / `setHeaderFooterLink` / `insertHeaderFooter` / `setTitlePage` / `setEvenAndOddHeaders`、文本框、注、批注、SmartArt 的 op、表格 op、修订 op、超链接与书签 op、域 op、编号 op、样式 op、直接格式 op、节结构 op 或 `setNotesText`，对 docx / pptx 发 `setHeaderFooterText`、`insertChartSheet` 或 `deleteChartSheet`，对 docx 发 `setPictureAnchor` / `setChartAnchor` / `setSmartArtPos` / `setNotesText`，对 pptx 发 `setPictureWrap` / `setPictureAnchor` / `setChartWrap` / `setChartAnchor` / `setSmartArtWrap`，或对 docx / xlsx 发 `setPicturePos` / `setChartPos` / `setSmartArtPos` / `setNotesText`）报 `InvalidField`。
 
 空单元格：目标格子在 XML 里还不存在时，`setCell` 按需插入 `<row>` 和 `<c>`，插在正确的行列顺序上。找不到工作表才报 `IdNotFound`。
 
@@ -1583,6 +1584,65 @@ pptx：找不到该页报 `IdNotFound`。`id` 必须是 `slide:{n}` 或 `slide:{
 `deletePara` 时，若该段里的书签、批注范围或许可范围起止不成对（跨到段外），报 `NotImplemented`。段内有 `w:ins`、`w:del`、`w:moveFrom` 或 `w:moveTo` 时同样报 `NotImplemented`。不要拆坏跨段标记。框内、注内、批注内的既有规则不变。
 
 xlsx / pptx 上发此 op 报 `InvalidField`。
+
+### insertSection
+
+```json
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "C:\\data\\note.docx",
+  "output": "C:\\data\\note.split.docx",
+  "ops": [
+    { "op": "insertSection", "id": "para:3F2A1B00", "type": "nextPage" }
+  ]
+}
+```
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"insertSection"` |
+| `id` | 主文档 `w:body` 的直接子段落 id（插在该段之后），或 `docx:document`（在文档末尾插入新的空节） |
+| `type` | 可选。`nextPage`、`continuous`、`evenPage`、`oddPage`、`nextColumn`（`ST_SectionMark`）。省略当作 `nextPage`。写在新分节符所在的那个 `w:sectPr` 上 |
+
+插在点名段之后：该段成为当前节的最后一段。该段还没有 `pPr/sectPr` 时，把分节符写在该段上。该段已经带 `sectPr` 时，在它后面插入一个空的 `w:p`（新 `w14:paraId`），把新分节符放在这个空段上。不要拆 run，不要拆段落中间。
+
+节属性副本克隆该段当前所属节的 `w:sectPr`（含 `pgSz` / `pgMar` / `cols` / `titlePg` / `footnotePr` 等）。分节符之前的那一节保留原来的页眉、页脚引用。分节符之后的那一节省略 `headerReference` / `footerReference`，inspect 的 `headerLink` / `footerLink` 按已有规则为 `true`（第一节除外）。不要把引用抄到新节上。
+
+点名段是当前最后一节的最后一段时：该段写上带引用的 `sectPr`，并在 `w:body` 的 `sectPr` 之前再插一个空的 `w:p`，保证末节至少有一段。`id` 为 `docx:document` 时：已有正文留在原末节，新节至少有一个空段。
+
+该段之后、下一 `sectPr` 之前的块级内容（含 `w:tbl`）属于新节。最后一节的 `sectPr` 仍在 `w:body` 末尾，中间节在段末，不要写反。插完之后 `section:{n}` 按新的文档顺序重编。
+
+表格单元格内、页眉页脚、框内、注内、批注内的段落，以及 `section:{n}`、容器 id、表 id、run id，一律报 `InvalidId`。找不到段落报 `IdNotFound`。不认识的 `type` 报 `InvalidField`。xlsx / pptx 上发此 op 报 `InvalidField`。
+
+### deleteSection
+
+```json
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "C:\\data\\note.docx",
+  "output": "C:\\data\\note.merge.docx",
+  "ops": [
+    { "op": "deleteSection", "id": "section:1" }
+  ]
+}
+```
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"deleteSection"` |
+| `id` | 节 id，必须是 `section:{n}`。`n` 不能是最后一节 |
+
+删掉结束第 `n` 节的那个 `w:sectPr`（一定在某段 `pPr` 上，不会是 `w:body` 末尾那一份）。第 `n` 节的正文并进第 `n+1` 节，沿用第 `n+1` 节的节属性。这与 Word 删除分节符的方向相同。
+
+只剩一节，或对最后一节发此 op，报 `InvalidField`。节不存在报 `IdNotFound`。id 不是 `section:{n}` 报 `InvalidId`。
+
+删完后，若某个 header/footer 部件没有任何节的 `headerReference` / `footerReference` 再用，按 `setHeaderFooterLink` 且 `linked: true` 的既有逻辑删部件、主文档关系、该部件 `.rels`、Override。媒体仍被其它页眉引用则留下。xlsx / pptx 上发此 op 报 `InvalidField`。
+
+`deletePara` 现有规则不变：非末段带 `sectPr` 仍报 `NotImplemented`。要拆掉分节符请用 `deleteSection`。
+
+示例见 `docs/examples/docx-apply-insert-section.json`。create 多节见 `docs/examples/docx-create-sections.json`。
 
 ### insertTable
 
@@ -2336,7 +2396,7 @@ Content Type：data 为 `application/vnd.openxmlformats-officedocument.drawingml
 
 ### 改动范围（docx）
 
-允许变脏的部件：主文档 XML（通常是 `/word/document.xml`）及其 `.rels`，被 `setParaText`、`setParaFormat`、`setRunFormat`、图片 op、文本框 op、图表 op、SmartArt op、表格结构 op、修订 op、超链接与书签 op、域 op、`setParaNumbering` 或 `setParaStyle` 点名的页眉、页脚部件及其 `.rels`，`setHeaderFooterLink` / `insertHeaderFooter` 改到的主文档关系、`[Content_Types].xml`、新建或删除的 header/footer 部件及其 `.rels`，脚注 / 尾注部件及其 `.rels`，批注部件 `/word/comments.xml`、`commentsExtended.xml`、`people.xml`，以及文件里已有的 `commentsIds.xml` / `commentsExtensible.xml`，图表部件 `/word/charts/…` 及其 `.rels`，embedding `/word/embeddings/…`，SmartArt 四件套 `/word/diagrams/…` 及可选 drawing 缓存，`setNoteNumbering` 在整篇上改到的 `settings.xml` 与主文档（各节 `sectPr`），`setEvenAndOddHeaders` / `setMirrorMargins` / `setGutterAtTop` 改到的 `settings.xml`，编号 op 改到的 `/word/numbering.xml`、主文档 `.rels` 与 `[Content_Types].xml`，`setStyle` 改到的 `/word/styles.xml`，以及新媒体或被删的 `/word/media/…`。`setHeaderFooterDistance`、`setPageMargin`、`setPageSize`、`setColumns`、`setVerticalAlign`、`setLineNumbering`、`setDocGrid`、`setRtlGutter` 与 `setTitlePage` 只脏主文档。正文图片 op、文本框 op、图表 op、SmartArt op、正文表格结构 op、正文修订 op、正文超链接 / 书签 op、正文域 op、正文 `setParaNumbering`、正文 `setParaStyle`、正文 `setParaFormat` 与正文 `setRunFormat` 脏主文档与主文档 `.rels`。一次 `ops` 可以混用 `setParaText`、`setHeaderFooterDistance`、`setPageMargin`、`setPageSize`、`setColumns`、`setVerticalAlign`、`setLineNumbering`、`setDocGrid`、`setRtlGutter`、`setMirrorMargins`、`setGutterAtTop`、`setHeaderFooterLink`、`insertHeaderFooter`、`setTitlePage`、`setEvenAndOddHeaders`、图片 op、文本框 op、脚注尾注 op、批注 op、图表 op、SmartArt op、表格结构 op、修订 op、超链接 / 书签 op、域 op 与编号 op、样式 op、直接格式 op。未点名的 `styles.xml`、未点名的页眉页脚、主题一律原样写回。未点名的 `numbering.xml` 也原样写回。未点名的 `settings.xml` 也原样写回。`setNoteNumbering` 只点名某一节时只脏主文档，不改 `settings.xml`。`replyComment` 会脏出现父批注范围标记的宿主部件（常见是主文档）。只改批注文本、元数据或完成标记时，未出现范围标记的宿主部件（常见是主文档）原字节写回。只改图表 cache / 标题 / 图例、且宿主 drawing 未动时，未点名的正文段落字节按「drawing 未动」验收。只改 SmartArt 点文字或增删点、且宿主 drawing 未动时，同样按「drawing 未动」验收。
+允许变脏的部件：主文档 XML（通常是 `/word/document.xml`）及其 `.rels`，被 `setParaText`、`setParaFormat`、`setRunFormat`、图片 op、文本框 op、图表 op、SmartArt op、表格结构 op、修订 op、超链接与书签 op、域 op、`setParaNumbering` 或 `setParaStyle` 点名的页眉、页脚部件及其 `.rels`，`setHeaderFooterLink` / `insertHeaderFooter` / `deleteSection` 改到的主文档关系、`[Content_Types].xml`、新建或删除的 header/footer 部件及其 `.rels`，脚注 / 尾注部件及其 `.rels`，批注部件 `/word/comments.xml`、`commentsExtended.xml`、`people.xml`，以及文件里已有的 `commentsIds.xml` / `commentsExtensible.xml`，图表部件 `/word/charts/…` 及其 `.rels`，embedding `/word/embeddings/…`，SmartArt 四件套 `/word/diagrams/…` 及可选 drawing 缓存，`setNoteNumbering` 在整篇上改到的 `settings.xml` 与主文档（各节 `sectPr`），`setEvenAndOddHeaders` / `setMirrorMargins` / `setGutterAtTop` 改到的 `settings.xml`，编号 op 改到的 `/word/numbering.xml`、主文档 `.rels` 与 `[Content_Types].xml`，`setStyle` 改到的 `/word/styles.xml`，以及新媒体或被删的 `/word/media/…`。`setHeaderFooterDistance`、`setPageMargin`、`setPageSize`、`setColumns`、`setVerticalAlign`、`setLineNumbering`、`setDocGrid`、`setRtlGutter`、`setTitlePage` 与 `insertSection` 只脏主文档。`deleteSection` 脏主文档，并可能删掉不再被引用的 header/footer 部件。正文图片 op、文本框 op、图表 op、SmartArt op、正文表格结构 op、正文修订 op、正文超链接 / 书签 op、正文域 op、正文 `setParaNumbering`、正文 `setParaStyle`、正文 `setParaFormat` 与正文 `setRunFormat` 脏主文档与主文档 `.rels`。一次 `ops` 可以混用 `setParaText`、`setHeaderFooterDistance`、`setPageMargin`、`setPageSize`、`setColumns`、`setVerticalAlign`、`setLineNumbering`、`setDocGrid`、`setRtlGutter`、`setMirrorMargins`、`setGutterAtTop`、`setHeaderFooterLink`、`insertHeaderFooter`、`setTitlePage`、`setEvenAndOddHeaders`、`insertSection`、`deleteSection`、图片 op、文本框 op、脚注尾注 op、批注 op、图表 op、SmartArt op、表格结构 op、修订 op、超链接 / 书签 op、域 op 与编号 op、样式 op、直接格式 op。未点名的 `styles.xml`、未点名的页眉页脚、主题一律原样写回。未点名的 `numbering.xml` 也原样写回。未点名的 `settings.xml` 也原样写回。`setNoteNumbering` 只点名某一节时只脏主文档，不改 `settings.xml`。`replyComment` 会脏出现父批注范围标记的宿主部件（常见是主文档）。只改批注文本、元数据或完成标记时，未出现范围标记的宿主部件（常见是主文档）原字节写回。只改图表 cache / 标题 / 图例、且宿主 drawing 未动时，未点名的正文段落字节按「drawing 未动」验收。只改 SmartArt 点文字或增删点、且宿主 drawing 未动时，同样按「drawing 未动」验收。
 
 被改部件同样整份重序列化，保留程度与 xlsx 工作表相同：元素与属性顺序、未知命名空间保留；注释、处理指令、DOCTYPE 会丢。
 

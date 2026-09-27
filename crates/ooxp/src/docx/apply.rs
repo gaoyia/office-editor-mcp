@@ -18,18 +18,19 @@ use super::para::{self, BodyPara, HostPara, NoteKind, ParaTarget};
 use super::picture;
 use super::request::{
     DeleteBookmarkOp, DeleteColOp, DeleteCommentOp, DeleteFieldOp, DeleteHyperlinkOp, DeleteNoteOp,
-    DeleteParaOp, DeletePictureOp, DeleteRowOp, DeleteTableOp, DeleteTextBoxOp, DocxOp,
-    InsertBookmarkOp, InsertColOp, InsertCommentOp, InsertFieldOp, InsertHeaderFooterOp,
+    DeleteParaOp, DeletePictureOp, DeleteRowOp, DeleteSectionOp, DeleteTableOp, DeleteTextBoxOp,
+    DocxOp, InsertBookmarkOp, InsertColOp, InsertCommentOp, InsertFieldOp, InsertHeaderFooterOp,
     InsertHyperlinkOp, InsertNoteOp, InsertNumberingOp, InsertParaOp, InsertParaPlace,
-    InsertPictureOp, InsertRowOp, InsertTableOp, InsertTextBoxOp, MergeCellsOp, NoteNumberTarget,
-    ReplacePictureOp, ReplyCommentOp, RevisionOp, SetBookmarkOp, SetColumnsOp, SetCommentDoneOp,
-    SetCommentMetaOp, SetCommentTextOp, SetDocGridOp, SetEvenAndOddHeadersOp, SetFieldOp,
-    SetGutterAtTopOp, SetHfDistanceOp, SetHfLinkOp, SetHyperlinkOp, SetLineNumberingOp,
-    SetMirrorMarginsOp, SetNoteNumberingOp, SetNumberingOp, SetPageMarginOp, SetPageSizeOp,
-    SetParaFormatOp, SetParaNumberingOp, SetParaStyleOp, SetParaTextOp, SetPictureSizeOp,
-    SetPictureWrapOp, SetRtlGutterOp, SetRunFormatOp, SetStyleOp, SetTextBoxDirectionOp,
-    SetTextBoxFillOp, SetTextBoxLineOp, SetTextBoxLinkOp, SetTextBoxSizeOp, SetTextBoxWrapOp,
-    SetTitlePageOp, SetVerticalAlignOp, SplitCellsOp,
+    InsertPictureOp, InsertRowOp, InsertSectionOp, InsertSectionPlace, InsertTableOp,
+    InsertTextBoxOp, MergeCellsOp, NoteNumberTarget, ReplacePictureOp, ReplyCommentOp, RevisionOp,
+    SetBookmarkOp, SetColumnsOp, SetCommentDoneOp, SetCommentMetaOp, SetCommentTextOp,
+    SetDocGridOp, SetEvenAndOddHeadersOp, SetFieldOp, SetGutterAtTopOp, SetHfDistanceOp,
+    SetHfLinkOp, SetHyperlinkOp, SetLineNumberingOp, SetMirrorMarginsOp, SetNoteNumberingOp,
+    SetNumberingOp, SetPageMarginOp, SetPageSizeOp, SetParaFormatOp, SetParaNumberingOp,
+    SetParaStyleOp, SetParaTextOp, SetPictureSizeOp, SetPictureWrapOp, SetRtlGutterOp,
+    SetRunFormatOp, SetStyleOp, SetTextBoxDirectionOp, SetTextBoxFillOp, SetTextBoxLineOp,
+    SetTextBoxLinkOp, SetTextBoxSizeOp, SetTextBoxWrapOp, SetTitlePageOp, SetVerticalAlignOp,
+    SplitCellsOp,
 };
 use super::revision;
 use super::sect;
@@ -75,6 +76,22 @@ pub fn apply(bytes: &[u8], ops: &[DocxOp]) -> Result<Vec<u8>, Error> {
             }
             DocxOp::InsertHeaderFooter(op) => {
                 apply_insert_hf(&mut pkg, &mut docs, &mut dirty, &doc_part, op, i)?;
+                refresh_hf_catalog(&pkg, &docs, &doc_part, &mut catalog)?;
+            }
+            DocxOp::InsertSection(op) => {
+                apply_insert_section(&mut docs, &mut dirty, &doc_part, op, i)?;
+                refresh_hf_catalog(&pkg, &docs, &doc_part, &mut catalog)?;
+            }
+            DocxOp::DeleteSection(op) => {
+                apply_delete_section(
+                    &mut pkg,
+                    &mut docs,
+                    &mut dirty,
+                    &mut removed,
+                    &doc_part,
+                    op,
+                    i,
+                )?;
                 refresh_hf_catalog(&pkg, &docs, &doc_part, &mut catalog)?;
             }
             DocxOp::SetTitlePage(op) => {
@@ -1734,6 +1751,74 @@ fn relink_section(
     removed.insert(old.clone());
     docs.remove(&old);
     dirty.remove(&old);
+    Ok(())
+}
+
+fn apply_insert_section(
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    op: &InsertSectionOp,
+    i: usize,
+) -> Result<(), Error> {
+    let doc = docs.get_mut(doc_part).unwrap();
+    let after = match &op.place {
+        InsertSectionPlace::After(p) => Some(p),
+        InsertSectionPlace::EndOfDocument => None,
+    };
+    sect::insert_section_break(&mut doc.root, after, op.break_type, &op.id, i)?;
+    dirty.insert(doc_part.to_string(), ());
+    Ok(())
+}
+
+fn apply_delete_section(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    removed: &mut HashSet<String>,
+    doc_part: &str,
+    op: &DeleteSectionOp,
+    i: usize,
+) -> Result<(), Error> {
+    let old_parts: Vec<String> = {
+        let catalog = hf::catalog(pkg, doc_part, &docs.get(doc_part).unwrap().root)?;
+        catalog.into_iter().map(|h| h.part).collect()
+    };
+    {
+        let doc = docs.get_mut(doc_part).unwrap();
+        sect::delete_section_break(&mut doc.root, op.n, &op.id, i)?;
+    }
+    dirty.insert(doc_part.to_string(), ());
+    drop_hf_parts_not_in_catalog(pkg, docs, dirty, removed, doc_part, &old_parts)
+}
+
+fn drop_hf_parts_not_in_catalog(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    removed: &mut HashSet<String>,
+    doc_part: &str,
+    old_parts: &[String],
+) -> Result<(), Error> {
+    let still = hf::catalog(pkg, doc_part, &docs.get(doc_part).unwrap().root)?;
+    for old in old_parts {
+        if still.iter().any(|h| h.part == *old) {
+            continue;
+        }
+        let mut rels = Relationships::from_package(pkg, doc_part)?;
+        rels.remove_by_target_part(doc_part, old);
+        rels.write_to(pkg, doc_part)?;
+
+        let mut cts = ContentTypes::from_package(pkg)?;
+        cts.remove_override(old);
+        cts.write_to(pkg)?;
+
+        pkg.remove(old);
+        pkg.remove(&rels_part_name(old));
+        removed.insert(old.to_string());
+        docs.remove(old);
+        dirty.remove(old);
+    }
     Ok(())
 }
 
