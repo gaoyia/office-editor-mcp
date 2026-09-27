@@ -9,6 +9,7 @@ use crate::xml::{self, Document, Element, Node};
 use super::charts;
 use super::comments;
 use super::field;
+use super::format;
 use super::hf::{self, HfKind};
 use super::link;
 use super::notes;
@@ -25,10 +26,10 @@ use super::request::{
     SetCommentMetaOp, SetCommentTextOp, SetDocGridOp, SetEvenAndOddHeadersOp, SetFieldOp,
     SetGutterAtTopOp, SetHfDistanceOp, SetHfLinkOp, SetHyperlinkOp, SetLineNumberingOp,
     SetMirrorMarginsOp, SetNoteNumberingOp, SetNumberingOp, SetPageMarginOp, SetPageSizeOp,
-    SetParaNumberingOp, SetParaStyleOp, SetParaTextOp, SetPictureSizeOp, SetPictureWrapOp,
-    SetRtlGutterOp, SetStyleOp, SetTextBoxDirectionOp, SetTextBoxFillOp, SetTextBoxLineOp,
-    SetTextBoxLinkOp, SetTextBoxSizeOp, SetTextBoxWrapOp, SetTitlePageOp, SetVerticalAlignOp,
-    SplitCellsOp,
+    SetParaFormatOp, SetParaNumberingOp, SetParaStyleOp, SetParaTextOp, SetPictureSizeOp,
+    SetPictureWrapOp, SetRtlGutterOp, SetRunFormatOp, SetStyleOp, SetTextBoxDirectionOp,
+    SetTextBoxFillOp, SetTextBoxLineOp, SetTextBoxLinkOp, SetTextBoxSizeOp, SetTextBoxWrapOp,
+    SetTitlePageOp, SetVerticalAlignOp, SplitCellsOp,
 };
 use super::revision;
 use super::sect;
@@ -360,6 +361,12 @@ pub fn apply(bytes: &[u8], ops: &[DocxOp]) -> Result<Vec<u8>, Error> {
             }
             DocxOp::SetParaStyle(op) => {
                 apply_set_para_style(&pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
+            }
+            DocxOp::SetParaFormat(op) => {
+                apply_set_para_format(&pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
+            }
+            DocxOp::SetRunFormat(op) => {
+                apply_set_run_format(&pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
             }
         }
     }
@@ -1001,6 +1008,75 @@ fn apply_split_cells(
     let part_name = tbl::part_for_story(catalog, doc_part, op.target.story(), &op.id, i)?;
     let doc = load_part(pkg, docs, &part_name)?;
     tbl::apply_split(&mut doc.root, &op.target, &op.id, i)?;
+    dirty.insert(part_name, ());
+    Ok(())
+}
+
+fn apply_set_para_format(
+    pkg: &Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &SetParaFormatOp,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name = part_for_format_para(pkg, catalog, doc_part, &op.para, &op.id, i)?;
+    let doc = load_part(pkg, docs, &part_name)?;
+    let el = find_insert_para_mut(&mut doc.root, &op.para).ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::ParaNotFound { id: op.id.clone() },
+            format!("ops[{i}].id"),
+        )
+    })?;
+    format::apply_para(
+        el,
+        format::ParaFormatPatch {
+            align: op.align.as_ref().map(|v| v.as_deref()),
+            left: op.left,
+            right: op.right,
+            first_line: op.first_line,
+            hanging: op.hanging,
+            before: op.before,
+            after: op.after,
+            line: op.line,
+            line_rule: op.line_rule.as_ref().map(|v| v.as_deref()),
+        },
+    );
+    dirty.insert(part_name, ());
+    Ok(())
+}
+
+fn apply_set_run_format(
+    pkg: &Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &SetRunFormatOp,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name = part_for_format_para(pkg, catalog, doc_part, &op.para, &op.id, i)?;
+    let doc = load_part(pkg, docs, &part_name)?;
+    let el = find_insert_para_mut(&mut doc.root, &op.para).ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::ParaNotFound { id: op.id.clone() },
+            format!("ops[{i}].id"),
+        )
+    })?;
+    let run = format::find_run_mut(el, op.run).ok_or_else(|| format::missing_run(&op.id, i))?;
+    format::apply_run(
+        run,
+        format::RunFormatPatch {
+            bold: op.bold,
+            italic: op.italic,
+            underline: op.underline.as_ref().map(|v| v.as_deref()),
+            sz: op.sz,
+            color: op.color.as_deref(),
+            font: op.font.as_deref(),
+            east_asia_font: op.east_asia_font.as_deref(),
+        },
+    );
     dirty.insert(part_name, ());
     Ok(())
 }
@@ -3010,6 +3086,25 @@ fn part_for_para(
             },
             format!("ops[{i}].id"),
         )),
+    }
+}
+
+fn part_for_format_para(
+    pkg: &Package,
+    catalog: &[hf::HfPart],
+    doc_part: &str,
+    target: &ParaTarget,
+    id: &str,
+    i: usize,
+) -> Result<String, Error> {
+    match target {
+        ParaTarget::InComment { .. } => comments::part_name(pkg, doc_part)?.ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::ParaNotFound { id: id.to_string() },
+                format!("ops[{i}].id"),
+            )
+        }),
+        _ => part_for_para(pkg, catalog, doc_part, target, id, i),
     }
 }
 

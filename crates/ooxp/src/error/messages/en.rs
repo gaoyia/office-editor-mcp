@@ -291,6 +291,12 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::SetParaStyleNeedsPara => {
                 "setParaStyle id must be a body or header/footer paragraph id".into()
             }
+            IdReason::SetRunFormatNeedsRun => {
+                "setRunFormat id must be a paragraph id plus /run:N".into()
+            }
+            IdReason::RunPrefix => "Run id must be a paragraph id plus /run:N".into(),
+            IdReason::RunIndexNotInt => "Run index must be an integer".into(),
+            IdReason::RunIndexFromOne => "Run index is 1-based".into(),
         },
         ErrorKind::SheetNotFound { name } => format!("Sheet not found: {name}"),
         ErrorKind::ParaNotFound { id } => format!("Paragraph not found: {id}"),
@@ -548,6 +554,20 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::NeedSetParaStyleStyle => {
             "setParaStyle requires style (a style: id or null)".into()
         }
+        ErrorKind::NeedSetParaFormatField => {
+            "setParaFormat requires at least one of align, left, right, firstLine, hanging, before, after, line, or lineRule"
+                .into()
+        }
+        ErrorKind::NeedSetRunFormatField => {
+            "setRunFormat requires at least one of bold, italic, underline, sz, color, font, or eastAsiaFont"
+                .into()
+        }
+        ErrorKind::InvalidAlign => {
+            "align must be left, center, right, both, distribute, start, or end".into()
+        }
+        ErrorKind::InvalidLineRule => "lineRule must be auto, exact, or atLeast".into(),
+        ErrorKind::InvalidUnderline => "underline is not a known ST_Underline value".into(),
+        ErrorKind::RunNotFound { id } => format!("Run not found: {id}"),
         ErrorKind::OpcOpen { reason } => match reason {
             OpcReason::EmptyPartName => "Part name must not be empty".into(),
             OpcReason::InvalidPartName { name } => format!("Invalid part name: {name}"),

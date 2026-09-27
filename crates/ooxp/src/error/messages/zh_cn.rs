@@ -267,6 +267,10 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::SetParaStyleNeedsPara => {
                 "setParaStyle 的 id 必须是正文或页眉页脚段落 id".into()
             }
+            IdReason::SetRunFormatNeedsRun => "setRunFormat 的 id 必须是段落 id 加上 /run:N".into(),
+            IdReason::RunPrefix => "run id 必须是段落 id 加上 /run:N".into(),
+            IdReason::RunIndexNotInt => "run 序号必须是整数".into(),
+            IdReason::RunIndexFromOne => "run 序号从 1 起".into(),
         },
         ErrorKind::SheetNotFound { name } => format!("找不到工作表：{name}"),
         ErrorKind::ParaNotFound { id } => format!("找不到段落：{id}"),
@@ -466,6 +470,20 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::NeedSetParaStyleStyle => {
             "setParaStyle 必须有 style（style: 样式 id 或 null）".into()
         }
+        ErrorKind::NeedSetParaFormatField => {
+            "setParaFormat 至少要给 align、left、right、firstLine、hanging、before、after、line 或 lineRule 之一"
+                .into()
+        }
+        ErrorKind::NeedSetRunFormatField => {
+            "setRunFormat 至少要给 bold、italic、underline、sz、color、font 或 eastAsiaFont 之一"
+                .into()
+        }
+        ErrorKind::InvalidAlign => {
+            "align 必须是 left、center、right、both、distribute、start 或 end".into()
+        }
+        ErrorKind::InvalidLineRule => "lineRule 必须是 auto、exact 或 atLeast".into(),
+        ErrorKind::InvalidUnderline => "underline 不是认识的 ST_Underline 值".into(),
+        ErrorKind::RunNotFound { id } => format!("找不到 run：{id}"),
         ErrorKind::OpcOpen { reason } => match reason {
             OpcReason::EmptyPartName => "部件名不能为空".into(),
             OpcReason::InvalidPartName { name } => format!("非法部件名：{name}"),

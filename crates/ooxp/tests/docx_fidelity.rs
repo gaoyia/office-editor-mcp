@@ -1476,10 +1476,14 @@ fn inspect_lists_body_pictures() {
             "id",
             "index",
             "style",
+            "align",
+            "indent",
+            "spacing",
             "text",
             "stable",
             "pictureCount",
             "textBoxCount",
+            "runCount",
             "pictures"
         ]
     );

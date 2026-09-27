@@ -7,7 +7,7 @@ use crate::xml::{Element, Node};
 
 use super::para::{self, BodyPara, TxbxKey, TxbxTarget};
 use super::picture::{self, PicKind, WrapKind};
-use super::{MC_NS, W14_NS, WP_NS};
+use super::{format, MC_NS, W14_NS, WP_NS};
 
 /// 现代文本框命名空间（MS-DOCX WordprocessingShape）。
 pub const WPS_NS: &str = "http://schemas.microsoft.com/office/word/2010/wordprocessingShape";
@@ -85,6 +85,7 @@ pub fn textboxes_json(
     boxes: &[TxbxInfo],
     content: bool,
     pictures: bool,
+    runs: bool,
 ) -> Result<Vec<Value>, Error> {
     let mut out = Vec::new();
     for b in boxes {
@@ -105,7 +106,7 @@ pub fn textboxes_json(
             "stable": b.stable,
         });
         if content {
-            fill_one_box(host, host_para_id, b, &mut node, pictures)?;
+            fill_one_box(host, host_para_id, b, &mut node, pictures, runs)?;
         }
         out.push(node);
     }
@@ -118,6 +119,7 @@ fn fill_one_box(
     info: &TxbxInfo,
     slot: &mut Value,
     pictures: bool,
+    runs: bool,
 ) -> Result<(), Error> {
     let Some(content) = find_txbx_content_for(host, host_para_id, &info.id)? else {
         slot["paragraphs"] = json!([]);
@@ -131,32 +133,14 @@ fn fill_one_box(
     let mut pic_nodes = Vec::new();
     for (i, p) in paras.iter().enumerate() {
         let index = i + 1;
-        let (pid, stable) = para::para_stable_id_in(&info.id, p, index);
+        let (pid, _) = para::para_stable_id_in(&info.id, p, index);
         let pics = picture::collect_pictures(p, &pid)?;
-        let mut node = if let Some(level) = para::heading_level(p) {
-            json!({
-                "id": pid,
-                "index": index,
-                "style": para::p_style(p),
-                "level": level,
-                "text": para::visible_text(p),
-                "stable": stable,
-                "pictureCount": pics.len(),
-            })
-        } else {
-            json!({
-                "id": pid,
-                "index": index,
-                "style": para::p_style(p),
-                "text": para::visible_text(p),
-                "stable": stable,
-                "pictureCount": pics.len(),
-            })
-        };
+        let mut node = format::para_node(p, index, Some(&info.id), Some(pics.len()), None);
         if pictures {
             node["pictures"] = Value::Array(picture::pictures_json(&pics));
             pic_nodes.extend(picture::pictures_json(&pics));
         }
+        format::maybe_runs(&mut node, p, runs);
         para_nodes.push(node);
     }
     slot["paragraphs"] = Value::Array(para_nodes);

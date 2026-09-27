@@ -194,6 +194,12 @@ pub(crate) enum IdReason {
     StylePrefix,
     /// setParaStyle 必须用正文或页眉页脚段落 id
     SetParaStyleNeedsPara,
+    /// setRunFormat 必须用 {段落}/run:N
+    SetRunFormatNeedsRun,
+    /// run id 必须是 {段落}/run:N
+    RunPrefix,
+    RunIndexNotInt,
+    RunIndexFromOne,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -435,6 +441,12 @@ define_error_kinds! {
     EmptyStyleFont => vec![Self::EmptyStyleFont],
     InvalidStyleColor => vec![Self::InvalidStyleColor],
     NeedSetParaStyleStyle => vec![Self::NeedSetParaStyleStyle],
+    NeedSetParaFormatField => vec![Self::NeedSetParaFormatField],
+    NeedSetRunFormatField => vec![Self::NeedSetRunFormatField],
+    InvalidAlign => vec![Self::InvalidAlign],
+    InvalidLineRule => vec![Self::InvalidLineRule],
+    InvalidUnderline => vec![Self::InvalidUnderline],
+    RunNotFound { id: String } => vec![Self::RunNotFound { id: "para:1/run:1".into() }],
     OpcOpen { reason: OpcReason } => OpcReason::all_samples()
         .into_iter()
         .map(|reason| Self::OpcOpen { reason })
@@ -606,6 +618,10 @@ impl IdReason {
             Self::SetParaNumberingNeedsPara,
             Self::StylePrefix,
             Self::SetParaStyleNeedsPara,
+            Self::SetRunFormatNeedsRun,
+            Self::RunPrefix,
+            Self::RunIndexNotInt,
+            Self::RunIndexFromOne,
         ]
     }
 }
@@ -736,6 +752,11 @@ impl ErrorKind {
             | Self::EmptyStyleFont
             | Self::InvalidStyleColor
             | Self::NeedSetParaStyleStyle
+            | Self::NeedSetParaFormatField
+            | Self::NeedSetRunFormatField
+            | Self::InvalidAlign
+            | Self::InvalidLineRule
+            | Self::InvalidUnderline
             | Self::LastTextBoxPara
             | Self::LastNotePara
             | Self::NeedNoteNumberingField
@@ -798,7 +819,8 @@ impl ErrorKind {
             | Self::FieldNotFound { .. }
             | Self::NumberingNotFound { .. }
             | Self::AbstractNumNotFound { .. }
-            | Self::StyleNotFound { .. } => IdNotFound,
+            | Self::StyleNotFound { .. }
+            | Self::RunNotFound { .. } => IdNotFound,
             Self::ScopeRequired { .. } => ScopeRequired,
             Self::SharedFormulaMaster { .. }
             | Self::InkComment { .. }

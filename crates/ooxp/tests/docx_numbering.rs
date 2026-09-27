@@ -193,10 +193,14 @@ fn numbering_list_and_para_fields() {
             "style",
             "num",
             "ilvl",
+            "align",
+            "indent",
+            "spacing",
             "text",
             "stable",
             "pictureCount",
-            "textBoxCount"
+            "textBoxCount",
+            "runCount"
         ]
     );
     assert_eq!(p1["num"], "num:1");

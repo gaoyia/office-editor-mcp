@@ -884,10 +884,14 @@ mod tests {
                 "index",
                 "style",
                 "level",
+                "align",
+                "indent",
+                "spacing",
                 "text",
                 "stable",
                 "pictureCount",
-                "textBoxCount"
+                "textBoxCount",
+                "runCount"
             ]
         );
         assert_eq!(
@@ -896,10 +900,14 @@ mod tests {
                 "id",
                 "index",
                 "style",
+                "align",
+                "indent",
+                "spacing",
                 "text",
                 "stable",
                 "pictureCount",
-                "textBoxCount"
+                "textBoxCount",
+                "runCount"
             ]
         );
         assert_eq!(

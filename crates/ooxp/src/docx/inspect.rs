@@ -9,6 +9,7 @@ use crate::xml;
 use super::charts;
 use super::comments;
 use super::field;
+use super::format;
 use super::hf::{self, HfKind, HfPart};
 use super::link;
 use super::notes;
@@ -56,6 +57,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     let expand_hyperlinks = scope.as_ref().is_some_and(|s| s.hyperlinks);
     let expand_bookmarks = scope.as_ref().is_some_and(|s| s.bookmarks);
     let expand_fields = scope.as_ref().is_some_and(|s| s.fields);
+    let expand_runs = scope.as_ref().is_some_and(|s| s.runs);
     let hf_expand = HfExpand {
         paragraphs: expand_hf,
         pictures: expand_pics,
@@ -68,6 +70,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         hyperlinks: expand_hyperlinks,
         bookmarks: expand_bookmarks,
         fields: expand_fields,
+        runs: expand_runs,
     };
     let (headers, footers) = hf_arrays(&pkg, &catalog, &hf_expand)?;
     let sections = section_nodes(&pkg, &part, &doc.root)?;
@@ -122,6 +125,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
                 &catalog,
                 NoteKind::Footnote,
                 expand_pics,
+                expand_runs,
             )?;
             let (endnotes, en_seps) = notes_array(
                 &pkg,
@@ -130,6 +134,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
                 &catalog,
                 NoteKind::Endnote,
                 expand_pics,
+                expand_runs,
             )?;
             let mut seps = fn_seps;
             seps.extend(en_seps);
@@ -139,7 +144,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         }
         let coverage = load_coverage(&pkg, &part, &doc.root, &catalog)?;
         if scope.comments {
-            tree["comments"] = comments_array(&pkg, &part, &coverage, expand_pics)?;
+            tree["comments"] = comments_array(&pkg, &part, &coverage, expand_pics, expand_runs)?;
         }
         if scope.charts {
             tree["charts"] = Value::Array(charts::collect_body(&pkg, &part, &paras)?);
@@ -148,7 +153,8 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
             tree["smartArts"] = Value::Array(smartart::collect_body(&pkg, &part, &paras)?);
         }
         if scope.tables {
-            tree["tables"] = Value::Array(tbl::tables_json(&doc.root, None, expand_pics)?);
+            tree["tables"] =
+                Value::Array(tbl::tables_json(&doc.root, None, expand_pics, expand_runs)?);
         }
         if scope.revisions {
             tree["revisions"] = Value::Array(revision::revisions_json(&doc.root, None)?);
@@ -186,6 +192,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
                         expand_pics,
                         expand_txbx,
                         expand_txbx_content,
+                        expand_runs,
                         &body_boxes,
                     )?);
                 }
@@ -295,6 +302,7 @@ struct HfExpand {
     hyperlinks: bool,
     bookmarks: bool,
     fields: bool,
+    runs: bool,
 }
 
 fn hf_arrays(
@@ -360,6 +368,7 @@ fn hf_node(pkg: &Package, item: &HfPart, expand: &HfExpand) -> Result<Value, Err
                 &mine,
                 expand.text_box_content,
                 expand.pictures,
+                expand.runs,
             )?);
         }
         node["textBoxes"] = Value::Array(listed);
@@ -375,6 +384,7 @@ fn hf_node(pkg: &Package, item: &HfPart, expand: &HfExpand) -> Result<Value, Err
             &doc.root,
             Some(&item.id),
             expand.pictures,
+            expand.runs,
         )?);
     }
     if expand.revisions {
@@ -394,7 +404,7 @@ fn hf_node(pkg: &Package, item: &HfPart, expand: &HfExpand) -> Result<Value, Err
         let mut paragraphs = Vec::new();
         for (i, p) in paras.iter().enumerate() {
             let index = i + 1;
-            paragraphs.push(para_json(p, index, Some(&item.id), None, None));
+            paragraphs.push(para_json(p, index, Some(&item.id), None, None, expand.runs));
         }
         node["paragraphs"] = Value::Array(paragraphs);
     }
@@ -407,6 +417,7 @@ fn body_para_json(
     expand_pics: bool,
     expand_txbx: bool,
     expand_txbx_content: bool,
+    expand_runs: bool,
     all_boxes: &[textbox::TxbxInfo],
 ) -> Result<Value, Error> {
     let (id, _) = para::para_stable_id(p, index);
@@ -415,7 +426,7 @@ fn body_para_json(
         .into_iter()
         .cloned()
         .collect();
-    let mut node = para_json(p, index, None, Some(pics.len()), Some(mine.len()));
+    let mut node = para_json(p, index, None, Some(pics.len()), Some(mine.len()), false);
     if expand_pics {
         node["pictures"] = Value::Array(picture::pictures_json(&pics));
     }
@@ -426,6 +437,7 @@ fn body_para_json(
             &mine,
             expand_txbx_content,
             expand_pics,
+            expand_runs,
         )?);
     }
     let fn_refs = notes::refs_in_para(p, NoteKind::Footnote);
@@ -442,6 +454,7 @@ fn body_para_json(
             .map(|nid| NoteKind::Endnote.inspect_id(&nid))
             .collect::<Vec<_>>());
     }
+    format::maybe_runs(&mut node, p, expand_runs);
     Ok(node)
 }
 
@@ -451,40 +464,10 @@ fn para_json(
     container: Option<&str>,
     picture_count: Option<usize>,
     text_box_count: Option<usize>,
+    expand_runs: bool,
 ) -> Value {
-    let (id, stable) = match container {
-        Some(c) => para::para_stable_id_in(c, p, index),
-        None => para::para_stable_id(p, index),
-    };
-    let style = para::p_style(p);
-    let text = para::visible_text(p);
-    let mut node = if let Some(level) = para::heading_level(p) {
-        json!({
-            "id": id,
-            "index": index,
-            "style": style,
-            "level": level,
-            "text": text,
-            "stable": stable,
-        })
-    } else {
-        json!({
-            "id": id,
-            "index": index,
-            "style": style,
-            "text": text,
-            "stable": stable,
-        })
-    };
-    if let Some(obj) = node.as_object_mut() {
-        numbering::stamp_para(obj, p);
-    }
-    if let Some(n) = picture_count {
-        node["pictureCount"] = json!(n);
-    }
-    if let Some(n) = text_box_count {
-        node["textBoxCount"] = json!(n);
-    }
+    let mut node = format::para_node(p, index, container, picture_count, text_box_count);
+    format::maybe_runs(&mut node, p, expand_runs);
     node
 }
 
@@ -495,6 +478,7 @@ fn notes_array(
     catalog: &[HfPart],
     kind: NoteKind,
     expand_pics: bool,
+    expand_runs: bool,
 ) -> Result<(Value, Vec<Value>), Error> {
     let hosts = notes::collect_hosts(pkg, doc_part, doc_root, catalog, kind)?;
     let Some(part) = notes::part_name(pkg, doc_part, kind)? else {
@@ -519,10 +503,18 @@ fn notes_array(
             let (pid, _) = para::para_stable_id_in(&inspect_id, p, index);
             let pics = picture::collect_pictures(p, &pid)?;
             pic_count += pics.len();
-            let mut node = para_json(p, index, Some(&inspect_id), Some(pics.len()), Some(0));
+            let mut node = para_json(
+                p,
+                index,
+                Some(&inspect_id),
+                Some(pics.len()),
+                Some(0),
+                false,
+            );
             if expand_pics {
                 node["pictures"] = Value::Array(picture::pictures_json(&pics));
             }
+            format::maybe_runs(&mut node, p, expand_runs);
             all_pics.extend(pics);
             para_nodes.push(node);
         }
@@ -590,6 +582,7 @@ fn comments_array(
     doc_part: &str,
     coverage: &Option<comments::CommentCoverage>,
     expand_pics: bool,
+    expand_runs: bool,
 ) -> Result<Value, Error> {
     let Some(part) = comments::part_name(pkg, doc_part)? else {
         return Ok(Value::Array(Vec::new()));
@@ -625,10 +618,18 @@ fn comments_array(
             let (pid, _) = para::para_stable_id_in(&inspect_id, p, index);
             let pics = picture::collect_pictures(p, &pid)?;
             pic_count += pics.len();
-            let mut node = para_json(p, index, Some(&inspect_id), Some(pics.len()), Some(0));
+            let mut node = para_json(
+                p,
+                index,
+                Some(&inspect_id),
+                Some(pics.len()),
+                Some(0),
+                false,
+            );
             if expand_pics {
                 node["pictures"] = Value::Array(picture::pictures_json(&pics));
             }
+            format::maybe_runs(&mut node, p, expand_runs);
             all_pics.extend(pics);
             para_nodes.push(node);
         }
@@ -678,7 +679,18 @@ fn stamp_value(v: &mut Value, coverage: &comments::CommentCoverage) {
                         if !ids.is_empty() {
                             let listed: Vec<String> =
                                 ids.iter().map(|c| comments::inspect_id(c)).collect();
-                            map.insert("commentIds".into(), json!(listed));
+                            if map.contains_key("runs") {
+                                let mut out = serde_json::Map::new();
+                                for (k, v) in map.iter() {
+                                    if k == "runs" {
+                                        out.insert("commentIds".into(), json!(listed));
+                                    }
+                                    out.insert(k.clone(), v.clone());
+                                }
+                                *map = out;
+                            } else {
+                                map.insert("commentIds".into(), json!(listed));
+                            }
                         }
                     }
                 }

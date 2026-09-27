@@ -586,6 +586,8 @@ fn is_foreign_op(op_name: &str) -> bool {
             | "setParaNumbering"
             | "setStyle"
             | "setParaStyle"
+            | "setParaFormat"
+            | "setRunFormat"
             | "setTextBoxLink"
             | "insertFootnote"
             | "insertEndnote"

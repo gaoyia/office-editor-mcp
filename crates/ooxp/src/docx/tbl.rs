@@ -5,6 +5,7 @@ use serde_json::{json, Value};
 use crate::error::{Error, ErrorKind, IdReason, XmlIssue};
 use crate::xml::{Element, Node};
 
+use super::format;
 use super::hf::{self, HfKind, HfPart, HfType};
 use super::para::{self, ParaTarget};
 
@@ -82,6 +83,7 @@ pub fn tables_json(
     root: &Element,
     container: Option<&str>,
     expand_pics: bool,
+    expand_runs: bool,
 ) -> Result<Vec<Value>, Error> {
     let paras = para::collect_paragraphs(root);
     let mut index_of: Vec<(*const Element, usize)> = Vec::new();
@@ -99,6 +101,7 @@ pub fn tables_json(
             container,
             &index_of,
             expand_pics,
+            expand_runs,
         )?);
     }
     Ok(out)
@@ -831,6 +834,7 @@ fn table_node(
     container: Option<&str>,
     index_of: &[(*const Element, usize)],
     expand_pics: bool,
+    expand_runs: bool,
 ) -> Result<Value, Error> {
     let id = match container {
         Some(c) => format!("{c}/table:{index}"),
@@ -847,7 +851,7 @@ fn table_node(
             let span = grid_span(tc)?;
             let vm = v_merge_of(tc)?;
             let cell_id = format!("{id}/r{row_n}c{col}");
-            let paras = cell_paragraphs(tc, container, index_of, expand_pics)?;
+            let paras = cell_paragraphs(tc, container, index_of, expand_pics, expand_runs)?;
             cells.push(json!({
                 "id": cell_id,
                 "row": row_n,
@@ -883,6 +887,7 @@ fn cell_paragraphs(
     container: Option<&str>,
     index_of: &[(*const Element, usize)],
     expand_pics: bool,
+    expand_runs: bool,
 ) -> Result<Vec<Value>, Error> {
     let mut ps = Vec::new();
     collect_cell_ps(tc, &mut ps);
@@ -907,6 +912,7 @@ fn cell_paragraphs(
             pics.len(),
             boxes.len(),
             expand_pics,
+            expand_runs,
             &pics,
         )?);
     }
@@ -921,35 +927,17 @@ fn rebuild_para_node(
     pic_n: usize,
     box_n: usize,
     expand_pics: bool,
+    expand_runs: bool,
     pics: &[super::picture::PicInfo],
 ) -> Result<Value, Error> {
-    let style = para::p_style(p);
-    let text = para::visible_text(p);
-    let mut node = if let Some(level) = para::heading_level(p) {
-        json!({
-            "id": id,
-            "index": idx,
-            "style": style,
-            "level": level,
-            "text": text,
-            "stable": stable,
-            "pictureCount": pic_n,
-            "textBoxCount": box_n,
-        })
-    } else {
-        json!({
-            "id": id,
-            "index": idx,
-            "style": style,
-            "text": text,
-            "stable": stable,
-            "pictureCount": pic_n,
-            "textBoxCount": box_n,
-        })
-    };
+    let mut node = format::para_node(p, idx, None, Some(pic_n), Some(box_n));
+    // 单元格段落 id 已按故事序号算好，覆盖 format 按该 p 自己算出来的 id。
+    node["id"] = json!(id);
+    node["stable"] = json!(stable);
     if expand_pics {
         node["pictures"] = Value::Array(super::picture::pictures_json(pics));
     }
+    format::maybe_runs(&mut node, p, expand_runs);
     Ok(node)
 }
 

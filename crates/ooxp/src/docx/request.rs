@@ -50,6 +50,8 @@ pub struct InspectScope {
     pub numbering: bool,
     /// 为 true 时列出样式定义。
     pub styles: bool,
+    /// 为 true 时列出已切出段落上的 run。
+    pub runs: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -580,6 +582,35 @@ pub struct SetParaStyleOp {
 }
 
 #[derive(Debug, Clone)]
+pub struct SetParaFormatOp {
+    pub id: String,
+    pub para: ParaTarget,
+    pub align: Option<Option<String>>,
+    pub left: Option<Option<u32>>,
+    pub right: Option<Option<u32>>,
+    pub first_line: Option<Option<u32>>,
+    pub hanging: Option<Option<u32>>,
+    pub before: Option<Option<u32>>,
+    pub after: Option<Option<u32>>,
+    pub line: Option<Option<u32>>,
+    pub line_rule: Option<Option<String>>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetRunFormatOp {
+    pub id: String,
+    pub para: ParaTarget,
+    pub run: usize,
+    pub bold: Option<bool>,
+    pub italic: Option<bool>,
+    pub underline: Option<Option<String>>,
+    pub sz: Option<u32>,
+    pub color: Option<String>,
+    pub font: Option<String>,
+    pub east_asia_font: Option<String>,
+}
+
+#[derive(Debug, Clone)]
 pub enum DocxOp {
     SetParaText(SetParaTextOp),
     SetHeaderFooterDistance(SetHfDistanceOp),
@@ -634,6 +665,8 @@ pub enum DocxOp {
     SetParaNumbering(SetParaNumberingOp),
     SetStyle(SetStyleOp),
     SetParaStyle(SetParaStyleOp),
+    SetParaFormat(SetParaFormatOp),
+    SetRunFormat(SetRunFormatOp),
     SetTextBoxLink(SetTextBoxLinkOp),
     InsertFootnote(InsertNoteOp),
     InsertEndnote(InsertNoteOp),
@@ -706,6 +739,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
             "fields",
             "numbering",
             "styles",
+            "runs",
         ],
     )?;
 
@@ -724,6 +758,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
     let fields = parse_bool_field(obj.get("fields"), "fields")?;
     let numbering = parse_bool_field(obj.get("numbering"), "numbering")?;
     let styles = parse_bool_field(obj.get("styles"), "styles")?;
+    let runs = parse_bool_field(obj.get("runs"), "runs")?;
     if text_box_content && !text_boxes {
         return Err(Error::with_path(
             ErrorKind::ScopeFieldRequires {
@@ -752,6 +787,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
                 && !obj.contains_key("fields")
                 && !obj.contains_key("numbering")
                 && !obj.contains_key("styles")
+                && !obj.contains_key("runs")
             {
                 return Ok(None);
             }
@@ -773,6 +809,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
                 fields,
                 numbering,
                 styles,
+                runs,
             }))
         }
         (Some(f), Some(m)) => {
@@ -831,6 +868,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
                 fields,
                 numbering,
                 styles,
+                runs,
             }))
         }
         _ => Err(Error::with_path(
@@ -968,6 +1006,8 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<DocxOp>, Error> {
             }
             "setStyle" => out.push(DocxOp::SetStyle(parse_set_style(obj, i)?)),
             "setParaStyle" => out.push(DocxOp::SetParaStyle(parse_set_para_style(obj, i)?)),
+            "setParaFormat" => out.push(DocxOp::SetParaFormat(parse_set_para_format(obj, i)?)),
+            "setRunFormat" => out.push(DocxOp::SetRunFormat(parse_set_run_format(obj, i)?)),
             "setTextBoxLink" => out.push(DocxOp::SetTextBoxLink(parse_set_txbx_link(obj, i)?)),
             "insertFootnote" => out.push(DocxOp::InsertFootnote(parse_insert_note(
                 obj,
@@ -2560,6 +2600,244 @@ fn parse_set_para_style(
         }
     };
     Ok(SetParaStyleOp { id, para, style })
+}
+
+fn parse_set_para_format(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<SetParaFormatOp, Error> {
+    deny_keys(
+        obj,
+        i,
+        &[
+            "op",
+            "id",
+            "align",
+            "left",
+            "right",
+            "firstLine",
+            "hanging",
+            "before",
+            "after",
+            "line",
+            "lineRule",
+        ],
+    )?;
+    let id = require_op_id(obj, i)?;
+    let para = para::parse_para_id(&id, i)?;
+    let align = parse_opt_null_enum(
+        obj,
+        i,
+        "align",
+        super::format::ALIGN_SET,
+        ErrorKind::InvalidAlign,
+    )?;
+    let left = parse_opt_null_u32(obj, i, "left")?;
+    let right = parse_opt_null_u32(obj, i, "right")?;
+    let first_line = parse_opt_null_u32(obj, i, "firstLine")?;
+    let hanging = parse_opt_null_u32(obj, i, "hanging")?;
+    if matches!((&first_line, &hanging), (Some(Some(_)), Some(Some(_)))) {
+        return Err(Error::with_path(
+            ErrorKind::MutuallyExclusive {
+                a: "firstLine".into(),
+                b: "hanging".into(),
+            },
+            format!("ops[{i}]"),
+        ));
+    }
+    let before = parse_opt_null_u32(obj, i, "before")?;
+    let after = parse_opt_null_u32(obj, i, "after")?;
+    let line = parse_opt_null_u32(obj, i, "line")?;
+    let line_rule = parse_opt_null_enum(
+        obj,
+        i,
+        "lineRule",
+        super::format::LINE_RULE_SET,
+        ErrorKind::InvalidLineRule,
+    )?;
+    if align.is_none()
+        && left.is_none()
+        && right.is_none()
+        && first_line.is_none()
+        && hanging.is_none()
+        && before.is_none()
+        && after.is_none()
+        && line.is_none()
+        && line_rule.is_none()
+    {
+        return Err(Error::with_path(
+            ErrorKind::NeedSetParaFormatField,
+            format!("ops[{i}]"),
+        ));
+    }
+    Ok(SetParaFormatOp {
+        id,
+        para,
+        align,
+        left,
+        right,
+        first_line,
+        hanging,
+        before,
+        after,
+        line,
+        line_rule,
+    })
+}
+
+fn parse_set_run_format(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<SetRunFormatOp, Error> {
+    deny_keys(
+        obj,
+        i,
+        &[
+            "op",
+            "id",
+            "bold",
+            "italic",
+            "underline",
+            "sz",
+            "color",
+            "font",
+            "eastAsiaFont",
+        ],
+    )?;
+    let id = require_op_id(obj, i)?;
+    let (para, run) = super::format::parse_run_id(&id, &format!("ops[{i}].id"))?;
+    let bold = parse_opt_bool(obj, i, "bold")?;
+    let italic = parse_opt_bool(obj, i, "italic")?;
+    let underline = parse_opt_null_enum(
+        obj,
+        i,
+        "underline",
+        super::format::UNDERLINE_SET,
+        ErrorKind::InvalidUnderline,
+    )?;
+    let sz = parse_opt_u32_range(obj, i, "sz", 2, 3276)?;
+    let color = match obj.get("color") {
+        None => None,
+        Some(Value::String(s)) => {
+            if !is_rgb_hex(s) {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidStyleColor,
+                    format!("ops[{i}].color"),
+                ));
+            }
+            Some(s.clone())
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "color".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].color"),
+            ));
+        }
+    };
+    let font = parse_nonempty_opt_string(obj, i, "font")?;
+    let east_asia_font = parse_nonempty_opt_string(obj, i, "eastAsiaFont")?;
+    if bold.is_none()
+        && italic.is_none()
+        && underline.is_none()
+        && sz.is_none()
+        && color.is_none()
+        && font.is_none()
+        && east_asia_font.is_none()
+    {
+        return Err(Error::with_path(
+            ErrorKind::NeedSetRunFormatField,
+            format!("ops[{i}]"),
+        ));
+    }
+    Ok(SetRunFormatOp {
+        id,
+        para,
+        run,
+        bold,
+        italic,
+        underline,
+        sz,
+        color,
+        font,
+        east_asia_font,
+    })
+}
+
+fn parse_opt_bool(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+    field: &str,
+) -> Result<Option<bool>, Error> {
+    match obj.get(field) {
+        None => Ok(None),
+        Some(Value::Bool(b)) => Ok(Some(*b)),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::Boolean,
+            },
+            format!("ops[{i}].{field}"),
+        )),
+    }
+}
+
+fn parse_opt_null_u32(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+    field: &str,
+) -> Result<Option<Option<u32>>, Error> {
+    match obj.get(field) {
+        None => Ok(None),
+        Some(Value::Null) => Ok(Some(None)),
+        Some(Value::Number(n)) => {
+            let u = n.as_u64().ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::WrongType {
+                        field: field.into(),
+                        expected: TypeName::Integer,
+                    },
+                    format!("ops[{i}].{field}"),
+                )
+            })?;
+            Ok(Some(Some(u as u32)))
+        }
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::Integer,
+            },
+            format!("ops[{i}].{field}"),
+        )),
+    }
+}
+
+fn parse_opt_null_enum(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+    field: &str,
+    allowed: &[&str],
+    bad: ErrorKind,
+) -> Result<Option<Option<String>>, Error> {
+    match obj.get(field) {
+        None => Ok(None),
+        Some(Value::Null) => Ok(Some(None)),
+        Some(Value::String(s)) => {
+            if !allowed.contains(&s.as_str()) {
+                return Err(Error::with_path(bad, format!("ops[{i}].{field}")));
+            }
+            Ok(Some(Some(s.clone())))
+        }
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::String,
+            },
+            format!("ops[{i}].{field}"),
+        )),
+    }
 }
 
 fn parse_nonempty_opt_string(

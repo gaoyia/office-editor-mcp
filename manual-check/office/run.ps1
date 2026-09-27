@@ -46,6 +46,7 @@ $order = @(
     'docx-field'
     'docx-numbering'
     'docx-style'
+    'docx-format'
     'docx-headerfooter'
     'docx-distance'
     'docx-link'

@@ -361,6 +361,19 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 | St5 | 改标题 | `setStyle` 去掉 Heading1 加粗后，标题段 Word 不再加粗，无修复 |
 | St6 | 去掉 | `setParaStyle` 且 `style` 为 `null` 后该段树上 `style` 为 `null`，无修复 |
 
+## 段落与 run 直接格式
+
+`inspect` 段上始终有 `align` / `indent` / `spacing` / `runCount`。`scope.runs: true` 时列出 `runs`。手测脚本 `manual-check/office/cases/docx-format.ps1`。不改 `styles.xml`。
+
+| 序号 | 检查 | 通过标准 |
+| --- | --- | --- |
+| Pf1 | 名单 | 无 `scope.runs` 时已切出的段有 `runCount` 且没有 `runs`；给了 `scope.runs` 后能列出 `{段落 id}/run:{n}` |
+| Pf2 | 段对齐 | `setParaFormat` 把一段 `align` 改成 `center` 后树上为 `center` |
+| Pf3 | 打开对齐 | Word 打开后该段居中，无修复 |
+| Pf4 | run 加粗 | `setRunFormat` 把第一段第一个 run 设为加粗后 Word 该 run 加粗，无修复 |
+| Pf5 | 未点名 | 同一段未点名的 run 颜色还在 |
+| Pf6 | 间距 | `setParaFormat` 写 `before` / `after` 后 Word 段前段后距对得上（允许 0.05 磅误差），无修复 |
+
 ## 原样保存（opc 验收）
 
 与 xlsx 清单相同：O1 第一期放弃；零脏写回在 OPC 层验收；O2 按 apply 看未改区域。

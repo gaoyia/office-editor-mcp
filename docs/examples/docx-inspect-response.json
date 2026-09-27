@@ -61,19 +61,27 @@
       "index": 1,
       "style": "Heading1",
       "level": 1,
+      "align": null,
+      "indent": null,
+      "spacing": null,
       "text": "标题",
       "stable": true,
       "pictureCount": 0,
-      "textBoxCount": 0
+      "textBoxCount": 0,
+      "runCount": 1
     },
     {
       "id": "para:00A1B2C3",
       "index": 2,
       "style": null,
+      "align": null,
+      "indent": null,
+      "spacing": null,
       "text": "hello",
       "stable": true,
       "pictureCount": 0,
-      "textBoxCount": 0
+      "textBoxCount": 0,
+      "runCount": 1
     }
   ]
 }

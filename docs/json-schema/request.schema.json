@@ -84,6 +84,7 @@
         "fields": { "type": "boolean" },
         "numbering": { "type": "boolean" },
         "styles": { "type": "boolean" },
+        "runs": { "type": "boolean" },
         "slide": { "type": "integer", "minimum": 1 },
         "maxShapes": { "type": "integer", "minimum": 1, "maximum": 5000 }
       },
@@ -548,6 +549,8 @@
               { "$ref": "#/$defs/setParaNumberingOp" },
               { "$ref": "#/$defs/setStyleOp" },
               { "$ref": "#/$defs/setParaStyleOp" },
+              { "$ref": "#/$defs/setParaFormatOp" },
+              { "$ref": "#/$defs/setRunFormatOp" },
               { "$ref": "#/$defs/setTextBoxLinkOp" },
               { "$ref": "#/$defs/insertFootnoteOp" },
               { "$ref": "#/$defs/insertEndnoteOp" },
@@ -1322,6 +1325,77 @@
             { "type": "null" }
           ]
         }
+      }
+    },
+    "setParaFormatOp": {
+      "type": "object",
+      "required": ["op", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "setParaFormat" },
+        "id": { "type": "string", "minLength": 1 },
+        "align": {
+          "oneOf": [
+            { "type": "string", "enum": ["left", "center", "right", "both", "distribute", "start", "end"] },
+            { "type": "null" }
+          ]
+        },
+        "left": { "oneOf": [{ "type": "integer", "minimum": 0 }, { "type": "null" }] },
+        "right": { "oneOf": [{ "type": "integer", "minimum": 0 }, { "type": "null" }] },
+        "firstLine": { "oneOf": [{ "type": "integer", "minimum": 0 }, { "type": "null" }] },
+        "hanging": { "oneOf": [{ "type": "integer", "minimum": 0 }, { "type": "null" }] },
+        "before": { "oneOf": [{ "type": "integer", "minimum": 0 }, { "type": "null" }] },
+        "after": { "oneOf": [{ "type": "integer", "minimum": 0 }, { "type": "null" }] },
+        "line": { "oneOf": [{ "type": "integer", "minimum": 0 }, { "type": "null" }] },
+        "lineRule": {
+          "oneOf": [
+            { "type": "string", "enum": ["auto", "exact", "atLeast"] },
+            { "type": "null" }
+          ]
+        }
+      }
+    },
+    "setRunFormatOp": {
+      "type": "object",
+      "required": ["op", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "setRunFormat" },
+        "id": { "type": "string", "minLength": 1 },
+        "bold": { "type": "boolean" },
+        "italic": { "type": "boolean" },
+        "underline": {
+          "oneOf": [
+            {
+              "type": "string",
+              "enum": [
+                "single",
+                "none",
+                "double",
+                "thick",
+                "dotted",
+                "dash",
+                "wave",
+                "words",
+                "dottedHeavy",
+                "dashedHeavy",
+                "dashLong",
+                "dashLongHeavy",
+                "dotDash",
+                "dashDotHeavy",
+                "dotDotDash",
+                "dashDotDotHeavy",
+                "wavyHeavy",
+                "wavyDouble"
+              ]
+            },
+            { "type": "null" }
+          ]
+        },
+        "sz": { "type": "integer", "minimum": 2, "maximum": 3276 },
+        "color": { "type": "string", "pattern": "^[0-9A-Fa-f]{6}$" },
+        "font": { "type": "string", "minLength": 1 },
+        "eastAsiaFont": { "type": "string", "minLength": 1 }
       }
     },
     "setTextBoxLinkOp": {

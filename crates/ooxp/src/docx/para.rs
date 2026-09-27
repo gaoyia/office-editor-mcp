@@ -677,7 +677,7 @@ fn walk_paras<'a>(el: &'a Element, f: &mut impl FnMut(&'a Element)) {
     }
 }
 
-fn first_alt_child_index(el: &Element) -> Option<usize> {
+pub(crate) fn first_alt_child_index(el: &Element) -> Option<usize> {
     let mut fallback = None;
     for (i, n) in el.children.iter().enumerate() {
         if let Node::Element(e) = n {
