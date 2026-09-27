@@ -5,13 +5,14 @@ use crate::error::{Error, ErrorKind, IdReason};
 use crate::opc::{
     rels_part_name, resolve_rel_target, ContentTypes, Package, Relationship, Relationships,
 };
-use crate::xml::{Document, Element, Node, DEFAULT_DECL};
+use crate::xml::{Document, Element, DEFAULT_DECL};
 
 use super::a1;
 use super::apply::{self, write_json_cell};
 use super::chart as xlsx_chart;
 use super::picture::{self, AnchorKind, EditAs};
 use super::request::{DeleteChartSheetOp, InsertChartSheetOp};
+use super::sheets;
 use super::{CT_CHARTSHEET, REL_CHARTSHEET, REL_NS, SML_NS};
 
 /// 图表工作表上那一张框的 `cNvPr/@id`。Excel 另存从 2 起；id 1 在部分 drawing 场景会拒开。
@@ -129,7 +130,7 @@ pub fn insert(
             child: "sheets".into(),
         })
     })?;
-    let sheet_id = next_sheet_id(sheets);
+    let sheet_id = sheets::next_sheet_id(sheets);
     sheets.push_element(
         Element::new("sheet")
             .with_attr("name", op.name.clone())
@@ -174,12 +175,8 @@ pub fn delete(
             format!("ops[{op_index}].id"),
         ));
     }
-    if sheet_index.len() <= 1 {
-        return Err(Error::with_path(
-            ErrorKind::NeedAtLeastOneSheet,
-            format!("ops[{op_index}].id"),
-        ));
-    }
+    sheets::reject_if_last_sheet(sheet_index.len(), op_index)?;
+    sheets::reject_if_last_visible(&wb_doc.root, &op.sheet, op_index)?;
     apply::load_dirty(pkg, dirty_sheets, &cs_part, false)?;
     let drawing_parts = {
         let doc = apply::dirty_of(dirty_sheets, &cs_part);
@@ -189,7 +186,7 @@ pub fn delete(
     for drawing_part in &drawing_parts {
         charts.extend(chart_parts_of_drawing(pkg, drawing_part)?);
     }
-    let rid = remove_workbook_sheet(&mut wb_doc.root, &op.sheet).ok_or_else(|| {
+    let rid = sheets::remove_workbook_sheet(&mut wb_doc.root, &op.sheet).ok_or_else(|| {
         Error::new(ErrorKind::XmlMissing {
             parent: "sheets".into(),
             child: "sheet".into(),
@@ -215,7 +212,7 @@ pub fn delete(
         }
     }
     sheet_index.retain(|(n, _, _)| !n.eq_ignore_ascii_case(&op.sheet));
-    clamp_active_tab(&mut wb_doc.root, sheet_index.len());
+    sheets::clamp_active_tab(&mut wb_doc.root, sheet_index.len());
     Ok(())
 }
 
@@ -264,16 +261,6 @@ fn next_chartsheet_part(pkg: &Package) -> String {
     }
 }
 
-fn next_sheet_id(sheets: &Element) -> u32 {
-    let mut max = 0u32;
-    for sh in sheets.children_by_local("sheet") {
-        if let Some(id) = sh.attr("sheetId").and_then(|s| s.parse().ok()) {
-            max = max.max(id);
-        }
-    }
-    max + 1
-}
-
 fn chartsheet_xml(drawing_rid: &str) -> Document {
     let view = Element::new("sheetView")
         .with_attr("workbookViewId", "0")
@@ -317,39 +304,4 @@ fn chart_parts_of_drawing(pkg: &Package, drawing_part: &str) -> Result<Vec<Strin
         }
     }
     Ok(out)
-}
-
-fn remove_workbook_sheet(wb: &mut Element, name: &str) -> Option<String> {
-    let sheets = wb.child_by_local_mut("sheets")?;
-    let idx = sheets.children.iter().position(|n| match n {
-        Node::Element(e) => {
-            e.local_name() == "sheet"
-                && e.attr("name").is_some_and(|n| n.eq_ignore_ascii_case(name))
-        }
-        Node::Text(_) => false,
-    })?;
-    let Node::Element(el) = sheets.children.remove(idx) else {
-        return None;
-    };
-    el.attr_local("id").map(str::to_string)
-}
-
-fn clamp_active_tab(wb: &mut Element, sheet_count: usize) {
-    if sheet_count == 0 {
-        return;
-    }
-    let Some(views) = wb.child_by_local_mut("bookViews") else {
-        return;
-    };
-    for view in views.element_children_mut() {
-        if view.local_name() != "workbookView" {
-            continue;
-        }
-        let Some(tab) = view.attr("activeTab").and_then(|s| s.parse::<usize>().ok()) else {
-            continue;
-        };
-        if tab >= sheet_count {
-            view.set_attr("activeTab", (sheet_count - 1).to_string());
-        }
-    }
 }

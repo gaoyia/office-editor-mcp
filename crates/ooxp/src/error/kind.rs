@@ -124,8 +124,14 @@ pub(crate) enum IdReason {
     InsertChartNeedsSlide,
     /// insertChartSheet 必须用 xlsx:workbook
     InsertChartSheetNeedsWorkbook,
+    /// insertSheet 必须用 xlsx:workbook
+    InsertSheetNeedsWorkbook,
     /// deleteChartSheet 必须用图表工作表 sheet:工作表名
     DeleteChartSheetNeedsChartsheet,
+    /// deleteSheet 必须用普通工作表 sheet:工作表名
+    DeleteSheetNeedsWorksheet,
+    /// renameSheet / moveSheet / setSheetHidden 必须用 sheet:工作表名
+    SheetOpNeedsSheet,
     /// xlsx 图表 id 必须是 sheet:工作表名/chart:…
     SheetChartPrefix,
     /// 工作表 id，缺少 /chart:…
@@ -388,6 +394,12 @@ define_error_kinds! {
     CustomPropNotFound { id: String } => vec![Self::CustomPropNotFound { id: "prop:Editor".into() }],
     SharedFormulaMaster { cell: String } => vec![Self::SharedFormulaMaster { cell: "A1".into() }],
     NeedAtLeastOneSheet => vec![Self::NeedAtLeastOneSheet],
+    LastVisibleSheet => vec![Self::LastVisibleSheet],
+    MoveSheetAfterSelf => vec![Self::MoveSheetAfterSelf],
+    SheetStillReferenced { name: String } => {
+        vec![Self::SheetStillReferenced { name: "Sheet1".into() }]
+    },
+    DialogOrMacroSheet => vec![Self::DialogOrMacroSheet],
     DuplicateSheetName { name: String } => vec![Self::DuplicateSheetName { name: "Sheet1".into() }],
     InvalidSheetName { reason: SheetNameReason } => SheetNameReason::all_samples()
         .into_iter()
@@ -673,7 +685,10 @@ impl IdReason {
             Self::InsertChartNeedsSheet,
             Self::InsertChartNeedsSlide,
             Self::InsertChartSheetNeedsWorkbook,
+            Self::InsertSheetNeedsWorkbook,
             Self::DeleteChartSheetNeedsChartsheet,
+            Self::DeleteSheetNeedsWorksheet,
+            Self::SheetOpNeedsSheet,
             Self::SheetChartPrefix,
             Self::SheetChartContainer,
             Self::SlideChartPrefix,
@@ -843,6 +858,8 @@ impl ErrorKind {
             | Self::SetCellWorksheetOnly
             | Self::InspectWorksheetOnly
             | Self::NeedAtLeastOneSheet
+            | Self::LastVisibleSheet
+            | Self::MoveSheetAfterSelf
             | Self::DuplicateSheetName { .. }
             | Self::InvalidSheetName { .. }
             | Self::InvalidParaStyle
@@ -993,6 +1010,8 @@ impl ErrorKind {
             Self::ScopeRequired { .. } => ScopeRequired,
             Self::SharedFormulaMaster { .. }
             | Self::InkComment { .. }
+            | Self::SheetStillReferenced { .. }
+            | Self::DialogOrMacroSheet
             | Self::CrossParaMarker
             | Self::ParaHasRevision
             | Self::SectionBreakPara

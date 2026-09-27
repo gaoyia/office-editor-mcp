@@ -802,6 +802,7 @@ mod tests {
                 "id",
                 "name",
                 "kind",
+                "hidden",
                 "pictureCount",
                 "chartCount",
                 "hasHeaderFooter",

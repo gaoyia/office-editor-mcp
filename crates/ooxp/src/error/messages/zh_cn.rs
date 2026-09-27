@@ -169,8 +169,17 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::InsertChartSheetNeedsWorkbook => {
                 "insertChartSheet 的 id 必须是 xlsx:workbook".into()
             }
+            IdReason::InsertSheetNeedsWorkbook => {
+                "insertSheet 的 id 必须是 xlsx:workbook".into()
+            }
             IdReason::DeleteChartSheetNeedsChartsheet => {
                 "deleteChartSheet 的 id 必须是图表工作表 sheet:工作表名".into()
+            }
+            IdReason::DeleteSheetNeedsWorksheet => {
+                "deleteSheet 的 id 必须是普通工作表 sheet:工作表名".into()
+            }
+            IdReason::SheetOpNeedsSheet => {
+                "id 必须是 sheet:工作表名".into()
             }
             IdReason::SheetChartPrefix => {
                 "xlsx 图表 id 必须是 sheet:工作表名/chart:…".into()
@@ -519,6 +528,14 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             "{cell} 是共享公式的主格，改它会让引用同一 si 的单元格失去公式；请先把那些单元格改成各自独立的公式"
         ),
         ErrorKind::NeedAtLeastOneSheet => "至少需要一张工作表".into(),
+        ErrorKind::LastVisibleSheet => "不能隐藏或删除最后一张可见工作表".into(),
+        ErrorKind::MoveSheetAfterSelf => "moveSheet 的 after 不能是自己".into(),
+        ErrorKind::SheetStillReferenced { name } => {
+            format!("定义名或公式仍引用工作表 {name}")
+        }
+        ErrorKind::DialogOrMacroSheet => {
+            "对话表和宏表不能删除、改名、重排或隐藏".into()
+        }
         ErrorKind::DuplicateSheetName { name } => format!("工作表名重复：{name}"),
         ErrorKind::InvalidSheetName { reason } => match reason {
             SheetNameReason::Missing => "缺少工作表名".into(),

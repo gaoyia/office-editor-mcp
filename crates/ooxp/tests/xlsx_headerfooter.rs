@@ -144,6 +144,7 @@ fn summary_without_scope() {
             "id",
             "name",
             "kind",
+            "hidden",
             "pictureCount",
             "chartCount",
             "hasHeaderFooter"

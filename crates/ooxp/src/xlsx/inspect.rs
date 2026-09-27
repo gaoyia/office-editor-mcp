@@ -13,10 +13,32 @@ use super::hf;
 use super::picture;
 use super::{REL_CHARTSHEET, REL_DIALOGSHEET, REL_SHARED_STRINGS};
 
+/// 按 workbook 关系 Type 判定表种类。`/macrosheet` 与 `/xlMacrosheet` 都算宏表。
+pub(crate) fn sheet_kind(rel_type: &str) -> &'static str {
+    if rel_type == REL_CHARTSHEET || rel_type.ends_with("/chartsheet") {
+        "chartsheet"
+    } else if rel_type == REL_DIALOGSHEET || rel_type.ends_with("/dialogsheet") {
+        "dialogsheet"
+    } else if rel_type.ends_with("/macrosheet") || rel_type.ends_with("/xlMacrosheet") {
+        "macrosheet"
+    } else {
+        "worksheet"
+    }
+}
+
+pub(crate) fn sheet_state_hidden(state: Option<&str>) -> bool {
+    matches!(state, Some("hidden") | Some("veryHidden"))
+}
+
+pub(crate) fn sheet_state_visible(state: Option<&str>) -> bool {
+    !sheet_state_hidden(state)
+}
+
 pub(crate) struct SheetMeta {
     pub(crate) name: String,
     pub(crate) kind: &'static str,
     pub(crate) part: String,
+    pub(crate) hidden: bool,
 }
 
 pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error> {
@@ -44,6 +66,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         obj.insert("id".into(), json!(format!("sheet:{}", sh.name)));
         obj.insert("name".into(), json!(sh.name));
         obj.insert("kind".into(), json!(sh.kind));
+        obj.insert("hidden".into(), json!(sh.hidden));
         let sheet_doc = xml::parse(pkg.get(&sh.part)?)?;
         if sh.kind == "worksheet" {
             let pics = picture::collect_sheet_pictures(&pkg, &sh.part, &sh.name)?;
@@ -203,18 +226,18 @@ pub(crate) fn list_sheets(
                 rid: rid.clone(),
             })
         })?;
-        let kind = if rel.rel_type == REL_CHARTSHEET || rel.rel_type.ends_with("/chartsheet") {
-            "chartsheet"
-        } else if rel.rel_type == REL_DIALOGSHEET || rel.rel_type.ends_with("/dialogsheet") {
-            "dialogsheet"
-        } else {
-            "worksheet"
-        };
+        let kind = sheet_kind(&rel.rel_type);
         let part = opc::resolve_rel_target(wb_part, &rel.target)?;
         if !pkg.contains(&part) {
             return Err(Error::new(ErrorKind::PartMissing { name: part }));
         }
-        out.push(SheetMeta { name, kind, part });
+        let hidden = sheet_state_hidden(sh.attr("state"));
+        out.push(SheetMeta {
+            name,
+            kind,
+            part,
+            hidden,
+        });
     }
     Ok(out)
 }

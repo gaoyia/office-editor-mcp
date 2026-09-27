@@ -257,6 +257,35 @@ pub struct DeleteChartSheetOp {
 }
 
 #[derive(Debug, Clone)]
+pub struct InsertSheetOp {
+    pub name: String,
+    pub after: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct DeleteSheetOp {
+    pub sheet: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct RenameSheetOp {
+    pub sheet: String,
+    pub name: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct MoveSheetOp {
+    pub sheet: String,
+    pub after: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetSheetHiddenOp {
+    pub sheet: String,
+    pub hidden: bool,
+}
+
+#[derive(Debug, Clone)]
 pub struct DeleteChartOp {
     pub id: String,
     pub target: SheetChartId,
@@ -424,6 +453,11 @@ pub enum XlsxOp {
     InsertChart(InsertChartOp),
     InsertChartSheet(InsertChartSheetOp),
     DeleteChartSheet(DeleteChartSheetOp),
+    InsertSheet(InsertSheetOp),
+    DeleteSheet(DeleteSheetOp),
+    RenameSheet(RenameSheetOp),
+    MoveSheet(MoveSheetOp),
+    SetSheetHidden(SetSheetHiddenOp),
     DeleteChart(DeleteChartOp),
     SetChartTitle(SetChartTitleOp),
     SetChartSeries(SetChartSeriesOp),
@@ -561,6 +595,11 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<XlsxOp>, Error> {
             "insertChart" => XlsxOp::InsertChart(parse_insert_chart(obj, i)?),
             "insertChartSheet" => XlsxOp::InsertChartSheet(parse_insert_chart_sheet(obj, i)?),
             "deleteChartSheet" => XlsxOp::DeleteChartSheet(parse_delete_chart_sheet(obj, i)?),
+            "insertSheet" => XlsxOp::InsertSheet(parse_insert_sheet(obj, i)?),
+            "deleteSheet" => XlsxOp::DeleteSheet(parse_delete_sheet(obj, i)?),
+            "renameSheet" => XlsxOp::RenameSheet(parse_rename_sheet(obj, i)?),
+            "moveSheet" => XlsxOp::MoveSheet(parse_move_sheet(obj, i)?),
+            "setSheetHidden" => XlsxOp::SetSheetHidden(parse_set_sheet_hidden(obj, i)?),
             "deleteChart" => XlsxOp::DeleteChart(parse_delete_chart(obj, i)?),
             "setChartTitle" => XlsxOp::SetChartTitle(parse_set_chart_title(obj, i)?),
             "setChartSeries" => XlsxOp::SetChartSeries(parse_set_chart_series(obj, i)?),
@@ -1480,11 +1519,126 @@ fn parse_delete_chart_sheet(
     deny_keys(obj, i, &["op", "id"])?;
     let id = require_id(obj, i)?;
     Ok(DeleteChartSheetOp {
-        sheet: parse_sheet_only_id(&id, i, IdReason::DeleteChartSheetNeedsChartsheet)?,
+        sheet: parse_sheet_only_id(&id, i, "id", IdReason::DeleteChartSheetNeedsChartsheet)?,
     })
 }
 
-fn parse_sheet_only_id(id: &str, op_index: usize, reason: IdReason) -> Result<String, Error> {
+fn parse_insert_sheet(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<InsertSheetOp, Error> {
+    deny_keys(obj, i, &["op", "id", "name", "after"])?;
+    let id = require_id(obj, i)?;
+    if id != "xlsx:workbook" {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::InsertSheetNeedsWorkbook,
+            },
+            format!("ops[{i}].id"),
+        ));
+    }
+    Ok(InsertSheetOp {
+        name: parse_new_sheet_name(obj, i)?,
+        after: parse_optional_after(obj, i, false)?,
+    })
+}
+
+fn parse_delete_sheet(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<DeleteSheetOp, Error> {
+    deny_keys(obj, i, &["op", "id"])?;
+    let id = require_id(obj, i)?;
+    Ok(DeleteSheetOp {
+        sheet: parse_sheet_only_id(&id, i, "id", IdReason::DeleteSheetNeedsWorksheet)?,
+    })
+}
+
+fn parse_rename_sheet(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<RenameSheetOp, Error> {
+    deny_keys(obj, i, &["op", "id", "name"])?;
+    let id = require_id(obj, i)?;
+    Ok(RenameSheetOp {
+        sheet: parse_sheet_only_id(&id, i, "id", IdReason::SheetOpNeedsSheet)?,
+        name: parse_new_sheet_name(obj, i)?,
+    })
+}
+
+fn parse_move_sheet(obj: &serde_json::Map<String, Value>, i: usize) -> Result<MoveSheetOp, Error> {
+    deny_keys(obj, i, &["op", "id", "after"])?;
+    let id = require_id(obj, i)?;
+    Ok(MoveSheetOp {
+        sheet: parse_sheet_only_id(&id, i, "id", IdReason::SheetOpNeedsSheet)?,
+        after: parse_optional_after(obj, i, true)?,
+    })
+}
+
+fn parse_set_sheet_hidden(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<SetSheetHiddenOp, Error> {
+    deny_keys(obj, i, &["op", "id", "hidden"])?;
+    let id = require_id(obj, i)?;
+    Ok(SetSheetHiddenOp {
+        sheet: parse_sheet_only_id(&id, i, "id", IdReason::SheetOpNeedsSheet)?,
+        hidden: parse_required_bool(obj.get("hidden"), i, "setSheetHidden", "hidden")?,
+    })
+}
+
+fn parse_new_sheet_name(obj: &serde_json::Map<String, Value>, i: usize) -> Result<String, Error> {
+    match obj.get("name") {
+        Some(Value::String(s)) => {
+            validate_sheet_name(s, format!("ops[{i}].name"))?;
+            Ok(s.clone())
+        }
+        None => Err(Error::with_path(
+            ErrorKind::InvalidSheetName {
+                reason: SheetNameReason::Missing,
+            },
+            format!("ops[{i}].name"),
+        )),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "name".into(),
+                expected: TypeName::String,
+            },
+            format!("ops[{i}].name"),
+        )),
+    }
+}
+
+fn parse_optional_after(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+    allow_null: bool,
+) -> Result<Option<String>, Error> {
+    match obj.get("after") {
+        None => Ok(None),
+        Some(Value::Null) if allow_null => Ok(None),
+        Some(Value::String(s)) => Ok(Some(parse_sheet_only_id(
+            s,
+            i,
+            "after",
+            IdReason::SheetOpNeedsSheet,
+        )?)),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "after".into(),
+                expected: TypeName::String,
+            },
+            format!("ops[{i}].after"),
+        )),
+    }
+}
+
+fn parse_sheet_only_id(
+    id: &str,
+    op_index: usize,
+    field: &str,
+    reason: IdReason,
+) -> Result<String, Error> {
     if id.contains("/chart:")
         || id.contains("/pic:")
         || id.contains("/hf:")
@@ -1492,19 +1646,19 @@ fn parse_sheet_only_id(id: &str, op_index: usize, reason: IdReason) -> Result<St
     {
         return Err(Error::with_path(
             ErrorKind::InvalidId { reason },
-            format!("ops[{op_index}].id"),
+            format!("ops[{op_index}].{field}"),
         ));
     }
     let Some(name) = id.strip_prefix("sheet:") else {
         return Err(Error::with_path(
             ErrorKind::InvalidId { reason },
-            format!("ops[{op_index}].id"),
+            format!("ops[{op_index}].{field}"),
         ));
     };
     if name.is_empty() || name.contains('/') {
         return Err(Error::with_path(
             ErrorKind::InvalidId { reason },
-            format!("ops[{op_index}].id"),
+            format!("ops[{op_index}].{field}"),
         ));
     }
     Ok(name.to_string())

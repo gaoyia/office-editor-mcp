@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "C:\\data\\book.xlsx",
+  "output": "C:\\data\\book.sheets.xlsx",
+  "ops": [
+    { "op": "insertSheet", "id": "xlsx:workbook", "name": "Sheet3" },
+    { "op": "renameSheet", "id": "sheet:Sheet3", "name": "附录" },
+    { "op": "moveSheet", "id": "sheet:附录" },
+    { "op": "setSheetHidden", "id": "sheet:Sheet2", "hidden": true }
+  ]
+}

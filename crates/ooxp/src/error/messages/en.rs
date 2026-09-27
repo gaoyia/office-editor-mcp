@@ -194,8 +194,17 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::InsertChartSheetNeedsWorkbook => {
                 "insertChartSheet id must be xlsx:workbook".into()
             }
+            IdReason::InsertSheetNeedsWorkbook => {
+                "insertSheet id must be xlsx:workbook".into()
+            }
             IdReason::DeleteChartSheetNeedsChartsheet => {
                 "deleteChartSheet id must be a chartsheet sheet:name".into()
+            }
+            IdReason::DeleteSheetNeedsWorksheet => {
+                "deleteSheet id must be a worksheet sheet:name".into()
+            }
+            IdReason::SheetOpNeedsSheet => {
+                "id must be sheet:name".into()
             }
             IdReason::SheetChartPrefix => {
                 "xlsx chart id must be sheet:name/chart:…".into()
@@ -613,6 +622,18 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             "{cell} is a shared formula master; changing it would leave dependents with the same si without a formula. Change those cells to independent formulas first"
         ),
         ErrorKind::NeedAtLeastOneSheet => "At least one worksheet is required".into(),
+        ErrorKind::LastVisibleSheet => {
+            "Cannot hide or delete the last visible sheet".into()
+        }
+        ErrorKind::MoveSheetAfterSelf => {
+            "moveSheet after cannot be the same sheet as id".into()
+        }
+        ErrorKind::SheetStillReferenced { name } => {
+            format!("Defined names or formulas still refer to sheet {name}")
+        }
+        ErrorKind::DialogOrMacroSheet => {
+            "dialogsheet and macrosheet cannot be deleted, renamed, moved, or hidden".into()
+        }
         ErrorKind::DuplicateSheetName { name } => format!("Duplicate sheet name: {name}"),
         ErrorKind::InvalidSheetName { reason } => match reason {
             SheetNameReason::Missing => "Missing sheet name".into(),

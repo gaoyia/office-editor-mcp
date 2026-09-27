@@ -664,6 +664,11 @@
               { "$ref": "#/$defs/insertChartOp" },
               { "$ref": "#/$defs/insertChartSheetOp" },
               { "$ref": "#/$defs/deleteChartSheetOp" },
+              { "$ref": "#/$defs/insertSheetOp" },
+              { "$ref": "#/$defs/deleteSheetOp" },
+              { "$ref": "#/$defs/renameSheetOp" },
+              { "$ref": "#/$defs/moveSheetOp" },
+              { "$ref": "#/$defs/setSheetHiddenOp" },
               { "$ref": "#/$defs/deleteChartOp" },
               { "$ref": "#/$defs/setChartTitleOp" },
               { "$ref": "#/$defs/setChartSeriesOp" },
@@ -1871,6 +1876,56 @@
       "properties": {
         "op": { "const": "deleteChartSheet" },
         "id": { "type": "string", "minLength": 1 }
+      }
+    },
+    "insertSheetOp": {
+      "type": "object",
+      "required": ["op", "id", "name"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "insertSheet" },
+        "id": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 },
+        "after": { "type": "string", "minLength": 1 }
+      }
+    },
+    "deleteSheetOp": {
+      "type": "object",
+      "required": ["op", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "deleteSheet" },
+        "id": { "type": "string", "minLength": 1 }
+      }
+    },
+    "renameSheetOp": {
+      "type": "object",
+      "required": ["op", "id", "name"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "renameSheet" },
+        "id": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 }
+      }
+    },
+    "moveSheetOp": {
+      "type": "object",
+      "required": ["op", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "moveSheet" },
+        "id": { "type": "string", "minLength": 1 },
+        "after": { "type": ["string", "null"], "minLength": 1 }
+      }
+    },
+    "setSheetHiddenOp": {
+      "type": "object",
+      "required": ["op", "id", "hidden"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "setSheetHidden" },
+        "id": { "type": "string", "minLength": 1 },
+        "hidden": { "type": "boolean" }
       }
     },
     "deleteChartOp": {

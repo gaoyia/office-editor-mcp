@@ -71,6 +71,7 @@ $order = @(
     'docx-protect'
     'docx-watermark'
     'xlsx-docprops'
+    'xlsx-sheets'
     'pptx-docprops'
     'pptx-apply'
     'pptx-pictures'

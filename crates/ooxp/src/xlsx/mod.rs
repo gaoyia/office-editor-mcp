@@ -9,6 +9,7 @@ mod hf;
 mod inspect;
 mod picture;
 mod request;
+mod sheets;
 
 pub use apply::apply;
 pub use create::create;

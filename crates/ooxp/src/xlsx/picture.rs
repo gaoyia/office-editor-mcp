@@ -1533,7 +1533,7 @@ fn update_rel_target(
     rels.write_to(pkg, part)
 }
 
-fn media_still_used(pkg: &Package, media_opc: &str) -> Result<bool, Error> {
+pub(crate) fn media_still_used(pkg: &Package, media_opc: &str) -> Result<bool, Error> {
     for name in pkg.part_names() {
         if !name.ends_with(".rels") {
             continue;

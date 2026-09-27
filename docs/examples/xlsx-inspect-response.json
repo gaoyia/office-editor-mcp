@@ -23,6 +23,7 @@
       "id": "sheet:Sheet1",
       "name": "Sheet1",
       "kind": "worksheet",
+      "hidden": false,
       "pictureCount": 0,
       "chartCount": 0,
       "truncated": false,

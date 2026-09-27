@@ -9,7 +9,9 @@ use super::a1;
 use super::chart;
 use super::chartsheet;
 use super::hf;
+use super::inspect;
 use super::picture;
+use super::sheets;
 use super::REL_CALC_CHAIN;
 
 pub fn apply(bytes: &[u8], ops: &[XlsxOp]) -> Result<Vec<u8>, Error> {
@@ -135,6 +137,34 @@ pub fn apply(bytes: &[u8], ops: &[XlsxOp]) -> Result<Vec<u8>, Error> {
                     op,
                     i,
                 )?;
+                workbook_dirty = true;
+            }
+            XlsxOp::InsertSheet(op) => {
+                sheets::insert(&mut pkg, &mut wb_doc, &wb_part, &mut sheet_index, op, i)?;
+                workbook_dirty = true;
+            }
+            XlsxOp::DeleteSheet(op) => {
+                sheets::delete(
+                    &mut pkg,
+                    &mut wb_doc,
+                    &wb_part,
+                    &mut sheet_index,
+                    &mut dirty_sheets,
+                    op,
+                    i,
+                )?;
+                workbook_dirty = true;
+            }
+            XlsxOp::RenameSheet(op) => {
+                sheets::rename(&pkg, &mut wb_doc, &mut sheet_index, &dirty_sheets, op, i)?;
+                workbook_dirty = true;
+            }
+            XlsxOp::MoveSheet(op) => {
+                sheets::move_sheet(&mut wb_doc, &mut sheet_index, op, i)?;
+                workbook_dirty = true;
+            }
+            XlsxOp::SetSheetHidden(op) => {
+                sheets::set_hidden(&mut wb_doc, &sheet_index, op, i)?;
                 workbook_dirty = true;
             }
             XlsxOp::DeleteChart(op) => {
@@ -352,13 +382,7 @@ fn sheet_index(
                 rid: rid.to_string(),
             })
         })?;
-        let kind = if rel.rel_type.ends_with("/chartsheet") {
-            "chartsheet"
-        } else if rel.rel_type.ends_with("/dialogsheet") {
-            "dialogsheet"
-        } else {
-            "worksheet"
-        };
+        let kind = inspect::sheet_kind(&rel.rel_type);
         let part = opc::resolve_rel_target(wb_part, &rel.target)?;
         out.push((name, part, kind));
     }
