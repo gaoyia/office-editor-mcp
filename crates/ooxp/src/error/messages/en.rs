@@ -222,6 +222,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             }
             IdReason::EvenOddNeedsDocument => {
                 "setEvenAndOddHeaders id must be docx:document".into()
+            }
+            IdReason::SettingsNeedDocument => {
+                "setMirrorMargins / setGutterAtTop id must be docx:document".into()
             },
         },
         ErrorKind::SheetNotFound { name } => format!("Sheet not found: {name}"),
@@ -402,6 +405,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::HfInsertWhileLinked => {
             "This section inherits that header/footer; use setHeaderFooterLink to unlink".into()
         }
+        ErrorKind::InvalidSectValue { field } => format!("{field} is not an allowed value"),
         ErrorKind::OpcOpen { reason } => match reason {
             OpcReason::EmptyPartName => "Part name must not be empty".into(),
             OpcReason::InvalidPartName { name } => format!("Invalid part name: {name}"),

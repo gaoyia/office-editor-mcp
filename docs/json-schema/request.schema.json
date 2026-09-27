@@ -461,6 +461,15 @@
               { "$ref": "#/$defs/setHeaderFooterTextOp" },
               { "$ref": "#/$defs/setParaTextOp" },
               { "$ref": "#/$defs/setHeaderFooterDistanceOp" },
+              { "$ref": "#/$defs/setPageMarginOp" },
+              { "$ref": "#/$defs/setPageSizeOp" },
+              { "$ref": "#/$defs/setColumnsOp" },
+              { "$ref": "#/$defs/setVerticalAlignOp" },
+              { "$ref": "#/$defs/setLineNumberingOp" },
+              { "$ref": "#/$defs/setDocGridOp" },
+              { "$ref": "#/$defs/setRtlGutterOp" },
+              { "$ref": "#/$defs/setMirrorMarginsOp" },
+              { "$ref": "#/$defs/setGutterAtTopOp" },
               { "$ref": "#/$defs/setHeaderFooterLinkOp" },
               { "$ref": "#/$defs/insertHeaderFooterOp" },
               { "$ref": "#/$defs/setTitlePageOp" },
@@ -623,6 +632,141 @@
         "op": { "const": "setEvenAndOddHeaders" },
         "id": { "type": "string", "minLength": 1 },
         "evenAndOdd": { "type": "boolean" }
+      }
+    },
+    "setPageMarginOp": {
+      "type": "object",
+      "required": ["op", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "setPageMargin" },
+        "id": { "type": "string", "minLength": 1 },
+        "top": { "type": "integer" },
+        "bottom": { "type": "integer" },
+        "left": { "type": "integer", "minimum": 0 },
+        "right": { "type": "integer", "minimum": 0 },
+        "gutter": { "type": "integer", "minimum": 0 }
+      },
+      "anyOf": [
+        { "required": ["top"] },
+        { "required": ["bottom"] },
+        { "required": ["left"] },
+        { "required": ["right"] },
+        { "required": ["gutter"] }
+      ]
+    },
+    "setPageSizeOp": {
+      "type": "object",
+      "required": ["op", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "setPageSize" },
+        "id": { "type": "string", "minLength": 1 },
+        "pageWidth": { "type": "integer", "minimum": 0 },
+        "pageHeight": { "type": "integer", "minimum": 0 },
+        "orient": { "enum": ["portrait", "landscape"] }
+      },
+      "anyOf": [
+        { "required": ["pageWidth"] },
+        { "required": ["pageHeight"] },
+        { "required": ["orient"] }
+      ]
+    },
+    "setColumnsOp": {
+      "type": "object",
+      "required": ["op", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "setColumns" },
+        "id": { "type": "string", "minLength": 1 },
+        "num": { "type": "integer", "minimum": 1 },
+        "space": { "type": "integer", "minimum": 0 },
+        "equalWidth": { "type": "boolean" },
+        "sep": { "type": "boolean" },
+        "cols": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "width": { "type": "integer", "minimum": 0 },
+              "space": { "type": "integer", "minimum": 0 }
+            }
+          }
+        },
+        "enabled": { "const": false }
+      }
+    },
+    "setVerticalAlignOp": {
+      "type": "object",
+      "required": ["op", "id", "vAlign"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "setVerticalAlign" },
+        "id": { "type": "string", "minLength": 1 },
+        "vAlign": {
+          "anyOf": [
+            { "enum": ["top", "center", "both", "bottom"] },
+            { "type": "null" }
+          ]
+        }
+      }
+    },
+    "setLineNumberingOp": {
+      "type": "object",
+      "required": ["op", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "setLineNumbering" },
+        "id": { "type": "string", "minLength": 1 },
+        "countBy": { "type": "integer", "minimum": 0 },
+        "start": { "type": "integer", "minimum": 0 },
+        "distance": { "type": "integer", "minimum": 0 },
+        "restart": { "enum": ["newPage", "newSection", "continuous"] },
+        "enabled": { "const": false }
+      }
+    },
+    "setDocGridOp": {
+      "type": "object",
+      "required": ["op", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "setDocGrid" },
+        "id": { "type": "string", "minLength": 1 },
+        "type": { "enum": ["default", "lines", "linesAndChars", "snapToChars"] },
+        "linePitch": { "type": "integer" },
+        "charSpace": { "type": "integer" },
+        "enabled": { "const": false }
+      }
+    },
+    "setRtlGutterOp": {
+      "type": "object",
+      "required": ["op", "id", "rtlGutter"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "setRtlGutter" },
+        "id": { "type": "string", "minLength": 1 },
+        "rtlGutter": { "type": "boolean" }
+      }
+    },
+    "setMirrorMarginsOp": {
+      "type": "object",
+      "required": ["op", "id", "mirrorMargins"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "setMirrorMargins" },
+        "id": { "type": "string", "minLength": 1 },
+        "mirrorMargins": { "type": "boolean" }
+      }
+    },
+    "setGutterAtTopOp": {
+      "type": "object",
+      "required": ["op", "id", "gutterAtTop"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "setGutterAtTop" },
+        "id": { "type": "string", "minLength": 1 },
+        "gutterAtTop": { "type": "boolean" }
       }
     },
     "replacePictureOp": {

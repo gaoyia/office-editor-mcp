@@ -212,7 +212,9 @@ fn inspect_counts_without_list() {
             "outline",
             "headers",
             "footers",
-            "sections"
+            "sections",
+            "mirrorMargins",
+            "gutterAtTop"
         ]
     );
 }

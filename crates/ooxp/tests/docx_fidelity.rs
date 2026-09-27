@@ -570,6 +570,182 @@ fn apply_distance_on_create_keeps_page_margins() {
 }
 
 #[test]
+fn inspect_section_layout_null_when_missing() {
+    let path = write_hf_sample("sect-null");
+    let tree = inspect_hf(&path, false);
+    let s1 = &tree["sections"][0];
+    assert!(s1["top"].is_null());
+    assert!(s1["pageWidth"].is_null());
+    assert!(s1["orient"].is_null());
+    assert!(s1["columns"].is_null());
+    assert!(s1["vAlign"].is_null());
+    assert!(s1["lineNumbering"].is_null());
+    assert!(s1["docGrid"].is_null());
+    assert!(s1["rtlGutter"].is_null());
+    assert_eq!(tree["sections"][1]["pageWidth"], 11906);
+    assert_eq!(tree["sections"][1]["pageHeight"], 16838);
+    assert!(tree["sections"][1]["orient"].is_null());
+    assert!(tree["mirrorMargins"].is_null());
+    assert!(tree["gutterAtTop"].is_null());
+}
+
+#[test]
+fn apply_page_margin_and_size_leave_unnamed() {
+    let path = write_hf_sample("sect-margin");
+    let out = tmp_dir().join("sect-margin-out.docx");
+    apply_ops(
+        &path,
+        &out,
+        json!([
+            {
+                "op": "setPageMargin",
+                "id": "section:1",
+                "top": 1440,
+                "left": 1800,
+                "right": 1800,
+                "bottom": 1440
+            },
+            {
+                "op": "setPageSize",
+                "id": "section:1",
+                "pageWidth": 16838,
+                "pageHeight": 11906,
+                "orient": "landscape"
+            }
+        ]),
+    )
+    .unwrap();
+    let tree = inspect_hf(&out, false);
+    assert_eq!(tree["sections"][0]["top"], 1440);
+    assert_eq!(tree["sections"][0]["left"], 1800);
+    assert!(tree["sections"][0]["gutter"].is_null());
+    assert!(tree["sections"][0]["headerDistance"].is_null());
+    assert_eq!(tree["sections"][0]["pageWidth"], 16838);
+    assert_eq!(tree["sections"][0]["orient"], "landscape");
+    let xml = part(&out, "word/document.xml");
+    assert!(!xml.contains("w:gutter="));
+    assert!(!xml.contains("w:header="));
+}
+
+#[test]
+fn apply_page_margin_keeps_header_distance_on_create() {
+    let dir = tmp_dir();
+    let n = SEQ.fetch_add(1, Ordering::Relaxed);
+    let created = dir.join(format!("sect-create-{n}.docx"));
+    run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "create",
+            "path": created.to_string_lossy(),
+            "document": { "paragraphs": [{ "text": "a" }] }
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap();
+    let out = dir.join(format!("sect-create-out-{n}.docx"));
+    apply_ops(
+        &created,
+        &out,
+        json!([{
+            "op": "setPageMargin",
+            "id": "section:1",
+            "top": 720,
+            "gutter": 360
+        }]),
+    )
+    .unwrap();
+    let tree = inspect_hf(&out, false);
+    assert_eq!(tree["sections"][0]["top"], 720);
+    assert_eq!(tree["sections"][0]["gutter"], 360);
+    assert_eq!(tree["sections"][0]["headerDistance"], 708);
+    assert_eq!(tree["sections"][0]["left"], 1440);
+    apply_ops(
+        &out,
+        &out,
+        json!([{
+            "op": "setHeaderFooterDistance",
+            "id": "section:1",
+            "headerDistance": 1440
+        }]),
+    )
+    .unwrap();
+    let tree = inspect_hf(&out, false);
+    assert_eq!(tree["sections"][0]["headerDistance"], 1440);
+    assert_eq!(tree["sections"][0]["top"], 720);
+}
+
+#[test]
+fn apply_columns_valign_linenum_grid_flags() {
+    let path = write_hf_sample("sect-rest");
+    let out = tmp_dir().join("sect-rest-out.docx");
+    apply_ops(
+        &path,
+        &out,
+        json!([
+            { "op": "setColumns", "id": "section:1", "num": 2, "space": 720, "equalWidth": true },
+            { "op": "setVerticalAlign", "id": "section:1", "vAlign": "center" },
+            { "op": "setLineNumbering", "id": "section:1", "countBy": 1, "restart": "newPage" },
+            { "op": "setDocGrid", "id": "section:1", "type": "lines", "linePitch": 360 },
+            { "op": "setRtlGutter", "id": "section:1", "rtlGutter": true },
+            { "op": "setMirrorMargins", "id": "docx:document", "mirrorMargins": true },
+            { "op": "setGutterAtTop", "id": "docx:document", "gutterAtTop": true }
+        ]),
+    )
+    .unwrap();
+    let tree = inspect_hf(&out, false);
+    assert_eq!(tree["sections"][0]["columns"]["num"], 2);
+    assert_eq!(tree["sections"][0]["columns"]["equalWidth"], true);
+    assert_eq!(tree["sections"][0]["vAlign"], "center");
+    assert_eq!(tree["sections"][0]["lineNumbering"]["countBy"], 1);
+    assert_eq!(tree["sections"][0]["docGrid"]["type"], "lines");
+    assert_eq!(tree["sections"][0]["rtlGutter"], true);
+    assert_eq!(tree["mirrorMargins"], true);
+    assert_eq!(tree["gutterAtTop"], true);
+
+    apply_ops(
+        &out,
+        &out,
+        json!([
+            { "op": "setColumns", "id": "section:1", "enabled": false },
+            { "op": "setVerticalAlign", "id": "section:1", "vAlign": null },
+            { "op": "setLineNumbering", "id": "section:1", "enabled": false },
+            { "op": "setDocGrid", "id": "section:1", "enabled": false },
+            { "op": "setRtlGutter", "id": "section:1", "rtlGutter": false },
+            { "op": "setMirrorMargins", "id": "docx:document", "mirrorMargins": false }
+        ]),
+    )
+    .unwrap();
+    let tree = inspect_hf(&out, false);
+    assert!(tree["sections"][0]["columns"].is_null());
+    assert!(tree["sections"][0]["vAlign"].is_null());
+    assert!(tree["sections"][0]["lineNumbering"].is_null());
+    assert!(tree["sections"][0]["docGrid"].is_null());
+    assert!(tree["sections"][0]["rtlGutter"].is_null());
+    assert!(tree["mirrorMargins"].is_null());
+}
+
+#[test]
+fn apply_section_bad_id_and_foreign() {
+    let path = write_hf_sample("sect-bad");
+    let out = tmp_dir().join("sect-bad-out.docx");
+    let err = apply_ops(
+        &path,
+        &out,
+        json!([{ "op": "setPageMargin", "id": "para:1", "top": 1440 }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidId);
+    let err = apply_ops(
+        &path,
+        &out,
+        json!([{ "op": "setMirrorMargins", "id": "section:1", "mirrorMargins": true }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidId);
+}
+
+#[test]
 fn apply_distance_bad_id_is_invalid() {
     let path = write_hf_sample("dist-bad-id");
     let out = tmp_dir().join("dist-bad-id-out.docx");

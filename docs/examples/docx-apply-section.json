@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "C:\\data\\note.docx",
+  "output": "C:\\data\\note.section.docx",
+  "ops": [
+    {
+      "op": "setPageMargin",
+      "id": "section:1",
+      "top": 1440,
+      "bottom": 1440,
+      "left": 1800,
+      "right": 1800
+    },
+    {
+      "op": "setPageSize",
+      "id": "section:1",
+      "pageWidth": 16838,
+      "pageHeight": 11906,
+      "orient": "landscape"
+    },
+    { "op": "setColumns", "id": "section:1", "num": 2, "space": 720, "equalWidth": true },
+    { "op": "setVerticalAlign", "id": "section:1", "vAlign": "center" },
+    { "op": "setLineNumbering", "id": "section:1", "countBy": 1 },
+    { "op": "setRtlGutter", "id": "section:1", "rtlGutter": true },
+    { "op": "setMirrorMargins", "id": "docx:document", "mirrorMargins": true }
+  ]
+}

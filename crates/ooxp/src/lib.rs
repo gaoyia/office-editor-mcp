@@ -854,6 +854,8 @@ mod tests {
                 "headers",
                 "footers",
                 "sections",
+                "mirrorMargins",
+                "gutterAtTop",
                 "from",
                 "truncated",
                 "paragraphs"
@@ -895,6 +897,19 @@ mod tests {
                 "index",
                 "headerDistance",
                 "footerDistance",
+                "top",
+                "bottom",
+                "left",
+                "right",
+                "gutter",
+                "pageWidth",
+                "pageHeight",
+                "orient",
+                "columns",
+                "vAlign",
+                "lineNumbering",
+                "docGrid",
+                "rtlGutter",
                 "headerLink",
                 "footerLink"
             ]

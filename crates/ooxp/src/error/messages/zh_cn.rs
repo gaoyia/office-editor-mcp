@@ -201,6 +201,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             }
             IdReason::EvenOddNeedsDocument => {
                 "setEvenAndOddHeaders 的 id 必须是 docx:document".into()
+            }
+            IdReason::SettingsNeedDocument => {
+                "setMirrorMargins / setGutterAtTop 的 id 必须是 docx:document".into()
             },
         },
         ErrorKind::SheetNotFound { name } => format!("找不到工作表：{name}"),
@@ -344,6 +347,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::HfInsertWhileLinked => {
             "本节该页眉页脚仍链接前节，请用 setHeaderFooterLink 断开".into()
         }
+        ErrorKind::InvalidSectValue { field } => format!("{field} 不是允许的取值"),
         ErrorKind::OpcOpen { reason } => match reason {
             OpcReason::EmptyPartName => "部件名不能为空".into(),
             OpcReason::InvalidPartName { name } => format!("非法部件名：{name}"),

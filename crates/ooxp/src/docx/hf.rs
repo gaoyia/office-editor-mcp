@@ -487,16 +487,19 @@ fn explicit_refs(
 }
 
 pub(crate) fn bool_prop(el: &Element, local: &str) -> bool {
-    let Some(child) = el.child_by_local(local) else {
-        return false;
-    };
-    match child.attr_local("val") {
+    on_off_opt(el, local).unwrap_or(false)
+}
+
+/// 没有对应子元素则为 `None`；有则按 OnOff 读成布尔。
+pub fn on_off_opt(el: &Element, local: &str) -> Option<bool> {
+    let child = el.child_by_local(local)?;
+    Some(match child.attr_local("val") {
         None => true,
         Some(v) => {
             let lower = v.to_ascii_lowercase();
             matches!(lower.as_str(), "1" | "true" | "on")
         }
-    }
+    })
 }
 
 fn read_even_and_odd(
@@ -588,9 +591,14 @@ fn find_sect_mut<'a>(el: &'a mut Element, idx: &mut usize, n: usize) -> Option<&
     None
 }
 
-/// 读 `w:pgMar` 上的 twip 属性；缺则为 `None`。
-pub fn twip_attr(pg_mar: Option<&Element>, local: &str) -> Result<Option<i64>, Error> {
-    let Some(el) = pg_mar else {
+/// 读元素上的整数属性；缺则为 `None`。`signed` 为假时负数报 `XmlBroken`。
+pub fn measure_attr(
+    el: Option<&Element>,
+    local: &str,
+    elem: &str,
+    signed: bool,
+) -> Result<Option<i64>, Error> {
+    let Some(el) = el else {
         return Ok(None);
     };
     let Some(raw) = el.attr_local(local) else {
@@ -600,29 +608,49 @@ pub fn twip_attr(pg_mar: Option<&Element>, local: &str) -> Result<Option<i64>, E
     let n: i64 = t.parse().map_err(|_| {
         Error::xml_detail(
             XmlIssue::Parse,
-            format!("pgMar/@{local} not an integer: {raw}"),
+            format!("{elem}/@{local} not an integer: {raw}"),
         )
     })?;
-    if n < 0 {
+    if !signed && n < 0 {
         return Err(Error::xml_detail(
             XmlIssue::Parse,
-            format!("pgMar/@{local} must be non-negative: {raw}"),
+            format!("{elem}/@{local} must be non-negative: {raw}"),
         ));
     }
     Ok(Some(n))
 }
 
-/// 按 local name 写 twip 属性；已有则改原名，没有则用节前缀补上。
-pub fn set_twip_attr(el: &mut Element, local: &str, value: u32) {
+/// 读 `w:pgMar` 上的非负 twip 属性；缺则为 `None`。
+pub fn twip_attr(pg_mar: Option<&Element>, local: &str) -> Result<Option<i64>, Error> {
+    measure_attr(pg_mar, local, "pgMar", false)
+}
+
+/// 读可为负的 twip（`top` / `bottom`）。
+pub fn signed_twip_attr(pg_mar: Option<&Element>, local: &str) -> Result<Option<i64>, Error> {
+    measure_attr(pg_mar, local, "pgMar", true)
+}
+
+/// 按 local name 写属性；已有则改原名，没有则用父元素前缀补上。
+pub fn set_local_attr(el: &mut Element, local: &str, value: impl Into<String>) {
+    let value = value.into();
     if let Some((_, v)) = el
         .attrs
         .iter_mut()
         .find(|(k, _)| k.rsplit(':').next().unwrap_or(k) == local)
     {
-        *v = value.to_string();
+        *v = value;
         return;
     }
-    el.set_attr(&el.prefixed(local), value.to_string());
+    el.set_attr(&el.prefixed(local), value);
+}
+
+/// 按 local name 写 twip 属性；已有则改原名，没有则用节前缀补上。
+pub fn set_twip_attr(el: &mut Element, local: &str, value: u32) {
+    set_local_attr(el, local, value.to_string());
+}
+
+pub fn set_signed_twip_attr(el: &mut Element, local: &str, value: i64) {
+    set_local_attr(el, local, value.to_string());
 }
 
 fn first_alt_child_index(el: &Element) -> Option<usize> {
@@ -668,6 +696,59 @@ pub const TITLE_PG_ORDER: &[&str] = &[
 /// `evenAndOddHeaders` 在 `CT_Settings` 里位于 `compat` 之前。
 pub const EVEN_ODD_ORDER: &[&str] = &["evenAndOddHeaders", "compat"];
 
+/// `mirrorMargins` / `gutterAtTop` 在 `CT_Settings` 里的位置，见 ECMA-376 §A.1。
+pub const SETTINGS_ORDER: &[&str] = &[
+    "writeProtection",
+    "view",
+    "zoom",
+    "removePersonalInformation",
+    "removeDateAndTime",
+    "doNotDisplayPageBoundaries",
+    "displayBackgroundShape",
+    "printPostScriptOverText",
+    "printFractionalCharacterWidth",
+    "printFormsData",
+    "embedTrueTypeFonts",
+    "embedSystemFonts",
+    "saveSubsetFonts",
+    "saveFormsData",
+    "mirrorMargins",
+    "alignBordersAndEdges",
+    "bordersDoNotSurroundHeader",
+    "bordersDoNotSurroundFooter",
+    "gutterAtTop",
+    "hideSpellingErrors",
+    "hideGrammaticalErrors",
+    "activeWritingStyle",
+    "proofState",
+    "formsDesign",
+    "attachedTemplate",
+    "linkStyles",
+    "stylePaneFormatFilter",
+    "stylePaneSortMethod",
+    "documentType",
+    "mailMerge",
+    "revisionView",
+    "trackRevisions",
+    "doNotTrackMoves",
+    "doNotTrackFormatting",
+    "documentProtection",
+    "autoFormatOverride",
+    "styleLockTheme",
+    "styleLockQFSet",
+    "defaultTabStop",
+    "autoHyphenation",
+    "consecutiveHyphenLimit",
+    "hyphenationZone",
+    "doNotHyphenateCaps",
+    "showEnvelope",
+    "summaryLength",
+    "clickAndTypeStyle",
+    "defaultTableStyle",
+    "evenAndOddHeaders",
+    "compat",
+];
+
 pub fn set_on_off(parent: &mut Element, local: &str, on: bool, order: &[&str]) {
     remove_local(parent, local);
     if !on {
@@ -679,11 +760,25 @@ pub fn set_on_off(parent: &mut Element, local: &str, on: bool, order: &[&str]) {
         .insert(dest, Node::Element(Element::new(parent.prefixed(local))));
 }
 
-fn remove_local(parent: &mut Element, local: &str) {
+pub fn remove_local(parent: &mut Element, local: &str) {
     parent.children.retain(|n| match n {
         Node::Element(e) => e.local_name() != local,
         _ => true,
     });
+}
+
+/// 没有则按 `EG_SectPrContents` 顺序插入空元素，并返回可变引用。
+pub fn ensure_child_in_order<'a>(
+    parent: &'a mut Element,
+    local: &str,
+    order: &[&str],
+) -> &'a mut Element {
+    if parent.child_by_local(local).is_none() {
+        let el = Element::new(parent.prefixed(local));
+        let dest = insert_index_by_order(parent, local, order);
+        parent.children.insert(dest, Node::Element(el));
+    }
+    parent.child_by_local_mut(local).unwrap()
 }
 
 fn insert_index_by_order(parent: &Element, local: &str, order: &[&str]) -> usize {

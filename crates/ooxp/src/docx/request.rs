@@ -83,6 +83,94 @@ pub struct SetEvenAndOddHeadersOp {
 }
 
 #[derive(Debug, Clone)]
+pub struct SetPageMarginOp {
+    pub id: String,
+    pub n: usize,
+    pub top: Option<i64>,
+    pub bottom: Option<i64>,
+    pub left: Option<u32>,
+    pub right: Option<u32>,
+    pub gutter: Option<u32>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetPageSizeOp {
+    pub id: String,
+    pub n: usize,
+    pub page_width: Option<u32>,
+    pub page_height: Option<u32>,
+    pub orient: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ColWidth {
+    pub width: Option<u32>,
+    pub space: Option<u32>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetColumnsOp {
+    pub id: String,
+    pub n: usize,
+    pub num: Option<u32>,
+    pub space: Option<u32>,
+    pub equal_width: Option<bool>,
+    pub sep: Option<bool>,
+    pub cols: Option<Vec<ColWidth>>,
+    pub enabled: Option<bool>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetVerticalAlignOp {
+    pub id: String,
+    pub n: usize,
+    /// `None` 表示 JSON `null`，删掉 `w:vAlign`。
+    pub v_align: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetLineNumberingOp {
+    pub id: String,
+    pub n: usize,
+    pub count_by: Option<u32>,
+    pub start: Option<u32>,
+    pub distance: Option<u32>,
+    pub restart: Option<String>,
+    pub enabled: Option<bool>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetDocGridOp {
+    pub id: String,
+    pub n: usize,
+    pub grid_type: Option<String>,
+    pub line_pitch: Option<i64>,
+    pub char_space: Option<i64>,
+    pub enabled: Option<bool>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetRtlGutterOp {
+    pub id: String,
+    pub n: usize,
+    pub rtl_gutter: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetMirrorMarginsOp {
+    #[allow(dead_code)]
+    pub id: String,
+    pub mirror_margins: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetGutterAtTopOp {
+    #[allow(dead_code)]
+    pub id: String,
+    pub gutter_at_top: bool,
+}
+
+#[derive(Debug, Clone)]
 pub struct ReplacePictureOp {
     pub id: String,
     pub target: PicTarget,
@@ -311,6 +399,15 @@ pub enum DocxOp {
     InsertHeaderFooter(InsertHeaderFooterOp),
     SetTitlePage(SetTitlePageOp),
     SetEvenAndOddHeaders(SetEvenAndOddHeadersOp),
+    SetPageMargin(SetPageMarginOp),
+    SetPageSize(SetPageSizeOp),
+    SetColumns(SetColumnsOp),
+    SetVerticalAlign(SetVerticalAlignOp),
+    SetLineNumbering(SetLineNumberingOp),
+    SetDocGrid(SetDocGridOp),
+    SetRtlGutter(SetRtlGutterOp),
+    SetMirrorMargins(SetMirrorMarginsOp),
+    SetGutterAtTop(SetGutterAtTopOp),
     ReplacePicture(ReplacePictureOp),
     InsertPicture(InsertPictureOp),
     DeletePicture(DeletePictureOp),
@@ -567,6 +664,21 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<DocxOp>, Error> {
             "setEvenAndOddHeaders" => out.push(DocxOp::SetEvenAndOddHeaders(
                 parse_set_even_and_odd(obj, i)?,
             )),
+            "setPageMargin" => out.push(DocxOp::SetPageMargin(parse_set_page_margin(obj, i)?)),
+            "setPageSize" => out.push(DocxOp::SetPageSize(parse_set_page_size(obj, i)?)),
+            "setColumns" => out.push(DocxOp::SetColumns(parse_set_columns(obj, i)?)),
+            "setVerticalAlign" => {
+                out.push(DocxOp::SetVerticalAlign(parse_set_vertical_align(obj, i)?))
+            }
+            "setLineNumbering" => {
+                out.push(DocxOp::SetLineNumbering(parse_set_line_numbering(obj, i)?))
+            }
+            "setDocGrid" => out.push(DocxOp::SetDocGrid(parse_set_doc_grid(obj, i)?)),
+            "setRtlGutter" => out.push(DocxOp::SetRtlGutter(parse_set_rtl_gutter(obj, i)?)),
+            "setMirrorMargins" => {
+                out.push(DocxOp::SetMirrorMargins(parse_set_mirror_margins(obj, i)?))
+            }
+            "setGutterAtTop" => out.push(DocxOp::SetGutterAtTop(parse_set_gutter_at_top(obj, i)?)),
             "replacePicture" => out.push(DocxOp::ReplacePicture(parse_replace_pic(obj, i)?)),
             "insertPicture" => out.push(DocxOp::InsertPicture(parse_insert_pic(obj, i)?)),
             "deletePicture" => out.push(DocxOp::DeletePicture(parse_delete_pic(obj, i)?)),
@@ -928,6 +1040,451 @@ fn parse_set_even_and_odd(
         "evenAndOdd",
     )?;
     Ok(SetEvenAndOddHeadersOp { id, even_and_odd })
+}
+
+fn require_document_id(id: &str, i: usize, reason: IdReason) -> Result<(), Error> {
+    if id == "docx:document" {
+        return Ok(());
+    }
+    Err(Error::with_path(
+        ErrorKind::InvalidId { reason },
+        format!("ops[{i}].id"),
+    ))
+}
+
+fn parse_enabled_false(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+    other: bool,
+) -> Result<Option<bool>, Error> {
+    match obj.get("enabled") {
+        None => Ok(None),
+        Some(Value::Bool(false)) => {
+            if other {
+                return Err(Error::with_path(
+                    ErrorKind::MutuallyExclusive {
+                        a: "enabled".into(),
+                        b: "other fields".into(),
+                    },
+                    format!("ops[{i}].enabled"),
+                ));
+            }
+            Ok(Some(false))
+        }
+        Some(_) => Err(Error::with_path(
+            ErrorKind::InvalidSectValue {
+                field: "enabled".into(),
+            },
+            format!("ops[{i}].enabled"),
+        )),
+    }
+}
+
+fn parse_optional_bool_field(
+    v: Option<&Value>,
+    i: usize,
+    field: &str,
+) -> Result<Option<bool>, Error> {
+    match v {
+        None => Ok(None),
+        Some(Value::Bool(b)) => Ok(Some(*b)),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::Boolean,
+            },
+            format!("ops[{i}].{field}"),
+        )),
+    }
+}
+
+fn parse_signed_twip_field(v: Option<&Value>, i: usize, field: &str) -> Result<Option<i64>, Error> {
+    let Some(v) = v else {
+        return Ok(None);
+    };
+    let path = format!("ops[{i}].{field}");
+    match v {
+        Value::Number(n) => n.as_i64().map(Some).ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::WrongType {
+                    field: field.into(),
+                    expected: TypeName::Integer,
+                },
+                path,
+            )
+        }),
+        _ => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::Integer,
+            },
+            path,
+        )),
+    }
+}
+
+fn parse_enum_field(
+    v: Option<&Value>,
+    i: usize,
+    field: &str,
+    allowed: &[&str],
+) -> Result<Option<String>, Error> {
+    match v {
+        None => Ok(None),
+        Some(Value::String(s)) if allowed.contains(&s.as_str()) => Ok(Some(s.clone())),
+        Some(Value::String(_)) => Err(Error::with_path(
+            ErrorKind::InvalidSectValue {
+                field: field.into(),
+            },
+            format!("ops[{i}].{field}"),
+        )),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::String,
+            },
+            format!("ops[{i}].{field}"),
+        )),
+    }
+}
+
+fn parse_set_page_margin(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<SetPageMarginOp, Error> {
+    deny_keys(
+        obj,
+        i,
+        &["op", "id", "top", "bottom", "left", "right", "gutter"],
+    )?;
+    let id = require_op_id(obj, i)?;
+    let n = parse_section_id(&id, i)?;
+    let top = parse_signed_twip_field(obj.get("top"), i, "top")?;
+    let bottom = parse_signed_twip_field(obj.get("bottom"), i, "bottom")?;
+    let left = parse_twip_field(obj.get("left"), i, "left")?;
+    let right = parse_twip_field(obj.get("right"), i, "right")?;
+    let gutter = parse_twip_field(obj.get("gutter"), i, "gutter")?;
+    if top.is_none() && bottom.is_none() && left.is_none() && right.is_none() && gutter.is_none() {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "setPageMargin".into(),
+                field: "top, bottom, left, right, or gutter".into(),
+            },
+            format!("ops[{i}]"),
+        ));
+    }
+    Ok(SetPageMarginOp {
+        id,
+        n,
+        top,
+        bottom,
+        left,
+        right,
+        gutter,
+    })
+}
+
+fn parse_set_page_size(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<SetPageSizeOp, Error> {
+    deny_keys(obj, i, &["op", "id", "pageWidth", "pageHeight", "orient"])?;
+    let id = require_op_id(obj, i)?;
+    let n = parse_section_id(&id, i)?;
+    let page_width = parse_twip_field(obj.get("pageWidth"), i, "pageWidth")?;
+    let page_height = parse_twip_field(obj.get("pageHeight"), i, "pageHeight")?;
+    let orient = parse_enum_field(obj.get("orient"), i, "orient", &["portrait", "landscape"])?;
+    if page_width.is_none() && page_height.is_none() && orient.is_none() {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "setPageSize".into(),
+                field: "pageWidth, pageHeight, or orient".into(),
+            },
+            format!("ops[{i}]"),
+        ));
+    }
+    Ok(SetPageSizeOp {
+        id,
+        n,
+        page_width,
+        page_height,
+        orient,
+    })
+}
+
+fn parse_col_items(v: Option<&Value>, i: usize) -> Result<Option<Vec<ColWidth>>, Error> {
+    let Some(v) = v else {
+        return Ok(None);
+    };
+    let Value::Array(arr) = v else {
+        return Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "cols".into(),
+                expected: TypeName::Array,
+            },
+            format!("ops[{i}].cols"),
+        ));
+    };
+    let mut out = Vec::new();
+    for (j, item) in arr.iter().enumerate() {
+        let Value::Object(m) = item else {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "cols".into(),
+                    expected: TypeName::Object,
+                },
+                format!("ops[{i}].cols[{j}]"),
+            ));
+        };
+        for k in m.keys() {
+            if !matches!(k.as_str(), "width" | "space") {
+                return Err(Error::with_path(
+                    ErrorKind::UnknownField { field: k.clone() },
+                    format!("ops[{i}].cols[{j}].{k}"),
+                ));
+            }
+        }
+        out.push(ColWidth {
+            width: parse_twip_field(m.get("width"), i, "width")?,
+            space: parse_twip_field(m.get("space"), i, "space")?,
+        });
+    }
+    Ok(Some(out))
+}
+
+fn parse_set_columns(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<SetColumnsOp, Error> {
+    deny_keys(
+        obj,
+        i,
+        &[
+            "op",
+            "id",
+            "num",
+            "space",
+            "equalWidth",
+            "sep",
+            "cols",
+            "enabled",
+        ],
+    )?;
+    let id = require_op_id(obj, i)?;
+    let n = parse_section_id(&id, i)?;
+    let num = parse_twip_field(obj.get("num"), i, "num")?;
+    if let Some(0) = num {
+        return Err(Error::with_path(
+            ErrorKind::MinValue {
+                field: "num".into(),
+                min: 1,
+            },
+            format!("ops[{i}].num"),
+        ));
+    }
+    let space = parse_twip_field(obj.get("space"), i, "space")?;
+    let equal_width = parse_optional_bool_field(obj.get("equalWidth"), i, "equalWidth")?;
+    let sep = parse_optional_bool_field(obj.get("sep"), i, "sep")?;
+    let cols = parse_col_items(obj.get("cols"), i)?;
+    if equal_width == Some(true) && cols.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::MutuallyExclusive {
+                a: "equalWidth".into(),
+                b: "cols".into(),
+            },
+            format!("ops[{i}]"),
+        ));
+    }
+    let other = num.is_some()
+        || space.is_some()
+        || equal_width.is_some()
+        || sep.is_some()
+        || cols.is_some();
+    let enabled = parse_enabled_false(obj, i, other)?;
+    if enabled.is_none() && !other {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "setColumns".into(),
+                field: "num, space, equalWidth, sep, cols, or enabled".into(),
+            },
+            format!("ops[{i}]"),
+        ));
+    }
+    Ok(SetColumnsOp {
+        id,
+        n,
+        num,
+        space,
+        equal_width,
+        sep,
+        cols,
+        enabled,
+    })
+}
+
+fn parse_set_vertical_align(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<SetVerticalAlignOp, Error> {
+    deny_keys(obj, i, &["op", "id", "vAlign"])?;
+    let id = require_op_id(obj, i)?;
+    let n = parse_section_id(&id, i)?;
+    let v_align = match obj.get("vAlign") {
+        None => {
+            return Err(Error::with_path(
+                ErrorKind::OpRequiresField {
+                    op: "setVerticalAlign".into(),
+                    field: "vAlign".into(),
+                },
+                format!("ops[{i}].vAlign"),
+            ));
+        }
+        Some(Value::Null) => None,
+        Some(Value::String(s)) if matches!(s.as_str(), "top" | "center" | "both" | "bottom") => {
+            Some(s.clone())
+        }
+        Some(Value::String(_)) => {
+            return Err(Error::with_path(
+                ErrorKind::InvalidSectValue {
+                    field: "vAlign".into(),
+                },
+                format!("ops[{i}].vAlign"),
+            ));
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "vAlign".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].vAlign"),
+            ));
+        }
+    };
+    Ok(SetVerticalAlignOp { id, n, v_align })
+}
+
+fn parse_set_line_numbering(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<SetLineNumberingOp, Error> {
+    deny_keys(
+        obj,
+        i,
+        &[
+            "op", "id", "countBy", "start", "distance", "restart", "enabled",
+        ],
+    )?;
+    let id = require_op_id(obj, i)?;
+    let n = parse_section_id(&id, i)?;
+    let count_by = parse_twip_field(obj.get("countBy"), i, "countBy")?;
+    let start = parse_twip_field(obj.get("start"), i, "start")?;
+    let distance = parse_twip_field(obj.get("distance"), i, "distance")?;
+    let restart = parse_enum_field(
+        obj.get("restart"),
+        i,
+        "restart",
+        &["newPage", "newSection", "continuous"],
+    )?;
+    let other = count_by.is_some() || start.is_some() || distance.is_some() || restart.is_some();
+    let enabled = parse_enabled_false(obj, i, other)?;
+    if enabled.is_none() && !other {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "setLineNumbering".into(),
+                field: "countBy, start, distance, restart, or enabled".into(),
+            },
+            format!("ops[{i}]"),
+        ));
+    }
+    Ok(SetLineNumberingOp {
+        id,
+        n,
+        count_by,
+        start,
+        distance,
+        restart,
+        enabled,
+    })
+}
+
+fn parse_set_doc_grid(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<SetDocGridOp, Error> {
+    deny_keys(
+        obj,
+        i,
+        &["op", "id", "type", "linePitch", "charSpace", "enabled"],
+    )?;
+    let id = require_op_id(obj, i)?;
+    let n = parse_section_id(&id, i)?;
+    let grid_type = parse_enum_field(
+        obj.get("type"),
+        i,
+        "type",
+        &["default", "lines", "linesAndChars", "snapToChars"],
+    )?;
+    let line_pitch = parse_i64_field(obj.get("linePitch"), i, "linePitch")?;
+    let char_space = parse_i64_field(obj.get("charSpace"), i, "charSpace")?;
+    let other = grid_type.is_some() || line_pitch.is_some() || char_space.is_some();
+    let enabled = parse_enabled_false(obj, i, other)?;
+    if enabled.is_none() && !other {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "setDocGrid".into(),
+                field: "type, linePitch, charSpace, or enabled".into(),
+            },
+            format!("ops[{i}]"),
+        ));
+    }
+    Ok(SetDocGridOp {
+        id,
+        n,
+        grid_type,
+        line_pitch,
+        char_space,
+        enabled,
+    })
+}
+
+fn parse_set_rtl_gutter(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<SetRtlGutterOp, Error> {
+    deny_keys(obj, i, &["op", "id", "rtlGutter"])?;
+    let id = require_op_id(obj, i)?;
+    let n = parse_section_id(&id, i)?;
+    let rtl_gutter = parse_required_bool(obj.get("rtlGutter"), i, "setRtlGutter", "rtlGutter")?;
+    Ok(SetRtlGutterOp { id, n, rtl_gutter })
+}
+
+fn parse_set_mirror_margins(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<SetMirrorMarginsOp, Error> {
+    deny_keys(obj, i, &["op", "id", "mirrorMargins"])?;
+    let id = require_op_id(obj, i)?;
+    require_document_id(&id, i, IdReason::SettingsNeedDocument)?;
+    let mirror_margins = parse_required_bool(
+        obj.get("mirrorMargins"),
+        i,
+        "setMirrorMargins",
+        "mirrorMargins",
+    )?;
+    Ok(SetMirrorMarginsOp { id, mirror_margins })
+}
+
+fn parse_set_gutter_at_top(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<SetGutterAtTopOp, Error> {
+    deny_keys(obj, i, &["op", "id", "gutterAtTop"])?;
+    let id = require_op_id(obj, i)?;
+    require_document_id(&id, i, IdReason::SettingsNeedDocument)?;
+    let gutter_at_top =
+        parse_required_bool(obj.get("gutterAtTop"), i, "setGutterAtTop", "gutterAtTop")?;
+    Ok(SetGutterAtTopOp { id, gutter_at_top })
 }
 
 fn require_op_id(obj: &serde_json::Map<String, Value>, i: usize) -> Result<String, Error> {

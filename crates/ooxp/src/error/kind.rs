@@ -144,6 +144,8 @@ pub(crate) enum IdReason {
     InsertSmartArtNeedsSlide,
     /// setEvenAndOddHeaders 必须用 docx:document
     EvenOddNeedsDocument,
+    /// setMirrorMargins / setGutterAtTop 必须用 docx:document
+    SettingsNeedDocument,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -345,6 +347,7 @@ define_error_kinds! {
         hf_type: "even".into(),
     }],
     HfInsertWhileLinked => vec![Self::HfInsertWhileLinked],
+    InvalidSectValue { field: String } => vec![Self::InvalidSectValue { field: "orient".into() }],
     OpcOpen { reason: OpcReason } => OpcReason::all_samples()
         .into_iter()
         .map(|reason| Self::OpcOpen { reason })
@@ -481,6 +484,7 @@ impl IdReason {
             Self::SlideSmartArtContainer,
             Self::InsertSmartArtNeedsSlide,
             Self::EvenOddNeedsDocument,
+            Self::SettingsNeedDocument,
         ]
     }
 }
@@ -585,6 +589,7 @@ impl ErrorKind {
             | Self::CannotLinkFirstSection
             | Self::HfTypeInactive { .. }
             | Self::HfInsertWhileLinked
+            | Self::InvalidSectValue { .. }
             | Self::LastTextBoxPara
             | Self::LastNotePara
             | Self::NeedNoteNumberingField

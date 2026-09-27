@@ -16,11 +16,14 @@ use super::request::{
     DeleteCommentOp, DeleteNoteOp, DeleteParaOp, DeletePictureOp, DeleteTextBoxOp, DocxOp,
     InsertCommentOp, InsertHeaderFooterOp, InsertNoteOp, InsertParaOp, InsertParaPlace,
     InsertPictureOp, InsertTextBoxOp, NoteNumberTarget, ReplacePictureOp, ReplyCommentOp,
-    SetCommentDoneOp, SetCommentMetaOp, SetCommentTextOp, SetEvenAndOddHeadersOp, SetHfDistanceOp,
-    SetHfLinkOp, SetNoteNumberingOp, SetParaTextOp, SetPictureSizeOp, SetPictureWrapOp,
-    SetTextBoxDirectionOp, SetTextBoxFillOp, SetTextBoxLineOp, SetTextBoxLinkOp, SetTextBoxSizeOp,
-    SetTextBoxWrapOp, SetTitlePageOp,
+    SetColumnsOp, SetCommentDoneOp, SetCommentMetaOp, SetCommentTextOp, SetDocGridOp,
+    SetEvenAndOddHeadersOp, SetGutterAtTopOp, SetHfDistanceOp, SetHfLinkOp, SetLineNumberingOp,
+    SetMirrorMarginsOp, SetNoteNumberingOp, SetPageMarginOp, SetPageSizeOp, SetParaTextOp,
+    SetPictureSizeOp, SetPictureWrapOp, SetRtlGutterOp, SetTextBoxDirectionOp, SetTextBoxFillOp,
+    SetTextBoxLineOp, SetTextBoxLinkOp, SetTextBoxSizeOp, SetTextBoxWrapOp, SetTitlePageOp,
+    SetVerticalAlignOp,
 };
+use super::sect;
 use super::smartart;
 use super::textbox;
 use super::{CT_FOOTER, CT_HEADER, REL_FOOTER, REL_HEADER};
@@ -70,6 +73,33 @@ pub fn apply(bytes: &[u8], ops: &[DocxOp]) -> Result<Vec<u8>, Error> {
             DocxOp::SetEvenAndOddHeaders(op) => {
                 apply_even_and_odd(&mut pkg, &mut docs, &mut dirty, &doc_part, op, i)?;
                 refresh_hf_catalog(&pkg, &docs, &doc_part, &mut catalog)?;
+            }
+            DocxOp::SetPageMargin(op) => {
+                apply_page_margin(&mut docs, &mut dirty, &doc_part, op, i)?;
+            }
+            DocxOp::SetPageSize(op) => {
+                apply_page_size(&mut docs, &mut dirty, &doc_part, op, i)?;
+            }
+            DocxOp::SetColumns(op) => {
+                apply_columns(&mut docs, &mut dirty, &doc_part, op, i)?;
+            }
+            DocxOp::SetVerticalAlign(op) => {
+                apply_valign(&mut docs, &mut dirty, &doc_part, op, i)?;
+            }
+            DocxOp::SetLineNumbering(op) => {
+                apply_line_numbering(&mut docs, &mut dirty, &doc_part, op, i)?;
+            }
+            DocxOp::SetDocGrid(op) => {
+                apply_doc_grid(&mut docs, &mut dirty, &doc_part, op, i)?;
+            }
+            DocxOp::SetRtlGutter(op) => {
+                apply_rtl_gutter(&mut docs, &mut dirty, &doc_part, op, i)?;
+            }
+            DocxOp::SetMirrorMargins(op) => {
+                apply_mirror_margins(&mut pkg, &mut docs, &mut dirty, &doc_part, op, i)?;
+            }
+            DocxOp::SetGutterAtTop(op) => {
+                apply_gutter_at_top(&mut pkg, &mut docs, &mut dirty, &doc_part, op, i)?;
             }
             DocxOp::ReplacePicture(op) => {
                 apply_replace_pic(&mut pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
@@ -384,14 +414,13 @@ fn apply_hf_distance(root: &mut Element, op: &SetHfDistanceOp, i: usize) -> Resu
     })?;
     let has_pg = sect.child_by_local("pgMar").is_some();
     if !has_pg {
-        let mut pg = Element::new(sect.prefixed("pgMar"));
+        let pg = hf::ensure_child_in_order(sect, "pgMar", hf::TITLE_PG_ORDER);
         if let Some(h) = op.header_distance {
-            hf::set_twip_attr(&mut pg, "header", h);
+            hf::set_twip_attr(pg, "header", h);
         }
         if let Some(f) = op.footer_distance {
-            hf::set_twip_attr(&mut pg, "footer", f);
+            hf::set_twip_attr(pg, "footer", f);
         }
-        sect.children.push(Node::Element(pg));
         return Ok(());
     }
     let pg = sect.child_by_local_mut("pgMar").unwrap();
@@ -573,6 +602,199 @@ fn apply_title_page(
     let sect = hf::find_sect_pr_mut(&mut doc.root, op.n).unwrap();
     hf::set_on_off(sect, "titlePg", op.title_page, hf::TITLE_PG_ORDER);
     dirty.insert(doc_part.to_string(), ());
+    Ok(())
+}
+
+fn find_sect_for_apply<'a>(
+    docs: &'a mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    n: usize,
+    id: &str,
+    i: usize,
+) -> Result<&'a mut Element, Error> {
+    let doc = docs.get_mut(doc_part).unwrap();
+    let sect = hf::find_sect_pr_mut(&mut doc.root, n).ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::SectionNotFound { id: id.to_string() },
+            format!("ops[{i}].id"),
+        )
+    })?;
+    dirty.insert(doc_part.to_string(), ());
+    Ok(sect)
+}
+
+fn apply_page_margin(
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    op: &SetPageMarginOp,
+    i: usize,
+) -> Result<(), Error> {
+    let sect = find_sect_for_apply(docs, dirty, doc_part, op.n, &op.id, i)?;
+    sect::apply_page_margin(sect, op.top, op.bottom, op.left, op.right, op.gutter);
+    Ok(())
+}
+
+fn apply_page_size(
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    op: &SetPageSizeOp,
+    i: usize,
+) -> Result<(), Error> {
+    let sect = find_sect_for_apply(docs, dirty, doc_part, op.n, &op.id, i)?;
+    sect::apply_page_size(sect, op.page_width, op.page_height, op.orient.as_deref());
+    Ok(())
+}
+
+fn apply_columns(
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    op: &SetColumnsOp,
+    i: usize,
+) -> Result<(), Error> {
+    let items: Option<Vec<sect::ColItem>> = op.cols.as_ref().map(|v| {
+        v.iter()
+            .map(|c| sect::ColItem {
+                width: c.width,
+                space: c.space,
+            })
+            .collect()
+    });
+    let sect = find_sect_for_apply(docs, dirty, doc_part, op.n, &op.id, i)?;
+    sect::apply_columns(
+        sect,
+        op.num,
+        op.space,
+        op.equal_width,
+        op.sep,
+        items.as_deref(),
+        op.enabled,
+    );
+    Ok(())
+}
+
+fn apply_valign(
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    op: &SetVerticalAlignOp,
+    i: usize,
+) -> Result<(), Error> {
+    let sect = find_sect_for_apply(docs, dirty, doc_part, op.n, &op.id, i)?;
+    sect::apply_valign(sect, op.v_align.as_deref());
+    Ok(())
+}
+
+fn apply_line_numbering(
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    op: &SetLineNumberingOp,
+    i: usize,
+) -> Result<(), Error> {
+    let sect = find_sect_for_apply(docs, dirty, doc_part, op.n, &op.id, i)?;
+    sect::apply_line_numbering(
+        sect,
+        op.count_by,
+        op.start,
+        op.distance,
+        op.restart.as_deref(),
+        op.enabled,
+    );
+    Ok(())
+}
+
+fn apply_doc_grid(
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    op: &SetDocGridOp,
+    i: usize,
+) -> Result<(), Error> {
+    let sect = find_sect_for_apply(docs, dirty, doc_part, op.n, &op.id, i)?;
+    sect::apply_doc_grid(
+        sect,
+        op.grid_type.as_deref(),
+        op.line_pitch,
+        op.char_space,
+        op.enabled,
+    );
+    Ok(())
+}
+
+fn apply_rtl_gutter(
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    op: &SetRtlGutterOp,
+    i: usize,
+) -> Result<(), Error> {
+    let sect = find_sect_for_apply(docs, dirty, doc_part, op.n, &op.id, i)?;
+    sect::apply_rtl_gutter(sect, op.rtl_gutter);
+    Ok(())
+}
+
+fn apply_mirror_margins(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    op: &SetMirrorMarginsOp,
+    i: usize,
+) -> Result<(), Error> {
+    apply_settings_flag(
+        pkg,
+        docs,
+        dirty,
+        doc_part,
+        "mirrorMargins",
+        op.mirror_margins,
+        i,
+    )
+}
+
+fn apply_gutter_at_top(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    op: &SetGutterAtTopOp,
+    i: usize,
+) -> Result<(), Error> {
+    apply_settings_flag(
+        pkg,
+        docs,
+        dirty,
+        doc_part,
+        "gutterAtTop",
+        op.gutter_at_top,
+        i,
+    )
+}
+
+fn apply_settings_flag(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    local: &str,
+    on: bool,
+    i: usize,
+) -> Result<(), Error> {
+    let settings = notes::settings_part_name(pkg, doc_part)?.ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::PartMissing {
+                name: "/word/settings.xml".into(),
+            },
+            format!("ops[{i}].id"),
+        )
+    })?;
+    let doc = load_part(pkg, docs, &settings)?;
+    sect::apply_settings_flag(&mut doc.root, local, on);
+    dirty.insert(settings, ());
     Ok(())
 }
 

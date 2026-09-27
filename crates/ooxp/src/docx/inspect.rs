@@ -56,6 +56,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         expand_smartart,
     )?;
     let sections = section_nodes(&pkg, &part, &doc.root)?;
+    let (mirror_margins, gutter_at_top) = super::sect::document_flags(&pkg, &part)?;
     let picture_count = body_picture_count(&paras)?;
     let body_boxes = collect_body_boxes(&paras)?;
     let text_box_count = body_boxes.len();
@@ -85,6 +86,8 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         "headers": headers,
         "footers": footers,
         "sections": sections,
+        "mirrorMargins": mirror_margins,
+        "gutterAtTop": gutter_at_top,
     });
 
     if let Some(scope) = scope {
@@ -174,6 +177,7 @@ fn section_nodes(
     for (i, sect) in sects.iter().enumerate() {
         let index = i + 1;
         let pg = sect.child_by_local("pgMar");
+        let sz = sect.child_by_local("pgSz");
         let link = links.get(i).copied().unwrap_or(hf::SectionLinkState {
             header: hf::HfLinkTriple {
                 default: Some(false),
@@ -191,6 +195,19 @@ fn section_nodes(
             "index": index,
             "headerDistance": hf::twip_attr(pg, "header")?,
             "footerDistance": hf::twip_attr(pg, "footer")?,
+            "top": hf::signed_twip_attr(pg, "top")?,
+            "bottom": hf::signed_twip_attr(pg, "bottom")?,
+            "left": hf::twip_attr(pg, "left")?,
+            "right": hf::twip_attr(pg, "right")?,
+            "gutter": hf::twip_attr(pg, "gutter")?,
+            "pageWidth": hf::measure_attr(sz, "w", "pgSz", false)?,
+            "pageHeight": hf::measure_attr(sz, "h", "pgSz", false)?,
+            "orient": super::sect::orient_value(sz)?,
+            "columns": super::sect::columns_value(sect.child_by_local("cols"))?,
+            "vAlign": super::sect::valign_value(sect.child_by_local("vAlign"))?,
+            "lineNumbering": super::sect::line_numbering_value(sect.child_by_local("lnNumType"))?,
+            "docGrid": super::sect::doc_grid_value(sect.child_by_local("docGrid"))?,
+            "rtlGutter": super::sect::rtl_gutter_value(sect),
             "headerLink": {
                 "default": link.header.default,
                 "even": link.header.even,
