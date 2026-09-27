@@ -1678,3 +1678,99 @@ function Ensure-PptxPptSmartArtSource([switch]$Force) {
     Write-Log "saved ppt smartart source $path"
     return $path
 }
+
+function Test-PptxNotesSource([string]$pptx, [string]$reqName) {
+    $tree = Invoke-OoxpTree @{
+        schemaVersion = 1; action = 'inspect'
+        path = $pptx.Replace('\', '/'); format = 'pptx'
+        scope = @{ notes = $true }
+    } $reqName
+    $slide = @($tree.slides) | Select-Object -First 1
+    $has = $false
+    if ($slide -and ($slide.PSObject.Properties.Name -contains 'hasNotes')) {
+        $has = [bool]$slide.hasNotes
+    }
+    $notes = $null
+    if ($slide -and ($slide.PSObject.Properties.Name -contains 'notes')) { $notes = $slide.notes }
+    $id = ''
+    $texts = @()
+    if ($notes -and ($notes -ne $null) -and ($notes.GetType().Name -ne 'DBNull')) {
+        try { $id = [string]$notes.id } catch { $id = '' }
+        foreach ($sh in @($notes.shapes)) {
+            $texts += [string]$sh.text
+        }
+    }
+    $S = $global:OoxpStrings
+    $hit = $false
+    foreach ($t in $texts) {
+        if (([string]$t).Trim() -eq $S.notesSrc) { $hit = $true }
+    }
+    return [pscustomobject]@{
+        hasNotes = $has
+        id = $id
+        hit = $hit
+        ok = $has -and ($id -eq 'slide:1/notes') -and $hit
+    }
+}
+
+# PowerPoint 亲手另存：第一页有演讲者备注。不要用库 create 产物当带备注的唯一样例。
+function Ensure-PptxPptNotesSource([switch]$Force) {
+    $path = Get-OutPath 'pptx-ppt-notes-source.pptx'
+    if ((Test-Path $path) -and -not $Force) {
+        $cached = Test-PptxNotesSource $path 'pptx-notes-source-cache-check'
+        if ($cached.ok) { return $path }
+        Write-Log "缓存的 pptx 备注 source 不合格（hasNotes=$($cached.hasNotes) id=$($cached.id) hit=$($cached.hit)），重建"
+    }
+
+    $tmpDir = Join-Path $env:TEMP 'ooxp-office'
+    New-Item -ItemType Directory -Force -Path $tmpDir | Out-Null
+    $tmp = Join-Path $tmpDir 'pptx-ppt-notes-source.pptx'
+    $S = $global:OoxpStrings
+    Invoke-OoxpRequest @{
+        schemaVersion = 1; action = 'create'
+        path = $tmp.Replace('\', '/'); format = 'pptx'
+        presentation = @{
+            slides = @(
+                @{ shapes = @(@{ text = $S.chapter1 }, @{ text = $S.shape2src }) }
+                @{ shapes = @(@{ text = $S.page2keep }) }
+            )
+        }
+    } 'pptx-notes-source-create' | Out-Null
+
+    $ppt = Ensure-MsPpt (Ensure-PptxCreate)
+    $pres = Open-PptPres $ppt $tmp
+    $s1 = Get-PptSlide $pres 1
+    $page = $s1.NotesPage
+    $shapes = $page.Shapes
+    $written = $false
+    try {
+        $n = [int]$shapes.Count
+        for ($i = 1; $i -le $n; $i++) {
+            $shp = $shapes.Item($i)
+            try {
+                $ph = $null
+                try { $ph = $shp.PlaceholderFormat } catch { $ph = $null }
+                if ($null -eq $ph) { continue }
+                try {
+                    if ([int]$ph.Type -eq 2) {
+                        $tf = $shp.TextFrame
+                        try {
+                            $tr = $tf.TextRange
+                            try { $tr.Text = $S.notesSrc; $written = $true } finally { Release-Com $tr }
+                        } finally { Release-Com $tf }
+                    }
+                } finally { Release-Com $ph }
+            } finally { Release-Com $shp }
+            if ($written) { break }
+        }
+    } finally { Release-Com $shapes }
+    Release-Com $page
+    if (-not $written) { throw 'PowerPoint 没有写下演讲者备注' }
+    Write-Log 'PowerPoint Save() 原地覆盖 TEMP 里的备注源文件'
+    $pres.Save()
+    Close-PptPres $pres
+    Release-Com $s1
+    Copy-Item -Force $tmp $path
+    Write-Log "saved ppt notes source $path"
+    return $path
+}

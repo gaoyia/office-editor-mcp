@@ -18,10 +18,18 @@ pub struct InspectScope {
     pub pictures: bool,
     pub charts: bool,
     pub smart_art: bool,
+    pub notes: bool,
 }
 
 #[derive(Debug, Clone)]
 pub struct SetShapeTextOp {
+    pub id: String,
+    pub text: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetNotesTextOp {
+    pub slide: usize,
     pub id: String,
     pub text: String,
 }
@@ -36,6 +44,7 @@ pub struct ReplacePictureOp {
 #[derive(Debug, Clone)]
 pub struct InsertPictureOp {
     pub slide: usize,
+    pub on_notes: bool,
     pub file: String,
     pub x: Option<i64>,
     pub y: Option<i64>,
@@ -243,6 +252,7 @@ pub struct SetSmartArtLayoutOp {
 #[derive(Debug, Clone)]
 pub enum PptxOp {
     SetShapeText(SetShapeTextOp),
+    SetNotesText(SetNotesTextOp),
     ReplacePicture(ReplacePictureOp),
     InsertPicture(InsertPictureOp),
     DeletePicture(DeletePictureOp),
@@ -290,11 +300,19 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
     }
     json::deny_unknown(
         obj,
-        &["slide", "maxShapes", "pictures", "charts", "smartArt"],
+        &[
+            "slide",
+            "maxShapes",
+            "pictures",
+            "charts",
+            "smartArt",
+            "notes",
+        ],
     )?;
     let pictures = parse_bool_field(obj.get("pictures"), "pictures")?;
     let charts = parse_bool_field(obj.get("charts"), "charts")?;
     let smart_art = parse_bool_field(obj.get("smartArt"), "smartArt")?;
+    let notes = parse_bool_field(obj.get("notes"), "notes")?;
     let slide = match obj.get("slide") {
         None => None,
         Some(s) => {
@@ -358,6 +376,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
         pictures,
         charts,
         smart_art,
+        notes,
     }))
 }
 
@@ -404,6 +423,7 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<PptxOp>, Error> {
         }
         let parsed = match op_name {
             "setShapeText" => PptxOp::SetShapeText(parse_set_shape_text(obj, i)?),
+            "setNotesText" => PptxOp::SetNotesText(parse_set_notes_text(obj, i)?),
             "replacePicture" => PptxOp::ReplacePicture(parse_replace_pic(obj, i)?),
             "insertPicture" => PptxOp::InsertPicture(parse_insert_pic(obj, i)?),
             "deletePicture" => PptxOp::DeletePicture(parse_delete_pic(obj, i)?),
@@ -515,6 +535,38 @@ fn parse_set_shape_text(obj: &Map<String, Value>, i: usize) -> Result<SetShapeTe
     Ok(SetShapeTextOp { id, text })
 }
 
+fn parse_set_notes_text(obj: &Map<String, Value>, i: usize) -> Result<SetNotesTextOp, Error> {
+    deny_keys(obj, i, &["op", "id", "text"])?;
+    let id = require_id(obj, i)?;
+    let (slide, _) = picture::parse_insert_slide_or_notes(
+        &id,
+        i,
+        crate::error::IdReason::SetNotesTextNeedsSlide,
+    )?;
+    let text = match obj.get("text") {
+        Some(Value::String(s)) => s.clone(),
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "text".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].text"),
+            ));
+        }
+        None => {
+            return Err(Error::with_path(
+                ErrorKind::OpRequiresField {
+                    op: "setNotesText".into(),
+                    field: "text".into(),
+                },
+                format!("ops[{i}].text"),
+            ));
+        }
+    };
+    Ok(SetNotesTextOp { slide, id, text })
+}
+
 fn parse_replace_pic(obj: &Map<String, Value>, i: usize) -> Result<ReplacePictureOp, Error> {
     deny_keys(obj, i, &["op", "id", "file"])?;
     let id = require_id(obj, i)?;
@@ -526,7 +578,8 @@ fn parse_replace_pic(obj: &Map<String, Value>, i: usize) -> Result<ReplacePictur
 fn parse_insert_pic(obj: &Map<String, Value>, i: usize) -> Result<InsertPictureOp, Error> {
     deny_keys(obj, i, &["op", "id", "file", "x", "y", "cx", "cy"])?;
     let id = require_id(obj, i)?;
-    let slide = picture::parse_insert_slide_id(&id, i)?;
+    let (slide, on_notes) =
+        picture::parse_insert_slide_or_notes(&id, i, crate::error::IdReason::InsertNeedsSlide)?;
     let file = require_file(obj, i, "insertPicture")?;
     let x = parse_off_field(obj.get("x"), i, "x")?;
     let y = parse_off_field(obj.get("y"), i, "y")?;
@@ -552,6 +605,7 @@ fn parse_insert_pic(obj: &Map<String, Value>, i: usize) -> Result<InsertPictureO
     }
     Ok(InsertPictureOp {
         slide,
+        on_notes,
         file,
         x,
         y,
@@ -1556,6 +1610,7 @@ pub(crate) fn parse_create_picture(
     }
     Ok(InsertPictureOp {
         slide,
+        on_notes: false,
         file,
         x,
         y,

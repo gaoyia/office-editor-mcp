@@ -181,7 +181,7 @@ pptx create 同样生成 Transitional 包，命名空间用 2006 那套。不能
 | `/docProps/app.xml` | Application 写成 `ooxp`，Slides 与页数一致 |
 | `/ppt/media/imageN.*` | 给了 `slides[].pictures` 时写入 |
 
-第一期不写备注、讲义、`viewProps`、`tableStyles`、动画。
+第一期 create 不写备注、讲义、`viewProps`、`tableStyles`、动画。apply 的 `setNotesText` 或往备注插图时，可能新建 `/ppt/notesMasters/notesMaster1.xml` 与 `/ppt/notesSlides/notesSlideN.xml`。
 
 `presentation.xml` 里：`p:sldMasterIdLst` 一条、`p:sldIdLst` 按页顺序、`p:sldSz` 为 16:9（`cx="12192000"` `cy="6858000"`）、`p:notesSz` 为 `cx="6858000"` `cy="9144000"`。`p:sldId/@id` 从 256 起递增，与领域 id 的 `slide:{n}` 不是一回事。
 
@@ -246,6 +246,8 @@ apply 插入幻灯片图时，可能新建 `/ppt/media/imageN.*`，并在该页 
 apply 插入幻灯片图表时，可能新建 `/ppt/charts/chartN.xml`（CT `application/vnd.openxmlformats-officedocument.drawingml.chart+xml`）、chart 的 `.rels`，以及 `/ppt/embeddings/Microsoft_Excel_WorksheetN.xlsx`（CT `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`）。该页 `.rels` 补一条 chart 关系（Type 以 `/chart` 结尾）。chart 部件写 `c:externalData r:id="rId1"`，关系 Type 为 `http://schemas.openxmlformats.org/officeDocument/2006/relationships/package`。宿主是 `p:graphicFrame`，位置与尺寸在 `p:xfrm`。create 给了 `slides[].charts` 时同样写入。
 
 apply 插入幻灯片 SmartArt 时，可能新建 `/ppt/diagrams/` 下的 data / layout / colors / quickStyle（CT 分别为 `application/vnd.openxmlformats-officedocument.drawingml.diagramData+xml`、`…diagramLayout+xml`、`…diagramColors+xml`、`…diagramQuickStyle+xml`）。该页 `.rels` 补四条 diagram 关系。宿主是 `p:graphicFrame`，`a:graphicData/@uri` 为 diagram URI，`dgm:relIds` 指向这四条。create 给了 `slides[].smartArts` 时同样写入。不写 Fallback 位图，不写 diagram drawing 缓存。改点对不上缓存时删掉该缓存。
+
+apply 新建备注页时，可能写入 `/ppt/notesSlides/notesSlideN.xml`（CT `application/vnd.openxmlformats-officedocument.presentationml.notesSlide+xml`）和 `/ppt/notesMasters/notesMaster1.xml`（CT `…notesMaster+xml`）。幻灯片 `.rels` 补一条 notesSlide 关系（Type 以 `/notesSlide` 结尾）。备注页 `.rels` 指向 notesMaster 与对应幻灯片（Type 分别以 `/notesMaster`、`/slide` 结尾）。若 presentation 还没有 notesMaster，补 presentation 关系，并在 `presentation.xml` 的 `p:sldMasterIdLst` 之后写入 `p:notesMasterIdLst`。notesMaster 的 theme 关系指向包内已有 theme，不另建 theme2。备注页结构对照 PowerPoint 16.0 另存样例：`sldImg`、`body`、`sldNum` 三个占位符。往备注插的 `p:pic` 写在 notesSlide 的 `p:spTree` 里，媒体仍在 `/ppt/media/…`。
 
 ## 验收（第 2 项）
 

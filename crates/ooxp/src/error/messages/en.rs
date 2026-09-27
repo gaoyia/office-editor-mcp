@@ -77,7 +77,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::ParaIndexFromOne => "para:index starts at 1".into(),
             IdReason::ParaIdNotHex => "paraId must be hexadecimal".into(),
             IdReason::ShapePrefix => "Shape id must start with slide:".into(),
-            IdReason::ShapeForm => "setShapeText id must be slide:N/shape:…".into(),
+            IdReason::ShapeForm => {
+                "setShapeText id must be slide:N/shape:… or slide:N/notes/shape:…".into()
+            }
             IdReason::SlideIndexNotInt => "Slide index must be a positive integer".into(),
             IdReason::SlideIndexFromOne => "Slide index starts at 1".into(),
             IdReason::ShapeEmpty => "shape must not be empty".into(),
@@ -108,13 +110,16 @@ pub(super) fn render(kind: &ErrorKind) -> String {
                 "xlsx insertPicture id must be sheet:name or sheet:name/hf:kind:side".into()
             }
             IdReason::SlidePicPrefix => {
-                "pptx picture id must be slide:N/pic:…".into()
+                "pptx picture id must be slide:N/pic:… or slide:N/notes/pic:…".into()
             }
             IdReason::SlidePicContainer => {
                 "Slide id must include /pic:… (that id alone is not a picture)".into()
             }
             IdReason::InsertNeedsSlide => {
-                "pptx insertPicture id must be slide:N".into()
+                "pptx insertPicture id must be slide:N or slide:N/notes".into()
+            }
+            IdReason::SetNotesTextNeedsSlide => {
+                "setNotesText id must be slide:N or slide:N/notes".into()
             }
             IdReason::HfSlotPrefix => {
                 "xlsx header/footer id must be sheet:name/hf:odd|even|first:header|footer".into()
@@ -351,6 +356,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         }
         ErrorKind::InvalidXlsxAnchor => "anchor must be oneCell or twoCell".into(),
         ErrorKind::InvalidXlsxEditAs => "editAs must be twoCell, oneCell, or absolute".into(),
+        ErrorKind::NotesSlideImage => {
+            "Cannot edit the slide-image placeholder on a notes page".into()
+        }
         ErrorKind::SharedFormulaMaster { cell } => format!(
             "{cell} is a shared formula master; changing it would leave dependents with the same si without a formula. Change those cells to independent formulas first"
         ),

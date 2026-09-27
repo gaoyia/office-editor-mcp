@@ -22,7 +22,7 @@ MCP 是以后的传输层，第一期不做。将来无论用不用 JSON-RPC，�
 
 禁止把 inspect 树当成完整文档模型，改完之后整包重新生成。apply 的入参只能是操作列表，不能是整棵树。
 
-xlsx 另有只读动作 `exportMedia`：按图 id 把媒体部件原字节写到本地。xlsx 的 `exportMedia` 认工作表图 id 与页眉页脚图 id，写出 `/xl/media/…`。pptx 的 `exportMedia` 认幻灯片图 id，写出 `/ppt/media/…`。docx 与 pptx 另有 `exportChartData`：按图表 id 把 embedding 工作簿原字节写到本地。它们不改上述三个动作的语义，也不把字节塞进 inspect 树。xlsx 对 `exportChartData` 仍报 `InvalidField`（图表数据就在本工作簿单元格里）。
+xlsx 另有只读动作 `exportMedia`：按图 id 把媒体部件原字节写到本地。xlsx 的 `exportMedia` 认工作表图 id 与页眉页脚图 id，写出 `/xl/media/…`。pptx 的 `exportMedia` 认幻灯片图 id 与备注图 id，写出 `/ppt/media/…`。docx 与 pptx 另有 `exportChartData`：按图表 id 把 embedding 工作簿原字节写到本地。它们不改上述三个动作的语义，也不把字节塞进 inspect 树。xlsx 对 `exportChartData` 仍报 `InvalidField`（图表数据就在本工作簿单元格里）。
 
 ## 模块
 
@@ -62,7 +62,7 @@ crates/ooxp-cli/             命令行，只依赖 ooxp。二进制名也是 oox
 
 ### pptx
 
-入口由根关系里 `/officeDocument` 指向，常见路径 `/ppt/presentation.xml`。幻灯片顺序跟 `p:sldIdLst`，不跟文件名。inspect 默认只返回页名单与各页 `pictureCount`、`chartCount`、`smartArtCount`；要形状必须给 `scope.slide`，要图名单必须给 `scope.pictures`，要图表名单必须给 `scope.charts`，要 SmartArt 名单必须给 `scope.smartArt`。apply 可改被点名形状的 `p:txBody` 可见文字，也可换、插、删幻灯片上的 `p:pic` 并改尺寸与画布坐标；也可插、删、改幻灯片上的嵌入图表（改系列时 cache 与 embedding 双写）；也可插、删、改幻灯片上的 SmartArt（改点时写 data 部件，对不上 drawing 缓存则删缓存）。不删形状重建，不改 `<p:timing>`。`exportMedia` 按图 id 写出 `/ppt/media/…`。`exportChartData` 按图表 id 写出 embedding。create 生成最小 Transitional 包，必含 theme、slideMaster、slideLayout、presentation、各页 slide、presProps。给了 `slides[].pictures` 时复用 `insertPicture`，写入 `/ppt/media/…` 与该页 `p:pic`。给了 `slides[].charts` 时复用 `insertChart`，写入 `/ppt/charts/…`、embedding 与 `p:graphicFrame`。给了 `slides[].smartArts` 时复用 `insertSmartArt`，写入 `/ppt/diagrams/…` 与图示 `p:graphicFrame`。备注、母版内容、动画第一期不进树也不改。`mc:AlternateContent` 只走第一个 `Choice`。
+入口由根关系里 `/officeDocument` 指向，常见路径 `/ppt/presentation.xml`。幻灯片顺序跟 `p:sldIdLst`，不跟文件名。inspect 默认只返回页名单与各页 `pictureCount`、`chartCount`、`smartArtCount`、`hasNotes`；要形状必须给 `scope.slide`，要图名单必须给 `scope.pictures`，要图表名单必须给 `scope.charts`，要 SmartArt 名单必须给 `scope.smartArt`，要备注形状必须给 `scope.notes`。apply 可改被点名形状的 `p:txBody` 可见文字（含备注形状，缩略图占位符除外），可用 `setNotesText` 按页改演讲者备注；也可换、插、删幻灯片或备注页上的 `p:pic` 并改尺寸与画布坐标；也可插、删、改幻灯片上的嵌入图表（改系列时 cache 与 embedding 双写）；也可插、删、改幻灯片上的 SmartArt（改点时写 data 部件，对不上 drawing 缓存则删缓存）。不删形状重建，不改 `<p:timing>`。`exportMedia` 按图 id 写出 `/ppt/media/…`。`exportChartData` 按图表 id 写出 embedding。create 生成最小 Transitional 包，必含 theme、slideMaster、slideLayout、presentation、各页 slide、presProps。给了 `slides[].pictures` 时复用 `insertPicture`，写入 `/ppt/media/…` 与该页 `p:pic`。给了 `slides[].charts` 时复用 `insertChart`，写入 `/ppt/charts/…`、embedding 与 `p:graphicFrame`。给了 `slides[].smartArts` 时复用 `insertSmartArt`，写入 `/ppt/diagrams/…` 与图示 `p:graphicFrame`。create 本期不写备注。母版内容、动画第一期不进树也不改。`mc:AlternateContent` 只走第一个 `Choice`。
 
 ### cli
 
@@ -72,11 +72,11 @@ crates/ooxp-cli/             命令行，只依赖 ooxp。二进制名也是 oox
 
 ### inspect
 
-调用方给出路径和范围。库打开 OPC 包，定位格式入口部件（xlsx 是 Workbook，docx 是 Main Document，pptx 是 Presentation）。按范围读必要的 XML，生成带 id 的树。xlsx 默认不读完全部单元格，也不展开 `pictures`、`charts` 或页眉原文（仍返回 `pictureCount`、`chartCount` 与 `hasHeaderFooter`）。docx 默认不返回正文 `paragraphs` 也不展开页眉页脚段落、任何 `pictures`、`textBoxes`、注名单、批注名单、图表名单或 SmartArt 名单，pptx 默认不返回 `shapes`，也不展开 `pictures` / `charts` / `smartArts`（仍返回根与各页 `pictureCount`、`chartCount`、`smartArtCount`）。包不写回。
+调用方给出路径和范围。库打开 OPC 包，定位格式入口部件（xlsx 是 Workbook，docx 是 Main Document，pptx 是 Presentation）。按范围读必要的 XML，生成带 id 的树。xlsx 默认不读完全部单元格，也不展开 `pictures`、`charts` 或页眉原文（仍返回 `pictureCount`、`chartCount` 与 `hasHeaderFooter`）。docx 默认不返回正文 `paragraphs` 也不展开页眉页脚段落、任何 `pictures`、`textBoxes`、注名单、批注名单、图表名单或 SmartArt 名单，pptx 默认不返回 `shapes`，也不展开 `pictures` / `charts` / `smartArts` / `notes`（仍返回根与各页 `pictureCount`、`chartCount`、`smartArtCount`，以及各页 `hasNotes`）。包不写回。
 
 ### apply
 
-调用方给出路径和 `ops`。库打开包，按每条 op 的 id 找到 XML 节点，只改这些节点。xlsx 在改了单元格之后，把工作簿标成打开时需要重算。xlsx 也可改被点名的工作表图（换、插、删、改尺寸、改锚点），也可插删改工作表图表，脏 drawing、chart 部件、工作表 XML、关系与媒体。xlsx 也可新建或删除图表工作表，脏 workbook 的 `sheets`、chartsheet 部件及其 drawing / chart。xlsx 也可改工作表上的页眉页脚原文，并可对 `worksheet` 页眉槽位插换删 DrawingML 图，脏 `headerFooter` / `drawingHF` 与对应 drawing。docx 可改被点名的段落，可改节上页眉页脚距边界，也可改节上页眉页脚是否链接前节，也可改页眉、页脚、正文、注或批注里被点名的 DrawingML 图与文本框，也可插删脚注尾注并改编号属性，也可插删回复批注并改完成标记，也可插删改嵌入图表，也可插删改 SmartArt。pptx 可改被点名形状的可见文字，也可改被点名的幻灯片图（换、插、删、改尺寸、改画布坐标），也可插删改幻灯片图表，也可插删改幻灯片 SmartArt，脏该页 XML、该页 `.rels`、`/ppt/charts/`、embedding 与 `/ppt/diagrams/`。保存时只重写脏部件。
+调用方给出路径和 `ops`。库打开包，按每条 op 的 id 找到 XML 节点，只改这些节点。xlsx 在改了单元格之后，把工作簿标成打开时需要重算。xlsx 也可改被点名的工作表图（换、插、删、改尺寸、改锚点），也可插删改工作表图表，脏 drawing、chart 部件、工作表 XML、关系与媒体。xlsx 也可新建或删除图表工作表，脏 workbook 的 `sheets`、chartsheet 部件及其 drawing / chart。xlsx 也可改工作表上的页眉页脚原文，并可对 `worksheet` 页眉槽位插换删 DrawingML 图，脏 `headerFooter` / `drawingHF` 与对应 drawing。docx 可改被点名的段落，可改节上页眉页脚距边界，也可改节上页眉页脚是否链接前节，也可改页眉、页脚、正文、注或批注里被点名的 DrawingML 图与文本框，也可插删脚注尾注并改编号属性，也可插删回复批注并改完成标记，也可插删改嵌入图表，也可插删改 SmartArt。pptx 可改被点名形状的可见文字（含备注形状），可用 `setNotesText` 按页改或新建演讲者备注，也可改被点名的幻灯片图与备注图（换、插、删、改尺寸、改画布坐标），也可插删改幻灯片图表，也可插删改幻灯片 SmartArt，脏该页 XML、该页 `.rels`、notesSlide、必要时 notesMaster 与 presentation、`/ppt/charts/`、embedding 与 `/ppt/diagrams/`。保存时只重写脏部件。
 
 ### create
 
@@ -93,7 +93,7 @@ crates/ooxp-cli/             命令行，只依赖 ooxp。二进制名也是 oox
 ## 硬约束
 
 - 自己实现 OPC。不要把 `office_oxide` 写进 `Cargo.toml`，不要加它的 git 子模块，不要在仓库里放它的源码目录。
-- 查规范用 `standards/md/` 的章节索引。xlsx 单元格见 ECMA-376 §18.3.1.4，公式见 §18.3.1.96 与 §18.17，共享字符串见 §18.4，计算属性见 §18.2.2，工作表图与 `graphicFrame` 见 §20.5，图表部件见 §21.2。docx 主文档见 §11.3.10，段落见 §17.3.1.22，样式见 §17.7，页眉页脚见 §17.10，批注见 §17.13，图表见 §21.2，SmartArt / diagram 见 §21.4，`w14:paraId` 见 MS-DOCX §2.6.2.3，`commentEx` 见 MS-DOCX §2.5.3.1。pptx Presentation 部件见 §13.3.6，幻灯片见 §13.3.8 与 §19.3，页名单见 §19.2.1.34，形状与文本框见 §19.3.1.45 / §19.3.1.51，图片 `p:pic` 见 §19.3.1.37，`cNvPr` 见 §19.3.1.12，`p:graphicFrame` 见 §19.3.1.21。包结构见 §9 与 §12.2。
+- 查规范用 `standards/md/` 的章节索引。xlsx 单元格见 ECMA-376 §18.3.1.4，公式见 §18.3.1.96 与 §18.17，共享字符串见 §18.4，计算属性见 §18.2.2，工作表图与 `graphicFrame` 见 §20.5，图表部件见 §21.2。docx 主文档见 §11.3.10，段落见 §17.3.1.22，样式见 §17.7，页眉页脚见 §17.10，批注见 §17.13，图表见 §21.2，SmartArt / diagram 见 §21.4，`w14:paraId` 见 MS-DOCX §2.6.2.3，`commentEx` 见 MS-DOCX §2.5.3.1。pptx Presentation 部件见 §13.3.6，幻灯片见 §13.3.8 与 §19.3，页名单见 §19.2.1.34，形状与文本框见 §19.3.1.45 / §19.3.1.51，图片 `p:pic` 见 §19.3.1.37，`cNvPr` 见 §19.3.1.12，`p:graphicFrame` 见 §19.3.1.21，备注页见 §13.3.5 与 §19.3.2。包结构见 §9 与 §12.2。
 - 不实现 Excel 计算引擎、Word 排版引擎、PowerPoint 完整动画时间轴，也不实现图表渲染或 SmartArt 版式算法。
 - 不支持 `.doc`、`.xls`、`.ppt`。
 - XML 编辑是手术刀：不认识的命名空间、属性、子元素，只要没被当前 op 点到，就原样保留。

@@ -67,8 +67,10 @@ pub(crate) enum IdReason {
     SlidePicPrefix,
     /// 页 id，缺少 /pic:…
     SlidePicContainer,
-    /// pptx insertPicture 必须用 slide:{n}
+    /// pptx 的 insertPicture 必须用 slide:N 或 slide:N/notes
     InsertNeedsSlide,
+    /// setNotesText 必须用 slide:N 或 slide:N/notes
+    SetNotesTextNeedsSlide,
     /// xlsx 页眉槽位 id 必须是 sheet:{name}/hf:{kind}:{side}
     HfSlotPrefix,
     /// 框 id 必须是 {段落}/txbx:…
@@ -266,6 +268,7 @@ define_error_kinds! {
     PictureAnchorAbsolute => vec![Self::PictureAnchorAbsolute],
     InvalidXlsxAnchor => vec![Self::InvalidXlsxAnchor],
     InvalidXlsxEditAs => vec![Self::InvalidXlsxEditAs],
+    NotesSlideImage => vec![Self::NotesSlideImage],
     SharedFormulaMaster { cell: String } => vec![Self::SharedFormulaMaster { cell: "A1".into() }],
     NeedAtLeastOneSheet => vec![Self::NeedAtLeastOneSheet],
     DuplicateSheetName { name: String } => vec![Self::DuplicateSheetName { name: "Sheet1".into() }],
@@ -429,6 +432,7 @@ impl IdReason {
             Self::SlidePicPrefix,
             Self::SlidePicContainer,
             Self::InsertNeedsSlide,
+            Self::SetNotesTextNeedsSlide,
             Self::HfSlotPrefix,
             Self::TxbxPrefix,
             Self::TxbxContainer,
@@ -606,7 +610,8 @@ impl ErrorKind {
             | Self::InsertChartWorksheetOnly
             | Self::DataSheetMustBeWorksheet
             | Self::InvalidXlsxAnchor
-            | Self::InvalidXlsxEditAs => InvalidField,
+            | Self::InvalidXlsxEditAs
+            | Self::NotesSlideImage => InvalidField,
             Self::OutOfRange { .. } => TruncatedLimit,
             Self::InvalidRange { .. } => InvalidRange,
             Self::InvalidId { .. } => InvalidId,

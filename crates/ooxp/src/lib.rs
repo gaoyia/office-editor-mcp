@@ -520,8 +520,10 @@ mod tests {
         assert_eq!(tree["slides"][0]["pictureCount"], 0);
         assert_eq!(tree["slides"][0]["chartCount"], 0);
         assert_eq!(tree["slides"][0]["smartArtCount"], 0);
+        assert_eq!(tree["slides"][0]["hasNotes"], false);
         assert!(tree["slides"][0].get("shapes").is_none());
         assert!(tree["slides"][0].get("pictures").is_none());
+        assert!(tree["slides"][0].get("notes").is_none());
 
         let scoped = json!({
             "schemaVersion": 1,
@@ -952,6 +954,7 @@ mod tests {
                 "index",
                 "name",
                 "hidden",
+                "hasNotes",
                 "pictureCount",
                 "chartCount",
                 "smartArtCount",
@@ -966,6 +969,7 @@ mod tests {
                 "index",
                 "name",
                 "hidden",
+                "hasNotes",
                 "pictureCount",
                 "chartCount",
                 "smartArtCount"

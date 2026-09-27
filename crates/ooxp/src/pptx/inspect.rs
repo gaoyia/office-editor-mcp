@@ -1,12 +1,13 @@
 //! 从演示文稿读出页名单、文本形状、图和图表。
 
-use serde_json::{json, Value};
+use serde_json::{json, Map, Value};
 
 use crate::error::Error;
 use crate::opc::{self, Package};
 use crate::xml;
 
 use super::chart;
+use super::notes;
 use super::picture;
 use super::request::InspectScope;
 use super::shape;
@@ -21,6 +22,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     let want_pictures = scope.as_ref().is_some_and(|s| s.pictures);
     let want_charts = scope.as_ref().is_some_and(|s| s.charts);
     let want_smartarts = scope.as_ref().is_some_and(|s| s.smart_art);
+    let want_notes = scope.as_ref().is_some_and(|s| s.notes);
 
     let mut slide_json = Vec::new();
     let mut picture_count = 0usize;
@@ -28,7 +30,8 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     let mut smart_art_count = 0usize;
     for s in &slides {
         let doc = xml::parse(pkg.get(&s.part)?)?;
-        let pics = picture::collect_pictures(&doc.root, s.index);
+        let host = format!("slide:{}", s.index);
+        let pics = picture::collect_pictures(&doc.root, &host);
         picture_count += pics.len();
         let charts_list = if want_charts {
             Some(chart::collect_charts(&pkg, &doc.root, s.index, &s.part)?)
@@ -52,23 +55,33 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
             .map(|c| c.len())
             .unwrap_or_else(|| smartart::count_smartarts(&doc.root));
         smart_art_count += n_smartarts;
-        let mut obj = json!({
-            "id": format!("slide:{}", s.index),
-            "index": s.index,
-            "name": s.name,
-            "hidden": s.hidden,
-            "pictureCount": pics.len(),
-            "chartCount": n_charts,
-            "smartArtCount": n_smartarts,
-        });
+        let has = notes::has_notes(&pkg, &s.part)?;
+        let mut obj = Map::new();
+        obj.insert("id".into(), json!(host));
+        obj.insert("index".into(), json!(s.index));
+        obj.insert("name".into(), json!(s.name));
+        obj.insert("hidden".into(), json!(s.hidden));
+        obj.insert("hasNotes".into(), json!(has));
+        obj.insert("pictureCount".into(), json!(pics.len()));
+        obj.insert("chartCount".into(), json!(n_charts));
+        obj.insert("smartArtCount".into(), json!(n_smartarts));
         if want_pictures {
-            obj["pictures"] = Value::Array(picture::pictures_json(&pics));
+            obj.insert(
+                "pictures".into(),
+                Value::Array(picture::pictures_json(&pics)),
+            );
         }
         if let Some(charts) = charts_list {
-            obj["charts"] = Value::Array(charts);
+            obj.insert("charts".into(), Value::Array(charts));
         }
         if let Some(smartarts) = smartarts_list {
-            obj["smartArts"] = Value::Array(smartarts);
+            obj.insert("smartArts".into(), Value::Array(smartarts));
+        }
+        if want_notes {
+            obj.insert(
+                "notes".into(),
+                notes::notes_json(&pkg, &s.part, s.index, want_pictures)?,
+            );
         }
         if let Some(scope) = &scope {
             if scope.slide == Some(s.index as u32) {
@@ -83,7 +96,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
                 let mut shapes = Vec::new();
                 for (i, sp) in all.iter().take(take).enumerate() {
                     let index = i + 1;
-                    let (id, shape_id, stable) = shape::shape_stable_id(sp, s.index, index);
+                    let (id, shape_id, stable) = shape::shape_stable_id(sp, &host, index);
                     let mut sh = json!({
                         "id": id,
                         "shapeId": Value::Null,
@@ -99,11 +112,11 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
                     }
                     shapes.push(sh);
                 }
-                obj["truncated"] = json!(truncated);
-                obj["shapes"] = Value::Array(shapes);
+                obj.insert("truncated".into(), json!(truncated));
+                obj.insert("shapes".into(), Value::Array(shapes));
             }
         }
-        slide_json.push(obj);
+        slide_json.push(Value::Object(obj));
     }
 
     Ok(json!({

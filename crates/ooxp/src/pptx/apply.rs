@@ -5,6 +5,7 @@ use crate::opc::{self, Package};
 use crate::xml;
 
 use super::chart;
+use super::notes;
 use super::picture;
 use super::request::PptxOp;
 use super::shape;
@@ -13,7 +14,7 @@ use super::smartart;
 pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
     let mut pkg = Package::open_bytes(bytes.to_vec())?;
     let pres_part = opc::office_document_part(&pkg)?;
-    let pres = xml::parse(pkg.get(&pres_part)?)?;
+    let mut pres = xml::parse(pkg.get(&pres_part)?)?;
     let slides = shape::list_slides(&pkg, &pres_part, &pres.root)?;
 
     for (i, op) in ops.iter().enumerate() {
@@ -28,13 +29,31 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                         format!("ops[{i}].id"),
                     )
                 })?;
-                let mut doc = xml::parse(pkg.get(&meta.part)?)?;
+                let part = if target.on_notes {
+                    notes::notes_slide_part(&pkg, &meta.part)?.ok_or_else(|| {
+                        Error::with_path(
+                            ErrorKind::ShapeNotFound { id: op.id.clone() },
+                            format!("ops[{i}].id"),
+                        )
+                    })?
+                } else {
+                    meta.part.clone()
+                };
+                let mut doc = xml::parse(pkg.get(&part)?)?;
+                if target.on_notes {
+                    if let Some(sp) = notes::find_any_sp_by_key(&doc.root, &target.key) {
+                        notes::reject_slide_image(sp, i)?;
+                    }
+                }
                 let sp = shape::find_shape_mut(&mut doc.root, &target.key).ok_or_else(|| {
                     Error::with_path(
                         ErrorKind::ShapeNotFound { id: op.id.clone() },
                         format!("ops[{i}].id"),
                     )
                 })?;
+                if target.on_notes {
+                    notes::reject_slide_image(sp, i)?;
+                }
                 let tx = sp.child_by_local_mut("txBody").ok_or_else(|| {
                     Error::with_path(
                         ErrorKind::ShapeHasNoText { id: op.id.clone() },
@@ -42,7 +61,16 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                     )
                 })?;
                 shape::set_txbody_text(tx, &op.text);
-                pkg.set(&meta.part, doc.to_bytes()?)?;
+                pkg.set(&part, doc.to_bytes()?)?;
+            }
+            PptxOp::SetNotesText(op) => {
+                let meta = slides.get(op.slide - 1).ok_or_else(|| {
+                    Error::with_path(
+                        ErrorKind::SlideNotFound { n: op.slide as u32 },
+                        format!("ops[{i}].id"),
+                    )
+                })?;
+                notes::apply_set_notes_text(&mut pkg, &pres_part, &mut pres, &meta.part, op, i)?;
             }
             PptxOp::ReplacePicture(op) => {
                 let meta = slides.get(op.target.slide - 1).ok_or_else(|| {
@@ -53,8 +81,15 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                         format!("ops[{i}].id"),
                     )
                 })?;
-                let doc = xml::parse(pkg.get(&meta.part)?)?;
-                picture::replace_picture(&mut pkg, &meta.part, &doc.root, op, i)?;
+                let part = pic_host_part(
+                    &pkg,
+                    meta,
+                    op.target.on_notes,
+                    &op.id,
+                    format!("ops[{i}].id"),
+                )?;
+                let doc = xml::parse(pkg.get(&part)?)?;
+                picture::replace_picture(&mut pkg, &part, &doc.root, op, i)?;
             }
             PptxOp::InsertPicture(op) => {
                 let meta = slides.get(op.slide - 1).ok_or_else(|| {
@@ -63,16 +98,21 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                         format!("ops[{i}].id"),
                     )
                 })?;
-                let mut doc = xml::parse(pkg.get(&meta.part)?)?;
+                let part = if op.on_notes {
+                    notes::ensure_notes_slide(&mut pkg, &pres_part, &mut pres, &meta.part)?
+                } else {
+                    meta.part.clone()
+                };
+                let mut doc = xml::parse(pkg.get(&part)?)?;
                 picture::insert_picture(
                     &mut pkg,
                     &mut doc,
-                    &meta.part,
+                    &part,
                     &pres.root,
                     op,
                     &format!("ops[{i}].file"),
                 )?;
-                pkg.set(&meta.part, doc.to_bytes()?)?;
+                pkg.set(&part, doc.to_bytes()?)?;
             }
             PptxOp::DeletePicture(op) => {
                 let meta = slides.get(op.target.slide - 1).ok_or_else(|| {
@@ -83,9 +123,16 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                         format!("ops[{i}].id"),
                     )
                 })?;
-                let mut doc = xml::parse(pkg.get(&meta.part)?)?;
-                picture::delete_picture(&mut pkg, &mut doc, &meta.part, op, i)?;
-                pkg.set(&meta.part, doc.to_bytes()?)?;
+                let part = pic_host_part(
+                    &pkg,
+                    meta,
+                    op.target.on_notes,
+                    &op.id,
+                    format!("ops[{i}].id"),
+                )?;
+                let mut doc = xml::parse(pkg.get(&part)?)?;
+                picture::delete_picture(&mut pkg, &mut doc, &part, op, i)?;
+                pkg.set(&part, doc.to_bytes()?)?;
             }
             PptxOp::SetPictureSize(op) => {
                 let meta = slides.get(op.target.slide - 1).ok_or_else(|| {
@@ -96,9 +143,16 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                         format!("ops[{i}].id"),
                     )
                 })?;
-                let mut doc = xml::parse(pkg.get(&meta.part)?)?;
+                let part = pic_host_part(
+                    &pkg,
+                    meta,
+                    op.target.on_notes,
+                    &op.id,
+                    format!("ops[{i}].id"),
+                )?;
+                let mut doc = xml::parse(pkg.get(&part)?)?;
                 picture::set_picture_size(&mut doc, op, i)?;
-                pkg.set(&meta.part, doc.to_bytes()?)?;
+                pkg.set(&part, doc.to_bytes()?)?;
             }
             PptxOp::SetPicturePos(op) => {
                 let meta = slides.get(op.target.slide - 1).ok_or_else(|| {
@@ -109,9 +163,16 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                         format!("ops[{i}].id"),
                     )
                 })?;
-                let mut doc = xml::parse(pkg.get(&meta.part)?)?;
+                let part = pic_host_part(
+                    &pkg,
+                    meta,
+                    op.target.on_notes,
+                    &op.id,
+                    format!("ops[{i}].id"),
+                )?;
+                let mut doc = xml::parse(pkg.get(&part)?)?;
                 picture::set_picture_pos(&mut doc, op, i)?;
-                pkg.set(&meta.part, doc.to_bytes()?)?;
+                pkg.set(&part, doc.to_bytes()?)?;
             }
             PptxOp::InsertChart(op) => {
                 let meta = slides.get(op.slide - 1).ok_or_else(|| {
@@ -390,4 +451,20 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
     }
 
     pkg.save_to_vec()
+}
+
+fn pic_host_part(
+    pkg: &Package,
+    meta: &shape::SlideMeta,
+    on_notes: bool,
+    id: &str,
+    json_path: String,
+) -> Result<String, Error> {
+    if on_notes {
+        notes::notes_slide_part(pkg, &meta.part)?.ok_or_else(|| {
+            Error::with_path(ErrorKind::PictureNotFound { id: id.to_string() }, json_path)
+        })
+    } else {
+        Ok(meta.part.clone())
+    }
 }

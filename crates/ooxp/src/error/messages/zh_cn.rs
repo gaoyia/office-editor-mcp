@@ -69,7 +69,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::ParaIndexFromOne => "para:index 从 1 起".into(),
             IdReason::ParaIdNotHex => "paraId 必须是十六进制".into(),
             IdReason::ShapePrefix => "形状 id 必须以 slide: 开头".into(),
-            IdReason::ShapeForm => "setShapeText 的 id 必须是 slide:N/shape:…".into(),
+            IdReason::ShapeForm => {
+                "setShapeText 的 id 必须是 slide:N/shape:… 或 slide:N/notes/shape:…".into()
+            }
             IdReason::SlideIndexNotInt => "slide 序号必须是正整数".into(),
             IdReason::SlideIndexFromOne => "slide 序号从 1 起".into(),
             IdReason::ShapeEmpty => "shape 后面不能为空".into(),
@@ -97,13 +99,16 @@ pub(super) fn render(kind: &ErrorKind) -> String {
                 "xlsx 的 insertPicture 的 id 必须是 sheet:工作表名 或页眉槽位 id".into()
             }
             IdReason::SlidePicPrefix => {
-                "pptx 图 id 必须是 slide:N/pic:…".into()
+                "pptx 图 id 必须是 slide:N/pic:… 或 slide:N/notes/pic:…".into()
             }
             IdReason::SlidePicContainer => {
                 "页 id 必须带 /pic:…（该 id 本身不是图）".into()
             }
             IdReason::InsertNeedsSlide => {
-                "pptx 的 insertPicture 的 id 必须是 slide:N".into()
+                "pptx 的 insertPicture 的 id 必须是 slide:N 或 slide:N/notes".into()
+            }
+            IdReason::SetNotesTextNeedsSlide => {
+                "setNotesText 的 id 必须是 slide:N 或 slide:N/notes".into()
             }
             IdReason::HfSlotPrefix => {
                 "xlsx 页眉槽位 id 必须是 sheet:工作表名/hf:odd|even|first:header|footer".into()
@@ -302,6 +307,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         }
         ErrorKind::InvalidXlsxAnchor => "anchor 必须是 oneCell 或 twoCell".into(),
         ErrorKind::InvalidXlsxEditAs => "editAs 必须是 twoCell、oneCell 或 absolute".into(),
+        ErrorKind::NotesSlideImage => "不能改备注页上的幻灯片缩略图占位符".into(),
         ErrorKind::SharedFormulaMaster { cell } => format!(
             "{cell} 是共享公式的主格，改它会让引用同一 si 的单元格失去公式；请先把那些单元格改成各自独立的公式"
         ),

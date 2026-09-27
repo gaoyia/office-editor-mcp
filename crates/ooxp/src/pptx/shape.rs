@@ -18,6 +18,7 @@ pub enum ShapeKey {
 
 pub struct ShapeTarget {
     pub slide: usize,
+    pub on_notes: bool,
     pub key: ShapeKey,
 }
 
@@ -31,14 +32,18 @@ pub fn parse_shape_id(id: &str, op_index: usize) -> Result<ShapeTarget, Error> {
             path.clone(),
         )
     })?;
-    let (n, after) = rest.split_once("/shape:").ok_or_else(|| {
-        Error::with_path(
+    let (n, after, on_notes) = if let Some((n, after)) = rest.split_once("/notes/shape:") {
+        (n, after, true)
+    } else if let Some((n, after)) = rest.split_once("/shape:") {
+        (n, after, false)
+    } else {
+        return Err(Error::with_path(
             ErrorKind::InvalidId {
                 reason: IdReason::ShapeForm,
             },
-            path.clone(),
-        )
-    })?;
+            path,
+        ));
+    };
     let slide: usize = n.parse().map_err(|_| {
         Error::with_path(
             ErrorKind::InvalidId {
@@ -82,11 +87,13 @@ pub fn parse_shape_id(id: &str, op_index: usize) -> Result<ShapeTarget, Error> {
         }
         return Ok(ShapeTarget {
             slide,
+            on_notes,
             key: ShapeKey::Index(idx),
         });
     }
     Ok(ShapeTarget {
         slide,
+        on_notes,
         key: ShapeKey::Id(after.to_string()),
     })
 }
@@ -157,18 +164,14 @@ pub fn cnv_pr(sp: &Element) -> Option<&Element> {
         .and_then(|nv| nv.child_by_local("cNvPr"))
 }
 
-pub fn shape_stable_id(sp: &Element, slide: usize, index: usize) -> (String, Option<String>, bool) {
+pub fn shape_stable_id(sp: &Element, host: &str, index: usize) -> (String, Option<String>, bool) {
     if let Some(id) = cnv_pr(sp)
         .and_then(|c| c.attr("id"))
         .filter(|s| !s.is_empty())
     {
-        (
-            format!("slide:{slide}/shape:{id}"),
-            Some(id.to_string()),
-            true,
-        )
+        (format!("{host}/shape:{id}"), Some(id.to_string()), true)
     } else {
-        (format!("slide:{slide}/shape:index:{index}"), None, false)
+        (format!("{host}/shape:index:{index}"), None, false)
     }
 }
 

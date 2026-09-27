@@ -517,6 +517,7 @@
               { "$ref": "#/$defs/setSmartArtColorsOp" },
               { "$ref": "#/$defs/setSmartArtStyleOp" },
               { "$ref": "#/$defs/setSmartArtLayoutOp" },
+              { "$ref": "#/$defs/setNotesTextOp" },
               { "$ref": "#/$defs/setShapeTextOp" }
             ]
           }
@@ -1411,6 +1412,16 @@
         "id": { "type": "string", "minLength": 1 },
         "output": { "type": "string", "minLength": 1 },
         "locale": { "type": "string" }
+      }
+    },
+    "setNotesTextOp": {
+      "type": "object",
+      "required": ["op", "id", "text"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "setNotesText" },
+        "id": { "type": "string", "minLength": 1 },
+        "text": { "type": "string" }
       }
     },
     "setShapeTextOp": {

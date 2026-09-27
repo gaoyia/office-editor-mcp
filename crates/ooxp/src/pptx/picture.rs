@@ -40,6 +40,7 @@ pub enum PicKey {
 #[derive(Debug, Clone)]
 pub struct PicTarget {
     pub slide: usize,
+    pub on_notes: bool,
     pub key: PicKey,
 }
 
@@ -64,14 +65,18 @@ pub fn parse_pic_id(id: &str, json_path: &str) -> Result<PicTarget, Error> {
             path.clone(),
         )
     })?;
-    let (n, after) = rest.split_once("/pic:").ok_or_else(|| {
-        Error::with_path(
+    let (n, after, on_notes) = if let Some((n, after)) = rest.split_once("/notes/pic:") {
+        (n, after, true)
+    } else if let Some((n, after)) = rest.split_once("/pic:") {
+        (n, after, false)
+    } else {
+        return Err(Error::with_path(
             ErrorKind::InvalidId {
                 reason: IdReason::SlidePicContainer,
             },
-            path.clone(),
-        )
-    })?;
+            path,
+        ));
+    };
     let slide: usize = n.parse().map_err(|_| {
         Error::with_path(
             ErrorKind::InvalidId {
@@ -115,34 +120,42 @@ pub fn parse_pic_id(id: &str, json_path: &str) -> Result<PicTarget, Error> {
         }
         return Ok(PicTarget {
             slide,
+            on_notes,
             key: PicKey::Index(idx),
         });
     }
     Ok(PicTarget {
         slide,
+        on_notes,
         key: PicKey::Id(after.to_string()),
     })
 }
 
-pub fn parse_insert_slide_id(id: &str, op_index: usize) -> Result<usize, Error> {
+pub fn parse_insert_slide_or_notes(
+    id: &str,
+    op_index: usize,
+    bad: IdReason,
+) -> Result<(usize, bool), Error> {
     let path = format!("ops[{op_index}].id");
     let rest = id.strip_prefix("slide:").ok_or_else(|| {
         Error::with_path(
             ErrorKind::InvalidId {
-                reason: IdReason::InsertNeedsSlide,
+                reason: bad.clone(),
             },
             path.clone(),
         )
     })?;
-    if rest.is_empty() || rest.contains('/') {
-        return Err(Error::with_path(
-            ErrorKind::InvalidId {
-                reason: IdReason::InsertNeedsSlide,
-            },
-            path,
-        ));
-    }
-    let slide: usize = rest.parse().map_err(|_| {
+    let (n, on_notes) = if let Some(n) = rest.strip_suffix("/notes") {
+        if n.is_empty() || n.contains('/') {
+            return Err(Error::with_path(ErrorKind::InvalidId { reason: bad }, path));
+        }
+        (n, true)
+    } else if rest.is_empty() || rest.contains('/') {
+        return Err(Error::with_path(ErrorKind::InvalidId { reason: bad }, path));
+    } else {
+        (rest, false)
+    };
+    let slide: usize = n.parse().map_err(|_| {
         Error::with_path(
             ErrorKind::InvalidId {
                 reason: IdReason::SlideIndexNotInt,
@@ -158,10 +171,10 @@ pub fn parse_insert_slide_id(id: &str, op_index: usize) -> Result<usize, Error> 
             path,
         ));
     }
-    Ok(slide)
+    Ok((slide, on_notes))
 }
 
-pub fn collect_pictures(root: &Element, slide: usize) -> Vec<PicInfo> {
+pub fn collect_pictures(root: &Element, host: &str) -> Vec<PicInfo> {
     let mut out = Vec::new();
     let mut index = 0usize;
     shape::walk_choice(root, &mut |e| {
@@ -169,7 +182,7 @@ pub fn collect_pictures(root: &Element, slide: usize) -> Vec<PicInfo> {
             return;
         }
         index += 1;
-        out.push(pic_info(e, slide, index));
+        out.push(pic_info(e, host, index));
     });
     out
 }
@@ -191,7 +204,7 @@ fn pic_to_json(p: &PicInfo) -> Value {
     Value::Object(m)
 }
 
-fn pic_info(pic: &Element, slide: usize, index: usize) -> PicInfo {
+fn pic_info(pic: &Element, host: &str, index: usize) -> PicInfo {
     let cnv = pic_cnv_pr(pic);
     let cnv_pr_id = cnv
         .and_then(|c| c.attr("id"))
@@ -199,8 +212,8 @@ fn pic_info(pic: &Element, slide: usize, index: usize) -> PicInfo {
         .map(str::to_string);
     let name = cnv.and_then(|c| c.attr("name")).unwrap_or("").to_string();
     let (id, stable) = match &cnv_pr_id {
-        Some(n) => (format!("slide:{slide}/pic:{n}"), true),
-        None => (format!("slide:{slide}/pic:index:{index}"), false),
+        Some(n) => (format!("{host}/pic:{n}"), true),
+        None => (format!("{host}/pic:index:{index}"), false),
     };
     let xfrm = pic_xfrm(pic);
     let (x, y) = match xfrm.and_then(|x| x.child_by_local("off")) {
@@ -399,7 +412,15 @@ pub(crate) fn vacant_pos(
     pic_cx: i64,
     pic_cy: i64,
 ) -> (i64, i64) {
-    let (slide_cx, slide_cy) = slide_size(pres_root);
+    vacant_pos_canvas(slide_size(pres_root), slide_root, pic_cx, pic_cy)
+}
+
+pub(crate) fn vacant_pos_canvas(
+    (slide_cx, slide_cy): (i64, i64),
+    slide_root: &Element,
+    pic_cx: i64,
+    pic_cy: i64,
+) -> (i64, i64) {
     let boxes = occupied_boxes(slide_root);
     if boxes.is_empty() {
         return (GAP_EMU, GAP_EMU);
@@ -449,12 +470,19 @@ pub fn export_media(bytes: &[u8], id: &str) -> Result<ExportedMedia, Error> {
             "id",
         )
     })?;
-    let doc = crate::xml::parse(pkg.get(&meta.part)?)?;
+    let part = if target.on_notes {
+        super::notes::notes_slide_part(&pkg, &meta.part)?.ok_or_else(|| {
+            Error::with_path(ErrorKind::PictureNotFound { id: id.to_string() }, "id")
+        })?
+    } else {
+        meta.part.clone()
+    };
+    let doc = crate::xml::parse(pkg.get(&part)?)?;
     let pic = find_pic_in_immut(&doc.root, &target.key)
         .ok_or_else(|| Error::with_path(ErrorKind::PictureNotFound { id: id.to_string() }, "id"))?;
     let rid = blip_embed(pic)
         .ok_or_else(|| Error::with_path(ErrorKind::PictureNotFound { id: id.to_string() }, "id"))?;
-    let media = crate::opc::resolve_id(&pkg, &meta.part, &rid)?;
+    let media = crate::opc::resolve_id(&pkg, &part, &rid)?;
     let media_bytes = pkg.get(&media)?.to_vec();
     let cts = ContentTypes::from_package(&pkg)?;
     let content_type = cts.content_type_of(&media).map(str::to_string);
@@ -524,7 +552,14 @@ pub fn insert_picture(
     };
     let (x, y) = match (op.x, op.y) {
         (Some(px), Some(py)) => (px, py),
-        _ => vacant_pos(pres_root, &slide_doc.root, cx, cy),
+        _ => {
+            let canvas = if op.on_notes {
+                super::notes::notes_size(pres_root)
+            } else {
+                slide_size(pres_root)
+            };
+            vacant_pos_canvas(canvas, &slide_doc.root, cx, cy)
+        }
     };
     ensure_xmlns(&mut slide_doc.root, "r", REL_NS);
     ensure_xmlns(&mut slide_doc.root, "a", DML_NS);
@@ -639,12 +674,13 @@ pub(crate) fn ensure_child<'a>(parent: &'a mut Element, local: &str) -> &'a mut 
 }
 
 pub(crate) fn insert_into_sp_tree(root: &mut Element, pic: Element) -> Result<(), Error> {
+    let parent = root.name.clone();
     let tree = root
         .child_by_local_mut("cSld")
         .and_then(|c| c.child_by_local_mut("spTree"))
         .ok_or_else(|| {
             Error::new(ErrorKind::XmlMissing {
-                parent: "p:sld".into(),
+                parent,
                 child: "p:spTree".into(),
             })
         })?;

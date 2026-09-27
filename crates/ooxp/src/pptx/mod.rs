@@ -4,6 +4,7 @@ mod apply;
 mod chart;
 mod create;
 mod inspect;
+mod notes;
 mod picture;
 mod request;
 mod shape;
