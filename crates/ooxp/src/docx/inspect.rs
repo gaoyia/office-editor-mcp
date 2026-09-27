@@ -106,6 +106,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         "hyperlinkCount": link::count_hyperlinks(&doc.root),
         "bookmarkCount": link::count_bookmarks(&doc.root),
         "fieldCount": field::count_fields(&doc.root),
+        "tocCount": field::count_tocs(&doc.root),
         "numberingCount": numbering::count_nums(&pkg, &part)?,
         "styleCount": styles::count_styles(&pkg, &part)?,
         "outline": outline,
@@ -168,6 +169,9 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         }
         if scope.fields {
             tree["fields"] = Value::Array(field::fields_json(&doc.root, None)?);
+        }
+        if scope.tocs {
+            tree["tocs"] = Value::Array(field::tocs_json(&doc.root)?);
         }
         if scope.numbering {
             tree["numberings"] = Value::Array(numbering::numberings_json(&pkg, &part)?);

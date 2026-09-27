@@ -274,6 +274,12 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::InsertSectionNeedsBodyPara => {
                 "insertSection 的 id 必须是 w:body 的直接子段落，或 docx:document".into()
             }
+            IdReason::TocPrefix => "目录 id 必须是 toc:N".into(),
+            IdReason::TocIndexNotInt => "toc 序号必须是正整数".into(),
+            IdReason::TocIndexFromOne => "toc 序号从 1 起".into(),
+            IdReason::InsertTocNeedsBodyPara => {
+                "insertToc 的 id 必须是 w:body 的直接子段落，或 docx:document".into()
+            }
         },
         ErrorKind::SheetNotFound { name } => format!("找不到工作表：{name}"),
         ErrorKind::ParaNotFound { id } => format!("找不到段落：{id}"),
@@ -313,6 +319,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         }
         ErrorKind::SectionTypeOnLastPara => {
             "最后一段不能带 sectionType，末节的 sectPr 仍在 w:body".into()
+        }
+        ErrorKind::InvalidTocKind => {
+            "kind 必须是 toc、tof 或 toa；instr 必须以 TOC 或 TOA 开头".into()
         }
         ErrorKind::CommentNotFound { id } => format!("找不到批注：{id}"),
         ErrorKind::NeedCommentParaId => {
@@ -452,6 +461,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             "setHyperlink 至少要给 url、anchor、text 或 tooltip 之一".into()
         }
         ErrorKind::FieldNotFound { id } => format!("找不到域：{id}"),
+        ErrorKind::TocNotFound { id } => format!("找不到目录：{id}"),
         ErrorKind::SetParaTextHasField => "不能改带域的段落的可见文本".into(),
         ErrorKind::EmptyFieldInstr => "instr 不能为空".into(),
         ErrorKind::InvalidFieldKeep => "keep 只能是 result 或 instr".into(),

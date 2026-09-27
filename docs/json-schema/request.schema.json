@@ -82,6 +82,7 @@
         "hyperlinks": { "type": "boolean" },
         "bookmarks": { "type": "boolean" },
         "fields": { "type": "boolean" },
+        "tocs": { "type": "boolean" },
         "numbering": { "type": "boolean" },
         "styles": { "type": "boolean" },
         "runs": { "type": "boolean" },
@@ -549,6 +550,8 @@
               { "$ref": "#/$defs/insertFieldOp" },
               { "$ref": "#/$defs/setFieldOp" },
               { "$ref": "#/$defs/deleteFieldOp" },
+              { "$ref": "#/$defs/insertTocOp" },
+              { "$ref": "#/$defs/deleteTocOp" },
               { "$ref": "#/$defs/insertNumberingOp" },
               { "$ref": "#/$defs/setNumberingOp" },
               { "$ref": "#/$defs/setParaNumberingOp" },
@@ -1277,6 +1280,26 @@
         "op": { "const": "deleteField" },
         "id": { "type": "string", "minLength": 1 },
         "keep": { "enum": ["result", "instr"] }
+      }
+    },
+    "insertTocOp": {
+      "type": "object",
+      "required": ["op", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "insertToc" },
+        "id": { "type": "string", "minLength": 1 },
+        "kind": { "enum": ["toc", "tof", "toa"] },
+        "instr": { "type": "string", "minLength": 1 }
+      }
+    },
+    "deleteTocOp": {
+      "type": "object",
+      "required": ["op", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "deleteToc" },
+        "id": { "type": "string", "minLength": 1 }
       }
     },
     "insertNumberingOp": {

@@ -39,6 +39,7 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 | Nl1–Nl6 | ✅ | Word 16.0：`docx-numbering.ps1`，6 PASS / 0 FAIL。名单、段上 `num`/`ilvl`、插 decimal 定义、绑两段、改 bullet、解绑。标题栏无 Repair |
 | St1–St6 | ✅ | Word 16.0：`docx-style.ps1`，6 PASS / 0 FAIL。名单、换 Heading2、大纲对得上、改 Normal 为 24 磅、去掉 Heading1 加粗、解绑。标题栏无 Repair |
 | Sc1–Sc6 | ✅ | Word 16.0：`docx-insert-section.ps1`，6 PASS / 0 FAIL。插节后两节且第二节 `headerLink.default`；打开无修复；断链后两节页眉能独立改字；删节后只剩一节、无孤儿 `headerN.xml`；create 带 `sectionType` 为两节。标题栏无 Repair |
+| Tc1–Tc5 | ✅ | Word 16.0：`docx-toc.ps1`，5 PASS / 0 FAIL。无 `scope.tocs` 时只有 `tocCount`；插入后 `toc:1` / `kind=toc` 且 `fields` 含 TOC；打开无修复；更新域后可见「第一章」；删后 `tocCount=0` 标题还在；`kind=tof` 树上为 `tof`。标题栏无 Repair |
 | O1 | 🚫 | 领域层不做原样保存，与 xlsx 清单相同。零脏写回见 OPC 库测试。Word 另存 create 产物见 `docx-O1-word-resave`。此前记的 `SaveAs2` 挂起，拆分后重跑没再出现，一秒内返回 |
 
 ## create
@@ -64,7 +65,7 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 | I2 | 大纲 | `outline` 含第一段，`level` 为 `1`，`text` 为 `标题` |
 | I3 | 段落 id | 两段都有 `para:{hex}`，`stable` 为 `true` |
 | I4 | 第二段 | `text` 为 `hello` |
-| I5 | 无 scope | 只发 path 时没有 `paragraphs` 字段，仍有 `outline`、`paraCount`、`pictureCount`、`tableCount`、`revisionCount`、`hyperlinkCount`、`bookmarkCount`、`headers`、`footers`、`sections` |
+| I5 | 无 scope | 只发 path 时没有 `paragraphs` 字段，仍有 `outline`、`paraCount`、`pictureCount`、`tableCount`、`revisionCount`、`hyperlinkCount`、`bookmarkCount`、`fieldCount`、`tocCount`、`headers`、`footers`、`sections` |
 
 ## apply
 
@@ -387,6 +388,18 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 | Sc4 | 删节 | `deleteSection` 且 `id` 为 `section:1` 后只剩一节，Word 无修复 |
 | Sc5 | 孤儿 | 删节后包里没有未被引用的 `/word/headerN.xml` |
 | Sc6 | create | 带 `sectionType` 的 create 产物树上有两节，Word 无修复 |
+
+## 目录
+
+`insertToc` 写入 TOC / TOA 域；`deleteToc` 删掉目录块。不在库里算页码。手测脚本 `manual-check/office/cases/docx-toc.ps1`。
+
+| 序号 | 检查 | 通过标准 |
+| --- | --- | --- |
+| Tc1 | 名单 | 无 `scope.tocs` 时有 `tocCount` 且没有 `tocs`；`insertToc` 之后 `tocCount` 为 1，给了 `scope.tocs` 能列出 `toc:1`，`kind` 为 `toc`，且 `fields` 里有对应 `TOC` 域 |
+| Tc2 | 打开 | Word 打开后无修复 |
+| Tc3 | 更新 | Word 更新域或 `TablesOfContents.Update` 之后，目录可见文字含标题「第一章」 |
+| Tc4 | 删除 | `deleteToc` 之后 `tocCount` 为 0，标题段还在，Word 无修复 |
+| Tc5 | 图表目录 | `kind` 为 `tof` 的插入产物树上 `kind` 为 `tof`，Word 无修复 |
 
 ## 原样保存（opc 验收）
 

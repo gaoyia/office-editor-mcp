@@ -19,18 +19,18 @@ use super::picture;
 use super::request::{
     DeleteBookmarkOp, DeleteColOp, DeleteCommentOp, DeleteFieldOp, DeleteHyperlinkOp, DeleteNoteOp,
     DeleteParaOp, DeletePictureOp, DeleteRowOp, DeleteSectionOp, DeleteTableOp, DeleteTextBoxOp,
-    DocxOp, InsertBookmarkOp, InsertColOp, InsertCommentOp, InsertFieldOp, InsertHeaderFooterOp,
-    InsertHyperlinkOp, InsertNoteOp, InsertNumberingOp, InsertParaOp, InsertParaPlace,
-    InsertPictureOp, InsertRowOp, InsertSectionOp, InsertSectionPlace, InsertTableOp,
-    InsertTextBoxOp, MergeCellsOp, NoteNumberTarget, ReplacePictureOp, ReplyCommentOp, RevisionOp,
-    SetBookmarkOp, SetColumnsOp, SetCommentDoneOp, SetCommentMetaOp, SetCommentTextOp,
-    SetDocGridOp, SetEvenAndOddHeadersOp, SetFieldOp, SetGutterAtTopOp, SetHfDistanceOp,
-    SetHfLinkOp, SetHyperlinkOp, SetLineNumberingOp, SetMirrorMarginsOp, SetNoteNumberingOp,
-    SetNumberingOp, SetPageMarginOp, SetPageSizeOp, SetParaFormatOp, SetParaNumberingOp,
-    SetParaStyleOp, SetParaTextOp, SetPictureSizeOp, SetPictureWrapOp, SetRtlGutterOp,
-    SetRunFormatOp, SetStyleOp, SetTextBoxDirectionOp, SetTextBoxFillOp, SetTextBoxLineOp,
-    SetTextBoxLinkOp, SetTextBoxSizeOp, SetTextBoxWrapOp, SetTitlePageOp, SetVerticalAlignOp,
-    SplitCellsOp,
+    DeleteTocOp, DocxOp, InsertBookmarkOp, InsertColOp, InsertCommentOp, InsertFieldOp,
+    InsertHeaderFooterOp, InsertHyperlinkOp, InsertNoteOp, InsertNumberingOp, InsertParaOp,
+    InsertParaPlace, InsertPictureOp, InsertRowOp, InsertSectionOp, InsertSectionPlace,
+    InsertTableOp, InsertTextBoxOp, InsertTocOp, InsertTocPlace, MergeCellsOp, NoteNumberTarget,
+    ReplacePictureOp, ReplyCommentOp, RevisionOp, SetBookmarkOp, SetColumnsOp, SetCommentDoneOp,
+    SetCommentMetaOp, SetCommentTextOp, SetDocGridOp, SetEvenAndOddHeadersOp, SetFieldOp,
+    SetGutterAtTopOp, SetHfDistanceOp, SetHfLinkOp, SetHyperlinkOp, SetLineNumberingOp,
+    SetMirrorMarginsOp, SetNoteNumberingOp, SetNumberingOp, SetPageMarginOp, SetPageSizeOp,
+    SetParaFormatOp, SetParaNumberingOp, SetParaStyleOp, SetParaTextOp, SetPictureSizeOp,
+    SetPictureWrapOp, SetRtlGutterOp, SetRunFormatOp, SetStyleOp, SetTextBoxDirectionOp,
+    SetTextBoxFillOp, SetTextBoxLineOp, SetTextBoxLinkOp, SetTextBoxSizeOp, SetTextBoxWrapOp,
+    SetTitlePageOp, SetVerticalAlignOp, SplitCellsOp,
 };
 use super::revision;
 use super::sect;
@@ -93,6 +93,12 @@ pub fn apply(bytes: &[u8], ops: &[DocxOp]) -> Result<Vec<u8>, Error> {
                     i,
                 )?;
                 refresh_hf_catalog(&pkg, &docs, &doc_part, &mut catalog)?;
+            }
+            DocxOp::InsertToc(op) => {
+                apply_insert_toc(&mut docs, &mut dirty, &doc_part, op, i)?;
+            }
+            DocxOp::DeleteToc(op) => {
+                apply_delete_toc(&mut docs, &mut dirty, &doc_part, op, i)?;
             }
             DocxOp::SetTitlePage(op) => {
                 apply_title_page(&mut docs, &mut dirty, &doc_part, op, i)?;
@@ -1767,6 +1773,36 @@ fn apply_insert_section(
         InsertSectionPlace::EndOfDocument => None,
     };
     sect::insert_section_break(&mut doc.root, after, op.break_type, &op.id, i)?;
+    dirty.insert(doc_part.to_string(), ());
+    Ok(())
+}
+
+fn apply_insert_toc(
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    op: &InsertTocOp,
+    i: usize,
+) -> Result<(), Error> {
+    let doc = docs.get_mut(doc_part).unwrap();
+    let after = match &op.place {
+        InsertTocPlace::After(p) => Some(p),
+        InsertTocPlace::EndOfDocument => None,
+    };
+    field::insert_toc(&mut doc.root, after, &op.instr, &op.id, i)?;
+    dirty.insert(doc_part.to_string(), ());
+    Ok(())
+}
+
+fn apply_delete_toc(
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    op: &DeleteTocOp,
+    i: usize,
+) -> Result<(), Error> {
+    let doc = docs.get_mut(doc_part).unwrap();
+    field::delete_toc(&mut doc.root, op.n, &op.id, i)?;
     dirty.insert(doc_part.to_string(), ());
     Ok(())
 }

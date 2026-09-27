@@ -564,6 +564,8 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<XlsxOp>, Error> {
             | "setRunFormat"
             | "insertSection"
             | "deleteSection"
+            | "insertToc"
+            | "deleteToc"
             | "setTextBoxLink"
             | "insertFootnote"
             | "insertEndnote"

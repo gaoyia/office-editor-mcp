@@ -301,6 +301,12 @@ pub(super) fn render(kind: &ErrorKind) -> String {
                 "insertSection id must be a direct child paragraph of w:body, or docx:document"
                     .into()
             }
+            IdReason::TocPrefix => "Table of contents id must be toc:N".into(),
+            IdReason::TocIndexNotInt => "toc index must be a positive integer".into(),
+            IdReason::TocIndexFromOne => "toc index starts at 1".into(),
+            IdReason::InsertTocNeedsBodyPara => {
+                "insertToc id must be a direct child paragraph of w:body, or docx:document".into()
+            }
         },
         ErrorKind::SheetNotFound { name } => format!("Sheet not found: {name}"),
         ErrorKind::ParaNotFound { id } => format!("Paragraph not found: {id}"),
@@ -352,6 +358,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         }
         ErrorKind::SectionTypeOnLastPara => {
             "the last paragraph must not have sectionType; the last section stays on w:body".into()
+        }
+        ErrorKind::InvalidTocKind => {
+            "kind must be toc, tof, or toa; instr must start with TOC or TOA".into()
         }
         ErrorKind::CommentNotFound { id } => format!("Comment not found: {id}"),
         ErrorKind::NeedCommentParaId => {
@@ -535,6 +544,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             "setHyperlink requires at least one of url, anchor, text, or tooltip".into()
         }
         ErrorKind::FieldNotFound { id } => format!("Field not found: {id}"),
+        ErrorKind::TocNotFound { id } => format!("Table of contents not found: {id}"),
         ErrorKind::SetParaTextHasField => {
             "Cannot change visible text in a paragraph that contains a field".into()
         }

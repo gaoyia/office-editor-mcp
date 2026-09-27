@@ -692,3 +692,396 @@ fn para_prefix_of(root: &Element, path: &[usize]) -> Option<Vec<usize>> {
     }
     found
 }
+
+/// 目录块类型：TOC、带 `\c` 的图表目录、TOA。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TocKind {
+    Toc,
+    Tof,
+    Toa,
+}
+
+impl TocKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Toc => "toc",
+            Self::Tof => "tof",
+            Self::Toa => "toa",
+        }
+    }
+
+    pub fn parse(s: &str) -> Option<Self> {
+        match s {
+            "toc" => Some(Self::Toc),
+            "tof" => Some(Self::Tof),
+            "toa" => Some(Self::Toa),
+            _ => None,
+        }
+    }
+
+    pub fn default_instr(self) -> &'static str {
+        match self {
+            Self::Toc => r#" TOC \o "1-3" \h \z \u"#,
+            Self::Tof => r#" TOC \c "Figure" \h \z \u"#,
+            Self::Toa => r#" TOA \h"#,
+        }
+    }
+}
+
+pub fn parse_toc_kind(raw: &str) -> Result<TocKind, ErrorKind> {
+    TocKind::parse(raw).ok_or(ErrorKind::InvalidTocKind)
+}
+
+fn has_c_switch(instr: &str) -> bool {
+    let b = instr.as_bytes();
+    let mut i = 0;
+    let mut quoted = false;
+    while i < b.len() {
+        if b[i] == b'"' {
+            quoted = !quoted;
+            i += 1;
+            continue;
+        }
+        if !quoted && b[i] == b'\\' && i + 1 < b.len() {
+            if b[i + 1].eq_ignore_ascii_case(&b'c') {
+                return true;
+            }
+            i += 2;
+            continue;
+        }
+        i += 1;
+    }
+    false
+}
+
+fn toc_kind_of(code: &str, instr: &str) -> Option<TocKind> {
+    match code {
+        "TOA" => Some(TocKind::Toa),
+        "TOC" => {
+            if has_c_switch(instr) {
+                Some(TocKind::Tof)
+            } else {
+                Some(TocKind::Toc)
+            }
+        }
+        _ => None,
+    }
+}
+
+pub fn instr_is_toc_or_toa(instr: &str) -> bool {
+    toc_kind_of(&field_code(instr), instr).is_some()
+}
+
+fn toc_recs(root: &Element) -> Vec<FieldRec> {
+    collect_fields(root)
+        .into_iter()
+        .filter(|rec| toc_kind_of(&field_code(&rec.instr), &rec.instr).is_some())
+        .collect()
+}
+
+pub fn count_tocs(root: &Element) -> usize {
+    toc_recs(root).len()
+}
+
+pub fn tocs_json(root: &Element) -> Result<Vec<Value>, Error> {
+    let fields = fields_json(root, None)?;
+    let mut out = Vec::new();
+    let mut n = 0usize;
+    for f in fields {
+        let code = f["code"].as_str().unwrap_or("");
+        let instr = f["instr"].as_str().unwrap_or("");
+        let Some(kind) = toc_kind_of(code, instr) else {
+            continue;
+        };
+        n += 1;
+        out.push(json!({
+            "id": format!("toc:{n}"),
+            "index": n,
+            "kind": kind.as_str(),
+            "field": f["id"],
+            "instr": f["instr"],
+            "host": f["host"],
+            "end": f["end"],
+            "text": f["text"],
+        }));
+    }
+    Ok(out)
+}
+
+pub fn insert_toc(
+    root: &mut Element,
+    after: Option<&BodyPara>,
+    instr: &str,
+    err_id: &str,
+    op_i: usize,
+) -> Result<(), Error> {
+    let new_id = para::next_para_hex(root);
+    if let Some(para) = after {
+        let path = para::find_paragraph_path(root, para).ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::ParaNotFound {
+                    id: err_id.to_string(),
+                },
+                format!("ops[{op_i}].id"),
+            )
+        })?;
+        let parent_path = path[..path.len().saturating_sub(1)].to_vec();
+        let new_p = {
+            let parent = para::element_at(root, &parent_path).ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::ParaNotFound {
+                        id: err_id.to_string(),
+                    },
+                    format!("ops[{op_i}].id"),
+                )
+            })?;
+            if parent.local_name() != "body" {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidId {
+                        reason: IdReason::InsertTocNeedsBodyPara,
+                    },
+                    format!("ops[{op_i}].id"),
+                ));
+            }
+            let mut p = para::new_paragraph(parent, &new_id, "");
+            insert_field(&mut p, instr, None);
+            p
+        };
+        let (host, idx) = para::parent_and_index_mut(root, &path).ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::ParaNotFound {
+                    id: err_id.to_string(),
+                },
+                format!("ops[{op_i}].id"),
+            )
+        })?;
+        host.children.insert(idx + 1, Node::Element(new_p));
+    } else {
+        let body = para::story_body_mut(root).ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::XmlMissing {
+                    parent: "document".into(),
+                    child: "body".into(),
+                },
+                format!("ops[{op_i}].id"),
+            )
+        })?;
+        let mut new_p = para::new_paragraph(body, &new_id, "");
+        insert_field(&mut new_p, instr, None);
+        para::append_before_body_sect_pr(body, new_p);
+    }
+    Ok(())
+}
+
+const TOC_GALLERIES: &[&str] = &[
+    "Table of Contents",
+    "Table of Figures",
+    "List of Figures",
+    "Table of Authorities",
+];
+
+fn sdt_gallery(sdt: &Element) -> Option<String> {
+    sdt.child_by_local("sdtPr")?
+        .child_by_local("docPartObj")?
+        .child_by_local("docPartGallery")?
+        .attr_local("val")
+        .map(str::to_string)
+}
+
+fn innermost_toc_sdt(root: &Element, inner: &[usize]) -> Option<Vec<usize>> {
+    let mut cur = root;
+    let mut acc = Vec::new();
+    let mut found = None;
+    for &i in inner {
+        acc.push(i);
+        match cur.children.get(i) {
+            Some(Node::Element(e)) => {
+                if e.local_name() == "sdt" {
+                    if let Some(g) = sdt_gallery(e) {
+                        if TOC_GALLERIES.iter().any(|k| *k == g) {
+                            found = Some(acc.clone());
+                        }
+                    }
+                }
+                cur = e;
+            }
+            _ => break,
+        }
+    }
+    found
+}
+
+fn para_has_block_content(p: &Element) -> bool {
+    p.element_children().any(|e| e.local_name() != "pPr")
+}
+
+fn path_starts_with(path: &[usize], prefix: &[usize]) -> bool {
+    path.len() >= prefix.len() && path[..prefix.len()] == *prefix
+}
+
+fn sdt_contains_sect_pr(root: &Element, sdt_path: &[usize]) -> bool {
+    let Some(sdt) = para::element_at(root, sdt_path) else {
+        return false;
+    };
+    fn walk(el: &Element) -> bool {
+        if el.local_name() == "sectPr" {
+            return true;
+        }
+        el.element_children().any(walk)
+    }
+    walk(sdt)
+}
+
+/// 删掉该目录域之后，某段会只剩 `sectPr`，无法整段去掉。
+fn toc_blocked_by_sect_pr(root: &Element, rec: &FieldRec) -> bool {
+    let Some(start_p) = para_prefix_of(root, &rec.start) else {
+        return false;
+    };
+    let Some(end_p) = para_prefix_of(root, &rec.end) else {
+        return false;
+    };
+    if start_p.len() < 2 || end_p.len() < 2 {
+        return false;
+    }
+    if start_p[..start_p.len() - 1] != end_p[..end_p.len() - 1] {
+        return false;
+    }
+    let parent_path = &start_p[..start_p.len() - 1];
+    let Some(parent) = para::element_at(root, parent_path) else {
+        return false;
+    };
+    if parent.local_name() != "body" {
+        return false;
+    }
+    let blocks = blocks_in_closed_range(root, &rec.start, &rec.end);
+    let lo = start_p[start_p.len() - 1];
+    let hi = end_p[end_p.len() - 1];
+    for idx in lo..=hi {
+        let mut ppath = parent_path.to_vec();
+        ppath.push(idx);
+        let Some(p) = para::element_at(root, &ppath) else {
+            continue;
+        };
+        if p.local_name() != "p" || !para::para_has_sect_pr(p) {
+            continue;
+        }
+        let leftover = p.children.iter().enumerate().any(|(i, n)| {
+            let Node::Element(e) = n else {
+                return false;
+            };
+            if e.local_name() == "pPr" {
+                return false;
+            }
+            let mut cpath = ppath.clone();
+            cpath.push(i);
+            !blocks.iter().any(|b| path_starts_with(b, &cpath))
+        });
+        if !leftover {
+            return true;
+        }
+    }
+    false
+}
+
+fn ensure_body_has_para(root: &mut Element) -> Result<(), Error> {
+    let hex = para::next_para_hex(root);
+    let body = para::story_body_mut(root).ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::XmlMissing {
+                parent: "document".into(),
+                child: "body".into(),
+            },
+            "document",
+        )
+    })?;
+    if body.element_children().any(|e| e.local_name() == "p") {
+        return Ok(());
+    }
+    let new_p = para::new_paragraph(body, &hex, "");
+    para::append_before_body_sect_pr(body, new_p);
+    Ok(())
+}
+
+fn drop_empty_body_paras(
+    root: &mut Element,
+    start_p: &[usize],
+    end_p: &[usize],
+) -> Result<(), Error> {
+    if start_p.len() < 2 || end_p.len() < 2 {
+        return Ok(());
+    }
+    if start_p[..start_p.len() - 1] != end_p[..end_p.len() - 1] {
+        return Ok(());
+    }
+    let parent_path = start_p[..start_p.len() - 1].to_vec();
+    {
+        let Some(parent) = para::element_at(root, &parent_path) else {
+            return Ok(());
+        };
+        if parent.local_name() != "body" {
+            return Ok(());
+        }
+    }
+    let lo = start_p[start_p.len() - 1];
+    let hi = end_p[end_p.len() - 1];
+    if lo > hi {
+        return Ok(());
+    }
+    for idx in (lo..=hi).rev() {
+        let mut ppath = parent_path.clone();
+        ppath.push(idx);
+        let Some(p) = para::element_at(root, &ppath) else {
+            continue;
+        };
+        if p.local_name() != "p" {
+            continue;
+        }
+        if para::para_has_sect_pr(p) || para_has_block_content(p) {
+            continue;
+        }
+        remove_at(root, &ppath)?;
+    }
+    Ok(())
+}
+
+pub fn delete_toc(root: &mut Element, n: usize, err_id: &str, op_i: usize) -> Result<(), Error> {
+    let recs = toc_recs(root);
+    if n < 1 || n > recs.len() {
+        return Err(Error::with_path(
+            ErrorKind::TocNotFound {
+                id: err_id.to_string(),
+            },
+            format!("ops[{op_i}].id"),
+        ));
+    }
+    let rec = recs.into_iter().nth(n - 1).expect("n 已检查");
+    if let Some(sdt_path) = innermost_toc_sdt(root, &rec.start) {
+        let parent = para::element_at(root, &sdt_path[..sdt_path.len() - 1]);
+        if parent.is_some_and(|p| p.local_name() == "body") {
+            if sdt_contains_sect_pr(root, &sdt_path) {
+                return Err(Error::with_path(
+                    ErrorKind::SectionBreakPara,
+                    format!("ops[{op_i}].id"),
+                ));
+            }
+            remove_at(root, &sdt_path)?;
+            ensure_body_has_para(root)?;
+            return Ok(());
+        }
+    }
+    if toc_blocked_by_sect_pr(root, &rec) {
+        return Err(Error::with_path(
+            ErrorKind::SectionBreakPara,
+            format!("ops[{op_i}].id"),
+        ));
+    }
+    let start_p = para_prefix_of(root, &rec.start);
+    let end_p = para_prefix_of(root, &rec.end);
+    let blocks = blocks_in_closed_range(root, &rec.start, &rec.end);
+    remove_paths(root, blocks)?;
+    if let (Some(a), Some(b)) = (start_p, end_p) {
+        drop_empty_body_paras(root, &a, &b)?;
+    }
+    ensure_body_has_para(root)?;
+    Ok(())
+}

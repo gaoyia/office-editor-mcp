@@ -590,6 +590,8 @@ fn is_foreign_op(op_name: &str) -> bool {
             | "setRunFormat"
             | "insertSection"
             | "deleteSection"
+            | "insertToc"
+            | "deleteToc"
             | "setTextBoxLink"
             | "insertFootnote"
             | "insertEndnote"

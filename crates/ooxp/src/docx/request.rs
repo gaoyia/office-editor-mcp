@@ -46,6 +46,8 @@ pub struct InspectScope {
     pub bookmarks: bool,
     /// 为 true 时列出域。
     pub fields: bool,
+    /// 为 true 时列出目录块。
+    pub tocs: bool,
     /// 为 true 时列出编号定义。
     pub numbering: bool,
     /// 为 true 时列出样式定义。
@@ -630,6 +632,25 @@ pub struct DeleteSectionOp {
 }
 
 #[derive(Debug, Clone)]
+pub enum InsertTocPlace {
+    After(para::BodyPara),
+    EndOfDocument,
+}
+
+#[derive(Debug, Clone)]
+pub struct InsertTocOp {
+    pub id: String,
+    pub place: InsertTocPlace,
+    pub instr: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct DeleteTocOp {
+    pub id: String,
+    pub n: usize,
+}
+
+#[derive(Debug, Clone)]
 pub enum DocxOp {
     SetParaText(SetParaTextOp),
     SetHeaderFooterDistance(SetHfDistanceOp),
@@ -637,6 +658,8 @@ pub enum DocxOp {
     InsertHeaderFooter(InsertHeaderFooterOp),
     InsertSection(InsertSectionOp),
     DeleteSection(DeleteSectionOp),
+    InsertToc(InsertTocOp),
+    DeleteToc(DeleteTocOp),
     SetTitlePage(SetTitlePageOp),
     SetEvenAndOddHeaders(SetEvenAndOddHeadersOp),
     SetPageMargin(SetPageMarginOp),
@@ -758,6 +781,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
             "hyperlinks",
             "bookmarks",
             "fields",
+            "tocs",
             "numbering",
             "styles",
             "runs",
@@ -777,6 +801,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
     let hyperlinks = parse_bool_field(obj.get("hyperlinks"), "hyperlinks")?;
     let bookmarks = parse_bool_field(obj.get("bookmarks"), "bookmarks")?;
     let fields = parse_bool_field(obj.get("fields"), "fields")?;
+    let tocs = parse_bool_field(obj.get("tocs"), "tocs")?;
     let numbering = parse_bool_field(obj.get("numbering"), "numbering")?;
     let styles = parse_bool_field(obj.get("styles"), "styles")?;
     let runs = parse_bool_field(obj.get("runs"), "runs")?;
@@ -806,6 +831,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
                 && !obj.contains_key("hyperlinks")
                 && !obj.contains_key("bookmarks")
                 && !obj.contains_key("fields")
+                && !obj.contains_key("tocs")
                 && !obj.contains_key("numbering")
                 && !obj.contains_key("styles")
                 && !obj.contains_key("runs")
@@ -828,6 +854,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
                 hyperlinks,
                 bookmarks,
                 fields,
+                tocs,
                 numbering,
                 styles,
                 runs,
@@ -887,6 +914,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
                 hyperlinks,
                 bookmarks,
                 fields,
+                tocs,
                 numbering,
                 styles,
                 runs,
@@ -968,6 +996,8 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<DocxOp>, Error> {
             "insertHeaderFooter" => out.push(DocxOp::InsertHeaderFooter(parse_insert_hf(obj, i)?)),
             "insertSection" => out.push(DocxOp::InsertSection(parse_insert_section(obj, i)?)),
             "deleteSection" => out.push(DocxOp::DeleteSection(parse_delete_section(obj, i)?)),
+            "insertToc" => out.push(DocxOp::InsertToc(parse_insert_toc(obj, i)?)),
+            "deleteToc" => out.push(DocxOp::DeleteToc(parse_delete_toc(obj, i)?)),
             "setTitlePage" => out.push(DocxOp::SetTitlePage(parse_set_title_page(obj, i)?)),
             "setEvenAndOddHeaders" => out.push(DocxOp::SetEvenAndOddHeaders(
                 parse_set_even_and_odd(obj, i)?,
@@ -1381,6 +1411,114 @@ fn parse_delete_section(
     let id = require_op_id(obj, i)?;
     let n = parse_section_id(&id, i)?;
     Ok(DeleteSectionOp { id, n })
+}
+
+fn parse_insert_toc(obj: &serde_json::Map<String, Value>, i: usize) -> Result<InsertTocOp, Error> {
+    deny_keys(obj, i, &["op", "id", "kind", "instr"])?;
+    let id = require_op_id(obj, i)?;
+    let kind = match obj.get("kind") {
+        None => None,
+        Some(Value::String(s)) => Some(
+            super::field::parse_toc_kind(s)
+                .map_err(|kind| Error::with_path(kind, format!("ops[{i}].kind")))?,
+        ),
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "kind".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].kind"),
+            ));
+        }
+    };
+    let instr = match obj.get("instr") {
+        None => None,
+        Some(Value::String(s)) => {
+            if s.trim().is_empty() {
+                return Err(Error::with_path(
+                    ErrorKind::EmptyFieldInstr,
+                    format!("ops[{i}].instr"),
+                ));
+            }
+            if !super::field::instr_is_toc_or_toa(s) {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidTocKind,
+                    format!("ops[{i}].instr"),
+                ));
+            }
+            Some(s.clone())
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "instr".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].instr"),
+            ));
+        }
+    };
+    let instr = match instr {
+        Some(s) => s,
+        None => kind
+            .unwrap_or(super::field::TocKind::Toc)
+            .default_instr()
+            .to_string(),
+    };
+    let path = format!("ops[{i}].id");
+    let place = if id == "docx:document" {
+        InsertTocPlace::EndOfDocument
+    } else {
+        match para::parse_para_id_at(&id, &path)? {
+            ParaTarget::Body(p) => InsertTocPlace::After(p),
+            _ => {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidId {
+                        reason: IdReason::InsertTocNeedsBodyPara,
+                    },
+                    path,
+                ));
+            }
+        }
+    };
+    Ok(InsertTocOp { id, place, instr })
+}
+
+fn parse_delete_toc(obj: &serde_json::Map<String, Value>, i: usize) -> Result<DeleteTocOp, Error> {
+    deny_keys(obj, i, &["op", "id"])?;
+    let id = require_op_id(obj, i)?;
+    let n = parse_toc_id(&id, i)?;
+    Ok(DeleteTocOp { id, n })
+}
+
+fn parse_toc_id(id: &str, op_index: usize) -> Result<usize, Error> {
+    let path = format!("ops[{op_index}].id");
+    let rest = id.strip_prefix("toc:").ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::TocPrefix,
+            },
+            path.clone(),
+        )
+    })?;
+    let n: usize = rest.parse().map_err(|_| {
+        Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::TocIndexNotInt,
+            },
+            path.clone(),
+        )
+    })?;
+    if n < 1 {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::TocIndexFromOne,
+            },
+            path,
+        ));
+    }
+    Ok(n)
 }
 
 fn parse_set_title_page(

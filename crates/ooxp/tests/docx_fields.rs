@@ -132,7 +132,9 @@ fn inspect_counts_without_listing() {
     let path = write_sample("bare");
     let tree = inspect(&path, json!({}));
     assert_eq!(tree["fieldCount"], 6);
+    assert_eq!(tree["tocCount"], 0);
     assert!(tree.get("fields").is_none());
+    assert!(tree.get("tocs").is_none());
     assert_eq!(tree["headers"][0]["fieldCount"], 1);
     assert!(tree["headers"][0].get("fields").is_none());
 }

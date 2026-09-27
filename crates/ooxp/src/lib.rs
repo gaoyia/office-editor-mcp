@@ -860,6 +860,7 @@ mod tests {
                 "hyperlinkCount",
                 "bookmarkCount",
                 "fieldCount",
+                "tocCount",
                 "numberingCount",
                 "styleCount",
                 "outline",

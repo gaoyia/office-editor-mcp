@@ -202,6 +202,12 @@ pub(crate) enum IdReason {
     RunIndexFromOne,
     /// insertSection 必须是主文档 body 的直接子段落或 docx:document
     InsertSectionNeedsBodyPara,
+    /// 目录 id 必须是 toc:N
+    TocPrefix,
+    TocIndexNotInt,
+    TocIndexFromOne,
+    /// insertToc 必须是主文档 body 的直接子段落或 docx:document
+    InsertTocNeedsBodyPara,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -429,6 +435,8 @@ define_error_kinds! {
     BookmarkRangeCrossStory => vec![Self::BookmarkRangeCrossStory],
     NeedSetHyperlinkField => vec![Self::NeedSetHyperlinkField],
     FieldNotFound { id: String } => vec![Self::FieldNotFound { id: "field:1".into() }],
+    TocNotFound { id: String } => vec![Self::TocNotFound { id: "toc:1".into() }],
+    InvalidTocKind => vec![Self::InvalidTocKind],
     SetParaTextHasField => vec![Self::SetParaTextHasField],
     EmptyFieldInstr => vec![Self::EmptyFieldInstr],
     InvalidFieldKeep => vec![Self::InvalidFieldKeep],
@@ -628,6 +636,10 @@ impl IdReason {
             Self::RunIndexNotInt,
             Self::RunIndexFromOne,
             Self::InsertSectionNeedsBodyPara,
+            Self::TocPrefix,
+            Self::TocIndexNotInt,
+            Self::TocIndexFromOne,
+            Self::InsertTocNeedsBodyPara,
         ]
     }
 }
@@ -727,6 +739,7 @@ impl ErrorKind {
             | Self::InvalidSectionType
             | Self::SectionTypeOnLastPara
             | Self::CannotDeleteLastSection
+            | Self::InvalidTocKind
             | Self::CreateHfDuplicate
             | Self::InvalidPicKind
             | Self::InvalidPicWrap
@@ -826,6 +839,7 @@ impl ErrorKind {
             | Self::HyperlinkNotFound { .. }
             | Self::BookmarkNotFound { .. }
             | Self::FieldNotFound { .. }
+            | Self::TocNotFound { .. }
             | Self::NumberingNotFound { .. }
             | Self::AbstractNumNotFound { .. }
             | Self::StyleNotFound { .. }
