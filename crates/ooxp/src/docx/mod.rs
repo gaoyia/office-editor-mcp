@@ -5,6 +5,7 @@ mod charts;
 mod comments;
 mod create;
 mod export;
+mod field;
 mod hf;
 mod inspect;
 mod link;

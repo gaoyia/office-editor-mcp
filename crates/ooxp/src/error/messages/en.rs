@@ -266,6 +266,14 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::InsertBookmarkNeedsPara => {
                 "insertBookmark id and end must be a body or header/footer paragraph id".into()
             }
+            IdReason::FieldPrefix => {
+                "Field id must be field:N or a header/footer container id plus /field:N".into()
+            }
+            IdReason::FieldIndexNotInt => "field index must be a positive integer".into(),
+            IdReason::FieldIndexFromOne => "field index starts at 1".into(),
+            IdReason::InsertFieldNeedsPara => {
+                "insertField id must be a body or header/footer paragraph id".into()
+            }
         },
         ErrorKind::SheetNotFound { name } => format!("Sheet not found: {name}"),
         ErrorKind::ParaNotFound { id } => format!("Paragraph not found: {id}"),
@@ -490,6 +498,13 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::NeedSetHyperlinkField => {
             "setHyperlink requires at least one of url, anchor, text, or tooltip".into()
         }
+        ErrorKind::FieldNotFound { id } => format!("Field not found: {id}"),
+        ErrorKind::SetParaTextHasField => {
+            "Cannot change visible text in a paragraph that contains a field".into()
+        }
+        ErrorKind::EmptyFieldInstr => "instr must not be empty".into(),
+        ErrorKind::InvalidFieldKeep => "keep must be result or instr".into(),
+        ErrorKind::NeedSetFieldInstr => "setField requires instr".into(),
         ErrorKind::OpcOpen { reason } => match reason {
             OpcReason::EmptyPartName => "Part name must not be empty".into(),
             OpcReason::InvalidPartName { name } => format!("Invalid part name: {name}"),

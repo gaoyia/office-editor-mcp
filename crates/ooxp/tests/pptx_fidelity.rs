@@ -533,3 +533,39 @@ fn delete_bookmark_is_not_for_pptx() {
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);
 }
+
+#[test]
+fn scope_fields_is_not_for_pptx() {
+    let src = write_sample("fld-scope");
+    let err = run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "inspect",
+            "path": src.to_string_lossy(),
+            "scope": { "fields": true }
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+}
+
+#[test]
+fn insert_field_is_not_for_pptx() {
+    let src = write_sample("fld-foreign");
+    let out = tmp_dir().join("fld-foreign-out.pptx");
+    let err = run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "apply",
+            "path": src.to_string_lossy(),
+            "output": out.to_string_lossy(),
+            "ops": [{ "op": "insertField", "id": "para:1", "instr": " PAGE " }]
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+}

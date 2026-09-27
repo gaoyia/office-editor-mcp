@@ -8,23 +8,25 @@ use crate::xml::{self, Document, Element, Node};
 
 use super::charts;
 use super::comments;
+use super::field;
 use super::hf::{self, HfKind};
 use super::link;
 use super::notes;
 use super::para::{self, BodyPara, HostPara, NoteKind, ParaTarget};
 use super::picture;
 use super::request::{
-    DeleteBookmarkOp, DeleteColOp, DeleteCommentOp, DeleteHyperlinkOp, DeleteNoteOp, DeleteParaOp,
-    DeletePictureOp, DeleteRowOp, DeleteTableOp, DeleteTextBoxOp, DocxOp, InsertBookmarkOp,
-    InsertColOp, InsertCommentOp, InsertHeaderFooterOp, InsertHyperlinkOp, InsertNoteOp,
-    InsertParaOp, InsertParaPlace, InsertPictureOp, InsertRowOp, InsertTableOp, InsertTextBoxOp,
-    MergeCellsOp, NoteNumberTarget, ReplacePictureOp, ReplyCommentOp, RevisionOp, SetBookmarkOp,
-    SetColumnsOp, SetCommentDoneOp, SetCommentMetaOp, SetCommentTextOp, SetDocGridOp,
-    SetEvenAndOddHeadersOp, SetGutterAtTopOp, SetHfDistanceOp, SetHfLinkOp, SetHyperlinkOp,
-    SetLineNumberingOp, SetMirrorMarginsOp, SetNoteNumberingOp, SetPageMarginOp, SetPageSizeOp,
-    SetParaTextOp, SetPictureSizeOp, SetPictureWrapOp, SetRtlGutterOp, SetTextBoxDirectionOp,
-    SetTextBoxFillOp, SetTextBoxLineOp, SetTextBoxLinkOp, SetTextBoxSizeOp, SetTextBoxWrapOp,
-    SetTitlePageOp, SetVerticalAlignOp, SplitCellsOp,
+    DeleteBookmarkOp, DeleteColOp, DeleteCommentOp, DeleteFieldOp, DeleteHyperlinkOp, DeleteNoteOp,
+    DeleteParaOp, DeletePictureOp, DeleteRowOp, DeleteTableOp, DeleteTextBoxOp, DocxOp,
+    InsertBookmarkOp, InsertColOp, InsertCommentOp, InsertFieldOp, InsertHeaderFooterOp,
+    InsertHyperlinkOp, InsertNoteOp, InsertParaOp, InsertParaPlace, InsertPictureOp, InsertRowOp,
+    InsertTableOp, InsertTextBoxOp, MergeCellsOp, NoteNumberTarget, ReplacePictureOp,
+    ReplyCommentOp, RevisionOp, SetBookmarkOp, SetColumnsOp, SetCommentDoneOp, SetCommentMetaOp,
+    SetCommentTextOp, SetDocGridOp, SetEvenAndOddHeadersOp, SetFieldOp, SetGutterAtTopOp,
+    SetHfDistanceOp, SetHfLinkOp, SetHyperlinkOp, SetLineNumberingOp, SetMirrorMarginsOp,
+    SetNoteNumberingOp, SetPageMarginOp, SetPageSizeOp, SetParaTextOp, SetPictureSizeOp,
+    SetPictureWrapOp, SetRtlGutterOp, SetTextBoxDirectionOp, SetTextBoxFillOp, SetTextBoxLineOp,
+    SetTextBoxLinkOp, SetTextBoxSizeOp, SetTextBoxWrapOp, SetTitlePageOp, SetVerticalAlignOp,
+    SplitCellsOp,
 };
 use super::revision;
 use super::sect;
@@ -332,6 +334,15 @@ pub fn apply(bytes: &[u8], ops: &[DocxOp]) -> Result<Vec<u8>, Error> {
             DocxOp::DeleteBookmark(op) => {
                 apply_delete_bookmark(&pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
             }
+            DocxOp::InsertField(op) => {
+                apply_insert_field(&pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
+            }
+            DocxOp::SetField(op) => {
+                apply_set_field(&pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
+            }
+            DocxOp::DeleteField(op) => {
+                apply_delete_field(&pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
+            }
         }
     }
 
@@ -360,6 +371,16 @@ fn refuse_set_text_if_hyperlink(el: &Element, i: usize) -> Result<(), Error> {
     if link::para_blocks_set_text(el) {
         return Err(Error::with_path(
             ErrorKind::SetParaTextHasHyperlink,
+            format!("ops[{i}].id"),
+        ));
+    }
+    Ok(())
+}
+
+fn refuse_set_text_if_field(root: &Element, para: &para::BodyPara, i: usize) -> Result<(), Error> {
+    if field::para_blocks_set_text(root, para) {
+        return Err(Error::with_path(
+            ErrorKind::SetParaTextHasField,
             format!("ops[{i}].id"),
         ));
     }
@@ -624,6 +645,64 @@ fn apply_delete_bookmark(
     Ok(())
 }
 
+fn apply_insert_field(
+    pkg: &Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &InsertFieldOp,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name = part_for_para(pkg, catalog, doc_part, &op.para, &op.id, i)?;
+    let doc = load_part(pkg, docs, &part_name)?;
+    let el = find_insert_para_mut(&mut doc.root, &op.para).ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::ParaNotFound { id: op.id.clone() },
+            format!("ops[{i}].id"),
+        )
+    })?;
+    field::insert_field(el, &op.instr, op.result.as_deref());
+    dirty.insert(part_name, ());
+    Ok(())
+}
+
+fn apply_set_field(
+    pkg: &Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &SetFieldOp,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name = field::part_for_story(catalog, doc_part, &op.target.story, || {
+        field::missing_field_err(&op.id, i)
+    })?;
+    let doc = load_part(pkg, docs, &part_name)?;
+    field::set_field_instr(&mut doc.root, op.target.n, &op.instr, &op.id, i)?;
+    dirty.insert(part_name, ());
+    Ok(())
+}
+
+fn apply_delete_field(
+    pkg: &Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &DeleteFieldOp,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name = field::part_for_story(catalog, doc_part, &op.target.story, || {
+        field::missing_field_err(&op.id, i)
+    })?;
+    let doc = load_part(pkg, docs, &part_name)?;
+    field::delete_field(&mut doc.root, op.target.n, op.keep, &op.id, i)?;
+    dirty.insert(part_name, ());
+    Ok(())
+}
+
 fn apply_insert_table(
     pkg: &Package,
     docs: &mut HashMap<String, Document>,
@@ -774,6 +853,7 @@ fn apply_para_text(
     match &target {
         ParaTarget::Body(p) => {
             let doc = load_part(pkg, docs, doc_part)?;
+            refuse_set_text_if_field(&doc.root, p, i)?;
             let el = para::find_paragraph_mut(&mut doc.root, p).ok_or_else(|| {
                 Error::with_path(
                     ErrorKind::ParaNotFound { id: op.id.clone() },
@@ -793,6 +873,7 @@ fn apply_para_text(
         } => {
             let part_name = part_for_hf(catalog, *kind, *hf_type, *n, &op.id, i)?;
             let doc = load_part(pkg, docs, &part_name)?;
+            refuse_set_text_if_field(&doc.root, para, i)?;
             let el = para::find_paragraph_mut(&mut doc.root, para).ok_or_else(|| {
                 Error::with_path(
                     ErrorKind::ParaNotFound { id: op.id.clone() },

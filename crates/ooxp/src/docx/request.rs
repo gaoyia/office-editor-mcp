@@ -44,6 +44,8 @@ pub struct InspectScope {
     pub hyperlinks: bool,
     /// 为 true 时列出书签。
     pub bookmarks: bool,
+    /// 为 true 时列出域。
+    pub fields: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -509,6 +511,28 @@ pub struct DeleteBookmarkOp {
 }
 
 #[derive(Debug, Clone)]
+pub struct InsertFieldOp {
+    pub id: String,
+    pub para: ParaTarget,
+    pub instr: String,
+    pub result: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetFieldOp {
+    pub id: String,
+    pub target: super::field::FieldRef,
+    pub instr: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct DeleteFieldOp {
+    pub id: String,
+    pub target: super::field::FieldRef,
+    pub keep: super::field::FieldKeep,
+}
+
+#[derive(Debug, Clone)]
 pub enum DocxOp {
     SetParaText(SetParaTextOp),
     SetHeaderFooterDistance(SetHfDistanceOp),
@@ -555,6 +579,9 @@ pub enum DocxOp {
     InsertBookmark(InsertBookmarkOp),
     SetBookmark(SetBookmarkOp),
     DeleteBookmark(DeleteBookmarkOp),
+    InsertField(InsertFieldOp),
+    SetField(SetFieldOp),
+    DeleteField(DeleteFieldOp),
     SetTextBoxLink(SetTextBoxLinkOp),
     InsertFootnote(InsertNoteOp),
     InsertEndnote(InsertNoteOp),
@@ -624,6 +651,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
             "revisions",
             "hyperlinks",
             "bookmarks",
+            "fields",
         ],
     )?;
 
@@ -639,6 +667,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
     let revisions = parse_bool_field(obj.get("revisions"), "revisions")?;
     let hyperlinks = parse_bool_field(obj.get("hyperlinks"), "hyperlinks")?;
     let bookmarks = parse_bool_field(obj.get("bookmarks"), "bookmarks")?;
+    let fields = parse_bool_field(obj.get("fields"), "fields")?;
     if text_box_content && !text_boxes {
         return Err(Error::with_path(
             ErrorKind::ScopeFieldRequires {
@@ -664,6 +693,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
                 && !obj.contains_key("revisions")
                 && !obj.contains_key("hyperlinks")
                 && !obj.contains_key("bookmarks")
+                && !obj.contains_key("fields")
             {
                 return Ok(None);
             }
@@ -682,6 +712,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
                 revisions,
                 hyperlinks,
                 bookmarks,
+                fields,
             }))
         }
         (Some(f), Some(m)) => {
@@ -737,6 +768,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
                 revisions,
                 hyperlinks,
                 bookmarks,
+                fields,
             }))
         }
         _ => Err(Error::with_path(
@@ -864,6 +896,9 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<DocxOp>, Error> {
             "insertBookmark" => out.push(DocxOp::InsertBookmark(parse_insert_bookmark(obj, i)?)),
             "setBookmark" => out.push(DocxOp::SetBookmark(parse_set_bookmark(obj, i)?)),
             "deleteBookmark" => out.push(DocxOp::DeleteBookmark(parse_delete_bookmark(obj, i)?)),
+            "insertField" => out.push(DocxOp::InsertField(parse_insert_field(obj, i)?)),
+            "setField" => out.push(DocxOp::SetField(parse_set_field(obj, i)?)),
+            "deleteField" => out.push(DocxOp::DeleteField(parse_delete_field(obj, i)?)),
             "setTextBoxLink" => out.push(DocxOp::SetTextBoxLink(parse_set_txbx_link(obj, i)?)),
             "insertFootnote" => out.push(DocxOp::InsertFootnote(parse_insert_note(
                 obj,
@@ -2037,6 +2072,94 @@ fn parse_delete_bookmark(
     let id = require_op_id(obj, i)?;
     let target = super::link::parse_bookmark_ref(&id, &format!("ops[{i}].id"))?;
     Ok(DeleteBookmarkOp { id, target })
+}
+
+fn require_instr(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+    missing: ErrorKind,
+) -> Result<String, Error> {
+    match obj.get("instr") {
+        Some(Value::String(s)) => {
+            if s.trim().is_empty() {
+                return Err(Error::with_path(
+                    ErrorKind::EmptyFieldInstr,
+                    format!("ops[{i}].instr"),
+                ));
+            }
+            Ok(s.clone())
+        }
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "instr".into(),
+                expected: TypeName::String,
+            },
+            format!("ops[{i}].instr"),
+        )),
+        None => Err(Error::with_path(missing, format!("ops[{i}].instr"))),
+    }
+}
+
+fn parse_insert_field(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<InsertFieldOp, Error> {
+    deny_keys(obj, i, &["op", "id", "instr", "result"])?;
+    let id = require_op_id(obj, i)?;
+    let para = parse_story_para_at(&id, &format!("ops[{i}].id"), IdReason::InsertFieldNeedsPara)?;
+    let instr = require_instr(
+        obj,
+        i,
+        ErrorKind::OpRequiresField {
+            op: "insertField".into(),
+            field: "instr".into(),
+        },
+    )?;
+    let result = optional_op_string(obj, i, "result")?;
+    Ok(InsertFieldOp {
+        id,
+        para,
+        instr,
+        result,
+    })
+}
+
+fn parse_set_field(obj: &serde_json::Map<String, Value>, i: usize) -> Result<SetFieldOp, Error> {
+    deny_keys(obj, i, &["op", "id", "instr"])?;
+    let id = require_op_id(obj, i)?;
+    let target = super::field::parse_field_ref(&id, &format!("ops[{i}].id"))?;
+    let instr = require_instr(obj, i, ErrorKind::NeedSetFieldInstr)?;
+    Ok(SetFieldOp { id, target, instr })
+}
+
+fn parse_delete_field(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<DeleteFieldOp, Error> {
+    deny_keys(obj, i, &["op", "id", "keep"])?;
+    let id = require_op_id(obj, i)?;
+    let target = super::field::parse_field_ref(&id, &format!("ops[{i}].id"))?;
+    let keep = match obj.get("keep") {
+        None => super::field::FieldKeep::Result,
+        Some(Value::String(s)) if s == "result" => super::field::FieldKeep::Result,
+        Some(Value::String(s)) if s == "instr" => super::field::FieldKeep::Instr,
+        Some(Value::String(_)) => {
+            return Err(Error::with_path(
+                ErrorKind::InvalidFieldKeep,
+                format!("ops[{i}].keep"),
+            ));
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "keep".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].keep"),
+            ));
+        }
+    };
+    Ok(DeleteFieldOp { id, target, keep })
 }
 
 fn parse_col_after(v: Option<&Value>, i: usize) -> Result<u32, Error> {

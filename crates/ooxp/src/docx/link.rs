@@ -610,7 +610,7 @@ fn host_para_id(
     json!(id)
 }
 
-fn split_story<'a>(
+pub(crate) fn split_story<'a>(
     id: &'a str,
     path: &str,
     kind: &str,
@@ -632,7 +632,12 @@ fn split_story<'a>(
     ))
 }
 
-fn parse_n(s: &str, path: &str, not_int: IdReason, from_one: IdReason) -> Result<usize, Error> {
+pub(crate) fn parse_n(
+    s: &str,
+    path: &str,
+    not_int: IdReason,
+    from_one: IdReason,
+) -> Result<usize, Error> {
     let n: usize = s.parse().map_err(|_| {
         Error::with_path(ErrorKind::InvalidId { reason: not_int }, path.to_string())
     })?;

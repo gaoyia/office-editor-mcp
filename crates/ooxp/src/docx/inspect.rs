@@ -8,6 +8,7 @@ use crate::xml;
 
 use super::charts;
 use super::comments;
+use super::field;
 use super::hf::{self, HfKind, HfPart};
 use super::link;
 use super::notes;
@@ -52,6 +53,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     let expand_revisions = scope.as_ref().is_some_and(|s| s.revisions);
     let expand_hyperlinks = scope.as_ref().is_some_and(|s| s.hyperlinks);
     let expand_bookmarks = scope.as_ref().is_some_and(|s| s.bookmarks);
+    let expand_fields = scope.as_ref().is_some_and(|s| s.fields);
     let hf_expand = HfExpand {
         paragraphs: expand_hf,
         pictures: expand_pics,
@@ -63,6 +65,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         revisions: expand_revisions,
         hyperlinks: expand_hyperlinks,
         bookmarks: expand_bookmarks,
+        fields: expand_fields,
     };
     let (headers, footers) = hf_arrays(&pkg, &catalog, &hf_expand)?;
     let sections = section_nodes(&pkg, &part, &doc.root)?;
@@ -97,6 +100,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         "revisionCount": revision::count_revisions(&doc.root),
         "hyperlinkCount": link::count_hyperlinks(&doc.root),
         "bookmarkCount": link::count_bookmarks(&doc.root),
+        "fieldCount": field::count_fields(&doc.root),
         "outline": outline,
         "headers": headers,
         "footers": footers,
@@ -151,6 +155,9 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         }
         if scope.bookmarks {
             tree["bookmarks"] = Value::Array(link::bookmarks_json(&doc.root, None)?);
+        }
+        if scope.fields {
+            tree["fields"] = Value::Array(field::fields_json(&doc.root, None)?);
         }
         if let (Some(from), Some(max_paras)) = (scope.from, scope.max_paras) {
             let start = from as usize;
@@ -277,6 +284,7 @@ struct HfExpand {
     revisions: bool,
     hyperlinks: bool,
     bookmarks: bool,
+    fields: bool,
 }
 
 fn hf_arrays(
@@ -326,6 +334,7 @@ fn hf_node(pkg: &Package, item: &HfPart, expand: &HfExpand) -> Result<Value, Err
         "revisionCount": revision::count_revisions(&doc.root),
         "hyperlinkCount": link::count_hyperlinks(&doc.root),
         "bookmarkCount": link::count_bookmarks(&doc.root),
+        "fieldCount": field::count_fields(&doc.root),
     });
     if expand.pictures {
         node["pictures"] = Value::Array(picture::pictures_json(&pics));
@@ -367,6 +376,9 @@ fn hf_node(pkg: &Package, item: &HfPart, expand: &HfExpand) -> Result<Value, Err
     }
     if expand.bookmarks {
         node["bookmarks"] = Value::Array(link::bookmarks_json(&doc.root, Some(&item.id))?);
+    }
+    if expand.fields {
+        node["fields"] = Value::Array(field::fields_json(&doc.root, Some(&item.id))?);
     }
     if expand.paragraphs {
         let mut paragraphs = Vec::new();

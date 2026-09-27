@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "note.docx",
+  "output": "note.field.docx",
+  "ops": [
+    {
+      "op": "insertField",
+      "id": "para:AAAA0001",
+      "instr": " PAGE ",
+      "result": "1"
+    },
+    {
+      "op": "setField",
+      "id": "field:1",
+      "instr": " DATE "
+    },
+    {
+      "op": "deleteField",
+      "id": "field:1",
+      "keep": "result"
+    }
+  ]
+}

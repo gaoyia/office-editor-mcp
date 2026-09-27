@@ -35,6 +35,7 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 | Tb1–Tb8 | ✅ | Word 16.0：`docx-table.ps1`，8 PASS / 0 FAIL。名单、改字、增行增列、删表、create 2×2、合并、最后一行 `InvalidField`。标题栏无 Repair |
 | Rv1–Rv6 | ✅ | Word 16.0：`docx-revision.ps1`，6 PASS / 0 FAIL。名单、接受删除、拒绝插入、接受插入、拒绝删除、带修订段 `setParaText` 得 `NotImplemented`。标题栏无 Repair |
 | Hb1–Hb7 | ✅ | Word 16.0：`docx-hyperlink.ps1`，7 PASS / 0 FAIL。名单、改 URL、插链、删链、插书签、删书签、带链段 `setParaText` 得 `NotImplemented`。标题栏无 Repair |
+| Fd1–Fd7 | ✅ | Word 16.0：`docx-field.ps1`，7 PASS / 0 FAIL。名单、改 PAGE 为 DATE、插 DATE、删域留结果、删域留指令、页眉 PAGE、带域段 `setParaText` 得 `NotImplemented`。标题栏无 Repair |
 | O1 | 🚫 | 领域层不做原样保存，与 xlsx 清单相同。零脏写回见 OPC 库测试。Word 另存 create 产物见 `docx-O1-word-resave`。此前记的 `SaveAs2` 挂起，拆分后重跑没再出现，一秒内返回 |
 
 ## create
@@ -317,6 +318,20 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 | Hb5 | 插书签 | `insertBookmark` 后 COM 能按名找到，无修复 |
 | Hb6 | 删书签 | `deleteBookmark` 后该书签消失，无修复 |
 | Hb7 | 改字拒绝 | 对仍带本期超链接的段发 `setParaText` 得 `NotImplemented`，文件未写坏 |
+
+## 域
+
+准备一份带 PAGE 或 DATE 域的样例：可用 `insertField` 写入，也可用 Word 另存。`inspect` 带 `scope.fields: true`。手测脚本 `manual-check/office/cases/docx-field.ps1`。
+
+| 序号 | 检查 | 通过标准 |
+| --- | --- | --- |
+| Fd1 | 名单 | 无 scope 时仍有 `fieldCount` 且没有 `fields`；给了 `scope.fields` 后能列出 `field:`，带 `instr` 与 `code` |
+| Fd2 | 改指令 | `setField` 改 PAGE 为 DATE 后 Word 无修复 |
+| Fd3 | 插域 | 对无域段 `insertField` 后 Word 无修复，能看见域 |
+| Fd4 | 删域留结果 | `deleteField`（`keep` 为 `result` 或缺省）后缓存字还在、域消失，无修复 |
+| Fd5 | 删域留指令 | `deleteField` 且 `keep` 为 `instr` 后指令字还在、域消失，无修复 |
+| Fd6 | 页眉 PAGE | 默认页眉里的 PAGE 能列出，id 带 `header:` 前缀 |
+| Fd7 | 改字拒绝 | 对仍带本期域的段发 `setParaText` 得 `NotImplemented`，文件未写坏 |
 
 ## 原样保存（opc 验收）
 

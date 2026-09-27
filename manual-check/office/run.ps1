@@ -43,6 +43,7 @@ $order = @(
     'docx-table'
     'docx-revision'
     'docx-hyperlink'
+    'docx-field'
     'docx-headerfooter'
     'docx-distance'
     'docx-link'

@@ -81,6 +81,7 @@
         "revisions": { "type": "boolean" },
         "hyperlinks": { "type": "boolean" },
         "bookmarks": { "type": "boolean" },
+        "fields": { "type": "boolean" },
         "slide": { "type": "integer", "minimum": 1 },
         "maxShapes": { "type": "integer", "minimum": 1, "maximum": 5000 }
       },
@@ -537,6 +538,9 @@
               { "$ref": "#/$defs/insertBookmarkOp" },
               { "$ref": "#/$defs/setBookmarkOp" },
               { "$ref": "#/$defs/deleteBookmarkOp" },
+              { "$ref": "#/$defs/insertFieldOp" },
+              { "$ref": "#/$defs/setFieldOp" },
+              { "$ref": "#/$defs/deleteFieldOp" },
               { "$ref": "#/$defs/setTextBoxLinkOp" },
               { "$ref": "#/$defs/insertFootnoteOp" },
               { "$ref": "#/$defs/insertEndnoteOp" },
@@ -1208,6 +1212,37 @@
       "properties": {
         "op": { "const": "deleteBookmark" },
         "id": { "type": "string", "minLength": 1 }
+      }
+    },
+    "insertFieldOp": {
+      "type": "object",
+      "required": ["op", "id", "instr"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "insertField" },
+        "id": { "type": "string", "minLength": 1 },
+        "instr": { "type": "string", "minLength": 1 },
+        "result": { "type": "string" }
+      }
+    },
+    "setFieldOp": {
+      "type": "object",
+      "required": ["op", "id", "instr"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "setField" },
+        "id": { "type": "string", "minLength": 1 },
+        "instr": { "type": "string", "minLength": 1 }
+      }
+    },
+    "deleteFieldOp": {
+      "type": "object",
+      "required": ["op", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "deleteField" },
+        "id": { "type": "string", "minLength": 1 },
+        "keep": { "enum": ["result", "instr"] }
       }
     },
     "setTextBoxLinkOp": {

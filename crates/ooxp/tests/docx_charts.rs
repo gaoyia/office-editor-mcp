@@ -221,6 +221,7 @@ fn inspect_count_without_list() {
             "revisionCount",
             "hyperlinkCount",
             "bookmarkCount",
+            "fieldCount",
             "outline",
             "headers",
             "footers",

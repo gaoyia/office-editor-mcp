@@ -475,3 +475,33 @@ fn insert_hyperlink_is_not_for_xlsx() {
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);
 }
+
+#[test]
+fn scope_fields_is_not_for_xlsx() {
+    let src = write_sample("fld-scope");
+    let err = run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "inspect",
+            "path": src.to_string_lossy(),
+            "scope": { "fields": true }
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+}
+
+#[test]
+fn insert_field_is_not_for_xlsx() {
+    let src = write_sample("fld-foreign");
+    let out = tmp_dir().join("fld-foreign-out.xlsx");
+    let err = apply(
+        &src,
+        &out,
+        json!([{ "op": "insertField", "id": "para:1", "instr": " PAGE " }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+}

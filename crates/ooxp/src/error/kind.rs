@@ -173,6 +173,12 @@ pub(crate) enum IdReason {
     BookmarkIndexFromOne,
     /// insertBookmark 必须用正文或页眉页脚段落 id
     InsertBookmarkNeedsPara,
+    /// 域 id 必须是 field:N 或 {容器}/field:N
+    FieldPrefix,
+    FieldIndexNotInt,
+    FieldIndexFromOne,
+    /// insertField 必须用正文或页眉页脚段落 id
+    InsertFieldNeedsPara,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -396,6 +402,11 @@ define_error_kinds! {
     BookmarkRangeReversed => vec![Self::BookmarkRangeReversed],
     BookmarkRangeCrossStory => vec![Self::BookmarkRangeCrossStory],
     NeedSetHyperlinkField => vec![Self::NeedSetHyperlinkField],
+    FieldNotFound { id: String } => vec![Self::FieldNotFound { id: "field:1".into() }],
+    SetParaTextHasField => vec![Self::SetParaTextHasField],
+    EmptyFieldInstr => vec![Self::EmptyFieldInstr],
+    InvalidFieldKeep => vec![Self::InvalidFieldKeep],
+    NeedSetFieldInstr => vec![Self::NeedSetFieldInstr],
     OpcOpen { reason: OpcReason } => OpcReason::all_samples()
         .into_iter()
         .map(|reason| Self::OpcOpen { reason })
@@ -554,6 +565,10 @@ impl IdReason {
             Self::BookmarkIndexNotInt,
             Self::BookmarkIndexFromOne,
             Self::InsertBookmarkNeedsPara,
+            Self::FieldPrefix,
+            Self::FieldIndexNotInt,
+            Self::FieldIndexFromOne,
+            Self::InsertFieldNeedsPara,
         ]
     }
 }
@@ -671,6 +686,9 @@ impl ErrorKind {
             | Self::BookmarkRangeReversed
             | Self::BookmarkRangeCrossStory
             | Self::NeedSetHyperlinkField
+            | Self::EmptyFieldInstr
+            | Self::InvalidFieldKeep
+            | Self::NeedSetFieldInstr
             | Self::LastTextBoxPara
             | Self::LastNotePara
             | Self::NeedNoteNumberingField
@@ -729,7 +747,8 @@ impl ErrorKind {
             | Self::TableNotFound { .. }
             | Self::RevisionNotFound { .. }
             | Self::HyperlinkNotFound { .. }
-            | Self::BookmarkNotFound { .. } => IdNotFound,
+            | Self::BookmarkNotFound { .. }
+            | Self::FieldNotFound { .. } => IdNotFound,
             Self::ScopeRequired { .. } => ScopeRequired,
             Self::SharedFormulaMaster { .. }
             | Self::InkComment { .. }
@@ -748,7 +767,8 @@ impl ErrorKind {
             | Self::TableGridMismatch
             | Self::MergeNotSimple
             | Self::SetParaTextHasRevision
-            | Self::SetParaTextHasHyperlink => NotImplemented,
+            | Self::SetParaTextHasHyperlink
+            | Self::SetParaTextHasField => NotImplemented,
             Self::OpcOpen { .. } => OpcOpen,
             Self::PartMissing { .. }
             | Self::RelNotFound { .. }
