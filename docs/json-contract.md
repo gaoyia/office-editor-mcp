@@ -479,9 +479,11 @@ xlsx、docx、pptx 共用 `scope` 这个字段名，里面的键按格式分，�
 - `type`：`number`、`text`、`boolean`、`error`、`date`、`empty`。对应 SpreadsheetML `ST_CellType`（§18.18.11）的映射见下表。
 - `value` 是缓存显示值，不是库算出来的。公式格的 `value` 来自 `<v>`，可能过期。没有 `<v>` 时 `value` 为 `null`。
 - `formula`：有公式则返回以 `=` 开头的字符串。XML 里 `<f>` 不含 `=`，由库补上。没有公式则为 `null`。
-- 共享公式（`<f t="shared">`）：主单元格返回其公式文本；从属单元格若 XML 里没有文本，第一期 `formula` 为 `null`，并多一个 `"shared": true`。以后可以改成展开成该格的 A1 公式，不改 id 规则。
+- 共享公式（`<f t="shared"`，§18.3.1.40）：主格返回公式文本，并带 `"shared": true` 与 `"sharedRef"`（取主格 `f/@ref`，规范化成 `A1` 或 `A1:B2`）。从属格带 `"shared": true`；`formula` 按主格到该格的行列差展开成该格的 A1 文本（规则与下文 apply 的相对展开相同）。找不到主格或主格没有公式文本时，从属格 `formula` 仍为 `null`。
+- 数组公式（`<f t="array"`）：主格返回公式文本，并带 `"array": true` 与 `"arrayRef"`（取 `f/@ref`，同样规范化；没有 `ref` 则当作该格自己）。落在该 `ref` 内、自己没有公式的格子带 `"array": true`，`formula` 为 `null`。
+- 数据表公式（`<f t="dataTable"`）：带 `"dataTable": true`。本期不展开，也不在 apply 里改。
 - 内联字符串（`t="inlineStr"`）和共享字符串（`t="s"`）在树上都是 `type: "text"`，`value` 为拼接后的可见纯文本，不含 run 级样式。`t="s"` 的 `<v>` 必须是共享字符串表里的合法非负整数索引。越界或无法解析报 `XmlBroken`，不要当成空串。
-- 单元格字段顺序：`id`、`ref`、`type`、`value`、`formula`，然后始终跟 `numFmt`，有非默认字体 / 填充 / 边框 / 对齐时再跟 `font`、`fill`、`border`、`align`，共享从属格最后跟 `shared`。
+- 单元格字段顺序：`id`、`ref`、`type`、`value`、`formula`，然后始终跟 `numFmt`，有非默认字体 / 填充 / 边框 / 对齐时再跟 `font`、`fill`、`border`、`align`，然后按需跟 `array`、`arrayRef`、`shared`、`sharedRef`、`dataTable`。只在为真或有值时出现：`array` / `shared` / `dataTable` 为 `true`，`arrayRef` / `sharedRef` 为规范化后的区域字符串。
 - `numFmt` 是数字格式代码字符串，不是 `numFmtId`。缺 `<c>/@s` 或 `s` 越界时按 `cellXfs` 第 0 条。内置 id 0–49 用 ECMA-376 §18.8.30 的英文代码（例如 `0` → `"General"`，`2` → `"0.00"`，`14` → `"mm-dd-yy"`），不按打开 Excel 的区域设置改写。自定义格式取 `numFmts` 里对应 `formatCode`。没有 styles 部件时当作 `"General"`。
 - `font` / `fill` / `border` / `align` 是精简摘要，不是完整 `xf` 镜像。与 `fonts[0]` / `fills[0]`（`patternType="none"`）/ 空边框相同则省略该对象。渐变填充只报 `{ "pattern": "gradient" }`，不展开 stop。
 - `font` 字段顺序：`name`、`sz`、`bold`、`italic`、`underline`、`color`。只出现与默认字体不同的键。`sz` 为磅，整数则 JSON 整数。`underline` 为 `single` / `double` / `singleAccounting` / `doubleAccounting`。`color` 见下。
@@ -928,7 +930,7 @@ docx 根上始终带 `protection`，不要另给 scope 键。来源是 `/word/se
 
 行与单元格按行号、列号升序写出。补上 `sheetData` 和合理的 `dimension`。
 
-最小 `styles.xml` 必须生成，见 [opc.md](opc.md)。默认字体颜色写 `<color rgb="FF000000"/>`，不引用 theme，包里也不生成 theme 部件。给了 `sheets[].pictures` 时按 `insertPicture` 同一套规则写 drawing 与 media。给了 `sheets[].charts` 时按 `insertChart` 同一套规则写 `/xl/charts/chartN.xml`、`xdr:graphicFrame` 和 `dataFrom` 一带单元格，不写 embedding。一张表上的图与图表共用一份 drawing：先写 `pictures`，再写 `charts`。`xdr:cNvPr/@id` 取该表已有全部 `cNvPr` 的最大整数加 1。不要生成透视表、条件格式、图表工作表。create 本期不写列宽、行高、合并。`workbook` 根上或 `cells[]` 上出现 `pictures` / `charts`，或 `sheets[]` 上出现 `kind` / `wrap` / `smartArts`，报 `InvalidField`。`sheets[].kind` 仍拒绝。给了 `workbook.props` 时按 `setProps` / `setCustomProp` 同一套规则写 core / app / custom；省略则仍写空的 `dc:title` 与 `dc:creator` 为 `ooxp`，不写 custom 部件。
+最小 `styles.xml` 必须生成，见 [opc.md](opc.md)。默认字体颜色写 `<color rgb="FF000000"/>`，不引用 theme，包里也不生成 theme 部件。给了 `sheets[].pictures` 时按 `insertPicture` 同一套规则写 drawing 与 media。给了 `sheets[].charts` 时按 `insertChart` 同一套规则写 `/xl/charts/chartN.xml`、`xdr:graphicFrame` 和 `dataFrom` 一带单元格，不写 embedding。一张表上的图与图表共用一份 drawing：先写 `pictures`，再写 `charts`。`xdr:cNvPr/@id` 取该表已有全部 `cNvPr` 的最大整数加 1。不要生成透视表、条件格式、图表工作表。create 本期不写列宽、行高、合并，也不写共享公式或数组公式（`cells[]` 出现 `shared` / `sharedRef` / `array` / `arrayRef` 报 `InvalidField`）。`workbook` 根上或 `cells[]` 上出现 `pictures` / `charts`，或 `sheets[]` 上出现 `kind` / `wrap` / `smartArts`，报 `InvalidField`。`sheets[].kind` 仍拒绝。给了 `workbook.props` 时按 `setProps` / `setCustomProp` 同一套规则写 core / app / custom；省略则仍写空的 `dc:title` 与 `dc:creator` 为 `ooxp`，不写 custom 部件。
 
 ### docx
 
@@ -1115,6 +1117,12 @@ create 与 apply 落盘时先写入目标同目录的临时文件，再改名为
 | `id` | 单元格 id |
 | `value` | 与 create 相同。`null` 表示清空该格的值和公式 |
 | `formula` | 以 `=` 开头。不能与 `value` 同时出现 |
+| `shared` | 可选布尔。`true`：把目标格当共享公式主格，保住或新建一组。`false`：先把该格所在共享组拆成独立公式，再按 `value` / `formula` 写主格 |
+| `sharedRef` | 可选。共享组区域，A1 闭区间。只能与 `formula` 一起出现。目标格必须是该区域左上角 |
+| `array` | 可选布尔。`true`：写成数组公式。`false`：若该格是数组主格，拆成普通公式或值 |
+| `arrayRef` | 可选。数组公式区域，A1 闭区间。只能与 `formula` 一起出现。目标格必须是该区域左上角。给了 `arrayRef` 即视为数组公式，不必再写 `array: true` |
+
+`arrayRef` 与 `sharedRef` 不能同时出现。`shared` 与 `array` 不能同时为 `true`。`value` 不能与 `shared: true`、`array: true`、`sharedRef`、`arrayRef` 同时出现。`shared: false` 不能与 `sharedRef` 同时出现。`array: false` 不能与 `arrayRef` 同时出现。目标格不是 `arrayRef` / `sharedRef` 的左上角时报 `InvalidField`。`arrayRef` / `sharedRef` 非法时报 `InvalidRange`。示例见 `docs/examples/xlsx-apply-formula.json`。
 
 不认识的 `op` 报 `UnsupportedOp`，不要忽略。xlsx 认 `setCell`、`setCellStyle`、`setHeaderFooterText`、`replacePicture`、`insertPicture`、`deletePicture`、`setPictureSize`、`setPictureAnchor`、以及图表 op（`insertChart`、`insertChartSheet`、`deleteChartSheet`、`deleteChart`、`setChartTitle`、`setChartSeries`、`addChartSeries`、`deleteChartSeries`、`setChartType`、`setChartAxisTitle`、`setChartLegend`、`setChartDataLabels`、`insertTrendline`、`setTrendline`、`deleteTrendline`、`insertErrorBars`、`setErrorBars`、`deleteErrorBars`、`setChartSeriesAxis`、`setChartSize`、`setChartAnchor`；不含 `setChartWrap`）、以及 `setProps` / `setCustomProp` / `deleteCustomProp`、以及工作表管理 op（`insertSheet`、`deleteSheet`、`renameSheet`、`moveSheet`、`setSheetHidden`）、以及列宽行高与合并 op（`setColWidth`、`setRowHeight`、`mergeRange`、`unmergeRange`）。docx 认 `setParaText`、`setHeaderFooterDistance`、`setPageMargin`、`setPageSize`、`setColumns`、`setVerticalAlign`、`setLineNumbering`、`setDocGrid`、`setRtlGutter`、`setMirrorMargins`、`setGutterAtTop`、`setHeaderFooterLink`、`insertHeaderFooter`、`setTitlePage`、`setEvenAndOddHeaders`、图片 op（含 `setPictureWrap`，不含 `setPictureAnchor`）、文本框 op、`insertPara` / `deletePara`、表格 op（`insertTable`、`deleteTable`、`insertRow`、`deleteRow`、`insertCol`、`deleteCol`、`mergeCells`、`splitCells`）、修订 op（`acceptRevision`、`rejectRevision`）、超链接与书签 op（`insertHyperlink`、`setHyperlink`、`deleteHyperlink`、`insertBookmark`、`setBookmark`、`deleteBookmark`）、域 op（`insertField`、`setField`、`deleteField`）、目录 op（`insertToc`、`deleteToc`）、公式 op（`insertMath`、`setMath`、`deleteMath`）、内容控件 op（`insertContentControl`、`setContentControl`、`deleteContentControl`）、编号 op（`insertNumbering`、`setNumbering`、`setParaNumbering`）、样式 op（`setStyle`、`setParaStyle`）、直接格式 op（`setParaFormat`、`setRunFormat`）、节结构 op（`insertSection`、`deleteSection`）、脚注尾注 op（`insertFootnote`、`insertEndnote`、`deleteFootnote`、`deleteEndnote`、`setNoteNumbering`）、批注 op（`insertComment`、`deleteComment`、`replyComment`、`setCommentText`、`setCommentMeta`、`setCommentDone`）、图表 op（`insertChart`、`deleteChart`、`setChartTitle`、`setChartSeries`、`addChartSeries`、`deleteChartSeries`、`setChartType`、`setChartAxisTitle`、`setChartLegend`、`setChartDataLabels`、`insertTrendline`、`setTrendline`、`deleteTrendline`、`insertErrorBars`、`setErrorBars`、`deleteErrorBars`、`setChartSeriesAxis`、`setChartSize`、`setChartWrap`；不含 `setChartAnchor`、`insertChartSheet`、`deleteChartSheet`）、以及 SmartArt op（`insertSmartArt`、`deleteSmartArt`、`setSmartArtText`、`addSmartArtPoint`、`deleteSmartArtPoint`、`setSmartArtSize`、`setSmartArtWrap`、`setSmartArtColors`、`setSmartArtStyle`、`setSmartArtLayout`）、以及 OLE op（`insertOle`、`deleteOle`）、以及 `setProtection`、以及 `insertWatermark` / `deleteWatermark`、以及 `setProps` / `setCustomProp` / `deleteCustomProp`。pptx 认 `setShapeText`、`setNotesText`、批注 op（`insertComment`、`deleteComment`、`replyComment`、`setCommentText`、`setCommentMeta`、`setCommentDone`）、`replacePicture`、`insertPicture`、`deletePicture`、`setPictureSize`、`setPicturePos`、以及图表 op（`insertChart`、`deleteChart`、`setChartTitle`、`setChartSeries`、`addChartSeries`、`deleteChartSeries`、`setChartType`、`setChartAxisTitle`、`setChartLegend`、`setChartDataLabels`、`insertTrendline`、`setTrendline`、`deleteTrendline`、`insertErrorBars`、`setErrorBars`、`deleteErrorBars`、`setChartSeriesAxis`、`setChartSize`、`setChartPos`；不含 `setChartWrap`、`setChartAnchor`、`insertChartSheet`、`deleteChartSheet`）、以及 SmartArt op（`insertSmartArt`、`deleteSmartArt`、`setSmartArtText`、`addSmartArtPoint`、`deleteSmartArtPoint`、`setSmartArtSize`、`setSmartArtPos`、`setSmartArtColors`、`setSmartArtStyle`、`setSmartArtLayout`；不含 `setSmartArtWrap`）、以及 `setProps` / `setCustomProp` / `deleteCustomProp`。对不上格式的 op（例如对 pptx 发 `setCell` / `setCellStyle` / `setParaText`，对 xlsx 发 `setPictureWrap`、`setChartWrap` 或 `setHeaderFooterDistance` / `setPageMargin` / `setPageSize` / `setColumns` / `setVerticalAlign` / `setLineNumbering` / `setDocGrid` / `setRtlGutter` / `setMirrorMargins` / `setGutterAtTop` / `setHeaderFooterLink` / `insertHeaderFooter` / `setTitlePage` / `setEvenAndOddHeaders`、文本框、注、批注、SmartArt 的 op、OLE 的 op、`setProtection`、`insertWatermark` / `deleteWatermark`、表格 op、修订 op、超链接与书签 op、域 op、编号 op、样式 op、直接格式 op、节结构 op 或 `setNotesText`，对 docx / pptx 发 `setHeaderFooterText`、`insertChartSheet`、`deleteChartSheet`、`insertSheet`、`deleteSheet`、`renameSheet`、`moveSheet`、`setSheetHidden`、`setCellStyle`、`setColWidth`、`setRowHeight`、`mergeRange` 或 `unmergeRange`，对 docx 发 `setPictureAnchor` / `setChartAnchor` / `setSmartArtPos` / `setNotesText`，对 pptx 发 `setPictureWrap` / `setPictureAnchor` / `setChartWrap` / `setChartAnchor` / `setSmartArtWrap`，或对 docx / xlsx 发 `setPicturePos` / `setChartPos` / `setSmartArtPos` / `setNotesText`）报 `InvalidField`。
 
@@ -1217,7 +1225,7 @@ create 与 apply 落盘时先写入目标同目录的临时文件，再改名为
 | `id` | 工作表 id `sheet:{name}` |
 | `range` | 必须。A1 区域，例如 `A1:B2`。单格（`A1` 或 `A1:A1`）报 `InvalidField` |
 
-内容留在左上角：范围内其余格子按 `setCell` 清空值和公式，保留 `s`。与新区域相交的已有 `<mergeCell>` 先删掉再写入这一条。`mergeCells/@count` 写成子元素个数；删光则去掉 `mergeCells`。插入位置在 `sheetData` 之后、`phoneticPr` 等后续元素之前（§A.2 `CT_Worksheet`）。范围内若有共享公式主格且仍有从属格，报 `NotImplemented`，不写文件。找不到工作表报 `IdNotFound`。id 不是工作表 id 报 `InvalidId`。只能改 `worksheet`。`range` 非法报 `InvalidRange`。docx / pptx 上发此 op 报 `InvalidField`。xlsx 上仍不要发 Word 的 `mergeCells`。不标重算。create 本期不写合并。
+内容留在左上角：范围内其余格子按 `setCell` 清空值和公式，保留 `s`。与新区域相交的已有 `<mergeCell>` 先删掉再写入这一条。`mergeCells/@count` 写成子元素个数；删光则去掉 `mergeCells`。插入位置在 `sheetData` 之后、`phoneticPr` 等后续元素之前（§A.2 `CT_Worksheet`）。范围内若有共享公式主格且仍有从属格、或数组公式主格、或数据表公式，报 `NotImplemented`，不写文件。找不到工作表报 `IdNotFound`。id 不是工作表 id 报 `InvalidId`。只能改 `worksheet`。`range` 非法报 `InvalidRange`。docx / pptx 上发此 op 报 `InvalidField`。xlsx 上仍不要发 Word 的 `mergeCells`。不标重算。create 本期不写合并。
 
 ### unmergeRange
 
@@ -1337,7 +1345,15 @@ create 的 `document.watermarks` 复用同一套规则。不要 `id`。
 
 省略 `r` 的行和单元格：SpreadsheetML 允许 `<row>` 与 `<c>` 不写 `r`，编号由出现顺序推出。apply 在改这张表之前，先把这类隐式编号按顺序算出来写成显式 `r`。不这样做，后面插入新行会让它们的编号整体漂移，等于悄悄改了别的数据。这是语义等价的改写，Office 打开看不出区别。
 
-共享公式：主单元格的 `<f>` 带 `ref` 和 `si`，从属单元格只带 `si`。对**主单元格**发 `setCell`（写值、写公式、清空都算）会让从属单元格的 `si` 失去定义，Office 打开时报需要修复，因此第一期直接报 `NotImplemented`，不写文件。想改主单元格，先把同组的从属单元格逐个改成独立公式。对**从属单元格**发 `setCell` 是允许的，主单元格不受影响。库不做公式引用平移，这属于计算引擎的活。
+共享公式（§18.3.1.40，`t="shared"`）：主格的 `<f>` 带 `ref` 和 `si`，从属格只带 `si`。对**从属格**发 `setCell`（不带 `shared` / `sharedRef`）仍写成独立 `<f>`，主格不动。对**主格**只给 `formula`、不给 `shared: false`：保住整组，只改主格 `<f>` 文本，保留 `t` / `si` / `ref`，从属格仍是空的共享 `<f>`。给了 `sharedRef` 则按新区域改 `ref`：新范围内缺的从属格补空的 `<f t="shared" si>`；被踢出的格子按相对位移展开成独立公式；新范围内已有独立公式的格子改成该组从属格。新区域缩成单格则主格改成普通公式。对主格给 `shared: false`，或写 `value` / 清空：先拆组（每个从属格写成展开后的独立 `<f>`），再写主格。给 `formula` 与 `sharedRef`、且目标还不是该组主格：新建一组，`si` 取本表未用的下一个非负整数。新 `sharedRef` / `arrayRef` 盖住其它共享组、数组或数据表时报 `NotImplemented`。
+
+相对展开：拆组与 inspect 从属格时，按主格与目标格的行列差平移公式里的 A1 单元格与 A1 区域（尊重 `$`）。工作表前缀、定义名、结构化表引用、函数名、字符串原样留下。出界写成 `#REF!`。这不是插行时改其它格子引用的引擎；插行导致的引用漂移仍然要么拒绝、要么只改点名格。
+
+数组公式（`t="array"`）：给 `formula` 与 `arrayRef`（或 `array: true`）时，在左上角写 `<f t="array" ref="…">`。范围内其它格不写公式；还不存在则插入只有 `r` 的 `<c>`。对已有数组主格只给 `formula`、不给 `array: false`：保留 `t="array"` 与现有 `ref`，只改公式文本。对数组主格写 `value` / 清空 / `array: false`：主格改成普通值或普通公式，范围内其它格留下缓存值。对数组范围内非主格发 `setCell` 报 `NotImplemented`。
+
+数据表公式（`t="dataTable"`）：对主格或 `ref` 范围内的格子发 `setCell` 报 `NotImplemented`。本期不读写数据表。
+
+create 本期仍只写普通 `<f>`，不写 `t="shared"` / `t="array"`。
 
 清空：去掉 `<f>`、`<v>`、`<is>`，保留 `<c>` 上的 `r`、`s` 以及不认识的属性。这样常见数字格式和字体还能在。若清空后 `<c>` 只剩 `r`（没有 `s` 也没有其他属性），可以把整个 `<c>` 删掉。目标格在 XML 里还不存在时，清空是空操作，仍计入 `opsApplied`；这不是错误，因为 `setCell` 对空格子本来就不报 `IdNotFound`。
 

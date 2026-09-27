@@ -619,8 +619,23 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::EmptyCustomPropName => "custom property name must be a non-empty string".into(),
         ErrorKind::CustomPropNotFound { id } => format!("custom property not found: {id}"),
         ErrorKind::SharedFormulaMaster { cell } => format!(
-            "{cell} is a shared formula master; changing it would leave dependents with the same si without a formula. Change those cells to independent formulas first"
+            "{cell} is a shared formula master with dependents; mergeRange cannot cover it"
         ),
+        ErrorKind::DataTableFormula { cell } => format!(
+            "{cell} is part of a data table formula, which this version does not change"
+        ),
+        ErrorKind::ArrayFormulaPart { cell } => format!(
+            "{cell} is inside an array formula; change the top-left master cell instead"
+        ),
+        ErrorKind::FormulaGroupOverlap { cell } => format!(
+            "{cell} already belongs to another shared, array, or data table formula"
+        ),
+        ErrorKind::FormulaRangeNotTopLeft => {
+            "id must be the top-left cell of sharedRef or arrayRef".into()
+        }
+        ErrorKind::SharedNeedsRef => {
+            "shared: true on a cell that is not already a shared master requires sharedRef".into()
+        }
         ErrorKind::NeedAtLeastOneSheet => "At least one worksheet is required".into(),
         ErrorKind::LastVisibleSheet => {
             "Cannot hide or delete the last visible sheet".into()

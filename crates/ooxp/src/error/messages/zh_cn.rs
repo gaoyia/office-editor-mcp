@@ -525,8 +525,23 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::EmptyCustomPropName => "自定义属性 name 必须是非空字符串".into(),
         ErrorKind::CustomPropNotFound { id } => format!("找不到自定义属性：{id}"),
         ErrorKind::SharedFormulaMaster { cell } => format!(
-            "{cell} 是共享公式的主格，改它会让引用同一 si 的单元格失去公式；请先把那些单元格改成各自独立的公式"
+            "{cell} 是仍有从属格的共享公式主格，mergeRange 不能盖住它"
         ),
+        ErrorKind::DataTableFormula { cell } => {
+            format!("{cell} 属于数据表公式，本期不能改")
+        }
+        ErrorKind::ArrayFormulaPart { cell } => {
+            format!("{cell} 落在数组公式范围内，请改左上角主格")
+        }
+        ErrorKind::FormulaGroupOverlap { cell } => {
+            format!("{cell} 已经属于另一组共享公式、数组公式或数据表公式")
+        }
+        ErrorKind::FormulaRangeNotTopLeft => {
+            "id 必须是 sharedRef 或 arrayRef 的左上角".into()
+        }
+        ErrorKind::SharedNeedsRef => {
+            "对还不是共享主格的格子写 shared: true 时必须给 sharedRef".into()
+        }
         ErrorKind::NeedAtLeastOneSheet => "至少需要一张工作表".into(),
         ErrorKind::LastVisibleSheet => "不能隐藏或删除最后一张可见工作表".into(),
         ErrorKind::MoveSheetAfterSelf => "moveSheet 的 after 不能是自己".into(),

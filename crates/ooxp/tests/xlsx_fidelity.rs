@@ -172,17 +172,42 @@ fn clearing_cell_in_row_without_r_takes_effect() {
 }
 
 #[test]
-fn shared_formula_master_is_rejected() {
+fn shared_formula_master_keeps_group() {
     let src = write_sample("shared-master");
     let out = tmp_dir().join("shared-master-out.xlsx");
-    let err = apply(
+    apply(
         &src,
         &out,
         json!([{ "op": "setCell", "id": "cell:Sheet1!B1", "formula": "=A1*3" }]),
     )
+    .unwrap();
+
+    let data = part(&out, "xl/worksheets/sheet1.xml");
+    let data = sheet_data_of(&data);
+    assert!(
+        data.contains(r#"<f t="shared" ref="B1:B2" si="0">A1*3</f>"#),
+        "主格公式没改或拆组了：{data}"
+    );
+    assert!(
+        data.contains(r#"<f t="shared" si="0"/>"#),
+        "从属格没保住：{data}"
+    );
+}
+
+#[test]
+fn data_table_formula_is_rejected() {
+    let src = write_with_sheet1(
+        "dt",
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData><row r="1"><c r="A1"><v>1</v></c><c r="B1"><f t="dataTable" ref="B1:B2" dt2D="0" dtr="0" r1="A1"/></c></row><row r="2"><c r="B2"><v>2</v></c></row></sheetData></worksheet>"#,
+    );
+    let out = tmp_dir().join("dt-out.xlsx");
+    let err = apply(
+        &src,
+        &out,
+        json!([{ "op": "setCell", "id": "cell:Sheet1!B1", "formula": "=A1" }]),
+    )
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::NotImplemented);
-    assert_eq!(err.field_path(), Some("ops[0].id"));
     assert!(!out.exists() || std::fs::read(&out).unwrap() == std::fs::read(&src).unwrap());
 }
 
@@ -346,7 +371,10 @@ fn inspect_reads_shared_string_and_shared_formula() {
     };
     assert_eq!(find("cell:Sheet1!C1")["value"], "共享文本");
     assert_eq!(find("cell:Sheet1!B1")["formula"], "=A1*2");
+    assert_eq!(find("cell:Sheet1!B1")["shared"], true);
+    assert_eq!(find("cell:Sheet1!B1")["sharedRef"], "B1:B2");
     assert_eq!(find("cell:Sheet1!B2")["shared"], true);
+    assert_eq!(find("cell:Sheet1!B2")["formula"], "=A2*2");
     assert_eq!(find("cell:Sheet1!A3")["value"], 12);
 }
 

@@ -1,5 +1,6 @@
 //! 按 id 改单元格或工作表图，改单元格时标记打开时重算。
 
+use super::formula;
 use super::request::{SetCellOp, SetCellValue, XlsxOp};
 use crate::error::{Error, ErrorKind, IdReason, RelSource};
 use crate::opc::{self, ContentTypes, Package, Relationships};
@@ -553,16 +554,108 @@ pub(crate) fn apply_set_cell(
     op: &SetCellOp,
     op_index: usize,
 ) -> Result<(), Error> {
-    reject_shared_formula_master(worksheet, cell, op_index)?;
-    let sheet_data = ensure_sheet_data(worksheet);
-    if matches!(&op.value, Some(SetCellValue::Null)) {
-        clear_cell(sheet_data, cell);
-        expand_dimension(worksheet, cell);
+    let index = worksheet
+        .child_by_local("sheetData")
+        .map(formula::index_sheet)
+        .unwrap_or_default();
+
+    if let Some(formula::Occupied::DataTable { .. }) = formula::occupy_at(&index, cell) {
+        return Err(Error::with_path(
+            ErrorKind::DataTableFormula {
+                cell: a1::format_cell(cell.col, cell.row),
+            },
+            format!("ops[{op_index}].id"),
+        ));
+    }
+
+    let array_master = match formula::occupy_at(&index, cell) {
+        Some(formula::Occupied::Array { master }) => Some(master),
+        _ => None,
+    };
+    let shared_here = match formula::occupy_at(&index, cell) {
+        Some(formula::Occupied::Shared { si, master }) => Some((si, master)),
+        _ => None,
+    };
+
+    let wants_array = op.array == Some(true) || op.array_ref.is_some();
+    let wants_drop_array = op.array == Some(false);
+    let wants_explode = op.shared == Some(false);
+    let wants_shared_keep = op.shared == Some(true) || op.shared_ref.is_some();
+    let is_array_master = array_master == Some(cell);
+    let is_shared_master = shared_here
+        .as_ref()
+        .map(|(_, master)| *master == cell)
+        .unwrap_or(false);
+
+    if let Some(master) = array_master {
+        if master != cell {
+            return Err(Error::with_path(
+                ErrorKind::ArrayFormulaPart {
+                    cell: a1::format_cell(cell.col, cell.row),
+                },
+                format!("ops[{op_index}].id"),
+            ));
+        }
+    }
+
+    if wants_array {
+        let (start, end) = op
+            .array_ref
+            .or_else(|| {
+                index
+                    .arrays
+                    .iter()
+                    .find(|g| g.master == cell)
+                    .map(|g| (g.start, g.end))
+            })
+            .unwrap_or((cell, cell));
+        return write_array_formula(worksheet, cell, start, end, op, &index, op_index);
+    }
+
+    if is_array_master && op.formula.is_some() && !wants_drop_array {
+        let g = index.arrays.iter().find(|g| g.master == cell).unwrap();
+        return write_array_formula(worksheet, cell, g.start, g.end, op, &index, op_index);
+    }
+
+    if is_array_master {
+        apply_plain_or_clear(worksheet, cell, op);
         return Ok(());
     }
-    let c = ensure_cell(sheet_data, cell);
-    fill_cell(c, op);
-    expand_dimension(worksheet, cell);
+
+    if let Some((_, master)) = &shared_here {
+        if *master != cell {
+            if wants_shared_keep {
+                return Err(Error::with_path(
+                    ErrorKind::FormulaRangeNotTopLeft,
+                    format!("ops[{op_index}].id"),
+                ));
+            }
+            apply_plain_or_clear(worksheet, cell, op);
+            return Ok(());
+        }
+    }
+
+    let explode_then_write =
+        wants_explode || (is_shared_master && op.value.is_some() && !wants_shared_keep);
+
+    if explode_then_write {
+        if let Some((si, master)) = shared_here {
+            let body = index
+                .shared
+                .get(&si)
+                .map(|g| g.formula.clone())
+                .unwrap_or_default();
+            explode_shared_group(worksheet, &si, master, &body);
+        }
+        apply_plain_or_clear(worksheet, cell, op);
+        return Ok(());
+    }
+
+    if wants_shared_keep || (is_shared_master && op.formula.is_some()) {
+        return write_shared_formula(worksheet, cell, op, &index, is_shared_master, op_index);
+    }
+
+    apply_plain_or_clear(worksheet, cell, op);
     Ok(())
 }
 
@@ -580,42 +673,344 @@ pub(crate) fn write_json_cell(
             id: String::new(),
             value: Some(parsed),
             formula: None,
+            shared: None,
+            shared_ref: None,
+            array: None,
+            array_ref: None,
         },
         op_index,
     )
 }
 
-/// 共享公式的主格带 `ref` 和 `si`，从属格只带 `si`（§18.3.1.40）。改写或清空主格会让从属格
-/// 的 `si` 失去定义，Excel 打开时报需要修复。第一期不做公式引用平移，因此直接拒绝这条 op。
-pub(crate) fn reject_shared_formula_master(
-    worksheet: &Element,
+fn apply_plain_or_clear(worksheet: &mut Element, cell: a1::CellRef, op: &SetCellOp) {
+    let sheet_data = ensure_sheet_data(worksheet);
+    if matches!(&op.value, Some(SetCellValue::Null)) {
+        clear_cell(sheet_data, cell);
+        expand_dimension(worksheet, cell);
+        return;
+    }
+    let c = ensure_cell(sheet_data, cell);
+    fill_cell(c, op);
+    expand_dimension(worksheet, cell);
+}
+
+fn write_array_formula(
+    worksheet: &mut Element,
     cell: a1::CellRef,
+    start: a1::CellRef,
+    end: a1::CellRef,
+    op: &SetCellOp,
+    index: &formula::FormulaIndex,
+    op_index: usize,
+) -> Result<(), Error> {
+    if cell != start {
+        return Err(Error::with_path(
+            ErrorKind::FormulaRangeNotTopLeft,
+            format!("ops[{op_index}].id"),
+        ));
+    }
+    let body = formula::formula_body(op.formula.as_deref().unwrap_or("")).to_string();
+    reject_overlap(index, start, end, SkipGroup::Array(cell), op_index)?;
+    let refer = a1::format_range(start, end);
+    {
+        let sheet_data = ensure_sheet_data(worksheet);
+        for row in start.row..=end.row {
+            for col in start.col..=end.col {
+                let here = a1::CellRef { col, row };
+                let c = ensure_cell(sheet_data, here);
+                if here == cell {
+                    write_formula_elem(c, &body, FormulaWrite::Array { refer: &refer });
+                } else {
+                    strip_formula_and_value(c);
+                }
+            }
+        }
+    }
+    expand_dimension(worksheet, start);
+    expand_dimension(worksheet, end);
+    Ok(())
+}
+
+fn write_shared_formula(
+    worksheet: &mut Element,
+    cell: a1::CellRef,
+    op: &SetCellOp,
+    index: &formula::FormulaIndex,
+    is_shared_master: bool,
+    op_index: usize,
+) -> Result<(), Error> {
+    if !is_shared_master && op.shared_ref.is_none() {
+        return Err(Error::with_path(
+            ErrorKind::SharedNeedsRef,
+            format!("ops[{op_index}]"),
+        ));
+    }
+    let existing = index.shared.values().find(|g| g.master == cell);
+    let (start, end) = op
+        .shared_ref
+        .or_else(|| existing.map(|g| (g.start, g.end)))
+        .unwrap_or((cell, cell));
+    if cell != start {
+        return Err(Error::with_path(
+            ErrorKind::FormulaRangeNotTopLeft,
+            format!("ops[{op_index}].id"),
+        ));
+    }
+    let body = op
+        .formula
+        .as_deref()
+        .map(formula::formula_body)
+        .map(str::to_string)
+        .or_else(|| existing.map(|g| g.formula.clone()))
+        .unwrap_or_default();
+    let si = existing.map(|g| g.si.clone()).unwrap_or_else(|| {
+        worksheet
+            .child_by_local("sheetData")
+            .map(formula::next_si)
+            .unwrap_or(0)
+            .to_string()
+    });
+    let same_range = existing
+        .map(|g| g.start == start && g.end == end)
+        .unwrap_or(false);
+    if same_range {
+        let refer = a1::format_range(start, end);
+        let sheet_data = ensure_sheet_data(worksheet);
+        let c = ensure_cell(sheet_data, cell);
+        if let Some(f) = c.child_by_local_mut("f") {
+            f.set_text(&body);
+            if f.attr("t") != Some("shared") {
+                f.set_attr("t", "shared");
+            }
+            f.set_attr("si", &si);
+            f.set_attr("ref", refer);
+        } else {
+            write_formula_elem(
+                c,
+                &body,
+                FormulaWrite::Shared {
+                    si: &si,
+                    refer: Some(&refer),
+                },
+            );
+        }
+        strip_value_only(c);
+        expand_dimension(worksheet, cell);
+        return Ok(());
+    }
+    reject_overlap(index, start, end, SkipGroup::Shared(&si), op_index)?;
+    if let Some(old) = existing {
+        let members = worksheet
+            .child_by_local("sheetData")
+            .map(|sd| formula::shared_members(sd, &old.si))
+            .unwrap_or_default();
+        for m in members {
+            if m != cell && !a1::in_range(m, start, end) {
+                let shifted = formula::shift_a1_formula(&old.formula, old.master, m);
+                let sheet_data = ensure_sheet_data(worksheet);
+                let c = ensure_cell(sheet_data, m);
+                write_formula_elem(c, &shifted, FormulaWrite::Normal);
+            }
+        }
+    }
+    if start == end {
+        apply_plain_or_clear(worksheet, cell, op);
+        return Ok(());
+    }
+    let refer = a1::format_range(start, end);
+    {
+        let sheet_data = ensure_sheet_data(worksheet);
+        for row in start.row..=end.row {
+            for col in start.col..=end.col {
+                let here = a1::CellRef { col, row };
+                let c = ensure_cell(sheet_data, here);
+                if here == cell {
+                    write_formula_elem(
+                        c,
+                        &body,
+                        FormulaWrite::Shared {
+                            si: &si,
+                            refer: Some(&refer),
+                        },
+                    );
+                } else {
+                    write_formula_elem(
+                        c,
+                        "",
+                        FormulaWrite::Shared {
+                            si: &si,
+                            refer: None,
+                        },
+                    );
+                }
+            }
+        }
+    }
+    expand_dimension(worksheet, start);
+    expand_dimension(worksheet, end);
+    Ok(())
+}
+
+fn explode_shared_group(worksheet: &mut Element, si: &str, master: a1::CellRef, body: &str) {
+    let members = worksheet
+        .child_by_local("sheetData")
+        .map(|sd| formula::shared_members(sd, si))
+        .unwrap_or_default();
+    let sheet_data = ensure_sheet_data(worksheet);
+    for m in members {
+        if m == master {
+            continue;
+        }
+        let shifted = formula::shift_a1_formula(body, master, m);
+        let c = ensure_cell(sheet_data, m);
+        write_formula_elem(c, &shifted, FormulaWrite::Normal);
+    }
+}
+
+enum SkipGroup<'a> {
+    Shared(&'a str),
+    Array(a1::CellRef),
+}
+
+fn reject_overlap(
+    index: &formula::FormulaIndex,
+    start: a1::CellRef,
+    end: a1::CellRef,
+    skip: SkipGroup<'_>,
+    op_index: usize,
+) -> Result<(), Error> {
+    for row in start.row..=end.row {
+        for col in start.col..=end.col {
+            let here = a1::CellRef { col, row };
+            match formula::occupy_at(index, here) {
+                Some(formula::Occupied::DataTable { .. }) => {
+                    return Err(Error::with_path(
+                        ErrorKind::FormulaGroupOverlap {
+                            cell: a1::format_cell(col, row),
+                        },
+                        format!("ops[{op_index}].id"),
+                    ));
+                }
+                Some(formula::Occupied::Array { master }) => {
+                    let ok = matches!(skip, SkipGroup::Array(m) if m == master);
+                    if !ok {
+                        return Err(Error::with_path(
+                            ErrorKind::FormulaGroupOverlap {
+                                cell: a1::format_cell(col, row),
+                            },
+                            format!("ops[{op_index}].id"),
+                        ));
+                    }
+                }
+                Some(formula::Occupied::Shared { si, .. }) => {
+                    let ok = matches!(skip, SkipGroup::Shared(s) if s == si);
+                    if !ok {
+                        return Err(Error::with_path(
+                            ErrorKind::FormulaGroupOverlap {
+                                cell: a1::format_cell(col, row),
+                            },
+                            format!("ops[{op_index}].id"),
+                        ));
+                    }
+                }
+                None => {}
+            }
+        }
+    }
+    Ok(())
+}
+
+enum FormulaWrite<'a> {
+    Normal,
+    Shared { si: &'a str, refer: Option<&'a str> },
+    Array { refer: &'a str },
+}
+
+fn strip_formula_and_value(c: &mut Element) {
+    c.children.retain(|n| match n {
+        Node::Element(e) => !matches!(e.local_name(), "f" | "v" | "is"),
+        Node::Text(_) => true,
+    });
+    c.remove_attr("t");
+}
+
+fn strip_value_only(c: &mut Element) {
+    c.children.retain(|n| match n {
+        Node::Element(e) => !matches!(e.local_name(), "v" | "is"),
+        Node::Text(_) => true,
+    });
+}
+
+fn write_formula_elem(c: &mut Element, body: &str, kind: FormulaWrite<'_>) {
+    strip_formula_and_value(c);
+    let mut f = Element::new("f");
+    match kind {
+        FormulaWrite::Normal => {}
+        FormulaWrite::Shared { si, refer } => {
+            f.set_attr("t", "shared");
+            f.set_attr("si", si);
+            if let Some(r) = refer {
+                f.set_attr("ref", r);
+            }
+        }
+        FormulaWrite::Array { refer } => {
+            f.set_attr("t", "array");
+            f.set_attr("ref", refer);
+        }
+    }
+    if !body.is_empty() {
+        f.set_text(body);
+    }
+    c.children.insert(0, Node::Element(f));
+}
+
+/// 合并区域碰到共享主格、数组或数据表时拒绝，避免 Excel 修复。
+pub(crate) fn reject_merge_formula_conflicts(
+    worksheet: &Element,
+    start: a1::CellRef,
+    end: a1::CellRef,
     op_index: usize,
 ) -> Result<(), Error> {
     let Some(sheet_data) = worksheet.child_by_local("sheetData") else {
         return Ok(());
     };
-    let Some(target) = find_cell(sheet_data, cell) else {
-        return Ok(());
-    };
-    let Some(f) = target.child_by_local("f") else {
-        return Ok(());
-    };
-    if f.attr("t") != Some("shared") || f.attr("ref").is_none() {
-        return Ok(());
+    let index = formula::index_sheet(sheet_data);
+    for row in start.row..=end.row {
+        for col in start.col..=end.col {
+            let here = a1::CellRef { col, row };
+            match formula::occupy_at(&index, here) {
+                Some(formula::Occupied::DataTable { .. }) => {
+                    return Err(Error::with_path(
+                        ErrorKind::DataTableFormula {
+                            cell: a1::format_cell(col, row),
+                        },
+                        format!("ops[{op_index}].id"),
+                    ));
+                }
+                Some(formula::Occupied::Array { master }) => {
+                    return Err(Error::with_path(
+                        ErrorKind::ArrayFormulaPart {
+                            cell: a1::format_cell(master.col, master.row),
+                        },
+                        format!("ops[{op_index}].id"),
+                    ));
+                }
+                Some(formula::Occupied::Shared { si, master })
+                    if master == here
+                        && formula::has_shared_dependents(sheet_data, &si, master) =>
+                {
+                    return Err(Error::with_path(
+                        ErrorKind::SharedFormulaMaster {
+                            cell: a1::format_cell(master.col, master.row),
+                        },
+                        format!("ops[{op_index}].id"),
+                    ));
+                }
+                Some(formula::Occupied::Shared { .. }) | None => {}
+            }
+        }
     }
-    let Some(si) = f.attr("si") else {
-        return Ok(());
-    };
-    if !has_shared_dependents(sheet_data, si, cell) {
-        return Ok(());
-    }
-    Err(Error::with_path(
-        ErrorKind::SharedFormulaMaster {
-            cell: a1::format_cell(cell.col, cell.row),
-        },
-        format!("ops[{op_index}].id"),
-    ))
+    Ok(())
 }
 
 pub(crate) fn find_cell(sheet_data: &Element, cell: a1::CellRef) -> Option<&Element> {
@@ -630,23 +1025,6 @@ pub(crate) fn find_cell(sheet_data: &Element, cell: a1::CellRef) -> Option<&Elem
         }
     }
     None
-}
-
-fn has_shared_dependents(sheet_data: &Element, si: &str, master: a1::CellRef) -> bool {
-    for row in sheet_data.children_by_local("row") {
-        for c in row.children_by_local("c") {
-            if c.attr("r").and_then(|r| a1::parse_cell(r).ok()) == Some(master) {
-                continue;
-            }
-            let Some(f) = c.child_by_local("f") else {
-                continue;
-            };
-            if f.attr("t") == Some("shared") && f.attr("si") == Some(si) {
-                return true;
-            }
-        }
-    }
-    false
 }
 
 pub(crate) fn ensure_sheet_data(worksheet: &mut Element) -> &mut Element {

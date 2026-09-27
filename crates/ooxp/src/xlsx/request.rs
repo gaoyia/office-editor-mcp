@@ -155,6 +155,10 @@ pub struct SetCellOp {
     pub id: String,
     pub value: Option<SetCellValue>,
     pub formula: Option<String>,
+    pub shared: Option<bool>,
+    pub shared_ref: Option<(a1::CellRef, a1::CellRef)>,
+    pub array: Option<bool>,
+    pub array_ref: Option<(a1::CellRef, a1::CellRef)>,
 }
 
 /// 省略 / `null` / 有值。`null` 表示把该分量重置为默认。
@@ -860,7 +864,20 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<XlsxOp>, Error> {
 }
 
 fn parse_set_cell(obj: &serde_json::Map<String, Value>, i: usize) -> Result<SetCellOp, Error> {
-    deny_keys(obj, i, &["op", "id", "value", "formula"])?;
+    deny_keys(
+        obj,
+        i,
+        &[
+            "op",
+            "id",
+            "value",
+            "formula",
+            "shared",
+            "sharedRef",
+            "array",
+            "arrayRef",
+        ],
+    )?;
     let id = require_id(obj, i)?;
     let has_value = obj.contains_key("value");
     let has_formula = obj.contains_key("formula");
@@ -904,7 +921,86 @@ fn parse_set_cell(obj: &serde_json::Map<String, Value>, i: usize) -> Result<SetC
     } else {
         None
     };
-    Ok(SetCellOp { id, value, formula })
+    let shared = parse_opt_bool(obj, i, "shared")?;
+    let array = parse_opt_bool(obj, i, "array")?;
+    let shared_ref = parse_opt_a1_range(obj, i, "sharedRef")?;
+    let array_ref = parse_opt_a1_range(obj, i, "arrayRef")?;
+    if shared_ref.is_some() && array_ref.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::MutuallyExclusive {
+                a: "sharedRef".into(),
+                b: "arrayRef".into(),
+            },
+            format!("ops[{i}]"),
+        ));
+    }
+    if shared == Some(true) && array == Some(true) {
+        return Err(Error::with_path(
+            ErrorKind::MutuallyExclusive {
+                a: "shared".into(),
+                b: "array".into(),
+            },
+            format!("ops[{i}]"),
+        ));
+    }
+    if shared == Some(false) && shared_ref.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::MutuallyExclusive {
+                a: "shared".into(),
+                b: "sharedRef".into(),
+            },
+            format!("ops[{i}]"),
+        ));
+    }
+    if array == Some(false) && array_ref.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::MutuallyExclusive {
+                a: "array".into(),
+                b: "arrayRef".into(),
+            },
+            format!("ops[{i}]"),
+        ));
+    }
+    if has_value
+        && (shared == Some(true)
+            || array == Some(true)
+            || shared_ref.is_some()
+            || array_ref.is_some())
+    {
+        let b = if shared == Some(true) {
+            "shared"
+        } else if array == Some(true) {
+            "array"
+        } else if shared_ref.is_some() {
+            "sharedRef"
+        } else {
+            "arrayRef"
+        };
+        return Err(Error::with_path(
+            ErrorKind::MutuallyExclusive {
+                a: "value".into(),
+                b: b.into(),
+            },
+            format!("ops[{i}]"),
+        ));
+    }
+    if (shared_ref.is_some() || array_ref.is_some() || array == Some(true)) && formula.is_none() {
+        return Err(Error::with_path(
+            ErrorKind::MissingField {
+                field: "formula".into(),
+            },
+            format!("ops[{i}].formula"),
+        ));
+    }
+    Ok(SetCellOp {
+        id,
+        value,
+        formula,
+        shared,
+        shared_ref,
+        array,
+        array_ref,
+    })
 }
 
 fn parse_set_cell_style(
@@ -1732,6 +1828,45 @@ fn parse_bool_field(v: Option<&Value>, field: &str) -> Result<bool, Error> {
                 expected: TypeName::Boolean,
             },
             format!("scope.{field}"),
+        )),
+    }
+}
+
+fn parse_opt_bool(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+    field: &str,
+) -> Result<Option<bool>, Error> {
+    match obj.get(field) {
+        None => Ok(None),
+        Some(Value::Bool(b)) => Ok(Some(*b)),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::Boolean,
+            },
+            format!("ops[{i}].{field}"),
+        )),
+    }
+}
+
+fn parse_opt_a1_range(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+    field: &str,
+) -> Result<Option<(a1::CellRef, a1::CellRef)>, Error> {
+    match obj.get(field) {
+        None => Ok(None),
+        Some(Value::String(s)) => {
+            let (start, end) = a1::parse_range(s).map_err(|e| e.at(format!("ops[{i}].{field}")))?;
+            Ok(Some((start, end)))
+        }
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::String,
+            },
+            format!("ops[{i}].{field}"),
         )),
     }
 }

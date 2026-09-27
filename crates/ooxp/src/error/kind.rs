@@ -393,6 +393,11 @@ define_error_kinds! {
     EmptyCustomPropName => vec![Self::EmptyCustomPropName],
     CustomPropNotFound { id: String } => vec![Self::CustomPropNotFound { id: "prop:Editor".into() }],
     SharedFormulaMaster { cell: String } => vec![Self::SharedFormulaMaster { cell: "A1".into() }],
+    DataTableFormula { cell: String } => vec![Self::DataTableFormula { cell: "A1".into() }],
+    ArrayFormulaPart { cell: String } => vec![Self::ArrayFormulaPart { cell: "A1".into() }],
+    FormulaGroupOverlap { cell: String } => vec![Self::FormulaGroupOverlap { cell: "A1".into() }],
+    FormulaRangeNotTopLeft => vec![Self::FormulaRangeNotTopLeft],
+    SharedNeedsRef => vec![Self::SharedNeedsRef],
     NeedAtLeastOneSheet => vec![Self::NeedAtLeastOneSheet],
     LastVisibleSheet => vec![Self::LastVisibleSheet],
     MoveSheetAfterSelf => vec![Self::MoveSheetAfterSelf],
@@ -861,6 +866,8 @@ impl ErrorKind {
             | Self::ActionNotForFormat { .. }
             | Self::ScopeFieldRequires { .. }
             | Self::SetCellNeedsValueOrFormula
+            | Self::FormulaRangeNotTopLeft
+            | Self::SharedNeedsRef
             | Self::FormulaMustStartWithEquals
             | Self::InvalidCellValue
             | Self::OpRequiresField { .. }
@@ -1027,6 +1034,9 @@ impl ErrorKind {
             | Self::CustomPropNotFound { .. } => IdNotFound,
             Self::ScopeRequired { .. } => ScopeRequired,
             Self::SharedFormulaMaster { .. }
+            | Self::DataTableFormula { .. }
+            | Self::ArrayFormulaPart { .. }
+            | Self::FormulaGroupOverlap { .. }
             | Self::InkComment { .. }
             | Self::SheetStillReferenced { .. }
             | Self::DialogOrMacroSheet

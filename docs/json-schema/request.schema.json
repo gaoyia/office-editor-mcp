@@ -733,7 +733,11 @@
         "formula": {
           "type": "string",
           "pattern": "^="
-        }
+        },
+        "shared": { "type": "boolean" },
+        "sharedRef": { "type": "string", "minLength": 1 },
+        "array": { "type": "boolean" },
+        "arrayRef": { "type": "string", "minLength": 1 }
       },
       "oneOf": [
         { "required": ["value"] },

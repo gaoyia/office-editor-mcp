@@ -9,6 +9,7 @@ use crate::xml::{self, Element};
 
 use super::a1;
 use super::chart;
+use super::formula;
 use super::hf;
 use super::picture;
 use super::style;
@@ -293,6 +294,7 @@ fn inspect_cells(
     let Some(sheet_data) = root.child_by_local("sheetData") else {
         return Ok((Vec::new(), false, range_norm));
     };
+    let index = formula::index_sheet(sheet_data);
 
     let mut cells = Vec::new();
     let mut truncated = false;
@@ -311,7 +313,7 @@ fn inspect_cells(
                 truncated = true;
                 break 'rows;
             }
-            cells.push(cell_to_json(c, sheet_name, sst, styles)?);
+            cells.push(cell_to_json(c, sheet_name, sst, styles, &index)?);
         }
     }
     Ok((cells, truncated, range_norm))
@@ -322,6 +324,7 @@ fn cell_to_json(
     sheet_name: &str,
     sst: &[String],
     styles: &style::Stylebook,
+    index: &formula::FormulaIndex,
 ) -> Result<Value, Error> {
     let raw_ref = c.attr("r").unwrap_or("");
     let pref = a1::parse_cell(raw_ref)?;
@@ -333,23 +336,61 @@ fn cell_to_json(
 
     let mut formula = json!(null);
     let mut shared = false;
+    let mut shared_ref: Option<String> = None;
+    let mut array = false;
+    let mut array_ref: Option<String> = None;
+    let mut data_table = false;
     if let Some(f) = f_el {
         let ft = f.attr("t").unwrap_or("");
         let text = f.text_content();
-        if ft == "shared" && text.trim().is_empty() {
-            formula = json!(null);
-            shared = true;
-        } else if !text.trim().is_empty() {
-            let body = text.trim();
-            let shown = if body.starts_with('=') {
-                body.to_string()
-            } else {
-                format!("={body}")
-            };
-            formula = json!(shown);
-            if ft == "shared" {
+        match ft {
+            "shared" => {
                 shared = true;
+                if let Some(g) = f.attr("si").and_then(|si| index.shared.get(si)) {
+                    if g.master == pref {
+                        shared_ref = Some(a1::format_range(g.start, g.end));
+                        if !g.formula.trim().is_empty() {
+                            formula = json!(formula::shown_formula(&g.formula));
+                        } else if !text.trim().is_empty() {
+                            formula = json!(formula::shown_formula(&text));
+                        }
+                    } else if !g.formula.trim().is_empty() {
+                        let shifted = formula::shift_a1_formula(&g.formula, g.master, pref);
+                        formula = json!(formula::shown_formula(&shifted));
+                    }
+                } else if !text.trim().is_empty() {
+                    formula = json!(formula::shown_formula(&text));
+                }
             }
+            "array" => {
+                array = true;
+                if let Some(g) = index.arrays.iter().find(|g| g.master == pref) {
+                    array_ref = Some(a1::format_range(g.start, g.end));
+                    if !g.formula.trim().is_empty() {
+                        formula = json!(formula::shown_formula(&g.formula));
+                    }
+                } else if !text.trim().is_empty() {
+                    formula = json!(formula::shown_formula(&text));
+                    array_ref = f
+                        .attr("ref")
+                        .and_then(|r| a1::parse_range(r).ok())
+                        .map(|(a, b)| a1::format_range(a, b));
+                }
+            }
+            "dataTable" => {
+                data_table = true;
+                if !text.trim().is_empty() {
+                    formula = json!(formula::shown_formula(&text));
+                }
+            }
+            _ if !text.trim().is_empty() => {
+                formula = json!(formula::shown_formula(&text));
+            }
+            _ => {}
+        }
+    } else if let Some(formula::Occupied::Array { master }) = formula::occupy_at(index, pref) {
+        if master != pref {
+            array = true;
         }
     }
 
@@ -371,8 +412,20 @@ fn cell_to_json(
         "formula": formula,
     });
     style::attach_style(&mut obj, c, styles);
-    if shared && formula.is_null() {
+    if array {
+        obj["array"] = json!(true);
+    }
+    if let Some(r) = array_ref {
+        obj["arrayRef"] = json!(r);
+    }
+    if shared {
         obj["shared"] = json!(true);
+    }
+    if let Some(r) = shared_ref {
+        obj["sharedRef"] = json!(r);
+    }
+    if data_table {
+        obj["dataTable"] = json!(true);
     }
     Ok(obj)
 }

@@ -235,11 +235,7 @@ pub(crate) fn apply_merge_range(
             format!("ops[{op_index}].range"),
         ));
     }
-    for row in start.row..=end.row {
-        for col in start.col..=end.col {
-            apply::reject_shared_formula_master(worksheet, CellRef { col, row }, op_index)?;
-        }
-    }
+    apply::reject_merge_formula_conflicts(worksheet, start, end, op_index)?;
     {
         let sheet_data = apply::ensure_sheet_data(worksheet);
         for row in start.row..=end.row {

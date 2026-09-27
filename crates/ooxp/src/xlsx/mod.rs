@@ -5,6 +5,7 @@ mod apply;
 mod chart;
 mod chartsheet;
 mod create;
+mod formula;
 mod hf;
 mod inspect;
 mod layout;

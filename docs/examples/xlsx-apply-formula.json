@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "C:\\data\\book.xlsx",
+  "output": "C:\\data\\book.formula.xlsx",
+  "ops": [
+    { "op": "setCell", "id": "cell:Sheet1!B1", "formula": "=A1*2", "sharedRef": "B1:B2" },
+    { "op": "setCell", "id": "cell:Sheet1!C1", "formula": "=A1:A2", "arrayRef": "C1:C2" }
+  ]
+}

@@ -8,7 +8,29 @@ pub struct CellRef {
     pub row: u32,
 }
 
+/// 带 `$` 的 A1 引用，供共享公式相对展开使用。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct AbsCellRef {
+    pub col: u32,
+    pub row: u32,
+    pub col_abs: bool,
+    pub row_abs: bool,
+}
+
+impl AbsCellRef {
+    pub fn cell(self) -> CellRef {
+        CellRef {
+            col: self.col,
+            row: self.row,
+        }
+    }
+}
+
 pub fn parse_cell(input: &str) -> Result<CellRef, Error> {
+    Ok(parse_cell_abs(input)?.cell())
+}
+
+pub fn parse_cell_abs(input: &str) -> Result<AbsCellRef, Error> {
     let s = input.trim();
     if s.is_empty() {
         return Err(Error::new(ErrorKind::InvalidRange {
@@ -17,7 +39,8 @@ pub fn parse_cell(input: &str) -> Result<CellRef, Error> {
     }
     let bytes = s.as_bytes();
     let mut i = 0;
-    if bytes[i] == b'$' {
+    let col_abs = bytes[i] == b'$';
+    if col_abs {
         i += 1;
     }
     let col_start = i;
@@ -32,7 +55,8 @@ pub fn parse_cell(input: &str) -> Result<CellRef, Error> {
         }));
     }
     let col = letters_to_col(&s[col_start..i])?;
-    if i < bytes.len() && bytes[i] == b'$' {
+    let row_abs = i < bytes.len() && bytes[i] == b'$';
+    if row_abs {
         i += 1;
     }
     if i >= bytes.len() || !bytes[i].is_ascii_digit() {
@@ -59,7 +83,61 @@ pub fn parse_cell(input: &str) -> Result<CellRef, Error> {
             reason: RangeReason::ColOutOfRange { col },
         }));
     }
-    Ok(CellRef { col, row })
+    Ok(AbsCellRef {
+        col,
+        row,
+        col_abs,
+        row_abs,
+    })
+}
+
+/// 从 `input[from..]` 解析一个 A1（可带 `$`）。成功返回引用与消费后的字节下标。
+pub fn parse_abs_prefix(input: &str, from: usize) -> Option<(AbsCellRef, usize)> {
+    if from >= input.len() {
+        return None;
+    }
+    let s = &input[from..];
+    let bytes = s.as_bytes();
+    let mut i = 0;
+    let col_abs = bytes[i] == b'$';
+    if col_abs {
+        i += 1;
+        if i >= bytes.len() {
+            return None;
+        }
+    }
+    let col_start = i;
+    while i < bytes.len() && bytes[i].is_ascii_alphabetic() {
+        i += 1;
+    }
+    if i == col_start {
+        return None;
+    }
+    let col = letters_to_col(&s[col_start..i]).ok()?;
+    let row_abs = i < bytes.len() && bytes[i] == b'$';
+    if row_abs {
+        i += 1;
+    }
+    let row_start = i;
+    while i < bytes.len() && bytes[i].is_ascii_digit() {
+        i += 1;
+    }
+    if i == row_start {
+        return None;
+    }
+    let row: u32 = s[row_start..i].parse().ok()?;
+    if row == 0 || row > 1_048_576 || col == 0 || col > 16_384 {
+        return None;
+    }
+    Some((
+        AbsCellRef {
+            col,
+            row,
+            col_abs,
+            row_abs,
+        },
+        from + i,
+    ))
 }
 
 pub fn parse_range(input: &str) -> Result<(CellRef, CellRef), Error> {
@@ -109,6 +187,56 @@ pub fn col_to_letters(mut col: u32) -> String {
 
 pub fn format_cell(col: u32, row: u32) -> String {
     format!("{}{row}", col_to_letters(col))
+}
+
+pub fn format_abs_cell(c: AbsCellRef) -> String {
+    format!(
+        "{}{}{}{}",
+        if c.col_abs { "$" } else { "" },
+        col_to_letters(c.col),
+        if c.row_abs { "$" } else { "" },
+        c.row
+    )
+}
+
+pub fn format_range(start: CellRef, end: CellRef) -> String {
+    if start == end {
+        format_cell(start.col, start.row)
+    } else {
+        format!(
+            "{}:{}",
+            format_cell(start.col, start.row),
+            format_cell(end.col, end.row)
+        )
+    }
+}
+
+/// 相对引用按行列差平移；绝对引用不动。出界返回 `None`。
+pub fn shift_abs(c: AbsCellRef, dcol: i64, drow: i64) -> Option<AbsCellRef> {
+    let col = if c.col_abs {
+        c.col
+    } else {
+        let n = c.col as i64 + dcol;
+        if !(1..=16_384).contains(&n) {
+            return None;
+        }
+        n as u32
+    };
+    let row = if c.row_abs {
+        c.row
+    } else {
+        let n = c.row as i64 + drow;
+        if !(1..=1_048_576).contains(&n) {
+            return None;
+        }
+        n as u32
+    };
+    Some(AbsCellRef {
+        col,
+        row,
+        col_abs: c.col_abs,
+        row_abs: c.row_abs,
+    })
 }
 
 /// 列字母或列区间，例如 `A`、`A:C`。不要带行号。
@@ -172,6 +300,13 @@ mod tests {
         assert_eq!(parse_cell("AA100").unwrap(), CellRef { col: 27, row: 100 });
         assert_eq!(format_cell(27, 100), "AA100");
         assert_eq!(normalize_a1("a1").unwrap(), "A1");
+        let abs = parse_cell_abs("$A$1").unwrap();
+        assert!(abs.col_abs && abs.row_abs);
+        assert_eq!(format_abs_cell(abs), "$A$1");
+        assert_eq!(
+            format_range(CellRef { col: 1, row: 1 }, CellRef { col: 2, row: 2 }),
+            "A1:B2"
+        );
     }
 
     #[test]

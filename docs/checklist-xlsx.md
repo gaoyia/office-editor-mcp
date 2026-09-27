@@ -195,3 +195,15 @@ Office 另存 create 产物是打开冒烟，见 `manual-check/office/cases/opc-
 | Xl3 | 行高 | `setRowHeight` 把第 1 行写成 30 磅后，COM `RowHeight` 约为 30，无修复 |
 | Xl4 | 合并与取消 | `mergeRange` `A1:B2` 后左上角值还在、其余格空、COM 认合并；再 `unmergeRange` 后不再合并，无修复 |
 | Xl5 | 缺字段 | 只给 `op` 与 `id` 的 `setColWidth` 得 `InvalidField`，未写文件。不强制开 Excel |
+
+## 公式结构
+
+用库 create 产物再 apply 写出共享组与数组。脚本 `manual-check/office/cases/xlsx-formula.ps1`。编号用 Xf。
+
+| 序号 | 检查 | 通过标准 |
+| --- | --- | --- |
+| Xf1 | inspect | 共享主格有 `formula`、`shared`、`sharedRef`；从属格 `formula` 为展开后的 A1，且 `shared` 为 `true` |
+| Xf2 | 改主格公式 | 保住共享组，Excel 无修复，从属格打开后重算正确 |
+| Xf3 | 拆组 | `shared: false` 后各格都是独立公式，Excel 无修复 |
+| Xf4 | 数组公式 | `arrayRef` 写入后 Excel 认数组、无修复 |
+| Xf5 | 数组从属格 | 对非主格 `setCell` 得 `NotImplemented`，未写文件。不强制开 Excel |
