@@ -197,6 +197,14 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::InsertSheetNeedsWorkbook => {
                 "insertSheet id must be xlsx:workbook".into()
             }
+            IdReason::InsertDefinedNameNeedsWorkbook => {
+                "insertDefinedName id must be xlsx:workbook".into()
+            }
+            IdReason::DefinedNamePrefix => {
+                "defined name id must be name:n, n starting at 1".into()
+            }
+            IdReason::NameIndexNotInt => "name must be followed by a positive integer".into(),
+            IdReason::NameIndexFromOne => "defined name index starts at 1".into(),
             IdReason::DeleteChartSheetNeedsChartsheet => {
                 "deleteChartSheet id must be a chartsheet sheet:name".into()
             }
@@ -870,6 +878,15 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         }
         ErrorKind::PivotTableNotFound { id } => {
             format!("Pivot table not found: {id}")
+        }
+        ErrorKind::NeedSetDefinedNameField => {
+            "setDefinedName requires a field besides op and id".into()
+        }
+        ErrorKind::InvalidDefinedName { field } => {
+            format!("{field} is not a valid defined name value")
+        }
+        ErrorKind::DefinedNameNotFound { id } => {
+            format!("Defined name not found: {id}")
         }
         ErrorKind::InvalidAlign => {
             "align must be left, center, right, both, distribute, start, or end".into()

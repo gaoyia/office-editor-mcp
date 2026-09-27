@@ -172,6 +172,14 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::InsertSheetNeedsWorkbook => {
                 "insertSheet 的 id 必须是 xlsx:workbook".into()
             }
+            IdReason::InsertDefinedNameNeedsWorkbook => {
+                "insertDefinedName 的 id 必须是 xlsx:workbook".into()
+            }
+            IdReason::DefinedNamePrefix => {
+                "定义名 id 必须是 name:n，n 从 1 起".into()
+            }
+            IdReason::NameIndexNotInt => "name 后面必须是正整数".into(),
+            IdReason::NameIndexFromOne => "定义名序号从 1 起".into(),
             IdReason::DeleteChartSheetNeedsChartsheet => {
                 "deleteChartSheet 的 id 必须是图表工作表 sheet:工作表名".into()
             }
@@ -721,6 +729,13 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             format!("透视表的 {field} 不合法")
         }
         ErrorKind::PivotTableNotFound { id } => format!("找不到透视表：{id}"),
+        ErrorKind::NeedSetDefinedNameField => {
+            "setDefinedName 除 op 与 id 外至少要给一个字段".into()
+        }
+        ErrorKind::InvalidDefinedName { field } => {
+            format!("定义名的 {field} 不合法")
+        }
+        ErrorKind::DefinedNameNotFound { id } => format!("找不到定义名：{id}"),
         ErrorKind::InvalidAlign => {
             "align 必须是 left、center、right、both、distribute、start 或 end".into()
         }

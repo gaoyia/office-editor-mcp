@@ -12,6 +12,7 @@ use super::cf;
 use super::chart;
 use super::formula;
 use super::hf;
+use super::names;
 use super::picture;
 use super::pivot;
 use super::style;
@@ -226,8 +227,14 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     root.insert("id".into(), json!("xlsx:workbook"));
     root.insert("pictureCount".into(), json!(picture_count));
     root.insert("chartCount".into(), json!(chart_count));
+    root.insert("definedNameCount".into(), json!(names::count(&wb.root)));
     root.insert("props".into(), crate::props::inspect(&pkg)?);
     root.insert("sheets".into(), Value::Array(sheet_json));
+    let sheet_names: Vec<String> = sheets.iter().map(|s| s.name.clone()).collect();
+    root.insert(
+        "definedNames".into(),
+        names::inspect(&wb.root, &sheet_names),
+    );
     Ok(Value::Object(root))
 }
 

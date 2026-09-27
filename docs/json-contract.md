@@ -47,6 +47,7 @@ id 是给模型用的字符串，必须能从文件内容稳定算出来，不�
 | 条件格式 | `sheet:{name}/cf:{n}` | `sheet:Sheet1/cf:1` |
 | 工作表表格 | `sheet:{name}/table:{n}` | `sheet:Sheet1/table:1` |
 | 工作表透视表 | `sheet:{name}/pivot:{n}` | `sheet:Sheet1/pivot:1` |
+| 定义名 | `name:{n}` | `name:1` |
 
 `{name}` 是 `workbook.xml` 里 `<sheet name="...">` 的值，不是 `sheetId`，也不是 `r:id`。查找工作表时大小写不敏感，输出 id 时用文件里的原始大小写。
 
@@ -79,6 +80,8 @@ xlsx 页眉页脚是工作表上的 `headerFooter`（ECMA-376 §18.3.1.46），�
 工作表表格是 `/xl/tables/tableN.xml` 加该表 `<tableParts>`（ECMA-376 §18.5.1.2），不是 Word 的 `w:tbl`，也不要套单元格 id。`{n}` 从 1 起，按该表 `<tableParts>/<tablePart>` 的文档顺序。增删之后旧的 `table:{n}` 会变，只够同一次 inspect 之后立刻 apply。不要用 XML `id` 或 `displayName` 编树 id；这两项作为字段出现。`insertSheetTable` 的 `id` 必须是工作表 id `sheet:{name}`。`setSheetTable` / `deleteSheetTable` 的 `id` 必须是表格 id。对单元格 id、图 id、数据验证 id、条件格式 id 或工作表 id 发后两个 op 报 `InvalidId`。只能改 `worksheet`。表上的 `<autoFilter>` 跟表格部件走；工作表级 `<autoFilter>` 见视图计划，本期不列不改。不实现结构化引用求值，也不渲染色阶或表样式。
 
 工作表透视表是 `/xl/pivotTables/pivotTableN.xml` 加该表关系（Type 以 `/pivotTable` 结尾，ECMA-376 §18.10），缓存在 `/xl/pivotCache/`。`{n}` 从 1 起，按该表这些关系的文档顺序。增删之后旧的 `pivot:{n}` 会变，只够同一次 inspect 之后立刻 apply。不要用 `cacheId` 或 `name` 编树 id；这两项作为字段出现。`insertPivotTable` 的 `id` 必须是工作表 id `sheet:{name}`。`setPivotTable` / `deletePivotTable` 的 `id` 必须是透视表 id。对单元格 id、图 id、数据验证 id、条件格式 id、表格 id 或工作表 id 发后两个 op 报 `InvalidId`。只能改 `worksheet`。只读写工作表源（`cacheSource/@type="worksheet"`）。OLAP、外部连接与 consolidation 的缓存不进树、不接受 apply，原样留下。库按源格子抄缓存记录，并标 `refreshOnLoad`，不在库里聚合，也不把合计写进 `sheetData`。透视图表改数仍按已有 `flags.pivot` 拒绝。
+
+定义名是 workbook `<definedNames>/<definedName>`（ECMA-376 §18.2.5）。`{n}` 从 1 起，按该元素的文档顺序。增删之后旧的 `name:{n}` 会变，只够同一次 inspect 之后立刻 apply。不要用 `@name` 编树 id：同一工作簿里表级同名可以并存。`insertDefinedName` 的 `id` 必须是 `xlsx:workbook`。`setDefinedName` / `deleteDefinedName` 的 `id` 必须是定义名 id。对单元格 id、工作表 id、透视表 id 或 `xlsx:workbook` 发后两个 op 报 `InvalidId`。打印区域 `_xlnm.Print_Area` 当普通定义名。公式当字符串，不解析求值。不实现动态数组 spill。
 
 ### docx
 
@@ -318,7 +321,7 @@ xlsx、docx、pptx 共用 `scope` 这个字段名，里面的键按格式分，�
 | `scope.charts` | 否 | 为 `true` 时给每张 `worksheet` 与 `chartsheet` 填 `charts`。省略或 `false` 则只有 `chartCount`，没有名单。不把 chart 部件或媒体字节放进树。不依赖 `sheet` / `range` / `pictures` |
 | `scope.headerFooter` | 否 | 为 `true` 时给每张 `worksheet` / `chartsheet` / `dialogsheet` 填六个页眉页脚槽位（`headerFooters`）。没有的槽位仍列出，`text` 为 `null`。省略或 `false` 则只有 `hasHeaderFooter`，不倒出原文，也没有 `headerFooters`。不依赖 `sheet` / `range` / `pictures` / `charts` |
 
-省略 `scope`、或只给空对象：返回工作簿节点和表名单，每张表不含 `cells`，也没有 `pictures` / `charts` / `headerFooters`。工作簿与每张 `worksheet` 仍有 `pictureCount`。工作簿、每张 `worksheet` 与每张 `chartsheet` 仍有 `chartCount`。每张表仍有 `hasHeaderFooter`。这是默认截断。
+省略 `scope`、或只给空对象：返回工作簿节点和表名单，每张表不含 `cells`，也没有 `pictures` / `charts` / `headerFooters`。工作簿与每张 `worksheet` 仍有 `pictureCount`。工作簿、每张 `worksheet` 与每张 `chartsheet` 仍有 `chartCount`。工作簿仍有 `definedNameCount` 与 `definedNames`。每张表仍有 `hasHeaderFooter`。这是默认截断。
 
 只要想看单元格，就必须同时给 `sheet` 和 `range`。不默认扫第一张表的整张纸。只要想看工作表图名单，就给 `pictures: true`。只要想看图表名单，就给 `charts: true`。只要想看页眉原文，就给 `headerFooter: true`。四者独立，可只开一边。页眉图名单出现在已展开的槽位上，须同时 `headerFooter: true` 与 `pictures: true`。
 
@@ -399,6 +402,7 @@ xlsx、docx、pptx 共用 `scope` 这个字段名，里面的键按格式分，�
   "id": "xlsx:workbook",
   "pictureCount": 0,
   "chartCount": 0,
+  "definedNameCount": 0,
   "props": {
     "title": "",
     "subject": null,
@@ -475,13 +479,15 @@ xlsx、docx、pptx 共用 `scope` 这个字段名，里面的键按格式分，�
       "pivotCount": 0,
       "hasHeaderFooter": false
     }
-  ]
+  ],
+  "definedNames": []
 }
 ```
 
 规则：
 
-- 工作簿字段顺序：`id`、`pictureCount`、`chartCount`、`props`、`sheets`。`pictureCount` 始终出现，等于各 `worksheet` 的 `pictureCount` 之和，不含 `chartsheet` / `dialogsheet` / `macrosheet`。`chartCount` 始终出现，等于各 `worksheet` 与 `chartsheet` 的 `chartCount` 之和，不含 `dialogsheet` / `macrosheet`。`props` 始终出现，规则见下文「文档属性」。
+- 工作簿字段顺序：`id`、`pictureCount`、`chartCount`、`definedNameCount`、`props`、`sheets`、`definedNames`。`pictureCount` 始终出现，等于各 `worksheet` 的 `pictureCount` 之和，不含 `chartsheet` / `dialogsheet` / `macrosheet`。`chartCount` 始终出现，等于各 `worksheet` 与 `chartsheet` 的 `chartCount` 之和，不含 `dialogsheet` / `macrosheet`。`definedNameCount` 始终出现，是 workbook `<definedNames>` 里 `<definedName>` 的个数。没有则为 `0`。`definedNames` 始终列出，可为空数组，不另加 scope 键。`props` 始终出现，规则见下文「文档属性」。
+- `definedNames` 每项字段顺序：`id`、`name`、`formula`、`hidden`、`localSheet`。`name` 取 `@name`，没有则为 `""`。`formula` 是元素文本，当字符串，不解析求值、不补 `=`。`hidden` 为布尔：`@hidden` 为 `1` / `true` / `TRUE` / `on` 则为 `true`，缺省或其余为 `false`。`localSheet` 有 `@localSheetId` 则按 0 基下标解成 `sheets` 里对应表的 `name`；解不出、缺属性或无法解析则为 `null`（簿级）。打印区域 `_xlnm.Print_Area` 与其它内置名同样列出。
 - `sheets` 始终列出工作簿里全部表（含隐藏表），便于模型知道还有哪些表。未点名的表不带 `cells`、`range`、`truncated`、`cols`、`rows`、`merges`、`dataValidations`、`conditionalFormats`、`tables`、`pivots`。
 - `kind`：`worksheet`、`chartsheet`、`dialogsheet`、`macrosheet`。第一期只对 `worksheet` 填单元格与图。`worksheet` 与 `chartsheet` 都填 `chartCount`。每张表始终填 `hidden`：`sheet/@state` 为 `hidden` 或 `veryHidden` 则为 `true`，缺省、空或 `visible` 为 `false`。每张表始终填 `hasHeaderFooter`：该表 `headerFooter` 里任一槽位有非空文本则为 `true`；没有该元素、空的 `<headerFooter/>`、或六个槽位都空则为 `false`。不算 VML，也不因为只有 `drawingHF` 图就把此项改成 `true`。
 - `worksheet` 字段顺序：`id`、`name`、`kind`、`hidden`、`pictureCount`、`chartCount`、`dataValidationCount`、`conditionalFormatCount`、`tableCount`、`pivotCount`、`hasHeaderFooter`，有页眉名单时再跟 `headerFooters`，有图名单时再跟 `pictures`，有图表名单时再跟 `charts`，有单元格切片时再跟 `truncated`、`range`、`cells`、`cols`、`rows`、`merges`、`dataValidations`、`conditionalFormats`、`tables`、`pivots`。`pictureCount` 始终出现，是该表工作表 drawing 里被收入的 `xdr:pic` 个数（判定见上文 xlsx 图 id 那节），不含页眉图。没有图则为 `0`。`chartCount` 始终出现，是该表被收入的图表个数（判定见上文 xlsx 图表 id 那节）。没有图表则为 `0`。`dataValidationCount` 始终出现，是该表 `<dataValidations>` 里 `<dataValidation>` 的个数，不含 `extLst` 里的 `x14:dataValidations`。没有则为 `0`。`conditionalFormatCount` 始终出现，是该表全部 `<conditionalFormatting>` 里 `<cfRule>` 的个数，不含 `extLst` 里的 `x14:conditionalFormattings`。没有则为 `0`。`tableCount` 始终出现，是该表 `<tableParts>` 里 `<tablePart>` 的个数。没有则为 `0`。`pivotCount` 始终出现，是该表关系里 Type 以 `/pivotTable` 结尾的条目个数。没有则为 `0`。`chartsheet` 没有 `pictureCount`，也没有 `pictures`，也没有 `dataValidationCount`，也没有 `conditionalFormatCount`，也没有 `tableCount`，也没有 `pivotCount`；字段顺序：`id`、`name`、`kind`、`hidden`、`chartCount`、`hasHeaderFooter`，有页眉名单时再跟 `headerFooters`，有图表名单时再跟 `charts`。`dialogsheet` / `macrosheet` 没有 `pictureCount` / `pictures` / `chartCount` / `charts` / `dataValidationCount` / `conditionalFormatCount` / `tableCount` / `pivotCount`；字段顺序：`id`、`name`、`kind`、`hidden`、`hasHeaderFooter`，有页眉名单时再跟 `headerFooters`。关系 Type 以 `/macrosheet` 结尾的表 `kind` 为 `macrosheet`。
@@ -958,7 +964,7 @@ docx 根上始终带 `protection`，不要另给 scope 键。来源是 `/word/se
 
 行与单元格按行号、列号升序写出。补上 `sheetData` 和合理的 `dimension`。
 
-最小 `styles.xml` 必须生成，见 [opc.md](opc.md)。默认字体颜色写 `<color rgb="FF000000"/>`，不引用 theme，包里也不生成 theme 部件。给了 `sheets[].pictures` 时按 `insertPicture` 同一套规则写 drawing 与 media。给了 `sheets[].charts` 时按 `insertChart` 同一套规则写 `/xl/charts/chartN.xml`、`xdr:graphicFrame` 和 `dataFrom` 一带单元格，不写 embedding。一张表上的图与图表共用一份 drawing：先写 `pictures`，再写 `charts`。`xdr:cNvPr/@id` 取该表已有全部 `cNvPr` 的最大整数加 1。不要生成透视表、条件格式、图表工作表。create 本期不写列宽、行高、合并、数据验证、条件格式、工作表表格、透视表，也不写共享公式或数组公式（`cells[]` 出现 `shared` / `sharedRef` / `array` / `arrayRef` 报 `InvalidField`）。`workbook` 根上或 `cells[]` 上出现 `pictures` / `charts`，或 `sheets[]` 上出现 `kind` / `wrap` / `smartArts`，报 `InvalidField`。`sheets[].kind` 仍拒绝。给了 `workbook.props` 时按 `setProps` / `setCustomProp` 同一套规则写 core / app / custom；省略则仍写空的 `dc:title` 与 `dc:creator` 为 `ooxp`，不写 custom 部件。
+最小 `styles.xml` 必须生成，见 [opc.md](opc.md)。默认字体颜色写 `<color rgb="FF000000"/>`，不引用 theme，包里也不生成 theme 部件。给了 `sheets[].pictures` 时按 `insertPicture` 同一套规则写 drawing 与 media。给了 `sheets[].charts` 时按 `insertChart` 同一套规则写 `/xl/charts/chartN.xml`、`xdr:graphicFrame` 和 `dataFrom` 一带单元格，不写 embedding。一张表上的图与图表共用一份 drawing：先写 `pictures`，再写 `charts`。`xdr:cNvPr/@id` 取该表已有全部 `cNvPr` 的最大整数加 1。不要生成透视表、条件格式、图表工作表。create 本期不写列宽、行高、合并、数据验证、条件格式、工作表表格、透视表、定义名，也不写共享公式或数组公式（`cells[]` 出现 `shared` / `sharedRef` / `array` / `arrayRef` 报 `InvalidField`）。`workbook` 根上或 `cells[]` 上出现 `pictures` / `charts` / `definedNames`，或 `sheets[]` 上出现 `kind` / `wrap` / `smartArts`，报 `InvalidField`。`sheets[].kind` 仍拒绝。给了 `workbook.props` 时按 `setProps` / `setCustomProp` 同一套规则写 core / app / custom；省略则仍写空的 `dc:title` 与 `dc:creator` 为 `ooxp`，不写 custom 部件。
 
 ### docx
 
@@ -1516,6 +1522,66 @@ create 与 apply 落盘时先写入目标同目录的临时文件，再改名为
 去掉工作表关系、透视表部件与 Content Type Override。若没有其它透视表再用该 `cacheId`，同时去掉 workbook `<pivotCache>`、缓存定义与记录部件及其关系与 Override。`pivotCaches` 删光则去掉该元素。不删 `sheetData`。找不到该序号报 `IdNotFound`。id 不是透视表 id 报 `InvalidId`。只能改 `worksheet`。docx / pptx 上发此 op 报 `InvalidField`。不标重算。
 
 示例见 `docs/examples/xlsx-apply-pivot.json`。
+
+### insertDefinedName
+
+往工作簿追加一条定义名（ECMA-376 §18.2.5）。公式当字符串写入元素文本，不解析、不求值。
+
+```json
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "C:\\data\\book.xlsx",
+  "output": "C:\\data\\book.named.xlsx",
+  "ops": [
+    {
+      "op": "insertDefinedName",
+      "id": "xlsx:workbook",
+      "name": "Sales",
+      "formula": "Sheet1!$A$1:$A$10"
+    }
+  ]
+}
+```
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"insertDefinedName"` |
+| `id` | 必须是 `xlsx:workbook` |
+| `name` | 必须。写入 `@name` |
+| `formula` | 必须。写入元素文本。不要前导 `=` |
+| `hidden` | 可选。布尔。`true` 写 `@hidden="1"`；省略或 `false` 不写该属性 |
+| `localSheet` | 可选。工作表名，写成 `@localSheetId`（`sheets` 里 0 基下标）。省略则为簿级 |
+
+`name` 长度 1 到 255 个字符。首字符必须是字母、`_` 或 `\`；其余只能是字母、数字、`.` 或 `_`。不能含空白。不能是 `R` 或 `C`（不分大小写）。不能整段解析成 A1 单元格或 A1 区域（例如 `A1`、`LOG10`）。不能整段看成 R1C1 引用（例如 `R1C1`、`RC`）。`_xlnm.Print_Area` 合法。同一作用域内大小写不敏感唯一：簿级互斥；同一 `localSheetId` 互斥；簿级与表级可以同名。还须与整本工作簿表格的 `displayName` / `name` 互斥。`formula` 去掉首尾空白后不能为空，且不能以 `=` 开头。`localSheet` 必须是已有表名；找不到报 `IdNotFound`。空串或 `null` 报 `InvalidField`。id 不是 `xlsx:workbook` 报 `InvalidId`。`<definedNames>` 按 `CT_Workbook` 插在 `externalReferences` 之后、`calcPr` 之前；`count` 写成子元素个数。docx / pptx 上发此 op 报 `InvalidField`。不标重算，不删 `calcChain`。create 本期不写定义名。
+
+### setDefinedName
+
+改已有定义名。只改给了的字段。
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"setDefinedName"` |
+| `id` | 定义名 id `name:{n}` |
+| `name` | 可选。新的名，约束与 insert 相同。`null` 报 `InvalidField` |
+| `formula` | 可选。新的公式文本，约束与 insert 相同。`null` 报 `InvalidField` |
+| `hidden` | 可选。布尔。`true` 写 `@hidden="1"`；`false` 去掉该属性。`null` 报 `InvalidField` |
+| `localSheet` | 可选。工作表名则改成该表级；`null` 表示改成簿级（去掉 `@localSheetId`）。省略表示不改 |
+
+除 `op` 与 `id` 外至少给一个字段，否则报 `InvalidField`。改 `name` 或 `localSheet` 时按新作用域做唯一性检查。未点名的属性与未知子元素原样留。找不到该序号报 `IdNotFound`。id 不是定义名 id 报 `InvalidId`。docx / pptx 上发此 op 报 `InvalidField`。不标重算。
+
+### deleteDefinedName
+
+删掉一条定义名。
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"deleteDefinedName"` |
+| `id` | 定义名 id `name:{n}` |
+
+去掉该 `<definedName>`。删光则去掉 `<definedNames>`。找不到该序号报 `IdNotFound`。id 不是定义名 id 报 `InvalidId`。docx / pptx 上发此 op 报 `InvalidField`。不标重算。
+
+示例见 `docs/examples/xlsx-apply-defined-name.json`。
 
 ### setProps
 

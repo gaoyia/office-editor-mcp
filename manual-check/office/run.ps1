@@ -79,6 +79,7 @@ $order = @(
     'xlsx-conditional-format'
     'xlsx-table'
     'xlsx-pivot'
+    'xlsx-defined-name'
     'pptx-docprops'
     'pptx-apply'
     'pptx-pictures'

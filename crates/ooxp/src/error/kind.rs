@@ -126,6 +126,12 @@ pub(crate) enum IdReason {
     InsertChartSheetNeedsWorkbook,
     /// insertSheet 必须用 xlsx:workbook
     InsertSheetNeedsWorkbook,
+    /// insertDefinedName 必须用 xlsx:workbook
+    InsertDefinedNameNeedsWorkbook,
+    /// setDefinedName / deleteDefinedName 必须用 name:n
+    DefinedNamePrefix,
+    NameIndexNotInt,
+    NameIndexFromOne,
     /// deleteChartSheet 必须用图表工作表 sheet:工作表名
     DeleteChartSheetNeedsChartsheet,
     /// deleteSheet 必须用普通工作表 sheet:工作表名
@@ -616,6 +622,13 @@ define_error_kinds! {
     PivotTableNotFound { id: String } => {
         vec![Self::PivotTableNotFound { id: "sheet:Sheet1/pivot:1".into() }]
     },
+    NeedSetDefinedNameField => vec![Self::NeedSetDefinedNameField],
+    InvalidDefinedName { field: String } => {
+        vec![Self::InvalidDefinedName { field: "name".into() }]
+    },
+    DefinedNameNotFound { id: String } => {
+        vec![Self::DefinedNameNotFound { id: "name:1".into() }]
+    },
     InvalidAlign => vec![Self::InvalidAlign],
     InvalidLineRule => vec![Self::InvalidLineRule],
     InvalidUnderline => vec![Self::InvalidUnderline],
@@ -748,6 +761,10 @@ impl IdReason {
             Self::InsertChartNeedsSlide,
             Self::InsertChartSheetNeedsWorkbook,
             Self::InsertSheetNeedsWorkbook,
+            Self::InsertDefinedNameNeedsWorkbook,
+            Self::DefinedNamePrefix,
+            Self::NameIndexNotInt,
+            Self::NameIndexFromOne,
             Self::DeleteChartSheetNeedsChartsheet,
             Self::DeleteSheetNeedsWorksheet,
             Self::SheetOpNeedsSheet,
@@ -1005,6 +1022,8 @@ impl ErrorKind {
             | Self::InvalidSheetTable { .. }
             | Self::NeedSetPivotTableField
             | Self::InvalidPivotTable { .. }
+            | Self::NeedSetDefinedNameField
+            | Self::InvalidDefinedName { .. }
             | Self::InvalidAlign
             | Self::InvalidLineRule
             | Self::InvalidUnderline
@@ -1103,7 +1122,8 @@ impl ErrorKind {
             | Self::DataValidationNotFound { .. }
             | Self::ConditionalFormatNotFound { .. }
             | Self::SheetTableNotFound { .. }
-            | Self::PivotTableNotFound { .. } => IdNotFound,
+            | Self::PivotTableNotFound { .. }
+            | Self::DefinedNameNotFound { .. } => IdNotFound,
             Self::ScopeRequired { .. } => ScopeRequired,
             Self::SharedFormulaMaster { .. }
             | Self::DataTableFormula { .. }

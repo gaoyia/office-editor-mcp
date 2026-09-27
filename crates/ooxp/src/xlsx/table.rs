@@ -344,6 +344,33 @@ fn collect_workbook_tables(
     Ok(out)
 }
 
+/// 整本工作簿表格的 `name` / `displayName`，不含定义名。
+pub(crate) fn table_taken_names(
+    pkg: &Package,
+    sheet_index: &[(String, String, &'static str)],
+    dirty_sheets: &[(String, Document)],
+) -> Result<Vec<String>, Error> {
+    let mut metas = Vec::new();
+    for (_, part, kind) in sheet_index {
+        if *kind != "worksheet" {
+            continue;
+        }
+        if let Some((_, doc)) = dirty_sheets.iter().find(|(p, _)| p == part) {
+            append_tables_from(pkg, part, &doc.root, &mut metas)?;
+        } else {
+            let bytes = pkg.get(part)?;
+            let owned = xml::parse(bytes)?;
+            append_tables_from(pkg, part, &owned.root, &mut metas)?;
+        }
+    }
+    let mut out = Vec::new();
+    for t in metas {
+        out.push(t.name);
+        out.push(t.display_name);
+    }
+    Ok(out)
+}
+
 fn append_tables_from(
     pkg: &Package,
     sheet_part: &str,

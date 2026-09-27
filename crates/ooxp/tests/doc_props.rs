@@ -188,7 +188,14 @@ fn inspect_default_props_on_three_formats() {
     assert_eq!(tp["id"], "pptx:presentation");
     assert_eq!(
         object_keys(&tx)[3..],
-        ["pictureCount", "chartCount", "props", "sheets"]
+        [
+            "pictureCount",
+            "chartCount",
+            "definedNameCount",
+            "props",
+            "sheets",
+            "definedNames"
+        ]
     );
     assert_eq!(object_keys(&td)[object_keys(&td).len() - 1], "protection");
     assert_eq!(object_keys(&tp)[object_keys(&tp).len() - 2], "props");

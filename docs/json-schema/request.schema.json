@@ -598,6 +598,9 @@
               { "$ref": "#/$defs/insertPivotTableOp" },
               { "$ref": "#/$defs/setPivotTableOp" },
               { "$ref": "#/$defs/deletePivotTableOp" },
+              { "$ref": "#/$defs/insertDefinedNameOp" },
+              { "$ref": "#/$defs/setDefinedNameOp" },
+              { "$ref": "#/$defs/deleteDefinedNameOp" },
               { "$ref": "#/$defs/setHeaderFooterTextOp" },
               { "$ref": "#/$defs/setParaTextOp" },
               { "$ref": "#/$defs/setHeaderFooterDistanceOp" },
@@ -1337,6 +1340,47 @@
       "additionalProperties": false,
       "properties": {
         "op": { "const": "deletePivotTable" },
+        "id": { "type": "string", "minLength": 1 }
+      }
+    },
+    "insertDefinedNameOp": {
+      "type": "object",
+      "required": ["op", "id", "name", "formula"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "insertDefinedName" },
+        "id": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 },
+        "formula": { "type": "string", "minLength": 1 },
+        "hidden": { "type": "boolean" },
+        "localSheet": { "type": "string", "minLength": 1 }
+      }
+    },
+    "setDefinedNameOp": {
+      "type": "object",
+      "required": ["op", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "setDefinedName" },
+        "id": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 },
+        "formula": { "type": "string", "minLength": 1 },
+        "hidden": { "type": "boolean" },
+        "localSheet": { "type": ["string", "null"], "minLength": 1 }
+      },
+      "anyOf": [
+        { "required": ["name"] },
+        { "required": ["formula"] },
+        { "required": ["hidden"] },
+        { "required": ["localSheet"] }
+      ]
+    },
+    "deleteDefinedNameOp": {
+      "type": "object",
+      "required": ["op", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "deleteDefinedName" },
         "id": { "type": "string", "minLength": 1 }
       }
     },

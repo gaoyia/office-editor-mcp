@@ -9,6 +9,7 @@ use crate::chart::{ChartType, NewSeries};
 
 use super::a1;
 use super::chart::{self, SheetChartId};
+use super::names;
 use super::picture::{self, SheetPicId};
 
 /// 工作表页眉页脚六个槽位之一。
@@ -690,6 +691,38 @@ pub struct DeletePivotTableOp {
 }
 
 #[derive(Debug, Clone)]
+pub struct InsertDefinedNameOp {
+    pub name: String,
+    pub formula: String,
+    pub hidden: Option<bool>,
+    pub local_sheet: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetDefinedNameOp {
+    pub index: usize,
+    pub name: Option<String>,
+    pub formula: Option<String>,
+    pub hidden: Option<bool>,
+    /// `None` 省略；`Some(None)` 改成簿级；`Some(Some(名))` 改成该表级。
+    pub local_sheet: Option<Option<String>>,
+}
+
+impl SetDefinedNameOp {
+    pub fn has_patch(&self) -> bool {
+        self.name.is_some()
+            || self.formula.is_some()
+            || self.hidden.is_some()
+            || self.local_sheet.is_some()
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct DeleteDefinedNameOp {
+    pub index: usize,
+}
+
+#[derive(Debug, Clone)]
 pub struct SetHeaderFooterTextOp {
     #[allow(dead_code)]
     pub id: String,
@@ -1007,6 +1040,9 @@ pub enum XlsxOp {
     InsertPivotTable(InsertPivotTableOp),
     SetPivotTable(SetPivotTableOp),
     DeletePivotTable(DeletePivotTableOp),
+    InsertDefinedName(InsertDefinedNameOp),
+    SetDefinedName(SetDefinedNameOp),
+    DeleteDefinedName(DeleteDefinedNameOp),
     DeleteChart(DeleteChartOp),
     SetChartTitle(SetChartTitleOp),
     SetChartSeries(SetChartSeriesOp),
@@ -1176,6 +1212,9 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<XlsxOp>, Error> {
             "insertPivotTable" => XlsxOp::InsertPivotTable(parse_insert_pivot_table(obj, i)?),
             "setPivotTable" => XlsxOp::SetPivotTable(parse_set_pivot_table(obj, i)?),
             "deletePivotTable" => XlsxOp::DeletePivotTable(parse_delete_pivot_table(obj, i)?),
+            "insertDefinedName" => XlsxOp::InsertDefinedName(parse_insert_defined_name(obj, i)?),
+            "setDefinedName" => XlsxOp::SetDefinedName(parse_set_defined_name(obj, i)?),
+            "deleteDefinedName" => XlsxOp::DeleteDefinedName(parse_delete_defined_name(obj, i)?),
             "deleteChart" => XlsxOp::DeleteChart(parse_delete_chart(obj, i)?),
             "setChartTitle" => XlsxOp::SetChartTitle(parse_set_chart_title(obj, i)?),
             "setChartSeries" => XlsxOp::SetChartSeries(parse_set_chart_series(obj, i)?),
@@ -3363,6 +3402,235 @@ fn parse_delete_pivot_table(
     let id = require_id(obj, i)?;
     let (sheet, index) = parse_pivot_id(&id, i)?;
     Ok(DeletePivotTableOp { sheet, index })
+}
+
+fn parse_insert_defined_name(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<InsertDefinedNameOp, Error> {
+    deny_keys(
+        obj,
+        i,
+        &["op", "id", "name", "formula", "hidden", "localSheet"],
+    )?;
+    let id = require_id(obj, i)?;
+    if id != "xlsx:workbook" {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::InsertDefinedNameNeedsWorkbook,
+            },
+            format!("ops[{i}].id"),
+        ));
+    }
+    let name = parse_defined_name_name(obj.get("name"), i)?.ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::MissingField {
+                field: "name".into(),
+            },
+            format!("ops[{i}].name"),
+        )
+    })?;
+    let formula = parse_defined_name_formula(obj.get("formula"), i)?.ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::MissingField {
+                field: "formula".into(),
+            },
+            format!("ops[{i}].formula"),
+        )
+    })?;
+    let local_sheet = match obj.get("localSheet") {
+        None => None,
+        Some(Value::Null) => {
+            return Err(Error::with_path(
+                ErrorKind::InvalidDefinedName {
+                    field: "localSheet".into(),
+                },
+                format!("ops[{i}].localSheet"),
+            ));
+        }
+        Some(Value::String(s)) => {
+            if s.is_empty() {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidDefinedName {
+                        field: "localSheet".into(),
+                    },
+                    format!("ops[{i}].localSheet"),
+                ));
+            }
+            Some(s.clone())
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "localSheet".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].localSheet"),
+            ));
+        }
+    };
+    Ok(InsertDefinedNameOp {
+        name,
+        formula,
+        hidden: parse_opt_bool(obj, i, "hidden")?,
+        local_sheet,
+    })
+}
+
+fn parse_set_defined_name(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<SetDefinedNameOp, Error> {
+    deny_keys(
+        obj,
+        i,
+        &["op", "id", "name", "formula", "hidden", "localSheet"],
+    )?;
+    let id = require_id(obj, i)?;
+    let index = parse_defined_name_id(&id, i)?;
+    if let Some(Value::Null) = obj.get("hidden") {
+        return Err(Error::with_path(
+            ErrorKind::InvalidDefinedName {
+                field: "hidden".into(),
+            },
+            format!("ops[{i}].hidden"),
+        ));
+    }
+    let op = SetDefinedNameOp {
+        index,
+        name: parse_defined_name_name(obj.get("name"), i)?,
+        formula: parse_defined_name_formula(obj.get("formula"), i)?,
+        hidden: parse_opt_bool(obj, i, "hidden")?,
+        local_sheet: parse_set_local_sheet(obj, i)?,
+    };
+    if !op.has_patch() {
+        return Err(Error::with_path(
+            ErrorKind::NeedSetDefinedNameField,
+            format!("ops[{i}]"),
+        ));
+    }
+    Ok(op)
+}
+
+fn parse_delete_defined_name(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<DeleteDefinedNameOp, Error> {
+    deny_keys(obj, i, &["op", "id"])?;
+    let id = require_id(obj, i)?;
+    Ok(DeleteDefinedNameOp {
+        index: parse_defined_name_id(&id, i)?,
+    })
+}
+
+fn parse_defined_name_name(v: Option<&Value>, i: usize) -> Result<Option<String>, Error> {
+    match v {
+        None => Ok(None),
+        Some(Value::Null) => Err(Error::with_path(
+            ErrorKind::InvalidDefinedName {
+                field: "name".into(),
+            },
+            format!("ops[{i}].name"),
+        )),
+        Some(Value::String(s)) => {
+            names::validate_name(s, i)?;
+            Ok(Some(s.clone()))
+        }
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "name".into(),
+                expected: TypeName::String,
+            },
+            format!("ops[{i}].name"),
+        )),
+    }
+}
+
+fn parse_defined_name_formula(v: Option<&Value>, i: usize) -> Result<Option<String>, Error> {
+    match v {
+        None => Ok(None),
+        Some(Value::Null) => Err(Error::with_path(
+            ErrorKind::InvalidDefinedName {
+                field: "formula".into(),
+            },
+            format!("ops[{i}].formula"),
+        )),
+        Some(Value::String(s)) => {
+            names::validate_formula(s, i)?;
+            Ok(Some(s.clone()))
+        }
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "formula".into(),
+                expected: TypeName::String,
+            },
+            format!("ops[{i}].formula"),
+        )),
+    }
+}
+
+fn parse_set_local_sheet(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<Option<Option<String>>, Error> {
+    match obj.get("localSheet") {
+        None => Ok(None),
+        Some(Value::Null) => Ok(Some(None)),
+        Some(Value::String(s)) => {
+            if s.is_empty() {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidDefinedName {
+                        field: "localSheet".into(),
+                    },
+                    format!("ops[{i}].localSheet"),
+                ));
+            }
+            Ok(Some(Some(s.clone())))
+        }
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "localSheet".into(),
+                expected: TypeName::String,
+            },
+            format!("ops[{i}].localSheet"),
+        )),
+    }
+}
+
+fn parse_defined_name_id(id: &str, op_index: usize) -> Result<usize, Error> {
+    let Some(nstr) = id.strip_prefix("name:") else {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::DefinedNamePrefix,
+            },
+            format!("ops[{op_index}].id"),
+        ));
+    };
+    if nstr.is_empty() || nstr.contains('/') || !nstr.chars().all(|c| c.is_ascii_digit()) {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::NameIndexNotInt,
+            },
+            format!("ops[{op_index}].id"),
+        ));
+    }
+    let n: usize = nstr.parse().map_err(|_| {
+        Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::NameIndexNotInt,
+            },
+            format!("ops[{op_index}].id"),
+        )
+    })?;
+    if n == 0 {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::NameIndexFromOne,
+            },
+            format!("ops[{op_index}].id"),
+        ));
+    }
+    Ok(n)
 }
 
 fn parse_pivot_name(v: Option<&Value>, i: usize) -> Result<Option<String>, Error> {

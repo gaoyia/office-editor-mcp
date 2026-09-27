@@ -10,6 +10,7 @@ mod formula;
 mod hf;
 mod inspect;
 mod layout;
+mod names;
 mod picture;
 mod pivot;
 mod request;

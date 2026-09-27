@@ -792,8 +792,10 @@ mod tests {
                 "id",
                 "pictureCount",
                 "chartCount",
+                "definedNameCount",
                 "props",
-                "sheets"
+                "sheets",
+                "definedNames"
             ]
         );
         assert_eq!(

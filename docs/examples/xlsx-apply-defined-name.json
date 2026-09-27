@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "C:\\data\\book.xlsx",
+  "output": "C:\\data\\book.named.xlsx",
+  "ops": [
+    {
+      "op": "insertDefinedName",
+      "id": "xlsx:workbook",
+      "name": "Sales",
+      "formula": "Sheet1!$A$1:$A$10"
+    },
+    {
+      "op": "setDefinedName",
+      "id": "name:1",
+      "formula": "Sheet1!$A$1:$A$20",
+      "hidden": false
+    },
+    { "op": "deleteDefinedName", "id": "name:1" }
+  ]
+}
