@@ -191,6 +191,7 @@ mod tests {
         assert_eq!(tree["chartCount"], 0);
         assert_eq!(tree["smartArtCount"], 0);
         assert_eq!(tree["tableCount"], 0);
+        assert_eq!(tree["revisionCount"], 0);
         assert!(tree.get("comments").is_none());
         assert!(tree.get("charts").is_none());
         assert!(tree.get("smartArts").is_none());
@@ -853,6 +854,7 @@ mod tests {
                 "chartCount",
                 "smartArtCount",
                 "tableCount",
+                "revisionCount",
                 "outline",
                 "headers",
                 "footers",

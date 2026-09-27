@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "note.docx",
+  "output": "note.revision.docx",
+  "ops": [
+    { "op": "acceptRevision", "id": "rev:1" },
+    { "op": "rejectRevision", "id": "rev:2" }
+  ]
+}

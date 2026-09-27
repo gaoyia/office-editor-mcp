@@ -212,6 +212,8 @@ fn inspect_skips_deleted_text() {
     let path = write_sample("del");
     let tree = inspect_all(&path);
     assert_eq!(tree["paragraphs"][3]["text"], "留下");
+    assert_eq!(tree["revisionCount"], 1);
+    assert!(tree.get("revisions").is_none());
 }
 
 #[test]
@@ -1156,6 +1158,7 @@ fn inspect_lists_header_pictures() {
             "chartCount",
             "smartArtCount",
             "tableCount",
+            "revisionCount",
             "pictures"
         ]
     );

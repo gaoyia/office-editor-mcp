@@ -38,6 +38,8 @@ pub struct InspectScope {
     pub smart_art: bool,
     /// 为 true 时列出表格。
     pub tables: bool,
+    /// 为 true 时列出修订痕迹。
+    pub revisions: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -450,6 +452,12 @@ pub struct SplitCellsOp {
 }
 
 #[derive(Debug, Clone)]
+pub struct RevisionOp {
+    pub id: String,
+    pub target: super::revision::RevRef,
+}
+
+#[derive(Debug, Clone)]
 pub enum DocxOp {
     SetParaText(SetParaTextOp),
     SetHeaderFooterDistance(SetHfDistanceOp),
@@ -488,6 +496,8 @@ pub enum DocxOp {
     DeleteCol(DeleteColOp),
     MergeCells(MergeCellsOp),
     SplitCells(SplitCellsOp),
+    AcceptRevision(RevisionOp),
+    RejectRevision(RevisionOp),
     SetTextBoxLink(SetTextBoxLinkOp),
     InsertFootnote(InsertNoteOp),
     InsertEndnote(InsertNoteOp),
@@ -554,6 +564,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
             "charts",
             "smartArt",
             "tables",
+            "revisions",
         ],
     )?;
 
@@ -566,6 +577,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
     let charts = parse_bool_field(obj.get("charts"), "charts")?;
     let smart_art = parse_bool_field(obj.get("smartArt"), "smartArt")?;
     let tables = parse_bool_field(obj.get("tables"), "tables")?;
+    let revisions = parse_bool_field(obj.get("revisions"), "revisions")?;
     if text_box_content && !text_boxes {
         return Err(Error::with_path(
             ErrorKind::ScopeFieldRequires {
@@ -588,6 +600,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
                 && !obj.contains_key("charts")
                 && !obj.contains_key("smartArt")
                 && !obj.contains_key("tables")
+                && !obj.contains_key("revisions")
             {
                 return Ok(None);
             }
@@ -603,6 +616,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
                 charts,
                 smart_art,
                 tables,
+                revisions,
             }))
         }
         (Some(f), Some(m)) => {
@@ -655,6 +669,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
                 charts,
                 smart_art,
                 tables,
+                revisions,
             }))
         }
         _ => Err(Error::with_path(
@@ -774,6 +789,8 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<DocxOp>, Error> {
             "deleteCol" => out.push(DocxOp::DeleteCol(parse_delete_col(obj, i)?)),
             "mergeCells" => out.push(DocxOp::MergeCells(parse_merge_cells(obj, i)?)),
             "splitCells" => out.push(DocxOp::SplitCells(parse_split_cells(obj, i)?)),
+            "acceptRevision" => out.push(DocxOp::AcceptRevision(parse_revision_op(obj, i)?)),
+            "rejectRevision" => out.push(DocxOp::RejectRevision(parse_revision_op(obj, i)?)),
             "setTextBoxLink" => out.push(DocxOp::SetTextBoxLink(parse_set_txbx_link(obj, i)?)),
             "insertFootnote" => out.push(DocxOp::InsertFootnote(parse_insert_note(
                 obj,
@@ -1652,6 +1669,13 @@ fn parse_split_cells(
     let id = require_op_id(obj, i)?;
     let target = tbl::parse_cell_ref(&id, i)?;
     Ok(SplitCellsOp { id, target })
+}
+
+fn parse_revision_op(obj: &serde_json::Map<String, Value>, i: usize) -> Result<RevisionOp, Error> {
+    deny_keys(obj, i, &["op", "id"])?;
+    let id = require_op_id(obj, i)?;
+    let target = super::revision::parse_rev_ref(&id, &format!("ops[{i}].id"))?;
+    Ok(RevisionOp { id, target })
 }
 
 fn parse_col_after(v: Option<&Value>, i: usize) -> Result<u32, Error> {

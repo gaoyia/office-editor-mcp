@@ -415,3 +415,33 @@ fn scope_tables_is_not_for_xlsx() {
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);
 }
+
+#[test]
+fn accept_revision_is_not_for_xlsx() {
+    let src = write_sample("rev-foreign");
+    let out = tmp_dir().join("rev-foreign-out.xlsx");
+    let err = apply(
+        &src,
+        &out,
+        json!([{ "op": "acceptRevision", "id": "rev:1" }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+}
+
+#[test]
+fn scope_revisions_is_not_for_xlsx() {
+    let src = write_sample("rev-scope");
+    let err = run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "inspect",
+            "path": src.to_string_lossy(),
+            "scope": { "revisions": true }
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+}

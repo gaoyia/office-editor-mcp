@@ -461,3 +461,39 @@ fn apply_keeps_sibling_that_still_has_field() {
     assert!(!slide.contains("标题"));
     assert_eq!(read_back(&out), "新");
 }
+
+#[test]
+fn accept_revision_is_not_for_pptx() {
+    let src = write_sample("rev-foreign");
+    let out = tmp_dir().join("rev-foreign-out.pptx");
+    let err = run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "apply",
+            "path": src.to_string_lossy(),
+            "output": out.to_string_lossy(),
+            "ops": [{ "op": "acceptRevision", "id": "rev:1" }]
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+}
+
+#[test]
+fn scope_revisions_is_not_for_pptx() {
+    let src = write_sample("rev-scope");
+    let err = run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "inspect",
+            "path": src.to_string_lossy(),
+            "scope": { "revisions": true }
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+}

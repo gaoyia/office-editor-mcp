@@ -157,6 +157,10 @@ pub(crate) enum IdReason {
     InsertRowNeedsTableOrRow,
     DeleteRowNeedsRow,
     SplitNeedsCell,
+    /// 修订 id 必须是 rev:N 或 {容器}/rev:N
+    RevPrefix,
+    RevIndexNotInt,
+    RevIndexFromOne,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -368,6 +372,8 @@ define_error_kinds! {
     TableGridMismatch => vec![Self::TableGridMismatch],
     MergeNotSimple => vec![Self::MergeNotSimple],
     NeedTableCellsMatch => vec![Self::NeedTableCellsMatch],
+    RevisionNotFound { id: String } => vec![Self::RevisionNotFound { id: "rev:1".into() }],
+    SetParaTextHasRevision => vec![Self::SetParaTextHasRevision],
     OpcOpen { reason: OpcReason } => OpcReason::all_samples()
         .into_iter()
         .map(|reason| Self::OpcOpen { reason })
@@ -515,6 +521,9 @@ impl IdReason {
             Self::InsertRowNeedsTableOrRow,
             Self::DeleteRowNeedsRow,
             Self::SplitNeedsCell,
+            Self::RevPrefix,
+            Self::RevIndexNotInt,
+            Self::RevIndexFromOne,
         ]
     }
 }
@@ -680,7 +689,8 @@ impl ErrorKind {
             | Self::ChartSeriesNotFound { .. }
             | Self::SmartArtNotFound { .. }
             | Self::SmartArtPointNotFound { .. }
-            | Self::TableNotFound { .. } => IdNotFound,
+            | Self::TableNotFound { .. }
+            | Self::RevisionNotFound { .. } => IdNotFound,
             Self::ScopeRequired { .. } => ScopeRequired,
             Self::SharedFormulaMaster { .. }
             | Self::InkComment { .. }
@@ -697,7 +707,8 @@ impl ErrorKind {
             | Self::PictureAnchorAbsolute
             | Self::TableHasRevision
             | Self::TableGridMismatch
-            | Self::MergeNotSimple => NotImplemented,
+            | Self::MergeNotSimple
+            | Self::SetParaTextHasRevision => NotImplemented,
             Self::OpcOpen { .. } => OpcOpen,
             Self::PartMissing { .. }
             | Self::RelNotFound { .. }

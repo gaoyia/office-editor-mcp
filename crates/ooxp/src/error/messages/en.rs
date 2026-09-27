@@ -244,6 +244,11 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             }
             IdReason::DeleteRowNeedsRow => "deleteRow id must be a row id".into(),
             IdReason::SplitNeedsCell => "splitCells id must be a cell id".into(),
+            IdReason::RevPrefix => {
+                "Revision id must be rev:N or a header/footer container id plus /rev:N".into()
+            }
+            IdReason::RevIndexNotInt => "revision index must be a positive integer".into(),
+            IdReason::RevIndexFromOne => "revision index starts at 1".into(),
         },
         ErrorKind::SheetNotFound { name } => format!("Sheet not found: {name}"),
         ErrorKind::ParaNotFound { id } => format!("Paragraph not found: {id}"),
@@ -443,6 +448,10 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::NeedTableCellsMatch => {
             "cells must be a rows×cols array of strings".into()
         },
+        ErrorKind::RevisionNotFound { id } => format!("Revision not found: {id}"),
+        ErrorKind::SetParaTextHasRevision => {
+            "Cannot change visible text in a paragraph that contains tracked revisions".into()
+        }
         ErrorKind::OpcOpen { reason } => match reason {
             OpcReason::EmptyPartName => "Part name must not be empty".into(),
             OpcReason::InvalidPartName { name } => format!("Invalid part name: {name}"),

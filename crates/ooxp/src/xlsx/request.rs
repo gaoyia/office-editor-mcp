@@ -544,6 +544,8 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<XlsxOp>, Error> {
             | "deleteCol"
             | "mergeCells"
             | "splitCells"
+            | "acceptRevision"
+            | "rejectRevision"
             | "setTextBoxLink"
             | "insertFootnote"
             | "insertEndnote"

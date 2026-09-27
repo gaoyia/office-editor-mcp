@@ -16,7 +16,7 @@ use super::request::{
     DeleteColOp, DeleteCommentOp, DeleteNoteOp, DeleteParaOp, DeletePictureOp, DeleteRowOp,
     DeleteTableOp, DeleteTextBoxOp, DocxOp, InsertColOp, InsertCommentOp, InsertHeaderFooterOp,
     InsertNoteOp, InsertParaOp, InsertParaPlace, InsertPictureOp, InsertRowOp, InsertTableOp,
-    InsertTextBoxOp, MergeCellsOp, NoteNumberTarget, ReplacePictureOp, ReplyCommentOp,
+    InsertTextBoxOp, MergeCellsOp, NoteNumberTarget, ReplacePictureOp, ReplyCommentOp, RevisionOp,
     SetColumnsOp, SetCommentDoneOp, SetCommentMetaOp, SetCommentTextOp, SetDocGridOp,
     SetEvenAndOddHeadersOp, SetGutterAtTopOp, SetHfDistanceOp, SetHfLinkOp, SetLineNumberingOp,
     SetMirrorMarginsOp, SetNoteNumberingOp, SetPageMarginOp, SetPageSizeOp, SetParaTextOp,
@@ -24,6 +24,7 @@ use super::request::{
     SetTextBoxLineOp, SetTextBoxLinkOp, SetTextBoxSizeOp, SetTextBoxWrapOp, SetTitlePageOp,
     SetVerticalAlignOp, SplitCellsOp,
 };
+use super::revision;
 use super::sect;
 use super::smartart;
 use super::tbl;
@@ -297,6 +298,16 @@ pub fn apply(bytes: &[u8], ops: &[DocxOp]) -> Result<Vec<u8>, Error> {
             DocxOp::SplitCells(op) => {
                 apply_split_cells(&pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
             }
+            DocxOp::AcceptRevision(op) => {
+                apply_rev(
+                    &pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, true, i,
+                )?;
+            }
+            DocxOp::RejectRevision(op) => {
+                apply_rev(
+                    &pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, false, i,
+                )?;
+            }
         }
     }
 
@@ -309,6 +320,33 @@ pub fn apply(bytes: &[u8], ops: &[DocxOp]) -> Result<Vec<u8>, Error> {
     }
 
     pkg.save_to_vec()
+}
+
+fn refuse_set_text_if_revision(el: &Element, i: usize) -> Result<(), Error> {
+    if revision::para_blocks_set_text(el) {
+        return Err(Error::with_path(
+            ErrorKind::SetParaTextHasRevision,
+            format!("ops[{i}].id"),
+        ));
+    }
+    Ok(())
+}
+
+fn apply_rev(
+    pkg: &Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &RevisionOp,
+    accept: bool,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name = revision::part_for_story(catalog, doc_part, &op.target.story, &op.id, i)?;
+    let doc = load_part(pkg, docs, &part_name)?;
+    revision::apply_revision(&mut doc.root, op.target.n, accept, &op.id, i)?;
+    dirty.insert(part_name, ());
+    Ok(())
 }
 
 fn apply_insert_table(
@@ -467,6 +505,7 @@ fn apply_para_text(
                     format!("ops[{i}].id"),
                 )
             })?;
+            refuse_set_text_if_revision(el, i)?;
             para::set_visible_text(el, &op.text);
             dirty.insert(doc_part.to_string(), ());
         }
@@ -484,6 +523,7 @@ fn apply_para_text(
                     format!("ops[{i}].id"),
                 )
             })?;
+            refuse_set_text_if_revision(el, i)?;
             para::set_visible_text(el, &op.text);
             dirty.insert(part_name, ());
         }
@@ -508,6 +548,7 @@ fn apply_para_text(
                     format!("ops[{i}].id"),
                 )
             })?;
+            refuse_set_text_if_revision(el, i)?;
             para::set_visible_text(el, &op.text);
             dirty.insert(part_name, ());
         }
@@ -536,6 +577,7 @@ fn apply_para_text(
                     format!("ops[{i}].id"),
                 )
             })?;
+            refuse_set_text_if_revision(el, i)?;
             para::set_visible_text(el, &op.text);
             dirty.insert(part_name, ());
         }
@@ -561,6 +603,7 @@ fn apply_para_text(
                     format!("ops[{i}].id"),
                 )
             })?;
+            refuse_set_text_if_revision(el, i)?;
             para::set_visible_text(el, &op.text);
             dirty.insert(part_name, ());
         }

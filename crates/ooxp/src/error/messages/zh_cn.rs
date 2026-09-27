@@ -223,6 +223,11 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             }
             IdReason::DeleteRowNeedsRow => "deleteRow 的 id 必须是行 id".into(),
             IdReason::SplitNeedsCell => "splitCells 的 id 必须是单元格 id".into(),
+            IdReason::RevPrefix => {
+                "修订 id 必须是 rev:N，或页眉页脚容器 id 加上 /rev:N".into()
+            }
+            IdReason::RevIndexNotInt => "修订序号必须是正整数".into(),
+            IdReason::RevIndexFromOne => "修订序号从 1 起".into(),
         },
         ErrorKind::SheetNotFound { name } => format!("找不到工作表：{name}"),
         ErrorKind::ParaNotFound { id } => format!("找不到段落：{id}"),
@@ -375,6 +380,8 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::TableGridMismatch => "这一行占的网格列数对不上 colCount，不能改结构".into(),
         ErrorKind::MergeNotSimple => "mergeCells 需要一块尚未合并、对齐网格的矩形".into(),
         ErrorKind::NeedTableCellsMatch => "cells 必须是 rows×cols 的字符串数组".into(),
+        ErrorKind::RevisionNotFound { id } => format!("找不到修订：{id}"),
+        ErrorKind::SetParaTextHasRevision => "不能改带修订痕迹的段落的可见文本".into(),
         ErrorKind::OpcOpen { reason } => match reason {
             OpcReason::EmptyPartName => "部件名不能为空".into(),
             OpcReason::InvalidPartName { name } => format!("非法部件名：{name}"),

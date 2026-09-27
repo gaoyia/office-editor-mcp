@@ -570,6 +570,8 @@ fn is_foreign_op(op_name: &str) -> bool {
             | "deleteCol"
             | "mergeCells"
             | "splitCells"
+            | "acceptRevision"
+            | "rejectRevision"
             | "setTextBoxLink"
             | "insertFootnote"
             | "insertEndnote"

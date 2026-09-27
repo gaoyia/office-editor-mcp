@@ -33,6 +33,7 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 | Nh1–Nh7 | ✅ | Word 16.0：`docx-new-header.ps1`，7 PASS / 0 FAIL。新建默认页眉、首页不同、奇偶页、第二节 even 独立、create even/first、类型未生效与已链接均 `InvalidField`。标题栏无 Repair |
 | Sp1–Sp8 | ✅ | Word 16.0：`docx-section.ps1`，8 PASS / 0 FAIL。四边距与横向纸张、距边界仍独立、分栏、垂直对齐与行号、镜像边距。标题栏无 Repair |
 | Tb1–Tb8 | ✅ | Word 16.0：`docx-table.ps1`，8 PASS / 0 FAIL。名单、改字、增行增列、删表、create 2×2、合并、最后一行 `InvalidField`。标题栏无 Repair |
+| Rv1–Rv6 | ✅ | Word 16.0：`docx-revision.ps1`，6 PASS / 0 FAIL。名单、接受删除、拒绝插入、接受插入、拒绝删除、带修订段 `setParaText` 得 `NotImplemented`。标题栏无 Repair |
 | O1 | 🚫 | 领域层不做原样保存，与 xlsx 清单相同。零脏写回见 OPC 库测试。Word 另存 create 产物见 `docx-O1-word-resave`。此前记的 `SaveAs2` 挂起，拆分后重跑没再出现，一秒内返回 |
 
 ## create
@@ -58,7 +59,7 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 | I2 | 大纲 | `outline` 含第一段，`level` 为 `1`，`text` 为 `标题` |
 | I3 | 段落 id | 两段都有 `para:{hex}`，`stable` 为 `true` |
 | I4 | 第二段 | `text` 为 `hello` |
-| I5 | 无 scope | 只发 path 时没有 `paragraphs` 字段，仍有 `outline`、`paraCount`、`pictureCount`、`tableCount`、`headers`、`footers`、`sections` |
+| I5 | 无 scope | 只发 path 时没有 `paragraphs` 字段，仍有 `outline`、`paraCount`、`pictureCount`、`tableCount`、`revisionCount`、`headers`、`footers`、`sections` |
 
 ## apply
 
@@ -288,6 +289,19 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 | Tb6 | create | create 带 2×2 表，Word 能打开，无修复；COM 表数为 1 |
 | Tb7 | 合并 | `mergeCells` 合并第一行两格后 Word 无修复；COM 第一行单元格数变为 1 |
 | Tb8 | 最后一行 | 对仅剩一行的表 `deleteRow` 得 `InvalidField`，文件未写坏 |
+
+## 修订痕迹
+
+准备一份带修订的样例：Word 打开跟踪修订后，一段里删几个字、另一段里插入几个字，另存。`inspect` 带 `scope.revisions: true`。手测脚本 `manual-check/office/cases/docx-revision.ps1`。
+
+| 序号 | 检查 | 通过标准 |
+| --- | --- | --- |
+| Rv1 | 名单 | 无 scope 时仍有 `revisionCount` 且没有 `revisions`；给了 `scope.revisions` 后能列出 `ins` 与 `del`，带 `host` 段落 id |
+| Rv2 | 接受删除 | `acceptRevision` 点名删除后，Word 无修复，被删的字从可见文本里消失 |
+| Rv3 | 拒绝插入 | `rejectRevision` 点名插入后，Word 无修复，插入字消失，原文还在 |
+| Rv4 | 接受插入 | `acceptRevision` 点名插入后，Word 无修复，插入字留下且不再标修订 |
+| Rv5 | 拒绝删除 | `rejectRevision` 点名删除后，Word 无修复，被删的字重新可见 |
+| Rv6 | 改字拒绝 | 对仍带本期修订的段发 `setParaText` 得 `NotImplemented`，文件未写坏 |
 
 ## 原样保存（opc 验收）
 

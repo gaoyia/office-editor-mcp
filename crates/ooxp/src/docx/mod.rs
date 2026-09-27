@@ -11,6 +11,7 @@ mod notes;
 mod para;
 mod picture;
 mod request;
+mod revision;
 mod sect;
 mod smartart;
 mod tbl;

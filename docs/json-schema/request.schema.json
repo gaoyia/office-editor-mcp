@@ -78,6 +78,7 @@
         "charts": { "type": "boolean" },
         "smartArt": { "type": "boolean" },
         "tables": { "type": "boolean" },
+        "revisions": { "type": "boolean" },
         "slide": { "type": "integer", "minimum": 1 },
         "maxShapes": { "type": "integer", "minimum": 1, "maximum": 5000 }
       },
@@ -526,6 +527,8 @@
               { "$ref": "#/$defs/deleteColOp" },
               { "$ref": "#/$defs/mergeCellsOp" },
               { "$ref": "#/$defs/splitCellsOp" },
+              { "$ref": "#/$defs/acceptRevisionOp" },
+              { "$ref": "#/$defs/rejectRevisionOp" },
               { "$ref": "#/$defs/setTextBoxLinkOp" },
               { "$ref": "#/$defs/insertFootnoteOp" },
               { "$ref": "#/$defs/insertEndnoteOp" },
@@ -1113,6 +1116,24 @@
       "additionalProperties": false,
       "properties": {
         "op": { "const": "splitCells" },
+        "id": { "type": "string", "minLength": 1 }
+      }
+    },
+    "acceptRevisionOp": {
+      "type": "object",
+      "required": ["op", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "acceptRevision" },
+        "id": { "type": "string", "minLength": 1 }
+      }
+    },
+    "rejectRevisionOp": {
+      "type": "object",
+      "required": ["op", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "rejectRevision" },
         "id": { "type": "string", "minLength": 1 }
       }
     },
