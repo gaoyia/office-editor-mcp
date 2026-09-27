@@ -363,6 +363,10 @@ define_error_kinds! {
     NotesSlideImage => vec![Self::NotesSlideImage],
     GraphicInRestrictedStory => vec![Self::GraphicInRestrictedStory],
     NeedPropsField => vec![Self::NeedPropsField],
+    NeedProtectionField => vec![Self::NeedProtectionField],
+    InvalidProtectionEdit => vec![Self::InvalidProtectionEdit],
+    ProtectionPassword => vec![Self::ProtectionPassword],
+    ProtectionHasPassword => vec![Self::ProtectionHasPassword],
     InvalidCustomPropType => vec![Self::InvalidCustomPropType],
     EmptyCustomPropName => vec![Self::EmptyCustomPropName],
     CustomPropNotFound { id: String } => vec![Self::CustomPropNotFound { id: "prop:Editor".into() }],
@@ -885,6 +889,8 @@ impl ErrorKind {
             | Self::NotesSlideImage
             | Self::GraphicInRestrictedStory
             | Self::NeedPropsField
+            | Self::NeedProtectionField
+            | Self::InvalidProtectionEdit
             | Self::InvalidCustomPropType
             | Self::EmptyCustomPropName => InvalidField,
             Self::OutOfRange { .. } => TruncatedLimit,
@@ -942,7 +948,9 @@ impl ErrorKind {
             | Self::SetParaTextHasSdt
             | Self::ContentControlBound
             | Self::ContentControlRepeating
-            | Self::ContentControlHasTable => NotImplemented,
+            | Self::ContentControlHasTable
+            | Self::ProtectionPassword
+            | Self::ProtectionHasPassword => NotImplemented,
             Self::OpcOpen { .. } => OpcOpen,
             Self::PartMissing { .. }
             | Self::RelNotFound { .. }

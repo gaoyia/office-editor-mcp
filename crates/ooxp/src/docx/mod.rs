@@ -16,6 +16,7 @@ mod numbering;
 mod ole;
 mod para;
 mod picture;
+mod protect;
 mod request;
 mod revision;
 mod sdt;

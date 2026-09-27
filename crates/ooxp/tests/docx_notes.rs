@@ -177,7 +177,8 @@ fn inspect_counts_without_lists() {
             "sections",
             "mirrorMargins",
             "gutterAtTop",
-            "props"
+            "props",
+            "protection"
         ]
     );
 }

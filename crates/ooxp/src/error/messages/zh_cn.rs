@@ -214,7 +214,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
                 "setEvenAndOddHeaders 的 id 必须是 docx:document".into()
             }
             IdReason::SettingsNeedDocument => {
-                "setMirrorMargins / setGutterAtTop 的 id 必须是 docx:document".into()
+                "setMirrorMargins / setGutterAtTop / setProtection 的 id 必须是 docx:document".into()
             }
             IdReason::TablePrefix => {
                 "表 id 必须是 table:N，或页眉页脚容器 id 加上 /table:N".into()
@@ -450,6 +450,16 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::NeedPropsField => {
             "setProps 至少要给 title、subject、creator、description、keywords、category、company、manager 之一"
                 .into()
+        }
+        ErrorKind::NeedProtectionField => {
+            "setProtection 至少要给 enforced、edit、formatting、readOnlyRecommended 之一".into()
+        }
+        ErrorKind::InvalidProtectionEdit => {
+            "edit 必须是 readOnly、comments、trackedChanges 或 forms".into()
+        }
+        ErrorKind::ProtectionPassword => "setProtection 不写密码哈希".into(),
+        ErrorKind::ProtectionHasPassword => {
+            "这份文件带密码哈希，不能改保护字段".into()
         }
         ErrorKind::InvalidCustomPropType => {
             "自定义属性 type 必须是 lpwstr、i4、r8 或 bool，且必须与 value 对得上".into()

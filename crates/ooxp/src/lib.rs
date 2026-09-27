@@ -875,6 +875,7 @@ mod tests {
                 "mirrorMargins",
                 "gutterAtTop",
                 "props",
+                "protection",
                 "from",
                 "truncated",
                 "paragraphs"

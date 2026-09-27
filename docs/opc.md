@@ -110,7 +110,7 @@ docx create 同样生成 Transitional 包，命名空间用 2006 那套。
 | `/word/document.xml` | 主文档，至少一个 `w:p` |
 | `/word/_rels/document.xml.rels` | 指向 styles 与 settings |
 | `/word/styles.xml` | 至少含 Normal、Heading1、Heading2、Heading3 |
-| `/word/settings.xml` | 最小文档设置。必须含 `compatibilityMode`，`val` 为 `15`（MS-DOCX §2.3.5），否则 Word 按兼容模式打开（默认 12） |
+| `/word/settings.xml` | 最小文档设置。必须含 `compatibilityMode`，`val` 为 `15`（MS-DOCX §2.3.5），否则 Word 按兼容模式打开（默认 12）。给了 `document.protection` 或 apply `setProtection` 时还可含 `documentProtection` / `writeProtection` |
 
 可选但 create 要写：
 

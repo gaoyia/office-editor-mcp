@@ -130,6 +130,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         "mirrorMargins": mirror_margins,
         "gutterAtTop": gutter_at_top,
         "props": crate::props::inspect(&pkg)?,
+        "protection": super::protect::inspect(&pkg, &part)?,
     });
 
     if let Some(scope) = scope {

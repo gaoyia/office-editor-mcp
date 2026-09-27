@@ -822,6 +822,7 @@ pub enum DocxOp {
     SetSmartArtLayout(super::smartart::SetSmartArtLayoutOp),
     InsertOle(super::ole::InsertOleOp),
     DeleteOle(super::ole::DeleteOleOp),
+    SetProtection(super::protect::SetProtectionOp),
     SetProps(crate::props::SetPropsOp),
     SetCustomProp(crate::props::SetCustomPropOp),
     DeleteCustomProp(crate::props::DeleteCustomPropOp),
@@ -1242,6 +1243,7 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<DocxOp>, Error> {
             )?)),
             "insertOle" => out.push(DocxOp::InsertOle(parse_insert_ole(obj, i)?)),
             "deleteOle" => out.push(DocxOp::DeleteOle(parse_delete_ole(obj, i)?)),
+            "setProtection" => out.push(DocxOp::SetProtection(super::protect::parse_op(obj, i)?)),
             "setProps" => out.push(DocxOp::SetProps(crate::props::parse_set_props(
                 obj,
                 i,

@@ -136,7 +136,7 @@ pub fn create(document: &Value) -> Result<Vec<u8>, Error> {
     for k in obj.keys() {
         if !matches!(
             k.as_str(),
-            "paragraphs" | "headers" | "footers" | "tables" | "props"
+            "paragraphs" | "headers" | "footers" | "tables" | "props" | "protection"
         ) {
             return Err(Error::with_path(
                 ErrorKind::UnknownField { field: k.clone() },
@@ -320,7 +320,14 @@ pub fn create(document: &Value) -> Result<Vec<u8>, Error> {
     }
 
     let bytes = pkg.save_to_vec()?;
-    apply_follow_ups(bytes, &paras, &header_items, &footer_items)
+    let bytes = apply_follow_ups(bytes, &paras, &header_items, &footer_items)?;
+    if obj.get("protection").is_some() {
+        let mut pkg = crate::opc::Package::open_bytes(bytes)?;
+        super::protect::apply_create(&mut pkg, obj.get("protection"))?;
+        pkg.save_to_vec()
+    } else {
+        Ok(bytes)
+    }
 }
 
 fn parse_hf_side(v: Option<&Value>, side: &str) -> Result<Vec<HfCreateItem>, Error> {

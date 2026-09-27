@@ -71,7 +71,7 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 | I2 | 大纲 | `outline` 含第一段，`level` 为 `1`，`text` 为 `标题` |
 | I3 | 段落 id | 两段都有 `para:{hex}`，`stable` 为 `true` |
 | I4 | 第二段 | `text` 为 `hello` |
-| I5 | 无 scope | 只发 path 时没有 `paragraphs` 字段，仍有 `outline`、`paraCount`、`pictureCount`、`tableCount`、`revisionCount`、`hyperlinkCount`、`bookmarkCount`、`fieldCount`、`tocCount`、`mathCount`、`contentControlCount`、`headers`、`footers`、`sections`、`props` |
+| I5 | 无 scope | 只发 path 时没有 `paragraphs` 字段，仍有 `outline`、`paraCount`、`pictureCount`、`tableCount`、`revisionCount`、`hyperlinkCount`、`bookmarkCount`、`fieldCount`、`tocCount`、`mathCount`、`contentControlCount`、`headers`、`footers`、`sections`、`props`、`protection` |
 
 ## apply
 
@@ -482,6 +482,19 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 | Ol3 | 删除 | `deleteOle` 后 `oleObjectCount` 为 0，Word 无修复 |
 | Ol4 | 插入 | 对段落发 `insertOle` 写入本地 xlsx 后 Word 无修复，树上能看见 |
 | Ol5 | 拒错 id | 对段落 id 发 `deleteOle`、对 OLE id 发 `insertOle` 得 `InvalidId`。不强制开 Word |
+
+## 文档保护
+
+只认 `settings.xml` 的 `w:documentProtection` / `w:writeProtection`。不破解密码。手测脚本 `manual-check/office/cases/docx-protect.ps1`。
+
+| 序号 | 检查 | 通过标准 |
+| --- | --- | --- |
+| Pr1 | inspect | Word 无密码只读保护另存后，无 scope 时根上有 `protection`；`enforced` 为 true，`edit` 为 `readOnly`，`hasPassword` 为 false |
+| Pr2 | 关掉 | `setProtection` `enforced: false` 后 Word `ProtectionType` 为 `-1`，标题栏无 Repair |
+| Pr3 | 打开窗体 | 对未保护文件 `enforced: true`、`edit: forms` 后 Word `ProtectionType` 为 `2`，标题栏无 Repair |
+| Pr4 | 只读推荐 | Word 勾选只读推荐另存后，`readOnlyRecommended` 为 true |
+| Pr5 | 有密码 | Word 带密码保护另存后，`hasPassword` 为 true，树 JSON 不含该明文；对其发改 `enforced` 得 `NotImplemented`，不写文件 |
+| Pr6 | 拒错 id | 对段落 id 发 `setProtection` 得 `InvalidId`；一个字段都不给得 `InvalidField`。不强制开 Word |
 
 ## 原样保存（opc 验收）
 

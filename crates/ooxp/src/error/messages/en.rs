@@ -237,7 +237,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
                 "setEvenAndOddHeaders id must be docx:document".into()
             }
             IdReason::SettingsNeedDocument => {
-                "setMirrorMargins / setGutterAtTop id must be docx:document".into()
+                "setMirrorMargins / setGutterAtTop / setProtection id must be docx:document".into()
             }
             IdReason::TablePrefix => {
                 "Table id must be table:N or a header/footer container id plus /table:N".into()
@@ -518,6 +518,19 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::NeedPropsField => {
             "setProps requires at least one of title, subject, creator, description, keywords, category, company, manager"
                 .into()
+        }
+        ErrorKind::NeedProtectionField => {
+            "setProtection requires at least one of enforced, edit, formatting, readOnlyRecommended"
+                .into()
+        }
+        ErrorKind::InvalidProtectionEdit => {
+            "edit must be readOnly, comments, trackedChanges, or forms".into()
+        }
+        ErrorKind::ProtectionPassword => {
+            "setProtection does not write password hashes".into()
+        }
+        ErrorKind::ProtectionHasPassword => {
+            "this document has a password hash; protection fields cannot be changed".into()
         }
         ErrorKind::InvalidCustomPropType => {
             "custom property type must be lpwstr, i4, r8, or bool, and must match value"

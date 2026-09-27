@@ -242,7 +242,8 @@
           "maxItems": 3,
           "items": { "$ref": "#/$defs/docxHfCreate" }
         },
-        "props": { "$ref": "#/$defs/createProps" }
+        "props": { "$ref": "#/$defs/createProps" },
+        "protection": { "$ref": "#/$defs/createProtection" }
       }
     },
     "docxHfCreate": {
@@ -684,6 +685,7 @@
               { "$ref": "#/$defs/setSmartArtLayoutOp" },
               { "$ref": "#/$defs/insertOleOp" },
               { "$ref": "#/$defs/deleteOleOp" },
+              { "$ref": "#/$defs/setProtectionOp" },
               { "$ref": "#/$defs/setNotesTextOp" },
               { "$ref": "#/$defs/setShapeTextOp" },
               { "$ref": "#/$defs/setPropsOp" },
@@ -2284,6 +2286,41 @@
         "value": { "type": ["string", "number", "boolean"] },
         "type": { "enum": ["lpwstr", "i4", "r8", "bool"] }
       }
+    },
+    "setProtectionOp": {
+      "type": "object",
+      "required": ["op", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "setProtection" },
+        "id": { "type": "string", "minLength": 1 },
+        "enforced": { "type": "boolean" },
+        "edit": { "enum": ["readOnly", "comments", "trackedChanges", "forms"] },
+        "formatting": { "type": "boolean" },
+        "readOnlyRecommended": { "type": "boolean" }
+      },
+      "anyOf": [
+        { "required": ["enforced"] },
+        { "required": ["edit"] },
+        { "required": ["formatting"] },
+        { "required": ["readOnlyRecommended"] }
+      ]
+    },
+    "createProtection": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enforced": { "type": "boolean" },
+        "edit": { "enum": ["readOnly", "comments", "trackedChanges", "forms"] },
+        "formatting": { "type": "boolean" },
+        "readOnlyRecommended": { "type": "boolean" }
+      },
+      "anyOf": [
+        { "required": ["enforced"] },
+        { "required": ["edit"] },
+        { "required": ["formatting"] },
+        { "required": ["readOnlyRecommended"] }
+      ]
     },
     "setPropsOp": {
       "type": "object",

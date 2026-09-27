@@ -18,6 +18,7 @@ use super::numbering;
 use super::ole;
 use super::para::{self, BodyPara, HostPara, NoteKind, ParaTarget};
 use super::picture;
+use super::protect;
 use super::request::{
     DeleteBookmarkOp, DeleteColOp, DeleteCommentOp, DeleteContentControlOp, DeleteFieldOp,
     DeleteHyperlinkOp, DeleteMathOp, DeleteNoteOp, DeleteParaOp, DeletePictureOp, DeleteRowOp,
@@ -333,6 +334,9 @@ pub fn apply(bytes: &[u8], ops: &[DocxOp]) -> Result<Vec<u8>, Error> {
             }
             DocxOp::DeleteOle(op) => {
                 ole::apply_delete(&mut pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
+            }
+            DocxOp::SetProtection(op) => {
+                protect::apply(&mut pkg, &mut docs, &mut dirty, &doc_part, op, i)?;
             }
             DocxOp::SetProps(op) => {
                 crate::props::apply_set_props(&mut pkg, op, i)?;

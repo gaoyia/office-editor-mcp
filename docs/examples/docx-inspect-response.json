@@ -71,6 +71,13 @@
     "manager": null,
     "custom": []
   },
+  "protection": {
+    "enforced": false,
+    "edit": null,
+    "formatting": false,
+    "hasPassword": false,
+    "readOnlyRecommended": false
+  },
   "from": 1,
   "truncated": false,
   "paragraphs": [
