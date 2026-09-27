@@ -130,12 +130,16 @@ pub(crate) enum IdReason {
     DeleteChartSheetNeedsChartsheet,
     /// deleteSheet 必须用普通工作表 sheet:工作表名
     DeleteSheetNeedsWorksheet,
-    /// renameSheet / moveSheet / setSheetHidden / insertDataValidation 必须用 sheet:工作表名
+    /// renameSheet / moveSheet / setSheetHidden / insertDataValidation / insertConditionalFormat 必须用 sheet:工作表名
     SheetOpNeedsSheet,
     /// setDataValidation / deleteDataValidation 必须用 sheet:工作表名/dv:n
     SheetDvPrefix,
     DvIndexNotInt,
     DvIndexFromOne,
+    /// setConditionalFormat / deleteConditionalFormat 必须用 sheet:工作表名/cf:n
+    SheetCfPrefix,
+    CfIndexNotInt,
+    CfIndexFromOne,
     /// xlsx 图表 id 必须是 sheet:工作表名/chart:…
     SheetChartPrefix,
     /// 工作表 id，缺少 /chart:…
@@ -582,6 +586,16 @@ define_error_kinds! {
     DataValidationNotFound { id: String } => {
         vec![Self::DataValidationNotFound { id: "sheet:Sheet1/dv:1".into() }]
     },
+    NeedSetConditionalFormatField => vec![Self::NeedSetConditionalFormatField],
+    NeedConditionalFormatFormula { field: String } => {
+        vec![Self::NeedConditionalFormatFormula { field: "formulas".into() }]
+    },
+    InvalidConditionalFormat { field: String } => {
+        vec![Self::InvalidConditionalFormat { field: "type".into() }]
+    },
+    ConditionalFormatNotFound { id: String } => {
+        vec![Self::ConditionalFormatNotFound { id: "sheet:Sheet1/cf:1".into() }]
+    },
     InvalidAlign => vec![Self::InvalidAlign],
     InvalidLineRule => vec![Self::InvalidLineRule],
     InvalidUnderline => vec![Self::InvalidUnderline],
@@ -720,6 +734,9 @@ impl IdReason {
             Self::SheetDvPrefix,
             Self::DvIndexNotInt,
             Self::DvIndexFromOne,
+            Self::SheetCfPrefix,
+            Self::CfIndexNotInt,
+            Self::CfIndexFromOne,
             Self::SheetChartPrefix,
             Self::SheetChartContainer,
             Self::SlideChartPrefix,
@@ -957,6 +974,9 @@ impl ErrorKind {
             | Self::NeedSetDataValidationField
             | Self::NeedDataValidationFormula { .. }
             | Self::InvalidDataValidation { .. }
+            | Self::NeedSetConditionalFormatField
+            | Self::NeedConditionalFormatFormula { .. }
+            | Self::InvalidConditionalFormat { .. }
             | Self::InvalidAlign
             | Self::InvalidLineRule
             | Self::InvalidUnderline
@@ -1052,7 +1072,8 @@ impl ErrorKind {
             | Self::StyleNotFound { .. }
             | Self::RunNotFound { .. }
             | Self::CustomPropNotFound { .. }
-            | Self::DataValidationNotFound { .. } => IdNotFound,
+            | Self::DataValidationNotFound { .. }
+            | Self::ConditionalFormatNotFound { .. } => IdNotFound,
             Self::ScopeRequired { .. } => ScopeRequired,
             Self::SharedFormulaMaster { .. }
             | Self::DataTableFormula { .. }

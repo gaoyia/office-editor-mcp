@@ -8,7 +8,7 @@
 
 Microsoft Excel 16.0 已打开，用户确认通过。本机若装了 WPS，`Excel.Application` 会被抢走，测试仍直接启动 `EXCEL.EXE` 再挂 COM。
 
-C、I、A、O、Xp、Xc、Xh 这几组现在由 `manual-check/office/cases/xlsx-*.ps1` 自动判定，跑 `pwsh -File manual-check\office\run.ps1 -Case 'xlsx-*'` 即可复现，逐条结果落在 `manual-check/office/out/office-results.csv`。2026-09-27 补跑 `xlsx-pictures.ps1`，Xp1–Xp7 通过。同日补跑 `xlsx-charts.ps1`，Xc1–Xc7 通过。同日补跑 `xlsx-create-pictures.ps1`，C8–C10 通过。同日补跑 `xlsx-create-charts.ps1`，C11–C13 通过。同日补跑 `xlsx-headerfooter.ps1`，Xh1–Xh5 通过。同日补跑 `xlsx-docprops.ps1`，Xd1–Xd5 通过。同日补跑 `xlsx-charts-remain.ps1`，Xr1–Xr4 通过。同日补跑 `xlsx-sheets.ps1`，Xm1–Xm7 通过。同日补跑 `xlsx-cellstyle.ps1`，Xs1–Xs5 通过。同日补跑 `xlsx-layout.ps1`，Xl1–Xl5 通过。同日补跑 `xlsx-formula.ps1`，Xf1–Xf5 通过。2026-09-28 补跑 `xlsx-validation.ps1`，Xv1–Xv5 通过。
+C、I、A、O、Xp、Xc、Xh 这几组现在由 `manual-check/office/cases/xlsx-*.ps1` 自动判定，跑 `pwsh -File manual-check\office\run.ps1 -Case 'xlsx-*'` 即可复现，逐条结果落在 `manual-check/office/out/office-results.csv`。2026-09-27 补跑 `xlsx-pictures.ps1`，Xp1–Xp7 通过。同日补跑 `xlsx-charts.ps1`，Xc1–Xc7 通过。同日补跑 `xlsx-create-pictures.ps1`，C8–C10 通过。同日补跑 `xlsx-create-charts.ps1`，C11–C13 通过。同日补跑 `xlsx-headerfooter.ps1`，Xh1–Xh5 通过。同日补跑 `xlsx-docprops.ps1`，Xd1–Xd5 通过。同日补跑 `xlsx-charts-remain.ps1`，Xr1–Xr4 通过。同日补跑 `xlsx-sheets.ps1`，Xm1–Xm7 通过。同日补跑 `xlsx-cellstyle.ps1`，Xs1–Xs5 通过。同日补跑 `xlsx-layout.ps1`，Xl1–Xl5 通过。同日补跑 `xlsx-formula.ps1`，Xf1–Xf5 通过。2026-09-28 补跑 `xlsx-validation.ps1`，Xv1–Xv5 通过。同日补跑 `xlsx-conditional-format.ps1`，Xn1–Xn5 通过。
 
 | 序号 | 状态 | 结果 |
 | --- | --- | --- |
@@ -31,6 +31,7 @@ C、I、A、O、Xp、Xc、Xh 这几组现在由 `manual-check/office/cases/xlsx-
 | Xl1–Xl5 | ✅ | Excel 16.0：`xlsx-layout.ps1`，5 PASS / 0 FAIL。列宽 20、行高 30、合并 A1:B2 对得上；取消合并无修复；缺字段得 `InvalidField` 且未写文件 |
 | Xf1–Xf5 | ✅ | Excel 16.0：`xlsx-formula.ps1`，5 PASS / 0 FAIL。共享主格改公式保住整组；拆组后各格独立；数组公式 Excel 认；非主格 `NotImplemented` |
 | Xv1–Xv5 | ✅ | Excel 16.0：`xlsx-validation.ps1`，5 PASS / 0 FAIL。A1 序列下拉能看见 1、2、3；多区域 `A1`/`C1`；删除后无列表校验、无 Repair；缺字段得 `InvalidField` 且未写文件 |
+| Xn1–Xn5 | ✅ | Excel 16.0：`xlsx-conditional-format.ps1`，5 PASS / 0 FAIL。A1:A10 大于 0 填绿；两色色阶；删除后无条件格式、无 Repair；缺字段得 `InvalidField` 且未写文件 |
 
 ## create
 
@@ -221,3 +222,15 @@ Office 另存 create 产物是打开冒烟，见 `manual-check/office/cases/opc-
 | Xv3 | 多区域 | `sqref` 为 `A1 C1` 时 inspect 的 `sqref` 为 `["A1","C1"]`，两条都能看见下拉 |
 | Xv4 | 删除 | `deleteDataValidation` 后该格不再有校验，Excel 无修复 |
 | Xv5 | 缺字段 | 只给 `op` 与 `id` 的 `insertDataValidation` 得 `InvalidField`，未写文件。不强制开 Excel |
+
+## 条件格式
+
+用库 create 产物再 apply。脚本 `manual-check/office/cases/xlsx-conditional-format.ps1`。编号用 Xn。
+
+| 序号 | 检查 | 通过标准 |
+| --- | --- | --- |
+| Xn1 | inspect | 有单元格范围时表上有 `conditionalFormatCount` 与 `conditionalFormats`；create 默认为 `0` 与空数组 |
+| Xn2 | 单元格值填绿 | `insertConditionalFormat` 给 `A1:A10` 写 `type=cellIs`、`greaterThan`、`formulas=["0"]`、绿底后，Excel 无修复；A1 为 1 时能看见绿色条件格式 |
+| Xn3 | 色阶 | 写入两色 `colorScale` 后 Excel 认色阶、无修复 |
+| Xn4 | 删除 | `deleteConditionalFormat` 后该范围不再有条件格式，Excel 无修复 |
+| Xn5 | 缺字段 | 只给 `op` 与 `id` 的 `insertConditionalFormat` 得 `InvalidField`，未写文件。不强制开 Excel |

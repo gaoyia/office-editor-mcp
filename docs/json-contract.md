@@ -44,6 +44,7 @@ id 是给模型用的字符串，必须能从文件内容稳定算出来，不�
 | 趋势线 | `{系列 id}/trendline:{k}` | `sheet:Sheet1/chart:2/series:0/trendline:1` |
 | 误差线 | `{系列 id}/errorBars:{k}` | `sheet:Sheet1/chart:2/series:0/errorBars:1` |
 | 数据验证 | `sheet:{name}/dv:{n}` | `sheet:Sheet1/dv:1` |
+| 条件格式 | `sheet:{name}/cf:{n}` | `sheet:Sheet1/cf:1` |
 
 `{name}` 是 `workbook.xml` 里 `<sheet name="...">` 的值，不是 `sheetId`，也不是 `r:id`。查找工作表时大小写不敏感，输出 id 时用文件里的原始大小写。
 
@@ -70,6 +71,8 @@ xlsx 页眉页脚是工作表上的 `headerFooter`（ECMA-376 §18.3.1.46），�
 `insertChart` 的 `id` 必须是 `sheet:{name}`，且该表 `kind` 为 `worksheet`。对图 id、图表 id、系列 id、单元格 id 或 `xlsx:workbook` 发 `insertChart` 报 `InvalidId`。对 `chartsheet` / `dialogsheet` 发 `insertChart` 报 `InvalidField`。`insertChartSheet` 的 `id` 必须是 `xlsx:workbook`。`deleteChartSheet` 的 `id` 必须是 `sheet:{name}`，且该表 `kind` 为 `chartsheet`。`deleteChart` / `setChartTitle` / `setChartType` / `setChartAxisTitle` / `setChartLegend` / `setChartDataLabels` / `setChartSize` / `setChartAnchor` / `addChartSeries` 的 `id` 必须是图表 id。`setChartSeries` / `deleteChartSeries` / `insertTrendline` / `insertErrorBars` / `setChartSeriesAxis` 的 `id` 必须是系列 id。`setTrendline` / `deleteTrendline` 的 `id` 必须是趋势线 id。`setErrorBars` / `deleteErrorBars` 的 `id` 必须是误差线 id。对不上的 id 形态报 `InvalidId`。`setChartWrap` 是 Word 绕排，xlsx 上报 `InvalidField`。xlsx 改锚点请用 `setChartAnchor`。
 
 数据验证挂在该 `worksheet` 上，不挂在单元格上。`{n}` 从 1 起，按该表 `<dataValidations>/<dataValidation>` 的文档顺序。增删之后旧的 `dv:{n}` 会变，只够同一次 inspect 之后立刻 apply。不要套单元格 id，也不要从 `sqref` 编 id。`insertDataValidation` 的 `id` 必须是工作表 id `sheet:{name}`。`setDataValidation` / `deleteDataValidation` 的 `id` 必须是规则 id。对单元格 id、图 id 或工作表 id 发后两个 op 报 `InvalidId`。只能改 `worksheet`。`extLst` 里的 `x14:dataValidations` 不进树、不接受 apply，原样留下。
+
+条件格式同样挂在该 `worksheet` 上，不挂在单元格上。`{n}` 从 1 起，按该表全部 `<conditionalFormatting>/<cfRule>` 的文档顺序（先块后规则）。增删之后旧的 `cf:{n}` 会变，只够同一次 inspect 之后立刻 apply。不要套单元格 id，也不要从 `sqref` 编 id。同一 `<conditionalFormatting>` 里多条规则共用该块的 `sqref`。`insertConditionalFormat` 的 `id` 必须是工作表 id `sheet:{name}`。`setConditionalFormat` / `deleteConditionalFormat` 的 `id` 必须是规则 id。对单元格 id、图 id、数据验证 id 或工作表 id 发后两个 op 报 `InvalidId`。只能改 `worksheet`。`extLst` 里的 `x14:conditionalFormattings` 不进树、不接受 apply，原样留下。不渲染色阶，也不求值公式。
 
 ### docx
 
@@ -413,6 +416,7 @@ xlsx、docx、pptx 共用 `scope` 这个字段名，里面的键按格式分，�
       "pictureCount": 0,
       "chartCount": 0,
       "dataValidationCount": 0,
+      "conditionalFormatCount": 0,
       "hasHeaderFooter": false,
       "truncated": true,
       "range": "A1:D20",
@@ -445,7 +449,8 @@ xlsx、docx、pptx 共用 `scope` 这个字段名，里面的键按格式分，�
       "cols": [],
       "rows": [],
       "merges": [],
-      "dataValidations": []
+      "dataValidations": [],
+      "conditionalFormats": []
     },
     {
       "id": "sheet:Sheet2",
@@ -455,6 +460,7 @@ xlsx、docx、pptx 共用 `scope` 这个字段名，里面的键按格式分，�
       "pictureCount": 0,
       "chartCount": 0,
       "dataValidationCount": 0,
+      "conditionalFormatCount": 0,
       "hasHeaderFooter": false
     }
   ]
@@ -464,9 +470,9 @@ xlsx、docx、pptx 共用 `scope` 这个字段名，里面的键按格式分，�
 规则：
 
 - 工作簿字段顺序：`id`、`pictureCount`、`chartCount`、`props`、`sheets`。`pictureCount` 始终出现，等于各 `worksheet` 的 `pictureCount` 之和，不含 `chartsheet` / `dialogsheet` / `macrosheet`。`chartCount` 始终出现，等于各 `worksheet` 与 `chartsheet` 的 `chartCount` 之和，不含 `dialogsheet` / `macrosheet`。`props` 始终出现，规则见下文「文档属性」。
-- `sheets` 始终列出工作簿里全部表（含隐藏表），便于模型知道还有哪些表。未点名的表不带 `cells`、`range`、`truncated`、`cols`、`rows`、`merges`、`dataValidations`。
+- `sheets` 始终列出工作簿里全部表（含隐藏表），便于模型知道还有哪些表。未点名的表不带 `cells`、`range`、`truncated`、`cols`、`rows`、`merges`、`dataValidations`、`conditionalFormats`。
 - `kind`：`worksheet`、`chartsheet`、`dialogsheet`、`macrosheet`。第一期只对 `worksheet` 填单元格与图。`worksheet` 与 `chartsheet` 都填 `chartCount`。每张表始终填 `hidden`：`sheet/@state` 为 `hidden` 或 `veryHidden` 则为 `true`，缺省、空或 `visible` 为 `false`。每张表始终填 `hasHeaderFooter`：该表 `headerFooter` 里任一槽位有非空文本则为 `true`；没有该元素、空的 `<headerFooter/>`、或六个槽位都空则为 `false`。不算 VML，也不因为只有 `drawingHF` 图就把此项改成 `true`。
-- `worksheet` 字段顺序：`id`、`name`、`kind`、`hidden`、`pictureCount`、`chartCount`、`dataValidationCount`、`hasHeaderFooter`，有页眉名单时再跟 `headerFooters`，有图名单时再跟 `pictures`，有图表名单时再跟 `charts`，有单元格切片时再跟 `truncated`、`range`、`cells`、`cols`、`rows`、`merges`、`dataValidations`。`pictureCount` 始终出现，是该表工作表 drawing 里被收入的 `xdr:pic` 个数（判定见上文 xlsx 图 id 那节），不含页眉图。没有图则为 `0`。`chartCount` 始终出现，是该表被收入的图表个数（判定见上文 xlsx 图表 id 那节）。没有图表则为 `0`。`dataValidationCount` 始终出现，是该表 `<dataValidations>` 里 `<dataValidation>` 的个数，不含 `extLst` 里的 `x14:dataValidations`。没有则为 `0`。`chartsheet` 没有 `pictureCount`，也没有 `pictures`，也没有 `dataValidationCount`；字段顺序：`id`、`name`、`kind`、`hidden`、`chartCount`、`hasHeaderFooter`，有页眉名单时再跟 `headerFooters`，有图表名单时再跟 `charts`。`dialogsheet` / `macrosheet` 没有 `pictureCount` / `pictures` / `chartCount` / `charts` / `dataValidationCount`；字段顺序：`id`、`name`、`kind`、`hidden`、`hasHeaderFooter`，有页眉名单时再跟 `headerFooters`。关系 Type 以 `/macrosheet` 结尾的表 `kind` 为 `macrosheet`。
+- `worksheet` 字段顺序：`id`、`name`、`kind`、`hidden`、`pictureCount`、`chartCount`、`dataValidationCount`、`conditionalFormatCount`、`hasHeaderFooter`，有页眉名单时再跟 `headerFooters`，有图名单时再跟 `pictures`，有图表名单时再跟 `charts`，有单元格切片时再跟 `truncated`、`range`、`cells`、`cols`、`rows`、`merges`、`dataValidations`、`conditionalFormats`。`pictureCount` 始终出现，是该表工作表 drawing 里被收入的 `xdr:pic` 个数（判定见上文 xlsx 图 id 那节），不含页眉图。没有图则为 `0`。`chartCount` 始终出现，是该表被收入的图表个数（判定见上文 xlsx 图表 id 那节）。没有图表则为 `0`。`dataValidationCount` 始终出现，是该表 `<dataValidations>` 里 `<dataValidation>` 的个数，不含 `extLst` 里的 `x14:dataValidations`。没有则为 `0`。`conditionalFormatCount` 始终出现，是该表全部 `<conditionalFormatting>` 里 `<cfRule>` 的个数，不含 `extLst` 里的 `x14:conditionalFormattings`。没有则为 `0`。`chartsheet` 没有 `pictureCount`，也没有 `pictures`，也没有 `dataValidationCount`，也没有 `conditionalFormatCount`；字段顺序：`id`、`name`、`kind`、`hidden`、`chartCount`、`hasHeaderFooter`，有页眉名单时再跟 `headerFooters`，有图表名单时再跟 `charts`。`dialogsheet` / `macrosheet` 没有 `pictureCount` / `pictures` / `chartCount` / `charts` / `dataValidationCount` / `conditionalFormatCount`；字段顺序：`id`、`name`、`kind`、`hidden`、`hasHeaderFooter`，有页眉名单时再跟 `headerFooters`。关系 Type 以 `/macrosheet` 结尾的表 `kind` 为 `macrosheet`。
 - `scope.headerFooter` 为 `true` 时，每张表带 `headerFooters`，固定六个对象，顺序见上文 id 表。每个槽位字段顺序：`id`、`kind`、`side`、`text`；`worksheet` 再跟 `pictureCount`，若同时 `pictures: true` 再跟 `pictures`。`kind` / `side` 与 id 里那两段相同。`text` 为该 XML 元素原文，没有该元素则为 `null`。空串是合法原文，与 `null` 不同。`pictureCount` 是分到该槽的 DrawingML 页眉图个数。`chartsheet` / `dialogsheet` / `macrosheet` 的槽位没有 `pictureCount` / `pictures`。
 - `scope.pictures` 为 `true` 时，每张 `worksheet` 带工作表 `pictures`。没有图时为空数组。按该表 `<drawing>` 部件顺序、同一部件内按锚点文档顺序。每张字段顺序：`id`、`cNvPrId`、`name`、`anchor`，然后按锚点种类跟位置字段，最后 `stable`。`cNvPrId` 是 `xdr:cNvPr/@id` 原文，没有则为 `null`。`name` 取 `xdr:cNvPr/@name`，没有则为 `""`。`anchor` 为 `twoCell`、`oneCell` 或 `absolute`。单独 `pictures: true`、不开 `headerFooter`：只列工作表图，不含页眉图。
 - `twoCell`（§20.5.2.33）再跟 `from`、`fromOffX`、`fromOffY`、`to`、`toOffX`、`toOffY`、`editAs`。不报 `cx` / `cy`（显示尺寸由起止格与列宽行高决定，库不算）。`editAs` 取 `twoCellAnchor/@editAs`：`twoCell`、`oneCell` 或 `absolute`；缺省当作 `twoCell`。
@@ -477,11 +483,12 @@ xlsx、docx、pptx 共用 `scope` 这个字段名，里面的键按格式分，�
 - 每条系列字段顺序：`id`、`index`、`name`、`nameRef`、`categories`、`catRef`、`values`、`valRef`，气泡再跟 `sizes`、`sizeRef`，再跟 `axis`，有趋势线时再跟 `trendlines`，有误差线时再跟 `errorBars`，必要时再跟 `cacheStale`。`axis` / `trendlines` / `errorBars` 规则与 docx 图表相同。`index` 即 `{idx}`。`name` / `categories` / `values` / `sizes` 优先取 `c:f` 指向的单元格缓存值（与 inspect 单元格同一套 `<v>`）；读不到再退回 chart 的 cache / lit。`nameRef` / `catRef` / `valRef` / `sizeRef` 取对应 `c:f` 原文；没有公式则为 `null`。单元格值与 chart cache 不一致时该系列 `cacheStale: true`。
 - 不把媒体字节或 chart 部件放进树。
 - `cells` 稀疏：范围内没有 `<c>` 的格子不出现。
-- 有单元格切片时始终带 `cols`、`rows`、`merges`、`dataValidations`（可为空数组）。未点名的表、以及没有单元格切片的表不带这四项。
+- 有单元格切片时始终带 `cols`、`rows`、`merges`、`dataValidations`、`conditionalFormats`（可为空数组）。未点名的表、以及没有单元格切片的表不带这五项。
 - `cols` 来自工作表 `<cols>/<col>`（§18.3.1.13）。只列出与 inspect 范围列号有交集、且带 `width` 或为真的 `bestFit` 的条目，并把 `min` / `max` 裁到范围内。每项字段顺序：`min`、`max`，有 `width` 再跟，`bestFit` 为真时再跟。`min` / `max` 是列字母（与 A1 同一套）。JSON 的 `width` 是 Excel 列宽字符数（与 COM `ColumnWidth` 同一套），不是像素，也不是 XML 属性的原样数字。从 `col/@width` 按 §18.3.1.13 的公式还原，MDW 固定用该节示例的 Calibri 11 点 7 像素，四舍五入到 2 位小数。不读实际字体、不算排版。没有 `width` 则省略该键。`bestFit` 仅在属性为真时出现且为 `true`。不要用 `sheetFormatPr/@defaultColWidth` 去填没有 `<col>` 的列。不报隐藏、大纲、列样式。
 - `rows` 来自范围内已有 `<row>` 且带 `ht` 的行。没有 `ht` 的行不出现。每项字段顺序：`r`、`height`。`r` 是行号（从 1 计）。`height` 取 `row/@ht`，单位磅。不报隐藏、大纲。
 - `merges` 是与 inspect 范围有交集的 `<mergeCell/@ref>`，规范化成 `A1:B2` 这种闭区间字符串，按左上角行列升序。报完整合并区，不裁到 inspect 范围。没有则为 `[]`。
 - `dataValidations` 列出该表全部 `<dataValidation>`（ECMA-376 §18.3.1.32），不按 inspect 范围过滤。条数通常少，点名该表单元格切片时就要能拿到规则 id。每项字段顺序：`id`、`sqref`、`type`，然后按需跟 `operator`、`formula1`、`formula2`、`allowBlank`、`dropdown`、`showInputMessage`、`showErrorMessage`、`errorStyle`、`errorTitle`、`error`、`promptTitle`、`prompt`。`sqref` 是字符串数组：把 XML `sqref`（`ST_Sqref`，空格分隔）拆开，能解析成 A1 的规范化成 `A1` 或 `A1:B2`，解析不了的段落原样留下；按 XML 原文顺序，不排序。`type` 取 `ST_DataValidationType`（`none` / `whole` / `decimal` / `list` / `date` / `time` / `textLength` / `custom`），缺属性当作 `none`。`operator` 仅在 XML 有该属性时出现。`formula1` / `formula2` 是对应子元素的原文，当字符串，不求值、不补 `=`；没有该子元素则省略。`allowBlank` / `showInputMessage` / `showErrorMessage` 始终是布尔：XML 为 `1` / `true` / `TRUE` / `on` 则为 `true`，缺省为 `false`。`dropdown` 只在 `type` 为 `list` 时出现：表示是否显示单元格下拉。XML 的 `showDropDown="1"` 在 Excel 里是**隐藏**下拉（与 ECMA 属性名相反），因此 `showDropDown` 为真时 JSON `dropdown` 为 `false`，缺省或为假时 `dropdown` 为 `true`。`errorStyle` / `errorTitle` / `error` / `promptTitle` / `prompt` 仅在 XML 有对应属性时出现。不报 `imeMode`，也不报父元素 `disablePrompts` / `xWindow` / `yWindow`。`extLst` 里的扩展校验不列入。
+- `conditionalFormats` 列出该表全部 `<cfRule>`（ECMA-376 §18.3.1.10），按文档顺序，不按 inspect 范围过滤。条数通常少，点名该表单元格切片时就要能拿到规则 id。每项字段顺序：`id`、`sqref`、`type`、`priority`，然后按需跟 `operator`、`formulas`、`text`、`timePeriod`、`rank`、`percent`、`bottom`、`aboveAverage`、`equalAverage`、`stdDev`、`stopIfTrue`、`dxf`、`colorScale`、`dataBar`、`iconSet`。`sqref` 取所属 `<conditionalFormatting>/@sqref`，拆分数组规则与数据验证相同。同一块里多条规则重复同一份 `sqref`。`type` 取 `ST_CfType`（§18.18.12）原文；缺属性则省略该键。`priority` 取 XML 整数；缺属性则省略。`operator` 仅在 XML 有该属性时出现，取值 `ST_ConditionalFormattingOperator`（§18.18.15）。`formulas` 是 `<formula>` 子元素原文组成的字符串数组，不求值、不补 `=`；没有则省略。`text` / `timePeriod` / `rank` 仅在 XML 有对应属性时出现。`percent` / `bottom` / `aboveAverage` / `equalAverage` / `stopIfTrue` 仅在属性为真时出现且为 `true`。`stdDev` 仅在 XML 有该属性时出现。`dxf` 是 `dxfId` 指向的 `styles.xml` `<dxfs>/<dxf>` 摘要：字段顺序 `font`、`fill`、`border`，形状与单元格样式摘要相同，但按差分本身报（不跟 `fonts[0]` 比）。`dxf` 的 `fill` 若缺 `patternType` 却有 `fgColor` / `bgColor`，当作 `solid`。没有 `dxfId` 或越界则省略 `dxf`。`colorScale` 字段顺序：`cfvo`、`colors`。`cfvo` 每项字段顺序：`type`，有 `val` 再跟，`gte` 为假时再跟 `false`。`colors` 是颜色对象数组，规则与单元格 `color` 相同。`dataBar` 字段顺序：`cfvo`、`color`，然后按需 `minLength`、`maxLength`、`showValue`。`showValue` 仅在 XML 为假时出现且为 `false`。`iconSet` 字段顺序：`set`（XML 属性 `iconSet`，缺省当作 `3TrafficLights1`）、`cfvo`，然后 `showValue` 为假、`reverse` 为真、`percent` 为假时再跟对应键。父块 `pivot="1"` 不进 JSON。`extLst` 里的扩展条件格式不列入。
 - 范围内有内容的格子超过 `maxCells` 时，按行优先、从左到右截断，`truncated` 为 `true`。未截断则为 `false`。
 - `type`：`number`、`text`、`boolean`、`error`、`date`、`empty`。对应 SpreadsheetML `ST_CellType`（§18.18.11）的映射见下表。
 - `value` 是缓存显示值，不是库算出来的。公式格的 `value` 来自 `<v>`，可能过期。没有 `<v>` 时 `value` 为 `null`。
@@ -937,7 +944,7 @@ docx 根上始终带 `protection`，不要另给 scope 键。来源是 `/word/se
 
 行与单元格按行号、列号升序写出。补上 `sheetData` 和合理的 `dimension`。
 
-最小 `styles.xml` 必须生成，见 [opc.md](opc.md)。默认字体颜色写 `<color rgb="FF000000"/>`，不引用 theme，包里也不生成 theme 部件。给了 `sheets[].pictures` 时按 `insertPicture` 同一套规则写 drawing 与 media。给了 `sheets[].charts` 时按 `insertChart` 同一套规则写 `/xl/charts/chartN.xml`、`xdr:graphicFrame` 和 `dataFrom` 一带单元格，不写 embedding。一张表上的图与图表共用一份 drawing：先写 `pictures`，再写 `charts`。`xdr:cNvPr/@id` 取该表已有全部 `cNvPr` 的最大整数加 1。不要生成透视表、条件格式、图表工作表。create 本期不写列宽、行高、合并、数据验证，也不写共享公式或数组公式（`cells[]` 出现 `shared` / `sharedRef` / `array` / `arrayRef` 报 `InvalidField`）。`workbook` 根上或 `cells[]` 上出现 `pictures` / `charts`，或 `sheets[]` 上出现 `kind` / `wrap` / `smartArts`，报 `InvalidField`。`sheets[].kind` 仍拒绝。给了 `workbook.props` 时按 `setProps` / `setCustomProp` 同一套规则写 core / app / custom；省略则仍写空的 `dc:title` 与 `dc:creator` 为 `ooxp`，不写 custom 部件。
+最小 `styles.xml` 必须生成，见 [opc.md](opc.md)。默认字体颜色写 `<color rgb="FF000000"/>`，不引用 theme，包里也不生成 theme 部件。给了 `sheets[].pictures` 时按 `insertPicture` 同一套规则写 drawing 与 media。给了 `sheets[].charts` 时按 `insertChart` 同一套规则写 `/xl/charts/chartN.xml`、`xdr:graphicFrame` 和 `dataFrom` 一带单元格，不写 embedding。一张表上的图与图表共用一份 drawing：先写 `pictures`，再写 `charts`。`xdr:cNvPr/@id` 取该表已有全部 `cNvPr` 的最大整数加 1。不要生成透视表、条件格式、图表工作表。create 本期不写列宽、行高、合并、数据验证、条件格式，也不写共享公式或数组公式（`cells[]` 出现 `shared` / `sharedRef` / `array` / `arrayRef` 报 `InvalidField`）。`workbook` 根上或 `cells[]` 上出现 `pictures` / `charts`，或 `sheets[]` 上出现 `kind` / `wrap` / `smartArts`，报 `InvalidField`。`sheets[].kind` 仍拒绝。给了 `workbook.props` 时按 `setProps` / `setCustomProp` 同一套规则写 core / app / custom；省略则仍写空的 `dc:title` 与 `dc:creator` 为 `ooxp`，不写 custom 部件。
 
 ### docx
 
@@ -1178,7 +1185,7 @@ create 与 apply 落盘时先写入目标同目录的临时文件，再改名为
 
 颜色对象恰好含 `rgb`、`theme`、`indexed` 之一。`rgb` 为 6 位或 8 位十六进制（不带 `#`），写入时大写；6 位补成 `FF` + 六位 ARGB。`theme` 为非负整数，可再带数字 `tint`。`indexed` 为非负整数。主题色原样写入，不解析成 RGB。同时给了多种颜色键、或 `tint` 却没有 `theme`，报 `InvalidField`。
 
-写 `styles.xml` 时：能在已有 `numFmts` / `fonts` / `fills` / `borders` / `cellXfs` 里找到相同定义就复用下标，否则追加。不重排、不删、不改写未点名的 `xf` 条目。未点名格子的 `s` 不变。`s="0"` 可省略该属性。没有 styles 部件则按 create 那份最小表新建，并补 workbook 关系与 Override。不改 `cellStyleXfs`、`dxfs`、主题。create 本期不写单元格样式。
+写 `styles.xml` 时：能在已有 `numFmts` / `fonts` / `fills` / `borders` / `cellXfs` 里找到相同定义就复用下标，否则追加。不重排、不删、不改写未点名的 `xf` 条目。未点名格子的 `s` 不变。`s="0"` 可省略该属性。没有 styles 部件则按 create 那份最小表新建，并补 workbook 关系与 Override。不改 `cellStyleXfs`、主题。`setCellStyle` 不改 `dxfs`；条件格式写 `dxfs` 见 `insertConditionalFormat`。create 本期不写单元格样式。
 
 示例见 `docs/examples/xlsx-apply-cellstyle.json`。
 
@@ -1304,6 +1311,72 @@ create 与 apply 落盘时先写入目标同目录的临时文件，再改名为
 删光则去掉 `<dataValidations>`。找不到该序号报 `IdNotFound`。id 不是规则 id 报 `InvalidId`。只能改 `worksheet`。docx / pptx 上发此 op 报 `InvalidField`。不标重算。
 
 示例见 `docs/examples/xlsx-apply-validation.json`。
+
+### insertConditionalFormat
+
+往工作表追加一条条件格式规则（ECMA-376 §18.3.1.18 / §18.3.1.10）。公式当字符串，不求值。不渲染色阶、数据条或图标。始终新建一块 `<conditionalFormatting>`（一块一条规则），追加到已有条件格式之后、`dataValidations` 之前。
+
+```json
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "C:\\data\\book.xlsx",
+  "output": "C:\\data\\book.cf.xlsx",
+  "ops": [
+    {
+      "op": "insertConditionalFormat",
+      "id": "sheet:Sheet1",
+      "sqref": "A1:A10",
+      "type": "cellIs",
+      "operator": "greaterThan",
+      "formulas": ["0"],
+      "dxf": { "fill": { "pattern": "solid", "fg": { "rgb": "FFC6EFCE" } } }
+    }
+  ]
+}
+```
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"insertConditionalFormat"` |
+| `id` | 工作表 id `sheet:{name}` |
+| `sqref` | 必须。A1 区域字符串，或字符串数组。写入规则与 `insertDataValidation` 的 `sqref` 相同 |
+| `type` | 必须。本期可写：`cellIs` / `expression` / `colorScale` / `dataBar` / `iconSet`。其余 `ST_CfType` 出现报 `InvalidField` |
+| `operator` | `cellIs` 必须。`lessThan` / `lessThanOrEqual` / `equal` / `notEqual` / `greaterThanOrEqual` / `greaterThan` / `between` / `notBetween`。其它 `type` 上出现报 `InvalidField`。`containsText` / `notContains` / `beginsWith` / `endsWith` 本期不写 |
+| `formulas` | 字符串数组。写入 `<formula>` 文本，前导 `=` 会去掉，不求值。`cellIs` 的 `between` / `notBetween` 必须恰好 2 项，其余 `cellIs` 与 `expression` 必须恰好 1 项。其它 `type` 上出现报 `InvalidField` |
+| `dxf` | 可选对象。字段 `font` / `fill` / `border`，形状与 `setCellStyle` 相同。写入 `styles.xml` 的 `<dxfs>`：能找到相同 `dxf` 就复用下标，否则追加，不删旧条。`fill` 只给了 `fg` 时，差分里同时写 `fgColor` 与 `bgColor`（Excel 条件格式填色常用 `bgColor`）。`colorScale` / `dataBar` / `iconSet` 上出现报 `InvalidField` |
+| `colorScale` | `type` 为 `colorScale` 时必须。对象：`colors` 必须是 2 或 3 个颜色对象；`cfvo` 可选，长度必须与 `colors` 相同。省略 `cfvo` 时两项当作 `min`/`max`，三项当作 `min` / `percentile`（`val` 为 `"50"`）/ `max` |
+| `dataBar` | `type` 为 `dataBar` 时可选。省略则写 `min`/`max` 两个 `cfvo` 与颜色 `rgb=FF638EC6`。对象字段：`cfvo`（必须 2 项，省略则用缺省）、`color`（省略则用缺省蓝）、`minLength` / `maxLength`（0–100 的整数；省略不写属性，XML 缺省 10 与 90）、`showValue`（布尔；省略或 `true` 不写属性） |
+| `iconSet` | `type` 为 `iconSet` 时可选。省略则写 `set=3TrafficLights1` 与百分位 `0`/`33`/`67`。对象字段：`set`（`ST_IconSetType`，§18.18.42；省略当作 `3TrafficLights1`）、`cfvo`（项数必须等于该套图标个数：3 / 4 / 5；省略则按个数均分 `percent`）、`showValue`、`reverse`、`percent`（布尔） |
+| `priority` | 可选正整数。省略则取该表已有 `cfRule/@priority` 的最大整数加 1，没有则 `1`。不检查是否与其它规则重复 |
+| `stopIfTrue` | 可选布尔。`true` 写 `stopIfTrue="1"`；省略或 `false` 不写 |
+
+`cfvo` 每项：`type` 必须是 `num` / `percent` / `max` / `min` / `formula` / `percentile`。`val` 为字符串；`min` / `max` 可省略。`gte` 为布尔，`false` 写 `gte="0"`。颜色对象与 `setCellStyle` 相同。`type` 为 `cellIs` / `expression` 时不要出现 `colorScale` / `dataBar` / `iconSet`。`type` 为 `colorScale` 时不要出现 `dataBar` / `iconSet` / `operator` / `formulas` / `dxf`，以此类推。找不到工作表报 `IdNotFound`。id 不是工作表 id 报 `InvalidId`。只能改 `worksheet`。`sqref` 非法报 `InvalidRange`。不认识的枚举报 `InvalidField`。docx / pptx 上发此 op 报 `InvalidField`。不标重算，不删 `calcChain`。不写 `x14` 扩展数据条（渐变、负值色、轴）或扩展图标集。create 本期不写条件格式。
+
+### setConditionalFormat
+
+改已有规则。只改给了的字段。
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"setConditionalFormat"` |
+| `id` | 规则 id `sheet:{name}/cf:{n}` |
+| 其余 | 与 `insertConditionalFormat` 相同，全部可选。`formulas` / `dxf` / `colorScale` / `dataBar` / `iconSet` / `operator` / `priority` 可为 `null`：`formulas` 为 `null` 去掉全部 `<formula>`；`dxf` 为 `null` 去掉 `dxfId`（不删 `styles.xml` 里的 `dxf`）；`colorScale` / `dataBar` / `iconSet` 为 `null` 去掉对应子元素；`priority` 为 `null` 报 `InvalidField`（XML 必有 `priority`） |
+
+除 `op` 与 `id` 外至少给一个字段，否则报 `InvalidField`。改 `sqref` 时改所属 `<conditionalFormatting>/@sqref`，同一块里其它规则一起变范围。改 `type` 时只允许改成可写的五种；会清掉与新类型冲突的子元素与属性，并按 insert 同一套约束补齐。对 inspect 列出的其它类型（如 `top10`），可以改 `sqref` / `priority` / `stopIfTrue` / `dxf`；改 `type` 到五种之一则整条按新类型重写；给 `operator` / `formulas` / `colorScale` / `dataBar` / `iconSet` 却不改 `type` 报 `InvalidField`。未点名的属性、未知属性与未知子元素（含该规则上的 `extLst`）原样留。改完之后的规则仍须满足 insert 那套约束。找不到该序号报 `IdNotFound`。id 不是规则 id 报 `InvalidId`。只能改 `worksheet`。docx / pptx 上发此 op 报 `InvalidField`。不标重算。
+
+### deleteConditionalFormat
+
+删掉一条规则。
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"deleteConditionalFormat"` |
+| `id` | 规则 id `sheet:{name}/cf:{n}` |
+
+该块删光则去掉这块 `<conditionalFormatting>`。全部删光则表上不再有条件格式元素。其它规则的 `priority` 不重排。找不到该序号报 `IdNotFound`。id 不是规则 id 报 `InvalidId`。只能改 `worksheet`。docx / pptx 上发此 op 报 `InvalidField`。不标重算。不删 `styles.xml` 里未再被引用的 `dxf`。
+
+示例见 `docs/examples/xlsx-apply-conditional-format.json`。
 
 ### setProps
 

@@ -10,7 +10,7 @@ use super::a1;
 use super::apply;
 use super::picture;
 use super::request::{
-    AlignPatch, BorderPatch, BorderSidePatch, ColorSpec, FillPatch, FontPatch, Patch,
+    AlignPatch, BorderPatch, BorderSidePatch, ColorSpec, DxfPatch, FillPatch, FontPatch, Patch,
     SetCellStyleOp,
 };
 use super::{CT_STYLES, REL_STYLES, SML_NS};
@@ -22,6 +22,7 @@ pub struct Stylebook {
     fills: Vec<Element>,
     borders: Vec<Element>,
     xfs: Vec<Element>,
+    dxfs: Vec<Element>,
 }
 
 impl Stylebook {
@@ -32,7 +33,12 @@ impl Stylebook {
             fills: Vec::new(),
             borders: Vec::new(),
             xfs: Vec::new(),
+            dxfs: Vec::new(),
         }
+    }
+
+    pub fn dxf_json(&self, id: usize) -> Option<Value> {
+        self.dxfs.get(id).and_then(dxf_summary)
     }
 }
 
@@ -211,6 +217,7 @@ fn stylebook_from_root(root: &Element) -> Stylebook {
         fills: clone_children(root.child_by_local("fills"), "fill"),
         borders: clone_children(root.child_by_local("borders"), "border"),
         xfs: clone_children(root.child_by_local("cellXfs"), "xf"),
+        dxfs: clone_children(root.child_by_local("dxfs"), "dxf"),
     }
 }
 
@@ -382,7 +389,7 @@ fn align_summary(al: Option<&Element>) -> Option<Value> {
     }
 }
 
-fn color_json(el: &Element) -> Option<Value> {
+pub(crate) fn color_json(el: &Element) -> Option<Value> {
     if attr_bool(el, "auto") {
         return None;
     }
@@ -492,6 +499,100 @@ fn intern_xf(
     }
 
     Ok(intern_child(styles, "cellXfs", "xf", &xf))
+}
+
+/// 把条件格式差分写入 `<dxfs>`，相同定义复用下标。空补丁不写。
+pub(crate) fn intern_dxf(styles: &mut Element, patch: &DxfPatch) -> Option<usize> {
+    if patch.is_empty() {
+        return None;
+    }
+    let mut dxf = Element::new("dxf");
+    if let Some(font) = &patch.font {
+        let el = apply_font_patch(Element::new("font"), font);
+        if !el.children.is_empty() {
+            dxf.push_element(el);
+        }
+    }
+    if let Some(fill) = &patch.fill {
+        let mut el = apply_fill_patch(Element::new("fill"), fill);
+        copy_fg_to_bg_if_needed(&mut el);
+        dxf.push_element(el);
+    }
+    if let Some(border) = &patch.border {
+        let el = apply_border_patch(empty_border(), border);
+        if border_summary(&el).is_some() {
+            dxf.push_element(el);
+        }
+    }
+    if dxf.children.is_empty() {
+        return None;
+    }
+    Some(intern_child(styles, "dxfs", "dxf", &dxf))
+}
+
+fn copy_fg_to_bg_if_needed(fill: &mut Element) {
+    let Some(pf) = fill.child_by_local_mut("patternFill") else {
+        return;
+    };
+    if pf.child_by_local("bgColor").is_some() {
+        return;
+    }
+    let Some(fg) = pf.child_by_local("fgColor").cloned() else {
+        return;
+    };
+    let mut bg = fg;
+    bg.name = "bgColor".into();
+    pf.push_element(bg);
+}
+
+fn dxf_summary(dxf: &Element) -> Option<Value> {
+    let mut m = Map::new();
+    if let Some(font) = dxf
+        .child_by_local("font")
+        .and_then(|f| font_summary(f, None))
+    {
+        m.insert("font".into(), font);
+    }
+    if let Some(fill) = dxf.child_by_local("fill").and_then(dxf_fill_summary) {
+        m.insert("fill".into(), fill);
+    }
+    if let Some(border) = dxf.child_by_local("border").and_then(border_summary) {
+        m.insert("border".into(), border);
+    }
+    if m.is_empty() {
+        None
+    } else {
+        Some(Value::Object(m))
+    }
+}
+
+fn dxf_fill_summary(fill: &Element) -> Option<Value> {
+    if fill.child_by_local("gradientFill").is_some() {
+        return Some(json!({ "pattern": "gradient" }));
+    }
+    let pf = fill.child_by_local("patternFill")?;
+    let fg = pf.child_by_local("fgColor").and_then(color_json);
+    let bg = pf.child_by_local("bgColor").and_then(color_json);
+    let mut pattern = pf.attr("patternType").unwrap_or("none");
+    if pattern == "none" && (fg.is_some() || bg.is_some()) {
+        pattern = "solid";
+    }
+    if pattern == "none" {
+        return None;
+    }
+    let mut m = Map::new();
+    m.insert("pattern".into(), json!(pattern));
+    if let Some(fg) = fg {
+        m.insert("fg".into(), fg);
+    }
+    if let Some(bg) = bg {
+        m.insert("bg".into(), bg);
+    }
+    Some(Value::Object(m))
+}
+
+pub(crate) fn color_el(name: &str, spec: &ColorSpec) -> Element {
+    color_element(name, spec)
 }
 
 fn default_xf() -> Element {

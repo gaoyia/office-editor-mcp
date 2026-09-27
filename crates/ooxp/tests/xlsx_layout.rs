@@ -85,6 +85,7 @@ fn inspect_empty_layout_on_create() {
     assert_eq!(sh["rows"], json!([]));
     assert_eq!(sh["merges"], json!([]));
     assert_eq!(sh["dataValidations"], json!([]));
+    assert_eq!(sh["conditionalFormats"], json!([]));
 }
 
 #[test]

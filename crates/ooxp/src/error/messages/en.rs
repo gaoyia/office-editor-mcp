@@ -211,6 +211,11 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             }
             IdReason::DvIndexNotInt => "dv must be followed by a positive integer".into(),
             IdReason::DvIndexFromOne => "dv index starts at 1".into(),
+            IdReason::SheetCfPrefix => {
+                "conditional format id must be sheet:name/cf:n, n starting at 1".into()
+            }
+            IdReason::CfIndexNotInt => "cf must be followed by a positive integer".into(),
+            IdReason::CfIndexFromOne => "cf index starts at 1".into(),
             IdReason::SheetChartPrefix => {
                 "xlsx chart id must be sheet:name/chart:…".into()
             }
@@ -813,7 +818,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         }
         ErrorKind::RowRangeReversed => "toRow must not be less than row".into(),
         ErrorKind::LayoutWorksheetOnly => {
-            "column width, row height, merge, and data validation ops only apply to worksheets"
+            "column width, row height, merge, data validation, and conditional format ops only apply to worksheets"
                 .into()
         }
         ErrorKind::NeedSetDataValidationField => {
@@ -827,6 +832,18 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         }
         ErrorKind::DataValidationNotFound { id } => {
             format!("Data validation not found: {id}")
+        }
+        ErrorKind::NeedSetConditionalFormatField => {
+            "setConditionalFormat requires a field besides op and id".into()
+        }
+        ErrorKind::NeedConditionalFormatFormula { field } => {
+            format!("conditional format requires {field}")
+        }
+        ErrorKind::InvalidConditionalFormat { field } => {
+            format!("{field} is not a valid conditional format value")
+        }
+        ErrorKind::ConditionalFormatNotFound { id } => {
+            format!("Conditional format not found: {id}")
         }
         ErrorKind::InvalidAlign => {
             "align must be left, center, right, both, distribute, start, or end".into()

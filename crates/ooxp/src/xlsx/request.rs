@@ -430,6 +430,187 @@ pub struct DeleteDataValidationOp {
     pub index: usize,
 }
 
+/// 条件格式差分格式，形状与单元格样式的 font/fill/border 相同。
+#[derive(Debug, Clone)]
+pub struct DxfPatch {
+    pub font: Option<FontPatch>,
+    pub fill: Option<FillPatch>,
+    pub border: Option<BorderPatch>,
+}
+
+impl DxfPatch {
+    pub fn is_empty(&self) -> bool {
+        self.font.is_none() && self.fill.is_none() && self.border.is_none()
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CfType {
+    CellIs,
+    Expression,
+    ColorScale,
+    DataBar,
+    IconSet,
+}
+
+impl CfType {
+    pub fn parse(s: &str) -> Option<Self> {
+        Some(match s {
+            "cellIs" => Self::CellIs,
+            "expression" => Self::Expression,
+            "colorScale" => Self::ColorScale,
+            "dataBar" => Self::DataBar,
+            "iconSet" => Self::IconSet,
+            _ => return None,
+        })
+    }
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::CellIs => "cellIs",
+            Self::Expression => "expression",
+            Self::ColorScale => "colorScale",
+            Self::DataBar => "dataBar",
+            Self::IconSet => "iconSet",
+        }
+    }
+
+    pub fn is_writable(s: &str) -> bool {
+        Self::parse(s).is_some()
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CfOperator {
+    LessThan,
+    LessThanOrEqual,
+    Equal,
+    NotEqual,
+    GreaterThanOrEqual,
+    GreaterThan,
+    Between,
+    NotBetween,
+}
+
+impl CfOperator {
+    pub fn parse(s: &str) -> Option<Self> {
+        Some(match s {
+            "lessThan" => Self::LessThan,
+            "lessThanOrEqual" => Self::LessThanOrEqual,
+            "equal" => Self::Equal,
+            "notEqual" => Self::NotEqual,
+            "greaterThanOrEqual" => Self::GreaterThanOrEqual,
+            "greaterThan" => Self::GreaterThan,
+            "between" => Self::Between,
+            "notBetween" => Self::NotBetween,
+            _ => return None,
+        })
+    }
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::LessThan => "lessThan",
+            Self::LessThanOrEqual => "lessThanOrEqual",
+            Self::Equal => "equal",
+            Self::NotEqual => "notEqual",
+            Self::GreaterThanOrEqual => "greaterThanOrEqual",
+            Self::GreaterThan => "greaterThan",
+            Self::Between => "between",
+            Self::NotBetween => "notBetween",
+        }
+    }
+
+    pub fn formula_count(self) -> usize {
+        match self {
+            Self::Between | Self::NotBetween => 2,
+            _ => 1,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct CfvoSpec {
+    pub type_: String,
+    pub val: Option<String>,
+    pub gte: Option<bool>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ColorScaleSpec {
+    pub cfvo: Option<Vec<CfvoSpec>>,
+    pub colors: Vec<ColorSpec>,
+}
+
+#[derive(Debug, Clone)]
+pub struct DataBarSpec {
+    pub cfvo: Option<Vec<CfvoSpec>>,
+    pub color: Option<ColorSpec>,
+    pub min_length: Option<u32>,
+    pub max_length: Option<u32>,
+    pub show_value: Option<bool>,
+}
+
+#[derive(Debug, Clone)]
+pub struct IconSetSpec {
+    pub set: Option<String>,
+    pub cfvo: Option<Vec<CfvoSpec>>,
+    pub show_value: Option<bool>,
+    pub reverse: Option<bool>,
+    pub percent: Option<bool>,
+}
+
+#[derive(Debug, Clone)]
+pub struct InsertConditionalFormatOp {
+    pub sheet: String,
+    pub sqref: Vec<(a1::CellRef, a1::CellRef)>,
+    pub type_: CfType,
+    pub operator: Option<CfOperator>,
+    pub formulas: Option<Vec<String>>,
+    pub dxf: Option<DxfPatch>,
+    pub color_scale: Option<ColorScaleSpec>,
+    pub data_bar: Option<DataBarSpec>,
+    pub icon_set: Option<IconSetSpec>,
+    pub priority: Option<i32>,
+    pub stop_if_true: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetConditionalFormatOp {
+    pub sheet: String,
+    pub index: usize,
+    pub sqref: Option<Vec<(a1::CellRef, a1::CellRef)>>,
+    pub type_: Option<CfType>,
+    pub operator: Patch<CfOperator>,
+    pub formulas: Patch<Vec<String>>,
+    pub dxf: Patch<DxfPatch>,
+    pub color_scale: Patch<ColorScaleSpec>,
+    pub data_bar: Patch<DataBarSpec>,
+    pub icon_set: Patch<IconSetSpec>,
+    pub priority: Option<i32>,
+    pub stop_if_true: Option<bool>,
+}
+
+impl SetConditionalFormatOp {
+    pub fn has_patch(&self) -> bool {
+        self.sqref.is_some()
+            || self.type_.is_some()
+            || self.operator.is_present()
+            || self.formulas.is_present()
+            || self.dxf.is_present()
+            || self.color_scale.is_present()
+            || self.data_bar.is_present()
+            || self.icon_set.is_present()
+            || self.priority.is_some()
+            || self.stop_if_true.is_some()
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct DeleteConditionalFormatOp {
+    pub sheet: String,
+    pub index: usize,
+}
+
 #[derive(Debug, Clone)]
 pub struct SetHeaderFooterTextOp {
     #[allow(dead_code)]
@@ -739,6 +920,9 @@ pub enum XlsxOp {
     InsertDataValidation(InsertDataValidationOp),
     SetDataValidation(SetDataValidationOp),
     DeleteDataValidation(DeleteDataValidationOp),
+    InsertConditionalFormat(InsertConditionalFormatOp),
+    SetConditionalFormat(SetConditionalFormatOp),
+    DeleteConditionalFormat(DeleteConditionalFormatOp),
     DeleteChart(DeleteChartOp),
     SetChartTitle(SetChartTitleOp),
     SetChartSeries(SetChartSeriesOp),
@@ -892,6 +1076,15 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<XlsxOp>, Error> {
             "setDataValidation" => XlsxOp::SetDataValidation(parse_set_data_validation(obj, i)?),
             "deleteDataValidation" => {
                 XlsxOp::DeleteDataValidation(parse_delete_data_validation(obj, i)?)
+            }
+            "insertConditionalFormat" => {
+                XlsxOp::InsertConditionalFormat(parse_insert_conditional_format(obj, i)?)
+            }
+            "setConditionalFormat" => {
+                XlsxOp::SetConditionalFormat(parse_set_conditional_format(obj, i)?)
+            }
+            "deleteConditionalFormat" => {
+                XlsxOp::DeleteConditionalFormat(parse_delete_conditional_format(obj, i)?)
             }
             "deleteChart" => XlsxOp::DeleteChart(parse_delete_chart(obj, i)?),
             "setChartTitle" => XlsxOp::SetChartTitle(parse_set_chart_title(obj, i)?),
@@ -2775,6 +2968,944 @@ fn parse_delete_data_validation(
     Ok(DeleteDataValidationOp { sheet, index })
 }
 
+const CF_KEYS: &[&str] = &[
+    "op",
+    "id",
+    "sqref",
+    "type",
+    "operator",
+    "formulas",
+    "dxf",
+    "colorScale",
+    "dataBar",
+    "iconSet",
+    "priority",
+    "stopIfTrue",
+];
+
+const ICON_SETS: &[&str] = &[
+    "3Arrows",
+    "3ArrowsGray",
+    "3Flags",
+    "3Signs",
+    "3Symbols",
+    "3Symbols2",
+    "3TrafficLights1",
+    "3TrafficLights2",
+    "4Arrows",
+    "4ArrowsGray",
+    "4Rating",
+    "4RedToBlack",
+    "4TrafficLights",
+    "5Arrows",
+    "5ArrowsGray",
+    "5Quarters",
+    "5Rating",
+];
+
+const CFVO_TYPES: &[&str] = &["num", "percent", "max", "min", "formula", "percentile"];
+
+pub(crate) fn icon_set_count(set: &str) -> usize {
+    if set.starts_with('5') {
+        5
+    } else if set.starts_with('4') {
+        4
+    } else {
+        3
+    }
+}
+
+fn parse_insert_conditional_format(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<InsertConditionalFormatOp, Error> {
+    deny_keys(obj, i, CF_KEYS)?;
+    let id = require_id(obj, i)?;
+    let sheet = parse_sheet_only_id(&id, i, "id", IdReason::SheetOpNeedsSheet)?;
+    let sqref = parse_sqref_field(obj.get("sqref"), i, true)?;
+    let type_ = parse_cf_type_field(obj.get("type"), i, true)?.ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::MissingField {
+                field: "type".into(),
+            },
+            format!("ops[{i}].type"),
+        )
+    })?;
+    let operator = parse_cf_operator_field(obj.get("operator"), i, false)?;
+    let formulas = parse_cf_formulas_opt(obj.get("formulas"), i)?;
+    let dxf = parse_dxf_opt(obj.get("dxf"), i)?;
+    let color_scale = parse_color_scale_opt(obj.get("colorScale"), i)?;
+    let data_bar = parse_data_bar_opt(obj.get("dataBar"), i)?;
+    let icon_set = parse_icon_set_opt(obj.get("iconSet"), i)?;
+    let priority = parse_cf_priority_opt(obj.get("priority"), i)?;
+    let stop_if_true = parse_opt_bool(obj, i, "stopIfTrue")?.unwrap_or(false);
+    check_cf_fields(
+        type_,
+        operator,
+        formulas.as_deref(),
+        dxf.as_ref(),
+        color_scale.as_ref(),
+        data_bar.as_ref(),
+        icon_set.as_ref(),
+        i,
+        true,
+    )?;
+    Ok(InsertConditionalFormatOp {
+        sheet,
+        sqref,
+        type_,
+        operator,
+        formulas,
+        dxf,
+        color_scale,
+        data_bar,
+        icon_set,
+        priority,
+        stop_if_true,
+    })
+}
+
+fn parse_set_conditional_format(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<SetConditionalFormatOp, Error> {
+    deny_keys(obj, i, CF_KEYS)?;
+    let id = require_id(obj, i)?;
+    let (sheet, index) = parse_cf_id(&id, i)?;
+    let sqref = if obj.contains_key("sqref") {
+        Some(parse_sqref_field(obj.get("sqref"), i, true)?)
+    } else {
+        None
+    };
+    let op = SetConditionalFormatOp {
+        sheet,
+        index,
+        sqref,
+        type_: parse_cf_type_field(obj.get("type"), i, false)?,
+        operator: parse_cf_operator_patch(obj.get("operator"), i)?,
+        formulas: parse_cf_formulas_patch(obj.get("formulas"), i)?,
+        dxf: parse_dxf_patch_field(obj.get("dxf"), i)?,
+        color_scale: parse_color_scale_patch(obj.get("colorScale"), i)?,
+        data_bar: parse_data_bar_patch(obj.get("dataBar"), i)?,
+        icon_set: parse_icon_set_patch(obj.get("iconSet"), i)?,
+        priority: parse_cf_priority_opt(obj.get("priority"), i)?,
+        stop_if_true: parse_opt_bool(obj, i, "stopIfTrue")?,
+    };
+    if !op.has_patch() {
+        return Err(Error::with_path(
+            ErrorKind::NeedSetConditionalFormatField,
+            format!("ops[{i}]"),
+        ));
+    }
+    Ok(op)
+}
+
+fn parse_delete_conditional_format(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<DeleteConditionalFormatOp, Error> {
+    deny_keys(obj, i, &["op", "id"])?;
+    let id = require_id(obj, i)?;
+    let (sheet, index) = parse_cf_id(&id, i)?;
+    Ok(DeleteConditionalFormatOp { sheet, index })
+}
+
+fn parse_cf_id(id: &str, op_index: usize) -> Result<(String, usize), Error> {
+    let Some(rest) = id.strip_prefix("sheet:") else {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::SheetCfPrefix,
+            },
+            format!("ops[{op_index}].id"),
+        ));
+    };
+    let Some((name, nstr)) = rest.split_once("/cf:") else {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::SheetCfPrefix,
+            },
+            format!("ops[{op_index}].id"),
+        ));
+    };
+    if name.is_empty() || name.contains('/') {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::SheetCfPrefix,
+            },
+            format!("ops[{op_index}].id"),
+        ));
+    }
+    if !nstr.chars().all(|c| c.is_ascii_digit()) {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::CfIndexNotInt,
+            },
+            format!("ops[{op_index}].id"),
+        ));
+    }
+    let n: usize = nstr.parse().map_err(|_| {
+        Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::CfIndexNotInt,
+            },
+            format!("ops[{op_index}].id"),
+        )
+    })?;
+    if n == 0 {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::CfIndexFromOne,
+            },
+            format!("ops[{op_index}].id"),
+        ));
+    }
+    Ok((name.to_string(), n))
+}
+
+fn parse_cf_type_field(
+    v: Option<&Value>,
+    i: usize,
+    required: bool,
+) -> Result<Option<CfType>, Error> {
+    match v {
+        None if required => Err(Error::with_path(
+            ErrorKind::MissingField {
+                field: "type".into(),
+            },
+            format!("ops[{i}].type"),
+        )),
+        None => Ok(None),
+        Some(Value::String(s)) => CfType::parse(s).map(Some).ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::InvalidConditionalFormat {
+                    field: "type".into(),
+                },
+                format!("ops[{i}].type"),
+            )
+        }),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "type".into(),
+                expected: TypeName::String,
+            },
+            format!("ops[{i}].type"),
+        )),
+    }
+}
+
+fn parse_cf_operator_field(
+    v: Option<&Value>,
+    i: usize,
+    required: bool,
+) -> Result<Option<CfOperator>, Error> {
+    match v {
+        None if required => Err(Error::with_path(
+            ErrorKind::MissingField {
+                field: "operator".into(),
+            },
+            format!("ops[{i}].operator"),
+        )),
+        None => Ok(None),
+        Some(Value::String(s)) => CfOperator::parse(s).map(Some).ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::InvalidConditionalFormat {
+                    field: "operator".into(),
+                },
+                format!("ops[{i}].operator"),
+            )
+        }),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "operator".into(),
+                expected: TypeName::String,
+            },
+            format!("ops[{i}].operator"),
+        )),
+    }
+}
+
+fn parse_cf_operator_patch(v: Option<&Value>, i: usize) -> Result<Patch<CfOperator>, Error> {
+    match v {
+        None => Ok(Patch::Absent),
+        Some(Value::Null) => Ok(Patch::Clear),
+        Some(Value::String(s)) => CfOperator::parse(s).map(Patch::Set).ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::InvalidConditionalFormat {
+                    field: "operator".into(),
+                },
+                format!("ops[{i}].operator"),
+            )
+        }),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "operator".into(),
+                expected: TypeName::String,
+            },
+            format!("ops[{i}].operator"),
+        )),
+    }
+}
+
+fn parse_cf_formulas_opt(v: Option<&Value>, i: usize) -> Result<Option<Vec<String>>, Error> {
+    match v {
+        None => Ok(None),
+        Some(Value::Array(arr)) if arr.is_empty() => Err(Error::with_path(
+            ErrorKind::InvalidConditionalFormat {
+                field: "formulas".into(),
+            },
+            format!("ops[{i}].formulas"),
+        )),
+        Some(Value::Array(arr)) => {
+            let mut out = Vec::new();
+            for (j, item) in arr.iter().enumerate() {
+                let Some(s) = item.as_str() else {
+                    return Err(Error::with_path(
+                        ErrorKind::WrongType {
+                            field: "formulas".into(),
+                            expected: TypeName::String,
+                        },
+                        format!("ops[{i}].formulas[{j}]"),
+                    ));
+                };
+                out.push(strip_formula_eq(s));
+            }
+            if out.len() > 3 {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidConditionalFormat {
+                        field: "formulas".into(),
+                    },
+                    format!("ops[{i}].formulas"),
+                ));
+            }
+            Ok(Some(out))
+        }
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "formulas".into(),
+                expected: TypeName::Array,
+            },
+            format!("ops[{i}].formulas"),
+        )),
+    }
+}
+
+fn parse_cf_formulas_patch(v: Option<&Value>, i: usize) -> Result<Patch<Vec<String>>, Error> {
+    match v {
+        None => Ok(Patch::Absent),
+        Some(Value::Null) => Ok(Patch::Clear),
+        Some(other) => Ok(Patch::Set(
+            parse_cf_formulas_opt(Some(other), i)?.ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::InvalidConditionalFormat {
+                        field: "formulas".into(),
+                    },
+                    format!("ops[{i}].formulas"),
+                )
+            })?,
+        )),
+    }
+}
+
+fn parse_dxf_opt(v: Option<&Value>, i: usize) -> Result<Option<DxfPatch>, Error> {
+    match v {
+        None => Ok(None),
+        Some(Value::Object(m)) => Ok(Some(parse_dxf_obj(m, i)?)),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "dxf".into(),
+                expected: TypeName::Object,
+            },
+            format!("ops[{i}].dxf"),
+        )),
+    }
+}
+
+fn parse_dxf_patch_field(v: Option<&Value>, i: usize) -> Result<Patch<DxfPatch>, Error> {
+    match v {
+        None => Ok(Patch::Absent),
+        Some(Value::Null) => Ok(Patch::Clear),
+        Some(Value::Object(m)) => Ok(Patch::Set(parse_dxf_obj(m, i)?)),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "dxf".into(),
+                expected: TypeName::Object,
+            },
+            format!("ops[{i}].dxf"),
+        )),
+    }
+}
+
+fn parse_dxf_obj(obj: &serde_json::Map<String, Value>, i: usize) -> Result<DxfPatch, Error> {
+    deny_sub_keys(obj, i, "dxf", &["font", "fill", "border"])?;
+    let font = match obj.get("font") {
+        None => None,
+        Some(Value::Object(m)) => Some(parse_font_patch(m, i, "dxf.font")?),
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "font".into(),
+                    expected: TypeName::Object,
+                },
+                format!("ops[{i}].dxf.font"),
+            ));
+        }
+    };
+    let fill = match obj.get("fill") {
+        None => None,
+        Some(Value::Object(m)) => Some(parse_fill_patch(m, i, "dxf.fill")?),
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "fill".into(),
+                    expected: TypeName::Object,
+                },
+                format!("ops[{i}].dxf.fill"),
+            ));
+        }
+    };
+    let border = match obj.get("border") {
+        None => None,
+        Some(Value::Object(m)) => Some(parse_border_patch(m, i, "dxf.border")?),
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "border".into(),
+                    expected: TypeName::Object,
+                },
+                format!("ops[{i}].dxf.border"),
+            ));
+        }
+    };
+    Ok(DxfPatch { font, fill, border })
+}
+
+fn parse_color_scale_opt(v: Option<&Value>, i: usize) -> Result<Option<ColorScaleSpec>, Error> {
+    match v {
+        None => Ok(None),
+        Some(Value::Object(m)) => Ok(Some(parse_color_scale_obj(m, i)?)),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "colorScale".into(),
+                expected: TypeName::Object,
+            },
+            format!("ops[{i}].colorScale"),
+        )),
+    }
+}
+
+fn parse_color_scale_patch(v: Option<&Value>, i: usize) -> Result<Patch<ColorScaleSpec>, Error> {
+    match v {
+        None => Ok(Patch::Absent),
+        Some(Value::Null) => Ok(Patch::Clear),
+        Some(Value::Object(m)) => Ok(Patch::Set(parse_color_scale_obj(m, i)?)),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "colorScale".into(),
+                expected: TypeName::Object,
+            },
+            format!("ops[{i}].colorScale"),
+        )),
+    }
+}
+
+fn parse_color_scale_obj(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<ColorScaleSpec, Error> {
+    deny_sub_keys(obj, i, "colorScale", &["cfvo", "colors"])?;
+    let colors = parse_color_array(obj.get("colors"), i, "colorScale.colors", 2, 3)?;
+    let cfvo = parse_cfvo_array_opt(obj.get("cfvo"), i, "colorScale.cfvo", 2, 3)?;
+    if let Some(v) = &cfvo {
+        if v.len() != colors.len() {
+            return Err(Error::with_path(
+                ErrorKind::InvalidConditionalFormat {
+                    field: "colorScale.cfvo".into(),
+                },
+                format!("ops[{i}].colorScale.cfvo"),
+            ));
+        }
+    }
+    Ok(ColorScaleSpec { cfvo, colors })
+}
+
+fn parse_data_bar_opt(v: Option<&Value>, i: usize) -> Result<Option<DataBarSpec>, Error> {
+    match v {
+        None => Ok(None),
+        Some(Value::Object(m)) => Ok(Some(parse_data_bar_obj(m, i)?)),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "dataBar".into(),
+                expected: TypeName::Object,
+            },
+            format!("ops[{i}].dataBar"),
+        )),
+    }
+}
+
+fn parse_data_bar_patch(v: Option<&Value>, i: usize) -> Result<Patch<DataBarSpec>, Error> {
+    match v {
+        None => Ok(Patch::Absent),
+        Some(Value::Null) => Ok(Patch::Clear),
+        Some(Value::Object(m)) => Ok(Patch::Set(parse_data_bar_obj(m, i)?)),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "dataBar".into(),
+                expected: TypeName::Object,
+            },
+            format!("ops[{i}].dataBar"),
+        )),
+    }
+}
+
+fn parse_data_bar_obj(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<DataBarSpec, Error> {
+    deny_sub_keys(
+        obj,
+        i,
+        "dataBar",
+        &["cfvo", "color", "minLength", "maxLength", "showValue"],
+    )?;
+    let cfvo = parse_cfvo_array_opt(obj.get("cfvo"), i, "dataBar.cfvo", 2, 2)?;
+    let color = match obj.get("color") {
+        None => None,
+        Some(Value::Object(m)) => Some(parse_color_spec(m, i, "dataBar.color")?),
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "color".into(),
+                    expected: TypeName::Object,
+                },
+                format!("ops[{i}].dataBar.color"),
+            ));
+        }
+    };
+    Ok(DataBarSpec {
+        cfvo,
+        color,
+        min_length: parse_opt_u32_top(obj, i, "minLength", "dataBar.minLength", 0, 100)?,
+        max_length: parse_opt_u32_top(obj, i, "maxLength", "dataBar.maxLength", 0, 100)?,
+        show_value: parse_sub_bool(obj, i, "dataBar", "showValue")?,
+    })
+}
+
+fn parse_icon_set_opt(v: Option<&Value>, i: usize) -> Result<Option<IconSetSpec>, Error> {
+    match v {
+        None => Ok(None),
+        Some(Value::Object(m)) => Ok(Some(parse_icon_set_obj(m, i)?)),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "iconSet".into(),
+                expected: TypeName::Object,
+            },
+            format!("ops[{i}].iconSet"),
+        )),
+    }
+}
+
+fn parse_icon_set_patch(v: Option<&Value>, i: usize) -> Result<Patch<IconSetSpec>, Error> {
+    match v {
+        None => Ok(Patch::Absent),
+        Some(Value::Null) => Ok(Patch::Clear),
+        Some(Value::Object(m)) => Ok(Patch::Set(parse_icon_set_obj(m, i)?)),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "iconSet".into(),
+                expected: TypeName::Object,
+            },
+            format!("ops[{i}].iconSet"),
+        )),
+    }
+}
+
+fn parse_icon_set_obj(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<IconSetSpec, Error> {
+    deny_sub_keys(
+        obj,
+        i,
+        "iconSet",
+        &["set", "cfvo", "showValue", "reverse", "percent"],
+    )?;
+    let set = match obj.get("set") {
+        None => None,
+        Some(Value::String(s)) if ICON_SETS.contains(&s.as_str()) => Some(s.clone()),
+        Some(Value::String(_)) => {
+            return Err(Error::with_path(
+                ErrorKind::InvalidConditionalFormat {
+                    field: "iconSet.set".into(),
+                },
+                format!("ops[{i}].iconSet.set"),
+            ));
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "set".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].iconSet.set"),
+            ));
+        }
+    };
+    let n = icon_set_count(set.as_deref().unwrap_or("3TrafficLights1"));
+    let cfvo = parse_cfvo_array_opt(obj.get("cfvo"), i, "iconSet.cfvo", n, n)?;
+    Ok(IconSetSpec {
+        set,
+        cfvo,
+        show_value: parse_sub_bool(obj, i, "iconSet", "showValue")?,
+        reverse: parse_sub_bool(obj, i, "iconSet", "reverse")?,
+        percent: parse_sub_bool(obj, i, "iconSet", "percent")?,
+    })
+}
+
+fn parse_cfvo_array_opt(
+    v: Option<&Value>,
+    i: usize,
+    path: &str,
+    min: usize,
+    max: usize,
+) -> Result<Option<Vec<CfvoSpec>>, Error> {
+    match v {
+        None => Ok(None),
+        Some(Value::Array(arr)) => {
+            if arr.len() < min || arr.len() > max {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidConditionalFormat { field: path.into() },
+                    format!("ops[{i}].{path}"),
+                ));
+            }
+            let mut out = Vec::new();
+            for (j, item) in arr.iter().enumerate() {
+                let Some(obj) = item.as_object() else {
+                    return Err(Error::with_path(
+                        ErrorKind::WrongType {
+                            field: "cfvo".into(),
+                            expected: TypeName::Object,
+                        },
+                        format!("ops[{i}].{path}[{j}]"),
+                    ));
+                };
+                out.push(parse_cfvo_obj(obj, i, &format!("{path}[{j}]"))?);
+            }
+            Ok(Some(out))
+        }
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "cfvo".into(),
+                expected: TypeName::Array,
+            },
+            format!("ops[{i}].{path}"),
+        )),
+    }
+}
+
+fn parse_cfvo_obj(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+    prefix: &str,
+) -> Result<CfvoSpec, Error> {
+    deny_sub_keys(obj, i, prefix, &["type", "val", "gte"])?;
+    let type_ = match obj.get("type") {
+        Some(Value::String(s)) if CFVO_TYPES.contains(&s.as_str()) => s.clone(),
+        Some(Value::String(_)) => {
+            return Err(Error::with_path(
+                ErrorKind::InvalidConditionalFormat {
+                    field: "cfvo.type".into(),
+                },
+                format!("ops[{i}].{prefix}.type"),
+            ));
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "type".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].{prefix}.type"),
+            ));
+        }
+        None => {
+            return Err(Error::with_path(
+                ErrorKind::MissingField {
+                    field: "type".into(),
+                },
+                format!("ops[{i}].{prefix}.type"),
+            ));
+        }
+    };
+    let val = match obj.get("val") {
+        None => None,
+        Some(Value::String(s)) => Some(s.clone()),
+        Some(Value::Number(n)) => Some(n.to_string()),
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "val".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].{prefix}.val"),
+            ));
+        }
+    };
+    Ok(CfvoSpec {
+        type_,
+        val,
+        gte: parse_sub_bool(obj, i, prefix, "gte")?,
+    })
+}
+
+fn parse_color_array(
+    v: Option<&Value>,
+    i: usize,
+    path: &str,
+    min: usize,
+    max: usize,
+) -> Result<Vec<ColorSpec>, Error> {
+    let Some(Value::Array(arr)) = v else {
+        return Err(Error::with_path(
+            if v.is_none() {
+                ErrorKind::MissingField {
+                    field: "colors".into(),
+                }
+            } else {
+                ErrorKind::WrongType {
+                    field: "colors".into(),
+                    expected: TypeName::Array,
+                }
+            },
+            format!("ops[{i}].{path}"),
+        ));
+    };
+    if arr.len() < min || arr.len() > max {
+        return Err(Error::with_path(
+            ErrorKind::InvalidConditionalFormat {
+                field: "colors".into(),
+            },
+            format!("ops[{i}].{path}"),
+        ));
+    }
+    let mut out = Vec::new();
+    for (j, item) in arr.iter().enumerate() {
+        let Some(obj) = item.as_object() else {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "colors".into(),
+                    expected: TypeName::Object,
+                },
+                format!("ops[{i}].{path}[{j}]"),
+            ));
+        };
+        out.push(parse_color_spec(obj, i, &format!("{path}[{j}]"))?);
+    }
+    Ok(out)
+}
+
+fn parse_cf_priority_opt(v: Option<&Value>, i: usize) -> Result<Option<i32>, Error> {
+    match v {
+        None => Ok(None),
+        Some(Value::Null) => Err(Error::with_path(
+            ErrorKind::InvalidConditionalFormat {
+                field: "priority".into(),
+            },
+            format!("ops[{i}].priority"),
+        )),
+        Some(Value::Number(n)) => {
+            let Some(v) = n.as_i64().filter(|x| *x >= 1 && *x <= i32::MAX as i64) else {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidConditionalFormat {
+                        field: "priority".into(),
+                    },
+                    format!("ops[{i}].priority"),
+                ));
+            };
+            Ok(Some(v as i32))
+        }
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "priority".into(),
+                expected: TypeName::Integer,
+            },
+            format!("ops[{i}].priority"),
+        )),
+    }
+}
+
+fn parse_opt_u32_top(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+    field: &str,
+    path: &str,
+    min: u32,
+    max: u32,
+) -> Result<Option<u32>, Error> {
+    match obj.get(field) {
+        None => Ok(None),
+        Some(Value::Number(n)) => {
+            let Some(v) = n.as_u64().and_then(|x| u32::try_from(x).ok()) else {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidConditionalFormat {
+                        field: field.into(),
+                    },
+                    format!("ops[{i}].{path}"),
+                ));
+            };
+            if v < min || v > max {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidConditionalFormat {
+                        field: field.into(),
+                    },
+                    format!("ops[{i}].{path}"),
+                ));
+            }
+            Ok(Some(v))
+        }
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::Integer,
+            },
+            format!("ops[{i}].{path}"),
+        )),
+    }
+}
+
+pub(crate) fn check_cf_fields(
+    type_: CfType,
+    operator: Option<CfOperator>,
+    formulas: Option<&[String]>,
+    dxf: Option<&DxfPatch>,
+    color_scale: Option<&ColorScaleSpec>,
+    data_bar: Option<&DataBarSpec>,
+    icon_set: Option<&IconSetSpec>,
+    i: usize,
+    insert: bool,
+) -> Result<(), Error> {
+    let bad = |field: &str| {
+        Error::with_path(
+            ErrorKind::InvalidConditionalFormat {
+                field: field.into(),
+            },
+            format!("ops[{i}].{field}"),
+        )
+    };
+    match type_ {
+        CfType::CellIs => {
+            if color_scale.is_some() {
+                return Err(bad("colorScale"));
+            }
+            if data_bar.is_some() {
+                return Err(bad("dataBar"));
+            }
+            if icon_set.is_some() {
+                return Err(bad("iconSet"));
+            }
+            let Some(op) = operator else {
+                return Err(Error::with_path(
+                    ErrorKind::MissingField {
+                        field: "operator".into(),
+                    },
+                    format!("ops[{i}].operator"),
+                ));
+            };
+            let need = op.formula_count();
+            let got = formulas.map(|f| f.len()).unwrap_or(0);
+            if got != need {
+                return Err(Error::with_path(
+                    ErrorKind::NeedConditionalFormatFormula {
+                        field: "formulas".into(),
+                    },
+                    format!("ops[{i}].formulas"),
+                ));
+            }
+        }
+        CfType::Expression => {
+            if operator.is_some() {
+                return Err(bad("operator"));
+            }
+            if color_scale.is_some() {
+                return Err(bad("colorScale"));
+            }
+            if data_bar.is_some() {
+                return Err(bad("dataBar"));
+            }
+            if icon_set.is_some() {
+                return Err(bad("iconSet"));
+            }
+            if formulas.map(|f| f.len()).unwrap_or(0) != 1 {
+                return Err(Error::with_path(
+                    ErrorKind::NeedConditionalFormatFormula {
+                        field: "formulas".into(),
+                    },
+                    format!("ops[{i}].formulas"),
+                ));
+            }
+        }
+        CfType::ColorScale => {
+            if operator.is_some() {
+                return Err(bad("operator"));
+            }
+            if formulas.is_some() {
+                return Err(bad("formulas"));
+            }
+            if dxf.is_some() {
+                return Err(bad("dxf"));
+            }
+            if data_bar.is_some() {
+                return Err(bad("dataBar"));
+            }
+            if icon_set.is_some() {
+                return Err(bad("iconSet"));
+            }
+            if insert && color_scale.is_none() {
+                return Err(Error::with_path(
+                    ErrorKind::MissingField {
+                        field: "colorScale".into(),
+                    },
+                    format!("ops[{i}].colorScale"),
+                ));
+            }
+        }
+        CfType::DataBar => {
+            if operator.is_some() {
+                return Err(bad("operator"));
+            }
+            if formulas.is_some() {
+                return Err(bad("formulas"));
+            }
+            if dxf.is_some() {
+                return Err(bad("dxf"));
+            }
+            if color_scale.is_some() {
+                return Err(bad("colorScale"));
+            }
+            if icon_set.is_some() {
+                return Err(bad("iconSet"));
+            }
+        }
+        CfType::IconSet => {
+            if operator.is_some() {
+                return Err(bad("operator"));
+            }
+            if formulas.is_some() {
+                return Err(bad("formulas"));
+            }
+            if dxf.is_some() {
+                return Err(bad("dxf"));
+            }
+            if color_scale.is_some() {
+                return Err(bad("colorScale"));
+            }
+            if data_bar.is_some() {
+                return Err(bad("dataBar"));
+            }
+        }
+    }
+    Ok(())
+}
+
 fn parse_dv_id(id: &str, op_index: usize) -> Result<(String, usize), Error> {
     let Some(rest) = id.strip_prefix("sheet:") else {
         return Err(Error::with_path(
@@ -3322,6 +4453,7 @@ fn parse_sheet_only_id(
         || id.contains("/pic:")
         || id.contains("/hf:")
         || id.contains("/dv:")
+        || id.contains("/cf:")
         || id.starts_with("cell:")
     {
         return Err(Error::with_path(

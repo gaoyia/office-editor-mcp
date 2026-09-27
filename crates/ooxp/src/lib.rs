@@ -806,6 +806,7 @@ mod tests {
                 "pictureCount",
                 "chartCount",
                 "dataValidationCount",
+                "conditionalFormatCount",
                 "hasHeaderFooter",
                 "truncated",
                 "range",
@@ -813,7 +814,8 @@ mod tests {
                 "cols",
                 "rows",
                 "merges",
-                "dataValidations"
+                "dataValidations",
+                "conditionalFormats"
             ]
         );
         assert_eq!(

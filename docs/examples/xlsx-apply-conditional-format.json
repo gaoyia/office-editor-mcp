@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "C:\\data\\book.xlsx",
+  "output": "C:\\data\\book.cf.xlsx",
+  "ops": [
+    {
+      "op": "insertConditionalFormat",
+      "id": "sheet:Sheet1",
+      "sqref": "A1:A10",
+      "type": "cellIs",
+      "operator": "greaterThan",
+      "formulas": ["0"],
+      "dxf": { "fill": { "pattern": "solid", "fg": { "rgb": "FFC6EFCE" } } }
+    },
+    {
+      "op": "setConditionalFormat",
+      "id": "sheet:Sheet1/cf:1",
+      "sqref": "A1:B10"
+    },
+    { "op": "deleteConditionalFormat", "id": "sheet:Sheet1/cf:1" }
+  ]
+}

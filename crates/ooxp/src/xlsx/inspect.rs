@@ -8,6 +8,7 @@ use crate::opc::{self, Package};
 use crate::xml::{self, Element};
 
 use super::a1;
+use super::cf;
 use super::chart;
 use super::formula;
 use super::hf;
@@ -81,6 +82,8 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
             obj.insert("chartCount".into(), json!(charts.len()));
             let dv_count = validation::count(&sheet_doc.root);
             obj.insert("dataValidationCount".into(), json!(dv_count));
+            let cf_count = cf::count(&sheet_doc.root);
+            obj.insert("conditionalFormatCount".into(), json!(cf_count));
             let has_hf = hf::has_header_footer(&sheet_doc.root);
             obj.insert("hasHeaderFooter".into(), json!(has_hf));
             if want_header_footer {
@@ -120,6 +123,10 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
                     obj.insert(
                         "dataValidations".into(),
                         validation::inspect(&sheet_doc.root, &sh.name),
+                    );
+                    obj.insert(
+                        "conditionalFormats".into(),
+                        cf::inspect(&sheet_doc.root, &sh.name, &styles),
                     );
                 }
             }

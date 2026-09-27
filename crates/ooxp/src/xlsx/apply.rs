@@ -1,7 +1,7 @@
 //! 按 id 改单元格或工作表图，改单元格时标记打开时重算。
 
 use super::formula;
-use super::request::{SetCellOp, SetCellValue, XlsxOp};
+use super::request::{Patch, SetCellOp, SetCellValue, XlsxOp};
 use crate::error::{Error, ErrorKind, IdReason, RelSource};
 use crate::opc::{self, ContentTypes, Package, Relationships};
 use crate::xml::{self, Document, Element, Node};
@@ -242,6 +242,41 @@ pub fn apply(bytes: &[u8], ops: &[XlsxOp]) -> Result<Vec<u8>, Error> {
                 load_dirty(&pkg, &mut dirty_sheets, &part, true)?;
                 let doc = dirty_of(&mut dirty_sheets, &part);
                 super::validation::apply_delete(&mut doc.root, op, i)?;
+            }
+            XlsxOp::InsertConditionalFormat(op) => {
+                let part = require_layout_worksheet(&sheet_index, &op.sheet, i)?;
+                load_dirty(&pkg, &mut dirty_sheets, &part, true)?;
+                let dxf_id = match &op.dxf {
+                    Some(dxf) => {
+                        let styles_root =
+                            style::ensure_styles(&mut pkg, &wb_part, &mut styles_doc)?;
+                        style::intern_dxf(styles_root, dxf)
+                    }
+                    None => None,
+                };
+                let doc = dirty_of(&mut dirty_sheets, &part);
+                super::cf::apply_insert(&mut doc.root, op, dxf_id, i)?;
+            }
+            XlsxOp::SetConditionalFormat(op) => {
+                let part = require_layout_worksheet(&sheet_index, &op.sheet, i)?;
+                load_dirty(&pkg, &mut dirty_sheets, &part, true)?;
+                let dxf_id = match &op.dxf {
+                    Patch::Absent => None,
+                    Patch::Clear => Some(None),
+                    Patch::Set(dxf) => {
+                        let styles_root =
+                            style::ensure_styles(&mut pkg, &wb_part, &mut styles_doc)?;
+                        Some(style::intern_dxf(styles_root, dxf))
+                    }
+                };
+                let doc = dirty_of(&mut dirty_sheets, &part);
+                super::cf::apply_set(&mut doc.root, op, dxf_id, i)?;
+            }
+            XlsxOp::DeleteConditionalFormat(op) => {
+                let part = require_layout_worksheet(&sheet_index, &op.sheet, i)?;
+                load_dirty(&pkg, &mut dirty_sheets, &part, true)?;
+                let doc = dirty_of(&mut dirty_sheets, &part);
+                super::cf::apply_delete(&mut doc.root, op, i)?;
             }
             XlsxOp::DeleteChart(op) => {
                 let (part, kind) = require_named_sheet(&sheet_index, &op.target.sheet, i)?;

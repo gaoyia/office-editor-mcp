@@ -148,6 +148,7 @@ fn summary_without_scope() {
             "pictureCount",
             "chartCount",
             "dataValidationCount",
+            "conditionalFormatCount",
             "hasHeaderFooter"
         ]
     );
