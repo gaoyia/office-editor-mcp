@@ -28,6 +28,8 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 | Cmt1–Cmt7 | ✅ | Word 16.0：`docx-comments.ps1`，8 PASS / 0 FAIL。计数与名单、改字、插删、回复线程（`Comments.Count=4` 且 `Replies=1`）、完成标记、批注内插图。标题栏无 Repair |
 | Ch1–Ch8 | ✅ | Word 16.0：`docx-charts.ps1`，9 PASS / 0 FAIL。计数与名单（COM 系列值对得上）、改系列为 11/22/33/44、插饼图、删除、改折线、关图例开标签、组合图当时 `NotImplemented` 且未写文件、`exportChartData` 与 embedding 字节一致。标题栏无 Repair。组合图改数与改类型见下方 Cx 组 |
 | Cx1–Cx8 | ✅ | Word 16.0：`docx-charts-ext.ps1`，8 PASS / 0 FAIL。圆环 / 雷达 / 气泡各自有 `type`；改数、插入、组合图改数与收成柱形、透视改标题、股价仍 `NotImplemented`。标题栏无 Repair |
+| Sa1–Sa8 | ✅ | Word 16.0：`docx-smartart.ps1`。列表型 SmartArt 改字、插删、增删点、跨家族 `NotImplemented` |
+| Ip1–Ip5 | ✅ | Word 16.0：`docx-body-para.ps1`，5 PASS / 0 FAIL。插在第二段之后、插到文档末、删第二段、最后一段 `InvalidField`、默认页眉插一段。标题栏无 Repair |
 | O1 | 🚫 | 领域层不做原样保存，与 xlsx 清单相同。零脏写回见 OPC 库测试。Word 另存 create 产物见 `docx-O1-word-resave`。此前记的 `SaveAs2` 挂起，拆分后重跑没再出现，一秒内返回 |
 
 ## create
@@ -227,6 +229,18 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 | Sa6 | 删点 | `deleteSmartArtPoint` 后 Word 打开重排，目标点及其子点消失 |
 | Sa7 | 版式 | 对不在 `list` / `org` 家族的图示发 `setSmartArtLayout` 得到 `NotImplemented`，文件未写坏 |
 | Sa8 | 尺寸 | `setSmartArtSize` 后宿主尺寸能对上，无修复 |
+
+## 正文插删段落
+
+准备一份 Word 亲手另存的样例：至少三段正文，第二段带加粗。页眉另用带默认页眉的 Word 另存样例。不要用库 `create` 产物当唯一样例。手测脚本 `manual-check/office/cases/docx-body-para.ps1`。编号用 Ip。
+
+| 序号 | 检查 | 通过标准 |
+| --- | --- | --- |
+| Ip1 | 插在第二段之后 | `insertPara` 后 Word 无修复；新段可见文字是请求里的 `text`；第二段仍加粗；第一段、原第三段未改 |
+| Ip2 | 插到文档末 | 对 `docx:document` 发 `insertPara` 后，inspect 最后一段是新段；Word 无修复 |
+| Ip3 | 删除非末段 | `deletePara` 删掉第二段后 Word 无修复；第一段标题还在 |
+| Ip4 | 最后一段 | 故事里只剩一段时再 `deletePara` 得 `InvalidField`，文件未写坏 |
+| Ip5 | 页眉 | 对默认页眉容器或页眉段落 `insertPara` 后，页眉可见多一段；Word 无修复；正文未改 |
 
 ## 原样保存（opc 验收）
 

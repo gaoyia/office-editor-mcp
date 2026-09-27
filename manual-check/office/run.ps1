@@ -37,6 +37,7 @@ $order = @(
     'xlsx-chartsheet'
     'xlsx-headerfooter'
     'docx-apply'
+    'docx-body-para'
     'docx-headerfooter'
     'docx-distance'
     'docx-link'

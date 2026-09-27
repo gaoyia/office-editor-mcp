@@ -87,9 +87,7 @@ pub(crate) enum IdReason {
     SetParaOnBox,
     /// insertTextBox 必须是宿主段落
     InsertNeedsHostPara,
-    /// 正文（框外、注外）插删段
-    InsertParaBody,
-    /// insertPara / deletePara 必须是框、框内段、注或注内段
+    /// deletePara 必须是段落 id，不能是容器
     InsertParaNeedsBox,
     /// 脚注/尾注 id 形态不对
     NotePrefix,
@@ -299,6 +297,10 @@ define_error_kinds! {
     InvalidNoteNumFmt => vec![Self::InvalidNoteNumFmt],
     InvalidNoteRestart => vec![Self::InvalidNoteRestart],
     LastCommentPara => vec![Self::LastCommentPara],
+    LastStoryPara => vec![Self::LastStoryPara],
+    CrossParaMarker => vec![Self::CrossParaMarker],
+    ParaHasRevision => vec![Self::ParaHasRevision],
+    SectionBreakPara => vec![Self::SectionBreakPara],
     CommentNotFound { id: String } => vec![Self::CommentNotFound { id: "comment:0".into() }],
     NeedCommentParaId => vec![Self::NeedCommentParaId],
     NeedCommentMetaField => vec![Self::NeedCommentMetaField],
@@ -446,7 +448,6 @@ impl IdReason {
             Self::TxbxIndexFromOne,
             Self::SetParaOnBox,
             Self::InsertNeedsHostPara,
-            Self::InsertParaBody,
             Self::InsertParaNeedsBox,
             Self::NotePrefix,
             Self::NoteContainer,
@@ -588,6 +589,7 @@ impl ErrorKind {
             | Self::InvalidNoteNumFmt
             | Self::InvalidNoteRestart
             | Self::LastCommentPara
+            | Self::LastStoryPara
             | Self::NeedCommentParaId
             | Self::NeedCommentMetaField
             | Self::CommentRangeCrossPart
@@ -638,6 +640,9 @@ impl ErrorKind {
             Self::ScopeRequired { .. } => ScopeRequired,
             Self::SharedFormulaMaster { .. }
             | Self::InkComment { .. }
+            | Self::CrossParaMarker
+            | Self::ParaHasRevision
+            | Self::SectionBreakPara
             | Self::RestrictedChart { .. }
             | Self::ChartTypeNotConvertible
             | Self::SmartArtLayoutNotConvertible

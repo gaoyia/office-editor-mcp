@@ -537,6 +537,22 @@ fn parse_host_para_id(id: &str, path: &str) -> Result<HostPara, Error> {
     ))
 }
 
+/// `header:default:1` 这种容器 id，没有 `/para:`。
+pub fn parse_hf_container_id(id: &str) -> Option<(HfKind, HfType, u32)> {
+    let (kind_s, rest) = id.split_once(':')?;
+    let kind = HfKind::parse(kind_s)?;
+    if rest.contains('/') {
+        return None;
+    }
+    let (type_s, n_s) = rest.split_once(':')?;
+    let hf_type = HfType::parse(type_s)?;
+    let n: u32 = n_s.parse().ok()?;
+    if n < 1 {
+        return None;
+    }
+    Some((kind, hf_type, n))
+}
+
 fn parse_txbx_key<'a>(s: &'a str, path: &str) -> Result<(TxbxKey, Option<&'a str>), Error> {
     if let Some(rest) = s.strip_prefix("index:") {
         let (num, tail) = split_first_seg(rest);
@@ -1026,4 +1042,258 @@ fn needs_xml_space(text: &str) -> bool {
         || text.ends_with(' ')
         || text.ends_with('\t')
         || text.contains('\n')
+}
+
+pub fn story_body_mut(root: &mut Element) -> Option<&mut Element> {
+    if root.local_name() == "document" {
+        root.child_by_local_mut("body")
+    } else {
+        Some(root)
+    }
+}
+
+fn p_matches(el: &Element, idx: usize, target: &BodyPara) -> bool {
+    match target {
+        BodyPara::Index(n) => idx == *n,
+        BodyPara::Hex(hex) => el
+            .attr_local("paraId")
+            .is_some_and(|id| id.eq_ignore_ascii_case(hex)),
+    }
+}
+
+/// 从部件根走到目标 `w:p` 的子节点下标路径。
+pub fn find_paragraph_path(root: &Element, target: &BodyPara) -> Option<Vec<usize>> {
+    let mut idx = 0usize;
+    let mut path = Vec::new();
+    if find_p_path_from(root, &mut idx, target, &mut path) {
+        Some(path)
+    } else {
+        None
+    }
+}
+
+fn find_p_path_from(
+    el: &Element,
+    idx: &mut usize,
+    target: &BodyPara,
+    path: &mut Vec<usize>,
+) -> bool {
+    if el.local_name() == "txbxContent" {
+        return false;
+    }
+    if el.local_name() == "AlternateContent" {
+        if let Some(i) = first_alt_child_index(el) {
+            path.push(i);
+            let hit = matches!(
+                &el.children[i],
+                Node::Element(e) if find_p_path_from(e, idx, target, path)
+            );
+            if hit {
+                return true;
+            }
+            path.pop();
+        }
+        return false;
+    }
+    if el.local_name() == "p" {
+        *idx += 1;
+        if p_matches(el, *idx, target) {
+            return true;
+        }
+    }
+    for (i, n) in el.children.iter().enumerate() {
+        if let Node::Element(e) = n {
+            path.push(i);
+            if find_p_path_from(e, idx, target, path) {
+                return true;
+            }
+            path.pop();
+        }
+    }
+    false
+}
+
+pub fn collect_paragraph_paths(root: &Element) -> Vec<Vec<usize>> {
+    let mut cur = Vec::new();
+    let mut out = Vec::new();
+    collect_p_paths_from(root, &mut cur, &mut out);
+    out
+}
+
+fn collect_p_paths_from(el: &Element, path: &mut Vec<usize>, out: &mut Vec<Vec<usize>>) {
+    if el.local_name() == "txbxContent" {
+        return;
+    }
+    if el.local_name() == "AlternateContent" {
+        if let Some(i) = first_alt_child_index(el) {
+            path.push(i);
+            if let Node::Element(e) = &el.children[i] {
+                collect_p_paths_from(e, path, out);
+            }
+            path.pop();
+        }
+        return;
+    }
+    if el.local_name() == "p" {
+        out.push(path.clone());
+    }
+    for (i, n) in el.children.iter().enumerate() {
+        if let Node::Element(e) = n {
+            path.push(i);
+            collect_p_paths_from(e, path, out);
+            path.pop();
+        }
+    }
+}
+
+pub fn element_at<'a>(root: &'a Element, path: &[usize]) -> Option<&'a Element> {
+    let mut cur = root;
+    for &i in path {
+        cur = match cur.children.get(i)? {
+            Node::Element(e) => e,
+            _ => return None,
+        };
+    }
+    Some(cur)
+}
+
+pub fn element_at_mut<'a>(root: &'a mut Element, path: &[usize]) -> Option<&'a mut Element> {
+    let mut cur = root;
+    for &i in path {
+        cur = match cur.children.get_mut(i)? {
+            Node::Element(e) => e,
+            _ => return None,
+        };
+    }
+    Some(cur)
+}
+
+pub fn parent_and_index_mut<'a>(
+    root: &'a mut Element,
+    path: &[usize],
+) -> Option<(&'a mut Element, usize)> {
+    let (last, prefix) = path.split_last()?;
+    let mut cur = root;
+    for &i in prefix {
+        cur = match cur.children.get_mut(i)? {
+            Node::Element(e) => e,
+            _ => return None,
+        };
+    }
+    Some((cur, *last))
+}
+
+pub fn count_direct_p(parent: &Element) -> usize {
+    parent
+        .element_children()
+        .filter(|e| e.local_name() == "p")
+        .count()
+}
+
+pub fn append_before_body_sect_pr(parent: &mut Element, new_p: Element) {
+    let pos = parent
+        .children
+        .iter()
+        .position(|n| matches!(n, Node::Element(e) if e.local_name() == "sectPr"));
+    match pos {
+        Some(i) => parent.children.insert(i, Node::Element(new_p)),
+        None => parent.children.push(Node::Element(new_p)),
+    }
+}
+
+fn walk_story_descendants(el: &Element, f: &mut impl FnMut(&Element)) {
+    if el.local_name() == "txbxContent" {
+        return;
+    }
+    if el.local_name() == "AlternateContent" {
+        if let Some(i) = first_alt_child_index(el) {
+            if let Node::Element(child) = &el.children[i] {
+                walk_story_descendants(child, f);
+            }
+        }
+        return;
+    }
+    f(el);
+    for n in &el.children {
+        if let Node::Element(e) = n {
+            walk_story_descendants(e, f);
+        }
+    }
+}
+
+pub fn para_has_revision(p: &Element) -> bool {
+    let mut hit = false;
+    walk_story_descendants(p, &mut |e| {
+        if matches!(e.local_name(), "ins" | "del" | "moveFrom" | "moveTo") {
+            hit = true;
+        }
+    });
+    hit
+}
+
+pub fn para_has_unmatched_range(p: &Element) -> bool {
+    unmatched_pair(p, "bookmarkStart", "bookmarkEnd")
+        || unmatched_pair(p, "commentRangeStart", "commentRangeEnd")
+        || unmatched_pair(p, "permStart", "permEnd")
+}
+
+fn unmatched_pair(p: &Element, start: &str, end: &str) -> bool {
+    let mut starts = Vec::new();
+    let mut ends = Vec::new();
+    walk_story_descendants(p, &mut |e| {
+        let name = e.local_name();
+        if name == start {
+            if let Some(id) = e.attr_local("id") {
+                starts.push(id.to_string());
+            }
+        } else if name == end {
+            if let Some(id) = e.attr_local("id") {
+                ends.push(id.to_string());
+            }
+        }
+    });
+    starts.sort();
+    ends.sort();
+    starts != ends
+}
+
+pub fn para_has_sect_pr(p: &Element) -> bool {
+    p.child_by_local("pPr")
+        .and_then(|ppr| ppr.child_by_local("sectPr"))
+        .is_some()
+}
+
+pub fn take_ppr_sect_pr(p: &mut Element) -> Option<Element> {
+    let ppr = p.child_by_local_mut("pPr")?;
+    let i = ppr
+        .children
+        .iter()
+        .position(|n| matches!(n, Node::Element(e) if e.local_name() == "sectPr"))?;
+    match ppr.children.remove(i) {
+        Node::Element(e) => Some(e),
+        _ => None,
+    }
+}
+
+pub fn put_ppr_sect_pr(p: &mut Element, sect: Element) {
+    if p.child_by_local("pPr").is_none() {
+        let ppr = Element::new(p.prefixed("pPr"));
+        p.children.insert(0, Node::Element(ppr));
+    }
+    if let Some(ppr) = p.child_by_local_mut("pPr") {
+        ppr.push_element(sect);
+    }
+}
+
+pub fn is_last_collected(root: &Element, target: &BodyPara) -> bool {
+    let paras = collect_paragraphs(root);
+    let Some(last) = paras.last() else {
+        return false;
+    };
+    match target {
+        BodyPara::Index(n) => *n == paras.len(),
+        BodyPara::Hex(hex) => last
+            .attr_local("paraId")
+            .is_some_and(|id| id.eq_ignore_ascii_case(hex)),
+    }
 }

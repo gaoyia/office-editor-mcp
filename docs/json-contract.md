@@ -1219,15 +1219,36 @@ pptx：找不到该页报 `IdNotFound`。`id` 必须是 `slide:{n}` 或 `slide:{
 
 `horizontal` 对应横排（去掉或写成从左到右）；`vertical` 对应竖排，写入 `wps:bodyPr/@vert` 为 `eaVert`。xlsx / pptx 上发此 op 报 `InvalidField`。
 
-### insertPara / deletePara（仅框内与注内）
+### insertPara / deletePara
 
 | 字段 | 含义 |
 | --- | --- |
 | `op` | `"insertPara"` 或 `"deletePara"` |
-| `id` | `insertPara` 用框 id、注 id 或批注 id（插到该容器末）或框内 / 注内 / 批注内段落 id（插到该段之后）；`deletePara` 必须是框内、注内或批注内段落 id |
+| `id` | 见下 |
 | `text` | 仅 `insertPara`。可选，新段可见文本 |
 
-正文（框外、注外、批注外）插删段仍报 `InvalidId`。框内只剩一段时 `deletePara` 报 `InvalidField`（`w:txbxContent` 至少留一段）。注内只剩一段时同样报 `InvalidField`（一条用户注至少留一个 `w:p`）。批注内只剩一段时同样报 `InvalidField`（一条 `w:comment` 至少留一个 `w:p`）。新段带新的 `w14:paraId`。批注内插删段后必须把该批注 `commentEx/@paraId` 改成新的最后一段 `paraId`；若有回复的 `paraIdParent` 指向旧的最后一段，一并改成新值。xlsx / pptx 上发此 op 报 `InvalidField`。
+`insertPara` 的 `id`：
+
+- 正文段落 id：插到该段之后（该段的直接父节点里，紧挨着它）
+- `docx:document`：插到主文档故事末尾（`w:body` 里、`w:sectPr` 之前）
+- 页眉或页脚容器 id（如 `header:default:1`）：插到该部件末尾
+- 页眉或页脚段落 id：插到该段之后
+- 框 id、注 id、批注 id：插到该容器末尾（原规则）
+- 框内 / 注内 / 批注内段落 id：插到该段之后（原规则）
+
+`deletePara` 的 `id` 必须是段落 id（正文、页眉页脚、表格单元格内、框内、注内或批注内）。对 `docx:document`、页眉页脚容器、框 id、注容器 id 或批注容器 id 发 `deletePara` 报 `InvalidId`。
+
+只插删 `w:p`，不插删 `w:tbl` / `w:tr` / `w:tc`。表格单元格内的段落跟本期走，不跟表格计划。
+
+直接父节点里只剩一个 `w:p` 时 `deletePara` 报 `InvalidField`。正文、页眉、页脚、表格单元格、`w:txbxContent`、一条用户注、一条 `w:comment` 都适用。不允许删空文档或删空页眉页脚。
+
+新段带新的 `w14:paraId`。批注内插删段后必须把该批注 `commentEx/@paraId` 改成新的最后一段 `paraId`；若有回复的 `paraIdParent` 指向旧的最后一段，一并改成新值。
+
+删主文档里收集顺序的最后一段，且该段 `pPr` 带 `sectPr`（文档末节属性）时：把 `sectPr` 挪到删完后仍留下的最后一段上，再删。该段不是收集顺序的最后一段、却带 `sectPr`（分节符）时，报 `NotImplemented`。
+
+`deletePara` 时，若该段里的书签、批注范围或许可范围起止不成对（跨到段外），报 `NotImplemented`。段内有 `w:ins`、`w:del`、`w:moveFrom` 或 `w:moveTo` 时同样报 `NotImplemented`。不要拆坏跨段标记。框内、注内、批注内的既有规则不变。
+
+xlsx / pptx 上发此 op 报 `InvalidField`。
 
 ### setTextBoxLink
 

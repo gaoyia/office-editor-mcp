@@ -1263,7 +1263,87 @@ fn apply_insert_para(
             retarget_comment_last(pkg, docs, dirty, doc_part, comment_id, old_last.as_deref())?;
             Ok(())
         }
+        InsertParaPlace::Body { after } => apply_insert_story_para(
+            pkg,
+            docs,
+            dirty,
+            doc_part,
+            after.as_ref(),
+            &op.id,
+            &op.text,
+            i,
+        ),
+        InsertParaPlace::HeaderFooter {
+            kind,
+            hf_type,
+            n,
+            after,
+        } => {
+            let part_name = part_for_hf(catalog, *kind, *hf_type, *n, &op.id, i)?;
+            apply_insert_story_para(
+                pkg,
+                docs,
+                dirty,
+                &part_name,
+                after.as_ref(),
+                &op.id,
+                &op.text,
+                i,
+            )
+        }
     }
+}
+
+fn apply_insert_story_para(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    part_name: &str,
+    after: Option<&para::BodyPara>,
+    id: &str,
+    text: &str,
+    i: usize,
+) -> Result<(), Error> {
+    let doc = load_part(pkg, docs, part_name)?;
+    let new_id = para::next_para_hex(&doc.root);
+    if let Some(after) = after {
+        let path = para::find_paragraph_path(&doc.root, after).ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::ParaNotFound { id: id.to_string() },
+                format!("ops[{i}].id"),
+            )
+        })?;
+        let new_p = {
+            let host = para::element_at(&doc.root, &path).ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::ParaNotFound { id: id.to_string() },
+                    format!("ops[{i}].id"),
+                )
+            })?;
+            para::new_paragraph(host, &new_id, text)
+        };
+        let (parent, idx) = para::parent_and_index_mut(&mut doc.root, &path).ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::ParaNotFound { id: id.to_string() },
+                format!("ops[{i}].id"),
+            )
+        })?;
+        parent.children.insert(idx + 1, Node::Element(new_p));
+    } else {
+        let body = para::story_body_mut(&mut doc.root).ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::XmlMissing {
+                    parent: part_name.to_string(),
+                    child: "body".into(),
+                },
+                format!("ops[{i}].id"),
+            )
+        })?;
+        let new_p = para::new_paragraph(body, &new_id, text);
+        para::append_before_body_sect_pr(body, new_p);
+    }
+    dirty.insert(part_name.to_string(), ());
+    Ok(())
 }
 
 fn insert_p_after(parent: &mut Element, para: &para::BodyPara, new_p: Element) -> Result<(), ()> {
@@ -1397,13 +1477,118 @@ fn apply_delete_para(
             retarget_comment_last(pkg, docs, dirty, doc_part, comment_id, old_last.as_deref())?;
             Ok(())
         }
-        _ => Err(Error::with_path(
-            ErrorKind::InvalidId {
-                reason: crate::error::IdReason::InsertParaNeedsBox,
-            },
-            format!("ops[{i}].id"),
-        )),
+        ParaTarget::Body(para) => {
+            apply_delete_story_para(pkg, docs, dirty, doc_part, para, &op.id, i)
+        }
+        ParaTarget::HeaderFooter {
+            kind,
+            hf_type,
+            n,
+            para,
+        } => {
+            let part_name = part_for_hf(catalog, *kind, *hf_type, *n, &op.id, i)?;
+            apply_delete_story_para(pkg, docs, dirty, &part_name, para, &op.id, i)
+        }
     }
+}
+
+fn apply_delete_story_para(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    part_name: &str,
+    para: &para::BodyPara,
+    id: &str,
+    i: usize,
+) -> Result<(), Error> {
+    let doc = load_part(pkg, docs, part_name)?;
+    let path = para::find_paragraph_path(&doc.root, para).ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::ParaNotFound { id: id.to_string() },
+            format!("ops[{i}].id"),
+        )
+    })?;
+    let parent_count = if path.len() <= 1 {
+        para::count_direct_p(&doc.root)
+    } else {
+        let parent = para::element_at(&doc.root, &path[..path.len() - 1]).ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::ParaNotFound { id: id.to_string() },
+                format!("ops[{i}].id"),
+            )
+        })?;
+        para::count_direct_p(parent)
+    };
+    if parent_count <= 1 {
+        return Err(Error::with_path(
+            ErrorKind::LastStoryPara,
+            format!("ops[{i}].id"),
+        ));
+    }
+    let (has_rev, unmatched, has_sect, is_last) = {
+        let p_el = para::element_at(&doc.root, &path).ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::ParaNotFound { id: id.to_string() },
+                format!("ops[{i}].id"),
+            )
+        })?;
+        (
+            para::para_has_revision(p_el),
+            para::para_has_unmatched_range(p_el),
+            para::para_has_sect_pr(p_el),
+            para::is_last_collected(&doc.root, para),
+        )
+    };
+    if has_rev {
+        return Err(Error::with_path(
+            ErrorKind::ParaHasRevision,
+            format!("ops[{i}].id"),
+        ));
+    }
+    if unmatched {
+        return Err(Error::with_path(
+            ErrorKind::CrossParaMarker,
+            format!("ops[{i}].id"),
+        ));
+    }
+    if has_sect && !is_last {
+        return Err(Error::with_path(
+            ErrorKind::SectionBreakPara,
+            format!("ops[{i}].id"),
+        ));
+    }
+    if has_sect && is_last {
+        let sect = {
+            let p_mut = para::element_at_mut(&mut doc.root, &path).ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::ParaNotFound { id: id.to_string() },
+                    format!("ops[{i}].id"),
+                )
+            })?;
+            para::take_ppr_sect_pr(p_mut)
+        };
+        if let Some(sect) = sect {
+            let paths = para::collect_paragraph_paths(&doc.root);
+            if let Some(dest_path) = paths.iter().rev().find(|pp| *pp != &path).cloned() {
+                let dest = para::element_at_mut(&mut doc.root, &dest_path).ok_or_else(|| {
+                    Error::with_path(
+                        ErrorKind::ParaNotFound { id: id.to_string() },
+                        format!("ops[{i}].id"),
+                    )
+                })?;
+                para::put_ppr_sect_pr(dest, sect);
+            }
+        }
+    }
+    let (parent, idx) = para::parent_and_index_mut(&mut doc.root, &path).ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::ParaNotFound { id: id.to_string() },
+            format!("ops[{i}].id"),
+        )
+    })?;
+    parent.children.remove(idx);
+    dirty.insert(part_name.to_string(), ());
+    Ok(())
 }
 
 fn remove_p_at(parent: &mut Element, para: &para::BodyPara) -> Result<(), ()> {

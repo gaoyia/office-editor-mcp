@@ -1830,13 +1830,6 @@ fn insert_and_delete_para_in_textbox() {
     )
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);
-    let err = apply_ops(
-        &path,
-        &tmp_dir().join("txbx-para-body.docx"),
-        json!([{ "op": "insertPara", "id": "para:CCCC3001", "text": "x" }]),
-    )
-    .unwrap_err();
-    assert_eq!(err.code(), ErrorCode::InvalidId);
 }
 
 #[test]
@@ -2236,4 +2229,160 @@ fn insert_picture_inside_textbox() {
     let exported = tmp_dir().join("txbx-pic-export.png");
     export_pic(&out, &pic_id, &exported).unwrap();
     assert_eq!(std::fs::read(&exported).unwrap(), PNG_1X1);
+}
+
+#[test]
+fn insert_and_delete_body_para() {
+    let path = write_sample("body-para");
+    let before_styles = part_bytes(&path, "word/styles.xml");
+    let out = tmp_dir().join("body-para-ins.docx");
+    apply_ops(
+        &path,
+        &out,
+        json!([{ "op": "insertPara", "id": "para:AAAA0001", "text": "新段" }]),
+    )
+    .unwrap();
+    assert_eq!(before_styles, part_bytes(&out, "word/styles.xml"));
+    let tree = inspect_all(&out);
+    let texts: Vec<&str> = tree["paragraphs"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|p| p["text"].as_str().unwrap())
+        .collect();
+    assert_eq!(texts[0], "标题");
+    assert_eq!(texts[1], "新段");
+    assert_eq!(texts[2], "粗细");
+    let xml = part(&out, "word/document.xml");
+    assert!(xml.contains("w14:paraId"));
+    assert!(xml.contains("新段"));
+
+    let out_end = tmp_dir().join("body-para-end.docx");
+    apply_ops(
+        &path,
+        &out_end,
+        json!([{ "op": "insertPara", "id": "docx:document", "text": "末段" }]),
+    )
+    .unwrap();
+    let tree_end = inspect_all(&out_end);
+    let last = tree_end["paragraphs"].as_array().unwrap().last().unwrap();
+    assert_eq!(last["text"], "末段");
+    let xml_end = part(&out_end, "word/document.xml");
+    let ins = xml_end.find(">末段<").unwrap();
+    let sect = xml_end.find("<w:sectPr>").unwrap();
+    assert!(ins < sect, "新段必须写在 body 级 sectPr 前面");
+
+    let out_del = tmp_dir().join("body-para-del.docx");
+    apply_ops(
+        &path,
+        &out_del,
+        json!([{ "op": "deletePara", "id": "para:AAAA0006" }]),
+    )
+    .unwrap();
+    let tree_del = inspect_all(&out_del);
+    let texts_del: Vec<&str> = tree_del["paragraphs"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|p| p["text"].as_str().unwrap())
+        .collect();
+    assert!(!texts_del.contains(&"外层"));
+    assert!(texts_del.contains(&"标题"));
+}
+
+#[test]
+fn delete_body_para_guards() {
+    let path = write_sample("body-para-guard");
+    let err = apply_ops(
+        &path,
+        &tmp_dir().join("body-rev.docx"),
+        json!([{ "op": "deletePara", "id": "para:AAAA0004" }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::NotImplemented);
+
+    let err = apply_ops(
+        &path,
+        &tmp_dir().join("body-cell-last.docx"),
+        json!([{ "op": "deletePara", "id": "para:AAAA0005" }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+
+    let out = tmp_dir().join("body-cell-ins.docx");
+    apply_ops(
+        &path,
+        &out,
+        json!([{ "op": "insertPara", "id": "para:AAAA0005", "text": "表内二" }]),
+    )
+    .unwrap();
+    let tree = inspect_all(&out);
+    let texts: Vec<&str> = tree["paragraphs"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|p| p["text"].as_str().unwrap())
+        .collect();
+    let i = texts.iter().position(|t| *t == "表内").unwrap();
+    assert_eq!(texts[i + 1], "表内二");
+}
+
+#[test]
+fn insert_header_para_and_refuse_last_delete() {
+    let path = write_hf_sample("hf-para");
+    let out = tmp_dir().join("hf-para-ins.docx");
+    apply_ops(
+        &path,
+        &out,
+        json!([{ "op": "insertPara", "id": "header:default:1", "text": "页眉第二段" }]),
+    )
+    .unwrap();
+    let tree = inspect_hf(&out, true);
+    let h = tree["headers"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|h| h["type"] == "default")
+        .unwrap();
+    assert_eq!(h["paraCount"], 2);
+    assert_eq!(h["paragraphs"][1]["text"], "页眉第二段");
+
+    let err = apply_ops(
+        &path,
+        &tmp_dir().join("hf-para-last.docx"),
+        json!([{ "op": "deletePara", "id": "header:default:1/para:AAAA1001" }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+
+    let err = apply_ops(
+        &path,
+        &tmp_dir().join("hf-para-container-del.docx"),
+        json!([{ "op": "deletePara", "id": "header:default:1" }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidId);
+
+    let out2 = tmp_dir().join("body-last.docx");
+    apply_ops(
+        &path,
+        &out2,
+        json!([{ "op": "deletePara", "id": "para:index:2" }]),
+    )
+    .unwrap();
+    let err = apply_ops(
+        &out2,
+        &tmp_dir().join("body-last-2.docx"),
+        json!([{ "op": "deletePara", "id": "para:index:1" }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+
+    let err = apply_ops(
+        &path,
+        &tmp_dir().join("body-sect-break.docx"),
+        json!([{ "op": "deletePara", "id": "para:index:1" }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::NotImplemented);
 }

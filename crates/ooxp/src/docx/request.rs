@@ -168,6 +168,15 @@ pub enum InsertParaPlace {
         comment_id: String,
         after: Option<BodyPara>,
     },
+    Body {
+        after: Option<BodyPara>,
+    },
+    HeaderFooter {
+        kind: HfKind,
+        hf_type: HfType,
+        n: u32,
+        after: Option<BodyPara>,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -1560,13 +1569,24 @@ fn parse_insert_para(
         };
         return Ok(InsertParaOp { id, place, text });
     }
-    if !id.contains("/txbx:") {
-        return Err(Error::with_path(
-            ErrorKind::InvalidId {
-                reason: crate::error::IdReason::InsertParaBody,
+    if id == "docx:document" {
+        return Ok(InsertParaOp {
+            id,
+            place: InsertParaPlace::Body { after: None },
+            text,
+        });
+    }
+    if let Some((kind, hf_type, n)) = para::parse_hf_container_id(&id) {
+        return Ok(InsertParaOp {
+            id,
+            place: InsertParaPlace::HeaderFooter {
+                kind,
+                hf_type,
+                n,
+                after: None,
             },
-            path,
-        ));
+            text,
+        });
     }
     if let Ok(box_target) = para::parse_txbx_id_at(&id, &path) {
         return Ok(InsertParaOp {
@@ -1590,7 +1610,27 @@ fn parse_insert_para(
             },
             text,
         }),
-        _ => Err(Error::with_path(
+        ParaTarget::Body(after) => Ok(InsertParaOp {
+            id,
+            place: InsertParaPlace::Body { after: Some(after) },
+            text,
+        }),
+        ParaTarget::HeaderFooter {
+            kind,
+            hf_type,
+            n,
+            para,
+        } => Ok(InsertParaOp {
+            id,
+            place: InsertParaPlace::HeaderFooter {
+                kind,
+                hf_type,
+                n,
+                after: Some(para),
+            },
+            text,
+        }),
+        ParaTarget::InNote { .. } | ParaTarget::InComment { .. } => Err(Error::with_path(
             ErrorKind::InvalidId {
                 reason: crate::error::IdReason::InsertParaNeedsBox,
             },
@@ -1648,22 +1688,17 @@ fn parse_delete_para(
             }),
         };
     }
-    if !id.contains("/txbx:") {
-        return Err(Error::with_path(
-            ErrorKind::InvalidId {
-                reason: crate::error::IdReason::InsertParaBody,
-            },
-            path,
-        ));
-    }
     match para::parse_para_id_at(&id, &path) {
-        Ok(inner @ ParaTarget::InTextBox { .. }) => Ok(DeleteParaOp { id, inner }),
-        Ok(_) | Err(_) => Err(Error::with_path(
+        Ok(inner @ ParaTarget::InTextBox { .. })
+        | Ok(inner @ ParaTarget::Body(_))
+        | Ok(inner @ ParaTarget::HeaderFooter { .. }) => Ok(DeleteParaOp { id, inner }),
+        Ok(_) => Err(Error::with_path(
             ErrorKind::InvalidId {
                 reason: crate::error::IdReason::InsertParaNeedsBox,
             },
             path,
         )),
+        Err(e) => Err(e),
     }
 }
 

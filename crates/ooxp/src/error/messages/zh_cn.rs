@@ -127,11 +127,8 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::TxbxIndexFromOne => "txbx:index 从 1 起".into(),
             IdReason::SetParaOnBox => "setParaText 的 id 必须是段落 id，不能是文本框 id".into(),
             IdReason::InsertNeedsHostPara => "insertTextBox 的 id 必须是宿主段落 id".into(),
-            IdReason::InsertParaBody => {
-                "insertPara 与 deletePara 只允许用在文本框、脚注、尾注或批注内".into()
-            }
             IdReason::InsertParaNeedsBox => {
-                "insertPara / deletePara 的 id 必须是文本框、框内段落、注、注内段落、批注或批注内段落".into()
+                "deletePara 的 id 必须是段落 id（正文、页眉页脚、表格单元格、文本框、注或批注）".into()
             }
             IdReason::NotePrefix => "脚注、尾注 id 必须是 footnote:… 或 endnote:…".into(),
             IdReason::NoteContainer => {
@@ -226,6 +223,14 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             "numRestart 必须是 continuous、eachSect 或 eachPage".into()
         }
         ErrorKind::LastCommentPara => "批注内至少要留一段，不能删掉最后一段".into(),
+        ErrorKind::LastStoryPara => {
+            "正文、页眉、页脚或表格单元格至少要留一段，不能删掉最后一段".into()
+        }
+        ErrorKind::CrossParaMarker => {
+            "不能删除书签、批注范围或许可范围跨出本段的段落".into()
+        }
+        ErrorKind::ParaHasRevision => "不能删除带修订标记的段落".into(),
+        ErrorKind::SectionBreakPara => "不能删除带分节符的段落，先把节属性挪走".into(),
         ErrorKind::CommentNotFound { id } => format!("找不到批注：{id}"),
         ErrorKind::NeedCommentParaId => {
             "批注最后一段必须有 w14:paraId，才能写 commentsExtended".into()

@@ -140,12 +140,8 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::TxbxIndexFromOne => "txbx:index starts at 1".into(),
             IdReason::SetParaOnBox => "setParaText id must be a paragraph id, not a text box id".into(),
             IdReason::InsertNeedsHostPara => "insertTextBox id must be a host paragraph id".into(),
-            IdReason::InsertParaBody => {
-                "insertPara and deletePara are only allowed inside a text box, a note, or a comment".into()
-            }
             IdReason::InsertParaNeedsBox => {
-                "insertPara / deletePara id must be a text box, a paragraph inside a text box, a note, a paragraph inside a note, a comment, or a paragraph inside a comment"
-                    .into()
+                "deletePara id must be a paragraph id (body, header/footer, table cell, text box, note, or comment)".into()
             }
             IdReason::NotePrefix => {
                 "Footnote/endnote id must be footnote:… or endnote:…".into()
@@ -253,6 +249,18 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         }
         ErrorKind::LastCommentPara => {
             "Cannot delete the last paragraph in a comment".into()
+        }
+        ErrorKind::LastStoryPara => {
+            "Cannot delete the last paragraph in the document body, a header, a footer, or a table cell".into()
+        }
+        ErrorKind::CrossParaMarker => {
+            "Cannot delete a paragraph whose bookmark, comment, or permission range continues outside it".into()
+        }
+        ErrorKind::ParaHasRevision => {
+            "Cannot delete a paragraph that contains revision markup".into()
+        }
+        ErrorKind::SectionBreakPara => {
+            "Cannot delete a paragraph that carries a section break; move section properties first".into()
         }
         ErrorKind::CommentNotFound { id } => format!("Comment not found: {id}"),
         ErrorKind::NeedCommentParaId => {
