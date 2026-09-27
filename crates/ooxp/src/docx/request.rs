@@ -48,6 +48,8 @@ pub struct InspectScope {
     pub fields: bool,
     /// 为 true 时列出目录块。
     pub tocs: bool,
+    /// 为 true 时列出公式。
+    pub maths: bool,
     /// 为 true 时列出编号定义。
     pub numbering: bool,
     /// 为 true 时列出样式定义。
@@ -651,6 +653,33 @@ pub struct DeleteTocOp {
 }
 
 #[derive(Debug, Clone)]
+pub enum InsertMathPlace {
+    After(ParaTarget),
+    EndOfDocument,
+}
+
+#[derive(Debug, Clone)]
+pub struct InsertMathOp {
+    pub id: String,
+    pub place: InsertMathPlace,
+    pub kind: super::math::MathKind,
+    pub text: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetMathOp {
+    pub id: String,
+    pub target: super::math::MathRef,
+    pub text: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct DeleteMathOp {
+    pub id: String,
+    pub target: super::math::MathRef,
+}
+
+#[derive(Debug, Clone)]
 pub enum DocxOp {
     SetParaText(SetParaTextOp),
     SetHeaderFooterDistance(SetHfDistanceOp),
@@ -660,6 +689,9 @@ pub enum DocxOp {
     DeleteSection(DeleteSectionOp),
     InsertToc(InsertTocOp),
     DeleteToc(DeleteTocOp),
+    InsertMath(InsertMathOp),
+    SetMath(SetMathOp),
+    DeleteMath(DeleteMathOp),
     SetTitlePage(SetTitlePageOp),
     SetEvenAndOddHeaders(SetEvenAndOddHeadersOp),
     SetPageMargin(SetPageMarginOp),
@@ -782,6 +814,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
             "bookmarks",
             "fields",
             "tocs",
+            "maths",
             "numbering",
             "styles",
             "runs",
@@ -802,6 +835,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
     let bookmarks = parse_bool_field(obj.get("bookmarks"), "bookmarks")?;
     let fields = parse_bool_field(obj.get("fields"), "fields")?;
     let tocs = parse_bool_field(obj.get("tocs"), "tocs")?;
+    let maths = parse_bool_field(obj.get("maths"), "maths")?;
     let numbering = parse_bool_field(obj.get("numbering"), "numbering")?;
     let styles = parse_bool_field(obj.get("styles"), "styles")?;
     let runs = parse_bool_field(obj.get("runs"), "runs")?;
@@ -832,6 +866,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
                 && !obj.contains_key("bookmarks")
                 && !obj.contains_key("fields")
                 && !obj.contains_key("tocs")
+                && !obj.contains_key("maths")
                 && !obj.contains_key("numbering")
                 && !obj.contains_key("styles")
                 && !obj.contains_key("runs")
@@ -855,6 +890,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
                 bookmarks,
                 fields,
                 tocs,
+                maths,
                 numbering,
                 styles,
                 runs,
@@ -915,6 +951,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
                 bookmarks,
                 fields,
                 tocs,
+                maths,
                 numbering,
                 styles,
                 runs,
@@ -998,6 +1035,9 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<DocxOp>, Error> {
             "deleteSection" => out.push(DocxOp::DeleteSection(parse_delete_section(obj, i)?)),
             "insertToc" => out.push(DocxOp::InsertToc(parse_insert_toc(obj, i)?)),
             "deleteToc" => out.push(DocxOp::DeleteToc(parse_delete_toc(obj, i)?)),
+            "insertMath" => out.push(DocxOp::InsertMath(parse_insert_math(obj, i)?)),
+            "setMath" => out.push(DocxOp::SetMath(parse_set_math(obj, i)?)),
+            "deleteMath" => out.push(DocxOp::DeleteMath(parse_delete_math(obj, i)?)),
             "setTitlePage" => out.push(DocxOp::SetTitlePage(parse_set_title_page(obj, i)?)),
             "setEvenAndOddHeaders" => out.push(DocxOp::SetEvenAndOddHeaders(
                 parse_set_even_and_odd(obj, i)?,
@@ -1490,6 +1530,125 @@ fn parse_delete_toc(obj: &serde_json::Map<String, Value>, i: usize) -> Result<De
     let id = require_op_id(obj, i)?;
     let n = parse_toc_id(&id, i)?;
     Ok(DeleteTocOp { id, n })
+}
+
+fn parse_insert_math(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<InsertMathOp, Error> {
+    deny_keys(obj, i, &["op", "id", "kind", "text"])?;
+    let id = require_op_id(obj, i)?;
+    let kind = match obj.get("kind") {
+        None => super::math::MathKind::Inline,
+        Some(Value::String(s)) if s == "inline" => super::math::MathKind::Inline,
+        Some(Value::String(s)) if s == "display" => super::math::MathKind::Display,
+        Some(Value::String(_)) => {
+            return Err(Error::with_path(
+                ErrorKind::InvalidMathKind,
+                format!("ops[{i}].kind"),
+            ));
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "kind".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].kind"),
+            ));
+        }
+    };
+    let text = match obj.get("text") {
+        Some(Value::String(s)) => {
+            if s.is_empty() {
+                return Err(Error::with_path(
+                    ErrorKind::EmptyMathText,
+                    format!("ops[{i}].text"),
+                ));
+            }
+            s.clone()
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "text".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].text"),
+            ));
+        }
+        None => {
+            return Err(Error::with_path(
+                ErrorKind::OpRequiresField {
+                    op: "insertMath".into(),
+                    field: "text".into(),
+                },
+                format!("ops[{i}].text"),
+            ));
+        }
+    };
+    let path = format!("ops[{i}].id");
+    let place = if id == "docx:document" {
+        InsertMathPlace::EndOfDocument
+    } else {
+        InsertMathPlace::After(parse_story_para_at(
+            &id,
+            &path,
+            IdReason::InsertMathNeedsPara,
+        )?)
+    };
+    Ok(InsertMathOp {
+        id,
+        place,
+        kind,
+        text,
+    })
+}
+
+fn parse_set_math(obj: &serde_json::Map<String, Value>, i: usize) -> Result<SetMathOp, Error> {
+    deny_keys(obj, i, &["op", "id", "text"])?;
+    let id = require_op_id(obj, i)?;
+    let target = super::math::parse_math_ref(&id, &format!("ops[{i}].id"))?;
+    let text = match obj.get("text") {
+        Some(Value::String(s)) => {
+            if s.is_empty() {
+                return Err(Error::with_path(
+                    ErrorKind::EmptyMathText,
+                    format!("ops[{i}].text"),
+                ));
+            }
+            s.clone()
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "text".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].text"),
+            ));
+        }
+        None => {
+            return Err(Error::with_path(
+                ErrorKind::OpRequiresField {
+                    op: "setMath".into(),
+                    field: "text".into(),
+                },
+                format!("ops[{i}].text"),
+            ));
+        }
+    };
+    Ok(SetMathOp { id, target, text })
+}
+
+fn parse_delete_math(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<DeleteMathOp, Error> {
+    deny_keys(obj, i, &["op", "id"])?;
+    let id = require_op_id(obj, i)?;
+    let target = super::math::parse_math_ref(&id, &format!("ops[{i}].id"))?;
+    Ok(DeleteMathOp { id, target })
 }
 
 fn parse_toc_id(id: &str, op_index: usize) -> Result<usize, Error> {

@@ -1158,6 +1158,7 @@ fn inspect_lists_header_pictures() {
             "hyperlinkCount",
             "bookmarkCount",
             "fieldCount",
+            "mathCount",
             "pictures"
         ]
     );

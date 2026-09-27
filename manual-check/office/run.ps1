@@ -49,6 +49,7 @@ $order = @(
     'docx-format'
     'docx-insert-section'
     'docx-toc'
+    'docx-math'
     'docx-headerfooter'
     'docx-distance'
     'docx-link'

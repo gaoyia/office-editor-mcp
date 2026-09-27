@@ -307,6 +307,15 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::InsertTocNeedsBodyPara => {
                 "insertToc id must be a direct child paragraph of w:body, or docx:document".into()
             }
+            IdReason::MathPrefix => {
+                "Math id must be math:N or a header/footer container id plus /math:N".into()
+            }
+            IdReason::MathIndexNotInt => "math index must be a positive integer".into(),
+            IdReason::MathIndexFromOne => "math index starts at 1".into(),
+            IdReason::InsertMathNeedsPara => {
+                "insertMath id must be a body or header/footer paragraph id, or docx:document"
+                    .into()
+            }
         },
         ErrorKind::SheetNotFound { name } => format!("Sheet not found: {name}"),
         ErrorKind::ParaNotFound { id } => format!("Paragraph not found: {id}"),
@@ -545,10 +554,16 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         }
         ErrorKind::FieldNotFound { id } => format!("Field not found: {id}"),
         ErrorKind::TocNotFound { id } => format!("Table of contents not found: {id}"),
+        ErrorKind::MathNotFound { id } => format!("Equation not found: {id}"),
         ErrorKind::SetParaTextHasField => {
             "Cannot change visible text in a paragraph that contains a field".into()
         }
+        ErrorKind::SetParaTextHasMath => {
+            "Cannot change visible text in a paragraph that contains an equation".into()
+        }
         ErrorKind::EmptyFieldInstr => "instr must not be empty".into(),
+        ErrorKind::EmptyMathText => "text must not be empty".into(),
+        ErrorKind::InvalidMathKind => "kind must be inline or display".into(),
         ErrorKind::InvalidFieldKeep => "keep must be result or instr".into(),
         ErrorKind::NeedSetFieldInstr => "setField requires instr".into(),
         ErrorKind::NumberingNotFound { id } => format!("Numbering instance not found: {id}"),

@@ -10,6 +10,7 @@ mod format;
 mod hf;
 mod inspect;
 mod link;
+mod math;
 mod notes;
 mod numbering;
 mod para;
@@ -34,6 +35,7 @@ pub const REL_CHART: &str =
 pub const CT_CHART: &str = "application/vnd.openxmlformats-officedocument.drawingml.chart+xml";
 
 pub const WML_NS: &str = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
+pub const MATH_NS: &str = "http://schemas.openxmlformats.org/officeDocument/2006/math";
 pub const W14_NS: &str = "http://schemas.microsoft.com/office/word/2010/wordml";
 pub const MC_NS: &str = "http://schemas.openxmlformats.org/markup-compatibility/2006";
 pub const REL_NS: &str = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";

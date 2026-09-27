@@ -208,6 +208,12 @@ pub(crate) enum IdReason {
     TocIndexFromOne,
     /// insertToc 必须是主文档 body 的直接子段落或 docx:document
     InsertTocNeedsBodyPara,
+    /// 公式 id 必须是 math:N 或 {容器}/math:N
+    MathPrefix,
+    MathIndexNotInt,
+    MathIndexFromOne,
+    /// insertMath 必须是正文或页眉页脚段落 id，或 docx:document
+    InsertMathNeedsPara,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -436,8 +442,12 @@ define_error_kinds! {
     NeedSetHyperlinkField => vec![Self::NeedSetHyperlinkField],
     FieldNotFound { id: String } => vec![Self::FieldNotFound { id: "field:1".into() }],
     TocNotFound { id: String } => vec![Self::TocNotFound { id: "toc:1".into() }],
+    MathNotFound { id: String } => vec![Self::MathNotFound { id: "math:1".into() }],
     InvalidTocKind => vec![Self::InvalidTocKind],
+    InvalidMathKind => vec![Self::InvalidMathKind],
+    EmptyMathText => vec![Self::EmptyMathText],
     SetParaTextHasField => vec![Self::SetParaTextHasField],
+    SetParaTextHasMath => vec![Self::SetParaTextHasMath],
     EmptyFieldInstr => vec![Self::EmptyFieldInstr],
     InvalidFieldKeep => vec![Self::InvalidFieldKeep],
     NeedSetFieldInstr => vec![Self::NeedSetFieldInstr],
@@ -640,6 +650,10 @@ impl IdReason {
             Self::TocIndexNotInt,
             Self::TocIndexFromOne,
             Self::InsertTocNeedsBodyPara,
+            Self::MathPrefix,
+            Self::MathIndexNotInt,
+            Self::MathIndexFromOne,
+            Self::InsertMathNeedsPara,
         ]
     }
 }
@@ -740,6 +754,8 @@ impl ErrorKind {
             | Self::SectionTypeOnLastPara
             | Self::CannotDeleteLastSection
             | Self::InvalidTocKind
+            | Self::InvalidMathKind
+            | Self::EmptyMathText
             | Self::CreateHfDuplicate
             | Self::InvalidPicKind
             | Self::InvalidPicWrap
@@ -840,6 +856,7 @@ impl ErrorKind {
             | Self::BookmarkNotFound { .. }
             | Self::FieldNotFound { .. }
             | Self::TocNotFound { .. }
+            | Self::MathNotFound { .. }
             | Self::NumberingNotFound { .. }
             | Self::AbstractNumNotFound { .. }
             | Self::StyleNotFound { .. }
@@ -863,7 +880,8 @@ impl ErrorKind {
             | Self::MergeNotSimple
             | Self::SetParaTextHasRevision
             | Self::SetParaTextHasHyperlink
-            | Self::SetParaTextHasField => NotImplemented,
+            | Self::SetParaTextHasField
+            | Self::SetParaTextHasMath => NotImplemented,
             Self::OpcOpen { .. } => OpcOpen,
             Self::PartMissing { .. }
             | Self::RelNotFound { .. }

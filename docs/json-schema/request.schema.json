@@ -83,6 +83,7 @@
         "bookmarks": { "type": "boolean" },
         "fields": { "type": "boolean" },
         "tocs": { "type": "boolean" },
+        "maths": { "type": "boolean" },
         "numbering": { "type": "boolean" },
         "styles": { "type": "boolean" },
         "runs": { "type": "boolean" },
@@ -552,6 +553,9 @@
               { "$ref": "#/$defs/deleteFieldOp" },
               { "$ref": "#/$defs/insertTocOp" },
               { "$ref": "#/$defs/deleteTocOp" },
+              { "$ref": "#/$defs/insertMathOp" },
+              { "$ref": "#/$defs/setMathOp" },
+              { "$ref": "#/$defs/deleteMathOp" },
               { "$ref": "#/$defs/insertNumberingOp" },
               { "$ref": "#/$defs/setNumberingOp" },
               { "$ref": "#/$defs/setParaNumberingOp" },
@@ -1299,6 +1303,36 @@
       "additionalProperties": false,
       "properties": {
         "op": { "const": "deleteToc" },
+        "id": { "type": "string", "minLength": 1 }
+      }
+    },
+    "insertMathOp": {
+      "type": "object",
+      "required": ["op", "id", "text"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "insertMath" },
+        "id": { "type": "string", "minLength": 1 },
+        "text": { "type": "string", "minLength": 1 },
+        "kind": { "enum": ["inline", "display"] }
+      }
+    },
+    "setMathOp": {
+      "type": "object",
+      "required": ["op", "id", "text"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "setMath" },
+        "id": { "type": "string", "minLength": 1 },
+        "text": { "type": "string", "minLength": 1 }
+      }
+    },
+    "deleteMathOp": {
+      "type": "object",
+      "required": ["op", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "deleteMath" },
         "id": { "type": "string", "minLength": 1 }
       }
     },

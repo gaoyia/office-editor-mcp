@@ -12,25 +12,27 @@ use super::field;
 use super::format;
 use super::hf::{self, HfKind};
 use super::link;
+use super::math;
 use super::notes;
 use super::numbering;
 use super::para::{self, BodyPara, HostPara, NoteKind, ParaTarget};
 use super::picture;
 use super::request::{
-    DeleteBookmarkOp, DeleteColOp, DeleteCommentOp, DeleteFieldOp, DeleteHyperlinkOp, DeleteNoteOp,
-    DeleteParaOp, DeletePictureOp, DeleteRowOp, DeleteSectionOp, DeleteTableOp, DeleteTextBoxOp,
-    DeleteTocOp, DocxOp, InsertBookmarkOp, InsertColOp, InsertCommentOp, InsertFieldOp,
-    InsertHeaderFooterOp, InsertHyperlinkOp, InsertNoteOp, InsertNumberingOp, InsertParaOp,
-    InsertParaPlace, InsertPictureOp, InsertRowOp, InsertSectionOp, InsertSectionPlace,
-    InsertTableOp, InsertTextBoxOp, InsertTocOp, InsertTocPlace, MergeCellsOp, NoteNumberTarget,
-    ReplacePictureOp, ReplyCommentOp, RevisionOp, SetBookmarkOp, SetColumnsOp, SetCommentDoneOp,
-    SetCommentMetaOp, SetCommentTextOp, SetDocGridOp, SetEvenAndOddHeadersOp, SetFieldOp,
-    SetGutterAtTopOp, SetHfDistanceOp, SetHfLinkOp, SetHyperlinkOp, SetLineNumberingOp,
-    SetMirrorMarginsOp, SetNoteNumberingOp, SetNumberingOp, SetPageMarginOp, SetPageSizeOp,
-    SetParaFormatOp, SetParaNumberingOp, SetParaStyleOp, SetParaTextOp, SetPictureSizeOp,
-    SetPictureWrapOp, SetRtlGutterOp, SetRunFormatOp, SetStyleOp, SetTextBoxDirectionOp,
-    SetTextBoxFillOp, SetTextBoxLineOp, SetTextBoxLinkOp, SetTextBoxSizeOp, SetTextBoxWrapOp,
-    SetTitlePageOp, SetVerticalAlignOp, SplitCellsOp,
+    DeleteBookmarkOp, DeleteColOp, DeleteCommentOp, DeleteFieldOp, DeleteHyperlinkOp, DeleteMathOp,
+    DeleteNoteOp, DeleteParaOp, DeletePictureOp, DeleteRowOp, DeleteSectionOp, DeleteTableOp,
+    DeleteTextBoxOp, DeleteTocOp, DocxOp, InsertBookmarkOp, InsertColOp, InsertCommentOp,
+    InsertFieldOp, InsertHeaderFooterOp, InsertHyperlinkOp, InsertMathOp, InsertMathPlace,
+    InsertNoteOp, InsertNumberingOp, InsertParaOp, InsertParaPlace, InsertPictureOp, InsertRowOp,
+    InsertSectionOp, InsertSectionPlace, InsertTableOp, InsertTextBoxOp, InsertTocOp,
+    InsertTocPlace, MergeCellsOp, NoteNumberTarget, ReplacePictureOp, ReplyCommentOp, RevisionOp,
+    SetBookmarkOp, SetColumnsOp, SetCommentDoneOp, SetCommentMetaOp, SetCommentTextOp,
+    SetDocGridOp, SetEvenAndOddHeadersOp, SetFieldOp, SetGutterAtTopOp, SetHfDistanceOp,
+    SetHfLinkOp, SetHyperlinkOp, SetLineNumberingOp, SetMathOp, SetMirrorMarginsOp,
+    SetNoteNumberingOp, SetNumberingOp, SetPageMarginOp, SetPageSizeOp, SetParaFormatOp,
+    SetParaNumberingOp, SetParaStyleOp, SetParaTextOp, SetPictureSizeOp, SetPictureWrapOp,
+    SetRtlGutterOp, SetRunFormatOp, SetStyleOp, SetTextBoxDirectionOp, SetTextBoxFillOp,
+    SetTextBoxLineOp, SetTextBoxLinkOp, SetTextBoxSizeOp, SetTextBoxWrapOp, SetTitlePageOp,
+    SetVerticalAlignOp, SplitCellsOp,
 };
 use super::revision;
 use super::sect;
@@ -99,6 +101,15 @@ pub fn apply(bytes: &[u8], ops: &[DocxOp]) -> Result<Vec<u8>, Error> {
             }
             DocxOp::DeleteToc(op) => {
                 apply_delete_toc(&mut docs, &mut dirty, &doc_part, op, i)?;
+            }
+            DocxOp::InsertMath(op) => {
+                apply_insert_math(&pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
+            }
+            DocxOp::SetMath(op) => {
+                apply_set_math(&pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
+            }
+            DocxOp::DeleteMath(op) => {
+                apply_delete_math(&pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
             }
             DocxOp::SetTitlePage(op) => {
                 apply_title_page(&mut docs, &mut dirty, &doc_part, op, i)?;
@@ -429,6 +440,16 @@ fn refuse_set_text_if_field(root: &Element, para: &para::BodyPara, i: usize) -> 
     if field::para_blocks_set_text(root, para) {
         return Err(Error::with_path(
             ErrorKind::SetParaTextHasField,
+            format!("ops[{i}].id"),
+        ));
+    }
+    Ok(())
+}
+
+fn refuse_set_text_if_math(root: &Element, para: &para::BodyPara, i: usize) -> Result<(), Error> {
+    if math::para_blocks_set_text(root, para) {
+        return Err(Error::with_path(
+            ErrorKind::SetParaTextHasMath,
             format!("ops[{i}].id"),
         ));
     }
@@ -1118,6 +1139,7 @@ fn apply_para_text(
         ParaTarget::Body(p) => {
             let doc = load_part(pkg, docs, doc_part)?;
             refuse_set_text_if_field(&doc.root, p, i)?;
+            refuse_set_text_if_math(&doc.root, p, i)?;
             let el = para::find_paragraph_mut(&mut doc.root, p).ok_or_else(|| {
                 Error::with_path(
                     ErrorKind::ParaNotFound { id: op.id.clone() },
@@ -1138,6 +1160,7 @@ fn apply_para_text(
             let part_name = part_for_hf(catalog, *kind, *hf_type, *n, &op.id, i)?;
             let doc = load_part(pkg, docs, &part_name)?;
             refuse_set_text_if_field(&doc.root, para, i)?;
+            refuse_set_text_if_math(&doc.root, para, i)?;
             let el = para::find_paragraph_mut(&mut doc.root, para).ok_or_else(|| {
                 Error::with_path(
                     ErrorKind::ParaNotFound { id: op.id.clone() },
@@ -1804,6 +1827,81 @@ fn apply_delete_toc(
     let doc = docs.get_mut(doc_part).unwrap();
     field::delete_toc(&mut doc.root, op.n, &op.id, i)?;
     dirty.insert(doc_part.to_string(), ());
+    Ok(())
+}
+
+fn apply_insert_math(
+    pkg: &Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &InsertMathOp,
+    i: usize,
+) -> Result<(), Error> {
+    match &op.place {
+        InsertMathPlace::EndOfDocument => {
+            let doc = docs.get_mut(doc_part).unwrap();
+            math::ensure_math_ns(&mut doc.root);
+            math::insert_math(&mut doc.root, None, op.kind, &op.text, &op.id, i)?;
+            dirty.insert(doc_part.to_string(), ());
+        }
+        InsertMathPlace::After(target) => {
+            let part_name = part_for_para(pkg, catalog, doc_part, target, &op.id, i)?;
+            let doc = load_part(pkg, docs, &part_name)?;
+            math::ensure_math_ns(&mut doc.root);
+            let para = match target {
+                ParaTarget::Body(p) | ParaTarget::HeaderFooter { para: p, .. } => p,
+                _ => {
+                    return Err(Error::with_path(
+                        ErrorKind::InvalidId {
+                            reason: crate::error::IdReason::InsertMathNeedsPara,
+                        },
+                        format!("ops[{i}].id"),
+                    ));
+                }
+            };
+            math::insert_math(&mut doc.root, Some(para), op.kind, &op.text, &op.id, i)?;
+            dirty.insert(part_name, ());
+        }
+    }
+    Ok(())
+}
+
+fn apply_set_math(
+    pkg: &Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &SetMathOp,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name = math::part_for_story(catalog, doc_part, &op.target.story, || {
+        math::missing_math_err(&op.id, i)
+    })?;
+    let doc = load_part(pkg, docs, &part_name)?;
+    math::ensure_math_ns(&mut doc.root);
+    math::set_math(&mut doc.root, op.target.n, &op.text, &op.id, i)?;
+    dirty.insert(part_name, ());
+    Ok(())
+}
+
+fn apply_delete_math(
+    pkg: &Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &DeleteMathOp,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name = math::part_for_story(catalog, doc_part, &op.target.story, || {
+        math::missing_math_err(&op.id, i)
+    })?;
+    let doc = load_part(pkg, docs, &part_name)?;
+    math::delete_math(&mut doc.root, op.target.n, &op.id, i)?;
+    dirty.insert(part_name, ());
     Ok(())
 }
 
