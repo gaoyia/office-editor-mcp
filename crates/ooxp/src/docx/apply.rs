@@ -3875,7 +3875,6 @@ fn apply_set_comment_meta(
         let doc = load_part(pkg, docs, &comments_part)?;
         let comment = comments::find_comment_mut(&mut doc.root, &op.comment_id)
             .ok_or_else(|| comments::comment_missing(&op.id, i))?;
-        comments::reject_ink(comment, &op.id, i)?;
         if let Some(a) = &op.author {
             set_w_attr(comment, "author", a);
         }
@@ -3910,7 +3909,6 @@ fn apply_set_comment_done(
         let doc = load_part(pkg, docs, &comments_part)?;
         let comment = comments::find_comment(&doc.root, &op.comment_id)
             .ok_or_else(|| comments::comment_missing(&op.id, i))?;
-        comments::reject_ink(comment, &op.id, i)?;
         comments::last_para_id(comment).ok_or_else(|| comments::need_para_id(i))?
     };
     let extended_part = comments::ensure_extended_part(pkg, docs, dirty, doc_part)?;

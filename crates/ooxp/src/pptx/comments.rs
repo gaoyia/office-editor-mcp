@@ -470,7 +470,6 @@ pub fn apply_set_meta(
             format!("ops[{op_index}].id"),
         )
     })?;
-    reject_ink(host, &op.id, op_index)?;
     if let Some(date) = &op.date {
         host.set_attr("created", date);
     }
@@ -515,7 +514,6 @@ pub fn apply_set_done(
             format!("ops[{op_index}].id"),
         )
     })?;
-    reject_ink(host, &op.id, op_index)?;
     if op.done {
         host.set_attr("status", "resolved");
     } else {

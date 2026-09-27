@@ -2439,7 +2439,7 @@ xlsx / pptx 上发此 op 报 `InvalidField`。
 | `id` | 批注容器 id。docx 为 `comment:0`；pptx 为 `slide:{n}/comment:{guid}` 或回复 id |
 | `text` | 新的可见纯文本，字符串，可空 |
 
-只改该 `w:comment` 的可见文本，不改范围标记。留下第一段（含 `annotationRef`），按 `setParaText` 的规则改这段的可见 `w:t`，删掉后面多出来的 `w:p`。随后把 `commentEx/@paraId` 和指向旧最后一段的 `paraIdParent` 改成留下的那一段。id 不是批注容器 id 报 `InvalidId`。对批注内段落 id 请用 `setParaText`。对 `kind` 为 `ink` 的批注报 `NotImplemented`。xlsx 上发此 op 报 `InvalidField`。pptx 的 `id` 可以是批注容器 id 或回复 id。只改对应 `p188:txBody` 的可见文本，规则与 `setShapeText` 相同。对 `kind` 为 `ink` 的批注报 `NotImplemented`。
+只改该 `w:comment` 的可见文本，不改范围标记。留下第一段（含 `annotationRef`），按 `setParaText` 的规则改这段的可见 `w:t`，删掉后面多出来的 `w:p`。随后把 `commentEx/@paraId` 和指向旧最后一段的 `paraIdParent` 改成留下的那一段。id 不是批注容器 id 报 `InvalidId`。对批注内段落 id 请用 `setParaText`。对 `kind` 为 `ink` 的批注报 `NotImplemented`，没有可见 `w:t` 时同样拒绝，不写文件。xlsx 上发此 op 报 `InvalidField`。pptx 的 `id` 可以是批注容器 id 或回复 id。只改对应 `p188:txBody` 的可见文本，规则与 `setShapeText` 相同。对 `kind` 为 `ink` 的批注报 `NotImplemented`，没有可见 `txBody` 文本时同样拒绝。
 
 ### setCommentMeta
 
@@ -2451,7 +2451,7 @@ xlsx / pptx 上发此 op 报 `InvalidField`。
 | `initials` | 可选 |
 | `date` | 可选。`xsd:dateTime` 字符串 |
 
-`author`、`initials`、`date` 至少给一个，否则报 `InvalidField`。只改被点名的属性，其余不动。改 `author` 时若 `people.xml` 里还没有这个作者则补一条，不删旧作者。id 不是批注容器 id 报 `InvalidId`。xlsx 上发此 op 报 `InvalidField`。pptx 的 `id` 可以是批注容器 id 或回复 id。改作者或缩写时按新的 `name` / `initials` 指向（必要时新建）一条 `p188:author`，只改该 `cm` 或 `reply` 的 `authorId`，不改共享的那条 author 记录，以免误伤同作者其它批注。对 `kind` 为 `ink` 的批注报 `NotImplemented`。
+`author`、`initials`、`date` 至少给一个，否则报 `InvalidField`。只改被点名的属性，其余不动。改 `author` 时若 `people.xml` 里还没有这个作者则补一条，不删旧作者。id 不是批注容器 id 报 `InvalidId`。xlsx 上发此 op 报 `InvalidField`。pptx 的 `id` 可以是批注容器 id 或回复 id。改作者或缩写时按新的 `name` / `initials` 指向（必要时新建）一条 `p188:author`，只改该 `cm` 或 `reply` 的 `authorId`，不改共享的那条 author 记录，以免误伤同作者其它批注。`kind` 为 `ink` 的批注同样可以改这些字段，不改正文或幻灯片上的墨迹画。
 
 ### setCommentDone
 
@@ -2461,7 +2461,7 @@ xlsx / pptx 上发此 op 报 `InvalidField`。
 | `id` | 批注容器 id |
 | `done` | 布尔。`true` 写成 `commentEx/@done="1"`，`false` 写成 `"0"` |
 
-只改被点名这一条的 `done`，不自动改回复。没有 `commentsExtended` 则按 Word 16 最小集新建，并为文件里每条批注补 `commentEx`（默认 `done="0"`），再改被点名的那条。父批注最后一段没有 `w14:paraId` 时报 `InvalidField`。xlsx 上发此 op 报 `InvalidField`。pptx 的 `id` 可以是批注容器 id 或回复 id。`done: true` 写 `status="resolved"`；`false` 去掉 `status`（与另存样例默认无 status、即 active 一致）。对 `kind` 为 `ink` 的批注报 `NotImplemented`。
+只改被点名这一条的 `done`，不自动改回复。没有 `commentsExtended` 则按 Word 16 最小集新建，并为文件里每条批注补 `commentEx`（默认 `done="0"`），再改被点名的那条。父批注最后一段没有 `w14:paraId` 时报 `InvalidField`。xlsx 上发此 op 报 `InvalidField`。pptx 的 `id` 可以是批注容器 id 或回复 id。`done: true` 写 `status="resolved"`；`false` 去掉 `status`（与另存样例默认无 status、即 active 一致）。`kind` 为 `ink` 的批注同样可以改完成标记。
 
 ### 图表 op 的共同限制
 

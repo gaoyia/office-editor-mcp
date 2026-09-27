@@ -517,6 +517,20 @@ fn insert_picture_in_comment_and_ink_rejected() {
         json!([{ "op": "replyComment", "id": "comment:0", "text": "x" }]),
     );
     assert_eq!(err.code(), ErrorCode::NotImplemented);
+    let meta_out = tmp_dir().join("ink-meta.docx");
+    apply(
+        &ink,
+        &meta_out,
+        json!([
+            { "op": "setCommentMeta", "id": "comment:0", "author": "Ink2", "initials": "K" },
+            { "op": "setCommentDone", "id": "comment:0", "done": true }
+        ]),
+    );
+    let tree = inspect(&meta_out, json!({ "comments": true }));
+    assert_eq!(tree["comments"][0]["kind"], "ink");
+    assert_eq!(tree["comments"][0]["author"], "Ink2");
+    assert_eq!(tree["comments"][0]["initials"], "K");
+    assert_eq!(tree["comments"][0]["done"], true);
     let del = tmp_dir().join("ink-del.docx");
     apply(
         &ink,

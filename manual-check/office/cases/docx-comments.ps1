@@ -1,5 +1,7 @@
-# docx 批注：docs/checklist-docx.md 的 Cmt1–Cmt7。
+# docx 批注：docs/checklist-docx.md 的 Cmt1–Cmt7、Ik1–Ik4。
 # 源文件由 Word 在前两段插入批注并回复后另存。不要用 create 产物当唯一样例。
+# 墨迹：在另存样例的 word/comments.xml 里给 Bob 那条插入 wpi:ink（本地名为 ink）。
+# 空 inkml:ink 会让 Word 16.0 报文件损坏；wpi 命名空间已在另存部件里。不从安装目录抄 InkML。
 
 $ErrorActionPreference = 'Stop'
 . ([IO.Path]::Combine($PSScriptRoot, '..', '..', 'lib', 'bootstrap.ps1'))
@@ -240,3 +242,220 @@ try {
 finally { Release-Com $commentsP }
 Add-Check 'docx-Cmt7' (($capP -notmatch 'Repair') -and ($inCmt -ge 1)) "caption=$capP inlineInComment=$inCmt"
 Close-WordDoc $docP
+
+function Invoke-OoxpExpectFail($obj, [string]$name) {
+    $path = Join-Path $global:OoxpReqDir "$name.json"
+    Write-JsonFile $path $obj
+    $psi = New-Object System.Diagnostics.ProcessStartInfo
+    $psi.FileName = $global:OoxpExe
+    $psi.Arguments = "--input `"$path`""
+    $psi.UseShellExecute = $false
+    $psi.RedirectStandardOutput = $true
+    $psi.RedirectStandardError = $true
+    $psi.StandardOutputEncoding = [System.Text.Encoding]::UTF8
+    $psi.StandardErrorEncoding = [System.Text.Encoding]::UTF8
+    $proc = [System.Diagnostics.Process]::Start($psi)
+    $stdout = $proc.StandardOutput.ReadToEnd().Trim()
+    $stderr = $proc.StandardError.ReadToEnd().Trim()
+    $proc.WaitForExit()
+    $code = $proc.ExitCode
+    $proc.Dispose()
+    Write-Log "ooxp $name 退出码 $code stderr=$stderr"
+    return @{ ExitCode = $code; Stderr = $stderr; Stdout = $stdout }
+}
+
+function Rewrite-ZipPart([string]$zipPath, [string]$part, [scriptblock]$edit) {
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $zip = [IO.Compression.ZipFile]::Open($zipPath, 'Update')
+    try {
+        $entry = $zip.Entries | Where-Object { ($_.FullName -replace '\\', '/') -eq $part } | Select-Object -First 1
+        if (-not $entry) { throw "zip 里没有 $part" }
+        $ms = New-Object IO.MemoryStream
+        $es = $entry.Open()
+        $es.CopyTo($ms)
+        $es.Dispose()
+        $xml = [Text.Encoding]::UTF8.GetString($ms.ToArray())
+        $text2 = & $edit $xml
+        $name = $entry.FullName
+        $entry.Delete()
+        $newEntry = $zip.CreateEntry($name)
+        $bytes = [Text.Encoding]::UTF8.GetBytes($text2)
+        $ws = $newEntry.Open()
+        $ws.Write($bytes, 0, $bytes.Length)
+        $ws.Dispose()
+    }
+    finally { $zip.Dispose() }
+}
+
+function Inject-DocxCommentInk([string]$docx, [switch]$StripText) {
+    $script:InkStrip = [bool]$StripText
+    Rewrite-ZipPart $docx 'word/comments.xml' {
+        param($xml)
+        $marker = 'w:author="' + $script:InkAuthor + '"'
+        $a = $xml.IndexOf($marker)
+        if ($a -lt 0) {
+            $marker = "w:author='$($script:InkAuthor)'"
+            $a = $xml.IndexOf($marker)
+        }
+        if ($a -lt 0) { throw "comments.xml 里没有作者 $($script:InkAuthor)" }
+        $head = $xml.Substring(0, [Math]::Min($a + 20, $xml.Length))
+        $start = $head.LastIndexOf('<w:comment')
+        $end = $xml.IndexOf('</w:comment>', $a)
+        if ($start -lt 0 -or $end -lt 0) { throw '找不到 w:comment 边界' }
+        $end += '</w:comment>'.Length
+        $block = $xml.Substring($start, $end - $start)
+        if ($block -notmatch '<wpi:ink') {
+            $cClose = $block.IndexOf('</w:comment>')
+            if ($cClose -lt 0) { throw '批注块没有结束标签' }
+            $block = $block.Insert($cClose, '<wpi:ink/>')
+        }
+        if ($script:InkStrip) {
+            $block = [regex]::Replace($block, '<w:t\b[^>]*>.*?</w:t>', '')
+        }
+        return $xml.Substring(0, $start) + $block + $xml.Substring($end)
+    }
+}
+
+function Find-InkComment($tree) {
+    foreach ($c in @($tree.comments)) {
+        if ([string]$c.kind -eq 'ink') { return $c }
+    }
+    return $null
+}
+
+function Test-NoInkBitmap($node) {
+    $bad = @('inkBitmap', 'inkImage', 'bitmap', 'inkData', 'inkPng')
+    foreach ($n in @($node.PSObject.Properties.Name)) {
+        if ($bad -contains $n) { return $false }
+    }
+    $pic = 0
+    if ($node.PSObject.Properties.Name -contains 'pictureCount') { $pic = [int]$node.pictureCount }
+    return ($pic -eq 0)
+}
+
+# Ik1–Ik4：另存批注样例插入 wpi:ink。不猜完整 InkML。
+$script:InkAuthor = 'Bob'
+$inkSrc = Get-OutPath 'docx-comments-ink-source.docx'
+Close-WordDocByPath $word $inkSrc
+Copy-Item -Force $src $inkSrc
+Inject-DocxCommentInk $inkSrc
+
+$treeInk = Invoke-OoxpTree @{
+    schemaVersion = 1; action = 'inspect'
+    path = $inkSrc.Replace('\', '/'); format = 'docx'
+    scope = @{ comments = $true }
+} 'docx-comments-ink-inspect'
+$inkC = Find-InkComment $treeInk
+$noBmp = $inkC -and (Test-NoInkBitmap $inkC)
+$docInk = Open-WordDoc $word $inkSrc
+$capInk = [string]$docInk.ActiveWindow.Caption
+Close-WordDoc $docInk
+Add-Check 'docx-Ik1' (($null -ne $inkC) -and $noBmp -and ($capInk -notmatch 'Repair')) "id=$($inkC.id) kind=$($inkC.kind) noBmp=$noBmp caption=$capInk"
+
+$metaOut = Get-OutPath 'docx-comments-ink-meta.docx'
+Close-WordDocByPath $word $metaOut
+if (Test-Path $metaOut) { Remove-Item $metaOut -Force }
+Invoke-OoxpRequest @{
+    schemaVersion = 1; action = 'apply'
+    path = $inkSrc.Replace('\', '/')
+    output = $metaOut.Replace('\', '/')
+    ops = @(@{ op = 'setCommentMeta'; id = $inkC.id; author = 'Ink2'; initials = 'K' })
+} 'docx-comments-ink-meta' | Out-Null
+
+$treeMeta = Invoke-OoxpTree @{
+    schemaVersion = 1; action = 'inspect'
+    path = $metaOut.Replace('\', '/'); format = 'docx'
+    scope = @{ comments = $true }
+} 'docx-comments-ink-meta-inspect'
+$inkMeta = Find-InkComment $treeMeta
+$docM = Open-WordDoc $word $metaOut
+$capM = [string]$docM.ActiveWindow.Caption
+$authorHit = $false
+$commentsM = $docM.Comments
+try {
+    $nM = [int]$commentsM.Count
+    for ($i = 1; $i -le $nM; $i++) {
+        $c = $commentsM.Item($i)
+        try {
+            $a = [string]$c.Author
+            if ($a -eq 'Ink2') { $authorHit = $true }
+        }
+        finally { Release-Com $c }
+    }
+}
+finally { Release-Com $commentsM }
+Add-Check 'docx-Ik2' (($capM -notmatch 'Repair') -and ($inkMeta.author -eq 'Ink2') -and ($inkMeta.initials -eq 'K') -and $authorHit) "caption=$capM author=$($inkMeta.author) initials=$($inkMeta.initials) com=$authorHit"
+Close-WordDoc $docM
+
+$doneOut = Get-OutPath 'docx-comments-ink-done.docx'
+Close-WordDocByPath $word $doneOut
+if (Test-Path $doneOut) { Remove-Item $doneOut -Force }
+Invoke-OoxpRequest @{
+    schemaVersion = 1; action = 'apply'
+    path = $inkSrc.Replace('\', '/')
+    output = $doneOut.Replace('\', '/')
+    ops = @(@{ op = 'setCommentDone'; id = $inkC.id; done = $true })
+} 'docx-comments-ink-done' | Out-Null
+
+$treeDone = Invoke-OoxpTree @{
+    schemaVersion = 1; action = 'inspect'
+    path = $doneOut.Replace('\', '/'); format = 'docx'
+    scope = @{ comments = $true }
+} 'docx-comments-ink-done-inspect'
+$inkDone = Find-InkComment $treeDone
+$docDn = Open-WordDoc $word $doneOut
+$capDn = [string]$docDn.ActiveWindow.Caption
+$doneVal = $false
+$commentsDn = $docDn.Comments
+try {
+    $nDn = [int]$commentsDn.Count
+    for ($i = 1; $i -le $nDn; $i++) {
+        $c = $commentsDn.Item($i)
+        try {
+            $t = ([string]$c.Range.Text).Trim()
+            if ($t -match [regex]::Escape($S.commentB)) {
+                try { $doneVal = [bool]$c.Done } catch { $doneVal = $false }
+            }
+        }
+        finally { Release-Com $c }
+    }
+}
+finally { Release-Com $commentsDn }
+Add-Check 'docx-Ik3' (($capDn -notmatch 'Repair') -and ([bool]$inkDone.done -eq $true) -and $doneVal) "caption=$capDn inspectDone=$($inkDone.done) com=$doneVal"
+Close-WordDoc $docDn
+
+$inkBare = Get-OutPath 'docx-comments-ink-bare.docx'
+Close-WordDocByPath $word $inkBare
+Copy-Item -Force $inkSrc $inkBare
+Inject-DocxCommentInk $inkBare -StripText
+$failOut = Get-OutPath 'docx-comments-ink-text.docx'
+if (Test-Path $failOut) { Remove-Item $failOut -Force }
+$rawInk = Invoke-OoxpExpectFail @{
+    schemaVersion = 1; action = 'apply'
+    path = $inkBare.Replace('\', '/')
+    output = $failOut.Replace('\', '/')
+    ops = @(@{ op = 'setCommentText'; id = $inkC.id; text = $S.commentTextNew })
+} 'docx-comments-ink-set-text'
+$inkCode = ''
+try { $inkCode = [string](($rawInk.Stderr | ConvertFrom-Json).error.code) } catch { $inkCode = $rawInk.Stderr }
+$noWrite = -not (Test-Path $failOut)
+
+$delOut = Get-OutPath 'docx-comments-ink-delete.docx'
+Close-WordDocByPath $word $delOut
+if (Test-Path $delOut) { Remove-Item $delOut -Force }
+Invoke-OoxpRequest @{
+    schemaVersion = 1; action = 'apply'
+    path = $inkBare.Replace('\', '/')
+    output = $delOut.Replace('\', '/')
+    ops = @(@{ op = 'deleteComment'; id = $inkC.id })
+} 'docx-comments-ink-delete' | Out-Null
+$treeDel = Invoke-OoxpTree @{
+    schemaVersion = 1; action = 'inspect'
+    path = $delOut.Replace('\', '/'); format = 'docx'
+    scope = @{ comments = $true }
+} 'docx-comments-ink-delete-inspect'
+$stillInk = $null -ne (Find-InkComment $treeDel)
+$docDel = Open-WordDoc $word $delOut
+$capDel = [string]$docDel.ActiveWindow.Caption
+Close-WordDoc $docDel
+Add-Check 'docx-Ik4' (($inkCode -eq 'NotImplemented') -and $noWrite -and ($capDel -notmatch 'Repair') -and (-not $stillInk)) "code=$inkCode wrote=$(-not $noWrite) caption=$capDel stillInk=$stillInk"

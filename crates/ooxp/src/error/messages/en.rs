@@ -440,7 +440,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             "insertComment start must not come after end".into()
         }
         ErrorKind::InkComment { id } => {
-            format!("Ink comments cannot be edited except deleteComment: {id}")
+            format!("Ink comments cannot set text, receive replies, or accept drawing inserts: {id}")
         }
         ErrorKind::ChartNotFound { id } => format!("Chart not found: {id}"),
         ErrorKind::ChartSeriesNotFound { id } => format!("Chart series not found: {id}"),

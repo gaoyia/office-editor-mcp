@@ -1,5 +1,6 @@
-# pptx 批注：docs/checklist-pptx.md 的 Pcm1–Pcm5。
+# pptx 批注：docs/checklist-pptx.md 的 Pcm1–Pcm5、Pik1–Pik4。
 # 源文件：PowerPoint 亲手另存，第一页有两条线程化批注，其中一条带回复。不要用库 create 产物当带批注的唯一样例。
+# 墨迹：在另存样例的现代批注部件里，按 commentId 给「批注乙」插入本地名为 ink 的空标记。
 
 $ErrorActionPreference = 'Stop'
 . ([IO.Path]::Combine($PSScriptRoot, '..', '..', 'lib', 'bootstrap.ps1'))
@@ -183,3 +184,215 @@ $presTh = Open-PptPres $ppt $threadOut
 $capTh = Get-PptCaption $presTh
 Add-Check 'pptx-Pcm5' (($capTh -notmatch 'Repair') -and $replyOk -and $doneOk) "cap=$capTh reply=$replyOk done=$($cTh.done)"
 Close-PptPres $presTh
+
+function Invoke-OoxpExpectFail($obj, [string]$name) {
+    $path = Join-Path $global:OoxpReqDir "$name.json"
+    Write-JsonFile $path $obj
+    $psi = New-Object System.Diagnostics.ProcessStartInfo
+    $psi.FileName = $global:OoxpExe
+    $psi.Arguments = "--input `"$path`""
+    $psi.UseShellExecute = $false
+    $psi.RedirectStandardOutput = $true
+    $psi.RedirectStandardError = $true
+    $psi.StandardOutputEncoding = [System.Text.Encoding]::UTF8
+    $psi.StandardErrorEncoding = [System.Text.Encoding]::UTF8
+    $proc = [System.Diagnostics.Process]::Start($psi)
+    $stdout = $proc.StandardOutput.ReadToEnd().Trim()
+    $stderr = $proc.StandardError.ReadToEnd().Trim()
+    $proc.WaitForExit()
+    $code = $proc.ExitCode
+    $proc.Dispose()
+    Write-Log "ooxp $name 退出码 $code stderr=$stderr"
+    return @{ ExitCode = $code; Stderr = $stderr; Stdout = $stdout }
+}
+
+function Find-ZipPartContaining([string]$zipPath, [string]$prefix, [string]$needle) {
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $zip = [IO.Compression.ZipFile]::OpenRead($zipPath)
+    try {
+        foreach ($e in $zip.Entries) {
+            $n = $e.FullName -replace '\\', '/'
+            if ($n -like $prefix) {
+                $ms = New-Object IO.MemoryStream
+                $es = $e.Open()
+                $es.CopyTo($ms)
+                $es.Dispose()
+                $text = [Text.Encoding]::UTF8.GetString($ms.ToArray())
+                if ($text.Contains($needle)) { return $n }
+            }
+        }
+    }
+    finally { $zip.Dispose() }
+    return $null
+}
+
+function Rewrite-ZipPart([string]$zipPath, [string]$part, [scriptblock]$edit) {
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $zip = [IO.Compression.ZipFile]::Open($zipPath, 'Update')
+    try {
+        $entry = $zip.Entries | Where-Object { ($_.FullName -replace '\\', '/') -eq $part } | Select-Object -First 1
+        if (-not $entry) { throw "zip 里没有 $part" }
+        $ms = New-Object IO.MemoryStream
+        $es = $entry.Open()
+        $es.CopyTo($ms)
+        $es.Dispose()
+        $xml = [Text.Encoding]::UTF8.GetString($ms.ToArray())
+        $text2 = & $edit $xml
+        $name = $entry.FullName
+        $entry.Delete()
+        $newEntry = $zip.CreateEntry($name)
+        $bytes = [Text.Encoding]::UTF8.GetBytes($text2)
+        $ws = $newEntry.Open()
+        $ws.Write($bytes, 0, $bytes.Length)
+        $ws.Dispose()
+    }
+    finally { $zip.Dispose() }
+}
+
+function Inject-PptxCommentInk([string]$pptx, [switch]$StripText) {
+    $script:InkStrip = [bool]$StripText
+    $part = Find-ZipPartContaining $pptx 'ppt/comments/*.xml' $script:InkCmId
+    if (-not $part) { throw "批注部件里没有 $($script:InkCmId)" }
+    Rewrite-ZipPart $pptx $part {
+        param($xml)
+        $tIdx = $xml.IndexOf($script:InkCmId)
+        if ($tIdx -lt 0) { throw "部件里没有 $($script:InkCmId)" }
+        $head = $xml.Substring(0, [Math]::Min($tIdx + 20, $xml.Length))
+        $cmStart = $head.LastIndexOf('<p188:cm')
+        if ($cmStart -lt 0) { $cmStart = $head.LastIndexOf('<p:cm') }
+        if ($cmStart -lt 0) { throw '找不到批注元素起点' }
+        $cmEnd = $xml.IndexOf('</p188:cm>', $tIdx)
+        $endLen = '</p188:cm>'.Length
+        if ($cmEnd -lt 0) {
+            $cmEnd = $xml.IndexOf('</p:cm>', $tIdx)
+            $endLen = '</p:cm>'.Length
+        }
+        if ($cmEnd -lt 0) { throw '找不到批注元素终点' }
+        $cmEnd += $endLen
+        $block = $xml.Substring($cmStart, $cmEnd - $cmStart)
+        if ($block -notmatch '<ink[\s/>]') {
+            $close = '</p188:txBody>'
+            $p = $block.LastIndexOf($close)
+            if ($p -lt 0) {
+                $close = '</a:txBody>'
+                $p = $block.LastIndexOf($close)
+            }
+            if ($p -lt 0) { throw '批注里没有 txBody 结束标签' }
+            $block = $block.Insert($p + $close.Length, '<ink/>')
+        }
+        if ($script:InkStrip) {
+            $block = [regex]::Replace($block, '<a:t(\s[^>]*)?>.*?</a:t>', '<a:t></a:t>')
+        }
+        return $xml.Substring(0, $cmStart) + $block + $xml.Substring($cmEnd)
+    }
+}
+
+function Find-PptInkComment($tree) {
+    foreach ($c in @($tree.slides[0].comments)) {
+        if ([string]$c.kind -eq 'ink') { return $c }
+    }
+    return $null
+}
+
+$script:InkCmId = [string]$cB.commentId
+$inkSrc = Get-OutPath 'pptx-comments-ink-source.pptx'
+Close-PptPresByPath $ppt $inkSrc
+if (Test-Path $inkSrc) { Remove-Item $inkSrc -Force }
+Copy-Item -Force $src $inkSrc
+Inject-PptxCommentInk $inkSrc
+
+$treeInk = Invoke-OoxpTree @{
+    schemaVersion = 1; action = 'inspect'
+    path = $inkSrc.Replace('\', '/'); format = 'pptx'
+    scope = @{ comments = $true }
+} 'pptx-comments-ink-inspect'
+$inkC = Find-PptInkComment $treeInk
+$noBmp = $true
+if ($inkC) {
+    foreach ($n in @($inkC.PSObject.Properties.Name)) {
+        if (@('inkBitmap', 'inkImage', 'bitmap', 'inkData', 'inkPng') -contains $n) { $noBmp = $false }
+    }
+}
+$presInk = Open-PptPres $ppt $inkSrc
+$capInk = Get-PptCaption $presInk
+Close-PptPres $presInk
+Add-Check 'pptx-Pik1' (($null -ne $inkC) -and $noBmp -and ($capInk -notmatch 'Repair')) "id=$($inkC.id) kind=$($inkC.kind) noBmp=$noBmp cap=$capInk"
+
+$metaOut = Get-OutPath 'pptx-comments-ink-meta.pptx'
+Close-PptPresByPath $ppt $metaOut
+if (Test-Path $metaOut) { Remove-Item $metaOut -Force }
+Invoke-OoxpRequest @{
+    schemaVersion = 1; action = 'apply'
+    path = $inkSrc.Replace('\', '/')
+    output = $metaOut.Replace('\', '/')
+    ops = @(@{ op = 'setCommentMeta'; id = $inkC.id; author = 'Ink2'; initials = 'K' })
+} 'pptx-comments-ink-meta' | Out-Null
+
+$treeMeta = Invoke-OoxpTree @{
+    schemaVersion = 1; action = 'inspect'
+    path = $metaOut.Replace('\', '/'); format = 'pptx'
+    scope = @{ comments = $true }
+} 'pptx-comments-ink-meta-inspect'
+$inkMeta = Find-PptInkComment $treeMeta
+$presM = Open-PptPres $ppt $metaOut
+$capM = Get-PptCaption $presM
+Close-PptPres $presM
+Add-Check 'pptx-Pik2' (($capM -notmatch 'Repair') -and ($inkMeta.author -eq 'Ink2') -and ($inkMeta.initials -eq 'K')) "cap=$capM author=$($inkMeta.author) initials=$($inkMeta.initials)"
+
+$doneOut = Get-OutPath 'pptx-comments-ink-done.pptx'
+Close-PptPresByPath $ppt $doneOut
+if (Test-Path $doneOut) { Remove-Item $doneOut -Force }
+Invoke-OoxpRequest @{
+    schemaVersion = 1; action = 'apply'
+    path = $inkSrc.Replace('\', '/')
+    output = $doneOut.Replace('\', '/')
+    ops = @(@{ op = 'setCommentDone'; id = $inkC.id; done = $true })
+} 'pptx-comments-ink-done' | Out-Null
+
+$treeDone = Invoke-OoxpTree @{
+    schemaVersion = 1; action = 'inspect'
+    path = $doneOut.Replace('\', '/'); format = 'pptx'
+    scope = @{ comments = $true }
+} 'pptx-comments-ink-done-inspect'
+$inkDone = Find-PptInkComment $treeDone
+$presDn = Open-PptPres $ppt $doneOut
+$capDn = Get-PptCaption $presDn
+Close-PptPres $presDn
+Add-Check 'pptx-Pik3' (($capDn -notmatch 'Repair') -and ([bool]$inkDone.done -eq $true)) "cap=$capDn done=$($inkDone.done)"
+
+$inkBare = Get-OutPath 'pptx-comments-ink-bare.pptx'
+Close-PptPresByPath $ppt $inkBare
+if (Test-Path $inkBare) { Remove-Item $inkBare -Force }
+Copy-Item -Force $inkSrc $inkBare
+Inject-PptxCommentInk $inkBare -StripText
+$failOut = Get-OutPath 'pptx-comments-ink-text.pptx'
+if (Test-Path $failOut) { Remove-Item $failOut -Force }
+$rawInk = Invoke-OoxpExpectFail @{
+    schemaVersion = 1; action = 'apply'
+    path = $inkBare.Replace('\', '/')
+    output = $failOut.Replace('\', '/')
+    ops = @(@{ op = 'setCommentText'; id = $inkC.id; text = $S.commentTextNew })
+} 'pptx-comments-ink-set-text'
+$inkCode = ''
+try { $inkCode = [string](($rawInk.Stderr | ConvertFrom-Json).error.code) } catch { $inkCode = $rawInk.Stderr }
+$noWrite = -not (Test-Path $failOut)
+
+$delOut = Get-OutPath 'pptx-comments-ink-delete.pptx'
+Close-PptPresByPath $ppt $delOut
+if (Test-Path $delOut) { Remove-Item $delOut -Force }
+Invoke-OoxpRequest @{
+    schemaVersion = 1; action = 'apply'
+    path = $inkBare.Replace('\', '/')
+    output = $delOut.Replace('\', '/')
+    ops = @(@{ op = 'deleteComment'; id = $inkC.id })
+} 'pptx-comments-ink-delete' | Out-Null
+$treeDel = Invoke-OoxpTree @{
+    schemaVersion = 1; action = 'inspect'
+    path = $delOut.Replace('\', '/'); format = 'pptx'
+    scope = @{ comments = $true }
+} 'pptx-comments-ink-delete-inspect'
+$stillInk = $null -ne (Find-PptInkComment $treeDel)
+$presDel = Open-PptPres $ppt $delOut
+$capDel = Get-PptCaption $presDel
+Close-PptPres $presDel
+Add-Check 'pptx-Pik4' (($inkCode -eq 'NotImplemented') -and $noWrite -and ($capDel -notmatch 'Repair') -and (-not $stillInk)) "code=$inkCode wrote=$(-not $noWrite) cap=$capDel stillInk=$stillInk"

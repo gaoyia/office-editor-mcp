@@ -387,7 +387,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::CommentRangeReversed => {
             "insertComment 的 start 不能晚于 end".into()
         }
-        ErrorKind::InkComment { id } => format!("墨迹批注除删除外不能编辑：{id}"),
+        ErrorKind::InkComment { id } => format!("墨迹批注不能改字、回复或在其内插入 drawing：{id}"),
         ErrorKind::ChartNotFound { id } => format!("找不到图表：{id}"),
         ErrorKind::ChartSeriesNotFound { id } => format!("找不到图表系列：{id}"),
         ErrorKind::TrendlineNotFound { id } => format!("找不到趋势线：{id}"),

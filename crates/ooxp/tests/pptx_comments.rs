@@ -1,12 +1,13 @@
 //! 幻灯片现代批注：名单、插删改、回复、完成标记、跨格式拒绝。
 
-use std::io::{Cursor, Read};
+use std::io::{Cursor, Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU32, Ordering};
 
 use ooxp::{run, ErrorCode, RunOutput};
 use serde_json::{json, Value};
-use zip::ZipArchive;
+use zip::write::SimpleFileOptions;
+use zip::{CompressionMethod, ZipArchive, ZipWriter};
 
 static SEQ: AtomicU32 = AtomicU32::new(0);
 
@@ -106,6 +107,30 @@ fn part_names(path: &Path) -> Vec<String> {
     let bytes = std::fs::read(path).unwrap();
     let zip = ZipArchive::new(Cursor::new(bytes)).unwrap();
     zip.file_names().map(str::to_string).collect()
+}
+
+fn rewrite_part(path: &Path, name: &str, f: impl FnOnce(Vec<u8>) -> Vec<u8>) {
+    let bytes = std::fs::read(path).unwrap();
+    let mut zip_in = ZipArchive::new(Cursor::new(bytes)).unwrap();
+    let mut out = Cursor::new(Vec::new());
+    let mut transform = Some(f);
+    {
+        let mut zip_out = ZipWriter::new(&mut out);
+        let opt = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
+        for i in 0..zip_in.len() {
+            let mut file = zip_in.by_index(i).unwrap();
+            let n = file.name().to_string();
+            let mut data = Vec::new();
+            file.read_to_end(&mut data).unwrap();
+            if n == name {
+                data = transform.take().expect("部件只应出现一次")(data);
+            }
+            zip_out.start_file(&n, opt).unwrap();
+            zip_out.write_all(&data).unwrap();
+        }
+        zip_out.finish().unwrap();
+    }
+    std::fs::write(path, out.into_inner()).unwrap();
 }
 
 fn insert_one(src: &Path, out: &Path, text: &str) {
@@ -467,4 +492,57 @@ fn reply_id_must_be_parent_comment() {
     )
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidId);
+}
+
+#[test]
+fn ink_allows_meta_and_done_rejects_text() {
+    let src = create_deck("ink0");
+    let with = tmp("ink-in").with_extension("pptx");
+    insert_one(&src, &with, "墨迹批");
+    let comments = part_names(&with)
+        .into_iter()
+        .find(|n| n.contains("/comments/") && n.ends_with(".xml"))
+        .expect("应有批注部件");
+    rewrite_part(&with, &comments, |data| {
+        String::from_utf8(data)
+            .unwrap()
+            .replace("</p188:txBody>", "</p188:txBody><ink/>")
+            .into_bytes()
+    });
+    let tree = inspect_comments(&with);
+    let art = &tree["slides"][0]["comments"][0];
+    assert_eq!(art["kind"], "ink");
+    let cid = art["id"].as_str().unwrap().to_string();
+
+    let err = apply(
+        &with,
+        &tmp("ink-text").with_extension("pptx"),
+        json!([{ "op": "setCommentText", "id": cid, "text": "x" }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::NotImplemented);
+    let err = apply(
+        &with,
+        &tmp("ink-reply").with_extension("pptx"),
+        json!([{ "op": "replyComment", "id": cid, "text": "x" }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::NotImplemented);
+
+    let meta = tmp("ink-meta").with_extension("pptx");
+    apply(
+        &with,
+        &meta,
+        json!([
+            { "op": "setCommentMeta", "id": cid, "author": "Ink2", "initials": "K" },
+            { "op": "setCommentDone", "id": cid, "done": true }
+        ]),
+    )
+    .unwrap();
+    let tree = inspect_comments(&meta);
+    let art = &tree["slides"][0]["comments"][0];
+    assert_eq!(art["kind"], "ink");
+    assert_eq!(art["author"], "Ink2");
+    assert_eq!(art["initials"], "K");
+    assert_eq!(art["done"], true);
 }

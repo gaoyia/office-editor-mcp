@@ -8,7 +8,7 @@ C、I、A、Pp、Pc、Psa、Pn、Pcm 各组由 `manual-check/office/cases/pptx-*
 
 ## 本机结果（2026-09-27）
 
-Microsoft PowerPoint 16.0 已打开，C1、C3、C4、C5–C10、I1–I5、A1–A5、Pp1–Pp7、Pc1–Pc7、Psa1–Psa7、Pn1–Pn4、Pcm1–Pcm5 均 PASS。本机若装了 WPS，`PowerPoint.Application` 会被抢走，测试仍直接启动 `POWERPNT.EXE`，从 `mdiClass` 挂 COM。O1 已放弃。2026-09-27 补跑 `pptx-pictures.ps1`，Pp1–Pp7 通过。同日补跑 `pptx-create-pictures.ps1`，C5–C7 通过。同日补跑 `pptx-charts.ps1`，Pc1–Pc7 通过。同日补跑 `pptx-create-charts.ps1`，C8–C10 通过。同日补跑 `pptx-smartart.ps1`，Psa1–Psa7 通过。同日补跑 `pptx-notes.ps1`，Pn1–Pn4 通过。同日补跑 `pptx-comments.ps1`，Pcm1–Pcm5 通过。同日补跑 `pptx-docprops.ps1`，Pd1–Pd5 通过。同日补跑 `pptx-charts-remain.ps1`，Pr1–Pr3 通过。
+Microsoft PowerPoint 16.0 已打开，C1、C3、C4、C5–C10、I1–I5、A1–A5、Pp1–Pp7、Pc1–Pc7、Psa1–Psa7、Pn1–Pn4、Pcm1–Pcm5、Pik1–Pik4 均 PASS。本机若装了 WPS，`PowerPoint.Application` 会被抢走，测试仍直接启动 `POWERPNT.EXE`，从 `mdiClass` 挂 COM。O1 已放弃。2026-09-27 补跑 `pptx-pictures.ps1`，Pp1–Pp7 通过。同日补跑 `pptx-create-pictures.ps1`，C5–C7 通过。同日补跑 `pptx-charts.ps1`，Pc1–Pc7 通过。同日补跑 `pptx-create-charts.ps1`，C8–C10 通过。同日补跑 `pptx-smartart.ps1`，Psa1–Psa7 通过。同日补跑 `pptx-notes.ps1`，Pn1–Pn4 通过。同日补跑 `pptx-comments.ps1`，Pcm1–Pcm5、Pik1–Pik4 通过。同日补跑 `pptx-docprops.ps1`，Pd1–Pd5 通过。同日补跑 `pptx-charts-remain.ps1`，Pr1–Pr3 通过。
 
 | 序号 | 状态 | 结果 |
 | --- | --- | --- |
@@ -23,6 +23,7 @@ Microsoft PowerPoint 16.0 已打开，C1、C3、C4、C5–C10、I1–I5、A1–A
 | Psa1–Psa7 | ✅ | PowerPoint 16.0：`pptx-smartart.ps1`，7 PASS / 0 FAIL。另存列表型 id 为 `slide:1/smartdiagram:4`；改字 / 增删点 / 删整张无修复；create `list` 为 `slide:1/smartdiagram:3`；列表改成组织图后文字还在、无修复；库外 uniqueId 得 `NotImplemented` 且未写文件 |
 | Pn1–Pn4 | ✅ | PowerPoint 16.0：无 `notes` 时有 `hasNotes`；展开后 `notes.id` 为 `slide:1/notes`；`setNotesText` 后备注窗格是新字且无修复；改备注不改幻灯片字；往备注插图无修复 |
 | Pcm1–Pcm5 | ✅ | PowerPoint 16.0：无 `comments` 时有 `commentCount`；展开后 id 为 `slide:…/comment:{guid}`；改字 / 插入 / 删除无修复；回复与完成标记能看见 |
+| Pik1–Pik4 | ✅ | PowerPoint 16.0：`pptx-comments.ps1` 墨迹组，4 PASS / 0 FAIL。现代批注注入 `ink` 后 `kind=ink`；`setCommentMeta` / `setCommentDone` 无修复；无可见文本时 `setCommentText` 为 `NotImplemented` 且未写文件；`deleteComment` 无修复 |
 | Pd1–Pd5 | ✅ | PowerPoint 16.0：`pptx-docprops.ps1`，5 PASS / 0 FAIL。根上 `props`、`creator=ooxp`；只改标题后面板标题是新字、公司名还在；自定义 `prop:部门`；删后名单空；形状 id 发 `setProps` 为 `InvalidId`。无 Repair |
 | Pr1–Pr3 | ✅ | PowerPoint 16.0：`pptx-charts-remain.ps1`，3 PASS / 0 FAIL。趋势线 COM Count=1；改删趋势线；次轴 `AxisGroup=2`。无 Repair |
 | O1 | 🚫 | 领域层不做原样保存，与 xlsx 清单相同。零脏写回见 OPC 库测试。PowerPoint 另存 create 产物见 `pptx-O1-ppt-resave` |
@@ -141,6 +142,17 @@ Microsoft PowerPoint 16.0 已打开，C1、C3、C4、C5–C10、I1–I5、A1–A
 | Pcm3 | 插入 | `insertComment` 后审阅窗格能看见新批注，无修复 |
 | Pcm4 | 删除 | `deleteComment` 后该条消失，无修复 |
 | Pcm5 | 回复与完成 | `replyComment` 后线程能看见回复；`setCommentDone` 后完成标记对上，无修复 |
+
+## 批注墨迹
+
+现代批注里带本地名为 `ink` 的标记。不把墨迹当位图列出。编号用 Pik。
+
+| 序号 | 检查 | 通过标准 |
+| --- | --- | --- |
+| Pik1 | 名单 | ✅ `kind` 为 `ink` |
+| Pik2 | 元数据 | ✅ `setCommentMeta` 后作者变了，无修复 |
+| Pik3 | 完成 | ✅ `setCommentDone` 后 `done` 为 true，无修复 |
+| Pik4 | 改字仍拒 | ✅ 没有可见文本时 `setCommentText` 得 `NotImplemented`，文件未写坏 |
 
 ## 文档属性
 
