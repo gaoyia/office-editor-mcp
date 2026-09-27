@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "C:\\data\\book.xlsx",
+  "output": "C:\\data\\book.print.xlsx",
+  "ops": [
+    {
+      "op": "setPrintSetup",
+      "id": "sheet:Sheet1",
+      "left": 1,
+      "orientation": "landscape",
+      "printArea": "A1:A10"
+    }
+  ]
+}

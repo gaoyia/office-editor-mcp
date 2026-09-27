@@ -601,6 +601,7 @@
               { "$ref": "#/$defs/insertDefinedNameOp" },
               { "$ref": "#/$defs/setDefinedNameOp" },
               { "$ref": "#/$defs/deleteDefinedNameOp" },
+              { "$ref": "#/$defs/setPrintSetupOp" },
               { "$ref": "#/$defs/setHeaderFooterTextOp" },
               { "$ref": "#/$defs/setParaTextOp" },
               { "$ref": "#/$defs/setHeaderFooterDistanceOp" },
@@ -1383,6 +1384,61 @@
         "op": { "const": "deleteDefinedName" },
         "id": { "type": "string", "minLength": 1 }
       }
+    },
+    "setPrintSetupOp": {
+      "type": "object",
+      "required": ["op", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "setPrintSetup" },
+        "id": { "type": "string", "minLength": 1 },
+        "left": { "type": "number", "minimum": 0 },
+        "right": { "type": "number", "minimum": 0 },
+        "top": { "type": "number", "minimum": 0 },
+        "bottom": { "type": "number", "minimum": 0 },
+        "header": { "type": "number", "minimum": 0 },
+        "footer": { "type": "number", "minimum": 0 },
+        "paperSize": { "type": "integer", "minimum": 1 },
+        "orientation": { "enum": ["portrait", "landscape"] },
+        "scale": { "type": "integer", "minimum": 10, "maximum": 400 },
+        "fitToPage": { "type": "boolean" },
+        "fitToWidth": { "type": "integer", "minimum": 0 },
+        "fitToHeight": { "type": "integer", "minimum": 0 },
+        "gridLines": { "type": "boolean" },
+        "headings": { "type": "boolean" },
+        "hCenter": { "type": "boolean" },
+        "vCenter": { "type": "boolean" },
+        "printArea": { "type": ["string", "null"], "minLength": 1 },
+        "rowBreaks": {
+          "type": "array",
+          "items": { "type": "integer", "minimum": 1 }
+        },
+        "colBreaks": {
+          "type": "array",
+          "items": { "type": "integer", "minimum": 1 }
+        }
+      },
+      "anyOf": [
+        { "required": ["left"] },
+        { "required": ["right"] },
+        { "required": ["top"] },
+        { "required": ["bottom"] },
+        { "required": ["header"] },
+        { "required": ["footer"] },
+        { "required": ["paperSize"] },
+        { "required": ["orientation"] },
+        { "required": ["scale"] },
+        { "required": ["fitToPage"] },
+        { "required": ["fitToWidth"] },
+        { "required": ["fitToHeight"] },
+        { "required": ["gridLines"] },
+        { "required": ["headings"] },
+        { "required": ["hCenter"] },
+        { "required": ["vCenter"] },
+        { "required": ["printArea"] },
+        { "required": ["rowBreaks"] },
+        { "required": ["colBreaks"] }
+      ]
     },
     "setHeaderFooterTextOp": {
       "type": "object",

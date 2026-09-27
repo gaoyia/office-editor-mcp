@@ -466,3 +466,101 @@ fn insert_workbook_child(root: &mut Element, el: Element, local: &str) {
     }
     root.children.insert(at, Node::Element(el));
 }
+
+pub(crate) const PRINT_AREA: &str = "_xlnm.Print_Area";
+
+pub(crate) fn print_area_formula(wb: &Element, sheet_id: u32) -> Option<String> {
+    let parent = wb.child_by_local("definedNames")?;
+    for el in parent.children_by_local("definedName") {
+        if !is_print_area(el) {
+            continue;
+        }
+        if parse_local_sheet_id(el) != Some(sheet_id) {
+            continue;
+        }
+        let t = el.text_content();
+        if t.trim().is_empty() {
+            return None;
+        }
+        return Some(t);
+    }
+    None
+}
+
+pub(crate) fn set_print_area(wb_doc: &mut Document, sheet_id: u32, formula: &str) {
+    let parent = ensure_defined_names(&mut wb_doc.root);
+    let mut first = true;
+    let mut drop = Vec::new();
+    for (i, n) in parent.children.iter().enumerate() {
+        let Node::Element(e) = n else { continue };
+        if e.local_name() != "definedName" || !is_print_area(e) {
+            continue;
+        }
+        if parse_local_sheet_id(e) != Some(sheet_id) {
+            continue;
+        }
+        if first {
+            first = false;
+        } else {
+            drop.push(i);
+        }
+    }
+    for i in drop.into_iter().rev() {
+        parent.children.remove(i);
+    }
+    let found = parent.element_children_mut().any(|e| {
+        if e.local_name() == "definedName"
+            && is_print_area(e)
+            && parse_local_sheet_id(e) == Some(sheet_id)
+        {
+            e.set_text(formula);
+            true
+        } else {
+            false
+        }
+    });
+    if !found {
+        parent.push_element(build_defined_name(
+            PRINT_AREA,
+            formula,
+            None,
+            Some(sheet_id),
+        ));
+    }
+    sync_count(parent);
+}
+
+pub(crate) fn clear_print_area(wb_doc: &mut Document, sheet_id: u32) {
+    let empty = {
+        let Some(parent) = wb_doc.root.child_by_local_mut("definedNames") else {
+            return;
+        };
+        parent.children.retain(|n| {
+            !matches!(
+                n,
+                Node::Element(e)
+                    if e.local_name() == "definedName"
+                        && is_print_area(e)
+                        && parse_local_sheet_id(e) == Some(sheet_id)
+            )
+        });
+        let left = parent.children_by_local("definedName").len();
+        if left == 0 {
+            true
+        } else {
+            sync_count(parent);
+            false
+        }
+    };
+    if empty {
+        wb_doc.root.children.retain(|n| match n {
+            Node::Element(e) => e.local_name() != "definedNames",
+            _ => true,
+        });
+    }
+}
+
+fn is_print_area(el: &Element) -> bool {
+    el.attr("name")
+        .is_some_and(|n| n.eq_ignore_ascii_case(PRINT_AREA))
+}

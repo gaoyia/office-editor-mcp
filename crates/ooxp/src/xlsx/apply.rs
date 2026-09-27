@@ -366,6 +366,25 @@ pub fn apply(bytes: &[u8], ops: &[XlsxOp]) -> Result<Vec<u8>, Error> {
                 super::names::apply_delete(&mut wb_doc, op, i)?;
                 workbook_dirty = true;
             }
+            XlsxOp::SetPrintSetup(op) => {
+                let (part, kind) = require_named_sheet(&sheet_index, &op.sheet, i)?;
+                if kind == "dialogsheet" || kind == "macrosheet" {
+                    return Err(Error::with_path(
+                        ErrorKind::DialogOrMacroSheet,
+                        format!("ops[{i}].id"),
+                    ));
+                }
+                let sheet_id = sheet_index
+                    .iter()
+                    .position(|(n, _, _)| n.eq_ignore_ascii_case(&op.sheet))
+                    .expect("require_named_sheet 已核对表名") as u32;
+                let exact = sheet_index[sheet_id as usize].0.clone();
+                load_dirty(&pkg, &mut dirty_sheets, &part, false)?;
+                let doc = dirty_of(&mut dirty_sheets, &part);
+                if super::print::apply(&mut doc.root, &mut wb_doc, sheet_id, &exact, kind, op, i)? {
+                    workbook_dirty = true;
+                }
+            }
             XlsxOp::DeleteChart(op) => {
                 let (part, kind) = require_named_sheet(&sheet_index, &op.target.sheet, i)?;
                 load_dirty(&pkg, &mut dirty_sheets, &part, false)?;

@@ -888,6 +888,12 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::DefinedNameNotFound { id } => {
             format!("Defined name not found: {id}")
         }
+        ErrorKind::NeedSetPrintSetupField => {
+            "setPrintSetup requires a field besides op and id".into()
+        }
+        ErrorKind::InvalidPrintSetup { field } => {
+            format!("{field} is not a valid setPrintSetup value")
+        }
         ErrorKind::InvalidAlign => {
             "align must be left, center, right, both, distribute, start, or end".into()
         }

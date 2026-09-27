@@ -812,6 +812,7 @@ mod tests {
                 "tableCount",
                 "pivotCount",
                 "hasHeaderFooter",
+                "print",
                 "truncated",
                 "range",
                 "cells",

@@ -736,6 +736,12 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             format!("定义名的 {field} 不合法")
         }
         ErrorKind::DefinedNameNotFound { id } => format!("找不到定义名：{id}"),
+        ErrorKind::NeedSetPrintSetupField => {
+            "setPrintSetup 除 op 与 id 外至少要给一个字段".into()
+        }
+        ErrorKind::InvalidPrintSetup { field } => {
+            format!("打印设置的 {field} 不合法")
+        }
         ErrorKind::InvalidAlign => {
             "align 必须是 left、center、right、both、distribute、start 或 end".into()
         }

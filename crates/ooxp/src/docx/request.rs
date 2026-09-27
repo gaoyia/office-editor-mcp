@@ -1110,6 +1110,7 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<DocxOp>, Error> {
             || op_name == "insertDefinedName"
             || op_name == "setDefinedName"
             || op_name == "deleteDefinedName"
+            || op_name == "setPrintSetup"
             || op_name == "setPicturePos"
             || op_name == "setChartPos"
             || op_name == "setSmartArtPos"

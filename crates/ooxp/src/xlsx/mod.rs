@@ -13,6 +13,7 @@ mod layout;
 mod names;
 mod picture;
 mod pivot;
+mod print;
 mod request;
 mod sheets;
 mod style;

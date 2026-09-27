@@ -719,6 +719,7 @@ fn is_foreign_op(op_name: &str) -> bool {
             | "insertDefinedName"
             | "setDefinedName"
             | "deleteDefinedName"
+            | "setPrintSetup"
             | "setSmartArtWrap"
             | "insertOle"
             | "deleteOle"

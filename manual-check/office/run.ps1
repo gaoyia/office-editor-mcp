@@ -80,6 +80,7 @@ $order = @(
     'xlsx-table'
     'xlsx-pivot'
     'xlsx-defined-name'
+    'xlsx-print'
     'pptx-docprops'
     'pptx-apply'
     'pptx-pictures'

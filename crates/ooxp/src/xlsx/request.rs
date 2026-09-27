@@ -723,6 +723,55 @@ pub struct DeleteDefinedNameOp {
 }
 
 #[derive(Debug, Clone)]
+pub struct SetPrintSetupOp {
+    pub sheet: String,
+    pub left: Option<f64>,
+    pub right: Option<f64>,
+    pub top: Option<f64>,
+    pub bottom: Option<f64>,
+    pub header: Option<f64>,
+    pub footer: Option<f64>,
+    pub paper_size: Option<u32>,
+    pub orientation: Option<String>,
+    pub scale: Option<u32>,
+    pub fit_to_page: Option<bool>,
+    pub fit_to_width: Option<u32>,
+    pub fit_to_height: Option<u32>,
+    pub grid_lines: Option<bool>,
+    pub headings: Option<bool>,
+    pub h_center: Option<bool>,
+    pub v_center: Option<bool>,
+    /// `None` 省略；`Some(None)` 删打印区域；`Some(Some(A1))` 写入。
+    pub print_area: Option<Option<String>>,
+    pub row_breaks: Option<Vec<u32>>,
+    pub col_breaks: Option<Vec<u32>>,
+}
+
+impl SetPrintSetupOp {
+    fn has_patch(&self) -> bool {
+        self.left.is_some()
+            || self.right.is_some()
+            || self.top.is_some()
+            || self.bottom.is_some()
+            || self.header.is_some()
+            || self.footer.is_some()
+            || self.paper_size.is_some()
+            || self.orientation.is_some()
+            || self.scale.is_some()
+            || self.fit_to_page.is_some()
+            || self.fit_to_width.is_some()
+            || self.fit_to_height.is_some()
+            || self.grid_lines.is_some()
+            || self.headings.is_some()
+            || self.h_center.is_some()
+            || self.v_center.is_some()
+            || self.print_area.is_some()
+            || self.row_breaks.is_some()
+            || self.col_breaks.is_some()
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct SetHeaderFooterTextOp {
     #[allow(dead_code)]
     pub id: String,
@@ -1043,6 +1092,7 @@ pub enum XlsxOp {
     InsertDefinedName(InsertDefinedNameOp),
     SetDefinedName(SetDefinedNameOp),
     DeleteDefinedName(DeleteDefinedNameOp),
+    SetPrintSetup(SetPrintSetupOp),
     DeleteChart(DeleteChartOp),
     SetChartTitle(SetChartTitleOp),
     SetChartSeries(SetChartSeriesOp),
@@ -1215,6 +1265,7 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<XlsxOp>, Error> {
             "insertDefinedName" => XlsxOp::InsertDefinedName(parse_insert_defined_name(obj, i)?),
             "setDefinedName" => XlsxOp::SetDefinedName(parse_set_defined_name(obj, i)?),
             "deleteDefinedName" => XlsxOp::DeleteDefinedName(parse_delete_defined_name(obj, i)?),
+            "setPrintSetup" => XlsxOp::SetPrintSetup(parse_set_print_setup(obj, i)?),
             "deleteChart" => XlsxOp::DeleteChart(parse_delete_chart(obj, i)?),
             "setChartTitle" => XlsxOp::SetChartTitle(parse_set_chart_title(obj, i)?),
             "setChartSeries" => XlsxOp::SetChartSeries(parse_set_chart_series(obj, i)?),
@@ -3521,6 +3572,222 @@ fn parse_delete_defined_name(
     Ok(DeleteDefinedNameOp {
         index: parse_defined_name_id(&id, i)?,
     })
+}
+
+fn parse_set_print_setup(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<SetPrintSetupOp, Error> {
+    deny_keys(
+        obj,
+        i,
+        &[
+            "op",
+            "id",
+            "left",
+            "right",
+            "top",
+            "bottom",
+            "header",
+            "footer",
+            "paperSize",
+            "orientation",
+            "scale",
+            "fitToPage",
+            "fitToWidth",
+            "fitToHeight",
+            "gridLines",
+            "headings",
+            "hCenter",
+            "vCenter",
+            "printArea",
+            "rowBreaks",
+            "colBreaks",
+        ],
+    )?;
+    let id = require_id(obj, i)?;
+    let sheet = parse_sheet_only_id(&id, i, "id", IdReason::SheetOpNeedsSheet)?;
+    let op = SetPrintSetupOp {
+        sheet,
+        left: parse_print_inch(obj, i, "left")?,
+        right: parse_print_inch(obj, i, "right")?,
+        top: parse_print_inch(obj, i, "top")?,
+        bottom: parse_print_inch(obj, i, "bottom")?,
+        header: parse_print_inch(obj, i, "header")?,
+        footer: parse_print_inch(obj, i, "footer")?,
+        paper_size: parse_print_u32(obj, i, "paperSize", 1, u32::MAX)?,
+        orientation: parse_print_orientation(obj, i)?,
+        scale: parse_print_u32(obj, i, "scale", 10, 400)?,
+        fit_to_page: parse_opt_bool(obj, i, "fitToPage")?,
+        fit_to_width: parse_print_u32(obj, i, "fitToWidth", 0, u32::MAX)?,
+        fit_to_height: parse_print_u32(obj, i, "fitToHeight", 0, u32::MAX)?,
+        grid_lines: parse_opt_bool(obj, i, "gridLines")?,
+        headings: parse_opt_bool(obj, i, "headings")?,
+        h_center: parse_opt_bool(obj, i, "hCenter")?,
+        v_center: parse_opt_bool(obj, i, "vCenter")?,
+        print_area: parse_print_area(obj, i)?,
+        row_breaks: parse_print_breaks(obj, i, "rowBreaks", 1_048_576)?,
+        col_breaks: parse_print_breaks(obj, i, "colBreaks", 16_384)?,
+    };
+    if !op.has_patch() {
+        return Err(Error::with_path(
+            ErrorKind::NeedSetPrintSetupField,
+            format!("ops[{i}]"),
+        ));
+    }
+    Ok(op)
+}
+
+fn parse_print_inch(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+    field: &str,
+) -> Result<Option<f64>, Error> {
+    match obj.get(field) {
+        None => Ok(None),
+        Some(Value::Number(n)) => {
+            let Some(v) = n.as_f64().filter(|x| x.is_finite() && *x >= 0.0) else {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidPrintSetup {
+                        field: field.into(),
+                    },
+                    format!("ops[{i}].{field}"),
+                ));
+            };
+            Ok(Some(v))
+        }
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::Integer,
+            },
+            format!("ops[{i}].{field}"),
+        )),
+    }
+}
+
+fn parse_print_u32(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+    field: &str,
+    min: u32,
+    max: u32,
+) -> Result<Option<u32>, Error> {
+    match obj.get(field) {
+        None => Ok(None),
+        Some(Value::Number(n)) => {
+            let v = n.as_u64().and_then(|x| u32::try_from(x).ok());
+            let Some(v) = v.filter(|x| *x >= min && *x <= max) else {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidPrintSetup {
+                        field: field.into(),
+                    },
+                    format!("ops[{i}].{field}"),
+                ));
+            };
+            Ok(Some(v))
+        }
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::Integer,
+            },
+            format!("ops[{i}].{field}"),
+        )),
+    }
+}
+
+fn parse_print_orientation(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<Option<String>, Error> {
+    match obj.get("orientation") {
+        None => Ok(None),
+        Some(Value::String(s)) if s == "portrait" || s == "landscape" => Ok(Some(s.clone())),
+        Some(Value::String(_)) => Err(Error::with_path(
+            ErrorKind::InvalidPrintSetup {
+                field: "orientation".into(),
+            },
+            format!("ops[{i}].orientation"),
+        )),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "orientation".into(),
+                expected: TypeName::String,
+            },
+            format!("ops[{i}].orientation"),
+        )),
+    }
+}
+
+fn parse_print_area(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<Option<Option<String>>, Error> {
+    match obj.get("printArea") {
+        None => Ok(None),
+        Some(Value::Null) => Ok(Some(None)),
+        Some(Value::String(s)) => {
+            if s.trim().is_empty() {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidPrintSetup {
+                        field: "printArea".into(),
+                    },
+                    format!("ops[{i}].printArea"),
+                ));
+            }
+            Ok(Some(Some(s.clone())))
+        }
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "printArea".into(),
+                expected: TypeName::String,
+            },
+            format!("ops[{i}].printArea"),
+        )),
+    }
+}
+
+fn parse_print_breaks(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+    field: &str,
+    max: u32,
+) -> Result<Option<Vec<u32>>, Error> {
+    match obj.get(field) {
+        None => Ok(None),
+        Some(Value::Array(arr)) => {
+            let mut out = Vec::with_capacity(arr.len());
+            for (j, v) in arr.iter().enumerate() {
+                let Some(n) = v.as_u64().and_then(|x| u32::try_from(x).ok()) else {
+                    return Err(Error::with_path(
+                        ErrorKind::WrongType {
+                            field: format!("{field}[{j}]"),
+                            expected: TypeName::Integer,
+                        },
+                        format!("ops[{i}].{field}[{j}]"),
+                    ));
+                };
+                if n < 1 || n > max {
+                    return Err(Error::with_path(
+                        ErrorKind::InvalidPrintSetup {
+                            field: field.into(),
+                        },
+                        format!("ops[{i}].{field}[{j}]"),
+                    ));
+                }
+                out.push(n);
+            }
+            Ok(Some(out))
+        }
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::Array,
+            },
+            format!("ops[{i}].{field}"),
+        )),
+    }
 }
 
 fn parse_defined_name_name(v: Option<&Value>, i: usize) -> Result<Option<String>, Error> {

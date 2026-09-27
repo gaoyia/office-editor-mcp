@@ -629,6 +629,10 @@ define_error_kinds! {
     DefinedNameNotFound { id: String } => {
         vec![Self::DefinedNameNotFound { id: "name:1".into() }]
     },
+    NeedSetPrintSetupField => vec![Self::NeedSetPrintSetupField],
+    InvalidPrintSetup { field: String } => {
+        vec![Self::InvalidPrintSetup { field: "left".into() }]
+    },
     InvalidAlign => vec![Self::InvalidAlign],
     InvalidLineRule => vec![Self::InvalidLineRule],
     InvalidUnderline => vec![Self::InvalidUnderline],
@@ -1024,6 +1028,8 @@ impl ErrorKind {
             | Self::InvalidPivotTable { .. }
             | Self::NeedSetDefinedNameField
             | Self::InvalidDefinedName { .. }
+            | Self::NeedSetPrintSetupField
+            | Self::InvalidPrintSetup { .. }
             | Self::InvalidAlign
             | Self::InvalidLineRule
             | Self::InvalidUnderline

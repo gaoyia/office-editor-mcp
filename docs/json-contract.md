@@ -321,7 +321,7 @@ xlsx、docx、pptx 共用 `scope` 这个字段名，里面的键按格式分，�
 | `scope.charts` | 否 | 为 `true` 时给每张 `worksheet` 与 `chartsheet` 填 `charts`。省略或 `false` 则只有 `chartCount`，没有名单。不把 chart 部件或媒体字节放进树。不依赖 `sheet` / `range` / `pictures` |
 | `scope.headerFooter` | 否 | 为 `true` 时给每张 `worksheet` / `chartsheet` / `dialogsheet` 填六个页眉页脚槽位（`headerFooters`）。没有的槽位仍列出，`text` 为 `null`。省略或 `false` 则只有 `hasHeaderFooter`，不倒出原文，也没有 `headerFooters`。不依赖 `sheet` / `range` / `pictures` / `charts` |
 
-省略 `scope`、或只给空对象：返回工作簿节点和表名单，每张表不含 `cells`，也没有 `pictures` / `charts` / `headerFooters`。工作簿与每张 `worksheet` 仍有 `pictureCount`。工作簿、每张 `worksheet` 与每张 `chartsheet` 仍有 `chartCount`。工作簿仍有 `definedNameCount` 与 `definedNames`。每张表仍有 `hasHeaderFooter`。这是默认截断。
+省略 `scope`、或只给空对象：返回工作簿节点和表名单，每张表不含 `cells`，也没有 `pictures` / `charts` / `headerFooters`。工作簿与每张 `worksheet` 仍有 `pictureCount`。工作簿、每张 `worksheet` 与每张 `chartsheet` 仍有 `chartCount`。工作簿仍有 `definedNameCount` 与 `definedNames`。每张表仍有 `hasHeaderFooter`。每张 `worksheet` / `chartsheet` 仍有 `print`。这是默认截断。
 
 只要想看单元格，就必须同时给 `sheet` 和 `range`。不默认扫第一张表的整张纸。只要想看工作表图名单，就给 `pictures: true`。只要想看图表名单，就给 `charts: true`。只要想看页眉原文，就给 `headerFooter: true`。四者独立，可只开一边。页眉图名单出现在已展开的槽位上，须同时 `headerFooter: true` 与 `pictures: true`。
 
@@ -430,6 +430,27 @@ xlsx、docx、pptx 共用 `scope` 这个字段名，里面的键按格式分，�
       "tableCount": 0,
       "pivotCount": 0,
       "hasHeaderFooter": false,
+      "print": {
+        "left": 0.7,
+        "right": 0.7,
+        "top": 0.75,
+        "bottom": 0.75,
+        "header": 0.3,
+        "footer": 0.3,
+        "paperSize": 1,
+        "orientation": "portrait",
+        "scale": 100,
+        "fitToPage": false,
+        "fitToWidth": 1,
+        "fitToHeight": 1,
+        "gridLines": false,
+        "headings": false,
+        "hCenter": false,
+        "vCenter": false,
+        "printArea": null,
+        "rowBreaks": [],
+        "colBreaks": []
+      },
       "truncated": true,
       "range": "A1:D20",
       "cells": [
@@ -477,7 +498,28 @@ xlsx、docx、pptx 共用 `scope` 这个字段名，里面的键按格式分，�
       "conditionalFormatCount": 0,
       "tableCount": 0,
       "pivotCount": 0,
-      "hasHeaderFooter": false
+      "hasHeaderFooter": false,
+      "print": {
+        "left": 0.7,
+        "right": 0.7,
+        "top": 0.75,
+        "bottom": 0.75,
+        "header": 0.3,
+        "footer": 0.3,
+        "paperSize": 1,
+        "orientation": "portrait",
+        "scale": 100,
+        "fitToPage": false,
+        "fitToWidth": 1,
+        "fitToHeight": 1,
+        "gridLines": false,
+        "headings": false,
+        "hCenter": false,
+        "vCenter": false,
+        "printArea": null,
+        "rowBreaks": [],
+        "colBreaks": []
+      }
     }
   ],
   "definedNames": []
@@ -489,8 +531,9 @@ xlsx、docx、pptx 共用 `scope` 这个字段名，里面的键按格式分，�
 - 工作簿字段顺序：`id`、`pictureCount`、`chartCount`、`definedNameCount`、`props`、`sheets`、`definedNames`。`pictureCount` 始终出现，等于各 `worksheet` 的 `pictureCount` 之和，不含 `chartsheet` / `dialogsheet` / `macrosheet`。`chartCount` 始终出现，等于各 `worksheet` 与 `chartsheet` 的 `chartCount` 之和，不含 `dialogsheet` / `macrosheet`。`definedNameCount` 始终出现，是 workbook `<definedNames>` 里 `<definedName>` 的个数。没有则为 `0`。`definedNames` 始终列出，可为空数组，不另加 scope 键。`props` 始终出现，规则见下文「文档属性」。
 - `definedNames` 每项字段顺序：`id`、`name`、`formula`、`hidden`、`localSheet`。`name` 取 `@name`，没有则为 `""`。`formula` 是元素文本，当字符串，不解析求值、不补 `=`。`hidden` 为布尔：`@hidden` 为 `1` / `true` / `TRUE` / `on` 则为 `true`，缺省或其余为 `false`。`localSheet` 有 `@localSheetId` 则按 0 基下标解成 `sheets` 里对应表的 `name`；解不出、缺属性或无法解析则为 `null`（簿级）。打印区域 `_xlnm.Print_Area` 与其它内置名同样列出。
 - `sheets` 始终列出工作簿里全部表（含隐藏表），便于模型知道还有哪些表。未点名的表不带 `cells`、`range`、`truncated`、`cols`、`rows`、`merges`、`dataValidations`、`conditionalFormats`、`tables`、`pivots`。
-- `kind`：`worksheet`、`chartsheet`、`dialogsheet`、`macrosheet`。第一期只对 `worksheet` 填单元格与图。`worksheet` 与 `chartsheet` 都填 `chartCount`。每张表始终填 `hidden`：`sheet/@state` 为 `hidden` 或 `veryHidden` 则为 `true`，缺省、空或 `visible` 为 `false`。每张表始终填 `hasHeaderFooter`：该表 `headerFooter` 里任一槽位有非空文本则为 `true`；没有该元素、空的 `<headerFooter/>`、或六个槽位都空则为 `false`。不算 VML，也不因为只有 `drawingHF` 图就把此项改成 `true`。
-- `worksheet` 字段顺序：`id`、`name`、`kind`、`hidden`、`pictureCount`、`chartCount`、`dataValidationCount`、`conditionalFormatCount`、`tableCount`、`pivotCount`、`hasHeaderFooter`，有页眉名单时再跟 `headerFooters`，有图名单时再跟 `pictures`，有图表名单时再跟 `charts`，有单元格切片时再跟 `truncated`、`range`、`cells`、`cols`、`rows`、`merges`、`dataValidations`、`conditionalFormats`、`tables`、`pivots`。`pictureCount` 始终出现，是该表工作表 drawing 里被收入的 `xdr:pic` 个数（判定见上文 xlsx 图 id 那节），不含页眉图。没有图则为 `0`。`chartCount` 始终出现，是该表被收入的图表个数（判定见上文 xlsx 图表 id 那节）。没有图表则为 `0`。`dataValidationCount` 始终出现，是该表 `<dataValidations>` 里 `<dataValidation>` 的个数，不含 `extLst` 里的 `x14:dataValidations`。没有则为 `0`。`conditionalFormatCount` 始终出现，是该表全部 `<conditionalFormatting>` 里 `<cfRule>` 的个数，不含 `extLst` 里的 `x14:conditionalFormattings`。没有则为 `0`。`tableCount` 始终出现，是该表 `<tableParts>` 里 `<tablePart>` 的个数。没有则为 `0`。`pivotCount` 始终出现，是该表关系里 Type 以 `/pivotTable` 结尾的条目个数。没有则为 `0`。`chartsheet` 没有 `pictureCount`，也没有 `pictures`，也没有 `dataValidationCount`，也没有 `conditionalFormatCount`，也没有 `tableCount`，也没有 `pivotCount`；字段顺序：`id`、`name`、`kind`、`hidden`、`chartCount`、`hasHeaderFooter`，有页眉名单时再跟 `headerFooters`，有图表名单时再跟 `charts`。`dialogsheet` / `macrosheet` 没有 `pictureCount` / `pictures` / `chartCount` / `charts` / `dataValidationCount` / `conditionalFormatCount` / `tableCount` / `pivotCount`；字段顺序：`id`、`name`、`kind`、`hidden`、`hasHeaderFooter`，有页眉名单时再跟 `headerFooters`。关系 Type 以 `/macrosheet` 结尾的表 `kind` 为 `macrosheet`。
+- `kind`：`worksheet`、`chartsheet`、`dialogsheet`、`macrosheet`。第一期只对 `worksheet` 填单元格与图。`worksheet` 与 `chartsheet` 都填 `chartCount`。每张表始终填 `hidden`：`sheet/@state` 为 `hidden` 或 `veryHidden` 则为 `true`，缺省、空或 `visible` 为 `false`。每张表始终填 `hasHeaderFooter`：该表 `headerFooter` 里任一槽位有非空文本则为 `true`；没有该元素、空的 `<headerFooter/>`、或六个槽位都空则为 `false`。不算 VML，也不因为只有 `drawingHF` 图就把此项改成 `true`。每张 `worksheet` 与 `chartsheet` 始终填 `print`（对象，不另编 id）。`dialogsheet` / `macrosheet` 没有 `print`。
+- `worksheet` 字段顺序：`id`、`name`、`kind`、`hidden`、`pictureCount`、`chartCount`、`dataValidationCount`、`conditionalFormatCount`、`tableCount`、`pivotCount`、`hasHeaderFooter`、`print`，有页眉名单时再跟 `headerFooters`，有图名单时再跟 `pictures`，有图表名单时再跟 `charts`，有单元格切片时再跟 `truncated`、`range`、`cells`、`cols`、`rows`、`merges`、`dataValidations`、`conditionalFormats`、`tables`、`pivots`。`pictureCount` 始终出现，是该表工作表 drawing 里被收入的 `xdr:pic` 个数（判定见上文 xlsx 图 id 那节），不含页眉图。没有图则为 `0`。`chartCount` 始终出现，是该表被收入的图表个数（判定见上文 xlsx 图表 id 那节）。没有图表则为 `0`。`dataValidationCount` 始终出现，是该表 `<dataValidations>` 里 `<dataValidation>` 的个数，不含 `extLst` 里的 `x14:dataValidations`。没有则为 `0`。`conditionalFormatCount` 始终出现，是该表全部 `<conditionalFormatting>` 里 `<cfRule>` 的个数，不含 `extLst` 里的 `x14:conditionalFormattings`。没有则为 `0`。`tableCount` 始终出现，是该表 `<tableParts>` 里 `<tablePart>` 的个数。没有则为 `0`。`pivotCount` 始终出现，是该表关系里 Type 以 `/pivotTable` 结尾的条目个数。没有则为 `0`。`chartsheet` 没有 `pictureCount`，也没有 `pictures`，也没有 `dataValidationCount`，也没有 `conditionalFormatCount`，也没有 `tableCount`，也没有 `pivotCount`；字段顺序：`id`、`name`、`kind`、`hidden`、`chartCount`、`hasHeaderFooter`、`print`，有页眉名单时再跟 `headerFooters`，有图表名单时再跟 `charts`。`dialogsheet` / `macrosheet` 没有 `pictureCount` / `pictures` / `chartCount` / `charts` / `dataValidationCount` / `conditionalFormatCount` / `tableCount` / `pivotCount`；字段顺序：`id`、`name`、`kind`、`hidden`、`hasHeaderFooter`，有页眉名单时再跟 `headerFooters`。关系 Type 以 `/macrosheet` 结尾的表 `kind` 为 `macrosheet`。
+- `print` 字段顺序：`left`、`right`、`top`、`bottom`、`header`、`footer`、`paperSize`、`orientation`、`scale`、`fitToPage`、`fitToWidth`、`fitToHeight`、`gridLines`、`headings`、`hCenter`、`vCenter`、`printArea`、`rowBreaks`、`colBreaks`。边距是英寸数字，与 XML `pageMargins`（§18.3.1.62）相同；没有该元素时用缺省 `left`/`right` 0.7、`top`/`bottom` 0.75、`header`/`footer` 0.3。`paperSize` 是 ECMA 整数（1 为 Letter，9 为 A4）；缺省为 1。`orientation` 为 `portrait` 或 `landscape`；XML 为 `default` 或缺省都报 `portrait`。`scale` 缺省 100。`fitToPage` 取 `sheetPr/pageSetUpPr/@fitToPage`，缺省 `false`。`fitToWidth` / `fitToHeight` 缺省 1。`gridLines` 仅当 `printOptions` 的 `gridLines` 与 `gridLinesSet` 都为真时为 `true`（`gridLinesSet` 缺省为真）。`headings` / `hCenter` / `vCenter` 取 `printOptions` 对应属性，缺省 `false`。`printArea` 取该表级 `_xlnm.Print_Area` 的公式文本；能解析成单一 A1 时规范化成带表名前缀的绝对引用；没有则为 `null`。`rowBreaks` / `colBreaks` 是从 1 计的整数数组，只列入 `man="1"` 的 `<brk>`（XML `@id` 从 0 计，树上加 1）；按升序。`chartsheet` 没有 `printOptions` / `rowBreaks` / `colBreaks` / `pageSetUpPr`，也没有 `scale` / `fitToWidth` / `fitToHeight`；这些键仍列出，值为上述缺省。
 - `scope.headerFooter` 为 `true` 时，每张表带 `headerFooters`，固定六个对象，顺序见上文 id 表。每个槽位字段顺序：`id`、`kind`、`side`、`text`；`worksheet` 再跟 `pictureCount`，若同时 `pictures: true` 再跟 `pictures`。`kind` / `side` 与 id 里那两段相同。`text` 为该 XML 元素原文，没有该元素则为 `null`。空串是合法原文，与 `null` 不同。`pictureCount` 是分到该槽的 DrawingML 页眉图个数。`chartsheet` / `dialogsheet` / `macrosheet` 的槽位没有 `pictureCount` / `pictures`。
 - `scope.pictures` 为 `true` 时，每张 `worksheet` 带工作表 `pictures`。没有图时为空数组。按该表 `<drawing>` 部件顺序、同一部件内按锚点文档顺序。每张字段顺序：`id`、`cNvPrId`、`name`、`anchor`，然后按锚点种类跟位置字段，最后 `stable`。`cNvPrId` 是 `xdr:cNvPr/@id` 原文，没有则为 `null`。`name` 取 `xdr:cNvPr/@name`，没有则为 `""`。`anchor` 为 `twoCell`、`oneCell` 或 `absolute`。单独 `pictures: true`、不开 `headerFooter`：只列工作表图，不含页眉图。
 - `twoCell`（§20.5.2.33）再跟 `from`、`fromOffX`、`fromOffY`、`to`、`toOffX`、`toOffY`、`editAs`。不报 `cx` / `cy`（显示尺寸由起止格与列宽行高决定，库不算）。`editAs` 取 `twoCellAnchor/@editAs`：`twoCell`、`oneCell` 或 `absolute`；缺省当作 `twoCell`。
@@ -964,7 +1007,7 @@ docx 根上始终带 `protection`，不要另给 scope 键。来源是 `/word/se
 
 行与单元格按行号、列号升序写出。补上 `sheetData` 和合理的 `dimension`。
 
-最小 `styles.xml` 必须生成，见 [opc.md](opc.md)。默认字体颜色写 `<color rgb="FF000000"/>`，不引用 theme，包里也不生成 theme 部件。给了 `sheets[].pictures` 时按 `insertPicture` 同一套规则写 drawing 与 media。给了 `sheets[].charts` 时按 `insertChart` 同一套规则写 `/xl/charts/chartN.xml`、`xdr:graphicFrame` 和 `dataFrom` 一带单元格，不写 embedding。一张表上的图与图表共用一份 drawing：先写 `pictures`，再写 `charts`。`xdr:cNvPr/@id` 取该表已有全部 `cNvPr` 的最大整数加 1。不要生成透视表、条件格式、图表工作表。create 本期不写列宽、行高、合并、数据验证、条件格式、工作表表格、透视表、定义名，也不写共享公式或数组公式（`cells[]` 出现 `shared` / `sharedRef` / `array` / `arrayRef` 报 `InvalidField`）。`workbook` 根上或 `cells[]` 上出现 `pictures` / `charts` / `definedNames`，或 `sheets[]` 上出现 `kind` / `wrap` / `smartArts`，报 `InvalidField`。`sheets[].kind` 仍拒绝。给了 `workbook.props` 时按 `setProps` / `setCustomProp` 同一套规则写 core / app / custom；省略则仍写空的 `dc:title` 与 `dc:creator` 为 `ooxp`，不写 custom 部件。
+最小 `styles.xml` 必须生成，见 [opc.md](opc.md)。默认字体颜色写 `<color rgb="FF000000"/>`，不引用 theme，包里也不生成 theme 部件。给了 `sheets[].pictures` 时按 `insertPicture` 同一套规则写 drawing 与 media。给了 `sheets[].charts` 时按 `insertChart` 同一套规则写 `/xl/charts/chartN.xml`、`xdr:graphicFrame` 和 `dataFrom` 一带单元格，不写 embedding。一张表上的图与图表共用一份 drawing：先写 `pictures`，再写 `charts`。`xdr:cNvPr/@id` 取该表已有全部 `cNvPr` 的最大整数加 1。不要生成透视表、条件格式、图表工作表。create 本期不写列宽、行高、合并、数据验证、条件格式、工作表表格、透视表、定义名、打印设置，也不写共享公式或数组公式（`cells[]` 出现 `shared` / `sharedRef` / `array` / `arrayRef` 报 `InvalidField`）。`workbook` 根上或 `cells[]` 上出现 `pictures` / `charts` / `definedNames`，或 `sheets[]` 上出现 `kind` / `wrap` / `smartArts`，报 `InvalidField`。`sheets[].kind` 仍拒绝。给了 `workbook.props` 时按 `setProps` / `setCustomProp` 同一套规则写 core / app / custom；省略则仍写空的 `dc:title` 与 `dc:creator` 为 `ooxp`，不写 custom 部件。
 
 ### docx
 
@@ -1158,7 +1201,7 @@ create 与 apply 落盘时先写入目标同目录的临时文件，再改名为
 
 `arrayRef` 与 `sharedRef` 不能同时出现。`shared` 与 `array` 不能同时为 `true`。`value` 不能与 `shared: true`、`array: true`、`sharedRef`、`arrayRef` 同时出现。`shared: false` 不能与 `sharedRef` 同时出现。`array: false` 不能与 `arrayRef` 同时出现。目标格不是 `arrayRef` / `sharedRef` 的左上角时报 `InvalidField`。`arrayRef` / `sharedRef` 非法时报 `InvalidRange`。示例见 `docs/examples/xlsx-apply-formula.json`。
 
-不认识的 `op` 报 `UnsupportedOp`，不要忽略。xlsx 认 `setCell`、`setCellStyle`、`setHeaderFooterText`、`replacePicture`、`insertPicture`、`deletePicture`、`setPictureSize`、`setPictureAnchor`、以及图表 op（`insertChart`、`insertChartSheet`、`deleteChartSheet`、`deleteChart`、`setChartTitle`、`setChartSeries`、`addChartSeries`、`deleteChartSeries`、`setChartType`、`setChartAxisTitle`、`setChartLegend`、`setChartDataLabels`、`insertTrendline`、`setTrendline`、`deleteTrendline`、`insertErrorBars`、`setErrorBars`、`deleteErrorBars`、`setChartSeriesAxis`、`setChartSize`、`setChartAnchor`；不含 `setChartWrap`）、以及 `setProps` / `setCustomProp` / `deleteCustomProp`、以及工作表管理 op（`insertSheet`、`deleteSheet`、`renameSheet`、`moveSheet`、`setSheetHidden`）、以及列宽行高与合并 op（`setColWidth`、`setRowHeight`、`mergeRange`、`unmergeRange`）、以及数据验证 op（`insertDataValidation`、`setDataValidation`、`deleteDataValidation`）、以及条件格式 op（`insertConditionalFormat`、`setConditionalFormat`、`deleteConditionalFormat`）、以及工作表表格 op（`insertSheetTable`、`setSheetTable`、`deleteSheetTable`）、以及透视表 op（`insertPivotTable`、`setPivotTable`、`deletePivotTable`）。docx 认 `setParaText`、`setHeaderFooterDistance`、`setPageMargin`、`setPageSize`、`setColumns`、`setVerticalAlign`、`setLineNumbering`、`setDocGrid`、`setRtlGutter`、`setMirrorMargins`、`setGutterAtTop`、`setHeaderFooterLink`、`insertHeaderFooter`、`setTitlePage`、`setEvenAndOddHeaders`、图片 op（含 `setPictureWrap`，不含 `setPictureAnchor`）、文本框 op、`insertPara` / `deletePara`、表格 op（`insertTable`、`deleteTable`、`insertRow`、`deleteRow`、`insertCol`、`deleteCol`、`mergeCells`、`splitCells`）、修订 op（`acceptRevision`、`rejectRevision`）、超链接与书签 op（`insertHyperlink`、`setHyperlink`、`deleteHyperlink`、`insertBookmark`、`setBookmark`、`deleteBookmark`）、域 op（`insertField`、`setField`、`deleteField`）、目录 op（`insertToc`、`deleteToc`）、公式 op（`insertMath`、`setMath`、`deleteMath`）、内容控件 op（`insertContentControl`、`setContentControl`、`deleteContentControl`）、编号 op（`insertNumbering`、`setNumbering`、`setParaNumbering`）、样式 op（`setStyle`、`setParaStyle`）、直接格式 op（`setParaFormat`、`setRunFormat`）、节结构 op（`insertSection`、`deleteSection`）、脚注尾注 op（`insertFootnote`、`insertEndnote`、`deleteFootnote`、`deleteEndnote`、`setNoteNumbering`）、批注 op（`insertComment`、`deleteComment`、`replyComment`、`setCommentText`、`setCommentMeta`、`setCommentDone`）、图表 op（`insertChart`、`deleteChart`、`setChartTitle`、`setChartSeries`、`addChartSeries`、`deleteChartSeries`、`setChartType`、`setChartAxisTitle`、`setChartLegend`、`setChartDataLabels`、`insertTrendline`、`setTrendline`、`deleteTrendline`、`insertErrorBars`、`setErrorBars`、`deleteErrorBars`、`setChartSeriesAxis`、`setChartSize`、`setChartWrap`；不含 `setChartAnchor`、`insertChartSheet`、`deleteChartSheet`）、以及 SmartArt op（`insertSmartArt`、`deleteSmartArt`、`setSmartArtText`、`addSmartArtPoint`、`deleteSmartArtPoint`、`setSmartArtSize`、`setSmartArtWrap`、`setSmartArtColors`、`setSmartArtStyle`、`setSmartArtLayout`）、以及 OLE op（`insertOle`、`deleteOle`）、以及 `setProtection`、以及 `insertWatermark` / `deleteWatermark`、以及 `setProps` / `setCustomProp` / `deleteCustomProp`。pptx 认 `setShapeText`、`setNotesText`、批注 op（`insertComment`、`deleteComment`、`replyComment`、`setCommentText`、`setCommentMeta`、`setCommentDone`）、`replacePicture`、`insertPicture`、`deletePicture`、`setPictureSize`、`setPicturePos`、以及图表 op（`insertChart`、`deleteChart`、`setChartTitle`、`setChartSeries`、`addChartSeries`、`deleteChartSeries`、`setChartType`、`setChartAxisTitle`、`setChartLegend`、`setChartDataLabels`、`insertTrendline`、`setTrendline`、`deleteTrendline`、`insertErrorBars`、`setErrorBars`、`deleteErrorBars`、`setChartSeriesAxis`、`setChartSize`、`setChartPos`；不含 `setChartWrap`、`setChartAnchor`、`insertChartSheet`、`deleteChartSheet`）、以及 SmartArt op（`insertSmartArt`、`deleteSmartArt`、`setSmartArtText`、`addSmartArtPoint`、`deleteSmartArtPoint`、`setSmartArtSize`、`setSmartArtPos`、`setSmartArtColors`、`setSmartArtStyle`、`setSmartArtLayout`；不含 `setSmartArtWrap`）、以及 `setProps` / `setCustomProp` / `deleteCustomProp`。对不上格式的 op（例如对 pptx 发 `setCell` / `setCellStyle` / `setParaText`，对 xlsx 发 `setPictureWrap`、`setChartWrap` 或 `setHeaderFooterDistance` / `setPageMargin` / `setPageSize` / `setColumns` / `setVerticalAlign` / `setLineNumbering` / `setDocGrid` / `setRtlGutter` / `setMirrorMargins` / `setGutterAtTop` / `setHeaderFooterLink` / `insertHeaderFooter` / `setTitlePage` / `setEvenAndOddHeaders`、文本框、注、批注、SmartArt 的 op、OLE 的 op、`setProtection`、`insertWatermark` / `deleteWatermark`、表格 op、修订 op、超链接与书签 op、域 op、编号 op、样式 op、直接格式 op、节结构 op 或 `setNotesText`，对 docx / pptx 发 `setHeaderFooterText`、`insertChartSheet`、`deleteChartSheet`、`insertSheet`、`deleteSheet`、`renameSheet`、`moveSheet`、`setSheetHidden`、`setCellStyle`、`setColWidth`、`setRowHeight`、`mergeRange` 或 `unmergeRange`、`insertDataValidation` / `setDataValidation` / `deleteDataValidation`、`insertConditionalFormat` / `setConditionalFormat` / `deleteConditionalFormat`、`insertSheetTable` / `setSheetTable` / `deleteSheetTable`、`insertPivotTable` / `setPivotTable` / `deletePivotTable`，对 docx 发 `setPictureAnchor` / `setChartAnchor` / `setSmartArtPos` / `setNotesText`，对 pptx 发 `setPictureWrap` / `setPictureAnchor` / `setChartWrap` / `setChartAnchor` / `setSmartArtWrap`，或对 docx / xlsx 发 `setPicturePos` / `setChartPos` / `setSmartArtPos` / `setNotesText`）报 `InvalidField`。
+不认识的 `op` 报 `UnsupportedOp`，不要忽略。xlsx 认 `setCell`、`setCellStyle`、`setHeaderFooterText`、`replacePicture`、`insertPicture`、`deletePicture`、`setPictureSize`、`setPictureAnchor`、以及图表 op（`insertChart`、`insertChartSheet`、`deleteChartSheet`、`deleteChart`、`setChartTitle`、`setChartSeries`、`addChartSeries`、`deleteChartSeries`、`setChartType`、`setChartAxisTitle`、`setChartLegend`、`setChartDataLabels`、`insertTrendline`、`setTrendline`、`deleteTrendline`、`insertErrorBars`、`setErrorBars`、`deleteErrorBars`、`setChartSeriesAxis`、`setChartSize`、`setChartAnchor`；不含 `setChartWrap`）、以及 `setProps` / `setCustomProp` / `deleteCustomProp`、以及工作表管理 op（`insertSheet`、`deleteSheet`、`renameSheet`、`moveSheet`、`setSheetHidden`）、以及列宽行高与合并 op（`setColWidth`、`setRowHeight`、`mergeRange`、`unmergeRange`）、以及数据验证 op（`insertDataValidation`、`setDataValidation`、`deleteDataValidation`）、以及条件格式 op（`insertConditionalFormat`、`setConditionalFormat`、`deleteConditionalFormat`）、以及工作表表格 op（`insertSheetTable`、`setSheetTable`、`deleteSheetTable`）、以及透视表 op（`insertPivotTable`、`setPivotTable`、`deletePivotTable`）、以及定义名 op（`insertDefinedName`、`setDefinedName`、`deleteDefinedName`）、以及 `setPrintSetup`。docx 认 `setParaText`、`setHeaderFooterDistance`、`setPageMargin`、`setPageSize`、`setColumns`、`setVerticalAlign`、`setLineNumbering`、`setDocGrid`、`setRtlGutter`、`setMirrorMargins`、`setGutterAtTop`、`setHeaderFooterLink`、`insertHeaderFooter`、`setTitlePage`、`setEvenAndOddHeaders`、图片 op（含 `setPictureWrap`，不含 `setPictureAnchor`）、文本框 op、`insertPara` / `deletePara`、表格 op（`insertTable`、`deleteTable`、`insertRow`、`deleteRow`、`insertCol`、`deleteCol`、`mergeCells`、`splitCells`）、修订 op（`acceptRevision`、`rejectRevision`）、超链接与书签 op（`insertHyperlink`、`setHyperlink`、`deleteHyperlink`、`insertBookmark`、`setBookmark`、`deleteBookmark`）、域 op（`insertField`、`setField`、`deleteField`）、目录 op（`insertToc`、`deleteToc`）、公式 op（`insertMath`、`setMath`、`deleteMath`）、内容控件 op（`insertContentControl`、`setContentControl`、`deleteContentControl`）、编号 op（`insertNumbering`、`setNumbering`、`setParaNumbering`）、样式 op（`setStyle`、`setParaStyle`）、直接格式 op（`setParaFormat`、`setRunFormat`）、节结构 op（`insertSection`、`deleteSection`）、脚注尾注 op（`insertFootnote`、`insertEndnote`、`deleteFootnote`、`deleteEndnote`、`setNoteNumbering`）、批注 op（`insertComment`、`deleteComment`、`replyComment`、`setCommentText`、`setCommentMeta`、`setCommentDone`）、图表 op（`insertChart`、`deleteChart`、`setChartTitle`、`setChartSeries`、`addChartSeries`、`deleteChartSeries`、`setChartType`、`setChartAxisTitle`、`setChartLegend`、`setChartDataLabels`、`insertTrendline`、`setTrendline`、`deleteTrendline`、`insertErrorBars`、`setErrorBars`、`deleteErrorBars`、`setChartSeriesAxis`、`setChartSize`、`setChartWrap`；不含 `setChartAnchor`、`insertChartSheet`、`deleteChartSheet`）、以及 SmartArt op（`insertSmartArt`、`deleteSmartArt`、`setSmartArtText`、`addSmartArtPoint`、`deleteSmartArtPoint`、`setSmartArtSize`、`setSmartArtWrap`、`setSmartArtColors`、`setSmartArtStyle`、`setSmartArtLayout`）、以及 OLE op（`insertOle`、`deleteOle`）、以及 `setProtection`、以及 `insertWatermark` / `deleteWatermark`、以及 `setProps` / `setCustomProp` / `deleteCustomProp`。pptx 认 `setShapeText`、`setNotesText`、批注 op（`insertComment`、`deleteComment`、`replyComment`、`setCommentText`、`setCommentMeta`、`setCommentDone`）、`replacePicture`、`insertPicture`、`deletePicture`、`setPictureSize`、`setPicturePos`、以及图表 op（`insertChart`、`deleteChart`、`setChartTitle`、`setChartSeries`、`addChartSeries`、`deleteChartSeries`、`setChartType`、`setChartAxisTitle`、`setChartLegend`、`setChartDataLabels`、`insertTrendline`、`setTrendline`、`deleteTrendline`、`insertErrorBars`、`setErrorBars`、`deleteErrorBars`、`setChartSeriesAxis`、`setChartSize`、`setChartPos`；不含 `setChartWrap`、`setChartAnchor`、`insertChartSheet`、`deleteChartSheet`）、以及 SmartArt op（`insertSmartArt`、`deleteSmartArt`、`setSmartArtText`、`addSmartArtPoint`、`deleteSmartArtPoint`、`setSmartArtSize`、`setSmartArtPos`、`setSmartArtColors`、`setSmartArtStyle`、`setSmartArtLayout`；不含 `setSmartArtWrap`）、以及 `setProps` / `setCustomProp` / `deleteCustomProp`。对不上格式的 op（例如对 pptx 发 `setCell` / `setCellStyle` / `setParaText`，对 xlsx 发 `setPictureWrap`、`setChartWrap` 或 `setHeaderFooterDistance` / `setPageMargin` / `setPageSize` / `setColumns` / `setVerticalAlign` / `setLineNumbering` / `setDocGrid` / `setRtlGutter` / `setMirrorMargins` / `setGutterAtTop` / `setHeaderFooterLink` / `insertHeaderFooter` / `setTitlePage` / `setEvenAndOddHeaders`、文本框、注、批注、SmartArt 的 op、OLE 的 op、`setProtection`、`insertWatermark` / `deleteWatermark`、表格 op、修订 op、超链接与书签 op、域 op、编号 op、样式 op、直接格式 op、节结构 op 或 `setNotesText`，对 docx / pptx 发 `setHeaderFooterText`、`insertChartSheet`、`deleteChartSheet`、`insertSheet`、`deleteSheet`、`renameSheet`、`moveSheet`、`setSheetHidden`、`setCellStyle`、`setColWidth`、`setRowHeight`、`mergeRange` 或 `unmergeRange`、`insertDataValidation` / `setDataValidation` / `deleteDataValidation`、`insertConditionalFormat` / `setConditionalFormat` / `deleteConditionalFormat`、`insertSheetTable` / `setSheetTable` / `deleteSheetTable`、`insertPivotTable` / `setPivotTable` / `deletePivotTable`、`insertDefinedName` / `setDefinedName` / `deleteDefinedName`、`setPrintSetup`，对 docx 发 `setPictureAnchor` / `setChartAnchor` / `setSmartArtPos` / `setNotesText`，对 pptx 发 `setPictureWrap` / `setPictureAnchor` / `setChartWrap` / `setChartAnchor` / `setSmartArtWrap`，或对 docx / xlsx 发 `setPicturePos` / `setChartPos` / `setSmartArtPos` / `setNotesText`）报 `InvalidField`。
 
 ### setCellStyle
 
@@ -1721,7 +1764,7 @@ create 本期仍只写普通 `<f>`，不写 `t="shared"` / `t="array"`。
 - 可能被删除的 `/xl/calcChain.xml` 以及因此修改的关系与内容类型（仅 `setCell` 等改了值或公式时）
 - `setCellStyle` 还可脏 styles 部件（常见 `/xl/styles.xml`），必要时补 workbook 关系与 Override
 
-未点名的 `xf` 条目、其他工作表、主题一律按原来的语义留下：不要重排或改写未点名下标。只改单元格值、不改样式、不改图、图表或页眉时，`styles.xml` 与绘图原样写回。图表 op 还可以脏 drawing、`/xl/charts/…` 及其 `.rels`、`[Content_Types].xml`，以及被写入数据的工作表 XML；写入单元格时走上面同一套重算标记。`insertChartSheet` / `deleteChartSheet` / `insertSheet` / `deleteSheet` / `renameSheet` / `moveSheet` / `setSheetHidden` 还可以脏 `/xl/workbook.xml` 的 `sheets`、workbook 关系，以及新表或被删表的部件。工作表表格 op 还可以脏 `/xl/tables/…`、工作表 `tableParts`、工作表 `.rels` 与 `[Content_Types].xml`；改列名或 insert 给出 `columns` 时还可脏该表 `sheetData`。页眉文本只脏目标表 XML。页眉图还可以脏 `drawingHF` 指向的 drawing、工作表 `.rels`、`/xl/media/…` 与 `[Content_Types].xml`。`setProps` / `setCustomProp` / `deleteCustomProp` 还可以脏 `/docProps/core.xml`、`/docProps/app.xml`、`/docProps/custom.xml`、根 `.rels` 与 `[Content_Types].xml`。只改 core 字段时不要新建 custom。未点名的 `HeadingPairs` / `TitlesOfParts` 留下。
+未点名的 `xf` 条目、其他工作表、主题一律按原来的语义留下：不要重排或改写未点名下标。只改单元格值、不改样式、不改图、图表或页眉时，`styles.xml` 与绘图原样写回。图表 op 还可以脏 drawing、`/xl/charts/…` 及其 `.rels`、`[Content_Types].xml`，以及被写入数据的工作表 XML；写入单元格时走上面同一套重算标记。`insertChartSheet` / `deleteChartSheet` / `insertSheet` / `deleteSheet` / `renameSheet` / `moveSheet` / `setSheetHidden` 还可以脏 `/xl/workbook.xml` 的 `sheets`、workbook 关系，以及新表或被删表的部件。工作表表格 op 还可以脏 `/xl/tables/…`、工作表 `tableParts`、工作表 `.rels` 与 `[Content_Types].xml`；改列名或 insert 给出 `columns` 时还可脏该表 `sheetData`。页眉文本只脏目标表 XML。`setPrintSetup` 脏目标表的 `pageMargins` / `pageSetup` / `printOptions` / `sheetPr` / `rowBreaks` / `colBreaks`；改打印区域时还脏 `/xl/workbook.xml` 的 `<definedNames>`。页眉图还可以脏 `drawingHF` 指向的 drawing、工作表 `.rels`、`/xl/media/…` 与 `[Content_Types].xml`。`setProps` / `setCustomProp` / `deleteCustomProp` 还可以脏 `/docProps/core.xml`、`/docProps/app.xml`、`/docProps/custom.xml`、根 `.rels` 与 `[Content_Types].xml`。只改 core 字段时不要新建 custom。未点名的 `HeadingPairs` / `TitlesOfParts` 留下。
 
 被改的部件是整份重新序列化的，不是按字节做定点替换。因此保证到这个程度：XML 声明、元素与属性的顺序、未知命名空间的元素与属性、文本内容都保留；注释、处理指令和 DOCTYPE 会丢，CDATA 会变成等价的转义文本。Office 的工作表部件不带这些东西，所以第一期接受这个代价。
 
@@ -1746,6 +1789,46 @@ create 本期仍只写普通 `<f>`，不写 `t="shared"` / `t="array"`。
 | `text` | 该槽位原文，字符串，可空。必填 |
 
 找不到该表报 `IdNotFound`。id 不是页眉槽位 id 报 `InvalidId`。对图 id、工作表 id 或单元格 id 发此 op 报 `InvalidId`。`worksheet` / `chartsheet` / `dialogsheet` 都可以改文本。没有 `headerFooter` 则按 CT_Worksheet 顺序新建。`text` 为空串时去掉该槽位元素；六个槽位都空时仍保留空的 `headerFooter`（若已有 `differentOddEven` / `differentFirst` 等属性则留下）。写 `even` 槽位时给 `headerFooter` 设 `differentOddEven="1"`；写 `first` 槽位时设 `differentFirst="1"`。不自动清这两项属性。不改 VML。不解释 `&P` 等代码。docx / pptx 上发此 op 报 `InvalidField`。`create` 本期不写页眉页脚。
+
+### setPrintSetup
+
+改工作表或图表工作表的页边距、纸张、方向、缩放、打印网格线、打印区域与手工分页符。不改页眉页脚原文（仍走 `setHeaderFooterText`）。
+
+```json
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "C:\\data\\book.xlsx",
+  "output": "C:\\data\\book.print.xlsx",
+  "ops": [
+    {
+      "op": "setPrintSetup",
+      "id": "sheet:Sheet1",
+      "left": 1,
+      "orientation": "landscape",
+      "printArea": "A1:A10"
+    }
+  ]
+}
+```
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"setPrintSetup"` |
+| `id` | 工作表 id `sheet:{name}` |
+| `left` / `right` / `top` / `bottom` / `header` / `footer` | 可选。英寸数字，须有限且不小于 0 |
+| `paperSize` | 可选。ECMA 整数，至少为 1 |
+| `orientation` | 可选。`portrait` 或 `landscape` |
+| `scale` | 可选。整数，10 到 400 |
+| `fitToPage` | 可选。布尔 |
+| `fitToWidth` / `fitToHeight` | 可选。非负整数 |
+| `gridLines` / `headings` / `hCenter` / `vCenter` | 可选。布尔 |
+| `printArea` | 可选。单一 A1（可带本表名前缀），或 `null` 删除该表 `_xlnm.Print_Area` |
+| `rowBreaks` / `colBreaks` | 可选。从 1 计的整数数组，只写手工分页符 |
+
+除 `op` / `id` 外至少给一个字段，否则报 `InvalidField`。边距写入 `pageMargins`（六个属性都必填，未点名的用当前值或缺省）。`pageSetup` 按 `CT_Worksheet` 插在 `pageMargins` 之后、`headerFooter` 之前。给了 `fitToWidth` / `fitToHeight` 时写 `sheetPr/pageSetUpPr/@fitToPage="1"`。给了 `scale` 且未同时给 fit 时把 `fitToPage` 写成假。显式给了 `fitToPage` 则以该值为准，但仍遵守「给了 fit 则写成真」这条。`printArea` 写成该表级 `_xlnm.Print_Area`，公式为带表名前缀的绝对引用；`null` 删掉该表这类定义名。定义名名单里仍能看见它。`rowBreaks` / `colBreaks` 替换手工 `<brk>`（`man="1"`），XML `@id` 为 JSON 减 1；其它 `brk` 留下。找不到该表报 `IdNotFound`。id 不是工作表 id 报 `InvalidId`。对 `dialogsheet` / `macrosheet` 报 `NotImplemented`。对 `chartsheet` 发 `scale` / `fitToPage` / `fitToWidth` / `fitToHeight` / `gridLines` / `headings` / `hCenter` / `vCenter` / `rowBreaks` / `colBreaks` 报 `InvalidField`（图表工作表没有这些 XML）。不改 `headerFooter`。docx / pptx 上发此 op 报 `InvalidField`。不标重算。create 本期不写打印设置。
+
+示例见 `docs/examples/xlsx-apply-print.json`。
 
 ### setParaText
 

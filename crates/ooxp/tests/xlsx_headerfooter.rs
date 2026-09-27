@@ -151,7 +151,8 @@ fn summary_without_scope() {
             "conditionalFormatCount",
             "tableCount",
             "pivotCount",
-            "hasHeaderFooter"
+            "hasHeaderFooter",
+            "print"
         ]
     );
 }

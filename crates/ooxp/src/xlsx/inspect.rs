@@ -69,7 +69,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     let mut sheet_json = Vec::new();
     let mut picture_count = 0usize;
     let mut chart_count = 0usize;
-    for sh in &sheets {
+    for (sheet_id, sh) in sheets.iter().enumerate() {
         let mut obj = Map::new();
         obj.insert("id".into(), json!(format!("sheet:{}", sh.name)));
         obj.insert("name".into(), json!(sh.name));
@@ -93,6 +93,10 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
             obj.insert("pivotCount".into(), json!(pivot_count));
             let has_hf = hf::has_header_footer(&sheet_doc.root);
             obj.insert("hasHeaderFooter".into(), json!(has_hf));
+            obj.insert(
+                "print".into(),
+                super::print::inspect(&sheet_doc.root, &wb.root, sheet_id as u32, &sh.name),
+            );
             if want_header_footer {
                 obj.insert(
                     "headerFooters".into(),
@@ -152,6 +156,10 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
             obj.insert(
                 "hasHeaderFooter".into(),
                 json!(hf::has_header_footer(&sheet_doc.root)),
+            );
+            obj.insert(
+                "print".into(),
+                super::print::inspect(&sheet_doc.root, &wb.root, sheet_id as u32, &sh.name),
             );
             if want_header_footer {
                 obj.insert(
