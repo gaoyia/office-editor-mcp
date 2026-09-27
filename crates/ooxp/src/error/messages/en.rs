@@ -219,6 +219,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             }
             IdReason::InsertSmartArtNeedsSlide => {
                 "pptx insertSmartArt id must be slide:N".into()
+            }
+            IdReason::EvenOddNeedsDocument => {
+                "setEvenAndOddHeaders id must be docx:document".into()
             },
         },
         ErrorKind::SheetNotFound { name } => format!("Sheet not found: {name}"),
@@ -389,13 +392,15 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         }
         ErrorKind::InvalidHfKind => "kind must be header or footer".into(),
         ErrorKind::InvalidHfType => "type must be default, even, or first".into(),
-        ErrorKind::CreateHfOnlyDefault => "create headers/footers type must be default".into(),
-        ErrorKind::CreateHfDuplicate => "create allows only one default header or footer".into(),
+        ErrorKind::CreateHfDuplicate => "create allows each header/footer type only once per side".into(),
         ErrorKind::CannotLinkFirstSection => {
             "The first section cannot link to a previous section".into()
         }
         ErrorKind::HfTypeInactive { kind, hf_type } => {
             format!("{kind} type {hf_type} is not active on this section")
+        }
+        ErrorKind::HfInsertWhileLinked => {
+            "This section inherits that header/footer; use setHeaderFooterLink to unlink".into()
         }
         ErrorKind::OpcOpen { reason } => match reason {
             OpcReason::EmptyPartName => "Part name must not be empty".into(),

@@ -1,5 +1,7 @@
 //! 从领域 JSON 生成 Transitional 文档。
 
+use std::collections::HashSet;
+
 use serde_json::Value;
 
 use crate::error::{Error, ErrorKind, TypeName};
@@ -8,6 +10,7 @@ use crate::opc::{
 };
 use crate::xml::{self, Element, Node};
 
+use super::hf::{HfKind, HfType};
 use super::picture::{self, PicKind, WrapKind, WrapPos};
 use super::smartart::{self, InsertSpec};
 use super::textbox::{self, DEFAULT_CX, DEFAULT_CY, WPS_NS};
@@ -65,6 +68,11 @@ enum ParaKind {
     HeaderFooter,
 }
 
+struct HfCreateItem {
+    hf_type: HfType,
+    paras: Vec<NewPara>,
+}
+
 pub fn create(document: &Value) -> Result<Vec<u8>, Error> {
     let obj = document.as_object().ok_or_else(|| {
         Error::with_path(
@@ -114,8 +122,12 @@ pub fn create(document: &Value) -> Result<Vec<u8>, Error> {
         paras.push(NewPara::empty());
     }
 
-    let header = parse_hf_side(obj.get("headers"), "headers")?;
-    let footer = parse_hf_side(obj.get("footers"), "footers")?;
+    let header_items = parse_hf_side(obj.get("headers"), "headers")?;
+    let footer_items = parse_hf_side(obj.get("footers"), "footers")?;
+    let need_even = header_items.iter().any(|h| h.hf_type == HfType::Even)
+        || footer_items.iter().any(|h| h.hf_type == HfType::Even);
+    let need_first = header_items.iter().any(|h| h.hf_type == HfType::First)
+        || footer_items.iter().any(|h| h.hf_type == HfType::First);
 
     let mut pkg = Package::create();
     let mut overrides = vec![
@@ -125,11 +137,11 @@ pub fn create(document: &Value) -> Result<Vec<u8>, Error> {
         ("/docProps/core.xml".into(), CT_CORE.into()),
         ("/docProps/app.xml".into(), CT_APP.into()),
     ];
-    if header.is_some() {
-        overrides.push(("/word/header1.xml".into(), CT_HEADER.into()));
+    for i in 0..header_items.len() {
+        overrides.push((format!("/word/header{}.xml", i + 1), CT_HEADER.into()));
     }
-    if footer.is_some() {
-        overrides.push(("/word/footer1.xml".into(), CT_FOOTER.into()));
+    for i in 0..footer_items.len() {
+        overrides.push((format!("/word/footer{}.xml", i + 1), CT_FOOTER.into()));
     }
     let types = ContentTypes {
         defaults: vec![
@@ -180,69 +192,75 @@ pub fn create(document: &Value) -> Result<Vec<u8>, Error> {
         target_mode: None,
         extra: Vec::new(),
     });
-    let (header_rid, footer_rid) = match (header.is_some(), footer.is_some()) {
-        (true, true) => (Some("rId3"), Some("rId4")),
-        (true, false) => (Some("rId3"), None),
-        (false, true) => (None, Some("rId3")),
-        (false, false) => (None, None),
-    };
-    if let Some(id) = header_rid {
+    let mut next_rid = 3u32;
+    let mut hf_refs: Vec<(HfKind, HfType, String)> = Vec::new();
+    for (i, item) in header_items.iter().enumerate() {
+        let rid = format!("rId{next_rid}");
+        next_rid += 1;
         doc_rels.push(Relationship {
-            id: id.into(),
+            id: rid.clone(),
             rel_type: REL_HEADER.into(),
-            target: "header1.xml".into(),
+            target: format!("header{}.xml", i + 1),
             target_mode: None,
             extra: Vec::new(),
         });
+        hf_refs.push((HfKind::Header, item.hf_type, rid));
     }
-    if let Some(id) = footer_rid {
+    for (i, item) in footer_items.iter().enumerate() {
+        let rid = format!("rId{next_rid}");
+        next_rid += 1;
         doc_rels.push(Relationship {
-            id: id.into(),
+            id: rid.clone(),
             rel_type: REL_FOOTER.into(),
-            target: "footer1.xml".into(),
+            target: format!("footer{}.xml", i + 1),
             target_mode: None,
             extra: Vec::new(),
         });
+        hf_refs.push((HfKind::Footer, item.hf_type, rid));
     }
 
     pkg.set(CONTENT_TYPES_PART, types.to_xml().into_bytes())?;
     pkg.set(ROOT_RELS_PART, root_rels.to_xml().into_bytes())?;
     pkg.set(
         "/word/document.xml",
-        document_xml(&paras, header_rid, footer_rid).into_bytes(),
+        document_xml(&paras, &hf_refs, need_first).into_bytes(),
     )?;
     pkg.set(
         "/word/_rels/document.xml.rels",
         doc_rels.to_xml().into_bytes(),
     )?;
-    if let Some(h) = &header {
-        pkg.set("/word/header1.xml", hf_xml("hdr", h).into_bytes())?;
+    for (i, item) in header_items.iter().enumerate() {
+        let part = format!("/word/header{}.xml", i + 1);
+        pkg.set(&part, hf_xml("hdr", &item.paras).into_bytes())?;
     }
-    if let Some(f) = &footer {
-        pkg.set("/word/footer1.xml", hf_xml("ftr", f).into_bytes())?;
+    for (i, item) in footer_items.iter().enumerate() {
+        let part = format!("/word/footer{}.xml", i + 1);
+        pkg.set(&part, hf_xml("ftr", &item.paras).into_bytes())?;
     }
     pkg.set("/word/styles.xml", styles_xml().into_bytes())?;
-    pkg.set("/word/settings.xml", settings_xml().into_bytes())?;
+    pkg.set("/word/settings.xml", settings_xml(need_even).into_bytes())?;
     pkg.set("/docProps/core.xml", core_xml().into_bytes())?;
     pkg.set("/docProps/app.xml", app_xml().into_bytes())?;
 
     attach_pictures(&mut pkg, "/word/document.xml", &paras)?;
     attach_smartarts(&mut pkg, "/word/document.xml", &paras)?;
-    if let Some(h) = &header {
-        attach_pictures(&mut pkg, "/word/header1.xml", h)?;
-        attach_smartarts(&mut pkg, "/word/header1.xml", h)?;
+    for (i, item) in header_items.iter().enumerate() {
+        let part = format!("/word/header{}.xml", i + 1);
+        attach_pictures(&mut pkg, &part, &item.paras)?;
+        attach_smartarts(&mut pkg, &part, &item.paras)?;
     }
-    if let Some(f) = &footer {
-        attach_pictures(&mut pkg, "/word/footer1.xml", f)?;
-        attach_smartarts(&mut pkg, "/word/footer1.xml", f)?;
+    for (i, item) in footer_items.iter().enumerate() {
+        let part = format!("/word/footer{}.xml", i + 1);
+        attach_pictures(&mut pkg, &part, &item.paras)?;
+        attach_smartarts(&mut pkg, &part, &item.paras)?;
     }
 
     pkg.save_to_vec()
 }
 
-fn parse_hf_side(v: Option<&Value>, side: &str) -> Result<Option<Vec<NewPara>>, Error> {
+fn parse_hf_side(v: Option<&Value>, side: &str) -> Result<Vec<HfCreateItem>, Error> {
     let Some(v) = v else {
-        return Ok(None);
+        return Ok(Vec::new());
     };
     let path = format!("document.{side}");
     let arr = v.as_array().ok_or_else(|| {
@@ -255,51 +273,53 @@ fn parse_hf_side(v: Option<&Value>, side: &str) -> Result<Option<Vec<NewPara>>, 
         )
     })?;
     if arr.is_empty() {
-        return Ok(None);
+        return Ok(Vec::new());
     }
-    if arr.len() > 1 {
-        return Err(Error::with_path(ErrorKind::CreateHfDuplicate, path));
-    }
-    let obj = arr[0].as_object().ok_or_else(|| {
-        Error::with_path(
-            ErrorKind::WrongType {
-                field: format!("{side}[0]"),
-                expected: TypeName::Object,
-            },
-            format!("{path}[0]"),
-        )
-    })?;
-    for k in obj.keys() {
-        if !matches!(k.as_str(), "type" | "paragraphs") {
-            return Err(Error::with_path(
-                ErrorKind::UnknownField { field: k.clone() },
-                format!("{path}[0].{k}"),
-            ));
-        }
-    }
-    match obj.get("type") {
-        None => {}
-        Some(Value::String(s)) if s == "default" => {}
-        Some(Value::String(_)) => {
-            return Err(Error::with_path(
-                ErrorKind::CreateHfOnlyDefault,
-                format!("{path}[0].type"),
-            ));
-        }
-        Some(_) => {
-            return Err(Error::with_path(
+    let mut seen = HashSet::new();
+    let mut out = Vec::new();
+    for (i, item) in arr.iter().enumerate() {
+        let item_path = format!("{path}[{i}]");
+        let obj = item.as_object().ok_or_else(|| {
+            Error::with_path(
                 ErrorKind::WrongType {
-                    field: "type".into(),
-                    expected: TypeName::String,
+                    field: format!("{side}[{i}]"),
+                    expected: TypeName::Object,
                 },
-                format!("{path}[0].type"),
-            ));
+                item_path.clone(),
+            )
+        })?;
+        for k in obj.keys() {
+            if !matches!(k.as_str(), "type" | "paragraphs") {
+                return Err(Error::with_path(
+                    ErrorKind::UnknownField { field: k.clone() },
+                    format!("{item_path}.{k}"),
+                ));
+            }
         }
+        let hf_type = match obj.get("type") {
+            None => HfType::Default,
+            Some(Value::String(s)) => HfType::parse(s).ok_or_else(|| {
+                Error::with_path(ErrorKind::InvalidHfType, format!("{item_path}.type"))
+            })?,
+            Some(_) => {
+                return Err(Error::with_path(
+                    ErrorKind::WrongType {
+                        field: "type".into(),
+                        expected: TypeName::String,
+                    },
+                    format!("{item_path}.type"),
+                ));
+            }
+        };
+        if !seen.insert(hf_type) {
+            return Err(Error::with_path(ErrorKind::CreateHfDuplicate, path));
+        }
+        out.push(HfCreateItem {
+            hf_type,
+            paras: parse_hf_paras(obj.get("paragraphs"), &format!("{item_path}.paragraphs"))?,
+        });
     }
-    Ok(Some(parse_hf_paras(
-        obj.get("paragraphs"),
-        &format!("{path}[0].paragraphs"),
-    )?))
+    Ok(out)
 }
 
 fn parse_hf_paras(v: Option<&Value>, path: &str) -> Result<Vec<NewPara>, Error> {
@@ -761,7 +781,7 @@ fn story_xmlns() -> String {
     )
 }
 
-fn document_xml(paras: &[NewPara], header_rid: Option<&str>, footer_rid: Option<&str>) -> String {
+fn document_xml(paras: &[NewPara], refs: &[(HfKind, HfType, String)], title_pg: bool) -> String {
     let mut body = String::new();
     let mut next_para = paras.len() as u32 + 1;
     let mut doc_pr = 1u32;
@@ -769,19 +789,20 @@ fn document_xml(paras: &[NewPara], header_rid: Option<&str>, footer_rid: Option<
         let id = format!("{:08X}", i as u32 + 1);
         body.push_str(&para_xml(p, &id, &mut next_para, &mut doc_pr));
     }
-    let mut refs = String::new();
-    if let Some(r) = header_rid {
-        refs.push_str(&format!(
-            r#"<w:headerReference w:type="default" r:id="{r}"/>"#
+    let mut refs_xml = String::new();
+    for (kind, hf_type, rid) in refs {
+        let tag = match kind {
+            HfKind::Header => "headerReference",
+            HfKind::Footer => "footerReference",
+        };
+        refs_xml.push_str(&format!(
+            r#"<w:{tag} w:type="{}" r:id="{rid}"/>"#,
+            hf_type.as_str()
         ));
     }
-    if let Some(r) = footer_rid {
-        refs.push_str(&format!(
-            r#"<w:footerReference w:type="default" r:id="{r}"/>"#
-        ));
-    }
+    let title = if title_pg { "<w:titlePg/>" } else { "" };
     body.push_str(&format!(
-        r#"<w:sectPr>{refs}<w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="708" w:footer="708" w:gutter="0"/></w:sectPr>"#
+        r#"<w:sectPr>{refs_xml}<w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="708" w:footer="708" w:gutter="0"/>{title}</w:sectPr>"#
     ));
     format!(
         r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document {}><w:body>{body}</w:body></w:document>"#,
@@ -924,9 +945,14 @@ fn styles_xml() -> String {
     )
 }
 
-fn settings_xml() -> String {
+fn settings_xml(even_and_odd: bool) -> String {
+    let even = if even_and_odd {
+        "<w:evenAndOddHeaders/>"
+    } else {
+        ""
+    };
     format!(
-        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:settings xmlns:w="{WML_NS}"><w:compat><w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="15"/></w:compat></w:settings>"#
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:settings xmlns:w="{WML_NS}">{even}<w:compat><w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="15"/></w:compat></w:settings>"#
     )
 }
 

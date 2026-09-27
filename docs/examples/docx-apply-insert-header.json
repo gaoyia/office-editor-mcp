@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "note.docx",
+  "output": "note.hf.docx",
+  "ops": [
+    { "op": "insertHeaderFooter", "id": "section:1", "kind": "header", "type": "default" },
+    { "op": "setTitlePage", "id": "section:1", "titlePage": true },
+    { "op": "setEvenAndOddHeaders", "id": "docx:document", "evenAndOdd": true }
+  ]
+}

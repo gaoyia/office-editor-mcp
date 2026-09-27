@@ -30,6 +30,7 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 | Cx1–Cx8 | ✅ | Word 16.0：`docx-charts-ext.ps1`，8 PASS / 0 FAIL。圆环 / 雷达 / 气泡各自有 `type`；改数、插入、组合图改数与收成柱形、透视改标题、股价仍 `NotImplemented`。标题栏无 Repair |
 | Sa1–Sa8 | ✅ | Word 16.0：`docx-smartart.ps1`。列表型 SmartArt 改字、插删、增删点、跨家族 `NotImplemented` |
 | Ip1–Ip5 | ✅ | Word 16.0：`docx-body-para.ps1`，5 PASS / 0 FAIL。插在第二段之后、插到文档末、删第二段、最后一段 `InvalidField`、默认页眉插一段。标题栏无 Repair |
+| Nh1–Nh7 | ✅ | Word 16.0：`docx-new-header.ps1`，7 PASS / 0 FAIL。新建默认页眉、首页不同、奇偶页、第二节 even 独立、create even/first、类型未生效与已链接均 `InvalidField`。标题栏无 Repair |
 | O1 | 🚫 | 领域层不做原样保存，与 xlsx 清单相同。零脏写回见 OPC 库测试。Word 另存 create 产物见 `docx-O1-word-resave`。此前记的 `SaveAs2` 挂起，拆分后重跑没再出现，一秒内返回 |
 
 ## create
@@ -241,6 +242,20 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 | Ip3 | 删除非末段 | `deletePara` 删掉第二段后 Word 无修复；第一段标题还在 |
 | Ip4 | 最后一段 | 故事里只剩一段时再 `deletePara` 得 `InvalidField`，文件未写坏 |
 | Ip5 | 页眉 | 对默认页眉容器或页眉段落 `insertPara` 后，页眉可见多一段；Word 无修复；正文未改 |
+
+## 新建页眉与奇偶首页
+
+无页眉的源可用库 `create`（不要页眉）或 Word 空白文档另存。两节样例用 `Ensure-DocxWordLinkSource`。手测脚本 `manual-check/office/cases/docx-new-header.ps1`。编号用 Nh。
+
+| 序号 | 检查 | 通过标准 |
+| --- | --- | --- |
+| Nh1 | 新建默认页眉 | 对无页眉文档 `insertHeaderFooter` 后 Word 无修复；随后改字，页眉可见新字，正文未改 |
+| Nh2 | 首页不同 | `setTitlePage` 为 true 再插入 first 页眉并改字；Word `DifferentFirstPageHeaderFooter` 为 true；首页页眉是新字 |
+| Nh3 | 奇偶页 | `setEvenAndOddHeaders` 为 true 再插入 even 页眉并改字；Word `OddAndEvenPagesHeaderFooter` 为 true |
+| Nh4 | 第二节 even 独立 | 两节文档打开奇偶页后，对第二节 even `setHeaderFooterLink` 断链并改字；第一节 even 仍是原文；Word 无修复 |
+| Nh5 | create even/first | create 同时给 default / even / first；Word 无修复；奇偶与首页标志为真 |
+| Nh6 | 类型未生效 | 未开奇偶页时对 even 发 `insertHeaderFooter` 得 `InvalidField`，文件未写坏 |
+| Nh7 | 已链接 | 对第二节 default（仍链接前节）发 `insertHeaderFooter` 得 `InvalidField`，文件未写坏 |
 
 ## 原样保存（opc 验收）
 

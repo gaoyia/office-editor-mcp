@@ -61,6 +61,28 @@ pub struct SetHfLinkOp {
 }
 
 #[derive(Debug, Clone)]
+pub struct InsertHeaderFooterOp {
+    pub id: String,
+    pub n: usize,
+    pub kind: HfKind,
+    pub hf_type: HfType,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetTitlePageOp {
+    pub id: String,
+    pub n: usize,
+    pub title_page: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetEvenAndOddHeadersOp {
+    #[allow(dead_code)]
+    pub id: String,
+    pub even_and_odd: bool,
+}
+
+#[derive(Debug, Clone)]
 pub struct ReplacePictureOp {
     pub id: String,
     pub target: PicTarget,
@@ -286,6 +308,9 @@ pub enum DocxOp {
     SetParaText(SetParaTextOp),
     SetHeaderFooterDistance(SetHfDistanceOp),
     SetHeaderFooterLink(SetHfLinkOp),
+    InsertHeaderFooter(InsertHeaderFooterOp),
+    SetTitlePage(SetTitlePageOp),
+    SetEvenAndOddHeaders(SetEvenAndOddHeadersOp),
     ReplacePicture(ReplacePictureOp),
     InsertPicture(InsertPictureOp),
     DeletePicture(DeletePictureOp),
@@ -537,6 +562,11 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<DocxOp>, Error> {
             "setHeaderFooterLink" => {
                 out.push(DocxOp::SetHeaderFooterLink(parse_set_hf_link(obj, i)?))
             }
+            "insertHeaderFooter" => out.push(DocxOp::InsertHeaderFooter(parse_insert_hf(obj, i)?)),
+            "setTitlePage" => out.push(DocxOp::SetTitlePage(parse_set_title_page(obj, i)?)),
+            "setEvenAndOddHeaders" => out.push(DocxOp::SetEvenAndOddHeaders(
+                parse_set_even_and_odd(obj, i)?,
+            )),
             "replacePicture" => out.push(DocxOp::ReplacePicture(parse_replace_pic(obj, i)?)),
             "insertPicture" => out.push(DocxOp::InsertPicture(parse_insert_pic(obj, i)?)),
             "deletePicture" => out.push(DocxOp::DeletePicture(parse_delete_pic(obj, i)?)),
@@ -826,6 +856,141 @@ fn parse_set_hf_link(obj: &serde_json::Map<String, Value>, i: usize) -> Result<S
         hf_type,
         linked,
     })
+}
+
+fn parse_insert_hf(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<InsertHeaderFooterOp, Error> {
+    for k in obj.keys() {
+        if !matches!(k.as_str(), "op" | "id" | "kind" | "type") {
+            return Err(Error::with_path(
+                ErrorKind::UnknownField { field: k.clone() },
+                format!("ops[{i}].{k}"),
+            ));
+        }
+    }
+    let id = require_op_id(obj, i)?;
+    let n = parse_section_id(&id, i)?;
+    let kind = parse_hf_kind(obj, i, "insertHeaderFooter")?;
+    let hf_type = parse_hf_type(obj, i, "insertHeaderFooter")?;
+    Ok(InsertHeaderFooterOp {
+        id,
+        n,
+        kind,
+        hf_type,
+    })
+}
+
+fn parse_set_title_page(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<SetTitlePageOp, Error> {
+    for k in obj.keys() {
+        if !matches!(k.as_str(), "op" | "id" | "titlePage") {
+            return Err(Error::with_path(
+                ErrorKind::UnknownField { field: k.clone() },
+                format!("ops[{i}].{k}"),
+            ));
+        }
+    }
+    let id = require_op_id(obj, i)?;
+    let n = parse_section_id(&id, i)?;
+    let title_page = parse_required_bool(obj.get("titlePage"), i, "setTitlePage", "titlePage")?;
+    Ok(SetTitlePageOp { id, n, title_page })
+}
+
+fn parse_set_even_and_odd(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<SetEvenAndOddHeadersOp, Error> {
+    for k in obj.keys() {
+        if !matches!(k.as_str(), "op" | "id" | "evenAndOdd") {
+            return Err(Error::with_path(
+                ErrorKind::UnknownField { field: k.clone() },
+                format!("ops[{i}].{k}"),
+            ));
+        }
+    }
+    let id = require_op_id(obj, i)?;
+    if id != "docx:document" {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::EvenOddNeedsDocument,
+            },
+            format!("ops[{i}].id"),
+        ));
+    }
+    let even_and_odd = parse_required_bool(
+        obj.get("evenAndOdd"),
+        i,
+        "setEvenAndOddHeaders",
+        "evenAndOdd",
+    )?;
+    Ok(SetEvenAndOddHeadersOp { id, even_and_odd })
+}
+
+fn require_op_id(obj: &serde_json::Map<String, Value>, i: usize) -> Result<String, Error> {
+    obj.get("id")
+        .and_then(Value::as_str)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
+        .ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::MissingField { field: "id".into() },
+                format!("ops[{i}].id"),
+            )
+        })
+}
+
+fn parse_hf_kind(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+    op: &str,
+) -> Result<HfKind, Error> {
+    match obj.get("kind") {
+        Some(Value::String(s)) => HfKind::parse(s)
+            .ok_or_else(|| Error::with_path(ErrorKind::InvalidHfKind, format!("ops[{i}].kind"))),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "kind".into(),
+                expected: TypeName::String,
+            },
+            format!("ops[{i}].kind"),
+        )),
+        None => Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: op.into(),
+                field: "kind".into(),
+            },
+            format!("ops[{i}].kind"),
+        )),
+    }
+}
+
+fn parse_hf_type(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+    op: &str,
+) -> Result<HfType, Error> {
+    match obj.get("type") {
+        Some(Value::String(s)) => HfType::parse(s)
+            .ok_or_else(|| Error::with_path(ErrorKind::InvalidHfType, format!("ops[{i}].type"))),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "type".into(),
+                expected: TypeName::String,
+            },
+            format!("ops[{i}].type"),
+        )),
+        None => Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: op.into(),
+                field: "type".into(),
+            },
+            format!("ops[{i}].type"),
+        )),
+    }
 }
 
 fn parse_section_id(id: &str, op_index: usize) -> Result<usize, Error> {

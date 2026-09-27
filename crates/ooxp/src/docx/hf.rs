@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use crate::error::{Error, XmlIssue};
 use crate::opc::{self, Package, Relationships};
-use crate::xml::{Element, Node};
+use crate::xml::{Document, Element, Node};
 
 use super::WML_NS;
 
@@ -218,6 +218,28 @@ pub fn type_is_active(hf_type: HfType, title_pg: bool, even_and_odd: bool) -> bo
 pub fn even_and_odd_headers(pkg: &Package, doc_part: &str) -> Result<bool, Error> {
     let rels = Relationships::from_package(pkg, doc_part)?;
     read_even_and_odd(pkg, doc_part, &rels)
+}
+
+/// 优先读 apply 缓存里的 settings，让同一批 op 能看见刚打开的奇偶页。
+pub fn even_and_odd_cached(
+    pkg: &Package,
+    docs: &HashMap<String, Document>,
+    doc_part: &str,
+) -> Result<bool, Error> {
+    let rels = Relationships::from_package(pkg, doc_part)?;
+    let Some(rel) = rels.find_by_type_suffix("/settings").into_iter().next() else {
+        return Ok(false);
+    };
+    if rel.is_external() {
+        return Ok(false);
+    }
+    let Ok(settings_part) = opc::resolve_rel_target(doc_part, &rel.target) else {
+        return Ok(false);
+    };
+    if let Some(doc) = docs.get(&settings_part) {
+        return Ok(bool_prop(&doc.root, "evenAndOddHeaders"));
+    }
+    even_and_odd_headers(pkg, doc_part)
 }
 
 pub fn has_explicit_ref(sect: &Element, kind: HfKind, hf_type: HfType) -> bool {
@@ -616,4 +638,72 @@ fn first_alt_child_index(el: &Element) -> Option<usize> {
         }
     }
     fallback
+}
+
+/// `titlePg` 在 `EG_SectPrContents` 里的位置，见 ECMA-376 §17.6.18。
+pub const TITLE_PG_ORDER: &[&str] = &[
+    "headerReference",
+    "footerReference",
+    "footnotePr",
+    "endnotePr",
+    "type",
+    "pgSz",
+    "pgMar",
+    "paperSrc",
+    "pgBorders",
+    "lnNumType",
+    "pgNumType",
+    "cols",
+    "formProt",
+    "vAlign",
+    "noEndnote",
+    "titlePg",
+    "textDirection",
+    "bidi",
+    "rtlGutter",
+    "docGrid",
+    "printerSettings",
+];
+
+/// `evenAndOddHeaders` 在 `CT_Settings` 里位于 `compat` 之前。
+pub const EVEN_ODD_ORDER: &[&str] = &["evenAndOddHeaders", "compat"];
+
+pub fn set_on_off(parent: &mut Element, local: &str, on: bool, order: &[&str]) {
+    remove_local(parent, local);
+    if !on {
+        return;
+    }
+    let dest = insert_index_by_order(parent, local, order);
+    parent
+        .children
+        .insert(dest, Node::Element(Element::new(parent.prefixed(local))));
+}
+
+fn remove_local(parent: &mut Element, local: &str) {
+    parent.children.retain(|n| match n {
+        Node::Element(e) => e.local_name() != local,
+        _ => true,
+    });
+}
+
+fn insert_index_by_order(parent: &Element, local: &str, order: &[&str]) -> usize {
+    let my = order
+        .iter()
+        .position(|&x| x == local)
+        .unwrap_or(order.len());
+    let mut after_lower = 0usize;
+    for (i, n) in parent.children.iter().enumerate() {
+        let Node::Element(e) = n else {
+            continue;
+        };
+        let Some(rank) = order.iter().position(|&x| x == e.local_name()) else {
+            continue;
+        };
+        if rank < my {
+            after_lower = i + 1;
+        } else if rank > my {
+            return i;
+        }
+    }
+    after_lower
 }

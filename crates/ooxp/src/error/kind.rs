@@ -142,6 +142,8 @@ pub(crate) enum IdReason {
     SlideSmartArtContainer,
     /// pptx 的 insertSmartArt 必须用 slide:N
     InsertSmartArtNeedsSlide,
+    /// setEvenAndOddHeaders 必须用 docx:document
+    EvenOddNeedsDocument,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -281,7 +283,6 @@ define_error_kinds! {
     InvalidParaStyle => vec![Self::InvalidParaStyle],
     InvalidHfKind => vec![Self::InvalidHfKind],
     InvalidHfType => vec![Self::InvalidHfType],
-    CreateHfOnlyDefault => vec![Self::CreateHfOnlyDefault],
     CreateHfDuplicate => vec![Self::CreateHfDuplicate],
     InvalidPicKind => vec![Self::InvalidPicKind],
     InvalidPicWrap => vec![Self::InvalidPicWrap],
@@ -343,6 +344,7 @@ define_error_kinds! {
         kind: "header".into(),
         hf_type: "even".into(),
     }],
+    HfInsertWhileLinked => vec![Self::HfInsertWhileLinked],
     OpcOpen { reason: OpcReason } => OpcReason::all_samples()
         .into_iter()
         .map(|reason| Self::OpcOpen { reason })
@@ -478,6 +480,7 @@ impl IdReason {
             Self::SlideSmartArtPrefix,
             Self::SlideSmartArtContainer,
             Self::InsertSmartArtNeedsSlide,
+            Self::EvenOddNeedsDocument,
         ]
     }
 }
@@ -574,7 +577,6 @@ impl ErrorKind {
             | Self::InvalidParaStyle
             | Self::InvalidHfKind
             | Self::InvalidHfType
-            | Self::CreateHfOnlyDefault
             | Self::CreateHfDuplicate
             | Self::InvalidPicKind
             | Self::InvalidPicWrap
@@ -582,6 +584,7 @@ impl ErrorKind {
             | Self::InvalidImageFile
             | Self::CannotLinkFirstSection
             | Self::HfTypeInactive { .. }
+            | Self::HfInsertWhileLinked
             | Self::LastTextBoxPara
             | Self::LastNotePara
             | Self::NeedNoteNumberingField

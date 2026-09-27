@@ -198,6 +198,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             }
             IdReason::InsertSmartArtNeedsSlide => {
                 "pptx insertSmartArt 的 id 必须是 slide:N".into()
+            }
+            IdReason::EvenOddNeedsDocument => {
+                "setEvenAndOddHeaders 的 id 必须是 docx:document".into()
             },
         },
         ErrorKind::SheetNotFound { name } => format!("找不到工作表：{name}"),
@@ -333,11 +336,13 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::InvalidParaStyle => "style 只允许 Normal、Heading1、Heading2、Heading3".into(),
         ErrorKind::InvalidHfKind => "kind 必须是 header 或 footer".into(),
         ErrorKind::InvalidHfType => "type 必须是 default、even 或 first".into(),
-        ErrorKind::CreateHfOnlyDefault => "create 的页眉页脚 type 只能是 default".into(),
-        ErrorKind::CreateHfDuplicate => "create 每一侧只能有一个默认页眉或页脚".into(),
+        ErrorKind::CreateHfDuplicate => "create 每一侧同一 type 只能出现一次".into(),
         ErrorKind::CannotLinkFirstSection => "第一节不能链接到前一节".into(),
         ErrorKind::HfTypeInactive { kind, hf_type } => {
             format!("本节未启用这种 {kind}（{hf_type}）")
+        }
+        ErrorKind::HfInsertWhileLinked => {
+            "本节该页眉页脚仍链接前节，请用 setHeaderFooterLink 断开".into()
         }
         ErrorKind::OpcOpen { reason } => match reason {
             OpcReason::EmptyPartName => "部件名不能为空".into(),

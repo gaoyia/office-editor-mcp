@@ -38,6 +38,7 @@ $order = @(
     'xlsx-headerfooter'
     'docx-apply'
     'docx-body-para'
+    'docx-new-header'
     'docx-headerfooter'
     'docx-distance'
     'docx-link'

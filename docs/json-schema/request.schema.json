@@ -217,12 +217,12 @@
         },
         "headers": {
           "type": "array",
-          "maxItems": 1,
+          "maxItems": 3,
           "items": { "$ref": "#/$defs/docxHfCreate" }
         },
         "footers": {
           "type": "array",
-          "maxItems": 1,
+          "maxItems": 3,
           "items": { "$ref": "#/$defs/docxHfCreate" }
         }
       }
@@ -231,7 +231,7 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "type": { "const": "default" },
+        "type": { "enum": ["default", "even", "first"] },
         "paragraphs": {
           "type": "array",
           "items": { "$ref": "#/$defs/docxHfParaCreate" }
@@ -462,6 +462,9 @@
               { "$ref": "#/$defs/setParaTextOp" },
               { "$ref": "#/$defs/setHeaderFooterDistanceOp" },
               { "$ref": "#/$defs/setHeaderFooterLinkOp" },
+              { "$ref": "#/$defs/insertHeaderFooterOp" },
+              { "$ref": "#/$defs/setTitlePageOp" },
+              { "$ref": "#/$defs/setEvenAndOddHeadersOp" },
               { "$ref": "#/$defs/replacePictureOp" },
               { "$ref": "#/$defs/insertPictureOp" },
               { "$ref": "#/$defs/deletePictureOp" },
@@ -589,6 +592,37 @@
         "kind": { "enum": ["header", "footer"] },
         "type": { "enum": ["default", "even", "first"] },
         "linked": { "type": "boolean" }
+      }
+    },
+    "insertHeaderFooterOp": {
+      "type": "object",
+      "required": ["op", "id", "kind", "type"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "insertHeaderFooter" },
+        "id": { "type": "string", "minLength": 1 },
+        "kind": { "enum": ["header", "footer"] },
+        "type": { "enum": ["default", "even", "first"] }
+      }
+    },
+    "setTitlePageOp": {
+      "type": "object",
+      "required": ["op", "id", "titlePage"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "setTitlePage" },
+        "id": { "type": "string", "minLength": 1 },
+        "titlePage": { "type": "boolean" }
+      }
+    },
+    "setEvenAndOddHeadersOp": {
+      "type": "object",
+      "required": ["op", "id", "evenAndOdd"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "setEvenAndOddHeaders" },
+        "id": { "type": "string", "minLength": 1 },
+        "evenAndOdd": { "type": "boolean" }
       }
     },
     "replacePictureOp": {

@@ -2165,7 +2165,7 @@ fn create_pictures_rejects_missing_file_and_one_size() {
     assert_eq!(err.field_path(), Some("document.paragraphs[0].pictures[0]"));
 
     let path3 = create_docx_path("create-hf-even");
-    let err = run(
+    run(
         &json!({
             "schemaVersion": 1,
             "action": "create",
@@ -2178,9 +2178,34 @@ fn create_pictures_rejects_missing_file_and_one_size() {
         .to_string(),
         None,
     )
+    .unwrap();
+    let tree = inspect_hf(&path3, true);
+    assert_eq!(tree["headers"][0]["type"], "even");
+    assert_eq!(tree["headers"][0]["paragraphs"][0]["text"], "偶");
+    assert_eq!(tree["sections"][0]["headerLink"]["even"], false);
+    assert!(tree["sections"][0]["headerLink"]["first"].is_null());
+    assert!(part(&path3, "word/settings.xml").contains("evenAndOddHeaders"));
+
+    let path4 = create_docx_path("create-hf-dup");
+    let err = run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "create",
+            "path": path4.to_string_lossy(),
+            "document": {
+                "paragraphs": [{ "text": "a" }],
+                "headers": [
+                    { "type": "default", "paragraphs": [{ "text": "一" }] },
+                    { "type": "default", "paragraphs": [{ "text": "二" }] }
+                ]
+            }
+        })
+        .to_string(),
+        None,
+    )
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);
-    assert_eq!(err.field_path(), Some("document.headers[0].type"));
+    assert_eq!(err.field_path(), Some("document.headers"));
 }
 
 #[test]
@@ -2385,4 +2410,213 @@ fn insert_header_para_and_refuse_last_delete() {
     )
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::NotImplemented);
+}
+
+#[test]
+fn insert_header_footer_on_blank_and_guards() {
+    let src = create_docx_path("nh-src");
+    run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "create",
+            "path": src.to_string_lossy(),
+            "document": { "paragraphs": [{ "text": "正文" }] }
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap();
+
+    let err = apply_ops(
+        &src,
+        &tmp_dir().join("nh-even-off.docx"),
+        json!([{
+            "op": "insertHeaderFooter",
+            "id": "section:1",
+            "kind": "header",
+            "type": "even"
+        }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+
+    let out = tmp_dir().join("nh-insert-default.docx");
+    apply_ops(
+        &src,
+        &out,
+        json!([{
+            "op": "insertHeaderFooter",
+            "id": "section:1",
+            "kind": "header",
+            "type": "default"
+        }]),
+    )
+    .unwrap();
+    let tree = inspect_hf(&out, true);
+    assert_eq!(tree["headers"].as_array().unwrap().len(), 1);
+    assert_eq!(tree["headers"][0]["id"], "header:default:1");
+    assert_eq!(tree["headers"][0]["paraCount"], 1);
+    assert_eq!(tree["sections"][0]["headerLink"]["default"], false);
+    assert!(zip_has_part(&out, "word/header1.xml"));
+
+    let again = tmp_dir().join("nh-insert-again.docx");
+    apply_ops(
+        &out,
+        &again,
+        json!([{
+            "op": "insertHeaderFooter",
+            "id": "section:1",
+            "kind": "header",
+            "type": "default"
+        }]),
+    )
+    .unwrap();
+    assert_eq!(
+        inspect_hf(&again, false)["headers"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+
+    let pid = inspect_hf(&out, true)["headers"][0]["paragraphs"][0]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let edited = tmp_dir().join("nh-insert-edit.docx");
+    apply(&out, &edited, &pid, "新页眉").unwrap();
+    assert_eq!(
+        inspect_hf(&edited, true)["headers"][0]["paragraphs"][0]["text"],
+        "新页眉"
+    );
+}
+
+#[test]
+fn title_page_and_even_odd_flags() {
+    let src = create_docx_path("nh-flags-src");
+    run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "create",
+            "path": src.to_string_lossy(),
+            "document": { "paragraphs": [{ "text": "正文" }] }
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap();
+
+    let out = tmp_dir().join("nh-flags.docx");
+    apply_ops(
+        &src,
+        &out,
+        json!([
+            { "op": "setTitlePage", "id": "section:1", "titlePage": true },
+            { "op": "setEvenAndOddHeaders", "id": "docx:document", "evenAndOdd": true },
+            { "op": "insertHeaderFooter", "id": "section:1", "kind": "header", "type": "first" },
+            { "op": "insertHeaderFooter", "id": "section:1", "kind": "header", "type": "even" }
+        ]),
+    )
+    .unwrap();
+    let tree = inspect_hf(&out, true);
+    assert_eq!(tree["sections"][0]["headerLink"]["first"], false);
+    assert_eq!(tree["sections"][0]["headerLink"]["even"], false);
+    let types: Vec<_> = tree["headers"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|h| h["type"].as_str().unwrap())
+        .collect();
+    assert!(types.contains(&"first"));
+    assert!(types.contains(&"even"));
+    assert!(part(&out, "word/settings.xml").contains("evenAndOddHeaders"));
+    assert!(part(&out, "word/document.xml").contains("titlePg"));
+
+    let off = tmp_dir().join("nh-flags-off.docx");
+    apply_ops(
+        &out,
+        &off,
+        json!([
+            { "op": "setTitlePage", "id": "section:1", "titlePage": false },
+            { "op": "setEvenAndOddHeaders", "id": "docx:document", "evenAndOdd": false }
+        ]),
+    )
+    .unwrap();
+    let after = inspect_hf(&off, false);
+    assert!(after["sections"][0]["headerLink"]["first"].is_null());
+    assert!(after["sections"][0]["headerLink"]["even"].is_null());
+    assert!(!part(&off, "word/settings.xml").contains("evenAndOddHeaders"));
+}
+
+#[test]
+fn insert_header_refuses_linked_section() {
+    let path = write_hf_sample("nh-linked");
+    let err = apply_ops(
+        &path,
+        &tmp_dir().join("nh-linked-out.docx"),
+        json!([{
+            "op": "insertHeaderFooter",
+            "id": "section:2",
+            "kind": "header",
+            "type": "default"
+        }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+
+    let err = apply_ops(
+        &path,
+        &tmp_dir().join("nh-evenodd-id.docx"),
+        json!([{
+            "op": "setEvenAndOddHeaders",
+            "id": "section:1",
+            "evenAndOdd": true
+        }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidId);
+}
+
+#[test]
+fn create_first_and_even_headers() {
+    let path = create_docx_path("create-hf-both");
+    run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "create",
+            "path": path.to_string_lossy(),
+            "document": {
+                "paragraphs": [{ "text": "a" }],
+                "headers": [
+                    { "type": "default", "paragraphs": [{ "text": "奇" }] },
+                    { "type": "even", "paragraphs": [{ "text": "偶" }] },
+                    { "type": "first", "paragraphs": [{ "text": "首" }] }
+                ]
+            }
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap();
+    let tree = inspect_hf(&path, true);
+    assert_eq!(tree["headers"].as_array().unwrap().len(), 3);
+    assert_eq!(tree["sections"][0]["headerLink"]["default"], false);
+    assert_eq!(tree["sections"][0]["headerLink"]["even"], false);
+    assert_eq!(tree["sections"][0]["headerLink"]["first"], false);
+    let texts: Vec<_> = tree["headers"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|h| {
+            (
+                h["type"].as_str().unwrap(),
+                h["paragraphs"][0]["text"].as_str().unwrap(),
+            )
+        })
+        .collect();
+    assert!(texts.contains(&("default", "奇")));
+    assert!(texts.contains(&("even", "偶")));
+    assert!(texts.contains(&("first", "首")));
+    assert!(part(&path, "word/settings.xml").contains("evenAndOddHeaders"));
+    assert!(part(&path, "word/document.xml").contains("titlePg"));
 }
