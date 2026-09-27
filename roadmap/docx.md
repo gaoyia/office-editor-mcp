@@ -54,6 +54,7 @@ xlsx 见 [`roadmap/xlsx.md`](xlsx.md)。pptx 见 [`roadmap/pptx.md`](pptx.md)。
 | 21 | `.plan/2026年-9月-27日-✅-docx-公式.md` | 无 |
 | 22 | `.plan/2026年-9月-27日-✅-docx-内容控件.md` | 无 |
 | 23 | `.plan/2026年-9月-27日-✅-docx-create补齐.md` | 图表、注、批注、多节相关 apply 已过 |
+| 24 | `.plan/2026年-9月-27日-✅-docx-容器内drawing.md` | 文本框、注、批注、图表、SmartArt 已过 |
 
 页眉改字、距边界、链接前节、图文混排已过，见对应 ✅ 计划。第一期段落改字见总计划。
 
@@ -61,11 +62,10 @@ xlsx 见 [`roadmap/xlsx.md`](xlsx.md)。pptx 见 [`roadmap/pptx.md`](pptx.md)。
 
 | 序 | 计划 | 前置 |
 | --- | --- | --- |
-| 0 | `.plan/2026年-9月-27日-❌-docx-容器内drawing.md` | 文本框、注、批注、图表、SmartArt 已过 |
-| 1 | `.plan/2026年-9月-27日-❌-docx-文档属性.md` | 无 |
-| 2 | `.plan/2026年-9月-27日-❌-docx-OLE.md` | 导出媒体已过 |
-| 3 | `.plan/2026年-9月-27日-❌-docx-保护.md` | 无 |
-| 4 | `.plan/2026年-9月-27日-❌-docx-水印.md` | 图或文本框已过 |
+| 0 | `.plan/2026年-9月-27日-❌-docx-文档属性.md` | 无 |
+| 1 | `.plan/2026年-9月-27日-❌-docx-OLE.md` | 导出媒体已过 |
+| 2 | `.plan/2026年-9月-27日-❌-docx-保护.md` | 无 |
+| 3 | `.plan/2026年-9月-27日-❌-docx-水印.md` | 图或文本框已过 |
 
 1 可并行。
 

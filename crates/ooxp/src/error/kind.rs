@@ -349,6 +349,7 @@ define_error_kinds! {
     InvalidXlsxAnchor => vec![Self::InvalidXlsxAnchor],
     InvalidXlsxEditAs => vec![Self::InvalidXlsxEditAs],
     NotesSlideImage => vec![Self::NotesSlideImage],
+    GraphicInRestrictedStory => vec![Self::GraphicInRestrictedStory],
     SharedFormulaMaster { cell: String } => vec![Self::SharedFormulaMaster { cell: "A1".into() }],
     NeedAtLeastOneSheet => vec![Self::NeedAtLeastOneSheet],
     DuplicateSheetName { name: String } => vec![Self::DuplicateSheetName { name: "Sheet1".into() }],
@@ -857,7 +858,8 @@ impl ErrorKind {
             | Self::DataSheetMustBeWorksheet
             | Self::InvalidXlsxAnchor
             | Self::InvalidXlsxEditAs
-            | Self::NotesSlideImage => InvalidField,
+            | Self::NotesSlideImage
+            | Self::GraphicInRestrictedStory => InvalidField,
             Self::OutOfRange { .. } => TruncatedLimit,
             Self::InvalidRange { .. } => InvalidRange,
             Self::InvalidId { .. } => InvalidId,

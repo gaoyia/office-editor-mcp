@@ -213,6 +213,9 @@ fn inspect_notes_lists_hosts_and_separators() {
             "host",
             "paraCount",
             "pictureCount",
+            "textBoxCount",
+            "chartCount",
+            "smartArtCount",
             "paragraphs"
         ]
     );

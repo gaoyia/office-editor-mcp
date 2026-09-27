@@ -492,6 +492,10 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::NotesSlideImage => {
             "Cannot edit the slide-image placeholder on a notes page".into()
         }
+        ErrorKind::GraphicInRestrictedStory => {
+            "Cannot place a graphic object in a text box, callout, comment, footnote, or endnote"
+                .into()
+        }
         ErrorKind::SharedFormulaMaster { cell } => format!(
             "{cell} is a shared formula master; changing it would leave dependents with the same si without a formula. Change those cells to independent formulas first"
         ),

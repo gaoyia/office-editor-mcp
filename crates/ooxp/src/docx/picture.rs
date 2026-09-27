@@ -577,6 +577,24 @@ pub fn part_for_pic(
             })?;
             Ok(item.part.clone())
         }
+        PicTarget::InTextBox {
+            host: HostPara::InNote { kind, .. },
+            ..
+        } => notes::part_name(pkg, doc_part, *kind)?.ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::PictureNotFound { id: id.to_string() },
+                field_path.to_string(),
+            )
+        }),
+        PicTarget::InTextBox {
+            host: HostPara::InComment { .. },
+            ..
+        } => super::comments::part_name(pkg, doc_part)?.ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::PictureNotFound { id: id.to_string() },
+                field_path.to_string(),
+            )
+        }),
         PicTarget::HeaderFooter {
             kind, hf_type, n, ..
         } => {

@@ -284,6 +284,9 @@ fn inspect_lists_parent_range_and_comment_ids() {
             "end",
             "paraCount",
             "pictureCount",
+            "textBoxCount",
+            "chartCount",
+            "smartArtCount",
             "paragraphs"
         ]
     );

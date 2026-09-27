@@ -134,6 +134,10 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
                 &catalog,
                 NoteKind::Footnote,
                 expand_pics,
+                expand_txbx,
+                expand_txbx_content,
+                expand_charts,
+                expand_smartart,
                 expand_runs,
             )?;
             let (endnotes, en_seps) = notes_array(
@@ -143,6 +147,10 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
                 &catalog,
                 NoteKind::Endnote,
                 expand_pics,
+                expand_txbx,
+                expand_txbx_content,
+                expand_charts,
+                expand_smartart,
                 expand_runs,
             )?;
             let mut seps = fn_seps;
@@ -153,7 +161,17 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         }
         let coverage = load_coverage(&pkg, &part, &doc.root, &catalog)?;
         if scope.comments {
-            tree["comments"] = comments_array(&pkg, &part, &coverage, expand_pics, expand_runs)?;
+            tree["comments"] = comments_array(
+                &pkg,
+                &part,
+                &coverage,
+                expand_pics,
+                expand_txbx,
+                expand_txbx_content,
+                expand_charts,
+                expand_smartart,
+                expand_runs,
+            )?;
         }
         if scope.charts {
             tree["charts"] = Value::Array(charts::collect_body(&pkg, &part, &paras)?);
@@ -205,11 +223,15 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
                     }
                     let index = i + 1;
                     paragraphs.push(body_para_json(
+                        &pkg,
+                        &part,
                         p,
                         index,
                         expand_pics,
                         expand_txbx,
                         expand_txbx_content,
+                        expand_charts,
+                        expand_smartart,
                         expand_runs,
                         &body_boxes,
                     )?);
@@ -385,12 +407,16 @@ fn hf_node(pkg: &Package, item: &HfPart, expand: &HfExpand) -> Result<Value, Err
             let (id, _) = para::para_stable_id_in(&item.id, p, i + 1);
             let mine: Vec<_> = boxes_for_para(&boxes, &id).into_iter().cloned().collect();
             listed.extend(textbox::textboxes_json(
+                pkg,
+                &item.part,
                 p,
                 &id,
                 &mine,
                 expand.text_box_content,
                 expand.pictures,
                 expand.runs,
+                expand.charts,
+                expand.smart_art,
             )?);
         }
         node["textBoxes"] = Value::Array(listed);
@@ -440,11 +466,15 @@ fn hf_node(pkg: &Package, item: &HfPart, expand: &HfExpand) -> Result<Value, Err
 }
 
 fn body_para_json(
+    pkg: &Package,
+    host_part: &str,
     p: &crate::xml::Element,
     index: usize,
     expand_pics: bool,
     expand_txbx: bool,
     expand_txbx_content: bool,
+    expand_charts: bool,
+    expand_smartart: bool,
     expand_runs: bool,
     all_boxes: &[textbox::TxbxInfo],
 ) -> Result<Value, Error> {
@@ -460,12 +490,16 @@ fn body_para_json(
     }
     if expand_txbx {
         node["textBoxes"] = Value::Array(textbox::textboxes_json(
+            pkg,
+            host_part,
             p,
             &id,
             &mine,
             expand_txbx_content,
             expand_pics,
             expand_runs,
+            expand_charts,
+            expand_smartart,
         )?);
     }
     let fn_refs = notes::refs_in_para(p, NoteKind::Footnote);
@@ -506,6 +540,10 @@ fn notes_array(
     catalog: &[HfPart],
     kind: NoteKind,
     expand_pics: bool,
+    expand_txbx: bool,
+    expand_txbx_content: bool,
+    expand_charts: bool,
+    expand_smartart: bool,
     expand_runs: bool,
 ) -> Result<(Value, Vec<Value>), Error> {
     let hosts = notes::collect_hosts(pkg, doc_part, doc_root, catalog, kind)?;
@@ -522,42 +560,37 @@ fn notes_array(
             .filter(|(nid, _)| notes::ids_match(nid, &note_id))
             .map(|(_, pid)| pid.clone())
             .collect();
-        let paras = para::collect_paragraphs(note);
-        let mut pic_count = 0usize;
-        let mut para_nodes = Vec::new();
-        let mut all_pics = Vec::new();
-        for (i, p) in paras.iter().enumerate() {
-            let index = i + 1;
-            let (pid, _) = para::para_stable_id_in(&inspect_id, p, index);
-            let pics = picture::collect_pictures(p, &pid)?;
-            pic_count += pics.len();
-            let mut node = para_json(
-                p,
-                index,
-                Some(&inspect_id),
-                Some(pics.len()),
-                Some(0),
-                false,
-            );
-            if expand_pics {
-                node["pictures"] = Value::Array(picture::pictures_json(&pics));
-            }
-            format::maybe_runs(&mut node, p, expand_runs);
-            all_pics.extend(pics);
-            para_nodes.push(node);
-        }
+        let media = story_media(
+            pkg,
+            &part,
+            note,
+            &inspect_id,
+            expand_pics,
+            expand_txbx,
+            expand_txbx_content,
+            expand_charts,
+            expand_smartart,
+            expand_runs,
+        )?;
         let mut node = json!({
             "id": inspect_id,
             "noteId": note_id,
             "type": "normal",
             "host": host,
-            "paraCount": paras.len(),
-            "pictureCount": pic_count,
+            "paraCount": media.para_count,
+            "pictureCount": media.pic_count,
+            "textBoxCount": media.box_count,
+            "chartCount": media.chart_count,
+            "smartArtCount": media.smart_art_count,
         });
-        if expand_pics {
-            node["pictures"] = Value::Array(picture::pictures_json(&all_pics));
-        }
-        node["paragraphs"] = Value::Array(para_nodes);
+        attach_story_lists(
+            &mut node,
+            &media,
+            expand_pics,
+            expand_txbx,
+            expand_charts,
+            expand_smartart,
+        );
         users.push(node);
     }
     let mut seps = Vec::new();
@@ -610,6 +643,10 @@ fn comments_array(
     doc_part: &str,
     coverage: &Option<comments::CommentCoverage>,
     expand_pics: bool,
+    expand_txbx: bool,
+    expand_txbx_content: bool,
+    expand_charts: bool,
+    expand_smartart: bool,
     expand_runs: bool,
 ) -> Result<Value, Error> {
     let Some(part) = comments::part_name(pkg, doc_part)? else {
@@ -637,30 +674,18 @@ fn comments_array(
         } else {
             "normal"
         };
-        let paras = para::collect_paragraphs(comment);
-        let mut pic_count = 0usize;
-        let mut para_nodes = Vec::new();
-        let mut all_pics = Vec::new();
-        for (i, p) in paras.iter().enumerate() {
-            let index = i + 1;
-            let (pid, _) = para::para_stable_id_in(&inspect_id, p, index);
-            let pics = picture::collect_pictures(p, &pid)?;
-            pic_count += pics.len();
-            let mut node = para_json(
-                p,
-                index,
-                Some(&inspect_id),
-                Some(pics.len()),
-                Some(0),
-                false,
-            );
-            if expand_pics {
-                node["pictures"] = Value::Array(picture::pictures_json(&pics));
-            }
-            format::maybe_runs(&mut node, p, expand_runs);
-            all_pics.extend(pics);
-            para_nodes.push(node);
-        }
+        let media = story_media(
+            pkg,
+            &part,
+            comment,
+            &inspect_id,
+            expand_pics,
+            expand_txbx,
+            expand_txbx_content,
+            expand_charts,
+            expand_smartart,
+            expand_runs,
+        )?;
         let start = coverage
             .as_ref()
             .and_then(|c| c.start.get(&w_id))
@@ -682,16 +707,155 @@ fn comments_array(
             "kind": kind,
             "start": start,
             "end": end,
-            "paraCount": paras.len(),
-            "pictureCount": pic_count,
+            "paraCount": media.para_count,
+            "pictureCount": media.pic_count,
+            "textBoxCount": media.box_count,
+            "chartCount": media.chart_count,
+            "smartArtCount": media.smart_art_count,
         });
-        if expand_pics {
-            node["pictures"] = Value::Array(picture::pictures_json(&all_pics));
-        }
-        node["paragraphs"] = Value::Array(para_nodes);
+        attach_story_lists(
+            &mut node,
+            &media,
+            expand_pics,
+            expand_txbx,
+            expand_charts,
+            expand_smartart,
+        );
         out.push(node);
     }
     Ok(Value::Array(out))
+}
+
+struct StoryMedia {
+    para_count: usize,
+    pic_count: usize,
+    box_count: usize,
+    chart_count: usize,
+    smart_art_count: usize,
+    pictures: Vec<picture::PicInfo>,
+    text_boxes: Vec<Value>,
+    charts: Vec<Value>,
+    smart_arts: Vec<Value>,
+    paragraphs: Vec<Value>,
+}
+
+fn story_media(
+    pkg: &Package,
+    host_part: &str,
+    story: &crate::xml::Element,
+    container_id: &str,
+    expand_pics: bool,
+    expand_txbx: bool,
+    expand_txbx_content: bool,
+    expand_charts: bool,
+    expand_smartart: bool,
+    expand_runs: bool,
+) -> Result<StoryMedia, Error> {
+    let paras = para::collect_paragraphs(story);
+    let mut all_boxes = Vec::new();
+    for (i, p) in paras.iter().enumerate() {
+        let (pid, _) = para::para_stable_id_in(container_id, p, i + 1);
+        all_boxes.extend(textbox::collect_textboxes(p, &pid)?);
+    }
+    textbox::resolve_links(&mut all_boxes);
+    let mut pic_count = 0usize;
+    let mut chart_count = 0usize;
+    let mut smart_art_count = 0usize;
+    let mut all_pics = Vec::new();
+    let mut charts_list = Vec::new();
+    let mut smart_list = Vec::new();
+    let mut listed_boxes = Vec::new();
+    let mut para_nodes = Vec::new();
+    for (i, p) in paras.iter().enumerate() {
+        let index = i + 1;
+        let (pid, _) = para::para_stable_id_in(container_id, p, index);
+        let pics = picture::collect_pictures(p, &pid)?;
+        pic_count += pics.len();
+        chart_count += charts::count_charts(p)?;
+        smart_art_count += smartart::count_smartarts(p)?;
+        let mine: Vec<_> = boxes_for_para(&all_boxes, &pid)
+            .into_iter()
+            .cloned()
+            .collect();
+        let mut node = para_json(
+            p,
+            index,
+            Some(container_id),
+            Some(pics.len()),
+            Some(mine.len()),
+            false,
+        );
+        if expand_pics {
+            node["pictures"] = Value::Array(picture::pictures_json(&pics));
+        }
+        if expand_txbx {
+            let json_boxes = textbox::textboxes_json(
+                pkg,
+                host_part,
+                p,
+                &pid,
+                &mine,
+                expand_txbx_content,
+                expand_pics,
+                expand_runs,
+                expand_charts,
+                expand_smartart,
+            )?;
+            node["textBoxes"] = Value::Array(json_boxes.clone());
+            listed_boxes.extend(json_boxes);
+        }
+        format::maybe_runs(&mut node, p, expand_runs);
+        all_pics.extend(pics);
+        if expand_charts {
+            charts_list.extend(charts::collect_in_para(pkg, host_part, p, &pid)?);
+        }
+        if expand_smartart {
+            let mut sa_index = 0usize;
+            smart_list.extend(smartart::collect_in_para(
+                pkg,
+                host_part,
+                p,
+                &pid,
+                &mut sa_index,
+            )?);
+        }
+        para_nodes.push(node);
+    }
+    Ok(StoryMedia {
+        para_count: paras.len(),
+        pic_count,
+        box_count: all_boxes.len(),
+        chart_count,
+        smart_art_count,
+        pictures: all_pics,
+        text_boxes: listed_boxes,
+        charts: charts_list,
+        smart_arts: smart_list,
+        paragraphs: para_nodes,
+    })
+}
+
+fn attach_story_lists(
+    node: &mut Value,
+    media: &StoryMedia,
+    expand_pics: bool,
+    expand_txbx: bool,
+    expand_charts: bool,
+    expand_smartart: bool,
+) {
+    if expand_pics {
+        node["pictures"] = Value::Array(picture::pictures_json(&media.pictures));
+    }
+    if expand_txbx {
+        node["textBoxes"] = Value::Array(media.text_boxes.clone());
+    }
+    if expand_charts {
+        node["charts"] = Value::Array(media.charts.clone());
+    }
+    if expand_smartart {
+        node["smartArts"] = Value::Array(media.smart_arts.clone());
+    }
+    node["paragraphs"] = Value::Array(media.paragraphs.clone());
 }
 
 fn stamp_comment_ids(tree: &mut Value, coverage: &comments::CommentCoverage) {

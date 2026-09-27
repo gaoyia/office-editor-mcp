@@ -63,6 +63,7 @@ $order = @(
     'docx-charts'
     'docx-charts-ext'
     'docx-smartart'
+    'docx-container-drawing'
     'pptx-apply'
     'pptx-pictures'
     'pptx-charts'

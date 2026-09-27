@@ -1,4 +1,4 @@
-//! 正文与页眉页脚里的嵌入图表：名单、改数据、插删、改类型。不渲染。
+//! 正文、页眉页脚、文本框、脚注、尾注与批注里的嵌入图表：名单、改数据、插删、改类型。不渲染。
 
 use std::collections::{HashMap, HashSet};
 
@@ -12,9 +12,12 @@ use crate::opc::{
 use crate::xlsx;
 use crate::xml::{self, Document, Element, Node};
 
+use super::comments;
 use super::hf::{HfKind, HfPart, HfType};
-use super::para::{self, BodyPara, ParaTarget};
+use super::notes;
+use super::para::{self, BodyPara, HostPara, ParaTarget, TxbxKey};
 use super::picture::{self, PicKind, WrapKind, WrapPos};
+use super::textbox;
 use super::{A_NS, CT_CHART, REL_CHART, REL_NS};
 
 pub const CHART_NS: &str = "http://schemas.openxmlformats.org/drawingml/2006/chart";
@@ -155,18 +158,33 @@ pub enum ChartTarget {
         para: BodyPara,
         key: ChartKey,
     },
+    InTextBox {
+        host: HostPara,
+        box_key: TxbxKey,
+        para: BodyPara,
+        key: ChartKey,
+    },
+    InNote {
+        kind: para::NoteKind,
+        note_id: String,
+        para: BodyPara,
+        key: ChartKey,
+    },
+    InComment {
+        comment_id: String,
+        para: BodyPara,
+        key: ChartKey,
+    },
 }
 
 impl ChartTarget {
-    fn para(&self) -> &BodyPara {
-        match self {
-            Self::Body { para, .. } | Self::HeaderFooter { para, .. } => para,
-        }
-    }
-
     fn key(&self) -> &ChartKey {
         match self {
-            Self::Body { key, .. } | Self::HeaderFooter { key, .. } => key,
+            Self::Body { key, .. }
+            | Self::HeaderFooter { key, .. }
+            | Self::InTextBox { key, .. }
+            | Self::InNote { key, .. }
+            | Self::InComment { key, .. } => key,
         }
     }
 }
@@ -377,18 +395,6 @@ pub fn parse_chart_id_at(id: &str, path: &str) -> Result<ChartTarget, Error> {
             path.to_string(),
         ));
     };
-    if left.contains("/txbx:")
-        || left.starts_with("footnote:")
-        || left.starts_with("endnote:")
-        || left.starts_with("comment:")
-    {
-        return Err(Error::with_path(
-            ErrorKind::InvalidId {
-                reason: IdReason::ChartPrefix,
-            },
-            path.to_string(),
-        ));
-    }
     let key = parse_chart_key(key_s, path)?;
     match para::parse_para_id_at(left, path)? {
         ParaTarget::Body(para) => Ok(ChartTarget::Body { para, key }),
@@ -404,12 +410,31 @@ pub fn parse_chart_id_at(id: &str, path: &str) -> Result<ChartTarget, Error> {
             para,
             key,
         }),
-        _ => Err(Error::with_path(
-            ErrorKind::InvalidId {
-                reason: IdReason::ChartPrefix,
-            },
-            path.to_string(),
-        )),
+        ParaTarget::InTextBox {
+            host,
+            key: box_key,
+            para,
+        } => Ok(ChartTarget::InTextBox {
+            host,
+            box_key,
+            para,
+            key,
+        }),
+        ParaTarget::InNote {
+            kind,
+            note_id,
+            para,
+        } => Ok(ChartTarget::InNote {
+            kind,
+            note_id,
+            para,
+            key,
+        }),
+        ParaTarget::InComment { comment_id, para } => Ok(ChartTarget::InComment {
+            comment_id,
+            para,
+            key,
+        }),
     }
 }
 
@@ -469,14 +494,12 @@ pub fn parse_insert_para_id(id: &str, op_index: usize) -> Result<ParaTarget, Err
         }
     }
     let target = para::parse_para_id_at(id, &path)?;
-    match target {
-        ParaTarget::Body(_) | ParaTarget::HeaderFooter { .. } => Ok(target),
-        _ => Err(Error::with_path(
-            ErrorKind::InvalidId {
-                reason: IdReason::InsertChartNeedsPara,
-            },
-            path,
-        )),
+    match &target {
+        ParaTarget::Body(_)
+        | ParaTarget::HeaderFooter { .. }
+        | ParaTarget::InTextBox { .. }
+        | ParaTarget::InNote { .. }
+        | ParaTarget::InComment { .. } => Ok(target),
     }
 }
 
@@ -525,7 +548,17 @@ pub fn apply_insert(
     op: &InsertChartOp,
     i: usize,
 ) -> Result<(), Error> {
-    let host = part_for_para(catalog, doc_part, &op.para, &op.id, i)?;
+    let host = part_for_para(pkg, catalog, doc_part, &op.para, &op.id, i)?;
+    if let ParaTarget::InComment { comment_id, .. } = &op.para {
+        let doc = load_part(pkg, docs, &host)?;
+        let comment = comments::find_comment(&doc.root, comment_id).ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::ParaNotFound { id: op.id.clone() },
+                format!("ops[{i}].id"),
+            )
+        })?;
+        comments::reject_ink(comment, &op.id, i)?;
+    }
     {
         let doc = load_part(pkg, docs, &host)?;
         if find_para_mut(&mut doc.root, &op.para).is_none() {
@@ -633,7 +666,7 @@ pub fn apply_delete(
     };
     {
         let doc = load_part(pkg, docs, &host)?;
-        if !remove_chart(&mut doc.root, op.target.key()) {
+        if !remove_chart_from_target(&mut doc.root, &op.target) {
             return Err(Error::with_path(
                 ErrorKind::ChartNotFound { id: op.id.clone() },
                 format!("ops[{i}].id"),
@@ -1546,8 +1579,41 @@ fn matches_key(drawing: &Element, key: &ChartKey, index: usize) -> bool {
 }
 
 fn find_drawing<'a>(root: &'a Element, target: &ChartTarget) -> Option<&'a Element> {
-    let p = para::find_paragraph(root, target.para())?;
+    let p = find_target_para(root, target)?;
     find_chart_walk(p, &mut 0, target.key())
+}
+
+fn find_target_para<'a>(root: &'a Element, target: &ChartTarget) -> Option<&'a Element> {
+    match target {
+        ChartTarget::Body { para, .. } | ChartTarget::HeaderFooter { para, .. } => {
+            para::find_paragraph(root, para)
+        }
+        ChartTarget::InTextBox {
+            host,
+            box_key,
+            para,
+            ..
+        } => {
+            let host_p = para::find_paragraph(root, host.body())?;
+            let content = textbox::find_txbx_content_by_key(host_p, box_key)?;
+            para::find_paragraph_in_txbx(content, para)
+        }
+        ChartTarget::InNote {
+            kind,
+            note_id,
+            para,
+            ..
+        } => {
+            let note = notes::find_user_note(root, *kind, note_id)?;
+            para::find_paragraph(note, para)
+        }
+        ChartTarget::InComment {
+            comment_id, para, ..
+        } => {
+            let comment = comments::find_comment(root, comment_id)?;
+            para::find_paragraph(comment, para)
+        }
+    }
 }
 
 fn find_chart_walk<'a>(el: &'a Element, idx: &mut usize, key: &ChartKey) -> Option<&'a Element> {
@@ -1580,8 +1646,44 @@ fn find_chart_walk<'a>(el: &'a Element, idx: &mut usize, key: &ChartKey) -> Opti
 }
 
 fn find_drawing_mut<'a>(root: &'a mut Element, target: &ChartTarget) -> Option<&'a mut Element> {
-    let p = para::find_paragraph_mut(root, target.para())?;
+    let p = find_target_para_mut(root, target)?;
     find_chart_mut_walk(p, &mut 0, target.key())
+}
+
+fn find_target_para_mut<'a>(
+    root: &'a mut Element,
+    target: &ChartTarget,
+) -> Option<&'a mut Element> {
+    match target {
+        ChartTarget::Body { para, .. } | ChartTarget::HeaderFooter { para, .. } => {
+            para::find_paragraph_mut(root, para)
+        }
+        ChartTarget::InTextBox {
+            host,
+            box_key,
+            para,
+            ..
+        } => {
+            let host_p = para::find_paragraph_mut(root, host.body())?;
+            let content = textbox::find_txbx_content_by_key_mut(host_p, box_key)?;
+            para::find_paragraph_in_txbx_mut(content, para)
+        }
+        ChartTarget::InNote {
+            kind,
+            note_id,
+            para,
+            ..
+        } => {
+            let note = notes::find_user_note_mut(root, *kind, note_id)?;
+            para::find_paragraph_mut(note, para)
+        }
+        ChartTarget::InComment {
+            comment_id, para, ..
+        } => {
+            let comment = comments::find_comment_mut(root, comment_id)?;
+            para::find_paragraph_mut(comment, para)
+        }
+    }
 }
 
 fn find_chart_mut_walk<'a>(
@@ -1616,6 +1718,13 @@ fn find_chart_mut_walk<'a>(
         }
     }
     None
+}
+
+fn remove_chart_from_target(root: &mut Element, target: &ChartTarget) -> bool {
+    match find_target_para_mut(root, target) {
+        Some(p) => remove_chart(p, target.key()),
+        None => false,
+    }
 }
 
 fn remove_chart(root: &mut Element, key: &ChartKey) -> bool {
@@ -1808,6 +1917,7 @@ fn join_t(el: &Element) -> String {
 }
 
 fn part_for_para(
+    pkg: &Package,
     catalog: &[HfPart],
     doc_part: &str,
     para: &ParaTarget,
@@ -1828,17 +1938,65 @@ fn part_for_para(
             })?;
             Ok(item.part.clone())
         }
-        _ => Err(Error::with_path(
-            ErrorKind::InvalidId {
-                reason: IdReason::InsertChartNeedsPara,
-            },
-            format!("ops[{i}].id"),
-        )),
+        ParaTarget::InTextBox { host, .. } => {
+            part_for_host_para(pkg, catalog, doc_part, host, id, i)
+        }
+        ParaTarget::InNote { kind, .. } => {
+            notes::part_name(pkg, doc_part, *kind)?.ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::ParaNotFound { id: id.to_string() },
+                    format!("ops[{i}].id"),
+                )
+            })
+        }
+        ParaTarget::InComment { .. } => comments::part_name(pkg, doc_part)?.ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::ParaNotFound { id: id.to_string() },
+                format!("ops[{i}].id"),
+            )
+        }),
+    }
+}
+
+fn part_for_host_para(
+    pkg: &Package,
+    catalog: &[HfPart],
+    doc_part: &str,
+    host: &HostPara,
+    id: &str,
+    i: usize,
+) -> Result<String, Error> {
+    match host {
+        HostPara::Body(_) => Ok(doc_part.to_string()),
+        HostPara::HeaderFooter {
+            kind, hf_type, n, ..
+        } => {
+            let container_id = format!("{}:{}:{n}", kind.as_str(), hf_type.as_str());
+            let item = super::hf::find_by_id(catalog, &container_id).ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::ParaNotFound { id: id.to_string() },
+                    format!("ops[{i}].id"),
+                )
+            })?;
+            Ok(item.part.clone())
+        }
+        HostPara::InNote { kind, .. } => notes::part_name(pkg, doc_part, *kind)?.ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::ParaNotFound { id: id.to_string() },
+                format!("ops[{i}].id"),
+            )
+        }),
+        HostPara::InComment { .. } => comments::part_name(pkg, doc_part)?.ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::ParaNotFound { id: id.to_string() },
+                format!("ops[{i}].id"),
+            )
+        }),
     }
 }
 
 fn part_for_target(
-    _pkg: &Package,
+    pkg: &Package,
     catalog: &[HfPart],
     doc_part: &str,
     target: &ChartTarget,
@@ -1859,6 +2017,49 @@ fn part_for_target(
             })?;
             Ok(item.part.clone())
         }
+        ChartTarget::InTextBox { host, .. } => match host {
+            HostPara::Body(_) => Ok(doc_part.to_string()),
+            HostPara::HeaderFooter {
+                kind, hf_type, n, ..
+            } => {
+                let container_id = format!("{}:{}:{n}", kind.as_str(), hf_type.as_str());
+                let item = super::hf::find_by_id(catalog, &container_id).ok_or_else(|| {
+                    Error::with_path(
+                        ErrorKind::ChartNotFound { id: id.to_string() },
+                        path.to_string(),
+                    )
+                })?;
+                Ok(item.part.clone())
+            }
+            HostPara::InNote { kind, .. } => {
+                notes::part_name(pkg, doc_part, *kind)?.ok_or_else(|| {
+                    Error::with_path(
+                        ErrorKind::ChartNotFound { id: id.to_string() },
+                        path.to_string(),
+                    )
+                })
+            }
+            HostPara::InComment { .. } => comments::part_name(pkg, doc_part)?.ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::ChartNotFound { id: id.to_string() },
+                    path.to_string(),
+                )
+            }),
+        },
+        ChartTarget::InNote { kind, .. } => {
+            notes::part_name(pkg, doc_part, *kind)?.ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::ChartNotFound { id: id.to_string() },
+                    path.to_string(),
+                )
+            })
+        }
+        ChartTarget::InComment { .. } => comments::part_name(pkg, doc_part)?.ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::ChartNotFound { id: id.to_string() },
+                path.to_string(),
+            )
+        }),
     }
 }
 
@@ -1867,7 +2068,23 @@ fn find_para_mut<'a>(root: &'a mut Element, target: &ParaTarget) -> Option<&'a m
         ParaTarget::Body(p) | ParaTarget::HeaderFooter { para: p, .. } => {
             para::find_paragraph_mut(root, p)
         }
-        _ => None,
+        ParaTarget::InTextBox { host, key, para } => {
+            let host_p = para::find_paragraph_mut(root, host.body())?;
+            let content = textbox::find_txbx_content_by_key_mut(host_p, key)?;
+            para::find_paragraph_in_txbx_mut(content, para)
+        }
+        ParaTarget::InNote {
+            kind,
+            note_id,
+            para,
+        } => {
+            let note = notes::find_user_note_mut(root, *kind, note_id)?;
+            para::find_paragraph_mut(note, para)
+        }
+        ParaTarget::InComment { comment_id, para } => {
+            let comment = comments::find_comment_mut(root, comment_id)?;
+            para::find_paragraph_mut(comment, para)
+        }
     }
 }
 

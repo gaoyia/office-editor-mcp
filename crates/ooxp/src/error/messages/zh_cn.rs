@@ -427,6 +427,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::InvalidXlsxAnchor => "anchor 必须是 oneCell 或 twoCell".into(),
         ErrorKind::InvalidXlsxEditAs => "editAs 必须是 twoCell、oneCell 或 absolute".into(),
         ErrorKind::NotesSlideImage => "不能改备注页上的幻灯片缩略图占位符".into(),
+        ErrorKind::GraphicInRestrictedStory => {
+            "不能把图形对象放到文本框、标注、批注、脚注或尾注中".into()
+        }
         ErrorKind::SharedFormulaMaster { cell } => format!(
             "{cell} 是共享公式的主格，改它会让引用同一 si 的单元格失去公式；请先把那些单元格改成各自独立的公式"
         ),

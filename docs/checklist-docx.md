@@ -43,6 +43,7 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 | Mm1–Mm6 | ✅ | Word 16.0：`docx-math.ps1`，6 PASS / 0 FAIL。无 `scope.maths` 时只有 `mathCount`；inline 插入后 `math:1` / `kind=inline`；打开无修复且 `OMaths.Count=1`、`Type=1`；`setMath` 后仍是公式；display `Type=0`；删后 `mathCount=0` 标题还在；页眉 `mathCount=1` 且无修复。标题栏无 Repair |
 | Cc1–Cc6 | ✅ | Word 16.0：`docx-sdt.ps1`，6 PASS / 0 FAIL。无 `scope.contentControls` 时只有 `contentControlCount`；plainText 插入后 `sdt:1` / `kind=plainText`；打开无修复且 `ContentControls.Count=1`、`Type=1`；`setContentControl` 后仍是纯文本控件；下拉 `Type=4`；删后 `contentControlCount=0` 标题与原文还在；页眉 `contentControlCount=1` 且无修复。标题栏无 Repair |
 | Cf1–Cf6 | ✅ | Word 16.0：`docx-create-full.ps1`，6 PASS / 0 FAIL。两节、饼图、脚注、尾注、批注；标题栏无 Repair。`commentsExtended` 的 CT 须为 `…wordprocessingml.commentsExtended+xml` |
+| Cd1–Cd6 | ✅ | Word 16.0：`docx-container-drawing.ps1`，6 PASS / 0 FAIL。批注内柱形图；注内与批注内 `insertTextBox` 为 `InvalidField`；框内图表根计数不含该图。标题栏无 Repair |
 | O1 | 🚫 | 领域层不做原样保存，与 xlsx 清单相同。零脏写回见 OPC 库测试。Word 另存 create 产物见 `docx-O1-word-resave`。此前记的 `SaveAs2` 挂起，拆分后重跑没再出现，一秒内返回 |
 
 ## create
@@ -443,6 +444,19 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 | Cf4 | 尾注 | `endnoteCount` 为 1，注内可见文字为写入的原文 |
 | Cf5 | 批注 | `commentCount` 为 1，批注内可见文字为写入的原文 |
 | Cf6 | 打开 | Word 打开后无修复；能看见饼图、脚注、尾注与批注 |
+
+## 容器内 drawing
+
+文本框、脚注、尾注、批注里的图表与 SmartArt 进树，op 与正文相同。注内与批注内的文本框若已在文件里则进树；`insertTextBox` 不往这些故事里写，与 Word 相同。手测脚本 `manual-check/office/cases/docx-container-drawing.ps1`。
+
+| 序号 | 检查 | 通过标准 |
+| --- | --- | --- |
+| Cd1 | 批注内柱形图 | 批注段落上 `insertChart` 后，给了 `scope.comments` 与 `scope.charts` 时批注上 `chartCount` 为 1，图表 id 以 `comment:` 开头；根上 `chartCount` 仍等于正文图表数 |
+| Cd2 | 批注内打开 | Word 打开后无修复，审阅窗格能看见该批注 |
+| Cd3 | 注内文本框 | 对脚注段落发 `insertTextBox` 报 `InvalidField`，不写输出文件 |
+| Cd4 | 批注内文本框 | 对批注段落发 `insertTextBox` 报 `InvalidField`，不写输出文件 |
+| Cd5 | 框内图表 | 正文框内段落上 `insertChart` 后，框上 `chartCount` 为 1，根上 `chartCount` 不含该图 |
+| Cd6 | 容器 id | 对批注容器 id 发 `insertChart`、对框 id 发 `insertTextBox` 均 `InvalidId` |
 
 ## 原样保存（opc 验收）
 

@@ -3,10 +3,13 @@
 use serde_json::{json, Value};
 
 use crate::error::{Error, ErrorKind};
+use crate::opc::Package;
 use crate::xml::{Element, Node};
 
+use super::charts;
 use super::para::{self, BodyPara, TxbxKey, TxbxTarget};
 use super::picture::{self, PicKind, WrapKind};
+use super::smartart;
 use super::{format, MC_NS, W14_NS, WP_NS};
 
 /// 现代文本框命名空间（MS-DOCX WordprocessingShape）。
@@ -26,6 +29,8 @@ pub struct TxbxInfo {
     pub stable: bool,
     pub para_count: usize,
     pub picture_count: usize,
+    pub chart_count: usize,
+    pub smart_art_count: usize,
     pub story_id: Option<String>,
     pub seq: u32,
     pub prev: Option<String>,
@@ -80,12 +85,16 @@ pub fn resolve_links(boxes: &mut [TxbxInfo]) {
 }
 
 pub fn textboxes_json(
+    pkg: &Package,
+    host_part: &str,
     host: &Element,
     host_para_id: &str,
     boxes: &[TxbxInfo],
     content: bool,
     pictures: bool,
     runs: bool,
+    charts: bool,
+    smart_art: bool,
 ) -> Result<Vec<Value>, Error> {
     let mut out = Vec::new();
     for b in boxes {
@@ -103,10 +112,25 @@ pub fn textboxes_json(
             },
             "paraCount": b.para_count,
             "pictureCount": b.picture_count,
+            "chartCount": b.chart_count,
+            "smartArtCount": b.smart_art_count,
             "stable": b.stable,
         });
         if content {
             fill_one_box(host, host_para_id, b, &mut node, pictures, runs)?;
+        }
+        if charts {
+            node["charts"] =
+                Value::Array(collect_inner_charts(pkg, host_part, host, host_para_id, b)?);
+        }
+        if smart_art {
+            node["smartArts"] = Value::Array(collect_inner_smartarts(
+                pkg,
+                host_part,
+                host,
+                host_para_id,
+                b,
+            )?);
         }
         out.push(node);
     }
@@ -177,7 +201,7 @@ fn txbx_from_drawing(drawing: &Element, host: &str, index: usize) -> Result<Txbx
     let (doc_pr_id, name) = doc_pr(drawing);
     let (id, stable) = box_id(host, &doc_pr_id, index);
     let content = find_txbx_content(drawing);
-    let (para_count, picture_count) = content_counts(content, &id)?;
+    let (para_count, picture_count, chart_count, smart_art_count) = content_counts(content, &id)?;
     let (story_id, seq) = story_of(drawing);
     Ok(TxbxInfo {
         id,
@@ -190,6 +214,8 @@ fn txbx_from_drawing(drawing: &Element, host: &str, index: usize) -> Result<Txbx
         stable,
         para_count,
         picture_count,
+        chart_count,
+        smart_art_count,
         story_id,
         seq,
         prev: None,
@@ -208,7 +234,7 @@ fn txbx_from_wsp(
     let (doc_pr_id, name) = cnv_pr(wsp);
     let (id, stable) = box_id(host, &doc_pr_id, index);
     let content = find_txbx_content(wsp);
-    let (para_count, picture_count) = content_counts(content, &id)?;
+    let (para_count, picture_count, chart_count, smart_art_count) = content_counts(content, &id)?;
     let (story_id, seq) = story_of(wsp);
     Ok(TxbxInfo {
         id,
@@ -221,6 +247,8 @@ fn txbx_from_wsp(
         stable,
         para_count,
         picture_count,
+        chart_count,
+        smart_art_count,
         story_id,
         seq,
         prev: None,
@@ -235,17 +263,65 @@ fn box_id(host: &str, doc_pr_id: &Option<String>, index: usize) -> (String, bool
     }
 }
 
-fn content_counts(content: Option<&Element>, box_id: &str) -> Result<(usize, usize), Error> {
+fn content_counts(
+    content: Option<&Element>,
+    box_id: &str,
+) -> Result<(usize, usize, usize, usize), Error> {
     let Some(content) = content else {
-        return Ok((0, 0));
+        return Ok((0, 0, 0, 0));
     };
     let paras = para::collect_paragraphs_in_txbx(content);
     let mut pics = 0usize;
+    let mut chart_n = 0usize;
+    let mut smart_n = 0usize;
     for (i, p) in paras.iter().enumerate() {
         let (pid, _) = para::para_stable_id_in(box_id, p, i + 1);
         pics += picture::collect_pictures(p, &pid)?.len();
+        chart_n += charts::count_charts(p)?;
+        smart_n += smartart::count_smartarts(p)?;
     }
-    Ok((paras.len(), pics))
+    Ok((paras.len(), pics, chart_n, smart_n))
+}
+
+fn collect_inner_charts(
+    pkg: &Package,
+    host_part: &str,
+    host: &Element,
+    host_para_id: &str,
+    info: &TxbxInfo,
+) -> Result<Vec<Value>, Error> {
+    let Some(content) = find_txbx_content_for(host, host_para_id, &info.id)? else {
+        return Ok(Vec::new());
+    };
+    let paras = para::collect_paragraphs_in_txbx(content);
+    let mut out = Vec::new();
+    for (i, p) in paras.iter().enumerate() {
+        let (pid, _) = para::para_stable_id_in(&info.id, p, i + 1);
+        out.extend(charts::collect_in_para(pkg, host_part, p, &pid)?);
+    }
+    Ok(out)
+}
+
+fn collect_inner_smartarts(
+    pkg: &Package,
+    host_part: &str,
+    host: &Element,
+    host_para_id: &str,
+    info: &TxbxInfo,
+) -> Result<Vec<Value>, Error> {
+    let Some(content) = find_txbx_content_for(host, host_para_id, &info.id)? else {
+        return Ok(Vec::new());
+    };
+    let paras = para::collect_paragraphs_in_txbx(content);
+    let mut out = Vec::new();
+    for (i, p) in paras.iter().enumerate() {
+        let (pid, _) = para::para_stable_id_in(&info.id, p, i + 1);
+        let mut index = 0usize;
+        out.extend(smartart::collect_in_para(
+            pkg, host_part, p, &pid, &mut index,
+        )?);
+    }
+    Ok(out)
 }
 
 fn find_txbx_content_for<'a>(
@@ -1177,7 +1253,7 @@ fn build_textbox_ac(doc_pr: u32, cx: i64, cy: i64, text: &str, para_id: &str) ->
     let mut ac = Element::new("mc:AlternateContent");
     let mut choice = Element::new("mc:Choice").with_attr("Requires", "wps");
     let mut drawing = Element::new("w:drawing");
-    let mut anchor = Element::new("wp:anchor")
+    let mut frame = Element::new("wp:anchor")
         .with_attr("distT", "0")
         .with_attr("distB", "0")
         .with_attr("distL", "114300")
@@ -1188,7 +1264,7 @@ fn build_textbox_ac(doc_pr: u32, cx: i64, cy: i64, text: &str, para_id: &str) ->
         .with_attr("locked", "0")
         .with_attr("layoutInCell", "1")
         .with_attr("allowOverlap", "1");
-    anchor.push_element(
+    frame.push_element(
         Element::new("wp:simplePos")
             .with_attr("x", "0")
             .with_attr("y", "0"),
@@ -1197,31 +1273,44 @@ fn build_textbox_ac(doc_pr: u32, cx: i64, cy: i64, text: &str, para_id: &str) ->
     pos_h.push_element(Element::new("wp:align").with_text("left"));
     let mut pos_v = Element::new("wp:positionV").with_attr("relativeFrom", "margin");
     pos_v.push_element(Element::new("wp:align").with_text("top"));
-    anchor.push_element(pos_h);
-    anchor.push_element(pos_v);
-    anchor.push_element(
+    frame.push_element(pos_h);
+    frame.push_element(pos_v);
+    frame.push_element(
         Element::new("wp:extent")
             .with_attr("cx", cx.to_string())
             .with_attr("cy", cy.to_string()),
     );
-    anchor.push_element(
+    frame.push_element(
         Element::new("wp:effectExtent")
             .with_attr("l", "0")
             .with_attr("t", "0")
             .with_attr("r", "0")
             .with_attr("b", "0"),
     );
-    anchor.push_element(Element::new("wp:wrapSquare").with_attr("wrapText", "bothSides"));
-    anchor.push_element(
+    frame.push_element(Element::new("wp:wrapSquare").with_attr("wrapText", "bothSides"));
+    frame.push_element(
         Element::new("wp:docPr")
             .with_attr("id", doc_pr.to_string())
             .with_attr("name", format!("文本框 {doc_pr}")),
     );
     let mut frame_pr = Element::new("wp:cNvGraphicFramePr");
     frame_pr.push_element(Element::new("a:graphicFrameLocks").with_attr("noChangeAspect", "1"));
-    anchor.push_element(frame_pr);
+    frame.push_element(frame_pr);
     let mut graphic = Element::new("a:graphic");
     let mut data = Element::new("a:graphicData").with_attr("uri", WPS_NS);
+    data.push_element(build_textbox_wsp(cx, cy, text, para_id));
+    graphic.push_element(data);
+    frame.push_element(graphic);
+    drawing.push_element(frame);
+    choice.push_element(drawing);
+    ac.push_element(choice);
+    let mut fallback = Element::new("mc:Fallback");
+    fallback.push_element(Element::new("w:pict"));
+    ac.push_element(fallback);
+    ac
+}
+
+fn build_textbox_wsp(cx: i64, cy: i64, text: &str, para_id: &str) -> Element {
     let mut wsp = Element::new("wps:wsp");
     wsp.push_element(Element::new("wps:cNvSpPr").with_attr("txBox", "1"));
     let mut sp = Element::new("wps:spPr");
@@ -1275,16 +1364,7 @@ fn build_textbox_ac(doc_pr: u32, cx: i64, cy: i64, text: &str, para_id: &str) ->
         .with_attr("bIns", "45720");
     body_pr.push_element(Element::new("a:noAutofit"));
     wsp.push_element(body_pr);
-    data.push_element(wsp);
-    graphic.push_element(data);
-    anchor.push_element(graphic);
-    drawing.push_element(anchor);
-    choice.push_element(drawing);
-    ac.push_element(choice);
-    let mut fallback = Element::new("mc:Fallback");
-    fallback.push_element(Element::new("w:pict"));
-    ac.push_element(fallback);
-    ac
+    wsp
 }
 
 fn ensure_sp_pr(wsp: &mut Element) -> &mut Element {

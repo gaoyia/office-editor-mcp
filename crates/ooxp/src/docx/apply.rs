@@ -1196,7 +1196,7 @@ fn apply_para_text(
             dirty.insert(part_name, ());
         }
         ParaTarget::InTextBox { host, key, para } => {
-            let part_name = part_for_host(catalog, doc_part, host, &op.id, i)?;
+            let part_name = part_for_host(pkg, catalog, doc_part, host, &op.id, i)?;
             let doc = load_part(pkg, docs, &part_name)?;
             let host_p = para::find_paragraph_mut(&mut doc.root, host.body()).ok_or_else(|| {
                 Error::with_path(
@@ -2104,7 +2104,9 @@ fn part_for_pic(
 ) -> Result<String, Error> {
     match target {
         picture::PicTarget::Body { .. } => Ok(doc_part.to_string()),
-        picture::PicTarget::InTextBox { host, .. } => part_for_host(catalog, doc_part, host, id, i),
+        picture::PicTarget::InTextBox { host, .. } => {
+            part_for_host(pkg, catalog, doc_part, host, id, i)
+        }
         picture::PicTarget::HeaderFooter {
             kind, hf_type, n, ..
         } => {
@@ -2289,7 +2291,9 @@ fn apply_insert_pic(
         ParaTarget::HeaderFooter {
             kind, hf_type, n, ..
         } => part_for_hf(catalog, *kind, *hf_type, *n, &op.id, i)?,
-        ParaTarget::InTextBox { host, .. } => part_for_host(catalog, doc_part, host, &op.id, i)?,
+        ParaTarget::InTextBox { host, .. } => {
+            part_for_host(pkg, catalog, doc_part, host, &op.id, i)?
+        }
         ParaTarget::InNote { kind, .. } => {
             notes::part_name(pkg, doc_part, *kind)?.ok_or_else(|| {
                 Error::with_path(
@@ -2467,6 +2471,7 @@ fn part_for_hf(
 }
 
 fn part_for_host(
+    pkg: &Package,
     catalog: &[hf::HfPart],
     doc_part: &str,
     host: &HostPara,
@@ -2478,17 +2483,30 @@ fn part_for_host(
         HostPara::HeaderFooter {
             kind, hf_type, n, ..
         } => part_for_hf(catalog, *kind, *hf_type, *n, id, i),
+        HostPara::InNote { kind, .. } => notes::part_name(pkg, doc_part, *kind)?.ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::ParaNotFound { id: id.to_string() },
+                format!("ops[{i}].id"),
+            )
+        }),
+        HostPara::InComment { .. } => comments::part_name(pkg, doc_part)?.ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::ParaNotFound { id: id.to_string() },
+                format!("ops[{i}].id"),
+            )
+        }),
     }
 }
 
 fn part_for_txbx(
+    pkg: &Package,
     catalog: &[hf::HfPart],
     doc_part: &str,
     target: &para::TxbxTarget,
     id: &str,
     i: usize,
 ) -> Result<String, Error> {
-    part_for_host(catalog, doc_part, &target.host, id, i)
+    part_for_host(pkg, catalog, doc_part, &target.host, id, i)
 }
 
 fn find_insert_para_mut<'a>(root: &'a mut Element, target: &ParaTarget) -> Option<&'a mut Element> {
@@ -2531,7 +2549,16 @@ fn apply_insert_txbx(
     op: &InsertTextBoxOp,
     i: usize,
 ) -> Result<(), Error> {
-    let part_name = part_for_host(catalog, doc_part, &op.host, &op.id, i)?;
+    if matches!(
+        &op.host,
+        HostPara::InNote { .. } | HostPara::InComment { .. }
+    ) {
+        return Err(Error::with_path(
+            ErrorKind::GraphicInRestrictedStory,
+            format!("ops[{i}].id"),
+        ));
+    }
+    let part_name = part_for_host(pkg, catalog, doc_part, &op.host, &op.id, i)?;
     let doc = load_part(pkg, docs, &part_name)?;
     textbox::ensure_textbox_ns(&mut doc.root);
     let doc_pr = picture::next_docpr_id(&doc.root);
@@ -2560,7 +2587,7 @@ fn apply_delete_txbx(
     op: &DeleteTextBoxOp,
     i: usize,
 ) -> Result<(), Error> {
-    let part_name = part_for_txbx(catalog, doc_part, &op.target, &op.id, i)?;
+    let part_name = part_for_txbx(pkg, catalog, doc_part, &op.target, &op.id, i)?;
     let doc = load_part(pkg, docs, &part_name)?;
     let story = {
         let host = para::find_paragraph(&doc.root, op.target.host.body())
@@ -2591,7 +2618,7 @@ fn apply_txbx_size(
     op: &SetTextBoxSizeOp,
     i: usize,
 ) -> Result<(), Error> {
-    let part_name = part_for_txbx(catalog, doc_part, &op.target, &op.id, i)?;
+    let part_name = part_for_txbx(pkg, catalog, doc_part, &op.target, &op.id, i)?;
     let doc = load_part(pkg, docs, &part_name)?;
     let host = para::find_paragraph_mut(&mut doc.root, op.target.host.body())
         .ok_or_else(|| txbx_missing(&op.id, i))?;
@@ -2613,7 +2640,7 @@ fn apply_txbx_wrap(
     op: &SetTextBoxWrapOp,
     i: usize,
 ) -> Result<(), Error> {
-    let part_name = part_for_txbx(catalog, doc_part, &op.target, &op.id, i)?;
+    let part_name = part_for_txbx(pkg, catalog, doc_part, &op.target, &op.id, i)?;
     let doc = load_part(pkg, docs, &part_name)?;
     textbox::ensure_textbox_ns(&mut doc.root);
     let host = para::find_paragraph_mut(&mut doc.root, op.target.host.body())
@@ -2635,7 +2662,7 @@ fn apply_txbx_fill(
     op: &SetTextBoxFillOp,
     i: usize,
 ) -> Result<(), Error> {
-    let part_name = part_for_txbx(catalog, doc_part, &op.target, &op.id, i)?;
+    let part_name = part_for_txbx(pkg, catalog, doc_part, &op.target, &op.id, i)?;
     let doc = load_part(pkg, docs, &part_name)?;
     textbox::ensure_textbox_ns(&mut doc.root);
     let host = para::find_paragraph_mut(&mut doc.root, op.target.host.body())
@@ -2657,7 +2684,7 @@ fn apply_txbx_line(
     op: &SetTextBoxLineOp,
     i: usize,
 ) -> Result<(), Error> {
-    let part_name = part_for_txbx(catalog, doc_part, &op.target, &op.id, i)?;
+    let part_name = part_for_txbx(pkg, catalog, doc_part, &op.target, &op.id, i)?;
     let doc = load_part(pkg, docs, &part_name)?;
     textbox::ensure_textbox_ns(&mut doc.root);
     let host = para::find_paragraph_mut(&mut doc.root, op.target.host.body())
@@ -2679,7 +2706,7 @@ fn apply_txbx_dir(
     op: &SetTextBoxDirectionOp,
     i: usize,
 ) -> Result<(), Error> {
-    let part_name = part_for_txbx(catalog, doc_part, &op.target, &op.id, i)?;
+    let part_name = part_for_txbx(pkg, catalog, doc_part, &op.target, &op.id, i)?;
     let doc = load_part(pkg, docs, &part_name)?;
     textbox::ensure_textbox_ns(&mut doc.root);
     let host = para::find_paragraph_mut(&mut doc.root, op.target.host.body())
@@ -2703,7 +2730,7 @@ fn apply_insert_para(
 ) -> Result<(), Error> {
     match &op.place {
         InsertParaPlace::TextBox { box_target, after } => {
-            let part_name = part_for_txbx(catalog, doc_part, box_target, &op.id, i)?;
+            let part_name = part_for_txbx(pkg, catalog, doc_part, box_target, &op.id, i)?;
             let doc = load_part(pkg, docs, &part_name)?;
             let new_id = para::next_para_hex(&doc.root);
             let host = para::find_paragraph_mut(&mut doc.root, box_target.host.body())
@@ -2906,7 +2933,7 @@ fn apply_delete_para(
 ) -> Result<(), Error> {
     match &op.inner {
         ParaTarget::InTextBox { host, key, para } => {
-            let part_name = part_for_host(catalog, doc_part, host, &op.id, i)?;
+            let part_name = part_for_host(pkg, catalog, doc_part, host, &op.id, i)?;
             let doc = load_part(pkg, docs, &part_name)?;
             let host_p = para::find_paragraph_mut(&mut doc.root, host.body()).ok_or_else(|| {
                 Error::with_path(
@@ -3149,9 +3176,10 @@ fn apply_txbx_link(
     op: &SetTextBoxLinkOp,
     i: usize,
 ) -> Result<(), Error> {
-    let part_a = part_for_txbx(catalog, doc_part, &op.target, &op.id, i)?;
+    let part_a = part_for_txbx(pkg, catalog, doc_part, &op.target, &op.id, i)?;
     if let Some(next) = &op.next {
         let part_b = part_for_txbx(
+            pkg,
             catalog,
             doc_part,
             next,
@@ -3215,7 +3243,9 @@ fn apply_insert_note(
             n,
             ..
         } => part_for_hf(catalog, *hf_kind, *hf_type, *n, &op.id, i)?,
-        ParaTarget::InTextBox { host, .. } => part_for_host(catalog, doc_part, host, &op.id, i)?,
+        ParaTarget::InTextBox { host, .. } => {
+            part_for_host(pkg, catalog, doc_part, host, &op.id, i)?
+        }
         ParaTarget::InNote { .. } | ParaTarget::InComment { .. } => {
             return Err(Error::with_path(
                 ErrorKind::InvalidId {
@@ -3405,7 +3435,7 @@ fn part_for_para(
         ParaTarget::HeaderFooter {
             kind, hf_type, n, ..
         } => part_for_hf(catalog, *kind, *hf_type, *n, id, i),
-        ParaTarget::InTextBox { host, .. } => part_for_host(catalog, doc_part, host, id, i),
+        ParaTarget::InTextBox { host, .. } => part_for_host(pkg, catalog, doc_part, host, id, i),
         ParaTarget::InNote { kind, .. } => {
             notes::part_name(pkg, doc_part, *kind)?.ok_or_else(|| {
                 Error::with_path(

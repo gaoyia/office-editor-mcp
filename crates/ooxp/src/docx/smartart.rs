@@ -1,4 +1,4 @@
-//! 正文与页眉页脚里的 SmartArt：名单、改字、增删点、插删、配色与版式。不实现版式算法。
+//! 正文、页眉页脚、文本框、脚注、尾注与批注里的 SmartArt：名单、改字、增删点、插删、配色与版式。不实现版式算法。
 
 use std::collections::HashMap;
 
@@ -12,9 +12,12 @@ use crate::smartart::{
 };
 use crate::xml::{self, Document, Element, Node};
 
+use super::comments;
 use super::hf::{HfKind, HfPart, HfType};
-use super::para::{self, BodyPara, ParaTarget};
+use super::notes;
+use super::para::{self, BodyPara, HostPara, ParaTarget, TxbxKey};
 use super::picture::{self, PicKind, WrapKind, WrapPos};
+use super::textbox;
 use super::REL_NS;
 
 pub use crate::smartart::{
@@ -38,6 +41,23 @@ pub enum DiagramTarget {
         kind: HfKind,
         hf_type: HfType,
         n: u32,
+        para: BodyPara,
+        key: DiagramKey,
+    },
+    InTextBox {
+        host: HostPara,
+        box_key: TxbxKey,
+        para: BodyPara,
+        key: DiagramKey,
+    },
+    InNote {
+        kind: para::NoteKind,
+        note_id: String,
+        para: BodyPara,
+        key: DiagramKey,
+    },
+    InComment {
+        comment_id: String,
         para: BodyPara,
         key: DiagramKey,
     },
@@ -173,7 +193,7 @@ pub fn collect_hf(pkg: &Package, item: &HfPart, paras: &[&Element]) -> Result<Ve
     Ok(out)
 }
 
-fn collect_in_para(
+pub fn collect_in_para(
     pkg: &Package,
     host_part: &str,
     para: &Element,
@@ -221,18 +241,6 @@ pub fn parse_diagram_id_at(id: &str, path: &str) -> Result<DiagramTarget, Error>
             path.to_string(),
         ));
     };
-    if left.contains("/txbx:")
-        || left.starts_with("footnote:")
-        || left.starts_with("endnote:")
-        || left.starts_with("comment:")
-    {
-        return Err(Error::with_path(
-            ErrorKind::InvalidId {
-                reason: IdReason::SmartArtPrefix,
-            },
-            path.to_string(),
-        ));
-    }
     let key = parse_diagram_key(key_s, path)?;
     match para::parse_para_id_at(left, path)? {
         ParaTarget::Body(para) => Ok(DiagramTarget::Body { para, key }),
@@ -248,12 +256,31 @@ pub fn parse_diagram_id_at(id: &str, path: &str) -> Result<DiagramTarget, Error>
             para,
             key,
         }),
-        _ => Err(Error::with_path(
-            ErrorKind::InvalidId {
-                reason: IdReason::SmartArtPrefix,
-            },
-            path.to_string(),
-        )),
+        ParaTarget::InTextBox {
+            host,
+            key: box_key,
+            para,
+        } => Ok(DiagramTarget::InTextBox {
+            host,
+            box_key,
+            para,
+            key,
+        }),
+        ParaTarget::InNote {
+            kind,
+            note_id,
+            para,
+        } => Ok(DiagramTarget::InNote {
+            kind,
+            note_id,
+            para,
+            key,
+        }),
+        ParaTarget::InComment { comment_id, para } => Ok(DiagramTarget::InComment {
+            comment_id,
+            para,
+            key,
+        }),
     }
 }
 
@@ -317,14 +344,12 @@ pub fn parse_insert_para_id(id: &str, op_index: usize) -> Result<ParaTarget, Err
         }
     }
     let target = para::parse_para_id_at(id, &path)?;
-    match target {
-        ParaTarget::Body(_) | ParaTarget::HeaderFooter { .. } => Ok(target),
-        _ => Err(Error::with_path(
-            ErrorKind::InvalidId {
-                reason: IdReason::InsertSmartArtNeedsPara,
-            },
-            path,
-        )),
+    match &target {
+        ParaTarget::Body(_)
+        | ParaTarget::HeaderFooter { .. }
+        | ParaTarget::InTextBox { .. }
+        | ParaTarget::InNote { .. }
+        | ParaTarget::InComment { .. } => Ok(target),
     }
 }
 
@@ -403,7 +428,17 @@ pub fn apply_insert(
     op: &InsertSmartArtOp,
     i: usize,
 ) -> Result<(), Error> {
-    let host = part_for_para(catalog, doc_part, &op.para, &op.id, i)?;
+    let host = part_for_para(pkg, catalog, doc_part, &op.para, &op.id, i)?;
+    if let ParaTarget::InComment { comment_id, .. } = &op.para {
+        let doc = load_part(pkg, docs, &host)?;
+        let comment = comments::find_comment(&doc.root, comment_id).ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::ParaNotFound { id: op.id.clone() },
+                format!("ops[{i}].id"),
+            )
+        })?;
+        comments::reject_ink(comment, &op.id, i)?;
+    }
     {
         let doc = load_part(pkg, docs, &host)?;
         if find_para_mut(&mut doc.root, &op.para).is_none() {
@@ -475,6 +510,7 @@ pub fn apply_delete(
     i: usize,
 ) -> Result<(), Error> {
     let host = part_for_target(
+        pkg,
         catalog,
         doc_part,
         &op.target,
@@ -551,6 +587,7 @@ pub fn apply_text(
     i: usize,
 ) -> Result<(), Error> {
     let host = part_for_target(
+        pkg,
         catalog,
         doc_part,
         &op.target.diagram,
@@ -586,7 +623,14 @@ pub fn apply_add_point(
         AddParent::Diagram(t) => (t.clone(), None, op.id.clone()),
         AddParent::Point(p) => (p.diagram.clone(), Some(p.model_id.clone()), op.id.clone()),
     };
-    let host = part_for_target(catalog, doc_part, &diagram, &id, &format!("ops[{i}].id"))?;
+    let host = part_for_target(
+        pkg,
+        catalog,
+        doc_part,
+        &diagram,
+        &id,
+        &format!("ops[{i}].id"),
+    )?;
     let layout_uid = layout_unique_id(pkg, docs, &host, &diagram, &id, i).ok();
     if smartart::family_of(layout_uid.as_deref().unwrap_or("")) == Some(LayoutKind::List) {
         if op.role == Role::Asst {
@@ -633,6 +677,7 @@ pub fn apply_delete_point(
     i: usize,
 ) -> Result<(), Error> {
     let host = part_for_target(
+        pkg,
         catalog,
         doc_part,
         &op.target.diagram,
@@ -671,6 +716,7 @@ pub fn apply_size(
     i: usize,
 ) -> Result<(), Error> {
     let host = part_for_target(
+        pkg,
         catalog,
         doc_part,
         &op.target,
@@ -704,6 +750,7 @@ pub fn apply_wrap(
     i: usize,
 ) -> Result<(), Error> {
     let host = part_for_target(
+        pkg,
         catalog,
         doc_part,
         &op.target,
@@ -788,6 +835,7 @@ pub fn apply_layout(
     i: usize,
 ) -> Result<(), Error> {
     let host = part_for_target(
+        pkg,
         catalog,
         doc_part,
         &op.target,
@@ -844,7 +892,7 @@ fn retarget_satellite(
     unique_id: &str,
     xml_body: &str,
 ) -> Result<(), Error> {
-    let host = part_for_target(catalog, doc_part, target, id, &format!("ops[{i}].id"))?;
+    let host = part_for_target(pkg, catalog, doc_part, target, id, &format!("ops[{i}].id"))?;
     let doc = load_part(pkg, docs, &host)?;
     let drawing = find_drawing_mut(&mut doc.root, target).ok_or_else(|| {
         Error::with_path(
@@ -1019,19 +1067,60 @@ fn matches_key(drawing: &Element, key: &DiagramKey, index: usize) -> bool {
     }
 }
 
+fn diagram_key(target: &DiagramTarget) -> &DiagramKey {
+    match target {
+        DiagramTarget::Body { key, .. }
+        | DiagramTarget::HeaderFooter { key, .. }
+        | DiagramTarget::InTextBox { key, .. }
+        | DiagramTarget::InNote { key, .. }
+        | DiagramTarget::InComment { key, .. } => key,
+    }
+}
+
+fn find_target_para<'a>(root: &'a Element, target: &DiagramTarget) -> Option<&'a Element> {
+    match target {
+        DiagramTarget::Body { para, .. } | DiagramTarget::HeaderFooter { para, .. } => {
+            para::find_paragraph(root, para)
+        }
+        DiagramTarget::InTextBox {
+            host,
+            box_key,
+            para,
+            ..
+        } => {
+            let host_p = para::find_paragraph(root, host.body())?;
+            let content = textbox::find_txbx_content_by_key(host_p, box_key)?;
+            para::find_paragraph_in_txbx(content, para)
+        }
+        DiagramTarget::InNote {
+            kind,
+            note_id,
+            para,
+            ..
+        } => {
+            let note = notes::find_user_note(root, *kind, note_id)?;
+            para::find_paragraph(note, para)
+        }
+        DiagramTarget::InComment {
+            comment_id, para, ..
+        } => {
+            let comment = comments::find_comment(root, comment_id)?;
+            para::find_paragraph(comment, para)
+        }
+    }
+}
+
 fn find_drawing<'a>(root: &'a Element, target: &DiagramTarget) -> Option<&'a Element> {
     match target {
-        DiagramTarget::Body { para, key } => {
-            let p = para::find_paragraph(root, para)?;
-            find_walk(p, &mut 0, key)
+        DiagramTarget::HeaderFooter {
+            para,
+            key: DiagramKey::Index(n),
+            ..
+        } => find_hf_index(root, para, *n),
+        _ => {
+            let p = find_target_para(root, target)?;
+            find_walk(p, &mut 0, diagram_key(target))
         }
-        DiagramTarget::HeaderFooter { para, key, .. } => match key {
-            DiagramKey::DocPr(_) => {
-                let p = para::find_paragraph(root, para)?;
-                find_walk(p, &mut 0, key)
-            }
-            DiagramKey::Index(n) => find_hf_index(root, para, *n),
-        },
     }
 }
 
@@ -1041,19 +1130,53 @@ fn find_hf_index<'a>(root: &'a Element, para: &BodyPara, n: usize) -> Option<&'a
     find_walk(p, &mut 0, &DiagramKey::Index(local))
 }
 
+fn find_target_para_mut<'a>(
+    root: &'a mut Element,
+    target: &DiagramTarget,
+) -> Option<&'a mut Element> {
+    match target {
+        DiagramTarget::Body { para, .. } | DiagramTarget::HeaderFooter { para, .. } => {
+            para::find_paragraph_mut(root, para)
+        }
+        DiagramTarget::InTextBox {
+            host,
+            box_key,
+            para,
+            ..
+        } => {
+            let host_p = para::find_paragraph_mut(root, host.body())?;
+            let content = textbox::find_txbx_content_by_key_mut(host_p, box_key)?;
+            para::find_paragraph_in_txbx_mut(content, para)
+        }
+        DiagramTarget::InNote {
+            kind,
+            note_id,
+            para,
+            ..
+        } => {
+            let note = notes::find_user_note_mut(root, *kind, note_id)?;
+            para::find_paragraph_mut(note, para)
+        }
+        DiagramTarget::InComment {
+            comment_id, para, ..
+        } => {
+            let comment = comments::find_comment_mut(root, comment_id)?;
+            para::find_paragraph_mut(comment, para)
+        }
+    }
+}
+
 fn find_drawing_mut<'a>(root: &'a mut Element, target: &DiagramTarget) -> Option<&'a mut Element> {
     match target {
-        DiagramTarget::Body { para, key } => {
-            let p = para::find_paragraph_mut(root, para)?;
-            find_walk_mut(p, &mut 0, key)
+        DiagramTarget::HeaderFooter {
+            para,
+            key: DiagramKey::Index(n),
+            ..
+        } => find_hf_index_mut(root, para, *n),
+        _ => {
+            let p = find_target_para_mut(root, target)?;
+            find_walk_mut(p, &mut 0, diagram_key(target))
         }
-        DiagramTarget::HeaderFooter { para, key, .. } => match key {
-            DiagramKey::DocPr(_) => {
-                let p = para::find_paragraph_mut(root, para)?;
-                find_walk_mut(p, &mut 0, key)
-            }
-            DiagramKey::Index(n) => find_hf_index_mut(root, para, *n),
-        },
     }
 }
 
@@ -1159,22 +1282,20 @@ fn find_walk_mut<'a>(
 
 fn remove_smartart(root: &mut Element, target: &DiagramTarget) -> bool {
     match target {
-        DiagramTarget::Body { para, key } => match para::find_paragraph_mut(root, para) {
-            Some(p) => remove_walk(p, &mut 0, key),
+        DiagramTarget::HeaderFooter {
+            para,
+            key: DiagramKey::Index(n),
+            ..
+        } => match hf_local_index(root, para, *n) {
+            Some(local) => match para::find_paragraph_mut(root, para) {
+                Some(p) => remove_walk(p, &mut 0, &DiagramKey::Index(local)),
+                None => false,
+            },
             None => false,
         },
-        DiagramTarget::HeaderFooter { para, key, .. } => match key {
-            DiagramKey::DocPr(_) => match para::find_paragraph_mut(root, para) {
-                Some(p) => remove_walk(p, &mut 0, key),
-                None => false,
-            },
-            DiagramKey::Index(n) => match hf_local_index(root, para, *n) {
-                Some(local) => match para::find_paragraph_mut(root, para) {
-                    Some(p) => remove_walk(p, &mut 0, &DiagramKey::Index(local)),
-                    None => false,
-                },
-                None => false,
-            },
+        _ => match find_target_para_mut(root, target) {
+            Some(p) => remove_walk(p, &mut 0, diagram_key(target)),
+            None => false,
         },
     }
 }
@@ -1375,6 +1496,7 @@ fn load_part<'a>(
 }
 
 fn part_for_para(
+    pkg: &Package,
     catalog: &[HfPart],
     doc_part: &str,
     para: &ParaTarget,
@@ -1395,36 +1517,105 @@ fn part_for_para(
             })?;
             Ok(item.part.clone())
         }
-        _ => Err(Error::with_path(
-            ErrorKind::InvalidId {
-                reason: IdReason::InsertSmartArtNeedsPara,
-            },
-            format!("ops[{i}].id"),
-        )),
+        ParaTarget::InTextBox { host, .. } => {
+            part_for_host_para(pkg, catalog, doc_part, host, id, i, true)
+        }
+        ParaTarget::InNote { kind, .. } => {
+            notes::part_name(pkg, doc_part, *kind)?.ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::ParaNotFound { id: id.to_string() },
+                    format!("ops[{i}].id"),
+                )
+            })
+        }
+        ParaTarget::InComment { .. } => comments::part_name(pkg, doc_part)?.ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::ParaNotFound { id: id.to_string() },
+                format!("ops[{i}].id"),
+            )
+        }),
+    }
+}
+
+fn part_for_host_para(
+    pkg: &Package,
+    catalog: &[HfPart],
+    doc_part: &str,
+    host: &HostPara,
+    id: &str,
+    i: usize,
+    insert: bool,
+) -> Result<String, Error> {
+    let missing = || {
+        if insert {
+            Error::with_path(
+                ErrorKind::ParaNotFound { id: id.to_string() },
+                format!("ops[{i}].id"),
+            )
+        } else {
+            Error::with_path(
+                ErrorKind::SmartArtNotFound { id: id.to_string() },
+                format!("ops[{i}].id"),
+            )
+        }
+    };
+    match host {
+        HostPara::Body(_) => Ok(doc_part.to_string()),
+        HostPara::HeaderFooter {
+            kind, hf_type, n, ..
+        } => {
+            let container_id = format!("{}:{}:{n}", kind.as_str(), hf_type.as_str());
+            let item = super::hf::find_by_id(catalog, &container_id).ok_or_else(missing)?;
+            Ok(item.part.clone())
+        }
+        HostPara::InNote { kind, .. } => {
+            notes::part_name(pkg, doc_part, *kind)?.ok_or_else(missing)
+        }
+        HostPara::InComment { .. } => comments::part_name(pkg, doc_part)?.ok_or_else(missing),
     }
 }
 
 fn part_for_target(
+    pkg: &Package,
     catalog: &[HfPart],
     doc_part: &str,
     target: &DiagramTarget,
     id: &str,
     path: &str,
 ) -> Result<String, Error> {
+    let missing = || {
+        Error::with_path(
+            ErrorKind::SmartArtNotFound { id: id.to_string() },
+            path.to_string(),
+        )
+    };
     match target {
         DiagramTarget::Body { .. } => Ok(doc_part.to_string()),
         DiagramTarget::HeaderFooter {
             kind, hf_type, n, ..
         } => {
             let container_id = format!("{}:{}:{n}", kind.as_str(), hf_type.as_str());
-            let item = super::hf::find_by_id(catalog, &container_id).ok_or_else(|| {
-                Error::with_path(
-                    ErrorKind::SmartArtNotFound { id: id.to_string() },
-                    path.to_string(),
-                )
-            })?;
+            let item = super::hf::find_by_id(catalog, &container_id).ok_or_else(missing)?;
             Ok(item.part.clone())
         }
+        DiagramTarget::InTextBox { host, .. } => match host {
+            HostPara::Body(_) => Ok(doc_part.to_string()),
+            HostPara::HeaderFooter {
+                kind, hf_type, n, ..
+            } => {
+                let container_id = format!("{}:{}:{n}", kind.as_str(), hf_type.as_str());
+                let item = super::hf::find_by_id(catalog, &container_id).ok_or_else(missing)?;
+                Ok(item.part.clone())
+            }
+            HostPara::InNote { kind, .. } => {
+                notes::part_name(pkg, doc_part, *kind)?.ok_or_else(missing)
+            }
+            HostPara::InComment { .. } => comments::part_name(pkg, doc_part)?.ok_or_else(missing),
+        },
+        DiagramTarget::InNote { kind, .. } => {
+            notes::part_name(pkg, doc_part, *kind)?.ok_or_else(missing)
+        }
+        DiagramTarget::InComment { .. } => comments::part_name(pkg, doc_part)?.ok_or_else(missing),
     }
 }
 
@@ -1433,7 +1624,23 @@ fn find_para_mut<'a>(root: &'a mut Element, target: &ParaTarget) -> Option<&'a m
         ParaTarget::Body(p) | ParaTarget::HeaderFooter { para: p, .. } => {
             para::find_paragraph_mut(root, p)
         }
-        _ => None,
+        ParaTarget::InTextBox { host, key, para } => {
+            let host_p = para::find_paragraph_mut(root, host.body())?;
+            let content = textbox::find_txbx_content_by_key_mut(host_p, key)?;
+            para::find_paragraph_in_txbx_mut(content, para)
+        }
+        ParaTarget::InNote {
+            kind,
+            note_id,
+            para,
+        } => {
+            let note = notes::find_user_note_mut(root, *kind, note_id)?;
+            para::find_paragraph_mut(note, para)
+        }
+        ParaTarget::InComment { comment_id, para } => {
+            let comment = comments::find_comment_mut(root, comment_id)?;
+            para::find_paragraph_mut(comment, para)
+        }
     }
 }
 

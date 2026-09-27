@@ -593,6 +593,10 @@ pub fn story_key(doc_part: &str, target: &ParaTarget) -> Result<StoryKey, Error>
                 para::HostPara::HeaderFooter {
                     kind, hf_type, n, ..
                 } => format!("hf:{}:{}:{n}", kind.as_str(), hf_type.as_str()),
+                para::HostPara::InNote { kind, note_id, .. } => {
+                    format!("{}:{note_id}", kind.as_str())
+                }
+                para::HostPara::InComment { comment_id, .. } => format!("comment:{comment_id}"),
             };
             let box_key = match key {
                 para::TxbxKey::DocPr(id) => format!("docpr:{id}"),

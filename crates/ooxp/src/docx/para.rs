@@ -135,6 +135,15 @@ pub enum HostPara {
         n: u32,
         para: BodyPara,
     },
+    InNote {
+        kind: NoteKind,
+        note_id: String,
+        para: BodyPara,
+    },
+    InComment {
+        comment_id: String,
+        para: BodyPara,
+    },
 }
 
 impl HostPara {
@@ -142,6 +151,8 @@ impl HostPara {
         match self {
             Self::Body(p) => p,
             Self::HeaderFooter { para, .. } => para,
+            Self::InNote { para, .. } => para,
+            Self::InComment { para, .. } => para,
         }
     }
 }
@@ -259,6 +270,16 @@ pub fn parse_para_id_at(id: &str, path: &str) -> Result<ParaTarget, Error> {
             n,
             para,
         }),
+        HostPara::InNote {
+            kind,
+            note_id,
+            para,
+        } => Ok(ParaTarget::InNote {
+            kind,
+            note_id,
+            para,
+        }),
+        HostPara::InComment { comment_id, para } => Ok(ParaTarget::InComment { comment_id, para }),
     }
 }
 
@@ -528,6 +549,44 @@ fn parse_host_para_id(id: &str, path: &str) -> Result<HostPara, Error> {
                 para: parse_body_para(para_rest, &path)?,
             });
         }
+    }
+    if let Some(note) = parse_note_id_at(id, &path)? {
+        return match note {
+            NoteIdTarget::Sep => Err(Error::with_path(
+                ErrorKind::InvalidId {
+                    reason: IdReason::NoteSep,
+                },
+                path,
+            )),
+            NoteIdTarget::Container { .. } => Err(Error::with_path(
+                ErrorKind::InvalidId {
+                    reason: IdReason::NoteContainer,
+                },
+                path,
+            )),
+            NoteIdTarget::Para {
+                kind,
+                note_id,
+                para,
+            } => Ok(HostPara::InNote {
+                kind,
+                note_id,
+                para,
+            }),
+        };
+    }
+    if let Some(comment) = parse_comment_id_at(id, &path)? {
+        return match comment {
+            CommentIdTarget::Container { .. } => Err(Error::with_path(
+                ErrorKind::InvalidId {
+                    reason: IdReason::CommentContainer,
+                },
+                path,
+            )),
+            CommentIdTarget::Para { comment_id, para } => {
+                Ok(HostPara::InComment { comment_id, para })
+            }
+        };
     }
     Err(Error::with_path(
         ErrorKind::InvalidId {
