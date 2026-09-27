@@ -17,6 +17,7 @@ mod para;
 mod picture;
 mod request;
 mod revision;
+mod sdt;
 mod sect;
 mod smartart;
 mod styles;

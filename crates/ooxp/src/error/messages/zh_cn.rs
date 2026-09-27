@@ -288,6 +288,14 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::InsertMathNeedsPara => {
                 "insertMath 的 id 必须是正文或页眉页脚段落 id，或 docx:document".into()
             }
+            IdReason::SdtPrefix => {
+                "内容控件 id 必须是 sdt:N，或页眉页脚容器 id 加上 /sdt:N".into()
+            }
+            IdReason::SdtIndexNotInt => "内容控件序号必须是正整数".into(),
+            IdReason::SdtIndexFromOne => "内容控件序号从 1 起".into(),
+            IdReason::InsertSdtNeedsPara => {
+                "insertContentControl 的 id 必须是正文或页眉页脚段落 id，或 docx:document".into()
+            }
         },
         ErrorKind::SheetNotFound { name } => format!("找不到工作表：{name}"),
         ErrorKind::ParaNotFound { id } => format!("找不到段落：{id}"),
@@ -471,11 +479,25 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::FieldNotFound { id } => format!("找不到域：{id}"),
         ErrorKind::TocNotFound { id } => format!("找不到目录：{id}"),
         ErrorKind::MathNotFound { id } => format!("找不到公式：{id}"),
+        ErrorKind::ContentControlNotFound { id } => format!("找不到内容控件：{id}"),
         ErrorKind::SetParaTextHasField => "不能改带域的段落的可见文本".into(),
         ErrorKind::SetParaTextHasMath => "不能改带公式的段落的可见文本".into(),
+        ErrorKind::SetParaTextHasSdt => "不能改带内容控件的段落的可见文本".into(),
         ErrorKind::EmptyFieldInstr => "instr 不能为空".into(),
         ErrorKind::EmptyMathText => "text 不能为空".into(),
         ErrorKind::InvalidMathKind => "kind 只能是 inline 或 display".into(),
+        ErrorKind::InvalidContentControlKind => {
+            "kind 只能是 plainText、richText、dropDown、comboBox 或 date".into()
+        }
+        ErrorKind::EmptyContentControlText => "text 不能为空".into(),
+        ErrorKind::InvalidContentControlKeep => "keep 只能是 content 或 none".into(),
+        ErrorKind::InvalidContentControlItems => "items 必须是非空字符串组成的非空数组".into(),
+        ErrorKind::ContentControlFieldMismatch => {
+            "items 只用于 dropDown/comboBox，fullDate 只用于 date".into()
+        }
+        ErrorKind::ContentControlBound => "不能改绑定到自定义 XML 的内容控件".into(),
+        ErrorKind::ContentControlRepeating => "不能改重复节内容控件的值".into(),
+        ErrorKind::ContentControlHasTable => "不能摊平含表格的块级内容控件".into(),
         ErrorKind::InvalidFieldKeep => "keep 只能是 result 或 instr".into(),
         ErrorKind::NeedSetFieldInstr => "setField 必须有 instr".into(),
         ErrorKind::NumberingNotFound { id } => format!("找不到编号实例：{id}"),

@@ -1159,6 +1159,7 @@ fn inspect_lists_header_pictures() {
             "bookmarkCount",
             "fieldCount",
             "mathCount",
+            "contentControlCount",
             "pictures"
         ]
     );

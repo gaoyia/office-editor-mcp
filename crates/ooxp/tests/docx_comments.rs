@@ -216,6 +216,7 @@ fn inspect_counts_without_list() {
             "fieldCount",
             "tocCount",
             "mathCount",
+            "contentControlCount",
             "numberingCount",
             "styleCount",
             "outline",

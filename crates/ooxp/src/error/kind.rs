@@ -214,6 +214,12 @@ pub(crate) enum IdReason {
     MathIndexFromOne,
     /// insertMath 必须是正文或页眉页脚段落 id，或 docx:document
     InsertMathNeedsPara,
+    /// 内容控件 id 必须是 sdt:N 或 {容器}/sdt:N
+    SdtPrefix,
+    SdtIndexNotInt,
+    SdtIndexFromOne,
+    /// insertContentControl 必须是正文或页眉页脚段落 id，或 docx:document
+    InsertSdtNeedsPara,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -443,11 +449,21 @@ define_error_kinds! {
     FieldNotFound { id: String } => vec![Self::FieldNotFound { id: "field:1".into() }],
     TocNotFound { id: String } => vec![Self::TocNotFound { id: "toc:1".into() }],
     MathNotFound { id: String } => vec![Self::MathNotFound { id: "math:1".into() }],
+    ContentControlNotFound { id: String } => vec![Self::ContentControlNotFound { id: "sdt:1".into() }],
     InvalidTocKind => vec![Self::InvalidTocKind],
     InvalidMathKind => vec![Self::InvalidMathKind],
     EmptyMathText => vec![Self::EmptyMathText],
+    InvalidContentControlKind => vec![Self::InvalidContentControlKind],
+    EmptyContentControlText => vec![Self::EmptyContentControlText],
+    InvalidContentControlKeep => vec![Self::InvalidContentControlKeep],
+    InvalidContentControlItems => vec![Self::InvalidContentControlItems],
+    ContentControlFieldMismatch => vec![Self::ContentControlFieldMismatch],
+    ContentControlBound => vec![Self::ContentControlBound],
+    ContentControlRepeating => vec![Self::ContentControlRepeating],
+    ContentControlHasTable => vec![Self::ContentControlHasTable],
     SetParaTextHasField => vec![Self::SetParaTextHasField],
     SetParaTextHasMath => vec![Self::SetParaTextHasMath],
+    SetParaTextHasSdt => vec![Self::SetParaTextHasSdt],
     EmptyFieldInstr => vec![Self::EmptyFieldInstr],
     InvalidFieldKeep => vec![Self::InvalidFieldKeep],
     NeedSetFieldInstr => vec![Self::NeedSetFieldInstr],
@@ -654,6 +670,10 @@ impl IdReason {
             Self::MathIndexNotInt,
             Self::MathIndexFromOne,
             Self::InsertMathNeedsPara,
+            Self::SdtPrefix,
+            Self::SdtIndexNotInt,
+            Self::SdtIndexFromOne,
+            Self::InsertSdtNeedsPara,
         ]
     }
 }
@@ -756,6 +776,11 @@ impl ErrorKind {
             | Self::InvalidTocKind
             | Self::InvalidMathKind
             | Self::EmptyMathText
+            | Self::InvalidContentControlKind
+            | Self::EmptyContentControlText
+            | Self::InvalidContentControlKeep
+            | Self::InvalidContentControlItems
+            | Self::ContentControlFieldMismatch
             | Self::CreateHfDuplicate
             | Self::InvalidPicKind
             | Self::InvalidPicWrap
@@ -857,6 +882,7 @@ impl ErrorKind {
             | Self::FieldNotFound { .. }
             | Self::TocNotFound { .. }
             | Self::MathNotFound { .. }
+            | Self::ContentControlNotFound { .. }
             | Self::NumberingNotFound { .. }
             | Self::AbstractNumNotFound { .. }
             | Self::StyleNotFound { .. }
@@ -881,7 +907,11 @@ impl ErrorKind {
             | Self::SetParaTextHasRevision
             | Self::SetParaTextHasHyperlink
             | Self::SetParaTextHasField
-            | Self::SetParaTextHasMath => NotImplemented,
+            | Self::SetParaTextHasMath
+            | Self::SetParaTextHasSdt
+            | Self::ContentControlBound
+            | Self::ContentControlRepeating
+            | Self::ContentControlHasTable => NotImplemented,
             Self::OpcOpen { .. } => OpcOpen,
             Self::PartMissing { .. }
             | Self::RelNotFound { .. }

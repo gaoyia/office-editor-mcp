@@ -862,6 +862,7 @@ mod tests {
                 "fieldCount",
                 "tocCount",
                 "mathCount",
+                "contentControlCount",
                 "numberingCount",
                 "styleCount",
                 "outline",

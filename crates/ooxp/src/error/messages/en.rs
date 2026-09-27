@@ -316,6 +316,16 @@ pub(super) fn render(kind: &ErrorKind) -> String {
                 "insertMath id must be a body or header/footer paragraph id, or docx:document"
                     .into()
             }
+            IdReason::SdtPrefix => {
+                "Content control id must be sdt:N or a header/footer container id plus /sdt:N"
+                    .into()
+            }
+            IdReason::SdtIndexNotInt => "sdt index must be a positive integer".into(),
+            IdReason::SdtIndexFromOne => "sdt index starts at 1".into(),
+            IdReason::InsertSdtNeedsPara => {
+                "insertContentControl id must be a body or header/footer paragraph id, or docx:document"
+                    .into()
+            }
         },
         ErrorKind::SheetNotFound { name } => format!("Sheet not found: {name}"),
         ErrorKind::ParaNotFound { id } => format!("Paragraph not found: {id}"),
@@ -555,15 +565,39 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::FieldNotFound { id } => format!("Field not found: {id}"),
         ErrorKind::TocNotFound { id } => format!("Table of contents not found: {id}"),
         ErrorKind::MathNotFound { id } => format!("Equation not found: {id}"),
+        ErrorKind::ContentControlNotFound { id } => format!("Content control not found: {id}"),
         ErrorKind::SetParaTextHasField => {
             "Cannot change visible text in a paragraph that contains a field".into()
         }
         ErrorKind::SetParaTextHasMath => {
             "Cannot change visible text in a paragraph that contains an equation".into()
         }
+        ErrorKind::SetParaTextHasSdt => {
+            "Cannot change visible text in a paragraph that contains a content control".into()
+        }
         ErrorKind::EmptyFieldInstr => "instr must not be empty".into(),
         ErrorKind::EmptyMathText => "text must not be empty".into(),
         ErrorKind::InvalidMathKind => "kind must be inline or display".into(),
+        ErrorKind::InvalidContentControlKind => {
+            "kind must be plainText, richText, dropDown, comboBox, or date".into()
+        }
+        ErrorKind::EmptyContentControlText => "text must not be empty".into(),
+        ErrorKind::InvalidContentControlKeep => "keep must be content or none".into(),
+        ErrorKind::InvalidContentControlItems => {
+            "items must be a non-empty array of non-empty strings".into()
+        }
+        ErrorKind::ContentControlFieldMismatch => {
+            "items is only for dropDown/comboBox, and fullDate is only for date".into()
+        }
+        ErrorKind::ContentControlBound => {
+            "Cannot change a content control that is bound to custom XML".into()
+        }
+        ErrorKind::ContentControlRepeating => {
+            "Cannot change the value of a repeating-section content control".into()
+        }
+        ErrorKind::ContentControlHasTable => {
+            "Cannot flatten a block content control that contains a table".into()
+        }
         ErrorKind::InvalidFieldKeep => "keep must be result or instr".into(),
         ErrorKind::NeedSetFieldInstr => "setField requires instr".into(),
         ErrorKind::NumberingNotFound { id } => format!("Numbering instance not found: {id}"),

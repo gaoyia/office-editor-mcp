@@ -18,23 +18,25 @@ use super::numbering;
 use super::para::{self, BodyPara, HostPara, NoteKind, ParaTarget};
 use super::picture;
 use super::request::{
-    DeleteBookmarkOp, DeleteColOp, DeleteCommentOp, DeleteFieldOp, DeleteHyperlinkOp, DeleteMathOp,
-    DeleteNoteOp, DeleteParaOp, DeletePictureOp, DeleteRowOp, DeleteSectionOp, DeleteTableOp,
-    DeleteTextBoxOp, DeleteTocOp, DocxOp, InsertBookmarkOp, InsertColOp, InsertCommentOp,
-    InsertFieldOp, InsertHeaderFooterOp, InsertHyperlinkOp, InsertMathOp, InsertMathPlace,
-    InsertNoteOp, InsertNumberingOp, InsertParaOp, InsertParaPlace, InsertPictureOp, InsertRowOp,
-    InsertSectionOp, InsertSectionPlace, InsertTableOp, InsertTextBoxOp, InsertTocOp,
-    InsertTocPlace, MergeCellsOp, NoteNumberTarget, ReplacePictureOp, ReplyCommentOp, RevisionOp,
-    SetBookmarkOp, SetColumnsOp, SetCommentDoneOp, SetCommentMetaOp, SetCommentTextOp,
-    SetDocGridOp, SetEvenAndOddHeadersOp, SetFieldOp, SetGutterAtTopOp, SetHfDistanceOp,
-    SetHfLinkOp, SetHyperlinkOp, SetLineNumberingOp, SetMathOp, SetMirrorMarginsOp,
-    SetNoteNumberingOp, SetNumberingOp, SetPageMarginOp, SetPageSizeOp, SetParaFormatOp,
-    SetParaNumberingOp, SetParaStyleOp, SetParaTextOp, SetPictureSizeOp, SetPictureWrapOp,
-    SetRtlGutterOp, SetRunFormatOp, SetStyleOp, SetTextBoxDirectionOp, SetTextBoxFillOp,
-    SetTextBoxLineOp, SetTextBoxLinkOp, SetTextBoxSizeOp, SetTextBoxWrapOp, SetTitlePageOp,
-    SetVerticalAlignOp, SplitCellsOp,
+    DeleteBookmarkOp, DeleteColOp, DeleteCommentOp, DeleteContentControlOp, DeleteFieldOp,
+    DeleteHyperlinkOp, DeleteMathOp, DeleteNoteOp, DeleteParaOp, DeletePictureOp, DeleteRowOp,
+    DeleteSectionOp, DeleteTableOp, DeleteTextBoxOp, DeleteTocOp, DocxOp, InsertBookmarkOp,
+    InsertColOp, InsertCommentOp, InsertContentControlOp, InsertFieldOp, InsertHeaderFooterOp,
+    InsertHyperlinkOp, InsertMathOp, InsertMathPlace, InsertNoteOp, InsertNumberingOp,
+    InsertParaOp, InsertParaPlace, InsertPictureOp, InsertRowOp, InsertSdtPlace, InsertSectionOp,
+    InsertSectionPlace, InsertTableOp, InsertTextBoxOp, InsertTocOp, InsertTocPlace, MergeCellsOp,
+    NoteNumberTarget, ReplacePictureOp, ReplyCommentOp, RevisionOp, SetBookmarkOp, SetColumnsOp,
+    SetCommentDoneOp, SetCommentMetaOp, SetCommentTextOp, SetContentControlOp, SetDocGridOp,
+    SetEvenAndOddHeadersOp, SetFieldOp, SetGutterAtTopOp, SetHfDistanceOp, SetHfLinkOp,
+    SetHyperlinkOp, SetLineNumberingOp, SetMathOp, SetMirrorMarginsOp, SetNoteNumberingOp,
+    SetNumberingOp, SetPageMarginOp, SetPageSizeOp, SetParaFormatOp, SetParaNumberingOp,
+    SetParaStyleOp, SetParaTextOp, SetPictureSizeOp, SetPictureWrapOp, SetRtlGutterOp,
+    SetRunFormatOp, SetStyleOp, SetTextBoxDirectionOp, SetTextBoxFillOp, SetTextBoxLineOp,
+    SetTextBoxLinkOp, SetTextBoxSizeOp, SetTextBoxWrapOp, SetTitlePageOp, SetVerticalAlignOp,
+    SplitCellsOp,
 };
 use super::revision;
+use super::sdt;
 use super::sect;
 use super::smartart;
 use super::styles;
@@ -110,6 +112,15 @@ pub fn apply(bytes: &[u8], ops: &[DocxOp]) -> Result<Vec<u8>, Error> {
             }
             DocxOp::DeleteMath(op) => {
                 apply_delete_math(&pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
+            }
+            DocxOp::InsertContentControl(op) => {
+                apply_insert_sdt(&pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
+            }
+            DocxOp::SetContentControl(op) => {
+                apply_set_sdt(&pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
+            }
+            DocxOp::DeleteContentControl(op) => {
+                apply_delete_sdt(&pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
             }
             DocxOp::SetTitlePage(op) => {
                 apply_title_page(&mut docs, &mut dirty, &doc_part, op, i)?;
@@ -450,6 +461,16 @@ fn refuse_set_text_if_math(root: &Element, para: &para::BodyPara, i: usize) -> R
     if math::para_blocks_set_text(root, para) {
         return Err(Error::with_path(
             ErrorKind::SetParaTextHasMath,
+            format!("ops[{i}].id"),
+        ));
+    }
+    Ok(())
+}
+
+fn refuse_set_text_if_sdt(root: &Element, para: &para::BodyPara, i: usize) -> Result<(), Error> {
+    if sdt::para_blocks_set_text(root, para) {
+        return Err(Error::with_path(
+            ErrorKind::SetParaTextHasSdt,
             format!("ops[{i}].id"),
         ));
     }
@@ -1140,6 +1161,7 @@ fn apply_para_text(
             let doc = load_part(pkg, docs, doc_part)?;
             refuse_set_text_if_field(&doc.root, p, i)?;
             refuse_set_text_if_math(&doc.root, p, i)?;
+            refuse_set_text_if_sdt(&doc.root, p, i)?;
             let el = para::find_paragraph_mut(&mut doc.root, p).ok_or_else(|| {
                 Error::with_path(
                     ErrorKind::ParaNotFound { id: op.id.clone() },
@@ -1161,6 +1183,7 @@ fn apply_para_text(
             let doc = load_part(pkg, docs, &part_name)?;
             refuse_set_text_if_field(&doc.root, para, i)?;
             refuse_set_text_if_math(&doc.root, para, i)?;
+            refuse_set_text_if_sdt(&doc.root, para, i)?;
             let el = para::find_paragraph_mut(&mut doc.root, para).ok_or_else(|| {
                 Error::with_path(
                     ErrorKind::ParaNotFound { id: op.id.clone() },
@@ -1901,6 +1924,98 @@ fn apply_delete_math(
     })?;
     let doc = load_part(pkg, docs, &part_name)?;
     math::delete_math(&mut doc.root, op.target.n, &op.id, i)?;
+    dirty.insert(part_name, ());
+    Ok(())
+}
+
+fn apply_insert_sdt(
+    pkg: &Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &InsertContentControlOp,
+    i: usize,
+) -> Result<(), Error> {
+    let write = sdt::SdtWrite {
+        kind: op.kind,
+        text: &op.text,
+        tag: op.tag.as_deref(),
+        alias: op.alias.as_deref(),
+        items: &op.items,
+        full_date: op.full_date.as_deref(),
+    };
+    match &op.place {
+        InsertSdtPlace::EndOfDocument => {
+            let doc = docs.get_mut(doc_part).unwrap();
+            sdt::insert_sdt(&mut doc.root, None, &write, &op.id, i)?;
+            dirty.insert(doc_part.to_string(), ());
+        }
+        InsertSdtPlace::After(target) => {
+            let part_name = part_for_para(pkg, catalog, doc_part, target, &op.id, i)?;
+            let doc = load_part(pkg, docs, &part_name)?;
+            let para = match target {
+                ParaTarget::Body(p) | ParaTarget::HeaderFooter { para: p, .. } => p,
+                _ => {
+                    return Err(Error::with_path(
+                        ErrorKind::InvalidId {
+                            reason: crate::error::IdReason::InsertSdtNeedsPara,
+                        },
+                        format!("ops[{i}].id"),
+                    ));
+                }
+            };
+            sdt::insert_sdt(&mut doc.root, Some(para), &write, &op.id, i)?;
+            dirty.insert(part_name, ());
+        }
+    }
+    Ok(())
+}
+
+fn apply_set_sdt(
+    pkg: &Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &SetContentControlOp,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name = sdt::part_for_story(catalog, doc_part, &op.target.story, || {
+        sdt::missing_sdt_err(&op.id, i)
+    })?;
+    let doc = load_part(pkg, docs, &part_name)?;
+    sdt::set_sdt(
+        &mut doc.root,
+        &sdt::SdtSet {
+            n: op.target.n,
+            text: &op.text,
+            tag: op.tag.as_deref(),
+            alias: op.alias.as_deref(),
+            items: op.items.as_deref(),
+            full_date: op.full_date.as_deref(),
+            id: &op.id,
+            i,
+        },
+    )?;
+    dirty.insert(part_name, ());
+    Ok(())
+}
+
+fn apply_delete_sdt(
+    pkg: &Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &DeleteContentControlOp,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name = sdt::part_for_story(catalog, doc_part, &op.target.story, || {
+        sdt::missing_sdt_err(&op.id, i)
+    })?;
+    let doc = load_part(pkg, docs, &part_name)?;
+    sdt::delete_sdt(&mut doc.root, op.target.n, op.keep, &op.id, i)?;
     dirty.insert(part_name, ());
     Ok(())
 }

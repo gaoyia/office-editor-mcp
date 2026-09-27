@@ -50,6 +50,7 @@ $order = @(
     'docx-insert-section'
     'docx-toc'
     'docx-math'
+    'docx-sdt'
     'docx-headerfooter'
     'docx-distance'
     'docx-link'

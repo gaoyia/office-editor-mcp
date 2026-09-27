@@ -50,6 +50,8 @@ pub struct InspectScope {
     pub tocs: bool,
     /// 为 true 时列出公式。
     pub maths: bool,
+    /// 为 true 时列出内容控件。
+    pub content_controls: bool,
     /// 为 true 时列出编号定义。
     pub numbering: bool,
     /// 为 true 时列出样式定义。
@@ -680,6 +682,42 @@ pub struct DeleteMathOp {
 }
 
 #[derive(Debug, Clone)]
+pub enum InsertSdtPlace {
+    After(ParaTarget),
+    EndOfDocument,
+}
+
+#[derive(Debug, Clone)]
+pub struct InsertContentControlOp {
+    pub id: String,
+    pub place: InsertSdtPlace,
+    pub kind: super::sdt::SdtKind,
+    pub text: String,
+    pub tag: Option<String>,
+    pub alias: Option<String>,
+    pub items: Vec<String>,
+    pub full_date: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetContentControlOp {
+    pub id: String,
+    pub target: super::sdt::SdtRef,
+    pub text: String,
+    pub tag: Option<String>,
+    pub alias: Option<String>,
+    pub items: Option<Vec<String>>,
+    pub full_date: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct DeleteContentControlOp {
+    pub id: String,
+    pub target: super::sdt::SdtRef,
+    pub keep: super::sdt::SdtKeep,
+}
+
+#[derive(Debug, Clone)]
 pub enum DocxOp {
     SetParaText(SetParaTextOp),
     SetHeaderFooterDistance(SetHfDistanceOp),
@@ -692,6 +730,9 @@ pub enum DocxOp {
     InsertMath(InsertMathOp),
     SetMath(SetMathOp),
     DeleteMath(DeleteMathOp),
+    InsertContentControl(InsertContentControlOp),
+    SetContentControl(SetContentControlOp),
+    DeleteContentControl(DeleteContentControlOp),
     SetTitlePage(SetTitlePageOp),
     SetEvenAndOddHeaders(SetEvenAndOddHeadersOp),
     SetPageMargin(SetPageMarginOp),
@@ -815,6 +856,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
             "fields",
             "tocs",
             "maths",
+            "contentControls",
             "numbering",
             "styles",
             "runs",
@@ -836,6 +878,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
     let fields = parse_bool_field(obj.get("fields"), "fields")?;
     let tocs = parse_bool_field(obj.get("tocs"), "tocs")?;
     let maths = parse_bool_field(obj.get("maths"), "maths")?;
+    let content_controls = parse_bool_field(obj.get("contentControls"), "contentControls")?;
     let numbering = parse_bool_field(obj.get("numbering"), "numbering")?;
     let styles = parse_bool_field(obj.get("styles"), "styles")?;
     let runs = parse_bool_field(obj.get("runs"), "runs")?;
@@ -867,6 +910,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
                 && !obj.contains_key("fields")
                 && !obj.contains_key("tocs")
                 && !obj.contains_key("maths")
+                && !obj.contains_key("contentControls")
                 && !obj.contains_key("numbering")
                 && !obj.contains_key("styles")
                 && !obj.contains_key("runs")
@@ -891,6 +935,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
                 fields,
                 tocs,
                 maths,
+                content_controls,
                 numbering,
                 styles,
                 runs,
@@ -952,6 +997,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
                 fields,
                 tocs,
                 maths,
+                content_controls,
                 numbering,
                 styles,
                 runs,
@@ -1038,6 +1084,13 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<DocxOp>, Error> {
             "insertMath" => out.push(DocxOp::InsertMath(parse_insert_math(obj, i)?)),
             "setMath" => out.push(DocxOp::SetMath(parse_set_math(obj, i)?)),
             "deleteMath" => out.push(DocxOp::DeleteMath(parse_delete_math(obj, i)?)),
+            "insertContentControl" => {
+                out.push(DocxOp::InsertContentControl(parse_insert_sdt(obj, i)?))
+            }
+            "setContentControl" => out.push(DocxOp::SetContentControl(parse_set_sdt(obj, i)?)),
+            "deleteContentControl" => {
+                out.push(DocxOp::DeleteContentControl(parse_delete_sdt(obj, i)?))
+            }
             "setTitlePage" => out.push(DocxOp::SetTitlePage(parse_set_title_page(obj, i)?)),
             "setEvenAndOddHeaders" => out.push(DocxOp::SetEvenAndOddHeaders(
                 parse_set_even_and_odd(obj, i)?,
@@ -1649,6 +1702,220 @@ fn parse_delete_math(
     let id = require_op_id(obj, i)?;
     let target = super::math::parse_math_ref(&id, &format!("ops[{i}].id"))?;
     Ok(DeleteMathOp { id, target })
+}
+
+fn parse_insert_sdt(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<InsertContentControlOp, Error> {
+    deny_keys(
+        obj,
+        i,
+        &[
+            "op", "id", "kind", "text", "tag", "alias", "items", "fullDate",
+        ],
+    )?;
+    let id = require_op_id(obj, i)?;
+    let kind = match obj.get("kind") {
+        None => super::sdt::SdtKind::PlainText,
+        Some(Value::String(s)) => super::sdt::SdtKind::parse(s).ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::InvalidContentControlKind,
+                format!("ops[{i}].kind"),
+            )
+        })?,
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "kind".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].kind"),
+            ));
+        }
+    };
+    let text = parse_sdt_text(obj, i, "insertContentControl")?;
+    let tag = optional_op_string(obj, i, "tag")?;
+    let alias = optional_op_string(obj, i, "alias")?;
+    let items = parse_sdt_items(obj, i)?;
+    if !items.is_empty()
+        && !matches!(
+            kind,
+            super::sdt::SdtKind::DropDown | super::sdt::SdtKind::ComboBox
+        )
+    {
+        return Err(Error::with_path(
+            ErrorKind::ContentControlFieldMismatch,
+            format!("ops[{i}].items"),
+        ));
+    }
+    let full_date = optional_op_string(obj, i, "fullDate")?;
+    if full_date.is_some() && kind != super::sdt::SdtKind::Date {
+        return Err(Error::with_path(
+            ErrorKind::ContentControlFieldMismatch,
+            format!("ops[{i}].fullDate"),
+        ));
+    }
+    if let Some(fd) = &full_date {
+        if fd.is_empty() {
+            return Err(Error::with_path(
+                ErrorKind::EmptyContentControlText,
+                format!("ops[{i}].fullDate"),
+            ));
+        }
+    }
+    let path = format!("ops[{i}].id");
+    let place = if id == "docx:document" {
+        InsertSdtPlace::EndOfDocument
+    } else {
+        InsertSdtPlace::After(parse_story_para_at(
+            &id,
+            &path,
+            IdReason::InsertSdtNeedsPara,
+        )?)
+    };
+    Ok(InsertContentControlOp {
+        id,
+        place,
+        kind,
+        text,
+        tag,
+        alias,
+        items,
+        full_date,
+    })
+}
+
+fn parse_set_sdt(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<SetContentControlOp, Error> {
+    deny_keys(
+        obj,
+        i,
+        &["op", "id", "text", "tag", "alias", "items", "fullDate"],
+    )?;
+    let id = require_op_id(obj, i)?;
+    let target = super::sdt::parse_sdt_ref(&id, &format!("ops[{i}].id"))?;
+    let text = parse_sdt_text(obj, i, "setContentControl")?;
+    let tag = optional_op_string(obj, i, "tag")?;
+    let alias = optional_op_string(obj, i, "alias")?;
+    let items = if obj.contains_key("items") {
+        Some(parse_sdt_items(obj, i)?)
+    } else {
+        None
+    };
+    let full_date = optional_op_string(obj, i, "fullDate")?;
+    Ok(SetContentControlOp {
+        id,
+        target,
+        text,
+        tag,
+        alias,
+        items,
+        full_date,
+    })
+}
+
+fn parse_delete_sdt(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<DeleteContentControlOp, Error> {
+    deny_keys(obj, i, &["op", "id", "keep"])?;
+    let id = require_op_id(obj, i)?;
+    let target = super::sdt::parse_sdt_ref(&id, &format!("ops[{i}].id"))?;
+    let keep = match obj.get("keep") {
+        None => super::sdt::SdtKeep::Content,
+        Some(Value::String(s)) => super::sdt::SdtKeep::parse(s).ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::InvalidContentControlKeep,
+                format!("ops[{i}].keep"),
+            )
+        })?,
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "keep".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].keep"),
+            ));
+        }
+    };
+    Ok(DeleteContentControlOp { id, target, keep })
+}
+
+fn parse_sdt_text(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+    op: &str,
+) -> Result<String, Error> {
+    match obj.get("text") {
+        Some(Value::String(s)) => {
+            if s.is_empty() {
+                return Err(Error::with_path(
+                    ErrorKind::EmptyContentControlText,
+                    format!("ops[{i}].text"),
+                ));
+            }
+            Ok(s.clone())
+        }
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "text".into(),
+                expected: TypeName::String,
+            },
+            format!("ops[{i}].text"),
+        )),
+        None => Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: op.into(),
+                field: "text".into(),
+            },
+            format!("ops[{i}].text"),
+        )),
+    }
+}
+
+fn parse_sdt_items(obj: &serde_json::Map<String, Value>, i: usize) -> Result<Vec<String>, Error> {
+    match obj.get("items") {
+        None => Ok(Vec::new()),
+        Some(Value::Array(arr)) => {
+            if arr.is_empty() {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidContentControlItems,
+                    format!("ops[{i}].items"),
+                ));
+            }
+            let mut out = Vec::new();
+            for (j, v) in arr.iter().enumerate() {
+                let s = v.as_str().ok_or_else(|| {
+                    Error::with_path(
+                        ErrorKind::WrongType {
+                            field: "items".into(),
+                            expected: TypeName::String,
+                        },
+                        format!("ops[{i}].items[{j}]"),
+                    )
+                })?;
+                if s.is_empty() {
+                    return Err(Error::with_path(
+                        ErrorKind::InvalidContentControlItems,
+                        format!("ops[{i}].items[{j}]"),
+                    ));
+                }
+                out.push(s.to_string());
+            }
+            Ok(out)
+        }
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "items".into(),
+                expected: TypeName::Array,
+            },
+            format!("ops[{i}].items"),
+        )),
+    }
 }
 
 fn parse_toc_id(id: &str, op_index: usize) -> Result<usize, Error> {

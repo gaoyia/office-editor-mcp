@@ -84,6 +84,7 @@
         "fields": { "type": "boolean" },
         "tocs": { "type": "boolean" },
         "maths": { "type": "boolean" },
+        "contentControls": { "type": "boolean" },
         "numbering": { "type": "boolean" },
         "styles": { "type": "boolean" },
         "runs": { "type": "boolean" },
@@ -556,6 +557,9 @@
               { "$ref": "#/$defs/insertMathOp" },
               { "$ref": "#/$defs/setMathOp" },
               { "$ref": "#/$defs/deleteMathOp" },
+              { "$ref": "#/$defs/insertContentControlOp" },
+              { "$ref": "#/$defs/setContentControlOp" },
+              { "$ref": "#/$defs/deleteContentControlOp" },
               { "$ref": "#/$defs/insertNumberingOp" },
               { "$ref": "#/$defs/setNumberingOp" },
               { "$ref": "#/$defs/setParaNumberingOp" },
@@ -1334,6 +1338,53 @@
       "properties": {
         "op": { "const": "deleteMath" },
         "id": { "type": "string", "minLength": 1 }
+      }
+    },
+    "insertContentControlOp": {
+      "type": "object",
+      "required": ["op", "id", "text"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "insertContentControl" },
+        "id": { "type": "string", "minLength": 1 },
+        "text": { "type": "string", "minLength": 1 },
+        "kind": { "enum": ["plainText", "richText", "dropDown", "comboBox", "date"] },
+        "tag": { "type": "string" },
+        "alias": { "type": "string" },
+        "items": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "fullDate": { "type": "string", "minLength": 1 }
+      }
+    },
+    "setContentControlOp": {
+      "type": "object",
+      "required": ["op", "id", "text"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "setContentControl" },
+        "id": { "type": "string", "minLength": 1 },
+        "text": { "type": "string", "minLength": 1 },
+        "tag": { "type": "string" },
+        "alias": { "type": "string" },
+        "items": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "fullDate": { "type": "string", "minLength": 1 }
+      }
+    },
+    "deleteContentControlOp": {
+      "type": "object",
+      "required": ["op", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "deleteContentControl" },
+        "id": { "type": "string", "minLength": 1 },
+        "keep": { "enum": ["content", "none"] }
       }
     },
     "insertNumberingOp": {

@@ -41,6 +41,7 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 | Sc1–Sc6 | ✅ | Word 16.0：`docx-insert-section.ps1`，6 PASS / 0 FAIL。插节后两节且第二节 `headerLink.default`；打开无修复；断链后两节页眉能独立改字；删节后只剩一节、无孤儿 `headerN.xml`；create 带 `sectionType` 为两节。标题栏无 Repair |
 | Tc1–Tc5 | ✅ | Word 16.0：`docx-toc.ps1`，5 PASS / 0 FAIL。无 `scope.tocs` 时只有 `tocCount`；插入后 `toc:1` / `kind=toc` 且 `fields` 含 TOC；打开无修复；更新域后可见「第一章」；删后 `tocCount=0` 标题还在；`kind=tof` 树上为 `tof`。标题栏无 Repair |
 | Mm1–Mm6 | ✅ | Word 16.0：`docx-math.ps1`，6 PASS / 0 FAIL。无 `scope.maths` 时只有 `mathCount`；inline 插入后 `math:1` / `kind=inline`；打开无修复且 `OMaths.Count=1`、`Type=1`；`setMath` 后仍是公式；display `Type=0`；删后 `mathCount=0` 标题还在；页眉 `mathCount=1` 且无修复。标题栏无 Repair |
+| Cc1–Cc6 | ✅ | Word 16.0：`docx-sdt.ps1`，6 PASS / 0 FAIL。无 `scope.contentControls` 时只有 `contentControlCount`；plainText 插入后 `sdt:1` / `kind=plainText`；打开无修复且 `ContentControls.Count=1`、`Type=1`；`setContentControl` 后仍是纯文本控件；下拉 `Type=4`；删后 `contentControlCount=0` 标题与原文还在；页眉 `contentControlCount=1` 且无修复。标题栏无 Repair |
 | O1 | 🚫 | 领域层不做原样保存，与 xlsx 清单相同。零脏写回见 OPC 库测试。Word 另存 create 产物见 `docx-O1-word-resave`。此前记的 `SaveAs2` 挂起，拆分后重跑没再出现，一秒内返回 |
 
 ## create
@@ -66,7 +67,7 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 | I2 | 大纲 | `outline` 含第一段，`level` 为 `1`，`text` 为 `标题` |
 | I3 | 段落 id | 两段都有 `para:{hex}`，`stable` 为 `true` |
 | I4 | 第二段 | `text` 为 `hello` |
-| I5 | 无 scope | 只发 path 时没有 `paragraphs` 字段，仍有 `outline`、`paraCount`、`pictureCount`、`tableCount`、`revisionCount`、`hyperlinkCount`、`bookmarkCount`、`fieldCount`、`tocCount`、`mathCount`、`headers`、`footers`、`sections` |
+| I5 | 无 scope | 只发 path 时没有 `paragraphs` 字段，仍有 `outline`、`paraCount`、`pictureCount`、`tableCount`、`revisionCount`、`hyperlinkCount`、`bookmarkCount`、`fieldCount`、`tocCount`、`mathCount`、`contentControlCount`、`headers`、`footers`、`sections` |
 
 ## apply
 
@@ -414,6 +415,19 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 | Mm4 | 独立公式 | `kind` 为 `display` 的插入产物树上 `kind` 为 `display`，Word 无修复 |
 | Mm5 | 删除 | `deleteMath` 之后 `mathCount` 为 0，标题段还在，Word 无修复 |
 | Mm6 | 页眉 | 默认页眉插入一条 inline 公式后，容器上 `mathCount` 为 1，Word 无修复 |
+
+## 内容控件
+
+`insertContentControl` / `setContentControl` / `deleteContentControl` 读写 `w:sdt`。不实现开发者模式 UI。手测脚本 `manual-check/office/cases/docx-sdt.ps1`。
+
+| 序号 | 检查 | 通过标准 |
+| --- | --- | --- |
+| Cc1 | 名单 | 无 `scope.contentControls` 时有 `contentControlCount` 且没有 `contentControls`；`insertContentControl` 之后 `contentControlCount` 为 1，给了 `scope.contentControls` 能列出 `sdt:1`，`kind` 为 `plainText`，`text` 为写入的原文 |
+| Cc2 | 打开 | Word 打开后无修复，能看见内容控件 |
+| Cc3 | 改字 | `setContentControl` 之后树上 `text` 变成新值，Word 仍把它当内容控件 |
+| Cc4 | 下拉 | `kind` 为 `dropDown` 的插入产物树上 `kind` 为 `dropDown`，Word 无修复 |
+| Cc5 | 删除 | `deleteContentControl` 且 `keep` 为 `content` 之后 `contentControlCount` 为 0，原文字还在，标题段还在，Word 无修复 |
+| Cc6 | 页眉 | 默认页眉插入一条纯文本控件后，容器上 `contentControlCount` 为 1，Word 无修复 |
 
 ## 原样保存（opc 验收）
 
