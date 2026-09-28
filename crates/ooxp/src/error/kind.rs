@@ -67,7 +67,7 @@ pub(crate) enum IdReason {
     SlidePicPrefix,
     /// 页 id，缺少 /pic:…
     SlidePicContainer,
-    /// pptx 的 insertPicture 必须用 slide:N 或 slide:N/notes
+    /// pptx 的 insertPicture / insertShape 必须用 slide:N 或 slide:N/notes
     InsertNeedsSlide,
     /// setNotesText 必须用 slide:N 或 slide:N/notes
     SetNotesTextNeedsSlide,

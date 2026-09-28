@@ -65,6 +65,75 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                 shape::set_txbody_text(tx, &op.text);
                 pkg.set(&part, doc.to_bytes()?)?;
             }
+            PptxOp::InsertShape(op) => {
+                let meta = slides.get(op.slide - 1).ok_or_else(|| {
+                    Error::with_path(
+                        ErrorKind::SlideNotFound { n: op.slide as u32 },
+                        format!("ops[{i}].id"),
+                    )
+                })?;
+                let part = if op.on_notes {
+                    notes::ensure_notes_slide(&mut pkg, &pres_part, &mut pres, &meta.part)?
+                } else {
+                    meta.part.clone()
+                };
+                let mut doc = xml::parse(pkg.get(&part)?)?;
+                let canvas = if op.on_notes {
+                    notes::notes_size(&pres.root)
+                } else {
+                    picture::canvas_size(&pres.root)
+                };
+                shape::insert_shape(&mut doc, canvas, op)?;
+                pkg.set(&part, doc.to_bytes()?)?;
+            }
+            PptxOp::DeleteShape(op) => {
+                let mut doc = open_shape_host(&pkg, &slides, &op.target, &op.id, i)?;
+                if op.target.on_notes {
+                    reject_notes_image(&doc.root, &op.target.key, i)?;
+                }
+                let Some(spid) = shape::try_remove_shape(&mut doc.root, &op.target.key) else {
+                    return Err(Error::with_path(
+                        ErrorKind::ShapeNotFound { id: op.id.clone() },
+                        format!("ops[{i}].id"),
+                    ));
+                };
+                if let Some(id) = spid {
+                    shape::strip_timing_for_spid(&mut doc.root, &id);
+                }
+                write_shape_host(&mut pkg, &slides, &op.target, doc)?;
+            }
+            PptxOp::SetShapePos(op) => {
+                let mut doc = open_shape_host(&pkg, &slides, &op.target, &op.id, i)?;
+                if op.target.on_notes {
+                    reject_notes_image(&doc.root, &op.target.key, i)?;
+                }
+                shape::set_shape_pos(&mut doc, op, i)?;
+                write_shape_host(&mut pkg, &slides, &op.target, doc)?;
+            }
+            PptxOp::SetShapeSize(op) => {
+                let mut doc = open_shape_host(&pkg, &slides, &op.target, &op.id, i)?;
+                if op.target.on_notes {
+                    reject_notes_image(&doc.root, &op.target.key, i)?;
+                }
+                shape::set_shape_size(&mut doc, op, i)?;
+                write_shape_host(&mut pkg, &slides, &op.target, doc)?;
+            }
+            PptxOp::SetShapeFill(op) => {
+                let mut doc = open_shape_host(&pkg, &slides, &op.target, &op.id, i)?;
+                if op.target.on_notes {
+                    reject_notes_image(&doc.root, &op.target.key, i)?;
+                }
+                shape::set_shape_fill(&mut doc, op, i)?;
+                write_shape_host(&mut pkg, &slides, &op.target, doc)?;
+            }
+            PptxOp::SetShapeLine(op) => {
+                let mut doc = open_shape_host(&pkg, &slides, &op.target, &op.id, i)?;
+                if op.target.on_notes {
+                    reject_notes_image(&doc.root, &op.target.key, i)?;
+                }
+                shape::set_shape_line(&mut doc, op, i)?;
+                write_shape_host(&mut pkg, &slides, &op.target, doc)?;
+            }
             PptxOp::SetNotesText(op) => {
                 let meta = slides.get(op.slide - 1).ok_or_else(|| {
                     Error::with_path(
@@ -591,6 +660,72 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
     }
 
     pkg.save_to_vec()
+}
+
+fn reject_notes_image(
+    root: &crate::xml::Element,
+    key: &shape::ShapeKey,
+    i: usize,
+) -> Result<(), Error> {
+    if let Some(sp) = notes::find_any_sp_by_key(root, key) {
+        notes::reject_slide_image(sp, i)?;
+    }
+    Ok(())
+}
+
+fn open_shape_host(
+    pkg: &Package,
+    slides: &[shape::SlideMeta],
+    target: &shape::ShapeTarget,
+    id: &str,
+    i: usize,
+) -> Result<xml::Document, Error> {
+    let meta = slides.get(target.slide - 1).ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::SlideNotFound {
+                n: target.slide as u32,
+            },
+            format!("ops[{i}].id"),
+        )
+    })?;
+    let part = if target.on_notes {
+        notes::notes_slide_part(pkg, &meta.part)?.ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::ShapeNotFound { id: id.to_string() },
+                format!("ops[{i}].id"),
+            )
+        })?
+    } else {
+        meta.part.clone()
+    };
+    xml::parse(pkg.get(&part)?)
+}
+
+fn write_shape_host(
+    pkg: &mut Package,
+    slides: &[shape::SlideMeta],
+    target: &shape::ShapeTarget,
+    doc: xml::Document,
+) -> Result<(), Error> {
+    let meta = slides.get(target.slide - 1).ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::SlideNotFound {
+                n: target.slide as u32,
+            },
+            "id",
+        )
+    })?;
+    let part = if target.on_notes {
+        notes::notes_slide_part(pkg, &meta.part)?.ok_or_else(|| {
+            Error::new(ErrorKind::ShapeNotFound {
+                id: format!("slide:{}/notes", target.slide),
+            })
+        })?
+    } else {
+        meta.part.clone()
+    };
+    pkg.set(&part, doc.to_bytes()?)?;
+    Ok(())
 }
 
 fn comment_slide_meta<'a>(

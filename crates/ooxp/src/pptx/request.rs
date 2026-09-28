@@ -30,6 +30,54 @@ pub struct SetShapeTextOp {
 }
 
 #[derive(Debug, Clone)]
+pub struct InsertShapeOp {
+    pub slide: usize,
+    pub on_notes: bool,
+    pub text: String,
+    pub x: Option<i64>,
+    pub y: Option<i64>,
+    pub cx: Option<i64>,
+    pub cy: Option<i64>,
+}
+
+#[derive(Debug, Clone)]
+pub struct DeleteShapeOp {
+    pub id: String,
+    pub target: super::shape::ShapeTarget,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetShapePosOp {
+    pub id: String,
+    pub target: super::shape::ShapeTarget,
+    pub x: Option<i64>,
+    pub y: Option<i64>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetShapeSizeOp {
+    pub id: String,
+    pub target: super::shape::ShapeTarget,
+    pub cx: Option<i64>,
+    pub cy: Option<i64>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetShapeFillOp {
+    pub id: String,
+    pub target: super::shape::ShapeTarget,
+    pub color: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetShapeLineOp {
+    pub id: String,
+    pub target: super::shape::ShapeTarget,
+    pub color: Option<String>,
+    pub width: Option<i64>,
+}
+
+#[derive(Debug, Clone)]
 pub struct SetNotesTextOp {
     pub slide: usize,
     pub id: String,
@@ -379,6 +427,12 @@ pub struct SetSmartArtLayoutOp {
 #[derive(Debug, Clone)]
 pub enum PptxOp {
     SetShapeText(SetShapeTextOp),
+    InsertShape(InsertShapeOp),
+    DeleteShape(DeleteShapeOp),
+    SetShapePos(SetShapePosOp),
+    SetShapeSize(SetShapeSizeOp),
+    SetShapeFill(SetShapeFillOp),
+    SetShapeLine(SetShapeLineOp),
     SetNotesText(SetNotesTextOp),
     InsertComment(InsertCommentOp),
     ReplyComment(ReplyCommentOp),
@@ -573,6 +627,12 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<PptxOp>, Error> {
         }
         let parsed = match op_name {
             "setShapeText" => PptxOp::SetShapeText(parse_set_shape_text(obj, i)?),
+            "insertShape" => PptxOp::InsertShape(parse_insert_shape(obj, i)?),
+            "deleteShape" => PptxOp::DeleteShape(parse_delete_shape(obj, i)?),
+            "setShapePos" => PptxOp::SetShapePos(parse_set_shape_pos(obj, i)?),
+            "setShapeSize" => PptxOp::SetShapeSize(parse_set_shape_size(obj, i)?),
+            "setShapeFill" => PptxOp::SetShapeFill(parse_set_shape_fill(obj, i)?),
+            "setShapeLine" => PptxOp::SetShapeLine(parse_set_shape_line(obj, i)?),
             "setNotesText" => PptxOp::SetNotesText(parse_set_notes_text(obj, i)?),
             "insertComment" => PptxOp::InsertComment(parse_insert_comment(obj, i)?),
             "replyComment" => PptxOp::ReplyComment(parse_reply_comment(obj, i)?),
@@ -789,6 +849,173 @@ fn parse_set_shape_text(obj: &Map<String, Value>, i: usize) -> Result<SetShapeTe
         }
     };
     Ok(SetShapeTextOp { id, text })
+}
+
+fn parse_insert_shape(obj: &Map<String, Value>, i: usize) -> Result<InsertShapeOp, Error> {
+    deny_keys(obj, i, &["op", "id", "text", "x", "y", "cx", "cy"])?;
+    let id = require_id(obj, i)?;
+    let (slide, on_notes) =
+        picture::parse_insert_slide_or_notes(&id, i, crate::error::IdReason::InsertNeedsSlide)?;
+    let text = match obj.get("text") {
+        Some(Value::String(s)) => s.clone(),
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "text".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].text"),
+            ));
+        }
+        None => String::new(),
+    };
+    let x = parse_off_field(obj.get("x"), i, "x")?;
+    let y = parse_off_field(obj.get("y"), i, "y")?;
+    if x.is_some() != y.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "insertShape".into(),
+                field: "x and y together".into(),
+            },
+            format!("ops[{i}]"),
+        ));
+    }
+    let cx = parse_emu_field(obj.get("cx"), i, "cx")?;
+    let cy = parse_emu_field(obj.get("cy"), i, "cy")?;
+    if cx.is_some() != cy.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "insertShape".into(),
+                field: "cx and cy together".into(),
+            },
+            format!("ops[{i}]"),
+        ));
+    }
+    Ok(InsertShapeOp {
+        slide,
+        on_notes,
+        text,
+        x,
+        y,
+        cx,
+        cy,
+    })
+}
+
+fn parse_delete_shape(obj: &Map<String, Value>, i: usize) -> Result<DeleteShapeOp, Error> {
+    deny_keys(obj, i, &["op", "id"])?;
+    let id = require_id(obj, i)?;
+    let target = super::shape::parse_shape_id(&id, i)?;
+    Ok(DeleteShapeOp { id, target })
+}
+
+fn parse_set_shape_pos(obj: &Map<String, Value>, i: usize) -> Result<SetShapePosOp, Error> {
+    deny_keys(obj, i, &["op", "id", "x", "y"])?;
+    let id = require_id(obj, i)?;
+    let target = super::shape::parse_shape_id(&id, i)?;
+    let x = parse_off_field(obj.get("x"), i, "x")?;
+    let y = parse_off_field(obj.get("y"), i, "y")?;
+    if x.is_none() && y.is_none() {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "setShapePos".into(),
+                field: "x or y".into(),
+            },
+            format!("ops[{i}]"),
+        ));
+    }
+    Ok(SetShapePosOp { id, target, x, y })
+}
+
+fn parse_set_shape_size(obj: &Map<String, Value>, i: usize) -> Result<SetShapeSizeOp, Error> {
+    deny_keys(obj, i, &["op", "id", "cx", "cy"])?;
+    let id = require_id(obj, i)?;
+    let target = super::shape::parse_shape_id(&id, i)?;
+    let cx = parse_emu_field(obj.get("cx"), i, "cx")?;
+    let cy = parse_emu_field(obj.get("cy"), i, "cy")?;
+    if cx.is_none() && cy.is_none() {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "setShapeSize".into(),
+                field: "cx or cy".into(),
+            },
+            format!("ops[{i}]"),
+        ));
+    }
+    Ok(SetShapeSizeOp { id, target, cx, cy })
+}
+
+fn parse_set_shape_fill(obj: &Map<String, Value>, i: usize) -> Result<SetShapeFillOp, Error> {
+    deny_keys(obj, i, &["op", "id", "color"])?;
+    let id = require_id(obj, i)?;
+    let target = super::shape::parse_shape_id(&id, i)?;
+    let color = parse_color_field(obj, i, "setShapeFill")?;
+    Ok(SetShapeFillOp { id, target, color })
+}
+
+fn parse_set_shape_line(obj: &Map<String, Value>, i: usize) -> Result<SetShapeLineOp, Error> {
+    deny_keys(obj, i, &["op", "id", "color", "width"])?;
+    let id = require_id(obj, i)?;
+    let target = super::shape::parse_shape_id(&id, i)?;
+    if !obj.contains_key("color") {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "setShapeLine".into(),
+                field: "color".into(),
+            },
+            format!("ops[{i}].color"),
+        ));
+    }
+    let color = parse_color_field(obj, i, "setShapeLine")?;
+    let width = parse_emu_field(obj.get("width"), i, "width")?;
+    if color.is_none() && width.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::UnknownField {
+                field: "width".into(),
+            },
+            format!("ops[{i}].width"),
+        ));
+    }
+    Ok(SetShapeLineOp {
+        id,
+        target,
+        color,
+        width,
+    })
+}
+
+fn parse_color_field(
+    obj: &Map<String, Value>,
+    i: usize,
+    op: &str,
+) -> Result<Option<String>, Error> {
+    match obj.get("color") {
+        None => Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: op.into(),
+                field: "color".into(),
+            },
+            format!("ops[{i}].color"),
+        )),
+        Some(Value::Null) => Ok(None),
+        Some(Value::String(s)) => {
+            if s.len() == 6 && s.chars().all(|c| c.is_ascii_hexdigit()) {
+                Ok(Some(s.clone()))
+            } else {
+                Err(Error::with_path(
+                    ErrorKind::InvalidHexColor,
+                    format!("ops[{i}].color"),
+                ))
+            }
+        }
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "color".into(),
+                expected: TypeName::String,
+            },
+            format!("ops[{i}].color"),
+        )),
+    }
 }
 
 fn parse_set_notes_text(obj: &Map<String, Value>, i: usize) -> Result<SetNotesTextOp, Error> {

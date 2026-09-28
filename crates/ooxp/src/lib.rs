@@ -1056,7 +1056,7 @@ mod tests {
         );
         assert_eq!(
             object_keys(&tree["slides"][0]["shapes"][0]),
-            ["id", "shapeId", "name", "text", "stable"]
+            ["id", "shapeId", "name", "x", "y", "cx", "cy", "text", "stable"]
         );
     }
 }

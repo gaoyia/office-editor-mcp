@@ -84,21 +84,7 @@ pub fn notes_json(
     let mut shapes = Vec::new();
     for (i, sp) in all.iter().enumerate() {
         let index = i + 1;
-        let (id, shape_id, stable) = shape::shape_stable_id(sp, &host, index);
-        let mut sh = json!({
-            "id": id,
-            "shapeId": Value::Null,
-            "name": Value::Null,
-            "text": shape::visible_text(sp),
-            "stable": stable,
-        });
-        if let Some(sid) = shape_id {
-            sh["shapeId"] = json!(sid);
-        }
-        if let Some(n) = shape::shape_name(sp) {
-            sh["name"] = json!(n);
-        }
-        shapes.push(sh);
+        shapes.push(shape::shape_node_json(sp, &host, index));
     }
     let mut obj = Map::new();
     obj.insert("id".into(), json!(host));

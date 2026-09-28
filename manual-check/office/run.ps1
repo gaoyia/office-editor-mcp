@@ -92,6 +92,7 @@ $order = @(
     'pptx-docprops'
     'pptx-apply'
     'pptx-slides'
+    'pptx-shapes'
     'pptx-pictures'
     'pptx-charts'
     'pptx-charts-remain'

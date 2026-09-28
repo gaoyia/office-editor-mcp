@@ -1824,7 +1824,13 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<XlsxOp>, Error> {
             | "insertSlide"
             | "deleteSlide"
             | "moveSlide"
-            | "setSlideHidden" => {
+            | "setSlideHidden"
+            | "insertShape"
+            | "deleteShape"
+            | "setShapePos"
+            | "setShapeSize"
+            | "setShapeFill"
+            | "setShapeLine" => {
                 return Err(Error::with_path(
                     ErrorKind::OpNotForFormat {
                         format: "xlsx".into(),

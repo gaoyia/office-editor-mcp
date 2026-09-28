@@ -1,8 +1,16 @@
 //! 幻灯片里的文本形状：定位、可见文字、AlternateContent 只走一支。
 
+use serde_json::{json, Value};
+
 use crate::error::{Error, ErrorKind, IdReason};
 use crate::opc::{self, Package};
-use crate::xml::{Element, Node};
+use crate::xml::{Document, Element, Node};
+
+use super::picture;
+use super::request::{
+    InsertShapeOp, SetShapeFillOp, SetShapeLineOp, SetShapePosOp, SetShapeSizeOp,
+};
+use super::DML_NS;
 
 pub struct SlideMeta {
     pub index: usize,
@@ -11,11 +19,13 @@ pub struct SlideMeta {
     pub hidden: bool,
 }
 
+#[derive(Debug, Clone)]
 pub enum ShapeKey {
     Id(String),
     Index(usize),
 }
 
+#[derive(Debug, Clone)]
 pub struct ShapeTarget {
     pub slide: usize,
     pub on_notes: bool,
@@ -180,6 +190,53 @@ pub fn shape_name(sp: &Element) -> Option<String> {
         .and_then(|c| c.attr("name"))
         .filter(|s| !s.is_empty())
         .map(str::to_string)
+}
+
+pub fn shape_node_json(sp: &Element, host: &str, index: usize) -> Value {
+    let (id, shape_id, stable) = shape_stable_id(sp, host, index);
+    let (x, y, cx, cy) = geometry_json(sp);
+    let mut sh = json!({
+        "id": id,
+        "shapeId": Value::Null,
+        "name": Value::Null,
+        "x": x,
+        "y": y,
+        "cx": cx,
+        "cy": cy,
+        "text": visible_text(sp),
+        "stable": stable,
+    });
+    if let Some(sid) = shape_id {
+        sh["shapeId"] = json!(sid);
+    }
+    if let Some(n) = shape_name(sp) {
+        sh["name"] = json!(n);
+    }
+    sh
+}
+
+fn geometry_json(sp: &Element) -> (Value, Value, Value, Value) {
+    let xfrm = sp
+        .child_by_local("spPr")
+        .and_then(|p| p.child_by_local("xfrm"));
+    let off = xfrm.and_then(|x| x.child_by_local("off"));
+    let ext = xfrm.and_then(|x| x.child_by_local("ext"));
+    (
+        json_i64_attr(off, "x"),
+        json_i64_attr(off, "y"),
+        json_i64_attr(ext, "cx"),
+        json_i64_attr(ext, "cy"),
+    )
+}
+
+fn json_i64_attr(el: Option<&Element>, name: &str) -> Value {
+    match el
+        .and_then(|e| e.attr(name))
+        .and_then(|s| s.parse::<i64>().ok())
+    {
+        Some(n) => json!(n),
+        None => Value::Null,
+    }
 }
 
 pub fn visible_text(sp: &Element) -> String {
@@ -578,4 +635,376 @@ pub(crate) fn first_alt_child_index(el: &Element) -> Option<usize> {
         }
     }
     fallback
+}
+
+const DEFAULT_SHAPE_CX: i64 = 1_828_800;
+const DEFAULT_SHAPE_CY: i64 = 914_400;
+
+fn is_counted_shape(el: &Element) -> bool {
+    el.local_name() == "sp" && el.child_by_local("txBody").is_some()
+}
+
+fn shape_matches(el: &Element, index: usize, key: &ShapeKey) -> bool {
+    match key {
+        ShapeKey::Index(n) => index == *n,
+        ShapeKey::Id(req) => cnv_pr(el)
+            .and_then(|c| c.attr("id"))
+            .is_some_and(|id| ids_match(id, req)),
+    }
+}
+
+fn counted_spid(el: &Element) -> Option<String> {
+    cnv_pr(el)
+        .and_then(|c| c.attr("id"))
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
+}
+
+/// 删掉命中的文本形状。返回 `None` 表示没找到；`Some(spid)` 里 `spid` 可能仍是 `None`（没有 `cNvPr/@id`）。
+pub fn try_remove_shape(root: &mut Element, key: &ShapeKey) -> Option<Option<String>> {
+    let mut idx = 0usize;
+    let mut spid = None;
+    if !remove_shape_in(root, &mut idx, key, &mut spid) {
+        return None;
+    }
+    prune_empty_groups(root);
+    Some(spid)
+}
+
+fn remove_shape_in(
+    el: &mut Element,
+    idx: &mut usize,
+    key: &ShapeKey,
+    spid: &mut Option<String>,
+) -> bool {
+    let mut i = 0;
+    while i < el.children.len() {
+        let hit_ac = match &el.children[i] {
+            Node::Element(e) if e.local_name() == "AlternateContent" => {
+                scan_alt_for_hit(e, idx, key)
+            }
+            _ => None,
+        };
+        if let Some(hit) = hit_ac {
+            *spid = hit;
+            el.children.remove(i);
+            return true;
+        }
+        let is_hit = match &el.children[i] {
+            Node::Element(e) if is_counted_shape(e) => {
+                *idx += 1;
+                if shape_matches(e, *idx, key) {
+                    *spid = counted_spid(e);
+                    true
+                } else {
+                    false
+                }
+            }
+            _ => false,
+        };
+        if is_hit {
+            el.children.remove(i);
+            return true;
+        }
+        if let Node::Element(e) = &mut el.children[i] {
+            if e.local_name() != "AlternateContent" && remove_shape_in(e, idx, key, spid) {
+                return true;
+            }
+        }
+        i += 1;
+    }
+    false
+}
+
+/// 扫描 Choice 里的文本形状：命中则返回该形状的 `cNvPr/@id`，并把 `idx` 计到命中处（后续形状不再计，因为整段 AC 会删掉）。
+fn scan_alt_for_hit(ac: &Element, idx: &mut usize, key: &ShapeKey) -> Option<Option<String>> {
+    let mut hit: Option<Option<String>> = None;
+    walk_choice(ac, &mut |e| {
+        if hit.is_some() || !is_counted_shape(e) {
+            return;
+        }
+        *idx += 1;
+        if shape_matches(e, *idx, key) {
+            hit = Some(counted_spid(e));
+        }
+    });
+    hit
+}
+
+fn prune_empty_groups(el: &mut Element) {
+    for n in &mut el.children {
+        if let Node::Element(e) = n {
+            prune_empty_groups(e);
+        }
+    }
+    el.children.retain(
+        |n| !matches!(n, Node::Element(e) if e.local_name() == "grpSp" && !grp_has_member(e)),
+    );
+}
+
+fn grp_has_member(grp: &Element) -> bool {
+    grp.element_children().any(|c| {
+        matches!(
+            c.local_name(),
+            "sp" | "pic" | "cxnSp" | "graphicFrame" | "grpSp" | "AlternateContent"
+        )
+    })
+}
+
+pub fn insert_shape(
+    doc: &mut Document,
+    canvas: (i64, i64),
+    op: &InsertShapeOp,
+) -> Result<(), Error> {
+    let cx = op.cx.unwrap_or(DEFAULT_SHAPE_CX);
+    let cy = op.cy.unwrap_or(DEFAULT_SHAPE_CY);
+    let (x, y) = match (op.x, op.y) {
+        (Some(px), Some(py)) => (px, py),
+        _ => picture::vacant_pos_canvas(canvas, &doc.root, cx, cy),
+    };
+    picture::ensure_xmlns(&mut doc.root, "a", DML_NS);
+    let cnv = picture::next_cnv_id(&doc.root);
+    let name = format!("文本框 {cnv}");
+    let mut sp = build_text_box(cnv, &name, x, y, cx, cy);
+    if let Some(tx) = sp.child_by_local_mut("txBody") {
+        set_txbody_text(tx, &op.text);
+    }
+    picture::insert_into_sp_tree(&mut doc.root, sp)?;
+    Ok(())
+}
+
+fn build_text_box(cnv: u32, name: &str, x: i64, y: i64, cx: i64, cy: i64) -> Element {
+    let mut sp = Element::new("p:sp");
+    let mut nv = Element::new("p:nvSpPr");
+    nv.push_element(
+        Element::new("p:cNvPr")
+            .with_attr("id", cnv.to_string())
+            .with_attr("name", name),
+    );
+    nv.push_element(Element::new("p:cNvSpPr").with_attr("txBox", "1"));
+    nv.push_element(Element::new("p:nvPr"));
+    sp.push_element(nv);
+
+    let mut sp_pr = Element::new("p:spPr");
+    let mut xfrm = Element::new("a:xfrm");
+    xfrm.push_element(
+        Element::new("a:off")
+            .with_attr("x", x.to_string())
+            .with_attr("y", y.to_string()),
+    );
+    xfrm.push_element(
+        Element::new("a:ext")
+            .with_attr("cx", cx.to_string())
+            .with_attr("cy", cy.to_string()),
+    );
+    sp_pr.push_element(xfrm);
+    let mut geom = Element::new("a:prstGeom").with_attr("prst", "rect");
+    geom.push_element(Element::new("a:avLst"));
+    sp_pr.push_element(geom);
+    sp_pr.push_element(Element::new("a:noFill"));
+    let mut ln = Element::new("a:ln");
+    ln.push_element(Element::new("a:noFill"));
+    sp_pr.push_element(ln);
+    sp.push_element(sp_pr);
+
+    let mut tx = Element::new("p:txBody");
+    tx.push_element(
+        Element::new("a:bodyPr")
+            .with_attr("wrap", "square")
+            .with_attr("lIns", "91440")
+            .with_attr("tIns", "45720")
+            .with_attr("rIns", "91440")
+            .with_attr("bIns", "45720"),
+    );
+    tx.push_element(Element::new("a:lstStyle"));
+    sp.push_element(tx);
+    sp
+}
+
+pub fn set_shape_pos(doc: &mut Document, op: &SetShapePosOp, op_index: usize) -> Result<(), Error> {
+    let sp = find_shape_mut(&mut doc.root, &op.target.key).ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::ShapeNotFound { id: op.id.clone() },
+            format!("ops[{op_index}].id"),
+        )
+    })?;
+    let xfrm = ensure_xfrm(sp);
+    let off = ensure_a_child(xfrm, "off");
+    if let Some(x) = op.x {
+        picture::set_attr_local(off, "x", &x.to_string());
+    }
+    if let Some(y) = op.y {
+        picture::set_attr_local(off, "y", &y.to_string());
+    }
+    Ok(())
+}
+
+pub fn set_shape_size(
+    doc: &mut Document,
+    op: &SetShapeSizeOp,
+    op_index: usize,
+) -> Result<(), Error> {
+    let sp = find_shape_mut(&mut doc.root, &op.target.key).ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::ShapeNotFound { id: op.id.clone() },
+            format!("ops[{op_index}].id"),
+        )
+    })?;
+    let xfrm = ensure_xfrm(sp);
+    let ext = ensure_a_child(xfrm, "ext");
+    if let Some(cx) = op.cx {
+        picture::set_attr_local(ext, "cx", &cx.to_string());
+    }
+    if let Some(cy) = op.cy {
+        picture::set_attr_local(ext, "cy", &cy.to_string());
+    }
+    Ok(())
+}
+
+pub fn set_shape_fill(
+    doc: &mut Document,
+    op: &SetShapeFillOp,
+    op_index: usize,
+) -> Result<(), Error> {
+    let sp = find_shape_mut(&mut doc.root, &op.target.key).ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::ShapeNotFound { id: op.id.clone() },
+            format!("ops[{op_index}].id"),
+        )
+    })?;
+    let sp_pr = picture::ensure_child(sp, "spPr");
+    remove_named(
+        sp_pr,
+        &[
+            "noFill",
+            "solidFill",
+            "gradFill",
+            "blipFill",
+            "pattFill",
+            "grpFill",
+        ],
+    );
+    match op.color.as_deref() {
+        Some(c) => {
+            let mut fill = Element::new("a:solidFill");
+            fill.push_element(Element::new("a:srgbClr").with_attr("val", c.to_ascii_uppercase()));
+            sp_pr.push_element(fill);
+        }
+        None => sp_pr.push_element(Element::new("a:noFill")),
+    }
+    Ok(())
+}
+
+pub fn set_shape_line(
+    doc: &mut Document,
+    op: &SetShapeLineOp,
+    op_index: usize,
+) -> Result<(), Error> {
+    let sp = find_shape_mut(&mut doc.root, &op.target.key).ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::ShapeNotFound { id: op.id.clone() },
+            format!("ops[{op_index}].id"),
+        )
+    })?;
+    let sp_pr = picture::ensure_child(sp, "spPr");
+    remove_named(sp_pr, &["ln"]);
+    let mut ln = Element::new("a:ln");
+    if let Some(w) = op.width {
+        ln.set_attr("w", w.to_string());
+    }
+    match op.color.as_deref() {
+        Some(c) => {
+            let mut fill = Element::new("a:solidFill");
+            fill.push_element(Element::new("a:srgbClr").with_attr("val", c.to_ascii_uppercase()));
+            ln.push_element(fill);
+        }
+        None => ln.push_element(Element::new("a:noFill")),
+    }
+    sp_pr.push_element(ln);
+    Ok(())
+}
+
+fn ensure_xfrm(sp: &mut Element) -> &mut Element {
+    let sp_pr = picture::ensure_child(sp, "spPr");
+    ensure_a_child(sp_pr, "xfrm")
+}
+
+fn ensure_a_child<'a>(parent: &'a mut Element, local: &str) -> &'a mut Element {
+    if parent.child_by_local(local).is_none() {
+        parent.push_element(Element::new(format!("a:{local}")));
+    }
+    parent.child_by_local_mut(local).expect("刚插入的子元素")
+}
+
+fn remove_named(parent: &mut Element, locals: &[&str]) {
+    parent.children.retain(|n| match n {
+        Node::Element(e) => !locals.contains(&e.local_name()),
+        _ => true,
+    });
+}
+
+pub fn strip_timing_for_spid(slide_root: &mut Element, spid: &str) {
+    let mut i = 0;
+    while i < slide_root.children.len() {
+        let drop = match &mut slide_root.children[i] {
+            Node::Element(e) if e.local_name() == "timing" => {
+                remove_matching_tgt_el(e, spid);
+                prune_anim(e);
+                e.element_children().next().is_none()
+            }
+            _ => false,
+        };
+        if drop {
+            slide_root.children.remove(i);
+            continue;
+        }
+        i += 1;
+    }
+}
+
+fn remove_matching_tgt_el(el: &mut Element, spid: &str) {
+    el.children.retain(
+        |n| !matches!(n, Node::Element(e) if e.local_name() == "tgtEl" && contains_sp_tgt(e, spid)),
+    );
+    for n in &mut el.children {
+        if let Node::Element(e) = n {
+            remove_matching_tgt_el(e, spid);
+        }
+    }
+}
+
+fn contains_sp_tgt(el: &Element, spid: &str) -> bool {
+    if el.local_name() == "spTgt" {
+        if let Some(v) = el.attr("spid") {
+            return ids_match(v, spid);
+        }
+    }
+    el.element_children().any(|c| contains_sp_tgt(c, spid))
+}
+
+fn prune_anim(el: &mut Element) {
+    for _ in 0..8 {
+        prune_anim_pass(el);
+    }
+}
+
+fn prune_anim_pass(el: &mut Element) {
+    for n in &mut el.children {
+        if let Node::Element(e) = n {
+            prune_anim_pass(e);
+        }
+    }
+    el.children.retain(|n| {
+        let Node::Element(e) = n else {
+            return true;
+        };
+        match e.local_name() {
+            "cBhvr" => e.child_by_local("tgtEl").is_some(),
+            "anim" | "animEffect" | "animMotion" | "animRot" | "animScale" | "animClr" | "set" => {
+                e.child_by_local("cBhvr").is_some() || e.child_by_local("childTnLst").is_some()
+            }
+            "childTnLst" | "tnLst" | "seq" | "par" | "cTn" => e.element_children().next().is_some(),
+            _ => true,
+        }
+    });
 }

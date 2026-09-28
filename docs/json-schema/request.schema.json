@@ -764,6 +764,12 @@
               { "$ref": "#/$defs/deleteWatermarkOp" },
               { "$ref": "#/$defs/setNotesTextOp" },
               { "$ref": "#/$defs/setShapeTextOp" },
+              { "$ref": "#/$defs/insertShapeOp" },
+              { "$ref": "#/$defs/deleteShapeOp" },
+              { "$ref": "#/$defs/setShapePosOp" },
+              { "$ref": "#/$defs/setShapeSizeOp" },
+              { "$ref": "#/$defs/setShapeFillOp" },
+              { "$ref": "#/$defs/setShapeLineOp" },
               { "$ref": "#/$defs/insertSlideOp" },
               { "$ref": "#/$defs/deleteSlideOp" },
               { "$ref": "#/$defs/moveSlideOp" },
@@ -3338,6 +3344,80 @@
         "op": { "const": "setShapeText" },
         "id": { "type": "string", "minLength": 1 },
         "text": { "type": "string" }
+      }
+    },
+    "insertShapeOp": {
+      "type": "object",
+      "required": ["op", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "insertShape" },
+        "id": { "type": "string", "minLength": 1 },
+        "text": { "type": "string" },
+        "x": { "type": "integer", "minimum": 0 },
+        "y": { "type": "integer", "minimum": 0 },
+        "cx": { "type": "integer", "minimum": 1 },
+        "cy": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "deleteShapeOp": {
+      "type": "object",
+      "required": ["op", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "deleteShape" },
+        "id": { "type": "string", "minLength": 1 }
+      }
+    },
+    "setShapePosOp": {
+      "type": "object",
+      "required": ["op", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "setShapePos" },
+        "id": { "type": "string", "minLength": 1 },
+        "x": { "type": "integer", "minimum": 0 },
+        "y": { "type": "integer", "minimum": 0 }
+      },
+      "anyOf": [
+        { "required": ["x"] },
+        { "required": ["y"] }
+      ]
+    },
+    "setShapeSizeOp": {
+      "type": "object",
+      "required": ["op", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "setShapeSize" },
+        "id": { "type": "string", "minLength": 1 },
+        "cx": { "type": "integer", "minimum": 1 },
+        "cy": { "type": "integer", "minimum": 1 }
+      },
+      "anyOf": [
+        { "required": ["cx"] },
+        { "required": ["cy"] }
+      ]
+    },
+    "setShapeFillOp": {
+      "type": "object",
+      "required": ["op", "id", "color"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "setShapeFill" },
+        "id": { "type": "string", "minLength": 1 },
+        "color": { "type": ["string", "null"] }
+      }
+    },
+    "setShapeLineOp": {
+      "type": "object",
+      "required": ["op", "id", "color"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "setShapeLine" },
+        "id": { "type": "string", "minLength": 1 },
+        "color": { "type": ["string", "null"] },
+        "width": { "type": "integer", "minimum": 1 }
       }
     },
     "insertSlideOp": {

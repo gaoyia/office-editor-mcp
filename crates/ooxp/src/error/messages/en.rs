@@ -116,7 +116,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
                 "Slide id must include /pic:… (that id alone is not a picture)".into()
             }
             IdReason::InsertNeedsSlide => {
-                "pptx insertPicture id must be slide:N or slide:N/notes".into()
+                "pptx insertPicture / insertShape id must be slide:N or slide:N/notes".into()
             }
             IdReason::SetNotesTextNeedsSlide => {
                 "setNotesText id must be slide:N or slide:N/notes".into()

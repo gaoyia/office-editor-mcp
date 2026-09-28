@@ -4,11 +4,11 @@
 
 检查前用 create 或 apply 在本机生成文件，不要用改过扩展名的 zip 目录冒充。本机若 `PowerPoint.Application` 被 WPS 抢走，直接启动 `POWERPNT.EXE` 再挂 COM，不要走被抢的 ProgID。Office 16 的对象模型在 `mdiClass` 上。
 
-C、I、A、Pp、Pc、Psa、Pn、Pcm、Pm 各组由 `manual-check/office/cases/pptx-*.ps1` 自动判定，跑 `pwsh -File manual-check\office\run.ps1 -Case 'pptx-*'` 即可复现。O1 已放弃，与 xlsx / docx 相同。
+C、I、A、Pp、Pc、Psa、Pn、Pcm、Pm、Ps 各组由 `manual-check/office/cases/pptx-*.ps1` 自动判定，跑 `pwsh -File manual-check\office\run.ps1 -Case 'pptx-*'` 即可复现。O1 已放弃，与 xlsx / docx 相同。
 
 ## 本机结果（2026-09-28）
 
-Microsoft PowerPoint 16.0 已打开，C1、C3、C4、C5–C10、I1–I5、A1–A5、Pp1–Pp7、Pc1–Pc7、Psa1–Psa7、Pn1–Pn4、Pcm1–Pcm5、Pik1–Pik4、Pm1–Pm5 均 PASS。本机若装了 WPS，`PowerPoint.Application` 会被抢走，测试仍直接启动 `POWERPNT.EXE`，从 `mdiClass` 挂 COM。O1 已放弃。2026-09-27 补跑 `pptx-pictures.ps1`，Pp1–Pp7 通过。同日补跑 `pptx-create-pictures.ps1`，C5–C7 通过。同日补跑 `pptx-charts.ps1`，Pc1–Pc7 通过。同日补跑 `pptx-create-charts.ps1`，C8–C10 通过。同日补跑 `pptx-smartart.ps1`，Psa1–Psa7 通过。同日补跑 `pptx-notes.ps1`，Pn1–Pn4 通过。同日补跑 `pptx-comments.ps1`，Pcm1–Pcm5、Pik1–Pik4 通过。同日补跑 `pptx-docprops.ps1`，Pd1–Pd5 通过。同日补跑 `pptx-charts-remain.ps1`，Pr1–Pr3 通过。2026-09-28 补跑 `pptx-slides.ps1`，Pm1–Pm5 通过。
+Microsoft PowerPoint 16.0 已打开，C1、C3、C4、C5–C10、I1–I5、A1–A5、Pp1–Pp7、Pc1–Pc7、Psa1–Psa7、Pn1–Pn4、Pcm1–Pcm5、Pik1–Pik4、Pm1–Pm5、Ps1–Ps5 均 PASS。本机若装了 WPS，`PowerPoint.Application` 会被抢走，测试仍直接启动 `POWERPNT.EXE`，从 `mdiClass` 挂 COM。O1 已放弃。2026-09-27 补跑 `pptx-pictures.ps1`，Pp1–Pp7 通过。同日补跑 `pptx-create-pictures.ps1`，C5–C7 通过。同日补跑 `pptx-charts.ps1`，Pc1–Pc7 通过。同日补跑 `pptx-create-charts.ps1`，C8–C10 通过。同日补跑 `pptx-smartart.ps1`，Psa1–Psa7 通过。同日补跑 `pptx-notes.ps1`，Pn1–Pn4 通过。同日补跑 `pptx-comments.ps1`，Pcm1–Pcm5、Pik1–Pik4 通过。同日补跑 `pptx-docprops.ps1`，Pd1–Pd5 通过。同日补跑 `pptx-charts-remain.ps1`，Pr1–Pr3 通过。2026-09-28 补跑 `pptx-slides.ps1`，Pm1–Pm5 通过。同日补跑 `pptx-shapes.ps1`，Ps1–Ps5 通过。
 
 | 序号 | 状态 | 结果 |
 | --- | --- | --- |
@@ -26,6 +26,7 @@ Microsoft PowerPoint 16.0 已打开，C1、C3、C4、C5–C10、I1–I5、A1–A
 | Pik1–Pik4 | ✅ | PowerPoint 16.0：`pptx-comments.ps1` 墨迹组，4 PASS / 0 FAIL。现代批注注入 `ink` 后 `kind=ink`；`setCommentMeta` / `setCommentDone` 无修复；无可见文本时 `setCommentText` 为 `NotImplemented` 且未写文件；`deleteComment` 无修复 |
 | Pd1–Pd5 | ✅ | PowerPoint 16.0：`pptx-docprops.ps1`，5 PASS / 0 FAIL。根上 `props`、`creator=ooxp`；只改标题后面板标题是新字、公司名还在；自定义 `prop:部门`；删后名单空；形状 id 发 `setProps` 为 `InvalidId`。无 Repair |
 | Pm1–Pm5 | ✅ | PowerPoint 16.0：`pptx-slides.ps1`，5 PASS / 0 FAIL。两页名单与 `hidden=false`；`insertSlide` 后第三页是原第二页、新页无文本框；`moveSlide` 到最前；`setSlideHidden` 后 COM Hidden 为真；删最后一页 / 缺 `hidden` 为 `InvalidField` 且未写文件。无 Repair |
+| Ps1–Ps5 | ✅ | PowerPoint 16.0：`pptx-shapes.ps1`，5 PASS / 0 FAIL。`insertShape` 后 id 为 `slide:1/shape:4`；位置 72×108 磅、尺寸 144×72 磅、填充红；改字后旧框还在；删除后 COM 形状数为 2；另存样例插新框后旧框动画 Count 仍为 1；错 id / 缺成对 `cx` / 缺 `color` 为 `InvalidField` 且未写文件。无 Repair |
 | Pr1–Pr3 | ✅ | PowerPoint 16.0：`pptx-charts-remain.ps1`，3 PASS / 0 FAIL。趋势线 COM Count=1；改删趋势线；次轴 `AxisGroup=2`。无 Repair |
 | O1 | 🚫 | 领域层不做原样保存，与 xlsx 清单相同。零脏写回见 OPC 库测试。PowerPoint 另存 create 产物见 `pptx-O1-ppt-resave` |
 
@@ -178,6 +179,18 @@ Microsoft PowerPoint 16.0 已打开，C1、C3、C4、C5–C10、I1–I5、A1–A
 | Pm3 | 重排 | 把 `slide:3` 移到最前；inspect 第一页是原先那页文字；无 Repair |
 | Pm4 | 隐藏 | `setSlideHidden` `hidden: true` 后 inspect `hidden=true`；COM `SlideShowTransition.Hidden` 为真；无 Repair |
 | Pm5 | 删除 | 只剩一页时 `deleteSlide` 得 `InvalidField` 且未写文件；三页里删一页后计数为 2、无 Repair。缺 `hidden` 得 `InvalidField` |
+
+## 形状增删与几何
+
+插文本框、改位置尺寸填色、删除。不删旧形状再重建。脚本 `manual-check/office/cases/pptx-shapes.ps1`。编号用 Ps（不要跟图的 Pp、幻灯片管理的 Pm 混）。
+
+| 序号 | 检查 | 通过标准 |
+| --- | --- | --- |
+| Ps1 | 插入 | ✅ 对 create 产物 `insertShape` 后新框可见；inspect id 为 `slide:…/shape:…` 且 `stable`；PowerPoint 无 Repair |
+| Ps2 | 几何与填色 | ✅ `setShapePos` / `setShapeSize` 后位置尺寸对上；`setShapeFill` / `setShapeLine` 后填充与边框能看见；无 Repair |
+| Ps3 | 改字 | ✅ 对新框 `setShapeText` 后文字是请求值；旧框文字还在 |
+| Ps4 | 删除 | ✅ `deleteShape` 后该框消失；同页未删形状还在、`cNvPr/@id` 不变；无 Repair |
+| Ps5 | 动画仍绑 | ✅ 对 PowerPoint 另存样例只插新框、不删带动画的旧框；旧框动画还在；无 Repair。对形状 id 发 `insertShape`、缺成对 `cx` 或缺 `color` 得 `InvalidField` 且未写文件 |
 
 ## 原样保存（opc 验收）
 

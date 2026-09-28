@@ -105,7 +105,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
                 "页 id 必须带 /pic:…（该 id 本身不是图）".into()
             }
             IdReason::InsertNeedsSlide => {
-                "pptx 的 insertPicture 的 id 必须是 slide:N 或 slide:N/notes".into()
+                "pptx 的 `insertPicture` / `insertShape` 的 id 必须是 slide:N 或 slide:N/notes".into()
             }
             IdReason::SetNotesTextNeedsSlide => {
                 "setNotesText 的 id 必须是 slide:N 或 slide:N/notes".into()

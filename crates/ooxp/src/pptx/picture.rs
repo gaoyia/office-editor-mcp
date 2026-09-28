@@ -372,6 +372,10 @@ fn slide_size(pres_root: &Element) -> (i64, i64) {
     (cx, cy)
 }
 
+pub(crate) fn canvas_size(pres_root: &Element) -> (i64, i64) {
+    slide_size(pres_root)
+}
+
 struct BoxEmu {
     x: i64,
     y: i64,
