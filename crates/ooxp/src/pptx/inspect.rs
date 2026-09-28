@@ -11,6 +11,7 @@ use super::comments;
 use super::handout;
 use super::hyperlink;
 use super::master;
+use super::media;
 use super::notes;
 use super::picture;
 use super::request::InspectScope;
@@ -27,6 +28,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     let slides = shape::list_slides(&pkg, &pres_part, &pres.root)?;
     let slide_count = slides.len();
     let want_pictures = scope.as_ref().is_some_and(|s| s.pictures);
+    let want_media = scope.as_ref().is_some_and(|s| s.media);
     let want_charts = scope.as_ref().is_some_and(|s| s.charts);
     let want_smartarts = scope.as_ref().is_some_and(|s| s.smart_art);
     let want_notes = scope.as_ref().is_some_and(|s| s.notes);
@@ -40,6 +42,8 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
 
     let mut slide_json = Vec::new();
     let mut picture_count = 0usize;
+    let mut video_count = 0usize;
+    let mut audio_count = 0usize;
     let mut chart_count = 0usize;
     let mut smart_art_count = 0usize;
     let mut comment_count = 0usize;
@@ -51,6 +55,17 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         let host = format!("slide:{}", s.index);
         let pics = picture::collect_pictures(&doc.root, &host);
         picture_count += pics.len();
+        let media_lists = if want_media {
+            Some(media::collect(&pkg, &s.part, &doc.root, &host)?)
+        } else {
+            None
+        };
+        let (n_videos, n_audios) = match &media_lists {
+            Some((v, a)) => (v.len(), a.len()),
+            None => media::count(&doc.root),
+        };
+        video_count += n_videos;
+        audio_count += n_audios;
         let charts_list = if want_charts {
             Some(chart::collect_charts(&pkg, &doc.root, &host, &s.part)?)
         } else {
@@ -117,6 +132,8 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         obj.insert("transition".into(), transition::inspect(&doc.root));
         obj.insert("hasNotes".into(), json!(has));
         obj.insert("pictureCount".into(), json!(pics.len()));
+        obj.insert("videoCount".into(), json!(n_videos));
+        obj.insert("audioCount".into(), json!(n_audios));
         obj.insert("chartCount".into(), json!(n_charts));
         obj.insert("smartArtCount".into(), json!(n_smartarts));
         obj.insert("commentCount".into(), json!(n_comments));
@@ -128,6 +145,10 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
                 "pictures".into(),
                 Value::Array(picture::pictures_json(&pics)),
             );
+        }
+        if let Some((videos, audios)) = media_lists {
+            obj.insert("videos".into(), Value::Array(media::list_json(&videos)));
+            obj.insert("audios".into(), Value::Array(media::list_json(&audios)));
         }
         if let Some(charts) = charts_list {
             obj.insert("charts".into(), Value::Array(charts));
@@ -191,6 +212,8 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     root.insert("id".into(), json!("pptx:presentation"));
     root.insert("slideCount".into(), json!(slide_count));
     root.insert("pictureCount".into(), json!(picture_count));
+    root.insert("videoCount".into(), json!(video_count));
+    root.insert("audioCount".into(), json!(audio_count));
     root.insert("chartCount".into(), json!(chart_count));
     root.insert("smartArtCount".into(), json!(smart_art_count));
     root.insert("commentCount".into(), json!(comment_count));

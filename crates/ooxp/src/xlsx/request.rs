@@ -1836,7 +1836,10 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<XlsxOp>, Error> {
             | "setShapeLine"
             | "setTableCellText"
             | "setTablePos"
-            | "setTableSize" => {
+            | "setTableSize"
+            | "insertVideo"
+            | "insertAudio"
+            | "deleteMedia" => {
                 return Err(Error::with_path(
                     ErrorKind::OpNotForFormat {
                         format: "xlsx".into(),

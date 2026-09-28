@@ -163,6 +163,8 @@ fn inspect_has_notes_without_notes_object() {
             "transition",
             "hasNotes",
             "pictureCount",
+            "videoCount",
+            "audioCount",
             "chartCount",
             "smartArtCount",
             "commentCount",

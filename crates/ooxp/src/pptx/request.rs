@@ -10,6 +10,7 @@ use crate::smartart::{ColorsKind, LayoutKind, NewPoint, Role, StyleKind};
 use super::chart;
 use super::comments;
 use super::hyperlink;
+use super::media;
 use super::picture;
 use super::shape;
 use super::smartart;
@@ -21,6 +22,7 @@ pub struct InspectScope {
     pub slide: Option<u32>,
     pub max_shapes: u32,
     pub pictures: bool,
+    pub media: bool,
     pub charts: bool,
     pub smart_art: bool,
     pub notes: bool,
@@ -253,6 +255,22 @@ pub struct SetPicturePosOp {
     pub target: picture::PicTarget,
     pub x: Option<i64>,
     pub y: Option<i64>,
+}
+
+#[derive(Debug, Clone)]
+pub struct InsertMediaOp {
+    pub slide: usize,
+    pub file: String,
+    pub x: Option<i64>,
+    pub y: Option<i64>,
+    pub cx: Option<i64>,
+    pub cy: Option<i64>,
+}
+
+#[derive(Debug, Clone)]
+pub struct DeleteMediaOp {
+    pub id: String,
+    pub target: media::MediaTarget,
 }
 
 #[derive(Debug, Clone)]
@@ -579,6 +597,9 @@ pub enum PptxOp {
     DeletePicture(DeletePictureOp),
     SetPictureSize(SetPictureSizeOp),
     SetPicturePos(SetPicturePosOp),
+    InsertVideo(InsertMediaOp),
+    InsertAudio(InsertMediaOp),
+    DeleteMedia(DeleteMediaOp),
     InsertChart(InsertChartOp),
     DeleteChart(DeleteChartOp),
     SetChartTitle(SetChartTitleOp),
@@ -654,6 +675,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
             "slide",
             "maxShapes",
             "pictures",
+            "media",
             "charts",
             "smartArt",
             "notes",
@@ -666,6 +688,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
         ],
     )?;
     let pictures = parse_bool_field(obj.get("pictures"), "pictures")?;
+    let media = parse_bool_field(obj.get("media"), "media")?;
     let charts = parse_bool_field(obj.get("charts"), "charts")?;
     let smart_art = parse_bool_field(obj.get("smartArt"), "smartArt")?;
     let notes = parse_bool_field(obj.get("notes"), "notes")?;
@@ -736,6 +759,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
         slide,
         max_shapes: max_shapes as u32,
         pictures,
+        media,
         charts,
         smart_art,
         notes,
@@ -809,6 +833,9 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<PptxOp>, Error> {
             "deletePicture" => PptxOp::DeletePicture(parse_delete_pic(obj, i)?),
             "setPictureSize" => PptxOp::SetPictureSize(parse_set_pic_size(obj, i)?),
             "setPicturePos" => PptxOp::SetPicturePos(parse_set_pic_pos(obj, i)?),
+            "insertVideo" => PptxOp::InsertVideo(parse_insert_media(obj, i, "insertVideo")?),
+            "insertAudio" => PptxOp::InsertAudio(parse_insert_media(obj, i, "insertAudio")?),
+            "deleteMedia" => PptxOp::DeleteMedia(parse_delete_media(obj, i)?),
             "insertChart" => PptxOp::InsertChart(parse_insert_chart(obj, i)?),
             "deleteChart" => PptxOp::DeleteChart(parse_delete_chart(obj, i)?),
             "setChartTitle" => PptxOp::SetChartTitle(parse_set_chart_title(obj, i)?),
@@ -1963,6 +1990,54 @@ fn parse_set_pic_pos(obj: &Map<String, Value>, i: usize) -> Result<SetPicturePos
         ));
     }
     Ok(SetPicturePosOp { id, target, x, y })
+}
+
+fn parse_insert_media(
+    obj: &Map<String, Value>,
+    i: usize,
+    op: &str,
+) -> Result<InsertMediaOp, Error> {
+    deny_keys(obj, i, &["op", "id", "file", "x", "y", "cx", "cy"])?;
+    let id = require_id(obj, i)?;
+    let slide = media::parse_insert_slide(&id, i)?;
+    let file = require_file(obj, i, op)?;
+    let x = parse_off_field(obj.get("x"), i, "x")?;
+    let y = parse_off_field(obj.get("y"), i, "y")?;
+    if x.is_some() != y.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: op.into(),
+                field: "x and y together".into(),
+            },
+            format!("ops[{i}]"),
+        ));
+    }
+    let cx = parse_emu_field(obj.get("cx"), i, "cx")?;
+    let cy = parse_emu_field(obj.get("cy"), i, "cy")?;
+    if cx.is_some() != cy.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: op.into(),
+                field: "cx and cy together".into(),
+            },
+            format!("ops[{i}]"),
+        ));
+    }
+    Ok(InsertMediaOp {
+        slide,
+        file,
+        x,
+        y,
+        cx,
+        cy,
+    })
+}
+
+fn parse_delete_media(obj: &Map<String, Value>, i: usize) -> Result<DeleteMediaOp, Error> {
+    deny_keys(obj, i, &["op", "id"])?;
+    let id = require_id(obj, i)?;
+    let target = media::parse_media_id(&id, &format!("ops[{i}].id"))?;
+    Ok(DeleteMediaOp { id, target })
 }
 
 fn parse_insert_chart(obj: &Map<String, Value>, i: usize) -> Result<InsertChartOp, Error> {

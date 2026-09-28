@@ -1135,6 +1135,9 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<DocxOp>, Error> {
             || op_name == "setTableCellText"
             || op_name == "setTablePos"
             || op_name == "setTableSize"
+            || op_name == "insertVideo"
+            || op_name == "insertAudio"
+            || op_name == "deleteMedia"
         {
             return Err(Error::with_path(
                 ErrorKind::OpNotForFormat {

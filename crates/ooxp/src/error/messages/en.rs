@@ -118,6 +118,12 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::CommentPicExportOnly => {
                 "comment pictures can only be used with exportMedia".into()
             }
+            IdReason::SlideMediaForm => {
+                "pptx video / audio id must be slide:N/video:… or slide:N/audio:…".into()
+            }
+            IdReason::InsertMediaNeedsSlide => {
+                "pptx insertVideo / insertAudio id must be slide:N".into()
+            }
             IdReason::InsertNeedsSlide => {
                 "pptx insertPicture / insertShape id must be slide:N or slide:N/notes".into()
             }
@@ -505,6 +511,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::ShapeNotFound { id } => format!("Shape not found: {id}"),
         ErrorKind::ShapeHasNoText { id } => format!("Shape has no text box: {id}"),
         ErrorKind::PictureNotFound { id } => format!("Picture not found: {id}"),
+        ErrorKind::MediaNotFound { id } => format!("Video or audio not found: {id}"),
         ErrorKind::TextBoxNotFound { id } => format!("Text box not found: {id}"),
         ErrorKind::LastTextBoxPara => {
             "Cannot delete the last paragraph in a text box".into()
@@ -679,6 +686,10 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         }
         ErrorKind::InvalidPicAlign => "alignH must be left/center/right; alignV must be top/center/bottom".into(),
         ErrorKind::InvalidImageFile => "file is not a recognized bitmap (PNG, JPEG, GIF, or BMP)".into(),
+        ErrorKind::InvalidMediaFile => {
+            "file is not a recognized media clip (insertVideo accepts MP4, insertAudio accepts WAV)"
+                .into()
+        }
         ErrorKind::SetCellWorksheetOnly => "setCell only applies to worksheets".into(),
         ErrorKind::InspectWorksheetOnly => "Cells can only be read from worksheets".into(),
         ErrorKind::InsertPictureWorksheetOnly => "insertPicture only applies to worksheets".into(),

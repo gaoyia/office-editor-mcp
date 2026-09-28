@@ -169,7 +169,12 @@ fn object_map(root: &Element, slide: usize) -> HashMap<String, String> {
         }
         "pic" => {
             if let Some(id) = cnv_id(e, "nvPicPr") {
-                map.insert(id.clone(), format!("{host}/pic:{id}"));
+                let kind = match super::media::media_kind(e) {
+                    Some(super::media::MediaKind::Video) => "video",
+                    Some(super::media::MediaKind::Audio) => "audio",
+                    None => "pic",
+                };
+                map.insert(id.clone(), format!("{host}/{kind}:{id}"));
             }
         }
         "graphicFrame" => {

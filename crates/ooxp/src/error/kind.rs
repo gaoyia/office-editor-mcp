@@ -69,6 +69,10 @@ pub(crate) enum IdReason {
     SlidePicContainer,
     /// 批注内图只能 exportMedia
     CommentPicExportOnly,
+    /// pptx 视频 / 音频 id 必须是 slide:N/video:… 或 slide:N/audio:…
+    SlideMediaForm,
+    /// pptx 的 insertVideo / insertAudio 必须用 slide:N
+    InsertMediaNeedsSlide,
     /// pptx 的 insertPicture / insertShape 必须用 slide:N 或 slide:N/notes
     InsertNeedsSlide,
     /// setNotesText 必须用 slide:N 或 slide:N/notes
@@ -520,7 +524,9 @@ define_error_kinds! {
     InvalidPicWrap => vec![Self::InvalidPicWrap],
     InvalidPicAlign => vec![Self::InvalidPicAlign],
     InvalidImageFile => vec![Self::InvalidImageFile],
+    InvalidMediaFile => vec![Self::InvalidMediaFile],
     PictureNotFound { id: String } => vec![Self::PictureNotFound { id: "header:default:1/pic:1".into() }],
+    MediaNotFound { id: String } => vec![Self::MediaNotFound { id: "slide:1/video:3".into() }],
     TextBoxNotFound { id: String } => vec![Self::TextBoxNotFound { id: "para:3F2A1B00/txbx:8".into() }],
     LastTextBoxPara => vec![Self::LastTextBoxPara],
     LastNotePara => vec![Self::LastNotePara],
@@ -841,6 +847,8 @@ impl IdReason {
             Self::SlidePicPrefix,
             Self::SlidePicContainer,
             Self::CommentPicExportOnly,
+            Self::SlideMediaForm,
+            Self::InsertMediaNeedsSlide,
             Self::InsertNeedsSlide,
             Self::SetNotesTextNeedsSlide,
             Self::PptxCommentForm,
@@ -1126,6 +1134,7 @@ impl ErrorKind {
             | Self::InvalidPicWrap
             | Self::InvalidPicAlign
             | Self::InvalidImageFile
+            | Self::InvalidMediaFile
             | Self::CannotLinkFirstSection
             | Self::HfTypeInactive { .. }
             | Self::HfInsertWhileLinked
@@ -1285,6 +1294,7 @@ impl ErrorKind {
             | Self::ShapeNotFound { .. }
             | Self::ShapeHasNoText { .. }
             | Self::PictureNotFound { .. }
+            | Self::MediaNotFound { .. }
             | Self::TextBoxNotFound { .. }
             | Self::NoteNotFound { .. }
             | Self::CommentNotFound { .. }

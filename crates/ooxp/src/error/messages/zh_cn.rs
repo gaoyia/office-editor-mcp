@@ -107,6 +107,12 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::CommentPicExportOnly => {
                 "批注内图只能 exportMedia，不能插、换、删或改尺寸位置".into()
             }
+            IdReason::SlideMediaForm => {
+                "pptx 视频 / 音频 id 必须是 slide:N/video:… 或 slide:N/audio:…".into()
+            }
+            IdReason::InsertMediaNeedsSlide => {
+                "pptx 的 insertVideo / insertAudio 的 id 必须是 slide:N".into()
+            }
             IdReason::InsertNeedsSlide => {
                 "pptx 的 `insertPicture` / `insertShape` 的 id 必须是 slide:N 或 slide:N/notes".into()
             }
@@ -463,6 +469,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::ShapeNotFound { id } => format!("找不到形状：{id}"),
         ErrorKind::ShapeHasNoText { id } => format!("形状没有文本框：{id}"),
         ErrorKind::PictureNotFound { id } => format!("找不到图：{id}"),
+        ErrorKind::MediaNotFound { id } => format!("找不到视频或音频：{id}"),
         ErrorKind::TextBoxNotFound { id } => format!("找不到文本框：{id}"),
         ErrorKind::LastTextBoxPara => "文本框内至少要留一段，不能删掉最后一段".into(),
         ErrorKind::LastNotePara => "脚注、尾注内至少要留一段，不能删掉最后一段".into(),
@@ -595,6 +602,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         }
         ErrorKind::InvalidPicAlign => "alignH 只允许 left/center/right，alignV 只允许 top/center/bottom".into(),
         ErrorKind::InvalidImageFile => "file 不是本库认的位图（PNG、JPEG、GIF 或 BMP）".into(),
+        ErrorKind::InvalidMediaFile => {
+            "file 不是本库认的媒体（insertVideo 认 MP4，insertAudio 认 WAV）".into()
+        }
         ErrorKind::SetCellWorksheetOnly => "只能对工作表 setCell".into(),
         ErrorKind::InspectWorksheetOnly => "只能对工作表读单元格".into(),
         ErrorKind::InsertPictureWorksheetOnly => "只能往工作表 insertPicture".into(),

@@ -335,8 +335,18 @@ fn parse_i64_attr(el: &Element, name: &str) -> Option<i64> {
     el.attr(name)?.parse().ok()
 }
 
+fn is_media_host(el: &Element) -> bool {
+    el.child_by_local("nvPicPr")
+        .and_then(|nv| nv.child_by_local("nvPr"))
+        .is_some_and(|nv| {
+            nv.child_by_local("videoFile").is_some()
+                || nv.child_by_local("audioFile").is_some()
+                || nv.child_by_local("wavAudioFile").is_some()
+        })
+}
+
 fn is_counted_pic(el: &Element) -> bool {
-    el.local_name() == "pic" && blip_el(el).is_some()
+    el.local_name() == "pic" && blip_el(el).is_some() && !is_media_host(el)
 }
 
 fn blip_el(pic: &Element) -> Option<&Element> {
@@ -556,6 +566,9 @@ pub(crate) fn vacant_pos_canvas(
 }
 
 pub fn export_media(bytes: &[u8], id: &str) -> Result<ExportedMedia, Error> {
+    if super::media::is_media_id(id) {
+        return super::media::export(bytes, id);
+    }
     let target = parse_pic_id(id, "id")?;
     let pkg = Package::open_bytes(bytes.to_vec())?;
     let pres_part = crate::opc::office_document_part(&pkg)?;
@@ -839,7 +852,7 @@ fn build_pic(cnv: u32, name: &str, rid: &str, x: i64, y: i64, cx: i64, cy: i64) 
     pic
 }
 
-fn next_media_part(pkg: &Package, ext: &str) -> String {
+pub(crate) fn next_media_part(pkg: &Package, ext: &str) -> String {
     let mut n = 1u32;
     loop {
         let name = format!("/ppt/media/image{n}.{ext}");

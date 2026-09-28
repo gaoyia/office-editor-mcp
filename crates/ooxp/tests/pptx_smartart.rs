@@ -165,6 +165,8 @@ fn inspect_count_without_list() {
             "id",
             "slideCount",
             "pictureCount",
+            "videoCount",
+            "audioCount",
             "chartCount",
             "smartArtCount",
             "commentCount",

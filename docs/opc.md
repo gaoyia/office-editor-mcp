@@ -247,6 +247,8 @@ DrawingML 主命名空间：
 
 apply 插入幻灯片图时，可能新建 `/ppt/media/imageN.*`，并在该页 `.rels` 补一条 image 关系（Type 以 `/image` 结尾）。`p:pic` 写在该页 `p:spTree` 里，位置与尺寸在 `p:spPr/a:xfrm`。create 给了 `slides[].pictures` 时同样写入。
 
+apply 插入幻灯片视频或音频时，可能新建 `/ppt/media/mediaN.mp4` 或 `/ppt/media/mediaN.wav`，以及一张海报 `/ppt/media/imageN.png`。该页 `.rels` 补三条关系：MS-PPTX media（Type `http://schemas.microsoft.com/office/2007/relationships/media`）、ISO video 或 audio（Type 分别以 `/video`、`/audio` 结尾），两者指向同一媒体部件；再补一条 image 关系指向海报。`p:pic` 的 `p:nvPr` 写 `a:videoFile` / `a:audioFile` 的 `r:link` 与 `p14:media` 的 `r:embed`。`[Content_Types].xml` 补 Default：`mp4` 为 `video/mp4`，`wav` 为 `audio/x-wav`。不写 `<p:timing>`。create 本期不写媒体。
+
 apply 插入幻灯片图表时，可能新建 `/ppt/charts/chartN.xml`（CT `application/vnd.openxmlformats-officedocument.drawingml.chart+xml`）、chart 的 `.rels`，以及 `/ppt/embeddings/Microsoft_Excel_WorksheetN.xlsx`（CT `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`）。该页 `.rels` 补一条 chart 关系（Type 以 `/chart` 结尾）。chart 部件写 `c:externalData r:id="rId1"`，关系 Type 为 `http://schemas.openxmlformats.org/officeDocument/2006/relationships/package`。宿主是 `p:graphicFrame`，位置与尺寸在 `p:xfrm`。create 给了 `slides[].charts` 时同样写入。
 
 apply 插入幻灯片 SmartArt 时，可能新建 `/ppt/diagrams/` 下的 data / layout / colors / quickStyle（CT 分别为 `application/vnd.openxmlformats-officedocument.drawingml.diagramData+xml`、`…diagramLayout+xml`、`…diagramColors+xml`、`…diagramQuickStyle+xml`）。该页 `.rels` 补四条 diagram 关系。宿主是 `p:graphicFrame`，`a:graphicData/@uri` 为 diagram URI，`dgm:relIds` 指向这四条。create 给了 `slides[].smartArts` 时同样写入。不写 Fallback 位图，不写 diagram drawing 缓存。改点对不上缓存时删掉该缓存。

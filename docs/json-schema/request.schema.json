@@ -205,6 +205,9 @@
         "handout": {
           "type": "boolean"
         },
+        "media": {
+          "type": "boolean"
+        },
         "revisions": {
           "type": "boolean"
         },
@@ -955,6 +958,15 @@
               },
               {
                 "$ref": "pptx.schema.json#/$defs/setHandoutTextOp"
+              },
+              {
+                "$ref": "pptx.schema.json#/$defs/insertVideoOp"
+              },
+              {
+                "$ref": "pptx.schema.json#/$defs/insertAudioOp"
+              },
+              {
+                "$ref": "pptx.schema.json#/$defs/deleteMediaOp"
               },
               {
                 "$ref": "#/$defs/setPropsOp"

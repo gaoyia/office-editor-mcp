@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "action": "exportMedia",
+  "path": "deck.pptx",
+  "id": "slide:1/video:3",
+  "output": "C:\\out\\intro.mp4"
+}

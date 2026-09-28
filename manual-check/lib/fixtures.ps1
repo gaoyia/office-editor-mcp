@@ -818,6 +818,114 @@ function Ensure-PptxPptPictureSource([switch]$Force) {
     return $path
 }
 
+function Find-OoxpFfmpeg {
+    $cmd = Get-Command ffmpeg -ErrorAction SilentlyContinue
+    if ($cmd) { return $cmd.Source }
+    foreach ($p in @('C:\bin\ffmpeg.bat', 'C:\bin\ffmpeg.exe', 'C:\ffmpeg\bin\ffmpeg.exe')) {
+        if (Test-Path $p) { return $p }
+    }
+    return $null
+}
+
+function Ensure-OoxpMp4([switch]$Force) {
+    $path = Get-OutPath 'ooxp-clip.mp4'
+    if ((Test-Path $path) -and -not $Force) { return $path }
+    $probeOut = Get-OutPath 'probe-media.mp4'
+    if ((Test-Path $probeOut) -and -not $Force) {
+        Copy-Item -Force $probeOut $path
+        return $path
+    }
+    $probe = Join-Path $env:TEMP 'ooxp-probe-media.mp4'
+    if ((Test-Path $probe) -and -not $Force) {
+        Copy-Item -Force $probe $path
+        return $path
+    }
+    $ff = Find-OoxpFfmpeg
+    if (-not $ff) {
+        throw '找不到 ffmpeg，无法生成手测用的 MP4'
+    }
+    Write-Log "ffmpeg 生成 1 秒黑场 $path"
+    & $ff -y -f lavfi -i 'color=c=black:s=160x120:d=1' -c:v libx264 -pix_fmt yuv420p -t 1 $path
+    if (-not (Test-Path $path)) { throw "ffmpeg 没有写出 $path" }
+    return $path
+}
+
+function Ensure-OoxpWav([switch]$Force) {
+    $path = Get-OutPath 'ooxp-beep.wav'
+    if ((Test-Path $path) -and -not $Force) { return $path }
+    $sys = 'C:\Windows\Media\Alarm01.wav'
+    if (Test-Path $sys) {
+        Copy-Item -Force $sys $path
+        return $path
+    }
+    # 最小 PCM WAV，给 insertAudio 用。
+    $data = [byte[]]::new(8)
+    $riffSize = [BitConverter]::GetBytes([uint32]44)
+    $fmtLen = [BitConverter]::GetBytes([uint32]16)
+    $pcm = [BitConverter]::GetBytes([uint16]1)
+    $mono = [BitConverter]::GetBytes([uint16]1)
+    $rate = [BitConverter]::GetBytes([uint32]8000)
+    $byteRate = [BitConverter]::GetBytes([uint32]16000)
+    $align = [BitConverter]::GetBytes([uint16]2)
+    $bits = [BitConverter]::GetBytes([uint16]16)
+    $dataLen = [BitConverter]::GetBytes([uint32]8)
+    $bytes = New-Object System.Collections.Generic.List[byte]
+    $utf8 = [Text.Encoding]::ASCII
+    [void]$bytes.AddRange($utf8.GetBytes('RIFF'))
+    [void]$bytes.AddRange($riffSize)
+    [void]$bytes.AddRange($utf8.GetBytes('WAVE'))
+    [void]$bytes.AddRange($utf8.GetBytes('fmt '))
+    [void]$bytes.AddRange($fmtLen)
+    [void]$bytes.AddRange($pcm)
+    [void]$bytes.AddRange($mono)
+    [void]$bytes.AddRange($rate)
+    [void]$bytes.AddRange($byteRate)
+    [void]$bytes.AddRange($align)
+    [void]$bytes.AddRange($bits)
+    [void]$bytes.AddRange($utf8.GetBytes('data'))
+    [void]$bytes.AddRange($dataLen)
+    [void]$bytes.AddRange($data)
+    [IO.File]::WriteAllBytes($path, $bytes.ToArray())
+    return $path
+}
+
+# PowerPoint 亲手另存的带视频样例：第一页至少一段 Type=16 媒体。
+function Ensure-PptxPptMediaSource([switch]$Force) {
+    $path = Get-OutPath 'pptx-ppt-media-source.pptx'
+    if ((Test-Path $path) -and -not $Force) { return $path }
+
+    $mp4 = Ensure-OoxpMp4
+    $tmpDir = Join-Path $env:TEMP 'ooxp-office'
+    New-Item -ItemType Directory -Force -Path $tmpDir | Out-Null
+    $tmp = Join-Path $tmpDir 'pptx-ppt-media-source.pptx'
+    $S = $global:OoxpStrings
+    $req = @{
+        schemaVersion = 1; action = 'create'
+        path = $tmp.Replace('\', '/'); format = 'pptx'
+        presentation = @{
+            slides = @(@{ shapes = @(@{ text = $S.chapter1 }) })
+        }
+    }
+    Invoke-OoxpRequest $req 'pptx-media-source-create' | Out-Null
+
+    $ppt = Ensure-MsPpt (Ensure-PptxCreate)
+    Close-PptPresByPath $ppt $tmp
+    $pres = Open-PptPres $ppt $tmp
+    $s1 = Get-PptSlide $pres 1
+    $shapes = $s1.Shapes
+    $vid = $shapes.AddMediaObject2($mp4, 0, -1, 40, 40, 240, 180)
+    Write-Log ("AddMediaObject2 Type=$([int]$vid.Type) Name=$($vid.Name)")
+    Write-Log 'PowerPoint Save() 原地覆盖 TEMP 里的带媒体源文件'
+    $pres.Save()
+    Close-PptPres $pres
+    Release-Com $vid
+    Release-Com $shapes
+    Release-Com $s1
+    Copy-Item -Force $tmp $path
+    Write-Log "saved ppt media source $path"
+    return $path
+}
+
 function Test-PptxChartSource([string]$pptx, [string]$reqName) {
     $tree = Invoke-OoxpTree @{
         schemaVersion = 1; action = 'inspect'

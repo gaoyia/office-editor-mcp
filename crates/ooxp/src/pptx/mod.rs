@@ -8,6 +8,7 @@ mod handout;
 mod hyperlink;
 mod inspect;
 mod master;
+mod media;
 mod notes;
 mod picture;
 mod request;
