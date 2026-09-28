@@ -108,6 +108,8 @@ fn inspect_empty_on_create() {
             "id",
             "pictureCount",
             "chartCount",
+            "textBoxCount",
+            "smartArtCount",
             "commentCount",
             "definedNameCount",
             "props",

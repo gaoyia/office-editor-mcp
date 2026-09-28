@@ -7,11 +7,15 @@ use crate::json;
 
 use crate::chart::{ChartType, NewSeries};
 
+use crate::smartart::{ColorsKind, LayoutKind, NewPoint, Role, StyleKind};
+
 use super::a1;
 use super::chart::{self, SheetChartId};
 use super::comments;
 use super::names;
 use super::picture::{self, SheetPicId};
+use super::shape::{self, SheetDrawId};
+use super::smartart as xlsx_smartart;
 
 /// 工作表页眉页脚六个槽位之一。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -143,6 +147,8 @@ pub struct InspectScope {
     pub charts: bool,
     pub header_footer: bool,
     pub comments: bool,
+    pub text_boxes: bool,
+    pub smart_art: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -1133,6 +1139,150 @@ pub struct SetChartSeriesAxisOp {
 }
 
 #[derive(Debug, Clone)]
+pub struct InsertTextBoxOp {
+    pub sheet: String,
+    pub text: Option<String>,
+    pub cx: Option<i64>,
+    pub cy: Option<i64>,
+    pub from: a1::CellRef,
+    pub to: Option<a1::CellRef>,
+    pub anchor: picture::AnchorKind,
+    pub from_off_x: i64,
+    pub from_off_y: i64,
+    pub to_off_x: i64,
+    pub to_off_y: i64,
+}
+
+#[derive(Debug, Clone)]
+pub struct DeleteTextBoxOp {
+    pub id: String,
+    pub target: SheetDrawId,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetTextBoxSizeOp {
+    pub id: String,
+    pub target: SheetDrawId,
+    pub cx: Option<i64>,
+    pub cy: Option<i64>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetTextBoxAnchorOp {
+    pub id: String,
+    pub target: SheetDrawId,
+    pub anchor: Option<picture::AnchorKind>,
+    pub from: Option<a1::CellRef>,
+    pub to: Option<a1::CellRef>,
+    pub from_off_x: Option<i64>,
+    pub from_off_y: Option<i64>,
+    pub to_off_x: Option<i64>,
+    pub to_off_y: Option<i64>,
+    pub pos_x: Option<i64>,
+    pub pos_y: Option<i64>,
+    pub edit_as: Option<picture::EditAs>,
+    pub cx: Option<i64>,
+    pub cy: Option<i64>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetShapeTextOp {
+    pub id: String,
+    pub target: SheetDrawId,
+    pub text: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct InsertSmartArtOp {
+    pub sheet: String,
+    pub layout: LayoutKind,
+    pub points: Option<Vec<NewPoint>>,
+    pub cx: Option<i64>,
+    pub cy: Option<i64>,
+    pub from: a1::CellRef,
+    pub to: Option<a1::CellRef>,
+    pub anchor: picture::AnchorKind,
+    pub from_off_x: i64,
+    pub from_off_y: i64,
+    pub to_off_x: i64,
+    pub to_off_y: i64,
+}
+
+#[derive(Debug, Clone)]
+pub struct DeleteSmartArtOp {
+    pub id: String,
+    pub target: SheetDrawId,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetSmartArtTextOp {
+    pub id: String,
+    pub target: xlsx_smartart::PointTarget,
+    pub text: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct AddSmartArtPointOp {
+    pub id: String,
+    pub parent: xlsx_smartart::AddParent,
+    pub text: String,
+    pub role: Role,
+}
+
+#[derive(Debug, Clone)]
+pub struct DeleteSmartArtPointOp {
+    pub id: String,
+    pub target: xlsx_smartart::PointTarget,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetSmartArtSizeOp {
+    pub id: String,
+    pub target: SheetDrawId,
+    pub cx: Option<i64>,
+    pub cy: Option<i64>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetSmartArtAnchorOp {
+    pub id: String,
+    pub target: SheetDrawId,
+    pub anchor: Option<picture::AnchorKind>,
+    pub from: Option<a1::CellRef>,
+    pub to: Option<a1::CellRef>,
+    pub from_off_x: Option<i64>,
+    pub from_off_y: Option<i64>,
+    pub to_off_x: Option<i64>,
+    pub to_off_y: Option<i64>,
+    pub pos_x: Option<i64>,
+    pub pos_y: Option<i64>,
+    pub edit_as: Option<picture::EditAs>,
+    pub cx: Option<i64>,
+    pub cy: Option<i64>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetSmartArtColorsOp {
+    pub id: String,
+    pub target: SheetDrawId,
+    pub colors: ColorsKind,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetSmartArtStyleOp {
+    pub id: String,
+    pub target: SheetDrawId,
+    pub style: StyleKind,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetSmartArtLayoutOp {
+    pub id: String,
+    pub target: SheetDrawId,
+    pub layout: LayoutKind,
+}
+
+#[derive(Debug, Clone)]
 pub enum XlsxOp {
     SetCell(SetCellOp),
     SetCellStyle(Box<SetCellStyleOp>),
@@ -1196,6 +1346,21 @@ pub enum XlsxOp {
     SetErrorBars(SetErrorBarsOp),
     DeleteErrorBars(DeleteErrorBarsOp),
     SetChartSeriesAxis(SetChartSeriesAxisOp),
+    InsertTextBox(InsertTextBoxOp),
+    DeleteTextBox(DeleteTextBoxOp),
+    SetTextBoxSize(SetTextBoxSizeOp),
+    SetTextBoxAnchor(SetTextBoxAnchorOp),
+    SetShapeText(SetShapeTextOp),
+    InsertSmartArt(InsertSmartArtOp),
+    DeleteSmartArt(DeleteSmartArtOp),
+    SetSmartArtText(SetSmartArtTextOp),
+    AddSmartArtPoint(AddSmartArtPointOp),
+    DeleteSmartArtPoint(DeleteSmartArtPointOp),
+    SetSmartArtSize(SetSmartArtSizeOp),
+    SetSmartArtAnchor(SetSmartArtAnchorOp),
+    SetSmartArtColors(SetSmartArtColorsOp),
+    SetSmartArtStyle(SetSmartArtStyleOp),
+    SetSmartArtLayout(SetSmartArtLayoutOp),
     SetProps(crate::props::SetPropsOp),
     SetCustomProp(crate::props::SetCustomPropOp),
     DeleteCustomProp(crate::props::DeleteCustomPropOp),
@@ -1227,12 +1392,16 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
             "charts",
             "headerFooter",
             "comments",
+            "textBoxes",
+            "smartArt",
         ],
     )?;
     let pictures = parse_bool_field(obj.get("pictures"), "pictures")?;
     let charts = parse_bool_field(obj.get("charts"), "charts")?;
     let header_footer = parse_bool_field(obj.get("headerFooter"), "headerFooter")?;
     let comments = parse_bool_field(obj.get("comments"), "comments")?;
+    let text_boxes = parse_bool_field(obj.get("textBoxes"), "textBoxes")?;
+    let smart_art = parse_bool_field(obj.get("smartArt"), "smartArt")?;
     let sheet = obj.get("sheet").and_then(Value::as_str);
     let range = obj.get("range").and_then(Value::as_str);
     let max_cells = match obj.get("maxCells") {
@@ -1277,7 +1446,14 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
             ));
         }
     };
-    if cells.is_none() && !pictures && !charts && !header_footer && !comments {
+    if cells.is_none()
+        && !pictures
+        && !charts
+        && !header_footer
+        && !comments
+        && !text_boxes
+        && !smart_art
+    {
         return Ok(None);
     }
     Ok(Some(InspectScope {
@@ -1286,6 +1462,8 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
         charts,
         header_footer,
         comments,
+        text_boxes,
+        smart_art,
     }))
 }
 
@@ -1382,6 +1560,23 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<XlsxOp>, Error> {
             "setErrorBars" => XlsxOp::SetErrorBars(parse_set_error_bars(obj, i)?),
             "deleteErrorBars" => XlsxOp::DeleteErrorBars(parse_delete_error_bars(obj, i)?),
             "setChartSeriesAxis" => XlsxOp::SetChartSeriesAxis(parse_set_series_axis(obj, i)?),
+            "insertTextBox" => XlsxOp::InsertTextBox(parse_insert_textbox(obj, i)?),
+            "deleteTextBox" => XlsxOp::DeleteTextBox(parse_delete_textbox(obj, i)?),
+            "setTextBoxSize" => XlsxOp::SetTextBoxSize(parse_set_textbox_size(obj, i)?),
+            "setTextBoxAnchor" => XlsxOp::SetTextBoxAnchor(parse_set_textbox_anchor(obj, i)?),
+            "setShapeText" => XlsxOp::SetShapeText(parse_set_shape_text(obj, i)?),
+            "insertSmartArt" => XlsxOp::InsertSmartArt(parse_insert_smartart(obj, i)?),
+            "deleteSmartArt" => XlsxOp::DeleteSmartArt(parse_delete_smartart(obj, i)?),
+            "setSmartArtText" => XlsxOp::SetSmartArtText(parse_set_smartart_text(obj, i)?),
+            "addSmartArtPoint" => XlsxOp::AddSmartArtPoint(parse_add_smartart_point(obj, i)?),
+            "deleteSmartArtPoint" => {
+                XlsxOp::DeleteSmartArtPoint(parse_delete_smartart_point(obj, i)?)
+            }
+            "setSmartArtSize" => XlsxOp::SetSmartArtSize(parse_set_smartart_size(obj, i)?),
+            "setSmartArtAnchor" => XlsxOp::SetSmartArtAnchor(parse_set_smartart_anchor(obj, i)?),
+            "setSmartArtColors" => XlsxOp::SetSmartArtColors(parse_set_smartart_colors(obj, i)?),
+            "setSmartArtStyle" => XlsxOp::SetSmartArtStyle(parse_set_smartart_style(obj, i)?),
+            "setSmartArtLayout" => XlsxOp::SetSmartArtLayout(parse_set_smartart_layout(obj, i)?),
             "setProps" => XlsxOp::SetProps(crate::props::parse_set_props(obj, i, "xlsx:workbook")?),
             "setCustomProp" => XlsxOp::SetCustomProp(crate::props::parse_set_custom_prop(
                 obj,
@@ -1392,7 +1587,6 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<XlsxOp>, Error> {
                 XlsxOp::DeleteCustomProp(crate::props::parse_delete_custom_prop(obj, i)?)
             }
             "setParaText"
-            | "setShapeText"
             | "setNotesText"
             | "setPicturePos"
             | "setChartPos"
@@ -1412,9 +1606,6 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<XlsxOp>, Error> {
             | "setTitlePage"
             | "setEvenAndOddHeaders"
             | "setPictureWrap"
-            | "insertTextBox"
-            | "deleteTextBox"
-            | "setTextBoxSize"
             | "setTextBoxWrap"
             | "setTextBoxFill"
             | "setTextBoxLine"
@@ -1464,16 +1655,7 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<XlsxOp>, Error> {
             | "deleteEndnote"
             | "setNoteNumbering"
             | "setChartWrap"
-            | "insertSmartArt"
-            | "deleteSmartArt"
-            | "setSmartArtText"
-            | "addSmartArtPoint"
-            | "deleteSmartArtPoint"
-            | "setSmartArtSize"
             | "setSmartArtWrap"
-            | "setSmartArtColors"
-            | "setSmartArtStyle"
-            | "setSmartArtLayout"
             | "insertOle"
             | "deleteOle"
             | "insertWatermark"
@@ -6738,6 +6920,505 @@ fn parse_set_chart_anchor(
         ));
     }
     Ok(op)
+}
+
+struct InsertAnchorSpec {
+    from: a1::CellRef,
+    to: Option<a1::CellRef>,
+    anchor: picture::AnchorKind,
+    from_off_x: i64,
+    from_off_y: i64,
+    to_off_x: i64,
+    to_off_y: i64,
+    cx: Option<i64>,
+    cy: Option<i64>,
+}
+
+fn parse_insert_anchor(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+    op: &str,
+) -> Result<InsertAnchorSpec, Error> {
+    let from = parse_required_a1(obj, i, "from")?;
+    let anchor = match obj.get("anchor") {
+        None => picture::AnchorKind::OneCell,
+        Some(Value::String(s)) => picture::AnchorKind::parse_insert(s).ok_or_else(|| {
+            Error::with_path(ErrorKind::InvalidXlsxAnchor, format!("ops[{i}].anchor"))
+        })?,
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "anchor".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].anchor"),
+            ));
+        }
+    };
+    let to = parse_opt_a1(obj.get("to"), i, "to")?;
+    if anchor == picture::AnchorKind::TwoCell && to.is_none() {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: op.into(),
+                field: "to".into(),
+            },
+            format!("ops[{i}].to"),
+        ));
+    }
+    if anchor == picture::AnchorKind::OneCell && to.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::UnknownField { field: "to".into() },
+            format!("ops[{i}].to"),
+        ));
+    }
+    let cx = parse_emu_field(obj.get("cx"), i, "cx")?;
+    let cy = parse_emu_field(obj.get("cy"), i, "cy")?;
+    if cx.is_some() != cy.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: op.into(),
+                field: "cx and cy together".into(),
+            },
+            format!("ops[{i}]"),
+        ));
+    }
+    Ok(InsertAnchorSpec {
+        from,
+        to,
+        anchor,
+        from_off_x: parse_off_field(obj.get("fromOffX"), i, "fromOffX")?.unwrap_or(0),
+        from_off_y: parse_off_field(obj.get("fromOffY"), i, "fromOffY")?.unwrap_or(0),
+        to_off_x: parse_off_field(obj.get("toOffX"), i, "toOffX")?.unwrap_or(0),
+        to_off_y: parse_off_field(obj.get("toOffY"), i, "toOffY")?.unwrap_or(0),
+        cx,
+        cy,
+    })
+}
+
+fn parse_opt_text(obj: &serde_json::Map<String, Value>, i: usize) -> Result<Option<String>, Error> {
+    match obj.get("text") {
+        None => Ok(None),
+        Some(Value::String(s)) => Ok(Some(s.clone())),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "text".into(),
+                expected: TypeName::String,
+            },
+            format!("ops[{i}].text"),
+        )),
+    }
+}
+
+fn parse_require_text(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+    op: &str,
+) -> Result<String, Error> {
+    match obj.get("text") {
+        Some(Value::String(s)) => Ok(s.clone()),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "text".into(),
+                expected: TypeName::String,
+            },
+            format!("ops[{i}].text"),
+        )),
+        None => Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: op.into(),
+                field: "text".into(),
+            },
+            format!("ops[{i}].text"),
+        )),
+    }
+}
+
+fn parse_size_pair(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+    op: &str,
+) -> Result<(Option<i64>, Option<i64>), Error> {
+    let cx = parse_emu_field(obj.get("cx"), i, "cx")?;
+    let cy = parse_emu_field(obj.get("cy"), i, "cy")?;
+    if cx.is_none() && cy.is_none() {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: op.into(),
+                field: "cx or cy".into(),
+            },
+            format!("ops[{i}]"),
+        ));
+    }
+    Ok((cx, cy))
+}
+
+struct DrawingAnchorPatch {
+    anchor: Option<picture::AnchorKind>,
+    from: Option<a1::CellRef>,
+    to: Option<a1::CellRef>,
+    from_off_x: Option<i64>,
+    from_off_y: Option<i64>,
+    to_off_x: Option<i64>,
+    to_off_y: Option<i64>,
+    pos_x: Option<i64>,
+    pos_y: Option<i64>,
+    edit_as: Option<picture::EditAs>,
+    cx: Option<i64>,
+    cy: Option<i64>,
+}
+
+fn parse_drawing_anchor_patch(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+    op: &str,
+) -> Result<DrawingAnchorPatch, Error> {
+    let anchor = match obj.get("anchor") {
+        None => None,
+        Some(Value::String(s)) if s == "absolute" => {
+            return Err(Error::with_path(
+                ErrorKind::PictureAnchorAbsolute,
+                format!("ops[{i}].anchor"),
+            ));
+        }
+        Some(Value::String(s)) => Some(picture::AnchorKind::parse_insert(s).ok_or_else(|| {
+            Error::with_path(ErrorKind::InvalidXlsxAnchor, format!("ops[{i}].anchor"))
+        })?),
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "anchor".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].anchor"),
+            ));
+        }
+    };
+    let edit_as = match obj.get("editAs") {
+        None => None,
+        Some(Value::String(s)) => Some(picture::EditAs::parse(s).ok_or_else(|| {
+            Error::with_path(ErrorKind::InvalidXlsxEditAs, format!("ops[{i}].editAs"))
+        })?),
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "editAs".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].editAs"),
+            ));
+        }
+    };
+    let from = parse_opt_a1(obj.get("from"), i, "from")?;
+    let to = parse_opt_a1(obj.get("to"), i, "to")?;
+    let from_off_x = parse_off_field(obj.get("fromOffX"), i, "fromOffX")?;
+    let from_off_y = parse_off_field(obj.get("fromOffY"), i, "fromOffY")?;
+    let to_off_x = parse_off_field(obj.get("toOffX"), i, "toOffX")?;
+    let to_off_y = parse_off_field(obj.get("toOffY"), i, "toOffY")?;
+    let pos_x = parse_i64_field(obj.get("posX"), i, "posX")?;
+    let pos_y = parse_i64_field(obj.get("posY"), i, "posY")?;
+    let cx = parse_emu_field(obj.get("cx"), i, "cx")?;
+    let cy = parse_emu_field(obj.get("cy"), i, "cy")?;
+    let has_any = anchor.is_some()
+        || from.is_some()
+        || to.is_some()
+        || from_off_x.is_some()
+        || from_off_y.is_some()
+        || to_off_x.is_some()
+        || to_off_y.is_some()
+        || pos_x.is_some()
+        || pos_y.is_some()
+        || edit_as.is_some()
+        || cx.is_some()
+        || cy.is_some();
+    if !has_any {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: op.into(),
+                field: "anchor, from, to, offsets, pos, editAs, or size".into(),
+            },
+            format!("ops[{i}]"),
+        ));
+    }
+    Ok(DrawingAnchorPatch {
+        anchor,
+        from,
+        to,
+        from_off_x,
+        from_off_y,
+        to_off_x,
+        to_off_y,
+        pos_x,
+        pos_y,
+        edit_as,
+        cx,
+        cy,
+    })
+}
+
+fn parse_insert_textbox(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<InsertTextBoxOp, Error> {
+    deny_keys(
+        obj,
+        i,
+        &[
+            "op", "id", "text", "cx", "cy", "from", "to", "anchor", "fromOffX", "fromOffY",
+            "toOffX", "toOffY",
+        ],
+    )?;
+    let id = require_id(obj, i)?;
+    let sheet = shape::parse_insert_sheet_id(&id, i, IdReason::InsertTextBoxNeedsSheet)?;
+    let a = parse_insert_anchor(obj, i, "insertTextBox")?;
+    Ok(InsertTextBoxOp {
+        sheet,
+        text: parse_opt_text(obj, i)?,
+        cx: a.cx,
+        cy: a.cy,
+        from: a.from,
+        to: a.to,
+        anchor: a.anchor,
+        from_off_x: a.from_off_x,
+        from_off_y: a.from_off_y,
+        to_off_x: a.to_off_x,
+        to_off_y: a.to_off_y,
+    })
+}
+
+fn parse_delete_textbox(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<DeleteTextBoxOp, Error> {
+    deny_keys(obj, i, &["op", "id"])?;
+    let id = require_id(obj, i)?;
+    let target = shape::parse_sp_id(&id, i)?;
+    Ok(DeleteTextBoxOp { id, target })
+}
+
+fn parse_set_textbox_size(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<SetTextBoxSizeOp, Error> {
+    deny_keys(obj, i, &["op", "id", "cx", "cy"])?;
+    let id = require_id(obj, i)?;
+    let target = shape::parse_sp_id(&id, i)?;
+    let (cx, cy) = parse_size_pair(obj, i, "setTextBoxSize")?;
+    Ok(SetTextBoxSizeOp { id, target, cx, cy })
+}
+
+fn parse_set_textbox_anchor(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<SetTextBoxAnchorOp, Error> {
+    deny_keys(
+        obj,
+        i,
+        &[
+            "op", "id", "anchor", "from", "to", "fromOffX", "fromOffY", "toOffX", "toOffY", "posX",
+            "posY", "editAs", "cx", "cy",
+        ],
+    )?;
+    let id = require_id(obj, i)?;
+    let target = shape::parse_sp_id(&id, i)?;
+    let p = parse_drawing_anchor_patch(obj, i, "setTextBoxAnchor")?;
+    Ok(SetTextBoxAnchorOp {
+        id,
+        target,
+        anchor: p.anchor,
+        from: p.from,
+        to: p.to,
+        from_off_x: p.from_off_x,
+        from_off_y: p.from_off_y,
+        to_off_x: p.to_off_x,
+        to_off_y: p.to_off_y,
+        pos_x: p.pos_x,
+        pos_y: p.pos_y,
+        edit_as: p.edit_as,
+        cx: p.cx,
+        cy: p.cy,
+    })
+}
+
+fn parse_set_shape_text(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<SetShapeTextOp, Error> {
+    deny_keys(obj, i, &["op", "id", "text"])?;
+    let id = require_id(obj, i)?;
+    let target = shape::parse_sp_id(&id, i)?;
+    let text = parse_require_text(obj, i, "setShapeText")?;
+    Ok(SetShapeTextOp { id, target, text })
+}
+
+fn parse_insert_smartart(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<InsertSmartArtOp, Error> {
+    deny_keys(
+        obj,
+        i,
+        &[
+            "op", "id", "layout", "points", "cx", "cy", "from", "to", "anchor", "fromOffX",
+            "fromOffY", "toOffX", "toOffY",
+        ],
+    )?;
+    let id = require_id(obj, i)?;
+    let sheet = shape::parse_insert_sheet_id(&id, i, IdReason::InsertSmartArtNeedsSheet)?;
+    let (layout, points) = crate::smartart::parse_layout_and_points(obj, &format!("ops[{i}]"))?;
+    let a = parse_insert_anchor(obj, i, "insertSmartArt")?;
+    Ok(InsertSmartArtOp {
+        sheet,
+        layout,
+        points,
+        cx: a.cx,
+        cy: a.cy,
+        from: a.from,
+        to: a.to,
+        anchor: a.anchor,
+        from_off_x: a.from_off_x,
+        from_off_y: a.from_off_y,
+        to_off_x: a.to_off_x,
+        to_off_y: a.to_off_y,
+    })
+}
+
+fn parse_delete_smartart(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<DeleteSmartArtOp, Error> {
+    deny_keys(obj, i, &["op", "id"])?;
+    let id = require_id(obj, i)?;
+    let target = xlsx_smartart::parse_diagram_id(&id, i)?;
+    Ok(DeleteSmartArtOp { id, target })
+}
+
+fn parse_set_smartart_text(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<SetSmartArtTextOp, Error> {
+    deny_keys(obj, i, &["op", "id", "text"])?;
+    let id = require_id(obj, i)?;
+    let target = xlsx_smartart::parse_point_id(&id, i)?;
+    let text = parse_require_text(obj, i, "setSmartArtText")?;
+    Ok(SetSmartArtTextOp { id, target, text })
+}
+
+fn parse_add_smartart_point(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<AddSmartArtPointOp, Error> {
+    deny_keys(obj, i, &["op", "id", "text", "role"])?;
+    let id = require_id(obj, i)?;
+    let parent = xlsx_smartart::parse_add_parent(&id, i)?;
+    let text = match obj.get("text") {
+        None | Some(Value::Null) => String::new(),
+        Some(Value::String(s)) => s.clone(),
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "text".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].text"),
+            ));
+        }
+    };
+    let role = crate::smartart::parse_role_field(obj.get("role"), &format!("ops[{i}].role"))?;
+    Ok(AddSmartArtPointOp {
+        id,
+        parent,
+        text,
+        role,
+    })
+}
+
+fn parse_delete_smartart_point(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<DeleteSmartArtPointOp, Error> {
+    deny_keys(obj, i, &["op", "id"])?;
+    let id = require_id(obj, i)?;
+    let target = xlsx_smartart::parse_point_id(&id, i)?;
+    Ok(DeleteSmartArtPointOp { id, target })
+}
+
+fn parse_set_smartart_size(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<SetSmartArtSizeOp, Error> {
+    deny_keys(obj, i, &["op", "id", "cx", "cy"])?;
+    let id = require_id(obj, i)?;
+    let target = xlsx_smartart::parse_diagram_id(&id, i)?;
+    let (cx, cy) = parse_size_pair(obj, i, "setSmartArtSize")?;
+    Ok(SetSmartArtSizeOp { id, target, cx, cy })
+}
+
+fn parse_set_smartart_anchor(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<SetSmartArtAnchorOp, Error> {
+    deny_keys(
+        obj,
+        i,
+        &[
+            "op", "id", "anchor", "from", "to", "fromOffX", "fromOffY", "toOffX", "toOffY", "posX",
+            "posY", "editAs", "cx", "cy",
+        ],
+    )?;
+    let id = require_id(obj, i)?;
+    let target = xlsx_smartart::parse_diagram_id(&id, i)?;
+    let p = parse_drawing_anchor_patch(obj, i, "setSmartArtAnchor")?;
+    Ok(SetSmartArtAnchorOp {
+        id,
+        target,
+        anchor: p.anchor,
+        from: p.from,
+        to: p.to,
+        from_off_x: p.from_off_x,
+        from_off_y: p.from_off_y,
+        to_off_x: p.to_off_x,
+        to_off_y: p.to_off_y,
+        pos_x: p.pos_x,
+        pos_y: p.pos_y,
+        edit_as: p.edit_as,
+        cx: p.cx,
+        cy: p.cy,
+    })
+}
+
+fn parse_set_smartart_colors(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<SetSmartArtColorsOp, Error> {
+    deny_keys(obj, i, &["op", "id", "colors"])?;
+    let id = require_id(obj, i)?;
+    let target = xlsx_smartart::parse_diagram_id(&id, i)?;
+    let colors =
+        crate::smartart::parse_colors_field(obj.get("colors"), &format!("ops[{i}].colors"))?;
+    Ok(SetSmartArtColorsOp { id, target, colors })
+}
+
+fn parse_set_smartart_style(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<SetSmartArtStyleOp, Error> {
+    deny_keys(obj, i, &["op", "id", "style"])?;
+    let id = require_id(obj, i)?;
+    let target = xlsx_smartart::parse_diagram_id(&id, i)?;
+    let style = crate::smartart::parse_style_field(obj.get("style"), &format!("ops[{i}].style"))?;
+    Ok(SetSmartArtStyleOp { id, target, style })
+}
+
+fn parse_set_smartart_layout(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<SetSmartArtLayoutOp, Error> {
+    deny_keys(obj, i, &["op", "id", "layout"])?;
+    let id = require_id(obj, i)?;
+    let target = xlsx_smartart::parse_diagram_id(&id, i)?;
+    let layout =
+        crate::smartart::parse_layout_field(obj.get("layout"), &format!("ops[{i}].layout"))?;
+    Ok(SetSmartArtLayoutOp { id, target, layout })
 }
 
 fn parse_insert_trendline(

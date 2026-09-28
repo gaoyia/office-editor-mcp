@@ -51,7 +51,7 @@ impl AnchorKind {
         }
     }
 
-    fn from_local(name: &str) -> Option<Self> {
+    pub(crate) fn from_local(name: &str) -> Option<Self> {
         match name {
             "twoCellAnchor" => Some(Self::TwoCell),
             "oneCellAnchor" => Some(Self::OneCell),

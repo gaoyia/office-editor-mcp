@@ -147,6 +147,8 @@ fn summary_without_scope() {
             "hidden",
             "pictureCount",
             "chartCount",
+            "textBoxCount",
+            "smartArtCount",
             "dataValidationCount",
             "conditionalFormatCount",
             "tableCount",

@@ -16,6 +16,8 @@ use super::hf;
 use super::names;
 use super::picture;
 use super::pivot;
+use super::shape;
+use super::smartart;
 use super::style;
 use super::table;
 use super::validation;
@@ -62,6 +64,8 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     let want_charts = scope.as_ref().is_some_and(|s| s.charts);
     let want_header_footer = scope.as_ref().is_some_and(|s| s.header_footer);
     let want_comments = scope.as_ref().is_some_and(|s| s.comments);
+    let want_text_boxes = scope.as_ref().is_some_and(|s| s.text_boxes);
+    let want_smart_art = scope.as_ref().is_some_and(|s| s.smart_art);
     let cells_scope = scope.as_ref().and_then(|s| s.cells.as_ref());
     let sheet_parts: Vec<(String, String)> = sheets
         .iter()
@@ -71,6 +75,8 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     let mut sheet_json = Vec::new();
     let mut picture_count = 0usize;
     let mut chart_count = 0usize;
+    let mut text_box_count = 0usize;
+    let mut smart_art_count = 0usize;
     let mut comment_count = 0usize;
     for (sheet_id, sh) in sheets.iter().enumerate() {
         let mut obj = Map::new();
@@ -86,6 +92,12 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
             let charts = chart::collect_sheet_charts(&pkg, &sh.part, &sh.name, &sst, &sheet_parts)?;
             chart_count += charts.len();
             obj.insert("chartCount".into(), json!(charts.len()));
+            let boxes = shape::collect_textboxes(&pkg, &sh.part, &sh.name)?;
+            text_box_count += boxes.len();
+            obj.insert("textBoxCount".into(), json!(boxes.len()));
+            let arts = smartart::collect_smartarts(&pkg, &sh.part, &sh.name)?;
+            smart_art_count += arts.len();
+            obj.insert("smartArtCount".into(), json!(arts.len()));
             let dv_count = validation::count(&sheet_doc.root);
             obj.insert("dataValidationCount".into(), json!(dv_count));
             let cf_count = cf::count(&sheet_doc.root);
@@ -129,6 +141,12 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
             }
             if want_charts {
                 obj.insert("charts".into(), Value::Array(chart::charts_json(&charts)));
+            }
+            if want_text_boxes {
+                obj.insert("textBoxes".into(), Value::Array(boxes));
+            }
+            if want_smart_art {
+                obj.insert("smartArts".into(), Value::Array(arts));
             }
             if want_comments {
                 obj.insert(
@@ -253,6 +271,8 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     root.insert("id".into(), json!("xlsx:workbook"));
     root.insert("pictureCount".into(), json!(picture_count));
     root.insert("chartCount".into(), json!(chart_count));
+    root.insert("textBoxCount".into(), json!(text_box_count));
+    root.insert("smartArtCount".into(), json!(smart_art_count));
     root.insert("commentCount".into(), json!(comment_count));
     root.insert("definedNameCount".into(), json!(names::count(&wb.root)));
     root.insert("props".into(), crate::props::inspect(&pkg)?);

@@ -524,7 +524,7 @@ fn create_smartarts_and_empty_and_rejects() {
 }
 
 #[test]
-fn xlsx_still_rejects_smartart_scope() {
+fn xlsx_accepts_smartart_scope() {
     let path = tmp("book").with_extension("xlsx");
     run(
         &json!({
@@ -537,7 +537,7 @@ fn xlsx_still_rejects_smartart_scope() {
         None,
     )
     .unwrap();
-    let err = run(
+    let RunOutput::Inspect(tree) = run(
         &json!({
             "schemaVersion": 1,
             "action": "inspect",
@@ -547,8 +547,11 @@ fn xlsx_still_rejects_smartart_scope() {
         .to_string(),
         None,
     )
-    .unwrap_err();
-    assert_eq!(err.code(), ErrorCode::InvalidField);
+    .unwrap() else {
+        panic!("inspect 应返回树");
+    };
+    assert_eq!(tree["smartArtCount"], 0);
+    assert_eq!(tree["sheets"][0]["smartArts"], json!([]));
 }
 
 #[test]

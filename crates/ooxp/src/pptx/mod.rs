@@ -8,7 +8,7 @@ mod inspect;
 mod notes;
 mod picture;
 mod request;
-mod shape;
+pub(crate) mod shape;
 mod smartart;
 
 pub use apply::apply;

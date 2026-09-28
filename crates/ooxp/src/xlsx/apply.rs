@@ -14,7 +14,9 @@ use super::hf;
 use super::inspect;
 use super::layout;
 use super::picture;
+use super::shape;
 use super::sheets;
+use super::smartart;
 use super::style;
 use super::REL_CALC_CHAIN;
 
@@ -456,6 +458,175 @@ pub fn apply(bytes: &[u8], ops: &[XlsxOp]) -> Result<Vec<u8>, Error> {
                 let part = require_comments_worksheet(&sheet_index, &target.sheet, i)?;
                 comments::apply_set_done(&mut pkg, &part, op, i)?;
             }
+            XlsxOp::InsertTextBox(op) => {
+                let part = require_drawing_worksheet(
+                    &sheet_index,
+                    &op.sheet,
+                    i,
+                    ErrorKind::InsertTextBoxWorksheetOnly,
+                )?;
+                load_dirty(&pkg, &mut dirty_sheets, &part, false)?;
+                let doc = dirty_of(&mut dirty_sheets, &part);
+                shape::insert_textbox(&mut pkg, doc, &part, op)?;
+            }
+            XlsxOp::DeleteTextBox(op) => {
+                let part = require_drawing_worksheet(
+                    &sheet_index,
+                    &op.target.sheet,
+                    i,
+                    ErrorKind::InsertTextBoxWorksheetOnly,
+                )?;
+                load_dirty(&pkg, &mut dirty_sheets, &part, false)?;
+                let doc = dirty_of(&mut dirty_sheets, &part);
+                shape::delete_textbox(&mut pkg, doc, &part, op, i)?;
+            }
+            XlsxOp::SetTextBoxSize(op) => {
+                let part = require_drawing_worksheet(
+                    &sheet_index,
+                    &op.target.sheet,
+                    i,
+                    ErrorKind::InsertTextBoxWorksheetOnly,
+                )?;
+                load_dirty(&pkg, &mut dirty_sheets, &part, false)?;
+                let doc = dirty_of(&mut dirty_sheets, &part);
+                shape::set_textbox_size(&mut pkg, &doc.root, &part, op, i)?;
+            }
+            XlsxOp::SetTextBoxAnchor(op) => {
+                let part = require_drawing_worksheet(
+                    &sheet_index,
+                    &op.target.sheet,
+                    i,
+                    ErrorKind::InsertTextBoxWorksheetOnly,
+                )?;
+                load_dirty(&pkg, &mut dirty_sheets, &part, false)?;
+                let doc = dirty_of(&mut dirty_sheets, &part);
+                shape::set_textbox_anchor(&mut pkg, &doc.root, &part, op, i)?;
+            }
+            XlsxOp::SetShapeText(op) => {
+                let part = require_drawing_worksheet(
+                    &sheet_index,
+                    &op.target.sheet,
+                    i,
+                    ErrorKind::InsertTextBoxWorksheetOnly,
+                )?;
+                load_dirty(&pkg, &mut dirty_sheets, &part, false)?;
+                let doc = dirty_of(&mut dirty_sheets, &part);
+                shape::set_shape_text(&mut pkg, &doc.root, &part, op, i)?;
+            }
+            XlsxOp::InsertSmartArt(op) => {
+                let part = require_drawing_worksheet(
+                    &sheet_index,
+                    &op.sheet,
+                    i,
+                    ErrorKind::InsertSmartArtWorksheetOnly,
+                )?;
+                load_dirty(&pkg, &mut dirty_sheets, &part, false)?;
+                let doc = dirty_of(&mut dirty_sheets, &part);
+                smartart::insert_smartart(&mut pkg, doc, &part, op)?;
+            }
+            XlsxOp::DeleteSmartArt(op) => {
+                let part = require_drawing_worksheet(
+                    &sheet_index,
+                    &op.target.sheet,
+                    i,
+                    ErrorKind::InsertSmartArtWorksheetOnly,
+                )?;
+                load_dirty(&pkg, &mut dirty_sheets, &part, false)?;
+                let doc = dirty_of(&mut dirty_sheets, &part);
+                smartart::delete_smartart(&mut pkg, doc, &part, op, i)?;
+            }
+            XlsxOp::SetSmartArtText(op) => {
+                let part = require_drawing_worksheet(
+                    &sheet_index,
+                    &op.target.diagram.sheet,
+                    i,
+                    ErrorKind::InsertSmartArtWorksheetOnly,
+                )?;
+                load_dirty(&pkg, &mut dirty_sheets, &part, false)?;
+                let doc = dirty_of(&mut dirty_sheets, &part);
+                smartart::apply_text(&mut pkg, &doc.root, &part, op, i)?;
+            }
+            XlsxOp::AddSmartArtPoint(op) => {
+                let sheet = match &op.parent {
+                    smartart::AddParent::Diagram(t) => t.sheet.as_str(),
+                    smartart::AddParent::Point(p) => p.diagram.sheet.as_str(),
+                };
+                let part = require_drawing_worksheet(
+                    &sheet_index,
+                    sheet,
+                    i,
+                    ErrorKind::InsertSmartArtWorksheetOnly,
+                )?;
+                load_dirty(&pkg, &mut dirty_sheets, &part, false)?;
+                let doc = dirty_of(&mut dirty_sheets, &part);
+                smartart::apply_add_point(&mut pkg, &doc.root, &part, op, i)?;
+            }
+            XlsxOp::DeleteSmartArtPoint(op) => {
+                let part = require_drawing_worksheet(
+                    &sheet_index,
+                    &op.target.diagram.sheet,
+                    i,
+                    ErrorKind::InsertSmartArtWorksheetOnly,
+                )?;
+                load_dirty(&pkg, &mut dirty_sheets, &part, false)?;
+                let doc = dirty_of(&mut dirty_sheets, &part);
+                smartart::apply_delete_point(&mut pkg, &doc.root, &part, op, i)?;
+            }
+            XlsxOp::SetSmartArtSize(op) => {
+                let part = require_drawing_worksheet(
+                    &sheet_index,
+                    &op.target.sheet,
+                    i,
+                    ErrorKind::InsertSmartArtWorksheetOnly,
+                )?;
+                load_dirty(&pkg, &mut dirty_sheets, &part, false)?;
+                let doc = dirty_of(&mut dirty_sheets, &part);
+                smartart::set_smartart_size(&mut pkg, &doc.root, &part, op, i)?;
+            }
+            XlsxOp::SetSmartArtAnchor(op) => {
+                let part = require_drawing_worksheet(
+                    &sheet_index,
+                    &op.target.sheet,
+                    i,
+                    ErrorKind::InsertSmartArtWorksheetOnly,
+                )?;
+                load_dirty(&pkg, &mut dirty_sheets, &part, false)?;
+                let doc = dirty_of(&mut dirty_sheets, &part);
+                smartart::set_smartart_anchor(&mut pkg, &doc.root, &part, op, i)?;
+            }
+            XlsxOp::SetSmartArtColors(op) => {
+                let part = require_drawing_worksheet(
+                    &sheet_index,
+                    &op.target.sheet,
+                    i,
+                    ErrorKind::InsertSmartArtWorksheetOnly,
+                )?;
+                load_dirty(&pkg, &mut dirty_sheets, &part, false)?;
+                let doc = dirty_of(&mut dirty_sheets, &part);
+                smartart::apply_colors(&mut pkg, &doc.root, &part, op, i)?;
+            }
+            XlsxOp::SetSmartArtStyle(op) => {
+                let part = require_drawing_worksheet(
+                    &sheet_index,
+                    &op.target.sheet,
+                    i,
+                    ErrorKind::InsertSmartArtWorksheetOnly,
+                )?;
+                load_dirty(&pkg, &mut dirty_sheets, &part, false)?;
+                let doc = dirty_of(&mut dirty_sheets, &part);
+                smartart::apply_style(&mut pkg, &doc.root, &part, op, i)?;
+            }
+            XlsxOp::SetSmartArtLayout(op) => {
+                let part = require_drawing_worksheet(
+                    &sheet_index,
+                    &op.target.sheet,
+                    i,
+                    ErrorKind::InsertSmartArtWorksheetOnly,
+                )?;
+                load_dirty(&pkg, &mut dirty_sheets, &part, false)?;
+                let doc = dirty_of(&mut dirty_sheets, &part);
+                smartart::apply_layout(&mut pkg, &doc.root, &part, op, i)?;
+            }
             XlsxOp::DeleteChart(op) => {
                 let (part, kind) = require_named_sheet(&sheet_index, &op.target.sheet, i)?;
                 load_dirty(&pkg, &mut dirty_sheets, &part, false)?;
@@ -613,6 +784,15 @@ fn require_comments_worksheet(
     name: &str,
     op_index: usize,
 ) -> Result<String, Error> {
+    require_drawing_worksheet(index, name, op_index, ErrorKind::CommentsWorksheetOnly)
+}
+
+fn require_drawing_worksheet(
+    index: &[(String, String, &'static str)],
+    name: &str,
+    op_index: usize,
+    chartsheet_err: ErrorKind,
+) -> Result<String, Error> {
     let meta = index.iter().find(|(n, _, _)| n.eq_ignore_ascii_case(name));
     let Some((_, part, kind)) = meta else {
         return Err(Error::with_path(
@@ -629,7 +809,7 @@ fn require_comments_worksheet(
             format!("ops[{op_index}].id"),
         )),
         _ => Err(Error::with_path(
-            ErrorKind::CommentsWorksheetOnly,
+            chartsheet_err,
             format!("ops[{op_index}].id"),
         )),
     }

@@ -146,6 +146,26 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::TxbxIndexFromOne => "txbx:index starts at 1".into(),
             IdReason::SetParaOnBox => "setParaText id must be a paragraph id, not a text box id".into(),
             IdReason::InsertNeedsHostPara => "insertTextBox id must be a host paragraph id".into(),
+            IdReason::SheetSpPrefix => {
+                "xlsx text box id must be sheet:name/sp:…".into()
+            }
+            IdReason::SheetSpContainer => {
+                "Sheet id must include /sp:… (that id alone is not a text box)".into()
+            }
+            IdReason::SpIndexNotInt => "sp:index must be followed by a positive integer".into(),
+            IdReason::SpIndexFromOne => "sp:index starts at 1".into(),
+            IdReason::InsertTextBoxNeedsSheet => {
+                "xlsx insertTextBox id must be sheet:name".into()
+            }
+            IdReason::SheetSmartArtPrefix => {
+                "xlsx SmartArt id must be sheet:name/smartdiagram:…".into()
+            }
+            IdReason::SheetSmartArtContainer => {
+                "Sheet id must include /smartdiagram:… (that id alone is not a SmartArt)".into()
+            }
+            IdReason::InsertSmartArtNeedsSheet => {
+                "xlsx insertSmartArt id must be sheet:name".into()
+            }
             IdReason::InsertParaNeedsBox => {
                 "deletePara id must be a paragraph id (body, header/footer, table cell, text box, note, or comment)".into()
             }
@@ -595,12 +615,26 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::InspectWorksheetOnly => "Cells can only be read from worksheets".into(),
         ErrorKind::InsertPictureWorksheetOnly => "insertPicture only applies to worksheets".into(),
         ErrorKind::InsertChartWorksheetOnly => "insertChart only applies to worksheets".into(),
+        ErrorKind::InsertTextBoxWorksheetOnly => {
+            "insertTextBox and text box ops only apply to worksheets".into()
+        }
+        ErrorKind::InsertSmartArtWorksheetOnly => {
+            "insertSmartArt and SmartArt ops only apply to worksheets".into()
+        }
         ErrorKind::CommentsWorksheetOnly => "comment ops only apply to worksheets".into(),
         ErrorKind::DataSheetMustBeWorksheet => {
             "insertChartSheet data must be written to a worksheet".into()
         }
         ErrorKind::TwoCellPictureSize => {
             "twoCell picture size is defined by the anchor cells; use setPictureAnchor to change the to cell"
+                .into()
+        }
+        ErrorKind::TwoCellTextBoxSize => {
+            "twoCell text box size is defined by the anchor cells; use setTextBoxAnchor to change the to cell"
+                .into()
+        }
+        ErrorKind::TwoCellSmartArtSize => {
+            "twoCell SmartArt size is defined by the anchor cells; use setSmartArtAnchor to change the to cell"
                 .into()
         }
         ErrorKind::TwoCellChartSize => {

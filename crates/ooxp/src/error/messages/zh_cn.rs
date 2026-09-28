@@ -133,6 +133,26 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::TxbxIndexFromOne => "txbx:index 从 1 起".into(),
             IdReason::SetParaOnBox => "setParaText 的 id 必须是段落 id，不能是文本框 id".into(),
             IdReason::InsertNeedsHostPara => "insertTextBox 的 id 必须是宿主段落 id".into(),
+            IdReason::SheetSpPrefix => {
+                "xlsx 文本框 id 必须是 sheet:工作表名/sp:…".into()
+            }
+            IdReason::SheetSpContainer => {
+                "工作表 id 必须带 /sp:…（该 id 本身不是文本框）".into()
+            }
+            IdReason::SpIndexNotInt => "sp:index 后面必须是正整数".into(),
+            IdReason::SpIndexFromOne => "sp:index 从 1 起".into(),
+            IdReason::InsertTextBoxNeedsSheet => {
+                "xlsx 的 insertTextBox 的 id 必须是 sheet:工作表名".into()
+            }
+            IdReason::SheetSmartArtPrefix => {
+                "xlsx SmartArt id 必须是 sheet:工作表名/smartdiagram:…".into()
+            }
+            IdReason::SheetSmartArtContainer => {
+                "工作表 id 必须带 /smartdiagram:…（该 id 本身不是 SmartArt）".into()
+            }
+            IdReason::InsertSmartArtNeedsSheet => {
+                "xlsx 的 insertSmartArt 的 id 必须是 sheet:工作表名".into()
+            }
             IdReason::InsertParaNeedsBox => {
                 "deletePara 的 id 必须是段落 id（正文、页眉页脚、表格单元格、文本框、注或批注）".into()
             }
@@ -513,12 +533,20 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::InspectWorksheetOnly => "只能对工作表读单元格".into(),
         ErrorKind::InsertPictureWorksheetOnly => "只能往工作表 insertPicture".into(),
         ErrorKind::InsertChartWorksheetOnly => "只能往工作表 insertChart".into(),
+        ErrorKind::InsertTextBoxWorksheetOnly => "只能往工作表 insertTextBox / 改文本框".into(),
+        ErrorKind::InsertSmartArtWorksheetOnly => "只能往工作表 insertSmartArt / 改图示".into(),
         ErrorKind::CommentsWorksheetOnly => "只能对工作表发批注 op".into(),
         ErrorKind::DataSheetMustBeWorksheet => {
             "insertChartSheet 的数据必须写到普通工作表上".into()
         }
         ErrorKind::TwoCellPictureSize => {
             "twoCell 图的显示尺寸由起止格决定，请用 setPictureAnchor 改 to".into()
+        }
+        ErrorKind::TwoCellTextBoxSize => {
+            "twoCell 文本框的显示尺寸由起止格决定，请用 setTextBoxAnchor 改 to".into()
+        }
+        ErrorKind::TwoCellSmartArtSize => {
+            "twoCell SmartArt 的显示尺寸由起止格决定，请用 setSmartArtAnchor 改 to".into()
         }
         ErrorKind::TwoCellChartSize => {
             "twoCell 图表的显示尺寸由起止格决定，请用 setChartAnchor 改 to".into()

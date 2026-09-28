@@ -91,6 +91,20 @@ pub(crate) enum IdReason {
     SetParaOnBox,
     /// insertTextBox 必须是宿主段落
     InsertNeedsHostPara,
+    /// xlsx 文本框 id 必须是 sheet:{name}/sp:…
+    SheetSpPrefix,
+    /// 工作表 id，缺少 /sp:…
+    SheetSpContainer,
+    SpIndexNotInt,
+    SpIndexFromOne,
+    /// xlsx 的 insertTextBox 必须用 sheet:工作表名
+    InsertTextBoxNeedsSheet,
+    /// xlsx 图示 id 必须是 sheet:{name}/smartdiagram:…
+    SheetSmartArtPrefix,
+    /// 工作表 id，缺少 /smartdiagram:…
+    SheetSmartArtContainer,
+    /// xlsx 的 insertSmartArt 必须用 sheet:工作表名
+    InsertSmartArtNeedsSheet,
     /// deletePara 必须是段落 id，不能是容器
     InsertParaNeedsBox,
     /// 脚注/尾注 id 形态不对
@@ -398,10 +412,14 @@ define_error_kinds! {
     InspectWorksheetOnly => vec![Self::InspectWorksheetOnly],
     InsertPictureWorksheetOnly => vec![Self::InsertPictureWorksheetOnly],
     InsertChartWorksheetOnly => vec![Self::InsertChartWorksheetOnly],
+    InsertTextBoxWorksheetOnly => vec![Self::InsertTextBoxWorksheetOnly],
+    InsertSmartArtWorksheetOnly => vec![Self::InsertSmartArtWorksheetOnly],
     CommentsWorksheetOnly => vec![Self::CommentsWorksheetOnly],
     DataSheetMustBeWorksheet => vec![Self::DataSheetMustBeWorksheet],
     TwoCellPictureSize => vec![Self::TwoCellPictureSize],
     TwoCellChartSize => vec![Self::TwoCellChartSize],
+    TwoCellTextBoxSize => vec![Self::TwoCellTextBoxSize],
+    TwoCellSmartArtSize => vec![Self::TwoCellSmartArtSize],
     DeleteChartsheetLast => vec![Self::DeleteChartsheetLast],
     ChartFormulaNotA1 => vec![Self::ChartFormulaNotA1],
     PictureAnchorAbsolute => vec![Self::PictureAnchorAbsolute],
@@ -757,6 +775,14 @@ impl IdReason {
             Self::TxbxIndexFromOne,
             Self::SetParaOnBox,
             Self::InsertNeedsHostPara,
+            Self::SheetSpPrefix,
+            Self::SheetSpContainer,
+            Self::SpIndexNotInt,
+            Self::SpIndexFromOne,
+            Self::InsertTextBoxNeedsSheet,
+            Self::SheetSmartArtPrefix,
+            Self::SheetSmartArtContainer,
+            Self::InsertSmartArtNeedsSheet,
             Self::InsertParaNeedsBox,
             Self::NotePrefix,
             Self::NoteContainer,
@@ -1099,6 +1125,8 @@ impl ErrorKind {
             | Self::InvalidTextBoxDirection
             | Self::InsertPictureWorksheetOnly
             | Self::InsertChartWorksheetOnly
+            | Self::InsertTextBoxWorksheetOnly
+            | Self::InsertSmartArtWorksheetOnly
             | Self::CommentsWorksheetOnly
             | Self::DataSheetMustBeWorksheet
             | Self::InvalidXlsxAnchor
@@ -1167,6 +1195,8 @@ impl ErrorKind {
             | Self::SmartArtLayoutNotConvertible
             | Self::TwoCellPictureSize
             | Self::TwoCellChartSize
+            | Self::TwoCellTextBoxSize
+            | Self::TwoCellSmartArtSize
             | Self::DeleteChartsheetLast
             | Self::ChartFormulaNotA1
             | Self::PictureAnchorAbsolute
