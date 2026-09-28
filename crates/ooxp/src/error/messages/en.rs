@@ -235,6 +235,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::LayoutForm => {
                 "setSlideLayout layout must be master:N/layout:K".into()
             }
+            IdReason::SetHandoutTextNeedsHandout => {
+                "setHandoutText id must be handout".into()
+            }
             IdReason::InsertDefinedNameNeedsWorkbook => {
                 "insertDefinedName id must be xlsx:workbook".into()
             }

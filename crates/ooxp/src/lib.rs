@@ -1024,6 +1024,7 @@ mod tests {
                 "tableCount",
                 "animCount",
                 "masterCount",
+                "hasHandout",
                 "props",
                 "slides"
             ]

@@ -4,6 +4,7 @@ mod apply;
 mod chart;
 mod comments;
 mod create;
+mod handout;
 mod inspect;
 mod master;
 mod notes;

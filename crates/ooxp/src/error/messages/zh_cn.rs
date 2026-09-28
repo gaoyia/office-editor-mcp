@@ -210,6 +210,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::LayoutForm => {
                 "setSlideLayout 的 layout 必须是 master:N/layout:K".into()
             }
+            IdReason::SetHandoutTextNeedsHandout => {
+                "setHandoutText 的 id 必须是 handout".into()
+            }
             IdReason::InsertDefinedNameNeedsWorkbook => {
                 "insertDefinedName 的 id 必须是 xlsx:workbook".into()
             }

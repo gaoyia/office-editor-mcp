@@ -6,6 +6,7 @@ use crate::xml;
 
 use super::chart;
 use super::comments;
+use super::handout;
 use super::master;
 use super::notes;
 use super::picture;
@@ -798,6 +799,9 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                 master::set_slide_layout(
                     &mut pkg, &slides, &pres_part, &pres.root, op.slide, op.master, op.layout, i,
                 )?;
+            }
+            PptxOp::SetHandoutText(op) => {
+                handout::set_text(&mut pkg, &pres_part, &mut pres, op, i)?;
             }
             PptxOp::SetProps(op) => {
                 crate::props::apply_set_props(&mut pkg, op, i)?;

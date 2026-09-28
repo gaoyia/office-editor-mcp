@@ -8,6 +8,7 @@ use crate::xml;
 
 use super::chart;
 use super::comments;
+use super::handout;
 use super::master;
 use super::notes;
 use super::picture;
@@ -32,6 +33,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     let want_tables = scope.as_ref().is_some_and(|s| s.tables);
     let want_timing = scope.as_ref().is_some_and(|s| s.timing);
     let want_masters = scope.as_ref().is_some_and(|s| s.masters);
+    let want_handout = scope.as_ref().is_some_and(|s| s.handout);
     let catalog = master::catalog(&pkg, &pres_part, &pres.root)?;
 
     let mut slide_json = Vec::new();
@@ -170,9 +172,16 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     root.insert("tableCount".into(), json!(table_count));
     root.insert("animCount".into(), json!(anim_count));
     root.insert("masterCount".into(), json!(catalog.count()));
+    root.insert(
+        "hasHandout".into(),
+        json!(handout::has_handout(&pkg, &pres_part)?),
+    );
     root.insert("props".into(), crate::props::inspect(&pkg)?);
     if want_masters {
         root.insert("masters".into(), master::masters_json(&pkg, &catalog)?);
+    }
+    if want_handout {
+        root.insert("handout".into(), handout::handout_json(&pkg, &pres_part)?);
     }
     root.insert("slides".into(), Value::Array(slide_json));
     Ok(Value::Object(root))

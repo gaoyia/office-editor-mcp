@@ -152,6 +152,8 @@ pub(crate) enum IdReason {
     MasterForm,
     /// setSlideLayout 的 layout 必须是 master:N/layout:K
     LayoutForm,
+    /// setHandoutText 必须用 handout
+    SetHandoutTextNeedsHandout,
     /// insertDefinedName 必须用 xlsx:workbook
     InsertDefinedNameNeedsWorkbook,
     /// setDefinedName / deleteDefinedName 必须用 name:n
@@ -873,6 +875,7 @@ impl IdReason {
             Self::SlideOpNeedsSlide,
             Self::MasterForm,
             Self::LayoutForm,
+            Self::SetHandoutTextNeedsHandout,
             Self::InsertDefinedNameNeedsWorkbook,
             Self::DefinedNamePrefix,
             Self::NameIndexNotInt,

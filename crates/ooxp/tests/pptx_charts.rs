@@ -162,6 +162,7 @@ fn inspect_chart_count_without_list() {
             "tableCount",
             "animCount",
             "masterCount",
+            "hasHandout",
             "props",
             "slides"
         ]

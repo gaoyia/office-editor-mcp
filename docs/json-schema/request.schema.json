@@ -202,6 +202,9 @@
         "masters": {
           "type": "boolean"
         },
+        "handout": {
+          "type": "boolean"
+        },
         "revisions": {
           "type": "boolean"
         },
@@ -949,6 +952,9 @@
               },
               {
                 "$ref": "pptx.schema.json#/$defs/setSlideLayoutOp"
+              },
+              {
+                "$ref": "pptx.schema.json#/$defs/setHandoutTextOp"
               },
               {
                 "$ref": "#/$defs/setPropsOp"

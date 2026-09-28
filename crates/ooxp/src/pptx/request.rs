@@ -26,6 +26,7 @@ pub struct InspectScope {
     pub tables: bool,
     pub timing: bool,
     pub masters: bool,
+    pub handout: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -125,6 +126,14 @@ pub struct SetSlideLayoutOp {
     pub slide: usize,
     pub master: usize,
     pub layout: usize,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetHandoutTextOp {
+    pub header: Option<String>,
+    pub footer: Option<String>,
+    pub date: Option<String>,
+    pub sld_num: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -578,6 +587,7 @@ pub enum PptxOp {
     SetSlideHidden(SetSlideHiddenOp),
     SetTransition(SetTransitionOp),
     SetSlideLayout(SetSlideLayoutOp),
+    SetHandoutText(SetHandoutTextOp),
     SetProps(crate::props::SetPropsOp),
     SetCustomProp(crate::props::SetCustomPropOp),
     DeleteCustomProp(crate::props::DeleteCustomPropOp),
@@ -612,6 +622,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
             "tables",
             "timing",
             "masters",
+            "handout",
         ],
     )?;
     let pictures = parse_bool_field(obj.get("pictures"), "pictures")?;
@@ -622,6 +633,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
     let tables = parse_bool_field(obj.get("tables"), "tables")?;
     let timing = parse_bool_field(obj.get("timing"), "timing")?;
     let masters = parse_bool_field(obj.get("masters"), "masters")?;
+    let handout = parse_bool_field(obj.get("handout"), "handout")?;
     let slide = match obj.get("slide") {
         None => None,
         Some(s) => {
@@ -690,6 +702,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
         tables,
         timing,
         masters,
+        handout,
     }))
 }
 
@@ -802,6 +815,7 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<PptxOp>, Error> {
             "setSlideHidden" => PptxOp::SetSlideHidden(parse_set_slide_hidden(obj, i)?),
             "setTransition" => PptxOp::SetTransition(parse_set_transition(obj, i)?),
             "setSlideLayout" => PptxOp::SetSlideLayout(parse_set_slide_layout(obj, i)?),
+            "setHandoutText" => PptxOp::SetHandoutText(parse_set_handout_text(obj, i)?),
             "setProps" => {
                 PptxOp::SetProps(crate::props::parse_set_props(obj, i, "pptx:presentation")?)
             }
@@ -1293,6 +1307,56 @@ fn parse_set_slide_layout(obj: &Map<String, Value>, i: usize) -> Result<SetSlide
         master,
         layout: layout_n,
     })
+}
+
+fn parse_set_handout_text(obj: &Map<String, Value>, i: usize) -> Result<SetHandoutTextOp, Error> {
+    deny_keys(obj, i, &["op", "id", "header", "footer", "date", "sldNum"])?;
+    let id = require_id(obj, i)?;
+    if id != "handout" {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: crate::error::IdReason::SetHandoutTextNeedsHandout,
+            },
+            format!("ops[{i}].id"),
+        ));
+    }
+    let header = parse_optional_slot(obj, i, "header")?;
+    let footer = parse_optional_slot(obj, i, "footer")?;
+    let date = parse_optional_slot(obj, i, "date")?;
+    let sld_num = parse_optional_slot(obj, i, "sldNum")?;
+    if header.is_none() && footer.is_none() && date.is_none() && sld_num.is_none() {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "setHandoutText".into(),
+                field: "header, footer, date, or sldNum".into(),
+            },
+            format!("ops[{i}]"),
+        ));
+    }
+    Ok(SetHandoutTextOp {
+        header,
+        footer,
+        date,
+        sld_num,
+    })
+}
+
+fn parse_optional_slot(
+    obj: &Map<String, Value>,
+    i: usize,
+    field: &str,
+) -> Result<Option<String>, Error> {
+    match obj.get(field) {
+        None => Ok(None),
+        Some(Value::String(s)) => Ok(Some(s.clone())),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::String,
+            },
+            format!("ops[{i}].{field}"),
+        )),
+    }
 }
 
 fn parse_shape_host(

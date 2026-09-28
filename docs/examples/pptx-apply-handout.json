@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "deck.pptx",
+  "output": "deck.handout.pptx",
+  "ops": [
+    { "op": "setHandoutText", "id": "handout", "header": "讲义页眉", "footer": "讲义页脚" }
+  ]
+}

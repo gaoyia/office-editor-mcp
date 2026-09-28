@@ -738,6 +738,57 @@
           "minLength": 1
         }
       }
+    },
+    "setHandoutTextOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setHandoutText"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "header": {
+          "type": "string"
+        },
+        "footer": {
+          "type": "string"
+        },
+        "date": {
+          "type": "string"
+        },
+        "sldNum": {
+          "type": "string"
+        }
+      },
+      "anyOf": [
+        {
+          "required": [
+            "header"
+          ]
+        },
+        {
+          "required": [
+            "footer"
+          ]
+        },
+        {
+          "required": [
+            "date"
+          ]
+        },
+        {
+          "required": [
+            "sldNum"
+          ]
+        }
+      ]
     }
   }
 }

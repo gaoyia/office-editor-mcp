@@ -249,6 +249,7 @@ fn create_has_master_count_without_list() {
             "tableCount",
             "animCount",
             "masterCount",
+            "hasHandout",
             "props",
             "slides"
         ]
@@ -286,6 +287,7 @@ fn masters_scope_lists_blank_layout() {
             "tableCount",
             "animCount",
             "masterCount",
+            "hasHandout",
             "props",
             "masters",
             "slides"

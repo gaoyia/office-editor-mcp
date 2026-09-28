@@ -48,6 +48,7 @@ pptx 模块不要引用 `docx::` 或 `xlsx::`。`c:chart`（§21.2）用 `crates
 | 3 | `.plan/2026年-9月-27日-✅-pptx-切换.md` | 无（只动 `<p:transition>`，不写 timing） |
 | 4 | `.plan/2026年-9月-27日-✅-pptx-动画清单.md` | 无（只读，禁止 apply 写 timing） |
 | 5 | `.plan/2026年-9月-27日-✅-pptx-母版与版式.md` | 形状增删 |
+| 6 | `.plan/2026年-9月-27日-✅-pptx-讲义.md` | 备注已过 |
 
 0 与 2 不要合成一份。图是 `p:pic`，图表是 `p:graphicFrame`，位置是画布 `a:xfrm`。第一期页名单和 `setShapeText` 见总计划。
 
@@ -55,7 +56,6 @@ pptx 模块不要引用 `docx::` 或 `xlsx::`。`c:chart`（§21.2）用 `crates
 
 | 序 | 计划 | 前置 |
 | --- | --- | --- |
-| 6 | `.plan/2026年-9月-27日-❌-pptx-讲义.md` | 备注已过 |
 | 7 | `.plan/2026年-9月-27日-❌-pptx-超链接.md` | 无 |
 | 8 | `.plan/2026年-9月-27日-❌-pptx-create备注与批注.md` | 备注、批注 apply 已过 |
 | 9 | `.plan/2026年-9月-27日-❌-pptx-备注批注内剩余.md` | 备注、批注、图表、SmartArt 已过 |
