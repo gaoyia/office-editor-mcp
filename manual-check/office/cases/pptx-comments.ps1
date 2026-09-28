@@ -1,4 +1,4 @@
-# pptx 批注：docs/checklist-pptx.md 的 Pcm1–Pcm5、Pik1–Pik4。
+# pptx 批注：docs/checklist-pptx.md 的 Pcm1–Pcm6、Pik1–Pik4。
 # 源文件：PowerPoint 亲手另存，第一页有两条线程化批注，其中一条带回复。不要用库 create 产物当带批注的唯一样例。
 # 墨迹：在另存样例的现代批注部件里，按 commentId 给「批注乙」插入本地名为 ink 的空标记。
 
@@ -185,6 +185,100 @@ $capTh = Get-PptCaption $presTh
 Add-Check 'pptx-Pcm5' (($capTh -notmatch 'Repair') -and $replyOk -and $doneOk) "cap=$capTh reply=$replyOk done=$($cTh.done)"
 Close-PptPres $presTh
 
+function Add-ZipBytes([string]$zipPath, [string]$part, [byte[]]$bytes) {
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $zip = [IO.Compression.ZipFile]::Open($zipPath, 'Update')
+    try {
+        $n = $part -replace '\\', '/'
+        $old = $zip.Entries | Where-Object { ($_.FullName -replace '\\', '/') -eq $n } | Select-Object -First 1
+        if ($old) { $old.Delete() }
+        $entry = $zip.CreateEntry($n)
+        $ws = $entry.Open()
+        $ws.Write($bytes, 0, $bytes.Length)
+        $ws.Dispose()
+    }
+    finally { $zip.Dispose() }
+}
+
+function Get-ZipBytes([string]$zipPath, [string]$part) {
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $zip = [IO.Compression.ZipFile]::OpenRead($zipPath)
+    try {
+        $n = $part -replace '\\', '/'
+        $entry = $zip.Entries | Where-Object { ($_.FullName -replace '\\', '/') -eq $n } | Select-Object -First 1
+        if (-not $entry) { return $null }
+        $ms = New-Object IO.MemoryStream
+        $es = $entry.Open()
+        $es.CopyTo($ms)
+        $es.Dispose()
+        return $ms.ToArray()
+    }
+    finally { $zip.Dispose() }
+}
+
+function Inject-PptxCommentBlip([string]$pptx, [string]$guid, [string]$pngPath) {
+    $script:BlipGuid = $guid
+    $part = Find-ZipPartContaining $pptx 'ppt/comments/*.xml' $guid
+    if (-not $part) { throw "批注部件里没有 $guid" }
+    Rewrite-ZipPart $pptx $part {
+        param($xml)
+        $tIdx = $xml.IndexOf($script:BlipGuid)
+        if ($tIdx -lt 0) { throw "部件里没有 $($script:BlipGuid)" }
+        $head = $xml.Substring(0, [Math]::Min($tIdx + 20, $xml.Length))
+        $cmStart = $head.LastIndexOf('<p188:cm')
+        if ($cmStart -lt 0) { $cmStart = $head.LastIndexOf('<p:cm') }
+        if ($cmStart -lt 0) { throw '找不到批注元素起点' }
+        $cmEnd = $xml.IndexOf('</p188:cm>', $tIdx)
+        $endLen = '</p188:cm>'.Length
+        if ($cmEnd -lt 0) {
+            $cmEnd = $xml.IndexOf('</p:cm>', $tIdx)
+            $endLen = '</p:cm>'.Length
+        }
+        if ($cmEnd -lt 0) { throw '找不到批注元素终点' }
+        $cmEnd += $endLen
+        $block = $xml.Substring($cmStart, $cmEnd - $cmStart)
+        if ($block -notmatch 'a:blip[^>]*r:embed') {
+            $close = '</p188:txBody>'
+            $p = $block.LastIndexOf($close)
+            if ($p -lt 0) {
+                $close = '</a:txBody>'
+                $p = $block.LastIndexOf($close)
+            }
+            if ($p -lt 0) { throw '批注里没有 txBody 结束标签' }
+            $block = $block.Insert($p + $close.Length, '<a:blip r:embed="rIdOoxpPic"/>')
+        }
+        return $xml.Substring(0, $cmStart) + $block + $xml.Substring($cmEnd)
+    }
+    $dir = ($part -replace '\\', '/').Substring(0, ($part -replace '\\', '/').LastIndexOf('/'))
+    $file = ($part -replace '\\', '/').Substring(($part -replace '\\', '/').LastIndexOf('/') + 1)
+    $rels = "$dir/_rels/$file.rels"
+    $relsXml = Get-ZipBytes $pptx $rels
+    $relBody = @"
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rIdOoxpPic" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/image-ooxp-cm.png"/>
+</Relationships>
+"@
+    if ($null -ne $relsXml) {
+        $old = [Text.Encoding]::UTF8.GetString($relsXml)
+        if ($old -notmatch 'rIdOoxpPic') {
+            $relBody = $old.Replace('</Relationships>', '  <Relationship Id="rIdOoxpPic" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/image-ooxp-cm.png"/></Relationships>')
+        } else {
+            $relBody = $old
+        }
+    }
+    Add-ZipBytes $pptx $rels ([Text.Encoding]::UTF8.GetBytes($relBody))
+    Add-ZipBytes $pptx 'ppt/media/image-ooxp-cm.png' ([IO.File]::ReadAllBytes($pngPath))
+    Rewrite-ZipPart $pptx '[Content_Types].xml' {
+        param($xml)
+        if ($xml -match 'Extension="png"') { return $xml }
+        return $xml.Replace(
+            '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">',
+            '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="png" ContentType="image/png"/>'
+        )
+    }
+}
+
 function Invoke-OoxpExpectFail($obj, [string]$name) {
     $path = Join-Path $global:OoxpReqDir "$name.json"
     Write-JsonFile $path $obj
@@ -248,6 +342,56 @@ function Rewrite-ZipPart([string]$zipPath, [string]$part, [scriptblock]$edit) {
     }
     finally { $zip.Dispose() }
 }
+
+$pngA = Ensure-OoxpPngA
+$picSrc = Get-OutPath 'pptx-comments-pic-source.pptx'
+Close-PptPresByPath $ppt $picSrc
+if (Test-Path $picSrc) { Remove-Item $picSrc -Force }
+Copy-Item -Force $src $picSrc
+Inject-PptxCommentBlip $picSrc ([string]$cA.commentId) $pngA
+
+$treePicCm = Invoke-OoxpTree @{
+    schemaVersion = 1; action = 'inspect'
+    path = $picSrc.Replace('\', '/'); format = 'pptx'
+    scope = @{ comments = $true; pictures = $true }
+} 'pptx-comments-pic-inspect'
+$cPic = Find-PptCommentByText $treePicCm ([string]$cA.text)
+$picCountOk = $cPic -and ([int]$cPic.pictureCount -eq 1)
+$wantPicId = "$($cA.id)/pic:1"
+$picIdOk = $false
+if ($cPic -and $cPic.pictures) {
+    $picIdOk = ([string]$cPic.pictures[0].id -eq $wantPicId)
+}
+$expPic = Get-OutPath 'pptx-comments-pic.png'
+if (Test-Path $expPic) { Remove-Item $expPic -Force }
+Invoke-OoxpRequest @{
+    schemaVersion = 1; action = 'exportMedia'
+    path = $picSrc.Replace('\', '/')
+    id = $wantPicId
+    output = $expPic.Replace('\', '/')
+} 'pptx-comments-pic-export' | Out-Null
+$mediaBytes = Get-ZipBytes $picSrc 'ppt/media/image-ooxp-cm.png'
+$expBytes = if (Test-Path $expPic) { [IO.File]::ReadAllBytes($expPic) } else { @() }
+$bytesOk = ($null -ne $mediaBytes) -and ($expBytes.Length -eq $mediaBytes.Length)
+if ($bytesOk) {
+    for ($bi = 0; $bi -lt $mediaBytes.Length; $bi++) {
+        if ($expBytes[$bi] -ne $mediaBytes[$bi]) { $bytesOk = $false; break }
+    }
+}
+$failPic = Get-OutPath 'pptx-comments-pic-insert.pptx'
+if (Test-Path $failPic) { Remove-Item $failPic -Force }
+$rawPic = Invoke-OoxpExpectFail @{
+    schemaVersion = 1; action = 'apply'
+    path = $picSrc.Replace('\', '/')
+    output = $failPic.Replace('\', '/')
+    ops = @(@{ op = 'insertPicture'; id = $cA.id; file = $pngA.Replace('\', '/') })
+} 'pptx-comments-pic-insert'
+$picCode = ''
+try { $picCode = [string](($rawPic.Stderr | ConvertFrom-Json).error.code) } catch { $picCode = $rawPic.Stderr }
+$noPicWrite = -not (Test-Path $failPic)
+Add-Check 'pptx-Pcm6' (
+    $picCountOk -and $picIdOk -and $bytesOk -and ($picCode -eq 'InvalidId') -and $noPicWrite
+) "count=$($cPic.pictureCount) id=$($cPic.pictures[0].id) bytes=$bytesOk code=$picCode wrote=$(-not $noPicWrite)"
 
 function Inject-PptxCommentInk([string]$pptx, [switch]$StripText) {
     $script:InkStrip = [bool]$StripText

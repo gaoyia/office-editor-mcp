@@ -1,4 +1,4 @@
-# pptx 备注：docs/checklist-pptx.md 的 Pn1–Pn4。
+# pptx 备注：docs/checklist-pptx.md 的 Pn1–Pn6。
 # 源文件：PowerPoint 亲手另存，第一页有演讲者备注。不要用库 create 产物当带备注的唯一样例。
 
 $ErrorActionPreference = 'Stop'
@@ -179,3 +179,107 @@ Add-Check 'pptx-Pn4' (
 ) "cap=$capP idOk=$picIdOk rootPc=$($treePic.pictureCount) com=$comPics n=$nPics"
 Release-Com $slideP
 Close-PptPres $presP
+
+$chartOut = Get-OutPath 'pptx-notes-chart.pptx'
+Close-PptPresByPath $ppt $chartOut
+if (Test-Path $chartOut) { Remove-Item $chartOut -Force }
+Invoke-OoxpRequest @{
+    schemaVersion = 1; action = 'apply'
+    path = $src.Replace('\', '/')
+    output = $chartOut.Replace('\', '/')
+    ops = @(@{
+        op = 'insertChart'
+        id = 'slide:1/notes'
+        type = 'col'
+        title = $S.chartTitle
+        series = @(@{
+            name = $S.chartSer1
+            categories = @($S.saItem1, $S.saItem2, $S.saItem3)
+            values = @(1, 2, 3)
+        })
+    })
+} 'pptx-notes-insert-chart' | Out-Null
+
+$treeCh = Invoke-OoxpTree @{
+    schemaVersion = 1; action = 'inspect'
+    path = $chartOut.Replace('\', '/'); format = 'pptx'
+    scope = @{ notes = $true; charts = $true }
+} 'pptx-notes-chart-inspect'
+$nNotesCh = $treeCh.slides[0].notes
+$chId = $null
+if ($nNotesCh -and $nNotesCh.charts -and @($nNotesCh.charts).Count -ge 1) {
+    $chId = [string]$nNotesCh.charts[0].id
+}
+$chIdOk = ($null -ne $chId) -and ($chId -like 'slide:1/notes/chart:*')
+$slideChStill = [int]$treeCh.chartCount -eq 0 -and [int]$treeCh.slides[0].chartCount -eq 0
+$serId = $null
+if ($chIdOk) { $serId = "$chId/series:0" }
+
+$serOut = Get-OutPath 'pptx-notes-chart-series.pptx'
+Close-PptPresByPath $ppt $serOut
+if (Test-Path $serOut) { Remove-Item $serOut -Force }
+if ($serId) {
+    Invoke-OoxpRequest @{
+        schemaVersion = 1; action = 'apply'
+        path = $chartOut.Replace('\', '/')
+        output = $serOut.Replace('\', '/')
+        ops = @(@{ op = 'setChartSeries'; id = $serId; values = @(10, 20, 30) })
+    } 'pptx-notes-chart-series' | Out-Null
+}
+$treeSer = $null
+$valsOk = $false
+if (Test-Path $serOut) {
+    $treeSer = Invoke-OoxpTree @{
+        schemaVersion = 1; action = 'inspect'
+        path = $serOut.Replace('\', '/'); format = 'pptx'
+        scope = @{ notes = $true; charts = $true }
+    } 'pptx-notes-chart-series-inspect'
+    $got = @($treeSer.slides[0].notes.charts[0].series[0].values)
+    $valsOk = ($got.Count -eq 3) -and ([double]$got[0] -eq 10) -and ([double]$got[1] -eq 20) -and ([double]$got[2] -eq 30)
+}
+
+$openChart = if (Test-Path $serOut) { $serOut } else { $chartOut }
+$presC = Open-PptPres $ppt $openChart
+$capC = Get-PptCaption $presC
+Close-PptPres $presC
+Add-Check 'pptx-Pn5' (
+    ($capC -notmatch 'Repair') -and $chIdOk -and $slideChStill -and $valsOk
+) "cap=$capC id=$chId slideCc=$($treeCh.chartCount) vals=$valsOk"
+
+$saOut = Get-OutPath 'pptx-notes-smartart.pptx'
+Close-PptPresByPath $ppt $saOut
+if (Test-Path $saOut) { Remove-Item $saOut -Force }
+Invoke-OoxpRequest @{
+    schemaVersion = 1; action = 'apply'
+    path = $src.Replace('\', '/')
+    output = $saOut.Replace('\', '/')
+    ops = @(@{
+        op = 'insertSmartArt'
+        id = 'slide:1/notes'
+        layout = 'list'
+        points = @(
+            @{ text = $S.saItem1 }
+            @{ text = $S.saItem2 }
+            @{ text = $S.saItem3 }
+        )
+    })
+} 'pptx-notes-insert-smartart' | Out-Null
+
+$treeSa = Invoke-OoxpTree @{
+    schemaVersion = 1; action = 'inspect'
+    path = $saOut.Replace('\', '/'); format = 'pptx'
+    scope = @{ notes = $true; smartArt = $true }
+} 'pptx-notes-smartart-inspect'
+$nNotesSa = $treeSa.slides[0].notes
+$saId = $null
+if ($nNotesSa -and $nNotesSa.smartArts -and @($nNotesSa.smartArts).Count -ge 1) {
+    $saId = [string]$nNotesSa.smartArts[0].id
+}
+$saIdOk = ($null -ne $saId) -and ($saId -like 'slide:1/notes/smartdiagram:*')
+$slideSaStill = [int]$treeSa.smartArtCount -eq 0 -and [int]$treeSa.slides[0].smartArtCount -eq 0
+$presSa = Open-PptPres $ppt $saOut
+$capSa = Get-PptCaption $presSa
+Close-PptPres $presSa
+Add-Check 'pptx-Pn6' (
+    ($capSa -notmatch 'Repair') -and $saIdOk -and $slideSaStill
+) "cap=$capSa id=$saId slideSa=$($treeSa.smartArtCount)"

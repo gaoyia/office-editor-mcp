@@ -6,7 +6,7 @@ xlsx / docx / pptx 的稳定 id、inspect、create 与专用 apply 分别见 [js
 
 机器可读副本入口是 [json-schema/request.schema.json](json-schema/request.schema.json)。xlsx / docx / pptx 的片段分别是 [xlsx.schema.json](json-schema/xlsx.schema.json)、[docx.schema.json](json-schema/docx.schema.json)、[pptx.schema.json](json-schema/pptx.schema.json)。与 Markdown 冲突时以本文及分册为准。
 
-xlsx、docx、pptx 的 inspect、create、apply 已经按本文实现。docx 另有 `exportMedia` 与 `exportChartData`。docx 的 `exportMedia` 认图 id 与 OLE id：图 id 写出 `/word/media/…`，OLE id 写出 embeddings 部件。xlsx 的 `exportMedia` 认工作表图 id 与页眉页脚图 id。pptx 的 `exportMedia` 认幻灯片图 id 与备注图 id，写出 `/ppt/media/…`。xlsx / pptx 的 `exportMedia` 不认 OLE id。xlsx 的 `scope.charts` 与图表 op 认工作表 / 图表工作表上的图；`scope.headerFooter` 展开工作表上的页眉页脚槽位。pptx 的 `scope.charts` 与图表 op 认幻灯片上的图表 `p:graphicFrame`；`exportChartData` 认幻灯片图表 id，写出 embedding。pptx 的 `scope.smartArt` 与 SmartArt op 认幻灯片上的 diagram `p:graphicFrame`。pptx 的 `scope.tables` 与表格 op 认幻灯片上 DrawingML 表 `p:graphicFrame`（`a:tbl`，ECMA-376 §21.1.3.13），不认 `w:tbl`，也不认工作表表格。pptx 的 `scope.comments` 与批注 op 认该页 2018 线程化批注（`p188:cmLst`），不认 ECMA-376 §19.4 旧式部件。pptx 的 `scope.timing` 列出该页 `<p:timing>` 效果摘要，apply 不写时间轴。pptx 的 `scope.masters` 列出幻灯片母版与版式及占位符，apply 可用 `setSlideLayout` 换页的版式关系，也可用 `setShapeText` / `setShapePos` / `setShapeSize` 改占位符。pptx 的 `scope.handout` 列出讲义母版页眉页脚槽位，apply 用 `setHandoutText` 改字。pptx 的 `scope.hyperlinks` 与超链接 op 认幻灯片文本形状 `p:cNvPr` 上的 `a:hlinkClick`（跳转 / 文件 / URL），不认 run 级链、图、表、图表、SmartArt、备注或母版上的链。xlsx 的 `scope.comments` 与批注 op 认工作表上的 MS-XLSX 线程化批注（`threadedComment`），不认作者不以 `tc=` 开头的旧式 VML 批注。xlsx 的 `scope.textBoxes` 与文本框 op、`setShapeText` 认工作表 DrawingML 文本框（`xdr:sp` 且 `txBox`）。xlsx 的 `scope.smartArt` 与 SmartArt op 认工作表 diagram `xdr:graphicFrame`。xlsx 的 `scope.hyperlinks` 与超链接 op 认工作表 `<hyperlinks>`（ECMA-376 §18.3.1.47），不认 `HYPERLINK()` 公式，也不认图或框上的 DrawingML 链。xlsx 的 `scope.sparklines` 与迷你图 op 认工作表 `extLst` 里的 `x14:sparklineGroups`（MS-XLSX §2.4.8），不把折线画进树。xlsx 可用 `setProtection` 开关无密码的工作表 `sheetProtection` 与工作簿 `workbookProtection`。xlsx 的 `exportChartData` 仍拒绝。人工打开只认 Microsoft Office，见三份 checklist。
+xlsx、docx、pptx 的 inspect、create、apply 已经按本文实现。docx 另有 `exportMedia` 与 `exportChartData`。docx 的 `exportMedia` 认图 id 与 OLE id：图 id 写出 `/word/media/…`，OLE id 写出 embeddings 部件。xlsx 的 `exportMedia` 认工作表图 id 与页眉页脚图 id。pptx 的 `exportMedia` 认幻灯片图 id、备注图 id 与批注内图 id，写出 `/ppt/media/…`。xlsx / pptx 的 `exportMedia` 不认 OLE id。xlsx 的 `scope.charts` 与图表 op 认工作表 / 图表工作表上的图；`scope.headerFooter` 展开工作表上的页眉页脚槽位。pptx 的 `scope.charts` 与图表 op 认幻灯片与备注页上的图表 `p:graphicFrame`；`exportChartData` 认这两处图表 id，写出 embedding。pptx 的 `scope.smartArt` 与 SmartArt op 认幻灯片与备注页上的 diagram `p:graphicFrame`。pptx 的 `scope.tables` 与表格 op 认幻灯片上 DrawingML 表 `p:graphicFrame`（`a:tbl`，ECMA-376 §21.1.3.13），不认 `w:tbl`，也不认工作表表格。pptx 的 `scope.comments` 与批注 op 认该页 2018 线程化批注（`p188:cmLst`），不认 ECMA-376 §19.4 旧式部件。pptx 的 `scope.timing` 列出该页 `<p:timing>` 效果摘要，apply 不写时间轴。pptx 的 `scope.masters` 列出幻灯片母版与版式及占位符，apply 可用 `setSlideLayout` 换页的版式关系，也可用 `setShapeText` / `setShapePos` / `setShapeSize` 改占位符。pptx 的 `scope.handout` 列出讲义母版页眉页脚槽位，apply 用 `setHandoutText` 改字。pptx 的 `scope.hyperlinks` 与超链接 op 认幻灯片文本形状 `p:cNvPr` 上的 `a:hlinkClick`（跳转 / 文件 / URL），不认 run 级链、图、表、图表、SmartArt、备注或母版上的链。xlsx 的 `scope.comments` 与批注 op 认工作表上的 MS-XLSX 线程化批注（`threadedComment`），不认作者不以 `tc=` 开头的旧式 VML 批注。xlsx 的 `scope.textBoxes` 与文本框 op、`setShapeText` 认工作表 DrawingML 文本框（`xdr:sp` 且 `txBox`）。xlsx 的 `scope.smartArt` 与 SmartArt op 认工作表 diagram `xdr:graphicFrame`。xlsx 的 `scope.hyperlinks` 与超链接 op 认工作表 `<hyperlinks>`（ECMA-376 §18.3.1.47），不认 `HYPERLINK()` 公式，也不认图或框上的 DrawingML 链。xlsx 的 `scope.sparklines` 与迷你图 op 认工作表 `extLst` 里的 `x14:sparklineGroups`（MS-XLSX §2.4.8），不把折线画进树。xlsx 可用 `setProtection` 开关无密码的工作表 `sheetProtection` 与工作簿 `workbookProtection`。xlsx 的 `exportChartData` 仍拒绝。人工打开只认 Microsoft Office，见三份 checklist。
 
 ## 信封
 
@@ -255,7 +255,7 @@ xlsx 工作簿（id 为 `xlsx:workbook`）：
 | 字段 | 含义 |
 | --- | --- |
 | `op` | 必须是 `"replacePicture"` |
-| `id` | 图 id：docx 为 `{容器}/pic:…` 或 `{段落 id}/pic:…`；xlsx 为 `sheet:{name}/pic:…`；pptx 为 `slide:{n}/pic:…` 或 `slide:{n}/notes/pic:…` |
+| `id` | 图 id：docx 为 `{容器}/pic:…` 或 `{段落 id}/pic:…`；xlsx 为 `sheet:{name}/pic:…`；pptx 为 `slide:{n}/pic:…`、`slide:{n}/notes/pic:…` 或 `{批注 id}/pic:{k}`。pptx 批注内图 id 只能用于 `exportMedia`，对本 op 报 `InvalidId` |
 | `file` | 本地图片路径，与信封 `path` 一样认正斜杠和反斜杠。不把 base64 放进领域 JSON |
 
 找不到该图报 `IdNotFound`。读不到 `file` 报 `Io`。文件不是本库认的位图（见下）报 `InvalidField`。
@@ -295,7 +295,7 @@ docx：找不到该段落报 `IdNotFound`。`id` 不是段落 id 报 `InvalidId`
 
 xlsx：找不到该表报 `IdNotFound`。`id` 不是 `sheet:{name}` 也不是页眉槽位 id 报 `InvalidId`。该表不是 `worksheet` 报 `InvalidField`。往工作表插图必须给 `from`，否则报 `MissingField`。`from` / `to` 不是合法 A1 报 `InvalidRange`。`anchor` 为 `twoCell` 却没有 `to` 报 `InvalidField`。`anchor` 为 `absolute` 或不认识报 `InvalidField`。`cx` / `cy` 规则与 docx 相同；`twoCell` 也要写 `xdr:pic` 里的 `a:ext`（给 Excel 一个内部尺寸），显示尺寸仍由起止格决定。没有 drawing 部件则新建 `/xl/drawings/drawingN.xml`、工作表关系、`[Content_Types].xml` 的 Override，并在工作表上写 `<drawing r:id="…"/>`。往页眉槽位插图时不写 `<drawing>`，改写或新建 `<drawingHF r:id="…"/>`。新媒体写入 `/xl/media/imageN.*`。`xdr:cNvPr/@id` 取该表工作表 drawing 与 `drawingHF` 里已有 `cNvPr` 的最大整数加 1。工作表图至少为 1。页眉图至少为 2：Excel 16.0 若 `drawingHF` 的 `cho` / `lho` 等属性指向 id 1，会拒绝打开该工作簿。锚点必须带空的 `xdr:clientData`（§20.5.2.3）。
 
-pptx：找不到该页报 `IdNotFound`。`id` 必须是 `slide:{n}` 或 `slide:{n}/notes`。对图 id、形状 id 或 `pptx:presentation` 发此 op 报 `InvalidId`。`cx` / `cy` 规则与 docx 相同。`x` / `y` 必须成对出现或成对省略；只给一个时报 `InvalidField`。缺坐标则放到该宿主空白处，不要叠在 `(0,0)`：往幻灯片插时读取 `presentation.xml` 的 `p:sldSz`；往备注插时读取 `p:notesSz`（没有则用 `6858000` × `9144000`）。扫描该宿主已有 `p:sp` / `p:pic` / `p:graphicFrame` / 嵌套 `p:grpSp` 的 `a:xfrm`，优先放到最右侧空隙，放不下再放到下方。`kind` / `wrap` / `from` / `to` / `anchor` 以及 xlsx 偏移字段出现报 `InvalidField`。写入该宿主 `p:spTree` 一个新的 `p:pic`（带 `a:blip`），关系指向 `/ppt/media/imageN.*`。`p:cNvPr/@id` 取该宿主已有全部 `cNvPr`（`sp` / `pic` / `graphicFrame` / 组合，含 `spTree` 自己的 `id="1"`）的最大整数加 1，至少为 2。`id` 为 `slide:{n}/notes` 且该页还没有 notesSlide 时，按 `setNotesText` 同一套规则新建最小备注页再插图。
+pptx：找不到该页报 `IdNotFound`。`id` 必须是 `slide:{n}` 或 `slide:{n}/notes`。对图 id、形状 id、批注 id、批注内图 id 或 `pptx:presentation` 发此 op 报 `InvalidId`。`cx` / `cy` 规则与 docx 相同。`x` / `y` 必须成对出现或成对省略；只给一个时报 `InvalidField`。缺坐标则放到该宿主空白处，不要叠在 `(0,0)`：往幻灯片插时读取 `presentation.xml` 的 `p:sldSz`；往备注插时读取 `p:notesSz`（没有则用 `6858000` × `9144000`）。扫描该宿主已有 `p:sp` / `p:pic` / `p:graphicFrame` / 嵌套 `p:grpSp` 的 `a:xfrm`，优先放到最右侧空隙，放不下再放到下方。`kind` / `wrap` / `from` / `to` / `anchor` 以及 xlsx 偏移字段出现报 `InvalidField`。写入该宿主 `p:spTree` 一个新的 `p:pic`（带 `a:blip`），关系指向 `/ppt/media/imageN.*`。`p:cNvPr/@id` 取该宿主已有全部 `cNvPr`（`sp` / `pic` / `graphicFrame` / 组合，含 `spTree` 自己的 `id="1"`）的最大整数加 1，至少为 2。`id` 为 `slide:{n}/notes` 且该页还没有 notesSlide 时，按 `setNotesText` 同一套规则新建最小备注页再插图。对批注 id 发此 op 报 `InvalidId`。
 
 ### deletePicture
 
@@ -762,7 +762,7 @@ xlsx 没有 embedding。有可解析的连续 A1 `c:f` 时：把数组写入这�
 | 字段 | 含义 |
 | --- | --- |
 | `op` | 必须是 `"insertChart"` |
-| `id` | docx：宿主段落 id（正文、页眉页脚、框内、注内或批注内段落）。xlsx：工作表 id `sheet:{name}`。pptx：页 id `slide:{n}` |
+| `id` | docx：宿主段落 id（正文、页眉页脚、框内、注内或批注内段落）。xlsx：工作表 id `sheet:{name}`。pptx：页 id `slide:{n}`，或备注容器 id `slide:{n}/notes` |
 | `type` | `bar`、`col`、`line`、`pie`、`area`、`scatter`、`doughnut`、`radar`、`bubble` 或 `combo` |
 | `title` | 可选。图表标题 |
 | `series` | 必须。非空数组。每项可含 `name`、`categories`、`values`、`sizes`、`type`；`values` 必填且非空 |
@@ -780,7 +780,7 @@ docx：在该段末插入 `w:drawing`，默认浮动。新建 `/word/charts/char
 
 xlsx：找不到该表报 `IdNotFound`。`id` 不是 `sheet:{name}` 报 `InvalidId`。该表不是 `worksheet` 报 `InvalidField`。必须给 `from` 与 `dataFrom`，否则报 `MissingField`。`from` / `to` / `dataFrom` 不是合法 A1 报 `InvalidRange`。`anchor` 规则与 `insertPicture` 相同。按 `setCell` 语义把数据表写到 `dataFrom` 起的格子（已有内容会被覆盖）。新建 `/xl/charts/chartN.xml`、chart 的 `.rels`（不写 embedding），`c:f` 指向这些格子。没有 drawing 则按插图同一套规则新建 drawing，并在锚点下写 `xdr:graphicFrame`（须带空的 `xdr:clientData`）。`xdr:cNvPr/@id` 取该表已有全部 `cNvPr`（图与框）的最大整数加 1，至少为 1。对图 id、图表 id、系列 id 或单元格 id 发此 op 报 `InvalidId`。不要用本 op 新建图表工作表。
 
-pptx：找不到该页报 `IdNotFound`。`id` 必须是 `slide:{n}`。对图 id、形状 id、图表 id 或 `pptx:presentation` 发此 op 报 `InvalidId`。写入该页 `p:spTree` 一个 `p:graphicFrame`，新建 `/ppt/charts/chartN.xml`、chart 的 `.rels`、一份最小 embedding（`/ppt/embeddings/Microsoft_Excel_WorksheetN.xlsx`，规则与 docx 相同）。`p:cNvPr/@id` 取该页已有全部 `cNvPr` 的最大整数加 1，至少为 2。`x` / `y` 成对规则与 `insertPicture` 相同。不写演示文稿里的工作表。
+pptx：找不到该页报 `IdNotFound`。`id` 必须是 `slide:{n}` 或 `slide:{n}/notes`。对图 id、形状 id、图表 id、批注 id 或 `pptx:presentation` 发此 op 报 `InvalidId`。写入该宿主 `p:spTree` 一个 `p:graphicFrame`，新建 `/ppt/charts/chartN.xml`、chart 的 `.rels`、一份最小 embedding（`/ppt/embeddings/Microsoft_Excel_WorksheetN.xlsx`，规则与 docx 相同）。图表关系写在该宿主 `.rels`（幻灯片或 notesSlide）。`p:cNvPr/@id` 取该宿主已有全部 `cNvPr` 的最大整数加 1，至少为 2。`x` / `y` 成对规则与 `insertPicture` 相同；往备注插时画布用 `p:notesSz`。`id` 为 `slide:{n}/notes` 且该页还没有 notesSlide 时，按 `setNotesText` 同一套规则新建最小备注页再插图。不写演示文稿里的工作表。
 
 `type` 不认识或 `series` 为空报 `InvalidField`。`pie` 与 `doughnut` 只允许恰好一条系列，否则报 `InvalidField`。`bubble` 的 `sizes` 省略则写成与 `values` 等长的 `1`。`type` 为 `combo` 时，每条系列必须带 `type`（`bar`、`col`、`line`、`area` 或 `scatter`），且至少出现两种不同包裹，否则报 `InvalidField`；`combo` 的系列 `type` 不能是 `pie`、`doughnut`、`radar`、`bubble`。对非组合图的系列给 `type` 报 `InvalidField`。
 
@@ -852,7 +852,7 @@ xlsx 认同一套 SmartArt op，但几何走工作表锚点：用 `setSmartArtAn
 | 字段 | 含义 |
 | --- | --- |
 | `op` | 必须是 `"insertSmartArt"` |
-| `id` | docx：宿主段落 id，正文、页眉页脚、框内、注内或批注内段落。xlsx：工作表 id `sheet:{name}`。pptx：页 id `slide:{n}` |
+| `id` | docx：宿主段落 id，正文、页眉页脚、框内、注内或批注内段落。xlsx：工作表 id `sheet:{name}`。pptx：页 id `slide:{n}`，或备注容器 id `slide:{n}/notes` |
 | `layout` | `list`、`org` 或 `cycle` |
 | `points` | 可选。可见点数组。每项可含 `text`、`parent`、`role`。`parent` 是本数组里从 0 起的下标，表示父点；省略或 `null` 表示挂到文档根点下 |
 | `kind` | docx 可选。`inline` 或 `anchor`，缺省 `anchor`。xlsx / pptx 上出现报 `InvalidField` |
@@ -865,7 +865,7 @@ docx：在该段末插入 `w:drawing`，默认浮动。新建 `/word/diagrams/` 
 
 xlsx：在该表 worksheet drawing 插入 `xdr:graphicFrame`。新建 `/xl/diagrams/` 下同样四件套，四条关系写在 **drawing** `.rels`。`xdr:cNvPr/@id` 取该表已有全部 `cNvPr` 的最大整数加 1。`from` 必填，锚点对齐 `insertChart`。缺省尺寸用 `5486400` × `3200400`。`kind` / `wrap` / `x` / `y` 出现报 `InvalidField`。对图 id、图表 id、图示 id、点 id、文本框 id、单元格 id 或 `xlsx:workbook` 发此 op 报 `InvalidId`。找不到工作表报 `IdNotFound`。对 `chartsheet` 报 `InvalidField`。对 `dialogsheet` / `macrosheet` 报 `NotImplemented`。
 
-pptx：在该页 `p:spTree` 插入 `p:graphicFrame`。新建 `/ppt/diagrams/` 下同样四件套，四条关系写在该页 `.rels`。`p:cNvPr/@id` 取该页已有全部 `cNvPr` 的最大整数加 1，至少为 2。缺 `x` / `y` 则放到该页空白处。对图 id、图表 id、图示 id、点 id、形状 id 或 `pptx:presentation` 发此 op 报 `InvalidId`。找不到页报 `IdNotFound`。
+pptx：在该宿主 `p:spTree` 插入 `p:graphicFrame`。新建 `/ppt/diagrams/` 下同样四件套，四条关系写在该宿主 `.rels`（幻灯片或 notesSlide）。`p:cNvPr/@id` 取该宿主已有全部 `cNvPr` 的最大整数加 1，至少为 2。缺 `x` / `y` 则放到该宿主空白处；往备注插时画布用 `p:notesSz`。`id` 为 `slide:{n}/notes` 且该页还没有 notesSlide 时，按 `setNotesText` 同一套规则新建最小备注页再插入。对图 id、图表 id、图示 id、点 id、形状 id、批注 id 或 `pptx:presentation` 发此 op 报 `InvalidId`。找不到页报 `IdNotFound`。
 
 `dgm:relIds` 的 `r:dm` / `r:lo` / `r:qs` / `r:cs` 指向这四条。不强制套 `mc:AlternateContent`，不写 Fallback 位图，不写 diagram drawing 缓存。
 
@@ -977,7 +977,7 @@ Content Type：data 为 `application/vnd.openxmlformats-officedocument.drawingml
 
 写出的是该媒体部件或嵌入部件的原字节。`contentType` 取自 `[Content_Types].xml` 对该部件的 Default 或 Override；都没有则省略该字段。扩展名由调用方自己定，库不按类型改名。
 
-xlsx 用工作表图 id 或页眉图 id，写出 `/xl/media/…`。pptx 用幻灯片图 id 或备注图 id，写出 `/ppt/media/…`。docx 文本框里的图用框内段落上的图 id，同一动作能导出。脚注、尾注里的图用注内段落上的图 id，同一动作能导出。批注里的图用批注内段落上的图 id，同一动作能导出。docx 的 OLE id 写出 `/word/embeddings/…`，不是预览图。嵌入图表的工作簿另走 `exportChartData`，不在本动作。
+xlsx 用工作表图 id 或页眉图 id，写出 `/xl/media/…`。pptx 用幻灯片图 id、备注图 id 或批注内图 id，写出 `/ppt/media/…`。docx 文本框里的图用框内段落上的图 id，同一动作能导出。脚注、尾注里的图用注内段落上的图 id，同一动作能导出。批注里的图用批注内段落上的图 id，同一动作能导出。docx 的 OLE id 写出 `/word/embeddings/…`，不是预览图。嵌入图表的工作簿另走 `exportChartData`，不在本动作。
 
 成功时 stdout 见 [errors.md](errors.md)。源包不写回。
 
@@ -1002,7 +1002,7 @@ xlsx 用工作表图 id 或页眉图 id，写出 `/xl/media/…`。pptx 用幻�
 | `output` | 否 | 本地目标路径。省略时用命令行 `--output`。两者都缺报 `MissingField`。不得默认写成源 `path` |
 | `format` | 否 | 可省略，从 `path` 扩展名推断 |
 
-`id` 必须是图表 id，含正文、页眉页脚、框内、注内与批注内带前缀的 id。对系列 id、段落 id、形状 id、图 id 报 `InvalidId`。找不到该图报表 `IdNotFound`。没有 embedding 报 `OpcPartMissing`。关系指向外部资源同样报 `OpcPartMissing`，不下载 http。xlsx 本期报 `InvalidField`。
+`id` 必须是图表 id，含正文、页眉页脚、框内、注内与批注内带前缀的 id，以及 pptx 备注图表 id `slide:{n}/notes/chart:…`。对系列 id、段落 id、形状 id、图 id 报 `InvalidId`。找不到该图报表 `IdNotFound`。没有 embedding 报 `OpcPartMissing`。关系指向外部资源同样报 `OpcPartMissing`，不下载 http。xlsx 本期报 `InvalidField`。
 
 写出的是 embedding 部件的原字节。`contentType` 取自 `[Content_Types].xml`；没有则省略。
 

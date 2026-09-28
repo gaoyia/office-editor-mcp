@@ -235,6 +235,7 @@ fn insert_comment_inspects_and_writes_modern_parts() {
             "kind",
             "x",
             "y",
+            "pictureCount",
             "text",
             "replies"
         ]

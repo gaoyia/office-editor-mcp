@@ -110,10 +110,13 @@ pub(super) fn render(kind: &ErrorKind) -> String {
                 "xlsx insertPicture id must be sheet:name or sheet:name/hf:kind:side".into()
             }
             IdReason::SlidePicPrefix => {
-                "pptx picture id must be slide:N/pic:… or slide:N/notes/pic:…".into()
+                "pptx picture id must be slide:N/pic:…, slide:N/notes/pic:…, or slide:N/comment:GUID/pic:n".into()
             }
             IdReason::SlidePicContainer => {
                 "Slide id must include /pic:… (that id alone is not a picture)".into()
+            }
+            IdReason::CommentPicExportOnly => {
+                "comment pictures can only be used with exportMedia".into()
             }
             IdReason::InsertNeedsSlide => {
                 "pptx insertPicture / insertShape id must be slide:N or slide:N/notes".into()
@@ -215,7 +218,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
                 "xlsx insertChart id must be sheet:name".into()
             }
             IdReason::InsertChartNeedsSlide => {
-                "pptx insertChart id must be slide:N".into()
+                "pptx insertChart id must be slide:N or slide:N/notes".into()
             }
             IdReason::InsertChartSheetNeedsWorkbook => {
                 "insertChartSheet id must be xlsx:workbook".into()
@@ -283,7 +286,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
                 "Sheet id must include /chart:… (that id alone is not a chart)".into()
             }
             IdReason::SlideChartPrefix => {
-                "pptx chart id must be slide:N/chart:…".into()
+                "pptx chart id must be slide:N/chart:… or slide:N/notes/chart:…".into()
             }
             IdReason::SlideChartContainer => {
                 "Slide id must include /chart:… (that id alone is not a chart)".into()
@@ -305,13 +308,13 @@ pub(super) fn render(kind: &ErrorKind) -> String {
                 "insertSmartArt id must be a body or header/footer paragraph id".into()
             }
             IdReason::SlideSmartArtPrefix => {
-                "pptx SmartArt id must be slide:N/smartdiagram:…".into()
+                "pptx SmartArt id must be slide:N/smartdiagram:… or slide:N/notes/smartdiagram:…".into()
             }
             IdReason::SlideSmartArtContainer => {
                 "Slide id must include /smartdiagram:… (that id alone is not a SmartArt)".into()
             }
             IdReason::InsertSmartArtNeedsSlide => {
-                "pptx insertSmartArt id must be slide:N".into()
+                "pptx insertSmartArt id must be slide:N or slide:N/notes".into()
             }
             IdReason::SlideTablePrefix => "pptx table id must be slide:N/table:…".into(),
             IdReason::SlideTableContainer => {

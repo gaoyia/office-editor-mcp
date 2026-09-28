@@ -73,6 +73,8 @@ pub fn notes_json(
     slide_part: &str,
     slide: usize,
     want_pictures: bool,
+    want_charts: bool,
+    want_smartarts: bool,
 ) -> Result<Value, Error> {
     let Some(part) = notes_slide_part(pkg, slide_part)? else {
         return Ok(Value::Null);
@@ -80,6 +82,26 @@ pub fn notes_json(
     let doc = xml::parse(pkg.get(&part)?)?;
     let host = format!("slide:{slide}/notes");
     let pics = picture::collect_pictures(&doc.root, &host);
+    let charts_list = if want_charts {
+        Some(super::chart::collect_charts(pkg, &doc.root, &host, &part)?)
+    } else {
+        None
+    };
+    let n_charts = charts_list
+        .as_ref()
+        .map(|c| c.len())
+        .unwrap_or_else(|| super::chart::count_charts(&doc.root));
+    let smartarts_list = if want_smartarts {
+        Some(super::smartart::collect_smartarts(
+            pkg, &doc.root, &host, &part,
+        )?)
+    } else {
+        None
+    };
+    let n_smartarts = smartarts_list
+        .as_ref()
+        .map(|c| c.len())
+        .unwrap_or_else(|| super::smartart::count_smartarts(&doc.root));
     let all = shape::collect_text_shapes(&doc.root);
     let mut shapes = Vec::new();
     for (i, sp) in all.iter().enumerate() {
@@ -89,11 +111,19 @@ pub fn notes_json(
     let mut obj = Map::new();
     obj.insert("id".into(), json!(host));
     obj.insert("pictureCount".into(), json!(pics.len()));
+    obj.insert("chartCount".into(), json!(n_charts));
+    obj.insert("smartArtCount".into(), json!(n_smartarts));
     if want_pictures {
         obj.insert(
             "pictures".into(),
             Value::Array(picture::pictures_json(&pics)),
         );
+    }
+    if let Some(charts) = charts_list {
+        obj.insert("charts".into(), Value::Array(charts));
+    }
+    if let Some(smartarts) = smartarts_list {
+        obj.insert("smartArts".into(), Value::Array(smartarts));
     }
     obj.insert("shapes".into(), Value::Array(shapes));
     Ok(Value::Object(obj))

@@ -67,6 +67,8 @@ pub(crate) enum IdReason {
     SlidePicPrefix,
     /// 页 id，缺少 /pic:…
     SlidePicContainer,
+    /// 批注内图只能 exportMedia
+    CommentPicExportOnly,
     /// pptx 的 insertPicture / insertShape 必须用 slide:N 或 slide:N/notes
     InsertNeedsSlide,
     /// setNotesText 必须用 slide:N 或 slide:N/notes
@@ -838,6 +840,7 @@ impl IdReason {
             Self::InsertNeedsSheet,
             Self::SlidePicPrefix,
             Self::SlidePicContainer,
+            Self::CommentPicExportOnly,
             Self::InsertNeedsSlide,
             Self::SetNotesTextNeedsSlide,
             Self::PptxCommentForm,

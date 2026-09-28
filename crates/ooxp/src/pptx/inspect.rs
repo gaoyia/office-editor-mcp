@@ -52,7 +52,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         let pics = picture::collect_pictures(&doc.root, &host);
         picture_count += pics.len();
         let charts_list = if want_charts {
-            Some(chart::collect_charts(&pkg, &doc.root, s.index, &s.part)?)
+            Some(chart::collect_charts(&pkg, &doc.root, &host, &s.part)?)
         } else {
             None
         };
@@ -63,7 +63,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         chart_count += n_charts;
         let smartarts_list = if want_smartarts {
             Some(smartart::collect_smartarts(
-                &pkg, &doc.root, s.index, &s.part,
+                &pkg, &doc.root, &host, &s.part,
             )?)
         } else {
             None
@@ -75,7 +75,12 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         smart_art_count += n_smartarts;
         let has = notes::has_notes(&pkg, &s.part)?;
         let comments_list = if want_comments {
-            Some(comments::collect_on_slide(&pkg, &s.part, s.index)?)
+            Some(comments::collect_on_slide(
+                &pkg,
+                &s.part,
+                s.index,
+                want_pictures,
+            )?)
         } else {
             None
         };
@@ -136,7 +141,14 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         if want_notes {
             obj.insert(
                 "notes".into(),
-                notes::notes_json(&pkg, &s.part, s.index, want_pictures)?,
+                notes::notes_json(
+                    &pkg,
+                    &s.part,
+                    s.index,
+                    want_pictures,
+                    want_charts,
+                    want_smartarts,
+                )?,
             );
         }
         if let Some(list) = comments_list {

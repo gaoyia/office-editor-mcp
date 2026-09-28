@@ -15,7 +15,7 @@ use super::request::{
     SetCommentTextOp,
 };
 use super::shape::{self, SlideMeta};
-use super::{DML_NS, REL_NS};
+use super::{ExportedMedia, DML_NS, REL_NS};
 
 pub const REL_MODERN_COMMENTS: &str =
     "http://schemas.microsoft.com/office/2018/10/relationships/comments";
@@ -155,6 +155,7 @@ pub fn collect_on_slide(
     pkg: &Package,
     slide_part: &str,
     slide: usize,
+    want_pictures: bool,
 ) -> Result<Vec<Value>, Error> {
     let Some(part) = comments_part(pkg, slide_part)? else {
         return Ok(Vec::new());
@@ -163,7 +164,7 @@ pub fn collect_on_slide(
     let authors = load_authors(pkg)?;
     let mut out = Vec::new();
     for cm in cm_elements(&doc.root) {
-        if let Some(v) = comment_json(cm, slide, &authors) {
+        if let Some(v) = comment_json(cm, slide, &authors, want_pictures) {
             out.push(v);
         }
     }
@@ -187,7 +188,7 @@ fn load_authors(pkg: &Package) -> Result<Vec<Author>, Error> {
         .collect())
 }
 
-fn comments_part(pkg: &Package, slide_part: &str) -> Result<Option<String>, Error> {
+pub(crate) fn comments_part(pkg: &Package, slide_part: &str) -> Result<Option<String>, Error> {
     let rels = Relationships::from_package(pkg, slide_part)?;
     let Some(rel) = rels.rels.iter().find(|r| r.rel_type == REL_MODERN_COMMENTS) else {
         return Ok(None);
@@ -204,7 +205,12 @@ fn author_elements(root: &Element) -> impl Iterator<Item = &Element> {
         .filter(|e| e.local_name() == "author")
 }
 
-fn comment_json(cm: &Element, slide: usize, authors: &[Author]) -> Option<Value> {
+fn comment_json(
+    cm: &Element,
+    slide: usize,
+    authors: &[Author],
+    want_pictures: bool,
+) -> Option<Value> {
     let guid = cm.attr("id")?.to_string();
     let host = format!("slide:{slide}/comment:{guid}");
     let author_id = cm.attr("authorId").unwrap_or("");
@@ -214,6 +220,7 @@ fn comment_json(cm: &Element, slide: usize, authors: &[Author]) -> Option<Value>
         .child_by_local("txBody")
         .map(shape::txbody_visible_text)
         .unwrap_or_default();
+    let pics = comment_pictures(&host, cm, true);
     let mut replies = Vec::new();
     if let Some(lst) = cm.child_by_local("replyLst") {
         for reply in lst.element_children().filter(|e| e.local_name() == "reply") {
@@ -224,16 +231,22 @@ fn comment_json(cm: &Element, slide: usize, authors: &[Author]) -> Option<Value>
                     .child_by_local("txBody")
                     .map(shape::txbody_visible_text)
                     .unwrap_or_default();
-                replies.push(json!({
-                    "id": format!("{host}/reply:{rg}"),
-                    "commentId": rg,
-                    "author": rn,
-                    "initials": ri,
-                    "date": reply.attr("created"),
-                    "done": status_done(reply),
-                    "kind": comment_kind(reply),
-                    "text": rt,
-                }));
+                let reply_id = format!("{host}/reply:{rg}");
+                let reply_pics = comment_pictures(&reply_id, reply, false);
+                let mut robj = Map::new();
+                robj.insert("id".into(), json!(reply_id));
+                robj.insert("commentId".into(), json!(rg));
+                robj.insert("author".into(), json!(rn));
+                robj.insert("initials".into(), json!(ri));
+                robj.insert("date".into(), json!(reply.attr("created")));
+                robj.insert("done".into(), json!(status_done(reply)));
+                robj.insert("kind".into(), json!(comment_kind(reply)));
+                robj.insert("pictureCount".into(), json!(reply_pics.len()));
+                if want_pictures {
+                    robj.insert("pictures".into(), Value::Array(reply_pics));
+                }
+                robj.insert("text".into(), json!(rt));
+                replies.push(Value::Object(robj));
             }
         }
     }
@@ -247,9 +260,87 @@ fn comment_json(cm: &Element, slide: usize, authors: &[Author]) -> Option<Value>
     obj.insert("kind".into(), json!(comment_kind(cm)));
     obj.insert("x".into(), json!(x));
     obj.insert("y".into(), json!(y));
+    obj.insert("pictureCount".into(), json!(pics.len()));
+    if want_pictures {
+        obj.insert("pictures".into(), Value::Array(pics));
+    }
     obj.insert("text".into(), json!(text));
     obj.insert("replies".into(), Value::Array(replies));
     Some(Value::Object(obj))
+}
+
+fn comment_pictures(host: &str, el: &Element, skip_reply_lst: bool) -> Vec<Value> {
+    collect_embed_blips(el, skip_reply_lst)
+        .into_iter()
+        .enumerate()
+        .map(|(i, _)| json!({ "id": format!("{host}/pic:{}", i + 1) }))
+        .collect()
+}
+
+fn collect_embed_blips(el: &Element, skip_reply_lst: bool) -> Vec<&Element> {
+    let mut out = Vec::new();
+    walk_embed_blips(el, skip_reply_lst, &mut out);
+    out
+}
+
+fn walk_embed_blips<'a>(el: &'a Element, skip_reply_lst: bool, out: &mut Vec<&'a Element>) {
+    if skip_reply_lst && el.local_name() == "replyLst" {
+        return;
+    }
+    if el.local_name() == "blip" && el.attr_local("embed").is_some_and(|s| !s.is_empty()) {
+        out.push(el);
+        return;
+    }
+    for child in el.element_children() {
+        walk_embed_blips(child, skip_reply_lst, out);
+    }
+}
+
+pub fn export_pic(
+    pkg: &Package,
+    slide_part: &str,
+    cm: &picture::CommentPic,
+    key: &picture::PicKey,
+    id: &str,
+) -> Result<ExportedMedia, Error> {
+    let picture::PicKey::Index(k) = key else {
+        return Err(Error::with_path(
+            ErrorKind::PictureNotFound { id: id.to_string() },
+            "id",
+        ));
+    };
+    let part = comments_part(pkg, slide_part)?
+        .ok_or_else(|| Error::with_path(ErrorKind::PictureNotFound { id: id.to_string() }, "id"))?;
+    let doc = xml::parse(pkg.get(&part)?)?;
+    let host = find_comment_host(&doc.root, cm)
+        .ok_or_else(|| Error::with_path(ErrorKind::PictureNotFound { id: id.to_string() }, "id"))?;
+    let skip_reply_lst = cm.reply.is_none();
+    let blips = collect_embed_blips(host, skip_reply_lst);
+    let blip = blips
+        .get(*k - 1)
+        .ok_or_else(|| Error::with_path(ErrorKind::PictureNotFound { id: id.to_string() }, "id"))?;
+    let rid = blip
+        .attr_local("embed")
+        .ok_or_else(|| Error::with_path(ErrorKind::PictureNotFound { id: id.to_string() }, "id"))?;
+    let media = opc::resolve_id(pkg, &part, rid)?;
+    let media_bytes = pkg.get(&media)?.to_vec();
+    let cts = ContentTypes::from_package(pkg)?;
+    let content_type = cts.content_type_of(&media).map(str::to_string);
+    Ok(ExportedMedia {
+        bytes: media_bytes,
+        content_type,
+    })
+}
+
+fn find_comment_host<'a>(root: &'a Element, cm: &picture::CommentPic) -> Option<&'a Element> {
+    let parent = cm_elements(root).find(|e| e.attr("id") == Some(cm.guid.as_str()))?;
+    match &cm.reply {
+        None => Some(parent),
+        Some(rg) => parent
+            .child_by_local("replyLst")?
+            .element_children()
+            .find(|e| e.local_name() == "reply" && e.attr("id") == Some(rg.as_str())),
+    }
 }
 
 fn author_by_id(authors: &[Author], id: &str) -> (Value, Value) {

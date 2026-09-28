@@ -28,6 +28,7 @@ pub enum ChartKey {
 #[derive(Debug, Clone)]
 pub struct ChartTarget {
     pub slide: usize,
+    pub on_notes: bool,
     pub key: ChartKey,
 }
 
@@ -41,14 +42,18 @@ pub fn parse_chart_id(id: &str, json_path: &str) -> Result<ChartTarget, Error> {
             path.clone(),
         )
     })?;
-    let (n, after) = rest.split_once("/chart:").ok_or_else(|| {
-        Error::with_path(
+    let (n, after, on_notes) = if let Some((n, after)) = rest.split_once("/notes/chart:") {
+        (n, after, true)
+    } else if let Some((n, after)) = rest.split_once("/chart:") {
+        (n, after, false)
+    } else {
+        return Err(Error::with_path(
             ErrorKind::InvalidId {
                 reason: IdReason::SlideChartContainer,
             },
             path.clone(),
-        )
-    })?;
+        ));
+    };
     let slide: usize = n.parse().map_err(|_| {
         Error::with_path(
             ErrorKind::InvalidId {
@@ -84,6 +89,7 @@ pub fn parse_chart_id(id: &str, json_path: &str) -> Result<ChartTarget, Error> {
         }
         return Ok(ChartTarget {
             slide,
+            on_notes,
             key: ChartKey::Index(k),
         });
     }
@@ -97,6 +103,7 @@ pub fn parse_chart_id(id: &str, json_path: &str) -> Result<ChartTarget, Error> {
     }
     Ok(ChartTarget {
         slide,
+        on_notes,
         key: ChartKey::Id(after.to_string()),
     })
 }
@@ -148,41 +155,8 @@ pub fn parse_error_bars_id(
     Ok((target, index, k))
 }
 
-pub fn parse_insert_slide_id(id: &str, op_index: usize) -> Result<usize, Error> {
-    let path = format!("ops[{op_index}].id");
-    let rest = id.strip_prefix("slide:").ok_or_else(|| {
-        Error::with_path(
-            ErrorKind::InvalidId {
-                reason: IdReason::InsertChartNeedsSlide,
-            },
-            path.clone(),
-        )
-    })?;
-    if rest.is_empty() || rest.contains('/') {
-        return Err(Error::with_path(
-            ErrorKind::InvalidId {
-                reason: IdReason::InsertChartNeedsSlide,
-            },
-            path,
-        ));
-    }
-    let slide: usize = rest.parse().map_err(|_| {
-        Error::with_path(
-            ErrorKind::InvalidId {
-                reason: IdReason::SlideIndexNotInt,
-            },
-            path.clone(),
-        )
-    })?;
-    if slide < 1 {
-        return Err(Error::with_path(
-            ErrorKind::InvalidId {
-                reason: IdReason::SlideIndexFromOne,
-            },
-            path,
-        ));
-    }
-    Ok(slide)
+pub fn parse_insert_slide_id(id: &str, op_index: usize) -> Result<(usize, bool), Error> {
+    picture::parse_insert_slide_or_notes(id, op_index, IdReason::InsertChartNeedsSlide)
 }
 
 pub fn count_charts(root: &Element) -> usize {
@@ -214,19 +188,19 @@ fn count_in(el: &Element, n: &mut usize) {
 pub fn collect_charts(
     pkg: &Package,
     root: &Element,
-    slide: usize,
+    host: &str,
     slide_part: &str,
 ) -> Result<Vec<Value>, Error> {
     let mut out = Vec::new();
     let mut index = 0usize;
-    collect_in(pkg, root, slide, slide_part, &mut index, &mut out)?;
+    collect_in(pkg, root, host, slide_part, &mut index, &mut out)?;
     Ok(out)
 }
 
 fn collect_in(
     pkg: &Package,
     el: &Element,
-    slide: usize,
+    host: &str,
     slide_part: &str,
     index: &mut usize,
     out: &mut Vec<Value>,
@@ -234,19 +208,19 @@ fn collect_in(
     if el.local_name() == "AlternateContent" {
         if let Some(i) = shape::first_alt_child_index(el) {
             if let Node::Element(child) = &el.children[i] {
-                return collect_in(pkg, child, slide, slide_part, index, out);
+                return collect_in(pkg, child, host, slide_part, index, out);
             }
         }
         return Ok(());
     }
     if is_counted_chart(el) {
         *index += 1;
-        out.push(chart_json(pkg, el, slide, slide_part, *index)?);
+        out.push(chart_json(pkg, el, host, slide_part, *index)?);
         return Ok(());
     }
     for n in &el.children {
         if let Node::Element(e) = n {
-            collect_in(pkg, e, slide, slide_part, index, out)?;
+            collect_in(pkg, e, host, slide_part, index, out)?;
         }
     }
     Ok(())
@@ -306,15 +280,15 @@ fn frame_xfrm(frame: &Element) -> Option<&Element> {
 fn chart_json(
     pkg: &Package,
     frame: &Element,
-    slide: usize,
+    host: &str,
     slide_part: &str,
     index: usize,
 ) -> Result<Value, Error> {
     let (raw_id, name) = cnv_of_frame(frame);
     let stable = raw_id.is_some();
     let id = match &raw_id {
-        Some(v) => format!("slide:{slide}/chart:{v}"),
-        None => format!("slide:{slide}/chart:index:{index}"),
+        Some(v) => format!("{host}/chart:{v}"),
+        None => format!("{host}/chart:index:{index}"),
     };
     let xfrm = frame_xfrm(frame);
     let (x, y) = match xfrm.and_then(|x| x.child_by_local("off")) {
@@ -554,12 +528,19 @@ pub fn export_chart_data(bytes: &[u8], id: &str) -> Result<ExportedMedia, Error>
             "id",
         )
     })?;
-    let doc = xml::parse(pkg.get(&meta.part)?)?;
+    let part = if target.on_notes {
+        super::notes::notes_slide_part(&pkg, &meta.part)?.ok_or_else(|| {
+            Error::with_path(ErrorKind::ChartNotFound { id: id.to_string() }, "id")
+        })?
+    } else {
+        meta.part.clone()
+    };
+    let doc = xml::parse(pkg.get(&part)?)?;
     let frame = find_frame_immut(&doc.root, &target.key)
         .ok_or_else(|| Error::with_path(ErrorKind::ChartNotFound { id: id.to_string() }, "id"))?;
     let rid = chart_rid(frame)
         .ok_or_else(|| Error::with_path(ErrorKind::ChartNotFound { id: id.to_string() }, "id"))?;
-    let chart_part = crate::opc::resolve_id(&pkg, &meta.part, &rid)?;
+    let chart_part = crate::opc::resolve_id(&pkg, &part, &rid)?;
     let chart_doc = xml::parse(pkg.get(&chart_part)?)?;
     let embed_rid = chart::external_data_rid(&chart_doc.root).ok_or_else(|| {
         Error::with_path(
@@ -637,7 +618,18 @@ pub fn insert_chart(
     );
     let (x, y) = match (op.x, op.y) {
         (Some(px), Some(py)) => (px, py),
-        _ => picture::vacant_pos(pres_root, &slide_doc.root, cx, cy),
+        _ => {
+            if op.on_notes {
+                picture::vacant_pos_canvas(
+                    super::notes::notes_size(pres_root),
+                    &slide_doc.root,
+                    cx,
+                    cy,
+                )
+            } else {
+                picture::vacant_pos(pres_root, &slide_doc.root, cx, cy)
+            }
+        }
     };
     picture::ensure_xmlns(&mut slide_doc.root, "r", REL_NS);
     picture::ensure_xmlns(&mut slide_doc.root, "a", DML_NS);

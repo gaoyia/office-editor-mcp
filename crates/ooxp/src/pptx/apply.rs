@@ -297,361 +297,369 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                 pkg.set(&part, doc.to_bytes()?)?;
             }
             PptxOp::InsertChart(op) => {
-                let meta = slides.get(op.slide - 1).ok_or_else(|| {
-                    Error::with_path(
-                        ErrorKind::SlideNotFound { n: op.slide as u32 },
-                        format!("ops[{i}].id"),
-                    )
-                })?;
-                let mut doc = xml::parse(pkg.get(&meta.part)?)?;
-                chart::insert_chart(&mut pkg, &mut doc, &meta.part, &pres.root, op, i)?;
-                pkg.set(&meta.part, doc.to_bytes()?)?;
+                let part = ensure_notes_or_slide(
+                    &mut pkg,
+                    &pres_part,
+                    &mut pres,
+                    &slides,
+                    op.slide,
+                    op.on_notes,
+                    format!("ops[{i}].id"),
+                )?;
+                let mut doc = xml::parse(pkg.get(&part)?)?;
+                chart::insert_chart(&mut pkg, &mut doc, &part, &pres.root, op, i)?;
+                pkg.set(&part, doc.to_bytes()?)?;
             }
             PptxOp::DeleteChart(op) => {
-                let meta = slides.get(op.target.slide - 1).ok_or_else(|| {
-                    Error::with_path(
-                        ErrorKind::SlideNotFound {
-                            n: op.target.slide as u32,
-                        },
-                        format!("ops[{i}].id"),
-                    )
-                })?;
-                let mut doc = xml::parse(pkg.get(&meta.part)?)?;
-                chart::delete_chart(&mut pkg, &mut doc, &meta.part, op, i)?;
-                pkg.set(&meta.part, doc.to_bytes()?)?;
+                let part = notes_or_slide_part(
+                    &pkg,
+                    &slides,
+                    op.target.slide,
+                    op.target.on_notes,
+                    ErrorKind::ChartNotFound { id: op.id.clone() },
+                    format!("ops[{i}].id"),
+                )?;
+                let mut doc = xml::parse(pkg.get(&part)?)?;
+                chart::delete_chart(&mut pkg, &mut doc, &part, op, i)?;
+                pkg.set(&part, doc.to_bytes()?)?;
             }
             PptxOp::SetChartTitle(op) => {
-                let meta = slides.get(op.target.slide - 1).ok_or_else(|| {
-                    Error::with_path(
-                        ErrorKind::SlideNotFound {
-                            n: op.target.slide as u32,
-                        },
-                        format!("ops[{i}].id"),
-                    )
-                })?;
-                let doc = xml::parse(pkg.get(&meta.part)?)?;
-                chart::apply_title(&mut pkg, &doc.root, &meta.part, op, i)?;
+                let part = notes_or_slide_part(
+                    &pkg,
+                    &slides,
+                    op.target.slide,
+                    op.target.on_notes,
+                    ErrorKind::ChartNotFound { id: op.id.clone() },
+                    format!("ops[{i}].id"),
+                )?;
+                let doc = xml::parse(pkg.get(&part)?)?;
+                chart::apply_title(&mut pkg, &doc.root, &part, op, i)?;
             }
             PptxOp::SetChartSeries(op) => {
-                let meta = slides.get(op.target.slide - 1).ok_or_else(|| {
-                    Error::with_path(
-                        ErrorKind::SlideNotFound {
-                            n: op.target.slide as u32,
-                        },
-                        format!("ops[{i}].id"),
-                    )
-                })?;
-                let doc = xml::parse(pkg.get(&meta.part)?)?;
-                chart::apply_series(&mut pkg, &doc.root, &meta.part, op, i)?;
+                let part = notes_or_slide_part(
+                    &pkg,
+                    &slides,
+                    op.target.slide,
+                    op.target.on_notes,
+                    ErrorKind::ChartNotFound { id: op.id.clone() },
+                    format!("ops[{i}].id"),
+                )?;
+                let doc = xml::parse(pkg.get(&part)?)?;
+                chart::apply_series(&mut pkg, &doc.root, &part, op, i)?;
             }
             PptxOp::AddChartSeries(op) => {
-                let meta = slides.get(op.target.slide - 1).ok_or_else(|| {
-                    Error::with_path(
-                        ErrorKind::SlideNotFound {
-                            n: op.target.slide as u32,
-                        },
-                        format!("ops[{i}].id"),
-                    )
-                })?;
-                let doc = xml::parse(pkg.get(&meta.part)?)?;
-                chart::apply_add_series(&mut pkg, &doc.root, &meta.part, op, i)?;
+                let part = notes_or_slide_part(
+                    &pkg,
+                    &slides,
+                    op.target.slide,
+                    op.target.on_notes,
+                    ErrorKind::ChartNotFound { id: op.id.clone() },
+                    format!("ops[{i}].id"),
+                )?;
+                let doc = xml::parse(pkg.get(&part)?)?;
+                chart::apply_add_series(&mut pkg, &doc.root, &part, op, i)?;
             }
             PptxOp::DeleteChartSeries(op) => {
-                let meta = slides.get(op.target.slide - 1).ok_or_else(|| {
-                    Error::with_path(
-                        ErrorKind::SlideNotFound {
-                            n: op.target.slide as u32,
-                        },
-                        format!("ops[{i}].id"),
-                    )
-                })?;
-                let doc = xml::parse(pkg.get(&meta.part)?)?;
-                chart::apply_delete_series(&mut pkg, &doc.root, &meta.part, op, i)?;
+                let part = notes_or_slide_part(
+                    &pkg,
+                    &slides,
+                    op.target.slide,
+                    op.target.on_notes,
+                    ErrorKind::ChartNotFound { id: op.id.clone() },
+                    format!("ops[{i}].id"),
+                )?;
+                let doc = xml::parse(pkg.get(&part)?)?;
+                chart::apply_delete_series(&mut pkg, &doc.root, &part, op, i)?;
             }
             PptxOp::SetChartType(op) => {
-                let meta = slides.get(op.target.slide - 1).ok_or_else(|| {
-                    Error::with_path(
-                        ErrorKind::SlideNotFound {
-                            n: op.target.slide as u32,
-                        },
-                        format!("ops[{i}].id"),
-                    )
-                })?;
-                let doc = xml::parse(pkg.get(&meta.part)?)?;
-                chart::apply_type(&mut pkg, &doc.root, &meta.part, op, i)?;
+                let part = notes_or_slide_part(
+                    &pkg,
+                    &slides,
+                    op.target.slide,
+                    op.target.on_notes,
+                    ErrorKind::ChartNotFound { id: op.id.clone() },
+                    format!("ops[{i}].id"),
+                )?;
+                let doc = xml::parse(pkg.get(&part)?)?;
+                chart::apply_type(&mut pkg, &doc.root, &part, op, i)?;
             }
             PptxOp::SetChartAxisTitle(op) => {
-                let meta = slides.get(op.target.slide - 1).ok_or_else(|| {
-                    Error::with_path(
-                        ErrorKind::SlideNotFound {
-                            n: op.target.slide as u32,
-                        },
-                        format!("ops[{i}].id"),
-                    )
-                })?;
-                let doc = xml::parse(pkg.get(&meta.part)?)?;
-                chart::apply_axis_title(&mut pkg, &doc.root, &meta.part, op, i)?;
+                let part = notes_or_slide_part(
+                    &pkg,
+                    &slides,
+                    op.target.slide,
+                    op.target.on_notes,
+                    ErrorKind::ChartNotFound { id: op.id.clone() },
+                    format!("ops[{i}].id"),
+                )?;
+                let doc = xml::parse(pkg.get(&part)?)?;
+                chart::apply_axis_title(&mut pkg, &doc.root, &part, op, i)?;
             }
             PptxOp::SetChartLegend(op) => {
-                let meta = slides.get(op.target.slide - 1).ok_or_else(|| {
-                    Error::with_path(
-                        ErrorKind::SlideNotFound {
-                            n: op.target.slide as u32,
-                        },
-                        format!("ops[{i}].id"),
-                    )
-                })?;
-                let doc = xml::parse(pkg.get(&meta.part)?)?;
-                chart::apply_legend(&mut pkg, &doc.root, &meta.part, op, i)?;
+                let part = notes_or_slide_part(
+                    &pkg,
+                    &slides,
+                    op.target.slide,
+                    op.target.on_notes,
+                    ErrorKind::ChartNotFound { id: op.id.clone() },
+                    format!("ops[{i}].id"),
+                )?;
+                let doc = xml::parse(pkg.get(&part)?)?;
+                chart::apply_legend(&mut pkg, &doc.root, &part, op, i)?;
             }
             PptxOp::SetChartDataLabels(op) => {
-                let meta = slides.get(op.target.slide - 1).ok_or_else(|| {
-                    Error::with_path(
-                        ErrorKind::SlideNotFound {
-                            n: op.target.slide as u32,
-                        },
-                        format!("ops[{i}].id"),
-                    )
-                })?;
-                let doc = xml::parse(pkg.get(&meta.part)?)?;
-                chart::apply_data_labels(&mut pkg, &doc.root, &meta.part, op, i)?;
+                let part = notes_or_slide_part(
+                    &pkg,
+                    &slides,
+                    op.target.slide,
+                    op.target.on_notes,
+                    ErrorKind::ChartNotFound { id: op.id.clone() },
+                    format!("ops[{i}].id"),
+                )?;
+                let doc = xml::parse(pkg.get(&part)?)?;
+                chart::apply_data_labels(&mut pkg, &doc.root, &part, op, i)?;
             }
             PptxOp::SetChartSize(op) => {
-                let meta = slides.get(op.target.slide - 1).ok_or_else(|| {
-                    Error::with_path(
-                        ErrorKind::SlideNotFound {
-                            n: op.target.slide as u32,
-                        },
-                        format!("ops[{i}].id"),
-                    )
-                })?;
-                let mut doc = xml::parse(pkg.get(&meta.part)?)?;
+                let part = notes_or_slide_part(
+                    &pkg,
+                    &slides,
+                    op.target.slide,
+                    op.target.on_notes,
+                    ErrorKind::ChartNotFound { id: op.id.clone() },
+                    format!("ops[{i}].id"),
+                )?;
+                let mut doc = xml::parse(pkg.get(&part)?)?;
                 chart::apply_size(&mut doc, op, i)?;
-                pkg.set(&meta.part, doc.to_bytes()?)?;
+                pkg.set(&part, doc.to_bytes()?)?;
             }
             PptxOp::SetChartPos(op) => {
-                let meta = slides.get(op.target.slide - 1).ok_or_else(|| {
-                    Error::with_path(
-                        ErrorKind::SlideNotFound {
-                            n: op.target.slide as u32,
-                        },
-                        format!("ops[{i}].id"),
-                    )
-                })?;
-                let mut doc = xml::parse(pkg.get(&meta.part)?)?;
+                let part = notes_or_slide_part(
+                    &pkg,
+                    &slides,
+                    op.target.slide,
+                    op.target.on_notes,
+                    ErrorKind::ChartNotFound { id: op.id.clone() },
+                    format!("ops[{i}].id"),
+                )?;
+                let mut doc = xml::parse(pkg.get(&part)?)?;
                 chart::apply_pos(&mut doc, op, i)?;
-                pkg.set(&meta.part, doc.to_bytes()?)?;
+                pkg.set(&part, doc.to_bytes()?)?;
             }
             PptxOp::InsertTrendline(op) => {
-                let meta = slides.get(op.target.slide - 1).ok_or_else(|| {
-                    Error::with_path(
-                        ErrorKind::SlideNotFound {
-                            n: op.target.slide as u32,
-                        },
-                        format!("ops[{i}].id"),
-                    )
-                })?;
-                let doc = xml::parse(pkg.get(&meta.part)?)?;
-                chart::apply_insert_trendline(&mut pkg, &doc.root, &meta.part, op, i)?;
+                let part = notes_or_slide_part(
+                    &pkg,
+                    &slides,
+                    op.target.slide,
+                    op.target.on_notes,
+                    ErrorKind::ChartNotFound { id: op.id.clone() },
+                    format!("ops[{i}].id"),
+                )?;
+                let doc = xml::parse(pkg.get(&part)?)?;
+                chart::apply_insert_trendline(&mut pkg, &doc.root, &part, op, i)?;
             }
             PptxOp::SetTrendline(op) => {
-                let meta = slides.get(op.target.slide - 1).ok_or_else(|| {
-                    Error::with_path(
-                        ErrorKind::SlideNotFound {
-                            n: op.target.slide as u32,
-                        },
-                        format!("ops[{i}].id"),
-                    )
-                })?;
-                let doc = xml::parse(pkg.get(&meta.part)?)?;
-                chart::apply_set_trendline(&mut pkg, &doc.root, &meta.part, op, i)?;
+                let part = notes_or_slide_part(
+                    &pkg,
+                    &slides,
+                    op.target.slide,
+                    op.target.on_notes,
+                    ErrorKind::ChartNotFound { id: op.id.clone() },
+                    format!("ops[{i}].id"),
+                )?;
+                let doc = xml::parse(pkg.get(&part)?)?;
+                chart::apply_set_trendline(&mut pkg, &doc.root, &part, op, i)?;
             }
             PptxOp::DeleteTrendline(op) => {
-                let meta = slides.get(op.target.slide - 1).ok_or_else(|| {
-                    Error::with_path(
-                        ErrorKind::SlideNotFound {
-                            n: op.target.slide as u32,
-                        },
-                        format!("ops[{i}].id"),
-                    )
-                })?;
-                let doc = xml::parse(pkg.get(&meta.part)?)?;
-                chart::apply_delete_trendline(&mut pkg, &doc.root, &meta.part, op, i)?;
+                let part = notes_or_slide_part(
+                    &pkg,
+                    &slides,
+                    op.target.slide,
+                    op.target.on_notes,
+                    ErrorKind::ChartNotFound { id: op.id.clone() },
+                    format!("ops[{i}].id"),
+                )?;
+                let doc = xml::parse(pkg.get(&part)?)?;
+                chart::apply_delete_trendline(&mut pkg, &doc.root, &part, op, i)?;
             }
             PptxOp::InsertErrorBars(op) => {
-                let meta = slides.get(op.target.slide - 1).ok_or_else(|| {
-                    Error::with_path(
-                        ErrorKind::SlideNotFound {
-                            n: op.target.slide as u32,
-                        },
-                        format!("ops[{i}].id"),
-                    )
-                })?;
-                let doc = xml::parse(pkg.get(&meta.part)?)?;
-                chart::apply_insert_error_bars(&mut pkg, &doc.root, &meta.part, op, i)?;
+                let part = notes_or_slide_part(
+                    &pkg,
+                    &slides,
+                    op.target.slide,
+                    op.target.on_notes,
+                    ErrorKind::ChartNotFound { id: op.id.clone() },
+                    format!("ops[{i}].id"),
+                )?;
+                let doc = xml::parse(pkg.get(&part)?)?;
+                chart::apply_insert_error_bars(&mut pkg, &doc.root, &part, op, i)?;
             }
             PptxOp::SetErrorBars(op) => {
-                let meta = slides.get(op.target.slide - 1).ok_or_else(|| {
-                    Error::with_path(
-                        ErrorKind::SlideNotFound {
-                            n: op.target.slide as u32,
-                        },
-                        format!("ops[{i}].id"),
-                    )
-                })?;
-                let doc = xml::parse(pkg.get(&meta.part)?)?;
-                chart::apply_set_error_bars(&mut pkg, &doc.root, &meta.part, op, i)?;
+                let part = notes_or_slide_part(
+                    &pkg,
+                    &slides,
+                    op.target.slide,
+                    op.target.on_notes,
+                    ErrorKind::ChartNotFound { id: op.id.clone() },
+                    format!("ops[{i}].id"),
+                )?;
+                let doc = xml::parse(pkg.get(&part)?)?;
+                chart::apply_set_error_bars(&mut pkg, &doc.root, &part, op, i)?;
             }
             PptxOp::DeleteErrorBars(op) => {
-                let meta = slides.get(op.target.slide - 1).ok_or_else(|| {
-                    Error::with_path(
-                        ErrorKind::SlideNotFound {
-                            n: op.target.slide as u32,
-                        },
-                        format!("ops[{i}].id"),
-                    )
-                })?;
-                let doc = xml::parse(pkg.get(&meta.part)?)?;
-                chart::apply_delete_error_bars(&mut pkg, &doc.root, &meta.part, op, i)?;
+                let part = notes_or_slide_part(
+                    &pkg,
+                    &slides,
+                    op.target.slide,
+                    op.target.on_notes,
+                    ErrorKind::ChartNotFound { id: op.id.clone() },
+                    format!("ops[{i}].id"),
+                )?;
+                let doc = xml::parse(pkg.get(&part)?)?;
+                chart::apply_delete_error_bars(&mut pkg, &doc.root, &part, op, i)?;
             }
             PptxOp::SetChartSeriesAxis(op) => {
-                let meta = slides.get(op.target.slide - 1).ok_or_else(|| {
-                    Error::with_path(
-                        ErrorKind::SlideNotFound {
-                            n: op.target.slide as u32,
-                        },
-                        format!("ops[{i}].id"),
-                    )
-                })?;
-                let doc = xml::parse(pkg.get(&meta.part)?)?;
-                chart::apply_series_axis(&mut pkg, &doc.root, &meta.part, op, i)?;
+                let part = notes_or_slide_part(
+                    &pkg,
+                    &slides,
+                    op.target.slide,
+                    op.target.on_notes,
+                    ErrorKind::ChartNotFound { id: op.id.clone() },
+                    format!("ops[{i}].id"),
+                )?;
+                let doc = xml::parse(pkg.get(&part)?)?;
+                chart::apply_series_axis(&mut pkg, &doc.root, &part, op, i)?;
             }
             PptxOp::InsertSmartArt(op) => {
-                let meta = slides.get(op.slide - 1).ok_or_else(|| {
-                    Error::with_path(
-                        ErrorKind::SlideNotFound { n: op.slide as u32 },
-                        format!("ops[{i}].id"),
-                    )
-                })?;
-                let mut doc = xml::parse(pkg.get(&meta.part)?)?;
-                smartart::insert_smartart(&mut pkg, &mut doc, &meta.part, &pres.root, op, i)?;
-                pkg.set(&meta.part, doc.to_bytes()?)?;
+                let part = ensure_notes_or_slide(
+                    &mut pkg,
+                    &pres_part,
+                    &mut pres,
+                    &slides,
+                    op.slide,
+                    op.on_notes,
+                    format!("ops[{i}].id"),
+                )?;
+                let mut doc = xml::parse(pkg.get(&part)?)?;
+                smartart::insert_smartart(&mut pkg, &mut doc, &part, &pres.root, op, i)?;
+                pkg.set(&part, doc.to_bytes()?)?;
             }
             PptxOp::DeleteSmartArt(op) => {
-                let meta = slides.get(op.target.slide - 1).ok_or_else(|| {
-                    Error::with_path(
-                        ErrorKind::SlideNotFound {
-                            n: op.target.slide as u32,
-                        },
-                        format!("ops[{i}].id"),
-                    )
-                })?;
-                let mut doc = xml::parse(pkg.get(&meta.part)?)?;
-                smartart::delete_smartart(&mut pkg, &mut doc, &meta.part, op, i)?;
-                pkg.set(&meta.part, doc.to_bytes()?)?;
+                let part = notes_or_slide_part(
+                    &pkg,
+                    &slides,
+                    op.target.slide,
+                    op.target.on_notes,
+                    ErrorKind::SmartArtNotFound { id: op.id.clone() },
+                    format!("ops[{i}].id"),
+                )?;
+                let mut doc = xml::parse(pkg.get(&part)?)?;
+                smartart::delete_smartart(&mut pkg, &mut doc, &part, op, i)?;
+                pkg.set(&part, doc.to_bytes()?)?;
             }
             PptxOp::SetSmartArtText(op) => {
-                let meta = slides.get(op.target.diagram.slide - 1).ok_or_else(|| {
-                    Error::with_path(
-                        ErrorKind::SlideNotFound {
-                            n: op.target.diagram.slide as u32,
-                        },
-                        format!("ops[{i}].id"),
-                    )
-                })?;
-                let doc = xml::parse(pkg.get(&meta.part)?)?;
-                smartart::apply_text(&mut pkg, &doc.root, &meta.part, op, i)?;
+                let part = notes_or_slide_part(
+                    &pkg,
+                    &slides,
+                    op.target.diagram.slide,
+                    op.target.diagram.on_notes,
+                    ErrorKind::SmartArtNotFound { id: op.id.clone() },
+                    format!("ops[{i}].id"),
+                )?;
+                let doc = xml::parse(pkg.get(&part)?)?;
+                smartart::apply_text(&mut pkg, &doc.root, &part, op, i)?;
             }
             PptxOp::AddSmartArtPoint(op) => {
-                let slide = match &op.parent {
-                    smartart::AddParent::Diagram(t) => t.slide,
-                    smartart::AddParent::Point(p) => p.diagram.slide,
+                let (slide, on_notes) = match &op.parent {
+                    smartart::AddParent::Diagram(t) => (t.slide, t.on_notes),
+                    smartart::AddParent::Point(p) => (p.diagram.slide, p.diagram.on_notes),
                 };
-                let meta = slides.get(slide - 1).ok_or_else(|| {
-                    Error::with_path(
-                        ErrorKind::SlideNotFound { n: slide as u32 },
-                        format!("ops[{i}].id"),
-                    )
-                })?;
-                let doc = xml::parse(pkg.get(&meta.part)?)?;
-                smartart::apply_add_point(&mut pkg, &doc.root, &meta.part, op, i)?;
+                let part = notes_or_slide_part(
+                    &pkg,
+                    &slides,
+                    slide,
+                    on_notes,
+                    ErrorKind::SmartArtNotFound { id: op.id.clone() },
+                    format!("ops[{i}].id"),
+                )?;
+                let doc = xml::parse(pkg.get(&part)?)?;
+                smartart::apply_add_point(&mut pkg, &doc.root, &part, op, i)?;
             }
             PptxOp::DeleteSmartArtPoint(op) => {
-                let meta = slides.get(op.target.diagram.slide - 1).ok_or_else(|| {
-                    Error::with_path(
-                        ErrorKind::SlideNotFound {
-                            n: op.target.diagram.slide as u32,
-                        },
-                        format!("ops[{i}].id"),
-                    )
-                })?;
-                let doc = xml::parse(pkg.get(&meta.part)?)?;
-                smartart::apply_delete_point(&mut pkg, &doc.root, &meta.part, op, i)?;
+                let part = notes_or_slide_part(
+                    &pkg,
+                    &slides,
+                    op.target.diagram.slide,
+                    op.target.diagram.on_notes,
+                    ErrorKind::SmartArtNotFound { id: op.id.clone() },
+                    format!("ops[{i}].id"),
+                )?;
+                let doc = xml::parse(pkg.get(&part)?)?;
+                smartart::apply_delete_point(&mut pkg, &doc.root, &part, op, i)?;
             }
             PptxOp::SetSmartArtSize(op) => {
-                let meta = slides.get(op.target.slide - 1).ok_or_else(|| {
-                    Error::with_path(
-                        ErrorKind::SlideNotFound {
-                            n: op.target.slide as u32,
-                        },
-                        format!("ops[{i}].id"),
-                    )
-                })?;
-                let mut doc = xml::parse(pkg.get(&meta.part)?)?;
+                let part = notes_or_slide_part(
+                    &pkg,
+                    &slides,
+                    op.target.slide,
+                    op.target.on_notes,
+                    ErrorKind::SmartArtNotFound { id: op.id.clone() },
+                    format!("ops[{i}].id"),
+                )?;
+                let mut doc = xml::parse(pkg.get(&part)?)?;
                 smartart::apply_size(&mut doc, op, i)?;
-                pkg.set(&meta.part, doc.to_bytes()?)?;
+                pkg.set(&part, doc.to_bytes()?)?;
             }
             PptxOp::SetSmartArtPos(op) => {
-                let meta = slides.get(op.target.slide - 1).ok_or_else(|| {
-                    Error::with_path(
-                        ErrorKind::SlideNotFound {
-                            n: op.target.slide as u32,
-                        },
-                        format!("ops[{i}].id"),
-                    )
-                })?;
-                let mut doc = xml::parse(pkg.get(&meta.part)?)?;
+                let part = notes_or_slide_part(
+                    &pkg,
+                    &slides,
+                    op.target.slide,
+                    op.target.on_notes,
+                    ErrorKind::SmartArtNotFound { id: op.id.clone() },
+                    format!("ops[{i}].id"),
+                )?;
+                let mut doc = xml::parse(pkg.get(&part)?)?;
                 smartart::apply_pos(&mut doc, op, i)?;
-                pkg.set(&meta.part, doc.to_bytes()?)?;
+                pkg.set(&part, doc.to_bytes()?)?;
             }
             PptxOp::SetSmartArtColors(op) => {
-                let meta = slides.get(op.target.slide - 1).ok_or_else(|| {
-                    Error::with_path(
-                        ErrorKind::SlideNotFound {
-                            n: op.target.slide as u32,
-                        },
-                        format!("ops[{i}].id"),
-                    )
-                })?;
-                let mut doc = xml::parse(pkg.get(&meta.part)?)?;
-                smartart::apply_colors(&mut pkg, &mut doc, &meta.part, op, i)?;
-                pkg.set(&meta.part, doc.to_bytes()?)?;
+                let part = notes_or_slide_part(
+                    &pkg,
+                    &slides,
+                    op.target.slide,
+                    op.target.on_notes,
+                    ErrorKind::SmartArtNotFound { id: op.id.clone() },
+                    format!("ops[{i}].id"),
+                )?;
+                let mut doc = xml::parse(pkg.get(&part)?)?;
+                smartart::apply_colors(&mut pkg, &mut doc, &part, op, i)?;
+                pkg.set(&part, doc.to_bytes()?)?;
             }
             PptxOp::SetSmartArtStyle(op) => {
-                let meta = slides.get(op.target.slide - 1).ok_or_else(|| {
-                    Error::with_path(
-                        ErrorKind::SlideNotFound {
-                            n: op.target.slide as u32,
-                        },
-                        format!("ops[{i}].id"),
-                    )
-                })?;
-                let mut doc = xml::parse(pkg.get(&meta.part)?)?;
-                smartart::apply_style(&mut pkg, &mut doc, &meta.part, op, i)?;
-                pkg.set(&meta.part, doc.to_bytes()?)?;
+                let part = notes_or_slide_part(
+                    &pkg,
+                    &slides,
+                    op.target.slide,
+                    op.target.on_notes,
+                    ErrorKind::SmartArtNotFound { id: op.id.clone() },
+                    format!("ops[{i}].id"),
+                )?;
+                let mut doc = xml::parse(pkg.get(&part)?)?;
+                smartart::apply_style(&mut pkg, &mut doc, &part, op, i)?;
+                pkg.set(&part, doc.to_bytes()?)?;
             }
             PptxOp::SetSmartArtLayout(op) => {
-                let meta = slides.get(op.target.slide - 1).ok_or_else(|| {
-                    Error::with_path(
-                        ErrorKind::SlideNotFound {
-                            n: op.target.slide as u32,
-                        },
-                        format!("ops[{i}].id"),
-                    )
-                })?;
-                let mut doc = xml::parse(pkg.get(&meta.part)?)?;
-                smartart::apply_layout(&mut pkg, &mut doc, &meta.part, op, i)?;
-                pkg.set(&meta.part, doc.to_bytes()?)?;
+                let part = notes_or_slide_part(
+                    &pkg,
+                    &slides,
+                    op.target.slide,
+                    op.target.on_notes,
+                    ErrorKind::SmartArtNotFound { id: op.id.clone() },
+                    format!("ops[{i}].id"),
+                )?;
+                let mut doc = xml::parse(pkg.get(&part)?)?;
+                smartart::apply_layout(&mut pkg, &mut doc, &part, op, i)?;
+                pkg.set(&part, doc.to_bytes()?)?;
             }
             PptxOp::InsertTable(op) => {
                 let meta = slides.get(op.slide - 1).ok_or_else(|| {
@@ -937,6 +945,47 @@ fn comment_slide_meta<'a>(
             format!("ops[{i}].id"),
         )
     })
+}
+
+fn notes_or_slide_part(
+    pkg: &Package,
+    slides: &[shape::SlideMeta],
+    slide: usize,
+    on_notes: bool,
+    missing: ErrorKind,
+    json_path: String,
+) -> Result<String, Error> {
+    let meta = slides.get(slide - 1).ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::SlideNotFound { n: slide as u32 },
+            json_path.clone(),
+        )
+    })?;
+    if on_notes {
+        notes::notes_slide_part(pkg, &meta.part)?
+            .ok_or_else(|| Error::with_path(missing, json_path))
+    } else {
+        Ok(meta.part.clone())
+    }
+}
+
+fn ensure_notes_or_slide(
+    pkg: &mut Package,
+    pres_part: &str,
+    pres: &mut xml::Document,
+    slides: &[shape::SlideMeta],
+    slide: usize,
+    on_notes: bool,
+    json_path: String,
+) -> Result<String, Error> {
+    let meta = slides
+        .get(slide - 1)
+        .ok_or_else(|| Error::with_path(ErrorKind::SlideNotFound { n: slide as u32 }, json_path))?;
+    if on_notes {
+        notes::ensure_notes_slide(pkg, pres_part, pres, &meta.part)
+    } else {
+        Ok(meta.part.clone())
+    }
 }
 
 fn pic_host_part(

@@ -99,10 +99,13 @@ pub(super) fn render(kind: &ErrorKind) -> String {
                 "xlsx 的 insertPicture 的 id 必须是 sheet:工作表名 或页眉槽位 id".into()
             }
             IdReason::SlidePicPrefix => {
-                "pptx 图 id 必须是 slide:N/pic:… 或 slide:N/notes/pic:…".into()
+                "pptx 图 id 必须是 slide:N/pic:…、slide:N/notes/pic:… 或 slide:N/comment:GUID/pic:n".into()
             }
             IdReason::SlidePicContainer => {
                 "页 id 必须带 /pic:…（该 id 本身不是图）".into()
+            }
+            IdReason::CommentPicExportOnly => {
+                "批注内图只能 exportMedia，不能插、换、删或改尺寸位置".into()
             }
             IdReason::InsertNeedsSlide => {
                 "pptx 的 `insertPicture` / `insertShape` 的 id 必须是 slide:N 或 slide:N/notes".into()
@@ -190,7 +193,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
                 "xlsx 的 insertChart 的 id 必须是 sheet:工作表名".into()
             }
             IdReason::InsertChartNeedsSlide => {
-                "pptx 的 insertChart 的 id 必须是 slide:N".into()
+                "pptx 的 insertChart 的 id 必须是 slide:N 或 slide:N/notes".into()
             }
             IdReason::InsertChartSheetNeedsWorkbook => {
                 "insertChartSheet 的 id 必须是 xlsx:workbook".into()
@@ -258,7 +261,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
                 "工作表 id 必须带 /chart:…（该 id 本身不是图表）".into()
             }
             IdReason::SlideChartPrefix => {
-                "pptx 图表 id 必须是 slide:N/chart:…".into()
+                "pptx 图表 id 必须是 slide:N/chart:… 或 slide:N/notes/chart:…".into()
             }
             IdReason::SlideChartContainer => {
                 "页 id 必须带 /chart:…（该 id 本身不是图表）".into()
@@ -278,13 +281,13 @@ pub(super) fn render(kind: &ErrorKind) -> String {
                 "insertSmartArt 的 id 必须是正文或页眉页脚段落 id".into()
             }
             IdReason::SlideSmartArtPrefix => {
-                "pptx SmartArt id 必须是 slide:N/smartdiagram:…".into()
+                "pptx SmartArt id 必须是 slide:N/smartdiagram:… 或 slide:N/notes/smartdiagram:…".into()
             }
             IdReason::SlideSmartArtContainer => {
                 "页 id 必须带 /smartdiagram:…（该 id 本身不是 SmartArt）".into()
             }
             IdReason::InsertSmartArtNeedsSlide => {
-                "pptx insertSmartArt 的 id 必须是 slide:N".into()
+                "pptx insertSmartArt 的 id 必须是 slide:N 或 slide:N/notes".into()
             }
             IdReason::SlideTablePrefix => "pptx 表 id 必须是 slide:N/table:…".into(),
             IdReason::SlideTableContainer => {

@@ -38,9 +38,16 @@ pub enum PicKey {
 }
 
 #[derive(Debug, Clone)]
+pub struct CommentPic {
+    pub guid: String,
+    pub reply: Option<String>,
+}
+
+#[derive(Debug, Clone)]
 pub struct PicTarget {
     pub slide: usize,
     pub on_notes: bool,
+    pub comment: Option<CommentPic>,
     pub key: PicKey,
 }
 
@@ -65,6 +72,9 @@ pub fn parse_pic_id(id: &str, json_path: &str) -> Result<PicTarget, Error> {
             path.clone(),
         )
     })?;
+    if let Some((n, after)) = rest.split_once("/comment:") {
+        return parse_comment_pic_id(n, after, path);
+    }
     let (n, after, on_notes) = if let Some((n, after)) = rest.split_once("/notes/pic:") {
         (n, after, true)
     } else if let Some((n, after)) = rest.split_once("/pic:") {
@@ -77,12 +87,66 @@ pub fn parse_pic_id(id: &str, json_path: &str) -> Result<PicTarget, Error> {
             path,
         ));
     };
+    let slide = parse_slide_n(n, &path)?;
+    let key = parse_pic_key(after, &path)?;
+    Ok(PicTarget {
+        slide,
+        on_notes,
+        comment: None,
+        key,
+    })
+}
+
+fn parse_comment_pic_id(n: &str, after: &str, path: String) -> Result<PicTarget, Error> {
+    let slide = parse_slide_n(n, &path)?;
+    let (guid, rest, reply) = if let Some((parent, rest)) = after.split_once("/reply:") {
+        let (reply, pic) = rest.split_once("/pic:").ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::InvalidId {
+                    reason: IdReason::SlidePicPrefix,
+                },
+                path.clone(),
+            )
+        })?;
+        (parent, pic, Some(reply.to_string()))
+    } else {
+        let (guid, pic) = after.split_once("/pic:").ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::InvalidId {
+                    reason: IdReason::SlidePicPrefix,
+                },
+                path.clone(),
+            )
+        })?;
+        (guid, pic, None)
+    };
+    if guid.is_empty() || reply.as_ref().is_some_and(|r| r.is_empty()) {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::SlidePicPrefix,
+            },
+            path,
+        ));
+    }
+    let key = parse_comment_pic_key(rest, &path)?;
+    Ok(PicTarget {
+        slide,
+        on_notes: false,
+        comment: Some(CommentPic {
+            guid: guid.to_string(),
+            reply,
+        }),
+        key,
+    })
+}
+
+fn parse_slide_n(n: &str, path: &str) -> Result<usize, Error> {
     let slide: usize = n.parse().map_err(|_| {
         Error::with_path(
             ErrorKind::InvalidId {
                 reason: IdReason::SlideIndexNotInt,
             },
-            path.clone(),
+            path.to_string(),
         )
     })?;
     if slide < 1 {
@@ -90,15 +154,19 @@ pub fn parse_pic_id(id: &str, json_path: &str) -> Result<PicTarget, Error> {
             ErrorKind::InvalidId {
                 reason: IdReason::SlideIndexFromOne,
             },
-            path,
+            path.to_string(),
         ));
     }
+    Ok(slide)
+}
+
+fn parse_pic_key(after: &str, path: &str) -> Result<PicKey, Error> {
     if after.is_empty() {
         return Err(Error::with_path(
             ErrorKind::InvalidId {
                 reason: IdReason::SlidePicContainer,
             },
-            path,
+            path.to_string(),
         ));
     }
     if let Some(k) = after.strip_prefix("index:") {
@@ -107,7 +175,7 @@ pub fn parse_pic_id(id: &str, json_path: &str) -> Result<PicTarget, Error> {
                 ErrorKind::InvalidId {
                     reason: IdReason::PicIndexNotInt,
                 },
-                path.clone(),
+                path.to_string(),
             )
         })?;
         if idx < 1 {
@@ -115,20 +183,47 @@ pub fn parse_pic_id(id: &str, json_path: &str) -> Result<PicTarget, Error> {
                 ErrorKind::InvalidId {
                     reason: IdReason::PicIndexFromOne,
                 },
-                path,
+                path.to_string(),
             ));
         }
-        return Ok(PicTarget {
-            slide,
-            on_notes,
-            key: PicKey::Index(idx),
-        });
+        return Ok(PicKey::Index(idx));
     }
-    Ok(PicTarget {
-        slide,
-        on_notes,
-        key: PicKey::Id(after.to_string()),
-    })
+    Ok(PicKey::Id(after.to_string()))
+}
+
+fn parse_comment_pic_key(after: &str, path: &str) -> Result<PicKey, Error> {
+    if let Some(k) = after.strip_prefix("index:") {
+        return parse_pic_key(&format!("index:{k}"), path);
+    }
+    let idx: usize = after.parse().map_err(|_| {
+        Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::PicIndexNotInt,
+            },
+            path.to_string(),
+        )
+    })?;
+    if idx < 1 {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::PicIndexFromOne,
+            },
+            path.to_string(),
+        ));
+    }
+    Ok(PicKey::Index(idx))
+}
+
+pub fn reject_comment_pic(target: &PicTarget, json_path: &str) -> Result<(), Error> {
+    if target.comment.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::CommentPicExportOnly,
+            },
+            json_path.to_string(),
+        ));
+    }
+    Ok(())
 }
 
 pub fn parse_insert_slide_or_notes(
@@ -481,6 +576,9 @@ pub fn export_media(bytes: &[u8], id: &str) -> Result<ExportedMedia, Error> {
     } else {
         meta.part.clone()
     };
+    if let Some(cm) = &target.comment {
+        return super::comments::export_pic(&pkg, &meta.part, cm, &target.key, id);
+    }
     let doc = crate::xml::parse(pkg.get(&part)?)?;
     let pic = find_pic_in_immut(&doc.root, &target.key)
         .ok_or_else(|| Error::with_path(ErrorKind::PictureNotFound { id: id.to_string() }, "id"))?;

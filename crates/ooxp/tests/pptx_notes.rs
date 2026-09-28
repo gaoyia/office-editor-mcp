@@ -200,7 +200,16 @@ fn set_notes_text_creates_parts_and_inspects() {
     assert_eq!(notes["id"], "slide:1/notes");
     assert_eq!(notes["pictureCount"], 0);
     assert!(notes.get("pictures").is_none());
-    assert_eq!(object_keys(notes), ["id", "pictureCount", "shapes"]);
+    assert_eq!(
+        object_keys(notes),
+        [
+            "id",
+            "pictureCount",
+            "chartCount",
+            "smartArtCount",
+            "shapes"
+        ]
+    );
     assert_eq!(body_text(notes), "演讲者备注");
     let body = notes["shapes"]
         .as_array()
@@ -331,7 +340,14 @@ fn insert_picture_on_notes_does_not_join_slide_count() {
     assert_eq!(notes["pictures"][0]["id"], "slide:1/notes/pic:5");
     assert_eq!(
         object_keys(notes),
-        ["id", "pictureCount", "pictures", "shapes"]
+        [
+            "id",
+            "pictureCount",
+            "chartCount",
+            "smartArtCount",
+            "pictures",
+            "shapes"
+        ]
     );
 
     let exported = tmp("exp").with_extension("png");

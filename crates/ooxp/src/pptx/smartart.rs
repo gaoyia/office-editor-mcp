@@ -30,6 +30,7 @@ pub enum SmartArtKey {
 #[derive(Debug, Clone)]
 pub struct SmartArtTarget {
     pub slide: usize,
+    pub on_notes: bool,
     pub key: SmartArtKey,
 }
 
@@ -55,14 +56,18 @@ pub fn parse_diagram_id(id: &str, json_path: &str) -> Result<SmartArtTarget, Err
             path.clone(),
         )
     })?;
-    let (n, after) = rest.split_once("/smartdiagram:").ok_or_else(|| {
-        Error::with_path(
+    let (n, after, on_notes) = if let Some((n, after)) = rest.split_once("/notes/smartdiagram:") {
+        (n, after, true)
+    } else if let Some((n, after)) = rest.split_once("/smartdiagram:") {
+        (n, after, false)
+    } else {
+        return Err(Error::with_path(
             ErrorKind::InvalidId {
                 reason: IdReason::SlideSmartArtContainer,
             },
             path.clone(),
-        )
-    })?;
+        ));
+    };
     let slide: usize = n.parse().map_err(|_| {
         Error::with_path(
             ErrorKind::InvalidId {
@@ -98,6 +103,7 @@ pub fn parse_diagram_id(id: &str, json_path: &str) -> Result<SmartArtTarget, Err
         }
         return Ok(SmartArtTarget {
             slide,
+            on_notes,
             key: SmartArtKey::Index(k),
         });
     }
@@ -111,6 +117,7 @@ pub fn parse_diagram_id(id: &str, json_path: &str) -> Result<SmartArtTarget, Err
     }
     Ok(SmartArtTarget {
         slide,
+        on_notes,
         key: SmartArtKey::Id(after.to_string()),
     })
 }
@@ -148,41 +155,8 @@ pub fn parse_add_parent(id: &str, json_path: &str) -> Result<AddParent, Error> {
     }
 }
 
-pub fn parse_insert_slide_id(id: &str, op_index: usize) -> Result<usize, Error> {
-    let path = format!("ops[{op_index}].id");
-    let rest = id.strip_prefix("slide:").ok_or_else(|| {
-        Error::with_path(
-            ErrorKind::InvalidId {
-                reason: IdReason::InsertSmartArtNeedsSlide,
-            },
-            path.clone(),
-        )
-    })?;
-    if rest.is_empty() || rest.contains('/') {
-        return Err(Error::with_path(
-            ErrorKind::InvalidId {
-                reason: IdReason::InsertSmartArtNeedsSlide,
-            },
-            path,
-        ));
-    }
-    let slide: usize = rest.parse().map_err(|_| {
-        Error::with_path(
-            ErrorKind::InvalidId {
-                reason: IdReason::SlideIndexNotInt,
-            },
-            path.clone(),
-        )
-    })?;
-    if slide < 1 {
-        return Err(Error::with_path(
-            ErrorKind::InvalidId {
-                reason: IdReason::SlideIndexFromOne,
-            },
-            path,
-        ));
-    }
-    Ok(slide)
+pub fn parse_insert_slide_id(id: &str, op_index: usize) -> Result<(usize, bool), Error> {
+    picture::parse_insert_slide_or_notes(id, op_index, IdReason::InsertSmartArtNeedsSlide)
 }
 
 pub fn count_smartarts(root: &Element) -> usize {
@@ -214,19 +188,19 @@ fn count_in(el: &Element, n: &mut usize) {
 pub fn collect_smartarts(
     pkg: &Package,
     root: &Element,
-    slide: usize,
+    host: &str,
     slide_part: &str,
 ) -> Result<Vec<Value>, Error> {
     let mut out = Vec::new();
     let mut index = 0usize;
-    collect_in(pkg, root, slide, slide_part, &mut index, &mut out)?;
+    collect_in(pkg, root, host, slide_part, &mut index, &mut out)?;
     Ok(out)
 }
 
 fn collect_in(
     pkg: &Package,
     el: &Element,
-    slide: usize,
+    host: &str,
     slide_part: &str,
     index: &mut usize,
     out: &mut Vec<Value>,
@@ -234,19 +208,19 @@ fn collect_in(
     if el.local_name() == "AlternateContent" {
         if let Some(i) = shape::first_alt_child_index(el) {
             if let Node::Element(child) = &el.children[i] {
-                return collect_in(pkg, child, slide, slide_part, index, out);
+                return collect_in(pkg, child, host, slide_part, index, out);
             }
         }
         return Ok(());
     }
     if is_diagram_frame(el) {
         *index += 1;
-        out.push(smartart_json(pkg, el, slide, slide_part, *index)?);
+        out.push(smartart_json(pkg, el, host, slide_part, *index)?);
         return Ok(());
     }
     for n in &el.children {
         if let Node::Element(e) = n {
-            collect_in(pkg, e, slide, slide_part, index, out)?;
+            collect_in(pkg, e, host, slide_part, index, out)?;
         }
     }
     Ok(())
@@ -293,15 +267,15 @@ fn frame_xfrm(frame: &Element) -> Option<&Element> {
 fn smartart_json(
     pkg: &Package,
     frame: &Element,
-    slide: usize,
+    host: &str,
     slide_part: &str,
     index: usize,
 ) -> Result<Value, Error> {
     let (raw_id, name) = cnv_of_frame(frame);
     let stable = raw_id.is_some();
     let id = match &raw_id {
-        Some(v) => format!("slide:{slide}/smartdiagram:{v}"),
-        None => format!("slide:{slide}/smartdiagram:index:{index}"),
+        Some(v) => format!("{host}/smartdiagram:{v}"),
+        None => format!("{host}/smartdiagram:index:{index}"),
     };
     let xfrm = frame_xfrm(frame);
     let (x, y) = match xfrm.and_then(|x| x.child_by_local("off")) {
@@ -640,7 +614,18 @@ pub fn insert_smartart(
     let (cx, cy) = (op.cx.unwrap_or(DEFAULT_CX), op.cy.unwrap_or(DEFAULT_CY));
     let (x, y) = match (op.x, op.y) {
         (Some(px), Some(py)) => (px, py),
-        _ => picture::vacant_pos(pres_root, &slide_doc.root, cx, cy),
+        _ => {
+            if op.on_notes {
+                picture::vacant_pos_canvas(
+                    super::notes::notes_size(pres_root),
+                    &slide_doc.root,
+                    cx,
+                    cy,
+                )
+            } else {
+                picture::vacant_pos(pres_root, &slide_doc.root, cx, cy)
+            }
+        }
     };
     picture::ensure_xmlns(&mut slide_doc.root, "r", REL_NS);
     picture::ensure_xmlns(&mut slide_doc.root, "a", DML_NS);
