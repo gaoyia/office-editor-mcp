@@ -10,13 +10,14 @@ use super::notes;
 use super::picture;
 use super::request::PptxOp;
 use super::shape;
+use super::slides;
 use super::smartart;
 
 pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
     let mut pkg = Package::open_bytes(bytes.to_vec())?;
     let pres_part = opc::office_document_part(&pkg)?;
     let mut pres = xml::parse(pkg.get(&pres_part)?)?;
-    let slides = shape::list_slides(&pkg, &pres_part, &pres.root)?;
+    let mut slides = shape::list_slides(&pkg, &pres_part, &pres.root)?;
 
     for (i, op) in ops.iter().enumerate() {
         match op {
@@ -560,6 +561,22 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                 let mut doc = xml::parse(pkg.get(&meta.part)?)?;
                 smartart::apply_layout(&mut pkg, &mut doc, &meta.part, op, i)?;
                 pkg.set(&meta.part, doc.to_bytes()?)?;
+            }
+            PptxOp::InsertSlide(op) => {
+                slides::insert(&mut pkg, &pres_part, &mut pres, &slides, op, i)?;
+                slides = shape::list_slides(&pkg, &pres_part, &pres.root)?;
+            }
+            PptxOp::DeleteSlide(op) => {
+                slides::delete(&mut pkg, &pres_part, &mut pres, &slides, op, i)?;
+                slides = shape::list_slides(&pkg, &pres_part, &pres.root)?;
+            }
+            PptxOp::MoveSlide(op) => {
+                slides::move_slide(&pres_part, &mut pres, &mut pkg, &slides, op, i)?;
+                slides = shape::list_slides(&pkg, &pres_part, &pres.root)?;
+            }
+            PptxOp::SetSlideHidden(op) => {
+                slides::set_hidden(&mut pkg, &slides, op, i)?;
+                slides = shape::list_slides(&pkg, &pres_part, &pres.root)?;
             }
             PptxOp::SetProps(op) => {
                 crate::props::apply_set_props(&mut pkg, op, i)?;

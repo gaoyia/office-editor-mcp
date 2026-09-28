@@ -3,7 +3,7 @@
 use serde_json::{Map, Value};
 
 use crate::chart::{ChartType, NewSeries};
-use crate::error::{Error, ErrorKind, ScopeNeed, TypeName};
+use crate::error::{Error, ErrorKind, IdReason, ScopeNeed, TypeName};
 use crate::json;
 use crate::smartart::{ColorsKind, LayoutKind, NewPoint, Role, StyleKind};
 
@@ -34,6 +34,28 @@ pub struct SetNotesTextOp {
     pub slide: usize,
     pub id: String,
     pub text: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct InsertSlideOp {
+    pub after: Option<usize>,
+}
+
+#[derive(Debug, Clone)]
+pub struct DeleteSlideOp {
+    pub slide: usize,
+}
+
+#[derive(Debug, Clone)]
+pub struct MoveSlideOp {
+    pub slide: usize,
+    pub after: Option<usize>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetSlideHiddenOp {
+    pub slide: usize,
+    pub hidden: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -398,6 +420,10 @@ pub enum PptxOp {
     SetSmartArtColors(SetSmartArtColorsOp),
     SetSmartArtStyle(SetSmartArtStyleOp),
     SetSmartArtLayout(SetSmartArtLayoutOp),
+    InsertSlide(InsertSlideOp),
+    DeleteSlide(DeleteSlideOp),
+    MoveSlide(MoveSlideOp),
+    SetSlideHidden(SetSlideHiddenOp),
     SetProps(crate::props::SetPropsOp),
     SetCustomProp(crate::props::SetCustomPropOp),
     DeleteCustomProp(crate::props::DeleteCustomPropOp),
@@ -592,6 +618,10 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<PptxOp>, Error> {
             "setSmartArtColors" => PptxOp::SetSmartArtColors(parse_set_smartart_colors(obj, i)?),
             "setSmartArtStyle" => PptxOp::SetSmartArtStyle(parse_set_smartart_style(obj, i)?),
             "setSmartArtLayout" => PptxOp::SetSmartArtLayout(parse_set_smartart_layout(obj, i)?),
+            "insertSlide" => PptxOp::InsertSlide(parse_insert_slide(obj, i)?),
+            "deleteSlide" => PptxOp::DeleteSlide(parse_delete_slide(obj, i)?),
+            "moveSlide" => PptxOp::MoveSlide(parse_move_slide(obj, i)?),
+            "setSlideHidden" => PptxOp::SetSlideHidden(parse_set_slide_hidden(obj, i)?),
             "setProps" => {
                 PptxOp::SetProps(crate::props::parse_set_props(obj, i, "pptx:presentation")?)
             }
@@ -791,6 +821,104 @@ fn parse_set_notes_text(obj: &Map<String, Value>, i: usize) -> Result<SetNotesTe
         }
     };
     Ok(SetNotesTextOp { slide, id, text })
+}
+
+fn parse_insert_slide(obj: &Map<String, Value>, i: usize) -> Result<InsertSlideOp, Error> {
+    deny_keys(obj, i, &["op", "id", "after"])?;
+    let id = require_id(obj, i)?;
+    if id != "pptx:presentation" {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::InsertSlideNeedsPresentation,
+            },
+            format!("ops[{i}].id"),
+        ));
+    }
+    Ok(InsertSlideOp {
+        after: parse_optional_slide_after(obj, i, false)?,
+    })
+}
+
+fn parse_delete_slide(obj: &Map<String, Value>, i: usize) -> Result<DeleteSlideOp, Error> {
+    deny_keys(obj, i, &["op", "id"])?;
+    let id = require_id(obj, i)?;
+    Ok(DeleteSlideOp {
+        slide: parse_slide_only_id(&id, i, "id")?,
+    })
+}
+
+fn parse_move_slide(obj: &Map<String, Value>, i: usize) -> Result<MoveSlideOp, Error> {
+    deny_keys(obj, i, &["op", "id", "after"])?;
+    let id = require_id(obj, i)?;
+    Ok(MoveSlideOp {
+        slide: parse_slide_only_id(&id, i, "id")?,
+        after: parse_optional_slide_after(obj, i, true)?,
+    })
+}
+
+fn parse_set_slide_hidden(obj: &Map<String, Value>, i: usize) -> Result<SetSlideHiddenOp, Error> {
+    deny_keys(obj, i, &["op", "id", "hidden"])?;
+    let id = require_id(obj, i)?;
+    Ok(SetSlideHiddenOp {
+        slide: parse_slide_only_id(&id, i, "id")?,
+        hidden: parse_required_bool(obj.get("hidden"), i, "setSlideHidden", "hidden")?,
+    })
+}
+
+fn parse_optional_slide_after(
+    obj: &Map<String, Value>,
+    i: usize,
+    allow_null: bool,
+) -> Result<Option<usize>, Error> {
+    match obj.get("after") {
+        None => Ok(None),
+        Some(Value::Null) if allow_null => Ok(None),
+        Some(Value::String(s)) => Ok(Some(parse_slide_only_id(s, i, "after")?)),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "after".into(),
+                expected: TypeName::String,
+            },
+            format!("ops[{i}].after"),
+        )),
+    }
+}
+
+fn parse_slide_only_id(id: &str, op_index: usize, field: &str) -> Result<usize, Error> {
+    let path = format!("ops[{op_index}].{field}");
+    let Some(rest) = id.strip_prefix("slide:") else {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::SlideOpNeedsSlide,
+            },
+            path,
+        ));
+    };
+    if rest.is_empty() || rest.contains('/') {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::SlideOpNeedsSlide,
+            },
+            path,
+        ));
+    }
+    let slide: usize = rest.parse().map_err(|_| {
+        Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::SlideIndexNotInt,
+            },
+            path.clone(),
+        )
+    })?;
+    if slide < 1 {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::SlideIndexFromOne,
+            },
+            path,
+        ));
+    }
+    Ok(slide)
 }
 
 fn parse_optional_text(obj: &Map<String, Value>, i: usize) -> Result<String, Error> {

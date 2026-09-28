@@ -198,6 +198,12 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::InsertSheetNeedsWorkbook => {
                 "insertSheet 的 id 必须是 xlsx:workbook".into()
             }
+            IdReason::InsertSlideNeedsPresentation => {
+                "insertSlide 的 id 必须是 pptx:presentation".into()
+            }
+            IdReason::SlideOpNeedsSlide => {
+                "id 必须是 slide:N".into()
+            }
             IdReason::InsertDefinedNameNeedsWorkbook => {
                 "insertDefinedName 的 id 必须是 xlsx:workbook".into()
             }
@@ -623,8 +629,11 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             "对还不是共享主格的格子写 shared: true 时必须给 sharedRef".into()
         }
         ErrorKind::NeedAtLeastOneSheet => "至少需要一张工作表".into(),
+        ErrorKind::LastSlide => "至少需要一页幻灯片".into(),
         ErrorKind::LastVisibleSheet => "不能隐藏或删除最后一张可见工作表".into(),
         ErrorKind::MoveSheetAfterSelf => "moveSheet 的 after 不能是自己".into(),
+        ErrorKind::MoveSlideAfterSelf => "moveSlide 的 after 不能是自己".into(),
+        ErrorKind::SlideLayoutMissing => "找不到可用的幻灯片版式".into(),
         ErrorKind::SheetStillReferenced { name } => {
             format!("定义名或公式仍引用工作表 {name}")
         }

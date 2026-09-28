@@ -1119,6 +1119,10 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<DocxOp>, Error> {
             || op_name == "insertSparkline"
             || op_name == "setSparkline"
             || op_name == "deleteSparkline"
+            || op_name == "insertSlide"
+            || op_name == "deleteSlide"
+            || op_name == "moveSlide"
+            || op_name == "setSlideHidden"
         {
             return Err(Error::with_path(
                 ErrorKind::OpNotForFormat {

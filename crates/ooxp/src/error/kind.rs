@@ -144,6 +144,10 @@ pub(crate) enum IdReason {
     InsertChartSheetNeedsWorkbook,
     /// insertSheet 必须用 xlsx:workbook
     InsertSheetNeedsWorkbook,
+    /// insertSlide 必须用 pptx:presentation
+    InsertSlideNeedsPresentation,
+    /// deleteSlide / moveSlide / setSlideHidden 必须用 slide:N
+    SlideOpNeedsSlide,
     /// insertDefinedName 必须用 xlsx:workbook
     InsertDefinedNameNeedsWorkbook,
     /// setDefinedName / deleteDefinedName 必须用 name:n
@@ -458,8 +462,11 @@ define_error_kinds! {
     FormulaRangeNotTopLeft => vec![Self::FormulaRangeNotTopLeft],
     SharedNeedsRef => vec![Self::SharedNeedsRef],
     NeedAtLeastOneSheet => vec![Self::NeedAtLeastOneSheet],
+    LastSlide => vec![Self::LastSlide],
     LastVisibleSheet => vec![Self::LastVisibleSheet],
     MoveSheetAfterSelf => vec![Self::MoveSheetAfterSelf],
+    MoveSlideAfterSelf => vec![Self::MoveSlideAfterSelf],
+    SlideLayoutMissing => vec![Self::SlideLayoutMissing],
     SheetStillReferenced { name: String } => {
         vec![Self::SheetStillReferenced { name: "Sheet1".into() }]
     },
@@ -838,6 +845,8 @@ impl IdReason {
             Self::InsertChartNeedsSlide,
             Self::InsertChartSheetNeedsWorkbook,
             Self::InsertSheetNeedsWorkbook,
+            Self::InsertSlideNeedsPresentation,
+            Self::SlideOpNeedsSlide,
             Self::InsertDefinedNameNeedsWorkbook,
             Self::DefinedNamePrefix,
             Self::NameIndexNotInt,
@@ -1033,8 +1042,11 @@ impl ErrorKind {
             | Self::SetCellWorksheetOnly
             | Self::InspectWorksheetOnly
             | Self::NeedAtLeastOneSheet
+            | Self::LastSlide
             | Self::LastVisibleSheet
             | Self::MoveSheetAfterSelf
+            | Self::MoveSlideAfterSelf
+            | Self::SlideLayoutMissing
             | Self::DuplicateSheetName { .. }
             | Self::InvalidSheetName { .. }
             | Self::InvalidParaStyle

@@ -91,6 +91,7 @@ $order = @(
     'xlsx-anchor'
     'pptx-docprops'
     'pptx-apply'
+    'pptx-slides'
     'pptx-pictures'
     'pptx-charts'
     'pptx-charts-remain'

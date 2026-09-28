@@ -9,6 +9,7 @@ mod notes;
 mod picture;
 mod request;
 pub(crate) mod shape;
+mod slides;
 mod smartart;
 
 pub use apply::apply;

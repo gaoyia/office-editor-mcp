@@ -764,6 +764,10 @@
               { "$ref": "#/$defs/deleteWatermarkOp" },
               { "$ref": "#/$defs/setNotesTextOp" },
               { "$ref": "#/$defs/setShapeTextOp" },
+              { "$ref": "#/$defs/insertSlideOp" },
+              { "$ref": "#/$defs/deleteSlideOp" },
+              { "$ref": "#/$defs/moveSlideOp" },
+              { "$ref": "#/$defs/setSlideHiddenOp" },
               { "$ref": "#/$defs/setPropsOp" },
               { "$ref": "#/$defs/setCustomPropOp" },
               { "$ref": "#/$defs/deleteCustomPropOp" }
@@ -3334,6 +3338,45 @@
         "op": { "const": "setShapeText" },
         "id": { "type": "string", "minLength": 1 },
         "text": { "type": "string" }
+      }
+    },
+    "insertSlideOp": {
+      "type": "object",
+      "required": ["op", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "insertSlide" },
+        "id": { "type": "string", "minLength": 1 },
+        "after": { "type": "string", "minLength": 1 }
+      }
+    },
+    "deleteSlideOp": {
+      "type": "object",
+      "required": ["op", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "deleteSlide" },
+        "id": { "type": "string", "minLength": 1 }
+      }
+    },
+    "moveSlideOp": {
+      "type": "object",
+      "required": ["op", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "moveSlide" },
+        "id": { "type": "string", "minLength": 1 },
+        "after": { "type": ["string", "null"], "minLength": 1 }
+      }
+    },
+    "setSlideHiddenOp": {
+      "type": "object",
+      "required": ["op", "id", "hidden"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "setSlideHidden" },
+        "id": { "type": "string", "minLength": 1 },
+        "hidden": { "type": "boolean" }
       }
     },
     "nullableString": { "type": ["string", "null"] },

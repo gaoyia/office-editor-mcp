@@ -223,6 +223,12 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::InsertSheetNeedsWorkbook => {
                 "insertSheet id must be xlsx:workbook".into()
             }
+            IdReason::InsertSlideNeedsPresentation => {
+                "insertSlide id must be pptx:presentation".into()
+            }
+            IdReason::SlideOpNeedsSlide => {
+                "id must be slide:N".into()
+            }
             IdReason::InsertDefinedNameNeedsWorkbook => {
                 "insertDefinedName id must be xlsx:workbook".into()
             }
@@ -725,12 +731,17 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             "shared: true on a cell that is not already a shared master requires sharedRef".into()
         }
         ErrorKind::NeedAtLeastOneSheet => "At least one worksheet is required".into(),
+        ErrorKind::LastSlide => "At least one slide is required".into(),
         ErrorKind::LastVisibleSheet => {
             "Cannot hide or delete the last visible sheet".into()
         }
         ErrorKind::MoveSheetAfterSelf => {
             "moveSheet after cannot be the same sheet as id".into()
         }
+        ErrorKind::MoveSlideAfterSelf => {
+            "moveSlide after cannot be the same slide as id".into()
+        }
+        ErrorKind::SlideLayoutMissing => "No slide layout is available".into(),
         ErrorKind::SheetStillReferenced { name } => {
             format!("Defined names or formulas still refer to sheet {name}")
         }
