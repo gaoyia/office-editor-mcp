@@ -8,7 +8,7 @@
 
 Microsoft Word 16.0 已打开，用户确认通过。create、inspect、apply 三组都过了。O1 已放弃，见下表。本机若装了 WPS，`Word.Application` 会被抢走，测试仍直接启动 `WINWORD.EXE` 再挂 COM。A11 补过 `word/settings.xml` 之后，2026-09-26 用新 `docx-create.docx` 重跑，Word 报 `CompatibilityMode=15`。
 
-C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，跑 `pwsh -File manual-check\office\run.ps1 -Case 'docx-*'` 即可复现，逐条结果落在 `manual-check/office/out/office-results.csv`。2026-09-27 补跑 `docx-charts-remain.ps1`，Cr1–Cr6 通过。同日重跑 `docx-charts-ext.ps1`，Cx8 股价 `type=stock`。同日重跑 `docx-smartart.ps1`，Sa1–Sa9 通过。同日重跑 `docx-comments.ps1`，Cmt1–Cmt7、Ik1–Ik4 通过。
+C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，跑 `pwsh -File manual-check\office\run.ps1 -Case 'docx-*'` 即可复现，逐条结果落在 `manual-check/office/out/office-results.csv`。2026-09-27 补跑 `docx-charts-remain.ps1`，Cr1–Cr6 通过。同日重跑 `docx-charts-ext.ps1`，Cx8 股价 `type=stock`。同日重跑 `docx-smartart.ps1`，Sa1–Sa9 通过。同日重跑 `docx-comments.ps1`，Cmt1–Cmt7、Ik1–Ik4 通过。2026-09-28 补跑 `docx-format.ps1`，Pf1–Pf6 通过。同日补跑 `docx-ole.ps1`，Ol1–Ol5 通过。同日补跑 `docx-protect.ps1`，Pr1–Pr6 通过。同日补跑 `docx-watermark.ps1`，Wm1–Wm5 通过。
 
 | 序号 | 状态 | 结果 |
 | --- | --- | --- |
@@ -47,6 +47,10 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 | Cf1–Cf6 | ✅ | Word 16.0：`docx-create-full.ps1`，6 PASS / 0 FAIL。两节、饼图、脚注、尾注、批注；标题栏无 Repair。`commentsExtended` 的 CT 须为 `…wordprocessingml.commentsExtended+xml` |
 | Cd1–Cd6 | ✅ | Word 16.0：`docx-container-drawing.ps1`，6 PASS / 0 FAIL。批注内柱形图；注内与批注内 `insertTextBox` 为 `InvalidField`；框内图表根计数不含该图。标题栏无 Repair |
 | Dp1–Dp5 | ✅ | Word 16.0：`docx-docprops.ps1`，5 PASS / 0 FAIL。根上 `props`、`creator=ooxp`；只改标题后面板标题是新字、公司名还在；自定义 `prop:部门`；删后名单空；错 id 为 `InvalidId`。标题栏无 Repair |
+| Pf1–Pf6 | ✅ | Word 16.0：`docx-format.ps1`，6 PASS / 0 FAIL。无 `scope.runs` 时有 `runCount`、没有名单；对齐为居中；第一 run 加粗后第二 run 红色还在；段前 12 磅、段后 6 磅。标题栏无 Repair |
+| Ol1–Ol5 | ✅ | Word 16.0：`docx-ole.ps1`，6 PASS / 0 FAIL。无名单时 `oleObjectCount=1`；`progId` 为 `Excel.Sheet.12`；`exportMedia` 与 embeddings 字节一致；删除后计数为 0；插入后树上能看见；错 id 为 `InvalidId` 且未写文件。标题栏无 Repair |
+| Pr1–Pr6 | ✅ | Word 16.0：`docx-protect.ps1`，6 PASS / 0 FAIL。只读保护 `enforced=true`、`edit=readOnly`；关掉后 `ProtectionType=-1`；窗体保护为 `2`；只读推荐为 true；带哈希 `hasPassword=true` 且改 `enforced` 得 `NotImplemented`；错 id / 空字段拒写。标题栏无 Repair |
+| Wm1–Wm5 | ✅ | Word 16.0：`docx-watermark.ps1`，5 PASS / 0 FAIL。文字水印 id 为 `header:default:1/watermark:1`、`kind=text`；删除后计数为 0；图片水印 `kind=picture`；普通页眉图不进 `watermarkCount`；错 id / 同时给 `text` 与 `file` 拒写。标题栏无 Repair |
 | O1 | 🚫 | 领域层不做原样保存，与 xlsx 清单相同。零脏写回见 OPC 库测试。Word 另存 create 产物见 `docx-O1-word-resave`。此前记的 `SaveAs2` 挂起，拆分后重跑没再出现，一秒内返回 |
 
 ## create
