@@ -4,11 +4,11 @@
 
 检查前用 create 或 apply 在本机生成文件，不要用改过扩展名的 zip 目录冒充。本机若 `PowerPoint.Application` 被 WPS 抢走，直接启动 `POWERPNT.EXE` 再挂 COM，不要走被抢的 ProgID。Office 16 的对象模型在 `mdiClass` 上。
 
-C、I、A、Pp、Pc、Psa、Pn、Pcm、Pm、Ps、Pt、Tn、Am、Mm、Ho 各组由 `manual-check/office/cases/pptx-*.ps1` 自动判定，跑 `pwsh -File manual-check\office\run.ps1 -Case 'pptx-*'` 即可复现。O1 已放弃，与 xlsx / docx 相同。
+C、I、A、Pp、Pc、Psa、Pn、Pcm、Pm、Ps、Pt、Tn、Am、Mm、Ho、Phl 各组由 `manual-check/office/cases/pptx-*.ps1` 自动判定，跑 `pwsh -File manual-check\office\run.ps1 -Case 'pptx-*'` 即可复现。O1 已放弃，与 xlsx / docx 相同。
 
 ## 本机结果（2026-09-28）
 
-Microsoft PowerPoint 16.0 已打开，C1、C3、C4、C5–C10、I1–I5、A1–A5、Pp1–Pp7、Pc1–Pc7、Psa1–Psa7、Pn1–Pn4、Pcm1–Pcm5、Pik1–Pik4、Pm1–Pm5、Ps1–Ps5、Pt1–Pt6、Tn1–Tn5、Am1–Am5、Mm1–Mm5、Ho1–Ho5 均 PASS。本机若装了 WPS，`PowerPoint.Application` 会被抢走，测试仍直接启动 `POWERPNT.EXE`，从 `mdiClass` 挂 COM。O1 已放弃。2026-09-27 补跑 `pptx-pictures.ps1`，Pp1–Pp7 通过。同日补跑 `pptx-create-pictures.ps1`，C5–C7 通过。同日补跑 `pptx-charts.ps1`，Pc1–Pc7 通过。同日补跑 `pptx-create-charts.ps1`，C8–C10 通过。同日补跑 `pptx-smartart.ps1`，Psa1–Psa7 通过。同日补跑 `pptx-notes.ps1`，Pn1–Pn4 通过。同日补跑 `pptx-comments.ps1`，Pcm1–Pcm5、Pik1–Pik4 通过。同日补跑 `pptx-docprops.ps1`，Pd1–Pd5 通过。同日补跑 `pptx-charts-remain.ps1`，Pr1–Pr3 通过。2026-09-28 补跑 `pptx-slides.ps1`，Pm1–Pm5 通过。同日补跑 `pptx-shapes.ps1`，Ps1–Ps5 通过。同日补跑 `pptx-tables.ps1`，Pt1–Pt6 通过。同日补跑 `pptx-transition.ps1`，Tn1–Tn5 通过。同日补跑 `pptx-timing.ps1`，Am1–Am5 通过。同日补跑 `pptx-masters.ps1`，Mm1–Mm5 通过。同日补跑 `pptx-handout.ps1`，Ho1–Ho5 通过。
+Microsoft PowerPoint 16.0 已打开，C1、C3、C4、C5–C10、I1–I5、A1–A5、Pp1–Pp7、Pc1–Pc7、Psa1–Psa7、Pn1–Pn4、Pcm1–Pcm5、Pik1–Pik4、Pm1–Pm5、Ps1–Ps5、Pt1–Pt6、Tn1–Tn5、Am1–Am5、Mm1–Mm5、Ho1–Ho5、Phl1–Phl5 均 PASS。本机若装了 WPS，`PowerPoint.Application` 会被抢走，测试仍直接启动 `POWERPNT.EXE`，从 `mdiClass` 挂 COM。O1 已放弃。2026-09-27 补跑 `pptx-pictures.ps1`，Pp1–Pp7 通过。同日补跑 `pptx-create-pictures.ps1`，C5–C7 通过。同日补跑 `pptx-charts.ps1`，Pc1–Pc7 通过。同日补跑 `pptx-create-charts.ps1`，C8–C10 通过。同日补跑 `pptx-smartart.ps1`，Psa1–Psa7 通过。同日补跑 `pptx-notes.ps1`，Pn1–Pn4 通过。同日补跑 `pptx-comments.ps1`，Pcm1–Pcm5、Pik1–Pik4 通过。同日补跑 `pptx-docprops.ps1`，Pd1–Pd5 通过。同日补跑 `pptx-charts-remain.ps1`，Pr1–Pr3 通过。2026-09-28 补跑 `pptx-slides.ps1`，Pm1–Pm5 通过。同日补跑 `pptx-shapes.ps1`，Ps1–Ps5 通过。同日补跑 `pptx-tables.ps1`，Pt1–Pt6 通过。同日补跑 `pptx-transition.ps1`，Tn1–Tn5 通过。同日补跑 `pptx-timing.ps1`，Am1–Am5 通过。同日补跑 `pptx-masters.ps1`，Mm1–Mm5 通过。同日补跑 `pptx-handout.ps1`，Ho1–Ho5 通过。同日补跑 `pptx-hyperlinks.ps1`，Phl1–Phl5 通过。
 
 | 序号 | 状态 | 结果 |
 | --- | --- | --- |
@@ -32,6 +32,7 @@ Microsoft PowerPoint 16.0 已打开，C1、C3、C4、C5–C10、I1–I5、A1–A
 | Am1–Am5 | ✅ | PowerPoint 16.0：`pptx-timing.ps1`，5 PASS / 0 FAIL。无 `timing` 时根与各页有 `animCount`、没有名单；另存进入淡入 `target=slide:1/shape:2`、`type=fade`、`trigger=click`；COM MainSequence.Count=1；只改字名单还在；`setTiming` 为 `UnsupportedOp`；xlsx / docx 的 `scope.timing` 为 `InvalidField`。无 Repair |
 | Mm1–Mm5 | ✅ | PowerPoint 16.0：`pptx-masters.ps1`，5 PASS / 0 FAIL。无 `masters` 时只有 `masterCount`；create 版式名「空白」；另存默认文稿列出「标题幻灯片」等；标题占位符改字无修复；插用户框后换成 `master:1/layout:7`（空白）用户框还在；占位符 `setShapePos` 几何有变；xlsx / docx 拒 `scope.masters` 与 `setSlideLayout`。无 Repair |
 | Ho1–Ho5 | ✅ | PowerPoint 16.0：`pptx-handout.ps1`，5 PASS / 0 FAIL。无 `handout` 时只有 `hasHandout`；create 为 false、展开为 null；`setHandoutText` 写页脚 / 页眉后 COM 与 inspect 可见新字、无 Repair；xlsx / docx 拒 `scope.handout` 与 `setHandoutText`。 |
+| Phl1–Phl5 | ✅ | PowerPoint 16.0：`pptx-hyperlinks.ps1`，5 PASS / 0 FAIL。无名单时根与各页有 `hyperlinkCount=0`；`insertHyperlink` 后 COM 单击地址对上且无 Repair；改地址后对得上；删除后框上字还在；对页 id 得 `InvalidId`，缺目标得 `InvalidField` 且未写文件。 |
 | Pr1–Pr3 | ✅ | PowerPoint 16.0：`pptx-charts-remain.ps1`，3 PASS / 0 FAIL。趋势线 COM Count=1；改删趋势线；次轴 `AxisGroup=2`。无 Repair |
 | O1 | 🚫 | 领域层不做原样保存，与 xlsx 清单相同。零脏写回见 OPC 库测试。PowerPoint 另存 create 产物见 `pptx-O1-ppt-resave` |
 
@@ -257,6 +258,18 @@ inspect 列出讲义母版页眉、页脚、日期、页码槽位。apply 用 `s
 | Ho3 | 改页眉 | 同一次或另一次 `setHandoutText` 写 `header` 后能看见新字；无 Repair |
 | Ho4 | 新建 | 对 create 产物（原先没有讲义母版）发 `setHandoutText` 后 `hasHandout=true`；无 Repair |
 | Ho5 | 拒错 | xlsx / docx 的 `scope.handout` 与 `setHandoutText` 得 `InvalidField`，未写文件 |
+
+## 超链接
+
+形状级 `a:hlinkClick`。inspect 计 `hyperlinkCount`，`scope.hyperlinks` 列出链。apply 能改地址、插、删。内部跳转用 `slide:{n}`。不写放映宏动作。脚本：`manual-check/office/cases/pptx-hyperlinks.ps1`。编号用 Phl。
+
+| 序号 | 检查 | 通过标准 |
+| --- | --- | --- |
+| Phl1 | inspect | 无 `hyperlinks` 时根与各页有 `hyperlinkCount`、没有名单；create 产物为 0；`scope.hyperlinks: true` 时名单为空数组 |
+| Phl2 | URL | `insertHyperlink` 给第一框 `url` 后 PowerPoint 无 Repair；该形状单击超链接地址对上；inspect `kind=url` |
+| Phl3 | 改地址 | `setHyperlink` 改 URL 后 COM 地址是新值；无 Repair |
+| Phl4 | 删链留字 | `deleteHyperlink` 后链没了，框上字还在；无 Repair |
+| Phl5 | 拒错 | 对页 id 发 `insertHyperlink` 得 `InvalidId`；缺 `url`/`file`/`slide` 得 `InvalidField`，未写文件 |
 
 ## 原样保存（opc 验收）
 

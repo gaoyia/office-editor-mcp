@@ -9,6 +9,7 @@ use crate::xml;
 use super::chart;
 use super::comments;
 use super::handout;
+use super::hyperlink;
 use super::master;
 use super::notes;
 use super::picture;
@@ -30,6 +31,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     let want_smartarts = scope.as_ref().is_some_and(|s| s.smart_art);
     let want_notes = scope.as_ref().is_some_and(|s| s.notes);
     let want_comments = scope.as_ref().is_some_and(|s| s.comments);
+    let want_hyperlinks = scope.as_ref().is_some_and(|s| s.hyperlinks);
     let want_tables = scope.as_ref().is_some_and(|s| s.tables);
     let want_timing = scope.as_ref().is_some_and(|s| s.timing);
     let want_masters = scope.as_ref().is_some_and(|s| s.masters);
@@ -41,6 +43,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     let mut chart_count = 0usize;
     let mut smart_art_count = 0usize;
     let mut comment_count = 0usize;
+    let mut hyperlink_count = 0usize;
     let mut table_count = 0usize;
     let mut anim_count = 0usize;
     for s in &slides {
@@ -81,6 +84,9 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
             None => comments::count_on_slide(&pkg, &s.part)?,
         };
         comment_count += n_comments;
+        let rels = opc::Relationships::from_package(&pkg, &s.part)?;
+        let n_links = hyperlink::count(&doc.root);
+        hyperlink_count += n_links;
         let tables_list = if want_tables {
             Some(table::collect_tables(&doc.root, s.index))
         } else {
@@ -109,6 +115,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         obj.insert("chartCount".into(), json!(n_charts));
         obj.insert("smartArtCount".into(), json!(n_smartarts));
         obj.insert("commentCount".into(), json!(n_comments));
+        obj.insert("hyperlinkCount".into(), json!(n_links));
         obj.insert("tableCount".into(), json!(n_tables));
         obj.insert("animCount".into(), json!(n_anims));
         if want_pictures {
@@ -134,6 +141,12 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         }
         if let Some(list) = comments_list {
             obj.insert("comments".into(), Value::Array(list));
+        }
+        if want_hyperlinks {
+            obj.insert(
+                "hyperlinks".into(),
+                hyperlink::list_json(&doc.root, s.index, &s.part, &rels, &slides),
+            );
         }
         if want_timing {
             obj.insert("timing".into(), Value::Array(anims));
@@ -169,6 +182,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     root.insert("chartCount".into(), json!(chart_count));
     root.insert("smartArtCount".into(), json!(smart_art_count));
     root.insert("commentCount".into(), json!(comment_count));
+    root.insert("hyperlinkCount".into(), json!(hyperlink_count));
     root.insert("tableCount".into(), json!(table_count));
     root.insert("animCount".into(), json!(anim_count));
     root.insert("masterCount".into(), json!(catalog.count()));

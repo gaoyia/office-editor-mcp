@@ -1021,6 +1021,7 @@ mod tests {
                 "chartCount",
                 "smartArtCount",
                 "commentCount",
+                "hyperlinkCount",
                 "tableCount",
                 "animCount",
                 "masterCount",
@@ -1043,6 +1044,7 @@ mod tests {
                 "chartCount",
                 "smartArtCount",
                 "commentCount",
+                "hyperlinkCount",
                 "tableCount",
                 "animCount",
                 "truncated",
@@ -1063,6 +1065,7 @@ mod tests {
                 "chartCount",
                 "smartArtCount",
                 "commentCount",
+                "hyperlinkCount",
                 "tableCount",
                 "animCount"
             ]

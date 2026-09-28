@@ -398,6 +398,15 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::InsertHyperlinkNeedsSheet => {
                 "xlsx insertHyperlink id must be sheet:name".into()
             }
+            IdReason::InsertHyperlinkNeedsShape => {
+                "pptx insertHyperlink id must be a slide text shape id".into()
+            }
+            IdReason::SlideLinkPrefix => {
+                "pptx hyperlink id must be slide:n/link:k, n and k starting at 1".into()
+            }
+            IdReason::PptxJumpNeedsSlide => {
+                "pptx internal jump must be slide:n, n starting at 1".into()
+            }
             IdReason::SheetSparkPrefix => {
                 "xlsx sparkline id must be sheet:name/spark:n, n starting at 1".into()
             }
@@ -882,6 +891,19 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             "xlsx setHyperlink requires at least one of url, location, tooltip, display, or ref"
                 .into()
         }
+        ErrorKind::PptxHyperlinkNeedTarget => {
+            "pptx hyperlink requires exactly one of url, file, or slide".into()
+        }
+        ErrorKind::PptxNeedSetHyperlinkField => {
+            "pptx setHyperlink requires at least one of url, file, slide, or tooltip".into()
+        }
+        ErrorKind::ShapeAlreadyHasHyperlink => {
+            "this shape already has a shape-level hyperlink; use setHyperlink".into()
+        }
+        ErrorKind::PptxHyperlinkSelfSlide => {
+            "cannot hyperlink a shape to its own slide".into()
+        }
+        ErrorKind::EmptyHyperlinkFile => "file must not be empty".into(),
         ErrorKind::FieldNotFound { id } => format!("Field not found: {id}"),
         ErrorKind::TocNotFound { id } => format!("Table of contents not found: {id}"),
         ErrorKind::MathNotFound { id } => format!("Equation not found: {id}"),

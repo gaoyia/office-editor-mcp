@@ -40,6 +40,7 @@
 | 表单元格 | `{表 id}/r:{r}/c:{c}` | `slide:1/table:4/r:1/c:2` |
 | 批注 | `slide:{n}/comment:{guid}` | `slide:1/comment:{A1B2C3D4-E5F6-4789-ABCD-EF1234567890}` |
 | 批注回复 | `{批注 id}/reply:{guid}` | `slide:1/comment:{A1B2C3D4-E5F6-4789-ABCD-EF1234567890}/reply:{11111111-2222-4333-8444-555555555555}` |
+| 超链接 | `slide:{n}/link:{k}` | `slide:1/link:1` |
 | 讲义母版 | `handout` | `handout` |
 | 自定义属性 | `prop:{name}` | `prop:Editor` |
 
@@ -64,6 +65,8 @@ SmartArt id 的 `{cNvPrId}` 取该 `p:graphicFrame` 的 `p:nvGraphicFramePr/p:cN
 同一页里若出现重复的 `cNvPr/@id`，inspect 照样列出每一处；apply 命中该页文档顺序中的第一处。
 
 批注 `{guid}` 取该页现代批注部件里 `p188:cm/@id` 的原文（MS-PPTX 2018/8），含花括号。回复 `{guid}` 取同一条 `p188:cm` 里 `p188:reply/@id` 的原文。按文件原文精确匹配，不因大小写或有无花括号而放宽。同一页多条批注共用一个 comments 部件。ECMA-376 §19.4 旧式 `/ppt/comments/commentN.xml` 与 `commentAuthors` 不进树、不接受 apply；只有旧式时 `commentCount` 为 `0`，`scope.comments` 为空数组。insert 只写现代部件。
+
+超链接 `{k}` 从 1 起，按该页被收入的文本形状上 `p:cNvPr/a:hlinkClick` 的文档顺序（与 `shapes` 同一套判定：带 `p:txBody` 的 `p:sp`，含组合里的；`mc:AlternateContent` 只进第一个 Choice）。不认 `a:hlinkHover`，不认 run 级 `a:rPr/a:hlinkClick`，不认图、表、图表、SmartArt、备注或母版上的链。增删之后 `{k}` 会变，只够同一次 inspect 之后立刻 apply。`insertHyperlink` 的 `id` 必须是幻灯片文本形状 id。`setHyperlink` / `deleteHyperlink` 的 `id` 必须是超链接 id。对不上的 id 形态报 `InvalidId`。
 
 apply 不得把**未点名**的形状删掉再重建，以免 `cNvPr/@id` 变化导致绑在形状上的动画失效。`deleteShape` 只摘被点名的那一个 `p:sp`，并清掉 `<p:timing>` 里对应的 `p:tgtEl`（`p:spTgt/@spid` 对该形状 `cNvPr/@id`）；未点名形状的 timing 节点留下，不要整节删掉 `<p:timing>`。插、删、重排页只改 `p:sldIdLst` 与被点名页的部件，未点名页 XML 原字节写回。
 
@@ -95,7 +98,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
 | 字段 | 必填 | 含义 |
 | --- | --- | --- |
 | `path` | 是 | 已有文件 |
-| `scope` | 否 | 省略或空对象：返回 `slideCount`、`pictureCount`、`chartCount`、`smartArtCount`、`commentCount`、`tableCount`、`animCount`、`masterCount`、`hasHandout` 和页名单；各页有这些计数、`layoutId`、`hasNotes` 和 `transition`，没有 `shapes`，也没有 `pictures` / `charts` / `smartArts` / `tables` / `timing` 名单，也没有 `notes` 对象，也没有 `comments` 名单，也没有根上 `masters`，也没有根上 `handout` |
+| `scope` | 否 | 省略或空对象：返回 `slideCount`、`pictureCount`、`chartCount`、`smartArtCount`、`commentCount`、`hyperlinkCount`、`tableCount`、`animCount`、`masterCount`、`hasHandout` 和页名单；各页有这些计数、`layoutId`、`hasNotes` 和 `transition`，没有 `shapes`，也没有 `pictures` / `charts` / `smartArts` / `tables` / `timing` 名单，也没有 `notes` 对象，也没有 `comments` 名单，也没有 `hyperlinks` 名单，也没有根上 `masters`，也没有根上 `handout` |
 | `scope.slide` | 要形状时必填 | 页序号，从 1 起，按 `p:sldIdLst` 顺序 |
 | `scope.maxShapes` | 否 | 该页最多返回多少个文本形状，默认 `2000`，允许范围 `1` 到 `5000`。不管备注形状 |
 | `scope.pictures` | 否 | 为 `true` 时给每页填 `pictures`。若同时 `notes: true` 且该页有备注对象，备注上也填 `pictures`。省略或 `false` 则只有计数，没有名单。不读媒体字节。不依赖 `scope.slide` |
@@ -103,12 +106,13 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
 | `scope.smartArt` | 否 | 为 `true` 时给每页填 `smartArts`。省略或 `false` 则只有 `smartArtCount`，没有名单。不把图示画成图，不读 Fallback 位图。不依赖 `scope.slide` / `pictures` / `charts`。备注里的 SmartArt 本期不进树 |
 | `scope.notes` | 否 | 为 `true` 时给每页填 `notes`。有备注页则为对象，没有则为 `null`。省略或 `false` 则只有 `hasNotes`，不倒出备注形状。不依赖 `scope.slide` |
 | `scope.comments` | 否 | 为 `true` 时给每页填 `comments`。没有现代批注时为空数组。省略或 `false` 则只有 `commentCount`，没有名单。不依赖 `scope.slide`。不读 ECMA-376 §19.4 旧式 `commentN.xml` |
+| `scope.hyperlinks` | 否 | 为 `true` 时给每页填 `hyperlinks`。没有链时为空数组。省略或 `false` 则只有 `hyperlinkCount`，没有名单。不依赖 `scope.slide`。不认 run 级链、图、表、图表、SmartArt、备注或母版上的链。xlsx / docx 的 `scope.hyperlinks` 见各自响应 |
 | `scope.tables` | 否 | 为 `true` 时给每页填 `tables`。省略或 `false` 则只有 `tableCount`，没有名单。不依赖 `scope.slide`。备注里的表本期不进树 |
 | `scope.timing` | 否 | 为 `true` 时给每页填 `timing`（动画效果摘要）。省略或 `false` 则只有 `animCount`，没有名单。不依赖 `scope.slide`。不返回完整时间轴树，也不写 `<p:timing>` |
 | `scope.masters` | 否 | 为 `true` 时根上填 `masters`（母版、版式与占位符）。省略或 `false` 则只有 `masterCount`，没有名单。不依赖 `scope.slide`。不算母版排版引擎。xlsx / docx 的 `scope` 里出现 `masters` 报 `InvalidField` |
 | `scope.handout` | 否 | 为 `true` 时根上填 `handout`。有讲义母版则为对象，没有则为 `null`。省略或 `false` 则只有 `hasHandout`，不倒出槽位文字。不依赖 `scope.slide`。不算讲义打印布局。xlsx / docx 的 `scope` 里出现 `handout` 报 `InvalidField` |
 
-只要想看形状，就必须给 `slide`。不默认把每一页的文本框都倒出来。只给 `maxShapes`、不给 `slide` 报 `ScopeRequired`。只给 `pictures: true`、`charts: true`、`smartArt: true`、`tables: true`、`notes: true`、`comments: true`、`timing: true`、`masters: true` 或 `handout: true`、不给 `slide` 合法，各页都带对应名单、都不带幻灯片 `shapes`。根上 `masters` 只看 `scope.masters`。根上 `handout` 只看 `scope.handout`。`slide` 小于 `1` 报 `InvalidField`。`slide` 超出 `slideCount` 时各页都不带 `shapes`，不报错；图名单、图表名单、SmartArt 名单、表名单、备注对象、批注名单与动画摘要仍按各自键决定。
+只要想看形状，就必须给 `slide`。不默认把每一页的文本框都倒出来。只给 `maxShapes`、不给 `slide` 报 `ScopeRequired`。只给 `pictures: true`、`charts: true`、`smartArt: true`、`tables: true`、`notes: true`、`comments: true`、`hyperlinks: true`、`timing: true`、`masters: true` 或 `handout: true`、不给 `slide` 合法，各页都带对应名单、都不带幻灯片 `shapes`。根上 `masters` 只看 `scope.masters`。根上 `handout` 只看 `scope.handout`。`slide` 小于 `1` 报 `InvalidField`。`slide` 超出 `slideCount` 时各页都不带 `shapes`，不报错；图名单、图表名单、SmartArt 名单、表名单、备注对象、批注名单、超链接名单与动画摘要仍按各自键决定。
 
 
 ### 响应
@@ -123,6 +127,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   "chartCount": 0,
   "smartArtCount": 0,
   "commentCount": 0,
+  "hyperlinkCount": 0,
   "tableCount": 0,
   "animCount": 0,
   "masterCount": 1,
@@ -154,6 +159,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
       "chartCount": 0,
       "smartArtCount": 0,
       "commentCount": 0,
+      "hyperlinkCount": 0,
       "tableCount": 0,
       "animCount": 0,
       "truncated": false,
@@ -194,6 +200,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
       "chartCount": 0,
       "smartArtCount": 0,
       "commentCount": 0,
+      "hyperlinkCount": 0,
       "tableCount": 0,
       "animCount": 0
     }
@@ -209,6 +216,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
 - `chartCount` 在演示文稿根上始终出现，等于各页被收入的图表之和。每页始终有自己的 `chartCount`。
 - `smartArtCount` 在演示文稿根上始终出现，等于各页被收入的 SmartArt 之和。每页始终有自己的 `smartArtCount`。
 - `commentCount` 在演示文稿根上始终出现，等于各页 `p188:cm` 之和，不含 `p188:reply`。每页始终有自己的 `commentCount`，只计该页。旧式 §19.4 批注不计。
+- `hyperlinkCount` 在演示文稿根上始终出现，等于各页被收入的形状级 `a:hlinkClick` 之和。每页始终有自己的 `hyperlinkCount`，只计该页幻灯片。没有链则为 `0`。根上不挂 `hyperlinks`，除非给了 `scope.hyperlinks`。不计 run 级链，也不计备注或母版上的链。
 - `tableCount` 在演示文稿根上始终出现，等于各页被收入的 DrawingML 表之和。每页始终有自己的 `tableCount`。没有表则为 `0`。根上不挂 `tables`，除非给了 `scope.tables`。
 - `hasNotes` 在每页始终出现：该页 `.rels` 有 Type 以 `/notesSlide` 结尾的关系则为 `true`，否则为 `false`。
 - `slides` 始终列出全部页（含隐藏页）。未点名的页不带 `shapes`、`truncated`。
@@ -216,7 +224,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
 - `layoutId` 在每页始终出现：该页 `.rels` 里 Type 以 `/slideLayout` 结尾的关系，对到某母版 `p:sldLayoutIdLst` 里的那一份，则为 `master:{n}/layout:{k}`。找不到该关系、或对不上任何已编母版版式，则为 `null`。不因换页关系改母版 / 版式序号。
 - `hidden`：`p:sld/@show` 为 `0` 或 `false` 时为 `true`，其余为 `false`。
 - `transition` 在每页始终出现。没有 `<p:transition>`（含包在 `mc:AlternateContent` 里的）则为 `null`。有则为对象，字段顺序：`type`、`dur`。`type` 取效果子元素的本地名（`sndAc` / `extLst` 不算）。ECMA-376 的 `blinds` / `checker` / `circle` / `dissolve` / `comb` / `cover` / `cut` / `diamond` / `fade` / `newsflash` / `plus` / `pull` / `push` / `random` / `randomBar` / `split` / `strips` / `wedge` / `wheel` / `wipe` / `zoom`，以及 MS-PPTX 的 `vortex` / `switch` / `flip` / `ripple` / `honeycomb` / `prism` / `doors` / `window` / `ferris` / `gallery` / `conveyor` / `pan` / `glitter` / `warp` / `flythrough` / `flash` / `shred` / `reveal` / `wheelReverse` / `morph`，按原名返回。不在这份名单里的效果（含 `prstTrans`）为 `other`。`mc:AlternateContent` 只走第一个 Choice。`dur` 优先取 `p14:dur`（毫秒，无单位整数）；没有则按 `spd` 折算：`slow` 为 `1000`，`med` 为 `750`，`fast` 或缺 `spd` 为 `500`。没有效果子元素但仍有 `<p:transition>` 时 `type` 为 `none`。
-- 省略 `scope` 或只给空对象时，没有 `shapes`、`truncated`，也没有 `pictures` / `charts` / `smartArts` / `tables` / `timing` 名单，也没有 `notes`，也没有 `comments`，也没有根上 `masters`，也没有根上 `handout`。
+- 省略 `scope` 或只给空对象时，没有 `shapes`、`truncated`，也没有 `pictures` / `charts` / `smartArts` / `tables` / `timing` 名单，也没有 `notes`，也没有 `comments`，也没有 `hyperlinks`，也没有根上 `masters`，也没有根上 `handout`。
 - 给了 `scope.slide` 时，只给那一页填 `shapes`。该页带 `p:txBody` 的 `p:sp` 超过 `maxShapes` 则 `truncated` 为 `true`，按该页文档顺序截断。未截断则为 `false`。备注形状不算进 `maxShapes`。
 - `scope.slide` 大于 `slideCount` 时，各页都不带 `shapes`，不报错。
 - `scope.pictures` 为 `true` 时，每页带 `pictures`。没有图时为空数组。不依赖 `scope.slide`。每张字段顺序：`id`、`cNvPrId`、`name`、`x`、`y`、`cx`、`cy`、`stable`。`cNvPrId` 是 `p:cNvPr/@id` 原文，没有则为 `null`。`name` 取 `p:cNvPr/@name`，没有则为 `""`。`x` / `y` 取 `p:spPr/a:xfrm/a:off` 的 EMU；`cx` / `cy` 取 `a:ext`。缺对应属性则为 `null`。不读媒体字节。幻灯片图 id 为 `slide:{n}/pic:…`。
@@ -231,7 +239,8 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
 - `scope.masters` 为 `true` 时，根上带 `masters`。没有母版时为空数组。不依赖 `scope.slide`。不算母版排版引擎，也不把母版装饰形（没有 `p:ph` 的 `p:sp`）收进树。每份母版字段顺序：`id`、`index`、`name`、`placeholders`、`layouts`。`id` 为 `master:{n}`。`name` 取该 slideMaster 的 `p:cSld/@name`，没有则为 `null`。`placeholders` 只收带 `p:nvPr/p:ph` 的 `p:sp`（含组合里的），按文档顺序。每份版式字段顺序：`id`、`index`、`name`、`kind`、`placeholders`。`id` 为 `master:{n}/layout:{k}`。`name` 取该 slideLayout 的 `p:cSld/@name`，没有则为 `null`。`kind` 取 `p:sldLayout/@type` 原文，没有则为 `null`。create 写出的那份空白版式 `kind` 为 `blank`、名为「空白」。占位符字段顺序：`id`、`shapeId`、`name`、`type`、`idx`、`x`、`y`、`cx`、`cy`、`text`、`stable`。`id` 为 `master:{n}/shape:{cNvPrId}` 或 `master:{n}/layout:{k}/shape:{cNvPrId}`；没有 `cNvPr/@id` 则为 `…/shape:index:{i}`，`stable` 为 `false`，`{i}` 只在该母版或该版式被收入的占位符内从 1 计。`type` 取 `p:ph/@type`，缺则为 `null`。`idx` 取 `p:ph/@idx` 原文，缺则为 `null`。几何与 `text` 规则与幻灯片形状相同；没有 `txBody` 则 `text` 为 `""`。xlsx / docx 的 `scope` 里出现 `masters` 报 `InvalidField`。
 - `scope.notes` 为 `true` 时，每页带 `notes`。没有 notesSlide 关系则为 `null`。有则为对象，字段顺序：`id`、`pictureCount`，有图名单时再跟 `pictures`，然后 `shapes`。`id` 为 `slide:{n}/notes`。`pictureCount` 只计该备注页上被收入的 `p:pic`，不并进幻灯片 `pictures`。备注形状判定与幻灯片形状相同（带 `p:txBody` 的 `p:sp`），id 为 `slide:{n}/notes/shape:…`。字段顺序与幻灯片形状相同：`id`、`shapeId`、`name`、`x`、`y`、`cx`、`cy`、`text`、`stable`。备注形状一次倒出，不用 `maxShapes`。
 - `scope.comments` 为 `true` 时，每页带 `comments`。没有现代批注时为空数组。不依赖 `scope.slide`。按该页 `p188:cmLst` 里 `p188:cm` 的文档顺序。每条字段顺序：`id`、`commentId`、`author`、`initials`、`date`、`done`、`kind`、`x`、`y`、`text`、`replies`。`commentId` 是 `p188:cm/@id` 原文。`author` / `initials` 按 `authorId` 去 `/ppt/authors.xml` 的 `p188:author` 取 `name` / `initials`，对不上则为 `null`。`date` 取 `created` 原文，缺则为 `null`。`done`：`status` 为 `resolved` 或 `closed` 为 `true`；缺 `status`（即 active）为 `false`。`kind` 为 `normal`；该 `cm` 内出现墨迹标记（本地名为 `ink`）则为 `ink`。`x` / `y` 取 `p188:pos` 的 EMU，缺则为 `null`。`text` 取 `p188:txBody` 可见纯文本，规则与形状 `text` 相同。回复嵌在 `replies` 里，不单独占 `commentCount`。回复字段顺序：`id`、`commentId`、`author`、`initials`、`date`、`done`、`kind`、`text`（无 `x` / `y`）。回复 `id` 为 `{父批注 id}/reply:{guid}`。
-- 页对象字段顺序：`id`、`index`、`name`、`layoutId`、`hidden`、`transition`、`hasNotes`、`pictureCount`、`chartCount`、`smartArtCount`、`commentCount`、`tableCount`、`animCount`，然后按需 `pictures`，再按需 `charts`，再按需 `smartArts`，再按需 `tables`，再按需 `notes`，再按需 `comments`，再按需 `timing`，再按需 `truncated` 与 `shapes`。根对象字段顺序：`schemaVersion`、`format`、`id`、`slideCount`、`pictureCount`、`chartCount`、`smartArtCount`、`commentCount`、`tableCount`、`animCount`、`masterCount`、`hasHandout`、`props`，有 `scope.masters` 时再跟 `masters`，有 `scope.handout` 时再跟 `handout`，然后 `slides`。`props` 始终出现，规则见 [json-contract.md](json-contract.md#文档属性三格式共用)。
+- `scope.hyperlinks` 为 `true` 时，每页带 `hyperlinks`。没有链时为空数组。不依赖 `scope.slide`。按该页被收入形状上 `p:cNvPr/a:hlinkClick` 的文档顺序。每条字段顺序：`id`、`index`、`kind`、`host`、`rId`、`url`、`file`、`slide`、`tooltip`。`index` 与 id 里的 `{k}` 相同。`host` 是所在形状 id。`rId` 是 `r:id` 原文，缺则为 `null`。`kind` 为 `url`（External hyperlink 关系且没有文件跳转 `action`）、`file`（`action` 为 `ppaction://hlinkfile`）或 `slide`（slide 关系，或 `action` 为 `ppaction://hlinksldjump`）。`url` / `file` / `slide` 按 kind 填对应目标，其余为 `null`。`url` 与 `file` 取该关系 `Target` 原文，缺关系则为 `null`。`slide` 对到 `slide:{n}`，对不上则为 `null`。`tooltip` 取 `tooltip` 属性，缺则为 `null`。不把形状可见字抄进这条。xlsx / docx 的 `scope.hyperlinks` 见各自分册。
+- 页对象字段顺序：`id`、`index`、`name`、`layoutId`、`hidden`、`transition`、`hasNotes`、`pictureCount`、`chartCount`、`smartArtCount`、`commentCount`、`hyperlinkCount`、`tableCount`、`animCount`，然后按需 `pictures`，再按需 `charts`，再按需 `smartArts`，再按需 `tables`，再按需 `notes`，再按需 `comments`，再按需 `hyperlinks`，再按需 `timing`，再按需 `truncated` 与 `shapes`。根对象字段顺序：`schemaVersion`、`format`、`id`、`slideCount`、`pictureCount`、`chartCount`、`smartArtCount`、`commentCount`、`hyperlinkCount`、`tableCount`、`animCount`、`masterCount`、`hasHandout`、`props`，有 `scope.masters` 时再跟 `masters`，有 `scope.handout` 时再跟 `handout`，然后 `slides`。`props` 始终出现，规则见 [json-contract.md](json-contract.md#文档属性三格式共用)。
 - `shapeId` 是 `cNvPr/@id` 的原文。走 `shape:index:{k}` 时为 `null`。
 - 形状上的 `name` 取 `cNvPr/@name` 的原文。没有则为 `null`。
 - `x` / `y` 取 `p:spPr/a:xfrm/a:off` 的 EMU；`cx` / `cy` 取 `a:ext`。缺对应属性则为 `null`。备注形状同样。
@@ -295,7 +304,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
 
 `workbook`、`document`、`presentation` 三者必须恰好出现一个。xlsx 路径必须用 `workbook`，docx 路径必须用 `document`，pptx 路径必须用 `presentation`，对不上报 `InvalidField`。
 
-create 写出 Transitional 最小包，见 [opc.md](opc.md)。必须带 theme、slideMaster、slideLayout、presentation、各页 slide、presProps，不能只写 ECMA 示例里那个仅含 `notesSz` 的 presentation。幻灯片尺寸用 16:9（`sldSz` 为 `cx="12192000"` `cy="6858000"`）。不要生成动画、切换、备注、批注、讲义。切换请用 `setTransition`，不要在 create 的 `slides[]` 上写 `transition` 或 `timing`。给了 `slides[].pictures` 时按 `insertPicture` 同一套规则写 `/ppt/media/…`、该页 `.rels` 与 `p:pic`。给了 `slides[].charts` 时按 `insertChart` 同一套规则写 `/ppt/charts/…`、embedding 与图表 `p:graphicFrame`。给了 `slides[].smartArts` 时按 `insertSmartArt` 同一套规则写 `/ppt/diagrams/…` 与图示 `p:graphicFrame`。给了 `slides[].tables` 时按 `insertTable` 同一套规则写表 `p:graphicFrame`（`a:tbl`）。先写该页 `shapes`，再按数组顺序写 `pictures`，再写 `charts`，再写 `smartArts`，再写 `tables`。`p:cNvPr/@id` 取该页已有全部 `cNvPr` 的最大整数加 1，至少为 2。`presentation` 根上或 `shapes[]` 上出现 `pictures` / `charts` / `smartArts` / `tables` / `masters` / `handout` 报 `InvalidField`。create 仍只写一份 `type="blank"`、名为「空白」的版式，不按 JSON 生成多份母版。给了 `presentation.props` 时按 `setProps` / `setCustomProp` 同一套规则写 core / app / custom；省略则仍写空的 `dc:title` 与 `dc:creator` 为 `ooxp`，不写 custom 部件。
+create 写出 Transitional 最小包，见 [opc.md](opc.md)。必须带 theme、slideMaster、slideLayout、presentation、各页 slide、presProps，不能只写 ECMA 示例里那个仅含 `notesSz` 的 presentation。幻灯片尺寸用 16:9（`sldSz` 为 `cx="12192000"` `cy="6858000"`）。不要生成动画、切换、备注、批注、讲义。切换请用 `setTransition`，不要在 create 的 `slides[]` 上写 `transition` 或 `timing`。给了 `slides[].pictures` 时按 `insertPicture` 同一套规则写 `/ppt/media/…`、该页 `.rels` 与 `p:pic`。给了 `slides[].charts` 时按 `insertChart` 同一套规则写 `/ppt/charts/…`、embedding 与图表 `p:graphicFrame`。给了 `slides[].smartArts` 时按 `insertSmartArt` 同一套规则写 `/ppt/diagrams/…` 与图示 `p:graphicFrame`。给了 `slides[].tables` 时按 `insertTable` 同一套规则写表 `p:graphicFrame`（`a:tbl`）。先写该页 `shapes`，再按数组顺序写 `pictures`，再写 `charts`，再写 `smartArts`，再写 `tables`。`p:cNvPr/@id` 取该页已有全部 `cNvPr` 的最大整数加 1，至少为 2。`presentation` 根上或 `shapes[]` 上出现 `pictures` / `charts` / `smartArts` / `tables` / `masters` / `handout` / `hyperlinks` 报 `InvalidField`。`slides[]` 上出现 `hyperlinks` 报未知字段。create 本期不写超链接。create 仍只写一份 `type="blank"`、名为「空白」的版式，不按 JSON 生成多份母版。给了 `presentation.props` 时按 `setProps` / `setCustomProp` 同一套规则写 core / app / custom；省略则仍写空的 `dc:title` 与 `dc:creator` 为 `ooxp`，不写 custom 部件。
 
 每个文本框写成带 `p:txBody` 的 `p:sp`，`p:cNvPr/@id` 从 `2` 起在该页内递增（`1` 留给 `spTree`）。随后 inspect 得到的 id 都是 `slide:{n}/shape:{id}`，`stable` 为 `true`。形状纵向错开，避免叠在同一位置。颜色用 RGB，不依赖主题色语义。
 
@@ -575,7 +584,7 @@ pptx：`id` 不是页 id 或备注容器 id 报 `InvalidId`（对形状 id、图
 
 ### 改动范围（pptx）
 
-允许变脏的部件：被改的那一张幻灯片 XML（通常是 `/ppt/slides/slideN.xml`，N 以关系目标为准）及其 `.rels`，被改的 notesSlide 及其 `.rels`，必要时 `presentation.xml` 及其 `.rels`、新建的 notesMaster 及其 `.rels`，`[Content_Types].xml`，以及新建或被删的 `/ppt/media/…`、`/ppt/charts/…`、embedding、`/ppt/diagrams/…` 及可选 drawing 缓存，以及现代批注部件 `/ppt/comments/modernComment_*.xml` 与 `/ppt/authors.xml`。`setShapeText` 以及 `setShapePos` / `setShapeSize` / `setShapeFill` / `setShapeLine` / `deleteShape` 只脏目标宿主 XML（幻灯片、notesSlide、被点名的 slideMaster 或 slideLayout）。`insertShape` 往幻灯片插只脏该页 XML；往备注插时可脏 notesSlide、该页 `.rels`、notesMaster、presentation，与 `setNotesText` 相同。`insertTable` / `deleteTable` / `insertRow` / `deleteRow` / `insertCol` / `deleteCol` / `setTableCellText` / `setTablePos` / `setTableSize` 只脏该页幻灯片 XML，不新建部件。`setNotesText` 可脏 notesSlide、该页 `.rels`、notesMaster、presentation。图片 op 还可脏该宿主关系与媒体。图表 op 还可脏 chart 部件、embedding。SmartArt op 还可脏四件套与缓存。批注 op 还可脏该页 comments 部件、幻灯片 XML（新建时的 `commentRel`）、presentation `.rels` 与 authors。`insertSlide` / `deleteSlide` / `moveSlide` 还可脏 `presentation.xml` 的 `sldIdLst`（及若有则 `p14:sectionLst`）、presentation 关系、新页或被删页及其 `.rels`、内容类型，以及被删页无人引用的备注 / 现代批注 / 图表 / embedding / diagram / 媒体。`setSlideHidden` 只脏该页 `p:sld/@show`。`setTransition` 只脏该页幻灯片 XML 的 `<p:transition>`（或包住它的 `mc:AlternateContent`），不脏 timing。`setSlideLayout` 只脏该页 `.rels` 的 `slideLayout` 目标，不脏幻灯片 XML、母版 XML 或版式 XML。`setHandoutText` 可脏 handoutMaster 及其 `.rels`、必要时 `presentation.xml` 及其 `.rels` 与 `[Content_Types].xml`。其他页、未点名的幻灯片母版、未点名的版式、主题、`presProps` 一律原样写回。一次 `ops` 可以混用 `setShapeText`、形状管理 op、表格 op、`setNotesText`、`setHandoutText`、批注 op、图片 op、图表 op、SmartArt op、幻灯片管理 op（含 `setTransition`、`setSlideLayout`）与 `setProps` / `setCustomProp` / `deleteCustomProp`。文件属性 op 还可以脏 `/docProps/core.xml`、`/docProps/app.xml`、`/docProps/custom.xml`、根 `.rels` 与 `[Content_Types].xml`。只改 core 字段时不要新建 custom。未点名的 `Slides` 留下。只改 SmartArt 点文字或增删点、且宿主 graphicFrame 未动时，该页 XML 按「drawing 未动」验收。
+允许变脏的部件：被改的那一张幻灯片 XML（通常是 `/ppt/slides/slideN.xml`，N 以关系目标为准）及其 `.rels`，被改的 notesSlide 及其 `.rels`，必要时 `presentation.xml` 及其 `.rels`、新建的 notesMaster 及其 `.rels`，`[Content_Types].xml`，以及新建或被删的 `/ppt/media/…`、`/ppt/charts/…`、embedding、`/ppt/diagrams/…` 及可选 drawing 缓存，以及现代批注部件 `/ppt/comments/modernComment_*.xml` 与 `/ppt/authors.xml`。`setShapeText` 以及 `setShapePos` / `setShapeSize` / `setShapeFill` / `setShapeLine` / `deleteShape` 只脏目标宿主 XML（幻灯片、notesSlide、被点名的 slideMaster 或 slideLayout）。`insertShape` 往幻灯片插只脏该页 XML；往备注插时可脏 notesSlide、该页 `.rels`、notesMaster、presentation，与 `setNotesText` 相同。`insertTable` / `deleteTable` / `insertRow` / `deleteRow` / `insertCol` / `deleteCol` / `setTableCellText` / `setTablePos` / `setTableSize` 只脏该页幻灯片 XML，不新建部件。`setNotesText` 可脏 notesSlide、该页 `.rels`、notesMaster、presentation。图片 op 还可脏该宿主关系与媒体。图表 op 还可脏 chart 部件、embedding。SmartArt op 还可脏四件套与缓存。批注 op 还可脏该页 comments 部件、幻灯片 XML（新建时的 `commentRel`）、presentation `.rels` 与 authors。`insertSlide` / `deleteSlide` / `moveSlide` 还可脏 `presentation.xml` 的 `sldIdLst`（及若有则 `p14:sectionLst`）、presentation 关系、新页或被删页及其 `.rels`、内容类型，以及被删页无人引用的备注 / 现代批注 / 图表 / embedding / diagram / 媒体。`setSlideHidden` 只脏该页 `p:sld/@show`。`setTransition` 只脏该页幻灯片 XML 的 `<p:transition>`（或包住它的 `mc:AlternateContent`），不脏 timing。`setSlideLayout` 只脏该页 `.rels` 的 `slideLayout` 目标，不脏幻灯片 XML、母版 XML 或版式 XML。`setHandoutText` 可脏 handoutMaster 及其 `.rels`、必要时 `presentation.xml` 及其 `.rels` 与 `[Content_Types].xml`。超链接 op 脏该页幻灯片 XML 与该页 `.rels`（新建或删除 hyperlink / slide 关系）。其他页、未点名的幻灯片母版、未点名的版式、主题、`presProps` 一律原样写回。一次 `ops` 可以混用 `setShapeText`、形状管理 op、表格 op、`setNotesText`、`setHandoutText`、批注 op、超链接 op、图片 op、图表 op、SmartArt op、幻灯片管理 op（含 `setTransition`、`setSlideLayout`）与 `setProps` / `setCustomProp` / `deleteCustomProp`。文件属性 op 还可以脏 `/docProps/core.xml`、`/docProps/app.xml`、`/docProps/custom.xml`、根 `.rels` 与 `[Content_Types].xml`。只改 core 字段时不要新建 custom。未点名的 `Slides` 留下。只改 SmartArt 点文字或增删点、且宿主 graphicFrame 未动时，该页 XML 按「drawing 未动」验收。
 
 被改部件同样整份重序列化，保留程度与 xlsx 工作表相同：元素与属性顺序、未知命名空间保留；注释、处理指令、DOCTYPE 会丢。
 

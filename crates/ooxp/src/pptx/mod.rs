@@ -5,6 +5,7 @@ mod chart;
 mod comments;
 mod create;
 mod handout;
+mod hyperlink;
 mod inspect;
 mod master;
 mod notes;
@@ -37,6 +38,8 @@ pub const REL_OFFICE_DOCUMENT: &str =
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument";
 pub const REL_SLIDE: &str =
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide";
+pub const REL_HYPERLINK: &str =
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink";
 pub const REL_SLIDE_MASTER: &str =
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster";
 pub const REL_SLIDE_LAYOUT: &str =

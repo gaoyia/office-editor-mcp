@@ -166,6 +166,7 @@ fn inspect_has_notes_without_notes_object() {
             "chartCount",
             "smartArtCount",
             "commentCount",
+            "hyperlinkCount",
             "tableCount",
             "animCount"
         ]

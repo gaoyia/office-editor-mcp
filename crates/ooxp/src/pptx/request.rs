@@ -9,7 +9,9 @@ use crate::smartart::{ColorsKind, LayoutKind, NewPoint, Role, StyleKind};
 
 use super::chart;
 use super::comments;
+use super::hyperlink;
 use super::picture;
+use super::shape;
 use super::smartart;
 use super::table;
 use super::transition;
@@ -23,6 +25,7 @@ pub struct InspectScope {
     pub smart_art: bool,
     pub notes: bool,
     pub comments: bool,
+    pub hyperlinks: bool,
     pub tables: bool,
     pub timing: bool,
     pub masters: bool,
@@ -134,6 +137,37 @@ pub struct SetHandoutTextOp {
     pub footer: Option<String>,
     pub date: Option<String>,
     pub sld_num: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub enum PptxLinkKind {
+    Url(String),
+    File(String),
+    Slide(usize),
+}
+
+#[derive(Debug, Clone)]
+pub struct InsertHyperlinkOp {
+    pub id: String,
+    pub shape: super::shape::ShapeTarget,
+    pub target: PptxLinkKind,
+    pub tooltip: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetHyperlinkOp {
+    pub id: String,
+    pub slide: usize,
+    pub index: usize,
+    pub target: Option<PptxLinkKind>,
+    pub tooltip: Option<Option<String>>,
+}
+
+#[derive(Debug, Clone)]
+pub struct DeleteHyperlinkOp {
+    pub id: String,
+    pub slide: usize,
+    pub index: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -588,6 +622,9 @@ pub enum PptxOp {
     SetTransition(SetTransitionOp),
     SetSlideLayout(SetSlideLayoutOp),
     SetHandoutText(SetHandoutTextOp),
+    InsertHyperlink(InsertHyperlinkOp),
+    SetHyperlink(SetHyperlinkOp),
+    DeleteHyperlink(DeleteHyperlinkOp),
     SetProps(crate::props::SetPropsOp),
     SetCustomProp(crate::props::SetCustomPropOp),
     DeleteCustomProp(crate::props::DeleteCustomPropOp),
@@ -619,6 +656,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
             "smartArt",
             "notes",
             "comments",
+            "hyperlinks",
             "tables",
             "timing",
             "masters",
@@ -630,6 +668,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
     let smart_art = parse_bool_field(obj.get("smartArt"), "smartArt")?;
     let notes = parse_bool_field(obj.get("notes"), "notes")?;
     let comments = parse_bool_field(obj.get("comments"), "comments")?;
+    let hyperlinks = parse_bool_field(obj.get("hyperlinks"), "hyperlinks")?;
     let tables = parse_bool_field(obj.get("tables"), "tables")?;
     let timing = parse_bool_field(obj.get("timing"), "timing")?;
     let masters = parse_bool_field(obj.get("masters"), "masters")?;
@@ -699,6 +738,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
         smart_art,
         notes,
         comments,
+        hyperlinks,
         tables,
         timing,
         masters,
@@ -816,6 +856,9 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<PptxOp>, Error> {
             "setTransition" => PptxOp::SetTransition(parse_set_transition(obj, i)?),
             "setSlideLayout" => PptxOp::SetSlideLayout(parse_set_slide_layout(obj, i)?),
             "setHandoutText" => PptxOp::SetHandoutText(parse_set_handout_text(obj, i)?),
+            "insertHyperlink" => PptxOp::InsertHyperlink(parse_insert_hyperlink(obj, i)?),
+            "setHyperlink" => PptxOp::SetHyperlink(parse_set_hyperlink(obj, i)?),
+            "deleteHyperlink" => PptxOp::DeleteHyperlink(parse_delete_hyperlink(obj, i)?),
             "setProps" => {
                 PptxOp::SetProps(crate::props::parse_set_props(obj, i, "pptx:presentation")?)
             }
@@ -876,9 +919,6 @@ fn is_foreign_op(op_name: &str) -> bool {
             | "splitCells"
             | "acceptRevision"
             | "rejectRevision"
-            | "insertHyperlink"
-            | "setHyperlink"
-            | "deleteHyperlink"
             | "insertSparkline"
             | "setSparkline"
             | "deleteSparkline"
@@ -1339,6 +1379,155 @@ fn parse_set_handout_text(obj: &Map<String, Value>, i: usize) -> Result<SetHando
         date,
         sld_num,
     })
+}
+
+fn parse_insert_hyperlink(obj: &Map<String, Value>, i: usize) -> Result<InsertHyperlinkOp, Error> {
+    deny_keys(obj, i, &["op", "id", "url", "file", "slide", "tooltip"])?;
+    let id = require_id(obj, i)?;
+    let shape = parse_insert_hyperlink_shape(&id, i)?;
+    let target = parse_pptx_link_target(obj, i)?
+        .ok_or_else(|| Error::with_path(ErrorKind::PptxHyperlinkNeedTarget, format!("ops[{i}]")))?;
+    Ok(InsertHyperlinkOp {
+        id,
+        shape,
+        target,
+        tooltip: parse_optional_tooltip(obj, i)?,
+    })
+}
+
+fn parse_set_hyperlink(obj: &Map<String, Value>, i: usize) -> Result<SetHyperlinkOp, Error> {
+    deny_keys(obj, i, &["op", "id", "url", "file", "slide", "tooltip"])?;
+    let id = require_id(obj, i)?;
+    let (slide, index) = hyperlink::parse_link_id(&id, i)?;
+    let target = parse_pptx_link_target(obj, i)?;
+    let tooltip = parse_set_tooltip(obj, i)?;
+    if target.is_none() && tooltip.is_none() {
+        return Err(Error::with_path(
+            ErrorKind::PptxNeedSetHyperlinkField,
+            format!("ops[{i}]"),
+        ));
+    }
+    Ok(SetHyperlinkOp {
+        id,
+        slide,
+        index,
+        target,
+        tooltip,
+    })
+}
+
+fn parse_delete_hyperlink(obj: &Map<String, Value>, i: usize) -> Result<DeleteHyperlinkOp, Error> {
+    deny_keys(obj, i, &["op", "id"])?;
+    let id = require_id(obj, i)?;
+    let (slide, index) = hyperlink::parse_link_id(&id, i)?;
+    Ok(DeleteHyperlinkOp { id, slide, index })
+}
+
+fn parse_insert_hyperlink_shape(id: &str, i: usize) -> Result<shape::ShapeTarget, Error> {
+    match shape::parse_shape_id(id, i) {
+        Ok(t) if !t.on_notes => Ok(t),
+        Ok(_) | Err(_) => Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::InsertHyperlinkNeedsShape,
+            },
+            format!("ops[{i}].id"),
+        )),
+    }
+}
+
+fn parse_pptx_link_target(
+    obj: &Map<String, Value>,
+    i: usize,
+) -> Result<Option<PptxLinkKind>, Error> {
+    let url = parse_pptx_target_string(obj, i, "url", ErrorKind::EmptyHyperlinkUrl)?;
+    let file = parse_pptx_target_string(obj, i, "file", ErrorKind::EmptyHyperlinkFile)?;
+    let slide = match obj.get("slide") {
+        None => None,
+        Some(Value::Null) => {
+            return Err(Error::with_path(
+                ErrorKind::PptxHyperlinkNeedTarget,
+                format!("ops[{i}].slide"),
+            ));
+        }
+        Some(Value::String(s)) if s.is_empty() => {
+            return Err(Error::with_path(
+                ErrorKind::PptxHyperlinkNeedTarget,
+                format!("ops[{i}].slide"),
+            ));
+        }
+        Some(Value::String(s)) => Some(hyperlink::parse_jump_slide(s, i, "slide")?),
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "slide".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].slide"),
+            ));
+        }
+    };
+    match (url, file, slide) {
+        (Some(u), None, None) => Ok(Some(PptxLinkKind::Url(u))),
+        (None, Some(f), None) => Ok(Some(PptxLinkKind::File(f))),
+        (None, None, Some(n)) => Ok(Some(PptxLinkKind::Slide(n))),
+        (None, None, None) => Ok(None),
+        _ => Err(Error::with_path(
+            ErrorKind::PptxHyperlinkNeedTarget,
+            format!("ops[{i}]"),
+        )),
+    }
+}
+
+fn parse_pptx_target_string(
+    obj: &Map<String, Value>,
+    i: usize,
+    field: &str,
+    empty: ErrorKind,
+) -> Result<Option<String>, Error> {
+    match obj.get(field) {
+        None => Ok(None),
+        Some(Value::Null) => Err(Error::with_path(empty, format!("ops[{i}].{field}"))),
+        Some(Value::String(s)) if s.is_empty() => {
+            Err(Error::with_path(empty, format!("ops[{i}].{field}")))
+        }
+        Some(Value::String(s)) => Ok(Some(s.clone())),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::String,
+            },
+            format!("ops[{i}].{field}"),
+        )),
+    }
+}
+
+fn parse_optional_tooltip(obj: &Map<String, Value>, i: usize) -> Result<Option<String>, Error> {
+    match obj.get("tooltip") {
+        None => Ok(None),
+        Some(Value::String(s)) => Ok(Some(s.clone())),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "tooltip".into(),
+                expected: TypeName::String,
+            },
+            format!("ops[{i}].tooltip"),
+        )),
+    }
+}
+
+fn parse_set_tooltip(obj: &Map<String, Value>, i: usize) -> Result<Option<Option<String>>, Error> {
+    match obj.get("tooltip") {
+        None => Ok(None),
+        Some(Value::Null) => Ok(Some(None)),
+        Some(Value::String(s)) => Ok(Some(Some(s.clone()))),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "tooltip".into(),
+                expected: TypeName::String,
+            },
+            format!("ops[{i}].tooltip"),
+        )),
+    }
 }
 
 fn parse_optional_slot(

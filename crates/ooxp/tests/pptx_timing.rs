@@ -179,6 +179,7 @@ fn create_has_zero_anim_count_without_list() {
             "chartCount",
             "smartArtCount",
             "commentCount",
+            "hyperlinkCount",
             "tableCount",
             "animCount",
             "masterCount",

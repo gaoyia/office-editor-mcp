@@ -1448,6 +1448,14 @@
         },
         "display": {
           "type": "string"
+        },
+        "file": {
+          "type": "string",
+          "minLength": 1
+        },
+        "slide": {
+          "type": "string",
+          "minLength": 1
         }
       }
     },
@@ -1498,6 +1506,14 @@
           ]
         },
         "ref": {
+          "type": "string",
+          "minLength": 1
+        },
+        "file": {
+          "type": "string",
+          "minLength": 1
+        },
+        "slide": {
           "type": "string",
           "minLength": 1
         }

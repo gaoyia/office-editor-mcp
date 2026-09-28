@@ -121,6 +121,7 @@ fn create_has_no_handout_without_scope() {
             "chartCount",
             "smartArtCount",
             "commentCount",
+            "hyperlinkCount",
             "tableCount",
             "animCount",
             "masterCount",

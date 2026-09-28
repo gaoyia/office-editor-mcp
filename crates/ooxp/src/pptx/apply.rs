@@ -7,6 +7,7 @@ use crate::xml;
 use super::chart;
 use super::comments;
 use super::handout;
+use super::hyperlink;
 use super::master;
 use super::notes;
 use super::picture;
@@ -802,6 +803,44 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
             }
             PptxOp::SetHandoutText(op) => {
                 handout::set_text(&mut pkg, &pres_part, &mut pres, op, i)?;
+            }
+            PptxOp::InsertHyperlink(op) => {
+                let meta = slides.get(op.shape.slide - 1).ok_or_else(|| {
+                    Error::with_path(
+                        ErrorKind::SlideNotFound {
+                            n: op.shape.slide as u32,
+                        },
+                        format!("ops[{i}].id"),
+                    )
+                })?;
+                let part = meta.part.clone();
+                let mut doc = xml::parse(pkg.get(&part)?)?;
+                hyperlink::apply_insert(&mut pkg, &mut doc, &part, &slides, op, i)?;
+                pkg.set(&part, doc.to_bytes()?)?;
+            }
+            PptxOp::SetHyperlink(op) => {
+                let meta = slides.get(op.slide - 1).ok_or_else(|| {
+                    Error::with_path(
+                        ErrorKind::SlideNotFound { n: op.slide as u32 },
+                        format!("ops[{i}].id"),
+                    )
+                })?;
+                let part = meta.part.clone();
+                let mut doc = xml::parse(pkg.get(&part)?)?;
+                hyperlink::apply_set(&mut pkg, &mut doc, &part, &slides, op, i)?;
+                pkg.set(&part, doc.to_bytes()?)?;
+            }
+            PptxOp::DeleteHyperlink(op) => {
+                let meta = slides.get(op.slide - 1).ok_or_else(|| {
+                    Error::with_path(
+                        ErrorKind::SlideNotFound { n: op.slide as u32 },
+                        format!("ops[{i}].id"),
+                    )
+                })?;
+                let part = meta.part.clone();
+                let mut doc = xml::parse(pkg.get(&part)?)?;
+                hyperlink::apply_delete(&mut pkg, &mut doc.root, &part, op, i)?;
+                pkg.set(&part, doc.to_bytes()?)?;
             }
             PptxOp::SetProps(op) => {
                 crate::props::apply_set_props(&mut pkg, op, i)?;

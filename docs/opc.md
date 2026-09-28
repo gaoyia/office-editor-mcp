@@ -257,6 +257,8 @@ apply 的 `setHandoutText` 可能写入 `/ppt/handoutMasters/handoutMaster1.xml`
 
 apply 插入现代批注时，可能写入 `/ppt/comments/modernComment_{sldId}_N.xml`（CT `application/vnd.ms-powerpoint.comments+xml`，根 `p188:cmLst`，命名空间 `http://schemas.microsoft.com/office/powerpoint/2018/8/main`）和 `/ppt/authors.xml`（CT `application/vnd.ms-powerpoint.authors+xml`，根 `p188:authorLst`）。幻灯片 `.rels` 补一条 comments 关系，Type 必须是完整 URI `http://schemas.microsoft.com/office/2018/10/relationships/comments`，不要用 `ends_with("/comments")`（会误伤 2006 旧式）。presentation `.rels` 补一条 authors 关系，Type 为 `http://schemas.microsoft.com/office/2018/10/relationships/authors`。幻灯片 XML 在 `p:clrMapOvr` 之后写入 `p:extLst` / `p:ext`（uri `{6950BFC3-D8DA-4A85-94F7-54DA5524770B}`）/ `p188:commentRel`。同一页多条批注共用一个 comments 部件。`p188:cm` 子元素顺序为锚点（`pc:sldMkLst`）、`p188:pos`、可选 `p188:replyLst`、`p188:txBody`。`pc:sldMk/@sldId` 取 presentation 该页 `p:sldId` 的无前缀 `id`。不写 ECMA-376 §19.4 的 `/ppt/comments/commentN.xml` 与 `commentAuthors`。
 
+apply 的超链接 op 只改该页幻灯片 XML 的 `p:cNvPr/a:hlinkClick` 与该页 `.rels`。URL / 文件写 Type 以 `/hyperlink` 结尾、`TargetMode` 为 `External` 的关系；跳转到某页写 Type 以 `/slide` 结尾的内部关系。不新建幻灯片部件。删链只摘 `hlinkClick`，孤儿关系删掉。
+
 ## 验收（第 2 项）
 
 零脏保存：`open` 之后不调用 `set` / `remove`，再 `save`。每个部件的未压缩字节、以及 ZIP 里该条目的 CRC，都与打开时相同。库测试对 Excel 另存的 xlsx、以及 create 写出的 docx / pptx 各跑一遍。

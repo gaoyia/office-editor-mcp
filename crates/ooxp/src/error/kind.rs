@@ -265,6 +265,12 @@ pub(crate) enum IdReason {
     SheetLinkPrefix,
     /// xlsx 的 insertHyperlink 必须用 sheet:工作表名
     InsertHyperlinkNeedsSheet,
+    /// pptx 的 insertHyperlink 必须用幻灯片文本形状 id
+    InsertHyperlinkNeedsShape,
+    /// pptx 超链接 id 必须是 slide:N/link:K
+    SlideLinkPrefix,
+    /// pptx 内部跳转必须是 slide:N
+    PptxJumpNeedsSlide,
     /// xlsx 迷你图组 id 必须是 sheet:{name}/spark:{n}
     SheetSparkPrefix,
     SparkIndexNotInt,
@@ -631,6 +637,11 @@ define_error_kinds! {
     BookmarkRangeCrossStory => vec![Self::BookmarkRangeCrossStory],
     NeedSetHyperlinkField => vec![Self::NeedSetHyperlinkField],
     NeedXlsxSetHyperlinkField => vec![Self::NeedXlsxSetHyperlinkField],
+    PptxHyperlinkNeedTarget => vec![Self::PptxHyperlinkNeedTarget],
+    PptxNeedSetHyperlinkField => vec![Self::PptxNeedSetHyperlinkField],
+    ShapeAlreadyHasHyperlink => vec![Self::ShapeAlreadyHasHyperlink],
+    PptxHyperlinkSelfSlide => vec![Self::PptxHyperlinkSelfSlide],
+    EmptyHyperlinkFile => vec![Self::EmptyHyperlinkFile],
     FieldNotFound { id: String } => vec![Self::FieldNotFound { id: "field:1".into() }],
     TocNotFound { id: String } => vec![Self::TocNotFound { id: "toc:1".into() }],
     MathNotFound { id: String } => vec![Self::MathNotFound { id: "math:1".into() }],
@@ -946,6 +957,9 @@ impl IdReason {
             Self::InsertLinkNeedsPara,
             Self::SheetLinkPrefix,
             Self::InsertHyperlinkNeedsSheet,
+            Self::InsertHyperlinkNeedsShape,
+            Self::SlideLinkPrefix,
+            Self::PptxJumpNeedsSlide,
             Self::SheetSparkPrefix,
             Self::SparkIndexNotInt,
             Self::SparkIndexFromOne,
@@ -1125,6 +1139,11 @@ impl ErrorKind {
             | Self::BookmarkRangeReversed
             | Self::BookmarkRangeCrossStory
             | Self::NeedSetHyperlinkField
+            | Self::PptxHyperlinkNeedTarget
+            | Self::PptxNeedSetHyperlinkField
+            | Self::ShapeAlreadyHasHyperlink
+            | Self::PptxHyperlinkSelfSlide
+            | Self::EmptyHyperlinkFile
             | Self::EmptyFieldInstr
             | Self::InvalidFieldKeep
             | Self::NeedSetFieldInstr

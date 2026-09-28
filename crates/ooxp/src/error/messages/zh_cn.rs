@@ -365,6 +365,15 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::InsertHyperlinkNeedsSheet => {
                 "xlsx 的 insertHyperlink 的 id 必须是 sheet:工作表名".into()
             }
+            IdReason::InsertHyperlinkNeedsShape => {
+                "pptx 的 insertHyperlink 的 id 必须是幻灯片文本形状 id".into()
+            }
+            IdReason::SlideLinkPrefix => {
+                "pptx 超链接 id 必须是 slide:n/link:k，n 与 k 从 1 起".into()
+            }
+            IdReason::PptxJumpNeedsSlide => {
+                "pptx 内部跳转必须是 slide:n，n 从 1 起".into()
+            }
             IdReason::SheetSparkPrefix => {
                 "xlsx 迷你图组 id 必须是 sheet:工作表名/spark:n，n 从 1 起".into()
             }
@@ -742,6 +751,17 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::NeedXlsxSetHyperlinkField => {
             "xlsx 的 setHyperlink 至少要给 url、location、tooltip、display 或 ref 之一".into()
         }
+        ErrorKind::PptxHyperlinkNeedTarget => {
+            "pptx 的超链接必须恰好给 url、file 或 slide 之一".into()
+        }
+        ErrorKind::PptxNeedSetHyperlinkField => {
+            "pptx 的 setHyperlink 至少要给 url、file、slide 或 tooltip 之一".into()
+        }
+        ErrorKind::ShapeAlreadyHasHyperlink => {
+            "该形状已有形状级超链接，请用 setHyperlink".into()
+        }
+        ErrorKind::PptxHyperlinkSelfSlide => "不能把超链接跳到本页".into(),
+        ErrorKind::EmptyHyperlinkFile => "file 不能为空".into(),
         ErrorKind::FieldNotFound { id } => format!("找不到域：{id}"),
         ErrorKind::TocNotFound { id } => format!("找不到目录：{id}"),
         ErrorKind::MathNotFound { id } => format!("找不到公式：{id}"),
