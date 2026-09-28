@@ -20,6 +20,7 @@ use super::shape;
 use super::slides;
 use super::smartart;
 use super::table;
+use super::theme;
 use super::timing;
 use super::transition;
 
@@ -1038,6 +1039,16 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
             }
             PptxOp::DeleteMaster(op) => {
                 master::delete_master(&mut pkg, &slides, &pres_part, &mut pres, op.master, i)?;
+            }
+            PptxOp::SetSlideSize(op) => {
+                theme::set_slide_size(&mut pres, op.cx, op.cy, op.type_name.as_deref(), i)?;
+                pkg.set(&pres_part, pres.to_bytes()?)?;
+            }
+            PptxOp::SetThemeColors(op) => {
+                theme::set_theme_colors(&mut pkg, &pres_part, &pres.root, op.master, &op.slots, i)?;
+            }
+            PptxOp::SetThemeFonts(op) => {
+                theme::set_theme_fonts(&mut pkg, &pres_part, &pres.root, op.master, &op.fonts, i)?;
             }
             PptxOp::SetHandoutText(op) => {
                 handout::set_text(&mut pkg, &pres_part, &mut pres, op, i)?;

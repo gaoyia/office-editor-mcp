@@ -999,6 +999,15 @@
                 "$ref": "pptx.schema.json#/$defs/deleteMasterOp"
               },
               {
+                "$ref": "pptx.schema.json#/$defs/setSlideSizeOp"
+              },
+              {
+                "$ref": "pptx.schema.json#/$defs/setThemeColorsOp"
+              },
+              {
+                "$ref": "pptx.schema.json#/$defs/setThemeFontsOp"
+              },
+              {
                 "$ref": "pptx.schema.json#/$defs/setHandoutTextOp"
               },
               {

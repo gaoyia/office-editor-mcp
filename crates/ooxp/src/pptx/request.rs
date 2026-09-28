@@ -202,6 +202,25 @@ pub struct DeleteMasterOp {
 }
 
 #[derive(Debug, Clone)]
+pub struct SetSlideSizeOp {
+    pub cx: i64,
+    pub cy: i64,
+    pub type_name: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetThemeColorsOp {
+    pub master: usize,
+    pub slots: Vec<(String, String)>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetThemeFontsOp {
+    pub master: usize,
+    pub fonts: Vec<(super::theme::FontSlot, String)>,
+}
+
+#[derive(Debug, Clone)]
 pub struct SetHandoutTextOp {
     pub header: Option<String>,
     pub footer: Option<String>,
@@ -781,6 +800,9 @@ pub enum PptxOp {
     DeletePlaceholder(DeletePlaceholderOp),
     InsertMaster(InsertMasterOp),
     DeleteMaster(DeleteMasterOp),
+    SetSlideSize(SetSlideSizeOp),
+    SetThemeColors(SetThemeColorsOp),
+    SetThemeFonts(SetThemeFontsOp),
     SetHandoutText(SetHandoutTextOp),
     InsertHyperlink(InsertHyperlinkOp),
     SetHyperlink(SetHyperlinkOp),
@@ -1045,6 +1067,9 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<PptxOp>, Error> {
             "deletePlaceholder" => PptxOp::DeletePlaceholder(parse_delete_placeholder(obj, i)?),
             "insertMaster" => PptxOp::InsertMaster(parse_insert_master(obj, i)?),
             "deleteMaster" => PptxOp::DeleteMaster(parse_delete_master(obj, i)?),
+            "setSlideSize" => PptxOp::SetSlideSize(parse_set_slide_size(obj, i)?),
+            "setThemeColors" => PptxOp::SetThemeColors(parse_set_theme_colors(obj, i)?),
+            "setThemeFonts" => PptxOp::SetThemeFonts(parse_set_theme_fonts(obj, i)?),
             "setHandoutText" => PptxOp::SetHandoutText(parse_set_handout_text(obj, i)?),
             "insertHyperlink" => PptxOp::InsertHyperlink(parse_insert_hyperlink(obj, i)?),
             "setHyperlink" => PptxOp::SetHyperlink(parse_set_hyperlink(obj, i)?),
@@ -2116,6 +2141,179 @@ fn parse_delete_master(obj: &Map<String, Value>, i: usize) -> Result<DeleteMaste
     Ok(DeleteMasterOp {
         master: super::master::parse_master_only_id(&id, i, IdReason::DeleteMasterNeedsMaster)?,
     })
+}
+
+fn parse_set_slide_size(obj: &Map<String, Value>, i: usize) -> Result<SetSlideSizeOp, Error> {
+    deny_keys(obj, i, &["op", "id", "cx", "cy", "type"])?;
+    let id = require_id(obj, i)?;
+    if id != "pptx:presentation" {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::SetSlideSizeNeedsPresentation,
+            },
+            format!("ops[{i}].id"),
+        ));
+    }
+    let cx = parse_emu_field(obj.get("cx"), i, "cx")?.ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "setSlideSize".into(),
+                field: "cx".into(),
+            },
+            format!("ops[{i}].cx"),
+        )
+    })?;
+    let cy = parse_emu_field(obj.get("cy"), i, "cy")?.ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "setSlideSize".into(),
+                field: "cy".into(),
+            },
+            format!("ops[{i}].cy"),
+        )
+    })?;
+    let type_name = match obj.get("type") {
+        None => None,
+        Some(Value::String(s)) if super::theme::is_slide_size_type(s) => Some(s.clone()),
+        Some(Value::String(_)) => {
+            return Err(Error::with_path(
+                ErrorKind::InvalidSlideSizeType,
+                format!("ops[{i}].type"),
+            ));
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "type".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].type"),
+            ));
+        }
+    };
+    Ok(SetSlideSizeOp { cx, cy, type_name })
+}
+
+fn parse_hex_slot(v: &Value, i: usize, field: &str) -> Result<String, Error> {
+    match v {
+        Value::String(s) if s.len() == 6 && s.chars().all(|c| c.is_ascii_hexdigit()) => {
+            Ok(s.clone())
+        }
+        Value::String(_) => Err(Error::with_path(
+            ErrorKind::InvalidHexColor,
+            format!("ops[{i}].{field}"),
+        )),
+        _ => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::String,
+            },
+            format!("ops[{i}].{field}"),
+        )),
+    }
+}
+
+fn parse_set_theme_colors(obj: &Map<String, Value>, i: usize) -> Result<SetThemeColorsOp, Error> {
+    deny_keys(
+        obj,
+        i,
+        &[
+            "op", "id", "dk1", "lt1", "dk2", "lt2", "accent1", "accent2", "accent3", "accent4",
+            "accent5", "accent6", "hlink", "folHlink",
+        ],
+    )?;
+    let id = require_id(obj, i)?;
+    let master = super::master::parse_master_only_id(&id, i, IdReason::SetThemeNeedsMaster)?;
+    let mut slots = Vec::new();
+    for slot in super::theme::COLOR_SLOTS {
+        if let Some(v) = obj.get(*slot) {
+            slots.push(((*slot).to_string(), parse_hex_slot(v, i, slot)?));
+        }
+    }
+    if slots.is_empty() {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "setThemeColors".into(),
+                field: "a color slot".into(),
+            },
+            format!("ops[{i}]"),
+        ));
+    }
+    Ok(SetThemeColorsOp { master, slots })
+}
+
+fn parse_theme_face(
+    obj: &Map<String, Value>,
+    i: usize,
+    field: &str,
+    allow_empty: bool,
+) -> Result<Option<String>, Error> {
+    match obj.get(field) {
+        None => Ok(None),
+        Some(Value::String(s)) if !s.is_empty() || allow_empty => Ok(Some(s.clone())),
+        Some(Value::String(_)) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::NonEmptyString,
+            },
+            format!("ops[{i}].{field}"),
+        )),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::String,
+            },
+            format!("ops[{i}].{field}"),
+        )),
+    }
+}
+
+fn parse_set_theme_fonts(obj: &Map<String, Value>, i: usize) -> Result<SetThemeFontsOp, Error> {
+    deny_keys(
+        obj,
+        i,
+        &[
+            "op",
+            "id",
+            "majorLatin",
+            "minorLatin",
+            "majorEa",
+            "minorEa",
+            "majorCs",
+            "minorCs",
+        ],
+    )?;
+    let id = require_id(obj, i)?;
+    let master = super::master::parse_master_only_id(&id, i, IdReason::SetThemeNeedsMaster)?;
+    let mut fonts = Vec::new();
+    if let Some(s) = parse_theme_face(obj, i, "majorLatin", false)? {
+        fonts.push((super::theme::FontSlot::MajorLatin, s));
+    }
+    if let Some(s) = parse_theme_face(obj, i, "minorLatin", false)? {
+        fonts.push((super::theme::FontSlot::MinorLatin, s));
+    }
+    if let Some(s) = parse_theme_face(obj, i, "majorEa", true)? {
+        fonts.push((super::theme::FontSlot::MajorEa, s));
+    }
+    if let Some(s) = parse_theme_face(obj, i, "minorEa", true)? {
+        fonts.push((super::theme::FontSlot::MinorEa, s));
+    }
+    if let Some(s) = parse_theme_face(obj, i, "majorCs", true)? {
+        fonts.push((super::theme::FontSlot::MajorCs, s));
+    }
+    if let Some(s) = parse_theme_face(obj, i, "minorCs", true)? {
+        fonts.push((super::theme::FontSlot::MinorCs, s));
+    }
+    if fonts.is_empty() {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "setThemeFonts".into(),
+                field: "a font slot".into(),
+            },
+            format!("ops[{i}]"),
+        ));
+    }
+    Ok(SetThemeFontsOp { master, fonts })
 }
 
 fn parse_set_handout_text(obj: &Map<String, Value>, i: usize) -> Result<SetHandoutTextOp, Error> {

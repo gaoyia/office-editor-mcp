@@ -129,6 +129,7 @@ fn table_count_without_list() {
             "masterCount",
             "hasHandout",
             "sectionCount",
+            "slideSize",
             "props",
             "slides"
         ]

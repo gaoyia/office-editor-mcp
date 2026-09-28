@@ -255,6 +255,7 @@ fn create_has_master_count_without_list() {
             "masterCount",
             "hasHandout",
             "sectionCount",
+            "slideSize",
             "props",
             "slides"
         ]
@@ -298,6 +299,7 @@ fn masters_scope_lists_blank_layout() {
             "masterCount",
             "hasHandout",
             "sectionCount",
+            "slideSize",
             "props",
             "masters",
             "slides"

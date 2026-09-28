@@ -88,6 +88,10 @@ impl Catalog {
         self.masters.iter().find(|m| m.index == n)
     }
 
+    pub fn master_part(&self, n: usize) -> Option<&str> {
+        self.master(n).map(|m| m.part.as_str())
+    }
+
     fn layout(&self, master: usize, layout: usize) -> Option<&LayoutRec> {
         self.master(master)?
             .layouts
@@ -148,10 +152,12 @@ pub fn masters_json(pkg: &Package, catalog: &Catalog) -> Result<Value, Error> {
                 "placeholders": placeholders_json(&layout_doc.root, &layout_host),
             }));
         }
+        let theme = super::theme::theme_json(pkg, &m.part)?;
         out.push(json!({
             "id": host,
             "index": m.index,
             "name": m.name,
+            "theme": theme,
             "placeholders": placeholders_json(&doc.root, &host),
             "layouts": layouts,
         }));

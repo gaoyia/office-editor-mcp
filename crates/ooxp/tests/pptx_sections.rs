@@ -126,6 +126,7 @@ fn create_has_zero_section_count_without_list() {
             "masterCount",
             "hasHandout",
             "sectionCount",
+            "slideSize",
             "props",
             "slides"
         ]

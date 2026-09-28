@@ -268,6 +268,12 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::DeleteMasterNeedsMaster => {
                 "deleteMaster id must be master:N".into()
             }
+            IdReason::SetSlideSizeNeedsPresentation => {
+                "setSlideSize id must be pptx:presentation".into()
+            }
+            IdReason::SetThemeNeedsMaster => {
+                "setThemeColors / setThemeFonts id must be master:N".into()
+            }
             IdReason::SetHandoutTextNeedsHandout => {
                 "setHandoutText id must be handout".into()
             }
@@ -537,6 +543,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::SectionNotFound { id } => format!("Section not found: {id}"),
         ErrorKind::SlideNotFound { n } => format!("Slide not found: slide:{n}"),
         ErrorKind::MasterNotFound { n } => format!("Slide master not found: master:{n}"),
+        ErrorKind::ThemeNotFound { n } => format!("Theme not found for slide master: master:{n}"),
         ErrorKind::LayoutNotFound { master, layout } => {
             format!("Slide layout not found: master:{master}/layout:{layout}")
         }
@@ -852,6 +859,12 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::MasterInUse => "A slide still uses a layout of this master".into(),
         ErrorKind::InvalidPlaceholderType => {
             "type must be a writable placeholder type".into()
+        }
+        ErrorKind::InvalidSlideSizeType => {
+            "type must be a writable slide size type".into()
+        }
+        ErrorKind::SlideSizeOutOfRange => {
+            "cx / cy must be an integer from 914400 to 51206400".into()
         }
         ErrorKind::LastVisibleSheet => {
             "Cannot hide or delete the last visible sheet".into()

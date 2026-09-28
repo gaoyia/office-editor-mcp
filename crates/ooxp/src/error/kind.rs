@@ -174,6 +174,10 @@ pub(crate) enum IdReason {
     InsertMasterNeedsPresentation,
     /// deleteMaster 的 id 必须是 master:N
     DeleteMasterNeedsMaster,
+    /// setSlideSize 必须用 pptx:presentation
+    SetSlideSizeNeedsPresentation,
+    /// setThemeColors / setThemeFonts 必须用 master:N
+    SetThemeNeedsMaster,
     /// setHandoutText 必须用 handout
     SetHandoutTextNeedsHandout,
     /// insertDefinedName 必须用 xlsx:workbook
@@ -530,6 +534,9 @@ define_error_kinds! {
     LayoutInUse => vec![Self::LayoutInUse],
     MasterInUse => vec![Self::MasterInUse],
     InvalidPlaceholderType => vec![Self::InvalidPlaceholderType],
+    InvalidSlideSizeType => vec![Self::InvalidSlideSizeType],
+    SlideSizeOutOfRange => vec![Self::SlideSizeOutOfRange],
+    ThemeNotFound { n: u32 } => vec![Self::ThemeNotFound { n: 9 }],
     LastVisibleSheet => vec![Self::LastVisibleSheet],
     MoveSheetAfterSelf => vec![Self::MoveSheetAfterSelf],
     MoveSlideAfterSelf => vec![Self::MoveSlideAfterSelf],
@@ -944,6 +951,8 @@ impl IdReason {
             Self::InsertPlaceholderNeedsHost,
             Self::InsertMasterNeedsPresentation,
             Self::DeleteMasterNeedsMaster,
+            Self::SetSlideSizeNeedsPresentation,
+            Self::SetThemeNeedsMaster,
             Self::SetSlideSectionNeedsSlide,
             Self::SlideOpNeedsSlide,
             Self::MasterForm,
@@ -1165,6 +1174,8 @@ impl ErrorKind {
             | Self::LayoutInUse
             | Self::MasterInUse
             | Self::InvalidPlaceholderType
+            | Self::InvalidSlideSizeType
+            | Self::SlideSizeOutOfRange
             | Self::LastVisibleSheet
             | Self::MoveSheetAfterSelf
             | Self::MoveSlideAfterSelf
@@ -1361,6 +1372,7 @@ impl ErrorKind {
             | Self::SectionNotFound { .. }
             | Self::SlideNotFound { .. }
             | Self::MasterNotFound { .. }
+            | Self::ThemeNotFound { .. }
             | Self::LayoutNotFound { .. }
             | Self::ShapeNotFound { .. }
             | Self::ConnectorNotFound { .. }

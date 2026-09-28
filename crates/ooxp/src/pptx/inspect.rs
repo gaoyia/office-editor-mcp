@@ -20,6 +20,7 @@ use super::section;
 use super::shape;
 use super::smartart;
 use super::table;
+use super::theme;
 use super::timing;
 use super::transition;
 
@@ -246,6 +247,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         json!(handout::has_handout(&pkg, &pres_part)?),
     );
     root.insert("sectionCount".into(), json!(section::count(&pres.root)));
+    root.insert("slideSize".into(), theme::slide_size_json(&pres.root));
     root.insert("props".into(), crate::props::inspect(&pkg)?);
     if want_masters {
         root.insert("masters".into(), master::masters_json(&pkg, &catalog)?);

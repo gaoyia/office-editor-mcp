@@ -1030,6 +1030,7 @@ mod tests {
                 "masterCount",
                 "hasHandout",
                 "sectionCount",
+                "slideSize",
                 "props",
                 "slides"
             ]

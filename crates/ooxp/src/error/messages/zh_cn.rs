@@ -243,6 +243,12 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::DeleteMasterNeedsMaster => {
                 "deleteMaster 的 id 必须是 master:N".into()
             }
+            IdReason::SetSlideSizeNeedsPresentation => {
+                "setSlideSize 的 id 必须是 pptx:presentation".into()
+            }
+            IdReason::SetThemeNeedsMaster => {
+                "setThemeColors / setThemeFonts 的 id 必须是 master:N".into()
+            }
             IdReason::SetHandoutTextNeedsHandout => {
                 "setHandoutText 的 id 必须是 handout".into()
             }
@@ -495,6 +501,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::SectionNotFound { id } => format!("找不到节：{id}"),
         ErrorKind::SlideNotFound { n } => format!("找不到幻灯片：slide:{n}"),
         ErrorKind::MasterNotFound { n } => format!("找不到幻灯片母版：master:{n}"),
+        ErrorKind::ThemeNotFound { n } => format!("找不到该母版的 theme：master:{n}"),
         ErrorKind::LayoutNotFound { master, layout } => {
             format!("找不到版式：master:{master}/layout:{layout}")
         }
@@ -747,6 +754,12 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::MasterInUse => "仍有幻灯片使用该母版下的版式".into(),
         ErrorKind::InvalidPlaceholderType => {
             "type 必须是可写的占位符类型".into()
+        }
+        ErrorKind::InvalidSlideSizeType => {
+            "type 必须是可写的幻灯片尺寸类型".into()
+        }
+        ErrorKind::SlideSizeOutOfRange => {
+            "cx / cy 必须是 914400 到 51206400 的整数".into()
         }
         ErrorKind::LastVisibleSheet => "不能隐藏或删除最后一张可见工作表".into(),
         ErrorKind::MoveSheetAfterSelf => "moveSheet 的 after 不能是自己".into(),

@@ -19,6 +19,7 @@ pub(crate) mod shape;
 mod slides;
 mod smartart;
 mod table;
+mod theme;
 mod timing;
 mod transition;
 

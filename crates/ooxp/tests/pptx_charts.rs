@@ -168,6 +168,7 @@ fn inspect_chart_count_without_list() {
             "masterCount",
             "hasHandout",
             "sectionCount",
+            "slideSize",
             "props",
             "slides"
         ]

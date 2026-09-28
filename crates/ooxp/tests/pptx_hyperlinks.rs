@@ -160,6 +160,7 @@ fn inspect_hyperlink_count_without_list() {
             "masterCount",
             "hasHandout",
             "sectionCount",
+            "slideSize",
             "props",
             "slides"
         ]

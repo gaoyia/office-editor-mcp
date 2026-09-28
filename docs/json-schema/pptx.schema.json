@@ -1006,6 +1006,54 @@
         "id": { "type": "string", "minLength": 1 }
       }
     },
+    "setSlideSizeOp": {
+      "type": "object",
+      "required": ["op", "id", "cx", "cy"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "setSlideSize" },
+        "id": { "type": "string", "minLength": 1 },
+        "cx": { "type": "integer", "minimum": 914400, "maximum": 51206400 },
+        "cy": { "type": "integer", "minimum": 914400, "maximum": 51206400 },
+        "type": { "type": "string", "minLength": 1 }
+      }
+    },
+    "setThemeColorsOp": {
+      "type": "object",
+      "required": ["op", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "setThemeColors" },
+        "id": { "type": "string", "minLength": 1 },
+        "dk1": { "type": "string", "minLength": 1 },
+        "lt1": { "type": "string", "minLength": 1 },
+        "dk2": { "type": "string", "minLength": 1 },
+        "lt2": { "type": "string", "minLength": 1 },
+        "accent1": { "type": "string", "minLength": 1 },
+        "accent2": { "type": "string", "minLength": 1 },
+        "accent3": { "type": "string", "minLength": 1 },
+        "accent4": { "type": "string", "minLength": 1 },
+        "accent5": { "type": "string", "minLength": 1 },
+        "accent6": { "type": "string", "minLength": 1 },
+        "hlink": { "type": "string", "minLength": 1 },
+        "folHlink": { "type": "string", "minLength": 1 }
+      }
+    },
+    "setThemeFontsOp": {
+      "type": "object",
+      "required": ["op", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "setThemeFonts" },
+        "id": { "type": "string", "minLength": 1 },
+        "majorLatin": { "type": "string" },
+        "minorLatin": { "type": "string" },
+        "majorEa": { "type": "string" },
+        "minorEa": { "type": "string" },
+        "majorCs": { "type": "string" },
+        "minorCs": { "type": "string" }
+      }
+    },
     "setHandoutTextOp": {
       "type": "object",
       "required": [
