@@ -165,7 +165,8 @@ fn inspect_has_notes_without_notes_object() {
             "chartCount",
             "smartArtCount",
             "commentCount",
-            "tableCount"
+            "tableCount",
+            "animCount"
         ]
     );
     let expanded = inspect_notes(&path, false);

@@ -12,6 +12,7 @@ pub(crate) mod shape;
 mod slides;
 mod smartart;
 mod table;
+mod timing;
 mod transition;
 
 pub use apply::apply;

@@ -1022,6 +1022,7 @@ mod tests {
                 "smartArtCount",
                 "commentCount",
                 "tableCount",
+                "animCount",
                 "props",
                 "slides"
             ]
@@ -1040,6 +1041,7 @@ mod tests {
                 "smartArtCount",
                 "commentCount",
                 "tableCount",
+                "animCount",
                 "truncated",
                 "shapes"
             ]
@@ -1057,7 +1059,8 @@ mod tests {
                 "chartCount",
                 "smartArtCount",
                 "commentCount",
-                "tableCount"
+                "tableCount",
+                "animCount"
             ]
         );
         assert_eq!(

@@ -3,6 +3,7 @@
   "format": "pptx",
   "id": "pptx:presentation",
   "slideCount": 2,
+  "animCount": 0,
   "props": {
     "title": "",
     "subject": null,

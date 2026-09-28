@@ -24,6 +24,7 @@ pub struct InspectScope {
     pub notes: bool,
     pub comments: bool,
     pub tables: bool,
+    pub timing: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -598,6 +599,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
             "notes",
             "comments",
             "tables",
+            "timing",
         ],
     )?;
     let pictures = parse_bool_field(obj.get("pictures"), "pictures")?;
@@ -606,6 +608,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
     let notes = parse_bool_field(obj.get("notes"), "notes")?;
     let comments = parse_bool_field(obj.get("comments"), "comments")?;
     let tables = parse_bool_field(obj.get("tables"), "tables")?;
+    let timing = parse_bool_field(obj.get("timing"), "timing")?;
     let slide = match obj.get("slide") {
         None => None,
         Some(s) => {
@@ -672,6 +675,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
         notes,
         comments,
         tables,
+        timing,
     }))
 }
 

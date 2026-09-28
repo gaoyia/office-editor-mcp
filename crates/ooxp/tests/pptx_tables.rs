@@ -121,6 +121,7 @@ fn table_count_without_list() {
             "smartArtCount",
             "commentCount",
             "tableCount",
+            "animCount",
             "props",
             "slides"
         ]

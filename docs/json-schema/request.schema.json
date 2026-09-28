@@ -80,6 +80,7 @@
         "oleObjects": { "type": "boolean" },
         "watermarks": { "type": "boolean" },
         "tables": { "type": "boolean" },
+        "timing": { "type": "boolean" },
         "revisions": { "type": "boolean" },
         "hyperlinks": { "type": "boolean" },
         "sparklines": { "type": "boolean" },

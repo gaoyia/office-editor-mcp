@@ -14,6 +14,7 @@ use super::request::InspectScope;
 use super::shape;
 use super::smartart;
 use super::table;
+use super::timing;
 use super::transition;
 
 pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error> {
@@ -28,6 +29,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     let want_notes = scope.as_ref().is_some_and(|s| s.notes);
     let want_comments = scope.as_ref().is_some_and(|s| s.comments);
     let want_tables = scope.as_ref().is_some_and(|s| s.tables);
+    let want_timing = scope.as_ref().is_some_and(|s| s.timing);
 
     let mut slide_json = Vec::new();
     let mut picture_count = 0usize;
@@ -35,6 +37,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     let mut smart_art_count = 0usize;
     let mut comment_count = 0usize;
     let mut table_count = 0usize;
+    let mut anim_count = 0usize;
     for s in &slides {
         let doc = xml::parse(pkg.get(&s.part)?)?;
         let host = format!("slide:{}", s.index);
@@ -83,6 +86,9 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
             .map(|c| c.len())
             .unwrap_or_else(|| table::count_tables(&doc.root));
         table_count += n_tables;
+        let anims = timing::list(&doc.root, s.index);
+        let n_anims = anims.len();
+        anim_count += n_anims;
         let mut obj = Map::new();
         obj.insert("id".into(), json!(host));
         obj.insert("index".into(), json!(s.index));
@@ -95,6 +101,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         obj.insert("smartArtCount".into(), json!(n_smartarts));
         obj.insert("commentCount".into(), json!(n_comments));
         obj.insert("tableCount".into(), json!(n_tables));
+        obj.insert("animCount".into(), json!(n_anims));
         if want_pictures {
             obj.insert(
                 "pictures".into(),
@@ -118,6 +125,9 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         }
         if let Some(list) = comments_list {
             obj.insert("comments".into(), Value::Array(list));
+        }
+        if want_timing {
+            obj.insert("timing".into(), Value::Array(anims));
         }
         if let Some(scope) = &scope {
             if scope.slide == Some(s.index as u32) {
@@ -151,6 +161,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         "smartArtCount": smart_art_count,
         "commentCount": comment_count,
         "tableCount": table_count,
+        "animCount": anim_count,
         "props": crate::props::inspect(&pkg)?,
         "slides": slide_json,
     }))
