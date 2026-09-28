@@ -17,6 +17,8 @@ pub struct SlideMeta {
     pub part: String,
     pub name: Option<String>,
     pub hidden: bool,
+    /// `p:sldId` 的无前缀 `id`（`ST_SlideId`），不是 `r:id`。
+    pub sld_id: Option<u32>,
 }
 
 #[derive(Debug, Clone)]
@@ -149,11 +151,13 @@ pub fn list_slides(
             doc.root.attr("show"),
             Some("0") | Some("false") | Some("FALSE")
         );
+        let numeric_id = sld_id.attr("id").and_then(|s| s.parse().ok());
         out.push(SlideMeta {
             index: i + 1,
             part,
             name,
             hidden,
+            sld_id: numeric_id,
         });
     }
     Ok(out)

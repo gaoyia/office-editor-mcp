@@ -564,6 +564,7 @@ fn attach_comments(pkg: &mut Package, slides: &[NewSlide]) -> Result<(), Error> 
             part: format!("/ppt/slides/slide{n}.xml"),
             name: None,
             hidden: false,
+            sld_id: None,
         };
         for (j, op) in slide.comments.iter().enumerate() {
             comments::apply_insert(pkg, pres_part, &pres, &meta, op, j)?;

@@ -396,6 +396,16 @@ pub(super) fn render(kind: &ErrorKind) -> String {
                 "Slide id must include /ole:… (that id alone is not an embedded object)".into()
             }
             IdReason::InsertOleNeedsSlide => "pptx insertOle id must be slide:N".into(),
+            IdReason::InsertZoomNeedsSlide => "insertZoom id must be slide:N".into(),
+            IdReason::ZoomTargetSlide => {
+                "insertZoom target must be slide:N when type is slide".into()
+            }
+            IdReason::SlideZoomPrefix => "Zoom id must be slide:N/zoom:…".into(),
+            IdReason::SlideZoomContainer => {
+                "Slide id must include /zoom:… (that id alone is not a Zoom)".into()
+            }
+            IdReason::ZoomIndexNotInt => "zoom:index must be followed by a positive integer".into(),
+            IdReason::ZoomIndexFromOne => "zoom:index starts at 1".into(),
             IdReason::InsertWatermarkNeedsDocument => {
                 "insertWatermark id must be docx:document".into()
             }
@@ -730,6 +740,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         }
         ErrorKind::SmartArtNotFound { id } => format!("SmartArt not found: {id}"),
         ErrorKind::OleNotFound { id } => format!("Embedded object not found: {id}"),
+        ErrorKind::ZoomNotFound { id } => format!("Zoom not found: {id}"),
+        ErrorKind::InvalidZoomType => "type must be slide or section".into(),
+        ErrorKind::ZoomTargetSelf => "insertZoom target cannot be the host slide".into(),
         ErrorKind::WatermarkNotFound { id } => format!("Watermark not found: {id}"),
         ErrorKind::WatermarkNeedTextOrFile => {
             "insertWatermark requires exactly one of text or file".into()

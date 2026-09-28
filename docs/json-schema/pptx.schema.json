@@ -1546,6 +1546,66 @@
           "minLength": 1
         }
       }
+    },
+    "insertZoomOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "type",
+        "target"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "insertZoom"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "type": {
+          "type": "string",
+          "minLength": 1
+        },
+        "target": {
+          "type": "string",
+          "minLength": 1
+        },
+        "x": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "y": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "cx": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "cy": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "deleteZoomOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "deleteZoom"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
     }
   }
 }

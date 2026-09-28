@@ -1027,6 +1027,7 @@ mod tests {
                 "hyperlinkCount",
                 "tableCount",
                 "oleObjectCount",
+                "zoomCount",
                 "connectorCount",
                 "animCount",
                 "masterCount",
@@ -1057,6 +1058,7 @@ mod tests {
                 "hyperlinkCount",
                 "tableCount",
                 "oleObjectCount",
+                "zoomCount",
                 "connectorCount",
                 "animCount",
                 "truncated",
@@ -1082,6 +1084,7 @@ mod tests {
                 "hyperlinkCount",
                 "tableCount",
                 "oleObjectCount",
+                "zoomCount",
                 "connectorCount",
                 "animCount"
             ]

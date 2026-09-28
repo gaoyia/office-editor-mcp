@@ -217,6 +217,9 @@
         "customShows": {
           "type": "boolean"
         },
+        "zooms": {
+          "type": "boolean"
+        },
         "revisions": {
           "type": "boolean"
         },
@@ -1042,6 +1045,12 @@
               },
               {
                 "$ref": "pptx.schema.json#/$defs/deleteCustomShowOp"
+              },
+              {
+                "$ref": "pptx.schema.json#/$defs/insertZoomOp"
+              },
+              {
+                "$ref": "pptx.schema.json#/$defs/deleteZoomOp"
               },
               {
                 "$ref": "#/$defs/setPropsOp"

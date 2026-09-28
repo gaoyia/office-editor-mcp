@@ -716,7 +716,7 @@ fn remove_sid_from_section_lst(lst: &mut Element, sid: u32) {
     }
 }
 
-fn new_guid() -> String {
+pub(crate) fn new_guid() -> String {
     let t = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_nanos())

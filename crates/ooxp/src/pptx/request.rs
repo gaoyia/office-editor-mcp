@@ -21,6 +21,7 @@ use super::shape;
 use super::smartart;
 use super::table;
 use super::transition;
+use super::zoom;
 
 #[derive(Debug, Clone)]
 pub struct InspectScope {
@@ -41,6 +42,7 @@ pub struct InspectScope {
     pub sections: bool,
     pub custom_shows: bool,
     pub ole_objects: bool,
+    pub zooms: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -806,6 +808,8 @@ pub enum PptxOp {
     DeleteCustomShow(DeleteCustomShowOp),
     InsertOle(super::ole::InsertOleOp),
     DeleteOle(super::ole::DeleteOleOp),
+    InsertZoom(super::zoom::InsertZoomOp),
+    DeleteZoom(super::zoom::DeleteZoomOp),
     InsertChart(InsertChartOp),
     DeleteChart(DeleteChartOp),
     SetChartTitle(SetChartTitleOp),
@@ -906,6 +910,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
             "sections",
             "customShows",
             "oleObjects",
+            "zooms",
         ],
     )?;
     let pictures = parse_bool_field(obj.get("pictures"), "pictures")?;
@@ -923,6 +928,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
     let sections = parse_bool_field(obj.get("sections"), "sections")?;
     let custom_shows = parse_bool_field(obj.get("customShows"), "customShows")?;
     let ole_objects = parse_bool_field(obj.get("oleObjects"), "oleObjects")?;
+    let zooms = parse_bool_field(obj.get("zooms"), "zooms")?;
     let slide = match obj.get("slide") {
         None => None,
         Some(s) => {
@@ -998,6 +1004,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
         sections,
         custom_shows,
         ole_objects,
+        zooms,
     }))
 }
 
@@ -1080,6 +1087,8 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<PptxOp>, Error> {
             "deleteCustomShow" => PptxOp::DeleteCustomShow(parse_delete_custom_show(obj, i)?),
             "insertOle" => PptxOp::InsertOle(parse_insert_ole(obj, i)?),
             "deleteOle" => PptxOp::DeleteOle(parse_delete_ole(obj, i)?),
+            "insertZoom" => PptxOp::InsertZoom(parse_insert_zoom(obj, i)?),
+            "deleteZoom" => PptxOp::DeleteZoom(parse_delete_zoom(obj, i)?),
             "insertChart" => PptxOp::InsertChart(parse_insert_chart(obj, i)?),
             "deleteChart" => PptxOp::DeleteChart(parse_delete_chart(obj, i)?),
             "setChartTitle" => PptxOp::SetChartTitle(parse_set_chart_title(obj, i)?),
@@ -3253,6 +3262,120 @@ fn parse_delete_ole(obj: &Map<String, Value>, i: usize) -> Result<ole::DeleteOle
     let id = require_id(obj, i)?;
     let target = ole::parse_ole_id(&id, &format!("ops[{i}].id"))?;
     Ok(ole::DeleteOleOp { id, target })
+}
+
+fn parse_insert_zoom(obj: &Map<String, Value>, i: usize) -> Result<zoom::InsertZoomOp, Error> {
+    deny_keys(
+        obj,
+        i,
+        &["op", "id", "type", "target", "x", "y", "cx", "cy"],
+    )?;
+    let id = require_id(obj, i)?;
+    let slide = zoom::parse_insert_slide_id(&id, i)?;
+    let kind_s = match obj.get("type") {
+        None => {
+            return Err(Error::with_path(
+                ErrorKind::MissingField {
+                    field: "type".into(),
+                },
+                format!("ops[{i}].type"),
+            ));
+        }
+        Some(Value::String(s)) if s == "slide" || s == "section" => s.clone(),
+        Some(Value::String(_)) => {
+            return Err(Error::with_path(
+                ErrorKind::InvalidZoomType,
+                format!("ops[{i}].type"),
+            ));
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "type".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].type"),
+            ));
+        }
+    };
+    let target_s = match obj.get("target") {
+        None => {
+            return Err(Error::with_path(
+                ErrorKind::MissingField {
+                    field: "target".into(),
+                },
+                format!("ops[{i}].target"),
+            ));
+        }
+        Some(Value::String(s)) if !s.is_empty() => s.as_str(),
+        Some(Value::String(_)) => {
+            return Err(Error::with_path(
+                ErrorKind::MissingField {
+                    field: "target".into(),
+                },
+                format!("ops[{i}].target"),
+            ));
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "target".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].target"),
+            ));
+        }
+    };
+    let kind = if kind_s == "slide" {
+        let target = zoom::parse_slide_target(target_s, &format!("ops[{i}].target"))?;
+        if target == slide {
+            return Err(Error::with_path(
+                ErrorKind::ZoomTargetSelf,
+                format!("ops[{i}].target"),
+            ));
+        }
+        zoom::InsertKind::Slide { target }
+    } else {
+        let target = section::parse_section_id(target_s, &format!("ops[{i}].target"))?;
+        zoom::InsertKind::Section { target }
+    };
+    let x = parse_off_field(obj.get("x"), i, "x")?;
+    let y = parse_off_field(obj.get("y"), i, "y")?;
+    if x.is_some() != y.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "insertZoom".into(),
+                field: "x and y together".into(),
+            },
+            format!("ops[{i}]"),
+        ));
+    }
+    let cx = parse_emu_field(obj.get("cx"), i, "cx")?;
+    let cy = parse_emu_field(obj.get("cy"), i, "cy")?;
+    if cx.is_some() != cy.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "insertZoom".into(),
+                field: "cx and cy together".into(),
+            },
+            format!("ops[{i}]"),
+        ));
+    }
+    Ok(zoom::InsertZoomOp {
+        slide,
+        kind,
+        x,
+        y,
+        cx,
+        cy,
+    })
+}
+
+fn parse_delete_zoom(obj: &Map<String, Value>, i: usize) -> Result<zoom::DeleteZoomOp, Error> {
+    deny_keys(obj, i, &["op", "id"])?;
+    let id = require_id(obj, i)?;
+    let target = zoom::parse_zoom_id(&id, &format!("ops[{i}].id"))?;
+    Ok(zoom::DeleteZoomOp { id, target })
 }
 
 fn parse_slides_array(

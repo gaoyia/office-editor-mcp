@@ -126,6 +126,7 @@ fn create_has_no_handout_without_scope() {
             "hyperlinkCount",
             "tableCount",
             "oleObjectCount",
+            "zoomCount",
             "connectorCount",
             "animCount",
             "masterCount",

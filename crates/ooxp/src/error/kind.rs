@@ -266,6 +266,16 @@ pub(crate) enum IdReason {
     SlideOleContainer,
     /// pptx 的 insertOle 必须用 slide:N
     InsertOleNeedsSlide,
+    /// pptx 的 insertZoom 必须用 slide:N
+    InsertZoomNeedsSlide,
+    /// insertZoom 的 type 为 slide 时 target 必须是 slide:N
+    ZoomTargetSlide,
+    /// pptx Zoom id 必须是 slide:N/zoom:…
+    SlideZoomPrefix,
+    /// 页 id，缺少 /zoom:…
+    SlideZoomContainer,
+    ZoomIndexNotInt,
+    ZoomIndexFromOne,
     /// insertWatermark 必须用 docx:document
     InsertWatermarkNeedsDocument,
     /// 水印 id 必须是 {页眉容器}/watermark:…
@@ -663,6 +673,9 @@ define_error_kinds! {
     SmartArtAsstOnList => vec![Self::SmartArtAsstOnList],
     SmartArtListDepth => vec![Self::SmartArtListDepth],
     OleNotFound { id: String } => vec![Self::OleNotFound { id: "para:1/ole:_1".into() }],
+    ZoomNotFound { id: String } => vec![Self::ZoomNotFound { id: "slide:1/zoom:3".into() }],
+    InvalidZoomType => vec![Self::InvalidZoomType],
+    ZoomTargetSelf => vec![Self::ZoomTargetSelf],
     WatermarkNotFound { id: String } => vec![Self::WatermarkNotFound { id: "header:default:1/watermark:1".into() }],
     WatermarkNeedTextOrFile => vec![Self::WatermarkNeedTextOrFile],
     TextBoxLinkCrossPart => vec![Self::TextBoxLinkCrossPart],
@@ -1025,6 +1038,12 @@ impl IdReason {
             Self::SlideOlePrefix,
             Self::SlideOleContainer,
             Self::InsertOleNeedsSlide,
+            Self::InsertZoomNeedsSlide,
+            Self::ZoomTargetSlide,
+            Self::SlideZoomPrefix,
+            Self::SlideZoomContainer,
+            Self::ZoomIndexNotInt,
+            Self::ZoomIndexFromOne,
             Self::InsertWatermarkNeedsDocument,
             Self::WatermarkPrefix,
             Self::WatermarkContainer,
@@ -1330,6 +1349,8 @@ impl ErrorKind {
             | Self::InvalidChartType
             | Self::InvalidTransitionType
             | Self::InvalidAnimType
+            | Self::InvalidZoomType
+            | Self::ZoomTargetSelf
             | Self::InvalidAnimTrigger
             | Self::InvalidTransitionDur
             | Self::InvalidTransitionAdvTm
@@ -1418,6 +1439,7 @@ impl ErrorKind {
             | Self::SmartArtNotFound { .. }
             | Self::SmartArtPointNotFound { .. }
             | Self::OleNotFound { .. }
+            | Self::ZoomNotFound { .. }
             | Self::WatermarkNotFound { .. }
             | Self::TableNotFound { .. }
             | Self::RevisionNotFound { .. }

@@ -25,6 +25,7 @@ use super::table;
 use super::theme;
 use super::timing;
 use super::transition;
+use super::zoom;
 
 pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error> {
     let pkg = Package::open_bytes(bytes.to_vec())?;
@@ -47,6 +48,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     let want_sections = scope.as_ref().is_some_and(|s| s.sections);
     let want_custom_shows = scope.as_ref().is_some_and(|s| s.custom_shows);
     let want_ole_objects = scope.as_ref().is_some_and(|s| s.ole_objects);
+    let want_zooms = scope.as_ref().is_some_and(|s| s.zooms);
     let catalog = master::catalog(&pkg, &pres_part, &pres.root)?;
 
     let mut slide_json = Vec::new();
@@ -59,6 +61,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     let mut hyperlink_count = 0usize;
     let mut table_count = 0usize;
     let mut ole_object_count = 0usize;
+    let mut zoom_count = 0usize;
     let mut connector_count = 0usize;
     let mut anim_count = 0usize;
     for s in &slides {
@@ -138,6 +141,16 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
             None => ole::count(&pkg, &s.part, &doc.root)?,
         };
         ole_object_count += n_ole;
+        let zooms_list = if want_zooms {
+            Some(zoom::collect(&doc.root, &host, &slides, &pres.root))
+        } else {
+            None
+        };
+        let n_zoom = zooms_list
+            .as_ref()
+            .map(|c| c.len())
+            .unwrap_or_else(|| zoom::count(&doc.root));
+        zoom_count += n_zoom;
         let connectors_list = if want_connectors {
             Some(connector::list_json(&doc.root, s.index))
         } else {
@@ -171,6 +184,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         obj.insert("hyperlinkCount".into(), json!(n_links));
         obj.insert("tableCount".into(), json!(n_tables));
         obj.insert("oleObjectCount".into(), json!(n_ole));
+        obj.insert("zoomCount".into(), json!(n_zoom));
         obj.insert("connectorCount".into(), json!(n_cxn));
         obj.insert("animCount".into(), json!(n_anims));
         if want_pictures {
@@ -194,6 +208,9 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         }
         if let Some(oles) = ole_list {
             obj.insert("oleObjects".into(), Value::Array(oles));
+        }
+        if let Some(zooms) = zooms_list {
+            obj.insert("zooms".into(), Value::Array(zooms));
         }
         if let Some(connectors) = connectors_list {
             obj.insert("connectors".into(), Value::Array(connectors));
@@ -260,6 +277,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     root.insert("hyperlinkCount".into(), json!(hyperlink_count));
     root.insert("tableCount".into(), json!(table_count));
     root.insert("oleObjectCount".into(), json!(ole_object_count));
+    root.insert("zoomCount".into(), json!(zoom_count));
     root.insert("connectorCount".into(), json!(connector_count));
     root.insert("animCount".into(), json!(anim_count));
     root.insert("masterCount".into(), json!(catalog.count()));

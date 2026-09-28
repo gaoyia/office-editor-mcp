@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "deck.pptx",
+  "ops": [
+    { "op": "insertZoom", "id": "slide:1", "type": "slide", "target": "slide:2" },
+    { "op": "deleteZoom", "id": "slide:1/zoom:3" }
+  ]
+}

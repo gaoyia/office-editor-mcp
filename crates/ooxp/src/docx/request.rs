@@ -1160,6 +1160,8 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<DocxOp>, Error> {
             || op_name == "insertCustomShow"
             || op_name == "setCustomShow"
             || op_name == "deleteCustomShow"
+            || op_name == "insertZoom"
+            || op_name == "deleteZoom"
         {
             return Err(Error::with_path(
                 ErrorKind::OpNotForFormat {

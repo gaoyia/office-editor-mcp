@@ -125,6 +125,7 @@ fn table_count_without_list() {
             "hyperlinkCount",
             "tableCount",
             "oleObjectCount",
+            "zoomCount",
             "connectorCount",
             "animCount",
             "masterCount",

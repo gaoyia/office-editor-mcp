@@ -25,6 +25,7 @@ use super::table;
 use super::theme;
 use super::timing;
 use super::transition;
+use super::zoom;
 
 pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
     let mut pkg = Package::open_bytes(bytes.to_vec())?;
@@ -509,6 +510,32 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                 let part = meta.part.clone();
                 let mut doc = xml::parse(pkg.get(&part)?)?;
                 ole::delete(&mut pkg, &mut doc, &part, op, i)?;
+                pkg.set(&part, doc.to_bytes()?)?;
+            }
+            PptxOp::InsertZoom(op) => {
+                let meta = slides.get(op.slide - 1).ok_or_else(|| {
+                    Error::with_path(
+                        ErrorKind::SlideNotFound { n: op.slide as u32 },
+                        format!("ops[{i}].id"),
+                    )
+                })?;
+                let part = meta.part.clone();
+                let mut doc = xml::parse(pkg.get(&part)?)?;
+                zoom::insert(&mut pkg, &mut doc, &part, &pres.root, &slides, op, i)?;
+                pkg.set(&part, doc.to_bytes()?)?;
+            }
+            PptxOp::DeleteZoom(op) => {
+                let meta = slides.get(op.target.slide - 1).ok_or_else(|| {
+                    Error::with_path(
+                        ErrorKind::SlideNotFound {
+                            n: op.target.slide as u32,
+                        },
+                        format!("ops[{i}].id"),
+                    )
+                })?;
+                let part = meta.part.clone();
+                let mut doc = xml::parse(pkg.get(&part)?)?;
+                zoom::delete(&mut pkg, &mut doc, &part, op, i)?;
                 pkg.set(&part, doc.to_bytes()?)?;
             }
             PptxOp::InsertChart(op) => {

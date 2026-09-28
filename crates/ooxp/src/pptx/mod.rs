@@ -24,6 +24,7 @@ mod table;
 mod theme;
 mod timing;
 mod transition;
+mod zoom;
 
 pub use apply::apply;
 pub use chart::export_chart_data;

@@ -4,11 +4,11 @@
 
 检查前用 create 或 apply 在本机生成文件，不要用改过扩展名的 zip 目录冒充。本机若 `PowerPoint.Application` 被 WPS 抢走，直接启动 `POWERPNT.EXE` 再挂 COM，不要走被抢的 ProgID。Office 16 的对象模型在 `mdiClass` 上。
 
-C、I、A、Pp、Pc、Psa、Pn、Pcm、Pm、Ps、Sg、Pt、Tn、Tr、Am、Aw、Mm、Mw、Ts、Ho、Phl、Pmd、Psc、Cs、Po、Cr 各组由 `manual-check/office/cases/pptx-*.ps1` 自动判定，跑 `pwsh -File manual-check\office\run.ps1 -Case 'pptx-*'` 即可复现。O1 已放弃，与 xlsx / docx 相同。
+C、I、A、Pp、Pc、Psa、Pn、Pcm、Pm、Ps、Sg、Pt、Tn、Tr、Am、Aw、Mm、Mw、Ts、Ho、Phl、Pmd、Psc、Cs、Po、Cr、Pz 各组由 `manual-check/office/cases/pptx-*.ps1` 自动判定，跑 `pwsh -File manual-check\office\run.ps1 -Case 'pptx-*'` 即可复现。O1 已放弃，与 xlsx / docx 相同。
 
 ## 本机结果（2026-09-28）
 
-Microsoft PowerPoint 16.0 已打开，C1、C3、C4、C5–C13、I1–I5、A1–A5、Pp1–Pp7、Pc1–Pc7、Psa1–Psa7、Pn1–Pn6、Pcm1–Pcm6、Pik1–Pik4、Pm1–Pm5、Ps1–Ps5、Sg1–Sg5、Pt1–Pt6、Tn1–Tn5、Am1–Am5、Mm1–Mm5、Ho1–Ho5、Phl1–Phl5、Pmd1–Pmd5、Psc1–Psc5、Cs1–Cs5 均 PASS。本机若装了 WPS，`PowerPoint.Application` 会被抢走，测试仍直接启动 `POWERPNT.EXE`，从 `mdiClass` 挂 COM。O1 已放弃。2026-09-27 补跑 `pptx-pictures.ps1`，Pp1–Pp7 通过。同日补跑 `pptx-create-pictures.ps1`，C5–C7 通过。同日补跑 `pptx-charts.ps1`，Pc1–Pc7 通过。同日补跑 `pptx-create-charts.ps1`，C8–C10 通过。同日补跑 `pptx-smartart.ps1`，Psa1–Psa7 通过。同日补跑 `pptx-notes.ps1`，Pn1–Pn4 通过。同日补跑 `pptx-comments.ps1`，Pcm1–Pcm5、Pik1–Pik4 通过。同日补跑 `pptx-docprops.ps1`，Pd1–Pd5 通过。同日补跑 `pptx-charts-remain.ps1`，Pr1–Pr3 通过。2026-09-28 补跑 `pptx-slides.ps1`，Pm1–Pm5 通过。同日补跑 `pptx-shapes.ps1`，Ps1–Ps5 通过。同日补跑 `pptx-tables.ps1`，Pt1–Pt6 通过。同日补跑 `pptx-transition.ps1`，Tn1–Tn5 通过。同日补跑 `pptx-timing.ps1`，Am1–Am5 通过。同日补跑 `pptx-masters.ps1`，Mm1–Mm5 通过。同日补跑 `pptx-handout.ps1`，Ho1–Ho5 通过。同日补跑 `pptx-hyperlinks.ps1`，Phl1–Phl5 通过。同日补跑 `pptx-create-notes-comments.ps1`，C11–C13 通过。同日补跑 `pptx-notes.ps1`，Pn5–Pn6 通过。同日补跑 `pptx-comments.ps1`，Pcm6 通过。同日补跑 `pptx-media.ps1`，Pmd1–Pmd5 通过。同日补跑 `pptx-sections.ps1`，Psc1–Psc5 通过。2026-09-29 补跑 `pptx-anim-write.ps1`，Aw1–Aw5 通过。同日补跑 `pptx-transition-remain.ps1`，Tr1–Tr5 通过。同日补跑 `pptx-shape-geom.ps1`，Sg1–Sg5 通过。同日补跑 `pptx-master-write.ps1`，Mw1–Mw5 通过。同日补跑 `pptx-theme-size.ps1`，Ts1–Ts5 通过。同日补跑 `pptx-custom-show.ps1`，Cs1–Cs5 通过。2026-09-29 补跑 `pptx-create-remain.ps1`，Cr1–Cr5 通过。同日补跑 `pptx-notes.ps1`，Pn7–Pn11 通过。
+Microsoft PowerPoint 16.0 已打开，C1、C3、C4、C5–C13、I1–I5、A1–A5、Pp1–Pp7、Pc1–Pc7、Psa1–Psa7、Pn1–Pn6、Pcm1–Pcm6、Pik1–Pik4、Pm1–Pm5、Ps1–Ps5、Sg1–Sg5、Pt1–Pt6、Tn1–Tn5、Am1–Am5、Mm1–Mm5、Ho1–Ho5、Phl1–Phl5、Pmd1–Pmd5、Psc1–Psc5、Cs1–Cs5 均 PASS。本机若装了 WPS，`PowerPoint.Application` 会被抢走，测试仍直接启动 `POWERPNT.EXE`，从 `mdiClass` 挂 COM。O1 已放弃。2026-09-27 补跑 `pptx-pictures.ps1`，Pp1–Pp7 通过。同日补跑 `pptx-create-pictures.ps1`，C5–C7 通过。同日补跑 `pptx-charts.ps1`，Pc1–Pc7 通过。同日补跑 `pptx-create-charts.ps1`，C8–C10 通过。同日补跑 `pptx-smartart.ps1`，Psa1–Psa7 通过。同日补跑 `pptx-notes.ps1`，Pn1–Pn4 通过。同日补跑 `pptx-comments.ps1`，Pcm1–Pcm5、Pik1–Pik4 通过。同日补跑 `pptx-docprops.ps1`，Pd1–Pd5 通过。同日补跑 `pptx-charts-remain.ps1`，Pr1–Pr3 通过。2026-09-28 补跑 `pptx-slides.ps1`，Pm1–Pm5 通过。同日补跑 `pptx-shapes.ps1`，Ps1–Ps5 通过。同日补跑 `pptx-tables.ps1`，Pt1–Pt6 通过。同日补跑 `pptx-transition.ps1`，Tn1–Tn5 通过。同日补跑 `pptx-timing.ps1`，Am1–Am5 通过。同日补跑 `pptx-masters.ps1`，Mm1–Mm5 通过。同日补跑 `pptx-handout.ps1`，Ho1–Ho5 通过。同日补跑 `pptx-hyperlinks.ps1`，Phl1–Phl5 通过。同日补跑 `pptx-create-notes-comments.ps1`，C11–C13 通过。同日补跑 `pptx-notes.ps1`，Pn5–Pn6 通过。同日补跑 `pptx-comments.ps1`，Pcm6 通过。同日补跑 `pptx-media.ps1`，Pmd1–Pmd5 通过。同日补跑 `pptx-sections.ps1`，Psc1–Psc5 通过。2026-09-29 补跑 `pptx-anim-write.ps1`，Aw1–Aw5 通过。同日补跑 `pptx-transition-remain.ps1`，Tr1–Tr5 通过。同日补跑 `pptx-shape-geom.ps1`，Sg1–Sg5 通过。同日补跑 `pptx-master-write.ps1`，Mw1–Mw5 通过。同日补跑 `pptx-theme-size.ps1`，Ts1–Ts5 通过。同日补跑 `pptx-custom-show.ps1`，Cs1–Cs5 通过。2026-09-29 补跑 `pptx-create-remain.ps1`，Cr1–Cr5 通过。同日补跑 `pptx-notes.ps1`，Pn7–Pn11 通过。同日补跑 `pptx-zoom.ps1`，Pz1–Pz5 通过。
 
 | 序号 | 状态 | 结果 |
 | --- | --- | --- |
@@ -45,6 +45,7 @@ Microsoft PowerPoint 16.0 已打开，C1、C3、C4、C5–C13、I1–I5、A1–A
 | Psc1–Psc5 | ✅ | PowerPoint 16.0：`pptx-sections.ps1`，5 PASS / 0 FAIL。无 `sections` 时有 `sectionCount=2`、没有名单；另存两节 id 为 `section:1`，`slides` 对得上页序；连续 `insertSlideSection` 两节再划第二页后 COM 第二节名为「内容」、FirstSlide=2、无 Repair；改名后左侧是「正文」；删节后页还在、节名没了；对页 id 得 `InvalidId`，`start` 与 `after` 同给得 `InvalidField` 且未写文件。 |
 | Cs1–Cs5 | ✅ | PowerPoint 16.0：`pptx-custom-show.ps1`，5 PASS / 0 FAIL。无 `customShows` 时有 `customShowCount=0`、没有名单；`insertCustomShow` 后 id 为 `show:1`、`name=Tour`、`slides` 为第 1、3 页；COM NamedSlideShows Count=1 且 `SlideShowName` 能设成 Tour、无 Repair；改名 Guide 且页序为第 3、1 页后 COM 对上；`deleteCustomShow` 后名单空；`deleteSlide` 后对应 `r:id` 消失、空名单仍留那一条；页 id / 空名 / 重名 / xlsx / docx 拒写。 |
 | Po1–Po5 | ✅ | PowerPoint 16.0：`pptx-ole.ps1`，6 PASS / 0 FAIL。无 `oleObjects` 时有 `oleObjectCount`、没有名单；另存嵌入 xlsx id 为 `slide:1/ole:4`，不并进 `pictures`；`exportMedia` 与 embeddings 字节一致；`deleteOle` 后 COM Type=7 没了、无 Repair；`insertOle` 后 Type=7、`progId=Excel.Sheet.12`、无 Repair；页 id 发 `deleteOle`、OLE id 发 `insertOle` 得 `InvalidId`，xlsx 得 `InvalidField`，未写文件。 |
+| Pz1–Pz5 | ✅ | PowerPoint 16.0：`pptx-zoom.ps1`，6 PASS / 0 FAIL。无名单时有 `zoomCount`；`insertZoom` 后 id 为 `slide:1/zoom:3`、`type=slide`、`target=slide:2`，不并进 `pictures`；COM Type=-2 且 Name 以 Zoom 开头；`deleteZoom` 后 Count=0；页 id / Zoom id 错配、`type=summary`、目标是自己、xlsx 拒写。无 Repair |
 | Pr1–Pr3 | ✅ | PowerPoint 16.0：`pptx-charts-remain.ps1`，3 PASS / 0 FAIL。趋势线 COM Count=1；改删趋势线；次轴 `AxisGroup=2`。无 Repair |
 | O1 | 🚫 | 领域层不做原样保存，与 xlsx 清单相同。零脏写回见 OPC 库测试。PowerPoint 另存 create 产物见 `pptx-O1-ppt-resave` |
 
@@ -411,6 +412,18 @@ inspect 计 `oleObjectCount`，`scope.oleObjects` 列名单。`exportMedia` 按 
 | Po3 | 删除 | `deleteOle` 后计数为 0、COM Type=7 的形状没了；无 Repair |
 | Po4 | 插入 | 对 create 产物 `insertOle` 本地 xlsx 后无 Repair；COM Type=7；inspect id 为 `slide:1/ole:…`、`progId` 含 Excel |
 | Po5 | 拒错 | 对页 id 发 `deleteOle` 得 `InvalidId`；对 `slide:1/ole:…` 发 `insertOle` 得 `InvalidId`；xlsx 发 `insertOle` 得 `InvalidField`，未写文件 |
+
+## 幻灯片缩放
+
+inspect 计 `zoomCount`，`scope.zooms` 列名单。apply 能插入幻灯片缩放 / 节缩放、能删除。不算放映引擎，不写 `<p:timing>`。Fallback 预览 `p:pic` 不进 `pictures`。插入走 ooxp，不要 `ExecuteMso`。COM 认 `Type=-2` 且 `Name` 以 `Zoom` 开头。脚本：`manual-check/office/cases/pptx-zoom.ps1`。编号用 Pz。
+
+| 序号 | 检查 | 通过标准 |
+| --- | --- | --- |
+| Pz1 | inspect | 无 `zooms` 时根与各页有 `zoomCount`、没有名单；`insertZoom` 后 `scope.zooms: true` 的 id 为 `slide:1/zoom:…`，`type=slide`，`target` 为 `slide:2`，不并进 `pictures` |
+| Pz2 | 插入 | 对 create 三页产物 `insertZoom` 后 PowerPoint 无 Repair；COM `Type=-2` 且 `Name` 以 `Zoom` 开头 |
+| Pz3 | 不进图 | 插入后 `pictureCount` 仍为 0，`scope.pictures` 为空数组 |
+| Pz4 | 删除 | `deleteZoom` 后计数为 0、COM 不再有 `Type=-2` 且名以 Zoom 开头的形状；无 Repair |
+| Pz5 | 拒错 | 对页 id 发 `deleteZoom` 得 `InvalidId`；对 Zoom id 发 `insertZoom` 得 `InvalidId`；`type=summary` 或目标是自己得 `InvalidField`；xlsx 发 `insertZoom` 得 `InvalidField`，未写文件 |
 
 ## 原样保存（opc 验收）
 

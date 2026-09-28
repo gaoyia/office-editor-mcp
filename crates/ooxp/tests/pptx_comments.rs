@@ -174,6 +174,7 @@ fn inspect_comment_count_without_list() {
             "hyperlinkCount",
             "tableCount",
             "oleObjectCount",
+            "zoomCount",
             "connectorCount",
             "animCount",
             "masterCount",

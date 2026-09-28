@@ -365,6 +365,16 @@ pub(super) fn render(kind: &ErrorKind) -> String {
                 "页 id 必须带 /ole:…（该 id 本身不是嵌入对象）".into()
             }
             IdReason::InsertOleNeedsSlide => "pptx insertOle 的 id 必须是 slide:N".into(),
+            IdReason::InsertZoomNeedsSlide => "insertZoom 的 id 必须是 slide:N".into(),
+            IdReason::ZoomTargetSlide => {
+                "insertZoom 的 type 为 slide 时 target 必须是 slide:N".into()
+            }
+            IdReason::SlideZoomPrefix => "Zoom id 必须是 slide:N/zoom:…".into(),
+            IdReason::SlideZoomContainer => {
+                "页 id 必须带 /zoom:…（该 id 本身不是 Zoom）".into()
+            }
+            IdReason::ZoomIndexNotInt => "zoom:index 后面必须是正整数".into(),
+            IdReason::ZoomIndexFromOne => "zoom:index 从 1 起".into(),
             IdReason::InsertWatermarkNeedsDocument => {
                 "insertWatermark 的 id 必须是 docx:document".into()
             }
@@ -648,6 +658,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         }
         ErrorKind::SmartArtNotFound { id } => format!("找不到 SmartArt：{id}"),
         ErrorKind::OleNotFound { id } => format!("找不到嵌入对象：{id}"),
+        ErrorKind::ZoomNotFound { id } => format!("找不到 Zoom：{id}"),
+        ErrorKind::InvalidZoomType => "type 必须是 slide 或 section".into(),
+        ErrorKind::ZoomTargetSelf => "insertZoom 的 target 不能是宿主自己".into(),
         ErrorKind::WatermarkNotFound { id } => format!("找不到水印：{id}"),
         ErrorKind::WatermarkNeedTextOrFile => {
             "insertWatermark 必须恰好给 text 或 file 之一".into()

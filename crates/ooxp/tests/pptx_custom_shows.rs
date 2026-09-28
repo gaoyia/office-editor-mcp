@@ -134,6 +134,7 @@ fn create_has_zero_custom_show_count_without_list() {
             "hyperlinkCount",
             "tableCount",
             "oleObjectCount",
+            "zoomCount",
             "connectorCount",
             "animCount",
             "masterCount",
