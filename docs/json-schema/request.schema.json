@@ -1785,11 +1785,15 @@
         "op": { "const": "setPictureSize" },
         "id": { "type": "string", "minLength": 1 },
         "cx": { "type": "integer", "minimum": 1 },
-        "cy": { "type": "integer", "minimum": 1 }
+        "cy": { "type": "integer", "minimum": 1 },
+        "to": { "type": "string", "minLength": 1 },
+        "toOffX": { "type": "integer", "minimum": 0 },
+        "toOffY": { "type": "integer", "minimum": 0 }
       },
       "anyOf": [
         { "required": ["cx"] },
-        { "required": ["cy"] }
+        { "required": ["cy"] },
+        { "required": ["to"] }
       ]
     },
     "setPicturePosOp": {
@@ -1832,7 +1836,7 @@
       "properties": {
         "op": { "const": "setPictureAnchor" },
         "id": { "type": "string", "minLength": 1 },
-        "anchor": { "enum": ["oneCell", "twoCell"] },
+        "anchor": { "enum": ["oneCell", "twoCell", "absolute"] },
         "from": { "type": "string", "minLength": 1 },
         "to": { "type": "string", "minLength": 1 },
         "fromOffX": { "type": "integer", "minimum": 0 },
@@ -1896,9 +1900,12 @@
         "op": { "const": "setTextBoxSize" },
         "id": { "type": "string", "minLength": 1 },
         "cx": { "type": "integer", "minimum": 1 },
-        "cy": { "type": "integer", "minimum": 1 }
+        "cy": { "type": "integer", "minimum": 1 },
+        "to": { "type": "string", "minLength": 1 },
+        "toOffX": { "type": "integer", "minimum": 0 },
+        "toOffY": { "type": "integer", "minimum": 0 }
       },
-      "anyOf": [{ "required": ["cx"] }, { "required": ["cy"] }]
+      "anyOf": [{ "required": ["cx"] }, { "required": ["cy"] }, { "required": ["to"] }]
     },
     "setTextBoxAnchorOp": {
       "type": "object",
@@ -1907,7 +1914,7 @@
       "properties": {
         "op": { "const": "setTextBoxAnchor" },
         "id": { "type": "string", "minLength": 1 },
-        "anchor": { "enum": ["oneCell", "twoCell"] },
+        "anchor": { "enum": ["oneCell", "twoCell", "absolute"] },
         "from": { "type": "string", "minLength": 1 },
         "to": { "type": "string", "minLength": 1 },
         "fromOffX": { "type": "integer", "minimum": 0 },
@@ -3010,11 +3017,15 @@
         "op": { "const": "setChartSize" },
         "id": { "type": "string", "minLength": 1 },
         "cx": { "type": "integer", "minimum": 1 },
-        "cy": { "type": "integer", "minimum": 1 }
+        "cy": { "type": "integer", "minimum": 1 },
+        "to": { "type": "string", "minLength": 1 },
+        "toOffX": { "type": "integer", "minimum": 0 },
+        "toOffY": { "type": "integer", "minimum": 0 }
       },
       "anyOf": [
         { "required": ["cx"] },
-        { "required": ["cy"] }
+        { "required": ["cy"] },
+        { "required": ["to"] }
       ]
     },
     "setChartPosOp": {
@@ -3057,7 +3068,7 @@
       "properties": {
         "op": { "const": "setChartAnchor" },
         "id": { "type": "string", "minLength": 1 },
-        "anchor": { "enum": ["oneCell", "twoCell"] },
+        "anchor": { "enum": ["oneCell", "twoCell", "absolute"] },
         "from": { "type": "string", "minLength": 1 },
         "to": { "type": "string", "minLength": 1 },
         "fromOffX": { "type": "integer", "minimum": 0 },
@@ -3122,7 +3133,7 @@
       "properties": {
         "op": { "const": "setSmartArtAnchor" },
         "id": { "type": "string", "minLength": 1 },
-        "anchor": { "enum": ["oneCell", "twoCell"] },
+        "anchor": { "enum": ["oneCell", "twoCell", "absolute"] },
         "from": { "type": "string", "minLength": 1 },
         "to": { "type": "string", "minLength": 1 },
         "fromOffX": { "type": "integer", "minimum": 0 },
@@ -3216,11 +3227,15 @@
         "op": { "const": "setSmartArtSize" },
         "id": { "type": "string", "minLength": 1 },
         "cx": { "type": "integer", "minimum": 1 },
-        "cy": { "type": "integer", "minimum": 1 }
+        "cy": { "type": "integer", "minimum": 1 },
+        "to": { "type": "string", "minLength": 1 },
+        "toOffX": { "type": "integer", "minimum": 0 },
+        "toOffY": { "type": "integer", "minimum": 0 }
       },
       "anyOf": [
         { "required": ["cx"] },
-        { "required": ["cy"] }
+        { "required": ["cy"] },
+        { "required": ["to"] }
       ]
     },
     "setSmartArtPosOp": {

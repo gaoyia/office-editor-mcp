@@ -1026,10 +1026,30 @@ pub fn set_chart_size(
     let kind = find_anchor_kind(&doc.root, &op.target.key).ok_or_else(|| {
         Error::with_path(ErrorKind::ChartNotFound { id: op.id.clone() }, path.clone())
     })?;
-    if kind == AnchorKind::TwoCell {
-        return Err(Error::with_path(ErrorKind::TwoCellChartSize, path));
-    }
-    if !update_extent(&mut doc.root, &op.target.key, op.cx, op.cy) {
+    let action = picture::plan_size(
+        kind,
+        &picture::SizePatch {
+            cx: op.cx,
+            cy: op.cy,
+            to: op.to,
+            to_off_x: op.to_off_x,
+            to_off_y: op.to_off_y,
+        },
+        ErrorKind::TwoCellChartSize,
+        "setChartSize",
+        op_index,
+    )?;
+    let ok = match action {
+        picture::SizeAction::Extent { cx, cy } => {
+            update_extent(&mut doc.root, &op.target.key, cx, cy)
+        }
+        picture::SizeAction::TwoCell {
+            to,
+            to_off_x,
+            to_off_y,
+        } => update_two_cell_to(&mut doc.root, &op.target.key, to, to_off_x, to_off_y),
+    };
+    if !ok {
         return Err(Error::with_path(
             ErrorKind::ChartNotFound { id: op.id.clone() },
             path,
@@ -1048,18 +1068,32 @@ pub fn set_chart_anchor(
     let path = format!("ops[{op_index}].id");
     let drawing_part = find_drawing_for(pkg, sheet_part, &op.target, &op.id, &path)?;
     let mut doc = xml::parse(pkg.get(&drawing_part)?)?;
-    let current = find_anchor_kind(&doc.root, &op.target.key).ok_or_else(|| {
+    let snapshot = snapshot_anchor(&doc.root, &op.target.key).ok_or_else(|| {
         Error::with_path(ErrorKind::ChartNotFound { id: op.id.clone() }, path.clone())
     })?;
-    let target_kind = op.anchor.unwrap_or(current);
-    if current == AnchorKind::Absolute {
-        if op.anchor.is_some_and(|a| a != AnchorKind::Absolute)
-            || op.from.is_some()
-            || op.to.is_some()
-        {
-            return Err(Error::with_path(ErrorKind::PictureAnchorAbsolute, path));
-        }
-        if !update_absolute_pos(&mut doc.root, &op.target.key, op.pos_x, op.pos_y) {
+    let planned = picture::plan_anchor(
+        &snapshot.geom(),
+        &picture::AnchorPatch {
+            anchor: op.anchor,
+            from: op.from,
+            to: op.to,
+            from_off_x: op.from_off_x,
+            from_off_y: op.from_off_y,
+            to_off_x: op.to_off_x,
+            to_off_y: op.to_off_y,
+            pos_x: op.pos_x,
+            pos_y: op.pos_y,
+            edit_as: op.edit_as,
+            cx: op.cx,
+            cy: op.cy,
+        },
+        "setChartAnchor",
+        op_index,
+        chart::DEFAULT_CX,
+        chart::DEFAULT_CY,
+    )?;
+    if planned.pos_only {
+        if !update_absolute_pos(&mut doc.root, &op.target.key, planned.pos_x, planned.pos_y) {
             return Err(Error::with_path(
                 ErrorKind::ChartNotFound { id: op.id.clone() },
                 path,
@@ -1068,78 +1102,24 @@ pub fn set_chart_anchor(
         pkg.set(&drawing_part, doc.to_bytes()?)?;
         return Ok(());
     }
-    if target_kind == AnchorKind::Absolute || op.pos_x.is_some() || op.pos_y.is_some() {
-        return Err(Error::with_path(ErrorKind::PictureAnchorAbsolute, path));
-    }
     picture::ensure_xmlns(&mut doc.root, "r", REL_NS);
     picture::ensure_xmlns(&mut doc.root, "a", picture::A_NS);
-    let snapshot = snapshot_anchor(&doc.root, &op.target.key).ok_or_else(|| {
-        Error::with_path(ErrorKind::ChartNotFound { id: op.id.clone() }, path.clone())
-    })?;
-    let from = op.from.or(snapshot.from).ok_or_else(|| {
-        Error::with_path(
-            ErrorKind::OpRequiresField {
-                op: "setChartAnchor".into(),
-                field: "from".into(),
-            },
-            format!("ops[{op_index}].from"),
-        )
-    })?;
-    let to = if target_kind == AnchorKind::TwoCell {
-        Some(op.to.or(snapshot.to).ok_or_else(|| {
-            Error::with_path(
-                ErrorKind::OpRequiresField {
-                    op: "setChartAnchor".into(),
-                    field: "to".into(),
-                },
-                format!("ops[{op_index}].to"),
-            )
-        })?)
-    } else {
-        None
-    };
-    let cx = if target_kind == AnchorKind::OneCell {
-        op.cx.or(snapshot.cx).ok_or_else(|| {
-            Error::with_path(
-                ErrorKind::OpRequiresField {
-                    op: "setChartAnchor".into(),
-                    field: "cx and cy".into(),
-                },
-                format!("ops[{op_index}]"),
-            )
-        })?
-    } else {
-        snapshot.cx.unwrap_or(chart::DEFAULT_CX)
-    };
-    let cy = if target_kind == AnchorKind::OneCell {
-        op.cy.or(snapshot.cy).ok_or_else(|| {
-            Error::with_path(
-                ErrorKind::OpRequiresField {
-                    op: "setChartAnchor".into(),
-                    field: "cx and cy".into(),
-                },
-                format!("ops[{op_index}]"),
-            )
-        })?
-    } else {
-        snapshot.cy.unwrap_or(chart::DEFAULT_CY)
-    };
     replace_chart_anchor(
         &mut doc.root,
         &op.target.key,
         picture::build_anchor(
-            target_kind,
-            from,
-            to,
-            op.from_off_x.unwrap_or(snapshot.from_off_x),
-            op.from_off_y.unwrap_or(snapshot.from_off_y),
-            op.to_off_x.unwrap_or(snapshot.to_off_x),
-            op.to_off_y.unwrap_or(snapshot.to_off_y),
-            None,
-            None,
-            cx,
-            cy,
-            op.edit_as.unwrap_or(snapshot.edit_as),
+            planned.kind,
+            planned.from,
+            planned.to,
+            planned.from_off_x,
+            planned.from_off_y,
+            planned.to_off_x,
+            planned.to_off_y,
+            planned.pos_x,
+            planned.pos_y,
+            planned.cx,
+            planned.cy,
+            planned.edit_as,
             snapshot.cnv,
             &snapshot.name,
             &snapshot.rid,
@@ -1668,12 +1648,15 @@ fn replace_chart_anchor_in(
 }
 
 struct AnchorSnap {
+    kind: AnchorKind,
     from: Option<CellRef>,
     to: Option<CellRef>,
     from_off_x: i64,
     from_off_y: i64,
     to_off_x: i64,
     to_off_y: i64,
+    pos_x: Option<i64>,
+    pos_y: Option<i64>,
     cx: Option<i64>,
     cy: Option<i64>,
     edit_as: EditAs,
@@ -1681,6 +1664,25 @@ struct AnchorSnap {
     name: String,
     rid: String,
     frame: Element,
+}
+
+impl AnchorSnap {
+    fn geom(&self) -> picture::AnchorGeom {
+        picture::AnchorGeom {
+            kind: self.kind,
+            from: self.from,
+            to: self.to,
+            from_off_x: self.from_off_x,
+            from_off_y: self.from_off_y,
+            to_off_x: self.to_off_x,
+            to_off_y: self.to_off_y,
+            pos_x: self.pos_x,
+            pos_y: self.pos_y,
+            cx: self.cx,
+            cy: self.cy,
+            edit_as: self.edit_as,
+        }
+    }
 }
 
 fn snapshot_anchor(root: &Element, key: &ChartKey) -> Option<AnchorSnap> {
@@ -1700,14 +1702,18 @@ fn snapshot_anchor(root: &Element, key: &ChartKey) -> Option<AnchorSnap> {
         let (from, from_off_x, from_off_y) = picture::read_marker(anchor.child_by_local("from"));
         let (to, to_off_x, to_off_y) = picture::read_marker(anchor.child_by_local("to"));
         let (cx, cy) = picture::read_ext(anchor);
+        let (pos_x, pos_y) = picture::read_pos(anchor);
         let (raw, name) = cnv_of_frame(frame);
         found = Some(AnchorSnap {
+            kind,
             from,
             to,
             from_off_x,
             from_off_y,
             to_off_x,
             to_off_y,
+            pos_x,
+            pos_y,
             cx,
             cy,
             edit_as: if kind == AnchorKind::TwoCell {
@@ -1789,6 +1795,31 @@ fn update_absolute_pos(
                 picture::set_attr_local(pos, "y", &v.to_string());
             }
         }
+        true
+    })
+}
+
+fn update_two_cell_to(
+    root: &mut Element,
+    key: &ChartKey,
+    to: CellRef,
+    to_off_x: Option<i64>,
+    to_off_y: Option<i64>,
+) -> bool {
+    let mut index = 0usize;
+    picture::walk_anchors_mut(root, &mut |anchor, _| {
+        let Some(frame) = anchor
+            .element_children()
+            .find(|c| c.local_name() == "graphicFrame" && graphic_uri(c).is_some())
+        else {
+            return false;
+        };
+        let raw = cnv_of_frame(frame).0;
+        index += 1;
+        if !key_matches(key, &raw, index) {
+            return false;
+        }
+        picture::apply_two_cell_to(anchor, to, to_off_x, to_off_y);
         true
     })
 }

@@ -316,7 +316,23 @@ fn insert_two_cell_and_reject_size() {
         }]),
     )
     .unwrap_err();
-    assert_eq!(err.code(), ErrorCode::NotImplemented);
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+    let sized = tmp("two-to").with_extension("xlsx");
+    apply(
+        &out,
+        &sized,
+        json!([{
+            "op": "setPictureSize",
+            "id": "sheet:Sheet1/pic:1",
+            "to": "E9"
+        }]),
+    )
+    .unwrap();
+    let after = inspect_pics(&sized);
+    let pic2 = &after["sheets"][0]["pictures"][0];
+    assert_eq!(pic2["anchor"], "twoCell");
+    assert_eq!(pic2["from"], "A1");
+    assert_eq!(pic2["to"], "E9");
 }
 
 #[test]
@@ -400,14 +416,15 @@ fn insert_rejects_cell_id() {
 }
 
 #[test]
-fn set_picture_anchor_absolute_is_not_implemented() {
+fn set_picture_anchor_absolute_roundtrip() {
     let src = create_book("abs");
     let png = write_png("abs", PNG_1X1);
     let one = tmp("abs-one").with_extension("xlsx");
     insert_one(&src, &one, &png);
+    let missing = tmp("abs-missing").with_extension("xlsx");
     let err = apply(
         &one,
-        &tmp("abs-out").with_extension("xlsx"),
+        &missing,
         json!([{
             "op": "setPictureAnchor",
             "id": "sheet:Sheet1/pic:1",
@@ -415,7 +432,112 @@ fn set_picture_anchor_absolute_is_not_implemented() {
         }]),
     )
     .unwrap_err();
-    assert_eq!(err.code(), ErrorCode::NotImplemented);
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+    assert!(!missing.exists());
+
+    let abs_path = tmp("abs-out").with_extension("xlsx");
+    apply(
+        &one,
+        &abs_path,
+        json!([{
+            "op": "setPictureAnchor",
+            "id": "sheet:Sheet1/pic:1",
+            "anchor": "absolute",
+            "posX": 914400,
+            "posY": 1828800
+        }]),
+    )
+    .unwrap();
+    let pic = &inspect_pics(&abs_path)["sheets"][0]["pictures"][0];
+    assert_eq!(pic["anchor"], "absolute");
+    assert_eq!(pic["posX"], 914400);
+    assert_eq!(pic["posY"], 1828800);
+    assert_eq!(pic["cx"], 914400);
+    assert_eq!(pic["cy"], 914400);
+
+    let moved = tmp("abs-moved").with_extension("xlsx");
+    apply(
+        &abs_path,
+        &moved,
+        json!([{
+            "op": "setPictureAnchor",
+            "id": "sheet:Sheet1/pic:1",
+            "posX": 2000000
+        }]),
+    )
+    .unwrap();
+    let pic2 = &inspect_pics(&moved)["sheets"][0]["pictures"][0];
+    assert_eq!(pic2["anchor"], "absolute");
+    assert_eq!(pic2["posX"], 2000000);
+    assert_eq!(pic2["posY"], 1828800);
+
+    let back = tmp("abs-back").with_extension("xlsx");
+    apply(
+        &moved,
+        &back,
+        json!([{
+            "op": "setPictureAnchor",
+            "id": "sheet:Sheet1/pic:1",
+            "anchor": "oneCell",
+            "from": "C3"
+        }]),
+    )
+    .unwrap();
+    let pic3 = &inspect_pics(&back)["sheets"][0]["pictures"][0];
+    assert_eq!(pic3["anchor"], "oneCell");
+    assert_eq!(pic3["from"], "C3");
+    assert_eq!(pic3["cx"], 914400);
+}
+
+#[test]
+fn two_cell_to_one_cell_needs_size() {
+    let src = create_book("two-one");
+    let png = write_png("two-one", PNG_1X1);
+    let two = tmp("two-one-in").with_extension("xlsx");
+    apply(
+        &src,
+        &two,
+        json!([{
+            "op": "insertPicture",
+            "id": "sheet:Sheet1",
+            "file": png.to_string_lossy(),
+            "anchor": "twoCell",
+            "from": "A1",
+            "to": "C4"
+        }]),
+    )
+    .unwrap();
+    let fail = tmp("two-one-fail").with_extension("xlsx");
+    let err = apply(
+        &two,
+        &fail,
+        json!([{
+            "op": "setPictureAnchor",
+            "id": "sheet:Sheet1/pic:1",
+            "anchor": "oneCell"
+        }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+    assert!(!fail.exists());
+    let ok = tmp("two-one-ok").with_extension("xlsx");
+    apply(
+        &two,
+        &ok,
+        json!([{
+            "op": "setPictureAnchor",
+            "id": "sheet:Sheet1/pic:1",
+            "anchor": "oneCell",
+            "cx": 1828800,
+            "cy": 914400
+        }]),
+    )
+    .unwrap();
+    let pic = &inspect_pics(&ok)["sheets"][0]["pictures"][0];
+    assert_eq!(pic["anchor"], "oneCell");
+    assert_eq!(pic["from"], "A1");
+    assert_eq!(pic["cx"], 1828800);
+    assert_eq!(pic["cy"], 914400);
 }
 
 #[test]

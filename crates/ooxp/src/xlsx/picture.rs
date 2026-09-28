@@ -51,6 +51,16 @@ impl AnchorKind {
         }
     }
 
+    /// `set*Anchor` 认三种；`insert*` 仍只走 `parse_insert`。
+    pub fn parse_set(s: &str) -> Option<Self> {
+        match s {
+            "oneCell" => Some(Self::OneCell),
+            "twoCell" => Some(Self::TwoCell),
+            "absolute" => Some(Self::Absolute),
+            _ => None,
+        }
+    }
+
     pub(crate) fn from_local(name: &str) -> Option<Self> {
         match name {
             "twoCellAnchor" => Some(Self::TwoCell),
@@ -91,6 +101,300 @@ impl EditAs {
             "oneCell" => Some(Self::OneCell),
             "absolute" => Some(Self::Absolute),
             _ => None,
+        }
+    }
+}
+
+/// 规划锚点时占位；`absoluteAnchor` 不写 `xdr:from`。
+const PLACEHOLDER_CELL: a1::CellRef = a1::CellRef { col: 1, row: 1 };
+const DEFAULT_PIC_CX: i64 = 914_400;
+const DEFAULT_PIC_CY: i64 = 914_400;
+
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct AnchorGeom {
+    pub kind: AnchorKind,
+    pub from: Option<a1::CellRef>,
+    pub to: Option<a1::CellRef>,
+    pub from_off_x: i64,
+    pub from_off_y: i64,
+    pub to_off_x: i64,
+    pub to_off_y: i64,
+    pub pos_x: Option<i64>,
+    pub pos_y: Option<i64>,
+    pub cx: Option<i64>,
+    pub cy: Option<i64>,
+    pub edit_as: EditAs,
+}
+
+pub(crate) struct AnchorPatch {
+    pub anchor: Option<AnchorKind>,
+    pub from: Option<a1::CellRef>,
+    pub to: Option<a1::CellRef>,
+    pub from_off_x: Option<i64>,
+    pub from_off_y: Option<i64>,
+    pub to_off_x: Option<i64>,
+    pub to_off_y: Option<i64>,
+    pub pos_x: Option<i64>,
+    pub pos_y: Option<i64>,
+    pub edit_as: Option<EditAs>,
+    pub cx: Option<i64>,
+    pub cy: Option<i64>,
+}
+
+pub(crate) struct PlannedAnchor {
+    pub kind: AnchorKind,
+    pub from: a1::CellRef,
+    pub to: Option<a1::CellRef>,
+    pub from_off_x: i64,
+    pub from_off_y: i64,
+    pub to_off_x: i64,
+    pub to_off_y: i64,
+    pub pos_x: Option<i64>,
+    pub pos_y: Option<i64>,
+    pub cx: i64,
+    pub cy: i64,
+    pub edit_as: EditAs,
+    pub pos_only: bool,
+}
+
+pub(crate) struct SizePatch {
+    pub cx: Option<i64>,
+    pub cy: Option<i64>,
+    pub to: Option<a1::CellRef>,
+    pub to_off_x: Option<i64>,
+    pub to_off_y: Option<i64>,
+}
+
+pub(crate) enum SizeAction {
+    Extent {
+        cx: Option<i64>,
+        cy: Option<i64>,
+    },
+    TwoCell {
+        to: a1::CellRef,
+        to_off_x: Option<i64>,
+        to_off_y: Option<i64>,
+    },
+}
+
+fn op_requires(op: &str, field: &str, path: String) -> Error {
+    Error::with_path(
+        ErrorKind::OpRequiresField {
+            op: op.into(),
+            field: field.into(),
+        },
+        path,
+    )
+}
+
+fn unknown_field(field: &str, path: String) -> Error {
+    Error::with_path(
+        ErrorKind::UnknownField {
+            field: field.into(),
+        },
+        path,
+    )
+}
+
+/// 三种锚点互转。不算列宽行高；缺字段就拒绝。
+pub(crate) fn plan_anchor(
+    geom: &AnchorGeom,
+    patch: &AnchorPatch,
+    op: &str,
+    op_index: usize,
+    default_cx: i64,
+    default_cy: i64,
+) -> Result<PlannedAnchor, Error> {
+    let target = patch.anchor.unwrap_or(geom.kind);
+    let converting = target != geom.kind;
+    if geom.kind == AnchorKind::Absolute && !converting {
+        if patch.from.is_some() || patch.to.is_some() {
+            return Err(op_requires(op, "anchor", format!("ops[{op_index}].anchor")));
+        }
+        if patch.cx.is_some() {
+            return Err(unknown_field("cx", format!("ops[{op_index}].cx")));
+        }
+        if patch.cy.is_some() {
+            return Err(unknown_field("cy", format!("ops[{op_index}].cy")));
+        }
+        if patch.from_off_x.is_some() {
+            return Err(unknown_field(
+                "fromOffX",
+                format!("ops[{op_index}].fromOffX"),
+            ));
+        }
+        if patch.from_off_y.is_some() {
+            return Err(unknown_field(
+                "fromOffY",
+                format!("ops[{op_index}].fromOffY"),
+            ));
+        }
+        if patch.to_off_x.is_some() {
+            return Err(unknown_field("toOffX", format!("ops[{op_index}].toOffX")));
+        }
+        if patch.to_off_y.is_some() {
+            return Err(unknown_field("toOffY", format!("ops[{op_index}].toOffY")));
+        }
+        if patch.edit_as.is_some() {
+            return Err(unknown_field("editAs", format!("ops[{op_index}].editAs")));
+        }
+        return Ok(PlannedAnchor {
+            kind: AnchorKind::Absolute,
+            from: PLACEHOLDER_CELL,
+            to: None,
+            from_off_x: 0,
+            from_off_y: 0,
+            to_off_x: 0,
+            to_off_y: 0,
+            pos_x: patch.pos_x,
+            pos_y: patch.pos_y,
+            cx: default_cx,
+            cy: default_cy,
+            edit_as: geom.edit_as,
+            pos_only: true,
+        });
+    }
+    if target != AnchorKind::Absolute && (patch.pos_x.is_some() || patch.pos_y.is_some()) {
+        return Err(op_requires(op, "anchor", format!("ops[{op_index}].anchor")));
+    }
+    if target == AnchorKind::Absolute
+        && converting
+        && (patch.pos_x.is_none() || patch.pos_y.is_none())
+    {
+        return Err(op_requires(op, "posX and posY", format!("ops[{op_index}]")));
+    }
+    let from = if target == AnchorKind::Absolute {
+        geom.from.or(patch.from).unwrap_or(PLACEHOLDER_CELL)
+    } else {
+        patch
+            .from
+            .or(geom.from)
+            .ok_or_else(|| op_requires(op, "from", format!("ops[{op_index}].from")))?
+    };
+    let to = if target == AnchorKind::TwoCell {
+        let existing = if geom.kind == AnchorKind::TwoCell {
+            geom.to
+        } else {
+            None
+        };
+        Some(
+            patch
+                .to
+                .or(existing)
+                .ok_or_else(|| op_requires(op, "to", format!("ops[{op_index}].to")))?,
+        )
+    } else {
+        None
+    };
+    let from_off_x = patch.from_off_x.unwrap_or(if geom.from.is_some() {
+        geom.from_off_x
+    } else {
+        0
+    });
+    let from_off_y = patch.from_off_y.unwrap_or(if geom.from.is_some() {
+        geom.from_off_y
+    } else {
+        0
+    });
+    let to_off_x = patch
+        .to_off_x
+        .unwrap_or(if geom.to.is_some() { geom.to_off_x } else { 0 });
+    let to_off_y = patch
+        .to_off_y
+        .unwrap_or(if geom.to.is_some() { geom.to_off_y } else { 0 });
+    let (cx, cy) = extent_for(geom, patch, target, op, op_index, default_cx, default_cy)?;
+    let pos_x = if target == AnchorKind::Absolute {
+        patch.pos_x.or(geom.pos_x)
+    } else {
+        None
+    };
+    let pos_y = if target == AnchorKind::Absolute {
+        patch.pos_y.or(geom.pos_y)
+    } else {
+        None
+    };
+    Ok(PlannedAnchor {
+        kind: target,
+        from,
+        to,
+        from_off_x,
+        from_off_y,
+        to_off_x,
+        to_off_y,
+        pos_x,
+        pos_y,
+        cx,
+        cy,
+        edit_as: patch.edit_as.unwrap_or(geom.edit_as),
+        pos_only: false,
+    })
+}
+
+fn extent_for(
+    geom: &AnchorGeom,
+    patch: &AnchorPatch,
+    target: AnchorKind,
+    op: &str,
+    op_index: usize,
+    default_cx: i64,
+    default_cy: i64,
+) -> Result<(i64, i64), Error> {
+    if target == AnchorKind::TwoCell {
+        return Ok((default_cx, default_cy));
+    }
+    let from_two = geom.kind == AnchorKind::TwoCell;
+    let need = || op_requires(op, "cx and cy", format!("ops[{op_index}]"));
+    let cx = if from_two {
+        patch.cx.ok_or_else(need)?
+    } else {
+        patch.cx.or(geom.cx).ok_or_else(need)?
+    };
+    let cy = if from_two {
+        patch.cy.ok_or_else(need)?
+    } else {
+        patch.cy.or(geom.cy).ok_or_else(need)?
+    };
+    Ok((cx, cy))
+}
+
+pub(crate) fn plan_size(
+    kind: AnchorKind,
+    patch: &SizePatch,
+    two_cell: ErrorKind,
+    op: &str,
+    op_index: usize,
+) -> Result<SizeAction, Error> {
+    match kind {
+        AnchorKind::TwoCell => {
+            if patch.cx.is_some() || patch.cy.is_some() {
+                return Err(Error::with_path(two_cell, format!("ops[{op_index}].id")));
+            }
+            let to = patch
+                .to
+                .ok_or_else(|| op_requires(op, "to", format!("ops[{op_index}].to")))?;
+            Ok(SizeAction::TwoCell {
+                to,
+                to_off_x: patch.to_off_x,
+                to_off_y: patch.to_off_y,
+            })
+        }
+        AnchorKind::OneCell | AnchorKind::Absolute => {
+            if patch.to.is_some() {
+                return Err(unknown_field("to", format!("ops[{op_index}].to")));
+            }
+            if patch.to_off_x.is_some() {
+                return Err(unknown_field("toOffX", format!("ops[{op_index}].toOffX")));
+            }
+            if patch.to_off_y.is_some() {
+                return Err(unknown_field("toOffY", format!("ops[{op_index}].toOffY")));
+            }
+            if patch.cx.is_none() && patch.cy.is_none() {
+                return Err(op_requires(op, "cx or cy", format!("ops[{op_index}]")));
+            }
+            Ok(SizeAction::Extent {
+                cx: patch.cx,
+                cy: patch.cy,
+            })
         }
     }
 }
@@ -513,10 +817,28 @@ pub fn set_picture_size(
             path.clone(),
         )
     })?;
-    if kind == AnchorKind::TwoCell {
-        return Err(Error::with_path(ErrorKind::TwoCellPictureSize, path));
-    }
-    if !update_extent(&mut doc.root, &search, op.cx, op.cy) {
+    let action = plan_size(
+        kind,
+        &SizePatch {
+            cx: op.cx,
+            cy: op.cy,
+            to: op.to,
+            to_off_x: op.to_off_x,
+            to_off_y: op.to_off_y,
+        },
+        ErrorKind::TwoCellPictureSize,
+        "setPictureSize",
+        op_index,
+    )?;
+    let ok = match action {
+        SizeAction::Extent { cx, cy } => update_extent(&mut doc.root, &search, cx, cy),
+        SizeAction::TwoCell {
+            to,
+            to_off_x,
+            to_off_y,
+        } => update_two_cell_to(&mut doc.root, &search, to, to_off_x, to_off_y),
+    };
+    if !ok {
         return Err(Error::with_path(
             ErrorKind::PictureNotFound { id: op.id.clone() },
             path,
@@ -540,21 +862,35 @@ pub fn set_picture_anchor(
         target: &op.target,
         hf_el: hf_el.as_ref(),
     };
-    let current = find_anchor_kind(&doc.root, &search).ok_or_else(|| {
+    let snapshot = snapshot_anchor(&doc.root, &search).ok_or_else(|| {
         Error::with_path(
             ErrorKind::PictureNotFound { id: op.id.clone() },
             path.clone(),
         )
     })?;
-    let target_kind = op.anchor.unwrap_or(current);
-    if current == AnchorKind::Absolute {
-        if op.anchor.is_some_and(|a| a != AnchorKind::Absolute)
-            || op.from.is_some()
-            || op.to.is_some()
-        {
-            return Err(Error::with_path(ErrorKind::PictureAnchorAbsolute, path));
-        }
-        if !update_absolute_pos(&mut doc.root, &search, op.pos_x, op.pos_y) {
+    let planned = plan_anchor(
+        &snapshot.geom(),
+        &AnchorPatch {
+            anchor: op.anchor,
+            from: op.from,
+            to: op.to,
+            from_off_x: op.from_off_x,
+            from_off_y: op.from_off_y,
+            to_off_x: op.to_off_x,
+            to_off_y: op.to_off_y,
+            pos_x: op.pos_x,
+            pos_y: op.pos_y,
+            edit_as: op.edit_as,
+            cx: op.cx,
+            cy: op.cy,
+        },
+        "setPictureAnchor",
+        op_index,
+        DEFAULT_PIC_CX,
+        DEFAULT_PIC_CY,
+    )?;
+    if planned.pos_only {
+        if !update_absolute_pos(&mut doc.root, &search, planned.pos_x, planned.pos_y) {
             return Err(Error::with_path(
                 ErrorKind::PictureNotFound { id: op.id.clone() },
                 path,
@@ -563,87 +899,25 @@ pub fn set_picture_anchor(
         pkg.set(&drawing_part, doc.to_bytes()?)?;
         return Ok(());
     }
-    if target_kind == AnchorKind::Absolute || op.pos_x.is_some() || op.pos_y.is_some() {
-        return Err(Error::with_path(ErrorKind::PictureAnchorAbsolute, path));
-    }
     // 转锚点会重写 xdr:pic；Excel 原 drawing 根上常常没有 xmlns:r。
     ensure_xmlns(&mut doc.root, "r", REL_NS);
     ensure_xmlns(&mut doc.root, "a", A_NS);
-    let snapshot = snapshot_anchor(&doc.root, &search).ok_or_else(|| {
-        Error::with_path(
-            ErrorKind::PictureNotFound { id: op.id.clone() },
-            path.clone(),
-        )
-    })?;
-    let from = op.from.or(snapshot.from).ok_or_else(|| {
-        Error::with_path(
-            ErrorKind::OpRequiresField {
-                op: "setPictureAnchor".into(),
-                field: "from".into(),
-            },
-            format!("ops[{op_index}].from"),
-        )
-    })?;
-    let to = if target_kind == AnchorKind::TwoCell {
-        Some(op.to.or(snapshot.to).ok_or_else(|| {
-            Error::with_path(
-                ErrorKind::OpRequiresField {
-                    op: "setPictureAnchor".into(),
-                    field: "to".into(),
-                },
-                format!("ops[{op_index}].to"),
-            )
-        })?)
-    } else {
-        None
-    };
-    let cx = if target_kind == AnchorKind::OneCell {
-        op.cx.or(snapshot.cx).ok_or_else(|| {
-            Error::with_path(
-                ErrorKind::OpRequiresField {
-                    op: "setPictureAnchor".into(),
-                    field: "cx and cy".into(),
-                },
-                format!("ops[{op_index}]"),
-            )
-        })?
-    } else {
-        snapshot.cx.unwrap_or(914400)
-    };
-    let cy = if target_kind == AnchorKind::OneCell {
-        op.cy.or(snapshot.cy).ok_or_else(|| {
-            Error::with_path(
-                ErrorKind::OpRequiresField {
-                    op: "setPictureAnchor".into(),
-                    field: "cx and cy".into(),
-                },
-                format!("ops[{op_index}]"),
-            )
-        })?
-    } else {
-        snapshot.cy.unwrap_or(914400)
-    };
-    let from_off_x = op.from_off_x.unwrap_or(snapshot.from_off_x);
-    let from_off_y = op.from_off_y.unwrap_or(snapshot.from_off_y);
-    let to_off_x = op.to_off_x.unwrap_or(snapshot.to_off_x);
-    let to_off_y = op.to_off_y.unwrap_or(snapshot.to_off_y);
-    let edit_as = op.edit_as.unwrap_or(snapshot.edit_as);
     replace_anchor(
         &mut doc.root,
         &search,
         build_anchor(
-            target_kind,
-            from,
-            to,
-            from_off_x,
-            from_off_y,
-            to_off_x,
-            to_off_y,
-            None,
-            None,
-            cx,
-            cy,
-            edit_as,
+            planned.kind,
+            planned.from,
+            planned.to,
+            planned.from_off_x,
+            planned.from_off_y,
+            planned.to_off_x,
+            planned.to_off_y,
+            planned.pos_x,
+            planned.pos_y,
+            planned.cx,
+            planned.cy,
+            planned.edit_as,
             snapshot.cnv,
             &snapshot.name,
             &snapshot.rid,
@@ -655,12 +929,15 @@ pub fn set_picture_anchor(
 }
 
 struct AnchorSnap {
+    kind: AnchorKind,
     from: Option<a1::CellRef>,
     to: Option<a1::CellRef>,
     from_off_x: i64,
     from_off_y: i64,
     to_off_x: i64,
     to_off_y: i64,
+    pos_x: Option<i64>,
+    pos_y: Option<i64>,
     cx: Option<i64>,
     cy: Option<i64>,
     edit_as: EditAs,
@@ -668,6 +945,25 @@ struct AnchorSnap {
     name: String,
     rid: String,
     pic: Element,
+}
+
+impl AnchorSnap {
+    fn geom(&self) -> AnchorGeom {
+        AnchorGeom {
+            kind: self.kind,
+            from: self.from,
+            to: self.to,
+            from_off_x: self.from_off_x,
+            from_off_y: self.from_off_y,
+            to_off_x: self.to_off_x,
+            to_off_y: self.to_off_y,
+            pos_x: self.pos_x,
+            pos_y: self.pos_y,
+            cx: self.cx,
+            cy: self.cy,
+            edit_as: self.edit_as,
+        }
+    }
 }
 
 fn snapshot_anchor(root: &Element, search: &PicSearch<'_>) -> Option<AnchorSnap> {
@@ -689,16 +985,20 @@ fn snapshot_anchor(root: &Element, search: &PicSearch<'_>) -> Option<AnchorSnap>
         let (from, from_off_x, from_off_y) = read_marker(anchor.child_by_local("from"));
         let (to, to_off_x, to_off_y) = read_marker(anchor.child_by_local("to"));
         let (cx, cy) = read_ext(anchor);
+        let (pos_x, pos_y) = read_pos(anchor);
         let rid = blip_rid(pic).unwrap_or_default();
         let (cnv_raw, name) = cnv_of(pic);
         let cnv = cnv_raw.and_then(|s| s.parse().ok()).unwrap_or(1);
         found = Some(AnchorSnap {
+            kind,
             from,
             to,
             from_off_x,
             from_off_y,
             to_off_x,
             to_off_y,
+            pos_x,
+            pos_y,
             cx,
             cy,
             edit_as: if kind == AnchorKind::TwoCell {
@@ -1333,6 +1633,29 @@ fn update_absolute_pos(
     })
 }
 
+fn update_two_cell_to(
+    root: &mut Element,
+    search: &PicSearch<'_>,
+    to: a1::CellRef,
+    to_off_x: Option<i64>,
+    to_off_y: Option<i64>,
+) -> bool {
+    let mut index = 0usize;
+    walk_anchors_mut(root, &mut |anchor, _| {
+        let Some(pic) = direct_pic(anchor) else {
+            return false;
+        };
+        if !has_blip(pic) {
+            return false;
+        }
+        if !search.hit(&cnv_of(pic).0, &mut index) {
+            return false;
+        }
+        apply_two_cell_to(anchor, to, to_off_x, to_off_y);
+        true
+    })
+}
+
 pub(crate) fn drawing_is_empty(root: &Element) -> bool {
     !root.element_children().any(|c| {
         AnchorKind::from_local(c.local_name()).is_some()
@@ -1673,6 +1996,43 @@ fn set_body_ext(pic: &mut Element, cx: i64, cy: i64) {
             set_attr_local(ext, "cy", &cy.to_string());
         }
     }
+}
+
+pub(crate) fn apply_two_cell_to(
+    anchor: &mut Element,
+    to: a1::CellRef,
+    to_off_x: Option<i64>,
+    to_off_y: Option<i64>,
+) {
+    let (_, cur_x, cur_y) = read_marker(anchor.child_by_local("to"));
+    rewrite_to_marker(
+        anchor,
+        to,
+        to_off_x.unwrap_or(cur_x),
+        to_off_y.unwrap_or(cur_y),
+    );
+}
+
+fn rewrite_to_marker(anchor: &mut Element, to: a1::CellRef, off_x: i64, off_y: i64) {
+    let new_to = marker_el("xdr:to", to, off_x, off_y);
+    for n in anchor.children.iter_mut() {
+        if let Node::Element(child) = n {
+            if child.local_name() == "to" {
+                *child = new_to;
+                return;
+            }
+        }
+    }
+    let mut at = anchor.children.len();
+    for (i, n) in anchor.children.iter().enumerate() {
+        if let Node::Element(child) = n {
+            if child.local_name() == "from" {
+                at = i + 1;
+                break;
+            }
+        }
+    }
+    anchor.children.insert(at, Node::Element(new_to));
 }
 
 fn marker_el(name: &str, cell: a1::CellRef, off_x: i64, off_y: i64) -> Element {

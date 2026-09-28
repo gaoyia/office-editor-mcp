@@ -88,6 +88,7 @@ $order = @(
     'xlsx-hyperlinks'
     'xlsx-sparklines'
     'xlsx-protect'
+    'xlsx-anchor'
     'pptx-docprops'
     'pptx-apply'
     'pptx-pictures'

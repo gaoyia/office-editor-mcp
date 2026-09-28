@@ -363,7 +363,21 @@ fn two_cell_size_rejected() {
         }]),
     )
     .unwrap_err();
-    assert_eq!(err.code(), ErrorCode::NotImplemented);
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+    let sized = tmp("two-to");
+    apply(
+        &out,
+        &sized,
+        json!([{
+            "op": "setChartSize",
+            "id": "sheet:Sheet1/chart:1",
+            "to": "E10"
+        }]),
+    )
+    .unwrap();
+    let after = inspect_charts(&sized);
+    assert_eq!(after["sheets"][0]["charts"][0]["anchor"], "twoCell");
+    assert_eq!(after["sheets"][0]["charts"][0]["to"], "E10");
 }
 
 #[test]

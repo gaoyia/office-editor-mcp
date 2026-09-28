@@ -571,11 +571,17 @@ pub fn set_smartart_size(
         sheet_part,
         &op.target.key,
         is_diagram_frame,
-        op.cx,
-        op.cy,
+        picture::SizePatch {
+            cx: op.cx,
+            cy: op.cy,
+            to: op.to,
+            to_off_x: op.to_off_x,
+            to_off_y: op.to_off_y,
+        },
         ErrorKind::TwoCellSmartArtSize,
         ErrorKind::SmartArtNotFound { id: op.id.clone() },
-        &format!("ops[{op_index}].id"),
+        "setSmartArtSize",
+        op_index,
     )
 }
 

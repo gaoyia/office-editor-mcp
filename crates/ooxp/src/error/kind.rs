@@ -436,7 +436,6 @@ define_error_kinds! {
     TwoCellSmartArtSize => vec![Self::TwoCellSmartArtSize],
     DeleteChartsheetLast => vec![Self::DeleteChartsheetLast],
     ChartFormulaNotA1 => vec![Self::ChartFormulaNotA1],
-    PictureAnchorAbsolute => vec![Self::PictureAnchorAbsolute],
     InvalidXlsxAnchor => vec![Self::InvalidXlsxAnchor],
     InvalidXlsxEditAs => vec![Self::InvalidXlsxEditAs],
     NotesSlideImage => vec![Self::NotesSlideImage],
@@ -1188,6 +1187,10 @@ impl ErrorKind {
             | Self::DataSheetMustBeWorksheet
             | Self::InvalidXlsxAnchor
             | Self::InvalidXlsxEditAs
+            | Self::TwoCellPictureSize
+            | Self::TwoCellChartSize
+            | Self::TwoCellTextBoxSize
+            | Self::TwoCellSmartArtSize
             | Self::NotesSlideImage
             | Self::GraphicInRestrictedStory
             | Self::NeedPropsField
@@ -1252,13 +1255,8 @@ impl ErrorKind {
             | Self::ChartTypeNotConvertible
             | Self::CustomErrorBars
             | Self::SmartArtLayoutNotConvertible
-            | Self::TwoCellPictureSize
-            | Self::TwoCellChartSize
-            | Self::TwoCellTextBoxSize
-            | Self::TwoCellSmartArtSize
             | Self::DeleteChartsheetLast
             | Self::ChartFormulaNotA1
-            | Self::PictureAnchorAbsolute
             | Self::TableHasRevision
             | Self::TableGridMismatch
             | Self::MergeNotSimple

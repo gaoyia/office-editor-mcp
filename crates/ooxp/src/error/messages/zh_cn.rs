@@ -559,25 +559,22 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             "insertChartSheet 的数据必须写到普通工作表上".into()
         }
         ErrorKind::TwoCellPictureSize => {
-            "twoCell 图的显示尺寸由起止格决定，请用 setPictureAnchor 改 to".into()
+            "twoCell 图请在 setPictureSize 里给 to，不要给 cx / cy".into()
         }
         ErrorKind::TwoCellTextBoxSize => {
-            "twoCell 文本框的显示尺寸由起止格决定，请用 setTextBoxAnchor 改 to".into()
+            "twoCell 文本框请在 setTextBoxSize 里给 to，不要给 cx / cy".into()
         }
         ErrorKind::TwoCellSmartArtSize => {
-            "twoCell SmartArt 的显示尺寸由起止格决定，请用 setSmartArtAnchor 改 to".into()
+            "twoCell SmartArt 请在 setSmartArtSize 里给 to，不要给 cx / cy".into()
         }
         ErrorKind::TwoCellChartSize => {
-            "twoCell 图表的显示尺寸由起止格决定，请用 setChartAnchor 改 to".into()
+            "twoCell 图表请在 setChartSize 里给 to，不要给 cx / cy".into()
         }
         ErrorKind::DeleteChartsheetLast => {
             "不能删掉图表工作表上仅剩的图表，否则会留下空的图表工作表".into()
         }
         ErrorKind::ChartFormulaNotA1 => {
             "系列公式不是连续 A1 区域（命名区域、三维引用或不连续区域本期不写）".into()
-        }
-        ErrorKind::PictureAnchorAbsolute => {
-            "absolute 锚点不能与 oneCell / twoCell 互转，只能改 posX / posY 或尺寸".into()
         }
         ErrorKind::InvalidXlsxAnchor => "anchor 必须是 oneCell 或 twoCell".into(),
         ErrorKind::InvalidXlsxEditAs => "editAs 必须是 twoCell、oneCell 或 absolute".into(),

@@ -649,19 +649,19 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             "insertChartSheet data must be written to a worksheet".into()
         }
         ErrorKind::TwoCellPictureSize => {
-            "twoCell picture size is defined by the anchor cells; use setPictureAnchor to change the to cell"
+            "twoCell picture size is defined by the to cell; give to on setPictureSize, not cx / cy"
                 .into()
         }
         ErrorKind::TwoCellTextBoxSize => {
-            "twoCell text box size is defined by the anchor cells; use setTextBoxAnchor to change the to cell"
+            "twoCell text box size is defined by the to cell; give to on setTextBoxSize, not cx / cy"
                 .into()
         }
         ErrorKind::TwoCellSmartArtSize => {
-            "twoCell SmartArt size is defined by the anchor cells; use setSmartArtAnchor to change the to cell"
+            "twoCell SmartArt size is defined by the to cell; give to on setSmartArtSize, not cx / cy"
                 .into()
         }
         ErrorKind::TwoCellChartSize => {
-            "twoCell chart size is defined by the anchor cells; use setChartAnchor to change the to cell"
+            "twoCell chart size is defined by the to cell; give to on setChartSize, not cx / cy"
                 .into()
         }
         ErrorKind::DeleteChartsheetLast => {
@@ -670,10 +670,6 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         }
         ErrorKind::ChartFormulaNotA1 => {
             "series formula is not a contiguous A1 range (named ranges, 3-D references, and non-contiguous ranges are not written)"
-                .into()
-        }
-        ErrorKind::PictureAnchorAbsolute => {
-            "absolute anchors cannot convert to or from oneCell / twoCell; only posX / posY or size may change"
                 .into()
         }
         ErrorKind::InvalidXlsxAnchor => "anchor must be oneCell or twoCell".into(),

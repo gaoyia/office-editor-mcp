@@ -382,11 +382,17 @@ pub fn set_textbox_size(
         sheet_part,
         &op.target.key,
         is_textbox,
-        op.cx,
-        op.cy,
+        picture::SizePatch {
+            cx: op.cx,
+            cy: op.cy,
+            to: op.to,
+            to_off_x: op.to_off_x,
+            to_off_y: op.to_off_y,
+        },
         ErrorKind::TwoCellTextBoxSize,
         ErrorKind::TextBoxNotFound { id: op.id.clone() },
-        &format!("ops[{op_index}].id"),
+        "setTextBoxSize",
+        op_index,
     )
 }
 
@@ -449,22 +455,31 @@ pub(crate) fn set_object_size(
     sheet_part: &str,
     key: &DrawKey,
     is_obj: fn(&Element) -> bool,
-    cx: Option<i64>,
-    cy: Option<i64>,
+    patch: picture::SizePatch,
     two_cell: ErrorKind,
     not_found: ErrorKind,
-    field_path: &str,
+    op: &str,
+    op_index: usize,
 ) -> Result<(), Error> {
+    let path = format!("ops[{op_index}].id");
     let drawing_part = find_drawing_for(pkg, sheet_part, sheet_root, is_obj, key)
-        .ok_or_else(|| Error::with_path(not_found.clone(), field_path))?;
+        .ok_or_else(|| Error::with_path(not_found.clone(), &path))?;
     let mut doc = xml::parse(pkg.get(&drawing_part)?)?;
     let kind = find_outer_kind(&doc.root, is_obj, key)
-        .ok_or_else(|| Error::with_path(not_found.clone(), field_path))?;
-    if kind == AnchorKind::TwoCell {
-        return Err(Error::with_path(two_cell, field_path));
-    }
-    if !update_outer_extent(&mut doc.root, is_obj, key, cx, cy) {
-        return Err(Error::with_path(not_found, field_path));
+        .ok_or_else(|| Error::with_path(not_found.clone(), &path))?;
+    let action = picture::plan_size(kind, &patch, two_cell, op, op_index)?;
+    let ok = match action {
+        picture::SizeAction::Extent { cx, cy } => {
+            update_outer_extent(&mut doc.root, is_obj, key, cx, cy)
+        }
+        picture::SizeAction::TwoCell {
+            to,
+            to_off_x,
+            to_off_y,
+        } => update_outer_to(&mut doc.root, is_obj, key, to, to_off_x, to_off_y),
+    };
+    if !ok {
+        return Err(Error::with_path(not_found, path));
     }
     pkg.set(&drawing_part, doc.to_bytes()?)?;
     Ok(())
@@ -484,88 +499,51 @@ pub(crate) fn set_object_anchor(
     let drawing_part = find_drawing_for(pkg, sheet_part, sheet_root, is_obj, key)
         .ok_or_else(|| Error::with_path(not_found.clone(), &path))?;
     let mut doc = xml::parse(pkg.get(&drawing_part)?)?;
-    let current = find_outer_kind(&doc.root, is_obj, key)
+    let snapshot = snapshot_outer(&doc.root, is_obj, key)
         .ok_or_else(|| Error::with_path(not_found.clone(), &path))?;
-    let target_kind = w.anchor.unwrap_or(current);
-    if current == AnchorKind::Absolute {
-        if w.anchor.is_some_and(|a| a != AnchorKind::Absolute) || w.from.is_some() || w.to.is_some()
-        {
-            return Err(Error::with_path(ErrorKind::PictureAnchorAbsolute, path));
-        }
-        if !update_absolute_pos(&mut doc.root, is_obj, key, w.pos_x, w.pos_y) {
+    let planned = picture::plan_anchor(
+        &snapshot.geom(),
+        &picture::AnchorPatch {
+            anchor: w.anchor,
+            from: w.from,
+            to: w.to,
+            from_off_x: w.from_off_x,
+            from_off_y: w.from_off_y,
+            to_off_x: w.to_off_x,
+            to_off_y: w.to_off_y,
+            pos_x: w.pos_x,
+            pos_y: w.pos_y,
+            edit_as: w.edit_as,
+            cx: w.cx,
+            cy: w.cy,
+        },
+        w.op,
+        op_index,
+        w.default_cx,
+        w.default_cy,
+    )?;
+    if planned.pos_only {
+        if !update_absolute_pos(&mut doc.root, is_obj, key, planned.pos_x, planned.pos_y) {
             return Err(Error::with_path(not_found, path));
         }
         pkg.set(&drawing_part, doc.to_bytes()?)?;
         return Ok(());
     }
-    if target_kind == AnchorKind::Absolute || w.pos_x.is_some() || w.pos_y.is_some() {
-        return Err(Error::with_path(ErrorKind::PictureAnchorAbsolute, path));
-    }
     picture::ensure_xmlns(&mut doc.root, "r", super::REL_NS);
     picture::ensure_xmlns(&mut doc.root, "a", picture::A_NS);
-    let snapshot = snapshot_outer(&doc.root, is_obj, key)
-        .ok_or_else(|| Error::with_path(not_found.clone(), &path))?;
-    let from = w.from.or(snapshot.from).ok_or_else(|| {
-        Error::with_path(
-            ErrorKind::OpRequiresField {
-                op: w.op.into(),
-                field: "from".into(),
-            },
-            format!("ops[{op_index}].from"),
-        )
-    })?;
-    let to = if target_kind == AnchorKind::TwoCell {
-        Some(w.to.or(snapshot.to).ok_or_else(|| {
-            Error::with_path(
-                ErrorKind::OpRequiresField {
-                    op: w.op.into(),
-                    field: "to".into(),
-                },
-                format!("ops[{op_index}].to"),
-            )
-        })?)
-    } else {
-        None
-    };
-    let cx = if target_kind == AnchorKind::OneCell {
-        w.cx.or(snapshot.cx).ok_or_else(|| {
-            Error::with_path(
-                ErrorKind::OpRequiresField {
-                    op: w.op.into(),
-                    field: "cx and cy".into(),
-                },
-                format!("ops[{op_index}]"),
-            )
-        })?
-    } else {
-        snapshot.cx.unwrap_or(w.default_cx)
-    };
-    let cy = if target_kind == AnchorKind::OneCell {
-        w.cy.or(snapshot.cy).ok_or_else(|| {
-            Error::with_path(
-                ErrorKind::OpRequiresField {
-                    op: w.op.into(),
-                    field: "cx and cy".into(),
-                },
-                format!("ops[{op_index}]"),
-            )
-        })?
-    } else {
-        snapshot.cy.unwrap_or(w.default_cy)
-    };
     let new_anchor = picture::build_anchor(
-        target_kind,
-        from,
-        to,
-        w.from_off_x.unwrap_or(snapshot.from_off_x),
-        w.from_off_y.unwrap_or(snapshot.from_off_y),
-        w.to_off_x.unwrap_or(snapshot.to_off_x),
-        w.to_off_y.unwrap_or(snapshot.to_off_y),
-        None,
-        None,
-        cx,
-        cy,
-        w.edit_as.unwrap_or(snapshot.edit_as),
+        planned.kind,
+        planned.from,
+        planned.to,
+        planned.from_off_x,
+        planned.from_off_y,
+        planned.to_off_x,
+        planned.to_off_y,
+        planned.pos_x,
+        planned.pos_y,
+        planned.cx,
+        planned.cy,
+        planned.edit_as,
         0,
         "",
         "",
@@ -798,16 +776,38 @@ fn find_outer_kind(
 }
 
 struct OuterSnap {
+    kind: AnchorKind,
     from: Option<a1::CellRef>,
     to: Option<a1::CellRef>,
     from_off_x: i64,
     from_off_y: i64,
     to_off_x: i64,
     to_off_y: i64,
+    pos_x: Option<i64>,
+    pos_y: Option<i64>,
     cx: Option<i64>,
     cy: Option<i64>,
     edit_as: EditAs,
     payload: Element,
+}
+
+impl OuterSnap {
+    fn geom(&self) -> picture::AnchorGeom {
+        picture::AnchorGeom {
+            kind: self.kind,
+            from: self.from,
+            to: self.to,
+            from_off_x: self.from_off_x,
+            from_off_y: self.from_off_y,
+            to_off_x: self.to_off_x,
+            to_off_y: self.to_off_y,
+            pos_x: self.pos_x,
+            pos_y: self.pos_y,
+            cx: self.cx,
+            cy: self.cy,
+            edit_as: self.edit_as,
+        }
+    }
 }
 
 fn snapshot_outer(
@@ -827,16 +827,20 @@ fn snapshot_outer(
         let (from, from_off_x, from_off_y) = picture::read_marker(anchor.child_by_local("from"));
         let (to, to_off_x, to_off_y) = picture::read_marker(anchor.child_by_local("to"));
         let (cx, cy) = picture::read_ext(anchor);
+        let (pos_x, pos_y) = picture::read_pos(anchor);
         let Some(payload) = payload_of(anchor) else {
             return Ok(());
         };
         found = Some(OuterSnap {
+            kind,
             from,
             to,
             from_off_x,
             from_off_y,
             to_off_x,
             to_off_y,
+            pos_x,
+            pos_y,
             cx,
             cy,
             edit_as: if kind == AnchorKind::TwoCell {
@@ -948,6 +952,24 @@ fn update_absolute_pos(
                 picture::set_attr_local(pos, "y", &v.to_string());
             }
         }
+        true
+    })
+}
+
+fn update_outer_to(
+    root: &mut Element,
+    is_obj: fn(&Element) -> bool,
+    key: &DrawKey,
+    to: a1::CellRef,
+    to_off_x: Option<i64>,
+    to_off_y: Option<i64>,
+) -> bool {
+    let mut index = 0usize;
+    picture::walk_anchors_mut(root, &mut |anchor, _| {
+        if !outer_contains(anchor, is_obj, key, &mut index) {
+            return false;
+        }
+        picture::apply_two_cell_to(anchor, to, to_off_x, to_off_y);
         true
     })
 }

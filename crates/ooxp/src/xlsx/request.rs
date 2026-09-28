@@ -1028,6 +1028,9 @@ pub struct SetPictureSizeOp {
     pub target: SheetPicId,
     pub cx: Option<i64>,
     pub cy: Option<i64>,
+    pub to: Option<a1::CellRef>,
+    pub to_off_x: Option<i64>,
+    pub to_off_y: Option<i64>,
 }
 
 #[derive(Debug, Clone)]
@@ -1190,6 +1193,9 @@ pub struct SetChartSizeOp {
     pub target: SheetChartId,
     pub cx: Option<i64>,
     pub cy: Option<i64>,
+    pub to: Option<a1::CellRef>,
+    pub to_off_x: Option<i64>,
+    pub to_off_y: Option<i64>,
 }
 
 #[derive(Debug, Clone)]
@@ -1295,6 +1301,9 @@ pub struct SetTextBoxSizeOp {
     pub target: SheetDrawId,
     pub cx: Option<i64>,
     pub cy: Option<i64>,
+    pub to: Option<a1::CellRef>,
+    pub to_off_x: Option<i64>,
+    pub to_off_y: Option<i64>,
 }
 
 #[derive(Debug, Clone)]
@@ -1371,6 +1380,9 @@ pub struct SetSmartArtSizeOp {
     pub target: SheetDrawId,
     pub cx: Option<i64>,
     pub cy: Option<i64>,
+    pub to: Option<a1::CellRef>,
+    pub to_off_x: Option<i64>,
+    pub to_off_y: Option<i64>,
 }
 
 #[derive(Debug, Clone)]
@@ -2667,21 +2679,19 @@ fn parse_set_pic_size(
     obj: &serde_json::Map<String, Value>,
     i: usize,
 ) -> Result<SetPictureSizeOp, Error> {
-    deny_keys(obj, i, &["op", "id", "cx", "cy"])?;
+    deny_keys(obj, i, &["op", "id", "cx", "cy", "to", "toOffX", "toOffY"])?;
     let id = require_id(obj, i)?;
     let target = picture::parse_pic_id(&id, i)?;
-    let cx = parse_emu_field(obj.get("cx"), i, "cx")?;
-    let cy = parse_emu_field(obj.get("cy"), i, "cy")?;
-    if cx.is_none() && cy.is_none() {
-        return Err(Error::with_path(
-            ErrorKind::OpRequiresField {
-                op: "setPictureSize".into(),
-                field: "cx or cy".into(),
-            },
-            format!("ops[{i}]"),
-        ));
-    }
-    Ok(SetPictureSizeOp { id, target, cx, cy })
+    let s = parse_drawing_size(obj, i, "setPictureSize")?;
+    Ok(SetPictureSizeOp {
+        id,
+        target,
+        cx: s.cx,
+        cy: s.cy,
+        to: s.to,
+        to_off_x: s.to_off_x,
+        to_off_y: s.to_off_y,
+    })
 }
 
 fn parse_set_pic_anchor(
@@ -2698,82 +2708,23 @@ fn parse_set_pic_anchor(
     )?;
     let id = require_id(obj, i)?;
     let target = picture::parse_pic_id(&id, i)?;
-    let anchor = match obj.get("anchor") {
-        None => None,
-        Some(Value::String(s)) if s == "absolute" => {
-            return Err(Error::with_path(
-                ErrorKind::PictureAnchorAbsolute,
-                format!("ops[{i}].anchor"),
-            ));
-        }
-        Some(Value::String(s)) => Some(picture::AnchorKind::parse_insert(s).ok_or_else(|| {
-            Error::with_path(ErrorKind::InvalidXlsxAnchor, format!("ops[{i}].anchor"))
-        })?),
-        Some(_) => {
-            return Err(Error::with_path(
-                ErrorKind::WrongType {
-                    field: "anchor".into(),
-                    expected: TypeName::String,
-                },
-                format!("ops[{i}].anchor"),
-            ));
-        }
-    };
-    let from = parse_opt_a1(obj.get("from"), i, "from")?;
-    let to = parse_opt_a1(obj.get("to"), i, "to")?;
-    let edit_as = match obj.get("editAs") {
-        None => None,
-        Some(Value::String(s)) => Some(picture::EditAs::parse(s).ok_or_else(|| {
-            Error::with_path(ErrorKind::InvalidXlsxEditAs, format!("ops[{i}].editAs"))
-        })?),
-        Some(_) => {
-            return Err(Error::with_path(
-                ErrorKind::WrongType {
-                    field: "editAs".into(),
-                    expected: TypeName::String,
-                },
-                format!("ops[{i}].editAs"),
-            ));
-        }
-    };
-    let op = SetPictureAnchorOp {
+    let p = parse_drawing_anchor_patch(obj, i, "setPictureAnchor")?;
+    Ok(SetPictureAnchorOp {
         id,
         target,
-        anchor,
-        from,
-        to,
-        from_off_x: parse_off_field(obj.get("fromOffX"), i, "fromOffX")?,
-        from_off_y: parse_off_field(obj.get("fromOffY"), i, "fromOffY")?,
-        to_off_x: parse_off_field(obj.get("toOffX"), i, "toOffX")?,
-        to_off_y: parse_off_field(obj.get("toOffY"), i, "toOffY")?,
-        pos_x: parse_i64_field(obj.get("posX"), i, "posX")?,
-        pos_y: parse_i64_field(obj.get("posY"), i, "posY")?,
-        edit_as,
-        cx: parse_emu_field(obj.get("cx"), i, "cx")?,
-        cy: parse_emu_field(obj.get("cy"), i, "cy")?,
-    };
-    let has_any = op.anchor.is_some()
-        || op.from.is_some()
-        || op.to.is_some()
-        || op.from_off_x.is_some()
-        || op.from_off_y.is_some()
-        || op.to_off_x.is_some()
-        || op.to_off_y.is_some()
-        || op.pos_x.is_some()
-        || op.pos_y.is_some()
-        || op.edit_as.is_some()
-        || op.cx.is_some()
-        || op.cy.is_some();
-    if !has_any {
-        return Err(Error::with_path(
-            ErrorKind::OpRequiresField {
-                op: "setPictureAnchor".into(),
-                field: "anchor, from, to, offsets, pos, editAs, or size".into(),
-            },
-            format!("ops[{i}]"),
-        ));
-    }
-    Ok(op)
+        anchor: p.anchor,
+        from: p.from,
+        to: p.to,
+        from_off_x: p.from_off_x,
+        from_off_y: p.from_off_y,
+        to_off_x: p.to_off_x,
+        to_off_y: p.to_off_y,
+        pos_x: p.pos_x,
+        pos_y: p.pos_y,
+        edit_as: p.edit_as,
+        cx: p.cx,
+        cy: p.cy,
+    })
 }
 
 pub fn parse_cell_value(v: &Value, path: &str) -> Result<SetCellValue, Error> {
@@ -2955,46 +2906,6 @@ fn parse_off_field(v: Option<&Value>, i: usize, field: &str) -> Result<Option<i6
                     ));
                 }
                 return Ok(Some(i64v));
-            }
-            Err(Error::with_path(
-                ErrorKind::WrongType {
-                    field: field.into(),
-                    expected: TypeName::Integer,
-                },
-                path,
-            ))
-        }
-        _ => Err(Error::with_path(
-            ErrorKind::WrongType {
-                field: field.into(),
-                expected: TypeName::Integer,
-            },
-            path,
-        )),
-    }
-}
-
-fn parse_i64_field(v: Option<&Value>, i: usize, field: &str) -> Result<Option<i64>, Error> {
-    let Some(v) = v else {
-        return Ok(None);
-    };
-    let path = format!("ops[{i}].{field}");
-    match v {
-        Value::Number(n) => {
-            if let Some(i64v) = n.as_i64() {
-                return Ok(Some(i64v));
-            }
-            if let Some(u) = n.as_u64() {
-                if u > i64::MAX as u64 {
-                    return Err(Error::with_path(
-                        ErrorKind::WrongType {
-                            field: field.into(),
-                            expected: TypeName::Integer,
-                        },
-                        path,
-                    ));
-                }
-                return Ok(Some(u as i64));
             }
             Err(Error::with_path(
                 ErrorKind::WrongType {
@@ -7533,21 +7444,19 @@ fn parse_set_chart_size(
     obj: &serde_json::Map<String, Value>,
     i: usize,
 ) -> Result<SetChartSizeOp, Error> {
-    deny_keys(obj, i, &["op", "id", "cx", "cy"])?;
+    deny_keys(obj, i, &["op", "id", "cx", "cy", "to", "toOffX", "toOffY"])?;
     let id = require_id(obj, i)?;
     let target = chart::parse_chart_id(&id, i)?;
-    let cx = parse_emu_field(obj.get("cx"), i, "cx")?;
-    let cy = parse_emu_field(obj.get("cy"), i, "cy")?;
-    if cx.is_none() && cy.is_none() {
-        return Err(Error::with_path(
-            ErrorKind::OpRequiresField {
-                op: "setChartSize".into(),
-                field: "cx or cy".into(),
-            },
-            format!("ops[{i}]"),
-        ));
-    }
-    Ok(SetChartSizeOp { id, target, cx, cy })
+    let s = parse_drawing_size(obj, i, "setChartSize")?;
+    Ok(SetChartSizeOp {
+        id,
+        target,
+        cx: s.cx,
+        cy: s.cy,
+        to: s.to,
+        to_off_x: s.to_off_x,
+        to_off_y: s.to_off_y,
+    })
 }
 
 fn parse_set_chart_anchor(
@@ -7564,79 +7473,23 @@ fn parse_set_chart_anchor(
     )?;
     let id = require_id(obj, i)?;
     let target = chart::parse_chart_id(&id, i)?;
-    let anchor = match obj.get("anchor") {
-        None => None,
-        Some(Value::String(s)) if s == "absolute" => {
-            return Err(Error::with_path(
-                ErrorKind::PictureAnchorAbsolute,
-                format!("ops[{i}].anchor"),
-            ));
-        }
-        Some(Value::String(s)) => Some(picture::AnchorKind::parse_insert(s).ok_or_else(|| {
-            Error::with_path(ErrorKind::InvalidXlsxAnchor, format!("ops[{i}].anchor"))
-        })?),
-        Some(_) => {
-            return Err(Error::with_path(
-                ErrorKind::WrongType {
-                    field: "anchor".into(),
-                    expected: TypeName::String,
-                },
-                format!("ops[{i}].anchor"),
-            ));
-        }
-    };
-    let op = SetChartAnchorOp {
+    let p = parse_drawing_anchor_patch(obj, i, "setChartAnchor")?;
+    Ok(SetChartAnchorOp {
         id,
         target,
-        anchor,
-        from: parse_opt_a1(obj.get("from"), i, "from")?,
-        to: parse_opt_a1(obj.get("to"), i, "to")?,
-        from_off_x: parse_off_field(obj.get("fromOffX"), i, "fromOffX")?,
-        from_off_y: parse_off_field(obj.get("fromOffY"), i, "fromOffY")?,
-        to_off_x: parse_off_field(obj.get("toOffX"), i, "toOffX")?,
-        to_off_y: parse_off_field(obj.get("toOffY"), i, "toOffY")?,
-        pos_x: parse_i64_field(obj.get("posX"), i, "posX")?,
-        pos_y: parse_i64_field(obj.get("posY"), i, "posY")?,
-        edit_as: match obj.get("editAs") {
-            None => None,
-            Some(Value::String(s)) => Some(picture::EditAs::parse(s).ok_or_else(|| {
-                Error::with_path(ErrorKind::InvalidXlsxEditAs, format!("ops[{i}].editAs"))
-            })?),
-            Some(_) => {
-                return Err(Error::with_path(
-                    ErrorKind::WrongType {
-                        field: "editAs".into(),
-                        expected: TypeName::String,
-                    },
-                    format!("ops[{i}].editAs"),
-                ));
-            }
-        },
-        cx: parse_emu_field(obj.get("cx"), i, "cx")?,
-        cy: parse_emu_field(obj.get("cy"), i, "cy")?,
-    };
-    let has_any = op.anchor.is_some()
-        || op.from.is_some()
-        || op.to.is_some()
-        || op.from_off_x.is_some()
-        || op.from_off_y.is_some()
-        || op.to_off_x.is_some()
-        || op.to_off_y.is_some()
-        || op.pos_x.is_some()
-        || op.pos_y.is_some()
-        || op.edit_as.is_some()
-        || op.cx.is_some()
-        || op.cy.is_some();
-    if !has_any {
-        return Err(Error::with_path(
-            ErrorKind::OpRequiresField {
-                op: "setChartAnchor".into(),
-                field: "anchor, from, to, offsets, pos, editAs, or size".into(),
-            },
-            format!("ops[{i}]"),
-        ));
-    }
-    Ok(op)
+        anchor: p.anchor,
+        from: p.from,
+        to: p.to,
+        from_off_x: p.from_off_x,
+        from_off_y: p.from_off_y,
+        to_off_x: p.to_off_x,
+        to_off_y: p.to_off_y,
+        pos_x: p.pos_x,
+        pos_y: p.pos_y,
+        edit_as: p.edit_as,
+        cx: p.cx,
+        cy: p.cy,
+    })
 }
 
 struct InsertAnchorSpec {
@@ -7750,23 +7603,59 @@ fn parse_require_text(
     }
 }
 
-fn parse_size_pair(
+struct DrawingSizePatch {
+    cx: Option<i64>,
+    cy: Option<i64>,
+    to: Option<a1::CellRef>,
+    to_off_x: Option<i64>,
+    to_off_y: Option<i64>,
+}
+
+fn parse_drawing_size(
     obj: &serde_json::Map<String, Value>,
     i: usize,
     op: &str,
-) -> Result<(Option<i64>, Option<i64>), Error> {
+) -> Result<DrawingSizePatch, Error> {
     let cx = parse_emu_field(obj.get("cx"), i, "cx")?;
     let cy = parse_emu_field(obj.get("cy"), i, "cy")?;
-    if cx.is_none() && cy.is_none() {
+    let to = parse_opt_a1(obj.get("to"), i, "to")?;
+    let to_off_x = parse_off_field(obj.get("toOffX"), i, "toOffX")?;
+    let to_off_y = parse_off_field(obj.get("toOffY"), i, "toOffY")?;
+    if (cx.is_some() || cy.is_some()) && (to.is_some() || to_off_x.is_some() || to_off_y.is_some())
+    {
         return Err(Error::with_path(
-            ErrorKind::OpRequiresField {
-                op: op.into(),
-                field: "cx or cy".into(),
+            ErrorKind::MutuallyExclusive {
+                a: "cx/cy".into(),
+                b: "to".into(),
             },
             format!("ops[{i}]"),
         ));
     }
-    Ok((cx, cy))
+    if (to_off_x.is_some() || to_off_y.is_some()) && to.is_none() {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: op.into(),
+                field: "to".into(),
+            },
+            format!("ops[{i}].to"),
+        ));
+    }
+    if cx.is_none() && cy.is_none() && to.is_none() {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: op.into(),
+                field: "cx or cy or to".into(),
+            },
+            format!("ops[{i}]"),
+        ));
+    }
+    Ok(DrawingSizePatch {
+        cx,
+        cy,
+        to,
+        to_off_x,
+        to_off_y,
+    })
 }
 
 struct DrawingAnchorPatch {
@@ -7791,13 +7680,7 @@ fn parse_drawing_anchor_patch(
 ) -> Result<DrawingAnchorPatch, Error> {
     let anchor = match obj.get("anchor") {
         None => None,
-        Some(Value::String(s)) if s == "absolute" => {
-            return Err(Error::with_path(
-                ErrorKind::PictureAnchorAbsolute,
-                format!("ops[{i}].anchor"),
-            ));
-        }
-        Some(Value::String(s)) => Some(picture::AnchorKind::parse_insert(s).ok_or_else(|| {
+        Some(Value::String(s)) => Some(picture::AnchorKind::parse_set(s).ok_or_else(|| {
             Error::with_path(ErrorKind::InvalidXlsxAnchor, format!("ops[{i}].anchor"))
         })?),
         Some(_) => {
@@ -7831,8 +7714,8 @@ fn parse_drawing_anchor_patch(
     let from_off_y = parse_off_field(obj.get("fromOffY"), i, "fromOffY")?;
     let to_off_x = parse_off_field(obj.get("toOffX"), i, "toOffX")?;
     let to_off_y = parse_off_field(obj.get("toOffY"), i, "toOffY")?;
-    let pos_x = parse_i64_field(obj.get("posX"), i, "posX")?;
-    let pos_y = parse_i64_field(obj.get("posY"), i, "posY")?;
+    let pos_x = parse_off_field(obj.get("posX"), i, "posX")?;
+    let pos_y = parse_off_field(obj.get("posY"), i, "posY")?;
     let cx = parse_emu_field(obj.get("cx"), i, "cx")?;
     let cy = parse_emu_field(obj.get("cy"), i, "cy")?;
     let has_any = anchor.is_some()
@@ -7916,11 +7799,19 @@ fn parse_set_textbox_size(
     obj: &serde_json::Map<String, Value>,
     i: usize,
 ) -> Result<SetTextBoxSizeOp, Error> {
-    deny_keys(obj, i, &["op", "id", "cx", "cy"])?;
+    deny_keys(obj, i, &["op", "id", "cx", "cy", "to", "toOffX", "toOffY"])?;
     let id = require_id(obj, i)?;
     let target = shape::parse_sp_id(&id, i)?;
-    let (cx, cy) = parse_size_pair(obj, i, "setTextBoxSize")?;
-    Ok(SetTextBoxSizeOp { id, target, cx, cy })
+    let s = parse_drawing_size(obj, i, "setTextBoxSize")?;
+    Ok(SetTextBoxSizeOp {
+        id,
+        target,
+        cx: s.cx,
+        cy: s.cy,
+        to: s.to,
+        to_off_x: s.to_off_x,
+        to_off_y: s.to_off_y,
+    })
 }
 
 fn parse_set_textbox_anchor(
@@ -8063,11 +7954,19 @@ fn parse_set_smartart_size(
     obj: &serde_json::Map<String, Value>,
     i: usize,
 ) -> Result<SetSmartArtSizeOp, Error> {
-    deny_keys(obj, i, &["op", "id", "cx", "cy"])?;
+    deny_keys(obj, i, &["op", "id", "cx", "cy", "to", "toOffX", "toOffY"])?;
     let id = require_id(obj, i)?;
     let target = xlsx_smartart::parse_diagram_id(&id, i)?;
-    let (cx, cy) = parse_size_pair(obj, i, "setSmartArtSize")?;
-    Ok(SetSmartArtSizeOp { id, target, cx, cy })
+    let s = parse_drawing_size(obj, i, "setSmartArtSize")?;
+    Ok(SetSmartArtSizeOp {
+        id,
+        target,
+        cx: s.cx,
+        cy: s.cy,
+        to: s.to,
+        to_off_x: s.to_off_x,
+        to_off_y: s.to_off_y,
+    })
 }
 
 fn parse_set_smartart_anchor(

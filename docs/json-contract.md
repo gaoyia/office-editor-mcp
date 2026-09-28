@@ -2473,10 +2473,12 @@ pptx：找不到该页报 `IdNotFound`。`id` 必须是 `slide:{n}` 或 `slide:{
 | --- | --- |
 | `op` | 必须是 `"setPictureSize"` |
 | `id` | 图 id |
-| `cx` | 可选。宽度，EMU，正整数 |
-| `cy` | 可选。高度，EMU，正整数 |
+| `cx` | 可选。宽度，EMU，正整数。xlsx `twoCell` 上出现报 `InvalidField` |
+| `cy` | 可选。高度，EMU，正整数。xlsx `twoCell` 上出现报 `InvalidField` |
+| `to` | xlsx `twoCell` 时必须。右下角 A1。`oneCell` / `absolute` 上出现报 `InvalidField` |
+| `toOffX` / `toOffY` | 可选。只随 xlsx `twoCell` 的 `to` 改右下角偏移。省略则留下当前值 |
 
-`cx` 与 `cy` 至少给一个，否则报 `InvalidField`。只改被点名的那一侧，另一侧保持原值。docx：写入 `wp:extent`；若 `pic:spPr/a:xfrm/a:ext` 存在，一并改。xlsx：`anchor` 为 `oneCell` 或 `absolute` 时写入 `xdr:ext`；若 `xdr:spPr/a:xfrm/a:ext` 存在，一并改。`anchor` 为 `twoCell` 时报 `NotImplemented`，不写文件。pptx：写入 `p:spPr/a:xfrm/a:ext`。找不到该图报 `IdNotFound`。
+`cx` 与 `cy` 至少给一个，否则报 `InvalidField`（xlsx `twoCell` 见下）。`cx` / `cy` 与 `to` 不能同时出现。只改被点名的那一侧，另一侧保持原值。docx：写入 `wp:extent`；若 `pic:spPr/a:xfrm/a:ext` 存在，一并改。xlsx：`oneCell` 或 `absolute` 时写入 `xdr:ext`；若 `xdr:spPr/a:xfrm/a:ext` 存在，一并改。`twoCell` 不认 `cx` / `cy`（出现报 `InvalidField`），必须给 `to`（右下角 A1）；可选 `toOffX` / `toOffY`（EMU，非负，省略则留下当前偏移）。不按列宽行高去换算 EMU。docx / pptx 上出现 `to` / `toOffX` / `toOffY` 报 `InvalidField`。pptx：写入 `p:spPr/a:xfrm/a:ext`。找不到该图报 `IdNotFound`。
 
 ### setPictureWrap
 
@@ -2533,17 +2535,17 @@ pptx：找不到该页报 `IdNotFound`。`id` 必须是 `slide:{n}` 或 `slide:{
 | --- | --- |
 | `op` | 必须是 `"setPictureAnchor"` |
 | `id` | xlsx 图 id |
-| `anchor` | 可选。`oneCell` 或 `twoCell`。写成 `absolute` 报 `NotImplemented` |
-| `from` | 可选。左上角 A1 |
-| `to` | 可选。`twoCell` 的右下角 A1 |
+| `anchor` | 可选。`oneCell`、`twoCell` 或 `absolute` |
+| `from` | 可选。左上角 A1。从 `absolute` 转出时必须 |
+| `to` | 可选。`twoCell` 的右下角 A1。转到 `twoCell` 时必须（请求给，或原来就是 `twoCell` 已有） |
 | `fromOffX` / `fromOffY` / `toOffX` / `toOffY` | 可选。EMU，不得为负 |
-| `posX` / `posY` | 可选。仅当现有锚点已是 `absolute` 时改位置，EMU |
+| `posX` / `posY` | 可选。EMU，非负。已是 `absolute` 时改位置；转到 `absolute` 时必须成对给出 |
 | `editAs` | 可选。只对 `twoCell`：`twoCell` / `oneCell` / `absolute` |
-| `cx` / `cy` | 从 `twoCell` 转到 `oneCell` 时必填（库不算列宽行高）。已经是 `oneCell` 时请用 `setPictureSize` |
+| `cx` / `cy` | 转到 `oneCell` 或从 `twoCell` 转到 `absolute` 时必须成对给出（库不算列宽行高）。已经是 `oneCell` / `absolute` 时请用 `setPictureSize` |
 
 `anchor`、位置字段、`editAs`、`cx` / `cy` 至少给一类，否则报 `InvalidField`。找不到该图报 `IdNotFound`。`id` 不是 xlsx 图 id 报 `InvalidId`。docx / pptx 上发此 op 报 `InvalidField`。pptx 改画布坐标请用 `setPicturePos`。
 
-`oneCell` ↔ `twoCell` 可以互转：改锚点元素名，留下 `xdr:pic` 与 `xdr:clientData`。转到 `twoCell` 必须有 `to`（请求给，或原来就是 `twoCell` 已有）。转到 `oneCell` 必须有 `cx` 与 `cy`（请求给，或原来就是 `oneCell` 已有）。与 `absolute` 互转报 `NotImplemented`，不写文件。已有 `absolute` 只许改 `posX` / `posY`；改 `from` / `to` / `anchor` 报 `NotImplemented`。
+三种锚点可以互转：改锚点元素名，留下 `xdr:pic` 与 `xdr:clientData`。转到 `twoCell` 必须有 `to`（请求给，或原来就是 `twoCell` 已有）。转到 `oneCell` 必须有 `cx` 与 `cy`（请求给，或原来就是 `oneCell` / `absolute` 已有 `xdr:ext`）。从 `twoCell` 转出时 `cx` / `cy` 必须出现在请求里，不要用 `twoCell` 锚点上可能存在的 `a:ext` 去猜显示尺寸。转到 `absolute` 必须给 `posX` 与 `posY`；从 `twoCell` 转入还须给 `cx` 与 `cy`。从 `absolute` 转出必须给 `from`（转到 `twoCell` 还须给 `to`）。缺字段报 `InvalidField`，不写文件。已有 `absolute` 且不改 `anchor` 时只许改 `posX` / `posY`。`insertPicture` 仍不认 `absolute`。
 
 未点名的位置属性原样留下。`from` / `to` 不是合法 A1 报 `InvalidRange`。
 
@@ -2605,7 +2607,7 @@ pptx：找不到该页报 `IdNotFound`。`id` 必须是 `slide:{n}` 或 `slide:{
 
 ### setTextBoxSize
 
-字段与 `setPictureSize` 相同，`id` 必须是框 id。docx 写入该框 `wp:extent`；若 `wps:spPr/a:xfrm/a:ext` 存在，一并改。xlsx 只改 `oneCell` / `absolute` 的 `xdr:ext`（以及存在的 `a:xfrm/a:ext`）；对 `twoCell` 报 `NotImplemented`。pptx 上发此 op 报 `InvalidField`。
+字段与 `setPictureSize` 相同，`id` 必须是框 id。docx 写入该框 `wp:extent`；若 `wps:spPr/a:xfrm/a:ext` 存在，一并改。xlsx 规则与图相同：`oneCell` / `absolute` 改 `xdr:ext`，`twoCell` 改右下角 `to`。pptx 上发此 op 报 `InvalidField`。
 
 ### setTextBoxAnchor
 
@@ -3648,7 +3650,7 @@ xlsx：按图表 id 删掉包含该 `xdr:graphicFrame` 的整个锚点。不删�
 
 ### setChartSize
 
-字段与 `setPictureSize` 相同，`id` 为图表 id。docx 改宿主 `wp:extent`（以及 `a:ext` 若有），规则与图相同。xlsx 只改 `oneCell` / `absolute` 的 `xdr:ext`（以及存在的 `a:xfrm/a:ext`）；对 `twoCell` 报 `NotImplemented`。pptx 写入 graphicFrame 的 `p:xfrm/a:ext`。
+字段与 `setPictureSize` 相同，`id` 为图表 id。docx 改宿主 `wp:extent`（以及 `a:ext` 若有），规则与图相同。xlsx 规则与图相同：`oneCell` / `absolute` 改 `xdr:ext`，`twoCell` 改右下角 `to`。pptx 写入 graphicFrame 的 `p:xfrm/a:ext`。
 
 ### setChartPos
 
@@ -3743,7 +3745,7 @@ Content Type：data 为 `application/vnd.openxmlformats-officedocument.drawingml
 
 ### setSmartArtSize
 
-字段与 `setPictureSize` 相同，`id` 为图示 id。docx 改宿主 `wp:extent`（以及 `a:ext` 若有），规则与图相同。xlsx 只改 `oneCell` / `absolute` 的 `xdr:ext`（以及存在的 `a:xfrm/a:ext`）；对 `twoCell` 报 `NotImplemented`。pptx 改 graphicFrame 的 `p:xfrm/a:ext`。
+字段与 `setPictureSize` 相同，`id` 为图示 id。docx 改宿主 `wp:extent`（以及 `a:ext` 若有），规则与图相同。xlsx 规则与图相同：`oneCell` / `absolute` 改 `xdr:ext`，`twoCell` 改右下角 `to`。pptx 改 graphicFrame 的 `p:xfrm/a:ext`。
 
 ### setSmartArtAnchor
 
