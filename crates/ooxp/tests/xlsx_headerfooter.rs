@@ -154,6 +154,7 @@ fn summary_without_scope() {
             "tableCount",
             "pivotCount",
             "commentCount",
+            "hyperlinkCount",
             "hasHeaderFooter",
             "print",
             "view",

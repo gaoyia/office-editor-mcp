@@ -235,6 +235,10 @@ pub(crate) enum IdReason {
     LinkIndexFromOne,
     /// insertHyperlink 必须用正文或页眉页脚段落 id
     InsertLinkNeedsPara,
+    /// xlsx 超链接 id 必须是 sheet:{name}/link:{n}
+    SheetLinkPrefix,
+    /// xlsx 的 insertHyperlink 必须用 sheet:工作表名
+    InsertHyperlinkNeedsSheet,
     /// 书签 id 必须是 bookmark:N 或 {容器}/bookmark:N
     BookmarkPrefix,
     BookmarkIndexNotInt,
@@ -415,6 +419,7 @@ define_error_kinds! {
     InsertTextBoxWorksheetOnly => vec![Self::InsertTextBoxWorksheetOnly],
     InsertSmartArtWorksheetOnly => vec![Self::InsertSmartArtWorksheetOnly],
     CommentsWorksheetOnly => vec![Self::CommentsWorksheetOnly],
+    InsertHyperlinkWorksheetOnly => vec![Self::InsertHyperlinkWorksheetOnly],
     DataSheetMustBeWorksheet => vec![Self::DataSheetMustBeWorksheet],
     TwoCellPictureSize => vec![Self::TwoCellPictureSize],
     TwoCellChartSize => vec![Self::TwoCellChartSize],
@@ -560,12 +565,16 @@ define_error_kinds! {
     BookmarkNotFound { id: String } => vec![Self::BookmarkNotFound { id: "bookmark:1".into() }],
     SetParaTextHasHyperlink => vec![Self::SetParaTextHasHyperlink],
     HyperlinkNeedTarget => vec![Self::HyperlinkNeedTarget],
+    XlsxHyperlinkNeedTarget => vec![Self::XlsxHyperlinkNeedTarget],
     EmptyHyperlinkUrl => vec![Self::EmptyHyperlinkUrl],
+    EmptyHyperlinkLocation => vec![Self::EmptyHyperlinkLocation],
+    HyperlinkOverlap => vec![Self::HyperlinkOverlap],
     InvalidBookmarkName => vec![Self::InvalidBookmarkName],
     BookmarkNameTaken => vec![Self::BookmarkNameTaken],
     BookmarkRangeReversed => vec![Self::BookmarkRangeReversed],
     BookmarkRangeCrossStory => vec![Self::BookmarkRangeCrossStory],
     NeedSetHyperlinkField => vec![Self::NeedSetHyperlinkField],
+    NeedXlsxSetHyperlinkField => vec![Self::NeedXlsxSetHyperlinkField],
     FieldNotFound { id: String } => vec![Self::FieldNotFound { id: "field:1".into() }],
     TocNotFound { id: String } => vec![Self::TocNotFound { id: "toc:1".into() }],
     MathNotFound { id: String } => vec![Self::MathNotFound { id: "math:1".into() }],
@@ -865,6 +874,8 @@ impl IdReason {
             Self::LinkIndexNotInt,
             Self::LinkIndexFromOne,
             Self::InsertLinkNeedsPara,
+            Self::SheetLinkPrefix,
+            Self::InsertHyperlinkNeedsSheet,
             Self::BookmarkPrefix,
             Self::BookmarkIndexNotInt,
             Self::BookmarkIndexFromOne,
@@ -1128,6 +1139,11 @@ impl ErrorKind {
             | Self::InsertTextBoxWorksheetOnly
             | Self::InsertSmartArtWorksheetOnly
             | Self::CommentsWorksheetOnly
+            | Self::InsertHyperlinkWorksheetOnly
+            | Self::HyperlinkOverlap
+            | Self::XlsxHyperlinkNeedTarget
+            | Self::EmptyHyperlinkLocation
+            | Self::NeedXlsxSetHyperlinkField
             | Self::DataSheetMustBeWorksheet
             | Self::InvalidXlsxAnchor
             | Self::InvalidXlsxEditAs

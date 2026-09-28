@@ -111,6 +111,7 @@ fn inspect_empty_on_create() {
             "textBoxCount",
             "smartArtCount",
             "commentCount",
+            "hyperlinkCount",
             "definedNameCount",
             "props",
             "sheets",

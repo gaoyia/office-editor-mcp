@@ -358,6 +358,12 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::InsertLinkNeedsPara => {
                 "insertHyperlink id must be a body or header/footer paragraph id".into()
             }
+            IdReason::SheetLinkPrefix => {
+                "xlsx hyperlink id must be sheet:name/link:n, n starting at 1".into()
+            }
+            IdReason::InsertHyperlinkNeedsSheet => {
+                "xlsx insertHyperlink id must be sheet:name".into()
+            }
             IdReason::BookmarkPrefix => {
                 "Bookmark id must be bookmark:N or a header/footer container id plus /bookmark:N"
                     .into()
@@ -622,6 +628,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             "insertSmartArt and SmartArt ops only apply to worksheets".into()
         }
         ErrorKind::CommentsWorksheetOnly => "comment ops only apply to worksheets".into(),
+        ErrorKind::InsertHyperlinkWorksheetOnly => {
+            "hyperlink ops only apply to worksheets".into()
+        }
         ErrorKind::DataSheetMustBeWorksheet => {
             "insertChartSheet data must be written to a worksheet".into()
         }
@@ -767,7 +776,14 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             "Cannot change visible text in a paragraph that contains a hyperlink".into()
         }
         ErrorKind::HyperlinkNeedTarget => "exactly one of url or anchor is required".into(),
+        ErrorKind::XlsxHyperlinkNeedTarget => {
+            "xlsx insertHyperlink and setHyperlink require at least one of url or location".into()
+        }
         ErrorKind::EmptyHyperlinkUrl => "url must not be empty".into(),
+        ErrorKind::EmptyHyperlinkLocation => "location must not be empty".into(),
+        ErrorKind::HyperlinkOverlap => {
+            "hyperlink ref overlaps another hyperlink on the same worksheet".into()
+        }
         ErrorKind::InvalidBookmarkName => {
             "bookmark name must not be empty, contain whitespace, or start with an underscore"
                 .into()
@@ -781,6 +797,10 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         }
         ErrorKind::NeedSetHyperlinkField => {
             "setHyperlink requires at least one of url, anchor, text, or tooltip".into()
+        }
+        ErrorKind::NeedXlsxSetHyperlinkField => {
+            "xlsx setHyperlink requires at least one of url, location, tooltip, display, or ref"
+                .into()
         }
         ErrorKind::FieldNotFound { id } => format!("Field not found: {id}"),
         ErrorKind::TocNotFound { id } => format!("Table of contents not found: {id}"),

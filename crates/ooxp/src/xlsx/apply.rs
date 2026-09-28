@@ -1,6 +1,7 @@
 //! 按 id 改单元格或工作表图，改单元格时标记打开时重算。
 
 use super::formula;
+use super::hyperlink;
 use super::request::{Patch, SetCellOp, SetCellValue, XlsxOp};
 use crate::error::{Error, ErrorKind, IdReason, RelSource};
 use crate::opc::{self, ContentTypes, Package, Relationships};
@@ -457,6 +458,39 @@ pub fn apply(bytes: &[u8], ops: &[XlsxOp]) -> Result<Vec<u8>, Error> {
                 let target = comments::parse_comment_id(&op.id, &format!("ops[{i}].id"))?;
                 let part = require_comments_worksheet(&sheet_index, &target.sheet, i)?;
                 comments::apply_set_done(&mut pkg, &part, op, i)?;
+            }
+            XlsxOp::InsertHyperlink(op) => {
+                let part = require_drawing_worksheet(
+                    &sheet_index,
+                    &op.sheet,
+                    i,
+                    ErrorKind::InsertHyperlinkWorksheetOnly,
+                )?;
+                load_dirty(&pkg, &mut dirty_sheets, &part, false)?;
+                let doc = dirty_of(&mut dirty_sheets, &part);
+                hyperlink::apply_insert(&mut pkg, &mut doc.root, &part, op, i)?;
+            }
+            XlsxOp::SetHyperlink(op) => {
+                let part = require_drawing_worksheet(
+                    &sheet_index,
+                    &op.sheet,
+                    i,
+                    ErrorKind::InsertHyperlinkWorksheetOnly,
+                )?;
+                load_dirty(&pkg, &mut dirty_sheets, &part, false)?;
+                let doc = dirty_of(&mut dirty_sheets, &part);
+                hyperlink::apply_set(&mut pkg, &mut doc.root, &part, op, i)?;
+            }
+            XlsxOp::DeleteHyperlink(op) => {
+                let part = require_drawing_worksheet(
+                    &sheet_index,
+                    &op.sheet,
+                    i,
+                    ErrorKind::InsertHyperlinkWorksheetOnly,
+                )?;
+                load_dirty(&pkg, &mut dirty_sheets, &part, false)?;
+                let doc = dirty_of(&mut dirty_sheets, &part);
+                hyperlink::apply_delete(&mut pkg, &mut doc.root, &part, op, i)?;
             }
             XlsxOp::InsertTextBox(op) => {
                 let part = require_drawing_worksheet(

@@ -9,6 +9,7 @@ mod comments;
 mod create;
 mod formula;
 mod hf;
+mod hyperlink;
 mod inspect;
 mod layout;
 mod names;
@@ -50,6 +51,8 @@ pub const REL_STYLES: &str =
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles";
 pub const REL_SHARED_STRINGS: &str =
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings";
+pub const REL_HYPERLINK: &str =
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink";
 pub const REL_CALC_CHAIN: &str =
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/calcChain";
 pub const REL_CORE: &str =

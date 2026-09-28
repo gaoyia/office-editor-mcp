@@ -475,9 +475,9 @@ fn scope_revisions_is_not_for_xlsx() {
 }
 
 #[test]
-fn scope_hyperlinks_is_not_for_xlsx() {
+fn xlsx_accepts_hyperlinks_scope() {
     let src = write_sample("hl-scope");
-    let err = run(
+    let RunOutput::Inspect(tree) = run(
         &json!({
             "schemaVersion": 1,
             "action": "inspect",
@@ -487,8 +487,12 @@ fn scope_hyperlinks_is_not_for_xlsx() {
         .to_string(),
         None,
     )
-    .unwrap_err();
-    assert_eq!(err.code(), ErrorCode::InvalidField);
+    .unwrap() else {
+        panic!("inspect 应返回树");
+    };
+    assert_eq!(tree["hyperlinkCount"], 0);
+    assert_eq!(tree["sheets"][0]["hyperlinkCount"], 0);
+    assert_eq!(tree["sheets"][0]["hyperlinks"], json!([]));
 }
 
 #[test]

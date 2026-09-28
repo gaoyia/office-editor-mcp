@@ -149,6 +149,7 @@ pub struct InspectScope {
     pub comments: bool,
     pub text_boxes: bool,
     pub smart_art: bool,
+    pub hyperlinks: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -855,6 +856,37 @@ pub struct SetCommentDoneOp {
 }
 
 #[derive(Debug, Clone)]
+pub struct InsertHyperlinkOp {
+    pub sheet: String,
+    pub refer: String,
+    pub start: a1::CellRef,
+    pub end: a1::CellRef,
+    pub url: Option<String>,
+    pub location: Option<String>,
+    pub tooltip: Option<String>,
+    pub display: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetHyperlinkOp {
+    pub id: String,
+    pub sheet: String,
+    pub index: usize,
+    pub url: Patch<String>,
+    pub location: Patch<String>,
+    pub tooltip: Patch<String>,
+    pub display: Patch<String>,
+    pub refer: Option<(String, a1::CellRef, a1::CellRef)>,
+}
+
+#[derive(Debug, Clone)]
+pub struct DeleteHyperlinkOp {
+    pub id: String,
+    pub sheet: String,
+    pub index: usize,
+}
+
+#[derive(Debug, Clone)]
 pub struct SetHeaderFooterTextOp {
     #[allow(dead_code)]
     pub id: String,
@@ -1328,6 +1360,9 @@ pub enum XlsxOp {
     SetCommentText(SetCommentTextOp),
     SetCommentMeta(SetCommentMetaOp),
     SetCommentDone(SetCommentDoneOp),
+    InsertHyperlink(InsertHyperlinkOp),
+    SetHyperlink(SetHyperlinkOp),
+    DeleteHyperlink(DeleteHyperlinkOp),
     DeleteChart(DeleteChartOp),
     SetChartTitle(SetChartTitleOp),
     SetChartSeries(SetChartSeriesOp),
@@ -1394,6 +1429,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
             "comments",
             "textBoxes",
             "smartArt",
+            "hyperlinks",
         ],
     )?;
     let pictures = parse_bool_field(obj.get("pictures"), "pictures")?;
@@ -1402,6 +1438,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
     let comments = parse_bool_field(obj.get("comments"), "comments")?;
     let text_boxes = parse_bool_field(obj.get("textBoxes"), "textBoxes")?;
     let smart_art = parse_bool_field(obj.get("smartArt"), "smartArt")?;
+    let hyperlinks = parse_bool_field(obj.get("hyperlinks"), "hyperlinks")?;
     let sheet = obj.get("sheet").and_then(Value::as_str);
     let range = obj.get("range").and_then(Value::as_str);
     let max_cells = match obj.get("maxCells") {
@@ -1453,6 +1490,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
         && !comments
         && !text_boxes
         && !smart_art
+        && !hyperlinks
     {
         return Ok(None);
     }
@@ -1464,6 +1502,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
         comments,
         text_boxes,
         smart_art,
+        hyperlinks,
     }))
 }
 
@@ -1540,6 +1579,9 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<XlsxOp>, Error> {
             "setCommentText" => XlsxOp::SetCommentText(parse_set_comment_text(obj, i)?),
             "setCommentMeta" => XlsxOp::SetCommentMeta(parse_set_comment_meta(obj, i)?),
             "setCommentDone" => XlsxOp::SetCommentDone(parse_set_comment_done(obj, i)?),
+            "insertHyperlink" => XlsxOp::InsertHyperlink(parse_insert_hyperlink(obj, i)?),
+            "setHyperlink" => XlsxOp::SetHyperlink(parse_set_hyperlink(obj, i)?),
+            "deleteHyperlink" => XlsxOp::DeleteHyperlink(parse_delete_hyperlink(obj, i)?),
             "deleteChart" => XlsxOp::DeleteChart(parse_delete_chart(obj, i)?),
             "setChartTitle" => XlsxOp::SetChartTitle(parse_set_chart_title(obj, i)?),
             "setChartSeries" => XlsxOp::SetChartSeries(parse_set_chart_series(obj, i)?),
@@ -1622,9 +1664,6 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<XlsxOp>, Error> {
             | "splitCells"
             | "acceptRevision"
             | "rejectRevision"
-            | "insertHyperlink"
-            | "setHyperlink"
-            | "deleteHyperlink"
             | "insertBookmark"
             | "setBookmark"
             | "deleteBookmark"
@@ -4140,6 +4179,88 @@ fn parse_set_comment_done(
     Ok(SetCommentDoneOp { id, done })
 }
 
+fn parse_insert_hyperlink(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<InsertHyperlinkOp, Error> {
+    deny_keys(
+        obj,
+        i,
+        &["op", "id", "ref", "url", "location", "tooltip", "display"],
+    )?;
+    let id = require_id(obj, i)?;
+    let sheet = parse_sheet_only_id(&id, i, "id", IdReason::InsertHyperlinkNeedsSheet)?;
+    let (refer, start, end) = parse_required_range(obj, i)?;
+    let url = parse_opt_target(obj, i, "url", ErrorKind::EmptyHyperlinkUrl)?;
+    let location = parse_opt_target(obj, i, "location", ErrorKind::EmptyHyperlinkLocation)?;
+    if url.is_none() && location.is_none() {
+        return Err(Error::with_path(
+            ErrorKind::XlsxHyperlinkNeedTarget,
+            format!("ops[{i}]"),
+        ));
+    }
+    Ok(InsertHyperlinkOp {
+        sheet,
+        refer,
+        start,
+        end,
+        url,
+        location,
+        tooltip: parse_opt_plain(obj, i, "tooltip")?,
+        display: parse_opt_plain(obj, i, "display")?,
+    })
+}
+
+fn parse_set_hyperlink(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<SetHyperlinkOp, Error> {
+    deny_keys(
+        obj,
+        i,
+        &["op", "id", "url", "location", "tooltip", "display", "ref"],
+    )?;
+    let id = require_id(obj, i)?;
+    let (sheet, index) = parse_link_id(&id, i)?;
+    let url = parse_hyperlink_patch(obj, i, "url", Some(ErrorKind::EmptyHyperlinkUrl))?;
+    let location =
+        parse_hyperlink_patch(obj, i, "location", Some(ErrorKind::EmptyHyperlinkLocation))?;
+    let tooltip = parse_hyperlink_patch(obj, i, "tooltip", None)?;
+    let display = parse_hyperlink_patch(obj, i, "display", None)?;
+    let refer = parse_opt_range(obj, i)?;
+    if url.is_absent()
+        && location.is_absent()
+        && tooltip.is_absent()
+        && display.is_absent()
+        && refer.is_none()
+    {
+        return Err(Error::with_path(
+            ErrorKind::NeedXlsxSetHyperlinkField,
+            format!("ops[{i}]"),
+        ));
+    }
+    Ok(SetHyperlinkOp {
+        id,
+        sheet,
+        index,
+        url,
+        location,
+        tooltip,
+        display,
+        refer,
+    })
+}
+
+fn parse_delete_hyperlink(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<DeleteHyperlinkOp, Error> {
+    deny_keys(obj, i, &["op", "id"])?;
+    let id = require_id(obj, i)?;
+    let (sheet, index) = parse_link_id(&id, i)?;
+    Ok(DeleteHyperlinkOp { id, sheet, index })
+}
+
 fn parse_optional_text(obj: &serde_json::Map<String, Value>, i: usize) -> Result<String, Error> {
     match obj.get("text") {
         None => Ok(String::new()),
@@ -5838,6 +5959,170 @@ fn parse_dv_id(id: &str, op_index: usize) -> Result<(String, usize), Error> {
     Ok((name.to_string(), n))
 }
 
+fn parse_link_id(id: &str, op_index: usize) -> Result<(String, usize), Error> {
+    let Some(rest) = id.strip_prefix("sheet:") else {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::SheetLinkPrefix,
+            },
+            format!("ops[{op_index}].id"),
+        ));
+    };
+    let Some((name, nstr)) = rest.split_once("/link:") else {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::SheetLinkPrefix,
+            },
+            format!("ops[{op_index}].id"),
+        ));
+    };
+    if name.is_empty() || name.contains('/') {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::SheetLinkPrefix,
+            },
+            format!("ops[{op_index}].id"),
+        ));
+    }
+    if nstr.is_empty() || !nstr.bytes().all(|b| b.is_ascii_digit()) {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::LinkIndexNotInt,
+            },
+            format!("ops[{op_index}].id"),
+        ));
+    }
+    let n: usize = nstr.parse().map_err(|_| {
+        Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::LinkIndexNotInt,
+            },
+            format!("ops[{op_index}].id"),
+        )
+    })?;
+    if n == 0 {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::LinkIndexFromOne,
+            },
+            format!("ops[{op_index}].id"),
+        ));
+    }
+    Ok((name.to_string(), n))
+}
+
+fn parse_required_range(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<(String, a1::CellRef, a1::CellRef), Error> {
+    match obj.get("ref") {
+        Some(Value::String(s)) => {
+            let (start, end) = a1::parse_range(s).map_err(|e| e.at(format!("ops[{i}].ref")))?;
+            Ok((a1::format_range(start, end), start, end))
+        }
+        None => Err(Error::with_path(
+            ErrorKind::MissingField {
+                field: "ref".into(),
+            },
+            format!("ops[{i}].ref"),
+        )),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "ref".into(),
+                expected: TypeName::String,
+            },
+            format!("ops[{i}].ref"),
+        )),
+    }
+}
+
+fn parse_opt_range(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<Option<(String, a1::CellRef, a1::CellRef)>, Error> {
+    match obj.get("ref") {
+        None => Ok(None),
+        Some(Value::String(s)) => {
+            let (start, end) = a1::parse_range(s).map_err(|e| e.at(format!("ops[{i}].ref")))?;
+            Ok(Some((a1::format_range(start, end), start, end)))
+        }
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "ref".into(),
+                expected: TypeName::String,
+            },
+            format!("ops[{i}].ref"),
+        )),
+    }
+}
+
+fn parse_opt_target(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+    field: &str,
+    empty: ErrorKind,
+) -> Result<Option<String>, Error> {
+    match obj.get(field) {
+        None => Ok(None),
+        Some(Value::String(s)) if s.is_empty() => {
+            Err(Error::with_path(empty, format!("ops[{i}].{field}")))
+        }
+        Some(Value::String(s)) => Ok(Some(s.clone())),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::String,
+            },
+            format!("ops[{i}].{field}"),
+        )),
+    }
+}
+
+fn parse_opt_plain(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+    field: &str,
+) -> Result<Option<String>, Error> {
+    match obj.get(field) {
+        None => Ok(None),
+        Some(Value::String(s)) => Ok(Some(s.clone())),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::String,
+            },
+            format!("ops[{i}].{field}"),
+        )),
+    }
+}
+
+fn parse_hyperlink_patch(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+    field: &str,
+    empty: Option<ErrorKind>,
+) -> Result<Patch<String>, Error> {
+    match obj.get(field) {
+        None => Ok(Patch::Absent),
+        Some(Value::Null) => Ok(Patch::Clear),
+        Some(Value::String(s)) if s.is_empty() => {
+            if let Some(kind) = empty {
+                Err(Error::with_path(kind, format!("ops[{i}].{field}")))
+            } else {
+                Ok(Patch::Set(String::new()))
+            }
+        }
+        Some(Value::String(s)) => Ok(Patch::Set(s.clone())),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::String,
+            },
+            format!("ops[{i}].{field}"),
+        )),
+    }
+}
+
 fn parse_sqref_field(
     v: Option<&Value>,
     i: usize,
@@ -6336,6 +6621,7 @@ fn parse_sheet_only_id(
         || id.contains("/cf:")
         || id.contains("/table:")
         || id.contains("/pivot:")
+        || id.contains("/link:")
         || id.starts_with("cell:")
     {
         return Err(Error::with_path(

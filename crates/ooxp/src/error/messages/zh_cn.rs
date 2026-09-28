@@ -327,6 +327,12 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::InsertLinkNeedsPara => {
                 "insertHyperlink 的 id 必须是正文或页眉页脚段落 id".into()
             }
+            IdReason::SheetLinkPrefix => {
+                "xlsx 超链接 id 必须是 sheet:工作表名/link:n，n 从 1 起".into()
+            }
+            IdReason::InsertHyperlinkNeedsSheet => {
+                "xlsx 的 insertHyperlink 的 id 必须是 sheet:工作表名".into()
+            }
             IdReason::BookmarkPrefix => {
                 "书签 id 必须是 bookmark:N，或页眉页脚容器 id 加上 /bookmark:N".into()
             }
@@ -536,6 +542,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::InsertTextBoxWorksheetOnly => "只能往工作表 insertTextBox / 改文本框".into(),
         ErrorKind::InsertSmartArtWorksheetOnly => "只能往工作表 insertSmartArt / 改图示".into(),
         ErrorKind::CommentsWorksheetOnly => "只能对工作表发批注 op".into(),
+        ErrorKind::InsertHyperlinkWorksheetOnly => "只能对工作表发超链接 op".into(),
         ErrorKind::DataSheetMustBeWorksheet => {
             "insertChartSheet 的数据必须写到普通工作表上".into()
         }
@@ -645,7 +652,12 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::BookmarkNotFound { id } => format!("找不到书签：{id}"),
         ErrorKind::SetParaTextHasHyperlink => "不能改带超链接的段落的可见文本".into(),
         ErrorKind::HyperlinkNeedTarget => "必须恰好给 url 或 anchor 之一".into(),
+        ErrorKind::XlsxHyperlinkNeedTarget => {
+            "xlsx 的超链接必须至少给 url 或 location 之一".into()
+        }
         ErrorKind::EmptyHyperlinkUrl => "url 不能为空".into(),
+        ErrorKind::EmptyHyperlinkLocation => "location 不能为空".into(),
+        ErrorKind::HyperlinkOverlap => "超链接区域与同一张表上已有链相交".into(),
         ErrorKind::InvalidBookmarkName => {
             "书签名不能为空、不能含空白、不能以下划线开头".into()
         }
@@ -656,6 +668,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         }
         ErrorKind::NeedSetHyperlinkField => {
             "setHyperlink 至少要给 url、anchor、text 或 tooltip 之一".into()
+        }
+        ErrorKind::NeedXlsxSetHyperlinkField => {
+            "xlsx 的 setHyperlink 至少要给 url、location、tooltip、display 或 ref 之一".into()
         }
         ErrorKind::FieldNotFound { id } => format!("找不到域：{id}"),
         ErrorKind::TocNotFound { id } => format!("找不到目录：{id}"),

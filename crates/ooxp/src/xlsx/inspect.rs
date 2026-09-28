@@ -66,6 +66,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     let want_comments = scope.as_ref().is_some_and(|s| s.comments);
     let want_text_boxes = scope.as_ref().is_some_and(|s| s.text_boxes);
     let want_smart_art = scope.as_ref().is_some_and(|s| s.smart_art);
+    let want_hyperlinks = scope.as_ref().is_some_and(|s| s.hyperlinks);
     let cells_scope = scope.as_ref().and_then(|s| s.cells.as_ref());
     let sheet_parts: Vec<(String, String)> = sheets
         .iter()
@@ -78,6 +79,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     let mut text_box_count = 0usize;
     let mut smart_art_count = 0usize;
     let mut comment_count = 0usize;
+    let mut hyperlink_count = 0usize;
     for (sheet_id, sh) in sheets.iter().enumerate() {
         let mut obj = Map::new();
         obj.insert("id".into(), json!(format!("sheet:{}", sh.name)));
@@ -109,6 +111,9 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
             let n_comments = comments::count_on_sheet(&pkg, &sh.part)?;
             comment_count += n_comments;
             obj.insert("commentCount".into(), json!(n_comments));
+            let n_links = super::hyperlink::count(&sheet_doc.root);
+            hyperlink_count += n_links;
+            obj.insert("hyperlinkCount".into(), json!(n_links));
             let has_hf = hf::has_header_footer(&sheet_doc.root);
             obj.insert("hasHeaderFooter".into(), json!(has_hf));
             obj.insert(
@@ -152,6 +157,13 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
                 obj.insert(
                     "comments".into(),
                     Value::Array(comments::collect_on_sheet(&pkg, &sh.part, &sh.name)?),
+                );
+            }
+            if want_hyperlinks {
+                let sheet_rels = opc::Relationships::from_package(&pkg, &sh.part)?;
+                obj.insert(
+                    "hyperlinks".into(),
+                    super::hyperlink::inspect(&sheet_doc.root, &sh.name, &sheet_rels),
                 );
             }
             if let Some(cs) = cells_scope {
@@ -274,6 +286,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     root.insert("textBoxCount".into(), json!(text_box_count));
     root.insert("smartArtCount".into(), json!(smart_art_count));
     root.insert("commentCount".into(), json!(comment_count));
+    root.insert("hyperlinkCount".into(), json!(hyperlink_count));
     root.insert("definedNameCount".into(), json!(names::count(&wb.root)));
     root.insert("props".into(), crate::props::inspect(&pkg)?);
     root.insert("sheets".into(), Value::Array(sheet_json));

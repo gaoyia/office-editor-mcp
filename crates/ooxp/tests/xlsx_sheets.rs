@@ -129,6 +129,7 @@ fn inspect_lists_hidden() {
             "tableCount",
             "pivotCount",
             "commentCount",
+            "hyperlinkCount",
             "hasHeaderFooter",
             "print",
             "view",
