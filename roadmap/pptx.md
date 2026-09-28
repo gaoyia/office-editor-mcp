@@ -27,6 +27,7 @@ pptx 模块不要引用 `docx::` 或 `xlsx::`。`c:chart`（§21.2）用 `crates
 - `exportChartData`：跟幻灯片图表走
 - 复制已有文件再 apply：不必新动作
 - `a:fld`：不收不改；独立节点不另开
+- 功能区艺术字：另存是带 `p:txBody` 的 `p:sp`，已进形状树。不新开对象，不做字填充切片
 
 ## 已过
 

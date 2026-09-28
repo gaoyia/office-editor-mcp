@@ -26,6 +26,7 @@ docx 见 [`roadmap/docx.md`](docx.md)。pptx 见 [`roadmap/pptx.md`](pptx.md)。
 - 组合 `xdr:grpSp` 里的图：不够用时补进 `.plan/2026年-9月-27日-✅-xlsx-工作表图.md`
 - `exportMedia`：跟图走
 - 复制已有文件再 apply：不必新动作
+- 功能区艺术字：另存是无 `txBox` 的 `xdr:sp`。按现有规则不进 `textBoxes`，不扩大收集，不单开对象
 
 ## 已过
 

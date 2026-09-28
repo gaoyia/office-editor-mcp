@@ -25,6 +25,7 @@ xlsx 见 [`roadmap/xlsx.md`](xlsx.md)。pptx 见 [`roadmap/pptx.md`](pptx.md)。
 - 组合里符合条件的图 / 图表 / SmartArt：展开子节点，组合本身不进树
 - `exportMedia` / `exportChartData`：跟图、图表走
 - 复制已有文件再 apply：不必新动作
+- 功能区艺术字：另存是 `wps:wsp` ，inspect 已进 `textBoxes`。不新开对象，不做字填充或弯曲切片
 
 ## 已过
 
