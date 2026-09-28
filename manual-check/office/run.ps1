@@ -94,6 +94,7 @@ $order = @(
     'pptx-apply'
     'pptx-slides'
     'pptx-shapes'
+    'pptx-shape-geom'
     'pptx-tables'
     'pptx-transition'
     'pptx-transition-remain'

@@ -1025,6 +1025,7 @@ mod tests {
                 "commentCount",
                 "hyperlinkCount",
                 "tableCount",
+                "connectorCount",
                 "animCount",
                 "masterCount",
                 "hasHandout",
@@ -1051,6 +1052,7 @@ mod tests {
                 "commentCount",
                 "hyperlinkCount",
                 "tableCount",
+                "connectorCount",
                 "animCount",
                 "truncated",
                 "shapes"
@@ -1074,12 +1076,13 @@ mod tests {
                 "commentCount",
                 "hyperlinkCount",
                 "tableCount",
+                "connectorCount",
                 "animCount"
             ]
         );
         assert_eq!(
             object_keys(&tree["slides"][0]["shapes"][0]),
-            ["id", "shapeId", "name", "x", "y", "cx", "cy", "text", "stable"]
+            ["id", "shapeId", "name", "prst", "x", "y", "cx", "cy", "text", "stable"]
         );
     }
 }

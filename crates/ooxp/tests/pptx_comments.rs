@@ -173,6 +173,7 @@ fn inspect_comment_count_without_list() {
             "commentCount",
             "hyperlinkCount",
             "tableCount",
+            "connectorCount",
             "animCount",
             "masterCount",
             "hasHandout",

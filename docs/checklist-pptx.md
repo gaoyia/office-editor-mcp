@@ -4,11 +4,11 @@
 
 检查前用 create 或 apply 在本机生成文件，不要用改过扩展名的 zip 目录冒充。本机若 `PowerPoint.Application` 被 WPS 抢走，直接启动 `POWERPNT.EXE` 再挂 COM，不要走被抢的 ProgID。Office 16 的对象模型在 `mdiClass` 上。
 
-C、I、A、Pp、Pc、Psa、Pn、Pcm、Pm、Ps、Pt、Tn、Tr、Am、Aw、Mm、Ho、Phl、Pmd、Psc 各组由 `manual-check/office/cases/pptx-*.ps1` 自动判定，跑 `pwsh -File manual-check\office\run.ps1 -Case 'pptx-*'` 即可复现。O1 已放弃，与 xlsx / docx 相同。
+C、I、A、Pp、Pc、Psa、Pn、Pcm、Pm、Ps、Sg、Pt、Tn、Tr、Am、Aw、Mm、Ho、Phl、Pmd、Psc 各组由 `manual-check/office/cases/pptx-*.ps1` 自动判定，跑 `pwsh -File manual-check\office\run.ps1 -Case 'pptx-*'` 即可复现。O1 已放弃，与 xlsx / docx 相同。
 
 ## 本机结果（2026-09-28）
 
-Microsoft PowerPoint 16.0 已打开，C1、C3、C4、C5–C13、I1–I5、A1–A5、Pp1–Pp7、Pc1–Pc7、Psa1–Psa7、Pn1–Pn6、Pcm1–Pcm6、Pik1–Pik4、Pm1–Pm5、Ps1–Ps5、Pt1–Pt6、Tn1–Tn5、Am1–Am5、Mm1–Mm5、Ho1–Ho5、Phl1–Phl5、Pmd1–Pmd5、Psc1–Psc5 均 PASS。本机若装了 WPS，`PowerPoint.Application` 会被抢走，测试仍直接启动 `POWERPNT.EXE`，从 `mdiClass` 挂 COM。O1 已放弃。2026-09-27 补跑 `pptx-pictures.ps1`，Pp1–Pp7 通过。同日补跑 `pptx-create-pictures.ps1`，C5–C7 通过。同日补跑 `pptx-charts.ps1`，Pc1–Pc7 通过。同日补跑 `pptx-create-charts.ps1`，C8–C10 通过。同日补跑 `pptx-smartart.ps1`，Psa1–Psa7 通过。同日补跑 `pptx-notes.ps1`，Pn1–Pn4 通过。同日补跑 `pptx-comments.ps1`，Pcm1–Pcm5、Pik1–Pik4 通过。同日补跑 `pptx-docprops.ps1`，Pd1–Pd5 通过。同日补跑 `pptx-charts-remain.ps1`，Pr1–Pr3 通过。2026-09-28 补跑 `pptx-slides.ps1`，Pm1–Pm5 通过。同日补跑 `pptx-shapes.ps1`，Ps1–Ps5 通过。同日补跑 `pptx-tables.ps1`，Pt1–Pt6 通过。同日补跑 `pptx-transition.ps1`，Tn1–Tn5 通过。同日补跑 `pptx-timing.ps1`，Am1–Am5 通过。同日补跑 `pptx-masters.ps1`，Mm1–Mm5 通过。同日补跑 `pptx-handout.ps1`，Ho1–Ho5 通过。同日补跑 `pptx-hyperlinks.ps1`，Phl1–Phl5 通过。同日补跑 `pptx-create-notes-comments.ps1`，C11–C13 通过。同日补跑 `pptx-notes.ps1`，Pn5–Pn6 通过。同日补跑 `pptx-comments.ps1`，Pcm6 通过。同日补跑 `pptx-media.ps1`，Pmd1–Pmd5 通过。同日补跑 `pptx-sections.ps1`，Psc1–Psc5 通过。2026-09-29 补跑 `pptx-anim-write.ps1`，Aw1–Aw5 通过。同日补跑 `pptx-transition-remain.ps1`，Tr1–Tr5 通过。
+Microsoft PowerPoint 16.0 已打开，C1、C3、C4、C5–C13、I1–I5、A1–A5、Pp1–Pp7、Pc1–Pc7、Psa1–Psa7、Pn1–Pn6、Pcm1–Pcm6、Pik1–Pik4、Pm1–Pm5、Ps1–Ps5、Sg1–Sg5、Pt1–Pt6、Tn1–Tn5、Am1–Am5、Mm1–Mm5、Ho1–Ho5、Phl1–Phl5、Pmd1–Pmd5、Psc1–Psc5 均 PASS。本机若装了 WPS，`PowerPoint.Application` 会被抢走，测试仍直接启动 `POWERPNT.EXE`，从 `mdiClass` 挂 COM。O1 已放弃。2026-09-27 补跑 `pptx-pictures.ps1`，Pp1–Pp7 通过。同日补跑 `pptx-create-pictures.ps1`，C5–C7 通过。同日补跑 `pptx-charts.ps1`，Pc1–Pc7 通过。同日补跑 `pptx-create-charts.ps1`，C8–C10 通过。同日补跑 `pptx-smartart.ps1`，Psa1–Psa7 通过。同日补跑 `pptx-notes.ps1`，Pn1–Pn4 通过。同日补跑 `pptx-comments.ps1`，Pcm1–Pcm5、Pik1–Pik4 通过。同日补跑 `pptx-docprops.ps1`，Pd1–Pd5 通过。同日补跑 `pptx-charts-remain.ps1`，Pr1–Pr3 通过。2026-09-28 补跑 `pptx-slides.ps1`，Pm1–Pm5 通过。同日补跑 `pptx-shapes.ps1`，Ps1–Ps5 通过。同日补跑 `pptx-tables.ps1`，Pt1–Pt6 通过。同日补跑 `pptx-transition.ps1`，Tn1–Tn5 通过。同日补跑 `pptx-timing.ps1`，Am1–Am5 通过。同日补跑 `pptx-masters.ps1`，Mm1–Mm5 通过。同日补跑 `pptx-handout.ps1`，Ho1–Ho5 通过。同日补跑 `pptx-hyperlinks.ps1`，Phl1–Phl5 通过。同日补跑 `pptx-create-notes-comments.ps1`，C11–C13 通过。同日补跑 `pptx-notes.ps1`，Pn5–Pn6 通过。同日补跑 `pptx-comments.ps1`，Pcm6 通过。同日补跑 `pptx-media.ps1`，Pmd1–Pmd5 通过。同日补跑 `pptx-sections.ps1`，Psc1–Psc5 通过。2026-09-29 补跑 `pptx-anim-write.ps1`，Aw1–Aw5 通过。同日补跑 `pptx-transition-remain.ps1`，Tr1–Tr5 通过。同日补跑 `pptx-shape-geom.ps1`，Sg1–Sg5 通过。
 
 | 序号 | 状态 | 结果 |
 | --- | --- | --- |
@@ -28,6 +28,7 @@ Microsoft PowerPoint 16.0 已打开，C1、C3、C4、C5–C13、I1–I5、A1–A
 | Pd1–Pd5 | ✅ | PowerPoint 16.0：`pptx-docprops.ps1`，5 PASS / 0 FAIL。根上 `props`、`creator=ooxp`；只改标题后面板标题是新字、公司名还在；自定义 `prop:部门`；删后名单空；形状 id 发 `setProps` 为 `InvalidId`。无 Repair |
 | Pm1–Pm5 | ✅ | PowerPoint 16.0：`pptx-slides.ps1`，5 PASS / 0 FAIL。两页名单与 `hidden=false`；`insertSlide` 后第三页是原第二页、新页无文本框；`moveSlide` 到最前；`setSlideHidden` 后 COM Hidden 为真；删最后一页 / 缺 `hidden` 为 `InvalidField` 且未写文件。无 Repair |
 | Ps1–Ps5 | ✅ | PowerPoint 16.0：`pptx-shapes.ps1`，5 PASS / 0 FAIL。`insertShape` 后 id 为 `slide:1/shape:4`；位置 72×108 磅、尺寸 144×72 磅、填充红；改字后旧框还在；删除后 COM 形状数为 2；另存样例插新框后旧框动画 Count 仍为 1；错 id / 缺成对 `cx` / 缺 `color` 为 `InvalidField` 且未写文件。无 Repair |
+| Sg1–Sg5 | ✅ | PowerPoint 16.0：`pptx-shape-geom.ps1`，5 PASS / 0 FAIL。`insertShape` `prst=ellipse` 后 id 为 `slide:1/shape:4`、COM AutoShapeType=9；`insertConnector` 后 id 为 `slide:1/cxn:4`、COM Connector 为真；`groupShapes` 后 COM Type=6、子 id 仍在；`ungroup` 后组合解开、子 id 还在；连接线几何名给 `insertShape`、只给一个成员 `groupShapes` 为 `InvalidField`，对形状 id 发 `insertConnector` 为 `InvalidId`，均未写文件。无 Repair |
 | Pt1–Pt6 | ✅ | PowerPoint 16.0：`pptx-tables.ps1`，7 PASS / 0 FAIL。另存样例 id 为 `slide:1/table:4`；改格 COM 可见「改过的正文」；增行后 COM Rows=3；`insertTable` 后 id 为 `slide:1/table:4` 且 `stable`、COM 格可见「甲」；`deleteTable` 后 COM 表数为 0；形状 id 得 `InvalidId`，缺 `rows` / 最后一行得 `InvalidField` 且未写文件。无 Repair |
 | Tn1–Tn5 | ✅ | PowerPoint 16.0：`pptx-transition.ps1`，5 PASS / 0 FAIL。无切换页 `transition` 为 null；另存淡入 `type=fade`、`dur=500`；`setTransition` 后 COM EntryEffect=3849、Duration=0.5；只改字切换还在；`type: null` 后 COM 效果为 0；形状 id 得 `InvalidId`，`type=other` 得 `InvalidField` 且未写文件。无 Repair |
 | Tr1–Tr5 | ✅ | PowerPoint 16.0：`pptx-transition-remain.ps1`，5 PASS / 0 FAIL。定时进片 `advTm` 对上 COM AdvanceOnTime；`wipe` `dir=r` 对上 EntryEffect=2819；`fallOver` 不是 `other`；只改字字段还在；错 `dir` 为 `InvalidField` 且未写文件。无 Repair |
@@ -208,6 +209,18 @@ Microsoft PowerPoint 16.0 已打开，C1、C3、C4、C5–C13、I1–I5、A1–A
 | Ps3 | 改字 | ✅ 对新框 `setShapeText` 后文字是请求值；旧框文字还在 |
 | Ps4 | 删除 | ✅ `deleteShape` 后该框消失；同页未删形状还在、`cNvPr/@id` 不变；无 Repair |
 | Ps5 | 动画仍绑 | ✅ 对 PowerPoint 另存样例只插新框、不删带动画的旧框；旧框动画还在；无 Repair。对形状 id 发 `insertShape`、缺成对 `cx` 或缺 `color` 得 `InvalidField` 且未写文件 |
+
+## 形状几何剩余
+
+非矩形预设几何、连接线、组合。脚本 `manual-check/office/cases/pptx-shape-geom.ps1`。编号用 Sg（不要跟 Ps、节的 Psc 混）。
+
+| 序号 | 检查 | 通过标准 |
+| --- | --- | --- |
+| Sg1 | 椭圆 | ✅ 对 create 产物 `insertShape` `prst=ellipse` 后 inspect `prst` 为 `ellipse`，id 为 `slide:…/shape:…`；COM AutoShapeType=9；无 Repair |
+| Sg2 | 连接线 | ✅ `insertConnector` 后 inspect `connectors: true` 时 id 为 `slide:…/cxn:…` 且 `stable`；COM Connector 为真；无 Repair |
+| Sg3 | 组合 | ✅ `groupShapes` 两个文本框后 COM Type=6；inspect 子形状 id 仍在；无 Repair |
+| Sg4 | 解开 | ✅ `ungroup` 后组合解开，子 id 还在；无 Repair |
+| Sg5 | 拒错 | ✅ 连接线几何名给 `insertShape`、`groupShapes` 只给一个成员、对形状 id 发 `insertConnector` 得 `InvalidField` 或 `InvalidId`；均未写文件 |
 
 ## 幻灯片表格
 

@@ -195,24 +195,29 @@ pub fn shape_name(sp: &Element) -> Option<String> {
 pub fn shape_node_json(sp: &Element, host: &str, index: usize) -> Value {
     let (id, shape_id, stable) = shape_stable_id(sp, host, index);
     let (x, y, cx, cy) = geometry_json(sp);
-    let mut sh = json!({
-        "id": id,
-        "shapeId": Value::Null,
-        "name": Value::Null,
-        "x": x,
-        "y": y,
-        "cx": cx,
-        "cy": cy,
-        "text": visible_text(sp),
-        "stable": stable,
-    });
-    if let Some(sid) = shape_id {
-        sh["shapeId"] = json!(sid);
-    }
-    if let Some(n) = shape_name(sp) {
-        sh["name"] = json!(n);
-    }
-    sh
+    let mut sh = serde_json::Map::new();
+    sh.insert("id".into(), json!(id));
+    sh.insert("shapeId".into(), shape_id.map_or(Value::Null, |s| json!(s)));
+    sh.insert(
+        "name".into(),
+        shape_name(sp).map_or(Value::Null, |n| json!(n)),
+    );
+    sh.insert("prst".into(), prst_json(sp));
+    sh.insert("x".into(), x);
+    sh.insert("y".into(), y);
+    sh.insert("cx".into(), cx);
+    sh.insert("cy".into(), cy);
+    sh.insert("text".into(), json!(visible_text(sp)));
+    sh.insert("stable".into(), json!(stable));
+    Value::Object(sh)
+}
+
+pub(crate) fn prst_json(el: &Element) -> Value {
+    el.child_by_local("spPr")
+        .and_then(|p| p.child_by_local("prstGeom"))
+        .and_then(|g| g.attr_local("prst"))
+        .filter(|s| !s.is_empty())
+        .map_or(Value::Null, |s| json!(s))
 }
 
 pub(crate) fn geometry_json(sp: &Element) -> (Value, Value, Value, Value) {
@@ -737,7 +742,7 @@ fn scan_alt_for_hit(ac: &Element, idx: &mut usize, key: &ShapeKey) -> Option<Opt
     hit
 }
 
-fn prune_empty_groups(el: &mut Element) {
+pub(crate) fn prune_empty_groups(el: &mut Element) {
     for n in &mut el.children {
         if let Node::Element(e) = n {
             prune_empty_groups(e);
@@ -757,6 +762,72 @@ fn grp_has_member(grp: &Element) -> bool {
     })
 }
 
+pub fn is_writable_shape_prst(s: &str) -> bool {
+    matches!(
+        s,
+        "rect"
+            | "roundRect"
+            | "round1Rect"
+            | "round2SameRect"
+            | "round2DiagRect"
+            | "snipRoundRect"
+            | "snip1Rect"
+            | "snip2SameRect"
+            | "snip2DiagRect"
+            | "ellipse"
+            | "triangle"
+            | "rtTriangle"
+            | "parallelogram"
+            | "trapezoid"
+            | "diamond"
+            | "pentagon"
+            | "hexagon"
+            | "heptagon"
+            | "octagon"
+            | "decagon"
+            | "dodecagon"
+            | "star4"
+            | "star5"
+            | "star6"
+            | "star8"
+            | "star16"
+            | "star24"
+            | "star32"
+            | "plus"
+            | "plaque"
+            | "teardrop"
+            | "homePlate"
+            | "chevron"
+            | "pie"
+            | "donut"
+            | "noSmoking"
+            | "blockArc"
+            | "rightArrow"
+            | "leftArrow"
+            | "upArrow"
+            | "downArrow"
+            | "leftRightArrow"
+            | "upDownArrow"
+            | "quadArrow"
+            | "stripedRightArrow"
+            | "notchedRightArrow"
+            | "bentUpArrow"
+            | "cube"
+            | "can"
+            | "lightningBolt"
+            | "heart"
+            | "sun"
+            | "moon"
+            | "smileyFace"
+            | "foldedCorner"
+            | "bevel"
+            | "frame"
+            | "cloud"
+            | "ribbon"
+            | "wave"
+    )
+}
+
 pub fn insert_shape(
     doc: &mut Document,
     canvas: (i64, i64),
@@ -770,8 +841,13 @@ pub fn insert_shape(
     };
     picture::ensure_xmlns(&mut doc.root, "a", DML_NS);
     let cnv = picture::next_cnv_id(&doc.root);
-    let name = format!("文本框 {cnv}");
-    let mut sp = build_text_box(cnv, &name, x, y, cx, cy);
+    let is_box = op.prst == "rect";
+    let name = if is_box {
+        format!("文本框 {cnv}")
+    } else {
+        format!("形状 {cnv}")
+    };
+    let mut sp = build_sp(cnv, &name, &op.prst, is_box, x, y, cx, cy);
     if let Some(tx) = sp.child_by_local_mut("txBody") {
         set_txbody_text(tx, &op.text);
     }
@@ -779,7 +855,16 @@ pub fn insert_shape(
     Ok(())
 }
 
-fn build_text_box(cnv: u32, name: &str, x: i64, y: i64, cx: i64, cy: i64) -> Element {
+fn build_sp(
+    cnv: u32,
+    name: &str,
+    prst: &str,
+    is_box: bool,
+    x: i64,
+    y: i64,
+    cx: i64,
+    cy: i64,
+) -> Element {
     let mut sp = Element::new("p:sp");
     let mut nv = Element::new("p:nvSpPr");
     nv.push_element(
@@ -787,7 +872,11 @@ fn build_text_box(cnv: u32, name: &str, x: i64, y: i64, cx: i64, cy: i64) -> Ele
             .with_attr("id", cnv.to_string())
             .with_attr("name", name),
     );
-    nv.push_element(Element::new("p:cNvSpPr").with_attr("txBox", "1"));
+    if is_box {
+        nv.push_element(Element::new("p:cNvSpPr").with_attr("txBox", "1"));
+    } else {
+        nv.push_element(Element::new("p:cNvSpPr"));
+    }
     nv.push_element(Element::new("p:nvPr"));
     sp.push_element(nv);
 
@@ -804,13 +893,24 @@ fn build_text_box(cnv: u32, name: &str, x: i64, y: i64, cx: i64, cy: i64) -> Ele
             .with_attr("cy", cy.to_string()),
     );
     sp_pr.push_element(xfrm);
-    let mut geom = Element::new("a:prstGeom").with_attr("prst", "rect");
+    let mut geom = Element::new("a:prstGeom").with_attr("prst", prst);
     geom.push_element(Element::new("a:avLst"));
     sp_pr.push_element(geom);
-    sp_pr.push_element(Element::new("a:noFill"));
-    let mut ln = Element::new("a:ln");
-    ln.push_element(Element::new("a:noFill"));
-    sp_pr.push_element(ln);
+    if is_box {
+        sp_pr.push_element(Element::new("a:noFill"));
+        let mut ln = Element::new("a:ln");
+        ln.push_element(Element::new("a:noFill"));
+        sp_pr.push_element(ln);
+    } else {
+        let mut fill = Element::new("a:solidFill");
+        fill.push_element(Element::new("a:srgbClr").with_attr("val", "5B9BD5"));
+        sp_pr.push_element(fill);
+        let mut ln = Element::new("a:ln").with_attr("w", "12700");
+        let mut ln_fill = Element::new("a:solidFill");
+        ln_fill.push_element(Element::new("a:srgbClr").with_attr("val", "2E75B6"));
+        ln.push_element(ln_fill);
+        sp_pr.push_element(ln);
+    }
     sp.push_element(sp_pr);
 
     let mut tx = Element::new("p:txBody");
@@ -916,19 +1016,25 @@ pub fn set_shape_line(
     op: &SetShapeLineOp,
     op_index: usize,
 ) -> Result<(), Error> {
-    let sp = find_shape_mut(&mut doc.root, &op.target.key).ok_or_else(|| {
+    let target = op.target.as_ref().expect("形状");
+    let sp = find_shape_mut(&mut doc.root, &target.key).ok_or_else(|| {
         Error::with_path(
             ErrorKind::ShapeNotFound { id: op.id.clone() },
             format!("ops[{op_index}].id"),
         )
     })?;
-    let sp_pr = picture::ensure_child(sp, "spPr");
+    apply_line(sp, op.color.as_deref(), op.width);
+    Ok(())
+}
+
+pub(crate) fn apply_line(el: &mut Element, color: Option<&str>, width: Option<i64>) {
+    let sp_pr = picture::ensure_child(el, "spPr");
     remove_named(sp_pr, &["ln"]);
     let mut ln = Element::new("a:ln");
-    if let Some(w) = op.width {
+    if let Some(w) = width {
         ln.set_attr("w", w.to_string());
     }
-    match op.color.as_deref() {
+    match color {
         Some(c) => {
             let mut fill = Element::new("a:solidFill");
             fill.push_element(Element::new("a:srgbClr").with_attr("val", c.to_ascii_uppercase()));
@@ -937,7 +1043,6 @@ pub fn set_shape_line(
         None => ln.push_element(Element::new("a:noFill")),
     }
     sp_pr.push_element(ln);
-    Ok(())
 }
 
 fn ensure_xfrm(sp: &mut Element) -> &mut Element {

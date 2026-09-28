@@ -113,6 +113,12 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::InsertMediaNeedsSlide => {
                 "pptx 的 insertVideo / insertAudio 的 id 必须是 slide:N".into()
             }
+            IdReason::SlideCxnForm => {
+                "pptx 连接线 id 必须是 slide:N/cxn:…".into()
+            }
+            IdReason::InsertConnectorNeedsSlide => {
+                "pptx 的 insertConnector / groupShapes 的 id 必须是 slide:N".into()
+            }
             IdReason::InsertNeedsSlide => {
                 "pptx 的 `insertPicture` / `insertShape` 的 id 必须是 slide:N 或 slide:N/notes".into()
             }
@@ -582,6 +588,18 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::InvalidTransitionDir => {
             "dir 必须是该切换允许的方向；invX / invY 只对 prstTrans 预设有效".into()
         }
+        ErrorKind::InvalidShapePrst => {
+            "prst 必须是可写的预设几何名；连接线几何请用 insertConnector".into()
+        }
+        ErrorKind::InvalidConnectorPrst => {
+            "prst 必须是可写的连接线几何名".into()
+        }
+        ErrorKind::GroupNeedsTwo => "groupShapes 的 ids 至少两个".into(),
+        ErrorKind::GroupMemberNested => {
+            "只能组合幻灯片 spTree 的直接子节点，不能把已在组合里的对象再编一层".into()
+        }
+        ErrorKind::NotGrouped => "该对象不在组合里".into(),
+        ErrorKind::ConnectorNotFound { id } => format!("找不到连接线：{id}"),
         ErrorKind::InvalidChartAxis => "axis 必须是 cat 或 val，且图表里要有对应主轴".into(),
         ErrorKind::InvalidLegendPos => "pos 必须是 b、t、l、r 或 tr".into(),
         ErrorKind::PieNeedsOneSeries => "饼图与圆环图必须恰好一条系列".into(),

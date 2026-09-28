@@ -158,7 +158,7 @@ fn insert_shape_after_create() {
     assert_eq!(neu["cy"], 914400);
     assert_eq!(
         object_keys(neu),
-        ["id", "shapeId", "name", "x", "y", "cx", "cy", "text", "stable"]
+        ["id", "shapeId", "name", "prst", "x", "y", "cx", "cy", "text", "stable"]
     );
     let xml = part(&out, "ppt/slides/slide1.xml");
     assert!(xml.contains("txBox=\"1\""));

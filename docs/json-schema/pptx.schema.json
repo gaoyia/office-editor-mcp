@@ -424,6 +424,107 @@
         "cy": {
           "type": "integer",
           "minimum": 1
+        },
+        "prst": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "insertConnectorOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "insertConnector"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "prst": {
+          "type": "string",
+          "minLength": 1
+        },
+        "x": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "y": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "cx": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "cy": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "deleteConnectorOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "deleteConnector"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "groupShapesOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "ids"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "groupShapes"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "ids": {
+          "type": "array",
+          "minItems": 2,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "ungroupOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "ungroup"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
         }
       }
     },

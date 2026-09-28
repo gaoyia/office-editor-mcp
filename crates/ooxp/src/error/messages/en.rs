@@ -124,6 +124,12 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::InsertMediaNeedsSlide => {
                 "pptx insertVideo / insertAudio id must be slide:N".into()
             }
+            IdReason::SlideCxnForm => {
+                "pptx connector id must be slide:N/cxn:…".into()
+            }
+            IdReason::InsertConnectorNeedsSlide => {
+                "pptx insertConnector / groupShapes id must be slide:N".into()
+            }
             IdReason::InsertNeedsSlide => {
                 "pptx insertPicture / insertShape id must be slide:N or slide:N/notes".into()
             }
@@ -658,6 +664,18 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::InvalidTransitionDir => {
             "dir must be allowed for this transition; invX / invY are only valid on prstTrans presets".into()
         }
+        ErrorKind::InvalidShapePrst => {
+            "prst must be a writable preset geometry; use insertConnector for connector geometries".into()
+        }
+        ErrorKind::InvalidConnectorPrst => {
+            "prst must be a writable connector geometry".into()
+        }
+        ErrorKind::GroupNeedsTwo => "groupShapes ids must contain at least two members".into(),
+        ErrorKind::GroupMemberNested => {
+            "only direct children of the slide spTree can be grouped; nested groups are not allowed".into()
+        }
+        ErrorKind::NotGrouped => "this object is not inside a group".into(),
+        ErrorKind::ConnectorNotFound { id } => format!("connector not found: {id}"),
         ErrorKind::InvalidChartAxis => {
             "axis must be cat or val, and the chart must have that primary axis".into()
         }

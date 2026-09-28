@@ -3,7 +3,9 @@
 mod apply;
 mod chart;
 mod comments;
+mod connector;
 mod create;
+mod group;
 mod handout;
 mod hyperlink;
 mod inspect;

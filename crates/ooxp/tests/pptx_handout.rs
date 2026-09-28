@@ -125,6 +125,7 @@ fn create_has_no_handout_without_scope() {
             "commentCount",
             "hyperlinkCount",
             "tableCount",
+            "connectorCount",
             "animCount",
             "masterCount",
             "hasHandout",

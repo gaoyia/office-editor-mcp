@@ -265,8 +265,15 @@ fn object_map(root: &Element, slide: usize) -> HashMap<String, String> {
     let mut map = HashMap::new();
     shape::walk_choice(root, &mut |e| match e.local_name() {
         "sp" => {
-            if let Some(id) = cnv_id(e, "nvSpPr") {
-                map.insert(id.clone(), format!("{host}/shape:{id}"));
+            if e.child_by_local("txBody").is_some() {
+                if let Some(id) = cnv_id(e, "nvSpPr") {
+                    map.insert(id.clone(), format!("{host}/shape:{id}"));
+                }
+            }
+        }
+        "cxnSp" => {
+            if let Some(id) = cnv_id(e, "nvCxnSpPr") {
+                map.insert(id.clone(), format!("{host}/cxn:{id}"));
             }
         }
         "pic" => {

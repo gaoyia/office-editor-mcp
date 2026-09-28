@@ -9,6 +9,8 @@ use crate::smartart::{ColorsKind, LayoutKind, NewPoint, Role, StyleKind};
 
 use super::chart;
 use super::comments;
+use super::connector;
+use super::group;
 use super::hyperlink;
 use super::media;
 use super::picture;
@@ -30,6 +32,7 @@ pub struct InspectScope {
     pub comments: bool,
     pub hyperlinks: bool,
     pub tables: bool,
+    pub connectors: bool,
     pub timing: bool,
     pub masters: bool,
     pub handout: bool,
@@ -51,6 +54,7 @@ pub struct InsertShapeOp {
     pub y: Option<i64>,
     pub cx: Option<i64>,
     pub cy: Option<i64>,
+    pub prst: String,
 }
 
 #[derive(Debug, Clone)]
@@ -64,6 +68,7 @@ pub struct SetShapePosOp {
     pub id: String,
     pub target: Option<super::shape::ShapeTarget>,
     pub placeholder: Option<super::master::PlaceholderId>,
+    pub cxn: Option<super::connector::CxnTarget>,
     pub x: Option<i64>,
     pub y: Option<i64>,
 }
@@ -73,6 +78,7 @@ pub struct SetShapeSizeOp {
     pub id: String,
     pub target: Option<super::shape::ShapeTarget>,
     pub placeholder: Option<super::master::PlaceholderId>,
+    pub cxn: Option<super::connector::CxnTarget>,
     pub cx: Option<i64>,
     pub cy: Option<i64>,
 }
@@ -87,7 +93,8 @@ pub struct SetShapeFillOp {
 #[derive(Debug, Clone)]
 pub struct SetShapeLineOp {
     pub id: String,
-    pub target: super::shape::ShapeTarget,
+    pub target: Option<super::shape::ShapeTarget>,
+    pub cxn: Option<super::connector::CxnTarget>,
     pub color: Option<String>,
     pub width: Option<i64>,
 }
@@ -622,9 +629,42 @@ pub struct SetTableSizeOp {
 }
 
 #[derive(Debug, Clone)]
+pub struct InsertConnectorOp {
+    pub slide: usize,
+    pub prst: String,
+    pub x: Option<i64>,
+    pub y: Option<i64>,
+    pub cx: Option<i64>,
+    pub cy: Option<i64>,
+}
+
+#[derive(Debug, Clone)]
+pub struct DeleteConnectorOp {
+    pub id: String,
+    pub target: connector::CxnTarget,
+}
+
+#[derive(Debug, Clone)]
+pub struct GroupShapesOp {
+    pub slide: usize,
+    pub ids: Vec<String>,
+    pub members: Vec<group::MemberId>,
+}
+
+#[derive(Debug, Clone)]
+pub struct UngroupOp {
+    pub id: String,
+    pub member: group::MemberId,
+}
+
+#[derive(Debug, Clone)]
 pub enum PptxOp {
     SetShapeText(SetShapeTextOp),
     InsertShape(InsertShapeOp),
+    InsertConnector(InsertConnectorOp),
+    DeleteConnector(DeleteConnectorOp),
+    GroupShapes(GroupShapesOp),
+    Ungroup(UngroupOp),
     DeleteShape(DeleteShapeOp),
     SetShapePos(SetShapePosOp),
     SetShapeSize(SetShapeSizeOp),
@@ -733,6 +773,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
             "comments",
             "hyperlinks",
             "tables",
+            "connectors",
             "timing",
             "masters",
             "handout",
@@ -747,6 +788,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
     let comments = parse_bool_field(obj.get("comments"), "comments")?;
     let hyperlinks = parse_bool_field(obj.get("hyperlinks"), "hyperlinks")?;
     let tables = parse_bool_field(obj.get("tables"), "tables")?;
+    let connectors = parse_bool_field(obj.get("connectors"), "connectors")?;
     let timing = parse_bool_field(obj.get("timing"), "timing")?;
     let masters = parse_bool_field(obj.get("masters"), "masters")?;
     let handout = parse_bool_field(obj.get("handout"), "handout")?;
@@ -819,6 +861,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
         comments,
         hyperlinks,
         tables,
+        connectors,
         timing,
         masters,
         handout,
@@ -870,6 +913,10 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<PptxOp>, Error> {
         let parsed = match op_name {
             "setShapeText" => PptxOp::SetShapeText(parse_set_shape_text(obj, i)?),
             "insertShape" => PptxOp::InsertShape(parse_insert_shape(obj, i)?),
+            "insertConnector" => PptxOp::InsertConnector(parse_insert_connector(obj, i)?),
+            "deleteConnector" => PptxOp::DeleteConnector(parse_delete_connector(obj, i)?),
+            "groupShapes" => PptxOp::GroupShapes(parse_group_shapes(obj, i)?),
+            "ungroup" => PptxOp::Ungroup(parse_ungroup(obj, i)?),
             "deleteShape" => PptxOp::DeleteShape(parse_delete_shape(obj, i)?),
             "setShapePos" => PptxOp::SetShapePos(parse_set_shape_pos(obj, i)?),
             "setShapeSize" => PptxOp::SetShapeSize(parse_set_shape_size(obj, i)?),
@@ -1111,7 +1158,7 @@ fn parse_set_shape_text(obj: &Map<String, Value>, i: usize) -> Result<SetShapeTe
 }
 
 fn parse_insert_shape(obj: &Map<String, Value>, i: usize) -> Result<InsertShapeOp, Error> {
-    deny_keys(obj, i, &["op", "id", "text", "x", "y", "cx", "cy"])?;
+    deny_keys(obj, i, &["op", "id", "text", "x", "y", "cx", "cy", "prst"])?;
     let id = require_id(obj, i)?;
     let (slide, on_notes) =
         picture::parse_insert_slide_or_notes(&id, i, crate::error::IdReason::InsertNeedsSlide)?;
@@ -1127,6 +1174,28 @@ fn parse_insert_shape(obj: &Map<String, Value>, i: usize) -> Result<InsertShapeO
             ));
         }
         None => String::new(),
+    };
+    let prst = match obj.get("prst") {
+        None => "rect".to_string(),
+        Some(Value::String(s)) => {
+            if super::shape::is_writable_shape_prst(s) {
+                s.clone()
+            } else {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidShapePrst,
+                    format!("ops[{i}].prst"),
+                ));
+            }
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "prst".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].prst"),
+            ));
+        }
     };
     let x = parse_off_field(obj.get("x"), i, "x")?;
     let y = parse_off_field(obj.get("y"), i, "y")?;
@@ -1158,7 +1227,148 @@ fn parse_insert_shape(obj: &Map<String, Value>, i: usize) -> Result<InsertShapeO
         y,
         cx,
         cy,
+        prst,
     })
+}
+
+fn parse_insert_connector(obj: &Map<String, Value>, i: usize) -> Result<InsertConnectorOp, Error> {
+    deny_keys(obj, i, &["op", "id", "prst", "x", "y", "cx", "cy"])?;
+    let id = require_id(obj, i)?;
+    let slide = connector::parse_insert_slide_id(&id, i)?;
+    let prst = match obj.get("prst") {
+        None => "straightConnector1".to_string(),
+        Some(Value::String(s)) => {
+            if connector::is_writable_prst(s) {
+                s.clone()
+            } else {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidConnectorPrst,
+                    format!("ops[{i}].prst"),
+                ));
+            }
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "prst".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].prst"),
+            ));
+        }
+    };
+    let x = parse_off_field(obj.get("x"), i, "x")?;
+    let y = parse_off_field(obj.get("y"), i, "y")?;
+    if x.is_some() != y.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "insertConnector".into(),
+                field: "x and y together".into(),
+            },
+            format!("ops[{i}]"),
+        ));
+    }
+    let cx = parse_emu_field(obj.get("cx"), i, "cx")?;
+    let cy = parse_emu_field(obj.get("cy"), i, "cy")?;
+    if cx.is_some() != cy.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "insertConnector".into(),
+                field: "cx and cy together".into(),
+            },
+            format!("ops[{i}]"),
+        ));
+    }
+    Ok(InsertConnectorOp {
+        slide,
+        prst,
+        x,
+        y,
+        cx,
+        cy,
+    })
+}
+
+fn parse_delete_connector(obj: &Map<String, Value>, i: usize) -> Result<DeleteConnectorOp, Error> {
+    deny_keys(obj, i, &["op", "id"])?;
+    let id = require_id(obj, i)?;
+    let target = connector::parse_cxn_id(&id, i)?;
+    Ok(DeleteConnectorOp { id, target })
+}
+
+fn parse_group_shapes(obj: &Map<String, Value>, i: usize) -> Result<GroupShapesOp, Error> {
+    deny_keys(obj, i, &["op", "id", "ids"])?;
+    let id = require_id(obj, i)?;
+    let slide =
+        connector::parse_slide_only(&id, i, crate::error::IdReason::InsertConnectorNeedsSlide)?;
+    let ids = match obj.get("ids") {
+        Some(Value::Array(arr)) => {
+            if arr.len() < 2 {
+                return Err(Error::with_path(
+                    ErrorKind::GroupNeedsTwo,
+                    format!("ops[{i}].ids"),
+                ));
+            }
+            let mut out = Vec::new();
+            for (k, v) in arr.iter().enumerate() {
+                let s = v.as_str().ok_or_else(|| {
+                    Error::with_path(
+                        ErrorKind::WrongType {
+                            field: format!("ids[{k}]"),
+                            expected: TypeName::String,
+                        },
+                        format!("ops[{i}].ids[{k}]"),
+                    )
+                })?;
+                if s.is_empty() {
+                    return Err(Error::with_path(
+                        ErrorKind::WrongType {
+                            field: format!("ids[{k}]"),
+                            expected: TypeName::NonEmptyString,
+                        },
+                        format!("ops[{i}].ids[{k}]"),
+                    ));
+                }
+                out.push(s.to_string());
+            }
+            out
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "ids".into(),
+                    expected: TypeName::Array,
+                },
+                format!("ops[{i}].ids"),
+            ));
+        }
+        None => {
+            return Err(Error::with_path(
+                ErrorKind::OpRequiresField {
+                    op: "groupShapes".into(),
+                    field: "ids".into(),
+                },
+                format!("ops[{i}].ids"),
+            ));
+        }
+    };
+    let mut members = Vec::new();
+    for (k, mid) in ids.iter().enumerate() {
+        let m = group::parse_member_id(mid, i).map_err(|e| e.at(format!("ops[{i}].ids[{k}]")))?;
+        members.push(m);
+    }
+    Ok(GroupShapesOp {
+        slide,
+        ids,
+        members,
+    })
+}
+
+fn parse_ungroup(obj: &Map<String, Value>, i: usize) -> Result<UngroupOp, Error> {
+    deny_keys(obj, i, &["op", "id"])?;
+    let id = require_id(obj, i)?;
+    let member = group::parse_member_id(&id, i)?;
+    Ok(UngroupOp { id, member })
 }
 
 fn parse_delete_shape(obj: &Map<String, Value>, i: usize) -> Result<DeleteShapeOp, Error> {
@@ -1171,7 +1381,7 @@ fn parse_delete_shape(obj: &Map<String, Value>, i: usize) -> Result<DeleteShapeO
 fn parse_set_shape_pos(obj: &Map<String, Value>, i: usize) -> Result<SetShapePosOp, Error> {
     deny_keys(obj, i, &["op", "id", "x", "y"])?;
     let id = require_id(obj, i)?;
-    let (target, placeholder) = parse_shape_host(&id, i)?;
+    let (target, placeholder, cxn) = parse_shape_pos_host(&id, i)?;
     let x = parse_off_field(obj.get("x"), i, "x")?;
     let y = parse_off_field(obj.get("y"), i, "y")?;
     if x.is_none() && y.is_none() {
@@ -1187,6 +1397,7 @@ fn parse_set_shape_pos(obj: &Map<String, Value>, i: usize) -> Result<SetShapePos
         id,
         target,
         placeholder,
+        cxn,
         x,
         y,
     })
@@ -1195,7 +1406,7 @@ fn parse_set_shape_pos(obj: &Map<String, Value>, i: usize) -> Result<SetShapePos
 fn parse_set_shape_size(obj: &Map<String, Value>, i: usize) -> Result<SetShapeSizeOp, Error> {
     deny_keys(obj, i, &["op", "id", "cx", "cy"])?;
     let id = require_id(obj, i)?;
-    let (target, placeholder) = parse_shape_host(&id, i)?;
+    let (target, placeholder, cxn) = parse_shape_pos_host(&id, i)?;
     let cx = parse_emu_field(obj.get("cx"), i, "cx")?;
     let cy = parse_emu_field(obj.get("cy"), i, "cy")?;
     if cx.is_none() && cy.is_none() {
@@ -1211,6 +1422,7 @@ fn parse_set_shape_size(obj: &Map<String, Value>, i: usize) -> Result<SetShapeSi
         id,
         target,
         placeholder,
+        cxn,
         cx,
         cy,
     })
@@ -1227,7 +1439,11 @@ fn parse_set_shape_fill(obj: &Map<String, Value>, i: usize) -> Result<SetShapeFi
 fn parse_set_shape_line(obj: &Map<String, Value>, i: usize) -> Result<SetShapeLineOp, Error> {
     deny_keys(obj, i, &["op", "id", "color", "width"])?;
     let id = require_id(obj, i)?;
-    let target = super::shape::parse_shape_id(&id, i)?;
+    let (target, cxn) = if connector::looks_like_cxn_id(&id) {
+        (None, Some(connector::parse_cxn_id(&id, i)?))
+    } else {
+        (Some(super::shape::parse_shape_id(&id, i)?), None)
+    };
     if !obj.contains_key("color") {
         return Err(Error::with_path(
             ErrorKind::OpRequiresField {
@@ -1250,6 +1466,7 @@ fn parse_set_shape_line(obj: &Map<String, Value>, i: usize) -> Result<SetShapeLi
     Ok(SetShapeLineOp {
         id,
         target,
+        cxn,
         color,
         width,
     })
@@ -1461,6 +1678,8 @@ fn parse_set_transition(obj: &Map<String, Value>, i: usize) -> Result<SetTransit
 
 const ANIM_HOST_KINDS: &[&str] = &[
     "shape",
+    "cxn",
+    "pic",
     "pic",
     "video",
     "audio",
@@ -1882,20 +2101,23 @@ fn parse_optional_slot(
     }
 }
 
-fn parse_shape_host(
-    id: &str,
-    i: usize,
-) -> Result<
-    (
-        Option<super::shape::ShapeTarget>,
-        Option<super::master::PlaceholderId>,
-    ),
-    Error,
-> {
+type ShapePosHost = (
+    Option<super::shape::ShapeTarget>,
+    Option<super::master::PlaceholderId>,
+    Option<connector::CxnTarget>,
+);
+
+fn parse_shape_pos_host(id: &str, i: usize) -> Result<ShapePosHost, Error> {
     if id.starts_with("master:") {
-        Ok((None, Some(super::master::parse_placeholder_id(id, i)?)))
+        Ok((
+            None,
+            Some(super::master::parse_placeholder_id(id, i)?),
+            None,
+        ))
+    } else if connector::looks_like_cxn_id(id) {
+        Ok((None, None, Some(connector::parse_cxn_id(id, i)?)))
     } else {
-        Ok((Some(super::shape::parse_shape_id(id, i)?), None))
+        Ok((Some(super::shape::parse_shape_id(id, i)?), None, None))
     }
 }
 

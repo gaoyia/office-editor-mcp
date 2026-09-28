@@ -163,6 +163,7 @@ fn inspect_chart_count_without_list() {
             "commentCount",
             "hyperlinkCount",
             "tableCount",
+            "connectorCount",
             "animCount",
             "masterCount",
             "hasHandout",

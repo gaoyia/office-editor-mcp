@@ -124,6 +124,7 @@ fn table_count_without_list() {
             "commentCount",
             "hyperlinkCount",
             "tableCount",
+            "connectorCount",
             "animCount",
             "masterCount",
             "hasHandout",

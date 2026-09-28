@@ -8,6 +8,7 @@ use crate::xml;
 
 use super::chart;
 use super::comments;
+use super::connector;
 use super::handout;
 use super::hyperlink;
 use super::master;
@@ -36,6 +37,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     let want_comments = scope.as_ref().is_some_and(|s| s.comments);
     let want_hyperlinks = scope.as_ref().is_some_and(|s| s.hyperlinks);
     let want_tables = scope.as_ref().is_some_and(|s| s.tables);
+    let want_connectors = scope.as_ref().is_some_and(|s| s.connectors);
     let want_timing = scope.as_ref().is_some_and(|s| s.timing);
     let want_masters = scope.as_ref().is_some_and(|s| s.masters);
     let want_handout = scope.as_ref().is_some_and(|s| s.handout);
@@ -51,6 +53,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     let mut comment_count = 0usize;
     let mut hyperlink_count = 0usize;
     let mut table_count = 0usize;
+    let mut connector_count = 0usize;
     let mut anim_count = 0usize;
     for s in &slides {
         let doc = xml::parse(pkg.get(&s.part)?)?;
@@ -119,6 +122,16 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
             .map(|c| c.len())
             .unwrap_or_else(|| table::count_tables(&doc.root));
         table_count += n_tables;
+        let connectors_list = if want_connectors {
+            Some(connector::list_json(&doc.root, s.index))
+        } else {
+            None
+        };
+        let n_cxn = connectors_list
+            .as_ref()
+            .map(|c| c.len())
+            .unwrap_or_else(|| connector::count(&doc.root));
+        connector_count += n_cxn;
         let anims = timing::list(&doc.root, s.index);
         let n_anims = anims.len();
         anim_count += n_anims;
@@ -141,6 +154,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         obj.insert("commentCount".into(), json!(n_comments));
         obj.insert("hyperlinkCount".into(), json!(n_links));
         obj.insert("tableCount".into(), json!(n_tables));
+        obj.insert("connectorCount".into(), json!(n_cxn));
         obj.insert("animCount".into(), json!(n_anims));
         if want_pictures {
             obj.insert(
@@ -160,6 +174,9 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         }
         if let Some(tables) = tables_list {
             obj.insert("tables".into(), Value::Array(tables));
+        }
+        if let Some(connectors) = connectors_list {
+            obj.insert("connectors".into(), Value::Array(connectors));
         }
         if want_notes {
             obj.insert(
@@ -221,6 +238,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     root.insert("commentCount".into(), json!(comment_count));
     root.insert("hyperlinkCount".into(), json!(hyperlink_count));
     root.insert("tableCount".into(), json!(table_count));
+    root.insert("connectorCount".into(), json!(connector_count));
     root.insert("animCount".into(), json!(anim_count));
     root.insert("masterCount".into(), json!(catalog.count()));
     root.insert(

@@ -788,6 +788,16 @@ pub(crate) fn ensure_child<'a>(parent: &'a mut Element, local: &str) -> &'a mut 
     parent.child_by_local_mut(local).expect("刚插入的子元素")
 }
 
+pub(crate) fn sp_tree(root: &Element) -> Option<&Element> {
+    root.child_by_local("cSld")
+        .and_then(|c| c.child_by_local("spTree"))
+}
+
+pub(crate) fn sp_tree_mut(root: &mut Element) -> Option<&mut Element> {
+    root.child_by_local_mut("cSld")
+        .and_then(|c| c.child_by_local_mut("spTree"))
+}
+
 pub(crate) fn insert_into_sp_tree(root: &mut Element, pic: Element) -> Result<(), Error> {
     let parent = root.name.clone();
     let tree = root

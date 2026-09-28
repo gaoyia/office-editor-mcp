@@ -73,6 +73,10 @@ pub(crate) enum IdReason {
     SlideMediaForm,
     /// pptx 的 insertVideo / insertAudio 必须用 slide:N
     InsertMediaNeedsSlide,
+    /// pptx 连接线 id 必须是 slide:N/cxn:…
+    SlideCxnForm,
+    /// pptx 的 insertConnector / groupShapes 必须用 slide:N
+    InsertConnectorNeedsSlide,
     /// pptx 的 insertPicture / insertShape 必须用 slide:N 或 slide:N/notes
     InsertNeedsSlide,
     /// setNotesText 必须用 slide:N 或 slide:N/notes
@@ -599,6 +603,12 @@ define_error_kinds! {
     InvalidTransitionDur => vec![Self::InvalidTransitionDur],
     InvalidTransitionAdvTm => vec![Self::InvalidTransitionAdvTm],
     InvalidTransitionDir => vec![Self::InvalidTransitionDir],
+    InvalidShapePrst => vec![Self::InvalidShapePrst],
+    InvalidConnectorPrst => vec![Self::InvalidConnectorPrst],
+    GroupNeedsTwo => vec![Self::GroupNeedsTwo],
+    GroupMemberNested => vec![Self::GroupMemberNested],
+    NotGrouped => vec![Self::NotGrouped],
+    ConnectorNotFound { id: String } => vec![Self::ConnectorNotFound { id: "slide:1/cxn:6".into() }],
     InvalidChartAxis => vec![Self::InvalidChartAxis],
     InvalidLegendPos => vec![Self::InvalidLegendPos],
     PieNeedsOneSeries => vec![Self::PieNeedsOneSeries],
@@ -870,6 +880,8 @@ impl IdReason {
             Self::SlideMediaForm,
             Self::InsertMediaNeedsSlide,
             Self::InsertNeedsSlide,
+            Self::InsertConnectorNeedsSlide,
+            Self::SlideCxnForm,
             Self::SetNotesTextNeedsSlide,
             Self::PptxCommentForm,
             Self::InsertCommentNeedsSlide,
@@ -1263,6 +1275,11 @@ impl ErrorKind {
             | Self::InvalidTransitionDur
             | Self::InvalidTransitionAdvTm
             | Self::InvalidTransitionDir
+            | Self::InvalidShapePrst
+            | Self::InvalidConnectorPrst
+            | Self::GroupNeedsTwo
+            | Self::GroupMemberNested
+            | Self::NotGrouped
             | Self::InvalidChartAxis
             | Self::InvalidLegendPos
             | Self::PieNeedsOneSeries
@@ -1324,6 +1341,7 @@ impl ErrorKind {
             | Self::MasterNotFound { .. }
             | Self::LayoutNotFound { .. }
             | Self::ShapeNotFound { .. }
+            | Self::ConnectorNotFound { .. }
             | Self::AnimNotFound { .. }
             | Self::AnimHostNotFound { .. }
             | Self::ShapeHasNoText { .. }

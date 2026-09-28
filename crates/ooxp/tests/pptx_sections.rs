@@ -121,6 +121,7 @@ fn create_has_zero_section_count_without_list() {
             "commentCount",
             "hyperlinkCount",
             "tableCount",
+            "connectorCount",
             "animCount",
             "masterCount",
             "hasHandout",

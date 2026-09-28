@@ -196,6 +196,9 @@
         "tables": {
           "type": "boolean"
         },
+        "connectors": {
+          "type": "boolean"
+        },
         "timing": {
           "type": "boolean"
         },
@@ -916,6 +919,18 @@
               },
               {
                 "$ref": "pptx.schema.json#/$defs/insertShapeOp"
+              },
+              {
+                "$ref": "pptx.schema.json#/$defs/insertConnectorOp"
+              },
+              {
+                "$ref": "pptx.schema.json#/$defs/deleteConnectorOp"
+              },
+              {
+                "$ref": "pptx.schema.json#/$defs/groupShapesOp"
+              },
+              {
+                "$ref": "pptx.schema.json#/$defs/ungroupOp"
               },
               {
                 "$ref": "pptx.schema.json#/$defs/deleteShapeOp"
