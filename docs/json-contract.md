@@ -1085,6 +1085,10 @@ docx 根上始终带 `protection`，不要另给 scope 键。来源是 `/word/se
         "pictures": [
           { "file": "C:\\\\img\\\\a.png", "from": "B2" },
           { "file": "C:\\\\img\\\\a.png", "from": "D2", "to": "F8", "anchor": "twoCell" }
+        ],
+        "headerFooters": [
+          { "kind": "odd", "side": "header", "text": "&C页眉" },
+          { "kind": "odd", "side": "footer", "text": "&C页脚", "pictures": [{ "file": "C:\\\\img\\\\a.png" }] }
         ]
       }
     ]
@@ -1098,8 +1102,9 @@ docx 根上始终带 `protection`，不要另给 scope 键。来源是 `/word/se
 | `workbook.sheets` | 至少一张表 |
 | `workbook.props` | 可选。文件属性，字段与下文 `setProps` / `setCustomProp` 相同 |
 | `sheets[].name` | 工作表名。Excel 限制：最长 31 个字符，不含 `:*?/[]\\`，不能叫 `History`，同一工作簿内不重复 |
-| `sheets[].pictures` | 可选。该表上的图列表。省略或空数组则不写图 |
+| `sheets[].pictures` | 可选。该表工作表 drawing 上的图列表。省略或空数组则不写工作表图。不进页眉 |
 | `sheets[].charts` | 可选。该表上的图表列表。省略或空数组则不写图表 |
+| `sheets[].headerFooters` | 可选。该表页眉页脚槽位列表。省略或空数组则不写 `headerFooter` / `drawingHF` |
 | `cells[].ref` | A1 地址 |
 | `cells[].value` | 数字、字符串、布尔、或 `null`。`null` 表示不写这个格 |
 | `cells[].formula` | 以 `=` 开头的公式文本。库不求值 |
@@ -1116,6 +1121,14 @@ docx 根上始终带 `protection`，不要另给 scope 键。来源是 `/word/se
 | `charts[].dataFrom` | 必须。数据表左上角，A1。按 `setCell` 语义覆盖已有格子，包括同一张表 `cells[]` 里已声明的值 |
 | `charts[].title` | 可选 |
 | `charts[].to` / `anchor` / `cx` / `cy` / 偏移 | 与 `insertChart` 相同。`kind` / `wrap` 报 `InvalidField` |
+| `headerFooters[].kind` | 必须。`odd` / `even` / `first`。其它取值报 `InvalidField` |
+| `headerFooters[].side` | 必须。`header` / `footer`。其它取值报 `InvalidField` |
+| `headerFooters[].text` | 可选。该槽位原文，与 `setHeaderFooterText` 相同，含 `&P` / `&C` 这类代码。空串不当作内容 |
+| `headerFooters[].pictures` | 可选。往该槽 `drawingHF` 插图。省略或空数组则不写图 |
+| `headerFooters[].pictures[].file` | 必须。本地路径，与页眉 `insertPicture` 相同 |
+| `headerFooters[].pictures[].cx` / `cy` | 可选，EMU，正整数。都省则按图片像素以 96 dpi 换算。只给一个时报 `InvalidField` |
+
+同一 `kind` 与 `side` 出现两次报 `InvalidField`。每一项至少要有非空 `text` 或一张图，否则报 `InvalidField`。页眉图禁止出现 `from` / `to` / `anchor` / `fromOffX` / `fromOffY` / `toOffX` / `toOffY`，出现报 `InvalidField`。不要把页眉图写进 `sheets[].pictures`。不要用单数 `headerFooter`（那是 inspect 的 scope 键），`sheets[]` 上出现它报 `InvalidField`。写 `even` 槽位时给 `headerFooter` 设 `differentOddEven="1"`；写 `first` 槽位时设 `differentFirst="1"`。先写各槽原文，再按数组顺序往对应槽插图。不写 VML `legacyDrawingHF`。不解释 `&P`。
 
 `value` 和 `formula` 不能在同一格同时出现。要公式就只写 `formula`。公式格不写缓存 `<v>`，并在 `workbook.xml` 的 `calcPr` 上设 `fullCalcOnLoad="1"`，让 Excel 打开时重算。
 
@@ -1123,7 +1136,7 @@ docx 根上始终带 `protection`，不要另给 scope 键。来源是 `/word/se
 
 行与单元格按行号、列号升序写出。补上 `sheetData` 和合理的 `dimension`。
 
-最小 `styles.xml` 必须生成，见 [opc.md](opc.md)。默认字体颜色写 `<color rgb="FF000000"/>`，不引用 theme，包里也不生成 theme 部件。给了 `sheets[].pictures` 时按 `insertPicture` 同一套规则写 drawing 与 media。给了 `sheets[].charts` 时按 `insertChart` 同一套规则写 `/xl/charts/chartN.xml`、`xdr:graphicFrame` 和 `dataFrom` 一带单元格，不写 embedding。一张表上的图与图表共用一份 drawing：先写 `pictures`，再写 `charts`。`xdr:cNvPr/@id` 取该表已有全部 `cNvPr` 的最大整数加 1。不要生成透视表、条件格式、图表工作表。create 本期不写列宽、行高、合并、数据验证、条件格式、工作表表格、透视表、定义名、打印设置、视图与筛选、批注、文本框、SmartArt、超链接、迷你图或保护，也不写共享公式或数组公式（`cells[]` 出现 `shared` / `sharedRef` / `array` / `arrayRef` 报 `InvalidField`）。`workbook` 根上或 `cells[]` 上出现 `pictures` / `charts` / `definedNames` / `workbookProtection` / `protection`，或 `sheets[]` 上出现 `kind` / `wrap` / `smartArts` / `textBoxes` / `hyperlinks` / `sparklines` / `sheetProtection` / `protection`，报 `InvalidField`。`sheets[].kind` 仍拒绝。给了 `workbook.props` 时按 `setProps` / `setCustomProp` 同一套规则写 core / app / custom；省略则仍写空的 `dc:title` 与 `dc:creator` 为 `ooxp`，不写 custom 部件。
+最小 `styles.xml` 必须生成，见 [opc.md](opc.md)。默认字体颜色写 `<color rgb="FF000000"/>`，不引用 theme，包里也不生成 theme 部件。给了 `sheets[].pictures` 时按 `insertPicture` 同一套规则写 worksheet drawing 与 media。给了 `sheets[].charts` 时按 `insertChart` 同一套规则写 `/xl/charts/chartN.xml`、`xdr:graphicFrame` 和 `dataFrom` 一带单元格，不写 embedding。一张表上的图与图表共用一份 drawing：先写 `pictures`，再写 `charts`。给了 `sheets[].headerFooters` 时按 `setHeaderFooterText` 写 `headerFooter` 六个槽位，按页眉 `insertPicture` 写 `drawingHF` 与 media；页眉图不进 worksheet drawing。`xdr:cNvPr/@id` 取该表已有全部 `cNvPr` 的最大整数加 1；页眉图至少为 2。不要生成透视表、条件格式、图表工作表。create 本期不写列宽、行高、合并、数据验证、条件格式、工作表表格、透视表、定义名、打印设置、视图与筛选、批注、文本框、SmartArt、超链接、迷你图或保护，也不写共享公式或数组公式（`cells[]` 出现 `shared` / `sharedRef` / `array` / `arrayRef` 报 `InvalidField`）。`workbook` 根上或 `cells[]` 上出现 `pictures` / `charts` / `headerFooters` / `headerFooter` / `definedNames` / `workbookProtection` / `protection`，或 `sheets[]` 上出现 `kind` / `wrap` / `smartArts` / `textBoxes` / `hyperlinks` / `sparklines` / `sheetProtection` / `protection` / `headerFooter`，报 `InvalidField`。`sheets[].kind` 仍拒绝。给了 `workbook.props` 时按 `setProps` / `setCustomProp` 同一套规则写 core / app / custom；省略则仍写空的 `dc:title` 与 `dc:creator` 为 `ooxp`，不写 custom 部件。
 
 ### docx
 
@@ -1950,7 +1963,7 @@ create 本期仍只写普通 `<f>`，不写 `t="shared"` / `t="array"`。
 | `id` | 页眉槽位 id，例如 `sheet:Sheet1/hf:odd:header` |
 | `text` | 该槽位原文，字符串，可空。必填 |
 
-找不到该表报 `IdNotFound`。id 不是页眉槽位 id 报 `InvalidId`。对图 id、工作表 id 或单元格 id 发此 op 报 `InvalidId`。`worksheet` / `chartsheet` / `dialogsheet` 都可以改文本。没有 `headerFooter` 则按 CT_Worksheet 顺序新建。`text` 为空串时去掉该槽位元素；六个槽位都空时仍保留空的 `headerFooter`（若已有 `differentOddEven` / `differentFirst` 等属性则留下）。写 `even` 槽位时给 `headerFooter` 设 `differentOddEven="1"`；写 `first` 槽位时设 `differentFirst="1"`。不自动清这两项属性。不改 VML。不解释 `&P` 等代码。docx / pptx 上发此 op 报 `InvalidField`。`create` 本期不写页眉页脚。
+找不到该表报 `IdNotFound`。id 不是页眉槽位 id 报 `InvalidId`。对图 id、工作表 id 或单元格 id 发此 op 报 `InvalidId`。`worksheet` / `chartsheet` / `dialogsheet` 都可以改文本。没有 `headerFooter` 则按 CT_Worksheet 顺序新建。`text` 为空串时去掉该槽位元素；六个槽位都空时仍保留空的 `headerFooter`（若已有 `differentOddEven` / `differentFirst` 等属性则留下）。写 `even` 槽位时给 `headerFooter` 设 `differentOddEven="1"`；写 `first` 槽位时设 `differentFirst="1"`。不自动清这两项属性。不改 VML。不解释 `&P` 等代码。docx / pptx 上发此 op 报 `InvalidField`。create 写页眉页脚见上文 `sheets[].headerFooters`。
 
 ### setPrintSetup
 

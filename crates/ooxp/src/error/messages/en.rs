@@ -754,6 +754,14 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::InvalidHfKind => "kind must be header or footer".into(),
         ErrorKind::InvalidHfType => "type must be default, even, or first".into(),
         ErrorKind::CreateHfDuplicate => "create allows each header/footer type only once per side".into(),
+        ErrorKind::InvalidXlsxHfKind => "kind must be odd, even, or first".into(),
+        ErrorKind::InvalidXlsxHfSide => "side must be header or footer".into(),
+        ErrorKind::CreateXlsxHfDuplicate => {
+            "create allows each headerFooters kind and side only once".into()
+        }
+        ErrorKind::NeedXlsxHfContent => {
+            "headerFooters item needs non-empty text or at least one picture".into()
+        }
         ErrorKind::CannotLinkFirstSection => {
             "The first section cannot link to a previous section".into()
         }

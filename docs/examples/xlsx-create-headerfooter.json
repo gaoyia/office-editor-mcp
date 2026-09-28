@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "action": "create",
+  "path": "book.xlsx",
+  "format": "xlsx",
+  "workbook": {
+    "sheets": [
+      {
+        "name": "Sheet1",
+        "cells": [{ "ref": "A1", "value": 1 }],
+        "headerFooters": [
+          { "kind": "odd", "side": "header", "text": "&CC14页眉", "pictures": [{ "file": "pic.png" }] },
+          { "kind": "odd", "side": "footer", "text": "&CC14页脚" }
+        ]
+      }
+    ]
+  }
+}

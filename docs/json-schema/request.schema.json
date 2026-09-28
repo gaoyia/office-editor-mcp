@@ -154,7 +154,35 @@
         "charts": {
           "type": "array",
           "items": { "$ref": "#/$defs/xlsxChartCreate" }
+        },
+        "headerFooters": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/xlsxHeaderFooterCreate" }
         }
+      }
+    },
+    "xlsxHeaderFooterCreate": {
+      "type": "object",
+      "required": ["kind", "side"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "enum": ["odd", "even", "first"] },
+        "side": { "enum": ["header", "footer"] },
+        "text": { "type": "string" },
+        "pictures": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/xlsxHfPictureCreate" }
+        }
+      }
+    },
+    "xlsxHfPictureCreate": {
+      "type": "object",
+      "required": ["file"],
+      "additionalProperties": false,
+      "properties": {
+        "file": { "type": "string", "minLength": 1 },
+        "cx": { "type": "integer", "minimum": 1 },
+        "cy": { "type": "integer", "minimum": 1 }
       }
     },
     "xlsxPictureCreate": {

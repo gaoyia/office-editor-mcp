@@ -26,6 +26,7 @@ $order = @(
     'xlsx-create'
     'xlsx-create-pictures'
     'xlsx-create-charts'
+    'xlsx-create-headerfooter'
     'docx-create'
     'docx-create-pictures'
     'docx-create-full'

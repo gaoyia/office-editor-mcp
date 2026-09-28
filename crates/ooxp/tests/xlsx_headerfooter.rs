@@ -375,3 +375,186 @@ fn set_text_leaves_styles_crc() {
     .unwrap();
     assert_eq!(crc_of(&out, "xl/styles.xml"), styles_before);
 }
+
+fn create_with(tag: &str, sheets: serde_json::Value) -> PathBuf {
+    let path = tmp(tag).with_extension("xlsx");
+    run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "create",
+            "path": path.to_string_lossy(),
+            "workbook": { "sheets": sheets }
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap();
+    path
+}
+
+fn create_err(sheets: serde_json::Value) -> ooxp::Error {
+    run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "create",
+            "path": tmp("bad").with_extension("xlsx").to_string_lossy(),
+            "workbook": { "sheets": sheets }
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap_err()
+}
+
+#[test]
+fn create_writes_odd_header_text() {
+    let path = create_with(
+        "create-hf-text",
+        json!([{
+            "name": "Sheet1",
+            "cells": [{ "ref": "A1", "value": 1 }],
+            "headerFooters": [
+                { "kind": "odd", "side": "header", "text": "&CC14页眉" },
+                { "kind": "odd", "side": "footer", "text": "&CC14页脚" }
+            ]
+        }]),
+    );
+    let tree = inspect(&path, json!({ "headerFooter": true }));
+    assert_eq!(tree["sheets"][0]["hasHeaderFooter"], true);
+    let slots = tree["sheets"][0]["headerFooters"].as_array().unwrap();
+    assert_eq!(slots.len(), 6);
+    assert_eq!(slots[0]["id"], "sheet:Sheet1/hf:odd:header");
+    assert_eq!(slots[0]["text"], "&CC14页眉");
+    assert_eq!(slots[1]["text"], "&CC14页脚");
+    let xml = part_text(&path, "xl/worksheets/sheet1.xml");
+    assert!(xml.contains("<oddHeader"), "{xml}");
+    assert!(xml.contains("xml:space=\"preserve\""), "{xml}");
+    assert!(!xml.contains("legacyDrawingHF"), "{xml}");
+}
+
+#[test]
+fn create_writes_hf_picture_id_starts_at_two() {
+    let png = tmp("create-hf-pic").with_extension("png");
+    std::fs::write(&png, PNG_1X1).unwrap();
+    let path = create_with(
+        "create-hf-pic",
+        json!([{
+            "name": "Sheet1",
+            "headerFooters": [{
+                "kind": "odd",
+                "side": "header",
+                "text": "&C图",
+                "pictures": [{ "file": png.to_string_lossy() }]
+            }]
+        }]),
+    );
+    let tree = inspect(&path, json!({ "headerFooter": true, "pictures": true }));
+    let slots = tree["sheets"][0]["headerFooters"].as_array().unwrap();
+    let pics = slots[0]["pictures"].as_array().unwrap();
+    assert_eq!(pics.len(), 1);
+    assert_eq!(pics[0]["id"], "sheet:Sheet1/hf:odd:header/pic:2");
+    assert_eq!(tree["sheets"][0]["pictureCount"], 0);
+    let xml = part_text(&path, "xl/worksheets/sheet1.xml");
+    assert!(xml.contains("<drawingHF"), "{xml}");
+    assert!(xml.contains(r#"cho="2""#), "{xml}");
+    assert!(!xml.contains("<drawing "), "{xml}");
+    assert!(!xml.contains("legacyDrawingHF"), "{xml}");
+}
+
+#[test]
+fn create_even_sets_different_odd_even() {
+    let path = create_with(
+        "create-hf-even",
+        json!([{
+            "name": "Sheet1",
+            "headerFooters": [
+                { "kind": "even", "side": "header", "text": "偶" },
+                { "kind": "first", "side": "footer", "text": "首" }
+            ]
+        }]),
+    );
+    let xml = part_text(&path, "xl/worksheets/sheet1.xml");
+    assert!(xml.contains(r#"differentOddEven="1""#), "{xml}");
+    assert!(xml.contains(r#"differentFirst="1""#), "{xml}");
+    let tree = inspect(&path, json!({ "headerFooter": true }));
+    let slots = tree["sheets"][0]["headerFooters"].as_array().unwrap();
+    assert_eq!(slots[2]["text"], "偶");
+    assert_eq!(slots[5]["text"], "首");
+}
+
+#[test]
+fn create_empty_header_footers_writes_none() {
+    let path = create_with(
+        "create-hf-empty",
+        json!([{ "name": "Sheet1", "headerFooters": [] }]),
+    );
+    let xml = part_text(&path, "xl/worksheets/sheet1.xml");
+    assert!(!xml.contains("headerFooter"), "{xml}");
+    let tree = inspect(&path, json!({}));
+    assert_eq!(tree["sheets"][0]["hasHeaderFooter"], false);
+}
+
+#[test]
+fn create_rejects_duplicate_and_empty_slot() {
+    let err = create_err(json!([{
+        "name": "Sheet1",
+        "headerFooters": [
+            { "kind": "odd", "side": "header", "text": "a" },
+            { "kind": "odd", "side": "header", "text": "b" }
+        ]
+    }]));
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+    assert_eq!(
+        err.field_path(),
+        Some("workbook.sheets[0].headerFooters[1]")
+    );
+
+    let err = create_err(json!([{
+        "name": "Sheet1",
+        "headerFooters": [{ "kind": "odd", "side": "header" }]
+    }]));
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+    assert_eq!(
+        err.field_path(),
+        Some("workbook.sheets[0].headerFooters[0]")
+    );
+}
+
+#[test]
+fn create_rejects_singular_header_footer_and_bad_kind() {
+    let err = create_err(json!([{
+        "name": "Sheet1",
+        "headerFooter": { "oddHeader": "x" }
+    }]));
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+    assert_eq!(err.field_path(), Some("workbook.sheets[0].headerFooter"));
+
+    let err = create_err(json!([{
+        "name": "Sheet1",
+        "headerFooters": [{ "kind": "default", "side": "header", "text": "x" }]
+    }]));
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+    assert_eq!(
+        err.field_path(),
+        Some("workbook.sheets[0].headerFooters[0].kind")
+    );
+}
+
+#[test]
+fn create_rejects_hf_picture_from() {
+    let png = tmp("hf-from").with_extension("png");
+    std::fs::write(&png, PNG_1X1).unwrap();
+    let err = create_err(json!([{
+        "name": "Sheet1",
+        "headerFooters": [{
+            "kind": "odd",
+            "side": "header",
+            "pictures": [{ "file": png.to_string_lossy(), "from": "A1" }]
+        }]
+    }]));
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+    assert_eq!(
+        err.field_path(),
+        Some("workbook.sheets[0].headerFooters[0].pictures[0].from")
+    );
+}

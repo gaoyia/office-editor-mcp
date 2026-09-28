@@ -68,6 +68,40 @@ function Ensure-XlsxCreateCharts([switch]$Force) {
     return $path
 }
 
+function Ensure-XlsxCreateHeaderFooter([switch]$Force) {
+    $path = Get-OutPath 'xlsx-create-headerfooter.xlsx'
+    if ((Test-Path $path) -and -not $Force) { return $path }
+    $png = Ensure-OoxpPngA
+    $file = $png.Replace('\', '/')
+    $req = @{
+        schemaVersion = 1; action = 'create'
+        path = $path.Replace('\', '/'); format = 'xlsx'
+        workbook = @{
+            sheets = @(
+                @{
+                    name = 'Sheet1'
+                    cells = @(@{ ref = 'A1'; value = 1 })
+                    headerFooters = @(
+                        @{
+                            kind = 'odd'
+                            side = 'header'
+                            text = '&CC14页眉'
+                            pictures = @(@{ file = $file })
+                        }
+                        @{
+                            kind = 'odd'
+                            side = 'footer'
+                            text = '&CC14页脚'
+                        }
+                    )
+                }
+            )
+        }
+    }
+    Invoke-OoxpRequest $req 'xlsx-create-headerfooter' | Out-Null
+    return $path
+}
+
 function Ensure-DocxCreate([switch]$Force) {
     $path = Get-OutPath 'docx-create.docx'
     if ((Test-Path $path) -and -not $Force) { return $path }

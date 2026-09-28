@@ -474,6 +474,10 @@ define_error_kinds! {
     InvalidHfKind => vec![Self::InvalidHfKind],
     InvalidHfType => vec![Self::InvalidHfType],
     CreateHfDuplicate => vec![Self::CreateHfDuplicate],
+    InvalidXlsxHfKind => vec![Self::InvalidXlsxHfKind],
+    InvalidXlsxHfSide => vec![Self::InvalidXlsxHfSide],
+    CreateXlsxHfDuplicate => vec![Self::CreateXlsxHfDuplicate],
+    NeedXlsxHfContent => vec![Self::NeedXlsxHfContent],
     InvalidPicKind => vec![Self::InvalidPicKind],
     InvalidPicWrap => vec![Self::InvalidPicWrap],
     InvalidPicAlign => vec![Self::InvalidPicAlign],
@@ -1049,6 +1053,10 @@ impl ErrorKind {
             | Self::InvalidContentControlItems
             | Self::ContentControlFieldMismatch
             | Self::CreateHfDuplicate
+            | Self::InvalidXlsxHfKind
+            | Self::InvalidXlsxHfSide
+            | Self::CreateXlsxHfDuplicate
+            | Self::NeedXlsxHfContent
             | Self::InvalidPicKind
             | Self::InvalidPicWrap
             | Self::InvalidPicAlign

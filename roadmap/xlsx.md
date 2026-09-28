@@ -54,6 +54,7 @@ docx 见 [`roadmap/docx.md`](docx.md)。pptx 见 [`roadmap/pptx.md`](pptx.md)。
 | 13 | `.plan/2026年-9月-27日-✅-xlsx-超链接.md` | 无 |
 | 14 | `.plan/2026年-9月-27日-✅-xlsx-迷你图.md` | 无 |
 | 15 | `.plan/2026年-9月-27日-✅-xlsx-保护.md` | 无 |
+| 16 | `.plan/2026年-9月-27日-✅-xlsx-create页眉页脚.md` | 页眉页脚 apply 已过 |
 
 0 与 1 不要合成一份。Excel 图表数据在本工作簿单元格里，和 Word embedding 不是一回事。页眉是工作表上的 `headerFooter` 加可选 `drawingHF`，不是 Word 的 header 部件。图表工作表是 `chartsheet` 部件。第一期单元格读写见总计划。
 
@@ -61,10 +62,9 @@ docx 见 [`roadmap/docx.md`](docx.md)。pptx 见 [`roadmap/pptx.md`](pptx.md)。
 
 | 序 | 计划 | 前置 |
 | --- | --- | --- |
-| 16 | `.plan/2026年-9月-27日-❌-xlsx-create页眉页脚.md` | 页眉页脚 apply 已过 |
 | 17 | `.plan/2026年-9月-27日-❌-xlsx-锚点剩余.md` | 工作表图已过 |
 
-数据透视不要做成计算引擎。序号 15 已过；表上换族走已过的 C2。
+数据透视不要做成计算引擎。序号 16 已过；表上换族走已过的 C2。
 
 ## 跨格式（本类型要跟）
 
@@ -76,4 +76,4 @@ xlsx 没有 Word / PowerPoint 那种墨迹批注计划；批注已过（序号 1
 
 ## 怎么算 Excel 全量做完
 
-已过表保持 ✅，待做 16–17 与 C1–C2 都 ✅，`docs/` 与实现一致，Excel 16.0 手测过对应清单。永不做的条目不算欠账。
+已过表保持 ✅，待做 17 与 C1–C2 都 ✅，`docs/` 与实现一致，Excel 16.0 手测过对应清单。永不做的条目不算欠账。

@@ -645,6 +645,12 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::InvalidHfKind => "kind 必须是 header 或 footer".into(),
         ErrorKind::InvalidHfType => "type 必须是 default、even 或 first".into(),
         ErrorKind::CreateHfDuplicate => "create 每一侧同一 type 只能出现一次".into(),
+        ErrorKind::InvalidXlsxHfKind => "kind 必须是 odd、even 或 first".into(),
+        ErrorKind::InvalidXlsxHfSide => "side 必须是 header 或 footer".into(),
+        ErrorKind::CreateXlsxHfDuplicate => "create 同一 kind 与 side 只能出现一次".into(),
+        ErrorKind::NeedXlsxHfContent => {
+            "headerFooters 每一项至少要有非空 text 或一张图".into()
+        }
         ErrorKind::CannotLinkFirstSection => "第一节不能链接到前一节".into(),
         ErrorKind::HfTypeInactive { kind, hf_type } => {
             format!("本节未启用这种 {kind}（{hf_type}）")

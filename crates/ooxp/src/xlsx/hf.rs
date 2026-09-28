@@ -211,6 +211,16 @@ fn collect_hf_pictures(
     Ok(out)
 }
 
+/// create 写 even / first 槽位时补属性；没有原文时也要有空的 `headerFooter`。
+pub(crate) fn ensure_create_slot_flags(sheet: &mut Element, slot: HfSlot) {
+    let hf = ensure_header_footer(sheet);
+    match slot.kind_str() {
+        "even" => hf.set_attr("differentOddEven", "1"),
+        "first" => hf.set_attr("differentFirst", "1"),
+        _ => {}
+    }
+}
+
 pub(crate) fn set_text(sheet: &mut Element, op: &SetHeaderFooterTextOp) {
     let hf = ensure_header_footer(sheet);
     match op.slot.kind_str() {
