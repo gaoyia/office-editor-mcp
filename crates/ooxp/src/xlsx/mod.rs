@@ -20,6 +20,7 @@ mod request;
 mod shape;
 mod sheets;
 mod smartart;
+mod sparkline;
 mod style;
 mod table;
 mod validation;

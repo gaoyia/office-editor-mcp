@@ -85,6 +85,7 @@ $order = @(
     'xlsx-comments'
     'xlsx-shapes'
     'xlsx-hyperlinks'
+    'xlsx-sparklines'
     'pptx-docprops'
     'pptx-apply'
     'pptx-pictures'

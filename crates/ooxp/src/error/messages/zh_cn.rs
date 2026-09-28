@@ -333,6 +333,14 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::InsertHyperlinkNeedsSheet => {
                 "xlsx 的 insertHyperlink 的 id 必须是 sheet:工作表名".into()
             }
+            IdReason::SheetSparkPrefix => {
+                "xlsx 迷你图组 id 必须是 sheet:工作表名/spark:n，n 从 1 起".into()
+            }
+            IdReason::SparkIndexNotInt => "迷你图序号必须是正整数".into(),
+            IdReason::SparkIndexFromOne => "迷你图序号从 1 起".into(),
+            IdReason::InsertSparklineNeedsSheet => {
+                "xlsx 的 insertSparkline 的 id 必须是 sheet:工作表名".into()
+            }
             IdReason::BookmarkPrefix => {
                 "书签 id 必须是 bookmark:N，或页眉页脚容器 id 加上 /bookmark:N".into()
             }
@@ -543,6 +551,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::InsertSmartArtWorksheetOnly => "只能往工作表 insertSmartArt / 改图示".into(),
         ErrorKind::CommentsWorksheetOnly => "只能对工作表发批注 op".into(),
         ErrorKind::InsertHyperlinkWorksheetOnly => "只能对工作表发超链接 op".into(),
+        ErrorKind::InsertSparklineWorksheetOnly => "只能对工作表发迷你图 op".into(),
         ErrorKind::DataSheetMustBeWorksheet => {
             "insertChartSheet 的数据必须写到普通工作表上".into()
         }
@@ -658,6 +667,18 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::EmptyHyperlinkUrl => "url 不能为空".into(),
         ErrorKind::EmptyHyperlinkLocation => "location 不能为空".into(),
         ErrorKind::HyperlinkOverlap => "超链接区域与同一张表上已有链相交".into(),
+        ErrorKind::SparklineNotFound { id } => format!("找不到迷你图组：{id}"),
+        ErrorKind::SparklineOverlap => "迷你图宿主格与同一张表上已有迷你图相交".into(),
+        ErrorKind::SparklineHostNotCell => "迷你图 ref 必须是单格".into(),
+        ErrorKind::SparklineFormulaNotLine => "迷你图 formula 必须是单行或单列".into(),
+        ErrorKind::SparklineGroupHasMany => {
+            "组内有多条迷你图时 setSparkline 不能改 ref 或 formula".into()
+        }
+        ErrorKind::EmptySparklineFormula => "formula 不能为空".into(),
+        ErrorKind::InvalidSparklineType => "type 只能是 line、column 或 stacked".into(),
+        ErrorKind::NeedSetSparklineField => {
+            "setSparkline 至少要给 type、ref 或 formula 之一".into()
+        }
         ErrorKind::InvalidBookmarkName => {
             "书签名不能为空、不能含空白、不能以下划线开头".into()
         }

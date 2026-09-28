@@ -130,6 +130,7 @@ fn inspect_lists_hidden() {
             "pivotCount",
             "commentCount",
             "hyperlinkCount",
+            "sparklineCount",
             "hasHeaderFooter",
             "print",
             "view",

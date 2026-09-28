@@ -195,6 +195,7 @@ fn inspect_default_props_on_three_formats() {
             "smartArtCount",
             "commentCount",
             "hyperlinkCount",
+            "sparklineCount",
             "definedNameCount",
             "props",
             "sheets",

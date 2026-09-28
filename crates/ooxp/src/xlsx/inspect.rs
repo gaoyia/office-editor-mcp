@@ -67,6 +67,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     let want_text_boxes = scope.as_ref().is_some_and(|s| s.text_boxes);
     let want_smart_art = scope.as_ref().is_some_and(|s| s.smart_art);
     let want_hyperlinks = scope.as_ref().is_some_and(|s| s.hyperlinks);
+    let want_sparklines = scope.as_ref().is_some_and(|s| s.sparklines);
     let cells_scope = scope.as_ref().and_then(|s| s.cells.as_ref());
     let sheet_parts: Vec<(String, String)> = sheets
         .iter()
@@ -80,6 +81,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     let mut smart_art_count = 0usize;
     let mut comment_count = 0usize;
     let mut hyperlink_count = 0usize;
+    let mut sparkline_count = 0usize;
     for (sheet_id, sh) in sheets.iter().enumerate() {
         let mut obj = Map::new();
         obj.insert("id".into(), json!(format!("sheet:{}", sh.name)));
@@ -114,6 +116,9 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
             let n_links = super::hyperlink::count(&sheet_doc.root);
             hyperlink_count += n_links;
             obj.insert("hyperlinkCount".into(), json!(n_links));
+            let n_sparks = super::sparkline::count(&sheet_doc.root);
+            sparkline_count += n_sparks;
+            obj.insert("sparklineCount".into(), json!(n_sparks));
             let has_hf = hf::has_header_footer(&sheet_doc.root);
             obj.insert("hasHeaderFooter".into(), json!(has_hf));
             obj.insert(
@@ -164,6 +169,12 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
                 obj.insert(
                     "hyperlinks".into(),
                     super::hyperlink::inspect(&sheet_doc.root, &sh.name, &sheet_rels),
+                );
+            }
+            if want_sparklines {
+                obj.insert(
+                    "sparklines".into(),
+                    super::sparkline::inspect(&sheet_doc.root, &sh.name),
                 );
             }
             if let Some(cs) = cells_scope {
@@ -287,6 +298,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     root.insert("smartArtCount".into(), json!(smart_art_count));
     root.insert("commentCount".into(), json!(comment_count));
     root.insert("hyperlinkCount".into(), json!(hyperlink_count));
+    root.insert("sparklineCount".into(), json!(sparkline_count));
     root.insert("definedNameCount".into(), json!(names::count(&wb.root)));
     root.insert("props".into(), crate::props::inspect(&pkg)?);
     root.insert("sheets".into(), Value::Array(sheet_json));

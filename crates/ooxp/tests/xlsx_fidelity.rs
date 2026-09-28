@@ -496,6 +496,27 @@ fn xlsx_accepts_hyperlinks_scope() {
 }
 
 #[test]
+fn xlsx_accepts_sparklines_scope() {
+    let src = write_sample("sk-scope");
+    let RunOutput::Inspect(tree) = run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "inspect",
+            "path": src.to_string_lossy(),
+            "scope": { "sparklines": true }
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap() else {
+        panic!("inspect 应返回树");
+    };
+    assert_eq!(tree["sparklineCount"], 0);
+    assert_eq!(tree["sheets"][0]["sparklineCount"], 0);
+    assert_eq!(tree["sheets"][0]["sparklines"], json!([]));
+}
+
+#[test]
 fn insert_hyperlink_is_not_for_xlsx() {
     let src = write_sample("hl-foreign");
     let out = tmp_dir().join("hl-foreign-out.xlsx");

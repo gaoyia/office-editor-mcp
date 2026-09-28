@@ -364,6 +364,14 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::InsertHyperlinkNeedsSheet => {
                 "xlsx insertHyperlink id must be sheet:name".into()
             }
+            IdReason::SheetSparkPrefix => {
+                "xlsx sparkline id must be sheet:name/spark:n, n starting at 1".into()
+            }
+            IdReason::SparkIndexNotInt => "sparkline index must be a positive integer".into(),
+            IdReason::SparkIndexFromOne => "sparkline index starts at 1".into(),
+            IdReason::InsertSparklineNeedsSheet => {
+                "xlsx insertSparkline id must be sheet:name".into()
+            }
             IdReason::BookmarkPrefix => {
                 "Bookmark id must be bookmark:N or a header/footer container id plus /bookmark:N"
                     .into()
@@ -631,6 +639,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::InsertHyperlinkWorksheetOnly => {
             "hyperlink ops only apply to worksheets".into()
         }
+        ErrorKind::InsertSparklineWorksheetOnly => {
+            "sparkline ops only apply to worksheets".into()
+        }
         ErrorKind::DataSheetMustBeWorksheet => {
             "insertChartSheet data must be written to a worksheet".into()
         }
@@ -783,6 +794,22 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::EmptyHyperlinkLocation => "location must not be empty".into(),
         ErrorKind::HyperlinkOverlap => {
             "hyperlink ref overlaps another hyperlink on the same worksheet".into()
+        }
+        ErrorKind::SparklineNotFound { id } => format!("Sparkline group not found: {id}"),
+        ErrorKind::SparklineOverlap => {
+            "sparkline host cell overlaps another sparkline on the same worksheet".into()
+        }
+        ErrorKind::SparklineHostNotCell => "sparkline ref must be a single cell".into(),
+        ErrorKind::SparklineFormulaNotLine => {
+            "sparkline formula must be a single row or a single column".into()
+        }
+        ErrorKind::SparklineGroupHasMany => {
+            "setSparkline ref and formula require a group with exactly one sparkline".into()
+        }
+        ErrorKind::EmptySparklineFormula => "formula must not be empty".into(),
+        ErrorKind::InvalidSparklineType => "type must be line, column, or stacked".into(),
+        ErrorKind::NeedSetSparklineField => {
+            "setSparkline requires at least one of type, ref, or formula".into()
         }
         ErrorKind::InvalidBookmarkName => {
             "bookmark name must not be empty, contain whitespace, or start with an underscore"

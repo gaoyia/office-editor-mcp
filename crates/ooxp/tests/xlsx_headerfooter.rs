@@ -155,6 +155,7 @@ fn summary_without_scope() {
             "pivotCount",
             "commentCount",
             "hyperlinkCount",
+            "sparklineCount",
             "hasHeaderFooter",
             "print",
             "view",

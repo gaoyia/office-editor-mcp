@@ -3,6 +3,7 @@
 use super::formula;
 use super::hyperlink;
 use super::request::{Patch, SetCellOp, SetCellValue, XlsxOp};
+use super::sparkline;
 use crate::error::{Error, ErrorKind, IdReason, RelSource};
 use crate::opc::{self, ContentTypes, Package, Relationships};
 use crate::xml::{self, Document, Element, Node};
@@ -491,6 +492,39 @@ pub fn apply(bytes: &[u8], ops: &[XlsxOp]) -> Result<Vec<u8>, Error> {
                 load_dirty(&pkg, &mut dirty_sheets, &part, false)?;
                 let doc = dirty_of(&mut dirty_sheets, &part);
                 hyperlink::apply_delete(&mut pkg, &mut doc.root, &part, op, i)?;
+            }
+            XlsxOp::InsertSparkline(op) => {
+                let part = require_drawing_worksheet(
+                    &sheet_index,
+                    &op.sheet,
+                    i,
+                    ErrorKind::InsertSparklineWorksheetOnly,
+                )?;
+                load_dirty(&pkg, &mut dirty_sheets, &part, false)?;
+                let doc = dirty_of(&mut dirty_sheets, &part);
+                sparkline::apply_insert(&mut doc.root, &op.sheet, op, i)?;
+            }
+            XlsxOp::SetSparkline(op) => {
+                let part = require_drawing_worksheet(
+                    &sheet_index,
+                    &op.sheet,
+                    i,
+                    ErrorKind::InsertSparklineWorksheetOnly,
+                )?;
+                load_dirty(&pkg, &mut dirty_sheets, &part, false)?;
+                let doc = dirty_of(&mut dirty_sheets, &part);
+                sparkline::apply_set(&mut doc.root, &op.sheet, op, i)?;
+            }
+            XlsxOp::DeleteSparkline(op) => {
+                let part = require_drawing_worksheet(
+                    &sheet_index,
+                    &op.sheet,
+                    i,
+                    ErrorKind::InsertSparklineWorksheetOnly,
+                )?;
+                load_dirty(&pkg, &mut dirty_sheets, &part, false)?;
+                let doc = dirty_of(&mut dirty_sheets, &part);
+                sparkline::apply_delete(&mut doc.root, op, i)?;
             }
             XlsxOp::InsertTextBox(op) => {
                 let part = require_drawing_worksheet(

@@ -82,6 +82,7 @@
         "tables": { "type": "boolean" },
         "revisions": { "type": "boolean" },
         "hyperlinks": { "type": "boolean" },
+        "sparklines": { "type": "boolean" },
         "bookmarks": { "type": "boolean" },
         "fields": { "type": "boolean" },
         "tocs": { "type": "boolean" },
@@ -652,6 +653,9 @@
               { "$ref": "#/$defs/insertHyperlinkOp" },
               { "$ref": "#/$defs/setHyperlinkOp" },
               { "$ref": "#/$defs/deleteHyperlinkOp" },
+              { "$ref": "#/$defs/insertSparklineOp" },
+              { "$ref": "#/$defs/setSparklineOp" },
+              { "$ref": "#/$defs/deleteSparklineOp" },
               { "$ref": "#/$defs/insertBookmarkOp" },
               { "$ref": "#/$defs/setBookmarkOp" },
               { "$ref": "#/$defs/deleteBookmarkOp" },
@@ -2114,6 +2118,39 @@
       "additionalProperties": false,
       "properties": {
         "op": { "const": "deleteHyperlink" },
+        "id": { "type": "string", "minLength": 1 }
+      }
+    },
+    "insertSparklineOp": {
+      "type": "object",
+      "required": ["op", "id", "ref", "formula"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "insertSparkline" },
+        "id": { "type": "string", "minLength": 1 },
+        "ref": { "type": "string", "minLength": 1 },
+        "formula": { "type": "string", "minLength": 1 },
+        "type": { "enum": ["line", "column", "stacked"] }
+      }
+    },
+    "setSparklineOp": {
+      "type": "object",
+      "required": ["op", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "setSparkline" },
+        "id": { "type": "string", "minLength": 1 },
+        "ref": { "type": "string", "minLength": 1 },
+        "formula": { "type": "string", "minLength": 1 },
+        "type": { "enum": ["line", "column", "stacked"] }
+      }
+    },
+    "deleteSparklineOp": {
+      "type": "object",
+      "required": ["op", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "deleteSparkline" },
         "id": { "type": "string", "minLength": 1 }
       }
     },

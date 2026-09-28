@@ -239,6 +239,12 @@ pub(crate) enum IdReason {
     SheetLinkPrefix,
     /// xlsx 的 insertHyperlink 必须用 sheet:工作表名
     InsertHyperlinkNeedsSheet,
+    /// xlsx 迷你图组 id 必须是 sheet:{name}/spark:{n}
+    SheetSparkPrefix,
+    SparkIndexNotInt,
+    SparkIndexFromOne,
+    /// xlsx 的 insertSparkline 必须用 sheet:工作表名
+    InsertSparklineNeedsSheet,
     /// 书签 id 必须是 bookmark:N 或 {容器}/bookmark:N
     BookmarkPrefix,
     BookmarkIndexNotInt,
@@ -420,6 +426,7 @@ define_error_kinds! {
     InsertSmartArtWorksheetOnly => vec![Self::InsertSmartArtWorksheetOnly],
     CommentsWorksheetOnly => vec![Self::CommentsWorksheetOnly],
     InsertHyperlinkWorksheetOnly => vec![Self::InsertHyperlinkWorksheetOnly],
+    InsertSparklineWorksheetOnly => vec![Self::InsertSparklineWorksheetOnly],
     DataSheetMustBeWorksheet => vec![Self::DataSheetMustBeWorksheet],
     TwoCellPictureSize => vec![Self::TwoCellPictureSize],
     TwoCellChartSize => vec![Self::TwoCellChartSize],
@@ -569,6 +576,14 @@ define_error_kinds! {
     EmptyHyperlinkUrl => vec![Self::EmptyHyperlinkUrl],
     EmptyHyperlinkLocation => vec![Self::EmptyHyperlinkLocation],
     HyperlinkOverlap => vec![Self::HyperlinkOverlap],
+    SparklineNotFound { id: String } => vec![Self::SparklineNotFound { id: "sheet:Sheet1/spark:1".into() }],
+    SparklineOverlap => vec![Self::SparklineOverlap],
+    SparklineHostNotCell => vec![Self::SparklineHostNotCell],
+    SparklineFormulaNotLine => vec![Self::SparklineFormulaNotLine],
+    SparklineGroupHasMany => vec![Self::SparklineGroupHasMany],
+    EmptySparklineFormula => vec![Self::EmptySparklineFormula],
+    InvalidSparklineType => vec![Self::InvalidSparklineType],
+    NeedSetSparklineField => vec![Self::NeedSetSparklineField],
     InvalidBookmarkName => vec![Self::InvalidBookmarkName],
     BookmarkNameTaken => vec![Self::BookmarkNameTaken],
     BookmarkRangeReversed => vec![Self::BookmarkRangeReversed],
@@ -876,6 +891,10 @@ impl IdReason {
             Self::InsertLinkNeedsPara,
             Self::SheetLinkPrefix,
             Self::InsertHyperlinkNeedsSheet,
+            Self::SheetSparkPrefix,
+            Self::SparkIndexNotInt,
+            Self::SparkIndexFromOne,
+            Self::InsertSparklineNeedsSheet,
             Self::BookmarkPrefix,
             Self::BookmarkIndexNotInt,
             Self::BookmarkIndexFromOne,
@@ -1140,7 +1159,15 @@ impl ErrorKind {
             | Self::InsertSmartArtWorksheetOnly
             | Self::CommentsWorksheetOnly
             | Self::InsertHyperlinkWorksheetOnly
+            | Self::InsertSparklineWorksheetOnly
             | Self::HyperlinkOverlap
+            | Self::SparklineOverlap
+            | Self::SparklineHostNotCell
+            | Self::SparklineFormulaNotLine
+            | Self::SparklineGroupHasMany
+            | Self::EmptySparklineFormula
+            | Self::InvalidSparklineType
+            | Self::NeedSetSparklineField
             | Self::XlsxHyperlinkNeedTarget
             | Self::EmptyHyperlinkLocation
             | Self::NeedXlsxSetHyperlinkField
@@ -1179,6 +1206,7 @@ impl ErrorKind {
             | Self::TableNotFound { .. }
             | Self::RevisionNotFound { .. }
             | Self::HyperlinkNotFound { .. }
+            | Self::SparklineNotFound { .. }
             | Self::BookmarkNotFound { .. }
             | Self::FieldNotFound { .. }
             | Self::TocNotFound { .. }

@@ -1116,6 +1116,9 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<DocxOp>, Error> {
             || op_name == "setPicturePos"
             || op_name == "setChartPos"
             || op_name == "setSmartArtPos"
+            || op_name == "insertSparkline"
+            || op_name == "setSparkline"
+            || op_name == "deleteSparkline"
         {
             return Err(Error::with_path(
                 ErrorKind::OpNotForFormat {
