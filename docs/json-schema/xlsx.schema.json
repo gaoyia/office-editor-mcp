@@ -1,0 +1,2732 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ooxp.local/schema/v1/xlsx.schema.json",
+  "title": "ooxp xlsx $defs",
+  "$comment": "供 request.schema.json 引用，不是独立的完整请求 schema。",
+  "$defs": {
+    "xlsxWorkbook": {
+      "type": "object",
+      "required": [
+        "sheets"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "sheets": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/xlsxSheetCreate"
+          }
+        },
+        "props": {
+          "$ref": "request.schema.json#/$defs/createProps"
+        }
+      }
+    },
+    "xlsxSheetCreate": {
+      "type": "object",
+      "required": [
+        "name"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 31
+        },
+        "cells": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/xlsxCellCreate"
+          }
+        },
+        "pictures": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/xlsxPictureCreate"
+          }
+        },
+        "charts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/xlsxChartCreate"
+          }
+        },
+        "headerFooters": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/xlsxHeaderFooterCreate"
+          }
+        }
+      }
+    },
+    "xlsxHeaderFooterCreate": {
+      "type": "object",
+      "required": [
+        "kind",
+        "side"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "odd",
+            "even",
+            "first"
+          ]
+        },
+        "side": {
+          "enum": [
+            "header",
+            "footer"
+          ]
+        },
+        "text": {
+          "type": "string"
+        },
+        "pictures": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/xlsxHfPictureCreate"
+          }
+        }
+      }
+    },
+    "xlsxHfPictureCreate": {
+      "type": "object",
+      "required": [
+        "file"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "file": {
+          "type": "string",
+          "minLength": 1
+        },
+        "cx": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "cy": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "xlsxPictureCreate": {
+      "type": "object",
+      "required": [
+        "file",
+        "from"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "file": {
+          "type": "string",
+          "minLength": 1
+        },
+        "from": {
+          "type": "string",
+          "minLength": 1
+        },
+        "to": {
+          "type": "string",
+          "minLength": 1
+        },
+        "anchor": {
+          "enum": [
+            "oneCell",
+            "twoCell"
+          ]
+        },
+        "cx": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "cy": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "fromOffX": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "fromOffY": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "toOffX": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "toOffY": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "xlsxChartCreate": {
+      "type": "object",
+      "required": [
+        "type",
+        "series",
+        "from",
+        "dataFrom"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "$ref": "request.schema.json#/$defs/insertChartType"
+        },
+        "title": {
+          "type": "string"
+        },
+        "series": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "allOf": [
+              {
+                "$ref": "request.schema.json#/$defs/chartSeriesData"
+              },
+              {
+                "required": [
+                  "values"
+                ]
+              }
+            ]
+          }
+        },
+        "from": {
+          "type": "string",
+          "minLength": 1
+        },
+        "to": {
+          "type": "string",
+          "minLength": 1
+        },
+        "anchor": {
+          "enum": [
+            "oneCell",
+            "twoCell"
+          ]
+        },
+        "cx": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "cy": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "fromOffX": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "fromOffY": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "toOffX": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "toOffY": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "dataFrom": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "xlsxCellCreate": {
+      "type": "object",
+      "required": [
+        "ref"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "ref": {
+          "type": "string",
+          "minLength": 1
+        },
+        "value": {
+          "type": [
+            "number",
+            "string",
+            "boolean",
+            "null"
+          ]
+        },
+        "formula": {
+          "type": "string",
+          "pattern": "^="
+        }
+      },
+      "not": {
+        "required": [
+          "value",
+          "formula"
+        ]
+      }
+    },
+    "setCellOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setCell"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "value": {
+          "type": [
+            "number",
+            "string",
+            "boolean",
+            "null"
+          ]
+        },
+        "formula": {
+          "type": "string",
+          "pattern": "^="
+        },
+        "shared": {
+          "type": "boolean"
+        },
+        "sharedRef": {
+          "type": "string",
+          "minLength": 1
+        },
+        "array": {
+          "type": "boolean"
+        },
+        "arrayRef": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "oneOf": [
+        {
+          "required": [
+            "value"
+          ]
+        },
+        {
+          "required": [
+            "formula"
+          ]
+        }
+      ]
+    },
+    "cellColor": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "rgb": {
+          "type": "string",
+          "pattern": "^[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?$"
+        },
+        "theme": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "indexed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "tint": {
+          "type": "number"
+        }
+      }
+    },
+    "cellBorderSide": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "style": {
+          "type": "string",
+          "minLength": 1
+        },
+        "color": {
+          "$ref": "#/$defs/cellColor"
+        }
+      }
+    },
+    "setCellStyleOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setCellStyle"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "numFmt": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        },
+        "font": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "name": {
+              "type": "string",
+              "minLength": 1
+            },
+            "sz": {
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "maximum": 409
+            },
+            "bold": {
+              "type": "boolean"
+            },
+            "italic": {
+              "type": "boolean"
+            },
+            "underline": {
+              "type": [
+                "boolean",
+                "string",
+                "null"
+              ]
+            },
+            "color": {
+              "$ref": "#/$defs/cellColor"
+            }
+          }
+        },
+        "fill": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "pattern": {
+              "type": "string",
+              "minLength": 1
+            },
+            "fg": {
+              "$ref": "#/$defs/cellColor"
+            },
+            "bg": {
+              "$ref": "#/$defs/cellColor"
+            }
+          }
+        },
+        "border": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "style": {
+              "type": "string",
+              "minLength": 1
+            },
+            "color": {
+              "$ref": "#/$defs/cellColor"
+            },
+            "left": {
+              "$ref": "#/$defs/cellBorderSide"
+            },
+            "right": {
+              "$ref": "#/$defs/cellBorderSide"
+            },
+            "top": {
+              "$ref": "#/$defs/cellBorderSide"
+            },
+            "bottom": {
+              "$ref": "#/$defs/cellBorderSide"
+            }
+          }
+        },
+        "align": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "horizontal": {
+              "type": "string",
+              "minLength": 1
+            },
+            "vertical": {
+              "type": "string",
+              "minLength": 1
+            },
+            "wrap": {
+              "type": "boolean"
+            }
+          }
+        }
+      },
+      "anyOf": [
+        {
+          "required": [
+            "numFmt"
+          ]
+        },
+        {
+          "required": [
+            "font"
+          ]
+        },
+        {
+          "required": [
+            "fill"
+          ]
+        },
+        {
+          "required": [
+            "border"
+          ]
+        },
+        {
+          "required": [
+            "align"
+          ]
+        }
+      ]
+    },
+    "setColWidthOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "col"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setColWidth"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "col": {
+          "type": "string",
+          "minLength": 1
+        },
+        "width": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "exclusiveMinimum": 0,
+          "maximum": 255
+        },
+        "bestFit": {
+          "type": "boolean"
+        }
+      },
+      "anyOf": [
+        {
+          "required": [
+            "width"
+          ]
+        },
+        {
+          "required": [
+            "bestFit"
+          ]
+        }
+      ]
+    },
+    "setRowHeightOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "row",
+        "height"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setRowHeight"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "row": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1048576
+        },
+        "toRow": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1048576
+        },
+        "height": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "exclusiveMinimum": 0,
+          "maximum": 409
+        }
+      }
+    },
+    "mergeRangeOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "range"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "mergeRange"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "range": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "unmergeRangeOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "range"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "unmergeRange"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "range": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "insertDataValidationOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "sqref",
+        "type"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "insertDataValidation"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sqref": {
+          "oneOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          ]
+        },
+        "type": {
+          "enum": [
+            "none",
+            "whole",
+            "decimal",
+            "list",
+            "date",
+            "time",
+            "textLength",
+            "custom"
+          ]
+        },
+        "operator": {
+          "enum": [
+            "between",
+            "notBetween",
+            "equal",
+            "notEqual",
+            "lessThan",
+            "lessThanOrEqual",
+            "greaterThan",
+            "greaterThanOrEqual"
+          ]
+        },
+        "formula1": {
+          "type": "string"
+        },
+        "formula2": {
+          "type": "string"
+        },
+        "allowBlank": {
+          "type": "boolean"
+        },
+        "dropdown": {
+          "type": "boolean"
+        },
+        "showInputMessage": {
+          "type": "boolean"
+        },
+        "showErrorMessage": {
+          "type": "boolean"
+        },
+        "errorStyle": {
+          "enum": [
+            "stop",
+            "warning",
+            "information"
+          ]
+        },
+        "errorTitle": {
+          "type": "string"
+        },
+        "error": {
+          "type": "string"
+        },
+        "promptTitle": {
+          "type": "string"
+        },
+        "prompt": {
+          "type": "string"
+        }
+      }
+    },
+    "setDataValidationOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setDataValidation"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sqref": {
+          "oneOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          ]
+        },
+        "type": {
+          "enum": [
+            "none",
+            "whole",
+            "decimal",
+            "list",
+            "date",
+            "time",
+            "textLength",
+            "custom"
+          ]
+        },
+        "operator": {
+          "oneOf": [
+            {
+              "enum": [
+                "between",
+                "notBetween",
+                "equal",
+                "notEqual",
+                "lessThan",
+                "lessThanOrEqual",
+                "greaterThan",
+                "greaterThanOrEqual"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "formula1": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "formula2": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "allowBlank": {
+          "type": "boolean"
+        },
+        "dropdown": {
+          "type": "boolean"
+        },
+        "showInputMessage": {
+          "type": "boolean"
+        },
+        "showErrorMessage": {
+          "type": "boolean"
+        },
+        "errorStyle": {
+          "oneOf": [
+            {
+              "enum": [
+                "stop",
+                "warning",
+                "information"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "errorTitle": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "error": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "promptTitle": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "prompt": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "deleteDataValidationOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "deleteDataValidation"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "cfSqref": {
+      "oneOf": [
+        {
+          "type": "string",
+          "minLength": 1
+        },
+        {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      ]
+    },
+    "cfWritableType": {
+      "enum": [
+        "cellIs",
+        "expression",
+        "colorScale",
+        "dataBar",
+        "iconSet"
+      ]
+    },
+    "cfOperator": {
+      "enum": [
+        "lessThan",
+        "lessThanOrEqual",
+        "equal",
+        "notEqual",
+        "greaterThanOrEqual",
+        "greaterThan",
+        "between",
+        "notBetween"
+      ]
+    },
+    "cfvo": {
+      "type": "object",
+      "required": [
+        "type"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "enum": [
+            "num",
+            "percent",
+            "max",
+            "min",
+            "formula",
+            "percentile"
+          ]
+        },
+        "val": {
+          "type": "string"
+        },
+        "gte": {
+          "type": "boolean"
+        }
+      }
+    },
+    "cfDxf": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "font": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "name": {
+              "type": "string",
+              "minLength": 1
+            },
+            "sz": {
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "maximum": 409
+            },
+            "bold": {
+              "type": "boolean"
+            },
+            "italic": {
+              "type": "boolean"
+            },
+            "underline": {
+              "type": [
+                "boolean",
+                "string",
+                "null"
+              ]
+            },
+            "color": {
+              "$ref": "#/$defs/cellColor"
+            }
+          }
+        },
+        "fill": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "pattern": {
+              "type": "string",
+              "minLength": 1
+            },
+            "fg": {
+              "$ref": "#/$defs/cellColor"
+            },
+            "bg": {
+              "$ref": "#/$defs/cellColor"
+            }
+          }
+        },
+        "border": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "style": {
+              "type": "string",
+              "minLength": 1
+            },
+            "color": {
+              "$ref": "#/$defs/cellColor"
+            },
+            "left": {
+              "$ref": "#/$defs/cellBorderSide"
+            },
+            "right": {
+              "$ref": "#/$defs/cellBorderSide"
+            },
+            "top": {
+              "$ref": "#/$defs/cellBorderSide"
+            },
+            "bottom": {
+              "$ref": "#/$defs/cellBorderSide"
+            }
+          }
+        }
+      }
+    },
+    "cfColorScale": {
+      "type": "object",
+      "required": [
+        "colors"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "cfvo": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 3,
+          "items": {
+            "$ref": "#/$defs/cfvo"
+          }
+        },
+        "colors": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 3,
+          "items": {
+            "$ref": "#/$defs/cellColor"
+          }
+        }
+      }
+    },
+    "cfDataBar": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "cfvo": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": {
+            "$ref": "#/$defs/cfvo"
+          }
+        },
+        "color": {
+          "$ref": "#/$defs/cellColor"
+        },
+        "minLength": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "maxLength": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "showValue": {
+          "type": "boolean"
+        }
+      }
+    },
+    "cfIconSet": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "set": {
+          "enum": [
+            "3Arrows",
+            "3ArrowsGray",
+            "3Flags",
+            "3Signs",
+            "3Symbols",
+            "3Symbols2",
+            "3TrafficLights1",
+            "3TrafficLights2",
+            "4Arrows",
+            "4ArrowsGray",
+            "4Rating",
+            "4RedToBlack",
+            "4TrafficLights",
+            "5Arrows",
+            "5ArrowsGray",
+            "5Quarters",
+            "5Rating"
+          ]
+        },
+        "cfvo": {
+          "type": "array",
+          "minItems": 2,
+          "items": {
+            "$ref": "#/$defs/cfvo"
+          }
+        },
+        "showValue": {
+          "type": "boolean"
+        },
+        "reverse": {
+          "type": "boolean"
+        },
+        "percent": {
+          "type": "boolean"
+        }
+      }
+    },
+    "insertConditionalFormatOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "sqref",
+        "type"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "insertConditionalFormat"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sqref": {
+          "$ref": "#/$defs/cfSqref"
+        },
+        "type": {
+          "$ref": "#/$defs/cfWritableType"
+        },
+        "operator": {
+          "$ref": "#/$defs/cfOperator"
+        },
+        "formulas": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 3,
+          "items": {
+            "type": "string"
+          }
+        },
+        "dxf": {
+          "$ref": "#/$defs/cfDxf"
+        },
+        "colorScale": {
+          "$ref": "#/$defs/cfColorScale"
+        },
+        "dataBar": {
+          "$ref": "#/$defs/cfDataBar"
+        },
+        "iconSet": {
+          "$ref": "#/$defs/cfIconSet"
+        },
+        "priority": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "stopIfTrue": {
+          "type": "boolean"
+        }
+      }
+    },
+    "setConditionalFormatOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setConditionalFormat"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sqref": {
+          "$ref": "#/$defs/cfSqref"
+        },
+        "type": {
+          "$ref": "#/$defs/cfWritableType"
+        },
+        "operator": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/cfOperator"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "formulas": {
+          "oneOf": [
+            {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 3,
+              "items": {
+                "type": "string"
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "dxf": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/cfDxf"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "colorScale": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/cfColorScale"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "dataBar": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/cfDataBar"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "iconSet": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/cfIconSet"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "priority": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "stopIfTrue": {
+          "type": "boolean"
+        }
+      }
+    },
+    "deleteConditionalFormatOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "deleteConditionalFormat"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "insertSheetTableOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "ref"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "insertSheetTable"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "ref": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "columns": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "setSheetTableOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setSheetTable"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "ref": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "columns": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "deleteSheetTableOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "deleteSheetTable"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "pivotSource": {
+      "type": "object",
+      "required": [
+        "ref"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "sheet": {
+          "type": "string",
+          "minLength": 1
+        },
+        "ref": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "insertPivotTableOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "source",
+        "location",
+        "values"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "insertPivotTable"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source": {
+          "$ref": "#/$defs/pivotSource"
+        },
+        "location": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "rows": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "cols": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "filters": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "values": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "setPivotTableOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setPivotTable"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source": {
+          "$ref": "#/$defs/pivotSource"
+        },
+        "location": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "rows": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "cols": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "filters": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "values": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "deletePivotTableOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "deletePivotTable"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "insertDefinedNameOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "name",
+        "formula"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "insertDefinedName"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "formula": {
+          "type": "string",
+          "minLength": 1
+        },
+        "hidden": {
+          "type": "boolean"
+        },
+        "localSheet": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "setDefinedNameOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setDefinedName"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "formula": {
+          "type": "string",
+          "minLength": 1
+        },
+        "hidden": {
+          "type": "boolean"
+        },
+        "localSheet": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        }
+      },
+      "anyOf": [
+        {
+          "required": [
+            "name"
+          ]
+        },
+        {
+          "required": [
+            "formula"
+          ]
+        },
+        {
+          "required": [
+            "hidden"
+          ]
+        },
+        {
+          "required": [
+            "localSheet"
+          ]
+        }
+      ]
+    },
+    "deleteDefinedNameOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "deleteDefinedName"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "setPrintSetupOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setPrintSetup"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "left": {
+          "type": "number",
+          "minimum": 0
+        },
+        "right": {
+          "type": "number",
+          "minimum": 0
+        },
+        "top": {
+          "type": "number",
+          "minimum": 0
+        },
+        "bottom": {
+          "type": "number",
+          "minimum": 0
+        },
+        "header": {
+          "type": "number",
+          "minimum": 0
+        },
+        "footer": {
+          "type": "number",
+          "minimum": 0
+        },
+        "paperSize": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "orientation": {
+          "enum": [
+            "portrait",
+            "landscape"
+          ]
+        },
+        "scale": {
+          "type": "integer",
+          "minimum": 10,
+          "maximum": 400
+        },
+        "fitToPage": {
+          "type": "boolean"
+        },
+        "fitToWidth": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "fitToHeight": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "gridLines": {
+          "type": "boolean"
+        },
+        "headings": {
+          "type": "boolean"
+        },
+        "hCenter": {
+          "type": "boolean"
+        },
+        "vCenter": {
+          "type": "boolean"
+        },
+        "printArea": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        },
+        "rowBreaks": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "colBreaks": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      },
+      "anyOf": [
+        {
+          "required": [
+            "left"
+          ]
+        },
+        {
+          "required": [
+            "right"
+          ]
+        },
+        {
+          "required": [
+            "top"
+          ]
+        },
+        {
+          "required": [
+            "bottom"
+          ]
+        },
+        {
+          "required": [
+            "header"
+          ]
+        },
+        {
+          "required": [
+            "footer"
+          ]
+        },
+        {
+          "required": [
+            "paperSize"
+          ]
+        },
+        {
+          "required": [
+            "orientation"
+          ]
+        },
+        {
+          "required": [
+            "scale"
+          ]
+        },
+        {
+          "required": [
+            "fitToPage"
+          ]
+        },
+        {
+          "required": [
+            "fitToWidth"
+          ]
+        },
+        {
+          "required": [
+            "fitToHeight"
+          ]
+        },
+        {
+          "required": [
+            "gridLines"
+          ]
+        },
+        {
+          "required": [
+            "headings"
+          ]
+        },
+        {
+          "required": [
+            "hCenter"
+          ]
+        },
+        {
+          "required": [
+            "vCenter"
+          ]
+        },
+        {
+          "required": [
+            "printArea"
+          ]
+        },
+        {
+          "required": [
+            "rowBreaks"
+          ]
+        },
+        {
+          "required": [
+            "colBreaks"
+          ]
+        }
+      ]
+    },
+    "setSheetViewOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setSheetView"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "zoom": {
+          "type": "integer",
+          "minimum": 10,
+          "maximum": 400
+        },
+        "frozenRows": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1048575
+        },
+        "frozenCols": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 16383
+        },
+        "activeCell": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "anyOf": [
+        {
+          "required": [
+            "zoom"
+          ]
+        },
+        {
+          "required": [
+            "frozenRows"
+          ]
+        },
+        {
+          "required": [
+            "frozenCols"
+          ]
+        },
+        {
+          "required": [
+            "activeCell"
+          ]
+        }
+      ]
+    },
+    "setAutoFilterOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "ref"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setAutoFilter"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "ref": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        }
+      }
+    },
+    "setHeaderFooterTextOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "text"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setHeaderFooterText"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "text": {
+          "type": "string"
+        }
+      }
+    },
+    "setPictureAnchorOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setPictureAnchor"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "anchor": {
+          "enum": [
+            "oneCell",
+            "twoCell",
+            "absolute"
+          ]
+        },
+        "from": {
+          "type": "string",
+          "minLength": 1
+        },
+        "to": {
+          "type": "string",
+          "minLength": 1
+        },
+        "fromOffX": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "fromOffY": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "toOffX": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "toOffY": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "posX": {
+          "type": "integer"
+        },
+        "posY": {
+          "type": "integer"
+        },
+        "editAs": {
+          "enum": [
+            "twoCell",
+            "oneCell",
+            "absolute"
+          ]
+        },
+        "cx": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "cy": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "anyOf": [
+        {
+          "required": [
+            "anchor"
+          ]
+        },
+        {
+          "required": [
+            "from"
+          ]
+        },
+        {
+          "required": [
+            "to"
+          ]
+        },
+        {
+          "required": [
+            "fromOffX"
+          ]
+        },
+        {
+          "required": [
+            "fromOffY"
+          ]
+        },
+        {
+          "required": [
+            "toOffX"
+          ]
+        },
+        {
+          "required": [
+            "toOffY"
+          ]
+        },
+        {
+          "required": [
+            "posX"
+          ]
+        },
+        {
+          "required": [
+            "posY"
+          ]
+        },
+        {
+          "required": [
+            "editAs"
+          ]
+        },
+        {
+          "required": [
+            "cx"
+          ]
+        },
+        {
+          "required": [
+            "cy"
+          ]
+        }
+      ]
+    },
+    "setTextBoxAnchorOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setTextBoxAnchor"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "anchor": {
+          "enum": [
+            "oneCell",
+            "twoCell",
+            "absolute"
+          ]
+        },
+        "from": {
+          "type": "string",
+          "minLength": 1
+        },
+        "to": {
+          "type": "string",
+          "minLength": 1
+        },
+        "fromOffX": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "fromOffY": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "toOffX": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "toOffY": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "posX": {
+          "type": "integer"
+        },
+        "posY": {
+          "type": "integer"
+        },
+        "editAs": {
+          "enum": [
+            "twoCell",
+            "oneCell",
+            "absolute"
+          ]
+        },
+        "cx": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "cy": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "anyOf": [
+        {
+          "required": [
+            "anchor"
+          ]
+        },
+        {
+          "required": [
+            "from"
+          ]
+        },
+        {
+          "required": [
+            "to"
+          ]
+        },
+        {
+          "required": [
+            "fromOffX"
+          ]
+        },
+        {
+          "required": [
+            "fromOffY"
+          ]
+        },
+        {
+          "required": [
+            "toOffX"
+          ]
+        },
+        {
+          "required": [
+            "toOffY"
+          ]
+        },
+        {
+          "required": [
+            "posX"
+          ]
+        },
+        {
+          "required": [
+            "posY"
+          ]
+        },
+        {
+          "required": [
+            "editAs"
+          ]
+        },
+        {
+          "required": [
+            "cx"
+          ]
+        },
+        {
+          "required": [
+            "cy"
+          ]
+        }
+      ]
+    },
+    "insertSparklineOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "ref",
+        "formula"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "insertSparkline"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "ref": {
+          "type": "string",
+          "minLength": 1
+        },
+        "formula": {
+          "type": "string",
+          "minLength": 1
+        },
+        "type": {
+          "enum": [
+            "line",
+            "column",
+            "stacked"
+          ]
+        }
+      }
+    },
+    "setSparklineOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setSparkline"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "ref": {
+          "type": "string",
+          "minLength": 1
+        },
+        "formula": {
+          "type": "string",
+          "minLength": 1
+        },
+        "type": {
+          "enum": [
+            "line",
+            "column",
+            "stacked"
+          ]
+        }
+      }
+    },
+    "deleteSparklineOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "deleteSparkline"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "insertChartSheetOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "name",
+        "type",
+        "series",
+        "dataFrom"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "insertChartSheet"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "dataSheet": {
+          "type": "string",
+          "minLength": 1
+        },
+        "type": {
+          "$ref": "request.schema.json#/$defs/insertChartType"
+        },
+        "title": {
+          "type": "string"
+        },
+        "series": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "allOf": [
+              {
+                "$ref": "request.schema.json#/$defs/chartSeriesData"
+              },
+              {
+                "required": [
+                  "values"
+                ]
+              }
+            ]
+          }
+        },
+        "cx": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "cy": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "dataFrom": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "deleteChartSheetOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "deleteChartSheet"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "insertSheetOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "name"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "insertSheet"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "after": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "deleteSheetOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "deleteSheet"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "renameSheetOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "name"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "renameSheet"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "moveSheetOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "moveSheet"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "after": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        }
+      }
+    },
+    "setSheetHiddenOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "hidden"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setSheetHidden"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "hidden": {
+          "type": "boolean"
+        }
+      }
+    },
+    "setChartAnchorOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setChartAnchor"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "anchor": {
+          "enum": [
+            "oneCell",
+            "twoCell",
+            "absolute"
+          ]
+        },
+        "from": {
+          "type": "string",
+          "minLength": 1
+        },
+        "to": {
+          "type": "string",
+          "minLength": 1
+        },
+        "fromOffX": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "fromOffY": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "toOffX": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "toOffY": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "posX": {
+          "type": "integer"
+        },
+        "posY": {
+          "type": "integer"
+        },
+        "editAs": {
+          "enum": [
+            "twoCell",
+            "oneCell",
+            "absolute"
+          ]
+        },
+        "cx": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "cy": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "anyOf": [
+        {
+          "required": [
+            "anchor"
+          ]
+        },
+        {
+          "required": [
+            "from"
+          ]
+        },
+        {
+          "required": [
+            "to"
+          ]
+        },
+        {
+          "required": [
+            "fromOffX"
+          ]
+        },
+        {
+          "required": [
+            "fromOffY"
+          ]
+        },
+        {
+          "required": [
+            "toOffX"
+          ]
+        },
+        {
+          "required": [
+            "toOffY"
+          ]
+        },
+        {
+          "required": [
+            "posX"
+          ]
+        },
+        {
+          "required": [
+            "posY"
+          ]
+        },
+        {
+          "required": [
+            "editAs"
+          ]
+        },
+        {
+          "required": [
+            "cx"
+          ]
+        },
+        {
+          "required": [
+            "cy"
+          ]
+        }
+      ]
+    },
+    "setSmartArtAnchorOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setSmartArtAnchor"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "anchor": {
+          "enum": [
+            "oneCell",
+            "twoCell",
+            "absolute"
+          ]
+        },
+        "from": {
+          "type": "string",
+          "minLength": 1
+        },
+        "to": {
+          "type": "string",
+          "minLength": 1
+        },
+        "fromOffX": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "fromOffY": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "toOffX": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "toOffY": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "posX": {
+          "type": "integer"
+        },
+        "posY": {
+          "type": "integer"
+        },
+        "editAs": {
+          "enum": [
+            "twoCell",
+            "oneCell",
+            "absolute"
+          ]
+        },
+        "cx": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "cy": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "anyOf": [
+        {
+          "required": [
+            "anchor"
+          ]
+        },
+        {
+          "required": [
+            "from"
+          ]
+        },
+        {
+          "required": [
+            "to"
+          ]
+        },
+        {
+          "required": [
+            "fromOffX"
+          ]
+        },
+        {
+          "required": [
+            "fromOffY"
+          ]
+        },
+        {
+          "required": [
+            "toOffX"
+          ]
+        },
+        {
+          "required": [
+            "toOffY"
+          ]
+        },
+        {
+          "required": [
+            "posX"
+          ]
+        },
+        {
+          "required": [
+            "posY"
+          ]
+        },
+        {
+          "required": [
+            "editAs"
+          ]
+        },
+        {
+          "required": [
+            "cx"
+          ]
+        },
+        {
+          "required": [
+            "cy"
+          ]
+        }
+      ]
+    }
+  }
+}

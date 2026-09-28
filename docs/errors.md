@@ -72,7 +72,7 @@
 
 ## 成功形态
 
-inspect 成功：stdout 是领域树，见 [json-contract.md](json-contract.md)。不要再包一层 `{ "ok": true, "tree": ... }`，以免和树本身的字段打架。
+inspect 成功：stdout 是领域树，见 [json-contract.md](json-contract.md) 与 [json-contract-xlsx.md](json-contract-xlsx.md) 等分册。不要再包一层 `{ "ok": true, "tree": ... }`，以免和树本身的字段打架。
 
 create / apply / exportMedia / exportChartData 成功：stdout 为一行 JSON：
 

@@ -1,3722 +1,3300 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://ooxp.local/schema/v1/request.json",
+  "$id": "https://ooxp.local/schema/v1/request.schema.json",
+  "$comment": "入口 schema。xlsx / docx / pptx 的 create 体与专用 apply op 在同目录 xlsx.schema.json、docx.schema.json、pptx.schema.json。与 docs/json-contract.md 及分册冲突时以 Markdown 为准。",
   "title": "ooxp 领域请求",
   "type": "object",
-  "required": ["schemaVersion", "action"],
+  "required": [
+    "schemaVersion",
+    "action"
+  ],
   "properties": {
-    "schemaVersion": { "const": 1 },
-    "action": { "enum": ["inspect", "create", "apply", "exportMedia", "exportChartData"] }
+    "schemaVersion": {
+      "const": 1
+    },
+    "action": {
+      "enum": [
+        "inspect",
+        "create",
+        "apply",
+        "exportMedia",
+        "exportChartData"
+      ]
+    }
   },
   "allOf": [
     {
       "if": {
-        "properties": { "action": { "const": "inspect" } },
-        "required": ["action"]
+        "properties": {
+          "action": {
+            "const": "inspect"
+          }
+        },
+        "required": [
+          "action"
+        ]
       },
-      "then": { "$ref": "#/$defs/inspectRequest" }
+      "then": {
+        "$ref": "#/$defs/inspectRequest"
+      }
     },
     {
       "if": {
-        "properties": { "action": { "const": "create" } },
-        "required": ["action"]
+        "properties": {
+          "action": {
+            "const": "create"
+          }
+        },
+        "required": [
+          "action"
+        ]
       },
-      "then": { "$ref": "#/$defs/createRequest" }
+      "then": {
+        "$ref": "#/$defs/createRequest"
+      }
     },
     {
       "if": {
-        "properties": { "action": { "const": "apply" } },
-        "required": ["action"]
+        "properties": {
+          "action": {
+            "const": "apply"
+          }
+        },
+        "required": [
+          "action"
+        ]
       },
-      "then": { "$ref": "#/$defs/applyRequest" }
+      "then": {
+        "$ref": "#/$defs/applyRequest"
+      }
     },
     {
       "if": {
-        "properties": { "action": { "const": "exportMedia" } },
-        "required": ["action"]
+        "properties": {
+          "action": {
+            "const": "exportMedia"
+          }
+        },
+        "required": [
+          "action"
+        ]
       },
-      "then": { "$ref": "#/$defs/exportMediaRequest" }
+      "then": {
+        "$ref": "#/$defs/exportMediaRequest"
+      }
     },
     {
       "if": {
-        "properties": { "action": { "const": "exportChartData" } },
-        "required": ["action"]
+        "properties": {
+          "action": {
+            "const": "exportChartData"
+          }
+        },
+        "required": [
+          "action"
+        ]
       },
-      "then": { "$ref": "#/$defs/exportChartDataRequest" }
+      "then": {
+        "$ref": "#/$defs/exportChartDataRequest"
+      }
     }
   ],
   "$defs": {
-    "format": { "enum": ["xlsx", "docx", "pptx"] },
+    "format": {
+      "enum": [
+        "xlsx",
+        "docx",
+        "pptx"
+      ]
+    },
     "inspectRequest": {
       "type": "object",
-      "required": ["schemaVersion", "action", "path"],
+      "required": [
+        "schemaVersion",
+        "action",
+        "path"
+      ],
       "additionalProperties": false,
       "properties": {
-        "schemaVersion": { "const": 1 },
-        "action": { "const": "inspect" },
-        "path": { "type": "string", "minLength": 1 },
-        "format": { "$ref": "#/$defs/format" },
-        "scope": { "$ref": "#/$defs/inspectScope" },
-        "locale": { "type": "string" }
+        "schemaVersion": {
+          "const": 1
+        },
+        "action": {
+          "const": "inspect"
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "format": {
+          "$ref": "#/$defs/format"
+        },
+        "scope": {
+          "$ref": "#/$defs/inspectScope"
+        },
+        "locale": {
+          "type": "string"
+        }
       }
     },
     "inspectScope": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "sheet": { "type": "string", "minLength": 1 },
-        "range": { "type": "string", "minLength": 1 },
-        "maxCells": { "type": "integer", "minimum": 1, "maximum": 20000 },
-        "from": { "type": "integer", "minimum": 1 },
-        "maxParas": { "type": "integer", "minimum": 1, "maximum": 5000 },
-        "headerFooter": { "type": "boolean" },
-        "pictures": { "type": "boolean" },
-        "textBoxes": { "type": "boolean" },
-        "textBoxContent": { "type": "boolean" },
-        "notes": { "type": "boolean" },
-        "comments": { "type": "boolean" },
-        "charts": { "type": "boolean" },
-        "smartArt": { "type": "boolean" },
-        "oleObjects": { "type": "boolean" },
-        "watermarks": { "type": "boolean" },
-        "tables": { "type": "boolean" },
-        "timing": { "type": "boolean" },
-        "revisions": { "type": "boolean" },
-        "hyperlinks": { "type": "boolean" },
-        "sparklines": { "type": "boolean" },
-        "bookmarks": { "type": "boolean" },
-        "fields": { "type": "boolean" },
-        "tocs": { "type": "boolean" },
-        "maths": { "type": "boolean" },
-        "contentControls": { "type": "boolean" },
-        "numbering": { "type": "boolean" },
-        "styles": { "type": "boolean" },
-        "runs": { "type": "boolean" },
-        "slide": { "type": "integer", "minimum": 1 },
-        "maxShapes": { "type": "integer", "minimum": 1, "maximum": 5000 }
+        "sheet": {
+          "type": "string",
+          "minLength": 1
+        },
+        "range": {
+          "type": "string",
+          "minLength": 1
+        },
+        "maxCells": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 20000
+        },
+        "from": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "maxParas": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 5000
+        },
+        "headerFooter": {
+          "type": "boolean"
+        },
+        "pictures": {
+          "type": "boolean"
+        },
+        "textBoxes": {
+          "type": "boolean"
+        },
+        "textBoxContent": {
+          "type": "boolean"
+        },
+        "notes": {
+          "type": "boolean"
+        },
+        "comments": {
+          "type": "boolean"
+        },
+        "charts": {
+          "type": "boolean"
+        },
+        "smartArt": {
+          "type": "boolean"
+        },
+        "oleObjects": {
+          "type": "boolean"
+        },
+        "watermarks": {
+          "type": "boolean"
+        },
+        "tables": {
+          "type": "boolean"
+        },
+        "timing": {
+          "type": "boolean"
+        },
+        "revisions": {
+          "type": "boolean"
+        },
+        "hyperlinks": {
+          "type": "boolean"
+        },
+        "sparklines": {
+          "type": "boolean"
+        },
+        "bookmarks": {
+          "type": "boolean"
+        },
+        "fields": {
+          "type": "boolean"
+        },
+        "tocs": {
+          "type": "boolean"
+        },
+        "maths": {
+          "type": "boolean"
+        },
+        "contentControls": {
+          "type": "boolean"
+        },
+        "numbering": {
+          "type": "boolean"
+        },
+        "styles": {
+          "type": "boolean"
+        },
+        "runs": {
+          "type": "boolean"
+        },
+        "slide": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "maxShapes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 5000
+        }
       },
       "dependentRequired": {
-        "range": ["sheet"],
-        "sheet": ["range"],
-        "from": ["maxParas"],
-        "maxParas": ["from"],
-        "maxShapes": ["slide"],
-        "textBoxContent": ["textBoxes"]
+        "range": [
+          "sheet"
+        ],
+        "sheet": [
+          "range"
+        ],
+        "from": [
+          "maxParas"
+        ],
+        "maxParas": [
+          "from"
+        ],
+        "maxShapes": [
+          "slide"
+        ],
+        "textBoxContent": [
+          "textBoxes"
+        ]
       }
     },
     "createRequest": {
       "type": "object",
       "comment": "path 省略时，落盘路径由调用方另给，命令行用 --output。xlsx 用 workbook，docx 用 document，pptx 用 presentation，三者不能同时出现。",
-      "required": ["schemaVersion", "action"],
+      "required": [
+        "schemaVersion",
+        "action"
+      ],
       "additionalProperties": false,
       "properties": {
-        "schemaVersion": { "const": 1 },
-        "action": { "const": "create" },
-        "path": { "type": "string", "minLength": 1 },
-        "format": { "$ref": "#/$defs/format" },
-        "workbook": { "$ref": "#/$defs/xlsxWorkbook" },
-        "document": { "$ref": "#/$defs/docxDocument" },
-        "presentation": { "$ref": "#/$defs/pptxPresentation" },
-        "locale": { "type": "string" }
+        "schemaVersion": {
+          "const": 1
+        },
+        "action": {
+          "const": "create"
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "format": {
+          "$ref": "#/$defs/format"
+        },
+        "workbook": {
+          "$ref": "xlsx.schema.json#/$defs/xlsxWorkbook"
+        },
+        "document": {
+          "$ref": "docx.schema.json#/$defs/docxDocument"
+        },
+        "presentation": {
+          "$ref": "pptx.schema.json#/$defs/pptxPresentation"
+        },
+        "locale": {
+          "type": "string"
+        }
       },
       "oneOf": [
-        { "required": ["workbook"] },
-        { "required": ["document"] },
-        { "required": ["presentation"] }
+        {
+          "required": [
+            "workbook"
+          ]
+        },
+        {
+          "required": [
+            "document"
+          ]
+        },
+        {
+          "required": [
+            "presentation"
+          ]
+        }
       ]
     },
-    "xlsxWorkbook": {
-      "type": "object",
-      "required": ["sheets"],
-      "additionalProperties": false,
-      "properties": {
-        "sheets": {
-          "type": "array",
-          "minItems": 1,
-          "items": { "$ref": "#/$defs/xlsxSheetCreate" }
-        },
-        "props": { "$ref": "#/$defs/createProps" }
-      }
+    "smartArtLayout": {
+      "enum": [
+        "list",
+        "org",
+        "cycle"
+      ]
     },
-    "xlsxSheetCreate": {
-      "type": "object",
-      "required": ["name"],
-      "additionalProperties": false,
-      "properties": {
-        "name": { "type": "string", "minLength": 1, "maxLength": 31 },
-        "cells": {
-          "type": "array",
-          "items": { "$ref": "#/$defs/xlsxCellCreate" }
-        },
-        "pictures": {
-          "type": "array",
-          "items": { "$ref": "#/$defs/xlsxPictureCreate" }
-        },
-        "charts": {
-          "type": "array",
-          "items": { "$ref": "#/$defs/xlsxChartCreate" }
-        },
-        "headerFooters": {
-          "type": "array",
-          "items": { "$ref": "#/$defs/xlsxHeaderFooterCreate" }
-        }
-      }
+    "smartArtRole": {
+      "enum": [
+        "node",
+        "asst"
+      ]
     },
-    "xlsxHeaderFooterCreate": {
-      "type": "object",
-      "required": ["kind", "side"],
-      "additionalProperties": false,
-      "properties": {
-        "kind": { "enum": ["odd", "even", "first"] },
-        "side": { "enum": ["header", "footer"] },
-        "text": { "type": "string" },
-        "pictures": {
-          "type": "array",
-          "items": { "$ref": "#/$defs/xlsxHfPictureCreate" }
-        }
-      }
-    },
-    "xlsxHfPictureCreate": {
-      "type": "object",
-      "required": ["file"],
-      "additionalProperties": false,
-      "properties": {
-        "file": { "type": "string", "minLength": 1 },
-        "cx": { "type": "integer", "minimum": 1 },
-        "cy": { "type": "integer", "minimum": 1 }
-      }
-    },
-    "xlsxPictureCreate": {
-      "type": "object",
-      "required": ["file", "from"],
-      "additionalProperties": false,
-      "properties": {
-        "file": { "type": "string", "minLength": 1 },
-        "from": { "type": "string", "minLength": 1 },
-        "to": { "type": "string", "minLength": 1 },
-        "anchor": { "enum": ["oneCell", "twoCell"] },
-        "cx": { "type": "integer", "minimum": 1 },
-        "cy": { "type": "integer", "minimum": 1 },
-        "fromOffX": { "type": "integer", "minimum": 0 },
-        "fromOffY": { "type": "integer", "minimum": 0 },
-        "toOffX": { "type": "integer", "minimum": 0 },
-        "toOffY": { "type": "integer", "minimum": 0 }
-      }
-    },
-    "xlsxChartCreate": {
-      "type": "object",
-      "required": ["type", "series", "from", "dataFrom"],
-      "additionalProperties": false,
-      "properties": {
-        "type": { "$ref": "#/$defs/insertChartType" },
-        "title": { "type": "string" },
-        "series": {
-          "type": "array",
-          "minItems": 1,
-          "items": {
-            "allOf": [
-              { "$ref": "#/$defs/chartSeriesData" },
-              { "required": ["values"] }
-            ]
-          }
-        },
-        "from": { "type": "string", "minLength": 1 },
-        "to": { "type": "string", "minLength": 1 },
-        "anchor": { "enum": ["oneCell", "twoCell"] },
-        "cx": { "type": "integer", "minimum": 1 },
-        "cy": { "type": "integer", "minimum": 1 },
-        "fromOffX": { "type": "integer", "minimum": 0 },
-        "fromOffY": { "type": "integer", "minimum": 0 },
-        "toOffX": { "type": "integer", "minimum": 0 },
-        "toOffY": { "type": "integer", "minimum": 0 },
-        "dataFrom": { "type": "string", "minLength": 1 }
-      }
-    },
-    "xlsxCellCreate": {
-      "type": "object",
-      "required": ["ref"],
-      "additionalProperties": false,
-      "properties": {
-        "ref": { "type": "string", "minLength": 1 },
-        "value": {
-          "type": ["number", "string", "boolean", "null"]
-        },
-        "formula": {
-          "type": "string",
-          "pattern": "^="
-        }
-      },
-      "not": {
-        "required": ["value", "formula"]
-      }
-    },
-    "docxDocument": {
-      "type": "object",
-      "required": ["paragraphs"],
-      "additionalProperties": false,
-      "properties": {
-        "paragraphs": {
-          "type": "array",
-          "items": { "$ref": "#/$defs/docxParaCreate" }
-        },
-        "tables": {
-          "type": "array",
-          "items": { "$ref": "#/$defs/docxTableCreate" }
-        },
-        "headers": {
-          "type": "array",
-          "maxItems": 3,
-          "items": { "$ref": "#/$defs/docxHfCreate" }
-        },
-        "footers": {
-          "type": "array",
-          "maxItems": 3,
-          "items": { "$ref": "#/$defs/docxHfCreate" }
-        },
-        "props": { "$ref": "#/$defs/createProps" },
-        "protection": { "$ref": "#/$defs/createProtection" },
-        "watermarks": {
-          "type": "array",
-          "items": { "$ref": "#/$defs/createWatermark" }
-        }
-      }
-    },
-    "docxHfCreate": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "type": { "enum": ["default", "even", "first"] },
-        "paragraphs": {
-          "type": "array",
-          "items": { "$ref": "#/$defs/docxHfParaCreate" }
-        },
-        "tables": {
-          "type": "array",
-          "items": { "$ref": "#/$defs/docxTableCreate" }
-        }
-      }
-    },
-    "docxTableCreate": {
-      "type": "object",
-      "required": ["cells"],
-      "additionalProperties": false,
-      "properties": {
-        "after": { "type": "integer", "minimum": 0 },
-        "cells": {
-          "type": "array",
-          "minItems": 1,
-          "maxItems": 500,
-          "items": {
-            "type": "array",
-            "minItems": 1,
-            "maxItems": 63,
-            "items": { "type": "string" }
-          }
-        }
-      }
-    },
-    "docxHfParaCreate": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "text": { "type": "string" },
-        "pictures": {
-          "type": "array",
-          "items": { "$ref": "#/$defs/docxPictureCreate" }
-        },
-        "smartArts": {
-          "type": "array",
-          "items": { "$ref": "#/$defs/docxSmartArtCreate" }
-        },
-        "charts": {
-          "type": "array",
-          "items": { "$ref": "#/$defs/docxChartCreate" }
-        },
-        "oleObjects": {
-          "type": "array",
-          "items": { "$ref": "#/$defs/docxOleCreate" }
-        },
-        "footnote": { "type": "string" },
-        "endnote": { "type": "string" },
-        "comments": {
-          "type": "array",
-          "items": { "$ref": "#/$defs/docxCommentCreate" }
-        }
-      }
-    },
-    "docxParaCreate": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "text": { "type": "string" },
-        "style": {
-          "type": "string",
-          "enum": ["Normal", "Heading1", "Heading2", "Heading3"]
-        },
-        "sectionType": {
-          "enum": ["nextPage", "continuous", "evenPage", "oddPage", "nextColumn"]
-        },
-        "textBoxes": {
-          "type": "array",
-          "items": { "$ref": "#/$defs/docxTextBoxCreate" }
-        },
-        "pictures": {
-          "type": "array",
-          "items": { "$ref": "#/$defs/docxPictureCreate" }
-        },
-        "smartArts": {
-          "type": "array",
-          "items": { "$ref": "#/$defs/docxSmartArtCreate" }
-        },
-        "charts": {
-          "type": "array",
-          "items": { "$ref": "#/$defs/docxChartCreate" }
-        },
-        "oleObjects": {
-          "type": "array",
-          "items": { "$ref": "#/$defs/docxOleCreate" }
-        },
-        "footnote": { "type": "string" },
-        "endnote": { "type": "string" },
-        "comments": {
-          "type": "array",
-          "items": { "$ref": "#/$defs/docxCommentCreate" }
-        }
-      }
-    },
-    "docxOleCreate": {
-      "type": "object",
-      "required": ["file"],
-      "additionalProperties": false,
-      "properties": {
-        "file": { "type": "string", "minLength": 1 }
-      }
-    },
-    "docxChartCreate": {
-      "type": "object",
-      "required": ["type", "series"],
-      "additionalProperties": false,
-      "properties": {
-        "type": { "$ref": "#/$defs/insertChartType" },
-        "title": { "type": "string" },
-        "series": {
-          "type": "array",
-          "minItems": 1,
-          "items": {
-            "allOf": [
-              { "$ref": "#/$defs/chartSeriesData" },
-              { "required": ["values"] }
-            ]
-          }
-        },
-        "kind": { "enum": ["inline", "anchor"] },
-        "wrap": {
-          "type": ["string", "null"],
-          "enum": ["square", "tight", "through", "topAndBottom", "none", null]
-        },
-        "cx": { "type": "integer", "minimum": 1 },
-        "cy": { "type": "integer", "minimum": 1 }
-      }
-    },
-    "docxCommentCreate": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "text": { "type": "string" },
-        "author": { "type": "string" },
-        "initials": { "type": "string" },
-        "date": { "type": "string", "minLength": 1 }
-      }
-    },
-    "docxPictureCreate": {
-      "type": "object",
-      "required": ["file"],
-      "additionalProperties": false,
-      "properties": {
-        "file": { "type": "string", "minLength": 1 },
-        "cx": { "type": "integer", "minimum": 1 },
-        "cy": { "type": "integer", "minimum": 1 },
-        "kind": { "enum": ["inline", "anchor"] },
-        "wrap": { "enum": ["square", "tight", "through", "topAndBottom", "none"] },
-        "alignH": { "enum": ["left", "center", "right"] },
-        "alignV": { "enum": ["top", "center", "bottom"] },
-        "offsetX": { "type": "integer" },
-        "offsetY": { "type": "integer" }
-      }
-    },
-    "docxTextBoxCreate": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "text": { "type": "string" },
-        "cx": { "type": "integer", "minimum": 1 },
-        "cy": { "type": "integer", "minimum": 1 }
-      }
-    },
-    "smartArtLayout": { "enum": ["list", "org", "cycle"] },
-    "smartArtRole": { "enum": ["node", "asst"] },
     "smartArtColors": {
-      "enum": ["accent1", "accent2", "accent3", "accent4", "accent5", "accent6"]
+      "enum": [
+        "accent1",
+        "accent2",
+        "accent3",
+        "accent4",
+        "accent5",
+        "accent6"
+      ]
     },
-    "smartArtStyle": { "enum": ["simple", "subtle", "intense"] },
-    "docxSmartArtCreate": {
-      "type": "object",
-      "required": ["layout"],
-      "additionalProperties": false,
-      "properties": {
-        "layout": { "$ref": "#/$defs/smartArtLayout" },
-        "points": {
-          "type": "array",
-          "items": { "$ref": "#/$defs/smartArtPointInput" }
-        },
-        "kind": { "enum": ["inline", "anchor"] },
-        "wrap": {
-          "type": ["string", "null"],
-          "enum": ["square", "tight", "through", "topAndBottom", "none", null]
-        },
-        "cx": { "type": "integer", "minimum": 1 },
-        "cy": { "type": "integer", "minimum": 1 }
-      }
+    "smartArtStyle": {
+      "enum": [
+        "simple",
+        "subtle",
+        "intense"
+      ]
     },
     "smartArtPointInput": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "text": { "type": "string" },
-        "parent": { "type": ["integer", "null"], "minimum": 0 },
-        "role": { "$ref": "#/$defs/smartArtRole" }
-      }
-    },
-    "pptxPresentation": {
-      "type": "object",
-      "required": ["slides"],
-      "additionalProperties": false,
-      "properties": {
-        "slides": {
-          "type": "array",
-          "items": { "$ref": "#/$defs/pptxSlideCreate" }
+        "text": {
+          "type": "string"
         },
-        "props": { "$ref": "#/$defs/createProps" }
-      }
-    },
-    "pptxSlideCreate": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "shapes": {
-          "type": "array",
-          "items": { "$ref": "#/$defs/pptxShapeCreate" }
+        "parent": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
         },
-        "pictures": {
-          "type": "array",
-          "items": { "$ref": "#/$defs/pptxPictureCreate" }
-        },
-        "charts": {
-          "type": "array",
-          "items": { "$ref": "#/$defs/pptxChartCreate" }
-        },
-        "smartArts": {
-          "type": "array",
-          "items": { "$ref": "#/$defs/pptxSmartArtCreate" }
-        },
-        "tables": {
-          "type": "array",
-          "items": { "$ref": "#/$defs/pptxTableCreate" }
+        "role": {
+          "$ref": "#/$defs/smartArtRole"
         }
-      }
-    },
-    "pptxSmartArtCreate": {
-      "type": "object",
-      "required": ["layout"],
-      "additionalProperties": false,
-      "properties": {
-        "layout": { "$ref": "#/$defs/smartArtLayout" },
-        "points": {
-          "type": "array",
-          "items": { "$ref": "#/$defs/smartArtPointInput" }
-        },
-        "x": { "type": "integer", "minimum": 0 },
-        "y": { "type": "integer", "minimum": 0 },
-        "cx": { "type": "integer", "minimum": 1 },
-        "cy": { "type": "integer", "minimum": 1 }
-      }
-    },
-    "pptxTableCreate": {
-      "type": "object",
-      "required": ["rows", "cols"],
-      "additionalProperties": false,
-      "properties": {
-        "rows": { "type": "integer", "minimum": 1, "maximum": 500 },
-        "cols": { "type": "integer", "minimum": 1, "maximum": 75 },
-        "cells": {
-          "type": "array",
-          "items": {
-            "type": "array",
-            "items": { "type": "string" }
-          }
-        },
-        "x": { "type": "integer", "minimum": 0 },
-        "y": { "type": "integer", "minimum": 0 },
-        "cx": { "type": "integer", "minimum": 1 },
-        "cy": { "type": "integer", "minimum": 1 }
-      }
-    },
-    "pptxChartCreate": {
-      "type": "object",
-      "required": ["type", "series"],
-      "additionalProperties": false,
-      "properties": {
-        "type": { "$ref": "#/$defs/insertChartType" },
-        "title": { "type": "string" },
-        "series": {
-          "type": "array",
-          "minItems": 1,
-          "items": {
-            "allOf": [
-              { "$ref": "#/$defs/chartSeriesData" },
-              { "required": ["values"] }
-            ]
-          }
-        },
-        "x": { "type": "integer", "minimum": 0 },
-        "y": { "type": "integer", "minimum": 0 },
-        "cx": { "type": "integer", "minimum": 1 },
-        "cy": { "type": "integer", "minimum": 1 }
-      }
-    },
-    "pptxPictureCreate": {
-      "type": "object",
-      "required": ["file"],
-      "additionalProperties": false,
-      "properties": {
-        "file": { "type": "string", "minLength": 1 },
-        "x": { "type": "integer", "minimum": 0 },
-        "y": { "type": "integer", "minimum": 0 },
-        "cx": { "type": "integer", "minimum": 1 },
-        "cy": { "type": "integer", "minimum": 1 }
-      }
-    },
-    "pptxShapeCreate": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "text": { "type": "string" }
       }
     },
     "exportMediaRequest": {
       "type": "object",
       "comment": "output 省略时，落盘路径由调用方另给，命令行用 --output。不得默认写成源 path。",
-      "required": ["schemaVersion", "action", "path", "id"],
+      "required": [
+        "schemaVersion",
+        "action",
+        "path",
+        "id"
+      ],
       "additionalProperties": false,
       "properties": {
-        "schemaVersion": { "const": 1 },
-        "action": { "const": "exportMedia" },
-        "path": { "type": "string", "minLength": 1 },
-        "format": { "$ref": "#/$defs/format" },
-        "id": { "type": "string", "minLength": 1 },
-        "output": { "type": "string", "minLength": 1 },
-        "locale": { "type": "string" }
+        "schemaVersion": {
+          "const": 1
+        },
+        "action": {
+          "const": "exportMedia"
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "format": {
+          "$ref": "#/$defs/format"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "output": {
+          "type": "string",
+          "minLength": 1
+        },
+        "locale": {
+          "type": "string"
+        }
       }
     },
     "applyRequest": {
       "type": "object",
-      "required": ["schemaVersion", "action", "path", "ops"],
+      "required": [
+        "schemaVersion",
+        "action",
+        "path",
+        "ops"
+      ],
       "additionalProperties": false,
       "properties": {
-        "schemaVersion": { "const": 1 },
-        "action": { "const": "apply" },
-        "path": { "type": "string", "minLength": 1 },
-        "format": { "$ref": "#/$defs/format" },
-        "output": { "type": "string", "minLength": 1 },
-        "locale": { "type": "string" },
+        "schemaVersion": {
+          "const": 1
+        },
+        "action": {
+          "const": "apply"
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "format": {
+          "$ref": "#/$defs/format"
+        },
+        "output": {
+          "type": "string",
+          "minLength": 1
+        },
+        "locale": {
+          "type": "string"
+        },
         "ops": {
           "type": "array",
           "minItems": 1,
           "items": {
             "oneOf": [
-              { "$ref": "#/$defs/setCellOp" },
-              { "$ref": "#/$defs/setCellStyleOp" },
-              { "$ref": "#/$defs/setColWidthOp" },
-              { "$ref": "#/$defs/setRowHeightOp" },
-              { "$ref": "#/$defs/mergeRangeOp" },
-              { "$ref": "#/$defs/unmergeRangeOp" },
-              { "$ref": "#/$defs/insertDataValidationOp" },
-              { "$ref": "#/$defs/setDataValidationOp" },
-              { "$ref": "#/$defs/deleteDataValidationOp" },
-              { "$ref": "#/$defs/insertConditionalFormatOp" },
-              { "$ref": "#/$defs/setConditionalFormatOp" },
-              { "$ref": "#/$defs/deleteConditionalFormatOp" },
-              { "$ref": "#/$defs/insertSheetTableOp" },
-              { "$ref": "#/$defs/setSheetTableOp" },
-              { "$ref": "#/$defs/deleteSheetTableOp" },
-              { "$ref": "#/$defs/insertPivotTableOp" },
-              { "$ref": "#/$defs/setPivotTableOp" },
-              { "$ref": "#/$defs/deletePivotTableOp" },
-              { "$ref": "#/$defs/insertDefinedNameOp" },
-              { "$ref": "#/$defs/setDefinedNameOp" },
-              { "$ref": "#/$defs/deleteDefinedNameOp" },
-              { "$ref": "#/$defs/setPrintSetupOp" },
-              { "$ref": "#/$defs/setSheetViewOp" },
-              { "$ref": "#/$defs/setAutoFilterOp" },
-              { "$ref": "#/$defs/setHeaderFooterTextOp" },
-              { "$ref": "#/$defs/setParaTextOp" },
-              { "$ref": "#/$defs/setHeaderFooterDistanceOp" },
-              { "$ref": "#/$defs/setPageMarginOp" },
-              { "$ref": "#/$defs/setPageSizeOp" },
-              { "$ref": "#/$defs/setColumnsOp" },
-              { "$ref": "#/$defs/setVerticalAlignOp" },
-              { "$ref": "#/$defs/setLineNumberingOp" },
-              { "$ref": "#/$defs/setDocGridOp" },
-              { "$ref": "#/$defs/setRtlGutterOp" },
-              { "$ref": "#/$defs/setMirrorMarginsOp" },
-              { "$ref": "#/$defs/setGutterAtTopOp" },
-              { "$ref": "#/$defs/setHeaderFooterLinkOp" },
-              { "$ref": "#/$defs/insertHeaderFooterOp" },
-              { "$ref": "#/$defs/insertSectionOp" },
-              { "$ref": "#/$defs/deleteSectionOp" },
-              { "$ref": "#/$defs/setTitlePageOp" },
-              { "$ref": "#/$defs/setEvenAndOddHeadersOp" },
-              { "$ref": "#/$defs/replacePictureOp" },
-              { "$ref": "#/$defs/insertPictureOp" },
-              { "$ref": "#/$defs/deletePictureOp" },
-              { "$ref": "#/$defs/setPictureSizeOp" },
-              { "$ref": "#/$defs/setPictureWrapOp" },
-              { "$ref": "#/$defs/setPictureAnchorOp" },
-              { "$ref": "#/$defs/setPicturePosOp" },
-              { "$ref": "#/$defs/insertTextBoxOp" },
-              { "$ref": "#/$defs/deleteTextBoxOp" },
-              { "$ref": "#/$defs/setTextBoxSizeOp" },
-              { "$ref": "#/$defs/setTextBoxAnchorOp" },
-              { "$ref": "#/$defs/setTextBoxWrapOp" },
-              { "$ref": "#/$defs/setTextBoxFillOp" },
-              { "$ref": "#/$defs/setTextBoxLineOp" },
-              { "$ref": "#/$defs/setTextBoxDirectionOp" },
-              { "$ref": "#/$defs/insertParaOp" },
-              { "$ref": "#/$defs/deleteParaOp" },
-              { "$ref": "#/$defs/insertTableOp" },
-              { "$ref": "#/$defs/deleteTableOp" },
-              { "$ref": "#/$defs/insertRowOp" },
-              { "$ref": "#/$defs/deleteRowOp" },
-              { "$ref": "#/$defs/insertColOp" },
-              { "$ref": "#/$defs/deleteColOp" },
-              { "$ref": "#/$defs/mergeCellsOp" },
-              { "$ref": "#/$defs/splitCellsOp" },
-              { "$ref": "#/$defs/acceptRevisionOp" },
-              { "$ref": "#/$defs/rejectRevisionOp" },
-              { "$ref": "#/$defs/insertHyperlinkOp" },
-              { "$ref": "#/$defs/setHyperlinkOp" },
-              { "$ref": "#/$defs/deleteHyperlinkOp" },
-              { "$ref": "#/$defs/insertSparklineOp" },
-              { "$ref": "#/$defs/setSparklineOp" },
-              { "$ref": "#/$defs/deleteSparklineOp" },
-              { "$ref": "#/$defs/insertBookmarkOp" },
-              { "$ref": "#/$defs/setBookmarkOp" },
-              { "$ref": "#/$defs/deleteBookmarkOp" },
-              { "$ref": "#/$defs/insertFieldOp" },
-              { "$ref": "#/$defs/setFieldOp" },
-              { "$ref": "#/$defs/deleteFieldOp" },
-              { "$ref": "#/$defs/insertTocOp" },
-              { "$ref": "#/$defs/deleteTocOp" },
-              { "$ref": "#/$defs/insertMathOp" },
-              { "$ref": "#/$defs/setMathOp" },
-              { "$ref": "#/$defs/deleteMathOp" },
-              { "$ref": "#/$defs/insertContentControlOp" },
-              { "$ref": "#/$defs/setContentControlOp" },
-              { "$ref": "#/$defs/deleteContentControlOp" },
-              { "$ref": "#/$defs/insertNumberingOp" },
-              { "$ref": "#/$defs/setNumberingOp" },
-              { "$ref": "#/$defs/setParaNumberingOp" },
-              { "$ref": "#/$defs/setStyleOp" },
-              { "$ref": "#/$defs/setParaStyleOp" },
-              { "$ref": "#/$defs/setParaFormatOp" },
-              { "$ref": "#/$defs/setRunFormatOp" },
-              { "$ref": "#/$defs/setTextBoxLinkOp" },
-              { "$ref": "#/$defs/insertFootnoteOp" },
-              { "$ref": "#/$defs/insertEndnoteOp" },
-              { "$ref": "#/$defs/deleteFootnoteOp" },
-              { "$ref": "#/$defs/deleteEndnoteOp" },
-              { "$ref": "#/$defs/setNoteNumberingOp" },
-              { "$ref": "#/$defs/insertCommentOp" },
-              { "$ref": "#/$defs/deleteCommentOp" },
-              { "$ref": "#/$defs/replyCommentOp" },
-              { "$ref": "#/$defs/setCommentTextOp" },
-              { "$ref": "#/$defs/setCommentMetaOp" },
-              { "$ref": "#/$defs/setCommentDoneOp" },
-              { "$ref": "#/$defs/insertChartOp" },
-              { "$ref": "#/$defs/insertChartSheetOp" },
-              { "$ref": "#/$defs/deleteChartSheetOp" },
-              { "$ref": "#/$defs/insertSheetOp" },
-              { "$ref": "#/$defs/deleteSheetOp" },
-              { "$ref": "#/$defs/renameSheetOp" },
-              { "$ref": "#/$defs/moveSheetOp" },
-              { "$ref": "#/$defs/setSheetHiddenOp" },
-              { "$ref": "#/$defs/deleteChartOp" },
-              { "$ref": "#/$defs/setChartTitleOp" },
-              { "$ref": "#/$defs/setChartSeriesOp" },
-              { "$ref": "#/$defs/addChartSeriesOp" },
-              { "$ref": "#/$defs/deleteChartSeriesOp" },
-              { "$ref": "#/$defs/setChartTypeOp" },
-              { "$ref": "#/$defs/setChartAxisTitleOp" },
-              { "$ref": "#/$defs/setChartLegendOp" },
-              { "$ref": "#/$defs/setChartDataLabelsOp" },
-              { "$ref": "#/$defs/insertTrendlineOp" },
-              { "$ref": "#/$defs/setTrendlineOp" },
-              { "$ref": "#/$defs/deleteTrendlineOp" },
-              { "$ref": "#/$defs/insertErrorBarsOp" },
-              { "$ref": "#/$defs/setErrorBarsOp" },
-              { "$ref": "#/$defs/deleteErrorBarsOp" },
-              { "$ref": "#/$defs/setChartSeriesAxisOp" },
-              { "$ref": "#/$defs/setChartSizeOp" },
-              { "$ref": "#/$defs/setChartPosOp" },
-              { "$ref": "#/$defs/setChartWrapOp" },
-              { "$ref": "#/$defs/setChartAnchorOp" },
-              { "$ref": "#/$defs/setSmartArtAnchorOp" },
-              { "$ref": "#/$defs/insertSmartArtOp" },
-              { "$ref": "#/$defs/deleteSmartArtOp" },
-              { "$ref": "#/$defs/setSmartArtTextOp" },
-              { "$ref": "#/$defs/addSmartArtPointOp" },
-              { "$ref": "#/$defs/deleteSmartArtPointOp" },
-              { "$ref": "#/$defs/setSmartArtSizeOp" },
-              { "$ref": "#/$defs/setSmartArtPosOp" },
-              { "$ref": "#/$defs/setSmartArtWrapOp" },
-              { "$ref": "#/$defs/setSmartArtColorsOp" },
-              { "$ref": "#/$defs/setSmartArtStyleOp" },
-              { "$ref": "#/$defs/setSmartArtLayoutOp" },
-              { "$ref": "#/$defs/insertOleOp" },
-              { "$ref": "#/$defs/deleteOleOp" },
-              { "$ref": "#/$defs/setProtectionOp" },
-              { "$ref": "#/$defs/insertWatermarkOp" },
-              { "$ref": "#/$defs/deleteWatermarkOp" },
-              { "$ref": "#/$defs/setNotesTextOp" },
-              { "$ref": "#/$defs/setShapeTextOp" },
-              { "$ref": "#/$defs/insertShapeOp" },
-              { "$ref": "#/$defs/deleteShapeOp" },
-              { "$ref": "#/$defs/setShapePosOp" },
-              { "$ref": "#/$defs/setShapeSizeOp" },
-              { "$ref": "#/$defs/setShapeFillOp" },
-              { "$ref": "#/$defs/setShapeLineOp" },
-              { "$ref": "#/$defs/setTableCellTextOp" },
-              { "$ref": "#/$defs/setTablePosOp" },
-              { "$ref": "#/$defs/setTableSizeOp" },
-              { "$ref": "#/$defs/insertSlideOp" },
-              { "$ref": "#/$defs/deleteSlideOp" },
-              { "$ref": "#/$defs/moveSlideOp" },
-              { "$ref": "#/$defs/setSlideHiddenOp" },
-              { "$ref": "#/$defs/setTransitionOp" },
-              { "$ref": "#/$defs/setPropsOp" },
-              { "$ref": "#/$defs/setCustomPropOp" },
-              { "$ref": "#/$defs/deleteCustomPropOp" }
+              {
+                "$ref": "xlsx.schema.json#/$defs/setCellOp"
+              },
+              {
+                "$ref": "xlsx.schema.json#/$defs/setCellStyleOp"
+              },
+              {
+                "$ref": "xlsx.schema.json#/$defs/setColWidthOp"
+              },
+              {
+                "$ref": "xlsx.schema.json#/$defs/setRowHeightOp"
+              },
+              {
+                "$ref": "xlsx.schema.json#/$defs/mergeRangeOp"
+              },
+              {
+                "$ref": "xlsx.schema.json#/$defs/unmergeRangeOp"
+              },
+              {
+                "$ref": "xlsx.schema.json#/$defs/insertDataValidationOp"
+              },
+              {
+                "$ref": "xlsx.schema.json#/$defs/setDataValidationOp"
+              },
+              {
+                "$ref": "xlsx.schema.json#/$defs/deleteDataValidationOp"
+              },
+              {
+                "$ref": "xlsx.schema.json#/$defs/insertConditionalFormatOp"
+              },
+              {
+                "$ref": "xlsx.schema.json#/$defs/setConditionalFormatOp"
+              },
+              {
+                "$ref": "xlsx.schema.json#/$defs/deleteConditionalFormatOp"
+              },
+              {
+                "$ref": "xlsx.schema.json#/$defs/insertSheetTableOp"
+              },
+              {
+                "$ref": "xlsx.schema.json#/$defs/setSheetTableOp"
+              },
+              {
+                "$ref": "xlsx.schema.json#/$defs/deleteSheetTableOp"
+              },
+              {
+                "$ref": "xlsx.schema.json#/$defs/insertPivotTableOp"
+              },
+              {
+                "$ref": "xlsx.schema.json#/$defs/setPivotTableOp"
+              },
+              {
+                "$ref": "xlsx.schema.json#/$defs/deletePivotTableOp"
+              },
+              {
+                "$ref": "xlsx.schema.json#/$defs/insertDefinedNameOp"
+              },
+              {
+                "$ref": "xlsx.schema.json#/$defs/setDefinedNameOp"
+              },
+              {
+                "$ref": "xlsx.schema.json#/$defs/deleteDefinedNameOp"
+              },
+              {
+                "$ref": "xlsx.schema.json#/$defs/setPrintSetupOp"
+              },
+              {
+                "$ref": "xlsx.schema.json#/$defs/setSheetViewOp"
+              },
+              {
+                "$ref": "xlsx.schema.json#/$defs/setAutoFilterOp"
+              },
+              {
+                "$ref": "xlsx.schema.json#/$defs/setHeaderFooterTextOp"
+              },
+              {
+                "$ref": "docx.schema.json#/$defs/setParaTextOp"
+              },
+              {
+                "$ref": "docx.schema.json#/$defs/setHeaderFooterDistanceOp"
+              },
+              {
+                "$ref": "docx.schema.json#/$defs/setPageMarginOp"
+              },
+              {
+                "$ref": "docx.schema.json#/$defs/setPageSizeOp"
+              },
+              {
+                "$ref": "docx.schema.json#/$defs/setColumnsOp"
+              },
+              {
+                "$ref": "docx.schema.json#/$defs/setVerticalAlignOp"
+              },
+              {
+                "$ref": "docx.schema.json#/$defs/setLineNumberingOp"
+              },
+              {
+                "$ref": "docx.schema.json#/$defs/setDocGridOp"
+              },
+              {
+                "$ref": "docx.schema.json#/$defs/setRtlGutterOp"
+              },
+              {
+                "$ref": "docx.schema.json#/$defs/setMirrorMarginsOp"
+              },
+              {
+                "$ref": "docx.schema.json#/$defs/setGutterAtTopOp"
+              },
+              {
+                "$ref": "docx.schema.json#/$defs/setHeaderFooterLinkOp"
+              },
+              {
+                "$ref": "docx.schema.json#/$defs/insertHeaderFooterOp"
+              },
+              {
+                "$ref": "docx.schema.json#/$defs/insertSectionOp"
+              },
+              {
+                "$ref": "docx.schema.json#/$defs/deleteSectionOp"
+              },
+              {
+                "$ref": "docx.schema.json#/$defs/setTitlePageOp"
+              },
+              {
+                "$ref": "docx.schema.json#/$defs/setEvenAndOddHeadersOp"
+              },
+              {
+                "$ref": "#/$defs/replacePictureOp"
+              },
+              {
+                "$ref": "#/$defs/insertPictureOp"
+              },
+              {
+                "$ref": "#/$defs/deletePictureOp"
+              },
+              {
+                "$ref": "#/$defs/setPictureSizeOp"
+              },
+              {
+                "$ref": "docx.schema.json#/$defs/setPictureWrapOp"
+              },
+              {
+                "$ref": "xlsx.schema.json#/$defs/setPictureAnchorOp"
+              },
+              {
+                "$ref": "pptx.schema.json#/$defs/setPicturePosOp"
+              },
+              {
+                "$ref": "#/$defs/insertTextBoxOp"
+              },
+              {
+                "$ref": "#/$defs/deleteTextBoxOp"
+              },
+              {
+                "$ref": "#/$defs/setTextBoxSizeOp"
+              },
+              {
+                "$ref": "xlsx.schema.json#/$defs/setTextBoxAnchorOp"
+              },
+              {
+                "$ref": "docx.schema.json#/$defs/setTextBoxWrapOp"
+              },
+              {
+                "$ref": "docx.schema.json#/$defs/setTextBoxFillOp"
+              },
+              {
+                "$ref": "docx.schema.json#/$defs/setTextBoxLineOp"
+              },
+              {
+                "$ref": "docx.schema.json#/$defs/setTextBoxDirectionOp"
+              },
+              {
+                "$ref": "docx.schema.json#/$defs/insertParaOp"
+              },
+              {
+                "$ref": "docx.schema.json#/$defs/deleteParaOp"
+              },
+              {
+                "$ref": "#/$defs/insertTableOp"
+              },
+              {
+                "$ref": "#/$defs/deleteTableOp"
+              },
+              {
+                "$ref": "#/$defs/insertRowOp"
+              },
+              {
+                "$ref": "#/$defs/deleteRowOp"
+              },
+              {
+                "$ref": "#/$defs/insertColOp"
+              },
+              {
+                "$ref": "#/$defs/deleteColOp"
+              },
+              {
+                "$ref": "docx.schema.json#/$defs/mergeCellsOp"
+              },
+              {
+                "$ref": "docx.schema.json#/$defs/splitCellsOp"
+              },
+              {
+                "$ref": "docx.schema.json#/$defs/acceptRevisionOp"
+              },
+              {
+                "$ref": "docx.schema.json#/$defs/rejectRevisionOp"
+              },
+              {
+                "$ref": "#/$defs/insertHyperlinkOp"
+              },
+              {
+                "$ref": "#/$defs/setHyperlinkOp"
+              },
+              {
+                "$ref": "#/$defs/deleteHyperlinkOp"
+              },
+              {
+                "$ref": "xlsx.schema.json#/$defs/insertSparklineOp"
+              },
+              {
+                "$ref": "xlsx.schema.json#/$defs/setSparklineOp"
+              },
+              {
+                "$ref": "xlsx.schema.json#/$defs/deleteSparklineOp"
+              },
+              {
+                "$ref": "docx.schema.json#/$defs/insertBookmarkOp"
+              },
+              {
+                "$ref": "docx.schema.json#/$defs/setBookmarkOp"
+              },
+              {
+                "$ref": "docx.schema.json#/$defs/deleteBookmarkOp"
+              },
+              {
+                "$ref": "docx.schema.json#/$defs/insertFieldOp"
+              },
+              {
+                "$ref": "docx.schema.json#/$defs/setFieldOp"
+              },
+              {
+                "$ref": "docx.schema.json#/$defs/deleteFieldOp"
+              },
+              {
+                "$ref": "docx.schema.json#/$defs/insertTocOp"
+              },
+              {
+                "$ref": "docx.schema.json#/$defs/deleteTocOp"
+              },
+              {
+                "$ref": "docx.schema.json#/$defs/insertMathOp"
+              },
+              {
+                "$ref": "docx.schema.json#/$defs/setMathOp"
+              },
+              {
+                "$ref": "docx.schema.json#/$defs/deleteMathOp"
+              },
+              {
+                "$ref": "docx.schema.json#/$defs/insertContentControlOp"
+              },
+              {
+                "$ref": "docx.schema.json#/$defs/setContentControlOp"
+              },
+              {
+                "$ref": "docx.schema.json#/$defs/deleteContentControlOp"
+              },
+              {
+                "$ref": "docx.schema.json#/$defs/insertNumberingOp"
+              },
+              {
+                "$ref": "docx.schema.json#/$defs/setNumberingOp"
+              },
+              {
+                "$ref": "docx.schema.json#/$defs/setParaNumberingOp"
+              },
+              {
+                "$ref": "docx.schema.json#/$defs/setStyleOp"
+              },
+              {
+                "$ref": "docx.schema.json#/$defs/setParaStyleOp"
+              },
+              {
+                "$ref": "docx.schema.json#/$defs/setParaFormatOp"
+              },
+              {
+                "$ref": "docx.schema.json#/$defs/setRunFormatOp"
+              },
+              {
+                "$ref": "docx.schema.json#/$defs/setTextBoxLinkOp"
+              },
+              {
+                "$ref": "docx.schema.json#/$defs/insertFootnoteOp"
+              },
+              {
+                "$ref": "docx.schema.json#/$defs/insertEndnoteOp"
+              },
+              {
+                "$ref": "docx.schema.json#/$defs/deleteFootnoteOp"
+              },
+              {
+                "$ref": "docx.schema.json#/$defs/deleteEndnoteOp"
+              },
+              {
+                "$ref": "docx.schema.json#/$defs/setNoteNumberingOp"
+              },
+              {
+                "$ref": "#/$defs/insertCommentOp"
+              },
+              {
+                "$ref": "#/$defs/deleteCommentOp"
+              },
+              {
+                "$ref": "#/$defs/replyCommentOp"
+              },
+              {
+                "$ref": "#/$defs/setCommentTextOp"
+              },
+              {
+                "$ref": "#/$defs/setCommentMetaOp"
+              },
+              {
+                "$ref": "#/$defs/setCommentDoneOp"
+              },
+              {
+                "$ref": "#/$defs/insertChartOp"
+              },
+              {
+                "$ref": "xlsx.schema.json#/$defs/insertChartSheetOp"
+              },
+              {
+                "$ref": "xlsx.schema.json#/$defs/deleteChartSheetOp"
+              },
+              {
+                "$ref": "xlsx.schema.json#/$defs/insertSheetOp"
+              },
+              {
+                "$ref": "xlsx.schema.json#/$defs/deleteSheetOp"
+              },
+              {
+                "$ref": "xlsx.schema.json#/$defs/renameSheetOp"
+              },
+              {
+                "$ref": "xlsx.schema.json#/$defs/moveSheetOp"
+              },
+              {
+                "$ref": "xlsx.schema.json#/$defs/setSheetHiddenOp"
+              },
+              {
+                "$ref": "#/$defs/deleteChartOp"
+              },
+              {
+                "$ref": "#/$defs/setChartTitleOp"
+              },
+              {
+                "$ref": "#/$defs/setChartSeriesOp"
+              },
+              {
+                "$ref": "#/$defs/addChartSeriesOp"
+              },
+              {
+                "$ref": "#/$defs/deleteChartSeriesOp"
+              },
+              {
+                "$ref": "#/$defs/setChartTypeOp"
+              },
+              {
+                "$ref": "#/$defs/setChartAxisTitleOp"
+              },
+              {
+                "$ref": "#/$defs/setChartLegendOp"
+              },
+              {
+                "$ref": "#/$defs/setChartDataLabelsOp"
+              },
+              {
+                "$ref": "#/$defs/insertTrendlineOp"
+              },
+              {
+                "$ref": "#/$defs/setTrendlineOp"
+              },
+              {
+                "$ref": "#/$defs/deleteTrendlineOp"
+              },
+              {
+                "$ref": "#/$defs/insertErrorBarsOp"
+              },
+              {
+                "$ref": "#/$defs/setErrorBarsOp"
+              },
+              {
+                "$ref": "#/$defs/deleteErrorBarsOp"
+              },
+              {
+                "$ref": "#/$defs/setChartSeriesAxisOp"
+              },
+              {
+                "$ref": "#/$defs/setChartSizeOp"
+              },
+              {
+                "$ref": "pptx.schema.json#/$defs/setChartPosOp"
+              },
+              {
+                "$ref": "docx.schema.json#/$defs/setChartWrapOp"
+              },
+              {
+                "$ref": "xlsx.schema.json#/$defs/setChartAnchorOp"
+              },
+              {
+                "$ref": "xlsx.schema.json#/$defs/setSmartArtAnchorOp"
+              },
+              {
+                "$ref": "#/$defs/insertSmartArtOp"
+              },
+              {
+                "$ref": "#/$defs/deleteSmartArtOp"
+              },
+              {
+                "$ref": "#/$defs/setSmartArtTextOp"
+              },
+              {
+                "$ref": "#/$defs/addSmartArtPointOp"
+              },
+              {
+                "$ref": "#/$defs/deleteSmartArtPointOp"
+              },
+              {
+                "$ref": "#/$defs/setSmartArtSizeOp"
+              },
+              {
+                "$ref": "pptx.schema.json#/$defs/setSmartArtPosOp"
+              },
+              {
+                "$ref": "docx.schema.json#/$defs/setSmartArtWrapOp"
+              },
+              {
+                "$ref": "#/$defs/setSmartArtColorsOp"
+              },
+              {
+                "$ref": "#/$defs/setSmartArtStyleOp"
+              },
+              {
+                "$ref": "#/$defs/setSmartArtLayoutOp"
+              },
+              {
+                "$ref": "docx.schema.json#/$defs/insertOleOp"
+              },
+              {
+                "$ref": "docx.schema.json#/$defs/deleteOleOp"
+              },
+              {
+                "$ref": "#/$defs/setProtectionOp"
+              },
+              {
+                "$ref": "docx.schema.json#/$defs/insertWatermarkOp"
+              },
+              {
+                "$ref": "docx.schema.json#/$defs/deleteWatermarkOp"
+              },
+              {
+                "$ref": "pptx.schema.json#/$defs/setNotesTextOp"
+              },
+              {
+                "$ref": "#/$defs/setShapeTextOp"
+              },
+              {
+                "$ref": "pptx.schema.json#/$defs/insertShapeOp"
+              },
+              {
+                "$ref": "pptx.schema.json#/$defs/deleteShapeOp"
+              },
+              {
+                "$ref": "pptx.schema.json#/$defs/setShapePosOp"
+              },
+              {
+                "$ref": "pptx.schema.json#/$defs/setShapeSizeOp"
+              },
+              {
+                "$ref": "pptx.schema.json#/$defs/setShapeFillOp"
+              },
+              {
+                "$ref": "pptx.schema.json#/$defs/setShapeLineOp"
+              },
+              {
+                "$ref": "pptx.schema.json#/$defs/setTableCellTextOp"
+              },
+              {
+                "$ref": "pptx.schema.json#/$defs/setTablePosOp"
+              },
+              {
+                "$ref": "pptx.schema.json#/$defs/setTableSizeOp"
+              },
+              {
+                "$ref": "pptx.schema.json#/$defs/insertSlideOp"
+              },
+              {
+                "$ref": "pptx.schema.json#/$defs/deleteSlideOp"
+              },
+              {
+                "$ref": "pptx.schema.json#/$defs/moveSlideOp"
+              },
+              {
+                "$ref": "pptx.schema.json#/$defs/setSlideHiddenOp"
+              },
+              {
+                "$ref": "pptx.schema.json#/$defs/setTransitionOp"
+              },
+              {
+                "$ref": "#/$defs/setPropsOp"
+              },
+              {
+                "$ref": "#/$defs/setCustomPropOp"
+              },
+              {
+                "$ref": "#/$defs/deleteCustomPropOp"
+              }
             ]
           }
         }
       }
     },
-    "setCellOp": {
-      "type": "object",
-      "required": ["op", "id"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "setCell" },
-        "id": { "type": "string", "minLength": 1 },
-        "value": {
-          "type": ["number", "string", "boolean", "null"]
-        },
-        "formula": {
-          "type": "string",
-          "pattern": "^="
-        },
-        "shared": { "type": "boolean" },
-        "sharedRef": { "type": "string", "minLength": 1 },
-        "array": { "type": "boolean" },
-        "arrayRef": { "type": "string", "minLength": 1 }
-      },
-      "oneOf": [
-        { "required": ["value"] },
-        { "required": ["formula"] }
-      ]
-    },
-    "cellColor": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "rgb": { "type": "string", "pattern": "^[0-9A-Fa-f]{6}([0-9A-Fa-f]{2})?$" },
-        "theme": { "type": "integer", "minimum": 0 },
-        "indexed": { "type": "integer", "minimum": 0 },
-        "tint": { "type": "number" }
-      }
-    },
-    "cellBorderSide": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "style": { "type": "string", "minLength": 1 },
-        "color": { "$ref": "#/$defs/cellColor" }
-      }
-    },
-    "setCellStyleOp": {
-      "type": "object",
-      "required": ["op", "id"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "setCellStyle" },
-        "id": { "type": "string", "minLength": 1 },
-        "numFmt": { "type": ["string", "null"], "minLength": 1 },
-        "font": {
-          "type": ["object", "null"],
-          "additionalProperties": false,
-          "properties": {
-            "name": { "type": "string", "minLength": 1 },
-            "sz": { "type": "number", "exclusiveMinimum": 0, "maximum": 409 },
-            "bold": { "type": "boolean" },
-            "italic": { "type": "boolean" },
-            "underline": {
-              "type": ["boolean", "string", "null"]
-            },
-            "color": { "$ref": "#/$defs/cellColor" }
-          }
-        },
-        "fill": {
-          "type": ["object", "null"],
-          "additionalProperties": false,
-          "properties": {
-            "pattern": { "type": "string", "minLength": 1 },
-            "fg": { "$ref": "#/$defs/cellColor" },
-            "bg": { "$ref": "#/$defs/cellColor" }
-          }
-        },
-        "border": {
-          "type": ["object", "null"],
-          "additionalProperties": false,
-          "properties": {
-            "style": { "type": "string", "minLength": 1 },
-            "color": { "$ref": "#/$defs/cellColor" },
-            "left": { "$ref": "#/$defs/cellBorderSide" },
-            "right": { "$ref": "#/$defs/cellBorderSide" },
-            "top": { "$ref": "#/$defs/cellBorderSide" },
-            "bottom": { "$ref": "#/$defs/cellBorderSide" }
-          }
-        },
-        "align": {
-          "type": ["object", "null"],
-          "additionalProperties": false,
-          "properties": {
-            "horizontal": { "type": "string", "minLength": 1 },
-            "vertical": { "type": "string", "minLength": 1 },
-            "wrap": { "type": "boolean" }
-          }
-        }
-      },
-      "anyOf": [
-        { "required": ["numFmt"] },
-        { "required": ["font"] },
-        { "required": ["fill"] },
-        { "required": ["border"] },
-        { "required": ["align"] }
-      ]
-    },
-    "setColWidthOp": {
-      "type": "object",
-      "required": ["op", "id", "col"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "setColWidth" },
-        "id": { "type": "string", "minLength": 1 },
-        "col": { "type": "string", "minLength": 1 },
-        "width": { "type": ["number", "null"], "exclusiveMinimum": 0, "maximum": 255 },
-        "bestFit": { "type": "boolean" }
-      },
-      "anyOf": [
-        { "required": ["width"] },
-        { "required": ["bestFit"] }
-      ]
-    },
-    "setRowHeightOp": {
-      "type": "object",
-      "required": ["op", "id", "row", "height"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "setRowHeight" },
-        "id": { "type": "string", "minLength": 1 },
-        "row": { "type": "integer", "minimum": 1, "maximum": 1048576 },
-        "toRow": { "type": "integer", "minimum": 1, "maximum": 1048576 },
-        "height": { "type": ["number", "null"], "exclusiveMinimum": 0, "maximum": 409 }
-      }
-    },
-    "mergeRangeOp": {
-      "type": "object",
-      "required": ["op", "id", "range"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "mergeRange" },
-        "id": { "type": "string", "minLength": 1 },
-        "range": { "type": "string", "minLength": 1 }
-      }
-    },
-    "unmergeRangeOp": {
-      "type": "object",
-      "required": ["op", "id", "range"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "unmergeRange" },
-        "id": { "type": "string", "minLength": 1 },
-        "range": { "type": "string", "minLength": 1 }
-      }
-    },
-    "insertDataValidationOp": {
-      "type": "object",
-      "required": ["op", "id", "sqref", "type"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "insertDataValidation" },
-        "id": { "type": "string", "minLength": 1 },
-        "sqref": {
-          "oneOf": [
-            { "type": "string", "minLength": 1 },
-            {
-              "type": "array",
-              "minItems": 1,
-              "items": { "type": "string", "minLength": 1 }
-            }
-          ]
-        },
-        "type": {
-          "enum": ["none", "whole", "decimal", "list", "date", "time", "textLength", "custom"]
-        },
-        "operator": {
-          "enum": [
-            "between",
-            "notBetween",
-            "equal",
-            "notEqual",
-            "lessThan",
-            "lessThanOrEqual",
-            "greaterThan",
-            "greaterThanOrEqual"
-          ]
-        },
-        "formula1": { "type": "string" },
-        "formula2": { "type": "string" },
-        "allowBlank": { "type": "boolean" },
-        "dropdown": { "type": "boolean" },
-        "showInputMessage": { "type": "boolean" },
-        "showErrorMessage": { "type": "boolean" },
-        "errorStyle": { "enum": ["stop", "warning", "information"] },
-        "errorTitle": { "type": "string" },
-        "error": { "type": "string" },
-        "promptTitle": { "type": "string" },
-        "prompt": { "type": "string" }
-      }
-    },
-    "setDataValidationOp": {
-      "type": "object",
-      "required": ["op", "id"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "setDataValidation" },
-        "id": { "type": "string", "minLength": 1 },
-        "sqref": {
-          "oneOf": [
-            { "type": "string", "minLength": 1 },
-            {
-              "type": "array",
-              "minItems": 1,
-              "items": { "type": "string", "minLength": 1 }
-            }
-          ]
-        },
-        "type": {
-          "enum": ["none", "whole", "decimal", "list", "date", "time", "textLength", "custom"]
-        },
-        "operator": {
-          "oneOf": [
-            {
-              "enum": [
-                "between",
-                "notBetween",
-                "equal",
-                "notEqual",
-                "lessThan",
-                "lessThanOrEqual",
-                "greaterThan",
-                "greaterThanOrEqual"
-              ]
-            },
-            { "type": "null" }
-          ]
-        },
-        "formula1": { "type": ["string", "null"] },
-        "formula2": { "type": ["string", "null"] },
-        "allowBlank": { "type": "boolean" },
-        "dropdown": { "type": "boolean" },
-        "showInputMessage": { "type": "boolean" },
-        "showErrorMessage": { "type": "boolean" },
-        "errorStyle": {
-          "oneOf": [
-            { "enum": ["stop", "warning", "information"] },
-            { "type": "null" }
-          ]
-        },
-        "errorTitle": { "type": ["string", "null"] },
-        "error": { "type": ["string", "null"] },
-        "promptTitle": { "type": ["string", "null"] },
-        "prompt": { "type": ["string", "null"] }
-      }
-    },
-    "deleteDataValidationOp": {
-      "type": "object",
-      "required": ["op", "id"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "deleteDataValidation" },
-        "id": { "type": "string", "minLength": 1 }
-      }
-    },
-    "cfSqref": {
-      "oneOf": [
-        { "type": "string", "minLength": 1 },
-        {
-          "type": "array",
-          "minItems": 1,
-          "items": { "type": "string", "minLength": 1 }
-        }
-      ]
-    },
-    "cfWritableType": {
-      "enum": ["cellIs", "expression", "colorScale", "dataBar", "iconSet"]
-    },
-    "cfOperator": {
-      "enum": [
-        "lessThan",
-        "lessThanOrEqual",
-        "equal",
-        "notEqual",
-        "greaterThanOrEqual",
-        "greaterThan",
-        "between",
-        "notBetween"
-      ]
-    },
-    "cfvo": {
-      "type": "object",
-      "required": ["type"],
-      "additionalProperties": false,
-      "properties": {
-        "type": { "enum": ["num", "percent", "max", "min", "formula", "percentile"] },
-        "val": { "type": "string" },
-        "gte": { "type": "boolean" }
-      }
-    },
-    "cfDxf": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "font": {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "name": { "type": "string", "minLength": 1 },
-            "sz": { "type": "number", "exclusiveMinimum": 0, "maximum": 409 },
-            "bold": { "type": "boolean" },
-            "italic": { "type": "boolean" },
-            "underline": { "type": ["boolean", "string", "null"] },
-            "color": { "$ref": "#/$defs/cellColor" }
-          }
-        },
-        "fill": {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "pattern": { "type": "string", "minLength": 1 },
-            "fg": { "$ref": "#/$defs/cellColor" },
-            "bg": { "$ref": "#/$defs/cellColor" }
-          }
-        },
-        "border": {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "style": { "type": "string", "minLength": 1 },
-            "color": { "$ref": "#/$defs/cellColor" },
-            "left": { "$ref": "#/$defs/cellBorderSide" },
-            "right": { "$ref": "#/$defs/cellBorderSide" },
-            "top": { "$ref": "#/$defs/cellBorderSide" },
-            "bottom": { "$ref": "#/$defs/cellBorderSide" }
-          }
-        }
-      }
-    },
-    "cfColorScale": {
-      "type": "object",
-      "required": ["colors"],
-      "additionalProperties": false,
-      "properties": {
-        "cfvo": {
-          "type": "array",
-          "minItems": 2,
-          "maxItems": 3,
-          "items": { "$ref": "#/$defs/cfvo" }
-        },
-        "colors": {
-          "type": "array",
-          "minItems": 2,
-          "maxItems": 3,
-          "items": { "$ref": "#/$defs/cellColor" }
-        }
-      }
-    },
-    "cfDataBar": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "cfvo": {
-          "type": "array",
-          "minItems": 2,
-          "maxItems": 2,
-          "items": { "$ref": "#/$defs/cfvo" }
-        },
-        "color": { "$ref": "#/$defs/cellColor" },
-        "minLength": { "type": "integer", "minimum": 0, "maximum": 100 },
-        "maxLength": { "type": "integer", "minimum": 0, "maximum": 100 },
-        "showValue": { "type": "boolean" }
-      }
-    },
-    "cfIconSet": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "set": {
-          "enum": [
-            "3Arrows",
-            "3ArrowsGray",
-            "3Flags",
-            "3Signs",
-            "3Symbols",
-            "3Symbols2",
-            "3TrafficLights1",
-            "3TrafficLights2",
-            "4Arrows",
-            "4ArrowsGray",
-            "4Rating",
-            "4RedToBlack",
-            "4TrafficLights",
-            "5Arrows",
-            "5ArrowsGray",
-            "5Quarters",
-            "5Rating"
-          ]
-        },
-        "cfvo": {
-          "type": "array",
-          "minItems": 2,
-          "items": { "$ref": "#/$defs/cfvo" }
-        },
-        "showValue": { "type": "boolean" },
-        "reverse": { "type": "boolean" },
-        "percent": { "type": "boolean" }
-      }
-    },
-    "insertConditionalFormatOp": {
-      "type": "object",
-      "required": ["op", "id", "sqref", "type"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "insertConditionalFormat" },
-        "id": { "type": "string", "minLength": 1 },
-        "sqref": { "$ref": "#/$defs/cfSqref" },
-        "type": { "$ref": "#/$defs/cfWritableType" },
-        "operator": { "$ref": "#/$defs/cfOperator" },
-        "formulas": {
-          "type": "array",
-          "minItems": 1,
-          "maxItems": 3,
-          "items": { "type": "string" }
-        },
-        "dxf": { "$ref": "#/$defs/cfDxf" },
-        "colorScale": { "$ref": "#/$defs/cfColorScale" },
-        "dataBar": { "$ref": "#/$defs/cfDataBar" },
-        "iconSet": { "$ref": "#/$defs/cfIconSet" },
-        "priority": { "type": "integer", "minimum": 1 },
-        "stopIfTrue": { "type": "boolean" }
-      }
-    },
-    "setConditionalFormatOp": {
-      "type": "object",
-      "required": ["op", "id"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "setConditionalFormat" },
-        "id": { "type": "string", "minLength": 1 },
-        "sqref": { "$ref": "#/$defs/cfSqref" },
-        "type": { "$ref": "#/$defs/cfWritableType" },
-        "operator": {
-          "oneOf": [
-            { "$ref": "#/$defs/cfOperator" },
-            { "type": "null" }
-          ]
-        },
-        "formulas": {
-          "oneOf": [
-            {
-              "type": "array",
-              "minItems": 1,
-              "maxItems": 3,
-              "items": { "type": "string" }
-            },
-            { "type": "null" }
-          ]
-        },
-        "dxf": {
-          "oneOf": [
-            { "$ref": "#/$defs/cfDxf" },
-            { "type": "null" }
-          ]
-        },
-        "colorScale": {
-          "oneOf": [
-            { "$ref": "#/$defs/cfColorScale" },
-            { "type": "null" }
-          ]
-        },
-        "dataBar": {
-          "oneOf": [
-            { "$ref": "#/$defs/cfDataBar" },
-            { "type": "null" }
-          ]
-        },
-        "iconSet": {
-          "oneOf": [
-            { "$ref": "#/$defs/cfIconSet" },
-            { "type": "null" }
-          ]
-        },
-        "priority": { "type": ["integer", "null"], "minimum": 1 },
-        "stopIfTrue": { "type": "boolean" }
-      }
-    },
-    "deleteConditionalFormatOp": {
-      "type": "object",
-      "required": ["op", "id"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "deleteConditionalFormat" },
-        "id": { "type": "string", "minLength": 1 }
-      }
-    },
-    "insertSheetTableOp": {
-      "type": "object",
-      "required": ["op", "id", "ref"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "insertSheetTable" },
-        "id": { "type": "string", "minLength": 1 },
-        "ref": { "type": "string", "minLength": 1 },
-        "name": { "type": "string", "minLength": 1 },
-        "columns": {
-          "type": "array",
-          "minItems": 1,
-          "items": { "type": "string", "minLength": 1 }
-        }
-      }
-    },
-    "setSheetTableOp": {
-      "type": "object",
-      "required": ["op", "id"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "setSheetTable" },
-        "id": { "type": "string", "minLength": 1 },
-        "ref": { "type": "string", "minLength": 1 },
-        "name": { "type": "string", "minLength": 1 },
-        "columns": {
-          "type": "array",
-          "minItems": 1,
-          "items": { "type": "string", "minLength": 1 }
-        }
-      }
-    },
-    "deleteSheetTableOp": {
-      "type": "object",
-      "required": ["op", "id"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "deleteSheetTable" },
-        "id": { "type": "string", "minLength": 1 }
-      }
-    },
-    "pivotSource": {
-      "type": "object",
-      "required": ["ref"],
-      "additionalProperties": false,
-      "properties": {
-        "sheet": { "type": "string", "minLength": 1 },
-        "ref": { "type": "string", "minLength": 1 }
-      }
-    },
-    "insertPivotTableOp": {
-      "type": "object",
-      "required": ["op", "id", "source", "location", "values"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "insertPivotTable" },
-        "id": { "type": "string", "minLength": 1 },
-        "source": { "$ref": "#/$defs/pivotSource" },
-        "location": { "type": "string", "minLength": 1 },
-        "name": { "type": "string", "minLength": 1 },
-        "rows": {
-          "type": "array",
-          "items": { "type": "string", "minLength": 1 }
-        },
-        "cols": {
-          "type": "array",
-          "items": { "type": "string", "minLength": 1 }
-        },
-        "filters": {
-          "type": "array",
-          "items": { "type": "string", "minLength": 1 }
-        },
-        "values": {
-          "type": "array",
-          "minItems": 1,
-          "items": { "type": "string", "minLength": 1 }
-        }
-      }
-    },
-    "setPivotTableOp": {
-      "type": "object",
-      "required": ["op", "id"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "setPivotTable" },
-        "id": { "type": "string", "minLength": 1 },
-        "source": { "$ref": "#/$defs/pivotSource" },
-        "location": { "type": "string", "minLength": 1 },
-        "name": { "type": "string", "minLength": 1 },
-        "rows": {
-          "type": "array",
-          "items": { "type": "string", "minLength": 1 }
-        },
-        "cols": {
-          "type": "array",
-          "items": { "type": "string", "minLength": 1 }
-        },
-        "filters": {
-          "type": "array",
-          "items": { "type": "string", "minLength": 1 }
-        },
-        "values": {
-          "type": "array",
-          "minItems": 1,
-          "items": { "type": "string", "minLength": 1 }
-        }
-      }
-    },
-    "deletePivotTableOp": {
-      "type": "object",
-      "required": ["op", "id"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "deletePivotTable" },
-        "id": { "type": "string", "minLength": 1 }
-      }
-    },
-    "insertDefinedNameOp": {
-      "type": "object",
-      "required": ["op", "id", "name", "formula"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "insertDefinedName" },
-        "id": { "type": "string", "minLength": 1 },
-        "name": { "type": "string", "minLength": 1 },
-        "formula": { "type": "string", "minLength": 1 },
-        "hidden": { "type": "boolean" },
-        "localSheet": { "type": "string", "minLength": 1 }
-      }
-    },
-    "setDefinedNameOp": {
-      "type": "object",
-      "required": ["op", "id"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "setDefinedName" },
-        "id": { "type": "string", "minLength": 1 },
-        "name": { "type": "string", "minLength": 1 },
-        "formula": { "type": "string", "minLength": 1 },
-        "hidden": { "type": "boolean" },
-        "localSheet": { "type": ["string", "null"], "minLength": 1 }
-      },
-      "anyOf": [
-        { "required": ["name"] },
-        { "required": ["formula"] },
-        { "required": ["hidden"] },
-        { "required": ["localSheet"] }
-      ]
-    },
-    "deleteDefinedNameOp": {
-      "type": "object",
-      "required": ["op", "id"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "deleteDefinedName" },
-        "id": { "type": "string", "minLength": 1 }
-      }
-    },
-    "setPrintSetupOp": {
-      "type": "object",
-      "required": ["op", "id"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "setPrintSetup" },
-        "id": { "type": "string", "minLength": 1 },
-        "left": { "type": "number", "minimum": 0 },
-        "right": { "type": "number", "minimum": 0 },
-        "top": { "type": "number", "minimum": 0 },
-        "bottom": { "type": "number", "minimum": 0 },
-        "header": { "type": "number", "minimum": 0 },
-        "footer": { "type": "number", "minimum": 0 },
-        "paperSize": { "type": "integer", "minimum": 1 },
-        "orientation": { "enum": ["portrait", "landscape"] },
-        "scale": { "type": "integer", "minimum": 10, "maximum": 400 },
-        "fitToPage": { "type": "boolean" },
-        "fitToWidth": { "type": "integer", "minimum": 0 },
-        "fitToHeight": { "type": "integer", "minimum": 0 },
-        "gridLines": { "type": "boolean" },
-        "headings": { "type": "boolean" },
-        "hCenter": { "type": "boolean" },
-        "vCenter": { "type": "boolean" },
-        "printArea": { "type": ["string", "null"], "minLength": 1 },
-        "rowBreaks": {
-          "type": "array",
-          "items": { "type": "integer", "minimum": 1 }
-        },
-        "colBreaks": {
-          "type": "array",
-          "items": { "type": "integer", "minimum": 1 }
-        }
-      },
-      "anyOf": [
-        { "required": ["left"] },
-        { "required": ["right"] },
-        { "required": ["top"] },
-        { "required": ["bottom"] },
-        { "required": ["header"] },
-        { "required": ["footer"] },
-        { "required": ["paperSize"] },
-        { "required": ["orientation"] },
-        { "required": ["scale"] },
-        { "required": ["fitToPage"] },
-        { "required": ["fitToWidth"] },
-        { "required": ["fitToHeight"] },
-        { "required": ["gridLines"] },
-        { "required": ["headings"] },
-        { "required": ["hCenter"] },
-        { "required": ["vCenter"] },
-        { "required": ["printArea"] },
-        { "required": ["rowBreaks"] },
-        { "required": ["colBreaks"] }
-      ]
-    },
-    "setSheetViewOp": {
-      "type": "object",
-      "required": ["op", "id"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "setSheetView" },
-        "id": { "type": "string", "minLength": 1 },
-        "zoom": { "type": "integer", "minimum": 10, "maximum": 400 },
-        "frozenRows": { "type": "integer", "minimum": 0, "maximum": 1048575 },
-        "frozenCols": { "type": "integer", "minimum": 0, "maximum": 16383 },
-        "activeCell": { "type": "string", "minLength": 1 }
-      },
-      "anyOf": [
-        { "required": ["zoom"] },
-        { "required": ["frozenRows"] },
-        { "required": ["frozenCols"] },
-        { "required": ["activeCell"] }
-      ]
-    },
-    "setAutoFilterOp": {
-      "type": "object",
-      "required": ["op", "id", "ref"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "setAutoFilter" },
-        "id": { "type": "string", "minLength": 1 },
-        "ref": { "type": ["string", "null"], "minLength": 1 }
-      }
-    },
-    "setHeaderFooterTextOp": {
-      "type": "object",
-      "required": ["op", "id", "text"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "setHeaderFooterText" },
-        "id": { "type": "string", "minLength": 1 },
-        "text": { "type": "string" }
-      }
-    },
-    "setParaTextOp": {
-      "type": "object",
-      "required": ["op", "id", "text"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "setParaText" },
-        "id": { "type": "string", "minLength": 1 },
-        "text": { "type": "string" }
-      }
-    },
-    "setHeaderFooterDistanceOp": {
-      "type": "object",
-      "required": ["op", "id"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "setHeaderFooterDistance" },
-        "id": { "type": "string", "minLength": 1 },
-        "headerDistance": { "type": "integer", "minimum": 0 },
-        "footerDistance": { "type": "integer", "minimum": 0 }
-      },
-      "anyOf": [
-        { "required": ["headerDistance"] },
-        { "required": ["footerDistance"] }
-      ]
-    },
-    "setHeaderFooterLinkOp": {
-      "type": "object",
-      "required": ["op", "id", "kind", "type", "linked"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "setHeaderFooterLink" },
-        "id": { "type": "string", "minLength": 1 },
-        "kind": { "enum": ["header", "footer"] },
-        "type": { "enum": ["default", "even", "first"] },
-        "linked": { "type": "boolean" }
-      }
-    },
-    "insertHeaderFooterOp": {
-      "type": "object",
-      "required": ["op", "id", "kind", "type"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "insertHeaderFooter" },
-        "id": { "type": "string", "minLength": 1 },
-        "kind": { "enum": ["header", "footer"] },
-        "type": { "enum": ["default", "even", "first"] }
-      }
-    },
-    "insertSectionOp": {
-      "type": "object",
-      "required": ["op", "id"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "insertSection" },
-        "id": { "type": "string", "minLength": 1 },
-        "type": { "enum": ["nextPage", "continuous", "evenPage", "oddPage", "nextColumn"] }
-      }
-    },
-    "deleteSectionOp": {
-      "type": "object",
-      "required": ["op", "id"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "deleteSection" },
-        "id": { "type": "string", "minLength": 1 }
-      }
-    },
-    "setTitlePageOp": {
-      "type": "object",
-      "required": ["op", "id", "titlePage"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "setTitlePage" },
-        "id": { "type": "string", "minLength": 1 },
-        "titlePage": { "type": "boolean" }
-      }
-    },
-    "setEvenAndOddHeadersOp": {
-      "type": "object",
-      "required": ["op", "id", "evenAndOdd"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "setEvenAndOddHeaders" },
-        "id": { "type": "string", "minLength": 1 },
-        "evenAndOdd": { "type": "boolean" }
-      }
-    },
-    "setPageMarginOp": {
-      "type": "object",
-      "required": ["op", "id"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "setPageMargin" },
-        "id": { "type": "string", "minLength": 1 },
-        "top": { "type": "integer" },
-        "bottom": { "type": "integer" },
-        "left": { "type": "integer", "minimum": 0 },
-        "right": { "type": "integer", "minimum": 0 },
-        "gutter": { "type": "integer", "minimum": 0 }
-      },
-      "anyOf": [
-        { "required": ["top"] },
-        { "required": ["bottom"] },
-        { "required": ["left"] },
-        { "required": ["right"] },
-        { "required": ["gutter"] }
-      ]
-    },
-    "setPageSizeOp": {
-      "type": "object",
-      "required": ["op", "id"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "setPageSize" },
-        "id": { "type": "string", "minLength": 1 },
-        "pageWidth": { "type": "integer", "minimum": 0 },
-        "pageHeight": { "type": "integer", "minimum": 0 },
-        "orient": { "enum": ["portrait", "landscape"] }
-      },
-      "anyOf": [
-        { "required": ["pageWidth"] },
-        { "required": ["pageHeight"] },
-        { "required": ["orient"] }
-      ]
-    },
-    "setColumnsOp": {
-      "type": "object",
-      "required": ["op", "id"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "setColumns" },
-        "id": { "type": "string", "minLength": 1 },
-        "num": { "type": "integer", "minimum": 1 },
-        "space": { "type": "integer", "minimum": 0 },
-        "equalWidth": { "type": "boolean" },
-        "sep": { "type": "boolean" },
-        "cols": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "width": { "type": "integer", "minimum": 0 },
-              "space": { "type": "integer", "minimum": 0 }
-            }
-          }
-        },
-        "enabled": { "const": false }
-      }
-    },
-    "setVerticalAlignOp": {
-      "type": "object",
-      "required": ["op", "id", "vAlign"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "setVerticalAlign" },
-        "id": { "type": "string", "minLength": 1 },
-        "vAlign": {
-          "anyOf": [
-            { "enum": ["top", "center", "both", "bottom"] },
-            { "type": "null" }
-          ]
-        }
-      }
-    },
-    "setLineNumberingOp": {
-      "type": "object",
-      "required": ["op", "id"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "setLineNumbering" },
-        "id": { "type": "string", "minLength": 1 },
-        "countBy": { "type": "integer", "minimum": 0 },
-        "start": { "type": "integer", "minimum": 0 },
-        "distance": { "type": "integer", "minimum": 0 },
-        "restart": { "enum": ["newPage", "newSection", "continuous"] },
-        "enabled": { "const": false }
-      }
-    },
-    "setDocGridOp": {
-      "type": "object",
-      "required": ["op", "id"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "setDocGrid" },
-        "id": { "type": "string", "minLength": 1 },
-        "type": { "enum": ["default", "lines", "linesAndChars", "snapToChars"] },
-        "linePitch": { "type": "integer" },
-        "charSpace": { "type": "integer" },
-        "enabled": { "const": false }
-      }
-    },
-    "setRtlGutterOp": {
-      "type": "object",
-      "required": ["op", "id", "rtlGutter"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "setRtlGutter" },
-        "id": { "type": "string", "minLength": 1 },
-        "rtlGutter": { "type": "boolean" }
-      }
-    },
-    "setMirrorMarginsOp": {
-      "type": "object",
-      "required": ["op", "id", "mirrorMargins"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "setMirrorMargins" },
-        "id": { "type": "string", "minLength": 1 },
-        "mirrorMargins": { "type": "boolean" }
-      }
-    },
-    "setGutterAtTopOp": {
-      "type": "object",
-      "required": ["op", "id", "gutterAtTop"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "setGutterAtTop" },
-        "id": { "type": "string", "minLength": 1 },
-        "gutterAtTop": { "type": "boolean" }
-      }
-    },
     "replacePictureOp": {
       "type": "object",
-      "required": ["op", "id", "file"],
+      "required": [
+        "op",
+        "id",
+        "file"
+      ],
       "additionalProperties": false,
       "properties": {
-        "op": { "const": "replacePicture" },
-        "id": { "type": "string", "minLength": 1 },
-        "file": { "type": "string", "minLength": 1 }
+        "op": {
+          "const": "replacePicture"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "file": {
+          "type": "string",
+          "minLength": 1
+        }
       }
     },
     "insertPictureOp": {
       "type": "object",
-      "required": ["op", "id", "file"],
+      "required": [
+        "op",
+        "id",
+        "file"
+      ],
       "additionalProperties": false,
       "properties": {
-        "op": { "const": "insertPicture" },
-        "id": { "type": "string", "minLength": 1 },
-        "file": { "type": "string", "minLength": 1 },
-        "cx": { "type": "integer", "minimum": 1 },
-        "cy": { "type": "integer", "minimum": 1 },
-        "x": { "type": "integer", "minimum": 0 },
-        "y": { "type": "integer", "minimum": 0 },
-        "from": { "type": "string", "minLength": 1 },
-        "to": { "type": "string", "minLength": 1 },
-        "anchor": { "enum": ["oneCell", "twoCell"] },
-        "fromOffX": { "type": "integer", "minimum": 0 },
-        "fromOffY": { "type": "integer", "minimum": 0 },
-        "toOffX": { "type": "integer", "minimum": 0 },
-        "toOffY": { "type": "integer", "minimum": 0 }
+        "op": {
+          "const": "insertPicture"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "file": {
+          "type": "string",
+          "minLength": 1
+        },
+        "cx": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "cy": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "x": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "y": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "from": {
+          "type": "string",
+          "minLength": 1
+        },
+        "to": {
+          "type": "string",
+          "minLength": 1
+        },
+        "anchor": {
+          "enum": [
+            "oneCell",
+            "twoCell"
+          ]
+        },
+        "fromOffX": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "fromOffY": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "toOffX": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "toOffY": {
+          "type": "integer",
+          "minimum": 0
+        }
       }
     },
     "deletePictureOp": {
       "type": "object",
-      "required": ["op", "id"],
+      "required": [
+        "op",
+        "id"
+      ],
       "additionalProperties": false,
       "properties": {
-        "op": { "const": "deletePicture" },
-        "id": { "type": "string", "minLength": 1 }
+        "op": {
+          "const": "deletePicture"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
       }
     },
     "setPictureSizeOp": {
       "type": "object",
-      "required": ["op", "id"],
+      "required": [
+        "op",
+        "id"
+      ],
       "additionalProperties": false,
       "properties": {
-        "op": { "const": "setPictureSize" },
-        "id": { "type": "string", "minLength": 1 },
-        "cx": { "type": "integer", "minimum": 1 },
-        "cy": { "type": "integer", "minimum": 1 },
-        "to": { "type": "string", "minLength": 1 },
-        "toOffX": { "type": "integer", "minimum": 0 },
-        "toOffY": { "type": "integer", "minimum": 0 }
-      },
-      "anyOf": [
-        { "required": ["cx"] },
-        { "required": ["cy"] },
-        { "required": ["to"] }
-      ]
-    },
-    "setPicturePosOp": {
-      "type": "object",
-      "required": ["op", "id"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "setPicturePos" },
-        "id": { "type": "string", "minLength": 1 },
-        "x": { "type": "integer", "minimum": 0 },
-        "y": { "type": "integer", "minimum": 0 }
-      },
-      "anyOf": [
-        { "required": ["x"] },
-        { "required": ["y"] }
-      ]
-    },
-    "setPictureWrapOp": {
-      "type": "object",
-      "required": ["op", "id", "kind"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "setPictureWrap" },
-        "id": { "type": "string", "minLength": 1 },
-        "kind": { "enum": ["inline", "anchor"] },
-        "wrap": {
-          "type": ["string", "null"],
-          "enum": ["square", "tight", "through", "topAndBottom", "none", null]
+        "op": {
+          "const": "setPictureSize"
         },
-        "alignH": { "enum": ["left", "center", "right"] },
-        "alignV": { "enum": ["top", "center", "bottom"] },
-        "offsetX": { "type": "integer" },
-        "offsetY": { "type": "integer" }
-      }
-    },
-    "setPictureAnchorOp": {
-      "type": "object",
-      "required": ["op", "id"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "setPictureAnchor" },
-        "id": { "type": "string", "minLength": 1 },
-        "anchor": { "enum": ["oneCell", "twoCell", "absolute"] },
-        "from": { "type": "string", "minLength": 1 },
-        "to": { "type": "string", "minLength": 1 },
-        "fromOffX": { "type": "integer", "minimum": 0 },
-        "fromOffY": { "type": "integer", "minimum": 0 },
-        "toOffX": { "type": "integer", "minimum": 0 },
-        "toOffY": { "type": "integer", "minimum": 0 },
-        "posX": { "type": "integer" },
-        "posY": { "type": "integer" },
-        "editAs": { "enum": ["twoCell", "oneCell", "absolute"] },
-        "cx": { "type": "integer", "minimum": 1 },
-        "cy": { "type": "integer", "minimum": 1 }
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "cx": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "cy": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "to": {
+          "type": "string",
+          "minLength": 1
+        },
+        "toOffX": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "toOffY": {
+          "type": "integer",
+          "minimum": 0
+        }
       },
       "anyOf": [
-        { "required": ["anchor"] },
-        { "required": ["from"] },
-        { "required": ["to"] },
-        { "required": ["fromOffX"] },
-        { "required": ["fromOffY"] },
-        { "required": ["toOffX"] },
-        { "required": ["toOffY"] },
-        { "required": ["posX"] },
-        { "required": ["posY"] },
-        { "required": ["editAs"] },
-        { "required": ["cx"] },
-        { "required": ["cy"] }
+        {
+          "required": [
+            "cx"
+          ]
+        },
+        {
+          "required": [
+            "cy"
+          ]
+        },
+        {
+          "required": [
+            "to"
+          ]
+        }
       ]
     },
     "insertTextBoxOp": {
       "type": "object",
-      "required": ["op", "id"],
+      "required": [
+        "op",
+        "id"
+      ],
       "additionalProperties": false,
       "properties": {
-        "op": { "const": "insertTextBox" },
-        "id": { "type": "string", "minLength": 1 },
-        "cx": { "type": "integer", "minimum": 1 },
-        "cy": { "type": "integer", "minimum": 1 },
-        "text": { "type": "string" },
-        "from": { "type": "string", "minLength": 1 },
-        "to": { "type": "string", "minLength": 1 },
-        "anchor": { "enum": ["oneCell", "twoCell"] },
-        "fromOffX": { "type": "integer", "minimum": 0 },
-        "fromOffY": { "type": "integer", "minimum": 0 },
-        "toOffX": { "type": "integer", "minimum": 0 },
-        "toOffY": { "type": "integer", "minimum": 0 }
+        "op": {
+          "const": "insertTextBox"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "cx": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "cy": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "text": {
+          "type": "string"
+        },
+        "from": {
+          "type": "string",
+          "minLength": 1
+        },
+        "to": {
+          "type": "string",
+          "minLength": 1
+        },
+        "anchor": {
+          "enum": [
+            "oneCell",
+            "twoCell"
+          ]
+        },
+        "fromOffX": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "fromOffY": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "toOffX": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "toOffY": {
+          "type": "integer",
+          "minimum": 0
+        }
       }
     },
     "deleteTextBoxOp": {
       "type": "object",
-      "required": ["op", "id"],
+      "required": [
+        "op",
+        "id"
+      ],
       "additionalProperties": false,
       "properties": {
-        "op": { "const": "deleteTextBox" },
-        "id": { "type": "string", "minLength": 1 }
+        "op": {
+          "const": "deleteTextBox"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
       }
     },
     "setTextBoxSizeOp": {
       "type": "object",
-      "required": ["op", "id"],
+      "required": [
+        "op",
+        "id"
+      ],
       "additionalProperties": false,
       "properties": {
-        "op": { "const": "setTextBoxSize" },
-        "id": { "type": "string", "minLength": 1 },
-        "cx": { "type": "integer", "minimum": 1 },
-        "cy": { "type": "integer", "minimum": 1 },
-        "to": { "type": "string", "minLength": 1 },
-        "toOffX": { "type": "integer", "minimum": 0 },
-        "toOffY": { "type": "integer", "minimum": 0 }
-      },
-      "anyOf": [{ "required": ["cx"] }, { "required": ["cy"] }, { "required": ["to"] }]
-    },
-    "setTextBoxAnchorOp": {
-      "type": "object",
-      "required": ["op", "id"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "setTextBoxAnchor" },
-        "id": { "type": "string", "minLength": 1 },
-        "anchor": { "enum": ["oneCell", "twoCell", "absolute"] },
-        "from": { "type": "string", "minLength": 1 },
-        "to": { "type": "string", "minLength": 1 },
-        "fromOffX": { "type": "integer", "minimum": 0 },
-        "fromOffY": { "type": "integer", "minimum": 0 },
-        "toOffX": { "type": "integer", "minimum": 0 },
-        "toOffY": { "type": "integer", "minimum": 0 },
-        "posX": { "type": "integer" },
-        "posY": { "type": "integer" },
-        "editAs": { "enum": ["twoCell", "oneCell", "absolute"] },
-        "cx": { "type": "integer", "minimum": 1 },
-        "cy": { "type": "integer", "minimum": 1 }
+        "op": {
+          "const": "setTextBoxSize"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "cx": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "cy": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "to": {
+          "type": "string",
+          "minLength": 1
+        },
+        "toOffX": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "toOffY": {
+          "type": "integer",
+          "minimum": 0
+        }
       },
       "anyOf": [
-        { "required": ["anchor"] },
-        { "required": ["from"] },
-        { "required": ["to"] },
-        { "required": ["fromOffX"] },
-        { "required": ["fromOffY"] },
-        { "required": ["toOffX"] },
-        { "required": ["toOffY"] },
-        { "required": ["posX"] },
-        { "required": ["posY"] },
-        { "required": ["editAs"] },
-        { "required": ["cx"] },
-        { "required": ["cy"] }
-      ]
-    },
-    "setTextBoxWrapOp": {
-      "type": "object",
-      "required": ["op", "id", "kind"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "setTextBoxWrap" },
-        "id": { "type": "string", "minLength": 1 },
-        "kind": { "enum": ["inline", "anchor"] },
-        "wrap": {
-          "type": ["string", "null"],
-          "enum": ["square", "tight", "through", "topAndBottom", "none", null]
+        {
+          "required": [
+            "cx"
+          ]
         },
-        "alignH": { "enum": ["left", "center", "right"] },
-        "alignV": { "enum": ["top", "center", "bottom"] },
-        "offsetX": { "type": "integer" },
-        "offsetY": { "type": "integer" }
-      }
-    },
-    "setTextBoxFillOp": {
-      "type": "object",
-      "required": ["op", "id", "color"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "setTextBoxFill" },
-        "id": { "type": "string", "minLength": 1 },
-        "color": { "type": ["string", "null"] }
-      }
-    },
-    "setTextBoxLineOp": {
-      "type": "object",
-      "required": ["op", "id", "color"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "setTextBoxLine" },
-        "id": { "type": "string", "minLength": 1 },
-        "color": { "type": ["string", "null"] },
-        "width": { "type": "integer", "minimum": 1 }
-      }
-    },
-    "setTextBoxDirectionOp": {
-      "type": "object",
-      "required": ["op", "id", "direction"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "setTextBoxDirection" },
-        "id": { "type": "string", "minLength": 1 },
-        "direction": { "enum": ["horizontal", "vertical"] }
-      }
-    },
-    "insertParaOp": {
-      "type": "object",
-      "required": ["op", "id"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "insertPara" },
-        "id": { "type": "string", "minLength": 1 },
-        "text": { "type": "string" }
-      }
-    },
-    "deleteParaOp": {
-      "type": "object",
-      "required": ["op", "id"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "deletePara" },
-        "id": { "type": "string", "minLength": 1 }
-      }
+        {
+          "required": [
+            "cy"
+          ]
+        },
+        {
+          "required": [
+            "to"
+          ]
+        }
+      ]
     },
     "insertTableOp": {
       "type": "object",
-      "required": ["op", "id", "rows", "cols"],
+      "required": [
+        "op",
+        "id",
+        "rows",
+        "cols"
+      ],
       "additionalProperties": false,
       "properties": {
-        "op": { "const": "insertTable" },
-        "id": { "type": "string", "minLength": 1 },
-        "rows": { "type": "integer", "minimum": 1, "maximum": 500 },
-        "cols": { "type": "integer", "minimum": 1, "maximum": 75 },
+        "op": {
+          "const": "insertTable"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "rows": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 500
+        },
+        "cols": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 75
+        },
         "cells": {
           "type": "array",
           "items": {
             "type": "array",
-            "items": { "type": "string" }
+            "items": {
+              "type": "string"
+            }
           }
         },
-        "x": { "type": "integer", "minimum": 0 },
-        "y": { "type": "integer", "minimum": 0 },
-        "cx": { "type": "integer", "minimum": 1 },
-        "cy": { "type": "integer", "minimum": 1 }
+        "x": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "y": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "cx": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "cy": {
+          "type": "integer",
+          "minimum": 1
+        }
       }
     },
     "deleteTableOp": {
       "type": "object",
-      "required": ["op", "id"],
+      "required": [
+        "op",
+        "id"
+      ],
       "additionalProperties": false,
       "properties": {
-        "op": { "const": "deleteTable" },
-        "id": { "type": "string", "minLength": 1 }
+        "op": {
+          "const": "deleteTable"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
       }
     },
     "insertRowOp": {
       "type": "object",
-      "required": ["op", "id"],
+      "required": [
+        "op",
+        "id"
+      ],
       "additionalProperties": false,
       "properties": {
-        "op": { "const": "insertRow" },
-        "id": { "type": "string", "minLength": 1 }
+        "op": {
+          "const": "insertRow"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
       }
     },
     "deleteRowOp": {
       "type": "object",
-      "required": ["op", "id"],
+      "required": [
+        "op",
+        "id"
+      ],
       "additionalProperties": false,
       "properties": {
-        "op": { "const": "deleteRow" },
-        "id": { "type": "string", "minLength": 1 }
+        "op": {
+          "const": "deleteRow"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
       }
     },
     "insertColOp": {
       "type": "object",
-      "required": ["op", "id", "after"],
+      "required": [
+        "op",
+        "id",
+        "after"
+      ],
       "additionalProperties": false,
       "properties": {
-        "op": { "const": "insertCol" },
-        "id": { "type": "string", "minLength": 1 },
-        "after": { "type": "integer", "minimum": 0 }
+        "op": {
+          "const": "insertCol"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "after": {
+          "type": "integer",
+          "minimum": 0
+        }
       }
     },
     "deleteColOp": {
       "type": "object",
-      "required": ["op", "id", "col"],
+      "required": [
+        "op",
+        "id",
+        "col"
+      ],
       "additionalProperties": false,
       "properties": {
-        "op": { "const": "deleteCol" },
-        "id": { "type": "string", "minLength": 1 },
-        "col": { "type": "integer", "minimum": 1 }
-      }
-    },
-    "mergeCellsOp": {
-      "type": "object",
-      "required": ["op", "id", "startRow", "startCol", "endRow", "endCol"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "mergeCells" },
-        "id": { "type": "string", "minLength": 1 },
-        "startRow": { "type": "integer", "minimum": 1 },
-        "startCol": { "type": "integer", "minimum": 1 },
-        "endRow": { "type": "integer", "minimum": 1 },
-        "endCol": { "type": "integer", "minimum": 1 }
-      }
-    },
-    "splitCellsOp": {
-      "type": "object",
-      "required": ["op", "id"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "splitCells" },
-        "id": { "type": "string", "minLength": 1 }
-      }
-    },
-    "acceptRevisionOp": {
-      "type": "object",
-      "required": ["op", "id"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "acceptRevision" },
-        "id": { "type": "string", "minLength": 1 }
-      }
-    },
-    "rejectRevisionOp": {
-      "type": "object",
-      "required": ["op", "id"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "rejectRevision" },
-        "id": { "type": "string", "minLength": 1 }
+        "op": {
+          "const": "deleteCol"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "col": {
+          "type": "integer",
+          "minimum": 1
+        }
       }
     },
     "insertHyperlinkOp": {
       "type": "object",
-      "required": ["op", "id"],
+      "required": [
+        "op",
+        "id"
+      ],
       "additionalProperties": false,
       "properties": {
-        "op": { "const": "insertHyperlink" },
-        "id": { "type": "string", "minLength": 1 },
-        "text": { "type": "string" },
-        "url": { "type": "string", "minLength": 1 },
-        "anchor": { "type": "string", "minLength": 1 },
-        "location": { "type": "string", "minLength": 1 },
-        "ref": { "type": "string", "minLength": 1 },
-        "tooltip": { "type": "string" },
-        "display": { "type": "string" }
+        "op": {
+          "const": "insertHyperlink"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "text": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string",
+          "minLength": 1
+        },
+        "anchor": {
+          "type": "string",
+          "minLength": 1
+        },
+        "location": {
+          "type": "string",
+          "minLength": 1
+        },
+        "ref": {
+          "type": "string",
+          "minLength": 1
+        },
+        "tooltip": {
+          "type": "string"
+        },
+        "display": {
+          "type": "string"
+        }
       }
     },
     "setHyperlinkOp": {
       "type": "object",
-      "required": ["op", "id"],
+      "required": [
+        "op",
+        "id"
+      ],
       "additionalProperties": false,
       "properties": {
-        "op": { "const": "setHyperlink" },
-        "id": { "type": "string", "minLength": 1 },
-        "url": { "type": ["string", "null"] },
-        "anchor": { "type": "string", "minLength": 1 },
-        "location": { "type": ["string", "null"] },
-        "text": { "type": "string" },
-        "tooltip": { "type": ["string", "null"] },
-        "display": { "type": ["string", "null"] },
-        "ref": { "type": "string", "minLength": 1 }
+        "op": {
+          "const": "setHyperlink"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "url": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "anchor": {
+          "type": "string",
+          "minLength": 1
+        },
+        "location": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "text": {
+          "type": "string"
+        },
+        "tooltip": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "display": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "ref": {
+          "type": "string",
+          "minLength": 1
+        }
       }
     },
     "deleteHyperlinkOp": {
       "type": "object",
-      "required": ["op", "id"],
+      "required": [
+        "op",
+        "id"
+      ],
       "additionalProperties": false,
       "properties": {
-        "op": { "const": "deleteHyperlink" },
-        "id": { "type": "string", "minLength": 1 }
-      }
-    },
-    "insertSparklineOp": {
-      "type": "object",
-      "required": ["op", "id", "ref", "formula"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "insertSparkline" },
-        "id": { "type": "string", "minLength": 1 },
-        "ref": { "type": "string", "minLength": 1 },
-        "formula": { "type": "string", "minLength": 1 },
-        "type": { "enum": ["line", "column", "stacked"] }
-      }
-    },
-    "setSparklineOp": {
-      "type": "object",
-      "required": ["op", "id"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "setSparkline" },
-        "id": { "type": "string", "minLength": 1 },
-        "ref": { "type": "string", "minLength": 1 },
-        "formula": { "type": "string", "minLength": 1 },
-        "type": { "enum": ["line", "column", "stacked"] }
-      }
-    },
-    "deleteSparklineOp": {
-      "type": "object",
-      "required": ["op", "id"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "deleteSparkline" },
-        "id": { "type": "string", "minLength": 1 }
-      }
-    },
-    "insertBookmarkOp": {
-      "type": "object",
-      "required": ["op", "id"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "insertBookmark" },
-        "id": { "type": "string", "minLength": 1 },
-        "name": { "type": "string", "minLength": 1 },
-        "end": { "type": "string", "minLength": 1 }
-      }
-    },
-    "setBookmarkOp": {
-      "type": "object",
-      "required": ["op", "id", "name"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "setBookmark" },
-        "id": { "type": "string", "minLength": 1 },
-        "name": { "type": "string", "minLength": 1 }
-      }
-    },
-    "deleteBookmarkOp": {
-      "type": "object",
-      "required": ["op", "id"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "deleteBookmark" },
-        "id": { "type": "string", "minLength": 1 }
-      }
-    },
-    "insertFieldOp": {
-      "type": "object",
-      "required": ["op", "id", "instr"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "insertField" },
-        "id": { "type": "string", "minLength": 1 },
-        "instr": { "type": "string", "minLength": 1 },
-        "result": { "type": "string" }
-      }
-    },
-    "setFieldOp": {
-      "type": "object",
-      "required": ["op", "id", "instr"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "setField" },
-        "id": { "type": "string", "minLength": 1 },
-        "instr": { "type": "string", "minLength": 1 }
-      }
-    },
-    "deleteFieldOp": {
-      "type": "object",
-      "required": ["op", "id"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "deleteField" },
-        "id": { "type": "string", "minLength": 1 },
-        "keep": { "enum": ["result", "instr"] }
-      }
-    },
-    "insertTocOp": {
-      "type": "object",
-      "required": ["op", "id"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "insertToc" },
-        "id": { "type": "string", "minLength": 1 },
-        "kind": { "enum": ["toc", "tof", "toa"] },
-        "instr": { "type": "string", "minLength": 1 }
-      }
-    },
-    "deleteTocOp": {
-      "type": "object",
-      "required": ["op", "id"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "deleteToc" },
-        "id": { "type": "string", "minLength": 1 }
-      }
-    },
-    "insertMathOp": {
-      "type": "object",
-      "required": ["op", "id", "text"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "insertMath" },
-        "id": { "type": "string", "minLength": 1 },
-        "text": { "type": "string", "minLength": 1 },
-        "kind": { "enum": ["inline", "display"] }
-      }
-    },
-    "setMathOp": {
-      "type": "object",
-      "required": ["op", "id", "text"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "setMath" },
-        "id": { "type": "string", "minLength": 1 },
-        "text": { "type": "string", "minLength": 1 }
-      }
-    },
-    "deleteMathOp": {
-      "type": "object",
-      "required": ["op", "id"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "deleteMath" },
-        "id": { "type": "string", "minLength": 1 }
-      }
-    },
-    "insertContentControlOp": {
-      "type": "object",
-      "required": ["op", "id", "text"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "insertContentControl" },
-        "id": { "type": "string", "minLength": 1 },
-        "text": { "type": "string", "minLength": 1 },
-        "kind": { "enum": ["plainText", "richText", "dropDown", "comboBox", "date"] },
-        "tag": { "type": "string" },
-        "alias": { "type": "string" },
-        "items": {
-          "type": "array",
-          "minItems": 1,
-          "items": { "type": "string", "minLength": 1 }
+        "op": {
+          "const": "deleteHyperlink"
         },
-        "fullDate": { "type": "string", "minLength": 1 }
-      }
-    },
-    "setContentControlOp": {
-      "type": "object",
-      "required": ["op", "id", "text"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "setContentControl" },
-        "id": { "type": "string", "minLength": 1 },
-        "text": { "type": "string", "minLength": 1 },
-        "tag": { "type": "string" },
-        "alias": { "type": "string" },
-        "items": {
-          "type": "array",
-          "minItems": 1,
-          "items": { "type": "string", "minLength": 1 }
-        },
-        "fullDate": { "type": "string", "minLength": 1 }
-      }
-    },
-    "deleteContentControlOp": {
-      "type": "object",
-      "required": ["op", "id"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "deleteContentControl" },
-        "id": { "type": "string", "minLength": 1 },
-        "keep": { "enum": ["content", "none"] }
-      }
-    },
-    "insertNumberingOp": {
-      "type": "object",
-      "required": ["op", "id", "kind"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "insertNumbering" },
-        "id": { "const": "docx:document" },
-        "kind": { "enum": ["decimal", "bullet"] }
-      }
-    },
-    "setNumberingOp": {
-      "type": "object",
-      "required": ["op", "id", "ilvl"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "setNumbering" },
-        "id": { "type": "string", "minLength": 1 },
-        "ilvl": { "type": "integer", "minimum": 0, "maximum": 8 },
-        "numFmt": {
-          "enum": ["decimal", "bullet", "lowerLetter", "upperLetter", "lowerRoman", "upperRoman"]
-        },
-        "start": { "type": "integer", "minimum": 1 },
-        "lvlText": { "type": "string" }
-      }
-    },
-    "setParaNumberingOp": {
-      "type": "object",
-      "required": ["op", "id", "num"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "setParaNumbering" },
-        "id": { "type": "string", "minLength": 1 },
-        "num": {
-          "oneOf": [
-            { "type": "string", "minLength": 1 },
-            { "type": "null" }
-          ]
-        },
-        "ilvl": { "type": "integer", "minimum": 0, "maximum": 8 }
-      }
-    },
-    "setStyleOp": {
-      "type": "object",
-      "required": ["op", "id"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "setStyle" },
-        "id": { "type": "string", "minLength": 1 },
-        "font": { "type": "string", "minLength": 1 },
-        "eastAsiaFont": { "type": "string", "minLength": 1 },
-        "sz": { "type": "integer", "minimum": 2, "maximum": 3276 },
-        "bold": { "type": "boolean" },
-        "color": { "type": "string", "pattern": "^[0-9A-Fa-f]{6}$" },
-        "before": { "type": "integer", "minimum": 0 },
-        "after": { "type": "integer", "minimum": 0 }
-      }
-    },
-    "setParaStyleOp": {
-      "type": "object",
-      "required": ["op", "id", "style"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "setParaStyle" },
-        "id": { "type": "string", "minLength": 1 },
-        "style": {
-          "oneOf": [
-            { "type": "string", "minLength": 1 },
-            { "type": "null" }
-          ]
+        "id": {
+          "type": "string",
+          "minLength": 1
         }
-      }
-    },
-    "setParaFormatOp": {
-      "type": "object",
-      "required": ["op", "id"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "setParaFormat" },
-        "id": { "type": "string", "minLength": 1 },
-        "align": {
-          "oneOf": [
-            { "type": "string", "enum": ["left", "center", "right", "both", "distribute", "start", "end"] },
-            { "type": "null" }
-          ]
-        },
-        "left": { "oneOf": [{ "type": "integer", "minimum": 0 }, { "type": "null" }] },
-        "right": { "oneOf": [{ "type": "integer", "minimum": 0 }, { "type": "null" }] },
-        "firstLine": { "oneOf": [{ "type": "integer", "minimum": 0 }, { "type": "null" }] },
-        "hanging": { "oneOf": [{ "type": "integer", "minimum": 0 }, { "type": "null" }] },
-        "before": { "oneOf": [{ "type": "integer", "minimum": 0 }, { "type": "null" }] },
-        "after": { "oneOf": [{ "type": "integer", "minimum": 0 }, { "type": "null" }] },
-        "line": { "oneOf": [{ "type": "integer", "minimum": 0 }, { "type": "null" }] },
-        "lineRule": {
-          "oneOf": [
-            { "type": "string", "enum": ["auto", "exact", "atLeast"] },
-            { "type": "null" }
-          ]
-        }
-      }
-    },
-    "setRunFormatOp": {
-      "type": "object",
-      "required": ["op", "id"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "setRunFormat" },
-        "id": { "type": "string", "minLength": 1 },
-        "bold": { "type": "boolean" },
-        "italic": { "type": "boolean" },
-        "underline": {
-          "oneOf": [
-            {
-              "type": "string",
-              "enum": [
-                "single",
-                "none",
-                "double",
-                "thick",
-                "dotted",
-                "dash",
-                "wave",
-                "words",
-                "dottedHeavy",
-                "dashedHeavy",
-                "dashLong",
-                "dashLongHeavy",
-                "dotDash",
-                "dashDotHeavy",
-                "dotDotDash",
-                "dashDotDotHeavy",
-                "wavyHeavy",
-                "wavyDouble"
-              ]
-            },
-            { "type": "null" }
-          ]
-        },
-        "sz": { "type": "integer", "minimum": 2, "maximum": 3276 },
-        "color": { "type": "string", "pattern": "^[0-9A-Fa-f]{6}$" },
-        "font": { "type": "string", "minLength": 1 },
-        "eastAsiaFont": { "type": "string", "minLength": 1 }
-      }
-    },
-    "setTextBoxLinkOp": {
-      "type": "object",
-      "required": ["op", "id", "next"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "setTextBoxLink" },
-        "id": { "type": "string", "minLength": 1 },
-        "next": { "type": ["string", "null"] }
-      }
-    },
-    "insertFootnoteOp": {
-      "type": "object",
-      "required": ["op", "id"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "insertFootnote" },
-        "id": { "type": "string", "minLength": 1 },
-        "text": { "type": "string" }
-      }
-    },
-    "insertEndnoteOp": {
-      "type": "object",
-      "required": ["op", "id"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "insertEndnote" },
-        "id": { "type": "string", "minLength": 1 },
-        "text": { "type": "string" }
-      }
-    },
-    "deleteFootnoteOp": {
-      "type": "object",
-      "required": ["op", "id"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "deleteFootnote" },
-        "id": { "type": "string", "minLength": 1 }
-      }
-    },
-    "deleteEndnoteOp": {
-      "type": "object",
-      "required": ["op", "id"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "deleteEndnote" },
-        "id": { "type": "string", "minLength": 1 }
-      }
-    },
-    "setNoteNumberingOp": {
-      "type": "object",
-      "required": ["op", "id", "kind"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "setNoteNumbering" },
-        "id": { "type": "string", "minLength": 1 },
-        "kind": { "enum": ["footnote", "endnote"] },
-        "numFmt": {
-          "enum": ["decimal", "upperRoman", "lowerRoman", "upperLetter", "lowerLetter", "chicago"]
-        },
-        "numStart": { "type": "integer", "minimum": 1 },
-        "numRestart": { "enum": ["continuous", "eachSect", "eachPage"] }
       }
     },
     "insertCommentOp": {
       "type": "object",
-      "required": ["op"],
+      "required": [
+        "op"
+      ],
       "additionalProperties": false,
       "properties": {
-        "op": { "const": "insertComment" },
-        "id": { "type": "string", "minLength": 1 },
-        "start": { "type": "string", "minLength": 1 },
-        "end": { "type": "string", "minLength": 1 },
-        "text": { "type": "string" },
-        "author": { "type": "string" },
-        "initials": { "type": "string" },
-        "date": { "type": "string", "minLength": 1 },
-        "x": { "type": "integer", "minimum": 0 },
-        "y": { "type": "integer", "minimum": 0 }
+        "op": {
+          "const": "insertComment"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "start": {
+          "type": "string",
+          "minLength": 1
+        },
+        "end": {
+          "type": "string",
+          "minLength": 1
+        },
+        "text": {
+          "type": "string"
+        },
+        "author": {
+          "type": "string"
+        },
+        "initials": {
+          "type": "string"
+        },
+        "date": {
+          "type": "string",
+          "minLength": 1
+        },
+        "x": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "y": {
+          "type": "integer",
+          "minimum": 0
+        }
       },
       "oneOf": [
-        { "required": ["start", "end"] },
-        { "required": ["id"] }
+        {
+          "required": [
+            "start",
+            "end"
+          ]
+        },
+        {
+          "required": [
+            "id"
+          ]
+        }
       ]
     },
     "deleteCommentOp": {
       "type": "object",
-      "required": ["op", "id"],
+      "required": [
+        "op",
+        "id"
+      ],
       "additionalProperties": false,
       "properties": {
-        "op": { "const": "deleteComment" },
-        "id": { "type": "string", "minLength": 1 }
+        "op": {
+          "const": "deleteComment"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
       }
     },
     "replyCommentOp": {
       "type": "object",
-      "required": ["op", "id"],
+      "required": [
+        "op",
+        "id"
+      ],
       "additionalProperties": false,
       "properties": {
-        "op": { "const": "replyComment" },
-        "id": { "type": "string", "minLength": 1 },
-        "text": { "type": "string" },
-        "author": { "type": "string" },
-        "initials": { "type": "string" },
-        "date": { "type": "string", "minLength": 1 }
+        "op": {
+          "const": "replyComment"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "text": {
+          "type": "string"
+        },
+        "author": {
+          "type": "string"
+        },
+        "initials": {
+          "type": "string"
+        },
+        "date": {
+          "type": "string",
+          "minLength": 1
+        }
       }
     },
     "setCommentTextOp": {
       "type": "object",
-      "required": ["op", "id", "text"],
+      "required": [
+        "op",
+        "id",
+        "text"
+      ],
       "additionalProperties": false,
       "properties": {
-        "op": { "const": "setCommentText" },
-        "id": { "type": "string", "minLength": 1 },
-        "text": { "type": "string" }
+        "op": {
+          "const": "setCommentText"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "text": {
+          "type": "string"
+        }
       }
     },
     "setCommentMetaOp": {
       "type": "object",
-      "required": ["op", "id"],
+      "required": [
+        "op",
+        "id"
+      ],
       "additionalProperties": false,
       "properties": {
-        "op": { "const": "setCommentMeta" },
-        "id": { "type": "string", "minLength": 1 },
-        "author": { "type": "string" },
-        "initials": { "type": "string" },
-        "date": { "type": "string", "minLength": 1 }
+        "op": {
+          "const": "setCommentMeta"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "author": {
+          "type": "string"
+        },
+        "initials": {
+          "type": "string"
+        },
+        "date": {
+          "type": "string",
+          "minLength": 1
+        }
       },
       "anyOf": [
-        { "required": ["author"] },
-        { "required": ["initials"] },
-        { "required": ["date"] }
+        {
+          "required": [
+            "author"
+          ]
+        },
+        {
+          "required": [
+            "initials"
+          ]
+        },
+        {
+          "required": [
+            "date"
+          ]
+        }
       ]
     },
     "setCommentDoneOp": {
       "type": "object",
-      "required": ["op", "id", "done"],
+      "required": [
+        "op",
+        "id",
+        "done"
+      ],
       "additionalProperties": false,
       "properties": {
-        "op": { "const": "setCommentDone" },
-        "id": { "type": "string", "minLength": 1 },
-        "done": { "type": "boolean" }
+        "op": {
+          "const": "setCommentDone"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "done": {
+          "type": "boolean"
+        }
       }
     },
     "chartType": {
-      "enum": ["bar", "col", "line", "pie", "area", "scatter", "doughnut", "radar", "bubble"]
+      "enum": [
+        "bar",
+        "col",
+        "line",
+        "pie",
+        "area",
+        "scatter",
+        "doughnut",
+        "radar",
+        "bubble"
+      ]
     },
     "insertChartType": {
       "enum": [
-        "bar", "col", "line", "pie", "area", "scatter", "doughnut", "radar", "bubble", "combo"
+        "bar",
+        "col",
+        "line",
+        "pie",
+        "area",
+        "scatter",
+        "doughnut",
+        "radar",
+        "bubble",
+        "combo"
       ]
     },
-    "comboSeriesType": { "enum": ["bar", "col", "line", "area", "scatter"] },
+    "comboSeriesType": {
+      "enum": [
+        "bar",
+        "col",
+        "line",
+        "area",
+        "scatter"
+      ]
+    },
     "chartSeriesData": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "name": { "type": "string" },
-        "type": { "$ref": "#/$defs/comboSeriesType" },
+        "name": {
+          "type": "string"
+        },
+        "type": {
+          "$ref": "#/$defs/comboSeriesType"
+        },
         "categories": {
           "type": "array",
-          "items": { "type": ["string", "number"] }
+          "items": {
+            "type": [
+              "string",
+              "number"
+            ]
+          }
         },
         "values": {
           "type": "array",
           "minItems": 1,
-          "items": { "type": ["string", "number"] }
+          "items": {
+            "type": [
+              "string",
+              "number"
+            ]
+          }
         },
         "sizes": {
           "type": "array",
-          "items": { "type": ["string", "number"] }
+          "items": {
+            "type": [
+              "string",
+              "number"
+            ]
+          }
         }
       }
     },
     "insertChartOp": {
       "type": "object",
-      "required": ["op", "id", "type", "series"],
+      "required": [
+        "op",
+        "id",
+        "type",
+        "series"
+      ],
       "additionalProperties": false,
       "properties": {
-        "op": { "const": "insertChart" },
-        "id": { "type": "string", "minLength": 1 },
-        "type": { "$ref": "#/$defs/insertChartType" },
-        "title": { "type": "string" },
+        "op": {
+          "const": "insertChart"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "type": {
+          "$ref": "#/$defs/insertChartType"
+        },
+        "title": {
+          "type": "string"
+        },
         "series": {
           "type": "array",
           "minItems": 1,
           "items": {
             "allOf": [
-              { "$ref": "#/$defs/chartSeriesData" },
-              { "required": ["values"] }
+              {
+                "$ref": "#/$defs/chartSeriesData"
+              },
+              {
+                "required": [
+                  "values"
+                ]
+              }
             ]
           }
         },
-        "kind": { "enum": ["inline", "anchor"] },
+        "kind": {
+          "enum": [
+            "inline",
+            "anchor"
+          ]
+        },
         "wrap": {
-          "type": ["string", "null"],
-          "enum": ["square", "tight", "through", "topAndBottom", "none", null]
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "square",
+            "tight",
+            "through",
+            "topAndBottom",
+            "none",
+            null
+          ]
         },
-        "cx": { "type": "integer", "minimum": 1 },
-        "cy": { "type": "integer", "minimum": 1 },
-        "x": { "type": "integer", "minimum": 0 },
-        "y": { "type": "integer", "minimum": 0 },
-        "from": { "type": "string", "minLength": 1 },
-        "to": { "type": "string", "minLength": 1 },
-        "anchor": { "enum": ["oneCell", "twoCell"] },
-        "fromOffX": { "type": "integer", "minimum": 0 },
-        "fromOffY": { "type": "integer", "minimum": 0 },
-        "toOffX": { "type": "integer", "minimum": 0 },
-        "toOffY": { "type": "integer", "minimum": 0 },
-        "dataFrom": { "type": "string", "minLength": 1 }
-      }
-    },
-    "insertChartSheetOp": {
-      "type": "object",
-      "required": ["op", "id", "name", "type", "series", "dataFrom"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "insertChartSheet" },
-        "id": { "type": "string", "minLength": 1 },
-        "name": { "type": "string", "minLength": 1 },
-        "dataSheet": { "type": "string", "minLength": 1 },
-        "type": { "$ref": "#/$defs/insertChartType" },
-        "title": { "type": "string" },
-        "series": {
-          "type": "array",
-          "minItems": 1,
-          "items": {
-            "allOf": [
-              { "$ref": "#/$defs/chartSeriesData" },
-              { "required": ["values"] }
-            ]
-          }
+        "cx": {
+          "type": "integer",
+          "minimum": 1
         },
-        "cx": { "type": "integer", "minimum": 1 },
-        "cy": { "type": "integer", "minimum": 1 },
-        "dataFrom": { "type": "string", "minLength": 1 }
-      }
-    },
-    "deleteChartSheetOp": {
-      "type": "object",
-      "required": ["op", "id"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "deleteChartSheet" },
-        "id": { "type": "string", "minLength": 1 }
-      }
-    },
-    "insertSheetOp": {
-      "type": "object",
-      "required": ["op", "id", "name"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "insertSheet" },
-        "id": { "type": "string", "minLength": 1 },
-        "name": { "type": "string", "minLength": 1 },
-        "after": { "type": "string", "minLength": 1 }
-      }
-    },
-    "deleteSheetOp": {
-      "type": "object",
-      "required": ["op", "id"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "deleteSheet" },
-        "id": { "type": "string", "minLength": 1 }
-      }
-    },
-    "renameSheetOp": {
-      "type": "object",
-      "required": ["op", "id", "name"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "renameSheet" },
-        "id": { "type": "string", "minLength": 1 },
-        "name": { "type": "string", "minLength": 1 }
-      }
-    },
-    "moveSheetOp": {
-      "type": "object",
-      "required": ["op", "id"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "moveSheet" },
-        "id": { "type": "string", "minLength": 1 },
-        "after": { "type": ["string", "null"], "minLength": 1 }
-      }
-    },
-    "setSheetHiddenOp": {
-      "type": "object",
-      "required": ["op", "id", "hidden"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "setSheetHidden" },
-        "id": { "type": "string", "minLength": 1 },
-        "hidden": { "type": "boolean" }
+        "cy": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "x": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "y": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "from": {
+          "type": "string",
+          "minLength": 1
+        },
+        "to": {
+          "type": "string",
+          "minLength": 1
+        },
+        "anchor": {
+          "enum": [
+            "oneCell",
+            "twoCell"
+          ]
+        },
+        "fromOffX": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "fromOffY": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "toOffX": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "toOffY": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "dataFrom": {
+          "type": "string",
+          "minLength": 1
+        }
       }
     },
     "deleteChartOp": {
       "type": "object",
-      "required": ["op", "id"],
+      "required": [
+        "op",
+        "id"
+      ],
       "additionalProperties": false,
       "properties": {
-        "op": { "const": "deleteChart" },
-        "id": { "type": "string", "minLength": 1 }
+        "op": {
+          "const": "deleteChart"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
       }
     },
     "setChartTitleOp": {
       "type": "object",
-      "required": ["op", "id", "title"],
+      "required": [
+        "op",
+        "id",
+        "title"
+      ],
       "additionalProperties": false,
       "properties": {
-        "op": { "const": "setChartTitle" },
-        "id": { "type": "string", "minLength": 1 },
-        "title": { "type": "string" }
+        "op": {
+          "const": "setChartTitle"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "title": {
+          "type": "string"
+        }
       }
     },
     "setChartSeriesOp": {
       "type": "object",
-      "required": ["op", "id"],
+      "required": [
+        "op",
+        "id"
+      ],
       "additionalProperties": false,
       "properties": {
-        "op": { "const": "setChartSeries" },
-        "id": { "type": "string", "minLength": 1 },
-        "name": { "type": "string" },
+        "op": {
+          "const": "setChartSeries"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string"
+        },
         "categories": {
           "type": "array",
-          "items": { "type": ["string", "number"] }
+          "items": {
+            "type": [
+              "string",
+              "number"
+            ]
+          }
         },
         "values": {
           "type": "array",
-          "items": { "type": ["string", "number"] }
+          "items": {
+            "type": [
+              "string",
+              "number"
+            ]
+          }
         },
         "sizes": {
           "type": "array",
-          "items": { "type": ["string", "number"] }
+          "items": {
+            "type": [
+              "string",
+              "number"
+            ]
+          }
         }
       },
       "anyOf": [
-        { "required": ["name"] },
-        { "required": ["categories"] },
-        { "required": ["values"] },
-        { "required": ["sizes"] }
+        {
+          "required": [
+            "name"
+          ]
+        },
+        {
+          "required": [
+            "categories"
+          ]
+        },
+        {
+          "required": [
+            "values"
+          ]
+        },
+        {
+          "required": [
+            "sizes"
+          ]
+        }
       ]
     },
     "addChartSeriesOp": {
       "type": "object",
-      "required": ["op", "id", "values"],
+      "required": [
+        "op",
+        "id",
+        "values"
+      ],
       "additionalProperties": false,
       "properties": {
-        "op": { "const": "addChartSeries" },
-        "id": { "type": "string", "minLength": 1 },
-        "name": { "type": "string" },
+        "op": {
+          "const": "addChartSeries"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string"
+        },
         "categories": {
           "type": "array",
-          "items": { "type": ["string", "number"] }
+          "items": {
+            "type": [
+              "string",
+              "number"
+            ]
+          }
         },
         "values": {
           "type": "array",
           "minItems": 1,
-          "items": { "type": ["string", "number"] }
+          "items": {
+            "type": [
+              "string",
+              "number"
+            ]
+          }
         },
         "sizes": {
           "type": "array",
-          "items": { "type": ["string", "number"] }
+          "items": {
+            "type": [
+              "string",
+              "number"
+            ]
+          }
         },
-        "type": { "$ref": "#/$defs/comboSeriesType" }
+        "type": {
+          "$ref": "#/$defs/comboSeriesType"
+        }
       }
     },
     "deleteChartSeriesOp": {
       "type": "object",
-      "required": ["op", "id"],
+      "required": [
+        "op",
+        "id"
+      ],
       "additionalProperties": false,
       "properties": {
-        "op": { "const": "deleteChartSeries" },
-        "id": { "type": "string", "minLength": 1 }
+        "op": {
+          "const": "deleteChartSeries"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
       }
     },
     "setChartTypeOp": {
       "type": "object",
-      "required": ["op", "id", "type"],
+      "required": [
+        "op",
+        "id",
+        "type"
+      ],
       "additionalProperties": false,
       "properties": {
-        "op": { "const": "setChartType" },
-        "id": { "type": "string", "minLength": 1 },
-        "type": { "$ref": "#/$defs/chartType" }
+        "op": {
+          "const": "setChartType"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "type": {
+          "$ref": "#/$defs/chartType"
+        }
       }
     },
     "setChartAxisTitleOp": {
       "type": "object",
-      "required": ["op", "id", "axis", "title"],
+      "required": [
+        "op",
+        "id",
+        "axis",
+        "title"
+      ],
       "additionalProperties": false,
       "properties": {
-        "op": { "const": "setChartAxisTitle" },
-        "id": { "type": "string", "minLength": 1 },
-        "axis": { "enum": ["cat", "val"] },
-        "title": { "type": "string" }
+        "op": {
+          "const": "setChartAxisTitle"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "axis": {
+          "enum": [
+            "cat",
+            "val"
+          ]
+        },
+        "title": {
+          "type": "string"
+        }
       }
     },
     "setChartLegendOp": {
       "type": "object",
-      "required": ["op", "id", "show"],
+      "required": [
+        "op",
+        "id",
+        "show"
+      ],
       "additionalProperties": false,
       "properties": {
-        "op": { "const": "setChartLegend" },
-        "id": { "type": "string", "minLength": 1 },
-        "show": { "type": "boolean" },
-        "pos": { "enum": ["b", "t", "l", "r", "tr"] }
+        "op": {
+          "const": "setChartLegend"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "show": {
+          "type": "boolean"
+        },
+        "pos": {
+          "enum": [
+            "b",
+            "t",
+            "l",
+            "r",
+            "tr"
+          ]
+        }
       }
     },
     "setChartDataLabelsOp": {
       "type": "object",
-      "required": ["op", "id", "show"],
+      "required": [
+        "op",
+        "id",
+        "show"
+      ],
       "additionalProperties": false,
       "properties": {
-        "op": { "const": "setChartDataLabels" },
-        "id": { "type": "string", "minLength": 1 },
-        "show": { "type": "boolean" }
+        "op": {
+          "const": "setChartDataLabels"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "show": {
+          "type": "boolean"
+        }
       }
     },
     "trendlineType": {
-      "enum": ["linear", "exp", "log", "poly", "power", "movingAvg"]
+      "enum": [
+        "linear",
+        "exp",
+        "log",
+        "poly",
+        "power",
+        "movingAvg"
+      ]
     },
     "insertTrendlineOp": {
       "type": "object",
-      "required": ["op", "id", "type"],
+      "required": [
+        "op",
+        "id",
+        "type"
+      ],
       "additionalProperties": false,
       "properties": {
-        "op": { "const": "insertTrendline" },
-        "id": { "type": "string", "minLength": 1 },
-        "type": { "$ref": "#/$defs/trendlineType" },
-        "order": { "type": "integer", "minimum": 2, "maximum": 6 },
-        "period": { "type": "integer", "minimum": 2 },
-        "displayRSquared": { "type": "boolean" },
-        "displayEquation": { "type": "boolean" },
-        "name": { "type": "string" }
+        "op": {
+          "const": "insertTrendline"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "type": {
+          "$ref": "#/$defs/trendlineType"
+        },
+        "order": {
+          "type": "integer",
+          "minimum": 2,
+          "maximum": 6
+        },
+        "period": {
+          "type": "integer",
+          "minimum": 2
+        },
+        "displayRSquared": {
+          "type": "boolean"
+        },
+        "displayEquation": {
+          "type": "boolean"
+        },
+        "name": {
+          "type": "string"
+        }
       }
     },
     "setTrendlineOp": {
       "type": "object",
-      "required": ["op", "id"],
+      "required": [
+        "op",
+        "id"
+      ],
       "additionalProperties": false,
       "properties": {
-        "op": { "const": "setTrendline" },
-        "id": { "type": "string", "minLength": 1 },
-        "type": { "$ref": "#/$defs/trendlineType" },
-        "order": { "type": "integer", "minimum": 2, "maximum": 6 },
-        "period": { "type": "integer", "minimum": 2 },
-        "displayRSquared": { "type": "boolean" },
-        "displayEquation": { "type": "boolean" },
-        "name": { "type": "string" }
+        "op": {
+          "const": "setTrendline"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "type": {
+          "$ref": "#/$defs/trendlineType"
+        },
+        "order": {
+          "type": "integer",
+          "minimum": 2,
+          "maximum": 6
+        },
+        "period": {
+          "type": "integer",
+          "minimum": 2
+        },
+        "displayRSquared": {
+          "type": "boolean"
+        },
+        "displayEquation": {
+          "type": "boolean"
+        },
+        "name": {
+          "type": "string"
+        }
       },
       "anyOf": [
-        { "required": ["type"] },
-        { "required": ["order"] },
-        { "required": ["period"] },
-        { "required": ["displayRSquared"] },
-        { "required": ["displayEquation"] },
-        { "required": ["name"] }
+        {
+          "required": [
+            "type"
+          ]
+        },
+        {
+          "required": [
+            "order"
+          ]
+        },
+        {
+          "required": [
+            "period"
+          ]
+        },
+        {
+          "required": [
+            "displayRSquared"
+          ]
+        },
+        {
+          "required": [
+            "displayEquation"
+          ]
+        },
+        {
+          "required": [
+            "name"
+          ]
+        }
       ]
     },
     "deleteTrendlineOp": {
       "type": "object",
-      "required": ["op", "id"],
+      "required": [
+        "op",
+        "id"
+      ],
       "additionalProperties": false,
       "properties": {
-        "op": { "const": "deleteTrendline" },
-        "id": { "type": "string", "minLength": 1 }
+        "op": {
+          "const": "deleteTrendline"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
       }
     },
     "insertErrorBarsOp": {
       "type": "object",
-      "required": ["op", "id"],
+      "required": [
+        "op",
+        "id"
+      ],
       "additionalProperties": false,
       "properties": {
-        "op": { "const": "insertErrorBars" },
-        "id": { "type": "string", "minLength": 1 },
-        "dir": { "enum": ["x", "y"] },
-        "barType": { "enum": ["both", "plus", "minus"] },
-        "valType": { "enum": ["stdErr", "stdDev", "fixedVal", "percentage"] },
-        "value": { "type": "number" }
+        "op": {
+          "const": "insertErrorBars"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "dir": {
+          "enum": [
+            "x",
+            "y"
+          ]
+        },
+        "barType": {
+          "enum": [
+            "both",
+            "plus",
+            "minus"
+          ]
+        },
+        "valType": {
+          "enum": [
+            "stdErr",
+            "stdDev",
+            "fixedVal",
+            "percentage"
+          ]
+        },
+        "value": {
+          "type": "number"
+        }
       }
     },
     "setErrorBarsOp": {
       "type": "object",
-      "required": ["op", "id"],
+      "required": [
+        "op",
+        "id"
+      ],
       "additionalProperties": false,
       "properties": {
-        "op": { "const": "setErrorBars" },
-        "id": { "type": "string", "minLength": 1 },
-        "dir": { "enum": ["x", "y"] },
-        "barType": { "enum": ["both", "plus", "minus"] },
-        "valType": { "enum": ["stdErr", "stdDev", "fixedVal", "percentage"] },
-        "value": { "type": "number" }
+        "op": {
+          "const": "setErrorBars"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "dir": {
+          "enum": [
+            "x",
+            "y"
+          ]
+        },
+        "barType": {
+          "enum": [
+            "both",
+            "plus",
+            "minus"
+          ]
+        },
+        "valType": {
+          "enum": [
+            "stdErr",
+            "stdDev",
+            "fixedVal",
+            "percentage"
+          ]
+        },
+        "value": {
+          "type": "number"
+        }
       },
       "anyOf": [
-        { "required": ["dir"] },
-        { "required": ["barType"] },
-        { "required": ["valType"] },
-        { "required": ["value"] }
+        {
+          "required": [
+            "dir"
+          ]
+        },
+        {
+          "required": [
+            "barType"
+          ]
+        },
+        {
+          "required": [
+            "valType"
+          ]
+        },
+        {
+          "required": [
+            "value"
+          ]
+        }
       ]
     },
     "deleteErrorBarsOp": {
       "type": "object",
-      "required": ["op", "id"],
+      "required": [
+        "op",
+        "id"
+      ],
       "additionalProperties": false,
       "properties": {
-        "op": { "const": "deleteErrorBars" },
-        "id": { "type": "string", "minLength": 1 }
+        "op": {
+          "const": "deleteErrorBars"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
       }
     },
     "setChartSeriesAxisOp": {
       "type": "object",
-      "required": ["op", "id", "axis"],
+      "required": [
+        "op",
+        "id",
+        "axis"
+      ],
       "additionalProperties": false,
       "properties": {
-        "op": { "const": "setChartSeriesAxis" },
-        "id": { "type": "string", "minLength": 1 },
-        "axis": { "enum": ["primary", "secondary"] }
+        "op": {
+          "const": "setChartSeriesAxis"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "axis": {
+          "enum": [
+            "primary",
+            "secondary"
+          ]
+        }
       }
     },
     "setChartSizeOp": {
       "type": "object",
-      "required": ["op", "id"],
+      "required": [
+        "op",
+        "id"
+      ],
       "additionalProperties": false,
       "properties": {
-        "op": { "const": "setChartSize" },
-        "id": { "type": "string", "minLength": 1 },
-        "cx": { "type": "integer", "minimum": 1 },
-        "cy": { "type": "integer", "minimum": 1 },
-        "to": { "type": "string", "minLength": 1 },
-        "toOffX": { "type": "integer", "minimum": 0 },
-        "toOffY": { "type": "integer", "minimum": 0 }
-      },
-      "anyOf": [
-        { "required": ["cx"] },
-        { "required": ["cy"] },
-        { "required": ["to"] }
-      ]
-    },
-    "setChartPosOp": {
-      "type": "object",
-      "required": ["op", "id"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "setChartPos" },
-        "id": { "type": "string", "minLength": 1 },
-        "x": { "type": "integer", "minimum": 0 },
-        "y": { "type": "integer", "minimum": 0 }
-      },
-      "anyOf": [
-        { "required": ["x"] },
-        { "required": ["y"] }
-      ]
-    },
-    "setChartWrapOp": {
-      "type": "object",
-      "required": ["op", "id", "kind"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "setChartWrap" },
-        "id": { "type": "string", "minLength": 1 },
-        "kind": { "enum": ["inline", "anchor"] },
-        "wrap": {
-          "type": ["string", "null"],
-          "enum": ["square", "tight", "through", "topAndBottom", "none", null]
+        "op": {
+          "const": "setChartSize"
         },
-        "alignH": { "enum": ["left", "center", "right"] },
-        "alignV": { "enum": ["top", "center", "bottom"] },
-        "offsetX": { "type": "integer" },
-        "offsetY": { "type": "integer" }
-      }
-    },
-    "setChartAnchorOp": {
-      "type": "object",
-      "required": ["op", "id"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "setChartAnchor" },
-        "id": { "type": "string", "minLength": 1 },
-        "anchor": { "enum": ["oneCell", "twoCell", "absolute"] },
-        "from": { "type": "string", "minLength": 1 },
-        "to": { "type": "string", "minLength": 1 },
-        "fromOffX": { "type": "integer", "minimum": 0 },
-        "fromOffY": { "type": "integer", "minimum": 0 },
-        "toOffX": { "type": "integer", "minimum": 0 },
-        "toOffY": { "type": "integer", "minimum": 0 },
-        "posX": { "type": "integer" },
-        "posY": { "type": "integer" },
-        "editAs": { "enum": ["twoCell", "oneCell", "absolute"] },
-        "cx": { "type": "integer", "minimum": 1 },
-        "cy": { "type": "integer", "minimum": 1 }
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "cx": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "cy": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "to": {
+          "type": "string",
+          "minLength": 1
+        },
+        "toOffX": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "toOffY": {
+          "type": "integer",
+          "minimum": 0
+        }
       },
       "anyOf": [
-        { "required": ["anchor"] },
-        { "required": ["from"] },
-        { "required": ["to"] },
-        { "required": ["fromOffX"] },
-        { "required": ["fromOffY"] },
-        { "required": ["toOffX"] },
-        { "required": ["toOffY"] },
-        { "required": ["posX"] },
-        { "required": ["posY"] },
-        { "required": ["editAs"] },
-        { "required": ["cx"] },
-        { "required": ["cy"] }
+        {
+          "required": [
+            "cx"
+          ]
+        },
+        {
+          "required": [
+            "cy"
+          ]
+        },
+        {
+          "required": [
+            "to"
+          ]
+        }
       ]
     },
     "insertSmartArtOp": {
       "type": "object",
-      "required": ["op", "id", "layout"],
+      "required": [
+        "op",
+        "id",
+        "layout"
+      ],
       "additionalProperties": false,
       "properties": {
-        "op": { "const": "insertSmartArt" },
-        "id": { "type": "string", "minLength": 1 },
-        "layout": { "$ref": "#/$defs/smartArtLayout" },
+        "op": {
+          "const": "insertSmartArt"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "layout": {
+          "$ref": "#/$defs/smartArtLayout"
+        },
         "points": {
           "type": "array",
-          "items": { "$ref": "#/$defs/smartArtPointInput" }
+          "items": {
+            "$ref": "#/$defs/smartArtPointInput"
+          }
         },
-        "kind": { "enum": ["inline", "anchor"] },
+        "kind": {
+          "enum": [
+            "inline",
+            "anchor"
+          ]
+        },
         "wrap": {
-          "type": ["string", "null"],
-          "enum": ["square", "tight", "through", "topAndBottom", "none", null]
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "square",
+            "tight",
+            "through",
+            "topAndBottom",
+            "none",
+            null
+          ]
         },
-        "x": { "type": "integer", "minimum": 0 },
-        "y": { "type": "integer", "minimum": 0 },
-        "cx": { "type": "integer", "minimum": 1 },
-        "cy": { "type": "integer", "minimum": 1 },
-        "from": { "type": "string", "minLength": 1 },
-        "to": { "type": "string", "minLength": 1 },
-        "anchor": { "enum": ["oneCell", "twoCell"] },
-        "fromOffX": { "type": "integer", "minimum": 0 },
-        "fromOffY": { "type": "integer", "minimum": 0 },
-        "toOffX": { "type": "integer", "minimum": 0 },
-        "toOffY": { "type": "integer", "minimum": 0 }
+        "x": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "y": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "cx": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "cy": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "from": {
+          "type": "string",
+          "minLength": 1
+        },
+        "to": {
+          "type": "string",
+          "minLength": 1
+        },
+        "anchor": {
+          "enum": [
+            "oneCell",
+            "twoCell"
+          ]
+        },
+        "fromOffX": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "fromOffY": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "toOffX": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "toOffY": {
+          "type": "integer",
+          "minimum": 0
+        }
       }
-    },
-    "setSmartArtAnchorOp": {
-      "type": "object",
-      "required": ["op", "id"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "setSmartArtAnchor" },
-        "id": { "type": "string", "minLength": 1 },
-        "anchor": { "enum": ["oneCell", "twoCell", "absolute"] },
-        "from": { "type": "string", "minLength": 1 },
-        "to": { "type": "string", "minLength": 1 },
-        "fromOffX": { "type": "integer", "minimum": 0 },
-        "fromOffY": { "type": "integer", "minimum": 0 },
-        "toOffX": { "type": "integer", "minimum": 0 },
-        "toOffY": { "type": "integer", "minimum": 0 },
-        "posX": { "type": "integer" },
-        "posY": { "type": "integer" },
-        "editAs": { "enum": ["twoCell", "oneCell", "absolute"] },
-        "cx": { "type": "integer", "minimum": 1 },
-        "cy": { "type": "integer", "minimum": 1 }
-      },
-      "anyOf": [
-        { "required": ["anchor"] },
-        { "required": ["from"] },
-        { "required": ["to"] },
-        { "required": ["fromOffX"] },
-        { "required": ["fromOffY"] },
-        { "required": ["toOffX"] },
-        { "required": ["toOffY"] },
-        { "required": ["posX"] },
-        { "required": ["posY"] },
-        { "required": ["editAs"] },
-        { "required": ["cx"] },
-        { "required": ["cy"] }
-      ]
     },
     "deleteSmartArtOp": {
       "type": "object",
-      "required": ["op", "id"],
+      "required": [
+        "op",
+        "id"
+      ],
       "additionalProperties": false,
       "properties": {
-        "op": { "const": "deleteSmartArt" },
-        "id": { "type": "string", "minLength": 1 }
-      }
-    },
-    "insertOleOp": {
-      "type": "object",
-      "required": ["op", "id", "file"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "insertOle" },
-        "id": { "type": "string", "minLength": 1 },
-        "file": { "type": "string", "minLength": 1 }
-      }
-    },
-    "deleteOleOp": {
-      "type": "object",
-      "required": ["op", "id"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "deleteOle" },
-        "id": { "type": "string", "minLength": 1 }
+        "op": {
+          "const": "deleteSmartArt"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
       }
     },
     "setSmartArtTextOp": {
       "type": "object",
-      "required": ["op", "id", "text"],
+      "required": [
+        "op",
+        "id",
+        "text"
+      ],
       "additionalProperties": false,
       "properties": {
-        "op": { "const": "setSmartArtText" },
-        "id": { "type": "string", "minLength": 1 },
-        "text": { "type": "string" }
+        "op": {
+          "const": "setSmartArtText"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "text": {
+          "type": "string"
+        }
       }
     },
     "addSmartArtPointOp": {
       "type": "object",
-      "required": ["op", "id"],
+      "required": [
+        "op",
+        "id"
+      ],
       "additionalProperties": false,
       "properties": {
-        "op": { "const": "addSmartArtPoint" },
-        "id": { "type": "string", "minLength": 1 },
-        "text": { "type": "string" },
-        "role": { "$ref": "#/$defs/smartArtRole" }
+        "op": {
+          "const": "addSmartArtPoint"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "text": {
+          "type": "string"
+        },
+        "role": {
+          "$ref": "#/$defs/smartArtRole"
+        }
       }
     },
     "deleteSmartArtPointOp": {
       "type": "object",
-      "required": ["op", "id"],
+      "required": [
+        "op",
+        "id"
+      ],
       "additionalProperties": false,
       "properties": {
-        "op": { "const": "deleteSmartArtPoint" },
-        "id": { "type": "string", "minLength": 1 }
+        "op": {
+          "const": "deleteSmartArtPoint"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
       }
     },
     "setSmartArtSizeOp": {
       "type": "object",
-      "required": ["op", "id"],
+      "required": [
+        "op",
+        "id"
+      ],
       "additionalProperties": false,
       "properties": {
-        "op": { "const": "setSmartArtSize" },
-        "id": { "type": "string", "minLength": 1 },
-        "cx": { "type": "integer", "minimum": 1 },
-        "cy": { "type": "integer", "minimum": 1 },
-        "to": { "type": "string", "minLength": 1 },
-        "toOffX": { "type": "integer", "minimum": 0 },
-        "toOffY": { "type": "integer", "minimum": 0 }
-      },
-      "anyOf": [
-        { "required": ["cx"] },
-        { "required": ["cy"] },
-        { "required": ["to"] }
-      ]
-    },
-    "setSmartArtPosOp": {
-      "type": "object",
-      "required": ["op", "id"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "setSmartArtPos" },
-        "id": { "type": "string", "minLength": 1 },
-        "x": { "type": "integer", "minimum": 0 },
-        "y": { "type": "integer", "minimum": 0 }
-      },
-      "anyOf": [
-        { "required": ["x"] },
-        { "required": ["y"] }
-      ]
-    },
-    "setSmartArtWrapOp": {
-      "type": "object",
-      "required": ["op", "id", "kind"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "setSmartArtWrap" },
-        "id": { "type": "string", "minLength": 1 },
-        "kind": { "enum": ["inline", "anchor"] },
-        "wrap": {
-          "type": ["string", "null"],
-          "enum": ["square", "tight", "through", "topAndBottom", "none", null]
+        "op": {
+          "const": "setSmartArtSize"
         },
-        "alignH": { "enum": ["left", "center", "right"] },
-        "alignV": { "enum": ["top", "center", "bottom"] },
-        "offsetX": { "type": "integer" },
-        "offsetY": { "type": "integer" }
-      }
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "cx": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "cy": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "to": {
+          "type": "string",
+          "minLength": 1
+        },
+        "toOffX": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "toOffY": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "anyOf": [
+        {
+          "required": [
+            "cx"
+          ]
+        },
+        {
+          "required": [
+            "cy"
+          ]
+        },
+        {
+          "required": [
+            "to"
+          ]
+        }
+      ]
     },
     "setSmartArtColorsOp": {
       "type": "object",
-      "required": ["op", "id", "colors"],
+      "required": [
+        "op",
+        "id",
+        "colors"
+      ],
       "additionalProperties": false,
       "properties": {
-        "op": { "const": "setSmartArtColors" },
-        "id": { "type": "string", "minLength": 1 },
-        "colors": { "$ref": "#/$defs/smartArtColors" }
+        "op": {
+          "const": "setSmartArtColors"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "colors": {
+          "$ref": "#/$defs/smartArtColors"
+        }
       }
     },
     "setSmartArtStyleOp": {
       "type": "object",
-      "required": ["op", "id", "style"],
+      "required": [
+        "op",
+        "id",
+        "style"
+      ],
       "additionalProperties": false,
       "properties": {
-        "op": { "const": "setSmartArtStyle" },
-        "id": { "type": "string", "minLength": 1 },
-        "style": { "$ref": "#/$defs/smartArtStyle" }
+        "op": {
+          "const": "setSmartArtStyle"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "style": {
+          "$ref": "#/$defs/smartArtStyle"
+        }
       }
     },
     "setSmartArtLayoutOp": {
       "type": "object",
-      "required": ["op", "id", "layout"],
+      "required": [
+        "op",
+        "id",
+        "layout"
+      ],
       "additionalProperties": false,
       "properties": {
-        "op": { "const": "setSmartArtLayout" },
-        "id": { "type": "string", "minLength": 1 },
-        "layout": { "$ref": "#/$defs/smartArtLayout" }
+        "op": {
+          "const": "setSmartArtLayout"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "layout": {
+          "$ref": "#/$defs/smartArtLayout"
+        }
       }
     },
     "exportChartDataRequest": {
       "type": "object",
       "comment": "output 省略时，落盘路径由调用方另给，命令行用 --output。不得默认写成源 path。",
-      "required": ["schemaVersion", "action", "path", "id"],
+      "required": [
+        "schemaVersion",
+        "action",
+        "path",
+        "id"
+      ],
       "additionalProperties": false,
       "properties": {
-        "schemaVersion": { "const": 1 },
-        "action": { "const": "exportChartData" },
-        "path": { "type": "string", "minLength": 1 },
-        "format": { "$ref": "#/$defs/format" },
-        "id": { "type": "string", "minLength": 1 },
-        "output": { "type": "string", "minLength": 1 },
-        "locale": { "type": "string" }
-      }
-    },
-    "setNotesTextOp": {
-      "type": "object",
-      "required": ["op", "id", "text"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "setNotesText" },
-        "id": { "type": "string", "minLength": 1 },
-        "text": { "type": "string" }
+        "schemaVersion": {
+          "const": 1
+        },
+        "action": {
+          "const": "exportChartData"
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "format": {
+          "$ref": "#/$defs/format"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "output": {
+          "type": "string",
+          "minLength": 1
+        },
+        "locale": {
+          "type": "string"
+        }
       }
     },
     "setShapeTextOp": {
       "type": "object",
-      "required": ["op", "id", "text"],
+      "required": [
+        "op",
+        "id",
+        "text"
+      ],
       "additionalProperties": false,
       "properties": {
-        "op": { "const": "setShapeText" },
-        "id": { "type": "string", "minLength": 1 },
-        "text": { "type": "string" }
+        "op": {
+          "const": "setShapeText"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "text": {
+          "type": "string"
+        }
       }
     },
-    "insertShapeOp": {
-      "type": "object",
-      "required": ["op", "id"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "insertShape" },
-        "id": { "type": "string", "minLength": 1 },
-        "text": { "type": "string" },
-        "x": { "type": "integer", "minimum": 0 },
-        "y": { "type": "integer", "minimum": 0 },
-        "cx": { "type": "integer", "minimum": 1 },
-        "cy": { "type": "integer", "minimum": 1 }
-      }
-    },
-    "deleteShapeOp": {
-      "type": "object",
-      "required": ["op", "id"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "deleteShape" },
-        "id": { "type": "string", "minLength": 1 }
-      }
-    },
-    "setShapePosOp": {
-      "type": "object",
-      "required": ["op", "id"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "setShapePos" },
-        "id": { "type": "string", "minLength": 1 },
-        "x": { "type": "integer", "minimum": 0 },
-        "y": { "type": "integer", "minimum": 0 }
-      },
-      "anyOf": [
-        { "required": ["x"] },
-        { "required": ["y"] }
+    "nullableString": {
+      "type": [
+        "string",
+        "null"
       ]
     },
-    "setShapeSizeOp": {
-      "type": "object",
-      "required": ["op", "id"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "setShapeSize" },
-        "id": { "type": "string", "minLength": 1 },
-        "cx": { "type": "integer", "minimum": 1 },
-        "cy": { "type": "integer", "minimum": 1 }
-      },
-      "anyOf": [
-        { "required": ["cx"] },
-        { "required": ["cy"] }
-      ]
-    },
-    "setShapeFillOp": {
-      "type": "object",
-      "required": ["op", "id", "color"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "setShapeFill" },
-        "id": { "type": "string", "minLength": 1 },
-        "color": { "type": ["string", "null"] }
-      }
-    },
-    "setShapeLineOp": {
-      "type": "object",
-      "required": ["op", "id", "color"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "setShapeLine" },
-        "id": { "type": "string", "minLength": 1 },
-        "color": { "type": ["string", "null"] },
-        "width": { "type": "integer", "minimum": 1 }
-      }
-    },
-    "setTableCellTextOp": {
-      "type": "object",
-      "required": ["op", "id", "text"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "setTableCellText" },
-        "id": { "type": "string", "minLength": 1 },
-        "text": { "type": "string" }
-      }
-    },
-    "setTablePosOp": {
-      "type": "object",
-      "required": ["op", "id"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "setTablePos" },
-        "id": { "type": "string", "minLength": 1 },
-        "x": { "type": "integer", "minimum": 0 },
-        "y": { "type": "integer", "minimum": 0 }
-      }
-    },
-    "setTableSizeOp": {
-      "type": "object",
-      "required": ["op", "id"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "setTableSize" },
-        "id": { "type": "string", "minLength": 1 },
-        "cx": { "type": "integer", "minimum": 1 },
-        "cy": { "type": "integer", "minimum": 1 }
-      }
-    },
-    "insertSlideOp": {
-      "type": "object",
-      "required": ["op", "id"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "insertSlide" },
-        "id": { "type": "string", "minLength": 1 },
-        "after": { "type": "string", "minLength": 1 }
-      }
-    },
-    "deleteSlideOp": {
-      "type": "object",
-      "required": ["op", "id"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "deleteSlide" },
-        "id": { "type": "string", "minLength": 1 }
-      }
-    },
-    "moveSlideOp": {
-      "type": "object",
-      "required": ["op", "id"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "moveSlide" },
-        "id": { "type": "string", "minLength": 1 },
-        "after": { "type": ["string", "null"], "minLength": 1 }
-      }
-    },
-    "setSlideHiddenOp": {
-      "type": "object",
-      "required": ["op", "id", "hidden"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "setSlideHidden" },
-        "id": { "type": "string", "minLength": 1 },
-        "hidden": { "type": "boolean" }
-      }
-    },
-    "setTransitionOp": {
-      "type": "object",
-      "required": ["op", "id", "type"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "setTransition" },
-        "id": { "type": "string", "minLength": 1 },
-        "type": { "type": ["string", "null"] },
-        "dur": { "type": "integer", "minimum": 1, "maximum": 60000 }
-      }
-    },
-    "nullableString": { "type": ["string", "null"] },
     "createProps": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "title": { "$ref": "#/$defs/nullableString" },
-        "subject": { "$ref": "#/$defs/nullableString" },
-        "creator": { "$ref": "#/$defs/nullableString" },
-        "description": { "$ref": "#/$defs/nullableString" },
-        "keywords": { "$ref": "#/$defs/nullableString" },
-        "category": { "$ref": "#/$defs/nullableString" },
-        "company": { "$ref": "#/$defs/nullableString" },
-        "manager": { "$ref": "#/$defs/nullableString" },
+        "title": {
+          "$ref": "#/$defs/nullableString"
+        },
+        "subject": {
+          "$ref": "#/$defs/nullableString"
+        },
+        "creator": {
+          "$ref": "#/$defs/nullableString"
+        },
+        "description": {
+          "$ref": "#/$defs/nullableString"
+        },
+        "keywords": {
+          "$ref": "#/$defs/nullableString"
+        },
+        "category": {
+          "$ref": "#/$defs/nullableString"
+        },
+        "company": {
+          "$ref": "#/$defs/nullableString"
+        },
+        "manager": {
+          "$ref": "#/$defs/nullableString"
+        },
         "custom": {
           "type": "array",
-          "items": { "$ref": "#/$defs/createCustomProp" }
+          "items": {
+            "$ref": "#/$defs/createCustomProp"
+          }
         }
       }
     },
     "createCustomProp": {
       "type": "object",
-      "required": ["name", "value"],
+      "required": [
+        "name",
+        "value"
+      ],
       "additionalProperties": false,
       "properties": {
-        "name": { "type": "string", "minLength": 1 },
-        "value": { "type": ["string", "number", "boolean"] },
-        "type": { "enum": ["lpwstr", "i4", "r8", "bool"] }
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "value": {
+          "type": [
+            "string",
+            "number",
+            "boolean"
+          ]
+        },
+        "type": {
+          "enum": [
+            "lpwstr",
+            "i4",
+            "r8",
+            "bool"
+          ]
+        }
       }
     },
     "setProtectionOp": {
       "type": "object",
-      "required": ["op", "id"],
+      "required": [
+        "op",
+        "id"
+      ],
       "additionalProperties": false,
       "properties": {
-        "op": { "const": "setProtection" },
-        "id": { "type": "string", "minLength": 1 },
-        "enforced": { "type": "boolean" },
-        "edit": { "enum": ["readOnly", "comments", "trackedChanges", "forms"] },
-        "formatting": { "type": "boolean" },
-        "readOnlyRecommended": { "type": "boolean" },
-        "objects": { "type": "boolean" },
-        "scenarios": { "type": "boolean" },
-        "formatCells": { "type": "boolean" },
-        "formatColumns": { "type": "boolean" },
-        "formatRows": { "type": "boolean" },
-        "insertColumns": { "type": "boolean" },
-        "insertRows": { "type": "boolean" },
-        "insertHyperlinks": { "type": "boolean" },
-        "deleteColumns": { "type": "boolean" },
-        "deleteRows": { "type": "boolean" },
-        "selectLockedCells": { "type": "boolean" },
-        "sort": { "type": "boolean" },
-        "autoFilter": { "type": "boolean" },
-        "pivotTables": { "type": "boolean" },
-        "selectUnlockedCells": { "type": "boolean" },
-        "lockStructure": { "type": "boolean" },
-        "lockWindows": { "type": "boolean" },
-        "lockRevision": { "type": "boolean" }
+        "op": {
+          "const": "setProtection"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "enforced": {
+          "type": "boolean"
+        },
+        "edit": {
+          "enum": [
+            "readOnly",
+            "comments",
+            "trackedChanges",
+            "forms"
+          ]
+        },
+        "formatting": {
+          "type": "boolean"
+        },
+        "readOnlyRecommended": {
+          "type": "boolean"
+        },
+        "objects": {
+          "type": "boolean"
+        },
+        "scenarios": {
+          "type": "boolean"
+        },
+        "formatCells": {
+          "type": "boolean"
+        },
+        "formatColumns": {
+          "type": "boolean"
+        },
+        "formatRows": {
+          "type": "boolean"
+        },
+        "insertColumns": {
+          "type": "boolean"
+        },
+        "insertRows": {
+          "type": "boolean"
+        },
+        "insertHyperlinks": {
+          "type": "boolean"
+        },
+        "deleteColumns": {
+          "type": "boolean"
+        },
+        "deleteRows": {
+          "type": "boolean"
+        },
+        "selectLockedCells": {
+          "type": "boolean"
+        },
+        "sort": {
+          "type": "boolean"
+        },
+        "autoFilter": {
+          "type": "boolean"
+        },
+        "pivotTables": {
+          "type": "boolean"
+        },
+        "selectUnlockedCells": {
+          "type": "boolean"
+        },
+        "lockStructure": {
+          "type": "boolean"
+        },
+        "lockWindows": {
+          "type": "boolean"
+        },
+        "lockRevision": {
+          "type": "boolean"
+        }
       },
       "anyOf": [
-        { "required": ["enforced"] },
-        { "required": ["edit"] },
-        { "required": ["formatting"] },
-        { "required": ["readOnlyRecommended"] },
-        { "required": ["objects"] },
-        { "required": ["scenarios"] },
-        { "required": ["formatCells"] },
-        { "required": ["formatColumns"] },
-        { "required": ["formatRows"] },
-        { "required": ["insertColumns"] },
-        { "required": ["insertRows"] },
-        { "required": ["insertHyperlinks"] },
-        { "required": ["deleteColumns"] },
-        { "required": ["deleteRows"] },
-        { "required": ["selectLockedCells"] },
-        { "required": ["sort"] },
-        { "required": ["autoFilter"] },
-        { "required": ["pivotTables"] },
-        { "required": ["selectUnlockedCells"] },
-        { "required": ["lockStructure"] },
-        { "required": ["lockWindows"] },
-        { "required": ["lockRevision"] }
+        {
+          "required": [
+            "enforced"
+          ]
+        },
+        {
+          "required": [
+            "edit"
+          ]
+        },
+        {
+          "required": [
+            "formatting"
+          ]
+        },
+        {
+          "required": [
+            "readOnlyRecommended"
+          ]
+        },
+        {
+          "required": [
+            "objects"
+          ]
+        },
+        {
+          "required": [
+            "scenarios"
+          ]
+        },
+        {
+          "required": [
+            "formatCells"
+          ]
+        },
+        {
+          "required": [
+            "formatColumns"
+          ]
+        },
+        {
+          "required": [
+            "formatRows"
+          ]
+        },
+        {
+          "required": [
+            "insertColumns"
+          ]
+        },
+        {
+          "required": [
+            "insertRows"
+          ]
+        },
+        {
+          "required": [
+            "insertHyperlinks"
+          ]
+        },
+        {
+          "required": [
+            "deleteColumns"
+          ]
+        },
+        {
+          "required": [
+            "deleteRows"
+          ]
+        },
+        {
+          "required": [
+            "selectLockedCells"
+          ]
+        },
+        {
+          "required": [
+            "sort"
+          ]
+        },
+        {
+          "required": [
+            "autoFilter"
+          ]
+        },
+        {
+          "required": [
+            "pivotTables"
+          ]
+        },
+        {
+          "required": [
+            "selectUnlockedCells"
+          ]
+        },
+        {
+          "required": [
+            "lockStructure"
+          ]
+        },
+        {
+          "required": [
+            "lockWindows"
+          ]
+        },
+        {
+          "required": [
+            "lockRevision"
+          ]
+        }
       ]
     },
     "createProtection": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "enforced": { "type": "boolean" },
-        "edit": { "enum": ["readOnly", "comments", "trackedChanges", "forms"] },
-        "formatting": { "type": "boolean" },
-        "readOnlyRecommended": { "type": "boolean" }
+        "enforced": {
+          "type": "boolean"
+        },
+        "edit": {
+          "enum": [
+            "readOnly",
+            "comments",
+            "trackedChanges",
+            "forms"
+          ]
+        },
+        "formatting": {
+          "type": "boolean"
+        },
+        "readOnlyRecommended": {
+          "type": "boolean"
+        }
       },
       "anyOf": [
-        { "required": ["enforced"] },
-        { "required": ["edit"] },
-        { "required": ["formatting"] },
-        { "required": ["readOnlyRecommended"] }
-      ]
-    },
-    "insertWatermarkOp": {
-      "type": "object",
-      "required": ["op", "id"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "insertWatermark" },
-        "id": { "type": "string", "minLength": 1 },
-        "text": { "type": "string", "minLength": 1 },
-        "file": { "type": "string", "minLength": 1 }
-      },
-      "oneOf": [
-        { "required": ["text"], "not": { "required": ["file"] } },
-        { "required": ["file"], "not": { "required": ["text"] } }
-      ]
-    },
-    "deleteWatermarkOp": {
-      "type": "object",
-      "required": ["op", "id"],
-      "additionalProperties": false,
-      "properties": {
-        "op": { "const": "deleteWatermark" },
-        "id": { "type": "string", "minLength": 1 }
-      }
-    },
-    "createWatermark": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "text": { "type": "string", "minLength": 1 },
-        "file": { "type": "string", "minLength": 1 }
-      },
-      "oneOf": [
-        { "required": ["text"], "not": { "required": ["file"] } },
-        { "required": ["file"], "not": { "required": ["text"] } }
+        {
+          "required": [
+            "enforced"
+          ]
+        },
+        {
+          "required": [
+            "edit"
+          ]
+        },
+        {
+          "required": [
+            "formatting"
+          ]
+        },
+        {
+          "required": [
+            "readOnlyRecommended"
+          ]
+        }
       ]
     },
     "setPropsOp": {
       "type": "object",
-      "required": ["op", "id"],
+      "required": [
+        "op",
+        "id"
+      ],
       "additionalProperties": false,
       "properties": {
-        "op": { "const": "setProps" },
-        "id": { "type": "string", "minLength": 1 },
-        "title": { "$ref": "#/$defs/nullableString" },
-        "subject": { "$ref": "#/$defs/nullableString" },
-        "creator": { "$ref": "#/$defs/nullableString" },
-        "description": { "$ref": "#/$defs/nullableString" },
-        "keywords": { "$ref": "#/$defs/nullableString" },
-        "category": { "$ref": "#/$defs/nullableString" },
-        "company": { "$ref": "#/$defs/nullableString" },
-        "manager": { "$ref": "#/$defs/nullableString" }
+        "op": {
+          "const": "setProps"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "title": {
+          "$ref": "#/$defs/nullableString"
+        },
+        "subject": {
+          "$ref": "#/$defs/nullableString"
+        },
+        "creator": {
+          "$ref": "#/$defs/nullableString"
+        },
+        "description": {
+          "$ref": "#/$defs/nullableString"
+        },
+        "keywords": {
+          "$ref": "#/$defs/nullableString"
+        },
+        "category": {
+          "$ref": "#/$defs/nullableString"
+        },
+        "company": {
+          "$ref": "#/$defs/nullableString"
+        },
+        "manager": {
+          "$ref": "#/$defs/nullableString"
+        }
       },
       "anyOf": [
-        { "required": ["title"] },
-        { "required": ["subject"] },
-        { "required": ["creator"] },
-        { "required": ["description"] },
-        { "required": ["keywords"] },
-        { "required": ["category"] },
-        { "required": ["company"] },
-        { "required": ["manager"] }
+        {
+          "required": [
+            "title"
+          ]
+        },
+        {
+          "required": [
+            "subject"
+          ]
+        },
+        {
+          "required": [
+            "creator"
+          ]
+        },
+        {
+          "required": [
+            "description"
+          ]
+        },
+        {
+          "required": [
+            "keywords"
+          ]
+        },
+        {
+          "required": [
+            "category"
+          ]
+        },
+        {
+          "required": [
+            "company"
+          ]
+        },
+        {
+          "required": [
+            "manager"
+          ]
+        }
       ]
     },
     "setCustomPropOp": {
       "type": "object",
-      "required": ["op", "id", "name", "value"],
+      "required": [
+        "op",
+        "id",
+        "name",
+        "value"
+      ],
       "additionalProperties": false,
       "properties": {
-        "op": { "const": "setCustomProp" },
-        "id": { "type": "string", "minLength": 1 },
-        "name": { "type": "string", "minLength": 1 },
-        "value": { "type": ["string", "number", "boolean"] },
-        "type": { "enum": ["lpwstr", "i4", "r8", "bool"] }
+        "op": {
+          "const": "setCustomProp"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "value": {
+          "type": [
+            "string",
+            "number",
+            "boolean"
+          ]
+        },
+        "type": {
+          "enum": [
+            "lpwstr",
+            "i4",
+            "r8",
+            "bool"
+          ]
+        }
       }
     },
     "deleteCustomPropOp": {
       "type": "object",
-      "required": ["op", "id"],
+      "required": [
+        "op",
+        "id"
+      ],
       "additionalProperties": false,
       "properties": {
-        "op": { "const": "deleteCustomProp" },
-        "id": { "type": "string", "minLength": 1 }
+        "op": {
+          "const": "deleteCustomProp"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
       }
     }
   }

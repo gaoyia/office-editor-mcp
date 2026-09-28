@@ -1,0 +1,2414 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ooxp.local/schema/v1/docx.schema.json",
+  "title": "ooxp docx $defs",
+  "$comment": "供 request.schema.json 引用，不是独立的完整请求 schema。",
+  "$defs": {
+    "docxDocument": {
+      "type": "object",
+      "required": [
+        "paragraphs"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "paragraphs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/docxParaCreate"
+          }
+        },
+        "tables": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/docxTableCreate"
+          }
+        },
+        "headers": {
+          "type": "array",
+          "maxItems": 3,
+          "items": {
+            "$ref": "#/$defs/docxHfCreate"
+          }
+        },
+        "footers": {
+          "type": "array",
+          "maxItems": 3,
+          "items": {
+            "$ref": "#/$defs/docxHfCreate"
+          }
+        },
+        "props": {
+          "$ref": "request.schema.json#/$defs/createProps"
+        },
+        "protection": {
+          "$ref": "request.schema.json#/$defs/createProtection"
+        },
+        "watermarks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/createWatermark"
+          }
+        }
+      }
+    },
+    "docxHfCreate": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "enum": [
+            "default",
+            "even",
+            "first"
+          ]
+        },
+        "paragraphs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/docxHfParaCreate"
+          }
+        },
+        "tables": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/docxTableCreate"
+          }
+        }
+      }
+    },
+    "docxTableCreate": {
+      "type": "object",
+      "required": [
+        "cells"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "after": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "cells": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 500,
+          "items": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 63,
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "docxHfParaCreate": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "text": {
+          "type": "string"
+        },
+        "pictures": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/docxPictureCreate"
+          }
+        },
+        "smartArts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/docxSmartArtCreate"
+          }
+        },
+        "charts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/docxChartCreate"
+          }
+        },
+        "oleObjects": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/docxOleCreate"
+          }
+        },
+        "footnote": {
+          "type": "string"
+        },
+        "endnote": {
+          "type": "string"
+        },
+        "comments": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/docxCommentCreate"
+          }
+        }
+      }
+    },
+    "docxParaCreate": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "text": {
+          "type": "string"
+        },
+        "style": {
+          "type": "string",
+          "enum": [
+            "Normal",
+            "Heading1",
+            "Heading2",
+            "Heading3"
+          ]
+        },
+        "sectionType": {
+          "enum": [
+            "nextPage",
+            "continuous",
+            "evenPage",
+            "oddPage",
+            "nextColumn"
+          ]
+        },
+        "textBoxes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/docxTextBoxCreate"
+          }
+        },
+        "pictures": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/docxPictureCreate"
+          }
+        },
+        "smartArts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/docxSmartArtCreate"
+          }
+        },
+        "charts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/docxChartCreate"
+          }
+        },
+        "oleObjects": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/docxOleCreate"
+          }
+        },
+        "footnote": {
+          "type": "string"
+        },
+        "endnote": {
+          "type": "string"
+        },
+        "comments": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/docxCommentCreate"
+          }
+        }
+      }
+    },
+    "docxOleCreate": {
+      "type": "object",
+      "required": [
+        "file"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "file": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "docxChartCreate": {
+      "type": "object",
+      "required": [
+        "type",
+        "series"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "$ref": "request.schema.json#/$defs/insertChartType"
+        },
+        "title": {
+          "type": "string"
+        },
+        "series": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "allOf": [
+              {
+                "$ref": "request.schema.json#/$defs/chartSeriesData"
+              },
+              {
+                "required": [
+                  "values"
+                ]
+              }
+            ]
+          }
+        },
+        "kind": {
+          "enum": [
+            "inline",
+            "anchor"
+          ]
+        },
+        "wrap": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "square",
+            "tight",
+            "through",
+            "topAndBottom",
+            "none",
+            null
+          ]
+        },
+        "cx": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "cy": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "docxCommentCreate": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "text": {
+          "type": "string"
+        },
+        "author": {
+          "type": "string"
+        },
+        "initials": {
+          "type": "string"
+        },
+        "date": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "docxPictureCreate": {
+      "type": "object",
+      "required": [
+        "file"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "file": {
+          "type": "string",
+          "minLength": 1
+        },
+        "cx": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "cy": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "kind": {
+          "enum": [
+            "inline",
+            "anchor"
+          ]
+        },
+        "wrap": {
+          "enum": [
+            "square",
+            "tight",
+            "through",
+            "topAndBottom",
+            "none"
+          ]
+        },
+        "alignH": {
+          "enum": [
+            "left",
+            "center",
+            "right"
+          ]
+        },
+        "alignV": {
+          "enum": [
+            "top",
+            "center",
+            "bottom"
+          ]
+        },
+        "offsetX": {
+          "type": "integer"
+        },
+        "offsetY": {
+          "type": "integer"
+        }
+      }
+    },
+    "docxTextBoxCreate": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "text": {
+          "type": "string"
+        },
+        "cx": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "cy": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "docxSmartArtCreate": {
+      "type": "object",
+      "required": [
+        "layout"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "layout": {
+          "$ref": "request.schema.json#/$defs/smartArtLayout"
+        },
+        "points": {
+          "type": "array",
+          "items": {
+            "$ref": "request.schema.json#/$defs/smartArtPointInput"
+          }
+        },
+        "kind": {
+          "enum": [
+            "inline",
+            "anchor"
+          ]
+        },
+        "wrap": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "square",
+            "tight",
+            "through",
+            "topAndBottom",
+            "none",
+            null
+          ]
+        },
+        "cx": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "cy": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "setParaTextOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "text"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setParaText"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "text": {
+          "type": "string"
+        }
+      }
+    },
+    "setHeaderFooterDistanceOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setHeaderFooterDistance"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "headerDistance": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "footerDistance": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "anyOf": [
+        {
+          "required": [
+            "headerDistance"
+          ]
+        },
+        {
+          "required": [
+            "footerDistance"
+          ]
+        }
+      ]
+    },
+    "setHeaderFooterLinkOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "kind",
+        "type",
+        "linked"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setHeaderFooterLink"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "enum": [
+            "header",
+            "footer"
+          ]
+        },
+        "type": {
+          "enum": [
+            "default",
+            "even",
+            "first"
+          ]
+        },
+        "linked": {
+          "type": "boolean"
+        }
+      }
+    },
+    "insertHeaderFooterOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "kind",
+        "type"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "insertHeaderFooter"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "enum": [
+            "header",
+            "footer"
+          ]
+        },
+        "type": {
+          "enum": [
+            "default",
+            "even",
+            "first"
+          ]
+        }
+      }
+    },
+    "insertSectionOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "insertSection"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "type": {
+          "enum": [
+            "nextPage",
+            "continuous",
+            "evenPage",
+            "oddPage",
+            "nextColumn"
+          ]
+        }
+      }
+    },
+    "deleteSectionOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "deleteSection"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "setTitlePageOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "titlePage"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setTitlePage"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "titlePage": {
+          "type": "boolean"
+        }
+      }
+    },
+    "setEvenAndOddHeadersOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "evenAndOdd"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setEvenAndOddHeaders"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "evenAndOdd": {
+          "type": "boolean"
+        }
+      }
+    },
+    "setPageMarginOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setPageMargin"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "top": {
+          "type": "integer"
+        },
+        "bottom": {
+          "type": "integer"
+        },
+        "left": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "right": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "gutter": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "anyOf": [
+        {
+          "required": [
+            "top"
+          ]
+        },
+        {
+          "required": [
+            "bottom"
+          ]
+        },
+        {
+          "required": [
+            "left"
+          ]
+        },
+        {
+          "required": [
+            "right"
+          ]
+        },
+        {
+          "required": [
+            "gutter"
+          ]
+        }
+      ]
+    },
+    "setPageSizeOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setPageSize"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "pageWidth": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "pageHeight": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "orient": {
+          "enum": [
+            "portrait",
+            "landscape"
+          ]
+        }
+      },
+      "anyOf": [
+        {
+          "required": [
+            "pageWidth"
+          ]
+        },
+        {
+          "required": [
+            "pageHeight"
+          ]
+        },
+        {
+          "required": [
+            "orient"
+          ]
+        }
+      ]
+    },
+    "setColumnsOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setColumns"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "num": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "space": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "equalWidth": {
+          "type": "boolean"
+        },
+        "sep": {
+          "type": "boolean"
+        },
+        "cols": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "width": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "space": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          }
+        },
+        "enabled": {
+          "const": false
+        }
+      }
+    },
+    "setVerticalAlignOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "vAlign"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setVerticalAlign"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "vAlign": {
+          "anyOf": [
+            {
+              "enum": [
+                "top",
+                "center",
+                "both",
+                "bottom"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "setLineNumberingOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setLineNumbering"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "countBy": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "start": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "distance": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "restart": {
+          "enum": [
+            "newPage",
+            "newSection",
+            "continuous"
+          ]
+        },
+        "enabled": {
+          "const": false
+        }
+      }
+    },
+    "setDocGridOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setDocGrid"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "type": {
+          "enum": [
+            "default",
+            "lines",
+            "linesAndChars",
+            "snapToChars"
+          ]
+        },
+        "linePitch": {
+          "type": "integer"
+        },
+        "charSpace": {
+          "type": "integer"
+        },
+        "enabled": {
+          "const": false
+        }
+      }
+    },
+    "setRtlGutterOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "rtlGutter"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setRtlGutter"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "rtlGutter": {
+          "type": "boolean"
+        }
+      }
+    },
+    "setMirrorMarginsOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "mirrorMargins"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setMirrorMargins"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "mirrorMargins": {
+          "type": "boolean"
+        }
+      }
+    },
+    "setGutterAtTopOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "gutterAtTop"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setGutterAtTop"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "gutterAtTop": {
+          "type": "boolean"
+        }
+      }
+    },
+    "setPictureWrapOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "kind"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setPictureWrap"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "enum": [
+            "inline",
+            "anchor"
+          ]
+        },
+        "wrap": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "square",
+            "tight",
+            "through",
+            "topAndBottom",
+            "none",
+            null
+          ]
+        },
+        "alignH": {
+          "enum": [
+            "left",
+            "center",
+            "right"
+          ]
+        },
+        "alignV": {
+          "enum": [
+            "top",
+            "center",
+            "bottom"
+          ]
+        },
+        "offsetX": {
+          "type": "integer"
+        },
+        "offsetY": {
+          "type": "integer"
+        }
+      }
+    },
+    "setTextBoxWrapOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "kind"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setTextBoxWrap"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "enum": [
+            "inline",
+            "anchor"
+          ]
+        },
+        "wrap": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "square",
+            "tight",
+            "through",
+            "topAndBottom",
+            "none",
+            null
+          ]
+        },
+        "alignH": {
+          "enum": [
+            "left",
+            "center",
+            "right"
+          ]
+        },
+        "alignV": {
+          "enum": [
+            "top",
+            "center",
+            "bottom"
+          ]
+        },
+        "offsetX": {
+          "type": "integer"
+        },
+        "offsetY": {
+          "type": "integer"
+        }
+      }
+    },
+    "setTextBoxFillOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "color"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setTextBoxFill"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "color": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "setTextBoxLineOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "color"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setTextBoxLine"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "color": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "width": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "setTextBoxDirectionOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "direction"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setTextBoxDirection"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "direction": {
+          "enum": [
+            "horizontal",
+            "vertical"
+          ]
+        }
+      }
+    },
+    "insertParaOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "insertPara"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "text": {
+          "type": "string"
+        }
+      }
+    },
+    "deleteParaOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "deletePara"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "mergeCellsOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "startRow",
+        "startCol",
+        "endRow",
+        "endCol"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "mergeCells"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "startRow": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "startCol": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "endRow": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "endCol": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "splitCellsOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "splitCells"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "acceptRevisionOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "acceptRevision"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "rejectRevisionOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "rejectRevision"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "insertBookmarkOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "insertBookmark"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "end": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "setBookmarkOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "name"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setBookmark"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "deleteBookmarkOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "deleteBookmark"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "insertFieldOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "instr"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "insertField"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "instr": {
+          "type": "string",
+          "minLength": 1
+        },
+        "result": {
+          "type": "string"
+        }
+      }
+    },
+    "setFieldOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "instr"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setField"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "instr": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "deleteFieldOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "deleteField"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "keep": {
+          "enum": [
+            "result",
+            "instr"
+          ]
+        }
+      }
+    },
+    "insertTocOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "insertToc"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "enum": [
+            "toc",
+            "tof",
+            "toa"
+          ]
+        },
+        "instr": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "deleteTocOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "deleteToc"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "insertMathOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "text"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "insertMath"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "enum": [
+            "inline",
+            "display"
+          ]
+        }
+      }
+    },
+    "setMathOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "text"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setMath"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "deleteMathOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "deleteMath"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "insertContentControlOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "text"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "insertContentControl"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "enum": [
+            "plainText",
+            "richText",
+            "dropDown",
+            "comboBox",
+            "date"
+          ]
+        },
+        "tag": {
+          "type": "string"
+        },
+        "alias": {
+          "type": "string"
+        },
+        "items": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "fullDate": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "setContentControlOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "text"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setContentControl"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1
+        },
+        "tag": {
+          "type": "string"
+        },
+        "alias": {
+          "type": "string"
+        },
+        "items": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "fullDate": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "deleteContentControlOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "deleteContentControl"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "keep": {
+          "enum": [
+            "content",
+            "none"
+          ]
+        }
+      }
+    },
+    "insertNumberingOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "kind"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "insertNumbering"
+        },
+        "id": {
+          "const": "docx:document"
+        },
+        "kind": {
+          "enum": [
+            "decimal",
+            "bullet"
+          ]
+        }
+      }
+    },
+    "setNumberingOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "ilvl"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setNumbering"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "ilvl": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 8
+        },
+        "numFmt": {
+          "enum": [
+            "decimal",
+            "bullet",
+            "lowerLetter",
+            "upperLetter",
+            "lowerRoman",
+            "upperRoman"
+          ]
+        },
+        "start": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "lvlText": {
+          "type": "string"
+        }
+      }
+    },
+    "setParaNumberingOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "num"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setParaNumbering"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "num": {
+          "oneOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "ilvl": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 8
+        }
+      }
+    },
+    "setStyleOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setStyle"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "font": {
+          "type": "string",
+          "minLength": 1
+        },
+        "eastAsiaFont": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sz": {
+          "type": "integer",
+          "minimum": 2,
+          "maximum": 3276
+        },
+        "bold": {
+          "type": "boolean"
+        },
+        "color": {
+          "type": "string",
+          "pattern": "^[0-9A-Fa-f]{6}$"
+        },
+        "before": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "after": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "setParaStyleOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "style"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setParaStyle"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "style": {
+          "oneOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "setParaFormatOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setParaFormat"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "align": {
+          "oneOf": [
+            {
+              "type": "string",
+              "enum": [
+                "left",
+                "center",
+                "right",
+                "both",
+                "distribute",
+                "start",
+                "end"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "left": {
+          "oneOf": [
+            {
+              "type": "integer",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "right": {
+          "oneOf": [
+            {
+              "type": "integer",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "firstLine": {
+          "oneOf": [
+            {
+              "type": "integer",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "hanging": {
+          "oneOf": [
+            {
+              "type": "integer",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "before": {
+          "oneOf": [
+            {
+              "type": "integer",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "after": {
+          "oneOf": [
+            {
+              "type": "integer",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "line": {
+          "oneOf": [
+            {
+              "type": "integer",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "lineRule": {
+          "oneOf": [
+            {
+              "type": "string",
+              "enum": [
+                "auto",
+                "exact",
+                "atLeast"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "setRunFormatOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setRunFormat"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "bold": {
+          "type": "boolean"
+        },
+        "italic": {
+          "type": "boolean"
+        },
+        "underline": {
+          "oneOf": [
+            {
+              "type": "string",
+              "enum": [
+                "single",
+                "none",
+                "double",
+                "thick",
+                "dotted",
+                "dash",
+                "wave",
+                "words",
+                "dottedHeavy",
+                "dashedHeavy",
+                "dashLong",
+                "dashLongHeavy",
+                "dotDash",
+                "dashDotHeavy",
+                "dotDotDash",
+                "dashDotDotHeavy",
+                "wavyHeavy",
+                "wavyDouble"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "sz": {
+          "type": "integer",
+          "minimum": 2,
+          "maximum": 3276
+        },
+        "color": {
+          "type": "string",
+          "pattern": "^[0-9A-Fa-f]{6}$"
+        },
+        "font": {
+          "type": "string",
+          "minLength": 1
+        },
+        "eastAsiaFont": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "setTextBoxLinkOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "next"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setTextBoxLink"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "next": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "insertFootnoteOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "insertFootnote"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "text": {
+          "type": "string"
+        }
+      }
+    },
+    "insertEndnoteOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "insertEndnote"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "text": {
+          "type": "string"
+        }
+      }
+    },
+    "deleteFootnoteOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "deleteFootnote"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "deleteEndnoteOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "deleteEndnote"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "setNoteNumberingOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "kind"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setNoteNumbering"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "enum": [
+            "footnote",
+            "endnote"
+          ]
+        },
+        "numFmt": {
+          "enum": [
+            "decimal",
+            "upperRoman",
+            "lowerRoman",
+            "upperLetter",
+            "lowerLetter",
+            "chicago"
+          ]
+        },
+        "numStart": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "numRestart": {
+          "enum": [
+            "continuous",
+            "eachSect",
+            "eachPage"
+          ]
+        }
+      }
+    },
+    "setChartWrapOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "kind"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setChartWrap"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "enum": [
+            "inline",
+            "anchor"
+          ]
+        },
+        "wrap": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "square",
+            "tight",
+            "through",
+            "topAndBottom",
+            "none",
+            null
+          ]
+        },
+        "alignH": {
+          "enum": [
+            "left",
+            "center",
+            "right"
+          ]
+        },
+        "alignV": {
+          "enum": [
+            "top",
+            "center",
+            "bottom"
+          ]
+        },
+        "offsetX": {
+          "type": "integer"
+        },
+        "offsetY": {
+          "type": "integer"
+        }
+      }
+    },
+    "insertOleOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "file"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "insertOle"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "file": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "deleteOleOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "deleteOle"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "setSmartArtWrapOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "kind"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setSmartArtWrap"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "enum": [
+            "inline",
+            "anchor"
+          ]
+        },
+        "wrap": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "square",
+            "tight",
+            "through",
+            "topAndBottom",
+            "none",
+            null
+          ]
+        },
+        "alignH": {
+          "enum": [
+            "left",
+            "center",
+            "right"
+          ]
+        },
+        "alignV": {
+          "enum": [
+            "top",
+            "center",
+            "bottom"
+          ]
+        },
+        "offsetX": {
+          "type": "integer"
+        },
+        "offsetY": {
+          "type": "integer"
+        }
+      }
+    },
+    "insertWatermarkOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "insertWatermark"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1
+        },
+        "file": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "oneOf": [
+        {
+          "required": [
+            "text"
+          ],
+          "not": {
+            "required": [
+              "file"
+            ]
+          }
+        },
+        {
+          "required": [
+            "file"
+          ],
+          "not": {
+            "required": [
+              "text"
+            ]
+          }
+        }
+      ]
+    },
+    "deleteWatermarkOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "deleteWatermark"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "createWatermark": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "text": {
+          "type": "string",
+          "minLength": 1
+        },
+        "file": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "oneOf": [
+        {
+          "required": [
+            "text"
+          ],
+          "not": {
+            "required": [
+              "file"
+            ]
+          }
+        },
+        {
+          "required": [
+            "file"
+          ],
+          "not": {
+            "required": [
+              "text"
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

@@ -62,6 +62,9 @@ docx 另有只读动作 `exportMedia`：按图 id 把媒体部件原字节写到
 ├── docs/                              ← 规格真源
 │   ├── architecture.md
 │   ├── json-contract.md
+│   ├── json-contract-xlsx.md
+│   ├── json-contract-docx.md
+│   ├── json-contract-pptx.md
 │   ├── opc.md
 │   ├── errors.md
 │   ├── cli.md
@@ -70,6 +73,10 @@ docx 另有只读动作 `exportMedia`：按图 id 把媒体部件原字节写到
 │   ├── checklist-pptx.md
 │   ├── examples/
 │   └── json-schema/
+│       ├── request.schema.json
+│       ├── xlsx.schema.json
+│       ├── docx.schema.json
+│       └── pptx.schema.json
 ├── .bugfix-reports/                   ← 严重缺陷记录（计划中的目录，现在还不存在）
 └── standards/                         ← OOXML 规范原件与抽取结果
     ├── ECMA-376-Part1-5th-2016.pdf

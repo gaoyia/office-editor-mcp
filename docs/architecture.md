@@ -51,7 +51,7 @@ crates/ooxp-cli/             命令行，只依赖 ooxp。二进制名也是 oox
 
 ### json
 
-只处理领域信封：`schemaVersion`、`action`、各动作的必填字段。不认识的字段在第一期直接报错，避免默默丢数据。契约见 [json-contract.md](json-contract.md)。
+只处理领域信封：`schemaVersion`、`action`、各动作的必填字段。不认识的字段在第一期直接报错，避免默默丢数据。契约见 [json-contract.md](json-contract.md)，xlsx / docx / pptx 分册见同目录 `json-contract-xlsx.md` 等。
 
 ### xlsx
 
