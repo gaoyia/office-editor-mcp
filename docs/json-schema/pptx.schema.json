@@ -944,6 +944,68 @@
         }
       }
     },
+    "insertLayoutOp": {
+      "type": "object",
+      "required": ["op", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "insertLayout" },
+        "id": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 }
+      }
+    },
+    "deleteLayoutOp": {
+      "type": "object",
+      "required": ["op", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "deleteLayout" },
+        "id": { "type": "string", "minLength": 1 }
+      }
+    },
+    "insertPlaceholderOp": {
+      "type": "object",
+      "required": ["op", "id", "type"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "insertPlaceholder" },
+        "id": { "type": "string", "minLength": 1 },
+        "type": { "type": "string", "minLength": 1 },
+        "text": { "type": "string" },
+        "x": { "type": "integer", "minimum": 0 },
+        "y": { "type": "integer", "minimum": 0 },
+        "cx": { "type": "integer", "minimum": 1 },
+        "cy": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "deletePlaceholderOp": {
+      "type": "object",
+      "required": ["op", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "deletePlaceholder" },
+        "id": { "type": "string", "minLength": 1 }
+      }
+    },
+    "insertMasterOp": {
+      "type": "object",
+      "required": ["op", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "insertMaster" },
+        "id": { "type": "string", "minLength": 1 },
+        "from": { "type": "string", "minLength": 1 }
+      }
+    },
+    "deleteMasterOp": {
+      "type": "object",
+      "required": ["op", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "deleteMaster" },
+        "id": { "type": "string", "minLength": 1 }
+      }
+    },
     "setHandoutTextOp": {
       "type": "object",
       "required": [

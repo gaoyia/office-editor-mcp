@@ -981,6 +981,24 @@
                 "$ref": "pptx.schema.json#/$defs/setSlideLayoutOp"
               },
               {
+                "$ref": "pptx.schema.json#/$defs/insertLayoutOp"
+              },
+              {
+                "$ref": "pptx.schema.json#/$defs/deleteLayoutOp"
+              },
+              {
+                "$ref": "pptx.schema.json#/$defs/insertPlaceholderOp"
+              },
+              {
+                "$ref": "pptx.schema.json#/$defs/deletePlaceholderOp"
+              },
+              {
+                "$ref": "pptx.schema.json#/$defs/insertMasterOp"
+              },
+              {
+                "$ref": "pptx.schema.json#/$defs/deleteMasterOp"
+              },
+              {
                 "$ref": "pptx.schema.json#/$defs/setHandoutTextOp"
               },
               {

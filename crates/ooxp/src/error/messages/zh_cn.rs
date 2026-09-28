@@ -229,7 +229,19 @@ pub(super) fn render(kind: &ErrorKind) -> String {
                 "母版或占位符 id 必须是 master:N、master:N/layout:K 或 …/shape:…".into()
             }
             IdReason::LayoutForm => {
-                "setSlideLayout 的 layout 必须是 master:N/layout:K".into()
+                "版式 id 必须是 master:N/layout:K".into()
+            }
+            IdReason::InsertLayoutNeedsMaster => {
+                "insertLayout 的 id 必须是 master:N".into()
+            }
+            IdReason::InsertPlaceholderNeedsHost => {
+                "insertPlaceholder 的 id 必须是 master:N 或 master:N/layout:K".into()
+            }
+            IdReason::InsertMasterNeedsPresentation => {
+                "insertMaster 的 id 必须是 pptx:presentation".into()
+            }
+            IdReason::DeleteMasterNeedsMaster => {
+                "deleteMaster 的 id 必须是 master:N".into()
             }
             IdReason::SetHandoutTextNeedsHandout => {
                 "setHandoutText 的 id 必须是 handout".into()
@@ -729,6 +741,13 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         }
         ErrorKind::NeedAtLeastOneSheet => "至少需要一张工作表".into(),
         ErrorKind::LastSlide => "至少需要一页幻灯片".into(),
+        ErrorKind::LastLayout => "该母版至少需要一份版式".into(),
+        ErrorKind::LastMaster => "至少需要一份幻灯片母版".into(),
+        ErrorKind::LayoutInUse => "仍有幻灯片使用该版式".into(),
+        ErrorKind::MasterInUse => "仍有幻灯片使用该母版下的版式".into(),
+        ErrorKind::InvalidPlaceholderType => {
+            "type 必须是可写的占位符类型".into()
+        }
         ErrorKind::LastVisibleSheet => "不能隐藏或删除最后一张可见工作表".into(),
         ErrorKind::MoveSheetAfterSelf => "moveSheet 的 after 不能是自己".into(),
         ErrorKind::MoveSlideAfterSelf => "moveSlide 的 after 不能是自己".into(),

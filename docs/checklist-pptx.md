@@ -4,11 +4,11 @@
 
 检查前用 create 或 apply 在本机生成文件，不要用改过扩展名的 zip 目录冒充。本机若 `PowerPoint.Application` 被 WPS 抢走，直接启动 `POWERPNT.EXE` 再挂 COM，不要走被抢的 ProgID。Office 16 的对象模型在 `mdiClass` 上。
 
-C、I、A、Pp、Pc、Psa、Pn、Pcm、Pm、Ps、Sg、Pt、Tn、Tr、Am、Aw、Mm、Ho、Phl、Pmd、Psc 各组由 `manual-check/office/cases/pptx-*.ps1` 自动判定，跑 `pwsh -File manual-check\office\run.ps1 -Case 'pptx-*'` 即可复现。O1 已放弃，与 xlsx / docx 相同。
+C、I、A、Pp、Pc、Psa、Pn、Pcm、Pm、Ps、Sg、Pt、Tn、Tr、Am、Aw、Mm、Mw、Ho、Phl、Pmd、Psc 各组由 `manual-check/office/cases/pptx-*.ps1` 自动判定，跑 `pwsh -File manual-check\office\run.ps1 -Case 'pptx-*'` 即可复现。O1 已放弃，与 xlsx / docx 相同。
 
 ## 本机结果（2026-09-28）
 
-Microsoft PowerPoint 16.0 已打开，C1、C3、C4、C5–C13、I1–I5、A1–A5、Pp1–Pp7、Pc1–Pc7、Psa1–Psa7、Pn1–Pn6、Pcm1–Pcm6、Pik1–Pik4、Pm1–Pm5、Ps1–Ps5、Sg1–Sg5、Pt1–Pt6、Tn1–Tn5、Am1–Am5、Mm1–Mm5、Ho1–Ho5、Phl1–Phl5、Pmd1–Pmd5、Psc1–Psc5 均 PASS。本机若装了 WPS，`PowerPoint.Application` 会被抢走，测试仍直接启动 `POWERPNT.EXE`，从 `mdiClass` 挂 COM。O1 已放弃。2026-09-27 补跑 `pptx-pictures.ps1`，Pp1–Pp7 通过。同日补跑 `pptx-create-pictures.ps1`，C5–C7 通过。同日补跑 `pptx-charts.ps1`，Pc1–Pc7 通过。同日补跑 `pptx-create-charts.ps1`，C8–C10 通过。同日补跑 `pptx-smartart.ps1`，Psa1–Psa7 通过。同日补跑 `pptx-notes.ps1`，Pn1–Pn4 通过。同日补跑 `pptx-comments.ps1`，Pcm1–Pcm5、Pik1–Pik4 通过。同日补跑 `pptx-docprops.ps1`，Pd1–Pd5 通过。同日补跑 `pptx-charts-remain.ps1`，Pr1–Pr3 通过。2026-09-28 补跑 `pptx-slides.ps1`，Pm1–Pm5 通过。同日补跑 `pptx-shapes.ps1`，Ps1–Ps5 通过。同日补跑 `pptx-tables.ps1`，Pt1–Pt6 通过。同日补跑 `pptx-transition.ps1`，Tn1–Tn5 通过。同日补跑 `pptx-timing.ps1`，Am1–Am5 通过。同日补跑 `pptx-masters.ps1`，Mm1–Mm5 通过。同日补跑 `pptx-handout.ps1`，Ho1–Ho5 通过。同日补跑 `pptx-hyperlinks.ps1`，Phl1–Phl5 通过。同日补跑 `pptx-create-notes-comments.ps1`，C11–C13 通过。同日补跑 `pptx-notes.ps1`，Pn5–Pn6 通过。同日补跑 `pptx-comments.ps1`，Pcm6 通过。同日补跑 `pptx-media.ps1`，Pmd1–Pmd5 通过。同日补跑 `pptx-sections.ps1`，Psc1–Psc5 通过。2026-09-29 补跑 `pptx-anim-write.ps1`，Aw1–Aw5 通过。同日补跑 `pptx-transition-remain.ps1`，Tr1–Tr5 通过。同日补跑 `pptx-shape-geom.ps1`，Sg1–Sg5 通过。
+Microsoft PowerPoint 16.0 已打开，C1、C3、C4、C5–C13、I1–I5、A1–A5、Pp1–Pp7、Pc1–Pc7、Psa1–Psa7、Pn1–Pn6、Pcm1–Pcm6、Pik1–Pik4、Pm1–Pm5、Ps1–Ps5、Sg1–Sg5、Pt1–Pt6、Tn1–Tn5、Am1–Am5、Mm1–Mm5、Ho1–Ho5、Phl1–Phl5、Pmd1–Pmd5、Psc1–Psc5 均 PASS。本机若装了 WPS，`PowerPoint.Application` 会被抢走，测试仍直接启动 `POWERPNT.EXE`，从 `mdiClass` 挂 COM。O1 已放弃。2026-09-27 补跑 `pptx-pictures.ps1`，Pp1–Pp7 通过。同日补跑 `pptx-create-pictures.ps1`，C5–C7 通过。同日补跑 `pptx-charts.ps1`，Pc1–Pc7 通过。同日补跑 `pptx-create-charts.ps1`，C8–C10 通过。同日补跑 `pptx-smartart.ps1`，Psa1–Psa7 通过。同日补跑 `pptx-notes.ps1`，Pn1–Pn4 通过。同日补跑 `pptx-comments.ps1`，Pcm1–Pcm5、Pik1–Pik4 通过。同日补跑 `pptx-docprops.ps1`，Pd1–Pd5 通过。同日补跑 `pptx-charts-remain.ps1`，Pr1–Pr3 通过。2026-09-28 补跑 `pptx-slides.ps1`，Pm1–Pm5 通过。同日补跑 `pptx-shapes.ps1`，Ps1–Ps5 通过。同日补跑 `pptx-tables.ps1`，Pt1–Pt6 通过。同日补跑 `pptx-transition.ps1`，Tn1–Tn5 通过。同日补跑 `pptx-timing.ps1`，Am1–Am5 通过。同日补跑 `pptx-masters.ps1`，Mm1–Mm5 通过。同日补跑 `pptx-handout.ps1`，Ho1–Ho5 通过。同日补跑 `pptx-hyperlinks.ps1`，Phl1–Phl5 通过。同日补跑 `pptx-create-notes-comments.ps1`，C11–C13 通过。同日补跑 `pptx-notes.ps1`，Pn5–Pn6 通过。同日补跑 `pptx-comments.ps1`，Pcm6 通过。同日补跑 `pptx-media.ps1`，Pmd1–Pmd5 通过。同日补跑 `pptx-sections.ps1`，Psc1–Psc5 通过。2026-09-29 补跑 `pptx-anim-write.ps1`，Aw1–Aw5 通过。同日补跑 `pptx-transition-remain.ps1`，Tr1–Tr5 通过。同日补跑 `pptx-shape-geom.ps1`，Sg1–Sg5 通过。同日补跑 `pptx-master-write.ps1`，Mw1–Mw5 通过。
 
 | 序号 | 状态 | 结果 |
 | --- | --- | --- |
@@ -35,6 +35,7 @@ Microsoft PowerPoint 16.0 已打开，C1、C3、C4、C5–C13、I1–I5、A1–A
 | Am1–Am5 | ✅ | PowerPoint 16.0：`pptx-timing.ps1`，5 PASS / 0 FAIL。无 `timing` 时根与各页有 `animCount`、没有名单；另存进入淡入 `target=slide:1/shape:2`、`type=fade`、`trigger=click`；COM MainSequence.Count=1；只改字名单还在；`setTiming` 为 `UnsupportedOp`；xlsx / docx 的 `scope.timing` 为 `InvalidField`。无 Repair |
 | Aw1–Aw5 | ✅ | PowerPoint 16.0：`pptx-anim-write.ps1`，5 PASS / 0 FAIL。create 后 `insertAnim` `type=fade`，名单一条且 COM Count=1；另存页再插一条旧的还在、新的在末尾；`deleteAnim` 后 Count 少 1，删光没有 `<p:timing>`；只改字名单还在；错 id / `type` 为 `InvalidId` 或 `InvalidField` 且未写文件。无 Repair |
 | Mm1–Mm5 | ✅ | PowerPoint 16.0：`pptx-masters.ps1`，5 PASS / 0 FAIL。无 `masters` 时只有 `masterCount`；create 版式名「空白」；另存默认文稿列出「标题幻灯片」等；标题占位符改字无修复；插用户框后换成 `master:1/layout:7`（空白）用户框还在；占位符 `setShapePos` 几何有变；xlsx / docx 拒 `scope.masters` 与 `setSlideLayout`。无 Repair |
+| Mw1–Mw5 | ✅ | PowerPoint 16.0：`pptx-master-write.ps1`，5 PASS / 0 FAIL。`insertLayout` 后 `masterCount=1`、版式 `kind=blank`、COM CustomLayouts 1→2；`insertPlaceholder` `type=body` 后 COM Type=14；`deletePlaceholder` 后占位符没了；`insertMaster` 后 `masterCount=2`、Designs=2；占用时 `deleteLayout` / `deleteMaster` 为 `InvalidField`；页 id / 坏 type / xlsx / docx 拒写。无 Repair |
 | Ho1–Ho5 | ✅ | PowerPoint 16.0：`pptx-handout.ps1`，5 PASS / 0 FAIL。无 `handout` 时只有 `hasHandout`；create 为 false、展开为 null；`setHandoutText` 写页脚 / 页眉后 COM 与 inspect 可见新字、无 Repair；xlsx / docx 拒 `scope.handout` 与 `setHandoutText`。 |
 | Phl1–Phl5 | ✅ | PowerPoint 16.0：`pptx-hyperlinks.ps1`，5 PASS / 0 FAIL。无名单时根与各页有 `hyperlinkCount=0`；`insertHyperlink` 后 COM 单击地址对上且无 Repair；改地址后对得上；删除后框上字还在；对页 id 得 `InvalidId`，缺目标得 `InvalidField` 且未写文件。 |
 | Pmd1–Pmd5 | ✅ | PowerPoint 16.0：`pptx-media.ps1`，8 PASS / 0 FAIL。无 `media` 时有 `videoCount` / `audioCount`、没有名单；另存视频 id 为 `slide:1/video:3`，不并进 `pictures`；`exportMedia` 与 `/ppt/media/media1.mp4` 字节一致；`insertVideo` 后 Type=16、id 为 `slide:1/video:4`、无 Repair；`insertAudio` 后 `audioCount` 加 1、无 Repair；`deleteMedia` 后对象消失；对 `slide:1/notes` 得 `InvalidId`，WAV 当视频得 `InvalidField` 且未写文件。 |
@@ -294,6 +295,18 @@ inspect 列出 slideMaster / slideLayout 与占位符。apply 改占位符文字
 | Mm3 | 换版式 | ✅ 插「用户框」后换成 `master:1/layout:7`（空白），用户框 id 为 `slide:1/shape:4`；无 Repair |
 | Mm4 | 改几何 | ✅ 占位符 `setShapePos` 后 `x` 为 200000；无 Repair |
 | Mm5 | 拒错 | ✅ xlsx / docx 的 `scope.masters` 与 `setSlideLayout` 得 `InvalidField`，未写文件 |
+
+## 母版写入剩余
+
+在已有母版上新建 / 删除空白版式，给版式或母版插删带 `p:ph` 的占位符，以及抄一份母版。不算母版排版引擎。脚本：`manual-check/office/cases/pptx-master-write.ps1`。编号用 Mw。
+
+| 序号 | 检查 | 通过标准 |
+| --- | --- | --- |
+| Mw1 | 新建版式 | create 产物 `insertLayout` 后 `masterCount` 仍为 1，版式名单多一条且 `kind=blank`；COM CustomLayouts.Count 加 1；无 Repair |
+| Mw2 | 插占位符 | 对新版式 `insertPlaceholder` `type=body` 后 inspect 能看见 `type=body` 的占位符；COM Type=14；无 Repair |
+| Mw3 | 删占位符 | `deletePlaceholder` 后该占位符没了；无 Repair |
+| Mw4 | 第二份母版 | `insertMaster` 后 `masterCount` 为 2，无 Repair；有页占用时 `deleteMaster` / `deleteLayout` 为 `InvalidField`，未写文件 |
+| Mw5 | 拒错 | 对页 id 发 `insertLayout` 得 `InvalidId`；`type` 不在白名单得 `InvalidField`；xlsx / docx 发 `insertLayout` 得 `InvalidField`；均未写文件 |
 
 ## 讲义
 

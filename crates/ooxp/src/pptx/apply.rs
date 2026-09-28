@@ -999,6 +999,46 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                     &mut pkg, &slides, &pres_part, &pres.root, op.slide, op.master, op.layout, i,
                 )?;
             }
+            PptxOp::InsertLayout(op) => {
+                master::insert_layout(&mut pkg, &pres_part, &pres.root, op.master, &op.name, i)?;
+            }
+            PptxOp::DeleteLayout(op) => {
+                master::delete_layout(
+                    &mut pkg, &slides, &pres_part, &pres.root, op.master, op.layout, i,
+                )?;
+            }
+            PptxOp::InsertPlaceholder(op) => {
+                master::insert_placeholder(
+                    &mut pkg,
+                    &pres_part,
+                    &pres.root,
+                    op.master,
+                    op.layout,
+                    &op.type_name,
+                    &op.text,
+                    op.x,
+                    op.y,
+                    op.cx,
+                    op.cy,
+                    i,
+                )?;
+            }
+            PptxOp::DeletePlaceholder(op) => {
+                master::delete_placeholder(
+                    &mut pkg,
+                    &pres_part,
+                    &pres.root,
+                    &op.placeholder,
+                    &op.id,
+                    i,
+                )?;
+            }
+            PptxOp::InsertMaster(op) => {
+                master::insert_master(&mut pkg, &pres_part, &mut pres, op.from, i)?;
+            }
+            PptxOp::DeleteMaster(op) => {
+                master::delete_master(&mut pkg, &slides, &pres_part, &mut pres, op.master, i)?;
+            }
             PptxOp::SetHandoutText(op) => {
                 handout::set_text(&mut pkg, &pres_part, &mut pres, op, i)?;
             }

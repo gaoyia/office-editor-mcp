@@ -254,7 +254,19 @@ pub(super) fn render(kind: &ErrorKind) -> String {
                 "master / placeholder id must be master:N, master:N/layout:K, or …/shape:…".into()
             }
             IdReason::LayoutForm => {
-                "setSlideLayout layout must be master:N/layout:K".into()
+                "layout id must be master:N/layout:K".into()
+            }
+            IdReason::InsertLayoutNeedsMaster => {
+                "insertLayout id must be master:N".into()
+            }
+            IdReason::InsertPlaceholderNeedsHost => {
+                "insertPlaceholder id must be master:N or master:N/layout:K".into()
+            }
+            IdReason::InsertMasterNeedsPresentation => {
+                "insertMaster id must be pptx:presentation".into()
+            }
+            IdReason::DeleteMasterNeedsMaster => {
+                "deleteMaster id must be master:N".into()
             }
             IdReason::SetHandoutTextNeedsHandout => {
                 "setHandoutText id must be handout".into()
@@ -834,6 +846,13 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         }
         ErrorKind::NeedAtLeastOneSheet => "At least one worksheet is required".into(),
         ErrorKind::LastSlide => "At least one slide is required".into(),
+        ErrorKind::LastLayout => "The master must keep at least one layout".into(),
+        ErrorKind::LastMaster => "At least one slide master is required".into(),
+        ErrorKind::LayoutInUse => "A slide still uses this layout".into(),
+        ErrorKind::MasterInUse => "A slide still uses a layout of this master".into(),
+        ErrorKind::InvalidPlaceholderType => {
+            "type must be a writable placeholder type".into()
+        }
         ErrorKind::LastVisibleSheet => {
             "Cannot hide or delete the last visible sheet".into()
         }

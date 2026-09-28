@@ -164,8 +164,16 @@ pub(crate) enum IdReason {
     SlideOpNeedsSlide,
     /// 母版或占位符 id 形态不对
     MasterForm,
-    /// setSlideLayout 的 layout 必须是 master:N/layout:K
+    /// setSlideLayout / deleteLayout 的 layout 必须是 master:N/layout:K
     LayoutForm,
+    /// insertLayout 的 id 必须是 master:N
+    InsertLayoutNeedsMaster,
+    /// insertPlaceholder 的 id 必须是 master:N 或 master:N/layout:K
+    InsertPlaceholderNeedsHost,
+    /// insertMaster 必须用 pptx:presentation
+    InsertMasterNeedsPresentation,
+    /// deleteMaster 的 id 必须是 master:N
+    DeleteMasterNeedsMaster,
     /// setHandoutText 必须用 handout
     SetHandoutTextNeedsHandout,
     /// insertDefinedName 必须用 xlsx:workbook
@@ -517,6 +525,11 @@ define_error_kinds! {
     SharedNeedsRef => vec![Self::SharedNeedsRef],
     NeedAtLeastOneSheet => vec![Self::NeedAtLeastOneSheet],
     LastSlide => vec![Self::LastSlide],
+    LastLayout => vec![Self::LastLayout],
+    LastMaster => vec![Self::LastMaster],
+    LayoutInUse => vec![Self::LayoutInUse],
+    MasterInUse => vec![Self::MasterInUse],
+    InvalidPlaceholderType => vec![Self::InvalidPlaceholderType],
     LastVisibleSheet => vec![Self::LastVisibleSheet],
     MoveSheetAfterSelf => vec![Self::MoveSheetAfterSelf],
     MoveSlideAfterSelf => vec![Self::MoveSlideAfterSelf],
@@ -927,6 +940,10 @@ impl IdReason {
             Self::InsertSheetNeedsWorkbook,
             Self::InsertSlideNeedsPresentation,
             Self::InsertSlideSectionNeedsPresentation,
+            Self::InsertLayoutNeedsMaster,
+            Self::InsertPlaceholderNeedsHost,
+            Self::InsertMasterNeedsPresentation,
+            Self::DeleteMasterNeedsMaster,
             Self::SetSlideSectionNeedsSlide,
             Self::SlideOpNeedsSlide,
             Self::MasterForm,
@@ -1143,6 +1160,11 @@ impl ErrorKind {
             | Self::InspectWorksheetOnly
             | Self::NeedAtLeastOneSheet
             | Self::LastSlide
+            | Self::LastLayout
+            | Self::LastMaster
+            | Self::LayoutInUse
+            | Self::MasterInUse
+            | Self::InvalidPlaceholderType
             | Self::LastVisibleSheet
             | Self::MoveSheetAfterSelf
             | Self::MoveSlideAfterSelf

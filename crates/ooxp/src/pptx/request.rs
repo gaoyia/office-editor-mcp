@@ -162,6 +162,46 @@ pub struct SetSlideLayoutOp {
 }
 
 #[derive(Debug, Clone)]
+pub struct InsertLayoutOp {
+    pub master: usize,
+    pub name: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct DeleteLayoutOp {
+    pub master: usize,
+    pub layout: usize,
+}
+
+#[derive(Debug, Clone)]
+pub struct InsertPlaceholderOp {
+    pub master: usize,
+    pub layout: Option<usize>,
+    pub type_name: String,
+    pub text: String,
+    pub x: Option<i64>,
+    pub y: Option<i64>,
+    pub cx: Option<i64>,
+    pub cy: Option<i64>,
+}
+
+#[derive(Debug, Clone)]
+pub struct DeletePlaceholderOp {
+    pub id: String,
+    pub placeholder: super::master::PlaceholderId,
+}
+
+#[derive(Debug, Clone)]
+pub struct InsertMasterOp {
+    pub from: usize,
+}
+
+#[derive(Debug, Clone)]
+pub struct DeleteMasterOp {
+    pub master: usize,
+}
+
+#[derive(Debug, Clone)]
 pub struct SetHandoutTextOp {
     pub header: Option<String>,
     pub footer: Option<String>,
@@ -735,6 +775,12 @@ pub enum PptxOp {
     InsertAnim(InsertAnimOp),
     DeleteAnim(DeleteAnimOp),
     SetSlideLayout(SetSlideLayoutOp),
+    InsertLayout(InsertLayoutOp),
+    DeleteLayout(DeleteLayoutOp),
+    InsertPlaceholder(InsertPlaceholderOp),
+    DeletePlaceholder(DeletePlaceholderOp),
+    InsertMaster(InsertMasterOp),
+    DeleteMaster(DeleteMasterOp),
     SetHandoutText(SetHandoutTextOp),
     InsertHyperlink(InsertHyperlinkOp),
     SetHyperlink(SetHyperlinkOp),
@@ -993,6 +1039,12 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<PptxOp>, Error> {
             "insertAnim" => PptxOp::InsertAnim(parse_insert_anim(obj, i)?),
             "deleteAnim" => PptxOp::DeleteAnim(parse_delete_anim(obj, i)?),
             "setSlideLayout" => PptxOp::SetSlideLayout(parse_set_slide_layout(obj, i)?),
+            "insertLayout" => PptxOp::InsertLayout(parse_insert_layout(obj, i)?),
+            "deleteLayout" => PptxOp::DeleteLayout(parse_delete_layout(obj, i)?),
+            "insertPlaceholder" => PptxOp::InsertPlaceholder(parse_insert_placeholder(obj, i)?),
+            "deletePlaceholder" => PptxOp::DeletePlaceholder(parse_delete_placeholder(obj, i)?),
+            "insertMaster" => PptxOp::InsertMaster(parse_insert_master(obj, i)?),
+            "deleteMaster" => PptxOp::DeleteMaster(parse_delete_master(obj, i)?),
             "setHandoutText" => PptxOp::SetHandoutText(parse_set_handout_text(obj, i)?),
             "insertHyperlink" => PptxOp::InsertHyperlink(parse_insert_hyperlink(obj, i)?),
             "setHyperlink" => PptxOp::SetHyperlink(parse_set_hyperlink(obj, i)?),
@@ -1899,6 +1951,170 @@ fn parse_set_slide_layout(obj: &Map<String, Value>, i: usize) -> Result<SetSlide
         slide: parse_slide_only_id(&id, i, "id")?,
         master,
         layout: layout_n,
+    })
+}
+
+fn parse_insert_layout(obj: &Map<String, Value>, i: usize) -> Result<InsertLayoutOp, Error> {
+    deny_keys(obj, i, &["op", "id", "name"])?;
+    let id = require_id(obj, i)?;
+    let master = super::master::parse_master_only_id(&id, i, IdReason::InsertLayoutNeedsMaster)?;
+    let name = match obj.get("name") {
+        None => "空白".to_string(),
+        Some(Value::String(s)) if !s.is_empty() => s.clone(),
+        Some(Value::String(_)) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "name".into(),
+                    expected: TypeName::NonEmptyString,
+                },
+                format!("ops[{i}].name"),
+            ));
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "name".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].name"),
+            ));
+        }
+    };
+    Ok(InsertLayoutOp { master, name })
+}
+
+fn parse_delete_layout(obj: &Map<String, Value>, i: usize) -> Result<DeleteLayoutOp, Error> {
+    deny_keys(obj, i, &["op", "id"])?;
+    let id = require_id(obj, i)?;
+    let (master, layout) = super::master::parse_layout_ref_at(&id, &format!("ops[{i}].id"))?;
+    Ok(DeleteLayoutOp { master, layout })
+}
+
+fn parse_insert_placeholder(
+    obj: &Map<String, Value>,
+    i: usize,
+) -> Result<InsertPlaceholderOp, Error> {
+    deny_keys(obj, i, &["op", "id", "type", "text", "x", "y", "cx", "cy"])?;
+    let id = require_id(obj, i)?;
+    let (master, layout) = super::master::parse_master_or_layout_host(&id, i)?;
+    let type_name = match obj.get("type") {
+        None => {
+            return Err(Error::with_path(
+                ErrorKind::OpRequiresField {
+                    op: "insertPlaceholder".into(),
+                    field: "type".into(),
+                },
+                format!("ops[{i}].type"),
+            ));
+        }
+        Some(Value::String(s)) if super::master::is_writable_placeholder_type(s) => s.clone(),
+        Some(Value::String(_)) => {
+            return Err(Error::with_path(
+                ErrorKind::InvalidPlaceholderType,
+                format!("ops[{i}].type"),
+            ));
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "type".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].type"),
+            ));
+        }
+    };
+    let text = match obj.get("text") {
+        Some(Value::String(s)) => s.clone(),
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "text".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].text"),
+            ));
+        }
+        None => String::new(),
+    };
+    let x = parse_off_field(obj.get("x"), i, "x")?;
+    let y = parse_off_field(obj.get("y"), i, "y")?;
+    if x.is_some() != y.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "insertPlaceholder".into(),
+                field: "x and y together".into(),
+            },
+            format!("ops[{i}]"),
+        ));
+    }
+    let cx = parse_emu_field(obj.get("cx"), i, "cx")?;
+    let cy = parse_emu_field(obj.get("cy"), i, "cy")?;
+    if cx.is_some() != cy.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "insertPlaceholder".into(),
+                field: "cx and cy together".into(),
+            },
+            format!("ops[{i}]"),
+        ));
+    }
+    Ok(InsertPlaceholderOp {
+        master,
+        layout,
+        type_name,
+        text,
+        x,
+        y,
+        cx,
+        cy,
+    })
+}
+
+fn parse_delete_placeholder(
+    obj: &Map<String, Value>,
+    i: usize,
+) -> Result<DeletePlaceholderOp, Error> {
+    deny_keys(obj, i, &["op", "id"])?;
+    let id = require_id(obj, i)?;
+    let placeholder = super::master::parse_placeholder_id(&id, i)?;
+    Ok(DeletePlaceholderOp { id, placeholder })
+}
+
+fn parse_insert_master(obj: &Map<String, Value>, i: usize) -> Result<InsertMasterOp, Error> {
+    deny_keys(obj, i, &["op", "id", "from"])?;
+    let id = require_id(obj, i)?;
+    if id != "pptx:presentation" {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::InsertMasterNeedsPresentation,
+            },
+            format!("ops[{i}].id"),
+        ));
+    }
+    let from = match obj.get("from") {
+        None => 1usize,
+        Some(Value::String(s)) => {
+            super::master::parse_master_only_at(s, &format!("ops[{i}].from"), IdReason::MasterForm)?
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "from".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].from"),
+            ));
+        }
+    };
+    Ok(InsertMasterOp { from })
+}
+
+fn parse_delete_master(obj: &Map<String, Value>, i: usize) -> Result<DeleteMasterOp, Error> {
+    deny_keys(obj, i, &["op", "id"])?;
+    let id = require_id(obj, i)?;
+    Ok(DeleteMasterOp {
+        master: super::master::parse_master_only_id(&id, i, IdReason::DeleteMasterNeedsMaster)?,
     })
 }
 
