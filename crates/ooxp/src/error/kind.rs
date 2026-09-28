@@ -75,6 +75,10 @@ pub(crate) enum IdReason {
     PptxCommentForm,
     /// pptx insertComment 必须用 slide:N
     InsertCommentNeedsSlide,
+    /// xlsx 批注 id 必须是 cell:表!A1/comment:…
+    XlsxCommentForm,
+    /// xlsx insertComment 必须用单元格 id
+    InsertCommentNeedsCell,
     /// xlsx 页眉槽位 id 必须是 sheet:{name}/hf:{kind}:{side}
     HfSlotPrefix,
     /// 框 id 必须是 {段落}/txbx:…
@@ -394,6 +398,7 @@ define_error_kinds! {
     InspectWorksheetOnly => vec![Self::InspectWorksheetOnly],
     InsertPictureWorksheetOnly => vec![Self::InsertPictureWorksheetOnly],
     InsertChartWorksheetOnly => vec![Self::InsertChartWorksheetOnly],
+    CommentsWorksheetOnly => vec![Self::CommentsWorksheetOnly],
     DataSheetMustBeWorksheet => vec![Self::DataSheetMustBeWorksheet],
     TwoCellPictureSize => vec![Self::TwoCellPictureSize],
     TwoCellChartSize => vec![Self::TwoCellChartSize],
@@ -743,6 +748,8 @@ impl IdReason {
             Self::SetNotesTextNeedsSlide,
             Self::PptxCommentForm,
             Self::InsertCommentNeedsSlide,
+            Self::XlsxCommentForm,
+            Self::InsertCommentNeedsCell,
             Self::HfSlotPrefix,
             Self::TxbxPrefix,
             Self::TxbxContainer,
@@ -1092,6 +1099,7 @@ impl ErrorKind {
             | Self::InvalidTextBoxDirection
             | Self::InsertPictureWorksheetOnly
             | Self::InsertChartWorksheetOnly
+            | Self::CommentsWorksheetOnly
             | Self::DataSheetMustBeWorksheet
             | Self::InvalidXlsxAnchor
             | Self::InvalidXlsxEditAs

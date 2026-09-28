@@ -5,6 +5,7 @@ mod apply;
 mod cf;
 mod chart;
 mod chartsheet;
+mod comments;
 mod create;
 mod formula;
 mod hf;

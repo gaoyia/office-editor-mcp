@@ -108,6 +108,7 @@ fn inspect_empty_on_create() {
             "id",
             "pictureCount",
             "chartCount",
+            "commentCount",
             "definedNameCount",
             "props",
             "sheets",

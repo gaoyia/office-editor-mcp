@@ -127,6 +127,12 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::InsertCommentNeedsSlide => {
                 "pptx insertComment id must be slide:N".into()
             }
+            IdReason::XlsxCommentForm => {
+                "xlsx comment id must be cell:Sheet!A1/comment:GUID or …/reply:GUID".into()
+            }
+            IdReason::InsertCommentNeedsCell => {
+                "xlsx insertComment id must be a cell id cell:Sheet!A1".into()
+            }
             IdReason::HfSlotPrefix => {
                 "xlsx header/footer id must be sheet:name/hf:odd|even|first:header|footer".into()
             }
@@ -589,6 +595,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::InspectWorksheetOnly => "Cells can only be read from worksheets".into(),
         ErrorKind::InsertPictureWorksheetOnly => "insertPicture only applies to worksheets".into(),
         ErrorKind::InsertChartWorksheetOnly => "insertChart only applies to worksheets".into(),
+        ErrorKind::CommentsWorksheetOnly => "comment ops only apply to worksheets".into(),
         ErrorKind::DataSheetMustBeWorksheet => {
             "insertChartSheet data must be written to a worksheet".into()
         }

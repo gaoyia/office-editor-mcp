@@ -151,6 +151,7 @@ fn summary_without_scope() {
             "conditionalFormatCount",
             "tableCount",
             "pivotCount",
+            "commentCount",
             "hasHeaderFooter",
             "print",
             "view",

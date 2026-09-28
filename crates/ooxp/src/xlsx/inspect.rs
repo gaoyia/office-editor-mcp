@@ -10,6 +10,7 @@ use crate::xml::{self, Element};
 use super::a1;
 use super::cf;
 use super::chart;
+use super::comments;
 use super::formula;
 use super::hf;
 use super::names;
@@ -60,6 +61,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     let want_pictures = scope.as_ref().is_some_and(|s| s.pictures);
     let want_charts = scope.as_ref().is_some_and(|s| s.charts);
     let want_header_footer = scope.as_ref().is_some_and(|s| s.header_footer);
+    let want_comments = scope.as_ref().is_some_and(|s| s.comments);
     let cells_scope = scope.as_ref().and_then(|s| s.cells.as_ref());
     let sheet_parts: Vec<(String, String)> = sheets
         .iter()
@@ -69,6 +71,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     let mut sheet_json = Vec::new();
     let mut picture_count = 0usize;
     let mut chart_count = 0usize;
+    let mut comment_count = 0usize;
     for (sheet_id, sh) in sheets.iter().enumerate() {
         let mut obj = Map::new();
         obj.insert("id".into(), json!(format!("sheet:{}", sh.name)));
@@ -91,6 +94,9 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
             obj.insert("tableCount".into(), json!(table_count));
             let pivot_count = pivot::count(&pkg, &sh.part)?;
             obj.insert("pivotCount".into(), json!(pivot_count));
+            let n_comments = comments::count_on_sheet(&pkg, &sh.part)?;
+            comment_count += n_comments;
+            obj.insert("commentCount".into(), json!(n_comments));
             let has_hf = hf::has_header_footer(&sheet_doc.root);
             obj.insert("hasHeaderFooter".into(), json!(has_hf));
             obj.insert(
@@ -123,6 +129,12 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
             }
             if want_charts {
                 obj.insert("charts".into(), Value::Array(chart::charts_json(&charts)));
+            }
+            if want_comments {
+                obj.insert(
+                    "comments".into(),
+                    Value::Array(comments::collect_on_sheet(&pkg, &sh.part, &sh.name)?),
+                );
             }
             if let Some(cs) = cells_scope {
                 if sh.name.eq_ignore_ascii_case(&cs.sheet) {
@@ -241,6 +253,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     root.insert("id".into(), json!("xlsx:workbook"));
     root.insert("pictureCount".into(), json!(picture_count));
     root.insert("chartCount".into(), json!(chart_count));
+    root.insert("commentCount".into(), json!(comment_count));
     root.insert("definedNameCount".into(), json!(names::count(&wb.root)));
     root.insert("props".into(), crate::props::inspect(&pkg)?);
     root.insert("sheets".into(), Value::Array(sheet_json));

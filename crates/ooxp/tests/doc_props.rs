@@ -191,6 +191,7 @@ fn inspect_default_props_on_three_formats() {
         [
             "pictureCount",
             "chartCount",
+            "commentCount",
             "definedNameCount",
             "props",
             "sheets",

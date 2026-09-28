@@ -116,6 +116,12 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::InsertCommentNeedsSlide => {
                 "pptx 的 insertComment 的 id 必须是 slide:N".into()
             }
+            IdReason::XlsxCommentForm => {
+                "xlsx 批注 id 必须是 cell:表!A1/comment:GUID 或 …/reply:GUID".into()
+            }
+            IdReason::InsertCommentNeedsCell => {
+                "xlsx 的 insertComment 的 id 必须是单元格 id cell:表!A1".into()
+            }
             IdReason::HfSlotPrefix => {
                 "xlsx 页眉槽位 id 必须是 sheet:工作表名/hf:odd|even|first:header|footer".into()
             }
@@ -507,6 +513,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::InspectWorksheetOnly => "只能对工作表读单元格".into(),
         ErrorKind::InsertPictureWorksheetOnly => "只能往工作表 insertPicture".into(),
         ErrorKind::InsertChartWorksheetOnly => "只能往工作表 insertChart".into(),
+        ErrorKind::CommentsWorksheetOnly => "只能对工作表发批注 op".into(),
         ErrorKind::DataSheetMustBeWorksheet => {
             "insertChartSheet 的数据必须写到普通工作表上".into()
         }

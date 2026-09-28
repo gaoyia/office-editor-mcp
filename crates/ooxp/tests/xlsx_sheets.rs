@@ -126,6 +126,7 @@ fn inspect_lists_hidden() {
             "conditionalFormatCount",
             "tableCount",
             "pivotCount",
+            "commentCount",
             "hasHeaderFooter",
             "print",
             "view",

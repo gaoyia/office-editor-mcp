@@ -82,6 +82,7 @@ $order = @(
     'xlsx-defined-name'
     'xlsx-print'
     'xlsx-view'
+    'xlsx-comments'
     'pptx-docprops'
     'pptx-apply'
     'pptx-pictures'

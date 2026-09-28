@@ -9,6 +9,7 @@ use crate::chart::{ChartType, NewSeries};
 
 use super::a1;
 use super::chart::{self, SheetChartId};
+use super::comments;
 use super::names;
 use super::picture::{self, SheetPicId};
 
@@ -141,6 +142,7 @@ pub struct InspectScope {
     pub pictures: bool,
     pub charts: bool,
     pub header_footer: bool,
+    pub comments: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -797,6 +799,56 @@ pub struct SetAutoFilterOp {
 }
 
 #[derive(Debug, Clone)]
+pub struct InsertCommentOp {
+    pub sheet: String,
+    pub a1: String,
+    pub text: String,
+    pub author: String,
+    /// xlsx 接受但不写入 XML，树上恒为 null。
+    #[allow(dead_code)]
+    pub initials: String,
+    pub date: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ReplyCommentOp {
+    pub id: String,
+    pub text: String,
+    pub author: String,
+    /// xlsx 接受但不写入 XML，树上恒为 null。
+    #[allow(dead_code)]
+    pub initials: String,
+    pub date: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct DeleteCommentOp {
+    pub id: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetCommentTextOp {
+    pub id: String,
+    pub text: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetCommentMetaOp {
+    pub id: String,
+    pub author: Option<String>,
+    /// xlsx 接受但不写入 XML。
+    #[allow(dead_code)]
+    pub initials: Option<String>,
+    pub date: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetCommentDoneOp {
+    pub id: String,
+    pub done: bool,
+}
+
+#[derive(Debug, Clone)]
 pub struct SetHeaderFooterTextOp {
     #[allow(dead_code)]
     pub id: String,
@@ -1120,6 +1172,12 @@ pub enum XlsxOp {
     SetPrintSetup(SetPrintSetupOp),
     SetSheetView(SetSheetViewOp),
     SetAutoFilter(SetAutoFilterOp),
+    InsertComment(InsertCommentOp),
+    ReplyComment(ReplyCommentOp),
+    DeleteComment(DeleteCommentOp),
+    SetCommentText(SetCommentTextOp),
+    SetCommentMeta(SetCommentMetaOp),
+    SetCommentDone(SetCommentDoneOp),
     DeleteChart(DeleteChartOp),
     SetChartTitle(SetChartTitleOp),
     SetChartSeries(SetChartSeriesOp),
@@ -1168,11 +1226,13 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
             "pictures",
             "charts",
             "headerFooter",
+            "comments",
         ],
     )?;
     let pictures = parse_bool_field(obj.get("pictures"), "pictures")?;
     let charts = parse_bool_field(obj.get("charts"), "charts")?;
     let header_footer = parse_bool_field(obj.get("headerFooter"), "headerFooter")?;
+    let comments = parse_bool_field(obj.get("comments"), "comments")?;
     let sheet = obj.get("sheet").and_then(Value::as_str);
     let range = obj.get("range").and_then(Value::as_str);
     let max_cells = match obj.get("maxCells") {
@@ -1217,7 +1277,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
             ));
         }
     };
-    if cells.is_none() && !pictures && !charts && !header_footer {
+    if cells.is_none() && !pictures && !charts && !header_footer && !comments {
         return Ok(None);
     }
     Ok(Some(InspectScope {
@@ -1225,6 +1285,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
         pictures,
         charts,
         header_footer,
+        comments,
     }))
 }
 
@@ -1295,6 +1356,12 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<XlsxOp>, Error> {
             "setPrintSetup" => XlsxOp::SetPrintSetup(parse_set_print_setup(obj, i)?),
             "setSheetView" => XlsxOp::SetSheetView(parse_set_sheet_view(obj, i)?),
             "setAutoFilter" => XlsxOp::SetAutoFilter(parse_set_auto_filter(obj, i)?),
+            "insertComment" => XlsxOp::InsertComment(parse_insert_comment(obj, i)?),
+            "replyComment" => XlsxOp::ReplyComment(parse_reply_comment(obj, i)?),
+            "deleteComment" => XlsxOp::DeleteComment(parse_delete_comment(obj, i)?),
+            "setCommentText" => XlsxOp::SetCommentText(parse_set_comment_text(obj, i)?),
+            "setCommentMeta" => XlsxOp::SetCommentMeta(parse_set_comment_meta(obj, i)?),
+            "setCommentDone" => XlsxOp::SetCommentDone(parse_set_comment_done(obj, i)?),
             "deleteChart" => XlsxOp::DeleteChart(parse_delete_chart(obj, i)?),
             "setChartTitle" => XlsxOp::SetChartTitle(parse_set_chart_title(obj, i)?),
             "setChartSeries" => XlsxOp::SetChartSeries(parse_set_chart_series(obj, i)?),
@@ -1396,12 +1463,6 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<XlsxOp>, Error> {
             | "deleteFootnote"
             | "deleteEndnote"
             | "setNoteNumbering"
-            | "insertComment"
-            | "replyComment"
-            | "deleteComment"
-            | "setCommentText"
-            | "setCommentMeta"
-            | "setCommentDone"
             | "setChartWrap"
             | "insertSmartArt"
             | "deleteSmartArt"
@@ -3731,6 +3792,227 @@ fn parse_set_auto_filter(
         }
     };
     Ok(SetAutoFilterOp { sheet, refer })
+}
+
+fn parse_insert_comment(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<InsertCommentOp, Error> {
+    deny_keys(obj, i, &["op", "id", "text", "author", "initials", "date"])?;
+    let id = require_id(obj, i)?;
+    let (sheet, a1) = comments::parse_insert_cell(&id, i)?;
+    Ok(InsertCommentOp {
+        sheet,
+        a1,
+        text: parse_optional_text(obj, i)?,
+        author: parse_comment_str(obj, i, "author", "ooxp")?,
+        initials: parse_comment_str(obj, i, "initials", "oo")?,
+        date: parse_optional_date(obj, i)?,
+    })
+}
+
+fn parse_reply_comment(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<ReplyCommentOp, Error> {
+    deny_keys(obj, i, &["op", "id", "text", "author", "initials", "date"])?;
+    let id = require_id(obj, i)?;
+    let target = comments::parse_comment_id(&id, &format!("ops[{i}].id"))?;
+    if matches!(target.key, comments::CommentKey::Reply { .. }) {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::XlsxCommentForm,
+            },
+            format!("ops[{i}].id"),
+        ));
+    }
+    Ok(ReplyCommentOp {
+        id,
+        text: parse_optional_text(obj, i)?,
+        author: parse_comment_str(obj, i, "author", "ooxp")?,
+        initials: parse_comment_str(obj, i, "initials", "oo")?,
+        date: parse_optional_date(obj, i)?,
+    })
+}
+
+fn parse_delete_comment(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<DeleteCommentOp, Error> {
+    deny_keys(obj, i, &["op", "id"])?;
+    let id = require_id(obj, i)?;
+    let _ = comments::parse_comment_id(&id, &format!("ops[{i}].id"))?;
+    Ok(DeleteCommentOp { id })
+}
+
+fn parse_set_comment_text(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<SetCommentTextOp, Error> {
+    deny_keys(obj, i, &["op", "id", "text"])?;
+    let id = require_id(obj, i)?;
+    let _ = comments::parse_comment_id(&id, &format!("ops[{i}].id"))?;
+    let text = match obj.get("text") {
+        Some(Value::String(s)) => s.clone(),
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "text".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].text"),
+            ));
+        }
+        None => {
+            return Err(Error::with_path(
+                ErrorKind::OpRequiresField {
+                    op: "setCommentText".into(),
+                    field: "text".into(),
+                },
+                format!("ops[{i}].text"),
+            ));
+        }
+    };
+    Ok(SetCommentTextOp { id, text })
+}
+
+fn parse_set_comment_meta(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<SetCommentMetaOp, Error> {
+    deny_keys(obj, i, &["op", "id", "author", "initials", "date"])?;
+    let id = require_id(obj, i)?;
+    let _ = comments::parse_comment_id(&id, &format!("ops[{i}].id"))?;
+    let author = match obj.get("author") {
+        None => None,
+        Some(Value::String(s)) => Some(s.clone()),
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "author".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].author"),
+            ));
+        }
+    };
+    let initials = match obj.get("initials") {
+        None => None,
+        Some(Value::String(s)) => Some(s.clone()),
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "initials".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].initials"),
+            ));
+        }
+    };
+    let date = parse_optional_date(obj, i)?;
+    if author.is_none() && initials.is_none() && date.is_none() {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "setCommentMeta".into(),
+                field: "author, initials, or date".into(),
+            },
+            format!("ops[{i}]"),
+        ));
+    }
+    Ok(SetCommentMetaOp {
+        id,
+        author,
+        initials,
+        date,
+    })
+}
+
+fn parse_set_comment_done(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<SetCommentDoneOp, Error> {
+    deny_keys(obj, i, &["op", "id", "done"])?;
+    let id = require_id(obj, i)?;
+    let _ = comments::parse_comment_id(&id, &format!("ops[{i}].id"))?;
+    let done = match obj.get("done") {
+        Some(Value::Bool(b)) => *b,
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "done".into(),
+                    expected: TypeName::Boolean,
+                },
+                format!("ops[{i}].done"),
+            ));
+        }
+        None => {
+            return Err(Error::with_path(
+                ErrorKind::OpRequiresField {
+                    op: "setCommentDone".into(),
+                    field: "done".into(),
+                },
+                format!("ops[{i}].done"),
+            ));
+        }
+    };
+    Ok(SetCommentDoneOp { id, done })
+}
+
+fn parse_optional_text(obj: &serde_json::Map<String, Value>, i: usize) -> Result<String, Error> {
+    match obj.get("text") {
+        None => Ok(String::new()),
+        Some(Value::String(s)) => Ok(s.clone()),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "text".into(),
+                expected: TypeName::String,
+            },
+            format!("ops[{i}].text"),
+        )),
+    }
+}
+
+fn parse_comment_str(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+    field: &str,
+    default: &str,
+) -> Result<String, Error> {
+    match obj.get(field) {
+        None => Ok(default.to_string()),
+        Some(Value::String(s)) => Ok(s.clone()),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::String,
+            },
+            format!("ops[{i}].{field}"),
+        )),
+    }
+}
+
+fn parse_optional_date(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<Option<String>, Error> {
+    match obj.get("date") {
+        None => Ok(None),
+        Some(Value::String(s)) if !s.is_empty() => Ok(Some(s.clone())),
+        Some(Value::String(_)) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "date".into(),
+                expected: TypeName::NonEmptyString,
+            },
+            format!("ops[{i}].date"),
+        )),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "date".into(),
+                expected: TypeName::String,
+            },
+            format!("ops[{i}].date"),
+        )),
+    }
 }
 
 fn parse_view_u32(

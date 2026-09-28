@@ -9,6 +9,7 @@ use crate::xml::{self, Document, Element, Node};
 use super::a1;
 use super::chart;
 use super::chartsheet;
+use super::comments;
 use super::hf;
 use super::inspect;
 use super::layout;
@@ -425,6 +426,36 @@ pub fn apply(bytes: &[u8], ops: &[XlsxOp]) -> Result<Vec<u8>, Error> {
                 let doc = dirty_of(&mut dirty_sheets, &part);
                 super::view::apply_filter(&mut doc.root, kind, op, overlap, i)?;
             }
+            XlsxOp::InsertComment(op) => {
+                let cell = a1::parse_cell(&op.a1)?;
+                let part = require_comments_worksheet(&sheet_index, &op.sheet, i)?;
+                comments::apply_insert(&mut pkg, &wb_part, &mut dirty_sheets, &part, cell, op)?;
+            }
+            XlsxOp::ReplyComment(op) => {
+                let target = comments::parse_comment_id(&op.id, &format!("ops[{i}].id"))?;
+                let part = require_comments_worksheet(&sheet_index, &target.sheet, i)?;
+                comments::apply_reply(&mut pkg, &wb_part, &mut dirty_sheets, &part, op, i)?;
+            }
+            XlsxOp::DeleteComment(op) => {
+                let target = comments::parse_comment_id(&op.id, &format!("ops[{i}].id"))?;
+                let part = require_comments_worksheet(&sheet_index, &target.sheet, i)?;
+                comments::apply_delete(&mut pkg, &mut dirty_sheets, &part, op, i)?;
+            }
+            XlsxOp::SetCommentText(op) => {
+                let target = comments::parse_comment_id(&op.id, &format!("ops[{i}].id"))?;
+                let part = require_comments_worksheet(&sheet_index, &target.sheet, i)?;
+                comments::apply_set_text(&mut pkg, &mut dirty_sheets, &part, op, i)?;
+            }
+            XlsxOp::SetCommentMeta(op) => {
+                let target = comments::parse_comment_id(&op.id, &format!("ops[{i}].id"))?;
+                let part = require_comments_worksheet(&sheet_index, &target.sheet, i)?;
+                comments::apply_set_meta(&mut pkg, &wb_part, &mut dirty_sheets, &part, op, i)?;
+            }
+            XlsxOp::SetCommentDone(op) => {
+                let target = comments::parse_comment_id(&op.id, &format!("ops[{i}].id"))?;
+                let part = require_comments_worksheet(&sheet_index, &target.sheet, i)?;
+                comments::apply_set_done(&mut pkg, &part, op, i)?;
+            }
             XlsxOp::DeleteChart(op) => {
                 let (part, kind) = require_named_sheet(&sheet_index, &op.target.sheet, i)?;
                 load_dirty(&pkg, &mut dirty_sheets, &part, false)?;
@@ -575,6 +606,33 @@ fn require_sheet_part(
     op_index: usize,
 ) -> Result<String, Error> {
     Ok(require_named_sheet(index, name, op_index)?.0)
+}
+
+fn require_comments_worksheet(
+    index: &[(String, String, &'static str)],
+    name: &str,
+    op_index: usize,
+) -> Result<String, Error> {
+    let meta = index.iter().find(|(n, _, _)| n.eq_ignore_ascii_case(name));
+    let Some((_, part, kind)) = meta else {
+        return Err(Error::with_path(
+            ErrorKind::SheetNotFound {
+                name: name.to_string(),
+            },
+            format!("ops[{op_index}].id"),
+        ));
+    };
+    match *kind {
+        "worksheet" => Ok(part.clone()),
+        "dialogsheet" | "macrosheet" => Err(Error::with_path(
+            ErrorKind::DialogOrMacroSheet,
+            format!("ops[{op_index}].id"),
+        )),
+        _ => Err(Error::with_path(
+            ErrorKind::CommentsWorksheetOnly,
+            format!("ops[{op_index}].id"),
+        )),
+    }
 }
 
 fn require_layout_worksheet(

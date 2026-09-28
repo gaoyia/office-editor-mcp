@@ -8,7 +8,7 @@
 
 Microsoft Excel 16.0 已打开，用户确认通过。本机若装了 WPS，`Excel.Application` 会被抢走，测试仍直接启动 `EXCEL.EXE` 再挂 COM。
 
-C、I、A、O、Xp、Xc、Xh 这几组现在由 `manual-check/office/cases/xlsx-*.ps1` 自动判定，跑 `pwsh -File manual-check\office\run.ps1 -Case 'xlsx-*'` 即可复现，逐条结果落在 `manual-check/office/out/office-results.csv`。2026-09-27 补跑 `xlsx-pictures.ps1`，Xp1–Xp7 通过。同日补跑 `xlsx-charts.ps1`，Xc1–Xc7 通过。同日补跑 `xlsx-create-pictures.ps1`，C8–C10 通过。同日补跑 `xlsx-create-charts.ps1`，C11–C13 通过。同日补跑 `xlsx-headerfooter.ps1`，Xh1–Xh5 通过。同日补跑 `xlsx-docprops.ps1`，Xd1–Xd5 通过。同日补跑 `xlsx-charts-remain.ps1`，Xr1–Xr4 通过。同日补跑 `xlsx-sheets.ps1`，Xm1–Xm7 通过。同日补跑 `xlsx-cellstyle.ps1`，Xs1–Xs5 通过。同日补跑 `xlsx-layout.ps1`，Xl1–Xl5 通过。同日补跑 `xlsx-formula.ps1`，Xf1–Xf5 通过。2026-09-28 补跑 `xlsx-validation.ps1`，Xv1–Xv5 通过。同日补跑 `xlsx-conditional-format.ps1`，Xn1–Xn5 通过。同日补跑 `xlsx-pivot.ps1`，Xpt1–Xpt5 通过。同日补跑 `xlsx-defined-name.ps1`，Xnm1–Xnm5 通过。同日补跑 `xlsx-print.ps1`，Xps1–Xps5 通过。同日补跑 `xlsx-view.ps1`，Xvw1–Xvw5 通过。
+C、I、A、O、Xp、Xc、Xh 这几组现在由 `manual-check/office/cases/xlsx-*.ps1` 自动判定，跑 `pwsh -File manual-check\office\run.ps1 -Case 'xlsx-*'` 即可复现，逐条结果落在 `manual-check/office/out/office-results.csv`。2026-09-27 补跑 `xlsx-pictures.ps1`，Xp1–Xp7 通过。同日补跑 `xlsx-charts.ps1`，Xc1–Xc7 通过。同日补跑 `xlsx-create-pictures.ps1`，C8–C10 通过。同日补跑 `xlsx-create-charts.ps1`，C11–C13 通过。同日补跑 `xlsx-headerfooter.ps1`，Xh1–Xh5 通过。同日补跑 `xlsx-docprops.ps1`，Xd1–Xd5 通过。同日补跑 `xlsx-charts-remain.ps1`，Xr1–Xr4 通过。同日补跑 `xlsx-sheets.ps1`，Xm1–Xm7 通过。同日补跑 `xlsx-cellstyle.ps1`，Xs1–Xs5 通过。同日补跑 `xlsx-layout.ps1`，Xl1–Xl5 通过。同日补跑 `xlsx-formula.ps1`，Xf1–Xf5 通过。2026-09-28 补跑 `xlsx-validation.ps1`，Xv1–Xv5 通过。同日补跑 `xlsx-conditional-format.ps1`，Xn1–Xn5 通过。同日补跑 `xlsx-pivot.ps1`，Xpt1–Xpt5 通过。同日补跑 `xlsx-defined-name.ps1`，Xnm1–Xnm5 通过。同日补跑 `xlsx-print.ps1`，Xps1–Xps5 通过。同日补跑 `xlsx-view.ps1`，Xvw1–Xvw5 通过。同日补跑 `xlsx-comments.ps1`，Xcm1–Xcm5 通过。
 
 | 序号 | 状态 | 结果 |
 | --- | --- | --- |
@@ -36,6 +36,7 @@ C、I、A、O、Xp、Xc、Xh 这几组现在由 `manual-check/office/cases/xlsx-
 | Xnm1–Xnm5 | ✅ | Excel 16.0：`xlsx-defined-name.ps1`，5 PASS / 0 FAIL。建成 Sales 无 Repair；COM Names 能看见；改公式到 A1:A20 后仍认该名；删除后计数为 0；缺字段得 `InvalidField` 且未写文件 |
 | Xps1–Xps5 | ✅ | Excel 16.0：`xlsx-print.ps1`，5 PASS / 0 FAIL。默认 `print` 左边距 0.7、竖向、无打印区域；左边距 1 英寸与横向后 COM 对得上且页眉还在；打印区域与网格线 COM 认；缺字段得 `InvalidField` 且未写文件。无 Repair |
 | Xvw1–Xvw5 | ✅ | Excel 16.0：`xlsx-view.ps1`，5 PASS / 0 FAIL。默认 `view` 缩放 100、无冻结；冻结首行与缩放 80 后 COM 对得上；工作表筛选范围为 `$A$1:$A$10`；解冻后 `FreezePanes` 为假；缺字段得 `InvalidField` 且未写文件。无 Repair |
+| Xcm1–Xcm5 | ✅ | Excel 16.0：`xlsx-comments.ps1`，5 PASS / 0 FAIL。无名单时根与工作表有 `commentCount=0`；`insertComment` 后 COM `CommentsThreaded` 能看见正文且无 Repair；`replyComment` 后 COM `Replies` 与 inspect `replies` 对得上；删除后计数为 0；缺字段得 `InvalidField` 且未写文件 |
 
 
 ## create
@@ -299,3 +300,15 @@ Office 另存 create 产物是打开冒烟，见 `manual-check/office/cases/opc-
 | Xvw3 | 工作表筛选 | `setAutoFilter` 把 `ref` 写成 `A1:A10` 后 COM `AutoFilter.Range` 能对上，无修复 |
 | Xvw4 | 解冻 | `frozenRows` 与 `frozenCols` 都为 0 后 COM `FreezePanes` 为假，无修复 |
 | Xvw5 | 缺字段 | 只给 `op` 与 `id` 的 `setSheetView` 得 `InvalidField`，未写文件。不强制开 Excel |
+
+## 批注
+
+用库 create 产物再 apply。脚本 `manual-check/office/cases/xlsx-comments.ps1`。编号用 Xcm。
+
+| 序号 | 检查 | 通过标准 |
+| --- | --- | --- |
+| Xcm1 | inspect | 每张 `worksheet` 始终有 `commentCount`；create 默认为 `0`；给了 `scope.comments` 时名单为空数组，不依赖单元格切片 |
+| Xcm2 | 插入 | `insertComment` 写到 `A1` 后 Excel 无修复；COM `CommentThreaded` 能看见正文 |
+| Xcm3 | 回复 | `replyComment` 后 COM `Replies` 能看见；inspect 嵌在 `replies` |
+| Xcm4 | 删除 | `deleteComment` 后 `commentCount=0`、COM 没有线程批注、无修复 |
+| Xcm5 | 缺字段 | 只给 `op` 与 `id` 的 `setCommentMeta` 得 `InvalidField`，未写文件。不强制开 Excel |

@@ -461,7 +461,7 @@ fn reject_notes_id_and_foreign_ops() {
         None,
     )
     .unwrap_err();
-    assert_eq!(err.code(), ErrorCode::InvalidField);
+    assert_eq!(err.code(), ErrorCode::InvalidId);
 }
 
 #[test]
