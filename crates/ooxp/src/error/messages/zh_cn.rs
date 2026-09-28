@@ -277,6 +277,20 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::InsertSmartArtNeedsSlide => {
                 "pptx insertSmartArt 的 id 必须是 slide:N".into()
             }
+            IdReason::SlideTablePrefix => "pptx 表 id 必须是 slide:N/table:…".into(),
+            IdReason::SlideTableContainer => {
+                "页 id 必须带 /table:…（该 id 本身不是表）".into()
+            }
+            IdReason::SlideTableIndexNotInt => "table:index 后面必须是正整数".into(),
+            IdReason::SlideTableIndexFromOne => "table:index 从 1 起".into(),
+            IdReason::SlideTableRowForm => "行 id 必须是表 id 加上 /row:R，R 从 1 起".into(),
+            IdReason::SlideTableCellForm => {
+                "单元格 id 必须是表 id 加上 /r:R/c:C，R 与 C 从 1 起".into()
+            }
+            IdReason::InsertTableNeedsSlide => "pptx insertTable 的 id 必须是 slide:N".into(),
+            IdReason::SetTableCellNeedsCell => {
+                "setTableCellText 的 id 必须是 DrawingML 表单元格 id".into()
+            }
             IdReason::OlePrefix => {
                 "OLE id 必须是段落 id 加上 /ole:…".into()
             }

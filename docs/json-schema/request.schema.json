@@ -517,6 +517,10 @@
         "smartArts": {
           "type": "array",
           "items": { "$ref": "#/$defs/pptxSmartArtCreate" }
+        },
+        "tables": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/pptxTableCreate" }
         }
       }
     },
@@ -529,6 +533,26 @@
         "points": {
           "type": "array",
           "items": { "$ref": "#/$defs/smartArtPointInput" }
+        },
+        "x": { "type": "integer", "minimum": 0 },
+        "y": { "type": "integer", "minimum": 0 },
+        "cx": { "type": "integer", "minimum": 1 },
+        "cy": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "pptxTableCreate": {
+      "type": "object",
+      "required": ["rows", "cols"],
+      "additionalProperties": false,
+      "properties": {
+        "rows": { "type": "integer", "minimum": 1, "maximum": 500 },
+        "cols": { "type": "integer", "minimum": 1, "maximum": 75 },
+        "cells": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
         },
         "x": { "type": "integer", "minimum": 0 },
         "y": { "type": "integer", "minimum": 0 },
@@ -770,6 +794,9 @@
               { "$ref": "#/$defs/setShapeSizeOp" },
               { "$ref": "#/$defs/setShapeFillOp" },
               { "$ref": "#/$defs/setShapeLineOp" },
+              { "$ref": "#/$defs/setTableCellTextOp" },
+              { "$ref": "#/$defs/setTablePosOp" },
+              { "$ref": "#/$defs/setTableSizeOp" },
               { "$ref": "#/$defs/insertSlideOp" },
               { "$ref": "#/$defs/deleteSlideOp" },
               { "$ref": "#/$defs/moveSlideOp" },
@@ -2028,14 +2055,18 @@
         "op": { "const": "insertTable" },
         "id": { "type": "string", "minLength": 1 },
         "rows": { "type": "integer", "minimum": 1, "maximum": 500 },
-        "cols": { "type": "integer", "minimum": 1, "maximum": 63 },
+        "cols": { "type": "integer", "minimum": 1, "maximum": 75 },
         "cells": {
           "type": "array",
           "items": {
             "type": "array",
             "items": { "type": "string" }
           }
-        }
+        },
+        "x": { "type": "integer", "minimum": 0 },
+        "y": { "type": "integer", "minimum": 0 },
+        "cx": { "type": "integer", "minimum": 1 },
+        "cy": { "type": "integer", "minimum": 1 }
       }
     },
     "deleteTableOp": {
@@ -3418,6 +3449,38 @@
         "id": { "type": "string", "minLength": 1 },
         "color": { "type": ["string", "null"] },
         "width": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "setTableCellTextOp": {
+      "type": "object",
+      "required": ["op", "id", "text"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "setTableCellText" },
+        "id": { "type": "string", "minLength": 1 },
+        "text": { "type": "string" }
+      }
+    },
+    "setTablePosOp": {
+      "type": "object",
+      "required": ["op", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "setTablePos" },
+        "id": { "type": "string", "minLength": 1 },
+        "x": { "type": "integer", "minimum": 0 },
+        "y": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "setTableSizeOp": {
+      "type": "object",
+      "required": ["op", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "setTableSize" },
+        "id": { "type": "string", "minLength": 1 },
+        "cx": { "type": "integer", "minimum": 1 },
+        "cy": { "type": "integer", "minimum": 1 }
       }
     },
     "insertSlideOp": {

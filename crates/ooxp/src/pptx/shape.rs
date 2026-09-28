@@ -576,8 +576,14 @@ fn append_text_para(tx: &mut Element, lines: &[&str]) {
     });
     match existing {
         Some(p) => {
-            for el in built {
-                p.push_element(el);
+            // `a:endParaRPr` 必须在段末。空段常只有这一项，往后面塞 run 会被 PowerPoint 当成没字。
+            let insert_at = p
+                .children
+                .iter()
+                .position(|n| matches!(n, Node::Element(e) if e.local_name() == "endParaRPr"))
+                .unwrap_or(p.children.len());
+            for (k, el) in built.into_iter().enumerate() {
+                p.children.insert(insert_at + k, Node::Element(el));
             }
         }
         None => {

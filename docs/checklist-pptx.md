@@ -4,11 +4,11 @@
 
 检查前用 create 或 apply 在本机生成文件，不要用改过扩展名的 zip 目录冒充。本机若 `PowerPoint.Application` 被 WPS 抢走，直接启动 `POWERPNT.EXE` 再挂 COM，不要走被抢的 ProgID。Office 16 的对象模型在 `mdiClass` 上。
 
-C、I、A、Pp、Pc、Psa、Pn、Pcm、Pm、Ps 各组由 `manual-check/office/cases/pptx-*.ps1` 自动判定，跑 `pwsh -File manual-check\office\run.ps1 -Case 'pptx-*'` 即可复现。O1 已放弃，与 xlsx / docx 相同。
+C、I、A、Pp、Pc、Psa、Pn、Pcm、Pm、Ps、Pt 各组由 `manual-check/office/cases/pptx-*.ps1` 自动判定，跑 `pwsh -File manual-check\office\run.ps1 -Case 'pptx-*'` 即可复现。O1 已放弃，与 xlsx / docx 相同。
 
 ## 本机结果（2026-09-28）
 
-Microsoft PowerPoint 16.0 已打开，C1、C3、C4、C5–C10、I1–I5、A1–A5、Pp1–Pp7、Pc1–Pc7、Psa1–Psa7、Pn1–Pn4、Pcm1–Pcm5、Pik1–Pik4、Pm1–Pm5、Ps1–Ps5 均 PASS。本机若装了 WPS，`PowerPoint.Application` 会被抢走，测试仍直接启动 `POWERPNT.EXE`，从 `mdiClass` 挂 COM。O1 已放弃。2026-09-27 补跑 `pptx-pictures.ps1`，Pp1–Pp7 通过。同日补跑 `pptx-create-pictures.ps1`，C5–C7 通过。同日补跑 `pptx-charts.ps1`，Pc1–Pc7 通过。同日补跑 `pptx-create-charts.ps1`，C8–C10 通过。同日补跑 `pptx-smartart.ps1`，Psa1–Psa7 通过。同日补跑 `pptx-notes.ps1`，Pn1–Pn4 通过。同日补跑 `pptx-comments.ps1`，Pcm1–Pcm5、Pik1–Pik4 通过。同日补跑 `pptx-docprops.ps1`，Pd1–Pd5 通过。同日补跑 `pptx-charts-remain.ps1`，Pr1–Pr3 通过。2026-09-28 补跑 `pptx-slides.ps1`，Pm1–Pm5 通过。同日补跑 `pptx-shapes.ps1`，Ps1–Ps5 通过。
+Microsoft PowerPoint 16.0 已打开，C1、C3、C4、C5–C10、I1–I5、A1–A5、Pp1–Pp7、Pc1–Pc7、Psa1–Psa7、Pn1–Pn4、Pcm1–Pcm5、Pik1–Pik4、Pm1–Pm5、Ps1–Ps5、Pt1–Pt6 均 PASS。本机若装了 WPS，`PowerPoint.Application` 会被抢走，测试仍直接启动 `POWERPNT.EXE`，从 `mdiClass` 挂 COM。O1 已放弃。2026-09-27 补跑 `pptx-pictures.ps1`，Pp1–Pp7 通过。同日补跑 `pptx-create-pictures.ps1`，C5–C7 通过。同日补跑 `pptx-charts.ps1`，Pc1–Pc7 通过。同日补跑 `pptx-create-charts.ps1`，C8–C10 通过。同日补跑 `pptx-smartart.ps1`，Psa1–Psa7 通过。同日补跑 `pptx-notes.ps1`，Pn1–Pn4 通过。同日补跑 `pptx-comments.ps1`，Pcm1–Pcm5、Pik1–Pik4 通过。同日补跑 `pptx-docprops.ps1`，Pd1–Pd5 通过。同日补跑 `pptx-charts-remain.ps1`，Pr1–Pr3 通过。2026-09-28 补跑 `pptx-slides.ps1`，Pm1–Pm5 通过。同日补跑 `pptx-shapes.ps1`，Ps1–Ps5 通过。同日补跑 `pptx-tables.ps1`，Pt1–Pt6 通过。
 
 | 序号 | 状态 | 结果 |
 | --- | --- | --- |
@@ -27,6 +27,7 @@ Microsoft PowerPoint 16.0 已打开，C1、C3、C4、C5–C10、I1–I5、A1–A
 | Pd1–Pd5 | ✅ | PowerPoint 16.0：`pptx-docprops.ps1`，5 PASS / 0 FAIL。根上 `props`、`creator=ooxp`；只改标题后面板标题是新字、公司名还在；自定义 `prop:部门`；删后名单空；形状 id 发 `setProps` 为 `InvalidId`。无 Repair |
 | Pm1–Pm5 | ✅ | PowerPoint 16.0：`pptx-slides.ps1`，5 PASS / 0 FAIL。两页名单与 `hidden=false`；`insertSlide` 后第三页是原第二页、新页无文本框；`moveSlide` 到最前；`setSlideHidden` 后 COM Hidden 为真；删最后一页 / 缺 `hidden` 为 `InvalidField` 且未写文件。无 Repair |
 | Ps1–Ps5 | ✅ | PowerPoint 16.0：`pptx-shapes.ps1`，5 PASS / 0 FAIL。`insertShape` 后 id 为 `slide:1/shape:4`；位置 72×108 磅、尺寸 144×72 磅、填充红；改字后旧框还在；删除后 COM 形状数为 2；另存样例插新框后旧框动画 Count 仍为 1；错 id / 缺成对 `cx` / 缺 `color` 为 `InvalidField` 且未写文件。无 Repair |
+| Pt1–Pt6 | ✅ | PowerPoint 16.0：`pptx-tables.ps1`，7 PASS / 0 FAIL。另存样例 id 为 `slide:1/table:4`；改格 COM 可见「改过的正文」；增行后 COM Rows=3；`insertTable` 后 id 为 `slide:1/table:4` 且 `stable`、COM 格可见「甲」；`deleteTable` 后 COM 表数为 0；形状 id 得 `InvalidId`，缺 `rows` / 最后一行得 `InvalidField` 且未写文件。无 Repair |
 | Pr1–Pr3 | ✅ | PowerPoint 16.0：`pptx-charts-remain.ps1`，3 PASS / 0 FAIL。趋势线 COM Count=1；改删趋势线；次轴 `AxisGroup=2`。无 Repair |
 | O1 | 🚫 | 领域层不做原样保存，与 xlsx 清单相同。零脏写回见 OPC 库测试。PowerPoint 另存 create 产物见 `pptx-O1-ppt-resave` |
 
@@ -191,6 +192,19 @@ Microsoft PowerPoint 16.0 已打开，C1、C3、C4、C5–C10、I1–I5、A1–A
 | Ps3 | 改字 | ✅ 对新框 `setShapeText` 后文字是请求值；旧框文字还在 |
 | Ps4 | 删除 | ✅ `deleteShape` 后该框消失；同页未删形状还在、`cNvPr/@id` 不变；无 Repair |
 | Ps5 | 动画仍绑 | ✅ 对 PowerPoint 另存样例只插新框、不删带动画的旧框；旧框动画还在；无 Repair。对形状 id 发 `insertShape`、缺成对 `cx` 或缺 `color` 得 `InvalidField` 且未写文件 |
+
+## 幻灯片表格
+
+DrawingML 表（`a:tbl` 包在 `p:graphicFrame` 里）。不要把表编进 `shapes` / `charts` / `pictures`。源文件：PowerPoint 亲手另存，第一页至少一张表。不要用库 `create` 产物当带表的唯一样例。脚本：`manual-check/office/cases/pptx-tables.ps1`。编号用 Pt（不要跟形状的 Ps、图的 Pp 混）。
+
+| 序号 | 检查 | 通过标准 |
+| --- | --- | --- |
+| Pt1 | inspect | ✅ 无 `tables` 时根与各页有 `tableCount`、没有名单；`tables: true` 时 id 为 `slide:…/table:…`，能看见单元格 `text` |
+| Pt2 | 改格 | ✅ `setTableCellText` 后目标格可见字是请求值，无 Repair |
+| Pt3 | 增行 | ✅ `insertRow` 后行数加 1，无 Repair |
+| Pt4 | 插入 | ✅ 对 create 产物 `insertTable` 后新表可见；inspect id 为 `slide:…/table:…` 且 `stable`；无 Repair |
+| Pt5 | 删除 | ✅ `deleteTable` 后该表消失；同页未删形状还在；无 Repair |
+| Pt6 | 拒错 | ✅ 对形状 id 发 `insertTable` 得 `InvalidId`；缺 `rows`、只剩一行时 `deleteRow` 得 `InvalidField`；均未写文件 |
 
 ## 原样保存（opc 验收）
 

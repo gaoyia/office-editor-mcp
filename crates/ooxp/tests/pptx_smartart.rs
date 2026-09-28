@@ -168,6 +168,7 @@ fn inspect_count_without_list() {
             "chartCount",
             "smartArtCount",
             "commentCount",
+            "tableCount",
             "props",
             "slides"
         ]

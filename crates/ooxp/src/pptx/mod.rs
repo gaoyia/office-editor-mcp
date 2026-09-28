@@ -11,6 +11,7 @@ mod request;
 pub(crate) mod shape;
 mod slides;
 mod smartart;
+mod table;
 
 pub use apply::apply;
 pub use chart::export_chart_data;

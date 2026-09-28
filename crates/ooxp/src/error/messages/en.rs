@@ -304,6 +304,22 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::InsertSmartArtNeedsSlide => {
                 "pptx insertSmartArt id must be slide:N".into()
             }
+            IdReason::SlideTablePrefix => "pptx table id must be slide:N/table:…".into(),
+            IdReason::SlideTableContainer => {
+                "Slide id must include /table:… (that id alone is not a table)".into()
+            }
+            IdReason::SlideTableIndexNotInt => {
+                "table:index must be followed by a positive integer".into()
+            }
+            IdReason::SlideTableIndexFromOne => "table:index starts at 1".into(),
+            IdReason::SlideTableRowForm => "Row id must be a table id plus /row:R, R starting at 1".into(),
+            IdReason::SlideTableCellForm => {
+                "Cell id must be a table id plus /r:R/c:C, R and C starting at 1".into()
+            }
+            IdReason::InsertTableNeedsSlide => "pptx insertTable id must be slide:N".into(),
+            IdReason::SetTableCellNeedsCell => {
+                "setTableCellText id must be a DrawingML table cell id".into()
+            }
             IdReason::OlePrefix => {
                 "OLE id must be a paragraph id plus /ole:…".into()
             }

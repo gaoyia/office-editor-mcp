@@ -13,6 +13,7 @@ use super::picture;
 use super::request::InspectScope;
 use super::shape;
 use super::smartart;
+use super::table;
 
 pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error> {
     let pkg = Package::open_bytes(bytes.to_vec())?;
@@ -25,12 +26,14 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     let want_smartarts = scope.as_ref().is_some_and(|s| s.smart_art);
     let want_notes = scope.as_ref().is_some_and(|s| s.notes);
     let want_comments = scope.as_ref().is_some_and(|s| s.comments);
+    let want_tables = scope.as_ref().is_some_and(|s| s.tables);
 
     let mut slide_json = Vec::new();
     let mut picture_count = 0usize;
     let mut chart_count = 0usize;
     let mut smart_art_count = 0usize;
     let mut comment_count = 0usize;
+    let mut table_count = 0usize;
     for s in &slides {
         let doc = xml::parse(pkg.get(&s.part)?)?;
         let host = format!("slide:{}", s.index);
@@ -69,6 +72,16 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
             None => comments::count_on_slide(&pkg, &s.part)?,
         };
         comment_count += n_comments;
+        let tables_list = if want_tables {
+            Some(table::collect_tables(&doc.root, s.index))
+        } else {
+            None
+        };
+        let n_tables = tables_list
+            .as_ref()
+            .map(|c| c.len())
+            .unwrap_or_else(|| table::count_tables(&doc.root));
+        table_count += n_tables;
         let mut obj = Map::new();
         obj.insert("id".into(), json!(host));
         obj.insert("index".into(), json!(s.index));
@@ -79,6 +92,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         obj.insert("chartCount".into(), json!(n_charts));
         obj.insert("smartArtCount".into(), json!(n_smartarts));
         obj.insert("commentCount".into(), json!(n_comments));
+        obj.insert("tableCount".into(), json!(n_tables));
         if want_pictures {
             obj.insert(
                 "pictures".into(),
@@ -90,6 +104,9 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         }
         if let Some(smartarts) = smartarts_list {
             obj.insert("smartArts".into(), Value::Array(smartarts));
+        }
+        if let Some(tables) = tables_list {
+            obj.insert("tables".into(), Value::Array(tables));
         }
         if want_notes {
             obj.insert(
@@ -131,6 +148,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         "chartCount": chart_count,
         "smartArtCount": smart_art_count,
         "commentCount": comment_count,
+        "tableCount": table_count,
         "props": crate::props::inspect(&pkg)?,
         "slides": slide_json,
     }))

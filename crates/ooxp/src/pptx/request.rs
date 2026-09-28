@@ -11,6 +11,7 @@ use super::chart;
 use super::comments;
 use super::picture;
 use super::smartart;
+use super::table;
 
 #[derive(Debug, Clone)]
 pub struct InspectScope {
@@ -21,6 +22,7 @@ pub struct InspectScope {
     pub smart_art: bool,
     pub notes: bool,
     pub comments: bool,
+    pub tables: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -425,6 +427,74 @@ pub struct SetSmartArtLayoutOp {
 }
 
 #[derive(Debug, Clone)]
+pub struct InsertTableOp {
+    pub slide: usize,
+    pub rows: usize,
+    pub cols: usize,
+    pub cells: Vec<Vec<String>>,
+    pub x: Option<i64>,
+    pub y: Option<i64>,
+    pub cx: Option<i64>,
+    pub cy: Option<i64>,
+}
+
+#[derive(Debug, Clone)]
+pub struct DeleteTableOp {
+    pub id: String,
+    pub target: table::TableTarget,
+}
+
+#[derive(Debug, Clone)]
+pub struct InsertRowOp {
+    pub id: String,
+    pub target: table::TableOrRow,
+}
+
+#[derive(Debug, Clone)]
+pub struct DeleteRowOp {
+    pub id: String,
+    pub table: table::TableTarget,
+    pub row: usize,
+}
+
+#[derive(Debug, Clone)]
+pub struct InsertColOp {
+    pub id: String,
+    pub target: table::TableTarget,
+    pub after: u32,
+}
+
+#[derive(Debug, Clone)]
+pub struct DeleteColOp {
+    pub id: String,
+    pub target: table::TableTarget,
+    pub col: u32,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetTableCellTextOp {
+    pub id: String,
+    pub target: table::CellTarget,
+    pub text: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetTablePosOp {
+    pub id: String,
+    pub target: table::TableTarget,
+    pub x: Option<i64>,
+    pub y: Option<i64>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetTableSizeOp {
+    pub id: String,
+    pub target: table::TableTarget,
+    pub cx: Option<i64>,
+    pub cy: Option<i64>,
+}
+
+#[derive(Debug, Clone)]
 pub enum PptxOp {
     SetShapeText(SetShapeTextOp),
     InsertShape(InsertShapeOp),
@@ -474,6 +544,15 @@ pub enum PptxOp {
     SetSmartArtColors(SetSmartArtColorsOp),
     SetSmartArtStyle(SetSmartArtStyleOp),
     SetSmartArtLayout(SetSmartArtLayoutOp),
+    InsertTable(InsertTableOp),
+    DeleteTable(DeleteTableOp),
+    InsertRow(InsertRowOp),
+    DeleteRow(DeleteRowOp),
+    InsertCol(InsertColOp),
+    DeleteCol(DeleteColOp),
+    SetTableCellText(SetTableCellTextOp),
+    SetTablePos(SetTablePosOp),
+    SetTableSize(SetTableSizeOp),
     InsertSlide(InsertSlideOp),
     DeleteSlide(DeleteSlideOp),
     MoveSlide(MoveSlideOp),
@@ -509,6 +588,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
             "smartArt",
             "notes",
             "comments",
+            "tables",
         ],
     )?;
     let pictures = parse_bool_field(obj.get("pictures"), "pictures")?;
@@ -516,6 +596,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
     let smart_art = parse_bool_field(obj.get("smartArt"), "smartArt")?;
     let notes = parse_bool_field(obj.get("notes"), "notes")?;
     let comments = parse_bool_field(obj.get("comments"), "comments")?;
+    let tables = parse_bool_field(obj.get("tables"), "tables")?;
     let slide = match obj.get("slide") {
         None => None,
         Some(s) => {
@@ -581,6 +662,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
         smart_art,
         notes,
         comments,
+        tables,
     }))
 }
 
@@ -678,6 +760,15 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<PptxOp>, Error> {
             "setSmartArtColors" => PptxOp::SetSmartArtColors(parse_set_smartart_colors(obj, i)?),
             "setSmartArtStyle" => PptxOp::SetSmartArtStyle(parse_set_smartart_style(obj, i)?),
             "setSmartArtLayout" => PptxOp::SetSmartArtLayout(parse_set_smartart_layout(obj, i)?),
+            "insertTable" => PptxOp::InsertTable(parse_insert_table(obj, i)?),
+            "deleteTable" => PptxOp::DeleteTable(parse_delete_table(obj, i)?),
+            "insertRow" => PptxOp::InsertRow(parse_insert_row(obj, i)?),
+            "deleteRow" => PptxOp::DeleteRow(parse_delete_row(obj, i)?),
+            "insertCol" => PptxOp::InsertCol(parse_insert_col(obj, i)?),
+            "deleteCol" => PptxOp::DeleteCol(parse_delete_col(obj, i)?),
+            "setTableCellText" => PptxOp::SetTableCellText(parse_set_table_cell_text(obj, i)?),
+            "setTablePos" => PptxOp::SetTablePos(parse_set_table_pos(obj, i)?),
+            "setTableSize" => PptxOp::SetTableSize(parse_set_table_size(obj, i)?),
             "insertSlide" => PptxOp::InsertSlide(parse_insert_slide(obj, i)?),
             "deleteSlide" => PptxOp::DeleteSlide(parse_delete_slide(obj, i)?),
             "moveSlide" => PptxOp::MoveSlide(parse_move_slide(obj, i)?),
@@ -738,12 +829,6 @@ fn is_foreign_op(op_name: &str) -> bool {
             | "setTextBoxDirection"
             | "insertPara"
             | "deletePara"
-            | "insertTable"
-            | "deleteTable"
-            | "insertRow"
-            | "deleteRow"
-            | "insertCol"
-            | "deleteCol"
             | "mergeCells"
             | "splitCells"
             | "acceptRevision"
@@ -2097,6 +2182,177 @@ fn parse_set_smartart_layout(
     Ok(SetSmartArtLayoutOp { id, target, layout })
 }
 
+fn parse_insert_table(obj: &Map<String, Value>, i: usize) -> Result<InsertTableOp, Error> {
+    deny_keys(
+        obj,
+        i,
+        &["op", "id", "rows", "cols", "cells", "x", "y", "cx", "cy"],
+    )?;
+    let id = require_id(obj, i)?;
+    let slide = table::parse_insert_slide_id(&id, i)?;
+    let rows = table::parse_dim(
+        obj.get("rows"),
+        &format!("ops[{i}].rows"),
+        "rows",
+        1,
+        table::max_rows(),
+    )?;
+    let cols = table::parse_dim(
+        obj.get("cols"),
+        &format!("ops[{i}].cols"),
+        "cols",
+        1,
+        table::max_cols(),
+    )?;
+    let cells = table::parse_cells(obj.get("cells"), &format!("ops[{i}].cells"), rows, cols)?;
+    let x = parse_off_field(obj.get("x"), i, "x")?;
+    let y = parse_off_field(obj.get("y"), i, "y")?;
+    if x.is_some() != y.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "insertTable".into(),
+                field: "x and y together".into(),
+            },
+            format!("ops[{i}]"),
+        ));
+    }
+    let cx = parse_emu_field(obj.get("cx"), i, "cx")?;
+    let cy = parse_emu_field(obj.get("cy"), i, "cy")?;
+    if cx.is_some() != cy.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "insertTable".into(),
+                field: "cx and cy together".into(),
+            },
+            format!("ops[{i}]"),
+        ));
+    }
+    Ok(InsertTableOp {
+        slide,
+        rows,
+        cols,
+        cells,
+        x,
+        y,
+        cx,
+        cy,
+    })
+}
+
+fn parse_delete_table(obj: &Map<String, Value>, i: usize) -> Result<DeleteTableOp, Error> {
+    deny_keys(obj, i, &["op", "id"])?;
+    let id = require_id(obj, i)?;
+    let target = table::parse_table_id(
+        &id,
+        &format!("ops[{i}].id"),
+        IdReason::DeleteTableNeedsTable,
+    )?;
+    Ok(DeleteTableOp { id, target })
+}
+
+fn parse_insert_row(obj: &Map<String, Value>, i: usize) -> Result<InsertRowOp, Error> {
+    deny_keys(obj, i, &["op", "id"])?;
+    let id = require_id(obj, i)?;
+    let target = table::parse_table_or_row(&id, &format!("ops[{i}].id"))?;
+    Ok(InsertRowOp { id, target })
+}
+
+fn parse_delete_row(obj: &Map<String, Value>, i: usize) -> Result<DeleteRowOp, Error> {
+    deny_keys(obj, i, &["op", "id"])?;
+    let id = require_id(obj, i)?;
+    let (table, row) = table::parse_row_id(&id, &format!("ops[{i}].id"))?;
+    Ok(DeleteRowOp { id, table, row })
+}
+
+fn parse_insert_col(obj: &Map<String, Value>, i: usize) -> Result<InsertColOp, Error> {
+    deny_keys(obj, i, &["op", "id", "after"])?;
+    let id = require_id(obj, i)?;
+    let target = table::parse_table_id(&id, &format!("ops[{i}].id"), IdReason::NeedTableId)?;
+    let after = table::parse_after(obj.get("after"), i)?;
+    Ok(InsertColOp { id, target, after })
+}
+
+fn parse_delete_col(obj: &Map<String, Value>, i: usize) -> Result<DeleteColOp, Error> {
+    deny_keys(obj, i, &["op", "id", "col"])?;
+    let id = require_id(obj, i)?;
+    let target = table::parse_table_id(&id, &format!("ops[{i}].id"), IdReason::NeedTableId)?;
+    let col = table::parse_dim(
+        obj.get("col"),
+        &format!("ops[{i}].col"),
+        "col",
+        1,
+        i64::MAX as u64,
+    )? as u32;
+    Ok(DeleteColOp { id, target, col })
+}
+
+fn parse_set_table_cell_text(
+    obj: &Map<String, Value>,
+    i: usize,
+) -> Result<SetTableCellTextOp, Error> {
+    deny_keys(obj, i, &["op", "id", "text"])?;
+    let id = require_id(obj, i)?;
+    let target = table::parse_cell_id(&id, &format!("ops[{i}].id"))?;
+    let text = match obj.get("text") {
+        Some(Value::String(s)) => s.clone(),
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "text".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].text"),
+            ));
+        }
+        None => {
+            return Err(Error::with_path(
+                ErrorKind::OpRequiresField {
+                    op: "setTableCellText".into(),
+                    field: "text".into(),
+                },
+                format!("ops[{i}].text"),
+            ));
+        }
+    };
+    Ok(SetTableCellTextOp { id, target, text })
+}
+
+fn parse_set_table_pos(obj: &Map<String, Value>, i: usize) -> Result<SetTablePosOp, Error> {
+    deny_keys(obj, i, &["op", "id", "x", "y"])?;
+    let id = require_id(obj, i)?;
+    let target = table::parse_table_id(&id, &format!("ops[{i}].id"), IdReason::NeedTableId)?;
+    let x = parse_off_field(obj.get("x"), i, "x")?;
+    let y = parse_off_field(obj.get("y"), i, "y")?;
+    if x.is_none() && y.is_none() {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "setTablePos".into(),
+                field: "x or y".into(),
+            },
+            format!("ops[{i}]"),
+        ));
+    }
+    Ok(SetTablePosOp { id, target, x, y })
+}
+
+fn parse_set_table_size(obj: &Map<String, Value>, i: usize) -> Result<SetTableSizeOp, Error> {
+    deny_keys(obj, i, &["op", "id", "cx", "cy"])?;
+    let id = require_id(obj, i)?;
+    let target = table::parse_table_id(&id, &format!("ops[{i}].id"), IdReason::NeedTableId)?;
+    let cx = parse_emu_field(obj.get("cx"), i, "cx")?;
+    let cy = parse_emu_field(obj.get("cy"), i, "cy")?;
+    if cx.is_none() && cy.is_none() {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "setTableSize".into(),
+                field: "cx or cy".into(),
+            },
+            format!("ops[{i}]"),
+        ));
+    }
+    Ok(SetTableSizeOp { id, target, cx, cy })
+}
+
 fn parse_chart_type_field(v: Option<&Value>, path: &str) -> Result<ChartType, Error> {
     match v {
         Some(Value::String(s)) => ChartType::parse(s)
@@ -2450,6 +2706,74 @@ pub(crate) fn parse_create_smartart(
         slide,
         layout,
         points,
+        x,
+        y,
+        cx,
+        cy,
+    })
+}
+
+pub(crate) fn parse_create_table(
+    v: &Value,
+    prefix: &str,
+    slide: usize,
+) -> Result<InsertTableOp, Error> {
+    let obj = v.as_object().ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::WrongType {
+                field: "tables".into(),
+                expected: TypeName::Object,
+            },
+            prefix.to_string(),
+        )
+    })?;
+    deny_keys_at(
+        obj,
+        prefix,
+        &["rows", "cols", "cells", "x", "y", "cx", "cy"],
+    )?;
+    let rows = table::parse_dim(
+        obj.get("rows"),
+        &format!("{prefix}.rows"),
+        "rows",
+        1,
+        table::max_rows(),
+    )?;
+    let cols = table::parse_dim(
+        obj.get("cols"),
+        &format!("{prefix}.cols"),
+        "cols",
+        1,
+        table::max_cols(),
+    )?;
+    let cells = table::parse_cells(obj.get("cells"), &format!("{prefix}.cells"), rows, cols)?;
+    let x = parse_off_at(obj.get("x"), &format!("{prefix}.x"), "x")?;
+    let y = parse_off_at(obj.get("y"), &format!("{prefix}.y"), "y")?;
+    if x.is_some() != y.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "create".into(),
+                field: "x and y together".into(),
+            },
+            prefix.to_string(),
+        ));
+    }
+    let cx = parse_emu_at(obj.get("cx"), &format!("{prefix}.cx"), "cx")?;
+    let cy = parse_emu_at(obj.get("cy"), &format!("{prefix}.cy"), "cy")?;
+    if cx.is_some() != cy.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "create".into(),
+                field: "cx and cy together".into(),
+            },
+            prefix.to_string(),
+        ));
+    }
+    Ok(InsertTableOp {
+        slide,
+        rows,
+        cols,
+        cells,
         x,
         y,
         cx,

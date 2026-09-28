@@ -10,8 +10,8 @@ use crate::xml;
 
 use super::{
     chart, picture,
-    request::{self, InsertChartOp, InsertPictureOp, InsertSmartArtOp},
-    smartart, CT_APP, CT_CORE, CT_PRESENTATION, CT_PRES_PROPS, CT_SLIDE, CT_SLIDE_LAYOUT,
+    request::{self, InsertChartOp, InsertPictureOp, InsertSmartArtOp, InsertTableOp},
+    smartart, table, CT_APP, CT_CORE, CT_PRESENTATION, CT_PRES_PROPS, CT_SLIDE, CT_SLIDE_LAYOUT,
     CT_SLIDE_MASTER, CT_THEME, DML_NS, PML_NS, REL_APP, REL_CORE, REL_NS, REL_OFFICE_DOCUMENT,
     REL_PRES_PROPS, REL_SLIDE, REL_SLIDE_LAYOUT, REL_SLIDE_MASTER, REL_THEME,
 };
@@ -21,6 +21,7 @@ struct NewSlide {
     pictures: Vec<InsertPictureOp>,
     charts: Vec<InsertChartOp>,
     smart_arts: Vec<InsertSmartArtOp>,
+    tables: Vec<InsertTableOp>,
 }
 
 pub fn create(presentation: &Value) -> Result<Vec<u8>, Error> {
@@ -69,6 +70,7 @@ pub fn create(presentation: &Value) -> Result<Vec<u8>, Error> {
             pictures: Vec::new(),
             charts: Vec::new(),
             smart_arts: Vec::new(),
+            tables: Vec::new(),
         });
     }
     for s in &mut slides {
@@ -193,6 +195,7 @@ pub fn create(presentation: &Value) -> Result<Vec<u8>, Error> {
     attach_pictures(&mut pkg, &slides)?;
     attach_charts(&mut pkg, &slides)?;
     attach_smartarts(&mut pkg, &slides)?;
+    attach_tables(&mut pkg, &slides)?;
 
     pkg.set("/docProps/core.xml", core_xml().into_bytes())?;
     pkg.set("/docProps/app.xml", app_xml(slides.len()).into_bytes())?;
@@ -211,7 +214,10 @@ fn parse_slide(v: &Value, i: usize) -> Result<NewSlide, Error> {
         )
     })?;
     for k in obj.keys() {
-        if !matches!(k.as_str(), "shapes" | "pictures" | "charts" | "smartArts") {
+        if !matches!(
+            k.as_str(),
+            "shapes" | "pictures" | "charts" | "smartArts" | "tables"
+        ) {
             return Err(Error::with_path(
                 ErrorKind::UnknownField { field: k.clone() },
                 format!("presentation.slides[{i}].{k}"),
@@ -236,11 +242,13 @@ fn parse_slide(v: &Value, i: usize) -> Result<NewSlide, Error> {
     let pictures = parse_pictures(obj.get("pictures"), i)?;
     let charts = parse_charts(obj.get("charts"), i)?;
     let smart_arts = parse_smartarts(obj.get("smartArts"), i)?;
+    let tables = parse_tables(obj.get("tables"), i)?;
     Ok(NewSlide {
         shapes,
         pictures,
         charts,
         smart_arts,
+        tables,
     })
 }
 
@@ -319,6 +327,31 @@ fn parse_smartarts(v: Option<&Value>, slide_i: usize) -> Result<Vec<InsertSmartA
     Ok(out)
 }
 
+fn parse_tables(v: Option<&Value>, slide_i: usize) -> Result<Vec<InsertTableOp>, Error> {
+    let Some(v) = v else {
+        return Ok(Vec::new());
+    };
+    let prefix = format!("presentation.slides[{slide_i}].tables");
+    let arr = v.as_array().ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::WrongType {
+                field: "tables".into(),
+                expected: TypeName::Array,
+            },
+            prefix.clone(),
+        )
+    })?;
+    let mut out = Vec::new();
+    for (j, item) in arr.iter().enumerate() {
+        out.push(request::parse_create_table(
+            item,
+            &format!("{prefix}[{j}]"),
+            slide_i + 1,
+        )?);
+    }
+    Ok(out)
+}
+
 fn attach_pictures(pkg: &mut Package, slides: &[NewSlide]) -> Result<(), Error> {
     if slides.iter().all(|s| s.pictures.is_empty()) {
         return Ok(());
@@ -380,6 +413,26 @@ fn attach_smartarts(pkg: &mut Package, slides: &[NewSlide]) -> Result<(), Error>
         let mut doc = xml::parse(pkg.get(&part)?)?;
         for (j, op) in slide.smart_arts.iter().enumerate() {
             smartart::insert_smartart(pkg, &mut doc, &part, &pres.root, op, j)?;
+        }
+        pkg.set(&part, doc.to_bytes()?)?;
+    }
+    Ok(())
+}
+
+fn attach_tables(pkg: &mut Package, slides: &[NewSlide]) -> Result<(), Error> {
+    if slides.iter().all(|s| s.tables.is_empty()) {
+        return Ok(());
+    }
+    let pres = xml::parse(pkg.get("/ppt/presentation.xml")?)?;
+    for (i, slide) in slides.iter().enumerate() {
+        if slide.tables.is_empty() {
+            continue;
+        }
+        let n = i + 1;
+        let part = format!("/ppt/slides/slide{n}.xml");
+        let mut doc = xml::parse(pkg.get(&part)?)?;
+        for (j, op) in slide.tables.iter().enumerate() {
+            table::insert_table(&mut doc, &pres.root, op, j)?;
         }
         pkg.set(&part, doc.to_bytes()?)?;
     }

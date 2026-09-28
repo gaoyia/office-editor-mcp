@@ -12,6 +12,7 @@ use super::request::PptxOp;
 use super::shape;
 use super::slides;
 use super::smartart;
+use super::table;
 
 pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
     let mut pkg = Package::open_bytes(bytes.to_vec())?;
@@ -629,6 +630,123 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                 })?;
                 let mut doc = xml::parse(pkg.get(&meta.part)?)?;
                 smartart::apply_layout(&mut pkg, &mut doc, &meta.part, op, i)?;
+                pkg.set(&meta.part, doc.to_bytes()?)?;
+            }
+            PptxOp::InsertTable(op) => {
+                let meta = slides.get(op.slide - 1).ok_or_else(|| {
+                    Error::with_path(
+                        ErrorKind::SlideNotFound { n: op.slide as u32 },
+                        format!("ops[{i}].id"),
+                    )
+                })?;
+                let mut doc = xml::parse(pkg.get(&meta.part)?)?;
+                table::insert_table(&mut doc, &pres.root, op, i)?;
+                pkg.set(&meta.part, doc.to_bytes()?)?;
+            }
+            PptxOp::DeleteTable(op) => {
+                let meta = slides.get(op.target.slide - 1).ok_or_else(|| {
+                    Error::with_path(
+                        ErrorKind::SlideNotFound {
+                            n: op.target.slide as u32,
+                        },
+                        format!("ops[{i}].id"),
+                    )
+                })?;
+                let mut doc = xml::parse(pkg.get(&meta.part)?)?;
+                table::delete_table(&mut doc, op, i)?;
+                pkg.set(&meta.part, doc.to_bytes()?)?;
+            }
+            PptxOp::InsertRow(op) => {
+                let slide = match &op.target {
+                    table::TableOrRow::Table(t) => t.slide,
+                    table::TableOrRow::Row { table, .. } => table.slide,
+                };
+                let meta = slides.get(slide - 1).ok_or_else(|| {
+                    Error::with_path(
+                        ErrorKind::SlideNotFound { n: slide as u32 },
+                        format!("ops[{i}].id"),
+                    )
+                })?;
+                let mut doc = xml::parse(pkg.get(&meta.part)?)?;
+                table::insert_row(&mut doc, op, i)?;
+                pkg.set(&meta.part, doc.to_bytes()?)?;
+            }
+            PptxOp::DeleteRow(op) => {
+                let meta = slides.get(op.table.slide - 1).ok_or_else(|| {
+                    Error::with_path(
+                        ErrorKind::SlideNotFound {
+                            n: op.table.slide as u32,
+                        },
+                        format!("ops[{i}].id"),
+                    )
+                })?;
+                let mut doc = xml::parse(pkg.get(&meta.part)?)?;
+                table::delete_row(&mut doc, op, i)?;
+                pkg.set(&meta.part, doc.to_bytes()?)?;
+            }
+            PptxOp::InsertCol(op) => {
+                let meta = slides.get(op.target.slide - 1).ok_or_else(|| {
+                    Error::with_path(
+                        ErrorKind::SlideNotFound {
+                            n: op.target.slide as u32,
+                        },
+                        format!("ops[{i}].id"),
+                    )
+                })?;
+                let mut doc = xml::parse(pkg.get(&meta.part)?)?;
+                table::insert_col(&mut doc, op, i)?;
+                pkg.set(&meta.part, doc.to_bytes()?)?;
+            }
+            PptxOp::DeleteCol(op) => {
+                let meta = slides.get(op.target.slide - 1).ok_or_else(|| {
+                    Error::with_path(
+                        ErrorKind::SlideNotFound {
+                            n: op.target.slide as u32,
+                        },
+                        format!("ops[{i}].id"),
+                    )
+                })?;
+                let mut doc = xml::parse(pkg.get(&meta.part)?)?;
+                table::delete_col(&mut doc, op, i)?;
+                pkg.set(&meta.part, doc.to_bytes()?)?;
+            }
+            PptxOp::SetTableCellText(op) => {
+                let meta = slides.get(op.target.table.slide - 1).ok_or_else(|| {
+                    Error::with_path(
+                        ErrorKind::SlideNotFound {
+                            n: op.target.table.slide as u32,
+                        },
+                        format!("ops[{i}].id"),
+                    )
+                })?;
+                let mut doc = xml::parse(pkg.get(&meta.part)?)?;
+                table::set_cell_text(&mut doc, op, i)?;
+                pkg.set(&meta.part, doc.to_bytes()?)?;
+            }
+            PptxOp::SetTablePos(op) => {
+                let meta = slides.get(op.target.slide - 1).ok_or_else(|| {
+                    Error::with_path(
+                        ErrorKind::SlideNotFound {
+                            n: op.target.slide as u32,
+                        },
+                        format!("ops[{i}].id"),
+                    )
+                })?;
+                let mut doc = xml::parse(pkg.get(&meta.part)?)?;
+                table::apply_pos(&mut doc, op, i)?;
+                pkg.set(&meta.part, doc.to_bytes()?)?;
+            }
+            PptxOp::SetTableSize(op) => {
+                let meta = slides.get(op.target.slide - 1).ok_or_else(|| {
+                    Error::with_path(
+                        ErrorKind::SlideNotFound {
+                            n: op.target.slide as u32,
+                        },
+                        format!("ops[{i}].id"),
+                    )
+                })?;
+                let mut doc = xml::parse(pkg.get(&meta.part)?)?;
+                table::apply_size(&mut doc, op, i)?;
                 pkg.set(&meta.part, doc.to_bytes()?)?;
             }
             PptxOp::InsertSlide(op) => {

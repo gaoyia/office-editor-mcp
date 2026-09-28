@@ -169,6 +169,7 @@ fn inspect_comment_count_without_list() {
             "chartCount",
             "smartArtCount",
             "commentCount",
+            "tableCount",
             "props",
             "slides"
         ]

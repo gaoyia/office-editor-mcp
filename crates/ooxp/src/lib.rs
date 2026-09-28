@@ -524,6 +524,7 @@ mod tests {
         assert_eq!(tree["chartCount"], 0);
         assert_eq!(tree["smartArtCount"], 0);
         assert_eq!(tree["commentCount"], 0);
+        assert_eq!(tree["tableCount"], 0);
         assert_eq!(tree["slides"][0]["pictureCount"], 0);
         assert_eq!(tree["slides"][0]["chartCount"], 0);
         assert_eq!(tree["slides"][0]["smartArtCount"], 0);
@@ -1020,6 +1021,7 @@ mod tests {
                 "chartCount",
                 "smartArtCount",
                 "commentCount",
+                "tableCount",
                 "props",
                 "slides"
             ]
@@ -1036,6 +1038,7 @@ mod tests {
                 "chartCount",
                 "smartArtCount",
                 "commentCount",
+                "tableCount",
                 "truncated",
                 "shapes"
             ]
@@ -1051,7 +1054,8 @@ mod tests {
                 "pictureCount",
                 "chartCount",
                 "smartArtCount",
-                "commentCount"
+                "commentCount",
+                "tableCount"
             ]
         );
         assert_eq!(

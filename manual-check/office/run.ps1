@@ -93,6 +93,7 @@ $order = @(
     'pptx-apply'
     'pptx-slides'
     'pptx-shapes'
+    'pptx-tables'
     'pptx-pictures'
     'pptx-charts'
     'pptx-charts-remain'
