@@ -13,6 +13,7 @@ use super::media;
 use super::notes;
 use super::picture;
 use super::request::PptxOp;
+use super::section;
 use super::shape;
 use super::slides;
 use super::smartart;
@@ -350,6 +351,19 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                 let mut doc = xml::parse(pkg.get(&part)?)?;
                 media::delete(&mut pkg, &mut doc, &part, op, i)?;
                 pkg.set(&part, doc.to_bytes()?)?;
+            }
+            PptxOp::InsertSlideSection(op) => {
+                section::insert(&mut pkg, &pres_part, &mut pres, op, i)?;
+            }
+            PptxOp::SetSlideSectionName(op) => {
+                section::set_name(&mut pkg, &pres_part, &mut pres, op, i)?;
+            }
+            PptxOp::DeleteSlideSection(op) => {
+                section::delete(&mut pkg, &pres_part, &mut pres, op, i)?;
+            }
+            PptxOp::SetSlideSection(op) => {
+                section::set_slide(&mut pkg, &pres_part, &mut pres, op, i)?;
+                slides = shape::list_slides(&pkg, &pres_part, &pres.root)?;
             }
             PptxOp::InsertChart(op) => {
                 let part = ensure_notes_or_slide(

@@ -102,6 +102,7 @@ $order = @(
     'pptx-hyperlinks'
     'pptx-pictures'
     'pptx-media'
+    'pptx-sections'
     'pptx-charts'
     'pptx-charts-remain'
     'pptx-smartart'

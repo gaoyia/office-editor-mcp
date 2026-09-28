@@ -12,6 +12,7 @@ use super::comments;
 use super::hyperlink;
 use super::media;
 use super::picture;
+use super::section;
 use super::shape;
 use super::smartart;
 use super::table;
@@ -32,6 +33,7 @@ pub struct InspectScope {
     pub timing: bool,
     pub masters: bool,
     pub handout: bool,
+    pub sections: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -271,6 +273,30 @@ pub struct InsertMediaOp {
 pub struct DeleteMediaOp {
     pub id: String,
     pub target: media::MediaTarget,
+}
+
+#[derive(Debug, Clone)]
+pub struct InsertSlideSectionOp {
+    pub name: String,
+    pub start: Option<usize>,
+    pub after: Option<usize>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetSlideSectionNameOp {
+    pub section: usize,
+    pub name: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct DeleteSlideSectionOp {
+    pub section: usize,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetSlideSectionOp {
+    pub slide: usize,
+    pub section: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -600,6 +626,10 @@ pub enum PptxOp {
     InsertVideo(InsertMediaOp),
     InsertAudio(InsertMediaOp),
     DeleteMedia(DeleteMediaOp),
+    InsertSlideSection(InsertSlideSectionOp),
+    SetSlideSectionName(SetSlideSectionNameOp),
+    DeleteSlideSection(DeleteSlideSectionOp),
+    SetSlideSection(SetSlideSectionOp),
     InsertChart(InsertChartOp),
     DeleteChart(DeleteChartOp),
     SetChartTitle(SetChartTitleOp),
@@ -685,6 +715,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
             "timing",
             "masters",
             "handout",
+            "sections",
         ],
     )?;
     let pictures = parse_bool_field(obj.get("pictures"), "pictures")?;
@@ -698,6 +729,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
     let timing = parse_bool_field(obj.get("timing"), "timing")?;
     let masters = parse_bool_field(obj.get("masters"), "masters")?;
     let handout = parse_bool_field(obj.get("handout"), "handout")?;
+    let sections = parse_bool_field(obj.get("sections"), "sections")?;
     let slide = match obj.get("slide") {
         None => None,
         Some(s) => {
@@ -769,6 +801,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
         timing,
         masters,
         handout,
+        sections,
     }))
 }
 
@@ -836,6 +869,12 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<PptxOp>, Error> {
             "insertVideo" => PptxOp::InsertVideo(parse_insert_media(obj, i, "insertVideo")?),
             "insertAudio" => PptxOp::InsertAudio(parse_insert_media(obj, i, "insertAudio")?),
             "deleteMedia" => PptxOp::DeleteMedia(parse_delete_media(obj, i)?),
+            "insertSlideSection" => PptxOp::InsertSlideSection(parse_insert_slide_section(obj, i)?),
+            "setSlideSectionName" => {
+                PptxOp::SetSlideSectionName(parse_set_slide_section_name(obj, i)?)
+            }
+            "deleteSlideSection" => PptxOp::DeleteSlideSection(parse_delete_slide_section(obj, i)?),
+            "setSlideSection" => PptxOp::SetSlideSection(parse_set_slide_section(obj, i)?),
             "insertChart" => PptxOp::InsertChart(parse_insert_chart(obj, i)?),
             "deleteChart" => PptxOp::DeleteChart(parse_delete_chart(obj, i)?),
             "setChartTitle" => PptxOp::SetChartTitle(parse_set_chart_title(obj, i)?),
@@ -2038,6 +2077,156 @@ fn parse_delete_media(obj: &Map<String, Value>, i: usize) -> Result<DeleteMediaO
     let id = require_id(obj, i)?;
     let target = media::parse_media_id(&id, &format!("ops[{i}].id"))?;
     Ok(DeleteMediaOp { id, target })
+}
+
+fn parse_insert_slide_section(
+    obj: &Map<String, Value>,
+    i: usize,
+) -> Result<InsertSlideSectionOp, Error> {
+    deny_keys(obj, i, &["op", "id", "name", "start", "after"])?;
+    let id = require_id(obj, i)?;
+    if id != "pptx:presentation" {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::InsertSlideSectionNeedsPresentation,
+            },
+            format!("ops[{i}].id"),
+        ));
+    }
+    if obj.contains_key("start") && obj.contains_key("after") {
+        return Err(Error::with_path(
+            ErrorKind::MutuallyExclusive {
+                a: "start".into(),
+                b: "after".into(),
+            },
+            format!("ops[{i}]"),
+        ));
+    }
+    Ok(InsertSlideSectionOp {
+        name: require_name(obj, i)?,
+        start: parse_optional_slide_id_field(obj, i, "start")?,
+        after: parse_optional_section_id_field(obj, i, "after")?,
+    })
+}
+
+fn parse_set_slide_section_name(
+    obj: &Map<String, Value>,
+    i: usize,
+) -> Result<SetSlideSectionNameOp, Error> {
+    deny_keys(obj, i, &["op", "id", "name"])?;
+    let id = require_id(obj, i)?;
+    Ok(SetSlideSectionNameOp {
+        section: section::parse_section_id(&id, &format!("ops[{i}].id"))?,
+        name: require_name(obj, i)?,
+    })
+}
+
+fn parse_delete_slide_section(
+    obj: &Map<String, Value>,
+    i: usize,
+) -> Result<DeleteSlideSectionOp, Error> {
+    deny_keys(obj, i, &["op", "id"])?;
+    let id = require_id(obj, i)?;
+    Ok(DeleteSlideSectionOp {
+        section: section::parse_section_id(&id, &format!("ops[{i}].id"))?,
+    })
+}
+
+fn parse_set_slide_section(obj: &Map<String, Value>, i: usize) -> Result<SetSlideSectionOp, Error> {
+    deny_keys(obj, i, &["op", "id", "section"])?;
+    let id = require_id(obj, i)?;
+    let slide = if id
+        .strip_prefix("slide:")
+        .is_some_and(|rest| !rest.is_empty() && !rest.contains('/'))
+    {
+        parse_slide_only_id(&id, i, "id")?
+    } else {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::SetSlideSectionNeedsSlide,
+            },
+            format!("ops[{i}].id"),
+        ));
+    };
+    let section = match obj.get("section") {
+        Some(Value::String(s)) => section::parse_section_id(s, &format!("ops[{i}].section"))?,
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "section".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].section"),
+            ));
+        }
+        None => {
+            return Err(Error::with_path(
+                ErrorKind::MissingField {
+                    field: "section".into(),
+                },
+                format!("ops[{i}].section"),
+            ));
+        }
+    };
+    Ok(SetSlideSectionOp { slide, section })
+}
+
+fn require_name(obj: &Map<String, Value>, i: usize) -> Result<String, Error> {
+    match obj.get("name") {
+        Some(Value::String(s)) => Ok(s.clone()),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "name".into(),
+                expected: TypeName::String,
+            },
+            format!("ops[{i}].name"),
+        )),
+        None => Err(Error::with_path(
+            ErrorKind::MissingField {
+                field: "name".into(),
+            },
+            format!("ops[{i}].name"),
+        )),
+    }
+}
+
+fn parse_optional_slide_id_field(
+    obj: &Map<String, Value>,
+    i: usize,
+    field: &str,
+) -> Result<Option<usize>, Error> {
+    match obj.get(field) {
+        None => Ok(None),
+        Some(Value::String(s)) => Ok(Some(parse_slide_only_id(s, i, field)?)),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::String,
+            },
+            format!("ops[{i}].{field}"),
+        )),
+    }
+}
+
+fn parse_optional_section_id_field(
+    obj: &Map<String, Value>,
+    i: usize,
+    field: &str,
+) -> Result<Option<usize>, Error> {
+    match obj.get(field) {
+        None => Ok(None),
+        Some(Value::String(s)) => Ok(Some(section::parse_section_id(
+            s,
+            &format!("ops[{i}].{field}"),
+        )?)),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::String,
+            },
+            format!("ops[{i}].{field}"),
+        )),
+    }
 }
 
 fn parse_insert_chart(obj: &Map<String, Value>, i: usize) -> Result<InsertChartOp, Error> {

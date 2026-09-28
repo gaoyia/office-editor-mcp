@@ -208,6 +208,9 @@
         "media": {
           "type": "boolean"
         },
+        "sections": {
+          "type": "boolean"
+        },
         "revisions": {
           "type": "boolean"
         },
@@ -967,6 +970,18 @@
               },
               {
                 "$ref": "pptx.schema.json#/$defs/deleteMediaOp"
+              },
+              {
+                "$ref": "pptx.schema.json#/$defs/insertSlideSectionOp"
+              },
+              {
+                "$ref": "pptx.schema.json#/$defs/setSlideSectionNameOp"
+              },
+              {
+                "$ref": "pptx.schema.json#/$defs/deleteSlideSectionOp"
+              },
+              {
+                "$ref": "pptx.schema.json#/$defs/setSlideSectionOp"
               },
               {
                 "$ref": "#/$defs/setPropsOp"

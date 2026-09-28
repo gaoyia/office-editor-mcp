@@ -235,6 +235,12 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::InsertSlideNeedsPresentation => {
                 "insertSlide id must be pptx:presentation".into()
             }
+            IdReason::InsertSlideSectionNeedsPresentation => {
+                "insertSlideSection id must be pptx:presentation".into()
+            }
+            IdReason::SetSlideSectionNeedsSlide => {
+                "setSlideSection id must be slide:N".into()
+            }
             IdReason::SlideOpNeedsSlide => {
                 "id must be slide:N".into()
             }
@@ -690,6 +696,8 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             "file is not a recognized media clip (insertVideo accepts MP4, insertAudio accepts WAV)"
                 .into()
         }
+        ErrorKind::NeedsPptxSectionList => "the presentation has no slide section list".into(),
+        ErrorKind::SlideNotInPptxSection => "that slide is not in any section".into(),
         ErrorKind::SetCellWorksheetOnly => "setCell only applies to worksheets".into(),
         ErrorKind::InspectWorksheetOnly => "Cells can only be read from worksheets".into(),
         ErrorKind::InsertPictureWorksheetOnly => "insertPicture only applies to worksheets".into(),

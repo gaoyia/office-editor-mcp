@@ -15,6 +15,7 @@ use super::media;
 use super::notes;
 use super::picture;
 use super::request::InspectScope;
+use super::section;
 use super::shape;
 use super::smartart;
 use super::table;
@@ -38,6 +39,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     let want_timing = scope.as_ref().is_some_and(|s| s.timing);
     let want_masters = scope.as_ref().is_some_and(|s| s.masters);
     let want_handout = scope.as_ref().is_some_and(|s| s.handout);
+    let want_sections = scope.as_ref().is_some_and(|s| s.sections);
     let catalog = master::catalog(&pkg, &pres_part, &pres.root)?;
 
     let mut slide_json = Vec::new();
@@ -225,12 +227,19 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         "hasHandout".into(),
         json!(handout::has_handout(&pkg, &pres_part)?),
     );
+    root.insert("sectionCount".into(), json!(section::count(&pres.root)));
     root.insert("props".into(), crate::props::inspect(&pkg)?);
     if want_masters {
         root.insert("masters".into(), master::masters_json(&pkg, &catalog)?);
     }
     if want_handout {
         root.insert("handout".into(), handout::handout_json(&pkg, &pres_part)?);
+    }
+    if want_sections {
+        root.insert(
+            "sections".into(),
+            Value::Array(section::list_json(&pres.root)),
+        );
     }
     root.insert("slides".into(), Value::Array(slide_json));
     Ok(Value::Object(root))

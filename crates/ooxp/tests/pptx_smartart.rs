@@ -175,6 +175,7 @@ fn inspect_count_without_list() {
             "animCount",
             "masterCount",
             "hasHandout",
+            "sectionCount",
             "props",
             "slides"
         ]

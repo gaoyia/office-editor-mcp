@@ -186,6 +186,7 @@ fn create_has_zero_anim_count_without_list() {
             "animCount",
             "masterCount",
             "hasHandout",
+            "sectionCount",
             "props",
             "slides"
         ]

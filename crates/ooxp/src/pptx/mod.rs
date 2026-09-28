@@ -12,6 +12,7 @@ mod media;
 mod notes;
 mod picture;
 mod request;
+mod section;
 pub(crate) mod shape;
 mod slides;
 mod smartart;

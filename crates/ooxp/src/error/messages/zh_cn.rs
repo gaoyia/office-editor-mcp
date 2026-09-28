@@ -210,6 +210,12 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::InsertSlideNeedsPresentation => {
                 "insertSlide 的 id 必须是 pptx:presentation".into()
             }
+            IdReason::InsertSlideSectionNeedsPresentation => {
+                "insertSlideSection 的 id 必须是 pptx:presentation".into()
+            }
+            IdReason::SetSlideSectionNeedsSlide => {
+                "setSlideSection 的 id 必须是 slide:N".into()
+            }
             IdReason::SlideOpNeedsSlide => {
                 "id 必须是 slide:N".into()
             }
@@ -604,6 +610,12 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::InvalidImageFile => "file 不是本库认的位图（PNG、JPEG、GIF 或 BMP）".into(),
         ErrorKind::InvalidMediaFile => {
             "file 不是本库认的媒体（insertVideo 认 MP4，insertAudio 认 WAV）".into()
+        }
+        ErrorKind::NeedsPptxSectionList => {
+            "文件还没有幻灯片节名单".into()
+        }
+        ErrorKind::SlideNotInPptxSection => {
+            "该页不在任何幻灯片节里".into()
         }
         ErrorKind::SetCellWorksheetOnly => "只能对工作表 setCell".into(),
         ErrorKind::InspectWorksheetOnly => "只能对工作表读单元格".into(),

@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "deck.pptx",
+  "ops": [
+    { "op": "insertSlideSection", "id": "pptx:presentation", "name": "开场" },
+    { "op": "insertSlideSection", "id": "pptx:presentation", "name": "内容" },
+    { "op": "setSlideSection", "id": "slide:2", "section": "section:2" },
+    { "op": "setSlideSectionName", "id": "section:2", "name": "正文" }
+  ]
+}

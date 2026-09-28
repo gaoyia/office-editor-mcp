@@ -1028,6 +1028,7 @@ mod tests {
                 "animCount",
                 "masterCount",
                 "hasHandout",
+                "sectionCount",
                 "props",
                 "slides"
             ]

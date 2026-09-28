@@ -152,6 +152,10 @@ pub(crate) enum IdReason {
     InsertSheetNeedsWorkbook,
     /// insertSlide 必须用 pptx:presentation
     InsertSlideNeedsPresentation,
+    /// insertSlideSection 必须用 pptx:presentation
+    InsertSlideSectionNeedsPresentation,
+    /// setSlideSection 必须用 slide:N
+    SetSlideSectionNeedsSlide,
     /// deleteSlide / moveSlide / setSlideHidden / setTransition / setSlideLayout 必须用 slide:N
     SlideOpNeedsSlide,
     /// 母版或占位符 id 形态不对
@@ -525,6 +529,8 @@ define_error_kinds! {
     InvalidPicAlign => vec![Self::InvalidPicAlign],
     InvalidImageFile => vec![Self::InvalidImageFile],
     InvalidMediaFile => vec![Self::InvalidMediaFile],
+    NeedsPptxSectionList => vec![Self::NeedsPptxSectionList],
+    SlideNotInPptxSection => vec![Self::SlideNotInPptxSection],
     PictureNotFound { id: String } => vec![Self::PictureNotFound { id: "header:default:1/pic:1".into() }],
     MediaNotFound { id: String } => vec![Self::MediaNotFound { id: "slide:1/video:3".into() }],
     TextBoxNotFound { id: String } => vec![Self::TextBoxNotFound { id: "para:3F2A1B00/txbx:8".into() }],
@@ -894,6 +900,8 @@ impl IdReason {
             Self::InsertChartSheetNeedsWorkbook,
             Self::InsertSheetNeedsWorkbook,
             Self::InsertSlideNeedsPresentation,
+            Self::InsertSlideSectionNeedsPresentation,
+            Self::SetSlideSectionNeedsSlide,
             Self::SlideOpNeedsSlide,
             Self::MasterForm,
             Self::LayoutForm,
@@ -1135,6 +1143,8 @@ impl ErrorKind {
             | Self::InvalidPicAlign
             | Self::InvalidImageFile
             | Self::InvalidMediaFile
+            | Self::NeedsPptxSectionList
+            | Self::SlideNotInPptxSection
             | Self::CannotLinkFirstSection
             | Self::HfTypeInactive { .. }
             | Self::HfInsertWhileLinked

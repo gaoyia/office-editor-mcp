@@ -8,6 +8,7 @@ use crate::xml::{self, Document, Element, Node};
 
 use super::picture;
 use super::request::{DeleteSlideOp, InsertSlideOp, MoveSlideOp, SetSlideHiddenOp};
+use super::section;
 use super::shape::{self, SlideMeta};
 use super::{CT_SLIDE, DML_NS, PML_NS, REL_NS, REL_SLIDE, REL_SLIDE_LAYOUT};
 
@@ -63,13 +64,15 @@ pub fn insert(
         .with_attr("id", sid.to_string())
         .with_attr("r:id", rid);
     insert_sld_id(lst, insert_at, el);
-    place_sid_in_sections(
+    section::place_sid(
         &mut pres.root,
         sid,
         if op.after.is_some() {
-            neighbor_sid.map(Place::After).unwrap_or(Place::Append)
+            neighbor_sid
+                .map(section::Place::After)
+                .unwrap_or(section::Place::Append)
         } else {
-            Place::Append
+            section::Place::Append
         },
     );
     let mut cts = ContentTypes::from_package(pkg)?;
@@ -111,7 +114,7 @@ pub fn delete(
     let mut pres_rels = Relationships::from_package(pkg, pres_part)?;
     pres_rels.remove_by_id(&rid);
     pres_rels.write_to(pkg, pres_part)?;
-    remove_sid_from_sections(&mut pres.root, sid);
+    section::remove_sid(&mut pres.root, sid);
     if let Some(cust) = find_mut_by_local(&mut pres.root, "custShowLst") {
         remove_sld_refs(cust, &sid.to_string());
     }
@@ -184,10 +187,12 @@ pub fn move_slide(
         lst.children.insert(insert_at, node);
     }
     let place = match op.after {
-        None => Place::Front,
-        Some(_) => after_sid.map(Place::After).unwrap_or(Place::Front),
+        None => section::Place::Front,
+        Some(_) => after_sid
+            .map(section::Place::After)
+            .unwrap_or(section::Place::Front),
     };
-    place_sid_in_sections(&mut pres.root, sid, place);
+    section::place_sid(&mut pres.root, sid, place);
     pkg.set(pres_part, pres.to_bytes()?)?;
     Ok(())
 }
@@ -410,108 +415,6 @@ fn slide_st_id(pres_root: &Element, index: usize) -> Option<u32> {
         .filter(|e| e.local_name() == "sldId")
         .nth(index.checked_sub(1)?)
         .and_then(|e| e.attr("id")?.parse().ok())
-}
-
-#[derive(Clone, Copy)]
-enum Place {
-    Front,
-    After(u32),
-    Append,
-}
-
-fn place_sid_in_sections(root: &mut Element, sid: u32, place: Place) {
-    let Some(lst) = find_mut_by_local(root, "sectionLst") else {
-        return;
-    };
-    remove_sid_from_section_lst(lst, sid);
-    let sections: Vec<usize> = lst
-        .children
-        .iter()
-        .enumerate()
-        .filter_map(|(i, n)| match n {
-            Node::Element(e) if e.local_name() == "section" => Some(i),
-            _ => None,
-        })
-        .collect();
-    if sections.is_empty() {
-        return;
-    }
-    let target_section = match place {
-        Place::Front => sections[0],
-        Place::Append => *sections.last().unwrap(),
-        Place::After(after) => sections
-            .iter()
-            .copied()
-            .find(|&i| match &lst.children[i] {
-                Node::Element(sec) => section_has_sid(sec, after),
-                _ => false,
-            })
-            .unwrap_or(*sections.last().unwrap()),
-    };
-    let Node::Element(sec) = &mut lst.children[target_section] else {
-        return;
-    };
-    let sld_lst = ensure_section_sld_lst(sec);
-    let tag = sld_lst
-        .element_children()
-        .find(|e| e.local_name() == "sldId")
-        .map(|e| e.name.clone())
-        .unwrap_or_else(|| "p14:sldId".into());
-    let el = Element::new(tag).with_attr("id", sid.to_string());
-    match place {
-        Place::Front => insert_sld_id(sld_lst, 0, el),
-        Place::Append => sld_lst.children.push(Node::Element(el)),
-        Place::After(after) => {
-            let pos = sld_lst
-                .element_children()
-                .filter(|e| e.local_name() == "sldId")
-                .position(|e| e.attr("id").and_then(|s| s.parse::<u32>().ok()) == Some(after));
-            if let Some(pos) = pos {
-                insert_sld_id(sld_lst, pos + 1, el);
-            } else {
-                sld_lst.children.push(Node::Element(el));
-            }
-        }
-    }
-}
-
-fn remove_sid_from_sections(root: &mut Element, sid: u32) {
-    if let Some(lst) = find_mut_by_local(root, "sectionLst") {
-        remove_sid_from_section_lst(lst, sid);
-    }
-}
-
-fn remove_sid_from_section_lst(lst: &mut Element, sid: u32) {
-    for child in lst.element_children_mut() {
-        if child.local_name() != "section" {
-            continue;
-        }
-        if let Some(sld_lst) = child.child_by_local_mut("sldIdLst") {
-            sld_lst.children.retain(|n| match n {
-                Node::Element(e) => {
-                    !(e.local_name() == "sldId"
-                        && e.attr("id").and_then(|s| s.parse::<u32>().ok()) == Some(sid))
-                }
-                _ => true,
-            });
-        }
-    }
-}
-
-fn section_has_sid(sec: &Element, sid: u32) -> bool {
-    let Some(lst) = sec.child_by_local("sldIdLst") else {
-        return false;
-    };
-    lst.element_children()
-        .filter(|e| e.local_name() == "sldId")
-        .any(|e| e.attr("id").and_then(|s| s.parse::<u32>().ok()) == Some(sid))
-}
-
-fn ensure_section_sld_lst(sec: &mut Element) -> &mut Element {
-    if sec.child_by_local("sldIdLst").is_none() {
-        sec.push_element(Element::new("p14:sldIdLst"));
-    }
-    sec.child_by_local_mut("sldIdLst").expect("刚插入 sldIdLst")
 }
 
 fn remove_sld_refs(el: &mut Element, sid: &str) {

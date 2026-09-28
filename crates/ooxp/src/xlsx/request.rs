@@ -1839,7 +1839,11 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<XlsxOp>, Error> {
             | "setTableSize"
             | "insertVideo"
             | "insertAudio"
-            | "deleteMedia" => {
+            | "deleteMedia"
+            | "insertSlideSection"
+            | "setSlideSectionName"
+            | "deleteSlideSection"
+            | "setSlideSection" => {
                 return Err(Error::with_path(
                     ErrorKind::OpNotForFormat {
                         format: "xlsx".into(),
