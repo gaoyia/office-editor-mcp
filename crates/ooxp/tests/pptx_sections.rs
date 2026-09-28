@@ -349,24 +349,35 @@ fn rejects_bad_id_and_start_with_after() {
 }
 
 #[test]
-fn create_rejects_presentation_sections() {
-    let bad = tmp("create-sec").with_extension("pptx");
-    let err = run(
+fn create_writes_presentation_sections() {
+    let path = tmp("create-sec").with_extension("pptx");
+    run(
         &json!({
             "schemaVersion": 1,
             "action": "create",
-            "path": bad.to_string_lossy(),
+            "path": path.to_string_lossy(),
             "presentation": {
-                "sections": [],
-                "slides": [{ "shapes": [{ "text": "甲" }] }]
+                "sections": [
+                    { "name": "开场", "start": 1 },
+                    { "name": "内容", "start": 2 }
+                ],
+                "slides": [
+                    { "shapes": [{ "text": "甲" }] },
+                    { "shapes": [{ "text": "乙" }] }
+                ]
             }
         })
         .to_string(),
         None,
     )
-    .unwrap_err();
-    assert_eq!(err.code(), ErrorCode::InvalidField);
-    assert!(!bad.exists());
+    .unwrap();
+    let tree = inspect_scope(&path, Some(json!({ "sections": true })));
+    assert_eq!(tree["sectionCount"], 2);
+    let secs = tree["sections"].as_array().unwrap();
+    assert_eq!(secs[0]["name"], "开场");
+    assert_eq!(secs[0]["slides"], json!(["slide:1"]));
+    assert_eq!(secs[1]["name"], "内容");
+    assert_eq!(secs[1]["slides"], json!(["slide:2"]));
 }
 
 #[test]

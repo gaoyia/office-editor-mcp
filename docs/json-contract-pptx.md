@@ -348,14 +348,21 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
 | `path` | 输出路径。已存在则覆盖。省略时必须由调用方另给落盘路径，命令行用 `--output` |
 | `presentation.slides` | 页列表。可空；空则生成一页，页上有一个空文本框，否则 PowerPoint 可能打不开 |
 | `presentation.props` | 可选。文件属性，字段与 [json-contract.md](json-contract.md#setprops) 的 `setProps` / `setCustomProp` 相同 |
+| `presentation.sections` | 可选。幻灯片节列表。省略或空数组则不写 `p14:sectionLst` |
 | `slides[].shapes` | 该页文本框列表。可空；空则生成一个空文本框 |
 | `slides[].pictures` | 可选。该页上的图列表。省略或空数组则不写 `p:pic` |
+| `slides[].videos` | 可选。该页上的内嵌视频。省略或空数组则不写视频 `p:pic` |
+| `slides[].audios` | 可选。该页上的内嵌音频。省略或空数组则不写音频 `p:pic` |
 | `slides[].charts` | 可选。该页上的图表列表。省略或空数组则不写图表 `p:graphicFrame` |
 | `slides[].smartArts` | 可选。该页上的 SmartArt 列表。省略或空数组则不写图示 `p:graphicFrame` |
 | `slides[].tables` | 可选。该页上的 DrawingML 表列表。省略或空数组则不写表 `p:graphicFrame` |
 | `slides[].notes` | 可选。该页演讲者备注可见纯文本，字符串，可空。省略则不写 notesSlide。出现（含空串）则按 `setNotesText` 写该页 `body` 占位符 |
 | `slides[].comments` | 可选。该页现代批注列表。省略或空数组则不写批注 |
+| `slides[].transition` | 可选。该页切换对象。省略则该页没有 `<p:transition>` |
+| `slides[].anims` | 可选。该页预设进入效果。省略或空数组则不写 `<p:timing>` |
 | `shapes[].text` | 可见文本，可空字符串。省略当作 `""`。`\n` 写成 `a:br` |
+| `shapes[].url` / `shapes[].file` / `shapes[].slide` | 可选。形状级超链接，规则与 pptx `insertHyperlink` 相同，三者必须恰好一个。`slide` 是 `slides[]` 的 1 起下标，不是 `slide:{n}` 字符串 |
+| `shapes[].tooltip` | 可选。形状级超链接提示。没有 `url` / `file` / `slide` 却给了此项报 `InvalidField` |
 | `pictures[].file` | 本地路径，与 `insertPicture` 相同，按文件头认 PNG / JPEG / GIF / BMP。缺此字段报 `MissingField` |
 | `pictures[].x` / `pictures[].y` | 可选，EMU，非负整数。必须成对出现或成对省略；只给一个时报 `InvalidField`。缺则放到该页空白处，规则与 pptx `insertPicture` 相同 |
 | `pictures[].cx` / `pictures[].cy` | 可选，EMU，正整数。都省则按图片像素以 96 dpi 换算。只给一个时报 `InvalidField` |
@@ -374,12 +381,23 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
 | `comments[].initials` | 可选。省略当作 `"oo"` |
 | `comments[].date` | 可选。`xsd:dateTime`。省略则写入当前 UTC（无尾 `Z`） |
 | `comments[].x` / `comments[].y` | 可选，EMU，非负整数。必须成对出现或成对省略；只给一个时报 `InvalidField`。缺则放到该页空白处，规则与 pptx `insertComment` 相同 |
+| `videos[].file` | 本地路径，与 `insertVideo` 相同，按文件头认 MP4。缺此字段报 `MissingField` |
+| `videos[].x` / `videos[].y` / `videos[].cx` / `videos[].cy` | 可选。规则与 pptx `insertVideo` 相同 |
+| `audios[].file` | 本地路径，与 `insertAudio` 相同，按文件头认 WAV。缺此字段报 `MissingField` |
+| `audios[].x` / `audios[].y` / `audios[].cx` / `audios[].cy` | 可选。规则与 pptx `insertAudio` 相同 |
+| `transition.type` | 必须。效果名，规则与 `setTransition` 相同。`null`、空串或 `other` 报 `InvalidField`（create 没有「清除」） |
+| `transition.dur` / `advClick` / `advTm` / `dir` / `invX` / `invY` | 可选。规则与 `setTransition` 相同。不要 `op` / `id` |
+| `anims[].type` | 必须。本期只认 `fade` |
+| `anims[].trigger` | 可选。`click` / `with` / `after`，省略为 `click` |
+| `anims[].shape` / `picture` / `video` / `audio` / `table` / `chart` / `smartArt` | 绑定目标，1 起的序号，且恰好一个。对应该页 create 数组；`shapes` 缺省补的空框算第 1 个。序号对不上报 `InvalidField`。不要 `op` / `id` |
+| `sections[].name` | 必须。显示名，字符串，允许空串。缺省报 `MissingField` |
+| `sections[].start` | 必须。`slides[]` 的 1 起下标，不是 `slide:{n}`。必须严格递增。超出页数报 `InvalidField` |
 
-带图示例见 `docs/examples/pptx-create-pictures.json`。带图表示例见 `docs/examples/pptx-create-charts.json`。带 SmartArt 示例见 `docs/examples/pptx-create-smartart.json`。带表示例见 `docs/examples/pptx-create-tables.json`。带备注与批注示例见 `docs/examples/pptx-create-notes-comments.json`。`kind` / `wrap` / `from` / `to` / `anchor` / `dataFrom` 以及 xlsx 偏移字段出现报 `InvalidField`。`comments[]` 上出现 `op` / `id` / `start` / `end` / `replies` / `ink` 报未知字段。create 不写回复、不写墨迹、不写 ECMA-376 §19.4 旧式批注。
+带图示例见 `docs/examples/pptx-create-pictures.json`。带图表示例见 `docs/examples/pptx-create-charts.json`。带 SmartArt 示例见 `docs/examples/pptx-create-smartart.json`。带表示例见 `docs/examples/pptx-create-tables.json`。带备注与批注示例见 `docs/examples/pptx-create-notes-comments.json`。节、链、媒体、切换与动画合在一起的示例见 `docs/examples/pptx-create-remain.json`。`kind` / `wrap` / `from` / `to` / `anchor` / `dataFrom` 以及 xlsx 偏移字段出现报 `InvalidField`。`comments[]` 上出现 `op` / `id` / `start` / `end` / `replies` / `ink` 报未知字段。create 不写回复、不写墨迹、不写 ECMA-376 §19.4 旧式批注。`shapes[]` 上出现 `text` / `url` / `file` / `slide` / `tooltip` 以外的键报未知字段。`text` / `anchor` / `location` / `ref` / `display` 出现在形状超链接上（除可见 `text` 外）报未知字段。`url`、`file`、`slide` 不是恰好一个报 `InvalidField`。空串报 `InvalidField`。`slide` 不是正整数报 `InvalidField`。跳到本页报 `InvalidField`。目标页超出 `slides[]` 报 `InvalidField`。
 
 `workbook`、`document`、`presentation` 三者必须恰好出现一个。xlsx 路径必须用 `workbook`，docx 路径必须用 `document`，pptx 路径必须用 `presentation`，对不上报 `InvalidField`。
 
-create 写出 Transitional 最小包，见 [opc.md](opc.md)。必须带 theme、slideMaster、slideLayout、presentation、各页 slide、presProps，不能只写 ECMA 示例里那个仅含 `notesSz` 的 presentation。幻灯片尺寸用 16:9（`sldSz` 为 `cx="12192000"` `cy="6858000"`）。不要生成动画、切换、讲义。切换请用 `setTransition`，动画请用 `insertAnim`，不要在 create 的 `slides[]` 上写 `transition` 或 `timing`。给了 `slides[].pictures` 时按 `insertPicture` 同一套规则写 `/ppt/media/…`、该页 `.rels` 与 `p:pic`。给了 `slides[].charts` 时按 `insertChart` 同一套规则写 `/ppt/charts/…`、embedding 与图表 `p:graphicFrame`。给了 `slides[].smartArts` 时按 `insertSmartArt` 同一套规则写 `/ppt/diagrams/…` 与图示 `p:graphicFrame`。给了 `slides[].tables` 时按 `insertTable` 同一套规则写表 `p:graphicFrame`（`a:tbl`）。给了 `slides[].notes` 时按 `setNotesText` 同一套规则写该页演讲者备注：没有 notesMaster 则新建，再写 notesSlide。给了 `slides[].comments` 时按 `insertComment` 同一套规则写该页现代批注（`p188:cmLst`、`/ppt/authors.xml`）。先写该页 `shapes`，再按数组顺序写 `pictures`，再写 `charts`，再写 `smartArts`，再写 `tables`，再写 `notes`，再按数组顺序写 `comments`。`p:cNvPr/@id` 取该页已有全部 `cNvPr` 的最大整数加 1，至少为 2。`presentation` 根上或 `shapes[]` 上出现 `pictures` / `charts` / `smartArts` / `tables` / `notes` / `comments` / `masters` / `handout` / `hyperlinks` / `sections` / `customShows` / `oleObjects` 报 `InvalidField`。`slides[]` 上出现 `hyperlinks` 报未知字段。create 本期不写超链接。create 本期不写幻灯片节。create 本期不写自定义放映。`slides[]` 上出现 `oleObjects` 报未知字段。create 本期不写 OLE。create 仍只写一份 `type="blank"`、名为「空白」的版式，不按 JSON 生成多份母版。给了 `presentation.props` 时按 `setProps` / `setCustomProp` 同一套规则写 core / app / custom；省略则仍写空的 `dc:title` 与 `dc:creator` 为 `ooxp`，不写 custom 部件。
+create 写出 Transitional 最小包，见 [opc.md](opc.md)。必须带 theme、slideMaster、slideLayout、presentation、各页 slide、presProps，不能只写 ECMA 示例里那个仅含 `notesSz` 的 presentation。幻灯片尺寸用 16:9（`sldSz` 为 `cx="12192000"` `cy="6858000"`）。不要生成讲义。不要在 `slides[]` 上写整棵 `timing` 树。给了 `slides[].pictures` 时按 `insertPicture` 同一套规则写 `/ppt/media/…`、该页 `.rels` 与 `p:pic`。给了 `slides[].videos` 时按 `insertVideo` 同一套规则写媒体与视频 `p:pic`。给了 `slides[].audios` 时按 `insertAudio` 同一套规则写媒体与音频 `p:pic`。给了 `slides[].charts` 时按 `insertChart` 同一套规则写 `/ppt/charts/…`、embedding 与图表 `p:graphicFrame`。给了 `slides[].smartArts` 时按 `insertSmartArt` 同一套规则写 `/ppt/diagrams/…` 与图示 `p:graphicFrame`。给了 `slides[].tables` 时按 `insertTable` 同一套规则写表 `p:graphicFrame`（`a:tbl`）。给了 `slides[].notes` 时按 `setNotesText` 同一套规则写该页演讲者备注：没有 notesMaster 则新建，再写 notesSlide。给了 `slides[].comments` 时按 `insertComment` 同一套规则写该页现代批注（`p188:cmLst`、`/ppt/authors.xml`）。给了形状上的 `url` / `file` / `slide` 时按 `insertHyperlink` 同一套规则写 `a:hlinkClick`。给了 `slides[].transition` 时按 `setTransition` 同一套规则写 `<p:transition>`。给了 `slides[].anims` 时按 `insertAnim` 同一套规则写预设进入淡入。给了 `presentation.sections` 时按 `insertSlideSection` 同一套规则写 `p14:sectionLst`：先写第一项（`start` 为 1 则包住全部页；大于 1 则前面的页进空名节），再按数组顺序用 `start` 拆后续节。先写该页 `shapes`，再按数组顺序写 `pictures`，再写 `videos`，再写 `audios`，再写 `charts`，再写 `smartArts`，再写 `tables`，再写 `notes`，再按数组顺序写 `comments`，再写形状超链接，再写 `transition`，再按数组顺序写 `anims`。全部页写完后再写 `sections`。`p:cNvPr/@id` 取该页已有全部 `cNvPr` 的最大整数加 1，至少为 2。`presentation` 根上出现 `pictures` / `charts` / `smartArts` / `tables` / `notes` / `comments` / `videos` / `audios` / `anims` / `transition` / `masters` / `handout` / `hyperlinks` / `customShows` / `oleObjects` 报 `InvalidField`。`shapes[]` 上出现 `pictures` / `charts` / `smartArts` / `tables` / `notes` / `comments` / `videos` / `audios` / `anims` / `transition` / `masters` / `handout` / `hyperlinks` / `sections` / `customShows` / `oleObjects` 报 `InvalidField`。`slides[]` 上出现 `hyperlinks` 报未知字段（链写在 `shapes[]` 上，不另开页级名单）。`slides[]` 上出现 `timing` 报未知字段。create 本期不写自定义放映。`slides[]` 上出现 `oleObjects` 报未知字段。create 本期不写 OLE。create 仍只写一份 `type="blank"`、名为「空白」的版式，不按 JSON 生成多份母版。给了 `presentation.props` 时按 `setProps` / `setCustomProp` 同一套规则写 core / app / custom；省略则仍写空的 `dc:title` 与 `dc:creator` 为 `ooxp`，不写 custom 部件。
 
 每个文本框写成带 `p:txBody` 的 `p:sp`，`p:cNvPr/@id` 从 `2` 起在该页内递增（`1` 留给 `spTree`）。随后 inspect 得到的 id 都是 `slide:{n}/shape:{id}`，`stable` 为 `true`。形状纵向错开，避免叠在同一位置。颜色用 RGB，不依赖主题色语义。
 

@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "action": "create",
+  "path": "deck.pptx",
+  "format": "pptx",
+  "presentation": {
+    "sections": [
+      { "name": "开场", "start": 1 },
+      { "name": "内容", "start": 2 }
+    ],
+    "slides": [
+      {
+        "shapes": [
+          { "text": "标题", "url": "https://example.com/" }
+        ],
+        "transition": { "type": "fade" },
+        "anims": [{ "type": "fade", "shape": 1 }]
+      },
+      {
+        "shapes": [{ "text": "第二页" }],
+        "videos": [{ "file": "clip.mp4" }],
+        "audios": [{ "file": "beep.wav" }]
+      }
+    ]
+  }
+}

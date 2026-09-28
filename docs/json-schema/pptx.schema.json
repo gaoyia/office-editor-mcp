@@ -19,6 +19,12 @@
         },
         "props": {
           "$ref": "request.schema.json#/$defs/createProps"
+        },
+        "sections": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/pptxSectionCreate"
+          }
         }
       }
     },
@@ -63,6 +69,27 @@
           "type": "array",
           "items": {
             "$ref": "#/$defs/pptxCommentCreate"
+          }
+        },
+        "videos": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/pptxMediaCreate"
+          }
+        },
+        "audios": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/pptxMediaCreate"
+          }
+        },
+        "transition": {
+          "$ref": "#/$defs/pptxTransitionCreate"
+        },
+        "anims": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/pptxAnimCreate"
           }
         }
       }
@@ -256,6 +283,163 @@
       "properties": {
         "text": {
           "type": "string"
+        },
+        "url": {
+          "type": "string",
+          "minLength": 1
+        },
+        "file": {
+          "type": "string",
+          "minLength": 1
+        },
+        "slide": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "tooltip": {
+          "type": "string"
+        }
+      }
+    },
+    "pptxMediaCreate": {
+      "type": "object",
+      "required": [
+        "file"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "file": {
+          "type": "string",
+          "minLength": 1
+        },
+        "x": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "y": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "cx": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "cy": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "pptxTransitionCreate": {
+      "type": "object",
+      "required": [
+        "type"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "type": "string",
+          "minLength": 1
+        },
+        "dur": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 60000
+        },
+        "advClick": {
+          "type": "boolean"
+        },
+        "advTm": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1,
+          "maximum": 86400000
+        },
+        "dir": {
+          "type": "string",
+          "minLength": 1
+        },
+        "invX": {
+          "type": "boolean"
+        },
+        "invY": {
+          "type": "boolean"
+        }
+      }
+    },
+    "pptxAnimCreate": {
+      "type": "object",
+      "required": [
+        "type"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "fade"
+        },
+        "trigger": {
+          "type": "string",
+          "enum": [
+            "click",
+            "with",
+            "after"
+          ]
+        },
+        "shape": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "picture": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "video": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "audio": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "table": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "chart": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "smartArt": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "oneOf": [
+        { "required": ["shape"] },
+        { "required": ["picture"] },
+        { "required": ["video"] },
+        { "required": ["audio"] },
+        { "required": ["table"] },
+        { "required": ["chart"] },
+        { "required": ["smartArt"] }
+      ]
+    },
+    "pptxSectionCreate": {
+      "type": "object",
+      "required": [
+        "name",
+        "start"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "start": {
+          "type": "integer",
+          "minimum": 1
         }
       }
     },

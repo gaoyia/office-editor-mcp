@@ -375,15 +375,15 @@ fn wrong_ids_and_types() {
 }
 
 #[test]
-fn create_rejects_transition_field() {
-    let path = tmp("create-tn");
+fn create_rejects_null_transition_type() {
+    let path = tmp("create-tn-null");
     let err = run(
         &json!({
             "schemaVersion": 1,
             "action": "create",
             "path": path.to_string_lossy(),
             "presentation": {
-                "slides": [{ "shapes": [{ "text": "a" }], "transition": { "type": "fade" } }]
+                "slides": [{ "shapes": [{ "text": "a" }], "transition": { "type": null } }]
             }
         })
         .to_string(),

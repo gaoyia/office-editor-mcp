@@ -314,6 +314,38 @@ function Ensure-PptxCreateNotesComments([switch]$Force) {
     return $path
 }
 
+# 两页：第一节「开场」、第二节「内容」；第一页带 url、淡入切换与进入淡入；第二页带视频和音频。
+function Ensure-PptxCreateRemain([switch]$Force) {
+    $path = Get-OutPath 'pptx-create-remain.pptx'
+    if ((Test-Path $path) -and -not $Force) { return $path }
+    $mp4 = (Ensure-OoxpMp4).Replace('\', '/')
+    $wav = (Ensure-OoxpWav).Replace('\', '/')
+    $req = @{
+        schemaVersion = 1; action = 'create'
+        path = $path.Replace('\', '/'); format = 'pptx'
+        presentation = @{
+            sections = @(
+                @{ name = '开场'; start = 1 }
+                @{ name = '内容'; start = 2 }
+            )
+            slides = @(
+                @{
+                    shapes = @(@{ text = '标题'; url = 'https://example.com/' })
+                    transition = @{ type = 'fade' }
+                    anims = @(@{ type = 'fade'; shape = 1 })
+                }
+                @{
+                    shapes = @(@{ text = '第二页' })
+                    videos = @(@{ file = $mp4 })
+                    audios = @(@{ file = $wav })
+                }
+            )
+        }
+    }
+    Invoke-OoxpRequest $req 'pptx-create-remain' | Out-Null
+    return $path
+}
+
 # apply 的源文件要由 Excel 亲手存出来，不能拿 ooxp 自己的产物冒充，
 # 否则等于自己造自己读，测不到真实文件的写法。
 function Ensure-XlsxExcelSource([switch]$Force) {

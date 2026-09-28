@@ -359,6 +359,35 @@ pub struct InsertMediaOp {
 }
 
 #[derive(Debug, Clone)]
+pub struct CreateHyperlink {
+    pub target: PptxLinkKind,
+    pub tooltip: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum CreateAnimHost {
+    Shape(usize),
+    Picture(usize),
+    Video(usize),
+    Audio(usize),
+    Table(usize),
+    Chart(usize),
+    SmartArt(usize),
+}
+
+#[derive(Debug, Clone)]
+pub struct CreateAnim {
+    pub trigger: String,
+    pub host: CreateAnimHost,
+}
+
+#[derive(Debug, Clone)]
+pub struct CreateSection {
+    pub name: String,
+    pub start: usize,
+}
+
+#[derive(Debug, Clone)]
 pub struct DeleteMediaOp {
     pub id: String,
     pub target: media::MediaTarget,
@@ -4768,6 +4797,577 @@ pub(crate) fn parse_create_comment(
         x,
         y,
     })
+}
+
+pub(crate) fn parse_create_media(
+    v: &Value,
+    prefix: &str,
+    slide: usize,
+) -> Result<InsertMediaOp, Error> {
+    let obj = v.as_object().ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::WrongType {
+                field: "file".into(),
+                expected: TypeName::Object,
+            },
+            prefix.to_string(),
+        )
+    })?;
+    deny_keys_at(obj, prefix, &["file", "x", "y", "cx", "cy"])?;
+    let file = match obj.get("file") {
+        Some(Value::String(s)) if !s.is_empty() => s.clone(),
+        Some(Value::String(_)) | None => {
+            return Err(Error::with_path(
+                ErrorKind::MissingField {
+                    field: "file".into(),
+                },
+                format!("{prefix}.file"),
+            ));
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "file".into(),
+                    expected: TypeName::NonEmptyString,
+                },
+                format!("{prefix}.file"),
+            ));
+        }
+    };
+    let x = parse_off_at(obj.get("x"), &format!("{prefix}.x"), "x")?;
+    let y = parse_off_at(obj.get("y"), &format!("{prefix}.y"), "y")?;
+    if x.is_some() != y.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "create".into(),
+                field: "x and y together".into(),
+            },
+            prefix.to_string(),
+        ));
+    }
+    let cx = parse_emu_at(obj.get("cx"), &format!("{prefix}.cx"), "cx")?;
+    let cy = parse_emu_at(obj.get("cy"), &format!("{prefix}.cy"), "cy")?;
+    if cx.is_some() != cy.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "create".into(),
+                field: "cx and cy together".into(),
+            },
+            prefix.to_string(),
+        ));
+    }
+    Ok(InsertMediaOp {
+        slide,
+        file,
+        x,
+        y,
+        cx,
+        cy,
+    })
+}
+
+pub(crate) fn parse_create_shape(
+    v: &Value,
+    prefix: &str,
+) -> Result<(String, Option<CreateHyperlink>), Error> {
+    let obj = v.as_object().ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::WrongType {
+                field: "shapes".into(),
+                expected: TypeName::Object,
+            },
+            prefix.to_string(),
+        )
+    })?;
+    deny_keys_at(obj, prefix, &["text", "url", "file", "slide", "tooltip"])?;
+    let text = match obj.get("text") {
+        None => String::new(),
+        Some(Value::String(s)) => s.clone(),
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "text".into(),
+                    expected: TypeName::String,
+                },
+                format!("{prefix}.text"),
+            ));
+        }
+    };
+    let url = parse_create_link_string(obj, prefix, "url", ErrorKind::EmptyHyperlinkUrl)?;
+    let file = parse_create_link_string(obj, prefix, "file", ErrorKind::EmptyHyperlinkFile)?;
+    let slide = match obj.get("slide") {
+        None => None,
+        Some(Value::Null) => {
+            return Err(Error::with_path(
+                ErrorKind::PptxHyperlinkNeedTarget,
+                format!("{prefix}.slide"),
+            ));
+        }
+        Some(Value::Number(n)) => {
+            let Some(u) = n.as_u64() else {
+                return Err(Error::with_path(
+                    ErrorKind::WrongType {
+                        field: "slide".into(),
+                        expected: TypeName::Integer,
+                    },
+                    format!("{prefix}.slide"),
+                ));
+            };
+            if u < 1 || u > usize::MAX as u64 {
+                return Err(Error::with_path(
+                    ErrorKind::MinValue {
+                        field: "slide".into(),
+                        min: 1,
+                    },
+                    format!("{prefix}.slide"),
+                ));
+            }
+            Some(u as usize)
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "slide".into(),
+                    expected: TypeName::Integer,
+                },
+                format!("{prefix}.slide"),
+            ));
+        }
+    };
+    let tooltip = match obj.get("tooltip") {
+        None => None,
+        Some(Value::String(s)) => Some(s.clone()),
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "tooltip".into(),
+                    expected: TypeName::String,
+                },
+                format!("{prefix}.tooltip"),
+            ));
+        }
+    };
+    let target = match (url, file, slide) {
+        (Some(u), None, None) => Some(PptxLinkKind::Url(u)),
+        (None, Some(f), None) => Some(PptxLinkKind::File(f)),
+        (None, None, Some(n)) => Some(PptxLinkKind::Slide(n)),
+        (None, None, None) => None,
+        _ => {
+            return Err(Error::with_path(
+                ErrorKind::PptxHyperlinkNeedTarget,
+                prefix.to_string(),
+            ));
+        }
+    };
+    if target.is_none() && tooltip.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::PptxHyperlinkNeedTarget,
+            format!("{prefix}.tooltip"),
+        ));
+    }
+    let link = target.map(|target| CreateHyperlink { target, tooltip });
+    Ok((text, link))
+}
+
+pub(crate) fn parse_create_transition(
+    v: &Value,
+    prefix: &str,
+    slide: usize,
+) -> Result<SetTransitionOp, Error> {
+    let obj = v.as_object().ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::WrongType {
+                field: "transition".into(),
+                expected: TypeName::Object,
+            },
+            prefix.to_string(),
+        )
+    })?;
+    deny_keys_at(
+        obj,
+        prefix,
+        &["type", "dur", "advClick", "advTm", "dir", "invX", "invY"],
+    )?;
+    let type_name = match obj.get("type") {
+        None => {
+            return Err(Error::with_path(
+                ErrorKind::OpRequiresField {
+                    op: "create".into(),
+                    field: "type".into(),
+                },
+                format!("{prefix}.type"),
+            ));
+        }
+        Some(Value::Null) => {
+            return Err(Error::with_path(
+                ErrorKind::InvalidTransitionType,
+                format!("{prefix}.type"),
+            ));
+        }
+        Some(Value::String(s)) => {
+            if s.is_empty() || s == "other" || !transition::is_writable_type(s) {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidTransitionType,
+                    format!("{prefix}.type"),
+                ));
+            }
+            s.clone()
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "type".into(),
+                    expected: TypeName::String,
+                },
+                format!("{prefix}.type"),
+            ));
+        }
+    };
+    let dur = match obj.get("dur") {
+        None => None,
+        Some(v) => Some(parse_transition_ms_at(
+            v,
+            &format!("{prefix}.dur"),
+            "dur",
+            ErrorKind::InvalidTransitionDur,
+            1,
+            60000,
+        )?),
+    };
+    let adv_click = match obj.get("advClick") {
+        None => true,
+        Some(Value::Bool(b)) => *b,
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "advClick".into(),
+                    expected: TypeName::Boolean,
+                },
+                format!("{prefix}.advClick"),
+            ));
+        }
+    };
+    let adv_tm = match obj.get("advTm") {
+        None | Some(Value::Null) => None,
+        Some(v) => Some(parse_transition_ms_at(
+            v,
+            &format!("{prefix}.advTm"),
+            "advTm",
+            ErrorKind::InvalidTransitionAdvTm,
+            1,
+            86400000,
+        )?),
+    };
+    let dir = match obj.get("dir") {
+        None => None,
+        Some(Value::String(s)) if !s.is_empty() => Some(s.clone()),
+        Some(Value::String(_)) => {
+            return Err(Error::with_path(
+                ErrorKind::InvalidTransitionDir,
+                format!("{prefix}.dir"),
+            ));
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "dir".into(),
+                    expected: TypeName::String,
+                },
+                format!("{prefix}.dir"),
+            ));
+        }
+    };
+    let inv_x = parse_optional_flag_at(obj.get("invX"), &format!("{prefix}.invX"), "invX")?;
+    let inv_y = parse_optional_flag_at(obj.get("invY"), &format!("{prefix}.invY"), "invY")?;
+    Ok(SetTransitionOp {
+        slide,
+        type_name: Some(type_name),
+        dur,
+        adv_click,
+        adv_tm,
+        dir,
+        inv_x,
+        inv_y,
+    })
+}
+
+pub(crate) fn parse_create_anim(v: &Value, prefix: &str) -> Result<CreateAnim, Error> {
+    let obj = v.as_object().ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::WrongType {
+                field: "anims".into(),
+                expected: TypeName::Object,
+            },
+            prefix.to_string(),
+        )
+    })?;
+    deny_keys_at(
+        obj,
+        prefix,
+        &[
+            "type", "trigger", "shape", "picture", "video", "audio", "table", "chart", "smartArt",
+        ],
+    )?;
+    match obj.get("type") {
+        None => {
+            return Err(Error::with_path(
+                ErrorKind::OpRequiresField {
+                    op: "create".into(),
+                    field: "type".into(),
+                },
+                format!("{prefix}.type"),
+            ));
+        }
+        Some(Value::String(s)) if s == "fade" => {}
+        Some(Value::String(_)) => {
+            return Err(Error::with_path(
+                ErrorKind::InvalidAnimType,
+                format!("{prefix}.type"),
+            ));
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "type".into(),
+                    expected: TypeName::String,
+                },
+                format!("{prefix}.type"),
+            ));
+        }
+    }
+    let trigger = match obj.get("trigger") {
+        None => "click".to_string(),
+        Some(Value::String(s)) if matches!(s.as_str(), "click" | "with" | "after") => s.clone(),
+        Some(Value::String(_)) => {
+            return Err(Error::with_path(
+                ErrorKind::InvalidAnimTrigger,
+                format!("{prefix}.trigger"),
+            ));
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "trigger".into(),
+                    expected: TypeName::String,
+                },
+                format!("{prefix}.trigger"),
+            ));
+        }
+    };
+    let mut found: Vec<(&str, CreateAnimHost)> = Vec::new();
+    for (field, make) in [
+        (
+            "shape",
+            CreateAnimHost::Shape as fn(usize) -> CreateAnimHost,
+        ),
+        (
+            "picture",
+            CreateAnimHost::Picture as fn(usize) -> CreateAnimHost,
+        ),
+        (
+            "video",
+            CreateAnimHost::Video as fn(usize) -> CreateAnimHost,
+        ),
+        (
+            "audio",
+            CreateAnimHost::Audio as fn(usize) -> CreateAnimHost,
+        ),
+        (
+            "table",
+            CreateAnimHost::Table as fn(usize) -> CreateAnimHost,
+        ),
+        (
+            "chart",
+            CreateAnimHost::Chart as fn(usize) -> CreateAnimHost,
+        ),
+        (
+            "smartArt",
+            CreateAnimHost::SmartArt as fn(usize) -> CreateAnimHost,
+        ),
+    ] {
+        if obj.contains_key(field) {
+            let n = parse_create_index(obj.get(field), &format!("{prefix}.{field}"), field)?;
+            found.push((field, make(n)));
+        }
+    }
+    match found.len() {
+        0 => {
+            return Err(Error::with_path(
+                ErrorKind::OpRequiresField {
+                    op: "create".into(),
+                    field: "shape".into(),
+                },
+                prefix.to_string(),
+            ));
+        }
+        1 => {}
+        _ => {
+            return Err(Error::with_path(
+                ErrorKind::MutuallyExclusive {
+                    a: found[0].0.into(),
+                    b: found[1].0.into(),
+                },
+                prefix.to_string(),
+            ));
+        }
+    }
+    let host = found.remove(0).1;
+    Ok(CreateAnim { trigger, host })
+}
+
+pub(crate) fn parse_create_section(v: &Value, prefix: &str) -> Result<CreateSection, Error> {
+    let obj = v.as_object().ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::WrongType {
+                field: "sections".into(),
+                expected: TypeName::Object,
+            },
+            prefix.to_string(),
+        )
+    })?;
+    deny_keys_at(obj, prefix, &["name", "start"])?;
+    let name = match obj.get("name") {
+        Some(Value::String(s)) => s.clone(),
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "name".into(),
+                    expected: TypeName::String,
+                },
+                format!("{prefix}.name"),
+            ));
+        }
+        None => {
+            return Err(Error::with_path(
+                ErrorKind::MissingField {
+                    field: "name".into(),
+                },
+                format!("{prefix}.name"),
+            ));
+        }
+    };
+    let start = match obj.get("start") {
+        None => {
+            return Err(Error::with_path(
+                ErrorKind::MissingField {
+                    field: "start".into(),
+                },
+                format!("{prefix}.start"),
+            ));
+        }
+        Some(v) => parse_create_index(Some(v), &format!("{prefix}.start"), "start")?,
+    };
+    Ok(CreateSection { name, start })
+}
+
+fn parse_create_index(v: Option<&Value>, path: &str, field: &str) -> Result<usize, Error> {
+    match v {
+        Some(Value::Number(n)) => {
+            let Some(u) = n.as_u64() else {
+                return Err(Error::with_path(
+                    ErrorKind::WrongType {
+                        field: field.into(),
+                        expected: TypeName::Integer,
+                    },
+                    path.to_string(),
+                ));
+            };
+            if u < 1 || u > usize::MAX as u64 {
+                return Err(Error::with_path(
+                    ErrorKind::MinValue {
+                        field: field.into(),
+                        min: 1,
+                    },
+                    path.to_string(),
+                ));
+            }
+            Ok(u as usize)
+        }
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::Integer,
+            },
+            path.to_string(),
+        )),
+        None => Err(Error::with_path(
+            ErrorKind::MissingField {
+                field: field.into(),
+            },
+            path.to_string(),
+        )),
+    }
+}
+
+fn parse_create_link_string(
+    obj: &Map<String, Value>,
+    prefix: &str,
+    field: &str,
+    empty: ErrorKind,
+) -> Result<Option<String>, Error> {
+    match obj.get(field) {
+        None => Ok(None),
+        Some(Value::Null) => Err(Error::with_path(empty, format!("{prefix}.{field}"))),
+        Some(Value::String(s)) if s.is_empty() => {
+            Err(Error::with_path(empty, format!("{prefix}.{field}")))
+        }
+        Some(Value::String(s)) => Ok(Some(s.clone())),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::String,
+            },
+            format!("{prefix}.{field}"),
+        )),
+    }
+}
+
+fn parse_transition_ms_at(
+    v: &Value,
+    path: &str,
+    field: &str,
+    invalid: ErrorKind,
+    min: u64,
+    max: u64,
+) -> Result<u32, Error> {
+    let n = match v {
+        Value::Number(num) => num.as_u64().ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::WrongType {
+                    field: field.into(),
+                    expected: TypeName::Integer,
+                },
+                path.to_string(),
+            )
+        })?,
+        _ => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: field.into(),
+                    expected: TypeName::Integer,
+                },
+                path.to_string(),
+            ));
+        }
+    };
+    if !(min..=max).contains(&n) {
+        return Err(Error::with_path(invalid, path.to_string()));
+    }
+    Ok(n as u32)
+}
+
+fn parse_optional_flag_at(v: Option<&Value>, path: &str, field: &str) -> Result<bool, Error> {
+    match v {
+        None => Ok(false),
+        Some(Value::Bool(b)) => Ok(*b),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::Boolean,
+            },
+            path.to_string(),
+        )),
+    }
 }
 
 fn parse_emu_field(v: Option<&Value>, i: usize, field: &str) -> Result<Option<i64>, Error> {
