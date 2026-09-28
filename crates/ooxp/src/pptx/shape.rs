@@ -998,7 +998,7 @@ fn contains_sp_tgt(el: &Element, spid: &str) -> bool {
     el.element_children().any(|c| contains_sp_tgt(c, spid))
 }
 
-fn prune_anim(el: &mut Element) {
+pub(crate) fn prune_anim(el: &mut Element) {
     for _ in 0..8 {
         prune_anim_pass(el);
     }
@@ -1010,6 +1010,7 @@ fn prune_anim_pass(el: &mut Element) {
             prune_anim_pass(e);
         }
     }
+    let parent = el.local_name().to_string();
     el.children.retain(|n| {
         let Node::Element(e) = n else {
             return true;
@@ -1019,7 +1020,16 @@ fn prune_anim_pass(el: &mut Element) {
             "anim" | "animEffect" | "animMotion" | "animRot" | "animScale" | "animClr" | "set" => {
                 e.child_by_local("cBhvr").is_some() || e.child_by_local("childTnLst").is_some()
             }
-            "childTnLst" | "tnLst" | "seq" | "par" | "cTn" => e.element_children().next().is_some(),
+            "childTnLst" | "tnLst" | "seq" | "par" | "bldLst" => {
+                e.element_children().next().is_some()
+            }
+            "cTn" => {
+                if parent == "cBhvr" {
+                    true
+                } else {
+                    e.element_children().next().is_some()
+                }
+            }
             _ => true,
         }
     });

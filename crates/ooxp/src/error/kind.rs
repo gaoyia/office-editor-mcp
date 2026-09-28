@@ -344,6 +344,12 @@ pub(crate) enum IdReason {
     SetPropsNeedsRoot,
     /// deleteCustomProp 必须用 prop:{name}
     CustomPropPrefix,
+    /// 动画 id 必须是 slide:N/anim:K
+    AnimForm,
+    AnimIndexNotInt,
+    AnimIndexFromOne,
+    /// insertAnim 必须用幻灯片上的可绑对象，不能是备注或母版
+    InsertAnimNeedsHost,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -463,6 +469,10 @@ define_error_kinds! {
         vec![Self::LayoutNotFound { master: 1, layout: 9 }]
     },
     ShapeNotFound { id: String } => vec![Self::ShapeNotFound { id: "slide:1/shape:2".into() }],
+    AnimNotFound { id: String } => vec![Self::AnimNotFound { id: "slide:1/anim:1".into() }],
+    AnimHostNotFound { id: String } => {
+        vec![Self::AnimHostNotFound { id: "slide:1/shape:2".into() }]
+    },
     ShapeHasNoText { id: String } => vec![Self::ShapeHasNoText { id: "slide:1/shape:2".into() }],
     SetCellWorksheetOnly => vec![Self::SetCellWorksheetOnly],
     InspectWorksheetOnly => vec![Self::InspectWorksheetOnly],
@@ -584,6 +594,8 @@ define_error_kinds! {
     RestrictedChart { id: String } => vec![Self::RestrictedChart { id: "para:1/chart:1".into() }],
     InvalidChartType => vec![Self::InvalidChartType],
     InvalidTransitionType => vec![Self::InvalidTransitionType],
+    InvalidAnimType => vec![Self::InvalidAnimType],
+    InvalidAnimTrigger => vec![Self::InvalidAnimTrigger],
     InvalidTransitionDur => vec![Self::InvalidTransitionDur],
     InvalidChartAxis => vec![Self::InvalidChartAxis],
     InvalidLegendPos => vec![Self::InvalidLegendPos],
@@ -1019,6 +1031,10 @@ impl IdReason {
             Self::InsertSdtNeedsPara,
             Self::SetPropsNeedsRoot,
             Self::CustomPropPrefix,
+            Self::AnimForm,
+            Self::AnimIndexNotInt,
+            Self::AnimIndexFromOne,
+            Self::InsertAnimNeedsHost,
         ]
     }
 }
@@ -1240,6 +1256,8 @@ impl ErrorKind {
             | Self::LastChartSeries
             | Self::InvalidChartType
             | Self::InvalidTransitionType
+            | Self::InvalidAnimType
+            | Self::InvalidAnimTrigger
             | Self::InvalidTransitionDur
             | Self::InvalidChartAxis
             | Self::InvalidLegendPos
@@ -1302,6 +1320,8 @@ impl ErrorKind {
             | Self::MasterNotFound { .. }
             | Self::LayoutNotFound { .. }
             | Self::ShapeNotFound { .. }
+            | Self::AnimNotFound { .. }
+            | Self::AnimHostNotFound { .. }
             | Self::ShapeHasNoText { .. }
             | Self::PictureNotFound { .. }
             | Self::MediaNotFound { .. }

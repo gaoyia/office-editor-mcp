@@ -18,6 +18,7 @@ use super::shape;
 use super::slides;
 use super::smartart;
 use super::table;
+use super::timing;
 use super::transition;
 
 pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
@@ -872,6 +873,12 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                     op.dur,
                     i,
                 )?;
+            }
+            PptxOp::InsertAnim(op) => {
+                timing::insert(&mut pkg, &slides, &op.id, op.slide, &op.trigger, i)?;
+            }
+            PptxOp::DeleteAnim(op) => {
+                timing::delete(&mut pkg, &slides, &op.id, op.slide, op.index, i)?;
             }
             PptxOp::SetSlideLayout(op) => {
                 master::set_slide_layout(

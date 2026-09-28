@@ -97,6 +97,7 @@ $order = @(
     'pptx-tables'
     'pptx-transition'
     'pptx-timing'
+    'pptx-anim-write'
     'pptx-masters'
     'pptx-handout'
     'pptx-hyperlinks'

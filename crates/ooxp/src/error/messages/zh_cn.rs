@@ -462,6 +462,14 @@ pub(super) fn render(kind: &ErrorKind) -> String {
                     .into()
             }
             IdReason::CustomPropPrefix => "deleteCustomProp 的 id 必须是 prop:NAME".into(),
+            IdReason::AnimForm => {
+                "动画 id 必须是 slide:N/anim:K，insertAnim 的 id 必须是幻灯片上的可绑对象".into()
+            }
+            IdReason::AnimIndexNotInt => "anim 后面必须是正整数".into(),
+            IdReason::AnimIndexFromOne => "动画序号从 1 起".into(),
+            IdReason::InsertAnimNeedsHost => {
+                "insertAnim 的 id 必须是幻灯片上的形状、图、表、图表、SmartArt、视频或音频，不能是备注或母版".into()
+            }
         },
         ErrorKind::SheetNotFound { name } => format!("找不到工作表：{name}"),
         ErrorKind::ParaNotFound { id } => format!("找不到段落：{id}"),
@@ -473,6 +481,8 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             format!("找不到版式：master:{master}/layout:{layout}")
         }
         ErrorKind::ShapeNotFound { id } => format!("找不到形状：{id}"),
+        ErrorKind::AnimNotFound { id } => format!("找不到动画：{id}"),
+        ErrorKind::AnimHostNotFound { id } => format!("找不到可绑定动画的对象：{id}"),
         ErrorKind::ShapeHasNoText { id } => format!("形状没有文本框：{id}"),
         ErrorKind::PictureNotFound { id } => format!("找不到图：{id}"),
         ErrorKind::MediaNotFound { id } => format!("找不到视频或音频：{id}"),
@@ -565,6 +575,8 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::InvalidTransitionType => {
             "type 必须是可写的幻灯片切换名，或 null 表示清除".into()
         }
+        ErrorKind::InvalidAnimType => "type 本期只认 fade".into(),
+        ErrorKind::InvalidAnimTrigger => "trigger 必须是 click、with 或 after".into(),
         ErrorKind::InvalidTransitionDur => "dur 必须是 1 到 60000 的整数".into(),
         ErrorKind::InvalidChartAxis => "axis 必须是 cat 或 val，且图表里要有对应主轴".into(),
         ErrorKind::InvalidLegendPos => "pos 必须是 b、t、l、r 或 tr".into(),

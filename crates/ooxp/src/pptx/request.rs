@@ -129,6 +129,20 @@ pub struct SetTransitionOp {
 }
 
 #[derive(Debug, Clone)]
+pub struct InsertAnimOp {
+    pub id: String,
+    pub slide: usize,
+    pub trigger: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct DeleteAnimOp {
+    pub id: String,
+    pub slide: usize,
+    pub index: usize,
+}
+
+#[derive(Debug, Clone)]
 pub struct SetSlideLayoutOp {
     pub slide: usize,
     pub master: usize,
@@ -673,6 +687,8 @@ pub enum PptxOp {
     MoveSlide(MoveSlideOp),
     SetSlideHidden(SetSlideHiddenOp),
     SetTransition(SetTransitionOp),
+    InsertAnim(InsertAnimOp),
+    DeleteAnim(DeleteAnimOp),
     SetSlideLayout(SetSlideLayoutOp),
     SetHandoutText(SetHandoutTextOp),
     InsertHyperlink(InsertHyperlinkOp),
@@ -922,6 +938,8 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<PptxOp>, Error> {
             "moveSlide" => PptxOp::MoveSlide(parse_move_slide(obj, i)?),
             "setSlideHidden" => PptxOp::SetSlideHidden(parse_set_slide_hidden(obj, i)?),
             "setTransition" => PptxOp::SetTransition(parse_set_transition(obj, i)?),
+            "insertAnim" => PptxOp::InsertAnim(parse_insert_anim(obj, i)?),
+            "deleteAnim" => PptxOp::DeleteAnim(parse_delete_anim(obj, i)?),
             "setSlideLayout" => PptxOp::SetSlideLayout(parse_set_slide_layout(obj, i)?),
             "setHandoutText" => PptxOp::SetHandoutText(parse_set_handout_text(obj, i)?),
             "insertHyperlink" => PptxOp::InsertHyperlink(parse_insert_hyperlink(obj, i)?),
@@ -1383,6 +1401,198 @@ fn parse_set_transition(obj: &Map<String, Value>, i: usize) -> Result<SetTransit
         type_name,
         dur,
     })
+}
+
+const ANIM_HOST_KINDS: &[&str] = &[
+    "shape",
+    "pic",
+    "video",
+    "audio",
+    "table",
+    "chart",
+    "smartdiagram",
+];
+
+fn parse_insert_anim(obj: &Map<String, Value>, i: usize) -> Result<InsertAnimOp, Error> {
+    deny_keys(obj, i, &["op", "id", "type", "trigger"])?;
+    let id = require_id(obj, i)?;
+    let slide = parse_anim_host(&id, i)?;
+    match obj.get("type") {
+        None => {
+            return Err(Error::with_path(
+                ErrorKind::OpRequiresField {
+                    op: "insertAnim".into(),
+                    field: "type".into(),
+                },
+                format!("ops[{i}].type"),
+            ));
+        }
+        Some(Value::String(s)) if s == "fade" => {}
+        Some(Value::String(_)) => {
+            return Err(Error::with_path(
+                ErrorKind::InvalidAnimType,
+                format!("ops[{i}].type"),
+            ));
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "type".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].type"),
+            ));
+        }
+    }
+    let trigger = match obj.get("trigger") {
+        None => "click".to_string(),
+        Some(Value::String(s)) if matches!(s.as_str(), "click" | "with" | "after") => s.clone(),
+        Some(Value::String(_)) => {
+            return Err(Error::with_path(
+                ErrorKind::InvalidAnimTrigger,
+                format!("ops[{i}].trigger"),
+            ));
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "trigger".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].trigger"),
+            ));
+        }
+    };
+    Ok(InsertAnimOp { id, slide, trigger })
+}
+
+fn parse_delete_anim(obj: &Map<String, Value>, i: usize) -> Result<DeleteAnimOp, Error> {
+    deny_keys(obj, i, &["op", "id"])?;
+    let id = require_id(obj, i)?;
+    let (slide, index) = parse_anim_id(&id, i)?;
+    Ok(DeleteAnimOp { id, slide, index })
+}
+
+fn parse_anim_host(id: &str, op_index: usize) -> Result<usize, Error> {
+    let path = format!("ops[{op_index}].id");
+    if id.contains("/notes") || id.starts_with("master:") {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::InsertAnimNeedsHost,
+            },
+            path,
+        ));
+    }
+    let Some(rest) = id.strip_prefix("slide:") else {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::AnimForm,
+            },
+            path,
+        ));
+    };
+    let Some((n, after)) = rest.split_once('/') else {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::InsertAnimNeedsHost,
+            },
+            path,
+        ));
+    };
+    let Some((kind, key)) = after.split_once(':') else {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::AnimForm,
+            },
+            path,
+        ));
+    };
+    if !ANIM_HOST_KINDS.contains(&kind) || key.is_empty() || key.contains('/') {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::AnimForm,
+            },
+            path,
+        ));
+    }
+    let slide: usize = n.parse().map_err(|_| {
+        Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::SlideIndexNotInt,
+            },
+            path.clone(),
+        )
+    })?;
+    if slide < 1 {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::SlideIndexFromOne,
+            },
+            path,
+        ));
+    }
+    Ok(slide)
+}
+
+fn parse_anim_id(id: &str, op_index: usize) -> Result<(usize, usize), Error> {
+    let path = format!("ops[{op_index}].id");
+    let Some(rest) = id.strip_prefix("slide:") else {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::AnimForm,
+            },
+            path,
+        ));
+    };
+    let Some((n, after)) = rest.split_once("/anim:") else {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::AnimForm,
+            },
+            path,
+        ));
+    };
+    if after.is_empty() || after.contains('/') {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::AnimForm,
+            },
+            path,
+        ));
+    }
+    let slide: usize = n.parse().map_err(|_| {
+        Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::SlideIndexNotInt,
+            },
+            path.clone(),
+        )
+    })?;
+    if slide < 1 {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::SlideIndexFromOne,
+            },
+            path,
+        ));
+    }
+    let index: usize = after.parse().map_err(|_| {
+        Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::AnimIndexNotInt,
+            },
+            path.clone(),
+        )
+    })?;
+    if index < 1 {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::AnimIndexFromOne,
+            },
+            path,
+        ));
+    }
+    Ok((slide, index))
 }
 
 fn parse_set_slide_layout(obj: &Map<String, Value>, i: usize) -> Result<SetSlideLayoutOp, Error> {

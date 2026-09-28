@@ -957,6 +957,12 @@
                 "$ref": "pptx.schema.json#/$defs/setTransitionOp"
               },
               {
+                "$ref": "pptx.schema.json#/$defs/insertAnimOp"
+              },
+              {
+                "$ref": "pptx.schema.json#/$defs/deleteAnimOp"
+              },
+              {
                 "$ref": "pptx.schema.json#/$defs/setSlideLayoutOp"
               },
               {

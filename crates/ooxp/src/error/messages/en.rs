@@ -504,6 +504,14 @@ pub(super) fn render(kind: &ErrorKind) -> String {
                     .into()
             }
             IdReason::CustomPropPrefix => "deleteCustomProp id must be prop:NAME".into(),
+            IdReason::AnimForm => {
+                "anim id must be slide:N/anim:K; insertAnim id must be a slide object".into()
+            }
+            IdReason::AnimIndexNotInt => "anim index must be a positive integer".into(),
+            IdReason::AnimIndexFromOne => "anim index is 1-based".into(),
+            IdReason::InsertAnimNeedsHost => {
+                "insertAnim id must be a slide shape, picture, table, chart, SmartArt, video, or audio; notes and masters are not allowed".into()
+            }
         },
         ErrorKind::SheetNotFound { name } => format!("Sheet not found: {name}"),
         ErrorKind::ParaNotFound { id } => format!("Paragraph not found: {id}"),
@@ -515,6 +523,10 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             format!("Slide layout not found: master:{master}/layout:{layout}")
         }
         ErrorKind::ShapeNotFound { id } => format!("Shape not found: {id}"),
+        ErrorKind::AnimNotFound { id } => format!("Animation not found: {id}"),
+        ErrorKind::AnimHostNotFound { id } => {
+            format!("No animatable object found: {id}")
+        }
         ErrorKind::ShapeHasNoText { id } => format!("Shape has no text box: {id}"),
         ErrorKind::PictureNotFound { id } => format!("Picture not found: {id}"),
         ErrorKind::MediaNotFound { id } => format!("Video or audio not found: {id}"),
@@ -637,6 +649,8 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::InvalidTransitionType => {
             "type must be a writable slide transition, or null to clear".into()
         }
+        ErrorKind::InvalidAnimType => "type must be fade".into(),
+        ErrorKind::InvalidAnimTrigger => "trigger must be click, with, or after".into(),
         ErrorKind::InvalidTransitionDur => "dur must be an integer from 1 to 60000".into(),
         ErrorKind::InvalidChartAxis => {
             "axis must be cat or val, and the chart must have that primary axis".into()

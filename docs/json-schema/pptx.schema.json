@@ -753,6 +753,53 @@
         }
       }
     },
+    "insertAnimOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "type"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "insertAnim"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "type": {
+          "type": "string",
+          "minLength": 1
+        },
+        "trigger": {
+          "type": "string",
+          "enum": [
+            "click",
+            "with",
+            "after"
+          ]
+        }
+      }
+    },
+    "deleteAnimOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "deleteAnim"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
     "setSlideLayoutOp": {
       "type": "object",
       "required": [

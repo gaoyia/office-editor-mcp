@@ -4,11 +4,11 @@
 
 检查前用 create 或 apply 在本机生成文件，不要用改过扩展名的 zip 目录冒充。本机若 `PowerPoint.Application` 被 WPS 抢走，直接启动 `POWERPNT.EXE` 再挂 COM，不要走被抢的 ProgID。Office 16 的对象模型在 `mdiClass` 上。
 
-C、I、A、Pp、Pc、Psa、Pn、Pcm、Pm、Ps、Pt、Tn、Am、Mm、Ho、Phl、Pmd、Psc 各组由 `manual-check/office/cases/pptx-*.ps1` 自动判定，跑 `pwsh -File manual-check\office\run.ps1 -Case 'pptx-*'` 即可复现。O1 已放弃，与 xlsx / docx 相同。
+C、I、A、Pp、Pc、Psa、Pn、Pcm、Pm、Ps、Pt、Tn、Am、Aw、Mm、Ho、Phl、Pmd、Psc 各组由 `manual-check/office/cases/pptx-*.ps1` 自动判定，跑 `pwsh -File manual-check\office\run.ps1 -Case 'pptx-*'` 即可复现。O1 已放弃，与 xlsx / docx 相同。
 
 ## 本机结果（2026-09-28）
 
-Microsoft PowerPoint 16.0 已打开，C1、C3、C4、C5–C13、I1–I5、A1–A5、Pp1–Pp7、Pc1–Pc7、Psa1–Psa7、Pn1–Pn6、Pcm1–Pcm6、Pik1–Pik4、Pm1–Pm5、Ps1–Ps5、Pt1–Pt6、Tn1–Tn5、Am1–Am5、Mm1–Mm5、Ho1–Ho5、Phl1–Phl5、Pmd1–Pmd5、Psc1–Psc5 均 PASS。本机若装了 WPS，`PowerPoint.Application` 会被抢走，测试仍直接启动 `POWERPNT.EXE`，从 `mdiClass` 挂 COM。O1 已放弃。2026-09-27 补跑 `pptx-pictures.ps1`，Pp1–Pp7 通过。同日补跑 `pptx-create-pictures.ps1`，C5–C7 通过。同日补跑 `pptx-charts.ps1`，Pc1–Pc7 通过。同日补跑 `pptx-create-charts.ps1`，C8–C10 通过。同日补跑 `pptx-smartart.ps1`，Psa1–Psa7 通过。同日补跑 `pptx-notes.ps1`，Pn1–Pn4 通过。同日补跑 `pptx-comments.ps1`，Pcm1–Pcm5、Pik1–Pik4 通过。同日补跑 `pptx-docprops.ps1`，Pd1–Pd5 通过。同日补跑 `pptx-charts-remain.ps1`，Pr1–Pr3 通过。2026-09-28 补跑 `pptx-slides.ps1`，Pm1–Pm5 通过。同日补跑 `pptx-shapes.ps1`，Ps1–Ps5 通过。同日补跑 `pptx-tables.ps1`，Pt1–Pt6 通过。同日补跑 `pptx-transition.ps1`，Tn1–Tn5 通过。同日补跑 `pptx-timing.ps1`，Am1–Am5 通过。同日补跑 `pptx-masters.ps1`，Mm1–Mm5 通过。同日补跑 `pptx-handout.ps1`，Ho1–Ho5 通过。同日补跑 `pptx-hyperlinks.ps1`，Phl1–Phl5 通过。同日补跑 `pptx-create-notes-comments.ps1`，C11–C13 通过。同日补跑 `pptx-notes.ps1`，Pn5–Pn6 通过。同日补跑 `pptx-comments.ps1`，Pcm6 通过。同日补跑 `pptx-media.ps1`，Pmd1–Pmd5 通过。同日补跑 `pptx-sections.ps1`，Psc1–Psc5 通过。
+Microsoft PowerPoint 16.0 已打开，C1、C3、C4、C5–C13、I1–I5、A1–A5、Pp1–Pp7、Pc1–Pc7、Psa1–Psa7、Pn1–Pn6、Pcm1–Pcm6、Pik1–Pik4、Pm1–Pm5、Ps1–Ps5、Pt1–Pt6、Tn1–Tn5、Am1–Am5、Mm1–Mm5、Ho1–Ho5、Phl1–Phl5、Pmd1–Pmd5、Psc1–Psc5 均 PASS。本机若装了 WPS，`PowerPoint.Application` 会被抢走，测试仍直接启动 `POWERPNT.EXE`，从 `mdiClass` 挂 COM。O1 已放弃。2026-09-27 补跑 `pptx-pictures.ps1`，Pp1–Pp7 通过。同日补跑 `pptx-create-pictures.ps1`，C5–C7 通过。同日补跑 `pptx-charts.ps1`，Pc1–Pc7 通过。同日补跑 `pptx-create-charts.ps1`，C8–C10 通过。同日补跑 `pptx-smartart.ps1`，Psa1–Psa7 通过。同日补跑 `pptx-notes.ps1`，Pn1–Pn4 通过。同日补跑 `pptx-comments.ps1`，Pcm1–Pcm5、Pik1–Pik4 通过。同日补跑 `pptx-docprops.ps1`，Pd1–Pd5 通过。同日补跑 `pptx-charts-remain.ps1`，Pr1–Pr3 通过。2026-09-28 补跑 `pptx-slides.ps1`，Pm1–Pm5 通过。同日补跑 `pptx-shapes.ps1`，Ps1–Ps5 通过。同日补跑 `pptx-tables.ps1`，Pt1–Pt6 通过。同日补跑 `pptx-transition.ps1`，Tn1–Tn5 通过。同日补跑 `pptx-timing.ps1`，Am1–Am5 通过。同日补跑 `pptx-masters.ps1`，Mm1–Mm5 通过。同日补跑 `pptx-handout.ps1`，Ho1–Ho5 通过。同日补跑 `pptx-hyperlinks.ps1`，Phl1–Phl5 通过。同日补跑 `pptx-create-notes-comments.ps1`，C11–C13 通过。同日补跑 `pptx-notes.ps1`，Pn5–Pn6 通过。同日补跑 `pptx-comments.ps1`，Pcm6 通过。同日补跑 `pptx-media.ps1`，Pmd1–Pmd5 通过。同日补跑 `pptx-sections.ps1`，Psc1–Psc5 通过。2026-09-29 补跑 `pptx-anim-write.ps1`，Aw1–Aw5 通过。
 
 | 序号 | 状态 | 结果 |
 | --- | --- | --- |
@@ -31,6 +31,7 @@ Microsoft PowerPoint 16.0 已打开，C1、C3、C4、C5–C13、I1–I5、A1–A
 | Pt1–Pt6 | ✅ | PowerPoint 16.0：`pptx-tables.ps1`，7 PASS / 0 FAIL。另存样例 id 为 `slide:1/table:4`；改格 COM 可见「改过的正文」；增行后 COM Rows=3；`insertTable` 后 id 为 `slide:1/table:4` 且 `stable`、COM 格可见「甲」；`deleteTable` 后 COM 表数为 0；形状 id 得 `InvalidId`，缺 `rows` / 最后一行得 `InvalidField` 且未写文件。无 Repair |
 | Tn1–Tn5 | ✅ | PowerPoint 16.0：`pptx-transition.ps1`，5 PASS / 0 FAIL。无切换页 `transition` 为 null；另存淡入 `type=fade`、`dur=500`；`setTransition` 后 COM EntryEffect=3849、Duration=0.5；只改字切换还在；`type: null` 后 COM 效果为 0；形状 id 得 `InvalidId`，`type=other` 得 `InvalidField` 且未写文件。无 Repair |
 | Am1–Am5 | ✅ | PowerPoint 16.0：`pptx-timing.ps1`，5 PASS / 0 FAIL。无 `timing` 时根与各页有 `animCount`、没有名单；另存进入淡入 `target=slide:1/shape:2`、`type=fade`、`trigger=click`；COM MainSequence.Count=1；只改字名单还在；`setTiming` 为 `UnsupportedOp`；xlsx / docx 的 `scope.timing` 为 `InvalidField`。无 Repair |
+| Aw1–Aw5 | ✅ | PowerPoint 16.0：`pptx-anim-write.ps1`，5 PASS / 0 FAIL。create 后 `insertAnim` `type=fade`，名单一条且 COM Count=1；另存页再插一条旧的还在、新的在末尾；`deleteAnim` 后 Count 少 1，删光没有 `<p:timing>`；只改字名单还在；错 id / `type` 为 `InvalidId` 或 `InvalidField` 且未写文件。无 Repair |
 | Mm1–Mm5 | ✅ | PowerPoint 16.0：`pptx-masters.ps1`，5 PASS / 0 FAIL。无 `masters` 时只有 `masterCount`；create 版式名「空白」；另存默认文稿列出「标题幻灯片」等；标题占位符改字无修复；插用户框后换成 `master:1/layout:7`（空白）用户框还在；占位符 `setShapePos` 几何有变；xlsx / docx 拒 `scope.masters` 与 `setSlideLayout`。无 Repair |
 | Ho1–Ho5 | ✅ | PowerPoint 16.0：`pptx-handout.ps1`，5 PASS / 0 FAIL。无 `handout` 时只有 `hasHandout`；create 为 false、展开为 null；`setHandoutText` 写页脚 / 页眉后 COM 与 inspect 可见新字、无 Repair；xlsx / docx 拒 `scope.handout` 与 `setHandoutText`。 |
 | Phl1–Phl5 | ✅ | PowerPoint 16.0：`pptx-hyperlinks.ps1`，5 PASS / 0 FAIL。无名单时根与各页有 `hyperlinkCount=0`；`insertHyperlink` 后 COM 单击地址对上且无 Repair；改地址后对得上；删除后框上字还在；对页 id 得 `InvalidId`，缺目标得 `InvalidField` 且未写文件。 |
@@ -234,7 +235,7 @@ DrawingML 表（`a:tbl` 包在 `p:graphicFrame` 里）。不要把表编进 `sha
 
 ## 动画清单
 
-只读 `<p:timing>`，不写时间轴。源文件：PowerPoint 亲手另存一页带进入淡入动画。脚本：`manual-check/office/cases/pptx-timing.ps1`。编号用 Am。
+只读 `<p:timing>` 清单。写入见 `.plan/2026年-9月-29日-✅-pptx-动画写入.md`。旧「禁止 apply 写 timing」作废；`setTiming` 仍报 `UnsupportedOp`。源文件：PowerPoint 亲手另存一页带进入淡入动画。脚本：`manual-check/office/cases/pptx-timing.ps1`。编号用 Am。
 
 | 序号 | 检查 | 通过标准 |
 | --- | --- | --- |
@@ -243,6 +244,18 @@ DrawingML 表（`a:tbl` 包在 `p:graphicFrame` 里）。不要把表编进 `sha
 | Am3 | 改字不丢 | ✅ 对另存带动画样例只 `setShapeText`，名单还在；无 Repair |
 | Am4 | 无入口 | ✅ `setTiming` 得 `UnsupportedOp`，未写文件 |
 | Am5 | 拒错 | ✅ xlsx / docx 的 `scope.timing` 得 `InvalidField` |
+
+## 动画写入
+
+按模板给对象加、删预设进入淡入。不实现放映引擎，也不接受整棵时间轴 JSON。脚本：`manual-check/office/cases/pptx-anim-write.ps1`。编号用 Aw。
+
+| 序号 | 检查 | 通过标准 |
+| --- | --- | --- |
+| Aw1 | 插入 | ✅ create 产物 `insertAnim` `type=fade` 后 inspect 名单一条，`id` 为 `slide:1/anim:1`，`target` 对上第一框，COM `MainSequence.Count` 为 1，无 Repair |
+| Aw2 | 再插 | ✅ 另存已有动画的页再插一条，旧的还在，新的在末尾，COM Count 加 1，无 Repair |
+| Aw3 | 删除 | ✅ `deleteAnim` 后 Count 少 1；删光则没有 `<p:timing>`，无 Repair |
+| Aw4 | 改字不丢 | ✅ 只 `setShapeText`，名单还在，无 Repair |
+| Aw5 | 拒错 | ✅ 错对象 id 得 `InvalidId`；`type` 不在白名单得 `InvalidField`；xlsx / docx 发 `insertAnim` 得 `InvalidField`；均未写文件。`setTiming` 仍为 `UnsupportedOp` |
 
 ## 母版与版式
 
