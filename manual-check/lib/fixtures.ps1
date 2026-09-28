@@ -281,6 +281,39 @@ function Ensure-PptxCreateSmartArt([switch]$Force) {
     return $path
 }
 
+# 两页：第一页有演讲者备注和一条现代批注，第二页只有文本框。
+function Ensure-PptxCreateNotesComments([switch]$Force) {
+    $path = Get-OutPath 'pptx-create-notes-comments.pptx'
+    if ((Test-Path $path) -and -not $Force) { return $path }
+    $req = @{
+        schemaVersion = 1; action = 'create'
+        path = $path.Replace('\', '/'); format = 'pptx'
+        presentation = @{
+            slides = @(
+                @{
+                    shapes = @(@{ text = '标题' })
+                    notes = '演讲者备注'
+                    comments = @(
+                        @{
+                            text = '一条批注'
+                            author = 'Alice'
+                            initials = 'A'
+                            date = '2026-09-01T00:00:00.000'
+                            x = 914400
+                            y = 914400
+                        }
+                    )
+                }
+                @{
+                    shapes = @(@{ text = '第二页' })
+                }
+            )
+        }
+    }
+    Invoke-OoxpRequest $req 'pptx-create-notes-comments' | Out-Null
+    return $path
+}
+
 # apply 的源文件要由 Excel 亲手存出来，不能拿 ooxp 自己的产物冒充，
 # 否则等于自己造自己读，测不到真实文件的写法。
 function Ensure-XlsxExcelSource([switch]$Force) {

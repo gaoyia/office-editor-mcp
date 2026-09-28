@@ -9,8 +9,12 @@ use crate::opc::{
 use crate::xml;
 
 use super::{
-    chart, picture,
-    request::{self, InsertChartOp, InsertPictureOp, InsertSmartArtOp, InsertTableOp},
+    chart, comments, notes, picture,
+    request::{
+        self, InsertChartOp, InsertCommentOp, InsertPictureOp, InsertSmartArtOp, InsertTableOp,
+        SetNotesTextOp,
+    },
+    shape::SlideMeta,
     smartart, table, CT_APP, CT_CORE, CT_PRESENTATION, CT_PRES_PROPS, CT_SLIDE, CT_SLIDE_LAYOUT,
     CT_SLIDE_MASTER, CT_THEME, DML_NS, PML_NS, REL_APP, REL_CORE, REL_NS, REL_OFFICE_DOCUMENT,
     REL_PRES_PROPS, REL_SLIDE, REL_SLIDE_LAYOUT, REL_SLIDE_MASTER, REL_THEME,
@@ -22,6 +26,8 @@ struct NewSlide {
     charts: Vec<InsertChartOp>,
     smart_arts: Vec<InsertSmartArtOp>,
     tables: Vec<InsertTableOp>,
+    notes: Option<String>,
+    comments: Vec<InsertCommentOp>,
 }
 
 pub fn create(presentation: &Value) -> Result<Vec<u8>, Error> {
@@ -71,6 +77,8 @@ pub fn create(presentation: &Value) -> Result<Vec<u8>, Error> {
             charts: Vec::new(),
             smart_arts: Vec::new(),
             tables: Vec::new(),
+            notes: None,
+            comments: Vec::new(),
         });
     }
     for s in &mut slides {
@@ -196,6 +204,8 @@ pub fn create(presentation: &Value) -> Result<Vec<u8>, Error> {
     attach_charts(&mut pkg, &slides)?;
     attach_smartarts(&mut pkg, &slides)?;
     attach_tables(&mut pkg, &slides)?;
+    attach_notes(&mut pkg, &slides)?;
+    attach_comments(&mut pkg, &slides)?;
 
     pkg.set("/docProps/core.xml", core_xml().into_bytes())?;
     pkg.set("/docProps/app.xml", app_xml(slides.len()).into_bytes())?;
@@ -216,7 +226,7 @@ fn parse_slide(v: &Value, i: usize) -> Result<NewSlide, Error> {
     for k in obj.keys() {
         if !matches!(
             k.as_str(),
-            "shapes" | "pictures" | "charts" | "smartArts" | "tables"
+            "shapes" | "pictures" | "charts" | "smartArts" | "tables" | "notes" | "comments"
         ) {
             return Err(Error::with_path(
                 ErrorKind::UnknownField { field: k.clone() },
@@ -243,12 +253,16 @@ fn parse_slide(v: &Value, i: usize) -> Result<NewSlide, Error> {
     let charts = parse_charts(obj.get("charts"), i)?;
     let smart_arts = parse_smartarts(obj.get("smartArts"), i)?;
     let tables = parse_tables(obj.get("tables"), i)?;
+    let notes = parse_notes(obj.get("notes"), i)?;
+    let comments = parse_comments(obj.get("comments"), i)?;
     Ok(NewSlide {
         shapes,
         pictures,
         charts,
         smart_arts,
         tables,
+        notes,
+        comments,
     })
 }
 
@@ -352,6 +366,47 @@ fn parse_tables(v: Option<&Value>, slide_i: usize) -> Result<Vec<InsertTableOp>,
     Ok(out)
 }
 
+fn parse_notes(v: Option<&Value>, slide_i: usize) -> Result<Option<String>, Error> {
+    let Some(v) = v else {
+        return Ok(None);
+    };
+    match v {
+        Value::String(s) => Ok(Some(s.clone())),
+        _ => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "notes".into(),
+                expected: TypeName::String,
+            },
+            format!("presentation.slides[{slide_i}].notes"),
+        )),
+    }
+}
+
+fn parse_comments(v: Option<&Value>, slide_i: usize) -> Result<Vec<InsertCommentOp>, Error> {
+    let Some(v) = v else {
+        return Ok(Vec::new());
+    };
+    let prefix = format!("presentation.slides[{slide_i}].comments");
+    let arr = v.as_array().ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::WrongType {
+                field: "comments".into(),
+                expected: TypeName::Array,
+            },
+            prefix.clone(),
+        )
+    })?;
+    let mut out = Vec::new();
+    for (j, item) in arr.iter().enumerate() {
+        out.push(request::parse_create_comment(
+            item,
+            &format!("{prefix}[{j}]"),
+            slide_i + 1,
+        )?);
+    }
+    Ok(out)
+}
+
 fn attach_pictures(pkg: &mut Package, slides: &[NewSlide]) -> Result<(), Error> {
     if slides.iter().all(|s| s.pictures.is_empty()) {
         return Ok(());
@@ -435,6 +490,52 @@ fn attach_tables(pkg: &mut Package, slides: &[NewSlide]) -> Result<(), Error> {
             table::insert_table(&mut doc, &pres.root, op, j)?;
         }
         pkg.set(&part, doc.to_bytes()?)?;
+    }
+    Ok(())
+}
+
+fn attach_notes(pkg: &mut Package, slides: &[NewSlide]) -> Result<(), Error> {
+    if slides.iter().all(|s| s.notes.is_none()) {
+        return Ok(());
+    }
+    let pres_part = "/ppt/presentation.xml";
+    let mut pres = xml::parse(pkg.get(pres_part)?)?;
+    for (i, slide) in slides.iter().enumerate() {
+        let Some(text) = &slide.notes else {
+            continue;
+        };
+        let n = i + 1;
+        let part = format!("/ppt/slides/slide{n}.xml");
+        let op = SetNotesTextOp {
+            slide: n,
+            id: format!("slide:{n}"),
+            text: text.clone(),
+        };
+        notes::apply_set_notes_text(pkg, pres_part, &mut pres, &part, &op, 0)?;
+    }
+    Ok(())
+}
+
+fn attach_comments(pkg: &mut Package, slides: &[NewSlide]) -> Result<(), Error> {
+    if slides.iter().all(|s| s.comments.is_empty()) {
+        return Ok(());
+    }
+    let pres_part = "/ppt/presentation.xml";
+    let pres = xml::parse(pkg.get(pres_part)?)?;
+    for (i, slide) in slides.iter().enumerate() {
+        if slide.comments.is_empty() {
+            continue;
+        }
+        let n = i + 1;
+        let meta = SlideMeta {
+            index: n,
+            part: format!("/ppt/slides/slide{n}.xml"),
+            name: None,
+            hidden: false,
+        };
+        for (j, op) in slide.comments.iter().enumerate() {
+            comments::apply_insert(pkg, pres_part, &pres, &meta, op, j)?;
+        }
     }
     Ok(())
 }

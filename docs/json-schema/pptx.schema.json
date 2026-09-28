@@ -55,6 +55,15 @@
           "items": {
             "$ref": "#/$defs/pptxTableCreate"
           }
+        },
+        "notes": {
+          "type": "string"
+        },
+        "comments": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/pptxCommentCreate"
+          }
         }
       }
     },
@@ -134,6 +143,33 @@
         "cy": {
           "type": "integer",
           "minimum": 1
+        }
+      }
+    },
+    "pptxCommentCreate": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "text": {
+          "type": "string"
+        },
+        "author": {
+          "type": "string"
+        },
+        "initials": {
+          "type": "string"
+        },
+        "date": {
+          "type": "string",
+          "minLength": 1
+        },
+        "x": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "y": {
+          "type": "integer",
+          "minimum": 0
         }
       }
     },

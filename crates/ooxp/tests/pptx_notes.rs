@@ -186,6 +186,10 @@ fn set_notes_text_creates_parts_and_inspects() {
     assert!(names
         .iter()
         .any(|n| n == "ppt/notesMasters/notesMaster1.xml"));
+    assert!(names
+        .iter()
+        .any(|n| n == "ppt/notesMasters/_rels/notesMaster1.xml.rels"));
+    assert!(names.iter().any(|n| n == "ppt/theme/theme2.xml"));
     let pres = String::from_utf8(part_bytes(&out, "ppt/presentation.xml")).unwrap();
     assert!(pres.contains("notesMasterIdLst"));
     let tree = inspect_notes(&out, false);

@@ -9,7 +9,7 @@ use crate::xml::{self, Document, Element, Node};
 use super::picture;
 use super::request::SetNotesTextOp;
 use super::shape::{self, ShapeKey};
-use super::{DML_NS, PML_NS, REL_NS, REL_THEME};
+use super::{CT_THEME, DML_NS, PML_NS, REL_NS, REL_THEME};
 
 pub const REL_NOTES_SLIDE: &str =
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/notesSlide";
@@ -188,22 +188,8 @@ fn ensure_notes_master(
     }
     let master = next_part(pkg, "/ppt/notesMasters", "notesMaster");
     pkg.set(&master, NOTES_MASTER_XML.as_bytes().to_vec())?;
-    if let Some(theme) = pres_rels
-        .rels
-        .iter()
-        .find(|r| r.rel_type.ends_with("/theme"))
-    {
-        let theme_part = opc::resolve_id(pkg, pres_part, &theme.id)?;
-        let mut master_rels = Relationships { rels: Vec::new() };
-        master_rels.push(Relationship {
-            id: "rId1".into(),
-            rel_type: REL_THEME.into(),
-            target: picture::rel_target_from(&master, &theme_part),
-            target_mode: None,
-            extra: Vec::new(),
-        });
-        master_rels.write_to(pkg, &master)?;
-    }
+    // create 最小包的 theme 挂在 slideMaster 上，presentation 没有 theme 关系。
+    let cloned_theme = attach_cloned_theme(pkg, pres_part, &pres_rels, &master)?;
     let rid = pres_rels.next_rid();
     pres_rels.push(Relationship {
         id: rid.clone(),
@@ -217,8 +203,65 @@ fn ensure_notes_master(
     pkg.set(pres_part, pres.to_bytes()?)?;
     let mut cts = ContentTypes::from_package(pkg)?;
     cts.set_override(&master, CT_NOTES_MASTER)?;
+    if let Some(theme) = cloned_theme.as_deref() {
+        cts.set_override(theme, CT_THEME)?;
+    }
     cts.write_to(pkg)?;
     Ok(master)
+}
+
+/// PowerPoint 16.0 拒开与 slideMaster 共用同一 theme 部件的备注母版或讲义母版；复制一份独立 theme。
+pub(crate) fn attach_cloned_theme(
+    pkg: &mut Package,
+    pres_part: &str,
+    pres_rels: &Relationships,
+    master: &str,
+) -> Result<Option<String>, Error> {
+    let Some(src) = theme_part(pkg, pres_part, pres_rels)? else {
+        return Ok(None);
+    };
+    let cloned = next_part(pkg, "/ppt/theme", "theme");
+    pkg.set(&cloned, pkg.get(&src)?.to_vec())?;
+    let mut master_rels = Relationships { rels: Vec::new() };
+    master_rels.push(Relationship {
+        id: "rId1".into(),
+        rel_type: REL_THEME.into(),
+        target: picture::rel_target_from(master, &cloned),
+        target_mode: None,
+        extra: Vec::new(),
+    });
+    master_rels.write_to(pkg, master)?;
+    Ok(Some(cloned))
+}
+
+pub(crate) fn theme_part(
+    pkg: &Package,
+    pres_part: &str,
+    pres_rels: &Relationships,
+) -> Result<Option<String>, Error> {
+    if let Some(theme) = pres_rels
+        .rels
+        .iter()
+        .find(|r| r.rel_type.ends_with("/theme"))
+    {
+        return Ok(Some(opc::resolve_id(pkg, pres_part, &theme.id)?));
+    }
+    for rel in pres_rels
+        .rels
+        .iter()
+        .filter(|r| r.rel_type.ends_with("/slideMaster"))
+    {
+        let master = opc::resolve_id(pkg, pres_part, &rel.id)?;
+        let master_rels = Relationships::from_package(pkg, &master)?;
+        if let Some(theme) = master_rels
+            .rels
+            .iter()
+            .find(|r| r.rel_type.ends_with("/theme"))
+        {
+            return Ok(Some(opc::resolve_id(pkg, &master, &theme.id)?));
+        }
+    }
+    Ok(None)
 }
 
 fn insert_notes_master_id(pres_root: &mut Element, rid: &str) {

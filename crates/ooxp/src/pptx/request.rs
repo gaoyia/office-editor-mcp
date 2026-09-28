@@ -3272,6 +3272,108 @@ pub(crate) fn parse_create_picture(
     })
 }
 
+pub(crate) fn parse_create_comment(
+    v: &Value,
+    prefix: &str,
+    slide: usize,
+) -> Result<InsertCommentOp, Error> {
+    let obj = v.as_object().ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::WrongType {
+                field: "comments".into(),
+                expected: TypeName::Object,
+            },
+            prefix.to_string(),
+        )
+    })?;
+    deny_keys_at(
+        obj,
+        prefix,
+        &["text", "author", "initials", "date", "x", "y"],
+    )?;
+    let text = match obj.get("text") {
+        None => String::new(),
+        Some(Value::String(s)) => s.clone(),
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "text".into(),
+                    expected: TypeName::String,
+                },
+                format!("{prefix}.text"),
+            ));
+        }
+    };
+    let author = match obj.get("author") {
+        None => "ooxp".into(),
+        Some(Value::String(s)) => s.clone(),
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "author".into(),
+                    expected: TypeName::String,
+                },
+                format!("{prefix}.author"),
+            ));
+        }
+    };
+    let initials = match obj.get("initials") {
+        None => "oo".into(),
+        Some(Value::String(s)) => s.clone(),
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "initials".into(),
+                    expected: TypeName::String,
+                },
+                format!("{prefix}.initials"),
+            ));
+        }
+    };
+    let date = match obj.get("date") {
+        None => None,
+        Some(Value::String(s)) if !s.is_empty() => Some(s.clone()),
+        Some(Value::String(_)) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "date".into(),
+                    expected: TypeName::NonEmptyString,
+                },
+                format!("{prefix}.date"),
+            ));
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "date".into(),
+                    expected: TypeName::String,
+                },
+                format!("{prefix}.date"),
+            ));
+        }
+    };
+    let x = parse_off_at(obj.get("x"), &format!("{prefix}.x"), "x")?;
+    let y = parse_off_at(obj.get("y"), &format!("{prefix}.y"), "y")?;
+    if x.is_some() != y.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "create".into(),
+                field: "x and y together".into(),
+            },
+            prefix.to_string(),
+        ));
+    }
+    Ok(InsertCommentOp {
+        slide,
+        text,
+        author,
+        initials,
+        date,
+        x,
+        y,
+    })
+}
+
 fn parse_emu_field(v: Option<&Value>, i: usize, field: &str) -> Result<Option<i64>, Error> {
     parse_emu_at(v, &format!("ops[{i}].{field}"), field)
 }

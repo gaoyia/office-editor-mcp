@@ -10,7 +10,7 @@ use super::notes;
 use super::picture;
 use super::request::SetHandoutTextOp;
 use super::shape;
-use super::{CT_THEME, DML_NS, PML_NS, REL_THEME};
+use super::{CT_THEME, DML_NS, PML_NS};
 
 pub const REL_HANDOUT_MASTER: &str =
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/handoutMaster";
@@ -113,23 +113,7 @@ fn ensure_handout_master(
     let mut pres_rels = Relationships::from_package(pkg, pres_part)?;
     let master = next_part(pkg, "/ppt/handoutMasters", "handoutMaster");
     pkg.set(&master, HANDOUT_MASTER_XML.as_bytes().to_vec())?;
-    // PowerPoint 16.0 拒开与 slideMaster 共用同一 theme 部件的讲义母版；复制一份独立 theme。
-    let cloned_theme = if let Some(src) = theme_part(pkg, pres_part, &pres_rels)? {
-        let cloned = next_part(pkg, "/ppt/theme", "theme");
-        pkg.set(&cloned, pkg.get(&src)?.to_vec())?;
-        let mut master_rels = Relationships { rels: Vec::new() };
-        master_rels.push(Relationship {
-            id: "rId1".into(),
-            rel_type: REL_THEME.into(),
-            target: picture::rel_target_from(&master, &cloned),
-            target_mode: None,
-            extra: Vec::new(),
-        });
-        master_rels.write_to(pkg, &master)?;
-        Some(cloned)
-    } else {
-        None
-    };
+    let cloned_theme = notes::attach_cloned_theme(pkg, pres_part, &pres_rels, &master)?;
     let rid = pres_rels.next_rid();
     pres_rels.push(Relationship {
         id: rid.clone(),
@@ -179,36 +163,6 @@ fn insert_handout_master_id(pres_root: &mut Element, rid: &str) {
     } else {
         pres_root.push_element(lst);
     }
-}
-
-fn theme_part(
-    pkg: &Package,
-    pres_part: &str,
-    pres_rels: &Relationships,
-) -> Result<Option<String>, Error> {
-    if let Some(theme) = pres_rels
-        .rels
-        .iter()
-        .find(|r| r.rel_type.ends_with("/theme"))
-    {
-        return Ok(Some(opc::resolve_id(pkg, pres_part, &theme.id)?));
-    }
-    for rel in pres_rels
-        .rels
-        .iter()
-        .filter(|r| r.rel_type.ends_with("/slideMaster"))
-    {
-        let master = opc::resolve_id(pkg, pres_part, &rel.id)?;
-        let master_rels = Relationships::from_package(pkg, &master)?;
-        if let Some(theme) = master_rels
-            .rels
-            .iter()
-            .find(|r| r.rel_type.ends_with("/theme"))
-        {
-            return Ok(Some(opc::resolve_id(pkg, &master, &theme.id)?));
-        }
-    }
-    Ok(None)
 }
 
 fn next_part(pkg: &Package, dir: &str, stem: &str) -> String {

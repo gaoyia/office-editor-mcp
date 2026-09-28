@@ -185,7 +185,7 @@ pptx create 同样生成 Transitional 包，命名空间用 2006 那套。不能
 | `/docProps/custom.xml` | 仅当 `presentation.props.custom` 非空，或 apply 的 `setCustomProp` 新建了自定义属性 |
 | `/ppt/media/imageN.*` | 给了 `slides[].pictures` 时写入 |
 
-第一期 create 不写备注、批注、讲义、`viewProps`、`tableStyles`、动画。apply 的 `setNotesText` 或往备注插图时，可能新建 `/ppt/notesMasters/notesMaster1.xml` 与 `/ppt/notesSlides/notesSlideN.xml`。apply 的 `setHandoutText` 可能新建 `/ppt/handoutMasters/handoutMaster1.xml`。apply 插入现代批注时，可能新建 `/ppt/comments/modernComment_{sldId}_N.xml` 与 `/ppt/authors.xml`。
+create 不写讲义、`viewProps`、`tableStyles`、动画。给了 `slides[].notes` 时与 apply 的 `setNotesText` 相同，可能新建 `/ppt/notesMasters/notesMaster1.xml`、独立 theme 副本（常见为 `/ppt/theme/theme2.xml`）与 `/ppt/notesSlides/notesSlideN.xml`。给了 `slides[].comments` 时与 apply 的 `insertComment` 相同，可能新建 `/ppt/comments/modernComment_{sldId}_N.xml` 与 `/ppt/authors.xml`。apply 的 `setHandoutText` 可能新建 `/ppt/handoutMasters/handoutMaster1.xml`。
 
 `presentation.xml` 里：`p:sldMasterIdLst` 一条、`p:sldIdLst` 按页顺序、`p:sldSz` 为 16:9（`cx="12192000"` `cy="6858000"`）、`p:notesSz` 为 `cx="6858000"` `cy="9144000"`。`p:sldId/@id` 从 256 起递增，与领域 id 的 `slide:{n}` 不是一回事。
 
@@ -251,7 +251,7 @@ apply 插入幻灯片图表时，可能新建 `/ppt/charts/chartN.xml`（CT `app
 
 apply 插入幻灯片 SmartArt 时，可能新建 `/ppt/diagrams/` 下的 data / layout / colors / quickStyle（CT 分别为 `application/vnd.openxmlformats-officedocument.drawingml.diagramData+xml`、`…diagramLayout+xml`、`…diagramColors+xml`、`…diagramQuickStyle+xml`）。该页 `.rels` 补四条 diagram 关系。宿主是 `p:graphicFrame`，`a:graphicData/@uri` 为 diagram URI，`dgm:relIds` 指向这四条。create 给了 `slides[].smartArts` 时同样写入。不写 Fallback 位图，不写 diagram drawing 缓存。改点对不上缓存时删掉该缓存。
 
-apply 新建备注页时，可能写入 `/ppt/notesSlides/notesSlideN.xml`（CT `application/vnd.openxmlformats-officedocument.presentationml.notesSlide+xml`）和 `/ppt/notesMasters/notesMaster1.xml`（CT `…notesMaster+xml`）。幻灯片 `.rels` 补一条 notesSlide 关系（Type 以 `/notesSlide` 结尾）。备注页 `.rels` 指向 notesMaster 与对应幻灯片（Type 分别以 `/notesMaster`、`/slide` 结尾）。若 presentation 还没有 notesMaster，补 presentation 关系，并在 `presentation.xml` 的 `p:sldMasterIdLst` 之后写入 `p:notesMasterIdLst`。notesMaster 的 theme 关系指向包内已有 theme，不另建 theme2。备注页结构对照 PowerPoint 16.0 另存样例：`sldImg`、`body`、`sldNum` 三个占位符。往备注插的 `p:pic` 写在 notesSlide 的 `p:spTree` 里，媒体仍在 `/ppt/media/…`。
+apply 新建备注页时，可能写入 `/ppt/notesSlides/notesSlideN.xml`（CT `application/vnd.openxmlformats-officedocument.presentationml.notesSlide+xml`）和 `/ppt/notesMasters/notesMaster1.xml`（CT `…notesMaster+xml`）。幻灯片 `.rels` 补一条 notesSlide 关系（Type 以 `/notesSlide` 结尾）。备注页 `.rels` 指向 notesMaster 与对应幻灯片（Type 分别以 `/notesMaster`、`/slide` 结尾）。若 presentation 还没有 notesMaster，补 presentation 关系，并在 `presentation.xml` 的 `p:sldMasterIdLst` 之后写入 `p:notesMasterIdLst`。notesMaster 的 theme 关系指向新复制的 theme 部件（内容与包内已有 theme 相同，常见为 `/ppt/theme/theme2.xml`），不和 slideMaster 共用同一部件。备注页结构对照 PowerPoint 16.0 另存样例：`sldImg`、`body`、`sldNum` 三个占位符。往备注插的 `p:pic` 写在 notesSlide 的 `p:spTree` 里，媒体仍在 `/ppt/media/…`。
 
 apply 的 `setHandoutText` 可能写入 `/ppt/handoutMasters/handoutMaster1.xml`（CT `application/vnd.openxmlformats-officedocument.presentationml.handoutMaster+xml`）。presentation `.rels` 补一条 handoutMaster 关系（Type 以 `/handoutMaster` 结尾）。若还没有 `p:handoutMasterIdLst`，写在 `notesMasterIdLst` 之后（没有则写在 `sldMasterIdLst` 之后）。handoutMaster 的 theme 关系指向新复制的 theme 部件（内容与包内已有 theme 相同，常见为 `/ppt/theme/theme2.xml`），不和 slideMaster 共用同一部件。新建部件含 `hdr`、`dt`、`ftr`、`sldNum` 四个占位符，不写 `sldImg`。
 

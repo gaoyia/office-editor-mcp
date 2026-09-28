@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "action": "create",
+  "path": "deck.pptx",
+  "format": "pptx",
+  "presentation": {
+    "slides": [
+      {
+        "shapes": [{ "text": "标题" }],
+        "notes": "演讲者备注",
+        "comments": [
+          {
+            "text": "一条批注",
+            "author": "Alice",
+            "initials": "A",
+            "date": "2026-09-01T00:00:00.000",
+            "x": 914400,
+            "y": 914400
+          }
+        ]
+      },
+      {
+        "shapes": [{ "text": "第二页" }]
+      }
+    ]
+  }
+}
