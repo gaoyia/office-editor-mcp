@@ -596,6 +596,10 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::InvalidChartType => {
             "type must be bar, col, line, pie, area, scatter, doughnut, radar, or bubble; insertChart also allows combo".into()
         }
+        ErrorKind::InvalidTransitionType => {
+            "type must be a writable slide transition, or null to clear".into()
+        }
+        ErrorKind::InvalidTransitionDur => "dur must be an integer from 1 to 60000".into(),
         ErrorKind::InvalidChartAxis => {
             "axis must be cat or val, and the chart must have that primary axis".into()
         }

@@ -524,6 +524,10 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::InvalidChartType => {
             "type 必须是 bar、col、line、pie、area、scatter、doughnut、radar 或 bubble；insertChart 还可为 combo".into()
         }
+        ErrorKind::InvalidTransitionType => {
+            "type 必须是可写的幻灯片切换名，或 null 表示清除".into()
+        }
+        ErrorKind::InvalidTransitionDur => "dur 必须是 1 到 60000 的整数".into(),
         ErrorKind::InvalidChartAxis => "axis 必须是 cat 或 val，且图表里要有对应主轴".into(),
         ErrorKind::InvalidLegendPos => "pos 必须是 b、t、l、r 或 tr".into(),
         ErrorKind::PieNeedsOneSeries => "饼图与圆环图必须恰好一条系列".into(),

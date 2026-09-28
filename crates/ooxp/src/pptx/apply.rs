@@ -13,6 +13,7 @@ use super::shape;
 use super::slides;
 use super::smartart;
 use super::table;
+use super::transition;
 
 pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
     let mut pkg = Package::open_bytes(bytes.to_vec())?;
@@ -764,6 +765,16 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
             PptxOp::SetSlideHidden(op) => {
                 slides::set_hidden(&mut pkg, &slides, op, i)?;
                 slides = shape::list_slides(&pkg, &pres_part, &pres.root)?;
+            }
+            PptxOp::SetTransition(op) => {
+                transition::apply(
+                    &mut pkg,
+                    &slides,
+                    op.slide,
+                    op.type_name.as_deref(),
+                    op.dur,
+                    i,
+                )?;
             }
             PptxOp::SetProps(op) => {
                 crate::props::apply_set_props(&mut pkg, op, i)?;

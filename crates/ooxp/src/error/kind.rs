@@ -146,7 +146,7 @@ pub(crate) enum IdReason {
     InsertSheetNeedsWorkbook,
     /// insertSlide 必须用 pptx:presentation
     InsertSlideNeedsPresentation,
-    /// deleteSlide / moveSlide / setSlideHidden 必须用 slide:N
+    /// deleteSlide / moveSlide / setSlideHidden / setTransition 必须用 slide:N
     SlideOpNeedsSlide,
     /// insertDefinedName 必须用 xlsx:workbook
     InsertDefinedNameNeedsWorkbook,
@@ -553,6 +553,8 @@ define_error_kinds! {
     LastChartSeries => vec![Self::LastChartSeries],
     RestrictedChart { id: String } => vec![Self::RestrictedChart { id: "para:1/chart:1".into() }],
     InvalidChartType => vec![Self::InvalidChartType],
+    InvalidTransitionType => vec![Self::InvalidTransitionType],
+    InvalidTransitionDur => vec![Self::InvalidTransitionDur],
     InvalidChartAxis => vec![Self::InvalidChartAxis],
     InvalidLegendPos => vec![Self::InvalidLegendPos],
     PieNeedsOneSeries => vec![Self::PieNeedsOneSeries],
@@ -1183,6 +1185,8 @@ impl ErrorKind {
             | Self::InvalidSeriesAxis
             | Self::LastChartSeries
             | Self::InvalidChartType
+            | Self::InvalidTransitionType
+            | Self::InvalidTransitionDur
             | Self::InvalidChartAxis
             | Self::InvalidLegendPos
             | Self::PieNeedsOneSeries

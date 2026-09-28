@@ -12,6 +12,7 @@ pub(crate) mod shape;
 mod slides;
 mod smartart;
 mod table;
+mod transition;
 
 pub use apply::apply;
 pub use chart::export_chart_data;

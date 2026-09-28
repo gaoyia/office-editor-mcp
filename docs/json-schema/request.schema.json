@@ -801,6 +801,7 @@
               { "$ref": "#/$defs/deleteSlideOp" },
               { "$ref": "#/$defs/moveSlideOp" },
               { "$ref": "#/$defs/setSlideHiddenOp" },
+              { "$ref": "#/$defs/setTransitionOp" },
               { "$ref": "#/$defs/setPropsOp" },
               { "$ref": "#/$defs/setCustomPropOp" },
               { "$ref": "#/$defs/deleteCustomPropOp" }
@@ -3520,6 +3521,17 @@
         "op": { "const": "setSlideHidden" },
         "id": { "type": "string", "minLength": 1 },
         "hidden": { "type": "boolean" }
+      }
+    },
+    "setTransitionOp": {
+      "type": "object",
+      "required": ["op", "id", "type"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "setTransition" },
+        "id": { "type": "string", "minLength": 1 },
+        "type": { "type": ["string", "null"] },
+        "dur": { "type": "integer", "minimum": 1, "maximum": 60000 }
       }
     },
     "nullableString": { "type": ["string", "null"] },

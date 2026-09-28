@@ -14,6 +14,7 @@ use super::request::InspectScope;
 use super::shape;
 use super::smartart;
 use super::table;
+use super::transition;
 
 pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error> {
     let pkg = Package::open_bytes(bytes.to_vec())?;
@@ -87,6 +88,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         obj.insert("index".into(), json!(s.index));
         obj.insert("name".into(), json!(s.name));
         obj.insert("hidden".into(), json!(s.hidden));
+        obj.insert("transition".into(), transition::inspect(&doc.root));
         obj.insert("hasNotes".into(), json!(has));
         obj.insert("pictureCount".into(), json!(pics.len()));
         obj.insert("chartCount".into(), json!(n_charts));

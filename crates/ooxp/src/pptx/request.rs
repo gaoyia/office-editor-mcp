@@ -12,6 +12,7 @@ use super::comments;
 use super::picture;
 use super::smartart;
 use super::table;
+use super::transition;
 
 #[derive(Debug, Clone)]
 pub struct InspectScope {
@@ -106,6 +107,13 @@ pub struct MoveSlideOp {
 pub struct SetSlideHiddenOp {
     pub slide: usize,
     pub hidden: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetTransitionOp {
+    pub slide: usize,
+    pub type_name: Option<String>,
+    pub dur: Option<u32>,
 }
 
 #[derive(Debug, Clone)]
@@ -557,6 +565,7 @@ pub enum PptxOp {
     DeleteSlide(DeleteSlideOp),
     MoveSlide(MoveSlideOp),
     SetSlideHidden(SetSlideHiddenOp),
+    SetTransition(SetTransitionOp),
     SetProps(crate::props::SetPropsOp),
     SetCustomProp(crate::props::SetCustomPropOp),
     DeleteCustomProp(crate::props::DeleteCustomPropOp),
@@ -773,6 +782,7 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<PptxOp>, Error> {
             "deleteSlide" => PptxOp::DeleteSlide(parse_delete_slide(obj, i)?),
             "moveSlide" => PptxOp::MoveSlide(parse_move_slide(obj, i)?),
             "setSlideHidden" => PptxOp::SetSlideHidden(parse_set_slide_hidden(obj, i)?),
+            "setTransition" => PptxOp::SetTransition(parse_set_transition(obj, i)?),
             "setProps" => {
                 PptxOp::SetProps(crate::props::parse_set_props(obj, i, "pptx:presentation")?)
             }
@@ -1175,6 +1185,79 @@ fn parse_set_slide_hidden(obj: &Map<String, Value>, i: usize) -> Result<SetSlide
         slide: parse_slide_only_id(&id, i, "id")?,
         hidden: parse_required_bool(obj.get("hidden"), i, "setSlideHidden", "hidden")?,
     })
+}
+
+fn parse_set_transition(obj: &Map<String, Value>, i: usize) -> Result<SetTransitionOp, Error> {
+    deny_keys(obj, i, &["op", "id", "type", "dur"])?;
+    let id = require_id(obj, i)?;
+    let type_name = match obj.get("type") {
+        None => {
+            return Err(Error::with_path(
+                ErrorKind::OpRequiresField {
+                    op: "setTransition".into(),
+                    field: "type".into(),
+                },
+                format!("ops[{i}].type"),
+            ));
+        }
+        Some(Value::Null) => None,
+        Some(Value::String(s)) => {
+            if s.is_empty() || s == "other" || !transition::is_writable_type(s) {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidTransitionType,
+                    format!("ops[{i}].type"),
+                ));
+            }
+            Some(s.clone())
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "type".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].type"),
+            ));
+        }
+    };
+    let dur = match obj.get("dur") {
+        None => None,
+        Some(_) if type_name.is_none() => None,
+        Some(v) => Some(parse_transition_dur(v, i)?),
+    };
+    Ok(SetTransitionOp {
+        slide: parse_slide_only_id(&id, i, "id")?,
+        type_name,
+        dur,
+    })
+}
+
+fn parse_transition_dur(v: &Value, i: usize) -> Result<u32, Error> {
+    let path = format!("ops[{i}].dur");
+    let n = match v {
+        Value::Number(num) => num.as_u64().ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::WrongType {
+                    field: "dur".into(),
+                    expected: TypeName::Integer,
+                },
+                path.clone(),
+            )
+        })?,
+        _ => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "dur".into(),
+                    expected: TypeName::Integer,
+                },
+                path,
+            ));
+        }
+    };
+    if !(1..=60000).contains(&n) {
+        return Err(Error::with_path(ErrorKind::InvalidTransitionDur, path));
+    }
+    Ok(n as u32)
 }
 
 fn parse_optional_slide_after(

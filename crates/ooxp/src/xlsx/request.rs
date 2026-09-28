@@ -1825,6 +1825,7 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<XlsxOp>, Error> {
             | "deleteSlide"
             | "moveSlide"
             | "setSlideHidden"
+            | "setTransition"
             | "insertShape"
             | "deleteShape"
             | "setShapePos"

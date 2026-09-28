@@ -23,6 +23,7 @@
       "index": 1,
       "name": null,
       "hidden": false,
+      "transition": null,
       "truncated": false,
       "shapes": [
         {
@@ -45,7 +46,8 @@
       "id": "slide:2",
       "index": 2,
       "name": null,
-      "hidden": false
+      "hidden": false,
+      "transition": null
     }
   ]
 }

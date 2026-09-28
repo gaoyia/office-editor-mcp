@@ -159,6 +159,7 @@ fn inspect_has_notes_without_notes_object() {
             "index",
             "name",
             "hidden",
+            "transition",
             "hasNotes",
             "pictureCount",
             "chartCount",
