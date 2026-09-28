@@ -211,6 +211,7 @@ fn set_notes_text_creates_parts_and_inspects() {
             "pictureCount",
             "chartCount",
             "smartArtCount",
+            "tableCount",
             "shapes"
         ]
     );
@@ -349,6 +350,7 @@ fn insert_picture_on_notes_does_not_join_slide_count() {
             "pictureCount",
             "chartCount",
             "smartArtCount",
+            "tableCount",
             "pictures",
             "shapes"
         ]

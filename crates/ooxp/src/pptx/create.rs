@@ -905,9 +905,12 @@ fn resolve_anim_host(
                 .map(|p| p.id.clone())
                 .ok_or_else(|| anim_host_err(prefix, "audio"))
         }
-        CreateAnimHost::Table(n) => {
-            json_id(&table::collect_tables(root, slide), n, prefix, "table")
-        }
+        CreateAnimHost::Table(n) => json_id(
+            &table::collect_tables(root, &format!("slide:{slide}")),
+            n,
+            prefix,
+            "table",
+        ),
         CreateAnimHost::Chart(n) => json_id(
             &chart::collect_charts(pkg, root, &host_s, part)?,
             n,

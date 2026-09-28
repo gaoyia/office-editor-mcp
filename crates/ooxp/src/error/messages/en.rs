@@ -358,7 +358,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::InsertSmartArtNeedsSlide => {
                 "pptx insertSmartArt id must be slide:N or slide:N/notes".into()
             }
-            IdReason::SlideTablePrefix => "pptx table id must be slide:N/table:…".into(),
+            IdReason::SlideTablePrefix => {
+                "pptx table id must be slide:N/table:… or slide:N/notes/table:…".into()
+            }
             IdReason::SlideTableContainer => {
                 "Slide id must include /table:… (that id alone is not a table)".into()
             }
@@ -370,7 +372,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::SlideTableCellForm => {
                 "Cell id must be a table id plus /r:R/c:C, R and C starting at 1".into()
             }
-            IdReason::InsertTableNeedsSlide => "pptx insertTable id must be slide:N".into(),
+            IdReason::InsertTableNeedsSlide => {
+                "pptx insertTable id must be slide:N or slide:N/notes".into()
+            }
             IdReason::SetTableCellNeedsCell => {
                 "setTableCellText id must be a DrawingML table cell id".into()
             }

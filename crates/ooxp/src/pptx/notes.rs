@@ -75,6 +75,7 @@ pub fn notes_json(
     want_pictures: bool,
     want_charts: bool,
     want_smartarts: bool,
+    want_tables: bool,
 ) -> Result<Value, Error> {
     let Some(part) = notes_slide_part(pkg, slide_part)? else {
         return Ok(Value::Null);
@@ -102,6 +103,15 @@ pub fn notes_json(
         .as_ref()
         .map(|c| c.len())
         .unwrap_or_else(|| super::smartart::count_smartarts(&doc.root));
+    let tables_list = if want_tables {
+        Some(super::table::collect_tables(&doc.root, &host))
+    } else {
+        None
+    };
+    let n_tables = tables_list
+        .as_ref()
+        .map(|c| c.len())
+        .unwrap_or_else(|| super::table::count_tables(&doc.root));
     let all = shape::collect_text_shapes(&doc.root);
     let mut shapes = Vec::new();
     for (i, sp) in all.iter().enumerate() {
@@ -113,6 +123,7 @@ pub fn notes_json(
     obj.insert("pictureCount".into(), json!(pics.len()));
     obj.insert("chartCount".into(), json!(n_charts));
     obj.insert("smartArtCount".into(), json!(n_smartarts));
+    obj.insert("tableCount".into(), json!(n_tables));
     if want_pictures {
         obj.insert(
             "pictures".into(),
@@ -124,6 +135,9 @@ pub fn notes_json(
     }
     if let Some(smartarts) = smartarts_list {
         obj.insert("smartArts".into(), Value::Array(smartarts));
+    }
+    if let Some(tables) = tables_list {
+        obj.insert("tables".into(), Value::Array(tables));
     }
     obj.insert("shapes".into(), Value::Array(shapes));
     Ok(Value::Object(obj))

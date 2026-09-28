@@ -119,7 +119,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         let n_links = hyperlink::count(&doc.root);
         hyperlink_count += n_links;
         let tables_list = if want_tables {
-            Some(table::collect_tables(&doc.root, s.index))
+            Some(table::collect_tables(&doc.root, &host))
         } else {
             None
         };
@@ -208,6 +208,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
                     want_pictures,
                     want_charts,
                     want_smartarts,
+                    want_tables,
                 )?,
             );
         }

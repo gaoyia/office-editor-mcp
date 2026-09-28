@@ -674,6 +674,7 @@ pub struct SetSmartArtLayoutOp {
 #[derive(Debug, Clone)]
 pub struct InsertTableOp {
     pub slide: usize,
+    pub on_notes: bool,
     pub rows: usize,
     pub cols: usize,
     pub cells: Vec<Vec<String>>,
@@ -4028,7 +4029,7 @@ fn parse_insert_table(obj: &Map<String, Value>, i: usize) -> Result<InsertTableO
         &["op", "id", "rows", "cols", "cells", "x", "y", "cx", "cy"],
     )?;
     let id = require_id(obj, i)?;
-    let slide = table::parse_insert_slide_id(&id, i)?;
+    let (slide, on_notes) = table::parse_insert_slide_id(&id, i)?;
     let rows = table::parse_dim(
         obj.get("rows"),
         &format!("ops[{i}].rows"),
@@ -4068,6 +4069,7 @@ fn parse_insert_table(obj: &Map<String, Value>, i: usize) -> Result<InsertTableO
     }
     Ok(InsertTableOp {
         slide,
+        on_notes,
         rows,
         cols,
         cells,
@@ -4612,6 +4614,7 @@ pub(crate) fn parse_create_table(
     }
     Ok(InsertTableOp {
         slide,
+        on_notes: false,
         rows,
         cols,
         cells,

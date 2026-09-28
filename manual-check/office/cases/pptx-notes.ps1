@@ -1,4 +1,4 @@
-# pptx 备注：docs/checklist-pptx.md 的 Pn1–Pn6。
+# pptx 备注：docs/checklist-pptx.md 的 Pn1–Pn11。
 # 源文件：PowerPoint 亲手另存，第一页有演讲者备注。不要用库 create 产物当带备注的唯一样例。
 
 $ErrorActionPreference = 'Stop'
@@ -37,6 +37,53 @@ function Get-PptNotesText($slide) {
             }
         } finally { Release-Com $shapes }
         return ''
+    } finally { Release-Com $page }
+}
+
+function Invoke-OoxpExpectFail($obj, [string]$name) {
+    $path = Join-Path $global:OoxpReqDir "$name.json"
+    Write-JsonFile $path $obj
+    $psi = New-Object System.Diagnostics.ProcessStartInfo
+    $psi.FileName = $global:OoxpExe
+    $psi.Arguments = "--input `"$path`""
+    $psi.UseShellExecute = $false
+    $psi.RedirectStandardOutput = $true
+    $psi.RedirectStandardError = $true
+    $psi.StandardOutputEncoding = [System.Text.Encoding]::UTF8
+    $psi.StandardErrorEncoding = [System.Text.Encoding]::UTF8
+    $proc = [System.Diagnostics.Process]::Start($psi)
+    $stdout = $proc.StandardOutput.ReadToEnd().Trim()
+    $stderr = $proc.StandardError.ReadToEnd().Trim()
+    $proc.WaitForExit()
+    $code = $proc.ExitCode
+    $proc.Dispose()
+    Write-Log "ooxp $name 退出码 $code stderr=$stderr"
+    return @{ ExitCode = $code; Stderr = $stderr; Stdout = $stdout }
+}
+
+function Get-PptErrorCode($raw) {
+    try { return ($raw.Stderr | ConvertFrom-Json).error.code } catch { return $null }
+}
+
+function Get-PptNotesTableCount($slide) {
+    $page = $slide.NotesPage
+    try {
+        $n = 0
+        $shapes = $page.Shapes
+        try {
+            for ($i = 1; $i -le $shapes.Count; $i++) {
+                $shp = $shapes.Item($i)
+                try {
+                    $isTbl = $false
+                    try { if ([bool]$shp.HasTable) { $isTbl = $true } } catch {}
+                    if (-not $isTbl) {
+                        try { if ([int]$shp.Type -eq 19) { $isTbl = $true } } catch {}
+                    }
+                    if ($isTbl) { $n++ }
+                } finally { Release-Com $shp }
+            }
+        } finally { Release-Com $shapes }
+        return $n
     } finally { Release-Com $page }
 }
 
@@ -283,3 +330,130 @@ Close-PptPres $presSa
 Add-Check 'pptx-Pn6' (
     ($capSa -notmatch 'Repair') -and $saIdOk -and $slideSaStill
 ) "cap=$capSa id=$saId slideSa=$($treeSa.smartArtCount)"
+
+$tblOut = Get-OutPath 'pptx-notes-table.pptx'
+Close-PptPresByPath $ppt $tblOut
+if (Test-Path $tblOut) { Remove-Item $tblOut -Force }
+Invoke-OoxpRequest @{
+    schemaVersion = 1; action = 'apply'
+    path = $src.Replace('\', '/')
+    output = $tblOut.Replace('\', '/')
+    ops = @(@{
+        op = 'insertTable'
+        id = 'slide:1/notes'
+        rows = 2
+        cols = 2
+        cells = @(
+            @('甲', '乙'),
+            @('丙', '丁')
+        )
+    })
+} 'pptx-notes-insert-table' | Out-Null
+
+$treeTbl = Invoke-OoxpTree @{
+    schemaVersion = 1; action = 'inspect'
+    path = $tblOut.Replace('\', '/'); format = 'pptx'
+    scope = @{ notes = $true; tables = $true }
+} 'pptx-notes-table-inspect'
+$nNotesTbl = $treeTbl.slides[0].notes
+$tblId = $null
+if ($nNotesTbl -and $nNotesTbl.tables -and @($nNotesTbl.tables).Count -ge 1) {
+    $tblId = [string]$nNotesTbl.tables[0].id
+}
+$tblIdOk = ($null -ne $tblId) -and ($tblId -like 'slide:1/notes/table:*')
+$slideTblStill = ([int]$treeTbl.tableCount -eq 0) -and ([int]$treeTbl.slides[0].tableCount -eq 0)
+$bareNotes = Invoke-OoxpTree @{
+    schemaVersion = 1; action = 'inspect'
+    path = $tblOut.Replace('\', '/'); format = 'pptx'
+    scope = @{ notes = $true }
+} 'pptx-notes-table-bare'
+$bareHasCount = ($null -ne $bareNotes.slides[0].notes) -and ([int]$bareNotes.slides[0].notes.tableCount -eq 1)
+$bareNoList = -not ($bareNotes.slides[0].notes.PSObject.Properties.Name -contains 'tables')
+Add-Check 'pptx-Pn7' ($tblIdOk -and $slideTblStill -and $bareHasCount -and $bareNoList) `
+    "id=$tblId slideTc=$($treeTbl.tableCount) notesTc=$($nNotesTbl.tableCount) bare=$bareHasCount noList=$bareNoList"
+
+$presT = Open-PptPres $ppt $tblOut
+$capT = Get-PptCaption $presT
+$sT = Get-PptSlide $presT 1
+$nTbl = Get-PptNotesTableCount $sT
+Release-Com $sT
+Close-PptPres $presT
+Add-Check 'pptx-Pn8' (($capT -notmatch 'Repair') -and $tblIdOk -and ($nTbl -ge 1)) "cap=$capT com=$nTbl id=$tblId"
+
+$cellOut = Get-OutPath 'pptx-notes-table-cell.pptx'
+Close-PptPresByPath $ppt $cellOut
+if (Test-Path $cellOut) { Remove-Item $cellOut -Force }
+$cellId = "$tblId/r:1/c:1"
+Invoke-OoxpRequest @{
+    schemaVersion = 1; action = 'apply'
+    path = $tblOut.Replace('\', '/')
+    output = $cellOut.Replace('\', '/')
+    ops = @(@{ op = 'setTableCellText'; id = $cellId; text = '改过的正文' })
+} 'pptx-notes-table-cell' | Out-Null
+$treeCell = Invoke-OoxpTree @{
+    schemaVersion = 1; action = 'inspect'
+    path = $cellOut.Replace('\', '/'); format = 'pptx'
+    scope = @{ notes = $true; tables = $true }
+} 'pptx-notes-table-cell-inspect'
+$cellText = [string]$treeCell.slides[0].notes.tables[0].rows[0].cells[0].text
+$presC2 = Open-PptPres $ppt $cellOut
+$capCell = Get-PptCaption $presC2
+Close-PptPres $presC2
+Add-Check 'pptx-Pn9' (($capCell -notmatch 'Repair') -and ($cellText -eq '改过的正文')) "cap=$capCell text=$cellText"
+
+$delOut = Get-OutPath 'pptx-notes-table-del.pptx'
+Close-PptPresByPath $ppt $delOut
+if (Test-Path $delOut) { Remove-Item $delOut -Force }
+Invoke-OoxpRequest @{
+    schemaVersion = 1; action = 'apply'
+    path = $cellOut.Replace('\', '/')
+    output = $delOut.Replace('\', '/')
+    ops = @(@{ op = 'deleteTable'; id = $tblId })
+} 'pptx-notes-table-del' | Out-Null
+$treeDel = Invoke-OoxpTree @{
+    schemaVersion = 1; action = 'inspect'
+    path = $delOut.Replace('\', '/'); format = 'pptx'
+    scope = @{ notes = $true; tables = $true }
+} 'pptx-notes-table-del-inspect'
+$presD = Open-PptPres $ppt $delOut
+$capDel = Get-PptCaption $presD
+$sD = Get-PptSlide $presD 1
+$nDel = Get-PptNotesTableCount $sD
+Release-Com $sD
+Close-PptPres $presD
+$gone = ([int]$treeDel.slides[0].notes.tableCount -eq 0)
+Add-Check 'pptx-Pn10' (($capDel -notmatch 'Repair') -and $gone -and ($nDel -eq 0)) `
+    "cap=$capDel notesTc=$($treeDel.slides[0].notes.tableCount) com=$nDel"
+
+$failShape = Get-OutPath 'pptx-notes-table-fail-shape.pptx'
+$failTid = Get-OutPath 'pptx-notes-table-fail-tid.pptx'
+$failXlsx = Get-OutPath 'pptx-notes-table-fail.xlsx'
+foreach ($p in @($failShape, $failTid, $failXlsx)) {
+    if (Test-Path $p) { Remove-Item -Force $p }
+}
+$rawShape = Invoke-OoxpExpectFail @{
+    schemaVersion = 1; action = 'apply'
+    path = $src.Replace('\', '/')
+    output = $failShape.Replace('\', '/')
+    ops = @(@{ op = 'insertTable'; id = 'slide:1/shape:2'; rows = 1; cols = 1 })
+} 'pptx-notes-table-fail-shape'
+$rawTid = Invoke-OoxpExpectFail @{
+    schemaVersion = 1; action = 'apply'
+    path = $tblOut.Replace('\', '/')
+    output = $failTid.Replace('\', '/')
+    ops = @(@{ op = 'insertTable'; id = $tblId; rows = 1; cols = 1 })
+} 'pptx-notes-table-fail-tid'
+$xlsx = Ensure-XlsxCreate
+$rawX = Invoke-OoxpExpectFail @{
+    schemaVersion = 1; action = 'apply'
+    path = $xlsx.Replace('\', '/')
+    output = $failXlsx.Replace('\', '/')
+    ops = @(@{ op = 'insertTable'; id = 'slide:1/notes'; rows = 1; cols = 1 })
+} 'pptx-notes-table-fail-xlsx'
+$pn11ok = ((Get-PptErrorCode $rawShape) -eq 'InvalidId') `
+    -and ((Get-PptErrorCode $rawTid) -eq 'InvalidId') `
+    -and ((Get-PptErrorCode $rawX) -eq 'InvalidField') `
+    -and (-not (Test-Path $failShape)) `
+    -and (-not (Test-Path $failTid)) `
+    -and (-not (Test-Path $failXlsx))
+Add-Check 'pptx-Pn11' $pn11ok "shape=$(Get-PptErrorCode $rawShape) tid=$(Get-PptErrorCode $rawTid) x=$(Get-PptErrorCode $rawX)"

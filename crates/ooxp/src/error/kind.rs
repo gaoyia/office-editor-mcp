@@ -238,7 +238,7 @@ pub(crate) enum IdReason {
     SlideSmartArtContainer,
     /// pptx 的 insertSmartArt 必须用 slide:N
     InsertSmartArtNeedsSlide,
-    /// pptx 表 id 必须是 slide:N/table:…
+    /// pptx 表 id 必须是 slide:N/table:… 或 slide:N/notes/table:…
     SlideTablePrefix,
     /// 页 id，缺少 /table:…
     SlideTableContainer,
@@ -248,7 +248,7 @@ pub(crate) enum IdReason {
     SlideTableRowForm,
     /// 单元格 id 必须是 {表 id}/r:{r}/c:{c}
     SlideTableCellForm,
-    /// pptx 的 insertTable 必须用 slide:N
+    /// pptx 的 insertTable 必须用 slide:N 或 slide:N/notes
     InsertTableNeedsSlide,
     /// setTableCellText 必须用单元格 id
     SetTableCellNeedsCell,

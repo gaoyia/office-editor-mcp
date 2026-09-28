@@ -29,6 +29,7 @@ pub enum TableKey {
 #[derive(Debug, Clone)]
 pub struct TableTarget {
     pub slide: usize,
+    pub on_notes: bool,
     pub key: TableKey,
 }
 
@@ -45,25 +46,8 @@ pub struct CellTarget {
     pub col: usize,
 }
 
-pub fn parse_insert_slide_id(id: &str, op_index: usize) -> Result<usize, Error> {
-    let path = format!("ops[{op_index}].id");
-    let rest = id.strip_prefix("slide:").ok_or_else(|| {
-        Error::with_path(
-            ErrorKind::InvalidId {
-                reason: IdReason::InsertTableNeedsSlide,
-            },
-            path.clone(),
-        )
-    })?;
-    if rest.is_empty() || rest.contains('/') {
-        return Err(Error::with_path(
-            ErrorKind::InvalidId {
-                reason: IdReason::InsertTableNeedsSlide,
-            },
-            path,
-        ));
-    }
-    parse_slide_n(rest, &path)
+pub fn parse_insert_slide_id(id: &str, op_index: usize) -> Result<(usize, bool), Error> {
+    super::picture::parse_insert_slide_or_notes(id, op_index, IdReason::InsertTableNeedsSlide)
 }
 
 pub fn parse_table_id(id: &str, json_path: &str, wrong: IdReason) -> Result<TableTarget, Error> {
@@ -139,14 +123,18 @@ fn parse_table_rest(id: &str, json_path: &str, wrong: IdReason) -> Result<TableT
             path.clone(),
         )
     })?;
-    let (n, after) = rest.split_once("/table:").ok_or_else(|| {
-        Error::with_path(
+    let (n, after, on_notes) = if let Some((n, after)) = rest.split_once("/notes/table:") {
+        (n, after, true)
+    } else if let Some((n, after)) = rest.split_once("/table:") {
+        (n, after, false)
+    } else {
+        return Err(Error::with_path(
             ErrorKind::InvalidId {
                 reason: IdReason::SlideTableContainer,
             },
             path.clone(),
-        )
-    })?;
+        ));
+    };
     let slide = parse_slide_n(n, &path)?;
     if let Some(rest) = after.strip_prefix("index:") {
         if rest.contains('/') {
@@ -175,6 +163,7 @@ fn parse_table_rest(id: &str, json_path: &str, wrong: IdReason) -> Result<TableT
         }
         return Ok(TableTarget {
             slide,
+            on_notes,
             key: TableKey::Index(k),
         });
     }
@@ -186,6 +175,7 @@ fn parse_table_rest(id: &str, json_path: &str, wrong: IdReason) -> Result<TableT
     }
     Ok(TableTarget {
         slide,
+        on_notes,
         key: TableKey::Id(after.to_string()),
     })
 }
@@ -413,30 +403,30 @@ fn count_in(el: &Element, n: &mut usize) {
     }
 }
 
-pub fn collect_tables(root: &Element, slide: usize) -> Vec<Value> {
+pub fn collect_tables(root: &Element, host: &str) -> Vec<Value> {
     let mut out = Vec::new();
     let mut index = 0usize;
-    collect_in(root, slide, &mut index, &mut out);
+    collect_in(root, host, &mut index, &mut out);
     out
 }
 
-fn collect_in(el: &Element, slide: usize, index: &mut usize, out: &mut Vec<Value>) {
+fn collect_in(el: &Element, host: &str, index: &mut usize, out: &mut Vec<Value>) {
     if el.local_name() == "AlternateContent" {
         if let Some(i) = shape::first_alt_child_index(el) {
             if let Node::Element(child) = &el.children[i] {
-                collect_in(child, slide, index, out);
+                collect_in(child, host, index, out);
             }
         }
         return;
     }
     if is_table_frame(el) {
         *index += 1;
-        out.push(table_json(el, slide, *index));
+        out.push(table_json(el, host, *index));
         return;
     }
     for n in &el.children {
         if let Node::Element(e) = n {
-            collect_in(e, slide, index, out);
+            collect_in(e, host, index, out);
         }
     }
 }
@@ -565,12 +555,12 @@ fn row_span(tc: &Element) -> usize {
         .unwrap_or(1)
 }
 
-fn table_json(frame: &Element, slide: usize, index: usize) -> Value {
+fn table_json(frame: &Element, host: &str, index: usize) -> Value {
     let (raw_id, name) = cnv_of_frame(frame);
     let stable = raw_id.is_some();
     let id = match &raw_id {
-        Some(v) => format!("slide:{slide}/table:{v}"),
-        None => format!("slide:{slide}/table:index:{index}"),
+        Some(v) => format!("{host}/table:{v}"),
+        None => format!("{host}/table:index:{index}"),
     };
     let xfrm = frame_xfrm(frame);
     let (x, y) = match xfrm.and_then(|x| x.child_by_local("off")) {
@@ -717,7 +707,18 @@ pub fn insert_table(
     let cy = op.cy.unwrap_or(DEFAULT_CY);
     let (x, y) = match (op.x, op.y) {
         (Some(px), Some(py)) => (px, py),
-        _ => picture::vacant_pos(pres_root, &slide_doc.root, cx, cy),
+        _ => {
+            if op.on_notes {
+                picture::vacant_pos_canvas(
+                    super::notes::notes_size(pres_root),
+                    &slide_doc.root,
+                    cx,
+                    cy,
+                )
+            } else {
+                picture::vacant_pos(pres_root, &slide_doc.root, cx, cy)
+            }
+        }
     };
     picture::ensure_xmlns(&mut slide_doc.root, "a", DML_NS);
     let cnv = picture::next_cnv_id(&slide_doc.root);

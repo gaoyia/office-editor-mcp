@@ -331,7 +331,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::InsertSmartArtNeedsSlide => {
                 "pptx insertSmartArt 的 id 必须是 slide:N 或 slide:N/notes".into()
             }
-            IdReason::SlideTablePrefix => "pptx 表 id 必须是 slide:N/table:…".into(),
+            IdReason::SlideTablePrefix => {
+                "pptx 表 id 必须是 slide:N/table:… 或 slide:N/notes/table:…".into()
+            }
             IdReason::SlideTableContainer => {
                 "页 id 必须带 /table:…（该 id 本身不是表）".into()
             }
@@ -341,7 +343,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::SlideTableCellForm => {
                 "单元格 id 必须是表 id 加上 /r:R/c:C，R 与 C 从 1 起".into()
             }
-            IdReason::InsertTableNeedsSlide => "pptx insertTable 的 id 必须是 slide:N".into(),
+            IdReason::InsertTableNeedsSlide => {
+                "pptx insertTable 的 id 必须是 slide:N 或 slide:N/notes".into()
+            }
             IdReason::SetTableCellNeedsCell => {
                 "setTableCellText 的 id 必须是 DrawingML 表单元格 id".into()
             }

@@ -8,7 +8,7 @@ C、I、A、Pp、Pc、Psa、Pn、Pcm、Pm、Ps、Sg、Pt、Tn、Tr、Am、Aw、M
 
 ## 本机结果（2026-09-28）
 
-Microsoft PowerPoint 16.0 已打开，C1、C3、C4、C5–C13、I1–I5、A1–A5、Pp1–Pp7、Pc1–Pc7、Psa1–Psa7、Pn1–Pn6、Pcm1–Pcm6、Pik1–Pik4、Pm1–Pm5、Ps1–Ps5、Sg1–Sg5、Pt1–Pt6、Tn1–Tn5、Am1–Am5、Mm1–Mm5、Ho1–Ho5、Phl1–Phl5、Pmd1–Pmd5、Psc1–Psc5、Cs1–Cs5 均 PASS。本机若装了 WPS，`PowerPoint.Application` 会被抢走，测试仍直接启动 `POWERPNT.EXE`，从 `mdiClass` 挂 COM。O1 已放弃。2026-09-27 补跑 `pptx-pictures.ps1`，Pp1–Pp7 通过。同日补跑 `pptx-create-pictures.ps1`，C5–C7 通过。同日补跑 `pptx-charts.ps1`，Pc1–Pc7 通过。同日补跑 `pptx-create-charts.ps1`，C8–C10 通过。同日补跑 `pptx-smartart.ps1`，Psa1–Psa7 通过。同日补跑 `pptx-notes.ps1`，Pn1–Pn4 通过。同日补跑 `pptx-comments.ps1`，Pcm1–Pcm5、Pik1–Pik4 通过。同日补跑 `pptx-docprops.ps1`，Pd1–Pd5 通过。同日补跑 `pptx-charts-remain.ps1`，Pr1–Pr3 通过。2026-09-28 补跑 `pptx-slides.ps1`，Pm1–Pm5 通过。同日补跑 `pptx-shapes.ps1`，Ps1–Ps5 通过。同日补跑 `pptx-tables.ps1`，Pt1–Pt6 通过。同日补跑 `pptx-transition.ps1`，Tn1–Tn5 通过。同日补跑 `pptx-timing.ps1`，Am1–Am5 通过。同日补跑 `pptx-masters.ps1`，Mm1–Mm5 通过。同日补跑 `pptx-handout.ps1`，Ho1–Ho5 通过。同日补跑 `pptx-hyperlinks.ps1`，Phl1–Phl5 通过。同日补跑 `pptx-create-notes-comments.ps1`，C11–C13 通过。同日补跑 `pptx-notes.ps1`，Pn5–Pn6 通过。同日补跑 `pptx-comments.ps1`，Pcm6 通过。同日补跑 `pptx-media.ps1`，Pmd1–Pmd5 通过。同日补跑 `pptx-sections.ps1`，Psc1–Psc5 通过。2026-09-29 补跑 `pptx-anim-write.ps1`，Aw1–Aw5 通过。同日补跑 `pptx-transition-remain.ps1`，Tr1–Tr5 通过。同日补跑 `pptx-shape-geom.ps1`，Sg1–Sg5 通过。同日补跑 `pptx-master-write.ps1`，Mw1–Mw5 通过。同日补跑 `pptx-theme-size.ps1`，Ts1–Ts5 通过。同日补跑 `pptx-custom-show.ps1`，Cs1–Cs5 通过。2026-09-29 补跑 `pptx-ole.ps1`，Po1–Po5 通过。同日补跑 `pptx-create-remain.ps1`，Cr1–Cr5 通过。
+Microsoft PowerPoint 16.0 已打开，C1、C3、C4、C5–C13、I1–I5、A1–A5、Pp1–Pp7、Pc1–Pc7、Psa1–Psa7、Pn1–Pn6、Pcm1–Pcm6、Pik1–Pik4、Pm1–Pm5、Ps1–Ps5、Sg1–Sg5、Pt1–Pt6、Tn1–Tn5、Am1–Am5、Mm1–Mm5、Ho1–Ho5、Phl1–Phl5、Pmd1–Pmd5、Psc1–Psc5、Cs1–Cs5 均 PASS。本机若装了 WPS，`PowerPoint.Application` 会被抢走，测试仍直接启动 `POWERPNT.EXE`，从 `mdiClass` 挂 COM。O1 已放弃。2026-09-27 补跑 `pptx-pictures.ps1`，Pp1–Pp7 通过。同日补跑 `pptx-create-pictures.ps1`，C5–C7 通过。同日补跑 `pptx-charts.ps1`，Pc1–Pc7 通过。同日补跑 `pptx-create-charts.ps1`，C8–C10 通过。同日补跑 `pptx-smartart.ps1`，Psa1–Psa7 通过。同日补跑 `pptx-notes.ps1`，Pn1–Pn4 通过。同日补跑 `pptx-comments.ps1`，Pcm1–Pcm5、Pik1–Pik4 通过。同日补跑 `pptx-docprops.ps1`，Pd1–Pd5 通过。同日补跑 `pptx-charts-remain.ps1`，Pr1–Pr3 通过。2026-09-28 补跑 `pptx-slides.ps1`，Pm1–Pm5 通过。同日补跑 `pptx-shapes.ps1`，Ps1–Ps5 通过。同日补跑 `pptx-tables.ps1`，Pt1–Pt6 通过。同日补跑 `pptx-transition.ps1`，Tn1–Tn5 通过。同日补跑 `pptx-timing.ps1`，Am1–Am5 通过。同日补跑 `pptx-masters.ps1`，Mm1–Mm5 通过。同日补跑 `pptx-handout.ps1`，Ho1–Ho5 通过。同日补跑 `pptx-hyperlinks.ps1`，Phl1–Phl5 通过。同日补跑 `pptx-create-notes-comments.ps1`，C11–C13 通过。同日补跑 `pptx-notes.ps1`，Pn5–Pn6 通过。同日补跑 `pptx-comments.ps1`，Pcm6 通过。同日补跑 `pptx-media.ps1`，Pmd1–Pmd5 通过。同日补跑 `pptx-sections.ps1`，Psc1–Psc5 通过。2026-09-29 补跑 `pptx-anim-write.ps1`，Aw1–Aw5 通过。同日补跑 `pptx-transition-remain.ps1`，Tr1–Tr5 通过。同日补跑 `pptx-shape-geom.ps1`，Sg1–Sg5 通过。同日补跑 `pptx-master-write.ps1`，Mw1–Mw5 通过。同日补跑 `pptx-theme-size.ps1`，Ts1–Ts5 通过。同日补跑 `pptx-custom-show.ps1`，Cs1–Cs5 通过。2026-09-29 补跑 `pptx-create-remain.ps1`，Cr1–Cr5 通过。同日补跑 `pptx-notes.ps1`，Pn7–Pn11 通过。
 
 | 序号 | 状态 | 结果 |
 | --- | --- | --- |
@@ -24,6 +24,7 @@ Microsoft PowerPoint 16.0 已打开，C1、C3、C4、C5–C13、I1–I5、A1–A
 | Pc1–Pc7 | ✅ | PowerPoint 16.0：无 `charts` 时 `chartCount=1`；名单 id 为 `slide:1/chart:4`；改系列 / 插 / 删无修复；折线类型对上；尺寸 144×72 磅、位置 72×108 磅；export 与 embedding 字节一致 |
 | Psa1–Psa7 | ✅ | PowerPoint 16.0：`pptx-smartart.ps1`，7 PASS / 0 FAIL。另存列表型 id 为 `slide:1/smartdiagram:4`；改字 / 增删点 / 删整张无修复；create `list` 为 `slide:1/smartdiagram:3`；列表改成组织图后文字还在、无修复；库外 uniqueId 得 `NotImplemented` 且未写文件 |
 | Pn1–Pn6 | ✅ | PowerPoint 16.0：无 `notes` 时有 `hasNotes`；展开后 `notes.id` 为 `slide:1/notes`；`setNotesText` 后备注窗格是新字且无修复；改备注不改幻灯片字；往备注插图无修复；往备注插柱形图 id 为 `slide:1/notes/chart:5`，改系列后无修复且不并进幻灯片 `chartCount`；往备注插 `list` id 为 `slide:1/notes/smartdiagram:5`，无修复且不并进幻灯片 `smartArtCount` |
+| Pn7–Pn11 | ✅ | PowerPoint 16.0：`pptx-notes.ps1`，备注表组 PASS。id 为 `slide:1/notes/table:5`，不并进幻灯片 `tableCount`；COM 备注页表数为 1；改格可见「改过的正文」；删后 Count=0；形状 id / 表 id 发 `insertTable` 为 `InvalidId`，xlsx 为 `InvalidField`。无 Repair |
 | Pcm1–Pcm6 | ✅ | PowerPoint 16.0：无 `comments` 时有 `commentCount`；展开后 id 为 `slide:…/comment:{guid}`；改字 / 插入 / 删除无修复；回复与完成标记能看见；注入 `a:blip` 后 `pictureCount=1`、`exportMedia` 字节一致，对批注 id 发 `insertPicture` 为 `InvalidId` |
 | Pik1–Pik4 | ✅ | PowerPoint 16.0：`pptx-comments.ps1` 墨迹组，4 PASS / 0 FAIL。现代批注注入 `ink` 后 `kind=ink`；`setCommentMeta` / `setCommentDone` 无修复；无可见文本时 `setCommentText` 为 `NotImplemented` 且未写文件；`deleteComment` 无修复 |
 | Pd1–Pd5 | ✅ | PowerPoint 16.0：`pptx-docprops.ps1`，5 PASS / 0 FAIL。根上 `props`、`creator=ooxp`；只改标题后面板标题是新字、公司名还在；自定义 `prop:部门`；删后名单空；形状 id 发 `setProps` 为 `InvalidId`。无 Repair |
@@ -164,6 +165,11 @@ create 补齐节、形状级超链接、内嵌视频 / 音频、页切换和预�
 | Pn4 | 备注插图 | 往 `slide:{n}/notes` 插图后无修复，图在备注页上 |
 | Pn5 | 备注图表 | 往 `slide:{n}/notes` 插柱形图后 id 为 `slide:…/notes/chart:…`；改系列后 embedding 对得上；无修复。不并进幻灯片 `chartCount` |
 | Pn6 | 备注 SmartArt | 往 `slide:{n}/notes` 插 `list` 后 id 为 `slide:…/notes/smartdiagram:…`；无修复。不并进幻灯片 `smartArtCount` |
+| Pn7 | 备注表名单 | 无 `notes` 时没有 `notes` 对象；`notes` 且 `tables` 时 id 为 `slide:…/notes/table:…`。不并进幻灯片 `tableCount` |
+| Pn8 | 备注插表 | 往 `slide:{n}/notes` 插 2×2 表后 id 为 `slide:…/notes/table:…`；备注页 COM 能看见表；无修复。不并进幻灯片 `tableCount` |
+| Pn9 | 改格 | `setTableCellText` 后该格是新字；无修复 |
+| Pn10 | 删除 | `deleteTable` 后备注 `tableCount` 为 0；无修复 |
+| Pn11 | 拒写 | 对形状 id 发 `insertTable` 得 `InvalidId`；对备注表 id 发 `insertTable` 得 `InvalidId`；xlsx 得 `InvalidField`。未写文件 |
 
 ## 批注
 
