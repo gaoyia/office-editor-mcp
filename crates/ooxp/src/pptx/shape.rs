@@ -626,6 +626,10 @@ pub fn walk_choice<'a>(el: &'a Element, f: &mut impl FnMut(&'a Element)) {
         return;
     }
     f(el);
+    // 预览 `p:pic` 在 oleObj 里，不要算进 pictures。
+    if el.local_name() == "oleObj" {
+        return;
+    }
     for n in &el.children {
         if let Node::Element(e) = n {
             walk_choice(e, f);

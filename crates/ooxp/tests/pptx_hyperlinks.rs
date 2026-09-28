@@ -155,6 +155,7 @@ fn inspect_hyperlink_count_without_list() {
             "commentCount",
             "hyperlinkCount",
             "tableCount",
+            "oleObjectCount",
             "connectorCount",
             "animCount",
             "masterCount",

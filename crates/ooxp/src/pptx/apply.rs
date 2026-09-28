@@ -14,6 +14,7 @@ use super::hyperlink;
 use super::master;
 use super::media;
 use super::notes;
+use super::ole;
 use super::picture;
 use super::request::PptxOp;
 use super::section;
@@ -483,6 +484,32 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
             }
             PptxOp::DeleteCustomShow(op) => {
                 custom_show::delete(&mut pkg, &pres_part, &mut pres, op, i)?;
+            }
+            PptxOp::InsertOle(op) => {
+                let meta = slides.get(op.slide - 1).ok_or_else(|| {
+                    Error::with_path(
+                        ErrorKind::SlideNotFound { n: op.slide as u32 },
+                        format!("ops[{i}].id"),
+                    )
+                })?;
+                let part = meta.part.clone();
+                let mut doc = xml::parse(pkg.get(&part)?)?;
+                ole::insert(&mut pkg, &mut doc, &part, &pres.root, op, i)?;
+                pkg.set(&part, doc.to_bytes()?)?;
+            }
+            PptxOp::DeleteOle(op) => {
+                let meta = slides.get(op.target.slide - 1).ok_or_else(|| {
+                    Error::with_path(
+                        ErrorKind::SlideNotFound {
+                            n: op.target.slide as u32,
+                        },
+                        format!("ops[{i}].id"),
+                    )
+                })?;
+                let part = meta.part.clone();
+                let mut doc = xml::parse(pkg.get(&part)?)?;
+                ole::delete(&mut pkg, &mut doc, &part, op, i)?;
+                pkg.set(&part, doc.to_bytes()?)?;
             }
             PptxOp::InsertChart(op) => {
                 let part = ensure_notes_or_slide(

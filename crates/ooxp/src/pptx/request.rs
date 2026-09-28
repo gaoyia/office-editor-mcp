@@ -14,6 +14,7 @@ use super::custom_show;
 use super::group;
 use super::hyperlink;
 use super::media;
+use super::ole;
 use super::picture;
 use super::section;
 use super::shape;
@@ -39,6 +40,7 @@ pub struct InspectScope {
     pub handout: bool,
     pub sections: bool,
     pub custom_shows: bool,
+    pub ole_objects: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -772,6 +774,8 @@ pub enum PptxOp {
     InsertCustomShow(InsertCustomShowOp),
     SetCustomShow(SetCustomShowOp),
     DeleteCustomShow(DeleteCustomShowOp),
+    InsertOle(super::ole::InsertOleOp),
+    DeleteOle(super::ole::DeleteOleOp),
     InsertChart(InsertChartOp),
     DeleteChart(DeleteChartOp),
     SetChartTitle(SetChartTitleOp),
@@ -871,6 +875,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
             "handout",
             "sections",
             "customShows",
+            "oleObjects",
         ],
     )?;
     let pictures = parse_bool_field(obj.get("pictures"), "pictures")?;
@@ -887,6 +892,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
     let handout = parse_bool_field(obj.get("handout"), "handout")?;
     let sections = parse_bool_field(obj.get("sections"), "sections")?;
     let custom_shows = parse_bool_field(obj.get("customShows"), "customShows")?;
+    let ole_objects = parse_bool_field(obj.get("oleObjects"), "oleObjects")?;
     let slide = match obj.get("slide") {
         None => None,
         Some(s) => {
@@ -961,6 +967,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
         handout,
         sections,
         custom_shows,
+        ole_objects,
     }))
 }
 
@@ -1041,6 +1048,8 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<PptxOp>, Error> {
             "insertCustomShow" => PptxOp::InsertCustomShow(parse_insert_custom_show(obj, i)?),
             "setCustomShow" => PptxOp::SetCustomShow(parse_set_custom_show(obj, i)?),
             "deleteCustomShow" => PptxOp::DeleteCustomShow(parse_delete_custom_show(obj, i)?),
+            "insertOle" => PptxOp::InsertOle(parse_insert_ole(obj, i)?),
+            "deleteOle" => PptxOp::DeleteOle(parse_delete_ole(obj, i)?),
             "insertChart" => PptxOp::InsertChart(parse_insert_chart(obj, i)?),
             "deleteChart" => PptxOp::DeleteChart(parse_delete_chart(obj, i)?),
             "setChartTitle" => PptxOp::SetChartTitle(parse_set_chart_title(obj, i)?),
@@ -1229,8 +1238,6 @@ fn is_foreign_op(op_name: &str) -> bool {
             | "setSheetView"
             | "setAutoFilter"
             | "setSmartArtWrap"
-            | "insertOle"
-            | "deleteOle"
             | "insertWatermark"
             | "deleteWatermark"
             | "setProtection"
@@ -3201,6 +3208,21 @@ fn parse_delete_custom_show(
     Ok(DeleteCustomShowOp {
         show: custom_show::parse_show_id(&id, &format!("ops[{i}].id"))?,
     })
+}
+
+fn parse_insert_ole(obj: &Map<String, Value>, i: usize) -> Result<ole::InsertOleOp, Error> {
+    deny_keys(obj, i, &["op", "id", "file"])?;
+    let id = require_id(obj, i)?;
+    let slide = ole::parse_insert_slide_id(&id, i)?;
+    let file = require_file(obj, i, "insertOle")?;
+    Ok(ole::InsertOleOp { slide, file })
+}
+
+fn parse_delete_ole(obj: &Map<String, Value>, i: usize) -> Result<ole::DeleteOleOp, Error> {
+    deny_keys(obj, i, &["op", "id"])?;
+    let id = require_id(obj, i)?;
+    let target = ole::parse_ole_id(&id, &format!("ops[{i}].id"))?;
+    Ok(ole::DeleteOleOp { id, target })
 }
 
 fn parse_slides_array(

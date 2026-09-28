@@ -15,6 +15,7 @@ use super::hyperlink;
 use super::master;
 use super::media;
 use super::notes;
+use super::ole;
 use super::picture;
 use super::request::InspectScope;
 use super::section;
@@ -45,6 +46,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     let want_handout = scope.as_ref().is_some_and(|s| s.handout);
     let want_sections = scope.as_ref().is_some_and(|s| s.sections);
     let want_custom_shows = scope.as_ref().is_some_and(|s| s.custom_shows);
+    let want_ole_objects = scope.as_ref().is_some_and(|s| s.ole_objects);
     let catalog = master::catalog(&pkg, &pres_part, &pres.root)?;
 
     let mut slide_json = Vec::new();
@@ -56,6 +58,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     let mut comment_count = 0usize;
     let mut hyperlink_count = 0usize;
     let mut table_count = 0usize;
+    let mut ole_object_count = 0usize;
     let mut connector_count = 0usize;
     let mut anim_count = 0usize;
     for s in &slides {
@@ -125,6 +128,16 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
             .map(|c| c.len())
             .unwrap_or_else(|| table::count_tables(&doc.root));
         table_count += n_tables;
+        let ole_list = if want_ole_objects {
+            Some(ole::collect(&pkg, &s.part, &doc.root, &host)?)
+        } else {
+            None
+        };
+        let n_ole = match &ole_list {
+            Some(list) => list.len(),
+            None => ole::count(&pkg, &s.part, &doc.root)?,
+        };
+        ole_object_count += n_ole;
         let connectors_list = if want_connectors {
             Some(connector::list_json(&doc.root, s.index))
         } else {
@@ -157,6 +170,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         obj.insert("commentCount".into(), json!(n_comments));
         obj.insert("hyperlinkCount".into(), json!(n_links));
         obj.insert("tableCount".into(), json!(n_tables));
+        obj.insert("oleObjectCount".into(), json!(n_ole));
         obj.insert("connectorCount".into(), json!(n_cxn));
         obj.insert("animCount".into(), json!(n_anims));
         if want_pictures {
@@ -177,6 +191,9 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         }
         if let Some(tables) = tables_list {
             obj.insert("tables".into(), Value::Array(tables));
+        }
+        if let Some(oles) = ole_list {
+            obj.insert("oleObjects".into(), Value::Array(oles));
         }
         if let Some(connectors) = connectors_list {
             obj.insert("connectors".into(), Value::Array(connectors));
@@ -241,6 +258,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     root.insert("commentCount".into(), json!(comment_count));
     root.insert("hyperlinkCount".into(), json!(hyperlink_count));
     root.insert("tableCount".into(), json!(table_count));
+    root.insert("oleObjectCount".into(), json!(ole_object_count));
     root.insert("connectorCount".into(), json!(connector_count));
     root.insert("animCount".into(), json!(anim_count));
     root.insert("masterCount".into(), json!(catalog.count()));

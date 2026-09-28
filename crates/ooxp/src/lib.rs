@@ -7,6 +7,7 @@ mod dispatch;
 mod docx;
 mod error;
 mod json;
+mod ole;
 mod opc;
 mod pptx;
 mod props;
@@ -1025,6 +1026,7 @@ mod tests {
                 "commentCount",
                 "hyperlinkCount",
                 "tableCount",
+                "oleObjectCount",
                 "connectorCount",
                 "animCount",
                 "masterCount",
@@ -1054,6 +1056,7 @@ mod tests {
                 "commentCount",
                 "hyperlinkCount",
                 "tableCount",
+                "oleObjectCount",
                 "connectorCount",
                 "animCount",
                 "truncated",
@@ -1078,6 +1081,7 @@ mod tests {
                 "commentCount",
                 "hyperlinkCount",
                 "tableCount",
+                "oleObjectCount",
                 "connectorCount",
                 "animCount"
             ]

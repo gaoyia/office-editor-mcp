@@ -183,6 +183,7 @@ fn create_has_zero_anim_count_without_list() {
             "commentCount",
             "hyperlinkCount",
             "tableCount",
+            "oleObjectCount",
             "connectorCount",
             "animCount",
             "masterCount",

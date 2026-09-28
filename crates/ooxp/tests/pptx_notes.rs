@@ -170,6 +170,7 @@ fn inspect_has_notes_without_notes_object() {
             "commentCount",
             "hyperlinkCount",
             "tableCount",
+            "oleObjectCount",
             "connectorCount",
             "animCount"
         ]

@@ -418,7 +418,7 @@ fn wrong_id_is_invalid_id() {
 }
 
 #[test]
-fn xlsx_and_pptx_reject_ole_ops() {
+fn xlsx_rejects_ole_ops_pptx_uses_slide_ids() {
     let book = write_xlsx("reject-book");
     let err = run(
         &json!({
@@ -462,7 +462,7 @@ fn xlsx_and_pptx_reject_ole_ops() {
         None,
     )
     .unwrap();
-    let err = run(
+    run(
         &json!({
             "schemaVersion": 1,
             "action": "apply",
@@ -473,8 +473,7 @@ fn xlsx_and_pptx_reject_ole_ops() {
         .to_string(),
         None,
     )
-    .unwrap_err();
-    assert_eq!(err.code(), ErrorCode::InvalidField);
+    .unwrap();
     let err = run(
         &json!({
             "schemaVersion": 1,
@@ -487,7 +486,7 @@ fn xlsx_and_pptx_reject_ole_ops() {
         None,
     )
     .unwrap_err();
-    assert_eq!(err.code(), ErrorCode::InvalidField);
+    assert_eq!(err.code(), ErrorCode::InvalidId);
 }
 
 #[test]

@@ -387,6 +387,11 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::InsertOleNeedsPara => {
                 "insertOle id must be a body or header/footer paragraph id".into()
             }
+            IdReason::SlideOlePrefix => "OLE id must be slide:N/ole:…".into(),
+            IdReason::SlideOleContainer => {
+                "Slide id must include /ole:… (that id alone is not an embedded object)".into()
+            }
+            IdReason::InsertOleNeedsSlide => "pptx insertOle id must be slide:N".into(),
             IdReason::InsertWatermarkNeedsDocument => {
                 "insertWatermark id must be docx:document".into()
             }

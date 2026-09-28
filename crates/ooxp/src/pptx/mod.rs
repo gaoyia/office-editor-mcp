@@ -13,6 +13,7 @@ mod inspect;
 mod master;
 mod media;
 mod notes;
+mod ole;
 mod picture;
 mod request;
 mod section;

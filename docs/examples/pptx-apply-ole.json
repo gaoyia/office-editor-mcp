@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "deck.pptx",
+  "ops": [
+    { "op": "insertOle", "id": "slide:1", "file": "book.xlsx" },
+    { "op": "deleteOle", "id": "slide:1/ole:4" }
+  ]
+}

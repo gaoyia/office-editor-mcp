@@ -10,6 +10,7 @@ use crate::opc::Package;
 use crate::smartart::DGM_NS;
 use crate::xml::{Element, Node};
 
+use super::ole::{OLE_URI, OLE_URI_ISO};
 use super::shape::{self, SlideMeta};
 use super::table::TABLE_URI;
 
@@ -322,6 +323,8 @@ fn frame_kind(frame: &Element) -> Option<&'static str> {
         Some("chart")
     } else if n == DGM_NS {
         Some("smartdiagram")
+    } else if n == OLE_URI || n == OLE_URI_ISO {
+        Some("ole")
     } else {
         None
     }

@@ -356,6 +356,11 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::InsertOleNeedsPara => {
                 "insertOle 的 id 必须是正文或页眉页脚段落 id".into()
             }
+            IdReason::SlideOlePrefix => "OLE id 必须是 slide:N/ole:…".into(),
+            IdReason::SlideOleContainer => {
+                "页 id 必须带 /ole:…（该 id 本身不是嵌入对象）".into()
+            }
+            IdReason::InsertOleNeedsSlide => "pptx insertOle 的 id 必须是 slide:N".into(),
             IdReason::InsertWatermarkNeedsDocument => {
                 "insertWatermark 的 id 必须是 docx:document".into()
             }

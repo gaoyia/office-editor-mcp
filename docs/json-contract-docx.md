@@ -1466,7 +1466,7 @@ xlsx / pptx 上发此 op 报 `InvalidField`。
 | `id` | 必须是正文或页眉页脚段落 id |
 | `file` | 必须。本地文件路径 |
 
-按扩展名决定 ProgID 与写入方式：`.xlsx` 为 `Excel.Sheet.12`，`.xlsm` 为 `Excel.SheetMacroEnabled.12`，`.xls` 为 `Excel.Sheet.8`，`.docx` 为 `Word.Document.12`，`.docm` 为 `Word.DocumentMacroEnabled.12`，`.pptx` 为 `PowerPoint.Show.12`，`.pptm` 为 `PowerPoint.ShowMacroEnabled.12`。这些扩展名把源文件原字节写入 `/word/embeddings/…`，Content Type 与该格式主文档一致（xlsx 为 `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`，docx / pptx 同理；`.xls` 为 `application/vnd.ms-excel`）。其它扩展名 ProgID 为 `Package`，把源文件打成 OLE 复合文档（Ole10Native）写入 `/word/embeddings/oleObjectN.bin`，Content Type 为 `application/vnd.openxmlformats-officedocument.oleObject`。找不到 `file` 报 `Io`。空路径报 `InvalidField`。xlsx / pptx 上发此 op 报 `InvalidField`。
+按扩展名决定 ProgID 与写入方式：`.xlsx` 为 `Excel.Sheet.12`，`.xlsm` 为 `Excel.SheetMacroEnabled.12`，`.xls` 为 `Excel.Sheet.8`，`.docx` 为 `Word.Document.12`，`.docm` 为 `Word.DocumentMacroEnabled.12`，`.pptx` 为 `PowerPoint.Show.12`，`.pptm` 为 `PowerPoint.ShowMacroEnabled.12`。这些扩展名把源文件原字节写入 `/word/embeddings/…`，Content Type 与该格式主文档一致（xlsx 为 `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`，docx / pptx 同理；`.xls` 为 `application/vnd.ms-excel`）。其它扩展名 ProgID 为 `Package`，把源文件打成 OLE 复合文档（Ole10Native）写入 `/word/embeddings/oleObjectN.bin`，Content Type 为 `application/vnd.openxmlformats-officedocument.oleObject`。找不到 `file` 报 `Io`。空路径报 `InvalidField`。xlsx 上发此 op 报 `InvalidField`。pptx 上的语义见 [json-contract-pptx.md](json-contract-pptx.md#insertole)。
 
 宿主 XML 写 Transitional 的 `w:object`：`o:OLEObject` 的 `Type` 为 `Embed`，`DrawAspect` 为 `Content`，关系指向 embeddings；另写一条 image 关系指向占位 PNG。不改 VML 几何。`ObjectID` 取本文件尚未用过的正整数，写成 `_` 加该数字。Office 文件的关系 Type 用 `package`（与 Word 16.0 另存一致）；Package 用 `oleObject`。
 
@@ -1477,5 +1477,5 @@ xlsx / pptx 上发此 op 报 `InvalidField`。
 | `op` | 必须是 `"deleteOle"` |
 | `id` | 必须是 OLE id |
 
-找不到报 `IdNotFound`。删掉整棵 `w:object`（含预览 markup），去掉 oleObject / package 关系与 embeddings 部件；预览图若无其它关系再指向则一并去掉。xlsx / pptx 上发此 op 报 `InvalidField`。
+找不到报 `IdNotFound`。删掉整棵 `w:object`（含预览 markup），去掉 oleObject / package 关系与 embeddings 部件；预览图若无其它关系再指向则一并去掉。xlsx 上发此 op 报 `InvalidField`。pptx 上的语义见 [json-contract-pptx.md](json-contract-pptx.md#deleteole)。
 

@@ -408,6 +408,9 @@ fn find_pic_in<'a>(el: &'a mut Element, idx: &mut usize, key: &PicKey) -> Option
         }
         return None;
     }
+    if el.local_name() == "oleObj" {
+        return None;
+    }
     for child in el.children.as_mut_slice() {
         if let Node::Element(e) = child {
             if let Some(found) = find_pic_in(e, idx, key) {
@@ -446,6 +449,10 @@ fn remove_pic_in(el: &mut Element, idx: &mut usize, key: &PicKey) -> bool {
             return true;
         }
         if let Node::Element(e) = &mut el.children[i] {
+            if e.local_name() == "oleObj" {
+                i += 1;
+                continue;
+            }
             if !is_counted_pic(e) && remove_pic_in(e, idx, key) {
                 return true;
             }
@@ -566,6 +573,9 @@ pub(crate) fn vacant_pos_canvas(
 }
 
 pub fn export_media(bytes: &[u8], id: &str) -> Result<ExportedMedia, Error> {
+    if super::ole::is_ole_id(id) {
+        return super::ole::export(bytes, id);
+    }
     if super::media::is_media_id(id) {
         return super::media::export(bytes, id);
     }

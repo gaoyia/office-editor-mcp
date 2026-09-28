@@ -58,8 +58,6 @@ pub const REL_FOOTER: &str =
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer";
 pub const REL_IMAGE: &str =
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image";
-pub const REL_OLE: &str =
-    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/oleObject";
 pub const REL_HYPERLINK: &str =
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink";
 pub const REL_FOOTNOTES: &str =
@@ -104,4 +102,3 @@ pub const CT_PEOPLE: &str =
     "application/vnd.openxmlformats-officedocument.wordprocessingml.people+xml";
 pub const CT_CORE: &str = "application/vnd.openxmlformats-package.core-properties+xml";
 pub const CT_APP: &str = "application/vnd.openxmlformats-officedocument.extended-properties+xml";
-pub const CT_OLE: &str = "application/vnd.openxmlformats-officedocument.oleObject";

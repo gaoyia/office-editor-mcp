@@ -260,6 +260,12 @@ pub(crate) enum IdReason {
     OleIndexFromOne,
     /// insertOle 必须用正文或页眉页脚段落 id
     InsertOleNeedsPara,
+    /// pptx OLE id 必须是 slide:N/ole:…
+    SlideOlePrefix,
+    /// 页 id，缺少 /ole:…
+    SlideOleContainer,
+    /// pptx 的 insertOle 必须用 slide:N
+    InsertOleNeedsSlide,
     /// insertWatermark 必须用 docx:document
     InsertWatermarkNeedsDocument,
     /// 水印 id 必须是 {页眉容器}/watermark:…
@@ -1016,6 +1022,9 @@ impl IdReason {
             Self::OleIndexNotInt,
             Self::OleIndexFromOne,
             Self::InsertOleNeedsPara,
+            Self::SlideOlePrefix,
+            Self::SlideOleContainer,
+            Self::InsertOleNeedsSlide,
             Self::InsertWatermarkNeedsDocument,
             Self::WatermarkPrefix,
             Self::WatermarkContainer,

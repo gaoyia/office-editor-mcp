@@ -261,6 +261,8 @@ apply 插入现代批注时，可能写入 `/ppt/comments/modernComment_{sldId}_
 
 apply 的超链接 op 只改该页幻灯片 XML 的 `p:cNvPr/a:hlinkClick` 与该页 `.rels`。URL / 文件写 Type 以 `/hyperlink` 结尾、`TargetMode` 为 `External` 的关系；跳转到某页写 Type 以 `/slide` 结尾的内部关系。不新建幻灯片部件。删链只摘 `hlinkClick`，孤儿关系删掉。
 
+apply 插入幻灯片 OLE 时，可能新建 `/ppt/embeddings/Microsoft_Excel_WorksheetN.xlsx`（或其它 Office 扩展名，CT 与该格式主文档一致）或 `/ppt/embeddings/oleObjectN.bin`（CT `application/vnd.openxmlformats-officedocument.oleObject`），以及一张预览 `/ppt/media/imageN.png`。该页 `.rels` 补一条 package 或 oleObject 关系指向 embeddings，再补一条 image 关系指向预览。宿主是 `p:graphicFrame`，`a:graphicData/@uri` 为 `http://schemas.openxmlformats.org/presentationml/2006/ole`。`mc:AlternateContent` 的 Choice 只有 `p:oleObj`，Fallback 带 `p:pic` 预览。位置与尺寸在 `p:xfrm`。不写 `<p:timing>`。create 本期不写 OLE。
+
 ## 验收（第 2 项）
 
 零脏保存：`open` 之后不调用 `set` / `remove`，再 `save`。每个部件的未压缩字节、以及 ZIP 里该条目的 CRC，都与打开时相同。库测试对 Excel 另存的 xlsx、以及 create 写出的 docx / pptx 各跑一遍。
