@@ -146,8 +146,12 @@ pub(crate) enum IdReason {
     InsertSheetNeedsWorkbook,
     /// insertSlide 必须用 pptx:presentation
     InsertSlideNeedsPresentation,
-    /// deleteSlide / moveSlide / setSlideHidden / setTransition 必须用 slide:N
+    /// deleteSlide / moveSlide / setSlideHidden / setTransition / setSlideLayout 必须用 slide:N
     SlideOpNeedsSlide,
+    /// 母版或占位符 id 形态不对
+    MasterForm,
+    /// setSlideLayout 的 layout 必须是 master:N/layout:K
+    LayoutForm,
     /// insertDefinedName 必须用 xlsx:workbook
     InsertDefinedNameNeedsWorkbook,
     /// setDefinedName / deleteDefinedName 必须用 name:n
@@ -436,6 +440,10 @@ define_error_kinds! {
     ParaNotFound { id: String } => vec![Self::ParaNotFound { id: "para:1".into() }],
     SectionNotFound { id: String } => vec![Self::SectionNotFound { id: "section:9".into() }],
     SlideNotFound { n: u32 } => vec![Self::SlideNotFound { n: 3 }],
+    MasterNotFound { n: u32 } => vec![Self::MasterNotFound { n: 9 }],
+    LayoutNotFound { master: u32, layout: u32 } => {
+        vec![Self::LayoutNotFound { master: 1, layout: 9 }]
+    },
     ShapeNotFound { id: String } => vec![Self::ShapeNotFound { id: "slide:1/shape:2".into() }],
     ShapeHasNoText { id: String } => vec![Self::ShapeHasNoText { id: "slide:1/shape:2".into() }],
     SetCellWorksheetOnly => vec![Self::SetCellWorksheetOnly],
@@ -863,6 +871,8 @@ impl IdReason {
             Self::InsertSheetNeedsWorkbook,
             Self::InsertSlideNeedsPresentation,
             Self::SlideOpNeedsSlide,
+            Self::MasterForm,
+            Self::LayoutForm,
             Self::InsertDefinedNameNeedsWorkbook,
             Self::DefinedNamePrefix,
             Self::NameIndexNotInt,
@@ -1245,6 +1255,8 @@ impl ErrorKind {
             | Self::ParaNotFound { .. }
             | Self::SectionNotFound { .. }
             | Self::SlideNotFound { .. }
+            | Self::MasterNotFound { .. }
+            | Self::LayoutNotFound { .. }
             | Self::ShapeNotFound { .. }
             | Self::ShapeHasNoText { .. }
             | Self::PictureNotFound { .. }

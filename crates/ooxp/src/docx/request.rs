@@ -1124,6 +1124,7 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<DocxOp>, Error> {
             || op_name == "moveSlide"
             || op_name == "setSlideHidden"
             || op_name == "setTransition"
+            || op_name == "setSlideLayout"
             || op_name == "insertShape"
             || op_name == "deleteShape"
             || op_name == "setShapePos"

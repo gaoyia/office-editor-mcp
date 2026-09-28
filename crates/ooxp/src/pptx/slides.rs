@@ -249,7 +249,7 @@ fn layout_for_insert(
     ))
 }
 
-fn slide_layout_of(pkg: &Package, slide_part: &str) -> Result<Option<String>, Error> {
+pub(crate) fn slide_layout_of(pkg: &Package, slide_part: &str) -> Result<Option<String>, Error> {
     let rels = Relationships::from_package(pkg, slide_part)?;
     let Some(rel) = rels
         .rels

@@ -6,6 +6,7 @@ use crate::xml;
 
 use super::chart;
 use super::comments;
+use super::master;
 use super::notes;
 use super::picture;
 use super::request::PptxOp;
@@ -24,6 +25,11 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
     for (i, op) in ops.iter().enumerate() {
         match op {
             PptxOp::SetShapeText(op) => {
+                if op.id.starts_with("master:") {
+                    let ph = master::parse_placeholder_id(&op.id, i)?;
+                    master::set_text(&mut pkg, &pres_part, &pres.root, &ph, &op.id, &op.text, i)?;
+                    continue;
+                }
                 let target = shape::parse_shape_id(&op.id, i)?;
                 let meta = slides.get(target.slide - 1).ok_or_else(|| {
                     Error::with_path(
@@ -105,20 +111,32 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                 write_shape_host(&mut pkg, &slides, &op.target, doc)?;
             }
             PptxOp::SetShapePos(op) => {
-                let mut doc = open_shape_host(&pkg, &slides, &op.target, &op.id, i)?;
-                if op.target.on_notes {
-                    reject_notes_image(&doc.root, &op.target.key, i)?;
+                if let Some(ph) = &op.placeholder {
+                    master::set_pos(&mut pkg, &pres_part, &pres.root, ph, &op.id, op.x, op.y, i)?;
+                    continue;
+                }
+                let target = op.target.as_ref().expect("幻灯片形状");
+                let mut doc = open_shape_host(&pkg, &slides, target, &op.id, i)?;
+                if target.on_notes {
+                    reject_notes_image(&doc.root, &target.key, i)?;
                 }
                 shape::set_shape_pos(&mut doc, op, i)?;
-                write_shape_host(&mut pkg, &slides, &op.target, doc)?;
+                write_shape_host(&mut pkg, &slides, target, doc)?;
             }
             PptxOp::SetShapeSize(op) => {
-                let mut doc = open_shape_host(&pkg, &slides, &op.target, &op.id, i)?;
-                if op.target.on_notes {
-                    reject_notes_image(&doc.root, &op.target.key, i)?;
+                if let Some(ph) = &op.placeholder {
+                    master::set_size(
+                        &mut pkg, &pres_part, &pres.root, ph, &op.id, op.cx, op.cy, i,
+                    )?;
+                    continue;
+                }
+                let target = op.target.as_ref().expect("幻灯片形状");
+                let mut doc = open_shape_host(&pkg, &slides, target, &op.id, i)?;
+                if target.on_notes {
+                    reject_notes_image(&doc.root, &target.key, i)?;
                 }
                 shape::set_shape_size(&mut doc, op, i)?;
-                write_shape_host(&mut pkg, &slides, &op.target, doc)?;
+                write_shape_host(&mut pkg, &slides, target, doc)?;
             }
             PptxOp::SetShapeFill(op) => {
                 let mut doc = open_shape_host(&pkg, &slides, &op.target, &op.id, i)?;
@@ -774,6 +792,11 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                     op.type_name.as_deref(),
                     op.dur,
                     i,
+                )?;
+            }
+            PptxOp::SetSlideLayout(op) => {
+                master::set_slide_layout(
+                    &mut pkg, &slides, &pres_part, &pres.root, op.slide, op.master, op.layout, i,
                 )?;
             }
             PptxOp::SetProps(op) => {

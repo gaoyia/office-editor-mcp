@@ -25,6 +25,7 @@ pub struct InspectScope {
     pub comments: bool,
     pub tables: bool,
     pub timing: bool,
+    pub masters: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -53,7 +54,8 @@ pub struct DeleteShapeOp {
 #[derive(Debug, Clone)]
 pub struct SetShapePosOp {
     pub id: String,
-    pub target: super::shape::ShapeTarget,
+    pub target: Option<super::shape::ShapeTarget>,
+    pub placeholder: Option<super::master::PlaceholderId>,
     pub x: Option<i64>,
     pub y: Option<i64>,
 }
@@ -61,7 +63,8 @@ pub struct SetShapePosOp {
 #[derive(Debug, Clone)]
 pub struct SetShapeSizeOp {
     pub id: String,
-    pub target: super::shape::ShapeTarget,
+    pub target: Option<super::shape::ShapeTarget>,
+    pub placeholder: Option<super::master::PlaceholderId>,
     pub cx: Option<i64>,
     pub cy: Option<i64>,
 }
@@ -115,6 +118,13 @@ pub struct SetTransitionOp {
     pub slide: usize,
     pub type_name: Option<String>,
     pub dur: Option<u32>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetSlideLayoutOp {
+    pub slide: usize,
+    pub master: usize,
+    pub layout: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -567,6 +577,7 @@ pub enum PptxOp {
     MoveSlide(MoveSlideOp),
     SetSlideHidden(SetSlideHiddenOp),
     SetTransition(SetTransitionOp),
+    SetSlideLayout(SetSlideLayoutOp),
     SetProps(crate::props::SetPropsOp),
     SetCustomProp(crate::props::SetCustomPropOp),
     DeleteCustomProp(crate::props::DeleteCustomPropOp),
@@ -600,6 +611,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
             "comments",
             "tables",
             "timing",
+            "masters",
         ],
     )?;
     let pictures = parse_bool_field(obj.get("pictures"), "pictures")?;
@@ -609,6 +621,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
     let comments = parse_bool_field(obj.get("comments"), "comments")?;
     let tables = parse_bool_field(obj.get("tables"), "tables")?;
     let timing = parse_bool_field(obj.get("timing"), "timing")?;
+    let masters = parse_bool_field(obj.get("masters"), "masters")?;
     let slide = match obj.get("slide") {
         None => None,
         Some(s) => {
@@ -676,6 +689,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
         comments,
         tables,
         timing,
+        masters,
     }))
 }
 
@@ -787,6 +801,7 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<PptxOp>, Error> {
             "moveSlide" => PptxOp::MoveSlide(parse_move_slide(obj, i)?),
             "setSlideHidden" => PptxOp::SetSlideHidden(parse_set_slide_hidden(obj, i)?),
             "setTransition" => PptxOp::SetTransition(parse_set_transition(obj, i)?),
+            "setSlideLayout" => PptxOp::SetSlideLayout(parse_set_slide_layout(obj, i)?),
             "setProps" => {
                 PptxOp::SetProps(crate::props::parse_set_props(obj, i, "pptx:presentation")?)
             }
@@ -1011,7 +1026,7 @@ fn parse_delete_shape(obj: &Map<String, Value>, i: usize) -> Result<DeleteShapeO
 fn parse_set_shape_pos(obj: &Map<String, Value>, i: usize) -> Result<SetShapePosOp, Error> {
     deny_keys(obj, i, &["op", "id", "x", "y"])?;
     let id = require_id(obj, i)?;
-    let target = super::shape::parse_shape_id(&id, i)?;
+    let (target, placeholder) = parse_shape_host(&id, i)?;
     let x = parse_off_field(obj.get("x"), i, "x")?;
     let y = parse_off_field(obj.get("y"), i, "y")?;
     if x.is_none() && y.is_none() {
@@ -1023,13 +1038,19 @@ fn parse_set_shape_pos(obj: &Map<String, Value>, i: usize) -> Result<SetShapePos
             format!("ops[{i}]"),
         ));
     }
-    Ok(SetShapePosOp { id, target, x, y })
+    Ok(SetShapePosOp {
+        id,
+        target,
+        placeholder,
+        x,
+        y,
+    })
 }
 
 fn parse_set_shape_size(obj: &Map<String, Value>, i: usize) -> Result<SetShapeSizeOp, Error> {
     deny_keys(obj, i, &["op", "id", "cx", "cy"])?;
     let id = require_id(obj, i)?;
-    let target = super::shape::parse_shape_id(&id, i)?;
+    let (target, placeholder) = parse_shape_host(&id, i)?;
     let cx = parse_emu_field(obj.get("cx"), i, "cx")?;
     let cy = parse_emu_field(obj.get("cy"), i, "cy")?;
     if cx.is_none() && cy.is_none() {
@@ -1041,7 +1062,13 @@ fn parse_set_shape_size(obj: &Map<String, Value>, i: usize) -> Result<SetShapeSi
             format!("ops[{i}]"),
         ));
     }
-    Ok(SetShapeSizeOp { id, target, cx, cy })
+    Ok(SetShapeSizeOp {
+        id,
+        target,
+        placeholder,
+        cx,
+        cy,
+    })
 }
 
 fn parse_set_shape_fill(obj: &Map<String, Value>, i: usize) -> Result<SetShapeFillOp, Error> {
@@ -1234,6 +1261,55 @@ fn parse_set_transition(obj: &Map<String, Value>, i: usize) -> Result<SetTransit
         type_name,
         dur,
     })
+}
+
+fn parse_set_slide_layout(obj: &Map<String, Value>, i: usize) -> Result<SetSlideLayoutOp, Error> {
+    deny_keys(obj, i, &["op", "id", "layout"])?;
+    let id = require_id(obj, i)?;
+    let layout = match obj.get("layout") {
+        Some(Value::String(s)) if !s.is_empty() => s.clone(),
+        Some(Value::String(_)) | None => {
+            return Err(Error::with_path(
+                ErrorKind::OpRequiresField {
+                    op: "setSlideLayout".into(),
+                    field: "layout".into(),
+                },
+                format!("ops[{i}].layout"),
+            ));
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "layout".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].layout"),
+            ));
+        }
+    };
+    let (master, layout_n) = super::master::parse_layout_ref(&layout, i)?;
+    Ok(SetSlideLayoutOp {
+        slide: parse_slide_only_id(&id, i, "id")?,
+        master,
+        layout: layout_n,
+    })
+}
+
+fn parse_shape_host(
+    id: &str,
+    i: usize,
+) -> Result<
+    (
+        Option<super::shape::ShapeTarget>,
+        Option<super::master::PlaceholderId>,
+    ),
+    Error,
+> {
+    if id.starts_with("master:") {
+        Ok((None, Some(super::master::parse_placeholder_id(id, i)?)))
+    } else {
+        Ok((Some(super::shape::parse_shape_id(id, i)?), None))
+    }
 }
 
 fn parse_transition_dur(v: &Value, i: usize) -> Result<u32, Error> {

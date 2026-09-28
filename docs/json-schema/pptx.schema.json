@@ -716,6 +716,28 @@
           "maximum": 60000
         }
       }
+    },
+    "setSlideLayoutOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "layout"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setSlideLayout"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "layout": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
     }
   }
 }

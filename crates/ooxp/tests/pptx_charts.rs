@@ -161,6 +161,7 @@ fn inspect_chart_count_without_list() {
             "commentCount",
             "tableCount",
             "animCount",
+            "masterCount",
             "props",
             "slides"
         ]

@@ -1023,6 +1023,7 @@ mod tests {
                 "commentCount",
                 "tableCount",
                 "animCount",
+                "masterCount",
                 "props",
                 "slides"
             ]
@@ -1033,6 +1034,7 @@ mod tests {
                 "id",
                 "index",
                 "name",
+                "layoutId",
                 "hidden",
                 "transition",
                 "hasNotes",
@@ -1052,6 +1054,7 @@ mod tests {
                 "id",
                 "index",
                 "name",
+                "layoutId",
                 "hidden",
                 "transition",
                 "hasNotes",

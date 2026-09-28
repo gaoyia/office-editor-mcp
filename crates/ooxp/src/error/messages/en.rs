@@ -229,6 +229,12 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::SlideOpNeedsSlide => {
                 "id must be slide:N".into()
             }
+            IdReason::MasterForm => {
+                "master / placeholder id must be master:N, master:N/layout:K, or …/shape:…".into()
+            }
+            IdReason::LayoutForm => {
+                "setSlideLayout layout must be master:N/layout:K".into()
+            }
             IdReason::InsertDefinedNameNeedsWorkbook => {
                 "insertDefinedName id must be xlsx:workbook".into()
             }
@@ -477,6 +483,10 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::TableNotFound { id } => format!("Table not found: {id}"),
         ErrorKind::SectionNotFound { id } => format!("Section not found: {id}"),
         ErrorKind::SlideNotFound { n } => format!("Slide not found: slide:{n}"),
+        ErrorKind::MasterNotFound { n } => format!("Slide master not found: master:{n}"),
+        ErrorKind::LayoutNotFound { master, layout } => {
+            format!("Slide layout not found: master:{master}/layout:{layout}")
+        }
         ErrorKind::ShapeNotFound { id } => format!("Shape not found: {id}"),
         ErrorKind::ShapeHasNoText { id } => format!("Shape has no text box: {id}"),
         ErrorKind::PictureNotFound { id } => format!("Picture not found: {id}"),
@@ -701,7 +711,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::InvalidXlsxAnchor => "anchor must be oneCell or twoCell".into(),
         ErrorKind::InvalidXlsxEditAs => "editAs must be twoCell, oneCell, or absolute".into(),
         ErrorKind::NotesSlideImage => {
-            "Cannot edit the slide-image placeholder on a notes page".into()
+            "Cannot edit a placeholder whose type is sldImg".into()
         }
         ErrorKind::GraphicInRestrictedStory => {
             "Cannot place a graphic object in a text box, callout, comment, footnote, or endnote"

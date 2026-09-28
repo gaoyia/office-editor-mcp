@@ -204,6 +204,12 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::SlideOpNeedsSlide => {
                 "id 必须是 slide:N".into()
             }
+            IdReason::MasterForm => {
+                "母版或占位符 id 必须是 master:N、master:N/layout:K 或 …/shape:…".into()
+            }
+            IdReason::LayoutForm => {
+                "setSlideLayout 的 layout 必须是 master:N/layout:K".into()
+            }
             IdReason::InsertDefinedNameNeedsWorkbook => {
                 "insertDefinedName 的 id 必须是 xlsx:workbook".into()
             }
@@ -435,6 +441,10 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::TableNotFound { id } => format!("找不到表：{id}"),
         ErrorKind::SectionNotFound { id } => format!("找不到节：{id}"),
         ErrorKind::SlideNotFound { n } => format!("找不到幻灯片：slide:{n}"),
+        ErrorKind::MasterNotFound { n } => format!("找不到幻灯片母版：master:{n}"),
+        ErrorKind::LayoutNotFound { master, layout } => {
+            format!("找不到版式：master:{master}/layout:{layout}")
+        }
         ErrorKind::ShapeNotFound { id } => format!("找不到形状：{id}"),
         ErrorKind::ShapeHasNoText { id } => format!("形状没有文本框：{id}"),
         ErrorKind::PictureNotFound { id } => format!("找不到图：{id}"),
@@ -602,7 +612,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         }
         ErrorKind::InvalidXlsxAnchor => "anchor 必须是 oneCell 或 twoCell".into(),
         ErrorKind::InvalidXlsxEditAs => "editAs 必须是 twoCell、oneCell 或 absolute".into(),
-        ErrorKind::NotesSlideImage => "不能改备注页上的幻灯片缩略图占位符".into(),
+        ErrorKind::NotesSlideImage => "不能改 type 为 sldImg 的占位符".into(),
         ErrorKind::GraphicInRestrictedStory => {
             "不能把图形对象放到文本框、标注、批注、脚注或尾注中".into()
         }

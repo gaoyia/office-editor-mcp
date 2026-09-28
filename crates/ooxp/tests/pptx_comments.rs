@@ -171,6 +171,7 @@ fn inspect_comment_count_without_list() {
             "commentCount",
             "tableCount",
             "animCount",
+            "masterCount",
             "props",
             "slides"
         ]

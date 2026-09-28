@@ -158,6 +158,7 @@ fn inspect_has_notes_without_notes_object() {
             "id",
             "index",
             "name",
+            "layoutId",
             "hidden",
             "transition",
             "hasNotes",

@@ -199,6 +199,9 @@
         "timing": {
           "type": "boolean"
         },
+        "masters": {
+          "type": "boolean"
+        },
         "revisions": {
           "type": "boolean"
         },
@@ -943,6 +946,9 @@
               },
               {
                 "$ref": "pptx.schema.json#/$defs/setTransitionOp"
+              },
+              {
+                "$ref": "pptx.schema.json#/$defs/setSlideLayoutOp"
               },
               {
                 "$ref": "#/$defs/setPropsOp"

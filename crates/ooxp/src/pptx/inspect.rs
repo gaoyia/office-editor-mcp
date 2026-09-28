@@ -8,6 +8,7 @@ use crate::xml;
 
 use super::chart;
 use super::comments;
+use super::master;
 use super::notes;
 use super::picture;
 use super::request::InspectScope;
@@ -30,6 +31,8 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     let want_comments = scope.as_ref().is_some_and(|s| s.comments);
     let want_tables = scope.as_ref().is_some_and(|s| s.tables);
     let want_timing = scope.as_ref().is_some_and(|s| s.timing);
+    let want_masters = scope.as_ref().is_some_and(|s| s.masters);
+    let catalog = master::catalog(&pkg, &pres_part, &pres.root)?;
 
     let mut slide_json = Vec::new();
     let mut picture_count = 0usize;
@@ -93,6 +96,10 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         obj.insert("id".into(), json!(host));
         obj.insert("index".into(), json!(s.index));
         obj.insert("name".into(), json!(s.name));
+        obj.insert(
+            "layoutId".into(),
+            master::layout_id_json(&pkg, &catalog, &s.part)?,
+        );
         obj.insert("hidden".into(), json!(s.hidden));
         obj.insert("transition".into(), transition::inspect(&doc.root));
         obj.insert("hasNotes".into(), json!(has));
@@ -151,18 +158,22 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         slide_json.push(Value::Object(obj));
     }
 
-    Ok(json!({
-        "schemaVersion": 1,
-        "format": "pptx",
-        "id": "pptx:presentation",
-        "slideCount": slide_count,
-        "pictureCount": picture_count,
-        "chartCount": chart_count,
-        "smartArtCount": smart_art_count,
-        "commentCount": comment_count,
-        "tableCount": table_count,
-        "animCount": anim_count,
-        "props": crate::props::inspect(&pkg)?,
-        "slides": slide_json,
-    }))
+    let mut root = Map::new();
+    root.insert("schemaVersion".into(), json!(1));
+    root.insert("format".into(), json!("pptx"));
+    root.insert("id".into(), json!("pptx:presentation"));
+    root.insert("slideCount".into(), json!(slide_count));
+    root.insert("pictureCount".into(), json!(picture_count));
+    root.insert("chartCount".into(), json!(chart_count));
+    root.insert("smartArtCount".into(), json!(smart_art_count));
+    root.insert("commentCount".into(), json!(comment_count));
+    root.insert("tableCount".into(), json!(table_count));
+    root.insert("animCount".into(), json!(anim_count));
+    root.insert("masterCount".into(), json!(catalog.count()));
+    root.insert("props".into(), crate::props::inspect(&pkg)?);
+    if want_masters {
+        root.insert("masters".into(), master::masters_json(&pkg, &catalog)?);
+    }
+    root.insert("slides".into(), Value::Array(slide_json));
+    Ok(Value::Object(root))
 }

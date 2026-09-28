@@ -181,6 +181,7 @@ fn create_has_zero_anim_count_without_list() {
             "commentCount",
             "tableCount",
             "animCount",
+            "masterCount",
             "props",
             "slides"
         ]

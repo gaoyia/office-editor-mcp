@@ -215,7 +215,7 @@ pub fn shape_node_json(sp: &Element, host: &str, index: usize) -> Value {
     sh
 }
 
-fn geometry_json(sp: &Element) -> (Value, Value, Value, Value) {
+pub(crate) fn geometry_json(sp: &Element) -> (Value, Value, Value, Value) {
     let xfrm = sp
         .child_by_local("spPr")
         .and_then(|p| p.child_by_local("xfrm"));
@@ -319,7 +319,7 @@ fn find_sp_mut<'a>(
     None
 }
 
-fn ids_match(file: &str, req: &str) -> bool {
+pub(crate) fn ids_match(file: &str, req: &str) -> bool {
     match (file.parse::<u64>(), req.parse::<u64>()) {
         (Ok(a), Ok(b)) => a == b,
         _ => file == req,
@@ -828,20 +828,14 @@ fn build_text_box(cnv: u32, name: &str, x: i64, y: i64, cx: i64, cy: i64) -> Ele
 }
 
 pub fn set_shape_pos(doc: &mut Document, op: &SetShapePosOp, op_index: usize) -> Result<(), Error> {
-    let sp = find_shape_mut(&mut doc.root, &op.target.key).ok_or_else(|| {
+    let target = op.target.as_ref().expect("幻灯片形状");
+    let sp = find_shape_mut(&mut doc.root, &target.key).ok_or_else(|| {
         Error::with_path(
             ErrorKind::ShapeNotFound { id: op.id.clone() },
             format!("ops[{op_index}].id"),
         )
     })?;
-    let xfrm = ensure_xfrm(sp);
-    let off = ensure_a_child(xfrm, "off");
-    if let Some(x) = op.x {
-        picture::set_attr_local(off, "x", &x.to_string());
-    }
-    if let Some(y) = op.y {
-        picture::set_attr_local(off, "y", &y.to_string());
-    }
+    set_sp_pos(sp, op.x, op.y);
     Ok(())
 }
 
@@ -850,21 +844,37 @@ pub fn set_shape_size(
     op: &SetShapeSizeOp,
     op_index: usize,
 ) -> Result<(), Error> {
-    let sp = find_shape_mut(&mut doc.root, &op.target.key).ok_or_else(|| {
+    let target = op.target.as_ref().expect("幻灯片形状");
+    let sp = find_shape_mut(&mut doc.root, &target.key).ok_or_else(|| {
         Error::with_path(
             ErrorKind::ShapeNotFound { id: op.id.clone() },
             format!("ops[{op_index}].id"),
         )
     })?;
+    set_sp_size(sp, op.cx, op.cy);
+    Ok(())
+}
+
+pub(crate) fn set_sp_pos(sp: &mut Element, x: Option<i64>, y: Option<i64>) {
+    let xfrm = ensure_xfrm(sp);
+    let off = ensure_a_child(xfrm, "off");
+    if let Some(x) = x {
+        picture::set_attr_local(off, "x", &x.to_string());
+    }
+    if let Some(y) = y {
+        picture::set_attr_local(off, "y", &y.to_string());
+    }
+}
+
+pub(crate) fn set_sp_size(sp: &mut Element, cx: Option<i64>, cy: Option<i64>) {
     let xfrm = ensure_xfrm(sp);
     let ext = ensure_a_child(xfrm, "ext");
-    if let Some(cx) = op.cx {
+    if let Some(cx) = cx {
         picture::set_attr_local(ext, "cx", &cx.to_string());
     }
-    if let Some(cy) = op.cy {
+    if let Some(cy) = cy {
         picture::set_attr_local(ext, "cy", &cy.to_string());
     }
-    Ok(())
 }
 
 pub fn set_shape_fill(
