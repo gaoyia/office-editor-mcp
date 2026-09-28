@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "C:\\data\\book.xlsx",
+  "output": "C:\\data\\book.protect.xlsx",
+  "ops": [
+    { "op": "setProtection", "id": "sheet:Sheet1", "enforced": true },
+    { "op": "setProtection", "id": "xlsx:workbook", "lockStructure": true }
+  ]
+}

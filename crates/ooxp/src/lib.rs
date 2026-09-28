@@ -799,6 +799,7 @@ mod tests {
                 "sparklineCount",
                 "definedNameCount",
                 "props",
+                "workbookProtection",
                 "sheets",
                 "definedNames"
             ]
@@ -825,6 +826,7 @@ mod tests {
                 "print",
                 "view",
                 "autoFilter",
+                "sheetProtection",
                 "truncated",
                 "range",
                 "cells",

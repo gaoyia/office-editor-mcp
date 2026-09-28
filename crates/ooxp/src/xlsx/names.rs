@@ -447,7 +447,7 @@ fn sync_count(parent: &mut Element) {
     parent.set_attr("count", n.to_string());
 }
 
-fn insert_workbook_child(root: &mut Element, el: Element, local: &str) {
+pub(crate) fn insert_workbook_child(root: &mut Element, el: Element, local: &str) {
     let want = WORKBOOK_CHILD_ORDER
         .iter()
         .position(|n| *n == local)

@@ -240,6 +240,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::SheetOpNeedsSheet => {
                 "id must be sheet:name".into()
             }
+            IdReason::SetProtectionNeedsSheetOrWorkbook => {
+                "setProtection id must be sheet:name or xlsx:workbook".into()
+            }
             IdReason::SheetDvPrefix => {
                 "data validation id must be sheet:name/dv:n, n starting at 1".into()
             }
@@ -687,11 +690,13 @@ pub(super) fn render(kind: &ErrorKind) -> String {
                 .into()
         }
         ErrorKind::NeedProtectionField => {
-            "setProtection requires at least one of enforced, edit, formatting, readOnlyRecommended"
-                .into()
+            "setProtection requires at least one writable field".into()
         }
         ErrorKind::InvalidProtectionEdit => {
             "edit must be readOnly, comments, trackedChanges, or forms".into()
+        }
+        ErrorKind::InvalidSheetProtection { field } => {
+            format!("chartsheet does not accept {field}")
         }
         ErrorKind::ProtectionPassword => {
             "setProtection does not write password hashes".into()

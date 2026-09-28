@@ -215,6 +215,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::SheetOpNeedsSheet => {
                 "id 必须是 sheet:工作表名".into()
             }
+            IdReason::SetProtectionNeedsSheetOrWorkbook => {
+                "setProtection 的 id 必须是 sheet:工作表名 或 xlsx:workbook".into()
+            }
             IdReason::SheetDvPrefix => {
                 "数据验证 id 必须是 sheet:工作表名/dv:n，n 从 1 起".into()
             }
@@ -587,10 +590,13 @@ pub(super) fn render(kind: &ErrorKind) -> String {
                 .into()
         }
         ErrorKind::NeedProtectionField => {
-            "setProtection 至少要给 enforced、edit、formatting、readOnlyRecommended 之一".into()
+            "setProtection 至少要给一个可写字段".into()
         }
         ErrorKind::InvalidProtectionEdit => {
             "edit 必须是 readOnly、comments、trackedChanges 或 forms".into()
+        }
+        ErrorKind::InvalidSheetProtection { field } => {
+            format!("图表工作表不认 {field}")
         }
         ErrorKind::ProtectionPassword => "setProtection 不写密码哈希".into(),
         ErrorKind::ProtectionHasPassword => {

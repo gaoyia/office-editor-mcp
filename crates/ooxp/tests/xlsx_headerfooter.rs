@@ -159,7 +159,8 @@ fn summary_without_scope() {
             "hasHeaderFooter",
             "print",
             "view",
-            "autoFilter"
+            "autoFilter",
+            "sheetProtection"
         ]
     );
 }

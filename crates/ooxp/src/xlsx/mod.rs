@@ -16,6 +16,7 @@ mod names;
 mod picture;
 mod pivot;
 mod print;
+mod protect;
 mod request;
 mod shape;
 mod sheets;

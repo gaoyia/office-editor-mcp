@@ -134,7 +134,8 @@ fn inspect_lists_hidden() {
             "hasHeaderFooter",
             "print",
             "view",
-            "autoFilter"
+            "autoFilter",
+            "sheetProtection"
         ]
     );
 }

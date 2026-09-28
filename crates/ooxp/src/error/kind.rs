@@ -156,6 +156,8 @@ pub(crate) enum IdReason {
     DeleteSheetNeedsWorksheet,
     /// renameSheet / moveSheet / setSheetHidden / insertDataValidation / insertConditionalFormat / insertSheetTable 必须用 sheet:工作表名
     SheetOpNeedsSheet,
+    /// setProtection 必须用 sheet:工作表名 或 xlsx:workbook
+    SetProtectionNeedsSheetOrWorkbook,
     /// setDataValidation / deleteDataValidation 必须用 sheet:工作表名/dv:n
     SheetDvPrefix,
     DvIndexNotInt,
@@ -442,6 +444,9 @@ define_error_kinds! {
     NeedPropsField => vec![Self::NeedPropsField],
     NeedProtectionField => vec![Self::NeedProtectionField],
     InvalidProtectionEdit => vec![Self::InvalidProtectionEdit],
+    InvalidSheetProtection { field: String } => {
+        vec![Self::InvalidSheetProtection { field: "formatCells".into() }]
+    },
     ProtectionPassword => vec![Self::ProtectionPassword],
     ProtectionHasPassword => vec![Self::ProtectionHasPassword],
     InvalidCustomPropType => vec![Self::InvalidCustomPropType],
@@ -837,6 +842,7 @@ impl IdReason {
             Self::DeleteChartSheetNeedsChartsheet,
             Self::DeleteSheetNeedsWorksheet,
             Self::SheetOpNeedsSheet,
+            Self::SetProtectionNeedsSheetOrWorkbook,
             Self::SheetDvPrefix,
             Self::DvIndexNotInt,
             Self::DvIndexFromOne,
@@ -1180,6 +1186,7 @@ impl ErrorKind {
             | Self::NeedProtectionField
             | Self::WatermarkNeedTextOrFile
             | Self::InvalidProtectionEdit
+            | Self::InvalidSheetProtection { .. }
             | Self::InvalidCustomPropType
             | Self::EmptyCustomPropName => InvalidField,
             Self::OutOfRange { .. } => TruncatedLimit,

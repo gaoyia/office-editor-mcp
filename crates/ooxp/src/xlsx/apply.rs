@@ -2,7 +2,7 @@
 
 use super::formula;
 use super::hyperlink;
-use super::request::{Patch, SetCellOp, SetCellValue, XlsxOp};
+use super::request::{Patch, SetCellOp, SetCellValue, SetProtectionOp, XlsxOp};
 use super::sparkline;
 use crate::error::{Error, ErrorKind, IdReason, RelSource};
 use crate::opc::{self, ContentTypes, Package, Relationships};
@@ -526,6 +526,18 @@ pub fn apply(bytes: &[u8], ops: &[XlsxOp]) -> Result<Vec<u8>, Error> {
                 let doc = dirty_of(&mut dirty_sheets, &part);
                 sparkline::apply_delete(&mut doc.root, op, i)?;
             }
+            XlsxOp::SetProtection(op) => match op {
+                SetProtectionOp::Sheet(op) => {
+                    let (part, kind) = require_named_sheet(&sheet_index, &op.sheet, i)?;
+                    load_dirty(&pkg, &mut dirty_sheets, &part, false)?;
+                    let doc = dirty_of(&mut dirty_sheets, &part);
+                    super::protect::apply_sheet(&mut doc.root, kind, op, i)?;
+                }
+                SetProtectionOp::Workbook(op) => {
+                    super::protect::apply_workbook(&mut wb_doc.root, op, i)?;
+                    workbook_dirty = true;
+                }
+            },
             XlsxOp::InsertTextBox(op) => {
                 let part = require_drawing_worksheet(
                     &sheet_index,

@@ -8,7 +8,7 @@
 
 Microsoft Excel 16.0 已打开，用户确认通过。本机若装了 WPS，`Excel.Application` 会被抢走，测试仍直接启动 `EXCEL.EXE` 再挂 COM。
 
-C、I、A、O、Xp、Xc、Xh 这几组现在由 `manual-check/office/cases/xlsx-*.ps1` 自动判定，跑 `pwsh -File manual-check\office\run.ps1 -Case 'xlsx-*'` 即可复现，逐条结果落在 `manual-check/office/out/office-results.csv`。2026-09-27 补跑 `xlsx-pictures.ps1`，Xp1–Xp7 通过。同日补跑 `xlsx-charts.ps1`，Xc1–Xc7 通过。同日补跑 `xlsx-create-pictures.ps1`，C8–C10 通过。同日补跑 `xlsx-create-charts.ps1`，C11–C13 通过。同日补跑 `xlsx-headerfooter.ps1`，Xh1–Xh5 通过。同日补跑 `xlsx-docprops.ps1`，Xd1–Xd5 通过。同日补跑 `xlsx-charts-remain.ps1`，Xr1–Xr4 通过。同日补跑 `xlsx-sheets.ps1`，Xm1–Xm7 通过。同日补跑 `xlsx-cellstyle.ps1`，Xs1–Xs5 通过。同日补跑 `xlsx-layout.ps1`，Xl1–Xl5 通过。同日补跑 `xlsx-formula.ps1`，Xf1–Xf5 通过。2026-09-28 补跑 `xlsx-validation.ps1`，Xv1–Xv5 通过。同日补跑 `xlsx-conditional-format.ps1`，Xn1–Xn5 通过。同日补跑 `xlsx-pivot.ps1`，Xpt1–Xpt5 通过。同日补跑 `xlsx-defined-name.ps1`，Xnm1–Xnm5 通过。同日补跑 `xlsx-print.ps1`，Xps1–Xps5 通过。同日补跑 `xlsx-view.ps1`，Xvw1–Xvw5 通过。同日补跑 `xlsx-comments.ps1`，Xcm1–Xcm5 通过。同日补跑 `xlsx-shapes.ps1`，Xsa1–Xsa5 通过。同日补跑 `xlsx-hyperlinks.ps1`，Xhl1–Xhl5 通过。同日补跑 `xlsx-sparklines.ps1`，Xsk1–Xsk5 通过。
+C、I、A、O、Xp、Xc、Xh 这几组现在由 `manual-check/office/cases/xlsx-*.ps1` 自动判定，跑 `pwsh -File manual-check\office\run.ps1 -Case 'xlsx-*'` 即可复现，逐条结果落在 `manual-check/office/out/office-results.csv`。2026-09-27 补跑 `xlsx-pictures.ps1`，Xp1–Xp7 通过。同日补跑 `xlsx-charts.ps1`，Xc1–Xc7 通过。同日补跑 `xlsx-create-pictures.ps1`，C8–C10 通过。同日补跑 `xlsx-create-charts.ps1`，C11–C13 通过。同日补跑 `xlsx-headerfooter.ps1`，Xh1–Xh5 通过。同日补跑 `xlsx-docprops.ps1`，Xd1–Xd5 通过。同日补跑 `xlsx-charts-remain.ps1`，Xr1–Xr4 通过。同日补跑 `xlsx-sheets.ps1`，Xm1–Xm7 通过。同日补跑 `xlsx-cellstyle.ps1`，Xs1–Xs5 通过。同日补跑 `xlsx-layout.ps1`，Xl1–Xl5 通过。同日补跑 `xlsx-formula.ps1`，Xf1–Xf5 通过。2026-09-28 补跑 `xlsx-validation.ps1`，Xv1–Xv5 通过。同日补跑 `xlsx-conditional-format.ps1`，Xn1–Xn5 通过。同日补跑 `xlsx-pivot.ps1`，Xpt1–Xpt5 通过。同日补跑 `xlsx-defined-name.ps1`，Xnm1–Xnm5 通过。同日补跑 `xlsx-print.ps1`，Xps1–Xps5 通过。同日补跑 `xlsx-view.ps1`，Xvw1–Xvw5 通过。同日补跑 `xlsx-comments.ps1`，Xcm1–Xcm5 通过。同日补跑 `xlsx-shapes.ps1`，Xsa1–Xsa5 通过。同日补跑 `xlsx-hyperlinks.ps1`，Xhl1–Xhl5 通过。同日补跑 `xlsx-sparklines.ps1`，Xsk1–Xsk5 通过。同日补跑 `xlsx-protect.ps1`，Xpr1–Xpr5 通过。
 
 | 序号 | 状态 | 结果 |
 | --- | --- | --- |
@@ -40,6 +40,7 @@ C、I、A、O、Xp、Xc、Xh 这几组现在由 `manual-check/office/cases/xlsx-
 | Xsa1–Xsa5 | ✅ | Excel 16.0：`xlsx-shapes.ps1`，5 PASS / 0 FAIL。无名单时根与工作表有 `textBoxCount=0`、`smartArtCount=0`；`insertTextBox` 后 COM `Shapes` 能看见文本框且无 Repair；`setShapeText` 后可见字对得上；`insertSmartArt` `layout=list` 后 COM 能看见 SmartArt，inspect `layout` 对得上；删除后计数为 0；缺 `from` 得 `InvalidField` 且未写文件 |
 | Xhl1–Xhl5 | ✅ | Excel 16.0：`xlsx-hyperlinks.ps1`，5 PASS / 0 FAIL。无名单时根与工作表有 `hyperlinkCount=0`；`insertHyperlink` 后 COM `Hyperlinks` 能看见地址且无 Repair；改地址后对得上；删除后只留文字；缺字段得 `InvalidField` 且未写文件 |
 | Xsk1–Xsk5 | ✅ | Excel 16.0：`xlsx-sparklines.ps1`，5 PASS / 0 FAIL。无名单时根与工作表有 `sparklineCount=0`；`insertSparkline` 后 COM `SparklineGroups` 能看见折线且无 Repair；改数据范围后对得上；删除后计数为 0；缺字段得 `InvalidField` 且未写文件 |
+| Xpr1–Xpr5 | ✅ | Excel 16.0：`xlsx-protect.ps1`，5 PASS / 0 FAIL。无保护时根有 `workbookProtection`、工作表有 `sheetProtection` 且 `enforced=false`；打开工作表保护后 COM `ProtectContents` 为真且无 Repair；解开后能改格；工作簿锁结构后 COM `ProtectStructure` 为真；缺字段得 `InvalidField`，带哈希样例 `hasPassword=true` 且 apply 得 `NotImplemented` |
 
 
 ## create
@@ -351,3 +352,15 @@ Office 另存 create 产物是打开冒烟，见 `manual-check/office/cases/opc-
 | Xsk3 | 改范围 | `setSparkline` 改 `formula` 后 COM `SourceData` 对得上、无修复 |
 | Xsk4 | 删除 | `deleteSparkline` 后 `sparklineCount=0`、无修复 |
 | Xsk5 | 缺字段 | 只给 `op` 与 `id` 的 `insertSparkline`（缺 `ref`）得 `InvalidField`，未写文件。不强制开 Excel |
+
+## 保护
+
+用库 create 产物再 apply。带哈希样例由脚本在 ZIP 里写入 `sheetProtection` 属性，不靠 Excel 猜密码。脚本 `manual-check/office/cases/xlsx-protect.ps1`。编号用 Xpr。
+
+| 序号 | 检查 | 通过标准 |
+| --- | --- | --- |
+| Xpr1 | inspect | 无 scope 时工作簿有 `workbookProtection`，每张 `worksheet` 有 `sheetProtection`；create 默认为 `enforced=false`、`hasPassword=false`、`lockStructure=false` |
+| Xpr2 | 保护工作表 | `setProtection` `enforced: true` 后 Excel 无修复；COM `ProtectContents` 为真 |
+| Xpr3 | 解开 | `enforced: false` 后 COM `ProtectContents` 为假，单元格能写入，无修复 |
+| Xpr4 | 工作簿结构 | `lockStructure: true` 后 COM `ProtectStructure` 为真、无修复 |
+| Xpr5 | 缺字段与哈希 | 只给 `op` 与 `id` 得 `InvalidField`，未写文件；带 `hashValue` 的样例 inspect `hasPassword=true`，再 apply 得 `NotImplemented`。不强制为缺字段开 Excel |

@@ -198,6 +198,7 @@ fn inspect_default_props_on_three_formats() {
             "sparklineCount",
             "definedNameCount",
             "props",
+            "workbookProtection",
             "sheets",
             "definedNames"
         ]

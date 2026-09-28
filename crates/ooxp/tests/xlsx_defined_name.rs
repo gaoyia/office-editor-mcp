@@ -115,6 +115,7 @@ fn inspect_empty_on_create() {
             "sparklineCount",
             "definedNameCount",
             "props",
+            "workbookProtection",
             "sheets",
             "definedNames"
         ]

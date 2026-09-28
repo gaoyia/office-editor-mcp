@@ -931,6 +931,60 @@ pub struct DeleteSparklineOp {
 }
 
 #[derive(Debug, Clone)]
+pub struct SetSheetProtectionOp {
+    pub sheet: String,
+    pub enforced: Option<bool>,
+    pub objects: Option<bool>,
+    pub scenarios: Option<bool>,
+    pub format_cells: Option<bool>,
+    pub format_columns: Option<bool>,
+    pub format_rows: Option<bool>,
+    pub insert_columns: Option<bool>,
+    pub insert_rows: Option<bool>,
+    pub insert_hyperlinks: Option<bool>,
+    pub delete_columns: Option<bool>,
+    pub delete_rows: Option<bool>,
+    pub select_locked_cells: Option<bool>,
+    pub sort: Option<bool>,
+    pub auto_filter: Option<bool>,
+    pub pivot_tables: Option<bool>,
+    pub select_unlocked_cells: Option<bool>,
+}
+
+impl SetSheetProtectionOp {
+    pub(crate) fn has_flag(&self) -> bool {
+        self.objects.is_some()
+            || self.scenarios.is_some()
+            || self.format_cells.is_some()
+            || self.format_columns.is_some()
+            || self.format_rows.is_some()
+            || self.insert_columns.is_some()
+            || self.insert_rows.is_some()
+            || self.insert_hyperlinks.is_some()
+            || self.delete_columns.is_some()
+            || self.delete_rows.is_some()
+            || self.select_locked_cells.is_some()
+            || self.sort.is_some()
+            || self.auto_filter.is_some()
+            || self.pivot_tables.is_some()
+            || self.select_unlocked_cells.is_some()
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct SetWorkbookProtectionOp {
+    pub lock_structure: Option<bool>,
+    pub lock_windows: Option<bool>,
+    pub lock_revision: Option<bool>,
+}
+
+#[derive(Debug, Clone)]
+pub enum SetProtectionOp {
+    Sheet(SetSheetProtectionOp),
+    Workbook(SetWorkbookProtectionOp),
+}
+
+#[derive(Debug, Clone)]
 pub struct SetHeaderFooterTextOp {
     #[allow(dead_code)]
     pub id: String,
@@ -1410,6 +1464,7 @@ pub enum XlsxOp {
     InsertSparkline(InsertSparklineOp),
     SetSparkline(SetSparklineOp),
     DeleteSparkline(DeleteSparklineOp),
+    SetProtection(SetProtectionOp),
     DeleteChart(DeleteChartOp),
     SetChartTitle(SetChartTitleOp),
     SetChartSeries(SetChartSeriesOp),
@@ -1636,6 +1691,7 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<XlsxOp>, Error> {
             "insertSparkline" => XlsxOp::InsertSparkline(parse_insert_sparkline(obj, i)?),
             "setSparkline" => XlsxOp::SetSparkline(parse_set_sparkline(obj, i)?),
             "deleteSparkline" => XlsxOp::DeleteSparkline(parse_delete_sparkline(obj, i)?),
+            "setProtection" => XlsxOp::SetProtection(parse_set_protection(obj, i)?),
             "deleteChart" => XlsxOp::DeleteChart(parse_delete_chart(obj, i)?),
             "setChartTitle" => XlsxOp::SetChartTitle(parse_set_chart_title(obj, i)?),
             "setChartSeries" => XlsxOp::SetChartSeries(parse_set_chart_series(obj, i)?),
@@ -1752,8 +1808,7 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<XlsxOp>, Error> {
             | "insertOle"
             | "deleteOle"
             | "insertWatermark"
-            | "deleteWatermark"
-            | "setProtection" => {
+            | "deleteWatermark" => {
                 return Err(Error::with_path(
                     ErrorKind::OpNotForFormat {
                         format: "xlsx".into(),
@@ -4367,6 +4422,89 @@ fn parse_delete_sparkline(
     let id = require_id(obj, i)?;
     let (sheet, index) = parse_spark_id(&id, i)?;
     Ok(DeleteSparklineOp { id, sheet, index })
+}
+
+fn parse_set_protection(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<SetProtectionOp, Error> {
+    if obj.contains_key("password") {
+        return Err(Error::with_path(
+            ErrorKind::ProtectionPassword,
+            format!("ops[{i}].password"),
+        ));
+    }
+    let id = require_id(obj, i)?;
+    if id == "xlsx:workbook" {
+        deny_keys(
+            obj,
+            i,
+            &["op", "id", "lockStructure", "lockWindows", "lockRevision"],
+        )?;
+        let op = SetWorkbookProtectionOp {
+            lock_structure: parse_opt_bool(obj, i, "lockStructure")?,
+            lock_windows: parse_opt_bool(obj, i, "lockWindows")?,
+            lock_revision: parse_opt_bool(obj, i, "lockRevision")?,
+        };
+        if op.lock_structure.is_none() && op.lock_windows.is_none() && op.lock_revision.is_none() {
+            return Err(Error::with_path(
+                ErrorKind::NeedProtectionField,
+                format!("ops[{i}]"),
+            ));
+        }
+        return Ok(SetProtectionOp::Workbook(op));
+    }
+    deny_keys(
+        obj,
+        i,
+        &[
+            "op",
+            "id",
+            "enforced",
+            "objects",
+            "scenarios",
+            "formatCells",
+            "formatColumns",
+            "formatRows",
+            "insertColumns",
+            "insertRows",
+            "insertHyperlinks",
+            "deleteColumns",
+            "deleteRows",
+            "selectLockedCells",
+            "sort",
+            "autoFilter",
+            "pivotTables",
+            "selectUnlockedCells",
+        ],
+    )?;
+    let sheet = parse_sheet_only_id(&id, i, "id", IdReason::SetProtectionNeedsSheetOrWorkbook)?;
+    let op = SetSheetProtectionOp {
+        sheet,
+        enforced: parse_opt_bool(obj, i, "enforced")?,
+        objects: parse_opt_bool(obj, i, "objects")?,
+        scenarios: parse_opt_bool(obj, i, "scenarios")?,
+        format_cells: parse_opt_bool(obj, i, "formatCells")?,
+        format_columns: parse_opt_bool(obj, i, "formatColumns")?,
+        format_rows: parse_opt_bool(obj, i, "formatRows")?,
+        insert_columns: parse_opt_bool(obj, i, "insertColumns")?,
+        insert_rows: parse_opt_bool(obj, i, "insertRows")?,
+        insert_hyperlinks: parse_opt_bool(obj, i, "insertHyperlinks")?,
+        delete_columns: parse_opt_bool(obj, i, "deleteColumns")?,
+        delete_rows: parse_opt_bool(obj, i, "deleteRows")?,
+        select_locked_cells: parse_opt_bool(obj, i, "selectLockedCells")?,
+        sort: parse_opt_bool(obj, i, "sort")?,
+        auto_filter: parse_opt_bool(obj, i, "autoFilter")?,
+        pivot_tables: parse_opt_bool(obj, i, "pivotTables")?,
+        select_unlocked_cells: parse_opt_bool(obj, i, "selectUnlockedCells")?,
+    };
+    if op.enforced.is_none() && !op.has_flag() {
+        return Err(Error::with_path(
+            ErrorKind::NeedProtectionField,
+            format!("ops[{i}]"),
+        ));
+    }
+    Ok(SetProtectionOp::Sheet(op))
 }
 
 fn parse_optional_text(obj: &serde_json::Map<String, Value>, i: usize) -> Result<String, Error> {

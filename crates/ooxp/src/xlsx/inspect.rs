@@ -130,6 +130,10 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
                 "autoFilter".into(),
                 super::view::inspect_filter(&sheet_doc.root),
             );
+            obj.insert(
+                "sheetProtection".into(),
+                super::protect::inspect_sheet(&sheet_doc.root, sh.kind),
+            );
             if want_header_footer {
                 obj.insert(
                     "headerFooters".into(),
@@ -220,6 +224,10 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
                 super::print::inspect(&sheet_doc.root, &wb.root, sheet_id as u32, &sh.name),
             );
             obj.insert("view".into(), super::view::inspect_view(&sheet_doc.root));
+            obj.insert(
+                "sheetProtection".into(),
+                super::protect::inspect_sheet(&sheet_doc.root, sh.kind),
+            );
             if want_header_footer {
                 obj.insert(
                     "headerFooters".into(),
@@ -301,6 +309,10 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     root.insert("sparklineCount".into(), json!(sparkline_count));
     root.insert("definedNameCount".into(), json!(names::count(&wb.root)));
     root.insert("props".into(), crate::props::inspect(&pkg)?);
+    root.insert(
+        "workbookProtection".into(),
+        super::protect::inspect_workbook(&wb.root),
+    );
     root.insert("sheets".into(), Value::Array(sheet_json));
     let sheet_names: Vec<String> = sheets.iter().map(|s| s.name.clone()).collect();
     root.insert(
