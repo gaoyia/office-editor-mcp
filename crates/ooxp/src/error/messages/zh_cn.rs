@@ -578,6 +578,10 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::InvalidAnimType => "type 本期只认 fade".into(),
         ErrorKind::InvalidAnimTrigger => "trigger 必须是 click、with 或 after".into(),
         ErrorKind::InvalidTransitionDur => "dur 必须是 1 到 60000 的整数".into(),
+        ErrorKind::InvalidTransitionAdvTm => "advTm 必须是 1 到 86400000 的整数".into(),
+        ErrorKind::InvalidTransitionDir => {
+            "dir 必须是该切换允许的方向；invX / invY 只对 prstTrans 预设有效".into()
+        }
         ErrorKind::InvalidChartAxis => "axis 必须是 cat 或 val，且图表里要有对应主轴".into(),
         ErrorKind::InvalidLegendPos => "pos 必须是 b、t、l、r 或 tr".into(),
         ErrorKind::PieNeedsOneSeries => "饼图与圆环图必须恰好一条系列".into(),

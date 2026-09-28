@@ -256,7 +256,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
 - `name` 取 `p:cSld/@name` 的原文。没有该属性则为 `null`。
 - `layoutId` 在每页始终出现：该页 `.rels` 里 Type 以 `/slideLayout` 结尾的关系，对到某母版 `p:sldLayoutIdLst` 里的那一份，则为 `master:{n}/layout:{k}`。找不到该关系、或对不上任何已编母版版式，则为 `null`。不因换页关系改母版 / 版式序号。
 - `hidden`：`p:sld/@show` 为 `0` 或 `false` 时为 `true`，其余为 `false`。
-- `transition` 在每页始终出现。没有 `<p:transition>`（含包在 `mc:AlternateContent` 里的）则为 `null`。有则为对象，字段顺序：`type`、`dur`。`type` 取效果子元素的本地名（`sndAc` / `extLst` 不算）。ECMA-376 的 `blinds` / `checker` / `circle` / `dissolve` / `comb` / `cover` / `cut` / `diamond` / `fade` / `newsflash` / `plus` / `pull` / `push` / `random` / `randomBar` / `split` / `strips` / `wedge` / `wheel` / `wipe` / `zoom`，以及 MS-PPTX 的 `vortex` / `switch` / `flip` / `ripple` / `honeycomb` / `prism` / `doors` / `window` / `ferris` / `gallery` / `conveyor` / `pan` / `glitter` / `warp` / `flythrough` / `flash` / `shred` / `reveal` / `wheelReverse` / `morph`，按原名返回。不在这份名单里的效果（含 `prstTrans`）为 `other`。`mc:AlternateContent` 只走第一个 Choice。`dur` 优先取 `p14:dur`（毫秒，无单位整数）；没有则按 `spd` 折算：`slow` 为 `1000`，`med` 为 `750`，`fast` 或缺 `spd` 为 `500`。没有效果子元素但仍有 `<p:transition>` 时 `type` 为 `none`。
+- `transition` 在每页始终出现。没有 `<p:transition>`（含包在 `mc:AlternateContent` 里的）则为 `null`。有则为对象，字段顺序：`type`、`dur`、`advClick`、`advTm`，有 `dir` 再跟 `dir`，`invX` / `invY` 为真再跟。`type` 取效果子元素的本地名（`sndAc` / `extLst` 不算）。效果本地名为 `prstTrans` 时，`type` 改取 `prst` 属性：值为 `fallOver` / `drape` / `curtains` / `wind` / `prestige` / `fracture` / `crush` / `peelOff` / `pageCurlSingle` / `pageCurlDouble` / `airplane` / `origami` 则按该名返回，其余 `prst` 仍为 `other`。ECMA-376 的 `blinds` / `checker` / `circle` / `dissolve` / `comb` / `cover` / `cut` / `diamond` / `fade` / `newsflash` / `plus` / `pull` / `push` / `random` / `randomBar` / `split` / `strips` / `wedge` / `wheel` / `wipe` / `zoom`，以及 MS-PPTX 的 `vortex` / `switch` / `flip` / `ripple` / `honeycomb` / `prism` / `doors` / `window` / `ferris` / `gallery` / `conveyor` / `pan` / `glitter` / `warp` / `flythrough` / `flash` / `shred` / `reveal` / `wheelReverse` / `morph`，按原名返回。不在这份名单、也不是上述 prst 名的效果为 `other`。`mc:AlternateContent` 只走第一个 Choice。`dur` 优先取 `p14:dur`（毫秒，无单位整数）；没有则按 `spd` 折算：`slow` 为 `1000`，`med` 为 `750`，`fast` 或缺 `spd` 为 `500`。没有效果子元素但仍有 `<p:transition>` 时 `type` 为 `none`。`advClick`：属性为 `0` / `false` 则为 `false`，缺属性或其余值为 `true`。`advTm`：有属性且能解析成正整数则取其毫秒，否则为 `null`。`dir` 取效果子元素的 `dir` 原文；没有该属性则不出现该字段。`invX` / `invY` 只在对应属性为 `1` / `true` 时出现且值为 `true`。
 - 省略 `scope` 或只给空对象时，没有 `shapes`、`truncated`，也没有 `pictures` / `videos` / `audios` / `charts` / `smartArts` / `tables` / `timing` 名单，也没有 `notes`，也没有 `comments`，也没有 `hyperlinks`，也没有根上 `masters`，也没有根上 `handout`，也没有根上 `sections`。
 - 给了 `scope.slide` 时，只给那一页填 `shapes`。该页带 `p:txBody` 的 `p:sp` 超过 `maxShapes` 则 `truncated` 为 `true`，按该页文档顺序截断。未截断则为 `false`。备注形状不算进 `maxShapes`。
 - `scope.slide` 大于 `slideCount` 时，各页都不带 `shapes`，不报错。
@@ -438,10 +438,14 @@ pptx：`id` 不是 `pptx:presentation` 报 `InvalidId`。`after` 找不到报 `I
 | `id` | `slide:{n}` |
 | `type` | 效果名，或 `null` 表示去掉切换。必填 |
 | `dur` | 可选。时长，毫秒，整数，范围 `1`–`60000` |
+| `advClick` | 可选。`false` 表示不单击进片。省略为 `true` |
+| `advTm` | 可选。自动进片延迟，毫秒，整数，范围 `1`–`86400000`。`null` 或不给表示不定时 |
+| `dir` | 可选。效果子元素的方向。省略则不写该属性 |
+| `invX` / `invY` | 可选。只对 prst 名有意义。`true` 时写 `invX="1"` / `invY="1"` |
 
-找不到该页报 `IdNotFound`。id 不是页 id 报 `InvalidId`。缺 `type` 报 `InvalidField`。`type` 为 `other`、空串、或不在 inspect 那份可写名单里（`none` 可写，表示空的 `<p:transition>` 且没有效果子元素）报 `InvalidField`。`dur` 不是正整数或不在范围内报 `InvalidField`。`type` 为 `null` 时忽略 `dur`，删掉该页的 `<p:transition>`；若它包在只含切换的 `mc:AlternateContent` 里，整段 AlternateContent 删掉。已经没有切换则空操作。
+找不到该页报 `IdNotFound`。id 不是页 id 报 `InvalidId`。缺 `type` 报 `InvalidField`。`type` 为 `other`、空串、或不在 inspect 那份可写名单里（`none` 可写，表示空的 `<p:transition>` 且没有效果子元素；prst 白名单见上文 inspect）报 `InvalidField`。`dur` 不是正整数或不在范围内报 `InvalidField`。`advTm` 不是正整数或不在范围内报 `InvalidField`。该效果没有 `dir` 却给了 `dir`、`dir` 不在该效果允许值、或非 prst 却给了 `invX` / `invY`，报 `InvalidField`。`type` 为 `null` 时忽略 `dur` / `advClick` / `advTm` / `dir` / `invX` / `invY`，删掉该页的 `<p:transition>`；若它包在只含切换的 `mc:AlternateContent` 里，整段 AlternateContent 删掉。已经没有切换则空操作。
 
-`type` 不是 `null` 时整段换成新的 `<p:transition>`（含原先的 AlternateContent）。ECMA 名单里的效果写成 `p:` 子元素，直接放在 `p:sld` 下，不包 AlternateContent。MS-PPTX 名单里的效果写成 `p14:` / `p15:`（`morph` 用 `p15`）子元素，外包 `mc:AlternateContent`：Choice 要求对应前缀，Fallback 写 `p:fade`。不写 `sndAc`。`dur` 省略则按 `500`。同时写 `p14:dur` 与 `spd`：`dur<=500` 为 `fast`，`dur<=750` 为 `med`，其余为 `slow`。不改 `advClick` / `advTm` 以外的未点名属性——新元素不带这两项，即单击进片、不自动进片。不改 `<p:timing>`。docx / xlsx 上发此 op 报 `InvalidField`。
+`type` 不是 `null` 时整段换成新的 `<p:transition>`（含原先的 AlternateContent）。ECMA 名单里的效果写成 `p:` 子元素，直接放在 `p:sld` 下，不包 AlternateContent。prst 白名单与 `morph` 写成 `p15:`，其余 MS-PPTX 名单写成 `p14:`，外包 `mc:AlternateContent`：Choice 要求对应前缀，Fallback 写 `p:fade`。prst 的效果子元素是 `p15:prstTrans`，`prst` 为该 `type`。不写 `sndAc`。`dur` 省略则按 `500`。同时写 `p14:dur` 与 `spd`：`dur<=500` 为 `fast`，`dur<=750` 为 `med`，其余为 `slow`。`advClick` 为 `true` 或不给则不写该属性；`false` 写 `advClick="0"`。给了 `advTm` 则写在 `<p:transition>` 上。给了 `dir` 则写在效果子元素上。`invX` / `invY` 为真只写在 `p15:prstTrans` 上。不改 `<p:timing>`。docx / xlsx 上发此 op 报 `InvalidField`。
 
 ### insertAnim
 

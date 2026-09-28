@@ -868,9 +868,16 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                 transition::apply(
                     &mut pkg,
                     &slides,
-                    op.slide,
-                    op.type_name.as_deref(),
-                    op.dur,
+                    transition::SetArgs {
+                        slide: op.slide,
+                        type_name: op.type_name.as_deref(),
+                        dur: op.dur,
+                        adv_click: op.adv_click,
+                        adv_tm: op.adv_tm,
+                        dir: op.dir.as_deref(),
+                        inv_x: op.inv_x,
+                        inv_y: op.inv_y,
+                    },
                     i,
                 )?;
             }

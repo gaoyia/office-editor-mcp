@@ -597,6 +597,8 @@ define_error_kinds! {
     InvalidAnimType => vec![Self::InvalidAnimType],
     InvalidAnimTrigger => vec![Self::InvalidAnimTrigger],
     InvalidTransitionDur => vec![Self::InvalidTransitionDur],
+    InvalidTransitionAdvTm => vec![Self::InvalidTransitionAdvTm],
+    InvalidTransitionDir => vec![Self::InvalidTransitionDir],
     InvalidChartAxis => vec![Self::InvalidChartAxis],
     InvalidLegendPos => vec![Self::InvalidLegendPos],
     PieNeedsOneSeries => vec![Self::PieNeedsOneSeries],
@@ -1259,6 +1261,8 @@ impl ErrorKind {
             | Self::InvalidAnimType
             | Self::InvalidAnimTrigger
             | Self::InvalidTransitionDur
+            | Self::InvalidTransitionAdvTm
+            | Self::InvalidTransitionDir
             | Self::InvalidChartAxis
             | Self::InvalidLegendPos
             | Self::PieNeedsOneSeries

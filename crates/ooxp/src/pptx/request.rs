@@ -126,6 +126,11 @@ pub struct SetTransitionOp {
     pub slide: usize,
     pub type_name: Option<String>,
     pub dur: Option<u32>,
+    pub adv_click: bool,
+    pub adv_tm: Option<u32>,
+    pub dir: Option<String>,
+    pub inv_x: bool,
+    pub inv_y: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -1359,7 +1364,13 @@ fn parse_set_slide_hidden(obj: &Map<String, Value>, i: usize) -> Result<SetSlide
 }
 
 fn parse_set_transition(obj: &Map<String, Value>, i: usize) -> Result<SetTransitionOp, Error> {
-    deny_keys(obj, i, &["op", "id", "type", "dur"])?;
+    deny_keys(
+        obj,
+        i,
+        &[
+            "op", "id", "type", "dur", "advClick", "advTm", "dir", "invX", "invY",
+        ],
+    )?;
     let id = require_id(obj, i)?;
     let type_name = match obj.get("type") {
         None => {
@@ -1396,10 +1407,55 @@ fn parse_set_transition(obj: &Map<String, Value>, i: usize) -> Result<SetTransit
         Some(_) if type_name.is_none() => None,
         Some(v) => Some(parse_transition_dur(v, i)?),
     };
+    let adv_click = match obj.get("advClick") {
+        None => true,
+        Some(Value::Bool(b)) => *b,
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "advClick".into(),
+                    expected: TypeName::Boolean,
+                },
+                format!("ops[{i}].advClick"),
+            ));
+        }
+    };
+    let adv_tm = match obj.get("advTm") {
+        None | Some(Value::Null) => None,
+        Some(_) if type_name.is_none() => None,
+        Some(v) => Some(parse_transition_adv_tm(v, i)?),
+    };
+    let dir = match obj.get("dir") {
+        None => None,
+        Some(_) if type_name.is_none() => None,
+        Some(Value::String(s)) if !s.is_empty() => Some(s.clone()),
+        Some(Value::String(_)) => {
+            return Err(Error::with_path(
+                ErrorKind::InvalidTransitionDir,
+                format!("ops[{i}].dir"),
+            ));
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "dir".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].dir"),
+            ));
+        }
+    };
+    let inv_x = parse_optional_flag(obj.get("invX"), i, "invX")?;
+    let inv_y = parse_optional_flag(obj.get("invY"), i, "invY")?;
     Ok(SetTransitionOp {
         slide: parse_slide_only_id(&id, i, "id")?,
         type_name,
         dur,
+        adv_click,
+        adv_tm,
+        dir,
+        inv_x,
+        inv_y,
     })
 }
 
@@ -1844,12 +1900,34 @@ fn parse_shape_host(
 }
 
 fn parse_transition_dur(v: &Value, i: usize) -> Result<u32, Error> {
-    let path = format!("ops[{i}].dur");
+    parse_transition_ms(v, i, "dur", ErrorKind::InvalidTransitionDur, 1, 60000)
+}
+
+fn parse_transition_adv_tm(v: &Value, i: usize) -> Result<u32, Error> {
+    parse_transition_ms(
+        v,
+        i,
+        "advTm",
+        ErrorKind::InvalidTransitionAdvTm,
+        1,
+        86400000,
+    )
+}
+
+fn parse_transition_ms(
+    v: &Value,
+    i: usize,
+    field: &str,
+    invalid: ErrorKind,
+    min: u64,
+    max: u64,
+) -> Result<u32, Error> {
+    let path = format!("ops[{i}].{field}");
     let n = match v {
         Value::Number(num) => num.as_u64().ok_or_else(|| {
             Error::with_path(
                 ErrorKind::WrongType {
-                    field: "dur".into(),
+                    field: field.into(),
                     expected: TypeName::Integer,
                 },
                 path.clone(),
@@ -1858,17 +1936,31 @@ fn parse_transition_dur(v: &Value, i: usize) -> Result<u32, Error> {
         _ => {
             return Err(Error::with_path(
                 ErrorKind::WrongType {
-                    field: "dur".into(),
+                    field: field.into(),
                     expected: TypeName::Integer,
                 },
                 path,
             ));
         }
     };
-    if !(1..=60000).contains(&n) {
-        return Err(Error::with_path(ErrorKind::InvalidTransitionDur, path));
+    if !(min..=max).contains(&n) {
+        return Err(Error::with_path(invalid, path));
     }
     Ok(n as u32)
+}
+
+fn parse_optional_flag(v: Option<&Value>, i: usize, field: &str) -> Result<bool, Error> {
+    match v {
+        None => Ok(false),
+        Some(Value::Bool(b)) => Ok(*b),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::Boolean,
+            },
+            format!("ops[{i}].{field}"),
+        )),
+    }
 }
 
 fn parse_optional_slide_after(

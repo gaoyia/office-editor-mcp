@@ -165,6 +165,8 @@ fn inspect_reads_fade_and_other() {
     let tree = inspect(&fade);
     assert_eq!(tree["slides"][0]["transition"]["type"], "fade");
     assert_eq!(tree["slides"][0]["transition"]["dur"], 2000);
+    assert_eq!(tree["slides"][0]["transition"]["advClick"], true);
+    assert_eq!(tree["slides"][0]["transition"]["advTm"], Value::Null);
     assert_eq!(tree["slides"][1]["transition"], Value::Null);
 
     let other = create_deck("other-src");
@@ -433,6 +435,136 @@ fn docx_and_xlsx_reject_set_transition() {
         &xlsx,
         &dest,
         json!([{ "op": "setTransition", "id": "slide:1", "type": "fade" }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+    assert!(!dest.exists());
+}
+
+#[test]
+fn inspect_auto_dir_and_prst() {
+    let auto = create_deck("auto-src");
+    rewrite_part(&auto, "ppt/slides/slide1.xml", |data| {
+        let xml = String::from_utf8(data).unwrap();
+        inject_before_end(
+            &xml,
+            r#"<p:transition advClick="0" advTm="3000"><p:wipe dir="r"/></p:transition>"#,
+        )
+        .into_bytes()
+    });
+    let tree = inspect(&auto);
+    let tr = &tree["slides"][0]["transition"];
+    assert_eq!(tr["type"], "wipe");
+    assert_eq!(tr["advClick"], false);
+    assert_eq!(tr["advTm"], 3000);
+    assert_eq!(tr["dir"], "r");
+
+    let prst = create_deck("prst-src");
+    rewrite_part(&prst, "ppt/slides/slide1.xml", |data| {
+        let xml = with_p14(&String::from_utf8(data).unwrap()).replace(
+            r#"xmlns:p14="http://schemas.microsoft.com/office/powerpoint/2010/main""#,
+            concat!(
+                r#"xmlns:p14="http://schemas.microsoft.com/office/powerpoint/2010/main" "#,
+                r#"xmlns:p15="http://schemas.microsoft.com/office/powerpoint/2012/main""#
+            ),
+        );
+        inject_before_end(
+            &xml,
+            concat!(
+                r#"<mc:AlternateContent xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006">"#,
+                r#"<mc:Choice xmlns:p15="http://schemas.microsoft.com/office/powerpoint/2012/main" Requires="p15">"#,
+                r#"<p:transition><p15:prstTrans prst="fallOver" invX="1"/></p:transition>"#,
+                r#"</mc:Choice>"#,
+                r#"<mc:Fallback><p:transition><p:fade/></p:transition></mc:Fallback>"#,
+                r#"</mc:AlternateContent>"#
+            ),
+        )
+        .into_bytes()
+    });
+    let tree = inspect(&prst);
+    let tr = &tree["slides"][0]["transition"];
+    assert_eq!(tr["type"], "fallOver");
+    assert_eq!(tr["invX"], true);
+    assert!(tr.get("invY").is_none());
+}
+
+#[test]
+fn set_auto_wipe_and_fall_over() {
+    let src = create_deck("remain-set");
+    let auto = tmp("remain-auto");
+    apply(
+        &src,
+        &auto,
+        json!([{ "op": "setTransition", "id": "slide:1", "type": "fade", "advTm": 2000 }]),
+    )
+    .unwrap();
+    let tr = &inspect(&auto)["slides"][0]["transition"];
+    assert_eq!(tr["type"], "fade");
+    assert_eq!(tr["advClick"], true);
+    assert_eq!(tr["advTm"], 2000);
+    let xml = part(&auto, "ppt/slides/slide1.xml");
+    assert!(xml.contains("advTm=\"2000\""));
+    assert!(!xml.contains("advClick"));
+
+    let wipe = tmp("remain-wipe");
+    apply(
+        &src,
+        &wipe,
+        json!([{ "op": "setTransition", "id": "slide:1", "type": "wipe", "dir": "r" }]),
+    )
+    .unwrap();
+    let tr = &inspect(&wipe)["slides"][0]["transition"];
+    assert_eq!(tr["type"], "wipe");
+    assert_eq!(tr["dir"], "r");
+    assert_eq!(tr["advTm"], Value::Null);
+    let xml = part(&wipe, "ppt/slides/slide1.xml");
+    assert!(xml.contains("<p:wipe dir=\"r\""));
+
+    let fall = tmp("remain-fall");
+    apply(
+        &src,
+        &fall,
+        json!([{ "op": "setTransition", "id": "slide:1", "type": "fallOver", "invX": true }]),
+    )
+    .unwrap();
+    let tr = &inspect(&fall)["slides"][0]["transition"];
+    assert_eq!(tr["type"], "fallOver");
+    assert_eq!(tr["invX"], true);
+    let xml = part(&fall, "ppt/slides/slide1.xml");
+    assert!(xml.contains("p15:prstTrans"));
+    assert!(xml.contains("prst=\"fallOver\""));
+    assert!(xml.contains("invX=\"1\""));
+    assert!(xml.contains("AlternateContent"));
+}
+
+#[test]
+fn reject_dir_and_inv_on_fade() {
+    let src = create_deck("remain-bad");
+    let dest = tmp("remain-dir");
+    let err = apply(
+        &src,
+        &dest,
+        json!([{ "op": "setTransition", "id": "slide:1", "type": "fade", "dir": "r" }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+    assert!(!dest.exists());
+
+    let dest = tmp("remain-inv");
+    let err = apply(
+        &src,
+        &dest,
+        json!([{ "op": "setTransition", "id": "slide:1", "type": "fade", "invX": true }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+    assert!(!dest.exists());
+
+    let dest = tmp("remain-adv");
+    let err = apply(
+        &src,
+        &dest,
+        json!([{ "op": "setTransition", "id": "slide:1", "type": "fade", "advTm": 0 }]),
     )
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);

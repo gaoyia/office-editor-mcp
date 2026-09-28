@@ -1,6 +1,6 @@
-//! 幻灯片 `<p:transition>`：名单、时长与增删。不写 `<p:timing>`。
+//! 幻灯片 `<p:transition>`：名单、时长、自动进片、方向与 prstTrans。不写 `<p:timing>`。
 
-use serde_json::{json, Value};
+use serde_json::{json, Map, Value};
 
 use crate::error::{Error, ErrorKind};
 use crate::opc::Package;
@@ -59,55 +59,152 @@ const P14: &[&str] = &[
     "wheelReverse",
 ];
 
+const PRST: &[&str] = &[
+    "fallOver",
+    "drape",
+    "curtains",
+    "wind",
+    "prestige",
+    "fracture",
+    "crush",
+    "peelOff",
+    "pageCurlSingle",
+    "pageCurlDouble",
+    "airplane",
+    "origami",
+];
+
+const SIDE: &[&str] = &["l", "r", "u", "d"];
+const EIGHT: &[&str] = &["l", "r", "u", "d", "ld", "lu", "rd", "ru"];
+const CORNER: &[&str] = &["lu", "ru", "ld", "rd"];
+const ORIENT: &[&str] = &["horz", "vert"];
+const IN_OUT: &[&str] = &["in", "out"];
+const LEFT_RIGHT: &[&str] = &["l", "r"];
+
+pub struct SetArgs<'a> {
+    pub slide: usize,
+    pub type_name: Option<&'a str>,
+    pub dur: Option<u32>,
+    pub adv_click: bool,
+    pub adv_tm: Option<u32>,
+    pub dir: Option<&'a str>,
+    pub inv_x: bool,
+    pub inv_y: bool,
+}
+
 pub fn is_writable_type(name: &str) -> bool {
-    name == "none" || ECMA.contains(&name) || P14.contains(&name) || name == "morph"
+    name == "none"
+        || ECMA.contains(&name)
+        || P14.contains(&name)
+        || name == "morph"
+        || PRST.contains(&name)
 }
 
 pub fn inspect(root: &Element) -> Value {
     match find_transition(root) {
         None => Value::Null,
-        Some(el) => json!({
-            "type": effect_type(el),
-            "dur": duration_ms(el),
-        }),
+        Some(el) => {
+            let mut m = Map::new();
+            m.insert("type".into(), json!(effect_type(el)));
+            m.insert("dur".into(), json!(duration_ms(el)));
+            m.insert("advClick".into(), json!(adv_click(el)));
+            m.insert(
+                "advTm".into(),
+                match adv_tm(el) {
+                    Some(n) => json!(n),
+                    None => Value::Null,
+                },
+            );
+            if let Some(d) = effect_dir(el) {
+                m.insert("dir".into(), json!(d));
+            }
+            if xml_flag(first_effect_el(el).and_then(|e| e.attr_local("invX"))) {
+                m.insert("invX".into(), json!(true));
+            }
+            if xml_flag(first_effect_el(el).and_then(|e| e.attr_local("invY"))) {
+                m.insert("invY".into(), json!(true));
+            }
+            Value::Object(m)
+        }
     }
 }
 
 pub fn apply(
     pkg: &mut Package,
     slides: &[SlideMeta],
-    slide: usize,
-    type_name: Option<&str>,
-    dur: Option<u32>,
+    args: SetArgs<'_>,
     op_index: usize,
 ) -> Result<(), Error> {
-    if slide < 1 || slide > slides.len() {
+    if args.slide < 1 || args.slide > slides.len() {
         return Err(Error::with_path(
-            ErrorKind::SlideNotFound { n: slide as u32 },
+            ErrorKind::SlideNotFound {
+                n: args.slide as u32,
+            },
             format!("ops[{op_index}].id"),
         ));
     }
-    let part = slides[slide - 1].part.clone();
+    let part = slides[args.slide - 1].part.clone();
     let mut doc = crate::xml::parse(pkg.get(&part)?)?;
-    match type_name {
+    match args.type_name {
         None => {
             if !remove_all_transitions(&mut doc.root) {
                 return Ok(());
             }
         }
         Some(name) => {
+            validate_extras(name, &args, op_index)?;
             remove_all_transitions(&mut doc.root);
             picture::ensure_xmlns(&mut doc.root, "p14", P14_NS);
-            if name == "morph" {
+            if name == "morph" || PRST.contains(&name) {
                 picture::ensure_xmlns(&mut doc.root, "p15", P15_NS);
             }
-            let dur = dur.unwrap_or(500);
-            let node = build_transition_node(name, dur);
+            let dur = args.dur.unwrap_or(500);
+            let node = build_transition_node(name, dur, &args);
             let at = insert_index(&doc.root);
             doc.root.children.insert(at, node);
         }
     }
     pkg.set(&part, doc.to_bytes()?)?;
+    Ok(())
+}
+
+fn dir_values(name: &str) -> Option<&'static [&'static str]> {
+    match name {
+        "wipe" | "push" | "pan" | "vortex" => Some(SIDE),
+        "cover" | "pull" => Some(EIGHT),
+        "strips" => Some(CORNER),
+        "blinds" | "checker" | "comb" | "randomBar" | "doors" | "window" => Some(ORIENT),
+        "zoom" | "warp" | "split" => Some(IN_OUT),
+        "conveyor" | "gallery" | "ferris" | "flip" | "switch" | "reveal" => Some(LEFT_RIGHT),
+        _ => None,
+    }
+}
+
+fn validate_extras(name: &str, args: &SetArgs<'_>, i: usize) -> Result<(), Error> {
+    if let Some(dir) = args.dir {
+        match dir_values(name) {
+            None => {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidTransitionDir,
+                    format!("ops[{i}].dir"),
+                ));
+            }
+            Some(ok) if !ok.contains(&dir) => {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidTransitionDir,
+                    format!("ops[{i}].dir"),
+                ));
+            }
+            Some(_) => {}
+        }
+    }
+    if (args.inv_x || args.inv_y) && !PRST.contains(&name) {
+        let field = if args.inv_x { "invX" } else { "invY" };
+        return Err(Error::with_path(
+            ErrorKind::InvalidTransitionDir,
+            format!("ops[{i}].{field}"),
+        ));
+    }
     Ok(())
 }
 
@@ -138,18 +235,44 @@ fn transition_in_ac(ac: &Element) -> Option<&Element> {
         .find(|c| c.local_name() == "transition")
 }
 
+fn first_effect_el(el: &Element) -> Option<&Element> {
+    el.element_children()
+        .find(|c| c.local_name() != "sndAc" && c.local_name() != "extLst")
+}
+
 fn effect_type(el: &Element) -> String {
-    match first_effect(el) {
+    match first_effect_el(el) {
         None => "none".into(),
-        Some(name) if is_writable_type(name) => name.to_string(),
+        Some(child) if child.local_name() == "prstTrans" => match child.attr_local("prst") {
+            Some(prst) if PRST.contains(&prst) => prst.to_string(),
+            _ => "other".into(),
+        },
+        Some(child) if is_writable_type(child.local_name()) => child.local_name().to_string(),
         Some(_) => "other".into(),
     }
 }
 
-fn first_effect(el: &Element) -> Option<&str> {
-    el.element_children()
-        .map(|c| c.local_name())
-        .find(|n| *n != "sndAc" && *n != "extLst")
+fn effect_dir(el: &Element) -> Option<String> {
+    first_effect_el(el)
+        .and_then(|e| e.attr_local("dir"))
+        .map(str::to_string)
+}
+
+fn xml_flag(raw: Option<&str>) -> bool {
+    matches!(raw.map(str::trim), Some("1" | "true" | "TRUE" | "on"))
+}
+
+fn adv_click(el: &Element) -> bool {
+    !matches!(
+        el.attr_local("advClick").map(str::trim),
+        Some("0" | "false" | "FALSE" | "off")
+    )
+}
+
+fn adv_tm(el: &Element) -> Option<i64> {
+    let s = el.attr_local("advTm")?;
+    let n = s.parse::<i64>().ok()?;
+    (n >= 1).then_some(n)
 }
 
 fn duration_ms(el: &Element) -> i64 {
@@ -221,24 +344,57 @@ fn spd_for(dur: u32) -> &'static str {
     }
 }
 
-fn build_transition_el(effect: Option<(&str, &str)>, dur: u32) -> Element {
+fn build_effect_el(name: &str, args: &SetArgs<'_>) -> Option<Element> {
+    if name == "none" {
+        return None;
+    }
+    if PRST.contains(&name) {
+        let mut e = Element::new("p15:prstTrans").with_attr("prst", name);
+        if args.inv_x {
+            e = e.with_attr("invX", "1");
+        }
+        if args.inv_y {
+            e = e.with_attr("invY", "1");
+        }
+        return Some(e);
+    }
+    let prefix = if ECMA.contains(&name) {
+        "p"
+    } else if name == "morph" {
+        "p15"
+    } else {
+        "p14"
+    };
+    let mut e = Element::new(format!("{prefix}:{name}"));
+    if let Some(dir) = args.dir {
+        if dir_values(name).is_some() {
+            e = e.with_attr("dir", dir);
+        }
+    }
+    Some(e)
+}
+
+fn build_transition_el(name: &str, dur: u32, args: &SetArgs<'_>) -> Element {
     let mut tr = Element::new("p:transition")
         .with_attr("spd", spd_for(dur))
         .with_attr("p14:dur", dur.to_string());
-    if let Some((prefix, name)) = effect {
-        tr.push_element(Element::new(format!("{prefix}:{name}")));
+    if !args.adv_click {
+        tr = tr.with_attr("advClick", "0");
+    }
+    if let Some(ms) = args.adv_tm {
+        tr = tr.with_attr("advTm", ms.to_string());
+    }
+    if let Some(effect) = build_effect_el(name, args) {
+        tr.push_element(effect);
     }
     tr
 }
 
-fn build_transition_node(name: &str, dur: u32) -> Node {
-    if name == "none" {
-        return Node::Element(build_transition_el(None, dur));
+fn build_transition_node(name: &str, dur: u32, args: &SetArgs<'_>) -> Node {
+    if name == "none" || ECMA.contains(&name) {
+        return Node::Element(build_transition_el(name, dur, args));
     }
-    if ECMA.contains(&name) {
-        return Node::Element(build_transition_el(Some(("p", name)), dur));
-    }
-    let (prefix, ns, req) = if name == "morph" {
+    let (prefix, ns, req) = if name == "morph" || PRST.contains(&name) {
         ("p15", P15_NS, "p15")
     } else {
         ("p14", P14_NS, "p14")
@@ -246,9 +402,9 @@ fn build_transition_node(name: &str, dur: u32) -> Node {
     let mut choice = Element::new("mc:Choice")
         .with_attr("Requires", req)
         .with_attr(format!("xmlns:{prefix}"), ns);
-    choice.push_element(build_transition_el(Some((prefix, name)), dur));
+    choice.push_element(build_transition_el(name, dur, args));
     let mut fallback = Element::new("mc:Fallback");
-    fallback.push_element(build_transition_el(Some(("p", "fade")), dur));
+    fallback.push_element(build_transition_el("fade", dur, args));
     let mut ac = Element::new("mc:AlternateContent").with_attr("xmlns:mc", MC_NS);
     ac.push_element(choice);
     ac.push_element(fallback);

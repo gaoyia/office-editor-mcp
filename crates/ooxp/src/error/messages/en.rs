@@ -652,6 +652,12 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::InvalidAnimType => "type must be fade".into(),
         ErrorKind::InvalidAnimTrigger => "trigger must be click, with, or after".into(),
         ErrorKind::InvalidTransitionDur => "dur must be an integer from 1 to 60000".into(),
+        ErrorKind::InvalidTransitionAdvTm => {
+            "advTm must be an integer from 1 to 86400000".into()
+        }
+        ErrorKind::InvalidTransitionDir => {
+            "dir must be allowed for this transition; invX / invY are only valid on prstTrans presets".into()
+        }
         ErrorKind::InvalidChartAxis => {
             "axis must be cat or val, and the chart must have that primary axis".into()
         }
