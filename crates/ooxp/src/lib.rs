@@ -1031,6 +1031,7 @@ mod tests {
                 "hasHandout",
                 "sectionCount",
                 "slideSize",
+                "customShowCount",
                 "props",
                 "slides"
             ]

@@ -178,6 +178,7 @@ fn inspect_count_without_list() {
             "hasHandout",
             "sectionCount",
             "slideSize",
+            "customShowCount",
             "props",
             "slides"
         ]

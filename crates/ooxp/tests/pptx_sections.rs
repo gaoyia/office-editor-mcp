@@ -127,6 +127,7 @@ fn create_has_zero_section_count_without_list() {
             "hasHandout",
             "sectionCount",
             "slideSize",
+            "customShowCount",
             "props",
             "slides"
         ]

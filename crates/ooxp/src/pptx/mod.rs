@@ -5,6 +5,7 @@ mod chart;
 mod comments;
 mod connector;
 mod create;
+mod custom_show;
 mod group;
 mod handout;
 mod hyperlink;

@@ -1858,7 +1858,10 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<XlsxOp>, Error> {
             | "insertSlideSection"
             | "setSlideSectionName"
             | "deleteSlideSection"
-            | "setSlideSection" => {
+            | "setSlideSection"
+            | "insertCustomShow"
+            | "setCustomShow"
+            | "deleteCustomShow" => {
                 return Err(Error::with_path(
                     ErrorKind::OpNotForFormat {
                         format: "xlsx".into(),

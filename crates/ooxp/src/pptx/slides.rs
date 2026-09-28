@@ -6,6 +6,7 @@ use crate::opc::{
 };
 use crate::xml::{self, Document, Element, Node};
 
+use super::custom_show;
 use super::picture;
 use super::request::{DeleteSlideOp, InsertSlideOp, MoveSlideOp, SetSlideHiddenOp};
 use super::section;
@@ -115,9 +116,7 @@ pub fn delete(
     pres_rels.remove_by_id(&rid);
     pres_rels.write_to(pkg, pres_part)?;
     section::remove_sid(&mut pres.root, sid);
-    if let Some(cust) = find_mut_by_local(&mut pres.root, "custShowLst") {
-        remove_sld_refs(cust, &sid.to_string());
-    }
+    custom_show::remove_rid(&mut pres.root, &rid);
     let mut cts = ContentTypes::from_package(pkg)?;
     pkg.remove(&meta.part);
     pkg.remove(&rels_part_name(&meta.part));
@@ -415,48 +414,6 @@ fn slide_st_id(pres_root: &Element, index: usize) -> Option<u32> {
         .filter(|e| e.local_name() == "sldId")
         .nth(index.checked_sub(1)?)
         .and_then(|e| e.attr("id")?.parse().ok())
-}
-
-fn remove_sld_refs(el: &mut Element, sid: &str) {
-    el.children.retain(|n| match n {
-        Node::Element(e) => !(e.local_name() == "sld" && e.attr("id") == Some(sid)),
-        _ => true,
-    });
-    for child in el.element_children_mut() {
-        remove_sld_refs(child, sid);
-    }
-}
-
-fn find_mut_by_local<'a>(el: &'a mut Element, local: &str) -> Option<&'a mut Element> {
-    let path = find_local_path(el, local)?;
-    Some(follow_path(el, &path))
-}
-
-fn find_local_path(el: &Element, local: &str) -> Option<Vec<usize>> {
-    if el.local_name() == local {
-        return Some(Vec::new());
-    }
-    for (i, n) in el.children.iter().enumerate() {
-        let Node::Element(c) = n else {
-            continue;
-        };
-        if let Some(mut path) = find_local_path(c, local) {
-            path.insert(0, i);
-            return Some(path);
-        }
-    }
-    None
-}
-
-fn follow_path<'a>(el: &'a mut Element, path: &[usize]) -> &'a mut Element {
-    let mut cur = el;
-    for &i in path {
-        cur = match &mut cur.children[i] {
-            Node::Element(c) => c,
-            Node::Text(_) => unreachable!("路径只指向元素"),
-        };
-    }
-    cur
 }
 
 fn keep_shared(rel_type: &str) -> bool {

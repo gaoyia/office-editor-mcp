@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "deck.pptx",
+  "ops": [
+    { "op": "insertCustomShow", "id": "pptx:presentation", "name": "Tour", "slides": ["slide:1", "slide:3"] },
+    { "op": "setCustomShow", "id": "show:1", "name": "Guide", "slides": ["slide:3", "slide:1"] },
+    { "op": "deleteCustomShow", "id": "show:1" }
+  ]
+}

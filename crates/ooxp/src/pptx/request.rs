@@ -10,6 +10,7 @@ use crate::smartart::{ColorsKind, LayoutKind, NewPoint, Role, StyleKind};
 use super::chart;
 use super::comments;
 use super::connector;
+use super::custom_show;
 use super::group;
 use super::hyperlink;
 use super::media;
@@ -37,6 +38,7 @@ pub struct InspectScope {
     pub masters: bool,
     pub handout: bool,
     pub sections: bool,
+    pub custom_shows: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -382,6 +384,25 @@ pub struct DeleteSlideSectionOp {
 pub struct SetSlideSectionOp {
     pub slide: usize,
     pub section: usize,
+}
+
+#[derive(Debug, Clone)]
+pub struct InsertCustomShowOp {
+    pub name: String,
+    pub slides: Vec<usize>,
+    pub after: Option<usize>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetCustomShowOp {
+    pub show: usize,
+    pub name: Option<String>,
+    pub slides: Option<Vec<usize>>,
+}
+
+#[derive(Debug, Clone)]
+pub struct DeleteCustomShowOp {
+    pub show: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -748,6 +769,9 @@ pub enum PptxOp {
     SetSlideSectionName(SetSlideSectionNameOp),
     DeleteSlideSection(DeleteSlideSectionOp),
     SetSlideSection(SetSlideSectionOp),
+    InsertCustomShow(InsertCustomShowOp),
+    SetCustomShow(SetCustomShowOp),
+    DeleteCustomShow(DeleteCustomShowOp),
     InsertChart(InsertChartOp),
     DeleteChart(DeleteChartOp),
     SetChartTitle(SetChartTitleOp),
@@ -846,6 +870,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
             "masters",
             "handout",
             "sections",
+            "customShows",
         ],
     )?;
     let pictures = parse_bool_field(obj.get("pictures"), "pictures")?;
@@ -861,6 +886,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
     let masters = parse_bool_field(obj.get("masters"), "masters")?;
     let handout = parse_bool_field(obj.get("handout"), "handout")?;
     let sections = parse_bool_field(obj.get("sections"), "sections")?;
+    let custom_shows = parse_bool_field(obj.get("customShows"), "customShows")?;
     let slide = match obj.get("slide") {
         None => None,
         Some(s) => {
@@ -934,6 +960,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
         masters,
         handout,
         sections,
+        custom_shows,
     }))
 }
 
@@ -1011,6 +1038,9 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<PptxOp>, Error> {
             }
             "deleteSlideSection" => PptxOp::DeleteSlideSection(parse_delete_slide_section(obj, i)?),
             "setSlideSection" => PptxOp::SetSlideSection(parse_set_slide_section(obj, i)?),
+            "insertCustomShow" => PptxOp::InsertCustomShow(parse_insert_custom_show(obj, i)?),
+            "setCustomShow" => PptxOp::SetCustomShow(parse_set_custom_show(obj, i)?),
+            "deleteCustomShow" => PptxOp::DeleteCustomShow(parse_delete_custom_show(obj, i)?),
             "insertChart" => PptxOp::InsertChart(parse_insert_chart(obj, i)?),
             "deleteChart" => PptxOp::DeleteChart(parse_delete_chart(obj, i)?),
             "setChartTitle" => PptxOp::SetChartTitle(parse_set_chart_title(obj, i)?),
@@ -3107,6 +3137,130 @@ fn parse_set_slide_section(obj: &Map<String, Value>, i: usize) -> Result<SetSlid
         }
     };
     Ok(SetSlideSectionOp { slide, section })
+}
+
+fn parse_insert_custom_show(
+    obj: &Map<String, Value>,
+    i: usize,
+) -> Result<InsertCustomShowOp, Error> {
+    deny_keys(obj, i, &["op", "id", "name", "slides", "after"])?;
+    let id = require_id(obj, i)?;
+    if id != "pptx:presentation" {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::InsertCustomShowNeedsPresentation,
+            },
+            format!("ops[{i}].id"),
+        ));
+    }
+    let name = require_name(obj, i)?;
+    custom_show::check_name(&name, &format!("ops[{i}].name"))?;
+    Ok(InsertCustomShowOp {
+        name,
+        slides: parse_slides_array(obj, i, false)?.unwrap_or_default(),
+        after: parse_optional_show_id_field(obj, i, "after")?,
+    })
+}
+
+fn parse_set_custom_show(obj: &Map<String, Value>, i: usize) -> Result<SetCustomShowOp, Error> {
+    deny_keys(obj, i, &["op", "id", "name", "slides"])?;
+    let id = require_id(obj, i)?;
+    let show = custom_show::parse_show_id(&id, &format!("ops[{i}].id"))?;
+    let name = match obj.get("name") {
+        None => None,
+        Some(Value::String(s)) => {
+            custom_show::check_name(s, &format!("ops[{i}].name"))?;
+            Some(s.clone())
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "name".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].name"),
+            ));
+        }
+    };
+    let slides = parse_slides_array(obj, i, true)?;
+    if name.is_none() && slides.is_none() {
+        return Err(Error::with_path(
+            ErrorKind::NeedCustomShowField,
+            format!("ops[{i}]"),
+        ));
+    }
+    Ok(SetCustomShowOp { show, name, slides })
+}
+
+fn parse_delete_custom_show(
+    obj: &Map<String, Value>,
+    i: usize,
+) -> Result<DeleteCustomShowOp, Error> {
+    deny_keys(obj, i, &["op", "id"])?;
+    let id = require_id(obj, i)?;
+    Ok(DeleteCustomShowOp {
+        show: custom_show::parse_show_id(&id, &format!("ops[{i}].id"))?,
+    })
+}
+
+fn parse_slides_array(
+    obj: &Map<String, Value>,
+    i: usize,
+    optional: bool,
+) -> Result<Option<Vec<usize>>, Error> {
+    match obj.get("slides") {
+        None => {
+            if optional {
+                Ok(None)
+            } else {
+                Ok(Some(Vec::new()))
+            }
+        }
+        Some(Value::Array(arr)) => {
+            let mut out = Vec::new();
+            for (j, v) in arr.iter().enumerate() {
+                let s = v.as_str().ok_or_else(|| {
+                    Error::with_path(
+                        ErrorKind::WrongType {
+                            field: format!("slides[{j}]"),
+                            expected: TypeName::String,
+                        },
+                        format!("ops[{i}].slides[{j}]"),
+                    )
+                })?;
+                out.push(parse_slide_only_id(s, i, &format!("slides[{j}]"))?);
+            }
+            Ok(Some(out))
+        }
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "slides".into(),
+                expected: TypeName::Array,
+            },
+            format!("ops[{i}].slides"),
+        )),
+    }
+}
+
+fn parse_optional_show_id_field(
+    obj: &Map<String, Value>,
+    i: usize,
+    field: &str,
+) -> Result<Option<usize>, Error> {
+    match obj.get(field) {
+        None => Ok(None),
+        Some(Value::String(s)) => Ok(Some(custom_show::parse_show_id(
+            s,
+            &format!("ops[{i}].{field}"),
+        )?)),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::String,
+            },
+            format!("ops[{i}].{field}"),
+        )),
+    }
 }
 
 fn require_name(obj: &Map<String, Value>, i: usize) -> Result<String, Error> {

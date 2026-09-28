@@ -219,6 +219,12 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::InsertSlideSectionNeedsPresentation => {
                 "insertSlideSection 的 id 必须是 pptx:presentation".into()
             }
+            IdReason::InsertCustomShowNeedsPresentation => {
+                "insertCustomShow 的 id 必须是 pptx:presentation".into()
+            }
+            IdReason::CustomShowPrefix => "自定义放映 id 必须是 show:N".into(),
+            IdReason::CustomShowIndexNotInt => "show 序号必须是正整数".into(),
+            IdReason::CustomShowIndexFromOne => "show 序号从 1 起".into(),
             IdReason::SetSlideSectionNeedsSlide => {
                 "setSlideSection 的 id 必须是 slide:N".into()
             }
@@ -499,6 +505,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::ParaNotFound { id } => format!("找不到段落：{id}"),
         ErrorKind::TableNotFound { id } => format!("找不到表：{id}"),
         ErrorKind::SectionNotFound { id } => format!("找不到节：{id}"),
+        ErrorKind::CustomShowNotFound { id } => format!("找不到自定义放映：{id}"),
         ErrorKind::SlideNotFound { n } => format!("找不到幻灯片：slide:{n}"),
         ErrorKind::MasterNotFound { n } => format!("找不到幻灯片母版：master:{n}"),
         ErrorKind::ThemeNotFound { n } => format!("找不到该母版的 theme：master:{n}"),
@@ -832,6 +839,11 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             "书签名不能为空、不能含空白、不能以下划线开头".into()
         }
         ErrorKind::BookmarkNameTaken => "书签名已被占用".into(),
+        ErrorKind::CustomShowNameTooLong => "自定义放映名字不能超过 31 个字符".into(),
+        ErrorKind::CustomShowNameTaken => "自定义放映名字已被占用".into(),
+        ErrorKind::NeedCustomShowField => {
+            "setCustomShow 至少要给 name 或 slides 之一".into()
+        },
         ErrorKind::BookmarkRangeReversed => "insertBookmark 的 end 不能早于起始段".into(),
         ErrorKind::BookmarkRangeCrossStory => {
             "insertBookmark 的 end 必须与 id 在同一故事".into()

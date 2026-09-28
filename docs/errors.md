@@ -59,7 +59,7 @@
 | `InvalidField` | 字段类型不对、互斥字段同时出现、sheet 名非法、对不上格式的 op 或 scope 键 | 2 |
 | `InvalidRange` | A1 区域解析失败，或起止颠倒 | 2 |
 | `InvalidId` | id 字符串不符合该格式的生成规则 | 2 |
-| `IdNotFound` | id 语法对，但文件里没有这个工作表、段落、节、页眉页脚、图、形状、用户注、批注、图表、SmartArt、嵌入对象、水印、表、修订、超链接、书签、域、公式、内容控件、编号实例、抽象编号、样式、数据验证规则、条件格式规则、工作表表格、透视表、定义名或自定义属性或迷你图组 | 3 |
+| `IdNotFound` | id 语法对，但文件里没有这个工作表、段落、节、页眉页脚、图、形状、用户注、批注、图表、SmartArt、嵌入对象、水印、表、修订、超链接、书签、域、公式、内容控件、编号实例、抽象编号、样式、数据验证规则、条件格式规则、工作表表格、透视表、定义名、自定义属性、迷你图组或自定义放映 | 3 |
 | `ScopeRequired` | inspect 要单元格却没给 `sheet`+`range`，要段落正文却没给 `from`+`maxParas`，或要形状却没给 `slide` | 2 |
 | `TruncatedLimit` | `maxCells`、`maxParas`、`maxShapes` 超出允许范围，例如设成 `0` | 2 |
 | `OpcOpen` | 不是 ZIP，或缺少 `[Content_Types].xml` / 根关系 | 3 |

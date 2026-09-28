@@ -103,6 +103,7 @@ $order = @(
     'pptx-masters'
     'pptx-master-write'
     'pptx-theme-size'
+    'pptx-custom-show'
     'pptx-handout'
     'pptx-hyperlinks'
     'pptx-pictures'

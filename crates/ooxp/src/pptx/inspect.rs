@@ -9,6 +9,7 @@ use crate::xml;
 use super::chart;
 use super::comments;
 use super::connector;
+use super::custom_show;
 use super::handout;
 use super::hyperlink;
 use super::master;
@@ -43,6 +44,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     let want_masters = scope.as_ref().is_some_and(|s| s.masters);
     let want_handout = scope.as_ref().is_some_and(|s| s.handout);
     let want_sections = scope.as_ref().is_some_and(|s| s.sections);
+    let want_custom_shows = scope.as_ref().is_some_and(|s| s.custom_shows);
     let catalog = master::catalog(&pkg, &pres_part, &pres.root)?;
 
     let mut slide_json = Vec::new();
@@ -248,6 +250,10 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     );
     root.insert("sectionCount".into(), json!(section::count(&pres.root)));
     root.insert("slideSize".into(), theme::slide_size_json(&pres.root));
+    root.insert(
+        "customShowCount".into(),
+        json!(custom_show::count(&pres.root)),
+    );
     root.insert("props".into(), crate::props::inspect(&pkg)?);
     if want_masters {
         root.insert("masters".into(), master::masters_json(&pkg, &catalog)?);
@@ -259,6 +265,12 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         root.insert(
             "sections".into(),
             Value::Array(section::list_json(&pres.root)),
+        );
+    }
+    if want_custom_shows {
+        root.insert(
+            "customShows".into(),
+            Value::Array(custom_show::list_json(&pres.root)),
         );
     }
     root.insert("slides".into(), Value::Array(slide_json));

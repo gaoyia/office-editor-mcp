@@ -179,6 +179,7 @@ fn inspect_comment_count_without_list() {
             "hasHandout",
             "sectionCount",
             "slideSize",
+            "customShowCount",
             "props",
             "slides"
         ]

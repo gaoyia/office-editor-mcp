@@ -214,6 +214,9 @@
         "sections": {
           "type": "boolean"
         },
+        "customShows": {
+          "type": "boolean"
+        },
         "revisions": {
           "type": "boolean"
         },
@@ -1030,6 +1033,15 @@
               },
               {
                 "$ref": "pptx.schema.json#/$defs/setSlideSectionOp"
+              },
+              {
+                "$ref": "pptx.schema.json#/$defs/insertCustomShowOp"
+              },
+              {
+                "$ref": "pptx.schema.json#/$defs/setCustomShowOp"
+              },
+              {
+                "$ref": "pptx.schema.json#/$defs/deleteCustomShowOp"
               },
               {
                 "$ref": "#/$defs/setPropsOp"

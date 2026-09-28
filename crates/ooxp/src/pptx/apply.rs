@@ -7,6 +7,7 @@ use crate::xml;
 use super::chart;
 use super::comments;
 use super::connector;
+use super::custom_show;
 use super::group;
 use super::handout;
 use super::hyperlink;
@@ -473,6 +474,15 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
             PptxOp::SetSlideSection(op) => {
                 section::set_slide(&mut pkg, &pres_part, &mut pres, op, i)?;
                 slides = shape::list_slides(&pkg, &pres_part, &pres.root)?;
+            }
+            PptxOp::InsertCustomShow(op) => {
+                custom_show::insert(&mut pkg, &pres_part, &mut pres, op, i)?;
+            }
+            PptxOp::SetCustomShow(op) => {
+                custom_show::set(&mut pkg, &pres_part, &mut pres, op, i)?;
+            }
+            PptxOp::DeleteCustomShow(op) => {
+                custom_show::delete(&mut pkg, &pres_part, &mut pres, op, i)?;
             }
             PptxOp::InsertChart(op) => {
                 let part = ensure_notes_or_slide(

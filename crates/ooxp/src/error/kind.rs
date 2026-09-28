@@ -158,6 +158,12 @@ pub(crate) enum IdReason {
     InsertSlideNeedsPresentation,
     /// insertSlideSection 必须用 pptx:presentation
     InsertSlideSectionNeedsPresentation,
+    /// insertCustomShow 必须用 pptx:presentation
+    InsertCustomShowNeedsPresentation,
+    /// setCustomShow / deleteCustomShow 必须用 show:N
+    CustomShowPrefix,
+    CustomShowIndexNotInt,
+    CustomShowIndexFromOne,
     /// setSlideSection 必须用 slide:N
     SetSlideSectionNeedsSlide,
     /// deleteSlide / moveSlide / setSlideHidden / setTransition / setSlideLayout 必须用 slide:N
@@ -479,6 +485,7 @@ define_error_kinds! {
     SheetNotFound { name: String } => vec![Self::SheetNotFound { name: "Sheet9".into() }],
     ParaNotFound { id: String } => vec![Self::ParaNotFound { id: "para:1".into() }],
     SectionNotFound { id: String } => vec![Self::SectionNotFound { id: "section:9".into() }],
+    CustomShowNotFound { id: String } => vec![Self::CustomShowNotFound { id: "show:9".into() }],
     SlideNotFound { n: u32 } => vec![Self::SlideNotFound { n: 3 }],
     MasterNotFound { n: u32 } => vec![Self::MasterNotFound { n: 9 }],
     LayoutNotFound { master: u32, layout: u32 } => {
@@ -691,6 +698,9 @@ define_error_kinds! {
     NeedSetSparklineField => vec![Self::NeedSetSparklineField],
     InvalidBookmarkName => vec![Self::InvalidBookmarkName],
     BookmarkNameTaken => vec![Self::BookmarkNameTaken],
+    CustomShowNameTooLong => vec![Self::CustomShowNameTooLong],
+    CustomShowNameTaken => vec![Self::CustomShowNameTaken],
+    NeedCustomShowField => vec![Self::NeedCustomShowField],
     BookmarkRangeReversed => vec![Self::BookmarkRangeReversed],
     BookmarkRangeCrossStory => vec![Self::BookmarkRangeCrossStory],
     NeedSetHyperlinkField => vec![Self::NeedSetHyperlinkField],
@@ -947,6 +957,10 @@ impl IdReason {
             Self::InsertSheetNeedsWorkbook,
             Self::InsertSlideNeedsPresentation,
             Self::InsertSlideSectionNeedsPresentation,
+            Self::InsertCustomShowNeedsPresentation,
+            Self::CustomShowPrefix,
+            Self::CustomShowIndexNotInt,
+            Self::CustomShowIndexFromOne,
             Self::InsertLayoutNeedsMaster,
             Self::InsertPlaceholderNeedsHost,
             Self::InsertMasterNeedsPresentation,
@@ -1221,6 +1235,9 @@ impl ErrorKind {
             | Self::EmptyHyperlinkUrl
             | Self::InvalidBookmarkName
             | Self::BookmarkNameTaken
+            | Self::CustomShowNameTooLong
+            | Self::CustomShowNameTaken
+            | Self::NeedCustomShowField
             | Self::BookmarkRangeReversed
             | Self::BookmarkRangeCrossStory
             | Self::NeedSetHyperlinkField
@@ -1370,6 +1387,7 @@ impl ErrorKind {
             Self::SheetNotFound { .. }
             | Self::ParaNotFound { .. }
             | Self::SectionNotFound { .. }
+            | Self::CustomShowNotFound { .. }
             | Self::SlideNotFound { .. }
             | Self::MasterNotFound { .. }
             | Self::ThemeNotFound { .. }

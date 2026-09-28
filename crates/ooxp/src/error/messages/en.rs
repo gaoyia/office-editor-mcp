@@ -244,6 +244,12 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::InsertSlideSectionNeedsPresentation => {
                 "insertSlideSection id must be pptx:presentation".into()
             }
+            IdReason::InsertCustomShowNeedsPresentation => {
+                "insertCustomShow id must be pptx:presentation".into()
+            }
+            IdReason::CustomShowPrefix => "Custom show id must be show:N".into(),
+            IdReason::CustomShowIndexNotInt => "show index must be a positive integer".into(),
+            IdReason::CustomShowIndexFromOne => "show index starts at 1".into(),
             IdReason::SetSlideSectionNeedsSlide => {
                 "setSlideSection id must be slide:N".into()
             }
@@ -541,6 +547,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::ParaNotFound { id } => format!("Paragraph not found: {id}"),
         ErrorKind::TableNotFound { id } => format!("Table not found: {id}"),
         ErrorKind::SectionNotFound { id } => format!("Section not found: {id}"),
+        ErrorKind::CustomShowNotFound { id } => format!("Custom show not found: {id}"),
         ErrorKind::SlideNotFound { n } => format!("Slide not found: slide:{n}"),
         ErrorKind::MasterNotFound { n } => format!("Slide master not found: master:{n}"),
         ErrorKind::ThemeNotFound { n } => format!("Theme not found for slide master: master:{n}"),
@@ -970,6 +977,13 @@ pub(super) fn render(kind: &ErrorKind) -> String {
                 .into()
         }
         ErrorKind::BookmarkNameTaken => "bookmark name is already taken".into(),
+        ErrorKind::CustomShowNameTooLong => {
+            "custom show name must be at most 31 characters".into()
+        }
+        ErrorKind::CustomShowNameTaken => "custom show name is already taken".into(),
+        ErrorKind::NeedCustomShowField => {
+            "setCustomShow requires at least one of name or slides".into()
+        }
         ErrorKind::BookmarkRangeReversed => {
             "insertBookmark end must not precede the start paragraph".into()
         }

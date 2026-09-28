@@ -1157,6 +1157,9 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<DocxOp>, Error> {
             || op_name == "setSlideSectionName"
             || op_name == "deleteSlideSection"
             || op_name == "setSlideSection"
+            || op_name == "insertCustomShow"
+            || op_name == "setCustomShow"
+            || op_name == "deleteCustomShow"
         {
             return Err(Error::with_path(
                 ErrorKind::OpNotForFormat {
