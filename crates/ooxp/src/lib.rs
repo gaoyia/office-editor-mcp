@@ -803,6 +803,7 @@ mod tests {
                 "sparklineCount",
                 "oleObjectCount",
                 "slicerCount",
+                "connectionCount",
                 "definedNameCount",
                 "props",
                 "workbookProtection",

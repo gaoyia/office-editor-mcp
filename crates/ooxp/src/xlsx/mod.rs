@@ -6,6 +6,7 @@ mod cf;
 mod chart;
 mod chartsheet;
 mod comments;
+mod connection;
 mod create;
 mod formula;
 mod group;

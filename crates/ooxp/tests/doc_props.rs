@@ -200,6 +200,7 @@ fn inspect_default_props_on_three_formats() {
             "sparklineCount",
             "oleObjectCount",
             "slicerCount",
+            "connectionCount",
             "definedNameCount",
             "props",
             "workbookProtection",

@@ -293,6 +293,16 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::InsertDefinedNameNeedsWorkbook => {
                 "insertDefinedName 的 id 必须是 xlsx:workbook".into()
             }
+            IdReason::InsertConnectionNeedsWorkbook => {
+                "insertConnection 的 id 必须是 xlsx:workbook".into()
+            }
+            IdReason::ConnectionPrefix => {
+                "连接 id 必须是 connection:ID 或 connection:index:N".into()
+            }
+            IdReason::ConnectionIndexNotInt => {
+                "connection:index 后面必须是正整数".into()
+            }
+            IdReason::ConnectionIndexFromOne => "connection:index 从 1 起".into(),
             IdReason::DefinedNamePrefix => {
                 "定义名 id 必须是 name:n，n 从 1 起".into()
             }
@@ -723,6 +733,10 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::SlicerNotFound { id } => format!("找不到切片器：{id}"),
         ErrorKind::SlicerFieldNotFound { name } => {
             format!("切片器字段对不上源：{name}")
+        }
+        ErrorKind::ConnectionNotFound { id } => format!("找不到连接：{id}"),
+        ErrorKind::InvalidConnection { field } => {
+            format!("连接的 {field} 不合法")
         }
         ErrorKind::ZoomNotFound { id } => format!("找不到 Zoom：{id}"),
         ErrorKind::InvalidZoomType => "type 必须是 slide 或 section".into(),

@@ -210,6 +210,12 @@ pub(crate) enum IdReason {
     SetHandoutTextNeedsHandout,
     /// insertDefinedName 必须用 xlsx:workbook
     InsertDefinedNameNeedsWorkbook,
+    /// insertConnection 必须用 xlsx:workbook
+    InsertConnectionNeedsWorkbook,
+    /// 连接 id 必须是 connection:{xmlId} 或 connection:index:{k}
+    ConnectionPrefix,
+    ConnectionIndexNotInt,
+    ConnectionIndexFromOne,
     /// setDefinedName / deleteDefinedName 必须用 name:n
     DefinedNamePrefix,
     NameIndexNotInt,
@@ -720,6 +726,10 @@ define_error_kinds! {
     OleNotFound { id: String } => vec![Self::OleNotFound { id: "para:1/ole:_1".into() }],
     SlicerNotFound { id: String } => vec![Self::SlicerNotFound { id: "sheet:Sheet1/slicer:2".into() }],
     SlicerFieldNotFound { name: String } => vec![Self::SlicerFieldNotFound { name: "产品".into() }],
+    ConnectionNotFound { id: String } => vec![Self::ConnectionNotFound { id: "connection:1".into() }],
+    InvalidConnection { field: String } => {
+        vec![Self::InvalidConnection { field: "type".into() }]
+    },
     ZoomNotFound { id: String } => vec![Self::ZoomNotFound { id: "slide:1/zoom:3".into() }],
     InvalidZoomType => vec![Self::InvalidZoomType],
     InvalidShowPrType => vec![Self::InvalidShowPrType],
@@ -1056,6 +1066,10 @@ impl IdReason {
             Self::LayoutForm,
             Self::SetHandoutTextNeedsHandout,
             Self::InsertDefinedNameNeedsWorkbook,
+            Self::InsertConnectionNeedsWorkbook,
+            Self::ConnectionPrefix,
+            Self::ConnectionIndexNotInt,
+            Self::ConnectionIndexFromOne,
             Self::DefinedNamePrefix,
             Self::NameIndexNotInt,
             Self::NameIndexFromOne,
@@ -1395,6 +1409,7 @@ impl ErrorKind {
             | Self::NeedSetAutoFilterField
             | Self::InvalidAutoFilter { .. }
             | Self::SlicerFieldNotFound { .. }
+            | Self::InvalidConnection { .. }
             | Self::InvalidAlign
             | Self::InvalidLineRule
             | Self::InvalidUnderline
@@ -1524,6 +1539,7 @@ impl ErrorKind {
             | Self::SmartArtPointNotFound { .. }
             | Self::OleNotFound { .. }
             | Self::SlicerNotFound { .. }
+            | Self::ConnectionNotFound { .. }
             | Self::ZoomNotFound { .. }
             | Self::WatermarkNotFound { .. }
             | Self::TableNotFound { .. }

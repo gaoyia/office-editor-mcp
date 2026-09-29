@@ -93,6 +93,7 @@ $order = @(
     'xlsx-groups'
     'xlsx-ole'
     'xlsx-slicers'
+    'xlsx-connections'
     'xlsx-hyperlinks'
     'xlsx-sparklines'
     'xlsx-protect'

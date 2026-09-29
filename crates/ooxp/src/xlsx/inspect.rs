@@ -11,6 +11,7 @@ use super::a1;
 use super::cf;
 use super::chart;
 use super::comments;
+use super::connection;
 use super::formula;
 use super::hf;
 use super::names;
@@ -74,6 +75,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     let want_sparklines = scope.as_ref().is_some_and(|s| s.sparklines);
     let want_ole = scope.as_ref().is_some_and(|s| s.ole_objects);
     let want_slicers = scope.as_ref().is_some_and(|s| s.slicers);
+    let want_connections = scope.as_ref().is_some_and(|s| s.connections);
     let cells_scope = scope.as_ref().and_then(|s| s.cells.as_ref());
     let sheet_parts: Vec<(String, String)> = sheets
         .iter()
@@ -351,6 +353,10 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     root.insert("sparklineCount".into(), json!(sparkline_count));
     root.insert("oleObjectCount".into(), json!(ole_object_count));
     root.insert("slicerCount".into(), json!(slicer_count));
+    root.insert(
+        "connectionCount".into(),
+        json!(connection::count(&pkg, &wb_part)?),
+    );
     root.insert("definedNameCount".into(), json!(names::count(&wb.root)));
     root.insert("props".into(), crate::props::inspect(&pkg)?);
     root.insert(
@@ -363,6 +369,9 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         "definedNames".into(),
         names::inspect(&wb.root, &sheet_names),
     );
+    if want_connections {
+        root.insert("connections".into(), connection::inspect(&pkg, &wb_part)?);
+    }
     Ok(Value::Object(root))
 }
 

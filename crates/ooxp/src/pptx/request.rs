@@ -1251,6 +1251,8 @@ fn is_foreign_op(op_name: &str) -> bool {
             | "deleteSparkline"
             | "insertSlicer"
             | "deleteSlicer"
+            | "insertConnection"
+            | "deleteConnection"
             | "insertBookmark"
             | "setBookmark"
             | "deleteBookmark"

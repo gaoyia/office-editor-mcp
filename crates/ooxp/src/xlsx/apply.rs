@@ -12,6 +12,7 @@ use super::a1;
 use super::chart;
 use super::chartsheet;
 use super::comments;
+use super::connection;
 use super::hf;
 use super::inspect;
 use super::layout;
@@ -673,6 +674,12 @@ pub fn apply(bytes: &[u8], ops: &[XlsxOp]) -> Result<Vec<u8>, Error> {
                 let doc = dirty_of(&mut dirty_sheets, &part);
                 slicer::delete(&mut pkg, &mut wb_doc, &wb_part, doc, &part, op, i)?;
                 workbook_dirty = true;
+            }
+            XlsxOp::InsertConnection(op) => {
+                connection::insert(&mut pkg, &wb_part, op, i)?;
+            }
+            XlsxOp::DeleteConnection(op) => {
+                connection::delete(&mut pkg, &wb_part, op, i)?;
             }
             XlsxOp::SetTextBoxSize(op) => {
                 let part = require_drawing_worksheet(

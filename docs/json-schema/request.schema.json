@@ -193,6 +193,9 @@
         "slicers": {
           "type": "boolean"
         },
+        "connections": {
+          "type": "boolean"
+        },
         "oleObjects": {
           "type": "boolean"
         },
@@ -928,6 +931,12 @@
               },
               {
                 "$ref": "xlsx.schema.json#/$defs/deleteSlicerOp"
+              },
+              {
+                "$ref": "xlsx.schema.json#/$defs/insertConnectionOp"
+              },
+              {
+                "$ref": "xlsx.schema.json#/$defs/deleteConnectionOp"
               },
               {
                 "$ref": "docx.schema.json#/$defs/insertOleOp"

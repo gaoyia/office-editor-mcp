@@ -12,6 +12,7 @@ use crate::smartart::{ColorsKind, LayoutKind, NewPoint, Role, StyleKind};
 use super::a1;
 use super::chart::{self, SheetChartId};
 use super::comments;
+use super::connection;
 use super::names;
 use super::ole;
 use super::picture::{self, SheetPicId};
@@ -157,6 +158,7 @@ pub struct InspectScope {
     pub sparklines: bool,
     pub ole_objects: bool,
     pub slicers: bool,
+    pub connections: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -1576,6 +1578,8 @@ pub enum XlsxOp {
     DeleteOle(ole::DeleteOleOp),
     InsertSlicer(slicer::InsertSlicerOp),
     DeleteSlicer(slicer::DeleteSlicerOp),
+    InsertConnection(connection::InsertConnectionOp),
+    DeleteConnection(connection::DeleteConnectionOp),
     SetTextBoxSize(SetTextBoxSizeOp),
     SetTextBoxAnchor(SetTextBoxAnchorOp),
     SetShapeText(SetShapeTextOp),
@@ -1628,6 +1632,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
             "sparklines",
             "oleObjects",
             "slicers",
+            "connections",
         ],
     )?;
     let pictures = parse_bool_field(obj.get("pictures"), "pictures")?;
@@ -1642,6 +1647,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
     let sparklines = parse_bool_field(obj.get("sparklines"), "sparklines")?;
     let ole_objects = parse_bool_field(obj.get("oleObjects"), "oleObjects")?;
     let slicers = parse_bool_field(obj.get("slicers"), "slicers")?;
+    let connections = parse_bool_field(obj.get("connections"), "connections")?;
     let sheet = obj.get("sheet").and_then(Value::as_str);
     let range = obj.get("range").and_then(Value::as_str);
     let max_cells = match obj.get("maxCells") {
@@ -1699,6 +1705,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
         && !sparklines
         && !ole_objects
         && !slicers
+        && !connections
     {
         return Ok(None);
     }
@@ -1716,6 +1723,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
         sparklines,
         ole_objects,
         slicers,
+        connections,
     }))
 }
 
@@ -1831,6 +1839,8 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<XlsxOp>, Error> {
             "deleteOle" => XlsxOp::DeleteOle(parse_delete_ole(obj, i)?),
             "insertSlicer" => XlsxOp::InsertSlicer(parse_insert_slicer(obj, i)?),
             "deleteSlicer" => XlsxOp::DeleteSlicer(parse_delete_slicer(obj, i)?),
+            "insertConnection" => XlsxOp::InsertConnection(parse_insert_connection(obj, i)?),
+            "deleteConnection" => XlsxOp::DeleteConnection(parse_delete_connection(obj, i)?),
             "setTextBoxSize" => XlsxOp::SetTextBoxSize(parse_set_textbox_size(obj, i)?),
             "setTextBoxAnchor" => XlsxOp::SetTextBoxAnchor(parse_set_textbox_anchor(obj, i)?),
             "setShapeText" => XlsxOp::SetShapeText(parse_set_shape_text(obj, i)?),
@@ -8471,6 +8481,185 @@ fn parse_delete_slicer(
     let id = require_id(obj, i)?;
     let target = slicer::parse_slicer_id(&id, &format!("ops[{i}].id"))?;
     Ok(slicer::DeleteSlicerOp { id, target })
+}
+
+fn parse_insert_connection(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<connection::InsertConnectionOp, Error> {
+    deny_keys(
+        obj,
+        i,
+        &[
+            "op",
+            "id",
+            "name",
+            "type",
+            "url",
+            "sourceFile",
+            "description",
+        ],
+    )?;
+    let id = require_id(obj, i)?;
+    if id != "xlsx:workbook" {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::InsertConnectionNeedsWorkbook,
+            },
+            format!("ops[{i}].id"),
+        ));
+    }
+    let name = match obj.get("name") {
+        Some(Value::String(s)) if !s.is_empty() => s.clone(),
+        None => {
+            return Err(Error::with_path(
+                ErrorKind::MissingField {
+                    field: "name".into(),
+                },
+                format!("ops[{i}].name"),
+            ));
+        }
+        Some(Value::String(_)) => {
+            return Err(Error::with_path(
+                ErrorKind::InvalidConnection {
+                    field: "name".into(),
+                },
+                format!("ops[{i}].name"),
+            ));
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "name".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].name"),
+            ));
+        }
+    };
+    let kind = match obj.get("type") {
+        Some(Value::String(s)) if s == "web" => connection::ConnectionKind::Web,
+        Some(Value::String(s)) if s == "text" => connection::ConnectionKind::Text,
+        None => {
+            return Err(Error::with_path(
+                ErrorKind::MissingField {
+                    field: "type".into(),
+                },
+                format!("ops[{i}].type"),
+            ));
+        }
+        Some(Value::String(_)) => {
+            return Err(Error::with_path(
+                ErrorKind::InvalidConnection {
+                    field: "type".into(),
+                },
+                format!("ops[{i}].type"),
+            ));
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "type".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].type"),
+            ));
+        }
+    };
+    let url = parse_opt_nonempty_string(obj, i, "url")?;
+    let source_file = parse_opt_nonempty_string(obj, i, "sourceFile")?;
+    let description = match obj.get("description") {
+        None => None,
+        Some(Value::String(s)) => Some(s.clone()),
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "description".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].description"),
+            ));
+        }
+    };
+    match kind {
+        connection::ConnectionKind::Web => {
+            if source_file.is_some() {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidConnection {
+                        field: "sourceFile".into(),
+                    },
+                    format!("ops[{i}].sourceFile"),
+                ));
+            }
+            if url.is_none() {
+                return Err(Error::with_path(
+                    ErrorKind::MissingField {
+                        field: "url".into(),
+                    },
+                    format!("ops[{i}].url"),
+                ));
+            }
+        }
+        connection::ConnectionKind::Text => {
+            if url.is_some() {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidConnection {
+                        field: "url".into(),
+                    },
+                    format!("ops[{i}].url"),
+                ));
+            }
+            if source_file.is_none() {
+                return Err(Error::with_path(
+                    ErrorKind::MissingField {
+                        field: "sourceFile".into(),
+                    },
+                    format!("ops[{i}].sourceFile"),
+                ));
+            }
+        }
+    }
+    Ok(connection::InsertConnectionOp {
+        name,
+        kind,
+        url,
+        source_file,
+        description,
+    })
+}
+
+fn parse_opt_nonempty_string(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+    field: &str,
+) -> Result<Option<String>, Error> {
+    match obj.get(field) {
+        None => Ok(None),
+        Some(Value::String(s)) if !s.is_empty() => Ok(Some(s.clone())),
+        Some(Value::String(_)) => Err(Error::with_path(
+            ErrorKind::InvalidConnection {
+                field: field.into(),
+            },
+            format!("ops[{i}].{field}"),
+        )),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::String,
+            },
+            format!("ops[{i}].{field}"),
+        )),
+    }
+}
+
+fn parse_delete_connection(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<connection::DeleteConnectionOp, Error> {
+    deny_keys(obj, i, &["op", "id"])?;
+    let id = require_id(obj, i)?;
+    let key = connection::parse_connection_id(&id, &format!("ops[{i}].id"))?;
+    Ok(connection::DeleteConnectionOp { id, key })
 }
 
 fn parse_set_textbox_size(

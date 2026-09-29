@@ -62,6 +62,7 @@ docx 见 [`roadmap/docx.md`](docx.md)。pptx 见 [`roadmap/pptx.md`](pptx.md)。
 | 19 | `.plan/2026年-9月-29日-✅-xlsx-组合.md` | 工作表图 |
 | 20 | `.plan/2026年-9月-29日-✅-xlsx-OLE.md` | 工作表图 |
 | 21 | `.plan/2026年-9月-29日-✅-xlsx-切片器.md` | 数据透视、表格 |
+| 22 | `.plan/2026年-9月-29日-✅-xlsx-外部数据连接.md` | 无 |
 
 0 与 1 不要合成一份。Excel 图表数据在本工作簿单元格里，和 Word embedding 不是一回事。页眉是工作表上的 `headerFooter` 加可选 `drawingHF`，不是 Word 的 header 部件。图表工作表是 `chartsheet` 部件。第一期单元格读写见总计划。
 
@@ -71,7 +72,6 @@ docx 见 [`roadmap/docx.md`](docx.md)。pptx 见 [`roadmap/pptx.md`](pptx.md)。
 
 | 序 | 计划 | 前置 |
 | --- | --- | --- |
-| 22 | 外部数据连接 | 无 |
 | 23 | 分组 / 分级显示 | 无 |
 | 24 | 拆分窗格与自定义视图 | 视图与筛选 |
 | 25 | create 带批注、超链接、形状、SmartArt | 批注、超链接、形状 |
@@ -94,4 +94,4 @@ xlsx 没有 Word / PowerPoint 那种墨迹批注计划；批注已过（序号 1
 
 ## 怎么算 Excel 全量做完
 
-已过表保持 ✅，待做 22–31 做完，`docs/` 与实现一致，Excel 16.0 手测过对应清单。永不做的条目不算欠账。公式求值保持 🚫。
+已过表保持 ✅，待做 23–31 做完，`docs/` 与实现一致，Excel 16.0 手测过对应清单。永不做的条目不算欠账。公式求值保持 🚫。

@@ -318,6 +318,16 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::InsertDefinedNameNeedsWorkbook => {
                 "insertDefinedName id must be xlsx:workbook".into()
             }
+            IdReason::InsertConnectionNeedsWorkbook => {
+                "insertConnection id must be xlsx:workbook".into()
+            }
+            IdReason::ConnectionPrefix => {
+                "connection id must be connection:ID or connection:index:N".into()
+            }
+            IdReason::ConnectionIndexNotInt => {
+                "connection:index must be followed by a positive integer".into()
+            }
+            IdReason::ConnectionIndexFromOne => "connection:index starts at 1".into(),
             IdReason::DefinedNamePrefix => {
                 "defined name id must be name:n, n starting at 1".into()
             }
@@ -807,6 +817,10 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::SlicerNotFound { id } => format!("Slicer not found: {id}"),
         ErrorKind::SlicerFieldNotFound { name } => {
             format!("Slicer field does not match the source: {name}")
+        }
+        ErrorKind::ConnectionNotFound { id } => format!("Connection not found: {id}"),
+        ErrorKind::InvalidConnection { field } => {
+            format!("{field} is not a valid connection value")
         }
         ErrorKind::ZoomNotFound { id } => format!("Zoom not found: {id}"),
         ErrorKind::InvalidZoomType => "type must be slide or section".into(),
