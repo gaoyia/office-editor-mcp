@@ -288,6 +288,12 @@ pub(crate) enum IdReason {
     SlideOleContainer,
     /// pptx 的 insertOle 必须用 slide:N
     InsertOleNeedsSlide,
+    /// xlsx 的 insertOle 必须用 sheet:工作表名
+    InsertOleNeedsSheet,
+    /// xlsx OLE id 必须是 sheet:{name}/ole:…
+    SheetOlePrefix,
+    /// 工作表 id，缺少 /ole:…
+    SheetOleContainer,
     /// pptx 的 insertZoom 必须用 slide:N
     InsertZoomNeedsSlide,
     /// insertZoom 的 type 为 slide 时 target 必须是 slide:N
@@ -1084,6 +1090,9 @@ impl IdReason {
             Self::SlideOlePrefix,
             Self::SlideOleContainer,
             Self::InsertOleNeedsSlide,
+            Self::InsertOleNeedsSheet,
+            Self::SheetOlePrefix,
+            Self::SheetOleContainer,
             Self::InsertZoomNeedsSlide,
             Self::ZoomTargetSlide,
             Self::SlideZoomPrefix,

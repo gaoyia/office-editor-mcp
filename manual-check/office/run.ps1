@@ -91,6 +91,7 @@ $order = @(
     'xlsx-shapes'
     'xlsx-shapes-geom'
     'xlsx-groups'
+    'xlsx-ole'
     'xlsx-hyperlinks'
     'xlsx-sparklines'
     'xlsx-protect'

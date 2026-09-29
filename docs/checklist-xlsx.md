@@ -8,7 +8,7 @@
 
 Microsoft Excel 16.0 已打开，用户确认通过。本机若装了 WPS，`Excel.Application` 会被抢走，测试仍直接启动 `EXCEL.EXE` 再挂 COM。
 
-C、I、A、O、Xp、Xc、Xh 这几组现在由 `manual-check/office/cases/xlsx-*.ps1` 自动判定，跑 `pwsh -File manual-check\office\run.ps1 -Case 'xlsx-*'` 即可复现，逐条结果落在 `manual-check/office/out/office-results.csv`。2026-09-27 补跑 `xlsx-pictures.ps1`，Xp1–Xp7 通过。同日补跑 `xlsx-charts.ps1`，Xc1–Xc7 通过。同日补跑 `xlsx-create-pictures.ps1`，C8–C10 通过。同日补跑 `xlsx-create-charts.ps1`，C11–C13 通过。同日补跑 `xlsx-headerfooter.ps1`，Xh1–Xh5 通过。同日补跑 `xlsx-docprops.ps1`，Xd1–Xd5 通过。同日补跑 `xlsx-charts-remain.ps1`，Xr1–Xr4 通过。同日补跑 `xlsx-sheets.ps1`，Xm1–Xm7 通过。同日补跑 `xlsx-cellstyle.ps1`，Xs1–Xs5 通过。同日补跑 `xlsx-layout.ps1`，Xl1–Xl5 通过。同日补跑 `xlsx-formula.ps1`，Xf1–Xf5 通过。2026-09-28 补跑 `xlsx-validation.ps1`，Xv1–Xv5 通过。同日补跑 `xlsx-conditional-format.ps1`，Xn1–Xn5 通过。同日补跑 `xlsx-pivot.ps1`，Xpt1–Xpt5 通过。同日补跑 `xlsx-defined-name.ps1`，Xnm1–Xnm5 通过。同日补跑 `xlsx-print.ps1`，Xps1–Xps5 通过。同日补跑 `xlsx-view.ps1`，Xvw1–Xvw5 通过。同日补跑 `xlsx-comments.ps1`，Xcm1–Xcm5 通过。同日补跑 `xlsx-shapes.ps1`，Xsa1–Xsa5 通过。同日补跑 `xlsx-hyperlinks.ps1`，Xhl1–Xhl5 通过。同日补跑 `xlsx-sparklines.ps1`，Xsk1–Xsk5 通过。同日补跑 `xlsx-protect.ps1`，Xpr1–Xpr5 通过。同日补跑 `xlsx-create-headerfooter.ps1`，C14–C16 通过。同日补跑 `xlsx-anchor.ps1`，Xa1–Xa5 通过。2026-09-29 补跑 `xlsx-charts-rare.ps1`，Xq1–Xq5 通过。2026-09-28 补跑 `xlsx-chartsheet.ps1`，图表工作表 Xs1–Xs4 通过。同日补跑 `xlsx-table.ps1`，Xt1–Xt5 通过。
+C、I、A、O、Xp、Xc、Xh 这几组现在由 `manual-check/office/cases/xlsx-*.ps1` 自动判定，跑 `pwsh -File manual-check\office\run.ps1 -Case 'xlsx-*'` 即可复现，逐条结果落在 `manual-check/office/out/office-results.csv`。2026-09-27 补跑 `xlsx-pictures.ps1`，Xp1–Xp7 通过。同日补跑 `xlsx-charts.ps1`，Xc1–Xc7 通过。同日补跑 `xlsx-create-pictures.ps1`，C8–C10 通过。同日补跑 `xlsx-create-charts.ps1`，C11–C13 通过。同日补跑 `xlsx-headerfooter.ps1`，Xh1–Xh5 通过。同日补跑 `xlsx-docprops.ps1`，Xd1–Xd5 通过。同日补跑 `xlsx-charts-remain.ps1`，Xr1–Xr4 通过。同日补跑 `xlsx-sheets.ps1`，Xm1–Xm7 通过。同日补跑 `xlsx-cellstyle.ps1`，Xs1–Xs5 通过。同日补跑 `xlsx-layout.ps1`，Xl1–Xl5 通过。同日补跑 `xlsx-formula.ps1`，Xf1–Xf5 通过。2026-09-28 补跑 `xlsx-validation.ps1`，Xv1–Xv5 通过。同日补跑 `xlsx-conditional-format.ps1`，Xn1–Xn5 通过。同日补跑 `xlsx-pivot.ps1`，Xpt1–Xpt5 通过。同日补跑 `xlsx-defined-name.ps1`，Xnm1–Xnm5 通过。同日补跑 `xlsx-print.ps1`，Xps1–Xps5 通过。同日补跑 `xlsx-view.ps1`，Xvw1–Xvw5 通过。同日补跑 `xlsx-comments.ps1`，Xcm1–Xcm5 通过。同日补跑 `xlsx-shapes.ps1`，Xsa1–Xsa5 通过。同日补跑 `xlsx-hyperlinks.ps1`，Xhl1–Xhl5 通过。同日补跑 `xlsx-sparklines.ps1`，Xsk1–Xsk5 通过。同日补跑 `xlsx-protect.ps1`，Xpr1–Xpr5 通过。同日补跑 `xlsx-create-headerfooter.ps1`，C14–C16 通过。同日补跑 `xlsx-anchor.ps1`，Xa1–Xa5 通过。2026-09-29 补跑 `xlsx-charts-rare.ps1`，Xq1–Xq5 通过。同日补跑 `xlsx-ole.ps1`，Xol1–Xol5 通过。2026-09-28 补跑 `xlsx-chartsheet.ps1`，图表工作表 Xs1–Xs4 通过。同日补跑 `xlsx-table.ps1`，Xt1–Xt5 通过。
 
 | 序号 | 状态 | 结果 |
 | --- | --- | --- |
@@ -46,6 +46,7 @@ C、I、A、O、Xp、Xc、Xh 这几组现在由 `manual-check/office/cases/xlsx-
 | Xa1–Xa5 | ✅ | Excel 16.0：`xlsx-anchor.ps1`，5 PASS / 0 FAIL。twoCell 改 `to=G10` 无 Repair；oneCell 转到 absolute 后 `posX=914400`；再改 `posX=2000000` 无 Repair；转到 absolute 不给 pos、twoCell 给 `cx` 均得 `InvalidField` 且未写文件 |
 | Xsg1–Xsg5 | ✅ | Excel 16.0：`xlsx-shapes-geom.ps1`，5 PASS / 0 FAIL。无名单时根与工作表有 `shapeCount=0`、`connectorCount=0`；`insertShape` 后 COM 能看见矩形且无 Repair；`insertConnector` 后名单 id 为 `sheet:…/cxn:…`；改锚点与删后计数为 0；缺 `from` 得 `InvalidField` |
 | Xg1–Xg5 | ✅ | Excel 16.0：`xlsx-groups.ps1`，5 PASS / 0 FAIL。`groupShapes` 后 COM Type=6、子 id 仍在；`ungroup` 后组合解开；形状与连接线可编成一组；已组合再编、只给一个成员、`id=slide:1`、对未组合对象 `ungroup` 均拒写。无 Repair |
+| Xol1–Xol5 | ✅ | Excel 16.0：`xlsx-ole.ps1`，5 PASS / 0 FAIL。create 默认 `oleObjectCount=0`；`insertOle` 后 COM Type=7、id 为 `sheet:Sheet1/ole:1025`、`progId=Worksheet`、dummy 不进 `shapes`、无 Repair；`exportMedia` 与 embeddings 字节一致；删除后计数为 0；缺 `from` / `slide:1` / 形状 id 均拒写 |
 | 图表工作表 Xs1–Xs4 | ✅ | Excel 16.0：`xlsx-chartsheet.ps1`，4 PASS / 0 FAIL。`insertChartSheet` 后 `kind=chartsheet`、`chartCount=1`，无 Repair；数据 1/2/3 与 COM 一致；删除后表消失、数据格还在；对 `worksheet` 发 `deleteChartSheet` 得 `InvalidId` 且未写文件 |
 | Xt1–Xt5 | ✅ | Excel 16.0：`xlsx-table.ps1`，5 PASS / 0 FAIL。create 默认 `tableCount=0`；建成 Sales 后 COM 认表；改范围到 `A1:C4` 无 Repair；删除后数据还在、不再有表；缺 `ref` 得 `InvalidField` 且未写文件 |
 
@@ -374,6 +375,18 @@ Office 另存 create 产物是打开冒烟，见 `manual-check/office/cases/opc-
 | Xg3 | 形状与连接线 | 形状与连接线编成一组后 COM 认组合；inspect 两边名单都在；无 Repair |
 | Xg4 | 再编拒绝 | 已组合的成员再 `groupShapes` 得 `InvalidField`，未写文件。不强制开 Excel |
 | Xg5 | 拒写 | 只给一个成员、`id` 为 `slide:1`、对未组合对象发 `ungroup` 得 `InvalidField` 或 `InvalidId`；均未写文件。不强制开 Excel |
+
+## OLE
+
+用库 create 产物再 apply。脚本 `manual-check/office/cases/xlsx-ole.ps1`。编号用 **Xol**。不要和 Xg、Xsg、Xsa、Xa、Xs、Xq、O 撞。不激活 OLE 服务器。不把嵌入字节或预览图塞进 inspect 树。
+
+| 序号 | 检查 | 通过标准 |
+| --- | --- | --- |
+| Xol1 | inspect | 每张 `worksheet` 始终有 `oleObjectCount`；create 默认为 `0`；给了 `scope.oleObjects` 时名单为空数组，不依赖单元格切片 |
+| Xol2 | 插入 | `insertOle` 嵌入一份 xlsx 后 Excel 无修复；COM Type=7；inspect id 为 `sheet:Sheet1/ole:1025`，`progId` 为 `Worksheet`，dummy 不进 `shapes` |
+| Xol3 | 导出 | `exportMedia` 字节与 `/xl/embeddings/…` 部件一致 |
+| Xol4 | 删除 | `deleteOle` 后 `oleObjectCount=0`、无 Repair |
+| Xol5 | 拒写 | 缺 `from`、`id` 为 `slide:1`、对形状 id 发 `insertOle` 得 `InvalidField` 或 `InvalidId`；均未写文件。不强制开 Excel |
 
 ## 超链接
 

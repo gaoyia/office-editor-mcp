@@ -445,7 +445,7 @@ fn xlsx_rejects_ole_ops_pptx_uses_slide_ids() {
         None,
     )
     .unwrap_err();
-    assert_eq!(err.code(), ErrorCode::InvalidField);
+    assert_eq!(err.code(), ErrorCode::InvalidId);
 
     let pptx = tmp_dir().join(format!(
         "reject-{}.pptx",

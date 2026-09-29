@@ -397,6 +397,11 @@ pub(super) fn render(kind: &ErrorKind) -> String {
                 "页 id 必须带 /ole:…（该 id 本身不是嵌入对象）".into()
             }
             IdReason::InsertOleNeedsSlide => "pptx insertOle 的 id 必须是 slide:N".into(),
+            IdReason::InsertOleNeedsSheet => "xlsx insertOle 的 id 必须是 sheet:工作表名".into(),
+            IdReason::SheetOlePrefix => "xlsx OLE id 必须是 sheet:工作表名/ole:…".into(),
+            IdReason::SheetOleContainer => {
+                "工作表 id 必须带 /ole:…（该 id 本身不是嵌入对象）".into()
+            }
             IdReason::InsertZoomNeedsSlide => "insertZoom 的 id 必须是 slide:N".into(),
             IdReason::ZoomTargetSlide => {
                 "insertZoom 的 type 为 slide 时 target 必须是 slide:N".into()

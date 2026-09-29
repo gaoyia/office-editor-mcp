@@ -7,6 +7,7 @@ use crate::opc::{rels_part_name, Package, Relationships};
 use crate::xml::{self, Document, Element, Node};
 
 use super::a1;
+use super::ole;
 use super::picture::{self, AnchorKind, EditAs};
 use super::request::{
     DeleteConnectorOp, DeleteShapeOp, DeleteTextBoxOp, InsertConnectorOp, InsertShapeOp,
@@ -937,11 +938,17 @@ where
     F: FnMut(&Element, AnchorKind, &Element) -> Result<(), Error>,
 {
     let sheet = xml::parse(pkg.get(sheet_part)?)?;
+    let dummies = ole::dummy_ids(&sheet.root);
     for drawing_part in picture::drawing_parts_from(pkg, sheet_part, &sheet.root)? {
         let doc = xml::parse(pkg.get(&drawing_part)?)?;
         picture::walk_anchors(&doc.root, &mut |anchor, kind| {
             visit_payloads(anchor, &mut |el| {
                 if is_obj(el) {
+                    if let Some(id) = cnv_of_object(el).0 {
+                        if dummies.contains(&id) {
+                            return Ok(());
+                        }
+                    }
                     f(anchor, kind, el)?;
                 }
                 Ok(())
@@ -958,6 +965,7 @@ pub(crate) fn find_drawing_for(
     is_obj: fn(&Element) -> bool,
     key: &DrawKey,
 ) -> Option<String> {
+    let dummies = ole::dummy_ids(sheet_root);
     let mut index = 0usize;
     let Ok(parts) = picture::drawing_parts_from(pkg, sheet_part, sheet_root) else {
         return None;
@@ -976,6 +984,11 @@ pub(crate) fn find_drawing_for(
             }
             visit_payloads(anchor, &mut |el| {
                 if is_obj(el) {
+                    if let Some(id) = cnv_of_object(el).0 {
+                        if dummies.contains(&id) {
+                            return Ok(());
+                        }
+                    }
                     index += 1;
                     if key_matches(key, &cnv_of_object(el).0, index) {
                         hit = true;

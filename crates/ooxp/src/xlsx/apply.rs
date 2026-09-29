@@ -15,6 +15,7 @@ use super::comments;
 use super::hf;
 use super::inspect;
 use super::layout;
+use super::ole;
 use super::picture;
 use super::shape;
 use super::sheets;
@@ -625,6 +626,28 @@ pub fn apply(bytes: &[u8], ops: &[XlsxOp]) -> Result<Vec<u8>, Error> {
                 load_dirty(&pkg, &mut dirty_sheets, &part, false)?;
                 let doc = dirty_of(&mut dirty_sheets, &part);
                 super::group::ungroup(&mut pkg, doc, &part, op, i)?;
+            }
+            XlsxOp::InsertOle(op) => {
+                let part = require_drawing_worksheet(
+                    &sheet_index,
+                    &op.sheet,
+                    i,
+                    ErrorKind::InsertTextBoxWorksheetOnly,
+                )?;
+                load_dirty(&pkg, &mut dirty_sheets, &part, false)?;
+                let doc = dirty_of(&mut dirty_sheets, &part);
+                ole::insert(&mut pkg, doc, &part, op, &format!("ops[{i}].file"))?;
+            }
+            XlsxOp::DeleteOle(op) => {
+                let part = require_drawing_worksheet(
+                    &sheet_index,
+                    &op.target.sheet,
+                    i,
+                    ErrorKind::InsertTextBoxWorksheetOnly,
+                )?;
+                load_dirty(&pkg, &mut dirty_sheets, &part, false)?;
+                let doc = dirty_of(&mut dirty_sheets, &part);
+                ole::delete(&mut pkg, doc, &part, op, i)?;
             }
             XlsxOp::SetTextBoxSize(op) => {
                 let part = require_drawing_worksheet(

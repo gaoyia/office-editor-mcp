@@ -14,6 +14,7 @@ mod hyperlink;
 mod inspect;
 mod layout;
 mod names;
+mod ole;
 mod picture;
 mod pivot;
 mod print;

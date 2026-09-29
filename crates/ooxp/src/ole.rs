@@ -1,4 +1,4 @@
-//! 嵌入对象的文件分类与 Package 包装。docx / pptx 共用。
+//! 嵌入对象的文件分类与 Package 包装。docx / pptx / xlsx 共用。
 //! 不执行 OLE 服务器。
 
 use std::path::Path;

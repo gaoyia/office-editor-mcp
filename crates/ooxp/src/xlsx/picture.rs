@@ -607,6 +607,9 @@ fn pic_to_json(p: &PicInfo) -> Value {
 }
 
 pub fn export_media(bytes: &[u8], id: &str) -> Result<super::ExportedMedia, Error> {
+    if super::ole::is_ole_id(id) {
+        return super::ole::export(bytes, id);
+    }
     let pkg = Package::open_bytes(bytes.to_vec())?;
     let target = parse_pic_id_at(id, "id")?;
     let sheet_part = lookup_sheet_part(&pkg, &target.sheet, "id")?;

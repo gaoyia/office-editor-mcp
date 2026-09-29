@@ -915,6 +915,12 @@
                 "$ref": "#/$defs/setSmartArtLayoutOp"
               },
               {
+                "$ref": "xlsx.schema.json#/$defs/insertOleOp"
+              },
+              {
+                "$ref": "xlsx.schema.json#/$defs/deleteOleOp"
+              },
+              {
                 "$ref": "docx.schema.json#/$defs/insertOleOp"
               },
               {

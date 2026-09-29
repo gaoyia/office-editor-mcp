@@ -133,6 +133,7 @@ fn inspect_lists_hidden() {
             "commentCount",
             "hyperlinkCount",
             "sparklineCount",
+            "oleObjectCount",
             "hasHeaderFooter",
             "print",
             "view",

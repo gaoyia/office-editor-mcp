@@ -198,6 +198,7 @@ fn inspect_default_props_on_three_formats() {
             "commentCount",
             "hyperlinkCount",
             "sparklineCount",
+            "oleObjectCount",
             "definedNameCount",
             "props",
             "workbookProtection",

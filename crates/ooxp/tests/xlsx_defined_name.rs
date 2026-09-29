@@ -115,6 +115,7 @@ fn inspect_empty_on_create() {
             "commentCount",
             "hyperlinkCount",
             "sparklineCount",
+            "oleObjectCount",
             "definedNameCount",
             "props",
             "workbookProtection",

@@ -158,6 +158,7 @@ fn summary_without_scope() {
             "commentCount",
             "hyperlinkCount",
             "sparklineCount",
+            "oleObjectCount",
             "hasHeaderFooter",
             "print",
             "view",

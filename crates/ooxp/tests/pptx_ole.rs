@@ -338,7 +338,7 @@ fn wrong_ids_and_xlsx_reject() {
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);
 
-    let err = run(
+    let RunOutput::Inspect(tree) = run(
         &json!({
             "schemaVersion": 1,
             "action": "inspect",
@@ -348,8 +348,11 @@ fn wrong_ids_and_xlsx_reject() {
         .to_string(),
         None,
     )
-    .unwrap_err();
-    assert_eq!(err.code(), ErrorCode::InvalidField);
+    .unwrap() else {
+        panic!("xlsx inspect oleObjects 应返回树");
+    };
+    assert_eq!(tree["oleObjectCount"], 0);
+    assert_eq!(tree["sheets"][0]["oleObjects"], json!([]));
 
     let err = run(
         &json!({

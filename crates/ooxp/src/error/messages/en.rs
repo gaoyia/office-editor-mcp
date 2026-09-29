@@ -428,6 +428,11 @@ pub(super) fn render(kind: &ErrorKind) -> String {
                 "Slide id must include /ole:… (that id alone is not an embedded object)".into()
             }
             IdReason::InsertOleNeedsSlide => "pptx insertOle id must be slide:N".into(),
+            IdReason::InsertOleNeedsSheet => "xlsx insertOle id must be sheet:name".into(),
+            IdReason::SheetOlePrefix => "xlsx OLE id must be sheet:name/ole:…".into(),
+            IdReason::SheetOleContainer => {
+                "Sheet id must include /ole:… (that id alone is not an embedded object)".into()
+            }
             IdReason::InsertZoomNeedsSlide => "insertZoom id must be slide:N".into(),
             IdReason::ZoomTargetSlide => {
                 "insertZoom target must be slide:N when type is slide".into()

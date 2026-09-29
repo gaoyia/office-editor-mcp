@@ -13,6 +13,7 @@ use super::a1;
 use super::chart::{self, SheetChartId};
 use super::comments;
 use super::names;
+use super::ole;
 use super::picture::{self, SheetPicId};
 use super::shape::{self, DrawObjKind, SheetDrawId};
 use super::smartart as xlsx_smartart;
@@ -153,6 +154,7 @@ pub struct InspectScope {
     pub smart_art: bool,
     pub hyperlinks: bool,
     pub sparklines: bool,
+    pub ole_objects: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -1568,6 +1570,8 @@ pub enum XlsxOp {
     DeleteConnector(DeleteConnectorOp),
     GroupShapes(GroupShapesOp),
     Ungroup(UngroupOp),
+    InsertOle(ole::InsertOleOp),
+    DeleteOle(ole::DeleteOleOp),
     SetTextBoxSize(SetTextBoxSizeOp),
     SetTextBoxAnchor(SetTextBoxAnchorOp),
     SetShapeText(SetShapeTextOp),
@@ -1618,6 +1622,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
             "smartArt",
             "hyperlinks",
             "sparklines",
+            "oleObjects",
         ],
     )?;
     let pictures = parse_bool_field(obj.get("pictures"), "pictures")?;
@@ -1630,6 +1635,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
     let smart_art = parse_bool_field(obj.get("smartArt"), "smartArt")?;
     let hyperlinks = parse_bool_field(obj.get("hyperlinks"), "hyperlinks")?;
     let sparklines = parse_bool_field(obj.get("sparklines"), "sparklines")?;
+    let ole_objects = parse_bool_field(obj.get("oleObjects"), "oleObjects")?;
     let sheet = obj.get("sheet").and_then(Value::as_str);
     let range = obj.get("range").and_then(Value::as_str);
     let max_cells = match obj.get("maxCells") {
@@ -1685,6 +1691,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
         && !smart_art
         && !hyperlinks
         && !sparklines
+        && !ole_objects
     {
         return Ok(None);
     }
@@ -1700,6 +1707,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
         smart_art,
         hyperlinks,
         sparklines,
+        ole_objects,
     }))
 }
 
@@ -1811,6 +1819,8 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<XlsxOp>, Error> {
             "deleteConnector" => XlsxOp::DeleteConnector(parse_delete_connector(obj, i)?),
             "groupShapes" => XlsxOp::GroupShapes(parse_group_shapes(obj, i)?),
             "ungroup" => XlsxOp::Ungroup(parse_ungroup(obj, i)?),
+            "insertOle" => XlsxOp::InsertOle(parse_insert_ole(obj, i)?),
+            "deleteOle" => XlsxOp::DeleteOle(parse_delete_ole(obj, i)?),
             "setTextBoxSize" => XlsxOp::SetTextBoxSize(parse_set_textbox_size(obj, i)?),
             "setTextBoxAnchor" => XlsxOp::SetTextBoxAnchor(parse_set_textbox_anchor(obj, i)?),
             "setShapeText" => XlsxOp::SetShapeText(parse_set_shape_text(obj, i)?),
@@ -1902,8 +1912,6 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<XlsxOp>, Error> {
             | "setNoteNumbering"
             | "setChartWrap"
             | "setSmartArtWrap"
-            | "insertOle"
-            | "deleteOle"
             | "insertWatermark"
             | "deleteWatermark"
             | "insertSlide"
@@ -7118,6 +7126,7 @@ fn parse_sheet_only_id(
         || id.contains("/pivot:")
         || id.contains("/link:")
         || id.contains("/spark:")
+        || id.contains("/ole:")
         || id.starts_with("cell:")
     {
         return Err(Error::with_path(
@@ -8159,6 +8168,122 @@ fn parse_ungroup(obj: &serde_json::Map<String, Value>, i: usize) -> Result<Ungro
     let id = require_id(obj, i)?;
     let (target, kind) = shape::parse_drawing_obj_id(&id, i)?;
     Ok(UngroupOp { id, target, kind })
+}
+
+fn parse_insert_ole(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<ole::InsertOleOp, Error> {
+    deny_keys(
+        obj,
+        i,
+        &[
+            "op", "id", "file", "cx", "cy", "from", "to", "anchor", "fromOffX", "fromOffY",
+            "toOffX", "toOffY",
+        ],
+    )?;
+    let id = require_id(obj, i)?;
+    let sheet = parse_sheet_only_id(&id, i, "id", IdReason::InsertOleNeedsSheet)?;
+    let file = require_file(obj, i, "insertOle")?;
+    let cx = parse_emu_field(obj.get("cx"), i, "cx")?;
+    let cy = parse_emu_field(obj.get("cy"), i, "cy")?;
+    if cx.is_some() != cy.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "insertOle".into(),
+                field: "cx and cy together".into(),
+            },
+            format!("ops[{i}]"),
+        ));
+    }
+    let from = match obj.get("from") {
+        Some(Value::String(s)) => a1::parse_cell(s).map_err(|e| e.at(format!("ops[{i}].from")))?,
+        None => {
+            return Err(Error::with_path(
+                ErrorKind::MissingField {
+                    field: "from".into(),
+                },
+                format!("ops[{i}].from"),
+            ));
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "from".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].from"),
+            ));
+        }
+    };
+    let anchor = match obj.get("anchor") {
+        None => picture::AnchorKind::OneCell,
+        Some(Value::String(s)) => picture::AnchorKind::parse_insert(s).ok_or_else(|| {
+            Error::with_path(ErrorKind::InvalidXlsxAnchor, format!("ops[{i}].anchor"))
+        })?,
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "anchor".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].anchor"),
+            ));
+        }
+    };
+    let to = match obj.get("to") {
+        None => None,
+        Some(Value::String(s)) => {
+            Some(a1::parse_cell(s).map_err(|e| e.at(format!("ops[{i}].to")))?)
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "to".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].to"),
+            ));
+        }
+    };
+    if anchor == picture::AnchorKind::TwoCell && to.is_none() {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "insertOle".into(),
+                field: "to".into(),
+            },
+            format!("ops[{i}].to"),
+        ));
+    }
+    if anchor == picture::AnchorKind::OneCell && to.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::UnknownField { field: "to".into() },
+            format!("ops[{i}].to"),
+        ));
+    }
+    Ok(ole::InsertOleOp {
+        sheet,
+        file,
+        cx,
+        cy,
+        from,
+        to,
+        anchor,
+        from_off_x: parse_off_field(obj.get("fromOffX"), i, "fromOffX")?.unwrap_or(0),
+        from_off_y: parse_off_field(obj.get("fromOffY"), i, "fromOffY")?.unwrap_or(0),
+        to_off_x: parse_off_field(obj.get("toOffX"), i, "toOffX")?.unwrap_or(0),
+        to_off_y: parse_off_field(obj.get("toOffY"), i, "toOffY")?.unwrap_or(0),
+    })
+}
+
+fn parse_delete_ole(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<ole::DeleteOleOp, Error> {
+    deny_keys(obj, i, &["op", "id"])?;
+    let id = require_id(obj, i)?;
+    let target = ole::parse_ole_id(&id, &format!("ops[{i}].id"))?;
+    Ok(ole::DeleteOleOp { id, target })
 }
 
 fn parse_set_textbox_size(
