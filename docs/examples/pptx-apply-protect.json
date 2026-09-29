@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "deck.pptx",
+  "ops": [
+    { "op": "setShowPr", "id": "pptx:presentation", "type": "kiosk", "loop": true },
+    { "op": "setProtection", "id": "pptx:presentation", "enforced": false }
+  ]
+}

@@ -130,6 +130,8 @@ fn create_has_zero_section_count_without_list() {
             "sectionCount",
             "slideSize",
             "customShowCount",
+            "showPr",
+            "modifyProtection",
             "props",
             "slides"
         ]

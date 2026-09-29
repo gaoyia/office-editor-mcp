@@ -17,9 +17,11 @@ use super::media;
 use super::notes;
 use super::ole;
 use super::picture;
+use super::protect;
 use super::request::InspectScope;
 use super::section;
 use super::shape;
+use super::show;
 use super::smartart;
 use super::table;
 use super::theme;
@@ -291,6 +293,8 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         "customShowCount".into(),
         json!(custom_show::count(&pres.root)),
     );
+    root.insert("showPr".into(), show::inspect(&pkg, &pres_part)?);
+    root.insert("modifyProtection".into(), protect::inspect(&pres.root));
     root.insert("props".into(), crate::props::inspect(&pkg)?);
     if want_masters {
         root.insert("masters".into(), master::masters_json(&pkg, &catalog)?);

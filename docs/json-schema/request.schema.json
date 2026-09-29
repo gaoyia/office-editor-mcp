@@ -1053,6 +1053,9 @@
                 "$ref": "pptx.schema.json#/$defs/deleteZoomOp"
               },
               {
+                "$ref": "pptx.schema.json#/$defs/setShowPrOp"
+              },
+              {
                 "$ref": "#/$defs/setPropsOp"
               },
               {

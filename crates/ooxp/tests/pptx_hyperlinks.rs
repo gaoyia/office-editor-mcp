@@ -164,6 +164,8 @@ fn inspect_hyperlink_count_without_list() {
             "sectionCount",
             "slideSize",
             "customShowCount",
+            "showPr",
+            "modifyProtection",
             "props",
             "slides"
         ]

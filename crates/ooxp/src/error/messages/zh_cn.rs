@@ -252,6 +252,12 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::SetSlideSizeNeedsPresentation => {
                 "setSlideSize 的 id 必须是 pptx:presentation".into()
             }
+            IdReason::SetShowPrNeedsPresentation => {
+                "setShowPr 的 id 必须是 pptx:presentation".into()
+            }
+            IdReason::SetProtectionNeedsPresentation => {
+                "setProtection 的 id 必须是 pptx:presentation".into()
+            }
             IdReason::SetThemeNeedsMaster => {
                 "setThemeColors / setThemeFonts 的 id 必须是 master:N".into()
             }
@@ -660,6 +666,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::OleNotFound { id } => format!("找不到嵌入对象：{id}"),
         ErrorKind::ZoomNotFound { id } => format!("找不到 Zoom：{id}"),
         ErrorKind::InvalidZoomType => "type 必须是 slide 或 section".into(),
+        ErrorKind::InvalidShowPrType => "type 必须是 present、browse 或 kiosk".into(),
         ErrorKind::ZoomTargetSelf => "insertZoom 的 target 不能是宿主自己".into(),
         ErrorKind::WatermarkNotFound { id } => format!("找不到水印：{id}"),
         ErrorKind::WatermarkNeedTextOrFile => {

@@ -1606,6 +1606,39 @@
           "minLength": 1
         }
       }
+    },
+    "setShowPrOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setShowPr"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "type": {
+          "type": "string",
+          "minLength": 1
+        },
+        "loop": {
+          "type": "boolean"
+        },
+        "showNarration": {
+          "type": "boolean"
+        },
+        "showAnimation": {
+          "type": "boolean"
+        },
+        "useTimings": {
+          "type": "boolean"
+        }
+      }
     }
   }
 }

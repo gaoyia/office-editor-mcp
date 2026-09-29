@@ -16,9 +16,11 @@ use super::media;
 use super::notes;
 use super::ole;
 use super::picture;
+use super::protect;
 use super::request::PptxOp;
 use super::section;
 use super::shape;
+use super::show;
 use super::slides;
 use super::smartart;
 use super::table;
@@ -537,6 +539,12 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                 let mut doc = xml::parse(pkg.get(&part)?)?;
                 zoom::delete(&mut pkg, &mut doc, &part, op, i)?;
                 pkg.set(&part, doc.to_bytes()?)?;
+            }
+            PptxOp::SetShowPr(op) => {
+                show::apply(&mut pkg, &pres_part, op, i)?;
+            }
+            PptxOp::SetProtection(op) => {
+                protect::apply(&mut pkg, &pres_part, &mut pres, op, i)?;
             }
             PptxOp::InsertChart(op) => {
                 let part = ensure_notes_or_slide(

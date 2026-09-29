@@ -134,6 +134,8 @@ fn create_has_no_handout_without_scope() {
             "sectionCount",
             "slideSize",
             "customShowCount",
+            "showPr",
+            "modifyProtection",
             "props",
             "slides"
         ]

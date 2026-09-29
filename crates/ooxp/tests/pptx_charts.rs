@@ -172,6 +172,8 @@ fn inspect_chart_count_without_list() {
             "sectionCount",
             "slideSize",
             "customShowCount",
+            "showPr",
+            "modifyProtection",
             "props",
             "slides"
         ]

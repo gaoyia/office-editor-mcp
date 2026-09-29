@@ -277,6 +277,12 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::SetSlideSizeNeedsPresentation => {
                 "setSlideSize id must be pptx:presentation".into()
             }
+            IdReason::SetShowPrNeedsPresentation => {
+                "setShowPr id must be pptx:presentation".into()
+            }
+            IdReason::SetProtectionNeedsPresentation => {
+                "setProtection id must be pptx:presentation".into()
+            }
             IdReason::SetThemeNeedsMaster => {
                 "setThemeColors / setThemeFonts id must be master:N".into()
             }
@@ -742,6 +748,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::OleNotFound { id } => format!("Embedded object not found: {id}"),
         ErrorKind::ZoomNotFound { id } => format!("Zoom not found: {id}"),
         ErrorKind::InvalidZoomType => "type must be slide or section".into(),
+        ErrorKind::InvalidShowPrType => "type must be present, browse, or kiosk".into(),
         ErrorKind::ZoomTargetSelf => "insertZoom target cannot be the host slide".into(),
         ErrorKind::WatermarkNotFound { id } => format!("Watermark not found: {id}"),
         ErrorKind::WatermarkNeedTextOrFile => {

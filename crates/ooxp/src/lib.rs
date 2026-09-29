@@ -1035,6 +1035,8 @@ mod tests {
                 "sectionCount",
                 "slideSize",
                 "customShowCount",
+                "showPr",
+                "modifyProtection",
                 "props",
                 "slides"
             ]

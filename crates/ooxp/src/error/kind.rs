@@ -182,6 +182,10 @@ pub(crate) enum IdReason {
     DeleteMasterNeedsMaster,
     /// setSlideSize 必须用 pptx:presentation
     SetSlideSizeNeedsPresentation,
+    /// setShowPr 必须用 pptx:presentation
+    SetShowPrNeedsPresentation,
+    /// pptx 的 setProtection 必须用 pptx:presentation
+    SetProtectionNeedsPresentation,
     /// setThemeColors / setThemeFonts 必须用 master:N
     SetThemeNeedsMaster,
     /// setHandoutText 必须用 handout
@@ -675,6 +679,7 @@ define_error_kinds! {
     OleNotFound { id: String } => vec![Self::OleNotFound { id: "para:1/ole:_1".into() }],
     ZoomNotFound { id: String } => vec![Self::ZoomNotFound { id: "slide:1/zoom:3".into() }],
     InvalidZoomType => vec![Self::InvalidZoomType],
+    InvalidShowPrType => vec![Self::InvalidShowPrType],
     ZoomTargetSelf => vec![Self::ZoomTargetSelf],
     WatermarkNotFound { id: String } => vec![Self::WatermarkNotFound { id: "header:default:1/watermark:1".into() }],
     WatermarkNeedTextOrFile => vec![Self::WatermarkNeedTextOrFile],
@@ -985,6 +990,8 @@ impl IdReason {
             Self::InsertMasterNeedsPresentation,
             Self::DeleteMasterNeedsMaster,
             Self::SetSlideSizeNeedsPresentation,
+            Self::SetShowPrNeedsPresentation,
+            Self::SetProtectionNeedsPresentation,
             Self::SetThemeNeedsMaster,
             Self::SetSlideSectionNeedsSlide,
             Self::SlideOpNeedsSlide,
@@ -1350,6 +1357,7 @@ impl ErrorKind {
             | Self::InvalidTransitionType
             | Self::InvalidAnimType
             | Self::InvalidZoomType
+            | Self::InvalidShowPrType
             | Self::ZoomTargetSelf
             | Self::InvalidAnimTrigger
             | Self::InvalidTransitionDur

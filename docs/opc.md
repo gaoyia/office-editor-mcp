@@ -165,9 +165,9 @@ pptx create 同样生成 Transitional 包，命名空间用 2006 那套。不能
 | --- | --- |
 | `/[Content_Types].xml` | 内容类型 |
 | `/_rels/.rels` | 指向 Presentation，以及可选的核心属性 |
-| `/ppt/presentation.xml` | 页名单、母版关系、幻灯片尺寸 |
+| `/ppt/presentation.xml` | 页名单、母版关系、幻灯片尺寸；可选 `p:modifyVerifier` |
 | `/ppt/_rels/presentation.xml.rels` | 指向 slideMaster、各 slide、presProps |
-| `/ppt/presProps.xml` | Presentation Properties（§13.3.7，包内应当恰好一份） |
+| `/ppt/presProps.xml` | Presentation Properties（§13.3.7，包内应当恰好一份）。create 只有 `clrMru`；`setShowPr` 写 `p:showPr` |
 | `/ppt/slides/slideN.xml` | 每一页 |
 | `/ppt/slides/_rels/slideN.xml.rels` | 指向 slideLayout1；有图时再加 image 关系 |
 | `/ppt/slideLayouts/slideLayout1.xml` | 一张空白版式 |
@@ -260,6 +260,10 @@ apply 的 `setHandoutText` 可能写入 `/ppt/handoutMasters/handoutMaster1.xml`
 apply 插入现代批注时，可能写入 `/ppt/comments/modernComment_{sldId}_N.xml`（CT `application/vnd.ms-powerpoint.comments+xml`，根 `p188:cmLst`，命名空间 `http://schemas.microsoft.com/office/powerpoint/2018/8/main`）和 `/ppt/authors.xml`（CT `application/vnd.ms-powerpoint.authors+xml`，根 `p188:authorLst`）。幻灯片 `.rels` 补一条 comments 关系，Type 必须是完整 URI `http://schemas.microsoft.com/office/2018/10/relationships/comments`，不要用 `ends_with("/comments")`（会误伤 2006 旧式）。presentation `.rels` 补一条 authors 关系，Type 为 `http://schemas.microsoft.com/office/2018/10/relationships/authors`。幻灯片 XML 在 `p:clrMapOvr` 之后写入 `p:extLst` / `p:ext`（uri `{6950BFC3-D8DA-4A85-94F7-54DA5524770B}`）/ `p188:commentRel`。同一页多条批注共用一个 comments 部件。`p188:cm` 子元素顺序为锚点（`pc:sldMkLst`）、`p188:pos`、可选 `p188:replyLst`、`p188:txBody`。`pc:sldMk/@sldId` 取 presentation 该页 `p:sldId` 的无前缀 `id`。不写 ECMA-376 §19.4 的 `/ppt/comments/commentN.xml` 与 `commentAuthors`。
 
 apply 的超链接 op 只改该页幻灯片 XML 的 `p:cNvPr/a:hlinkClick` 与该页 `.rels`。URL / 文件写 Type 以 `/hyperlink` 结尾、`TargetMode` 为 `External` 的关系；跳转到某页写 Type 以 `/slide` 结尾的内部关系。不新建幻灯片部件。删链只摘 `hlinkClick`，孤儿关系删掉。
+
+apply 的 `setShowPr` 只改 `/ppt/presProps.xml` 的 `p:showPr`，插在 `prnPr` 之后、`clrMru` 之前。不新建 presProps 部件。没有该部件时报 `OpcPartMissing`。不写 `penClr` 与激光笔扩展。改成 `browse` 时写入 `p14:browseMode`（MS-PPTX §2.3.1.2）。
+
+apply 的 `setProtection` 只改 `presentation.xml` 的 `p:modifyVerifier`（`defaultTextStyle` 之后、`extLst` 之前）。本期只删不建。已有哈希属性则不改。
 
 apply 插入幻灯片 OLE 时，可能新建 `/ppt/embeddings/Microsoft_Excel_WorksheetN.xlsx`（或其它 Office 扩展名，CT 与该格式主文档一致）或 `/ppt/embeddings/oleObjectN.bin`（CT `application/vnd.openxmlformats-officedocument.oleObject`），以及一张预览 `/ppt/media/imageN.png`。该页 `.rels` 补一条 package 或 oleObject 关系指向 embeddings，再补一条 image 关系指向预览。宿主是 `p:graphicFrame`，`a:graphicData/@uri` 为 `http://schemas.openxmlformats.org/presentationml/2006/ole`。`mc:AlternateContent` 的 Choice 只有 `p:oleObj`，Fallback 带 `p:pic` 预览。位置与尺寸在 `p:xfrm`。不写 `<p:timing>`。create 本期不写 OLE。
 

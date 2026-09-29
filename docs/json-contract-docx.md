@@ -430,7 +430,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
 
 ### 文档保护（仅 docx）
 
-docx 根上始终带 `protection`，不要另给 scope 键。来源是 `/word/settings.xml` 的 `w:documentProtection`（ECMA-376 §17.15.1.29）与 `w:writeProtection`（§17.15.1.93）。没有 settings 部件时按全关处理，不报错。xlsx / pptx 不要带此对象。xlsx 用 `sheetProtection` / `workbookProtection`。
+docx 根上始终带 `protection`，不要另给 scope 键。来源是 `/word/settings.xml` 的 `w:documentProtection`（ECMA-376 §17.15.1.29）与 `w:writeProtection`（§17.15.1.93）。没有 settings 部件时按全关处理，不报错。xlsx / pptx 不要带此对象。xlsx 用 `sheetProtection` / `workbookProtection`。pptx 根上用 `modifyProtection`，不要带 `protection`。
 
 `protection` 字段顺序：`enforced`、`edit`、`formatting`、`hasPassword`、`readOnlyRecommended`。
 

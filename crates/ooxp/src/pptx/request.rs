@@ -810,6 +810,8 @@ pub enum PptxOp {
     DeleteOle(super::ole::DeleteOleOp),
     InsertZoom(super::zoom::InsertZoomOp),
     DeleteZoom(super::zoom::DeleteZoomOp),
+    SetShowPr(super::show::SetShowPrOp),
+    SetProtection(super::protect::SetProtectionOp),
     InsertChart(InsertChartOp),
     DeleteChart(DeleteChartOp),
     SetChartTitle(SetChartTitleOp),
@@ -1022,6 +1024,20 @@ fn parse_bool_field(v: Option<&Value>, field: &str) -> Result<bool, Error> {
     }
 }
 
+fn parse_opt_bool(obj: &Map<String, Value>, i: usize, field: &str) -> Result<Option<bool>, Error> {
+    match obj.get(field) {
+        None => Ok(None),
+        Some(Value::Bool(b)) => Ok(Some(*b)),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::Boolean,
+            },
+            format!("ops[{i}].{field}"),
+        )),
+    }
+}
+
 pub fn parse_ops(ops: &[Value]) -> Result<Vec<PptxOp>, Error> {
     let mut out = Vec::new();
     for (i, op) in ops.iter().enumerate() {
@@ -1089,6 +1105,8 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<PptxOp>, Error> {
             "deleteOle" => PptxOp::DeleteOle(parse_delete_ole(obj, i)?),
             "insertZoom" => PptxOp::InsertZoom(parse_insert_zoom(obj, i)?),
             "deleteZoom" => PptxOp::DeleteZoom(parse_delete_zoom(obj, i)?),
+            "setShowPr" => PptxOp::SetShowPr(parse_set_show_pr(obj, i)?),
+            "setProtection" => PptxOp::SetProtection(parse_set_protection(obj, i)?),
             "insertChart" => PptxOp::InsertChart(parse_insert_chart(obj, i)?),
             "deleteChart" => PptxOp::DeleteChart(parse_delete_chart(obj, i)?),
             "setChartTitle" => PptxOp::SetChartTitle(parse_set_chart_title(obj, i)?),
@@ -1279,7 +1297,6 @@ fn is_foreign_op(op_name: &str) -> bool {
             | "setSmartArtWrap"
             | "insertWatermark"
             | "deleteWatermark"
-            | "setProtection"
     )
 }
 
@@ -3376,6 +3393,121 @@ fn parse_delete_zoom(obj: &Map<String, Value>, i: usize) -> Result<zoom::DeleteZ
     let id = require_id(obj, i)?;
     let target = zoom::parse_zoom_id(&id, &format!("ops[{i}].id"))?;
     Ok(zoom::DeleteZoomOp { id, target })
+}
+
+fn parse_set_show_pr(
+    obj: &Map<String, Value>,
+    i: usize,
+) -> Result<super::show::SetShowPrOp, Error> {
+    deny_keys(
+        obj,
+        i,
+        &[
+            "op",
+            "id",
+            "type",
+            "loop",
+            "showNarration",
+            "showAnimation",
+            "useTimings",
+        ],
+    )?;
+    let id = require_id(obj, i)?;
+    if id != "pptx:presentation" {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::SetShowPrNeedsPresentation,
+            },
+            format!("ops[{i}].id"),
+        ));
+    }
+    let type_name = match obj.get("type") {
+        None => None,
+        Some(Value::String(s)) if matches!(s.as_str(), "present" | "browse" | "kiosk") => {
+            Some(s.clone())
+        }
+        Some(Value::String(_)) => {
+            return Err(Error::with_path(
+                ErrorKind::InvalidShowPrType,
+                format!("ops[{i}].type"),
+            ));
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "type".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].type"),
+            ));
+        }
+    };
+    let loop_ = parse_opt_bool(obj, i, "loop")?;
+    let show_narration = parse_opt_bool(obj, i, "showNarration")?;
+    let show_animation = parse_opt_bool(obj, i, "showAnimation")?;
+    let use_timings = parse_opt_bool(obj, i, "useTimings")?;
+    if type_name.is_none()
+        && loop_.is_none()
+        && show_narration.is_none()
+        && show_animation.is_none()
+        && use_timings.is_none()
+    {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "setShowPr".into(),
+                field: "type, loop, showNarration, showAnimation, or useTimings".into(),
+            },
+            format!("ops[{i}]"),
+        ));
+    }
+    Ok(super::show::SetShowPrOp {
+        type_name,
+        loop_,
+        show_narration,
+        show_animation,
+        use_timings,
+    })
+}
+
+fn parse_set_protection(
+    obj: &Map<String, Value>,
+    i: usize,
+) -> Result<super::protect::SetProtectionOp, Error> {
+    if obj.contains_key("password") {
+        return Err(Error::with_path(
+            ErrorKind::ProtectionPassword,
+            format!("ops[{i}].password"),
+        ));
+    }
+    deny_keys(obj, i, &["op", "id", "enforced"])?;
+    let id = require_id(obj, i)?;
+    if id != "pptx:presentation" {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::SetProtectionNeedsPresentation,
+            },
+            format!("ops[{i}].id"),
+        ));
+    }
+    let enforced = match obj.get("enforced") {
+        Some(Value::Bool(b)) => *b,
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "enforced".into(),
+                    expected: TypeName::Boolean,
+                },
+                format!("ops[{i}].enforced"),
+            ));
+        }
+        None => {
+            return Err(Error::with_path(
+                ErrorKind::NeedProtectionField,
+                format!("ops[{i}]"),
+            ));
+        }
+    };
+    Ok(super::protect::SetProtectionOp { enforced })
 }
 
 fn parse_slides_array(
