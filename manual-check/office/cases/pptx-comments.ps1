@@ -378,20 +378,9 @@ if ($bytesOk) {
         if ($expBytes[$bi] -ne $mediaBytes[$bi]) { $bytesOk = $false; break }
     }
 }
-$failPic = Get-OutPath 'pptx-comments-pic-insert.pptx'
-if (Test-Path $failPic) { Remove-Item $failPic -Force }
-$rawPic = Invoke-OoxpExpectFail @{
-    schemaVersion = 1; action = 'apply'
-    path = $picSrc.Replace('\', '/')
-    output = $failPic.Replace('\', '/')
-    ops = @(@{ op = 'insertPicture'; id = $cA.id; file = $pngA.Replace('\', '/') })
-} 'pptx-comments-pic-insert'
-$picCode = ''
-try { $picCode = [string](($rawPic.Stderr | ConvertFrom-Json).error.code) } catch { $picCode = $rawPic.Stderr }
-$noPicWrite = -not (Test-Path $failPic)
 Add-Check 'pptx-Pcm6' (
-    $picCountOk -and $picIdOk -and $bytesOk -and ($picCode -eq 'InvalidId') -and $noPicWrite
-) "count=$($cPic.pictureCount) id=$($cPic.pictures[0].id) bytes=$bytesOk code=$picCode wrote=$(-not $noPicWrite)"
+    $picCountOk -and $picIdOk -and $bytesOk
+) "count=$($cPic.pictureCount) id=$($cPic.pictures[0].id) bytes=$bytesOk"
 
 function Inject-PptxCommentInk([string]$pptx, [switch]$StripText) {
     $script:InkStrip = [bool]$StripText

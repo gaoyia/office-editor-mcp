@@ -1,10 +1,10 @@
-//! 备注页图表 / SmartArt，以及批注内图 exportMedia。
+//! 备注页图表 / SmartArt，以及批注内图 inspect、exportMedia 与写入。
 
 use std::io::{Cursor, Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU32, Ordering};
 
-use ooxp::{run, ErrorCode, RunOutput};
+use ooxp::{run, RunOutput};
 use serde_json::{json, Value};
 use zip::write::SimpleFileOptions;
 use zip::{CompressionMethod, ZipArchive, ZipWriter};
@@ -244,7 +244,7 @@ fn notes_insert_smartart_not_counted_on_slide() {
 }
 
 #[test]
-fn comment_blip_inspect_export_and_reject_insert() {
+fn comment_blip_inspect_export_and_insert() {
     let src = create_deck("cm");
     let with_cm = tmp("cm-ins").with_extension("pptx");
     apply(
@@ -319,27 +319,32 @@ fn comment_blip_inspect_export_and_reject_insert() {
     .unwrap();
     assert_eq!(std::fs::read(&exported).unwrap(), PNG_1X1);
 
-    let err = apply(
+    let inserted = tmp("cm-ins-pic").with_extension("pptx");
+    apply(
         &with_cm,
-        &tmp("cm-ins-pic").with_extension("pptx"),
+        &inserted,
         json!([{
             "op": "insertPicture",
             "id": cid,
             "file": exported.to_string_lossy()
         }]),
     )
-    .unwrap_err();
-    assert_eq!(err.code(), ErrorCode::InvalidId);
+    .unwrap();
+    let after_ins = inspect(&inserted, json!({ "comments": true, "pictures": true }));
+    assert_eq!(after_ins["pictureCount"], 0);
+    assert_eq!(after_ins["slides"][0]["comments"][0]["pictureCount"], 2);
 
-    let err = apply(
+    let replaced = tmp("cm-rep").with_extension("pptx");
+    apply(
         &with_cm,
-        &tmp("cm-rep").with_extension("pptx"),
+        &replaced,
         json!([{
             "op": "replacePicture",
             "id": pic_id,
             "file": exported.to_string_lossy()
         }]),
     )
-    .unwrap_err();
-    assert_eq!(err.code(), ErrorCode::InvalidId);
+    .unwrap();
+    let after_rep = inspect(&replaced, json!({ "comments": true, "pictures": true }));
+    assert_eq!(after_rep["slides"][0]["comments"][0]["pictureCount"], 1);
 }

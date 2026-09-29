@@ -907,7 +907,11 @@ pub(crate) fn rel_target_from(source_part: &str, target_opc: &str) -> String {
     format!("{}{rest}", "../".repeat(up))
 }
 
-fn add_image_rel(pkg: &mut Package, part: &str, media_opc: &str) -> Result<String, Error> {
+pub(crate) fn add_image_rel(
+    pkg: &mut Package,
+    part: &str,
+    media_opc: &str,
+) -> Result<String, Error> {
     let mut rels = Relationships::from_package(pkg, part)?;
     let rid = rels.next_rid();
     rels.push(Relationship {
@@ -921,7 +925,7 @@ fn add_image_rel(pkg: &mut Package, part: &str, media_opc: &str) -> Result<Strin
     Ok(rid)
 }
 
-fn update_rel_target(
+pub(crate) fn update_rel_target(
     pkg: &mut Package,
     part: &str,
     rid: &str,
@@ -988,7 +992,7 @@ pub(crate) fn set_attr_local(el: &mut Element, local: &str, value: &str) {
     el.set_attr(local, value);
 }
 
-fn read_image(path: &str) -> Result<ImageFile, Error> {
+pub(crate) fn read_image(path: &str) -> Result<ImageFile, Error> {
     let p = PathBuf::from(path);
     let bytes = std::fs::read(&p).map_err(|e| io_path(e, p.clone()))?;
     classify_image(bytes, &p)

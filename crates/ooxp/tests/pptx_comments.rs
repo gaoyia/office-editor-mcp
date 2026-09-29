@@ -9,6 +9,22 @@ use serde_json::{json, Value};
 use zip::write::SimpleFileOptions;
 use zip::{CompressionMethod, ZipArchive, ZipWriter};
 
+const PNG_1X1: &[u8] = &[
+    0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52,
+    0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x02, 0x00, 0x00, 0x00, 0x90, 0x77, 0x53,
+    0xDE, 0x00, 0x00, 0x00, 0x0C, 0x49, 0x44, 0x41, 0x54, 0x08, 0xD7, 0x63, 0xF8, 0xCF, 0xC0, 0x00,
+    0x00, 0x03, 0x01, 0x01, 0x00, 0x18, 0xDD, 0x8D, 0xB4, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4E,
+    0x44, 0xAE, 0x42, 0x60, 0x82,
+];
+
+const PNG_1X1_B: &[u8] = &[
+    0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52,
+    0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x02, 0x00, 0x00, 0x00, 0x90, 0x77, 0x53,
+    0xDE, 0x00, 0x00, 0x00, 0x0C, 0x49, 0x44, 0x41, 0x54, 0x08, 0xD7, 0x63, 0x60, 0x60, 0x60, 0x00,
+    0x00, 0x00, 0x04, 0x00, 0x01, 0xA3, 0x0A, 0x15, 0xE3, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4E,
+    0x44, 0xAE, 0x42, 0x60, 0x82,
+];
+
 static SEQ: AtomicU32 = AtomicU32::new(0);
 
 fn tmp_dir() -> PathBuf {
@@ -88,6 +104,29 @@ fn inspect_comments(path: &Path) -> Value {
         panic!("inspect 应返回树");
     };
     tree
+}
+
+fn inspect_comment_pics(path: &Path) -> Value {
+    let RunOutput::Inspect(tree) = run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "inspect",
+            "path": path.to_string_lossy(),
+            "scope": { "comments": true, "pictures": true }
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap() else {
+        panic!("inspect 应返回树");
+    };
+    tree
+}
+
+fn write_png(tag: &str, bytes: &[u8]) -> PathBuf {
+    let path = tmp(tag).with_extension("png");
+    std::fs::write(&path, bytes).unwrap();
+    path
 }
 
 fn object_keys(v: &Value) -> Vec<&str> {
@@ -452,7 +491,7 @@ fn reject_notes_id_and_foreign_ops() {
         }]),
     )
     .unwrap_err();
-    assert_eq!(err.code(), ErrorCode::InvalidId);
+    assert_eq!(err.code(), ErrorCode::IdNotFound);
 
     let xlsx = tmp("book").with_extension("xlsx");
     run(
@@ -538,6 +577,14 @@ fn ink_allows_meta_and_done_rejects_text() {
     )
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::NotImplemented);
+    let png = write_png("ink-pic", PNG_1X1);
+    let err = apply(
+        &with,
+        &tmp("ink-pic").with_extension("pptx"),
+        json!([{ "op": "insertPicture", "id": cid, "file": png.to_string_lossy() }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::NotImplemented);
     let err = apply(
         &with,
         &tmp("ink-reply").with_extension("pptx"),
@@ -562,4 +609,162 @@ fn ink_allows_meta_and_done_rejects_text() {
     assert_eq!(art["author"], "Ink2");
     assert_eq!(art["initials"], "K");
     assert_eq!(art["done"], true);
+}
+
+#[test]
+fn insert_replace_delete_comment_picture() {
+    let src = create_deck("cm-pic");
+    let with = tmp("cm-in").with_extension("pptx");
+    insert_one(&src, &with, "批注甲");
+    let tree0 = inspect_comments(&with);
+    let cid = tree0["slides"][0]["comments"][0]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let png_a = write_png("a", PNG_1X1);
+    let inserted = tmp("cm-pic-ins").with_extension("pptx");
+    apply(
+        &with,
+        &inserted,
+        json!([{ "op": "insertPicture", "id": cid, "file": png_a.to_string_lossy() }]),
+    )
+    .unwrap();
+    let tree = inspect_comment_pics(&inserted);
+    assert_eq!(tree0["pictureCount"], 0);
+    assert_eq!(tree["pictureCount"], 0);
+    assert_eq!(tree["slides"][0]["pictureCount"], 0);
+    let cm = &tree["slides"][0]["comments"][0];
+    assert_eq!(cm["pictureCount"], 1);
+    let pic_id = cm["pictures"][0]["id"].as_str().unwrap().to_string();
+    assert_eq!(pic_id, format!("{cid}/pic:1"));
+    let err = apply(
+        &inserted,
+        &tmp("cm-pic-on-pic").with_extension("pptx"),
+        json!([{ "op": "insertPicture", "id": pic_id, "file": png_a.to_string_lossy() }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidId);
+    let xml = part_names(&inserted)
+        .into_iter()
+        .find(|n| n.contains("/comments/") && n.ends_with(".xml") && !n.contains("_rels"))
+        .expect("应有批注部件");
+    let body = part_text(&inserted, &xml);
+    assert!(body.contains("</p188:txBody><a:blip r:embed="));
+    assert!(part_names(&inserted)
+        .iter()
+        .any(|n| n.starts_with("ppt/media/image") && n.ends_with(".png")));
+    let exported = tmp("cm-exp").with_extension("png");
+    run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "exportMedia",
+            "path": inserted.to_string_lossy(),
+            "id": pic_id,
+            "output": exported.to_string_lossy()
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap();
+    assert_eq!(std::fs::read(&exported).unwrap(), PNG_1X1);
+
+    let png_b = write_png("b", PNG_1X1_B);
+    let replaced = tmp("cm-pic-rep").with_extension("pptx");
+    apply(
+        &inserted,
+        &replaced,
+        json!([{ "op": "replacePicture", "id": pic_id, "file": png_b.to_string_lossy() }]),
+    )
+    .unwrap();
+    let exported_b = tmp("cm-exp-b").with_extension("png");
+    run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "exportMedia",
+            "path": replaced.to_string_lossy(),
+            "id": pic_id,
+            "output": exported_b.to_string_lossy()
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap();
+    assert_eq!(std::fs::read(&exported_b).unwrap(), PNG_1X1_B);
+
+    let err = apply(
+        &replaced,
+        &tmp("cm-sz").with_extension("pptx"),
+        json!([{ "op": "setPictureSize", "id": pic_id, "cx": 100, "cy": 100 }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidId);
+    let err = apply(
+        &replaced,
+        &tmp("cm-pos").with_extension("pptx"),
+        json!([{ "op": "setPicturePos", "id": pic_id, "x": 1, "y": 1 }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidId);
+    let err = apply(
+        &with,
+        &tmp("cm-xy").with_extension("pptx"),
+        json!([{
+            "op": "insertPicture",
+            "id": cid,
+            "file": png_a.to_string_lossy(),
+            "x": 1,
+            "y": 1
+        }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+
+    let deleted = tmp("cm-pic-del").with_extension("pptx");
+    apply(
+        &replaced,
+        &deleted,
+        json!([{ "op": "deletePicture", "id": pic_id }]),
+    )
+    .unwrap();
+    let after = inspect_comment_pics(&deleted);
+    assert_eq!(after["slides"][0]["comments"][0]["pictureCount"], 0);
+    assert_eq!(after["slides"][0]["comments"][0]["text"], "批注甲");
+    assert!(!part_names(&deleted)
+        .iter()
+        .any(|n| n.starts_with("ppt/media/")));
+}
+
+#[test]
+fn insert_picture_on_reply() {
+    let src = create_deck("cm-reply-pic");
+    let inserted = tmp("cm-r").with_extension("pptx");
+    insert_one(&src, &inserted, "批注甲");
+    let cid = inspect_comments(&inserted)["slides"][0]["comments"][0]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let replied = tmp("cm-r2").with_extension("pptx");
+    apply(
+        &inserted,
+        &replied,
+        json!([{ "op": "replyComment", "id": cid, "text": "回" }]),
+    )
+    .unwrap();
+    let rid = inspect_comments(&replied)["slides"][0]["comments"][0]["replies"][0]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let png = write_png("r", PNG_1X1);
+    let out = tmp("cm-r-pic").with_extension("pptx");
+    apply(
+        &replied,
+        &out,
+        json!([{ "op": "insertPicture", "id": rid, "file": png.to_string_lossy() }]),
+    )
+    .unwrap();
+    let tree = inspect_comment_pics(&out);
+    let reply = &tree["slides"][0]["comments"][0]["replies"][0];
+    assert_eq!(reply["pictureCount"], 1);
+    assert_eq!(tree["slides"][0]["comments"][0]["pictureCount"], 0);
+    assert_eq!(reply["pictures"][0]["id"], format!("{rid}/pic:1"));
 }

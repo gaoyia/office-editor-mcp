@@ -116,7 +116,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
                 "Slide id must include /pic:… (that id alone is not a picture)".into()
             }
             IdReason::CommentPicExportOnly => {
-                "comment pictures can only be used with exportMedia".into()
+                "comment pictures have no canvas size or position".into()
             }
             IdReason::SlideMediaForm => {
                 "pptx video / audio id must be slide:N/video:… or slide:N/audio:…".into()

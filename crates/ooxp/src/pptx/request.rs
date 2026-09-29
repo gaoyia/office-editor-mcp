@@ -325,6 +325,7 @@ pub struct ReplacePictureOp {
 pub struct InsertPictureOp {
     pub slide: usize,
     pub on_notes: bool,
+    pub comment: Option<comments::CommentTarget>,
     pub file: String,
     pub x: Option<i64>,
     pub y: Option<i64>,
@@ -3168,21 +3169,27 @@ fn parse_replace_pic(obj: &Map<String, Value>, i: usize) -> Result<ReplacePictur
     let id = require_id(obj, i)?;
     let target = picture::parse_pic_id(&id, &format!("ops[{i}].id"))?;
     let file = require_file(obj, i, "replacePicture")?;
-    picture::reject_comment_pic(&target, &format!("ops[{i}].id"))?;
     Ok(ReplacePictureOp { id, target, file })
 }
 
 fn parse_insert_pic(obj: &Map<String, Value>, i: usize) -> Result<InsertPictureOp, Error> {
-    deny_keys(obj, i, &["op", "id", "file", "x", "y", "cx", "cy"])?;
     let id = require_id(obj, i)?;
     if id.contains("/comment:") {
-        return Err(Error::with_path(
-            ErrorKind::InvalidId {
-                reason: IdReason::CommentPicExportOnly,
-            },
-            format!("ops[{i}].id"),
-        ));
+        deny_keys(obj, i, &["op", "id", "file"])?;
+        let target = comments::parse_comment_id(&id, &format!("ops[{i}].id"))?;
+        let file = require_file(obj, i, "insertPicture")?;
+        return Ok(InsertPictureOp {
+            slide: target.slide,
+            on_notes: false,
+            comment: Some(target),
+            file,
+            x: None,
+            y: None,
+            cx: None,
+            cy: None,
+        });
     }
+    deny_keys(obj, i, &["op", "id", "file", "x", "y", "cx", "cy"])?;
     let (slide, on_notes) =
         picture::parse_insert_slide_or_notes(&id, i, crate::error::IdReason::InsertNeedsSlide)?;
     let file = require_file(obj, i, "insertPicture")?;
@@ -3211,6 +3218,7 @@ fn parse_insert_pic(obj: &Map<String, Value>, i: usize) -> Result<InsertPictureO
     Ok(InsertPictureOp {
         slide,
         on_notes,
+        comment: None,
         file,
         x,
         y,
@@ -3223,7 +3231,6 @@ fn parse_delete_pic(obj: &Map<String, Value>, i: usize) -> Result<DeletePictureO
     deny_keys(obj, i, &["op", "id"])?;
     let id = require_id(obj, i)?;
     let target = picture::parse_pic_id(&id, &format!("ops[{i}].id"))?;
-    picture::reject_comment_pic(&target, &format!("ops[{i}].id"))?;
     Ok(DeletePictureOp { id, target })
 }
 
@@ -5150,6 +5157,7 @@ pub(crate) fn parse_create_picture(
     Ok(InsertPictureOp {
         slide,
         on_notes: false,
+        comment: None,
         file,
         x,
         y,

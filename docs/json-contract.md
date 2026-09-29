@@ -280,7 +280,7 @@ pptx 的放映类型、循环与旁白开关用 `setShowPr`，见 [json-contract
 | 字段 | 含义 |
 | --- | --- |
 | `op` | 必须是 `"replacePicture"` |
-| `id` | 图 id：docx 为 `{容器}/pic:…` 或 `{段落 id}/pic:…`；xlsx 为 `sheet:{name}/pic:…`；pptx 为 `slide:{n}/pic:…`、`slide:{n}/notes/pic:…` 或 `{批注 id}/pic:{k}`。pptx 批注内图 id 只能用于 `exportMedia`，对本 op 报 `InvalidId` |
+| `id` | 图 id：docx 为 `{容器}/pic:…` 或 `{段落 id}/pic:…`；xlsx 为 `sheet:{name}/pic:…`；pptx 为 `slide:{n}/pic:…`、`slide:{n}/notes/pic:…` 或 `{批注 id}/pic:{k}` |
 | `file` | 本地图片路径，与信封 `path` 一样认正斜杠和反斜杠。不把 base64 放进领域 JSON |
 
 找不到该图报 `IdNotFound`。读不到 `file` 报 `Io`。文件不是本库认的位图（见下）报 `InvalidField`。
@@ -304,7 +304,7 @@ pptx 的放映类型、循环与旁白开关用 `setShowPr`，见 [json-contract
 | 字段 | 含义 |
 | --- | --- |
 | `op` | 必须是 `"insertPicture"` |
-| `id` | docx：段落 id（正文用 `para:…` / `para:index:{n}`，页眉页脚用 `{容器}/para:…`）。xlsx：工作表 id `sheet:{name}`，或页眉槽位 id `sheet:{name}/hf:{kind}:{side}`。pptx：页 id `slide:{n}`，或备注容器 id `slide:{n}/notes` |
+| `id` | docx：段落 id（正文用 `para:…` / `para:index:{n}`，页眉页脚用 `{容器}/para:…`）。xlsx：工作表 id `sheet:{name}`，或页眉槽位 id `sheet:{name}/hf:{kind}:{side}`。pptx：页 id `slide:{n}`、备注容器 id `slide:{n}/notes`，或批注 / 回复 id |
 | `file` | 本地图片路径 |
 | `cx` | 可选。宽度，EMU，正整数 |
 | `cy` | 可选。高度，EMU，正整数 |
@@ -320,7 +320,7 @@ docx：找不到该段落报 `IdNotFound`。`id` 不是段落 id 报 `InvalidId`
 
 xlsx：找不到该表报 `IdNotFound`。`id` 不是 `sheet:{name}` 也不是页眉槽位 id 报 `InvalidId`。该表不是 `worksheet` 报 `InvalidField`。往工作表插图必须给 `from`，否则报 `MissingField`。`from` / `to` 不是合法 A1 报 `InvalidRange`。`anchor` 为 `twoCell` 却没有 `to` 报 `InvalidField`。`anchor` 为 `absolute` 或不认识报 `InvalidField`。`cx` / `cy` 规则与 docx 相同；`twoCell` 也要写 `xdr:pic` 里的 `a:ext`（给 Excel 一个内部尺寸），显示尺寸仍由起止格决定。没有 drawing 部件则新建 `/xl/drawings/drawingN.xml`、工作表关系、`[Content_Types].xml` 的 Override，并在工作表上写 `<drawing r:id="…"/>`。往页眉槽位插图时不写 `<drawing>`，改写或新建 `<drawingHF r:id="…"/>`。新媒体写入 `/xl/media/imageN.*`。`xdr:cNvPr/@id` 取该表工作表 drawing 与 `drawingHF` 里已有 `cNvPr` 的最大整数加 1。工作表图至少为 1。页眉图至少为 2：Excel 16.0 若 `drawingHF` 的 `cho` / `lho` 等属性指向 id 1，会拒绝打开该工作簿。锚点必须带空的 `xdr:clientData`（§20.5.2.3）。
 
-pptx：找不到该页报 `IdNotFound`。`id` 必须是 `slide:{n}` 或 `slide:{n}/notes`。对图 id、形状 id、批注 id、批注内图 id 或 `pptx:presentation` 发此 op 报 `InvalidId`。`cx` / `cy` 规则与 docx 相同。`x` / `y` 必须成对出现或成对省略；只给一个时报 `InvalidField`。缺坐标则放到该宿主空白处，不要叠在 `(0,0)`：往幻灯片插时读取 `presentation.xml` 的 `p:sldSz`；往备注插时读取 `p:notesSz`（没有则用 `6858000` × `9144000`）。扫描该宿主已有 `p:sp` / `p:pic` / `p:graphicFrame` / 嵌套 `p:grpSp` 的 `a:xfrm`，优先放到最右侧空隙，放不下再放到下方。`kind` / `wrap` / `from` / `to` / `anchor` 以及 xlsx 偏移字段出现报 `InvalidField`。写入该宿主 `p:spTree` 一个新的 `p:pic`（带 `a:blip`），关系指向 `/ppt/media/imageN.*`。`p:cNvPr/@id` 取该宿主已有全部 `cNvPr`（`sp` / `pic` / `graphicFrame` / 组合，含 `spTree` 自己的 `id="1"`）的最大整数加 1，至少为 2。`id` 为 `slide:{n}/notes` 且该页还没有 notesSlide 时，按 `setNotesText` 同一套规则新建最小备注页再插图。对批注 id 发此 op 报 `InvalidId`。
+pptx：找不到该页报 `IdNotFound`。`id` 必须是 `slide:{n}`、`slide:{n}/notes`，或批注 / 回复 id（`slide:{n}/comment:{guid}` 或 `{批注 id}/reply:{guid}`）。对图 id、形状 id、批注内图 id 或 `pptx:presentation` 发此 op 报 `InvalidId`。往幻灯片或备注插时：`cx` / `cy` 规则与 docx 相同；`x` / `y` 必须成对出现或成对省略；只给一个时报 `InvalidField`。缺坐标则放到该宿主空白处，不要叠在 `(0,0)`：往幻灯片插时读取 `presentation.xml` 的 `p:sldSz`；往备注插时读取 `p:notesSz`（没有则用 `6858000` × `9144000`）。扫描该宿主已有 `p:sp` / `p:pic` / `p:graphicFrame` / 嵌套 `p:grpSp` 的 `a:xfrm`，优先放到最右侧空隙，放不下再放到下方。`kind` / `wrap` / `from` / `to` / `anchor` 以及 xlsx 偏移字段出现报 `InvalidField`。写入该宿主 `p:spTree` 一个新的 `p:pic`（带 `a:blip`），关系指向 `/ppt/media/imageN.*`。`p:cNvPr/@id` 取该宿主已有全部 `cNvPr`（`sp` / `pic` / `graphicFrame` / 组合，含 `spTree` 自己的 `id="1"`）的最大整数加 1，至少为 2。`id` 为 `slide:{n}/notes` 且该页还没有 notesSlide 时，按 `setNotesText` 同一套规则新建最小备注页再插图。往批注或回复插时：不要 `x` / `y` / `cx` / `cy`（出现报未知字段）。找不到该批注报 `IdNotFound`。写入该 `p188:cm` 或 `p188:reply`：插在 `txBody` 之后、`extLst` 之前一个 `a:blip r:embed="…"`（没有 `extLst` 则放在该宿主末尾）。comments 部件 `.rels` 补一条 image 关系，媒体写入 `/ppt/media/imageN.*`。不写 `p:pic`，不写尺寸位置。不并进幻灯片 `pictureCount`。对 `kind` 为 `ink` 的批注或回复报 `NotImplemented`。PowerPoint 16.0：COM 批注对象没有插图方法；另存接受这种 `a:blip`，标题栏无 Repair。
 
 ### deletePicture
 
@@ -340,7 +340,7 @@ pptx：找不到该页报 `IdNotFound`。`id` 必须是 `slide:{n}` 或 `slide:{
 | `op` | 必须是 `"deletePicture"` |
 | `id` | 图 id |
 
-找不到该图报 `IdNotFound`。docx：按图 id 删掉对应的 `w:drawing`。若该图在 `mc:AlternateContent` 的 Choice 里，整段 `AlternateContent` 删掉（避免 Fallback 的 VML 把图留住）。所在 `w:r` 若删完后只剩 `w:rPr` 或空，把该 run 也删掉。xlsx：按图 id 删掉包含该 `xdr:pic` 的整个锚点。工作表 drawing 删空后去掉该部件、工作表上的 `<drawing>` 和对应关系。`drawingHF` 删空后去掉该部件、工作表上的 `<drawingHF>` 和对应关系；同时清掉 `drawingHF` 上指向该 `cNvPr` id 的左/中/右属性。pptx：按图 id 删掉对应的 `p:pic`。重新解析包内关系之后，若该媒体与该关系再无人引用，删掉媒体部件、关系条目和对应内容类型。
+找不到该图报 `IdNotFound`。docx：按图 id 删掉对应的 `w:drawing`。若该图在 `mc:AlternateContent` 的 Choice 里，整段 `AlternateContent` 删掉（避免 Fallback 的 VML 把图留住）。所在 `w:r` 若删完后只剩 `w:rPr` 或空，把该 run 也删掉。xlsx：按图 id 删掉包含该 `xdr:pic` 的整个锚点。工作表 drawing 删空后去掉该部件、工作表上的 `<drawing>` 和对应关系。`drawingHF` 删空后去掉该部件、工作表上的 `<drawingHF>` 和对应关系；同时清掉 `drawingHF` 上指向该 `cNvPr` id 的左/中/右属性。pptx：按图 id 删掉对应的 `p:pic`。批注内图删掉对应的 `a:blip`，`p188:cm` / `p188:reply` 与可见文字留下。重新解析包内关系之后，若该媒体与该关系再无人引用，删掉媒体部件、关系条目和对应内容类型。
 
 ### setPictureSize
 
@@ -364,7 +364,7 @@ pptx：找不到该页报 `IdNotFound`。`id` 必须是 `slide:{n}` 或 `slide:{
 | `to` | xlsx `twoCell` 时必须。右下角 A1。`oneCell` / `absolute` 上出现报 `InvalidField` |
 | `toOffX` / `toOffY` | 可选。只随 xlsx `twoCell` 的 `to` 改右下角偏移。省略则留下当前值 |
 
-`cx` 与 `cy` 至少给一个，否则报 `InvalidField`（xlsx `twoCell` 见下）。`cx` / `cy` 与 `to` 不能同时出现。只改被点名的那一侧，另一侧保持原值。docx：写入 `wp:extent`；若 `pic:spPr/a:xfrm/a:ext` 存在，一并改。xlsx：`oneCell` 或 `absolute` 时写入 `xdr:ext`；若 `xdr:spPr/a:xfrm/a:ext` 存在，一并改。`twoCell` 不认 `cx` / `cy`（出现报 `InvalidField`），必须给 `to`（右下角 A1）；可选 `toOffX` / `toOffY`（EMU，非负，省略则留下当前偏移）。不按列宽行高去换算 EMU。docx / pptx 上出现 `to` / `toOffX` / `toOffY` 报 `InvalidField`。pptx：写入 `p:spPr/a:xfrm/a:ext`。找不到该图报 `IdNotFound`。
+`cx` 与 `cy` 至少给一个，否则报 `InvalidField`（xlsx `twoCell` 见下）。`cx` / `cy` 与 `to` 不能同时出现。只改被点名的那一侧，另一侧保持原值。docx：写入 `wp:extent`；若 `pic:spPr/a:xfrm/a:ext` 存在，一并改。xlsx：`oneCell` 或 `absolute` 时写入 `xdr:ext`；若 `xdr:spPr/a:xfrm/a:ext` 存在，一并改。`twoCell` 不认 `cx` / `cy`（出现报 `InvalidField`），必须给 `to`（右下角 A1）；可选 `toOffX` / `toOffY`（EMU，非负，省略则留下当前偏移）。不按列宽行高去换算 EMU。docx / pptx 上出现 `to` / `toOffX` / `toOffY` 报 `InvalidField`。pptx：写入 `p:spPr/a:xfrm/a:ext`。找不到该图报 `IdNotFound`。批注内图没有画布 `xfrm`，对本 op 报 `InvalidId`。
 
 `setPictureWrap` 见 [docx](json-contract-docx.md#setpicturewrap)。`setPictureAnchor` 见 [xlsx](json-contract-xlsx.md#setpictureanchor)。`setPicturePos` 见 [pptx](json-contract-pptx.md#setpicturepos)。
 

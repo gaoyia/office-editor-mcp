@@ -67,7 +67,7 @@ pub(crate) enum IdReason {
     SlidePicPrefix,
     /// 页 id，缺少 /pic:…
     SlidePicContainer,
-    /// 批注内图只能 exportMedia
+    /// 批注内图没有画布尺寸和位置
     CommentPicExportOnly,
     /// pptx 视频 / 音频 id 必须是 slide:N/video:… 或 slide:N/audio:…
     SlideMediaForm,

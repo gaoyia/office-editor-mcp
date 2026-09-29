@@ -11,8 +11,8 @@ use crate::xml::{self, Document, Element, Node};
 
 use super::picture;
 use super::request::{
-    DeleteCommentOp, InsertCommentOp, ReplyCommentOp, SetCommentDoneOp, SetCommentMetaOp,
-    SetCommentTextOp,
+    DeleteCommentOp, DeletePictureOp, InsertCommentOp, InsertPictureOp, ReplacePictureOp,
+    ReplyCommentOp, SetCommentDoneOp, SetCommentMetaOp, SetCommentTextOp,
 };
 use super::shape::{self, SlideMeta};
 use super::{ExportedMedia, DML_NS, REL_NS};
@@ -330,6 +330,285 @@ pub fn export_pic(
         bytes: media_bytes,
         content_type,
     })
+}
+
+fn comment_id_of(target: &CommentTarget) -> String {
+    match &target.key {
+        CommentKey::Top(g) => format!("slide:{}/comment:{g}", target.slide),
+        CommentKey::Reply { parent, reply } => {
+            format!("slide:{}/comment:{parent}/reply:{reply}", target.slide)
+        }
+    }
+}
+
+fn key_from_pic(cm: &picture::CommentPic) -> CommentKey {
+    match &cm.reply {
+        None => CommentKey::Top(cm.guid.clone()),
+        Some(r) => CommentKey::Reply {
+            parent: cm.guid.clone(),
+            reply: r.clone(),
+        },
+    }
+}
+
+fn skip_reply_lst(key: &CommentKey) -> bool {
+    matches!(key, CommentKey::Top(_))
+}
+
+fn insert_blip(host: &mut Element, rid: &str) {
+    let blip = Element::new("a:blip").with_attr("r:embed", rid);
+    if let Some(i) = host
+        .children
+        .iter()
+        .position(|n| matches!(n, Node::Element(e) if e.local_name() == "extLst"))
+    {
+        host.children.insert(i, Node::Element(blip));
+    } else {
+        host.push_element(blip);
+    }
+}
+
+fn remove_nth_blip(host: &mut Element, skip: bool, index: usize) -> Option<String> {
+    let mut remaining = index;
+    remove_nth_blip_walk(host, skip, &mut remaining)
+}
+
+fn remove_nth_blip_walk(el: &mut Element, skip: bool, remaining: &mut usize) -> Option<String> {
+    if skip && el.local_name() == "replyLst" {
+        return None;
+    }
+    let mut i = 0;
+    while i < el.children.len() {
+        let is_target = matches!(
+            &el.children[i],
+            Node::Element(child)
+                if child.local_name() == "blip"
+                    && child.attr_local("embed").is_some_and(|s| !s.is_empty())
+        );
+        if is_target {
+            if *remaining == 0 {
+                let rid = match &el.children[i] {
+                    Node::Element(child) => child.attr_local("embed").unwrap_or("").to_string(),
+                    _ => String::new(),
+                };
+                el.children.remove(i);
+                return Some(rid);
+            }
+            *remaining = remaining.saturating_sub(1);
+            i += 1;
+            continue;
+        }
+        if let Node::Element(child) = &mut el.children[i] {
+            if let Some(rid) = remove_nth_blip_walk(child, skip, remaining) {
+                return Some(rid);
+            }
+        }
+        i += 1;
+    }
+    None
+}
+
+fn blip_still_on_host(host: &Element, skip: bool, rid: &str) -> bool {
+    collect_embed_blips(host, skip)
+        .iter()
+        .any(|b| b.attr_local("embed") == Some(rid))
+}
+
+pub fn insert_picture(
+    pkg: &mut Package,
+    meta: &SlideMeta,
+    op: &InsertPictureOp,
+    op_index: usize,
+) -> Result<(), Error> {
+    let target = op.comment.as_ref().ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::PptxCommentForm,
+            },
+            format!("ops[{op_index}].id"),
+        )
+    })?;
+    let part = comments_part(pkg, &meta.part)?.ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::CommentNotFound {
+                id: comment_id_of(target),
+            },
+            format!("ops[{op_index}].id"),
+        )
+    })?;
+    let mut doc = xml::parse(pkg.get(&part)?)?;
+    {
+        let host = find_host_mut(&mut doc.root, &target.key).ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::CommentNotFound {
+                    id: comment_id_of(target),
+                },
+                format!("ops[{op_index}].id"),
+            )
+        })?;
+        reject_ink(host, &comment_id_of(target), op_index)?;
+    }
+    let image = picture::read_image(&op.file).map_err(|e| e.at(format!("ops[{op_index}].file")))?;
+    let media = picture::next_media_part(pkg, &image.ext);
+    pkg.set(&media, image.bytes)?;
+    let rid = picture::add_image_rel(pkg, &part, &media)?;
+    let mut cts = ContentTypes::from_package(pkg)?;
+    cts.ensure_default(&image.ext, &image.content_type);
+    cts.write_to(pkg)?;
+    picture::ensure_xmlns(&mut doc.root, "r", REL_NS);
+    picture::ensure_xmlns(&mut doc.root, "a", DML_NS);
+    let host = find_host_mut(&mut doc.root, &target.key).ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::CommentNotFound {
+                id: comment_id_of(target),
+            },
+            format!("ops[{op_index}].id"),
+        )
+    })?;
+    insert_blip(host, &rid);
+    pkg.set(&part, doc.to_bytes()?)?;
+    Ok(())
+}
+
+pub fn replace_picture(
+    pkg: &mut Package,
+    meta: &SlideMeta,
+    op: &ReplacePictureOp,
+    op_index: usize,
+) -> Result<(), Error> {
+    let cm = op.target.comment.as_ref().ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::SlidePicPrefix,
+            },
+            format!("ops[{op_index}].id"),
+        )
+    })?;
+    let key = key_from_pic(cm);
+    let skip = skip_reply_lst(&key);
+    let k = match &op.target.key {
+        picture::PicKey::Index(k) => *k,
+        picture::PicKey::Id(_) => {
+            return Err(Error::with_path(
+                ErrorKind::PictureNotFound { id: op.id.clone() },
+                format!("ops[{op_index}].id"),
+            ));
+        }
+    };
+    if k < 1 {
+        return Err(Error::with_path(
+            ErrorKind::PictureNotFound { id: op.id.clone() },
+            format!("ops[{op_index}].id"),
+        ));
+    }
+    let part = comments_part(pkg, &meta.part)?.ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::PictureNotFound { id: op.id.clone() },
+            format!("ops[{op_index}].id"),
+        )
+    })?;
+    let doc = xml::parse(pkg.get(&part)?)?;
+    let host = find_comment_host(&doc.root, cm).ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::PictureNotFound { id: op.id.clone() },
+            format!("ops[{op_index}].id"),
+        )
+    })?;
+    let blips = collect_embed_blips(host, skip);
+    let blip = blips.get(k - 1).ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::PictureNotFound { id: op.id.clone() },
+            format!("ops[{op_index}].id"),
+        )
+    })?;
+    let rid = blip.attr_local("embed").ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::PictureNotFound { id: op.id.clone() },
+            format!("ops[{op_index}].id"),
+        )
+    })?;
+    let old_media = opc::resolve_id(pkg, &part, rid)?;
+    let image = picture::read_image(&op.file).map_err(|e| e.at(format!("ops[{op_index}].file")))?;
+    let media = picture::next_media_part(pkg, &image.ext);
+    pkg.set(&media, image.bytes)?;
+    picture::update_rel_target(pkg, &part, rid, &media)?;
+    let mut cts = ContentTypes::from_package(pkg)?;
+    cts.ensure_default(&image.ext, &image.content_type);
+    cts.write_to(pkg)?;
+    if old_media != media && !picture::media_still_used(pkg, &old_media)? {
+        pkg.remove(&old_media);
+    }
+    Ok(())
+}
+
+pub fn delete_picture(
+    pkg: &mut Package,
+    meta: &SlideMeta,
+    op: &DeletePictureOp,
+    op_index: usize,
+) -> Result<(), Error> {
+    let cm = op.target.comment.as_ref().ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::SlidePicPrefix,
+            },
+            format!("ops[{op_index}].id"),
+        )
+    })?;
+    let key = key_from_pic(cm);
+    let skip = skip_reply_lst(&key);
+    let k = match &op.target.key {
+        picture::PicKey::Index(k) => *k,
+        picture::PicKey::Id(_) => {
+            return Err(Error::with_path(
+                ErrorKind::PictureNotFound { id: op.id.clone() },
+                format!("ops[{op_index}].id"),
+            ));
+        }
+    };
+    if k < 1 {
+        return Err(Error::with_path(
+            ErrorKind::PictureNotFound { id: op.id.clone() },
+            format!("ops[{op_index}].id"),
+        ));
+    }
+    let part = comments_part(pkg, &meta.part)?.ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::PictureNotFound { id: op.id.clone() },
+            format!("ops[{op_index}].id"),
+        )
+    })?;
+    let mut doc = xml::parse(pkg.get(&part)?)?;
+    let rid = {
+        let host = find_host_mut(&mut doc.root, &key).ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::PictureNotFound { id: op.id.clone() },
+                format!("ops[{op_index}].id"),
+            )
+        })?;
+        remove_nth_blip(host, skip, k - 1).ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::PictureNotFound { id: op.id.clone() },
+                format!("ops[{op_index}].id"),
+            )
+        })?
+    };
+    let old_media = opc::resolve_id(pkg, &part, &rid).ok();
+    let still = find_host_mut(&mut doc.root, &key)
+        .map(|host| blip_still_on_host(host, skip, &rid))
+        .unwrap_or(false);
+    if !still {
+        let mut rels = Relationships::from_package(pkg, &part)?;
+        rels.remove_by_id(&rid);
+        rels.write_to(pkg, &part)?;
+    }
+    pkg.set(&part, doc.to_bytes()?)?;
+    if let Some(old) = old_media {
+        if !picture::media_still_used(pkg, &old)? {
+            pkg.remove(&old);
+        }
+    }
+    Ok(())
 }
 
 fn find_comment_host<'a>(root: &'a Element, cm: &picture::CommentPic) -> Option<&'a Element> {

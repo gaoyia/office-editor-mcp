@@ -320,6 +320,10 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                         format!("ops[{i}].id"),
                     )
                 })?;
+                if op.target.comment.is_some() {
+                    comments::replace_picture(&mut pkg, meta, op, i)?;
+                    continue;
+                }
                 let part = pic_host_part(
                     &pkg,
                     meta,
@@ -337,6 +341,10 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                         format!("ops[{i}].id"),
                     )
                 })?;
+                if op.comment.is_some() {
+                    comments::insert_picture(&mut pkg, meta, op, i)?;
+                    continue;
+                }
                 let part = if op.on_notes {
                     notes::ensure_notes_slide(&mut pkg, &pres_part, &mut pres, &meta.part)?
                 } else {
@@ -362,6 +370,10 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                         format!("ops[{i}].id"),
                     )
                 })?;
+                if op.target.comment.is_some() {
+                    comments::delete_picture(&mut pkg, meta, op, i)?;
+                    continue;
+                }
                 let part = pic_host_part(
                     &pkg,
                     meta,

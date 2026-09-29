@@ -105,7 +105,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
                 "页 id 必须带 /pic:…（该 id 本身不是图）".into()
             }
             IdReason::CommentPicExportOnly => {
-                "批注内图只能 exportMedia，不能插、换、删或改尺寸位置".into()
+                "批注内图没有画布尺寸和位置，不能 setPictureSize / setPicturePos".into()
             }
             IdReason::SlideMediaForm => {
                 "pptx 视频 / 音频 id 必须是 slide:N/video:… 或 slide:N/audio:…".into()
