@@ -6,6 +6,7 @@ mod comments;
 mod connector;
 mod create;
 mod custom_show;
+mod field;
 mod group;
 mod handout;
 mod hyperlink;

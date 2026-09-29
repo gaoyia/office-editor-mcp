@@ -502,6 +502,12 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::InsertFieldNeedsPara => {
                 "insertField id must be a body or header/footer paragraph id".into()
             }
+            IdReason::PptxFieldForm => {
+                "pptx field id must be slide:N/fld:GUID or slide:N/fld:index:K".into()
+            }
+            IdReason::InsertFieldNeedsShape => {
+                "pptx insertField id must be a slide text shape id".into()
+            }
             IdReason::InsertNumberingNeedsDocument => {
                 "insertNumbering id must be docx:document".into()
             }
@@ -749,6 +755,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::ZoomNotFound { id } => format!("Zoom not found: {id}"),
         ErrorKind::InvalidZoomType => "type must be slide or section".into(),
         ErrorKind::InvalidShowPrType => "type must be present, browse, or kiosk".into(),
+        ErrorKind::InvalidFldType => {
+            "type must be slidenum, datetime, or datetime1–datetime13".into()
+        }
         ErrorKind::ZoomTargetSelf => "insertZoom target cannot be the host slide".into(),
         ErrorKind::WatermarkNotFound { id } => format!("Watermark not found: {id}"),
         ErrorKind::WatermarkNeedTextOrFile => {

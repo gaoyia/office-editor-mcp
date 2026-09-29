@@ -406,7 +406,7 @@ fn strip_para(p: &mut Element) {
 }
 
 /// 清完之后只剩 `a:pPr` / `a:endParaRPr` 的段删掉。
-/// 含 `a:r`、`a:br`、`a:fld` 或其它不认识的子元素的段留下（域按契约第 8 条不清）。
+/// 含 `a:r`、`a:br`、`a:fld` 或其它不认识的子元素的段留下（未点名的域不清）。
 /// `CT_TextBody` 至少留一段（§A.4，`minOccurs="1"`）；从后往前删，优先保住前面的写入段。
 fn prune_empty_paras(el: &mut Element) {
     if el.local_name() == "AlternateContent" {

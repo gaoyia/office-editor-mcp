@@ -8,6 +8,7 @@ use super::chart;
 use super::comments;
 use super::connector;
 use super::custom_show;
+use super::field;
 use super::group;
 use super::handout;
 use super::hyperlink;
@@ -1166,6 +1167,44 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                 let part = meta.part.clone();
                 let mut doc = xml::parse(pkg.get(&part)?)?;
                 hyperlink::apply_delete(&mut pkg, &mut doc.root, &part, op, i)?;
+                pkg.set(&part, doc.to_bytes()?)?;
+            }
+            PptxOp::InsertField(op) => {
+                let meta = slides.get(op.shape.slide - 1).ok_or_else(|| {
+                    Error::with_path(
+                        ErrorKind::SlideNotFound {
+                            n: op.shape.slide as u32,
+                        },
+                        format!("ops[{i}].id"),
+                    )
+                })?;
+                let part = meta.part.clone();
+                let mut doc = xml::parse(pkg.get(&part)?)?;
+                field::apply_insert(&mut doc.root, op, i)?;
+                pkg.set(&part, doc.to_bytes()?)?;
+            }
+            PptxOp::SetField(op) => {
+                let meta = slides.get(op.slide - 1).ok_or_else(|| {
+                    Error::with_path(
+                        ErrorKind::SlideNotFound { n: op.slide as u32 },
+                        format!("ops[{i}].id"),
+                    )
+                })?;
+                let part = meta.part.clone();
+                let mut doc = xml::parse(pkg.get(&part)?)?;
+                field::apply_set(&mut doc.root, op, i)?;
+                pkg.set(&part, doc.to_bytes()?)?;
+            }
+            PptxOp::DeleteField(op) => {
+                let meta = slides.get(op.slide - 1).ok_or_else(|| {
+                    Error::with_path(
+                        ErrorKind::SlideNotFound { n: op.slide as u32 },
+                        format!("ops[{i}].id"),
+                    )
+                })?;
+                let part = meta.part.clone();
+                let mut doc = xml::parse(pkg.get(&part)?)?;
+                field::apply_delete(&mut doc.root, op, i)?;
                 pkg.set(&part, doc.to_bytes()?)?;
             }
             PptxOp::SetProps(op) => {

@@ -154,6 +154,7 @@ fn inspect_hyperlink_count_without_list() {
             "smartArtCount",
             "commentCount",
             "hyperlinkCount",
+            "fieldCount",
             "tableCount",
             "oleObjectCount",
             "zoomCount",

@@ -141,6 +141,7 @@ fn empty_create_has_count_without_list() {
             "smartArtCount",
             "commentCount",
             "hyperlinkCount",
+            "fieldCount",
             "tableCount",
             "oleObjectCount",
             "zoomCount",

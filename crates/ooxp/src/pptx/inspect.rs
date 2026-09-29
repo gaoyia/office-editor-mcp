@@ -10,6 +10,7 @@ use super::chart;
 use super::comments;
 use super::connector;
 use super::custom_show;
+use super::field;
 use super::handout;
 use super::hyperlink;
 use super::master;
@@ -42,6 +43,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     let want_notes = scope.as_ref().is_some_and(|s| s.notes);
     let want_comments = scope.as_ref().is_some_and(|s| s.comments);
     let want_hyperlinks = scope.as_ref().is_some_and(|s| s.hyperlinks);
+    let want_fields = scope.as_ref().is_some_and(|s| s.fields);
     let want_tables = scope.as_ref().is_some_and(|s| s.tables);
     let want_connectors = scope.as_ref().is_some_and(|s| s.connectors);
     let want_timing = scope.as_ref().is_some_and(|s| s.timing);
@@ -61,6 +63,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     let mut smart_art_count = 0usize;
     let mut comment_count = 0usize;
     let mut hyperlink_count = 0usize;
+    let mut field_count = 0usize;
     let mut table_count = 0usize;
     let mut ole_object_count = 0usize;
     let mut zoom_count = 0usize;
@@ -123,6 +126,8 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         let rels = opc::Relationships::from_package(&pkg, &s.part)?;
         let n_links = hyperlink::count(&doc.root);
         hyperlink_count += n_links;
+        let n_fields = field::count(&doc.root);
+        field_count += n_fields;
         let tables_list = if want_tables {
             Some(table::collect_tables(&doc.root, &host))
         } else {
@@ -184,6 +189,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         obj.insert("smartArtCount".into(), json!(n_smartarts));
         obj.insert("commentCount".into(), json!(n_comments));
         obj.insert("hyperlinkCount".into(), json!(n_links));
+        obj.insert("fieldCount".into(), json!(n_fields));
         obj.insert("tableCount".into(), json!(n_tables));
         obj.insert("oleObjectCount".into(), json!(n_ole));
         obj.insert("zoomCount".into(), json!(n_zoom));
@@ -240,6 +246,9 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
                 hyperlink::list_json(&doc.root, s.index, &s.part, &rels, &slides),
             );
         }
+        if want_fields {
+            obj.insert("fields".into(), field::list_json(&doc.root, s.index));
+        }
         if want_timing {
             obj.insert("timing".into(), Value::Array(anims));
         }
@@ -277,6 +286,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     root.insert("smartArtCount".into(), json!(smart_art_count));
     root.insert("commentCount".into(), json!(comment_count));
     root.insert("hyperlinkCount".into(), json!(hyperlink_count));
+    root.insert("fieldCount".into(), json!(field_count));
     root.insert("tableCount".into(), json!(table_count));
     root.insert("oleObjectCount".into(), json!(ole_object_count));
     root.insert("zoomCount".into(), json!(zoom_count));

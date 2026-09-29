@@ -696,10 +696,19 @@
                 "$ref": "docx.schema.json#/$defs/insertFieldOp"
               },
               {
+                "$ref": "pptx.schema.json#/$defs/insertFieldOp"
+              },
+              {
                 "$ref": "docx.schema.json#/$defs/setFieldOp"
               },
               {
+                "$ref": "pptx.schema.json#/$defs/setFieldOp"
+              },
+              {
                 "$ref": "docx.schema.json#/$defs/deleteFieldOp"
+              },
+              {
+                "$ref": "pptx.schema.json#/$defs/deleteFieldOp"
               },
               {
                 "$ref": "docx.schema.json#/$defs/insertTocOp"

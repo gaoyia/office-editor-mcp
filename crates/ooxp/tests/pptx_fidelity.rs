@@ -535,9 +535,9 @@ fn delete_bookmark_is_not_for_pptx() {
 }
 
 #[test]
-fn scope_fields_is_not_for_pptx() {
-    let src = write_sample("fld-scope");
-    let err = run(
+fn scope_fields_lists_pptx_a_fld() {
+    let src = write_slide_sample("fld-scope", FLD_SLIDE);
+    let RunOutput::Inspect(tree) = run(
         &json!({
             "schemaVersion": 1,
             "action": "inspect",
@@ -547,12 +547,21 @@ fn scope_fields_is_not_for_pptx() {
         .to_string(),
         None,
     )
-    .unwrap_err();
-    assert_eq!(err.code(), ErrorCode::InvalidField);
+    .unwrap() else {
+        panic!("inspect 应返回树");
+    };
+    assert_eq!(tree["fieldCount"], 1);
+    assert_eq!(tree["slides"][0]["fieldCount"], 1);
+    assert_eq!(
+        tree["slides"][0]["fields"][0]["id"],
+        "slide:1/fld:{00000000-0000-0000-0000-000000000001}"
+    );
+    assert_eq!(tree["slides"][0]["fields"][0]["type"], "slidenum");
+    assert_eq!(tree["slides"][0]["fields"][0]["text"], "1");
 }
 
 #[test]
-fn insert_field_is_not_for_pptx() {
+fn insert_field_docx_instr_is_not_for_pptx() {
     let src = write_sample("fld-foreign");
     let out = tmp_dir().join("fld-foreign-out.pptx");
     let err = run(

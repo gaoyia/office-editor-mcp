@@ -171,6 +171,7 @@ fn inspect_count_without_list() {
             "smartArtCount",
             "commentCount",
             "hyperlinkCount",
+            "fieldCount",
             "tableCount",
             "oleObjectCount",
             "zoomCount",

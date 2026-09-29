@@ -169,6 +169,7 @@ fn inspect_has_notes_without_notes_object() {
             "smartArtCount",
             "commentCount",
             "hyperlinkCount",
+            "fieldCount",
             "tableCount",
             "oleObjectCount",
             "zoomCount",

@@ -120,6 +120,7 @@ fn create_has_zero_section_count_without_list() {
             "smartArtCount",
             "commentCount",
             "hyperlinkCount",
+            "fieldCount",
             "tableCount",
             "oleObjectCount",
             "zoomCount",

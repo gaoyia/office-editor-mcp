@@ -11,6 +11,7 @@ use super::chart;
 use super::comments;
 use super::connector;
 use super::custom_show;
+use super::field;
 use super::group;
 use super::hyperlink;
 use super::media;
@@ -34,6 +35,7 @@ pub struct InspectScope {
     pub notes: bool,
     pub comments: bool,
     pub hyperlinks: bool,
+    pub fields: bool,
     pub tables: bool,
     pub connectors: bool,
     pub timing: bool,
@@ -871,6 +873,9 @@ pub enum PptxOp {
     InsertHyperlink(InsertHyperlinkOp),
     SetHyperlink(SetHyperlinkOp),
     DeleteHyperlink(DeleteHyperlinkOp),
+    InsertField(field::InsertFieldOp),
+    SetField(field::SetFieldOp),
+    DeleteField(field::DeleteFieldOp),
     SetProps(crate::props::SetPropsOp),
     SetCustomProp(crate::props::SetCustomPropOp),
     DeleteCustomProp(crate::props::DeleteCustomPropOp),
@@ -904,6 +909,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
             "notes",
             "comments",
             "hyperlinks",
+            "fields",
             "tables",
             "connectors",
             "timing",
@@ -922,6 +928,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
     let notes = parse_bool_field(obj.get("notes"), "notes")?;
     let comments = parse_bool_field(obj.get("comments"), "comments")?;
     let hyperlinks = parse_bool_field(obj.get("hyperlinks"), "hyperlinks")?;
+    let fields = parse_bool_field(obj.get("fields"), "fields")?;
     let tables = parse_bool_field(obj.get("tables"), "tables")?;
     let connectors = parse_bool_field(obj.get("connectors"), "connectors")?;
     let timing = parse_bool_field(obj.get("timing"), "timing")?;
@@ -998,6 +1005,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
         notes,
         comments,
         hyperlinks,
+        fields,
         tables,
         connectors,
         timing,
@@ -1170,6 +1178,9 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<PptxOp>, Error> {
             "insertHyperlink" => PptxOp::InsertHyperlink(parse_insert_hyperlink(obj, i)?),
             "setHyperlink" => PptxOp::SetHyperlink(parse_set_hyperlink(obj, i)?),
             "deleteHyperlink" => PptxOp::DeleteHyperlink(parse_delete_hyperlink(obj, i)?),
+            "insertField" => PptxOp::InsertField(parse_insert_field(obj, i)?),
+            "setField" => PptxOp::SetField(parse_set_field(obj, i)?),
+            "deleteField" => PptxOp::DeleteField(parse_delete_field(obj, i)?),
             "setProps" => {
                 PptxOp::SetProps(crate::props::parse_set_props(obj, i, "pptx:presentation")?)
             }
@@ -1236,9 +1247,6 @@ fn is_foreign_op(op_name: &str) -> bool {
             | "insertBookmark"
             | "setBookmark"
             | "deleteBookmark"
-            | "insertField"
-            | "setField"
-            | "deleteField"
             | "insertNumbering"
             | "setNumbering"
             | "setParaNumbering"
@@ -2481,6 +2489,155 @@ fn parse_delete_hyperlink(obj: &Map<String, Value>, i: usize) -> Result<DeleteHy
     let id = require_id(obj, i)?;
     let (slide, index) = hyperlink::parse_link_id(&id, i)?;
     Ok(DeleteHyperlinkOp { id, slide, index })
+}
+
+fn parse_insert_field(obj: &Map<String, Value>, i: usize) -> Result<field::InsertFieldOp, Error> {
+    deny_keys(obj, i, &["op", "id", "type", "text"])?;
+    let id = require_id(obj, i)?;
+    let shape = parse_insert_field_shape(&id, i)?;
+    let type_name = require_fld_type(obj, i)?;
+    let text = match obj.get("text") {
+        None => String::new(),
+        Some(Value::String(s)) => s.clone(),
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "text".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].text"),
+            ));
+        }
+    };
+    Ok(field::InsertFieldOp {
+        id,
+        shape,
+        type_name,
+        text,
+    })
+}
+
+fn parse_set_field(obj: &Map<String, Value>, i: usize) -> Result<field::SetFieldOp, Error> {
+    deny_keys(obj, i, &["op", "id", "type", "text"])?;
+    let id = require_id(obj, i)?;
+    let (slide, key) = field::parse_field_id(&id, i)?;
+    let type_name = match obj.get("type") {
+        None => None,
+        Some(Value::String(s)) => {
+            if !field::is_reserved_type(s) {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidFldType,
+                    format!("ops[{i}].type"),
+                ));
+            }
+            Some(s.clone())
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "type".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].type"),
+            ));
+        }
+    };
+    let text = match obj.get("text") {
+        None => None,
+        Some(Value::String(s)) => Some(s.clone()),
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "text".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].text"),
+            ));
+        }
+    };
+    if type_name.is_none() && text.is_none() {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "setField".into(),
+                field: "type".into(),
+            },
+            format!("ops[{i}]"),
+        ));
+    }
+    Ok(field::SetFieldOp {
+        id,
+        slide,
+        key,
+        type_name,
+        text,
+    })
+}
+
+fn parse_delete_field(obj: &Map<String, Value>, i: usize) -> Result<field::DeleteFieldOp, Error> {
+    deny_keys(obj, i, &["op", "id", "keep"])?;
+    let id = require_id(obj, i)?;
+    let (slide, key) = field::parse_field_id(&id, i)?;
+    let keep = match obj.get("keep") {
+        None => field::FieldKeep::Result,
+        Some(Value::String(s)) if s == "result" => field::FieldKeep::Result,
+        Some(Value::String(s)) if s == "instr" => field::FieldKeep::Instr,
+        Some(Value::String(_)) => {
+            return Err(Error::with_path(
+                ErrorKind::InvalidFieldKeep,
+                format!("ops[{i}].keep"),
+            ));
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "keep".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].keep"),
+            ));
+        }
+    };
+    Ok(field::DeleteFieldOp {
+        id,
+        slide,
+        key,
+        keep,
+    })
+}
+
+fn parse_insert_field_shape(id: &str, i: usize) -> Result<shape::ShapeTarget, Error> {
+    match shape::parse_shape_id(id, i) {
+        Ok(t) if !t.on_notes => Ok(t),
+        Ok(_) | Err(_) => Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::InsertFieldNeedsShape,
+            },
+            format!("ops[{i}].id"),
+        )),
+    }
+}
+
+fn require_fld_type(obj: &Map<String, Value>, i: usize) -> Result<String, Error> {
+    match obj.get("type") {
+        Some(Value::String(s)) if field::is_reserved_type(s) => Ok(s.clone()),
+        Some(Value::String(_)) => Err(Error::with_path(
+            ErrorKind::InvalidFldType,
+            format!("ops[{i}].type"),
+        )),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "type".into(),
+                expected: TypeName::String,
+            },
+            format!("ops[{i}].type"),
+        )),
+        None => Err(Error::with_path(
+            ErrorKind::MissingField {
+                field: "type".into(),
+            },
+            format!("ops[{i}].type"),
+        )),
+    }
 }
 
 fn parse_insert_hyperlink_shape(id: &str, i: usize) -> Result<shape::ShapeTarget, Error> {

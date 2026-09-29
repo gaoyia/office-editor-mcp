@@ -404,7 +404,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
 - `scope.revisions` 为 `true` 时，根上带 `revisions`（正文），每个页眉、页脚容器带 `revisions`。没有修订时为空数组。按该故事里被收入节点的文档顺序。每条字段顺序：`id`、`index`、`kind`、`xmlId`、`author`、`date`、`host`、`text`。`index` 与 id 里的 `{n}` 相同。`kind` 为 `ins`、`del`、`rPrChange` 或 `pPrChange`。`xmlId` 是 `w:id` 原文，缺则为 `null`。`author` / `date` 取对应属性原文，缺则为 `null`。`host` 是所在段落 id（正文 `para:…`，页眉页脚带容器前缀）；修订不在任何 `w:p` 里则为 `null`。`text`：`ins` 为该节点内可见 `w:t` 拼接；`del` 为 `w:delText`（以及其中若有的 `w:t`）拼接；属性修订为 `null`。xlsx / pptx 的 `scope` 里出现 `revisions` 报 `InvalidField`。
 - `scope.hyperlinks` 为 `true` 时，根上带 `hyperlinks`（正文），每个页眉、页脚容器带 `hyperlinks`。没有链时为空数组。按该故事里被收入节点的文档顺序。每条字段顺序：`id`、`index`、`kind`、`rId`、`url`、`anchor`、`tooltip`、`host`、`text`。`kind` 为 `url`（有 `r:id`）或 `anchor`（没有 `r:id`）。`rId` 是关系 id 原文，缺则为 `null`。`url` 是该关系的 `Target` 原文，缺关系则为 `null`。`anchor` 是 `w:anchor` 原文，缺则为 `null`。有 `r:id` 时树上仍可带 `anchor`，但规范说跳转时忽略它。`tooltip` 取 `w:tooltip`，缺则为 `null`。`host` 是所在段落 id；不在任何 `w:p` 里则为 `null`。`text` 为该节点内可见 `w:t` 拼接。pptx 的 `scope.hyperlinks` 见 [pptx 响应](json-contract-pptx.md#响应)。xlsx 的 `scope.hyperlinks` 见 [xlsx 响应](json-contract-xlsx.md#响应)。
 - `scope.bookmarks` 为 `true` 时，根上带 `bookmarks`（正文），每个页眉、页脚容器带 `bookmarks`。没有书签时为空数组。按该故事里被收入的 `w:bookmarkStart` 的文档顺序。每条字段顺序：`id`、`index`、`name`、`xmlId`、`start`、`end`。`name` 是 `w:name` 原文。`xmlId` 是 `w:id` 原文，缺则为 `null`。`start` / `end` 是起止所在段落 id；标记不在任何 `w:p` 里则为 `null`。xlsx / pptx 的 `scope` 里出现 `bookmarks` 报 `InvalidField`。
-- `scope.fields` 为 `true` 时，根上带 `fields`（正文），每个页眉、页脚容器带 `fields`。没有域时为空数组。按该故事里被收入域起点的文档顺序。每条字段顺序：`id`、`index`、`kind`、`code`、`instr`、`host`、`end`、`text`。`kind` 为 `simple`（`w:fldSimple`）或 `complex`（配对 `w:fldChar`）。`instr` 是本层指令原文：简单域取 `w:instr`；复杂域拼接 begin 与 separate 之间（没有 separate 则到 end）本层的 `w:instrText`，不含 `w:delInstrText`，也不含嵌套域的指令。`code` 是 `instr` 去掉首尾空白后第一个词，按 ASCII 大写；公式域以 `=` 开头时 `code` 为 `"="`；没有词则为 `""`。`host` 是起点所在段落 id；`end` 是终点所在段落 id（简单域与 `host` 相同）；不在任何 `w:p` 里则为 `null`。`text` 是缓存结果的可见文本：简单域为元素内可见 `w:t`；复杂域为 separate 与 end 之间的可见 `w:t`（没有 separate 则为 `""`）。xlsx / pptx 的 `scope` 里出现 `fields` 报 `InvalidField`。
+- `scope.fields` 为 `true` 时，根上带 `fields`（正文），每个页眉、页脚容器带 `fields`。没有域时为空数组。按该故事里被收入域起点的文档顺序。每条字段顺序：`id`、`index`、`kind`、`code`、`instr`、`host`、`end`、`text`。`kind` 为 `simple`（`w:fldSimple`）或 `complex`（配对 `w:fldChar`）。`instr` 是本层指令原文：简单域取 `w:instr`；复杂域拼接 begin 与 separate 之间（没有 separate 则到 end）本层的 `w:instrText`，不含 `w:delInstrText`，也不含嵌套域的指令。`code` 是 `instr` 去掉首尾空白后第一个词，按 ASCII 大写；公式域以 `=` 开头时 `code` 为 `"="`；没有词则为 `""`。`host` 是起点所在段落 id；`end` 是终点所在段落 id（简单域与 `host` 相同）；不在任何 `w:p` 里则为 `null`。`text` 是缓存结果的可见文本：简单域为元素内可见 `w:t`；复杂域为 separate 与 end 之间的可见 `w:t`（没有 separate 则为 `""`）。xlsx 的 `scope` 里出现 `fields` 报 `InvalidField`。pptx 认 `scope.fields`，见 [json-contract-pptx.md](json-contract-pptx.md#inspect)。
 - `scope.tocs` 为 `true` 时，根上带 `tocs`。没有目录时为空数组。按主文档里被收入的 TOC / TOA 域起点的文档顺序。每条字段顺序：`id`、`index`、`kind`、`field`、`instr`、`host`、`end`、`text`。`id` 是 `toc:{n}`。`kind` 为 `toc`、`tof` 或 `toa`。`field` 是对应的正文域 id（`field:{m}`）。`instr` / `host` / `end` / `text` 与该域在 `fields` 里的同名字段相同。xlsx / pptx 的 `scope` 里出现 `tocs` 报 `InvalidField`。
 - `scope.maths` 为 `true` 时，根上带 `maths`（正文），每个页眉、页脚容器带 `maths`。没有公式时为空数组。按该故事里顶层 `m:oMath` 的文档顺序。每条字段顺序：`id`、`index`、`kind`、`host`、`text`。`id` 是 `math:{n}` 或 `{容器}/math:{n}`。`kind` 为 `inline` 或 `display`。`host` 是所在段落 id；不在任何 `w:p` 里则为 `null`。`text` 为该 `oMath` 子孙里所有 `t`（即 `m:t`）按文档顺序拼接，不做 UnicodeMath 全量互转。xlsx / pptx 的 `scope` 里出现 `maths` 报 `InvalidField`。
 - `scope.contentControls` 为 `true` 时，根上带 `contentControls`（正文），每个页眉、页脚容器带 `contentControls`。没有控件时为空数组。按该故事里被收入的 `w:sdt` 的文档顺序。每条字段顺序：`id`、`index`、`kind`、`level`、`host`、`tag`、`alias`、`xmlId`、`bound`、`parent`、`text`；`kind` 为 `dropDown` 或 `comboBox` 时再跟 `items`；`kind` 为 `date` 时再跟 `fullDate`。`id` 是 `sdt:{n}` 或 `{容器}/sdt:{n}`。`kind` 为 `plainText`、`richText`、`dropDown`、`comboBox`、`date` 或 `repeatingSection`。`level` 为 `inline` 或 `block`。`host` 是所在段落 id（行内为祖先 `w:p`；块级为 `sdtContent` 里第一个 `w:p`）；对不上则为 `null`。`tag` / `alias` 取 `w:tag` / `w:alias` 的 `w:val`，缺则为 `null`。`xmlId` 是 `w:sdtPr/w:id/@w:val` 原文，缺则为 `null`。`bound` 在有 `w:dataBinding` 时为 `true`，否则为 `false`。`parent` 是最近一层被收入的祖先控件 id，没有则为 `null`。`text` 为 `sdtContent` 子孙里所有 `w:t` 按文档顺序拼接。`items` 是 `w:listItem` 数组，每项字段顺序：`display`、`value`，取 `w:displayText` / `w:value`，缺则为 `null`。`fullDate` 取 `w:date/@w:fullDate` 原文，缺则为 `null`。xlsx / pptx 的 `scope` 里出现 `contentControls` 报 `InvalidField`。
@@ -1152,7 +1152,7 @@ xlsx / pptx 上发此 op 报 `InvalidField`。
 | `instr` | 域指令字符串，必填。去掉首尾空白后不能为空 |
 | `result` | 可选。写入的缓存结果。省略则没有结果 run（仍写 `separate`） |
 
-在该段已有内容之后插入一组复杂域：`fldChar begin`（`w:dirty="true"`）、一条 `instrText`（`xml:space="preserve"`）、`fldChar separate`、若给了非空 `result` 则再写一个带 `w:t` 的 run、`fldChar end`。不在库里求值。`instr` 缺或只含空白报 `InvalidField`。找不到段落报 `IdNotFound`。id 不是段落 id 报 `InvalidId`。xlsx / pptx 上发此 op 报 `InvalidField`。
+在该段已有内容之后插入一组复杂域：`fldChar begin`（`w:dirty="true"`）、一条 `instrText`（`xml:space="preserve"`）、`fldChar separate`、若给了非空 `result` 则再写一个带 `w:t` 的 run、`fldChar end`。不在库里求值。`instr` 缺或只含空白报 `InvalidField`。找不到段落报 `IdNotFound`。id 不是段落 id 报 `InvalidId`。xlsx 上发此 op 报 `InvalidField`。pptx 用同一 op 名写 `a:fld`，字段见 [json-contract-pptx.md](json-contract-pptx.md#insertfield)。
 
 ### setField
 
@@ -1162,7 +1162,7 @@ xlsx / pptx 上发此 op 报 `InvalidField`。
 | `id` | 域 id |
 | `instr` | 新的指令字符串，必填。去掉首尾空白后不能为空 |
 
-只改被点名那一域的指令，不改缓存结果。简单域写 `w:instr`。复杂域删掉本层指令区里的旧 `instrText` 以及落在指令区里的嵌套域，在 begin 之后插入一条新的 `instrText`。结果区（separate 与 end 之间）不动。不在库里求值。`instr` 缺或只含空白报 `InvalidField`。找不到报 `IdNotFound`。id 不是域 id 报 `InvalidId`。xlsx / pptx 上发此 op 报 `InvalidField`。
+只改被点名那一域的指令，不改缓存结果。简单域写 `w:instr`。复杂域删掉本层指令区里的旧 `instrText` 以及落在指令区里的嵌套域，在 begin 之后插入一条新的 `instrText`。结果区（separate 与 end 之间）不动。不在库里求值。`instr` 缺或只含空白报 `InvalidField`。找不到报 `IdNotFound`。id 不是域 id 报 `InvalidId`。xlsx 上发此 op 报 `InvalidField`。pptx 用同一 op 名改 `a:fld` 的 `type` / 缓存，见 [json-contract-pptx.md](json-contract-pptx.md#setfield)。
 
 ### deleteField
 
@@ -1172,7 +1172,7 @@ xlsx / pptx 上发此 op 报 `InvalidField`。
 | `id` | 域 id |
 | `keep` | 可选。`result`（缺省）或 `instr`。其他值报 `InvalidField` |
 
-`keep` 为 `result`：拆掉该域外壳与指令，留下缓存结果。指令区里的嵌套域一并删掉；结果区里的嵌套域留下。简单域拆掉 `w:fldSimple`，留下子节点。`keep` 为 `instr`：把本层指令变成普通可见文本（`instrText` 改成 `w:t`，简单域则写成一个带指令原文的 run），删掉 begin / separate / end 与结果区。指令区里的嵌套域留下。找不到报 `IdNotFound`。id 不是域 id 报 `InvalidId`。xlsx / pptx 上发此 op 报 `InvalidField`。
+`keep` 为 `result`：拆掉该域外壳与指令，留下缓存结果。指令区里的嵌套域一并删掉；结果区里的嵌套域留下。简单域拆掉 `w:fldSimple`，留下子节点。`keep` 为 `instr`：把本层指令变成普通可见文本（`instrText` 改成 `w:t`，简单域则写成一个带指令原文的 run），删掉 begin / separate / end 与结果区。指令区里的嵌套域留下。找不到报 `IdNotFound`。id 不是域 id 报 `InvalidId`。xlsx 上发此 op 报 `InvalidField`。pptx 用同一 op 名拆 `a:fld`，见 [json-contract-pptx.md](json-contract-pptx.md#deletefield)。
 
 示例见 `docs/examples/docx-apply-field.json`。
 

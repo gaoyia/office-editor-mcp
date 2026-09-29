@@ -126,6 +126,7 @@ fn create_defaults_and_root_key_order() {
             "smartArtCount",
             "commentCount",
             "hyperlinkCount",
+            "fieldCount",
             "tableCount",
             "oleObjectCount",
             "zoomCount",

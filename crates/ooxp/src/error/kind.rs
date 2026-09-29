@@ -341,6 +341,10 @@ pub(crate) enum IdReason {
     FieldIndexFromOne,
     /// insertField 必须用正文或页眉页脚段落 id
     InsertFieldNeedsPara,
+    /// pptx 域 id 必须是 slide:N/fld:GUID 或 slide:N/fld:index:K
+    PptxFieldForm,
+    /// pptx 的 insertField 必须用幻灯片文本形状 id
+    InsertFieldNeedsShape,
     /// insertNumbering 必须用 docx:document
     InsertNumberingNeedsDocument,
     /// 编号实例 id 必须是 num:N
@@ -680,6 +684,7 @@ define_error_kinds! {
     ZoomNotFound { id: String } => vec![Self::ZoomNotFound { id: "slide:1/zoom:3".into() }],
     InvalidZoomType => vec![Self::InvalidZoomType],
     InvalidShowPrType => vec![Self::InvalidShowPrType],
+    InvalidFldType => vec![Self::InvalidFldType],
     ZoomTargetSelf => vec![Self::ZoomTargetSelf],
     WatermarkNotFound { id: String } => vec![Self::WatermarkNotFound { id: "header:default:1/watermark:1".into() }],
     WatermarkNeedTextOrFile => vec![Self::WatermarkNeedTextOrFile],
@@ -1092,6 +1097,8 @@ impl IdReason {
             Self::FieldIndexNotInt,
             Self::FieldIndexFromOne,
             Self::InsertFieldNeedsPara,
+            Self::PptxFieldForm,
+            Self::InsertFieldNeedsShape,
             Self::InsertNumberingNeedsDocument,
             Self::NumPrefix,
             Self::NumIndexNotInt,
@@ -1358,6 +1365,7 @@ impl ErrorKind {
             | Self::InvalidAnimType
             | Self::InvalidZoomType
             | Self::InvalidShowPrType
+            | Self::InvalidFldType
             | Self::ZoomTargetSelf
             | Self::InvalidAnimTrigger
             | Self::InvalidTransitionDur

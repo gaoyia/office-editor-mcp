@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "deck.pptx",
+  "ops": [
+    { "op": "insertField", "id": "slide:1/shape:2", "type": "slidenum", "text": "1" },
+    { "op": "setField", "id": "slide:1/fld:{8900A98D-CC96-461D-8E1A-9E2F9D60FB49}", "type": "datetime1" },
+    { "op": "deleteField", "id": "slide:1/fld:{8900A98D-CC96-461D-8E1A-9E2F9D60FB49}", "keep": "result" }
+  ]
+}

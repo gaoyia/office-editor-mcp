@@ -468,6 +468,12 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::InsertFieldNeedsPara => {
                 "insertField 的 id 必须是正文或页眉页脚段落 id".into()
             }
+            IdReason::PptxFieldForm => {
+                "pptx 域 id 必须是 slide:n/fld:GUID 或 slide:n/fld:index:k".into()
+            }
+            IdReason::InsertFieldNeedsShape => {
+                "pptx 的 insertField 的 id 必须是幻灯片文本形状 id".into()
+            }
             IdReason::InsertNumberingNeedsDocument => {
                 "insertNumbering 的 id 必须是 docx:document".into()
             }
@@ -667,6 +673,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::ZoomNotFound { id } => format!("找不到 Zoom：{id}"),
         ErrorKind::InvalidZoomType => "type 必须是 slide 或 section".into(),
         ErrorKind::InvalidShowPrType => "type 必须是 present、browse 或 kiosk".into(),
+        ErrorKind::InvalidFldType => {
+            "type 必须是 slidenum、datetime 或 datetime1–datetime13".into()
+        }
         ErrorKind::ZoomTargetSelf => "insertZoom 的 target 不能是宿主自己".into(),
         ErrorKind::WatermarkNotFound { id } => format!("找不到水印：{id}"),
         ErrorKind::WatermarkNeedTextOrFile => {
