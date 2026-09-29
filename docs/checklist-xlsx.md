@@ -47,6 +47,7 @@ C、I、A、O、Xp、Xc、Xh 这几组现在由 `manual-check/office/cases/xlsx-
 | Xsg1–Xsg5 | ✅ | Excel 16.0：`xlsx-shapes-geom.ps1`，5 PASS / 0 FAIL。无名单时根与工作表有 `shapeCount=0`、`connectorCount=0`；`insertShape` 后 COM 能看见矩形且无 Repair；`insertConnector` 后名单 id 为 `sheet:…/cxn:…`；改锚点与删后计数为 0；缺 `from` 得 `InvalidField` |
 | Xg1–Xg5 | ✅ | Excel 16.0：`xlsx-groups.ps1`，5 PASS / 0 FAIL。`groupShapes` 后 COM Type=6、子 id 仍在；`ungroup` 后组合解开；形状与连接线可编成一组；已组合再编、只给一个成员、`id=slide:1`、对未组合对象 `ungroup` 均拒写。无 Repair |
 | Xol1–Xol5 | ✅ | Excel 16.0：`xlsx-ole.ps1`，5 PASS / 0 FAIL。create 默认 `oleObjectCount=0`；`insertOle` 后 COM Type=7、id 为 `sheet:Sheet1/ole:1025`、`progId=Worksheet`、dummy 不进 `shapes`、无 Repair；`exportMedia` 与 embeddings 字节一致；删除后计数为 0；缺 `from` / `slide:1` / 形状 id 均拒写 |
+| Xsl1–Xsl5 | ✅ | Excel 16.0：`xlsx-slicers.ps1`，5 PASS / 0 FAIL。create 默认 `slicerCount=0`；表格 `insertSlicer` 后 COM `SlicerCaches.Count=1`、id 为 `sheet:Sheet1/slicer:1`、`sourceKind=table`、无 Repair；透视源 `sourceKind=pivot`；删除后计数为 0；缺 `from` / `slide:1` / 不存在的 `field` 均拒写 |
 | 图表工作表 Xs1–Xs4 | ✅ | Excel 16.0：`xlsx-chartsheet.ps1`，4 PASS / 0 FAIL。`insertChartSheet` 后 `kind=chartsheet`、`chartCount=1`，无 Repair；数据 1/2/3 与 COM 一致；删除后表消失、数据格还在；对 `worksheet` 发 `deleteChartSheet` 得 `InvalidId` 且未写文件 |
 | Xt1–Xt5 | ✅ | Excel 16.0：`xlsx-table.ps1`，5 PASS / 0 FAIL。create 默认 `tableCount=0`；建成 Sales 后 COM 认表；改范围到 `A1:C4` 无 Repair；删除后数据还在、不再有表；缺 `ref` 得 `InvalidField` 且未写文件 |
 
@@ -387,6 +388,18 @@ Office 另存 create 产物是打开冒烟，见 `manual-check/office/cases/opc-
 | Xol3 | 导出 | `exportMedia` 字节与 `/xl/embeddings/…` 部件一致 |
 | Xol4 | 删除 | `deleteOle` 后 `oleObjectCount=0`、无 Repair |
 | Xol5 | 拒写 | 缺 `from`、`id` 为 `slide:1`、对形状 id 发 `insertOle` 得 `InvalidField` 或 `InvalidId`；均未写文件。不强制开 Excel |
+
+## 切片器
+
+用库 create 产物再 apply 出表格，再插切片器。脚本 `manual-check/office/cases/xlsx-slicers.ps1`。编号用 **Xsl**。不要和 Xs、Xsa、Xsk、Xol 撞。不执行筛选，不刷新透视。
+
+| 序号 | 检查 | 通过标准 |
+| --- | --- | --- |
+| Xsl1 | inspect | 每张 `worksheet` 始终有 `slicerCount`；create 默认为 `0`；给了 `scope.slicers` 时名单为空数组，不依赖单元格切片 |
+| Xsl2 | 插入 | 对表格 `insertSlicer` 后 Excel 无修复；COM 能看见切片器；inspect id 为 `sheet:Sheet1/slicer:{cNvPrId}`，`sourceKind=table` |
+| Xsl3 | 透视源 | 对透视表 `insertSlicer` 后无修复；inspect `sourceKind=pivot` |
+| Xsl4 | 删除 | `deleteSlicer` 后 `slicerCount=0`、无 Repair |
+| Xsl5 | 拒写 | 缺 `from`、`id` 为 `slide:1`、对不存在的 `field` 得 `InvalidField` 或 `InvalidId`；均未写文件。不强制开 Excel |
 
 ## 超链接
 

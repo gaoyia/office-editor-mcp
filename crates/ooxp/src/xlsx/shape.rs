@@ -1102,7 +1102,9 @@ where
 {
     if el.local_name() == "AlternateContent" {
         if let Some(c) = first_choice(el) {
-            return visit_one(c, f);
+            for child in c.element_children() {
+                visit_one(child, f)?;
+            }
         }
         return Ok(());
     }

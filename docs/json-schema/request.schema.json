@@ -190,6 +190,9 @@
         "smartArt": {
           "type": "boolean"
         },
+        "slicers": {
+          "type": "boolean"
+        },
         "oleObjects": {
           "type": "boolean"
         },
@@ -919,6 +922,12 @@
               },
               {
                 "$ref": "xlsx.schema.json#/$defs/deleteOleOp"
+              },
+              {
+                "$ref": "xlsx.schema.json#/$defs/insertSlicerOp"
+              },
+              {
+                "$ref": "xlsx.schema.json#/$defs/deleteSlicerOp"
               },
               {
                 "$ref": "docx.schema.json#/$defs/insertOleOp"

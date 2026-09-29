@@ -402,6 +402,20 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::SheetOleContainer => {
                 "工作表 id 必须带 /ole:…（该 id 本身不是嵌入对象）".into()
             }
+            IdReason::InsertSlicerNeedsSheet => {
+                "xlsx insertSlicer 的 id 必须是 sheet:工作表名".into()
+            }
+            IdReason::SheetSlicerPrefix => {
+                "xlsx 切片器 id 必须是 sheet:工作表名/slicer:…".into()
+            }
+            IdReason::SheetSlicerContainer => {
+                "工作表 id 必须带 /slicer:…（该 id 本身不是切片器）".into()
+            }
+            IdReason::SlicerIndexNotInt => "slicer:index 后面必须是正整数".into(),
+            IdReason::SlicerIndexFromOne => "slicer:index 从 1 起".into(),
+            IdReason::InsertSlicerNeedsTableOrPivot => {
+                "insertSlicer 的 source 必须是本表表格 id 或透视表 id".into()
+            }
             IdReason::InsertZoomNeedsSlide => "insertZoom 的 id 必须是 slide:N".into(),
             IdReason::ZoomTargetSlide => {
                 "insertZoom 的 type 为 slide 时 target 必须是 slide:N".into()
@@ -706,6 +720,10 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         }
         ErrorKind::SmartArtNotFound { id } => format!("找不到 SmartArt：{id}"),
         ErrorKind::OleNotFound { id } => format!("找不到嵌入对象：{id}"),
+        ErrorKind::SlicerNotFound { id } => format!("找不到切片器：{id}"),
+        ErrorKind::SlicerFieldNotFound { name } => {
+            format!("切片器字段对不上源：{name}")
+        }
         ErrorKind::ZoomNotFound { id } => format!("找不到 Zoom：{id}"),
         ErrorKind::InvalidZoomType => "type 必须是 slide 或 section".into(),
         ErrorKind::InvalidShowPrType => "type 必须是 present、browse 或 kiosk".into(),

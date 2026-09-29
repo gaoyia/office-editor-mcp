@@ -22,6 +22,7 @@ mod protect;
 mod request;
 mod shape;
 mod sheets;
+mod slicer;
 mod smartart;
 mod sparkline;
 mod style;

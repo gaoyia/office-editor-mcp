@@ -433,6 +433,18 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::SheetOleContainer => {
                 "Sheet id must include /ole:… (that id alone is not an embedded object)".into()
             }
+            IdReason::InsertSlicerNeedsSheet => "xlsx insertSlicer id must be sheet:name".into(),
+            IdReason::SheetSlicerPrefix => "xlsx slicer id must be sheet:name/slicer:…".into(),
+            IdReason::SheetSlicerContainer => {
+                "Sheet id must include /slicer:… (that id alone is not a slicer)".into()
+            }
+            IdReason::SlicerIndexNotInt => {
+                "slicer:index must be followed by a positive integer".into()
+            }
+            IdReason::SlicerIndexFromOne => "slicer:index starts at 1".into(),
+            IdReason::InsertSlicerNeedsTableOrPivot => {
+                "insertSlicer source must be a table or pivot id on the same sheet".into()
+            }
             IdReason::InsertZoomNeedsSlide => "insertZoom id must be slide:N".into(),
             IdReason::ZoomTargetSlide => {
                 "insertZoom target must be slide:N when type is slide".into()
@@ -792,6 +804,10 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         }
         ErrorKind::SmartArtNotFound { id } => format!("SmartArt not found: {id}"),
         ErrorKind::OleNotFound { id } => format!("Embedded object not found: {id}"),
+        ErrorKind::SlicerNotFound { id } => format!("Slicer not found: {id}"),
+        ErrorKind::SlicerFieldNotFound { name } => {
+            format!("Slicer field does not match the source: {name}")
+        }
         ErrorKind::ZoomNotFound { id } => format!("Zoom not found: {id}"),
         ErrorKind::InvalidZoomType => "type must be slide or section".into(),
         ErrorKind::InvalidShowPrType => "type must be present, browse, or kiosk".into(),

@@ -292,8 +292,18 @@ pub(crate) enum IdReason {
     InsertOleNeedsSheet,
     /// xlsx OLE id 必须是 sheet:{name}/ole:…
     SheetOlePrefix,
-    /// 工作表 id，缺少 /ole:…
+    /// xlsx 工作表 id，缺少 /ole:…
     SheetOleContainer,
+    /// xlsx 的 insertSlicer 必须用 sheet:工作表名
+    InsertSlicerNeedsSheet,
+    /// xlsx 切片器 id 必须是 sheet:{name}/slicer:…
+    SheetSlicerPrefix,
+    /// 工作表 id，缺少 /slicer:…
+    SheetSlicerContainer,
+    SlicerIndexNotInt,
+    SlicerIndexFromOne,
+    /// insertSlicer 的 source 必须是本表表格 id 或透视表 id
+    InsertSlicerNeedsTableOrPivot,
     /// pptx 的 insertZoom 必须用 slide:N
     InsertZoomNeedsSlide,
     /// insertZoom 的 type 为 slide 时 target 必须是 slide:N
@@ -708,6 +718,8 @@ define_error_kinds! {
     SmartArtAsstOnList => vec![Self::SmartArtAsstOnList],
     SmartArtListDepth => vec![Self::SmartArtListDepth],
     OleNotFound { id: String } => vec![Self::OleNotFound { id: "para:1/ole:_1".into() }],
+    SlicerNotFound { id: String } => vec![Self::SlicerNotFound { id: "sheet:Sheet1/slicer:2".into() }],
+    SlicerFieldNotFound { name: String } => vec![Self::SlicerFieldNotFound { name: "产品".into() }],
     ZoomNotFound { id: String } => vec![Self::ZoomNotFound { id: "slide:1/zoom:3".into() }],
     InvalidZoomType => vec![Self::InvalidZoomType],
     InvalidShowPrType => vec![Self::InvalidShowPrType],
@@ -1093,6 +1105,12 @@ impl IdReason {
             Self::InsertOleNeedsSheet,
             Self::SheetOlePrefix,
             Self::SheetOleContainer,
+            Self::InsertSlicerNeedsSheet,
+            Self::SheetSlicerPrefix,
+            Self::SheetSlicerContainer,
+            Self::SlicerIndexNotInt,
+            Self::SlicerIndexFromOne,
+            Self::InsertSlicerNeedsTableOrPivot,
             Self::InsertZoomNeedsSlide,
             Self::ZoomTargetSlide,
             Self::SlideZoomPrefix,
@@ -1376,6 +1394,7 @@ impl ErrorKind {
             | Self::InvalidSheetView { .. }
             | Self::NeedSetAutoFilterField
             | Self::InvalidAutoFilter { .. }
+            | Self::SlicerFieldNotFound { .. }
             | Self::InvalidAlign
             | Self::InvalidLineRule
             | Self::InvalidUnderline
@@ -1504,6 +1523,7 @@ impl ErrorKind {
             | Self::SmartArtNotFound { .. }
             | Self::SmartArtPointNotFound { .. }
             | Self::OleNotFound { .. }
+            | Self::SlicerNotFound { .. }
             | Self::ZoomNotFound { .. }
             | Self::WatermarkNotFound { .. }
             | Self::TableNotFound { .. }

@@ -19,6 +19,7 @@ use super::ole;
 use super::picture;
 use super::shape;
 use super::sheets;
+use super::slicer;
 use super::smartart;
 use super::style;
 use super::REL_CALC_CHAIN;
@@ -648,6 +649,30 @@ pub fn apply(bytes: &[u8], ops: &[XlsxOp]) -> Result<Vec<u8>, Error> {
                 load_dirty(&pkg, &mut dirty_sheets, &part, false)?;
                 let doc = dirty_of(&mut dirty_sheets, &part);
                 ole::delete(&mut pkg, doc, &part, op, i)?;
+            }
+            XlsxOp::InsertSlicer(op) => {
+                let part = require_drawing_worksheet(
+                    &sheet_index,
+                    &op.sheet,
+                    i,
+                    ErrorKind::InsertTextBoxWorksheetOnly,
+                )?;
+                load_dirty(&pkg, &mut dirty_sheets, &part, false)?;
+                let doc = dirty_of(&mut dirty_sheets, &part);
+                slicer::insert(&mut pkg, &mut wb_doc, &wb_part, doc, &part, op, i)?;
+                workbook_dirty = true;
+            }
+            XlsxOp::DeleteSlicer(op) => {
+                let part = require_drawing_worksheet(
+                    &sheet_index,
+                    &op.target.sheet,
+                    i,
+                    ErrorKind::InsertTextBoxWorksheetOnly,
+                )?;
+                load_dirty(&pkg, &mut dirty_sheets, &part, false)?;
+                let doc = dirty_of(&mut dirty_sheets, &part);
+                slicer::delete(&mut pkg, &mut wb_doc, &wb_part, doc, &part, op, i)?;
+                workbook_dirty = true;
             }
             XlsxOp::SetTextBoxSize(op) => {
                 let part = require_drawing_worksheet(

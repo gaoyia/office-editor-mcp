@@ -16,6 +16,7 @@ use super::names;
 use super::ole;
 use super::picture::{self, SheetPicId};
 use super::shape::{self, DrawObjKind, SheetDrawId};
+use super::slicer;
 use super::smartart as xlsx_smartart;
 
 /// 工作表页眉页脚六个槽位之一。
@@ -155,6 +156,7 @@ pub struct InspectScope {
     pub hyperlinks: bool,
     pub sparklines: bool,
     pub ole_objects: bool,
+    pub slicers: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -1572,6 +1574,8 @@ pub enum XlsxOp {
     Ungroup(UngroupOp),
     InsertOle(ole::InsertOleOp),
     DeleteOle(ole::DeleteOleOp),
+    InsertSlicer(slicer::InsertSlicerOp),
+    DeleteSlicer(slicer::DeleteSlicerOp),
     SetTextBoxSize(SetTextBoxSizeOp),
     SetTextBoxAnchor(SetTextBoxAnchorOp),
     SetShapeText(SetShapeTextOp),
@@ -1623,6 +1627,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
             "hyperlinks",
             "sparklines",
             "oleObjects",
+            "slicers",
         ],
     )?;
     let pictures = parse_bool_field(obj.get("pictures"), "pictures")?;
@@ -1636,6 +1641,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
     let hyperlinks = parse_bool_field(obj.get("hyperlinks"), "hyperlinks")?;
     let sparklines = parse_bool_field(obj.get("sparklines"), "sparklines")?;
     let ole_objects = parse_bool_field(obj.get("oleObjects"), "oleObjects")?;
+    let slicers = parse_bool_field(obj.get("slicers"), "slicers")?;
     let sheet = obj.get("sheet").and_then(Value::as_str);
     let range = obj.get("range").and_then(Value::as_str);
     let max_cells = match obj.get("maxCells") {
@@ -1692,6 +1698,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
         && !hyperlinks
         && !sparklines
         && !ole_objects
+        && !slicers
     {
         return Ok(None);
     }
@@ -1708,6 +1715,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
         hyperlinks,
         sparklines,
         ole_objects,
+        slicers,
     }))
 }
 
@@ -1821,6 +1829,8 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<XlsxOp>, Error> {
             "ungroup" => XlsxOp::Ungroup(parse_ungroup(obj, i)?),
             "insertOle" => XlsxOp::InsertOle(parse_insert_ole(obj, i)?),
             "deleteOle" => XlsxOp::DeleteOle(parse_delete_ole(obj, i)?),
+            "insertSlicer" => XlsxOp::InsertSlicer(parse_insert_slicer(obj, i)?),
+            "deleteSlicer" => XlsxOp::DeleteSlicer(parse_delete_slicer(obj, i)?),
             "setTextBoxSize" => XlsxOp::SetTextBoxSize(parse_set_textbox_size(obj, i)?),
             "setTextBoxAnchor" => XlsxOp::SetTextBoxAnchor(parse_set_textbox_anchor(obj, i)?),
             "setShapeText" => XlsxOp::SetShapeText(parse_set_shape_text(obj, i)?),
@@ -7127,6 +7137,7 @@ fn parse_sheet_only_id(
         || id.contains("/link:")
         || id.contains("/spark:")
         || id.contains("/ole:")
+        || id.contains("/slicer:")
         || id.starts_with("cell:")
     {
         return Err(Error::with_path(
@@ -8284,6 +8295,182 @@ fn parse_delete_ole(
     let id = require_id(obj, i)?;
     let target = ole::parse_ole_id(&id, &format!("ops[{i}].id"))?;
     Ok(ole::DeleteOleOp { id, target })
+}
+
+fn parse_insert_slicer(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<slicer::InsertSlicerOp, Error> {
+    deny_keys(
+        obj,
+        i,
+        &[
+            "op", "id", "source", "field", "cx", "cy", "from", "to", "anchor", "fromOffX",
+            "fromOffY", "toOffX", "toOffY",
+        ],
+    )?;
+    let id = require_id(obj, i)?;
+    let sheet = parse_sheet_only_id(&id, i, "id", IdReason::InsertSlicerNeedsSheet)?;
+    let source_raw = match obj.get("source") {
+        Some(Value::String(s)) if !s.is_empty() => s.clone(),
+        None => {
+            return Err(Error::with_path(
+                ErrorKind::MissingField {
+                    field: "source".into(),
+                },
+                format!("ops[{i}].source"),
+            ));
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "source".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].source"),
+            ));
+        }
+    };
+    let source = parse_slicer_source(&source_raw, i)?;
+    let field = match obj.get("field") {
+        Some(Value::String(s)) if !s.is_empty() => s.clone(),
+        None => {
+            return Err(Error::with_path(
+                ErrorKind::MissingField {
+                    field: "field".into(),
+                },
+                format!("ops[{i}].field"),
+            ));
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "field".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].field"),
+            ));
+        }
+    };
+    let cx = parse_emu_field(obj.get("cx"), i, "cx")?;
+    let cy = parse_emu_field(obj.get("cy"), i, "cy")?;
+    if cx.is_some() != cy.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "insertSlicer".into(),
+                field: "cx and cy together".into(),
+            },
+            format!("ops[{i}]"),
+        ));
+    }
+    let from = match obj.get("from") {
+        Some(Value::String(s)) => a1::parse_cell(s).map_err(|e| e.at(format!("ops[{i}].from")))?,
+        None => {
+            return Err(Error::with_path(
+                ErrorKind::MissingField {
+                    field: "from".into(),
+                },
+                format!("ops[{i}].from"),
+            ));
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "from".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].from"),
+            ));
+        }
+    };
+    let anchor = match obj.get("anchor") {
+        None => picture::AnchorKind::OneCell,
+        Some(Value::String(s)) => picture::AnchorKind::parse_insert(s).ok_or_else(|| {
+            Error::with_path(ErrorKind::InvalidXlsxAnchor, format!("ops[{i}].anchor"))
+        })?,
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "anchor".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].anchor"),
+            ));
+        }
+    };
+    let to = match obj.get("to") {
+        None => None,
+        Some(Value::String(s)) => {
+            Some(a1::parse_cell(s).map_err(|e| e.at(format!("ops[{i}].to")))?)
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "to".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].to"),
+            ));
+        }
+    };
+    if anchor == picture::AnchorKind::TwoCell && to.is_none() {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "insertSlicer".into(),
+                field: "to".into(),
+            },
+            format!("ops[{i}].to"),
+        ));
+    }
+    if anchor == picture::AnchorKind::OneCell && to.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::UnknownField { field: "to".into() },
+            format!("ops[{i}].to"),
+        ));
+    }
+    Ok(slicer::InsertSlicerOp {
+        sheet,
+        source,
+        field,
+        cx,
+        cy,
+        from,
+        to,
+        anchor,
+        from_off_x: parse_off_field(obj.get("fromOffX"), i, "fromOffX")?.unwrap_or(0),
+        from_off_y: parse_off_field(obj.get("fromOffY"), i, "fromOffY")?.unwrap_or(0),
+        to_off_x: parse_off_field(obj.get("toOffX"), i, "toOffX")?.unwrap_or(0),
+        to_off_y: parse_off_field(obj.get("toOffY"), i, "toOffY")?.unwrap_or(0),
+    })
+}
+
+fn parse_slicer_source(raw: &str, i: usize) -> Result<slicer::SlicerSource, Error> {
+    if raw.contains("/table:") {
+        let (sheet, index) =
+            parse_table_id(raw, i).map_err(|e| e.at(format!("ops[{i}].source")))?;
+        return Ok(slicer::SlicerSource::Table { sheet, index });
+    }
+    if raw.contains("/pivot:") {
+        let (sheet, index) =
+            parse_pivot_id(raw, i).map_err(|e| e.at(format!("ops[{i}].source")))?;
+        return Ok(slicer::SlicerSource::Pivot { sheet, index });
+    }
+    Err(Error::with_path(
+        ErrorKind::InvalidId {
+            reason: IdReason::InsertSlicerNeedsTableOrPivot,
+        },
+        format!("ops[{i}].source"),
+    ))
+}
+
+fn parse_delete_slicer(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<slicer::DeleteSlicerOp, Error> {
+    deny_keys(obj, i, &["op", "id"])?;
+    let id = require_id(obj, i)?;
+    let target = slicer::parse_slicer_id(&id, &format!("ops[{i}].id"))?;
+    Ok(slicer::DeleteSlicerOp { id, target })
 }
 
 fn parse_set_textbox_size(
