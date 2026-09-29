@@ -249,6 +249,8 @@ pub struct InsertHyperlinkOp {
     pub shape: super::shape::ShapeTarget,
     pub target: PptxLinkKind,
     pub tooltip: Option<String>,
+    pub on_run: bool,
+    pub text: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -2450,7 +2452,12 @@ fn parse_set_handout_text(obj: &Map<String, Value>, i: usize) -> Result<SetHando
 }
 
 fn parse_insert_hyperlink(obj: &Map<String, Value>, i: usize) -> Result<InsertHyperlinkOp, Error> {
-    deny_keys(obj, i, &["op", "id", "url", "file", "slide", "tooltip"])?;
+    let on_run = parse_pptx_link_on(obj, i)?;
+    let mut allowed = vec!["op", "id", "url", "file", "slide", "tooltip", "on"];
+    if on_run {
+        allowed.push("text");
+    }
+    deny_keys(obj, i, &allowed)?;
     let id = require_id(obj, i)?;
     let shape = parse_insert_hyperlink_shape(&id, i)?;
     let target = parse_pptx_link_target(obj, i)?
@@ -2460,7 +2467,46 @@ fn parse_insert_hyperlink(obj: &Map<String, Value>, i: usize) -> Result<InsertHy
         shape,
         target,
         tooltip: parse_optional_tooltip(obj, i)?,
+        on_run,
+        text: if on_run {
+            parse_optional_run_text(obj, i)?
+        } else {
+            None
+        },
     })
+}
+
+fn parse_pptx_link_on(obj: &Map<String, Value>, i: usize) -> Result<bool, Error> {
+    match obj.get("on") {
+        None => Ok(false),
+        Some(Value::String(s)) if s == "shape" => Ok(false),
+        Some(Value::String(s)) if s == "run" => Ok(true),
+        Some(Value::String(_)) => Err(Error::with_path(
+            ErrorKind::InvalidHyperlinkOn,
+            format!("ops[{i}].on"),
+        )),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "on".into(),
+                expected: TypeName::String,
+            },
+            format!("ops[{i}].on"),
+        )),
+    }
+}
+
+fn parse_optional_run_text(obj: &Map<String, Value>, i: usize) -> Result<Option<String>, Error> {
+    match obj.get("text") {
+        None => Ok(None),
+        Some(Value::String(s)) => Ok(Some(s.clone())),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "text".into(),
+                expected: TypeName::String,
+            },
+            format!("ops[{i}].text"),
+        )),
+    }
 }
 
 fn parse_set_hyperlink(obj: &Map<String, Value>, i: usize) -> Result<SetHyperlinkOp, Error> {

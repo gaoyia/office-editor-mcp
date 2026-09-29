@@ -1,4 +1,4 @@
-//! 幻灯片文本形状上的 `a:hlinkClick`：名单、插、改、删。不引用 xlsx / docx。
+//! 幻灯片文本形状上的 `a:hlinkClick`：形状级与 run 级。不引用 xlsx / docx。
 
 use serde_json::{json, Map, Value};
 
@@ -14,12 +14,16 @@ use super::{REL_HYPERLINK, REL_NS, REL_SLIDE};
 const ACTION_SLIDE: &str = "ppaction://hlinksldjump";
 const ACTION_FILE: &str = "ppaction://hlinkfile";
 
+struct ClickView<'a> {
+    click: &'a Element,
+    on: &'static str,
+    text: Option<String>,
+}
+
 pub fn count(root: &Element) -> usize {
     let mut n = 0usize;
     for sp in shape::collect_text_shapes(root) {
-        if hlink_click(sp).is_some() {
-            n += 1;
-        }
+        n += clicks_in_shape(sp).len();
     }
     n
 }
@@ -35,12 +39,21 @@ pub fn list_json(
     let mut out = Vec::new();
     let mut index = 0usize;
     for (shape_index, sp) in shape::collect_text_shapes(root).into_iter().enumerate() {
-        let Some(click) = hlink_click(sp) else {
-            continue;
-        };
-        index += 1;
         let (host, _, _) = shape::shape_stable_id(sp, &host_prefix, shape_index + 1);
-        out.push(item_json(click, index, slide, &host, part, rels, slides));
+        for view in clicks_in_shape(sp) {
+            index += 1;
+            out.push(item_json(
+                view.click,
+                index,
+                slide,
+                &host,
+                part,
+                rels,
+                slides,
+                view.on,
+                view.text.as_deref(),
+            ));
+        }
     }
     Value::Array(out)
 }
@@ -57,6 +70,21 @@ pub fn apply_insert(
     ensure_jump_exists(slides, &op.target, i)?;
     picture::ensure_xmlns(&mut doc.root, "r", REL_NS);
     picture::ensure_xmlns(&mut doc.root, "a", super::DML_NS);
+    if op.on_run {
+        apply_insert_run(pkg, doc, part, slides, op, i)
+    } else {
+        apply_insert_shape(pkg, doc, part, slides, op, i)
+    }
+}
+
+fn apply_insert_shape(
+    pkg: &mut Package,
+    doc: &mut Document,
+    part: &str,
+    slides: &[SlideMeta],
+    op: &InsertHyperlinkOp,
+    i: usize,
+) -> Result<(), Error> {
     let sp = shape::find_shape_mut(&mut doc.root, &op.shape.key).ok_or_else(|| {
         Error::with_path(
             ErrorKind::ShapeNotFound { id: op.id.clone() },
@@ -77,6 +105,51 @@ pub fn apply_insert(
     }
     let rid = push_rel(pkg, part, slides, &op.target)?;
     insert_click(cnv, &rid, action_of(&op.target), op.tooltip.as_deref());
+    Ok(())
+}
+
+fn apply_insert_run(
+    pkg: &mut Package,
+    doc: &mut Document,
+    part: &str,
+    slides: &[SlideMeta],
+    op: &InsertHyperlinkOp,
+    i: usize,
+) -> Result<(), Error> {
+    let sp = shape::find_shape_mut(&mut doc.root, &op.shape.key).ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::ShapeNotFound { id: op.id.clone() },
+            format!("ops[{i}].id"),
+        )
+    })?;
+    let tx = sp.child_by_local_mut("txBody").ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::ShapeNotFound { id: op.id.clone() },
+            format!("ops[{i}].id"),
+        )
+    })?;
+    if last_para_index(tx).is_none() {
+        tx.push_element(Element::new(tx.prefixed("p")));
+    }
+    let para_i = last_para_index(tx).ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::ShapeNotFound { id: op.id.clone() },
+            format!("ops[{i}].id"),
+        )
+    })?;
+    let Node::Element(p) = &mut tx.children[para_i] else {
+        return Err(Error::with_path(
+            ErrorKind::ShapeNotFound { id: op.id.clone() },
+            format!("ops[{i}].id"),
+        ));
+    };
+    let rid = push_rel(pkg, part, slides, &op.target)?;
+    match &op.text {
+        Some(text) => {
+            append_linked_run(p, &rid, action_of(&op.target), op.tooltip.as_deref(), text)
+        }
+        None => wrap_last_run(p, &rid, action_of(&op.target), op.tooltip.as_deref(), i)?,
+    }
     Ok(())
 }
 
@@ -251,6 +324,8 @@ fn item_json(
     part: &str,
     rels: &Relationships,
     slides: &[SlideMeta],
+    on: &str,
+    text: Option<&str>,
 ) -> Value {
     let rid = shape::rid_attr(click).map(str::to_string);
     let rel = rid.as_deref().and_then(|id| rels.find_by_id(id));
@@ -281,6 +356,7 @@ fn item_json(
     obj.insert("id".into(), json!(format!("slide:{slide}/link:{index}")));
     obj.insert("index".into(), json!(index));
     obj.insert("kind".into(), json!(kind));
+    obj.insert("on".into(), json!(on));
     obj.insert("host".into(), json!(host));
     obj.insert("rId".into(), rid.map(|s| json!(s)).unwrap_or(Value::Null));
     obj.insert("url".into(), url);
@@ -293,7 +369,158 @@ fn item_json(
             .map(|s| json!(s))
             .unwrap_or(Value::Null),
     );
+    obj.insert("text".into(), text.map(|s| json!(s)).unwrap_or(Value::Null));
     Value::Object(obj)
+}
+
+fn clicks_in_shape(sp: &Element) -> Vec<ClickView<'_>> {
+    let mut out = Vec::new();
+    if let Some(click) = hlink_click(sp) {
+        out.push(ClickView {
+            click,
+            on: "shape",
+            text: None,
+        });
+    }
+    if let Some(tx) = sp.child_by_local("txBody") {
+        collect_run_clicks(tx, &mut out);
+    }
+    out
+}
+
+fn collect_run_clicks<'a>(el: &'a Element, out: &mut Vec<ClickView<'a>>) {
+    if el.local_name() == "AlternateContent" {
+        if let Some(i) = shape::first_alt_child_index(el) {
+            if let Node::Element(child) = &el.children[i] {
+                collect_run_clicks(child, out);
+            }
+        }
+        return;
+    }
+    if el.local_name() == "fld" {
+        return;
+    }
+    if el.local_name() == "r" {
+        if let Some(click) = el
+            .child_by_local("rPr")
+            .and_then(|rpr| rpr.child_by_local("hlinkClick"))
+        {
+            let text = el
+                .child_by_local("t")
+                .map(|t| t.text_content())
+                .unwrap_or_default();
+            out.push(ClickView {
+                click,
+                on: "run",
+                text: Some(text),
+            });
+        }
+        return;
+    }
+    for n in &el.children {
+        if let Node::Element(e) = n {
+            collect_run_clicks(e, out);
+        }
+    }
+}
+
+fn last_para_index(tx: &Element) -> Option<usize> {
+    tx.children
+        .iter()
+        .rposition(|n| matches!(n, Node::Element(e) if e.local_name() == "p"))
+}
+
+fn last_run_index(p: &Element) -> Option<usize> {
+    p.children
+        .iter()
+        .rposition(|n| matches!(n, Node::Element(e) if e.local_name() == "r"))
+}
+
+fn last_rpr(p: &Element) -> Option<Element> {
+    for n in p.children.iter().rev() {
+        let Node::Element(e) = n else {
+            continue;
+        };
+        if matches!(e.local_name(), "r" | "fld") {
+            if let Some(rpr) = e.child_by_local("rPr") {
+                return Some(rpr.clone());
+            }
+        }
+    }
+    p.child_by_local("endParaRPr").cloned()
+}
+
+fn strip_hlink_click(el: &mut Element) {
+    el.children
+        .retain(|n| !matches!(n, Node::Element(e) if e.local_name() == "hlinkClick"));
+}
+
+fn needs_xml_space(text: &str) -> bool {
+    text.starts_with(' ') || text.starts_with('\t') || text.ends_with(' ') || text.ends_with('\t')
+}
+
+fn append_linked_run(
+    p: &mut Element,
+    rid: &str,
+    action: Option<&str>,
+    tooltip: Option<&str>,
+    text: &str,
+) {
+    let mut r = Element::new(p.prefixed("r"));
+    let mut rpr = last_rpr(p).unwrap_or_else(|| Element::new(p.prefixed("rPr")));
+    rpr.name = p.prefixed("rPr");
+    strip_hlink_click(&mut rpr);
+    insert_click(&mut rpr, rid, action, tooltip);
+    r.push_element(rpr);
+    let mut t = Element::new(r.prefixed("t"));
+    if !text.is_empty() {
+        t.set_text(text);
+        if needs_xml_space(text) {
+            t.set_attr("xml:space", "preserve");
+        }
+    }
+    r.push_element(t);
+    let at = p
+        .children
+        .iter()
+        .position(|n| matches!(n, Node::Element(e) if e.local_name() == "endParaRPr"))
+        .unwrap_or(p.children.len());
+    p.children.insert(at, Node::Element(r));
+}
+
+fn wrap_last_run(
+    p: &mut Element,
+    rid: &str,
+    action: Option<&str>,
+    tooltip: Option<&str>,
+    i: usize,
+) -> Result<(), Error> {
+    let run_i = last_run_index(p)
+        .ok_or_else(|| Error::with_path(ErrorKind::PptxRunLinkNeedsRun, format!("ops[{i}].id")))?;
+    let Node::Element(r) = &mut p.children[run_i] else {
+        return Err(Error::with_path(
+            ErrorKind::PptxRunLinkNeedsRun,
+            format!("ops[{i}].id"),
+        ));
+    };
+    if r.child_by_local("rPr")
+        .and_then(|rpr| rpr.child_by_local("hlinkClick"))
+        .is_some()
+    {
+        return Err(Error::with_path(
+            ErrorKind::RunAlreadyHasHyperlink,
+            format!("ops[{i}].id"),
+        ));
+    }
+    if r.child_by_local("rPr").is_none() {
+        r.children
+            .insert(0, Node::Element(Element::new(r.prefixed("rPr"))));
+    }
+    let rpr = r
+        .child_by_local_mut("rPr")
+        .ok_or_else(|| Error::with_path(ErrorKind::PptxRunLinkNeedsRun, format!("ops[{i}].id")))?;
+    insert_click(rpr, rid, action, tooltip);
+    Ok(())
 }
 
 fn classify(action: &str, rel: Option<&Relationship>) -> &'static str {
@@ -332,10 +559,10 @@ fn cnv_pr_mut(sp: &mut Element) -> Option<&mut Element> {
 fn find_click(root: &Element, index: usize) -> Option<&Element> {
     let mut seen = 0usize;
     for sp in shape::collect_text_shapes(root) {
-        if let Some(click) = hlink_click(sp) {
+        for view in clicks_in_shape(sp) {
             seen += 1;
             if seen == index {
-                return Some(click);
+                return Some(view.click);
             }
         }
     }
@@ -361,15 +588,62 @@ fn find_click_in<'a>(
         return None;
     }
     let is_text_sp = el.local_name() == "sp" && el.child_by_local("txBody").is_some();
-    if is_text_sp && hlink_click(el).is_some() {
-        *seen += 1;
-        if *seen == want {
-            return cnv_pr_mut(el).and_then(|c| c.child_by_local_mut("hlinkClick"));
+    if is_text_sp {
+        if hlink_click(el).is_some() {
+            *seen += 1;
+            if *seen == want {
+                return cnv_pr_mut(el).and_then(|c| c.child_by_local_mut("hlinkClick"));
+            }
         }
+        if let Some(tx) = el.child_by_local_mut("txBody") {
+            return find_run_click_in(tx, want, seen);
+        }
+        return None;
     }
     for child in el.children.as_mut_slice() {
         if let Node::Element(e) = child {
             if let Some(found) = find_click_in(e, want, seen) {
+                return Some(found);
+            }
+        }
+    }
+    None
+}
+
+fn find_run_click_in<'a>(
+    el: &'a mut Element,
+    want: usize,
+    seen: &mut usize,
+) -> Option<&'a mut Element> {
+    if el.local_name() == "AlternateContent" {
+        if let Some(i) = shape::first_alt_child_index(el) {
+            if let Node::Element(child) = &mut el.children[i] {
+                return find_run_click_in(child, want, seen);
+            }
+        }
+        return None;
+    }
+    if el.local_name() == "fld" {
+        return None;
+    }
+    if el.local_name() == "r" {
+        if el
+            .child_by_local("rPr")
+            .and_then(|rpr| rpr.child_by_local("hlinkClick"))
+            .is_some()
+        {
+            *seen += 1;
+            if *seen == want {
+                return el
+                    .child_by_local_mut("rPr")
+                    .and_then(|rpr| rpr.child_by_local_mut("hlinkClick"));
+            }
+        }
+        return None;
+    }
+    for child in el.children.as_mut_slice() {
+        if let Node::Element(e) = child {
+            if let Some(found) = find_run_click_in(e, want, seen) {
                 return Some(found);
             }
         }
@@ -392,20 +666,64 @@ fn remove_click_in(el: &mut Element, want: usize, seen: &mut usize) -> bool {
         return false;
     }
     let is_text_sp = el.local_name() == "sp" && el.child_by_local("txBody").is_some();
-    if is_text_sp && hlink_click(el).is_some() {
-        *seen += 1;
-        if *seen == want {
-            if let Some(cnv) = cnv_pr_mut(el) {
-                cnv.children
-                    .retain(|n| !matches!(n, Node::Element(e) if e.local_name() == "hlinkClick"));
-                return true;
+    if is_text_sp {
+        if hlink_click(el).is_some() {
+            *seen += 1;
+            if *seen == want {
+                if let Some(cnv) = cnv_pr_mut(el) {
+                    strip_hlink_click(cnv);
+                    return true;
+                }
+                return false;
             }
-            return false;
         }
+        if let Some(tx) = el.child_by_local_mut("txBody") {
+            return remove_run_click_in(tx, want, seen);
+        }
+        return false;
     }
     for child in el.children.as_mut_slice() {
         if let Node::Element(e) = child {
             if remove_click_in(e, want, seen) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+fn remove_run_click_in(el: &mut Element, want: usize, seen: &mut usize) -> bool {
+    if el.local_name() == "AlternateContent" {
+        if let Some(i) = shape::first_alt_child_index(el) {
+            if let Node::Element(child) = &mut el.children[i] {
+                return remove_run_click_in(child, want, seen);
+            }
+        }
+        return false;
+    }
+    if el.local_name() == "fld" {
+        return false;
+    }
+    if el.local_name() == "r" {
+        if el
+            .child_by_local("rPr")
+            .and_then(|rpr| rpr.child_by_local("hlinkClick"))
+            .is_some()
+        {
+            *seen += 1;
+            if *seen == want {
+                if let Some(rpr) = el.child_by_local_mut("rPr") {
+                    strip_hlink_click(rpr);
+                    return true;
+                }
+                return false;
+            }
+        }
+        return false;
+    }
+    for child in el.children.as_mut_slice() {
+        if let Node::Element(e) = child {
+            if remove_run_click_in(e, want, seen) {
                 return true;
             }
         }

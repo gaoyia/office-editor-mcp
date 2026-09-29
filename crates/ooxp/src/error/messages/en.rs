@@ -1044,6 +1044,13 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::ShapeAlreadyHasHyperlink => {
             "this shape already has a shape-level hyperlink; use setHyperlink".into()
         }
+        ErrorKind::InvalidHyperlinkOn => "on must be shape or run".into(),
+        ErrorKind::RunAlreadyHasHyperlink => {
+            "this run already has a hyperlink; use setHyperlink".into()
+        }
+        ErrorKind::PptxRunLinkNeedsRun => {
+            "on=run needs an existing text run or a text field".into()
+        }
         ErrorKind::PptxHyperlinkSelfSlide => {
             "cannot hyperlink a shape to its own slide".into()
         }

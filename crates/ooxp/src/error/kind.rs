@@ -737,6 +737,9 @@ define_error_kinds! {
     PptxHyperlinkNeedTarget => vec![Self::PptxHyperlinkNeedTarget],
     PptxNeedSetHyperlinkField => vec![Self::PptxNeedSetHyperlinkField],
     ShapeAlreadyHasHyperlink => vec![Self::ShapeAlreadyHasHyperlink],
+    InvalidHyperlinkOn => vec![Self::InvalidHyperlinkOn],
+    RunAlreadyHasHyperlink => vec![Self::RunAlreadyHasHyperlink],
+    PptxRunLinkNeedsRun => vec![Self::PptxRunLinkNeedsRun],
     PptxHyperlinkSelfSlide => vec![Self::PptxHyperlinkSelfSlide],
     EmptyHyperlinkFile => vec![Self::EmptyHyperlinkFile],
     FieldNotFound { id: String } => vec![Self::FieldNotFound { id: "field:1".into() }],
@@ -1286,6 +1289,9 @@ impl ErrorKind {
             | Self::PptxHyperlinkNeedTarget
             | Self::PptxNeedSetHyperlinkField
             | Self::ShapeAlreadyHasHyperlink
+            | Self::InvalidHyperlinkOn
+            | Self::RunAlreadyHasHyperlink
+            | Self::PptxRunLinkNeedsRun
             | Self::PptxHyperlinkSelfSlide
             | Self::EmptyHyperlinkFile
             | Self::EmptyFieldInstr

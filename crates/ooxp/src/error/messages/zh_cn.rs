@@ -901,6 +901,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::ShapeAlreadyHasHyperlink => {
             "该形状已有形状级超链接，请用 setHyperlink".into()
         }
+        ErrorKind::InvalidHyperlinkOn => "on 必须是 shape 或 run".into(),
+        ErrorKind::RunAlreadyHasHyperlink => "该 run 已有超链接，请用 setHyperlink".into(),
+        ErrorKind::PptxRunLinkNeedsRun => "on 为 run 时需要已有文本 run，或给 text".into(),
         ErrorKind::PptxHyperlinkSelfSlide => "不能把超链接跳到本页".into(),
         ErrorKind::EmptyHyperlinkFile => "file 不能为空".into(),
         ErrorKind::FieldNotFound { id } => format!("找不到域：{id}"),

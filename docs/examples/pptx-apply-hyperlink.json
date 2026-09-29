@@ -20,6 +20,12 @@
       "slide": "slide:2"
     },
     {
+      "op": "insertHyperlink",
+      "id": "slide:1/shape:2",
+      "on": "run",
+      "url": "https://example.com/run"
+    },
+    {
       "op": "deleteHyperlink",
       "id": "slide:1/link:1"
     }

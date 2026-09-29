@@ -799,6 +799,8 @@ fn attach_hyperlinks(pkg: &mut Package, slides: &[NewSlide]) -> Result<(), Error
                 },
                 target: link.target.clone(),
                 tooltip: link.tooltip.clone(),
+                on_run: false,
+                text: None,
             };
             hyperlink::apply_insert(pkg, &mut doc, &part, &metas, &op, 0)?;
             dirty = true;

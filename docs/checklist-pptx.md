@@ -4,11 +4,11 @@
 
 检查前用 create 或 apply 在本机生成文件，不要用改过扩展名的 zip 目录冒充。本机若 `PowerPoint.Application` 被 WPS 抢走，直接启动 `POWERPNT.EXE` 再挂 COM，不要走被抢的 ProgID。Office 16 的对象模型在 `mdiClass` 上。
 
-C、I、A、Pp、Pc、Psa、Pn、Pcm、Pm、Ps、Sg、Pt、Tn、Tr、Am、Aw、Mm、Mw、Ts、Ho、Phl、Pmd、Psc、Cs、Po、Cr、Pz、Pw、Pf 各组由 `manual-check/office/cases/pptx-*.ps1` 自动判定，跑 `pwsh -File manual-check\office\run.ps1 -Case 'pptx-*'` 即可复现。O1 已放弃，与 xlsx / docx 相同。
+C、I、A、Pp、Pc、Psa、Pn、Pcm、Pm、Ps、Sg、Pt、Tn、Tr、Am、Aw、Mm、Mw、Ts、Ho、Phl、Phr、Pmd、Psc、Cs、Po、Cr、Pz、Pw、Pf 各组由 `manual-check/office/cases/pptx-*.ps1` 自动判定，跑 `pwsh -File manual-check\office\run.ps1 -Case 'pptx-*'` 即可复现。O1 已放弃，与 xlsx / docx 相同。
 
 ## 本机结果（2026-09-28）
 
-Microsoft PowerPoint 16.0 已打开，C1、C3、C4、C5–C13、I1–I5、A1–A5、Pp1–Pp7、Pc1–Pc7、Psa1–Psa7、Pn1–Pn6、Pcm1–Pcm6、Pik1–Pik4、Pm1–Pm5、Ps1–Ps5、Sg1–Sg5、Pt1–Pt6、Tn1–Tn5、Am1–Am5、Mm1–Mm5、Ho1–Ho5、Phl1–Phl5、Pmd1–Pmd5、Psc1–Psc5、Cs1–Cs5 均 PASS。本机若装了 WPS，`PowerPoint.Application` 会被抢走，测试仍直接启动 `POWERPNT.EXE`，从 `mdiClass` 挂 COM。O1 已放弃。2026-09-27 补跑 `pptx-pictures.ps1`，Pp1–Pp7 通过。同日补跑 `pptx-create-pictures.ps1`，C5–C7 通过。同日补跑 `pptx-charts.ps1`，Pc1–Pc7 通过。同日补跑 `pptx-create-charts.ps1`，C8–C10 通过。同日补跑 `pptx-smartart.ps1`，Psa1–Psa7 通过。同日补跑 `pptx-notes.ps1`，Pn1–Pn4 通过。同日补跑 `pptx-comments.ps1`，Pcm1–Pcm5、Pik1–Pik4 通过。同日补跑 `pptx-docprops.ps1`，Pd1–Pd5 通过。同日补跑 `pptx-charts-remain.ps1`，Pr1–Pr3 通过。2026-09-28 补跑 `pptx-slides.ps1`，Pm1–Pm5 通过。同日补跑 `pptx-shapes.ps1`，Ps1–Ps5 通过。同日补跑 `pptx-tables.ps1`，Pt1–Pt6 通过。同日补跑 `pptx-transition.ps1`，Tn1–Tn5 通过。同日补跑 `pptx-timing.ps1`，Am1–Am5 通过。同日补跑 `pptx-masters.ps1`，Mm1–Mm5 通过。同日补跑 `pptx-handout.ps1`，Ho1–Ho5 通过。同日补跑 `pptx-hyperlinks.ps1`，Phl1–Phl5 通过。同日补跑 `pptx-create-notes-comments.ps1`，C11–C13 通过。同日补跑 `pptx-notes.ps1`，Pn5–Pn6 通过。同日补跑 `pptx-comments.ps1`，Pcm6 通过。同日补跑 `pptx-media.ps1`，Pmd1–Pmd5 通过。同日补跑 `pptx-sections.ps1`，Psc1–Psc5 通过。2026-09-29 补跑 `pptx-anim-write.ps1`，Aw1–Aw5 通过。同日补跑 `pptx-transition-remain.ps1`，Tr1–Tr5 通过。同日补跑 `pptx-shape-geom.ps1`，Sg1–Sg5 通过。同日补跑 `pptx-master-write.ps1`，Mw1–Mw5 通过。同日补跑 `pptx-theme-size.ps1`，Ts1–Ts5 通过。同日补跑 `pptx-custom-show.ps1`，Cs1–Cs5 通过。2026-09-29 补跑 `pptx-create-remain.ps1`，Cr1–Cr5 通过。同日补跑 `pptx-notes.ps1`，Pn7–Pn11 通过。同日补跑 `pptx-zoom.ps1`，Pz1–Pz5 通过。同日补跑 `pptx-protect.ps1`，Pw1–Pw5 通过。同日补跑 `pptx-fields.ps1`，Pf1–Pf5 通过。
+Microsoft PowerPoint 16.0 已打开，C1、C3、C4、C5–C13、I1–I5、A1–A5、Pp1–Pp7、Pc1–Pc7、Psa1–Psa7、Pn1–Pn6、Pcm1–Pcm6、Pik1–Pik4、Pm1–Pm5、Ps1–Ps5、Sg1–Sg5、Pt1–Pt6、Tn1–Tn5、Am1–Am5、Mm1–Mm5、Ho1–Ho5、Phl1–Phl5、Pmd1–Pmd5、Psc1–Psc5、Cs1–Cs5 均 PASS。本机若装了 WPS，`PowerPoint.Application` 会被抢走，测试仍直接启动 `POWERPNT.EXE`，从 `mdiClass` 挂 COM。O1 已放弃。2026-09-27 补跑 `pptx-pictures.ps1`，Pp1–Pp7 通过。同日补跑 `pptx-create-pictures.ps1`，C5–C7 通过。同日补跑 `pptx-charts.ps1`，Pc1–Pc7 通过。同日补跑 `pptx-create-charts.ps1`，C8–C10 通过。同日补跑 `pptx-smartart.ps1`，Psa1–Psa7 通过。同日补跑 `pptx-notes.ps1`，Pn1–Pn4 通过。同日补跑 `pptx-comments.ps1`，Pcm1–Pcm5、Pik1–Pik4 通过。同日补跑 `pptx-docprops.ps1`，Pd1–Pd5 通过。同日补跑 `pptx-charts-remain.ps1`，Pr1–Pr3 通过。2026-09-28 补跑 `pptx-slides.ps1`，Pm1–Pm5 通过。同日补跑 `pptx-shapes.ps1`，Ps1–Ps5 通过。同日补跑 `pptx-tables.ps1`，Pt1–Pt6 通过。同日补跑 `pptx-transition.ps1`，Tn1–Tn5 通过。同日补跑 `pptx-timing.ps1`，Am1–Am5 通过。同日补跑 `pptx-masters.ps1`，Mm1–Mm5 通过。同日补跑 `pptx-handout.ps1`，Ho1–Ho5 通过。同日补跑 `pptx-hyperlinks.ps1`，Phl1–Phl5 通过。同日补跑 `pptx-create-notes-comments.ps1`，C11–C13 通过。同日补跑 `pptx-notes.ps1`，Pn5–Pn6 通过。同日补跑 `pptx-comments.ps1`，Pcm6 通过。同日补跑 `pptx-media.ps1`，Pmd1–Pmd5 通过。同日补跑 `pptx-sections.ps1`，Psc1–Psc5 通过。2026-09-29 补跑 `pptx-anim-write.ps1`，Aw1–Aw5 通过。同日补跑 `pptx-transition-remain.ps1`，Tr1–Tr5 通过。同日补跑 `pptx-shape-geom.ps1`，Sg1–Sg5 通过。同日补跑 `pptx-master-write.ps1`，Mw1–Mw5 通过。同日补跑 `pptx-theme-size.ps1`，Ts1–Ts5 通过。同日补跑 `pptx-custom-show.ps1`，Cs1–Cs5 通过。2026-09-29 补跑 `pptx-create-remain.ps1`，Cr1–Cr5 通过。同日补跑 `pptx-notes.ps1`，Pn7–Pn11 通过。同日补跑 `pptx-zoom.ps1`，Pz1–Pz5 通过。同日补跑 `pptx-protect.ps1`，Pw1–Pw5 通过。同日补跑 `pptx-fields.ps1`，Pf1–Pf5 通过。同日补跑 `pptx-run-links.ps1`，Phr1–Phr5 通过。
 
 | 序号 | 状态 | 结果 |
 | --- | --- | --- |
@@ -41,6 +41,7 @@ Microsoft PowerPoint 16.0 已打开，C1、C3、C4、C5–C13、I1–I5、A1–A
 | Ts1–Ts5 | ✅ | PowerPoint 16.0：`pptx-theme-size.ps1`，5 PASS / 0 FAIL。`setSlideSize` 后 inspect `cx=9144000`、COM SlideWidth=720、无 Repair；第一页文本框 `xfrm` 仍是 create 原值；`setThemeColors` `accent1=FF0000` 对上；`setThemeFonts` `majorLatin=Arial` 对上；页 id 得 `InvalidId`，`cx` 越界 / `type=other` / xlsx / docx 得 `InvalidField`，未写文件。 |
 | Ho1–Ho5 | ✅ | PowerPoint 16.0：`pptx-handout.ps1`，5 PASS / 0 FAIL。无 `handout` 时只有 `hasHandout`；create 为 false、展开为 null；`setHandoutText` 写页脚 / 页眉后 COM 与 inspect 可见新字、无 Repair；xlsx / docx 拒 `scope.handout` 与 `setHandoutText`。 |
 | Phl1–Phl5 | ✅ | PowerPoint 16.0：`pptx-hyperlinks.ps1`，5 PASS / 0 FAIL。无名单时根与各页有 `hyperlinkCount=0`；`insertHyperlink` 后 COM 单击地址对上且无 Repair；改地址后对得上；删除后框上字还在；对页 id 得 `InvalidId`，缺目标得 `InvalidField` 且未写文件。 |
+| Phr1–Phr5 | ✅ | PowerPoint 16.0：`pptx-run-links.ps1`，5 PASS / 0 FAIL。`insertHyperlink` `on=run` 后 `host` 为第一框、`on=run`；ZIP 链在 `a:rPr` 不在 `cNvPr`；改地址后 COM 文本范围对上；删除后字还在、没有 `a:hlinkClick`；`on=other` / xlsx `on` 得 `InvalidField`，页 id 得 `InvalidId`。无 Repair |
 | Pmd1–Pmd5 | ✅ | PowerPoint 16.0：`pptx-media.ps1`，8 PASS / 0 FAIL。无 `media` 时有 `videoCount` / `audioCount`、没有名单；另存视频 id 为 `slide:1/video:3`，不并进 `pictures`；`exportMedia` 与 `/ppt/media/media1.mp4` 字节一致；`insertVideo` 后 Type=16、id 为 `slide:1/video:4`、无 Repair；`insertAudio` 后 `audioCount` 加 1、无 Repair；`deleteMedia` 后对象消失；对 `slide:1/notes` 得 `InvalidId`，WAV 当视频得 `InvalidField` 且未写文件。 |
 | Psc1–Psc5 | ✅ | PowerPoint 16.0：`pptx-sections.ps1`，5 PASS / 0 FAIL。无 `sections` 时有 `sectionCount=2`、没有名单；另存两节 id 为 `section:1`，`slides` 对得上页序；连续 `insertSlideSection` 两节再划第二页后 COM 第二节名为「内容」、FirstSlide=2、无 Repair；改名后左侧是「正文」；删节后页还在、节名没了；对页 id 得 `InvalidId`，`start` 与 `after` 同给得 `InvalidField` 且未写文件。 |
 | Cs1–Cs5 | ✅ | PowerPoint 16.0：`pptx-custom-show.ps1`，5 PASS / 0 FAIL。无 `customShows` 时有 `customShowCount=0`、没有名单；`insertCustomShow` 后 id 为 `show:1`、`name=Tour`、`slides` 为第 1、3 页；COM NamedSlideShows Count=1 且 `SlideShowName` 能设成 Tour、无 Repair；改名 Guide 且页序为第 3、1 页后 COM 对上；`deleteCustomShow` 后名单空；`deleteSlide` 后对应 `r:id` 消失、空名单仍留那一条；页 id / 空名 / 重名 / xlsx / docx 拒写。 |
@@ -366,6 +367,18 @@ inspect 列出讲义母版页眉、页脚、日期、页码槽位。apply 用 `s
 | Phl3 | 改地址 | `setHyperlink` 改 URL 后 COM 地址是新值；无 Repair |
 | Phl4 | 删链留字 | `deleteHyperlink` 后链没了，框上字还在；无 Repair |
 | Phl5 | 拒错 | 对页 id 发 `insertHyperlink` 得 `InvalidId`；缺 `url`/`file`/`slide` 得 `InvalidField`，未写文件 |
+
+## run 级超链接
+
+run 的 `a:rPr/a:hlinkClick`。与形状级编进同一份 `hyperlinks`。`insertHyperlink` 的 `on` 为 `run`。不写 `a:hlinkHover`，不写下划线。脚本：`manual-check/office/cases/pptx-run-links.ps1`。编号用 Phr。
+
+| 序号 | 检查 | 通过标准 |
+| --- | --- | --- |
+| Phr1 | inspect | `insertHyperlink` `on=run` 后 `hyperlinkCount=1`，`on=run`，`host` 为第一框，`text` 对上 |
+| Phr2 | XML | PowerPoint 无 Repair；ZIP 里链在 `a:rPr/a:hlinkClick`，`p:cNvPr` 上没有 |
+| Phr3 | 改地址 | `setHyperlink` 改 URL 后 COM 文本范围地址是新值；无 Repair |
+| Phr4 | 删链留字 | `deleteHyperlink` 后没有 `a:hlinkClick`，框上字还在；无 Repair |
+| Phr5 | 拒错 | `on=other` 得 `InvalidField`；xlsx 出现 `on` 得 `InvalidField`；页 id 得 `InvalidId`，均未写文件 |
 
 ## 媒体
 

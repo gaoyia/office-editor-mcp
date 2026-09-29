@@ -1,4 +1,4 @@
-//! 幻灯片形状级超链接：名单、插改删、跳转、跨字段拒绝。
+//! 幻灯片形状级与 run 级超链接：名单、插改删、跳转、跨字段拒绝。
 
 use std::io::{Cursor, Read};
 use std::path::{Path, PathBuf};
@@ -209,16 +209,18 @@ fn insert_url_inspect_set_delete() {
     assert_eq!(links.len(), 1);
     assert_eq!(
         object_keys(&links[0]),
-        ["id", "index", "kind", "host", "rId", "url", "file", "slide", "tooltip"]
+        ["id", "index", "kind", "on", "host", "rId", "url", "file", "slide", "tooltip", "text"]
     );
     assert_eq!(links[0]["id"], "slide:1/link:1");
     assert_eq!(links[0]["index"], 1);
     assert_eq!(links[0]["kind"], "url");
+    assert_eq!(links[0]["on"], "shape");
     assert_eq!(links[0]["host"], shape);
     assert_eq!(links[0]["url"], "https://example.com/");
     assert!(links[0]["file"].is_null());
     assert!(links[0]["slide"].is_null());
     assert_eq!(links[0]["tooltip"], "提示");
+    assert!(links[0]["text"].is_null());
     let rid = links[0]["rId"].as_str().unwrap();
     assert!(rid.starts_with("rId"));
 
@@ -438,4 +440,176 @@ fn set_url_to_slide_jump() {
     let rels = part_text(&out, "ppt/slides/_rels/slide1.xml.rels");
     assert!(rels.contains("slide2.xml"));
     assert!(!rels.contains("/hyperlink"));
+}
+
+#[test]
+fn insert_run_url_inspect_set_delete() {
+    let src = create_deck("run");
+    let shape = first_shape_id(&src);
+    let inserted = tmp("run-ins").with_extension("pptx");
+    apply(
+        &src,
+        &inserted,
+        json!([{
+            "op": "insertHyperlink",
+            "id": shape,
+            "on": "run",
+            "url": "https://example.com/run"
+        }]),
+    )
+    .unwrap();
+    let xml = part_text(&inserted, "ppt/slides/slide1.xml");
+    assert!(xml.contains("<a:hlinkClick"));
+    assert!(xml.contains("rPr"));
+    let cnv = xml
+        .split("<p:cNvPr")
+        .nth(1)
+        .and_then(|s| s.split("</p:cNvPr>").next())
+        .unwrap_or("");
+    assert!(!cnv.contains("hlinkClick"));
+    let tree = inspect_links(&inserted);
+    assert_eq!(tree["hyperlinkCount"], 1);
+    let link = &tree["slides"][0]["hyperlinks"][0];
+    assert_eq!(link["on"], "run");
+    assert_eq!(link["kind"], "url");
+    assert_eq!(link["host"], shape);
+    assert_eq!(link["url"], "https://example.com/run");
+    assert_eq!(link["text"], "标题");
+
+    let set_out = tmp("run-set").with_extension("pptx");
+    apply(
+        &inserted,
+        &set_out,
+        json!([{
+            "op": "setHyperlink",
+            "id": "slide:1/link:1",
+            "url": "https://example.org/run"
+        }]),
+    )
+    .unwrap();
+    let tree_set = inspect_links(&set_out);
+    assert_eq!(
+        tree_set["slides"][0]["hyperlinks"][0]["url"],
+        "https://example.org/run"
+    );
+    assert_eq!(tree_set["slides"][0]["hyperlinks"][0]["on"], "run");
+
+    let del = tmp("run-del").with_extension("pptx");
+    apply(
+        &set_out,
+        &del,
+        json!([{ "op": "deleteHyperlink", "id": "slide:1/link:1" }]),
+    )
+    .unwrap();
+    let tree_del = inspect_links(&del);
+    assert_eq!(tree_del["hyperlinkCount"], 0);
+    let xml_del = part_text(&del, "ppt/slides/slide1.xml");
+    assert!(!xml_del.contains("hlinkClick"));
+    assert!(xml_del.contains("标题"));
+}
+
+#[test]
+fn insert_run_with_text_appends() {
+    let src = create_deck("run-text");
+    let shape = first_shape_id(&src);
+    let out = tmp("run-text").with_extension("pptx");
+    apply(
+        &src,
+        &out,
+        json!([{
+            "op": "insertHyperlink",
+            "id": shape,
+            "on": "run",
+            "text": "链",
+            "url": "https://example.com/t"
+        }]),
+    )
+    .unwrap();
+    let tree = inspect_links(&out);
+    let link = &tree["slides"][0]["hyperlinks"][0];
+    assert_eq!(link["on"], "run");
+    assert_eq!(link["text"], "链");
+    let shapes = inspect_shapes(&out);
+    assert_eq!(shapes["slides"][0]["shapes"][0]["text"], "标题链");
+}
+
+#[test]
+fn insert_shape_then_run_orders_shape_first() {
+    let src = create_deck("mixed");
+    let shape = first_shape_id(&src);
+    let out = tmp("mixed").with_extension("pptx");
+    apply(
+        &src,
+        &out,
+        json!([
+            { "op": "insertHyperlink", "id": shape, "url": "https://example.com/shape" },
+            { "op": "insertHyperlink", "id": shape, "on": "run", "url": "https://example.com/run" }
+        ]),
+    )
+    .unwrap();
+    let tree = inspect_links(&out);
+    assert_eq!(tree["hyperlinkCount"], 2);
+    let links = tree["slides"][0]["hyperlinks"].as_array().unwrap();
+    assert_eq!(links[0]["on"], "shape");
+    assert!(links[0]["text"].is_null());
+    assert_eq!(links[1]["on"], "run");
+    assert_eq!(links[1]["text"], "标题");
+}
+
+#[test]
+fn reject_bad_on_and_shape_text() {
+    let src = create_deck("on-bad");
+    let shape = first_shape_id(&src);
+    let err = apply(
+        &src,
+        &tmp("on-other").with_extension("pptx"),
+        json!([{
+            "op": "insertHyperlink",
+            "id": shape,
+            "on": "other",
+            "url": "https://example.com/"
+        }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+
+    let err = apply(
+        &src,
+        &tmp("shape-text").with_extension("pptx"),
+        json!([{
+            "op": "insertHyperlink",
+            "id": shape,
+            "text": "x",
+            "url": "https://example.com/"
+        }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+
+    let linked = tmp("run-twice").with_extension("pptx");
+    apply(
+        &src,
+        &linked,
+        json!([{
+            "op": "insertHyperlink",
+            "id": shape,
+            "on": "run",
+            "url": "https://example.com/a"
+        }]),
+    )
+    .unwrap();
+    let twice_out = tmp("run-twice-out").with_extension("pptx");
+    let err = apply(
+        &linked,
+        &twice_out,
+        json!([{
+            "op": "insertHyperlink",
+            "id": shape,
+            "on": "run",
+            "url": "https://example.com/b"
+        }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+    assert!(!twice_out.exists());
 }

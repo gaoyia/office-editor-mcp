@@ -1557,6 +1557,13 @@
         "display": {
           "type": "string"
         },
+        "on": {
+          "type": "string",
+          "enum": [
+            "shape",
+            "run"
+          ]
+        },
         "file": {
           "type": "string",
           "minLength": 1
