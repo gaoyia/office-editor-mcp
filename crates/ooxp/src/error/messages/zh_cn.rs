@@ -159,6 +159,29 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::InsertTextBoxNeedsSheet => {
                 "xlsx 的 insertTextBox 的 id 必须是 sheet:工作表名".into()
             }
+            IdReason::SheetShapePrefix => {
+                "xlsx 形状 id 必须是 sheet:工作表名/shape:…".into()
+            }
+            IdReason::SheetShapeContainer => {
+                "工作表 id 必须带 /shape:…（该 id 本身不是形状）".into()
+            }
+            IdReason::InsertShapeNeedsSheet => {
+                "xlsx 的 insertShape 的 id 必须是 sheet:工作表名".into()
+            }
+            IdReason::SheetCxnPrefix => {
+                "xlsx 连接线 id 必须是 sheet:工作表名/cxn:…".into()
+            }
+            IdReason::SheetCxnContainer => {
+                "工作表 id 必须带 /cxn:…（该 id 本身不是连接线）".into()
+            }
+            IdReason::CxnIndexNotInt => "cxn:index 后面必须是正整数".into(),
+            IdReason::CxnIndexFromOne => "cxn:index 从 1 起".into(),
+            IdReason::InsertConnectorNeedsSheet => {
+                "xlsx 的 insertConnector 的 id 必须是 sheet:工作表名".into()
+            }
+            IdReason::SetShapeTextNotCxn => {
+                "xlsx 的 setShapeText 的 id 必须是文本框或形状 id，不能是连接线".into()
+            }
             IdReason::SheetSmartArtPrefix => {
                 "xlsx SmartArt id 必须是 sheet:工作表名/smartdiagram:…".into()
             }
@@ -724,7 +747,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::InspectWorksheetOnly => "只能对工作表读单元格".into(),
         ErrorKind::InsertPictureWorksheetOnly => "只能往工作表 insertPicture".into(),
         ErrorKind::InsertChartWorksheetOnly => "只能往工作表 insertChart".into(),
-        ErrorKind::InsertTextBoxWorksheetOnly => "只能往工作表 insertTextBox / 改文本框".into(),
+        ErrorKind::InsertTextBoxWorksheetOnly => "只能往工作表插入或改文本框、形状与连接线".into(),
         ErrorKind::InsertSmartArtWorksheetOnly => "只能往工作表 insertSmartArt / 改图示".into(),
         ErrorKind::CommentsWorksheetOnly => "只能对工作表发批注 op".into(),
         ErrorKind::InsertHyperlinkWorksheetOnly => "只能对工作表发超链接 op".into(),
@@ -736,7 +759,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             "twoCell 图请在 setPictureSize 里给 to，不要给 cx / cy".into()
         }
         ErrorKind::TwoCellTextBoxSize => {
-            "twoCell 文本框请在 setTextBoxSize 里给 to，不要给 cx / cy".into()
+            "twoCell 文本框、形状或连接线请在 setTextBoxSize 里给 to，不要给 cx / cy".into()
         }
         ErrorKind::TwoCellSmartArtSize => {
             "twoCell SmartArt 请在 setSmartArtSize 里给 to，不要给 cx / cy".into()

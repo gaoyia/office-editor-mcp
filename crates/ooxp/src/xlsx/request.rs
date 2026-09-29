@@ -14,7 +14,7 @@ use super::chart::{self, SheetChartId};
 use super::comments;
 use super::names;
 use super::picture::{self, SheetPicId};
-use super::shape::{self, SheetDrawId};
+use super::shape::{self, DrawObjKind, SheetDrawId};
 use super::smartart as xlsx_smartart;
 
 /// 工作表页眉页脚六个槽位之一。
@@ -148,6 +148,8 @@ pub struct InspectScope {
     pub header_footer: bool,
     pub comments: bool,
     pub text_boxes: bool,
+    pub shapes: bool,
+    pub connectors: bool,
     pub smart_art: bool,
     pub hyperlinks: bool,
     pub sparklines: bool,
@@ -1293,7 +1295,50 @@ pub struct InsertTextBoxOp {
 }
 
 #[derive(Debug, Clone)]
+pub struct InsertShapeOp {
+    pub sheet: String,
+    pub text: Option<String>,
+    pub cx: Option<i64>,
+    pub cy: Option<i64>,
+    pub from: a1::CellRef,
+    pub to: Option<a1::CellRef>,
+    pub anchor: picture::AnchorKind,
+    pub from_off_x: i64,
+    pub from_off_y: i64,
+    pub to_off_x: i64,
+    pub to_off_y: i64,
+    pub prst: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct InsertConnectorOp {
+    pub sheet: String,
+    pub cx: Option<i64>,
+    pub cy: Option<i64>,
+    pub from: a1::CellRef,
+    pub to: Option<a1::CellRef>,
+    pub anchor: picture::AnchorKind,
+    pub from_off_x: i64,
+    pub from_off_y: i64,
+    pub to_off_x: i64,
+    pub to_off_y: i64,
+    pub prst: String,
+}
+
+#[derive(Debug, Clone)]
 pub struct DeleteTextBoxOp {
+    pub id: String,
+    pub target: SheetDrawId,
+}
+
+#[derive(Debug, Clone)]
+pub struct DeleteShapeOp {
+    pub id: String,
+    pub target: SheetDrawId,
+}
+
+#[derive(Debug, Clone)]
+pub struct DeleteConnectorOp {
     pub id: String,
     pub target: SheetDrawId,
 }
@@ -1302,6 +1347,7 @@ pub struct DeleteTextBoxOp {
 pub struct SetTextBoxSizeOp {
     pub id: String,
     pub target: SheetDrawId,
+    pub kind: DrawObjKind,
     pub cx: Option<i64>,
     pub cy: Option<i64>,
     pub to: Option<a1::CellRef>,
@@ -1313,6 +1359,7 @@ pub struct SetTextBoxSizeOp {
 pub struct SetTextBoxAnchorOp {
     pub id: String,
     pub target: SheetDrawId,
+    pub kind: DrawObjKind,
     pub anchor: Option<picture::AnchorKind>,
     pub from: Option<a1::CellRef>,
     pub to: Option<a1::CellRef>,
@@ -1331,6 +1378,7 @@ pub struct SetTextBoxAnchorOp {
 pub struct SetShapeTextOp {
     pub id: String,
     pub target: SheetDrawId,
+    pub kind: DrawObjKind,
     pub text: String,
 }
 
@@ -1499,7 +1547,11 @@ pub enum XlsxOp {
     DeleteErrorBars(DeleteErrorBarsOp),
     SetChartSeriesAxis(SetChartSeriesAxisOp),
     InsertTextBox(InsertTextBoxOp),
+    InsertShape(InsertShapeOp),
+    InsertConnector(InsertConnectorOp),
     DeleteTextBox(DeleteTextBoxOp),
+    DeleteShape(DeleteShapeOp),
+    DeleteConnector(DeleteConnectorOp),
     SetTextBoxSize(SetTextBoxSizeOp),
     SetTextBoxAnchor(SetTextBoxAnchorOp),
     SetShapeText(SetShapeTextOp),
@@ -1545,6 +1597,8 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
             "headerFooter",
             "comments",
             "textBoxes",
+            "shapes",
+            "connectors",
             "smartArt",
             "hyperlinks",
             "sparklines",
@@ -1555,6 +1609,8 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
     let header_footer = parse_bool_field(obj.get("headerFooter"), "headerFooter")?;
     let comments = parse_bool_field(obj.get("comments"), "comments")?;
     let text_boxes = parse_bool_field(obj.get("textBoxes"), "textBoxes")?;
+    let shapes = parse_bool_field(obj.get("shapes"), "shapes")?;
+    let connectors = parse_bool_field(obj.get("connectors"), "connectors")?;
     let smart_art = parse_bool_field(obj.get("smartArt"), "smartArt")?;
     let hyperlinks = parse_bool_field(obj.get("hyperlinks"), "hyperlinks")?;
     let sparklines = parse_bool_field(obj.get("sparklines"), "sparklines")?;
@@ -1608,6 +1664,8 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
         && !header_footer
         && !comments
         && !text_boxes
+        && !shapes
+        && !connectors
         && !smart_art
         && !hyperlinks
         && !sparklines
@@ -1621,6 +1679,8 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
         header_footer,
         comments,
         text_boxes,
+        shapes,
+        connectors,
         smart_art,
         hyperlinks,
         sparklines,
@@ -1728,7 +1788,11 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<XlsxOp>, Error> {
             "deleteErrorBars" => XlsxOp::DeleteErrorBars(parse_delete_error_bars(obj, i)?),
             "setChartSeriesAxis" => XlsxOp::SetChartSeriesAxis(parse_set_series_axis(obj, i)?),
             "insertTextBox" => XlsxOp::InsertTextBox(parse_insert_textbox(obj, i)?),
+            "insertShape" => XlsxOp::InsertShape(parse_insert_shape(obj, i)?),
+            "insertConnector" => XlsxOp::InsertConnector(parse_insert_connector(obj, i)?),
             "deleteTextBox" => XlsxOp::DeleteTextBox(parse_delete_textbox(obj, i)?),
+            "deleteShape" => XlsxOp::DeleteShape(parse_delete_shape(obj, i)?),
+            "deleteConnector" => XlsxOp::DeleteConnector(parse_delete_connector(obj, i)?),
             "setTextBoxSize" => XlsxOp::SetTextBoxSize(parse_set_textbox_size(obj, i)?),
             "setTextBoxAnchor" => XlsxOp::SetTextBoxAnchor(parse_set_textbox_anchor(obj, i)?),
             "setShapeText" => XlsxOp::SetShapeText(parse_set_shape_text(obj, i)?),
@@ -1842,12 +1906,8 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<XlsxOp>, Error> {
             | "setThemeColors"
             | "setThemeFonts"
             | "setHandoutText"
-            | "insertShape"
-            | "insertConnector"
-            | "deleteConnector"
             | "groupShapes"
             | "ungroup"
-            | "deleteShape"
             | "setShapePos"
             | "setShapeSize"
             | "setShapeFill"
@@ -7870,6 +7930,113 @@ fn parse_insert_textbox(
     })
 }
 
+fn parse_insert_shape(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<InsertShapeOp, Error> {
+    deny_keys(
+        obj,
+        i,
+        &[
+            "op", "id", "text", "cx", "cy", "from", "to", "anchor", "fromOffX", "fromOffY",
+            "toOffX", "toOffY", "prst",
+        ],
+    )?;
+    let id = require_id(obj, i)?;
+    let sheet = shape::parse_insert_sheet_id(&id, i, IdReason::InsertShapeNeedsSheet)?;
+    let a = parse_insert_anchor(obj, i, "insertShape")?;
+    Ok(InsertShapeOp {
+        sheet,
+        text: parse_opt_text(obj, i)?,
+        cx: a.cx,
+        cy: a.cy,
+        from: a.from,
+        to: a.to,
+        anchor: a.anchor,
+        from_off_x: a.from_off_x,
+        from_off_y: a.from_off_y,
+        to_off_x: a.to_off_x,
+        to_off_y: a.to_off_y,
+        prst: parse_shape_prst(obj, i)?,
+    })
+}
+
+fn parse_insert_connector(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<InsertConnectorOp, Error> {
+    deny_keys(
+        obj,
+        i,
+        &[
+            "op", "id", "cx", "cy", "from", "to", "anchor", "fromOffX", "fromOffY", "toOffX",
+            "toOffY", "prst",
+        ],
+    )?;
+    let id = require_id(obj, i)?;
+    let sheet = shape::parse_insert_sheet_id(&id, i, IdReason::InsertConnectorNeedsSheet)?;
+    let a = parse_insert_anchor(obj, i, "insertConnector")?;
+    Ok(InsertConnectorOp {
+        sheet,
+        cx: a.cx,
+        cy: a.cy,
+        from: a.from,
+        to: a.to,
+        anchor: a.anchor,
+        from_off_x: a.from_off_x,
+        from_off_y: a.from_off_y,
+        to_off_x: a.to_off_x,
+        to_off_y: a.to_off_y,
+        prst: parse_connector_prst(obj, i)?,
+    })
+}
+
+fn parse_shape_prst(obj: &serde_json::Map<String, Value>, i: usize) -> Result<String, Error> {
+    match obj.get("prst") {
+        None => Ok("rect".to_string()),
+        Some(Value::String(s)) => {
+            if crate::pptx::shape::is_writable_shape_prst(s) {
+                Ok(s.clone())
+            } else {
+                Err(Error::with_path(
+                    ErrorKind::InvalidShapePrst,
+                    format!("ops[{i}].prst"),
+                ))
+            }
+        }
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "prst".into(),
+                expected: TypeName::String,
+            },
+            format!("ops[{i}].prst"),
+        )),
+    }
+}
+
+fn parse_connector_prst(obj: &serde_json::Map<String, Value>, i: usize) -> Result<String, Error> {
+    match obj.get("prst") {
+        None => Ok("straightConnector1".to_string()),
+        Some(Value::String(s)) => {
+            if s == "line" || crate::pptx::connector::is_writable_prst(s) {
+                Ok(s.clone())
+            } else {
+                Err(Error::with_path(
+                    ErrorKind::InvalidConnectorPrst,
+                    format!("ops[{i}].prst"),
+                ))
+            }
+        }
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "prst".into(),
+                expected: TypeName::String,
+            },
+            format!("ops[{i}].prst"),
+        )),
+    }
+}
+
 fn parse_delete_textbox(
     obj: &serde_json::Map<String, Value>,
     i: usize,
@@ -7880,17 +8047,38 @@ fn parse_delete_textbox(
     Ok(DeleteTextBoxOp { id, target })
 }
 
+fn parse_delete_shape(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<DeleteShapeOp, Error> {
+    deny_keys(obj, i, &["op", "id"])?;
+    let id = require_id(obj, i)?;
+    let target = shape::parse_shape_id(&id, i)?;
+    Ok(DeleteShapeOp { id, target })
+}
+
+fn parse_delete_connector(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<DeleteConnectorOp, Error> {
+    deny_keys(obj, i, &["op", "id"])?;
+    let id = require_id(obj, i)?;
+    let target = shape::parse_cxn_id(&id, i)?;
+    Ok(DeleteConnectorOp { id, target })
+}
+
 fn parse_set_textbox_size(
     obj: &serde_json::Map<String, Value>,
     i: usize,
 ) -> Result<SetTextBoxSizeOp, Error> {
     deny_keys(obj, i, &["op", "id", "cx", "cy", "to", "toOffX", "toOffY"])?;
     let id = require_id(obj, i)?;
-    let target = shape::parse_sp_id(&id, i)?;
+    let (target, kind) = shape::parse_drawing_obj_id(&id, i)?;
     let s = parse_drawing_size(obj, i, "setTextBoxSize")?;
     Ok(SetTextBoxSizeOp {
         id,
         target,
+        kind,
         cx: s.cx,
         cy: s.cy,
         to: s.to,
@@ -7912,11 +8100,12 @@ fn parse_set_textbox_anchor(
         ],
     )?;
     let id = require_id(obj, i)?;
-    let target = shape::parse_sp_id(&id, i)?;
+    let (target, kind) = shape::parse_drawing_obj_id(&id, i)?;
     let p = parse_drawing_anchor_patch(obj, i, "setTextBoxAnchor")?;
     Ok(SetTextBoxAnchorOp {
         id,
         target,
+        kind,
         anchor: p.anchor,
         from: p.from,
         to: p.to,
@@ -7938,9 +8127,14 @@ fn parse_set_shape_text(
 ) -> Result<SetShapeTextOp, Error> {
     deny_keys(obj, i, &["op", "id", "text"])?;
     let id = require_id(obj, i)?;
-    let target = shape::parse_sp_id(&id, i)?;
+    let (target, kind) = shape::parse_shape_text_id(&id, i)?;
     let text = parse_require_text(obj, i, "setShapeText")?;
-    Ok(SetShapeTextOp { id, target, text })
+    Ok(SetShapeTextOp {
+        id,
+        target,
+        kind,
+        text,
+    })
 }
 
 fn parse_insert_smartart(

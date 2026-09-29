@@ -3,7 +3,7 @@
 mod apply;
 mod chart;
 mod comments;
-mod connector;
+pub(crate) mod connector;
 mod create;
 mod custom_show;
 mod field;

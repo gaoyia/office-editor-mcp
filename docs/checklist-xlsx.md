@@ -349,6 +349,18 @@ Office 另存 create 产物是打开冒烟，见 `manual-check/office/cases/opc-
 | Xsa4 | 删除 | `deleteTextBox` / `deleteSmartArt` 后对应计数为 0、无修复 |
 | Xsa5 | 缺字段 | 只给 `op` 与 `id` 的 `insertTextBox`（缺 `from`）得 `InvalidField`，未写文件。不强制开 Excel |
 
+## 无 txBox 的形状与连接线
+
+用库 create 产物再 apply。脚本 `manual-check/office/cases/xlsx-shapes-geom.ps1`。编号用 Xsg。不要和 Xsa 撞。
+
+| 序号 | 检查 | 通过标准 |
+| --- | --- | --- |
+| Xsg1 | inspect | 每张 `worksheet` 始终有 `shapeCount` 与 `connectorCount`；create 默认为 `0`；给了 `scope.shapes` / `scope.connectors` 时名单为空数组，不依赖单元格切片 |
+| Xsg2 | 矩形 | `insertShape` 写到 `B2` 后 Excel 无修复；inspect `prst` 为 `rect`，id 为 `sheet:…/shape:…`；COM `Shapes` 能看见；无 `txBox` |
+| Xsg3 | 连接线 | `insertConnector` 后 inspect `connectors` 名单 id 为 `sheet:…/cxn:…`，`prst` 为 `straightConnector1`；COM 能看见连接线；无修复 |
+| Xsg4 | 改锚点与删 | `setTextBoxSize` / `setTextBoxAnchor` 认形状 id；`setShapeText` 后可见字对得上；`deleteShape` / `deleteConnector` 后对应计数为 0、无修复 |
+| Xsg5 | 拒写 | 只给 `op` 与 `id` 的 `insertShape`（缺 `from`）得 `InvalidField`；对 `/sp:` 发 `deleteShape`、对 `/cxn:` 发 `setShapeText` 得 `InvalidId`；均未写文件。不强制开 Excel |
+
 ## 超链接
 
 用库 create 产物再 apply。脚本 `manual-check/office/cases/xlsx-hyperlinks.ps1`。编号用 Xhl。

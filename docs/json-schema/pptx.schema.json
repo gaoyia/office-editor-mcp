@@ -618,6 +618,36 @@
         "prst": {
           "type": "string",
           "minLength": 1
+        },
+        "from": {
+          "type": "string",
+          "minLength": 1
+        },
+        "to": {
+          "type": "string",
+          "minLength": 1
+        },
+        "anchor": {
+          "enum": [
+            "oneCell",
+            "twoCell"
+          ]
+        },
+        "fromOffX": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "fromOffY": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "toOffX": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "toOffY": {
+          "type": "integer",
+          "minimum": 0
         }
       }
     },
@@ -655,6 +685,36 @@
         "cy": {
           "type": "integer",
           "minimum": 1
+        },
+        "from": {
+          "type": "string",
+          "minLength": 1
+        },
+        "to": {
+          "type": "string",
+          "minLength": 1
+        },
+        "anchor": {
+          "enum": [
+            "oneCell",
+            "twoCell"
+          ]
+        },
+        "fromOffX": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "fromOffY": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "toOffX": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "toOffY": {
+          "type": "integer",
+          "minimum": 0
         }
       }
     },

@@ -109,6 +109,22 @@ pub(crate) enum IdReason {
     SpIndexFromOne,
     /// xlsx 的 insertTextBox 必须用 sheet:工作表名
     InsertTextBoxNeedsSheet,
+    /// xlsx 形状 id 必须是 sheet:{name}/shape:…
+    SheetShapePrefix,
+    /// 工作表 id，缺少 /shape:…
+    SheetShapeContainer,
+    /// xlsx 的 insertShape 必须用 sheet:工作表名
+    InsertShapeNeedsSheet,
+    /// xlsx 连接线 id 必须是 sheet:{name}/cxn:…
+    SheetCxnPrefix,
+    /// 工作表 id，缺少 /cxn:…
+    SheetCxnContainer,
+    CxnIndexNotInt,
+    CxnIndexFromOne,
+    /// xlsx 的 insertConnector 必须用 sheet:工作表名
+    InsertConnectorNeedsSheet,
+    /// setShapeText 不能用连接线 id
+    SetShapeTextNotCxn,
     /// xlsx 图示 id 必须是 sheet:{name}/smartdiagram:…
     SheetSmartArtPrefix,
     /// 工作表 id，缺少 /smartdiagram:…
@@ -964,6 +980,15 @@ impl IdReason {
             Self::SpIndexNotInt,
             Self::SpIndexFromOne,
             Self::InsertTextBoxNeedsSheet,
+            Self::SheetShapePrefix,
+            Self::SheetShapeContainer,
+            Self::InsertShapeNeedsSheet,
+            Self::SheetCxnPrefix,
+            Self::SheetCxnContainer,
+            Self::CxnIndexNotInt,
+            Self::CxnIndexFromOne,
+            Self::InsertConnectorNeedsSheet,
+            Self::SetShapeTextNotCxn,
             Self::SheetSmartArtPrefix,
             Self::SheetSmartArtContainer,
             Self::InsertSmartArtNeedsSheet,

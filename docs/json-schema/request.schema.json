@@ -172,6 +172,9 @@
         "textBoxes": {
           "type": "boolean"
         },
+        "shapes": {
+          "type": "boolean"
+        },
         "textBoxContent": {
           "type": "boolean"
         },

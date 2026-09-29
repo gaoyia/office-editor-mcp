@@ -98,14 +98,25 @@ fn default_counts_and_empty_lists() {
     let path = create_book("bare");
     let tree = inspect_bare(&path);
     assert_eq!(tree["textBoxCount"], 0);
+    assert_eq!(tree["shapeCount"], 0);
+    assert_eq!(tree["connectorCount"], 0);
     assert_eq!(tree["smartArtCount"], 0);
     assert_eq!(tree["sheets"][0]["textBoxCount"], 0);
+    assert_eq!(tree["sheets"][0]["shapeCount"], 0);
+    assert_eq!(tree["sheets"][0]["connectorCount"], 0);
     assert_eq!(tree["sheets"][0]["smartArtCount"], 0);
     assert!(tree["sheets"][0].get("textBoxes").is_none());
+    assert!(tree["sheets"][0].get("shapes").is_none());
+    assert!(tree["sheets"][0].get("connectors").is_none());
     assert!(tree["sheets"][0].get("smartArts").is_none());
 
-    let listed = inspect_scope(&path, json!({ "textBoxes": true, "smartArt": true }));
+    let listed = inspect_scope(
+        &path,
+        json!({ "textBoxes": true, "shapes": true, "connectors": true, "smartArt": true }),
+    );
     assert_eq!(listed["sheets"][0]["textBoxes"], json!([]));
+    assert_eq!(listed["sheets"][0]["shapes"], json!([]));
+    assert_eq!(listed["sheets"][0]["connectors"], json!([]));
     assert_eq!(listed["sheets"][0]["smartArts"], json!([]));
 }
 
@@ -255,6 +266,44 @@ fn create_rejects_textboxes_and_smartarts() {
     )
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);
+
+    let err = run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "create",
+            "path": path.to_string_lossy(),
+            "workbook": {
+                "sheets": [{
+                    "name": "Sheet1",
+                    "cells": [],
+                    "shapes": [{ "prst": "rect" }]
+                }]
+            }
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+
+    let err = run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "create",
+            "path": path.to_string_lossy(),
+            "workbook": {
+                "sheets": [{
+                    "name": "Sheet1",
+                    "cells": [],
+                    "connectors": [{ "prst": "line" }]
+                }]
+            }
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
 }
 
 #[test]
@@ -288,4 +337,150 @@ fn set_shape_text_needs_textbox_id() {
     )
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidId);
+}
+
+#[test]
+fn insert_shape_and_connector_roundtrip() {
+    let src = create_book("geom");
+    let inserted = tmp("geom-ins");
+    apply(
+        &src,
+        &inserted,
+        json!([
+            {
+                "op": "insertShape",
+                "id": "sheet:Sheet1",
+                "from": "B2",
+                "text": "矩形"
+            },
+            {
+                "op": "insertConnector",
+                "id": "sheet:Sheet1",
+                "from": "D4"
+            }
+        ]),
+    )
+    .unwrap();
+    let tree = inspect_scope(
+        &inserted,
+        json!({ "textBoxes": true, "shapes": true, "connectors": true }),
+    );
+    assert_eq!(tree["shapeCount"], 1);
+    assert_eq!(tree["connectorCount"], 1);
+    assert_eq!(tree["textBoxCount"], 0);
+    assert_eq!(tree["sheets"][0]["textBoxes"], json!([]));
+    let shapes = tree["sheets"][0]["shapes"].as_array().unwrap();
+    assert_eq!(shapes.len(), 1);
+    assert!(shapes[0]["id"]
+        .as_str()
+        .unwrap()
+        .starts_with("sheet:Sheet1/shape:"));
+    assert_eq!(shapes[0]["prst"], "rect");
+    assert_eq!(shapes[0]["text"], "矩形");
+    assert_eq!(shapes[0]["from"], "B2");
+    assert_eq!(shapes[0]["stable"], true);
+    let cxns = tree["sheets"][0]["connectors"].as_array().unwrap();
+    assert_eq!(cxns.len(), 1);
+    assert!(cxns[0]["id"]
+        .as_str()
+        .unwrap()
+        .starts_with("sheet:Sheet1/cxn:"));
+    assert_eq!(cxns[0]["prst"], "straightConnector1");
+    assert!(cxns[0].get("text").is_none());
+    let shape_id = shapes[0]["id"].as_str().unwrap().to_string();
+    let cxn_id = cxns[0]["id"].as_str().unwrap().to_string();
+
+    let patched = tmp("geom-text");
+    apply(
+        &inserted,
+        &patched,
+        json!([
+            { "op": "setShapeText", "id": shape_id, "text": "改过" },
+            { "op": "setTextBoxSize", "id": shape_id, "cx": 2000000, "cy": 1000000 }
+        ]),
+    )
+    .unwrap();
+    let after = inspect_scope(&patched, json!({ "shapes": true, "connectors": true }));
+    assert_eq!(after["sheets"][0]["shapes"][0]["text"], "改过");
+    assert_eq!(after["sheets"][0]["shapes"][0]["cx"], 2_000_000);
+    let shape_id = after["sheets"][0]["shapes"][0]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    let gone = tmp("geom-del");
+    apply(
+        &patched,
+        &gone,
+        json!([
+            { "op": "deleteShape", "id": shape_id },
+            { "op": "deleteConnector", "id": cxn_id }
+        ]),
+    )
+    .unwrap();
+    let empty = inspect_scope(&gone, json!({ "shapes": true, "connectors": true }));
+    assert_eq!(empty["shapeCount"], 0);
+    assert_eq!(empty["connectorCount"], 0);
+    assert_eq!(empty["sheets"][0]["shapes"], json!([]));
+    assert_eq!(empty["sheets"][0]["connectors"], json!([]));
+}
+
+#[test]
+fn insert_shape_requires_from() {
+    let src = create_book("noshape");
+    let out = tmp("noshape-out");
+    let err = apply(
+        &src,
+        &out,
+        json!([{ "op": "insertShape", "id": "sheet:Sheet1" }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+    assert!(!out.exists());
+}
+
+#[test]
+fn insert_shape_rejects_xy_and_connector_prst() {
+    let src = create_book("badprst");
+    let out = tmp("badprst-out");
+    let err = apply(
+        &src,
+        &out,
+        json!([{ "op": "insertShape", "id": "sheet:Sheet1", "from": "A1", "x": 0, "y": 0 }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+    let err = apply(
+        &src,
+        &out,
+        json!([{
+            "op": "insertShape",
+            "id": "sheet:Sheet1",
+            "from": "A1",
+            "prst": "straightConnector1"
+        }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+}
+
+#[test]
+fn delete_shape_rejects_textbox_id_and_set_text_rejects_cxn() {
+    let src = create_book("badid2");
+    let out = tmp("badid2-out");
+    let err = apply(
+        &src,
+        &out,
+        json!([{ "op": "deleteShape", "id": "sheet:Sheet1/sp:2" }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidId);
+    let err = apply(
+        &src,
+        &out,
+        json!([{ "op": "setShapeText", "id": "sheet:Sheet1/cxn:3", "text": "x" }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidId);
+    assert!(!out.exists());
 }

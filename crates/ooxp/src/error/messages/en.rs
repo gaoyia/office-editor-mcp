@@ -172,6 +172,29 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::InsertTextBoxNeedsSheet => {
                 "xlsx insertTextBox id must be sheet:name".into()
             }
+            IdReason::SheetShapePrefix => {
+                "xlsx shape id must be sheet:name/shape:…".into()
+            }
+            IdReason::SheetShapeContainer => {
+                "Sheet id must include /shape:… (that id alone is not a shape)".into()
+            }
+            IdReason::InsertShapeNeedsSheet => {
+                "xlsx insertShape id must be sheet:name".into()
+            }
+            IdReason::SheetCxnPrefix => {
+                "xlsx connector id must be sheet:name/cxn:…".into()
+            }
+            IdReason::SheetCxnContainer => {
+                "Sheet id must include /cxn:… (that id alone is not a connector)".into()
+            }
+            IdReason::CxnIndexNotInt => "cxn:index must be followed by a positive integer".into(),
+            IdReason::CxnIndexFromOne => "cxn:index starts at 1".into(),
+            IdReason::InsertConnectorNeedsSheet => {
+                "xlsx insertConnector id must be sheet:name".into()
+            }
+            IdReason::SetShapeTextNotCxn => {
+                "xlsx setShapeText id must be a text box or shape id, not a connector".into()
+            }
             IdReason::SheetSmartArtPrefix => {
                 "xlsx SmartArt id must be sheet:name/smartdiagram:…".into()
             }
@@ -814,7 +837,8 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::InsertPictureWorksheetOnly => "insertPicture only applies to worksheets".into(),
         ErrorKind::InsertChartWorksheetOnly => "insertChart only applies to worksheets".into(),
         ErrorKind::InsertTextBoxWorksheetOnly => {
-            "insertTextBox and text box ops only apply to worksheets".into()
+            "insertTextBox, insertShape, insertConnector and related ops only apply to worksheets"
+                .into()
         }
         ErrorKind::InsertSmartArtWorksheetOnly => {
             "insertSmartArt and SmartArt ops only apply to worksheets".into()
@@ -834,7 +858,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
                 .into()
         }
         ErrorKind::TwoCellTextBoxSize => {
-            "twoCell text box size is defined by the to cell; give to on setTextBoxSize, not cx / cy"
+            "twoCell text box, shape, or connector size is defined by the to cell; give to on setTextBoxSize, not cx / cy"
                 .into()
         }
         ErrorKind::TwoCellSmartArtSize => {

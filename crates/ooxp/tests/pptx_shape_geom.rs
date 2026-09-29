@@ -417,8 +417,9 @@ fn xlsx_and_docx_reject_connectors() {
         None,
     )
     .unwrap();
-    let err = inspect_err(&xlsx, json!({ "connectors": true }));
-    assert_eq!(err.code(), ErrorCode::InvalidField);
+    let tree = inspect_scope(&xlsx, json!({ "connectors": true }));
+    assert_eq!(tree["connectorCount"], 0);
+    assert_eq!(tree["sheets"][0]["connectors"], json!([]));
     let err = run(
         &json!({
             "schemaVersion": 1,
@@ -431,7 +432,7 @@ fn xlsx_and_docx_reject_connectors() {
         None,
     )
     .unwrap_err();
-    assert_eq!(err.code(), ErrorCode::InvalidField);
+    assert_eq!(err.code(), ErrorCode::InvalidId);
 
     let docx = tmp("scope").with_extension("docx");
     run(

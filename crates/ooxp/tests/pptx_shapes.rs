@@ -433,7 +433,7 @@ fn foreign_format_rejects() {
             "action": "apply",
             "path": xlsx.to_string_lossy(),
             "output": tmp("xlsx-out").with_extension("xlsx").to_string_lossy(),
-            "ops": [{ "op": "insertShape", "id": "slide:1" }]
+            "ops": [{ "op": "insertShape", "id": "sheet:Sheet1" }]
         })
         .to_string(),
         None,

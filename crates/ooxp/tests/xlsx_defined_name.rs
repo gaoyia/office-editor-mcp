@@ -109,6 +109,8 @@ fn inspect_empty_on_create() {
             "pictureCount",
             "chartCount",
             "textBoxCount",
+            "shapeCount",
+            "connectorCount",
             "smartArtCount",
             "commentCount",
             "hyperlinkCount",

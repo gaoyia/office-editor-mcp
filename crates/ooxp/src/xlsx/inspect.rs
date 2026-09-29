@@ -65,6 +65,8 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     let want_header_footer = scope.as_ref().is_some_and(|s| s.header_footer);
     let want_comments = scope.as_ref().is_some_and(|s| s.comments);
     let want_text_boxes = scope.as_ref().is_some_and(|s| s.text_boxes);
+    let want_shapes = scope.as_ref().is_some_and(|s| s.shapes);
+    let want_connectors = scope.as_ref().is_some_and(|s| s.connectors);
     let want_smart_art = scope.as_ref().is_some_and(|s| s.smart_art);
     let want_hyperlinks = scope.as_ref().is_some_and(|s| s.hyperlinks);
     let want_sparklines = scope.as_ref().is_some_and(|s| s.sparklines);
@@ -78,6 +80,8 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     let mut picture_count = 0usize;
     let mut chart_count = 0usize;
     let mut text_box_count = 0usize;
+    let mut shape_count = 0usize;
+    let mut connector_count = 0usize;
     let mut smart_art_count = 0usize;
     let mut comment_count = 0usize;
     let mut hyperlink_count = 0usize;
@@ -99,6 +103,12 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
             let boxes = shape::collect_textboxes(&pkg, &sh.part, &sh.name)?;
             text_box_count += boxes.len();
             obj.insert("textBoxCount".into(), json!(boxes.len()));
+            let shapes = shape::collect_shapes(&pkg, &sh.part, &sh.name)?;
+            shape_count += shapes.len();
+            obj.insert("shapeCount".into(), json!(shapes.len()));
+            let connectors = shape::collect_connectors(&pkg, &sh.part, &sh.name)?;
+            connector_count += connectors.len();
+            obj.insert("connectorCount".into(), json!(connectors.len()));
             let arts = smartart::collect_smartarts(&pkg, &sh.part, &sh.name)?;
             smart_art_count += arts.len();
             obj.insert("smartArtCount".into(), json!(arts.len()));
@@ -158,6 +168,12 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
             }
             if want_text_boxes {
                 obj.insert("textBoxes".into(), Value::Array(boxes));
+            }
+            if want_shapes {
+                obj.insert("shapes".into(), Value::Array(shapes));
+            }
+            if want_connectors {
+                obj.insert("connectors".into(), Value::Array(connectors));
             }
             if want_smart_art {
                 obj.insert("smartArts".into(), Value::Array(arts));
@@ -303,6 +319,8 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     root.insert("pictureCount".into(), json!(picture_count));
     root.insert("chartCount".into(), json!(chart_count));
     root.insert("textBoxCount".into(), json!(text_box_count));
+    root.insert("shapeCount".into(), json!(shape_count));
+    root.insert("connectorCount".into(), json!(connector_count));
     root.insert("smartArtCount".into(), json!(smart_art_count));
     root.insert("commentCount".into(), json!(comment_count));
     root.insert("hyperlinkCount".into(), json!(hyperlink_count));

@@ -549,6 +549,28 @@ pub fn apply(bytes: &[u8], ops: &[XlsxOp]) -> Result<Vec<u8>, Error> {
                 let doc = dirty_of(&mut dirty_sheets, &part);
                 shape::insert_textbox(&mut pkg, doc, &part, op)?;
             }
+            XlsxOp::InsertShape(op) => {
+                let part = require_drawing_worksheet(
+                    &sheet_index,
+                    &op.sheet,
+                    i,
+                    ErrorKind::InsertTextBoxWorksheetOnly,
+                )?;
+                load_dirty(&pkg, &mut dirty_sheets, &part, false)?;
+                let doc = dirty_of(&mut dirty_sheets, &part);
+                shape::insert_shape(&mut pkg, doc, &part, op)?;
+            }
+            XlsxOp::InsertConnector(op) => {
+                let part = require_drawing_worksheet(
+                    &sheet_index,
+                    &op.sheet,
+                    i,
+                    ErrorKind::InsertTextBoxWorksheetOnly,
+                )?;
+                load_dirty(&pkg, &mut dirty_sheets, &part, false)?;
+                let doc = dirty_of(&mut dirty_sheets, &part);
+                shape::insert_connector(&mut pkg, doc, &part, op)?;
+            }
             XlsxOp::DeleteTextBox(op) => {
                 let part = require_drawing_worksheet(
                     &sheet_index,
@@ -559,6 +581,28 @@ pub fn apply(bytes: &[u8], ops: &[XlsxOp]) -> Result<Vec<u8>, Error> {
                 load_dirty(&pkg, &mut dirty_sheets, &part, false)?;
                 let doc = dirty_of(&mut dirty_sheets, &part);
                 shape::delete_textbox(&mut pkg, doc, &part, op, i)?;
+            }
+            XlsxOp::DeleteShape(op) => {
+                let part = require_drawing_worksheet(
+                    &sheet_index,
+                    &op.target.sheet,
+                    i,
+                    ErrorKind::InsertTextBoxWorksheetOnly,
+                )?;
+                load_dirty(&pkg, &mut dirty_sheets, &part, false)?;
+                let doc = dirty_of(&mut dirty_sheets, &part);
+                shape::delete_shape(&mut pkg, doc, &part, op, i)?;
+            }
+            XlsxOp::DeleteConnector(op) => {
+                let part = require_drawing_worksheet(
+                    &sheet_index,
+                    &op.target.sheet,
+                    i,
+                    ErrorKind::InsertTextBoxWorksheetOnly,
+                )?;
+                load_dirty(&pkg, &mut dirty_sheets, &part, false)?;
+                let doc = dirty_of(&mut dirty_sheets, &part);
+                shape::delete_connector(&mut pkg, doc, &part, op, i)?;
             }
             XlsxOp::SetTextBoxSize(op) => {
                 let part = require_drawing_worksheet(

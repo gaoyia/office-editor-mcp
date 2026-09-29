@@ -1,4 +1,4 @@
-//! 工作表 SpreadsheetDrawing 文本框：名单、插删、改字、尺寸与锚点。
+//! 工作表 SpreadsheetDrawing 文本框、无 txBox 形状与连接线。
 
 use serde_json::{json, Map, Value};
 
@@ -9,11 +9,38 @@ use crate::xml::{self, Document, Element, Node};
 use super::a1;
 use super::picture::{self, AnchorKind, EditAs};
 use super::request::{
-    DeleteTextBoxOp, InsertTextBoxOp, SetShapeTextOp, SetTextBoxAnchorOp, SetTextBoxSizeOp,
+    DeleteConnectorOp, DeleteShapeOp, DeleteTextBoxOp, InsertConnectorOp, InsertShapeOp,
+    InsertTextBoxOp, SetShapeTextOp, SetTextBoxAnchorOp, SetTextBoxSizeOp,
 };
 
 pub const DEFAULT_CX: i64 = 1_828_800;
 pub const DEFAULT_CY: i64 = 914_400;
+
+/// inspect / apply 把 drawing 对象分成三类。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DrawObjKind {
+    TextBox,
+    Shape,
+    Connector,
+}
+
+impl DrawObjKind {
+    pub fn matcher(self) -> fn(&Element) -> bool {
+        match self {
+            Self::TextBox => is_textbox,
+            Self::Shape => is_shape,
+            Self::Connector => is_connector,
+        }
+    }
+
+    pub fn not_found(self, id: String) -> ErrorKind {
+        match self {
+            Self::TextBox => ErrorKind::TextBoxNotFound { id },
+            Self::Shape => ErrorKind::ShapeNotFound { id },
+            Self::Connector => ErrorKind::ConnectorNotFound { id },
+        }
+    }
+}
 
 #[derive(Debug, Clone)]
 pub enum DrawKey {
@@ -50,6 +77,54 @@ pub fn parse_sp_id(id: &str, op_index: usize) -> Result<SheetDrawId, Error> {
         IdReason::SpIndexNotInt,
         IdReason::SpIndexFromOne,
     )
+}
+
+pub fn parse_shape_id(id: &str, op_index: usize) -> Result<SheetDrawId, Error> {
+    parse_sheet_draw_id(
+        id,
+        &format!("ops[{op_index}].id"),
+        "shape",
+        IdReason::SheetShapePrefix,
+        IdReason::SheetShapeContainer,
+        IdReason::SpIndexNotInt,
+        IdReason::SpIndexFromOne,
+    )
+}
+
+pub fn parse_cxn_id(id: &str, op_index: usize) -> Result<SheetDrawId, Error> {
+    parse_sheet_draw_id(
+        id,
+        &format!("ops[{op_index}].id"),
+        "cxn",
+        IdReason::SheetCxnPrefix,
+        IdReason::SheetCxnContainer,
+        IdReason::CxnIndexNotInt,
+        IdReason::CxnIndexFromOne,
+    )
+}
+
+pub fn parse_drawing_obj_id(
+    id: &str,
+    op_index: usize,
+) -> Result<(SheetDrawId, DrawObjKind), Error> {
+    if id.contains("/shape:") {
+        Ok((parse_shape_id(id, op_index)?, DrawObjKind::Shape))
+    } else if id.contains("/cxn:") {
+        Ok((parse_cxn_id(id, op_index)?, DrawObjKind::Connector))
+    } else {
+        Ok((parse_sp_id(id, op_index)?, DrawObjKind::TextBox))
+    }
+}
+
+pub fn parse_shape_text_id(id: &str, op_index: usize) -> Result<(SheetDrawId, DrawObjKind), Error> {
+    if id.contains("/cxn:") {
+        return Err(invalid_id(IdReason::SetShapeTextNotCxn, op_index));
+    }
+    if id.contains("/shape:") {
+        Ok((parse_shape_id(id, op_index)?, DrawObjKind::Shape))
+    } else {
+        Ok((parse_sp_id(id, op_index)?, DrawObjKind::TextBox))
+    }
 }
 
 pub fn parse_sheet_draw_id(
@@ -127,32 +202,68 @@ pub fn collect_textboxes(
     sheet_part: &str,
     sheet_name: &str,
 ) -> Result<Vec<Value>, Error> {
+    collect_kind(pkg, sheet_part, sheet_name, DrawObjKind::TextBox)
+}
+
+pub fn collect_shapes(
+    pkg: &Package,
+    sheet_part: &str,
+    sheet_name: &str,
+) -> Result<Vec<Value>, Error> {
+    collect_kind(pkg, sheet_part, sheet_name, DrawObjKind::Shape)
+}
+
+pub fn collect_connectors(
+    pkg: &Package,
+    sheet_part: &str,
+    sheet_name: &str,
+) -> Result<Vec<Value>, Error> {
+    collect_kind(pkg, sheet_part, sheet_name, DrawObjKind::Connector)
+}
+
+fn collect_kind(
+    pkg: &Package,
+    sheet_part: &str,
+    sheet_name: &str,
+    kind: DrawObjKind,
+) -> Result<Vec<Value>, Error> {
     let mut out = Vec::new();
     let mut index = 0usize;
-    for_each_object(pkg, sheet_part, is_textbox, |anchor, kind, el| {
+    for_each_object(pkg, sheet_part, kind.matcher(), |anchor, akind, el| {
         index += 1;
-        out.push(textbox_json(anchor, kind, el, sheet_name, index));
+        out.push(object_json(anchor, akind, el, sheet_name, index, kind));
         Ok(())
     })?;
     Ok(out)
 }
 
-fn textbox_json(
+fn object_json(
     anchor: &Element,
-    kind: AnchorKind,
-    sp: &Element,
+    akind: AnchorKind,
+    el: &Element,
     sheet_name: &str,
     index: usize,
+    kind: DrawObjKind,
 ) -> Value {
-    let (raw_id, name) = cnv_of_object(sp);
+    let (raw_id, name) = cnv_of_object(el);
+    let (prefix, with_text, with_prst) = match kind {
+        DrawObjKind::TextBox => ("sp", true, false),
+        DrawObjKind::Shape => ("shape", el.child_by_local("txBody").is_some(), true),
+        DrawObjKind::Connector => ("cxn", false, true),
+    };
     let stable = raw_id.is_some();
     let id = match &raw_id {
-        Some(v) => format!("sheet:{sheet_name}/sp:{v}"),
-        None => format!("sheet:{sheet_name}/sp:index:{index}"),
+        Some(v) => format!("sheet:{sheet_name}/{prefix}:{v}"),
+        None => format!("sheet:{sheet_name}/{prefix}:index:{index}"),
     };
-    let mut m = geom_map(anchor, kind, id, raw_id, name, stable);
+    let mut m = geom_map(anchor, akind, id, raw_id, name, stable);
     let stable_v = m.remove("stable").unwrap_or(json!(stable));
-    m.insert("text".into(), json!(crate::pptx::shape::visible_text(sp)));
+    if with_prst {
+        m.insert("prst".into(), json!(prst_of(el)));
+    }
+    if with_text {
+        m.insert("text".into(), json!(crate::pptx::shape::visible_text(el)));
+    }
     m.insert("stable".into(), stable_v);
     Value::Object(m)
 }
@@ -229,7 +340,12 @@ pub fn insert_textbox(
     let cnv = picture::next_cnv_id(pkg, sheet_part, &sheet_doc.root)?;
     let name = format!("文本框 {cnv}");
     let sp = build_textbox_sp(cnv, &name, cx, cy, op.text.as_deref().unwrap_or(""));
-    let anchor = picture::build_anchor(
+    push_anchor(
+        pkg,
+        sheet_doc,
+        sheet_part,
+        drawing_part,
+        &mut draw_doc,
         op.anchor,
         op.from,
         op.to,
@@ -237,17 +353,131 @@ pub fn insert_textbox(
         op.from_off_y,
         op.to_off_x,
         op.to_off_y,
+        cx,
+        cy,
+        cnv,
+        &name,
+        sp,
+    )
+}
+
+pub fn insert_shape(
+    pkg: &mut Package,
+    sheet_doc: &mut Document,
+    sheet_part: &str,
+    op: &InsertShapeOp,
+) -> Result<(), Error> {
+    let cx = op.cx.unwrap_or(DEFAULT_CX);
+    let cy = op.cy.unwrap_or(DEFAULT_CY);
+    let drawing_part = picture::ensure_drawing_part(pkg, sheet_doc, sheet_part)?;
+    let mut draw_doc = xml::parse(pkg.get(&drawing_part)?)?;
+    picture::ensure_xmlns(&mut draw_doc.root, "r", super::REL_NS);
+    picture::ensure_xmlns(&mut draw_doc.root, "a", picture::A_NS);
+    let cnv = picture::next_cnv_id(pkg, sheet_part, &sheet_doc.root)?;
+    let name = format!("形状 {cnv}");
+    let sp = build_shape_sp(
+        cnv,
+        &name,
+        cx,
+        cy,
+        &op.prst,
+        op.text.as_deref().unwrap_or(""),
+    );
+    push_anchor(
+        pkg,
+        sheet_doc,
+        sheet_part,
+        drawing_part,
+        &mut draw_doc,
+        op.anchor,
+        op.from,
+        op.to,
+        op.from_off_x,
+        op.from_off_y,
+        op.to_off_x,
+        op.to_off_y,
+        cx,
+        cy,
+        cnv,
+        &name,
+        sp,
+    )
+}
+
+pub fn insert_connector(
+    pkg: &mut Package,
+    sheet_doc: &mut Document,
+    sheet_part: &str,
+    op: &InsertConnectorOp,
+) -> Result<(), Error> {
+    let cx = op.cx.unwrap_or(DEFAULT_CX);
+    let cy = op.cy.unwrap_or(DEFAULT_CY);
+    let drawing_part = picture::ensure_drawing_part(pkg, sheet_doc, sheet_part)?;
+    let mut draw_doc = xml::parse(pkg.get(&drawing_part)?)?;
+    picture::ensure_xmlns(&mut draw_doc.root, "r", super::REL_NS);
+    picture::ensure_xmlns(&mut draw_doc.root, "a", picture::A_NS);
+    let cnv = picture::next_cnv_id(pkg, sheet_part, &sheet_doc.root)?;
+    let name = format!("连接线 {cnv}");
+    let sp = build_cxn_sp(cnv, &name, cx, cy, &op.prst);
+    push_anchor(
+        pkg,
+        sheet_doc,
+        sheet_part,
+        drawing_part,
+        &mut draw_doc,
+        op.anchor,
+        op.from,
+        op.to,
+        op.from_off_x,
+        op.from_off_y,
+        op.to_off_x,
+        op.to_off_y,
+        cx,
+        cy,
+        cnv,
+        &name,
+        sp,
+    )
+}
+
+fn push_anchor(
+    pkg: &mut Package,
+    _sheet_doc: &mut Document,
+    _sheet_part: &str,
+    drawing_part: String,
+    draw_doc: &mut Document,
+    anchor: AnchorKind,
+    from: a1::CellRef,
+    to: Option<a1::CellRef>,
+    from_off_x: i64,
+    from_off_y: i64,
+    to_off_x: i64,
+    to_off_y: i64,
+    cx: i64,
+    cy: i64,
+    cnv: u32,
+    name: &str,
+    payload: Element,
+) -> Result<(), Error> {
+    let el = picture::build_anchor(
+        anchor,
+        from,
+        to,
+        from_off_x,
+        from_off_y,
+        to_off_x,
+        to_off_y,
         None,
         None,
         cx,
         cy,
         EditAs::TwoCell,
         cnv,
-        &name,
+        name,
         "",
-        Some(sp),
+        Some(payload),
     );
-    draw_doc.root.push_element(anchor);
+    draw_doc.root.push_element(el);
     pkg.set(&drawing_part, draw_doc.to_bytes()?)?;
     Ok(())
 }
@@ -308,6 +538,88 @@ fn build_textbox_sp(cnv: u32, name: &str, cx: i64, cy: i64, text: &str) -> Eleme
     sp
 }
 
+fn build_shape_sp(cnv: u32, name: &str, cx: i64, cy: i64, prst: &str, text: &str) -> Element {
+    let mut nv = Element::new("xdr:nvSpPr");
+    nv.push_element(
+        Element::new("xdr:cNvPr")
+            .with_attr("id", cnv.to_string())
+            .with_attr("name", name),
+    );
+    nv.push_element(Element::new("xdr:cNvSpPr"));
+    let mut sp = Element::new("xdr:sp");
+    sp.push_element(nv);
+    sp.push_element(sp_pr_fill_line(cx, cy, prst, true));
+    sp.push_element(empty_or_text_txbody(text));
+    sp
+}
+
+fn build_cxn_sp(cnv: u32, name: &str, cx: i64, cy: i64, prst: &str) -> Element {
+    let mut nv = Element::new("xdr:nvCxnSpPr");
+    nv.push_element(
+        Element::new("xdr:cNvPr")
+            .with_attr("id", cnv.to_string())
+            .with_attr("name", name),
+    );
+    nv.push_element(Element::new("xdr:cNvCxnSpPr"));
+    let mut cxn = Element::new("xdr:cxnSp");
+    cxn.push_element(nv);
+    cxn.push_element(sp_pr_fill_line(cx, cy, prst, false));
+    cxn
+}
+
+fn sp_pr_fill_line(cx: i64, cy: i64, prst: &str, filled: bool) -> Element {
+    let mut sp_pr = Element::new("xdr:spPr");
+    let mut xfrm = Element::new("a:xfrm");
+    xfrm.push_element(
+        Element::new("a:off")
+            .with_attr("x", "0")
+            .with_attr("y", "0"),
+    );
+    xfrm.push_element(
+        Element::new("a:ext")
+            .with_attr("cx", cx.to_string())
+            .with_attr("cy", cy.to_string()),
+    );
+    sp_pr.push_element(xfrm);
+    let mut geom = Element::new("a:prstGeom").with_attr("prst", prst);
+    geom.push_element(Element::new("a:avLst"));
+    sp_pr.push_element(geom);
+    if filled {
+        let mut fill = Element::new("a:solidFill");
+        fill.push_element(Element::new("a:srgbClr").with_attr("val", "FFFFFF"));
+        sp_pr.push_element(fill);
+    } else {
+        sp_pr.push_element(Element::new("a:noFill"));
+    }
+    let mut ln = Element::new("a:ln").with_attr("w", "9525");
+    let mut ln_fill = Element::new("a:solidFill");
+    ln_fill.push_element(Element::new("a:srgbClr").with_attr("val", "000000"));
+    ln.push_element(ln_fill);
+    sp_pr.push_element(ln);
+    sp_pr
+}
+
+fn empty_or_text_txbody(text: &str) -> Element {
+    let mut tx = Element::new("xdr:txBody");
+    tx.push_element(
+        Element::new("a:bodyPr")
+            .with_attr("wrap", "square")
+            .with_attr("rtlCol", "0"),
+    );
+    tx.push_element(Element::new("a:lstStyle"));
+    let mut p = Element::new("a:p");
+    if text.is_empty() {
+        p.push_element(Element::new("a:endParaRPr").with_attr("sz", "1100"));
+    } else {
+        let mut r = Element::new("a:r");
+        r.push_element(Element::new("a:rPr").with_attr("sz", "1100"));
+        r.push_element(Element::new("a:t").with_text(text));
+        p.push_element(r);
+    }
+    tx.push_element(p);
+    tx
+}
+
 pub fn delete_textbox(
     pkg: &mut Package,
     sheet_doc: &mut Document,
@@ -315,22 +627,69 @@ pub fn delete_textbox(
     op: &DeleteTextBoxOp,
     op_index: usize,
 ) -> Result<(), Error> {
+    delete_object(
+        pkg,
+        sheet_doc,
+        sheet_part,
+        &op.id,
+        &op.target.key,
+        DrawObjKind::TextBox,
+        op_index,
+    )
+}
+
+pub fn delete_shape(
+    pkg: &mut Package,
+    sheet_doc: &mut Document,
+    sheet_part: &str,
+    op: &DeleteShapeOp,
+    op_index: usize,
+) -> Result<(), Error> {
+    delete_object(
+        pkg,
+        sheet_doc,
+        sheet_part,
+        &op.id,
+        &op.target.key,
+        DrawObjKind::Shape,
+        op_index,
+    )
+}
+
+pub fn delete_connector(
+    pkg: &mut Package,
+    sheet_doc: &mut Document,
+    sheet_part: &str,
+    op: &DeleteConnectorOp,
+    op_index: usize,
+) -> Result<(), Error> {
+    delete_object(
+        pkg,
+        sheet_doc,
+        sheet_part,
+        &op.id,
+        &op.target.key,
+        DrawObjKind::Connector,
+        op_index,
+    )
+}
+
+fn delete_object(
+    pkg: &mut Package,
+    sheet_doc: &mut Document,
+    sheet_part: &str,
+    id: &str,
+    key: &DrawKey,
+    kind: DrawObjKind,
+    op_index: usize,
+) -> Result<(), Error> {
     let path = format!("ops[{op_index}].id");
-    let drawing_part =
-        find_drawing_for(pkg, sheet_part, &sheet_doc.root, is_textbox, &op.target.key).ok_or_else(
-            || {
-                Error::with_path(
-                    ErrorKind::TextBoxNotFound { id: op.id.clone() },
-                    path.clone(),
-                )
-            },
-        )?;
+    let is_obj = kind.matcher();
+    let drawing_part = find_drawing_for(pkg, sheet_part, &sheet_doc.root, is_obj, key)
+        .ok_or_else(|| Error::with_path(kind.not_found(id.to_string()), path.clone()))?;
     let mut doc = xml::parse(pkg.get(&drawing_part)?)?;
-    if !remove_object(&mut doc.root, is_textbox, &op.target.key) {
-        return Err(Error::with_path(
-            ErrorKind::TextBoxNotFound { id: op.id.clone() },
-            path,
-        ));
+    if !remove_object(&mut doc.root, is_obj, key) {
+        return Err(Error::with_path(kind.not_found(id.to_string()), path));
     }
     write_or_drop_drawing(pkg, sheet_doc, sheet_part, &drawing_part, doc)?;
     Ok(())
@@ -344,20 +703,12 @@ pub fn set_shape_text(
     op_index: usize,
 ) -> Result<(), Error> {
     let path = format!("ops[{op_index}].id");
-    let drawing_part = find_drawing_for(pkg, sheet_part, sheet_root, is_textbox, &op.target.key)
-        .ok_or_else(|| {
-            Error::with_path(
-                ErrorKind::TextBoxNotFound { id: op.id.clone() },
-                path.clone(),
-            )
-        })?;
+    let is_obj = op.kind.matcher();
+    let drawing_part = find_drawing_for(pkg, sheet_part, sheet_root, is_obj, &op.target.key)
+        .ok_or_else(|| Error::with_path(op.kind.not_found(op.id.clone()), path.clone()))?;
     let mut doc = xml::parse(pkg.get(&drawing_part)?)?;
-    let sp = find_object_mut(&mut doc.root, is_textbox, &op.target.key).ok_or_else(|| {
-        Error::with_path(
-            ErrorKind::TextBoxNotFound { id: op.id.clone() },
-            path.clone(),
-        )
-    })?;
+    let sp = find_object_mut(&mut doc.root, is_obj, &op.target.key)
+        .ok_or_else(|| Error::with_path(op.kind.not_found(op.id.clone()), path.clone()))?;
     let Some(tx) = sp.child_by_local_mut("txBody") else {
         return Err(Error::with_path(
             ErrorKind::ShapeHasNoText { id: op.id.clone() },
@@ -381,7 +732,7 @@ pub fn set_textbox_size(
         sheet_root,
         sheet_part,
         &op.target.key,
-        is_textbox,
+        op.kind.matcher(),
         picture::SizePatch {
             cx: op.cx,
             cy: op.cy,
@@ -390,7 +741,7 @@ pub fn set_textbox_size(
             to_off_y: op.to_off_y,
         },
         ErrorKind::TwoCellTextBoxSize,
-        ErrorKind::TextBoxNotFound { id: op.id.clone() },
+        op.kind.not_found(op.id.clone()),
         "setTextBoxSize",
         op_index,
     )
@@ -408,7 +759,7 @@ pub fn set_textbox_anchor(
         sheet_root,
         sheet_part,
         &op.target.key,
-        is_textbox,
+        op.kind.matcher(),
         AnchorWrite {
             op: "setTextBoxAnchor",
             anchor: op.anchor,
@@ -427,7 +778,7 @@ pub fn set_textbox_anchor(
             default_cy: DEFAULT_CY,
         },
         op_index,
-        ErrorKind::TextBoxNotFound { id: op.id.clone() },
+        op.kind.not_found(op.id.clone()),
     )
 }
 
@@ -656,6 +1007,22 @@ pub(crate) fn is_textbox(el: &Element) -> bool {
     )
 }
 
+pub(crate) fn is_shape(el: &Element) -> bool {
+    el.local_name() == "sp" && !is_textbox(el)
+}
+
+pub(crate) fn is_connector(el: &Element) -> bool {
+    el.local_name() == "cxnSp"
+}
+
+fn prst_of(el: &Element) -> Option<String> {
+    el.child_by_local("spPr")
+        .and_then(|p| p.child_by_local("prstGeom"))
+        .and_then(|g| g.attr_local("prst"))
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
+}
+
 pub(crate) fn key_matches(key: &DrawKey, raw: &Option<String>, index: usize) -> bool {
     match key {
         DrawKey::Index(n) => index == *n,
@@ -675,6 +1042,7 @@ pub(crate) fn key_matches(key: &DrawKey, raw: &Option<String>, index: usize) -> 
 pub(crate) fn cnv_of_object(el: &Element) -> (Option<String>, String) {
     let nv = el
         .child_by_local("nvSpPr")
+        .or_else(|| el.child_by_local("nvCxnSpPr"))
         .or_else(|| el.child_by_local("nvGraphicFramePr"));
     if let Some(nv) = nv {
         if let Some(pr) = nv.child_by_local("cNvPr") {
