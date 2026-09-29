@@ -312,6 +312,7 @@ fn chart_json(
     let mut legend = json!({ "show": false, "pos": null });
     let mut data_labels = json!({ "show": false });
     let mut flags: Vec<Value> = Vec::new();
+    let mut space_for_keys: Option<Element> = None;
     if let Some(rid) = chart_rid(frame) {
         if let Ok(chart_part) = crate::opc::resolve_id(pkg, slide_part, &rid) {
             if let Ok(bytes) = pkg.get(&chart_part) {
@@ -332,6 +333,7 @@ fn chart_json(
                     legend = chart::legend_json(&doc.root);
                     data_labels = json!({ "show": chart::data_labels_on(&doc.root) });
                     flags = chart::flags_json(&doc.root, &ty);
+                    space_for_keys = Some(doc.root);
                 }
             }
         }
@@ -344,7 +346,11 @@ fn chart_json(
     m.insert("y".into(), json!(y));
     m.insert("cx".into(), json!(cx));
     m.insert("cy".into(), json!(cy));
-    m.insert("type".into(), json!(ty));
+    if let Some(space) = &space_for_keys {
+        chart::insert_type_keys(&mut m, &ty, space);
+    } else {
+        m.insert("type".into(), json!(ty));
+    }
     m.insert("title".into(), title);
     m.insert("catAxisTitle".into(), cat_axis);
     m.insert("valAxisTitle".into(), val_axis);
@@ -583,6 +589,7 @@ pub fn insert_chart(
         chart::embed::SHEET,
         chart::embed::origin(),
         true,
+        op.of_pie_type.as_deref(),
     );
     pkg.set(&chart_part, xml.into_bytes())?;
 
@@ -1077,7 +1084,7 @@ pub fn apply_type(
             format!("ops[{i}].type"),
         ));
     }
-    chart::convert_type(&mut space.root, op.chart_type, i)?;
+    chart::convert_type(&mut space.root, op.chart_type, op.of_pie_type.as_deref(), i)?;
     pkg.set(&chart_part, space.to_bytes()?)?;
     Ok(())
 }

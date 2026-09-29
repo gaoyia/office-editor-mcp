@@ -179,6 +179,12 @@
         "type": {
           "$ref": "request.schema.json#/$defs/insertChartType"
         },
+        "ofPieType": {
+          "enum": [
+            "pie",
+            "bar"
+          ]
+        },
         "title": {
           "type": "string"
         },
@@ -2305,6 +2311,12 @@
         },
         "type": {
           "$ref": "request.schema.json#/$defs/insertChartType"
+        },
+        "ofPieType": {
+          "enum": [
+            "pie",
+            "bar"
+          ]
         },
         "title": {
           "type": "string"

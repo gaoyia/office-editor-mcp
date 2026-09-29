@@ -39,6 +39,7 @@ docx 见 [`roadmap/docx.md`](docx.md)。pptx 见 [`roadmap/pptx.md`](pptx.md)。
 | 4 | `.plan/2026年-9月-27日-✅-xlsx-页眉页脚.md` | 无 |
 | 5 | `.plan/2026年-9月-27日-✅-xlsx-图表工作表.md` | 工作表图表 |
 | C1 | `.plan/2026年-9月-27日-✅-图表剩余.md` | 工作表图表已过 |
+| C4 | `.plan/2026年-9月-29日-✅-图表稀有类型.md` | 图表剩余已过 |
 | 6 | `.plan/2026年-9月-27日-✅-xlsx-工作表管理.md` | 无 |
 | 7 | `.plan/2026年-9月-27日-✅-xlsx-单元格样式.md` | 无 |
 | 8 | `.plan/2026年-9月-27日-✅-xlsx-列宽行高与合并.md` | 无 |
@@ -62,7 +63,7 @@ docx 见 [`roadmap/docx.md`](docx.md)。pptx 见 [`roadmap/pptx.md`](pptx.md)。
 
 ## 待做
 
-第一期顺序待做已空。下面是全量第二轮，开切片时再写 `.plan/`。跨格式 C4 三家一起走。
+第一期顺序待做已空。下面是全量第二轮，开切片时再写 `.plan/`。跨格式 C4 已过。
 
 | 序 | 计划 | 前置 |
 | --- | --- | --- |
@@ -80,7 +81,6 @@ docx 见 [`roadmap/docx.md`](docx.md)。pptx 见 [`roadmap/pptx.md`](pptx.md)。
 | 29 | 外部引用 | 公式结构 |
 | 30 | 保护密码哈希 | 保护 |
 | 31 | `dialogsheet` / `macrosheet` 只读进树 | 工作表管理 |
-| C4 | 图表稀有类型（股价 / 曲面 / 复合饼 / chartex） | 图表剩余已过 |
 
 18 不要和艺术字画廊绑在一起。数据透视不要做成计算引擎。密码哈希若不想做加密，把 30 改成永不做。
 
@@ -90,8 +90,8 @@ docx 见 [`roadmap/docx.md`](docx.md)。pptx 见 [`roadmap/pptx.md`](pptx.md)。
 | --- | --- | --- |
 | C2 | `.plan/2026年-9月-27日-✅-SmartArt跨家族.md` | Word / PowerPoint 已过；工作表图示已进树（序号 12） |
 
-xlsx 没有 Word / PowerPoint 那种墨迹批注计划；批注已过（序号 11）。C4 见待做表。
+xlsx 没有 Word / PowerPoint 那种墨迹批注计划；批注已过（序号 11）。C4 见已过表。
 
 ## 怎么算 Excel 全量做完
 
-已过表保持 ✅，待做 18–31 与 C4 做完，`docs/` 与实现一致，Excel 16.0 手测过对应清单。永不做的条目不算欠账。公式求值保持 🚫。
+已过表保持 ✅，待做 18–31 做完，`docs/` 与实现一致，Excel 16.0 手测过对应清单。永不做的条目不算欠账。公式求值保持 🚫。

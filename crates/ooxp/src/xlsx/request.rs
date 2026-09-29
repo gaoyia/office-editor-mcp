@@ -1055,6 +1055,7 @@ pub struct SetPictureAnchorOp {
 pub struct InsertChartOp {
     pub sheet: String,
     pub chart_type: ChartType,
+    pub of_pie_type: Option<String>,
     pub title: Option<String>,
     pub series: Vec<NewSeries>,
     pub cx: Option<i64>,
@@ -1074,6 +1075,7 @@ pub struct InsertChartSheetOp {
     pub name: String,
     pub data_sheet: Option<String>,
     pub chart_type: ChartType,
+    pub of_pie_type: Option<String>,
     pub title: Option<String>,
     pub series: Vec<NewSeries>,
     pub cx: Option<i64>,
@@ -1162,6 +1164,7 @@ pub struct SetChartTypeOp {
     pub id: String,
     pub target: SheetChartId,
     pub chart_type: ChartType,
+    pub of_pie_type: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -3016,8 +3019,22 @@ fn parse_insert_chart(
         obj,
         i,
         &[
-            "op", "id", "type", "title", "series", "cx", "cy", "from", "to", "anchor", "fromOffX",
-            "fromOffY", "toOffX", "toOffY", "dataFrom",
+            "op",
+            "id",
+            "type",
+            "ofPieType",
+            "title",
+            "series",
+            "cx",
+            "cy",
+            "from",
+            "to",
+            "anchor",
+            "fromOffX",
+            "fromOffY",
+            "toOffX",
+            "toOffY",
+            "dataFrom",
         ],
     )?;
     if obj.contains_key("kind") {
@@ -3039,6 +3056,13 @@ fn parse_insert_chart(
     let id = require_id(obj, i)?;
     let sheet = chart::parse_insert_sheet_id(&id, i)?;
     let chart_type = parse_chart_type_field(obj.get("type"), i, true)?;
+    let of_pie_type =
+        crate::chart::parse_of_pie_type(obj.get("ofPieType"), &format!("ops[{i}].ofPieType"))?;
+    crate::chart::reject_of_pie_on_other(
+        chart_type,
+        of_pie_type.as_deref(),
+        &format!("ops[{i}].ofPieType"),
+    )?;
     let title = parse_chart_title_field(obj.get("title"), i)?;
     let series = parse_insert_series(obj.get("series"), i, chart_type, "insertChart")?;
     validate_insert_series(chart_type, &series, i)?;
@@ -3079,6 +3103,7 @@ fn parse_insert_chart(
     Ok(InsertChartOp {
         sheet,
         chart_type,
+        of_pie_type,
         title,
         series,
         cx,
@@ -3107,6 +3132,7 @@ fn parse_insert_chart_sheet(
             "name",
             "dataSheet",
             "type",
+            "ofPieType",
             "title",
             "series",
             "cx",
@@ -3168,6 +3194,13 @@ fn parse_insert_chart_sheet(
         }
     };
     let chart_type = parse_chart_type_field(obj.get("type"), i, true)?;
+    let of_pie_type =
+        crate::chart::parse_of_pie_type(obj.get("ofPieType"), &format!("ops[{i}].ofPieType"))?;
+    crate::chart::reject_of_pie_on_other(
+        chart_type,
+        of_pie_type.as_deref(),
+        &format!("ops[{i}].ofPieType"),
+    )?;
     let title = parse_chart_title_field(obj.get("title"), i)?;
     let series = parse_insert_series(obj.get("series"), i, chart_type, "insertChartSheet")?;
     validate_insert_series(chart_type, &series, i)?;
@@ -3177,6 +3210,7 @@ fn parse_insert_chart_sheet(
         name,
         data_sheet,
         chart_type,
+        of_pie_type,
         title,
         series,
         cx,
@@ -7078,12 +7112,11 @@ fn validate_insert_series(
     series: &[NewSeries],
     i: usize,
 ) -> Result<(), Error> {
-    if chart_type.needs_one_series() && series.len() != 1 {
-        return Err(Error::with_path(
-            ErrorKind::PieNeedsOneSeries,
-            format!("ops[{i}].series"),
-        ));
-    }
+    crate::chart::validate_insert_series_len(
+        chart_type,
+        series.len(),
+        &format!("ops[{i}].series"),
+    )?;
     if chart_type == ChartType::Combo {
         let kinds: std::collections::HashSet<&str> = series
             .iter()
@@ -7356,7 +7389,7 @@ fn parse_set_chart_type(
     obj: &serde_json::Map<String, Value>,
     i: usize,
 ) -> Result<SetChartTypeOp, Error> {
-    deny_keys(obj, i, &["op", "id", "type"])?;
+    deny_keys(obj, i, &["op", "id", "type", "ofPieType"])?;
     let id = require_id(obj, i)?;
     let target = chart::parse_chart_id(&id, i)?;
     let chart_type = parse_chart_type_field(obj.get("type"), i, true)?;
@@ -7366,10 +7399,18 @@ fn parse_set_chart_type(
             format!("ops[{i}].type"),
         ));
     }
+    let of_pie_type =
+        crate::chart::parse_of_pie_type(obj.get("ofPieType"), &format!("ops[{i}].ofPieType"))?;
+    crate::chart::reject_of_pie_on_other(
+        chart_type,
+        of_pie_type.as_deref(),
+        &format!("ops[{i}].ofPieType"),
+    )?;
     Ok(SetChartTypeOp {
         id,
         target,
         chart_type,
+        of_pie_type,
     })
 }
 

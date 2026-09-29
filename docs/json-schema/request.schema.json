@@ -1852,7 +1852,10 @@
         "scatter",
         "doughnut",
         "radar",
-        "bubble"
+        "bubble",
+        "stock",
+        "surface",
+        "ofPie"
       ]
     },
     "insertChartType": {
@@ -1866,7 +1869,10 @@
         "doughnut",
         "radar",
         "bubble",
-        "combo"
+        "combo",
+        "stock",
+        "surface",
+        "ofPie"
       ]
     },
     "comboSeriesType": {
@@ -1937,6 +1943,12 @@
         },
         "type": {
           "$ref": "#/$defs/insertChartType"
+        },
+        "ofPieType": {
+          "enum": [
+            "pie",
+            "bar"
+          ]
         },
         "title": {
           "type": "string"
@@ -2223,6 +2235,12 @@
         },
         "type": {
           "$ref": "#/$defs/chartType"
+        },
+        "ofPieType": {
+          "enum": [
+            "pie",
+            "bar"
+          ]
         }
       }
     },

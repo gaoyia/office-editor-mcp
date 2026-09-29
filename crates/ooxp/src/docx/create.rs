@@ -44,6 +44,7 @@ struct NewPic {
 
 struct CreateChart {
     chart_type: ChartType,
+    of_pie_type: Option<String>,
     title: Option<String>,
     series: Vec<NewSeries>,
     kind: PicKind,
@@ -1394,7 +1395,7 @@ fn parse_one_chart(v: &Value, path: &str) -> Result<CreateChart, Error> {
     for k in obj.keys() {
         if !matches!(
             k.as_str(),
-            "type" | "title" | "series" | "kind" | "wrap" | "cx" | "cy"
+            "type" | "ofPieType" | "title" | "series" | "kind" | "wrap" | "cx" | "cy"
         ) {
             return Err(Error::with_path(
                 ErrorKind::UnknownField { field: k.clone() },
@@ -1437,12 +1438,14 @@ fn parse_one_chart(v: &Value, path: &str) -> Result<CreateChart, Error> {
         }
     };
     let series = parse_create_series(obj.get("series"), path)?;
-    if chart_type.needs_one_series() && series.len() != 1 {
-        return Err(Error::with_path(
-            ErrorKind::PieNeedsOneSeries,
-            format!("{path}.series"),
-        ));
-    }
+    crate::chart::validate_insert_series_len(chart_type, series.len(), &format!("{path}.series"))?;
+    let of_pie_type =
+        crate::chart::parse_of_pie_type(obj.get("ofPieType"), &format!("{path}.ofPieType"))?;
+    crate::chart::reject_of_pie_on_other(
+        chart_type,
+        of_pie_type.as_deref(),
+        &format!("{path}.ofPieType"),
+    )?;
     if chart_type == ChartType::Combo {
         let kinds: HashSet<&str> = series
             .iter()
@@ -1520,6 +1523,7 @@ fn parse_one_chart(v: &Value, path: &str) -> Result<CreateChart, Error> {
     }
     Ok(CreateChart {
         chart_type,
+        of_pie_type,
         title,
         series,
         kind,
@@ -1699,6 +1703,7 @@ fn push_story_ops(
                 id: id.clone(),
                 para: host.clone(),
                 chart_type: ch.chart_type,
+                of_pie_type: ch.of_pie_type.clone(),
                 title: ch.title.clone(),
                 series: ch.series.clone(),
                 kind: ch.kind,

@@ -58,6 +58,8 @@ pub struct ChartInfo {
     pub data_labels: Value,
     pub flags: Vec<Value>,
     pub stable: bool,
+    pub of_pie_type: Option<String>,
+    pub layout_id: Option<String>,
 }
 
 pub fn parse_insert_sheet_id(id: &str, op_index: usize) -> Result<String, Error> {
@@ -259,6 +261,12 @@ fn chart_to_json(c: &ChartInfo) -> Value {
         }
     }
     m.insert("type".into(), json!(c.chart_type));
+    if let Some(t) = &c.of_pie_type {
+        m.insert("ofPieType".into(), json!(t));
+    }
+    if let Some(id) = &c.layout_id {
+        m.insert("layoutId".into(), json!(id));
+    }
     m.insert("title".into(), c.title.clone());
     m.insert("catAxisTitle".into(), c.cat_axis_title.clone());
     m.insert("valAxisTitle".into(), c.val_axis_title.clone());
@@ -304,6 +312,8 @@ fn chart_info(
     let mut legend = json!({ "show": false, "pos": null });
     let mut data_labels = json!({ "show": false });
     let mut flags = Vec::new();
+    let mut of_pie_type = None;
+    let mut layout_id = None;
     if let Some(rid) = chart_rid(frame) {
         if let Ok(chart_part) = crate::opc::resolve_id(pkg, drawing_part, &rid) {
             if let Ok(bytes) = pkg.get(&chart_part) {
@@ -321,6 +331,12 @@ fn chart_info(
                     legend = chart::legend_json(&doc.root);
                     data_labels = json!({ "show": chart::data_labels_on(&doc.root) });
                     flags = chart::flags_json(&doc.root, &ty);
+                    if ty == "ofPie" {
+                        of_pie_type = chart::inspect_of_pie_type(&doc.root);
+                    }
+                    if ty == "chartex" {
+                        layout_id = chart::inspect_layout_id(&doc.root);
+                    }
                 }
             }
         }
@@ -378,6 +394,8 @@ fn chart_info(
         data_labels,
         flags,
         stable,
+        of_pie_type,
+        layout_id,
     })
 }
 
@@ -477,6 +495,7 @@ pub fn insert_chart(
         sheet_name,
         op.data_from,
         false,
+        op.of_pie_type.as_deref(),
     );
     let chart_part = next_chart_part(pkg);
     pkg.set(&chart_part, xml.into_bytes())?;
@@ -865,7 +884,12 @@ pub fn set_chart_type(
 ) -> Result<(), Error> {
     let (mut space, chart_part) = load_space(pkg, sheet_part, &op.target, &op.id, op_index)?;
     chart::reject_restricted(&space.root, &op.id, op_index, ChartRestrict::Data)?;
-    chart::convert_type(&mut space.root, op.chart_type, op_index)?;
+    chart::convert_type(
+        &mut space.root,
+        op.chart_type,
+        op.of_pie_type.as_deref(),
+        op_index,
+    )?;
     pkg.set(&chart_part, space.to_bytes()?)?;
     Ok(())
 }

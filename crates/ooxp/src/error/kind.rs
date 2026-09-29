@@ -663,6 +663,9 @@ define_error_kinds! {
     InvalidChartAxis => vec![Self::InvalidChartAxis],
     InvalidLegendPos => vec![Self::InvalidLegendPos],
     PieNeedsOneSeries => vec![Self::PieNeedsOneSeries],
+    StockNeedsThreeSeries => vec![Self::StockNeedsThreeSeries],
+    SurfaceNeedsThreeSeries => vec![Self::SurfaceNeedsThreeSeries],
+    InvalidOfPieType => vec![Self::InvalidOfPieType],
     SizesOnNonBubble => vec![Self::SizesOnNonBubble],
     InvalidComboSeriesType => vec![Self::InvalidComboSeriesType],
     ChartTypeNotConvertible => vec![Self::ChartTypeNotConvertible],
@@ -1385,6 +1388,9 @@ impl ErrorKind {
             | Self::InvalidChartAxis
             | Self::InvalidLegendPos
             | Self::PieNeedsOneSeries
+            | Self::StockNeedsThreeSeries
+            | Self::SurfaceNeedsThreeSeries
+            | Self::InvalidOfPieType
             | Self::SizesOnNonBubble
             | Self::InvalidComboSeriesType
             | Self::NeedChartCategories

@@ -340,25 +340,29 @@ if ($pivot) {
 }
 Add-Check 'docx-Cx7' $pvOk $pvDetail
 
-# Cx8：股价 type=stock，改类型仍拒绝。
+# Cx8：股价 type=stock，三条系列转柱形成功。
 $otOut = Get-OutPath 'docx-charts-ext-other.docx'
 $otOk = $false
 $otDetail = 'no-stock'
 if ($stock) {
+    Close-WordDocByPath $word $otOut
     if (Test-Path $otOut) { Remove-Item -Force $otOut }
-    $raw = Invoke-OoxpExpectFail @{
+    Invoke-OoxpRequest @{
         schemaVersion = 1; action = 'apply'
         path = $src.Replace('\', '/')
         output = $otOut.Replace('\', '/')
         ops = @(@{ op = 'setChartType'; id = $stock.id; type = 'col' })
-    } 'docx-charts-ext-other'
-    $code = ''
-    try { $code = [string](($raw.Stderr | ConvertFrom-Json).error.code) } catch { $code = $raw.Stderr }
-    $noWrite = -not (Test-Path $otOut)
-    $docOt = Open-WordDoc $word $src
+    } 'docx-charts-ext-other' | Out-Null
+    $treeOt = Invoke-OoxpTree @{
+        schemaVersion = 1; action = 'inspect'
+        path = $otOut.Replace('\', '/'); format = 'docx'
+        scope = @{ from = 1; maxParas = 30; charts = $true }
+    } 'docx-charts-ext-other-inspect'
+    $after = @($treeOt.charts) | Where-Object { $_.id -eq $stock.id } | Select-Object -First 1
+    $docOt = Open-WordDoc $word $otOut
     $capOt = [string]$docOt.ActiveWindow.Caption
     Close-WordDoc $docOt
-    $otOk = ($stock.type -eq 'stock') -and ($code -eq 'NotImplemented') -and $noWrite -and ($capOt -notmatch 'Repair')
-    $otDetail = "type=$($stock.type) code=$code wrote=$(-not $noWrite) caption=$capOt"
+    $otOk = ($stock.type -eq 'stock') -and ([string]$after.type -eq 'col') -and ($capOt -notmatch 'Repair')
+    $otDetail = "from=$($stock.type) after=$($after.type) caption=$capOt"
 }
 Add-Check 'docx-Cx8' $otOk $otDetail

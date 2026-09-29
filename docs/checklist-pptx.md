@@ -8,7 +8,7 @@ C、I、A、Pp、Pc、Psa、Pn、Pcm、Pm、Ps、Sg、Pt、Tn、Tr、Am、Aw、M
 
 ## 本机结果（2026-09-28）
 
-Microsoft PowerPoint 16.0 已打开，C1、C3、C4、C5–C13、I1–I5、A1–A5、Pp1–Pp7、Pc1–Pc7、Psa1–Psa7、Pn1–Pn6、Pcm1–Pcm6、Pik1–Pik4、Pm1–Pm5、Ps1–Ps5、Sg1–Sg5、Pt1–Pt6、Tn1–Tn5、Am1–Am5、Mm1–Mm5、Ho1–Ho5、Phl1–Phl5、Pmd1–Pmd5、Psc1–Psc5、Cs1–Cs5 均 PASS。本机若装了 WPS，`PowerPoint.Application` 会被抢走，测试仍直接启动 `POWERPNT.EXE`，从 `mdiClass` 挂 COM。O1 已放弃。2026-09-27 补跑 `pptx-pictures.ps1`，Pp1–Pp7 通过。同日补跑 `pptx-create-pictures.ps1`，C5–C7 通过。同日补跑 `pptx-charts.ps1`，Pc1–Pc7 通过。同日补跑 `pptx-create-charts.ps1`，C8–C10 通过。同日补跑 `pptx-smartart.ps1`，Psa1–Psa7 通过。同日补跑 `pptx-notes.ps1`，Pn1–Pn4 通过。同日补跑 `pptx-comments.ps1`，Pcm1–Pcm5、Pik1–Pik4 通过。同日补跑 `pptx-docprops.ps1`，Pd1–Pd5 通过。同日补跑 `pptx-charts-remain.ps1`，Pr1–Pr3 通过。2026-09-28 补跑 `pptx-slides.ps1`，Pm1–Pm5 通过。同日补跑 `pptx-shapes.ps1`，Ps1–Ps5 通过。同日补跑 `pptx-tables.ps1`，Pt1–Pt6 通过。同日补跑 `pptx-transition.ps1`，Tn1–Tn5 通过。同日补跑 `pptx-timing.ps1`，Am1–Am5 通过。同日补跑 `pptx-masters.ps1`，Mm1–Mm5 通过。同日补跑 `pptx-handout.ps1`，Ho1–Ho5 通过。同日补跑 `pptx-hyperlinks.ps1`，Phl1–Phl5 通过。同日补跑 `pptx-create-notes-comments.ps1`，C11–C13 通过。同日补跑 `pptx-notes.ps1`，Pn5–Pn6 通过。同日补跑 `pptx-comments.ps1`，Pcm6 通过。同日补跑 `pptx-media.ps1`，Pmd1–Pmd5 通过。同日补跑 `pptx-sections.ps1`，Psc1–Psc5 通过。2026-09-29 补跑 `pptx-anim-write.ps1`，Aw1–Aw5 通过。同日补跑 `pptx-transition-remain.ps1`，Tr1–Tr5 通过。同日补跑 `pptx-shape-geom.ps1`，Sg1–Sg5 通过。同日补跑 `pptx-master-write.ps1`，Mw1–Mw5 通过。同日补跑 `pptx-theme-size.ps1`，Ts1–Ts5 通过。同日补跑 `pptx-custom-show.ps1`，Cs1–Cs5 通过。2026-09-29 补跑 `pptx-create-remain.ps1`，Cr1–Cr5 通过。同日补跑 `pptx-notes.ps1`，Pn7–Pn11 通过。同日补跑 `pptx-zoom.ps1`，Pz1–Pz5 通过。同日补跑 `pptx-protect.ps1`，Pw1–Pw5 通过。同日补跑 `pptx-fields.ps1`，Pf1–Pf5 通过。同日补跑 `pptx-run-links.ps1`，Phr1–Phr5 通过。同日补跑 `pptx-comment-pics.ps1`，Pcip1–Pcip5 通过。
+Microsoft PowerPoint 16.0 已打开，C1、C3、C4、C5–C13、I1–I5、A1–A5、Pp1–Pp7、Pc1–Pc7、Psa1–Psa7、Pn1–Pn6、Pcm1–Pcm6、Pik1–Pik4、Pm1–Pm5、Ps1–Ps5、Sg1–Sg5、Pt1–Pt6、Tn1–Tn5、Am1–Am5、Mm1–Mm5、Ho1–Ho5、Phl1–Phl5、Pmd1–Pmd5、Psc1–Psc5、Cs1–Cs5 均 PASS。本机若装了 WPS，`PowerPoint.Application` 会被抢走，测试仍直接启动 `POWERPNT.EXE`，从 `mdiClass` 挂 COM。O1 已放弃。2026-09-27 补跑 `pptx-pictures.ps1`，Pp1–Pp7 通过。同日补跑 `pptx-create-pictures.ps1`，C5–C7 通过。同日补跑 `pptx-charts.ps1`，Pc1–Pc7 通过。同日补跑 `pptx-create-charts.ps1`，C8–C10 通过。同日补跑 `pptx-smartart.ps1`，Psa1–Psa7 通过。同日补跑 `pptx-notes.ps1`，Pn1–Pn4 通过。同日补跑 `pptx-comments.ps1`，Pcm1–Pcm5、Pik1–Pik4 通过。同日补跑 `pptx-docprops.ps1`，Pd1–Pd5 通过。同日补跑 `pptx-charts-remain.ps1`，Pr1–Pr3 通过。2026-09-28 补跑 `pptx-slides.ps1`，Pm1–Pm5 通过。同日补跑 `pptx-shapes.ps1`，Ps1–Ps5 通过。同日补跑 `pptx-tables.ps1`，Pt1–Pt6 通过。同日补跑 `pptx-transition.ps1`，Tn1–Tn5 通过。同日补跑 `pptx-timing.ps1`，Am1–Am5 通过。同日补跑 `pptx-masters.ps1`，Mm1–Mm5 通过。同日补跑 `pptx-handout.ps1`，Ho1–Ho5 通过。同日补跑 `pptx-hyperlinks.ps1`，Phl1–Phl5 通过。同日补跑 `pptx-create-notes-comments.ps1`，C11–C13 通过。同日补跑 `pptx-notes.ps1`，Pn5–Pn6 通过。同日补跑 `pptx-comments.ps1`，Pcm6 通过。同日补跑 `pptx-media.ps1`，Pmd1–Pmd5 通过。同日补跑 `pptx-sections.ps1`，Psc1–Psc5 通过。2026-09-29 补跑 `pptx-anim-write.ps1`，Aw1–Aw5 通过。同日补跑 `pptx-transition-remain.ps1`，Tr1–Tr5 通过。同日补跑 `pptx-shape-geom.ps1`，Sg1–Sg5 通过。同日补跑 `pptx-master-write.ps1`，Mw1–Mw5 通过。同日补跑 `pptx-theme-size.ps1`，Ts1–Ts5 通过。同日补跑 `pptx-custom-show.ps1`，Cs1–Cs5 通过。2026-09-29 补跑 `pptx-create-remain.ps1`，Cr1–Cr5 通过。同日补跑 `pptx-notes.ps1`，Pn7–Pn11 通过。同日补跑 `pptx-zoom.ps1`，Pz1–Pz5 通过。同日补跑 `pptx-protect.ps1`，Pw1–Pw5 通过。同日补跑 `pptx-fields.ps1`，Pf1–Pf5 通过。同日补跑 `pptx-run-links.ps1`，Phr1–Phr5 通过。同日补跑 `pptx-comment-pics.ps1`，Pcip1–Pcip5 通过。2026-09-29 补跑 `pptx-charts-rare.ps1`，Pq1–Pq5 通过。
 
 | 序号 | 状态 | 结果 |
 | --- | --- | --- |
@@ -51,6 +51,7 @@ Microsoft PowerPoint 16.0 已打开，C1、C3、C4、C5–C13、I1–I5、A1–A
 | Pw1–Pw5 | ✅ | PowerPoint 16.0：`pptx-protect.ps1`，5 PASS / 0 FAIL。create 根上 `showPr.type=present`、`showNarration=true`、`hasPassword=false`；kiosk+loop 的 COM ShowType=3、Loop 为真；browse 的 ShowType=2；改回 present 后 ShowType=1；password / enforced true / 带哈希样例得 `NotImplemented`；页 id 得 `InvalidId`；xlsx 拒 `setShowPr`。无 Repair |
 | Pf1–Pf5 | ✅ | PowerPoint 16.0：`pptx-fields.ps1`，5 PASS / 0 FAIL。无名单时根与各页有 `fieldCount=0`；`insertField` `type=slidenum` 后 `host` 为形状 id、ZIP 有 `a:fld type="slidenum"`；`datetime1` 对上；`deleteField` 后没有 `a:fld`；页 id / 备注形状 id 得 `InvalidId`，`type=other` / xlsx / `instr` 得 `InvalidField`。无 Repair |
 | Pr1–Pr3 | ✅ | PowerPoint 16.0：`pptx-charts-remain.ps1`，3 PASS / 0 FAIL。趋势线 COM Count=1；改删趋势线；次轴 `AxisGroup=2`。无 Repair |
+| Pq1–Pq5 | ✅ | PowerPoint 16.0：`pptx-charts-rare.ps1`，5 PASS / 0 FAIL。插入股价 / 曲面 / 复合条无 Repair；股价三条转柱形、复合饼转饼；增系列与 `type=chartex`、两条股价均拒写。 |
 | O1 | 🚫 | 领域层不做原样保存，与 xlsx 清单相同。零脏写回见 OPC 库测试。PowerPoint 另存 create 产物见 `pptx-O1-ppt-resave` |
 
 ## create
@@ -143,6 +144,18 @@ create 补齐节、形状级超链接、内嵌视频 / 音频、页切换和预�
 | Pr1 | 趋势线 | ✅ `insertTrendline` 后 PowerPoint 无修复，COM 能看见趋势线 |
 | Pr2 | 改删趋势线 | ✅ `setTrendline` / `deleteTrendline` 后无修复 |
 | Pr3 | 次轴 | ✅ `setChartSeriesAxis` 后 `axis` 为 `secondary`，无修复 |
+
+## 图表稀有类型
+
+手测脚本 `manual-check/office/cases/pptx-charts-rare.ps1`。编号用 Pq。
+
+| 序号 | 检查 | 通过标准 |
+| --- | --- | --- |
+| Pq1 | 插入股价 | ✅ `insertChart` `type=stock` 三条系列后 PowerPoint 无修复，`type` 为 `stock` |
+| Pq2 | 插入曲面 | ✅ `insertChart` `type=surface` 三条系列后 PowerPoint 无修复，`type` 为 `surface` |
+| Pq3 | 插入复合饼 | ✅ `insertChart` `type=ofPie` 一条系列后 PowerPoint 无修复；`ofPieType=bar` 为复合条 |
+| Pq4 | 改类型 | ✅ 股价三条转 `col` 成功；复合饼转 `pie` 成功；无修复 |
+| Pq5 | 仍拒绝 | ✅ 对股价 `addChartSeries` 得 `NotImplemented`；源无 chartex 时 `insertChart type=chartex` 得 `InvalidField`；两条系列的股价 `insertChart` 得 `InvalidField`；均未写坏文件 |
 
 ## SmartArt
 

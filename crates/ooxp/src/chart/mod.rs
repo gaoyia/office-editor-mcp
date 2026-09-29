@@ -55,6 +55,9 @@ pub enum ChartType {
     Radar,
     Bubble,
     Combo,
+    Stock,
+    Surface,
+    OfPie,
 }
 
 impl ChartType {
@@ -70,6 +73,9 @@ impl ChartType {
             "radar" => Some(Self::Radar),
             "bubble" => Some(Self::Bubble),
             "combo" => Some(Self::Combo),
+            "stock" => Some(Self::Stock),
+            "surface" => Some(Self::Surface),
+            "ofPie" => Some(Self::OfPie),
             _ => None,
         }
     }
@@ -97,6 +103,9 @@ impl ChartType {
             Self::Radar => "radar",
             Self::Bubble => "bubble",
             Self::Combo => "combo",
+            Self::Stock => "stock",
+            Self::Surface => "surface",
+            Self::OfPie => "ofPie",
         }
     }
 
@@ -111,6 +120,9 @@ impl ChartType {
             Self::Radar => "radarChart",
             Self::Bubble => "bubbleChart",
             Self::Combo => "barChart",
+            Self::Stock => "stockChart",
+            Self::Surface => "surface3DChart",
+            Self::OfPie => "ofPieChart",
         }
     }
 
@@ -119,11 +131,15 @@ impl ChartType {
     }
 
     pub fn no_axes(self) -> bool {
-        matches!(self, Self::Pie | Self::Doughnut)
+        matches!(self, Self::Pie | Self::Doughnut | Self::OfPie)
     }
 
     pub fn needs_one_series(self) -> bool {
-        matches!(self, Self::Pie | Self::Doughnut)
+        matches!(self, Self::Pie | Self::Doughnut | Self::OfPie)
+    }
+
+    pub fn needs_three_series(self) -> bool {
+        matches!(self, Self::Stock | Self::Surface)
     }
 }
 
@@ -200,6 +216,95 @@ pub fn inspect_type(space: &Element, _chartex: bool) -> String {
         Some(k) => (*k).into(),
         None => "other".into(),
     }
+}
+
+/// 复合饼的 `c:ofPieType`。缺或对不上当作 `pie`。
+pub fn inspect_of_pie_type(space: &Element) -> Option<String> {
+    let plot = plot_area(space)?;
+    let wrap = plot
+        .element_children()
+        .find(|c| c.local_name() == "ofPieChart")?;
+    let raw = wrap
+        .child_by_local("ofPieType")
+        .and_then(|e| e.attr_local("val"))
+        .unwrap_or("pie");
+    Some(if raw == "bar" {
+        "bar".into()
+    } else {
+        "pie".into()
+    })
+}
+
+/// chartex 第一条 `cx:series/@layoutId`。没有该属性则没有这个键。
+pub fn inspect_layout_id(space: &Element) -> Option<String> {
+    let ser = find_desc(space, "series")?;
+    ser.attr_local("layoutId")
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
+}
+
+/// 在 `type` 之后按契约插入 `ofPieType` / `layoutId`。
+pub fn insert_type_keys(m: &mut Map<String, Value>, ty: &str, space: &Element) {
+    m.insert("type".into(), json!(ty));
+    if ty == "ofPie" {
+        m.insert(
+            "ofPieType".into(),
+            json!(inspect_of_pie_type(space).unwrap_or_else(|| "pie".into())),
+        );
+    }
+    if ty == "chartex" {
+        if let Some(id) = inspect_layout_id(space) {
+            m.insert("layoutId".into(), json!(id));
+        }
+    }
+}
+
+pub fn parse_of_pie_type(v: Option<&Value>, path: &str) -> Result<Option<String>, Error> {
+    match v {
+        None | Some(Value::Null) => Ok(None),
+        Some(Value::String(s)) if s == "pie" || s == "bar" => Ok(Some(s.clone())),
+        Some(Value::String(_)) => Err(Error::with_path(ErrorKind::InvalidOfPieType, path)),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "ofPieType".into(),
+                expected: crate::error::TypeName::String,
+            },
+            path,
+        )),
+    }
+}
+
+pub fn reject_of_pie_on_other(
+    ty: ChartType,
+    of_pie: Option<&str>,
+    path: &str,
+) -> Result<(), Error> {
+    if of_pie.is_some() && ty != ChartType::OfPie {
+        return Err(Error::with_path(ErrorKind::InvalidOfPieType, path));
+    }
+    Ok(())
+}
+
+pub fn of_pie_for_insert(given: Option<&str>) -> &str {
+    match given {
+        Some("bar") => "bar",
+        _ => "pie",
+    }
+}
+
+pub fn validate_insert_series_len(ty: ChartType, n: usize, path: &str) -> Result<(), Error> {
+    if ty.needs_one_series() && n != 1 {
+        return Err(Error::with_path(ErrorKind::PieNeedsOneSeries, path));
+    }
+    if ty.needs_three_series() && n != 3 {
+        let kind = if ty == ChartType::Stock {
+            ErrorKind::StockNeedsThreeSeries
+        } else {
+            ErrorKind::SurfaceNeedsThreeSeries
+        };
+        return Err(Error::with_path(kind, path));
+    }
+    Ok(())
 }
 
 pub fn wrapper_kind(el: &Element) -> Option<&'static str> {
@@ -1004,18 +1109,28 @@ pub fn set_data_labels(space: &mut Element, show: bool) {
     }
 }
 
-pub fn convert_type(space: &mut Element, target: ChartType, i: usize) -> Result<(), Error> {
+pub fn convert_type(
+    space: &mut Element,
+    target: ChartType,
+    of_pie_type: Option<&str>,
+    i: usize,
+) -> Result<(), Error> {
     if target == ChartType::Combo {
         return Err(Error::with_path(
             ErrorKind::InvalidChartType,
             format!("ops[{i}].type"),
         ));
     }
+    reject_of_pie_on_other(target, of_pie_type, &format!("ops[{i}].ofPieType"))?;
     let current = inspect_type(space, false);
-    if matches!(
-        current.as_str(),
-        "stock" | "surface" | "ofPie" | "other" | "chartex"
-    ) {
+    if matches!(current.as_str(), "other" | "chartex") {
+        return Err(Error::with_path(
+            ErrorKind::ChartTypeNotConvertible,
+            format!("ops[{i}].type"),
+        ));
+    }
+    let of_pie = resolve_of_pie_for_convert(space, target, of_pie_type, &current);
+    if target.needs_three_series() && series_count(space) != 3 {
         return Err(Error::with_path(
             ErrorKind::ChartTypeNotConvertible,
             format!("ops[{i}].type"),
@@ -1024,6 +1139,9 @@ pub fn convert_type(space: &mut Element, target: ChartType, i: usize) -> Result<
     if current == target.as_str() {
         if matches!(target, ChartType::Bar | ChartType::Col) {
             set_bar_dir(space, target);
+        }
+        if target == ChartType::OfPie {
+            set_of_pie_type(space, &of_pie);
         }
         return Ok(());
     }
@@ -1066,16 +1184,61 @@ pub fn convert_type(space: &mut Element, target: ChartType, i: usize) -> Result<
                 format!("ops[{i}].type"),
             ));
         };
-        let (insert_at, mut sers, ax_ids) = extract_wrapper_sers(plot);
+        let (insert_at, mut sers, mut ax_ids) = extract_wrapper_sers(plot);
+        if target == ChartType::Surface && ax_ids.len() < 3 {
+            if ax_ids.is_empty() {
+                ax_ids.push("1".into());
+            }
+            if ax_ids.len() == 1 {
+                ax_ids.push("2".into());
+            }
+            ax_ids.push("3".into());
+        }
         for ser in &mut sers {
             reshape_ser(ser, target);
         }
-        let wrap = build_type_wrapper(target, sers, &ax_ids);
+        let wrap = build_type_wrapper(target, sers, &ax_ids, &of_pie);
         let at = insert_at.unwrap_or(plot.children.len());
         plot.children.insert(at, Node::Element(wrap));
     }
     retarget_axes(space, target, from_xy);
     Ok(())
+}
+
+fn resolve_of_pie_for_convert(
+    space: &Element,
+    target: ChartType,
+    given: Option<&str>,
+    current: &str,
+) -> String {
+    if target != ChartType::OfPie {
+        return "pie".into();
+    }
+    if let Some(s) = given {
+        return s.to_string();
+    }
+    if current == "ofPie" {
+        return inspect_of_pie_type(space).unwrap_or_else(|| "pie".into());
+    }
+    "pie".into()
+}
+
+fn set_of_pie_type(space: &mut Element, of_pie: &str) {
+    let Some(plot) = plot_area_mut(space) else {
+        return;
+    };
+    for w in plot.element_children_mut() {
+        if w.local_name() == "ofPieChart" {
+            if let Some(el) = w.child_by_local_mut("ofPieType") {
+                el.set_attr("val", of_pie);
+            } else {
+                w.children.insert(
+                    0,
+                    Node::Element(Element::new("c:ofPieType").with_attr("val", of_pie)),
+                );
+            }
+        }
+    }
 }
 
 pub fn last_series_type(space: &Element) -> Option<ChartType> {
@@ -1145,7 +1308,7 @@ pub fn insert_ser(space: &mut Element, ser_el: Element, series_type: Option<Char
             })
             .unwrap_or_default();
         let mut w = Element::new(format!("c:{}", ty.wrapper()));
-        for p in wrapper_prefix_els(ty) {
+        for p in wrapper_prefix_els(ty, "pie") {
             w.push_element(p);
         }
         w.push_element(ser_el);
@@ -1154,6 +1317,9 @@ pub fn insert_ser(space: &mut Element, ser_el: Element, series_type: Option<Char
             let b = ax_ids.get(1).map(String::as_str).unwrap_or("2");
             w.push_element(Element::new("c:axId").with_attr("val", a));
             w.push_element(Element::new("c:axId").with_attr("val", b));
+            if ty == ChartType::Surface {
+                w.push_element(Element::new("c:axId").with_attr("val", "3"));
+            }
         }
         for s in wrapper_suffix_els(ty) {
             w.push_element(s);
@@ -1227,6 +1393,7 @@ pub fn build_chart_xml(
     sheet: &str,
     origin: CellRef,
     include_external_data: bool,
+    of_pie_type: Option<&str>,
 ) -> String {
     if ty == ChartType::Combo {
         return build_combo_chart_xml(title, series, cats, sheet, origin, include_external_data);
@@ -1298,17 +1465,21 @@ pub fn build_chart_xml(
         ));
     }
     let wrapper = ty.wrapper();
-    let extra = wrapper_prefix_xml(ty);
+    let extra = wrapper_prefix_xml(ty, of_pie_for_insert(of_pie_type));
     let suffix = wrapper_suffix_xml(ty);
     let axes = if ty.no_axes() {
         String::new()
     } else if xy {
         ax_pair_scatter()
+    } else if ty == ChartType::Surface {
+        format!("{}{}", ax_pair(), ser_ax_xml())
     } else {
         ax_pair()
     };
     let ax_ids = if ty.no_axes() {
         String::new()
+    } else if ty == ChartType::Surface {
+        r#"<c:axId val="1"/><c:axId val="2"/><c:axId val="3"/>"#.into()
     } else {
         r#"<c:axId val="1"/><c:axId val="2"/>"#.into()
     };
@@ -1317,6 +1488,7 @@ pub fn build_chart_xml(
         &format!("<c:{wrapper}>{extra}{sers}<c:dLbls><c:showLegendKey val=\"0\"/><c:showVal val=\"0\"/><c:showCatName val=\"0\"/><c:showSerName val=\"0\"/><c:showPercent val=\"0\"/></c:dLbls>{suffix}{ax_ids}</c:{wrapper}>"),
         &axes,
         include_external_data,
+        ty == ChartType::Surface,
     )
 }
 
@@ -1512,7 +1684,7 @@ fn build_combo_chart_xml(
                 None,
             ));
         }
-        let extra = wrapper_prefix_xml(*ty);
+        let extra = wrapper_prefix_xml(*ty, "pie");
         wrappers.push_str(&format!(
             "<c:{w}>{extra}{sers}<c:axId val=\"1\"/><c:axId val=\"2\"/></c:{w}>",
             w = ty.wrapper()
@@ -1523,10 +1695,16 @@ fn build_combo_chart_xml(
     } else {
         ax_pair()
     };
-    chart_space_xml(title, &wrappers, &axes, include_external_data)
+    chart_space_xml(title, &wrappers, &axes, include_external_data, false)
 }
 
-fn chart_space_xml(title: Option<&str>, plot_body: &str, axes: &str, embed: bool) -> String {
+fn chart_space_xml(
+    title: Option<&str>,
+    plot_body: &str,
+    axes: &str,
+    embed: bool,
+    surface: bool,
+) -> String {
     let title_xml = match title {
         Some(t) if !t.is_empty() => format!(r#"<c:autoTitleDeleted val="0"/>{}"#, title_el(t)),
         _ => r#"<c:autoTitleDeleted val="1"/>"#.into(),
@@ -1536,28 +1714,41 @@ fn chart_space_xml(title: Option<&str>, plot_body: &str, axes: &str, embed: bool
     } else {
         ""
     };
+    let view3d = if surface {
+        r#"<c:view3D><c:rotX val="15"/><c:rotY val="20"/><c:rAngAx val="0"/></c:view3D>"#
+    } else {
+        ""
+    };
+    let walls = if surface {
+        r#"<c:floor><c:thickness val="0"/></c:floor><c:sideWall><c:thickness val="0"/></c:sideWall><c:backWall><c:thickness val="0"/></c:backWall>"#
+    } else {
+        ""
+    };
     format!(
-        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><c:chartSpace xmlns:c="{CHART_NS}" xmlns:a="{A_NS}" xmlns:r="{REL_NS}"><c:chart>{title_xml}<c:plotArea><c:layout/>{plot_body}{axes}</c:plotArea><c:legend><c:legendPos val="r"/><c:overlay val="0"/></c:legend><c:plotVisOnly val="1"/></c:chart>{ext}</c:chartSpace>"#
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><c:chartSpace xmlns:c="{CHART_NS}" xmlns:a="{A_NS}" xmlns:r="{REL_NS}"><c:chart>{title_xml}{view3d}<c:plotArea><c:layout/>{plot_body}{axes}</c:plotArea>{walls}<c:legend><c:legendPos val="r"/><c:overlay val="0"/></c:legend><c:plotVisOnly val="1"/></c:chart>{ext}</c:chartSpace>"#
     )
 }
 
-fn wrapper_prefix_xml(ty: ChartType) -> &'static str {
+fn wrapper_prefix_xml(ty: ChartType, of_pie: &str) -> String {
     match ty {
         ChartType::Bar => {
-            r#"<c:barDir val="bar"/><c:grouping val="clustered"/><c:varyColors val="0"/>"#
+            r#"<c:barDir val="bar"/><c:grouping val="clustered"/><c:varyColors val="0"/>"#.into()
         }
         ChartType::Col => {
-            r#"<c:barDir val="col"/><c:grouping val="clustered"/><c:varyColors val="0"/>"#
+            r#"<c:barDir val="col"/><c:grouping val="clustered"/><c:varyColors val="0"/>"#.into()
         }
-        ChartType::Line => r#"<c:grouping val="standard"/><c:varyColors val="0"/>"#,
-        ChartType::Area => r#"<c:grouping val="standard"/><c:varyColors val="0"/>"#,
-        ChartType::Pie | ChartType::Doughnut => r#"<c:varyColors val="1"/>"#,
-        ChartType::Scatter => r#"<c:scatterStyle val="lineMarker"/><c:varyColors val="0"/>"#,
-        ChartType::Radar => r#"<c:radarStyle val="marker"/><c:varyColors val="0"/>"#,
-        ChartType::Bubble => r#"<c:varyColors val="0"/>"#,
+        ChartType::Line => r#"<c:grouping val="standard"/><c:varyColors val="0"/>"#.into(),
+        ChartType::Area => r#"<c:grouping val="standard"/><c:varyColors val="0"/>"#.into(),
+        ChartType::Pie | ChartType::Doughnut => r#"<c:varyColors val="1"/>"#.into(),
+        ChartType::Scatter => r#"<c:scatterStyle val="lineMarker"/><c:varyColors val="0"/>"#.into(),
+        ChartType::Radar => r#"<c:radarStyle val="marker"/><c:varyColors val="0"/>"#.into(),
+        ChartType::Bubble => r#"<c:varyColors val="0"/>"#.into(),
         ChartType::Combo => {
-            r#"<c:barDir val="col"/><c:grouping val="clustered"/><c:varyColors val="0"/>"#
+            r#"<c:barDir val="col"/><c:grouping val="clustered"/><c:varyColors val="0"/>"#.into()
         }
+        ChartType::Stock => String::new(),
+        ChartType::Surface => r#"<c:wireframe val="0"/>"#.into(),
+        ChartType::OfPie => format!(r#"<c:ofPieType val="{of_pie}"/><c:varyColors val="1"/>"#),
     }
 }
 
@@ -1565,11 +1756,14 @@ fn wrapper_suffix_xml(ty: ChartType) -> &'static str {
     match ty {
         ChartType::Doughnut => r#"<c:holeSize val="50"/>"#,
         ChartType::Bubble => r#"<c:bubbleScale val="100"/><c:showNegBubbles val="0"/>"#,
+        ChartType::Stock => r#"<c:hiLowLines/>"#,
+        ChartType::Surface => r#"<c:bandFmts/>"#,
+        ChartType::OfPie => r#"<c:gapWidth val="150"/><c:secondPieSize val="75"/><c:serLines/>"#,
         _ => "",
     }
 }
 
-fn wrapper_prefix_els(ty: ChartType) -> Vec<Element> {
+pub(crate) fn wrapper_prefix_els(ty: ChartType, of_pie: &str) -> Vec<Element> {
     match ty {
         ChartType::Bar => vec![
             Element::new("c:barDir").with_attr("val", "bar"),
@@ -1602,15 +1796,28 @@ fn wrapper_prefix_els(ty: ChartType) -> Vec<Element> {
             Element::new("c:grouping").with_attr("val", "clustered"),
             Element::new("c:varyColors").with_attr("val", "0"),
         ],
+        ChartType::Stock => Vec::new(),
+        ChartType::Surface => vec![Element::new("c:wireframe").with_attr("val", "0")],
+        ChartType::OfPie => vec![
+            Element::new("c:ofPieType").with_attr("val", of_pie),
+            Element::new("c:varyColors").with_attr("val", "1"),
+        ],
     }
 }
 
-fn wrapper_suffix_els(ty: ChartType) -> Vec<Element> {
+pub(crate) fn wrapper_suffix_els(ty: ChartType) -> Vec<Element> {
     match ty {
         ChartType::Doughnut => vec![Element::new("c:holeSize").with_attr("val", "50")],
         ChartType::Bubble => vec![
             Element::new("c:bubbleScale").with_attr("val", "100"),
             Element::new("c:showNegBubbles").with_attr("val", "0"),
+        ],
+        ChartType::Stock => vec![Element::new("c:hiLowLines")],
+        ChartType::Surface => vec![Element::new("c:bandFmts")],
+        ChartType::OfPie => vec![
+            Element::new("c:gapWidth").with_attr("val", "150"),
+            Element::new("c:secondPieSize").with_attr("val", "75"),
+            Element::new("c:serLines"),
         ],
         _ => Vec::new(),
     }
@@ -1677,7 +1884,7 @@ fn value_as_name(v: &Value) -> Option<String> {
     }
 }
 
-fn title_el(text: &str) -> String {
+pub(crate) fn title_el(text: &str) -> String {
     format!(
         r#"<c:title><c:tx><c:rich><a:bodyPr/><a:lstStyle/><a:p><a:pPr><a:defRPr/></a:pPr><a:r><a:t>{}</a:t></a:r></a:p></c:rich></c:tx><c:overlay val="0"/></c:title>"#,
         xml::escape_text(text)
@@ -1800,9 +2007,14 @@ fn extract_wrapper_sers(plot: &mut Element) -> (Option<usize>, Vec<Element>, Vec
     (first, sers, ax_ids)
 }
 
-fn build_type_wrapper(ty: ChartType, sers: Vec<Element>, ax_ids: &[String]) -> Element {
+fn build_type_wrapper(
+    ty: ChartType,
+    sers: Vec<Element>,
+    ax_ids: &[String],
+    of_pie: &str,
+) -> Element {
     let mut w = Element::new(format!("c:{}", ty.wrapper()));
-    for p in wrapper_prefix_els(ty) {
+    for p in wrapper_prefix_els(ty, of_pie) {
         w.push_element(p);
     }
     for s in sers {
@@ -1816,6 +2028,10 @@ fn build_type_wrapper(ty: ChartType, sers: Vec<Element>, ax_ids: &[String]) -> E
         let b = ax_ids.get(1).map(String::as_str).unwrap_or("2");
         w.push_element(Element::new("c:axId").with_attr("val", a));
         w.push_element(Element::new("c:axId").with_attr("val", b));
+        if ty == ChartType::Surface {
+            let c = ax_ids.get(2).map(String::as_str).unwrap_or("3");
+            w.push_element(Element::new("c:axId").with_attr("val", c));
+        }
     }
     w
 }
@@ -1909,56 +2125,143 @@ fn all_sers_have_cat_or_xy(space: &Element) -> bool {
 }
 
 fn retarget_axes(space: &mut Element, target: ChartType, from_xy: bool) {
-    let Some(plot) = plot_area_mut(space) else {
-        return;
-    };
-    if target.no_axes() {
-        plot.children.retain(|n| match n {
-            Node::Element(e) => !matches!(e.local_name(), "catAx" | "valAx" | "dateAx" | "serAx"),
-            _ => true,
-        });
-        return;
-    }
-    let has_cat = plot.element_children().any(|c| c.local_name() == "catAx");
-    let val_n = plot
-        .element_children()
-        .filter(|c| c.local_name() == "valAx")
-        .count();
-    if target.is_xy() {
-        for c in plot.element_children_mut() {
-            if c.local_name() == "catAx" {
-                c.name = "c:valAx".into();
-            }
+    strip_surface_extras(space, target != ChartType::Surface);
+    {
+        let Some(plot) = plot_area_mut(space) else {
+            return;
+        };
+        if target.no_axes() {
+            plot.children.retain(|n| match n {
+                Node::Element(e) => {
+                    !matches!(e.local_name(), "catAx" | "valAx" | "dateAx" | "serAx")
+                }
+                _ => true,
+            });
+            return;
         }
+        let has_cat = plot.element_children().any(|c| c.local_name() == "catAx");
         let val_n = plot
             .element_children()
             .filter(|c| c.local_name() == "valAx")
             .count();
-        if val_n == 0 {
-            append_axes(plot, &ax_pair_scatter());
-        } else if val_n == 1 {
-            append_axes(
-                plot,
-                r#"<c:valAx><c:axId val="2"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="l"/><c:majorGridlines/><c:numFmt formatCode="General" sourceLinked="1"/><c:crossAx val="1"/><c:crosses val="autoZero"/></c:valAx>"#,
-            );
-        }
-    } else if from_xy {
-        let mut first = true;
-        for c in plot.element_children_mut() {
-            if c.local_name() == "valAx" && first {
-                c.name = "c:catAx".into();
-                first = false;
+        if target.is_xy() {
+            for c in plot.element_children_mut() {
+                if c.local_name() == "catAx" {
+                    c.name = "c:valAx".into();
+                }
             }
+            let val_n = plot
+                .element_children()
+                .filter(|c| c.local_name() == "valAx")
+                .count();
+            if val_n == 0 {
+                append_axes(plot, &ax_pair_scatter());
+            } else if val_n == 1 {
+                append_axes(
+                    plot,
+                    r#"<c:valAx><c:axId val="2"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="l"/><c:majorGridlines/><c:numFmt formatCode="General" sourceLinked="1"/><c:crossAx val="1"/><c:crosses val="autoZero"/></c:valAx>"#,
+                );
+            }
+        } else if from_xy {
+            let mut first = true;
+            for c in plot.element_children_mut() {
+                if c.local_name() == "valAx" && first {
+                    c.name = "c:catAx".into();
+                    first = false;
+                }
+            }
+            if plot.element_children().all(|c| c.local_name() != "valAx") {
+                append_axes(
+                    plot,
+                    r#"<c:valAx><c:axId val="2"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="l"/><c:majorGridlines/><c:numFmt formatCode="General" sourceLinked="1"/><c:crossAx val="1"/><c:crosses val="autoZero"/><c:crossBetween val="between"/></c:valAx>"#,
+                );
+            }
+        } else if !has_cat && val_n == 0 {
+            append_axes(plot, &ax_pair());
         }
-        if plot.element_children().all(|c| c.local_name() != "valAx") {
-            append_axes(
-                plot,
-                r#"<c:valAx><c:axId val="2"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="l"/><c:majorGridlines/><c:numFmt formatCode="General" sourceLinked="1"/><c:crossAx val="1"/><c:crosses val="autoZero"/><c:crossBetween val="between"/></c:valAx>"#,
-            );
-        }
-    } else if !has_cat && val_n == 0 {
-        append_axes(plot, &ax_pair());
     }
+    if target == ChartType::Surface {
+        ensure_ser_ax(space);
+        ensure_view3d(space);
+        ensure_surface_walls(space);
+    }
+}
+
+fn strip_surface_extras(space: &mut Element, drop_all: bool) {
+    if let Some(chart) = inner_chart_mut(space) {
+        if drop_all {
+            chart.children.retain(|n| match n {
+                Node::Element(e) => {
+                    !matches!(e.local_name(), "view3D" | "floor" | "sideWall" | "backWall")
+                }
+                _ => true,
+            });
+        }
+    }
+    if drop_all {
+        if let Some(plot) = plot_area_mut(space) {
+            plot.children.retain(|n| match n {
+                Node::Element(e) => e.local_name() != "serAx",
+                _ => true,
+            });
+        }
+    }
+}
+
+fn ensure_ser_ax(space: &mut Element) {
+    let Some(plot) = plot_area_mut(space) else {
+        return;
+    };
+    if plot.element_children().any(|c| c.local_name() == "serAx") {
+        return;
+    }
+    append_axes(plot, &ser_ax_xml());
+}
+
+fn ensure_view3d(space: &mut Element) {
+    let Some(chart) = inner_chart_mut(space) else {
+        return;
+    };
+    if chart.child_by_local("view3D").is_some() {
+        return;
+    }
+    let xml = format!(
+        r#"<c:view3D xmlns:c="{CHART_NS}"><c:rotX val="15"/><c:rotY val="20"/><c:rAngAx val="0"/></c:view3D>"#
+    );
+    if let Ok(doc) = xml::parse(xml.as_bytes()) {
+        let at = chart
+            .children
+            .iter()
+            .position(|n| matches!(n, Node::Element(e) if e.local_name() == "plotArea"))
+            .unwrap_or(chart.children.len());
+        chart.children.insert(at, Node::Element(doc.root));
+    }
+}
+
+fn ensure_surface_walls(space: &mut Element) {
+    let Some(chart) = inner_chart_mut(space) else {
+        return;
+    };
+    if chart.child_by_local("floor").is_some() {
+        return;
+    }
+    let xml = format!(
+        r#"<c:root xmlns:c="{CHART_NS}"><c:floor><c:thickness val="0"/></c:floor><c:sideWall><c:thickness val="0"/></c:sideWall><c:backWall><c:thickness val="0"/></c:backWall></c:root>"#
+    );
+    if let Ok(doc) = xml::parse(xml.as_bytes()) {
+        let at = chart
+            .children
+            .iter()
+            .position(|n| matches!(n, Node::Element(e) if e.local_name() == "legend"))
+            .unwrap_or(chart.children.len());
+        for (shift, n) in doc.root.children.into_iter().enumerate() {
+            chart.children.insert(at + shift, n);
+        }
+    }
+}
+
+fn ser_ax_xml() -> String {
+    r#"<c:serAx><c:axId val="3"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="b"/><c:crossAx val="2"/></c:serAx>"#.into()
 }
 
 fn append_axes(plot: &mut Element, xml: &str) {
@@ -2004,7 +2307,7 @@ fn push_ser_into_wrapper(w: &mut Element, ser_el: Element) {
         .children
         .iter()
         .position(|n| {
-            matches!(n, Node::Element(e) if matches!(e.local_name(), "dLbls" | "axId" | "holeSize" | "bubbleScale" | "showNegBubbles"))
+            matches!(n, Node::Element(e) if matches!(e.local_name(), "dLbls" | "axId" | "holeSize" | "bubbleScale" | "showNegBubbles" | "hiLowLines" | "gapWidth" | "secondPieSize" | "serLines" | "bandFmts"))
         })
         .unwrap_or(w.children.len());
     w.children.insert(at, Node::Element(ser_el));

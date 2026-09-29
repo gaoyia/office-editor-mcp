@@ -667,6 +667,7 @@ fn parse_chart(v: &Value, prefix: &str, sheet: &str) -> Result<InsertChartOp, Er
         if !matches!(
             k.as_str(),
             "type"
+                | "ofPieType"
                 | "title"
                 | "series"
                 | "from"
@@ -722,12 +723,18 @@ fn parse_chart(v: &Value, prefix: &str, sheet: &str) -> Result<InsertChartOp, Er
         }
     };
     let series = parse_chart_series(obj.get("series"), prefix, chart_type)?;
-    if chart_type.needs_one_series() && series.len() != 1 {
-        return Err(Error::with_path(
-            ErrorKind::PieNeedsOneSeries,
-            format!("{prefix}.series"),
-        ));
-    }
+    crate::chart::validate_insert_series_len(
+        chart_type,
+        series.len(),
+        &format!("{prefix}.series"),
+    )?;
+    let of_pie_type =
+        crate::chart::parse_of_pie_type(obj.get("ofPieType"), &format!("{prefix}.ofPieType"))?;
+    crate::chart::reject_of_pie_on_other(
+        chart_type,
+        of_pie_type.as_deref(),
+        &format!("{prefix}.ofPieType"),
+    )?;
     if chart_type == ChartType::Combo {
         let kinds: HashSet<&str> = series
             .iter()
@@ -809,6 +816,7 @@ fn parse_chart(v: &Value, prefix: &str, sheet: &str) -> Result<InsertChartOp, Er
     Ok(InsertChartOp {
         sheet: sheet.to_string(),
         chart_type,
+        of_pie_type,
         title,
         series,
         cx,

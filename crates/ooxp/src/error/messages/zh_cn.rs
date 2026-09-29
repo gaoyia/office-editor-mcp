@@ -633,7 +633,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             format!("此图表不能按此操作编辑：{id}")
         }
         ErrorKind::InvalidChartType => {
-            "type 必须是 bar、col、line、pie、area、scatter、doughnut、radar 或 bubble；insertChart 还可为 combo".into()
+            "type 必须是 bar、col、line、pie、area、scatter、doughnut、radar、bubble、stock、surface 或 ofPie；insertChart 还可为 combo".into()
         }
         ErrorKind::InvalidTransitionType => {
             "type 必须是可写的幻灯片切换名，或 null 表示清除".into()
@@ -659,7 +659,12 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::ConnectorNotFound { id } => format!("找不到连接线：{id}"),
         ErrorKind::InvalidChartAxis => "axis 必须是 cat 或 val，且图表里要有对应主轴".into(),
         ErrorKind::InvalidLegendPos => "pos 必须是 b、t、l、r 或 tr".into(),
-        ErrorKind::PieNeedsOneSeries => "饼图与圆环图必须恰好一条系列".into(),
+        ErrorKind::PieNeedsOneSeries => "饼图、圆环图与复合饼必须恰好一条系列".into(),
+        ErrorKind::StockNeedsThreeSeries => "股价图必须恰好三条系列".into(),
+        ErrorKind::SurfaceNeedsThreeSeries => "曲面图必须恰好三条系列".into(),
+        ErrorKind::InvalidOfPieType => {
+            "ofPieType 必须是 pie 或 bar，且只对 type 为 ofPie 有意义".into()
+        }
         ErrorKind::SizesOnNonBubble => "sizes 只对气泡系列有意义".into(),
         ErrorKind::InvalidComboSeriesType => {
             "系列 type 必须是 bar、col、line、area 或 scatter，且只有组合图才能带".into()

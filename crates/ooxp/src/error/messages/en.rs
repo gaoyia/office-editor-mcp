@@ -707,7 +707,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             format!("This chart cannot be edited with this operation: {id}")
         }
         ErrorKind::InvalidChartType => {
-            "type must be bar, col, line, pie, area, scatter, doughnut, radar, or bubble; insertChart also allows combo".into()
+            "type must be bar, col, line, pie, area, scatter, doughnut, radar, bubble, stock, surface, or ofPie; insertChart also allows combo".into()
         }
         ErrorKind::InvalidTransitionType => {
             "type must be a writable slide transition, or null to clear".into()
@@ -738,7 +738,16 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         }
         ErrorKind::InvalidLegendPos => "pos must be b, t, l, r, or tr".into(),
         ErrorKind::PieNeedsOneSeries => {
-            "A pie or doughnut chart must have exactly one series".into()
+            "A pie, doughnut, or of-pie chart must have exactly one series".into()
+        }
+        ErrorKind::StockNeedsThreeSeries => {
+            "A stock chart must have exactly three series".into()
+        }
+        ErrorKind::SurfaceNeedsThreeSeries => {
+            "A surface chart must have exactly three series".into()
+        }
+        ErrorKind::InvalidOfPieType => {
+            "ofPieType must be pie or bar, and is only valid when type is ofPie".into()
         }
         ErrorKind::SizesOnNonBubble => "sizes is only valid on a bubble series".into(),
         ErrorKind::InvalidComboSeriesType => {

@@ -5234,7 +5234,16 @@ fn parse_insert_chart(
         obj,
         i,
         &[
-            "op", "id", "type", "title", "series", "kind", "wrap", "cx", "cy",
+            "op",
+            "id",
+            "type",
+            "ofPieType",
+            "title",
+            "series",
+            "kind",
+            "wrap",
+            "cx",
+            "cy",
         ],
     )?;
     let id = require_id(obj, i)?;
@@ -5253,13 +5262,19 @@ fn parse_insert_chart(
             ));
         }
     };
+    let of_pie_type =
+        crate::chart::parse_of_pie_type(obj.get("ofPieType"), &format!("ops[{i}].ofPieType"))?;
+    crate::chart::reject_of_pie_on_other(
+        chart_type,
+        of_pie_type.as_deref(),
+        &format!("ops[{i}].ofPieType"),
+    )?;
     let series = parse_insert_series(obj.get("series"), i, chart_type)?;
-    if chart_type.needs_one_series() && series.len() != 1 {
-        return Err(Error::with_path(
-            ErrorKind::PieNeedsOneSeries,
-            format!("ops[{i}].series"),
-        ));
-    }
+    crate::chart::validate_insert_series_len(
+        chart_type,
+        series.len(),
+        &format!("ops[{i}].series"),
+    )?;
     if chart_type == ChartType::Combo {
         let kinds: HashSet<&str> = series
             .iter()
@@ -5339,6 +5354,7 @@ fn parse_insert_chart(
         id,
         para,
         chart_type,
+        of_pie_type,
         title,
         series,
         kind,
@@ -5595,7 +5611,7 @@ fn parse_set_chart_type(
     obj: &serde_json::Map<String, Value>,
     i: usize,
 ) -> Result<charts::SetChartTypeOp, Error> {
-    deny_keys(obj, i, &["op", "id", "type"])?;
+    deny_keys(obj, i, &["op", "id", "type", "ofPieType"])?;
     let id = require_id(obj, i)?;
     let target = charts::parse_chart_id(&id, i)?;
     let chart_type = parse_chart_type_field(obj.get("type"), i, true)?;
@@ -5605,10 +5621,18 @@ fn parse_set_chart_type(
             format!("ops[{i}].type"),
         ));
     }
+    let of_pie_type =
+        crate::chart::parse_of_pie_type(obj.get("ofPieType"), &format!("ops[{i}].ofPieType"))?;
+    crate::chart::reject_of_pie_on_other(
+        chart_type,
+        of_pie_type.as_deref(),
+        &format!("ops[{i}].ofPieType"),
+    )?;
     Ok(charts::SetChartTypeOp {
         id,
         target,
         chart_type,
+        of_pie_type,
     })
 }
 

@@ -909,3 +909,182 @@ fn trendline_set_delete_and_axis() {
         "次轴必须带隐藏分类轴"
     );
 }
+
+#[test]
+fn insert_stock_surface_ofpie() {
+    let src = create_deck("rare");
+    let out = tmp("ins-rare").with_extension("pptx");
+    apply(
+        &src,
+        &out,
+        json!([
+            {
+                "op": "insertChart",
+                "id": "slide:1",
+                "type": "stock",
+                "title": "股价",
+                "x": 914400,
+                "y": 200000,
+                "cx": 3657600,
+                "cy": 1828800,
+                "series": [
+                    { "name": "高", "categories": ["甲", "乙", "丙"], "values": [30, 40, 50] },
+                    { "name": "低", "categories": ["甲", "乙", "丙"], "values": [10, 15, 20] },
+                    { "name": "收", "categories": ["甲", "乙", "丙"], "values": [20, 25, 35] }
+                ]
+            },
+            {
+                "op": "insertChart",
+                "id": "slide:1",
+                "type": "surface",
+                "x": 914400,
+                "y": 2200000,
+                "cx": 3657600,
+                "cy": 1828800,
+                "series": [
+                    { "name": "甲", "categories": ["A", "B"], "values": [1, 2] },
+                    { "name": "乙", "categories": ["A", "B"], "values": [3, 3] },
+                    { "name": "丙", "categories": ["A", "B"], "values": [2, 4] }
+                ]
+            },
+            {
+                "op": "insertChart",
+                "id": "slide:1",
+                "type": "ofPie",
+                "ofPieType": "bar",
+                "x": 4700000,
+                "y": 200000,
+                "cx": 3657600,
+                "cy": 1828800,
+                "series": [{ "name": "份额", "categories": ["A", "B", "C"], "values": [1, 2, 3] }]
+            }
+        ]),
+    )
+    .unwrap();
+    let tree = inspect_charts(&out);
+    let charts = tree["slides"][0]["charts"].as_array().unwrap();
+    let stock = charts.iter().find(|c| c["type"] == "stock").unwrap();
+    assert_eq!(stock["series"].as_array().unwrap().len(), 3);
+    let xml = String::from_utf8(part_bytes(&out, "ppt/charts/chart1.xml")).unwrap();
+    assert!(xml.contains("stockChart"));
+    assert!(xml.contains("hiLowLines"));
+    let surface = charts.iter().find(|c| c["type"] == "surface").unwrap();
+    assert_eq!(surface["series"].as_array().unwrap().len(), 3);
+    let sxml = String::from_utf8(part_bytes(&out, "ppt/charts/chart2.xml")).unwrap();
+    assert!(sxml.contains("surface3DChart"));
+    assert!(sxml.contains("view3D"));
+    assert!(sxml.contains("serAx"));
+    let ofpie = charts.iter().find(|c| c["type"] == "ofPie").unwrap();
+    assert_eq!(ofpie["ofPieType"], "bar");
+    let oxml = String::from_utf8(part_bytes(&out, "ppt/charts/chart3.xml")).unwrap();
+    assert!(oxml.contains("ofPieChart"));
+    assert!(oxml.contains(r#"<c:ofPieType val="bar"/>"#));
+    assert!(oxml.contains(r#"gapWidth val="150""#));
+    let out2 = tmp("ins-rare-type").with_extension("pptx");
+    apply(
+        &out,
+        &out2,
+        json!([
+            { "op": "setChartType", "id": stock["id"], "type": "col" },
+            { "op": "setChartType", "id": ofpie["id"], "type": "pie" }
+        ]),
+    )
+    .unwrap();
+    let tree2 = inspect_charts(&out2);
+    let charts2 = tree2["slides"][0]["charts"].as_array().unwrap();
+    assert_eq!(
+        charts2.iter().find(|c| c["id"] == stock["id"]).unwrap()["type"],
+        "col"
+    );
+    assert_eq!(
+        charts2.iter().find(|c| c["id"] == ofpie["id"]).unwrap()["type"],
+        "pie"
+    );
+}
+
+#[test]
+fn insert_rare_rejects_wrong_series_and_chartex() {
+    let src = create_deck("rare-bad");
+    let err = apply(
+        &src,
+        &tmp("rare-stock-2").with_extension("pptx"),
+        json!([{
+            "op": "insertChart",
+            "id": "slide:1",
+            "type": "stock",
+            "series": [
+                { "values": [1, 2] },
+                { "values": [3, 4] }
+            ]
+        }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+    let err = apply(
+        &src,
+        &tmp("rare-chartex").with_extension("pptx"),
+        json!([{
+            "op": "insertChart",
+            "id": "slide:1",
+            "type": "chartex",
+            "series": [{ "values": [1, 2] }]
+        }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+    let col = insert_col_deck("rare-col");
+    let err = apply(
+        &col,
+        &tmp("rare-to-stock").with_extension("pptx"),
+        json!([{
+            "op": "setChartType",
+            "id": "slide:1/chart:3",
+            "type": "stock"
+        }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::NotImplemented);
+    let err = apply(
+        &col,
+        &tmp("rare-ofpie-on-col").with_extension("pptx"),
+        json!([{
+            "op": "setChartType",
+            "id": "slide:1/chart:3",
+            "type": "col",
+            "ofPieType": "pie"
+        }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+    let stock = tmp("rare-add").with_extension("pptx");
+    apply(
+        &src,
+        &stock,
+        json!([{
+            "op": "insertChart",
+            "id": "slide:1",
+            "type": "stock",
+            "series": [
+                { "name": "高", "categories": ["甲", "乙"], "values": [3, 4] },
+                { "name": "低", "categories": ["甲", "乙"], "values": [1, 2] },
+                { "name": "收", "categories": ["甲", "乙"], "values": [2, 3] }
+            ]
+        }]),
+    )
+    .unwrap();
+    let tree = inspect_charts(&stock);
+    let stock_id = tree["slides"][0]["charts"][0]["id"].as_str().unwrap();
+    let before = std::fs::read(&stock).unwrap();
+    let err = apply(
+        &stock,
+        &tmp("rare-add-out").with_extension("pptx"),
+        json!([{
+            "op": "addChartSeries",
+            "id": stock_id,
+            "values": [1, 2]
+        }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::NotImplemented);
+    assert_eq!(std::fs::read(&stock).unwrap(), before);
+}

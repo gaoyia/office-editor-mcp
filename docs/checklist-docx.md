@@ -8,7 +8,7 @@
 
 Microsoft Word 16.0 已打开，用户确认通过。create、inspect、apply 三组都过了。O1 已放弃，见下表。本机若装了 WPS，`Word.Application` 会被抢走，测试仍直接启动 `WINWORD.EXE` 再挂 COM。A11 补过 `word/settings.xml` 之后，2026-09-26 用新 `docx-create.docx` 重跑，Word 报 `CompatibilityMode=15`。
 
-C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，跑 `pwsh -File manual-check\office\run.ps1 -Case 'docx-*'` 即可复现，逐条结果落在 `manual-check/office/out/office-results.csv`。2026-09-27 补跑 `docx-charts-remain.ps1`，Cr1–Cr6 通过。同日重跑 `docx-charts-ext.ps1`，Cx8 股价 `type=stock`。同日重跑 `docx-smartart.ps1`，Sa1–Sa9 通过。同日重跑 `docx-comments.ps1`，Cmt1–Cmt7、Ik1–Ik4 通过。2026-09-28 补跑 `docx-format.ps1`，Pf1–Pf6 通过。同日补跑 `docx-ole.ps1`，Ol1–Ol5 通过。同日补跑 `docx-protect.ps1`，Pr1–Pr6 通过。同日补跑 `docx-watermark.ps1`，Wm1–Wm5 通过。
+C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，跑 `pwsh -File manual-check\office\run.ps1 -Case 'docx-*'` 即可复现，逐条结果落在 `manual-check/office/out/office-results.csv`。2026-09-27 补跑 `docx-charts-remain.ps1`，Cr1–Cr6 通过。同日重跑 `docx-charts-ext.ps1`，Cx8 股价三条转柱形。2026-09-29 补跑 `docx-charts-rare.ps1`，Cq1–Cq5 通过。同日重跑 `docx-smartart.ps1`，Sa1–Sa9 通过。同日重跑 `docx-comments.ps1`，Cmt1–Cmt7、Ik1–Ik4 通过。2026-09-28 补跑 `docx-format.ps1`，Pf1–Pf6 通过。同日补跑 `docx-ole.ps1`，Ol1–Ol5 通过。同日补跑 `docx-protect.ps1`，Pr1–Pr6 通过。同日补跑 `docx-watermark.ps1`，Wm1–Wm5 通过。
 
 | 序号 | 状态 | 结果 |
 | --- | --- | --- |
@@ -28,8 +28,9 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 | Cmt1–Cmt7 | ✅ | Word 16.0：`docx-comments.ps1`，8 PASS / 0 FAIL。计数与名单、改字、插删、回复线程（`Comments.Count=4` 且 `Replies=1`）、完成标记、批注内插图。标题栏无 Repair |
 | Ik1–Ik4 | ✅ | Word 16.0：`docx-comments.ps1` 墨迹组，4 PASS / 0 FAIL。另存批注注入 `wpi:ink` 后 `kind=ink`；`setCommentMeta` / `setCommentDone` 无修复；无可见 `w:t` 时 `setCommentText` 为 `NotImplemented` 且未写文件；`deleteComment` 无修复 |
 | Ch1–Ch8 | ✅ | Word 16.0：`docx-charts.ps1`，9 PASS / 0 FAIL。计数与名单（COM 系列值对得上）、改系列为 11/22/33/44、插饼图、删除、改折线、关图例开标签、组合图当时 `NotImplemented` 且未写文件、`exportChartData` 与 embedding 字节一致。标题栏无 Repair。组合图改数与改类型见下方 Cx 组 |
-| Cx1–Cx8 | ✅ | Word 16.0：`docx-charts-ext.ps1`，8 PASS / 0 FAIL。圆环 / 雷达 / 气泡各自有 `type`；改数、插入、组合图改数与收成柱形、透视改标题、股价 `type=stock` 且改类型 `NotImplemented`。标题栏无 Repair |
+| Cx1–Cx8 | ✅ | Word 16.0：`docx-charts-ext.ps1`，8 PASS / 0 FAIL。圆环 / 雷达 / 气泡各自有 `type`；改数、插入、组合图改数与收成柱形、透视改标题、股价 `type=stock` 且三条系列转柱形无 Repair |
 | Cr1–Cr6 | ✅ | Word 16.0：`docx-charts-remain.ps1`，6 PASS / 0 FAIL。股价 `type=stock` 且改数为 10..50；趋势线 / 误差线增删改；次轴 COM `AxisGroup=2`。标题栏无 Repair |
+| Cq1–Cq5 | ✅ | Word 16.0：`docx-charts-rare.ps1`，5 PASS / 0 FAIL。插入股价 / 曲面 / 复合条无 Repair；股价三条转柱形、复合饼转饼；增系列与 `type=chartex`、两条股价均拒写。 |
 | Sa1–Sa9 | ✅ | Word 16.0：`docx-smartart.ps1`，10 PASS / 0 FAIL。列表型改字、插删、增删点、尺寸；列表改成循环后文字还在、无修复；库外 uniqueId 得 `NotImplemented` 且未写文件 |
 | Ip1–Ip5 | ✅ | Word 16.0：`docx-body-para.ps1`，5 PASS / 0 FAIL。插在第二段之后、插到文档末、删第二段、最后一段 `InvalidField`、默认页眉插一段。标题栏无 Repair |
 | Nh1–Nh7 | ✅ | Word 16.0：`docx-new-header.ps1`，7 PASS / 0 FAIL。新建默认页眉、首页不同、奇偶页、第二节 even 独立、create even/first、类型未生效与已链接均 `InvalidField`。标题栏无 Repair |
@@ -246,7 +247,19 @@ Word 亲手另存或在另存批注样例的 `comments.xml` 里带 `inkml:ink`�
 | Cx5 | 组合图改数 | ✅ 组合图 `setChartSeries` 后两条系列的值都对，无修复 |
 | Cx6 | 组合图改类型 | ✅ 组合图 `setChartType` 为 `col` 后变成柱形，无修复 |
 | Cx7 | 透视图表 | ✅ `setChartTitle` 能改；`setChartSeries` 得到 `NotImplemented`，文件未写坏 |
-| Cx8 | 股价改类型 | ✅ 股价 `type` 为 `stock`；对它发 `setChartType` 得到 `NotImplemented`，文件未写坏 |
+| Cx8 | 股价改类型 | ✅ 股价 `type` 为 `stock`；三条系列时 `setChartType` 为 `col` 成功，Word 无修复 |
+
+## 图表稀有类型
+
+`insertChart` 写出股价、曲面、复合饼；`setChartType` 在系列条数对得上时转入或转出。chartex 仍除删除与尺寸 / 绕排外锁死。手测脚本 `manual-check/office/cases/docx-charts-rare.ps1`。编号用 Cq。xlsx / pptx 各有对应脚本。
+
+| 序号 | 检查 | 通过标准 |
+| --- | --- | --- |
+| Cq1 | 插入股价 | ✅ `insertChart` `type=stock` 三条系列后 Word 无修复，`type` 为 `stock` |
+| Cq2 | 插入曲面 | ✅ `insertChart` `type=surface` 三条系列后 Word 无修复，`type` 为 `surface` |
+| Cq3 | 插入复合饼 | ✅ `insertChart` `type=ofPie` 一条系列后 Word 无修复；`ofPieType=bar` 为复合条 |
+| Cq4 | 改类型 | ✅ 股价三条转 `col` 成功；复合饼转 `pie` 成功；无修复 |
+| Cq5 | 仍拒绝 | ✅ 对股价 `addChartSeries` 得 `NotImplemented`；源无 chartex 时 `insertChart type=chartex` 得 `InvalidField`；两条系列的股价 `insertChart` 得 `InvalidField`；均未写坏文件 |
 
 ## 图表剩余
 

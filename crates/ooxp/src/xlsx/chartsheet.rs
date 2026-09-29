@@ -57,6 +57,7 @@ pub fn insert(
         &data_name,
         op.data_from,
         false,
+        op.of_pie_type.as_deref(),
     );
     let chart_part = xlsx_chart::next_chart_part(pkg);
     pkg.set(&chart_part, xml.into_bytes())?;

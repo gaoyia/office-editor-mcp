@@ -1100,28 +1100,29 @@ fn pivot_title_ok_series_blocked() {
 }
 
 #[test]
-fn stock_set_type_is_not_implemented() {
+fn stock_set_type_to_col() {
     let path = write_kind("st", "stock");
     let tree = inspect(&path, json!({ "charts": true }));
     assert_eq!(tree["charts"][0]["type"], "stock");
     assert_eq!(tree["charts"][0]["series"][0]["axis"], "primary");
-    let before = std::fs::read(&path).unwrap();
-    let err = apply_err(
+    let out = tmp_dir().join("st-col-out.docx");
+    apply(
         &path,
+        &out,
         json!([{ "op": "setChartType", "id": "para:AAAA0001/chart:7", "type": "col" }]),
     );
-    assert_eq!(err.code(), ErrorCode::NotImplemented);
-    assert_eq!(std::fs::read(&path).unwrap(), before);
+    let tree = inspect(&out, json!({ "charts": true }));
+    assert_eq!(tree["charts"][0]["type"], "col");
+    assert!(part_text(&out, "word/charts/chart1.xml").contains("barChart"));
 }
 
 #[test]
 fn of_pie_and_surface_types() {
     let p = write_kind("of", "ofPie");
     let s = write_kind("sf", "surface");
-    assert_eq!(
-        inspect(&p, json!({ "charts": true }))["charts"][0]["type"],
-        "ofPie"
-    );
+    let pt = inspect(&p, json!({ "charts": true }));
+    assert_eq!(pt["charts"][0]["type"], "ofPie");
+    assert_eq!(pt["charts"][0]["ofPieType"], "pie");
     assert_eq!(
         inspect(&s, json!({ "charts": true }))["charts"][0]["type"],
         "surface"
@@ -1289,4 +1290,159 @@ fn pie_rejects_trendline() {
         }]),
     );
     assert_eq!(err.code(), ErrorCode::InvalidField);
+}
+
+#[test]
+fn insert_stock_surface_ofpie() {
+    let path = write_sample("ins-rare", false);
+    let out = tmp_dir().join("ins-rare-out.docx");
+    apply(
+        &path,
+        &out,
+        json!([
+            {
+                "op": "insertChart",
+                "id": "para:AAAA0001",
+                "type": "stock",
+                "title": "股价",
+                "series": [
+                    { "name": "高", "categories": ["甲", "乙", "丙"], "values": [30, 40, 50] },
+                    { "name": "低", "categories": ["甲", "乙", "丙"], "values": [10, 15, 20] },
+                    { "name": "收", "categories": ["甲", "乙", "丙"], "values": [20, 25, 35] }
+                ]
+            },
+            {
+                "op": "insertChart",
+                "id": "para:AAAA0001",
+                "type": "surface",
+                "series": [
+                    { "name": "甲", "categories": ["A", "B"], "values": [1, 2] },
+                    { "name": "乙", "categories": ["A", "B"], "values": [3, 3] },
+                    { "name": "丙", "categories": ["A", "B"], "values": [2, 4] }
+                ]
+            },
+            {
+                "op": "insertChart",
+                "id": "para:AAAA0001",
+                "type": "ofPie",
+                "ofPieType": "bar",
+                "series": [{ "name": "份额", "categories": ["A", "B", "C"], "values": [1, 2, 3] }]
+            }
+        ]),
+    );
+    let tree = inspect(&out, json!({ "charts": true }));
+    let charts = tree["charts"].as_array().unwrap();
+    let stock = charts.iter().find(|c| c["type"] == "stock").unwrap();
+    assert_eq!(stock["series"].as_array().unwrap().len(), 3);
+    let xml = part_text(&out, "word/charts/chart2.xml");
+    assert!(xml.contains("stockChart"));
+    assert!(xml.contains("hiLowLines"));
+    let surface = charts.iter().find(|c| c["type"] == "surface").unwrap();
+    assert_eq!(surface["series"].as_array().unwrap().len(), 3);
+    let sxml = part_text(&out, "word/charts/chart3.xml");
+    assert!(sxml.contains("surface3DChart"));
+    assert!(sxml.contains("view3D"));
+    assert!(sxml.contains("serAx"));
+    let ofpie = charts.iter().find(|c| c["type"] == "ofPie").unwrap();
+    assert_eq!(ofpie["ofPieType"], "bar");
+    let oxml = part_text(&out, "word/charts/chart4.xml");
+    assert!(oxml.contains("ofPieChart"));
+    assert!(oxml.contains(r#"<c:ofPieType val="bar"/>"#));
+    assert!(oxml.contains(r#"gapWidth val="150""#));
+    let out2 = tmp_dir().join("ins-rare-type-out.docx");
+    apply(
+        &out,
+        &out2,
+        json!([
+            { "op": "setChartType", "id": stock["id"], "type": "col" },
+            { "op": "setChartType", "id": ofpie["id"], "type": "pie" }
+        ]),
+    );
+    let tree2 = inspect(&out2, json!({ "charts": true }));
+    let charts2 = tree2["charts"].as_array().unwrap();
+    assert_eq!(
+        charts2.iter().find(|c| c["id"] == stock["id"]).unwrap()["type"],
+        "col"
+    );
+    assert_eq!(
+        charts2.iter().find(|c| c["id"] == ofpie["id"]).unwrap()["type"],
+        "pie"
+    );
+}
+
+#[test]
+fn insert_rare_rejects_wrong_series_and_chartex() {
+    let path = write_sample("ins-rare-bad", false);
+    let err = apply_err(
+        &path,
+        json!([{
+            "op": "insertChart",
+            "id": "para:AAAA0001",
+            "type": "stock",
+            "series": [
+                { "values": [1, 2] },
+                { "values": [3, 4] }
+            ]
+        }]),
+    );
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+    let err = apply_err(
+        &path,
+        json!([{
+            "op": "insertChart",
+            "id": "para:AAAA0001",
+            "type": "chartex",
+            "series": [{ "values": [1, 2] }]
+        }]),
+    );
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+    let err = apply_err(
+        &path,
+        json!([{
+            "op": "setChartType",
+            "id": "para:AAAA0001/chart:7",
+            "type": "stock"
+        }]),
+    );
+    assert_eq!(err.code(), ErrorCode::NotImplemented);
+    let err = apply_err(
+        &path,
+        json!([{
+            "op": "setChartType",
+            "id": "para:AAAA0001/chart:7",
+            "type": "col",
+            "ofPieType": "pie"
+        }]),
+    );
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+}
+
+#[test]
+fn ofpie_set_type_to_pie_and_ofpie_type() {
+    let path = write_kind("of-pie", "ofPie");
+    let out = tmp_dir().join("of-pie-out.docx");
+    apply(
+        &path,
+        &out,
+        json!([{ "op": "setChartType", "id": "para:AAAA0001/chart:7", "type": "pie" }]),
+    );
+    assert_eq!(
+        inspect(&out, json!({ "charts": true }))["charts"][0]["type"],
+        "pie"
+    );
+    let path = write_kind("of-bar", "ofPie");
+    let out = tmp_dir().join("of-bar-out.docx");
+    apply(
+        &path,
+        &out,
+        json!([{
+            "op": "setChartType",
+            "id": "para:AAAA0001/chart:7",
+            "type": "ofPie",
+            "ofPieType": "bar"
+        }]),
+    );
+    let tree = inspect(&out, json!({ "charts": true }));
+    assert_eq!(tree["charts"][0]["type"], "ofPie");
+    assert_eq!(tree["charts"][0]["ofPieType"], "bar");
 }

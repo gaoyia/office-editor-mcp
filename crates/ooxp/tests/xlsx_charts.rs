@@ -709,3 +709,180 @@ fn union_formula_and_3d_reject() {
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::NotImplemented);
 }
+
+#[test]
+fn insert_stock_surface_ofpie() {
+    let src = create_book("rare");
+    let out = tmp("ins-rare");
+    apply(
+        &src,
+        &out,
+        json!([
+            {
+                "op": "insertChart",
+                "id": "sheet:Sheet1",
+                "type": "stock",
+                "from": "E2",
+                "dataFrom": "A10",
+                "title": "股价",
+                "series": [
+                    { "name": "高", "categories": ["甲", "乙", "丙"], "values": [30, 40, 50] },
+                    { "name": "低", "categories": ["甲", "乙", "丙"], "values": [10, 15, 20] },
+                    { "name": "收", "categories": ["甲", "乙", "丙"], "values": [20, 25, 35] }
+                ]
+            },
+            {
+                "op": "insertChart",
+                "id": "sheet:Sheet1",
+                "type": "surface",
+                "from": "E20",
+                "dataFrom": "F10",
+                "series": [
+                    { "name": "甲", "categories": ["A", "B"], "values": [1, 2] },
+                    { "name": "乙", "categories": ["A", "B"], "values": [3, 3] },
+                    { "name": "丙", "categories": ["A", "B"], "values": [2, 4] }
+                ]
+            },
+            {
+                "op": "insertChart",
+                "id": "sheet:Sheet1",
+                "type": "ofPie",
+                "ofPieType": "bar",
+                "from": "E38",
+                "dataFrom": "K10",
+                "series": [{ "name": "份额", "categories": ["A", "B", "C"], "values": [1, 2, 3] }]
+            }
+        ]),
+    )
+    .unwrap();
+    let tree = inspect_charts(&out);
+    let charts = tree["sheets"][0]["charts"].as_array().unwrap();
+    let stock = charts.iter().find(|c| c["type"] == "stock").unwrap();
+    assert_eq!(stock["series"].as_array().unwrap().len(), 3);
+    let xml = part_text(&out, "xl/charts/chart1.xml");
+    assert!(xml.contains("stockChart"));
+    assert!(xml.contains("hiLowLines"));
+    let surface = charts.iter().find(|c| c["type"] == "surface").unwrap();
+    assert_eq!(surface["series"].as_array().unwrap().len(), 3);
+    let sxml = part_text(&out, "xl/charts/chart2.xml");
+    assert!(sxml.contains("surface3DChart"));
+    assert!(sxml.contains("view3D"));
+    assert!(sxml.contains("serAx"));
+    let ofpie = charts.iter().find(|c| c["type"] == "ofPie").unwrap();
+    assert_eq!(ofpie["ofPieType"], "bar");
+    let oxml = part_text(&out, "xl/charts/chart3.xml");
+    assert!(oxml.contains("ofPieChart"));
+    assert!(oxml.contains(r#"<c:ofPieType val="bar"/>"#));
+    assert!(oxml.contains(r#"gapWidth val="150""#));
+    let out2 = tmp("ins-rare-type");
+    apply(
+        &out,
+        &out2,
+        json!([
+            { "op": "setChartType", "id": stock["id"], "type": "col" },
+            { "op": "setChartType", "id": ofpie["id"], "type": "pie" }
+        ]),
+    )
+    .unwrap();
+    let tree2 = inspect_charts(&out2);
+    let charts2 = tree2["sheets"][0]["charts"].as_array().unwrap();
+    assert_eq!(
+        charts2.iter().find(|c| c["id"] == stock["id"]).unwrap()["type"],
+        "col"
+    );
+    assert_eq!(
+        charts2.iter().find(|c| c["id"] == ofpie["id"]).unwrap()["type"],
+        "pie"
+    );
+}
+
+#[test]
+fn insert_rare_rejects_wrong_series_and_chartex() {
+    let src = create_book("rare-bad");
+    let err = apply(
+        &src,
+        &tmp("rare-stock-2"),
+        json!([{
+            "op": "insertChart",
+            "id": "sheet:Sheet1",
+            "type": "stock",
+            "from": "E2",
+            "dataFrom": "A10",
+            "series": [
+                { "values": [1, 2] },
+                { "values": [3, 4] }
+            ]
+        }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+    let err = apply(
+        &src,
+        &tmp("rare-chartex"),
+        json!([{
+            "op": "insertChart",
+            "id": "sheet:Sheet1",
+            "type": "chartex",
+            "from": "E2",
+            "dataFrom": "A10",
+            "series": [{ "values": [1, 2] }]
+        }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+    let col = insert_col("rare-col");
+    let err = apply(
+        &col,
+        &tmp("rare-to-stock"),
+        json!([{
+            "op": "setChartType",
+            "id": "sheet:Sheet1/chart:1",
+            "type": "stock"
+        }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::NotImplemented);
+    let err = apply(
+        &col,
+        &tmp("rare-ofpie-on-col"),
+        json!([{
+            "op": "setChartType",
+            "id": "sheet:Sheet1/chart:1",
+            "type": "col",
+            "ofPieType": "pie"
+        }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+    let stock = tmp("rare-add");
+    apply(
+        &src,
+        &stock,
+        json!([{
+            "op": "insertChart",
+            "id": "sheet:Sheet1",
+            "type": "stock",
+            "from": "E2",
+            "dataFrom": "A10",
+            "series": [
+                { "name": "高", "categories": ["甲", "乙"], "values": [3, 4] },
+                { "name": "低", "categories": ["甲", "乙"], "values": [1, 2] },
+                { "name": "收", "categories": ["甲", "乙"], "values": [2, 3] }
+            ]
+        }]),
+    )
+    .unwrap();
+    let before = std::fs::read(&stock).unwrap();
+    let err = apply(
+        &stock,
+        &tmp("rare-add-out"),
+        json!([{
+            "op": "addChartSeries",
+            "id": "sheet:Sheet1/chart:1",
+            "values": [1, 2]
+        }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::NotImplemented);
+    assert_eq!(std::fs::read(&stock).unwrap(), before);
+}
