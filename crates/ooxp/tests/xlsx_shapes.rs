@@ -1,5 +1,6 @@
 //! 工作表文本框与 SmartArt：名单、插删改、锚点、跨格式拒绝。
 
+use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU32, Ordering};
 
@@ -483,4 +484,149 @@ fn delete_shape_rejects_textbox_id_and_set_text_rejects_cxn() {
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidId);
     assert!(!out.exists());
+}
+
+fn drawing_xml(path: &Path) -> String {
+    let file = std::fs::File::open(path).unwrap();
+    let mut zip = zip::ZipArchive::new(file).unwrap();
+    let mut part = zip.by_name("xl/drawings/drawing1.xml").unwrap();
+    let mut s = String::new();
+    part.read_to_string(&mut s).unwrap();
+    s
+}
+
+#[test]
+fn group_and_ungroup_keep_child_ids() {
+    let src = create_book("grp");
+    let inserted = tmp("grp-ins");
+    apply(
+        &src,
+        &inserted,
+        json!([
+            { "op": "insertShape", "id": "sheet:Sheet1", "from": "B2", "text": "甲" },
+            { "op": "insertShape", "id": "sheet:Sheet1", "from": "E4", "text": "乙" }
+        ]),
+    )
+    .unwrap();
+    let tree = inspect_scope(&inserted, json!({ "shapes": true }));
+    let a = tree["sheets"][0]["shapes"][0]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let b = tree["sheets"][0]["shapes"][1]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    let grouped = tmp("grp-out");
+    apply(
+        &inserted,
+        &grouped,
+        json!([{ "op": "groupShapes", "id": "sheet:Sheet1", "ids": [a, b] }]),
+    )
+    .unwrap();
+    let after = inspect_scope(&grouped, json!({ "shapes": true }));
+    let ids: Vec<_> = after["sheets"][0]["shapes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|s| s["id"].as_str().unwrap().to_string())
+        .collect();
+    assert!(ids.contains(&a));
+    assert!(ids.contains(&b));
+    let xml = drawing_xml(&grouped);
+    assert!(xml.contains("<xdr:grpSp"));
+    assert!(xml.contains("组合 "));
+    assert!(!xml.contains("editAs"));
+    assert!(!xml.contains("xdr:nvPr"));
+
+    let dest = tmp("grp-again");
+    let err = apply(
+        &grouped,
+        &dest,
+        json!([{ "op": "groupShapes", "id": "sheet:Sheet1", "ids": [a, b] }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+    assert!(!dest.exists());
+
+    let opened = tmp("ungroup-out");
+    apply(&grouped, &opened, json!([{ "op": "ungroup", "id": a }])).unwrap();
+    let xml2 = drawing_xml(&opened);
+    assert!(!xml2.contains("<xdr:grpSp"));
+    let tree2 = inspect_scope(&opened, json!({ "shapes": true }));
+    let ids2: Vec<_> = tree2["sheets"][0]["shapes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|s| s["id"].as_str().unwrap().to_string())
+        .collect();
+    assert!(ids2.contains(&a));
+    assert!(ids2.contains(&b));
+}
+
+#[test]
+fn group_shape_with_connector_and_rejects() {
+    let src = create_book("grpcxn");
+    let inserted = tmp("grpcxn-ins");
+    apply(
+        &src,
+        &inserted,
+        json!([
+            { "op": "insertShape", "id": "sheet:Sheet1", "from": "B2" },
+            { "op": "insertConnector", "id": "sheet:Sheet1", "from": "D4" }
+        ]),
+    )
+    .unwrap();
+    let tree = inspect_scope(&inserted, json!({ "shapes": true, "connectors": true }));
+    let sid = tree["sheets"][0]["shapes"][0]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let cid = tree["sheets"][0]["connectors"][0]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let grouped = tmp("grpcxn-out");
+    apply(
+        &inserted,
+        &grouped,
+        json!([{ "op": "groupShapes", "id": "sheet:Sheet1", "ids": [sid, cid] }]),
+    )
+    .unwrap();
+    let xml = drawing_xml(&grouped);
+    assert!(xml.contains("<xdr:grpSp"));
+    assert!(xml.contains("<xdr:cxnSp"));
+    let listed = inspect_scope(&grouped, json!({ "shapes": true, "connectors": true }));
+    assert_eq!(listed["shapeCount"], 1);
+    assert_eq!(listed["connectorCount"], 1);
+
+    let dest = tmp("grp-one");
+    let err = apply(
+        &inserted,
+        &dest,
+        json!([{ "op": "groupShapes", "id": "sheet:Sheet1", "ids": [sid] }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+    assert!(!dest.exists());
+
+    let dest = tmp("grp-slide");
+    let err = apply(
+        &inserted,
+        &dest,
+        json!([{
+            "op": "groupShapes",
+            "id": "slide:1",
+            "ids": [sid, cid]
+        }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidId);
+    assert!(!dest.exists());
+
+    let dest = tmp("ungroup-bare");
+    let err = apply(&inserted, &dest, json!([{ "op": "ungroup", "id": sid }])).unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+    assert!(!dest.exists());
 }

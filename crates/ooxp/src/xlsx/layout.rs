@@ -495,6 +495,148 @@ fn fmt_num(n: f64) -> String {
     }
 }
 
+/// 组合写入用：列宽字符 → 像素时的缺省（Calibri 11 / 96dpi 的 8.43 → 64 像素）。
+const DEFAULT_COL_CHARS: f64 = 8.43;
+const DEFAULT_ROW_PT: f64 = 15.0;
+pub(crate) const EMU_PER_PIXEL: i64 = 9525;
+pub(crate) const EMU_PER_POINT: i64 = 12_700;
+const MAX_COL: u32 = 16_384;
+const MAX_ROW: u32 = 1_048_576;
+
+fn chars_to_emu(chars: f64) -> i64 {
+    let px = (chars * MAX_DIGIT_WIDTH + 5.0).floor().max(0.0) as i64;
+    px.saturating_mul(EMU_PER_PIXEL)
+}
+
+fn points_to_emu(pt: f64) -> i64 {
+    (pt * EMU_PER_POINT as f64).round() as i64
+}
+
+fn default_col_emu(sheet: &Element) -> i64 {
+    sheet
+        .child_by_local("sheetFormatPr")
+        .and_then(|e| e.attr_local("defaultColWidth"))
+        .and_then(parse_xml_f64)
+        .map(chars_to_emu)
+        .unwrap_or_else(|| chars_to_emu(DEFAULT_COL_CHARS))
+}
+
+fn default_row_emu(sheet: &Element) -> i64 {
+    let pt = sheet
+        .child_by_local("sheetFormatPr")
+        .and_then(|e| e.attr_local("defaultRowHeight"))
+        .and_then(parse_xml_f64)
+        .unwrap_or(DEFAULT_ROW_PT);
+    points_to_emu(pt).max(1)
+}
+
+fn col_width_emu(sheet: &Element, col: u32) -> i64 {
+    for cols in sheet.children_by_local("cols") {
+        for el in cols.children_by_local("col") {
+            let Some((min, max)) = col_span(el) else {
+                continue;
+            };
+            if col >= min && col <= max {
+                if let Some(w) = el.attr("width").and_then(parse_xml_f64) {
+                    return chars_to_emu(xml_width_to_chars(w)).max(1);
+                }
+            }
+        }
+    }
+    default_col_emu(sheet).max(1)
+}
+
+pub(crate) fn col_origin_emu(sheet: &Element, col: u32) -> i64 {
+    (1..col).map(|c| col_width_emu(sheet, c)).sum()
+}
+
+pub(crate) fn row_origin_emu(sheet: &Element, row: u32) -> i64 {
+    if row <= 1 {
+        return 0;
+    }
+    let def = default_row_emu(sheet).max(1);
+    let mut y = 0i64;
+    let mut cursor = 1u32;
+    for (cr, ch) in custom_row_heights(sheet) {
+        if cr >= row {
+            break;
+        }
+        if cr > cursor {
+            y = y.saturating_add(def.saturating_mul((cr - cursor) as i64));
+        }
+        y = y.saturating_add(ch);
+        cursor = cr.saturating_add(1);
+    }
+    if row > cursor {
+        y = y.saturating_add(def.saturating_mul((row - cursor) as i64));
+    }
+    y
+}
+
+fn custom_row_heights(sheet: &Element) -> Vec<(u32, i64)> {
+    let mut out = Vec::new();
+    let Some(sheet_data) = sheet.child_by_local("sheetData") else {
+        return out;
+    };
+    for el in sheet_data.children_by_local("row") {
+        let Some(r) = el.attr("r").and_then(|s| s.parse::<u32>().ok()) else {
+            continue;
+        };
+        if let Some(ht) = el.attr("ht").and_then(parse_xml_f64) {
+            out.push((r, points_to_emu(ht).max(1)));
+        }
+    }
+    out.sort_by_key(|(r, _)| *r);
+    out
+}
+
+pub(crate) fn emu_to_marker(sheet: &Element, x: i64, y: i64) -> (CellRef, i64, i64) {
+    let (col, col_off) = emu_to_col(sheet, x.max(0));
+    let (row, row_off) = emu_to_row(sheet, y.max(0));
+    (CellRef { col, row }, col_off, row_off)
+}
+
+fn emu_to_col(sheet: &Element, x: i64) -> (u32, i64) {
+    let mut acc = 0i64;
+    for c in 1..=MAX_COL {
+        let w = col_width_emu(sheet, c);
+        if acc.saturating_add(w) > x || c == MAX_COL {
+            return (c, x.saturating_sub(acc));
+        }
+        acc = acc.saturating_add(w);
+    }
+    (MAX_COL, 0)
+}
+
+fn emu_to_row(sheet: &Element, y: i64) -> (u32, i64) {
+    let def = default_row_emu(sheet).max(1);
+    let mut acc = 0i64;
+    let mut r = 1u32;
+    for (cr, ch) in custom_row_heights(sheet) {
+        if cr > r {
+            let gap = (cr - r) as i64;
+            let gap_emu = def.saturating_mul(gap);
+            if acc.saturating_add(gap_emu) > y {
+                let remain = y.saturating_sub(acc);
+                let extra = (remain / def) as u32;
+                return ((r.saturating_add(extra)).clamp(1, MAX_ROW), remain % def);
+            }
+            acc = acc.saturating_add(gap_emu);
+            r = cr;
+        }
+        if cr == r {
+            if acc.saturating_add(ch) > y {
+                return (r, y.saturating_sub(acc));
+            }
+            acc = acc.saturating_add(ch);
+            r = r.saturating_add(1);
+        }
+    }
+    let remain = y.saturating_sub(acc);
+    let extra = (remain / def) as u32;
+    (r.saturating_add(extra).clamp(1, MAX_ROW), remain % def)
+}
+
 fn ranges_intersect(a1: CellRef, b1: CellRef, a2: CellRef, b2: CellRef) -> bool {
     !(b1.col < a2.col || b2.col < a1.col || b1.row < a2.row || b2.row < a1.row)
 }

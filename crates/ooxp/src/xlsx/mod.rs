@@ -8,6 +8,7 @@ mod chartsheet;
 mod comments;
 mod create;
 mod formula;
+mod group;
 mod hf;
 mod hyperlink;
 mod inspect;

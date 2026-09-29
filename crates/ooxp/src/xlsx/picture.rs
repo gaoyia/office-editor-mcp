@@ -2035,7 +2035,7 @@ fn rewrite_to_marker(anchor: &mut Element, to: a1::CellRef, off_x: i64, off_y: i
     anchor.children.insert(at, Node::Element(new_to));
 }
 
-fn marker_el(name: &str, cell: a1::CellRef, off_x: i64, off_y: i64) -> Element {
+pub(crate) fn marker_el(name: &str, cell: a1::CellRef, off_x: i64, off_y: i64) -> Element {
     let mut el = Element::new(name);
     el.push_element(Element::new("xdr:col").with_text((cell.col.saturating_sub(1)).to_string()));
     el.push_element(Element::new("xdr:colOff").with_text(off_x.to_string()));

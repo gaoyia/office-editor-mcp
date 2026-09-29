@@ -44,6 +44,8 @@ C、I、A、O、Xp、Xc、Xh 这几组现在由 `manual-check/office/cases/xlsx-
 | Xsk1–Xsk5 | ✅ | Excel 16.0：`xlsx-sparklines.ps1`，5 PASS / 0 FAIL。无名单时根与工作表有 `sparklineCount=0`；`insertSparkline` 后 COM `SparklineGroups` 能看见折线且无 Repair；改数据范围后对得上；删除后计数为 0；缺字段得 `InvalidField` 且未写文件 |
 | Xpr1–Xpr5 | ✅ | Excel 16.0：`xlsx-protect.ps1`，5 PASS / 0 FAIL。无保护时根有 `workbookProtection`、工作表有 `sheetProtection` 且 `enforced=false`；打开工作表保护后 COM `ProtectContents` 为真且无 Repair；解开后能改格；工作簿锁结构后 COM `ProtectStructure` 为真；缺字段得 `InvalidField`，带哈希样例 `hasPassword=true` 且 apply 得 `NotImplemented` |
 | Xa1–Xa5 | ✅ | Excel 16.0：`xlsx-anchor.ps1`，5 PASS / 0 FAIL。twoCell 改 `to=G10` 无 Repair；oneCell 转到 absolute 后 `posX=914400`；再改 `posX=2000000` 无 Repair；转到 absolute 不给 pos、twoCell 给 `cx` 均得 `InvalidField` 且未写文件 |
+| Xsg1–Xsg5 | ✅ | Excel 16.0：`xlsx-shapes-geom.ps1`，5 PASS / 0 FAIL。无名单时根与工作表有 `shapeCount=0`、`connectorCount=0`；`insertShape` 后 COM 能看见矩形且无 Repair；`insertConnector` 后名单 id 为 `sheet:…/cxn:…`；改锚点与删后计数为 0；缺 `from` 得 `InvalidField` |
+| Xg1–Xg5 | ✅ | Excel 16.0：`xlsx-groups.ps1`，5 PASS / 0 FAIL。`groupShapes` 后 COM Type=6、子 id 仍在；`ungroup` 后组合解开；形状与连接线可编成一组；已组合再编、只给一个成员、`id=slide:1`、对未组合对象 `ungroup` 均拒写。无 Repair |
 | 图表工作表 Xs1–Xs4 | ✅ | Excel 16.0：`xlsx-chartsheet.ps1`，4 PASS / 0 FAIL。`insertChartSheet` 后 `kind=chartsheet`、`chartCount=1`，无 Repair；数据 1/2/3 与 COM 一致；删除后表消失、数据格还在；对 `worksheet` 发 `deleteChartSheet` 得 `InvalidId` 且未写文件 |
 | Xt1–Xt5 | ✅ | Excel 16.0：`xlsx-table.ps1`，5 PASS / 0 FAIL。create 默认 `tableCount=0`；建成 Sales 后 COM 认表；改范围到 `A1:C4` 无 Repair；删除后数据还在、不再有表；缺 `ref` 得 `InvalidField` 且未写文件 |
 
@@ -360,6 +362,18 @@ Office 另存 create 产物是打开冒烟，见 `manual-check/office/cases/opc-
 | Xsg3 | 连接线 | `insertConnector` 后 inspect `connectors` 名单 id 为 `sheet:…/cxn:…`，`prst` 为 `straightConnector1`；COM 能看见连接线；无修复 |
 | Xsg4 | 改锚点与删 | `setTextBoxSize` / `setTextBoxAnchor` 认形状 id；`setShapeText` 后可见字对得上；`deleteShape` / `deleteConnector` 后对应计数为 0、无修复 |
 | Xsg5 | 拒写 | 只给 `op` 与 `id` 的 `insertShape`（缺 `from`）得 `InvalidField`；对 `/sp:` 发 `deleteShape`、对 `/cxn:` 发 `setShapeText` 得 `InvalidId`；均未写文件。不强制开 Excel |
+
+## 组合
+
+用库 create 产物再 apply。脚本 `manual-check/office/cases/xlsx-groups.ps1`。编号用 **Xg**。不要和 Xsg、Xsa 撞。不算按列宽反推已有 `twoCell` 图的显示尺寸。
+
+| 序号 | 检查 | 通过标准 |
+| --- | --- | --- |
+| Xg1 | 组合 | `insertShape` 两个矩形后 `groupShapes`；Excel 无修复；COM Type=6；inspect 子形状 id 仍在 |
+| Xg2 | 解开 | `ungroup` 后组合解开，子 id 还在；无 Repair |
+| Xg3 | 形状与连接线 | 形状与连接线编成一组后 COM 认组合；inspect 两边名单都在；无 Repair |
+| Xg4 | 再编拒绝 | 已组合的成员再 `groupShapes` 得 `InvalidField`，未写文件。不强制开 Excel |
+| Xg5 | 拒写 | 只给一个成员、`id` 为 `slide:1`、对未组合对象发 `ungroup` 得 `InvalidField` 或 `InvalidId`；均未写文件。不强制开 Excel |
 
 ## 超链接
 

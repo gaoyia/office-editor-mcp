@@ -1344,6 +1344,20 @@ pub struct DeleteConnectorOp {
 }
 
 #[derive(Debug, Clone)]
+pub struct GroupShapesOp {
+    pub sheet: String,
+    pub ids: Vec<String>,
+    pub members: Vec<(SheetDrawId, DrawObjKind)>,
+}
+
+#[derive(Debug, Clone)]
+pub struct UngroupOp {
+    pub id: String,
+    pub target: SheetDrawId,
+    pub kind: DrawObjKind,
+}
+
+#[derive(Debug, Clone)]
 pub struct SetTextBoxSizeOp {
     pub id: String,
     pub target: SheetDrawId,
@@ -1552,6 +1566,8 @@ pub enum XlsxOp {
     DeleteTextBox(DeleteTextBoxOp),
     DeleteShape(DeleteShapeOp),
     DeleteConnector(DeleteConnectorOp),
+    GroupShapes(GroupShapesOp),
+    Ungroup(UngroupOp),
     SetTextBoxSize(SetTextBoxSizeOp),
     SetTextBoxAnchor(SetTextBoxAnchorOp),
     SetShapeText(SetShapeTextOp),
@@ -1793,6 +1809,8 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<XlsxOp>, Error> {
             "deleteTextBox" => XlsxOp::DeleteTextBox(parse_delete_textbox(obj, i)?),
             "deleteShape" => XlsxOp::DeleteShape(parse_delete_shape(obj, i)?),
             "deleteConnector" => XlsxOp::DeleteConnector(parse_delete_connector(obj, i)?),
+            "groupShapes" => XlsxOp::GroupShapes(parse_group_shapes(obj, i)?),
+            "ungroup" => XlsxOp::Ungroup(parse_ungroup(obj, i)?),
             "setTextBoxSize" => XlsxOp::SetTextBoxSize(parse_set_textbox_size(obj, i)?),
             "setTextBoxAnchor" => XlsxOp::SetTextBoxAnchor(parse_set_textbox_anchor(obj, i)?),
             "setShapeText" => XlsxOp::SetShapeText(parse_set_shape_text(obj, i)?),
@@ -1906,8 +1924,6 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<XlsxOp>, Error> {
             | "setThemeColors"
             | "setThemeFonts"
             | "setHandoutText"
-            | "groupShapes"
-            | "ungroup"
             | "setShapePos"
             | "setShapeSize"
             | "setShapeFill"
@@ -8065,6 +8081,84 @@ fn parse_delete_connector(
     let id = require_id(obj, i)?;
     let target = shape::parse_cxn_id(&id, i)?;
     Ok(DeleteConnectorOp { id, target })
+}
+
+fn parse_group_shapes(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<GroupShapesOp, Error> {
+    deny_keys(obj, i, &["op", "id", "ids"])?;
+    let id = require_id(obj, i)?;
+    let sheet = shape::parse_insert_sheet_id(&id, i, IdReason::GroupNeedsSheet)?;
+    let ids = match obj.get("ids") {
+        Some(Value::Array(arr)) => {
+            if arr.len() < 2 {
+                return Err(Error::with_path(
+                    ErrorKind::GroupNeedsTwo,
+                    format!("ops[{i}].ids"),
+                ));
+            }
+            let mut out = Vec::new();
+            for (k, v) in arr.iter().enumerate() {
+                let s = v.as_str().ok_or_else(|| {
+                    Error::with_path(
+                        ErrorKind::WrongType {
+                            field: format!("ids[{k}]"),
+                            expected: TypeName::String,
+                        },
+                        format!("ops[{i}].ids[{k}]"),
+                    )
+                })?;
+                if s.is_empty() {
+                    return Err(Error::with_path(
+                        ErrorKind::WrongType {
+                            field: format!("ids[{k}]"),
+                            expected: TypeName::NonEmptyString,
+                        },
+                        format!("ops[{i}].ids[{k}]"),
+                    ));
+                }
+                out.push(s.to_string());
+            }
+            out
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "ids".into(),
+                    expected: TypeName::Array,
+                },
+                format!("ops[{i}].ids"),
+            ));
+        }
+        None => {
+            return Err(Error::with_path(
+                ErrorKind::OpRequiresField {
+                    op: "groupShapes".into(),
+                    field: "ids".into(),
+                },
+                format!("ops[{i}].ids"),
+            ));
+        }
+    };
+    let mut members = Vec::new();
+    for (k, mid) in ids.iter().enumerate() {
+        let parsed =
+            shape::parse_drawing_obj_id(mid, i).map_err(|e| e.at(format!("ops[{i}].ids[{k}]")))?;
+        members.push(parsed);
+    }
+    Ok(GroupShapesOp {
+        sheet,
+        ids,
+        members,
+    })
+}
+
+fn parse_ungroup(obj: &serde_json::Map<String, Value>, i: usize) -> Result<UngroupOp, Error> {
+    deny_keys(obj, i, &["op", "id"])?;
+    let id = require_id(obj, i)?;
+    let (target, kind) = shape::parse_drawing_obj_id(&id, i)?;
+    Ok(UngroupOp { id, target, kind })
 }
 
 fn parse_set_textbox_size(

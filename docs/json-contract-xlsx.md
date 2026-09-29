@@ -68,7 +68,7 @@ xlsx 页眉页脚是工作表上的 `headerFooter`（ECMA-376 §18.3.1.46），�
 
 `insertShape` 的 `id` 必须是 `sheet:{name}`，且该表 `kind` 为 `worksheet`。对形状 id、文本框 id、连接线 id、图 id、单元格 id 或 `xlsx:workbook` 发 `insertShape` 报 `InvalidId`。对 `chartsheet` 发此 op 报 `InvalidField`。对 `dialogsheet` / `macrosheet` 报 `NotImplemented`。`deleteShape` 的 `id` 必须是 xlsx 形状 id。对文本框 id 或连接线 id 发 `deleteShape` 报 `InvalidId`。
 
-`insertConnector` 的 `id` 必须是 `sheet:{name}`，且该表 `kind` 为 `worksheet`。对连接线 id、形状 id、文本框 id、图 id、单元格 id 或 `xlsx:workbook` 发 `insertConnector` 报 `InvalidId`。对 `chartsheet` 发此 op 报 `InvalidField`。对 `dialogsheet` / `macrosheet` 报 `NotImplemented`。`deleteConnector` 的 `id` 必须是 xlsx 连接线 id。`groupShapes` / `ungroup` / `setShapePos` / `setShapeSize` / `setShapeFill` / `setShapeLine` 在 xlsx 上报 `InvalidField`。xlsx 改几何请用 `setTextBoxSize` / `setTextBoxAnchor`。出现 `x` / `y` 报 `InvalidField`。
+`insertConnector` 的 `id` 必须是 `sheet:{name}`，且该表 `kind` 为 `worksheet`。对连接线 id、形状 id、文本框 id、图 id、单元格 id 或 `xlsx:workbook` 发 `insertConnector` 报 `InvalidId`。对 `chartsheet` 发此 op 报 `InvalidField`。对 `dialogsheet` / `macrosheet` 报 `NotImplemented`。`deleteConnector` 的 `id` 必须是 xlsx 连接线 id。`groupShapes` 的 `id` 必须是 `sheet:{name}`。`ungroup` 的 `id` 必须是该组合内一个文本框 id、形状 id 或连接线 id。`setShapePos` / `setShapeSize` / `setShapeFill` / `setShapeLine` 在 xlsx 上报 `InvalidField`。xlsx 改几何请用 `setTextBoxSize` / `setTextBoxAnchor`。出现 `x` / `y` 报 `InvalidField`。
 
 工作表 SmartArt 挂在该 `worksheet` 上。`{cNvPrId}` 取该 `xdr:graphicFrame` 里 `xdr:nvGraphicFramePr/xdr:cNvPr/@id` 的原文，匹配规则与工作表图相同。没有该属性时用 `smartdiagram:index:{k}`，树上 `"stable": false`。`{k}` 只在该表全部 worksheet drawing 部件内从 1 计，只计入被收入的图示。点 id 为 `{图示 id}/pt:{modelId}`，规则与 docx / pptx 相同。只认 `xdr:graphicFrame` 且 `a:graphicData/@uri` 为 `http://schemas.openxmlformats.org/drawingml/2006/diagram`（可带尾斜杠）。`dgm:relIds` 的四条关系写在 **drawing** `.rels` 上（Excel 16.0 另存如此；不要写到工作表 `.rels`）。组合里符合条件的框要展开；几何仍取外层锚点。页眉页脚里的图示本期不进树。`mc:AlternateContent` 只进第一个 `Choice`。drawing 缓存按 docx / pptx：对不上 `modelId` 则删缓存。
 
@@ -945,7 +945,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
 - 可能被删除的 `/xl/calcChain.xml` 以及因此修改的关系与内容类型（仅 `setCell` 等改了值或公式时）
 - `setCellStyle` 还可脏 styles 部件（常见 `/xl/styles.xml`），必要时补 workbook 关系与 Override
 
-未点名的 `xf` 条目、其他工作表、主题一律按原来的语义留下：不要重排或改写未点名下标。只改单元格值、不改样式、不改图、图表或页眉时，`styles.xml` 与绘图原样写回。图表 op 还可以脏 drawing、`/xl/charts/…` 及其 `.rels`、`[Content_Types].xml`，以及被写入数据的工作表 XML；写入单元格时走上面同一套重算标记。`insertChartSheet` / `deleteChartSheet` / `insertSheet` / `deleteSheet` / `renameSheet` / `moveSheet` / `setSheetHidden` 还可以脏 `/xl/workbook.xml` 的 `sheets`、workbook 关系，以及新表或被删表的部件。工作表表格 op 还可以脏 `/xl/tables/…`、工作表 `tableParts`、工作表 `.rels` 与 `[Content_Types].xml`；改列名或 insert 给出 `columns` 时还可脏该表 `sheetData`。页眉文本只脏目标表 XML。`setPrintSetup` 脏目标表的 `pageMargins` / `pageSetup` / `printOptions` / `sheetPr` / `rowBreaks` / `colBreaks`；改打印区域时还脏 `/xl/workbook.xml` 的 `<definedNames>`。`setSheetView` 脏目标表的 `sheetViews`。`setAutoFilter` 脏目标表的工作表级 `autoFilter`，不改表格部件。页眉图还可以脏 `drawingHF` 指向的 drawing、工作表 `.rels`、`/xl/media/…` 与 `[Content_Types].xml`。文本框、形状与连接线 op 以及 `setShapeText` 还可以脏 worksheet drawing 及其 `.rels`。SmartArt op 还可以脏 worksheet drawing、drawing `.rels`、`/xl/diagrams/` 四件套与可选 drawing 缓存、以及 `[Content_Types].xml`。`setProps` / `setCustomProp` / `deleteCustomProp` 还可以脏 `/docProps/core.xml`、`/docProps/app.xml`、`/docProps/custom.xml`、根 `.rels` 与 `[Content_Types].xml`。只改 core 字段时不要新建 custom。未点名的 `HeadingPairs` / `TitlesOfParts` 留下。
+未点名的 `xf` 条目、其他工作表、主题一律按原来的语义留下：不要重排或改写未点名下标。只改单元格值、不改样式、不改图、图表或页眉时，`styles.xml` 与绘图原样写回。图表 op 还可以脏 drawing、`/xl/charts/…` 及其 `.rels`、`[Content_Types].xml`，以及被写入数据的工作表 XML；写入单元格时走上面同一套重算标记。`insertChartSheet` / `deleteChartSheet` / `insertSheet` / `deleteSheet` / `renameSheet` / `moveSheet` / `setSheetHidden` 还可以脏 `/xl/workbook.xml` 的 `sheets`、workbook 关系，以及新表或被删表的部件。工作表表格 op 还可以脏 `/xl/tables/…`、工作表 `tableParts`、工作表 `.rels` 与 `[Content_Types].xml`；改列名或 insert 给出 `columns` 时还可脏该表 `sheetData`。页眉文本只脏目标表 XML。`setPrintSetup` 脏目标表的 `pageMargins` / `pageSetup` / `printOptions` / `sheetPr` / `rowBreaks` / `colBreaks`；改打印区域时还脏 `/xl/workbook.xml` 的 `<definedNames>`。`setSheetView` 脏目标表的 `sheetViews`。`setAutoFilter` 脏目标表的工作表级 `autoFilter`，不改表格部件。页眉图还可以脏 `drawingHF` 指向的 drawing、工作表 `.rels`、`/xl/media/…` 与 `[Content_Types].xml`。文本框、形状与连接线 op、`groupShapes` / `ungroup` 以及 `setShapeText` 还可以脏 worksheet drawing 及其 `.rels`。SmartArt op 还可以脏 worksheet drawing、drawing `.rels`、`/xl/diagrams/` 四件套与可选 drawing 缓存、以及 `[Content_Types].xml`。`setProps` / `setCustomProp` / `deleteCustomProp` 还可以脏 `/docProps/core.xml`、`/docProps/app.xml`、`/docProps/custom.xml`、根 `.rels` 与 `[Content_Types].xml`。只改 core 字段时不要新建 custom。未点名的 `HeadingPairs` / `TitlesOfParts` 留下。
 
 被改的部件是整份重新序列化的，不是按字节做定点替换。因此保证到这个程度：XML 声明、元素与属性的顺序、未知命名空间的元素与属性、文本内容都保留；注释、处理指令和 DOCTYPE 会丢，CDATA 会变成等价的转义文本。Office 的工作表部件不带这些东西，所以第一期接受这个代价。
 
@@ -1163,6 +1163,29 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
 | `id` | 连接线 id `sheet:{name}/cxn:…` |
 
 找不到该连接线报 `IdNotFound`。id 不是 xlsx 连接线 id 报 `InvalidId`。删掉对应 `xdr:cxnSp`，空组合与空锚点规则与 `deleteShape` 相同。docx 上发此 op 报 `InvalidField`。pptx 规则见 [pptx 分册](json-contract-pptx.md#deleteconnector)。
+
+### groupShapes
+
+把同一张 `worksheet` 上至少两个当前为锚点直接子节点的对象包进一个新 `xdr:grpSp`。组合本身不进 inspect 树，符合条件的子文本框 / 形状 / 连接线仍展开；几何仍取外层锚点。
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"groupShapes"` |
+| `id` | 必须是 `sheet:{name}` |
+| `ids` | 必填。至少两个成员 id。每个必须是该表的文本框 id、形状 id 或连接线 id，且当前是某个 `twoCellAnchor` / `oneCellAnchor` / `absoluteAnchor` 的直接子节点 |
+
+成员少于 2 个、有重复、不在同一张表、已经在某个 `xdr:grpSp` 里、或不是 `xdr:sp` / `xdr:cxnSp`，报 `InvalidField`。找不到某个成员报 `IdNotFound`。`id` 不是工作表 id 报 `InvalidId`。对图 id、图表 id、SmartArt id、单元格 id 或 `xlsx:workbook` 发此 op 报 `InvalidId`。对 `chartsheet` 发此 op 报 `InvalidField`。对 `dialogsheet` / `macrosheet` 报 `NotImplemented`。新组合 `cNvPr/@id` 取该表已有全部 `cNvPr` 的最大整数加 1；`name` 写成「组合 {该 id}」。不写 `xdr:nvPr`，不写 `a16:creationId`，不写 `xdr:style`。外层写成一个 `xdr:twoCellAnchor`（不写 `editAs`），`from` / `to` 覆盖成员包围盒。组合 `xfrm` 的 `off` / `ext` / `chOff` / `chExt` 取该包围盒；把各成员 `a:off` / `a:ext` 写成工作表空间的绝对 EMU（与 Excel 16.0 `Range.Group()` 另存一致）。包围盒按该表 `cols` / `row/@ht` / `sheetFormatPr` 换算，缺省列宽 8.43 字符（64 像素）、行高 15 磅；不保证与 Excel 像素级一致。不重算已有组合框。不把图、图表、SmartArt、OLE 当成员。docx 上发此 op 报 `InvalidField`。pptx 见 [pptx 分册](json-contract-pptx.md#groupshapes)。
+
+### ungroup
+
+解开某个成员所在的 `xdr:grpSp`，子节点各自回到独立锚点。组合本身没有 inspect id。
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"ungroup"` |
+| `id` | 该组合内一个文本框 id、形状 id 或连接线 id |
+
+找不到该对象报 `IdNotFound`。id 不是文本框 / 形状 / 连接线 id 报 `InvalidId`。该对象不在 `xdr:grpSp` 里报 `InvalidField`。只解开包含该成员的那一层；嵌套组合仍是 `grpSp`。子节点 `cNvPr/@id` 不变。各子对象写成自己的 `xdr:twoCellAnchor`，`from` / `to` 由其 `a:xfrm` 按同一套列宽行高换回单元格。docx 上发此 op 报 `InvalidField`。pptx 见 [pptx 分册](json-contract-pptx.md#ungroup)。
 
 ### insertSparkline
 

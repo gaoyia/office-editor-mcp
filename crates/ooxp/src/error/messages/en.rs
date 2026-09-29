@@ -192,6 +192,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::InsertConnectorNeedsSheet => {
                 "xlsx insertConnector id must be sheet:name".into()
             }
+            IdReason::GroupNeedsSheet => {
+                "xlsx groupShapes id must be sheet:name".into()
+            }
             IdReason::SetShapeTextNotCxn => {
                 "xlsx setShapeText id must be a text box or shape id, not a connector".into()
             }
@@ -752,7 +755,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         }
         ErrorKind::GroupNeedsTwo => "groupShapes ids must contain at least two members".into(),
         ErrorKind::GroupMemberNested => {
-            "only direct children of the slide spTree can be grouped; nested groups are not allowed".into()
+            "groupShapes members must be ungrouped siblings; nested groups cannot be grouped again".into()
         }
         ErrorKind::NotGrouped => "this object is not inside a group".into(),
         ErrorKind::ConnectorNotFound { id } => format!("connector not found: {id}"),

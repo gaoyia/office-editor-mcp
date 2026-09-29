@@ -179,6 +179,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::InsertConnectorNeedsSheet => {
                 "xlsx 的 insertConnector 的 id 必须是 sheet:工作表名".into()
             }
+            IdReason::GroupNeedsSheet => {
+                "xlsx 的 groupShapes 的 id 必须是 sheet:工作表名".into()
+            }
             IdReason::SetShapeTextNotCxn => {
                 "xlsx 的 setShapeText 的 id 必须是文本框或形状 id，不能是连接线".into()
             }
@@ -676,7 +679,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         }
         ErrorKind::GroupNeedsTwo => "groupShapes 的 ids 至少两个".into(),
         ErrorKind::GroupMemberNested => {
-            "只能组合幻灯片 spTree 的直接子节点，不能把已在组合里的对象再编一层".into()
+            "只能组合尚未编组的直接子对象，不能把已在组合里的对象再编一层".into()
         }
         ErrorKind::NotGrouped => "该对象不在组合里".into(),
         ErrorKind::ConnectorNotFound { id } => format!("找不到连接线：{id}"),

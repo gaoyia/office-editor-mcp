@@ -822,7 +822,7 @@ pptx：`id` 不是页 id 报 `InvalidId`（对 `slide:{n}/notes`、形状 id、�
 | `id` | 必须是 `slide:{n}` |
 | `ids` | 必填。至少两个成员 id。每个必须是该页的形状 id 或连接线 id，且当前是 `spTree` 的直接子节点 |
 
-成员少于 2 个、有重复、不在同一页、已经在某个 `p:grpSp` 里、或不是 `p:sp`（带 `txBody`）/ `p:cxnSp`，报 `InvalidField`。找不到某个成员报 `IdNotFound`。`id` 不是页 id 报 `InvalidId`。新组合 `cNvPr/@id` 取该页最大加 1；`name` 写成「组合 {该 id}」。组合 `xfrm` 的 `off` / `ext` / `chOff` / `chExt` 取成员包围盒；成员自己的 `a:off` 不改（与 Office 16.0 另存一致）。不写 `a16:creationId`。不重算已有组合框。docx / xlsx 上发此 op 报 `InvalidField`。
+成员少于 2 个、有重复、不在同一页、已经在某个 `p:grpSp` 里、或不是 `p:sp`（带 `txBody`）/ `p:cxnSp`，报 `InvalidField`。找不到某个成员报 `IdNotFound`。`id` 不是页 id 报 `InvalidId`。新组合 `cNvPr/@id` 取该页最大加 1；`name` 写成「组合 {该 id}」。组合 `xfrm` 的 `off` / `ext` / `chOff` / `chExt` 取成员包围盒；成员自己的 `a:off` 不改（与 Office 16.0 另存一致）。不写 `a16:creationId`。不重算已有组合框。docx 上发此 op 报 `InvalidField`。xlsx 见 [xlsx 分册](json-contract-xlsx.md#groupshapes)。
 
 ### ungroup
 
@@ -833,7 +833,7 @@ pptx：`id` 不是页 id 报 `InvalidId`（对 `slide:{n}/notes`、形状 id、�
 | `op` | 必须是 `"ungroup"` |
 | `id` | 该组合内一个形状 id 或连接线 id |
 
-找不到该对象报 `IdNotFound`。id 不是形状 id 也不是连接线 id 报 `InvalidId`。该对象不在 `p:grpSp` 里报 `InvalidField`。子节点 `cNvPr/@id` 与各自 `xfrm` 不变。docx / xlsx 上发此 op 报 `InvalidField`。
+找不到该对象报 `IdNotFound`。id 不是形状 id 也不是连接线 id 报 `InvalidId`。该对象不在 `p:grpSp` 里报 `InvalidField`。子节点 `cNvPr/@id` 与各自 `xfrm` 不变。docx 上发此 op 报 `InvalidField`。xlsx 见 [xlsx 分册](json-contract-xlsx.md#ungroup)。
 
 ### deleteShape
 

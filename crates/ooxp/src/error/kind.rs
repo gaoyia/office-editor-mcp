@@ -123,6 +123,8 @@ pub(crate) enum IdReason {
     CxnIndexFromOne,
     /// xlsx 的 insertConnector 必须用 sheet:工作表名
     InsertConnectorNeedsSheet,
+    /// xlsx 的 groupShapes 必须用 sheet:工作表名
+    GroupNeedsSheet,
     /// setShapeText 不能用连接线 id
     SetShapeTextNotCxn,
     /// xlsx 图示 id 必须是 sheet:{name}/smartdiagram:…
@@ -988,6 +990,7 @@ impl IdReason {
             Self::CxnIndexNotInt,
             Self::CxnIndexFromOne,
             Self::InsertConnectorNeedsSheet,
+            Self::GroupNeedsSheet,
             Self::SetShapeTextNotCxn,
             Self::SheetSmartArtPrefix,
             Self::SheetSmartArtContainer,

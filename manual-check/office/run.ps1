@@ -90,6 +90,7 @@ $order = @(
     'xlsx-comments'
     'xlsx-shapes'
     'xlsx-shapes-geom'
+    'xlsx-groups'
     'xlsx-hyperlinks'
     'xlsx-sparklines'
     'xlsx-protect'
