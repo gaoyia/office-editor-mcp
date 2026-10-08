@@ -100,6 +100,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         body_ole_count += ole::count_in(&pkg, &part, p)?;
     }
     let body_table_count = tbl::count_tables(&doc.root);
+    let source_count = super::biblio::count_sources(&pkg, &part)?;
 
     let mut tree = json!({
         "schemaVersion": 1,
@@ -125,6 +126,9 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         "crossRefCount": field::count_cross_refs(&doc.root),
         "indexCount": field::count_indexes(&doc.root),
         "indexEntryCount": field::count_index_entries(&doc.root),
+        "sourceCount": source_count,
+        "citationCount": field::count_citations(&doc.root),
+        "bibliographyCount": field::count_bibliographies(&doc.root),
         "mathCount": math::count_maths(&doc.root),
         "contentControlCount": sdt::count_sdts(&doc.root),
         "numberingCount": numbering::count_nums(&pkg, &part)?,
@@ -231,6 +235,15 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         }
         if scope.index_entries {
             tree["indexEntries"] = Value::Array(field::index_entries_json(&doc.root)?);
+        }
+        if scope.sources {
+            tree["sources"] = Value::Array(super::biblio::sources_json(&pkg, &part)?);
+        }
+        if scope.citations {
+            tree["citations"] = Value::Array(field::citations_json(&doc.root)?);
+        }
+        if scope.bibliographies {
+            tree["bibliographies"] = Value::Array(field::bibliographies_json(&doc.root)?);
         }
         if scope.maths {
             tree["maths"] = Value::Array(math::maths_json(&doc.root, None)?);

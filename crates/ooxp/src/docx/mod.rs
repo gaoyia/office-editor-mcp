@@ -1,6 +1,7 @@
 //! docx：inspect / create / apply / exportMedia。
 
 mod apply;
+mod biblio;
 mod charts;
 mod comments;
 mod create;

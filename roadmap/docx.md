@@ -63,6 +63,7 @@ xlsx 见 [`roadmap/xlsx.md`](xlsx.md)。pptx 见 [`roadmap/pptx.md`](pptx.md)。
 | 29 | `.plan/2026年-10月-9日-✅-docx-主题.md` | 无 |
 | 30 | `.plan/2026年-10月-9日-✅-docx-交叉引用与题注.md` | 域、书签 |
 | 31 | `.plan/2026年-10月-9日-✅-docx-索引.md` | 域 |
+| 32 | `.plan/2026年-10月-9日-✅-docx-参考文献.md` | 域 |
 | C1 | `.plan/2026年-9月-27日-✅-图表剩余.md` | 嵌入图表已过 |
 | C2 | `.plan/2026年-9月-27日-✅-SmartArt跨家族.md` | SmartArt 已过 |
 | C3 | `.plan/2026年-9月-27日-✅-批注墨迹.md` | 批注已过 |
@@ -76,7 +77,6 @@ xlsx 见 [`roadmap/xlsx.md`](xlsx.md)。pptx 见 [`roadmap/pptx.md`](pptx.md)。
 
 | 序 | 计划 | 前置 |
 | --- | --- | --- |
-| 32 | 参考文献 | 域 |
 | 33 | 构建基块 / 文档部件 | 无 |
 | 34 | 字体嵌入 | 无 |
 | 35 | 页面背景与边框 | 节属性 |

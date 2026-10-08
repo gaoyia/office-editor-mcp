@@ -265,6 +265,15 @@
         "indexEntries": {
           "type": "boolean"
         },
+        "sources": {
+          "type": "boolean"
+        },
+        "citations": {
+          "type": "boolean"
+        },
+        "bibliographies": {
+          "type": "boolean"
+        },
         "maths": {
           "type": "boolean"
         },
@@ -793,6 +802,24 @@
               },
               {
                 "$ref": "docx.schema.json#/$defs/deleteIndexEntryOp"
+              },
+              {
+                "$ref": "docx.schema.json#/$defs/insertSourceOp"
+              },
+              {
+                "$ref": "docx.schema.json#/$defs/deleteSourceOp"
+              },
+              {
+                "$ref": "docx.schema.json#/$defs/insertCitationOp"
+              },
+              {
+                "$ref": "docx.schema.json#/$defs/deleteCitationOp"
+              },
+              {
+                "$ref": "docx.schema.json#/$defs/insertBibliographyOp"
+              },
+              {
+                "$ref": "docx.schema.json#/$defs/deleteBibliographyOp"
               },
               {
                 "$ref": "docx.schema.json#/$defs/insertMathOp"

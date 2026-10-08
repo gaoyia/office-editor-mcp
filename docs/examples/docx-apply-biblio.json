@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "C:\\data\\note.docx",
+  "output": "C:\\data\\note.biblio.docx",
+  "ops": [
+    {
+      "op": "insertSource",
+      "id": "docx:document",
+      "tag": "Book01",
+      "sourceType": "Book",
+      "title": "Office Open XML",
+      "year": "2006",
+      "last": "Ecma",
+      "first": "International",
+      "city": "Geneva",
+      "publisher": "Ecma International"
+    },
+    { "op": "insertCitation", "id": "para:3F2A1B00", "tag": "Book01" },
+    { "op": "insertBibliography", "id": "docx:document" },
+    { "op": "deleteBibliography", "id": "biblio:1" },
+    { "op": "deleteCitation", "id": "cite:1" },
+    { "op": "deleteSource", "id": "source:1" }
+  ]
+}

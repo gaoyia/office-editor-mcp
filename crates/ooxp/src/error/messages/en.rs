@@ -643,6 +643,25 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::InsertIndexEntryNeedsPara => {
                 "insertIndexEntry id must be a body or header/footer paragraph id".into()
             }
+            IdReason::SourcePrefix => "Bibliography source id must be source:N".into(),
+            IdReason::SourceIndexNotInt => "source index must be a positive integer".into(),
+            IdReason::SourceIndexFromOne => "source index starts at 1".into(),
+            IdReason::InsertSourceNeedsDocument => {
+                "insertSource id must be docx:document".into()
+            }
+            IdReason::CitePrefix => "Citation id must be cite:N".into(),
+            IdReason::CiteIndexNotInt => "cite index must be a positive integer".into(),
+            IdReason::CiteIndexFromOne => "cite index starts at 1".into(),
+            IdReason::InsertCitationNeedsPara => {
+                "insertCitation id must be a body or header/footer paragraph id".into()
+            }
+            IdReason::BiblioPrefix => "Bibliography id must be biblio:N".into(),
+            IdReason::BiblioIndexNotInt => "biblio index must be a positive integer".into(),
+            IdReason::BiblioIndexFromOne => "biblio index starts at 1".into(),
+            IdReason::InsertBibliographyNeedsBodyPara => {
+                "insertBibliography id must be a direct child paragraph of w:body, or docx:document"
+                    .into()
+            }
             IdReason::MathPrefix => {
                 "Math id must be math:N or a header/footer container id plus /math:N".into()
             }
@@ -751,6 +770,18 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             "entry must be non-empty, must not be only whitespace, and must not contain a double quote"
                 .into()
         }
+        ErrorKind::InvalidSourceTag => {
+            "tag must be non-empty, must not contain whitespace, and must not contain a double quote"
+                .into()
+        }
+        ErrorKind::DuplicateSourceTag => "tag must be unique among bibliography sources".into(),
+        ErrorKind::InvalidSourceType => "sourceType is not a supported ST_SourceType value".into(),
+        ErrorKind::EmptySourceTitle => "title must not be empty".into(),
+        ErrorKind::InvalidCitationTag => {
+            "tag must be non-empty, must not contain whitespace, and must not contain a double quote"
+                .into()
+        }
+        ErrorKind::InvalidBibliographyInstr => "instr must start with BIBLIOGRAPHY".into(),
         ErrorKind::CommentNotFound { id } => format!("Comment not found: {id}"),
         ErrorKind::NeedCommentParaId => {
             "The last paragraph of the comment must have w14:paraId to write commentsExtended".into()
@@ -1206,6 +1237,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::CrossRefNotFound { id } => format!("Cross-reference not found: {id}"),
         ErrorKind::IndexNotFound { id } => format!("Index not found: {id}"),
         ErrorKind::IndexEntryNotFound { id } => format!("Index entry not found: {id}"),
+        ErrorKind::SourceNotFound { id } => format!("Bibliography source not found: {id}"),
+        ErrorKind::CitationNotFound { id } => format!("Citation not found: {id}"),
+        ErrorKind::BibliographyNotFound { id } => format!("Bibliography not found: {id}"),
         ErrorKind::MathNotFound { id } => format!("Equation not found: {id}"),
         ErrorKind::ContentControlNotFound { id } => format!("Content control not found: {id}"),
         ErrorKind::SetParaTextHasField => {

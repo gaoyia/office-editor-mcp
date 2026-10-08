@@ -1605,6 +1605,24 @@ pub fn insert_index(
     err_id: &str,
     op_i: usize,
 ) -> Result<(), Error> {
+    insert_body_field(
+        root,
+        after,
+        instr,
+        err_id,
+        op_i,
+        IdReason::InsertIndexNeedsBodyPara,
+    )
+}
+
+fn insert_body_field(
+    root: &mut Element,
+    after: Option<&BodyPara>,
+    instr: &str,
+    err_id: &str,
+    op_i: usize,
+    reason: IdReason,
+) -> Result<(), Error> {
     let new_id = para::next_para_hex(root);
     if let Some(para) = after {
         let path = para::find_paragraph_path(root, para).ok_or_else(|| {
@@ -1627,9 +1645,7 @@ pub fn insert_index(
             })?;
             if parent.local_name() != "body" {
                 return Err(Error::with_path(
-                    ErrorKind::InvalidId {
-                        reason: IdReason::InsertIndexNeedsBodyPara,
-                    },
+                    ErrorKind::InvalidId { reason },
                     format!("ops[{op_i}].id"),
                 ));
             }
@@ -1719,4 +1735,197 @@ pub fn delete_index_entry(
     let rec = recs.into_iter().nth(n - 1).expect("n 已检查");
     let blocks = blocks_in_closed_range(root, &rec.start, &rec.end);
     remove_paths(root, blocks)
+}
+
+const DEFAULT_BIBLIOGRAPHY_INSTR: &str = " BIBLIOGRAPHY";
+
+pub fn instr_is_bibliography(instr: &str) -> bool {
+    field_code(instr) == "BIBLIOGRAPHY"
+}
+
+pub fn default_bibliography_instr() -> &'static str {
+    DEFAULT_BIBLIOGRAPHY_INSTR
+}
+
+fn citation_recs(root: &Element) -> Vec<FieldRec> {
+    let recs = collect_fields(root);
+    recs.iter()
+        .enumerate()
+        .filter(|(i, rec)| field_code(&rec.instr) == "CITATION" && !is_nested_field(&recs, *i))
+        .map(|(_, rec)| rec.clone())
+        .collect()
+}
+
+fn bibliography_recs(root: &Element) -> Vec<FieldRec> {
+    let recs = collect_fields(root);
+    recs.iter()
+        .enumerate()
+        .filter(|(i, rec)| field_code(&rec.instr) == "BIBLIOGRAPHY" && !is_nested_field(&recs, *i))
+        .map(|(_, rec)| rec.clone())
+        .collect()
+}
+
+pub fn count_citations(root: &Element) -> usize {
+    citation_recs(root).len()
+}
+
+pub fn count_bibliographies(root: &Element) -> usize {
+    bibliography_recs(root).len()
+}
+
+pub fn citations_json(root: &Element) -> Result<Vec<Value>, Error> {
+    let fields = fields_json(root, None)?;
+    let recs = collect_fields(root);
+    let mut out = Vec::new();
+    let mut n = 0usize;
+    for (i, f) in fields.into_iter().enumerate() {
+        let code = f["code"].as_str().unwrap_or("");
+        if code != "CITATION" || is_nested_field(&recs, i) {
+            continue;
+        }
+        n += 1;
+        out.push(json!({
+            "id": format!("cite:{n}"),
+            "index": n,
+            "field": f["id"],
+            "instr": f["instr"],
+            "tag": first_field_arg(f["instr"].as_str().unwrap_or("")),
+            "host": f["host"],
+            "end": f["end"],
+            "text": f["text"],
+        }));
+    }
+    Ok(out)
+}
+
+pub fn bibliographies_json(root: &Element) -> Result<Vec<Value>, Error> {
+    let fields = fields_json(root, None)?;
+    let recs = collect_fields(root);
+    let mut out = Vec::new();
+    let mut n = 0usize;
+    for (i, f) in fields.into_iter().enumerate() {
+        let code = f["code"].as_str().unwrap_or("");
+        if code != "BIBLIOGRAPHY" || is_nested_field(&recs, i) {
+            continue;
+        }
+        n += 1;
+        out.push(json!({
+            "id": format!("biblio:{n}"),
+            "index": n,
+            "field": f["id"],
+            "instr": f["instr"],
+            "host": f["host"],
+            "end": f["end"],
+            "text": f["text"],
+        }));
+    }
+    Ok(out)
+}
+
+pub fn insert_citation(p: &mut Element, tag: &str, xml_id: i64) {
+    let mut sdt = Element::new(p.prefixed("sdt"));
+    let mut pr = Element::new(sdt.prefixed("sdtPr"));
+    let mut id_el = Element::new(pr.prefixed("id"));
+    id_el.set_attr("w:val", xml_id.to_string());
+    pr.push_element(id_el);
+    pr.push_element(Element::new(pr.prefixed("citation")));
+    sdt.push_element(pr);
+    let mut content = Element::new(sdt.prefixed("sdtContent"));
+    insert_field(&mut content, &format!(" CITATION {tag} "), None);
+    sdt.push_element(content);
+    p.push_element(sdt);
+}
+
+fn has_citation_pr(sdt: &Element) -> bool {
+    sdt.child_by_local("sdtPr")
+        .map(|pr| pr.element_children().any(|c| c.local_name() == "citation"))
+        .unwrap_or(false)
+}
+
+fn citation_sdt_path(root: &Element, rec: &FieldRec) -> Option<Vec<usize>> {
+    for len in (1..rec.start.len()).rev() {
+        let path = rec.start[..len].to_vec();
+        let el = para::element_at(root, &path)?;
+        if el.local_name() == "sdt"
+            && has_citation_pr(el)
+            && rec.end.len() >= path.len()
+            && rec.end[..path.len()] == path[..]
+        {
+            return Some(path);
+        }
+    }
+    None
+}
+
+pub fn delete_citation(
+    root: &mut Element,
+    n: usize,
+    err_id: &str,
+    op_i: usize,
+) -> Result<(), Error> {
+    let recs = citation_recs(root);
+    if n < 1 || n > recs.len() {
+        return Err(Error::with_path(
+            ErrorKind::CitationNotFound {
+                id: err_id.to_string(),
+            },
+            format!("ops[{op_i}].id"),
+        ));
+    }
+    let rec = recs.into_iter().nth(n - 1).expect("n 已检查");
+    if let Some(sdt) = citation_sdt_path(root, &rec) {
+        return remove_at(root, &sdt);
+    }
+    let blocks = blocks_in_closed_range(root, &rec.start, &rec.end);
+    remove_paths(root, blocks)
+}
+
+pub fn insert_bibliography(
+    root: &mut Element,
+    after: Option<&BodyPara>,
+    instr: &str,
+    err_id: &str,
+    op_i: usize,
+) -> Result<(), Error> {
+    insert_body_field(
+        root,
+        after,
+        instr,
+        err_id,
+        op_i,
+        IdReason::InsertBibliographyNeedsBodyPara,
+    )
+}
+
+pub fn delete_bibliography(
+    root: &mut Element,
+    n: usize,
+    err_id: &str,
+    op_i: usize,
+) -> Result<(), Error> {
+    let recs = bibliography_recs(root);
+    if n < 1 || n > recs.len() {
+        return Err(Error::with_path(
+            ErrorKind::BibliographyNotFound {
+                id: err_id.to_string(),
+            },
+            format!("ops[{op_i}].id"),
+        ));
+    }
+    let rec = recs.into_iter().nth(n - 1).expect("n 已检查");
+    if toc_blocked_by_sect_pr(root, &rec) {
+        return Err(Error::with_path(
+            ErrorKind::SectionBreakPara,
+            format!("ops[{op_i}].id"),
+        ));
+    }
+    let start_p = para_prefix_of(root, &rec.start);
+    let end_p = para_prefix_of(root, &rec.end);
+    let blocks = blocks_in_closed_range(root, &rec.start, &rec.end);
+    remove_paths(root, blocks)?;
+    if let (Some(a), Some(b)) = (start_p, end_p) {
+        drop_empty_body_paras(root, &a, &b)?;
+    }
+    ensure_body_has_para(root)?;
+    Ok(())
 }

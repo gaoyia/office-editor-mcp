@@ -452,6 +452,24 @@ pub(crate) enum IdReason {
     XeIndexFromOne,
     /// insertIndexEntry 必须用正文或页眉页脚段落 id
     InsertIndexEntryNeedsPara,
+    /// 书目源 id 必须是 source:N
+    SourcePrefix,
+    SourceIndexNotInt,
+    SourceIndexFromOne,
+    /// insertSource 必须用 docx:document
+    InsertSourceNeedsDocument,
+    /// 引文 id 必须是 cite:N
+    CitePrefix,
+    CiteIndexNotInt,
+    CiteIndexFromOne,
+    /// insertCitation 必须用正文或页眉页脚段落 id
+    InsertCitationNeedsPara,
+    /// 书目块 id 必须是 biblio:N
+    BiblioPrefix,
+    BiblioIndexNotInt,
+    BiblioIndexFromOne,
+    /// insertBibliography 必须是主文档 body 的直接子段落或 docx:document
+    InsertBibliographyNeedsBodyPara,
     /// 公式 id 必须是 math:N 或 {容器}/math:N
     MathPrefix,
     MathIndexNotInt,
@@ -847,6 +865,9 @@ define_error_kinds! {
     CrossRefNotFound { id: String } => vec![Self::CrossRefNotFound { id: "xref:1".into() }],
     IndexNotFound { id: String } => vec![Self::IndexNotFound { id: "index:1".into() }],
     IndexEntryNotFound { id: String } => vec![Self::IndexEntryNotFound { id: "xe:1".into() }],
+    SourceNotFound { id: String } => vec![Self::SourceNotFound { id: "source:1".into() }],
+    CitationNotFound { id: String } => vec![Self::CitationNotFound { id: "cite:1".into() }],
+    BibliographyNotFound { id: String } => vec![Self::BibliographyNotFound { id: "biblio:1".into() }],
     MathNotFound { id: String } => vec![Self::MathNotFound { id: "math:1".into() }],
     ContentControlNotFound { id: String } => vec![Self::ContentControlNotFound { id: "sdt:1".into() }],
     InvalidTocKind => vec![Self::InvalidTocKind],
@@ -854,6 +875,12 @@ define_error_kinds! {
     InvalidCrossRefKind => vec![Self::InvalidCrossRefKind],
     InvalidIndexInstr => vec![Self::InvalidIndexInstr],
     InvalidIndexEntry => vec![Self::InvalidIndexEntry],
+    InvalidSourceTag => vec![Self::InvalidSourceTag],
+    DuplicateSourceTag => vec![Self::DuplicateSourceTag],
+    InvalidSourceType => vec![Self::InvalidSourceType],
+    EmptySourceTitle => vec![Self::EmptySourceTitle],
+    InvalidCitationTag => vec![Self::InvalidCitationTag],
+    InvalidBibliographyInstr => vec![Self::InvalidBibliographyInstr],
     InvalidMathKind => vec![Self::InvalidMathKind],
     EmptyMathText => vec![Self::EmptyMathText],
     InvalidContentControlKind => vec![Self::InvalidContentControlKind],
@@ -1284,6 +1311,18 @@ impl IdReason {
             Self::XeIndexNotInt,
             Self::XeIndexFromOne,
             Self::InsertIndexEntryNeedsPara,
+            Self::SourcePrefix,
+            Self::SourceIndexNotInt,
+            Self::SourceIndexFromOne,
+            Self::InsertSourceNeedsDocument,
+            Self::CitePrefix,
+            Self::CiteIndexNotInt,
+            Self::CiteIndexFromOne,
+            Self::InsertCitationNeedsPara,
+            Self::BiblioPrefix,
+            Self::BiblioIndexNotInt,
+            Self::BiblioIndexFromOne,
+            Self::InsertBibliographyNeedsBodyPara,
             Self::MathPrefix,
             Self::MathIndexNotInt,
             Self::MathIndexFromOne,
@@ -1416,6 +1455,12 @@ impl ErrorKind {
             | Self::InvalidCrossRefKind
             | Self::InvalidIndexInstr
             | Self::InvalidIndexEntry
+            | Self::InvalidSourceTag
+            | Self::DuplicateSourceTag
+            | Self::InvalidSourceType
+            | Self::EmptySourceTitle
+            | Self::InvalidCitationTag
+            | Self::InvalidBibliographyInstr
             | Self::InvalidMathKind
             | Self::EmptyMathText
             | Self::InvalidContentControlKind
@@ -1661,6 +1706,9 @@ impl ErrorKind {
             | Self::CrossRefNotFound { .. }
             | Self::IndexNotFound { .. }
             | Self::IndexEntryNotFound { .. }
+            | Self::SourceNotFound { .. }
+            | Self::CitationNotFound { .. }
+            | Self::BibliographyNotFound { .. }
             | Self::MathNotFound { .. }
             | Self::ContentControlNotFound { .. }
             | Self::NumberingNotFound { .. }

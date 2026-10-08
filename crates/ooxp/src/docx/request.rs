@@ -60,6 +60,12 @@ pub struct InspectScope {
     pub indexes: bool,
     /// 为 true 时列出 XE 索引项。
     pub index_entries: bool,
+    /// 为 true 时列出书目源。
+    pub sources: bool,
+    /// 为 true 时列出 CITATION。
+    pub citations: bool,
+    /// 为 true 时列出 BIBLIOGRAPHY 块。
+    pub bibliographies: bool,
     /// 为 true 时列出公式。
     pub maths: bool,
     /// 为 true 时列出内容控件。
@@ -734,6 +740,56 @@ pub struct DeleteIndexEntryOp {
 }
 
 #[derive(Debug, Clone)]
+pub struct InsertSourceOp {
+    pub tag: String,
+    pub source_type: String,
+    pub title: String,
+    pub year: Option<String>,
+    pub last: Option<String>,
+    pub first: Option<String>,
+    pub city: Option<String>,
+    pub publisher: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct DeleteSourceOp {
+    pub id: String,
+    pub n: usize,
+}
+
+#[derive(Debug, Clone)]
+pub struct InsertCitationOp {
+    pub id: String,
+    pub para: ParaTarget,
+    pub tag: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct DeleteCitationOp {
+    pub id: String,
+    pub n: usize,
+}
+
+#[derive(Debug, Clone)]
+pub enum InsertBibliographyPlace {
+    After(para::BodyPara),
+    EndOfDocument,
+}
+
+#[derive(Debug, Clone)]
+pub struct InsertBibliographyOp {
+    pub id: String,
+    pub place: InsertBibliographyPlace,
+    pub instr: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct DeleteBibliographyOp {
+    pub id: String,
+    pub n: usize,
+}
+
+#[derive(Debug, Clone)]
 pub enum InsertMathPlace {
     After(ParaTarget),
     EndOfDocument,
@@ -814,6 +870,12 @@ pub enum DocxOp {
     DeleteIndex(DeleteIndexOp),
     InsertIndexEntry(InsertIndexEntryOp),
     DeleteIndexEntry(DeleteIndexEntryOp),
+    InsertSource(InsertSourceOp),
+    DeleteSource(DeleteSourceOp),
+    InsertCitation(InsertCitationOp),
+    DeleteCitation(DeleteCitationOp),
+    InsertBibliography(InsertBibliographyOp),
+    DeleteBibliography(DeleteBibliographyOp),
     InsertMath(InsertMathOp),
     SetMath(SetMathOp),
     DeleteMath(DeleteMathOp),
@@ -965,6 +1027,9 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
             "crossRefs",
             "indexes",
             "indexEntries",
+            "sources",
+            "citations",
+            "bibliographies",
             "maths",
             "contentControls",
             "numbering",
@@ -993,6 +1058,9 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
     let cross_refs = parse_bool_field(obj.get("crossRefs"), "crossRefs")?;
     let indexes = parse_bool_field(obj.get("indexes"), "indexes")?;
     let index_entries = parse_bool_field(obj.get("indexEntries"), "indexEntries")?;
+    let sources = parse_bool_field(obj.get("sources"), "sources")?;
+    let citations = parse_bool_field(obj.get("citations"), "citations")?;
+    let bibliographies = parse_bool_field(obj.get("bibliographies"), "bibliographies")?;
     let maths = parse_bool_field(obj.get("maths"), "maths")?;
     let content_controls = parse_bool_field(obj.get("contentControls"), "contentControls")?;
     let numbering = parse_bool_field(obj.get("numbering"), "numbering")?;
@@ -1031,6 +1099,9 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
                 && !obj.contains_key("crossRefs")
                 && !obj.contains_key("indexes")
                 && !obj.contains_key("indexEntries")
+                && !obj.contains_key("sources")
+                && !obj.contains_key("citations")
+                && !obj.contains_key("bibliographies")
                 && !obj.contains_key("maths")
                 && !obj.contains_key("contentControls")
                 && !obj.contains_key("numbering")
@@ -1062,6 +1133,9 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
                 cross_refs,
                 indexes,
                 index_entries,
+                sources,
+                citations,
+                bibliographies,
                 maths,
                 content_controls,
                 numbering,
@@ -1130,6 +1204,9 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
                 cross_refs,
                 indexes,
                 index_entries,
+                sources,
+                citations,
+                bibliographies,
                 maths,
                 content_controls,
                 numbering,
@@ -1315,6 +1392,16 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<DocxOp>, Error> {
             "deleteIndexEntry" => {
                 out.push(DocxOp::DeleteIndexEntry(parse_delete_index_entry(obj, i)?))
             }
+            "insertSource" => out.push(DocxOp::InsertSource(parse_insert_source(obj, i)?)),
+            "deleteSource" => out.push(DocxOp::DeleteSource(parse_delete_source(obj, i)?)),
+            "insertCitation" => out.push(DocxOp::InsertCitation(parse_insert_citation(obj, i)?)),
+            "deleteCitation" => out.push(DocxOp::DeleteCitation(parse_delete_citation(obj, i)?)),
+            "insertBibliography" => out.push(DocxOp::InsertBibliography(
+                parse_insert_bibliography(obj, i)?,
+            )),
+            "deleteBibliography" => out.push(DocxOp::DeleteBibliography(
+                parse_delete_bibliography(obj, i)?,
+            )),
             "insertMath" => out.push(DocxOp::InsertMath(parse_insert_math(obj, i)?)),
             "setMath" => out.push(DocxOp::SetMath(parse_set_math(obj, i)?)),
             "deleteMath" => out.push(DocxOp::DeleteMath(parse_delete_math(obj, i)?)),
@@ -2121,6 +2208,234 @@ fn parse_delete_index_entry(
     Ok(DeleteIndexEntryOp { id, n })
 }
 
+fn parse_insert_source(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<InsertSourceOp, Error> {
+    deny_keys(
+        obj,
+        i,
+        &[
+            "op",
+            "id",
+            "tag",
+            "sourceType",
+            "title",
+            "year",
+            "last",
+            "first",
+            "city",
+            "publisher",
+        ],
+    )?;
+    let id = require_op_id(obj, i)?;
+    if id != "docx:document" {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::InsertSourceNeedsDocument,
+            },
+            format!("ops[{i}].id"),
+        ));
+    }
+    let tag = require_string_field(obj, i, "insertSource", "tag")?;
+    if super::biblio::tag_invalid(&tag) {
+        return Err(Error::with_path(
+            ErrorKind::InvalidSourceTag,
+            format!("ops[{i}].tag"),
+        ));
+    }
+    let source_type = match obj.get("sourceType") {
+        None => super::biblio::DEFAULT_SOURCE_TYPE.to_string(),
+        Some(Value::String(s)) => {
+            if !super::biblio::source_type_ok(s) {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidSourceType,
+                    format!("ops[{i}].sourceType"),
+                ));
+            }
+            s.clone()
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "sourceType".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].sourceType"),
+            ));
+        }
+    };
+    let title = require_string_field(obj, i, "insertSource", "title")?;
+    if title.is_empty() || title.chars().all(char::is_whitespace) {
+        return Err(Error::with_path(
+            ErrorKind::EmptySourceTitle,
+            format!("ops[{i}].title"),
+        ));
+    }
+    Ok(InsertSourceOp {
+        tag,
+        source_type,
+        title,
+        year: optional_string(obj, i, "year")?,
+        last: optional_string(obj, i, "last")?,
+        first: optional_string(obj, i, "first")?,
+        city: optional_string(obj, i, "city")?,
+        publisher: optional_string(obj, i, "publisher")?,
+    })
+}
+
+fn parse_delete_source(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<DeleteSourceOp, Error> {
+    deny_keys(obj, i, &["op", "id"])?;
+    let id = require_op_id(obj, i)?;
+    let n = parse_source_id(&id, i)?;
+    Ok(DeleteSourceOp { id, n })
+}
+
+fn parse_insert_citation(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<InsertCitationOp, Error> {
+    deny_keys(obj, i, &["op", "id", "tag"])?;
+    let id = require_op_id(obj, i)?;
+    let para = parse_story_para_at(
+        &id,
+        &format!("ops[{i}].id"),
+        IdReason::InsertCitationNeedsPara,
+    )?;
+    let tag = require_string_field(obj, i, "insertCitation", "tag")?;
+    if super::biblio::tag_invalid(&tag) {
+        return Err(Error::with_path(
+            ErrorKind::InvalidCitationTag,
+            format!("ops[{i}].tag"),
+        ));
+    }
+    Ok(InsertCitationOp { id, para, tag })
+}
+
+fn parse_delete_citation(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<DeleteCitationOp, Error> {
+    deny_keys(obj, i, &["op", "id"])?;
+    let id = require_op_id(obj, i)?;
+    let n = parse_cite_id(&id, i)?;
+    Ok(DeleteCitationOp { id, n })
+}
+
+fn parse_insert_bibliography(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<InsertBibliographyOp, Error> {
+    deny_keys(obj, i, &["op", "id", "instr"])?;
+    let id = require_op_id(obj, i)?;
+    let instr = match obj.get("instr") {
+        None => super::field::default_bibliography_instr().to_string(),
+        Some(Value::String(s)) => {
+            if s.trim().is_empty() {
+                return Err(Error::with_path(
+                    ErrorKind::EmptyFieldInstr,
+                    format!("ops[{i}].instr"),
+                ));
+            }
+            if !super::field::instr_is_bibliography(s) {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidBibliographyInstr,
+                    format!("ops[{i}].instr"),
+                ));
+            }
+            s.clone()
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "instr".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].instr"),
+            ));
+        }
+    };
+    let path = format!("ops[{i}].id");
+    let place = if id == "docx:document" {
+        InsertBibliographyPlace::EndOfDocument
+    } else {
+        match para::parse_para_id_at(&id, &path)? {
+            ParaTarget::Body(p) => InsertBibliographyPlace::After(p),
+            _ => {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidId {
+                        reason: IdReason::InsertBibliographyNeedsBodyPara,
+                    },
+                    path,
+                ));
+            }
+        }
+    };
+    Ok(InsertBibliographyOp { id, place, instr })
+}
+
+fn parse_delete_bibliography(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<DeleteBibliographyOp, Error> {
+    deny_keys(obj, i, &["op", "id"])?;
+    let id = require_op_id(obj, i)?;
+    let n = parse_biblio_id(&id, i)?;
+    Ok(DeleteBibliographyOp { id, n })
+}
+
+fn optional_string(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+    field: &str,
+) -> Result<Option<String>, Error> {
+    match obj.get(field) {
+        None => Ok(None),
+        Some(Value::String(s)) => {
+            if s.is_empty() {
+                Ok(None)
+            } else {
+                Ok(Some(s.clone()))
+            }
+        }
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::String,
+            },
+            format!("ops[{i}].{field}"),
+        )),
+    }
+}
+
+fn require_string_field(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+    op: &str,
+    field: &str,
+) -> Result<String, Error> {
+    match obj.get(field) {
+        Some(Value::String(s)) => Ok(s.clone()),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::String,
+            },
+            format!("ops[{i}].{field}"),
+        )),
+        None => Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: op.into(),
+                field: field.into(),
+            },
+            format!("ops[{i}].{field}"),
+        )),
+    }
+}
+
 fn parse_insert_math(
     obj: &serde_json::Map<String, Value>,
     i: usize,
@@ -2592,6 +2907,93 @@ fn parse_xe_id(id: &str, op_index: usize) -> Result<usize, Error> {
         return Err(Error::with_path(
             ErrorKind::InvalidId {
                 reason: IdReason::XeIndexFromOne,
+            },
+            path,
+        ));
+    }
+    Ok(n)
+}
+
+fn parse_source_id(id: &str, op_index: usize) -> Result<usize, Error> {
+    let path = format!("ops[{op_index}].id");
+    let rest = id.strip_prefix("source:").ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::SourcePrefix,
+            },
+            path.clone(),
+        )
+    })?;
+    let n: usize = rest.parse().map_err(|_| {
+        Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::SourceIndexNotInt,
+            },
+            path.clone(),
+        )
+    })?;
+    if n < 1 {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::SourceIndexFromOne,
+            },
+            path,
+        ));
+    }
+    Ok(n)
+}
+
+fn parse_cite_id(id: &str, op_index: usize) -> Result<usize, Error> {
+    let path = format!("ops[{op_index}].id");
+    let rest = id.strip_prefix("cite:").ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::CitePrefix,
+            },
+            path.clone(),
+        )
+    })?;
+    let n: usize = rest.parse().map_err(|_| {
+        Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::CiteIndexNotInt,
+            },
+            path.clone(),
+        )
+    })?;
+    if n < 1 {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::CiteIndexFromOne,
+            },
+            path,
+        ));
+    }
+    Ok(n)
+}
+
+fn parse_biblio_id(id: &str, op_index: usize) -> Result<usize, Error> {
+    let path = format!("ops[{op_index}].id");
+    let rest = id.strip_prefix("biblio:").ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::BiblioPrefix,
+            },
+            path.clone(),
+        )
+    })?;
+    let n: usize = rest.parse().map_err(|_| {
+        Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::BiblioIndexNotInt,
+            },
+            path.clone(),
+        )
+    })?;
+    if n < 1 {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::BiblioIndexFromOne,
             },
             path,
         ));

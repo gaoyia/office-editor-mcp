@@ -1637,6 +1637,146 @@
         }
       }
     },
+    "insertSourceOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "tag",
+        "title"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "insertSource"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "tag": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sourceType": {
+          "type": "string",
+          "minLength": 1
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "year": {
+          "type": "string"
+        },
+        "last": {
+          "type": "string"
+        },
+        "first": {
+          "type": "string"
+        },
+        "city": {
+          "type": "string"
+        },
+        "publisher": {
+          "type": "string"
+        }
+      }
+    },
+    "deleteSourceOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "deleteSource"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "insertCitationOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "tag"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "insertCitation"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "tag": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "deleteCitationOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "deleteCitation"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "insertBibliographyOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "insertBibliography"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "instr": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "deleteBibliographyOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "deleteBibliography"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
     "insertMathOp": {
       "type": "object",
       "required": [

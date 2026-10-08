@@ -604,6 +604,22 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::InsertIndexEntryNeedsPara => {
                 "insertIndexEntry 的 id 必须是正文或页眉页脚段落 id".into()
             }
+            IdReason::SourcePrefix => "书目源 id 必须是 source:N".into(),
+            IdReason::SourceIndexNotInt => "source 序号必须是正整数".into(),
+            IdReason::SourceIndexFromOne => "source 序号从 1 起".into(),
+            IdReason::InsertSourceNeedsDocument => "insertSource 的 id 必须是 docx:document".into(),
+            IdReason::CitePrefix => "引文 id 必须是 cite:N".into(),
+            IdReason::CiteIndexNotInt => "cite 序号必须是正整数".into(),
+            IdReason::CiteIndexFromOne => "cite 序号从 1 起".into(),
+            IdReason::InsertCitationNeedsPara => {
+                "insertCitation 的 id 必须是正文或页眉页脚段落 id".into()
+            }
+            IdReason::BiblioPrefix => "书目块 id 必须是 biblio:N".into(),
+            IdReason::BiblioIndexNotInt => "biblio 序号必须是正整数".into(),
+            IdReason::BiblioIndexFromOne => "biblio 序号从 1 起".into(),
+            IdReason::InsertBibliographyNeedsBodyPara => {
+                "insertBibliography 的 id 必须是 w:body 的直接子段落，或 docx:document".into()
+            }
             IdReason::MathPrefix => {
                 "公式 id 必须是 math:N，或页眉页脚容器 id 加上 /math:N".into()
             }
@@ -694,6 +710,16 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::InvalidIndexEntry => {
             "entry 不能为空、不能只含空白、也不能含英文双引号".into()
         }
+        ErrorKind::InvalidSourceTag => {
+            "tag 不能为空、不能含空白、也不能含英文双引号".into()
+        }
+        ErrorKind::DuplicateSourceTag => "tag 不能与已有书目源重名".into(),
+        ErrorKind::InvalidSourceType => "sourceType 不是本期认的 ST_SourceType".into(),
+        ErrorKind::EmptySourceTitle => "title 不能为空".into(),
+        ErrorKind::InvalidCitationTag => {
+            "tag 不能为空、不能含空白、也不能含英文双引号".into()
+        }
+        ErrorKind::InvalidBibliographyInstr => "instr 必须以 BIBLIOGRAPHY 开头".into(),
         ErrorKind::CommentNotFound { id } => format!("找不到批注：{id}"),
         ErrorKind::NeedCommentParaId => {
             "批注最后一段必须有 w14:paraId，才能写 commentsExtended".into()
@@ -1047,6 +1073,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::CrossRefNotFound { id } => format!("找不到交叉引用：{id}"),
         ErrorKind::IndexNotFound { id } => format!("找不到索引：{id}"),
         ErrorKind::IndexEntryNotFound { id } => format!("找不到索引项：{id}"),
+        ErrorKind::SourceNotFound { id } => format!("找不到书目源：{id}"),
+        ErrorKind::CitationNotFound { id } => format!("找不到引文：{id}"),
+        ErrorKind::BibliographyNotFound { id } => format!("找不到书目：{id}"),
         ErrorKind::MathNotFound { id } => format!("找不到公式：{id}"),
         ErrorKind::ContentControlNotFound { id } => format!("找不到内容控件：{id}"),
         ErrorKind::SetParaTextHasField => "不能改带域的段落的可见文本".into(),

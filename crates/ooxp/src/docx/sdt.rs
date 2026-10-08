@@ -476,7 +476,7 @@ fn list_item_el(parent: &Element, text: &str) -> Element {
     e
 }
 
-fn next_sdt_id(root: &Element) -> i64 {
+pub(crate) fn next_sdt_id(root: &Element) -> i64 {
     let mut used = Vec::new();
     collect_xml_ids(root, &mut used);
     let mut n = 1i64;
