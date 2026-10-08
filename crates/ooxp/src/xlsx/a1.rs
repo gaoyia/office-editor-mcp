@@ -211,6 +211,14 @@ pub fn format_range(start: CellRef, end: CellRef) -> String {
     }
 }
 
+/// 闭区间包含：`inner` 的四角都落在 `outer` 内。两端须已规范化。
+pub fn range_contains(outer: (CellRef, CellRef), inner: (CellRef, CellRef)) -> bool {
+    inner.0.col >= outer.0.col
+        && inner.0.row >= outer.0.row
+        && inner.1.col <= outer.1.col
+        && inner.1.row <= outer.1.row
+}
+
 /// 相对引用按行列差平移；绝对引用不动。出界返回 `None`。
 pub fn shift_abs(c: AbsCellRef, dcol: i64, drow: i64) -> Option<AbsCellRef> {
     let col = if c.col_abs {

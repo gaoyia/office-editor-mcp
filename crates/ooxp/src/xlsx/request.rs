@@ -829,6 +829,22 @@ pub struct SetAutoFilterOp {
 }
 
 #[derive(Debug, Clone)]
+pub struct SortConditionOp {
+    pub refer: String,
+    pub descending: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetSortStateOp {
+    pub sheet: String,
+    /// `None` 删除工作表级排序；`Some` 为已规范化的 A1。
+    pub refer: Option<String>,
+    pub case_sensitive: bool,
+    pub column_sort: bool,
+    pub columns: Vec<SortConditionOp>,
+}
+
+#[derive(Debug, Clone)]
 pub struct GroupRowsOp {
     pub sheet: String,
     pub row: u32,
@@ -1587,6 +1603,7 @@ pub enum XlsxOp {
     SetPrintSetup(SetPrintSetupOp),
     SetSheetView(SetSheetViewOp),
     SetAutoFilter(SetAutoFilterOp),
+    SetSortState(SetSortStateOp),
     InsertCustomView(custom_view::InsertCustomViewOp),
     DeleteCustomView(custom_view::DeleteCustomViewOp),
     ShowCustomView(custom_view::ShowCustomViewOp),
@@ -1858,6 +1875,7 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<XlsxOp>, Error> {
             "setPrintSetup" => XlsxOp::SetPrintSetup(parse_set_print_setup(obj, i)?),
             "setSheetView" => XlsxOp::SetSheetView(parse_set_sheet_view(obj, i)?),
             "setAutoFilter" => XlsxOp::SetAutoFilter(parse_set_auto_filter(obj, i)?),
+            "setSortState" => XlsxOp::SetSortState(parse_set_sort_state(obj, i)?),
             "insertCustomView" => XlsxOp::InsertCustomView(parse_insert_custom_view(obj, i)?),
             "deleteCustomView" => XlsxOp::DeleteCustomView(parse_delete_custom_view(obj, i)?),
             "showCustomView" => XlsxOp::ShowCustomView(parse_show_custom_view(obj, i)?),
@@ -4311,6 +4329,154 @@ fn parse_set_auto_filter(
         }
     };
     Ok(SetAutoFilterOp { sheet, refer })
+}
+
+fn parse_set_sort_state(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<SetSortStateOp, Error> {
+    deny_keys(
+        obj,
+        i,
+        &["op", "id", "ref", "caseSensitive", "columnSort", "columns"],
+    )?;
+    let id = require_id(obj, i)?;
+    let sheet = parse_sheet_only_id(&id, i, "id", IdReason::SheetOpNeedsSheet)?;
+    let refer = match obj.get("ref") {
+        None => {
+            return Err(Error::with_path(
+                ErrorKind::NeedSetSortStateField,
+                format!("ops[{i}]"),
+            ));
+        }
+        Some(Value::Null) => None,
+        Some(Value::String(s)) => {
+            if s.trim().is_empty() {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidSortState {
+                        field: "ref".into(),
+                    },
+                    format!("ops[{i}].ref"),
+                ));
+            }
+            Some(s.clone())
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "ref".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].ref"),
+            ));
+        }
+    };
+    let Some(raw_ref) = refer.as_deref() else {
+        for name in ["caseSensitive", "columnSort", "columns"] {
+            if obj.contains_key(name) {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidSortState { field: name.into() },
+                    format!("ops[{i}].{name}"),
+                ));
+            }
+        }
+        return Ok(SetSortStateOp {
+            sheet,
+            refer: None,
+            case_sensitive: false,
+            column_sort: false,
+            columns: Vec::new(),
+        });
+    };
+    let (outer_start, outer_end) =
+        a1::parse_range(raw_ref).map_err(|e| e.at(format!("ops[{i}].ref")))?;
+    let formatted = a1::format_range(outer_start, outer_end);
+    let case_sensitive = parse_opt_bool(obj, i, "caseSensitive")?.unwrap_or(false);
+    let column_sort = parse_opt_bool(obj, i, "columnSort")?.unwrap_or(false);
+    let columns_v = obj
+        .get("columns")
+        .ok_or_else(|| Error::with_path(ErrorKind::NeedSetSortStateField, format!("ops[{i}]")))?;
+    let arr = columns_v.as_array().ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::WrongType {
+                field: "columns".into(),
+                expected: TypeName::Array,
+            },
+            format!("ops[{i}].columns"),
+        )
+    })?;
+    if arr.is_empty() {
+        return Err(Error::with_path(
+            ErrorKind::EmptyArray {
+                field: "columns".into(),
+            },
+            format!("ops[{i}].columns"),
+        ));
+    }
+    let mut columns = Vec::new();
+    for (j, item) in arr.iter().enumerate() {
+        let item_obj = item.as_object().ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::WrongType {
+                    field: format!("columns[{j}]"),
+                    expected: TypeName::Object,
+                },
+                format!("ops[{i}].columns[{j}]"),
+            )
+        })?;
+        deny_keys_at(
+            item_obj,
+            i,
+            &format!("columns[{j}]"),
+            &["ref", "descending"],
+        )?;
+        let raw = item_obj
+            .get("ref")
+            .and_then(Value::as_str)
+            .filter(|s| !s.trim().is_empty())
+            .ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::InvalidSortState {
+                        field: "ref".into(),
+                    },
+                    format!("ops[{i}].columns[{j}].ref"),
+                )
+            })?;
+        let (start, end) =
+            a1::parse_range(raw).map_err(|e| e.at(format!("ops[{i}].columns[{j}].ref")))?;
+        if !a1::range_contains((outer_start, outer_end), (start, end)) {
+            return Err(Error::with_path(
+                ErrorKind::InvalidSortState {
+                    field: "ref".into(),
+                },
+                format!("ops[{i}].columns[{j}].ref"),
+            ));
+        }
+        let descending = match item_obj.get("descending") {
+            None => false,
+            Some(Value::Bool(b)) => *b,
+            Some(_) => {
+                return Err(Error::with_path(
+                    ErrorKind::WrongType {
+                        field: "descending".into(),
+                        expected: TypeName::Boolean,
+                    },
+                    format!("ops[{i}].columns[{j}].descending"),
+                ));
+            }
+        };
+        columns.push(SortConditionOp {
+            refer: a1::format_range(start, end),
+            descending,
+        });
+    }
+    Ok(SetSortStateOp {
+        sheet,
+        refer: Some(formatted),
+        case_sensitive,
+        column_sort,
+        columns,
+    })
 }
 
 fn parse_group_rows(obj: &serde_json::Map<String, Value>, i: usize) -> Result<GroupRowsOp, Error> {

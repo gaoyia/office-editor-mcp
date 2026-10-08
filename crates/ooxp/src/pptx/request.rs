@@ -1314,6 +1314,7 @@ fn is_foreign_op(op_name: &str) -> bool {
             | "setPrintSetup"
             | "setSheetView"
             | "setAutoFilter"
+            | "setSortState"
             | "groupRows"
             | "ungroupRows"
             | "groupCols"

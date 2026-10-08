@@ -156,6 +156,10 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
                 "autoFilter".into(),
                 super::view::inspect_filter(&sheet_doc.root),
             );
+            obj.insert(
+                "sortState".into(),
+                super::view::inspect_sort(&sheet_doc.root),
+            );
             obj.insert("outline".into(), super::outline::inspect(&sheet_doc.root));
             obj.insert(
                 "sheetProtection".into(),

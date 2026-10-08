@@ -1303,6 +1303,10 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::InvalidAutoFilter { field } => {
             format!("{field} is not a valid setAutoFilter value")
         }
+        ErrorKind::NeedSetSortStateField => "setSortState requires ref".into(),
+        ErrorKind::InvalidSortState { field } => {
+            format!("{field} is not a valid setSortState value")
+        }
         ErrorKind::NeedSetOutlineField => {
             "setOutline requires a field besides op and id".into()
         }

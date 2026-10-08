@@ -89,6 +89,7 @@ $order = @(
     'xlsx-defined-name'
     'xlsx-print'
     'xlsx-view'
+    'xlsx-sort'
     'xlsx-comments'
     'xlsx-shapes'
     'xlsx-shapes-geom'

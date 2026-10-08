@@ -164,6 +164,7 @@ fn summary_without_scope() {
             "print",
             "view",
             "autoFilter",
+            "sortState",
             "outline",
             "sheetProtection"
         ]

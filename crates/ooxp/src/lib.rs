@@ -838,6 +838,7 @@ mod tests {
                 "print",
                 "view",
                 "autoFilter",
+                "sortState",
                 "outline",
                 "sheetProtection",
                 "truncated",

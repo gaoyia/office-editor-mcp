@@ -1118,6 +1118,10 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::InvalidAutoFilter { field } => {
             format!("工作表筛选的 {field} 不合法")
         }
+        ErrorKind::NeedSetSortStateField => "setSortState 必须给 ref".into(),
+        ErrorKind::InvalidSortState { field } => {
+            format!("工作表排序的 {field} 不合法")
+        }
         ErrorKind::NeedSetOutlineField => {
             "setOutline 除 op 与 id 外至少要给一个字段".into()
         }

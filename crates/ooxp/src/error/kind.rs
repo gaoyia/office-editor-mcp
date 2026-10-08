@@ -899,6 +899,10 @@ define_error_kinds! {
     InvalidAutoFilter { field: String } => {
         vec![Self::InvalidAutoFilter { field: "ref".into() }]
     },
+    NeedSetSortStateField => vec![Self::NeedSetSortStateField],
+    InvalidSortState { field: String } => {
+        vec![Self::InvalidSortState { field: "ref".into() }]
+    },
     NeedSetOutlineField => vec![Self::NeedSetOutlineField],
     InvalidOutline { field: String } => {
         vec![Self::InvalidOutline { field: "collapsed".into() }]
@@ -1427,6 +1431,8 @@ impl ErrorKind {
             | Self::InvalidSheetView { .. }
             | Self::NeedSetAutoFilterField
             | Self::InvalidAutoFilter { .. }
+            | Self::NeedSetSortStateField
+            | Self::InvalidSortState { .. }
             | Self::NeedSetOutlineField
             | Self::InvalidOutline { .. }
             | Self::OutlineLevelMax

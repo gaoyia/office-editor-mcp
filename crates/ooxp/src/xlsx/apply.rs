@@ -435,6 +435,18 @@ pub fn apply(bytes: &[u8], ops: &[XlsxOp]) -> Result<Vec<u8>, Error> {
                 let doc = dirty_of(&mut dirty_sheets, &part);
                 super::view::apply_filter(&mut doc.root, kind, op, overlap, i)?;
             }
+            XlsxOp::SetSortState(op) => {
+                let (part, kind) = require_named_sheet(&sheet_index, &op.sheet, i)?;
+                if kind == "dialogsheet" || kind == "macrosheet" {
+                    return Err(Error::with_path(
+                        ErrorKind::DialogOrMacroSheet,
+                        format!("ops[{i}].id"),
+                    ));
+                }
+                load_dirty(&pkg, &mut dirty_sheets, &part, false)?;
+                let doc = dirty_of(&mut dirty_sheets, &part);
+                super::view::apply_sort(&mut doc.root, kind, op, i)?;
+            }
             XlsxOp::InsertCustomView(op) => {
                 load_content_sheets(&pkg, &sheet_index, &mut dirty_sheets)?;
                 custom_view::insert(&mut wb_doc.root, &sheet_index, &mut dirty_sheets, op, i)?;

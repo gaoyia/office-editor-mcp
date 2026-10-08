@@ -543,6 +543,9 @@
                 "$ref": "xlsx.schema.json#/$defs/setAutoFilterOp"
               },
               {
+                "$ref": "xlsx.schema.json#/$defs/setSortStateOp"
+              },
+              {
                 "$ref": "xlsx.schema.json#/$defs/insertCustomViewOp"
               },
               {

@@ -1,4 +1,4 @@
-//! 工作表视图与工作表级筛选：inspect 摘要，apply 写 sheetViews / autoFilter。
+//! 工作表视图、工作表级筛选与排序：inspect 摘要，apply 写 sheetViews / autoFilter / sortState。
 
 use serde_json::{json, Map, Value};
 
@@ -7,7 +7,7 @@ use crate::xml::{Element, Node};
 
 use super::a1::{self, CellRef};
 use super::layout;
-use super::request::{SetAutoFilterOp, SetSheetViewOp};
+use super::request::{SetAutoFilterOp, SetSheetViewOp, SetSortStateOp};
 
 const DEF_ZOOM: u32 = 100;
 const DEF_CELL: &str = "A1";
@@ -42,6 +42,48 @@ pub(crate) fn inspect_filter(sheet: &Element) -> Value {
         },
         _ => Value::Null,
     }
+}
+
+pub(crate) fn inspect_sort(sheet: &Element) -> Value {
+    let Some(st) = sheet.child_by_local("sortState") else {
+        return Value::Null;
+    };
+    let refer = match st.attr("ref") {
+        Some(raw) if !raw.trim().is_empty() => match a1::parse_range(raw) {
+            Ok((s, e)) => json!(a1::format_range(s, e)),
+            Err(_) => json!(raw),
+        },
+        _ => Value::Null,
+    };
+    let mut columns = Vec::new();
+    for cond in st.element_children() {
+        if cond.local_name() != "sortCondition" {
+            continue;
+        }
+        let Some(raw) = cond.attr("ref") else {
+            continue;
+        };
+        let cond_ref = match a1::parse_range(raw) {
+            Ok((s, e)) => a1::format_range(s, e),
+            Err(_) => raw.to_string(),
+        };
+        let mut item = Map::new();
+        item.insert("ref".into(), json!(cond_ref));
+        item.insert(
+            "descending".into(),
+            json!(xml_attr_true(cond, "descending")),
+        );
+        columns.push(Value::Object(item));
+    }
+    let mut obj = Map::new();
+    obj.insert("ref".into(), refer);
+    obj.insert(
+        "caseSensitive".into(),
+        json!(xml_attr_true(st, "caseSensitive")),
+    );
+    obj.insert("columnSort".into(), json!(xml_attr_true(st, "columnSort")));
+    obj.insert("columns".into(), Value::Array(columns));
+    Value::Object(obj)
 }
 
 pub(crate) fn apply_view(
@@ -125,6 +167,45 @@ pub(crate) fn apply_filter(
             }
         }
     }
+    Ok(())
+}
+
+pub(crate) fn apply_sort(
+    sheet: &mut Element,
+    kind: &str,
+    op: &SetSortStateOp,
+    i: usize,
+) -> Result<(), Error> {
+    if kind != "worksheet" {
+        return Err(Error::with_path(
+            ErrorKind::InvalidSortState {
+                field: "ref".into(),
+            },
+            format!("ops[{i}].ref"),
+        ));
+    }
+    sheet.children.retain(|n| match n {
+        Node::Element(e) => e.local_name() != "sortState",
+        _ => true,
+    });
+    let Some(raw) = op.refer.as_deref() else {
+        return Ok(());
+    };
+    let mut el = Element::new("sortState").with_attr("ref", raw);
+    if op.case_sensitive {
+        el = el.with_attr("caseSensitive", "1");
+    }
+    if op.column_sort {
+        el = el.with_attr("columnSort", "1");
+    }
+    for cond in &op.columns {
+        let mut child = Element::new("sortCondition").with_attr("ref", cond.refer.as_str());
+        if cond.descending {
+            child = child.with_attr("descending", "1");
+        }
+        el.push_element(child);
+    }
+    layout::insert_child_ordered(sheet, el, "sortState");
     Ok(())
 }
 
@@ -405,4 +486,11 @@ fn set_active_cell(view: &mut Element, cell: &str) {
 
 fn parse_filter_range(raw: &str, i: usize) -> Result<(CellRef, CellRef), Error> {
     a1::parse_range(raw).map_err(|e| e.at(format!("ops[{i}].ref")))
+}
+
+fn xml_attr_true(el: &Element, name: &str) -> bool {
+    matches!(
+        el.attr(name).map(str::trim),
+        Some("1" | "true" | "TRUE" | "on")
+    )
 }

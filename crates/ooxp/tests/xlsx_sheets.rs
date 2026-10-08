@@ -139,6 +139,7 @@ fn inspect_lists_hidden() {
             "print",
             "view",
             "autoFilter",
+            "sortState",
             "outline",
             "sheetProtection"
         ]

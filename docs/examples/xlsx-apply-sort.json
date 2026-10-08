@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "C:\\data\\book.xlsx",
+  "output": "C:\\data\\book.sort.xlsx",
+  "ops": [
+    {
+      "op": "setSortState",
+      "id": "sheet:Sheet1",
+      "ref": "A1:A3",
+      "columns": [
+        { "ref": "A1:A3", "descending": true }
+      ]
+    }
+  ]
+}
