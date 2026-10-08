@@ -26,15 +26,22 @@ use super::smartart;
 use super::style;
 use super::table;
 use super::validation;
-use super::{REL_CHARTSHEET, REL_DIALOGSHEET, REL_SHARED_STRINGS};
+use super::{
+    REL_CHARTSHEET, REL_DIALOGSHEET, REL_INTL_MACROSHEET, REL_MACROSHEET, REL_SHARED_STRINGS,
+};
 
-/// 按 workbook 关系 Type 判定表种类。`/macrosheet` 与 `/xlMacrosheet` 都算宏表。
+/// 按 workbook 关系 Type 判定表种类。`/xlMacrosheet` 与 `/xlIntlMacrosheet` 都算宏表。
 pub(crate) fn sheet_kind(rel_type: &str) -> &'static str {
     if rel_type == REL_CHARTSHEET || rel_type.ends_with("/chartsheet") {
         "chartsheet"
     } else if rel_type == REL_DIALOGSHEET || rel_type.ends_with("/dialogsheet") {
         "dialogsheet"
-    } else if rel_type.ends_with("/macrosheet") || rel_type.ends_with("/xlMacrosheet") {
+    } else if rel_type == REL_MACROSHEET
+        || rel_type == REL_INTL_MACROSHEET
+        || rel_type.ends_with("/macrosheet")
+        || rel_type.ends_with("/xlMacrosheet")
+        || rel_type.ends_with("/xlIntlMacrosheet")
+    {
         "macrosheet"
     } else {
         "worksheet"

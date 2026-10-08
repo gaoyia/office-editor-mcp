@@ -97,6 +97,28 @@ chartsheet 关系 Type：
 
 `http://schemas.openxmlformats.org/officeDocument/2006/relationships/chartsheet`
 
+dialogsheet 关系 Type（inspect 认，create 不写）：
+
+`http://schemas.openxmlformats.org/officeDocument/2006/relationships/dialogsheet`
+
+常见路径 `/xl/dialogsheets/sheetN.xml`。CT：
+
+`application/vnd.openxmlformats-officedocument.spreadsheetml.dialogsheet+xml`
+
+macrosheet 关系 Type（inspect 认，create 不写；国际宏表不另开 `kind`）：
+
+`http://schemas.microsoft.com/office/2006/relationships/xlMacrosheet`
+
+`http://schemas.microsoft.com/office/2006/relationships/xlIntlMacrosheet`
+
+常见路径 `/xl/macrosheets/…`。CT：
+
+`application/vnd.ms-excel.macrosheet+xml`
+
+`application/vnd.ms-excel.intlmacrosheet+xml`
+
+Excel 16.0 另存 `.xlsx` 会丢掉宏表，对话框表能留下。本仓库不打开 `.xlsm`。
+
 SpreadsheetML 主命名空间：
 
 `http://schemas.openxmlformats.org/spreadsheetml/2006/main`

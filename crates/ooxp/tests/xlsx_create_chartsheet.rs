@@ -203,6 +203,10 @@ fn create_rejects_dialogsheet_and_bad_data_sheet() {
     assert_eq!(err.code(), ErrorCode::InvalidField);
     assert_eq!(err.field_path(), Some("workbook.sheets[0].kind"));
 
+    let err = create_err(json!([{ "name": "Sheet1", "kind": "macrosheet" }]));
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+    assert_eq!(err.field_path(), Some("workbook.sheets[0].kind"));
+
     let err = create_err(json!([
         { "name": "Sheet1" },
         {

@@ -56,6 +56,10 @@ pub const REL_CHARTSHEET: &str =
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/chartsheet";
 pub const REL_DIALOGSHEET: &str =
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/dialogsheet";
+pub const REL_MACROSHEET: &str =
+    "http://schemas.microsoft.com/office/2006/relationships/xlMacrosheet";
+pub const REL_INTL_MACROSHEET: &str =
+    "http://schemas.microsoft.com/office/2006/relationships/xlIntlMacrosheet";
 pub const REL_STYLES: &str =
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles";
 pub const REL_SHARED_STRINGS: &str =

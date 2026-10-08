@@ -22,7 +22,7 @@ xlsx、docx、pptx 的 inspect、create、apply 已经按本文实现。docx 另
 
 另外按动作需要 `path`、`format`、`scope`、`workbook`、`document`、`presentation`、`ops`、`id`、`output` 等字段，见下文。禁止在请求里放一整棵 inspect 树来表示「把文档改成这样」。create 的 xlsx 用 `workbook`，docx 用 `document`，pptx 用 `presentation`，三者不能同时出现。
 
-`format` 取值：`xlsx`、`docx`、`pptx`。可省略，省略时从 `path` 的扩展名推断。推断不出就报 `UnsupportedFormat`。
+`format` 取值：`xlsx`、`docx`、`pptx`。不认 `.xlsm`。可省略，省略时从 `path` 的扩展名推断。推断不出就报 `UnsupportedFormat`。
 
 `path` 是本地文件系统路径。Windows 反斜杠和正斜杠都接受。
 

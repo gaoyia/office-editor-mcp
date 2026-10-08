@@ -53,19 +53,36 @@ fn apply(src: &Path, out: &Path, ops: serde_json::Value) -> Result<RunOutput, oo
 }
 
 fn inspect(path: &Path) -> serde_json::Value {
-    let RunOutput::Inspect(tree) = run(
+    inspect_with(path, None)
+}
+
+fn inspect_with(path: &Path, scope: Option<serde_json::Value>) -> serde_json::Value {
+    let mut req = json!({
+        "schemaVersion": 1,
+        "action": "inspect",
+        "path": path.to_string_lossy()
+    });
+    if let Some(scope) = scope {
+        req["scope"] = scope;
+    }
+    let RunOutput::Inspect(tree) = run(&req.to_string(), None).unwrap() else {
+        panic!("inspect 应返回树");
+    };
+    tree
+}
+
+fn inspect_err(path: &Path, scope: serde_json::Value) -> ooxp::Error {
+    run(
         &json!({
             "schemaVersion": 1,
             "action": "inspect",
-            "path": path.to_string_lossy()
+            "path": path.to_string_lossy(),
+            "scope": scope,
         })
         .to_string(),
         None,
     )
-    .unwrap() else {
-        panic!("inspect 应返回树");
-    };
-    tree
+    .unwrap_err()
 }
 
 fn object_keys(v: &serde_json::Value) -> Vec<&str> {
@@ -81,28 +98,115 @@ fn names(tree: &serde_json::Value) -> Vec<String> {
         .collect()
 }
 
-fn rewrite_part(path: &Path, name: &str, f: impl FnOnce(Vec<u8>) -> Vec<u8>) {
+fn rewrite_package(
+    path: &Path,
+    mut map: impl FnMut(&str, Vec<u8>) -> Option<(String, Vec<u8>)>,
+    extra: &[(&str, Vec<u8>)],
+) {
     let bytes = std::fs::read(path).unwrap();
     let mut zip_in = ZipArchive::new(Cursor::new(bytes)).unwrap();
     let mut out = Cursor::new(Vec::new());
-    let mut transform = Some(f);
     {
         let mut zip_out = ZipWriter::new(&mut out);
         let opt = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
         for i in 0..zip_in.len() {
             let mut file = zip_in.by_index(i).unwrap();
-            let n = file.name().to_string();
+            let n = file.name().replace('\\', "/");
             let mut data = Vec::new();
             file.read_to_end(&mut data).unwrap();
-            if n == name {
-                data = transform.take().expect("部件只应出现一次")(data);
+            if let Some((out_name, data)) = map(&n, data) {
+                zip_out.start_file(&out_name, opt).unwrap();
+                zip_out.write_all(&data).unwrap();
             }
-            zip_out.start_file(&n, opt).unwrap();
-            zip_out.write_all(&data).unwrap();
+        }
+        for (name, data) in extra {
+            zip_out.start_file(*name, opt).unwrap();
+            zip_out.write_all(data).unwrap();
         }
         zip_out.finish().unwrap();
     }
     std::fs::write(path, out.into_inner()).unwrap();
+}
+
+const REL_WORKSHEET: &str =
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet";
+const REL_DIALOGSHEET: &str =
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/dialogsheet";
+const REL_MACROSHEET: &str = "http://schemas.microsoft.com/office/2006/relationships/xlMacrosheet";
+const REL_INTL_MACROSHEET: &str =
+    "http://schemas.microsoft.com/office/2006/relationships/xlIntlMacrosheet";
+const CT_WORKSHEET: &str =
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml";
+const CT_DIALOGSHEET: &str =
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.dialogsheet+xml";
+const CT_MACROSHEET: &str = "application/vnd.ms-excel.macrosheet+xml";
+const CT_INTL_MACROSHEET: &str = "application/vnd.ms-excel.intlmacrosheet+xml";
+
+const DIALOG_XML: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<dialogsheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <sheetViews>
+    <sheetView workbookViewId="0" showRowColHeaders="0"/>
+  </sheetViews>
+  <sheetFormatPr defaultRowHeight="6.75"/>
+  <headerFooter>
+    <oddHeader>&amp;CDlg</oddHeader>
+  </headerFooter>
+  <pageMargins left="0.7" right="0.7" top="0.75" bottom="0.75" header="0.3" footer="0.3"/>
+</dialogsheet>"#;
+
+const MACRO_XML: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<xm:macrosheet xmlns:xm="http://schemas.microsoft.com/office/excel/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <sheetViews>
+    <sheetView workbookViewId="0" showFormulas="1"/>
+  </sheetViews>
+  <sheetFormatPr defaultRowHeight="15"/>
+  <sheetData/>
+  <pageMargins left="0.7" right="0.7" top="0.75" bottom="0.75" header="0.3" footer="0.3"/>
+</xm:macrosheet>"#;
+
+fn inject_special_sheet(
+    path: &Path,
+    src_part: &str,
+    dst_part: &str,
+    rel_type: &str,
+    content_type: &str,
+    xml: &str,
+) {
+    let src_target = src_part.strip_prefix("xl/").unwrap_or(src_part);
+    let dst_target = dst_part.strip_prefix("xl/").unwrap_or(dst_part);
+    let src_override = format!("/{src_part}");
+    let dst_override = format!("/{dst_part}");
+    let xml_bytes = xml.as_bytes().to_vec();
+    rewrite_package(
+        path,
+        |name, data| {
+            if name == src_part {
+                return None;
+            }
+            if name == "xl/_rels/workbook.xml.rels" {
+                let s = String::from_utf8(data).unwrap();
+                let s = s.replace(
+                    &format!("Target=\"{src_target}\""),
+                    &format!("Target=\"{dst_target}\""),
+                );
+                let s = s.replace(
+                    &format!("Type=\"{REL_WORKSHEET}\" Target=\"{dst_target}\""),
+                    &format!("Type=\"{rel_type}\" Target=\"{dst_target}\""),
+                );
+                return Some((name.to_string(), s.into_bytes()));
+            }
+            if name == "[Content_Types].xml" {
+                let s = String::from_utf8(data).unwrap();
+                let s = s.replace(
+                    &format!("PartName=\"{src_override}\" ContentType=\"{CT_WORKSHEET}\""),
+                    &format!("PartName=\"{dst_override}\" ContentType=\"{content_type}\""),
+                );
+                return Some((name.to_string(), s.into_bytes()));
+            }
+            Some((name.to_string(), data))
+        },
+        &[(dst_part, xml_bytes)],
+    );
 }
 
 #[test]
@@ -327,40 +431,120 @@ fn delete_sheet_on_chartsheet_is_invalid_id() {
 }
 
 #[test]
-fn macrosheet_kind_and_refuse_delete() {
+fn dialog_and_macrosheet_kind_and_refuse_write() {
     let src = create_book(
-        "macro",
+        "dlg-macro",
         json!([
             { "name": "Sheet1", "cells": [{ "ref": "A1", "value": 1 }] },
-            { "name": "Macro1", "cells": [{ "ref": "A1", "value": 2 }] }
+            { "name": "Dialog1", "cells": [{ "ref": "A1", "value": 2 }] },
+            { "name": "Macro1", "cells": [{ "ref": "A1", "value": 3 }] },
+            { "name": "Intl1", "cells": [{ "ref": "A1", "value": 4 }] }
         ]),
     );
-    rewrite_part(&src, "xl/_rels/workbook.xml.rels", |bytes| {
-        let s = String::from_utf8(bytes).unwrap();
-        let s = s.replace(
-            "http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet",
-            "http://schemas.microsoft.com/office/2006/relationships/xlMacrosheet",
-        );
-        // 只改 Macro1 那条：上面会把两条都改掉。按 Target 再改回 Sheet1。
-        let s = s.replacen(
-            "http://schemas.microsoft.com/office/2006/relationships/xlMacrosheet",
-            "http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet",
-            1,
-        );
-        s.into_bytes()
-    });
+    inject_special_sheet(
+        &src,
+        "xl/worksheets/sheet2.xml",
+        "xl/dialogsheets/sheet1.xml",
+        REL_DIALOGSHEET,
+        CT_DIALOGSHEET,
+        DIALOG_XML,
+    );
+    inject_special_sheet(
+        &src,
+        "xl/worksheets/sheet3.xml",
+        "xl/macrosheets/sheet1.xml",
+        REL_MACROSHEET,
+        CT_MACROSHEET,
+        MACRO_XML,
+    );
+    inject_special_sheet(
+        &src,
+        "xl/worksheets/sheet4.xml",
+        "xl/macrosheets/intlsheet1.xml",
+        REL_INTL_MACROSHEET,
+        CT_INTL_MACROSHEET,
+        MACRO_XML,
+    );
+
     let tree = inspect(&src);
     assert_eq!(tree["sheets"][0]["kind"], "worksheet");
-    assert_eq!(tree["sheets"][1]["kind"], "macrosheet");
+    assert_eq!(tree["sheets"][1]["kind"], "dialogsheet");
+    assert_eq!(tree["sheets"][1]["name"], "Dialog1");
     assert_eq!(tree["sheets"][1]["hidden"], false);
-    assert!(tree["sheets"][1].get("pictureCount").is_none());
-    let err = apply(
-        &src,
-        &tmp("macro-del"),
-        json!([{ "op": "deleteSheet", "id": "sheet:Macro1" }]),
-    )
-    .unwrap_err();
-    assert_eq!(err.code(), ErrorCode::NotImplemented);
+    assert_eq!(tree["sheets"][1]["hasHeaderFooter"], true);
+    assert_eq!(
+        object_keys(&tree["sheets"][1]),
+        ["id", "name", "kind", "hidden", "hasHeaderFooter"]
+    );
+    assert_eq!(tree["sheets"][2]["kind"], "macrosheet");
+    assert_eq!(tree["sheets"][2]["name"], "Macro1");
+    assert_eq!(tree["sheets"][2]["hasHeaderFooter"], false);
+    assert_eq!(
+        object_keys(&tree["sheets"][2]),
+        ["id", "name", "kind", "hidden", "hasHeaderFooter"]
+    );
+    assert_eq!(tree["sheets"][3]["kind"], "macrosheet");
+    assert_eq!(tree["sheets"][3]["name"], "Intl1");
+    assert_eq!(
+        object_keys(&tree["sheets"][3]),
+        ["id", "name", "kind", "hidden", "hasHeaderFooter"]
+    );
+
+    let hf = inspect_with(&src, Some(json!({ "headerFooter": true })));
+    assert_eq!(
+        object_keys(&hf["sheets"][1]),
+        [
+            "id",
+            "name",
+            "kind",
+            "hidden",
+            "hasHeaderFooter",
+            "headerFooters"
+        ]
+    );
+    assert_eq!(hf["sheets"][1]["headerFooters"][0]["text"], "&CDlg");
+    assert!(hf["sheets"][1]["headerFooters"][0]
+        .get("pictureCount")
+        .is_none());
+    assert_eq!(
+        hf["sheets"][2]["headerFooters"].as_array().unwrap().len(),
+        6
+    );
+    assert!(hf["sheets"][2]["headerFooters"][0]
+        .get("pictureCount")
+        .is_none());
+
+    let err = inspect_err(&src, json!({ "sheet": "Dialog1", "range": "A1" }));
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+    assert_eq!(err.field_path(), Some("scope.sheet"));
+    let err = inspect_err(&src, json!({ "sheet": "Macro1", "range": "A1" }));
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+
+    for (name, op) in [
+        (
+            "Dialog1",
+            json!([{ "op": "deleteSheet", "id": "sheet:Dialog1" }]),
+        ),
+        (
+            "Macro1",
+            json!([{ "op": "deleteSheet", "id": "sheet:Macro1" }]),
+        ),
+        (
+            "Intl1",
+            json!([{ "op": "renameSheet", "id": "sheet:Intl1", "name": "X" }]),
+        ),
+        (
+            "Dialog1",
+            json!([{ "op": "setSheetHidden", "id": "sheet:Dialog1", "hidden": true }]),
+        ),
+        (
+            "Macro1",
+            json!([{ "op": "moveSheet", "id": "sheet:Macro1" }]),
+        ),
+    ] {
+        let err = apply(&src, &tmp(&format!("refuse-{name}")), op).unwrap_err();
+        assert_eq!(err.code(), ErrorCode::NotImplemented, "{name}");
+    }
 }
 
 #[test]
