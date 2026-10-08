@@ -517,7 +517,13 @@ pub fn apply(bytes: &[u8], ops: &[XlsxOp]) -> Result<Vec<u8>, Error> {
                 )?;
                 load_dirty(&pkg, &mut dirty_sheets, &part, false)?;
                 let doc = dirty_of(&mut dirty_sheets, &part);
-                hyperlink::apply_insert(&mut pkg, &mut doc.root, &part, op, i)?;
+                hyperlink::apply_insert(
+                    &mut pkg,
+                    &mut doc.root,
+                    &part,
+                    op,
+                    &format!("ops[{i}].ref"),
+                )?;
             }
             XlsxOp::SetHyperlink(op) => {
                 let part = require_drawing_worksheet(

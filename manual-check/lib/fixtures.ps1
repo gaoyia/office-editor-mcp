@@ -102,6 +102,44 @@ function Ensure-XlsxCreateHeaderFooter([switch]$Force) {
     return $path
 }
 
+function Ensure-XlsxCreateDrawing([switch]$Force) {
+    $path = Get-OutPath 'xlsx-create-drawing.xlsx'
+    if ((Test-Path $path) -and -not $Force) { return $path }
+    $req = @{
+        schemaVersion = 1; action = 'create'
+        path = $path.Replace('\', '/'); format = 'xlsx'
+        workbook = @{
+            sheets = @(
+                @{
+                    name = 'Sheet1'
+                    cells = @(@{ ref = 'A1'; value = '链字' })
+                    comments = @(
+                        @{
+                            cell = 'A1'
+                            text = 'C17批注'
+                            author = 'Alice'
+                            date = '2026-09-13T00:00:00.000'
+                        }
+                    )
+                    hyperlinks = @(
+                        @{
+                            ref = 'A1'
+                            url = 'https://example.com/'
+                            tooltip = '示例'
+                        }
+                    )
+                    textBoxes = @(@{ from = 'B2'; text = '框' })
+                    shapes = @(@{ from = 'B4'; prst = 'ellipse' })
+                    connectors = @(@{ from = 'B5'; prst = 'straightConnector1' })
+                    smartArts = @(@{ from = 'D6'; layout = 'list' })
+                }
+            )
+        }
+    }
+    Invoke-OoxpRequest $req 'xlsx-create-drawing' | Out-Null
+    return $path
+}
+
 function Ensure-DocxCreate([switch]$Force) {
     $path = Get-OutPath 'docx-create.docx'
     if ((Test-Path $path) -and -not $Force) { return $path }

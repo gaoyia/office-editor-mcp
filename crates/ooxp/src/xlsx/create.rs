@@ -2,14 +2,20 @@
 
 use std::collections::HashSet;
 
-use serde_json::Value;
+use serde_json::{Map, Value};
 
 use super::chart;
+use super::comments;
 use super::hf;
+use super::hyperlink;
 use super::picture::{self, AnchorKind};
 use super::request::{
-    parse_cell_value, HfSlot, InsertChartOp, InsertPictureOp, SetCellValue, SetHeaderFooterTextOp,
+    parse_cell_value, HfSlot, InsertChartOp, InsertCommentOp, InsertConnectorOp, InsertHyperlinkOp,
+    InsertPictureOp, InsertShapeOp, InsertSmartArtOp, InsertTextBoxOp, SetCellValue,
+    SetHeaderFooterTextOp,
 };
+use super::shape;
+use super::smartart;
 use crate::chart::{ChartType, NewSeries};
 use crate::error::{Error, ErrorKind, SheetNameReason, TypeName};
 use crate::opc::{
@@ -42,6 +48,12 @@ struct NewSheet {
     pictures: Vec<InsertPictureOp>,
     charts: Vec<InsertChartOp>,
     header_footers: Vec<NewHfSlot>,
+    comments: Vec<InsertCommentOp>,
+    hyperlinks: Vec<InsertHyperlinkOp>,
+    text_boxes: Vec<InsertTextBoxOp>,
+    shapes: Vec<InsertShapeOp>,
+    connectors: Vec<InsertConnectorOp>,
+    smartarts: Vec<InsertSmartArtOp>,
 }
 
 pub fn create(workbook: &Value) -> Result<Vec<u8>, Error> {
@@ -216,6 +228,9 @@ pub fn create(workbook: &Value) -> Result<Vec<u8>, Error> {
     }
     attach_pictures(&mut pkg, &sheets)?;
     attach_charts(&mut pkg, &sheets)?;
+    attach_drawings(&mut pkg, &sheets)?;
+    attach_comments(&mut pkg, &sheets)?;
+    attach_hyperlinks(&mut pkg, &sheets)?;
     attach_header_footers(&mut pkg, &sheets)?;
     pkg.save_to_vec()
 }
@@ -233,7 +248,17 @@ fn parse_sheet(v: &Value, i: usize) -> Result<NewSheet, Error> {
     for k in obj.keys() {
         if !matches!(
             k.as_str(),
-            "name" | "cells" | "pictures" | "charts" | "headerFooters"
+            "name"
+                | "cells"
+                | "pictures"
+                | "charts"
+                | "headerFooters"
+                | "comments"
+                | "hyperlinks"
+                | "textBoxes"
+                | "shapes"
+                | "connectors"
+                | "smartArts"
         ) {
             return Err(Error::with_path(
                 ErrorKind::UnknownField { field: k.clone() },
@@ -271,12 +296,24 @@ fn parse_sheet(v: &Value, i: usize) -> Result<NewSheet, Error> {
     let pictures = parse_pictures(obj.get("pictures"), i, name)?;
     let charts = parse_charts(obj.get("charts"), i, name)?;
     let header_footers = parse_header_footers(obj.get("headerFooters"), i, name)?;
+    let comments = parse_comments(obj.get("comments"), i, name)?;
+    let hyperlinks = parse_hyperlinks(obj.get("hyperlinks"), i, name)?;
+    let text_boxes = parse_textboxes(obj.get("textBoxes"), i, name)?;
+    let shapes = parse_shapes(obj.get("shapes"), i, name)?;
+    let connectors = parse_connectors(obj.get("connectors"), i, name)?;
+    let smartarts = parse_smartarts(obj.get("smartArts"), i, name)?;
     Ok(NewSheet {
         name: name.to_string(),
         cells,
         pictures,
         charts,
         header_footers,
+        comments,
+        hyperlinks,
+        text_boxes,
+        shapes,
+        connectors,
+        smartarts,
     })
 }
 
@@ -358,6 +395,623 @@ fn attach_header_footers(pkg: &mut Package, sheets: &[NewSheet]) -> Result<(), E
         pkg.set(&part, doc.to_bytes()?)?;
     }
     Ok(())
+}
+
+fn attach_drawings(pkg: &mut Package, sheets: &[NewSheet]) -> Result<(), Error> {
+    for (i, sh) in sheets.iter().enumerate() {
+        if sh.text_boxes.is_empty()
+            && sh.shapes.is_empty()
+            && sh.connectors.is_empty()
+            && sh.smartarts.is_empty()
+        {
+            continue;
+        }
+        let part = format!("/xl/worksheets/sheet{}.xml", i + 1);
+        let mut doc = xml::parse(pkg.get(&part)?)?;
+        for op in &sh.text_boxes {
+            shape::insert_textbox(pkg, &mut doc, &part, op)?;
+        }
+        for op in &sh.shapes {
+            shape::insert_shape(pkg, &mut doc, &part, op)?;
+        }
+        for op in &sh.connectors {
+            shape::insert_connector(pkg, &mut doc, &part, op)?;
+        }
+        for op in &sh.smartarts {
+            smartart::insert_smartart(pkg, &mut doc, &part, op)?;
+        }
+        pkg.set(&part, doc.to_bytes()?)?;
+    }
+    Ok(())
+}
+
+fn attach_comments(pkg: &mut Package, sheets: &[NewSheet]) -> Result<(), Error> {
+    const WB_PART: &str = "/xl/workbook.xml";
+    for (i, sh) in sheets.iter().enumerate() {
+        if sh.comments.is_empty() {
+            continue;
+        }
+        let part = format!("/xl/worksheets/sheet{}.xml", i + 1);
+        let mut dirty = Vec::new();
+        for op in &sh.comments {
+            let cell = a1::parse_cell(&op.a1)?;
+            comments::apply_insert(pkg, WB_PART, &mut dirty, &part, cell, op)?;
+        }
+        for (p, doc) in dirty {
+            pkg.set(&p, doc.to_bytes()?)?;
+        }
+    }
+    Ok(())
+}
+
+fn attach_hyperlinks(pkg: &mut Package, sheets: &[NewSheet]) -> Result<(), Error> {
+    for (i, sh) in sheets.iter().enumerate() {
+        if sh.hyperlinks.is_empty() {
+            continue;
+        }
+        let part = format!("/xl/worksheets/sheet{}.xml", i + 1);
+        let mut doc = xml::parse(pkg.get(&part)?)?;
+        for (j, op) in sh.hyperlinks.iter().enumerate() {
+            hyperlink::apply_insert(
+                pkg,
+                &mut doc.root,
+                &part,
+                op,
+                &format!("workbook.sheets[{i}].hyperlinks[{j}].ref"),
+            )?;
+        }
+        pkg.set(&part, doc.to_bytes()?)?;
+    }
+    Ok(())
+}
+
+fn parse_object_array<'a>(
+    v: Option<&'a Value>,
+    field: &str,
+    prefix: &str,
+) -> Result<Option<&'a [Value]>, Error> {
+    let Some(v) = v else {
+        return Ok(None);
+    };
+    let arr = v.as_array().ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::Array,
+            },
+            prefix.to_string(),
+        )
+    })?;
+    Ok(Some(arr.as_slice()))
+}
+
+fn deny_unknown(obj: &Map<String, Value>, prefix: &str, allowed: &[&str]) -> Result<(), Error> {
+    for k in obj.keys() {
+        if !allowed.iter().any(|a| *a == k) {
+            return Err(Error::with_path(
+                ErrorKind::UnknownField { field: k.clone() },
+                format!("{prefix}.{k}"),
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn require_object<'a>(
+    v: &'a Value,
+    field: &str,
+    prefix: &str,
+) -> Result<&'a Map<String, Value>, Error> {
+    v.as_object().ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::Object,
+            },
+            prefix.to_string(),
+        )
+    })
+}
+
+struct CreateAnchor {
+    from: CellRef,
+    to: Option<CellRef>,
+    anchor: AnchorKind,
+    from_off_x: i64,
+    from_off_y: i64,
+    to_off_x: i64,
+    to_off_y: i64,
+    cx: Option<i64>,
+    cy: Option<i64>,
+}
+
+fn parse_create_anchor(obj: &Map<String, Value>, prefix: &str) -> Result<CreateAnchor, Error> {
+    let from = parse_required_a1_field(obj.get("from"), prefix, "from")?;
+    let cx = parse_emu(obj.get("cx"), prefix, "cx")?;
+    let cy = parse_emu(obj.get("cy"), prefix, "cy")?;
+    if cx.is_some() != cy.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "create".into(),
+                field: "cx and cy together".into(),
+            },
+            prefix.to_string(),
+        ));
+    }
+    let anchor = match obj.get("anchor") {
+        None => AnchorKind::OneCell,
+        Some(Value::String(s)) => AnchorKind::parse_insert(s).ok_or_else(|| {
+            Error::with_path(ErrorKind::InvalidXlsxAnchor, format!("{prefix}.anchor"))
+        })?,
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "anchor".into(),
+                    expected: TypeName::String,
+                },
+                format!("{prefix}.anchor"),
+            ));
+        }
+    };
+    let to = match obj.get("to") {
+        None => None,
+        Some(Value::String(s)) => {
+            Some(a1::parse_cell(s).map_err(|e| e.at(format!("{prefix}.to")))?)
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "to".into(),
+                    expected: TypeName::String,
+                },
+                format!("{prefix}.to"),
+            ));
+        }
+    };
+    if anchor == AnchorKind::TwoCell && to.is_none() {
+        return Err(Error::with_path(
+            ErrorKind::MissingField { field: "to".into() },
+            format!("{prefix}.to"),
+        ));
+    }
+    if anchor == AnchorKind::OneCell && to.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::UnknownField { field: "to".into() },
+            format!("{prefix}.to"),
+        ));
+    }
+    Ok(CreateAnchor {
+        from,
+        to,
+        anchor,
+        from_off_x: parse_off(obj.get("fromOffX"), prefix, "fromOffX")?.unwrap_or(0),
+        from_off_y: parse_off(obj.get("fromOffY"), prefix, "fromOffY")?.unwrap_or(0),
+        to_off_x: parse_off(obj.get("toOffX"), prefix, "toOffX")?.unwrap_or(0),
+        to_off_y: parse_off(obj.get("toOffY"), prefix, "toOffY")?.unwrap_or(0),
+        cx,
+        cy,
+    })
+}
+
+fn parse_opt_text_field(obj: &Map<String, Value>, prefix: &str) -> Result<Option<String>, Error> {
+    match obj.get("text") {
+        None => Ok(None),
+        Some(Value::String(s)) => Ok(Some(s.clone())),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "text".into(),
+                expected: TypeName::String,
+            },
+            format!("{prefix}.text"),
+        )),
+    }
+}
+
+fn parse_comments(
+    v: Option<&Value>,
+    sheet_i: usize,
+    sheet: &str,
+) -> Result<Vec<InsertCommentOp>, Error> {
+    let prefix = format!("workbook.sheets[{sheet_i}].comments");
+    let Some(arr) = parse_object_array(v, "comments", &prefix)? else {
+        return Ok(Vec::new());
+    };
+    let mut out = Vec::new();
+    for (j, item) in arr.iter().enumerate() {
+        out.push(parse_comment(item, &format!("{prefix}[{j}]"), sheet)?);
+    }
+    Ok(out)
+}
+
+fn parse_comment(v: &Value, prefix: &str, sheet: &str) -> Result<InsertCommentOp, Error> {
+    let obj = require_object(v, "comments", prefix)?;
+    deny_unknown(obj, prefix, &["cell", "text", "author", "initials", "date"])?;
+    let cell = parse_required_a1_field(obj.get("cell"), prefix, "cell")?;
+    let text = match obj.get("text") {
+        None => String::new(),
+        Some(Value::String(s)) => s.clone(),
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "text".into(),
+                    expected: TypeName::String,
+                },
+                format!("{prefix}.text"),
+            ));
+        }
+    };
+    let author = parse_comment_str(obj, prefix, "author", "ooxp")?;
+    let initials = parse_comment_str(obj, prefix, "initials", "oo")?;
+    let date = match obj.get("date") {
+        None => None,
+        Some(Value::String(s)) if !s.is_empty() => Some(s.clone()),
+        Some(Value::String(_)) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "date".into(),
+                    expected: TypeName::NonEmptyString,
+                },
+                format!("{prefix}.date"),
+            ));
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "date".into(),
+                    expected: TypeName::String,
+                },
+                format!("{prefix}.date"),
+            ));
+        }
+    };
+    Ok(InsertCommentOp {
+        sheet: sheet.to_string(),
+        a1: a1::format_cell(cell.col, cell.row),
+        text,
+        author,
+        initials,
+        date,
+    })
+}
+
+fn parse_comment_str(
+    obj: &Map<String, Value>,
+    prefix: &str,
+    field: &str,
+    default: &str,
+) -> Result<String, Error> {
+    match obj.get(field) {
+        None => Ok(default.to_string()),
+        Some(Value::String(s)) => Ok(s.clone()),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::String,
+            },
+            format!("{prefix}.{field}"),
+        )),
+    }
+}
+
+fn parse_hyperlinks(
+    v: Option<&Value>,
+    sheet_i: usize,
+    sheet: &str,
+) -> Result<Vec<InsertHyperlinkOp>, Error> {
+    let prefix = format!("workbook.sheets[{sheet_i}].hyperlinks");
+    let Some(arr) = parse_object_array(v, "hyperlinks", &prefix)? else {
+        return Ok(Vec::new());
+    };
+    let mut out = Vec::new();
+    for (j, item) in arr.iter().enumerate() {
+        out.push(parse_hyperlink(item, &format!("{prefix}[{j}]"), sheet)?);
+    }
+    Ok(out)
+}
+
+fn parse_hyperlink(v: &Value, prefix: &str, sheet: &str) -> Result<InsertHyperlinkOp, Error> {
+    let obj = require_object(v, "hyperlinks", prefix)?;
+    deny_unknown(
+        obj,
+        prefix,
+        &["ref", "url", "location", "tooltip", "display"],
+    )?;
+    let (refer, start, end) = match obj.get("ref") {
+        Some(Value::String(s)) => {
+            let (start, end) = a1::parse_range(s).map_err(|e| e.at(format!("{prefix}.ref")))?;
+            (a1::format_range(start, end), start, end)
+        }
+        None => {
+            return Err(Error::with_path(
+                ErrorKind::MissingField {
+                    field: "ref".into(),
+                },
+                format!("{prefix}.ref"),
+            ));
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "ref".into(),
+                    expected: TypeName::String,
+                },
+                format!("{prefix}.ref"),
+            ));
+        }
+    };
+    let url = parse_opt_target(obj, prefix, "url", ErrorKind::EmptyHyperlinkUrl)?;
+    let location = parse_opt_target(obj, prefix, "location", ErrorKind::EmptyHyperlinkLocation)?;
+    if url.is_none() && location.is_none() {
+        return Err(Error::with_path(
+            ErrorKind::XlsxHyperlinkNeedTarget,
+            prefix.to_string(),
+        ));
+    }
+    Ok(InsertHyperlinkOp {
+        sheet: sheet.to_string(),
+        refer,
+        start,
+        end,
+        url,
+        location,
+        tooltip: parse_opt_plain(obj, prefix, "tooltip")?,
+        display: parse_opt_plain(obj, prefix, "display")?,
+    })
+}
+
+fn parse_opt_target(
+    obj: &Map<String, Value>,
+    prefix: &str,
+    field: &str,
+    empty: ErrorKind,
+) -> Result<Option<String>, Error> {
+    match obj.get(field) {
+        None => Ok(None),
+        Some(Value::String(s)) if s.is_empty() => {
+            Err(Error::with_path(empty, format!("{prefix}.{field}")))
+        }
+        Some(Value::String(s)) => Ok(Some(s.clone())),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::String,
+            },
+            format!("{prefix}.{field}"),
+        )),
+    }
+}
+
+fn parse_opt_plain(
+    obj: &Map<String, Value>,
+    prefix: &str,
+    field: &str,
+) -> Result<Option<String>, Error> {
+    match obj.get(field) {
+        None => Ok(None),
+        Some(Value::String(s)) => Ok(Some(s.clone())),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::String,
+            },
+            format!("{prefix}.{field}"),
+        )),
+    }
+}
+
+fn parse_textboxes(
+    v: Option<&Value>,
+    sheet_i: usize,
+    sheet: &str,
+) -> Result<Vec<InsertTextBoxOp>, Error> {
+    let prefix = format!("workbook.sheets[{sheet_i}].textBoxes");
+    let Some(arr) = parse_object_array(v, "textBoxes", &prefix)? else {
+        return Ok(Vec::new());
+    };
+    let mut out = Vec::new();
+    for (j, item) in arr.iter().enumerate() {
+        out.push(parse_textbox(item, &format!("{prefix}[{j}]"), sheet)?);
+    }
+    Ok(out)
+}
+
+fn parse_textbox(v: &Value, prefix: &str, sheet: &str) -> Result<InsertTextBoxOp, Error> {
+    let obj = require_object(v, "textBoxes", prefix)?;
+    deny_unknown(
+        obj,
+        prefix,
+        &[
+            "text", "cx", "cy", "from", "to", "anchor", "fromOffX", "fromOffY", "toOffX", "toOffY",
+        ],
+    )?;
+    let a = parse_create_anchor(obj, prefix)?;
+    Ok(InsertTextBoxOp {
+        sheet: sheet.to_string(),
+        text: parse_opt_text_field(obj, prefix)?,
+        cx: a.cx,
+        cy: a.cy,
+        from: a.from,
+        to: a.to,
+        anchor: a.anchor,
+        from_off_x: a.from_off_x,
+        from_off_y: a.from_off_y,
+        to_off_x: a.to_off_x,
+        to_off_y: a.to_off_y,
+    })
+}
+
+fn parse_shapes(
+    v: Option<&Value>,
+    sheet_i: usize,
+    sheet: &str,
+) -> Result<Vec<InsertShapeOp>, Error> {
+    let prefix = format!("workbook.sheets[{sheet_i}].shapes");
+    let Some(arr) = parse_object_array(v, "shapes", &prefix)? else {
+        return Ok(Vec::new());
+    };
+    let mut out = Vec::new();
+    for (j, item) in arr.iter().enumerate() {
+        out.push(parse_shape(item, &format!("{prefix}[{j}]"), sheet)?);
+    }
+    Ok(out)
+}
+
+fn parse_shape(v: &Value, prefix: &str, sheet: &str) -> Result<InsertShapeOp, Error> {
+    let obj = require_object(v, "shapes", prefix)?;
+    deny_unknown(
+        obj,
+        prefix,
+        &[
+            "text", "cx", "cy", "from", "to", "anchor", "fromOffX", "fromOffY", "toOffX", "toOffY",
+            "prst",
+        ],
+    )?;
+    let a = parse_create_anchor(obj, prefix)?;
+    Ok(InsertShapeOp {
+        sheet: sheet.to_string(),
+        text: parse_opt_text_field(obj, prefix)?,
+        cx: a.cx,
+        cy: a.cy,
+        from: a.from,
+        to: a.to,
+        anchor: a.anchor,
+        from_off_x: a.from_off_x,
+        from_off_y: a.from_off_y,
+        to_off_x: a.to_off_x,
+        to_off_y: a.to_off_y,
+        prst: parse_shape_prst(obj, prefix)?,
+    })
+}
+
+fn parse_connectors(
+    v: Option<&Value>,
+    sheet_i: usize,
+    sheet: &str,
+) -> Result<Vec<InsertConnectorOp>, Error> {
+    let prefix = format!("workbook.sheets[{sheet_i}].connectors");
+    let Some(arr) = parse_object_array(v, "connectors", &prefix)? else {
+        return Ok(Vec::new());
+    };
+    let mut out = Vec::new();
+    for (j, item) in arr.iter().enumerate() {
+        out.push(parse_connector(item, &format!("{prefix}[{j}]"), sheet)?);
+    }
+    Ok(out)
+}
+
+fn parse_connector(v: &Value, prefix: &str, sheet: &str) -> Result<InsertConnectorOp, Error> {
+    let obj = require_object(v, "connectors", prefix)?;
+    deny_unknown(
+        obj,
+        prefix,
+        &[
+            "cx", "cy", "from", "to", "anchor", "fromOffX", "fromOffY", "toOffX", "toOffY", "prst",
+        ],
+    )?;
+    let a = parse_create_anchor(obj, prefix)?;
+    Ok(InsertConnectorOp {
+        sheet: sheet.to_string(),
+        cx: a.cx,
+        cy: a.cy,
+        from: a.from,
+        to: a.to,
+        anchor: a.anchor,
+        from_off_x: a.from_off_x,
+        from_off_y: a.from_off_y,
+        to_off_x: a.to_off_x,
+        to_off_y: a.to_off_y,
+        prst: parse_connector_prst(obj, prefix)?,
+    })
+}
+
+fn parse_shape_prst(obj: &Map<String, Value>, prefix: &str) -> Result<String, Error> {
+    match obj.get("prst") {
+        None => Ok("rect".to_string()),
+        Some(Value::String(s)) => {
+            if crate::pptx::shape::is_writable_shape_prst(s) {
+                Ok(s.clone())
+            } else {
+                Err(Error::with_path(
+                    ErrorKind::InvalidShapePrst,
+                    format!("{prefix}.prst"),
+                ))
+            }
+        }
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "prst".into(),
+                expected: TypeName::String,
+            },
+            format!("{prefix}.prst"),
+        )),
+    }
+}
+
+fn parse_connector_prst(obj: &Map<String, Value>, prefix: &str) -> Result<String, Error> {
+    match obj.get("prst") {
+        None => Ok("straightConnector1".to_string()),
+        Some(Value::String(s)) => {
+            if s == "line" || crate::pptx::connector::is_writable_prst(s) {
+                Ok(s.clone())
+            } else {
+                Err(Error::with_path(
+                    ErrorKind::InvalidConnectorPrst,
+                    format!("{prefix}.prst"),
+                ))
+            }
+        }
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "prst".into(),
+                expected: TypeName::String,
+            },
+            format!("{prefix}.prst"),
+        )),
+    }
+}
+
+fn parse_smartarts(
+    v: Option<&Value>,
+    sheet_i: usize,
+    sheet: &str,
+) -> Result<Vec<InsertSmartArtOp>, Error> {
+    let prefix = format!("workbook.sheets[{sheet_i}].smartArts");
+    let Some(arr) = parse_object_array(v, "smartArts", &prefix)? else {
+        return Ok(Vec::new());
+    };
+    let mut out = Vec::new();
+    for (j, item) in arr.iter().enumerate() {
+        out.push(parse_smartart(item, &format!("{prefix}[{j}]"), sheet)?);
+    }
+    Ok(out)
+}
+
+fn parse_smartart(v: &Value, prefix: &str, sheet: &str) -> Result<InsertSmartArtOp, Error> {
+    let obj = require_object(v, "smartArts", prefix)?;
+    deny_unknown(
+        obj,
+        prefix,
+        &[
+            "layout", "points", "cx", "cy", "from", "to", "anchor", "fromOffX", "fromOffY",
+            "toOffX", "toOffY",
+        ],
+    )?;
+    let (layout, points) = crate::smartart::parse_layout_and_points(obj, prefix)?;
+    let a = parse_create_anchor(obj, prefix)?;
+    Ok(InsertSmartArtOp {
+        sheet: sheet.to_string(),
+        layout,
+        points,
+        cx: a.cx,
+        cy: a.cy,
+        from: a.from,
+        to: a.to,
+        anchor: a.anchor,
+        from_off_x: a.from_off_x,
+        from_off_y: a.from_off_y,
+        to_off_x: a.to_off_x,
+        to_off_y: a.to_off_y,
+    })
 }
 
 fn parse_header_footers(

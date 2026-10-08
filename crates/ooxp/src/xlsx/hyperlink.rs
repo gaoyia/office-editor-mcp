@@ -69,12 +69,12 @@ pub(crate) fn apply_insert(
     worksheet: &mut Element,
     sheet_part: &str,
     op: &InsertHyperlinkOp,
-    i: usize,
+    ref_path: &str,
 ) -> Result<(), Error> {
     if overlaps(worksheet, op.start, op.end, None) {
         return Err(Error::with_path(
             ErrorKind::HyperlinkOverlap,
-            format!("ops[{i}].ref"),
+            ref_path.to_string(),
         ));
     }
     let rid = if let Some(url) = op.url.as_deref() {

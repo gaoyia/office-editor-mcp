@@ -64,9 +64,7 @@ docx 见 [`roadmap/docx.md`](docx.md)。pptx 见 [`roadmap/pptx.md`](pptx.md)。
 | 21 | `.plan/2026年-9月-29日-✅-xlsx-切片器.md` | 数据透视、表格 |
 | 22 | `.plan/2026年-9月-29日-✅-xlsx-外部数据连接.md` | 无 |
 | 23 | `.plan/2026年-10月-9日-✅-xlsx-分组分级显示.md` | 无 |
-| 24 | `.plan/2026年-10月-9日-✅-xlsx-拆分窗格与自定义视图.md` | 视图与筛选 |
-
-0 与 1 不要合成一份。Excel 图表数据在本工作簿单元格里，和 Word embedding 不是一回事。页眉是工作表上的 `headerFooter` 加可选 `drawingHF`，不是 Word 的 header 部件。图表工作表是 `chartsheet` 部件。第一期单元格读写见总计划。
+| 25 | `.plan/2026年-10月-9日-✅-xlsx-create带批注超链接形状SmartArt.md` | 批注、超链接、形状 |
 
 ## 待做
 
@@ -74,7 +72,6 @@ docx 见 [`roadmap/docx.md`](docx.md)。pptx 见 [`roadmap/pptx.md`](pptx.md)。
 
 | 序 | 计划 | 前置 |
 | --- | --- | --- |
-| 25 | create 带批注、超链接、形状、SmartArt | 批注、超链接、形状 |
 | 26 | create 图表工作表 | 图表工作表 |
 | 27 | 排序（`sortState`，不只改 `autoFilter/@ref`） | 视图与筛选 |
 | 28 | 共享公式改主格 | 公式结构 |

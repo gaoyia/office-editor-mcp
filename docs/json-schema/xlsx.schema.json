@@ -58,6 +58,42 @@
           "items": {
             "$ref": "#/$defs/xlsxHeaderFooterCreate"
           }
+        },
+        "comments": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/xlsxCommentCreate"
+          }
+        },
+        "hyperlinks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/xlsxHyperlinkCreate"
+          }
+        },
+        "textBoxes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/xlsxTextBoxCreate"
+          }
+        },
+        "shapes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/xlsxShapeCreate"
+          }
+        },
+        "connectors": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/xlsxConnectorCreate"
+          }
+        },
+        "smartArts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/xlsxSmartArtCreate"
+          }
         }
       }
     },
@@ -245,6 +281,271 @@
         "dataFrom": {
           "type": "string",
           "minLength": 1
+        }
+      }
+    },
+    "xlsxCommentCreate": {
+      "type": "object",
+      "required": [
+        "cell"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "cell": {
+          "type": "string",
+          "minLength": 1
+        },
+        "text": {
+          "type": "string"
+        },
+        "author": {
+          "type": "string"
+        },
+        "initials": {
+          "type": "string"
+        },
+        "date": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "xlsxHyperlinkCreate": {
+      "type": "object",
+      "required": [
+        "ref"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "ref": {
+          "type": "string",
+          "minLength": 1
+        },
+        "url": {
+          "type": "string",
+          "minLength": 1
+        },
+        "location": {
+          "type": "string",
+          "minLength": 1
+        },
+        "tooltip": {
+          "type": "string"
+        },
+        "display": {
+          "type": "string"
+        }
+      }
+    },
+    "xlsxTextBoxCreate": {
+      "type": "object",
+      "required": [
+        "from"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "from": {
+          "type": "string",
+          "minLength": 1
+        },
+        "to": {
+          "type": "string",
+          "minLength": 1
+        },
+        "anchor": {
+          "enum": [
+            "oneCell",
+            "twoCell"
+          ]
+        },
+        "cx": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "cy": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "fromOffX": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "fromOffY": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "toOffX": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "toOffY": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "text": {
+          "type": "string"
+        }
+      }
+    },
+    "xlsxShapeCreate": {
+      "type": "object",
+      "required": [
+        "from"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "from": {
+          "type": "string",
+          "minLength": 1
+        },
+        "to": {
+          "type": "string",
+          "minLength": 1
+        },
+        "anchor": {
+          "enum": [
+            "oneCell",
+            "twoCell"
+          ]
+        },
+        "cx": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "cy": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "fromOffX": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "fromOffY": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "toOffX": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "toOffY": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "text": {
+          "type": "string"
+        },
+        "prst": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "xlsxConnectorCreate": {
+      "type": "object",
+      "required": [
+        "from"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "from": {
+          "type": "string",
+          "minLength": 1
+        },
+        "to": {
+          "type": "string",
+          "minLength": 1
+        },
+        "anchor": {
+          "enum": [
+            "oneCell",
+            "twoCell"
+          ]
+        },
+        "cx": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "cy": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "fromOffX": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "fromOffY": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "toOffX": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "toOffY": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "prst": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "xlsxSmartArtCreate": {
+      "type": "object",
+      "required": [
+        "layout",
+        "from"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "layout": {
+          "$ref": "request.schema.json#/$defs/smartArtLayout"
+        },
+        "points": {
+          "type": "array",
+          "items": {
+            "$ref": "request.schema.json#/$defs/smartArtPointInput"
+          }
+        },
+        "from": {
+          "type": "string",
+          "minLength": 1
+        },
+        "to": {
+          "type": "string",
+          "minLength": 1
+        },
+        "anchor": {
+          "enum": [
+            "oneCell",
+            "twoCell"
+          ]
+        },
+        "cx": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "cy": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "fromOffX": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "fromOffY": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "toOffX": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "toOffY": {
+          "type": "integer",
+          "minimum": 0
         }
       }
     },

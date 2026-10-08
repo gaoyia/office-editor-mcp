@@ -339,7 +339,7 @@ fn text_anchor_and_para_id_rejected() {
 }
 
 #[test]
-fn create_rejects_sheet_hyperlinks() {
+fn create_rejects_hyperlink_without_target() {
     let path = tmp("create");
     let err = run(
         &json!({
@@ -349,7 +349,7 @@ fn create_rejects_sheet_hyperlinks() {
             "workbook": {
                 "sheets": [{
                     "name": "Sheet1",
-                    "hyperlinks": []
+                    "hyperlinks": [{ "ref": "A1" }]
                 }]
             }
         })
@@ -358,4 +358,5 @@ fn create_rejects_sheet_hyperlinks() {
     )
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);
+    assert_eq!(err.field_path(), Some("workbook.sheets[0].hyperlinks[0]"));
 }

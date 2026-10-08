@@ -496,6 +496,12 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
 | `sheets[].pictures` | 可选。该表工作表 drawing 上的图列表。省略或空数组则不写工作表图。不进页眉 |
 | `sheets[].charts` | 可选。该表上的图表列表。省略或空数组则不写图表 |
 | `sheets[].headerFooters` | 可选。该表页眉页脚槽位列表。省略或空数组则不写 `headerFooter` / `drawingHF` |
+| `sheets[].comments` | 可选。该表线程化批注列表。省略或空数组则不写批注部件。不写回复 |
+| `sheets[].hyperlinks` | 可选。该表 `<hyperlinks>` 列表。省略或空数组则不写。不写单元格值 |
+| `sheets[].textBoxes` | 可选。该表文本框列表。省略或空数组则不写 |
+| `sheets[].shapes` | 可选。该表无 `txBox` 的 `xdr:sp` 列表。省略或空数组则不写 |
+| `sheets[].connectors` | 可选。该表 `xdr:cxnSp` 列表。省略或空数组则不写 |
+| `sheets[].smartArts` | 可选。该表 SmartArt 列表。省略或空数组则不写 |
 | `cells[].ref` | A1 地址 |
 | `cells[].value` | 数字、字符串、布尔、或 `null`。`null` 表示不写这个格 |
 | `cells[].formula` | 以 `=` 开头的公式文本。库不求值 |
@@ -518,6 +524,22 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
 | `headerFooters[].pictures` | 可选。往该槽 `drawingHF` 插图。省略或空数组则不写图 |
 | `headerFooters[].pictures[].file` | 必须。本地路径，与页眉 `insertPicture` 相同 |
 | `headerFooters[].pictures[].cx` / `cy` | 可选，EMU，正整数。都省则按图片像素以 96 dpi 换算。只给一个时报 `InvalidField` |
+| `comments[].cell` | 必须。宿主单元格，单格 A1。缺此字段报 `MissingField`。不是合法单格报 `InvalidRange` |
+| `comments[].text` | 可选。可见纯文本，省略当作 `""` |
+| `comments[].author` | 可选。省略当作 `"ooxp"` |
+| `comments[].initials` | 可选。xlsx 接受但不写入 XML |
+| `comments[].date` | 可选。`xsd:dateTime` 字符串。省略则写入当前 UTC（无尾 `Z`） |
+| `hyperlinks[].ref` | 必须。覆盖的 A1 或闭区间。非法报 `InvalidRange` |
+| `hyperlinks[].url` | 外部 URL。与 `location` 至少给一个 |
+| `hyperlinks[].location` | 内部位置。与 `url` 至少给一个 |
+| `hyperlinks[].tooltip` / `display` | 可选。写入同名属性 |
+| `textBoxes[].from` / `shapes[].from` / `connectors[].from` / `smartArts[].from` | 必须。左上角单元格，A1 |
+| `textBoxes[]` / `shapes[]` / `connectors[]` / `smartArts[]` 的 `to` / `anchor` / 偏移 / `cx` / `cy` | 可选。规则与对应 insert 相同 |
+| `textBoxes[].text` / `shapes[].text` | 可选。可见纯文本 |
+| `shapes[].prst` | 可选。省略为 `rect`。必须是 pptx `insertShape` 那份可写预设名。连接线几何名报 `InvalidField` |
+| `connectors[].prst` | 可选。缺省 `straightConnector1`。允许取值与 `insertConnector` 相同 |
+| `smartArts[].layout` | 必须。`list` / `org` / `cycle` |
+| `smartArts[].points` | 可选。字段与 `insertSmartArt` 相同 |
 
 同一 `kind` 与 `side` 出现两次报 `InvalidField`。每一项至少要有非空 `text` 或一张图，否则报 `InvalidField`。页眉图禁止出现 `from` / `to` / `anchor` / `fromOffX` / `fromOffY` / `toOffX` / `toOffY`，出现报 `InvalidField`。不要把页眉图写进 `sheets[].pictures`。不要用单数 `headerFooter`（那是 inspect 的 scope 键），`sheets[]` 上出现它报 `InvalidField`。写 `even` 槽位时给 `headerFooter` 设 `differentOddEven="1"`；写 `first` 槽位时设 `differentFirst="1"`。先写各槽原文，再按数组顺序往对应槽插图。不写 VML `legacyDrawingHF`。不解释 `&P`。
 
@@ -527,7 +549,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
 
 行与单元格按行号、列号升序写出。补上 `sheetData` 和合理的 `dimension`。
 
-最小 `styles.xml` 必须生成，见 [opc.md](opc.md)。默认字体颜色写 `<color rgb="FF000000"/>`，不引用 theme，包里也不生成 theme 部件。给了 `sheets[].pictures` 时按 `insertPicture` 同一套规则写 worksheet drawing 与 media。给了 `sheets[].charts` 时按 `insertChart` 同一套规则写 `/xl/charts/chartN.xml`、`xdr:graphicFrame` 和 `dataFrom` 一带单元格，不写 embedding。一张表上的图与图表共用一份 drawing：先写 `pictures`，再写 `charts`。给了 `sheets[].headerFooters` 时按 `setHeaderFooterText` 写 `headerFooter` 六个槽位，按页眉 `insertPicture` 写 `drawingHF` 与 media；页眉图不进 worksheet drawing。`xdr:cNvPr/@id` 取该表已有全部 `cNvPr` 的最大整数加 1；页眉图至少为 2。不要生成透视表、条件格式、图表工作表。create 本期不写列宽、行高、合并、数据验证、条件格式、工作表表格、透视表、定义名、打印设置、视图与筛选、分组、拆分窗格、自定义视图、批注、文本框、形状、连接线、SmartArt、超链接、迷你图、OLE、切片器、外部数据连接或保护，也不写共享公式或数组公式（`cells[]` 出现 `shared` / `sharedRef` / `array` / `arrayRef` 报 `InvalidField`）。`workbook` 根上或 `cells[]` 上出现 `pictures` / `charts` / `headerFooters` / `headerFooter` / `definedNames` / `connections` / `customViews` / `workbookProtection` / `protection`，或 `sheets[]` 上出现 `kind` / `wrap` / `smartArts` / `textBoxes` / `shapes` / `connectors` / `hyperlinks` / `sparklines` / `oleObjects` / `slicers` / `sheetProtection` / `protection` / `headerFooter` / `outline`，报 `InvalidField`。`sheets[].kind` 仍拒绝。给了 `workbook.props` 时按 `setProps` / `setCustomProp` 同一套规则写 core / app / custom；省略则仍写空的 `dc:title` 与 `dc:creator` 为 `ooxp`，不写 custom 部件。
+最小 `styles.xml` 必须生成，见 [opc.md](opc.md)。默认字体颜色写 `<color rgb="FF000000"/>`，不引用 theme，包里也不生成 theme 部件。给了 `sheets[].pictures` 时按 `insertPicture` 同一套规则写 worksheet drawing 与 media。给了 `sheets[].charts` 时按 `insertChart` 同一套规则写 `/xl/charts/chartN.xml`、`xdr:graphicFrame` 和 `dataFrom` 一带单元格，不写 embedding。给了 `sheets[].textBoxes` / `shapes` / `connectors` / `smartArts` 时按对应 insert 同一套规则写入同一份 worksheet drawing：先写 `pictures`，再写 `charts`，再按 `textBoxes`、`shapes`、`connectors`、`smartArts` 数组顺序写入。给了 `sheets[].comments` 时按 `insertComment` 同一套规则写线程化批注、占位 `comments.xml` 与 Note `v:shape`；不写回复。给了 `sheets[].hyperlinks` 时按 `insertHyperlink` 同一套规则写 `<hyperlinks>` 与外部链关系。给了 `sheets[].headerFooters` 时按 `setHeaderFooterText` 写 `headerFooter` 六个槽位，按页眉 `insertPicture` 写 `drawingHF` 与 media；页眉图不进 worksheet drawing。`xdr:cNvPr/@id` 取该表已有全部 `cNvPr` 的最大整数加 1；页眉图至少为 2。不要生成透视表、条件格式、图表工作表。create 本期不写列宽、行高、合并、数据验证、条件格式、工作表表格、透视表、定义名、打印设置、视图与筛选、分组、拆分窗格、自定义视图、迷你图、OLE、切片器、外部数据连接、保护或组合，也不写共享公式或数组公式（`cells[]` 出现 `shared` / `sharedRef` / `array` / `arrayRef` 报 `InvalidField`）。`workbook` 根上或 `cells[]` 上出现 `pictures` / `charts` / `headerFooters` / `headerFooter` / `definedNames` / `connections` / `customViews` / `comments` / `hyperlinks` / `textBoxes` / `shapes` / `connectors` / `smartArts` / `workbookProtection` / `protection`，或 `sheets[]` 上出现 `kind` / `wrap` / `sparklines` / `oleObjects` / `slicers` / `sheetProtection` / `protection` / `headerFooter` / `outline`，报 `InvalidField`。`comments[]` 上出现 `id` / `replies` / `start` / `end` / `x` / `y`，`hyperlinks[]` 上出现 `text` / `anchor` / `id`，或 drawing 项上出现 `kind` / `wrap` / `x` / `y` / `id`，报 `InvalidField`。`sheets[].kind` 仍拒绝。给了 `workbook.props` 时按 `setProps` / `setCustomProp` 同一套规则写 core / app / custom；省略则仍写空的 `dc:title` 与 `dc:creator` 为 `ooxp`，不写 custom 部件。
 
 
 ## apply
