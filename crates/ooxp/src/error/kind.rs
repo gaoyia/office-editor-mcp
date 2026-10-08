@@ -440,6 +440,18 @@ pub(crate) enum IdReason {
     XrefIndexFromOne,
     /// insertCrossRef 必须用正文或页眉页脚段落 id
     InsertCrossRefNeedsPara,
+    /// 索引 id 必须是 index:N
+    IndexPrefix,
+    IndexIndexNotInt,
+    IndexIndexFromOne,
+    /// insertIndex 必须是主文档 body 的直接子段落或 docx:document
+    InsertIndexNeedsBodyPara,
+    /// 索引项 id 必须是 xe:N
+    XePrefix,
+    XeIndexNotInt,
+    XeIndexFromOne,
+    /// insertIndexEntry 必须用正文或页眉页脚段落 id
+    InsertIndexEntryNeedsPara,
     /// 公式 id 必须是 math:N 或 {容器}/math:N
     MathPrefix,
     MathIndexNotInt,
@@ -833,11 +845,15 @@ define_error_kinds! {
     TocNotFound { id: String } => vec![Self::TocNotFound { id: "toc:1".into() }],
     CaptionNotFound { id: String } => vec![Self::CaptionNotFound { id: "caption:1".into() }],
     CrossRefNotFound { id: String } => vec![Self::CrossRefNotFound { id: "xref:1".into() }],
+    IndexNotFound { id: String } => vec![Self::IndexNotFound { id: "index:1".into() }],
+    IndexEntryNotFound { id: String } => vec![Self::IndexEntryNotFound { id: "xe:1".into() }],
     MathNotFound { id: String } => vec![Self::MathNotFound { id: "math:1".into() }],
     ContentControlNotFound { id: String } => vec![Self::ContentControlNotFound { id: "sdt:1".into() }],
     InvalidTocKind => vec![Self::InvalidTocKind],
     InvalidSeqIdentifier => vec![Self::InvalidSeqIdentifier],
     InvalidCrossRefKind => vec![Self::InvalidCrossRefKind],
+    InvalidIndexInstr => vec![Self::InvalidIndexInstr],
+    InvalidIndexEntry => vec![Self::InvalidIndexEntry],
     InvalidMathKind => vec![Self::InvalidMathKind],
     EmptyMathText => vec![Self::EmptyMathText],
     InvalidContentControlKind => vec![Self::InvalidContentControlKind],
@@ -1260,6 +1276,14 @@ impl IdReason {
             Self::XrefIndexNotInt,
             Self::XrefIndexFromOne,
             Self::InsertCrossRefNeedsPara,
+            Self::IndexPrefix,
+            Self::IndexIndexNotInt,
+            Self::IndexIndexFromOne,
+            Self::InsertIndexNeedsBodyPara,
+            Self::XePrefix,
+            Self::XeIndexNotInt,
+            Self::XeIndexFromOne,
+            Self::InsertIndexEntryNeedsPara,
             Self::MathPrefix,
             Self::MathIndexNotInt,
             Self::MathIndexFromOne,
@@ -1390,6 +1414,8 @@ impl ErrorKind {
             | Self::InvalidTocKind
             | Self::InvalidSeqIdentifier
             | Self::InvalidCrossRefKind
+            | Self::InvalidIndexInstr
+            | Self::InvalidIndexEntry
             | Self::InvalidMathKind
             | Self::EmptyMathText
             | Self::InvalidContentControlKind
@@ -1633,6 +1659,8 @@ impl ErrorKind {
             | Self::TocNotFound { .. }
             | Self::CaptionNotFound { .. }
             | Self::CrossRefNotFound { .. }
+            | Self::IndexNotFound { .. }
+            | Self::IndexEntryNotFound { .. }
             | Self::MathNotFound { .. }
             | Self::ContentControlNotFound { .. }
             | Self::NumberingNotFound { .. }

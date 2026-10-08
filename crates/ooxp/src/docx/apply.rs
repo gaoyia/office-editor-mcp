@@ -21,12 +21,13 @@ use super::picture;
 use super::protect;
 use super::request::{
     DeleteBookmarkOp, DeleteCaptionOp, DeleteColOp, DeleteCommentOp, DeleteContentControlOp,
-    DeleteCrossRefOp, DeleteFieldOp, DeleteHyperlinkOp, DeleteMathOp, DeleteNoteOp, DeleteParaOp,
-    DeletePictureOp, DeleteRowOp, DeleteSectionOp, DeleteTableOp, DeleteTextBoxOp, DeleteTocOp,
-    DocxOp, InsertBookmarkOp, InsertCaptionOp, InsertCaptionPlace, InsertColOp, InsertCommentOp,
-    InsertContentControlOp, InsertCrossRefOp, InsertFieldOp, InsertHeaderFooterOp,
-    InsertHyperlinkOp, InsertMathOp, InsertMathPlace, InsertNoteOp, InsertNumberingOp,
-    InsertParaOp, InsertParaPlace, InsertPictureOp, InsertRowOp, InsertSdtPlace, InsertSectionOp,
+    DeleteCrossRefOp, DeleteFieldOp, DeleteHyperlinkOp, DeleteIndexEntryOp, DeleteIndexOp,
+    DeleteMathOp, DeleteNoteOp, DeleteParaOp, DeletePictureOp, DeleteRowOp, DeleteSectionOp,
+    DeleteTableOp, DeleteTextBoxOp, DeleteTocOp, DocxOp, InsertBookmarkOp, InsertCaptionOp,
+    InsertCaptionPlace, InsertColOp, InsertCommentOp, InsertContentControlOp, InsertCrossRefOp,
+    InsertFieldOp, InsertHeaderFooterOp, InsertHyperlinkOp, InsertIndexEntryOp, InsertIndexOp,
+    InsertIndexPlace, InsertMathOp, InsertMathPlace, InsertNoteOp, InsertNumberingOp, InsertParaOp,
+    InsertParaPlace, InsertPictureOp, InsertRowOp, InsertSdtPlace, InsertSectionOp,
     InsertSectionPlace, InsertTableOp, InsertTextBoxOp, InsertTocOp, InsertTocPlace, MergeCellsOp,
     NoteNumberTarget, ReplacePictureOp, ReplyCommentOp, RevisionOp, SetBookmarkOp, SetColumnsOp,
     SetCommentDoneOp, SetCommentMetaOp, SetCommentTextOp, SetContentControlOp, SetDocGridOp,
@@ -119,6 +120,18 @@ pub fn apply(bytes: &[u8], ops: &[DocxOp]) -> Result<Vec<u8>, Error> {
             }
             DocxOp::DeleteCrossRef(op) => {
                 apply_delete_cross_ref(&mut docs, &mut dirty, &doc_part, op, i)?;
+            }
+            DocxOp::InsertIndex(op) => {
+                apply_insert_index(&mut docs, &mut dirty, &doc_part, op, i)?;
+            }
+            DocxOp::DeleteIndex(op) => {
+                apply_delete_index(&mut docs, &mut dirty, &doc_part, op, i)?;
+            }
+            DocxOp::InsertIndexEntry(op) => {
+                apply_insert_index_entry(&pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
+            }
+            DocxOp::DeleteIndexEntry(op) => {
+                apply_delete_index_entry(&mut docs, &mut dirty, &doc_part, op, i)?;
             }
             DocxOp::InsertMath(op) => {
                 apply_insert_math(&pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
@@ -2001,6 +2014,71 @@ fn apply_delete_cross_ref(
 ) -> Result<(), Error> {
     let doc = docs.get_mut(doc_part).unwrap();
     field::delete_cross_ref(&mut doc.root, op.n, &op.id, i)?;
+    dirty.insert(doc_part.to_string(), ());
+    Ok(())
+}
+
+fn apply_insert_index(
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    op: &InsertIndexOp,
+    i: usize,
+) -> Result<(), Error> {
+    let doc = docs.get_mut(doc_part).unwrap();
+    let after = match &op.place {
+        InsertIndexPlace::After(p) => Some(p),
+        InsertIndexPlace::EndOfDocument => None,
+    };
+    field::insert_index(&mut doc.root, after, &op.instr, &op.id, i)?;
+    dirty.insert(doc_part.to_string(), ());
+    Ok(())
+}
+
+fn apply_delete_index(
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    op: &DeleteIndexOp,
+    i: usize,
+) -> Result<(), Error> {
+    let doc = docs.get_mut(doc_part).unwrap();
+    field::delete_index(&mut doc.root, op.n, &op.id, i)?;
+    dirty.insert(doc_part.to_string(), ());
+    Ok(())
+}
+
+fn apply_insert_index_entry(
+    pkg: &Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &InsertIndexEntryOp,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name = part_for_para(pkg, catalog, doc_part, &op.para, &op.id, i)?;
+    let doc = load_part(pkg, docs, &part_name)?;
+    let el = find_insert_para_mut(&mut doc.root, &op.para).ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::ParaNotFound { id: op.id.clone() },
+            format!("ops[{i}].id"),
+        )
+    })?;
+    field::insert_index_entry(el, &op.entry);
+    dirty.insert(part_name, ());
+    Ok(())
+}
+
+fn apply_delete_index_entry(
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    op: &DeleteIndexEntryOp,
+    i: usize,
+) -> Result<(), Error> {
+    let doc = docs.get_mut(doc_part).unwrap();
+    field::delete_index_entry(&mut doc.root, op.n, &op.id, i)?;
     dirty.insert(doc_part.to_string(), ());
     Ok(())
 }

@@ -170,6 +170,8 @@ fn inspect_counts_without_lists() {
             "tocCount",
             "captionCount",
             "crossRefCount",
+            "indexCount",
+            "indexEntryCount",
             "mathCount",
             "contentControlCount",
             "numberingCount",

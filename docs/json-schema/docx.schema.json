@@ -1560,6 +1560,83 @@
         }
       }
     },
+    "insertIndexOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "insertIndex"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "instr": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "deleteIndexOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "deleteIndex"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "insertIndexEntryOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "entry"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "insertIndexEntry"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "entry": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "deleteIndexEntryOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "deleteIndexEntry"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
     "insertMathOp": {
       "type": "object",
       "required": [

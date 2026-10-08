@@ -227,6 +227,8 @@ fn inspect_count_without_list() {
             "tocCount",
             "captionCount",
             "crossRefCount",
+            "indexCount",
+            "indexEntryCount",
             "mathCount",
             "contentControlCount",
             "numberingCount",

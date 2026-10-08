@@ -630,6 +630,19 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::InsertCrossRefNeedsPara => {
                 "insertCrossRef id must be a body or header/footer paragraph id".into()
             }
+            IdReason::IndexPrefix => "Index id must be index:N".into(),
+            IdReason::IndexIndexNotInt => "index index must be a positive integer".into(),
+            IdReason::IndexIndexFromOne => "index index starts at 1".into(),
+            IdReason::InsertIndexNeedsBodyPara => {
+                "insertIndex id must be a direct child paragraph of w:body, or docx:document"
+                    .into()
+            }
+            IdReason::XePrefix => "Index entry id must be xe:N".into(),
+            IdReason::XeIndexNotInt => "xe index must be a positive integer".into(),
+            IdReason::XeIndexFromOne => "xe index starts at 1".into(),
+            IdReason::InsertIndexEntryNeedsPara => {
+                "insertIndexEntry id must be a body or header/footer paragraph id".into()
+            }
             IdReason::MathPrefix => {
                 "Math id must be math:N or a header/footer container id plus /math:N".into()
             }
@@ -733,6 +746,11 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             "label must be a SEQ identifier: a Latin letter followed by up to 39 Latin letters, digits, or underscores".into()
         }
         ErrorKind::InvalidCrossRefKind => "kind must be ref or page".into(),
+        ErrorKind::InvalidIndexInstr => "instr must start with INDEX".into(),
+        ErrorKind::InvalidIndexEntry => {
+            "entry must be non-empty, must not be only whitespace, and must not contain a double quote"
+                .into()
+        }
         ErrorKind::CommentNotFound { id } => format!("Comment not found: {id}"),
         ErrorKind::NeedCommentParaId => {
             "The last paragraph of the comment must have w14:paraId to write commentsExtended".into()
@@ -1186,6 +1204,8 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::TocNotFound { id } => format!("Table of contents not found: {id}"),
         ErrorKind::CaptionNotFound { id } => format!("Caption not found: {id}"),
         ErrorKind::CrossRefNotFound { id } => format!("Cross-reference not found: {id}"),
+        ErrorKind::IndexNotFound { id } => format!("Index not found: {id}"),
+        ErrorKind::IndexEntryNotFound { id } => format!("Index entry not found: {id}"),
         ErrorKind::MathNotFound { id } => format!("Equation not found: {id}"),
         ErrorKind::ContentControlNotFound { id } => format!("Content control not found: {id}"),
         ErrorKind::SetParaTextHasField => {

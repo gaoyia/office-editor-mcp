@@ -259,6 +259,12 @@
         "crossRefs": {
           "type": "boolean"
         },
+        "indexes": {
+          "type": "boolean"
+        },
+        "indexEntries": {
+          "type": "boolean"
+        },
         "maths": {
           "type": "boolean"
         },
@@ -775,6 +781,18 @@
               },
               {
                 "$ref": "docx.schema.json#/$defs/deleteCrossRefOp"
+              },
+              {
+                "$ref": "docx.schema.json#/$defs/insertIndexOp"
+              },
+              {
+                "$ref": "docx.schema.json#/$defs/deleteIndexOp"
+              },
+              {
+                "$ref": "docx.schema.json#/$defs/insertIndexEntryOp"
+              },
+              {
+                "$ref": "docx.schema.json#/$defs/deleteIndexEntryOp"
               },
               {
                 "$ref": "docx.schema.json#/$defs/insertMathOp"

@@ -8,7 +8,7 @@
 
 Microsoft Word 16.0 已打开，用户确认通过。create、inspect、apply 三组都过了。O1 已放弃，见下表。本机若装了 WPS，`Word.Application` 会被抢走，测试仍直接启动 `WINWORD.EXE` 再挂 COM。A11 补过 `word/settings.xml` 之后，2026-09-26 用新 `docx-create.docx` 重跑，Word 报 `CompatibilityMode=15`。
 
-C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，跑 `pwsh -File manual-check\office\run.ps1 -Case 'docx-*'` 即可复现，逐条结果落在 `manual-check/office/out/office-results.csv`。2026-09-27 补跑 `docx-charts-remain.ps1`，Cr1–Cr6 通过。同日重跑 `docx-charts-ext.ps1`，Cx8 股价三条转柱形。2026-09-29 补跑 `docx-charts-rare.ps1`，Cq1–Cq5 通过。同日重跑 `docx-smartart.ps1`，Sa1–Sa9 通过。同日重跑 `docx-comments.ps1`，Cmt1–Cmt7、Ik1–Ik4 通过。2026-09-28 补跑 `docx-format.ps1`，Pf1–Pf6 通过。同日补跑 `docx-ole.ps1`，Ol1–Ol5 通过。同日补跑 `docx-protect.ps1`，Pr1–Pr6 通过。同日补跑 `docx-watermark.ps1`，Wm1–Wm5 通过。2026-10-09 补跑 `docx-theme.ps1`，Th1–Th5 通过。同日补跑 `docx-caption-xref.ps1`，Cp1–Cp6 通过。
+C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，跑 `pwsh -File manual-check\office\run.ps1 -Case 'docx-*'` 即可复现，逐条结果落在 `manual-check/office/out/office-results.csv`。2026-09-27 补跑 `docx-charts-remain.ps1`，Cr1–Cr6 通过。同日重跑 `docx-charts-ext.ps1`，Cx8 股价三条转柱形。2026-09-29 补跑 `docx-charts-rare.ps1`，Cq1–Cq5 通过。同日重跑 `docx-smartart.ps1`，Sa1–Sa9 通过。同日重跑 `docx-comments.ps1`，Cmt1–Cmt7、Ik1–Ik4 通过。2026-09-28 补跑 `docx-format.ps1`，Pf1–Pf6 通过。同日补跑 `docx-ole.ps1`，Ol1–Ol5 通过。同日补跑 `docx-protect.ps1`，Pr1–Pr6 通过。同日补跑 `docx-watermark.ps1`，Wm1–Wm5 通过。2026-10-09 补跑 `docx-theme.ps1`，Th1–Th5 通过。同日补跑 `docx-caption-xref.ps1`，Cp1–Cp6 通过。同日补跑 `docx-index.ps1`，Ix1–Ix6 通过。
 
 | 序号 | 状态 | 结果 |
 | --- | --- | --- |
@@ -54,6 +54,7 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 | Wm1–Wm5 | ✅ | Word 16.0：`docx-watermark.ps1`，5 PASS / 0 FAIL。文字水印 id 为 `header:default:1/watermark:1`、`kind=text`；删除后计数为 0；图片水印 `kind=picture`；普通页眉图不进 `watermarkCount`；错 id / 同时给 `text` 与 `file` 拒写。标题栏无 Repair |
 | Th1–Th5 | ✅ | Word 16.0：`docx-theme.ps1`，5 PASS / 0 FAIL。空白另存根上有 `theme`，`accent1` 为六位十六进制；改色为 `FF0000`；改字为 Arial；无 theme 部件得 `IdNotFound`；错 id / 空槽位拒写。标题栏无 Repair |
 | Cp1–Cp6 | ✅ | Word 16.0：`docx-caption-xref.ps1`，6 PASS / 0 FAIL。无 scope 时只有计数；插入后 `caption:1` / `identifier=Figure`；Word 更新域后交叉引用可见 Figure；删交叉引用与删题注无修复；页眉 `insertCaption` 为 `InvalidId`，xlsx 上为 `InvalidField`。标题栏无 Repair |
+| Ix1–Ix6 | ✅ | Word 16.0：`docx-index.ps1`，6 PASS / 0 FAIL。无 scope 时只有计数；插入后 `xe:1` / `index:1`，条目为 fox；Word 更新域后可见 fox；删索引与删索引项无修复；页眉 `insertIndex` 为 `InvalidId`，xlsx 上为 `InvalidField`。标题栏无 Repair |
 | O1 | 🚫 | 领域层不做原样保存，与 xlsx 清单相同。零脏写回见 OPC 库测试。Word 另存 create 产物见 `docx-O1-word-resave`。此前记的 `SaveAs2` 挂起，拆分后重跑没再出现，一秒内返回 |
 
 ## create
@@ -80,7 +81,7 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 | I2 | 大纲 | `outline` 含第一段，`level` 为 `1`，`text` 为 `标题` |
 | I3 | 段落 id | 两段都有 `para:{hex}`，`stable` 为 `true` |
 | I4 | 第二段 | `text` 为 `hello` |
-| I5 | 无 scope | 只发 path 时没有 `paragraphs` 字段，仍有 `outline`、`paraCount`、`pictureCount`、`tableCount`、`revisionCount`、`hyperlinkCount`、`bookmarkCount`、`fieldCount`、`tocCount`、`captionCount`、`crossRefCount`、`mathCount`、`contentControlCount`、`headers`、`footers`、`sections`、`props`、`protection`、`watermarkCount` |
+| I5 | 无 scope | 只发 path 时没有 `paragraphs` 字段，仍有 `outline`、`paraCount`、`pictureCount`、`tableCount`、`revisionCount`、`hyperlinkCount`、`bookmarkCount`、`fieldCount`、`tocCount`、`captionCount`、`crossRefCount`、`indexCount`、`indexEntryCount`、`mathCount`、`contentControlCount`、`headers`、`footers`、`sections`、`props`、`protection`、`watermarkCount` |
 
 ## apply
 
@@ -465,6 +466,19 @@ Word 亲手另存或在另存批注样例的 `comments.xml` 里带 `inkml:ink`�
 | Cp4 | 删除交叉引用 | `deleteCrossRef` 之后 `crossRefCount` 为 0，题注段还在，Word 无修复 |
 | Cp5 | 删除题注 | `deleteCaption` 之后 `captionCount` 为 0，标题段还在，Word 无修复 |
 | Cp6 | 拒错 | 对页眉段落发 `insertCaption` 得 `InvalidId`；xlsx 上发 `insertCaption` 得 `InvalidField`。未写文件 |
+
+## 索引
+
+`insertIndex` 写入 INDEX 域；`insertIndexEntry` 写入 XE。不在库里求值。手测脚本 `manual-check/office/cases/docx-index.ps1`。
+
+| 序号 | 检查 | 通过标准 |
+| --- | --- | --- |
+| Ix1 | 名单 | 无 `scope.indexes` / `scope.indexEntries` 时有 `indexCount` / `indexEntryCount` 且没有名单；`insertIndexEntry` 与 `insertIndex` 之后两项计数均为 1，给了对应 scope 能列出 `xe:1` / `index:1`，且 `fields` 里有 `XE` 与 `INDEX` |
+| Ix2 | 打开 | Word 打开后无修复 |
+| Ix3 | 更新 | Word 更新域后可见条目 `fox` |
+| Ix4 | 删除索引 | `deleteIndex` 之后 `indexCount` 为 0，标题段与索引项还在，Word 无修复 |
+| Ix5 | 删除索引项 | `deleteIndexEntry` 之后 `indexEntryCount` 为 0，标题段还在，Word 无修复 |
+| Ix6 | 拒错 | 对页眉段落发 `insertIndex` 得 `InvalidId`；xlsx 上发 `insertIndex` 得 `InvalidField`。未写文件 |
 
 ## 公式
 

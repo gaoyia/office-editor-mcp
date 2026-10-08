@@ -1505,3 +1505,218 @@ pub fn delete_cross_ref(
     let blocks = blocks_in_closed_range(root, &rec.start, &rec.end);
     remove_paths(root, blocks)
 }
+
+const DEFAULT_INDEX_INSTR: &str = r#" INDEX \h "A" \c "1""#;
+
+pub fn instr_is_index(instr: &str) -> bool {
+    field_code(instr) == "INDEX"
+}
+
+pub fn default_index_instr() -> &'static str {
+    DEFAULT_INDEX_INSTR
+}
+
+pub fn parse_index_entry(raw: &str) -> Result<(), ErrorKind> {
+    if raw.is_empty() || raw.chars().all(char::is_whitespace) || raw.contains('"') {
+        return Err(ErrorKind::InvalidIndexEntry);
+    }
+    Ok(())
+}
+
+fn index_recs(root: &Element) -> Vec<FieldRec> {
+    let recs = collect_fields(root);
+    recs.iter()
+        .enumerate()
+        .filter(|(i, rec)| field_code(&rec.instr) == "INDEX" && !is_nested_field(&recs, *i))
+        .map(|(_, rec)| rec.clone())
+        .collect()
+}
+
+fn xe_recs(root: &Element) -> Vec<FieldRec> {
+    let recs = collect_fields(root);
+    recs.iter()
+        .enumerate()
+        .filter(|(i, rec)| field_code(&rec.instr) == "XE" && !is_nested_field(&recs, *i))
+        .map(|(_, rec)| rec.clone())
+        .collect()
+}
+
+pub fn count_indexes(root: &Element) -> usize {
+    index_recs(root).len()
+}
+
+pub fn count_index_entries(root: &Element) -> usize {
+    xe_recs(root).len()
+}
+
+pub fn indexes_json(root: &Element) -> Result<Vec<Value>, Error> {
+    let fields = fields_json(root, None)?;
+    let recs = collect_fields(root);
+    let mut out = Vec::new();
+    let mut n = 0usize;
+    for (i, f) in fields.into_iter().enumerate() {
+        let code = f["code"].as_str().unwrap_or("");
+        if code != "INDEX" || is_nested_field(&recs, i) {
+            continue;
+        }
+        n += 1;
+        out.push(json!({
+            "id": format!("index:{n}"),
+            "index": n,
+            "field": f["id"],
+            "instr": f["instr"],
+            "host": f["host"],
+            "end": f["end"],
+            "text": f["text"],
+        }));
+    }
+    Ok(out)
+}
+
+pub fn index_entries_json(root: &Element) -> Result<Vec<Value>, Error> {
+    let fields = fields_json(root, None)?;
+    let recs = collect_fields(root);
+    let mut out = Vec::new();
+    let mut n = 0usize;
+    for (i, f) in fields.into_iter().enumerate() {
+        let code = f["code"].as_str().unwrap_or("");
+        if code != "XE" || is_nested_field(&recs, i) {
+            continue;
+        }
+        n += 1;
+        out.push(json!({
+            "id": format!("xe:{n}"),
+            "index": n,
+            "field": f["id"],
+            "instr": f["instr"],
+            "entry": first_field_arg(f["instr"].as_str().unwrap_or("")),
+            "host": f["host"],
+            "end": f["end"],
+            "text": f["text"],
+        }));
+    }
+    Ok(out)
+}
+
+pub fn insert_index(
+    root: &mut Element,
+    after: Option<&BodyPara>,
+    instr: &str,
+    err_id: &str,
+    op_i: usize,
+) -> Result<(), Error> {
+    let new_id = para::next_para_hex(root);
+    if let Some(para) = after {
+        let path = para::find_paragraph_path(root, para).ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::ParaNotFound {
+                    id: err_id.to_string(),
+                },
+                format!("ops[{op_i}].id"),
+            )
+        })?;
+        let parent_path = path[..path.len().saturating_sub(1)].to_vec();
+        let new_p = {
+            let parent = para::element_at(root, &parent_path).ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::ParaNotFound {
+                        id: err_id.to_string(),
+                    },
+                    format!("ops[{op_i}].id"),
+                )
+            })?;
+            if parent.local_name() != "body" {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidId {
+                        reason: IdReason::InsertIndexNeedsBodyPara,
+                    },
+                    format!("ops[{op_i}].id"),
+                ));
+            }
+            let mut p = para::new_paragraph(parent, &new_id, "");
+            insert_field(&mut p, instr, None);
+            p
+        };
+        let (host, idx) = para::parent_and_index_mut(root, &path).ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::ParaNotFound {
+                    id: err_id.to_string(),
+                },
+                format!("ops[{op_i}].id"),
+            )
+        })?;
+        host.children.insert(idx + 1, Node::Element(new_p));
+    } else {
+        let body = para::story_body_mut(root).ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::XmlMissing {
+                    parent: "document".into(),
+                    child: "body".into(),
+                },
+                format!("ops[{op_i}].id"),
+            )
+        })?;
+        let mut new_p = para::new_paragraph(body, &new_id, "");
+        insert_field(&mut new_p, instr, None);
+        para::append_before_body_sect_pr(body, new_p);
+    }
+    Ok(())
+}
+
+pub fn delete_index(root: &mut Element, n: usize, err_id: &str, op_i: usize) -> Result<(), Error> {
+    let recs = index_recs(root);
+    if n < 1 || n > recs.len() {
+        return Err(Error::with_path(
+            ErrorKind::IndexNotFound {
+                id: err_id.to_string(),
+            },
+            format!("ops[{op_i}].id"),
+        ));
+    }
+    let rec = recs.into_iter().nth(n - 1).expect("n 已检查");
+    if toc_blocked_by_sect_pr(root, &rec) {
+        return Err(Error::with_path(
+            ErrorKind::SectionBreakPara,
+            format!("ops[{op_i}].id"),
+        ));
+    }
+    let start_p = para_prefix_of(root, &rec.start);
+    let end_p = para_prefix_of(root, &rec.end);
+    let blocks = blocks_in_closed_range(root, &rec.start, &rec.end);
+    remove_paths(root, blocks)?;
+    if let (Some(a), Some(b)) = (start_p, end_p) {
+        drop_empty_body_paras(root, &a, &b)?;
+    }
+    ensure_body_has_para(root)?;
+    Ok(())
+}
+
+fn insert_xe_field(p: &mut Element, instr: &str) {
+    p.push_element(fld_char_run(p, "begin", false));
+    p.push_element(instr_run(p, instr));
+    p.push_element(fld_char_run(p, "end", false));
+}
+
+pub fn insert_index_entry(p: &mut Element, entry: &str) {
+    insert_xe_field(p, &format!(" XE \"{entry}\" "));
+}
+
+pub fn delete_index_entry(
+    root: &mut Element,
+    n: usize,
+    err_id: &str,
+    op_i: usize,
+) -> Result<(), Error> {
+    let recs = xe_recs(root);
+    if n < 1 || n > recs.len() {
+        return Err(Error::with_path(
+            ErrorKind::IndexEntryNotFound {
+                id: err_id.to_string(),
+            },
+            format!("ops[{op_i}].id"),
+        ));
+    }
+    let rec = recs.into_iter().nth(n - 1).expect("n 已检查");
+    let blocks = blocks_in_closed_range(root, &rec.start, &rec.end);
+    remove_paths(root, blocks)
+}

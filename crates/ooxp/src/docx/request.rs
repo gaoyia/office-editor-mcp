@@ -56,6 +56,10 @@ pub struct InspectScope {
     pub captions: bool,
     /// 为 true 时列出交叉引用。
     pub cross_refs: bool,
+    /// 为 true 时列出 INDEX 块。
+    pub indexes: bool,
+    /// 为 true 时列出 XE 索引项。
+    pub index_entries: bool,
     /// 为 true 时列出公式。
     pub maths: bool,
     /// 为 true 时列出内容控件。
@@ -698,6 +702,38 @@ pub struct DeleteCrossRefOp {
 }
 
 #[derive(Debug, Clone)]
+pub enum InsertIndexPlace {
+    After(para::BodyPara),
+    EndOfDocument,
+}
+
+#[derive(Debug, Clone)]
+pub struct InsertIndexOp {
+    pub id: String,
+    pub place: InsertIndexPlace,
+    pub instr: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct DeleteIndexOp {
+    pub id: String,
+    pub n: usize,
+}
+
+#[derive(Debug, Clone)]
+pub struct InsertIndexEntryOp {
+    pub id: String,
+    pub para: ParaTarget,
+    pub entry: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct DeleteIndexEntryOp {
+    pub id: String,
+    pub n: usize,
+}
+
+#[derive(Debug, Clone)]
 pub enum InsertMathPlace {
     After(ParaTarget),
     EndOfDocument,
@@ -774,6 +810,10 @@ pub enum DocxOp {
     DeleteCaption(DeleteCaptionOp),
     InsertCrossRef(InsertCrossRefOp),
     DeleteCrossRef(DeleteCrossRefOp),
+    InsertIndex(InsertIndexOp),
+    DeleteIndex(DeleteIndexOp),
+    InsertIndexEntry(InsertIndexEntryOp),
+    DeleteIndexEntry(DeleteIndexEntryOp),
     InsertMath(InsertMathOp),
     SetMath(SetMathOp),
     DeleteMath(DeleteMathOp),
@@ -923,6 +963,8 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
             "tocs",
             "captions",
             "crossRefs",
+            "indexes",
+            "indexEntries",
             "maths",
             "contentControls",
             "numbering",
@@ -949,6 +991,8 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
     let tocs = parse_bool_field(obj.get("tocs"), "tocs")?;
     let captions = parse_bool_field(obj.get("captions"), "captions")?;
     let cross_refs = parse_bool_field(obj.get("crossRefs"), "crossRefs")?;
+    let indexes = parse_bool_field(obj.get("indexes"), "indexes")?;
+    let index_entries = parse_bool_field(obj.get("indexEntries"), "indexEntries")?;
     let maths = parse_bool_field(obj.get("maths"), "maths")?;
     let content_controls = parse_bool_field(obj.get("contentControls"), "contentControls")?;
     let numbering = parse_bool_field(obj.get("numbering"), "numbering")?;
@@ -985,6 +1029,8 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
                 && !obj.contains_key("tocs")
                 && !obj.contains_key("captions")
                 && !obj.contains_key("crossRefs")
+                && !obj.contains_key("indexes")
+                && !obj.contains_key("indexEntries")
                 && !obj.contains_key("maths")
                 && !obj.contains_key("contentControls")
                 && !obj.contains_key("numbering")
@@ -1014,6 +1060,8 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
                 tocs,
                 captions,
                 cross_refs,
+                indexes,
+                index_entries,
                 maths,
                 content_controls,
                 numbering,
@@ -1080,6 +1128,8 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
                 tocs,
                 captions,
                 cross_refs,
+                indexes,
+                index_entries,
                 maths,
                 content_controls,
                 numbering,
@@ -1257,6 +1307,14 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<DocxOp>, Error> {
             "deleteCaption" => out.push(DocxOp::DeleteCaption(parse_delete_caption(obj, i)?)),
             "insertCrossRef" => out.push(DocxOp::InsertCrossRef(parse_insert_cross_ref(obj, i)?)),
             "deleteCrossRef" => out.push(DocxOp::DeleteCrossRef(parse_delete_cross_ref(obj, i)?)),
+            "insertIndex" => out.push(DocxOp::InsertIndex(parse_insert_index(obj, i)?)),
+            "deleteIndex" => out.push(DocxOp::DeleteIndex(parse_delete_index(obj, i)?)),
+            "insertIndexEntry" => {
+                out.push(DocxOp::InsertIndexEntry(parse_insert_index_entry(obj, i)?))
+            }
+            "deleteIndexEntry" => {
+                out.push(DocxOp::DeleteIndexEntry(parse_delete_index_entry(obj, i)?))
+            }
             "insertMath" => out.push(DocxOp::InsertMath(parse_insert_math(obj, i)?)),
             "setMath" => out.push(DocxOp::SetMath(parse_set_math(obj, i)?)),
             "deleteMath" => out.push(DocxOp::DeleteMath(parse_delete_math(obj, i)?)),
@@ -1952,6 +2010,117 @@ fn parse_delete_cross_ref(
     Ok(DeleteCrossRefOp { id, n })
 }
 
+fn parse_insert_index(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<InsertIndexOp, Error> {
+    deny_keys(obj, i, &["op", "id", "instr"])?;
+    let id = require_op_id(obj, i)?;
+    let instr = match obj.get("instr") {
+        None => super::field::default_index_instr().to_string(),
+        Some(Value::String(s)) => {
+            if s.trim().is_empty() {
+                return Err(Error::with_path(
+                    ErrorKind::EmptyFieldInstr,
+                    format!("ops[{i}].instr"),
+                ));
+            }
+            if !super::field::instr_is_index(s) {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidIndexInstr,
+                    format!("ops[{i}].instr"),
+                ));
+            }
+            s.clone()
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "instr".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].instr"),
+            ));
+        }
+    };
+    let path = format!("ops[{i}].id");
+    let place = if id == "docx:document" {
+        InsertIndexPlace::EndOfDocument
+    } else {
+        match para::parse_para_id_at(&id, &path)? {
+            ParaTarget::Body(p) => InsertIndexPlace::After(p),
+            _ => {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidId {
+                        reason: IdReason::InsertIndexNeedsBodyPara,
+                    },
+                    path,
+                ));
+            }
+        }
+    };
+    Ok(InsertIndexOp { id, place, instr })
+}
+
+fn parse_delete_index(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<DeleteIndexOp, Error> {
+    deny_keys(obj, i, &["op", "id"])?;
+    let id = require_op_id(obj, i)?;
+    let n = parse_index_id(&id, i)?;
+    Ok(DeleteIndexOp { id, n })
+}
+
+fn parse_insert_index_entry(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<InsertIndexEntryOp, Error> {
+    deny_keys(obj, i, &["op", "id", "entry"])?;
+    let id = require_op_id(obj, i)?;
+    let para = parse_story_para_at(
+        &id,
+        &format!("ops[{i}].id"),
+        IdReason::InsertIndexEntryNeedsPara,
+    )?;
+    let entry = match obj.get("entry") {
+        Some(Value::String(s)) => {
+            super::field::parse_index_entry(s)
+                .map_err(|kind| Error::with_path(kind, format!("ops[{i}].entry")))?;
+            s.clone()
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "entry".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].entry"),
+            ));
+        }
+        None => {
+            return Err(Error::with_path(
+                ErrorKind::OpRequiresField {
+                    op: "insertIndexEntry".into(),
+                    field: "entry".into(),
+                },
+                format!("ops[{i}].entry"),
+            ));
+        }
+    };
+    Ok(InsertIndexEntryOp { id, para, entry })
+}
+
+fn parse_delete_index_entry(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<DeleteIndexEntryOp, Error> {
+    deny_keys(obj, i, &["op", "id"])?;
+    let id = require_op_id(obj, i)?;
+    let n = parse_xe_id(&id, i)?;
+    Ok(DeleteIndexEntryOp { id, n })
+}
+
 fn parse_insert_math(
     obj: &serde_json::Map<String, Value>,
     i: usize,
@@ -2365,6 +2534,64 @@ fn parse_xref_id(id: &str, op_index: usize) -> Result<usize, Error> {
         return Err(Error::with_path(
             ErrorKind::InvalidId {
                 reason: IdReason::XrefIndexFromOne,
+            },
+            path,
+        ));
+    }
+    Ok(n)
+}
+
+fn parse_index_id(id: &str, op_index: usize) -> Result<usize, Error> {
+    let path = format!("ops[{op_index}].id");
+    let rest = id.strip_prefix("index:").ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::IndexPrefix,
+            },
+            path.clone(),
+        )
+    })?;
+    let n: usize = rest.parse().map_err(|_| {
+        Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::IndexIndexNotInt,
+            },
+            path.clone(),
+        )
+    })?;
+    if n < 1 {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::IndexIndexFromOne,
+            },
+            path,
+        ));
+    }
+    Ok(n)
+}
+
+fn parse_xe_id(id: &str, op_index: usize) -> Result<usize, Error> {
+    let path = format!("ops[{op_index}].id");
+    let rest = id.strip_prefix("xe:").ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::XePrefix,
+            },
+            path.clone(),
+        )
+    })?;
+    let n: usize = rest.parse().map_err(|_| {
+        Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::XeIndexNotInt,
+            },
+            path.clone(),
+        )
+    })?;
+    if n < 1 {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::XeIndexFromOne,
             },
             path,
         ));

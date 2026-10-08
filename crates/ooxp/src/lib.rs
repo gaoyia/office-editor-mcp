@@ -912,6 +912,8 @@ mod tests {
                 "tocCount",
                 "captionCount",
                 "crossRefCount",
+                "indexCount",
+                "indexEntryCount",
                 "mathCount",
                 "contentControlCount",
                 "numberingCount",
