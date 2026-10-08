@@ -8,7 +8,7 @@
 
 Microsoft Excel 16.0 已打开，用户确认通过。本机若装了 WPS，`Excel.Application` 会被抢走，测试仍直接启动 `EXCEL.EXE` 再挂 COM。
 
-C、I、A、O、Xp、Xc、Xh 这几组现在由 `manual-check/office/cases/xlsx-*.ps1` 自动判定，跑 `pwsh -File manual-check\office\run.ps1 -Case 'xlsx-*'` 即可复现，逐条结果落在 `manual-check/office/out/office-results.csv`。2026-09-27 补跑 `xlsx-pictures.ps1`，Xp1–Xp7 通过。同日补跑 `xlsx-charts.ps1`，Xc1–Xc7 通过。同日补跑 `xlsx-create-pictures.ps1`，C8–C10 通过。同日补跑 `xlsx-create-charts.ps1`，C11–C13 通过。同日补跑 `xlsx-headerfooter.ps1`，Xh1–Xh5 通过。同日补跑 `xlsx-docprops.ps1`，Xd1–Xd5 通过。同日补跑 `xlsx-charts-remain.ps1`，Xr1–Xr4 通过。同日补跑 `xlsx-sheets.ps1`，Xm1–Xm7 通过。同日补跑 `xlsx-cellstyle.ps1`，Xs1–Xs5 通过。同日补跑 `xlsx-layout.ps1`，Xl1–Xl5 通过。同日补跑 `xlsx-formula.ps1`，Xf1–Xf5 通过。2026-09-28 补跑 `xlsx-validation.ps1`，Xv1–Xv5 通过。同日补跑 `xlsx-conditional-format.ps1`，Xn1–Xn5 通过。同日补跑 `xlsx-pivot.ps1`，Xpt1–Xpt5 通过。同日补跑 `xlsx-defined-name.ps1`，Xnm1–Xnm5 通过。同日补跑 `xlsx-print.ps1`，Xps1–Xps5 通过。同日补跑 `xlsx-view.ps1`，Xvw1–Xvw5 通过。同日补跑 `xlsx-comments.ps1`，Xcm1–Xcm5 通过。同日补跑 `xlsx-shapes.ps1`，Xsa1–Xsa5 通过。同日补跑 `xlsx-hyperlinks.ps1`，Xhl1–Xhl5 通过。同日补跑 `xlsx-sparklines.ps1`，Xsk1–Xsk5 通过。同日补跑 `xlsx-protect.ps1`，Xpr1–Xpr5 通过。同日补跑 `xlsx-create-headerfooter.ps1`，C14–C16 通过。同日补跑 `xlsx-anchor.ps1`，Xa1–Xa5 通过。2026-09-29 补跑 `xlsx-charts-rare.ps1`，Xq1–Xq5 通过。同日补跑 `xlsx-ole.ps1`，Xol1–Xol5 通过。同日补跑 `xlsx-slicers.ps1`，Xsl1–Xsl5 通过。同日补跑 `xlsx-connections.ps1`，Xcn1–Xcn5 通过。2026-10-09 补跑 `xlsx-outline.ps1`，Xon1–Xon5 通过。同日补跑 `xlsx-custom-view.ps1`，Xsv1–Xsv5 通过。同日补跑 `xlsx-create-drawing.ps1`，C17–C21 通过。同日补跑 `xlsx-create-chartsheet.ps1`，C22–C24 通过。同日补跑 `xlsx-sort.ps1`，Xsr1–Xsr5 通过。2026-09-28 补跑 `xlsx-chartsheet.ps1`，图表工作表 Xs1–Xs4 通过。同日补跑 `xlsx-table.ps1`，Xt1–Xt5 通过。
+C、I、A、O、Xp、Xc、Xh 这几组现在由 `manual-check/office/cases/xlsx-*.ps1` 自动判定，跑 `pwsh -File manual-check\office\run.ps1 -Case 'xlsx-*'` 即可复现，逐条结果落在 `manual-check/office/out/office-results.csv`。2026-09-27 补跑 `xlsx-pictures.ps1`，Xp1–Xp7 通过。同日补跑 `xlsx-charts.ps1`，Xc1–Xc7 通过。同日补跑 `xlsx-create-pictures.ps1`，C8–C10 通过。同日补跑 `xlsx-create-charts.ps1`，C11–C13 通过。同日补跑 `xlsx-headerfooter.ps1`，Xh1–Xh5 通过。同日补跑 `xlsx-docprops.ps1`，Xd1–Xd5 通过。同日补跑 `xlsx-charts-remain.ps1`，Xr1–Xr4 通过。同日补跑 `xlsx-sheets.ps1`，Xm1–Xm7 通过。同日补跑 `xlsx-cellstyle.ps1`，Xs1–Xs5 通过。同日补跑 `xlsx-layout.ps1`，Xl1–Xl5 通过。同日补跑 `xlsx-formula.ps1`，Xf1–Xf5 通过。2026-09-28 补跑 `xlsx-validation.ps1`，Xv1–Xv5 通过。同日补跑 `xlsx-conditional-format.ps1`，Xn1–Xn5 通过。同日补跑 `xlsx-pivot.ps1`，Xpt1–Xpt5 通过。同日补跑 `xlsx-defined-name.ps1`，Xnm1–Xnm5 通过。同日补跑 `xlsx-print.ps1`，Xps1–Xps5 通过。同日补跑 `xlsx-view.ps1`，Xvw1–Xvw5 通过。同日补跑 `xlsx-comments.ps1`，Xcm1–Xcm5 通过。同日补跑 `xlsx-shapes.ps1`，Xsa1–Xsa5 通过。同日补跑 `xlsx-hyperlinks.ps1`，Xhl1–Xhl5 通过。同日补跑 `xlsx-sparklines.ps1`，Xsk1–Xsk5 通过。同日补跑 `xlsx-protect.ps1`，Xpr1–Xpr5 通过。同日补跑 `xlsx-create-headerfooter.ps1`，C14–C16 通过。同日补跑 `xlsx-anchor.ps1`，Xa1–Xa5 通过。2026-09-29 补跑 `xlsx-charts-rare.ps1`，Xq1–Xq5 通过。同日补跑 `xlsx-ole.ps1`，Xol1–Xol5 通过。同日补跑 `xlsx-slicers.ps1`，Xsl1–Xsl5 通过。同日补跑 `xlsx-connections.ps1`，Xcn1–Xcn5 通过。2026-10-09 补跑 `xlsx-outline.ps1`，Xon1–Xon5 通过。同日补跑 `xlsx-custom-view.ps1`，Xsv1–Xsv5 通过。同日补跑 `xlsx-create-drawing.ps1`，C17–C21 通过。同日补跑 `xlsx-create-chartsheet.ps1`，C22–C24 通过。同日补跑 `xlsx-sort.ps1`，Xsr1–Xsr5 通过。同日补跑 `xlsx-external-link.ps1`，Xel1–Xel5 通过。2026-09-28 补跑 `xlsx-chartsheet.ps1`，图表工作表 Xs1–Xs4 通过。同日补跑 `xlsx-table.ps1`，Xt1–Xt5 通过。
 
 | 序号 | 状态 | 结果 |
 | --- | --- | --- |
@@ -49,6 +49,7 @@ C、I、A、O、Xp、Xc、Xh 这几组现在由 `manual-check/office/cases/xlsx-
 | Xol1–Xol5 | ✅ | Excel 16.0：`xlsx-ole.ps1`，5 PASS / 0 FAIL。create 默认 `oleObjectCount=0`；`insertOle` 后 COM Type=7、id 为 `sheet:Sheet1/ole:1025`、`progId=Worksheet`、dummy 不进 `shapes`、无 Repair；`exportMedia` 与 embeddings 字节一致；删除后计数为 0；缺 `from` / `slide:1` / 形状 id 均拒写 |
 | Xsl1–Xsl5 | ✅ | Excel 16.0：`xlsx-slicers.ps1`，5 PASS / 0 FAIL。create 默认 `slicerCount=0`；表格 `insertSlicer` 后 COM `SlicerCaches.Count=1`、id 为 `sheet:Sheet1/slicer:1`、`sourceKind=table`、无 Repair；透视源 `sourceKind=pivot`；删除后计数为 0；缺 `from` / `slide:1` / 不存在的 `field` 均拒写 |
 | Xcn1–Xcn5 | ✅ | Excel 16.0：`xlsx-connections.ps1`，5 PASS / 0 FAIL。create 默认 `connectionCount=0`；网页 `insertConnection` 后 COM 认 `WebDemo`、inspect `kind=web`、无 Repair；文本连接 `kind=text`、`sourceFile` 对得上；删除后计数为 0；缺 `type` / `id=slide:1` / `type=odbc` 均拒写 |
+| Xel1–Xel5 | ✅ | Excel 16.0：`xlsx-external-link.ps1`，5 PASS / 0 FAIL。create 默认 `externalLinkCount=0`；`insertExternalLink` 并写 `=[1]Sheet1!A1` 后 COM `LinkSources` 含源文件、inspect `kind=book`、无 Repair；占用时删得 `NotImplemented`；清公式后再删计数为 0；缺 `path` / `id=slide:1` 拒写 |
 | Xon1–Xon5 | ✅ | Excel 16.0：`xlsx-outline.ps1`，5 PASS / 0 FAIL。默认 `outline.summaryBelow=true`、名单空；分组行 2:4 与列 B:C 后 COM `OutlineLevel` 对得上、无 Repair；折叠后细节行隐藏；取消分组后级回落；缺字段 / `id=slide:1` 拒写 |
 | Xsv1–Xsv5 | ✅ | Excel 16.0：`xlsx-custom-view.ps1`，5 PASS / 0 FAIL。默认 `splitRows`/`splitCols` 为 0、`customViewCount` 为 0；拆分后 COM `SplitRow=4` `SplitColumn=2`、无 Repair；`insertCustomView` 后 COM Count=1；删除后计数 0；冻结+拆分 / 空名 / `id=slide:1` 拒写 |
 | C17–C21 | ✅ | Excel 16.0：`xlsx-create-drawing.ps1`，5 PASS / 0 FAIL。inspect 批注 `ref=A1` 正文含 `C17批注`；超链接 id 为 `sheet:Sheet1/link:1`；形状 `from=B4` `prst=ellipse`；SmartArt `from=D6`；打开无 Repair，COM 批注 / 超链接 / Shapes=4 / SmartArt=1 |
@@ -450,6 +451,18 @@ Office 另存 create 产物是打开冒烟，见 `manual-check/office/cases/opc-
 | Xcn3 | 文本 | `insertConnection` `type=text` 后无修复；inspect `kind=text`、`sourceFile` 对得上 |
 | Xcn4 | 删除 | `deleteConnection` 后 `connectionCount=0`、无 Repair |
 | Xcn5 | 拒写 | 缺 `type`、`id` 为 `slide:1`、`type` 不是 `web`/`text` 得 `InvalidField` 或 `InvalidId`；均未写文件。不强制开 Excel |
+
+## 外部引用
+
+用库 create 产物再 apply。脚本 `manual-check/office/cases/xlsx-external-link.ps1`。编号用 **Xel**。不要和 Xl、Xcn 撞。不打开目标文件求值。
+
+| 序号 | 检查 | 通过标准 |
+| --- | --- | --- |
+| Xel1 | inspect | 工作簿始终有 `externalLinkCount`；create 默认为 `0`；给了 `scope.externalLinks` 时名单为空数组，不依赖单元格切片 |
+| Xel2 | 插入 | `insertExternalLink` 并写 `=[1]Sheet1!A1` 后 Excel 无修复；COM `LinkSources` 或 Formula 含源文件名；inspect `kind=book`、`path` 含源文件名。Excel 16.0 对未引用的 `externalReferences` 不填 `LinkSources` |
+| Xel3 | 公式占用 | 写了 `=[1]Sheet1!A1` 后再 `deleteExternalLink` 得 `NotImplemented`，未写文件。COM Formula 含 `Sheet1` 与 `A1`（Excel 可能写成 `'…[file.xlsx]Sheet1'!A1`） |
+| Xel4 | 删除 | 清掉公式后再删，`externalLinkCount=0`、无 Repair |
+| Xel5 | 拒写 | 缺 `path`、`id` 为 `slide:1` 得 `InvalidField` 或 `InvalidId`；均未写文件。不强制开 Excel |
 
 ## 分组 / 分级显示
 

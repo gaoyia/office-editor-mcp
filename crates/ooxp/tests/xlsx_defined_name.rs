@@ -118,6 +118,7 @@ fn inspect_empty_on_create() {
             "oleObjectCount",
             "slicerCount",
             "connectionCount",
+            "externalLinkCount",
             "customViewCount",
             "definedNameCount",
             "props",

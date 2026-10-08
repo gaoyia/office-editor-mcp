@@ -69,6 +69,7 @@ docx 见 [`roadmap/docx.md`](docx.md)。pptx 见 [`roadmap/pptx.md`](pptx.md)。
 | 26 | `.plan/2026年-10月-9日-✅-xlsx-create图表工作表.md` | 图表工作表 |
 | 27 | `.plan/2026年-10月-9日-✅-xlsx-排序.md` | 视图与筛选 |
 | 28 | `.plan/2026年-10月-9日-✅-xlsx-共享公式改主格.md` | 公式结构 |
+| 29 | `.plan/2026年-10月-9日-✅-xlsx-外部引用.md` | 公式结构 |
 
 ## 待做
 
@@ -76,7 +77,6 @@ docx 见 [`roadmap/docx.md`](docx.md)。pptx 见 [`roadmap/pptx.md`](pptx.md)。
 
 | 序 | 计划 | 前置 |
 | --- | --- | --- |
-| 29 | 外部引用 | 公式结构 |
 | 30 | 保护密码哈希 | 保护 |
 | 31 | `dialogsheet` / `macrosheet` 只读进树 | 工作表管理 |
 
@@ -92,4 +92,4 @@ xlsx 没有 Word / PowerPoint 那种墨迹批注计划；批注已过（序号 1
 
 ## 怎么算 Excel 全量做完
 
-已过表保持 ✅，待做 28–31 做完，`docs/` 与实现一致，Excel 16.0 手测过对应清单。永不做的条目不算欠账。公式求值保持 🚫。
+已过表保持 ✅，待做 30–31 做完，`docs/` 与实现一致，Excel 16.0 手测过对应清单。永不做的条目不算欠账。公式求值保持 🚫。

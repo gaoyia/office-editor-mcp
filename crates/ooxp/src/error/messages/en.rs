@@ -321,6 +321,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::InsertConnectionNeedsWorkbook => {
                 "insertConnection id must be xlsx:workbook".into()
             }
+            IdReason::InsertExternalLinkNeedsWorkbook => {
+                "insertExternalLink id must be xlsx:workbook".into()
+            }
             IdReason::InsertCustomViewNeedsWorkbook => {
                 "insertCustomView id must be xlsx:workbook".into()
             }
@@ -338,6 +341,13 @@ pub(super) fn render(kind: &ErrorKind) -> String {
                 "connection:index must be followed by a positive integer".into()
             }
             IdReason::ConnectionIndexFromOne => "connection:index starts at 1".into(),
+            IdReason::ExternalLinkPrefix => {
+                "external link id must be extlink:n, n starting at 1".into()
+            }
+            IdReason::ExternalLinkIndexNotInt => {
+                "extlink must be followed by a positive integer".into()
+            }
+            IdReason::ExternalLinkIndexFromOne => "extlink starts at 1".into(),
             IdReason::DefinedNamePrefix => {
                 "defined name id must be name:n, n starting at 1".into()
             }
@@ -831,6 +841,13 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::ConnectionNotFound { id } => format!("Connection not found: {id}"),
         ErrorKind::InvalidConnection { field } => {
             format!("{field} is not a valid connection value")
+        }
+        ErrorKind::ExternalLinkNotFound { id } => format!("External link not found: {id}"),
+        ErrorKind::InvalidExternalLink { field } => {
+            format!("{field} is not a valid external link value")
+        }
+        ErrorKind::ExternalLinkInUse => {
+            "A formula or defined name still uses this external link".into()
         }
         ErrorKind::CustomViewNotFound { id } => format!("Custom view not found: {id}"),
         ErrorKind::InvalidCustomView { field } => {

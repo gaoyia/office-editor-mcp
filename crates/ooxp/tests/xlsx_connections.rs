@@ -101,7 +101,10 @@ fn empty_create_has_count_without_list() {
         .any(|w| w == ["slicerCount", "connectionCount"]));
     assert!(keys
         .windows(2)
-        .any(|w| w == ["connectionCount", "customViewCount"]));
+        .any(|w| w == ["connectionCount", "externalLinkCount"]));
+    assert!(keys
+        .windows(2)
+        .any(|w| w == ["externalLinkCount", "customViewCount"]));
     assert!(keys
         .windows(2)
         .any(|w| w == ["customViewCount", "definedNameCount"]));

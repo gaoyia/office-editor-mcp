@@ -14,6 +14,7 @@ use super::chart::{self, SheetChartId};
 use super::comments;
 use super::connection;
 use super::custom_view;
+use super::extlink;
 use super::names;
 use super::ole;
 use super::picture::{self, SheetPicId};
@@ -160,6 +161,7 @@ pub struct InspectScope {
     pub ole_objects: bool,
     pub slicers: bool,
     pub connections: bool,
+    pub external_links: bool,
     pub custom_views: bool,
 }
 
@@ -1657,6 +1659,8 @@ pub enum XlsxOp {
     DeleteSlicer(slicer::DeleteSlicerOp),
     InsertConnection(connection::InsertConnectionOp),
     DeleteConnection(connection::DeleteConnectionOp),
+    InsertExternalLink(extlink::InsertExternalLinkOp),
+    DeleteExternalLink(extlink::DeleteExternalLinkOp),
     SetTextBoxSize(SetTextBoxSizeOp),
     SetTextBoxAnchor(SetTextBoxAnchorOp),
     SetShapeText(SetShapeTextOp),
@@ -1710,6 +1714,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
             "oleObjects",
             "slicers",
             "connections",
+            "externalLinks",
             "customViews",
         ],
     )?;
@@ -1726,6 +1731,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
     let ole_objects = parse_bool_field(obj.get("oleObjects"), "oleObjects")?;
     let slicers = parse_bool_field(obj.get("slicers"), "slicers")?;
     let connections = parse_bool_field(obj.get("connections"), "connections")?;
+    let external_links = parse_bool_field(obj.get("externalLinks"), "externalLinks")?;
     let custom_views = parse_bool_field(obj.get("customViews"), "customViews")?;
     let sheet = obj.get("sheet").and_then(Value::as_str);
     let range = obj.get("range").and_then(Value::as_str);
@@ -1785,6 +1791,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
         && !ole_objects
         && !slicers
         && !connections
+        && !external_links
         && !custom_views
     {
         return Ok(None);
@@ -1804,6 +1811,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
         ole_objects,
         slicers,
         connections,
+        external_links,
         custom_views,
     }))
 }
@@ -1931,6 +1939,8 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<XlsxOp>, Error> {
             "deleteSlicer" => XlsxOp::DeleteSlicer(parse_delete_slicer(obj, i)?),
             "insertConnection" => XlsxOp::InsertConnection(parse_insert_connection(obj, i)?),
             "deleteConnection" => XlsxOp::DeleteConnection(parse_delete_connection(obj, i)?),
+            "insertExternalLink" => XlsxOp::InsertExternalLink(parse_insert_external_link(obj, i)?),
+            "deleteExternalLink" => XlsxOp::DeleteExternalLink(parse_delete_external_link(obj, i)?),
             "setTextBoxSize" => XlsxOp::SetTextBoxSize(parse_set_textbox_size(obj, i)?),
             "setTextBoxAnchor" => XlsxOp::SetTextBoxAnchor(parse_set_textbox_anchor(obj, i)?),
             "setShapeText" => XlsxOp::SetShapeText(parse_set_shape_text(obj, i)?),
@@ -9203,6 +9213,107 @@ fn parse_delete_connection(
     let id = require_id(obj, i)?;
     let key = connection::parse_connection_id(&id, &format!("ops[{i}].id"))?;
     Ok(connection::DeleteConnectionOp { id, key })
+}
+
+fn parse_insert_external_link(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<extlink::InsertExternalLinkOp, Error> {
+    deny_keys(obj, i, &["op", "id", "path", "sheets"])?;
+    let id = require_id(obj, i)?;
+    if id != "xlsx:workbook" {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::InsertExternalLinkNeedsWorkbook,
+            },
+            format!("ops[{i}].id"),
+        ));
+    }
+    let path = match obj.get("path") {
+        Some(Value::String(s)) if !s.is_empty() => s.clone(),
+        None => {
+            return Err(Error::with_path(
+                ErrorKind::MissingField {
+                    field: "path".into(),
+                },
+                format!("ops[{i}].path"),
+            ));
+        }
+        Some(Value::String(_)) => {
+            return Err(Error::with_path(
+                ErrorKind::InvalidExternalLink {
+                    field: "path".into(),
+                },
+                format!("ops[{i}].path"),
+            ));
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "path".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].path"),
+            ));
+        }
+    };
+    let sheets = match obj.get("sheets") {
+        None => vec!["Sheet1".into()],
+        Some(Value::Array(arr)) => {
+            if arr.is_empty() {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidExternalLink {
+                        field: "sheets".into(),
+                    },
+                    format!("ops[{i}].sheets"),
+                ));
+            }
+            let mut out = Vec::with_capacity(arr.len());
+            for (j, v) in arr.iter().enumerate() {
+                match v {
+                    Value::String(s) if !s.is_empty() => out.push(s.clone()),
+                    Value::String(_) => {
+                        return Err(Error::with_path(
+                            ErrorKind::InvalidExternalLink {
+                                field: "sheets".into(),
+                            },
+                            format!("ops[{i}].sheets[{j}]"),
+                        ));
+                    }
+                    _ => {
+                        return Err(Error::with_path(
+                            ErrorKind::WrongType {
+                                field: "sheets".into(),
+                                expected: TypeName::String,
+                            },
+                            format!("ops[{i}].sheets[{j}]"),
+                        ));
+                    }
+                }
+            }
+            out
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "sheets".into(),
+                    expected: TypeName::Array,
+                },
+                format!("ops[{i}].sheets"),
+            ));
+        }
+    };
+    Ok(extlink::InsertExternalLinkOp { path, sheets })
+}
+
+fn parse_delete_external_link(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<extlink::DeleteExternalLinkOp, Error> {
+    deny_keys(obj, i, &["op", "id"])?;
+    let id = require_id(obj, i)?;
+    let index = extlink::parse_external_link_id(&id, &format!("ops[{i}].id"))?;
+    Ok(extlink::DeleteExternalLinkOp { id, index })
 }
 
 fn parse_set_textbox_size(

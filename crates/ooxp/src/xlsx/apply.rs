@@ -14,6 +14,7 @@ use super::chartsheet;
 use super::comments;
 use super::connection;
 use super::custom_view;
+use super::extlink;
 use super::hf;
 use super::inspect;
 use super::layout;
@@ -744,6 +745,22 @@ pub fn apply(bytes: &[u8], ops: &[XlsxOp]) -> Result<Vec<u8>, Error> {
             }
             XlsxOp::DeleteConnection(op) => {
                 connection::delete(&mut pkg, &wb_part, op, i)?;
+            }
+            XlsxOp::InsertExternalLink(op) => {
+                extlink::insert(&mut pkg, &mut wb_doc, &wb_part, op)?;
+                workbook_dirty = true;
+            }
+            XlsxOp::DeleteExternalLink(op) => {
+                extlink::delete(
+                    &mut pkg,
+                    &mut wb_doc,
+                    &wb_part,
+                    &sheet_index,
+                    &dirty_sheets,
+                    op,
+                    i,
+                )?;
+                workbook_dirty = true;
             }
             XlsxOp::SetTextBoxSize(op) => {
                 let part = require_drawing_worksheet(

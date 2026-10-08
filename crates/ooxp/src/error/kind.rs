@@ -212,6 +212,8 @@ pub(crate) enum IdReason {
     InsertDefinedNameNeedsWorkbook,
     /// insertConnection 必须用 xlsx:workbook
     InsertConnectionNeedsWorkbook,
+    /// insertExternalLink 必须用 xlsx:workbook
+    InsertExternalLinkNeedsWorkbook,
     /// insertCustomView 必须用 xlsx:workbook
     InsertCustomViewNeedsWorkbook,
     /// 自定义视图 id 必须是 customView:n
@@ -222,6 +224,10 @@ pub(crate) enum IdReason {
     ConnectionPrefix,
     ConnectionIndexNotInt,
     ConnectionIndexFromOne,
+    /// 外部引用 id 必须是 extlink:n
+    ExternalLinkPrefix,
+    ExternalLinkIndexNotInt,
+    ExternalLinkIndexFromOne,
     /// setDefinedName / deleteDefinedName 必须用 name:n
     DefinedNamePrefix,
     NameIndexNotInt,
@@ -736,6 +742,11 @@ define_error_kinds! {
     InvalidConnection { field: String } => {
         vec![Self::InvalidConnection { field: "type".into() }]
     },
+    ExternalLinkNotFound { id: String } => vec![Self::ExternalLinkNotFound { id: "extlink:1".into() }],
+    InvalidExternalLink { field: String } => {
+        vec![Self::InvalidExternalLink { field: "path".into() }]
+    },
+    ExternalLinkInUse => vec![Self::ExternalLinkInUse],
     CustomViewNotFound { id: String } => vec![Self::CustomViewNotFound { id: "customView:1".into() }],
     InvalidCustomView { field: String } => {
         vec![Self::InvalidCustomView { field: "name".into() }]
@@ -1086,6 +1097,7 @@ impl IdReason {
             Self::SetHandoutTextNeedsHandout,
             Self::InsertDefinedNameNeedsWorkbook,
             Self::InsertConnectionNeedsWorkbook,
+            Self::InsertExternalLinkNeedsWorkbook,
             Self::InsertCustomViewNeedsWorkbook,
             Self::CustomViewPrefix,
             Self::CustomViewIndexNotInt,
@@ -1093,6 +1105,9 @@ impl IdReason {
             Self::ConnectionPrefix,
             Self::ConnectionIndexNotInt,
             Self::ConnectionIndexFromOne,
+            Self::ExternalLinkPrefix,
+            Self::ExternalLinkIndexNotInt,
+            Self::ExternalLinkIndexFromOne,
             Self::DefinedNamePrefix,
             Self::NameIndexNotInt,
             Self::NameIndexFromOne,
@@ -1438,6 +1453,7 @@ impl ErrorKind {
             | Self::OutlineLevelMax
             | Self::SlicerFieldNotFound { .. }
             | Self::InvalidConnection { .. }
+            | Self::InvalidExternalLink { .. }
             | Self::InvalidCustomView { .. }
             | Self::InvalidAlign
             | Self::InvalidLineRule
@@ -1569,6 +1585,7 @@ impl ErrorKind {
             | Self::OleNotFound { .. }
             | Self::SlicerNotFound { .. }
             | Self::ConnectionNotFound { .. }
+            | Self::ExternalLinkNotFound { .. }
             | Self::CustomViewNotFound { .. }
             | Self::ZoomNotFound { .. }
             | Self::WatermarkNotFound { .. }
@@ -1598,6 +1615,7 @@ impl ErrorKind {
             | Self::FormulaGroupOverlap { .. }
             | Self::InkComment { .. }
             | Self::SheetStillReferenced { .. }
+            | Self::ExternalLinkInUse
             | Self::DialogOrMacroSheet
             | Self::CrossParaMarker
             | Self::ParaHasRevision

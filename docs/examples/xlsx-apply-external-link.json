@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "C:\\data\\book.xlsx",
+  "output": "C:\\data\\book.extlink.xlsx",
+  "ops": [
+    {
+      "op": "insertExternalLink",
+      "id": "xlsx:workbook",
+      "path": "C:\\data\\source.xlsx",
+      "sheets": ["Sheet1"]
+    },
+    { "op": "setCell", "id": "cell:Sheet1!B1", "formula": "=[1]Sheet1!A1" }
+  ]
+}

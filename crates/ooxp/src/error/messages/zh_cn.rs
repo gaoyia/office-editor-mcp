@@ -296,6 +296,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::InsertConnectionNeedsWorkbook => {
                 "insertConnection 的 id 必须是 xlsx:workbook".into()
             }
+            IdReason::InsertExternalLinkNeedsWorkbook => {
+                "insertExternalLink 的 id 必须是 xlsx:workbook".into()
+            }
             IdReason::InsertCustomViewNeedsWorkbook => {
                 "insertCustomView 的 id 必须是 xlsx:workbook".into()
             }
@@ -313,6 +316,13 @@ pub(super) fn render(kind: &ErrorKind) -> String {
                 "connection:index 后面必须是正整数".into()
             }
             IdReason::ConnectionIndexFromOne => "connection:index 从 1 起".into(),
+            IdReason::ExternalLinkPrefix => {
+                "外部引用 id 必须是 extlink:n，n 从 1 起".into()
+            }
+            IdReason::ExternalLinkIndexNotInt => {
+                "extlink 后面必须是正整数".into()
+            }
+            IdReason::ExternalLinkIndexFromOne => "extlink 从 1 起".into(),
             IdReason::DefinedNamePrefix => {
                 "定义名 id 必须是 name:n，n 从 1 起".into()
             }
@@ -748,6 +758,11 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::InvalidConnection { field } => {
             format!("连接的 {field} 不合法")
         }
+        ErrorKind::ExternalLinkNotFound { id } => format!("找不到外部引用：{id}"),
+        ErrorKind::InvalidExternalLink { field } => {
+            format!("外部引用的 {field} 不合法")
+        }
+        ErrorKind::ExternalLinkInUse => "公式或定义名仍在使用该外部引用".into(),
         ErrorKind::CustomViewNotFound { id } => format!("找不到自定义视图：{id}"),
         ErrorKind::InvalidCustomView { field } => {
             format!("自定义视图的 {field} 不合法")

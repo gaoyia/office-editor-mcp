@@ -196,6 +196,9 @@
         "connections": {
           "type": "boolean"
         },
+        "externalLinks": {
+          "type": "boolean"
+        },
         "customViews": {
           "type": "boolean"
         },
@@ -967,6 +970,12 @@
               },
               {
                 "$ref": "xlsx.schema.json#/$defs/deleteConnectionOp"
+              },
+              {
+                "$ref": "xlsx.schema.json#/$defs/insertExternalLinkOp"
+              },
+              {
+                "$ref": "xlsx.schema.json#/$defs/deleteExternalLinkOp"
               },
               {
                 "$ref": "docx.schema.json#/$defs/insertOleOp"

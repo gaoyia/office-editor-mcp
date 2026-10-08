@@ -804,6 +804,7 @@ mod tests {
                 "oleObjectCount",
                 "slicerCount",
                 "connectionCount",
+                "externalLinkCount",
                 "customViewCount",
                 "definedNameCount",
                 "props",

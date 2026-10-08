@@ -1132,6 +1132,8 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<DocxOp>, Error> {
             || op_name == "deleteSlicer"
             || op_name == "insertConnection"
             || op_name == "deleteConnection"
+            || op_name == "insertExternalLink"
+            || op_name == "deleteExternalLink"
             || op_name == "insertSlide"
             || op_name == "deleteSlide"
             || op_name == "moveSlide"
