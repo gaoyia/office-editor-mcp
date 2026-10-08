@@ -3226,6 +3226,10 @@
         },
         "lockRevision": {
           "type": "boolean"
+        },
+        "password": {
+          "type": "string",
+          "minLength": 1
         }
       },
       "anyOf": [

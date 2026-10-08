@@ -1027,6 +1027,7 @@ pub struct SetSheetProtectionOp {
     pub auto_filter: Option<bool>,
     pub pivot_tables: Option<bool>,
     pub select_unlocked_cells: Option<bool>,
+    pub password: Option<String>,
 }
 
 impl SetSheetProtectionOp {
@@ -1054,6 +1055,7 @@ pub struct SetWorkbookProtectionOp {
     pub lock_structure: Option<bool>,
     pub lock_windows: Option<bool>,
     pub lock_revision: Option<bool>,
+    pub password: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -4991,27 +4993,50 @@ fn parse_delete_sparkline(
     Ok(DeleteSparklineOp { id, sheet, index })
 }
 
+fn parse_opt_password(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<Option<String>, Error> {
+    match obj.get("password") {
+        None => Ok(None),
+        Some(Value::String(s)) if !s.is_empty() => Ok(Some(s.clone())),
+        Some(Value::String(_)) => Err(Error::with_path(
+            ErrorKind::ProtectionPasswordBlank,
+            format!("ops[{i}].password"),
+        )),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "password".into(),
+                expected: TypeName::String,
+            },
+            format!("ops[{i}].password"),
+        )),
+    }
+}
+
 fn parse_set_protection(
     obj: &serde_json::Map<String, Value>,
     i: usize,
 ) -> Result<SetProtectionOp, Error> {
-    if obj.contains_key("password") {
-        return Err(Error::with_path(
-            ErrorKind::ProtectionPassword,
-            format!("ops[{i}].password"),
-        ));
-    }
     let id = require_id(obj, i)?;
     if id == "xlsx:workbook" {
         deny_keys(
             obj,
             i,
-            &["op", "id", "lockStructure", "lockWindows", "lockRevision"],
+            &[
+                "op",
+                "id",
+                "lockStructure",
+                "lockWindows",
+                "lockRevision",
+                "password",
+            ],
         )?;
         let op = SetWorkbookProtectionOp {
             lock_structure: parse_opt_bool(obj, i, "lockStructure")?,
             lock_windows: parse_opt_bool(obj, i, "lockWindows")?,
             lock_revision: parse_opt_bool(obj, i, "lockRevision")?,
+            password: parse_opt_password(obj, i)?,
         };
         if op.lock_structure.is_none() && op.lock_windows.is_none() && op.lock_revision.is_none() {
             return Err(Error::with_path(
@@ -5043,6 +5068,7 @@ fn parse_set_protection(
             "autoFilter",
             "pivotTables",
             "selectUnlockedCells",
+            "password",
         ],
     )?;
     let sheet = parse_sheet_only_id(&id, i, "id", IdReason::SetProtectionNeedsSheetOrWorkbook)?;
@@ -5064,6 +5090,7 @@ fn parse_set_protection(
         auto_filter: parse_opt_bool(obj, i, "autoFilter")?,
         pivot_tables: parse_opt_bool(obj, i, "pivotTables")?,
         select_unlocked_cells: parse_opt_bool(obj, i, "selectUnlockedCells")?,
+        password: parse_opt_password(obj, i)?,
     };
     if op.enforced.is_none() && !op.has_flag() {
         return Err(Error::with_path(

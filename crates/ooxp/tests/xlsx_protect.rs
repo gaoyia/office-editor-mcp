@@ -348,19 +348,6 @@ fn missing_field_wrong_id_password_and_create() {
     .unwrap_err();
     assert_eq!(err_id.code(), ErrorCode::InvalidId);
 
-    let err_pw = apply(
-        &src,
-        &out,
-        json!([{
-            "op": "setProtection",
-            "id": "sheet:Sheet1",
-            "enforced": true,
-            "password": "secret"
-        }]),
-    )
-    .unwrap_err();
-    assert_eq!(err_pw.code(), ErrorCode::NotImplemented);
-
     let created = tmp("create-prot");
     let err_create = run(
         &json!({

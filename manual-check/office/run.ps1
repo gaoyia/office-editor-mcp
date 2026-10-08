@@ -104,6 +104,7 @@ $order = @(
     'xlsx-hyperlinks'
     'xlsx-sparklines'
     'xlsx-protect'
+    'xlsx-protect-hash'
     'xlsx-anchor'
     'pptx-docprops'
     'pptx-apply'

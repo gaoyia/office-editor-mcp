@@ -228,10 +228,11 @@ xlsx 工作表（id 为 `sheet:{name}`）：
 | `id` | 必须是 `sheet:{name}` |
 | `enforced` | 可选。布尔。`true` 写出 `<sheetProtection>` 并打开；`false` 删掉该元素 |
 | `objects` 等权限键 | 可选。布尔。与树上 `sheetProtection` 同名同向 |
+| `password` | 可选。非空字符串。按 Excel 16.0 写 SHA-512 哈希 |
 
-工作表可写键：`enforced`、`objects`、`scenarios`、`formatCells`、`formatColumns`、`formatRows`、`insertColumns`、`insertRows`、`insertHyperlinks`、`deleteColumns`、`deleteRows`、`selectLockedCells`、`sort`、`autoFilter`、`pivotTables`、`selectUnlockedCells`。至少给一个，否则报 `InvalidField`。未点名的属性留下。出现 `password` / `hasPassword` / `edit` / `formatting` / `readOnlyRecommended` / `lockStructure` 报 `InvalidField` 或 `NotImplemented`（`password` 为 `NotImplemented`）。id 不是工作表 id 报 `InvalidId`。找不到工作表报 `IdNotFound`。对 `dialogsheet` / `macrosheet` 报 `NotImplemented`。
+工作表可写键：`enforced`、`objects`、`scenarios`、`formatCells`、`formatColumns`、`formatRows`、`insertColumns`、`insertRows`、`insertHyperlinks`、`deleteColumns`、`deleteRows`、`selectLockedCells`、`sort`、`autoFilter`、`pivotTables`、`selectUnlockedCells`。至少给一个，否则报 `InvalidField`。`password` 可选，非空字符串；空串报 `InvalidField`。`password` 不算「至少一个可写字段」。未点名的属性留下。出现 `hasPassword` / `edit` / `formatting` / `readOnlyRecommended` / `lockStructure` 报 `InvalidField`。id 不是工作表 id 报 `InvalidId`。找不到工作表报 `IdNotFound`。对 `dialogsheet` / `macrosheet` 报 `NotImplemented`。
 
-打开保护且该表还没有 `<sheetProtection>` 时，按 Excel 16.0 `Protect()` 缺省写出 `sheet="1" objects="1" scenarios="1"`，其余权限用 schema 缺省（不写属性）。随后把本次点名的权限键写上：与缺省相同则省略该属性，与缺省不同则写 `"1"` 或 `"0"`。`enforced: true` 时 `@sheet` 为 `"1"`。不要写 `algorithmName` / `hashValue` / `saltValue` / `spinCount` / `password`。已有密码哈希时改任何字段报 `NotImplemented`，不删哈希。`enforced: false` 删掉整个元素。已经是目标状态则空操作，仍计入 `opsApplied`。不标重算，不新建部件。
+打开保护且该表还没有 `<sheetProtection>` 时，按 Excel 16.0 `Protect()` 缺省写出 `sheet="1" objects="1" scenarios="1"`，其余权限用 schema 缺省（不写属性）。随后把本次点名的权限键写上：与缺省相同则省略该属性，与缺省不同则写 `"1"` 或 `"0"`。`enforced: true` 时 `@sheet` 为 `"1"`。给了 `password` 时按 Excel 16.0 写 `algorithmName="SHA-512"`、`hashValue`、`saltValue`（16 字节随机盐的标准 Base64）、`spinCount="100000"`。口令按 UTF-16LE；`H0 = SHA-512(salt || password)`，再对 `i = 0 .. 99999` 做 `H_{i+1} = SHA-512(H_i || i 的 4 字节小端)`。不写遗留 `@password`。已有 SHA-512 哈希时必须给对得上的 `password`，否则报 `NotImplemented`；口令对不上报 `InvalidField`。对得上则可改权限，或 `enforced: false` 解开（删掉元素）。改写时换新盐重算。遗留 XOR 或其它算法即使给了 `password` 也报 `NotImplemented`。无哈希时 `enforced: false` 删掉整个元素。已经是目标状态则空操作，仍计入 `opsApplied`。不标重算，不新建部件。不把哈希放进树。
 
 图表工作表只认 `enforced` 与 `objects`。`enforced` 写入 `@content`（`CT_ChartsheetProtection`）。出现工作表专用权限键报 `InvalidField`。打开时缺省写出 `content="1" objects="1"`。
 
@@ -244,10 +245,11 @@ xlsx 工作簿（id 为 `xlsx:workbook`）：
 | `lockStructure` | 可选。布尔 |
 | `lockWindows` | 可选。布尔 |
 | `lockRevision` | 可选。布尔 |
+| `password` | 可选。非空字符串。写 `workbook*` SHA-512 哈希 |
 
-这三个至少给一个。出现工作表权限键或 docx 字段报 `InvalidField`。出现 `password` 报 `NotImplemented`。三项都为假时删掉 `<workbookProtection>`。为真的项写 `"1"`，为假的省略（schema 缺省即假）。不要写哈希属性。已有密码哈希时改任何字段报 `NotImplemented`。按 `CT_Workbook` 插在 `workbookPr` 之后、`bookViews` 之前。不新建部件。
+这三个至少给一个。出现工作表权限键或 docx 字段报 `InvalidField`。`password` 可选，规则与工作表相同。三项都为假时删掉 `<workbookProtection>`。为真的项写 `"1"`，为假的省略（schema 缺省即假）。给了 `password` 时写 `workbookAlgorithmName="SHA-512"`、`workbookHashValue`、`workbookSaltValue`、`workbookSpinCount="100000"`，算法与工作表相同。不写遗留 `@workbookPassword`。已有 SHA-512 哈希时必须给对得上的 `password`，否则报 `NotImplemented`；口令对不上报 `InvalidField`。遗留 XOR 或其它算法即使给了 `password` 也报 `NotImplemented`。按 `CT_Workbook` 插在 `workbookPr` 之后、`bookViews` 之前。不新建部件。
 
-示例见 `docs/examples/xlsx-apply-protect.json`。
+示例见 `docs/examples/xlsx-apply-protect.json`。带密码见 `docs/examples/xlsx-apply-protect-password.json`。
 
 pptx（id 为 `pptx:presentation`）：
 

@@ -974,6 +974,10 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::ProtectionHasPassword => {
             "this document has a password hash; protection fields cannot be changed".into()
         }
+        ErrorKind::ProtectionPasswordBlank => "password must be a non-empty string".into(),
+        ErrorKind::ProtectionPasswordWrong => {
+            "password does not match the existing SHA-512 hash".into()
+        }
         ErrorKind::InvalidCustomPropType => {
             "custom property type must be lpwstr, i4, r8, or bool, and must match value"
                 .into()
