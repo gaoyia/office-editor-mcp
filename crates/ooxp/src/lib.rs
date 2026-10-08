@@ -922,6 +922,7 @@ mod tests {
                 "contentControlCount",
                 "numberingCount",
                 "styleCount",
+                "embeddedFontCount",
                 "outline",
                 "headers",
                 "footers",
@@ -931,6 +932,7 @@ mod tests {
                 "props",
                 "protection",
                 "theme",
+                "fontEmbed",
                 "from",
                 "truncated",
                 "paragraphs"

@@ -7,6 +7,7 @@ mod comments;
 mod create;
 mod export;
 mod field;
+mod font_embed;
 mod format;
 mod glossary;
 mod hf;
@@ -100,6 +101,9 @@ pub const CT_WEB_SETTINGS: &str =
     "application/vnd.openxmlformats-officedocument.wordprocessingml.webSettings+xml";
 pub const CT_FONT_TABLE: &str =
     "application/vnd.openxmlformats-officedocument.wordprocessingml.fontTable+xml";
+pub const REL_FONT: &str =
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/font";
+pub const CT_OBFUSCATED_FONT: &str = "application/vnd.openxmlformats-officedocument.obfuscatedFont";
 pub const CT_HEADER: &str =
     "application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml";
 pub const CT_FOOTER: &str =

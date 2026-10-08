@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "C:\\data\\note.docx",
+  "ops": [
+    {
+      "op": "insertEmbeddedFont",
+      "id": "docx:document",
+      "name": "Calibri",
+      "file": "C:\\\\Windows\\\\Fonts\\\\calibri.ttf",
+      "style": "regular"
+    },
+    {
+      "op": "setFontEmbed",
+      "id": "docx:document",
+      "trueType": true,
+      "subset": false
+    },
+    {
+      "op": "deleteEmbeddedFont",
+      "id": "font:1"
+    }
+  ]
+}

@@ -1,6 +1,6 @@
 //! 从主文档与页眉页脚读出大纲和段落。
 
-use serde_json::{json, Value};
+use serde_json::{json, Map, Value};
 
 use crate::error::Error;
 use crate::opc::{self, Package, Relationships};
@@ -144,6 +144,18 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         "protection": super::protect::inspect(&pkg, &part)?,
         "theme": super::theme::inspect(&pkg, &part)?,
     });
+    insert_json_after(
+        tree.as_object_mut().unwrap(),
+        "styleCount",
+        "embeddedFontCount",
+        json!(super::font_embed::count(&pkg, &part)?),
+    );
+    insert_json_after(
+        tree.as_object_mut().unwrap(),
+        "theme",
+        "fontEmbed",
+        super::font_embed::flags_json(&pkg, &part)?,
+    );
 
     if let Some(scope) = scope {
         if scope.notes {
@@ -248,6 +260,9 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         }
         if scope.doc_parts {
             tree["docParts"] = Value::Array(super::glossary::parts_json(&pkg, &part)?);
+        }
+        if scope.embedded_fonts {
+            tree["embeddedFonts"] = Value::Array(super::font_embed::fonts_json(&pkg, &part)?);
         }
         if scope.maths {
             tree["maths"] = Value::Array(math::maths_json(&doc.root, None)?);
@@ -971,4 +986,22 @@ fn stamp_value(v: &mut Value, coverage: &comments::CommentCoverage) {
         }
         _ => {}
     }
+}
+
+/// `json!` 键太多会撞递归上限，新增根字段按契约顺序插到已有键后面。
+fn insert_json_after(map: &mut Map<String, Value>, after: &str, key: &str, val: Value) {
+    if !map.contains_key(after) {
+        map.insert(key.into(), val);
+        return;
+    }
+    let mut out = Map::new();
+    let mut pending = Some(val);
+    for (k, v) in std::mem::take(map) {
+        let hit = k == after;
+        out.insert(k, v);
+        if hit {
+            out.insert(key.into(), pending.take().expect("after 只出现一次"));
+        }
+    }
+    *map = out;
 }

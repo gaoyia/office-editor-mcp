@@ -1855,6 +1855,85 @@
         }
       }
     },
+    "insertEmbeddedFontOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "name",
+        "file"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "insertEmbeddedFont"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "file": {
+          "type": "string",
+          "minLength": 1
+        },
+        "style": {
+          "type": "string",
+          "enum": [
+            "regular",
+            "bold",
+            "italic",
+            "boldItalic"
+          ]
+        }
+      }
+    },
+    "deleteEmbeddedFontOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "deleteEmbeddedFont"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "setFontEmbedOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setFontEmbed"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "trueType": {
+          "type": "boolean"
+        },
+        "systemFonts": {
+          "type": "boolean"
+        },
+        "subset": {
+          "type": "boolean"
+        }
+      }
+    },
     "insertMathOp": {
       "type": "object",
       "required": [

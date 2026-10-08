@@ -478,6 +478,14 @@ pub(crate) enum IdReason {
     InsertDocPartNeedsDocument,
     /// insertDocPartContent 必须是主文档 body 的直接子段落或 docx:document
     InsertDocPartContentNeedsBodyPara,
+    /// 嵌入字体 id 必须是 font:N
+    FontPrefix,
+    FontIndexNotInt,
+    FontIndexFromOne,
+    /// insertEmbeddedFont 必须用 docx:document
+    InsertEmbeddedFontNeedsDocument,
+    /// setFontEmbed 必须用 docx:document
+    SetFontEmbedNeedsDocument,
     /// 公式 id 必须是 math:N 或 {容器}/math:N
     MathPrefix,
     MathIndexNotInt,
@@ -879,6 +887,12 @@ define_error_kinds! {
     DocPartNotFound { id: String } => vec![Self::DocPartNotFound { id: "docPart:1".into() }],
     EmptyDocPartName => vec![Self::EmptyDocPartName],
     DuplicateDocPartName => vec![Self::DuplicateDocPartName],
+    FontNotFound { id: String } => vec![Self::FontNotFound { id: "font:1".into() }],
+    EmptyFontName => vec![Self::EmptyFontName],
+    DuplicateEmbeddedFont => vec![Self::DuplicateEmbeddedFont],
+    InvalidFontStyle => vec![Self::InvalidFontStyle],
+    InvalidFontFile => vec![Self::InvalidFontFile],
+    NeedFontEmbedField => vec![Self::NeedFontEmbedField],
     InvalidDocPartGallery => vec![Self::InvalidDocPartGallery],
     InvalidDocPartBehavior => vec![Self::InvalidDocPartBehavior],
     EmptyDocPartText => vec![Self::EmptyDocPartText],
@@ -1342,6 +1356,11 @@ impl IdReason {
             Self::DocPartIndexFromOne,
             Self::InsertDocPartNeedsDocument,
             Self::InsertDocPartContentNeedsBodyPara,
+            Self::FontPrefix,
+            Self::FontIndexNotInt,
+            Self::FontIndexFromOne,
+            Self::InsertEmbeddedFontNeedsDocument,
+            Self::SetFontEmbedNeedsDocument,
             Self::MathPrefix,
             Self::MathIndexNotInt,
             Self::MathIndexFromOne,
@@ -1482,6 +1501,11 @@ impl ErrorKind {
             | Self::InvalidBibliographyInstr
             | Self::EmptyDocPartName
             | Self::DuplicateDocPartName
+            | Self::EmptyFontName
+            | Self::DuplicateEmbeddedFont
+            | Self::InvalidFontStyle
+            | Self::InvalidFontFile
+            | Self::NeedFontEmbedField
             | Self::InvalidDocPartGallery
             | Self::InvalidDocPartBehavior
             | Self::EmptyDocPartText
@@ -1734,6 +1758,7 @@ impl ErrorKind {
             | Self::CitationNotFound { .. }
             | Self::BibliographyNotFound { .. }
             | Self::DocPartNotFound { .. }
+            | Self::FontNotFound { .. }
             | Self::MathNotFound { .. }
             | Self::ContentControlNotFound { .. }
             | Self::NumberingNotFound { .. }

@@ -229,6 +229,7 @@ fn inspect_counts_without_list() {
             "contentControlCount",
             "numberingCount",
             "styleCount",
+            "embeddedFontCount",
             "outline",
             "headers",
             "footers",
@@ -237,7 +238,8 @@ fn inspect_counts_without_list() {
             "gutterAtTop",
             "props",
             "protection",
-            "theme"
+            "theme",
+            "fontEmbed"
         ]
     );
 }

@@ -629,6 +629,15 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::InsertDocPartContentNeedsBodyPara => {
                 "insertDocPartContent 的 id 必须是 w:body 的直接子段落，或 docx:document".into()
             }
+            IdReason::FontPrefix => "嵌入字体 id 必须是 font:N".into(),
+            IdReason::FontIndexNotInt => "font 序号必须是正整数".into(),
+            IdReason::FontIndexFromOne => "font 序号从 1 起".into(),
+            IdReason::InsertEmbeddedFontNeedsDocument => {
+                "insertEmbeddedFont 的 id 必须是 docx:document".into()
+            }
+            IdReason::SetFontEmbedNeedsDocument => {
+                "setFontEmbed 的 id 必须是 docx:document".into()
+            }
             IdReason::MathPrefix => {
                 "公式 id 必须是 math:N，或页眉页脚容器 id 加上 /math:N".into()
             }
@@ -1091,6 +1100,18 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::CitationNotFound { id } => format!("找不到引文：{id}"),
         ErrorKind::BibliographyNotFound { id } => format!("找不到书目：{id}"),
         ErrorKind::DocPartNotFound { id } => format!("找不到构建基块：{id}"),
+        ErrorKind::FontNotFound { id } => format!("找不到嵌入字体：{id}"),
+        ErrorKind::EmptyFontName => "name 不能为空".into(),
+        ErrorKind::DuplicateEmbeddedFont => "name 与 style 不能与已有嵌入面相同".into(),
+        ErrorKind::InvalidFontStyle => {
+            "style 只能是 regular、bold、italic 或 boldItalic".into()
+        }
+        ErrorKind::InvalidFontFile => {
+            "file 不是本库认的 TrueType / OpenType 字体（TTF/OTF）；不接受字体集合".into()
+        }
+        ErrorKind::NeedFontEmbedField => {
+            "setFontEmbed 至少要给 trueType、systemFonts 或 subset 之一".into()
+        }
         ErrorKind::MathNotFound { id } => format!("找不到公式：{id}"),
         ErrorKind::ContentControlNotFound { id } => format!("找不到内容控件：{id}"),
         ErrorKind::SetParaTextHasField => "不能改带域的段落的可见文本".into(),

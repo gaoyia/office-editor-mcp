@@ -13,6 +13,9 @@ pub struct ExportedMedia {
 }
 
 pub fn export_media(bytes: &[u8], id: &str) -> Result<ExportedMedia, Error> {
+    if id.starts_with("font:") {
+        return super::font_embed::export_media(bytes, id);
+    }
     if id.contains("/ole:") {
         return super::ole::export_media(bytes, id);
     }

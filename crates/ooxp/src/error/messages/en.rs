@@ -672,6 +672,15 @@ pub(super) fn render(kind: &ErrorKind) -> String {
                 "insertDocPartContent id must be a direct child paragraph of w:body, or docx:document"
                     .into()
             }
+            IdReason::FontPrefix => "Embedded font id must be font:N".into(),
+            IdReason::FontIndexNotInt => "font index must be a positive integer".into(),
+            IdReason::FontIndexFromOne => "font index starts at 1".into(),
+            IdReason::InsertEmbeddedFontNeedsDocument => {
+                "insertEmbeddedFont id must be docx:document".into()
+            }
+            IdReason::SetFontEmbedNeedsDocument => {
+                "setFontEmbed id must be docx:document".into()
+            }
             IdReason::MathPrefix => {
                 "Math id must be math:N or a header/footer container id plus /math:N".into()
             }
@@ -1260,6 +1269,20 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::CitationNotFound { id } => format!("Citation not found: {id}"),
         ErrorKind::BibliographyNotFound { id } => format!("Bibliography not found: {id}"),
         ErrorKind::DocPartNotFound { id } => format!("Building block not found: {id}"),
+        ErrorKind::FontNotFound { id } => format!("Embedded font not found: {id}"),
+        ErrorKind::EmptyFontName => "name must not be empty".into(),
+        ErrorKind::DuplicateEmbeddedFont => {
+            "name and style already have an embedded face".into()
+        }
+        ErrorKind::InvalidFontStyle => {
+            "style must be regular, bold, italic, or boldItalic".into()
+        }
+        ErrorKind::InvalidFontFile => {
+            "file is not a recognized TrueType or OpenType font (TTF/OTF); font collections are not allowed".into()
+        }
+        ErrorKind::NeedFontEmbedField => {
+            "setFontEmbed requires at least one of trueType, systemFonts, or subset".into()
+        }
         ErrorKind::MathNotFound { id } => format!("Equation not found: {id}"),
         ErrorKind::ContentControlNotFound { id } => format!("Content control not found: {id}"),
         ErrorKind::SetParaTextHasField => {

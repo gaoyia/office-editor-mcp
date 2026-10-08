@@ -10,6 +10,7 @@ use super::biblio;
 use super::charts;
 use super::comments;
 use super::field;
+use super::font_embed;
 use super::format;
 use super::glossary;
 use super::hf::{self, HfKind};
@@ -171,6 +172,25 @@ pub fn apply(bytes: &[u8], ops: &[DocxOp]) -> Result<Vec<u8>, Error> {
             }
             DocxOp::InsertDocPartContent(op) => {
                 apply_insert_doc_part_content(&pkg, &mut docs, &mut dirty, &doc_part, op, i)?;
+            }
+            DocxOp::InsertEmbeddedFont(op) => {
+                font_embed::insert(
+                    &mut pkg, &mut docs, &mut dirty, &doc_part, &op.name, op.style, &op.file, i,
+                )?;
+            }
+            DocxOp::DeleteEmbeddedFont(op) => {
+                font_embed::delete(&mut pkg, &mut docs, &mut dirty, &doc_part, op.n, &op.id, i)?;
+            }
+            DocxOp::SetFontEmbed(op) => {
+                font_embed::set_flags(
+                    &mut pkg,
+                    &mut docs,
+                    &mut dirty,
+                    &doc_part,
+                    op.true_type,
+                    op.system_fonts,
+                    op.subset,
+                )?;
             }
             DocxOp::InsertMath(op) => {
                 apply_insert_math(&pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;

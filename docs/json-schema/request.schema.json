@@ -277,6 +277,9 @@
         "docParts": {
           "type": "boolean"
         },
+        "embeddedFonts": {
+          "type": "boolean"
+        },
         "maths": {
           "type": "boolean"
         },
@@ -832,6 +835,15 @@
               },
               {
                 "$ref": "docx.schema.json#/$defs/insertDocPartContentOp"
+              },
+              {
+                "$ref": "docx.schema.json#/$defs/insertEmbeddedFontOp"
+              },
+              {
+                "$ref": "docx.schema.json#/$defs/deleteEmbeddedFontOp"
+              },
+              {
+                "$ref": "docx.schema.json#/$defs/setFontEmbedOp"
               },
               {
                 "$ref": "docx.schema.json#/$defs/insertMathOp"

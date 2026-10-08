@@ -68,6 +68,8 @@ pub struct InspectScope {
     pub bibliographies: bool,
     /// 为 true 时列出 glossary 构建基块。
     pub doc_parts: bool,
+    /// 为 true 时列出嵌入字体。
+    pub embedded_fonts: bool,
     /// 为 true 时列出公式。
     pub maths: bool,
     /// 为 true 时列出内容控件。
@@ -821,6 +823,26 @@ pub struct InsertDocPartContentOp {
 }
 
 #[derive(Debug, Clone)]
+pub struct InsertEmbeddedFontOp {
+    pub name: String,
+    pub style: super::font_embed::FontStyle,
+    pub file: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct DeleteEmbeddedFontOp {
+    pub id: String,
+    pub n: usize,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetFontEmbedOp {
+    pub true_type: Option<bool>,
+    pub system_fonts: Option<bool>,
+    pub subset: Option<bool>,
+}
+
+#[derive(Debug, Clone)]
 pub enum InsertMathPlace {
     After(ParaTarget),
     EndOfDocument,
@@ -910,6 +932,9 @@ pub enum DocxOp {
     InsertDocPart(InsertDocPartOp),
     DeleteDocPart(DeleteDocPartOp),
     InsertDocPartContent(InsertDocPartContentOp),
+    InsertEmbeddedFont(InsertEmbeddedFontOp),
+    DeleteEmbeddedFont(DeleteEmbeddedFontOp),
+    SetFontEmbed(SetFontEmbedOp),
     InsertMath(InsertMathOp),
     SetMath(SetMathOp),
     DeleteMath(DeleteMathOp),
@@ -1065,6 +1090,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
             "citations",
             "bibliographies",
             "docParts",
+            "embeddedFonts",
             "maths",
             "contentControls",
             "numbering",
@@ -1097,6 +1123,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
     let citations = parse_bool_field(obj.get("citations"), "citations")?;
     let bibliographies = parse_bool_field(obj.get("bibliographies"), "bibliographies")?;
     let doc_parts = parse_bool_field(obj.get("docParts"), "docParts")?;
+    let embedded_fonts = parse_bool_field(obj.get("embeddedFonts"), "embeddedFonts")?;
     let maths = parse_bool_field(obj.get("maths"), "maths")?;
     let content_controls = parse_bool_field(obj.get("contentControls"), "contentControls")?;
     let numbering = parse_bool_field(obj.get("numbering"), "numbering")?;
@@ -1139,6 +1166,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
                 && !obj.contains_key("citations")
                 && !obj.contains_key("bibliographies")
                 && !obj.contains_key("docParts")
+                && !obj.contains_key("embeddedFonts")
                 && !obj.contains_key("maths")
                 && !obj.contains_key("contentControls")
                 && !obj.contains_key("numbering")
@@ -1174,6 +1202,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
                 citations,
                 bibliographies,
                 doc_parts,
+                embedded_fonts,
                 maths,
                 content_controls,
                 numbering,
@@ -1246,6 +1275,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
                 citations,
                 bibliographies,
                 doc_parts,
+                embedded_fonts,
                 maths,
                 content_controls,
                 numbering,
@@ -1446,6 +1476,13 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<DocxOp>, Error> {
             "insertDocPartContent" => out.push(DocxOp::InsertDocPartContent(
                 parse_insert_doc_part_content(obj, i)?,
             )),
+            "insertEmbeddedFont" => out.push(DocxOp::InsertEmbeddedFont(
+                parse_insert_embedded_font(obj, i)?,
+            )),
+            "deleteEmbeddedFont" => out.push(DocxOp::DeleteEmbeddedFont(
+                parse_delete_embedded_font(obj, i)?,
+            )),
+            "setFontEmbed" => out.push(DocxOp::SetFontEmbed(parse_set_font_embed(obj, i)?)),
             "insertMath" => out.push(DocxOp::InsertMath(parse_insert_math(obj, i)?)),
             "setMath" => out.push(DocxOp::SetMath(parse_set_math(obj, i)?)),
             "deleteMath" => out.push(DocxOp::DeleteMath(parse_delete_math(obj, i)?)),
@@ -2596,6 +2633,92 @@ fn parse_insert_doc_part_content(
         place,
         n,
         part_id,
+    })
+}
+
+fn parse_insert_embedded_font(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<InsertEmbeddedFontOp, Error> {
+    deny_keys(obj, i, &["op", "id", "name", "file", "style"])?;
+    let id = require_op_id(obj, i)?;
+    if id != "docx:document" {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::InsertEmbeddedFontNeedsDocument,
+            },
+            format!("ops[{i}].id"),
+        ));
+    }
+    let name = require_string_field(obj, i, "insertEmbeddedFont", "name")?;
+    if name.is_empty() || name.chars().all(char::is_whitespace) {
+        return Err(Error::with_path(
+            ErrorKind::EmptyFontName,
+            format!("ops[{i}].name"),
+        ));
+    }
+    let file = require_string_field(obj, i, "insertEmbeddedFont", "file")?;
+    if file.is_empty() || file.chars().all(char::is_whitespace) {
+        return Err(Error::with_path(
+            ErrorKind::InvalidFontFile,
+            format!("ops[{i}].file"),
+        ));
+    }
+    let style = match obj.get("style") {
+        None => super::font_embed::FontStyle::Regular,
+        Some(Value::String(s)) => super::font_embed::FontStyle::parse(s).ok_or_else(|| {
+            Error::with_path(ErrorKind::InvalidFontStyle, format!("ops[{i}].style"))
+        })?,
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "style".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].style"),
+            ));
+        }
+    };
+    Ok(InsertEmbeddedFontOp { name, style, file })
+}
+
+fn parse_delete_embedded_font(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<DeleteEmbeddedFontOp, Error> {
+    deny_keys(obj, i, &["op", "id"])?;
+    let id = require_op_id(obj, i)?;
+    let n = super::font_embed::parse_id(&id, &format!("ops[{i}].id"))?;
+    Ok(DeleteEmbeddedFontOp { id, n })
+}
+
+fn parse_set_font_embed(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<SetFontEmbedOp, Error> {
+    deny_keys(obj, i, &["op", "id", "trueType", "systemFonts", "subset"])?;
+    let id = require_op_id(obj, i)?;
+    if id != "docx:document" {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::SetFontEmbedNeedsDocument,
+            },
+            format!("ops[{i}].id"),
+        ));
+    }
+    let true_type = parse_optional_bool_field(obj.get("trueType"), i, "trueType")?;
+    let system_fonts = parse_optional_bool_field(obj.get("systemFonts"), i, "systemFonts")?;
+    let subset = parse_optional_bool_field(obj.get("subset"), i, "subset")?;
+    if true_type.is_none() && system_fonts.is_none() && subset.is_none() {
+        return Err(Error::with_path(
+            ErrorKind::NeedFontEmbedField,
+            format!("ops[{i}]"),
+        ));
+    }
+    Ok(SetFontEmbedOp {
+        true_type,
+        system_fonts,
+        subset,
     })
 }
 
