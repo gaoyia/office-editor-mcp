@@ -433,6 +433,36 @@ pub fn apply(bytes: &[u8], ops: &[XlsxOp]) -> Result<Vec<u8>, Error> {
                 let doc = dirty_of(&mut dirty_sheets, &part);
                 super::view::apply_filter(&mut doc.root, kind, op, overlap, i)?;
             }
+            XlsxOp::GroupRows(op) => {
+                let part = require_outline_worksheet(&sheet_index, &op.sheet, i)?;
+                load_dirty(&pkg, &mut dirty_sheets, &part, true)?;
+                let doc = dirty_of(&mut dirty_sheets, &part);
+                super::outline::apply_group_rows(&mut doc.root, op, i)?;
+            }
+            XlsxOp::UngroupRows(op) => {
+                let part = require_outline_worksheet(&sheet_index, &op.sheet, i)?;
+                load_dirty(&pkg, &mut dirty_sheets, &part, true)?;
+                let doc = dirty_of(&mut dirty_sheets, &part);
+                super::outline::apply_ungroup_rows(&mut doc.root, op, i)?;
+            }
+            XlsxOp::GroupCols(op) => {
+                let part = require_outline_worksheet(&sheet_index, &op.sheet, i)?;
+                load_dirty(&pkg, &mut dirty_sheets, &part, true)?;
+                let doc = dirty_of(&mut dirty_sheets, &part);
+                super::outline::apply_group_cols(&mut doc.root, op, i)?;
+            }
+            XlsxOp::UngroupCols(op) => {
+                let part = require_outline_worksheet(&sheet_index, &op.sheet, i)?;
+                load_dirty(&pkg, &mut dirty_sheets, &part, true)?;
+                let doc = dirty_of(&mut dirty_sheets, &part);
+                super::outline::apply_ungroup_cols(&mut doc.root, op, i)?;
+            }
+            XlsxOp::SetOutline(op) => {
+                let part = require_outline_worksheet(&sheet_index, &op.sheet, i)?;
+                load_dirty(&pkg, &mut dirty_sheets, &part, true)?;
+                let doc = dirty_of(&mut dirty_sheets, &part);
+                super::outline::apply_set_outline(&mut doc.root, op, i)?;
+            }
             XlsxOp::InsertComment(op) => {
                 let cell = a1::parse_cell(&op.a1)?;
                 let part = require_comments_worksheet(&sheet_index, &op.sheet, i)?;
@@ -970,6 +1000,27 @@ fn require_named_sheet(
                 format!("ops[{op_index}].id"),
             )
         })
+}
+
+fn require_outline_worksheet(
+    index: &[(String, String, &'static str)],
+    name: &str,
+    op_index: usize,
+) -> Result<String, Error> {
+    let (part, kind) = require_named_sheet(index, name, op_index)?;
+    if kind == "dialogsheet" || kind == "macrosheet" {
+        return Err(Error::with_path(
+            ErrorKind::DialogOrMacroSheet,
+            format!("ops[{op_index}].id"),
+        ));
+    }
+    if kind != "worksheet" {
+        return Err(Error::with_path(
+            ErrorKind::InvalidOutline { field: "id".into() },
+            format!("ops[{op_index}].id"),
+        ));
+    }
+    Ok(part)
 }
 
 fn require_sheet_part(

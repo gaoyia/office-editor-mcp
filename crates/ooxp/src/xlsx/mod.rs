@@ -16,6 +16,7 @@ mod inspect;
 mod layout;
 mod names;
 mod ole;
+mod outline;
 mod picture;
 mod pivot;
 mod print;

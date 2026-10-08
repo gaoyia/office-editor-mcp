@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "C:\\data\\book.xlsx",
+  "output": "C:\\data\\book.outline.xlsx",
+  "ops": [
+    {
+      "op": "groupRows",
+      "id": "sheet:Sheet1",
+      "rows": "2:4"
+    },
+    {
+      "op": "groupCols",
+      "id": "sheet:Sheet1",
+      "col": "B:C"
+    },
+    {
+      "op": "setOutline",
+      "id": "sheet:Sheet1",
+      "summaryBelow": true,
+      "collapseRows": "2:4",
+      "collapsed": true
+    }
+  ]
+}

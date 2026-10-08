@@ -201,6 +201,151 @@ pub(crate) fn apply_set_col_width(
     Ok(())
 }
 
+const MAX_OUTLINE: u32 = 7;
+
+fn col_outline_level(piece: &ColPiece) -> u32 {
+    piece
+        .attrs
+        .iter()
+        .find(|(k, _)| k == "outlineLevel")
+        .and_then(|(_, v)| v.parse().ok())
+        .unwrap_or(0)
+}
+
+fn col_level_at(pieces: &[ColPiece], col: u32) -> u32 {
+    pieces
+        .iter()
+        .find(|p| p.min <= col && col <= p.max)
+        .map(col_outline_level)
+        .unwrap_or(0)
+}
+
+/// 给闭区间内每列的 `outlineLevel` 加 / 减 1。`delta` 只能是 `1` 或 `-1`。
+pub(crate) fn apply_col_outline_delta(
+    worksheet: &mut Element,
+    min_col: u32,
+    max_col: u32,
+    delta: i32,
+    op_index: usize,
+) -> Result<(), Error> {
+    if delta > 0 {
+        let pieces = collect_col_pieces(worksheet);
+        for c in min_col..=max_col {
+            let lvl = col_level_at(&pieces, c);
+            if lvl.saturating_add(delta as u32) > MAX_OUTLINE {
+                return Err(Error::with_path(
+                    ErrorKind::OutlineLevelMax,
+                    format!("ops[{op_index}].col"),
+                ));
+            }
+        }
+    }
+    map_col_span(worksheet, min_col, max_col, delta > 0, |piece| {
+        let cur = col_outline_level(piece);
+        let next = if delta > 0 {
+            cur.saturating_add(delta as u32)
+        } else {
+            cur.saturating_sub((-delta) as u32)
+        };
+        if next == 0 {
+            remove_attr(&mut piece.attrs, "outlineLevel");
+        } else {
+            ensure_default_col_width(piece);
+            set_attr(&mut piece.attrs, "outlineLevel", next.to_string());
+        }
+    });
+    Ok(())
+}
+
+/// 给闭区间内每列写或去掉布尔属性（`hidden` / `collapsed`）。
+pub(crate) fn apply_col_flag(
+    worksheet: &mut Element,
+    min_col: u32,
+    max_col: u32,
+    attr: &str,
+    on: bool,
+) {
+    map_col_span(worksheet, min_col, max_col, on, |piece| {
+        if on {
+            ensure_default_col_width(piece);
+            set_attr(&mut piece.attrs, attr, "1");
+        } else {
+            remove_attr(&mut piece.attrs, attr);
+        }
+    });
+}
+
+/// 新建 `<col>` 时补缺省列宽，避免 Excel 修复。已有 `width` 不改。
+fn ensure_default_col_width(piece: &mut ColPiece) {
+    if piece.attrs.iter().any(|(k, _)| k == "width") {
+        return;
+    }
+    set_attr(
+        &mut piece.attrs,
+        "width",
+        fmt_num(chars_to_xml_width(DEFAULT_COL_CHARS)),
+    );
+}
+
+fn map_col_span(
+    worksheet: &mut Element,
+    a: u32,
+    b: u32,
+    create_missing: bool,
+    mut patch: impl FnMut(&mut ColPiece),
+) {
+    let mut pieces = collect_col_pieces(worksheet);
+    let mut next = Vec::new();
+    let mut covered = Vec::new();
+    for piece in pieces.drain(..) {
+        if piece.max < a || piece.min > b {
+            next.push(piece);
+            continue;
+        }
+        if piece.min < a {
+            next.push(ColPiece {
+                min: piece.min,
+                max: a - 1,
+                attrs: piece.attrs.clone(),
+            });
+        }
+        let mid_min = piece.min.max(a);
+        let mid_max = piece.max.min(b);
+        let mut mid = ColPiece {
+            min: mid_min,
+            max: mid_max,
+            attrs: piece.attrs.clone(),
+        };
+        patch(&mut mid);
+        if mid.keep() {
+            next.push(mid);
+        }
+        covered.push((mid_min, mid_max));
+        if piece.max > b {
+            next.push(ColPiece {
+                min: b + 1,
+                max: piece.max,
+                attrs: piece.attrs,
+            });
+        }
+    }
+    if create_missing {
+        for (gap_min, gap_max) in uncovered_spans(a, b, &covered) {
+            let mut mid = ColPiece {
+                min: gap_min,
+                max: gap_max,
+                attrs: Vec::new(),
+            };
+            patch(&mut mid);
+            if mid.keep() {
+                next.push(mid);
+            }
+        }
+    }
+    next.sort_by_key(|p| p.min);
+    write_cols(worksheet, next);
+}
+
 pub(crate) fn apply_set_row_height(
     worksheet: &mut Element,
     op: &SetRowHeightOp,
@@ -423,6 +568,28 @@ fn ensure_merge_cells(worksheet: &mut Element) -> &mut Element {
 fn set_merge_count(parent: &mut Element) {
     let n = parent.children_by_local("mergeCell").len();
     parent.set_attr("count", n.to_string());
+}
+
+/// 保证有 `sheetFormatPr`，且带规范必填的 `defaultRowHeight`。
+/// 已有该元素时不覆盖已有行高。
+pub(crate) fn ensure_sheet_format_pr(sheet: &mut Element) -> &mut Element {
+    if sheet.child_by_local("sheetFormatPr").is_none() {
+        let mut pr = Element::new("sheetFormatPr");
+        pr.set_attr("defaultRowHeight", fmt_num(DEFAULT_ROW_PT));
+        insert_child_ordered(sheet, pr, "sheetFormatPr");
+    } else if sheet
+        .child_by_local("sheetFormatPr")
+        .unwrap()
+        .attr("defaultRowHeight")
+        .is_none()
+    {
+        sheet
+            .child_by_local_mut("sheetFormatPr")
+            .unwrap()
+            .attrs
+            .insert(0, ("defaultRowHeight".into(), fmt_num(DEFAULT_ROW_PT)));
+    }
+    sheet.child_by_local_mut("sheetFormatPr").unwrap()
 }
 
 pub(crate) fn insert_child_ordered(root: &mut Element, el: Element, local: &str) {

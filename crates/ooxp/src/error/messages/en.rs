@@ -1289,6 +1289,13 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::InvalidAutoFilter { field } => {
             format!("{field} is not a valid setAutoFilter value")
         }
+        ErrorKind::NeedSetOutlineField => {
+            "setOutline requires a field besides op and id".into()
+        }
+        ErrorKind::InvalidOutline { field } => {
+            format!("{field} is not a valid outline value")
+        }
+        ErrorKind::OutlineLevelMax => "outline level cannot exceed 7".into(),
         ErrorKind::InvalidAlign => {
             "align must be left, center, right, both, distribute, start, or end".into()
         }

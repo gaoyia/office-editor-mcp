@@ -540,6 +540,21 @@
                 "$ref": "xlsx.schema.json#/$defs/setAutoFilterOp"
               },
               {
+                "$ref": "xlsx.schema.json#/$defs/groupRowsOp"
+              },
+              {
+                "$ref": "xlsx.schema.json#/$defs/ungroupRowsOp"
+              },
+              {
+                "$ref": "xlsx.schema.json#/$defs/groupColsOp"
+              },
+              {
+                "$ref": "xlsx.schema.json#/$defs/ungroupColsOp"
+              },
+              {
+                "$ref": "xlsx.schema.json#/$defs/setOutlineOp"
+              },
+              {
                 "$ref": "xlsx.schema.json#/$defs/setHeaderFooterTextOp"
               },
               {

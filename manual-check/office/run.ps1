@@ -94,6 +94,7 @@ $order = @(
     'xlsx-ole'
     'xlsx-slicers'
     'xlsx-connections'
+    'xlsx-outline'
     'xlsx-hyperlinks'
     'xlsx-sparklines'
     'xlsx-protect'

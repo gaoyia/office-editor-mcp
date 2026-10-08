@@ -889,6 +889,11 @@ define_error_kinds! {
     InvalidAutoFilter { field: String } => {
         vec![Self::InvalidAutoFilter { field: "ref".into() }]
     },
+    NeedSetOutlineField => vec![Self::NeedSetOutlineField],
+    InvalidOutline { field: String } => {
+        vec![Self::InvalidOutline { field: "collapsed".into() }]
+    },
+    OutlineLevelMax => vec![Self::OutlineLevelMax],
     InvalidAlign => vec![Self::InvalidAlign],
     InvalidLineRule => vec![Self::InvalidLineRule],
     InvalidUnderline => vec![Self::InvalidUnderline],
@@ -1408,6 +1413,9 @@ impl ErrorKind {
             | Self::InvalidSheetView { .. }
             | Self::NeedSetAutoFilterField
             | Self::InvalidAutoFilter { .. }
+            | Self::NeedSetOutlineField
+            | Self::InvalidOutline { .. }
+            | Self::OutlineLevelMax
             | Self::SlicerFieldNotFound { .. }
             | Self::InvalidConnection { .. }
             | Self::InvalidAlign

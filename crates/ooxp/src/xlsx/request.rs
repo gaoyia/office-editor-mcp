@@ -815,6 +815,44 @@ pub struct SetAutoFilterOp {
 }
 
 #[derive(Debug, Clone)]
+pub struct GroupRowsOp {
+    pub sheet: String,
+    pub row: u32,
+    pub to_row: u32,
+}
+
+#[derive(Debug, Clone)]
+pub struct UngroupRowsOp {
+    pub sheet: String,
+    pub row: u32,
+    pub to_row: u32,
+}
+
+#[derive(Debug, Clone)]
+pub struct GroupColsOp {
+    pub sheet: String,
+    pub min_col: u32,
+    pub max_col: u32,
+}
+
+#[derive(Debug, Clone)]
+pub struct UngroupColsOp {
+    pub sheet: String,
+    pub min_col: u32,
+    pub max_col: u32,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetOutlineOp {
+    pub sheet: String,
+    pub summary_below: Option<bool>,
+    pub summary_right: Option<bool>,
+    pub collapse_rows: Option<(u32, u32)>,
+    pub collapse_cols: Option<(u32, u32)>,
+    pub collapsed: Option<bool>,
+}
+
+#[derive(Debug, Clone)]
 pub struct InsertCommentOp {
     pub sheet: String,
     pub a1: String,
@@ -1535,6 +1573,11 @@ pub enum XlsxOp {
     SetPrintSetup(SetPrintSetupOp),
     SetSheetView(SetSheetViewOp),
     SetAutoFilter(SetAutoFilterOp),
+    GroupRows(GroupRowsOp),
+    UngroupRows(UngroupRowsOp),
+    GroupCols(GroupColsOp),
+    UngroupCols(UngroupColsOp),
+    SetOutline(SetOutlineOp),
     InsertComment(InsertCommentOp),
     ReplyComment(ReplyCommentOp),
     DeleteComment(DeleteCommentOp),
@@ -1794,6 +1837,11 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<XlsxOp>, Error> {
             "setPrintSetup" => XlsxOp::SetPrintSetup(parse_set_print_setup(obj, i)?),
             "setSheetView" => XlsxOp::SetSheetView(parse_set_sheet_view(obj, i)?),
             "setAutoFilter" => XlsxOp::SetAutoFilter(parse_set_auto_filter(obj, i)?),
+            "groupRows" => XlsxOp::GroupRows(parse_group_rows(obj, i)?),
+            "ungroupRows" => XlsxOp::UngroupRows(parse_ungroup_rows(obj, i)?),
+            "groupCols" => XlsxOp::GroupCols(parse_group_cols(obj, i)?),
+            "ungroupCols" => XlsxOp::UngroupCols(parse_ungroup_cols(obj, i)?),
+            "setOutline" => XlsxOp::SetOutline(parse_set_outline(obj, i)?),
             "insertComment" => XlsxOp::InsertComment(parse_insert_comment(obj, i)?),
             "replyComment" => XlsxOp::ReplyComment(parse_reply_comment(obj, i)?),
             "deleteComment" => XlsxOp::DeleteComment(parse_delete_comment(obj, i)?),
@@ -4215,6 +4263,208 @@ fn parse_set_auto_filter(
         }
     };
     Ok(SetAutoFilterOp { sheet, refer })
+}
+
+fn parse_group_rows(obj: &serde_json::Map<String, Value>, i: usize) -> Result<GroupRowsOp, Error> {
+    deny_keys(obj, i, &["op", "id", "rows"])?;
+    let id = require_id(obj, i)?;
+    let sheet = parse_sheet_only_id(&id, i, "id", IdReason::SheetOpNeedsSheet)?;
+    let (row, to_row) = parse_required_row_span(obj, i, "rows")?;
+    Ok(GroupRowsOp { sheet, row, to_row })
+}
+
+fn parse_ungroup_rows(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<UngroupRowsOp, Error> {
+    deny_keys(obj, i, &["op", "id", "rows"])?;
+    let id = require_id(obj, i)?;
+    let sheet = parse_sheet_only_id(&id, i, "id", IdReason::SheetOpNeedsSheet)?;
+    let (row, to_row) = parse_required_row_span(obj, i, "rows")?;
+    Ok(UngroupRowsOp { sheet, row, to_row })
+}
+
+fn parse_group_cols(obj: &serde_json::Map<String, Value>, i: usize) -> Result<GroupColsOp, Error> {
+    deny_keys(obj, i, &["op", "id", "col"])?;
+    let id = require_id(obj, i)?;
+    let sheet = parse_sheet_only_id(&id, i, "id", IdReason::SheetOpNeedsSheet)?;
+    let (min_col, max_col) = parse_required_col_span(obj, i, "col")?;
+    Ok(GroupColsOp {
+        sheet,
+        min_col,
+        max_col,
+    })
+}
+
+fn parse_ungroup_cols(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<UngroupColsOp, Error> {
+    deny_keys(obj, i, &["op", "id", "col"])?;
+    let id = require_id(obj, i)?;
+    let sheet = parse_sheet_only_id(&id, i, "id", IdReason::SheetOpNeedsSheet)?;
+    let (min_col, max_col) = parse_required_col_span(obj, i, "col")?;
+    Ok(UngroupColsOp {
+        sheet,
+        min_col,
+        max_col,
+    })
+}
+
+fn parse_set_outline(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<SetOutlineOp, Error> {
+    deny_keys(
+        obj,
+        i,
+        &[
+            "op",
+            "id",
+            "summaryBelow",
+            "summaryRight",
+            "collapseRows",
+            "collapseCols",
+            "collapsed",
+        ],
+    )?;
+    let id = require_id(obj, i)?;
+    let sheet = parse_sheet_only_id(&id, i, "id", IdReason::SheetOpNeedsSheet)?;
+    let summary_below = parse_opt_bool(obj, i, "summaryBelow")?;
+    let summary_right = parse_opt_bool(obj, i, "summaryRight")?;
+    let collapse_rows = parse_opt_row_span(obj, i, "collapseRows")?;
+    let collapse_cols = parse_opt_col_span(obj, i, "collapseCols")?;
+    let collapsed = parse_opt_bool(obj, i, "collapsed")?;
+    if summary_below.is_none()
+        && summary_right.is_none()
+        && collapse_rows.is_none()
+        && collapse_cols.is_none()
+    {
+        return Err(Error::with_path(
+            ErrorKind::NeedSetOutlineField,
+            format!("ops[{i}]"),
+        ));
+    }
+    if (collapse_rows.is_some() || collapse_cols.is_some()) && collapsed.is_none() {
+        return Err(Error::with_path(
+            ErrorKind::InvalidOutline {
+                field: "collapsed".into(),
+            },
+            format!("ops[{i}].collapsed"),
+        ));
+    }
+    if collapsed.is_some() && collapse_rows.is_none() && collapse_cols.is_none() {
+        return Err(Error::with_path(
+            ErrorKind::InvalidOutline {
+                field: "collapsed".into(),
+            },
+            format!("ops[{i}].collapsed"),
+        ));
+    }
+    Ok(SetOutlineOp {
+        sheet,
+        summary_below,
+        summary_right,
+        collapse_rows,
+        collapse_cols,
+        collapsed,
+    })
+}
+
+fn parse_required_row_span(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+    field: &str,
+) -> Result<(u32, u32), Error> {
+    let raw = match obj.get(field) {
+        Some(Value::String(s)) => s,
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: field.into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].{field}"),
+            ));
+        }
+        None => {
+            return Err(Error::with_path(
+                ErrorKind::MissingField {
+                    field: field.into(),
+                },
+                format!("ops[{i}].{field}"),
+            ));
+        }
+    };
+    a1::parse_row_span(raw).map_err(|e| e.at(format!("ops[{i}].{field}")))
+}
+
+fn parse_required_col_span(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+    field: &str,
+) -> Result<(u32, u32), Error> {
+    let raw = match obj.get(field) {
+        Some(Value::String(s)) => s,
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: field.into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].{field}"),
+            ));
+        }
+        None => {
+            return Err(Error::with_path(
+                ErrorKind::MissingField {
+                    field: field.into(),
+                },
+                format!("ops[{i}].{field}"),
+            ));
+        }
+    };
+    a1::parse_col_span(raw).map_err(|e| e.at(format!("ops[{i}].{field}")))
+}
+
+fn parse_opt_row_span(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+    field: &str,
+) -> Result<Option<(u32, u32)>, Error> {
+    match obj.get(field) {
+        None => Ok(None),
+        Some(Value::String(s)) => a1::parse_row_span(s)
+            .map(Some)
+            .map_err(|e| e.at(format!("ops[{i}].{field}"))),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::String,
+            },
+            format!("ops[{i}].{field}"),
+        )),
+    }
+}
+
+fn parse_opt_col_span(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+    field: &str,
+) -> Result<Option<(u32, u32)>, Error> {
+    match obj.get(field) {
+        None => Ok(None),
+        Some(Value::String(s)) => a1::parse_col_span(s)
+            .map(Some)
+            .map_err(|e| e.at(format!("ops[{i}].{field}"))),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::String,
+            },
+            format!("ops[{i}].{field}"),
+        )),
+    }
 }
 
 fn parse_insert_comment(

@@ -263,6 +263,53 @@ pub fn parse_col_span(input: &str) -> Result<(u32, u32), Error> {
     Ok((start, end))
 }
 
+pub fn parse_row_span(input: &str) -> Result<(u32, u32), Error> {
+    let s = input.trim();
+    if s.is_empty() {
+        return Err(Error::new(ErrorKind::InvalidRange {
+            reason: RangeReason::Empty,
+        }));
+    }
+    let (left, right) = match s.split_once(':') {
+        Some((a, b)) => (a, b),
+        None => (s, s),
+    };
+    let start = parse_row_number(left)?;
+    let end = parse_row_number(right)?;
+    if start > end {
+        return Err(Error::new(ErrorKind::InvalidRange {
+            reason: RangeReason::Reversed {
+                input: input.to_string(),
+            },
+        }));
+    }
+    Ok((start, end))
+}
+
+fn parse_row_number(input: &str) -> Result<u32, Error> {
+    let s = input.trim();
+    if s.is_empty() || !s.bytes().all(|b| b.is_ascii_digit()) {
+        return Err(Error::new(ErrorKind::InvalidRange {
+            reason: RangeReason::NotA1 {
+                input: input.to_string(),
+            },
+        }));
+    }
+    let row: u32 = s.parse().map_err(|_| {
+        Error::new(ErrorKind::InvalidRange {
+            reason: RangeReason::NotA1 {
+                input: input.to_string(),
+            },
+        })
+    })?;
+    if !(1..=1_048_576).contains(&row) {
+        return Err(Error::new(ErrorKind::InvalidRange {
+            reason: RangeReason::RowOutOfRange { row },
+        }));
+    }
+    Ok(row)
+}
+
 fn parse_col_letters(input: &str) -> Result<u32, Error> {
     let s = input.trim();
     if s.is_empty() || !s.bytes().all(|b| b.is_ascii_alphabetic()) {

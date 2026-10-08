@@ -1916,6 +1916,152 @@
         }
       }
     },
+    "groupRowsOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "rows"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "groupRows"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "rows": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "ungroupRowsOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "rows"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "ungroupRows"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "rows": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "groupColsOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "col"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "groupCols"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "col": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "ungroupColsOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "col"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "ungroupCols"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "col": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "setOutlineOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setOutline"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "summaryBelow": {
+          "type": "boolean"
+        },
+        "summaryRight": {
+          "type": "boolean"
+        },
+        "collapseRows": {
+          "type": "string",
+          "minLength": 1
+        },
+        "collapseCols": {
+          "type": "string",
+          "minLength": 1
+        },
+        "collapsed": {
+          "type": "boolean"
+        }
+      },
+      "anyOf": [
+        {
+          "required": [
+            "summaryBelow"
+          ]
+        },
+        {
+          "required": [
+            "summaryRight"
+          ]
+        },
+        {
+          "required": [
+            "collapseRows",
+            "collapsed"
+          ]
+        },
+        {
+          "required": [
+            "collapseCols",
+            "collapsed"
+          ]
+        }
+      ]
+    },
     "setHeaderFooterTextOp": {
       "type": "object",
       "required": [

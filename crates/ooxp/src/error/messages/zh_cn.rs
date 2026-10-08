@@ -1104,6 +1104,13 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::InvalidAutoFilter { field } => {
             format!("工作表筛选的 {field} 不合法")
         }
+        ErrorKind::NeedSetOutlineField => {
+            "setOutline 除 op 与 id 外至少要给一个字段".into()
+        }
+        ErrorKind::InvalidOutline { field } => {
+            format!("大纲的 {field} 不合法")
+        }
+        ErrorKind::OutlineLevelMax => "大纲级不能超过 7".into(),
         ErrorKind::InvalidAlign => {
             "align 必须是 left、center、right、both、distribute、start 或 end".into()
         }

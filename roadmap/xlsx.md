@@ -63,6 +63,7 @@ docx 见 [`roadmap/docx.md`](docx.md)。pptx 见 [`roadmap/pptx.md`](pptx.md)。
 | 20 | `.plan/2026年-9月-29日-✅-xlsx-OLE.md` | 工作表图 |
 | 21 | `.plan/2026年-9月-29日-✅-xlsx-切片器.md` | 数据透视、表格 |
 | 22 | `.plan/2026年-9月-29日-✅-xlsx-外部数据连接.md` | 无 |
+| 23 | `.plan/2026年-10月-9日-✅-xlsx-分组分级显示.md` | 无 |
 
 0 与 1 不要合成一份。Excel 图表数据在本工作簿单元格里，和 Word embedding 不是一回事。页眉是工作表上的 `headerFooter` 加可选 `drawingHF`，不是 Word 的 header 部件。图表工作表是 `chartsheet` 部件。第一期单元格读写见总计划。
 
@@ -72,7 +73,6 @@ docx 见 [`roadmap/docx.md`](docx.md)。pptx 见 [`roadmap/pptx.md`](pptx.md)。
 
 | 序 | 计划 | 前置 |
 | --- | --- | --- |
-| 23 | 分组 / 分级显示 | 无 |
 | 24 | 拆分窗格与自定义视图 | 视图与筛选 |
 | 25 | create 带批注、超链接、形状、SmartArt | 批注、超链接、形状 |
 | 26 | create 图表工作表 | 图表工作表 |
