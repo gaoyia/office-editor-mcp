@@ -933,6 +933,7 @@ mod tests {
                 "protection",
                 "theme",
                 "fontEmbed",
+                "pageBackground",
                 "from",
                 "truncated",
                 "paragraphs"
@@ -996,7 +997,8 @@ mod tests {
                 "docGrid",
                 "rtlGutter",
                 "headerLink",
-                "footerLink"
+                "footerLink",
+                "pageBorders"
             ]
         );
         assert_eq!(

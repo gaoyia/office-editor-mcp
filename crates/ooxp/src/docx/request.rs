@@ -843,6 +843,25 @@ pub struct SetFontEmbedOp {
 }
 
 #[derive(Debug, Clone)]
+pub struct SetPageBackgroundOp {
+    pub color: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetPageBordersOp {
+    pub id: String,
+    pub n: usize,
+    pub enabled: Option<bool>,
+    pub offset_from: Option<String>,
+    pub display: Option<String>,
+    pub z_order: Option<String>,
+    pub top: Option<Option<super::page_bg::BorderSide>>,
+    pub left: Option<Option<super::page_bg::BorderSide>>,
+    pub bottom: Option<Option<super::page_bg::BorderSide>>,
+    pub right: Option<Option<super::page_bg::BorderSide>>,
+}
+
+#[derive(Debug, Clone)]
 pub enum InsertMathPlace {
     After(ParaTarget),
     EndOfDocument,
@@ -935,6 +954,8 @@ pub enum DocxOp {
     InsertEmbeddedFont(InsertEmbeddedFontOp),
     DeleteEmbeddedFont(DeleteEmbeddedFontOp),
     SetFontEmbed(SetFontEmbedOp),
+    SetPageBackground(SetPageBackgroundOp),
+    SetPageBorders(SetPageBordersOp),
     InsertMath(InsertMathOp),
     SetMath(SetMathOp),
     DeleteMath(DeleteMathOp),
@@ -1483,6 +1504,10 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<DocxOp>, Error> {
                 parse_delete_embedded_font(obj, i)?,
             )),
             "setFontEmbed" => out.push(DocxOp::SetFontEmbed(parse_set_font_embed(obj, i)?)),
+            "setPageBackground" => out.push(DocxOp::SetPageBackground(parse_set_page_background(
+                obj, i,
+            )?)),
+            "setPageBorders" => out.push(DocxOp::SetPageBorders(parse_set_page_borders(obj, i)?)),
             "insertMath" => out.push(DocxOp::InsertMath(parse_insert_math(obj, i)?)),
             "setMath" => out.push(DocxOp::SetMath(parse_set_math(obj, i)?)),
             "deleteMath" => out.push(DocxOp::DeleteMath(parse_delete_math(obj, i)?)),
@@ -2720,6 +2745,224 @@ fn parse_set_font_embed(
         system_fonts,
         subset,
     })
+}
+
+fn parse_set_page_background(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<SetPageBackgroundOp, Error> {
+    deny_keys(obj, i, &["op", "id", "color"])?;
+    let id = require_op_id(obj, i)?;
+    require_document_id(&id, i, IdReason::SetPageBackgroundNeedsDocument)?;
+    let color = match obj.get("color") {
+        None => {
+            return Err(Error::with_path(
+                ErrorKind::OpRequiresField {
+                    op: "setPageBackground".into(),
+                    field: "color".into(),
+                },
+                format!("ops[{i}].color"),
+            ));
+        }
+        Some(Value::Null) => None,
+        Some(Value::String(s)) => {
+            let parsed = super::page_bg::parse_color(s).ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::InvalidPageBackgroundColor,
+                    format!("ops[{i}].color"),
+                )
+            })?;
+            Some(parsed)
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "color".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].color"),
+            ));
+        }
+    };
+    Ok(SetPageBackgroundOp { color })
+}
+
+fn parse_set_page_borders(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<SetPageBordersOp, Error> {
+    deny_keys(
+        obj,
+        i,
+        &[
+            "op",
+            "id",
+            "enabled",
+            "offsetFrom",
+            "display",
+            "zOrder",
+            "top",
+            "left",
+            "bottom",
+            "right",
+        ],
+    )?;
+    let id = require_op_id(obj, i)?;
+    let n = parse_section_id(&id, i)?;
+    let offset_from = parse_page_border_enum(
+        obj.get("offsetFrom"),
+        i,
+        "offsetFrom",
+        ErrorKind::InvalidPageBorderOffset,
+        &["page", "text"],
+    )?;
+    let display = parse_page_border_enum(
+        obj.get("display"),
+        i,
+        "display",
+        ErrorKind::InvalidPageBorderDisplay,
+        &["allPages", "firstPage", "notFirstPage"],
+    )?;
+    let z_order = parse_page_border_enum(
+        obj.get("zOrder"),
+        i,
+        "zOrder",
+        ErrorKind::InvalidPageBorderZOrder,
+        &["front", "back"],
+    )?;
+    let top = parse_border_side(obj.get("top"), i, "top")?;
+    let left = parse_border_side(obj.get("left"), i, "left")?;
+    let bottom = parse_border_side(obj.get("bottom"), i, "bottom")?;
+    let right = parse_border_side(obj.get("right"), i, "right")?;
+    let other = offset_from.is_some()
+        || display.is_some()
+        || z_order.is_some()
+        || top.is_some()
+        || left.is_some()
+        || bottom.is_some()
+        || right.is_some();
+    let enabled = parse_enabled_false(obj, i, other)?;
+    if enabled.is_none() && !other {
+        return Err(Error::with_path(
+            ErrorKind::NeedPageBordersField,
+            format!("ops[{i}]"),
+        ));
+    }
+    Ok(SetPageBordersOp {
+        id,
+        n,
+        enabled,
+        offset_from,
+        display,
+        z_order,
+        top,
+        left,
+        bottom,
+        right,
+    })
+}
+
+fn parse_page_border_enum(
+    v: Option<&Value>,
+    i: usize,
+    field: &str,
+    kind: ErrorKind,
+    allowed: &[&str],
+) -> Result<Option<String>, Error> {
+    match v {
+        None => Ok(None),
+        Some(Value::String(s)) if allowed.contains(&s.as_str()) => Ok(Some(s.clone())),
+        Some(Value::String(_)) => Err(Error::with_path(kind, format!("ops[{i}].{field}"))),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::String,
+            },
+            format!("ops[{i}].{field}"),
+        )),
+    }
+}
+
+fn parse_border_side(
+    v: Option<&Value>,
+    i: usize,
+    field: &str,
+) -> Result<Option<Option<super::page_bg::BorderSide>>, Error> {
+    match v {
+        None => Ok(None),
+        Some(Value::Null) => Ok(Some(None)),
+        Some(Value::Object(map)) => {
+            for k in map.keys() {
+                if !["val", "sz", "space", "color"].contains(&k.as_str()) {
+                    return Err(Error::with_path(
+                        ErrorKind::UnknownField { field: k.clone() },
+                        format!("ops[{i}].{field}.{k}"),
+                    ));
+                }
+            }
+            let val = match map.get("val") {
+                Some(Value::String(s)) => super::page_bg::parse_border_val(s).ok_or_else(|| {
+                    Error::with_path(
+                        ErrorKind::InvalidPageBorderVal,
+                        format!("ops[{i}].{field}.val"),
+                    )
+                })?,
+                Some(_) => {
+                    return Err(Error::with_path(
+                        ErrorKind::WrongType {
+                            field: format!("{field}.val"),
+                            expected: TypeName::String,
+                        },
+                        format!("ops[{i}].{field}.val"),
+                    ));
+                }
+                None => {
+                    return Err(Error::with_path(
+                        ErrorKind::OpRequiresField {
+                            op: "setPageBorders".into(),
+                            field: "val".into(),
+                        },
+                        format!("ops[{i}].{field}.val"),
+                    ));
+                }
+            };
+            let sz = parse_twip_field(map.get("sz"), i, &format!("{field}.sz"))?;
+            let space = parse_twip_field(map.get("space"), i, &format!("{field}.space"))?;
+            let color = match map.get("color") {
+                None => None,
+                Some(Value::String(s)) => {
+                    Some(super::page_bg::parse_side_color(s).ok_or_else(|| {
+                        Error::with_path(
+                            ErrorKind::InvalidPageBorderColor,
+                            format!("ops[{i}].{field}.color"),
+                        )
+                    })?)
+                }
+                Some(_) => {
+                    return Err(Error::with_path(
+                        ErrorKind::WrongType {
+                            field: format!("{field}.color"),
+                            expected: TypeName::String,
+                        },
+                        format!("ops[{i}].{field}.color"),
+                    ));
+                }
+            };
+            Ok(Some(Some(super::page_bg::BorderSide {
+                val: val.to_string(),
+                sz,
+                space,
+                color,
+            })))
+        }
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::Object,
+            },
+            format!("ops[{i}].{field}"),
+        )),
+    }
 }
 
 fn parse_doc_part_id(id: &str, op_index: usize) -> Result<usize, Error> {

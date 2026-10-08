@@ -638,6 +638,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::SetFontEmbedNeedsDocument => {
                 "setFontEmbed 的 id 必须是 docx:document".into()
             }
+            IdReason::SetPageBackgroundNeedsDocument => {
+                "setPageBackground 的 id 必须是 docx:document".into()
+            }
             IdReason::MathPrefix => {
                 "公式 id 必须是 math:N，或页眉页脚容器 id 加上 /math:N".into()
             }
@@ -1111,6 +1114,23 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         }
         ErrorKind::NeedFontEmbedField => {
             "setFontEmbed 至少要给 trueType、systemFonts 或 subset 之一".into()
+        }
+        ErrorKind::InvalidPageBackgroundColor => {
+            "color 必须是六位 RGB 十六进制，或 null".into()
+        }
+        ErrorKind::NeedPageBordersField => {
+            "setPageBorders 至少要给 enabled、offsetFrom、display、zOrder 或某一边".into()
+        }
+        ErrorKind::InvalidPageBorderVal => {
+            "val 只能是 nil、none、single、dashed、dotted、double、thick、wave、dashSmallGap、dotDash 或 dotDotDash".into()
+        }
+        ErrorKind::InvalidPageBorderOffset => "offsetFrom 只能是 page 或 text".into(),
+        ErrorKind::InvalidPageBorderDisplay => {
+            "display 只能是 allPages、firstPage 或 notFirstPage".into()
+        }
+        ErrorKind::InvalidPageBorderZOrder => "zOrder 只能是 front 或 back".into(),
+        ErrorKind::InvalidPageBorderColor => {
+            "边框 color 只能是 auto 或六位 RGB 十六进制".into()
         }
         ErrorKind::MathNotFound { id } => format!("找不到公式：{id}"),
         ErrorKind::ContentControlNotFound { id } => format!("找不到内容控件：{id}"),

@@ -247,7 +247,8 @@ fn inspect_count_without_list() {
             "props",
             "protection",
             "theme",
-            "fontEmbed"
+            "fontEmbed",
+            "pageBackground"
         ]
     );
     assert_eq!(tree["headers"], json!([]));

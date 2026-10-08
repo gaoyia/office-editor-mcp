@@ -2040,6 +2040,8 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<XlsxOp>, Error> {
             | "insertEmbeddedFont"
             | "deleteEmbeddedFont"
             | "setFontEmbed"
+            | "setPageBackground"
+            | "setPageBorders"
             | "insertMath"
             | "setMath"
             | "deleteMath"

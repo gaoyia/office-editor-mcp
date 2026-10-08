@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "C:\\data\\note.docx",
+  "ops": [
+    {
+      "op": "setPageBackground",
+      "id": "docx:document",
+      "color": "FF0000"
+    },
+    {
+      "op": "setPageBorders",
+      "id": "section:1",
+      "offsetFrom": "page",
+      "top": { "val": "single", "sz": 4, "space": 24, "color": "auto" },
+      "left": { "val": "single", "sz": 4, "space": 24, "color": "auto" },
+      "bottom": { "val": "single", "sz": 4, "space": 24, "color": "auto" },
+      "right": { "val": "single", "sz": 4, "space": 24, "color": "auto" }
+    },
+    {
+      "op": "setPageBackground",
+      "id": "docx:document",
+      "color": null
+    },
+    {
+      "op": "setPageBorders",
+      "id": "section:1",
+      "enabled": false
+    }
+  ]
+}

@@ -1292,6 +1292,8 @@ fn is_foreign_op(op_name: &str) -> bool {
             | "insertEmbeddedFont"
             | "deleteEmbeddedFont"
             | "setFontEmbed"
+            | "setPageBackground"
+            | "setPageBorders"
             | "insertMath"
             | "setMath"
             | "deleteMath"

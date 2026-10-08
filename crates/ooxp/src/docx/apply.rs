@@ -19,6 +19,7 @@ use super::math;
 use super::notes;
 use super::numbering;
 use super::ole;
+use super::page_bg;
 use super::para::{self, BodyPara, HostPara, NoteKind, ParaTarget};
 use super::picture;
 use super::protect;
@@ -38,11 +39,11 @@ use super::request::{
     RevisionOp, SetBookmarkOp, SetColumnsOp, SetCommentDoneOp, SetCommentMetaOp, SetCommentTextOp,
     SetContentControlOp, SetDocGridOp, SetEvenAndOddHeadersOp, SetFieldOp, SetGutterAtTopOp,
     SetHfDistanceOp, SetHfLinkOp, SetHyperlinkOp, SetLineNumberingOp, SetMathOp,
-    SetMirrorMarginsOp, SetNoteNumberingOp, SetNumberingOp, SetPageMarginOp, SetPageSizeOp,
-    SetParaFormatOp, SetParaNumberingOp, SetParaStyleOp, SetParaTextOp, SetPictureSizeOp,
-    SetPictureWrapOp, SetRtlGutterOp, SetRunFormatOp, SetStyleOp, SetTextBoxDirectionOp,
-    SetTextBoxFillOp, SetTextBoxLineOp, SetTextBoxLinkOp, SetTextBoxSizeOp, SetTextBoxWrapOp,
-    SetTitlePageOp, SetVerticalAlignOp, SplitCellsOp,
+    SetMirrorMarginsOp, SetNoteNumberingOp, SetNumberingOp, SetPageBordersOp, SetPageMarginOp,
+    SetPageSizeOp, SetParaFormatOp, SetParaNumberingOp, SetParaStyleOp, SetParaTextOp,
+    SetPictureSizeOp, SetPictureWrapOp, SetRtlGutterOp, SetRunFormatOp, SetStyleOp,
+    SetTextBoxDirectionOp, SetTextBoxFillOp, SetTextBoxLineOp, SetTextBoxLinkOp, SetTextBoxSizeOp,
+    SetTextBoxWrapOp, SetTitlePageOp, SetVerticalAlignOp, SplitCellsOp,
 };
 use super::revision;
 use super::sdt;
@@ -191,6 +192,18 @@ pub fn apply(bytes: &[u8], ops: &[DocxOp]) -> Result<Vec<u8>, Error> {
                     op.system_fonts,
                     op.subset,
                 )?;
+            }
+            DocxOp::SetPageBackground(op) => {
+                page_bg::set_background(
+                    &mut pkg,
+                    &mut docs,
+                    &mut dirty,
+                    &doc_part,
+                    op.color.as_deref(),
+                )?;
+            }
+            DocxOp::SetPageBorders(op) => {
+                apply_page_borders(&mut docs, &mut dirty, &doc_part, op, i)?;
             }
             DocxOp::InsertMath(op) => {
                 apply_insert_math(&pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
@@ -1636,6 +1649,28 @@ fn find_sect_for_apply<'a>(
     })?;
     dirty.insert(doc_part.to_string(), ());
     Ok(sect)
+}
+
+fn apply_page_borders(
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    op: &SetPageBordersOp,
+    i: usize,
+) -> Result<(), Error> {
+    let sect = find_sect_for_apply(docs, dirty, doc_part, op.n, &op.id, i)?;
+    page_bg::set_borders(
+        sect,
+        op.enabled,
+        op.offset_from.as_deref(),
+        op.display.as_deref(),
+        op.z_order.as_deref(),
+        op.top.as_ref().map(|s| s.as_ref()),
+        op.left.as_ref().map(|s| s.as_ref()),
+        op.bottom.as_ref().map(|s| s.as_ref()),
+        op.right.as_ref().map(|s| s.as_ref()),
+    );
+    Ok(())
 }
 
 fn apply_page_margin(

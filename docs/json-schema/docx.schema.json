@@ -1934,6 +1934,149 @@
         }
       }
     },
+    "setPageBackgroundOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "color"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setPageBackground"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "color": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[0-9A-Fa-f]{6}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "pageBorderSide": {
+      "type": "object",
+      "required": [
+        "val"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "val": {
+          "enum": [
+            "nil",
+            "none",
+            "single",
+            "dashed",
+            "dotted",
+            "double",
+            "thick",
+            "wave",
+            "dashSmallGap",
+            "dotDash",
+            "dotDotDash"
+          ]
+        },
+        "sz": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "space": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "color": {
+          "type": "string"
+        }
+      }
+    },
+    "setPageBordersOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setPageBorders"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "enabled": {
+          "const": false
+        },
+        "offsetFrom": {
+          "enum": [
+            "page",
+            "text"
+          ]
+        },
+        "display": {
+          "enum": [
+            "allPages",
+            "firstPage",
+            "notFirstPage"
+          ]
+        },
+        "zOrder": {
+          "enum": [
+            "front",
+            "back"
+          ]
+        },
+        "top": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/pageBorderSide"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "left": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/pageBorderSide"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "bottom": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/pageBorderSide"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "right": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/pageBorderSide"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
     "insertMathOp": {
       "type": "object",
       "required": [

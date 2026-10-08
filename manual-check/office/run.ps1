@@ -83,6 +83,7 @@ $order = @(
     'docx-biblio'
     'docx-glossary'
     'docx-font-embed'
+    'docx-page-bg'
     'xlsx-docprops'
     'xlsx-sheets'
     'xlsx-cellstyle'

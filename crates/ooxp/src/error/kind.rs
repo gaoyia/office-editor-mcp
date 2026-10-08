@@ -486,6 +486,8 @@ pub(crate) enum IdReason {
     InsertEmbeddedFontNeedsDocument,
     /// setFontEmbed 必须用 docx:document
     SetFontEmbedNeedsDocument,
+    /// setPageBackground 必须用 docx:document
+    SetPageBackgroundNeedsDocument,
     /// 公式 id 必须是 math:N 或 {容器}/math:N
     MathPrefix,
     MathIndexNotInt,
@@ -893,6 +895,13 @@ define_error_kinds! {
     InvalidFontStyle => vec![Self::InvalidFontStyle],
     InvalidFontFile => vec![Self::InvalidFontFile],
     NeedFontEmbedField => vec![Self::NeedFontEmbedField],
+    InvalidPageBackgroundColor => vec![Self::InvalidPageBackgroundColor],
+    NeedPageBordersField => vec![Self::NeedPageBordersField],
+    InvalidPageBorderVal => vec![Self::InvalidPageBorderVal],
+    InvalidPageBorderOffset => vec![Self::InvalidPageBorderOffset],
+    InvalidPageBorderDisplay => vec![Self::InvalidPageBorderDisplay],
+    InvalidPageBorderZOrder => vec![Self::InvalidPageBorderZOrder],
+    InvalidPageBorderColor => vec![Self::InvalidPageBorderColor],
     InvalidDocPartGallery => vec![Self::InvalidDocPartGallery],
     InvalidDocPartBehavior => vec![Self::InvalidDocPartBehavior],
     EmptyDocPartText => vec![Self::EmptyDocPartText],
@@ -1361,6 +1370,7 @@ impl IdReason {
             Self::FontIndexFromOne,
             Self::InsertEmbeddedFontNeedsDocument,
             Self::SetFontEmbedNeedsDocument,
+            Self::SetPageBackgroundNeedsDocument,
             Self::MathPrefix,
             Self::MathIndexNotInt,
             Self::MathIndexFromOne,
@@ -1506,6 +1516,13 @@ impl ErrorKind {
             | Self::InvalidFontStyle
             | Self::InvalidFontFile
             | Self::NeedFontEmbedField
+            | Self::InvalidPageBackgroundColor
+            | Self::NeedPageBordersField
+            | Self::InvalidPageBorderVal
+            | Self::InvalidPageBorderOffset
+            | Self::InvalidPageBorderDisplay
+            | Self::InvalidPageBorderZOrder
+            | Self::InvalidPageBorderColor
             | Self::InvalidDocPartGallery
             | Self::InvalidDocPartBehavior
             | Self::EmptyDocPartText

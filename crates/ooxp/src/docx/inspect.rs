@@ -156,6 +156,12 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         "fontEmbed",
         super::font_embed::flags_json(&pkg, &part)?,
     );
+    insert_json_after(
+        tree.as_object_mut().unwrap(),
+        "fontEmbed",
+        "pageBackground",
+        super::page_bg::background_json(&pkg, &part, &doc.root)?,
+    );
 
     if let Some(scope) = scope {
         if scope.notes {
@@ -375,6 +381,7 @@ fn section_nodes(
                 "even": link.footer.even,
                 "first": link.footer.first,
             },
+            "pageBorders": super::page_bg::borders_json(sect),
         }));
     }
     Ok(out)

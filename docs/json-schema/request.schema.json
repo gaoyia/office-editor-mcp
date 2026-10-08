@@ -846,6 +846,12 @@
                 "$ref": "docx.schema.json#/$defs/setFontEmbedOp"
               },
               {
+                "$ref": "docx.schema.json#/$defs/setPageBackgroundOp"
+              },
+              {
+                "$ref": "docx.schema.json#/$defs/setPageBordersOp"
+              },
+              {
                 "$ref": "docx.schema.json#/$defs/insertMathOp"
               },
               {

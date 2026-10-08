@@ -17,6 +17,7 @@ mod math;
 mod notes;
 mod numbering;
 mod ole;
+mod page_bg;
 mod para;
 mod picture;
 mod protect;

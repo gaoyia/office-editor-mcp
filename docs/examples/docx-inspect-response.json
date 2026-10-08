@@ -62,7 +62,8 @@
       "docGrid": null,
       "rtlGutter": null,
       "headerLink": { "default": false, "even": null, "first": null },
-      "footerLink": { "default": false, "even": null, "first": null }
+      "footerLink": { "default": false, "even": null, "first": null },
+      "pageBorders": null
     }
   ],
   "mirrorMargins": null,
@@ -93,6 +94,10 @@
     "trueType": false,
     "systemFonts": false,
     "subset": false
+  },
+  "pageBackground": {
+    "color": null,
+    "display": false
   },
   "from": 1,
   "truncated": false,

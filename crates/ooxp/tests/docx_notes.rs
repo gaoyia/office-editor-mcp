@@ -190,7 +190,8 @@ fn inspect_counts_without_lists() {
             "props",
             "protection",
             "theme",
-            "fontEmbed"
+            "fontEmbed",
+            "pageBackground"
         ]
     );
 }

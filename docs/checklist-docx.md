@@ -58,6 +58,7 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 | Bi1–Bi6 | ✅ | Word 16.0：`docx-biblio.ps1`，6 PASS / 0 FAIL。无 scope 时只有计数；插入后 `source:1` / `cite:1` / `biblio:1`；Word 更新域后可见 `(Ecma, 2006)`；删书目、引文与源无修复；页眉 `insertBibliography` 为 `InvalidId`，xlsx 上为 `InvalidField`。标题栏无 Repair |
 | Bb1–Bb6 | ✅ | Word 16.0：`docx-glossary.ps1`，6 PASS / 0 FAIL。无 scope 时只有 `docPartCount`；插入后 `docPart:1`；Word 无 Repair；`insertDocPartContent` 后正文可见 `glossary clause`；删除后计数 0；页眉 `insertDocPartContent` 为 `InvalidId`，xlsx 上为 `InvalidField`。标题栏无 Repair |
 | Fe1–Fe6 | ✅ | Word 16.0：`docx-font-embed.ps1`，6 PASS / 0 FAIL。无 scope 时只有 `embeddedFontCount` 与 `fontEmbed`；插入后 `font:1`；Word 无 Repair；`exportMedia` 与 zip 字节一致；删除后计数 0 且 zip 无 `word/fonts/font1.odttf`；xlsx 上 `insertEmbeddedFont` 为 `InvalidField`。标题栏无 Repair |
+| Pb1–Pb6 | ✅ | Word 16.0：`docx-page-bg.ps1`，6 PASS / 0 FAIL。无背景时 `color=null`；set 后 `FF0000` 且 `display=true`；Word 无 Repair；删背景后 `color` 又为 null；`setPageBorders` 后节上有四边；xlsx 上 `setPageBackground` 为 `InvalidField`。标题栏无 Repair |
 | O1 | 🚫 | 领域层不做原样保存，与 xlsx 清单相同。零脏写回见 OPC 库测试。Word 另存 create 产物见 `docx-O1-word-resave`。此前记的 `SaveAs2` 挂起，拆分后重跑没再出现，一秒内返回 |
 
 ## create
@@ -84,7 +85,7 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 | I2 | 大纲 | `outline` 含第一段，`level` 为 `1`，`text` 为 `标题` |
 | I3 | 段落 id | 两段都有 `para:{hex}`，`stable` 为 `true` |
 | I4 | 第二段 | `text` 为 `hello` |
-| I5 | 无 scope | 只发 path 时没有 `paragraphs` 字段，仍有 `outline`、`paraCount`、`pictureCount`、`tableCount`、`revisionCount`、`hyperlinkCount`、`bookmarkCount`、`fieldCount`、`tocCount`、`captionCount`、`crossRefCount`、`indexCount`、`indexEntryCount`、`sourceCount`、`citationCount`、`bibliographyCount`、`docPartCount`、`mathCount`、`contentControlCount`、`embeddedFontCount`、`fontEmbed`、`headers`、`footers`、`sections`、`props`、`protection`、`watermarkCount` |
+| I5 | 无 scope | 只发 path 时没有 `paragraphs` 字段，仍有 `outline`、`paraCount`、`pictureCount`、`tableCount`、`revisionCount`、`hyperlinkCount`、`bookmarkCount`、`fieldCount`、`tocCount`、`captionCount`、`crossRefCount`、`indexCount`、`indexEntryCount`、`sourceCount`、`citationCount`、`bibliographyCount`、`docPartCount`、`mathCount`、`contentControlCount`、`embeddedFontCount`、`fontEmbed`、`pageBackground`、`headers`、`footers`、`sections`、`props`、`protection`、`watermarkCount` |
 
 ## apply
 
@@ -522,6 +523,20 @@ Word 亲手另存或在另存批注样例的 `comments.xml` 里带 `inkml:ink`�
 | Fe4 | 删除 | `deleteEmbeddedFont` 之后 `embeddedFontCount` 为 0，包内没有 `word/fonts/font1.odttf`，Word 无修复 |
 | Fe5 | 标志 | `setFontEmbed` 把 `subset` 写成 `true` 之后树上 `fontEmbed.subset` 为 `true`，Word 无修复 |
 | Fe6 | 拒错 | xlsx 上发 `insertEmbeddedFont` 得 `InvalidField`。未写文件 |
+
+
+## 页面背景与边框
+
+`setPageBackground` 写整篇 `w:background` 与 `displayBackgroundShape`；`setPageBorders` 写节上 `w:pgBorders`。不实现排版引擎，不写艺术型边框或 DrawingML 渐变。手测脚本 `manual-check/office/cases/docx-page-bg.ps1`。
+
+| 编号 | 项 | 期望 |
+| --- | --- | --- |
+| Pb1 | 名单 | 无背景时根上 `pageBackground.color` 为 `null`、`display` 为 `false`；节上 `pageBorders` 为 `null` |
+| Pb2 | 背景 | `setPageBackground` 把 `color` 写成 `FF0000` 之后树上为 `FF0000` 且 `display` 为 `true`，Word 无修复 |
+| Pb3 | 清除背景 | `color` 为 `null` 之后树上 `color` 又为 `null`、`display` 为 `false`，Word 无修复 |
+| Pb4 | 边框 | `setPageBorders` 四边 `single` 之后节上 `pageBorders.top.val` 为 `single`，Word 无修复 |
+| Pb5 | 清除边框 | `enabled: false` 之后节上 `pageBorders` 为 `null`，Word 无修复 |
+| Pb6 | 拒错 | xlsx 上发 `setPageBackground` 得 `InvalidField`。未写文件 |
 
 
 ## 公式

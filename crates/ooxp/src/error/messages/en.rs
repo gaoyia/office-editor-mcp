@@ -681,6 +681,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::SetFontEmbedNeedsDocument => {
                 "setFontEmbed id must be docx:document".into()
             }
+            IdReason::SetPageBackgroundNeedsDocument => {
+                "setPageBackground id must be docx:document".into()
+            }
             IdReason::MathPrefix => {
                 "Math id must be math:N or a header/footer container id plus /math:N".into()
             }
@@ -1282,6 +1285,23 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         }
         ErrorKind::NeedFontEmbedField => {
             "setFontEmbed requires at least one of trueType, systemFonts, or subset".into()
+        }
+        ErrorKind::InvalidPageBackgroundColor => {
+            "color must be a 6-digit RGB hex value, or null".into()
+        }
+        ErrorKind::NeedPageBordersField => {
+            "setPageBorders requires enabled, offsetFrom, display, zOrder, or at least one side".into()
+        }
+        ErrorKind::InvalidPageBorderVal => {
+            "val must be nil, none, single, dashed, dotted, double, thick, wave, dashSmallGap, dotDash, or dotDotDash".into()
+        }
+        ErrorKind::InvalidPageBorderOffset => "offsetFrom must be page or text".into(),
+        ErrorKind::InvalidPageBorderDisplay => {
+            "display must be allPages, firstPage, or notFirstPage".into()
+        }
+        ErrorKind::InvalidPageBorderZOrder => "zOrder must be front or back".into(),
+        ErrorKind::InvalidPageBorderColor => {
+            "border color must be auto or a 6-digit RGB hex value".into()
         }
         ErrorKind::MathNotFound { id } => format!("Equation not found: {id}"),
         ErrorKind::ContentControlNotFound { id } => format!("Content control not found: {id}"),

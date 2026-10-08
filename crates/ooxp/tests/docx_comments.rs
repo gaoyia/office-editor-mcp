@@ -239,7 +239,8 @@ fn inspect_counts_without_list() {
             "props",
             "protection",
             "theme",
-            "fontEmbed"
+            "fontEmbed",
+            "pageBackground"
         ]
     );
 }
