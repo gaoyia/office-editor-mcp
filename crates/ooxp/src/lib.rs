@@ -9,6 +9,7 @@ mod error;
 mod json;
 mod ole;
 mod opc;
+mod password;
 mod pptx;
 mod props;
 mod smartart;

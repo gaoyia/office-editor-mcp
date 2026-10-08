@@ -665,6 +665,7 @@ define_error_kinds! {
     ProtectionHasPassword => vec![Self::ProtectionHasPassword],
     ProtectionPasswordBlank => vec![Self::ProtectionPasswordBlank],
     ProtectionPasswordWrong => vec![Self::ProtectionPasswordWrong],
+    ProtectionPasswordNeedsDoc => vec![Self::ProtectionPasswordNeedsDoc],
     InvalidCustomPropType => vec![Self::InvalidCustomPropType],
     EmptyCustomPropName => vec![Self::EmptyCustomPropName],
     CustomPropNotFound { id: String } => vec![Self::CustomPropNotFound { id: "prop:Editor".into() }],
@@ -1723,6 +1724,7 @@ impl ErrorKind {
             | Self::InvalidSheetProtection { .. }
             | Self::ProtectionPasswordBlank
             | Self::ProtectionPasswordWrong
+            | Self::ProtectionPasswordNeedsDoc
             | Self::InvalidCustomPropType
             | Self::EmptyCustomPropName => InvalidField,
             Self::OutOfRange { .. } => TruncatedLimit,

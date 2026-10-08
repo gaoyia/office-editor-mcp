@@ -102,7 +102,7 @@ crates/ooxp-cli/             命令行，只依赖 ooxp。二进制名也是 oox
 
 ## 实现时允许的依赖（文档约定，代码阶段再写入 Cargo.toml）
 
-库可以依赖常见的 ZIP 与 XML crate，例如 `zip`、`quick-xml`、`serde`、`serde_json`。xlsx 写保护哈希可用 `sha2`、`getrandom`、`base64`。禁止依赖任何把整份 Office 文档建成自己那套对象模型、再整包写出的高层 Office crate。
+库可以依赖常见的 ZIP 与 XML crate，例如 `zip`、`quick-xml`、`serde`、`serde_json`。xlsx / docx 写保护哈希可用 `sha2`、`getrandom`、`base64`。禁止依赖任何把整份 Office 文档建成自己那套对象模型、再整包写出的高层 Office crate。
 
 ## 阶段边界
 

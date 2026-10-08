@@ -51,6 +51,7 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 | Pf1–Pf6 | ✅ | Word 16.0：`docx-format.ps1`，6 PASS / 0 FAIL。无 `scope.runs` 时有 `runCount`、没有名单；对齐为居中；第一 run 加粗后第二 run 红色还在；段前 12 磅、段后 6 磅。标题栏无 Repair |
 | Ol1–Ol5 | ✅ | Word 16.0：`docx-ole.ps1`，6 PASS / 0 FAIL。无名单时 `oleObjectCount=1`；`progId` 为 `Excel.Sheet.12`；`exportMedia` 与 embeddings 字节一致；删除后计数为 0；插入后树上能看见；错 id 为 `InvalidId` 且未写文件。标题栏无 Repair |
 | Pr1–Pr6 | ✅ | Word 16.0：`docx-protect.ps1`，6 PASS / 0 FAIL。只读保护 `enforced=true`、`edit=readOnly`；关掉后 `ProtectionType=-1`；窗体保护为 `2`；只读推荐为 true；带哈希 `hasPassword=true` 且改 `enforced` 得 `NotImplemented`；错 id / 空字段拒写。标题栏无 Repair |
+| Ph1–Ph5 | ✅ | Word 16.0：`docx-protect-hash.ps1`，5 PASS / 0 FAIL。带 `password` 后 `hasPassword=true`、树无哈希或明文；COM `ProtectionType=3`、`Unprotect("secret")` 成功、错误口令失败、无 Repair；对得上的口令 `enforced: false` 后无 Repair；空口令 / 错口令为 `InvalidField`，不给口令改哈希为 `NotImplemented` |
 | Wm1–Wm5 | ✅ | Word 16.0：`docx-watermark.ps1`，5 PASS / 0 FAIL。文字水印 id 为 `header:default:1/watermark:1`、`kind=text`；删除后计数为 0；图片水印 `kind=picture`；普通页眉图不进 `watermarkCount`；错 id / 同时给 `text` 与 `file` 拒写。标题栏无 Repair |
 | Th1–Th5 | ✅ | Word 16.0：`docx-theme.ps1`，5 PASS / 0 FAIL。空白另存根上有 `theme`，`accent1` 为六位十六进制；改色为 `FF0000`；改字为 Arial；无 theme 部件得 `IdNotFound`；错 id / 空槽位拒写。标题栏无 Repair |
 | Cp1–Cp6 | ✅ | Word 16.0：`docx-caption-xref.ps1`，6 PASS / 0 FAIL。无 scope 时只有计数；插入后 `caption:1` / `identifier=Figure`；Word 更新域后交叉引用可见 Figure；删交叉引用与删题注无修复；页眉 `insertCaption` 为 `InvalidId`，xlsx 上为 `InvalidField`。标题栏无 Repair |
@@ -617,7 +618,7 @@ Word 亲手另存或在另存批注样例的 `comments.xml` 里带 `inkml:ink`�
 
 ## 文档保护
 
-只认 `settings.xml` 的 `w:documentProtection` / `w:writeProtection`。不破解密码。手测脚本 `manual-check/office/cases/docx-protect.ps1`。
+只认 `settings.xml` 的 `w:documentProtection` / `w:writeProtection`。不破解密码。手测脚本 `manual-check/office/cases/docx-protect.ps1`。带密码哈希见下面 Ph 组。
 
 | 序号 | 检查 | 通过标准 |
 | --- | --- | --- |
@@ -627,6 +628,19 @@ Word 亲手另存或在另存批注样例的 `comments.xml` 里带 `inkml:ink`�
 | Pr4 | 只读推荐 | Word 勾选只读推荐另存后，`readOnlyRecommended` 为 true |
 | Pr5 | 有密码 | Word 带密码保护另存后，`hasPassword` 为 true，树 JSON 不含该明文；对其发改 `enforced` 得 `NotImplemented`，不写文件 |
 | Pr6 | 拒错 id | 对段落 id 发 `setProtection` 得 `InvalidId`；一个字段都不给得 `InvalidField`。不强制开 Word |
+
+## 保护密码哈希
+
+`setProtection` 的 `password` 写 Word 16.0 限制编辑 SHA-512（先做遗留口令预处理）。inspect 仍只报 `hasPassword`。不破解密码。手测脚本 `manual-check/office/cases/docx-protect-hash.ps1`。编号用 Ph。不要和 Pr、Pb 撞。Pr5「无口令改带哈希样例」仍为 `NotImplemented`。
+
+| 编号 | 项 | 期望 |
+| --- | --- | --- |
+| Ph1 | inspect | `setProtection` 带 `password` 后 `hasPassword=true`，树里没有哈希或明文；settings 有 `cryptAlgorithmSid="14"` |
+| Ph2 | 打开 | Word 打开写入产物后 `ProtectionType` 为 `3`；错误口令 `Unprotect` 失败，`Unprotect("secret")` 成功；标题栏无 Repair |
+| Ph3 | 解开 | 给对得上的 `password` 且 `enforced: false` 后 `hasPassword=false` |
+| Ph4 | 解开后打开 | Word 打开解开产物后 `ProtectionType` 为 `-1`，无 Repair |
+| Ph5 | 拒写 | 空 `password`、错口令解开、不给 `password` 改带 sid=14 的保护，分别得 `InvalidField` 或 `NotImplemented`；均未写文件。不强制为拒写开 Word |
+
 
 ## 水印
 

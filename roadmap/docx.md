@@ -67,6 +67,7 @@ xlsx 见 [`roadmap/xlsx.md`](xlsx.md)。pptx 见 [`roadmap/pptx.md`](pptx.md)。
 | 33 | `.plan/2026年-10月-9日-✅-docx-构建基块.md` | 无 |
 | 34 | `.plan/2026年-10月-9日-✅-docx-字体嵌入.md` | 无 |
 | 35 | `.plan/2026年-10月-9日-✅-docx-页面背景与边框.md` | 节属性 |
+| 36 | `.plan/2026年-10月-9日-✅-docx-保护密码哈希.md` | 保护 |
 | C1 | `.plan/2026年-9月-27日-✅-图表剩余.md` | 嵌入图表已过 |
 | C2 | `.plan/2026年-9月-27日-✅-SmartArt跨家族.md` | SmartArt 已过 |
 | C3 | `.plan/2026年-9月-27日-✅-批注墨迹.md` | 批注已过 |
@@ -80,7 +81,6 @@ xlsx 见 [`roadmap/xlsx.md`](xlsx.md)。pptx 见 [`roadmap/pptx.md`](pptx.md)。
 
 | 序 | 计划 | 前置 |
 | --- | --- | --- |
-| 36 | 保护密码哈希 | 保护 |
 | 37 | 接受 / 拒绝修订 | 修订痕迹 |
 | 38 | 组合与连接线 | 正文图、文本框 |
 | 39 | 框内再套框 | 文本框；先探测，Word 拒则放弃 |
@@ -91,7 +91,7 @@ xlsx 见 [`roadmap/xlsx.md`](xlsx.md)。pptx 见 [`roadmap/pptx.md`](pptx.md)。
 | 44 | 嵌入 SVG | 正文图 |
 | 45 | 墨迹画布（非批注） | 批注墨迹 |
 
-36 若不想做哈希，改成永不做。39 必须先另存探测，不要按 Excel / PowerPoint 的框去猜。
+39 必须先另存探测，不要按 Excel / PowerPoint 的框去猜。
 
 ## 跨格式（本类型要跟）
 

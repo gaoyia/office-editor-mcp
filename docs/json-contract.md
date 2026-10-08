@@ -211,14 +211,15 @@ docx：
 | `edit` | 可选。`readOnly`、`comments`、`trackedChanges` 或 `forms`。打开强制且当前没有种类时，缺省 `readOnly` |
 | `formatting` | 可选。布尔。对应 `w:formatting` |
 | `readOnlyRecommended` | 可选。布尔。`true` 写出 `<w:writeProtection w:recommended="true"/>`；`false` 在没有写保护密码时删掉该元素 |
+| `password` | 可选。非空字符串。按 Word 16.0 写限制编辑 SHA-512 哈希 |
 
-这四个字段至少给一个，否则报 `InvalidField`。未点名的字段留下。`edit` 为 `none` 或不认识的字符串报 `InvalidField`。关掉强制请用 `enforced: false`，不要写 `edit: none`。
+这四个可写字段至少给一个，否则报 `InvalidField`。`password` 不算「至少一个可写字段」。未点名的字段留下。`edit` 为 `none` 或不认识的字符串报 `InvalidField`。关掉强制请用 `enforced: false`，不要写 `edit: none`。空 `password` 报 `InvalidField`。`password` 只用于 `documentProtection`；只改 `readOnlyRecommended` 却给了 `password` 报 `InvalidField`。出现 `hasPassword` 报 `InvalidField`。id 不是 `docx:document` 报 `InvalidId`。没有 `settings.xml` 报 `OpcPartMissing`。对 pptx 发此 op 且 id 为 `pptx:presentation` 时走下面 pptx 那一节。
 
-出现 `password` 报 `NotImplemented`，不写哈希。`documentProtection` 已有密码哈希时，改 `enforced` / `edit` / `formatting` 报 `NotImplemented`，不删哈希。`writeProtection` 已有密码哈希时，改 `readOnlyRecommended` 报 `NotImplemented`。id 不是 `docx:document` 报 `InvalidId`。没有 `settings.xml` 报 `OpcPartMissing`。对 pptx 发此 op 且 id 为 `pptx:presentation` 时走下面 pptx 那一节。
+打开强制且没有哈希时，写出 Transitional 标记：`w:edit` 与 `w:enforcement="1"`。给了 `password` 时再按 Word 16.0 写 `cryptProviderType="rsaAES"`、`cryptAlgorithmClass="hash"`、`cryptAlgorithmType="typeAny"`、`cryptAlgorithmSid="14"`、`cryptSpinCount="100000"`、`hash`、`salt`（16 字节随机盐的标准 Base64）。口令按 UTF-8 取前 15 字节做 ECMA-376 Part 4 §14.8.1 遗留预处理，把 4 字节结果写成大写两位十六进制再按 UTF-16LE；`H0 = SHA-512(salt || 该 UTF-16LE)`，再对 `i = 0 .. 99999` 做 `H_{i+1} = SHA-512(H_i || i 的 4 字节小端)`。不写 ISO 的 `algorithmName` / `hashValue` / `saltValue` / `spinCount`，不写 `reservationPassword`。已有 `cryptAlgorithmSid=14` 且 `hash` / `salt` / `cryptSpinCount` 齐时必须给对得上的 `password`，否则报 `NotImplemented`；口令对不上报 `InvalidField`。对得上则可改种类，或 `enforced: false` 解开（删掉元素）。改写时换新盐重算。其它哈希（缺 sid、sid 不是 14、只有 ISO `hashValue`、`reservationPassword` 等）即使给了 `password` 也报 `NotImplemented`。无哈希时 `enforced: false` 直接删掉元素。`writeProtection` 已有密码哈希时，改 `readOnlyRecommended` 报 `NotImplemented`，即使给了 `password`。`edit` 为 `trackedChanges` 时同时写出空的 `w:trackRevisions`；关掉保护时不要删已有的 `trackRevisions`。`edit` 为 `forms` 时给主文档每一个 `w:sectPr` 写 `w:formProt`；关掉窗体保护或关掉强制时删掉各节 `w:formProt`。不读写 `w:permStart` / `w:permEnd`。已经是目标状态则空操作，仍计入 `opsApplied`。不把哈希放进树。
 
-打开强制时写出 Transitional 标记：`w:edit` 与 `w:enforcement="1"`，不要写 `hash` / `salt` / `crypt*`。`edit` 为 `trackedChanges` 时同时写出空的 `w:trackRevisions`；关掉保护时不要删已有的 `trackRevisions`。`edit` 为 `forms` 时给主文档每一个 `w:sectPr` 写 `w:formProt`；关掉窗体保护或关掉强制时删掉各节 `w:formProt`。不读写 `w:permStart` / `w:permEnd`。已经是目标状态则空操作，仍计入 `opsApplied`。
+create 的 `document.protection` 复用同一套规则，但出现 `password` 仍报 `NotImplemented`。出现 `hasPassword` 报 `InvalidField`（`hasPassword` 是树上的只读字段）。
 
-create 的 `document.protection` 复用同一套规则。出现 `hasPassword` 或 `password` 报 `InvalidField` / `NotImplemented`（`hasPassword` 是树上的只读字段，create 出现即 `InvalidField`）。
+带密码示例见 `docs/examples/docx-apply-protect-password.json`。
 
 xlsx 工作表（id 为 `sheet:{name}`）：
 

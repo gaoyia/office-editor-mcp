@@ -4,12 +4,12 @@
 use base64::engine::general_purpose::STANDARD;
 use base64::Engine;
 use serde_json::{json, Map, Value};
-use sha2::{Digest, Sha512};
 
 use super::layout;
 use super::names;
 use super::request::{SetSheetProtectionOp, SetWorkbookProtectionOp};
 use crate::error::{Error, ErrorKind};
+use crate::password::sha512_spin;
 use crate::xml::{Element, Node};
 
 const HASH_ATTRS: &[&str] = &[
@@ -349,26 +349,6 @@ fn write_sha512(el: &mut Element, password: &str, workbook: bool) {
     el.remove_attr("revisionsPassword");
 }
 
-pub(crate) fn sha512_spin(password: &str, salt: &[u8], spin: u32) -> Vec<u8> {
-    let mut pwd = Vec::with_capacity(password.len() * 2);
-    for u in password.encode_utf16() {
-        pwd.extend_from_slice(&u.to_le_bytes());
-    }
-    let mut digest: [u8; 64] = {
-        let mut h = Sha512::new();
-        h.update(salt);
-        h.update(&pwd);
-        h.finalize().into()
-    };
-    for i in 0..spin {
-        let mut h = Sha512::new();
-        h.update(digest);
-        h.update(i.to_le_bytes());
-        digest = h.finalize().into();
-    }
-    digest.to_vec()
-}
-
 fn has_password(el: &Element) -> bool {
     if HASH_ATTRS
         .iter()
@@ -404,20 +384,4 @@ fn remove_child(parent: &mut Element, local: &str) {
         Node::Element(e) => e.local_name() != local,
         _ => true,
     });
-}
-
-#[cfg(test)]
-mod hash_tests {
-    use super::*;
-    use base64::engine::general_purpose::STANDARD;
-    use base64::Engine;
-
-    #[test]
-    fn excel_sheet_sample_matches() {
-        let salt = STANDARD.decode("XU0YjfLYkdb5QbNqCNOyHA==").unwrap();
-        let want = STANDARD
-            .decode("6nKP+s3+T6I4ifGSbzortB+RwF5ZmjfkV3J86fejw5GFCree1zkmdy4Q3+xVUx9SdeihNagWdWE4gIWNb2OkWg==")
-            .unwrap();
-        assert_eq!(sha512_spin("secret", &salt, 100_000), want);
-    }
 }

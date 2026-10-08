@@ -955,6 +955,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         }
         ErrorKind::ProtectionPasswordBlank => "password 必须是非空字符串".into(),
         ErrorKind::ProtectionPasswordWrong => "password 与已有 SHA-512 哈希对不上".into(),
+        ErrorKind::ProtectionPasswordNeedsDoc => {
+            "password 只能配限制编辑，不能只配 readOnlyRecommended".into()
+        }
         ErrorKind::InvalidCustomPropType => {
             "自定义属性 type 必须是 lpwstr、i4、r8 或 bool，且必须与 value 对得上".into()
         }

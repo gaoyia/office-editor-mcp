@@ -1079,6 +1079,10 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::ProtectionPasswordWrong => {
             "password does not match the existing SHA-512 hash".into()
         }
+        ErrorKind::ProtectionPasswordNeedsDoc => {
+            "password can only be used with document editing protection, not readOnlyRecommended alone"
+                .into()
+        }
         ErrorKind::InvalidCustomPropType => {
             "custom property type must be lpwstr, i4, r8, or bool, and must match value"
                 .into()

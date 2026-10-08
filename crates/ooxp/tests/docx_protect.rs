@@ -258,18 +258,21 @@ fn hashed_file_is_read_only_and_apply_is_not_implemented() {
 }
 
 #[test]
-fn password_field_is_not_implemented() {
-    let src = create_docx("pw-field", None);
-    let err = apply_err(
-        &src,
-        json!([{
-            "op": "setProtection",
-            "id": "docx:document",
-            "enforced": true,
-            "password": "secret"
-        }]),
-    );
+fn create_password_is_not_implemented() {
+    let path = seq_path("pw-create", "docx");
+    let err = run_json(&json!({
+        "schemaVersion": 1,
+        "action": "create",
+        "path": path.to_string_lossy(),
+        "format": "docx",
+        "document": {
+            "paragraphs": [{ "text": "hello" }],
+            "protection": { "enforced": true, "edit": "readOnly", "password": "secret" }
+        }
+    }))
+    .unwrap_err();
     assert_eq!(err.code(), ErrorCode::NotImplemented);
+    assert!(!path.exists());
 }
 
 #[test]

@@ -521,7 +521,7 @@ docx 根上始终带 `protection`，不要另给 scope 键。来源是 `/word/se
 | `hasPassword` | 两元素上的哈希属性 | `documentProtection` 或 `writeProtection` 带非空 `hash` / `hashValue` / `salt` / `saltValue` / `reservationPassword` 时为 `true`。树上不出现哈希、盐或明文 |
 | `readOnlyRecommended` | `writeProtection/@recommended` | 为 on 且该元素没有密码哈希时为 `true`。有写保护密码时规范要求忽略 recommended，树上为 `false` |
 
-不把 `algorithmName`、`cryptProviderType`、`cryptAlgorithmSid`、`spinCount` 放进树。不列出 `w:permStart` / `w:permEnd`。不报告 IRM。
+不把 `algorithmName`、`cryptProviderType`、`cryptAlgorithmSid`、`spinCount`、`hash`、`salt` 放进树。不列出 `w:permStart` / `w:permEnd`。不报告 IRM。`setProtection` 带 `password` 时按 [json-contract.md](json-contract.md#setprotection) 写 Word 16.0 的 `crypt*` SHA-512，不把口令或哈希写进树。
 
 ### 主题（仅 docx）
 
@@ -577,7 +577,7 @@ docx 根上始终带 `theme`，不要另给 scope 键。来源是主文档 `.rel
 | `paragraphs[].comments` | 可选。该段上的批注列表。每条范围的 start 与 end 都是该段自身，不跨段。不写回复。页眉页脚段落同样允许 |
 | `document.headers` / `document.footers` | 可选。页眉或页脚。省略则不写对应部件 |
 | `document.props` | 可选。文件属性，字段与 [json-contract.md](json-contract.md#setprops) 的 `setProps` / `setCustomProp` 相同 |
-| `document.protection` | 可选。文档保护，字段与 [json-contract.md](json-contract.md#setprotection) 的 `setProtection` 相同（不要 `id`，不要 `hasPassword`） |
+| `document.protection` | 可选。文档保护，字段与 [json-contract.md](json-contract.md#setprotection) 的 `setProtection` 相同（不要 `id`，不要 `hasPassword`）。出现 `password` 仍报 `NotImplemented` |
 | `document.watermarks` | 可选。水印列表。省略或空数组则不写。每项恰好给 `text` 或 `file` 之一，规则与 `insertWatermark` 相同（不要 `id`）。在 follow-up 与 `protection` 之后写入 |
 | `document.tables` | 可选。正文表列表。省略或空数组则不写 `w:tbl` |
 | `headers[].type` / `footers[].type` | `default`、`even` 或 `first`；省略当作 `default`。同一侧同一 `type` 只能出现一次，否则报 `InvalidField`。给了 `even` 则写入整篇 `w:evenAndOddHeaders`；给了 `first` 则第一节写入 `w:titlePg` |

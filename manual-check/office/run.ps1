@@ -76,6 +76,7 @@ $order = @(
     'docx-docprops'
     'docx-ole'
     'docx-protect'
+    'docx-protect-hash'
     'docx-watermark'
     'docx-theme'
     'docx-caption-xref'
