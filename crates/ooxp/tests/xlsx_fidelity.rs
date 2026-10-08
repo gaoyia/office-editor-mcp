@@ -518,6 +518,7 @@ fn xlsx_accepts_sparklines_scope() {
     assert_eq!(tree["slicerCount"], 0);
     assert_eq!(tree["sheets"][0]["slicerCount"], 0);
     assert_eq!(tree["connectionCount"], 0);
+    assert_eq!(tree["customViewCount"], 0);
     assert_eq!(tree["sheets"][0]["sparklines"], json!([]));
 }
 

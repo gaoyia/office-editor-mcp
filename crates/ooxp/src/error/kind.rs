@@ -212,6 +212,12 @@ pub(crate) enum IdReason {
     InsertDefinedNameNeedsWorkbook,
     /// insertConnection 必须用 xlsx:workbook
     InsertConnectionNeedsWorkbook,
+    /// insertCustomView 必须用 xlsx:workbook
+    InsertCustomViewNeedsWorkbook,
+    /// 自定义视图 id 必须是 customView:n
+    CustomViewPrefix,
+    CustomViewIndexNotInt,
+    CustomViewIndexFromOne,
     /// 连接 id 必须是 connection:{xmlId} 或 connection:index:{k}
     ConnectionPrefix,
     ConnectionIndexNotInt,
@@ -730,6 +736,10 @@ define_error_kinds! {
     InvalidConnection { field: String } => {
         vec![Self::InvalidConnection { field: "type".into() }]
     },
+    CustomViewNotFound { id: String } => vec![Self::CustomViewNotFound { id: "customView:1".into() }],
+    InvalidCustomView { field: String } => {
+        vec![Self::InvalidCustomView { field: "name".into() }]
+    },
     ZoomNotFound { id: String } => vec![Self::ZoomNotFound { id: "slide:1/zoom:3".into() }],
     InvalidZoomType => vec![Self::InvalidZoomType],
     InvalidShowPrType => vec![Self::InvalidShowPrType],
@@ -1072,6 +1082,10 @@ impl IdReason {
             Self::SetHandoutTextNeedsHandout,
             Self::InsertDefinedNameNeedsWorkbook,
             Self::InsertConnectionNeedsWorkbook,
+            Self::InsertCustomViewNeedsWorkbook,
+            Self::CustomViewPrefix,
+            Self::CustomViewIndexNotInt,
+            Self::CustomViewIndexFromOne,
             Self::ConnectionPrefix,
             Self::ConnectionIndexNotInt,
             Self::ConnectionIndexFromOne,
@@ -1418,6 +1432,7 @@ impl ErrorKind {
             | Self::OutlineLevelMax
             | Self::SlicerFieldNotFound { .. }
             | Self::InvalidConnection { .. }
+            | Self::InvalidCustomView { .. }
             | Self::InvalidAlign
             | Self::InvalidLineRule
             | Self::InvalidUnderline
@@ -1548,6 +1563,7 @@ impl ErrorKind {
             | Self::OleNotFound { .. }
             | Self::SlicerNotFound { .. }
             | Self::ConnectionNotFound { .. }
+            | Self::CustomViewNotFound { .. }
             | Self::ZoomNotFound { .. }
             | Self::WatermarkNotFound { .. }
             | Self::TableNotFound { .. }

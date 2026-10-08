@@ -90,6 +90,8 @@ fn inspect_defaults() {
     assert_eq!(v["zoom"], json!(100));
     assert_eq!(v["frozenRows"], json!(0));
     assert_eq!(v["frozenCols"], json!(0));
+    assert_eq!(v["splitRows"], json!(0));
+    assert_eq!(v["splitCols"], json!(0));
     assert_eq!(v["activeCell"], json!("A1"));
     assert_eq!(
         inspect_tree(&path)["sheets"][0]["autoFilter"],
@@ -126,6 +128,8 @@ fn freeze_zoom_and_filter() {
     assert_eq!(v["zoom"], json!(80));
     assert_eq!(v["frozenRows"], json!(1));
     assert_eq!(v["frozenCols"], json!(0));
+    assert_eq!(v["splitRows"], json!(0));
+    assert_eq!(v["splitCols"], json!(0));
     assert_eq!(v["activeCell"], json!("A2"));
     assert_eq!(tree["sheets"][0]["autoFilter"], json!("A1:A10"));
     let xml = part_text(&out, "xl/worksheets/sheet1.xml");
@@ -165,6 +169,53 @@ fn unfreeze_and_clear_filter() {
     let xml = part_text(&out, "xl/worksheets/sheet1.xml");
     assert!(!xml.contains("<pane"), "{xml}");
     assert!(!xml.contains("<autoFilter"), "{xml}");
+}
+
+#[test]
+fn split_rows_and_cols() {
+    let src = create_book("sp");
+    let out = tmp("sp-out");
+    apply(
+        &src,
+        &out,
+        json!([{
+            "op": "setSheetView",
+            "id": "sheet:Sheet1",
+            "splitRows": 4,
+            "splitCols": 2
+        }]),
+    )
+    .unwrap();
+    let v = &inspect_tree(&out)["sheets"][0]["view"];
+    assert_eq!(v["splitRows"], json!(4));
+    assert_eq!(v["splitCols"], json!(2));
+    assert_eq!(v["frozenRows"], json!(0));
+    assert_eq!(v["frozenCols"], json!(0));
+    let xml = part_text(&out, "xl/worksheets/sheet1.xml");
+    assert!(xml.contains(r#"topLeftCell="C5""#), "{xml}");
+    assert!(xml.contains(r#"ySplit="1425""#), "{xml}");
+    assert!(!xml.contains(r#"state="frozen""#), "{xml}");
+    assert!(xml.contains("xSplit="), "{xml}");
+    assert!(xml.contains("ySplit="), "{xml}");
+}
+
+#[test]
+fn freeze_and_split_same_op_rejected() {
+    let src = create_book("mix");
+    let out = tmp("mix-out");
+    let err = apply(
+        &src,
+        &out,
+        json!([{
+            "op": "setSheetView",
+            "id": "sheet:Sheet1",
+            "frozenRows": 1,
+            "splitRows": 4
+        }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+    assert!(!out.exists());
 }
 
 #[test]

@@ -13,6 +13,7 @@ use super::a1;
 use super::chart::{self, SheetChartId};
 use super::comments;
 use super::connection;
+use super::custom_view;
 use super::names;
 use super::ole;
 use super::picture::{self, SheetPicId};
@@ -159,6 +160,7 @@ pub struct InspectScope {
     pub ole_objects: bool,
     pub slicers: bool,
     pub connections: bool,
+    pub custom_views: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -795,6 +797,8 @@ pub struct SetSheetViewOp {
     pub zoom: Option<u32>,
     pub frozen_rows: Option<u32>,
     pub frozen_cols: Option<u32>,
+    pub split_rows: Option<u32>,
+    pub split_cols: Option<u32>,
     pub active_cell: Option<String>,
 }
 
@@ -803,7 +807,17 @@ impl SetSheetViewOp {
         self.zoom.is_some()
             || self.frozen_rows.is_some()
             || self.frozen_cols.is_some()
+            || self.split_rows.is_some()
+            || self.split_cols.is_some()
             || self.active_cell.is_some()
+    }
+
+    pub(crate) fn has_freeze(&self) -> bool {
+        self.frozen_rows.is_some() || self.frozen_cols.is_some()
+    }
+
+    pub(crate) fn has_split(&self) -> bool {
+        self.split_rows.is_some() || self.split_cols.is_some()
     }
 }
 
@@ -1573,6 +1587,9 @@ pub enum XlsxOp {
     SetPrintSetup(SetPrintSetupOp),
     SetSheetView(SetSheetViewOp),
     SetAutoFilter(SetAutoFilterOp),
+    InsertCustomView(custom_view::InsertCustomViewOp),
+    DeleteCustomView(custom_view::DeleteCustomViewOp),
+    ShowCustomView(custom_view::ShowCustomViewOp),
     GroupRows(GroupRowsOp),
     UngroupRows(UngroupRowsOp),
     GroupCols(GroupColsOp),
@@ -1676,6 +1693,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
             "oleObjects",
             "slicers",
             "connections",
+            "customViews",
         ],
     )?;
     let pictures = parse_bool_field(obj.get("pictures"), "pictures")?;
@@ -1691,6 +1709,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
     let ole_objects = parse_bool_field(obj.get("oleObjects"), "oleObjects")?;
     let slicers = parse_bool_field(obj.get("slicers"), "slicers")?;
     let connections = parse_bool_field(obj.get("connections"), "connections")?;
+    let custom_views = parse_bool_field(obj.get("customViews"), "customViews")?;
     let sheet = obj.get("sheet").and_then(Value::as_str);
     let range = obj.get("range").and_then(Value::as_str);
     let max_cells = match obj.get("maxCells") {
@@ -1749,6 +1768,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
         && !ole_objects
         && !slicers
         && !connections
+        && !custom_views
     {
         return Ok(None);
     }
@@ -1767,6 +1787,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
         ole_objects,
         slicers,
         connections,
+        custom_views,
     }))
 }
 
@@ -1837,6 +1858,9 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<XlsxOp>, Error> {
             "setPrintSetup" => XlsxOp::SetPrintSetup(parse_set_print_setup(obj, i)?),
             "setSheetView" => XlsxOp::SetSheetView(parse_set_sheet_view(obj, i)?),
             "setAutoFilter" => XlsxOp::SetAutoFilter(parse_set_auto_filter(obj, i)?),
+            "insertCustomView" => XlsxOp::InsertCustomView(parse_insert_custom_view(obj, i)?),
+            "deleteCustomView" => XlsxOp::DeleteCustomView(parse_delete_custom_view(obj, i)?),
+            "showCustomView" => XlsxOp::ShowCustomView(parse_show_custom_view(obj, i)?),
             "groupRows" => XlsxOp::GroupRows(parse_group_rows(obj, i)?),
             "ungroupRows" => XlsxOp::UngroupRows(parse_ungroup_rows(obj, i)?),
             "groupCols" => XlsxOp::GroupCols(parse_group_cols(obj, i)?),
@@ -4206,7 +4230,16 @@ fn parse_set_sheet_view(
     deny_keys(
         obj,
         i,
-        &["op", "id", "zoom", "frozenRows", "frozenCols", "activeCell"],
+        &[
+            "op",
+            "id",
+            "zoom",
+            "frozenRows",
+            "frozenCols",
+            "splitRows",
+            "splitCols",
+            "activeCell",
+        ],
     )?;
     let id = require_id(obj, i)?;
     let sheet = parse_sheet_only_id(&id, i, "id", IdReason::SheetOpNeedsSheet)?;
@@ -4215,8 +4248,23 @@ fn parse_set_sheet_view(
         zoom: parse_view_u32(obj, i, "zoom", 10, 400)?,
         frozen_rows: parse_view_u32(obj, i, "frozenRows", 0, 1_048_575)?,
         frozen_cols: parse_view_u32(obj, i, "frozenCols", 0, 16_383)?,
+        split_rows: parse_view_u32(obj, i, "splitRows", 0, 1_048_575)?,
+        split_cols: parse_view_u32(obj, i, "splitCols", 0, 16_383)?,
         active_cell: parse_view_cell(obj, i)?,
     };
+    if op.has_freeze() && op.has_split() {
+        let field = if op.split_rows.is_some() {
+            "splitRows"
+        } else {
+            "splitCols"
+        };
+        return Err(Error::with_path(
+            ErrorKind::InvalidSheetView {
+                field: field.into(),
+            },
+            format!("ops[{i}].{field}"),
+        ));
+    }
     if !op.has_patch() {
         return Err(Error::with_path(
             ErrorKind::NeedSetSheetViewField,
@@ -8731,6 +8779,85 @@ fn parse_delete_slicer(
     let id = require_id(obj, i)?;
     let target = slicer::parse_slicer_id(&id, &format!("ops[{i}].id"))?;
     Ok(slicer::DeleteSlicerOp { id, target })
+}
+
+fn parse_insert_custom_view(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<custom_view::InsertCustomViewOp, Error> {
+    deny_keys(
+        obj,
+        i,
+        &[
+            "op",
+            "id",
+            "name",
+            "includePrintSettings",
+            "includeHiddenRowCol",
+        ],
+    )?;
+    let id = require_id(obj, i)?;
+    if id != "xlsx:workbook" {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::InsertCustomViewNeedsWorkbook,
+            },
+            format!("ops[{i}].id"),
+        ));
+    }
+    let name = match obj.get("name") {
+        Some(Value::String(s)) if !s.is_empty() => s.clone(),
+        None => {
+            return Err(Error::with_path(
+                ErrorKind::MissingField {
+                    field: "name".into(),
+                },
+                format!("ops[{i}].name"),
+            ));
+        }
+        Some(Value::String(_)) => {
+            return Err(Error::with_path(
+                ErrorKind::InvalidCustomView {
+                    field: "name".into(),
+                },
+                format!("ops[{i}].name"),
+            ));
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "name".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].name"),
+            ));
+        }
+    };
+    Ok(custom_view::InsertCustomViewOp {
+        name,
+        include_print_settings: parse_opt_bool(obj, i, "includePrintSettings")?.unwrap_or(true),
+        include_hidden_row_col: parse_opt_bool(obj, i, "includeHiddenRowCol")?.unwrap_or(true),
+    })
+}
+
+fn parse_delete_custom_view(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<custom_view::DeleteCustomViewOp, Error> {
+    deny_keys(obj, i, &["op", "id"])?;
+    let id = require_id(obj, i)?;
+    let index = custom_view::parse_custom_view_id(&id, &format!("ops[{i}].id"))?;
+    Ok(custom_view::DeleteCustomViewOp { id, index })
+}
+
+fn parse_show_custom_view(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<custom_view::ShowCustomViewOp, Error> {
+    deny_keys(obj, i, &["op", "id"])?;
+    let id = require_id(obj, i)?;
+    let index = custom_view::parse_custom_view_id(&id, &format!("ops[{i}].id"))?;
+    Ok(custom_view::ShowCustomViewOp { id, index })
 }
 
 fn parse_insert_connection(

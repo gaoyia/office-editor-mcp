@@ -321,6 +321,16 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::InsertConnectionNeedsWorkbook => {
                 "insertConnection id must be xlsx:workbook".into()
             }
+            IdReason::InsertCustomViewNeedsWorkbook => {
+                "insertCustomView id must be xlsx:workbook".into()
+            }
+            IdReason::CustomViewPrefix => {
+                "custom view id must be customView:n, n starting at 1".into()
+            }
+            IdReason::CustomViewIndexNotInt => {
+                "customView must be followed by a positive integer".into()
+            }
+            IdReason::CustomViewIndexFromOne => "customView starts at 1".into(),
             IdReason::ConnectionPrefix => {
                 "connection id must be connection:ID or connection:index:N".into()
             }
@@ -821,6 +831,10 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::ConnectionNotFound { id } => format!("Connection not found: {id}"),
         ErrorKind::InvalidConnection { field } => {
             format!("{field} is not a valid connection value")
+        }
+        ErrorKind::CustomViewNotFound { id } => format!("Custom view not found: {id}"),
+        ErrorKind::InvalidCustomView { field } => {
+            format!("{field} is not a valid custom view value")
         }
         ErrorKind::ZoomNotFound { id } => format!("Zoom not found: {id}"),
         ErrorKind::InvalidZoomType => "type must be slide or section".into(),

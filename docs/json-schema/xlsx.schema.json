@@ -1863,6 +1863,16 @@
           "minimum": 0,
           "maximum": 16383
         },
+        "splitRows": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1048575
+        },
+        "splitCols": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 16383
+        },
         "activeCell": {
           "type": "string",
           "minLength": 1
@@ -1882,6 +1892,16 @@
         {
           "required": [
             "frozenCols"
+          ]
+        },
+        {
+          "required": [
+            "splitRows"
+          ]
+        },
+        {
+          "required": [
+            "splitCols"
           ]
         },
         {
@@ -1912,6 +1932,68 @@
             "string",
             "null"
           ],
+          "minLength": 1
+        }
+      }
+    },
+    "insertCustomViewOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "name"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "insertCustomView"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "includePrintSettings": {
+          "type": "boolean"
+        },
+        "includeHiddenRowCol": {
+          "type": "boolean"
+        }
+      }
+    },
+    "deleteCustomViewOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "deleteCustomView"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "showCustomViewOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "showCustomView"
+        },
+        "id": {
+          "type": "string",
           "minLength": 1
         }
       }

@@ -101,7 +101,10 @@ fn empty_create_has_count_without_list() {
         .any(|w| w == ["slicerCount", "connectionCount"]));
     assert!(keys
         .windows(2)
-        .any(|w| w == ["connectionCount", "definedNameCount"]));
+        .any(|w| w == ["connectionCount", "customViewCount"]));
+    assert!(keys
+        .windows(2)
+        .any(|w| w == ["customViewCount", "definedNameCount"]));
     let listed = inspect(&path, json!({ "connections": true }));
     assert_eq!(listed["connections"], json!([]));
 }

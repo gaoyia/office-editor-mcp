@@ -196,6 +196,9 @@
         "connections": {
           "type": "boolean"
         },
+        "customViews": {
+          "type": "boolean"
+        },
         "oleObjects": {
           "type": "boolean"
         },
@@ -538,6 +541,15 @@
               },
               {
                 "$ref": "xlsx.schema.json#/$defs/setAutoFilterOp"
+              },
+              {
+                "$ref": "xlsx.schema.json#/$defs/insertCustomViewOp"
+              },
+              {
+                "$ref": "xlsx.schema.json#/$defs/deleteCustomViewOp"
+              },
+              {
+                "$ref": "xlsx.schema.json#/$defs/showCustomViewOp"
               },
               {
                 "$ref": "xlsx.schema.json#/$defs/groupRowsOp"

@@ -15,10 +15,13 @@ const DEF_CELL: &str = "A1";
 pub(crate) fn inspect_view(sheet: &Element) -> Value {
     let view = first_sheet_view(sheet);
     let (frozen_rows, frozen_cols) = view.map(frozen_of).unwrap_or((0, 0));
+    let (split_rows, split_cols) = view.map(split_of).unwrap_or((0, 0));
     let mut obj = Map::new();
     obj.insert("zoom".into(), json!(zoom_of(view)));
     obj.insert("frozenRows".into(), json!(frozen_rows));
     obj.insert("frozenCols".into(), json!(frozen_cols));
+    obj.insert("splitRows".into(), json!(split_rows));
+    obj.insert("splitCols".into(), json!(split_cols));
     obj.insert(
         "activeCell".into(),
         json!(view
@@ -60,11 +63,17 @@ pub(crate) fn apply_view(
             }
         }
     }
-    if op.frozen_rows.is_some() || op.frozen_cols.is_some() {
+    if op.has_freeze() {
         let (cur_rows, cur_cols) = frozen_of(ensure_default_view(sheet));
         let rows = op.frozen_rows.unwrap_or(cur_rows);
         let cols = op.frozen_cols.unwrap_or(cur_cols);
         set_freeze(ensure_default_view(sheet), rows, cols);
+    }
+    if op.has_split() {
+        let (cur_rows, cur_cols) = split_of(ensure_default_view(sheet));
+        let rows = op.split_rows.unwrap_or(cur_rows);
+        let cols = op.split_cols.unwrap_or(cur_cols);
+        set_split(ensure_default_view(sheet), rows, cols);
     }
     if let Some(cell) = op.active_cell.as_deref() {
         set_active_cell(ensure_default_view(sheet), cell);
@@ -123,6 +132,8 @@ fn reject_chartsheet_view_fields(op: &SetSheetViewOp, i: usize) -> Result<(), Er
     for (name, hit) in [
         ("frozenRows", op.frozen_rows.is_some()),
         ("frozenCols", op.frozen_cols.is_some()),
+        ("splitRows", op.split_rows.is_some()),
+        ("splitCols", op.split_cols.is_some()),
         ("activeCell", op.active_cell.is_some()),
     ] {
         if hit {
@@ -135,14 +146,14 @@ fn reject_chartsheet_view_fields(op: &SetSheetViewOp, i: usize) -> Result<(), Er
     Ok(())
 }
 
-fn first_sheet_view(sheet: &Element) -> Option<&Element> {
+pub(crate) fn first_sheet_view(sheet: &Element) -> Option<&Element> {
     sheet
         .child_by_local("sheetViews")?
         .element_children()
         .find(|e| e.local_name() == "sheetView")
 }
 
-fn ensure_default_view(sheet: &mut Element) -> &mut Element {
+pub(crate) fn ensure_default_view(sheet: &mut Element) -> &mut Element {
     if sheet.child_by_local("sheetViews").is_none() {
         layout::insert_child_ordered(sheet, Element::new("sheetViews"), "sheetViews");
     }
@@ -175,6 +186,61 @@ fn frozen_of(view: &Element) -> (u32, u32) {
         return (0, 0);
     }
     (split_count(pane, "ySplit"), split_count(pane, "xSplit"))
+}
+
+fn split_of(view: &Element) -> (u32, u32) {
+    let Some(pane) = view.child_by_local("pane") else {
+        return (0, 0);
+    };
+    let state = pane.attr("state").unwrap_or("split");
+    if state != "split" {
+        return (0, 0);
+    }
+    let x = split_count(pane, "xSplit");
+    let y = split_count(pane, "ySplit");
+    if x == 0 && y == 0 {
+        return (0, 0);
+    }
+    match pane
+        .attr("topLeftCell")
+        .and_then(|s| a1::parse_cell(s).ok())
+    {
+        Some(c) => (c.row.saturating_sub(1), c.col.saturating_sub(1)),
+        None => (0, 0),
+    }
+}
+
+pub(crate) fn has_split_or_freeze(sheet: &Element) -> bool {
+    let Some(view) = first_sheet_view(sheet) else {
+        return false;
+    };
+    let (fr, fc) = frozen_of(view);
+    let (sr, sc) = split_of(view);
+    fr > 0 || fc > 0 || sr > 0 || sc > 0
+}
+
+pub(crate) fn snapshot_pane(sheet: &Element) -> (Option<Element>, Vec<Element>) {
+    let Some(view) = first_sheet_view(sheet) else {
+        return (None, Vec::new());
+    };
+    let pane = view.child_by_local("pane").cloned();
+    let sels = view
+        .children_by_local("selection")
+        .into_iter()
+        .cloned()
+        .collect();
+    (pane, sels)
+}
+
+pub(crate) fn strip_pane_and_selection(view: &mut Element) -> Vec<Node> {
+    let mut rest = Vec::new();
+    for n in std::mem::take(&mut view.children) {
+        match &n {
+            Node::Element(e) if e.local_name() == "pane" || e.local_name() == "selection" => {}
+            _ => rest.push(n),
+        }
+    }
+    rest
 }
 
 fn split_count(pane: &Element, attr: &str) -> u32 {
@@ -220,13 +286,7 @@ fn active_cell_of(view: &Element) -> String {
 
 fn set_freeze(view: &mut Element, rows: u32, cols: u32) {
     let current_ac = active_cell_of(view);
-    let mut rest = Vec::new();
-    for n in std::mem::take(&mut view.children) {
-        match &n {
-            Node::Element(e) if e.local_name() == "pane" || e.local_name() == "selection" => {}
-            _ => rest.push(n),
-        }
-    }
+    let rest = strip_pane_and_selection(view);
     if rows == 0 && cols == 0 {
         view.push_element(
             Element::new("selection")
@@ -237,13 +297,7 @@ fn set_freeze(view: &mut Element, rows: u32, cols: u32) {
         return;
     }
     let top_left = a1::format_cell(cols + 1, rows + 1);
-    let active_pane = if rows > 0 && cols > 0 {
-        "bottomRight"
-    } else if rows > 0 {
-        "bottomLeft"
-    } else {
-        "topRight"
-    };
+    let active_pane = active_pane_name(rows, cols);
     let mut pane = Element::new("pane");
     if cols > 0 {
         pane.set_attr("xSplit", cols.to_string());
@@ -262,6 +316,49 @@ fn set_freeze(view: &mut Element, rows: u32, cols: u32) {
             .with_attr("sqref", top_left),
     );
     view.children.extend(rest);
+}
+
+fn set_split(view: &mut Element, rows: u32, cols: u32) {
+    let current_ac = active_cell_of(view);
+    let rest = strip_pane_and_selection(view);
+    if rows == 0 && cols == 0 {
+        view.push_element(
+            Element::new("selection")
+                .with_attr("activeCell", current_ac.clone())
+                .with_attr("sqref", current_ac),
+        );
+        view.children.extend(rest);
+        return;
+    }
+    let top_left = a1::format_cell(cols + 1, rows + 1);
+    let active_pane = active_pane_name(rows, cols);
+    let mut pane = Element::new("pane");
+    if cols > 0 {
+        pane.set_attr("xSplit", layout::default_col_split_twentieths(cols));
+    }
+    if rows > 0 {
+        pane.set_attr("ySplit", layout::default_row_split_twentieths(rows));
+    }
+    pane.set_attr("topLeftCell", &top_left);
+    pane.set_attr("activePane", active_pane);
+    view.push_element(pane);
+    view.push_element(
+        Element::new("selection")
+            .with_attr("pane", active_pane)
+            .with_attr("activeCell", top_left.clone())
+            .with_attr("sqref", top_left),
+    );
+    view.children.extend(rest);
+}
+
+fn active_pane_name(rows: u32, cols: u32) -> &'static str {
+    if rows > 0 && cols > 0 {
+        "bottomRight"
+    } else if rows > 0 {
+        "bottomLeft"
+    } else {
+        "topRight"
+    }
 }
 
 fn set_active_cell(view: &mut Element, cell: &str) {

@@ -201,6 +201,7 @@ fn inspect_default_props_on_three_formats() {
             "oleObjectCount",
             "slicerCount",
             "connectionCount",
+            "customViewCount",
             "definedNameCount",
             "props",
             "workbookProtection",

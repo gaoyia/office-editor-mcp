@@ -12,6 +12,7 @@ use super::cf;
 use super::chart;
 use super::comments;
 use super::connection;
+use super::custom_view;
 use super::formula;
 use super::hf;
 use super::names;
@@ -76,6 +77,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     let want_ole = scope.as_ref().is_some_and(|s| s.ole_objects);
     let want_slicers = scope.as_ref().is_some_and(|s| s.slicers);
     let want_connections = scope.as_ref().is_some_and(|s| s.connections);
+    let want_custom_views = scope.as_ref().is_some_and(|s| s.custom_views);
     let cells_scope = scope.as_ref().and_then(|s| s.cells.as_ref());
     let sheet_parts: Vec<(String, String)> = sheets
         .iter()
@@ -358,6 +360,10 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         "connectionCount".into(),
         json!(connection::count(&pkg, &wb_part)?),
     );
+    root.insert(
+        "customViewCount".into(),
+        json!(custom_view::count(&wb.root)),
+    );
     root.insert("definedNameCount".into(), json!(names::count(&wb.root)));
     root.insert("props".into(), crate::props::inspect(&pkg)?);
     root.insert(
@@ -372,6 +378,9 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     );
     if want_connections {
         root.insert("connections".into(), connection::inspect(&pkg, &wb_part)?);
+    }
+    if want_custom_views {
+        root.insert("customViews".into(), custom_view::inspect(&wb.root));
     }
     Ok(Value::Object(root))
 }

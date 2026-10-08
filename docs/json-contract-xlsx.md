@@ -38,6 +38,7 @@
 | 工作表切片器 | `sheet:{name}/slicer:{cNvPrId}` 或 `sheet:{name}/slicer:index:{k}` | `sheet:Sheet1/slicer:2` |
 | 定义名 | `name:{n}` | `name:1` |
 | 外部数据连接 | `connection:{xmlId}` 或 `connection:index:{k}` | `connection:1` |
+| 自定义视图 | `customView:{n}` | `customView:1` |
 
 `{name}` 是 `workbook.xml` 里 `<sheet name="...">` 的值，不是 `sheetId`，也不是 `r:id`。查找工作表时大小写不敏感，输出 id 时用文件里的原始大小写。
 
@@ -107,6 +108,8 @@ xlsx 的 `setProtection` 的 `id` 必须是 `sheet:{name}`（该表 `sheetProtec
 
 外部数据连接挂在工作簿上，不是某张表。`{xmlId}` 取 `/xl/connections.xml` 里 `connection/@id` 原文（ECMA-376 §18.13.1）。没有 `@id` 时用 `connection:index:{k}`，树上 `"stable": false`。`{k}` 只在被收入的连接内从 1 计。`deleted="true"` 的连接不进树。只读 Connections 部件（至多一份）。queryTable、Power Query、ODBC / OLE DB / OLAP 本期不另编 id；inspect 见到其它 `type` 仍列入，`kind` 为 `"other"`。`insertConnection` 的 `id` 必须是 `xlsx:workbook`。`deleteConnection` 的 `id` 必须是连接 id。对不上的 id 形态报 `InvalidId`。不提供改连接或刷新的 op。create 本期不写连接。不向数据源发请求，不把查询结果写进 `sheetData`。
 
+自定义视图挂在工作簿上。`{n}` 从 1 起，按 `<customWorkbookView>` 文档顺序（ECMA-376 §18.2.3 / §18.2.4）。增删之后旧的 `customView:{n}` 会变，只够同一次 inspect 之后立刻 apply。不要用 `@name` 或 guid 编树 id。`insertCustomView` 的 `id` 必须是 `xlsx:workbook`。`deleteCustomView` / `showCustomView` 的 `id` 必须是自定义视图 id。对不上的 id 形态报 `InvalidId`。create 本期不写自定义视图。不按视图恢复隐藏行 / 列。
+
 
 ## inspect
 
@@ -134,10 +137,11 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
 | `scope.oleObjects` | 否 | 为 `true` 时给每张 `worksheet` 填 `oleObjects`。没有嵌入对象时为空数组。省略或 `false` 则只有 `oleObjectCount`，没有名单。不依赖 `sheet` / `range` / 其它名单键。不把嵌入字节或预览图放进树。页眉、`chartsheet`、组合里的 OLE 本期不进树。docx / pptx 见各自分册 |
 | `scope.slicers` | 否 | 为 `true` 时给每张 `worksheet` 填 `slicers`。没有切片器时为空数组。省略或 `false` 则只有 `slicerCount`，没有名单。不依赖 `sheet` / `range` / 其它名单键。不把 cache 选项整表倒进树。时间线、OLAP 本期不进树。 |
 | `scope.connections` | 否 | 为 `true` 时给工作簿根填 `connections`。没有连接时为空数组。省略或 `false` 则只有 `connectionCount`，没有名单。不依赖 `sheet` / `range` / 其它名单键。不刷新，不把查询结果放进树。docx / pptx 的 `scope` 里出现 `connections` 报 `InvalidField`。 |
+| `scope.customViews` | 否 | 为 `true` 时给工作簿根填 `customViews`。没有自定义视图时为空数组。省略或 `false` 则只有 `customViewCount`，没有名单。不依赖 `sheet` / `range` / 其它名单键。不把 guid 或各表 `customSheetView` 细节放进树。docx / pptx 的 `scope` 里出现 `customViews` 报 `InvalidField`。 |
 
-省略 `scope`、或只给空对象：返回工作簿节点和表名单，每张表不含 `cells`，也没有 `pictures` / `charts` / `headerFooters` / `textBoxes` / `shapes` / `connectors` / `smartArts` / `comments` / `hyperlinks` / `sparklines` / `oleObjects` / `slicers`。工作簿与每张 `worksheet` 仍有 `pictureCount`、`textBoxCount`、`shapeCount`、`connectorCount`、`smartArtCount`。工作簿、每张 `worksheet` 与每张 `chartsheet` 仍有 `chartCount`。工作簿与每张 `worksheet` 仍有 `commentCount`、`hyperlinkCount`、`sparklineCount`、`oleObjectCount` 与 `slicerCount`。工作簿仍有 `connectionCount`、`definedNameCount` 与 `definedNames`。没有 `connections` 名单。每张表仍有 `hasHeaderFooter`。每张 `worksheet` / `chartsheet` 仍有 `print` 与 `view`。每张 `worksheet` 仍有 `autoFilter`。每张 `worksheet` 仍有 `outline`。工作簿仍有 `workbookProtection`。每张 `worksheet` 与 `chartsheet` 仍有 `sheetProtection`。这是默认截断。
+省略 `scope`、或只给空对象：返回工作簿节点和表名单，每张表不含 `cells`，也没有 `pictures` / `charts` / `headerFooters` / `textBoxes` / `shapes` / `connectors` / `smartArts` / `comments` / `hyperlinks` / `sparklines` / `oleObjects` / `slicers`。工作簿与每张 `worksheet` 仍有 `pictureCount`、`textBoxCount`、`shapeCount`、`connectorCount`、`smartArtCount`。工作簿、每张 `worksheet` 与每张 `chartsheet` 仍有 `chartCount`。工作簿与每张 `worksheet` 仍有 `commentCount`、`hyperlinkCount`、`sparklineCount`、`oleObjectCount` 与 `slicerCount`。工作簿仍有 `connectionCount`、`customViewCount`、`definedNameCount` 与 `definedNames`。没有 `connections` / `customViews` 名单。每张表仍有 `hasHeaderFooter`。每张 `worksheet` / `chartsheet` 仍有 `print` 与 `view`。每张 `worksheet` 仍有 `autoFilter`。每张 `worksheet` 仍有 `outline`。工作簿仍有 `workbookProtection`。每张 `worksheet` 与 `chartsheet` 仍有 `sheetProtection`。这是默认截断。
 
-只要想看单元格，就必须同时给 `sheet` 和 `range`。不默认扫第一张表的整张纸。只要想看工作表图名单，就给 `pictures: true`。只要想看图表名单，就给 `charts: true`。只要想看页眉原文，就给 `headerFooter: true`。只要想看文本框名单，就给 `textBoxes: true`。只要想看形状名单，就给 `shapes: true`。只要想看连接线名单，就给 `connectors: true`。只要想看 SmartArt 名单，就给 `smartArt: true`。只要想看批注名单，就给 `comments: true`。只要想看超链接名单，就给 `hyperlinks: true`。只要想看迷你图名单，就给 `sparklines: true`。只要想看嵌入对象名单，就给 `oleObjects: true`。只要想看切片器名单，就给 `slicers: true`。只要想看连接名单，就给 `connections: true`。这些键彼此独立，可只开一边。页眉图名单出现在已展开的槽位上，须同时 `headerFooter: true` 与 `pictures: true`。
+只要想看单元格，就必须同时给 `sheet` 和 `range`。不默认扫第一张表的整张纸。只要想看工作表图名单，就给 `pictures: true`。只要想看图表名单，就给 `charts: true`。只要想看页眉原文，就给 `headerFooter: true`。只要想看文本框名单，就给 `textBoxes: true`。只要想看形状名单，就给 `shapes: true`。只要想看连接线名单，就给 `connectors: true`。只要想看 SmartArt 名单，就给 `smartArt: true`。只要想看批注名单，就给 `comments: true`。只要想看超链接名单，就给 `hyperlinks: true`。只要想看迷你图名单，就给 `sparklines: true`。只要想看嵌入对象名单，就给 `oleObjects: true`。只要想看切片器名单，就给 `slicers: true`。只要想看连接名单，就给 `connections: true`。只要想看自定义视图名单，就给 `customViews: true`。这些键彼此独立，可只开一边。页眉图名单出现在已展开的槽位上，须同时 `headerFooter: true` 与 `pictures: true`。
 
 
 ### 响应
@@ -159,6 +163,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   "oleObjectCount": 0,
   "slicerCount": 0,
   "connectionCount": 0,
+  "customViewCount": 0,
   "definedNameCount": 0,
   "props": {
     "title": "",
@@ -227,6 +232,8 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
         "zoom": 100,
         "frozenRows": 0,
         "frozenCols": 0,
+        "splitRows": 0,
+        "splitCols": 0,
         "activeCell": "A1"
       },
       "autoFilter": null,
@@ -337,6 +344,8 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
         "zoom": 100,
         "frozenRows": 0,
         "frozenCols": 0,
+        "splitRows": 0,
+        "splitCols": 0,
         "activeCell": "A1"
       },
       "autoFilter": null,
@@ -373,13 +382,13 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
 
 规则：
 
-- 工作簿字段顺序：`id`、`pictureCount`、`chartCount`、`textBoxCount`、`shapeCount`、`connectorCount`、`smartArtCount`、`commentCount`、`hyperlinkCount`、`sparklineCount`、`oleObjectCount`、`slicerCount`、`connectionCount`、`definedNameCount`、`props`、`workbookProtection`、`sheets`、`definedNames`，有连接名单时再跟 `connections`。`pictureCount` 始终出现，等于各 `worksheet` 的 `pictureCount` 之和，不含 `chartsheet` / `dialogsheet` / `macrosheet`。`chartCount` 始终出现，等于各 `worksheet` 与 `chartsheet` 的 `chartCount` 之和，不含 `dialogsheet` / `macrosheet`。`textBoxCount` 始终出现，等于各 `worksheet` 的 `textBoxCount` 之和。`shapeCount` 始终出现，等于各 `worksheet` 的 `shapeCount` 之和。`connectorCount` 始终出现，等于各 `worksheet` 的 `connectorCount` 之和。`smartArtCount` 始终出现，等于各 `worksheet` 的 `smartArtCount` 之和。`commentCount` 始终出现，等于各 `worksheet` 的 `commentCount` 之和。`hyperlinkCount` 始终出现，等于各 `worksheet` 的 `hyperlinkCount` 之和。`sparklineCount` 始终出现，等于各 `worksheet` 的 `sparklineCount` 之和。`oleObjectCount` 始终出现，等于各 `worksheet` 的 `oleObjectCount` 之和。`slicerCount` 始终出现，等于各 `worksheet` 的 `slicerCount` 之和。`connectionCount` 始终出现，是 `/xl/connections.xml` 里被收入的 `connection` 个数（判定见上文外部数据连接 id 那节）。没有则为 `0`。`definedNameCount` 始终出现，是 workbook `<definedNames>` 里 `<definedName>` 的个数。没有则为 `0`。`definedNames` 始终列出，可为空数组，不另加 scope 键。`props` 始终出现，规则见 [json-contract.md](json-contract.md#文档属性三格式共用)。`workbookProtection` 始终出现，规则见下文「工作簿保护」。xlsx 根上不要带 docx 那个 `protection`。
+- 工作簿字段顺序：`id`、`pictureCount`、`chartCount`、`textBoxCount`、`shapeCount`、`connectorCount`、`smartArtCount`、`commentCount`、`hyperlinkCount`、`sparklineCount`、`oleObjectCount`、`slicerCount`、`connectionCount`、`customViewCount`、`definedNameCount`、`props`、`workbookProtection`、`sheets`、`definedNames`，有连接名单时再跟 `connections`，有自定义视图名单时再跟 `customViews`。`pictureCount` 始终出现，等于各 `worksheet` 的 `pictureCount` 之和，不含 `chartsheet` / `dialogsheet` / `macrosheet`。`chartCount` 始终出现，等于各 `worksheet` 与 `chartsheet` 的 `chartCount` 之和，不含 `dialogsheet` / `macrosheet`。`textBoxCount` 始终出现，等于各 `worksheet` 的 `textBoxCount` 之和。`shapeCount` 始终出现，等于各 `worksheet` 的 `shapeCount` 之和。`connectorCount` 始终出现，等于各 `worksheet` 的 `connectorCount` 之和。`smartArtCount` 始终出现，等于各 `worksheet` 的 `smartArtCount` 之和。`commentCount` 始终出现，等于各 `worksheet` 的 `commentCount` 之和。`hyperlinkCount` 始终出现，等于各 `worksheet` 的 `hyperlinkCount` 之和。`sparklineCount` 始终出现，等于各 `worksheet` 的 `sparklineCount` 之和。`oleObjectCount` 始终出现，等于各 `worksheet` 的 `oleObjectCount` 之和。`slicerCount` 始终出现，等于各 `worksheet` 的 `slicerCount` 之和。`connectionCount` 始终出现，是 `/xl/connections.xml` 里被收入的 `connection` 个数（判定见上文外部数据连接 id 那节）。没有则为 `0`。`customViewCount` 始终出现，是 workbook `<customWorkbookViews>` 里 `<customWorkbookView>` 的个数；没有则为 `0`。`definedNameCount` 始终出现，是 workbook `<definedNames>` 里 `<definedName>` 的个数。没有则为 `0`。`definedNames` 始终列出，可为空数组，不另加 scope 键。`props` 始终出现，规则见 [json-contract.md](json-contract.md#文档属性三格式共用)。`workbookProtection` 始终出现，规则见下文「工作簿保护」。xlsx 根上不要带 docx 那个 `protection`。
 - `definedNames` 每项字段顺序：`id`、`name`、`formula`、`hidden`、`localSheet`。`name` 取 `@name`，没有则为 `""`。`formula` 是元素文本，当字符串，不解析求值、不补 `=`。`hidden` 为布尔：`@hidden` 为 `1` / `true` / `TRUE` / `on` 则为 `true`，缺省或其余为 `false`。`localSheet` 有 `@localSheetId` 则按 0 基下标解成 `sheets` 里对应表的 `name`；解不出、缺属性或无法解析则为 `null`（簿级）。打印区域 `_xlnm.Print_Area` 与其它内置名同样列出。
 - `sheets` 始终列出工作簿里全部表（含隐藏表），便于模型知道还有哪些表。未点名的表不带 `cells`、`range`、`truncated`、`cols`、`rows`、`merges`、`dataValidations`、`conditionalFormats`、`tables`、`pivots`。
 - `kind`：`worksheet`、`chartsheet`、`dialogsheet`、`macrosheet`。第一期只对 `worksheet` 填单元格与图。`worksheet` 与 `chartsheet` 都填 `chartCount`。每张表始终填 `hidden`：`sheet/@state` 为 `hidden` 或 `veryHidden` 则为 `true`，缺省、空或 `visible` 为 `false`。每张表始终填 `hasHeaderFooter`：该表 `headerFooter` 里任一槽位有非空文本则为 `true`；没有该元素、空的 `<headerFooter/>`、或六个槽位都空则为 `false`。不算 VML，也不因为只有 `drawingHF` 图就把此项改成 `true`。每张 `worksheet` 与 `chartsheet` 始终填 `print`（对象，不另编 id）与 `view`（对象，不另编 id）。每张 `worksheet` 始终填 `autoFilter`（字符串或 `null`）。每张 `worksheet` 始终填 `outline`（对象，不另编 id）。每张 `worksheet` 与 `chartsheet` 始终填 `sheetProtection`（对象，不另编 id）。`dialogsheet` / `macrosheet` 没有 `print` / `view` / `autoFilter` / `outline` / `sheetProtection`。`chartsheet` 没有 `autoFilter`，也没有 `outline`。
 - `worksheet` 字段顺序：`id`、`name`、`kind`、`hidden`、`pictureCount`、`chartCount`、`textBoxCount`、`shapeCount`、`connectorCount`、`smartArtCount`、`dataValidationCount`、`conditionalFormatCount`、`tableCount`、`pivotCount`、`commentCount`、`hyperlinkCount`、`sparklineCount`、`oleObjectCount`、`slicerCount`、`hasHeaderFooter`、`print`、`view`、`autoFilter`、`outline`、`sheetProtection`，有页眉名单时再跟 `headerFooters`，有图名单时再跟 `pictures`，有图表名单时再跟 `charts`，有文本框名单时再跟 `textBoxes`，有形状名单时再跟 `shapes`，有连接线名单时再跟 `connectors`，有 SmartArt 名单时再跟 `smartArts`，有批注名单时再跟 `comments`，有超链接名单时再跟 `hyperlinks`，有迷你图名单时再跟 `sparklines`，有嵌入对象名单时再跟 `oleObjects`，有切片器名单时再跟 `slicers`，有单元格切片时再跟 `truncated`、`range`、`cells`、`cols`、`rows`、`merges`、`dataValidations`、`conditionalFormats`、`tables`、`pivots`。`pictureCount` 始终出现，是该表工作表 drawing 里被收入的 `xdr:pic` 个数（判定见上文 xlsx 图 id 那节），不含页眉图。没有图则为 `0`。`chartCount` 始终出现，是该表被收入的图表个数（判定见上文 xlsx 图表 id 那节）。没有图表则为 `0`。`textBoxCount` 始终出现，是该表被收入的文本框个数（判定见上文 xlsx 文本框 id 那节）。没有则为 `0`。`shapeCount` 始终出现，是该表被收入的形状个数（判定见上文 xlsx 形状 id 那节）。没有则为 `0`。`connectorCount` 始终出现，是该表被收入的连接线个数（判定见上文 xlsx 连接线 id 那节）。没有则为 `0`。`smartArtCount` 始终出现，是该表被收入的 SmartArt 个数（判定见上文 xlsx SmartArt id 那节）。没有则为 `0`。`dataValidationCount` 始终出现，是该表 `<dataValidations>` 里 `<dataValidation>` 的个数，不含 `extLst` 里的 `x14:dataValidations`。没有则为 `0`。`conditionalFormatCount` 始终出现，是该表全部 `<conditionalFormatting>` 里 `<cfRule>` 的个数，不含 `extLst` 里的 `x14:conditionalFormattings`。没有则为 `0`。`tableCount` 始终出现，是该表 `<tableParts>` 里 `<tablePart>` 的个数。没有则为 `0`。`pivotCount` 始终出现，是该表关系里 Type 以 `/pivotTable` 结尾的条目个数。没有则为 `0`。`commentCount` 始终出现，是该表线程化批注部件里没有 `parentId` 的 `threadedComment` 个数。没有则为 `0`。`hyperlinkCount` 始终出现，是该表 `<hyperlinks>` 里 `<hyperlink>` 的个数。没有则为 `0`。`sparklineCount` 始终出现，是该表 `extLst` 里 `x14:sparklineGroup` 的组数。没有则为 `0`。`oleObjectCount` 始终出现，是该表被收入的嵌入对象个数（判定见上文 xlsx OLE id 那节）。没有则为 `0`。`slicerCount` 始终出现，是该表被收入的切片器个数（判定见上文 xlsx 切片器 id 那节）。没有则为 `0`。`sheetProtection` 始终出现，规则见下文「工作表保护」。`chartsheet` 没有 `pictureCount`，也没有 `pictures`，也没有 `textBoxCount` / `textBoxes`，也没有 `shapeCount` / `shapes`，也没有 `connectorCount` / `connectors`，也没有 `smartArtCount` / `smartArts`，也没有 `dataValidationCount`，也没有 `conditionalFormatCount`，也没有 `tableCount`，也没有 `pivotCount`，也没有 `commentCount`，也没有 `hyperlinkCount`，也没有 `sparklineCount`，也没有 `oleObjectCount`，也没有 `autoFilter`，也没有 `outline`；字段顺序：`id`、`name`、`kind`、`hidden`、`chartCount`、`hasHeaderFooter`、`print`、`view`、`sheetProtection`，有页眉名单时再跟 `headerFooters`，有图表名单时再跟 `charts`。`dialogsheet` / `macrosheet` 没有 `pictureCount` / `pictures` / `chartCount` / `charts` / `textBoxCount` / `textBoxes` / `shapeCount` / `shapes` / `connectorCount` / `connectors` / `smartArtCount` / `smartArts` / `dataValidationCount` / `conditionalFormatCount` / `tableCount` / `pivotCount` / `commentCount` / `hyperlinkCount` / `sparklineCount` / `oleObjectCount` / `print` / `view` / `autoFilter` / `outline` / `sheetProtection`；字段顺序：`id`、`name`、`kind`、`hidden`、`hasHeaderFooter`，有页眉名单时再跟 `headerFooters`。关系 Type 以 `/macrosheet` 结尾的表 `kind` 为 `macrosheet`。
 - `print` 字段顺序：`left`、`right`、`top`、`bottom`、`header`、`footer`、`paperSize`、`orientation`、`scale`、`fitToPage`、`fitToWidth`、`fitToHeight`、`gridLines`、`headings`、`hCenter`、`vCenter`、`printArea`、`rowBreaks`、`colBreaks`。边距是英寸数字，与 XML `pageMargins`（§18.3.1.62）相同；没有该元素时用缺省 `left`/`right` 0.7、`top`/`bottom` 0.75、`header`/`footer` 0.3。`paperSize` 是 ECMA 整数（1 为 Letter，9 为 A4）；缺省为 1。`orientation` 为 `portrait` 或 `landscape`；XML 为 `default` 或缺省都报 `portrait`。`scale` 缺省 100。`fitToPage` 取 `sheetPr/pageSetUpPr/@fitToPage`，缺省 `false`。`fitToWidth` / `fitToHeight` 缺省 1。`gridLines` 仅当 `printOptions` 的 `gridLines` 与 `gridLinesSet` 都为真时为 `true`（`gridLinesSet` 缺省为真）。`headings` / `hCenter` / `vCenter` 取 `printOptions` 对应属性，缺省 `false`。`printArea` 取该表级 `_xlnm.Print_Area` 的公式文本；能解析成单一 A1 时规范化成带表名前缀的绝对引用；没有则为 `null`。`rowBreaks` / `colBreaks` 是从 1 计的整数数组，只列入 `man="1"` 的 `<brk>`（XML `@id` 从 0 计，树上加 1）；按升序。`chartsheet` 没有 `printOptions` / `rowBreaks` / `colBreaks` / `pageSetUpPr`，也没有 `scale` / `fitToWidth` / `fitToHeight`；这些键仍列出，值为上述缺省。
-- `view` 字段顺序：`zoom`、`frozenRows`、`frozenCols`、`activeCell`。只读第一个 `sheetView`（§18.3.1.87）。`zoom` 取 `@zoomScale`，缺省 100。`frozenRows` / `frozenCols` 仅当 `<pane>/@state` 为 `frozen` 或 `frozenSplit` 时取 `ySplit` / `xSplit`（四舍五入成非负整数）；`split`、缺省或没有 `<pane>` 则为 0。`activeCell` 取与 `activePane` 对应的 `<selection>/@activeCell`，没有则取第一条 `selection` 的 `activeCell` 或 `sqref` 首格；再没有则为 `A1`。能解析成 A1 的规范化成列字母加大写行号。`chartsheet` 没有 `<pane>` / `<selection>`；`frozenRows` / `frozenCols` 仍为 0，`activeCell` 仍为 `A1`，`zoom` 仍取该表 `sheetView/@zoomScale`。
+- `view` 字段顺序：`zoom`、`frozenRows`、`frozenCols`、`splitRows`、`splitCols`、`activeCell`。只读第一个 `sheetView`（§18.3.1.87）。`zoom` 取 `@zoomScale`，缺省 100。`frozenRows` / `frozenCols` 仅当 `<pane>/@state` 为 `frozen` 或 `frozenSplit` 时取 `ySplit` / `xSplit`（四舍五入成非负整数）；`split`、缺省或没有 `<pane>` 则为 0。`splitRows` / `splitCols` 仅当 pane 为拆分（无 `state` 或 `state="split"`，且 `xSplit` / `ySplit` 至少一个大于 0）时，取 `topLeftCell` 的行号减 1 / 列号减 1；没有 `topLeftCell` 或不是拆分则为 0。不要用 1/20 磅反推行列。拆分与冻结互斥：有拆分则冻结为 0，有冻结则拆分为 0。`activeCell` 取与 `activePane` 对应的 `<selection>/@activeCell`，没有则取第一条 `selection` 的 `activeCell` 或 `sqref` 首格；再没有则为 `A1`。能解析成 A1 的规范化成列字母加大写行号。`chartsheet` 没有 `<pane>` / `<selection>`；`frozenRows` / `frozenCols` / `splitRows` / `splitCols` 仍为 0，`activeCell` 仍为 `A1`，`zoom` 仍取该表 `sheetView/@zoomScale`。
 - `autoFilter` 取工作表级 `<autoFilter>/@ref`（§18.3.1.2）。能解析成单一 A1 时规范化成 `A1` 或 `A1:B2`；解析不了的原样留下；没有该元素则为 `null`。不算表格部件里的 `<autoFilter>`，也不报 `filterColumn`。
 - `outline` 不要另给 scope 键。来源是该表 `sheetPr/outlinePr`、各 `<row>/@outlineLevel` / `@hidden` / `@collapsed` 与 `<cols>/<col>` 的同名属性（ECMA-376 §18.3.1.61 / §18.3.1.73 / §18.3.1.13）。字段顺序：`summaryBelow`、`summaryRight`、`rows`、`cols`。`summaryBelow` / `summaryRight`：没有 `outlinePr` 或没有对应属性为 `true`；属性为 `0` / `false` / `FALSE` / `off` 则为 `false`。`rows` 列出全部 `outlineLevel>0` 或 `collapsed` 为真的 `<row>`，按行号升序，不按 inspect 范围过滤。每项字段顺序：`r`、`level`、`hidden`、`collapsed`。`r` 是行号（从 1 计）。`level` 取 `@outlineLevel`，缺省 0。`hidden` / `collapsed` 为布尔：属性为 `1` / `true` / `TRUE` / `on` 则为 `true`，缺省或其余为 `false`。`cols` 列出全部带 `outlineLevel>0` 或 `collapsed` 为真的 `<col>`，按 `min` 升序。每项字段顺序：`min`、`max`、`level`、`hidden`、`collapsed`。`min` / `max` 是列字母。`level` 取 `@outlineLevel`，缺省 0。不报列宽。布局名单 `cols` / `rows` 仍不报隐藏与大纲。`groupCols` 新建 `<col>` 时会写缺省 `width`，因此布局 `cols` 可能列出这些列的列宽。不把 `sheetFormatPr/@outlineLevelRow` / `@outlineLevelCol` 放进树。
 - `sheetProtection` 不要另给 scope 键。来源是该表 `<sheetProtection>`（工作表 ECMA-376 §18.3.1.85 `CT_SheetProtection`；图表工作表 §18.3.1.86 `CT_ChartsheetProtection`）。没有该元素时按规范缺省填全字段，`enforced` 为 `false`，`hasPassword` 为 `false`。不把哈希、盐、`algorithmName`、`spinCount` 或明文密码放进树。单元格 `locked` 是样式位，不在本对象里。
@@ -392,6 +401,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
 - `scope.oleObjects` 为 `true` 时，每张 `worksheet` 带 `oleObjects`。没有嵌入对象时为空数组。不依赖单元格切片。按该表 `<oleObjects>` 里被收入的 `oleObject` 文档顺序（`mc:AlternateContent` 只进第一个 `Choice`）。每条字段顺序：`id`、`shapeId`、`name`、`progId`、`kind`、`contentType`、`showAsIcon`、`anchor`，然后按锚点种类跟位置字段（规则与工作表图相同，几何取 `objectPr/anchor` 的 `from`/`to`；没有 `objectPr` 则取与 `shapeId` 相同的隐藏 `xdr:sp` 外层锚点），最后 `stable`。`shapeId` 是 `@shapeId` 原文，没有则为 `null`。`name` 取 dummy `xdr:sp` 的 `cNvPr/@name`，没有则为 `""`。`progId` 取 `@progId`，缺则为 `null`。`kind`：工作表关系 Type 后缀为 `/package` 时为 `package`，否则为 `embed`。`contentType` 取 embeddings 部件在 `[Content_Types].xml` 里的 Default 或 Override，都没有则为 `null`。`showAsIcon`：`@dvAspect` 为 `DVASPECT_ICON` 则为 `true`，否则为 `false`。不把嵌入字节或预览图放进树。与 `shapeId` 相同的隐藏 `xdr:sp` 不进 `shapes`。docx / pptx 见各自分册。
 - `scope.slicers` 为 `true` 时，每张 `worksheet` 带 `slicers`。没有切片器时为空数组。不依赖单元格切片。按该表 drawing 里被收入的 slicer `graphicFrame` 文档顺序。每条字段顺序：`id`、`cNvPrId`、`name`、`caption`、`sourceKind`、`sourceName`、`field`、`anchor`，然后按锚点种类跟位置字段（规则与工作表图相同），最后 `stable`。`cNvPrId` 是 `xdr:cNvPr/@id` 原文，没有则为 `null`。`name` 取 slicer 部件 `@name`，没有则取 `cNvPr/@name`，都没有则为 `""`。`caption` 取 `@caption`，缺则为 `null`。`sourceKind` 为 `table`（cache 带 `x15:tableSlicerCache`）或 `pivot`（带 `tabular` / `pivotTables`）。`sourceName` 取表格 `displayName` 或透视表 `@name`，对不上则为 `null`。`field` 取 cache `@sourceName`。不把 cache 选项、筛选状态或样式放进树。时间线、OLAP 不进本名单。docx / pptx 的 `scope` 里出现 `slicers` 报 `InvalidField`。
 - `scope.connections` 为 `true` 时，工作簿根带 `connections`。没有连接时为空数组。不依赖单元格切片。按 Connections 部件里被收入的 `connection` 文档顺序。每条字段顺序：`id`、`xmlId`、`name`、`kind`、`url`、`sourceFile`、`description`、`stable`。`xmlId` 是 `@id` 原文，没有则为 `null`。`name` 取 `@name`，没有则为 `""`。`kind`：`@type` 为 `4` 则为 `web`，为 `6` 则为 `text`，其余为 `other`。`url` 取 `webPr/@url`，缺则为 `null`。`sourceFile` 取 `textPr/@sourceFile`，缺则为 `null`。`description` 取 `@description`，缺则为 `null`。不把连接字符串、密码、queryTable 结果区或 `xr16:uid` 放进树。docx / pptx 的 `scope` 里出现 `connections` 报 `InvalidField`。
+- `scope.customViews` 为 `true` 时，工作簿根带 `customViews`。没有自定义视图时为空数组。不依赖单元格切片。按 `/xl/workbook.xml` 里 `<customWorkbookView>` 的文档顺序（ECMA-376 §18.2.3 / §18.2.4）。每条字段顺序：`id`、`name`、`includePrintSettings`、`includeHiddenRowCol`、`activeSheet`。`name` 取 `@name`，没有则为 `""`。`includePrintSettings` / `includeHiddenRowCol`：属性为 `0` / `false` / `FALSE` / `off` 则为 `false`，缺属性或其余为 `true`。`activeSheet` 按 `@activeSheetId` 对上 `sheets/sheet/@sheetId` 的表 `name`；对不上则为 `null`。不把 guid、窗口坐标或各表 `customSheetView` 放进树。docx / pptx 的 `scope` 里出现 `customViews` 报 `InvalidField`。
 - `scope.headerFooter` 为 `true` 时，每张表带 `headerFooters`，固定六个对象，顺序见上文 id 表。每个槽位字段顺序：`id`、`kind`、`side`、`text`；`worksheet` 再跟 `pictureCount`，若同时 `pictures: true` 再跟 `pictures`。`kind` / `side` 与 id 里那两段相同。`text` 为该 XML 元素原文，没有该元素则为 `null`。空串是合法原文，与 `null` 不同。`pictureCount` 是分到该槽的 DrawingML 页眉图个数。`chartsheet` / `dialogsheet` / `macrosheet` 的槽位没有 `pictureCount` / `pictures`。
 - `scope.pictures` 为 `true` 时，每张 `worksheet` 带工作表 `pictures`。没有图时为空数组。按该表 `<drawing>` 部件顺序、同一部件内按锚点文档顺序。每张字段顺序：`id`、`cNvPrId`、`name`、`anchor`，然后按锚点种类跟位置字段，最后 `stable`。`cNvPrId` 是 `xdr:cNvPr/@id` 原文，没有则为 `null`。`name` 取 `xdr:cNvPr/@name`，没有则为 `""`。`anchor` 为 `twoCell`、`oneCell` 或 `absolute`。单独 `pictures: true`、不开 `headerFooter`：只列工作表图，不含页眉图。
 - `twoCell`（§20.5.2.33）再跟 `from`、`fromOffX`、`fromOffY`、`to`、`toOffX`、`toOffY`、`editAs`。不报 `cx` / `cy`（显示尺寸由起止格与列宽行高决定，库不算）。`editAs` 取 `twoCellAnchor/@editAs`：`twoCell`、`oneCell` 或 `absolute`；缺省当作 `twoCell`。
@@ -517,7 +527,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
 
 行与单元格按行号、列号升序写出。补上 `sheetData` 和合理的 `dimension`。
 
-最小 `styles.xml` 必须生成，见 [opc.md](opc.md)。默认字体颜色写 `<color rgb="FF000000"/>`，不引用 theme，包里也不生成 theme 部件。给了 `sheets[].pictures` 时按 `insertPicture` 同一套规则写 worksheet drawing 与 media。给了 `sheets[].charts` 时按 `insertChart` 同一套规则写 `/xl/charts/chartN.xml`、`xdr:graphicFrame` 和 `dataFrom` 一带单元格，不写 embedding。一张表上的图与图表共用一份 drawing：先写 `pictures`，再写 `charts`。给了 `sheets[].headerFooters` 时按 `setHeaderFooterText` 写 `headerFooter` 六个槽位，按页眉 `insertPicture` 写 `drawingHF` 与 media；页眉图不进 worksheet drawing。`xdr:cNvPr/@id` 取该表已有全部 `cNvPr` 的最大整数加 1；页眉图至少为 2。不要生成透视表、条件格式、图表工作表。create 本期不写列宽、行高、合并、数据验证、条件格式、工作表表格、透视表、定义名、打印设置、视图与筛选、分组、批注、文本框、形状、连接线、SmartArt、超链接、迷你图、OLE、切片器、外部数据连接或保护，也不写共享公式或数组公式（`cells[]` 出现 `shared` / `sharedRef` / `array` / `arrayRef` 报 `InvalidField`）。`workbook` 根上或 `cells[]` 上出现 `pictures` / `charts` / `headerFooters` / `headerFooter` / `definedNames` / `connections` / `workbookProtection` / `protection`，或 `sheets[]` 上出现 `kind` / `wrap` / `smartArts` / `textBoxes` / `shapes` / `connectors` / `hyperlinks` / `sparklines` / `oleObjects` / `slicers` / `sheetProtection` / `protection` / `headerFooter` / `outline`，报 `InvalidField`。`sheets[].kind` 仍拒绝。给了 `workbook.props` 时按 `setProps` / `setCustomProp` 同一套规则写 core / app / custom；省略则仍写空的 `dc:title` 与 `dc:creator` 为 `ooxp`，不写 custom 部件。
+最小 `styles.xml` 必须生成，见 [opc.md](opc.md)。默认字体颜色写 `<color rgb="FF000000"/>`，不引用 theme，包里也不生成 theme 部件。给了 `sheets[].pictures` 时按 `insertPicture` 同一套规则写 worksheet drawing 与 media。给了 `sheets[].charts` 时按 `insertChart` 同一套规则写 `/xl/charts/chartN.xml`、`xdr:graphicFrame` 和 `dataFrom` 一带单元格，不写 embedding。一张表上的图与图表共用一份 drawing：先写 `pictures`，再写 `charts`。给了 `sheets[].headerFooters` 时按 `setHeaderFooterText` 写 `headerFooter` 六个槽位，按页眉 `insertPicture` 写 `drawingHF` 与 media；页眉图不进 worksheet drawing。`xdr:cNvPr/@id` 取该表已有全部 `cNvPr` 的最大整数加 1；页眉图至少为 2。不要生成透视表、条件格式、图表工作表。create 本期不写列宽、行高、合并、数据验证、条件格式、工作表表格、透视表、定义名、打印设置、视图与筛选、分组、拆分窗格、自定义视图、批注、文本框、形状、连接线、SmartArt、超链接、迷你图、OLE、切片器、外部数据连接或保护，也不写共享公式或数组公式（`cells[]` 出现 `shared` / `sharedRef` / `array` / `arrayRef` 报 `InvalidField`）。`workbook` 根上或 `cells[]` 上出现 `pictures` / `charts` / `headerFooters` / `headerFooter` / `definedNames` / `connections` / `customViews` / `workbookProtection` / `protection`，或 `sheets[]` 上出现 `kind` / `wrap` / `smartArts` / `textBoxes` / `shapes` / `connectors` / `hyperlinks` / `sparklines` / `oleObjects` / `slicers` / `sheetProtection` / `protection` / `headerFooter` / `outline`，报 `InvalidField`。`sheets[].kind` 仍拒绝。给了 `workbook.props` 时按 `setProps` / `setCustomProp` 同一套规则写 core / app / custom；省略则仍写空的 `dc:title` 与 `dc:creator` 为 `ooxp`，不写 custom 部件。
 
 
 ## apply
@@ -980,7 +990,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
 - 可能被删除的 `/xl/calcChain.xml` 以及因此修改的关系与内容类型（仅 `setCell` 等改了值或公式时）
 - `setCellStyle` 还可脏 styles 部件（常见 `/xl/styles.xml`），必要时补 workbook 关系与 Override
 
-未点名的 `xf` 条目、其他工作表、主题一律按原来的语义留下：不要重排或改写未点名下标。只改单元格值、不改样式、不改图、图表或页眉时，`styles.xml` 与绘图原样写回。图表 op 还可以脏 drawing、`/xl/charts/…` 及其 `.rels`、`[Content_Types].xml`，以及被写入数据的工作表 XML；写入单元格时走上面同一套重算标记。`insertChartSheet` / `deleteChartSheet` / `insertSheet` / `deleteSheet` / `renameSheet` / `moveSheet` / `setSheetHidden` 还可以脏 `/xl/workbook.xml` 的 `sheets`、workbook 关系，以及新表或被删表的部件。工作表表格 op 还可以脏 `/xl/tables/…`、工作表 `tableParts`、工作表 `.rels` 与 `[Content_Types].xml`；改列名或 insert 给出 `columns` 时还可脏该表 `sheetData`。页眉文本只脏目标表 XML。`setPrintSetup` 脏目标表的 `pageMargins` / `pageSetup` / `printOptions` / `sheetPr` / `rowBreaks` / `colBreaks`；改打印区域时还脏 `/xl/workbook.xml` 的 `<definedNames>`。`setSheetView` 脏目标表的 `sheetViews`。`setAutoFilter` 脏目标表的工作表级 `autoFilter`，不改表格部件。`groupRows` / `ungroupRows` / `groupCols` / `ungroupCols` / `setOutline` 脏目标表的 `sheetPr` / `sheetFormatPr` / `cols` / `sheetData` 行属性，不新建部件。页眉图还可以脏 `drawingHF` 指向的 drawing、工作表 `.rels`、`/xl/media/…` 与 `[Content_Types].xml`。文本框、形状与连接线 op、`groupShapes` / `ungroup` 以及 `setShapeText` 还可以脏 worksheet drawing 及其 `.rels`。`insertOle` / `deleteOle` 还可以脏工作表 `oleObjects`、worksheet drawing、`legacyDrawing` VML、工作表 `.rels`、VML `.rels`、`/xl/embeddings/…`、`/xl/media/…` 与 `[Content_Types].xml`。`insertSlicer` / `deleteSlicer` 还可以脏 `/xl/slicers/…`、`/xl/slicerCaches/…`、worksheet drawing、工作表 `extLst` 的 `slicerList`、workbook `extLst` 的 `slicerCaches`、workbook 的 `<definedNames>`、工作表 / workbook `.rels` 与 `[Content_Types].xml`；透视源的 `insertSlicer` 还脏 `/xl/pivotCache/pivotCacheDefinitionN.xml` 的 `extLst`。`insertConnection` / `deleteConnection` 还可以脏 `/xl/connections.xml`、workbook `.rels` 与 `[Content_Types].xml`。SmartArt op 还可以脏 worksheet drawing、drawing `.rels`、`/xl/diagrams/` 四件套与可选 drawing 缓存、以及 `[Content_Types].xml`。`setProps` / `setCustomProp` / `deleteCustomProp` 还可以脏 `/docProps/core.xml`、`/docProps/app.xml`、`/docProps/custom.xml`、根 `.rels` 与 `[Content_Types].xml`。只改 core 字段时不要新建 custom。未点名的 `HeadingPairs` / `TitlesOfParts` 留下。
+未点名的 `xf` 条目、其他工作表、主题一律按原来的语义留下：不要重排或改写未点名下标。只改单元格值、不改样式、不改图、图表或页眉时，`styles.xml` 与绘图原样写回。图表 op 还可以脏 drawing、`/xl/charts/…` 及其 `.rels`、`[Content_Types].xml`，以及被写入数据的工作表 XML；写入单元格时走上面同一套重算标记。`insertChartSheet` / `deleteChartSheet` / `insertSheet` / `deleteSheet` / `renameSheet` / `moveSheet` / `setSheetHidden` 还可以脏 `/xl/workbook.xml` 的 `sheets`、workbook 关系，以及新表或被删表的部件。工作表表格 op 还可以脏 `/xl/tables/…`、工作表 `tableParts`、工作表 `.rels` 与 `[Content_Types].xml`；改列名或 insert 给出 `columns` 时还可脏该表 `sheetData`。页眉文本只脏目标表 XML。`setPrintSetup` 脏目标表的 `pageMargins` / `pageSetup` / `printOptions` / `sheetPr` / `rowBreaks` / `colBreaks`；改打印区域时还脏 `/xl/workbook.xml` 的 `<definedNames>`。`setSheetView` 脏目标表的 `sheetViews`（含拆分）。`setAutoFilter` 脏目标表的工作表级 `autoFilter`，不改表格部件。`insertCustomView` / `deleteCustomView` / `showCustomView` 脏 `/xl/workbook.xml` 的 `customWorkbookViews` 以及各表 `customSheetViews` / 当前 `sheetViews` / 可选 `pageMargins`，不新建部件。`groupRows` / `ungroupRows` / `groupCols` / `ungroupCols` / `setOutline` 脏目标表的 `sheetPr` / `sheetFormatPr` / `cols` / `sheetData` 行属性，不新建部件。页眉图还可以脏 `drawingHF` 指向的 drawing、工作表 `.rels`、`/xl/media/…` 与 `[Content_Types].xml`。文本框、形状与连接线 op、`groupShapes` / `ungroup` 以及 `setShapeText` 还可以脏 worksheet drawing 及其 `.rels`。`insertOle` / `deleteOle` 还可以脏工作表 `oleObjects`、worksheet drawing、`legacyDrawing` VML、工作表 `.rels`、VML `.rels`、`/xl/embeddings/…`、`/xl/media/…` 与 `[Content_Types].xml`。`insertSlicer` / `deleteSlicer` 还可以脏 `/xl/slicers/…`、`/xl/slicerCaches/…`、worksheet drawing、工作表 `extLst` 的 `slicerList`、workbook `extLst` 的 `slicerCaches`、workbook 的 `<definedNames>`、工作表 / workbook `.rels` 与 `[Content_Types].xml`；透视源的 `insertSlicer` 还脏 `/xl/pivotCache/pivotCacheDefinitionN.xml` 的 `extLst`。`insertConnection` / `deleteConnection` 还可以脏 `/xl/connections.xml`、workbook `.rels` 与 `[Content_Types].xml`。SmartArt op 还可以脏 worksheet drawing、drawing `.rels`、`/xl/diagrams/` 四件套与可选 drawing 缓存、以及 `[Content_Types].xml`。`setProps` / `setCustomProp` / `deleteCustomProp` 还可以脏 `/docProps/core.xml`、`/docProps/app.xml`、`/docProps/custom.xml`、根 `.rels` 与 `[Content_Types].xml`。只改 core 字段时不要新建 custom。未点名的 `HeadingPairs` / `TitlesOfParts` 留下。
 
 被改的部件是整份重新序列化的，不是按字节做定点替换。因此保证到这个程度：XML 声明、元素与属性的顺序、未知命名空间的元素与属性、文本内容都保留；注释、处理指令和 DOCTYPE 会丢，CDATA 会变成等价的转义文本。Office 的工作表部件不带这些东西，所以第一期接受这个代价。
 
@@ -1048,7 +1058,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
 
 ### setSheetView
 
-改工作表或图表工作表默认视图的缩放、冻结窗格与活动单元格。不改分页预览 / 页面布局，不写拆分窗格。
+改工作表或图表工作表默认视图的缩放、冻结窗格、拆分窗格与活动单元格。不改分页预览 / 页面布局。
 
 ```json
 {
@@ -1074,9 +1084,10 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
 | `id` | 工作表 id `sheet:{name}` |
 | `zoom` | 可选。整数，10 到 400 |
 | `frozenRows` / `frozenCols` | 可选。非负整数。行不超过 1048575，列不超过 16383 |
+| `splitRows` / `splitCols` | 可选。非负整数。上限与冻结相同。与 COM `SplitRow` / `SplitColumn` 同一套 |
 | `activeCell` | 可选。单格 A1 |
 
-除 `op` / `id` 外至少给一个字段，否则报 `InvalidField`。只改第一个 `sheetView`；没有 `sheetViews` 则按 `CT_Worksheet` 顺序新建，该视图写 `workbookViewId="0"`。`zoom` 写 `@zoomScale`。给了任一冻结字段时写入 `<pane state="frozen">`：`ySplit` 为行数、`xSplit` 为列数（为 0 则不写该属性），`topLeftCell` 为冻结区右下角的下一格，`activePane` 按两侧是否非零取 `bottomLeft` / `topRight` / `bottomRight`。只给一侧时另一侧沿用当前冻结值（`split` 的 pane 当作当前 0）。两侧都为 0 则去掉 `<pane>`，并去掉各 `<selection>` 的 `pane` 属性。改冻结时重写一条对应 `activePane` 的 `<selection>`，其它 `selection` 去掉；未点名的 `pivotSelection` 与未知子元素留下。`activeCell` 须能解析成单格；写成该选区的 `activeCell` 与 `sqref`。对 `chartsheet` 发 `frozenRows` / `frozenCols` / `activeCell` 报 `InvalidField`。对 `chartsheet` 给了 `zoom` 时写 `@zoomScale` 并把 `@zoomToFit` 写成 `0`。找不到该表报 `IdNotFound`。id 不是工作表 id 报 `InvalidId`。对 `dialogsheet` / `macrosheet` 报 `NotImplemented`。docx / pptx 上发此 op 报 `InvalidField`。不标重算。create 本期不写视图。
+除 `op` / `id` 外至少给一个字段，否则报 `InvalidField`。只改第一个 `sheetView`；没有 `sheetViews` 则按 `CT_Worksheet` 顺序新建，该视图写 `workbookViewId="0"`。`zoom` 写 `@zoomScale`。任一冻结字段与任一拆分字段同时出现报 `InvalidField`。给了任一冻结字段时写入 `<pane state="frozen">`：`ySplit` 为行数、`xSplit` 为列数（为 0 则不写该属性），`topLeftCell` 为冻结区右下角的下一格，`activePane` 按两侧是否非零取 `bottomLeft` / `topRight` / `bottomRight`。只给一侧冻结时另一侧沿用当前冻结值（拆分 pane 当作当前 0）。两侧冻结都为 0 则去掉 `<pane>`。给了任一拆分字段时写入拆分 pane：不写 `state`（规范缺省 `split`）；`topLeftCell` 为拆分区右下角的下一格；`xSplit` / `ySplit` 按缺省列宽（Calibri 11，8.43 字符换成像素再换成 1/20 磅）与 Excel 16.0 金样行高（`SplitRow=4` 对应 `ySplit=1425`）写入，不保证与 Excel 像素级一致。手测认 COM `SplitRow` / `SplitColumn`。只给一侧拆分时另一侧沿用当前拆分值（冻结 pane 当作当前 0）。两侧拆分都为 0 则去掉 `<pane>`。改冻结或拆分时重写对应 `activePane` 的 `<selection>`，其它 `selection` 去掉；未点名的 `pivotSelection` 与未知子元素留下。`activeCell` 须能解析成单格；写成该选区的 `activeCell` 与 `sqref`。对 `chartsheet` 发 `frozenRows` / `frozenCols` / `splitRows` / `splitCols` / `activeCell` 报 `InvalidField`。对 `chartsheet` 给了 `zoom` 时写 `@zoomScale` 并把 `@zoomToFit` 写成 `0`。找不到该表报 `IdNotFound`。id 不是工作表 id 报 `InvalidId`。对 `dialogsheet` / `macrosheet` 报 `NotImplemented`。docx / pptx 上发此 op 报 `InvalidField`。不标重算。create 本期不写视图。
 
 示例见 `docs/examples/xlsx-apply-view.json`。
 
@@ -1109,6 +1120,60 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
 缺 `ref` 报 `InvalidField`。写入 `<autoFilter>/@ref`，能解析则规范化成 `A1` 或 `A1:B2`。已有该元素时只改 `@ref`，`filterColumn` 等子元素留下。没有则按 `CT_Worksheet` 插在 `scenarios` 之后、`sortState` 之前。`null` 去掉该元素。与同一张工作表上已有表格的 `ref` 相交报 `InvalidField`。只能改 `worksheet`。对 `chartsheet` 报 `InvalidField`。找不到该表报 `IdNotFound`。id 不是工作表 id 报 `InvalidId`。对 `dialogsheet` / `macrosheet` 报 `NotImplemented`。docx / pptx 上发此 op 报 `InvalidField`。不标重算。create 本期不写筛选。
 
 示例见 `docs/examples/xlsx-apply-view.json`。
+
+### insertCustomView
+
+把当前窗口设置存成一条自定义视图。不恢复隐藏行 / 列。
+
+```json
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "C:\\data\\book.xlsx",
+  "output": "C:\\data\\book.custom-view.xlsx",
+  "ops": [
+    {
+      "op": "insertCustomView",
+      "id": "xlsx:workbook",
+      "name": "DemoView",
+      "includePrintSettings": true,
+      "includeHiddenRowCol": true
+    }
+  ]
+}
+```
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"insertCustomView"` |
+| `id` | 必须是 `xlsx:workbook` |
+| `name` | 必须。非空。工作簿内大小写不敏感唯一 |
+| `includePrintSettings` | 可选。布尔。省略为 `true` |
+| `includeHiddenRowCol` | 可选。布尔。省略为 `true` |
+
+缺 `name` 或空串报 `InvalidField`。重名报 `InvalidField`。id 不是 `xlsx:workbook` 报 `InvalidId`。写入 workbook `<customWorkbookViews>/<customWorkbookView>`（`CT_Workbook` 插在 `calcPr` 之后、`pivotCaches` 之前）：必填 `name`、`guid`、`windowWidth`、`windowHeight`、`activeSheetId`。窗口尺寸从 `bookViews/workbookView` 同名属性除以 15；没有 `bookViews` 则 `windowWidth="1456"`、`windowHeight="1007"`。`activeSheetId` 取当前 `tabSelected` 的表，没有则取第一张表的 `@sheetId`。`includePrintSettings` / `includeHiddenRowCol` 为真则不写属性（规范缺省为真），为假则写成 `"0"`。给每张 `worksheet` 与 `chartsheet` 写一条同一 `guid` 的 `customSheetView`：有冻结或拆分则复制当前第一个 `sheetView` 的 `pane` 与 `selection`；`includePrintSettings` 为真时再写该表 `pageMargins`（没有则用缺省边距）。不写 `xr:uid`。不把隐藏行 / 列抄进快照。docx / pptx 上发此 op 报 `InvalidField`。不标重算。create 本期不写自定义视图。
+
+### deleteCustomView
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"deleteCustomView"` |
+| `id` | 自定义视图 id `customView:{n}` |
+
+去掉该 `<customWorkbookView>`，以及各表上同一 `guid` 的 `<customSheetView>`。删光则去掉 `<customWorkbookViews>` / 空的 `<customSheetViews>`。找不到该序号报 `IdNotFound`。id 不是自定义视图 id 报 `InvalidId`。docx / pptx 上发此 op 报 `InvalidField`。不标重算。
+
+### showCustomView
+
+按快照把窗格写回当前默认视图。
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"showCustomView"` |
+| `id` | 自定义视图 id `customView:{n}` |
+
+对每张带同一 `guid` 的 `customSheetView`：把它的 `pane` / `selection` 写到该表第一个 `sheetView`（没有则新建，`workbookViewId="0"`）。workbook 上 `includePrintSettings` 为真时，若快照有 `pageMargins` 则写回该表。不恢复隐藏行 / 列，不改筛选。找不到该序号报 `IdNotFound`。id 不是自定义视图 id 报 `InvalidId`。docx / pptx 上发此 op 报 `InvalidField`。不标重算。
+
+示例见 `docs/examples/xlsx-apply-custom-view.json`。
 
 ### groupRows
 

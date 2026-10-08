@@ -804,6 +804,7 @@ mod tests {
                 "oleObjectCount",
                 "slicerCount",
                 "connectionCount",
+                "customViewCount",
                 "definedNameCount",
                 "props",
                 "workbookProtection",

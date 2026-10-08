@@ -13,6 +13,7 @@ use super::chart;
 use super::chartsheet;
 use super::comments;
 use super::connection;
+use super::custom_view;
 use super::hf;
 use super::inspect;
 use super::layout;
@@ -432,6 +433,20 @@ pub fn apply(bytes: &[u8], ops: &[XlsxOp]) -> Result<Vec<u8>, Error> {
                 };
                 let doc = dirty_of(&mut dirty_sheets, &part);
                 super::view::apply_filter(&mut doc.root, kind, op, overlap, i)?;
+            }
+            XlsxOp::InsertCustomView(op) => {
+                load_content_sheets(&pkg, &sheet_index, &mut dirty_sheets)?;
+                custom_view::insert(&mut wb_doc.root, &sheet_index, &mut dirty_sheets, op, i)?;
+                workbook_dirty = true;
+            }
+            XlsxOp::DeleteCustomView(op) => {
+                load_content_sheets(&pkg, &sheet_index, &mut dirty_sheets)?;
+                custom_view::delete(&mut wb_doc.root, &sheet_index, &mut dirty_sheets, op, i)?;
+                workbook_dirty = true;
+            }
+            XlsxOp::ShowCustomView(op) => {
+                load_content_sheets(&pkg, &sheet_index, &mut dirty_sheets)?;
+                custom_view::show(&wb_doc.root, &sheet_index, &mut dirty_sheets, op, i)?;
             }
             XlsxOp::GroupRows(op) => {
                 let part = require_outline_worksheet(&sheet_index, &op.sheet, i)?;
@@ -1102,6 +1117,19 @@ fn reject_hf_pic_sheet(
             ErrorKind::InsertPictureWorksheetOnly,
             format!("ops[{op_index}].id"),
         ));
+    }
+    Ok(())
+}
+
+fn load_content_sheets(
+    pkg: &Package,
+    sheet_index: &[(String, String, &'static str)],
+    dirty: &mut Vec<(String, Document)>,
+) -> Result<(), Error> {
+    for (_, part, kind) in sheet_index {
+        if *kind == "worksheet" || *kind == "chartsheet" {
+            load_dirty(pkg, dirty, part, false)?;
+        }
     }
     Ok(())
 }

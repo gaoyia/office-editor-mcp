@@ -662,6 +662,17 @@ fn fmt_num(n: f64) -> String {
     }
 }
 
+/// 拆分窗格 `ySplit`：Excel 16.0 金样 `SplitRow=4` 对应 `ySplit=1425`，不是 15 磅 × 20。
+pub(crate) fn default_row_split_twentieths(rows: u32) -> String {
+    fmt_num(f64::from(rows) * 1425.0 / 4.0)
+}
+
+/// 拆分窗格 `xSplit`：缺省列宽 8.43 字符换成像素再换成 1/20 磅。
+pub(crate) fn default_col_split_twentieths(cols: u32) -> String {
+    let px = (DEFAULT_COL_CHARS * MAX_DIGIT_WIDTH + 5.0).floor().max(0.0);
+    fmt_num(px * 15.0 * f64::from(cols))
+}
+
 /// 组合写入用：列宽字符 → 像素时的缺省（Calibri 11 / 96dpi 的 8.43 → 64 像素）。
 const DEFAULT_COL_CHARS: f64 = 8.43;
 const DEFAULT_ROW_PT: f64 = 15.0;

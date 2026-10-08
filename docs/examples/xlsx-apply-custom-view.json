@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "C:\\data\\book.xlsx",
+  "output": "C:\\data\\book.custom-view.xlsx",
+  "ops": [
+    {
+      "op": "setSheetView",
+      "id": "sheet:Sheet1",
+      "splitRows": 4,
+      "splitCols": 2
+    },
+    {
+      "op": "insertCustomView",
+      "id": "xlsx:workbook",
+      "name": "DemoView",
+      "includePrintSettings": true,
+      "includeHiddenRowCol": true
+    }
+  ]
+}

@@ -296,6 +296,16 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::InsertConnectionNeedsWorkbook => {
                 "insertConnection 的 id 必须是 xlsx:workbook".into()
             }
+            IdReason::InsertCustomViewNeedsWorkbook => {
+                "insertCustomView 的 id 必须是 xlsx:workbook".into()
+            }
+            IdReason::CustomViewPrefix => {
+                "自定义视图 id 必须是 customView:n，n 从 1 起".into()
+            }
+            IdReason::CustomViewIndexNotInt => {
+                "customView 后面必须是正整数".into()
+            }
+            IdReason::CustomViewIndexFromOne => "customView 从 1 起".into(),
             IdReason::ConnectionPrefix => {
                 "连接 id 必须是 connection:ID 或 connection:index:N".into()
             }
@@ -737,6 +747,10 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::ConnectionNotFound { id } => format!("找不到连接：{id}"),
         ErrorKind::InvalidConnection { field } => {
             format!("连接的 {field} 不合法")
+        }
+        ErrorKind::CustomViewNotFound { id } => format!("找不到自定义视图：{id}"),
+        ErrorKind::InvalidCustomView { field } => {
+            format!("自定义视图的 {field} 不合法")
         }
         ErrorKind::ZoomNotFound { id } => format!("找不到 Zoom：{id}"),
         ErrorKind::InvalidZoomType => "type 必须是 slide 或 section".into(),
