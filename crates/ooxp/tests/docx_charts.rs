@@ -225,6 +225,8 @@ fn inspect_count_without_list() {
             "bookmarkCount",
             "fieldCount",
             "tocCount",
+            "captionCount",
+            "crossRefCount",
             "mathCount",
             "contentControlCount",
             "numberingCount",

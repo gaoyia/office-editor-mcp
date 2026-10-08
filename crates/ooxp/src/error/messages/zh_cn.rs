@@ -580,6 +580,18 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::InsertTocNeedsBodyPara => {
                 "insertToc 的 id 必须是 w:body 的直接子段落，或 docx:document".into()
             }
+            IdReason::CaptionPrefix => "题注 id 必须是 caption:N".into(),
+            IdReason::CaptionIndexNotInt => "caption 序号必须是正整数".into(),
+            IdReason::CaptionIndexFromOne => "caption 序号从 1 起".into(),
+            IdReason::InsertCaptionNeedsBodyPara => {
+                "insertCaption 的 id 必须是 w:body 的直接子段落，或 docx:document".into()
+            }
+            IdReason::XrefPrefix => "交叉引用 id 必须是 xref:N".into(),
+            IdReason::XrefIndexNotInt => "xref 序号必须是正整数".into(),
+            IdReason::XrefIndexFromOne => "xref 序号从 1 起".into(),
+            IdReason::InsertCrossRefNeedsPara => {
+                "insertCrossRef 的 id 必须是正文或页眉页脚段落 id".into()
+            }
             IdReason::MathPrefix => {
                 "公式 id 必须是 math:N，或页眉页脚容器 id 加上 /math:N".into()
             }
@@ -662,6 +674,10 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::InvalidTocKind => {
             "kind 必须是 toc、tof 或 toa；instr 必须以 TOC 或 TOA 开头".into()
         }
+        ErrorKind::InvalidSeqIdentifier => {
+            "label 必须是 SEQ 序列名：拉丁字母开头，其后最多 39 个拉丁字母、数字或下划线".into()
+        }
+        ErrorKind::InvalidCrossRefKind => "kind 只能是 ref 或 page".into(),
         ErrorKind::CommentNotFound { id } => format!("找不到批注：{id}"),
         ErrorKind::NeedCommentParaId => {
             "批注最后一段必须有 w14:paraId，才能写 commentsExtended".into()
@@ -1011,6 +1027,8 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::EmptyHyperlinkFile => "file 不能为空".into(),
         ErrorKind::FieldNotFound { id } => format!("找不到域：{id}"),
         ErrorKind::TocNotFound { id } => format!("找不到目录：{id}"),
+        ErrorKind::CaptionNotFound { id } => format!("找不到题注：{id}"),
+        ErrorKind::CrossRefNotFound { id } => format!("找不到交叉引用：{id}"),
         ErrorKind::MathNotFound { id } => format!("找不到公式：{id}"),
         ErrorKind::ContentControlNotFound { id } => format!("找不到内容控件：{id}"),
         ErrorKind::SetParaTextHasField => "不能改带域的段落的可见文本".into(),

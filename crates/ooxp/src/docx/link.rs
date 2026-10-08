@@ -40,6 +40,14 @@ struct BookmarkPair {
     xml_id: Option<String>,
 }
 
+/// 含隐藏书签在内的配对书签，供题注 / 交叉引用使用。
+#[derive(Debug, Clone)]
+pub(crate) struct BookmarkSpan {
+    pub start: Vec<usize>,
+    pub end: Vec<usize>,
+    pub name: String,
+}
+
 pub fn count_hyperlinks(root: &Element) -> usize {
     collect_hyperlink_paths(root).len()
 }
@@ -449,10 +457,28 @@ fn walk_bookmarks(
     }
 }
 
-fn all_bookmark_names(root: &Element) -> HashSet<String> {
+pub(crate) fn all_bookmark_names(root: &Element) -> HashSet<String> {
     let mut names = HashSet::new();
     collect_names(root, &mut names);
     names
+}
+
+pub(crate) fn all_bookmark_spans(root: &Element) -> Vec<BookmarkSpan> {
+    let mut starts = Vec::new();
+    let mut ends: HashMap<String, Vec<usize>> = HashMap::new();
+    let mut path = Vec::new();
+    walk_bookmarks(root, &mut path, true, &mut starts, &mut ends);
+    let mut out = Vec::new();
+    for (start, xml_id, name) in starts {
+        let Some(xml_id) = xml_id else {
+            continue;
+        };
+        let Some(end) = ends.get(&xml_id).cloned() else {
+            continue;
+        };
+        out.push(BookmarkSpan { start, end, name });
+    }
+    out
 }
 
 fn collect_names(el: &Element, names: &mut HashSet<String>) {
@@ -468,7 +494,7 @@ fn collect_names(el: &Element, names: &mut HashSet<String>) {
     }
 }
 
-fn next_bookmark_xml_id(root: &Element) -> String {
+pub(crate) fn next_bookmark_xml_id(root: &Element) -> String {
     let mut max = -1i64;
     walk_xml_ids(root, &mut max);
     (max + 1).max(0).to_string()
@@ -500,7 +526,7 @@ fn unused_ooxp_name(taken: &HashSet<String>) -> String {
     }
 }
 
-fn insert_bookmark_start(p: &mut Element, xml_id: &str, name: &str) {
+pub(crate) fn insert_bookmark_start(p: &mut Element, xml_id: &str, name: &str) {
     let mut start = Element::new(p.prefixed("bookmarkStart"));
     let id_key = start.prefixed("id");
     let name_key = start.prefixed("name");
@@ -517,7 +543,7 @@ fn insert_bookmark_start(p: &mut Element, xml_id: &str, name: &str) {
     p.children.insert(at, Node::Element(start));
 }
 
-fn insert_bookmark_end(p: &mut Element, xml_id: &str) {
+pub(crate) fn insert_bookmark_end(p: &mut Element, xml_id: &str) {
     let mut end = Element::new(p.prefixed("bookmarkEnd"));
     let id_key = end.prefixed("id");
     end.set_attr(&id_key, xml_id);

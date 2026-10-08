@@ -8,7 +8,7 @@
 
 Microsoft Word 16.0 已打开，用户确认通过。create、inspect、apply 三组都过了。O1 已放弃，见下表。本机若装了 WPS，`Word.Application` 会被抢走，测试仍直接启动 `WINWORD.EXE` 再挂 COM。A11 补过 `word/settings.xml` 之后，2026-09-26 用新 `docx-create.docx` 重跑，Word 报 `CompatibilityMode=15`。
 
-C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，跑 `pwsh -File manual-check\office\run.ps1 -Case 'docx-*'` 即可复现，逐条结果落在 `manual-check/office/out/office-results.csv`。2026-09-27 补跑 `docx-charts-remain.ps1`，Cr1–Cr6 通过。同日重跑 `docx-charts-ext.ps1`，Cx8 股价三条转柱形。2026-09-29 补跑 `docx-charts-rare.ps1`，Cq1–Cq5 通过。同日重跑 `docx-smartart.ps1`，Sa1–Sa9 通过。同日重跑 `docx-comments.ps1`，Cmt1–Cmt7、Ik1–Ik4 通过。2026-09-28 补跑 `docx-format.ps1`，Pf1–Pf6 通过。同日补跑 `docx-ole.ps1`，Ol1–Ol5 通过。同日补跑 `docx-protect.ps1`，Pr1–Pr6 通过。同日补跑 `docx-watermark.ps1`，Wm1–Wm5 通过。2026-10-09 补跑 `docx-theme.ps1`，Th1–Th5 通过。
+C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，跑 `pwsh -File manual-check\office\run.ps1 -Case 'docx-*'` 即可复现，逐条结果落在 `manual-check/office/out/office-results.csv`。2026-09-27 补跑 `docx-charts-remain.ps1`，Cr1–Cr6 通过。同日重跑 `docx-charts-ext.ps1`，Cx8 股价三条转柱形。2026-09-29 补跑 `docx-charts-rare.ps1`，Cq1–Cq5 通过。同日重跑 `docx-smartart.ps1`，Sa1–Sa9 通过。同日重跑 `docx-comments.ps1`，Cmt1–Cmt7、Ik1–Ik4 通过。2026-09-28 补跑 `docx-format.ps1`，Pf1–Pf6 通过。同日补跑 `docx-ole.ps1`，Ol1–Ol5 通过。同日补跑 `docx-protect.ps1`，Pr1–Pr6 通过。同日补跑 `docx-watermark.ps1`，Wm1–Wm5 通过。2026-10-09 补跑 `docx-theme.ps1`，Th1–Th5 通过。同日补跑 `docx-caption-xref.ps1`，Cp1–Cp6 通过。
 
 | 序号 | 状态 | 结果 |
 | --- | --- | --- |
@@ -53,6 +53,7 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 | Pr1–Pr6 | ✅ | Word 16.0：`docx-protect.ps1`，6 PASS / 0 FAIL。只读保护 `enforced=true`、`edit=readOnly`；关掉后 `ProtectionType=-1`；窗体保护为 `2`；只读推荐为 true；带哈希 `hasPassword=true` 且改 `enforced` 得 `NotImplemented`；错 id / 空字段拒写。标题栏无 Repair |
 | Wm1–Wm5 | ✅ | Word 16.0：`docx-watermark.ps1`，5 PASS / 0 FAIL。文字水印 id 为 `header:default:1/watermark:1`、`kind=text`；删除后计数为 0；图片水印 `kind=picture`；普通页眉图不进 `watermarkCount`；错 id / 同时给 `text` 与 `file` 拒写。标题栏无 Repair |
 | Th1–Th5 | ✅ | Word 16.0：`docx-theme.ps1`，5 PASS / 0 FAIL。空白另存根上有 `theme`，`accent1` 为六位十六进制；改色为 `FF0000`；改字为 Arial；无 theme 部件得 `IdNotFound`；错 id / 空槽位拒写。标题栏无 Repair |
+| Cp1–Cp6 | ✅ | Word 16.0：`docx-caption-xref.ps1`，6 PASS / 0 FAIL。无 scope 时只有计数；插入后 `caption:1` / `identifier=Figure`；Word 更新域后交叉引用可见 Figure；删交叉引用与删题注无修复；页眉 `insertCaption` 为 `InvalidId`，xlsx 上为 `InvalidField`。标题栏无 Repair |
 | O1 | 🚫 | 领域层不做原样保存，与 xlsx 清单相同。零脏写回见 OPC 库测试。Word 另存 create 产物见 `docx-O1-word-resave`。此前记的 `SaveAs2` 挂起，拆分后重跑没再出现，一秒内返回 |
 
 ## create
@@ -79,7 +80,7 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 | I2 | 大纲 | `outline` 含第一段，`level` 为 `1`，`text` 为 `标题` |
 | I3 | 段落 id | 两段都有 `para:{hex}`，`stable` 为 `true` |
 | I4 | 第二段 | `text` 为 `hello` |
-| I5 | 无 scope | 只发 path 时没有 `paragraphs` 字段，仍有 `outline`、`paraCount`、`pictureCount`、`tableCount`、`revisionCount`、`hyperlinkCount`、`bookmarkCount`、`fieldCount`、`tocCount`、`mathCount`、`contentControlCount`、`headers`、`footers`、`sections`、`props`、`protection`、`watermarkCount` |
+| I5 | 无 scope | 只发 path 时没有 `paragraphs` 字段，仍有 `outline`、`paraCount`、`pictureCount`、`tableCount`、`revisionCount`、`hyperlinkCount`、`bookmarkCount`、`fieldCount`、`tocCount`、`captionCount`、`crossRefCount`、`mathCount`、`contentControlCount`、`headers`、`footers`、`sections`、`props`、`protection`、`watermarkCount` |
 
 ## apply
 
@@ -451,6 +452,19 @@ Word 亲手另存或在另存批注样例的 `comments.xml` 里带 `inkml:ink`�
 | Tc3 | 更新 | Word 更新域或 `TablesOfContents.Update` 之后，目录可见文字含标题「第一章」 |
 | Tc4 | 删除 | `deleteToc` 之后 `tocCount` 为 0，标题段还在，Word 无修复 |
 | Tc5 | 图表目录 | `kind` 为 `tof` 的插入产物树上 `kind` 为 `tof`，Word 无修复 |
+
+## 题注与交叉引用
+
+`insertCaption` 写入 SEQ 与 `_Ref` 书签；`insertCrossRef` 写入 REF / PAGEREF。不在库里求值。手测脚本 `manual-check/office/cases/docx-caption-xref.ps1`。
+
+| 序号 | 检查 | 通过标准 |
+| --- | --- | --- |
+| Cp1 | 名单 | 无 `scope.captions` / `scope.crossRefs` 时有 `captionCount` / `crossRefCount` 且没有名单；`insertCaption` 之后 `captionCount` 为 1，给了 `scope.captions` 能列出 `caption:1`，`identifier` 为 `Figure`，且 `fields` 里有对应 `SEQ` 域；`bookmarkCount` 仍为 0（`_Ref` 隐藏书签） |
+| Cp2 | 打开 | Word 打开后无修复 |
+| Cp3 | 交叉引用 | 用题注上的 `bookmark` 发 `insertCrossRef` 后 `crossRefCount` 为 1，`kind` 为 `ref`；Word 更新域后可见 `Figure` |
+| Cp4 | 删除交叉引用 | `deleteCrossRef` 之后 `crossRefCount` 为 0，题注段还在，Word 无修复 |
+| Cp5 | 删除题注 | `deleteCaption` 之后 `captionCount` 为 0，标题段还在，Word 无修复 |
+| Cp6 | 拒错 | 对页眉段落发 `insertCaption` 得 `InvalidId`；xlsx 上发 `insertCaption` 得 `InvalidField`。未写文件 |
 
 ## 公式
 

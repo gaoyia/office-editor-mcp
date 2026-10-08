@@ -1,5 +1,7 @@
 //! 正文与页眉页脚里的 `w:fldChar` / `w:fldSimple`：inspect 名单与插改删。
 
+use std::collections::HashSet;
+
 use serde_json::{json, Value};
 
 use crate::error::{Error, ErrorKind, IdReason, XmlIssue};
@@ -27,6 +29,7 @@ enum FieldKind {
     Complex,
 }
 
+#[derive(Clone)]
 struct FieldRec {
     kind: FieldKind,
     start: Vec<usize>,
@@ -1084,4 +1087,421 @@ pub fn delete_toc(root: &mut Element, n: usize, err_id: &str, op_i: usize) -> Re
     }
     ensure_body_has_para(root)?;
     Ok(())
+}
+
+/// 交叉引用类型：REF / PAGEREF / NOTEREF。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CrossRefKind {
+    Ref,
+    Page,
+    Note,
+}
+
+impl CrossRefKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Ref => "ref",
+            Self::Page => "page",
+            Self::Note => "note",
+        }
+    }
+
+    pub fn parse_insert(s: &str) -> Option<Self> {
+        match s {
+            "ref" => Some(Self::Ref),
+            "page" => Some(Self::Page),
+            _ => None,
+        }
+    }
+
+    fn from_code(code: &str) -> Option<Self> {
+        match code {
+            "REF" => Some(Self::Ref),
+            "PAGEREF" => Some(Self::Page),
+            "NOTEREF" => Some(Self::Note),
+            _ => None,
+        }
+    }
+}
+
+pub fn parse_cross_ref_kind(raw: &str) -> Result<CrossRefKind, ErrorKind> {
+    CrossRefKind::parse_insert(raw).ok_or(ErrorKind::InvalidCrossRefKind)
+}
+
+pub fn parse_seq_identifier(s: &str) -> Result<(), ErrorKind> {
+    if valid_seq_identifier(s) {
+        Ok(())
+    } else {
+        Err(ErrorKind::InvalidSeqIdentifier)
+    }
+}
+
+fn valid_seq_identifier(s: &str) -> bool {
+    let mut chars = s.chars();
+    let Some(first) = chars.next() else {
+        return false;
+    };
+    if !first.is_ascii_alphabetic() {
+        return false;
+    }
+    let mut n = 1usize;
+    for c in chars {
+        n += 1;
+        if n > 40 {
+            return false;
+        }
+        if !(c.is_ascii_alphabetic() || c.is_ascii_digit() || c == '_') {
+            return false;
+        }
+    }
+    true
+}
+
+fn first_field_arg(instr: &str) -> String {
+    let s = instr.trim();
+    let code = field_code(s);
+    let rest = if s.len() >= code.len() && s[..code.len()].eq_ignore_ascii_case(&code) {
+        s[code.len()..].trim_start()
+    } else {
+        let mut parts = s.splitn(2, char::is_whitespace);
+        parts.next();
+        parts.next().unwrap_or("").trim_start()
+    };
+    if let Some(inner) = rest.strip_prefix('"') {
+        inner.split('"').next().unwrap_or("").to_string()
+    } else {
+        rest.split_whitespace()
+            .next()
+            .filter(|t| !t.starts_with('\\'))
+            .unwrap_or("")
+            .to_string()
+    }
+}
+
+fn is_nested_field(recs: &[FieldRec], idx: usize) -> bool {
+    let rec = &recs[idx];
+    recs.iter().enumerate().any(|(j, outer)| {
+        j != idx
+            && path_cmp(&outer.start, &rec.start) == std::cmp::Ordering::Less
+            && path_cmp(&rec.start, &outer.end) == std::cmp::Ordering::Less
+    })
+}
+
+fn bookmark_wraps(span: &link::BookmarkSpan, rec: &FieldRec) -> bool {
+    path_cmp(&span.start, &rec.start) != std::cmp::Ordering::Greater
+        && path_cmp(&rec.end, &span.end) != std::cmp::Ordering::Greater
+}
+
+fn wrapping_bookmark_name(root: &Element, rec: &FieldRec) -> Option<String> {
+    let spans = link::all_bookmark_spans(root);
+    let wrapping: Vec<&link::BookmarkSpan> =
+        spans.iter().filter(|s| bookmark_wraps(s, rec)).collect();
+    let refs: Vec<&link::BookmarkSpan> = wrapping
+        .iter()
+        .copied()
+        .filter(|s| s.name.starts_with("_Ref"))
+        .collect();
+    let pool = if refs.is_empty() { wrapping } else { refs };
+    pool.into_iter()
+        .max_by(|a, b| path_cmp(&a.start, &b.start))
+        .map(|s| s.name.clone())
+}
+
+fn wrapping_ref_paths(root: &Element, rec: &FieldRec) -> Vec<Vec<usize>> {
+    link::all_bookmark_spans(root)
+        .into_iter()
+        .filter(|s| s.name.starts_with("_Ref") && bookmark_wraps(s, rec))
+        .flat_map(|s| [s.start, s.end])
+        .collect()
+}
+
+fn unused_ref_name(taken: &HashSet<String>) -> String {
+    let mut n = 1u32;
+    loop {
+        let name = format!("_Ref{n:09}");
+        if !taken.contains(&name) {
+            return name;
+        }
+        n += 1;
+    }
+}
+
+fn check_ref_bookmark_name(name: &str, i: usize, field: &str) -> Result<(), Error> {
+    if name.is_empty() || name.chars().any(char::is_whitespace) {
+        return Err(Error::with_path(
+            ErrorKind::InvalidBookmarkName,
+            format!("ops[{i}].{field}"),
+        ));
+    }
+    Ok(())
+}
+
+fn fill_caption_para(
+    parent: &Element,
+    para_id: &str,
+    xml_id: &str,
+    name: &str,
+    label: &str,
+    title: Option<&str>,
+) -> Element {
+    let mut p = para::new_paragraph(parent, para_id, "");
+    link::insert_bookmark_start(&mut p, xml_id, name);
+    p.push_element(para::new_text_run(&p, &format!("{label} ")));
+    insert_field(&mut p, &format!(" SEQ {label} \\* ARABIC "), None);
+    link::insert_bookmark_end(&mut p, xml_id);
+    if let Some(t) = title {
+        if !t.is_empty() {
+            let text = if t.starts_with(|c: char| c.is_whitespace()) {
+                t.to_string()
+            } else {
+                format!(" {t}")
+            };
+            p.push_element(para::new_text_run(&p, &text));
+        }
+    }
+    p
+}
+
+pub fn count_captions(root: &Element) -> usize {
+    let recs = collect_fields(root);
+    recs.iter()
+        .enumerate()
+        .filter(|(i, rec)| field_code(&rec.instr) == "SEQ" && !is_nested_field(&recs, *i))
+        .count()
+}
+
+pub fn count_cross_refs(root: &Element) -> usize {
+    let recs = collect_fields(root);
+    recs.iter()
+        .enumerate()
+        .filter(|(i, rec)| {
+            CrossRefKind::from_code(&field_code(&rec.instr)).is_some()
+                && !is_nested_field(&recs, *i)
+        })
+        .count()
+}
+
+pub fn captions_json(root: &Element) -> Result<Vec<Value>, Error> {
+    let index_of = para_index_map(root);
+    let recs = collect_fields(root);
+    let mut out = Vec::new();
+    let mut n = 0usize;
+    for (i, rec) in recs.iter().enumerate() {
+        if field_code(&rec.instr) != "SEQ" || is_nested_field(&recs, i) {
+            continue;
+        }
+        n += 1;
+        out.push(json!({
+            "id": format!("caption:{n}"),
+            "index": n,
+            "field": format!("field:{}", i + 1),
+            "instr": rec.instr,
+            "identifier": first_field_arg(&rec.instr),
+            "bookmark": wrapping_bookmark_name(root, rec),
+            "host": host_para_id(root, &rec.start, None, &index_of),
+            "end": host_para_id(root, &rec.end, None, &index_of),
+            "text": rec.result,
+        }));
+    }
+    Ok(out)
+}
+
+pub fn cross_refs_json(root: &Element) -> Result<Vec<Value>, Error> {
+    let index_of = para_index_map(root);
+    let recs = collect_fields(root);
+    let mut out = Vec::new();
+    let mut n = 0usize;
+    for (i, rec) in recs.iter().enumerate() {
+        let Some(kind) = CrossRefKind::from_code(&field_code(&rec.instr)) else {
+            continue;
+        };
+        if is_nested_field(&recs, i) {
+            continue;
+        }
+        n += 1;
+        out.push(json!({
+            "id": format!("xref:{n}"),
+            "index": n,
+            "kind": kind.as_str(),
+            "field": format!("field:{}", i + 1),
+            "instr": rec.instr,
+            "bookmark": first_field_arg(&rec.instr),
+            "host": host_para_id(root, &rec.start, None, &index_of),
+            "end": host_para_id(root, &rec.end, None, &index_of),
+            "text": rec.result,
+        }));
+    }
+    Ok(out)
+}
+
+fn caption_recs(root: &Element) -> Vec<FieldRec> {
+    let recs = collect_fields(root);
+    recs.iter()
+        .enumerate()
+        .filter(|(i, rec)| field_code(&rec.instr) == "SEQ" && !is_nested_field(&recs, *i))
+        .map(|(_, rec)| rec.clone())
+        .collect()
+}
+
+fn xref_recs(root: &Element) -> Vec<FieldRec> {
+    let recs = collect_fields(root);
+    recs.iter()
+        .enumerate()
+        .filter(|(i, rec)| {
+            CrossRefKind::from_code(&field_code(&rec.instr)).is_some()
+                && !is_nested_field(&recs, *i)
+        })
+        .map(|(_, rec)| rec.clone())
+        .collect()
+}
+
+pub fn insert_caption(
+    root: &mut Element,
+    after: Option<&BodyPara>,
+    label: &str,
+    title: Option<&str>,
+    bookmark: Option<&str>,
+    err_id: &str,
+    op_i: usize,
+) -> Result<(), Error> {
+    let taken = link::all_bookmark_names(root);
+    let name = match bookmark {
+        Some(n) => {
+            check_ref_bookmark_name(n, op_i, "bookmark")?;
+            if taken.contains(n) {
+                return Err(Error::with_path(
+                    ErrorKind::BookmarkNameTaken,
+                    format!("ops[{op_i}].bookmark"),
+                ));
+            }
+            n.to_string()
+        }
+        None => unused_ref_name(&taken),
+    };
+    let xml_id = link::next_bookmark_xml_id(root);
+    let new_id = para::next_para_hex(root);
+    if let Some(para) = after {
+        let path = para::find_paragraph_path(root, para).ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::ParaNotFound {
+                    id: err_id.to_string(),
+                },
+                format!("ops[{op_i}].id"),
+            )
+        })?;
+        let parent_path = path[..path.len().saturating_sub(1)].to_vec();
+        let new_p = {
+            let parent = para::element_at(root, &parent_path).ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::ParaNotFound {
+                        id: err_id.to_string(),
+                    },
+                    format!("ops[{op_i}].id"),
+                )
+            })?;
+            if parent.local_name() != "body" {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidId {
+                        reason: IdReason::InsertCaptionNeedsBodyPara,
+                    },
+                    format!("ops[{op_i}].id"),
+                ));
+            }
+            fill_caption_para(parent, &new_id, &xml_id, &name, label, title)
+        };
+        let (host, idx) = para::parent_and_index_mut(root, &path).ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::ParaNotFound {
+                    id: err_id.to_string(),
+                },
+                format!("ops[{op_i}].id"),
+            )
+        })?;
+        host.children.insert(idx + 1, Node::Element(new_p));
+    } else {
+        let body = para::story_body_mut(root).ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::XmlMissing {
+                    parent: "document".into(),
+                    child: "body".into(),
+                },
+                format!("ops[{op_i}].id"),
+            )
+        })?;
+        let new_p = fill_caption_para(body, &new_id, &xml_id, &name, label, title);
+        para::append_before_body_sect_pr(body, new_p);
+    }
+    Ok(())
+}
+
+pub fn delete_caption(
+    root: &mut Element,
+    n: usize,
+    err_id: &str,
+    op_i: usize,
+) -> Result<(), Error> {
+    let recs = caption_recs(root);
+    if n < 1 || n > recs.len() {
+        return Err(Error::with_path(
+            ErrorKind::CaptionNotFound {
+                id: err_id.to_string(),
+            },
+            format!("ops[{op_i}].id"),
+        ));
+    }
+    let rec = recs.into_iter().nth(n - 1).expect("n 已检查");
+    let start_p = para_prefix_of(root, &rec.start);
+    let end_p = para_prefix_of(root, &rec.end);
+    if let (Some(sp), Some(ep)) = (start_p.as_ref(), end_p.as_ref()) {
+        if sp == ep && sp.len() >= 2 {
+            if let Some(parent) = para::element_at(root, &sp[..sp.len() - 1]) {
+                if parent.local_name() == "body" {
+                    let p = para::element_at(root, sp).ok_or_else(|| xml_broken("caption"))?;
+                    if para::para_has_sect_pr(p) {
+                        return Err(Error::with_path(
+                            ErrorKind::SectionBreakPara,
+                            format!("ops[{op_i}].id"),
+                        ));
+                    }
+                    remove_at(root, sp)?;
+                    ensure_body_has_para(root)?;
+                    return Ok(());
+                }
+            }
+        }
+    }
+    let mut drop = wrapping_ref_paths(root, &rec);
+    drop.extend(blocks_in_closed_range(root, &rec.start, &rec.end));
+    remove_paths(root, drop)?;
+    ensure_body_has_para(root)?;
+    Ok(())
+}
+
+pub fn insert_cross_ref(p: &mut Element, bookmark: &str, kind: CrossRefKind) {
+    let instr = match kind {
+        CrossRefKind::Ref => format!(" REF {bookmark} \\h "),
+        CrossRefKind::Page => format!(" PAGEREF {bookmark} \\h "),
+        CrossRefKind::Note => format!(" NOTEREF {bookmark} \\h "),
+    };
+    insert_field(p, &instr, None);
+}
+
+pub fn delete_cross_ref(
+    root: &mut Element,
+    n: usize,
+    err_id: &str,
+    op_i: usize,
+) -> Result<(), Error> {
+    let recs = xref_recs(root);
+    if n < 1 || n > recs.len() {
+        return Err(Error::with_path(
+            ErrorKind::CrossRefNotFound {
+                id: err_id.to_string(),
+            },
+            format!("ops[{op_i}].id"),
+        ));
+    }
+    let rec = recs.into_iter().nth(n - 1).expect("n 已检查");
+    let blocks = blocks_in_closed_range(root, &rec.start, &rec.end);
+    remove_paths(root, blocks)
 }

@@ -428,6 +428,18 @@ pub(crate) enum IdReason {
     TocIndexFromOne,
     /// insertToc 必须是主文档 body 的直接子段落或 docx:document
     InsertTocNeedsBodyPara,
+    /// 题注 id 必须是 caption:N
+    CaptionPrefix,
+    CaptionIndexNotInt,
+    CaptionIndexFromOne,
+    /// insertCaption 必须是主文档 body 的直接子段落或 docx:document
+    InsertCaptionNeedsBodyPara,
+    /// 交叉引用 id 必须是 xref:N
+    XrefPrefix,
+    XrefIndexNotInt,
+    XrefIndexFromOne,
+    /// insertCrossRef 必须用正文或页眉页脚段落 id
+    InsertCrossRefNeedsPara,
     /// 公式 id 必须是 math:N 或 {容器}/math:N
     MathPrefix,
     MathIndexNotInt,
@@ -819,9 +831,13 @@ define_error_kinds! {
     EmptyHyperlinkFile => vec![Self::EmptyHyperlinkFile],
     FieldNotFound { id: String } => vec![Self::FieldNotFound { id: "field:1".into() }],
     TocNotFound { id: String } => vec![Self::TocNotFound { id: "toc:1".into() }],
+    CaptionNotFound { id: String } => vec![Self::CaptionNotFound { id: "caption:1".into() }],
+    CrossRefNotFound { id: String } => vec![Self::CrossRefNotFound { id: "xref:1".into() }],
     MathNotFound { id: String } => vec![Self::MathNotFound { id: "math:1".into() }],
     ContentControlNotFound { id: String } => vec![Self::ContentControlNotFound { id: "sdt:1".into() }],
     InvalidTocKind => vec![Self::InvalidTocKind],
+    InvalidSeqIdentifier => vec![Self::InvalidSeqIdentifier],
+    InvalidCrossRefKind => vec![Self::InvalidCrossRefKind],
     InvalidMathKind => vec![Self::InvalidMathKind],
     EmptyMathText => vec![Self::EmptyMathText],
     InvalidContentControlKind => vec![Self::InvalidContentControlKind],
@@ -1236,6 +1252,14 @@ impl IdReason {
             Self::TocIndexNotInt,
             Self::TocIndexFromOne,
             Self::InsertTocNeedsBodyPara,
+            Self::CaptionPrefix,
+            Self::CaptionIndexNotInt,
+            Self::CaptionIndexFromOne,
+            Self::InsertCaptionNeedsBodyPara,
+            Self::XrefPrefix,
+            Self::XrefIndexNotInt,
+            Self::XrefIndexFromOne,
+            Self::InsertCrossRefNeedsPara,
             Self::MathPrefix,
             Self::MathIndexNotInt,
             Self::MathIndexFromOne,
@@ -1364,6 +1388,8 @@ impl ErrorKind {
             | Self::SectionTypeOnLastPara
             | Self::CannotDeleteLastSection
             | Self::InvalidTocKind
+            | Self::InvalidSeqIdentifier
+            | Self::InvalidCrossRefKind
             | Self::InvalidMathKind
             | Self::EmptyMathText
             | Self::InvalidContentControlKind
@@ -1605,6 +1631,8 @@ impl ErrorKind {
             | Self::BookmarkNotFound { .. }
             | Self::FieldNotFound { .. }
             | Self::TocNotFound { .. }
+            | Self::CaptionNotFound { .. }
+            | Self::CrossRefNotFound { .. }
             | Self::MathNotFound { .. }
             | Self::ContentControlNotFound { .. }
             | Self::NumberingNotFound { .. }

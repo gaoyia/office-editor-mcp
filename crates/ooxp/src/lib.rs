@@ -910,6 +910,8 @@ mod tests {
                 "bookmarkCount",
                 "fieldCount",
                 "tocCount",
+                "captionCount",
+                "crossRefCount",
                 "mathCount",
                 "contentControlCount",
                 "numberingCount",

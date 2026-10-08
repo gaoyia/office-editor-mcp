@@ -20,10 +20,11 @@ use super::para::{self, BodyPara, HostPara, NoteKind, ParaTarget};
 use super::picture;
 use super::protect;
 use super::request::{
-    DeleteBookmarkOp, DeleteColOp, DeleteCommentOp, DeleteContentControlOp, DeleteFieldOp,
-    DeleteHyperlinkOp, DeleteMathOp, DeleteNoteOp, DeleteParaOp, DeletePictureOp, DeleteRowOp,
-    DeleteSectionOp, DeleteTableOp, DeleteTextBoxOp, DeleteTocOp, DocxOp, InsertBookmarkOp,
-    InsertColOp, InsertCommentOp, InsertContentControlOp, InsertFieldOp, InsertHeaderFooterOp,
+    DeleteBookmarkOp, DeleteCaptionOp, DeleteColOp, DeleteCommentOp, DeleteContentControlOp,
+    DeleteCrossRefOp, DeleteFieldOp, DeleteHyperlinkOp, DeleteMathOp, DeleteNoteOp, DeleteParaOp,
+    DeletePictureOp, DeleteRowOp, DeleteSectionOp, DeleteTableOp, DeleteTextBoxOp, DeleteTocOp,
+    DocxOp, InsertBookmarkOp, InsertCaptionOp, InsertCaptionPlace, InsertColOp, InsertCommentOp,
+    InsertContentControlOp, InsertCrossRefOp, InsertFieldOp, InsertHeaderFooterOp,
     InsertHyperlinkOp, InsertMathOp, InsertMathPlace, InsertNoteOp, InsertNumberingOp,
     InsertParaOp, InsertParaPlace, InsertPictureOp, InsertRowOp, InsertSdtPlace, InsertSectionOp,
     InsertSectionPlace, InsertTableOp, InsertTextBoxOp, InsertTocOp, InsertTocPlace, MergeCellsOp,
@@ -106,6 +107,18 @@ pub fn apply(bytes: &[u8], ops: &[DocxOp]) -> Result<Vec<u8>, Error> {
             }
             DocxOp::DeleteToc(op) => {
                 apply_delete_toc(&mut docs, &mut dirty, &doc_part, op, i)?;
+            }
+            DocxOp::InsertCaption(op) => {
+                apply_insert_caption(&mut docs, &mut dirty, &doc_part, op, i)?;
+            }
+            DocxOp::DeleteCaption(op) => {
+                apply_delete_caption(&mut docs, &mut dirty, &doc_part, op, i)?;
+            }
+            DocxOp::InsertCrossRef(op) => {
+                apply_insert_cross_ref(&pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
+            }
+            DocxOp::DeleteCrossRef(op) => {
+                apply_delete_cross_ref(&mut docs, &mut dirty, &doc_part, op, i)?;
             }
             DocxOp::InsertMath(op) => {
                 apply_insert_math(&pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
@@ -1904,6 +1917,90 @@ fn apply_delete_toc(
 ) -> Result<(), Error> {
     let doc = docs.get_mut(doc_part).unwrap();
     field::delete_toc(&mut doc.root, op.n, &op.id, i)?;
+    dirty.insert(doc_part.to_string(), ());
+    Ok(())
+}
+
+fn apply_insert_caption(
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    op: &InsertCaptionOp,
+    i: usize,
+) -> Result<(), Error> {
+    let doc = docs.get_mut(doc_part).unwrap();
+    let after = match &op.place {
+        InsertCaptionPlace::After(p) => Some(p),
+        InsertCaptionPlace::EndOfDocument => None,
+    };
+    field::insert_caption(
+        &mut doc.root,
+        after,
+        &op.label,
+        op.title.as_deref(),
+        op.bookmark.as_deref(),
+        &op.id,
+        i,
+    )?;
+    dirty.insert(doc_part.to_string(), ());
+    Ok(())
+}
+
+fn apply_delete_caption(
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    op: &DeleteCaptionOp,
+    i: usize,
+) -> Result<(), Error> {
+    let doc = docs.get_mut(doc_part).unwrap();
+    field::delete_caption(&mut doc.root, op.n, &op.id, i)?;
+    dirty.insert(doc_part.to_string(), ());
+    Ok(())
+}
+
+fn apply_insert_cross_ref(
+    pkg: &Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &InsertCrossRefOp,
+    i: usize,
+) -> Result<(), Error> {
+    {
+        let main = docs.get(doc_part).unwrap();
+        if !link::all_bookmark_names(&main.root).contains(&op.bookmark) {
+            return Err(Error::with_path(
+                ErrorKind::BookmarkNotFound {
+                    id: op.bookmark.clone(),
+                },
+                format!("ops[{i}].bookmark"),
+            ));
+        }
+    }
+    let part_name = part_for_para(pkg, catalog, doc_part, &op.para, &op.id, i)?;
+    let doc = load_part(pkg, docs, &part_name)?;
+    let el = find_insert_para_mut(&mut doc.root, &op.para).ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::ParaNotFound { id: op.id.clone() },
+            format!("ops[{i}].id"),
+        )
+    })?;
+    field::insert_cross_ref(el, &op.bookmark, op.kind);
+    dirty.insert(part_name, ());
+    Ok(())
+}
+
+fn apply_delete_cross_ref(
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    op: &DeleteCrossRefOp,
+    i: usize,
+) -> Result<(), Error> {
+    let doc = docs.get_mut(doc_part).unwrap();
+    field::delete_cross_ref(&mut doc.root, op.n, &op.id, i)?;
     dirty.insert(doc_part.to_string(), ());
     Ok(())
 }

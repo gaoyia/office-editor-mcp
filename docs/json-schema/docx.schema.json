@@ -1470,6 +1470,96 @@
         }
       }
     },
+    "insertCaptionOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "insertCaption"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1
+        },
+        "title": {
+          "type": "string"
+        },
+        "bookmark": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "deleteCaptionOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "deleteCaption"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "insertCrossRefOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "bookmark"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "insertCrossRef"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "bookmark": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "enum": [
+            "ref",
+            "page"
+          ]
+        }
+      }
+    },
+    "deleteCrossRefOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "deleteCrossRef"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
     "insertMathOp": {
       "type": "object",
       "required": [

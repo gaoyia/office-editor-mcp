@@ -617,6 +617,19 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::InsertTocNeedsBodyPara => {
                 "insertToc id must be a direct child paragraph of w:body, or docx:document".into()
             }
+            IdReason::CaptionPrefix => "Caption id must be caption:N".into(),
+            IdReason::CaptionIndexNotInt => "caption index must be a positive integer".into(),
+            IdReason::CaptionIndexFromOne => "caption index starts at 1".into(),
+            IdReason::InsertCaptionNeedsBodyPara => {
+                "insertCaption id must be a direct child paragraph of w:body, or docx:document"
+                    .into()
+            }
+            IdReason::XrefPrefix => "Cross-reference id must be xref:N".into(),
+            IdReason::XrefIndexNotInt => "xref index must be a positive integer".into(),
+            IdReason::XrefIndexFromOne => "xref index starts at 1".into(),
+            IdReason::InsertCrossRefNeedsPara => {
+                "insertCrossRef id must be a body or header/footer paragraph id".into()
+            }
             IdReason::MathPrefix => {
                 "Math id must be math:N or a header/footer container id plus /math:N".into()
             }
@@ -716,6 +729,10 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::InvalidTocKind => {
             "kind must be toc, tof, or toa; instr must start with TOC or TOA".into()
         }
+        ErrorKind::InvalidSeqIdentifier => {
+            "label must be a SEQ identifier: a Latin letter followed by up to 39 Latin letters, digits, or underscores".into()
+        }
+        ErrorKind::InvalidCrossRefKind => "kind must be ref or page".into(),
         ErrorKind::CommentNotFound { id } => format!("Comment not found: {id}"),
         ErrorKind::NeedCommentParaId => {
             "The last paragraph of the comment must have w14:paraId to write commentsExtended".into()
@@ -1167,6 +1184,8 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::EmptyHyperlinkFile => "file must not be empty".into(),
         ErrorKind::FieldNotFound { id } => format!("Field not found: {id}"),
         ErrorKind::TocNotFound { id } => format!("Table of contents not found: {id}"),
+        ErrorKind::CaptionNotFound { id } => format!("Caption not found: {id}"),
+        ErrorKind::CrossRefNotFound { id } => format!("Cross-reference not found: {id}"),
         ErrorKind::MathNotFound { id } => format!("Equation not found: {id}"),
         ErrorKind::ContentControlNotFound { id } => format!("Content control not found: {id}"),
         ErrorKind::SetParaTextHasField => {

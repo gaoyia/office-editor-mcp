@@ -52,6 +52,10 @@ pub struct InspectScope {
     pub fields: bool,
     /// 为 true 时列出目录块。
     pub tocs: bool,
+    /// 为 true 时列出题注。
+    pub captions: bool,
+    /// 为 true 时列出交叉引用。
+    pub cross_refs: bool,
     /// 为 true 时列出公式。
     pub maths: bool,
     /// 为 true 时列出内容控件。
@@ -659,6 +663,41 @@ pub struct DeleteTocOp {
 }
 
 #[derive(Debug, Clone)]
+pub enum InsertCaptionPlace {
+    After(para::BodyPara),
+    EndOfDocument,
+}
+
+#[derive(Debug, Clone)]
+pub struct InsertCaptionOp {
+    pub id: String,
+    pub place: InsertCaptionPlace,
+    pub label: String,
+    pub title: Option<String>,
+    pub bookmark: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct DeleteCaptionOp {
+    pub id: String,
+    pub n: usize,
+}
+
+#[derive(Debug, Clone)]
+pub struct InsertCrossRefOp {
+    pub id: String,
+    pub para: ParaTarget,
+    pub bookmark: String,
+    pub kind: super::field::CrossRefKind,
+}
+
+#[derive(Debug, Clone)]
+pub struct DeleteCrossRefOp {
+    pub id: String,
+    pub n: usize,
+}
+
+#[derive(Debug, Clone)]
 pub enum InsertMathPlace {
     After(ParaTarget),
     EndOfDocument,
@@ -731,6 +770,10 @@ pub enum DocxOp {
     DeleteSection(DeleteSectionOp),
     InsertToc(InsertTocOp),
     DeleteToc(DeleteTocOp),
+    InsertCaption(InsertCaptionOp),
+    DeleteCaption(DeleteCaptionOp),
+    InsertCrossRef(InsertCrossRefOp),
+    DeleteCrossRef(DeleteCrossRefOp),
     InsertMath(InsertMathOp),
     SetMath(SetMathOp),
     DeleteMath(DeleteMathOp),
@@ -878,6 +921,8 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
             "bookmarks",
             "fields",
             "tocs",
+            "captions",
+            "crossRefs",
             "maths",
             "contentControls",
             "numbering",
@@ -902,6 +947,8 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
     let bookmarks = parse_bool_field(obj.get("bookmarks"), "bookmarks")?;
     let fields = parse_bool_field(obj.get("fields"), "fields")?;
     let tocs = parse_bool_field(obj.get("tocs"), "tocs")?;
+    let captions = parse_bool_field(obj.get("captions"), "captions")?;
+    let cross_refs = parse_bool_field(obj.get("crossRefs"), "crossRefs")?;
     let maths = parse_bool_field(obj.get("maths"), "maths")?;
     let content_controls = parse_bool_field(obj.get("contentControls"), "contentControls")?;
     let numbering = parse_bool_field(obj.get("numbering"), "numbering")?;
@@ -936,6 +983,8 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
                 && !obj.contains_key("bookmarks")
                 && !obj.contains_key("fields")
                 && !obj.contains_key("tocs")
+                && !obj.contains_key("captions")
+                && !obj.contains_key("crossRefs")
                 && !obj.contains_key("maths")
                 && !obj.contains_key("contentControls")
                 && !obj.contains_key("numbering")
@@ -963,6 +1012,8 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
                 bookmarks,
                 fields,
                 tocs,
+                captions,
+                cross_refs,
                 maths,
                 content_controls,
                 numbering,
@@ -1027,6 +1078,8 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
                 bookmarks,
                 fields,
                 tocs,
+                captions,
+                cross_refs,
                 maths,
                 content_controls,
                 numbering,
@@ -1200,6 +1253,10 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<DocxOp>, Error> {
             "deleteSection" => out.push(DocxOp::DeleteSection(parse_delete_section(obj, i)?)),
             "insertToc" => out.push(DocxOp::InsertToc(parse_insert_toc(obj, i)?)),
             "deleteToc" => out.push(DocxOp::DeleteToc(parse_delete_toc(obj, i)?)),
+            "insertCaption" => out.push(DocxOp::InsertCaption(parse_insert_caption(obj, i)?)),
+            "deleteCaption" => out.push(DocxOp::DeleteCaption(parse_delete_caption(obj, i)?)),
+            "insertCrossRef" => out.push(DocxOp::InsertCrossRef(parse_insert_cross_ref(obj, i)?)),
+            "deleteCrossRef" => out.push(DocxOp::DeleteCrossRef(parse_delete_cross_ref(obj, i)?)),
             "insertMath" => out.push(DocxOp::InsertMath(parse_insert_math(obj, i)?)),
             "setMath" => out.push(DocxOp::SetMath(parse_set_math(obj, i)?)),
             "deleteMath" => out.push(DocxOp::DeleteMath(parse_delete_math(obj, i)?)),
@@ -1743,6 +1800,158 @@ fn parse_delete_toc(obj: &serde_json::Map<String, Value>, i: usize) -> Result<De
     Ok(DeleteTocOp { id, n })
 }
 
+fn parse_insert_caption(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<InsertCaptionOp, Error> {
+    deny_keys(obj, i, &["op", "id", "label", "title", "bookmark"])?;
+    let id = require_op_id(obj, i)?;
+    let label = match obj.get("label") {
+        None => "Figure".to_string(),
+        Some(Value::String(s)) => {
+            super::field::parse_seq_identifier(s)
+                .map_err(|kind| Error::with_path(kind, format!("ops[{i}].label")))?;
+            s.clone()
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "label".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].label"),
+            ));
+        }
+    };
+    let title = optional_op_string(obj, i, "title")?;
+    let bookmark = match obj.get("bookmark") {
+        None => None,
+        Some(Value::String(s)) => {
+            if s.is_empty() || s.chars().any(char::is_whitespace) {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidBookmarkName,
+                    format!("ops[{i}].bookmark"),
+                ));
+            }
+            Some(s.clone())
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "bookmark".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].bookmark"),
+            ));
+        }
+    };
+    let path = format!("ops[{i}].id");
+    let place = if id == "docx:document" {
+        InsertCaptionPlace::EndOfDocument
+    } else {
+        match para::parse_para_id_at(&id, &path)? {
+            ParaTarget::Body(p) => InsertCaptionPlace::After(p),
+            _ => {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidId {
+                        reason: IdReason::InsertCaptionNeedsBodyPara,
+                    },
+                    path,
+                ));
+            }
+        }
+    };
+    Ok(InsertCaptionOp {
+        id,
+        place,
+        label,
+        title,
+        bookmark,
+    })
+}
+
+fn parse_delete_caption(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<DeleteCaptionOp, Error> {
+    deny_keys(obj, i, &["op", "id"])?;
+    let id = require_op_id(obj, i)?;
+    let n = parse_caption_id(&id, i)?;
+    Ok(DeleteCaptionOp { id, n })
+}
+
+fn parse_insert_cross_ref(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<InsertCrossRefOp, Error> {
+    deny_keys(obj, i, &["op", "id", "bookmark", "kind"])?;
+    let id = require_op_id(obj, i)?;
+    let para = parse_story_para_at(
+        &id,
+        &format!("ops[{i}].id"),
+        IdReason::InsertCrossRefNeedsPara,
+    )?;
+    let bookmark = match obj.get("bookmark") {
+        Some(Value::String(s)) => {
+            if s.is_empty() || s.chars().any(char::is_whitespace) {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidBookmarkName,
+                    format!("ops[{i}].bookmark"),
+                ));
+            }
+            s.clone()
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "bookmark".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].bookmark"),
+            ));
+        }
+        None => {
+            return Err(Error::with_path(
+                ErrorKind::OpRequiresField {
+                    op: "insertCrossRef".into(),
+                    field: "bookmark".into(),
+                },
+                format!("ops[{i}].bookmark"),
+            ));
+        }
+    };
+    let kind = match obj.get("kind") {
+        None => super::field::CrossRefKind::Ref,
+        Some(Value::String(s)) => super::field::parse_cross_ref_kind(s)
+            .map_err(|kind| Error::with_path(kind, format!("ops[{i}].kind")))?,
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "kind".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].kind"),
+            ));
+        }
+    };
+    Ok(InsertCrossRefOp {
+        id,
+        para,
+        bookmark,
+        kind,
+    })
+}
+
+fn parse_delete_cross_ref(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<DeleteCrossRefOp, Error> {
+    deny_keys(obj, i, &["op", "id"])?;
+    let id = require_op_id(obj, i)?;
+    let n = parse_xref_id(&id, i)?;
+    Ok(DeleteCrossRefOp { id, n })
+}
+
 fn parse_insert_math(
     obj: &serde_json::Map<String, Value>,
     i: usize,
@@ -2098,6 +2307,64 @@ fn parse_toc_id(id: &str, op_index: usize) -> Result<usize, Error> {
         return Err(Error::with_path(
             ErrorKind::InvalidId {
                 reason: IdReason::TocIndexFromOne,
+            },
+            path,
+        ));
+    }
+    Ok(n)
+}
+
+fn parse_caption_id(id: &str, op_index: usize) -> Result<usize, Error> {
+    let path = format!("ops[{op_index}].id");
+    let rest = id.strip_prefix("caption:").ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::CaptionPrefix,
+            },
+            path.clone(),
+        )
+    })?;
+    let n: usize = rest.parse().map_err(|_| {
+        Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::CaptionIndexNotInt,
+            },
+            path.clone(),
+        )
+    })?;
+    if n < 1 {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::CaptionIndexFromOne,
+            },
+            path,
+        ));
+    }
+    Ok(n)
+}
+
+fn parse_xref_id(id: &str, op_index: usize) -> Result<usize, Error> {
+    let path = format!("ops[{op_index}].id");
+    let rest = id.strip_prefix("xref:").ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::XrefPrefix,
+            },
+            path.clone(),
+        )
+    })?;
+    let n: usize = rest.parse().map_err(|_| {
+        Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::XrefIndexNotInt,
+            },
+            path.clone(),
+        )
+    })?;
+    if n < 1 {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::XrefIndexFromOne,
             },
             path,
         ));

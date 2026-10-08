@@ -253,6 +253,12 @@
         "tocs": {
           "type": "boolean"
         },
+        "captions": {
+          "type": "boolean"
+        },
+        "crossRefs": {
+          "type": "boolean"
+        },
         "maths": {
           "type": "boolean"
         },
@@ -757,6 +763,18 @@
               },
               {
                 "$ref": "docx.schema.json#/$defs/deleteTocOp"
+              },
+              {
+                "$ref": "docx.schema.json#/$defs/insertCaptionOp"
+              },
+              {
+                "$ref": "docx.schema.json#/$defs/deleteCaptionOp"
+              },
+              {
+                "$ref": "docx.schema.json#/$defs/insertCrossRefOp"
+              },
+              {
+                "$ref": "docx.schema.json#/$defs/deleteCrossRefOp"
               },
               {
                 "$ref": "docx.schema.json#/$defs/insertMathOp"

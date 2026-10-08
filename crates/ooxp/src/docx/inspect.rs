@@ -121,6 +121,8 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         "bookmarkCount": link::count_bookmarks(&doc.root),
         "fieldCount": field::count_fields(&doc.root),
         "tocCount": field::count_tocs(&doc.root),
+        "captionCount": field::count_captions(&doc.root),
+        "crossRefCount": field::count_cross_refs(&doc.root),
         "mathCount": math::count_maths(&doc.root),
         "contentControlCount": sdt::count_sdts(&doc.root),
         "numberingCount": numbering::count_nums(&pkg, &part)?,
@@ -215,6 +217,12 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         }
         if scope.tocs {
             tree["tocs"] = Value::Array(field::tocs_json(&doc.root)?);
+        }
+        if scope.captions {
+            tree["captions"] = Value::Array(field::captions_json(&doc.root)?);
+        }
+        if scope.cross_refs {
+            tree["crossRefs"] = Value::Array(field::cross_refs_json(&doc.root)?);
         }
         if scope.maths {
             tree["maths"] = Value::Array(math::maths_json(&doc.root, None)?);

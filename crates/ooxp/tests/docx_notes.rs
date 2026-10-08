@@ -168,6 +168,8 @@ fn inspect_counts_without_lists() {
             "bookmarkCount",
             "fieldCount",
             "tocCount",
+            "captionCount",
+            "crossRefCount",
             "mathCount",
             "contentControlCount",
             "numberingCount",
