@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "C:\\data\\note.docx",
+  "output": "C:\\data\\note.theme.docx",
+  "ops": [
+    { "op": "setThemeColors", "id": "docx:document", "accent1": "FF0000" },
+    { "op": "setThemeFonts", "id": "docx:document", "majorLatin": "Arial" }
+  ]
+}

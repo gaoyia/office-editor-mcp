@@ -1,22 +1,18 @@
 //! 幻灯片尺寸与母版 theme：inspect `slideSize` / `theme`，改 `sldSz`、`clrScheme`、`fontScheme`。
 //! 不按新画布重排，不重写 `fmtScheme`。
 
-use serde_json::{json, Map, Value};
+use serde_json::{json, Value};
 
 use crate::error::{Error, ErrorKind};
 use crate::opc::{self, Package, Relationships};
 use crate::xml::{self, Document, Element, Node};
 
 use super::master;
-use super::picture;
+
+pub use crate::theme::{FontSlot, COLOR_SLOTS};
 
 pub const SLIDE_SIZE_MIN: i64 = 914_400;
 pub const SLIDE_SIZE_MAX: i64 = 51_206_400;
-
-pub const COLOR_SLOTS: &[&str] = &[
-    "dk1", "lt1", "dk2", "lt2", "accent1", "accent2", "accent3", "accent4", "accent5", "accent6",
-    "hlink", "folHlink",
-];
 
 pub fn is_slide_size_type(ty: &str) -> bool {
     matches!(
@@ -97,18 +93,7 @@ pub fn theme_json(pkg: &Package, master_part: &str) -> Result<Value, Error> {
         return Ok(Value::Null);
     };
     let doc = xml::parse(pkg.get(&part)?)?;
-    let name = doc
-        .root
-        .attr_local("name")
-        .filter(|s| !s.is_empty())
-        .map(str::to_string);
-    let colors = color_scheme_json(&doc.root);
-    let fonts = font_scheme_json(&doc.root);
-    Ok(json!({
-        "name": name,
-        "colors": colors,
-        "fonts": fonts,
-    }))
+    Ok(crate::theme::inspect(&doc.root))
 }
 
 pub fn set_theme_colors(
@@ -122,19 +107,11 @@ pub fn set_theme_colors(
     let json_path = format!("ops[{op_index}].id");
     let part = theme_part_for_master(pkg, pres_part, pres_root, master, &json_path)?;
     let mut doc = xml::parse(pkg.get(&part)?)?;
-    picture::ensure_xmlns(&mut doc.root, "a", super::DML_NS);
-    let scheme = doc
-        .root
-        .child_by_local_mut("themeElements")
-        .and_then(|e| e.child_by_local_mut("clrScheme"))
-        .ok_or_else(|| {
-            Error::with_path(
-                ErrorKind::ThemeNotFound { n: master as u32 },
-                json_path.clone(),
-            )
-        })?;
-    for (slot, hex) in slots {
-        upsert_srgb_slot(scheme, slot, hex);
+    if !crate::theme::patch_colors(&mut doc.root, slots) {
+        return Err(Error::with_path(
+            ErrorKind::ThemeNotFound { n: master as u32 },
+            json_path,
+        ));
     }
     pkg.set(&part, doc.to_bytes()?)?;
     Ok(())
@@ -151,68 +128,9 @@ pub fn set_theme_fonts(
     let json_path = format!("ops[{op_index}].id");
     let part = theme_part_for_master(pkg, pres_part, pres_root, master, &json_path)?;
     let mut doc = xml::parse(pkg.get(&part)?)?;
-    picture::ensure_xmlns(&mut doc.root, "a", super::DML_NS);
-    if doc.root.child_by_local("themeElements").is_none() {
-        doc.root
-            .children
-            .insert(0, Node::Element(Element::new("a:themeElements")));
-    }
-    let elements = doc
-        .root
-        .child_by_local_mut("themeElements")
-        .ok_or_else(|| {
-            Error::with_path(
-                ErrorKind::XmlMissing {
-                    parent: "theme".into(),
-                    child: "themeElements".into(),
-                },
-                json_path.clone(),
-            )
-        })?;
-    if elements.child_by_local("fontScheme").is_none() {
-        elements.push_element(Element::new("a:fontScheme").with_attr("name", "Office"));
-    }
-    let scheme = elements.child_by_local_mut("fontScheme").ok_or_else(|| {
-        Error::with_path(
-            ErrorKind::XmlMissing {
-                parent: "themeElements".into(),
-                child: "fontScheme".into(),
-            },
-            json_path,
-        )
-    })?;
-    for (slot, face) in patches {
-        set_typeface(scheme, *slot, face);
-    }
+    crate::theme::patch_fonts(&mut doc.root, patches, &json_path)?;
     pkg.set(&part, doc.to_bytes()?)?;
     Ok(())
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum FontSlot {
-    MajorLatin,
-    MinorLatin,
-    MajorEa,
-    MinorEa,
-    MajorCs,
-    MinorCs,
-}
-
-impl FontSlot {
-    fn group(self) -> &'static str {
-        match self {
-            Self::MajorLatin | Self::MajorEa | Self::MajorCs => "majorFont",
-            Self::MinorLatin | Self::MinorEa | Self::MinorCs => "minorFont",
-        }
-    }
-
-    fn face(self) -> &'static str {
-        match self {
-            Self::MajorLatin | Self::MinorLatin => "latin",
-            Self::MajorEa | Self::MinorEa => "ea",
-            Self::MajorCs | Self::MinorCs => "cs",
-        }
-    }
 }
 
 fn theme_part_for_master(
@@ -247,113 +165,6 @@ fn theme_part(pkg: &Package, master_part: &str) -> Result<Option<String>, Error>
         return Ok(None);
     };
     Ok(Some(opc::resolve_id(pkg, master_part, &rel.id)?))
-}
-
-fn color_scheme_json(root: &Element) -> Value {
-    let mut obj = Map::new();
-    let scheme = root
-        .child_by_local("themeElements")
-        .and_then(|e| e.child_by_local("clrScheme"));
-    obj.insert(
-        "name".into(),
-        json!(scheme
-            .and_then(|s| s.attr_local("name"))
-            .filter(|s| !s.is_empty())),
-    );
-    for slot in COLOR_SLOTS {
-        obj.insert((*slot).into(), json!(slot_hex(scheme, slot)));
-    }
-    Value::Object(obj)
-}
-
-fn font_scheme_json(root: &Element) -> Value {
-    let scheme = root
-        .child_by_local("themeElements")
-        .and_then(|e| e.child_by_local("fontScheme"));
-    let mut obj = Map::new();
-    obj.insert(
-        "name".into(),
-        json!(scheme
-            .and_then(|s| s.attr_local("name"))
-            .filter(|s| !s.is_empty())),
-    );
-    obj.insert(
-        "majorLatin".into(),
-        json!(typeface_of(scheme, "majorFont", "latin")),
-    );
-    obj.insert(
-        "minorLatin".into(),
-        json!(typeface_of(scheme, "minorFont", "latin")),
-    );
-    obj.insert(
-        "majorEa".into(),
-        json!(typeface_of(scheme, "majorFont", "ea")),
-    );
-    obj.insert(
-        "minorEa".into(),
-        json!(typeface_of(scheme, "minorFont", "ea")),
-    );
-    obj.insert(
-        "majorCs".into(),
-        json!(typeface_of(scheme, "majorFont", "cs")),
-    );
-    obj.insert(
-        "minorCs".into(),
-        json!(typeface_of(scheme, "minorFont", "cs")),
-    );
-    Value::Object(obj)
-}
-
-fn slot_hex(scheme: Option<&Element>, slot: &str) -> Option<String> {
-    let el = scheme?.child_by_local(slot)?;
-    if let Some(v) = el
-        .child_by_local("srgbClr")
-        .and_then(|e| e.attr_local("val"))
-        .filter(|s| !s.is_empty())
-    {
-        return Some(v.to_string());
-    }
-    el.child_by_local("sysClr")
-        .and_then(|e| e.attr_local("lastClr"))
-        .filter(|s| !s.is_empty())
-        .map(str::to_string)
-}
-
-fn typeface_of(scheme: Option<&Element>, group: &str, face: &str) -> Option<String> {
-    scheme?
-        .child_by_local(group)
-        .and_then(|g| e_child(g, face))
-        .and_then(|e| e.attr_local("typeface"))
-        .map(str::to_string)
-}
-
-fn e_child<'a>(el: &'a Element, local: &str) -> Option<&'a Element> {
-    el.child_by_local(local)
-}
-
-fn upsert_srgb_slot(scheme: &mut Element, slot: &str, hex: &str) {
-    if let Some(el) = scheme.child_by_local_mut(slot) {
-        el.children.clear();
-        el.push_element(Element::new("a:srgbClr").with_attr("val", hex));
-        return;
-    }
-    let mut el = Element::new(format!("a:{slot}"));
-    el.push_element(Element::new("a:srgbClr").with_attr("val", hex));
-    scheme.push_element(el);
-}
-
-fn set_typeface(scheme: &mut Element, slot: FontSlot, face: &str) {
-    if scheme.child_by_local(slot.group()).is_none() {
-        scheme.push_element(Element::new(format!("a:{}", slot.group())));
-    }
-    let Some(group) = scheme.child_by_local_mut(slot.group()) else {
-        return;
-    };
-    if let Some(el) = group.child_by_local_mut(slot.face()) {
-        el.set_attr("typeface", face);
-        return;
-    }
-    group.push_element(Element::new(format!("a:{}", slot.face())).with_attr("typeface", face));
 }
 
 fn parse_emu(raw: Option<&str>) -> Value {

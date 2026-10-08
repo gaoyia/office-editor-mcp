@@ -140,6 +140,8 @@ docx create 同样生成 Transitional 包，命名空间用 2006 那套。
 | `/word/styles.xml` | 至少含 Normal、Heading1、Heading2、Heading3 |
 | `/word/settings.xml` | 最小文档设置。必须含 `compatibilityMode`，`val` 为 `15`（MS-DOCX §2.3.5），否则 Word 按兼容模式打开（默认 12）。给了 `document.protection` 或 apply `setProtection` 时还可含 `documentProtection` / `writeProtection` |
 
+inspect 认主文档 `.rels` 里 Type 以 `/theme` 结尾的部件（Word 16.0 另存常见 `/word/theme/theme1.xml`）。create 不写该部件。apply 的 `setThemeColors` / `setThemeFonts` 只改已有 theme，不新建。
+
 可选但 create 要写：
 
 | 路径 | 作用 |
@@ -166,9 +168,17 @@ Document Settings：
 
 `application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml`
 
+Theme（inspect 认，create 不写）：
+
+`application/vnd.openxmlformats-officedocument.theme+xml`
+
 settings 关系 Type：
 
 `http://schemas.openxmlformats.org/officeDocument/2006/relationships/settings`
+
+theme 关系 Type：
+
+`http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme`
 
 `compatibilityMode` 的 `w:uri` 必须是 `http://schemas.microsoft.com/office/word`。
 

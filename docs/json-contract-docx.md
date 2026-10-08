@@ -14,7 +14,7 @@
 
 没有 `w14:paraId` 时：`para:index:{n}`，`n` 从 1 起，按主文档部件里 `w:p` 的文档顺序（含表格单元格里的段落）。树上同时给 `"stable": false`。这类 id 在增删段落后会变，只够同一次 inspect 之后立刻 apply。
 
-标题和正文都是段落，不另编一套 id。脚注、尾注、批注都是独立故事：根上始终有计数；给了对应 `scope` 才列出名单，并可 apply。分隔符三条不进用户名单，禁止 apply。文本框是独立节点：框本身、框内段落与框内图按下面规则进树，并可 apply。页眉、页脚按下面规则进树，可按 id 改字；节上的页眉页脚距边界、页面边距、纸张、分栏、垂直对齐、行号、文档网格、装订线侧，以及是否链接到前一节，都可以读写。整篇的镜像边距与装订线在上，写在 `settings.xml`。页眉、页脚、正文、注和批注里的 DrawingML 图片可查、换、插、删，并可改尺寸与绕排。正文与页眉页脚里的嵌入对象（OLE / 包）可查、插、删，并可按 id 导出嵌入部件；框内、注内、批注内的 OLE 本期不编。正文与页眉页脚里的 `w:tbl` 可查、插、删，并可插删行与列、合并与拆分单元格。正文与页眉页脚里的 run 级插入、删除与段落/run 属性修订可按范围列出，并可接受或拒绝被点名的一条。apply 可用 `insertHeaderFooter` 为某节某类型新建页眉或页脚部件，可用 `setTitlePage` 写本节 `w:titlePg`，可用 `setEvenAndOddHeaders` 写整篇 `w:evenAndOddHeaders`，可用 `insertSection` 在某段之后插入分节符，可用 `deleteSection` 删掉非末节并把内容并进下一节，可用 `insertToc` 插入目录域、用 `deleteToc` 删掉目录块，可用 `insertMath` / `setMath` / `deleteMath` 插改删 OMML 公式，可用 `insertContentControl` / `setContentControl` / `deleteContentControl` 插改删内容控件。docx 可用 `setProtection` 开关无密码的限制编辑与只读推荐。xlsx 可用同一 `op` 开关工作表保护与工作簿结构保护（可写 SHA-512 哈希），不要复用 docx 根上那个 `protection` 对象。docx 可用 `insertWatermark` / `deleteWatermark` 读写页眉里的 DrawingML 水印。三种格式都可用 `setProps` / `setCustomProp` / `deleteCustomProp` 改文件属性。`create` 可在正文和页眉页脚上写 DrawingML 图，也可写文本框、SmartArt、图表、脚注、尾注与批注；页眉页脚允许 `default` / `even` / `first`；不写修订。字段见下文 create。嵌入图表不是 `pic:pic`：根上始终有 `chartCount`；给了 `scope.charts` 才列出名单，并可 apply。SmartArt 不是 `pic:pic`：根上始终有 `smartArtCount`；给了 `scope.smartArt` 才列出名单，并可 apply。正文与页眉页脚、文本框、脚注、尾注、批注里的图表与 SmartArt 走同一套 op，id 带所在段落前缀。注内与批注内的文本框同样进树，并可 apply。框内再套框仍拒绝。
+标题和正文都是段落，不另编一套 id。脚注、尾注、批注都是独立故事：根上始终有计数；给了对应 `scope` 才列出名单，并可 apply。分隔符三条不进用户名单，禁止 apply。文本框是独立节点：框本身、框内段落与框内图按下面规则进树，并可 apply。页眉、页脚按下面规则进树，可按 id 改字；节上的页眉页脚距边界、页面边距、纸张、分栏、垂直对齐、行号、文档网格、装订线侧，以及是否链接到前一节，都可以读写。整篇的镜像边距与装订线在上，写在 `settings.xml`。页眉、页脚、正文、注和批注里的 DrawingML 图片可查、换、插、删，并可改尺寸与绕排。正文与页眉页脚里的嵌入对象（OLE / 包）可查、插、删，并可按 id 导出嵌入部件；框内、注内、批注内的 OLE 本期不编。正文与页眉页脚里的 `w:tbl` 可查、插、删，并可插删行与列、合并与拆分单元格。正文与页眉页脚里的 run 级插入、删除与段落/run 属性修订可按范围列出，并可接受或拒绝被点名的一条。apply 可用 `insertHeaderFooter` 为某节某类型新建页眉或页脚部件，可用 `setTitlePage` 写本节 `w:titlePg`，可用 `setEvenAndOddHeaders` 写整篇 `w:evenAndOddHeaders`，可用 `insertSection` 在某段之后插入分节符，可用 `deleteSection` 删掉非末节并把内容并进下一节，可用 `insertToc` 插入目录域、用 `deleteToc` 删掉目录块，可用 `insertMath` / `setMath` / `deleteMath` 插改删 OMML 公式，可用 `insertContentControl` / `setContentControl` / `deleteContentControl` 插改删内容控件。docx 可用 `setProtection` 开关无密码的限制编辑与只读推荐。xlsx 可用同一 `op` 开关工作表保护与工作簿结构保护（可写 SHA-512 哈希），不要复用 docx 根上那个 `protection` 对象。docx 可用 `insertWatermark` / `deleteWatermark` 读写页眉里的 DrawingML 水印。docx 可用 `setThemeColors` / `setThemeFonts` 改主文档 theme 部件的配色与字体方案。三种格式都可用 `setProps` / `setCustomProp` / `deleteCustomProp` 改文件属性。`create` 可在正文和页眉页脚上写 DrawingML 图，也可写文本框、SmartArt、图表、脚注、尾注与批注；页眉页脚允许 `default` / `even` / `first`；不写修订。字段见下文 create。嵌入图表不是 `pic:pic`：根上始终有 `chartCount`；给了 `scope.charts` 才列出名单，并可 apply。SmartArt 不是 `pic:pic`：根上始终有 `smartArtCount`；给了 `scope.smartArt` 才列出名单，并可 apply。正文与页眉页脚、文本框、脚注、尾注、批注里的图表与 SmartArt 走同一套 op，id 带所在段落前缀。注内与批注内的文本框同样进树，并可 apply。框内再套框仍拒绝。
 
 页眉、页脚 id 按部件编，不按节编。`w:sectPr` 里的 `w:headerReference` / `w:footerReference`（§17.10.2、§17.10.5）经主文档关系解到部件路径。同一部件只出一个容器节点；多个节引用同一部件时，`sections` 列出所有节号。后一节某类型引用省略时按规范继承前节（§17.10.2）；`even` 是否继承还看 `settings.xml` 的 `w:evenAndOddHeaders`（§17.10.1），`first` 是否继承还看该节的 `w:titlePg`（§17.10.6）。OOXML 没有「链接到前一节」元素；Word UI 的勾选就是这种省略。inspect 在每个节上用 `headerLink` / `footerLink` 标出该类型是显式引用、继承前节，还是对本节不生效。apply 用 `setHeaderFooterLink` 断开或重新链接；用 `insertHeaderFooter` 在空白槽位新建部件。两节显式指向同一部件不算链接，两边都是 `false`。
 
@@ -358,7 +358,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
 规则：
 
 - 主文档部件（根关系里 `/officeDocument` 那条，常见路径 `/word/document.xml`）始终读。页眉、页脚部件按节引用与继承解析后读。脚注、尾注、批注部件按主文档关系去读（常见 `/word/footnotes.xml`、`/word/endnotes.xml`、`/word/comments.xml`）；没有对应关系则对应计数为 0。`commentsExtended`、`people`、`commentsIds`、`commentsExtensible` 有则读，没有不报错。
-- 文档根字段顺序：`id`、`paraCount`、`pictureCount`、`textBoxCount`、`footnoteCount`、`endnoteCount`、`commentCount`、`chartCount`、`smartArtCount`、`oleObjectCount`、`watermarkCount`、`tableCount`、`revisionCount`、`hyperlinkCount`、`bookmarkCount`、`fieldCount`、`tocCount`、`mathCount`、`contentControlCount`、`numberingCount`、`styleCount`、`outline`、`headers`、`footers`、`sections`、`mirrorMargins`、`gutterAtTop`、`props`、`protection`，有注名单时再跟 `footnotes`、`endnotes`、`noteSeparators`，有批注名单时再跟 `comments`，有图表名单时再跟 `charts`，有 SmartArt 名单时再跟 `smartArts`，有 OLE 名单时再跟 `oleObjects`，有水印名单时再跟 `watermarks`，有表名单时再跟 `tables`，有修订名单时再跟 `revisions`，有超链接名单时再跟 `hyperlinks`，有书签名单时再跟 `bookmarks`，有域名单时再跟 `fields`，有目录名单时再跟 `tocs`，有公式名单时再跟 `maths`，有内容控件名单时再跟 `contentControls`，有编号名单时再跟 `numberings`，有样式名单时再跟 `styles`，有正文切片时再跟 `from`、`truncated`、`paragraphs`。`props` 始终出现，规则见 [json-contract.md](json-contract.md#文档属性三格式共用)。`protection` 始终出现，规则见下文「文档保护」。xlsx / pptx 根上不要带 `protection`，也不要带 `watermarkCount` / `watermarks`。xlsx 根上带 `workbookProtection`，见 [xlsx 响应](json-contract-xlsx.md#响应)。
+- 文档根字段顺序：`id`、`paraCount`、`pictureCount`、`textBoxCount`、`footnoteCount`、`endnoteCount`、`commentCount`、`chartCount`、`smartArtCount`、`oleObjectCount`、`watermarkCount`、`tableCount`、`revisionCount`、`hyperlinkCount`、`bookmarkCount`、`fieldCount`、`tocCount`、`mathCount`、`contentControlCount`、`numberingCount`、`styleCount`、`outline`、`headers`、`footers`、`sections`、`mirrorMargins`、`gutterAtTop`、`props`、`protection`、`theme`，有注名单时再跟 `footnotes`、`endnotes`、`noteSeparators`，有批注名单时再跟 `comments`，有图表名单时再跟 `charts`，有 SmartArt 名单时再跟 `smartArts`，有 OLE 名单时再跟 `oleObjects`，有水印名单时再跟 `watermarks`，有表名单时再跟 `tables`，有修订名单时再跟 `revisions`，有超链接名单时再跟 `hyperlinks`，有书签名单时再跟 `bookmarks`，有域名单时再跟 `fields`，有目录名单时再跟 `tocs`，有公式名单时再跟 `maths`，有内容控件名单时再跟 `contentControls`，有编号名单时再跟 `numberings`，有样式名单时再跟 `styles`，有正文切片时再跟 `from`、`truncated`、`paragraphs`。`props` 始终出现，规则见 [json-contract.md](json-contract.md#文档属性三格式共用)。`protection` 始终出现，规则见下文「文档保护」。`theme` 始终出现，规则见下文「主题」。xlsx / pptx 根上不要带 `protection`，也不要带 `watermarkCount` / `watermarks`。pptx 的 theme 挂在 `masters[].theme`。xlsx 根上带 `workbookProtection`，见 [xlsx 响应](json-contract-xlsx.md#响应)。
 - `paraCount` 是主文档里 `w:p` 的总数，含表格单元格里的段落，不含文本框里的段落，始终出现。
 - 文档根上的 `pictureCount` 始终出现，只计主文档里被收入的 DrawingML 图片个数（判定见上文 docx 图 id 那节），不含页眉页脚，也不含框内图、注内图、批注内图。根上不挂正文 `pictures`。
 - 文档根上的 `textBoxCount` 始终出现，只计主文档里被收入的文本框个数，不含页眉页脚，也不含注内、批注内的框。根上不挂正文 `textBoxes`。
@@ -444,6 +444,15 @@ docx 根上始终带 `protection`，不要另给 scope 键。来源是 `/word/se
 
 不把 `algorithmName`、`cryptProviderType`、`cryptAlgorithmSid`、`spinCount` 放进树。不列出 `w:permStart` / `w:permEnd`。不报告 IRM。
 
+### 主题（仅 docx）
+
+docx 根上始终带 `theme`，不要另给 scope 键。来源是主文档 `.rels` 里 Type 以 `/theme` 结尾的部件（Word 16.0 另存常见 `/word/theme/theme1.xml`，ECMA-376 §14.2.7 / DrawingML `a:theme`）。没有该关系或部件不在包内时为 `null`，不报错。xlsx / pptx 根上不要带此对象。pptx 的 theme 见 [pptx 响应](json-contract-pptx.md#响应) 的 `masters[].theme`。create 本期不写 theme 部件。
+
+有部件时字段顺序：`name`、`colors`、`fonts`。规则与 pptx 母版 `theme` 相同：不算 `fmtScheme`，不把段落 / run 上的 `themeColor` 展开成 RGB。不读 `themeOverride`。
+
+`colors` 字段顺序：`name`、`dk1`、`lt1`、`dk2`、`lt2`、`accent1`、`accent2`、`accent3`、`accent4`、`accent5`、`accent6`、`hlink`、`folHlink`。`colors.name` 取 `a:clrScheme/@name`，没有则为 `null`。每个槽位：有 `a:srgbClr/@val` 取其原文；否则有 `a:sysClr/@lastClr` 取该原文；再没有则为 `null`。
+
+`fonts` 字段顺序：`name`、`majorLatin`、`minorLatin`、`majorEa`、`minorEa`、`majorCs`、`minorCs`。`fonts.name` 取 `a:fontScheme/@name`，没有则为 `null`。其余取 `a:majorFont` / `a:minorFont` 下 `a:latin` / `a:ea` / `a:cs` 的 `typeface` 原文，没有该元素则为 `null`。
 
 ## create
 
@@ -527,7 +536,7 @@ docx 根上始终带 `protection`，不要另给 scope 键。来源是 `/word/se
 
 create 写出 Transitional 最小包，见 [opc.md](opc.md)。每个 `w:p` 都带唯一的 `w14:paraId` 和 `w14:textId`（取值大于 0、小于 `0x80000000`，MS-DOCX §2.6.2.3 / §2.6.2.4），并在根元素上把 `w14` 列入 `mc:Ignorable`。这样随后 inspect 得到的 id 都是 `para:{paraId}`，`stable` 为 `true`。图的 `wp:docPr/@id` 在该部件内从 `1` 起递增，与 `insertPicture` 同一套写入。
 
-标题段写出 `<w:pStyle w:val="Heading1"/>` 这类引用，样式定义放在 `/word/styles.xml`。同时写 `/word/settings.xml`，含 `<w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="15"/>`（MS-DOCX §2.3.5）。缺这项时 Word 按兼容模式打开（默认 12）。`textBoxes` 写成浮动 `square` 的 `wps:wsp`，与 `insertTextBox` 同一套最小 Choice。`smartArts` 复用 `insertSmartArt` 的四件套生成。给了 `headers` / `footers` 时按出现顺序写 `/word/headerN.xml` 或 `/word/footerN.xml`，并在第一节 `sectPr` 上挂对应 `w:type` 的引用。若第一节在某段上结束，引用写在该段的 `sectPr` 上，不要留在 `w:body`。给了 `even` 则 `settings.xml` 含 `<w:evenAndOddHeaders/>`。给了 `first` 则第一节 `sectPr` 含 `<w:titlePg/>`。给了 `paragraphs[].sectionType` 时写出对应中间节；末节的 `sectPr` 仍在 `w:body` 末尾。给了 `paragraphs[].charts` 时按 `insertChart` 同一套规则写 `/word/charts/…`、embedding 与宿主 `w:drawing`。给了 `paragraphs[].oleObjects` 时按 `insertOle` 同一套规则写 embeddings、预览图与 `w:object`。给了 `footnote` / `endnote` 时按对应 insert 同一套规则写注部件、分隔符与引用 run。给了 `comments` 时按 `insertComment` 同一套规则写 `comments.xml`、`commentsExtended.xml`、`people.xml` 与范围标记。同一段上先写骨架里的文字 / 图 / 框 / SmartArt，再图表，再 OLE，再脚注，再尾注，再批注。不要生成目录、修订、超链接、书签、域、编号、公式、内容控件，也不写批注回复。给了 `document.props` 时按 `setProps` / `setCustomProp` 同一套规则写 core / app / custom；省略则仍写空的 `dc:title` 与 `dc:creator` 为 `ooxp`，不写 custom 部件。给了 `document.protection` 时按 `setProtection` 同一套规则写 `settings.xml`，窗体保护还可写各节 `w:formProt`。给了 `document.watermarks` 时按 `insertWatermark` 同一套规则写入页眉。默认页眉页脚带框不在本期 create。给了 `tables` 时写出带单线边框的 `w:tbl`，每列 `gridCol` 宽 1440 twip，每格一段，带新的 `w14:paraId`。不写 `tblStyle`。不算列宽。框内、表内、注内本期 create 不写图表或注。
+标题段写出 `<w:pStyle w:val="Heading1"/>` 这类引用，样式定义放在 `/word/styles.xml`。同时写 `/word/settings.xml`，含 `<w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="15"/>`（MS-DOCX §2.3.5）。缺这项时 Word 按兼容模式打开（默认 12）。`textBoxes` 写成浮动 `square` 的 `wps:wsp`，与 `insertTextBox` 同一套最小 Choice。`smartArts` 复用 `insertSmartArt` 的四件套生成。给了 `headers` / `footers` 时按出现顺序写 `/word/headerN.xml` 或 `/word/footerN.xml`，并在第一节 `sectPr` 上挂对应 `w:type` 的引用。若第一节在某段上结束，引用写在该段的 `sectPr` 上，不要留在 `w:body`。给了 `even` 则 `settings.xml` 含 `<w:evenAndOddHeaders/>`。给了 `first` 则第一节 `sectPr` 含 `<w:titlePg/>`。给了 `paragraphs[].sectionType` 时写出对应中间节；末节的 `sectPr` 仍在 `w:body` 末尾。给了 `paragraphs[].charts` 时按 `insertChart` 同一套规则写 `/word/charts/…`、embedding 与宿主 `w:drawing`。给了 `paragraphs[].oleObjects` 时按 `insertOle` 同一套规则写 embeddings、预览图与 `w:object`。给了 `footnote` / `endnote` 时按对应 insert 同一套规则写注部件、分隔符与引用 run。给了 `comments` 时按 `insertComment` 同一套规则写 `comments.xml`、`commentsExtended.xml`、`people.xml` 与范围标记。同一段上先写骨架里的文字 / 图 / 框 / SmartArt，再图表，再 OLE，再脚注，再尾注，再批注。不要生成目录、修订、超链接、书签、域、编号、公式、内容控件，也不写批注回复。给了 `document.props` 时按 `setProps` / `setCustomProp` 同一套规则写 core / app / custom；省略则仍写空的 `dc:title` 与 `dc:creator` 为 `ooxp`，不写 custom 部件。给了 `document.protection` 时按 `setProtection` 同一套规则写 `settings.xml`，窗体保护还可写各节 `w:formProt`。给了 `document.watermarks` 时按 `insertWatermark` 同一套规则写入页眉。不写 theme 部件。默认页眉页脚带框不在本期 create。给了 `tables` 时写出带单线边框的 `w:tbl`，每列 `gridCol` 宽 1440 twip，每格一段，带新的 `w14:paraId`。不写 `tblStyle`。不算列宽。框内、表内、注内本期 create 不写图表或注。
 
 
 ## apply
@@ -1478,4 +1487,50 @@ xlsx / pptx 上发此 op 报 `InvalidField`。
 | `id` | 必须是 OLE id |
 
 找不到报 `IdNotFound`。删掉整棵 `w:object`（含预览 markup），去掉 oleObject / package 关系与 embeddings 部件；预览图若无其它关系再指向则一并去掉。xlsx 上发此 op 报 `InvalidField`。pptx 上的语义见 [json-contract-pptx.md](json-contract-pptx.md#deleteole)。
+
+### setThemeColors
+
+改主文档 theme 部件的 `a:clrScheme` 槽位。不重写 `fmtScheme`。不把段落 / run 上的 `themeColor` 展开成直接色。
+
+```json
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "C:\\data\\note.docx",
+  "ops": [
+    { "op": "setThemeColors", "id": "docx:document", "accent1": "FF0000" }
+  ]
+}
+```
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"setThemeColors"` |
+| `id` | 必须是 `docx:document` |
+| `dk1` / `lt1` / `dk2` / `lt2` / `accent1`–`accent6` / `hlink` / `folHlink` | 可选。六位 RGB 十六进制。至少给一个 |
+
+docx：`id` 不是 `docx:document` 报 `InvalidId`。没有 theme 关系或部件不在包内报 `IdNotFound`。除 op 与 id 外一个槽位都不给、或某槽位不是六位十六进制，报 `InvalidField`。写入时把被点名槽位的子元素换成 `a:srgbClr`（原先若是 `sysClr` 也换成 `srgbClr`）。未点名槽位留下。不改 `a:clrScheme/@name`、不改 `a:theme/@name`、不改 `fmtScheme`。不改正文 XML。xlsx 上发此 op 报 `InvalidField`。pptx 见 [pptx 分册](json-contract-pptx.md#setthemecolors)，`id` 为 `master:{n}`。
+
+### setThemeFonts
+
+改主文档 theme 部件的 `a:fontScheme`。不重写 `fmtScheme`。
+
+```json
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "C:\\data\\note.docx",
+  "ops": [
+    { "op": "setThemeFonts", "id": "docx:document", "majorLatin": "Arial" }
+  ]
+}
+```
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"setThemeFonts"` |
+| `id` | 必须是 `docx:document` |
+| `majorLatin` / `minorLatin` / `majorEa` / `minorEa` / `majorCs` / `minorCs` | 可选。`typeface` 原文。至少给一个 |
+
+docx：`id` 不是 `docx:document` 报 `InvalidId`。找不到 theme 部件报 `IdNotFound`。一个字体字段都不给报 `InvalidField`。`majorLatin` / `minorLatin` 空串报 `InvalidField`。`ea` / `cs` 允许空串。没有 `fontScheme` / `majorFont` / `minorFont` 或对应 `latin` / `ea` / `cs` 则按需补上。只改 `typeface`，其它属性（如 `panose`）留下。不改 `a:fontScheme/@name`。不改正文 XML。xlsx 上发此 op 报 `InvalidField`。pptx 见 [pptx 分册](json-contract-pptx.md#setthemefonts)。
 

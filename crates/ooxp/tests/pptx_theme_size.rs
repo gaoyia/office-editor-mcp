@@ -459,6 +459,6 @@ fn reject_bad_ids_range_and_other_formats() {
         json!([{ "op": "setThemeColors", "id": "master:1", "accent1": "FF0000" }]),
     )
     .unwrap_err();
-    assert_eq!(err.code(), ErrorCode::InvalidField);
+    assert_eq!(err.code(), ErrorCode::InvalidId);
     assert!(!out.exists());
 }

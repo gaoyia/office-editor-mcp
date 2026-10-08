@@ -8,7 +8,7 @@
 
 Microsoft Word 16.0 已打开，用户确认通过。create、inspect、apply 三组都过了。O1 已放弃，见下表。本机若装了 WPS，`Word.Application` 会被抢走，测试仍直接启动 `WINWORD.EXE` 再挂 COM。A11 补过 `word/settings.xml` 之后，2026-09-26 用新 `docx-create.docx` 重跑，Word 报 `CompatibilityMode=15`。
 
-C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，跑 `pwsh -File manual-check\office\run.ps1 -Case 'docx-*'` 即可复现，逐条结果落在 `manual-check/office/out/office-results.csv`。2026-09-27 补跑 `docx-charts-remain.ps1`，Cr1–Cr6 通过。同日重跑 `docx-charts-ext.ps1`，Cx8 股价三条转柱形。2026-09-29 补跑 `docx-charts-rare.ps1`，Cq1–Cq5 通过。同日重跑 `docx-smartart.ps1`，Sa1–Sa9 通过。同日重跑 `docx-comments.ps1`，Cmt1–Cmt7、Ik1–Ik4 通过。2026-09-28 补跑 `docx-format.ps1`，Pf1–Pf6 通过。同日补跑 `docx-ole.ps1`，Ol1–Ol5 通过。同日补跑 `docx-protect.ps1`，Pr1–Pr6 通过。同日补跑 `docx-watermark.ps1`，Wm1–Wm5 通过。
+C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，跑 `pwsh -File manual-check\office\run.ps1 -Case 'docx-*'` 即可复现，逐条结果落在 `manual-check/office/out/office-results.csv`。2026-09-27 补跑 `docx-charts-remain.ps1`，Cr1–Cr6 通过。同日重跑 `docx-charts-ext.ps1`，Cx8 股价三条转柱形。2026-09-29 补跑 `docx-charts-rare.ps1`，Cq1–Cq5 通过。同日重跑 `docx-smartart.ps1`，Sa1–Sa9 通过。同日重跑 `docx-comments.ps1`，Cmt1–Cmt7、Ik1–Ik4 通过。2026-09-28 补跑 `docx-format.ps1`，Pf1–Pf6 通过。同日补跑 `docx-ole.ps1`，Ol1–Ol5 通过。同日补跑 `docx-protect.ps1`，Pr1–Pr6 通过。同日补跑 `docx-watermark.ps1`，Wm1–Wm5 通过。2026-10-09 补跑 `docx-theme.ps1`，Th1–Th5 通过。
 
 | 序号 | 状态 | 结果 |
 | --- | --- | --- |
@@ -52,6 +52,7 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 | Ol1–Ol5 | ✅ | Word 16.0：`docx-ole.ps1`，6 PASS / 0 FAIL。无名单时 `oleObjectCount=1`；`progId` 为 `Excel.Sheet.12`；`exportMedia` 与 embeddings 字节一致；删除后计数为 0；插入后树上能看见；错 id 为 `InvalidId` 且未写文件。标题栏无 Repair |
 | Pr1–Pr6 | ✅ | Word 16.0：`docx-protect.ps1`，6 PASS / 0 FAIL。只读保护 `enforced=true`、`edit=readOnly`；关掉后 `ProtectionType=-1`；窗体保护为 `2`；只读推荐为 true；带哈希 `hasPassword=true` 且改 `enforced` 得 `NotImplemented`；错 id / 空字段拒写。标题栏无 Repair |
 | Wm1–Wm5 | ✅ | Word 16.0：`docx-watermark.ps1`，5 PASS / 0 FAIL。文字水印 id 为 `header:default:1/watermark:1`、`kind=text`；删除后计数为 0；图片水印 `kind=picture`；普通页眉图不进 `watermarkCount`；错 id / 同时给 `text` 与 `file` 拒写。标题栏无 Repair |
+| Th1–Th5 | ✅ | Word 16.0：`docx-theme.ps1`，5 PASS / 0 FAIL。空白另存根上有 `theme`，`accent1` 为六位十六进制；改色为 `FF0000`；改字为 Arial；无 theme 部件得 `IdNotFound`；错 id / 空槽位拒写。标题栏无 Repair |
 | O1 | 🚫 | 领域层不做原样保存，与 xlsx 清单相同。零脏写回见 OPC 库测试。Word 另存 create 产物见 `docx-O1-word-resave`。此前记的 `SaveAs2` 挂起，拆分后重跑没再出现，一秒内返回 |
 
 ## create
@@ -551,6 +552,18 @@ Word 亲手另存或在另存批注样例的 `comments.xml` 里带 `inkml:ink`�
 | Wm3 | 图片 | 插入 PNG 水印后 Word 无修复，树上 `kind` 为 `picture` |
 | Wm4 | 普通图 | 往页眉插一张普通图后 `watermarkCount` 仍为 0，该图进 `pictures` |
 | Wm5 | 拒错 | 对段落 id 发 `insertWatermark` 得 `InvalidId`；`text` 与 `file` 都给得 `InvalidField`。不强制开 Word |
+
+## 主题
+
+主文档 theme 部件的配色与字体方案。不算主题排版引擎。手测脚本 `manual-check/office/cases/docx-theme.ps1`。编号用 Th。不要和表格 / 文本框的 T 组撞。
+
+| 序号 | 检查 | 通过标准 |
+| --- | --- | --- |
+| Th1 | inspect | Word 空白另存后，无 scope 时根上有 `theme` 对象；`colors.accent1` 为六位十六进制；字段顺序在 `protection` 之后。标题栏无 Repair |
+| Th2 | 改色 | `setThemeColors` `accent1` 为 `FF0000` 后树上为 `FF0000`，Word 无修复 |
+| Th3 | 改字 | `setThemeFonts` `majorLatin` 为 `Arial` 后树上为 `Arial`，Word 无修复 |
+| Th4 | 无 theme | 对 ooxp create（无 theme 部件）发 `setThemeColors` 得 `IdNotFound`，不写文件。不强制开 Word |
+| Th5 | 拒错 id | 对段落 id 发 `setThemeColors` 得 `InvalidId`；一个槽位都不给得 `InvalidField`。不强制开 Word |
 
 ## 原样保存（opc 验收）
 

@@ -210,7 +210,7 @@ fn inspect_default_props_on_three_formats() {
             "definedNames"
         ]
     );
-    assert_eq!(object_keys(&td)[object_keys(&td).len() - 1], "protection");
+    assert_eq!(object_keys(&td)[object_keys(&td).len() - 1], "theme");
     assert_eq!(object_keys(&tp)[object_keys(&tp).len() - 2], "props");
     assert_eq!(object_keys(&tp)[object_keys(&tp).len() - 1], "slides");
     assert_default_props(&tx);

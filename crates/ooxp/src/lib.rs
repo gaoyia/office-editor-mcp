@@ -12,6 +12,7 @@ mod opc;
 mod pptx;
 mod props;
 mod smartart;
+mod theme;
 mod xlsx;
 mod xml;
 
@@ -921,6 +922,7 @@ mod tests {
                 "gutterAtTop",
                 "props",
                 "protection",
+                "theme",
                 "from",
                 "truncated",
                 "paragraphs"

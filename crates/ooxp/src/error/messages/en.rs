@@ -312,6 +312,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::SetThemeNeedsMaster => {
                 "setThemeColors / setThemeFonts id must be master:N".into()
             }
+            IdReason::SetThemeNeedsDocument => {
+                "setThemeColors / setThemeFonts id must be docx:document".into()
+            }
             IdReason::SetHandoutTextNeedsHandout => {
                 "setHandoutText id must be handout".into()
             }
@@ -655,6 +658,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::SlideNotFound { n } => format!("Slide not found: slide:{n}"),
         ErrorKind::MasterNotFound { n } => format!("Slide master not found: master:{n}"),
         ErrorKind::ThemeNotFound { n } => format!("Theme not found for slide master: master:{n}"),
+        ErrorKind::DocumentThemeNotFound => "Document theme part not found".into(),
         ErrorKind::LayoutNotFound { master, layout } => {
             format!("Slide layout not found: master:{master}/layout:{layout}")
         }

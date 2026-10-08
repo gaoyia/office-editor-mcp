@@ -77,6 +77,7 @@ $order = @(
     'docx-ole'
     'docx-protect'
     'docx-watermark'
+    'docx-theme'
     'xlsx-docprops'
     'xlsx-sheets'
     'xlsx-cellstyle'

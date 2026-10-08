@@ -834,6 +834,8 @@ pub enum DocxOp {
     InsertWatermark(super::watermark::InsertWatermarkOp),
     DeleteWatermark(super::watermark::DeleteWatermarkOp),
     SetProtection(super::protect::SetProtectionOp),
+    SetThemeColors(super::theme::SetThemeColorsOp),
+    SetThemeFonts(super::theme::SetThemeFontsOp),
     SetProps(crate::props::SetPropsOp),
     SetCustomProp(crate::props::SetCustomPropOp),
     DeleteCustomProp(crate::props::DeleteCustomPropOp),
@@ -1149,8 +1151,6 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<DocxOp>, Error> {
             || op_name == "insertMaster"
             || op_name == "deleteMaster"
             || op_name == "setSlideSize"
-            || op_name == "setThemeColors"
-            || op_name == "setThemeFonts"
             || op_name == "setHandoutText"
             || op_name == "insertShape"
             || op_name == "insertConnector"
@@ -1369,6 +1369,12 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<DocxOp>, Error> {
                 obj, i,
             )?)),
             "setProtection" => out.push(DocxOp::SetProtection(super::protect::parse_op(obj, i)?)),
+            "setThemeColors" => out.push(DocxOp::SetThemeColors(super::theme::parse_set_colors(
+                obj, i,
+            )?)),
+            "setThemeFonts" => out.push(DocxOp::SetThemeFonts(super::theme::parse_set_fonts(
+                obj, i,
+            )?)),
             "setProps" => out.push(DocxOp::SetProps(crate::props::parse_set_props(
                 obj,
                 i,

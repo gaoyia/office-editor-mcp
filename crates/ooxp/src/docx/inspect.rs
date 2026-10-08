@@ -133,6 +133,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         "gutterAtTop": gutter_at_top,
         "props": crate::props::inspect(&pkg)?,
         "protection": super::protect::inspect(&pkg, &part)?,
+        "theme": super::theme::inspect(&pkg, &part)?,
     });
 
     if let Some(scope) = scope {

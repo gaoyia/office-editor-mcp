@@ -236,7 +236,8 @@ fn inspect_count_without_list() {
             "mirrorMargins",
             "gutterAtTop",
             "props",
-            "protection"
+            "protection",
+            "theme"
         ]
     );
     assert_eq!(tree["headers"], json!([]));

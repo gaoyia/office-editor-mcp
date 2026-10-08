@@ -367,6 +367,12 @@ pub fn apply(bytes: &[u8], ops: &[DocxOp]) -> Result<Vec<u8>, Error> {
             DocxOp::SetProtection(op) => {
                 protect::apply(&mut pkg, &mut docs, &mut dirty, &doc_part, op, i)?;
             }
+            DocxOp::SetThemeColors(op) => {
+                super::theme::set_colors(&mut pkg, &doc_part, op, i)?;
+            }
+            DocxOp::SetThemeFonts(op) => {
+                super::theme::set_fonts(&mut pkg, &doc_part, op, i)?;
+            }
             DocxOp::SetProps(op) => {
                 crate::props::apply_set_props(&mut pkg, op, i)?;
             }

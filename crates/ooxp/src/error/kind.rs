@@ -206,6 +206,8 @@ pub(crate) enum IdReason {
     SetProtectionNeedsPresentation,
     /// setThemeColors / setThemeFonts 必须用 master:N
     SetThemeNeedsMaster,
+    /// setThemeColors / setThemeFonts 必须用 docx:document
+    SetThemeNeedsDocument,
     /// setHandoutText 必须用 handout
     SetHandoutTextNeedsHandout,
     /// insertDefinedName 必须用 xlsx:workbook
@@ -622,6 +624,7 @@ define_error_kinds! {
     InvalidSlideSizeType => vec![Self::InvalidSlideSizeType],
     SlideSizeOutOfRange => vec![Self::SlideSizeOutOfRange],
     ThemeNotFound { n: u32 } => vec![Self::ThemeNotFound { n: 9 }],
+    DocumentThemeNotFound => vec![Self::DocumentThemeNotFound],
     LastVisibleSheet => vec![Self::LastVisibleSheet],
     MoveSheetAfterSelf => vec![Self::MoveSheetAfterSelf],
     MoveSlideAfterSelf => vec![Self::MoveSlideAfterSelf],
@@ -1092,6 +1095,7 @@ impl IdReason {
             Self::SetShowPrNeedsPresentation,
             Self::SetProtectionNeedsPresentation,
             Self::SetThemeNeedsMaster,
+            Self::SetThemeNeedsDocument,
             Self::SetSlideSectionNeedsSlide,
             Self::SlideOpNeedsSlide,
             Self::MasterForm,
@@ -1569,6 +1573,7 @@ impl ErrorKind {
             | Self::SlideNotFound { .. }
             | Self::MasterNotFound { .. }
             | Self::ThemeNotFound { .. }
+            | Self::DocumentThemeNotFound
             | Self::LayoutNotFound { .. }
             | Self::ShapeNotFound { .. }
             | Self::ConnectorNotFound { .. }

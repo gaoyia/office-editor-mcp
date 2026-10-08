@@ -25,6 +25,7 @@ mod smartart;
 mod styles;
 mod tbl;
 mod textbox;
+mod theme;
 mod watermark;
 
 pub use apply::apply;

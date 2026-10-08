@@ -287,6 +287,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::SetThemeNeedsMaster => {
                 "setThemeColors / setThemeFonts 的 id 必须是 master:N".into()
             }
+            IdReason::SetThemeNeedsDocument => {
+                "setThemeColors / setThemeFonts 的 id 必须是 docx:document".into()
+            }
             IdReason::SetHandoutTextNeedsHandout => {
                 "setHandoutText 的 id 必须是 handout".into()
             }
@@ -615,6 +618,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::SlideNotFound { n } => format!("找不到幻灯片：slide:{n}"),
         ErrorKind::MasterNotFound { n } => format!("找不到幻灯片母版：master:{n}"),
         ErrorKind::ThemeNotFound { n } => format!("找不到该母版的 theme：master:{n}"),
+        ErrorKind::DocumentThemeNotFound => "找不到文档 theme 部件".into(),
         ErrorKind::LayoutNotFound { master, layout } => {
             format!("找不到版式：master:{master}/layout:{layout}")
         }
