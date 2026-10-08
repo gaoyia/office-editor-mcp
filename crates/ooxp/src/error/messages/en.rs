@@ -903,7 +903,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             "sparkline ops only apply to worksheets".into()
         }
         ErrorKind::DataSheetMustBeWorksheet => {
-            "insertChartSheet data must be written to a worksheet".into()
+            "chart sheet data must be written to a worksheet".into()
         }
         ErrorKind::TwoCellPictureSize => {
             "twoCell picture size is defined by the to cell; give to on setPictureSize, not cx / cy"

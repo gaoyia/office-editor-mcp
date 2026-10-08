@@ -165,6 +165,7 @@ pub fn apply(bytes: &[u8], ops: &[XlsxOp]) -> Result<Vec<u8>, Error> {
                     &mut sheet_index,
                     &mut dirty_sheets,
                     op,
+                    &format!("ops[{i}]"),
                     i,
                 )?;
                 workbook_dirty = true;

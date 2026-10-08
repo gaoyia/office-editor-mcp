@@ -68,6 +68,37 @@ function Ensure-XlsxCreateCharts([switch]$Force) {
     return $path
 }
 
+function Ensure-XlsxCreateChartSheet([switch]$Force) {
+    $path = Get-OutPath 'xlsx-create-chartsheet.xlsx'
+    if ((Test-Path $path) -and -not $Force) { return $path }
+    $req = @{
+        schemaVersion = 1; action = 'create'
+        path = $path.Replace('\', '/'); format = 'xlsx'
+        workbook = @{
+            sheets = @(
+                @{ name = 'Sheet1' }
+                @{
+                    name = 'Chart1'
+                    kind = 'chartsheet'
+                    type = 'col'
+                    title = '销量'
+                    dataFrom = 'A10'
+                    dataSheet = 'Sheet1'
+                    series = @(
+                        @{
+                            name = 'Q1'
+                            categories = @('甲', '乙', '丙')
+                            values = @(1, 2, 3)
+                        }
+                    )
+                }
+            )
+        }
+    }
+    Invoke-OoxpRequest $req 'xlsx-create-chartsheet' | Out-Null
+    return $path
+}
+
 function Ensure-XlsxCreateHeaderFooter([switch]$Force) {
     $path = Get-OutPath 'xlsx-create-headerfooter.xlsx'
     if ((Test-Path $path) -and -not $Force) { return $path }

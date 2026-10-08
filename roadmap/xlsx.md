@@ -64,7 +64,9 @@ docx 见 [`roadmap/docx.md`](docx.md)。pptx 见 [`roadmap/pptx.md`](pptx.md)。
 | 21 | `.plan/2026年-9月-29日-✅-xlsx-切片器.md` | 数据透视、表格 |
 | 22 | `.plan/2026年-9月-29日-✅-xlsx-外部数据连接.md` | 无 |
 | 23 | `.plan/2026年-10月-9日-✅-xlsx-分组分级显示.md` | 无 |
+| 24 | `.plan/2026年-10月-9日-✅-xlsx-拆分窗格与自定义视图.md` | 视图与筛选 |
 | 25 | `.plan/2026年-10月-9日-✅-xlsx-create带批注超链接形状SmartArt.md` | 批注、超链接、形状 |
+| 26 | `.plan/2026年-10月-9日-✅-xlsx-create图表工作表.md` | 图表工作表 |
 
 ## 待做
 
@@ -72,7 +74,6 @@ docx 见 [`roadmap/docx.md`](docx.md)。pptx 见 [`roadmap/pptx.md`](pptx.md)。
 
 | 序 | 计划 | 前置 |
 | --- | --- | --- |
-| 26 | create 图表工作表 | 图表工作表 |
 | 27 | 排序（`sortState`，不只改 `autoFilter/@ref`） | 视图与筛选 |
 | 28 | 共享公式改主格 | 公式结构 |
 | 29 | 外部引用 | 公式结构 |
@@ -91,4 +92,4 @@ xlsx 没有 Word / PowerPoint 那种墨迹批注计划；批注已过（序号 1
 
 ## 怎么算 Excel 全量做完
 
-已过表保持 ✅，待做 25–31 做完，`docs/` 与实现一致，Excel 16.0 手测过对应清单。永不做的条目不算欠账。公式求值保持 🚫。
+已过表保持 ✅，待做 27–31 做完，`docs/` 与实现一致，Excel 16.0 手测过对应清单。永不做的条目不算欠账。公式求值保持 🚫。

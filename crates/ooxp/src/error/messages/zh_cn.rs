@@ -807,7 +807,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::InsertHyperlinkWorksheetOnly => "只能对工作表发超链接 op".into(),
         ErrorKind::InsertSparklineWorksheetOnly => "只能对工作表发迷你图 op".into(),
         ErrorKind::DataSheetMustBeWorksheet => {
-            "insertChartSheet 的数据必须写到普通工作表上".into()
+            "图表工作表的数据必须写到普通工作表上".into()
         }
         ErrorKind::TwoCellPictureSize => {
             "twoCell 图请在 setPictureSize 里给 to，不要给 cx / cy".into()

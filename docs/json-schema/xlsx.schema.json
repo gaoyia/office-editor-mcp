@@ -35,6 +35,56 @@
           "minLength": 1,
           "maxLength": 31
         },
+        "kind": {
+          "enum": [
+            "worksheet",
+            "chartsheet"
+          ]
+        },
+        "type": {
+          "$ref": "request.schema.json#/$defs/insertChartType"
+        },
+        "ofPieType": {
+          "enum": [
+            "pie",
+            "bar"
+          ]
+        },
+        "title": {
+          "type": "string"
+        },
+        "series": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "allOf": [
+              {
+                "$ref": "request.schema.json#/$defs/chartSeriesData"
+              },
+              {
+                "required": [
+                  "values"
+                ]
+              }
+            ]
+          }
+        },
+        "dataFrom": {
+          "type": "string",
+          "minLength": 1
+        },
+        "dataSheet": {
+          "type": "string",
+          "minLength": 1
+        },
+        "cx": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "cy": {
+          "type": "integer",
+          "minimum": 1
+        },
         "cells": {
           "type": "array",
           "items": {

@@ -25,6 +25,7 @@ pub fn insert(
     sheet_index: &mut Vec<(String, String, &'static str)>,
     dirty_sheets: &mut Vec<(String, Document)>,
     op: &InsertChartSheetOp,
+    path: &str,
     op_index: usize,
 ) -> Result<(), Error> {
     if sheet_index
@@ -35,10 +36,10 @@ pub fn insert(
             ErrorKind::DuplicateSheetName {
                 name: op.name.clone(),
             },
-            format!("ops[{op_index}].name"),
+            format!("{path}.name"),
         ));
     }
-    let (data_name, data_part) = resolve_data_sheet(sheet_index, op, op_index)?;
+    let (data_name, data_part) = resolve_data_sheet(sheet_index, op, path)?;
     let series = chart::normalize_insert_series(op.chart_type, &op.series);
     let cats = chart::shared_categories(&series);
     let cells = chart::data_table_cells(op.chart_type, &series, &cats, op.data_from);
@@ -220,7 +221,7 @@ pub fn delete(
 fn resolve_data_sheet(
     sheet_index: &[(String, String, &'static str)],
     op: &InsertChartSheetOp,
-    op_index: usize,
+    path: &str,
 ) -> Result<(String, String), Error> {
     if let Some(want) = &op.data_sheet {
         let found = sheet_index
@@ -230,11 +231,11 @@ fn resolve_data_sheet(
             Some((name, part, kind)) if *kind == "worksheet" => Ok((name.clone(), part.clone())),
             Some(_) => Err(Error::with_path(
                 ErrorKind::DataSheetMustBeWorksheet,
-                format!("ops[{op_index}].dataSheet"),
+                format!("{path}.dataSheet"),
             )),
             None => Err(Error::with_path(
                 ErrorKind::SheetNotFound { name: want.clone() },
-                format!("ops[{op_index}].dataSheet"),
+                format!("{path}.dataSheet"),
             )),
         }
     } else {
@@ -245,7 +246,7 @@ fn resolve_data_sheet(
             .ok_or_else(|| {
                 Error::with_path(
                     ErrorKind::DataSheetMustBeWorksheet,
-                    format!("ops[{op_index}].dataSheet"),
+                    format!("{path}.dataSheet"),
                 )
             })
     }

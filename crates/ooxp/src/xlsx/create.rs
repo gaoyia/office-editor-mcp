@@ -5,14 +5,15 @@ use std::collections::HashSet;
 use serde_json::{Map, Value};
 
 use super::chart;
+use super::chartsheet;
 use super::comments;
 use super::hf;
 use super::hyperlink;
 use super::picture::{self, AnchorKind};
 use super::request::{
-    parse_cell_value, HfSlot, InsertChartOp, InsertCommentOp, InsertConnectorOp, InsertHyperlinkOp,
-    InsertPictureOp, InsertShapeOp, InsertSmartArtOp, InsertTextBoxOp, SetCellValue,
-    SetHeaderFooterTextOp,
+    parse_cell_value, HfSlot, InsertChartOp, InsertChartSheetOp, InsertCommentOp,
+    InsertConnectorOp, InsertHyperlinkOp, InsertPictureOp, InsertShapeOp, InsertSmartArtOp,
+    InsertTextBoxOp, SetCellValue, SetHeaderFooterTextOp,
 };
 use super::shape;
 use super::smartart;
@@ -44,6 +45,7 @@ struct NewHfSlot {
 
 struct NewSheet {
     name: String,
+    chartsheet: Option<InsertChartSheetOp>,
     cells: Vec<NewCell>,
     pictures: Vec<InsertPictureOp>,
     charts: Vec<InsertChartOp>,
@@ -113,6 +115,37 @@ pub fn create(workbook: &Value) -> Result<Vec<u8>, Error> {
         }
         names_lower.push(lower);
     }
+    if sheets.iter().any(|s| s.chartsheet.is_some())
+        && sheets.iter().all(|s| s.chartsheet.is_some())
+    {
+        return Err(Error::with_path(
+            ErrorKind::NeedAtLeastOneSheet,
+            "workbook.sheets",
+        ));
+    }
+    for (i, sh) in sheets.iter().enumerate() {
+        let Some(op) = &sh.chartsheet else {
+            continue;
+        };
+        let Some(ds) = &op.data_sheet else {
+            continue;
+        };
+        match sheets.iter().find(|s| s.name.eq_ignore_ascii_case(ds)) {
+            Some(found) if found.chartsheet.is_none() => {}
+            Some(_) => {
+                return Err(Error::with_path(
+                    ErrorKind::DataSheetMustBeWorksheet,
+                    format!("workbook.sheets[{i}].dataSheet"),
+                ));
+            }
+            None => {
+                return Err(Error::with_path(
+                    ErrorKind::SheetNotFound { name: ds.clone() },
+                    format!("workbook.sheets[{i}].dataSheet"),
+                ));
+            }
+        }
+    }
 
     let mut sst: Vec<String> = Vec::new();
     let mut has_formula = false;
@@ -171,14 +204,19 @@ pub fn create(workbook: &Value) -> Result<Vec<u8>, Error> {
 
     let mut wb_rels = Relationships { rels: Vec::new() };
     let mut rid = 1u32;
-    for (i, _) in sheets.iter().enumerate() {
+    let mut ws_n = 0u32;
+    for sh in &sheets {
+        if sh.chartsheet.is_some() {
+            continue;
+        }
+        ws_n += 1;
         types
-            .set_override(&format!("/xl/worksheets/sheet{}.xml", i + 1), CT_WORKSHEET)
+            .set_override(&format!("/xl/worksheets/sheet{ws_n}.xml"), CT_WORKSHEET)
             .unwrap();
         wb_rels.push(Relationship {
             id: format!("rId{rid}"),
             rel_type: REL_WORKSHEET.into(),
-            target: format!("worksheets/sheet{}.xml", i + 1),
+            target: format!("worksheets/sheet{ws_n}.xml"),
             target_mode: None,
             extra: Vec::new(),
         });
@@ -220,9 +258,14 @@ pub fn create(workbook: &Value) -> Result<Vec<u8>, Error> {
     if !sst.is_empty() {
         pkg.set("/xl/sharedStrings.xml", sst_xml(&sst).into_bytes())?;
     }
-    for (i, sh) in sheets.iter().enumerate() {
+    let mut ws_n = 0u32;
+    for sh in &sheets {
+        if sh.chartsheet.is_some() {
+            continue;
+        }
+        ws_n += 1;
         pkg.set(
-            &format!("/xl/worksheets/sheet{}.xml", i + 1),
+            &format!("/xl/worksheets/sheet{ws_n}.xml"),
             sheet_xml(sh, &sst)?.into_bytes(),
         )?;
     }
@@ -232,6 +275,7 @@ pub fn create(workbook: &Value) -> Result<Vec<u8>, Error> {
     attach_comments(&mut pkg, &sheets)?;
     attach_hyperlinks(&mut pkg, &sheets)?;
     attach_header_footers(&mut pkg, &sheets)?;
+    attach_chartsheets(&mut pkg, &sheets)?;
     pkg.save_to_vec()
 }
 
@@ -245,10 +289,25 @@ fn parse_sheet(v: &Value, i: usize) -> Result<NewSheet, Error> {
             format!("workbook.sheets[{i}]"),
         )
     })?;
+    let prefix = format!("workbook.sheets[{i}]");
+    let kind = parse_create_sheet_kind(obj.get("kind"), &prefix)?;
+    let name = obj.get("name").and_then(Value::as_str).ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::InvalidSheetName {
+                reason: SheetNameReason::Missing,
+            },
+            format!("{prefix}.name"),
+        )
+    })?;
+    super::request::validate_sheet_name(name, format!("{prefix}.name"))?;
+    if kind == "chartsheet" {
+        return parse_chartsheet_sheet(obj, i, name);
+    }
     for k in obj.keys() {
         if !matches!(
             k.as_str(),
             "name"
+                | "kind"
                 | "cells"
                 | "pictures"
                 | "charts"
@@ -262,28 +321,19 @@ fn parse_sheet(v: &Value, i: usize) -> Result<NewSheet, Error> {
         ) {
             return Err(Error::with_path(
                 ErrorKind::UnknownField { field: k.clone() },
-                format!("workbook.sheets[{i}].{k}"),
+                format!("{prefix}.{k}"),
             ));
         }
     }
-    let name = obj.get("name").and_then(Value::as_str).ok_or_else(|| {
-        Error::with_path(
-            ErrorKind::InvalidSheetName {
-                reason: SheetNameReason::Missing,
-            },
-            format!("workbook.sheets[{i}].name"),
-        )
-    })?;
-    super::request::validate_sheet_name(name, format!("workbook.sheets[{i}].name"))?;
     let mut cells = Vec::new();
     if let Some(arr) = obj.get("cells") {
         let arr = arr.as_array().ok_or_else(|| {
             Error::with_path(
                 ErrorKind::WrongType {
-                    field: format!("workbook.sheets[{i}].cells"),
+                    field: format!("{prefix}.cells"),
                     expected: TypeName::Array,
                 },
-                format!("workbook.sheets[{i}].cells"),
+                format!("{prefix}.cells"),
             )
         })?;
         for (j, c) in arr.iter().enumerate() {
@@ -304,6 +354,7 @@ fn parse_sheet(v: &Value, i: usize) -> Result<NewSheet, Error> {
     let smartarts = parse_smartarts(obj.get("smartArts"), i, name)?;
     Ok(NewSheet {
         name: name.to_string(),
+        chartsheet: None,
         cells,
         pictures,
         charts,
@@ -317,12 +368,183 @@ fn parse_sheet(v: &Value, i: usize) -> Result<NewSheet, Error> {
     })
 }
 
-fn attach_pictures(pkg: &mut Package, sheets: &[NewSheet]) -> Result<(), Error> {
+fn parse_create_sheet_kind(v: Option<&Value>, prefix: &str) -> Result<&'static str, Error> {
+    match v {
+        None | Some(Value::Null) => Ok("worksheet"),
+        Some(Value::String(s)) if s == "worksheet" => Ok("worksheet"),
+        Some(Value::String(s)) if s == "chartsheet" => Ok("chartsheet"),
+        Some(Value::String(_)) => Err(Error::with_path(
+            ErrorKind::UnknownField {
+                field: "kind".into(),
+            },
+            format!("{prefix}.kind"),
+        )),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "kind".into(),
+                expected: TypeName::String,
+            },
+            format!("{prefix}.kind"),
+        )),
+    }
+}
+
+fn parse_chartsheet_sheet(
+    obj: &Map<String, Value>,
+    i: usize,
+    name: &str,
+) -> Result<NewSheet, Error> {
+    let prefix = format!("workbook.sheets[{i}]");
+    for k in obj.keys() {
+        if !matches!(
+            k.as_str(),
+            "name"
+                | "kind"
+                | "type"
+                | "ofPieType"
+                | "title"
+                | "series"
+                | "dataFrom"
+                | "dataSheet"
+                | "cx"
+                | "cy"
+        ) {
+            return Err(Error::with_path(
+                ErrorKind::UnknownField { field: k.clone() },
+                format!("{prefix}.{k}"),
+            ));
+        }
+    }
+    let common = parse_chart_common(obj, &prefix)?;
+    let data_from = parse_required_a1_field(obj.get("dataFrom"), &prefix, "dataFrom")?;
+    let data_sheet = match obj.get("dataSheet") {
+        None | Some(Value::Null) => None,
+        Some(Value::String(s)) if !s.is_empty() => Some(s.clone()),
+        Some(Value::String(_)) => {
+            return Err(Error::with_path(
+                ErrorKind::MissingField {
+                    field: "dataSheet".into(),
+                },
+                format!("{prefix}.dataSheet"),
+            ));
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "dataSheet".into(),
+                    expected: TypeName::String,
+                },
+                format!("{prefix}.dataSheet"),
+            ));
+        }
+    };
+    Ok(NewSheet {
+        name: name.to_string(),
+        chartsheet: Some(InsertChartSheetOp {
+            name: name.to_string(),
+            data_sheet,
+            chart_type: common.chart_type,
+            of_pie_type: common.of_pie_type,
+            title: common.title,
+            series: common.series,
+            cx: common.cx,
+            cy: common.cy,
+            data_from,
+        }),
+        cells: Vec::new(),
+        pictures: Vec::new(),
+        charts: Vec::new(),
+        header_footers: Vec::new(),
+        comments: Vec::new(),
+        hyperlinks: Vec::new(),
+        text_boxes: Vec::new(),
+        shapes: Vec::new(),
+        connectors: Vec::new(),
+        smartarts: Vec::new(),
+    })
+}
+
+fn each_worksheet(sheets: &[NewSheet]) -> impl Iterator<Item = (usize, String, &NewSheet)> {
+    let mut n = 0u32;
+    sheets.iter().enumerate().filter_map(move |(i, sh)| {
+        if sh.chartsheet.is_some() {
+            None
+        } else {
+            n += 1;
+            Some((i, format!("/xl/worksheets/sheet{n}.xml"), sh))
+        }
+    })
+}
+
+fn attach_chartsheets(pkg: &mut Package, sheets: &[NewSheet]) -> Result<(), Error> {
+    if sheets.iter().all(|s| s.chartsheet.is_none()) {
+        return Ok(());
+    }
+    let wb_part = "/xl/workbook.xml";
+    let mut wb_doc = xml::parse(pkg.get(wb_part)?)?;
+    let mut sheet_index = Vec::new();
+    for (_, part, sh) in each_worksheet(sheets) {
+        sheet_index.push((sh.name.clone(), part, "worksheet"));
+    }
+    let mut dirty = Vec::new();
     for (i, sh) in sheets.iter().enumerate() {
+        let Some(op) = &sh.chartsheet else {
+            continue;
+        };
+        chartsheet::insert(
+            pkg,
+            &mut wb_doc,
+            wb_part,
+            &mut sheet_index,
+            &mut dirty,
+            op,
+            &format!("workbook.sheets[{i}]"),
+            i,
+        )?;
+    }
+    for (p, doc) in dirty {
+        pkg.set(&p, doc.to_bytes()?)?;
+    }
+    reorder_workbook_sheets(
+        &mut wb_doc,
+        &sheets.iter().map(|s| s.name.as_str()).collect::<Vec<_>>(),
+    );
+    pkg.set(wb_part, wb_doc.to_bytes()?)?;
+    Ok(())
+}
+
+fn reorder_workbook_sheets(wb: &mut xml::Document, names: &[&str]) {
+    let Some(sheets) = wb.root.child_by_local_mut("sheets") else {
+        return;
+    };
+    let mut elems: Vec<xml::Element> = sheets
+        .children
+        .iter()
+        .filter_map(|n| match n {
+            xml::Node::Element(e) if e.local_name() == "sheet" => Some(e.clone()),
+            _ => None,
+        })
+        .collect();
+    elems.sort_by_key(|e| {
+        let name = e.attr("name").unwrap_or("");
+        names
+            .iter()
+            .position(|n| name.eq_ignore_ascii_case(n))
+            .unwrap_or(usize::MAX)
+    });
+    sheets
+        .children
+        .retain(|n| !matches!(n, xml::Node::Element(e) if e.local_name() == "sheet"));
+    for e in elems {
+        sheets.push_element(e);
+    }
+}
+
+fn attach_pictures(pkg: &mut Package, sheets: &[NewSheet]) -> Result<(), Error> {
+    for (i, part, sh) in each_worksheet(sheets) {
         if sh.pictures.is_empty() {
             continue;
         }
-        let part = format!("/xl/worksheets/sheet{}.xml", i + 1);
         let mut doc = xml::parse(pkg.get(&part)?)?;
         for (j, op) in sh.pictures.iter().enumerate() {
             picture::insert_picture(
@@ -339,11 +561,10 @@ fn attach_pictures(pkg: &mut Package, sheets: &[NewSheet]) -> Result<(), Error> 
 }
 
 fn attach_charts(pkg: &mut Package, sheets: &[NewSheet]) -> Result<(), Error> {
-    for (i, sh) in sheets.iter().enumerate() {
+    for (i, part, sh) in each_worksheet(sheets) {
         if sh.charts.is_empty() {
             continue;
         }
-        let part = format!("/xl/worksheets/sheet{}.xml", i + 1);
         let mut dirty = Vec::new();
         for op in &sh.charts {
             chart::insert_chart(pkg, &part, &sh.name, &mut dirty, op, i)?;
@@ -356,11 +577,10 @@ fn attach_charts(pkg: &mut Package, sheets: &[NewSheet]) -> Result<(), Error> {
 }
 
 fn attach_header_footers(pkg: &mut Package, sheets: &[NewSheet]) -> Result<(), Error> {
-    for (i, sh) in sheets.iter().enumerate() {
+    for (i, part, sh) in each_worksheet(sheets) {
         if sh.header_footers.is_empty() {
             continue;
         }
-        let part = format!("/xl/worksheets/sheet{}.xml", i + 1);
         let mut doc = xml::parse(pkg.get(&part)?)?;
         for slot in &sh.header_footers {
             if let Some(text) = &slot.text {
@@ -398,7 +618,7 @@ fn attach_header_footers(pkg: &mut Package, sheets: &[NewSheet]) -> Result<(), E
 }
 
 fn attach_drawings(pkg: &mut Package, sheets: &[NewSheet]) -> Result<(), Error> {
-    for (i, sh) in sheets.iter().enumerate() {
+    for (_, part, sh) in each_worksheet(sheets) {
         if sh.text_boxes.is_empty()
             && sh.shapes.is_empty()
             && sh.connectors.is_empty()
@@ -406,7 +626,6 @@ fn attach_drawings(pkg: &mut Package, sheets: &[NewSheet]) -> Result<(), Error> 
         {
             continue;
         }
-        let part = format!("/xl/worksheets/sheet{}.xml", i + 1);
         let mut doc = xml::parse(pkg.get(&part)?)?;
         for op in &sh.text_boxes {
             shape::insert_textbox(pkg, &mut doc, &part, op)?;
@@ -427,11 +646,10 @@ fn attach_drawings(pkg: &mut Package, sheets: &[NewSheet]) -> Result<(), Error> 
 
 fn attach_comments(pkg: &mut Package, sheets: &[NewSheet]) -> Result<(), Error> {
     const WB_PART: &str = "/xl/workbook.xml";
-    for (i, sh) in sheets.iter().enumerate() {
+    for (_, part, sh) in each_worksheet(sheets) {
         if sh.comments.is_empty() {
             continue;
         }
-        let part = format!("/xl/worksheets/sheet{}.xml", i + 1);
         let mut dirty = Vec::new();
         for op in &sh.comments {
             let cell = a1::parse_cell(&op.a1)?;
@@ -445,11 +663,10 @@ fn attach_comments(pkg: &mut Package, sheets: &[NewSheet]) -> Result<(), Error> 
 }
 
 fn attach_hyperlinks(pkg: &mut Package, sheets: &[NewSheet]) -> Result<(), Error> {
-    for (i, sh) in sheets.iter().enumerate() {
+    for (i, part, sh) in each_worksheet(sheets) {
         if sh.hyperlinks.is_empty() {
             continue;
         }
-        let part = format!("/xl/worksheets/sheet{}.xml", i + 1);
         let mut doc = xml::parse(pkg.get(&part)?)?;
         for (j, op) in sh.hyperlinks.iter().enumerate() {
             hyperlink::apply_insert(
@@ -1301,46 +1518,16 @@ fn parse_charts(
     Ok(out)
 }
 
-fn parse_chart(v: &Value, prefix: &str, sheet: &str) -> Result<InsertChartOp, Error> {
-    let obj = v.as_object().ok_or_else(|| {
-        Error::with_path(
-            ErrorKind::WrongType {
-                field: "charts".into(),
-                expected: TypeName::Object,
-            },
-            prefix.to_string(),
-        )
-    })?;
-    for k in obj.keys() {
-        if matches!(k.as_str(), "kind" | "wrap") {
-            return Err(Error::with_path(
-                ErrorKind::UnknownField { field: k.clone() },
-                format!("{prefix}.{k}"),
-            ));
-        }
-        if !matches!(
-            k.as_str(),
-            "type"
-                | "ofPieType"
-                | "title"
-                | "series"
-                | "from"
-                | "to"
-                | "anchor"
-                | "cx"
-                | "cy"
-                | "fromOffX"
-                | "fromOffY"
-                | "toOffX"
-                | "toOffY"
-                | "dataFrom"
-        ) {
-            return Err(Error::with_path(
-                ErrorKind::UnknownField { field: k.clone() },
-                format!("{prefix}.{k}"),
-            ));
-        }
-    }
+struct ChartCommon {
+    chart_type: ChartType,
+    of_pie_type: Option<String>,
+    title: Option<String>,
+    series: Vec<NewSeries>,
+    cx: Option<i64>,
+    cy: Option<i64>,
+}
+
+fn parse_chart_common(obj: &Map<String, Value>, prefix: &str) -> Result<ChartCommon, Error> {
     let chart_type = match obj.get("type") {
         Some(Value::String(s)) => ChartType::parse(s).ok_or_else(|| {
             Error::with_path(ErrorKind::InvalidChartType, format!("{prefix}.type"))
@@ -1423,6 +1610,57 @@ fn parse_chart(v: &Value, prefix: &str, sheet: &str) -> Result<InsertChartOp, Er
             prefix.to_string(),
         ));
     }
+    Ok(ChartCommon {
+        chart_type,
+        of_pie_type,
+        title,
+        series,
+        cx,
+        cy,
+    })
+}
+
+fn parse_chart(v: &Value, prefix: &str, sheet: &str) -> Result<InsertChartOp, Error> {
+    let obj = v.as_object().ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::WrongType {
+                field: "charts".into(),
+                expected: TypeName::Object,
+            },
+            prefix.to_string(),
+        )
+    })?;
+    for k in obj.keys() {
+        if matches!(k.as_str(), "kind" | "wrap") {
+            return Err(Error::with_path(
+                ErrorKind::UnknownField { field: k.clone() },
+                format!("{prefix}.{k}"),
+            ));
+        }
+        if !matches!(
+            k.as_str(),
+            "type"
+                | "ofPieType"
+                | "title"
+                | "series"
+                | "from"
+                | "to"
+                | "anchor"
+                | "cx"
+                | "cy"
+                | "fromOffX"
+                | "fromOffY"
+                | "toOffX"
+                | "toOffY"
+                | "dataFrom"
+        ) {
+            return Err(Error::with_path(
+                ErrorKind::UnknownField { field: k.clone() },
+                format!("{prefix}.{k}"),
+            ));
+        }
+    }
+    let common = parse_chart_common(obj, prefix)?;
     let from = parse_required_a1_field(obj.get("from"), prefix, "from")?;
     let data_from = parse_required_a1_field(obj.get("dataFrom"), prefix, "dataFrom")?;
     let anchor = match obj.get("anchor") {
@@ -1469,12 +1707,12 @@ fn parse_chart(v: &Value, prefix: &str, sheet: &str) -> Result<InsertChartOp, Er
     }
     Ok(InsertChartOp {
         sheet: sheet.to_string(),
-        chart_type,
-        of_pie_type,
-        title,
-        series,
-        cx,
-        cy,
+        chart_type: common.chart_type,
+        of_pie_type: common.of_pie_type,
+        title: common.title,
+        series: common.series,
+        cx: common.cx,
+        cy: common.cy,
         from,
         to,
         anchor,
@@ -1947,12 +2185,17 @@ fn parse_new_cell(v: &Value, i: usize, j: usize) -> Result<Option<NewCell>, Erro
 
 fn workbook_xml(sheets: &[NewSheet], has_formula: bool) -> String {
     let mut body = String::new();
-    for (i, sh) in sheets.iter().enumerate() {
+    let mut i = 0u32;
+    for sh in sheets {
+        if sh.chartsheet.is_some() {
+            continue;
+        }
+        i += 1;
         body.push_str(&format!(
             r#"<sheet name="{}" sheetId="{}" r:id="rId{}"/>"#,
             xml::escape_attr(&sh.name),
-            i + 1,
-            i + 1
+            i,
+            i
         ));
     }
     let calc = if has_formula {
@@ -2056,6 +2299,8 @@ fn core_xml() -> String {
 
 fn app_xml(sheets: &[NewSheet]) -> String {
     let n = sheets.len();
+    let n_ws = sheets.iter().filter(|s| s.chartsheet.is_none()).count();
+    let n_cs = n - n_ws;
     let mut titles = String::new();
     for sh in sheets {
         titles.push_str(&format!(
@@ -2063,7 +2308,16 @@ fn app_xml(sheets: &[NewSheet]) -> String {
             xml::escape_text(&sh.name)
         ));
     }
+    let pairs = if n_cs == 0 {
+        format!(
+            r#"<HeadingPairs><vt:vector size="2" baseType="variant"><vt:variant><vt:lpstr>Worksheets</vt:lpstr></vt:variant><vt:variant><vt:i4>{n_ws}</vt:i4></vt:variant></vt:vector></HeadingPairs>"#
+        )
+    } else {
+        format!(
+            r#"<HeadingPairs><vt:vector size="4" baseType="variant"><vt:variant><vt:lpstr>Worksheets</vt:lpstr></vt:variant><vt:variant><vt:i4>{n_ws}</vt:i4></vt:variant><vt:variant><vt:lpstr>Charts</vt:lpstr></vt:variant><vt:variant><vt:i4>{n_cs}</vt:i4></vt:variant></vt:vector></HeadingPairs>"#
+        )
+    };
     format!(
-        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes"><Application>ooxp</Application><HeadingPairs><vt:vector size="2" baseType="variant"><vt:variant><vt:lpstr>Worksheets</vt:lpstr></vt:variant><vt:variant><vt:i4>{n}</vt:i4></vt:variant></vt:vector></HeadingPairs><TitlesOfParts><vt:vector size="{n}" baseType="lpstr">{titles}</vt:vector></TitlesOfParts></Properties>"#
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes"><Application>ooxp</Application>{pairs}<TitlesOfParts><vt:vector size="{n}" baseType="lpstr">{titles}</vt:vector></TitlesOfParts></Properties>"#
     )
 }
