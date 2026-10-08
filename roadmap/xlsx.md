@@ -68,6 +68,7 @@ docx 见 [`roadmap/docx.md`](docx.md)。pptx 见 [`roadmap/pptx.md`](pptx.md)。
 | 25 | `.plan/2026年-10月-9日-✅-xlsx-create带批注超链接形状SmartArt.md` | 批注、超链接、形状 |
 | 26 | `.plan/2026年-10月-9日-✅-xlsx-create图表工作表.md` | 图表工作表 |
 | 27 | `.plan/2026年-10月-9日-✅-xlsx-排序.md` | 视图与筛选 |
+| 28 | `.plan/2026年-10月-9日-✅-xlsx-共享公式改主格.md` | 公式结构 |
 
 ## 待做
 
@@ -75,7 +76,6 @@ docx 见 [`roadmap/docx.md`](docx.md)。pptx 见 [`roadmap/pptx.md`](pptx.md)。
 
 | 序 | 计划 | 前置 |
 | --- | --- | --- |
-| 28 | 共享公式改主格 | 公式结构 |
 | 29 | 外部引用 | 公式结构 |
 | 30 | 保护密码哈希 | 保护 |
 | 31 | `dialogsheet` / `macrosheet` 只读进树 | 工作表管理 |

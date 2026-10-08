@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "C:\\data\\book.xlsx",
+  "output": "C:\\data\\book.shared-master.xlsx",
+  "ops": [
+    { "op": "setCell", "id": "cell:Sheet1!B1", "formula": "=A1*2", "sharedRef": "B1:B3" }
+  ]
+}

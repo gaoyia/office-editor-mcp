@@ -1360,13 +1360,7 @@ pub(crate) fn apply_set_cell(
     }
 
     if let Some((_, master)) = &shared_here {
-        if *master != cell {
-            if wants_shared_keep {
-                return Err(Error::with_path(
-                    ErrorKind::FormulaRangeNotTopLeft,
-                    format!("ops[{op_index}].id"),
-                ));
-            }
+        if *master != cell && !wants_shared_keep {
             apply_plain_or_clear(worksheet, cell, op);
             return Ok(());
         }
@@ -1482,10 +1476,10 @@ fn write_shared_formula(
             format!("ops[{op_index}]"),
         ));
     }
-    let existing = index.shared.values().find(|g| g.master == cell);
+    let existing_by_master = index.shared.values().find(|g| g.master == cell);
     let (start, end) = op
         .shared_ref
-        .or_else(|| existing.map(|g| (g.start, g.end)))
+        .or_else(|| existing_by_master.map(|g| (g.start, g.end)))
         .unwrap_or((cell, cell));
     if cell != start {
         return Err(Error::with_path(
@@ -1493,6 +1487,18 @@ fn write_shared_formula(
             format!("ops[{op_index}].id"),
         ));
     }
+    let existing = existing_by_master.or_else(|| {
+        let hits: Vec<_> = index
+            .shared
+            .values()
+            .filter(|g| a1::ranges_overlap(g.start, g.end, start, end))
+            .collect();
+        if hits.len() == 1 {
+            Some(hits[0])
+        } else {
+            None
+        }
+    });
     let body = op
         .formula
         .as_deref()
@@ -1508,7 +1514,7 @@ fn write_shared_formula(
             .to_string()
     });
     let same_range = existing
-        .map(|g| g.start == start && g.end == end)
+        .map(|g| g.start == start && g.end == end && g.master == cell)
         .unwrap_or(false);
     if same_range {
         let refer = a1::format_range(start, end);

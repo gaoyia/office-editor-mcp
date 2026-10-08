@@ -259,6 +259,18 @@ Office 另存 create 产物是打开冒烟，见 `manual-check/office/cases/opc-
 | Xf4 | 数组公式 | `arrayRef` 写入后 Excel 认数组、无修复 |
 | Xf5 | 数组从属格 | 对非主格 `setCell` 得 `NotImplemented`，未写文件。不强制开 Excel |
 
+## 共享公式改主格
+
+用库 create 产物再 apply。脚本 `manual-check/office/cases/xlsx-formula-master.ps1`。编号用 Xsm。不要占用 Xf。
+
+| 序号 | 检查 | 通过标准 |
+| --- | --- | --- |
+| Xsm1 | 向上迁主格 | 把 `B2:B3` 迁到 `B1:B3` 后，inspect 上 `B1` 有 `sharedRef`，`B2` / `B3` 是从属格且公式为展开后的 A1 |
+| Xsm2 | Excel 重算 | 同一份文件 Excel 无修复，COM `B1`/`B2`/`B3` 公式与打开后的值正确 |
+| Xsm3 | 向下收主格 | 把 `B1:B3` 收到 `B2:B3` 后，`B2` 是主格，`B1` 是独立公式；Excel 无修复 |
+| Xsm4 | 两组相交 | `sharedRef` 同时盖住两组已有共享组得 `NotImplemented`，未写文件。不强制开 Excel |
+| Xsm5 | 从属格缺范围 | 对从属格只给 `shared: true` 得 `InvalidField`，未写文件。不强制开 Excel |
+
 ## 数据验证
 
 用库 create 产物再 apply。脚本 `manual-check/office/cases/xlsx-validation.ps1`。编号用 Xv。

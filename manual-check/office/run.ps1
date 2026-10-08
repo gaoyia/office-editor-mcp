@@ -82,6 +82,7 @@ $order = @(
     'xlsx-cellstyle'
     'xlsx-layout'
     'xlsx-formula'
+    'xlsx-formula-master'
     'xlsx-validation'
     'xlsx-conditional-format'
     'xlsx-table'

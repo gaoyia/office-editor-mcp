@@ -288,3 +288,148 @@ fn expand_shared_ref() {
     assert_eq!(b3["formula"], json!("=A3*2"));
     assert_eq!(b3["shared"], json!(true));
 }
+
+fn with_shared_at(tag: &str, cell: &str, formula: &str, refer: &str) -> PathBuf {
+    let src = create_book(tag);
+    let out = tmp(&format!("{tag}-shared"));
+    apply(
+        &src,
+        &out,
+        json!([{
+            "op": "setCell",
+            "id": format!("cell:Sheet1!{cell}"),
+            "formula": formula,
+            "sharedRef": refer
+        }]),
+    )
+    .unwrap();
+    out
+}
+
+#[test]
+fn move_shared_master_up() {
+    let src = with_shared_at("mvup", "B2", "=A2*2", "B2:B3");
+    let out = tmp("mvup-out");
+    apply(
+        &src,
+        &out,
+        json!([{
+            "op": "setCell",
+            "id": "cell:Sheet1!B1",
+            "formula": "=A1*2",
+            "sharedRef": "B1:B3"
+        }]),
+    )
+    .unwrap();
+    let cells = inspect_cells(&out);
+    let b1 = cell_of(&cells, "cell:Sheet1!B1");
+    let b2 = cell_of(&cells, "cell:Sheet1!B2");
+    let b3 = cell_of(&cells, "cell:Sheet1!B3");
+    assert_eq!(b1["formula"], json!("=A1*2"));
+    assert_eq!(b1["shared"], json!(true));
+    assert_eq!(b1["sharedRef"], json!("B1:B3"));
+    assert_eq!(b2["formula"], json!("=A2*2"));
+    assert_eq!(b2["shared"], json!(true));
+    assert!(b2.get("sharedRef").is_none());
+    assert_eq!(b3["formula"], json!("=A3*2"));
+    assert_eq!(b3["shared"], json!(true));
+    assert!(b3.get("sharedRef").is_none());
+}
+
+#[test]
+fn shrink_shared_master_down() {
+    let src = with_shared_at("mvdown", "B1", "=A1*2", "B1:B3");
+    let out = tmp("mvdown-out");
+    apply(
+        &src,
+        &out,
+        json!([{
+            "op": "setCell",
+            "id": "cell:Sheet1!B2",
+            "formula": "=A2*2",
+            "sharedRef": "B2:B3"
+        }]),
+    )
+    .unwrap();
+    let cells = inspect_cells(&out);
+    let b1 = cell_of(&cells, "cell:Sheet1!B1");
+    let b2 = cell_of(&cells, "cell:Sheet1!B2");
+    let b3 = cell_of(&cells, "cell:Sheet1!B3");
+    assert_eq!(b1["formula"], json!("=A1*2"));
+    assert!(b1.get("shared").is_none());
+    assert_eq!(b2["formula"], json!("=A2*2"));
+    assert_eq!(b2["shared"], json!(true));
+    assert_eq!(b2["sharedRef"], json!("B2:B3"));
+    assert_eq!(b3["formula"], json!("=A3*2"));
+    assert_eq!(b3["shared"], json!(true));
+    assert!(b3.get("sharedRef").is_none());
+}
+
+#[test]
+fn overlap_two_shared_groups_is_not_implemented() {
+    let src = with_shared("two");
+    let mid = tmp("two-d");
+    apply(
+        &src,
+        &mid,
+        json!([{
+            "op": "setCell",
+            "id": "cell:Sheet1!D1",
+            "formula": "=A1*2",
+            "sharedRef": "D1:D2"
+        }]),
+    )
+    .unwrap();
+    let out = tmp("two-out");
+    let err = apply(
+        &mid,
+        &out,
+        json!([{
+            "op": "setCell",
+            "id": "cell:Sheet1!B1",
+            "formula": "=A1*2",
+            "sharedRef": "B1:D2"
+        }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::NotImplemented);
+    assert!(!out.exists());
+}
+
+#[test]
+fn dependent_shared_true_needs_ref() {
+    let src = with_shared("dep-keep");
+    let out = tmp("dep-keep-out");
+    let err = apply(
+        &src,
+        &out,
+        json!([{
+            "op": "setCell",
+            "id": "cell:Sheet1!B2",
+            "formula": "=A2*2",
+            "shared": true
+        }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+    assert!(!out.exists());
+}
+
+#[test]
+fn dependent_shared_ref_must_be_top_left() {
+    let src = with_shared("dep-tl");
+    let out = tmp("dep-tl-out");
+    let err = apply(
+        &src,
+        &out,
+        json!([{
+            "op": "setCell",
+            "id": "cell:Sheet1!B2",
+            "formula": "=A2*2",
+            "sharedRef": "B1:B2"
+        }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+    assert!(!out.exists());
+}

@@ -569,12 +569,22 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
 | `id` | 单元格 id |
 | `value` | 与 create 相同。`null` 表示清空该格的值和公式 |
 | `formula` | 以 `=` 开头。不能与 `value` 同时出现 |
-| `shared` | 可选布尔。`true`：把目标格当共享公式主格，保住或新建一组。`false`：先把该格所在共享组拆成独立公式，再按 `value` / `formula` 写主格 |
+| `shared` | 可选布尔。`true`：把目标格当共享公式主格，保住、迁主格或新建一组。`false`：先把该格所在共享组拆成独立公式，再按 `value` / `formula` 写主格 |
 | `sharedRef` | 可选。共享组区域，A1 闭区间。只能与 `formula` 一起出现。目标格必须是该区域左上角 |
 | `array` | 可选布尔。`true`：写成数组公式。`false`：若该格是数组主格，拆成普通公式或值 |
 | `arrayRef` | 可选。数组公式区域，A1 闭区间。只能与 `formula` 一起出现。目标格必须是该区域左上角。给了 `arrayRef` 即视为数组公式，不必再写 `array: true` |
 
-`arrayRef` 与 `sharedRef` 不能同时出现。`shared` 与 `array` 不能同时为 `true`。`value` 不能与 `shared: true`、`array: true`、`sharedRef`、`arrayRef` 同时出现。`shared: false` 不能与 `sharedRef` 同时出现。`array: false` 不能与 `arrayRef` 同时出现。目标格不是 `arrayRef` / `sharedRef` 的左上角时报 `InvalidField`。`arrayRef` / `sharedRef` 非法时报 `InvalidRange`。`setCell` 不改工作表 `<hyperlinks>`，也不改 `extLst` 里的迷你图。示例见 `docs/examples/xlsx-apply-formula.json`。
+`arrayRef` 与 `sharedRef` 不能同时出现。`shared` 与 `array` 不能同时为 `true`。`value` 不能与 `shared: true`、`array: true`、`sharedRef`、`arrayRef` 同时出现。`shared: false` 不能与 `sharedRef` 同时出现。`array: false` 不能与 `arrayRef` 同时出现。目标格不是 `arrayRef` / `sharedRef` 的左上角时报 `InvalidField`。`arrayRef` / `sharedRef` 非法时报 `InvalidRange`。`setCell` 不改工作表 `<hyperlinks>`，也不改 `extLst` 里的迷你图。示例见 `docs/examples/xlsx-apply-formula.json` 与 `docs/examples/xlsx-apply-shared-master.json`。
+
+共享公式（§18.3.1.40，`t="shared"`）：主格的 `<f>` 带 `ref` 和 `si`，从属格只带 `si`。对**从属格**发 `setCell`（不带 `shared` / `sharedRef`）仍写成独立 `<f>`，主格不动。对**主格**只给 `formula`、不给 `shared: false`：保住整组，只改主格 `<f>` 文本，保留 `t` / `si` / `ref`，从属格仍是空的共享 `<f>`。给了 `sharedRef` 则目标格必须是新区域左上角：新范围内缺的从属格补空的 `<f t="shared" si>`；被踢出的格子按相对位移展开成独立公式；新范围内已有独立公式的格子改成该组从属格。新区域缩成单格则目标格改成普通公式。对主格给 `shared: false`，或写 `value` / 清空：先拆组（每个从属格写成展开后的独立 `<f>`），再写主格。给 `formula` 与 `sharedRef`，且新区域与**恰好一组**已有共享组相交（含目标本身属于该组）：沿用该组 `si`，把主格迁到目标格；给了 `formula` 就用这段文本当新主格公式，不从旧主格再平移一遍；旧主格若仍在新区域内则改成从属格。与任何已有共享组都不相交则新建一组，`si` 取本表未用的下一个非负整数。新 `sharedRef` 同时盖住两组及以上已有共享组，或盖住数组 / 数据表，报 `NotImplemented`。`arrayRef` 盖住其它共享组、数组或数据表时报 `NotImplemented`。对从属格只给 `shared: true`、不给 `sharedRef` 报 `InvalidField`。
+
+相对展开：拆组与 inspect 从属格时，按主格与目标格的行列差平移公式里的 A1 单元格与 A1 区域（尊重 `$`）。工作表前缀、定义名、结构化表引用、函数名、字符串原样留下。出界写成 `#REF!`。这不是插行时改其它格子引用的引擎；插行导致的引用漂移仍然要么拒绝、要么只改点名格。
+
+数组公式（`t="array"`）：给 `formula` 与 `arrayRef`（或 `array: true`）时，在左上角写 `<f t="array" ref="…">`。范围内其它格不写公式；还不存在则插入只有 `r` 的 `<c>`。对已有数组主格只给 `formula`、不给 `array: false`：保留 `t="array"` 与现有 `ref`，只改公式文本。对数组主格写 `value` / 清空 / `array: false`：主格改成普通值或普通公式，范围内其它格留下缓存值。对数组范围内非主格发 `setCell` 报 `NotImplemented`。
+
+数据表公式（`t="dataTable"`）：对主格或 `ref` 范围内的格子发 `setCell` 报 `NotImplemented`。本期不读写数据表。
+
+create 本期仍只写普通 `<f>`，不写 `t="shared"` / `t="array"`。
 
 ### setCellStyle
 

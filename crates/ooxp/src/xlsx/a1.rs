@@ -211,6 +211,11 @@ pub fn format_range(start: CellRef, end: CellRef) -> String {
     }
 }
 
+/// 闭区间是否相交。两端须已规范化（左上到右下）。
+pub fn ranges_overlap(a0: CellRef, a1: CellRef, b0: CellRef, b1: CellRef) -> bool {
+    a0.col <= b1.col && b0.col <= a1.col && a0.row <= b1.row && b0.row <= a1.row
+}
+
 /// 闭区间包含：`inner` 的四角都落在 `outer` 内。两端须已规范化。
 pub fn range_contains(outer: (CellRef, CellRef), inner: (CellRef, CellRef)) -> bool {
     inner.0.col >= outer.0.col
@@ -362,6 +367,18 @@ mod tests {
             format_range(CellRef { col: 1, row: 1 }, CellRef { col: 2, row: 2 }),
             "A1:B2"
         );
+        assert!(ranges_overlap(
+            CellRef { col: 2, row: 2 },
+            CellRef { col: 2, row: 3 },
+            CellRef { col: 2, row: 1 },
+            CellRef { col: 2, row: 3 },
+        ));
+        assert!(!ranges_overlap(
+            CellRef { col: 2, row: 1 },
+            CellRef { col: 2, row: 2 },
+            CellRef { col: 4, row: 1 },
+            CellRef { col: 4, row: 2 },
+        ));
     }
 
     #[test]
