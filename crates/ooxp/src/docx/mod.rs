@@ -8,6 +8,7 @@ mod create;
 mod export;
 mod field;
 mod format;
+mod glossary;
 mod hf;
 mod inspect;
 mod link;
@@ -87,6 +88,18 @@ pub const CT_NUMBERING: &str =
     "application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml";
 pub const CT_SETTINGS: &str =
     "application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml";
+pub const REL_GLOSSARY: &str =
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/glossaryDocument";
+pub const CT_GLOSSARY: &str =
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document.glossary+xml";
+pub const REL_WEB_SETTINGS: &str =
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/webSettings";
+pub const REL_FONT_TABLE: &str =
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/fontTable";
+pub const CT_WEB_SETTINGS: &str =
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.webSettings+xml";
+pub const CT_FONT_TABLE: &str =
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.fontTable+xml";
 pub const CT_HEADER: &str =
     "application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml";
 pub const CT_FOOTER: &str =

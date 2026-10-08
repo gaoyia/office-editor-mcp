@@ -662,6 +662,16 @@ pub(super) fn render(kind: &ErrorKind) -> String {
                 "insertBibliography id must be a direct child paragraph of w:body, or docx:document"
                     .into()
             }
+            IdReason::DocPartPrefix => "Building block id must be docPart:N".into(),
+            IdReason::DocPartIndexNotInt => "docPart index must be a positive integer".into(),
+            IdReason::DocPartIndexFromOne => "docPart index starts at 1".into(),
+            IdReason::InsertDocPartNeedsDocument => {
+                "insertDocPart id must be docx:document".into()
+            }
+            IdReason::InsertDocPartContentNeedsBodyPara => {
+                "insertDocPartContent id must be a direct child paragraph of w:body, or docx:document"
+                    .into()
+            }
             IdReason::MathPrefix => {
                 "Math id must be math:N or a header/footer container id plus /math:N".into()
             }
@@ -782,6 +792,15 @@ pub(super) fn render(kind: &ErrorKind) -> String {
                 .into()
         }
         ErrorKind::InvalidBibliographyInstr => "instr must start with BIBLIOGRAPHY".into(),
+        ErrorKind::EmptyDocPartName => "name must not be empty".into(),
+        ErrorKind::DuplicateDocPartName => {
+            "name, gallery, and category must be unique among document parts".into()
+        }
+        ErrorKind::InvalidDocPartGallery => {
+            "gallery is not a supported ST_DocPartGallery value".into()
+        }
+        ErrorKind::InvalidDocPartBehavior => "behavior must be content, p, or pg".into(),
+        ErrorKind::EmptyDocPartText => "text must not be empty".into(),
         ErrorKind::CommentNotFound { id } => format!("Comment not found: {id}"),
         ErrorKind::NeedCommentParaId => {
             "The last paragraph of the comment must have w14:paraId to write commentsExtended".into()
@@ -1240,6 +1259,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::SourceNotFound { id } => format!("Bibliography source not found: {id}"),
         ErrorKind::CitationNotFound { id } => format!("Citation not found: {id}"),
         ErrorKind::BibliographyNotFound { id } => format!("Bibliography not found: {id}"),
+        ErrorKind::DocPartNotFound { id } => format!("Building block not found: {id}"),
         ErrorKind::MathNotFound { id } => format!("Equation not found: {id}"),
         ErrorKind::ContentControlNotFound { id } => format!("Content control not found: {id}"),
         ErrorKind::SetParaTextHasField => {

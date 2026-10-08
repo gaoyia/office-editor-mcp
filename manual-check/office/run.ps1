@@ -81,6 +81,7 @@ $order = @(
     'docx-caption-xref'
     'docx-index'
     'docx-biblio'
+    'docx-glossary'
     'xlsx-docprops'
     'xlsx-sheets'
     'xlsx-cellstyle'

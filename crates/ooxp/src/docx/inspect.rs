@@ -129,6 +129,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         "sourceCount": source_count,
         "citationCount": field::count_citations(&doc.root),
         "bibliographyCount": field::count_bibliographies(&doc.root),
+        "docPartCount": super::glossary::count_parts(&pkg, &part)?,
         "mathCount": math::count_maths(&doc.root),
         "contentControlCount": sdt::count_sdts(&doc.root),
         "numberingCount": numbering::count_nums(&pkg, &part)?,
@@ -244,6 +245,9 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         }
         if scope.bibliographies {
             tree["bibliographies"] = Value::Array(field::bibliographies_json(&doc.root)?);
+        }
+        if scope.doc_parts {
+            tree["docParts"] = Value::Array(super::glossary::parts_json(&pkg, &part)?);
         }
         if scope.maths {
             tree["maths"] = Value::Array(math::maths_json(&doc.root, None)?);

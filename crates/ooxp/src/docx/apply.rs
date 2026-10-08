@@ -11,6 +11,7 @@ use super::charts;
 use super::comments;
 use super::field;
 use super::format;
+use super::glossary;
 use super::hf::{self, HfKind};
 use super::link;
 use super::math;
@@ -22,12 +23,13 @@ use super::picture;
 use super::protect;
 use super::request::{
     DeleteBibliographyOp, DeleteBookmarkOp, DeleteCaptionOp, DeleteCitationOp, DeleteColOp,
-    DeleteCommentOp, DeleteContentControlOp, DeleteCrossRefOp, DeleteFieldOp, DeleteHyperlinkOp,
-    DeleteIndexEntryOp, DeleteIndexOp, DeleteMathOp, DeleteNoteOp, DeleteParaOp, DeletePictureOp,
-    DeleteRowOp, DeleteSectionOp, DeleteSourceOp, DeleteTableOp, DeleteTextBoxOp, DeleteTocOp,
-    DocxOp, InsertBibliographyOp, InsertBibliographyPlace, InsertBookmarkOp, InsertCaptionOp,
-    InsertCaptionPlace, InsertCitationOp, InsertColOp, InsertCommentOp, InsertContentControlOp,
-    InsertCrossRefOp, InsertFieldOp, InsertHeaderFooterOp, InsertHyperlinkOp, InsertIndexEntryOp,
+    DeleteCommentOp, DeleteContentControlOp, DeleteCrossRefOp, DeleteDocPartOp, DeleteFieldOp,
+    DeleteHyperlinkOp, DeleteIndexEntryOp, DeleteIndexOp, DeleteMathOp, DeleteNoteOp, DeleteParaOp,
+    DeletePictureOp, DeleteRowOp, DeleteSectionOp, DeleteSourceOp, DeleteTableOp, DeleteTextBoxOp,
+    DeleteTocOp, DocxOp, InsertBibliographyOp, InsertBibliographyPlace, InsertBookmarkOp,
+    InsertCaptionOp, InsertCaptionPlace, InsertCitationOp, InsertColOp, InsertCommentOp,
+    InsertContentControlOp, InsertCrossRefOp, InsertDocPartContentOp, InsertDocPartContentPlace,
+    InsertDocPartOp, InsertFieldOp, InsertHeaderFooterOp, InsertHyperlinkOp, InsertIndexEntryOp,
     InsertIndexOp, InsertIndexPlace, InsertMathOp, InsertMathPlace, InsertNoteOp,
     InsertNumberingOp, InsertParaOp, InsertParaPlace, InsertPictureOp, InsertRowOp, InsertSdtPlace,
     InsertSectionOp, InsertSectionPlace, InsertSourceOp, InsertTableOp, InsertTextBoxOp,
@@ -152,6 +154,23 @@ pub fn apply(bytes: &[u8], ops: &[DocxOp]) -> Result<Vec<u8>, Error> {
             }
             DocxOp::DeleteBibliography(op) => {
                 apply_delete_bibliography(&mut docs, &mut dirty, &doc_part, op, i)?;
+            }
+            DocxOp::InsertDocPart(op) => {
+                apply_insert_doc_part(&mut pkg, &mut docs, &mut dirty, &doc_part, op, i)?;
+            }
+            DocxOp::DeleteDocPart(op) => {
+                apply_delete_doc_part(
+                    &mut pkg,
+                    &mut docs,
+                    &mut dirty,
+                    &mut removed,
+                    &doc_part,
+                    op,
+                    i,
+                )?;
+            }
+            DocxOp::InsertDocPartContent(op) => {
+                apply_insert_doc_part_content(&pkg, &mut docs, &mut dirty, &doc_part, op, i)?;
             }
             DocxOp::InsertMath(op) => {
                 apply_insert_math(&pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
@@ -2211,6 +2230,67 @@ fn apply_delete_bibliography(
     field::delete_bibliography(&mut doc.root, op.n, &op.id, i)?;
     dirty.insert(doc_part.to_string(), ());
     Ok(())
+}
+
+fn apply_insert_doc_part(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    op: &InsertDocPartOp,
+    i: usize,
+) -> Result<(), Error> {
+    glossary::insert_part(
+        pkg,
+        docs,
+        dirty,
+        doc_part,
+        &glossary::DocPartWrite {
+            name: &op.name,
+            gallery: &op.gallery,
+            category: &op.category,
+            behavior: &op.behavior,
+            text: &op.text,
+        },
+        i,
+    )
+}
+
+fn apply_delete_doc_part(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    removed: &mut HashSet<String>,
+    doc_part: &str,
+    op: &DeleteDocPartOp,
+    i: usize,
+) -> Result<(), Error> {
+    glossary::delete_part(pkg, docs, dirty, removed, doc_part, op.n, &op.id, i)
+}
+
+fn apply_insert_doc_part_content(
+    pkg: &Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    op: &InsertDocPartContentOp,
+    i: usize,
+) -> Result<(), Error> {
+    let after = match &op.place {
+        InsertDocPartContentPlace::After(p) => Some(p),
+        InsertDocPartContentPlace::EndOfDocument => None,
+    };
+    glossary::insert_content(
+        pkg,
+        docs,
+        dirty,
+        doc_part,
+        after,
+        op.n,
+        &op.part_id,
+        &op.id,
+        i,
+    )
 }
 
 fn apply_insert_math(

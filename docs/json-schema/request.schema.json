@@ -274,6 +274,9 @@
         "bibliographies": {
           "type": "boolean"
         },
+        "docParts": {
+          "type": "boolean"
+        },
         "maths": {
           "type": "boolean"
         },
@@ -820,6 +823,15 @@
               },
               {
                 "$ref": "docx.schema.json#/$defs/deleteBibliographyOp"
+              },
+              {
+                "$ref": "docx.schema.json#/$defs/insertDocPartOp"
+              },
+              {
+                "$ref": "docx.schema.json#/$defs/deleteDocPartOp"
+              },
+              {
+                "$ref": "docx.schema.json#/$defs/insertDocPartContentOp"
               },
               {
                 "$ref": "docx.schema.json#/$defs/insertMathOp"

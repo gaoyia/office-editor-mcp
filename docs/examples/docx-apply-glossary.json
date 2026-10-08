@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "C:\\data\\note.docx",
+  "output": "C:\\data\\note.glossary.docx",
+  "ops": [
+    {
+      "op": "insertDocPart",
+      "id": "docx:document",
+      "name": "Clause1",
+      "text": "glossary clause",
+      "gallery": "custQuickParts",
+      "category": "General",
+      "behavior": "content"
+    },
+    {
+      "op": "insertDocPartContent",
+      "id": "docx:document",
+      "docPart": "docPart:1"
+    },
+    { "op": "deleteDocPart", "id": "docPart:1" }
+  ]
+}

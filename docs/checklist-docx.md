@@ -8,7 +8,7 @@
 
 Microsoft Word 16.0 已打开，用户确认通过。create、inspect、apply 三组都过了。O1 已放弃，见下表。本机若装了 WPS，`Word.Application` 会被抢走，测试仍直接启动 `WINWORD.EXE` 再挂 COM。A11 补过 `word/settings.xml` 之后，2026-09-26 用新 `docx-create.docx` 重跑，Word 报 `CompatibilityMode=15`。
 
-C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，跑 `pwsh -File manual-check\office\run.ps1 -Case 'docx-*'` 即可复现，逐条结果落在 `manual-check/office/out/office-results.csv`。2026-09-27 补跑 `docx-charts-remain.ps1`，Cr1–Cr6 通过。同日重跑 `docx-charts-ext.ps1`，Cx8 股价三条转柱形。2026-09-29 补跑 `docx-charts-rare.ps1`，Cq1–Cq5 通过。同日重跑 `docx-smartart.ps1`，Sa1–Sa9 通过。同日重跑 `docx-comments.ps1`，Cmt1–Cmt7、Ik1–Ik4 通过。2026-09-28 补跑 `docx-format.ps1`，Pf1–Pf6 通过。同日补跑 `docx-ole.ps1`，Ol1–Ol5 通过。同日补跑 `docx-protect.ps1`，Pr1–Pr6 通过。同日补跑 `docx-watermark.ps1`，Wm1–Wm5 通过。2026-10-09 补跑 `docx-theme.ps1`，Th1–Th5 通过。同日补跑 `docx-caption-xref.ps1`，Cp1–Cp6 通过。同日补跑 `docx-index.ps1`，Ix1–Ix6 通过。同日补跑 `docx-biblio.ps1`，Bi1–Bi6 通过。
+C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，跑 `pwsh -File manual-check\office\run.ps1 -Case 'docx-*'` 即可复现，逐条结果落在 `manual-check/office/out/office-results.csv`。2026-09-27 补跑 `docx-charts-remain.ps1`，Cr1–Cr6 通过。同日重跑 `docx-charts-ext.ps1`，Cx8 股价三条转柱形。2026-09-29 补跑 `docx-charts-rare.ps1`，Cq1–Cq5 通过。同日重跑 `docx-smartart.ps1`，Sa1–Sa9 通过。同日重跑 `docx-comments.ps1`，Cmt1–Cmt7、Ik1–Ik4 通过。2026-09-28 补跑 `docx-format.ps1`，Pf1–Pf6 通过。同日补跑 `docx-ole.ps1`，Ol1–Ol5 通过。同日补跑 `docx-protect.ps1`，Pr1–Pr6 通过。同日补跑 `docx-watermark.ps1`，Wm1–Wm5 通过。2026-10-09 补跑 `docx-theme.ps1`，Th1–Th5 通过。同日补跑 `docx-caption-xref.ps1`，Cp1–Cp6 通过。同日补跑 `docx-index.ps1`，Ix1–Ix6 通过。同日补跑 `docx-biblio.ps1`，Bi1–Bi6 通过。同日补跑 `docx-glossary.ps1`，Bb1–Bb6 通过。
 
 | 序号 | 状态 | 结果 |
 | --- | --- | --- |
@@ -56,6 +56,7 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 | Cp1–Cp6 | ✅ | Word 16.0：`docx-caption-xref.ps1`，6 PASS / 0 FAIL。无 scope 时只有计数；插入后 `caption:1` / `identifier=Figure`；Word 更新域后交叉引用可见 Figure；删交叉引用与删题注无修复；页眉 `insertCaption` 为 `InvalidId`，xlsx 上为 `InvalidField`。标题栏无 Repair |
 | Ix1–Ix6 | ✅ | Word 16.0：`docx-index.ps1`，6 PASS / 0 FAIL。无 scope 时只有计数；插入后 `xe:1` / `index:1`，条目为 fox；Word 更新域后可见 fox；删索引与删索引项无修复；页眉 `insertIndex` 为 `InvalidId`，xlsx 上为 `InvalidField`。标题栏无 Repair |
 | Bi1–Bi6 | ✅ | Word 16.0：`docx-biblio.ps1`，6 PASS / 0 FAIL。无 scope 时只有计数；插入后 `source:1` / `cite:1` / `biblio:1`；Word 更新域后可见 `(Ecma, 2006)`；删书目、引文与源无修复；页眉 `insertBibliography` 为 `InvalidId`，xlsx 上为 `InvalidField`。标题栏无 Repair |
+| Bb1–Bb6 | ✅ | Word 16.0：`docx-glossary.ps1`，6 PASS / 0 FAIL。无 scope 时只有 `docPartCount`；插入后 `docPart:1`；Word 无 Repair；`insertDocPartContent` 后正文可见 `glossary clause`；删除后计数 0；页眉 `insertDocPartContent` 为 `InvalidId`，xlsx 上为 `InvalidField`。标题栏无 Repair |
 | O1 | 🚫 | 领域层不做原样保存，与 xlsx 清单相同。零脏写回见 OPC 库测试。Word 另存 create 产物见 `docx-O1-word-resave`。此前记的 `SaveAs2` 挂起，拆分后重跑没再出现，一秒内返回 |
 
 ## create
@@ -82,7 +83,7 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 | I2 | 大纲 | `outline` 含第一段，`level` 为 `1`，`text` 为 `标题` |
 | I3 | 段落 id | 两段都有 `para:{hex}`，`stable` 为 `true` |
 | I4 | 第二段 | `text` 为 `hello` |
-| I5 | 无 scope | 只发 path 时没有 `paragraphs` 字段，仍有 `outline`、`paraCount`、`pictureCount`、`tableCount`、`revisionCount`、`hyperlinkCount`、`bookmarkCount`、`fieldCount`、`tocCount`、`captionCount`、`crossRefCount`、`indexCount`、`indexEntryCount`、`sourceCount`、`citationCount`、`bibliographyCount`、`mathCount`、`contentControlCount`、`headers`、`footers`、`sections`、`props`、`protection`、`watermarkCount` |
+| I5 | 无 scope | 只发 path 时没有 `paragraphs` 字段，仍有 `outline`、`paraCount`、`pictureCount`、`tableCount`、`revisionCount`、`hyperlinkCount`、`bookmarkCount`、`fieldCount`、`tocCount`、`captionCount`、`crossRefCount`、`indexCount`、`indexEntryCount`、`sourceCount`、`citationCount`、`bibliographyCount`、`docPartCount`、`mathCount`、`contentControlCount`、`headers`、`footers`、`sections`、`props`、`protection`、`watermarkCount` |
 
 ## apply
 
@@ -493,6 +494,19 @@ Word 亲手另存或在另存批注样例的 `comments.xml` 里带 `inkml:ink`�
 | Bi4 | 删除书目 | `deleteBibliography` 之后 `bibliographyCount` 为 0，源与引文还在，Word 无修复 |
 | Bi5 | 删除引文与源 | `deleteCitation` 之后 `citationCount` 为 0；`deleteSource` 之后 `sourceCount` 为 0；标题段还在，Word 无修复 |
 | Bi6 | 拒错 | 对页眉段落发 `insertBibliography` 得 `InvalidId`；xlsx 上发 `insertBibliography` 得 `InvalidField`。未写文件 |
+
+## 构建基块
+
+`insertDocPart` 写入 glossary `w:docPart`；`insertDocPartContent` 把 `docPartBody` 复制进主文档；`deleteDocPart` 删条目。不实现构建基块库 UI。手测脚本 `manual-check/office/cases/docx-glossary.ps1`。
+
+| 编号 | 项 | 期望 |
+| --- | --- | --- |
+| Bb1 | 名单 | 无 `scope.docParts` 时有 `docPartCount` 且没有名单；插入之后计数为 1，给了 scope 能列出 `docPart:1`，`name` 为 `Clause1`，`gallery` 为 `custQuickParts` |
+| Bb2 | 打开 | Word 打开后无修复 |
+| Bb3 | 插入正文 | `insertDocPartContent` 之后正文可见 `glossary clause`，Word 无修复 |
+| Bb4 | 删除 | `deleteDocPart` 之后 `docPartCount` 为 0，Word 无修复 |
+| Bb5 | 空包 | 删光后包内没有 `/word/glossary/document.xml` |
+| Bb6 | 拒错 | 对页眉段落发 `insertDocPartContent` 得 `InvalidId`；xlsx 上发 `insertDocPart` 得 `InvalidField`。未写文件 |
 
 ## 公式
 

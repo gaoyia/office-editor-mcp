@@ -470,6 +470,14 @@ pub(crate) enum IdReason {
     BiblioIndexFromOne,
     /// insertBibliography 必须是主文档 body 的直接子段落或 docx:document
     InsertBibliographyNeedsBodyPara,
+    /// 构建基块 id 必须是 docPart:N
+    DocPartPrefix,
+    DocPartIndexNotInt,
+    DocPartIndexFromOne,
+    /// insertDocPart 必须用 docx:document
+    InsertDocPartNeedsDocument,
+    /// insertDocPartContent 必须是主文档 body 的直接子段落或 docx:document
+    InsertDocPartContentNeedsBodyPara,
     /// 公式 id 必须是 math:N 或 {容器}/math:N
     MathPrefix,
     MathIndexNotInt,
@@ -868,6 +876,12 @@ define_error_kinds! {
     SourceNotFound { id: String } => vec![Self::SourceNotFound { id: "source:1".into() }],
     CitationNotFound { id: String } => vec![Self::CitationNotFound { id: "cite:1".into() }],
     BibliographyNotFound { id: String } => vec![Self::BibliographyNotFound { id: "biblio:1".into() }],
+    DocPartNotFound { id: String } => vec![Self::DocPartNotFound { id: "docPart:1".into() }],
+    EmptyDocPartName => vec![Self::EmptyDocPartName],
+    DuplicateDocPartName => vec![Self::DuplicateDocPartName],
+    InvalidDocPartGallery => vec![Self::InvalidDocPartGallery],
+    InvalidDocPartBehavior => vec![Self::InvalidDocPartBehavior],
+    EmptyDocPartText => vec![Self::EmptyDocPartText],
     MathNotFound { id: String } => vec![Self::MathNotFound { id: "math:1".into() }],
     ContentControlNotFound { id: String } => vec![Self::ContentControlNotFound { id: "sdt:1".into() }],
     InvalidTocKind => vec![Self::InvalidTocKind],
@@ -1323,6 +1337,11 @@ impl IdReason {
             Self::BiblioIndexNotInt,
             Self::BiblioIndexFromOne,
             Self::InsertBibliographyNeedsBodyPara,
+            Self::DocPartPrefix,
+            Self::DocPartIndexNotInt,
+            Self::DocPartIndexFromOne,
+            Self::InsertDocPartNeedsDocument,
+            Self::InsertDocPartContentNeedsBodyPara,
             Self::MathPrefix,
             Self::MathIndexNotInt,
             Self::MathIndexFromOne,
@@ -1461,6 +1480,11 @@ impl ErrorKind {
             | Self::EmptySourceTitle
             | Self::InvalidCitationTag
             | Self::InvalidBibliographyInstr
+            | Self::EmptyDocPartName
+            | Self::DuplicateDocPartName
+            | Self::InvalidDocPartGallery
+            | Self::InvalidDocPartBehavior
+            | Self::EmptyDocPartText
             | Self::InvalidMathKind
             | Self::EmptyMathText
             | Self::InvalidContentControlKind
@@ -1709,6 +1733,7 @@ impl ErrorKind {
             | Self::SourceNotFound { .. }
             | Self::CitationNotFound { .. }
             | Self::BibliographyNotFound { .. }
+            | Self::DocPartNotFound { .. }
             | Self::MathNotFound { .. }
             | Self::ContentControlNotFound { .. }
             | Self::NumberingNotFound { .. }

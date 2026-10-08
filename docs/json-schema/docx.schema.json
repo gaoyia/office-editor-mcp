@@ -1777,6 +1777,84 @@
         }
       }
     },
+    "insertDocPartOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "name",
+        "text"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "insertDocPart"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1
+        },
+        "gallery": {
+          "type": "string",
+          "minLength": 1
+        },
+        "category": {
+          "type": "string",
+          "minLength": 1
+        },
+        "behavior": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "deleteDocPartOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "deleteDocPart"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "insertDocPartContentOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "docPart"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "insertDocPartContent"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "docPart": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
     "insertMathOp": {
       "type": "object",
       "required": [

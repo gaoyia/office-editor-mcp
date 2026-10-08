@@ -620,6 +620,15 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::InsertBibliographyNeedsBodyPara => {
                 "insertBibliography 的 id 必须是 w:body 的直接子段落，或 docx:document".into()
             }
+            IdReason::DocPartPrefix => "构建基块 id 必须是 docPart:N".into(),
+            IdReason::DocPartIndexNotInt => "docPart 序号必须是正整数".into(),
+            IdReason::DocPartIndexFromOne => "docPart 序号从 1 起".into(),
+            IdReason::InsertDocPartNeedsDocument => {
+                "insertDocPart 的 id 必须是 docx:document".into()
+            }
+            IdReason::InsertDocPartContentNeedsBodyPara => {
+                "insertDocPartContent 的 id 必须是 w:body 的直接子段落，或 docx:document".into()
+            }
             IdReason::MathPrefix => {
                 "公式 id 必须是 math:N，或页眉页脚容器 id 加上 /math:N".into()
             }
@@ -720,6 +729,11 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             "tag 不能为空、不能含空白、也不能含英文双引号".into()
         }
         ErrorKind::InvalidBibliographyInstr => "instr 必须以 BIBLIOGRAPHY 开头".into(),
+        ErrorKind::EmptyDocPartName => "name 不能为空".into(),
+        ErrorKind::DuplicateDocPartName => "name、gallery 与 category 不能与已有构建基块相同".into(),
+        ErrorKind::InvalidDocPartGallery => "gallery 不是本期认的 ST_DocPartGallery".into(),
+        ErrorKind::InvalidDocPartBehavior => "behavior 只能是 content、p 或 pg".into(),
+        ErrorKind::EmptyDocPartText => "text 不能为空".into(),
         ErrorKind::CommentNotFound { id } => format!("找不到批注：{id}"),
         ErrorKind::NeedCommentParaId => {
             "批注最后一段必须有 w14:paraId，才能写 commentsExtended".into()
@@ -1076,6 +1090,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::SourceNotFound { id } => format!("找不到书目源：{id}"),
         ErrorKind::CitationNotFound { id } => format!("找不到引文：{id}"),
         ErrorKind::BibliographyNotFound { id } => format!("找不到书目：{id}"),
+        ErrorKind::DocPartNotFound { id } => format!("找不到构建基块：{id}"),
         ErrorKind::MathNotFound { id } => format!("找不到公式：{id}"),
         ErrorKind::ContentControlNotFound { id } => format!("找不到内容控件：{id}"),
         ErrorKind::SetParaTextHasField => "不能改带域的段落的可见文本".into(),

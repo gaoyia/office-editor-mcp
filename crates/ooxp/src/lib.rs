@@ -917,6 +917,7 @@ mod tests {
                 "sourceCount",
                 "citationCount",
                 "bibliographyCount",
+                "docPartCount",
                 "mathCount",
                 "contentControlCount",
                 "numberingCount",

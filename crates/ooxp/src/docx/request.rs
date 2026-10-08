@@ -66,6 +66,8 @@ pub struct InspectScope {
     pub citations: bool,
     /// 为 true 时列出 BIBLIOGRAPHY 块。
     pub bibliographies: bool,
+    /// 为 true 时列出 glossary 构建基块。
+    pub doc_parts: bool,
     /// 为 true 时列出公式。
     pub maths: bool,
     /// 为 true 时列出内容控件。
@@ -790,6 +792,35 @@ pub struct DeleteBibliographyOp {
 }
 
 #[derive(Debug, Clone)]
+pub struct InsertDocPartOp {
+    pub name: String,
+    pub gallery: String,
+    pub category: String,
+    pub behavior: String,
+    pub text: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct DeleteDocPartOp {
+    pub id: String,
+    pub n: usize,
+}
+
+#[derive(Debug, Clone)]
+pub enum InsertDocPartContentPlace {
+    After(para::BodyPara),
+    EndOfDocument,
+}
+
+#[derive(Debug, Clone)]
+pub struct InsertDocPartContentOp {
+    pub id: String,
+    pub place: InsertDocPartContentPlace,
+    pub n: usize,
+    pub part_id: String,
+}
+
+#[derive(Debug, Clone)]
 pub enum InsertMathPlace {
     After(ParaTarget),
     EndOfDocument,
@@ -876,6 +907,9 @@ pub enum DocxOp {
     DeleteCitation(DeleteCitationOp),
     InsertBibliography(InsertBibliographyOp),
     DeleteBibliography(DeleteBibliographyOp),
+    InsertDocPart(InsertDocPartOp),
+    DeleteDocPart(DeleteDocPartOp),
+    InsertDocPartContent(InsertDocPartContentOp),
     InsertMath(InsertMathOp),
     SetMath(SetMathOp),
     DeleteMath(DeleteMathOp),
@@ -1030,6 +1064,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
             "sources",
             "citations",
             "bibliographies",
+            "docParts",
             "maths",
             "contentControls",
             "numbering",
@@ -1061,6 +1096,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
     let sources = parse_bool_field(obj.get("sources"), "sources")?;
     let citations = parse_bool_field(obj.get("citations"), "citations")?;
     let bibliographies = parse_bool_field(obj.get("bibliographies"), "bibliographies")?;
+    let doc_parts = parse_bool_field(obj.get("docParts"), "docParts")?;
     let maths = parse_bool_field(obj.get("maths"), "maths")?;
     let content_controls = parse_bool_field(obj.get("contentControls"), "contentControls")?;
     let numbering = parse_bool_field(obj.get("numbering"), "numbering")?;
@@ -1102,6 +1138,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
                 && !obj.contains_key("sources")
                 && !obj.contains_key("citations")
                 && !obj.contains_key("bibliographies")
+                && !obj.contains_key("docParts")
                 && !obj.contains_key("maths")
                 && !obj.contains_key("contentControls")
                 && !obj.contains_key("numbering")
@@ -1136,6 +1173,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
                 sources,
                 citations,
                 bibliographies,
+                doc_parts,
                 maths,
                 content_controls,
                 numbering,
@@ -1207,6 +1245,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
                 sources,
                 citations,
                 bibliographies,
+                doc_parts,
                 maths,
                 content_controls,
                 numbering,
@@ -1401,6 +1440,11 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<DocxOp>, Error> {
             )),
             "deleteBibliography" => out.push(DocxOp::DeleteBibliography(
                 parse_delete_bibliography(obj, i)?,
+            )),
+            "insertDocPart" => out.push(DocxOp::InsertDocPart(parse_insert_doc_part(obj, i)?)),
+            "deleteDocPart" => out.push(DocxOp::DeleteDocPart(parse_delete_doc_part(obj, i)?)),
+            "insertDocPartContent" => out.push(DocxOp::InsertDocPartContent(
+                parse_insert_doc_part_content(obj, i)?,
             )),
             "insertMath" => out.push(DocxOp::InsertMath(parse_insert_math(obj, i)?)),
             "setMath" => out.push(DocxOp::SetMath(parse_set_math(obj, i)?)),
@@ -2385,6 +2429,206 @@ fn parse_delete_bibliography(
     let id = require_op_id(obj, i)?;
     let n = parse_biblio_id(&id, i)?;
     Ok(DeleteBibliographyOp { id, n })
+}
+
+fn parse_insert_doc_part(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<InsertDocPartOp, Error> {
+    deny_keys(
+        obj,
+        i,
+        &[
+            "op", "id", "name", "text", "gallery", "category", "behavior",
+        ],
+    )?;
+    let id = require_op_id(obj, i)?;
+    if id != "docx:document" {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::InsertDocPartNeedsDocument,
+            },
+            format!("ops[{i}].id"),
+        ));
+    }
+    let name = require_string_field(obj, i, "insertDocPart", "name")?;
+    if name.is_empty() || name.chars().all(char::is_whitespace) {
+        return Err(Error::with_path(
+            ErrorKind::EmptyDocPartName,
+            format!("ops[{i}].name"),
+        ));
+    }
+    let text = require_string_field(obj, i, "insertDocPart", "text")?;
+    if text.is_empty() || text.chars().all(char::is_whitespace) {
+        return Err(Error::with_path(
+            ErrorKind::EmptyDocPartText,
+            format!("ops[{i}].text"),
+        ));
+    }
+    let gallery = match obj.get("gallery") {
+        None => super::glossary::DEFAULT_GALLERY.to_string(),
+        Some(Value::String(s)) => {
+            if !super::glossary::gallery_ok(s) {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidDocPartGallery,
+                    format!("ops[{i}].gallery"),
+                ));
+            }
+            s.clone()
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "gallery".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].gallery"),
+            ));
+        }
+    };
+    let category = match obj.get("category") {
+        None => super::glossary::DEFAULT_CATEGORY.to_string(),
+        Some(Value::String(s)) => {
+            if s.is_empty() || s.chars().all(char::is_whitespace) {
+                return Err(Error::with_path(
+                    ErrorKind::EmptyDocPartName,
+                    format!("ops[{i}].category"),
+                ));
+            }
+            s.clone()
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "category".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].category"),
+            ));
+        }
+    };
+    let behavior = match obj.get("behavior") {
+        None => super::glossary::DEFAULT_BEHAVIOR.to_string(),
+        Some(Value::String(s)) => {
+            if !super::glossary::behavior_ok(s) {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidDocPartBehavior,
+                    format!("ops[{i}].behavior"),
+                ));
+            }
+            s.clone()
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "behavior".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].behavior"),
+            ));
+        }
+    };
+    Ok(InsertDocPartOp {
+        name,
+        gallery,
+        category,
+        behavior,
+        text,
+    })
+}
+
+fn parse_delete_doc_part(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<DeleteDocPartOp, Error> {
+    deny_keys(obj, i, &["op", "id"])?;
+    let id = require_op_id(obj, i)?;
+    let n = parse_doc_part_id(&id, i)?;
+    Ok(DeleteDocPartOp { id, n })
+}
+
+fn parse_insert_doc_part_content(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<InsertDocPartContentOp, Error> {
+    deny_keys(obj, i, &["op", "id", "docPart"])?;
+    let id = require_op_id(obj, i)?;
+    let part_id = match obj.get("docPart") {
+        Some(Value::String(s)) => s.clone(),
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "docPart".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].docPart"),
+            ));
+        }
+        None => {
+            return Err(Error::with_path(
+                ErrorKind::OpRequiresField {
+                    op: "insertDocPartContent".into(),
+                    field: "docPart".into(),
+                },
+                format!("ops[{i}].docPart"),
+            ));
+        }
+    };
+    let n = parse_doc_part_id_at(&part_id, &format!("ops[{i}].docPart"))?;
+    let path = format!("ops[{i}].id");
+    let place = if id == "docx:document" {
+        InsertDocPartContentPlace::EndOfDocument
+    } else {
+        match para::parse_para_id_at(&id, &path)? {
+            ParaTarget::Body(p) => InsertDocPartContentPlace::After(p),
+            _ => {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidId {
+                        reason: IdReason::InsertDocPartContentNeedsBodyPara,
+                    },
+                    path,
+                ));
+            }
+        }
+    };
+    Ok(InsertDocPartContentOp {
+        id,
+        place,
+        n,
+        part_id,
+    })
+}
+
+fn parse_doc_part_id(id: &str, op_index: usize) -> Result<usize, Error> {
+    parse_doc_part_id_at(id, &format!("ops[{op_index}].id"))
+}
+
+fn parse_doc_part_id_at(id: &str, path: &str) -> Result<usize, Error> {
+    let rest = id.strip_prefix("docPart:").ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::DocPartPrefix,
+            },
+            path.to_string(),
+        )
+    })?;
+    let n: usize = rest.parse().map_err(|_| {
+        Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::DocPartIndexNotInt,
+            },
+            path.to_string(),
+        )
+    })?;
+    if n < 1 {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::DocPartIndexFromOne,
+            },
+            path.to_string(),
+        ));
+    }
+    Ok(n)
 }
 
 fn optional_string(

@@ -232,6 +232,7 @@ fn inspect_count_without_list() {
             "sourceCount",
             "citationCount",
             "bibliographyCount",
+            "docPartCount",
             "mathCount",
             "contentControlCount",
             "numberingCount",
