@@ -11,6 +11,17 @@
       "result": "1"
     },
     {
+      "op": "insertField",
+      "id": "para:AAAA0001",
+      "code": "PAGE"
+    },
+    {
+      "op": "insertField",
+      "id": "para:AAAA0001",
+      "code": "FORMTEXT",
+      "name": "Text1"
+    },
+    {
       "op": "setField",
       "id": "field:1",
       "instr": " DATE "

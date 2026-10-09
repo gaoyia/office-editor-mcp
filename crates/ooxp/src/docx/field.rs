@@ -2,9 +2,9 @@
 
 use std::collections::HashSet;
 
-use serde_json::{json, Value};
+use serde_json::{json, Map, Value};
 
-use crate::error::{Error, ErrorKind, IdReason, XmlIssue};
+use crate::error::{Error, ErrorKind, IdReason, TypeName, XmlIssue};
 use crate::xml::{Element, Node};
 
 use super::hf::HfPart;
@@ -15,6 +15,28 @@ use super::para::{self, BodyPara};
 pub enum FieldKeep {
     Result,
     Instr,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FormType {
+    Text,
+    CheckBox,
+    DropDown,
+}
+
+#[derive(Debug, Clone)]
+pub struct FormWrite {
+    pub kind: FormType,
+    pub name: String,
+    pub checked: bool,
+    pub items: Vec<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct FieldBody {
+    pub instr: String,
+    pub result: Option<String>,
+    pub form: Option<FormWrite>,
 }
 
 #[derive(Debug, Clone)]
@@ -58,16 +80,25 @@ pub fn fields_json(root: &Element, container: Option<&str>) -> Result<Vec<Value>
             FieldKind::Simple => "simple",
             FieldKind::Complex => "complex",
         };
-        out.push(json!({
-            "id": id,
-            "index": n,
-            "kind": kind,
-            "code": field_code(&rec.instr),
-            "instr": rec.instr,
-            "host": host_para_id(root, &rec.start, container, &index_of),
-            "end": host_para_id(root, &rec.end, container, &index_of),
-            "text": rec.result,
-        }));
+        let mut o = serde_json::Map::new();
+        o.insert("id".into(), json!(id));
+        o.insert("index".into(), json!(n));
+        o.insert("kind".into(), json!(kind));
+        o.insert("code".into(), json!(field_code(&rec.instr)));
+        o.insert("instr".into(), json!(rec.instr));
+        o.insert(
+            "host".into(),
+            host_para_id(root, &rec.start, container, &index_of),
+        );
+        o.insert(
+            "end".into(),
+            host_para_id(root, &rec.end, container, &index_of),
+        );
+        o.insert("text".into(), json!(rec.result));
+        if let Some(form) = form_json(root, rec) {
+            o.insert("form".into(), form);
+        }
+        out.push(Value::Object(o));
     }
     Ok(out)
 }
@@ -112,15 +143,24 @@ pub fn para_blocks_set_text(root: &Element, target: &BodyPara) -> bool {
 }
 
 pub fn insert_field(p: &mut Element, instr: &str, result: Option<&str>) {
-    p.push_element(fld_char_run(p, "begin", true));
+    insert_field_form(p, instr, result, None);
+}
+
+pub fn insert_field_form(
+    p: &mut Element,
+    instr: &str,
+    result: Option<&str>,
+    form: Option<&FormWrite>,
+) {
+    p.push_element(fld_char_run(p, "begin", true, form));
     p.push_element(instr_run(p, instr));
-    p.push_element(fld_char_run(p, "separate", false));
+    p.push_element(fld_char_run(p, "separate", false, None));
     if let Some(text) = result {
         if !text.is_empty() {
             p.push_element(para::new_text_run(p, text));
         }
     }
-    p.push_element(fld_char_run(p, "end", false));
+    p.push_element(fld_char_run(p, "end", false, None));
 }
 
 pub fn set_field_instr(
@@ -586,13 +626,18 @@ fn remove_paths(root: &mut Element, mut paths: Vec<Vec<usize>>) -> Result<(), Er
     Ok(())
 }
 
-fn fld_char_run(parent: &Element, kind: &str, dirty: bool) -> Element {
+fn fld_char_run(parent: &Element, kind: &str, dirty: bool, form: Option<&FormWrite>) -> Element {
     let mut ch = Element::new(parent.prefixed("fldChar"));
     let ty = ch.prefixed("fldCharType");
     ch.set_attr(&ty, kind);
     if dirty {
         let d = ch.prefixed("dirty");
         ch.set_attr(&d, "true");
+    }
+    if kind == "begin" {
+        if let Some(form) = form {
+            ch.push_element(ff_data(parent, form));
+        }
     }
     let mut r = Element::new(parent.prefixed("r"));
     r.push_element(ch);
@@ -606,6 +651,422 @@ fn instr_run(parent: &Element, instr: &str) -> Element {
     let mut r = Element::new(parent.prefixed("r"));
     r.push_element(t);
     r
+}
+
+fn on_off(parent: &Element, local: &str, on: bool) -> Element {
+    let mut el = Element::new(parent.prefixed(local));
+    if !on {
+        let key = el.prefixed("val");
+        el.set_attr(&key, "0");
+    }
+    el
+}
+
+fn named(parent: &Element, local: &str, val: &str) -> Element {
+    let mut el = Element::new(parent.prefixed(local));
+    let key = el.prefixed("val");
+    el.set_attr(&key, val);
+    el
+}
+
+fn ff_data(parent: &Element, form: &FormWrite) -> Element {
+    let mut ff = Element::new(parent.prefixed("ffData"));
+    ff.push_element(named(parent, "name", &form.name));
+    ff.push_element(on_off(parent, "enabled", true));
+    ff.push_element(on_off(parent, "calcOnExit", false));
+    match form.kind {
+        FormType::Text => {
+            ff.push_element(Element::new(parent.prefixed("textInput")));
+        }
+        FormType::CheckBox => {
+            let mut box_el = Element::new(parent.prefixed("checkBox"));
+            box_el.push_element(Element::new(parent.prefixed("sizeAuto")));
+            box_el.push_element(on_off(parent, "default", form.checked));
+            ff.push_element(box_el);
+        }
+        FormType::DropDown => {
+            let mut list = Element::new(parent.prefixed("ddList"));
+            for item in &form.items {
+                list.push_element(named(parent, "listEntry", item));
+            }
+            ff.push_element(list);
+        }
+    }
+    ff
+}
+
+fn form_json(root: &Element, rec: &FieldRec) -> Option<Value> {
+    if rec.kind != FieldKind::Complex {
+        return None;
+    }
+    let el = para::element_at(root, &rec.start)?;
+    let ff = el.child_by_local("ffData")?;
+    let type_name = if ff.child_by_local("checkBox").is_some() {
+        "checkBox"
+    } else if ff.child_by_local("ddList").is_some() {
+        "dropDown"
+    } else {
+        "text"
+    };
+    let name = ff
+        .child_by_local("name")
+        .and_then(|n| n.attr_local("val"))
+        .unwrap_or("")
+        .to_string();
+    let enabled = ff
+        .child_by_local("enabled")
+        .map(on_off_is_true)
+        .unwrap_or(true);
+    let mut o = Map::new();
+    o.insert("type".into(), json!(type_name));
+    o.insert("name".into(), json!(name));
+    o.insert("enabled".into(), json!(enabled));
+    if type_name == "checkBox" {
+        let checked = ff
+            .child_by_local("checkBox")
+            .and_then(|b| {
+                b.child_by_local("default")
+                    .or_else(|| b.child_by_local("checked"))
+            })
+            .is_some_and(on_off_is_true);
+        o.insert("checked".into(), json!(checked));
+    }
+    if type_name == "dropDown" {
+        let items: Vec<Value> = ff
+            .child_by_local("ddList")
+            .map(|list| {
+                list.element_children()
+                    .filter(|c| c.local_name() == "listEntry")
+                    .filter_map(|c| c.attr_local("val").map(|s| json!(s)))
+                    .collect()
+            })
+            .unwrap_or_default();
+        o.insert("items".into(), json!(items));
+    }
+    Some(Value::Object(o))
+}
+
+fn on_off_is_true(el: &Element) -> bool {
+    match el.attr_local("val") {
+        None => true,
+        Some(v) => matches!(v, "1" | "true" | "on"),
+    }
+}
+
+pub fn parse_field_body(obj: &Map<String, Value>, path: &str) -> Result<FieldBody, Error> {
+    let has_instr = obj.contains_key("instr");
+    let has_code = obj.contains_key("code");
+    let result = match obj.get("result") {
+        None => None,
+        Some(Value::String(s)) => Some(s.clone()),
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "result".into(),
+                    expected: TypeName::String,
+                },
+                format!("{path}.result"),
+            ));
+        }
+    };
+    match (has_instr, has_code) {
+        (true, true) => Err(Error::with_path(
+            ErrorKind::MutuallyExclusive {
+                a: "instr".into(),
+                b: "code".into(),
+            },
+            path.to_string(),
+        )),
+        (false, false) => Err(Error::with_path(
+            ErrorKind::FieldNeedInstrOrCode,
+            path.to_string(),
+        )),
+        (true, false) => {
+            for extra in ["arg", "name", "items", "checked"] {
+                if obj.contains_key(extra) {
+                    return Err(Error::with_path(
+                        ErrorKind::UnknownField {
+                            field: extra.into(),
+                        },
+                        format!("{path}.{extra}"),
+                    ));
+                }
+            }
+            let instr = nonempty_instr(obj.get("instr"), &format!("{path}.instr"))?;
+            Ok(FieldBody {
+                instr,
+                result,
+                form: None,
+            })
+        }
+        (false, true) => parse_code_body(obj, path, result),
+    }
+}
+
+fn nonempty_instr(v: Option<&Value>, path: &str) -> Result<String, Error> {
+    match v {
+        Some(Value::String(s)) if !s.trim().is_empty() => Ok(s.clone()),
+        Some(Value::String(_)) => Err(Error::with_path(
+            ErrorKind::EmptyFieldInstr,
+            path.to_string(),
+        )),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "instr".into(),
+                expected: TypeName::String,
+            },
+            path.to_string(),
+        )),
+        None => Err(Error::with_path(
+            ErrorKind::EmptyFieldInstr,
+            path.to_string(),
+        )),
+    }
+}
+
+fn parse_code_body(
+    obj: &Map<String, Value>,
+    path: &str,
+    result: Option<String>,
+) -> Result<FieldBody, Error> {
+    let code_raw = match obj.get("code") {
+        Some(Value::String(s)) => s.as_str(),
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "code".into(),
+                    expected: TypeName::String,
+                },
+                format!("{path}.code"),
+            ));
+        }
+        None => {
+            return Err(Error::with_path(
+                ErrorKind::MissingField {
+                    field: "code".into(),
+                },
+                format!("{path}.code"),
+            ));
+        }
+    };
+    let code = code_raw.trim().to_ascii_uppercase();
+    if matches!(
+        code.as_str(),
+        "INCLUDETEXT" | "INCLUDEPICTURE" | "ASK" | "FILLIN"
+    ) {
+        return Err(Error::with_path(
+            ErrorKind::InvalidFieldCode { got: code },
+            format!("{path}.code"),
+        ));
+    }
+    let arg = optional_arg(obj.get("arg"), &format!("{path}.arg"))?;
+    let name = optional_arg(obj.get("name"), &format!("{path}.name"))?;
+    let checked = match obj.get("checked") {
+        None => false,
+        Some(Value::Bool(b)) => *b,
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "checked".into(),
+                    expected: TypeName::Boolean,
+                },
+                format!("{path}.checked"),
+            ));
+        }
+    };
+    let items = parse_items(obj.get("items"), &format!("{path}.items"))?;
+    let form_code = matches!(code.as_str(), "FORMTEXT" | "FORMCHECKBOX" | "FORMDROPDOWN");
+    if !form_code {
+        if obj.contains_key("name") {
+            return Err(Error::with_path(
+                ErrorKind::UnknownField {
+                    field: "name".into(),
+                },
+                format!("{path}.name"),
+            ));
+        }
+        if obj.contains_key("checked") {
+            return Err(Error::with_path(
+                ErrorKind::UnknownField {
+                    field: "checked".into(),
+                },
+                format!("{path}.checked"),
+            ));
+        }
+        if obj.contains_key("items") {
+            return Err(Error::with_path(
+                ErrorKind::UnknownField {
+                    field: "items".into(),
+                },
+                format!("{path}.items"),
+            ));
+        }
+    }
+    let needs_arg = matches!(
+        code.as_str(),
+        "MERGEFIELD" | "STYLEREF" | "REF" | "DOCPROPERTY"
+    );
+    if needs_arg && arg.is_none() {
+        return Err(Error::with_path(
+            ErrorKind::FieldNeedArg { code: code.clone() },
+            format!("{path}.arg"),
+        ));
+    }
+    if !needs_arg && code != "LISTNUM" && obj.contains_key("arg") {
+        return Err(Error::with_path(
+            ErrorKind::UnknownField {
+                field: "arg".into(),
+            },
+            format!("{path}.arg"),
+        ));
+    }
+    if code == "FORMCHECKBOX" && obj.contains_key("items") {
+        return Err(Error::with_path(
+            ErrorKind::UnknownField {
+                field: "items".into(),
+            },
+            format!("{path}.items"),
+        ));
+    }
+    if code == "FORMTEXT" && (obj.contains_key("items") || obj.contains_key("checked")) {
+        let field = if obj.contains_key("items") {
+            "items"
+        } else {
+            "checked"
+        };
+        return Err(Error::with_path(
+            ErrorKind::UnknownField {
+                field: field.into(),
+            },
+            format!("{path}.{field}"),
+        ));
+    }
+    if code == "FORMDROPDOWN" && obj.contains_key("checked") {
+        return Err(Error::with_path(
+            ErrorKind::UnknownField {
+                field: "checked".into(),
+            },
+            format!("{path}.checked"),
+        ));
+    }
+    let (instr, form) = match code.as_str() {
+        "PAGE" | "NUMPAGES" | "DATE" | "TIME" | "FILENAME" | "AUTHOR" => {
+            (format!(" {code} "), None)
+        }
+        "LISTNUM" => {
+            let instr = match &arg {
+                Some(a) => format!(" LISTNUM {a} "),
+                None => " LISTNUM ".into(),
+            };
+            (instr, None)
+        }
+        "DOCPROPERTY" | "MERGEFIELD" | "STYLEREF" | "REF" => {
+            let a = arg.expect("已检查 arg");
+            (format!(" {code} {a} "), None)
+        }
+        "FORMTEXT" => {
+            let name = name.unwrap_or_else(|| "Text1".into());
+            (
+                " FORMTEXT ".into(),
+                Some(FormWrite {
+                    kind: FormType::Text,
+                    name,
+                    checked: false,
+                    items: Vec::new(),
+                }),
+            )
+        }
+        "FORMCHECKBOX" => {
+            let name = name.unwrap_or_else(|| "Check1".into());
+            (
+                " FORMCHECKBOX ".into(),
+                Some(FormWrite {
+                    kind: FormType::CheckBox,
+                    name,
+                    checked,
+                    items: Vec::new(),
+                }),
+            )
+        }
+        "FORMDROPDOWN" => {
+            let name = name.unwrap_or_else(|| "Drop1".into());
+            (
+                " FORMDROPDOWN ".into(),
+                Some(FormWrite {
+                    kind: FormType::DropDown,
+                    name,
+                    checked: false,
+                    items,
+                }),
+            )
+        }
+        other => {
+            return Err(Error::with_path(
+                ErrorKind::InvalidFieldCode { got: other.into() },
+                format!("{path}.code"),
+            ));
+        }
+    };
+    Ok(FieldBody {
+        instr,
+        result,
+        form,
+    })
+}
+
+fn optional_arg(v: Option<&Value>, path: &str) -> Result<Option<String>, Error> {
+    match v {
+        None => Ok(None),
+        Some(Value::String(s)) if !s.trim().is_empty() => Ok(Some(s.clone())),
+        Some(Value::String(_)) => Err(Error::with_path(
+            ErrorKind::EmptyFieldInstr,
+            path.to_string(),
+        )),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: path.rsplit('.').next().unwrap_or("arg").into(),
+                expected: TypeName::String,
+            },
+            path.to_string(),
+        )),
+    }
+}
+
+fn parse_items(v: Option<&Value>, path: &str) -> Result<Vec<String>, Error> {
+    let Some(v) = v else {
+        return Ok(Vec::new());
+    };
+    let arr = v.as_array().ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::WrongType {
+                field: "items".into(),
+                expected: TypeName::Array,
+            },
+            path.to_string(),
+        )
+    })?;
+    let mut out = Vec::new();
+    for (i, item) in arr.iter().enumerate() {
+        match item {
+            Value::String(s) if !s.is_empty() => out.push(s.clone()),
+            Value::String(_) => {
+                return Err(Error::with_path(
+                    ErrorKind::EmptyFieldInstr,
+                    format!("{path}[{i}]"),
+                ));
+            }
+            _ => {
+                return Err(Error::with_path(
+                    ErrorKind::WrongType {
+                        field: "items".into(),
+                        expected: TypeName::String,
+                    },
+                    format!("{path}[{i}]"),
+                ));
+            }
+        }
+    }
+    Ok(out)
 }
 
 fn rename_local(el: &mut Element, local: &str) {
@@ -1708,9 +2169,9 @@ pub fn delete_index(root: &mut Element, n: usize, err_id: &str, op_i: usize) -> 
 }
 
 fn insert_xe_field(p: &mut Element, instr: &str) {
-    p.push_element(fld_char_run(p, "begin", false));
+    p.push_element(fld_char_run(p, "begin", false, None));
     p.push_element(instr_run(p, instr));
-    p.push_element(fld_char_run(p, "end", false));
+    p.push_element(fld_char_run(p, "end", false, None));
 }
 
 pub fn insert_index_entry(p: &mut Element, entry: &str) {

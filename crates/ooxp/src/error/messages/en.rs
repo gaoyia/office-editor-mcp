@@ -1331,6 +1331,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             "Cannot change visible text in a paragraph that contains a content control".into()
         }
         ErrorKind::EmptyFieldInstr => "instr must not be empty".into(),
+        ErrorKind::FieldNeedInstrOrCode => "exactly one of instr or code is required".into(),
+        ErrorKind::InvalidFieldCode { got } => format!("unknown field code: {got}"),
+        ErrorKind::FieldNeedArg { code } => format!("{code} requires arg"),
         ErrorKind::EmptyMathText => "text must not be empty".into(),
         ErrorKind::InvalidMathKind => "kind must be inline or display".into(),
         ErrorKind::MathNeedTextOrExpr => "exactly one of text or expr is required".into(),

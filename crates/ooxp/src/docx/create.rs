@@ -85,6 +85,7 @@ struct NewBookmark {
 struct NewField {
     instr: String,
     result: Option<String>,
+    form: Option<super::field::FormWrite>,
 }
 
 struct NewMath {
@@ -1975,41 +1976,22 @@ fn parse_fields(v: Option<&Value>, prefix: &str) -> Result<Vec<NewField>, Error>
             )
         })?;
         for k in obj.keys() {
-            if !matches!(k.as_str(), "instr" | "result") {
+            if !matches!(
+                k.as_str(),
+                "instr" | "result" | "code" | "arg" | "name" | "items" | "checked"
+            ) {
                 return Err(Error::with_path(
                     ErrorKind::UnknownField { field: k.clone() },
                     format!("{item_path}.{k}"),
                 ));
             }
         }
-        let instr = match obj.get("instr") {
-            Some(Value::String(s)) if !s.trim().is_empty() => s.clone(),
-            Some(Value::String(_)) => {
-                return Err(Error::with_path(
-                    ErrorKind::EmptyFieldInstr,
-                    format!("{item_path}.instr"),
-                ));
-            }
-            None => {
-                return Err(Error::with_path(
-                    ErrorKind::MissingField {
-                        field: "instr".into(),
-                    },
-                    format!("{item_path}.instr"),
-                ));
-            }
-            Some(_) => {
-                return Err(Error::with_path(
-                    ErrorKind::WrongType {
-                        field: "instr".into(),
-                        expected: TypeName::String,
-                    },
-                    format!("{item_path}.instr"),
-                ));
-            }
-        };
-        let result = parse_optional_str(obj.get("result"), &item_path, "result")?;
-        out.push(NewField { instr, result });
+        let body = super::field::parse_field_body(obj, &item_path)?;
+        out.push(NewField {
+            instr: body.instr,
+            result: body.result,
+            form: body.form,
+        });
     }
     Ok(out)
 }
@@ -2678,6 +2660,7 @@ fn push_story_ops(
                 para: host.clone(),
                 instr: f.instr.clone(),
                 result: f.result.clone(),
+                form: f.form.clone(),
             }));
         }
         for m in &p.maths {

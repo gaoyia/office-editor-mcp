@@ -412,3 +412,259 @@ fn insert_field_rejects_empty_instr_and_non_para() {
     );
     assert_eq!(err_miss.code(), ErrorCode::IdNotFound);
 }
+
+fn create_docx(tag: &str, document: serde_json::Value) -> PathBuf {
+    let n = SEQ.fetch_add(1, Ordering::Relaxed);
+    let path = tmp_dir().join(format!("{tag}-{n}.docx"));
+    run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "create",
+            "path": path.to_string_lossy(),
+            "format": "docx",
+            "document": document
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap();
+    path
+}
+
+fn create_err(document: serde_json::Value) -> ooxp::Error {
+    let n = SEQ.fetch_add(1, Ordering::Relaxed);
+    let path = tmp_dir().join(format!("create-err-{n}.docx"));
+    run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "create",
+            "path": path.to_string_lossy(),
+            "format": "docx",
+            "document": document
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap_err()
+}
+
+#[test]
+fn insert_field_code_page_has_no_form() {
+    let path = write_sample("code-page");
+    let out = tmp_dir().join("code-page-out.docx");
+    apply(
+        &path,
+        &out,
+        json!([{ "op": "insertField", "id": "para:AAAA0006", "code": "page" }]),
+    );
+    let tree = listed(&out);
+    let new = tree["fields"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|f| f["host"] == "para:AAAA0006")
+        .unwrap();
+    assert_eq!(new["kind"], "complex");
+    assert_eq!(new["code"], "PAGE");
+    assert!(new["instr"].as_str().unwrap().contains("PAGE"));
+    assert!(new.get("form").is_none());
+    let xml = part_text(&out, "word/document.xml");
+    assert!(xml.contains(r#"w:fldCharType="begin""#));
+    assert!(xml.contains(r#"w:dirty="true""#));
+    assert!(!xml.contains("ffData"));
+}
+
+#[test]
+fn insert_field_mergefield_needs_arg() {
+    let path = write_sample("merge");
+    let out = tmp_dir().join("merge-out.docx");
+    apply(
+        &path,
+        &out,
+        json!([{
+            "op": "insertField",
+            "id": "para:AAAA0006",
+            "code": "MERGEFIELD",
+            "arg": "Name"
+        }]),
+    );
+    let tree = listed(&out);
+    let new = tree["fields"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|f| f["host"] == "para:AAAA0006")
+        .unwrap();
+    assert_eq!(new["code"], "MERGEFIELD");
+    assert!(new["instr"].as_str().unwrap().contains("Name"));
+    assert!(new.get("form").is_none());
+}
+
+#[test]
+fn insert_field_form_text_writes_ffdata() {
+    let path = write_sample("form-text");
+    let out = tmp_dir().join("form-text-out.docx");
+    apply(
+        &path,
+        &out,
+        json!([{ "op": "insertField", "id": "para:AAAA0006", "code": "FORMTEXT" }]),
+    );
+    let tree = listed(&out);
+    let new = tree["fields"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|f| f["host"] == "para:AAAA0006")
+        .unwrap();
+    assert_eq!(new["code"], "FORMTEXT");
+    assert_eq!(object_keys(&new["form"]), ["type", "name", "enabled"]);
+    assert_eq!(new["form"]["type"], "text");
+    assert_eq!(new["form"]["name"], "Text1");
+    assert_eq!(new["form"]["enabled"], true);
+    let xml = part_text(&out, "word/document.xml");
+    assert!(xml.contains("<w:ffData>"));
+    assert!(xml.contains(r#"w:name w:val="Text1""#));
+    assert!(xml.contains("<w:textInput"));
+    assert!(!xml.contains("bookmarkStart"));
+}
+
+#[test]
+fn insert_field_form_checkbox_and_dropdown() {
+    let path = write_sample("form-more");
+    let out = tmp_dir().join("form-more-out.docx");
+    apply(
+        &path,
+        &out,
+        json!([
+            {
+                "op": "insertField",
+                "id": "para:AAAA0006",
+                "code": "FORMCHECKBOX",
+                "checked": true
+            },
+            {
+                "op": "insertField",
+                "id": "para:AAAA0006",
+                "code": "FORMDROPDOWN",
+                "name": "DropA",
+                "items": ["A", "B"]
+            }
+        ]),
+    );
+    let tree = listed(&out);
+    let in_p6: Vec<_> = tree["fields"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|f| f["host"] == "para:AAAA0006")
+        .collect();
+    assert_eq!(in_p6.len(), 2);
+    let boxf = in_p6.iter().find(|f| f["code"] == "FORMCHECKBOX").unwrap();
+    assert_eq!(
+        object_keys(&boxf["form"]),
+        ["type", "name", "enabled", "checked"]
+    );
+    assert_eq!(boxf["form"]["type"], "checkBox");
+    assert_eq!(boxf["form"]["name"], "Check1");
+    assert_eq!(boxf["form"]["checked"], true);
+    let drop = in_p6.iter().find(|f| f["code"] == "FORMDROPDOWN").unwrap();
+    assert_eq!(
+        object_keys(&drop["form"]),
+        ["type", "name", "enabled", "items"]
+    );
+    assert_eq!(drop["form"]["type"], "dropDown");
+    assert_eq!(drop["form"]["name"], "DropA");
+    assert_eq!(drop["form"]["items"], json!(["A", "B"]));
+}
+
+#[test]
+fn set_field_keeps_ffdata() {
+    let path = write_sample("set-ff");
+    let mid = tmp_dir().join("set-ff-mid.docx");
+    apply(
+        &path,
+        &mid,
+        json!([{ "op": "insertField", "id": "para:AAAA0006", "code": "FORMTEXT", "name": "KeepMe" }]),
+    );
+    let listed_mid = listed(&mid);
+    let id = listed_mid["fields"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|f| f["host"] == "para:AAAA0006")
+        .unwrap()["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let out = tmp_dir().join("set-ff-out.docx");
+    apply(
+        &mid,
+        &out,
+        json!([{ "op": "setField", "id": id, "instr": " FORMTEXT " }]),
+    );
+    let tree = listed(&out);
+    let kept = tree["fields"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|f| f["host"] == "para:AAAA0006")
+        .unwrap();
+    assert_eq!(kept["form"]["name"], "KeepMe");
+    assert_eq!(kept["form"]["type"], "text");
+}
+
+#[test]
+fn create_field_code_numpages() {
+    let path = create_docx(
+        "create-code",
+        json!({
+            "paragraphs": [{
+                "text": "页数",
+                "fields": [{ "code": "NUMPAGES" }]
+            }]
+        }),
+    );
+    let tree = listed(&path);
+    assert_eq!(tree["fieldCount"], 1);
+    assert_eq!(tree["fields"][0]["code"], "NUMPAGES");
+    assert!(tree["fields"][0].get("form").is_none());
+}
+
+#[test]
+fn insert_field_rejects_code_conflicts() {
+    let path = write_sample("code-bad");
+    let err_both = apply_err(
+        &path,
+        json!([{
+            "op": "insertField",
+            "id": "para:AAAA0006",
+            "instr": " PAGE ",
+            "code": "PAGE"
+        }]),
+    );
+    assert_eq!(err_both.code(), ErrorCode::InvalidField);
+    let err_ref = apply_err(
+        &path,
+        json!([{ "op": "insertField", "id": "para:AAAA0006", "code": "REF" }]),
+    );
+    assert_eq!(err_ref.code(), ErrorCode::InvalidField);
+    let err_inc = apply_err(
+        &path,
+        json!([{ "op": "insertField", "id": "para:AAAA0006", "code": "INCLUDETEXT" }]),
+    );
+    assert_eq!(err_inc.code(), ErrorCode::InvalidField);
+    let err_none = apply_err(
+        &path,
+        json!([{ "op": "insertField", "id": "para:AAAA0006" }]),
+    );
+    assert_eq!(err_none.code(), ErrorCode::InvalidField);
+    let err_arg = apply_err(
+        &path,
+        json!([{ "op": "insertField", "id": "para:AAAA0006", "code": "PAGE", "arg": "x" }]),
+    );
+    assert_eq!(err_arg.code(), ErrorCode::InvalidField);
+    let err_create = create_err(json!({
+        "paragraphs": [{ "text": "x", "fields": [{ "code": "FOO" }] }]
+    }));
+    assert_eq!(err_create.code(), ErrorCode::InvalidField);
+}

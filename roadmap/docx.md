@@ -74,6 +74,7 @@ xlsx 见 [`roadmap/xlsx.md`](xlsx.md)。pptx 见 [`roadmap/pptx.md`](pptx.md)。
 | 39 | `.plan/2026年-10月-9日-🚫-docx-框内再套框.md` | 文本框；Word 16.0 拒嵌套，放弃 |
 | 40 | `.plan/2026年-10月-9日-✅-docx-create补齐剩余.md` | create 补齐已过 |
 | 41 | `.plan/2026年-10月-9日-✅-docx-公式结构剩余.md` | 公式 |
+| 42 | `.plan/2026年-10月-9日-✅-docx-域类型补齐.md` | 域 |
 | C1 | `.plan/2026年-9月-27日-✅-图表剩余.md` | 嵌入图表已过 |
 | C2 | `.plan/2026年-9月-27日-✅-SmartArt跨家族.md` | SmartArt 已过 |
 | C3 | `.plan/2026年-9月-27日-✅-批注墨迹.md` | 批注已过 |
@@ -87,7 +88,6 @@ xlsx 见 [`roadmap/xlsx.md`](xlsx.md)。pptx 见 [`roadmap/pptx.md`](pptx.md)。
 
 | 序 | 计划 | 前置 |
 | --- | --- | --- |
-| 42 | 域类型补齐 | 域 |
 | 43 | 内容控件类型补齐 | 内容控件 |
 | 44 | 嵌入 SVG | 正文图 |
 | 45 | 墨迹画布（非批注） | 批注墨迹 |
@@ -98,4 +98,4 @@ xlsx 见 [`roadmap/xlsx.md`](xlsx.md)。pptx 见 [`roadmap/pptx.md`](pptx.md)。
 
 ## 怎么算 Word 全量做完
 
-已过表保持 ✅，待做 42–45 做完，39 保持 🚫，`docs/` 与实现一致，Word 16.0 手测过对应清单。永不做的条目不算欠账。排版引擎保持 🚫。
+已过表保持 ✅，待做 43–45 做完，39 保持 🚫，`docs/` 与实现一致，Word 16.0 手测过对应清单。永不做的条目不算欠账。排版引擎保持 🚫。

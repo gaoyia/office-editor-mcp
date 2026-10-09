@@ -468,19 +468,60 @@
     },
     "docxFieldCreate": {
       "type": "object",
-      "required": [
-        "instr"
-      ],
       "additionalProperties": false,
       "properties": {
         "instr": {
           "type": "string",
           "minLength": 1
         },
+        "code": {
+          "type": "string",
+          "minLength": 1
+        },
+        "arg": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "checked": {
+          "type": "boolean"
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
         "result": {
           "type": "string"
         }
-      }
+      },
+      "oneOf": [
+        {
+          "required": [
+            "instr"
+          ],
+          "not": {
+            "required": [
+              "code"
+            ]
+          }
+        },
+        {
+          "required": [
+            "code"
+          ],
+          "not": {
+            "required": [
+              "instr"
+            ]
+          }
+        }
+      ]
     },
     "docxMathCreate": {
       "type": "object",
@@ -1626,8 +1667,7 @@
       "type": "object",
       "required": [
         "op",
-        "id",
-        "instr"
+        "id"
       ],
       "additionalProperties": false,
       "properties": {
@@ -1642,10 +1682,54 @@
           "type": "string",
           "minLength": 1
         },
+        "code": {
+          "type": "string",
+          "minLength": 1
+        },
+        "arg": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "checked": {
+          "type": "boolean"
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
         "result": {
           "type": "string"
         }
-      }
+      },
+      "oneOf": [
+        {
+          "required": [
+            "instr"
+          ],
+          "not": {
+            "required": [
+              "code"
+            ]
+          }
+        },
+        {
+          "required": [
+            "code"
+          ],
+          "not": {
+            "required": [
+              "instr"
+            ]
+          }
+        }
+      ]
     },
     "setFieldOp": {
       "type": "object",

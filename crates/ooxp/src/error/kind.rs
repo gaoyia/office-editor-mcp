@@ -944,6 +944,9 @@ define_error_kinds! {
     SetParaTextHasMath => vec![Self::SetParaTextHasMath],
     SetParaTextHasSdt => vec![Self::SetParaTextHasSdt],
     EmptyFieldInstr => vec![Self::EmptyFieldInstr],
+    FieldNeedInstrOrCode => vec![Self::FieldNeedInstrOrCode],
+    InvalidFieldCode { got: String } => vec![Self::InvalidFieldCode { got: "FOO".into() }],
+    FieldNeedArg { code: String } => vec![Self::FieldNeedArg { code: "REF".into() }],
     InvalidFieldKeep => vec![Self::InvalidFieldKeep],
     NeedSetFieldInstr => vec![Self::NeedSetFieldInstr],
     NumberingNotFound { id: String } => vec![Self::NumberingNotFound { id: "num:1".into() }],
@@ -1593,6 +1596,9 @@ impl ErrorKind {
             | Self::PptxHyperlinkSelfSlide
             | Self::EmptyHyperlinkFile
             | Self::EmptyFieldInstr
+            | Self::FieldNeedInstrOrCode
+            | Self::InvalidFieldCode { .. }
+            | Self::FieldNeedArg { .. }
             | Self::InvalidFieldKeep
             | Self::NeedSetFieldInstr
             | Self::InvalidNumberingKind

@@ -8,7 +8,7 @@
 
 Microsoft Word 16.0 已打开，用户确认通过。create、inspect、apply 三组都过了。O1 已放弃，见下表。本机若装了 WPS，`Word.Application` 会被抢走，测试仍直接启动 `WINWORD.EXE` 再挂 COM。A11 补过 `word/settings.xml` 之后，2026-09-26 用新 `docx-create.docx` 重跑，Word 报 `CompatibilityMode=15`。
 
-C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，跑 `pwsh -File manual-check\office\run.ps1 -Case 'docx-*'` 即可复现，逐条结果落在 `manual-check/office/out/office-results.csv`。2026-09-27 补跑 `docx-charts-remain.ps1`，Cr1–Cr6 通过。同日重跑 `docx-charts-ext.ps1`，Cx8 股价三条转柱形。2026-09-29 补跑 `docx-charts-rare.ps1`，Cq1–Cq5 通过。同日重跑 `docx-smartart.ps1`，Sa1–Sa9 通过。同日重跑 `docx-comments.ps1`，Cmt1–Cmt7、Ik1–Ik4 通过。2026-09-28 补跑 `docx-format.ps1`，Pf1–Pf6 通过。同日补跑 `docx-ole.ps1`，Ol1–Ol5 通过。同日补跑 `docx-protect.ps1`，Pr1–Pr6 通过。同日补跑 `docx-watermark.ps1`，Wm1–Wm5 通过。2026-10-09 补跑 `docx-theme.ps1`，Th1–Th5 通过。同日补跑 `docx-caption-xref.ps1`，Cp1–Cp6 通过。同日补跑 `docx-index.ps1`，Ix1–Ix6 通过。同日补跑 `docx-biblio.ps1`，Bi1–Bi6 通过。同日补跑 `docx-glossary.ps1`，Bb1–Bb6 通过。同日补跑 `docx-font-embed.ps1`，Fe1–Fe6 通过。同日补跑 `docx-page-bg.ps1`，Pb1–Pb6 通过。同日补跑 `docx-protect-hash.ps1`，Ph1–Ph5 通过。同日补跑 `docx-revision-remain.ps1`，Rm1–Rm9 通过。同日补跑 `docx-groups.ps1`，Dg1–Dg8 通过。2026-10-09 探测框内再套框，Word 16.0 只写出故事级兄弟框，Nt1 放弃。同日补跑 `docx-create-remain.ps1`，Cs1–Cs9 通过。
+C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，跑 `pwsh -File manual-check\office\run.ps1 -Case 'docx-*'` 即可复现，逐条结果落在 `manual-check/office/out/office-results.csv`。2026-09-27 补跑 `docx-charts-remain.ps1`，Cr1–Cr6 通过。同日重跑 `docx-charts-ext.ps1`，Cx8 股价三条转柱形。2026-09-29 补跑 `docx-charts-rare.ps1`，Cq1–Cq5 通过。同日重跑 `docx-smartart.ps1`，Sa1–Sa9 通过。同日重跑 `docx-comments.ps1`，Cmt1–Cmt7、Ik1–Ik4 通过。2026-09-28 补跑 `docx-format.ps1`，Pf1–Pf6 通过。同日补跑 `docx-ole.ps1`，Ol1–Ol5 通过。同日补跑 `docx-protect.ps1`，Pr1–Pr6 通过。同日补跑 `docx-watermark.ps1`，Wm1–Wm5 通过。2026-10-09 补跑 `docx-theme.ps1`，Th1–Th5 通过。同日补跑 `docx-caption-xref.ps1`，Cp1–Cp6 通过。同日补跑 `docx-index.ps1`，Ix1–Ix6 通过。同日补跑 `docx-biblio.ps1`，Bi1–Bi6 通过。同日补跑 `docx-glossary.ps1`，Bb1–Bb6 通过。同日补跑 `docx-font-embed.ps1`，Fe1–Fe6 通过。同日补跑 `docx-page-bg.ps1`，Pb1–Pb6 通过。同日补跑 `docx-protect-hash.ps1`，Ph1–Ph5 通过。同日补跑 `docx-revision-remain.ps1`，Rm1–Rm9 通过。同日补跑 `docx-groups.ps1`，Dg1–Dg8 通过。2026-10-09 探测框内再套框，Word 16.0 只写出故事级兄弟框，Nt1 放弃。同日补跑 `docx-create-remain.ps1`，Cs1–Cs9 通过。2026-10-09 补跑 `docx-field-types.ps1`，Ft1–Ft7 通过。
 
 | 序号 | 状态 | 结果 |
 | --- | --- | --- |
@@ -42,6 +42,7 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 | Dg1–Dg8 | ✅ | Word 16.0：`docx-groups.ps1`，8 PASS / 0 FAIL。无名单时根上有 `connectorCount=0`；`insertConnector` 后 `prst=straightConnector1`、COM 连接线可见；删后计数为 0；两框 / 两浮动图 `groupShapes` 后 COM `Type=6`、树上仍是两个成员；`ungroup` 后独立；页眉连接线容器计数为 1、正文仍为 0；行内当成员 / `insertShape` / 错 id / xlsx 用段落 id 分别得 `InvalidField` / `IdNotFound` / `InvalidId`。标题栏无 Repair |
 | Hb1–Hb7 | ✅ | Word 16.0：`docx-hyperlink.ps1`，7 PASS / 0 FAIL。名单、改 URL、插链、删链、插书签、删书签、带链段 `setParaText` 得 `NotImplemented`。标题栏无 Repair |
 | Fd1–Fd7 | ✅ | Word 16.0：`docx-field.ps1`，7 PASS / 0 FAIL。名单、改 PAGE 为 DATE、插 DATE、删域留结果、删域留指令、页眉 PAGE、带域段 `setParaText` 得 `NotImplemented`。标题栏无 Repair |
+| Ft1–Ft7 | ✅ | Word 16.0：`docx-field-types.ps1`，7 PASS / 0 FAIL。`code` 写 PAGE 无 `form`；MERGEFIELD 带 `arg`；FORMTEXT 有 `ffData` 且 `FormFields.Count≥1`；复选 `checked=true`；下拉 `items` 含 A/B；create `NUMPAGES`；同时给 `instr`/`code`、缺 `arg`、`INCLUDETEXT` 为 `InvalidField`。标题栏无 Repair |
 | Nl1–Nl6 | ✅ | Word 16.0：`docx-numbering.ps1`，6 PASS / 0 FAIL。名单、段上 `num`/`ilvl`、插 decimal 定义、绑两段、改 bullet、解绑。标题栏无 Repair |
 | St1–St6 | ✅ | Word 16.0：`docx-style.ps1`，6 PASS / 0 FAIL。名单、换 Heading2、大纲对得上、改 Normal 为 24 磅、去掉 Heading1 加粗、解绑。标题栏无 Repair |
 | Sc1–Sc6 | ✅ | Word 16.0：`docx-insert-section.ps1`，6 PASS / 0 FAIL。插节后两节且第二节 `headerLink.default`；打开无修复；断链后两节页眉能独立改字；删节后只剩一节、无孤儿 `headerN.xml`；create 带 `sectionType` 为两节。标题栏无 Repair |
@@ -416,6 +417,20 @@ Word 跟踪修订下改表单元格底纹、插入空段、删除表行。`inspe
 | Fd5 | 删域留指令 | `deleteField` 且 `keep` 为 `instr` 后指令字还在、域消失，无修复 |
 | Fd6 | 页眉 PAGE | 默认页眉里的 PAGE 能列出，id 带 `header:` 前缀 |
 | Fd7 | 改字拒绝 | 对仍带本期域的段发 `setParaText` 得 `NotImplemented`，文件未写坏 |
+
+## 域类型
+
+`insertField` 可给 `code` 写常用域与窗体 `ffData`。不在库里求值。手测脚本 `manual-check/office/cases/docx-field-types.ps1`。
+
+| 序号 | 检查 | 通过标准 |
+| --- | --- | --- |
+| Ft1 | PAGE 预设 | `code` 为 `PAGE` 后树上 `code` 为 `PAGE`，无 `form`；Word 无修复且 `Fields.Count≥1` |
+| Ft2 | MERGEFIELD | `code` 为 `MERGEFIELD` 且 `arg` 为 `Name` 后 `instr` 含 `Name`；Word 无修复 |
+| Ft3 | 窗体文本 | `FORMTEXT` 后 `form.type` 为 `text`，`name` 为 `Text1`；Word `FormFields.Count≥1`，无修复 |
+| Ft4 | 复选 | `FORMCHECKBOX` 且 `checked: true` 后 `form.type` 为 `checkBox`，`checked` 为 true；Word 无修复 |
+| Ft5 | 下拉 | `FORMDROPDOWN` 且 `items` 为 `A`/`B` 后 `form.items` 含这两项；Word 无修复 |
+| Ft6 | create | create 段上 `code: NUMPAGES` 后树上 `code` 为 `NUMPAGES`；Word 无修复 |
+| Ft7 | 拒错 | 同时给 `instr` 与 `code`、或 `REF` 不给 `arg`、或 `INCLUDETEXT`，得 `InvalidField`，不写文件 |
 
 ## 编号列表
 

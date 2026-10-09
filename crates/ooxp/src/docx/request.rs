@@ -581,6 +581,7 @@ pub struct InsertFieldOp {
     pub para: ParaTarget,
     pub instr: String,
     pub result: Option<String>,
+    pub form: Option<super::field::FormWrite>,
 }
 
 #[derive(Debug, Clone)]
@@ -4501,23 +4502,22 @@ fn parse_insert_field(
     obj: &serde_json::Map<String, Value>,
     i: usize,
 ) -> Result<InsertFieldOp, Error> {
-    deny_keys(obj, i, &["op", "id", "instr", "result"])?;
-    let id = require_op_id(obj, i)?;
-    let para = parse_story_para_at(&id, &format!("ops[{i}].id"), IdReason::InsertFieldNeedsPara)?;
-    let instr = require_instr(
+    deny_keys(
         obj,
         i,
-        ErrorKind::OpRequiresField {
-            op: "insertField".into(),
-            field: "instr".into(),
-        },
+        &[
+            "op", "id", "instr", "result", "code", "arg", "name", "items", "checked",
+        ],
     )?;
-    let result = optional_op_string(obj, i, "result")?;
+    let id = require_op_id(obj, i)?;
+    let para = parse_story_para_at(&id, &format!("ops[{i}].id"), IdReason::InsertFieldNeedsPara)?;
+    let body = super::field::parse_field_body(obj, &format!("ops[{i}]"))?;
     Ok(InsertFieldOp {
         id,
         para,
-        instr,
-        result,
+        instr: body.instr,
+        result: body.result,
+        form: body.form,
     })
 }
 

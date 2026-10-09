@@ -924,7 +924,7 @@ fn apply_insert_field(
             format!("ops[{i}].id"),
         )
     })?;
-    field::insert_field(el, &op.instr, op.result.as_deref());
+    field::insert_field_form(el, &op.instr, op.result.as_deref(), op.form.as_ref());
     dirty.insert(part_name, ());
     Ok(())
 }

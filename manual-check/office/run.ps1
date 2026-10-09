@@ -54,6 +54,7 @@ $order = @(
     'docx-revision-remain'
     'docx-hyperlink'
     'docx-field'
+    'docx-field-types'
     'docx-numbering'
     'docx-style'
     'docx-format'
