@@ -21,3 +21,5 @@
 | [json-schema/request.schema.json](json-schema/request.schema.json) | 请求 JSON Schema 入口；xlsx / docx / pptx 片段在同目录 |
 
 规范条款以 `standards/md/` 为索引，本目录只引用条款号，不复制五千页原文。
+
+写本目录时，表格只放短字段。超过一行的说明改成无序列表，不要写成超长单行，也不要靠硬折行凑短。
