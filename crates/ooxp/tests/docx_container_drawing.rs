@@ -1,4 +1,4 @@
-//! 文本框、脚注、尾注、批注里的图表与 SmartArt；注内 / 批注内不可 insertTextBox。
+//! 文本框、脚注、尾注、批注里的图表与 SmartArt；注内 / 批注内 / 框内不可 insertTextBox。
 
 use std::io::{Cursor, Read};
 use std::path::{Path, PathBuf};
@@ -327,6 +327,26 @@ fn container_ids_rejected() {
     let err = apply_err(
         &with_box,
         json!([{ "op": "insertTextBox", "id": box_id, "text": "套框" }]),
+    );
+    assert_eq!(err.code(), ErrorCode::InvalidId);
+
+    let listed_inner = inspect(
+        &with_box,
+        json!({
+            "from": 1,
+            "maxParas": 5,
+            "textBoxes": true,
+            "textBoxContent": true
+        }),
+    );
+    let inner_para = listed_inner["paragraphs"][0]["textBoxes"][0]["paragraphs"][0]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    assert!(inner_para.contains("/txbx:"));
+    let err = apply_err(
+        &with_box,
+        json!([{ "op": "insertTextBox", "id": inner_para, "text": "套框段" }]),
     );
     assert_eq!(err.code(), ErrorCode::InvalidId);
 }
