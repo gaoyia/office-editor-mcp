@@ -128,12 +128,19 @@ function Bind-OfficeApp($process, [string]$topClass, [string]$childClass) {
 #
 # seedBook / seedDoc 是启动时要打开的文档，不能省：AccessibleObjectFromWindow
 # 要从文档子窗口（EXCEL7 / _WwG）上取对象模型，光有个空的 Excel 进程会拿到
-# hr=0x80004005。所以不管进程在不在，都先让它把 seed 文件打开——
-# Office 已在运行时不会新起进程，只是多开一个窗口。
+# hr=0x80004005。Excel 用 /x 强制新实例，并绑 Start-Process 返回的 pid：
+# 残留进程若没有 EXCEL7，DDE 复用会让 FromWindow 一直失败。
 function Ensure-MsExcel([string]$seedBook) {
     if ($global:OoxpExcel) { return $global:OoxpExcel }
-    Start-Process -FilePath (Get-OfficeExe 'EXCEL.EXE') -ArgumentList ('"' + $seedBook + '"')
-    $p = Wait-OfficeProcess 'EXCEL' 40
+    $started = Start-Process -FilePath (Get-OfficeExe 'EXCEL.EXE') -ArgumentList @('/x', $seedBook) -PassThru
+    $until = (Get-Date).AddSeconds(40)
+    $p = $null
+    do {
+        $p = Get-Process -Id $started.Id -ErrorAction SilentlyContinue
+        if ($p -and $p.MainWindowHandle -ne [IntPtr]::Zero) { break }
+        Start-Sleep -Milliseconds 400
+    } while ((Get-Date) -lt $until)
+    if (-not $p) { throw '等 EXCEL 启动超时' }
     $app = Bind-OfficeApp $p 'XLMAIN' 'EXCEL7'
     $app.DisplayAlerts = $false
     $app.AskToUpdateLinks = $false

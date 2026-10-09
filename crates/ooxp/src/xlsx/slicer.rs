@@ -1,4 +1,4 @@
-//! 工作表切片器：inspect 名单，apply 写 slicer / slicerCache 与 drawing graphicFrame。
+//! 工作表切片器与时间线：inspect 名单，apply 写 slicer / timeline 部件与 drawing graphicFrame。
 //! 不在库里执行筛选，不刷新透视合计。
 
 use serde_json::{json, Map, Value};
@@ -22,13 +22,19 @@ const X14_NS: &str = "http://schemas.microsoft.com/office/spreadsheetml/2009/9/m
 const X15_NS: &str = "http://schemas.microsoft.com/office/spreadsheetml/2010/11/main";
 const SLE_NS: &str = "http://schemas.microsoft.com/office/drawing/2010/slicer";
 const SLE15_NS: &str = "http://schemas.microsoft.com/office/drawing/2012/slicer";
+const TSLE_NS: &str = "http://schemas.microsoft.com/office/drawing/2012/timeslicer";
 const A14_NS: &str = "http://schemas.microsoft.com/office/drawing/2010/main";
 const SML_NS: &str = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
 
 const REL_SLICER: &str = "http://schemas.microsoft.com/office/2007/relationships/slicer";
 const REL_SLICER_CACHE: &str = "http://schemas.microsoft.com/office/2007/relationships/slicerCache";
+const REL_TIMELINE: &str = "http://schemas.microsoft.com/office/2011/relationships/timeline";
+const REL_TIMELINE_CACHE: &str =
+    "http://schemas.microsoft.com/office/2011/relationships/timelineCache";
 const CT_SLICER: &str = "application/vnd.ms-excel.slicer+xml";
 const CT_SLICER_CACHE: &str = "application/vnd.ms-excel.slicerCache+xml";
+const CT_TIMELINE: &str = "application/vnd.ms-excel.timeline+xml";
+const CT_TIMELINE_CACHE: &str = "application/vnd.ms-excel.timelineCache+xml";
 
 /// Excel 16.0 表格切片器工作表 `slicerList`。
 const SHEET_SLICER_LIST_URI: &str = "{3A4CF648-6AED-40f4-86FF-DC5316D8AED3}";
@@ -40,9 +46,16 @@ const WB_X14_SLICER_CACHES_URI: &str = "{BBE1A952-AA13-448e-AADC-164F8A28A991}";
 const TABLE_SLICER_CACHE_URI: &str = "{2F2917AC-EB37-4324-AD4E-5DD8C200BD13}";
 /// 透视缓存定义上的 `x14:pivotCacheDefinition`（MS-XLSX 2.2.4.6）。
 const PIVOT_CACHE_DEF_EXT_URI: &str = "{725AE2AE-9491-48be-B2B4-4EB974FC3084}";
+/// 工作表 `x15:timelineRefs`。Excel 16.0 另存 URI 含小写 hex。
+const SHEET_TIMELINE_REFS_URI: &str = "{7E03D99C-DC04-49d9-9315-930204A7B6E9}";
+/// 工作簿 `x15:timelineCacheRefs`。
+const WB_TIMELINE_CACHE_REFS_URI: &str = "{D0CA8CA8-9F24-4464-BF8E-62219DCF47F9}";
 
 const DEFAULT_CX: i64 = 1_905_000;
 const DEFAULT_CY: i64 = 2_540_000;
+/// Excel 16.0 时间线约 400×80 磅。
+const DEFAULT_TIMELINE_CX: i64 = 5_080_000;
+const DEFAULT_TIMELINE_CY: i64 = 1_016_000;
 const ROW_HEIGHT: &str = "381000";
 
 #[derive(Debug, Clone)]
@@ -63,11 +76,19 @@ pub enum SlicerSource {
     Pivot { sheet: String, index: usize },
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SlicerKind {
+    Slicer,
+    Timeline,
+}
+
 #[derive(Debug, Clone)]
 pub struct InsertSlicerOp {
     pub sheet: String,
     pub source: SlicerSource,
     pub field: String,
+    pub kind: SlicerKind,
+    pub level: u32,
     pub cx: Option<i64>,
     pub cy: Option<i64>,
     pub from: a1::CellRef,
@@ -91,6 +112,7 @@ struct Hit {
     cnv_name: String,
     sle_name: String,
     kind: AnchorKind,
+    timeline: bool,
     anchor: Element,
 }
 
@@ -152,7 +174,7 @@ pub fn count(pkg: &Package, sheet_part: &str) -> Result<usize, Error> {
 
 pub fn collect(pkg: &Package, sheet_part: &str, sheet_name: &str) -> Result<Vec<Value>, Error> {
     let hits = collect_hits(pkg, sheet_part)?;
-    let views = load_slicer_views(pkg, sheet_part)?;
+    let views = load_all_views(pkg, sheet_part)?;
     let caches = load_caches(pkg)?;
     let mut out = Vec::new();
     for (i, hit) in hits.iter().enumerate() {
@@ -178,8 +200,22 @@ pub fn insert(
     op: &InsertSlicerOp,
     op_index: usize,
 ) -> Result<(), Error> {
-    match &op.source {
-        SlicerSource::Table { sheet, index } => {
+    match (&op.kind, &op.source) {
+        (SlicerKind::Timeline, SlicerSource::Table { .. }) => Err(Error::with_path(
+            ErrorKind::InvalidSlicer {
+                field: "source".into(),
+            },
+            format!("ops[{op_index}].source"),
+        )),
+        (SlicerKind::Timeline, SlicerSource::Pivot { sheet, index }) => {
+            if !sheet.eq_ignore_ascii_case(&op.sheet) {
+                return Err(source_id_err(op_index));
+            }
+            insert_timeline(
+                pkg, wb_doc, wb_part, sheet_doc, sheet_part, op, *index, op_index,
+            )
+        }
+        (SlicerKind::Slicer, SlicerSource::Table { sheet, index }) => {
             if !sheet.eq_ignore_ascii_case(&op.sheet) {
                 return Err(source_id_err(op_index));
             }
@@ -187,7 +223,7 @@ pub fn insert(
                 pkg, wb_doc, wb_part, sheet_doc, sheet_part, op, *index, op_index,
             )
         }
-        SlicerSource::Pivot { sheet, index } => {
+        (SlicerKind::Slicer, SlicerSource::Pivot { sheet, index }) => {
             if !sheet.eq_ignore_ascii_case(&op.sheet) {
                 return Err(source_id_err(op_index));
             }
@@ -221,7 +257,12 @@ pub fn delete(
     };
     let _ = idx;
     let view_name = hit.sle_name.clone();
-    let views = load_slicer_views(pkg, sheet_part)?;
+    let timeline = hit.timeline;
+    let views = if timeline {
+        load_timeline_views(pkg, sheet_part)?
+    } else {
+        load_slicer_views(pkg, sheet_part)?
+    };
     let cache_name = views
         .iter()
         .find(|v| v.name == view_name)
@@ -237,7 +278,11 @@ pub fn delete(
         shape::write_or_drop_drawing(pkg, sheet_doc, sheet_part, &drawing_part, draw)?;
     }
 
-    remove_slicer_view(pkg, sheet_doc, sheet_part, &view_name)?;
+    if timeline {
+        remove_timeline_view(pkg, sheet_doc, sheet_part, &view_name)?;
+    } else {
+        remove_slicer_view(pkg, sheet_doc, sheet_part, &view_name)?;
+    }
     if !cache_name.is_empty() && cache_users(pkg, &cache_name)? == 0 {
         drop_cache(pkg, wb_doc, wb_part, &cache_name)?;
     }
@@ -258,7 +303,7 @@ fn insert_table(
     let cx = op.cx.unwrap_or(DEFAULT_CX);
     let cy = op.cy.unwrap_or(DEFAULT_CY);
     let (to, to_off_x, to_off_y) = dest_to(&sheet_doc.root, op, cx, cy);
-    let cache_name = unique_cache_name(pkg, wb_doc, &op.field);
+    let cache_name = unique_cache_name(pkg, wb_doc, &format!("Slicer_{}", op.field));
     let view_name = unique_view_name(pkg, &op.field);
     let cache_part = next_part(pkg, "/xl/slicerCaches/slicerCache", "xml");
     pkg.set(
@@ -278,7 +323,17 @@ fn insert_table(
     cts.set_override(&slicer_part, CT_SLICER)?;
     cts.write_to(pkg)?;
     write_drawing(
-        pkg, sheet_doc, sheet_part, op, &view_name, true, cx, cy, to, to_off_x, to_off_y,
+        pkg,
+        sheet_doc,
+        sheet_part,
+        op,
+        &view_name,
+        SlicerFrameKind::Table,
+        cx,
+        cy,
+        to,
+        to_off_x,
+        to_off_y,
     )?;
     let _ = display;
     Ok(())
@@ -302,7 +357,7 @@ fn insert_pivot(
     let cx = op.cx.unwrap_or(DEFAULT_CX);
     let cy = op.cy.unwrap_or(DEFAULT_CY);
     let (to, to_off_x, to_off_y) = dest_to(&sheet_doc.root, op, cx, cy);
-    let cache_name = unique_cache_name(pkg, wb_doc, &op.field);
+    let cache_name = unique_cache_name(pkg, wb_doc, &format!("Slicer_{}", op.field));
     let view_name = unique_view_name(pkg, &op.field);
     let cache_part = next_part(pkg, "/xl/slicerCaches/slicerCache", "xml");
     pkg.set(
@@ -329,7 +384,90 @@ fn insert_pivot(
     cts.set_override(&slicer_part, CT_SLICER)?;
     cts.write_to(pkg)?;
     write_drawing(
-        pkg, sheet_doc, sheet_part, op, &view_name, false, cx, cy, to, to_off_x, to_off_y,
+        pkg,
+        sheet_doc,
+        sheet_part,
+        op,
+        &view_name,
+        SlicerFrameKind::Pivot,
+        cx,
+        cy,
+        to,
+        to_off_x,
+        to_off_y,
+    )?;
+    Ok(())
+}
+
+fn insert_timeline(
+    pkg: &mut Package,
+    wb_doc: &mut Document,
+    wb_part: &str,
+    sheet_doc: &mut Document,
+    sheet_part: &str,
+    op: &InsertSlicerOp,
+    index: usize,
+    op_index: usize,
+) -> Result<(), Error> {
+    let meta = pivot_field(
+        pkg, wb_part, sheet_part, &op.sheet, index, &op.field, op_index,
+    )?;
+    // Excel 16.0 只在透视表 updatedVersion≥8 时加载时间线；库插入的透视默认是 4。
+    bump_pivot_updated_version(pkg, &meta.part)?;
+    let (start, end) = cache_date_bounds(pkg, wb_part, &meta.cache_id, &op.field, op_index)?;
+    mark_cache_field_dates(pkg, wb_part, &meta.cache_id, &op.field, &start, &end)?;
+    let tabular_id = ensure_x14_pivot_cache_id(pkg, wb_part, &meta.cache_id)?;
+    let tab_id = sheet_id(wb_doc, &op.sheet).unwrap_or(1);
+    let cx = op.cx.unwrap_or(DEFAULT_TIMELINE_CX);
+    let cy = op.cy.unwrap_or(DEFAULT_TIMELINE_CY);
+    let (to, to_off_x, to_off_y) = dest_to(&sheet_doc.root, op, cx, cy);
+    let cache_name = unique_cache_name(pkg, wb_doc, &format!("Timeline_{}", op.field));
+    let view_name = unique_view_name(pkg, &op.field);
+    let cache_part = next_part(pkg, "/xl/timelineCaches/timelineCache", "xml");
+    pkg.set(
+        &cache_part,
+        timeline_cache_xml(
+            &cache_name,
+            &op.field,
+            tab_id,
+            &meta.name,
+            &tabular_id,
+            &start,
+            &end,
+        ),
+    )?;
+    let cache_rid = add_rel(pkg, wb_part, REL_TIMELINE_CACHE, &cache_part)?;
+    push_wb_timeline_cache(wb_doc, &cache_rid);
+    push_cache_defined_name(wb_doc, &cache_name);
+    let (timeline_part, timeline_rid, is_new) = ensure_timelines_part(pkg, sheet_doc, sheet_part)?;
+    append_timeline_view(
+        pkg,
+        &timeline_part,
+        &view_name,
+        &cache_name,
+        &op.field,
+        op.level,
+        &start,
+    )?;
+    if is_new {
+        push_sheet_timeline_refs(&mut sheet_doc.root, &timeline_rid);
+    }
+    let mut cts = ContentTypes::from_package(pkg)?;
+    cts.set_override(&cache_part, CT_TIMELINE_CACHE)?;
+    cts.set_override(&timeline_part, CT_TIMELINE)?;
+    cts.write_to(pkg)?;
+    write_drawing(
+        pkg,
+        sheet_doc,
+        sheet_part,
+        op,
+        &view_name,
+        SlicerFrameKind::Timeline,
+        cx,
+        cy,
+        to,
+        to_off_x,
+        to_off_y,
     )?;
     Ok(())
 }
@@ -340,7 +478,7 @@ fn write_drawing(
     sheet_part: &str,
     op: &InsertSlicerOp,
     view_name: &str,
-    table: bool,
+    frame: SlicerFrameKind,
     cx: i64,
     cy: i64,
     to: a1::CellRef,
@@ -352,10 +490,17 @@ fn write_drawing(
     picture::ensure_xmlns(&mut draw_doc.root, "r", REL_NS);
     picture::ensure_xmlns(&mut draw_doc.root, "a", picture::A_NS);
     picture::ensure_xmlns(&mut draw_doc.root, "mc", MC_NS);
-    picture::ensure_xmlns(&mut draw_doc.root, "sle", SLE_NS);
+    match frame {
+        SlicerFrameKind::Table | SlicerFrameKind::Pivot => {
+            picture::ensure_xmlns(&mut draw_doc.root, "sle", SLE_NS);
+        }
+        SlicerFrameKind::Timeline => {
+            picture::ensure_xmlns(&mut draw_doc.root, "tsle", TSLE_NS);
+        }
+    }
     let cnv = picture::next_cnv_id(pkg, sheet_part, &sheet_doc.root)?;
     let ac = build_slicer_ac(
-        table,
+        frame,
         cnv,
         view_name,
         op.from,
@@ -390,7 +535,7 @@ fn dest_to(sheet: &Element, op: &InsertSlicerOp, cx: i64, cy: i64) -> (a1::CellR
 }
 
 fn collect_hits(pkg: &Package, sheet_part: &str) -> Result<Vec<Hit>, Error> {
-    let views = load_slicer_views(pkg, sheet_part)?;
+    let views = load_all_views(pkg, sheet_part)?;
     let caches = load_caches(pkg)?;
     let names: Vec<&str> = views
         .iter()
@@ -403,7 +548,7 @@ fn collect_hits(pkg: &Package, sheet_part: &str) -> Result<Vec<Hit>, Error> {
         let doc = xml::parse(pkg.get(&drawing_part)?)?;
         picture::walk_anchors(&doc.root, &mut |anchor, kind| {
             shape::visit_payloads(anchor, &mut |el| {
-                if is_slicer_frame(el) {
+                if is_slicer_or_timeline_frame(el) {
                     if let Some(sle) = sle_name(el) {
                         if names.iter().any(|n| *n == sle) {
                             let (cnv, cnv_name) = shape::cnv_of_object(el);
@@ -412,6 +557,7 @@ fn collect_hits(pkg: &Package, sheet_part: &str) -> Result<Vec<Hit>, Error> {
                                 cnv_name,
                                 sle_name: sle,
                                 kind,
+                                timeline: frame_is_timeline(el),
                                 anchor: anchor.clone(),
                             });
                         }
@@ -484,6 +630,11 @@ fn is_slicer_uri(uri: &str) -> bool {
     t == SLE_NS
 }
 
+fn is_timeslicer_uri(uri: &str) -> bool {
+    let t = uri.trim_end_matches('/');
+    t == TSLE_NS
+}
+
 fn graphic_uri(el: &Element) -> Option<String> {
     let mut found = None;
     picture::walk_all(el, &mut |e| {
@@ -494,26 +645,21 @@ fn graphic_uri(el: &Element) -> Option<String> {
     found
 }
 
-fn is_slicer_frame(el: &Element) -> bool {
+fn is_slicer_or_timeline_frame(el: &Element) -> bool {
     if el.local_name() != "graphicFrame" {
         return false;
     }
-    if !graphic_uri(el).is_some_and(|u| is_slicer_uri(&u)) {
-        return false;
-    }
-    let mut timeslicer = false;
-    picture::walk_all(el, &mut |e| {
-        if e.local_name() == "timeslicer" {
-            timeslicer = true;
-        }
-    });
-    !timeslicer
+    graphic_uri(el).is_some_and(|u| is_slicer_uri(&u) || is_timeslicer_uri(&u))
+}
+
+fn frame_is_timeline(el: &Element) -> bool {
+    graphic_uri(el).is_some_and(|u| is_timeslicer_uri(&u))
 }
 
 fn sle_name(el: &Element) -> Option<String> {
     let mut found = None;
     picture::walk_all(el, &mut |e| {
-        if e.local_name() == "slicer" && found.is_none() {
+        if found.is_none() && (e.local_name() == "slicer" || e.local_name() == "timeslicer") {
             found = e.attr("name").filter(|s| !s.is_empty()).map(str::to_string);
         }
     });
@@ -561,6 +707,43 @@ fn load_slicer_views(pkg: &Package, sheet_part: &str) -> Result<Vec<SlicerView>,
             });
         }
     }
+    Ok(out)
+}
+
+fn load_timeline_views(pkg: &Package, sheet_part: &str) -> Result<Vec<SlicerView>, Error> {
+    let rels = Relationships::from_package(pkg, sheet_part)?;
+    let mut out = Vec::new();
+    for rel in &rels.rels {
+        if !rel.rel_type.ends_with("/timeline") {
+            continue;
+        }
+        let Ok(part) = resolve_rel_target(sheet_part, &rel.target) else {
+            continue;
+        };
+        let Ok(bytes) = pkg.get(&part) else {
+            continue;
+        };
+        let Ok(doc) = xml::parse(bytes) else {
+            continue;
+        };
+        for el in doc.root.children_by_local("timeline") {
+            let name = el.attr("name").unwrap_or("").to_string();
+            if name.is_empty() {
+                continue;
+            }
+            out.push(SlicerView {
+                name,
+                cache: el.attr("cache").unwrap_or("").to_string(),
+                caption: el.attr("caption").map(str::to_string),
+            });
+        }
+    }
+    Ok(out)
+}
+
+fn load_all_views(pkg: &Package, sheet_part: &str) -> Result<Vec<SlicerView>, Error> {
+    let mut out = load_slicer_views(pkg, sheet_part)?;
+    out.extend(load_timeline_views(pkg, sheet_part)?);
     Ok(out)
 }
 
@@ -616,6 +799,33 @@ fn load_caches(pkg: &Package) -> Result<Vec<CacheMeta>, Error> {
             field,
             kind,
             source_name,
+        });
+    }
+    for rel in &rels.rels {
+        if !rel.rel_type.ends_with("/timelineCache") {
+            continue;
+        }
+        let Ok(part) = resolve_rel_target(&wb_part, &rel.target) else {
+            continue;
+        };
+        let Ok(bytes) = pkg.get(&part) else {
+            continue;
+        };
+        let Ok(doc) = xml::parse(bytes) else {
+            continue;
+        };
+        let name = doc.root.attr("name").unwrap_or("").to_string();
+        if name.is_empty() {
+            continue;
+        }
+        if !has_local(&doc.root, "pivotTables") {
+            continue;
+        }
+        out.push(CacheMeta {
+            field: doc.root.attr("sourceName").unwrap_or("").to_string(),
+            name,
+            kind: "timeline",
+            source_name: pivot_name_of(&doc.root),
         });
     }
     Ok(out)
@@ -767,6 +977,7 @@ struct PivotMeta {
     name: String,
     cache_id: String,
     item_count: usize,
+    part: String,
 }
 
 fn pivot_field(
@@ -801,6 +1012,7 @@ fn pivot_field(
             name,
             cache_id,
             item_count,
+            part,
         });
     }
     Err(Error::with_path(
@@ -826,6 +1038,23 @@ fn cache_item_count(pkg: &Package, wb_part: &str, cache_id: &str, field: &str) -
                 .count()
         })
         .unwrap_or(0)
+}
+
+/// Excel 16.0 打开时间线时，透视表 `updatedVersion` 必须至少为 8，否则会静默丢掉时间线部件。
+fn bump_pivot_updated_version(pkg: &mut Package, part: &str) -> Result<(), Error> {
+    const MIN: u32 = 8;
+    let mut doc = xml::parse(pkg.get(part)?)?;
+    let cur = doc
+        .root
+        .attr("updatedVersion")
+        .and_then(|s| s.parse::<u32>().ok())
+        .unwrap_or(0);
+    if cur >= MIN {
+        return Ok(());
+    }
+    doc.root.set_attr("updatedVersion", MIN.to_string());
+    pkg.set(part, doc.to_bytes()?)?;
+    Ok(())
 }
 
 /// 透视切片器的 `tabular/@pivotCacheId` 必须指向缓存定义上的 x14 扩展，不能只写 workbook `cacheId`。
@@ -959,14 +1188,14 @@ fn sheet_id(wb: &Document, name: &str) -> Option<u32> {
     None
 }
 
-fn unique_cache_name(pkg: &Package, wb: &Document, field: &str) -> String {
+fn unique_cache_name(pkg: &Package, wb: &Document, stem: &str) -> String {
     let mut taken = defined_names(wb);
     if let Ok(caches) = load_caches(pkg) {
         for c in caches {
             taken.push(c.name);
         }
     }
-    unique_name(&format!("Slicer_{field}"), &taken)
+    unique_name(stem, &taken)
 }
 
 fn unique_view_name(pkg: &Package, field: &str) -> String {
@@ -978,7 +1207,7 @@ fn unique_view_name(pkg: &Package, field: &str) -> String {
                     for sh in sheets.children_by_local("sheet") {
                         if let Some(rid) = rid_attr(sh) {
                             if let Ok(part) = resolve_id(pkg, &wb_part, rid) {
-                                if let Ok(views) = load_slicer_views(pkg, &part) {
+                                if let Ok(views) = load_all_views(pkg, &part) {
                                     for v in views {
                                         taken.push(v.name);
                                     }
@@ -1089,6 +1318,157 @@ fn pivot_cache_xml(
     }
     .to_bytes()
     .unwrap_or_default()
+}
+
+fn timeline_cache_xml(
+    name: &str,
+    field: &str,
+    tab_id: u32,
+    pivot_name: &str,
+    cache_id: &str,
+    start: &str,
+    end: &str,
+) -> Vec<u8> {
+    let mut pts = Element::new("pivotTables");
+    pts.push_element(
+        Element::new("pivotTable")
+            .with_attr("tabId", tab_id.to_string())
+            .with_attr("name", pivot_name),
+    );
+    let bounds = Element::new("bounds")
+        .with_attr("startDate", start)
+        .with_attr("endDate", end);
+    let mut state = Element::new("state")
+        .with_attr("minimalRefreshVersion", "6")
+        .with_attr("lastRefreshVersion", "6")
+        .with_attr("pivotCacheId", cache_id)
+        .with_attr("filterType", "unknown");
+    state.push_element(bounds);
+    let mut root = Element::new("timelineCacheDefinition")
+        .with_attr("xmlns", X15_NS)
+        .with_attr("name", name)
+        .with_attr("sourceName", field);
+    root.push_element(pts);
+    root.push_element(state);
+    Document {
+        decl: Some(DEFAULT_DECL.to_string()),
+        root,
+    }
+    .to_bytes()
+    .unwrap_or_default()
+}
+
+fn ensure_timelines_part(
+    pkg: &mut Package,
+    sheet_doc: &mut Document,
+    sheet_part: &str,
+) -> Result<(String, String, bool), Error> {
+    let rels = Relationships::from_package(pkg, sheet_part)?;
+    for rel in &rels.rels {
+        if rel.rel_type.ends_with("/timeline") {
+            let part = resolve_rel_target(sheet_part, &rel.target)?;
+            return Ok((part, rel.id.clone(), false));
+        }
+    }
+    let part = next_part(pkg, "/xl/timelines/timeline", "xml");
+    let root = Element::new("timelines").with_attr("xmlns", X15_NS);
+    pkg.set(
+        &part,
+        Document {
+            decl: Some(DEFAULT_DECL.to_string()),
+            root,
+        }
+        .to_bytes()?,
+    )?;
+    let rid = add_rel(pkg, sheet_part, REL_TIMELINE, &part)?;
+    picture::ensure_xmlns(&mut sheet_doc.root, "r", REL_NS);
+    picture::ensure_xmlns(&mut sheet_doc.root, "mc", MC_NS);
+    picture::ensure_xmlns(&mut sheet_doc.root, "x15", X15_NS);
+    ensure_ignorable(&mut sheet_doc.root, &["x15"]);
+    Ok((part, rid, true))
+}
+
+fn append_timeline_view(
+    pkg: &mut Package,
+    timeline_part: &str,
+    name: &str,
+    cache: &str,
+    caption: &str,
+    level: u32,
+    scroll: &str,
+) -> Result<(), Error> {
+    let mut doc = xml::parse(pkg.get(timeline_part)?)?;
+    doc.root.push_element(
+        Element::new("timeline")
+            .with_attr("name", name)
+            .with_attr("cache", cache)
+            .with_attr("caption", caption)
+            .with_attr("level", level.to_string())
+            .with_attr("selectionLevel", level.to_string())
+            .with_attr("scrollPosition", scroll),
+    );
+    pkg.set(timeline_part, doc.to_bytes()?)?;
+    Ok(())
+}
+
+fn push_sheet_timeline_refs(sheet: &mut Element, rid: &str) {
+    picture::ensure_xmlns(sheet, "r", REL_NS);
+    picture::ensure_xmlns(sheet, "x15", X15_NS);
+    picture::ensure_xmlns(sheet, "mc", MC_NS);
+    ensure_ignorable(sheet, &["x15"]);
+    if sheet.child_by_local("extLst").is_none() {
+        layout::insert_child_ordered(sheet, Element::new("extLst"), "extLst");
+    }
+    let ext_lst = sheet.child_by_local_mut("extLst").unwrap();
+    for n in ext_lst.children.iter_mut() {
+        let Node::Element(ext) = n else { continue };
+        if uri_eq(ext.attr("uri").unwrap_or(""), SHEET_TIMELINE_REFS_URI) {
+            if let Some(list) = ext.child_by_local_mut("timelineRefs") {
+                if list.element_children().any(|e| rid_attr(e) == Some(rid)) {
+                    return;
+                }
+                list.push_element(Element::new("x15:timelineRef").with_attr("r:id", rid));
+                return;
+            }
+        }
+    }
+    let mut list = Element::new("x15:timelineRefs");
+    list.push_element(Element::new("x15:timelineRef").with_attr("r:id", rid));
+    let mut ext = Element::new("ext")
+        .with_attr("uri", SHEET_TIMELINE_REFS_URI)
+        .with_attr("xmlns:x15", X15_NS);
+    ext.push_element(list);
+    ext_lst.push_element(ext);
+}
+
+fn push_wb_timeline_cache(wb: &mut Document, rid: &str) {
+    picture::ensure_xmlns(&mut wb.root, "r", REL_NS);
+    picture::ensure_xmlns(&mut wb.root, "mc", MC_NS);
+    picture::ensure_xmlns(&mut wb.root, "x15", X15_NS);
+    ensure_ignorable(&mut wb.root, &["x15"]);
+    if wb.root.child_by_local("extLst").is_none() {
+        names::insert_workbook_child(&mut wb.root, Element::new("extLst"), "extLst");
+    }
+    let ext_lst = wb.root.child_by_local_mut("extLst").unwrap();
+    for n in ext_lst.children.iter_mut() {
+        let Node::Element(ext) = n else { continue };
+        if !uri_eq(ext.attr("uri").unwrap_or(""), WB_TIMELINE_CACHE_REFS_URI) {
+            continue;
+        }
+        for list in ext.element_children_mut() {
+            if list.local_name() == "timelineCacheRefs" {
+                list.push_element(Element::new("x15:timelineCacheRef").with_attr("r:id", rid));
+                return;
+            }
+        }
+    }
+    let mut list = Element::new("x15:timelineCacheRefs");
+    list.push_element(Element::new("x15:timelineCacheRef").with_attr("r:id", rid));
+    let mut ext = Element::new("ext")
+        .with_attr("uri", WB_TIMELINE_CACHE_REFS_URI)
+        .with_attr("xmlns:x15", X15_NS);
+    ext.push_element(list);
+    ext_lst.push_element(ext);
 }
 
 fn ensure_slicers_part(
@@ -1220,7 +1600,7 @@ fn push_wb_cache(wb: &mut Document, table: bool, rid: &str) {
 }
 
 fn build_slicer_ac(
-    table: bool,
+    frame: SlicerFrameKind,
     cnv: u32,
     name: &str,
     from: a1::CellRef,
@@ -1234,19 +1614,25 @@ fn build_slicer_ac(
     edit_as: EditAs,
 ) -> Element {
     // Excel 16.0：twoCellAnchor 是 wsDr 的子元素，Choice 只包 graphicFrame。
-    let frame = build_frame(cnv, name, cx, cy);
-    let mut choice = if table {
-        Element::new("mc:Choice")
+    let graphic = build_frame(frame, cnv, name, cx, cy);
+    let mut choice = match frame {
+        SlicerFrameKind::Table => Element::new("mc:Choice")
             .with_attr("xmlns:sle15", SLE15_NS)
-            .with_attr("Requires", "sle15")
-    } else {
-        Element::new("mc:Choice")
+            .with_attr("Requires", "sle15"),
+        SlicerFrameKind::Pivot => Element::new("mc:Choice")
             .with_attr("xmlns:a14", A14_NS)
-            .with_attr("Requires", "a14")
+            .with_attr("Requires", "a14"),
+        SlicerFrameKind::Timeline => Element::new("mc:Choice")
+            .with_attr("xmlns:tsle", TSLE_NS)
+            .with_attr("Requires", "tsle"),
     };
-    choice.push_element(frame);
+    choice.push_element(graphic);
     let mut fallback = Element::new("mc:Fallback");
-    fallback.push_element(fallback_sp(name, cx, cy));
+    let fallback_text = match frame {
+        SlicerFrameKind::Timeline => "此形状表示时间线。",
+        _ => "此形状表示切片器。",
+    };
+    fallback.push_element(fallback_sp(name, cx, cy, fallback_text));
     let mut ac = Element::new("mc:AlternateContent").with_attr("xmlns:mc", MC_NS);
     ac.push_element(choice);
     ac.push_element(fallback);
@@ -1273,7 +1659,14 @@ fn two_cell(
     anchor
 }
 
-fn build_frame(cnv: u32, name: &str, cx: i64, cy: i64) -> Element {
+#[derive(Clone, Copy)]
+enum SlicerFrameKind {
+    Table,
+    Pivot,
+    Timeline,
+}
+
+fn build_frame(frame: SlicerFrameKind, cnv: u32, name: &str, cx: i64, cy: i64) -> Element {
     let mut nv = Element::new("xdr:nvGraphicFramePr");
     nv.push_element(
         Element::new("xdr:cNvPr")
@@ -1281,8 +1674,14 @@ fn build_frame(cnv: u32, name: &str, cx: i64, cy: i64) -> Element {
             .with_attr("name", name),
     );
     let mut locks = Element::new("xdr:cNvGraphicFramePr");
-    locks.push_element(Element::new("a:graphicFrameLocks").with_attr("noGrp", "1"));
+    if !matches!(frame, SlicerFrameKind::Timeline) {
+        locks.push_element(Element::new("a:graphicFrameLocks").with_attr("noGrp", "1"));
+    }
     nv.push_element(locks);
+    let (ext_cx, ext_cy) = match frame {
+        SlicerFrameKind::Timeline => ("0".to_string(), "0".to_string()),
+        _ => (cx.to_string(), cy.to_string()),
+    };
     let mut xfrm = Element::new("xdr:xfrm");
     xfrm.push_element(
         Element::new("a:off")
@@ -1291,15 +1690,29 @@ fn build_frame(cnv: u32, name: &str, cx: i64, cy: i64) -> Element {
     );
     xfrm.push_element(
         Element::new("a:ext")
-            .with_attr("cx", cx.to_string())
-            .with_attr("cy", cy.to_string()),
+            .with_attr("cx", ext_cx)
+            .with_attr("cy", ext_cy),
     );
-    let mut data = Element::new("a:graphicData").with_attr("uri", SLE_NS);
-    data.push_element(
-        Element::new("sle:slicer")
-            .with_attr("xmlns:sle", SLE_NS)
-            .with_attr("name", name),
-    );
+    let data = match frame {
+        SlicerFrameKind::Timeline => {
+            let mut data = Element::new("a:graphicData").with_attr("uri", TSLE_NS);
+            data.push_element(
+                Element::new("tsle:timeslicer")
+                    .with_attr("xmlns:tsle", TSLE_NS)
+                    .with_attr("name", name),
+            );
+            data
+        }
+        _ => {
+            let mut data = Element::new("a:graphicData").with_attr("uri", SLE_NS);
+            data.push_element(
+                Element::new("sle:slicer")
+                    .with_attr("xmlns:sle", SLE_NS)
+                    .with_attr("name", name),
+            );
+            data
+        }
+    };
     let mut graphic = Element::new("a:graphic");
     graphic.push_element(data);
     let mut frame = Element::new("xdr:graphicFrame").with_attr("macro", "");
@@ -1309,7 +1722,7 @@ fn build_frame(cnv: u32, name: &str, cx: i64, cy: i64) -> Element {
     frame
 }
 
-fn fallback_sp(name: &str, cx: i64, cy: i64) -> Element {
+fn fallback_sp(name: &str, cx: i64, cy: i64, text: &str) -> Element {
     let mut nv = Element::new("xdr:nvSpPr");
     nv.push_element(
         Element::new("xdr:cNvPr")
@@ -1335,13 +1748,15 @@ fn fallback_sp(name: &str, cx: i64, cy: i64) -> Element {
     sp_pr.push_element(geom);
     let mut p = Element::new("a:p");
     let mut r = Element::new("a:r");
-    r.push_element(Element::new("a:t").with_text("此形状表示切片器。"));
+    r.push_element(Element::new("a:t").with_text(text));
     p.push_element(r);
     let mut body = Element::new("xdr:txBody");
     body.push_element(Element::new("a:bodyPr"));
     body.push_element(Element::new("a:lstStyle"));
     body.push_element(p);
-    let mut sp = Element::new("xdr:sp");
+    let mut sp = Element::new("xdr:sp")
+        .with_attr("macro", "")
+        .with_attr("textlink", "");
     sp.push_element(nv);
     sp.push_element(sp_pr);
     sp.push_element(body);
@@ -1378,7 +1793,7 @@ fn slicer_in(el: &Element, want_name: &str, cnv: Option<&str>) -> bool {
     let mut hit = false;
     let _ = picture::walk_anchors(el, &mut |anchor, _| {
         shape::visit_payloads(anchor, &mut |e| {
-            if is_slicer_frame(e) {
+            if is_slicer_or_timeline_frame(e) {
                 let name = sle_name(e);
                 let (id, _) = shape::cnv_of_object(e);
                 if name.as_deref() == Some(want_name) || (cnv.is_some() && id.as_deref() == cnv) {
@@ -1442,6 +1857,86 @@ fn remove_slicer_view(
     Ok(())
 }
 
+fn remove_timeline_view(
+    pkg: &mut Package,
+    sheet_doc: &mut Document,
+    sheet_part: &str,
+    name: &str,
+) -> Result<(), Error> {
+    let mut rels = Relationships::from_package(pkg, sheet_part)?;
+    let mut drop_rid = None;
+    let mut drop_part = None;
+    for rel in &rels.rels {
+        if !rel.rel_type.ends_with("/timeline") {
+            continue;
+        }
+        let Ok(part) = resolve_rel_target(sheet_part, &rel.target) else {
+            continue;
+        };
+        let Ok(bytes) = pkg.get(&part) else {
+            continue;
+        };
+        let Ok(mut doc) = xml::parse(bytes) else {
+            continue;
+        };
+        let before = doc.root.children_by_local("timeline").len();
+        doc.root.children.retain(|n| match n {
+            Node::Element(e) if e.local_name() == "timeline" => e.attr("name") != Some(name),
+            _ => true,
+        });
+        if doc.root.children_by_local("timeline").len() == before {
+            continue;
+        }
+        if doc.root.children_by_local("timeline").is_empty() {
+            drop_rid = Some(rel.id.clone());
+            drop_part = Some(part);
+        } else {
+            pkg.set(&part, doc.to_bytes()?)?;
+        }
+        break;
+    }
+    if let (Some(rid), Some(part)) = (drop_rid, drop_part) {
+        rels.remove_by_id(&rid);
+        rels.write_to(pkg, sheet_part)?;
+        pkg.remove(&part);
+        pkg.remove(&rels_part_name(&part));
+        let mut cts = ContentTypes::from_package(pkg)?;
+        cts.remove_override(&part);
+        cts.write_to(pkg)?;
+        drop_sheet_timeline_rid(&mut sheet_doc.root, &rid);
+    }
+    Ok(())
+}
+
+fn drop_sheet_timeline_rid(sheet: &mut Element, rid: &str) {
+    let Some(ext_lst) = sheet.child_by_local_mut("extLst") else {
+        return;
+    };
+    for n in ext_lst.children.iter_mut() {
+        let Node::Element(ext) = n else { continue };
+        if !uri_eq(ext.attr("uri").unwrap_or(""), SHEET_TIMELINE_REFS_URI) {
+            continue;
+        }
+        if let Some(list) = ext.child_by_local_mut("timelineRefs") {
+            list.children.retain(|n| match n {
+                Node::Element(e) => rid_attr(e) != Some(rid),
+                _ => true,
+            });
+        }
+    }
+    ext_lst.children.retain(|n| match n {
+        Node::Element(ext) if uri_eq(ext.attr("uri").unwrap_or(""), SHEET_TIMELINE_REFS_URI) => ext
+            .child_by_local("timelineRefs")
+            .is_some_and(|l| l.element_children().next().is_some()),
+        _ => true,
+    });
+    if ext_lst.element_children().next().is_none() {
+        sheet
+            .children
+            .retain(|n| !matches!(n, Node::Element(e) if e.local_name() == "extLst"));
+    }
+}
+
 fn drop_sheet_list_rid(sheet: &mut Element, rid: &str) {
     let Some(ext_lst) = sheet.child_by_local_mut("extLst") else {
         return;
@@ -1479,7 +1974,7 @@ fn cache_users(pkg: &Package, cache_name: &str) -> Result<usize, Error> {
         for sh in sheets.children_by_local("sheet") {
             if let Some(rid) = rid_attr(sh) {
                 if let Ok(part) = resolve_id(pkg, &wb_part, rid) {
-                    if let Ok(views) = load_slicer_views(pkg, &part) {
+                    if let Ok(views) = load_all_views(pkg, &part) {
                         n += views.iter().filter(|v| v.cache == cache_name).count();
                     }
                 }
@@ -1499,7 +1994,7 @@ fn drop_cache(
     let mut drop_rid = None;
     let mut drop_part = None;
     for rel in &rels.rels {
-        if !rel.rel_type.ends_with("/slicerCache") {
+        if !(rel.rel_type.ends_with("/slicerCache") || rel.rel_type.ends_with("/timelineCache")) {
             continue;
         }
         let Ok(part) = resolve_rel_target(wb_part, &rel.target) else {
@@ -1538,11 +2033,14 @@ fn drop_wb_cache_rid(wb: &mut Element, rid: &str) {
     for n in ext_lst.children.iter_mut() {
         let Node::Element(ext) = n else { continue };
         let uri = ext.attr("uri").unwrap_or("");
-        if !(uri_eq(uri, WB_X14_SLICER_CACHES_URI) || uri_eq(uri, WB_X15_SLICER_CACHES_URI)) {
+        if !(uri_eq(uri, WB_X14_SLICER_CACHES_URI)
+            || uri_eq(uri, WB_X15_SLICER_CACHES_URI)
+            || uri_eq(uri, WB_TIMELINE_CACHE_REFS_URI))
+        {
             continue;
         }
         for list in ext.element_children_mut() {
-            if list.local_name() == "slicerCaches" {
+            if list.local_name() == "slicerCaches" || list.local_name() == "timelineCacheRefs" {
                 list.children.retain(|n| match n {
                     Node::Element(e) => rid_attr(e) != Some(rid),
                     _ => true,
@@ -1556,6 +2054,11 @@ fn drop_wb_cache_rid(wb: &mut Element, rid: &str) {
             if uri_eq(uri, WB_X14_SLICER_CACHES_URI) || uri_eq(uri, WB_X15_SLICER_CACHES_URI) {
                 ext.element_children().any(|list| {
                     list.local_name() == "slicerCaches" && list.element_children().next().is_some()
+                })
+            } else if uri_eq(uri, WB_TIMELINE_CACHE_REFS_URI) {
+                ext.element_children().any(|list| {
+                    list.local_name() == "timelineCacheRefs"
+                        && list.element_children().next().is_some()
                 })
             } else {
                 true
@@ -1669,6 +2172,236 @@ fn ensure_ignorable(el: &mut Element, tokens: &[&str]) {
     }
 }
 
+fn cache_date_bounds(
+    pkg: &Package,
+    wb_part: &str,
+    cache_id: &str,
+    field: &str,
+    op_index: usize,
+) -> Result<(String, String), Error> {
+    let Some(cf) = cache_field_el(pkg, wb_part, cache_id, field) else {
+        return Err(field_err(field, op_index));
+    };
+    let mut dates = Vec::new();
+    if let Some(shared) = cf.child_by_local("sharedItems") {
+        if let Some(v) = shared.attr("minDate") {
+            dates.push(normalize_iso(v));
+        }
+        if let Some(v) = shared.attr("maxDate") {
+            dates.push(normalize_iso(v));
+        }
+        for child in shared.element_children() {
+            match child.local_name() {
+                "d" => {
+                    if let Some(v) = child.attr("v") {
+                        dates.push(normalize_iso(v));
+                    }
+                }
+                "n" => {
+                    if let Some(iso) = child
+                        .attr("v")
+                        .and_then(|s| s.parse::<f64>().ok())
+                        .and_then(excel_serial_to_iso)
+                    {
+                        dates.push(iso);
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    dates.retain(|s| !s.is_empty());
+    if dates.is_empty() {
+        return Err(Error::with_path(
+            ErrorKind::InvalidSlicer {
+                field: "field".into(),
+            },
+            format!("ops[{op_index}].field"),
+        ));
+    }
+    dates.sort();
+    let start = dates.first().cloned().unwrap();
+    let end = dates.last().cloned().unwrap();
+    Ok((start, end))
+}
+
+fn mark_cache_field_dates(
+    pkg: &mut Package,
+    wb_part: &str,
+    cache_id: &str,
+    field: &str,
+    start: &str,
+    end: &str,
+) -> Result<(), Error> {
+    let part = pivot_cache_def_part(pkg, wb_part, cache_id)?;
+    let mut doc = xml::parse(pkg.get(&part)?)?;
+    let field_index = {
+        let Some(fields) = doc.root.child_by_local("cacheFields") else {
+            return Ok(());
+        };
+        match fields
+            .children_by_local("cacheField")
+            .iter()
+            .position(|cf| cf.attr("name") == Some(field))
+        {
+            Some(i) => i,
+            None => return Ok(()),
+        }
+    };
+    let mut order = Vec::new();
+    if let Some(fields) = doc.root.child_by_local_mut("cacheFields") {
+        if let Some(cf) = fields.element_children_mut().nth(field_index) {
+            cf.set_attr("numFmtId", "14");
+            if let Some(shared) = cf.child_by_local_mut("sharedItems") {
+                for child in shared.element_children() {
+                    match child.local_name() {
+                        "d" => {
+                            if let Some(v) = child.attr("v") {
+                                order.push(normalize_iso(v));
+                            }
+                        }
+                        "n" => {
+                            if let Some(iso) = child
+                                .attr("v")
+                                .and_then(|s| s.parse::<f64>().ok())
+                                .and_then(excel_serial_to_iso)
+                            {
+                                order.push(iso);
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+                if order.is_empty() {
+                    order.push(start.to_string());
+                    if end != start {
+                        order.push(end.to_string());
+                    }
+                }
+                shared.attrs.clear();
+                shared.set_attr("containsSemiMixedTypes", "0");
+                shared.set_attr("containsNonDate", "0");
+                shared.set_attr("containsDate", "1");
+                shared.set_attr("containsString", "0");
+                shared.set_attr("minDate", start);
+                shared.set_attr("maxDate", end);
+                shared.set_attr("count", order.len().to_string());
+                shared.children = order
+                    .iter()
+                    .map(|v| Node::Element(Element::new("d").with_attr("v", v.clone())))
+                    .collect();
+            }
+        }
+    }
+    pkg.set(&part, doc.to_bytes()?)?;
+    rewrite_cache_records_dates(pkg, &part, field_index, &order)?;
+    Ok(())
+}
+
+fn rewrite_cache_records_dates(
+    pkg: &mut Package,
+    def_part: &str,
+    field_index: usize,
+    order: &[String],
+) -> Result<(), Error> {
+    let rels = Relationships::from_package(pkg, def_part)?;
+    let Some(rel) = rels
+        .rels
+        .iter()
+        .find(|r| r.rel_type.ends_with("/pivotCacheRecords"))
+    else {
+        return Ok(());
+    };
+    let rec_part = resolve_rel_target(def_part, &rel.target)?;
+    let mut doc = xml::parse(pkg.get(&rec_part)?)?;
+    for rec in doc.root.element_children_mut() {
+        let mut i = 0usize;
+        for n in rec.children.iter_mut() {
+            let Node::Element(el) = n else { continue };
+            if i == field_index && el.local_name() == "n" {
+                if let Some(iso) = el
+                    .attr("v")
+                    .and_then(|s| s.parse::<f64>().ok())
+                    .and_then(excel_serial_to_iso)
+                {
+                    if let Some(idx) = order.iter().position(|d| d == &iso) {
+                        el.name = "x".into();
+                        el.set_attr("v", idx.to_string());
+                    } else {
+                        el.name = "d".into();
+                        el.set_attr("v", iso);
+                    }
+                }
+            }
+            i += 1;
+        }
+    }
+    pkg.set(&rec_part, doc.to_bytes()?)?;
+    Ok(())
+}
+
+fn normalize_iso(raw: &str) -> String {
+    let t = raw.trim();
+    if t.contains('T') {
+        t.to_string()
+    } else if t.len() >= 10 {
+        format!("{}T00:00:00", &t[..10])
+    } else {
+        t.to_string()
+    }
+}
+
+/// Excel 1900 日期系统：序列 1 = 1900-01-01。序列 ≥ 60 时跳过伪造的 1900-02-29。
+fn excel_serial_to_iso(serial: f64) -> Option<String> {
+    if !serial.is_finite() || !(0.0..2_958_466.0).contains(&serial) {
+        return None;
+    }
+    let day_f = serial.floor();
+    let frac = serial - day_f;
+    let mut day = day_f as i64;
+    if day >= 60 {
+        day -= 1;
+    }
+    let (y, m, d) = civil_from_days(days_from_civil(1899, 12, 31) + day);
+    let secs = (frac * 86400.0).round() as i64;
+    let h = ((secs / 3600) % 24) as u32;
+    let mi = ((secs / 60) % 60) as u32;
+    let s = (secs % 60) as u32;
+    Some(format!("{y:04}-{m:02}-{d:02}T{h:02}:{mi:02}:{s:02}"))
+}
+
+fn days_from_civil(y: i32, m: u32, d: u32) -> i64 {
+    let mut y = y;
+    let m = m as i32;
+    if m <= 2 {
+        y -= 1;
+    }
+    let era = if y >= 0 { y } else { y - 399 } / 400;
+    let yoe = (y - era * 400) as u32;
+    let mp = if m > 2 {
+        (m - 3) as u32
+    } else {
+        (m + 9) as u32
+    };
+    let doy = (153 * mp + 2) / 5 + d - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    era as i64 * 146097 + doe as i64 - 719468
+}
+
+fn civil_from_days(z: i64) -> (i32, u32, u32) {
+    let z = z + 719468;
+    let era = if z >= 0 { z } else { z - 146096 } / 146097;
+    let doe = (z - era * 146097) as u32;
+    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+    let y = yoe as i32 + era as i32 * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    let y = if m <= 2 { y + 1 } else { y };
+    (y, m, d)
+}
+
 fn field_err(field: &str, op_index: usize) -> Error {
     Error::with_path(
         ErrorKind::SlicerFieldNotFound {
@@ -1685,4 +2418,25 @@ fn source_id_err(op_index: usize) -> Error {
         },
         format!("ops[{op_index}].source"),
     )
+}
+
+#[cfg(test)]
+mod excel_date_tests {
+    use super::excel_serial_to_iso;
+
+    #[test]
+    fn serial_44927_is_2023_01_01() {
+        assert_eq!(
+            excel_serial_to_iso(44927.0).as_deref(),
+            Some("2023-01-01T00:00:00")
+        );
+        assert_eq!(
+            excel_serial_to_iso(44986.0).as_deref(),
+            Some("2023-03-01T00:00:00")
+        );
+        assert_eq!(
+            excel_serial_to_iso(1.0).as_deref(),
+            Some("1900-01-01T00:00:00")
+        );
+    }
 }

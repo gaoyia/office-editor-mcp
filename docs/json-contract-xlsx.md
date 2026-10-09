@@ -258,12 +258,16 @@ URI `{05C60535-1F16-4FD2-B633-F4F36F0B64E0}`，大小写不敏感）。
 `contentType` 恒为 `model/gltf.binary`。不把 GLB、相机、灯光摊进树。create 可用 `sheets[].model3ds`。
 docx / pptx 见各自分册。
 
-工作表切片器挂在该 `worksheet` 上。`{cNvPrId}` 取 drawing 里 slicer `graphicFrame` 的 `cNvPr/@id` 原文。
-没有该属性时用 `slicer:index:{k}`，树上 `"stable": false`。`{k}` 只在该表被收入的切片器内从 1 计。
-只认 `a:graphicData/@uri` 为 `http://schemas.microsoft.com/office/drawing/2010/slicer`（可带尾斜杠）的 `xdr:graphicFrame`，
-且 `sle:slicer/@name` 能对上该表 slicers 部件里的 `slicer/@name`。
-时间线 `timeslicer`、OLAP、没有 drawing 的孤立 slicer 部件本期不进树。`insertSlicer` 的 `id` 必须是 `sheet:{name}`。
-`deleteSlicer` 的 `id` 必须是切片器 id。对不上的 id 形态报 `InvalidId`。不提供改筛选、样式或标题的 op。create 本期不写切片器。不在库里执行筛选或刷新透视。
+工作表切片器挂在该 `worksheet` 上。`{cNvPrId}` 取 drawing 里 slicer 或时间线 `graphicFrame` 的 `cNvPr/@id` 原文。
+没有该属性时用 `slicer:index:{k}`，树上 `"stable": false`。`{k}` 只在该表被收入的切片器（含时间线）内从 1 计。
+id 仍是 `sheet:{name}/slicer:{cNvPrId}`，时间线不另开前缀。
+只认下面两类 `xdr:graphicFrame`，且视图 `@name` 能对上该表对应部件：
+
+- `a:graphicData/@uri` 为 `http://schemas.microsoft.com/office/drawing/2010/slicer`（可带尾斜杠），且 `sle:slicer/@name` 对上 slicers 部件里的 `slicer/@name`
+- `a:graphicData/@uri` 为 `http://schemas.microsoft.com/office/drawing/2012/timeslicer`（可带尾斜杠），且 `tsle:timeslicer/@name` 对上 timelines 部件里的 `timeline/@name`
+
+OLAP、没有 drawing 的孤立 slicer / timeline 部件本期不进树。`insertSlicer` 的 `id` 必须是 `sheet:{name}`。
+`deleteSlicer` 的 `id` 必须是切片器 id（含时间线）。对不上的 id 形态报 `InvalidId`。不提供改筛选、样式或标题的 op。create 本期不写切片器或时间线。不在库里执行筛选或刷新透视。
 
 xlsx 的 `setProtection` 的 `id` 必须是 `sheet:{name}`（该表 `sheetProtection`）或 `xlsx:workbook`（`workbookProtection`）。
 对单元格 id、迷你图 id 或图 id 发此 op 报 `InvalidId`。对 `dialogsheet` / `macrosheet` 报 `NotImplemented`。
@@ -467,11 +471,11 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   - docx / pptx 见各自分册
 - **`scope.slicers`**（否）
   - 为 `true` 时给每张 `worksheet` 填 `slicers`
-  - 没有切片器时为空数组
+  - 没有切片器（含时间线）时为空数组
   - 省略或 `false` 则只有 `slicerCount`，没有名单
   - 不依赖 `sheet` / `range` / 其它名单键
-  - 不把 cache 选项整表倒进树
-  - 时间线、OLAP 本期不进树
+  - 不把 cache 选项、筛选区间或时间线 `level` 倒进树
+  - OLAP 本期不进树
 - **`scope.connections`**（否）
   - 为 `true` 时给工作簿根填 `connections`
   - 没有连接时为空数组
@@ -935,12 +939,20 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   `cNvPrId` 是 Choice 里 `xdr:cNvPr/@id` 原文，没有则为 `null`。`name` 取 `cNvPr/@name`，没有则为 `""`。
   `contentType` 恒为 `model/gltf.binary`。不把 GLB、相机、灯光或海报放进树。
   Fallback 海报不进 `pictures`。docx / pptx 见各自分册。
-- `scope.slicers` 为 `true` 时，每张 `worksheet` 带 `slicers`。没有切片器时为空数组。不依赖单元格切片。按该表 drawing 里被收入的 slicer `graphicFrame` 文档顺序。
+- `scope.slicers` 为 `true` 时，每张 `worksheet` 带 `slicers`。没有切片器（含时间线）时为空数组。不依赖单元格切片。
+  按该表 drawing 里被收入的 slicer / 时间线 `graphicFrame` 文档顺序。
   每条字段顺序：`id`、`cNvPrId`、`name`、`caption`、`sourceKind`、`sourceName`、`field`、`anchor`，然后按锚点种类跟位置字段（规则与工作表图相同），最后 `stable`。
-  `cNvPrId` 是 `xdr:cNvPr/@id` 原文，没有则为 `null`。`name` 取 slicer 部件 `@name`，没有则取 `cNvPr/@name`，都没有则为 `""`。
-  `caption` 取 `@caption`，缺则为 `null`。`sourceKind` 为 `table`（cache 带 `x15:tableSlicerCache`）或 `pivot`（带 `tabular` / `pivotTables`）。
-  `sourceName` 取表格 `displayName` 或透视表 `@name`，对不上则为 `null`。`field` 取 cache `@sourceName`。不把 cache 选项、筛选状态或样式放进树。
-  时间线、OLAP 不进本名单。docx / pptx 的 `scope` 里出现 `slicers` 报 `InvalidField`。
+  `cNvPrId` 是 `xdr:cNvPr/@id` 原文，没有则为 `null`。`name` 取 slicer / timeline 部件 `@name`，没有则取 `cNvPr/@name`，都没有则为 `""`。
+  `caption` 取 `@caption`，缺则为 `null`。
+  `sourceKind`：
+
+  - `table`：slicerCache 带 `x15:tableSlicerCache`
+  - `pivot`：slicerCache 带 `tabular` / `pivotTables`
+  - `timeline`：timelineCache，drawing 为 `tsle:timeslicer`
+
+  `sourceName` 取表格 `displayName` 或透视表 `@name`，对不上则为 `null`。`field` 取 cache `@sourceName`。
+  不把 cache 选项、筛选状态、样式、时间线 `level` / `scrollPosition` 或 `bounds` 放进树。
+  OLAP 不进本名单。docx / pptx 的 `scope` 里出现 `slicers` 报 `InvalidField`。
 - `scope.connections` 为 `true` 时，工作簿根带 `connections`。没有连接时为空数组。不依赖单元格切片。按 Connections 部件里被收入的 `connection` 文档顺序。
   每条字段顺序：`id`、`xmlId`、`name`、`kind`、`url`、`sourceFile`、`description`、`stable`。`xmlId` 是 `@id` 原文，没有则为 `null`。
   `name` 取 `@name`，没有则为 `""`。`kind`：`@type` 为 `4` 则为 `web`，为 `6` 则为 `text`，其余为 `other`。`url` 取 `webPr/@url`，缺则为 `null`。
@@ -2048,6 +2060,9 @@ docx / pptx 上发此 op 报 `InvalidField`。不标重算。
 `insertSlicer` / `deleteSlicer` 还可以脏 `/xl/slicers/…`、`/xl/slicerCaches/…`、worksheet drawing、工作表 `extLst` 的 `slicerList`、
 workbook `extLst` 的 `slicerCaches`、workbook 的 `<definedNames>`、工作表 / workbook `.rels` 与 `[Content_Types].xml`；
 透视源的 `insertSlicer` 还脏 `/xl/pivotCache/pivotCacheDefinitionN.xml` 的 `extLst`。
+`kind` 为 `timeline` 时改脏 `/xl/timelines/…`、`/xl/timelineCaches/…`、工作表 `extLst` 的 `timelineRefs`、
+workbook `extLst` 的 `timelineCacheRefs`，以及该透视表的 `updatedVersion`（小于 8 时升到 8），
+不写 slicers / slicerCaches 部件。
 `insertConnection` / `deleteConnection` 还可以脏 `/xl/connections.xml`、workbook `.rels` 与 `[Content_Types].xml`。
 `insertExternalLink` / `deleteExternalLink` 还可以脏 `/xl/workbook.xml` 的 `<externalReferences>`、
 `/xl/externalLinks/…` 及其 `.rels`、workbook `.rels` 与 `[Content_Types].xml`。
@@ -2799,7 +2814,7 @@ Fallback 是同一套纯文本框，字为该 `text`。不栅格化，不写 `a:
 
 ### insertSlicer
 
-把切片器视图写到目标工作表。不在库里执行筛选，不刷新透视合计。
+把切片器或时间线视图写到目标工作表。不在库里执行筛选，不刷新透视合计。
 
 ```json
 {
@@ -2818,39 +2833,63 @@ Fallback 是同一套纯文本框，字为该 `text`。不栅格化，不写 `a:
 }
 ```
 
+时间线示例：`"kind": "timeline"`，`source` 必须是透视表 id，`field` 必须是透视缓存里能当成日期的字段。
+
 | 字段 | 含义 |
 | --- | --- |
 | `op` | 必须是 `"insertSlicer"` |
 | `id` | 必须是 `sheet:{name}` |
-| `source` | 必须。表格 id 或透视表 id |
+| `source` | 必须。表格 id 或透视表 id。`kind` 为 `timeline` 时只许透视表 id |
 | `field` | 必须。表格列名或透视字段名，与 cache `@sourceName` 相同 |
+| `kind` | 可选。`slicer`（缺省）或 `timeline` |
+| `level` | 可选。只许 `kind` 为 `timeline`。`0` 年、`1` 季、`2` 月、`3` 日。缺省 `2` |
 | `from` | 必须。左上角单元格，A1 |
 | `to` | `anchor` 为 `twoCell` 时必填 |
 | `anchor` | 可选。`oneCell`（缺省）或 `twoCell`。不写 `absoluteAnchor` |
-| `cx` / `cy` | 可选。EMU 正整数，须成对。缺省 `1905000` × `2540000` |
+| `cx` / `cy` | 可选。EMU 正整数，须成对。切片器缺省 `1905000` × `2540000`。时间线缺省 `5080000` × `1016000` |
 | `fromOffX` / `fromOffY` | 可选。缺省 `0`，不得为负 |
 | `toOffX` / `toOffY` | `twoCell` 时可选 |
 
 `id` 不是工作表 id 报 `InvalidId`。找不到该表报 `IdNotFound`。对 `chartsheet` 报 `InvalidField`。
 对 `dialogsheet` / `macrosheet` 报 `NotImplemented`。`source` 不是该表上的表格 id 或透视表 id 报 `InvalidId`。找不到源报 `IdNotFound`。
 `field` 对不上源的列或字段报 `InvalidField`。缺 `from` 报 `MissingField`。
+`kind` 不是 `slicer` / `timeline` 报 `InvalidField`。`kind` 为 `timeline` 却给了表格源报 `InvalidField`。
+`kind` 为 `timeline` 且字段没有日期或可转成 Excel 日期序列的共享项，报 `InvalidField`。
+`level` 出现在非时间线 op 上、不是 0–3 的整数，报 `InvalidField`。
 
-表格源写 `x15:tableSlicerCache` 与工作簿 `x15:slicerCaches`。透视源写 `tabular` 加 `pivotTables`，工作簿走 `x14:slicerCaches`。
+表格源写 `x15:tableSlicerCache` 与工作簿 `x15:slicerCaches`。透视切片器写 `tabular` 加 `pivotTables`，工作簿走 `x14:slicerCaches`。
 `tabular/@pivotCacheId` 必须等于该透视缓存定义 `extLst` 里 `x14:pivotCacheDefinition/@pivotCacheId`（MS-XLSX 2.6.33 / 2.6.83，
 URI `{725AE2AE-9491-48BE-B2B4-4EB974FC3084}`）。
 已有非 0 值则沿用；没有则写入 workbook `pivotCache/@cacheId`（为 `0` 或空时改写 `1`）。删除切片器时不摘这条扩展。
-drawing 写 `xdr:twoCellAnchor`，`mc:Choice` 只包 `sle:slicer` graphicFrame（不要把整段锚点套进 AlternateContent）。
-按 MS-XLSX 2.3.2.3 写一条定义名，`@name` 与 cache `@name` 相同，公式为 `#N/A`。不写 `hidden`。不写 `a16:creationId`。不写时间线。不写 OLAP。
+drawing 写 `xdr:twoCellAnchor`，`mc:Choice` 只包 graphicFrame（不要把整段锚点套进 AlternateContent）。
+切片器 Choice 包 `sle:slicer`。时间线 Choice `Requires="tsle"`，包 `tsle:timeslicer`，
+`graphicData/@uri` 为 `http://schemas.microsoft.com/office/drawing/2012/timeslicer`。
+按 MS-XLSX 2.3.2.3 写一条定义名，`@name` 与 cache `@name` 相同，公式为 `#N/A`。不写 `hidden`。不写 `a16:creationId`。不写 `xr10:uid`。不写 OLAP。
+
+时间线跟 Excel 16.0 另存：
+
+- 部件 `/xl/timelineCaches/timelineCacheN.xml`、`/xl/timelines/timelineN.xml`
+- 内容类型 `application/vnd.ms-excel.timelineCache+xml`、`application/vnd.ms-excel.timeline+xml`
+- 关系 Type 为 `http://schemas.microsoft.com/office/2011/relationships/timelineCache` 与 `…/timeline`
+- 工作簿 `extLst` URI `{D0CA8CA8-9F24-4464-BF8E-62219DCF47F9}` 写 `x15:timelineCacheRefs`
+- 工作表 `extLst` URI `{7E03D99C-DC04-49d9-9315-930204A7B6E9}` 写 `x15:timelineRefs`
+- `timelineCacheDefinition/@sourceName` 为透视字段名；`state/@pivotCacheId` 与上面 x14 扩展相同
+- `state/@filterType` 为 `unknown`，`minimalRefreshVersion` / `lastRefreshVersion` 为 `6`
+- `bounds` 取该字段共享项的最小 / 最大日期（数字共享项按 Excel 1900 序列转成 `dateTime`）
+- `timeline/@level` 与 `@selectionLevel` 相同；省略 `showHeader` 等默认 true 的属性
+- 不写 `timelineCachePivotCaches`，不写筛选 `selection`
+- 关联透视表 `updatedVersion` 若小于 8，升到 `8`。Excel 16.0 只在这个版本够新时加载时间线
 
 ### deleteSlicer
 
 | 字段 | 含义 |
 | --- | --- |
 | `op` | 必须是 `"deleteSlicer"` |
-| `id` | 必须是切片器 id |
+| `id` | 必须是切片器 id（含时间线） |
 
-找不到报 `IdNotFound`。id 不是切片器 id 报 `InvalidId`。摘 drawing 锚点、slicers 部件里对应 `slicer`。
-该 cache 已无视图则摘 slicerCache、workbook 关系，以及 `@name` 与 cache 名相同的那条定义名。slicers 部件删光则去掉该部件与工作表 `slicerList` 条目。
+找不到报 `IdNotFound`。id 不是切片器 id 报 `InvalidId`。摘 drawing 锚点、slicers 或 timelines 部件里对应视图。
+该 cache 已无视图则摘 slicerCache 或 timelineCache、workbook 关系，以及 `@name` 与 cache 名相同的那条定义名。
+slicers 部件删光则去掉该部件与工作表 `slicerList` 条目。timelines 部件删光则去掉该部件与工作表 `timelineRefs` 条目。
 
 ### insertConnection
 

@@ -8,7 +8,7 @@
 
 Microsoft Excel 16.0 已打开，用户确认通过。本机若装了 WPS，`Excel.Application` 会被抢走，测试仍直接启动 `EXCEL.EXE` 再挂 COM。
 
-C、I、A、O、Xp、Xvg、Xem、X3d、Xom、Xtf、Xfl、Xc、Xh、Xfs 这几组现在由 `manual-check/office/cases/xlsx-*.ps1` 自动判定，
+C、I、A、O、Xp、Xvg、Xem、X3d、Xom、Xtf、Xfl、Xc、Xh、Xfs、Xtl 这几组现在由 `manual-check/office/cases/xlsx-*.ps1` 自动判定，
 跑 `pwsh -File manual-check\office\run.ps1 -Case 'xlsx-*'` 即可复现，逐条结果落在 `manual-check/office/out/office-results.csv`。
 2026-09-27 补跑 `xlsx-pictures.ps1`，Xp1–Xp7 通过。同日补跑 `xlsx-charts.ps1`，Xc1–Xc7 通过。
 同日补跑 `xlsx-create-pictures.ps1`，C8–C10 通过。同日补跑 `xlsx-create-charts.ps1`，C11–C13 通过。
@@ -34,6 +34,7 @@ C、I、A、O、Xp、Xvg、Xem、X3d、Xom、Xtf、Xfl、Xc、Xh、Xfs 这几组
 2026-10-10 补跑 `xlsx-text-fill.ps1`，Xfl1–Xfl5 通过。无 Repair。
 2026-10-10 补跑 `xlsx-charts-rare-remain.ps1`，Xcx1–Xcx5 通过。无 Repair。
 2026-10-10 补跑 `xlsx-cf-spark-style.ps1`，Xfs1–Xfs5 通过。无 Repair。
+2026-10-10 补跑 `xlsx-timelines.ps1`，Xtl1–Xtl5 通过。COM `SlicerCaches` 类型为 2，无 Repair。
 
 - **C1** ✅
   - Excel 16.0 打开 `manual-check/office/out/xlsx-create.xlsx`，标题栏无 Repair
@@ -254,6 +255,13 @@ C、I、A、O、Xp、Xvg、Xem、X3d、Xom、Xtf、Xfl、Xc、Xh、Xfs 这几组
   - 迷你图标记与自定义轴 COM 能看见
   - 对角线与缩进 / 旋转无 Repair
   - 缺 `text`、`top10` 带 `operator`、自定义轴缺 `manualMin` 得 `InvalidField` 且未写文件
+- **Xtl1–Xtl5** ✅
+  - Excel 16.0：`xlsx-timelines.ps1`，5 PASS / 0 FAIL
+  - 无名单时根与工作表有 `slicerCount=0`
+  - `insertSlicer` `kind=timeline` 后 COM `SlicerCaches` 类型为 2 且无 Repair
+  - 包内有 timelines / timelineCaches，无 slicers 部件
+  - 删除后计数为 0
+  - 表格源得 `InvalidField` 且未写文件
 - **Xpr1–Xpr5** ✅
   - Excel 16.0：`xlsx-protect.ps1`，5 PASS / 0 FAIL
   - 无保护时根有 `workbookProtection`、工作表有 `sheetProtection` 且 `enforced=false`
@@ -1202,6 +1210,35 @@ inspect 只读进树。create 不生成。apply 不新开编辑。脚本 `manual
 - **Xsl5**
   - 检查：拒写
   - 通过标准：缺 `from`、`id` 为 `slide:1`、对不存在的 `field` 得 `InvalidField` 或 `InvalidId`
+  - 均未写文件
+  - 不强制开 Excel
+
+## 时间线切片器
+
+用库 create 产物再 apply 出带日期列的透视表，再插时间线。脚本 `manual-check/office/cases/xlsx-timelines.ps1`。编号用 **Xtl**。不要和 Xsl、Xs、Xsa、Xsk 撞。不执行筛选，不刷新透视。OLAP 不测。
+
+- **Xtl1**
+  - 检查：inspect
+  - 通过标准：每张 `worksheet` 始终有 `slicerCount`
+  - create 默认为 `0`
+  - 给了 `scope.slicers` 时名单为空数组
+- **Xtl2**
+  - 检查：插入
+  - 通过标准：`insertSlicer` `kind=timeline` 后 Excel 无修复
+  - COM `SlicerCaches` 能看见，类型为时间线
+  - inspect `sourceKind=timeline`，id 为 `sheet:Sheet1/slicer:{cNvPrId}`
+- **Xtl3**
+  - 检查：部件
+  - 通过标准：包内有 `/xl/timelines/` 与 `/xl/timelineCaches/`
+  - 没有 slicers / slicerCaches 部件
+  - drawing 含 `tsle:timeslicer`
+- **Xtl4**
+  - 检查：删除
+  - 通过标准：`deleteSlicer` 后 `slicerCount=0`、无 Repair
+  - 时间线部件去掉
+- **Xtl5**
+  - 检查：拒写
+  - 通过标准：`kind=timeline` 却给表格源、缺 `from`、`id` 为 `slide:1` 得 `InvalidField` 或 `InvalidId`
   - 均未写文件
   - 不强制开 Excel
 

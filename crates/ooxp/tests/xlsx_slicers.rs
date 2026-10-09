@@ -344,3 +344,173 @@ fn wrong_ids_and_missing_from() {
     assert_eq!(err.code(), ErrorCode::InvalidField);
     assert!(!out.exists());
 }
+
+fn with_date_pivot(tag: &str) -> PathBuf {
+    let path = tmp(tag);
+    run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "create",
+            "path": path.to_string_lossy(),
+            "workbook": {
+                "sheets": [{
+                    "name": "Sheet1",
+                    "cells": [
+                        { "ref": "A1", "value": "日期" },
+                        { "ref": "B1", "value": "数量" },
+                        { "ref": "A2", "value": 44927 },
+                        { "ref": "B2", "value": 1 },
+                        { "ref": "A3", "value": 44958 },
+                        { "ref": "B3", "value": 2 },
+                        { "ref": "A4", "value": 44986 },
+                        { "ref": "B4", "value": 3 }
+                    ]
+                }]
+            }
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap();
+    let out = tmp(&format!("{tag}-pt"));
+    apply(
+        &path,
+        &out,
+        json!([{
+            "op": "insertPivotTable",
+            "id": "sheet:Sheet1",
+            "source": { "sheet": "Sheet1", "ref": "A1:B4" },
+            "location": "E3",
+            "name": "DatePivot",
+            "rows": ["日期"],
+            "values": ["数量"]
+        }]),
+    )
+    .unwrap();
+    out
+}
+
+#[test]
+fn insert_timeline_on_date_pivot() {
+    let src = with_date_pivot("tl-src");
+    let out = tmp("tl-ins");
+    apply(
+        &src,
+        &out,
+        json!([{
+            "op": "insertSlicer",
+            "id": "sheet:Sheet1",
+            "source": "sheet:Sheet1/pivot:1",
+            "field": "日期",
+            "kind": "timeline",
+            "from": "H2"
+        }]),
+    )
+    .unwrap();
+    let tree = inspect(&out, json!({ "slicers": true }));
+    assert_eq!(tree["slicerCount"], 1);
+    let item = &tree["sheets"][0]["slicers"][0];
+    assert_eq!(item["sourceKind"], "timeline");
+    assert_eq!(item["sourceName"], "DatePivot");
+    assert_eq!(item["field"], "日期");
+    assert!(item["id"]
+        .as_str()
+        .unwrap()
+        .starts_with("sheet:Sheet1/slicer:"));
+    assert!(part_exists(&out, "xl/timelines/timeline1.xml"));
+    assert!(part_exists(&out, "xl/timelineCaches/timelineCache1.xml"));
+    assert!(!part_exists(&out, "xl/slicers/slicer1.xml"));
+    let drawing = part_text(&out, "xl/drawings/drawing1.xml");
+    assert!(drawing.contains("timeslicer"), "{drawing}");
+    assert!(drawing.contains("Requires=\"tsle\""), "{drawing}");
+    let cache = part_text(&out, "xl/timelineCaches/timelineCache1.xml");
+    assert!(
+        cache.contains("startDate=\"2023-01-01T00:00:00\""),
+        "{cache}"
+    );
+    assert!(cache.contains("endDate=\"2023-03-01T00:00:00\""), "{cache}");
+    let view = part_text(&out, "xl/timelines/timeline1.xml");
+    assert!(view.contains("level=\"2\""), "{view}");
+    let wb = part_text(&out, "xl/workbook.xml");
+    assert!(wb.contains("timelineCacheRefs"), "{wb}");
+    let sheet = part_text(&out, "xl/worksheets/sheet1.xml");
+    assert!(sheet.contains("timelineRefs"), "{sheet}");
+    let pcd = part_text(&out, "xl/pivotCache/pivotCacheDefinition1.xml");
+    assert!(pcd.contains("containsDate=\"1\""), "{pcd}");
+    let rec = part_text(&out, "xl/pivotCache/pivotCacheRecords1.xml");
+    assert!(
+        rec.contains("<x v=\"0\"/>") || rec.contains("<d v="),
+        "{rec}"
+    );
+    assert!(!rec.contains("44927"), "{rec}");
+    let pt = part_text(&out, "xl/pivotTables/pivotTable1.xml");
+    assert!(pt.contains("updatedVersion=\"8\""), "{pt}");
+}
+
+#[test]
+fn delete_timeline_drops_parts() {
+    let src = with_date_pivot("tl-del-src");
+    let inserted = tmp("tl-del-ins");
+    apply(
+        &src,
+        &inserted,
+        json!([{
+            "op": "insertSlicer",
+            "id": "sheet:Sheet1",
+            "source": "sheet:Sheet1/pivot:1",
+            "field": "日期",
+            "kind": "timeline",
+            "from": "H2"
+        }]),
+    )
+    .unwrap();
+    let tree = inspect(&inserted, json!({ "slicers": true }));
+    let id = tree["sheets"][0]["slicers"][0]["id"].as_str().unwrap();
+    let out = tmp("tl-del-out");
+    apply(&inserted, &out, json!([{ "op": "deleteSlicer", "id": id }])).unwrap();
+    let after = inspect(&out, json!({ "slicers": true }));
+    assert_eq!(after["slicerCount"], 0);
+    assert_eq!(after["sheets"][0]["slicers"], json!([]));
+    assert!(!part_exists(&out, "xl/timelines/timeline1.xml"));
+    assert!(!part_exists(&out, "xl/timelineCaches/timelineCache1.xml"));
+    let wb = part_text(&out, "xl/workbook.xml");
+    assert!(!wb.contains("timelineCacheRefs"), "{wb}");
+}
+
+#[test]
+fn timeline_rejects_table_source_and_text_field() {
+    let table = with_table("tl-bad-tbl");
+    let out = tmp("tl-bad-out");
+    let err = apply(
+        &table,
+        &out,
+        json!([{
+            "op": "insertSlicer",
+            "id": "sheet:Sheet1",
+            "source": "sheet:Sheet1/table:1",
+            "field": "产品",
+            "kind": "timeline",
+            "from": "F2"
+        }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+    assert!(!out.exists());
+
+    let src = with_pivot("tl-text");
+    let err = apply(
+        &src,
+        &out,
+        json!([{
+            "op": "insertSlicer",
+            "id": "sheet:Sheet1",
+            "source": "sheet:Sheet1/pivot:1",
+            "field": "产品",
+            "kind": "timeline",
+            "from": "H2"
+        }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+    assert!(!out.exists());
+}

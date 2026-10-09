@@ -125,6 +125,7 @@ $order = @(
     'xlsx-groups'
     'xlsx-ole'
     'xlsx-slicers'
+    'xlsx-timelines'
     'xlsx-connections'
     'xlsx-external-link'
     'xlsx-outline'

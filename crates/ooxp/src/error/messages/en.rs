@@ -1057,6 +1057,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::SlicerFieldNotFound { name } => {
             format!("Slicer field does not match the source: {name}")
         }
+        ErrorKind::InvalidSlicer { field } => format!("invalid slicer field: {field}"),
         ErrorKind::ConnectionNotFound { id } => format!("Connection not found: {id}"),
         ErrorKind::InvalidConnection { field } => {
             format!("{field} is not a valid connection value")

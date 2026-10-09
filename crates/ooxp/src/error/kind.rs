@@ -886,6 +886,7 @@ define_error_kinds! {
     MathDrawingNoExpr => vec![Self::MathDrawingNoExpr],
     SlicerNotFound { id: String } => vec![Self::SlicerNotFound { id: "sheet:Sheet1/slicer:2".into() }],
     SlicerFieldNotFound { name: String } => vec![Self::SlicerFieldNotFound { name: "产品".into() }],
+    InvalidSlicer { field: String } => vec![Self::InvalidSlicer { field: "kind".into() }],
     ConnectionNotFound { id: String } => vec![Self::ConnectionNotFound { id: "connection:1".into() }],
     InvalidConnection { field: String } => {
         vec![Self::InvalidConnection { field: "type".into() }]
@@ -1766,6 +1767,7 @@ impl ErrorKind {
             | Self::InvalidOutline { .. }
             | Self::OutlineLevelMax
             | Self::SlicerFieldNotFound { .. }
+            | Self::InvalidSlicer { .. }
             | Self::InvalidConnection { .. }
             | Self::InvalidExternalLink { .. }
             | Self::InvalidCustomView { .. }

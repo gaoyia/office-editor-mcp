@@ -784,7 +784,10 @@
 - `source` 不是本表表格 id 或透视表 id 报 `InvalidId`
 - 找不到源报 `IdNotFound`
 - `field` 对不上源的列或字段报 `InvalidField`
-- `deleteSlicer` 的 id 必须是切片器 id
+- `kind` 不是 `slicer` / `timeline` 报 `InvalidField`
+- `kind` 为 `timeline` 却给了表格源、或字段没有日期共享项，报 `InvalidField`
+- `level` 出现在非时间线 op 上、或不是 0–3 的整数，报 `InvalidField`
+- `deleteSlicer` 的 id 必须是切片器 id（含时间线）
 - 找不到报 `IdNotFound`，不是切片器 id 报 `InvalidId`
 - 对 `chartsheet` 发切片器 op 报 `InvalidField`
 - 对 `dialogsheet` / `macrosheet` 报 `NotImplemented`

@@ -3709,6 +3709,18 @@
           "type": "string",
           "minLength": 1
         },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "slicer",
+            "timeline"
+          ]
+        },
+        "level": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3
+        },
         "from": {
           "type": "string",
           "minLength": 1

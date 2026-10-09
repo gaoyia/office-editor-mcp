@@ -961,6 +961,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::SlicerFieldNotFound { name } => {
             format!("切片器字段对不上源：{name}")
         }
+        ErrorKind::InvalidSlicer { field } => format!("切片器字段不合法：{field}"),
         ErrorKind::ConnectionNotFound { id } => format!("找不到连接：{id}"),
         ErrorKind::InvalidConnection { field } => {
             format!("连接的 {field} 不合法")

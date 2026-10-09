@@ -10086,8 +10086,8 @@ fn parse_insert_slicer(
         obj,
         i,
         &[
-            "op", "id", "source", "field", "cx", "cy", "from", "to", "anchor", "fromOffX",
-            "fromOffY", "toOffX", "toOffY",
+            "op", "id", "source", "field", "kind", "level", "cx", "cy", "from", "to", "anchor",
+            "fromOffX", "fromOffY", "toOffX", "toOffY",
         ],
     )?;
     let id = require_id(obj, i)?;
@@ -10209,10 +10209,68 @@ fn parse_insert_slicer(
             format!("ops[{i}].to"),
         ));
     }
+    let kind = match obj.get("kind") {
+        None => slicer::SlicerKind::Slicer,
+        Some(Value::String(s)) if s == "slicer" => slicer::SlicerKind::Slicer,
+        Some(Value::String(s)) if s == "timeline" => slicer::SlicerKind::Timeline,
+        Some(Value::String(_)) => {
+            return Err(Error::with_path(
+                ErrorKind::InvalidSlicer {
+                    field: "kind".into(),
+                },
+                format!("ops[{i}].kind"),
+            ));
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "kind".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].kind"),
+            ));
+        }
+    };
+    let level = match obj.get("level") {
+        None => 2,
+        Some(_) if kind != slicer::SlicerKind::Timeline => {
+            return Err(Error::with_path(
+                ErrorKind::InvalidSlicer {
+                    field: "level".into(),
+                },
+                format!("ops[{i}].level"),
+            ));
+        }
+        Some(Value::Number(n)) => {
+            let v = n.as_u64().and_then(|x| u32::try_from(x).ok());
+            match v {
+                Some(v) if v <= 3 => v,
+                _ => {
+                    return Err(Error::with_path(
+                        ErrorKind::InvalidSlicer {
+                            field: "level".into(),
+                        },
+                        format!("ops[{i}].level"),
+                    ));
+                }
+            }
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "level".into(),
+                    expected: TypeName::Integer,
+                },
+                format!("ops[{i}].level"),
+            ));
+        }
+    };
     Ok(slicer::InsertSlicerOp {
         sheet,
         source,
         field,
+        kind,
+        level,
         cx,
         cy,
         from,
