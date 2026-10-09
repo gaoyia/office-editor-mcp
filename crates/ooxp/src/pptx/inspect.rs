@@ -72,7 +72,8 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     for s in &slides {
         let doc = xml::parse(pkg.get(&s.part)?)?;
         let host = format!("slide:{}", s.index);
-        let pics = picture::collect_pictures(&doc.root, &host);
+        let rels = opc::Relationships::from_package(&pkg, &s.part)?;
+        let pics = picture::collect_pictures_with(&doc.root, &host, Some(&rels));
         picture_count += pics.len();
         let media_lists = if want_media {
             Some(media::collect(&pkg, &s.part, &doc.root, &host)?)

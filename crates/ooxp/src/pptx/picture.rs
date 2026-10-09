@@ -272,6 +272,14 @@ pub fn parse_insert_slide_or_notes(
 }
 
 pub fn collect_pictures(root: &Element, host: &str) -> Vec<PicInfo> {
+    collect_pictures_with(root, host, None)
+}
+
+pub fn collect_pictures_with(
+    root: &Element,
+    host: &str,
+    rels: Option<&Relationships>,
+) -> Vec<PicInfo> {
     let mut out = Vec::new();
     let mut index = 0usize;
     shape::walk_choice(root, &mut |e| {
@@ -279,7 +287,7 @@ pub fn collect_pictures(root: &Element, host: &str) -> Vec<PicInfo> {
             return;
         }
         index += 1;
-        out.push(pic_info(e, host, index));
+        out.push(pic_info(e, host, index, rels));
     });
     out
 }
@@ -304,7 +312,7 @@ fn pic_to_json(p: &PicInfo) -> Value {
     Value::Object(m)
 }
 
-fn pic_info(pic: &Element, host: &str, index: usize) -> PicInfo {
+fn pic_info(pic: &Element, host: &str, index: usize, rels: Option<&Relationships>) -> PicInfo {
     let cnv = pic_cnv_pr(pic);
     let cnv_pr_id = cnv
         .and_then(|c| c.attr("id"))
@@ -333,7 +341,11 @@ fn pic_info(pic: &Element, host: &str, index: usize) -> PicInfo {
         cx,
         cy,
         stable,
-        content_type: crate::svg::content_type(pic).map(str::to_string),
+        content_type: crate::image::inspect_content_type(
+            crate::svg::content_type(pic).is_some(),
+            blip_embed(pic).as_deref(),
+            rels,
+        ),
     }
 }
 
@@ -1195,6 +1207,16 @@ fn classify_image(bytes: Vec<u8>, path: &Path) -> Result<ImageFile, Error> {
             content_type: "image/bmp".into(),
             cx,
             cy,
+            svg: None,
+        });
+    }
+    if let Some(m) = crate::image::classify(&bytes) {
+        return Ok(ImageFile {
+            bytes,
+            ext: m.ext.into(),
+            content_type: m.content_type.into(),
+            cx: m.cx,
+            cy: m.cy,
             svg: None,
         });
     }

@@ -1,6 +1,6 @@
 # 三家图嗅探补 EMF / WMF / TIFF
 
-状态：❌ 探测已过，规则已锁，文档与代码未动
+状态：✅ 文档、实现与 Excel / Word / PowerPoint 16.0 手测 Xem1–Xem6、Pem1–Pem6、Dem1–Dem6 已过
 日期：2026-10-09
 
 对应 `roadmap/docx.md`、`roadmap/xlsx.md`、`roadmap/pptx.md` 跨格式 **C6**。前置：正文图 / 工作表图 / 幻灯片图；C5 已过。不要和 3D / 墨迹 / OMML 捆在一起。不算渲染引擎。不认 SVGZ / WebP。不要改 docx 44 与 C5 的 `svgBlip` 写入路径。
@@ -19,9 +19,9 @@ request schema 的 `file` 仍是路径字符串。inspect 的 `contentType` 是�
 | --- | --- | --- |
 | 0 | Word / Excel / PowerPoint 16.0 探测插入后的 XML、关系、Content Type | ✅ |
 | 1 | 锁 sniff、扩展名、inspect `contentType` | ✅ |
-| 2 | 文档：主契约、三份分册、错误、opc、清单 | ❌ |
-| 3 | 三家 `classify_image` / 写入 / export | ❌ |
-| 4 | 库测试与 Office 16.0 手测 | ❌ |
+| 2 | 文档：主契约、三份分册、错误、opc、清单 | ✅ |
+| 3 | 三家 `classify_image` / 写入 / export | ✅ |
+| 4 | 库测试与 Office 16.0 手测 | ✅ |
 
 ## 探测结论（Office 16.0）
 
@@ -68,4 +68,4 @@ request schema 的 `file` 仍是路径字符串。inspect 的 `contentType` 是�
 
 ## 建议提交顺序
 
-`0 → 1 → 2 → 3 → 4`。先改 `docs/`。探测脚本不要提交、不要进 `run.ps1`。不要强杀 Office。手测脚本 `xlsx-emf.ps1` / `pptx-emf.ps1` / `docx-emf.ps1`，编号 **Xem** / **Pem** / **Dem**。COM：xlsx / pptx 认 `Type=13`，Word 行内认 `Type=3`。挂机从本份开始，下一份是 C7。
+`0 → 1 → 2 → 3 → 4`。先改 `docs/`。探测脚本不要提交、不要进 `run.ps1`。不要强杀 Office。手测脚本 `xlsx-emf.ps1` / `pptx-emf.ps1` / `docx-emf.ps1`，编号 **Xem** / **Pem** / **Dem**。COM：xlsx / pptx 认 `Type=13`，Word 行内认 `Type=3`。下一份是 C7。

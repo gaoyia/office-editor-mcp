@@ -3,6 +3,7 @@
 use serde_json::{json, Value};
 
 use crate::error::{Error, ErrorKind, IdReason, XmlIssue};
+use crate::opc::{Package, Relationships};
 use crate::xml::{Element, Node};
 
 use super::format;
@@ -80,11 +81,14 @@ pub fn count_tables(root: &Element) -> usize {
 }
 
 pub fn tables_json(
+    pkg: &Package,
+    host_part: &str,
     root: &Element,
     container: Option<&str>,
     expand_pics: bool,
     expand_runs: bool,
 ) -> Result<Vec<Value>, Error> {
+    let rels = Relationships::from_package(pkg, host_part)?;
     let paras = para::collect_paragraphs(root);
     let mut index_of: Vec<(*const Element, usize)> = Vec::new();
     for (i, p) in paras.iter().enumerate() {
@@ -102,6 +106,7 @@ pub fn tables_json(
             &index_of,
             expand_pics,
             expand_runs,
+            &rels,
         )?);
     }
     Ok(out)
@@ -835,6 +840,7 @@ fn table_node(
     index_of: &[(*const Element, usize)],
     expand_pics: bool,
     expand_runs: bool,
+    rels: &Relationships,
 ) -> Result<Value, Error> {
     let id = match container {
         Some(c) => format!("{c}/table:{index}"),
@@ -851,7 +857,7 @@ fn table_node(
             let span = grid_span(tc)?;
             let vm = v_merge_of(tc)?;
             let cell_id = format!("{id}/r{row_n}c{col}");
-            let paras = cell_paragraphs(tc, container, index_of, expand_pics, expand_runs)?;
+            let paras = cell_paragraphs(tc, container, index_of, expand_pics, expand_runs, rels)?;
             cells.push(json!({
                 "id": cell_id,
                 "row": row_n,
@@ -888,6 +894,7 @@ fn cell_paragraphs(
     index_of: &[(*const Element, usize)],
     expand_pics: bool,
     expand_runs: bool,
+    rels: &Relationships,
 ) -> Result<Vec<Value>, Error> {
     let mut ps = Vec::new();
     collect_cell_ps(tc, &mut ps);
@@ -902,7 +909,7 @@ fn cell_paragraphs(
             Some(c) => para::para_stable_id_in(c, p, idx),
             None => para::para_stable_id(p, idx),
         };
-        let pics = super::picture::collect_pictures(p, &id)?;
+        let pics = super::picture::collect_pictures_with(p, &id, Some(rels))?;
         let boxes = super::textbox::collect_textboxes(p, &id)?;
         out.push(rebuild_para_node(
             &id,

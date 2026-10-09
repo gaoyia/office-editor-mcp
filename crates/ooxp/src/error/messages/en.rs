@@ -1017,7 +1017,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         }
         ErrorKind::InvalidPicAlign => "alignH must be left/center/right; alignV must be top/center/bottom".into(),
         ErrorKind::InvalidImageFile => {
-            "file is not a recognized image (PNG, JPEG, GIF, BMP, or SVG)".into()
+            "file is not a recognized image (PNG, JPEG, GIF, BMP, SVG, EMF, WMF, or TIFF)".into()
         }
         ErrorKind::InvalidInkMl => {
             "file is not InkML (root element must be ink in the InkML namespace)".into()

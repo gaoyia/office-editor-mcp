@@ -161,10 +161,11 @@ pub fn collect_on_slide(
         return Ok(Vec::new());
     };
     let doc = xml::parse(pkg.get(&part)?)?;
+    let rels = Relationships::from_package(pkg, &part)?;
     let authors = load_authors(pkg)?;
     let mut out = Vec::new();
     for cm in cm_elements(&doc.root) {
-        if let Some(v) = comment_json(cm, slide, &authors, want_pictures) {
+        if let Some(v) = comment_json(cm, slide, &authors, want_pictures, Some(&rels)) {
             out.push(v);
         }
     }
@@ -210,6 +211,7 @@ fn comment_json(
     slide: usize,
     authors: &[Author],
     want_pictures: bool,
+    rels: Option<&Relationships>,
 ) -> Option<Value> {
     let guid = cm.attr("id")?.to_string();
     let host = format!("slide:{slide}/comment:{guid}");
@@ -220,7 +222,7 @@ fn comment_json(
         .child_by_local("txBody")
         .map(shape::txbody_visible_text)
         .unwrap_or_default();
-    let pics = comment_pictures(&host, cm, true);
+    let pics = comment_pictures(&host, cm, true, rels);
     let mut replies = Vec::new();
     if let Some(lst) = cm.child_by_local("replyLst") {
         for reply in lst.element_children().filter(|e| e.local_name() == "reply") {
@@ -232,7 +234,7 @@ fn comment_json(
                     .map(shape::txbody_visible_text)
                     .unwrap_or_default();
                 let reply_id = format!("{host}/reply:{rg}");
-                let reply_pics = comment_pictures(&reply_id, reply, false);
+                let reply_pics = comment_pictures(&reply_id, reply, false, rels);
                 let mut robj = Map::new();
                 robj.insert("id".into(), json!(reply_id));
                 robj.insert("commentId".into(), json!(rg));
@@ -269,14 +271,24 @@ fn comment_json(
     Some(Value::Object(obj))
 }
 
-fn comment_pictures(host: &str, el: &Element, skip_reply_lst: bool) -> Vec<Value> {
+fn comment_pictures(
+    host: &str,
+    el: &Element,
+    skip_reply_lst: bool,
+    rels: Option<&Relationships>,
+) -> Vec<Value> {
     collect_counted_blips(el, skip_reply_lst)
         .into_iter()
         .enumerate()
         .map(|(i, blip)| {
             let mut m = Map::new();
             m.insert("id".into(), json!(format!("{host}/pic:{}", i + 1)));
-            if let Some(ct) = crate::svg::content_type(blip) {
+            let rid = blip.attr_local("embed").filter(|s| !s.is_empty());
+            if let Some(ct) = crate::image::inspect_content_type(
+                crate::svg::content_type(blip).is_some(),
+                rid,
+                rels,
+            ) {
                 m.insert("contentType".into(), json!(ct));
             }
             Value::Object(m)

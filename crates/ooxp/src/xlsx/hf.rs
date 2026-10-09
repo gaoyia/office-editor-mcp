@@ -195,17 +195,24 @@ fn collect_hf_pictures(
             }
             let (cnv, _) = picture::cnv_of(pic);
             let slot = slot_for_cnv(hf_el, cnv.as_deref());
-            raw.push((slot, anchor.clone(), kind, pic.clone()));
+            raw.push((
+                slot,
+                anchor.clone(),
+                kind,
+                pic.clone(),
+                drawing_part.clone(),
+            ));
             Ok(())
         })?;
     }
     let mut counts = [0usize; 6];
     let mut out = Vec::new();
-    for (slot, anchor, kind, pic) in raw {
+    for (slot, anchor, kind, pic, drawing_part) in raw {
         let i = slot.index();
         counts[i] += 1;
         let id_base = slot.id(sheet_name);
-        let info = picture::pic_info_at(&anchor, kind, &pic, &id_base, counts[i])?;
+        let rels = Relationships::from_package(pkg, &drawing_part)?;
+        let info = picture::pic_info_at(&anchor, kind, &pic, &id_base, counts[i], Some(&rels))?;
         out.push((slot, info));
     }
     Ok(out)

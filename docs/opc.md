@@ -187,6 +187,9 @@ drawing 命名空间是 `http://schemas.openxmlformats.org/drawingml/2006/spread
 插入 SVG 时 drawing `.rels` 写两条 Type 以 `/image` 结尾的关系：一条指向 1×1 PNG 占位，一条指向 `/xl/media/imageN.svg`。
 `[Content_Types].xml` 补 `Default Extension="svg"` 为 `image/svg+xml`。`a:blip/@r:embed` 指向 PNG，`asvg:svgBlip` 指向 SVG。
 URI 为 `{96DAC541-7B7A-43D3-8B79-37D633B846F1}`，命名空间为 `http://schemas.microsoft.com/office/drawing/2016/SVG/main`。不栅格化。
+插入 EMF / WMF / TIFF 时只写一条 image 关系，原字节写入 `/xl/media/imageN.emf` / `.wmf` / `.tif`。
+`[Content_Types].xml` 补 Default：`emf` 为 `image/x-emf`，`wmf` 为 `image/x-wmf`，`tif` 为 `image/tiff`。
+不要 PNG 占位，不要 `svgBlip`。
 apply 插入工作表图表时，可能再新建 `/xl/charts/chartN.xml`（CT `application/vnd.openxmlformats-officedocument.drawingml.chart+xml`）及 chart 的 `.rels`；
 drawing 关系 Type 以 `/chart` 结尾。
 不写 embedding。apply 插入工作表超链接时，外部链在工作表 `.rels` 上补一条关系（Type
@@ -296,6 +299,10 @@ apply 或 create 插入 SVG 时：
 - URI 为 `{96DAC541-7B7A-43D3-8B79-37D633B846F1}`
 - 命名空间为 `http://schemas.microsoft.com/office/drawing/2016/SVG/main`
 - 不栅格化
+
+插入 EMF / WMF / TIFF 时只写一条 image 关系，原字节写入 `/word/media/imageN.emf` / `.wmf` / `.tif`。
+`[Content_Types].xml` 补 Default：`emf` 为 `image/x-emf`，`wmf` 为 `image/x-wmf`，`tif` 为 `image/tiff`。
+不要 PNG 占位，不要 `svgBlip`。
 
 apply 插入脚注或尾注时，可能新建 `/word/footnotes.xml` 或 `/word/endnotes.xml`（CT 分别为 `…footnotes+xml` / `…endnotes+xml`），
 并在主文档 `.rels` 与 `[Content_Types].xml` 上补关系与 Override。
@@ -481,6 +488,9 @@ apply 插入幻灯片图时，可能新建 `/ppt/media/imageN.*`，并在该页 
 插入 SVG 时该页 `.rels` 写两条 image 关系：一条指向 1×1 PNG 占位，一条指向 `/ppt/media/imageN.svg`。
 `[Content_Types].xml` 补 `Default Extension="svg"` 为 `image/svg+xml`。`a:blip/@r:embed` 指向 PNG，`asvg:svgBlip` 指向 SVG。
 URI 与命名空间与 Word / Excel 相同。不栅格化。PowerPoint 另存可以没有 PNG 后备，库写入仍带占位 PNG。
+插入 EMF / WMF / TIFF 时只写一条 image 关系，原字节写入 `/ppt/media/imageN.emf` / `.wmf` / `.tif`。
+`[Content_Types].xml` 补 Default：`emf` 为 `image/x-emf`，`wmf` 为 `image/x-wmf`，`tif` 为 `image/tiff`。
+不要 PNG 占位，不要 `svgBlip`。
 
 apply 插入幻灯片视频或音频时，可能新建 `/ppt/media/mediaN.mp4` 或 `/ppt/media/mediaN.wav`，以及一张海报 `/ppt/media/imageN.png`。
 该页 `.rels` 补三条关系：MS-PPTX media（Type `http://schemas.microsoft.com/office/2007/relationships/media`）、

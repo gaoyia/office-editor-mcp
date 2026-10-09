@@ -23,6 +23,7 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 2026-10-09 补跑 `docx-field-types.ps1`，Ft1–Ft7 通过。
 2026-10-09 补跑 `docx-svg.ps1`，Sv1–Sv6 通过。Word COM `Type=17`，72×36 磅。
 2026-10-09 补跑 `docx-ink.ps1`，Ic1–Ic6 通过。Word COM 在 `Shapes` 上 `Type=20`（`msoCanvas`），144×72 磅。
+同日补跑 `docx-emf.ps1`，Dem1–Dem6 通过。Word 行内 COM `Type=3`，无 Repair。
 
 - **C1** ✅
   - Word 16.0 能打开 `manual-check/office/out/docx-create.docx`，标题栏无 Repair
@@ -1552,6 +1553,32 @@ Word 跟踪修订下改表单元格底纹、插入空段、删除表行。`inspe
 - **Sv6**
   - 检查：拒错
   - 通过标准：空文件或不是 SVG / 位图的 `file` 报 `InvalidField`。不强制开 Word
+
+## 嵌入 EMF / WMF / TIFF
+
+正文与页眉页脚的 DrawingML 图按文件头认 EMF、WMF、TIFF，写入原字节。不要 PNG 占位，不要 `svgBlip`。不算排版引擎。xlsx / pptx 见 Xem / Pem（C6）。
+手测脚本 `manual-check/office/cases/docx-emf.ps1`。编号用 Dem。
+Word 行内 COM 认 `Type=3`（`wdInlineShapePicture`），不是 SVG 的 `17`。
+
+- **Dem1**
+  - 检查：插入
+  - 通过标准：`insertPicture` 把本地 EMF 写入正文段后，树上 `contentType` 为 `image/x-emf`，Word 无修复
+  - 行内 `Type=3`，包内有 `.emf`、没有 `svgBlip`
+- **Dem2**
+  - 检查：导出
+  - 通过标准：对该图 `exportMedia` 得到 EMF 原字节，`contentType` 为 `image/x-emf`
+- **Dem3**
+  - 检查：create
+  - 通过标准：`create` 的 `pictures[].file` 指向 WMF 后 Word 无修复，树上 `contentType` 为 `image/x-wmf`
+- **Dem4**
+  - 检查：换回位图
+  - 通过标准：`replacePicture` 换成 PNG 后树上没有 `contentType`，导出是 PNG，Word 无修复
+- **Dem5**
+  - 检查：页眉
+  - 通过标准：往页眉段落插 TIFF，容器 `pictures` 的 `contentType` 为 `image/tiff`，无修复
+- **Dem6**
+  - 检查：拒错
+  - 通过标准：空文件或不是图片的 `file` 报 `InvalidField`。不强制开 Word
 
 ## 墨迹画布
 

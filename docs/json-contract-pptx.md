@@ -695,7 +695,10 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
 - `scope.slide` 大于 `slideCount` 时，各页都不带 `shapes`，不报错。
 - `scope.pictures` 为 `true` 时，每页带 `pictures`。没有图时为空数组。不依赖 `scope.slide`。
   每张字段顺序：`id`、`cNvPrId`、`name`、`x`、`y`、`cx`、`cy`、`stable`。
-  有 `asvg:svgBlip` 时再跟 `contentType`，值为 `image/svg+xml`。位图图没有该字段。不把 SVG 原文放进树。
+  有 `asvg:svgBlip` 时再跟 `contentType`，值为 `image/svg+xml`。
+  没有 `svgBlip` 时，按 image 关系 Target 扩展名：
+  `.emf` 为 `image/x-emf`，`.wmf` 为 `image/x-wmf`，`.tif` / `.tiff` 为 `image/tiff`。
+  PNG / JPEG / GIF / BMP 没有该字段。不读媒体字节，不把原图放进树。
   `cNvPrId` 是 `p:cNvPr/@id` 原文，没有则为 `null`。
   `name` 取 `p:cNvPr/@name`，没有则为 `""`。`x` / `y` 取 `p:spPr/a:xfrm/a:off` 的 EMU；`cx` / `cy` 取 `a:ext`。缺对应属性则为 `null`。不读媒体字节。
   幻灯片图 id 为 `slide:{n}/pic:…`。
@@ -824,7 +827,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   `pictureCount` 只计该条 `cm` 下、不含 `replyLst` 的 `a:blip`（带 `r:embed` 或 `asvg:svgBlip`）。`text` 取 `p188:txBody` 可见纯文本，规则与形状 `text` 相同。
   回复嵌在 `replies` 里，不单独占 `commentCount`。回复字段顺序：`id`、`commentId`、`author`、`initials`、`date`、`done`、`kind`、`pictureCount`，
   有图名单时再跟 `pictures`，然后 `text`（无 `x` / `y`）。回复 `id` 为 `{父批注 id}/reply:{guid}`。
-  批注 / 回复内每张图字段顺序：`id`，有 `asvg:svgBlip` 时再跟 `contentType`（`image/svg+xml`）。
+  批注 / 回复内每张图字段顺序：`id`，再跟 `contentType`（规则与幻灯片图相同）。
 - `scope.hyperlinks` 为 `true` 时，每页带 `hyperlinks`。没有链时为空数组。不依赖 `scope.slide`。
   按该页被收入形状文档顺序：每个形状先 `p:cNvPr/a:hlinkClick`（若有），再按该框 `a:r` 文档顺序收 `a:rPr/a:hlinkClick`。
   每条字段顺序：`id`、`index`、`kind`、`on`、`host`、`rId`、`url`、`file`、`slide`、`tooltip`、`text`。`index` 与 id 里的 `{k}` 相同。
@@ -965,7 +968,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   - 形状级超链接提示
   - 没有 `url` / `file` / `slide` 却给了此项报 `InvalidField`
 - **`pictures[].file`**
-  - 本地路径，与 `insertPicture` 相同，按文件头认 PNG / JPEG / GIF / BMP / SVG
+  - 本地路径，与 `insertPicture` 相同，按文件头认 PNG / JPEG / GIF / BMP / SVG / EMF / WMF / TIFF
   - 缺此字段报 `MissingField`
 - **`pictures[].x` / `pictures[].y`**
   - 可选，EMU，非负整数
@@ -974,7 +977,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   - 缺则放到该页空白处，规则与 pptx `insertPicture` 相同
 - **`pictures[].cx` / `pictures[].cy`**
   - 可选，EMU，正整数
-  - 都省则按文件头尺寸以 96 dpi 换算（位图像素或 SVG 根尺寸）
+  - 都省则与 `insertPicture` 相同
   - 只给一个时报 `InvalidField`
 - **`charts[].type`**
   - 必须

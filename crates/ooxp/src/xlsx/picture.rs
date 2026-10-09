@@ -552,6 +552,7 @@ pub fn collect_sheet_pictures(
     let mut index = 0usize;
     for drawing_part in drawing_parts(pkg, sheet_part)? {
         let doc = xml::parse(pkg.get(&drawing_part)?)?;
+        let rels = Relationships::from_package(pkg, &drawing_part)?;
         walk_anchors(&doc.root, &mut |anchor, kind| {
             let Some(pic) = direct_pic(anchor) else {
                 return Ok(());
@@ -560,7 +561,7 @@ pub fn collect_sheet_pictures(
                 return Ok(());
             }
             index += 1;
-            out.push(pic_info(anchor, kind, pic, sheet_name, index)?);
+            out.push(pic_info(anchor, kind, pic, sheet_name, index, Some(&rels))?);
             Ok(())
         })?;
     }
@@ -1293,8 +1294,16 @@ fn pic_info(
     pic: &Element,
     sheet_name: &str,
     index: usize,
+    rels: Option<&Relationships>,
 ) -> Result<PicInfo, Error> {
-    pic_info_at(anchor, kind, pic, &format!("sheet:{sheet_name}"), index)
+    pic_info_at(
+        anchor,
+        kind,
+        pic,
+        &format!("sheet:{sheet_name}"),
+        index,
+        rels,
+    )
 }
 
 pub(crate) fn pic_info_at(
@@ -1303,6 +1312,7 @@ pub(crate) fn pic_info_at(
     pic: &Element,
     id_base: &str,
     index: usize,
+    rels: Option<&Relationships>,
 ) -> Result<PicInfo, Error> {
     let (raw_id, name) = cnv_of(pic);
     let stable = raw_id.is_some();
@@ -1359,7 +1369,11 @@ pub(crate) fn pic_info_at(
             None
         },
         stable,
-        content_type: crate::svg::content_type(pic).map(str::to_string),
+        content_type: crate::image::inspect_content_type(
+            crate::svg::content_type(pic).is_some(),
+            blip_embed(pic).as_deref(),
+            rels,
+        ),
     })
 }
 
@@ -2380,6 +2394,16 @@ fn classify_image(bytes: Vec<u8>, path: &Path) -> Result<ImageFile, Error> {
             content_type: "image/bmp".into(),
             cx,
             cy,
+            svg: None,
+        });
+    }
+    if let Some(m) = crate::image::classify(&bytes) {
+        return Ok(ImageFile {
+            bytes,
+            ext: m.ext.into(),
+            content_type: m.content_type.into(),
+            cx: m.cx,
+            cy: m.cy,
             svg: None,
         });
     }

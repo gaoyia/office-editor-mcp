@@ -234,6 +234,14 @@ pub fn copy_part_rels(pkg: &mut Package, src_part: &str, dst_part: &str) -> Resu
 }
 
 pub fn collect_pictures(root: &Element, container_id: &str) -> Result<Vec<PicInfo>, Error> {
+    collect_pictures_with(root, container_id, None)
+}
+
+pub fn collect_pictures_with(
+    root: &Element,
+    container_id: &str,
+    rels: Option<&Relationships>,
+) -> Result<Vec<PicInfo>, Error> {
     let mut out = Vec::new();
     let mut index = 0usize;
     walk_drawings(root, &mut |drawing| {
@@ -243,7 +251,7 @@ pub fn collect_pictures(root: &Element, container_id: &str) -> Result<Vec<PicInf
         if is_group_drawing(drawing) {
             walk_group_pics(drawing, &mut |pic| {
                 index += 1;
-                if let Ok(info) = pic_info_grouped(drawing, pic, container_id, index) {
+                if let Ok(info) = pic_info_grouped(drawing, pic, container_id, index, rels) {
                     out.push(info);
                 }
             });
@@ -253,7 +261,7 @@ pub fn collect_pictures(root: &Element, container_id: &str) -> Result<Vec<PicInf
             return Ok(());
         }
         index += 1;
-        out.push(pic_info(drawing, container_id, index)?);
+        out.push(pic_info(drawing, container_id, index, rels)?);
         Ok(())
     })?;
     Ok(out)
@@ -1000,7 +1008,12 @@ pub fn insert_drawing_into_para(p: &mut Element, drawing: Element) {
     p.children.push(Node::Element(run));
 }
 
-fn pic_info(drawing: &Element, container_id: &str, index: usize) -> Result<PicInfo, Error> {
+fn pic_info(
+    drawing: &Element,
+    container_id: &str,
+    index: usize,
+    rels: Option<&Relationships>,
+) -> Result<PicInfo, Error> {
     let frame = frame(drawing);
     let kind = match frame.map(Element::local_name) {
         Some("anchor") => PicKind::Anchor,
@@ -1038,7 +1051,11 @@ fn pic_info(drawing: &Element, container_id: &str, index: usize) -> Result<PicIn
         cy,
         wrap,
         stable,
-        content_type: svg_content_type(drawing),
+        content_type: crate::image::inspect_content_type(
+            svg_blip_rid(drawing).is_some(),
+            blip_embed(drawing).as_deref(),
+            rels,
+        ),
     })
 }
 
@@ -1112,6 +1129,7 @@ fn pic_info_grouped(
     pic: &Element,
     container_id: &str,
     index: usize,
+    rels: Option<&Relationships>,
 ) -> Result<PicInfo, Error> {
     let frame = frame(drawing);
     let kind = match frame.map(Element::local_name) {
@@ -1141,7 +1159,11 @@ fn pic_info_grouped(
         cy,
         wrap,
         stable,
-        content_type: svg_content_type(pic),
+        content_type: crate::image::inspect_content_type(
+            svg_blip_rid(pic).is_some(),
+            blip_embed(pic).as_deref(),
+            rels,
+        ),
     })
 }
 
@@ -1897,6 +1919,16 @@ fn classify_image(bytes: Vec<u8>, _path: &Path) -> Result<ImageFile, Error> {
             svg: None,
         });
     }
+    if let Some(m) = crate::image::classify(&bytes) {
+        return Ok(ImageFile {
+            bytes,
+            ext: m.ext.into(),
+            content_type: m.content_type.into(),
+            cx: m.cx,
+            cy: m.cy,
+            svg: None,
+        });
+    }
     if looks_like_svg(&bytes) {
         let (cx, cy) = svg_size(&bytes).unwrap_or((914400, 914400));
         return Ok(ImageFile {
@@ -1967,14 +1999,6 @@ fn jpeg_size(bytes: &[u8]) -> Option<(i64, i64)> {
         i += 2 + len;
     }
     None
-}
-
-fn svg_content_type(el: &Element) -> Option<String> {
-    if svg_blip_rid(el).is_some() {
-        Some(SVG_CT.into())
-    } else {
-        None
-    }
 }
 
 fn svg_ext_lst(svg_rid: &str) -> Element {

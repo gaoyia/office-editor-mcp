@@ -251,8 +251,14 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
             tree["watermarks"] = Value::Array(watermark::list_all(&pkg, &catalog)?);
         }
         if scope.tables {
-            tree["tables"] =
-                Value::Array(tbl::tables_json(&doc.root, None, expand_pics, expand_runs)?);
+            tree["tables"] = Value::Array(tbl::tables_json(
+                &pkg,
+                &part,
+                &doc.root,
+                None,
+                expand_pics,
+                expand_runs,
+            )?);
         }
         if scope.revisions {
             tree["revisions"] = Value::Array(revision::revisions_json(&doc.root, None)?);
@@ -486,8 +492,9 @@ fn hf_arrays(
 fn hf_node(pkg: &Package, item: &HfPart, expand: &HfExpand) -> Result<Value, Error> {
     let bytes = pkg.get(&item.part)?;
     let doc = xml::parse(bytes)?;
+    let rels = Relationships::from_package(pkg, &item.part)?;
     let paras = para::collect_paragraphs(&doc.root);
-    let pics = picture::collect_pictures(&doc.root, &item.id)?;
+    let pics = picture::collect_pictures_with(&doc.root, &item.id, Some(&rels))?;
     let mut boxes = Vec::new();
     for (i, p) in paras.iter().enumerate() {
         let (id, _) = para::para_stable_id_in(&item.id, p, i + 1);
@@ -591,6 +598,8 @@ fn hf_node(pkg: &Package, item: &HfPart, expand: &HfExpand) -> Result<Value, Err
     }
     if expand.tables {
         node["tables"] = Value::Array(tbl::tables_json(
+            pkg,
+            &item.part,
             &doc.root,
             Some(&item.id),
             expand.pictures,
@@ -652,7 +661,8 @@ fn body_para_json(
     all_cxns: &[connector::CxnInfo],
 ) -> Result<Value, Error> {
     let (id, _) = para::para_stable_id(p, index);
-    let pics = picture::collect_pictures(p, &id)?;
+    let rels = Relationships::from_package(pkg, host_part)?;
+    let pics = picture::collect_pictures_with(p, &id, Some(&rels))?;
     let mine: Vec<_> = boxes_for_para(all_boxes, &id)
         .into_iter()
         .cloned()
@@ -982,11 +992,12 @@ fn story_media(
     let mut smart_list = Vec::new();
     let mut listed_boxes = Vec::new();
     let mut listed_cxns = Vec::new();
+    let rels = Relationships::from_package(pkg, host_part)?;
     let mut para_nodes = Vec::new();
     for (i, p) in paras.iter().enumerate() {
         let index = i + 1;
         let (pid, _) = para::para_stable_id_in(container_id, p, index);
-        let pics = picture::collect_pictures(p, &pid)?;
+        let pics = picture::collect_pictures_with(p, &pid, Some(&rels))?;
         pic_count += pics.len();
         chart_count += charts::count_charts(p)?;
         smart_art_count += smartart::count_smartarts(p)?;

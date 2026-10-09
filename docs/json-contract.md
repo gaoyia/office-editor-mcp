@@ -534,7 +534,12 @@ pptx 的放映类型、循环与旁白开关用 `setShowPr`，见 [json-contract
 只换媒体字节与内容类型，不改锚点、绕排和位置。`a:blip/@r:embed` 的关系 id 保持不变。
 docx 扩展名变了就写新的 `/word/media/imageN.*`；xlsx 写新的 `/xl/media/imageN.*`；pptx 写新的 `/ppt/media/imageN.*`。
 改同一条关系的 `Target`，并更新 `[Content_Types].xml` 的 Default 或 Override；旧媒体若重新解析后无人引用则删掉。
-三种格式都按文件头认 PNG、JPEG（`.jpg` / `.jpeg`）、GIF、BMP、SVG；扩展名只用来给新媒体取名。不认 SVGZ。
+三种格式都按文件头认 PNG、JPEG（`.jpg` / `.jpeg`）、GIF、BMP、SVG、EMF、WMF、TIFF。
+扩展名只用来给新媒体取名。不认 SVGZ、WebP。
+换成 EMF / WMF / TIFF 时：把原字节写入该格式 media，一条 image 关系。
+`a:blip/@r:embed` 指向它。不要 PNG 占位，不要 `svgBlip`。
+写出扩展名用 `.emf` / `.wmf` / `.tif`。
+`Default Extension` 为 `image/x-emf` / `image/x-wmf` / `image/tiff`。
 
 换成 SVG 时：
 
@@ -618,8 +623,12 @@ docx 扩展名变了就写新的 `/word/media/imageN.*`；xlsx 写新的 `/xl/me
 docx：找不到该段落报 `IdNotFound`。`id` 不是段落 id 报 `InvalidId`。
 `cx` / `cy` 都省略时，位图按像素尺寸、96 dpi 换算成 EMU（`px × 914400 / 96`）；读不出尺寸则用 1 英寸见方（`914400`）。
 SVG 按根元素 `width` / `height`（无单位或 `px` 当 CSS 像素，同样 96 dpi）；没有则用 `viewBox`；再没有则 1 英寸见方。
+EMF 优先用 `rclFrame`（单位 0.01 mm）换 EMU；读不到再用 `rclBounds` 当像素、96 dpi。
+可放置 WMF 用 Aldus 框除以 `inch` 再乘 914400。非放置 WMF 读不到框则 1 英寸见方。
+TIFF 用 IFD `ImageWidth` / `ImageLength`，96 dpi；不读分辨率标签。
 只给一个时报 `InvalidField`。插入 `wp:inline`，挂在该段末尾一个新的 `w:r` 里。
 位图写入该部件一条 image 关系、`/word/media/imageN.*` 与内容类型。
+EMF / WMF / TIFF 与位图同一条路径：原字节、一条 image 关系。不要 PNG 占位，不要 `svgBlip`。
 SVG 再多写一条 image 关系指向 `/word/media/imageN.svg`。
 `a:blip/@r:embed` 指向 1×1 PNG 占位（不栅格化 SVG）。
 `asvg:svgBlip/@r:embed` 指向 SVG。
@@ -631,6 +640,7 @@ xlsx：找不到该表报 `IdNotFound`。`id` 不是 `sheet:{name}` 也不是页
 `cx` / `cy` 规则与 docx 相同；`twoCell` 也要写 `xdr:pic` 里的 `a:ext`（给 Excel 一个内部尺寸），显示尺寸仍由起止格决定。
 没有 drawing 部件则新建 `/xl/drawings/drawingN.xml`、工作表关系、`[Content_Types].xml` 的 Override，并在工作表上写 `<drawing r:id="…"/>`。
 往页眉槽位插图时不写 `<drawing>`，改写或新建 `<drawingHF r:id="…"/>`。新媒体写入 `/xl/media/imageN.*`。
+EMF / WMF / TIFF 与位图同一条路径：原字节、一条 image 关系。不要 PNG 占位，不要 `svgBlip`。
 SVG 再多写一条 image 关系指向 `/xl/media/imageN.svg`。
 `a:blip/@r:embed` 指向 1×1 PNG 占位。`asvg:svgBlip/@r:embed` 指向 SVG。
 `xdr:cNvPr/@id` 取该表工作表 drawing 与 `drawingHF` 里已有 `cNvPr` 的最大整数加 1。工作表图至少为 1。
@@ -644,6 +654,7 @@ pptx：找不到该页报 `IdNotFound`。`id` 必须是 `slide:{n}`、`slide:{n}
 扫描该宿主已有 `p:sp` / `p:pic` / `p:graphicFrame` / 嵌套 `p:grpSp` 的 `a:xfrm`，优先放到最右侧空隙，放不下再放到下方。
 `kind` / `wrap` / `from` / `to` / `anchor` 以及 xlsx 偏移字段出现报 `InvalidField`。
 写入该宿主 `p:spTree` 一个新的 `p:pic`（带 `a:blip`），关系指向 `/ppt/media/imageN.*`。
+EMF / WMF / TIFF 与位图同一条路径：原字节、一条 image 关系。不要 PNG 占位，不要 `svgBlip`。
 SVG 再多写一条 image 关系指向 `/ppt/media/imageN.svg`。
 `a:blip/@r:embed` 指向 1×1 PNG 占位。`asvg:svgBlip/@r:embed` 指向 SVG。
 `p:cNvPr/@id` 取该宿主已有全部 `cNvPr`（`sp` / `pic` / `graphicFrame` / 组合，含 `spTree` 自己的 `id="1"`）的最大整数加 1，至少为 2。
@@ -651,6 +662,7 @@ SVG 再多写一条 image 关系指向 `/ppt/media/imageN.svg`。
 往批注或回复插时：不要 `x` / `y` / `cx` / `cy`（出现报未知字段）。找不到该批注报 `IdNotFound`。
 写入该 `p188:cm` 或 `p188:reply`：插在 `txBody` 之后、`extLst` 之前一个 `a:blip r:embed="…"`（没有 `extLst` 则放在该宿主末尾）。
 comments 部件 `.rels` 补一条 image 关系，媒体写入 `/ppt/media/imageN.*`。
+EMF / WMF / TIFF 仍只写这一条 image 关系，不要 PNG 占位，不要 `svgBlip`。
 SVG 时该 `a:blip` 仍指向 1×1 PNG 占位，再补一条 image 关系指向 `/ppt/media/imageN.svg`，并写 `asvg:svgBlip`。
 不写 `p:pic`，不写尺寸位置。不并进幻灯片 `pictureCount`。
 对 `kind` 为 `ink` 的批注或回复报 `NotImplemented`。PowerPoint 16.0：COM 批注对象没有插图方法；另存接受这种 `a:blip`，标题栏无 Repair。

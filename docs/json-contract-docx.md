@@ -1066,7 +1066,10 @@ xlsx / pptx 的 `scope.tables` 不是同一件事：xlsx 仍拒绝；pptx 展开
   页眉页脚段落仍有 `align`、`indent`、`spacing`、`runCount`；给了 `scope.runs` 时再带 `runs`。
 - `scope.pictures` 为 `true` 时，每个页眉、页脚节点带 `pictures`；若同时给了 `from` 与 `maxParas`，切片里每段也带 `pictures`。否则这些节点上都没有该字段。不把媒体字节放进树。
   每张图的字段顺序：`id`、`docPrId`、`name`、`kind`、`cx`、`cy`、`wrap`、`stable`。
-  有 `asvg:svgBlip` 时再跟 `contentType`，值为 `image/svg+xml`。位图图没有该字段。不把 SVG 原文放进树。
+  有 `asvg:svgBlip` 时再跟 `contentType`，值为 `image/svg+xml`。
+  没有 `svgBlip` 时，按 image 关系 Target 扩展名：
+  `.emf` 为 `image/x-emf`，`.wmf` 为 `image/x-wmf`，`.tif` / `.tiff` 为 `image/tiff`。
+  PNG / JPEG / GIF / BMP 没有该字段。不读媒体字节，不把原图放进树。
 - `scope.textBoxes` 为 `true` 时，每个页眉、页脚节点带 `textBoxes`；若同时给了 `from` 与 `maxParas`，切片里每段也带 `textBoxes`。否则这些节点上都没有该字段。
   只给 `textBoxes`、不给 `from` / `maxParas`：只展开页眉页脚容器上的框。
   每个框的字段顺序：`id`、`docPrId`、`name`、`kind`、`cx`、`cy`、`wrap`、`link`、`paraCount`、`pictureCount`、`chartCount`、`smartArtCount`、`stable`，
@@ -1304,8 +1307,10 @@ xlsx / pptx 的 `scope.tables` 不是同一件事：xlsx 仍拒绝；pptx 展开
 - `docPrId` 取 `wp:docPr/@id` 的原文；没有该属性则为 `null`。`name` 取 `wp:docPr/@name` 的原文；没有则为 `null`。
 - `stable`：有 `wp:docPr/@id` 为 `true`，否则为 `false`。
 - `contentType`：该 `a:blip` 里有 `asvg:svgBlip` 时为 `image/svg+xml`。
+  没有 `svgBlip` 时，按 image 关系 Target 扩展名：
+  `.emf` 为 `image/x-emf`，`.wmf` 为 `image/x-wmf`，`.tif` / `.tiff` 为 `image/tiff`。
   命名空间为 `http://schemas.microsoft.com/office/drawing/2016/SVG/main`。
-  位图图省略该字段。不读媒体字节，不看 `[Content_Types].xml`。
+  PNG / JPEG / GIF / BMP 省略该字段。不读媒体字节。
 - `style` 取 `w:pStyle/@w:val` 的原文。没有 `pStyle` 则为 `null`（Word 此时按默认段落样式显示，树上不猜）。不把 `styles.xml` 里的字体、字号摊到段上。
 - `text` 是可见纯文本：该 `w:p` 内、不在 `w:del` 里的 `w:t` 按顺序拼接；`w:tab` 变成 `\t`，`w:br` 变成 `\n`。`w:instrText`（域指令）不进入。不含 run 级样式。
   嵌在 `w:txbxContent` 里的 `w:t` 不算，`mc:AlternateContent` 只取一支，判定见上文 docx 那节的边界两条。
@@ -1631,11 +1636,11 @@ ECMA-376 §14.2.7 / DrawingML `a:theme`）。
 
 - **`pictures[].file`**
   - 本地路径，与 `insertPicture` 相同
-  - 按文件头认 PNG、JPEG、GIF、BMP、SVG
+  - 按文件头认 PNG、JPEG、GIF、BMP、SVG、EMF、WMF、TIFF
   - 缺此字段报 `MissingField`
 - **`pictures[].cx` / `pictures[].cy`**
   - 可选，EMU，正整数
-  - 都省则按图片像素以 96 dpi 换算；SVG 按根元素尺寸，没有则用 `viewBox`，再没有则 1 英寸见方
+  - 都省则与 `insertPicture` 相同
   - 只给一个时报 `InvalidField`
 - **`pictures[].kind`**
   - 可选。`inline` 或 `anchor`，省略为 `inline`

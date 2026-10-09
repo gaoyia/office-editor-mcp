@@ -6,6 +6,7 @@ mod chart;
 mod dispatch;
 mod docx;
 mod error;
+mod image;
 mod json;
 mod ole;
 mod opc;

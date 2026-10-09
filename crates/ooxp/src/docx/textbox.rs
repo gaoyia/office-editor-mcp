@@ -3,7 +3,7 @@
 use serde_json::{json, Value};
 
 use crate::error::{Error, ErrorKind};
-use crate::opc::Package;
+use crate::opc::{Package, Relationships};
 use crate::xml::{Element, Node};
 
 use super::charts;
@@ -119,7 +119,16 @@ pub fn textboxes_json(
             "stable": b.stable,
         });
         if content {
-            fill_one_box(host, host_para_id, b, &mut node, pictures, runs)?;
+            fill_one_box(
+                pkg,
+                host_part,
+                host,
+                host_para_id,
+                b,
+                &mut node,
+                pictures,
+                runs,
+            )?;
         }
         if charts {
             node["charts"] =
@@ -140,6 +149,8 @@ pub fn textboxes_json(
 }
 
 fn fill_one_box(
+    pkg: &Package,
+    host_part: &str,
     host: &Element,
     host_para_id: &str,
     info: &TxbxInfo,
@@ -154,13 +165,14 @@ fn fill_one_box(
         }
         return Ok(());
     };
+    let rels = Relationships::from_package(pkg, host_part)?;
     let paras = para::collect_paragraphs_in_txbx(content);
     let mut para_nodes = Vec::new();
     let mut pic_nodes = Vec::new();
     for (i, p) in paras.iter().enumerate() {
         let index = i + 1;
         let (pid, _) = para::para_stable_id_in(&info.id, p, index);
-        let pics = picture::collect_pictures(p, &pid)?;
+        let pics = picture::collect_pictures_with(p, &pid, Some(&rels))?;
         let mut node = format::para_node(p, index, Some(&info.id), Some(pics.len()), None, None);
         if pictures {
             node["pictures"] = Value::Array(picture::pictures_json(&pics));

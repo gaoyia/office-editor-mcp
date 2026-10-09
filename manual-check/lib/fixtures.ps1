@@ -1227,6 +1227,101 @@ function Ensure-OoxpPngB([switch]$Force) {
     return Write-OoxpPng $path $bytes
 }
 
+function Write-OoxpBytes([string]$path, [byte[]]$bytes) {
+    $dir = Split-Path -Parent $path
+    if ($dir) { New-Item -ItemType Directory -Force -Path $dir | Out-Null }
+    [IO.File]::WriteAllBytes($path, $bytes)
+    return $path
+}
+
+# GDI+ 写出 Office 能打开的 EMF。库测试用最小文件头即可，手测不要用那份。
+function Ensure-OoxpEmf([switch]$Force) {
+    $path = Get-OutPath 'pic-emf.emf'
+    if ((Test-Path $path) -and -not $Force) { return $path }
+    Add-Type -AssemblyName System.Drawing
+    if (Test-Path $path) { Remove-Item $path -Force }
+    $bmp = New-Object System.Drawing.Bitmap 96, 48
+    $gRef = $null
+    $hdc = [IntPtr]::Zero
+    $meta = $null
+    $gMeta = $null
+    try {
+        $gRef = [System.Drawing.Graphics]::FromImage($bmp)
+        $hdc = $gRef.GetHdc()
+        $rect = New-Object System.Drawing.Rectangle 0, 0, 96, 48
+        $meta = New-Object System.Drawing.Imaging.Metafile(
+            $path,
+            $hdc,
+            $rect,
+            [System.Drawing.Imaging.MetafileFrameUnit]::Pixel,
+            [System.Drawing.Imaging.EmfType]::EmfOnly
+        )
+        $gMeta = [System.Drawing.Graphics]::FromImage($meta)
+        $gMeta.Clear([System.Drawing.Color]::FromArgb(51, 102, 204))
+        $gMeta.FillEllipse([System.Drawing.Brushes]::Gold, 24, 8, 48, 32)
+    }
+    finally {
+        if ($gMeta) { $gMeta.Dispose() }
+        if ($meta) { $meta.Dispose() }
+        if ($gRef -and $hdc -ne [IntPtr]::Zero) { $gRef.ReleaseHdc($hdc) }
+        if ($gRef) { $gRef.Dispose() }
+        $bmp.Dispose()
+    }
+    return $path
+}
+
+# 可放置 WMF：Aldus 22 字节头加最小 METAHEADER / META_EOF。
+function Ensure-OoxpWmf([switch]$Force) {
+    $path = Get-OutPath 'pic-wmf.wmf'
+    if ((Test-Path $path) -and -not $Force) { return $path }
+    $ms = New-Object System.IO.MemoryStream
+    $bw = New-Object System.IO.BinaryWriter $ms
+    $bw.Write([byte[]](0xD7, 0xCD, 0xC6, 0x9A))
+    $bw.Write([uint16]0)
+    $bw.Write([int16]0)
+    $bw.Write([int16]0)
+    $bw.Write([int16]32)
+    $bw.Write([int16]16)
+    $bw.Write([uint16]96)
+    $bw.Write([uint32]0)
+    $soFar = $ms.ToArray()
+    $cs = [uint16]0
+    for ($i = 0; $i -lt 20; $i += 2) {
+        $cs = $cs -bxor [BitConverter]::ToUInt16($soFar, $i)
+    }
+    $bw.Write($cs)
+    $bw.Write([uint16]1)
+    $bw.Write([uint16]9)
+    $bw.Write([uint16]0x0300)
+    $bw.Write([uint32]12)
+    $bw.Write([uint16]0)
+    $bw.Write([uint32]3)
+    $bw.Write([uint16]0)
+    $bw.Write([uint32]3)
+    $bw.Write([uint16]0)
+    $bw.Flush()
+    return Write-OoxpBytes $path $ms.ToArray()
+}
+
+function Ensure-OoxpTiff([switch]$Force) {
+    $path = Get-OutPath 'pic-tiff.tif'
+    if ((Test-Path $path) -and -not $Force) { return $path }
+    Add-Type -AssemblyName System.Drawing
+    $bmp = New-Object System.Drawing.Bitmap 32, 16
+    $g = $null
+    try {
+        $g = [System.Drawing.Graphics]::FromImage($bmp)
+        $g.Clear([System.Drawing.Color]::FromArgb(51, 102, 204))
+        $g.FillEllipse([System.Drawing.Brushes]::Gold, 8, 0, 16, 16)
+        $bmp.Save($path, [System.Drawing.Imaging.ImageFormat]::Tiff)
+    }
+    finally {
+        if ($g) { $g.Dispose() }
+        $bmp.Dispose()
+    }
+    return $path
+}
+
 # 两节、第二节默认页眉链接前节；页眉里有行内图和浮动图。
 function Ensure-DocxWordPictureSource([switch]$Force) {
     $path = Get-OutPath 'docx-word-picture-source.docx'

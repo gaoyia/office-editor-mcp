@@ -82,7 +82,8 @@ pub fn notes_json(
     };
     let doc = xml::parse(pkg.get(&part)?)?;
     let host = format!("slide:{slide}/notes");
-    let pics = picture::collect_pictures(&doc.root, &host);
+    let rels = crate::opc::Relationships::from_package(pkg, &part)?;
+    let pics = picture::collect_pictures_with(&doc.root, &host, Some(&rels));
     let charts_list = if want_charts {
         Some(super::chart::collect_charts(pkg, &doc.root, &host, &part)?)
     } else {
