@@ -15,6 +15,7 @@ use super::charts::{self, ChartType, InsertChartOp, NewSeries};
 use super::field;
 use super::hf::{HfKind, HfType};
 use super::math::MathKind;
+use super::math_expr::{self, MathBody};
 use super::numbering::NumberingKind;
 use super::ole::InsertOleOp;
 use super::para::{self, ParaTarget};
@@ -87,7 +88,7 @@ struct NewField {
 }
 
 struct NewMath {
-    text: String,
+    body: MathBody,
     kind: MathKind,
 }
 
@@ -2040,39 +2041,14 @@ fn parse_maths(v: Option<&Value>, prefix: &str) -> Result<Vec<NewMath>, Error> {
             )
         })?;
         for k in obj.keys() {
-            if !matches!(k.as_str(), "text" | "kind") {
+            if !matches!(k.as_str(), "text" | "kind" | "expr") {
                 return Err(Error::with_path(
                     ErrorKind::UnknownField { field: k.clone() },
                     format!("{item_path}.{k}"),
                 ));
             }
         }
-        let text = match obj.get("text") {
-            Some(Value::String(s)) if !s.is_empty() => s.clone(),
-            Some(Value::String(_)) => {
-                return Err(Error::with_path(
-                    ErrorKind::EmptyMathText,
-                    format!("{item_path}.text"),
-                ));
-            }
-            Some(_) => {
-                return Err(Error::with_path(
-                    ErrorKind::WrongType {
-                        field: "text".into(),
-                        expected: TypeName::String,
-                    },
-                    format!("{item_path}.text"),
-                ));
-            }
-            None => {
-                return Err(Error::with_path(
-                    ErrorKind::MissingField {
-                        field: "text".into(),
-                    },
-                    format!("{item_path}.text"),
-                ));
-            }
-        };
+        let body = math_expr::parse_math_body(obj, &item_path)?;
         let kind = match obj.get("kind") {
             None => MathKind::Inline,
             Some(Value::String(s)) if s == "inline" => MathKind::Inline,
@@ -2093,7 +2069,7 @@ fn parse_maths(v: Option<&Value>, prefix: &str) -> Result<Vec<NewMath>, Error> {
                 ));
             }
         };
-        out.push(NewMath { text, kind });
+        out.push(NewMath { body, kind });
     }
     Ok(out)
 }
@@ -2709,7 +2685,7 @@ fn push_story_ops(
                 id: id.clone(),
                 place: InsertMathPlace::After(host.clone()),
                 kind: m.kind,
-                text: m.text.clone(),
+                body: m.body.clone(),
             }));
         }
         for s in &p.content_controls {

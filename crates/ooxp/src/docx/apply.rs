@@ -2380,7 +2380,7 @@ fn apply_insert_math(
         InsertMathPlace::EndOfDocument => {
             let doc = docs.get_mut(doc_part).unwrap();
             math::ensure_math_ns(&mut doc.root);
-            math::insert_math(&mut doc.root, None, op.kind, &op.text, &op.id, i)?;
+            math::insert_math(&mut doc.root, None, op.kind, &op.body, &op.id, i)?;
             dirty.insert(doc_part.to_string(), ());
         }
         InsertMathPlace::After(target) => {
@@ -2398,7 +2398,7 @@ fn apply_insert_math(
                     ));
                 }
             };
-            math::insert_math(&mut doc.root, Some(para), op.kind, &op.text, &op.id, i)?;
+            math::insert_math(&mut doc.root, Some(para), op.kind, &op.body, &op.id, i)?;
             dirty.insert(part_name, ());
         }
     }
@@ -2419,7 +2419,7 @@ fn apply_set_math(
     })?;
     let doc = load_part(pkg, docs, &part_name)?;
     math::ensure_math_ns(&mut doc.root);
-    math::set_math(&mut doc.root, op.target.n, &op.text, &op.id, i)?;
+    math::set_math(&mut doc.root, op.target.n, &op.body, &op.id, i)?;
     dirty.insert(part_name, ());
     Ok(())
 }

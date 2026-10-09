@@ -16,6 +16,7 @@ mod hf;
 mod inspect;
 mod link;
 mod math;
+mod math_expr;
 mod notes;
 mod numbering;
 mod ole;

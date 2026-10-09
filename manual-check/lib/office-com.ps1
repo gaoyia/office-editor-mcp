@@ -170,7 +170,10 @@ function Open-WordDoc($word, [string]$path) {
     foreach ($d in @($word.Documents)) {
         if ($d.FullName -and ($d.FullName -ieq $path)) { return $d }
     }
-    return $word.Documents.Open($path)
+    try { $word.AskToUpdateLinks = $false } catch {}
+    try { $word.Options.UpdateLinksAtOpen = $false } catch {}
+    # ConfirmConversions=$false，打开时不要再问转换或更新域。
+    return $word.Documents.Open($path, $false)
 }
 
 function Ensure-MsPpt([string]$seedDeck) {

@@ -47,6 +47,7 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 | Sc1–Sc6 | ✅ | Word 16.0：`docx-insert-section.ps1`，6 PASS / 0 FAIL。插节后两节且第二节 `headerLink.default`；打开无修复；断链后两节页眉能独立改字；删节后只剩一节、无孤儿 `headerN.xml`；create 带 `sectionType` 为两节。标题栏无 Repair |
 | Tc1–Tc5 | ✅ | Word 16.0：`docx-toc.ps1`，5 PASS / 0 FAIL。无 `scope.tocs` 时只有 `tocCount`；插入后 `toc:1` / `kind=toc` 且 `fields` 含 TOC；打开无修复；更新域后可见「第一章」；删后 `tocCount=0` 标题还在；`kind=tof` 树上为 `tof`。标题栏无 Repair |
 | Mm1–Mm6 | ✅ | Word 16.0：`docx-math.ps1`，6 PASS / 0 FAIL。无 `scope.maths` 时只有 `mathCount`；inline 插入后 `math:1` / `kind=inline`；打开无修复且 `OMaths.Count=1`、`Type=1`；`setMath` 后仍是公式；display `Type=0`；删后 `mathCount=0` 标题还在；页眉 `mathCount=1` 且无修复。标题栏无 Repair |
+| Ms1–Ms8 | ✅ | Word 16.0：`docx-math-struct.ps1`，8 PASS / 0 FAIL。insert 分数后 `expr[0].type=frac`、display；平方根 `degHide`；nary `∑`；嵌套 `sSup`；`setMath` 给 `expr` 不摊平；只给 `text` 摊成一条 `text`；同时给 `text` 与 `expr` 为 `InvalidField`；create `expr` 为分数。标题栏无 Repair |
 | Cc1–Cc6 | ✅ | Word 16.0：`docx-sdt.ps1`，6 PASS / 0 FAIL。无 `scope.contentControls` 时只有 `contentControlCount`；plainText 插入后 `sdt:1` / `kind=plainText`；打开无修复且 `ContentControls.Count=1`、`Type=1`；`setContentControl` 后仍是纯文本控件；下拉 `Type=4`；删后 `contentControlCount=0` 标题与原文还在；页眉 `contentControlCount=1` 且无修复。标题栏无 Repair |
 | Cf1–Cf6 | ✅ | Word 16.0：`docx-create-full.ps1`，6 PASS / 0 FAIL。两节、饼图、脚注、尾注、批注；标题栏无 Repair。`commentsExtended` 的 CT 须为 `…wordprocessingml.commentsExtended+xml` |
 | Cs1–Cs9 | ✅ | Word 16.0：`docx-create-remain.ps1`，9 PASS / 0 FAIL。链 / 书签 / DATE 与 TOC 域 / `num:1` / 行内公式 / 纯文本控件 / `tocCount=1` / 批注回复 `parent=comment:0`；打开无 Repair，COM 能看见链、书签、编号、公式、内容控件与回复 |
@@ -573,6 +574,21 @@ Word 跟踪修订下改表单元格底纹、插入空段、删除表行。`inspe
 | Mm4 | 独立公式 | `kind` 为 `display` 的插入产物树上 `kind` 为 `display`，Word 无修复 |
 | Mm5 | 删除 | `deleteMath` 之后 `mathCount` 为 0，标题段还在，Word 无修复 |
 | Mm6 | 页眉 | 默认页眉插入一条 inline 公式后，容器上 `mathCount` 为 1，Word 无修复 |
+
+## 公式结构
+
+`insertMath` / `setMath` / create `maths[]` 可按 `expr` 写结构化 OMML。不解析 UnicodeMath / TeX，不在库里排版。手测脚本 `manual-check/office/cases/docx-math-struct.ps1`。
+
+| 序号 | 检查 | 通过标准 |
+| --- | --- | --- |
+| Ms1 | 分数 | `insertMath` 给 `expr` 分数后，给了 `scope.maths` 时 `expr[0].type` 为 `frac`，`text` 为 `ab`，`kind` 为 `display`；Word 无修复且 `OMaths.Count≥1` |
+| Ms2 | 根号 | 平方根 `degHide: true` 后 `expr[0].type` 为 `rad`，`degHide` 为 true；Word 无修复 |
+| Ms3 | n 元 | `chr` 为 `∑` 的 nary 插入后树上 `type` 为 `nary`；Word 无修复 |
+| Ms4 | 嵌套 | `(a/b)^2` 写成 `sSup` 套 `delim` 套 `frac` 后 `expr[0].type` 为 `sSup`；Word 无修复 |
+| Ms5 | 改结构 | 线性公式上 `setMath` 给 `expr` 后仍是分数，不摊平；Word 无修复 |
+| Ms6 | 摊平 | 结构化公式上 `setMath` 只给 `text` 后 `expr` 为一条 `text`；Word 仍当公式 |
+| Ms7 | 拒错 | 同时给 `text` 与 `expr` 得 `InvalidField`，不写输出文件 |
+| Ms8 | create | create 段上 `maths[].expr` 为分数后树上 `type` 为 `frac`；Word 无修复 |
 
 ## 内容控件
 

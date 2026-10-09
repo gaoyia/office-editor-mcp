@@ -1333,6 +1333,10 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::EmptyFieldInstr => "instr must not be empty".into(),
         ErrorKind::EmptyMathText => "text must not be empty".into(),
         ErrorKind::InvalidMathKind => "kind must be inline or display".into(),
+        ErrorKind::MathNeedTextOrExpr => "exactly one of text or expr is required".into(),
+        ErrorKind::EmptyMathExpr => "expr must not be empty".into(),
+        ErrorKind::InvalidMathExprType { got } => format!("unknown math node type: {got}"),
+        ErrorKind::EmptyMathSlot { field } => format!("{field} must not be empty"),
         ErrorKind::InvalidContentControlKind => {
             "kind must be plainText, richText, dropDown, comboBox, or date".into()
         }

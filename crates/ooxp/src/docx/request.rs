@@ -9,6 +9,7 @@ use crate::json;
 
 use super::charts::{self, ChartType, NewSeries};
 use super::hf::{HfKind, HfType};
+use super::math_expr::MathBody;
 use super::para::{
     self, BodyPara, CommentIdTarget, NoteIdTarget, NoteKind, ParaTarget, TxbxTarget,
 };
@@ -902,14 +903,14 @@ pub struct InsertMathOp {
     pub id: String,
     pub place: InsertMathPlace,
     pub kind: super::math::MathKind,
-    pub text: String,
+    pub body: MathBody,
 }
 
 #[derive(Debug, Clone)]
 pub struct SetMathOp {
     pub id: String,
     pub target: super::math::MathRef,
-    pub text: String,
+    pub body: MathBody,
 }
 
 #[derive(Debug, Clone)]
@@ -3089,7 +3090,7 @@ fn parse_insert_math(
     obj: &serde_json::Map<String, Value>,
     i: usize,
 ) -> Result<InsertMathOp, Error> {
-    deny_keys(obj, i, &["op", "id", "kind", "text"])?;
+    deny_keys(obj, i, &["op", "id", "kind", "text", "expr"])?;
     let id = require_op_id(obj, i)?;
     let kind = match obj.get("kind") {
         None => super::math::MathKind::Inline,
@@ -3111,35 +3112,7 @@ fn parse_insert_math(
             ));
         }
     };
-    let text = match obj.get("text") {
-        Some(Value::String(s)) => {
-            if s.is_empty() {
-                return Err(Error::with_path(
-                    ErrorKind::EmptyMathText,
-                    format!("ops[{i}].text"),
-                ));
-            }
-            s.clone()
-        }
-        Some(_) => {
-            return Err(Error::with_path(
-                ErrorKind::WrongType {
-                    field: "text".into(),
-                    expected: TypeName::String,
-                },
-                format!("ops[{i}].text"),
-            ));
-        }
-        None => {
-            return Err(Error::with_path(
-                ErrorKind::OpRequiresField {
-                    op: "insertMath".into(),
-                    field: "text".into(),
-                },
-                format!("ops[{i}].text"),
-            ));
-        }
-    };
+    let body = super::math_expr::parse_math_body(obj, &format!("ops[{i}]"))?;
     let path = format!("ops[{i}].id");
     let place = if id == "docx:document" {
         InsertMathPlace::EndOfDocument
@@ -3154,44 +3127,16 @@ fn parse_insert_math(
         id,
         place,
         kind,
-        text,
+        body,
     })
 }
 
 fn parse_set_math(obj: &serde_json::Map<String, Value>, i: usize) -> Result<SetMathOp, Error> {
-    deny_keys(obj, i, &["op", "id", "text"])?;
+    deny_keys(obj, i, &["op", "id", "text", "expr"])?;
     let id = require_op_id(obj, i)?;
     let target = super::math::parse_math_ref(&id, &format!("ops[{i}].id"))?;
-    let text = match obj.get("text") {
-        Some(Value::String(s)) => {
-            if s.is_empty() {
-                return Err(Error::with_path(
-                    ErrorKind::EmptyMathText,
-                    format!("ops[{i}].text"),
-                ));
-            }
-            s.clone()
-        }
-        Some(_) => {
-            return Err(Error::with_path(
-                ErrorKind::WrongType {
-                    field: "text".into(),
-                    expected: TypeName::String,
-                },
-                format!("ops[{i}].text"),
-            ));
-        }
-        None => {
-            return Err(Error::with_path(
-                ErrorKind::OpRequiresField {
-                    op: "setMath".into(),
-                    field: "text".into(),
-                },
-                format!("ops[{i}].text"),
-            ));
-        }
-    };
-    Ok(SetMathOp { id, target, text })
+    let body = super::math_expr::parse_math_body(obj, &format!("ops[{i}]"))?;
+    Ok(SetMathOp { id, target, body })
 }
 
 fn parse_delete_math(

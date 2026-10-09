@@ -150,7 +150,7 @@ OLE 的 `{token}` 优先取 `o:OLEObject/@ObjectID` 原文（常带前导 `_`）
 
 嵌入字体的 `{n}` 从 1 起，按 `fontTable` 里所有 `w:embedRegular` / `w:embedBold` / `w:embedItalic` / `w:embedBoldItalic` 的文档顺序（每个嵌入面一条，不是每个 `w:font`）。没有 fontTable 或没有任何 embed* 则为 0。`font:{n}` 在插删嵌入面之后会变。`insertEmbeddedFont` / `deleteEmbeddedFont` / `setFontEmbed` 的 id 规则见 apply。不把 odttf 字节塞进 inspect 树。不实现字体渲染、PANOSE 替换或 TTF 子集化引擎。create 本期不写嵌入字体。不改用户本机字体库。
 
-公式的 `{n}` 从 1 起，按该故事里顶层 `m:oMath` 的文档顺序（遇 `w:txbxContent` 停住；`mc:AlternateContent` 只进 Choice）。嵌在另一个 `oMath` 里的不算一条。`oMathPara` 里的每个 `oMath` 各算一条。`math:{n}` 在插删公式之后会变，只够同一次 inspect 之后立刻 apply。父节点是 `oMathPara` 时 `kind` 为 `display`，否则为 `inline`。正文用 `math:{n}`，页眉页脚用 `{容器}/math:{n}`。框内、注内、批注内的公式本期不编；对这些容器发公式 op 报 `InvalidId`。Equation Editor 3.0 的 OLE / `w:object` 不编。只认 OMML，不把公式编成结构化 JSON 树，也不实现排版引擎。
+公式的 `{n}` 从 1 起，按该故事里顶层 `m:oMath` 的文档顺序（遇 `w:txbxContent` 停住；`mc:AlternateContent` 只进 Choice）。嵌在另一个 `oMath` 里的不算一条。`oMathPara` 里的每个 `oMath` 各算一条。`math:{n}` 在插删公式之后会变，只够同一次 inspect 之后立刻 apply。父节点是 `oMathPara` 时 `kind` 为 `display`，否则为 `inline`。正文用 `math:{n}`，页眉页脚用 `{容器}/math:{n}`。框内、注内、批注内的公式本期不编；对这些容器发公式 op 报 `InvalidId`。Equation Editor 3.0 的 OLE / `w:object` 不编。只认 OMML。名单带 `expr` 结构树，不另编嵌套对象 id。不解析 UnicodeMath / TeX，也不实现排版引擎。
 
 内容控件的 `{n}` 从 1 起，按该故事里被收入的 `w:sdt` 的文档顺序（遇 `w:txbxContent` 停住；`mc:AlternateContent` 只进 Choice，ECMA-376 §17.5.2）。嵌套控件各算一条，外层 `{n}` 更小。`sdt:{n}` 在插删控件之后会变，只够同一次 inspect 之后立刻 apply。正文用 `sdt:{n}`，页眉页脚用 `{容器}/sdt:{n}`。框内、注内、批注内的控件本期不编；对这些容器发内容控件 op 报 `InvalidId`。本期收入：`plainText`（`w:text`）、`richText`（`w:richText`，或 `sdtPr` 未写类型元素，规范缺省为富文本）、`dropDown`（`w:dropDownList`）、`comboBox`（`w:comboBox`）、`date`（`w:date`）、`repeatingSection`（`repeatingSection` / `repeatingSectionItem`）。不收 `docPartObj`（目录等构建基块库仍走 `toc:`）、`bibliography`、`citation`、`picture`、`group`、`equation`、`checkbox`。祖先里有 `w:p` 时 `level` 为 `inline`，否则为 `block`。控件内段落仍走段落 id。`w:sdtPr/w:id/@w:val` 进 `xmlId`，不是树上的唯一键。带 `w:dataBinding` 的仍列出，`bound` 为 `true`。不实现 Word 开发者模式 UI，也不写自定义 XML 部件。
 
@@ -497,7 +497,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
 - 文档根上的 `fontEmbed` 始终出现，对象字段顺序：`trueType`、`systemFonts`、`subset`。三者都是布尔，分别对应 `settings.xml` 的 `w:embedTrueTypeFonts` / `w:embedSystemFonts` / `w:saveSubsetFonts`。没有对应元素为 `false`；有元素且省略 `val`、或 `val` 为 `1` / `true` / `on` 为 `true`。没有 settings 部件则三者都是 `false`。页眉页脚容器不出现 `fontEmbed`。xlsx / pptx 根上不要带 `fontEmbed`。
 - 文档根上的 `pageBackground` 始终出现，对象字段顺序：`color`、`display`。`color` 取主文档根上 `w:background/@w:color` 原文（ECMA-376 §17.2.1），没有 `w:background` 或缺该属性则为 `null`。本期只认 `@w:color`，不读 `themeColor`，也不把 `w:drawing` 渐变 / 图片背景摊进树。`display` 对应 `settings.xml` 的 `w:displayBackgroundShape`：有元素且 OnOff 为开为 `true`，否则为 `false`。没有 settings 则为 `false`。页眉页脚容器不出现 `pageBackground`。xlsx / pptx 根上不要带 `pageBackground`。不实现排版引擎，不算页面上实际画出的像素。create 本期不写页面背景。
 - 节上的 `pageBorders` 始终出现。没有 `w:pgBorders` 为 `null`。有则对象字段顺序：`offsetFrom`、`display`、`zOrder`、`top`、`left`、`bottom`、`right`。前三项取对应属性原文，缺则为 `null`。四边取 `w:top` / `w:left` / `w:bottom` / `w:right`，没有该子元素为 `null`。每边对象字段顺序：`val`、`sz`、`space`、`color`。`val` 取 `@w:val`，缺则为 `""`。`sz` 为八分之一磅（`ST_EighthPointMeasure`），能解析成非负整数则写整数，否则为 `null`。`space` 为单位磅的非负整数，缺或解析失败为 `null`。`color` 取 `@w:color` 原文，缺则为 `null`。本期不读 `art` 艺术型边框，也不把 `bordersDoNotSurroundHeader` / `bordersDoNotSurroundFooter` / `alignBordersAndEdges` 单开到树上。xlsx / pptx 节上不要带 `pageBorders`。create 本期不写页面边框。
-- `scope.maths` 为 `true` 时，根上带 `maths`（正文），每个页眉、页脚容器带 `maths`。没有公式时为空数组。按该故事里顶层 `m:oMath` 的文档顺序。每条字段顺序：`id`、`index`、`kind`、`host`、`text`。`id` 是 `math:{n}` 或 `{容器}/math:{n}`。`kind` 为 `inline` 或 `display`。`host` 是所在段落 id；不在任何 `w:p` 里则为 `null`。`text` 为该 `oMath` 子孙里所有 `t`（即 `m:t`）按文档顺序拼接，不做 UnicodeMath 全量互转。xlsx / pptx 的 `scope` 里出现 `maths` 报 `InvalidField`。
+- `scope.maths` 为 `true` 时，根上带 `maths`（正文），每个页眉、页脚容器带 `maths`。没有公式时为空数组。按该故事里顶层 `m:oMath` 的文档顺序。每条字段顺序：`id`、`index`、`kind`、`host`、`text`、`expr`。`id` 是 `math:{n}` 或 `{容器}/math:{n}`。`kind` 为 `inline` 或 `display`。`host` 是所在段落 id；不在任何 `w:p` 里则为 `null`。`text` 为该 `oMath` 子孙里所有 `t`（即 `m:t`）按文档顺序拼接，不做 UnicodeMath 全量互转。`expr` 是 `oMath` 直接子节点的数组，节点 `type` 见下文「公式 expr」。xlsx / pptx 的 `scope` 里出现 `maths` 报 `InvalidField`。
 - `scope.contentControls` 为 `true` 时，根上带 `contentControls`（正文），每个页眉、页脚容器带 `contentControls`。没有控件时为空数组。按该故事里被收入的 `w:sdt` 的文档顺序。每条字段顺序：`id`、`index`、`kind`、`level`、`host`、`tag`、`alias`、`xmlId`、`bound`、`parent`、`text`；`kind` 为 `dropDown` 或 `comboBox` 时再跟 `items`；`kind` 为 `date` 时再跟 `fullDate`。`id` 是 `sdt:{n}` 或 `{容器}/sdt:{n}`。`kind` 为 `plainText`、`richText`、`dropDown`、`comboBox`、`date` 或 `repeatingSection`。`level` 为 `inline` 或 `block`。`host` 是所在段落 id（行内为祖先 `w:p`；块级为 `sdtContent` 里第一个 `w:p`）；对不上则为 `null`。`tag` / `alias` 取 `w:tag` / `w:alias` 的 `w:val`，缺则为 `null`。`xmlId` 是 `w:sdtPr/w:id/@w:val` 原文，缺则为 `null`。`bound` 在有 `w:dataBinding` 时为 `true`，否则为 `false`。`parent` 是最近一层被收入的祖先控件 id，没有则为 `null`。`text` 为 `sdtContent` 子孙里所有 `w:t` 按文档顺序拼接。`items` 是 `w:listItem` 数组，每项字段顺序：`display`、`value`，取 `w:displayText` / `w:value`，缺则为 `null`。`fullDate` 取 `w:date/@w:fullDate` 原文，缺则为 `null`。xlsx / pptx 的 `scope` 里出现 `contentControls` 报 `InvalidField`。
 - `scope.numbering` 为 `true` 时，根上带 `numberings`。没有实例时为空数组。按 `numbering.xml` 里 `w:num`（`numId` 非 0）的文档顺序。每条字段顺序：`id`、`numId`、`abstractId`、`abstractNumId`、`multiLevelType`、`levels`。`id` 是 `num:{numId}`。`abstractId` 是 `abstractNum:{abstractNumId}`。`multiLevelType` 取该实例指向的抽象定义上 `w:multiLevelType/@w:val`，缺则为 `null`。`levels` 按 `ilvl` 升序。每一级先取抽象定义上的 `w:lvl`，该实例上同 `ilvl` 的 `w:lvlOverride/w:lvl` 盖住对应级。每级字段顺序：`ilvl`、`numFmt`、`lvlText`、`start`、`lvlJc`。`numFmt` / `lvlText` / `lvlJc` 取对应子元素 `@w:val` 原文，缺则为 `null`。`start` 能解析成整数则写整数，否则为 `null`。inspect 列出 XML 原文，不把 `numFmt` 收成白名单。xlsx / pptx 的 `scope` 里出现 `numbering` 报 `InvalidField`。
 - `scope.styles` 为 `true` 时，根上带 `styles`。没有样式时为空数组。按 `styles.xml` 里 `w:style`（`styleId` 非空）的文档顺序。每条字段顺序：`id`、`styleId`、`type`、`name`、`basedOn`、`default`。`id` 是 `style:{styleId}`。`styleId` 是 `w:styleId` 原文。`type` 取 `w:type` 原文，缺则为 `null`（规范缺省为段落样式，树上不猜）。`name` 取 `w:name/@w:val`，缺则为 `null`。`basedOn` 取 `w:basedOn/@w:val`，缺则为 `null`。`default` 看 `w:default`：`1` / `true` / `on` 为 `true`，其余或没有为 `false`。`w:latentStyles` 与 `w:docDefaults` 不进名单。xlsx / pptx 的 `scope` 里出现 `styles` 报 `InvalidField`。
@@ -590,7 +590,7 @@ docx 根上始终带 `theme`，不要另给 scope 键。来源是主文档 `.rel
 | `paragraphs[].hyperlinks` | 可选。该段上的超链接列表。省略则不写。字段与 `insertHyperlink` 相同，不含 `op` / `id`。必须有 `text`。`url` 与 `anchor` 恰好一个。出现 `location` / `file` / `slide` / `ref` / `display` / `on` 报未知字段。页眉页脚段落同样允许 |
 | `paragraphs[].bookmarks` | 可选。该段上的书签列表。省略则不写。`name` 可选；省略则按 `insertBookmark` 分配尚未占用的 `ooxp{n}`。`end` 可选，为同一故事 `paragraphs` 的 1 起下标；省略则起止都是本段。`end` 小于本段下标、大于该故事段数、为 0 或不是正整数，报 `InvalidField`。不要 `id`。页眉页脚段落同样允许 |
 | `paragraphs[].fields` | 可选。该段上的域列表。省略则不写。`instr` 必填，`result` 可选，规则与 `insertField` 相同。不要 `id`。页眉页脚段落同样允许 |
-| `paragraphs[].maths` | 可选。该段上的公式列表。省略则不写。`text` 必填非空，`kind` 可选 `inline`（缺省）或 `display`，规则与 `insertMath` 相同。不要 `id`。页眉页脚段落同样允许 |
+| `paragraphs[].maths` | 可选。该段上的公式列表。省略则不写。`text` 与 `expr` 恰好一个，规则与 `insertMath` 相同。`kind` 可选 `inline`（缺省）或 `display`。不要 `id`。页眉页脚段落同样允许 |
 | `paragraphs[].contentControls` | 可选。该段上的内容控件列表。省略则不写。字段与 `insertContentControl` 相同，不含 `op` / `id`。`text` 必填非空。页眉页脚段落同样允许 |
 | `paragraphs[].num` | 可选。从 1 起的整数，指向 `document.numberings` 的下标（不是 `num:{n}`）。省略则该段不绑编号。没有 `numberings`、越界或为 0 报 `InvalidField`。页眉页脚段落同样允许 |
 | `paragraphs[].ilvl` | 可选。绑定级别，缺省 `0`，取值 0 到 8。只给 `ilvl` 不给 `num` 报 `InvalidField` |
@@ -649,7 +649,8 @@ docx 根上始终带 `theme`，不要另给 scope 键。来源是主文档 `.rel
 | `fields[].instr` | 必须。域指令 |
 | `fields[].result` | 可选。缓存结果 |
 
-| `maths[].text` | 必须。非空 |
+| `maths[].text` | 与 `expr` 恰好一个。非空 |
+| `maths[].expr` | 与 `text` 恰好一个。规则与 `insertMath` 相同 |
 | `maths[].kind` | 可选。`inline` 或 `display` |
 
 | `contentControls[].text` | 必须。非空 |
@@ -1622,16 +1623,38 @@ run 级 `ins`：删掉整个 `w:ins`。run 级 `del`：拆掉 `w:del` 外壳，�
 | --- | --- |
 | `op` | 必须是 `"insertMath"` |
 | `id` | 段落 id（正文或页眉页脚），或 `docx:document` |
-| `text` | 必填，非空。写入一条 `m:r` / `m:t` |
+| `text` | 与 `expr` 恰好一个。非空。写入一条 `m:r` / `m:t` |
+| `expr` | 与 `text` 恰好一个。`oMath` 子节点数组，见「公式 expr」 |
 | `kind` | 可选。`inline`（缺省）或 `display` |
 
 写入前在该部件根上补 `xmlns:m`（`http://schemas.openxmlformats.org/officeDocument/2006/math`）。元素名写成 `m:oMath`，不要用宿主段落的 `w:` 前缀。
 
-`kind` 为 `inline`：把 `m:oMath`（内含一条 `m:r`/`m:t`）追加到该段。`id` 为 `docx:document` 时在正文末尾、`sectPr` 之前新插一个只含该 `oMath` 的 `w:p`。
+`kind` 为 `inline`：把 `m:oMath` 追加到该段。`id` 为 `docx:document` 时在正文末尾、`sectPr` 之前新插一个只含该 `oMath` 的 `w:p`。
 
 `kind` 为 `display`：在点名段之后新插一个 `w:p`（新 `w14:paraId`），里面是 `m:oMathPara`/`m:oMath`。`id` 为 `docx:document` 时插到正文末尾、`sectPr` 之前。
 
-不把 `text` 解析成分数、根号等结构化 OMML。框内、注内、批注内的段落，以及公式 id、容器 id、表 id、run id、`section:{n}`，一律报 `InvalidId`。找不到段落报 `IdNotFound`。空 `text` 或不认识的 `kind` 报 `InvalidField`。xlsx / pptx 上发此 op 报 `InvalidField`。create 给了 `paragraphs[].maths` 时按同一套规则写入。
+给了 `text` 时不解析成分数、根号。给了 `expr` 时按树写最小 OMML，不写 `m:rPr` / `ctrlPr`。框内、注内、批注内的段落，以及公式 id、容器 id、表 id、run id、`section:{n}`，一律报 `InvalidId`。找不到段落报 `IdNotFound`。空 `text`、空 `expr`、同时给两者、两个都不给、或不认识的 `kind` / `type`，报 `InvalidField`。出现 `tex` / `unicodemath` / `omml` 报未知字段。xlsx / pptx 上发此 op 报 `InvalidField`。create 给了 `paragraphs[].maths` 时按同一套规则写入。
+
+### 公式 expr
+
+`expr` 是数组，顺序即 `oMath` 子节点顺序。每个节点必须有 `type`。inspect 忽略 `m:*Pr`、`ctrlPr`、`m:rPr` 与 `w:rPr`。apply 不写这些属性，Word 16.0 打开无修复。
+
+| `type` | OMML | 槽 |
+| --- | --- | --- |
+| `text` | `m:r`/`m:t` | `text` 非空 |
+| `frac` | `m:f` | `num`、`den`；可选 `fracType`：`bar`（缺省，不写 `fPr`）/ `skw` / `lin` / `noBar` |
+| `rad` | `m:rad` | `e`；平方根 `degHide: true` 且不要 `deg`；n 次根给 `deg` |
+| `sSub` / `sSup` / `sSubSup` / `sPre` | 同名 | `e` 加 `sub` / `sup` |
+| `nary` | `m:nary` | `e`；可选 `chr`、`sub`、`sup` |
+| `delim` | `m:d` | `args`：至少一组节点数组，每组一个 `m:e` |
+| `func` | `m:func` | `fName`、`e` |
+| `mat` | `m:m` | `rows[]`，每项 `{ "cells": [ 节点数组, … ] }`，各行列数相同 |
+| `acc` / `bar` | 同名 | `e`；`acc` 可选 `chr` |
+| `limLow` / `limUpp` | 同名 | `e`、`lim` |
+| `eqArr` | `m:eqArr` | `rows`：节点数组的数组 |
+| `other` | 其余对象 | 仅 inspect：`name` 为本地名，`text` 为拼接。apply / create 报 `InvalidField` |
+
+槽都是节点数组。必填槽空数组报 `InvalidField`。`box` / `borderBox` / `phant` / `groupChr` inspect 进 `other`，本期不写。
 
 ### setMath
 
@@ -1639,9 +1662,10 @@ run 级 `ins`：删掉整个 `w:ins`。run 级 `del`：拆掉 `w:del` 外壳，�
 | --- | --- |
 | `op` | 必须是 `"setMath"` |
 | `id` | 公式 id |
-| `text` | 必填，非空 |
+| `text` | 与 `expr` 恰好一个。非空。用一条 `m:r`/`m:t` 整棵替换子节点，结构化对象会摊平 |
+| `expr` | 与 `text` 恰好一个。按树替换 `oMath` 子节点，不摊平 |
 
-用一条新的 `m:r`/`m:t` 整棵替换该 `oMath` 的子节点。结构化分数等会摊平。不改 `kind`，不拆 `oMathPara` 外壳。空 `text` 报 `InvalidField`。找不到报 `IdNotFound`。id 不是公式 id 报 `InvalidId`。xlsx / pptx 上发此 op 报 `InvalidField`。
+不改 `kind`，不拆 `oMathPara` 外壳。空 `text` / 空 `expr` / 同时给 / 两个都不给报 `InvalidField`。找不到报 `IdNotFound`。id 不是公式 id 报 `InvalidId`。xlsx / pptx 上发此 op 报 `InvalidField`。
 
 ### deleteMath
 

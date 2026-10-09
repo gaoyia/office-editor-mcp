@@ -1153,6 +1153,10 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::EmptyFieldInstr => "instr 不能为空".into(),
         ErrorKind::EmptyMathText => "text 不能为空".into(),
         ErrorKind::InvalidMathKind => "kind 只能是 inline 或 display".into(),
+        ErrorKind::MathNeedTextOrExpr => "必须恰好给 text 或 expr 其中一个".into(),
+        ErrorKind::EmptyMathExpr => "expr 不能为空".into(),
+        ErrorKind::InvalidMathExprType { got } => format!("不认识的公式节点 type：{got}"),
+        ErrorKind::EmptyMathSlot { field } => format!("{field} 不能为空"),
         ErrorKind::InvalidContentControlKind => {
             "kind 只能是 plainText、richText、dropDown、comboBox 或 date".into()
         }

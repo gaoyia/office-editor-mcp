@@ -57,6 +57,7 @@ pub fn maths_json(root: &Element, container: Option<&str>) -> Result<Vec<Value>,
             "kind": rec.kind.as_str(),
             "host": host_para_id(root, &rec.path, container, &index_of),
             "text": math_text(om),
+            "expr": super::math_expr::expr_of_omath(om),
         }));
     }
     Ok(out)
@@ -114,15 +115,15 @@ pub fn ensure_math_ns(root: &mut Element) {
     }
 }
 
-pub fn append_inline(p: &mut Element, text: &str) {
-    p.push_element(new_omath(text));
+pub fn append_inline(p: &mut Element, body: &super::math_expr::MathBody) {
+    p.push_element(body.to_omath());
 }
 
 pub fn insert_math(
     root: &mut Element,
     after: Option<&BodyPara>,
     kind: MathKind,
-    text: &str,
+    body: &super::math_expr::MathBody,
     err_id: &str,
     op_i: usize,
 ) -> Result<(), Error> {
@@ -145,20 +146,25 @@ pub fn insert_math(
                         format!("ops[{op_i}].id"),
                     )
                 })?;
-                append_inline(el, text);
+                append_inline(el, body);
                 Ok(())
             }
-            MathKind::Display => insert_display_after(root, para, text, err_id, op_i),
+            MathKind::Display => insert_display_after(root, para, body, err_id, op_i),
         },
-        None => insert_at_body_end(root, kind, text, op_i),
+        None => insert_at_body_end(root, kind, body, op_i),
     }
 }
 
-pub fn set_math(root: &mut Element, n: usize, text: &str, id: &str, i: usize) -> Result<(), Error> {
+pub fn set_math(
+    root: &mut Element,
+    n: usize,
+    body: &super::math_expr::MathBody,
+    id: &str,
+    i: usize,
+) -> Result<(), Error> {
     let rec = math_at(root, n, id, i)?;
     let om = para::element_at_mut(root, &rec.path).ok_or_else(|| missing_math(id, i))?;
-    om.children.clear();
-    om.push_element(new_math_run(text));
+    body.apply_to_omath(om);
     Ok(())
 }
 
@@ -182,7 +188,7 @@ pub fn delete_math(root: &mut Element, n: usize, id: &str, i: usize) -> Result<(
 fn insert_display_after(
     root: &mut Element,
     para: &BodyPara,
-    text: &str,
+    body: &super::math_expr::MathBody,
     err_id: &str,
     op_i: usize,
 ) -> Result<(), Error> {
@@ -206,7 +212,7 @@ fn insert_display_after(
             )
         })?;
         let mut p = para::new_paragraph(parent, &new_id, "");
-        p.push_element(new_omath_para(text));
+        p.push_element(body.to_omath_para());
         p
     };
     let (host, idx) = para::parent_and_index_mut(root, &path).ok_or_else(|| {
@@ -224,7 +230,7 @@ fn insert_display_after(
 fn insert_at_body_end(
     root: &mut Element,
     kind: MathKind,
-    text: &str,
+    math: &super::math_expr::MathBody,
     op_i: usize,
 ) -> Result<(), Error> {
     let new_id = para::next_para_hex(root);
@@ -239,8 +245,8 @@ fn insert_at_body_end(
     })?;
     let mut new_p = para::new_paragraph(body, &new_id, "");
     match kind {
-        MathKind::Inline => new_p.push_element(new_omath(text)),
-        MathKind::Display => new_p.push_element(new_omath_para(text)),
+        MathKind::Inline => new_p.push_element(math.to_omath()),
+        MathKind::Display => new_p.push_element(math.to_omath_para()),
     }
     para::append_before_body_sect_pr(body, new_p);
     Ok(())
@@ -415,7 +421,7 @@ fn enclosing_para(root: &Element, path: &[usize]) -> Option<Vec<usize>> {
     found
 }
 
-fn math_text(el: &Element) -> String {
+pub(crate) fn math_text(el: &Element) -> String {
     let mut out = String::new();
     collect_t(el, &mut out);
     out
@@ -431,19 +437,17 @@ fn collect_t(el: &Element, out: &mut String) {
     }
 }
 
-fn new_omath(text: &str) -> Element {
+pub(crate) fn new_omath(text: &str) -> Element {
     let mut om = Element::new("m:oMath");
     om.push_element(new_math_run(text));
     om
 }
 
-fn new_omath_para(text: &str) -> Element {
-    let mut wrap = Element::new("m:oMathPara");
-    wrap.push_element(new_omath(text));
-    wrap
+pub(crate) fn math_run_text(el: &Element) -> String {
+    math_text(el)
 }
 
-fn new_math_run(text: &str) -> Element {
+pub(crate) fn new_math_run(text: &str) -> Element {
     let mut t = Element::new("m:t");
     if needs_xml_space(text) {
         t.set_attr("xml:space", "preserve");

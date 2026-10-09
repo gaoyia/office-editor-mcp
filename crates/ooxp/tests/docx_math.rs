@@ -127,11 +127,15 @@ fn insert_inline_lists_and_delete_keeps_heading() {
     assert_eq!(tree["mathCount"], 1);
     assert_eq!(
         object_keys(&tree["maths"][0]),
-        ["id", "index", "kind", "host", "text"]
+        ["id", "index", "kind", "host", "text", "expr"]
     );
     assert_eq!(tree["maths"][0]["id"], "math:1");
     assert_eq!(tree["maths"][0]["kind"], "inline");
     assert_eq!(tree["maths"][0]["text"], "E=mc^2");
+    assert_eq!(
+        tree["maths"][0]["expr"],
+        json!([{ "type": "text", "text": "E=mc^2" }])
+    );
     assert_eq!(tree["maths"][0]["host"], p1);
     assert!(tree["paragraphs"][0]["text"]
         .as_str()
@@ -363,6 +367,14 @@ fn inspect_flattens_fraction_and_set_math_replaces_children() {
     assert_eq!(tree0["mathCount"], 1);
     assert_eq!(tree0["maths"][0]["kind"], "inline");
     assert_eq!(tree0["maths"][0]["text"], "12");
+    assert_eq!(
+        tree0["maths"][0]["expr"],
+        json!([{
+            "type": "frac",
+            "num": [{ "type": "text", "text": "1" }],
+            "den": [{ "type": "text", "text": "2" }]
+        }])
+    );
 
     let out = seq_path("frac-set", "docx");
     apply(
@@ -385,4 +397,173 @@ fn nested_omath_is_one_item_display_wraps() {
     assert_eq!(tree["mathCount"], 1);
     assert_eq!(tree["maths"][0]["kind"], "display");
     assert_eq!(tree["maths"][0]["text"], "a1");
+    assert_eq!(tree["maths"][0]["expr"][0]["type"], "sSub");
+}
+
+fn frac_expr() -> Value {
+    json!([{
+        "type": "frac",
+        "num": [{ "type": "text", "text": "a" }],
+        "den": [{ "type": "text", "text": "b" }]
+    }])
+}
+
+#[test]
+fn insert_and_create_frac_expr() {
+    let src = create_docx("frac-src", json!({ "paragraphs": [{ "text": "甲" }] }));
+    let p1 = first_body_para_id(&inspect(&src, false, false));
+    let out = seq_path("frac-ins", "docx");
+    apply(
+        &src,
+        &out,
+        json!([{ "op": "insertMath", "id": p1, "kind": "display", "expr": frac_expr() }]),
+    );
+    let tree = inspect(&out, true, false);
+    assert_eq!(tree["mathCount"], 1);
+    assert_eq!(tree["maths"][0]["kind"], "display");
+    assert_eq!(tree["maths"][0]["text"], "ab");
+    assert_eq!(tree["maths"][0]["expr"], frac_expr());
+
+    let created = create_docx(
+        "frac-create",
+        json!({
+            "paragraphs": [{
+                "text": "甲",
+                "maths": [{ "kind": "inline", "expr": frac_expr() }]
+            }]
+        }),
+    );
+    let tree_c = inspect(&created, true, false);
+    assert_eq!(tree_c["maths"][0]["expr"][0]["type"], "frac");
+    assert_eq!(tree_c["maths"][0]["text"], "ab");
+}
+
+#[test]
+fn set_math_expr_keeps_structure_text_flattens() {
+    let src = create_docx("set-src", json!({ "paragraphs": [{ "text": "甲" }] }));
+    let p1 = first_body_para_id(&inspect(&src, false, false));
+    let out = seq_path("frac-set-src", "docx");
+    apply(
+        &src,
+        &out,
+        json!([{ "op": "insertMath", "id": p1, "text": "x" }]),
+    );
+    let structured = seq_path("frac-set-expr", "docx");
+    apply(
+        &out,
+        &structured,
+        json!([{ "op": "setMath", "id": "math:1", "expr": frac_expr() }]),
+    );
+    let tree = inspect(&structured, true, false);
+    assert_eq!(tree["maths"][0]["expr"][0]["type"], "frac");
+    assert_eq!(tree["maths"][0]["text"], "ab");
+
+    let flat = seq_path("frac-flat", "docx");
+    apply(
+        &structured,
+        &flat,
+        json!([{ "op": "setMath", "id": "math:1", "text": "z" }]),
+    );
+    let tree2 = inspect(&flat, true, false);
+    assert_eq!(tree2["maths"][0]["text"], "z");
+    assert_eq!(
+        tree2["maths"][0]["expr"],
+        json!([{ "type": "text", "text": "z" }])
+    );
+}
+
+#[test]
+fn insert_math_rejects_both_or_neither_or_other() {
+    let src = create_docx("rej-src", json!({ "paragraphs": [{ "text": "甲" }] }));
+    let p1 = first_body_para_id(&inspect(&src, false, false));
+    let both = apply_err(
+        &src,
+        json!([{ "op": "insertMath", "id": p1, "text": "x", "expr": frac_expr() }]),
+    );
+    assert_eq!(both.code(), ErrorCode::InvalidField);
+
+    let neither = apply_err(&src, json!([{ "op": "insertMath", "id": p1 }]));
+    assert_eq!(neither.code(), ErrorCode::InvalidField);
+
+    let other = apply_err(
+        &src,
+        json!([{
+            "op": "insertMath",
+            "id": p1,
+            "expr": [{ "type": "other", "name": "box", "text": "x" }]
+        }]),
+    );
+    assert_eq!(other.code(), ErrorCode::InvalidField);
+}
+
+#[test]
+fn insert_rad_nary_and_nested() {
+    let src = create_docx("more-src", json!({ "paragraphs": [{ "text": "甲" }] }));
+    let p1 = first_body_para_id(&inspect(&src, false, false));
+    let out = seq_path("more", "docx");
+    apply(
+        &src,
+        &out,
+        json!([{
+            "op": "insertMath",
+            "id": p1,
+            "expr": [{
+                "type": "sSup",
+                "e": [{
+                    "type": "delim",
+                    "args": [[
+                        {
+                            "type": "frac",
+                            "num": [{ "type": "text", "text": "a" }],
+                            "den": [{ "type": "text", "text": "b" }]
+                        }
+                    ]]
+                }],
+                "sup": [{ "type": "text", "text": "2" }]
+            }]
+        }]),
+    );
+    let tree = inspect(&out, true, false);
+    assert_eq!(tree["maths"][0]["expr"][0]["type"], "sSup");
+    assert_eq!(tree["maths"][0]["text"], "ab2");
+
+    let rad = seq_path("rad", "docx");
+    apply(
+        &src,
+        &rad,
+        json!([{
+            "op": "insertMath",
+            "id": p1,
+            "expr": [{
+                "type": "rad",
+                "degHide": true,
+                "e": [{ "type": "text", "text": "x" }]
+            }]
+        }]),
+    );
+    let tree_r = inspect(&rad, true, false);
+    assert_eq!(tree_r["maths"][0]["expr"][0]["type"], "rad");
+    assert_eq!(tree_r["maths"][0]["expr"][0]["degHide"], true);
+    assert_eq!(tree_r["maths"][0]["text"], "x");
+
+    let nary = seq_path("nary", "docx");
+    apply(
+        &src,
+        &nary,
+        json!([{
+            "op": "insertMath",
+            "id": p1,
+            "expr": [{
+                "type": "nary",
+                "chr": "∑",
+                "sub": [{ "type": "text", "text": "i=1" }],
+                "sup": [{ "type": "text", "text": "n" }],
+                "e": [{ "type": "text", "text": "i" }]
+            }]
+        }]),
+    );
+    let tree_n = inspect(&nary, true, false);
+    assert_eq!(tree_n["maths"][0]["expr"][0]["type"], "nary");
+    assert_eq!(tree_n["maths"][0]["expr"][0]["chr"], "∑");
+    assert_eq!(tree_n["maths"][0]["text"], "i=1ni");
 }

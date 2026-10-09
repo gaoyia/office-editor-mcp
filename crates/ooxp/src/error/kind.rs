@@ -928,6 +928,10 @@ define_error_kinds! {
     InvalidBibliographyInstr => vec![Self::InvalidBibliographyInstr],
     InvalidMathKind => vec![Self::InvalidMathKind],
     EmptyMathText => vec![Self::EmptyMathText],
+    MathNeedTextOrExpr => vec![Self::MathNeedTextOrExpr],
+    EmptyMathExpr => vec![Self::EmptyMathExpr],
+    InvalidMathExprType { got: String } => vec![Self::InvalidMathExprType { got: "foo".into() }],
+    EmptyMathSlot { field: String } => vec![Self::EmptyMathSlot { field: "num".into() }],
     InvalidContentControlKind => vec![Self::InvalidContentControlKind],
     EmptyContentControlText => vec![Self::EmptyContentControlText],
     InvalidContentControlKeep => vec![Self::InvalidContentControlKeep],
@@ -1540,6 +1544,10 @@ impl ErrorKind {
             | Self::EmptyDocPartText
             | Self::InvalidMathKind
             | Self::EmptyMathText
+            | Self::MathNeedTextOrExpr
+            | Self::EmptyMathExpr
+            | Self::InvalidMathExprType { .. }
+            | Self::EmptyMathSlot { .. }
             | Self::InvalidContentControlKind
             | Self::EmptyContentControlText
             | Self::InvalidContentControlKeep
