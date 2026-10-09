@@ -953,6 +953,9 @@ define_error_kinds! {
     SparklineGroupHasMany => vec![Self::SparklineGroupHasMany],
     EmptySparklineFormula => vec![Self::EmptySparklineFormula],
     InvalidSparklineType => vec![Self::InvalidSparklineType],
+    InvalidSparkline { field: String } => {
+        vec![Self::InvalidSparkline { field: "manualMin".into() }]
+    },
     NeedSetSparklineField => vec![Self::NeedSetSparklineField],
     InvalidBookmarkName => vec![Self::InvalidBookmarkName],
     BookmarkNameTaken => vec![Self::BookmarkNameTaken],
@@ -1876,6 +1879,7 @@ impl ErrorKind {
             | Self::SparklineGroupHasMany
             | Self::EmptySparklineFormula
             | Self::InvalidSparklineType
+            | Self::InvalidSparkline { .. }
             | Self::NeedSetSparklineField
             | Self::XlsxHyperlinkNeedTarget
             | Self::EmptyHyperlinkLocation

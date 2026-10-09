@@ -244,6 +244,9 @@ pub struct BorderPatch {
     pub right: Option<BorderSidePatch>,
     pub top: Option<BorderSidePatch>,
     pub bottom: Option<BorderSidePatch>,
+    pub diagonal: Option<BorderSidePatch>,
+    pub diagonal_up: Option<bool>,
+    pub diagonal_down: Option<bool>,
 }
 
 #[derive(Debug, Clone)]
@@ -251,6 +254,9 @@ pub struct AlignPatch {
     pub horizontal: Option<String>,
     pub vertical: Option<String>,
     pub wrap: Option<bool>,
+    pub indent: Option<u32>,
+    pub rotation: Option<u32>,
+    pub shrink: Option<bool>,
 }
 
 #[derive(Debug, Clone)]
@@ -476,6 +482,12 @@ pub enum CfType {
     ColorScale,
     DataBar,
     IconSet,
+    Top10,
+    AboveAverage,
+    ContainsText,
+    NotContainsText,
+    BeginsWith,
+    EndsWith,
 }
 
 impl CfType {
@@ -486,6 +498,12 @@ impl CfType {
             "colorScale" => Self::ColorScale,
             "dataBar" => Self::DataBar,
             "iconSet" => Self::IconSet,
+            "top10" => Self::Top10,
+            "aboveAverage" => Self::AboveAverage,
+            "containsText" => Self::ContainsText,
+            "notContainsText" => Self::NotContainsText,
+            "beginsWith" => Self::BeginsWith,
+            "endsWith" => Self::EndsWith,
             _ => return None,
         })
     }
@@ -497,11 +515,34 @@ impl CfType {
             Self::ColorScale => "colorScale",
             Self::DataBar => "dataBar",
             Self::IconSet => "iconSet",
+            Self::Top10 => "top10",
+            Self::AboveAverage => "aboveAverage",
+            Self::ContainsText => "containsText",
+            Self::NotContainsText => "notContainsText",
+            Self::BeginsWith => "beginsWith",
+            Self::EndsWith => "endsWith",
         }
     }
 
     pub fn is_writable(s: &str) -> bool {
         Self::parse(s).is_some()
+    }
+
+    pub(crate) fn is_text(self) -> bool {
+        matches!(
+            self,
+            Self::ContainsText | Self::NotContainsText | Self::BeginsWith | Self::EndsWith
+        )
+    }
+
+    pub(crate) fn text_operator(self) -> Option<&'static str> {
+        match self {
+            Self::ContainsText => Some("containsText"),
+            Self::NotContainsText => Some("notContains"),
+            Self::BeginsWith => Some("beginsWith"),
+            Self::EndsWith => Some("endsWith"),
+            _ => None,
+        }
     }
 }
 
@@ -597,6 +638,13 @@ pub struct InsertConditionalFormatOp {
     pub icon_set: Option<IconSetSpec>,
     pub priority: Option<i32>,
     pub stop_if_true: bool,
+    pub text: Option<String>,
+    pub rank: Option<u32>,
+    pub percent: Option<bool>,
+    pub bottom: Option<bool>,
+    pub above_average: Option<bool>,
+    pub equal_average: Option<bool>,
+    pub std_dev: Option<i32>,
 }
 
 #[derive(Debug, Clone)]
@@ -613,6 +661,13 @@ pub struct SetConditionalFormatOp {
     pub icon_set: Patch<IconSetSpec>,
     pub priority: Option<i32>,
     pub stop_if_true: Option<bool>,
+    pub text: Patch<String>,
+    pub rank: Patch<u32>,
+    pub percent: Option<bool>,
+    pub bottom: Option<bool>,
+    pub above_average: Patch<bool>,
+    pub equal_average: Option<bool>,
+    pub std_dev: Patch<i32>,
 }
 
 impl SetConditionalFormatOp {
@@ -627,6 +682,13 @@ impl SetConditionalFormatOp {
             || self.icon_set.is_present()
             || self.priority.is_some()
             || self.stop_if_true.is_some()
+            || self.text.is_present()
+            || self.rank.is_present()
+            || self.percent.is_some()
+            || self.bottom.is_some()
+            || self.above_average.is_present()
+            || self.equal_average.is_some()
+            || self.std_dev.is_present()
     }
 }
 
@@ -984,6 +1046,70 @@ impl SparklineType {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SparkAxisType {
+    Individual,
+    Group,
+    Custom,
+}
+
+impl SparkAxisType {
+    fn parse(s: &str) -> Option<Self> {
+        Some(match s {
+            "individual" => Self::Individual,
+            "group" => Self::Group,
+            "custom" => Self::Custom,
+            _ => return None,
+        })
+    }
+
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Self::Individual => "individual",
+            Self::Group => "group",
+            Self::Custom => "custom",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SparkEmpty {
+    Gap,
+    Span,
+    Zero,
+}
+
+impl SparkEmpty {
+    fn parse(s: &str) -> Option<Self> {
+        Some(match s {
+            "gap" => Self::Gap,
+            "span" => Self::Span,
+            "zero" => Self::Zero,
+            _ => return None,
+        })
+    }
+
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Self::Gap => "gap",
+            Self::Span => "span",
+            Self::Zero => "zero",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct SparkColors {
+    pub series: Option<ColorSpec>,
+    pub negative: Option<ColorSpec>,
+    pub axis: Option<ColorSpec>,
+    pub markers: Option<ColorSpec>,
+    pub first: Option<ColorSpec>,
+    pub last: Option<ColorSpec>,
+    pub high: Option<ColorSpec>,
+    pub low: Option<ColorSpec>,
+}
+
 #[derive(Debug, Clone)]
 pub struct InsertSparklineOp {
     pub sheet: String,
@@ -991,6 +1117,20 @@ pub struct InsertSparklineOp {
     pub host: a1::CellRef,
     pub formula: String,
     pub kind: SparklineType,
+    pub display_empty: SparkEmpty,
+    pub markers: bool,
+    pub high: bool,
+    pub low: bool,
+    pub first: bool,
+    pub last: bool,
+    pub negative: bool,
+    pub display_x_axis: bool,
+    pub line_weight: Option<f64>,
+    pub min_axis: Option<SparkAxisType>,
+    pub max_axis: Option<SparkAxisType>,
+    pub manual_min: Option<f64>,
+    pub manual_max: Option<f64>,
+    pub colors: SparkColors,
 }
 
 #[derive(Debug, Clone)]
@@ -1001,6 +1141,20 @@ pub struct SetSparklineOp {
     pub kind: Option<SparklineType>,
     pub refer: Option<(String, a1::CellRef)>,
     pub formula: Patch<String>,
+    pub display_empty: Option<SparkEmpty>,
+    pub markers: Option<bool>,
+    pub high: Option<bool>,
+    pub low: Option<bool>,
+    pub first: Option<bool>,
+    pub last: Option<bool>,
+    pub negative: Option<bool>,
+    pub display_x_axis: Option<bool>,
+    pub line_weight: Patch<f64>,
+    pub min_axis: Option<SparkAxisType>,
+    pub max_axis: Option<SparkAxisType>,
+    pub manual_min: Patch<f64>,
+    pub manual_max: Patch<f64>,
+    pub colors: Option<SparkColors>,
 }
 
 #[derive(Debug, Clone)]
@@ -2533,7 +2687,17 @@ fn parse_border_patch(
         obj,
         i,
         prefix,
-        &["style", "color", "left", "right", "top", "bottom"],
+        &[
+            "style",
+            "color",
+            "left",
+            "right",
+            "top",
+            "bottom",
+            "diagonal",
+            "diagonalUp",
+            "diagonalDown",
+        ],
     )?;
     Ok(BorderPatch {
         style: parse_opt_border_style(obj, i, prefix, "style")?,
@@ -2542,6 +2706,9 @@ fn parse_border_patch(
         right: parse_opt_border_side(obj, i, prefix, "right")?,
         top: parse_opt_border_side(obj, i, prefix, "top")?,
         bottom: parse_opt_border_side(obj, i, prefix, "bottom")?,
+        diagonal: parse_opt_border_side(obj, i, prefix, "diagonal")?,
+        diagonal_up: parse_sub_bool(obj, i, prefix, "diagonalUp")?,
+        diagonal_down: parse_sub_bool(obj, i, prefix, "diagonalDown")?,
     })
 }
 
@@ -2594,7 +2761,19 @@ fn parse_align_patch(
     i: usize,
     prefix: &str,
 ) -> Result<AlignPatch, Error> {
-    deny_sub_keys(obj, i, prefix, &["horizontal", "vertical", "wrap"])?;
+    deny_sub_keys(
+        obj,
+        i,
+        prefix,
+        &[
+            "horizontal",
+            "vertical",
+            "wrap",
+            "indent",
+            "rotation",
+            "shrink",
+        ],
+    )?;
     let horizontal = match obj.get("horizontal") {
         None => None,
         Some(Value::String(s)) if H_ALIGN.contains(&s.as_str()) => Some(s.clone()),
@@ -2619,10 +2798,35 @@ fn parse_align_patch(
             ));
         }
     };
+    let indent = parse_opt_u32_field(obj, i, prefix, "indent")?;
+    if let Some(n) = indent {
+        if n > 250 {
+            return Err(Error::with_path(
+                ErrorKind::InvalidCellStyle {
+                    field: "indent".into(),
+                },
+                format!("ops[{i}].{prefix}.indent"),
+            ));
+        }
+    }
+    let rotation = parse_opt_u32_field(obj, i, prefix, "rotation")?;
+    if let Some(n) = rotation {
+        if n > 180 {
+            return Err(Error::with_path(
+                ErrorKind::InvalidCellStyle {
+                    field: "rotation".into(),
+                },
+                format!("ops[{i}].{prefix}.rotation"),
+            ));
+        }
+    }
     Ok(AlignPatch {
         horizontal,
         vertical,
         wrap: parse_sub_bool(obj, i, prefix, "wrap")?,
+        indent,
+        rotation,
+        shrink: parse_sub_bool(obj, i, prefix, "shrink")?,
     })
 }
 
@@ -3853,6 +4057,13 @@ const CF_KEYS: &[&str] = &[
     "iconSet",
     "priority",
     "stopIfTrue",
+    "text",
+    "rank",
+    "percent",
+    "bottom",
+    "aboveAverage",
+    "equalAverage",
+    "stdDev",
 ];
 
 const ICON_SETS: &[&str] = &[
@@ -3911,6 +4122,13 @@ fn parse_insert_conditional_format(
     let icon_set = parse_icon_set_opt(obj.get("iconSet"), i)?;
     let priority = parse_cf_priority_opt(obj.get("priority"), i)?;
     let stop_if_true = parse_opt_bool(obj, i, "stopIfTrue")?.unwrap_or(false);
+    let text = parse_cf_text_opt(obj.get("text"), i)?;
+    let rank = parse_opt_u32_top(obj, i, "rank", "rank", 1, u32::MAX)?;
+    let percent = parse_opt_bool(obj, i, "percent")?;
+    let bottom = parse_opt_bool(obj, i, "bottom")?;
+    let above_average = parse_opt_bool(obj, i, "aboveAverage")?;
+    let equal_average = parse_opt_bool(obj, i, "equalAverage")?;
+    let std_dev = parse_cf_std_dev_opt(obj.get("stdDev"), i)?;
     check_cf_fields(
         type_,
         operator,
@@ -3919,6 +4137,15 @@ fn parse_insert_conditional_format(
         color_scale.as_ref(),
         data_bar.as_ref(),
         icon_set.as_ref(),
+        CfExtraCheck {
+            text: text.as_deref(),
+            rank,
+            percent,
+            bottom,
+            above_average,
+            equal_average,
+            std_dev,
+        },
         i,
         true,
     )?;
@@ -3934,6 +4161,13 @@ fn parse_insert_conditional_format(
         icon_set,
         priority,
         stop_if_true,
+        text,
+        rank,
+        percent,
+        bottom,
+        above_average,
+        equal_average,
+        std_dev,
     })
 }
 
@@ -3962,6 +4196,13 @@ fn parse_set_conditional_format(
         icon_set: parse_icon_set_patch(obj.get("iconSet"), i)?,
         priority: parse_cf_priority_opt(obj.get("priority"), i)?,
         stop_if_true: parse_opt_bool(obj, i, "stopIfTrue")?,
+        text: parse_cf_text_patch(obj.get("text"), i)?,
+        rank: parse_cf_rank_patch(obj.get("rank"), i)?,
+        percent: parse_opt_bool(obj, i, "percent")?,
+        bottom: parse_opt_bool(obj, i, "bottom")?,
+        above_average: parse_cf_bool_patch(obj.get("aboveAverage"), i, "aboveAverage")?,
+        equal_average: parse_opt_bool(obj, i, "equalAverage")?,
+        std_dev: parse_cf_std_dev_patch(obj.get("stdDev"), i)?,
     };
     if !op.has_patch() {
         return Err(Error::with_path(
@@ -5016,21 +5257,62 @@ fn parse_delete_hyperlink(
     Ok(DeleteHyperlinkOp { id, sheet, index })
 }
 
+const SPARK_KEYS: &[&str] = &[
+    "op",
+    "id",
+    "ref",
+    "formula",
+    "type",
+    "displayEmptyCellsAs",
+    "markers",
+    "high",
+    "low",
+    "first",
+    "last",
+    "negative",
+    "displayXAxis",
+    "lineWeight",
+    "minAxisType",
+    "maxAxisType",
+    "manualMin",
+    "manualMax",
+    "colors",
+];
+
 fn parse_insert_sparkline(
     obj: &serde_json::Map<String, Value>,
     i: usize,
 ) -> Result<InsertSparklineOp, Error> {
-    deny_keys(obj, i, &["op", "id", "ref", "formula", "type"])?;
+    deny_keys(obj, i, SPARK_KEYS)?;
     let id = require_id(obj, i)?;
     let sheet = parse_sheet_only_id(&id, i, "id", IdReason::InsertSparklineNeedsSheet)?;
     let (refer, host) = parse_required_spark_host(obj, i)?;
     let formula = parse_required_spark_formula(obj, i)?;
+    let min_axis = parse_spark_axis(obj, i, "minAxisType")?;
+    let max_axis = parse_spark_axis(obj, i, "maxAxisType")?;
+    let manual_min = parse_opt_f64_top(obj, i, "manualMin")?;
+    let manual_max = parse_opt_f64_top(obj, i, "manualMax")?;
+    check_spark_axis(min_axis, max_axis, manual_min, manual_max, i)?;
     Ok(InsertSparklineOp {
         sheet,
         refer,
         host,
         formula,
         kind: parse_spark_type(obj, i)?.unwrap_or(SparklineType::Line),
+        display_empty: parse_spark_empty(obj, i)?.unwrap_or(SparkEmpty::Gap),
+        markers: parse_opt_bool(obj, i, "markers")?.unwrap_or(false),
+        high: parse_opt_bool(obj, i, "high")?.unwrap_or(false),
+        low: parse_opt_bool(obj, i, "low")?.unwrap_or(false),
+        first: parse_opt_bool(obj, i, "first")?.unwrap_or(false),
+        last: parse_opt_bool(obj, i, "last")?.unwrap_or(false),
+        negative: parse_opt_bool(obj, i, "negative")?.unwrap_or(false),
+        display_x_axis: parse_opt_bool(obj, i, "displayXAxis")?.unwrap_or(false),
+        line_weight: parse_spark_line_weight(obj, i)?,
+        min_axis,
+        max_axis,
+        manual_min,
+        manual_max,
+        colors: parse_spark_colors(obj.get("colors"), i)?.unwrap_or_default(),
     })
 }
 
@@ -5038,13 +5320,84 @@ fn parse_set_sparkline(
     obj: &serde_json::Map<String, Value>,
     i: usize,
 ) -> Result<SetSparklineOp, Error> {
-    deny_keys(obj, i, &["op", "id", "ref", "formula", "type"])?;
+    deny_keys(obj, i, SPARK_KEYS)?;
     let id = require_id(obj, i)?;
     let (sheet, index) = parse_spark_id(&id, i)?;
     let kind = parse_spark_type(obj, i)?;
     let refer = parse_opt_spark_host(obj, i)?;
     let formula = parse_opt_spark_formula(obj, i)?;
-    if kind.is_none() && refer.is_none() && formula.is_absent() {
+    let display_empty = parse_spark_empty(obj, i)?;
+    let markers = parse_opt_bool(obj, i, "markers")?;
+    let high = parse_opt_bool(obj, i, "high")?;
+    let low = parse_opt_bool(obj, i, "low")?;
+    let first = parse_opt_bool(obj, i, "first")?;
+    let last = parse_opt_bool(obj, i, "last")?;
+    let negative = parse_opt_bool(obj, i, "negative")?;
+    let display_x_axis = parse_opt_bool(obj, i, "displayXAxis")?;
+    let line_weight = parse_spark_line_weight_patch(obj, i)?;
+    let min_axis = parse_spark_axis(obj, i, "minAxisType")?;
+    let max_axis = parse_spark_axis(obj, i, "maxAxisType")?;
+    let manual_min = parse_f64_patch(obj, i, "manualMin")?;
+    let manual_max = parse_f64_patch(obj, i, "manualMax")?;
+    let colors = parse_spark_colors(obj.get("colors"), i)?;
+    let min_check = match &manual_min {
+        Patch::Set(v) => Some(*v),
+        _ => None,
+    };
+    let max_check = match &manual_max {
+        Patch::Set(v) => Some(*v),
+        _ => None,
+    };
+    if min_axis == Some(SparkAxisType::Custom) && min_check.is_none() {
+        return Err(Error::with_path(
+            ErrorKind::InvalidSparkline {
+                field: "manualMin".into(),
+            },
+            format!("ops[{i}].manualMin"),
+        ));
+    }
+    if max_axis == Some(SparkAxisType::Custom) && max_check.is_none() {
+        return Err(Error::with_path(
+            ErrorKind::InvalidSparkline {
+                field: "manualMax".into(),
+            },
+            format!("ops[{i}].manualMax"),
+        ));
+    }
+    if min_axis.is_some() && min_axis != Some(SparkAxisType::Custom) && min_check.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::InvalidSparkline {
+                field: "manualMin".into(),
+            },
+            format!("ops[{i}].manualMin"),
+        ));
+    }
+    if max_axis.is_some() && max_axis != Some(SparkAxisType::Custom) && max_check.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::InvalidSparkline {
+                field: "manualMax".into(),
+            },
+            format!("ops[{i}].manualMax"),
+        ));
+    }
+    if kind.is_none()
+        && refer.is_none()
+        && formula.is_absent()
+        && display_empty.is_none()
+        && markers.is_none()
+        && high.is_none()
+        && low.is_none()
+        && first.is_none()
+        && last.is_none()
+        && negative.is_none()
+        && display_x_axis.is_none()
+        && line_weight.is_absent()
+        && min_axis.is_none()
+        && max_axis.is_none()
+        && manual_min.is_absent()
+        && manual_max.is_absent()
+        && colors.is_none()
+    {
         return Err(Error::with_path(
             ErrorKind::NeedSetSparklineField,
             format!("ops[{i}]"),
@@ -5057,6 +5410,20 @@ fn parse_set_sparkline(
         kind,
         refer,
         formula,
+        display_empty,
+        markers,
+        high,
+        low,
+        first,
+        last,
+        negative,
+        display_x_axis,
+        line_weight,
+        min_axis,
+        max_axis,
+        manual_min,
+        manual_max,
+        colors,
     })
 }
 
@@ -6224,6 +6591,145 @@ fn parse_cf_formulas_patch(v: Option<&Value>, i: usize) -> Result<Patch<Vec<Stri
     }
 }
 
+fn parse_cf_text_opt(v: Option<&Value>, i: usize) -> Result<Option<String>, Error> {
+    match v {
+        None => Ok(None),
+        Some(Value::String(s)) if !s.is_empty() => Ok(Some(s.clone())),
+        Some(Value::String(_)) => Err(Error::with_path(
+            ErrorKind::InvalidConditionalFormat {
+                field: "text".into(),
+            },
+            format!("ops[{i}].text"),
+        )),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "text".into(),
+                expected: TypeName::String,
+            },
+            format!("ops[{i}].text"),
+        )),
+    }
+}
+
+fn parse_cf_text_patch(v: Option<&Value>, i: usize) -> Result<Patch<String>, Error> {
+    match v {
+        None => Ok(Patch::Absent),
+        Some(Value::Null) => Ok(Patch::Clear),
+        Some(other) => Ok(Patch::Set(parse_cf_text_opt(Some(other), i)?.ok_or_else(
+            || {
+                Error::with_path(
+                    ErrorKind::InvalidConditionalFormat {
+                        field: "text".into(),
+                    },
+                    format!("ops[{i}].text"),
+                )
+            },
+        )?)),
+    }
+}
+
+fn parse_cf_rank_patch(v: Option<&Value>, i: usize) -> Result<Patch<u32>, Error> {
+    match v {
+        None => Ok(Patch::Absent),
+        Some(Value::Null) => Err(Error::with_path(
+            ErrorKind::InvalidConditionalFormat {
+                field: "rank".into(),
+            },
+            format!("ops[{i}].rank"),
+        )),
+        Some(Value::Number(n)) => {
+            let Some(v) = n.as_u64().and_then(|x| u32::try_from(x).ok()) else {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidConditionalFormat {
+                        field: "rank".into(),
+                    },
+                    format!("ops[{i}].rank"),
+                ));
+            };
+            if v < 1 {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidConditionalFormat {
+                        field: "rank".into(),
+                    },
+                    format!("ops[{i}].rank"),
+                ));
+            }
+            Ok(Patch::Set(v))
+        }
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "rank".into(),
+                expected: TypeName::Integer,
+            },
+            format!("ops[{i}].rank"),
+        )),
+    }
+}
+
+fn parse_cf_std_dev_opt(v: Option<&Value>, i: usize) -> Result<Option<i32>, Error> {
+    match v {
+        None => Ok(None),
+        Some(Value::Number(n)) => {
+            let Some(v) = n.as_i64().and_then(|x| i32::try_from(x).ok()) else {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidConditionalFormat {
+                        field: "stdDev".into(),
+                    },
+                    format!("ops[{i}].stdDev"),
+                ));
+            };
+            if v < 1 {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidConditionalFormat {
+                        field: "stdDev".into(),
+                    },
+                    format!("ops[{i}].stdDev"),
+                ));
+            }
+            Ok(Some(v))
+        }
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "stdDev".into(),
+                expected: TypeName::Integer,
+            },
+            format!("ops[{i}].stdDev"),
+        )),
+    }
+}
+
+fn parse_cf_std_dev_patch(v: Option<&Value>, i: usize) -> Result<Patch<i32>, Error> {
+    match v {
+        None => Ok(Patch::Absent),
+        Some(Value::Null) => Ok(Patch::Clear),
+        Some(other) => Ok(Patch::Set(
+            parse_cf_std_dev_opt(Some(other), i)?.ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::InvalidConditionalFormat {
+                        field: "stdDev".into(),
+                    },
+                    format!("ops[{i}].stdDev"),
+                )
+            })?,
+        )),
+    }
+}
+
+fn parse_cf_bool_patch(v: Option<&Value>, i: usize, field: &str) -> Result<Patch<bool>, Error> {
+    match v {
+        None => Ok(Patch::Absent),
+        Some(Value::Null) => Ok(Patch::Clear),
+        Some(Value::Bool(b)) => Ok(Patch::Set(*b)),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::Boolean,
+            },
+            format!("ops[{i}].{field}"),
+        )),
+    }
+}
+
 fn parse_dxf_opt(v: Option<&Value>, i: usize) -> Result<Option<DxfPatch>, Error> {
     match v {
         None => Ok(None),
@@ -6698,6 +7204,7 @@ pub(crate) fn check_cf_fields(
     color_scale: Option<&ColorScaleSpec>,
     data_bar: Option<&DataBarSpec>,
     icon_set: Option<&IconSetSpec>,
+    extra: CfExtraCheck<'_>,
     i: usize,
     insert: bool,
 ) -> Result<(), Error> {
@@ -6709,17 +7216,23 @@ pub(crate) fn check_cf_fields(
             format!("ops[{i}].{field}"),
         )
     };
+    let reject_visual = || {
+        if color_scale.is_some() {
+            Err(bad("colorScale"))
+        } else if data_bar.is_some() {
+            Err(bad("dataBar"))
+        } else if icon_set.is_some() {
+            Err(bad("iconSet"))
+        } else {
+            Ok(())
+        }
+    };
     match type_ {
         CfType::CellIs => {
-            if color_scale.is_some() {
-                return Err(bad("colorScale"));
-            }
-            if data_bar.is_some() {
-                return Err(bad("dataBar"));
-            }
-            if icon_set.is_some() {
-                return Err(bad("iconSet"));
-            }
+            reject_visual()?;
+            reject_text_extra(&extra, i)?;
+            reject_top10_extra(&extra, i)?;
+            reject_avg_extra(&extra, i)?;
             let Some(op) = operator else {
                 return Err(Error::with_path(
                     ErrorKind::MissingField {
@@ -6743,15 +7256,10 @@ pub(crate) fn check_cf_fields(
             if operator.is_some() {
                 return Err(bad("operator"));
             }
-            if color_scale.is_some() {
-                return Err(bad("colorScale"));
-            }
-            if data_bar.is_some() {
-                return Err(bad("dataBar"));
-            }
-            if icon_set.is_some() {
-                return Err(bad("iconSet"));
-            }
+            reject_visual()?;
+            reject_text_extra(&extra, i)?;
+            reject_top10_extra(&extra, i)?;
+            reject_avg_extra(&extra, i)?;
             if formulas.map(|f| f.len()).unwrap_or(0) != 1 {
                 return Err(Error::with_path(
                     ErrorKind::NeedConditionalFormatFormula {
@@ -6777,6 +7285,9 @@ pub(crate) fn check_cf_fields(
             if icon_set.is_some() {
                 return Err(bad("iconSet"));
             }
+            reject_text_extra(&extra, i)?;
+            reject_top10_extra(&extra, i)?;
+            reject_avg_extra(&extra, i)?;
             if insert && color_scale.is_none() {
                 return Err(Error::with_path(
                     ErrorKind::MissingField {
@@ -6802,6 +7313,9 @@ pub(crate) fn check_cf_fields(
             if icon_set.is_some() {
                 return Err(bad("iconSet"));
             }
+            reject_text_extra(&extra, i)?;
+            reject_top10_extra(&extra, i)?;
+            reject_avg_extra(&extra, i)?;
         }
         CfType::IconSet => {
             if operator.is_some() {
@@ -6819,7 +7333,137 @@ pub(crate) fn check_cf_fields(
             if data_bar.is_some() {
                 return Err(bad("dataBar"));
             }
+            reject_text_extra(&extra, i)?;
+            reject_top10_extra(&extra, i)?;
+            reject_avg_extra(&extra, i)?;
         }
+        CfType::Top10 => {
+            if operator.is_some() {
+                return Err(bad("operator"));
+            }
+            if formulas.is_some() {
+                return Err(bad("formulas"));
+            }
+            reject_visual()?;
+            reject_text_extra(&extra, i)?;
+            reject_avg_extra(&extra, i)?;
+        }
+        CfType::AboveAverage => {
+            if operator.is_some() {
+                return Err(bad("operator"));
+            }
+            if formulas.is_some() {
+                return Err(bad("formulas"));
+            }
+            reject_visual()?;
+            reject_text_extra(&extra, i)?;
+            reject_top10_extra(&extra, i)?;
+        }
+        CfType::ContainsText | CfType::NotContainsText | CfType::BeginsWith | CfType::EndsWith => {
+            if operator.is_some() {
+                return Err(bad("operator"));
+            }
+            reject_visual()?;
+            reject_top10_extra(&extra, i)?;
+            reject_avg_extra(&extra, i)?;
+            if insert && extra.text.is_none() {
+                return Err(Error::with_path(
+                    ErrorKind::MissingField {
+                        field: "text".into(),
+                    },
+                    format!("ops[{i}].text"),
+                ));
+            }
+            if let Some(fs) = formulas {
+                if fs.len() != 1 {
+                    return Err(Error::with_path(
+                        ErrorKind::NeedConditionalFormatFormula {
+                            field: "formulas".into(),
+                        },
+                        format!("ops[{i}].formulas"),
+                    ));
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+#[derive(Clone, Copy, Default)]
+pub(crate) struct CfExtraCheck<'a> {
+    pub text: Option<&'a str>,
+    pub rank: Option<u32>,
+    pub percent: Option<bool>,
+    pub bottom: Option<bool>,
+    pub above_average: Option<bool>,
+    pub equal_average: Option<bool>,
+    pub std_dev: Option<i32>,
+}
+
+fn reject_text_extra(extra: &CfExtraCheck<'_>, i: usize) -> Result<(), Error> {
+    if extra.text.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::InvalidConditionalFormat {
+                field: "text".into(),
+            },
+            format!("ops[{i}].text"),
+        ));
+    }
+    Ok(())
+}
+
+fn reject_top10_extra(extra: &CfExtraCheck<'_>, i: usize) -> Result<(), Error> {
+    if extra.rank.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::InvalidConditionalFormat {
+                field: "rank".into(),
+            },
+            format!("ops[{i}].rank"),
+        ));
+    }
+    if extra.percent.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::InvalidConditionalFormat {
+                field: "percent".into(),
+            },
+            format!("ops[{i}].percent"),
+        ));
+    }
+    if extra.bottom.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::InvalidConditionalFormat {
+                field: "bottom".into(),
+            },
+            format!("ops[{i}].bottom"),
+        ));
+    }
+    Ok(())
+}
+
+fn reject_avg_extra(extra: &CfExtraCheck<'_>, i: usize) -> Result<(), Error> {
+    if extra.above_average.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::InvalidConditionalFormat {
+                field: "aboveAverage".into(),
+            },
+            format!("ops[{i}].aboveAverage"),
+        ));
+    }
+    if extra.equal_average.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::InvalidConditionalFormat {
+                field: "equalAverage".into(),
+            },
+            format!("ops[{i}].equalAverage"),
+        ));
+    }
+    if extra.std_dev.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::InvalidConditionalFormat {
+                field: "stdDev".into(),
+            },
+            format!("ops[{i}].stdDev"),
+        ));
     }
     Ok(())
 }
@@ -7110,6 +7754,250 @@ fn parse_spark_type(
             format!("ops[{i}].type"),
         )),
     }
+}
+
+fn parse_spark_empty(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<Option<SparkEmpty>, Error> {
+    match obj.get("displayEmptyCellsAs") {
+        None => Ok(None),
+        Some(Value::String(s)) => SparkEmpty::parse(s).map(Some).ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::InvalidSparkline {
+                    field: "displayEmptyCellsAs".into(),
+                },
+                format!("ops[{i}].displayEmptyCellsAs"),
+            )
+        }),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "displayEmptyCellsAs".into(),
+                expected: TypeName::String,
+            },
+            format!("ops[{i}].displayEmptyCellsAs"),
+        )),
+    }
+}
+
+fn parse_spark_axis(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+    field: &str,
+) -> Result<Option<SparkAxisType>, Error> {
+    match obj.get(field) {
+        None => Ok(None),
+        Some(Value::String(s)) => SparkAxisType::parse(s).map(Some).ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::InvalidSparkline {
+                    field: field.into(),
+                },
+                format!("ops[{i}].{field}"),
+            )
+        }),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::String,
+            },
+            format!("ops[{i}].{field}"),
+        )),
+    }
+}
+
+fn parse_opt_f64_top(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+    field: &str,
+) -> Result<Option<f64>, Error> {
+    match obj.get(field) {
+        None => Ok(None),
+        Some(Value::Number(n)) => {
+            let Some(v) = n.as_f64().filter(|x| x.is_finite()) else {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidSparkline {
+                        field: field.into(),
+                    },
+                    format!("ops[{i}].{field}"),
+                ));
+            };
+            Ok(Some(v))
+        }
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::Integer,
+            },
+            format!("ops[{i}].{field}"),
+        )),
+    }
+}
+
+fn parse_f64_patch(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+    field: &str,
+) -> Result<Patch<f64>, Error> {
+    match obj.get(field) {
+        None => Ok(Patch::Absent),
+        Some(Value::Null) => Ok(Patch::Clear),
+        Some(Value::Number(n)) => {
+            let Some(v) = n.as_f64().filter(|x| x.is_finite()) else {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidSparkline {
+                        field: field.into(),
+                    },
+                    format!("ops[{i}].{field}"),
+                ));
+            };
+            Ok(Patch::Set(v))
+        }
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::Integer,
+            },
+            format!("ops[{i}].{field}"),
+        )),
+    }
+}
+
+fn parse_spark_line_weight(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<Option<f64>, Error> {
+    match obj.get("lineWeight") {
+        None => Ok(None),
+        Some(Value::Number(n)) => {
+            let Some(v) = n.as_f64().filter(|x| x.is_finite()) else {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidSparkline {
+                        field: "lineWeight".into(),
+                    },
+                    format!("ops[{i}].lineWeight"),
+                ));
+            };
+            if !(0.0..=1584.0).contains(&v) {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidSparkline {
+                        field: "lineWeight".into(),
+                    },
+                    format!("ops[{i}].lineWeight"),
+                ));
+            }
+            Ok(Some(v))
+        }
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "lineWeight".into(),
+                expected: TypeName::Integer,
+            },
+            format!("ops[{i}].lineWeight"),
+        )),
+    }
+}
+
+fn parse_spark_line_weight_patch(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<Patch<f64>, Error> {
+    match obj.get("lineWeight") {
+        None => Ok(Patch::Absent),
+        Some(Value::Null) => Ok(Patch::Clear),
+        Some(Value::Number(n)) => {
+            let Some(v) = n.as_f64().filter(|x| x.is_finite()) else {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidSparkline {
+                        field: "lineWeight".into(),
+                    },
+                    format!("ops[{i}].lineWeight"),
+                ));
+            };
+            if !(0.0..=1584.0).contains(&v) {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidSparkline {
+                        field: "lineWeight".into(),
+                    },
+                    format!("ops[{i}].lineWeight"),
+                ));
+            }
+            Ok(Patch::Set(v))
+        }
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "lineWeight".into(),
+                expected: TypeName::Integer,
+            },
+            format!("ops[{i}].lineWeight"),
+        )),
+    }
+}
+
+fn parse_spark_colors(v: Option<&Value>, i: usize) -> Result<Option<SparkColors>, Error> {
+    match v {
+        None => Ok(None),
+        Some(Value::Object(m)) => {
+            deny_sub_keys(
+                m,
+                i,
+                "colors",
+                &[
+                    "series", "negative", "axis", "markers", "first", "last", "high", "low",
+                ],
+            )?;
+            Ok(Some(SparkColors {
+                series: parse_opt_color(m, i, "colors", "series")?,
+                negative: parse_opt_color(m, i, "colors", "negative")?,
+                axis: parse_opt_color(m, i, "colors", "axis")?,
+                markers: parse_opt_color(m, i, "colors", "markers")?,
+                first: parse_opt_color(m, i, "colors", "first")?,
+                last: parse_opt_color(m, i, "colors", "last")?,
+                high: parse_opt_color(m, i, "colors", "high")?,
+                low: parse_opt_color(m, i, "colors", "low")?,
+            }))
+        }
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "colors".into(),
+                expected: TypeName::Object,
+            },
+            format!("ops[{i}].colors"),
+        )),
+    }
+}
+
+fn check_spark_axis(
+    min_axis: Option<SparkAxisType>,
+    max_axis: Option<SparkAxisType>,
+    manual_min: Option<f64>,
+    manual_max: Option<f64>,
+    i: usize,
+) -> Result<(), Error> {
+    let bad = |field: &str| {
+        Error::with_path(
+            ErrorKind::InvalidSparkline {
+                field: field.into(),
+            },
+            format!("ops[{i}].{field}"),
+        )
+    };
+    match min_axis {
+        Some(SparkAxisType::Custom) if manual_min.is_none() => return Err(bad("manualMin")),
+        Some(kind) if kind != SparkAxisType::Custom && manual_min.is_some() => {
+            return Err(bad("manualMin"));
+        }
+        None if manual_min.is_some() => return Err(bad("manualMin")),
+        _ => {}
+    }
+    match max_axis {
+        Some(SparkAxisType::Custom) if manual_max.is_none() => return Err(bad("manualMax")),
+        Some(kind) if kind != SparkAxisType::Custom && manual_max.is_some() => {
+            return Err(bad("manualMax"));
+        }
+        None if manual_max.is_some() => return Err(bad("manualMax")),
+        _ => {}
+    }
+    Ok(())
 }
 
 fn parse_required_range(

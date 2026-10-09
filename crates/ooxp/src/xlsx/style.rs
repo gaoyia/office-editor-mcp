@@ -349,6 +349,15 @@ fn border_summary(border: &Element) -> Option<Value> {
             m.insert(side.into(), s);
         }
     }
+    if let Some(s) = side_json(border.child_by_local("diagonal")) {
+        m.insert("diagonal".into(), s);
+    }
+    if attr_bool(border, "diagonalUp") {
+        m.insert("diagonalUp".into(), json!(true));
+    }
+    if attr_bool(border, "diagonalDown") {
+        m.insert("diagonalDown".into(), json!(true));
+    }
     if m.is_empty() {
         None
     } else {
@@ -381,6 +390,17 @@ fn align_summary(al: Option<&Element>) -> Option<Value> {
     }
     if attr_bool(al, "wrapText") {
         m.insert("wrap".into(), json!(true));
+    }
+    if let Some(n) = al.attr("indent").and_then(|s| s.parse::<u32>().ok()) {
+        if n > 0 {
+            m.insert("indent".into(), json!(n));
+        }
+    }
+    if let Some(n) = al.attr("textRotation").and_then(|s| s.parse::<i64>().ok()) {
+        m.insert("rotation".into(), json!(n));
+    }
+    if attr_bool(al, "shrinkToFit") {
+        m.insert("shrink".into(), json!(true));
     }
     if m.is_empty() {
         None
@@ -872,6 +892,41 @@ fn apply_border_patch(mut border: Element, patch: &BorderPatch) -> Element {
         patch.bottom.as_ref().unwrap_or(&default_side),
         patch.bottom.is_some() || patch.style.is_some() || patch.color.is_some(),
     );
+    let style_given = patch
+        .diagonal
+        .as_ref()
+        .and_then(|d| d.style.as_ref())
+        .is_some();
+    let dir_given = patch.diagonal_up.is_some() || patch.diagonal_down.is_some();
+    if patch.diagonal.is_some() || dir_given {
+        let mut side = patch.diagonal.clone().unwrap_or(BorderSidePatch {
+            style: None,
+            color: None,
+        });
+        if side.style.is_none() && dir_given {
+            side.style = Some("thin".into());
+        }
+        apply_side(&mut border, "diagonal", &side, true);
+        if style_given && !dir_given {
+            border.set_attr("diagonalUp", "1");
+            border.set_attr("diagonalDown", "1");
+        } else {
+            if let Some(up) = patch.diagonal_up {
+                if up {
+                    border.set_attr("diagonalUp", "1");
+                } else {
+                    border.remove_attr("diagonalUp");
+                }
+            }
+            if let Some(down) = patch.diagonal_down {
+                if down {
+                    border.set_attr("diagonalDown", "1");
+                } else {
+                    border.remove_attr("diagonalDown");
+                }
+            }
+        }
+    }
     border
 }
 
@@ -907,6 +962,30 @@ fn apply_align_patch(cur: Option<Element>, patch: &AlignPatch) -> Element {
             al.set_attr("wrapText", "1");
         } else {
             al.remove_attr("wrapText");
+        }
+    }
+    if let Some(n) = patch.indent {
+        if n == 0 {
+            al.remove_attr("indent");
+        } else {
+            al.set_attr("indent", n.to_string());
+            if patch.horizontal.is_none() {
+                al.set_attr("horizontal", "left");
+            }
+        }
+    }
+    if let Some(n) = patch.rotation {
+        if n == 0 {
+            al.remove_attr("textRotation");
+        } else {
+            al.set_attr("textRotation", n.to_string());
+        }
+    }
+    if let Some(shrink) = patch.shrink {
+        if shrink {
+            al.set_attr("shrinkToFit", "1");
+        } else {
+            al.remove_attr("shrinkToFit");
         }
     }
     al

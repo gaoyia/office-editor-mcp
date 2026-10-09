@@ -5,9 +5,9 @@ use serde_json::{json, Map, Value};
 use super::a1::{self, CellRef};
 use super::layout;
 use super::request::{
-    check_cf_fields, icon_set_count, CfOperator, CfType, CfvoSpec, ColorScaleSpec, ColorSpec,
-    DataBarSpec, DeleteConditionalFormatOp, IconSetSpec, InsertConditionalFormatOp, Patch,
-    SetConditionalFormatOp,
+    check_cf_fields, icon_set_count, CfExtraCheck, CfOperator, CfType, CfvoSpec, ColorScaleSpec,
+    ColorSpec, DataBarSpec, DeleteConditionalFormatOp, IconSetSpec, InsertConditionalFormatOp,
+    Patch, SetConditionalFormatOp,
 };
 use super::style;
 use crate::error::{Error, ErrorKind};
@@ -75,8 +75,8 @@ fn inspect_one(
     if attr_true(el, "bottom") {
         obj.insert("bottom".into(), json!(true));
     }
-    if attr_true(el, "aboveAverage") {
-        obj.insert("aboveAverage".into(), json!(true));
+    if attr_false(el, "aboveAverage") {
+        obj.insert("aboveAverage".into(), json!(false));
     }
     if attr_true(el, "equalAverage") {
         obj.insert("equalAverage".into(), json!(true));
@@ -193,18 +193,7 @@ pub(crate) fn apply_insert(
 ) -> Result<(), Error> {
     let priority = op.priority.unwrap_or_else(|| next_priority(worksheet));
     let mut rule = Element::new("cfRule");
-    write_rule(
-        &mut rule,
-        op.type_,
-        op.operator,
-        op.formulas.as_deref(),
-        dxf_id,
-        op.color_scale.as_ref(),
-        op.data_bar.as_ref(),
-        op.icon_set.as_ref(),
-        priority,
-        op.stop_if_true,
-    );
+    write_rule(&mut rule, op, dxf_id, priority);
     let mut block = Element::new("conditionalFormatting");
     block.set_attr("sqref", format_sqref(&op.sqref));
     block.push_element(rule);
@@ -229,10 +218,15 @@ pub(crate) fn apply_set(
     let Node::Element(cf) = &mut worksheet.children[cf_i] else {
         return Err(not_found(&op.sheet, op.index, i));
     };
+    let first_cell = if let Some(ranges) = &op.sqref {
+        ranges.first().map(|(a, _)| a1::format_cell(a.col, a.row))
+    } else {
+        first_cell_from_sqref(cf.attr("sqref").unwrap_or(""))
+    };
     let Node::Element(rule) = &mut cf.children[rule_i] else {
         return Err(not_found(&op.sheet, op.index, i));
     };
-    apply_rule_patch(rule, op, dxf_id, i)
+    apply_rule_patch(rule, op, dxf_id, i, first_cell.as_deref())
 }
 
 pub(crate) fn apply_delete(
@@ -261,6 +255,7 @@ fn apply_rule_patch(
     op: &SetConditionalFormatOp,
     dxf_id: Option<Option<usize>>,
     i: usize,
+    first_cell: Option<&str>,
 ) -> Result<(), Error> {
     let existing_type = rule.attr("type").unwrap_or("").to_string();
     let writable_now = CfType::is_writable(&existing_type);
@@ -270,7 +265,14 @@ fn apply_rule_patch(
             || op.formulas.is_present()
             || op.color_scale.is_present()
             || op.data_bar.is_present()
-            || op.icon_set.is_present())
+            || op.icon_set.is_present()
+            || op.text.is_present()
+            || op.rank.is_present()
+            || op.percent.is_some()
+            || op.bottom.is_some()
+            || op.above_average.is_present()
+            || op.equal_average.is_some()
+            || op.std_dev.is_present())
     {
         return Err(Error::with_path(
             ErrorKind::InvalidConditionalFormat {
@@ -313,20 +315,18 @@ fn apply_rule_patch(
             Some(*v)
         }
     };
-    let formulas = match &op.formulas {
-        Patch::Absent => Some(existing_formulas(rule)).filter(|v| !v.is_empty()),
+    match &op.formulas {
+        Patch::Absent => {}
         Patch::Clear => {
             remove_children(rule, "formula");
-            None
         }
         Patch::Set(v) => {
             remove_children(rule, "formula");
             for f in v {
                 rule.push_element(Element::new("formula").with_text(f.clone()));
             }
-            Some(v.clone())
         }
-    };
+    }
     match &op.color_scale {
         Patch::Absent => {}
         Patch::Clear => remove_children(rule, "colorScale"),
@@ -369,8 +369,62 @@ fn apply_rule_patch(
         }
     }
 
-    let color_scale = rule.child_by_local("colorScale").map(|_| ());
-    // 改完之后仍须满足 insert 约束；非可写类型且未改 type 已在上面拒绝结构字段。
+    match &op.text {
+        Patch::Absent => {}
+        Patch::Clear => rule.remove_attr("text"),
+        Patch::Set(t) => rule.set_attr("text", t.clone()),
+    }
+    match &op.rank {
+        Patch::Absent => {
+            if (changing_type || op.type_.is_some())
+                && type_ == CfType::Top10
+                && rule.attr("rank").is_none()
+            {
+                rule.set_attr("rank", "10");
+            }
+        }
+        Patch::Clear => rule.remove_attr("rank"),
+        Patch::Set(n) => rule.set_attr("rank", n.to_string()),
+    }
+    patch_flag(rule, "percent", op.percent);
+    patch_flag(rule, "bottom", op.bottom);
+    match &op.above_average {
+        Patch::Absent => {}
+        Patch::Clear => rule.remove_attr("aboveAverage"),
+        Patch::Set(true) => rule.remove_attr("aboveAverage"),
+        Patch::Set(false) => rule.set_attr("aboveAverage", "0"),
+    }
+    patch_flag(rule, "equalAverage", op.equal_average);
+    match &op.std_dev {
+        Patch::Absent => {}
+        Patch::Clear => rule.remove_attr("stdDev"),
+        Patch::Set(n) => rule.set_attr("stdDev", n.to_string()),
+    }
+    if type_.is_text() {
+        if let Some(opstr) = type_.text_operator() {
+            rule.set_attr("operator", opstr);
+        }
+        if matches!(op.formulas, Patch::Absent)
+            && (matches!(op.text, Patch::Set(_)) || changing_type || op.type_.is_some())
+        {
+            if let (Some(text), Some(cell)) = (rule.attr("text").map(str::to_string), first_cell) {
+                remove_children(rule, "formula");
+                rule.push_element(
+                    Element::new("formula").with_text(text_formula(type_, cell, &text)),
+                );
+            }
+        }
+    }
+
+    let formulas = {
+        let v = existing_formulas(rule);
+        if v.is_empty() {
+            None
+        } else {
+            Some(v)
+        }
+    };
+
     if op.type_.is_some() || writable_now {
         let cs = match &op.color_scale {
             Patch::Set(s) => Some(s.clone()),
@@ -388,27 +442,31 @@ fn apply_rule_patch(
             Patch::Absent => existing_icon_set(rule),
         };
         let dxf_present = rule.attr("dxfId").is_some();
-        check_cf_fields(
-            type_,
-            operator,
-            formulas.as_deref(),
-            if dxf_present {
-                Some(&super::request::DxfPatch {
-                    font: None,
-                    fill: None,
-                    border: None,
-                })
-            } else {
-                None
-            },
-            cs.as_ref(),
-            db.as_ref(),
-            iset.as_ref(),
-            i,
-            changing_type || op.type_.is_some(),
-        )?;
+        {
+            let extra = extra_from_rule(rule);
+            check_cf_fields(
+                type_,
+                operator,
+                formulas.as_deref(),
+                if dxf_present {
+                    Some(&super::request::DxfPatch {
+                        font: None,
+                        fill: None,
+                        border: None,
+                    })
+                } else {
+                    None
+                },
+                cs.as_ref(),
+                db.as_ref(),
+                iset.as_ref(),
+                extra,
+                i,
+                changing_type || op.type_.is_some(),
+            )?;
+        }
         if type_ == CfType::ColorScale
-            && color_scale.is_none()
+            && rule.child_by_local("colorScale").is_none()
             && !matches!(op.color_scale, Patch::Set(_))
         {
             return Err(Error::with_path(
@@ -459,63 +517,101 @@ fn apply_rule_patch(
             rule.push_element(write_icon_set(&spec));
         }
     }
-    let _ = color_scale;
     Ok(())
 }
 
 fn write_rule(
     rule: &mut Element,
-    type_: CfType,
-    operator: Option<CfOperator>,
-    formulas: Option<&[String]>,
+    op: &InsertConditionalFormatOp,
     dxf_id: Option<usize>,
-    color_scale: Option<&ColorScaleSpec>,
-    data_bar: Option<&DataBarSpec>,
-    icon_set: Option<&IconSetSpec>,
     priority: i32,
-    stop_if_true: bool,
 ) {
-    rule.set_attr("type", type_.as_str());
+    rule.set_attr("type", op.type_.as_str());
     rule.set_attr("priority", priority.to_string());
-    if stop_if_true {
+    if op.stop_if_true {
         rule.set_attr("stopIfTrue", "1");
     }
     if let Some(id) = dxf_id {
         rule.set_attr("dxfId", id.to_string());
     }
-    if let Some(op) = operator {
-        rule.set_attr("operator", op.as_str());
+    if let Some(opstr) = op.type_.text_operator() {
+        rule.set_attr("operator", opstr);
+    } else if let Some(opv) = op.operator {
+        rule.set_attr("operator", opv.as_str());
     }
-    if let Some(fs) = formulas {
-        for f in fs {
-            rule.push_element(Element::new("formula").with_text(f.clone()));
+    if let Some(t) = &op.text {
+        rule.set_attr("text", t.clone());
+    }
+    if op.type_ == CfType::Top10 {
+        rule.set_attr("rank", op.rank.unwrap_or(10).to_string());
+        if op.percent == Some(true) {
+            rule.set_attr("percent", "1");
+        }
+        if op.bottom == Some(true) {
+            rule.set_attr("bottom", "1");
         }
     }
-    match type_ {
+    if op.type_ == CfType::AboveAverage {
+        if op.above_average == Some(false) {
+            rule.set_attr("aboveAverage", "0");
+        }
+        if op.equal_average == Some(true) {
+            rule.set_attr("equalAverage", "1");
+        }
+        if let Some(n) = op.std_dev {
+            rule.set_attr("stdDev", n.to_string());
+        }
+    }
+    let formulas: Vec<String> = if let Some(fs) = &op.formulas {
+        fs.clone()
+    } else if op.type_.is_text() {
+        if let Some(t) = &op.text {
+            vec![text_formula(op.type_, &first_sqref_cell(&op.sqref), t)]
+        } else {
+            Vec::new()
+        }
+    } else {
+        Vec::new()
+    };
+    for f in &formulas {
+        rule.push_element(Element::new("formula").with_text(f.clone()));
+    }
+    match op.type_ {
         CfType::ColorScale => {
-            if let Some(spec) = color_scale {
+            if let Some(spec) = op.color_scale.as_ref() {
                 rule.push_element(write_color_scale(spec));
             }
         }
         CfType::DataBar => {
-            rule.push_element(write_data_bar(data_bar.unwrap_or(&DataBarSpec {
-                cfvo: None,
-                color: None,
-                min_length: None,
-                max_length: None,
-                show_value: None,
-            })));
+            rule.push_element(write_data_bar(op.data_bar.as_ref().unwrap_or(
+                &DataBarSpec {
+                    cfvo: None,
+                    color: None,
+                    min_length: None,
+                    max_length: None,
+                    show_value: None,
+                },
+            )));
         }
         CfType::IconSet => {
-            rule.push_element(write_icon_set(icon_set.unwrap_or(&IconSetSpec {
-                set: None,
-                cfvo: None,
-                show_value: None,
-                reverse: None,
-                percent: None,
-            })));
+            rule.push_element(write_icon_set(op.icon_set.as_ref().unwrap_or(
+                &IconSetSpec {
+                    set: None,
+                    cfvo: None,
+                    show_value: None,
+                    reverse: None,
+                    percent: None,
+                },
+            )));
         }
-        CfType::CellIs | CfType::Expression => {}
+        CfType::CellIs
+        | CfType::Expression
+        | CfType::Top10
+        | CfType::AboveAverage
+        | CfType::ContainsText
+        | CfType::NotContainsText
+        | CfType::BeginsWith
+        | CfType::EndsWith => {}
     }
 }
 
@@ -767,6 +863,79 @@ fn attr_true(el: &Element, name: &str) -> bool {
         el.attr(name),
         Some("1") | Some("true") | Some("TRUE") | Some("on")
     )
+}
+
+fn attr_false(el: &Element, name: &str) -> bool {
+    matches!(
+        el.attr(name),
+        Some("0") | Some("false") | Some("FALSE") | Some("off")
+    )
+}
+
+fn patch_flag(el: &mut Element, name: &str, v: Option<bool>) {
+    match v {
+        None => {}
+        Some(true) => el.set_attr(name, "1"),
+        Some(false) => el.remove_attr(name),
+    }
+}
+
+fn extra_from_rule(rule: &Element) -> CfExtraCheck<'_> {
+    CfExtraCheck {
+        text: rule.attr("text"),
+        rank: rule.attr("rank").and_then(|s| s.parse().ok()),
+        percent: if attr_true(rule, "percent") {
+            Some(true)
+        } else if rule.attr("percent").is_some() {
+            Some(false)
+        } else {
+            None
+        },
+        bottom: if attr_true(rule, "bottom") {
+            Some(true)
+        } else if rule.attr("bottom").is_some() {
+            Some(false)
+        } else {
+            None
+        },
+        above_average: if attr_false(rule, "aboveAverage") {
+            Some(false)
+        } else if attr_true(rule, "aboveAverage") {
+            Some(true)
+        } else {
+            None
+        },
+        equal_average: if attr_true(rule, "equalAverage") {
+            Some(true)
+        } else if rule.attr("equalAverage").is_some() {
+            Some(false)
+        } else {
+            None
+        },
+        std_dev: rule.attr("stdDev").and_then(|s| s.parse().ok()),
+    }
+}
+
+fn text_formula(kind: CfType, cell: &str, text: &str) -> String {
+    let t = text.replace('"', "\"\"");
+    match kind {
+        CfType::ContainsText => format!("NOT(ISERROR(SEARCH(\"{t}\",{cell})))"),
+        CfType::NotContainsText => format!("ISERROR(SEARCH(\"{t}\",{cell}))"),
+        CfType::BeginsWith => format!("LEFT({cell},LEN(\"{t}\"))=\"{t}\""),
+        CfType::EndsWith => format!("RIGHT({cell},LEN(\"{t}\"))=\"{t}\""),
+        _ => String::new(),
+    }
+}
+
+fn first_sqref_cell(ranges: &[(CellRef, CellRef)]) -> String {
+    let a = ranges[0].0;
+    a1::format_cell(a.col, a.row)
+}
+
+fn first_cell_from_sqref(raw: &str) -> Option<String> {
+    let tok = raw.split_whitespace().next()?;
+    let (a, _) = a1::parse_range(tok).ok()?;
+    Some(a1::format_cell(a.col, a.row))
 }
 
 fn not_found(sheet: &str, index: usize, i: usize) -> Error {

@@ -1375,8 +1375,11 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         }
         ErrorKind::EmptySparklineFormula => "formula must not be empty".into(),
         ErrorKind::InvalidSparklineType => "type must be line, column, or stacked".into(),
+        ErrorKind::InvalidSparkline { field } => {
+            format!("invalid sparkline field: {field}")
+        }
         ErrorKind::NeedSetSparklineField => {
-            "setSparkline requires at least one of type, ref, or formula".into()
+            "setSparkline requires at least one field besides op and id".into()
         }
         ErrorKind::InvalidBookmarkName => {
             "bookmark name must not be empty, contain whitespace, or start with an underscore"

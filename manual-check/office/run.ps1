@@ -110,6 +110,7 @@ $order = @(
     'xlsx-formula-master'
     'xlsx-validation'
     'xlsx-conditional-format'
+    'xlsx-cf-spark-style'
     'xlsx-table'
     'xlsx-pivot'
     'xlsx-defined-name'

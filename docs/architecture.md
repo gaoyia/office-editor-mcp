@@ -103,7 +103,7 @@ apply 可改目标单元格，也可换、插、删工作表图，并可改 `one
 也可插、删、改工作表图表：改系列时写本表单元格并回写 cache（连续 A1、能解析成连续 A1 的命名区域、以及长度对得上的不连续并集），插图时在 `dataFrom` 写下数据表。也可增删趋势线、误差线，并把系列挂到次轴。
 也可新建或删除图表工作表：数据仍写在点名的普通表上，图表工作表本身没有 `sheetData`。也可插入、删除、改名、重排与隐藏普通工作表，脏 `workbook.xml` 的 `sheets` 与对应 worksheet 部件。
 对 `dialogsheet` / `macrosheet` 这些 op 仍报 `NotImplemented`。
-也可用 `setCellStyle` 写单元格数字格式、字体、填充、边框与对齐：复用或追加 `styles.xml` 里的 `xf`，只改被点名格子的 `s`。
+也可用 `setCellStyle` 写单元格数字格式、字体、填充、边框与对齐：复用或追加 `styles.xml` 里的 `xf`，只改被点名格子的 `s`。边框含对角线，对齐可写缩进、旋转与缩小字体。
 也可按槽位改页眉页脚原文，并可对 `worksheet` 的页眉槽位插、换、删 DrawingML 图。
 插图或插图表可能新建 `/xl/drawings/drawingN.xml`、`/xl/media/…`、`/xl/charts/chartN.xml` 以及工作表上的 `<drawing>`。
 也可插、删、改工作表文本框（`xdr:sp` `txBox`）、无 `txBox` 的形状、
@@ -116,13 +116,13 @@ apply 可改目标单元格，也可换、插、删工作表图，并可改 `one
 也可改共享公式主格（保住整组或拆成独立公式）并读写数组公式 `t="array"`，不求值、不改数据表公式。
 也可用 `insertDataValidation` / `setDataValidation` / `deleteDataValidation` 读写工作表 `dataValidations`：公式当字符串，不求值、不展开下拉列表；`extLst` 里的扩展校验原样留下。
 也可用 `insertConditionalFormat` / `setConditionalFormat` / `deleteConditionalFormat` 读写工作表 `conditionalFormatting`：公式当字符串，
-颜色写入 `styles.xml` 的 `dxf`；不渲染、不求值；`extLst` 里的扩展条件格式原样留下。
+颜色写入 `styles.xml` 的 `dxf`；可写 `top10` / `aboveAverage` / 文本类规则；不渲染、不求值；`extLst` 里的扩展条件格式原样留下。
 不写 embedding，不对 xlsx 做 `exportChartData`。不编辑 `legacyDrawingHF` / 表单控件 VML。
 insert / delete 线程化批注时只追加或去掉对应 Note `v:shape` 与占位 `comments.xml`，不改已有框的几何。
 也可插、删、回复、改字、改作者与完成标记线程化批注（MS-XLSX `threadedComment`），
 脏 threadedComments、persons、占位 comments、VML、工作表 `legacyDrawing`、关系与内容类型。
 也可插、删、改工作表单元格超链接：脏该表 XML 的 `<hyperlinks>` 与工作表 `.rels`（Type 以 `/hyperlink` 结尾、`TargetMode` 为 `External`），不标重算，不改单元格值。
-也可插、删、改工作表迷你图组：脏该表 `extLst` 里的 `x14:sparklineGroups`，不新建部件，不标重算。
+也可插、删、改工作表迷你图组：脏该表 `extLst` 里的 `x14:sparklineGroups`，可改颜色、标记与坐标轴，不新建部件，不标重算。
 也可用 `setProtection` 开关工作表 `sheetProtection` 与工作簿 `workbookProtection`：脏该表 XML 或 `workbook.xml`；
 无密码时不写哈希，给了 `password` 则写 Excel 16.0 的 SHA-512 哈希，不新建部件，不标重算。
 create 可写图、图表、图表工作表、页眉页脚、批注、超链接、文本框、公式框、形状、连接线、SmartArt 与 3D 模型，细则见下文 create。

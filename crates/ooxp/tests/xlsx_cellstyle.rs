@@ -329,3 +329,32 @@ fn custom_num_fmt_and_theme_color() {
     assert_eq!(a1["font"]["color"]["theme"], 1);
     assert_eq!(a1["border"]["left"]["style"], "thin");
 }
+
+#[test]
+fn diagonal_indent_rotation() {
+    let src = create_book("diag");
+    let out = tmp("diag-out");
+    apply(
+        &src,
+        &out,
+        json!([{
+            "op": "setCellStyle",
+            "id": "cell:Sheet1!A1",
+            "border": { "diagonal": { "style": "thin" } },
+            "align": { "indent": 2, "rotation": 45 }
+        }]),
+    )
+    .unwrap();
+    let cells = inspect_cells(&out);
+    let a1 = cell(&cells, "cell:Sheet1!A1");
+    assert_eq!(a1["border"]["diagonal"]["style"], "thin");
+    assert_eq!(a1["border"]["diagonalUp"], true);
+    assert_eq!(a1["border"]["diagonalDown"], true);
+    assert_eq!(a1["align"]["indent"], 2);
+    assert_eq!(a1["align"]["rotation"], 45);
+    assert_eq!(a1["align"]["horizontal"], "left");
+    let styles = part_text(&out, "xl/styles.xml");
+    assert!(styles.contains("diagonalUp=\"1\""), "{styles}");
+    assert!(styles.contains("textRotation=\"45\""), "{styles}");
+    assert!(styles.contains("indent=\"2\""), "{styles}");
+}

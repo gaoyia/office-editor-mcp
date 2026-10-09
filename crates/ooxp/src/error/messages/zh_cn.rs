@@ -1207,8 +1207,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         }
         ErrorKind::EmptySparklineFormula => "formula 不能为空".into(),
         ErrorKind::InvalidSparklineType => "type 只能是 line、column 或 stacked".into(),
+        ErrorKind::InvalidSparkline { field } => format!("迷你图字段不合法：{field}"),
         ErrorKind::NeedSetSparklineField => {
-            "setSparkline 至少要给 type、ref 或 formula 之一".into()
+            "setSparkline 除 op 与 id 外至少要给一个字段".into()
         }
         ErrorKind::InvalidBookmarkName => {
             "书签名不能为空、不能含空白、不能以下划线开头".into()

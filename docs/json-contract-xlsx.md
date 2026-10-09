@@ -908,11 +908,19 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   有 `r:id` 时树上仍可带 `location`（规范说这是靶内位置）。`tooltip` 取 `@tooltip`，缺则为 `null`。`display` 取 `@display`，缺则为 `null`。
   不把单元格可见值抄进这条；显示字仍走单元格。`HYPERLINK()` 公式不进本名单。pptx 的 `scope.hyperlinks` 见 [pptx 响应](json-contract-pptx.md#响应)。
 - `scope.sparklines` 为 `true` 时，每张 `worksheet` 带 `sparklines`。没有组时为空数组。不依赖单元格切片。按该表全部 `x14:sparklineGroup` 的文档顺序。
-  每条字段顺序：`id`、`index`、`type`、`displayEmptyCellsAs`、`sparklines`。`index` 与 id 里的 `{n}` 相同。
+  每条字段顺序：`id`、`index`、`type`、`displayEmptyCellsAs`，再按需跟标记与轴，有颜色子元素时跟 `colors`，最后 `sparklines`。
+  `index` 与 id 里的 `{n}` 相同。
   `type` 取 `@type`：`line` / `column` / `stacked`；缺属性当作 `line`。不认识的原文原样留下。
-  `displayEmptyCellsAs` 取同名属性：`gap` / `span` / `zero`；缺属性当作 `zero`。`sparklines` 是组内 `<x14:sparkline>` 数组，按文档顺序。
+  `displayEmptyCellsAs` 取同名属性：`gap` / `span` / `zero`；缺属性当作 `zero`。
+  `markers` / `high` / `low` / `first` / `last` / `negative` / `displayXAxis` 仅在对应属性为真时出现且为 `true`。
+  `lineWeight` 仅在 XML 有该属性时出现，为磅（数字）。
+  `minAxisType` / `maxAxisType` 取同名属性：`individual` / `group` / `custom`；缺省 `individual` 时省略。
+  `manualMin` / `manualMax` 仅在 XML 有该属性时出现，为数字。
+  `colors` 字段顺序：`series`、`negative`、`axis`、`markers`、`first`、`last`、`high`、`low`。
+  每项是颜色对象，规则与单元格 `color` 相同；没有对应子元素则省略该键。没有任一条颜色子元素则省略 `colors`。
+  `sparklines` 是组内 `<x14:sparkline>` 数组，按文档顺序。
   每项字段顺序：`ref`、`formula`。`ref` 取 `xm:sqref` 文本，能解析成单格则规范化成列字母加大写行号；解析不了或缺失则为 `null`。`formula` 取 `xm:f` 原文，缺则为 `null`。
-  不把颜色、标记、坐标轴或 `xr2:uid` 放进树。不把折线画进树。docx / pptx 的 `scope` 里出现 `sparklines` 报 `InvalidField`。
+  不把 `xr2:uid`、日期轴公式或折线画进树。docx / pptx 的 `scope` 里出现 `sparklines` 报 `InvalidField`。
 - `scope.oleObjects` 为 `true` 时，每张 `worksheet` 带 `oleObjects`。没有嵌入对象时为空数组。不依赖单元格切片。
   按该表 `<oleObjects>` 里被收入的 `oleObject` 文档顺序（`mc:AlternateContent` 只进第一个 `Choice`）。
   每条字段顺序：`id`、`shapeId`、`name`、`progId`、`kind`、`contentType`、`showAsIcon`、`anchor`，然后按锚点种类跟位置字段（规则与工作表图相同，几何取 `objectPr/anchor` 的 `from`/`to`；
@@ -1031,7 +1039,9 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   `type` 取 `ST_CfType`（§18.18.12）原文；缺属性则省略该键。`priority` 取 XML 整数；缺属性则省略。
   `operator` 仅在 XML 有该属性时出现，取值 `ST_ConditionalFormattingOperator`（§18.18.15）。
   `formulas` 是 `<formula>` 子元素原文组成的字符串数组，不求值、不补 `=`；没有则省略。`text` / `timePeriod` / `rank` 仅在 XML 有对应属性时出现。
-  `percent` / `bottom` / `aboveAverage` / `equalAverage` / `stopIfTrue` 仅在属性为真时出现且为 `true`。`stdDev` 仅在 XML 有该属性时出现。
+  `percent` / `bottom` / `equalAverage` / `stopIfTrue` 仅在属性为真时出现且为 `true`。
+  `aboveAverage` 仅在属性为 `0` / `false` / `FALSE` / `off` 时出现且为 `false`（低于平均）。缺属性或为真则省略，表示高于平均。
+  `stdDev` 仅在 XML 有该属性时出现。
   `dxf` 是 `dxfId` 指向的 `styles.xml` `<dxfs>/<dxf>` 摘要：字段顺序 `font`、`fill`、`border`，形状与单元格样式摘要相同，但按差分本身报（不跟 `fonts[0]` 比）。
   `dxf` 的 `fill` 若缺 `patternType` 却有 `fgColor` / `bgColor`，当作 `solid`。没有 `dxfId` 或越界则省略 `dxf`。
   `colorScale` 字段顺序：`cfvo`、`colors`。`cfvo` 每项字段顺序：`type`，有 `val` 再跟，`gte` 为假时再跟 `false`。
@@ -1074,9 +1084,14 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
 - `font` 字段顺序：`name`、`sz`、`bold`、`italic`、`underline`、`color`。只出现与默认字体不同的键。`sz` 为磅，整数则 JSON 整数。
   `underline` 为 `single` / `double` / `singleAccounting` / `doubleAccounting`。`color` 见下。
 - `fill` 字段顺序：`pattern`，然后 `fg`、`bg`（有才出现）。`pattern` 为 `ST_PatternType`（§18.18.55）。
-- `border` 字段顺序：`left`、`right`、`top`、`bottom`。每边是对象：`style`（`ST_BorderStyle`，§18.18.3），有颜色再跟 `color`。没有线型的边省略。
-- `align` 字段顺序：`horizontal`、`vertical`、`wrap`。取 `xf/alignment` 上有的属性。
+- `border` 字段顺序：`left`、`right`、`top`、`bottom`，有对角线再跟 `diagonal`，`diagonalUp` / `diagonalDown` 为真时再跟。
+  每边是对象：`style`（`ST_BorderStyle`，§18.18.3），有颜色再跟 `color`。没有线型的边省略。
+  `diagonalUp` / `diagonalDown` 取 `<border>` 上同名属性，仅在为真时出现且为 `true`。
+- `align` 字段顺序：`horizontal`、`vertical`、`wrap`，有缩进再跟 `indent`，有旋转再跟 `rotation`，缩小字体为真时再跟 `shrink`。
+  取 `xf/alignment` 上有的属性。
   `horizontal` 为 `ST_HorizontalAlignment`（§18.18.40），`vertical` 为 `ST_VerticalAlignment`（§18.18.88），`wrap` 为布尔。
+  `indent` 取 `@indent` 整数，缺或 `0` 则省略。`rotation` 取 `@textRotation` 整数。
+  `shrink` 仅在 `shrinkToFit` 为真时出现且为 `true`。
 - 颜色对象恰好给 `rgb`、`theme`、`indexed` 之一；`theme` 可再带 `tint`（数字）。`rgb` 为大写十六进制，6 位或 8 位（ARGB）。主题色原样报索引，不解析成 RGB。不报 `auto`。
 
 类型映射：
@@ -1366,11 +1381,18 @@ create 本期仍只写普通 `<f>`，不写 `t="shared"` / `t="array"`。
 `fill` 对象字段：`pattern`（`ST_PatternType`，§18.18.55）、`fg`、`bg`（颜色对象）。只给了 `fg` 且未写 `pattern` 时当作 `solid`。
 不写渐变；`pattern` 为 `gradient` 或不认识的值报 `InvalidField`。
 
-`border` 对象：可给顶层 `style` / `color`，作为未点名边的缺省；再给 `left` / `right` / `top` / `bottom` 覆盖单边。
-每边 `style` 为 `ST_BorderStyle`（§18.18.3，含 `none`）。不认识的 `style` 报 `InvalidField`。不写对角线。
+`border` 对象：可给顶层 `style` / `color`，作为未点名边的缺省；再给 `left` / `right` / `top` / `bottom` / `diagonal` 覆盖单边。
+每边 `style` 为 `ST_BorderStyle`（§18.18.3，含 `none`）。不认识的 `style` 报 `InvalidField`。
+`diagonalUp` / `diagonalDown` 为布尔。`true` 写对应属性 `"1"`，`false` 去掉该属性。
+只给了 `diagonal.style`、两个方向都未出现时，两个方向都写成 `"1"`（Excel 16.0 同时画两根斜线）。
+只给方向、不给 `diagonal.style` 时，缺省线型为 `thin`。
 
 `align` 对象字段：`horizontal`（`general`、`left`、`center`、`right`、`fill`、`justify`、`centerContinuous`、`distributed`）、
-`vertical`（`top`、`center`、`bottom`、`justify`、`distributed`）、`wrap`（布尔）。不认识的对齐报 `InvalidField`。不写缩进、旋转、缩小字体。
+`vertical`（`top`、`center`、`bottom`、`justify`、`distributed`）、`wrap`（布尔）、
+`indent`（整数，`0`–`250`）、`rotation`（整数，`0`–`180`，写入 `@textRotation`）、`shrink`（布尔，写入 `shrinkToFit`）。
+不认识的对齐、越界的 `indent` / `rotation` 报 `InvalidField`。
+`indent` 大于 `0` 且未给 `horizontal` 时写 `horizontal="left"`。
+`indent` 为 `0` 去掉该属性。`rotation` 为 `0` 去掉 `textRotation`。`shrink` 为 `true` 写 `"1"`，为 `false` 去掉属性。
 
 颜色对象恰好含 `rgb`、`theme`、`indexed` 之一。`rgb` 为 6 位或 8 位十六进制（不带 `#`），写入时大写；6 位补成 `FF` + 六位 ARGB。`theme` 为非负整数，可再带数字 `tint`。
 `indexed` 为非负整数。主题色原样写入，不解析成 RGB。同时给了多种颜色键、或 `tint` 却没有 `theme`，报 `InvalidField`。
@@ -1622,7 +1644,7 @@ docx / pptx 上发此 op 报 `InvalidField`。不标重算。
   - 写入规则与 `insertDataValidation` 的 `sqref` 相同
 - **`type`**
   - 必须
-  - 本期可写：`cellIs` / `expression` / `colorScale` / `dataBar` / `iconSet`
+  - 本期可写：`cellIs` / `expression` / `colorScale` / `dataBar` / `iconSet` / `top10` / `aboveAverage` / `containsText` / `notContainsText` / `beginsWith` / `endsWith`
   - 其余 `ST_CfType` 出现报 `InvalidField`
 - **`operator`**
   - `cellIs` 必须
@@ -1636,11 +1658,48 @@ docx / pptx 上发此 op 报 `InvalidField`。不标重算。
     - `between`
     - `notBetween`
   - 其它 `type` 上出现报 `InvalidField`
-  - `containsText` / `notContains` / `beginsWith` / `endsWith` 本期不写
+  - 文本类不要出现本字段；库按类型自己写 `containsText` / `notContains` / `beginsWith` / `endsWith`
 - **`formulas`**
   - 字符串数组
   - 写入 `<formula>` 文本，前导 `=` 会去掉，不求值
   - `cellIs` 的 `between` / `notBetween` 必须恰好 2 项，其余 `cellIs` 与 `expression` 必须恰好 1 项
+  - 文本类可省略：省略则按 `text` 与 `sqref` 左上角生成（见下）
+  - 文本类若给出必须恰好 1 项
+  - 其它 `type` 上出现报 `InvalidField`
+- **`text`**
+  - `containsText` / `notContainsText` / `beginsWith` / `endsWith` 必须
+  - 非空字符串，写入 `@text`
+  - 省略公式时按首块 `sqref` 左上角生成 `<formula>`：
+    - `containsText`：`NOT(ISERROR(SEARCH("…",A1)))`
+    - `notContainsText`：`ISERROR(SEARCH("…",A1))`
+    - `beginsWith`：`LEFT(A1,LEN("…"))="…"`
+    - `endsWith`：`RIGHT(A1,LEN("…"))="…"`
+  - 文本里的 `"` 写成 `""`
+  - 其它 `type` 上出现报 `InvalidField`
+- **`rank`**
+  - `top10` 可选正整数
+  - 省略当作 `10`
+  - 其它 `type` 上出现报 `InvalidField`
+- **`percent`**
+  - `top10` 可选布尔
+  - `true` 写 `percent="1"`
+  - 其它 `type` 上出现报 `InvalidField`
+- **`bottom`**
+  - `top10` 可选布尔
+  - `true` 写 `bottom="1"`
+  - 其它 `type` 上出现报 `InvalidField`
+- **`aboveAverage`**
+  - `type` 为 `aboveAverage` 时可选布尔
+  - 省略或 `true` 不写属性（高于平均）
+  - `false` 写 `aboveAverage="0"`
+  - 其它 `type` 上出现报 `InvalidField`
+- **`equalAverage`**
+  - `type` 为 `aboveAverage` 时可选布尔
+  - `true` 写 `equalAverage="1"`
+  - 其它 `type` 上出现报 `InvalidField`
+- **`stdDev`**
+  - `type` 为 `aboveAverage` 时可选正整数
+  - 写入 `@stdDev`
   - 其它 `type` 上出现报 `InvalidField`
 - **`dxf`**
   - 可选对象
@@ -1676,8 +1735,8 @@ docx / pptx 上发此 op 报 `InvalidField`。不标重算。
 
 `cfvo` 每项：`type` 必须是 `num` / `percent` / `max` / `min` / `formula` / `percentile`。`val` 为字符串；`min` / `max` 可省略。
 `gte` 为布尔，`false` 写 `gte="0"`。颜色对象与 `setCellStyle` 相同。
-`type` 为 `cellIs` / `expression` 时不要出现 `colorScale` / `dataBar` / `iconSet`。
-`type` 为 `colorScale` 时不要出现 `dataBar` / `iconSet` / `operator` / `formulas` / `dxf`，以此类推。找不到工作表报 `IdNotFound`。
+`type` 为 `cellIs` / `expression` / `top10` / `aboveAverage` 以及文本类时不要出现 `colorScale` / `dataBar` / `iconSet`。
+`type` 为 `colorScale` 时不要出现 `dataBar` / `iconSet` / `operator` / `formulas` / `dxf` / `text` / `rank`，以此类推。找不到工作表报 `IdNotFound`。
 id 不是工作表 id 报 `InvalidId`。只能改 `worksheet`。`sqref` 非法报 `InvalidRange`。不认识的枚举报 `InvalidField`。
 docx / pptx 上发此 op 报 `InvalidField`。不标重算，不删 `calcChain`。不写 `x14` 扩展数据条（渐变、负值色、轴）或扩展图标集。create 本期不写条件格式。
 
@@ -1697,9 +1756,10 @@ docx / pptx 上发此 op 报 `InvalidField`。不标重算，不删 `calcChain`�
   - `priority` 为 `null` 报 `InvalidField`（XML 必有 `priority`）
 
 除 `op` 与 `id` 外至少给一个字段，否则报 `InvalidField`。改 `sqref` 时改所属 `<conditionalFormatting>/@sqref`，同一块里其它规则一起变范围。
-改 `type` 时只允许改成可写的五种；会清掉与新类型冲突的子元素与属性，并按 insert 同一套约束补齐。
-对 inspect 列出的其它类型（如 `top10`），可以改 `sqref` / `priority` / `stopIfTrue` / `dxf`；改 `type` 到五种之一则整条按新类型重写；
-给 `operator` / `formulas` / `colorScale` / `dataBar` / `iconSet` 却不改 `type` 报 `InvalidField`。
+改 `type` 时只允许改成可写类型；会清掉与新类型冲突的子元素与属性，并按 insert 同一套约束补齐。
+当前已是可写类型时，可改 insert 那套字段（含 `text` / `rank` / `percent` / `bottom` / `aboveAverage` / `equalAverage` / `stdDev`）。
+对 inspect 列出的其它类型（如 `uniqueValues` / `timePeriod`），只许改 `sqref` / `priority` / `stopIfTrue` / `dxf`；
+给结构字段却不改 `type` 报 `InvalidField`。改 `type` 到可写类型之一则整条按新类型重写。
 未点名的属性、未知属性与未知子元素（含该规则上的 `extLst`）原样留。改完之后的规则仍须满足 insert 那套约束。找不到该序号报 `IdNotFound`。id 不是规则 id 报 `InvalidId`。
 只能改 `worksheet`。docx / pptx 上发此 op 报 `InvalidField`。不标重算。
 
@@ -2911,13 +2971,21 @@ docx / pptx 上发此 op 报 `InvalidField`。create 本期不写外部引用。
 | `ref` | 必填。宿主格，恰好一格 |
 | `formula` | 必填。数据范围字符串（`xm:f`） |
 | `type` | 可选。`line` / `column` / `stacked`。省略当作 `line` |
+| `displayEmptyCellsAs` | 可选。`gap` / `span` / `zero`。省略当作 `gap` |
+| `markers` / `high` / `low` / `first` / `last` / `negative` / `displayXAxis` | 可选布尔。`true` 写对应属性 `"1"` |
+| `lineWeight` | 可选。磅，`0`–`1584` |
+| `minAxisType` / `maxAxisType` | 可选。`individual` / `group` / `custom`。省略不写（Excel 缺省 `individual`） |
+| `manualMin` / `manualMax` | 可选数字。`minAxisType` 为 `custom` 时必须给 `manualMin`；`maxAxisType` 为 `custom` 时必须给 `manualMax` |
+| `colors` | 可选对象。键：`series` / `negative` / `axis` / `markers` / `first` / `last` / `high` / `low`。值为颜色对象 |
 
 在该表 `extLst` 里追加一组 `x14:sparklineGroup`，组内一条 `x14:sparkline`。
 没有对应 `ext` 则按 `CT_Worksheet` 在末尾写 `extLst` / `ext`（`uri` 写成 Excel 16.0 另存的 `{05C60535-1F16-4fd2-B633-F4F36F0B64E0}`），
 `xmlns:x14` 写在该 `ext` 上，`xmlns:xm` 写在 `sparklineGroups` 上。
 `ref` 必须是单格；闭区间报 `InvalidField`。非法 A1 报 `InvalidRange`。与同一张表上已有迷你图宿主格相交报 `InvalidField`。`formula` 去掉首尾空白后不能为空。
 能解析成无表名前缀的 A1 时写成 `当前表!A1:B1`（不加 `$`）；已含 `!` 或解析不成 A1 的原文写入。能解析成 A1 却既跨行又跨列报 `InvalidField`。
-不认识的 `type` 报 `InvalidField`。插入时按 Excel 16.0 另存写 `displayEmptyCellsAs="gap"` 以及一组默认 `color*`（`rgb`），不把这些放进请求。
+不认识的 `type` / `displayEmptyCellsAs` / 轴类型报 `InvalidField`。
+`minAxisType` 不是 `custom` 却给了 `manualMin`，或 `maxAxisType` 不是 `custom` 却给了 `manualMax`，报 `InvalidField`。
+插入时未给的颜色仍按 Excel 16.0 另存写默认 `rgb`（系列 `FF376092`，其余 `FFD00000` 或轴 `FF000000`）。给了 `colors` 的键覆盖对应子元素。
 不写 `xr2:uid`。不写单元格值。id 不是工作表 id 报 `InvalidId`。找不到工作表报 `IdNotFound`。
 只能写 `worksheet`；对 `chartsheet` 报 `InvalidField`；对 `dialogsheet` / `macrosheet` 报 `NotImplemented`。不标重算。不新建部件。
 其它 `ext` 原样留下。docx / pptx 上发此 op 报 `InvalidField`。create 本期不写迷你图。
@@ -2931,9 +2999,12 @@ docx / pptx 上发此 op 报 `InvalidField`。create 本期不写外部引用。
 | `type` | 可选。`line` / `column` / `stacked` |
 | `ref` | 可选。改该组**仅有的那一条**的宿主格 |
 | `formula` | 可选。改该组**仅有的那一条**的数据范围 |
+| 其余 | 与 `insertSparkline` 相同的可选字段：`displayEmptyCellsAs`、标记布尔、`lineWeight`、轴、`colors` |
 
-`type`、`ref`、`formula` 至少给一个，否则报 `InvalidField`。该组若有多于一条 `sparkline`，给 `ref` 或 `formula` 报 `InvalidField`（仍可只改 `type`）。
-`ref` 约束与 insert 相同，含重叠检查（排除自身）。`formula` 空串报 `InvalidField`，写入规则与 insert 相同。不改颜色与其它未点名属性。找不到报 `IdNotFound`。
+`type`、`ref`、`formula` 与新增可选字段至少给一个，否则报 `InvalidField`。该组若有多于一条 `sparkline`，给 `ref` 或 `formula` 报 `InvalidField`（仍可改 `type`、颜色与轴）。
+`ref` 约束与 insert 相同，含重叠检查（排除自身）。`formula` 空串报 `InvalidField`，写入规则与 insert 相同。
+`colors` 只覆盖给了的键，未点名的颜色子元素原样留。`lineWeight` 为 `null` 去掉该属性。
+标记布尔为 `false` 去掉对应属性。轴约束与 insert 相同。找不到报 `IdNotFound`。
 id 不是迷你图组 id 报 `InvalidId`。只能改 `worksheet`。docx / pptx 上发此 op 报 `InvalidField`。
 
 ### deleteSparkline

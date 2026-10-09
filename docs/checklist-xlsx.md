@@ -8,7 +8,7 @@
 
 Microsoft Excel 16.0 已打开，用户确认通过。本机若装了 WPS，`Excel.Application` 会被抢走，测试仍直接启动 `EXCEL.EXE` 再挂 COM。
 
-C、I、A、O、Xp、Xvg、Xem、X3d、Xom、Xtf、Xfl、Xc、Xh 这几组现在由 `manual-check/office/cases/xlsx-*.ps1` 自动判定，
+C、I、A、O、Xp、Xvg、Xem、X3d、Xom、Xtf、Xfl、Xc、Xh、Xfs 这几组现在由 `manual-check/office/cases/xlsx-*.ps1` 自动判定，
 跑 `pwsh -File manual-check\office\run.ps1 -Case 'xlsx-*'` 即可复现，逐条结果落在 `manual-check/office/out/office-results.csv`。
 2026-09-27 补跑 `xlsx-pictures.ps1`，Xp1–Xp7 通过。同日补跑 `xlsx-charts.ps1`，Xc1–Xc7 通过。
 同日补跑 `xlsx-create-pictures.ps1`，C8–C10 通过。同日补跑 `xlsx-create-charts.ps1`，C11–C13 通过。
@@ -33,6 +33,7 @@ C、I、A、O、Xp、Xvg、Xem、X3d、Xom、Xtf、Xfl、Xc、Xh 这几组现在
 同日补跑 `xlsx-shape-format.ps1`，Xtf1–Xtf5 通过。无 Repair。
 2026-10-10 补跑 `xlsx-text-fill.ps1`，Xfl1–Xfl5 通过。无 Repair。
 2026-10-10 补跑 `xlsx-charts-rare-remain.ps1`，Xcx1–Xcx5 通过。无 Repair。
+2026-10-10 补跑 `xlsx-cf-spark-style.ps1`，Xfs1–Xfs5 通过。无 Repair。
 
 - **C1** ✅
   - Excel 16.0 打开 `manual-check/office/out/xlsx-create.xlsx`，标题栏无 Repair
@@ -246,6 +247,13 @@ C、I、A、O、Xp、Xvg、Xem、X3d、Xom、Xtf、Xfl、Xc、Xh 这几组现在
   - 改数据范围后对得上
   - 删除后计数为 0
   - 缺字段得 `InvalidField` 且未写文件
+- **Xfs1–Xfs5** ✅
+  - Excel 16.0：`xlsx-cf-spark-style.ps1`，5 PASS / 0 FAIL
+  - `top10` `rank=3` 无 Repair
+  - 低于平均与 `containsText` 生成公式、无 Repair
+  - 迷你图标记与自定义轴 COM 能看见
+  - 对角线与缩进 / 旋转无 Repair
+  - 缺 `text`、`top10` 带 `operator`、自定义轴缺 `manualMin` 得 `InvalidField` 且未写文件
 - **Xpr1–Xpr5** ✅
   - Excel 16.0：`xlsx-protect.ps1`，5 PASS / 0 FAIL
   - 无保护时根有 `workbookProtection`、工作表有 `sheetProtection` 且 `enforced=false`
@@ -893,6 +901,29 @@ inspect 只读进树。create 不生成。apply 不新开编辑。脚本 `manual
   - 检查：缺字段
   - 通过标准：只给 `op` 与 `id` 的 `insertConditionalFormat` 得 `InvalidField`，未写文件
   - 不强制开 Excel
+
+## 条件格式与迷你图字段
+
+`top10` / `aboveAverage` / 文本类规则，迷你图颜色与标记 / 轴，单元格对角线与缩进 / 旋转。脚本 `manual-check/office/cases/xlsx-cf-spark-style.ps1`。编号用 **Xfs**。不要和 Xn、Xsk、Xs 撞。不求值、不渲染色阶。
+
+- **Xfs1**
+  - 检查：top10
+  - 通过标准：✅ `insertConditionalFormat` `type=top10` `rank=3` 后 Excel 无修复，inspect `rank` 为 3
+- **Xfs2**
+  - 检查：低于平均与包含文本
+  - 通过标准：✅ `aboveAverage` 且 `aboveAverage: false` 后无修复；`containsText` `text=foo` 后无修复，树上有生成的 `formulas`
+- **Xfs3**
+  - 检查：迷你图标记与轴
+  - 通过标准：✅ `insertSparkline` 带 `markers` 与 `minAxisType=custom` `manualMin=-2` 后无修复，COM 能看见迷你图
+- **Xfs4**
+  - 检查：对角线与缩进旋转
+  - 通过标准：✅ `setCellStyle` 写对角线、`indent=2`、`rotation=45` 后无修复
+- **Xfs5**
+  - 检查：仍拒绝
+  - 通过标准：✅ `containsText` 不带 `text` 得 `InvalidField`
+  - `top10` 带 `operator` 得 `InvalidField`
+  - `minAxisType=custom` 不带 `manualMin` 得 `InvalidField`
+  - 均未写坏文件
 
 ## 工作表表格
 

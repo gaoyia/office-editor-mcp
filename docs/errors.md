@@ -189,7 +189,7 @@
 - 序号不存在报 `IdNotFound`，不是规则 id 报 `InvalidId`
 - `setConditionalFormat` / `deleteConditionalFormat` 的 id 是 `sheet:{name}/cf:{n}`
 - 序号不存在报 `IdNotFound`，不是规则 id 报 `InvalidId`
-- 条件格式缺 `type` / `sqref` / 必要公式或阈值、或 `type` 不是本期可写的五种，是 `InvalidField`
+- 条件格式缺 `type` / `sqref` / 必要公式、`text` 或阈值、或 `type` 不是本期可写类型，是 `InvalidField`
 - `setSheetTable` / `deleteSheetTable` 的 id 是 `sheet:{name}/table:{n}`
 - 序号不存在报 `IdNotFound`，不是表格 id 报 `InvalidId`
 - 工作表表格缺 `ref`、`ref` 少于两行一列、与已有表相交、表名或列名非法，是 `InvalidField`
@@ -817,6 +817,7 @@
 - xlsx 的 `insertSparkline` 的 id 是工作表
 - 必须给 `ref` 与 `formula`
 - `ref` 不是单格、与已有宿主相交、或公式既跨行又跨列，报 `InvalidField`
+- `minAxisType` / `maxAxisType` 为 `custom` 却缺对应手动值，或非 `custom` 却带了手动值，报 `InvalidField`
 - `setSparkline` / `deleteSparkline` 的 id 是 `sheet:{name}/spark:{n}`
 - 序号不存在报 `IdNotFound`，不是组 id 报 `InvalidId`
 - 该组有多条却改 `ref` / `formula` 报 `InvalidField`

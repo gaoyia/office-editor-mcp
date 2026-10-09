@@ -4,7 +4,11 @@ use serde_json::{json, Map, Value};
 
 use super::a1::{self, CellRef};
 use super::layout;
-use super::request::{DeleteSparklineOp, InsertSparklineOp, Patch, SetSparklineOp, SparklineType};
+use super::request::{
+    ColorSpec, DeleteSparklineOp, InsertSparklineOp, Patch, SetSparklineOp, SparkAxisType,
+    SparkColors, SparkEmpty, SparklineType,
+};
+use super::style;
 use crate::chart;
 use crate::error::{Error, ErrorKind};
 use crate::xml::{Element, Node};
@@ -39,6 +43,41 @@ fn inspect_one(g: &Element, sheet: &str, n: usize) -> Value {
         "displayEmptyCellsAs".into(),
         json!(display_empty(g).as_str()),
     );
+    for name in [
+        "markers",
+        "high",
+        "low",
+        "first",
+        "last",
+        "negative",
+        "displayXAxis",
+    ] {
+        if attr_true(g, name) {
+            obj.insert(name.into(), json!(true));
+        }
+    }
+    if let Some(w) = g.attr("lineWeight").and_then(|s| s.parse::<f64>().ok()) {
+        obj.insert("lineWeight".into(), json_num(w));
+    }
+    if let Some(t) = g.attr("minAxisType") {
+        if t != "individual" {
+            obj.insert("minAxisType".into(), json!(t));
+        }
+    }
+    if let Some(t) = g.attr("maxAxisType") {
+        if t != "individual" {
+            obj.insert("maxAxisType".into(), json!(t));
+        }
+    }
+    if let Some(v) = g.attr("manualMin").and_then(|s| s.parse::<f64>().ok()) {
+        obj.insert("manualMin".into(), json_num(v));
+    }
+    if let Some(v) = g.attr("manualMax").and_then(|s| s.parse::<f64>().ok()) {
+        obj.insert("manualMax".into(), json_num(v));
+    }
+    if let Some(colors) = inspect_colors(g) {
+        obj.insert("colors".into(), colors);
+    }
     let mut items = Vec::new();
     if let Some(list) = g.child_by_local("sparklines") {
         for el in list.children_by_local("sparkline") {
@@ -47,6 +86,29 @@ fn inspect_one(g: &Element, sheet: &str, n: usize) -> Value {
     }
     obj.insert("sparklines".into(), Value::Array(items));
     Value::Object(obj)
+}
+
+fn inspect_colors(g: &Element) -> Option<Value> {
+    let mut m = Map::new();
+    for (key, local) in [
+        ("series", "colorSeries"),
+        ("negative", "colorNegative"),
+        ("axis", "colorAxis"),
+        ("markers", "colorMarkers"),
+        ("first", "colorFirst"),
+        ("last", "colorLast"),
+        ("high", "colorHigh"),
+        ("low", "colorLow"),
+    ] {
+        if let Some(c) = g.child_by_local(local).and_then(style::color_json) {
+            m.insert(key.into(), c);
+        }
+    }
+    if m.is_empty() {
+        None
+    } else {
+        Some(Value::Object(m))
+    }
 }
 
 fn inspect_sparkline(el: &Element) -> Value {
@@ -80,7 +142,7 @@ pub(crate) fn apply_insert(
         ));
     }
     let formula = write_formula(sheet, &op.formula);
-    let mut group = new_group(op.kind);
+    let mut group = new_group(op);
     let mut list = Element::new("x14:sparklines");
     list.push_element(new_sparkline(&op.refer, &formula));
     group.push_element(list);
@@ -122,6 +184,29 @@ pub(crate) fn apply_set(
                 el.set_attr("type", kind.as_str());
             }
         }
+    }
+    if let Some(v) = op.display_empty {
+        el.set_attr("displayEmptyCellsAs", v.as_str());
+    }
+    patch_flag(el, "markers", op.markers);
+    patch_flag(el, "high", op.high);
+    patch_flag(el, "low", op.low);
+    patch_flag(el, "first", op.first);
+    patch_flag(el, "last", op.last);
+    patch_flag(el, "negative", op.negative);
+    patch_flag(el, "displayXAxis", op.display_x_axis);
+    match &op.line_weight {
+        Patch::Absent => {}
+        Patch::Clear => el.remove_attr("lineWeight"),
+        Patch::Set(v) => el.set_attr("lineWeight", fmt_spark_num(*v)),
+    }
+    apply_axis(el, "minAxisType", "manualMin", op.min_axis, &op.manual_min);
+    apply_axis(el, "maxAxisType", "manualMax", op.max_axis, &op.manual_max);
+    if let Some(colors) = &op.colors {
+        overlay_colors(el, colors);
+    }
+    if op.refer.is_none() && !matches!(op.formula, Patch::Set(_)) {
+        return Ok(());
     }
     let spark = el.child_by_local_mut("sparklines").and_then(|p| {
         p.children.iter_mut().find_map(|n| match n {
@@ -184,23 +269,41 @@ pub(crate) fn apply_delete(
     Ok(())
 }
 
-fn new_group(kind: SparklineType) -> Element {
+fn new_group(op: &InsertSparklineOp) -> Element {
     let mut g = Element::new("x14:sparklineGroup");
-    g.set_attr("displayEmptyCellsAs", "gap");
-    if kind != SparklineType::Line {
-        g.set_attr("type", kind.as_str());
+    g.set_attr("displayEmptyCellsAs", op.display_empty.as_str());
+    if op.kind != SparklineType::Line {
+        g.set_attr("type", op.kind.as_str());
     }
-    for (name, rgb) in [
-        ("x14:colorSeries", COLOR_SERIES),
-        ("x14:colorNegative", COLOR_NEG),
-        ("x14:colorAxis", COLOR_AXIS),
-        ("x14:colorMarkers", COLOR_NEG),
-        ("x14:colorFirst", COLOR_NEG),
-        ("x14:colorLast", COLOR_NEG),
-        ("x14:colorHigh", COLOR_NEG),
-        ("x14:colorLow", COLOR_NEG),
+    set_flag(&mut g, "markers", op.markers);
+    set_flag(&mut g, "high", op.high);
+    set_flag(&mut g, "low", op.low);
+    set_flag(&mut g, "first", op.first);
+    set_flag(&mut g, "last", op.last);
+    set_flag(&mut g, "negative", op.negative);
+    set_flag(&mut g, "displayXAxis", op.display_x_axis);
+    if let Some(w) = op.line_weight {
+        g.set_attr("lineWeight", fmt_spark_num(w));
+    }
+    write_axis_type(&mut g, "minAxisType", op.min_axis);
+    write_axis_type(&mut g, "maxAxisType", op.max_axis);
+    if let Some(v) = op.manual_min {
+        g.set_attr("manualMin", fmt_spark_num(v));
+    }
+    if let Some(v) = op.manual_max {
+        g.set_attr("manualMax", fmt_spark_num(v));
+    }
+    for (name, rgb, spec) in [
+        ("x14:colorSeries", COLOR_SERIES, op.colors.series.as_ref()),
+        ("x14:colorNegative", COLOR_NEG, op.colors.negative.as_ref()),
+        ("x14:colorAxis", COLOR_AXIS, op.colors.axis.as_ref()),
+        ("x14:colorMarkers", COLOR_NEG, op.colors.markers.as_ref()),
+        ("x14:colorFirst", COLOR_NEG, op.colors.first.as_ref()),
+        ("x14:colorLast", COLOR_NEG, op.colors.last.as_ref()),
+        ("x14:colorHigh", COLOR_NEG, op.colors.high.as_ref()),
+        ("x14:colorLow", COLOR_NEG, op.colors.low.as_ref()),
     ] {
-        g.push_element(Element::new(name).with_attr("rgb", rgb));
+        g.push_element(spark_color_el(name, spec, rgb));
     }
     g
 }
@@ -371,11 +474,11 @@ fn spark_type_str(g: &Element) -> String {
     }
 }
 
-fn display_empty(g: &Element) -> DisplayEmpty {
+fn display_empty(g: &Element) -> SparkEmpty {
     match g.attr("displayEmptyCellsAs").map(str::trim) {
-        Some("gap") => DisplayEmpty::Gap,
-        Some("span") => DisplayEmpty::Span,
-        _ => DisplayEmpty::Zero,
+        Some("gap") => SparkEmpty::Gap,
+        Some("span") => SparkEmpty::Span,
+        _ => SparkEmpty::Zero,
     }
 }
 
@@ -411,19 +514,115 @@ fn not_found(id: &str, i: usize) -> Error {
     )
 }
 
-#[derive(Clone, Copy)]
-enum DisplayEmpty {
-    Gap,
-    Span,
-    Zero,
+fn attr_true(el: &Element, name: &str) -> bool {
+    matches!(
+        el.attr(name),
+        Some("1") | Some("true") | Some("TRUE") | Some("on")
+    )
 }
 
-impl DisplayEmpty {
-    fn as_str(self) -> &'static str {
-        match self {
-            Self::Gap => "gap",
-            Self::Span => "span",
-            Self::Zero => "zero",
+fn set_flag(el: &mut Element, name: &str, on: bool) {
+    if on {
+        el.set_attr(name, "1");
+    }
+}
+
+fn patch_flag(el: &mut Element, name: &str, v: Option<bool>) {
+    match v {
+        None => {}
+        Some(true) => el.set_attr(name, "1"),
+        Some(false) => el.remove_attr(name),
+    }
+}
+
+fn json_num(v: f64) -> Value {
+    if v.fract() == 0.0 && v.abs() <= (i64::MAX as f64) {
+        json!(v as i64)
+    } else {
+        json!(v)
+    }
+}
+
+fn fmt_spark_num(v: f64) -> String {
+    if v.fract() == 0.0 && v.abs() < 1e15 {
+        format!("{}", v as i64)
+    } else {
+        format!("{v}")
+    }
+}
+
+fn write_axis_type(el: &mut Element, attr: &str, kind: Option<SparkAxisType>) {
+    match kind {
+        None | Some(SparkAxisType::Individual) => {
+            if kind.is_some() {
+                el.remove_attr(attr);
+            }
         }
+        Some(other) => el.set_attr(attr, other.as_str()),
+    }
+}
+
+fn apply_axis(
+    el: &mut Element,
+    type_attr: &str,
+    manual_attr: &str,
+    kind: Option<SparkAxisType>,
+    manual: &Patch<f64>,
+) {
+    if let Some(kind) = kind {
+        match kind {
+            SparkAxisType::Individual => el.remove_attr(type_attr),
+            SparkAxisType::Group | SparkAxisType::Custom => {
+                el.set_attr(type_attr, kind.as_str());
+            }
+        }
+        if kind != SparkAxisType::Custom && matches!(manual, Patch::Absent) {
+            el.remove_attr(manual_attr);
+        }
+    }
+    match manual {
+        Patch::Absent => {}
+        Patch::Clear => el.remove_attr(manual_attr),
+        Patch::Set(v) => el.set_attr(manual_attr, fmt_spark_num(*v)),
+    }
+}
+
+fn spark_color_el(name: &str, spec: Option<&ColorSpec>, default: &str) -> Element {
+    match spec {
+        Some(spec) => style::color_el(name, spec),
+        None => Element::new(name).with_attr("rgb", default),
+    }
+}
+
+fn overlay_colors(g: &mut Element, colors: &SparkColors) {
+    let items = [
+        ("colorSeries", "x14:colorSeries", colors.series.as_ref()),
+        (
+            "colorNegative",
+            "x14:colorNegative",
+            colors.negative.as_ref(),
+        ),
+        ("colorAxis", "x14:colorAxis", colors.axis.as_ref()),
+        ("colorMarkers", "x14:colorMarkers", colors.markers.as_ref()),
+        ("colorFirst", "x14:colorFirst", colors.first.as_ref()),
+        ("colorLast", "x14:colorLast", colors.last.as_ref()),
+        ("colorHigh", "x14:colorHigh", colors.high.as_ref()),
+        ("colorLow", "x14:colorLow", colors.low.as_ref()),
+    ];
+    for (local, prefixed, spec) in items {
+        let Some(spec) = spec else { continue };
+        set_named_el(g, local, style::color_el(prefixed, spec));
+    }
+}
+
+fn set_named_el(parent: &mut Element, local: &str, el: Element) {
+    if let Some(i) = parent
+        .children
+        .iter()
+        .position(|n| matches!(n, Node::Element(e) if e.local_name() == local))
+    {
+        parent.children[i] = Node::Element(el);
+    } else {
+        parent.push_element(el);
     }
 }

@@ -354,3 +354,92 @@ fn formula_strips_equals() {
         json!(true)
     );
 }
+
+#[test]
+fn insert_top10_above_average_and_text() {
+    let src = create_book("xfs");
+    let out = tmp("xfs-out");
+    apply(
+        &src,
+        &out,
+        json!([
+            {
+                "op": "insertConditionalFormat",
+                "id": "sheet:Sheet1",
+                "sqref": "A1:A10",
+                "type": "top10",
+                "rank": 3,
+                "dxf": { "font": { "bold": true } }
+            },
+            {
+                "op": "insertConditionalFormat",
+                "id": "sheet:Sheet1",
+                "sqref": "A1:A10",
+                "type": "aboveAverage",
+                "aboveAverage": false
+            },
+            {
+                "op": "insertConditionalFormat",
+                "id": "sheet:Sheet1",
+                "sqref": "A1:A10",
+                "type": "containsText",
+                "text": "foo"
+            }
+        ]),
+    )
+    .unwrap();
+    let sh = inspect_sheet(&out);
+    let top = &sh["conditionalFormats"][0];
+    assert_eq!(top["type"], json!("top10"));
+    assert_eq!(top["rank"], json!(3));
+    assert!(top.get("percent").is_none());
+    let avg = &sh["conditionalFormats"][1];
+    assert_eq!(avg["type"], json!("aboveAverage"));
+    assert_eq!(avg["aboveAverage"], json!(false));
+    let text = &sh["conditionalFormats"][2];
+    assert_eq!(text["type"], json!("containsText"));
+    assert_eq!(text["text"], json!("foo"));
+    assert_eq!(text["operator"], json!("containsText"));
+    assert_eq!(
+        text["formulas"],
+        json!(["NOT(ISERROR(SEARCH(\"foo\",A1)))"])
+    );
+    let xml = part_text(&out, "xl/worksheets/sheet1.xml");
+    assert!(xml.contains(r#"type="top10""#), "{xml}");
+    assert!(xml.contains(r#"rank="3""#), "{xml}");
+    assert!(xml.contains(r#"aboveAverage="0""#), "{xml}");
+    assert!(xml.contains(r#"text="foo""#), "{xml}");
+}
+
+#[test]
+fn text_without_text_and_top10_operator_rejected() {
+    let src = create_book("xfs-bad");
+    let out = tmp("xfs-bad-out");
+    let err = apply(
+        &src,
+        &out,
+        json!([{
+            "op": "insertConditionalFormat",
+            "id": "sheet:Sheet1",
+            "sqref": "A1:A10",
+            "type": "containsText"
+        }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+    assert!(!out.exists());
+    let err2 = apply(
+        &src,
+        &out,
+        json!([{
+            "op": "insertConditionalFormat",
+            "id": "sheet:Sheet1",
+            "sqref": "A1:A10",
+            "type": "top10",
+            "operator": "greaterThan"
+        }]),
+    )
+    .unwrap_err();
+    assert_eq!(err2.code(), ErrorCode::InvalidField);
+    assert!(!out.exists());
+}

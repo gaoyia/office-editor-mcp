@@ -65,7 +65,7 @@ apply 用 `insertShape` / `deleteShape` / `insertConnector` / `deleteConnector`�
 `setTextBoxSize` / `setTextBoxAnchor` 也认形状 id 与连接线 id。
 xlsx 的 `scope.smartArt` 与 SmartArt op 认工作表 diagram `xdr:graphicFrame`。
 xlsx 的 `scope.hyperlinks` 与超链接 op 认工作表 `<hyperlinks>`（ECMA-376 §18.3.1.47），不认 `HYPERLINK()` 公式，也不认图或框上的 DrawingML 链。
-xlsx 的 `scope.sparklines` 与迷你图 op 认工作表 `extLst` 里的 `x14:sparklineGroups`（MS-XLSX §2.4.8），不把折线画进树。
+xlsx 的 `scope.sparklines` 与迷你图 op 认工作表 `extLst` 里的 `x14:sparklineGroups`（MS-XLSX §2.4.8），可读写颜色、标记与坐标轴，不把折线画进树。
 xlsx 的 `scope.connections` 与连接 op 认工作簿 `/xl/connections.xml`（ECMA-376 §18.13），不刷新、不把查询结果写进单元格。
 xlsx 的 `scope.externalLinks` 与外部引用 op 认工作簿 `<externalReferences>`（ECMA-376 §18.14），不打开目标文件，不求值。
 xlsx 的 `scope.customViews` 与自定义视图 op 认工作簿 `<customWorkbookViews>`（ECMA-376 §18.2.3 / §18.2.4），不按视图恢复隐藏行 / 列。

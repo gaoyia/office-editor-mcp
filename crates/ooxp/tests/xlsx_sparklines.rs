@@ -206,7 +206,14 @@ fn insert_line_inspect_set_delete() {
     assert_eq!(groups.len(), 1);
     assert_eq!(
         object_keys(&groups[0]),
-        ["id", "index", "type", "displayEmptyCellsAs", "sparklines"]
+        [
+            "id",
+            "index",
+            "type",
+            "displayEmptyCellsAs",
+            "colors",
+            "sparklines"
+        ]
     );
     assert_eq!(groups[0]["id"], "sheet:Sheet1/spark:1");
     assert_eq!(groups[0]["index"], 1);
@@ -508,4 +515,75 @@ fn group_with_many_cannot_set_ref() {
         inspect_sparks(&ok)["sheets"][0]["sparklines"][0]["type"],
         "column"
     );
+}
+
+#[test]
+fn insert_markers_and_custom_axis() {
+    let src = create_book("axis");
+    let out = tmp("axis-out");
+    apply(
+        &src,
+        &out,
+        json!([{
+            "op": "insertSparkline",
+            "id": "sheet:Sheet1",
+            "ref": "A1",
+            "formula": "B1:F1",
+            "markers": true,
+            "minAxisType": "custom",
+            "manualMin": -2,
+            "colors": { "series": { "rgb": "FF112233" } }
+        }]),
+    )
+    .unwrap();
+    let g = &inspect_sparks(&out)["sheets"][0]["sparklines"][0];
+    assert_eq!(g["markers"], true);
+    assert_eq!(g["minAxisType"], "custom");
+    assert_eq!(g["manualMin"], json!(-2));
+    assert_eq!(g["colors"]["series"]["rgb"], "FF112233");
+    assert_eq!(g["colors"]["axis"]["rgb"], "FF000000");
+    let xml = part_text(&out, "xl/worksheets/sheet1.xml");
+    assert!(xml.contains("markers=\"1\""), "{xml}");
+    assert!(xml.contains("minAxisType=\"custom\""), "{xml}");
+    assert!(xml.contains("manualMin=\"-2\""), "{xml}");
+    assert!(xml.contains("FF112233"), "{xml}");
+
+    let set_out = tmp("axis-set");
+    apply(
+        &out,
+        &set_out,
+        json!([{
+            "op": "setSparkline",
+            "id": "sheet:Sheet1/spark:1",
+            "markers": false,
+            "lineWeight": 1.5,
+            "colors": { "negative": { "rgb": "FF00FF00" } }
+        }]),
+    )
+    .unwrap();
+    let g2 = &inspect_sparks(&set_out)["sheets"][0]["sparklines"][0];
+    assert!(g2.get("markers").is_none());
+    assert_eq!(g2["lineWeight"], json!(1.5));
+    assert_eq!(g2["colors"]["series"]["rgb"], "FF112233");
+    assert_eq!(g2["colors"]["negative"]["rgb"], "FF00FF00");
+}
+
+#[test]
+fn custom_axis_without_manual_rejected() {
+    let src = create_book("axis-bad");
+    let out = tmp("axis-bad-out");
+    let err = apply(
+        &src,
+        &out,
+        json!([{
+            "op": "insertSparkline",
+            "id": "sheet:Sheet1",
+            "ref": "A1",
+            "formula": "B1:F1",
+            "minAxisType": "custom"
+        }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+    assert!(!out.exists());
 }
