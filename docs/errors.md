@@ -273,6 +273,16 @@
 - 往页眉槽位插图时出现 `from` / `to` / `anchor` 或偏移字段报 `InvalidField`
 - pptx 的 `insertPicture` 出现 `kind` / `wrap` / `from` / `to` / `anchor` 或 xlsx 偏移字段报 `InvalidField`
 - `x` / `y` 只给一个时报 `InvalidField`
+- pptx 的 `insertVideo` / `insertAudio` 的 `id` 必须是 `slide:{n}`、`slide:{n}/notes`、`master:{n}` 或 `master:{n}/layout:{k}`
+- `deleteMedia` / `setMedia` 的 `id` 必须是视频 id 或音频 id
+- 找不到该媒体报 `IdNotFound`
+- 不是这些 id 报 `InvalidId`
+- `setMedia` 一个可写字段都不给报 `InvalidField`
+- `st` / `end` / 书签 `time` 不是非负数报 `InvalidField`
+- 书签名空串或同一列表内重复报 `InvalidField`
+- 字幕 `file` 不是 WebVTT 报 `InvalidField`
+- `trackDisplayLoc` 不是 `media` / `slide` 报 `InvalidField`
+- xlsx / docx 上发这些媒体 op 报 `InvalidField`
 - 下列图片 op 的 `id` 必须是图 id（xlsx 含页眉图 id，pptx 为 `slide:{n}/pic:…`、`slide:{n}/notes/pic:…`、`master:{n}/pic:…`、`master:{n}/layout:{k}/pic:…` 或批注内图 id）
   - `replacePicture`
   - `deletePicture`

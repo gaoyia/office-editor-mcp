@@ -188,6 +188,10 @@ fn insert_video_inspect_export_delete() {
     assert_eq!(videos[0]["cx"], 3048000);
     assert_eq!(videos[0]["cy"], 2286000);
     assert_eq!(videos[0]["stable"], true);
+    assert_eq!(videos[0]["st"], 0);
+    assert_eq!(videos[0]["end"], 0);
+    assert_eq!(videos[0]["bookmarks"], json!([]));
+    assert_eq!(videos[0]["tracks"], json!([]));
     assert_eq!(
         object_keys(&videos[0]),
         [
@@ -201,7 +205,11 @@ fn insert_video_inspect_export_delete() {
             "embedded",
             "fileName",
             "contentType",
-            "stable"
+            "stable",
+            "st",
+            "end",
+            "bookmarks",
+            "tracks"
         ]
     );
     assert_eq!(tree["slides"][0]["audios"], json!([]));
@@ -403,4 +411,150 @@ fn xlsx_and_docx_reject_media_ops_and_scope() {
     )
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);
+}
+
+fn write_vtt(tag: &str) -> PathBuf {
+    let p = tmp(tag).with_extension("vtt");
+    std::fs::write(&p, "WEBVTT\n\n00:00:00.000 --> 00:00:00.800\nhello\n").unwrap();
+    p
+}
+
+#[test]
+fn set_media_trim_bookmarks_and_tracks() {
+    let src = create_deck("trim");
+    let mp4 = write_mp4("clip");
+    let vtt = write_vtt("cap");
+    let inserted = tmp("ins-t").with_extension("pptx");
+    apply(
+        &src,
+        &inserted,
+        json!([{
+            "op": "insertVideo",
+            "id": "slide:1",
+            "file": mp4.to_string_lossy()
+        }]),
+    )
+    .unwrap();
+    let patched = tmp("set-t").with_extension("pptx");
+    apply(
+        &inserted,
+        &patched,
+        json!([{
+            "op": "setMedia",
+            "id": "slide:1/video:3",
+            "st": 100,
+            "end": 200,
+            "bookmarks": [{ "name": "MarkA", "time": 300 }],
+            "tracks": [{ "label": "English", "lang": "en", "file": vtt.to_string_lossy() }]
+        }]),
+    )
+    .unwrap();
+    let tree = inspect_media(&patched);
+    let v = &tree["slides"][0]["videos"][0];
+    assert_eq!(v["st"], 100);
+    assert_eq!(v["end"], 200);
+    assert_eq!(v["bookmarks"][0]["name"], "MarkA");
+    assert_eq!(v["bookmarks"][0]["time"], 300);
+    assert_eq!(v["tracks"][0]["label"], "English");
+    assert_eq!(v["tracks"][0]["lang"], "en");
+    assert!(v["tracks"][0]["fileName"]
+        .as_str()
+        .unwrap()
+        .ends_with(".vtt"));
+    assert_eq!(v["trackDisplayLoc"], "media");
+    let xml = String::from_utf8(part_bytes(&patched, "ppt/slides/slide1.xml")).unwrap();
+    assert!(xml.contains("p14:trim"));
+    assert!(xml.contains("name=\"MarkA\""));
+    assert!(xml.contains("tracksInfo"));
+    assert!(!xml.contains("<p:timing"));
+    let rels = String::from_utf8(part_bytes(&patched, "ppt/slides/_rels/slide1.xml.rels")).unwrap();
+    assert!(rels.contains("/track"));
+
+    let cleared = tmp("clr-t").with_extension("pptx");
+    apply(
+        &patched,
+        &cleared,
+        json!([{
+            "op": "setMedia",
+            "id": "slide:1/video:3",
+            "st": 0,
+            "end": 0,
+            "bookmarks": [],
+            "tracks": []
+        }]),
+    )
+    .unwrap();
+    let after = inspect_media(&cleared);
+    let v2 = &after["slides"][0]["videos"][0];
+    assert_eq!(v2["st"], 0);
+    assert_eq!(v2["end"], 0);
+    assert_eq!(v2["bookmarks"], json!([]));
+    assert_eq!(v2["tracks"], json!([]));
+    let xml2 = String::from_utf8(part_bytes(&cleared, "ppt/slides/slide1.xml")).unwrap();
+    assert!(!xml2.contains("<p14:trim"));
+    assert!(!xml2.contains("bmkLst"));
+    assert!(!xml2.contains("tracksInfo"));
+
+    let err = apply(
+        &inserted,
+        &tmp("bad-t").with_extension("pptx"),
+        json!([{ "op": "setMedia", "id": "slide:1" }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidId);
+    let err = apply(
+        &inserted,
+        &tmp("empty-t").with_extension("pptx"),
+        json!([{ "op": "setMedia", "id": "slide:1/video:3" }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+    let err = apply(
+        &inserted,
+        &tmp("dup-t").with_extension("pptx"),
+        json!([{
+            "op": "setMedia",
+            "id": "slide:1/video:3",
+            "bookmarks": [
+                { "name": "A", "time": 1 },
+                { "name": "A", "time": 2 }
+            ]
+        }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+}
+
+#[test]
+fn insert_video_clip_fields() {
+    let src = create_deck("ins-clip");
+    let mp4 = write_mp4("clip-i");
+    let vtt = write_vtt("cap-i");
+    let inserted = tmp("ins-clip").with_extension("pptx");
+    apply(
+        &src,
+        &inserted,
+        json!([{
+            "op": "insertVideo",
+            "id": "slide:1",
+            "file": mp4.to_string_lossy(),
+            "st": 100,
+            "end": 200,
+            "bookmarks": [{ "name": "MarkA", "time": 300 }],
+            "tracks": [{ "label": "English", "lang": "en", "file": vtt.to_string_lossy() }]
+        }]),
+    )
+    .unwrap();
+    let tree = inspect_media(&inserted);
+    let v = &tree["slides"][0]["videos"][0];
+    assert_eq!(v["st"], 100);
+    assert_eq!(v["end"], 200);
+    assert_eq!(v["bookmarks"][0]["name"], "MarkA");
+    assert_eq!(v["tracks"][0]["label"], "English");
+    assert_eq!(v["trackDisplayLoc"], "media");
+    let xml = String::from_utf8(part_bytes(&inserted, "ppt/slides/slide1.xml")).unwrap();
+    assert!(xml.contains("p14:trim"));
+    assert!(xml.contains("name=\"MarkA\""));
+    assert!(xml.contains("tracksInfo"));
+    assert!(!xml.contains("<p:timing"));
 }

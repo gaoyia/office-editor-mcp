@@ -163,6 +163,7 @@ $order = @(
     'pptx-model3d'
     'pptx-omml'
     'pptx-media'
+    'pptx-media-trim'
     'pptx-sections'
     'pptx-charts'
     'pptx-charts-remain'

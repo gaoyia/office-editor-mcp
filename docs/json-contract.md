@@ -49,7 +49,8 @@ pptx 的 `scope.notesMaster` 列出备注母版占位符，apply 用同一套占
 pptx 的 `scope.hyperlinks` 与超链接 op 认幻灯片文本形状上的形状级 `p:cNvPr/a:hlinkClick` 与 run 级 `a:rPr/a:hlinkClick`（跳转 / 文件 / URL），不认图、表、图表、SmartArt、备注或母版上的链。
 pptx 的 `scope.fields` 列出幻灯片文本形状里的 `a:fld`；apply 用 `insertField` / `setField` / `deleteField` 写页码与日期域，不求值。
 xlsx 仍拒 `scope.fields` 与这三条。docx 仍写 `w:fldChar` / `instr`，并可按 `code` 写常用域与窗体 `ffData`。
-pptx 的 `scope.media` 与媒体 op 认幻灯片上带 `a:videoFile` / `a:audioFile` 的 `p:pic`，与普通图分家。
+pptx 的 `scope.media` 与媒体 op 认幻灯片、备注页与幻灯片母版 / 版式上带 `a:videoFile` / `a:audioFile` 的 `p:pic`，与普通图分家。
+inspect 带裁剪、书签与字幕轨；apply 用 `setMedia` 改这些字段，不写 fade，不写 timing。
 pptx 的 `scope.sections` 与幻灯片节 op 认 presentation 上 `p14:sectionLst`（MS-PPTX §2.3.1.25）的分组元数据，页顺序仍以 `p:sldIdLst` 为准；不要和 docx 的 `w:sectPr` 节混淆。
 pptx 的 `scope.customShows` 与自定义放映 op 认 `p:custShowLst`（ECMA-376 §19.2.1.5–19.2.1.7），页引用是 presentation 关系 `r:id`，不实现放映引擎。
 pptx 的 `scope.oleObjects` 与 OLE op 认幻灯片上带嵌入关系的 `p:oleObj`（`p:graphicFrame`，ECMA-376 §19.3.2.4），
@@ -276,7 +277,7 @@ pptx 认 `setShapeText`、`setShapeFormat`、形状管理 op（`insertShape`、`
 `setSlideLayout`）、以及母版写入 op（`insertLayout`、`deleteLayout`、`insertPlaceholder`、`deletePlaceholder`、`insertMaster`、
 `deleteMaster`）、以及主题与尺寸 op（`setSlideSize`、`setThemeColors`、`setThemeFonts`）、以及动画 op（`insertAnim`、`setAnim`、`deleteAnim`、`moveAnim`）、
 以及 `setHandoutText`、以及超链接 op（`insertHyperlink`、`setHyperlink`、`deleteHyperlink`）、以及域 op（`insertField`、`setField`、
-`deleteField`）、以及媒体 op（`insertVideo`、`insertAudio`、`deleteMedia`）、以及幻灯片节 op（`insertSlideSection`、`setSlideSectionName`、
+`deleteField`）、以及媒体 op（`insertVideo`、`insertAudio`、`deleteMedia`、`setMedia`）、以及幻灯片节 op（`insertSlideSection`、`setSlideSectionName`、
 `deleteSlideSection`、`setSlideSection`）、以及自定义放映 op（`insertCustomShow`、`setCustomShow`、`deleteCustomShow`）、
 以及 OLE op（`insertOle`、`deleteOle`）、以及 3D 模型 op（`insertModel3d`、`replaceModel3d`、`deleteModel3d`）、以及公式 op（`insertMath`、`setMath`、`deleteMath`）、以及 Zoom op（`insertZoom`、`deleteZoom`）、以及 `setShowPr`、以及 `setProtection`、
 以及 `setProps` / `setCustomProp` / `deleteCustomProp`。
@@ -304,7 +305,7 @@ pptx 认 `setShapeText`、`setShapeFormat`、形状管理 op（`insertShape`、`
  / `deleteLayout` / `insertPlaceholder` / `deletePlaceholder` / `insertMaster` / `deleteMaster` / `setSlideSize`
  / `setThemeColors` / `setThemeFonts` / `setHandoutText` / `setShapePos` / `setShapeSize` / `setShapeFill`
  / `setShapeLine` / `setTableCellText` / `setTablePos` / `setTableSize` / `insertVideo` / `insertAudio`
- / `deleteMedia` / `insertSlideSection` / `setSlideSectionName` / `deleteSlideSection` / `setSlideSection`
+ / `deleteMedia` / `setMedia` / `insertSlideSection` / `setSlideSectionName` / `deleteSlideSection` / `setSlideSection`
  / `insertCustomShow` / `setCustomShow` / `deleteCustomShow` / `insertZoom` / `deleteZoom`）报 `InvalidField`。
 xlsx 上发 `insertTable` / `deleteTable` / `insertRow` / `deleteRow` / `insertCol` / `deleteCol` / `mergeCells` / `splitCells` 仍报 `InvalidField`。
 对 docx 发 `insertShape` / `deleteShape` / `setShapeFormat` 报 `InvalidField`。pptx 上发 `mergeCells` / `splitCells` 报 `InvalidField`。

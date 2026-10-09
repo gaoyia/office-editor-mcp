@@ -1108,8 +1108,20 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             "file is not InkML (root element must be ink in the InkML namespace)".into()
         }
         ErrorKind::InvalidMediaFile => {
-            "file is not a recognized media clip (insertVideo accepts MP4, insertAudio accepts WAV)"
+            "file is not a recognized media clip (insertVideo accepts MP4, insertAudio accepts WAV, subtitle tracks accept WebVTT)"
                 .into()
+        }
+        ErrorKind::NeedSetMediaField => {
+            "setMedia requires at least one of st, end, bookmarks, or tracks".into()
+        }
+        ErrorKind::InvalidMediaTime => {
+            "st, end, and bookmark time must be non-negative numbers".into()
+        }
+        ErrorKind::DuplicateBookmarkName => {
+            "bookmark names on the same media object must be unique".into()
+        }
+        ErrorKind::InvalidTrack => {
+            "media bookmark or subtitle track name / label / id / trackDisplayLoc is invalid".into()
         }
         ErrorKind::NeedsPptxSectionList => "the presentation has no slide section list".into(),
         ErrorKind::SlideNotInPptxSection => "that slide is not in any section".into(),

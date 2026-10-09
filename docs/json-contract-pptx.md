@@ -260,9 +260,10 @@ Zoom Fallback 预览 `p:pic` 同样不进 `pictures`。`mc:AlternateContent` 只
 音频 id 同样取 `cNvPr/@id`，没有则用 `slide:{n}/audio:index:{k}`。`{k}` 只在该页全部被收入的音频内从 1 计。
 只认 `p:nvPr` 下带 `a:audioFile`（§20.1.3.5）或 `a:wavAudioFile`（§20.1.3.7）的 `p:pic`；同时带 `a:videoFile` 时算视频，不算音频。备注页、幻灯片母版、版式上的音频进树，id 带对应前缀。批注、备注母版、讲义上的音频不进树。
 
-`insertVideo` / `insertAudio` 的 `id` 必须是 `slide:{n}`、`slide:{n}/notes`、`master:{n}` 或 `master:{n}/layout:{k}`。`deleteMedia` 的 `id` 必须是视频 id 或音频 id。
-对图 id、形状 id 或 `pptx:presentation` 发这三条报 `InvalidId`。`id` 为 `slide:{n}/notes` 且该页还没有 notesSlide 时，按 `setNotesText` 同一套新建最小备注页再插入。
-对 `notesMaster` / `handout` 发这三条报 `InvalidId`。
+`insertVideo` / `insertAudio` 的 `id` 必须是 `slide:{n}`、`slide:{n}/notes`、`master:{n}` 或 `master:{n}/layout:{k}`。
+`deleteMedia` / `setMedia` 的 `id` 必须是视频 id 或音频 id。
+对图 id、形状 id 或 `pptx:presentation` 发这四条报 `InvalidId`。`id` 为 `slide:{n}/notes` 且该页还没有 notesSlide 时，按 `setNotesText` 同一套新建最小备注页再插入。
+对 `notesMaster` / `handout` 发 `insertVideo` / `insertAudio` 报 `InvalidId`。
 
 节 `{n}` 从 1 起，按 Presentation 里 `p:extLst/p:ext[@uri="{521415D9-36F7-43E2-AB2F-B90AF26B5E84}"]/p14:sectionLst/p14:section`
  的出现顺序（MS-PPTX §2.3.1.25、§2.3.3.24）。
@@ -870,13 +871,29 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   `text` 为该 `oMath` 内 `m:t` 拼接；忽略 `a:fld` 外壳。不把 OMML 原文、不把 `expr` 放进树。
   Fallback 文本框不进 `shapes`。xlsx / docx 见各自分册。
 - `scope.media` 为 `true` 时，每页带 `videos` 与 `audios`（先 `videos` 后 `audios`）。没有则为空数组。不依赖 `scope.slide`。
-  每条字段顺序：`id`、`cNvPrId`、`name`、`x`、`y`、`cx`、`cy`、`embedded`、`fileName`、`contentType`、`stable`。
+  每条字段顺序：`id`、`cNvPrId`、`name`、`x`、`y`、`cx`、`cy`、`embedded`、`fileName`、`contentType`、`stable`、
+  `st`、`end`、`bookmarks`、`tracks`。
+  有字幕轨时再跟 `trackDisplayLoc`。
   `cNvPrId` / `name` / `x` / `y` / `cx` / `cy` / `stable` 规则与图相同。
   `embedded`：媒体关系 `TargetMode` 不是 `External`、且目标部件在包内为 `true`，否则为 `false`。
   优先取 `p14:media/@r:embed`（MS-PPTX §2.3.1.18）；
   没有则取 `a:videoFile` / `a:audioFile` / `a:wavAudioFile` 的 `r:link` 或 `r:embed`。
   `fileName` 取该关系 `Target` 的文件名（最后一段），外链取路径最后一段；对不上关系则为 `null`。
   `contentType` 取 `[Content_Types].xml` 对该部件的 Default 或 Override；外链或没有则为 `null`。不把字节放进树。
+  `st` / `end` 取 `p14:media/p14:trim` 的 `st` / `end`（MS-PPTX `CT_MediaTrim`）。
+  这是从片头 / 片尾裁掉的毫秒，不是播放窗口的起止时刻。没有 `trim` 或没有该属性则为 `0`。
+  值为无单位数字；整数在 JSON 里写成整数，带小数则保留。
+  `bookmarks` 取 `p14:bmkLst/p14:bmk` 文档顺序。没有则为 `[]`。
+  每条字段顺序：`name`、`time`。`name` 取 `@name`，没有则为 `""`。
+  `time` 取 `@time`，相对媒体文件开头的毫秒，规则与 `st` 相同；缺属性则为 `0`。
+  `tracks` 取 `p14:media` 的 `extLst` 里 uri `{3AFAAA56-56D3-431D-BCD4-E75A35582382}` 的 `tracksInfo/trackLst/track`
+  （MS-PPTX §2.2.4.1、§2.13；命名空间 `http://schemas.microsoft.com/office/powerpoint/2017/3/main`）。
+  没有则为 `[]`。有字幕轨时再跟 `trackDisplayLoc`，取 `tracksInfo/@displayLoc`；缺则为 `"media"`。
+  每条字幕字段顺序：`id`、`label`、`lang`、`fileName`、`embedded`。
+  `id` 取 `@id` 原文，缺则为 `null`。`label` 取 `@label`，缺则为 `""`。
+  `lang` 取 `@lang`，缺则为 `null`。
+  `fileName` / `embedded` 取该 `r:embed` 或 `r:link`（`link` 优先）对上的关系，规则与媒体 `fileName` / `embedded` 相同。
+  不把 VTT 字节放进树。不把 `p14:fade` 放进树。
   xlsx / docx 的 `scope` 里出现 `media` 报 `InvalidField`。
 - `scope.charts` 为 `true` 时，每页带 `charts`。没有图表时为空数组。不依赖 `scope.slide`。
   每张字段顺序：`id`、`cNvPrId`、`name`、`x`、`y`、`cx`、`cy`、`type`，`type` 为 `ofPie` 时再跟 `ofPieType`，
@@ -1278,10 +1295,16 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
 - **`videos[].x` / `videos[].y` / `videos[].cx` / `videos[].cy`**
   - 可选
   - 规则与 pptx `insertVideo` 相同
+- **`videos[].st` / `videos[].end` / `videos[].bookmarks` / `videos[].tracks` / `videos[].trackDisplayLoc`**
+  - 可选
+  - 规则与 pptx `insertVideo` 相同
 - **`audios[].file`**
   - 本地路径，与 `insertAudio` 相同，按文件头认 WAV
   - 缺此字段报 `MissingField`
 - **`audios[].x` / `audios[].y` / `audios[].cx` / `audios[].cy`**
+  - 可选
+  - 规则与 pptx `insertAudio` 相同
+- **`audios[].st` / `audios[].end` / `audios[].bookmarks` / `audios[].tracks` / `audios[].trackDisplayLoc`**
   - 可选
   - 规则与 pptx `insertAudio` 相同
 - **`transition.type`**
@@ -2313,6 +2336,10 @@ theme 关系指向**新复制**的 theme 部件（内容与包内已有 theme �
 | `file` | 本地路径。按文件头认 MP4（`ftyp`），写出 `/ppt/media/mediaN.mp4`，内容类型 `video/mp4` |
 | `x` / `y` | 可选。EMU，非负整数。必须成对出现或成对省略；只给一个时报 `InvalidField` |
 | `cx` / `cy` | 可选。EMU，正整数。必须成对；只给一个时报 `InvalidField` |
+| `st` / `end` | 可选。从片头 / 片尾裁掉的毫秒，非负数字。省略则不写 `<p14:trim>` |
+| `bookmarks` | 可选。书签数组。省略则不写 `<p14:bmkLst>` |
+| `tracks` | 可选。字幕轨数组。省略则不写 `tracksInfo` |
+| `trackDisplayLoc` | 可选。只在给了 `tracks` 时出现。`media` 或 `slide`。省略为 `media` |
 
 找不到该页 / 该母版 / 该版式报 `IdNotFound`。`id` 不是合法宿主报 `InvalidId`。缺 `file` 报 `MissingField`。文件不是 MP4 报 `InvalidField`。
 `kind` / `wrap` / `from` / `to` / `anchor` 出现报 `InvalidField`。缺尺寸则用 `3048000` × `2286000`。
@@ -2325,13 +2352,48 @@ theme 关系指向**新复制**的 theme 部件（内容与包内已有 theme �
 该页 `.rels` 补三条关系：MS-PPTX media（Type `http://schemas.microsoft.com/office/2007/relationships/media`）、ISO video（Type 以 `/video` 结尾），
 两者 `Target` 指向同一 `mediaN.mp4`；
 再补一条 image 关系指向库内生成的海报 PNG（`/ppt/media/imageN.png`）。
-`p:cNvPr/@id` 规则与 `insertPicture` 相同。不写 trim、书签、字幕，不写 `<p:timing>`。xlsx / docx 上发此 op 报 `InvalidField`。
+`p:cNvPr/@id` 规则与 `insertPicture` 相同。
+`st` / `end` 不是非负数字报 `InvalidField`。两者都省略或都为 `0` 则不写 `<p14:trim>`；否则写 `<p14:trim>`，缺的一侧按 `0`。
+`bookmarks` 不是数组报 `InvalidField`。空数组不写 `bmkLst`。
+每条必须是对象，字段只许 `name`、`time`。`name` 必须是非空字符串，同一列表内不得重复。
+`time` 必须是非负数字，相对媒体文件开头。写入 `p14:bmkLst/p14:bmk`，顺序与数组相同。
+`tracks` 不是数组报 `InvalidField`。空数组不写 `tracksInfo`。
+每条必须是对象，字段只许 `id`、`label`、`lang`、`file`。
+`label` 必须是非空字符串。`file` 必须是本地 WebVTT 路径，按文件头认 `WEBVTT`（可带 UTF-8 BOM），写出 `/ppt/media/mediaN.vtt`，内容类型 `text/vtt`。
+该宿主 `.rels` 再补 Type `http://schemas.microsoft.com/office/2017/04/relationships/track`（MS-PPTX §2.1.3）。
+`id` 省略则库生成带花括号的 GUID；给了必须是带花括号的 GUID。`lang` 可选非空字符串。
+`trackDisplayLoc` 不是 `media` / `slide`，或没给 `tracks` 却给了它，报 `InvalidField`。
+字幕写在 `p14:media/p14:extLst/p14:ext[@uri="{3AFAAA56-56D3-431D-BCD4-E75A35582382}"]/p174:tracksInfo`，
+`displayLoc` 按上面的值，`track/@r:embed` 指向该 VTT。只写内嵌，不写 `r:link`。
+不写 `<p14:fade>`。不写 `<p:timing>`。xlsx / docx 上发此 op 报 `InvalidField`。
 
 ### insertAudio
 
 往幻灯片、备注页或幻灯片母版 / 版式插入一段内嵌音频。字段与 `insertVideo` 相同，`op` 为 `"insertAudio"`，`file` 按文件头认 WAV（`RIFF`…`WAVE`），写出 `/ppt/media/mediaN.wav`，内容类型 `audio/x-wav`。
 `p:nvPr` 写 `a:audioFile/@r:link` 与 `p14:media/@r:embed`。ISO 关系 Type 以 `/audio` 结尾。缺尺寸则用 `609600` × `609600`。
 其余规则与 `insertVideo` 相同。文件不是 WAV 报 `InvalidField`。xlsx / docx 上发此 op 报 `InvalidField`。
+
+### setMedia
+
+改已有内嵌视频 / 音频的裁剪、书签与字幕轨。不换媒体文件。不写 `<p:timing>`。不写 `<p14:fade>`。
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"setMedia"` |
+| `id` | 视频 id 或音频 id |
+| `st` / `end` | 可选。从片头 / 片尾裁掉的毫秒，非负数字 |
+| `bookmarks` | 可选。整份替换书签数组。`[]` 或 `null` 去掉 `bmkLst` |
+| `tracks` | 可选。整份替换字幕轨。`[]` 或 `null` 去掉 `tracksInfo` 与不再引用的 VTT |
+| `trackDisplayLoc` | 可选。只在给了 `tracks` 且不是清掉时出现。`media` 或 `slide` |
+
+找不到该对象报 `IdNotFound`。`id` 不是视频 id 也不是音频 id 报 `InvalidId`。
+`st` / `end` / `bookmarks` / `tracks` 一个都不给报 `InvalidField`。
+`st` / `end` 省略则留下现有 trim 的那一侧；两侧写完后都是 `0` 则去掉 `<p14:trim>`。
+`bookmarks` / `tracks` 省略则留下现有名单。校验规则与 `insertVideo` 相同。
+给了 `tracks` 且不是清掉时，每条必须带 `file`（不按已有 GUID 保留旧字节）。
+`trackDisplayLoc` 省略则沿用原 `tracksInfo/@displayLoc`，再没有则为 `media`。
+没有 `p14:media` 时补上：复用已有 media 关系；没有则按现有 `videoFile` / `audioFile` 目标补一条 media 关系。
+原有 `<p14:fade>` 原样留。其它 `p14:ext` 原样留。xlsx / docx 上发此 op 报 `InvalidField`。
 
 ### deleteMedia
 
@@ -2872,9 +2934,10 @@ presentation 关系、新页或被删页及其 `.rels`、内容类型，
 `setHandoutText` 可脏 handoutMaster 及其 `.rels`、必要时 `presentation.xml` 及其 `.rels` 与 `[Content_Types].xml`，以及新建 handoutMaster 时复制的 theme 部件。
 超链接 op 脏该页幻灯片 XML 与该页 `.rels`（新建或删除 hyperlink / slide 关系）。域 op（`insertField` / `setField` / `deleteField`）只脏该页幻灯片 XML。
 媒体 op 还可脏该页 `.rels`、`[Content_Types].xml`，以及新建或被删的 `/ppt/media/mediaN.*` 与海报 `/ppt/media/imageN.*`。
+`setMedia` 给了 `tracks` 时还可新建或删除 `text/vtt` 部件。
 其他页、未点名的幻灯片母版、未点名的版式、主题一律原样写回。未点名的 `presProps` 原样写回。
 一次 `ops` 可以混用 `setShapeText`、`setShapeFormat`、形状管理 op、表格 op、`setNotesText`、`setHandoutText`、批注 op、超链接 op、域 op（`insertField`、`setField`、
-`deleteField`）、图片 op、媒体 op、图表 op、SmartArt op、幻灯片管理 op（含 `setTransition`、`setSlideLayout`）、母版写入 op（`insertLayout`、
+`deleteField`）、图片 op、媒体 op（含 `setMedia`）、图表 op、SmartArt op、幻灯片管理 op（含 `setTransition`、`setSlideLayout`）、母版写入 op（`insertLayout`、
 `deleteLayout`、`insertPlaceholder`、`deletePlaceholder`、`insertMaster`、`deleteMaster`）、主题与尺寸 op（`setSlideSize`、
 `setThemeColors`、`setThemeFonts`）、动画 op（`insertAnim`、`setAnim`、`deleteAnim`、`moveAnim`）、幻灯片节 op、自定义放映 op（`insertCustomShow`、`setCustomShow`、
 `deleteCustomShow`）、OLE op（`insertOle`、`deleteOle`）、Zoom op（`insertZoom`、`deleteZoom`）、`setShowPr`、

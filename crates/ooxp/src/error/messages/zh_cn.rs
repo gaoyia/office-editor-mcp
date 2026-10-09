@@ -1002,7 +1002,13 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             "file 不是 InkML（根元素必须是 InkML 命名空间下的 ink）".into()
         }
         ErrorKind::InvalidMediaFile => {
-            "file 不是本库认的媒体（insertVideo 认 MP4，insertAudio 认 WAV）".into()
+            "file 不是本库认的媒体（insertVideo 认 MP4，insertAudio 认 WAV，字幕认 WebVTT）".into()
+        }
+        ErrorKind::NeedSetMediaField => "setMedia 至少要给 st、end、bookmarks 或 tracks".into(),
+        ErrorKind::InvalidMediaTime => "st、end 与书签 time 必须是非负数字".into(),
+        ErrorKind::DuplicateBookmarkName => "同一媒体上的书签名不能重复".into(),
+        ErrorKind::InvalidTrack => {
+            "字幕轨或书签的 name / label / id / trackDisplayLoc 不合法".into()
         }
         ErrorKind::NeedsPptxSectionList => {
             "文件还没有幻灯片节名单".into()

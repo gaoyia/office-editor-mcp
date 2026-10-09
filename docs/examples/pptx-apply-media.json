@@ -4,6 +4,13 @@
   "path": "deck.pptx",
   "ops": [
     { "op": "insertVideo", "id": "slide:1", "file": "C:\\clip\\intro.mp4" },
-    { "op": "insertAudio", "id": "slide:1", "file": "C:\\clip\\beep.wav" }
+    { "op": "insertAudio", "id": "slide:1", "file": "C:\\clip\\beep.wav" },
+    {
+      "op": "setMedia",
+      "id": "slide:1/video:4",
+      "st": 100,
+      "end": 200,
+      "bookmarks": [{ "name": "MarkA", "time": 300 }]
+    }
   ]
 }

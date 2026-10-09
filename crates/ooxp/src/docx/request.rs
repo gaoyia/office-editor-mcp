@@ -1502,6 +1502,7 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<DocxOp>, Error> {
             || op_name == "insertVideo"
             || op_name == "insertAudio"
             || op_name == "deleteMedia"
+            || op_name == "setMedia"
             || op_name == "insertSlideSection"
             || op_name == "setSlideSectionName"
             || op_name == "deleteSlideSection"

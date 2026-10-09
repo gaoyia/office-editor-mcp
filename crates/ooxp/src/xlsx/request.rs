@@ -2122,6 +2122,7 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<XlsxOp>, Error> {
             | "insertVideo"
             | "insertAudio"
             | "deleteMedia"
+            | "setMedia"
             | "insertSlideSection"
             | "setSlideSectionName"
             | "deleteSlideSection"

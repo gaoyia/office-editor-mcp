@@ -1266,6 +1266,9 @@
                 "$ref": "pptx.schema.json#/$defs/deleteMediaOp"
               },
               {
+                "$ref": "pptx.schema.json#/$defs/setMediaOp"
+              },
+              {
                 "$ref": "pptx.schema.json#/$defs/insertSlideSectionOp"
               },
               {

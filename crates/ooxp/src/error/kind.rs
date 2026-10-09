@@ -768,6 +768,10 @@ define_error_kinds! {
     InvalidImageFile => vec![Self::InvalidImageFile],
     InvalidInkMl => vec![Self::InvalidInkMl],
     InvalidMediaFile => vec![Self::InvalidMediaFile],
+    NeedSetMediaField => vec![Self::NeedSetMediaField],
+    InvalidMediaTime => vec![Self::InvalidMediaTime],
+    DuplicateBookmarkName => vec![Self::DuplicateBookmarkName],
+    InvalidTrack => vec![Self::InvalidTrack],
     NeedsPptxSectionList => vec![Self::NeedsPptxSectionList],
     SlideNotInPptxSection => vec![Self::SlideNotInPptxSection],
     PictureNotFound { id: String } => vec![Self::PictureNotFound { id: "header:default:1/pic:1".into() }],
@@ -1660,6 +1664,10 @@ impl ErrorKind {
             | Self::InvalidImageFile
             | Self::InvalidInkMl
             | Self::InvalidMediaFile
+            | Self::NeedSetMediaField
+            | Self::InvalidMediaTime
+            | Self::DuplicateBookmarkName
+            | Self::InvalidTrack
             | Self::NeedsPptxSectionList
             | Self::SlideNotInPptxSection
             | Self::CannotLinkFirstSection

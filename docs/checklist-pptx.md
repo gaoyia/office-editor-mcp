@@ -5,7 +5,7 @@
 检查前用 create 或 apply 在本机生成文件，不要用改过扩展名的 zip 目录冒充。
 本机若 `PowerPoint.Application` 被 WPS 抢走，直接启动 `POWERPNT.EXE` 再挂 COM，不要走被抢的 ProgID。Office 16 的对象模型在 `mdiClass` 上。
 
-C、I、A、Pp、Pvg、Pem、P3d、Pom、Pc、Psa、Pn、Pcm、Pm、Ps、Tf、Sg、Pt、Tn、Tr、Td、Am、Aw、Mm、Mw、Md、Ts、Ho、Nh、Nm、Phl、Phr、Pcip、Pmd、Psc、Cs、Po、Cr、Pz、Pw、
+C、I、A、Pp、Pvg、Pem、P3d、Pom、Pc、Psa、Pn、Pcm、Pm、Ps、Tf、Sg、Pt、Tn、Tr、Td、Mt、Am、Aw、Mm、Mw、Md、Ts、Ho、Nh、Nm、Phl、Phr、Pcip、Pmd、Psc、Cs、Po、Cr、Pz、Pw、
 Pf 各组由 `manual-check/office/cases/pptx-*.ps1` 自动判定，
 跑 `pwsh -File manual-check\office\run.ps1 -Case 'pptx-*'` 即可复现。O1 已放弃，与 xlsx / docx 相同。
 
@@ -36,6 +36,7 @@ Ps1–Ps5、Sg1–Sg5、Pt1–Pt6、Tn1–Tn5、Am1–Am5、Mm1–Mm5、Ho1–Ho
 2026-10-10 补跑 `pptx-notes-master.ps1`，Nh1–Nh5 通过。无 Repair。
 2026-10-10 补跑 `pptx-notes-master-objects.ps1`，Nm1–Nm5 通过。无 Repair。
 2026-10-10 补跑 `pptx-transition-sound.ps1`，Td1–Td5 通过。无 Repair。
+2026-10-10 补跑 `pptx-media-trim.ps1`，Mt1–Mt5 通过。无 Repair。
 
 - **C1** ✅
   - PowerPoint 16.0 能打开 `manual-check/office/out/pptx-create.pptx`，标题栏无 Repair
@@ -940,6 +941,38 @@ DrawingML 表（`a:tbl` 包在 `p:graphicFrame` 里）。不要把表编进 `sha
   - 通过标准：✅ 对 `notesMaster` 发 `setTransition` 得 `InvalidId`
   - 对 `fade` 发 `orient` 得 `InvalidField`
   - 对 `fade` 发 `spokes` 得 `InvalidField`
+  - 均未写文件
+
+## 媒体 trim、书签与字幕
+
+内嵌视频 / 音频读写 `p14:trim`、`p14:bmkLst` 与字幕轨。不转码，不写 `<p:timing>`，不写 `<p14:fade>`。
+脚本：`manual-check/office/cases/pptx-media-trim.ps1`。编号用 Mt（不要跟 Pmd、Td 混）。
+
+- **Mt1**
+  - 检查：裁剪
+  - 通过标准：✅ create 产物 `insertVideo` 后 `setMedia` `st=100` `end=200`
+  - inspect `st` 为 100、`end` 为 200
+  - ZIP 有 `<p14:trim st="100" end="200"/>`
+  - PowerPoint COM `StartPoint=100`、`EndPoint=800`（片长 1000），无 Repair
+- **Mt2**
+  - 检查：书签
+  - 通过标准：✅ 同一视频 `bookmarks=[{name:MarkA,time:300}]` 后 inspect 对上
+  - ZIP 有 `p14:bmk name="MarkA" time="300"`
+  - COM `MediaBookmarks.Count` 为 1，无 Repair
+- **Mt3**
+  - 检查：字幕轨
+  - 通过标准：✅ `setMedia` 给一条 WebVTT 后 apply 产物 inspect `tracks[0].label` 对上，`fileName` 以 `.vtt` 结尾
+  - ZIP 有 `tracksInfo` 与 `text/vtt` 部件
+  - PowerPoint 打开无 Repair
+- **Mt4**
+  - 检查：清掉
+  - 通过标准：✅ `setMedia` `st=0` `end=0` `bookmarks=[]` `tracks=[]` 后没有 `<p14:trim>`、没有 `bmkLst`、没有 `tracksInfo`
+  - 无 Repair
+- **Mt5**
+  - 检查：拒错
+  - 通过标准：✅ 对页 id 发 `setMedia` 得 `InvalidId`
+  - 一个可写字段都不给得 `InvalidField`
+  - 书签名重复得 `InvalidField`
   - 均未写文件
 
 ## 动画清单
