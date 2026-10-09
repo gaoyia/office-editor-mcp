@@ -8,6 +8,7 @@ use crate::xml::{self, Document, Element, Node};
 
 use super::notes;
 use super::picture;
+use super::request::InsertShapeOp;
 use super::shape::{self, ShapeKey, SlideMeta};
 use super::slides;
 use super::{
@@ -184,6 +185,10 @@ pub fn masters_json(pkg: &Package, catalog: &Catalog, want_timing: bool) -> Resu
                 "placeholders".into(),
                 json!(placeholders_json(&layout_doc.root, &layout_host)),
             );
+            layout_obj.insert(
+                "shapes".into(),
+                json!(deco_json(&layout_doc.root, &layout_host)),
+            );
             layouts.push(Value::Object(layout_obj));
         }
         let theme = super::theme::theme_json(pkg, &m.part)?;
@@ -200,6 +205,7 @@ pub fn masters_json(pkg: &Package, catalog: &Catalog, want_timing: bool) -> Resu
             "placeholders".into(),
             json!(placeholders_json(&doc.root, &host)),
         );
+        obj.insert("shapes".into(), json!(deco_json(&doc.root, &host)));
         obj.insert("layouts".into(), Value::Array(layouts));
         out.push(Value::Object(obj));
     }
@@ -331,6 +337,89 @@ pub fn set_size(
     })
 }
 
+pub fn set_fill(
+    pkg: &mut Package,
+    pres_part: &str,
+    pres_root: &Element,
+    ph: &PlaceholderId,
+    id: &str,
+    color: Option<&str>,
+    op_index: usize,
+) -> Result<(), Error> {
+    apply_on_deco(pkg, pres_part, pres_root, ph, id, op_index, |sp| {
+        shape::apply_fill(sp, color);
+        Ok(())
+    })
+}
+
+pub fn set_line(
+    pkg: &mut Package,
+    pres_part: &str,
+    pres_root: &Element,
+    ph: &PlaceholderId,
+    id: &str,
+    color: Option<&str>,
+    width: Option<i64>,
+    op_index: usize,
+) -> Result<(), Error> {
+    apply_on_deco(pkg, pres_part, pres_root, ph, id, op_index, |sp| {
+        shape::apply_line(sp, color, width);
+        Ok(())
+    })
+}
+
+pub fn insert_deco_shape(
+    pkg: &mut Package,
+    pres_part: &str,
+    pres_root: &Element,
+    master: usize,
+    layout: Option<usize>,
+    op: &InsertShapeOp,
+    op_index: usize,
+) -> Result<(), Error> {
+    let json_path = format!("ops[{op_index}].id");
+    let part = catalog(pkg, pres_part, pres_root)?.xml_part(master, layout, &json_path)?;
+    let mut doc = xml::parse(pkg.get(&part)?)?;
+    shape::insert_shape(&mut doc, canvas_sz(pres_root), op)?;
+    pkg.set(&part, doc.to_bytes()?)?;
+    Ok(())
+}
+
+pub fn delete_deco(
+    pkg: &mut Package,
+    pres_part: &str,
+    pres_root: &Element,
+    ph: &PlaceholderId,
+    id: &str,
+    op_index: usize,
+) -> Result<(), Error> {
+    let json_path = format!("ops[{op_index}].id");
+    let cat = catalog(pkg, pres_part, pres_root)?;
+    let part = cat.part_for(ph, &json_path)?.to_string();
+    let mut doc = xml::parse(pkg.get(&part)?)?;
+    if find_placeholder_mut(&mut doc.root, &ph.key).is_some() {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::MasterPlaceholderLocked,
+            },
+            json_path,
+        ));
+    }
+    let spid = deco_spid(&doc.root, &ph.key);
+    if !remove_deco(&mut doc.root, &ph.key) {
+        return Err(Error::with_path(
+            ErrorKind::ShapeNotFound { id: id.to_string() },
+            json_path,
+        ));
+    }
+    if let Some(id) = spid {
+        shape::strip_timing_for_spid(&mut doc.root, &id);
+    }
+    shape::prune_empty_groups(&mut doc.root);
+    pkg.set(&part, doc.to_bytes()?)?;
+    Ok(())
+}
+
 pub fn set_slide_layout(
     pkg: &mut Package,
     slides: &[SlideMeta],
@@ -398,7 +487,7 @@ fn apply_on_placeholder(
     let catalog = catalog(pkg, pres_part, pres_root)?;
     let part = catalog.part_for(ph, &json_path)?.to_string();
     let mut doc = xml::parse(pkg.get(&part)?)?;
-    let sp = find_placeholder_mut(&mut doc.root, &ph.key).ok_or_else(|| {
+    let sp = find_master_shape_mut(&mut doc.root, &ph.key).ok_or_else(|| {
         Error::with_path(ErrorKind::ShapeNotFound { id: id.to_string() }, json_path)
     })?;
     f(sp)?;
@@ -572,6 +661,19 @@ fn placeholders_json(root: &Element, host: &str) -> Vec<Value> {
     out
 }
 
+fn deco_json(root: &Element, host: &str) -> Vec<Value> {
+    let mut out = Vec::new();
+    let mut i = 0usize;
+    shape::walk_choice(root, &mut |e| {
+        if !is_deco(e) {
+            return;
+        }
+        i += 1;
+        out.push(shape::shape_node_json(e, host, i));
+    });
+    out
+}
+
 fn placeholder_json(sp: &Element, host: &str, index: usize) -> Value {
     let (id, shape_id, stable) = shape::shape_stable_id(sp, host, index);
     let (x, y, cx, cy) = shape::geometry_json(sp);
@@ -610,9 +712,129 @@ fn is_placeholder(el: &Element) -> bool {
             .is_some()
 }
 
+fn is_deco(el: &Element) -> bool {
+    el.local_name() == "sp" && !is_placeholder(el)
+}
+
+fn apply_on_deco(
+    pkg: &mut Package,
+    pres_part: &str,
+    pres_root: &Element,
+    ph: &PlaceholderId,
+    id: &str,
+    op_index: usize,
+    f: impl FnOnce(&mut Element) -> Result<(), Error>,
+) -> Result<(), Error> {
+    let json_path = format!("ops[{op_index}].id");
+    apply_on_placeholder(pkg, pres_part, pres_root, ph, id, op_index, |sp| {
+        if is_placeholder(sp) {
+            return Err(Error::with_path(
+                ErrorKind::InvalidId {
+                    reason: IdReason::MasterPlaceholderLocked,
+                },
+                json_path,
+            ));
+        }
+        f(sp)
+    })
+}
+
 fn find_placeholder_mut<'a>(root: &'a mut Element, key: &ShapeKey) -> Option<&'a mut Element> {
     let mut idx = 0usize;
     find_ph_mut(root, &mut idx, key)
+}
+
+fn find_master_shape_mut<'a>(root: &'a mut Element, key: &ShapeKey) -> Option<&'a mut Element> {
+    match key {
+        ShapeKey::Id(_) => {
+            let mut idx = 0usize;
+            find_any_sp_mut(root, &mut idx, key)
+        }
+        ShapeKey::Index(_) => {
+            if find_placeholder_mut(root, key).is_some() {
+                find_placeholder_mut(root, key)
+            } else {
+                find_deco_mut(root, key)
+            }
+        }
+    }
+}
+
+fn find_deco_mut<'a>(root: &'a mut Element, key: &ShapeKey) -> Option<&'a mut Element> {
+    let mut idx = 0usize;
+    find_deco_in(root, &mut idx, key)
+}
+
+fn find_any_sp_mut<'a>(
+    el: &'a mut Element,
+    idx: &mut usize,
+    key: &ShapeKey,
+) -> Option<&'a mut Element> {
+    if el.local_name() == "AlternateContent" {
+        if let Some(i) = shape::first_alt_child_index(el) {
+            if let Node::Element(child) = &mut el.children[i] {
+                return find_any_sp_mut(child, idx, key);
+            }
+        }
+        return None;
+    }
+    if el.local_name() == "sp" {
+        *idx += 1;
+        let hit = match key {
+            ShapeKey::Index(n) => *idx == *n,
+            ShapeKey::Id(req) => shape::cnv_pr(el)
+                .and_then(|c| c.attr("id"))
+                .is_some_and(|id| shape::ids_match(id, req)),
+        };
+        if hit {
+            return Some(el);
+        }
+        return None;
+    }
+    for child in el.children.as_mut_slice() {
+        if let Node::Element(e) = child {
+            if let Some(found) = find_any_sp_mut(e, idx, key) {
+                return Some(found);
+            }
+        }
+    }
+    None
+}
+
+fn find_deco_in<'a>(
+    el: &'a mut Element,
+    idx: &mut usize,
+    key: &ShapeKey,
+) -> Option<&'a mut Element> {
+    if el.local_name() == "AlternateContent" {
+        if let Some(i) = shape::first_alt_child_index(el) {
+            if let Node::Element(child) = &mut el.children[i] {
+                return find_deco_in(child, idx, key);
+            }
+        }
+        return None;
+    }
+    if is_deco(el) {
+        *idx += 1;
+        let hit = match key {
+            ShapeKey::Index(n) => *idx == *n,
+            ShapeKey::Id(req) => shape::cnv_pr(el)
+                .and_then(|c| c.attr("id"))
+                .is_some_and(|id| shape::ids_match(id, req)),
+        };
+        if hit {
+            return Some(el);
+        }
+        return None;
+    }
+    for child in el.children.as_mut_slice() {
+        if let Node::Element(e) = child {
+            if let Some(found) = find_deco_in(e, idx, key) {
+                return Some(found);
+            }
+        }
+    }
+    None
 }
 
 fn find_ph_mut<'a>(
@@ -1480,6 +1702,97 @@ fn remove_placeholder_in(el: &mut Element, idx: &mut usize, key: &ShapeKey) -> b
         }
         if let Node::Element(e) = &mut el.children[i] {
             if e.local_name() != "AlternateContent" && remove_placeholder_in(e, idx, key) {
+                return true;
+            }
+        }
+        i += 1;
+    }
+    false
+}
+
+fn deco_spid(root: &Element, key: &ShapeKey) -> Option<String> {
+    let mut idx = 0usize;
+    let mut found = None;
+    shape::walk_choice(root, &mut |e| {
+        if found.is_some() || !is_deco(e) {
+            return;
+        }
+        idx += 1;
+        let hit = match key {
+            ShapeKey::Index(n) => idx == *n,
+            ShapeKey::Id(req) => shape::cnv_pr(e)
+                .and_then(|c| c.attr("id"))
+                .is_some_and(|id| shape::ids_match(id, req)),
+        };
+        if hit {
+            found = shape::cnv_pr(e)
+                .and_then(|c| c.attr("id"))
+                .filter(|s| !s.is_empty())
+                .map(str::to_string);
+        }
+    });
+    found
+}
+
+fn remove_deco(root: &mut Element, key: &ShapeKey) -> bool {
+    let mut idx = 0usize;
+    remove_deco_in(root, &mut idx, key)
+}
+
+fn remove_deco_in(el: &mut Element, idx: &mut usize, key: &ShapeKey) -> bool {
+    let mut i = 0;
+    while i < el.children.len() {
+        let hit_ac = match &el.children[i] {
+            Node::Element(e) if e.local_name() == "AlternateContent" => {
+                let mut hit = false;
+                let mut n = *idx;
+                shape::walk_choice(e, &mut |sp| {
+                    if hit || !is_deco(sp) {
+                        return;
+                    }
+                    n += 1;
+                    let ok = match key {
+                        ShapeKey::Index(req) => n == *req,
+                        ShapeKey::Id(req) => shape::cnv_pr(sp)
+                            .and_then(|c| c.attr("id"))
+                            .is_some_and(|id| shape::ids_match(id, req)),
+                    };
+                    if ok {
+                        hit = true;
+                    }
+                });
+                if hit {
+                    *idx = n;
+                    true
+                } else {
+                    *idx = n;
+                    false
+                }
+            }
+            _ => false,
+        };
+        if hit_ac {
+            el.children.remove(i);
+            return true;
+        }
+        let is_hit = match &el.children[i] {
+            Node::Element(e) if is_deco(e) => {
+                *idx += 1;
+                match key {
+                    ShapeKey::Index(n) => *idx == *n,
+                    ShapeKey::Id(req) => shape::cnv_pr(e)
+                        .and_then(|c| c.attr("id"))
+                        .is_some_and(|id| shape::ids_match(id, req)),
+                }
+            }
+            _ => false,
+        };
+        if is_hit {
+            el.children.remove(i);
+            return true;
+        }
+        if let Node::Element(e) = &mut el.children[i] {
+            if e.local_name() != "AlternateContent" && remove_deco_in(e, idx, key) {
                 return true;
             }
         }

@@ -20,10 +20,11 @@
 - **版式**
   - id：`master:{n}/layout:{k}`
   - 例子：`master:1/layout:2`
-- **母版占位符**
+- **母版占位符 / 装饰形**
   - id：`master:{n}/shape:{shapeId}` 或 `master:{n}/shape:index:{k}`
   - 例子：`master:1/shape:2`
-- **版式占位符**
+  - 有 `p:ph` 的是占位符，没有的是装饰形。共用 `cNvPr/@id`，不要抢号
+- **版式占位符 / 装饰形**
   - id：`master:{n}/layout:{k}/shape:{shapeId}` 或 `…/shape:index:{i}`
   - 例子：`master:1/layout:1/shape:2`
 - **形状**
@@ -908,12 +909,12 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   不接受把整棵 `<p:timing>` 当 JSON 写入；`setTiming` 报 `UnsupportedOp`。
   该宿主第一条效果 `trigger` 为 `with` 或 `after` 时，外层包装仍写 `delay="indefinite"`，并加 `evt="onBegin"` 指向 `mainSeq` 的 `cTn/@id`（进片自动播）。
   第一条 `click` 不加这条。`clickOn` 不走这条，写在 `interactiveSeq` 里。
-- `scope.masters` 为 `true` 时，根上带 `masters`。没有母版时为空数组。不依赖 `scope.slide`。不算母版排版引擎，也不把母版装饰形（没有 `p:ph` 的 `p:sp`）收进树。
-  每份母版字段顺序：`id`、`index`、`name`、`theme`、`animCount`、`placeholders`、`layouts`。
+- `scope.masters` 为 `true` 时，根上带 `masters`。没有母版时为空数组。不依赖 `scope.slide`。不算母版排版引擎。不把母版装饰形抄进各页。
+  每份母版字段顺序：`id`、`index`、`name`、`theme`、`animCount`、`placeholders`、`shapes`、`layouts`。
   `scope.timing` 同开时在 `animCount` 之后、`placeholders` 之前带 `timing`。`id` 为 `master:{n}`。
   `animCount` 只计该 slideMaster 的 `<p:timing>`，不含其版式。
-  母版 `timing` 的 id 为 `master:{n}/anim:{k}`，`target` 对应该母版占位符 id。
-  只收带 `p:ph` 的占位符；母版装饰形不进名单。
+  母版 `timing` 的 id 为 `master:{n}/anim:{k}`，`target` 对应该母版形状 id（占位符或装饰形）。
+  占位符与装饰形都进名单。
   `name` 取该 slideMaster 的 `p:cSld/@name`，没有则为 `null`。`theme` 取该母版 `.rels` 里 Type 以 `/theme` 结尾的部件。没有该关系或部件不在包内则为 `null`。
   有则为对象，字段顺序：`name`、`colors`、`fonts`。`theme.name` 取 `a:theme/@name`，没有则为 `null`。
   `colors` 字段顺序：`name`、`dk1`、`lt1`、`dk2`、`lt2`、`accent1`、`accent2`、`accent3`、`accent4`、`accent5`、`accent6`、`hlink`、`folHlink`。
@@ -922,10 +923,11 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   `fonts.name` 取 `a:fontScheme/@name`，没有则为 `null`。
   其余取 `a:majorFont` / `a:minorFont` 下 `a:latin` / `a:ea` / `a:cs` 的 `typeface` 原文，没有该元素则为 `null`。不算主题排版引擎，不展开 `fmtScheme`。
   `placeholders` 只收带 `p:nvPr/p:ph` 的 `p:sp`（含组合里的），按文档顺序。
-  每份版式字段顺序：`id`、`index`、`name`、`kind`、`animCount`、`placeholders`。
+  `shapes` 只收没有 `p:ph` 的 `p:sp`（含组合里的，含无 `txBody`），按文档顺序。不收 `p:pic`、`p:cxnSp`、`p:graphicFrame`。
+  每份版式字段顺序：`id`、`index`、`name`、`kind`、`animCount`、`placeholders`、`shapes`。
   `scope.timing` 同开时在 `animCount` 之后、`placeholders` 之前带 `timing`。
   `id` 为 `master:{n}/layout:{k}`。
-  版式 `timing` 的 id 为 `master:{n}/layout:{k}/anim:{m}`，`target` 对应该版式占位符 id。
+  版式 `timing` 的 id 为 `master:{n}/layout:{k}/anim:{m}`，`target` 对应该版式形状 id（占位符或装饰形）。
   `animCount` 只计该 slideLayout 的 `<p:timing>`。`name` 取该 slideLayout 的 `p:cSld/@name`，没有则为 `null`。
   `kind` 取 `p:sldLayout/@type` 原文，没有则为 `null`。create 写出的那份空白版式 `kind` 为 `blank`、名为「空白」。
   占位符字段顺序：`id`、`shapeId`、`name`、`type`、`idx`、`x`、`y`、`cx`、`cy`、`text`，
@@ -933,6 +935,10 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   `id` 为 `master:{n}/shape:{cNvPrId}` 或 `master:{n}/layout:{k}/shape:{cNvPrId}`；
   没有 `cNvPr/@id` 则为 `…/shape:index:{i}`，`stable` 为 `false`，`{i}` 只在该母版或该版式被收入的占位符内从 1 计。
   `type` 取 `p:ph/@type`，缺则为 `null`。`idx` 取 `p:ph/@idx` 原文，缺则为 `null`。几何与 `text` 规则与幻灯片形状相同；没有 `txBody` 则 `text` 为 `""`。
+  装饰形字段顺序与幻灯片形状相同：`id`、`shapeId`、`name`、`prst`、`x`、`y`、`cx`、`cy`、`text`，
+  然后 `sz`、`color`、`bold`、`italic`、`underline`、`font`、`eastAsiaFont`、`align`、`textAnchor`、`stable`。
+  装饰形 `id` 同一套 `…/shape:{cNvPrId}`。没有 `cNvPr/@id` 则为 `…/shape:index:{i}`，`{i}` 只在该宿主被收入的装饰形内从 1 计，不和占位符的 `index` 混编。
+  没有 `txBody` 则 `text` 为 `""`。不把这些 `p:sp` 抄进各页。
   xlsx / docx 的 `scope` 里出现 `masters` 报 `InvalidField`。
 - `scope.notes` 为 `true` 时，每页带 `notes`。没有 notesSlide 关系则为 `null`。
   有则为对象，字段顺序：`id`、`pictureCount`、`mathCount`、`chartCount`、`smartArtCount`、`tableCount`、`model3dCount`、`animCount`，
@@ -1434,7 +1440,7 @@ prst 的效果子元素是 `p15:prstTrans`，`prst` 为该 `type`。不写 `sndA
     - `…/chart:…`
     - `…/smartdiagram:…`
     - 备注页上同样判定，id 带 `slide:{n}/notes/` 前缀
-    - 母版 / 版式占位符：`master:{n}/shape:…` 或 `master:{n}/layout:{k}/shape:…`
+    - 母版 / 版式形状（占位符与装饰形）：`master:{n}/shape:…` 或 `master:{n}/layout:{k}/shape:…`
 - **`type`**
   - 必须
   - 白名单：`appear`、`fade`、`flyIn`、`wipe`、`split`、`zoom`、`spin`、`growShrink`、`fadeOut`、`flyOut`、`wipeOut`、`pathRight`
@@ -1489,7 +1495,7 @@ prst 的效果子元素是 `p15:prstTrans`，`prst` 为该 `type`。不写 `sndA
 已有树则接到末尾：`click` 再挂一个并列包装组；`with` / `after` 接到现有最后一组里，空树时仍建包装组但 `nodeType` 为 `withEffect` / `afterEffect`；`clickOn` 再挂一个 `interactiveSeq`。
 新 `cTn/@id` 取该宿主 timing 已有最大整数加 1。该对象尚无 `bldP` 则补一条对应 `spid`、`grpId="0"`。给了 `para` 才写 `txEl`。给了 `sound` 才写 `sndAc`，并可脏该宿主 `.rels`、`/ppt/media/…` 与 `[Content_Types].xml`。
 不改 `<p:transition>`。不改未点名效果。
-备注没有 notesSlide 时报 `IdNotFound`。母版 / 版式只写占位符，装饰形报 `IdNotFound`。
+备注没有 notesSlide 时报 `IdNotFound`。母版 / 版式上占位符与装饰形都能绑。
 docx / xlsx 上发此 op 报 `InvalidField`。
 
 ### setAnim
@@ -1632,7 +1638,7 @@ pptx：`id` 不是母版 id 报 `InvalidId`（对 `master:{n}/layout:{k}`、占�
 
 ### insertPlaceholder
 
-往母版或版式插入一个带 `p:ph` 与 `p:txBody` 的占位符。不把 `insertShape` 扩到母版。不写 theme `p:style`，不写 `a16:creationId`。
+往母版或版式插入一个带 `p:ph` 与 `p:txBody` 的占位符。装饰形请用 `insertShape`。不写 theme `p:style`，不写 `a16:creationId`。
 
 ```json
 {
@@ -1827,7 +1833,8 @@ xlsx 上发此 op 报 `InvalidField`。docx 见 [docx 分册](json-contract-docx
 
 ### insertShape
 
-往幻灯片或备注页插入一个带 `p:txBody` 的形状。缺省 `prst` 为矩形文本框。不抄版式占位符，不写 `<p:timing>`。
+往幻灯片、备注页、母版或版式插入一个带 `p:txBody` 的形状。缺省 `prst` 为矩形文本框。不抄版式占位符，不写 `<p:timing>`。
+往母版 / 版式插时写出没有 `p:ph` 的装饰形，不把该 `p:sp` 抄进各页。插占位符请用 `insertPlaceholder`。
 
 ```json
 {
@@ -1849,7 +1856,7 @@ xlsx 上发此 op 报 `InvalidField`。docx 见 [docx 分册](json-contract-docx
 - **`op`**
   - 必须是 `"insertShape"`
 - **`id`**
-  - 必须是 `slide:{n}` 或 `slide:{n}/notes`（与 `insertPicture` 相同）
+  - 必须是 `slide:{n}`、`slide:{n}/notes`、`master:{n}` 或 `master:{n}/layout:{k}`
 - **`text`**
   - 可选
   - 可见纯文本，省略则空
@@ -1874,15 +1881,17 @@ xlsx 上发此 op 报 `InvalidField`。docx 见 [docx 分册](json-contract-docx
   - 规则与 `setShapeFormat` 相同
   - 省略则缺省 18 磅黑字 Calibri / 宋体
 
-pptx：`id` 不是页 id 或备注容器 id 报 `InvalidId`（对形状 id、图 id、母版 id 或 `pptx:presentation` 发本 op 也是这条）。找不到该页报 `IdNotFound`。
-只给 `x` 或只给 `y`、只给 `cx` 或只给 `cy` 报 `InvalidField`。缺坐标时在画布上找空位（幻灯片读 `p:sldSz`，备注读 `p:notesSz`），不要叠在 `(0,0)`。
+pptx：`id` 不是页 id、备注容器 id、母版 id 或版式 id 报 `InvalidId`（对形状 id、图 id 或 `pptx:presentation` 发本 op 也是这条）。
+找不到该页 / 该母版 / 该版式报 `IdNotFound`。
+只给 `x` 或只给 `y`、只给 `cx` 或只给 `cy` 报 `InvalidField`。缺坐标时在画布上找空位（幻灯片与母版 / 版式读 `p:sldSz`，备注读 `p:notesSz`），不要叠在 `(0,0)`。
 `id` 为 `slide:{n}/notes` 且该页还没有 notesSlide 时，按 `setNotesText` 同一套新建最小备注页再插入。
 
 写入该宿主 `p:spTree` 一个新 `p:sp`（插在 `extLst` 之前）。
 `prst` 为 `rect`（或缺省）时：`p:cNvSpPr/@txBox` 为 `1`，默认 `a:noFill` 与 `a:ln/a:noFill`，`cNvPr/@name` 写成「文本框 {该 id}」。
 其它可写 `prst`：不写 `txBox`，默认实心填充 `5B9BD5` 与线宽 `12700` 的描边 `2E75B6`，`cNvPr/@name` 写成「形状 {该 id}」。始终带 `p:txBody`。
 给了文字格式字段则按 `setShapeFormat` 写入该 `txBody`。省略则缺省 18 磅黑字 Calibri / 宋体。
-新 `cNvPr/@id` 取该页（含 `spTree` 的 `id="1"`）已有最大加 1，至少为 2。不写 `p:style`，不写 `a16:creationId`。不改未点名形状，不改已有 `<p:timing>`。
+新 `cNvPr/@id` 取该宿主（含 `spTree` 的 `id="1"`）已有最大加 1，至少为 2。不写 `p:style`，不写 `a16:creationId`。不改未点名形状，不改已有 `<p:timing>`。
+往母版 / 版式插入时不写 `p:ph`。
 docx 上发此 op 报 `InvalidField`。xlsx 见 [xlsx 分册](json-contract-xlsx.md#insertshape)：`id` 为 `sheet:{name}`，必须给 `from`，出现 `x` / `y` 报 `InvalidField`。
 
 可写 `prst`（ECMA-376 `ST_ShapeType` 子集，§20.1.10.56）：`rect`、`roundRect`、`round1Rect`、`round2SameRect`、`round2DiagRect`、
@@ -1992,24 +2001,24 @@ docx 见 [docx 分册](json-contract-docx.md#ungroup)。xlsx 见 [xlsx 分册](j
 | 字段 | 含义 |
 | --- | --- |
 | `op` | 必须是 `"deleteShape"` |
-| `id` | 形状 id（`slide:{n}/shape:…` 或备注上的 `slide:{n}/notes/shape:…`） |
+| `id` | 形状 id（`slide:{n}/shape:…`、备注上的 `slide:{n}/notes/shape:…`，或母版 / 版式装饰形 `master:…/shape:…`） |
 
 找不到该形状报 `IdNotFound`。id 不是形状 id 报 `InvalidId`。对母版或版式占位符 id 发本 op 报 `InvalidId`。
 插删占位符请用 `insertPlaceholder` / `deletePlaceholder`。对备注页上占位符 `p:ph/@type` 为 `sldImg` 的形状发本 op 报 `InvalidField`，不写文件。
 删掉对应 `p:sp`。若在 `mc:AlternateContent` 的 Choice 里，整段 `AlternateContent` 删掉。组合本身不进树；删组合内子 `sp` 后若组合空了，把空 `p:grpSp` 一并摘掉。
-不改其它形状的 `cNvPr/@id`。按被删形状的 `cNvPr/@id` 清掉本页 `<p:timing>` 里对应的 `p:tgtEl`（其子为 `p:spTgt/@spid`）；祖先因此变空则一并摘掉，未点名形状的 timing 留下。
-不要整节无故删掉仍有内容的 `<p:timing>`。docx 上发此 op 报 `InvalidField`。xlsx 见 [xlsx 分册](json-contract-xlsx.md#deleteshape)。
+不改其它形状的 `cNvPr/@id`。按被删形状的 `cNvPr/@id` 清掉本宿主 `<p:timing>` 里对应的 `p:tgtEl`（其子为 `p:spTgt/@spid`）；祖先因此变空则一并摘掉，未点名形状的 timing 留下。
+不要整节无故删掉仍有内容的 `<p:timing>`。母版 / 版式装饰形只改对应 slideMaster / slideLayout 部件，不改各页 XML。docx 上发此 op 报 `InvalidField`。xlsx 见 [xlsx 分册](json-contract-xlsx.md#deleteshape)。
 
 ### setShapePos
 
 | 字段 | 含义 |
 | --- | --- |
 | `op` | 必须是 `"setShapePos"` |
-| `id` | 形状 id（幻灯片 / 备注上的 `slide:…/shape:…`，母版 / 版式占位符 `master:…/shape:…`，或连接线 `slide:…/cxn:…`） |
+| `id` | 形状 id（幻灯片 / 备注上的 `slide:…/shape:…`，母版 / 版式占位符或装饰形 `master:…/shape:…`，或连接线 `slide:…/cxn:…`） |
 | `x` / `y` | 至少给一个。EMU，非负整数 |
 
 写入该 `p:sp` 或 `p:cxnSp` 的 `p:spPr/a:xfrm/a:off`。没有 `xfrm` 则补。找不到报 `IdNotFound`。id 不是形状 id 也不是连接线 id 报 `InvalidId`。
-`x` 与 `y` 一个都不给报 `InvalidField`。对 `sldImg` 占位符报 `InvalidField`。母版 / 版式占位符只改对应 slideMaster / slideLayout 部件，不改各页 XML。
+`x` 与 `y` 一个都不给报 `InvalidField`。对 `sldImg` 占位符报 `InvalidField`。母版 / 版式占位符与装饰形只改对应 slideMaster / slideLayout 部件，不改各页 XML。
 对已组合的子对象只改该子 `xfrm`，不重算父 `p:grpSp` 的包围盒。docx / xlsx 上发此 op 报 `InvalidField`。
 
 ### setShapeSize
@@ -2017,11 +2026,11 @@ docx 见 [docx 分册](json-contract-docx.md#ungroup)。xlsx 见 [xlsx 分册](j
 | 字段 | 含义 |
 | --- | --- |
 | `op` | 必须是 `"setShapeSize"` |
-| `id` | 形状 id（幻灯片 / 备注上的 `slide:…/shape:…`，母版 / 版式占位符 `master:…/shape:…`，或连接线 `slide:…/cxn:…`） |
+| `id` | 形状 id（幻灯片 / 备注上的 `slide:…/shape:…`，母版 / 版式占位符或装饰形 `master:…/shape:…`，或连接线 `slide:…/cxn:…`） |
 | `cx` / `cy` | 至少给一个。EMU，正整数 |
 
 写入该 `p:sp` 或 `p:cxnSp` 的 `p:spPr/a:xfrm/a:ext`。没有 `xfrm` 则补。找不到报 `IdNotFound`。id 不是形状 id 也不是连接线 id 报 `InvalidId`。
-`cx` 与 `cy` 一个都不给报 `InvalidField`。对 `sldImg` 占位符报 `InvalidField`。母版 / 版式占位符只改对应 slideMaster / slideLayout 部件。
+`cx` 与 `cy` 一个都不给报 `InvalidField`。对 `sldImg` 占位符报 `InvalidField`。母版 / 版式占位符与装饰形只改对应 slideMaster / slideLayout 部件。
 对已组合的子对象只改该子 `xfrm`，不重算父组合框。docx / xlsx 上发此 op 报 `InvalidField`。
 
 ### setShapeFill
@@ -2032,8 +2041,8 @@ docx 见 [docx 分册](json-contract-docx.md#ungroup)。xlsx 见 [xlsx 分册](j
 | `id` | 形状 id |
 | `color` | 必填。六位 RGB 十六进制，或 `null` 表示无填充。不写 theme 色 |
 
-写入 `p:spPr` 的 `a:solidFill/a:srgbClr`；`null` 则写成 `a:noFill`，并去掉原有填充。缺 `color` 或非法十六进制报 `InvalidField`。找不到报 `IdNotFound`。
-id 不是形状 id 报 `InvalidId`。对母版或版式占位符 id 发本 op 报 `InvalidId`。对 `sldImg` 占位符报 `InvalidField`。
+写入 `p:spPr` 的 `a:solidFill/a:srgbClr`；`null` 则写成 `a:noFill`，并去掉原有填充。缺 `color` 或非法十六进制报 `InvalidField`。找不到报 `IdNotFound`。id 不是形状 id 报 `InvalidId`。对母版或版式占位符 id 发本 op 报 `InvalidId`。对 `sldImg` 占位符报 `InvalidField`。
+母版 / 版式装饰形只改对应 slideMaster / slideLayout 部件，不改各页 XML。
 docx / xlsx 上发此 op 报 `InvalidField`。pptx 上发 `setTextBoxFill` 仍报 `InvalidField`。
 
 ### setShapeLine
@@ -2047,6 +2056,7 @@ docx / xlsx 上发此 op 报 `InvalidField`。pptx 上发 `setTextBoxFill` 仍�
 
 写入 `p:spPr/a:ln`。`color` 为 `null` 时写成 `a:ln/a:noFill`；此时出现 `width` 报 `InvalidField`。缺 `color` 或非法十六进制报 `InvalidField`。
 找不到报 `IdNotFound`。id 不是形状 id 也不是连接线 id 报 `InvalidId`。对母版或版式占位符 id 发本 op 报 `InvalidId`。对 `sldImg` 占位符报 `InvalidField`。
+母版 / 版式装饰形只改对应 slideMaster / slideLayout 部件，不改各页 XML。
 docx / xlsx 上发此 op 报 `InvalidField`。pptx 上发 `setTextBoxLine` 仍报 `InvalidField`。
 
 不给无 `txBody` 的旧 `p:sp` 补框。不重算组合框几何。
@@ -2705,6 +2715,7 @@ Fallback 是 `p:pic`，预览同一张 PNG，并带 `a:hlinkClick`（`action="pp
 `setShapeText` / `setShapeFormat` 以及 `setShapePos` / `setShapeSize` / `setShapeFill` / `setShapeLine` / `deleteShape` 只脏目标宿主 XML（幻灯片、
 notesSlide、被点名的 slideMaster 或 slideLayout）。
 `insertShape` 往幻灯片插只脏该页 XML；往备注插时可脏 notesSlide、该页 `.rels`、notesMaster、presentation，与 `setNotesText` 相同。
+往母版 / 版式插只脏目标 slideMaster 或 slideLayout XML。
 `insertConnector` / `deleteConnector` / `groupShapes` / `ungroup` 只脏该页幻灯片 XML。
 `insertTable` / `deleteTable` / `insertRow` / `deleteRow` / `insertCol` / `deleteCol` / `setTableCellText`
  / `setTablePos` / `setTableSize` 脏该宿主 XML（幻灯片或 notesSlide），不新建部件；

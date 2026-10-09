@@ -79,6 +79,8 @@ pub(crate) enum IdReason {
     InsertConnectorNeedsSlide,
     /// pptx 的 insertPicture / insertShape 必须用 slide:N 或 slide:N/notes
     InsertNeedsSlide,
+    /// pptx 的 insertShape 必须用 slide:N、slide:N/notes、master:N 或 master:N/layout:K
+    InsertShapeHost,
     /// setNotesText 必须用 slide:N 或 slide:N/notes
     SetNotesTextNeedsSlide,
     /// pptx 批注 id 必须是 slide:N/comment:…
@@ -206,6 +208,8 @@ pub(crate) enum IdReason {
     SlideOpNeedsSlide,
     /// 母版或占位符 id 形态不对
     MasterForm,
+    /// 母版 / 版式占位符请用 deletePlaceholder，不要用 deleteShape / setShapeFill / setShapeLine
+    MasterPlaceholderLocked,
     /// setSlideLayout / deleteLayout 的 layout 必须是 master:N/layout:K
     LayoutForm,
     /// insertLayout 的 id 必须是 master:N
@@ -1195,6 +1199,7 @@ impl IdReason {
             Self::SlideMediaForm,
             Self::InsertMediaNeedsSlide,
             Self::InsertNeedsSlide,
+            Self::InsertShapeHost,
             Self::InsertConnectorNeedsSlide,
             Self::SlideCxnForm,
             Self::SetNotesTextNeedsSlide,
@@ -1279,6 +1284,7 @@ impl IdReason {
             Self::SetSlideSectionNeedsSlide,
             Self::SlideOpNeedsSlide,
             Self::MasterForm,
+            Self::MasterPlaceholderLocked,
             Self::LayoutForm,
             Self::SetHandoutTextNeedsHandout,
             Self::InsertDefinedNameNeedsWorkbook,

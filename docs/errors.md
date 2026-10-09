@@ -376,8 +376,9 @@
 - 找不到形状时，`setShapeText` / `setShapeFormat` / `deleteShape` / `setShapePos` / `setShapeSize` / `setShapeFill` / `setShapeLine` 报 `IdNotFound`，不新建形状
 - 对幻灯片 id 或备注容器 id（没有 `/shape:`）发这些 op 报 `InvalidId`
 - 对备注页或母版 / 版式上占位符（`p:ph/@type` 为 `sldImg`）发这些 op 报 `InvalidField`
-- pptx 的 `insertShape` 的 `id` 必须是 `slide:{n}` 或 `slide:{n}/notes`
-- 对形状 id、图 id、母版 id 或 `pptx:presentation` 发该 op 报 `InvalidId`
+- pptx 的 `insertShape` 的 `id` 必须是 `slide:{n}`、`slide:{n}/notes`、`master:{n}` 或 `master:{n}/layout:{k}`
+- 对形状 id、图 id 或 `pptx:presentation` 发该 op 报 `InvalidId`
+- 对母版 / 版式占位符发 `deleteShape` / `setShapeFill` / `setShapeLine` 报 `InvalidId`
 - xlsx 的 `insertShape` 的 `id` 必须是 `sheet:{name}`，且该表为 `worksheet`
 - 必须给 `from`
 - 出现 `x` / `y` 报 `InvalidField`
@@ -404,7 +405,7 @@
 - xlsx / docx 上发此 op 报 `InvalidField`
 - `insertSlide` 的 id 必须是 `pptx:presentation`
 - `deleteSlide` / `moveSlide` / `setSlideHidden` / `setTransition` / `setSlideLayout` 的 id 必须是 `slide:{n}`
-- `insertAnim` 的 id 必须是可绑对象（`slide:{n}/shape:…`、`…/cxn:…`、`…/pic:…`、`…/video:…`、`…/audio:…`、`…/table:…`、`…/chart:…`、`…/smartdiagram:…`，或带 `slide:{n}/notes/` 前缀，或母版 / 版式占位符）
+- `insertAnim` 的 id 必须是可绑对象（`slide:{n}/shape:…`、`…/cxn:…`、`…/pic:…`、`…/video:…`、`…/audio:…`、`…/table:…`、`…/chart:…`、`…/smartdiagram:…`，或带 `slide:{n}/notes/` 前缀，或母版 / 版式形状）
 - 找不到该对象报 `IdNotFound`
 - 不是这些 id 报 `InvalidId`
 - `deleteAnim` / `setAnim` 的 id 必须是 inspect 名单上的动画 id

@@ -281,12 +281,14 @@ fn masters_scope_lists_blank_layout() {
     assert_eq!(masters[0]["id"], "master:1");
     assert_eq!(masters[0]["index"], 1);
     assert_eq!(masters[0]["placeholders"].as_array().unwrap().len(), 0);
+    assert_eq!(masters[0]["shapes"].as_array().unwrap().len(), 0);
     let layouts = masters[0]["layouts"].as_array().unwrap();
     assert_eq!(layouts.len(), 1);
     assert_eq!(layouts[0]["id"], "master:1/layout:1");
     assert_eq!(layouts[0]["name"], "空白");
     assert_eq!(layouts[0]["kind"], "blank");
     assert_eq!(layouts[0]["placeholders"].as_array().unwrap().len(), 0);
+    assert_eq!(layouts[0]["shapes"].as_array().unwrap().len(), 0);
     assert_eq!(
         object_keys(&tree),
         [

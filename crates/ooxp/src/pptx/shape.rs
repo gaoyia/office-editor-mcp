@@ -1004,12 +1004,18 @@ pub fn set_shape_fill(
     op: &SetShapeFillOp,
     op_index: usize,
 ) -> Result<(), Error> {
-    let sp = find_shape_mut(&mut doc.root, &op.target.key).ok_or_else(|| {
+    let target = op.target.as_ref().expect("幻灯片形状");
+    let sp = find_shape_mut(&mut doc.root, &target.key).ok_or_else(|| {
         Error::with_path(
             ErrorKind::ShapeNotFound { id: op.id.clone() },
             format!("ops[{op_index}].id"),
         )
     })?;
+    apply_fill(sp, op.color.as_deref());
+    Ok(())
+}
+
+pub(crate) fn apply_fill(sp: &mut Element, color: Option<&str>) {
     let sp_pr = picture::ensure_child(sp, "spPr");
     remove_named(
         sp_pr,
@@ -1022,7 +1028,7 @@ pub fn set_shape_fill(
             "grpFill",
         ],
     );
-    match op.color.as_deref() {
+    match color {
         Some(c) => {
             let mut fill = Element::new("a:solidFill");
             fill.push_element(Element::new("a:srgbClr").with_attr("val", c.to_ascii_uppercase()));
@@ -1030,7 +1036,6 @@ pub fn set_shape_fill(
         }
         None => sp_pr.push_element(Element::new("a:noFill")),
     }
-    Ok(())
 }
 
 pub fn set_shape_line(

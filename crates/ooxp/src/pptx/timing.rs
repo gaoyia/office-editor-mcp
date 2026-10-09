@@ -767,7 +767,7 @@ fn object_map(root: &Element, host: &str, placeholders_only: bool) -> HashMap<St
     let mut map = HashMap::new();
     shape::walk_choice(root, &mut |e| {
         if placeholders_only {
-            if is_placeholder_sp(e) {
+            if e.local_name() == "sp" {
                 if let Some(id) = cnv_id(e, "nvSpPr") {
                     map.insert(id.clone(), format!("{host}/shape:{id}"));
                 }
@@ -808,15 +808,6 @@ fn object_map(root: &Element, host: &str, placeholders_only: bool) -> HashMap<St
         }
     });
     map
-}
-
-fn is_placeholder_sp(el: &Element) -> bool {
-    el.local_name() == "sp"
-        && el
-            .child_by_local("nvSpPr")
-            .and_then(|nv| nv.child_by_local("nvPr"))
-            .and_then(|nv| nv.child_by_local("ph"))
-            .is_some()
 }
 
 fn spid_for_host(

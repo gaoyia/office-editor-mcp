@@ -139,6 +139,7 @@ fn inspect_slide_size_and_theme_keys() {
             "theme",
             "animCount",
             "placeholders",
+            "shapes",
             "layouts"
         ]
     );

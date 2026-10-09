@@ -5,7 +5,7 @@
 检查前用 create 或 apply 在本机生成文件，不要用改过扩展名的 zip 目录冒充。
 本机若 `PowerPoint.Application` 被 WPS 抢走，直接启动 `POWERPNT.EXE` 再挂 COM，不要走被抢的 ProgID。Office 16 的对象模型在 `mdiClass` 上。
 
-C、I、A、Pp、Pvg、Pem、P3d、Pom、Pc、Psa、Pn、Pcm、Pm、Ps、Tf、Sg、Pt、Tn、Tr、Am、Aw、Mm、Mw、Ts、Ho、Phl、Phr、Pcip、Pmd、Psc、Cs、Po、Cr、Pz、Pw、
+C、I、A、Pp、Pvg、Pem、P3d、Pom、Pc、Psa、Pn、Pcm、Pm、Ps、Tf、Sg、Pt、Tn、Tr、Am、Aw、Mm、Mw、Md、Ts、Ho、Phl、Phr、Pcip、Pmd、Psc、Cs、Po、Cr、Pz、Pw、
 Pf 各组由 `manual-check/office/cases/pptx-*.ps1` 自动判定，
 跑 `pwsh -File manual-check\office\run.ps1 -Case 'pptx-*'` 即可复现。O1 已放弃，与 xlsx / docx 相同。
 
@@ -32,6 +32,7 @@ Ps1–Ps5、Sg1–Sg5、Pt1–Pt6、Tn1–Tn5、Am1–Am5、Mm1–Mm5、Ho1–Ho
 同日补跑 `pptx-model3d.ps1`，P3d1–P3d6 通过。PowerPoint COM `Type=30`，无 Repair。
 同日补跑 `pptx-omml.ps1`，Pom1–Pom6 通过。无 Repair。
 同日补跑 `pptx-shape-format.ps1`，Tf1–Tf5 通过。无 Repair。
+2026-10-10 补跑 `pptx-master-deco.ps1`，Md1–Md5 通过。无 Repair。
 
 - **C1** ✅
   - PowerPoint 16.0 能打开 `manual-check/office/out/pptx-create.pptx`，标题栏无 Repair
@@ -249,6 +250,15 @@ Ps1–Ps5、Sg1–Sg5、Pt1–Pt6、Tn1–Tn5、Am1–Am5、Mm1–Mm5、Ho1–Ho
   - `insertMaster` 后 `masterCount=2`、Designs=2
   - 占用时 `deleteLayout` / `deleteMaster` 为 `InvalidField`
   - 页 id / 坏 type / xlsx / docx 拒写
+  - 无 Repair
+- **Md1–Md5** ✅
+  - PowerPoint 16.0：`pptx-master-deco.ps1`，5 PASS / 0 FAIL
+  - `insertShape` 到 `master:1` 后母版 `shapes` 一条、`text` 为「徽标」、无 `p:ph`
+  - 幻灯片框未抄装饰形
+  - `setShapeText` / `setShapePos` 对得上
+  - 装饰形 `insertAnim` `fade` 后母版 `timing[0].target` 对上
+  - `deleteShape` 后母版 `shapes` 为空；占位符 `deleteShape` 为 `InvalidId`
+  - 版式可插；`pptx:presentation` / 形状 id 拒 `insertShape`
   - 无 Repair
 - **Ts1–Ts5** ✅
   - PowerPoint 16.0：`pptx-theme-size.ps1`，5 PASS / 0 FAIL
@@ -1044,6 +1054,37 @@ inspect 列出 slideMaster / slideLayout 与占位符。apply 改占位符文字
   - `type` 不在白名单得 `InvalidField`
   - xlsx / docx 发 `insertLayout` 得 `InvalidField`
   - 均未写文件
+
+## 母版装饰形
+
+母版 / 版式上没有 `p:ph` 的 `p:sp` 进 inspect，能改几何与文字，能绑同一套预设动画。不把装饰形抄进各页。不算母版排版引擎。
+脚本：`manual-check/office/cases/pptx-master-deco.ps1`。编号用 Md。
+
+- **Md1**
+  - 检查：往母版插装饰形
+  - 通过标准：✅ create 产物对 `master:1` `insertShape` `text=徽标` 后 inspect `masters[0].shapes` 有一条，`text` 为「徽标」，没有 `p:ph`
+  - 幻灯片 `shapes` 仍只有原来的框
+  - PowerPoint 16.0 打开无 Repair
+- **Md2**
+  - 检查：改字与几何
+  - 通过标准：✅ 对装饰形 `setShapeText` 为「改过」后 `text` 为「改过」
+  - `setShapePos` `x=200000` 后 inspect `x` 为 200000
+  - 无 Repair
+- **Md3**
+  - 检查：绑动画
+  - 通过标准：✅ 对装饰形 `insertAnim` `type=fade` 后该母版 `timing[0].target` 为该装饰形 id
+  - 无 Repair
+- **Md4**
+  - 检查：删装饰形
+  - 通过标准：✅ `deleteShape` 后该母版 `shapes` 为空
+  - 对占位符发 `deleteShape` 得 `InvalidId`，未写文件
+  - 无 Repair
+- **Md5**
+  - 检查：版式与拒错
+  - 通过标准：✅ 对 `master:1/layout:1` `insertShape` 后该版式 `shapes` 有一条
+  - 对 `pptx:presentation` 发 `insertShape` 得 `InvalidId`
+  - 对形状 id 发 `insertShape` 得 `InvalidId`
+  - 均未写文件（拒错两条）
 
 ## 主题与幻灯片尺寸
 

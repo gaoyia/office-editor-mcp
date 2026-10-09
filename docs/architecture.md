@@ -192,7 +192,9 @@ inspect 默认只返回页名单与各页 `pictureCount`、`mathCount`、`videoC
 要连接线名单必须给 `scope.connectors`，要备注形状必须给 `scope.notes`，要批注名单必须给 `scope.comments`，要超链接名单必须给 `scope.hyperlinks`，
 要域名单必须给 `scope.fields`，要动画摘要必须给 `scope.timing`，要母版与版式名单必须给 `scope.masters`，要讲义母版槽位必须给 `scope.handout`，
 要幻灯片节名单必须给 `scope.sections`，要自定义放映名单必须给 `scope.customShows`。
-apply 可改被点名形状的 `p:txBody` 可见文字（含备注形状与母版 / 版式占位符，缩略图占位符除外），可插入文本框与非矩形预设几何、插入连接线、组合与解开、删除被点名形状、改画布坐标与尺寸、填充描边与 DrawingML 文字格式；
+apply 可改被点名形状的 `p:txBody` 可见文字（含备注形状、母版 / 版式占位符与装饰形，缩略图占位符除外），
+可插入文本框与非矩形预设几何、插入连接线、组合与解开、删除被点名形状、改画布坐标与尺寸、填充描边与 DrawingML 文字格式。
+母版 / 版式装饰形可用 `deleteShape`，占位符请用 `deletePlaceholder`。
 删除时清掉 timing 里对应 `tgtEl`，不重建未点名形状，不整节无故丢掉仍有内容的 `<p:timing>`。
 可用 `setNotesText` 按页改演讲者备注；也可换、插、删幻灯片或备注页上的 `p:pic` 并改尺寸与画布坐标；也可插、删、改幻灯片或备注页上的嵌入图表（改系列时 cache 与 embedding 双写；
 也可增删趋势线、误差线，并把系列挂到次轴）；也可插、删、改幻灯片或备注页上的 SmartArt（改点时写 data 部件，对不上 drawing 缓存则删缓存）；
@@ -202,6 +204,7 @@ apply 可改被点名形状的 `p:txBody` 可见文字（含备注形状与母�
 也可用 `insertAnim` / `setAnim` / `deleteAnim` / `moveAnim` 按模板增删改预设效果（不接受整棵时间轴树；第一条 `with` / `after` 进片自动播）；也可用 `setSlideLayout` 只改该页 `.rels` 的版式关系（不删用户形状、不抄占位符进页）；
 也可用 `insertLayout` / `deleteLayout` / `insertPlaceholder` / `deletePlaceholder` / `insertMaster` / `deleteMaster` 插删空白版式、
 带 `p:ph` 的占位符与整份母版（不算母版排版引擎）；
+也可用 `insertShape` / `deleteShape` 插删母版 / 版式上没有 `p:ph` 的装饰形（不抄进各页）；
 也可用 `setSlideSize` 只改 `p:sldSz`（不重排形状）；也可用 `setThemeColors` / `setThemeFonts` 改该母版 theme 的配色与字体（不重写 `fmtScheme`）；
 也可用 `setHandoutText` 改讲义母版页眉、页脚、日期与页码占位符（没有 handoutMaster 则新建最小部件）；
 也可插删改幻灯片文本形状上的形状级 `p:cNvPr/a:hlinkClick` 与 run 级 `a:rPr/a:hlinkClick`（URL / 文件 / 跳转到某页）；
@@ -219,7 +222,7 @@ apply 可改被点名形状的 `p:txBody` 可见文字（含备注形状与母�
 给了 `slides[].smartArts` 时复用 `insertSmartArt`，写入 `/ppt/diagrams/…` 与图示 `p:graphicFrame`。
 给了 `slides[].tables` 时复用 `insertTable`，写入表 `p:graphicFrame`。给了 `slides[].notes` 时复用 `setNotesText`。
 给了 `slides[].comments` 时复用 `insertComment`。给了 `slides[].anims` 时复用 `insertAnim`（白名单预设，可写 `delay` / `dur` / `repeat` / 声音 / 按段；第一条 `with` / `after` 进片自动播）。
-母版与版式进树（`scope.masters`），`setSlideLayout` 只换关系，写入用 `insertLayout` / `insertPlaceholder` / `insertMaster` 等。
+母版与版式进树（`scope.masters`），含占位符与装饰形。`setSlideLayout` 只换关系，写入用 `insertLayout` / `insertPlaceholder` / `insertMaster` / `insertShape` 等。
 动画效果摘要进树（`scope.timing`），写入用 `insertAnim` / `setAnim` / `deleteAnim` / `moveAnim`。切换进树，用 `setTransition` 改。幻灯片尺寸始终进树，写入用 `setSlideSize`。
 主题配色与字体挂在 `scope.masters` 的 `theme` 上，写入用 `setThemeColors` / `setThemeFonts`。`mc:AlternateContent` 只走第一个 `Choice`。
 

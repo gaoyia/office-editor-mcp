@@ -121,7 +121,10 @@ pub(super) fn render(kind: &ErrorKind) -> String {
                 "pptx 的 insertConnector / groupShapes 的 id 必须是 slide:N".into()
             }
             IdReason::InsertNeedsSlide => {
-                "pptx 的 `insertPicture` / `insertShape` 的 id 必须是 slide:N 或 slide:N/notes".into()
+                "pptx 的 `insertPicture` 的 id 必须是 slide:N 或 slide:N/notes".into()
+            }
+            IdReason::InsertShapeHost => {
+                "pptx 的 insertShape 的 id 必须是 slide:N、slide:N/notes、master:N 或 master:N/layout:K".into()
             }
             IdReason::SetNotesTextNeedsSlide => {
                 "setNotesText 的 id 必须是 slide:N 或 slide:N/notes".into()
@@ -281,6 +284,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             }
             IdReason::MasterForm => {
                 "母版或占位符 id 必须是 master:N、master:N/layout:K 或 …/shape:…".into()
+            }
+            IdReason::MasterPlaceholderLocked => {
+                "母版 / 版式占位符请用 deletePlaceholder；装饰形才用 deleteShape / setShapeFill / setShapeLine".into()
             }
             IdReason::LayoutForm => {
                 "版式 id 必须是 master:N/layout:K".into()

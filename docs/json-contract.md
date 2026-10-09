@@ -39,10 +39,11 @@ pptx 的 `scope.comments` 与批注 op 认该页 2018 线程化批注（`p188:cm
 pptx 的 `scope.timing` 列出该页 `<p:timing>` 效果摘要（含 `delay` / `dur` / `repeat` / 声音名 / 段落 / 点对象）；`scope.notes` 与 `scope.timing` 同开时备注对象带 `timing`；`scope.masters` 与 `scope.timing` 同开时母版 / 版式带 `timing`。
 apply 用 `insertAnim` / `setAnim` / `deleteAnim` / `moveAnim` 按模板增删改预设效果，可写 delay、dur、repeat、效果声音与按段；第一条 `with` / `after` 进片自动播。不接受整棵时间轴树。
 `setTransition` 还可写自动进片、方向与 `p15:prstTrans`。
-pptx 的 `scope.masters` 列出幻灯片母版与版式及占位符（含该母版 theme 的配色与字体），根上始终带 `slideSize`，apply 可用 `setSlideLayout` 换页的版式关系，
+pptx 的 `scope.masters` 列出幻灯片母版与版式、占位符与装饰形（含该母版 theme 的配色与字体），根上始终带 `slideSize`，apply 可用 `setSlideLayout` 换页的版式关系，
 也可用 `insertLayout` / `deleteLayout` / `insertPlaceholder` / `deletePlaceholder` / `insertMaster` / `deleteMaster` 插删版式、占位符与母版，
+也可用 `insertShape` / `deleteShape` 插删母版 / 版式上没有 `p:ph` 的装饰形，
 也可用 `setSlideSize` / `setThemeColors` / `setThemeFonts` 改画布尺寸与 theme 配色 / 字体，
-也可用 `setShapeText` / `setShapeFormat` / `setShapePos` / `setShapeSize` 改占位符。
+也可用 `setShapeText` / `setShapeFormat` / `setShapePos` / `setShapeSize` 改占位符与装饰形。
 pptx 的 `scope.handout` 列出讲义母版页眉页脚槽位，apply 用 `setHandoutText` 改字。
 pptx 的 `scope.hyperlinks` 与超链接 op 认幻灯片文本形状上的形状级 `p:cNvPr/a:hlinkClick` 与 run 级 `a:rPr/a:hlinkClick`（跳转 / 文件 / URL），不认图、表、图表、SmartArt、备注或母版上的链。
 pptx 的 `scope.fields` 列出幻灯片文本形状里的 `a:fld`；apply 用 `insertField` / `setField` / `deleteField` 写页码与日期域，不求值。
@@ -1788,7 +1789,8 @@ xlsx 规则与图相同：`oneCell` / `absolute` 改 `xdr:ext`，`twoCell` 改�
 xlsx 改工作表文本框或无 `txBox` 形状的 `xdr:txBody`，规则与 pptx 相同（把下文的 `p:sp` / `p:txBody` 换成 `xdr:sp` / `xdr:txBody`）。
 对工作表 id、图 id、图表 id 或连接线 id 发本 op 报 `InvalidId`。没有 `txBody` 的形状仍报 `IdNotFound`（不补 `txBody`）。docx 上发此 op 报 `InvalidField`。
 插删形状请用 `insertShape` / `deleteShape`，不要发 Word / Excel 的 `insertTextBox` / `deleteTextBox`（pptx 上这两条仍是外格式，报 `InvalidField`）。
-母版 / 版式占位符只改对应 slideMaster / slideLayout 部件，不改各页 XML。没有 `txBody` 的占位符仍报 `IdNotFound`（不补 `txBody`）。
+母版 / 版式占位符与装饰形只改对应 slideMaster / slideLayout 部件，不改各页 XML。没有 `txBody` 的占位符仍报 `IdNotFound`（不补 `txBody`）。
+没有 `txBody` 的装饰形同样报 `IdNotFound`（不补 `txBody`）。
 pptx 含形状级链时：只改 `p:txBody`，不改 `p:cNvPr` 上的 `a:hlinkClick` / `a:hlinkHover`，形状级链必须还在。
 第一个收下新文本的 run 若其 `a:rPr` 带 run 级 `a:hlinkClick`，会随第 5 条抄到新 run 上；其余 run 级链随清多余 run 丢掉。
 run 级链编进 `hyperlinks`，独立节点用 `insertHyperlink`（`on` 为 `run`）/ `setHyperlink` / `deleteHyperlink`。

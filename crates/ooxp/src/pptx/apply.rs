@@ -20,7 +20,7 @@ use super::ole;
 use super::omml;
 use super::picture;
 use super::protect;
-use super::request::{PptxOp, SetShapeFormatOp};
+use super::request::{InsertShapeHost, PptxOp, SetShapeFormatOp};
 use super::section;
 use super::shape;
 use super::show;
@@ -92,27 +92,34 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
             PptxOp::SetShapeFormat(op) => {
                 apply_set_shape_format(&mut pkg, &pres_part, &pres.root, &slides, op, i)?;
             }
-            PptxOp::InsertShape(op) => {
-                let meta = slides.get(op.slide - 1).ok_or_else(|| {
-                    Error::with_path(
-                        ErrorKind::SlideNotFound { n: op.slide as u32 },
-                        format!("ops[{i}].id"),
-                    )
-                })?;
-                let part = if op.on_notes {
-                    notes::ensure_notes_slide(&mut pkg, &pres_part, &mut pres, &meta.part)?
-                } else {
-                    meta.part.clone()
-                };
-                let mut doc = xml::parse(pkg.get(&part)?)?;
-                let canvas = if op.on_notes {
-                    notes::notes_size(&pres.root)
-                } else {
-                    picture::canvas_size(&pres.root)
-                };
-                shape::insert_shape(&mut doc, canvas, op)?;
-                pkg.set(&part, doc.to_bytes()?)?;
-            }
+            PptxOp::InsertShape(op) => match &op.host {
+                InsertShapeHost::Master { master, layout } => {
+                    master::insert_deco_shape(
+                        &mut pkg, &pres_part, &pres.root, *master, *layout, op, i,
+                    )?;
+                }
+                InsertShapeHost::Slide { slide, on_notes } => {
+                    let meta = slides.get(slide - 1).ok_or_else(|| {
+                        Error::with_path(
+                            ErrorKind::SlideNotFound { n: *slide as u32 },
+                            format!("ops[{i}].id"),
+                        )
+                    })?;
+                    let part = if *on_notes {
+                        notes::ensure_notes_slide(&mut pkg, &pres_part, &mut pres, &meta.part)?
+                    } else {
+                        meta.part.clone()
+                    };
+                    let mut doc = xml::parse(pkg.get(&part)?)?;
+                    let canvas = if *on_notes {
+                        notes::notes_size(&pres.root)
+                    } else {
+                        picture::canvas_size(&pres.root)
+                    };
+                    shape::insert_shape(&mut doc, canvas, op)?;
+                    pkg.set(&part, doc.to_bytes()?)?;
+                }
+            },
             PptxOp::InsertConnector(op) => {
                 let meta = slides.get(op.slide - 1).ok_or_else(|| {
                     Error::with_path(
@@ -176,11 +183,16 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                 pkg.set(&part, doc.to_bytes()?)?;
             }
             PptxOp::DeleteShape(op) => {
-                let mut doc = open_shape_host(&pkg, &slides, &op.target, &op.id, i)?;
-                if op.target.on_notes {
-                    reject_notes_image(&doc.root, &op.target.key, i)?;
+                if let Some(ph) = &op.placeholder {
+                    master::delete_deco(&mut pkg, &pres_part, &pres.root, ph, &op.id, i)?;
+                    continue;
                 }
-                let Some(spid) = shape::try_remove_shape(&mut doc.root, &op.target.key) else {
+                let target = op.target.as_ref().expect("幻灯片形状");
+                let mut doc = open_shape_host(&pkg, &slides, target, &op.id, i)?;
+                if target.on_notes {
+                    reject_notes_image(&doc.root, &target.key, i)?;
+                }
+                let Some(spid) = shape::try_remove_shape(&mut doc.root, &target.key) else {
                     return Err(Error::with_path(
                         ErrorKind::ShapeNotFound { id: op.id.clone() },
                         format!("ops[{i}].id"),
@@ -189,7 +201,7 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                 if let Some(id) = spid {
                     shape::strip_timing_for_spid(&mut doc.root, &id);
                 }
-                write_shape_host(&mut pkg, &slides, &op.target, doc)?;
+                write_shape_host(&mut pkg, &slides, target, doc)?;
             }
             PptxOp::SetShapePos(op) => {
                 if let Some(ph) = &op.placeholder {
@@ -248,14 +260,40 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                 write_shape_host(&mut pkg, &slides, target, doc)?;
             }
             PptxOp::SetShapeFill(op) => {
-                let mut doc = open_shape_host(&pkg, &slides, &op.target, &op.id, i)?;
-                if op.target.on_notes {
-                    reject_notes_image(&doc.root, &op.target.key, i)?;
+                if let Some(ph) = &op.placeholder {
+                    master::set_fill(
+                        &mut pkg,
+                        &pres_part,
+                        &pres.root,
+                        ph,
+                        &op.id,
+                        op.color.as_deref(),
+                        i,
+                    )?;
+                    continue;
+                }
+                let target = op.target.as_ref().expect("幻灯片形状");
+                let mut doc = open_shape_host(&pkg, &slides, target, &op.id, i)?;
+                if target.on_notes {
+                    reject_notes_image(&doc.root, &target.key, i)?;
                 }
                 shape::set_shape_fill(&mut doc, op, i)?;
-                write_shape_host(&mut pkg, &slides, &op.target, doc)?;
+                write_shape_host(&mut pkg, &slides, target, doc)?;
             }
             PptxOp::SetShapeLine(op) => {
+                if let Some(ph) = &op.placeholder {
+                    master::set_line(
+                        &mut pkg,
+                        &pres_part,
+                        &pres.root,
+                        ph,
+                        &op.id,
+                        op.color.as_deref(),
+                        op.width,
+                        i,
+                    )?;
+                    continue;
+                }
                 if let Some(cxn) = &op.cxn {
                     let slide = cxn.slide;
                     let meta = slides.get(slide - 1).ok_or_else(|| {

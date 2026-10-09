@@ -132,7 +132,10 @@ pub(super) fn render(kind: &ErrorKind) -> String {
                 "pptx insertConnector / groupShapes id must be slide:N".into()
             }
             IdReason::InsertNeedsSlide => {
-                "pptx insertPicture / insertShape id must be slide:N or slide:N/notes".into()
+                "pptx insertPicture id must be slide:N or slide:N/notes".into()
+            }
+            IdReason::InsertShapeHost => {
+                "pptx insertShape id must be slide:N, slide:N/notes, master:N or master:N/layout:K".into()
             }
             IdReason::SetNotesTextNeedsSlide => {
                 "setNotesText id must be slide:N or slide:N/notes".into()
@@ -314,6 +317,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             }
             IdReason::MasterForm => {
                 "master / placeholder id must be master:N, master:N/layout:K, or …/shape:…".into()
+            }
+            IdReason::MasterPlaceholderLocked => {
+                "master / layout placeholders use deletePlaceholder; decorative shapes use deleteShape / setShapeFill / setShapeLine".into()
             }
             IdReason::LayoutForm => {
                 "layout id must be master:N/layout:K".into()

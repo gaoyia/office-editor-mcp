@@ -63,9 +63,20 @@ pub struct SetShapeFormatOp {
 }
 
 #[derive(Debug, Clone)]
+pub enum InsertShapeHost {
+    Slide {
+        slide: usize,
+        on_notes: bool,
+    },
+    Master {
+        master: usize,
+        layout: Option<usize>,
+    },
+}
+
+#[derive(Debug, Clone)]
 pub struct InsertShapeOp {
-    pub slide: usize,
-    pub on_notes: bool,
+    pub host: InsertShapeHost,
     pub text: String,
     pub x: Option<i64>,
     pub y: Option<i64>,
@@ -78,7 +89,8 @@ pub struct InsertShapeOp {
 #[derive(Debug, Clone)]
 pub struct DeleteShapeOp {
     pub id: String,
-    pub target: super::shape::ShapeTarget,
+    pub target: Option<super::shape::ShapeTarget>,
+    pub placeholder: Option<super::master::PlaceholderId>,
 }
 
 #[derive(Debug, Clone)]
@@ -104,7 +116,8 @@ pub struct SetShapeSizeOp {
 #[derive(Debug, Clone)]
 pub struct SetShapeFillOp {
     pub id: String,
-    pub target: super::shape::ShapeTarget,
+    pub target: Option<super::shape::ShapeTarget>,
+    pub placeholder: Option<super::master::PlaceholderId>,
     pub color: Option<String>,
 }
 
@@ -112,6 +125,7 @@ pub struct SetShapeFillOp {
 pub struct SetShapeLineOp {
     pub id: String,
     pub target: Option<super::shape::ShapeTarget>,
+    pub placeholder: Option<super::master::PlaceholderId>,
     pub cxn: Option<super::connector::CxnTarget>,
     pub color: Option<String>,
     pub width: Option<i64>,
@@ -1508,8 +1522,7 @@ fn parse_insert_shape(obj: &Map<String, Value>, i: usize) -> Result<InsertShapeO
         ],
     )?;
     let id = require_id(obj, i)?;
-    let (slide, on_notes) =
-        picture::parse_insert_slide_or_notes(&id, i, crate::error::IdReason::InsertNeedsSlide)?;
+    let host = parse_insert_shape_host(&id, i)?;
     let text = match obj.get("text") {
         Some(Value::String(s)) => s.clone(),
         Some(_) => {
@@ -1568,8 +1581,7 @@ fn parse_insert_shape(obj: &Map<String, Value>, i: usize) -> Result<InsertShapeO
         ));
     }
     Ok(InsertShapeOp {
-        slide,
-        on_notes,
+        host,
         text,
         x,
         y,
@@ -1747,8 +1759,12 @@ fn parse_ungroup(obj: &Map<String, Value>, i: usize) -> Result<UngroupOp, Error>
 fn parse_delete_shape(obj: &Map<String, Value>, i: usize) -> Result<DeleteShapeOp, Error> {
     deny_keys(obj, i, &["op", "id"])?;
     let id = require_id(obj, i)?;
-    let target = super::shape::parse_shape_id(&id, i)?;
-    Ok(DeleteShapeOp { id, target })
+    let (target, placeholder) = parse_slide_or_master_shape(&id, i)?;
+    Ok(DeleteShapeOp {
+        id,
+        target,
+        placeholder,
+    })
 }
 
 fn parse_set_shape_pos(obj: &Map<String, Value>, i: usize) -> Result<SetShapePosOp, Error> {
@@ -1804,18 +1820,29 @@ fn parse_set_shape_size(obj: &Map<String, Value>, i: usize) -> Result<SetShapeSi
 fn parse_set_shape_fill(obj: &Map<String, Value>, i: usize) -> Result<SetShapeFillOp, Error> {
     deny_keys(obj, i, &["op", "id", "color"])?;
     let id = require_id(obj, i)?;
-    let target = super::shape::parse_shape_id(&id, i)?;
+    let (target, placeholder) = parse_slide_or_master_shape(&id, i)?;
     let color = parse_color_field(obj, i, "setShapeFill")?;
-    Ok(SetShapeFillOp { id, target, color })
+    Ok(SetShapeFillOp {
+        id,
+        target,
+        placeholder,
+        color,
+    })
 }
 
 fn parse_set_shape_line(obj: &Map<String, Value>, i: usize) -> Result<SetShapeLineOp, Error> {
     deny_keys(obj, i, &["op", "id", "color", "width"])?;
     let id = require_id(obj, i)?;
-    let (target, cxn) = if connector::looks_like_cxn_id(&id) {
-        (None, Some(connector::parse_cxn_id(&id, i)?))
+    let (target, placeholder, cxn) = if id.starts_with("master:") {
+        (
+            None,
+            Some(super::master::parse_placeholder_id(&id, i)?),
+            None,
+        )
+    } else if connector::looks_like_cxn_id(&id) {
+        (None, None, Some(connector::parse_cxn_id(&id, i)?))
     } else {
-        (Some(super::shape::parse_shape_id(&id, i)?), None)
+        (Some(super::shape::parse_shape_id(&id, i)?), None, None)
     };
     if !obj.contains_key("color") {
         return Err(Error::with_path(
@@ -1839,6 +1866,7 @@ fn parse_set_shape_line(obj: &Map<String, Value>, i: usize) -> Result<SetShapeLi
     Ok(SetShapeLineOp {
         id,
         target,
+        placeholder,
         cxn,
         color,
         width,
@@ -3494,6 +3522,44 @@ fn parse_shape_pos_host(id: &str, i: usize) -> Result<ShapePosHost, Error> {
     } else {
         Ok((Some(super::shape::parse_shape_id(id, i)?), None, None))
     }
+}
+
+fn parse_slide_or_master_shape(
+    id: &str,
+    i: usize,
+) -> Result<
+    (
+        Option<super::shape::ShapeTarget>,
+        Option<super::master::PlaceholderId>,
+    ),
+    Error,
+> {
+    if id.starts_with("master:") {
+        Ok((None, Some(super::master::parse_placeholder_id(id, i)?)))
+    } else {
+        Ok((Some(super::shape::parse_shape_id(id, i)?), None))
+    }
+}
+
+fn parse_insert_shape_host(id: &str, i: usize) -> Result<InsertShapeHost, Error> {
+    if id.starts_with("master:") {
+        if id.contains("/layout:") {
+            let (master, layout) = super::master::parse_layout_ref(id, i)?;
+            return Ok(InsertShapeHost::Master {
+                master,
+                layout: Some(layout),
+            });
+        }
+        let master =
+            super::master::parse_master_only_id(id, i, crate::error::IdReason::InsertShapeHost)?;
+        return Ok(InsertShapeHost::Master {
+            master,
+            layout: None,
+        });
+    }
+    let (slide, on_notes) =
+        picture::parse_insert_slide_or_notes(id, i, crate::error::IdReason::InsertShapeHost)?;
+    Ok(InsertShapeHost::Slide { slide, on_notes })
 }
 
 fn parse_transition_dur(v: &Value, i: usize) -> Result<u32, Error> {
