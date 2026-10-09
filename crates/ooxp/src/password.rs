@@ -1,9 +1,9 @@
-//! 保护口令哈希：Excel 工作表/工作簿 ISO SHA-512，以及 Word 限制编辑的遗留预处理加 SHA-512。
-//! 不破解密码。
+//! 保护口令哈希：Excel 工作表/工作簿与 PowerPoint 修改密码的 ISO SHA-512，
+//! 以及 Word 限制编辑的遗留预处理加 SHA-512。不破解密码。
 
 use sha2::{Digest, Sha512};
 
-/// Excel 16.0 与 Word 16.0 共用的 SHA-512 迭代。
+/// Excel 16.0、PowerPoint 16.0 与 Word 16.0 共用的 SHA-512 迭代。
 ///
 /// `password` 按 UTF-16LE 编码（不要 BOM）。
 /// `H0 = SHA-512(salt || password)`；`i = 0 .. spin-1` 时 `H_{i+1} = SHA-512(H_i || i 的 4 字节小端)`。
@@ -244,5 +244,14 @@ mod tests {
             .decode("lHSWYm7xlRXHKBrKtEnTcCOB+r3ZxNvnQ1cBeaumnBx1qdAlEOFT39EcTLOHK+pj3SNVZzx2T9mtHG/epYA+kw==")
             .unwrap();
         assert_eq!(word_sha512_spin("secret", &salt, 100_000), want);
+    }
+
+    #[test]
+    fn powerpoint_writepassword_sample_matches() {
+        let salt = STANDARD.decode("0DqIT0r3r/vfq1WJSH0csw==").unwrap();
+        let want = STANDARD
+            .decode("BojOzuAyO7brNl1Dj8sT9mQ0x+WPTqSINbM/4URAwXWzOnpgZkOYqQ4icqbolDQN87l2q7HnwHSOF+DFjhd8eQ==")
+            .unwrap();
+        assert_eq!(sha512_spin("secret", &salt, 100_000), want);
     }
 }

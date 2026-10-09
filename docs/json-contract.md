@@ -407,7 +407,8 @@ pptx 改 `presentation.xml` 的 `p:modifyVerifier`。pptx 的放映设置用 `se
     {
       "op": "setProtection",
       "id": "pptx:presentation",
-      "enforced": false
+      "enforced": true,
+      "password": "secret"
     }
   ]
 }
@@ -501,17 +502,26 @@ pptx（id 为 `pptx:presentation`）：
 | --- | --- |
 | `op` | 必须是 `"setProtection"` |
 | `id` | 必须是 `pptx:presentation` |
-| `enforced` | 必须。布尔。`false` 在没有密码哈希时删掉 `p:modifyVerifier`；`true` 报 `NotImplemented`（不写哈希） |
+| `enforced` | 必须。布尔。`true` 写出 `p:modifyVerifier`；`false` 删掉该元素 |
+| `password` | 可选。非空字符串。按 PowerPoint 16.0 写修改密码 SHA-512 哈希 |
 
-只认 `enforced`。出现 `password` 报 `NotImplemented`。出现 `hasPassword`、docx 字段或 xlsx 权限键报 `InvalidField`。
-id 不是 `pptx:presentation` 报 `InvalidId`。`p:modifyVerifier` 已有密码哈希时改任何字段（含 `enforced: false`）报 `NotImplemented`，不删哈希。
-没有该元素且 `enforced: false` 则空操作，仍计入 `opsApplied`。
-不写 `algorithmName` / `hashValue` / `saltValue` / `spinCount` / `spinValue`。
-按 `CT_Presentation` 该元素在 `defaultTextStyle` 之后、`extLst` 之前；本期只删不建。不新建部件。xlsx / docx 上对本 id 发此 op 仍报 `InvalidId`。
+必须给 `enforced`，否则报 `InvalidField`。`password` 不算「至少一个可写字段」。空 `password` 报 `InvalidField`。
+出现 `hasPassword`、docx 字段或 xlsx 权限键报 `InvalidField`。id 不是 `pptx:presentation` 报 `InvalidId`。
+
+`enforced: true` 且不给 `password` 时写出空 `<p:modifyVerifier/>`。已经是空元素则空操作。
+给了 `password` 时按 PowerPoint 16.0 写 `cryptProviderType="rsaAES"`、`cryptAlgorithmClass="hash"`、`cryptAlgorithmType="typeAny"`、
+`cryptAlgorithmSid="14"`、`spinCount="100000"`、`hashData`、`saltData`（16 字节随机盐的标准 Base64）。
+口令按 UTF-16LE；`H0 = SHA-512(salt || password)`，再对 `i = 0 .. 99999` 做 `H_{i+1} = SHA-512(H_i || i 的 4 字节小端)`。
+不写 ISO 的 `algorithmName` / `hashValue` / `saltValue` / `spinValue`，不写 Word 的 `hash` / `salt` / `cryptSpinCount`。
+已有 `cryptAlgorithmSid=14` 且 `hashData` / `saltData` / `spinCount` 齐时必须给对得上的 `password`，否则报 `NotImplemented`；口令对不上报 `InvalidField`。
+对得上则可 `enforced: false` 解开（删掉元素），或 `enforced: true` 换新盐重算。
+其它哈希（ISO `hashValue`、Word `hash` / `salt`、缺 sid、sid 不是 14 等）即使给了 `password` 也报 `NotImplemented`。
+无哈希时 `enforced: false` 直接删掉元素。没有该元素且 `enforced: false` 则空操作，仍计入 `opsApplied`。
+不把哈希放进树。按 `CT_Presentation` 该元素在 `defaultTextStyle` 之后、`extLst` 之前。不新建部件。xlsx / docx 上对本 id 发此 op 仍报 `InvalidId`。
 
 pptx 的放映类型、循环与旁白开关用 `setShowPr`，见 [json-contract-pptx.md](json-contract-pptx.md#setshowpr)。
 
-示例见 `docs/examples/pptx-apply-protect.json`。
+示例见 `docs/examples/pptx-apply-protect.json`。带密码见 `docs/examples/pptx-apply-protect-password.json`。
 
 ### replacePicture
 

@@ -5390,17 +5390,29 @@ fn parse_set_show_pr(
     })
 }
 
+fn parse_opt_password(obj: &Map<String, Value>, i: usize) -> Result<Option<String>, Error> {
+    match obj.get("password") {
+        None => Ok(None),
+        Some(Value::String(s)) if !s.is_empty() => Ok(Some(s.clone())),
+        Some(Value::String(_)) => Err(Error::with_path(
+            ErrorKind::ProtectionPasswordBlank,
+            format!("ops[{i}].password"),
+        )),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "password".into(),
+                expected: TypeName::String,
+            },
+            format!("ops[{i}].password"),
+        )),
+    }
+}
+
 fn parse_set_protection(
     obj: &Map<String, Value>,
     i: usize,
 ) -> Result<super::protect::SetProtectionOp, Error> {
-    if obj.contains_key("password") {
-        return Err(Error::with_path(
-            ErrorKind::ProtectionPassword,
-            format!("ops[{i}].password"),
-        ));
-    }
-    deny_keys(obj, i, &["op", "id", "enforced"])?;
+    deny_keys(obj, i, &["op", "id", "enforced", "password"])?;
     let id = require_id(obj, i)?;
     if id != "pptx:presentation" {
         return Err(Error::with_path(
@@ -5428,7 +5440,10 @@ fn parse_set_protection(
             ));
         }
     };
-    Ok(super::protect::SetProtectionOp { enforced })
+    Ok(super::protect::SetProtectionOp {
+        enforced,
+        password: parse_opt_password(obj, i)?,
+    })
 }
 
 fn parse_slides_array(

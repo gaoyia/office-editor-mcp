@@ -139,12 +139,10 @@ Close-PptPres $presP
 $pw4ok = ($capP -notmatch 'Repair') -and ([int]$snapP.ShowType -eq 1)
 Add-Check 'pptx-Pw4' $pw4ok "cap=$capP ShowType=$($snapP.ShowType)"
 
-$failPw = Get-OutPath 'pptx-protect-bad-password.pptx'
-$failEn = Get-OutPath 'pptx-protect-bad-enforced.pptx'
 $failId = Get-OutPath 'pptx-protect-bad-id.pptx'
 $failX = Get-OutPath 'pptx-protect-fail-xlsx.xlsx'
-$hashPath = Get-OutPath 'pptx-protect-hash.pptx'
-$hashOut = Get-OutPath 'pptx-protect-hash-out.pptx'
+$hashPath = Get-OutPath 'pptx-protect-iso-hash.pptx'
+$hashOut = Get-OutPath 'pptx-protect-iso-hash-out.pptx'
 Copy-Item -Force $src $hashPath
 Rewrite-ZipPart $hashPath 'ppt/presentation.xml' {
     param($xml)
@@ -162,18 +160,6 @@ $hashFail = Invoke-OoxpExpectFail @{
     ops = @(@{ op = 'setProtection'; id = 'pptx:presentation'; enforced = $false })
 } 'pptx-pw-hash-apply'
 
-$pwFail = Invoke-OoxpExpectFail @{
-    schemaVersion = 1; action = 'apply'
-    path = $src.Replace('\', '/')
-    output = $failPw.Replace('\', '/')
-    ops = @(@{ op = 'setProtection'; id = 'pptx:presentation'; enforced = $false; password = 'secret' })
-} 'pptx-pw-password'
-$enFail = Invoke-OoxpExpectFail @{
-    schemaVersion = 1; action = 'apply'
-    path = $src.Replace('\', '/')
-    output = $failEn.Replace('\', '/')
-    ops = @(@{ op = 'setProtection'; id = 'pptx:presentation'; enforced = $true })
-} 'pptx-pw-enforced'
 $idFail = Invoke-OoxpExpectFail @{
     schemaVersion = 1; action = 'apply'
     path = $src.Replace('\', '/')
@@ -194,14 +180,10 @@ $xFail = Invoke-OoxpExpectFail @{
 } 'pptx-pw-xlsx'
 
 $codeHash = Get-PptErrorCode $hashFail
-$codePw = Get-PptErrorCode $pwFail
-$codeEn = Get-PptErrorCode $enFail
 $codeId = Get-PptErrorCode $idFail
 $codeX = Get-PptErrorCode $xFail
 $pw5ok = $hashFlag `
     -and ($hashFail.ExitCode -ne 0) -and ($codeHash -eq 'NotImplemented') -and (-not (Test-Path $hashOut)) `
-    -and ($pwFail.ExitCode -ne 0) -and ($codePw -eq 'NotImplemented') -and (-not (Test-Path $failPw)) `
-    -and ($enFail.ExitCode -ne 0) -and ($codeEn -eq 'NotImplemented') -and (-not (Test-Path $failEn)) `
     -and ($idFail.ExitCode -ne 0) -and ($codeId -eq 'InvalidId') -and (-not (Test-Path $failId)) `
     -and ($xFail.ExitCode -ne 0) -and ($codeX -eq 'InvalidField')
-Add-Check 'pptx-Pw5' $pw5ok "hash=$hashFlag hashCode=$codeHash pw=$codePw en=$codeEn id=$codeId x=$codeX"
+Add-Check 'pptx-Pw5' $pw5ok "hash=$hashFlag hashCode=$codeHash id=$codeId x=$codeX"

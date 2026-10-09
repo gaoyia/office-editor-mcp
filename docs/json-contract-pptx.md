@@ -956,9 +956,11 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   `loop` / `showNarration` / `showAnimation` / `useTimings` 按对应属性，缺省分别为 `false` / `false` / `true` / `true`（schema 缺省）。
   不把 `sldAll` / `sldRg` / `custShow`、`penClr`、`extLst`、`kiosk/@restart` 或 `browse/@showScrollbar` 放进树。xlsx / docx 根上没有此字段。
 - `modifyProtection` 在演示文稿根上始终出现。来源是 Presentation 的 `p:modifyVerifier`（§19.2.1.19）。
-  字段只有 `hasPassword`：该元素带非空 `algorithmName` / `hashValue` / `saltValue` / `spinCount` / `spinValue` / `hash` / `salt` / `password` 时为 `true`，
+  字段只有 `hasPassword`：该元素带非空 `algorithmName` / `hashValue` / `saltValue` / `spinCount` / `spinValue` / `hash` / `salt` / `password` /
+  `hashData` / `saltData` / `cryptProviderType` / `cryptAlgorithmClass` / `cryptAlgorithmType` / `cryptAlgorithmSid` / `cryptSpinCount` 时为 `true`，
   否则为 `false`。
   树上不出现哈希。xlsx / docx 根上不要带此对象。docx 仍用 `protection`，xlsx 用 `sheetProtection` / `workbookProtection`。
+  `setProtection` 带 `password` 时按 [json-contract.md](json-contract.md#setprotection) 写 PowerPoint 16.0 的 `crypt*` SHA-512，不把口令或哈希写进树。
 - `scope.handout` 为 `true` 时，根上带 `handout`。没有讲义母版关系则为 `null`。有则为对象，字段顺序：`id`、`header`、`footer`、`date`、`sldNum`、`animCount`，
   `scope.timing` 同开时再跟 `timing`，然后 `placeholders`。
   `id` 为 `handout`。四个槽位分别取 handoutMaster 上第一个 `p:ph/@type` 为 `hdr` / `ftr` / `dt` / `sldNum` 的 `p:sp` 的可见字。

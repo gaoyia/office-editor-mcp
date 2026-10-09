@@ -309,31 +309,9 @@ fn protection_false_without_element_is_noop() {
 }
 
 #[test]
-fn rejects_password_enforced_true_wrong_id_and_foreign() {
+fn rejects_missing_field_wrong_id_and_foreign() {
     let src = create_deck("err");
     let out = tmp("should-not").with_extension("pptx");
-
-    let err = apply(
-        &src,
-        &out,
-        json!([{ "op": "setProtection", "id": "pptx:presentation", "enforced": true }]),
-    )
-    .unwrap_err();
-    assert_eq!(err.code(), ErrorCode::NotImplemented);
-    assert!(!out.exists());
-
-    let err = apply(
-        &src,
-        &out,
-        json!([{
-            "op": "setProtection",
-            "id": "pptx:presentation",
-            "enforced": false,
-            "password": "secret"
-        }]),
-    )
-    .unwrap_err();
-    assert_eq!(err.code(), ErrorCode::NotImplemented);
 
     let err = apply(
         &src,

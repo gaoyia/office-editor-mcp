@@ -570,7 +570,9 @@ URL / 文件写 Type 以 `/hyperlink` 结尾、`TargetMode` 为 `External` 的�
 apply 的 `setShowPr` 只改 `/ppt/presProps.xml` 的 `p:showPr`，插在 `prnPr` 之后、`clrMru` 之前。不新建 presProps 部件。
 没有该部件时报 `OpcPartMissing`。不写 `penClr` 与激光笔扩展。改成 `browse` 时写入 `p14:browseMode`（MS-PPTX §2.3.1.2）。
 
-apply 的 `setProtection` 只改 `presentation.xml` 的 `p:modifyVerifier`（`defaultTextStyle` 之后、`extLst` 之前）。本期只删不建。已有哈希属性则不改。
+apply 的 `setProtection` 只改 `presentation.xml` 的 `p:modifyVerifier`（`defaultTextStyle` 之后、`extLst` 之前）。
+无密码时写空元素或删掉元素。给了 `password` 则写 PowerPoint 16.0 的 `crypt*` / `hashData` / `saltData` / `spinCount`。
+已有可校验的 SHA-512 哈希时必须给对得上的口令。未知哈希不覆盖。
 
 apply 插入幻灯片 OLE 时，可能新建 `/ppt/embeddings/Microsoft_Excel_WorksheetN.xlsx`（或其它 Office 扩展名，
 CT 与该格式主文档一致）或 `/ppt/embeddings/oleObjectN.bin`（CT `application/vnd.openxmlformats-officedocument.oleObject`），以及一张预览 `/ppt/media/imageN.png`。

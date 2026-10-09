@@ -165,11 +165,10 @@
   - 段内本期收入的公式
   - 段内本期收入的行内内容控件
   - docx 表格结构 op 碰到表/行/单元格上的修订痕迹、网格变更标记，或某行占的列数对不上 `colCount`
-  - pptx 的 `setProtection` 出现 `password`
-  - pptx 上 `enforced: true`
   - docx create 出现 `password`
-  - 目标 `writeProtection` / `p:modifyVerifier` 已有密码哈希却要改对应字段
-  - docx / xlsx 已有密码哈希却不给对得上的 `password`（含 docx 非 `cryptAlgorithmSid=14`、xlsx 遗留 XOR）
+  - 目标 `writeProtection` 已有密码哈希却要改对应字段
+  - `p:modifyVerifier` / docx / xlsx 已有密码哈希却不给对得上的 `password`
+    （含 pptx 非 `cryptAlgorithmSid=14` 加 `hashData`、docx 非 `cryptAlgorithmSid=14`、xlsx 遗留 XOR）
 
 ### 各码在具体 op 上的判定
 
@@ -957,8 +956,9 @@
 - 没有 embedding 报 `OpcPartMissing`
 - `setProps` / `setCustomProp` 的 id 不是对应格式根报 `InvalidId`
 - `setProtection` 一个可写字段都不给、docx 的 `edit` 不认识、pptx 缺 `enforced`，报 `InvalidField`
-- pptx 出现 `password`，pptx 上 `enforced: true`，docx create 出现 `password`，docx / xlsx 已有哈希却不给对得上的 `password`，报 `NotImplemented`
-- docx / xlsx 空密码或口令对不上报 `InvalidField`
+- 空 `password` 或口令对不上已有 SHA-512 哈希报 `InvalidField`
+- 不给 `password` 却要改已有哈希，或哈希不是本期能校验的 SHA-512，报 `NotImplemented`
+- docx create 出现 `password` 报 `NotImplemented`
 - `setShowPr` 五个字段一个都不给、或 `type` 不是 `present` / `browse` / `kiosk`，报 `InvalidField`
 - `setProps` 八个可写字段一个都不给、`setCustomProp` 的 `name` 为空、`type` 不认识或与 `value` 对不上，报 `InvalidField`
 - `deleteCustomProp` 的 id 不是 `prop:{name}` 报 `InvalidId`

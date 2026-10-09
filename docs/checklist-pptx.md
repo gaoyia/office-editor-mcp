@@ -5,7 +5,7 @@
 检查前用 create 或 apply 在本机生成文件，不要用改过扩展名的 zip 目录冒充。
 本机若 `PowerPoint.Application` 被 WPS 抢走，直接启动 `POWERPNT.EXE` 再挂 COM，不要走被抢的 ProgID。Office 16 的对象模型在 `mdiClass` 上。
 
-C、I、A、Pp、Pvg、Pem、P3d、Pom、Pc、Psa、Pn、Pcm、Pm、Ps、Tf、Sg、Pt、Tn、Tr、Td、Mt、Am、Aw、Mm、Mw、Md、Ts、Ho、Nh、Nm、Phl、Phr、Phx、Pcip、Pmd、Psc、Cs、Po、Cr、Pz、Pzr、Pw、
+C、I、A、Pp、Pvg、Pem、P3d、Pom、Pc、Psa、Pn、Pcm、Pm、Ps、Tf、Sg、Pt、Tn、Tr、Td、Mt、Am、Aw、Mm、Mw、Md、Ts、Ho、Nh、Nm、Phl、Phr、Phx、Pcip、Pmd、Psc、Cs、Po、Cr、Pz、Pzr、Pw、Pph、
 Pf 各组由 `manual-check/office/cases/pptx-*.ps1` 自动判定，
 跑 `pwsh -File manual-check\office\run.ps1 -Case 'pptx-*'` 即可复现。O1 已放弃，与 xlsx / docx 相同。
 
@@ -39,6 +39,7 @@ Ps1–Ps5、Sg1–Sg5、Pt1–Pt6、Tn1–Tn5、Am1–Am5、Mm1–Mm5、Ho1–Ho
 2026-10-10 补跑 `pptx-media-trim.ps1`，Mt1–Mt5 通过。无 Repair。
 2026-10-10 补跑 `pptx-hyperlinks-remain.ps1`，Phx1–Phx5 通过。无 Repair。
 2026-10-10 补跑 `pptx-zoom-remain.ps1`，Pzr1–Pzr5 通过。无 Repair。
+2026-10-10 补跑 `pptx-protect-hash.ps1`，Pph1–Pph5 通过。无 Repair。
 
 - **C1** ✅
   - PowerPoint 16.0 能打开 `manual-check/office/out/pptx-create.pptx`，标题栏无 Repair
@@ -364,10 +365,17 @@ Ps1–Ps5、Sg1–Sg5、Pt1–Pt6、Tn1–Tn5、Am1–Am5、Mm1–Mm5、Ho1–Ho
   - kiosk+loop 的 COM ShowType=3、Loop 为真
   - browse 的 ShowType=2
   - 改回 present 后 ShowType=1
-  - password / enforced true / 带哈希样例得 `NotImplemented`
+  - 带哈希样例无口令得 `NotImplemented`
   - 页 id 得 `InvalidId`
   - xlsx 拒 `setShowPr`
   - 无 Repair
+- **Pph1–Pph5** ✅
+  - PowerPoint 16.0：`pptx-protect-hash.ps1`，5 PASS / 0 FAIL
+  - 带 `password` 后 `hasPassword=true`，ZIP 有 `cryptAlgorithmSid="14"` 与 `hashData`
+  - 对得上的口令解开后无 Repair
+  - 空 verifier 的 `hasPassword=false`
+  - 换盐后 `saltData` 改变
+  - 空口令 / 错口令 / 无口令改哈希 / ISO 样例分别得 `InvalidField` 或 `NotImplemented`
 - **Pf1–Pf5** ✅
   - PowerPoint 16.0：`pptx-fields.ps1`，5 PASS / 0 FAIL
   - 无名单时根与各页有 `fieldCount=0`
@@ -1509,8 +1517,8 @@ Fallback 预览 `p:pic` 不进 `pictures`。插入走 ooxp，不要 `ExecuteMso`
 ## 修改密码与放映保护
 
 inspect 根上始终给出 `showPr` 与 `modifyProtection`，不要另给 scope 键。
-apply 能改放映类型与循环（`setShowPr`），能在没有哈希时删掉 `p:modifyVerifier`（`setProtection` `enforced: false`）。不算放映引擎，不写哈希。
-带哈希样例只 ZIP 注入，不要用 COM 打开。脚本：`manual-check/office/cases/pptx-protect.ps1`。编号用 Pw（不要跟 Pz、Po、Pd、Pr、Pp 撞）。
+apply 能改放映类型与循环（`setShowPr`），能在没有哈希时删掉 `p:modifyVerifier`（`setProtection` `enforced: false`）。不算放映引擎。
+带哈希样例只 ZIP 注入，不要用 COM 打开。脚本：`manual-check/office/cases/pptx-protect.ps1`。编号用 Pw（不要跟 Pz、Po、Pd、Pr、Pp、Pph 撞）。
 
 - **Pw1**
   - 检查：inspect
@@ -1531,11 +1539,41 @@ apply 能改放映类型与循环（`setShowPr`），能在没有哈希时删掉
   - 无 Repair
 - **Pw5**
   - 检查：拒错
-  - 通过标准：`password` / `enforced: true` / 带哈希样例 `enforced: false` 得 `NotImplemented`
+  - 通过标准：ISO `hashValue` 样例不给 `password` 得 `NotImplemented`
   - xlsx / docx 发 `setShowPr` 得 `InvalidField`
   - 页 id 发 `setShowPr` 得 `InvalidId`
   - 未写文件
   - 带哈希样例不要开 PowerPoint
+
+## 修改密码哈希
+
+`setProtection` 的 `password` 写 PowerPoint 16.0 修改密码 SHA-512（`crypt*` + `hashData` / `saltData`，算法与 Excel 相同）。
+inspect 仍只报 `hasPassword`。不破解密码。带哈希或空 verifier 的文稿不要用 COM 打开。解开后再开。
+脚本：`manual-check/office/cases/pptx-protect-hash.ps1`。编号用 **Pph**（不要跟 Pw、Pz、Ph 撞）。
+
+- **Pph1**
+  - 检查：写哈希
+  - 通过标准：✅ `setProtection` 带 `password` 后 `hasPassword=true`，树里没有哈希或明文
+  - ZIP 有 `cryptAlgorithmSid="14"` 与 `hashData` / `saltData`
+- **Pph2**
+  - 检查：解开
+  - 通过标准：✅ 给对得上的 `password` 且 `enforced: false` 后 `hasPassword=false`
+  - PowerPoint 16.0 无 Repair
+- **Pph3**
+  - 检查：空 verifier
+  - 通过标准：✅ `enforced: true` 不带 `password` 后 ZIP 有空 `p:modifyVerifier`，`hasPassword=false`
+  - 不要用 COM 打开
+- **Pph4**
+  - 检查：换盐
+  - 通过标准：✅ 已有可校验哈希时再带同一 `password` 且 `enforced: true` 后 `saltData` 改变、`hasPassword=true`
+  - 不要用 COM 打开
+- **Pph5**
+  - 检查：拒错
+  - 通过标准：✅ 空 `password` 得 `InvalidField`
+  - 错口令解开得 `InvalidField`
+  - 不给 `password` 改带 `hashData` 的保护得 `NotImplemented`
+  - ISO `hashValue` 样例即使给了 `password` 也得 `NotImplemented`
+  - 未写文件
 
 ## 字段
 
