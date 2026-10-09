@@ -903,6 +903,15 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::InvalidShapePrst => {
             "prst 必须是可写的预设几何名；连接线几何请用 insertConnector".into()
         }
+        ErrorKind::InvalidGeomOp => {
+            "路径命令只允许 moveTo、lnTo、close".into()
+        }
+        ErrorKind::ConnectorEndHost => {
+            "start / end 必须与连接线同一宿主".into()
+        }
+        ErrorKind::NeedConnectorBind => {
+            "setConnector 必须给 start 或 end".into()
+        }
         ErrorKind::InvalidConnectorPrst => {
             "prst 必须是可写的连接线几何名".into()
         }

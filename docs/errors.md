@@ -383,29 +383,34 @@
 - create 的 `slides[].transition.type` 为 `null` 报 `InvalidField`
 - create 的 `anims[]` 绑定序号对不上该页对应数组报 `InvalidField`
 - `sections[].start` 不是正整数、不严格递增或超出页数报 `InvalidField`
-- 找不到形状时，`setShapeText` / `setShapeFormat` / `deleteShape` / `setShapePos` / `setShapeSize` / `setShapeFill` / `setShapeLine` 报 `IdNotFound`，不新建形状
+- 找不到形状时，`setShapeText` / `setShapeFormat` / `deleteShape` / `setShapePos` / `setShapeSize` / `setShapeFill` / `setShapeLine` / `setShapeGeom` 报 `IdNotFound`，不新建形状
 - 对幻灯片 id 或备注容器 id（没有 `/shape:`）发这些 op 报 `InvalidId`
 - 对备注页或母版 / 版式上占位符（`p:ph/@type` 为 `sldImg`）发这些 op 报 `InvalidField`
 - pptx 的 `insertShape` 的 `id` 必须是 `slide:{n}`、`slide:{n}/notes`、`master:{n}` 或 `master:{n}/layout:{k}`
 - 对形状 id、图 id 或 `pptx:presentation` 发该 op 报 `InvalidId`
-- 对母版 / 版式占位符发 `deleteShape` / `setShapeFill` / `setShapeLine` 报 `InvalidId`
+- 对母版 / 版式占位符发 `deleteShape` / `setShapeFill` / `setShapeLine` / `setShapeGeom` 报 `InvalidId`
 - xlsx 的 `insertShape` 的 `id` 必须是 `sheet:{name}`，且该表为 `worksheet`
 - 必须给 `from`
 - 出现 `x` / `y` 报 `InvalidField`
 - 对形状 id、图 id 或 `xlsx:workbook` 发该 op 报 `InvalidId`
 - `insertShape` 只给 `x` 或只给 `y`、只给 `cx` 或只给 `cy`、或 `prst` 不是可写预设名（含连接线几何名）报 `InvalidField`
+- `insertShape` 同时给 `prst` 与 `geom`、`geom.paths` 为空、或路径命令不是 `moveTo` / `lnTo` / `close` 报 `InvalidField`
+- `setShapeGeom` 缺 `paths`、空数组、或缺 `w` / `h` 报 `InvalidField`
+- 对连接线 id 发 `setShapeGeom` 报 `InvalidId`
 - `setShapePos` 的 `x` 与 `y` 一个都不给、`setShapeSize` 的 `cx` 与 `cy` 一个都不给、`setShapeFill` / `setShapeLine` 缺 `color`，或无边框时仍给 `width`，报 `InvalidField`
 - `setShapeFormat` 除 `op` 与 `id` 外一个字段都不给、`sz` 小于 100、`align` 不是 `l` / `ctr` / `r` / `just`、`textAnchor` 不是 `t` / `ctr` / `b`、`underline` 不是 `sng` / `none` / `dbl`、或 `font` / `eastAsiaFont` 为空串，报 `InvalidField`
 - `setShapeFormat` 的 `sz` 大于 400000 报 `TruncatedLimit`
 - 非法六位十六进制 `color` 报 `InvalidField`
 - docx 认 `insertConnector` / `deleteConnector` / `groupShapes` / `ungroup`
-- docx 上发 `insertShape` / `deleteShape` / `setShapePos` / `setShapeSize` / `setShapeFill` / `setShapeLine` / `setShapeFormat` 报 `InvalidField`
-- xlsx 上发 `groupShapes` / `ungroup` / `setShapePos` / `setShapeSize` / `setShapeFill` / `setShapeLine` 报 `InvalidField`
+- docx 上发 `insertShape` / `deleteShape` / `setShapePos` / `setShapeSize` / `setShapeFill` / `setShapeLine` / `setShapeGeom` / `setConnector` / `setShapeFormat` 报 `InvalidField`
+- xlsx 上发 `groupShapes` / `ungroup` / `setShapePos` / `setShapeSize` / `setShapeFill` / `setShapeLine` / `setShapeGeom` / `setConnector` 报 `InvalidField`
 - xlsx 认 `insertShape` / `deleteShape` / `insertConnector` / `deleteConnector` / `setShapeFormat`
-- 找不到连接线时，`deleteConnector` / 对连接线发的 `setShapePos` / `setShapeSize` / `setShapeLine` 报 `IdNotFound`
+- 找不到连接线时，`deleteConnector` / `setConnector` / 对连接线发的 `setShapePos` / `setShapeSize` / `setShapeLine` 报 `IdNotFound`
 - 对连接线发 `setShapeText` / `setShapeFormat` / `setShapeFill` / `deleteShape` 报 `InvalidId`
 - pptx 的 `insertConnector` 的 id 必须是 `slide:{n}`、`slide:{n}/notes`、`master:{n}` 或 `master:{n}/layout:{k}`
 - 对 `notesMaster` / `handout` 或形状 id 发该 op 报 `InvalidId`
+- `insertConnector` / `setConnector` 的 `start` / `end` 不是同宿主形状或连接线、或 `site` 小于 1 报 `InvalidField`
+- `setConnector` 的 `start` 与 `end` 一个都不给报 `InvalidField`
 - xlsx 的 `insertConnector` 的 id 必须是 `sheet:{name}`，必须给 `from`
 - 出现 `x` / `y` 报 `InvalidField`
 - `groupShapes` 的 ids 少于两个、有重复、或成员已在组合里报 `InvalidField`

@@ -1188,6 +1188,12 @@
                 "$ref": "pptx.schema.json#/$defs/setShapeLineOp"
               },
               {
+                "$ref": "pptx.schema.json#/$defs/setShapeGeomOp"
+              },
+              {
+                "$ref": "pptx.schema.json#/$defs/setConnectorOp"
+              },
+              {
                 "$ref": "pptx.schema.json#/$defs/setTableCellTextOp"
               },
               {

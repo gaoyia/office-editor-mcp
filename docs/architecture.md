@@ -193,7 +193,7 @@ inspect 默认只返回页名单与各页 `pictureCount`、`mathCount`、`videoC
 要域名单必须给 `scope.fields`，要动画摘要必须给 `scope.timing`，要母版与版式名单必须给 `scope.masters`，要备注母版占位符必须给 `scope.notesMaster`，要讲义母版槽位必须给 `scope.handout`，
 要幻灯片节名单必须给 `scope.sections`，要自定义放映名单必须给 `scope.customShows`。
 apply 可改被点名形状的 `p:txBody` 可见文字（含备注形状、母版 / 版式占位符与装饰形、备注母版与讲义占位符，缩略图占位符除外），
-可插入文本框与非矩形预设几何、插入连接线、组合与解开、删除被点名形状、改画布坐标与尺寸、填充描边与 DrawingML 文字格式。
+可插入文本框与非矩形预设几何、写入自定义路径（`a:custGeom`）、插入连接线（可写 `stCxn` / `endCxn`）、组合与解开、删除被点名形状、改画布坐标与尺寸、填充描边与 DrawingML 文字格式。
 母版 / 版式装饰形可用 `deleteShape`，占位符请用 `deletePlaceholder`。
 删除时清掉 timing 里对应 `tgtEl`，不重建未点名形状，不整节无故丢掉仍有内容的 `<p:timing>`。
 可用 `setNotesText` 按页改演讲者备注；也可换、插、删幻灯片或备注页上的 `p:pic` 并改尺寸与画布坐标；也可插、删、改幻灯片或备注页上的嵌入图表（改系列时 cache 与 embedding 双写；
@@ -298,7 +298,7 @@ docx 也可插删换 3D 模型，脏宿主 XML、`.rels`、GLB 与海报 PNG。
 docx 也可用 `setProtection` 改 `settings.xml` 的保护标记，窗体保护还可脏主文档各节 `w:formProt`。
 docx 也可插删页眉 DrawingML 水印，无 default 页眉时会新建，并可脏页眉部件与媒体。
 docx 也可用 `setThemeColors` / `setThemeFonts` 改主文档 theme 部件的配色与字体方案，只脏该 theme 部件，不重写 `fmtScheme`。
-pptx 可改被点名形状的可见文字（含备注形状与母版 / 版式占位符），可插入文本框与非矩形预设几何、插入连接线（幻灯片、备注页与母版 / 版式）、组合与解开、删除被点名形状并清对应 timing `tgtEl`、改画布坐标与尺寸、填充描边与 DrawingML 文字格式，
+pptx 可改被点名形状的可见文字（含备注形状与母版 / 版式占位符），可插入文本框与非矩形预设几何、写入自定义路径、插入连接线（幻灯片、备注页与母版 / 版式，可写 `stCxn` / `endCxn`）、组合与解开、删除被点名形状并清对应 timing `tgtEl`、改画布坐标与尺寸、填充描边与 DrawingML 文字格式，
 可用 `setNotesText` 按页改或新建演讲者备注，也可改被点名的幻灯片图、备注图与母版 / 版式图（换、插、删、改尺寸、改画布坐标），也可插删改幻灯片、备注页与母版 / 版式图表，也可插删改幻灯片、备注页与母版 / 版式 SmartArt，
 也可插删改幻灯片、备注页与母版 / 版式 DrawingML 表，也可插删回复并改现代批注，也可对批注或回复 id 插图并换、删批注内图（不改尺寸位置），也可按批注内图 id `exportMedia`，也可插入、删除、重排与隐藏幻灯片，
 也可用 `setTransition` 写或清除该页、母版或版式上的 `<p:transition>`（含自动进片、方向、切换声音、`split` 的 `orient`、`wheel` 的 `spokes` 与 `p15:prstTrans`），

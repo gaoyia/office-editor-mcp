@@ -136,6 +136,7 @@ $order = @(
     'pptx-shapes'
     'pptx-shape-format'
     'pptx-shape-geom'
+    'pptx-custgeom'
     'pptx-tables'
     'pptx-transition'
     'pptx-transition-remain'

@@ -883,6 +883,31 @@ COM 认 `Type=30`（`mso3DModel`）。批注内本期不插。
   - 通过标准：✅ 连接线几何名给 `insertShape`、`groupShapes` 只给一个成员、对形状 id 发 `insertConnector` 得 `InvalidField` 或 `InvalidId`
   - 均未写文件
 
+## 自定义几何
+
+自定义路径（`a:custGeom`）与连接线绑点。脚本 `manual-check/office/cases/pptx-custgeom.ps1`。编号用 Pcg（不要跟 Sg、Cs、Pc、Pph 混）。
+
+- **Pcg1**
+  - 检查：写路径
+  - 通过标准：✅ create 产物 `insertShape` 给 `geom` 后 inspect `prst` 为 `null`、`geom.paths` 对得上
+  - COM Type=5、AutoShapeType=138
+  - 无 Repair
+- **Pcg2**
+  - 检查：连接绑定
+  - 通过标准：✅ `insertConnector` 给 `start` / `end` 后 ZIP 有 `stCxn` / `endCxn`，inspect `start.id` / `end.id` 对得上
+  - COM Connector 为真
+  - 无 Repair
+- **Pcg3**
+  - 检查：改顶点
+  - 通过标准：✅ `setShapeGeom` 后 inspect `ops` 为新顶点，无 Repair
+- **Pcg4**
+  - 检查：改绑定
+  - 通过标准：✅ `setConnector` 后 ZIP `stCxn/@id` 换成新目标，无 Repair
+- **Pcg5**
+  - 检查：拒错
+  - 通过标准：✅ `prst` 与 `geom` 同给、`setShapeGeom` 写 `cubicBezTo`、对连接线 id 发 `setShapeGeom` 得 `InvalidField` 或 `InvalidId`
+  - 均未写文件
+
 ## 幻灯片表格
 
 DrawingML 表（`a:tbl` 包在 `p:graphicFrame` 里）。不要把表编进 `shapes` / `charts` / `pictures`。源文件：PowerPoint 亲手另存，第一页至少一张表。

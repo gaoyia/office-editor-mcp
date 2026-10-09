@@ -990,6 +990,15 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::InvalidShapePrst => {
             "prst must be a writable preset geometry; use insertConnector for connector geometries".into()
         }
+        ErrorKind::InvalidGeomOp => {
+            "path commands may only be moveTo, lnTo, or close".into()
+        }
+        ErrorKind::ConnectorEndHost => {
+            "start / end must be on the same host as the connector".into()
+        }
+        ErrorKind::NeedConnectorBind => {
+            "setConnector requires start or end".into()
+        }
         ErrorKind::InvalidConnectorPrst => {
             "prst must be a writable connector geometry".into()
         }

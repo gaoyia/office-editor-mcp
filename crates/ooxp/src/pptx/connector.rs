@@ -6,7 +6,9 @@ use crate::error::{Error, ErrorKind, IdReason};
 use crate::xml::{Document, Element, Node};
 
 use super::picture;
-use super::request::{InsertConnectorOp, SetShapeLineOp, SetShapePosOp, SetShapeSizeOp};
+use super::request::{
+    InsertConnectorOp, SetConnectorOp, SetShapeLineOp, SetShapePosOp, SetShapeSizeOp,
+};
 use super::shape::{self, ShapeKey};
 use super::DML_NS;
 
@@ -20,6 +22,17 @@ pub struct CxnTarget {
     pub on_notes: bool,
     pub master: Option<(usize, Option<usize>)>,
     pub key: ShapeKey,
+}
+
+#[derive(Debug, Clone)]
+pub struct CxnBind {
+    pub id: String,
+    pub slide: usize,
+    pub on_notes: bool,
+    pub master: Option<(usize, Option<usize>)>,
+    pub key: ShapeKey,
+    pub is_cxn: bool,
+    pub site: u32,
 }
 
 pub fn parse_cxn_id(id: &str, op_index: usize) -> Result<CxnTarget, Error> {
@@ -155,7 +168,7 @@ fn stable_id(el: &Element, host: &str, index: usize) -> (String, Option<String>,
     }
 }
 
-fn node_json(el: &Element, host: &str, index: usize) -> Value {
+fn node_json(el: &Element, root: &Element, host: &str, index: usize) -> Value {
     let (id, cnv, stable) = stable_id(el, host, index);
     let (x, y, cx, cy) = shape::geometry_json(el);
     let mut obj = Map::new();
@@ -166,6 +179,12 @@ fn node_json(el: &Element, host: &str, index: usize) -> Value {
         json!(cnv_pr(el).and_then(|c| c.attr("name")).unwrap_or("")),
     );
     obj.insert("prst".into(), shape::prst_json(el));
+    if let Some(start) = bind_json(el, root, host, "stCxn") {
+        obj.insert("start".into(), start);
+    }
+    if let Some(end) = bind_json(el, root, host, "endCxn") {
+        obj.insert("end".into(), end);
+    }
     obj.insert("x".into(), x);
     obj.insert("y".into(), y);
     obj.insert("cx".into(), cx);
@@ -174,11 +193,50 @@ fn node_json(el: &Element, host: &str, index: usize) -> Value {
     Value::Object(obj)
 }
 
+fn bind_json(el: &Element, root: &Element, host: &str, local: &str) -> Option<Value> {
+    let node = el
+        .child_by_local("nvCxnSpPr")
+        .and_then(|nv| nv.child_by_local("cNvCxnSpPr"))
+        .and_then(|pr| pr.child_by_local(local))?;
+    let cnv = node.attr_local("id").filter(|s| !s.is_empty())?;
+    let idx = node
+        .attr_local("idx")
+        .and_then(|s| s.parse::<i64>().ok())
+        .unwrap_or(0);
+    let mut obj = Map::new();
+    obj.insert("id".into(), json!(inspect_id_for_cnv(root, host, cnv)));
+    obj.insert("site".into(), json!(idx + 1));
+    Some(Value::Object(obj))
+}
+
+fn inspect_id_for_cnv(root: &Element, host: &str, cnv: &str) -> String {
+    for (i, sp) in shape::collect_text_shapes(root).into_iter().enumerate() {
+        if let Some(id) = shape::cnv_pr(sp).and_then(|c| c.attr("id")) {
+            if shape::ids_match(id, cnv) {
+                let (inspect, _, _) = shape::shape_stable_id(sp, host, i + 1);
+                return inspect;
+            }
+        }
+    }
+    for (i, cxn) in collect(root).into_iter().enumerate() {
+        if let Some(id) = cnv_pr(cxn).and_then(|c| c.attr("id")) {
+            if shape::ids_match(id, cnv) {
+                return if id.is_empty() {
+                    format!("{host}/cxn:index:{}", i + 1)
+                } else {
+                    format!("{host}/cxn:{id}")
+                };
+            }
+        }
+    }
+    format!("{host}/shape:{cnv}")
+}
+
 pub fn list_json(root: &Element, host: &str) -> Vec<Value> {
     collect(root)
         .into_iter()
         .enumerate()
-        .map(|(i, el)| node_json(el, host, i + 1))
+        .map(|(i, el)| node_json(el, root, host, i + 1))
         .collect()
 }
 
@@ -219,22 +277,209 @@ fn find_in<'a>(el: &'a mut Element, idx: &mut usize, key: &ShapeKey) -> Option<&
     None
 }
 
-pub fn insert(doc: &mut Document, canvas: (i64, i64), op: &InsertConnectorOp) -> Result<(), Error> {
+pub fn insert(
+    doc: &mut Document,
+    canvas: (i64, i64),
+    op: &InsertConnectorOp,
+    op_index: usize,
+) -> Result<(), Error> {
     let cx = op.cx.unwrap_or(DEFAULT_CX);
     let cy = op.cy.unwrap_or(DEFAULT_CY);
     let (x, y) = match (op.x, op.y) {
         (Some(px), Some(py)) => (px, py),
         _ => picture::vacant_pos_canvas(canvas, &doc.root, cx, cy),
     };
+    let start = match &op.start {
+        Some(b) => Some(resolve_bind(
+            &doc.root,
+            b,
+            op.slide,
+            op.on_notes,
+            op.master,
+            op_index,
+        )?),
+        None => None,
+    };
+    let end = match &op.end {
+        Some(b) => Some(resolve_bind(
+            &doc.root,
+            b,
+            op.slide,
+            op.on_notes,
+            op.master,
+            op_index,
+        )?),
+        None => None,
+    };
     picture::ensure_xmlns(&mut doc.root, "a", DML_NS);
     let cnv = picture::next_cnv_id(&doc.root);
     let name = format!("连接线 {cnv}");
-    let cxn = build_cxn(cnv, &name, &op.prst, x, y, cx, cy);
+    let cxn = build_cxn(
+        cnv,
+        &name,
+        &op.prst,
+        x,
+        y,
+        cx,
+        cy,
+        start.as_ref(),
+        end.as_ref(),
+    );
     picture::insert_into_sp_tree(&mut doc.root, cxn)?;
     Ok(())
 }
 
-fn build_cxn(cnv: u32, name: &str, prst: &str, x: i64, y: i64, cx: i64, cy: i64) -> Element {
+pub fn set_binds(doc: &mut Document, op: &SetConnectorOp, op_index: usize) -> Result<(), Error> {
+    let start = match &op.start {
+        Some(b) => Some(resolve_bind(
+            &doc.root,
+            b,
+            op.target.slide,
+            op.target.on_notes,
+            op.target.master,
+            op_index,
+        )?),
+        None => None,
+    };
+    let end = match &op.end {
+        Some(b) => Some(resolve_bind(
+            &doc.root,
+            b,
+            op.target.slide,
+            op.target.on_notes,
+            op.target.master,
+            op_index,
+        )?),
+        None => None,
+    };
+    let el = find_mut(&mut doc.root, &op.target.key).ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::ConnectorNotFound { id: op.id.clone() },
+            format!("ops[{op_index}].id"),
+        )
+    })?;
+    if let Some((ref cnv, site)) = start {
+        upsert_cxn_end(el, "stCxn", cnv, site);
+    }
+    if let Some((ref cnv, site)) = end {
+        upsert_cxn_end(el, "endCxn", cnv, site);
+    }
+    Ok(())
+}
+
+fn resolve_bind(
+    root: &Element,
+    bind: &CxnBind,
+    slide: usize,
+    on_notes: bool,
+    master: Option<(usize, Option<usize>)>,
+    op_index: usize,
+) -> Result<(String, u32), Error> {
+    if bind.slide != slide || bind.on_notes != on_notes || bind.master != master {
+        return Err(Error::with_path(
+            ErrorKind::ConnectorEndHost,
+            format!("ops[{op_index}]"),
+        ));
+    }
+    let cnv = if bind.is_cxn {
+        let el = collect(root)
+            .into_iter()
+            .enumerate()
+            .find(|(i, el)| match &bind.key {
+                ShapeKey::Index(n) => *i + 1 == *n,
+                ShapeKey::Id(req) => cnv_pr(el)
+                    .and_then(|c| c.attr("id"))
+                    .is_some_and(|id| shape::ids_match(id, req)),
+            })
+            .ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::ConnectorNotFound {
+                        id: bind.id.clone(),
+                    },
+                    format!("ops[{op_index}]"),
+                )
+            })?;
+        cnv_pr(el.1)
+            .and_then(|c| c.attr("id"))
+            .filter(|s| !s.is_empty())
+            .ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::ConnectorNotFound {
+                        id: bind.id.clone(),
+                    },
+                    format!("ops[{op_index}]"),
+                )
+            })?
+            .to_string()
+    } else {
+        let list = shape::collect_text_shapes(root);
+        let sp = match &bind.key {
+            ShapeKey::Index(n) => list.get(n - 1).copied(),
+            ShapeKey::Id(req) => list.iter().copied().find(|sp| {
+                shape::cnv_pr(sp)
+                    .and_then(|c| c.attr("id"))
+                    .is_some_and(|id| shape::ids_match(id, req))
+            }),
+        }
+        .ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::ShapeNotFound {
+                    id: bind.id.clone(),
+                },
+                format!("ops[{op_index}]"),
+            )
+        })?;
+        shape::cnv_pr(sp)
+            .and_then(|c| c.attr("id"))
+            .filter(|s| !s.is_empty())
+            .ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::ShapeNotFound {
+                        id: bind.id.clone(),
+                    },
+                    format!("ops[{op_index}]"),
+                )
+            })?
+            .to_string()
+    };
+    Ok((cnv, bind.site))
+}
+
+fn upsert_cxn_end(cxn: &mut Element, local: &str, cnv: &str, site: u32) {
+    let nv = match cxn.child_by_local_mut("nvCxnSpPr") {
+        Some(nv) => nv,
+        None => return,
+    };
+    let pr = picture::ensure_child(nv, "cNvCxnSpPr");
+    pr.children
+        .retain(|n| !matches!(n, Node::Element(e) if e.local_name() == local));
+    let mut e = Element::new(format!("a:{local}"));
+    e.set_attr("id", cnv.to_string());
+    e.set_attr("idx", (site.saturating_sub(1)).to_string());
+    if local == "stCxn" {
+        pr.children.insert(0, Node::Element(e));
+    } else if let Some(i) = pr
+        .children
+        .iter()
+        .position(|n| matches!(n, Node::Element(e) if e.local_name() == "stCxn"))
+    {
+        pr.children.insert(i + 1, Node::Element(e));
+    } else {
+        pr.children.insert(0, Node::Element(e));
+    }
+}
+
+fn build_cxn(
+    cnv: u32,
+    name: &str,
+    prst: &str,
+    x: i64,
+    y: i64,
+    cx: i64,
+    cy: i64,
+    start: Option<&(String, u32)>,
+    end: Option<&(String, u32)>,
+) -> Element {
     let mut cxn = Element::new("p:cxnSp");
     let mut nv = Element::new("p:nvCxnSpPr");
     nv.push_element(
@@ -242,7 +487,22 @@ fn build_cxn(cnv: u32, name: &str, prst: &str, x: i64, y: i64, cx: i64, cy: i64)
             .with_attr("id", cnv.to_string())
             .with_attr("name", name),
     );
-    nv.push_element(Element::new("p:cNvCxnSpPr"));
+    let mut cxn_pr = Element::new("p:cNvCxnSpPr");
+    if let Some((id, site)) = start {
+        cxn_pr.push_element(
+            Element::new("a:stCxn")
+                .with_attr("id", id)
+                .with_attr("idx", (site.saturating_sub(1)).to_string()),
+        );
+    }
+    if let Some((id, site)) = end {
+        cxn_pr.push_element(
+            Element::new("a:endCxn")
+                .with_attr("id", id)
+                .with_attr("idx", (site.saturating_sub(1)).to_string()),
+        );
+    }
+    nv.push_element(cxn_pr);
     nv.push_element(Element::new("p:nvPr"));
     cxn.push_element(nv);
 

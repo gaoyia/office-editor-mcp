@@ -545,6 +545,21 @@ pub fn set_line(
     })
 }
 
+pub fn set_geom(
+    pkg: &mut Package,
+    pres_part: &str,
+    pres_root: &Element,
+    ph: &PlaceholderId,
+    id: &str,
+    paths: &[super::geom::Path],
+    op_index: usize,
+) -> Result<(), Error> {
+    apply_on_deco(pkg, pres_part, pres_root, ph, id, op_index, |sp| {
+        shape::apply_geom(sp, paths);
+        Ok(())
+    })
+}
+
 pub fn insert_deco_shape(
     pkg: &mut Package,
     pres_part: &str,

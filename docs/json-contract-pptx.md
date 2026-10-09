@@ -936,10 +936,14 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   `x` / `y` / `cx` / `cy` 取 graphicFrame 的 `p:xfrm`；没有 graphicFrame 则取 `spPr/a:xfrm` 或 Fallback `p:pic` 的 `spPr/a:xfrm`。
   不把预览图放进树。xlsx / docx 的 `scope` 里出现 `zooms` 报 `InvalidField`。
 - `scope.connectors` 为 `true` 时，每页带 `connectors`。没有连接线时为空数组。不依赖 `scope.slide`。
-  每条字段顺序：`id`、`cNvPrId`、`name`、`prst`、`x`、`y`、`cx`、`cy`、`stable`。`cNvPrId` / `name` / `stable` 规则与图相同。
+  每条字段顺序：`id`、`cNvPrId`、`name`、`prst`，有 `a:stCxn` 时再跟 `start`，有 `a:endCxn` 时再跟 `end`，
+  然后 `x`、`y`、`cx`、`cy`、`stable`。`cNvPrId` / `name` / `stable` 规则与图相同。
   `prst` 取 `a:prstGeom/@prst`，没有则为 `null`。`x` / `y` / `cx` / `cy` 取 `p:spPr/a:xfrm`。组合里的 `p:cxnSp` 要展开。
+  `start` / `end` 字段顺序：`id`、`site`。`id` 是同宿主上 `cNvPr/@id` 对得上的形状或连接线 inspect id。
+  对不上时仍写成 `{host}/shape:{该 cNvPr id}`。`site` 为 `@idx` 加 1。没有对应元素则不要出现该键。
   docx 也认 `scope.connectors`，见 [docx 分册](json-contract-docx.md#scope)。
   xlsx 认 `scope.connectors`，见 [xlsx 分册](json-contract-xlsx.md#scope)。
+  docx / xlsx 连接线不带 `start` / `end`。
 - `animCount` 在演示文稿根上始终出现，等于各页效果摘要条数之和。每页始终有自己的 `animCount`。没有效果则为 `0`。根上不挂 `timing` 数组。名单只出现在各页上。本期不截断，一页全部列出。
 - `masterCount` 在演示文稿根上始终出现，等于 `p:sldMasterIdLst` 里 `p:sldMasterId` 的个数。没有该表则为 `0`。根上不挂 `masters`，除非给了 `scope.masters`。不算讲义母版。本期不截断。
 - `hasHandout` 在演示文稿根上始终出现：presentation `.rels` 有 Type 以 `/handoutMaster` 结尾的关系则为 `true`，否则为 `false`。根上不挂 `handout`，除非给了 `scope.handout`。
@@ -1044,7 +1048,8 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   `id` 为 `master:{n}/shape:{cNvPrId}` 或 `master:{n}/layout:{k}/shape:{cNvPrId}`；
   没有 `cNvPr/@id` 则为 `…/shape:index:{i}`，`stable` 为 `false`，`{i}` 只在该母版或该版式被收入的占位符内从 1 计。
   `type` 取 `p:ph/@type`，缺则为 `null`。`idx` 取 `p:ph/@idx` 原文，缺则为 `null`。几何与 `text` 规则与幻灯片形状相同；没有 `txBody` 则 `text` 为 `""`。
-  装饰形字段顺序与幻灯片形状相同：`id`、`shapeId`、`name`、`prst`、`x`、`y`、`cx`、`cy`、`text`，
+  装饰形字段顺序与幻灯片形状相同：`id`、`shapeId`、`name`、`prst`，有 `a:custGeom` 时再跟 `geom`，
+  然后 `x`、`y`、`cx`、`cy`、`text`，
   然后 `sz`、`color`、`bold`、`italic`、`underline`、`font`、`eastAsiaFont`、`align`、`textAnchor`、`stable`。
   装饰形 `id` 同一套 `…/shape:{cNvPrId}`。没有 `cNvPr/@id` 则为 `…/shape:index:{i}`，`{i}` 只在该宿主被收入的装饰形内从 1 计，不和占位符的 `index` 混编。
   没有 `txBody` 则 `text` 为 `""`。不把这些 `p:sp` 抄进各页。
@@ -1061,7 +1066,8 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   备注 `timing` 的 id 为 `slide:{n}/notes/anim:{k}`，`target` 对该备注页对象。
   根上 `animCount` 与各页 `animCount` 仍只计该页幻灯片 XML，不含备注与母版。
   备注形状判定与幻灯片形状相同（带 `p:txBody` 的 `p:sp`），id 为 `slide:{n}/notes/shape:…`。
-  字段顺序与幻灯片形状相同：`id`、`shapeId`、`name`、`prst`、`x`、`y`、`cx`、`cy`、`text`，
+  字段顺序与幻灯片形状相同：`id`、`shapeId`、`name`、`prst`，有 `a:custGeom` 时再跟 `geom`，
+  然后 `x`、`y`、`cx`、`cy`、`text`，
   然后 `sz`、`color`、`bold`、`italic`、`underline`、`font`、`eastAsiaFont`、`align`、`textAnchor`、`stable`。
   备注形状一次倒出，不用 `maxShapes`。
 - `scope.comments` 为 `true` 时，每页带 `comments`。没有现代批注时为空数组。不依赖 `scope.slide`。按该页 `p188:cmLst` 里 `p188:cm` 的文档顺序。
@@ -1101,10 +1107,20 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   有 `scope.customShows` 时再跟 `customShows`，然后 `slides`。
   `props` 始终出现，规则见 [json-contract.md](json-contract.md#文档属性三格式共用)。
 - `shapeId` 是 `cNvPr/@id` 的原文。走 `shape:index:{k}` 时为 `null`。
-  每条字段顺序：`id`、`shapeId`、`name`、`prst`、`x`、`y`、`cx`、`cy`、`text`，
+  每条字段顺序：`id`、`shapeId`、`name`、`prst`，有 `a:custGeom` 时再跟 `geom`，然后 `x`、`y`、`cx`、`cy`、`text`，
   然后 `sz`、`color`、`bold`、`italic`、`underline`、`font`、`eastAsiaFont`、`align`、`textAnchor`、`stable`。
 - 形状上的 `name` 取 `cNvPr/@name` 的原文。没有则为 `null`。
 - `prst` 取该 `p:sp` 的 `p:spPr/a:prstGeom/@prst`。没有 `prstGeom`（例如 `custGeom`）则为 `null`。
+- `geom` 只在有 `a:custGeom` 时出现，不要给只有 `prstGeom` 的形状补 `null`。
+  字段顺序：`paths`。`paths` 按 `a:pathLst` 里 `a:path` 的文档顺序。
+  每条路径字段顺序：`w`、`h`、`ops`。`w` / `h` 取 `a:path/@w` / `@h` 的整数，缺则为 `null`。
+  `ops` 按该 `a:path` 子元素顺序。
+  - `moveTo` / `lnTo`：`type` 为该名，再跟 `x`、`y`（取唯一 `a:pt`）
+  - `close`：只有 `type`
+  - `cubicBezTo` / `quadBezTo`：`type` 为该名，再跟 `pts`（各 `a:pt` 的 `x` / `y` 数组）
+  - `arcTo`：`type` 为 `arcTo`，再跟 `wR`、`hR`、`stAng`、`swAng`（属性原文，能解析为整数则报整数）
+  - 其它子元素：`type` 为本地名；有 `a:pt` 则再跟 `pts`
+  `x` / `y` / `pts[].x` / `pts[].y` 解析失败则为 `null`。create 的 `shapes[]` 不要写 `geom`。
 - `x` / `y` 取 `p:spPr/a:xfrm/a:off` 的 EMU；`cx` / `cy` 取 `a:ext`。缺对应属性则为 `null`。备注形状同样。
 - `text` 是可见纯文本：该形状 `p:txBody` 内、位于 `a:r` 里的 `a:t` 按文档顺序拼接；`a:br` 变成 `\n`。不含 run 级样式。
   `a:fld` 是应用程序更新的生成文本（§21.1.2.2.4），域里的 `a:t` 是缓存，不进入。`mc:AlternateContent` 只取一支，判定见上文 pptx 那节。
@@ -1167,6 +1183,8 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   - 该页文本框列表
   - 可空
   - 空则生成一个空文本框
+  - 出现 `geom` 报 `InvalidField`
+  - 自定义几何走 apply 的 `insertShape` / `setShapeGeom`
 - **`slides[].pictures`**
   - 可选
   - 该页上的图列表
@@ -2020,6 +2038,16 @@ xlsx 上发此 op 报 `InvalidField`。docx 见 [docx 分册](json-contract-docx
   - 省略为 `rect`
   - 必须是可写预设名
   - 连接线几何名（`straightConnector1` 等）报 `InvalidField`，请用 `insertConnector`
+  - 与 `geom` 同时出现报 `InvalidField`
+- **`geom`**
+  - 可选
+  - 自定义路径，结构与 inspect 的 `geom` 相同
+  - `paths` 必须非空
+  - 每条路径必须有正整数 `w` / `h` 与非空 `ops`
+  - 可写 `type` 只有 `moveTo`、`lnTo`、`close`
+  - `moveTo` / `lnTo` 必须给非负整数 `x` / `y`
+  - `close` 不要带 `x` / `y`
+  - 其它 `type` 报 `InvalidField`
 - **`sz` / `color` / `bold` / `italic` / `underline` / `font` / `eastAsiaFont` / `align` / `textAnchor`**
   - 可选
   - 规则与 `setShapeFormat` 相同
@@ -2031,12 +2059,19 @@ pptx：`id` 不是页 id、备注容器 id、母版 id 或版式 id 报 `Invalid
 `id` 为 `slide:{n}/notes` 且该页还没有 notesSlide 时，按 `setNotesText` 同一套新建最小备注页再插入。
 
 写入该宿主 `p:spTree` 一个新 `p:sp`（插在 `extLst` 之前）。
-`prst` 为 `rect`（或缺省）时：`p:cNvSpPr/@txBox` 为 `1`，默认 `a:noFill` 与 `a:ln/a:noFill`，`cNvPr/@name` 写成「文本框 {该 id}」。
-其它可写 `prst`：不写 `txBox`，默认实心填充 `5B9BD5` 与线宽 `12700` 的描边 `2E75B6`，`cNvPr/@name` 写成「形状 {该 id}」。始终带 `p:txBody`。
+`prst` 为 `rect`（或缺省）且没有 `geom` 时：`p:cNvSpPr/@txBox` 为 `1`，默认 `a:noFill` 与 `a:ln/a:noFill`，
+`cNvPr/@name` 写成「文本框 {该 id}」，写 `a:prstGeom`。
+其它可写 `prst`：不写 `txBox`，默认实心填充 `5B9BD5` 与线宽 `12700` 的描边 `2E75B6`，
+`cNvPr/@name` 写成「形状 {该 id}」，写 `a:prstGeom`。
+给了 `geom` 时：不写 `txBox`，不写 `prstGeom`，填充描边与非矩形预设相同，
+`cNvPr/@name` 写成「形状 {该 id}」。
+`a:custGeom` 必须含空 `avLst` / `gdLst` / `ahLst` / `cxnLst`，`a:rect` 的 `l` / `t` / `r` / `b` 都是 `0`，
+再写 `a:pathLst`。始终带 `p:txBody`。
 给了文字格式字段则按 `setShapeFormat` 写入该 `txBody`。省略则缺省 18 磅黑字 Calibri / 宋体。
 新 `cNvPr/@id` 取该宿主（含 `spTree` 的 `id="1"`）已有最大加 1，至少为 2。不写 `p:style`，不写 `a16:creationId`。不改未点名形状，不改已有 `<p:timing>`。
 往母版 / 版式插入时不写 `p:ph`。
 docx 上发此 op 报 `InvalidField`。xlsx 见 [xlsx 分册](json-contract-xlsx.md#insertshape)：`id` 为 `sheet:{name}`，必须给 `from`，出现 `x` / `y` 报 `InvalidField`。
+xlsx 的 `insertShape` 出现 `geom` 报 `InvalidField`。
 
 可写 `prst`（ECMA-376 `ST_ShapeType` 子集，§20.1.10.56）：`rect`、`roundRect`、`round1Rect`、`round2SameRect`、`round2DiagRect`、
 `snipRoundRect`、`snip1Rect`、`snip2SameRect`、`snip2DiagRect`、`ellipse`、`triangle`、`rtTriangle`、`parallelogram`、
@@ -2048,7 +2083,8 @@ docx 上发此 op 报 `InvalidField`。xlsx 见 [xlsx 分册](json-contract-xlsx
 
 ### insertConnector
 
-往幻灯片插入一条未绑连接点的连接线（`p:cxnSp`）。不写 `a:stCxn` / `a:endCxn`，不算自动绕障碍。
+往幻灯片、备注页、母版或版式插入一条连接线（`p:cxnSp`）。不算自动绕障碍。
+省略 `start` / `end` 时不写 `a:stCxn` / `a:endCxn`。
 
 ```json
 {
@@ -2061,7 +2097,9 @@ docx 上发此 op 报 `InvalidField`。xlsx 见 [xlsx 分册](json-contract-xlsx
       "id": "slide:1",
       "prst": "straightConnector1",
       "x": 635000,
-      "y": 4064000
+      "y": 4064000,
+      "start": { "id": "slide:1/shape:2", "site": 1 },
+      "end": { "id": "slide:1/shape:3", "site": 1 }
     }
   ]
 }
@@ -2094,13 +2132,24 @@ docx 上发此 op 报 `InvalidField`。xlsx 见 [xlsx 分册](json-contract-xlsx
   - 尺寸，EMU，正整数
   - 必须成对出现或成对省略
   - 都省略时默认 `1828800` × `762000`
+- **`start` / `end`**
+  - 可选
+  - 对象，字段顺序：`id`、`site`
+  - `id` 必须是同宿主形状 id 或连接线 id
+  - `site` 可选，正整数，省略为 `1`
+  - 写入 `a:stCxn` / `a:endCxn`：`id` 为目标 `cNvPr/@id`，`idx` 为 `site - 1`
 
 pptx：`id` 不是页 id、备注容器 id、母版 id 或版式 id 报 `InvalidId`（对形状 id、连接线 id 或 `pptx:presentation` 也是这条）。找不到该页 / 该母版 / 该版式报 `IdNotFound`。
 只给 `x` 或只给 `y`、只给 `cx` 或只给 `cy` 报 `InvalidField`。`prst` 不在名单里报 `InvalidField`。缺坐标时在画布上找空位（幻灯片与母版 / 版式读 `p:sldSz`，备注读 `p:notesSz`）。
 `id` 为 `slide:{n}/notes` 且该页还没有 notesSlide 时，按 `setNotesText` 同一套新建最小备注页再插入。
 对 `notesMaster` / `handout` 发本 op 报 `InvalidId`。
 `groupShapes` 的 `id` 仍必须是 `slide:{n}`，不认备注与母版。
-写入 `p:cxnSp`：`p:nvCxnSpPr` / 空 `p:cNvCxnSpPr`，`a:prstGeom` 为该 `prst`，默认线宽 `12700` 的黑色描边，无填充、无 `p:style`、无 `txBody`。
+`start` / `end` 不是对象、缺 `id`、`site` 小于 1 报 `InvalidField`。
+目标不在同一宿主报 `InvalidField`。找不到目标报 `IdNotFound`。
+id 不是形状 id 也不是连接线 id 报 `InvalidId`。
+xlsx / docx 上出现 `start` / `end` 报 `InvalidField`。
+写入 `p:cxnSp`：`p:nvCxnSpPr` / `p:cNvCxnSpPr`，`a:prstGeom` 为该 `prst`，默认线宽 `12700` 的黑色描边，无填充、无 `p:style`、无 `txBody`。
+给了 `start` 则写 `a:stCxn`，给了 `end` 则写 `a:endCxn`。都省略则 `cNvCxnSpPr` 为空。
 新 `cNvPr/@id` 规则与 `insertShape` 相同。`cNvPr/@name` 写成「连接线 {该 id}」。docx 见 [docx 分册](json-contract-docx.md#insertconnector)。
 xlsx 见 [xlsx 分册](json-contract-xlsx.md#insertconnector)。
 
@@ -2210,6 +2259,91 @@ docx / xlsx 上发此 op 报 `InvalidField`。pptx 上发 `setTextBoxLine` 仍�
 
 不给无 `txBody` 的旧 `p:sp` 补框。不重算组合框几何。
 
+### setShapeGeom
+
+把带 `p:txBody` 的 `p:sp` 的 `a:prstGeom` 或已有 `a:custGeom` 整份换成自定义路径。不重算组合框。
+
+```json
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "C:\\data\\deck.pptx",
+  "ops": [
+    {
+      "op": "setShapeGeom",
+      "id": "slide:1/shape:4",
+      "paths": [
+        {
+          "w": 1905001,
+          "h": 1270001,
+          "ops": [
+            { "type": "moveTo", "x": 0, "y": 0 },
+            { "type": "lnTo", "x": 1905000, "y": 0 },
+            { "type": "lnTo", "x": 1905000, "y": 1270000 },
+            { "type": "lnTo", "x": 0, "y": 1270000 }
+          ]
+        }
+      ]
+    }
+  ]
+}
+```
+
+- **`op`**
+  - 必须是 `"setShapeGeom"`
+- **`id`**
+  - 必须是形状 id（幻灯片 / 备注 `slide:…/shape:…`，或母版 / 版式装饰形 `master:…/shape:…`）
+- **`paths`**
+  - 必填
+  - 非空数组
+  - 规则与 `insertShape` 的 `geom.paths` 相同
+
+找不到报 `IdNotFound`。id 不是形状 id 报 `InvalidId`（对连接线 id、图 id 也是这条）。
+对母版或版式占位符、备注母版、讲义占位符发本 op 报 `InvalidId`。对 `sldImg` 占位符报 `InvalidField`。
+缺 `paths`、空数组、缺 `w` / `h`、空 `ops`、不可写 `type` 报 `InvalidField`。
+写入完整 `a:custGeom` 骨架（空 `avLst` / `gdLst` / `ahLst` / `cxnLst`，`rect` 全 0，再写 `pathLst`），去掉原 `prstGeom`。
+不写 `p:style`，不写 `a16:creationId`。不改填充描边，不改 `txBody`。
+母版 / 版式装饰形只改对应 slideMaster / slideLayout 部件。
+xlsx / docx 上发此 op 报 `InvalidField`。
+
+示例见 `docs/examples/pptx-apply-custgeom.json`。
+
+### setConnector
+
+改一条已有连接线的起点 / 终点绑定。不算自动绕障碍。不改画布坐标。
+
+```json
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "C:\\data\\deck.pptx",
+  "ops": [
+    {
+      "op": "setConnector",
+      "id": "slide:1/cxn:6",
+      "start": { "id": "slide:1/shape:2", "site": 1 },
+      "end": { "id": "slide:1/shape:5", "site": 1 }
+    }
+  ]
+}
+```
+
+- **`op`**
+  - 必须是 `"setConnector"`
+- **`id`**
+  - 必须是连接线 id
+- **`start` / `end`**
+  - 至少给一个
+  - 规则与 `insertConnector` 相同
+  - 未点名的一端留下
+
+找不到该连接线报 `IdNotFound`。id 不是连接线 id 报 `InvalidId`。
+`start` 与 `end` 一个都不给报 `InvalidField`。目标不在同一宿主报 `InvalidField`。
+找不到目标报 `IdNotFound`。目标 id 不是形状 id 也不是连接线 id 报 `InvalidId`。
+`site` 小于 1 报 `InvalidField`。
+写入或替换 `p:cNvCxnSpPr` 下的 `a:stCxn` / `a:endCxn`。不删未点名的那一端。
+xlsx / docx 上发此 op 报 `InvalidField`。
+
 ### setTableCellText
 
 改幻灯片 DrawingML 表某一格的可见文字。手术刀规则与 `setShapeText` 相同，目标是该 `a:tc` 的 `a:txBody`，不整格重建。
@@ -2309,9 +2443,9 @@ theme 部件按已有 theme 复制一份新的 `/ppt/theme/themeN.xml`，不和 
 
 四个槽位至少给一个，否则报 `InvalidField`。未点名的槽位留下。`id` 不是 `handout` 报 `InvalidId`。
 不要和 `setNotesText` 混用：本 op 只改 `/ppt/handoutMasters/…`，不改 notesSlide。
-对 `handout` 容器发 `setShapeText` / `setShapeFormat` / `insertShape` / `deleteShape` / `setShapeFill` / `setShapeLine` 报 `InvalidId`。
+对 `handout` 容器发 `setShapeText` / `setShapeFormat` / `insertShape` / `deleteShape` / `setShapeFill` / `setShapeLine` / `setShapeGeom` 报 `InvalidId`。
 对 `handout/shape:…` 发 `setShapeText` / `setShapeFormat` / `setShapePos` / `setShapeSize` 认该占位符。
-`sldImg` 仍报 `InvalidField`。`insertShape` / `deleteShape` / `setShapeFill` / `setShapeLine` 对讲义占位符仍报 `InvalidId`。
+`sldImg` 仍报 `InvalidField`。`insertShape` / `deleteShape` / `setShapeFill` / `setShapeLine` / `setShapeGeom` 对讲义占位符仍报 `InvalidId`。
 
 只改文档顺序中该类型的第一个占位符。没有 handoutMaster 时新建最小 Transitional 讲义母版：写 `/ppt/handoutMasters/handoutMaster1.xml`，
 presentation 关系、`p:handoutMasterIdLst`（插在 `notesMasterIdLst` 之后，没有则插在 `sldMasterIdLst` 之后）与内容类型。
@@ -2951,11 +3085,11 @@ xlsx / docx 上发此 op 报 `InvalidField`。
 必要时 `presentation.xml` 及其 `.rels`、新建的 notesMaster 及其 `.rels`，`[Content_Types].xml`，
 以及新建或被删的 `/ppt/media/…`、`/ppt/charts/…`、embedding、`/ppt/diagrams/…` 及可选 drawing 缓存，
 以及现代批注部件 `/ppt/comments/modernComment_*.xml` 与 `/ppt/authors.xml`。
-`setShapeText` / `setShapeFormat` 以及 `setShapePos` / `setShapeSize` / `setShapeFill` / `setShapeLine` / `deleteShape` 只脏目标宿主 XML（幻灯片、
+`setShapeText` / `setShapeFormat` 以及 `setShapePos` / `setShapeSize` / `setShapeFill` / `setShapeLine` / `setShapeGeom` / `deleteShape` 只脏目标宿主 XML（幻灯片、
 notesSlide、被点名的 slideMaster 或 slideLayout、notesMaster 或 handoutMaster）。
 `insertShape` 往幻灯片插只脏该页 XML；往备注插时可脏 notesSlide、该页 `.rels`、notesMaster、presentation，与 `setNotesText` 相同。
 往母版 / 版式插只脏目标 slideMaster 或 slideLayout XML。
-`insertConnector` / `deleteConnector` 脏该宿主 XML（幻灯片、notesSlide、slideMaster 或 slideLayout）。`groupShapes` / `ungroup` 只脏该页幻灯片 XML。
+`insertConnector` / `deleteConnector` / `setConnector` 脏该宿主 XML（幻灯片、notesSlide、slideMaster 或 slideLayout）。`groupShapes` / `ungroup` 只脏该页幻灯片 XML。
 `insertTable` / `deleteTable` / `insertRow` / `deleteRow` / `insertCol` / `deleteCol` / `setTableCellText`
  / `setTablePos` / `setTableSize` 脏该宿主 XML（幻灯片、notesSlide、slideMaster 或 slideLayout），不新建部件；
 往备注插且还没有 notesSlide 时可脏 notesSlide、该页 `.rels`、notesMaster、presentation，与 `setNotesText` 相同。

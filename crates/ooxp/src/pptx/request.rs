@@ -84,6 +84,7 @@ pub struct InsertShapeOp {
     pub cx: Option<i64>,
     pub cy: Option<i64>,
     pub prst: String,
+    pub geom: Option<Vec<super::geom::Path>>,
     pub format: Option<crate::drawing_text::TextFormat>,
 }
 
@@ -994,6 +995,24 @@ pub struct InsertConnectorOp {
     pub y: Option<i64>,
     pub cx: Option<i64>,
     pub cy: Option<i64>,
+    pub start: Option<super::connector::CxnBind>,
+    pub end: Option<super::connector::CxnBind>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetShapeGeomOp {
+    pub id: String,
+    pub target: Option<super::shape::ShapeTarget>,
+    pub placeholder: Option<super::master::PlaceholderId>,
+    pub paths: Vec<super::geom::Path>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetConnectorOp {
+    pub id: String,
+    pub target: connector::CxnTarget,
+    pub start: Option<connector::CxnBind>,
+    pub end: Option<connector::CxnBind>,
 }
 
 #[derive(Debug, Clone)]
@@ -1029,6 +1048,8 @@ pub enum PptxOp {
     SetShapeFill(SetShapeFillOp),
     SetShapeFormat(SetShapeFormatOp),
     SetShapeLine(SetShapeLineOp),
+    SetShapeGeom(SetShapeGeomOp),
+    SetConnector(SetConnectorOp),
     SetNotesText(SetNotesTextOp),
     InsertComment(InsertCommentOp),
     ReplyComment(ReplyCommentOp),
@@ -1348,6 +1369,8 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<PptxOp>, Error> {
             "setShapeFill" => PptxOp::SetShapeFill(parse_set_shape_fill(obj, i)?),
             "setShapeFormat" => PptxOp::SetShapeFormat(parse_set_shape_format(obj, i)?),
             "setShapeLine" => PptxOp::SetShapeLine(parse_set_shape_line(obj, i)?),
+            "setShapeGeom" => PptxOp::SetShapeGeom(parse_set_shape_geom(obj, i)?),
+            "setConnector" => PptxOp::SetConnector(parse_set_connector(obj, i)?),
             "setNotesText" => PptxOp::SetNotesText(parse_set_notes_text(obj, i)?),
             "insertComment" => PptxOp::InsertComment(parse_insert_comment(obj, i)?),
             "replyComment" => PptxOp::ReplyComment(parse_reply_comment(obj, i)?),
@@ -1667,6 +1690,7 @@ fn parse_insert_shape(obj: &Map<String, Value>, i: usize) -> Result<InsertShapeO
             "eastAsiaFont",
             "align",
             "textAnchor",
+            "geom",
         ],
     )?;
     let id = require_id(obj, i)?;
@@ -1684,26 +1708,43 @@ fn parse_insert_shape(obj: &Map<String, Value>, i: usize) -> Result<InsertShapeO
         }
         None => String::new(),
     };
-    let prst = match obj.get("prst") {
-        None => "rect".to_string(),
-        Some(Value::String(s)) => {
-            if super::shape::is_writable_shape_prst(s) {
-                s.clone()
-            } else {
+    if obj.contains_key("geom") && obj.contains_key("prst") {
+        return Err(Error::with_path(
+            ErrorKind::MutuallyExclusive {
+                a: "prst".into(),
+                b: "geom".into(),
+            },
+            format!("ops[{i}]"),
+        ));
+    }
+    let geom = match obj.get("geom") {
+        None => None,
+        Some(v) => Some(parse_geom_object(v, i, "geom")?),
+    };
+    let prst = if geom.is_some() {
+        String::new()
+    } else {
+        match obj.get("prst") {
+            None => "rect".to_string(),
+            Some(Value::String(s)) => {
+                if super::shape::is_writable_shape_prst(s) {
+                    s.clone()
+                } else {
+                    return Err(Error::with_path(
+                        ErrorKind::InvalidShapePrst,
+                        format!("ops[{i}].prst"),
+                    ));
+                }
+            }
+            Some(_) => {
                 return Err(Error::with_path(
-                    ErrorKind::InvalidShapePrst,
+                    ErrorKind::WrongType {
+                        field: "prst".into(),
+                        expected: TypeName::String,
+                    },
                     format!("ops[{i}].prst"),
                 ));
             }
-        }
-        Some(_) => {
-            return Err(Error::with_path(
-                ErrorKind::WrongType {
-                    field: "prst".into(),
-                    expected: TypeName::String,
-                },
-                format!("ops[{i}].prst"),
-            ));
         }
     };
     let x = parse_off_field(obj.get("x"), i, "x")?;
@@ -1736,6 +1777,7 @@ fn parse_insert_shape(obj: &Map<String, Value>, i: usize) -> Result<InsertShapeO
         cx,
         cy,
         prst,
+        geom,
         format: crate::drawing_text::parse(obj, &format!("ops[{i}]"), false)?,
     })
 }
@@ -1765,7 +1807,11 @@ fn parse_set_shape_format(obj: &Map<String, Value>, i: usize) -> Result<SetShape
 }
 
 fn parse_insert_connector(obj: &Map<String, Value>, i: usize) -> Result<InsertConnectorOp, Error> {
-    deny_keys(obj, i, &["op", "id", "prst", "x", "y", "cx", "cy"])?;
+    deny_keys(
+        obj,
+        i,
+        &["op", "id", "prst", "x", "y", "cx", "cy", "start", "end"],
+    )?;
     let id = require_id(obj, i)?;
     let (slide, on_notes, master) = connector::parse_insert_slide_id(&id, i)?.parts();
     let prst = match obj.get("prst") {
@@ -1821,6 +1867,8 @@ fn parse_insert_connector(obj: &Map<String, Value>, i: usize) -> Result<InsertCo
         y,
         cx,
         cy,
+        start: parse_opt_cxn_bind(obj, i, "start")?,
+        end: parse_opt_cxn_bind(obj, i, "end")?,
     })
 }
 
@@ -2023,6 +2071,320 @@ fn parse_set_shape_line(obj: &Map<String, Value>, i: usize) -> Result<SetShapeLi
         color,
         width,
     })
+}
+
+fn parse_set_shape_geom(obj: &Map<String, Value>, i: usize) -> Result<SetShapeGeomOp, Error> {
+    deny_keys(obj, i, &["op", "id", "paths"])?;
+    let id = require_id(obj, i)?;
+    let (target, placeholder) = parse_slide_or_master_shape(&id, i)?;
+    let paths = match obj.get("paths") {
+        Some(v) => parse_geom_paths(v, i, "paths")?,
+        None => {
+            return Err(Error::with_path(
+                ErrorKind::OpRequiresField {
+                    op: "setShapeGeom".into(),
+                    field: "paths".into(),
+                },
+                format!("ops[{i}].paths"),
+            ));
+        }
+    };
+    Ok(SetShapeGeomOp {
+        id,
+        target,
+        placeholder,
+        paths,
+    })
+}
+
+fn parse_set_connector(obj: &Map<String, Value>, i: usize) -> Result<SetConnectorOp, Error> {
+    deny_keys(obj, i, &["op", "id", "start", "end"])?;
+    let id = require_id(obj, i)?;
+    let target = connector::parse_cxn_id(&id, i)?;
+    let start = parse_opt_cxn_bind(obj, i, "start")?;
+    let end = parse_opt_cxn_bind(obj, i, "end")?;
+    if start.is_none() && end.is_none() {
+        return Err(Error::with_path(
+            ErrorKind::NeedConnectorBind,
+            format!("ops[{i}]"),
+        ));
+    }
+    Ok(SetConnectorOp {
+        id,
+        target,
+        start,
+        end,
+    })
+}
+
+fn parse_geom_object(v: &Value, i: usize, field: &str) -> Result<Vec<super::geom::Path>, Error> {
+    let prefix = format!("ops[{i}].{field}");
+    let obj = match v {
+        Value::Object(m) => m,
+        _ => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: field.into(),
+                    expected: TypeName::Object,
+                },
+                prefix,
+            ));
+        }
+    };
+    deny_keys_at(obj, &prefix, &["paths"])?;
+    match obj.get("paths") {
+        Some(v) => parse_geom_paths(v, i, &format!("{field}.paths")),
+        None => Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "insertShape".into(),
+                field: "geom.paths".into(),
+            },
+            format!("{prefix}.paths"),
+        )),
+    }
+}
+
+fn parse_geom_paths(v: &Value, i: usize, field: &str) -> Result<Vec<super::geom::Path>, Error> {
+    let prefix = format!("ops[{i}].{field}");
+    let arr = match v {
+        Value::Array(a) => a,
+        _ => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: field.into(),
+                    expected: TypeName::Array,
+                },
+                prefix,
+            ));
+        }
+    };
+    if arr.is_empty() {
+        return Err(Error::with_path(
+            ErrorKind::EmptyArray {
+                field: field.into(),
+            },
+            prefix,
+        ));
+    }
+    let mut out = Vec::with_capacity(arr.len());
+    for (j, item) in arr.iter().enumerate() {
+        out.push(parse_geom_path(item, i, &format!("{field}[{j}]"))?);
+    }
+    Ok(out)
+}
+
+fn parse_geom_path(v: &Value, i: usize, field: &str) -> Result<super::geom::Path, Error> {
+    let prefix = format!("ops[{i}].{field}");
+    let obj = match v {
+        Value::Object(m) => m,
+        _ => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: field.into(),
+                    expected: TypeName::Object,
+                },
+                prefix,
+            ));
+        }
+    };
+    deny_keys_at(obj, &prefix, &["w", "h", "ops"])?;
+    let w = parse_emu_at(obj.get("w"), &format!("{prefix}.w"), "w")?.ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "setShapeGeom".into(),
+                field: "w".into(),
+            },
+            format!("{prefix}.w"),
+        )
+    })?;
+    let h = parse_emu_at(obj.get("h"), &format!("{prefix}.h"), "h")?.ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "setShapeGeom".into(),
+                field: "h".into(),
+            },
+            format!("{prefix}.h"),
+        )
+    })?;
+    let ops_v = obj.get("ops").ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "setShapeGeom".into(),
+                field: "ops".into(),
+            },
+            format!("{prefix}.ops"),
+        )
+    })?;
+    let ops_arr = match ops_v {
+        Value::Array(a) => a,
+        _ => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "ops".into(),
+                    expected: TypeName::Array,
+                },
+                format!("{prefix}.ops"),
+            ));
+        }
+    };
+    if ops_arr.is_empty() {
+        return Err(Error::with_path(
+            ErrorKind::EmptyArray {
+                field: "ops".into(),
+            },
+            format!("{prefix}.ops"),
+        ));
+    }
+    let mut ops = Vec::with_capacity(ops_arr.len());
+    for (j, item) in ops_arr.iter().enumerate() {
+        ops.push(parse_geom_op(item, i, &format!("{field}.ops[{j}]"))?);
+    }
+    Ok(super::geom::Path { w, h, ops })
+}
+
+fn parse_geom_op(v: &Value, i: usize, field: &str) -> Result<super::geom::Op, Error> {
+    let prefix = format!("ops[{i}].{field}");
+    let obj = match v {
+        Value::Object(m) => m,
+        _ => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: field.into(),
+                    expected: TypeName::Object,
+                },
+                prefix,
+            ));
+        }
+    };
+    let ty = match obj.get("type") {
+        Some(Value::String(s)) => s.as_str(),
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "type".into(),
+                    expected: TypeName::String,
+                },
+                format!("{prefix}.type"),
+            ));
+        }
+        None => {
+            return Err(Error::with_path(
+                ErrorKind::OpRequiresField {
+                    op: "setShapeGeom".into(),
+                    field: "type".into(),
+                },
+                format!("{prefix}.type"),
+            ));
+        }
+    };
+    match ty {
+        "moveTo" | "lnTo" => {
+            deny_keys_at(obj, &prefix, &["type", "x", "y"])?;
+            let x = parse_off_at(obj.get("x"), &format!("{prefix}.x"), "x")?.ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::OpRequiresField {
+                        op: "setShapeGeom".into(),
+                        field: "x".into(),
+                    },
+                    format!("{prefix}.x"),
+                )
+            })?;
+            let y = parse_off_at(obj.get("y"), &format!("{prefix}.y"), "y")?.ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::OpRequiresField {
+                        op: "setShapeGeom".into(),
+                        field: "y".into(),
+                    },
+                    format!("{prefix}.y"),
+                )
+            })?;
+            if ty == "moveTo" {
+                Ok(super::geom::Op::MoveTo { x, y })
+            } else {
+                Ok(super::geom::Op::LnTo { x, y })
+            }
+        }
+        "close" => {
+            deny_keys_at(obj, &prefix, &["type"])?;
+            Ok(super::geom::Op::Close)
+        }
+        _ => Err(Error::with_path(
+            ErrorKind::InvalidGeomOp,
+            format!("{prefix}.type"),
+        )),
+    }
+}
+
+fn parse_opt_cxn_bind(
+    obj: &Map<String, Value>,
+    i: usize,
+    field: &str,
+) -> Result<Option<super::connector::CxnBind>, Error> {
+    match obj.get(field) {
+        None => Ok(None),
+        Some(v) => Ok(Some(parse_cxn_bind(v, i, field)?)),
+    }
+}
+
+fn parse_cxn_bind(v: &Value, i: usize, field: &str) -> Result<super::connector::CxnBind, Error> {
+    let prefix = format!("ops[{i}].{field}");
+    let obj = match v {
+        Value::Object(m) => m,
+        _ => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: field.into(),
+                    expected: TypeName::Object,
+                },
+                prefix,
+            ));
+        }
+    };
+    deny_keys_at(obj, &prefix, &["id", "site"])?;
+    let id = obj
+        .get("id")
+        .and_then(Value::as_str)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
+        .ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::MissingField { field: "id".into() },
+                format!("{prefix}.id"),
+            )
+        })?;
+    let site = parse_emu_at(obj.get("site"), &format!("{prefix}.site"), "site")?.unwrap_or(1);
+    let site = u32::try_from(site).map_err(|_| {
+        Error::with_path(
+            ErrorKind::MinValue {
+                field: "site".into(),
+                min: 1,
+            },
+            format!("{prefix}.site"),
+        )
+    })?;
+    if connector::looks_like_cxn_id(&id) {
+        let t = connector::parse_cxn_id(&id, i)?;
+        Ok(super::connector::CxnBind {
+            id,
+            slide: t.slide,
+            on_notes: t.on_notes,
+            master: t.master,
+            key: t.key,
+            is_cxn: true,
+            site,
+        })
+    } else {
+        let t = super::shape::parse_shape_id(&id, i)?;
+        Ok(super::connector::CxnBind {
+            id,
+            slide: t.slide,
+            on_notes: t.on_notes,
+            master: t.master,
+            key: t.key,
+            is_cxn: false,
+            site,
+        })
+    }
 }
 
 fn parse_color_field(

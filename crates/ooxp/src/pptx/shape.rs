@@ -8,7 +8,7 @@ use crate::xml::{Document, Element, Node};
 
 use super::picture;
 use super::request::{
-    InsertShapeOp, SetShapeFillOp, SetShapeLineOp, SetShapePosOp, SetShapeSizeOp,
+    InsertShapeOp, SetShapeFillOp, SetShapeGeomOp, SetShapeLineOp, SetShapePosOp, SetShapeSizeOp,
 };
 use super::DML_NS;
 
@@ -210,6 +210,9 @@ pub fn shape_node_json(sp: &Element, host: &str, index: usize) -> Value {
         shape_name(sp).map_or(Value::Null, |n| json!(n)),
     );
     sh.insert("prst".into(), prst_json(sp));
+    if let Some(geom) = super::geom::inspect_json(sp) {
+        sh.insert("geom".into(), geom);
+    }
     sh.insert("x".into(), x);
     sh.insert("y".into(), y);
     sh.insert("cx".into(), cx);
@@ -863,13 +866,23 @@ pub fn insert_shape(
     };
     picture::ensure_xmlns(&mut doc.root, "a", DML_NS);
     let cnv = picture::next_cnv_id(&doc.root);
-    let is_box = op.prst == "rect";
+    let is_box = op.geom.is_none() && op.prst == "rect";
     let name = if is_box {
         format!("文本框 {cnv}")
     } else {
         format!("形状 {cnv}")
     };
-    let mut sp = build_sp(cnv, &name, &op.prst, is_box, x, y, cx, cy);
+    let mut sp = build_sp(
+        cnv,
+        &name,
+        &op.prst,
+        op.geom.as_deref(),
+        is_box,
+        x,
+        y,
+        cx,
+        cy,
+    );
     if let Some(tx) = sp.child_by_local_mut("txBody") {
         set_txbody_text(tx, &op.text);
         if let Some(fmt) = &op.format {
@@ -884,6 +897,7 @@ fn build_sp(
     cnv: u32,
     name: &str,
     prst: &str,
+    geom: Option<&[super::geom::Path]>,
     is_box: bool,
     x: i64,
     y: i64,
@@ -918,9 +932,13 @@ fn build_sp(
             .with_attr("cy", cy.to_string()),
     );
     sp_pr.push_element(xfrm);
-    let mut geom = Element::new("a:prstGeom").with_attr("prst", prst);
-    geom.push_element(Element::new("a:avLst"));
-    sp_pr.push_element(geom);
+    if let Some(paths) = geom {
+        sp_pr.push_element(super::geom::build_cust_geom(paths));
+    } else {
+        let mut geom_el = Element::new("a:prstGeom").with_attr("prst", prst);
+        geom_el.push_element(Element::new("a:avLst"));
+        sp_pr.push_element(geom_el);
+    }
     if is_box {
         sp_pr.push_element(Element::new("a:noFill"));
         let mut ln = Element::new("a:ln");
@@ -1055,6 +1073,26 @@ pub fn set_shape_line(
     })?;
     apply_line(sp, op.color.as_deref(), op.width);
     Ok(())
+}
+
+pub fn set_shape_geom(
+    doc: &mut Document,
+    op: &SetShapeGeomOp,
+    op_index: usize,
+) -> Result<(), Error> {
+    let target = op.target.as_ref().expect("幻灯片形状");
+    let sp = find_shape_mut(&mut doc.root, &target.key).ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::ShapeNotFound { id: op.id.clone() },
+            format!("ops[{op_index}].id"),
+        )
+    })?;
+    apply_geom(sp, &op.paths);
+    Ok(())
+}
+
+pub(crate) fn apply_geom(sp: &mut Element, paths: &[super::geom::Path]) {
+    super::geom::apply_to_sp(sp, paths);
 }
 
 pub(crate) fn apply_line(el: &mut Element, color: Option<&str>, width: Option<i64>) {

@@ -1496,6 +1496,8 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<DocxOp>, Error> {
             || op_name == "setShapeFill"
             || op_name == "setShapeFormat"
             || op_name == "setShapeLine"
+            || op_name == "setShapeGeom"
+            || op_name == "setConnector"
             || op_name == "setTableCellText"
             || op_name == "setTablePos"
             || op_name == "setTableSize"

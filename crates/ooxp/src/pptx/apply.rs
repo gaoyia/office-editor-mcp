@@ -140,7 +140,7 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                 } else {
                     picture::canvas_size(&pres.root)
                 };
-                connector::insert(&mut doc, canvas, op)?;
+                connector::insert(&mut doc, canvas, op, i)?;
                 pkg.set(&part, doc.to_bytes()?)?;
             }
             PptxOp::DeleteConnector(op) => {
@@ -346,6 +346,36 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                 }
                 shape::set_shape_line(&mut doc, op, i)?;
                 write_shape_host(&mut pkg, &pres_part, &pres.root, &slides, target, doc)?;
+            }
+            PptxOp::SetShapeGeom(op) => {
+                if let Some(ph) = &op.placeholder {
+                    master::set_geom(&mut pkg, &pres_part, &pres.root, ph, &op.id, &op.paths, i)?;
+                    continue;
+                }
+                let target = op.target.as_ref().expect("幻灯片形状");
+                let mut doc =
+                    open_shape_host(&pkg, &pres_part, &pres.root, &slides, target, &op.id, i)?;
+                if target.on_notes {
+                    reject_notes_image(&doc.root, &target.key, i)?;
+                }
+                shape::set_shape_geom(&mut doc, op, i)?;
+                write_shape_host(&mut pkg, &pres_part, &pres.root, &slides, target, doc)?;
+            }
+            PptxOp::SetConnector(op) => {
+                let part = host_xml_part(
+                    &pkg,
+                    &pres_part,
+                    &pres.root,
+                    &slides,
+                    op.target.slide,
+                    op.target.on_notes,
+                    op.target.master,
+                    ErrorKind::ConnectorNotFound { id: op.id.clone() },
+                    format!("ops[{i}].id"),
+                )?;
+                let mut doc = xml::parse(pkg.get(&part)?)?;
+                connector::set_binds(&mut doc, op, i)?;
+                pkg.set(&part, doc.to_bytes()?)?;
             }
             PptxOp::SetNotesText(op) => {
                 let meta = slides.get(op.slide - 1).ok_or_else(|| {

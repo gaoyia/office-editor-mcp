@@ -23,7 +23,8 @@ pptx 的 `scope.charts` 与图表 op 认幻灯片、备注页与幻灯片母版 
 pptx 的 `scope.smartArt` 与 SmartArt op 认幻灯片、备注页与幻灯片母版 / 版式上的 diagram `p:graphicFrame`。
 pptx 的 `scope.tables` 与表格 op 认幻灯片、备注页与幻灯片母版 / 版式上 DrawingML 表 `p:graphicFrame`（`a:tbl`，ECMA-376 §21.1.3.13），不认 `w:tbl`，也不认工作表表格。
 pptx 的 `scope.connectors` 列出该页 `p:cxnSp`；`scope.notes` 与 `scope.connectors` 同开时备注上也列；`scope.masters` 同开时母版 / 版式上也列。
-apply 用 `insertConnector` / `deleteConnector` / `groupShapes` / `ungroup`，以及 `insertShape` 的 `prst`。
+apply 用 `insertConnector` / `deleteConnector` / `setConnector` / `groupShapes` / `ungroup`，
+以及 `insertShape` 的 `prst` / `geom`、`setShapeGeom`。
 xlsx 的 `groupShapes` / `ungroup` 认工作表文本框、无 `txBox` 形状与连接线。
 docx 的 `scope.connectors` 列出正文与页眉页脚里的 `wps` 连接线；
 apply 用 `insertConnector` / `deleteConnector` / `groupShapes` / `ungroup`。
@@ -44,6 +45,7 @@ pptx 的 `scope.masters` 列出幻灯片母版与版式、占位符与装饰形�
 也可用 `insertShape` / `deleteShape` 插删母版 / 版式上没有 `p:ph` 的装饰形，
 也可用 `setSlideSize` / `setThemeColors` / `setThemeFonts` 改画布尺寸与 theme 配色 / 字体，
 也可用 `setShapeText` / `setShapeFormat` / `setShapePos` / `setShapeSize` 改占位符与装饰形。
+装饰形还可用 `setShapeGeom`。
 pptx 的 `scope.handout` 列出讲义母版页眉页脚槽位与占位符，apply 用 `setHandoutText` 改四个槽位的字，也可用 `insertPlaceholder` / `deletePlaceholder` / `setShapeText` 改讲义占位符。
 pptx 的 `scope.notesMaster` 列出备注母版占位符，apply 用同一套占位符 op 与预设动画。
 pptx 的 `scope.hyperlinks` 与超链接 op 认幻灯片文本形状上的形状级 `p:cNvPr/a:hlinkClick` 与 run 级 `a:rPr/a:hlinkClick`（跳转 / 文件 / URL），不认图、表、图表、SmartArt、备注或母版上的链。
@@ -232,7 +234,7 @@ create 与 apply 落盘时先写入目标同目录的临时文件，再改名为
 以及 `setShapeText`、`setShapeFormat`、以及文本框 op（`insertTextBox`、`deleteTextBox`、`setTextBoxSize`、`setTextBoxAnchor`；
 不含 `setTextBoxWrap`、`setTextBoxFill`、`setTextBoxLine`、`setTextBoxDirection`）、以及形状管理 op（`insertShape`、`deleteShape`、
 `insertConnector`、`deleteConnector`、`groupShapes`、`ungroup`；
-不含 `setShapePos`、`setShapeSize`、`setShapeFill`、`setShapeLine`）、以及 SmartArt op（`insertSmartArt`、`deleteSmartArt`、
+不含 `setShapePos`、`setShapeSize`、`setShapeFill`、`setShapeLine`、`setShapeGeom`、`setConnector`）、以及 SmartArt op（`insertSmartArt`、`deleteSmartArt`、
 `setSmartArtText`、`addSmartArtPoint`、`deleteSmartArtPoint`、`setSmartArtSize`、`setSmartArtAnchor`、`setSmartArtColors`、
 `setSmartArtStyle`、`setSmartArtLayout`；
 不含 `setSmartArtPos`、`setSmartArtWrap`）、以及超链接 op（`insertHyperlink`、`setHyperlink`、`deleteHyperlink`）、
@@ -242,7 +244,7 @@ docx 认 `setParaText`、`setHeaderFooterDistance`、`setPageMargin`、`setPageS
 `setLineNumbering`、`setDocGrid`、`setRtlGutter`、`setMirrorMargins`、`setGutterAtTop`、`setHeaderFooterLink`、
 `insertHeaderFooter`、`setTitlePage`、`setEvenAndOddHeaders`、图片 op（含 `setPictureWrap`，
 不含 `setPictureAnchor`）、文本框 op、组合与连接线 op（`insertConnector`、`deleteConnector`、`groupShapes`、`ungroup`；
-不含 `insertShape`、`deleteShape`、`setShapePos`、`setShapeSize`、`setShapeFill`、`setShapeLine`、`setShapeFormat`）、`insertPara` / `deletePara`、
+不含 `insertShape`、`deleteShape`、`setShapePos`、`setShapeSize`、`setShapeFill`、`setShapeLine`、`setShapeGeom`、`setConnector`、`setShapeFormat`）、`insertPara` / `deletePara`、
 表格 op（`insertTable`、`deleteTable`、`insertRow`、`deleteRow`、`insertCol`、`deleteCol`、`mergeCells`、`splitCells`）、
 修订 op（`acceptRevision`、`rejectRevision`）、超链接与书签 op（`insertHyperlink`、`setHyperlink`、`deleteHyperlink`、`insertBookmark`、
 `setBookmark`、`deleteBookmark`）、域 op（`insertField`、`setField`、`deleteField`）、目录 op（`insertToc`、`deleteToc`）、
@@ -262,8 +264,8 @@ docx 认 `setParaText`、`setHeaderFooterDistance`、`setPageMargin`、`setPageS
 `setSmartArtStyle`、`setSmartArtLayout`）、以及 OLE op（`insertOle`、`deleteOle`）、以及墨迹画布 op（`insertInkCanvas`、`replaceInkCanvas`、`deleteInkCanvas`）、以及 3D 模型 op（`insertModel3d`、`replaceModel3d`、`deleteModel3d`）、以及 `setProtection`、
 以及 `insertWatermark` / `deleteWatermark`、以及 `setThemeColors` / `setThemeFonts`、
 以及 `setProps` / `setCustomProp` / `deleteCustomProp`。
-pptx 认 `setShapeText`、`setShapeFormat`、形状管理 op（`insertShape`、`insertConnector`、`deleteConnector`、`groupShapes`、`ungroup`、`deleteShape`、
-`setShapePos`、`setShapeSize`、`setShapeFill`、`setShapeLine`）、表格 op（`insertTable`、`deleteTable`、`insertRow`、`deleteRow`、
+pptx 认 `setShapeText`、`setShapeFormat`、形状管理 op（`insertShape`、`insertConnector`、`deleteConnector`、`setConnector`、`groupShapes`、`ungroup`、`deleteShape`、
+`setShapePos`、`setShapeSize`、`setShapeFill`、`setShapeLine`、`setShapeGeom`）、表格 op（`insertTable`、`deleteTable`、`insertRow`、`deleteRow`、
 `insertCol`、`deleteCol`、`setTableCellText`、`setTablePos`、`setTableSize`；
 不含 `mergeCells`、`splitCells`）、`setNotesText`、批注 op（`insertComment`、`deleteComment`、`replyComment`、`setCommentText`、
 `setCommentMeta`、`setCommentDone`）、`replacePicture`、`insertPicture`、`deletePicture`、`setPictureSize`、`setPicturePos`、
@@ -304,7 +306,7 @@ pptx 认 `setShapeText`、`setShapeFormat`、形状管理 op（`insertShape`、`
  / `moveSlide` / `setSlideHidden` / `setTransition` / `insertAnim` / `setAnim` / `deleteAnim` / `moveAnim` / `setSlideLayout` / `insertLayout`
  / `deleteLayout` / `insertPlaceholder` / `deletePlaceholder` / `insertMaster` / `deleteMaster` / `setSlideSize`
  / `setThemeColors` / `setThemeFonts` / `setHandoutText` / `setShapePos` / `setShapeSize` / `setShapeFill`
- / `setShapeLine` / `setTableCellText` / `setTablePos` / `setTableSize` / `insertVideo` / `insertAudio`
+ / `setShapeLine` / `setShapeGeom` / `setConnector` / `setTableCellText` / `setTablePos` / `setTableSize` / `insertVideo` / `insertAudio`
  / `deleteMedia` / `setMedia` / `insertSlideSection` / `setSlideSectionName` / `deleteSlideSection` / `setSlideSection`
  / `insertCustomShow` / `setCustomShow` / `deleteCustomShow` / `insertZoom` / `setZoom` / `deleteZoom`）报 `InvalidField`。
 xlsx 上发 `insertTable` / `deleteTable` / `insertRow` / `deleteRow` / `insertCol` / `deleteCol` / `mergeCells` / `splitCells` 仍报 `InvalidField`。

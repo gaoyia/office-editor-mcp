@@ -842,6 +842,9 @@ define_error_kinds! {
     InvalidTransitionOrient => vec![Self::InvalidTransitionOrient],
     InvalidTransitionSpokes => vec![Self::InvalidTransitionSpokes],
     InvalidShapePrst => vec![Self::InvalidShapePrst],
+    InvalidGeomOp => vec![Self::InvalidGeomOp],
+    ConnectorEndHost => vec![Self::ConnectorEndHost],
+    NeedConnectorBind => vec![Self::NeedConnectorBind],
     InvalidConnectorPrst => vec![Self::InvalidConnectorPrst],
     GroupNeedsTwo => vec![Self::GroupNeedsTwo],
     GroupMemberNested => vec![Self::GroupMemberNested],
@@ -1808,6 +1811,9 @@ impl ErrorKind {
             | Self::InvalidTransitionOrient
             | Self::InvalidTransitionSpokes
             | Self::InvalidShapePrst
+            | Self::InvalidGeomOp
+            | Self::ConnectorEndHost
+            | Self::NeedConnectorBind
             | Self::InvalidConnectorPrst
             | Self::GroupNeedsTwo
             | Self::GroupMemberNested

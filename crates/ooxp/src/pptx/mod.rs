@@ -8,6 +8,7 @@ pub(crate) mod connector;
 mod create;
 mod custom_show;
 mod field;
+pub(crate) mod geom;
 mod group;
 mod handout;
 mod hyperlink;

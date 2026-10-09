@@ -1,0 +1,57 @@
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "deck.pptx",
+  "ops": [
+    {
+      "op": "insertShape",
+      "id": "slide:1",
+      "geom": {
+        "paths": [
+          {
+            "w": 1905001,
+            "h": 1270001,
+            "ops": [
+              { "type": "moveTo", "x": 0, "y": 0 },
+              { "type": "lnTo", "x": 1905000, "y": 0 },
+              { "type": "lnTo", "x": 1905000, "y": 1270000 },
+              { "type": "lnTo", "x": 0, "y": 1270000 }
+            ]
+          }
+        ]
+      },
+      "x": 914400,
+      "y": 914400,
+      "cx": 1905001,
+      "cy": 1270001
+    },
+    {
+      "op": "insertConnector",
+      "id": "slide:1",
+      "start": { "id": "slide:1/shape:2", "site": 1 },
+      "end": { "id": "slide:1/shape:4", "site": 1 }
+    },
+    {
+      "op": "setShapeGeom",
+      "id": "slide:1/shape:4",
+      "paths": [
+        {
+          "w": 1905001,
+          "h": 1270001,
+          "ops": [
+            { "type": "moveTo", "x": 0, "y": 0 },
+            { "type": "lnTo", "x": 1905000, "y": 0 },
+            { "type": "lnTo", "x": 1905000, "y": 635000 },
+            { "type": "lnTo", "x": 0, "y": 1270000 },
+            { "type": "close" }
+          ]
+        }
+      ]
+    },
+    {
+      "op": "setConnector",
+      "id": "slide:1/cxn:5",
+      "end": { "id": "slide:1/shape:3", "site": 1 }
+    }
+  ]
+}
