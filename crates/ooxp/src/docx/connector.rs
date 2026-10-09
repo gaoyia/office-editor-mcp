@@ -103,7 +103,11 @@ pub fn parse_cxn_id(id: &str, op_index: usize) -> Result<TxbxTarget, Error> {
 
 pub fn parse_cxn_id_at(id: &str, path: &str) -> Result<TxbxTarget, Error> {
     let path = path.to_string();
-    if id.contains("/pic:") || id.contains("/txbx:") || id.contains("/ink:") {
+    if id.contains("/pic:")
+        || id.contains("/txbx:")
+        || id.contains("/ink:")
+        || id.contains("/model3d:")
+    {
         return Err(Error::with_path(
             ErrorKind::InvalidId {
                 reason: IdReason::DocxCxnPrefix,

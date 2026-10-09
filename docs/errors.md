@@ -79,6 +79,8 @@
     - 图表
     - SmartArt
     - 嵌入对象
+    - 3D 模型
+    - 墨迹画布
     - 水印
     - 表
     - 修订
@@ -286,6 +288,7 @@
 - 文件不是该格式认的图片报 `InvalidField`
   - 三种格式都认 PNG、JPEG、GIF、BMP、SVG、EMF、WMF、TIFF
   - 不认 SVGZ、WebP
+  - `insertModel3d` 的 `file` 不是 GLB 也走这个 kind，文案仍写「PNG、JPEG…TIFF」
 - create 的 `pictures[]` 缺 `file` 报 `MissingField`
 - 只给 `cx` 或只给 `cy` 报 `InvalidField`
 - xlsx create 的 `sheets[].pictures[]` 还须给 `from`，否则报 `MissingField`
@@ -534,7 +537,9 @@
   - `groupCols`
   - `ungroupCols`
   - `setOutline`
-- pptx 的 `exportMedia` 认幻灯片图 id、备注图 id、批注内图 id、视频 id、音频 id 与 OLE id
+- xlsx 的 `exportMedia` 认工作表图 id、页眉页脚图 id、OLE id 与 3D 模型 id
+- pptx 的 `exportMedia` 认幻灯片图 id、备注图 id、批注内图 id、视频 id、音频 id、OLE id 与 3D 模型 id
+- docx 的 `exportMedia` 认图 id、OLE id、3D 模型 id、墨迹画布 id 与嵌入字体 id
 - pptx 的 `exportChartData` 认幻灯片图表 id
 - 对 xlsx 发下列内容报 `InvalidField`
   - `exportChartData`
@@ -582,6 +587,7 @@
   - 超链接：`insertHyperlink`、`setHyperlink`、`deleteHyperlink`
   - 迷你图：`insertSparkline`、`setSparkline`、`deleteSparkline`
   - OLE：`insertOle`、`deleteOle`
+  - 3D 模型：`insertModel3d`、`replaceModel3d`、`deleteModel3d`
   - 切片器：`insertSlicer`、`deleteSlicer`
   - 连接：`insertConnection`、`deleteConnection`
   - 外部引用：`insertExternalLink`、`deleteExternalLink`
@@ -672,7 +678,7 @@
 - 找不到嵌入对象时，`deleteOle` 报 `IdNotFound`
 - docx 的 `insertOle` 的 `id` 必须是正文或页眉页脚段落 id
 - 对 OLE id、图 id、容器 id、框内、注内或批注内段落发该 op 报 `InvalidId`
-- xlsx 上发 `insertOle` / `deleteOle` 报 `InvalidField`
+- xlsx 的 `insertOle` 的 `id` 必须是 `sheet:{name}`
 - pptx 的 `insertOle` 的 `id` 必须是 `slide:{n}`
 - `deleteOle` 的 `id` 必须是 OLE id
 - 空 `file` 报 `InvalidField`
@@ -684,6 +690,13 @@
 - `replaceInkCanvas` / `deleteInkCanvas` 的 `id` 必须是墨迹画布 id
 - 根本地名不是 `ink` 或命名空间不是 InkML 报 `InvalidField`
 - xlsx / pptx 上发 `insertInkCanvas` / `replaceInkCanvas` / `deleteInkCanvas` 报 `InvalidField`
+- 找不到 3D 模型时，`replaceModel3d` / `deleteModel3d` 报 `IdNotFound`
+- `insertModel3d` 的 `id`：docx 必须是正文或页眉页脚段落 id，xlsx 必须是 `sheet:{name}`，pptx 必须是 `slide:{n}` 或 `slide:{n}/notes`
+- 对图 id、OLE id 发 3D op，或对 3D id 发图 op，报 `InvalidId`
+- `replaceModel3d` / `deleteModel3d` 的 `id` 必须是 3D 模型 id
+- `file` 不是 GLB（文件头不是小端 `glTF` version=2）报 `InvalidField`（`InvalidImageFile`）
+- `insertModel3d` 的 `file` 不是 GLB 也走这个 kind，文案仍写「PNG、JPEG…TIFF」，不必另改图错误句
+- xlsx 对 `chartsheet` 发 `insertModel3d` 报 `InvalidField`
 - 找不到水印时，`deleteWatermark` 报 `IdNotFound`
 - `insertWatermark` 的 id 不是 `docx:document` 报 `InvalidId`
 - `deleteWatermark` 的 id 不是水印 id 也不是 `docx:document` 报 `InvalidId`
@@ -884,10 +897,10 @@
 - 目标段落含本期收入的行内内容控件时 `setParaText` 报 `NotImplemented`
 - 带 `w:dataBinding`、重复节改值、组合控件改值，或块级控件里有表，报 `NotImplemented`
 - 控件落在带分节符且删掉后该段会变空的段落上时，`deleteContentControl` 报 `NotImplemented`
-- `exportMedia` 找不到图、嵌入对象、墨迹画布或媒体报 `IdNotFound`
-- docx 的 `id` 可以是图 id、OLE id 或墨迹画布 id
-- pptx 的 `id` 可以是图 id（含批注内图）、视频 / 音频 id 或 OLE id
-- xlsx 只认图 id
+- `exportMedia` 找不到图、嵌入对象、3D 模型、墨迹画布或媒体报 `IdNotFound`
+- docx 的 `id` 可以是图 id、OLE id、3D 模型 id 或墨迹画布 id
+- pptx 的 `id` 可以是图 id（含批注内图）、视频 / 音频 id、OLE id 或 3D 模型 id
+- xlsx 的 `id` 可以是图 id、OLE id 或 3D 模型 id
 - 不是这些 id 报 `InvalidId`
 - 关系指向外部资源报 `OpcPartMissing`
 - `exportChartData` 找不到图报表 `IdNotFound`

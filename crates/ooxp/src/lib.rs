@@ -8,6 +8,7 @@ mod docx;
 mod error;
 mod image;
 mod json;
+mod model3d;
 mod ole;
 mod opc;
 mod password;
@@ -22,6 +23,7 @@ mod xml;
 pub use dispatch::run;
 pub use error::{io_path, peek_lang, Error, ErrorCode, Lang};
 pub use json::{written_json, RunOutput};
+pub use model3d::sample_glb;
 
 #[cfg(test)]
 mod tests {
@@ -806,6 +808,7 @@ mod tests {
                 "hyperlinkCount",
                 "sparklineCount",
                 "oleObjectCount",
+                "model3dCount",
                 "slicerCount",
                 "connectionCount",
                 "externalLinkCount",
@@ -838,6 +841,7 @@ mod tests {
                 "hyperlinkCount",
                 "sparklineCount",
                 "oleObjectCount",
+                "model3dCount",
                 "slicerCount",
                 "hasHeaderFooter",
                 "print",
@@ -908,6 +912,7 @@ mod tests {
                 "chartCount",
                 "smartArtCount",
                 "oleObjectCount",
+                "model3dCount",
                 "watermarkCount",
                 "tableCount",
                 "revisionCount",
@@ -964,6 +969,7 @@ mod tests {
                 "textBoxCount",
                 "connectorCount",
                 "inkCanvasCount",
+                "model3dCount",
                 "runCount"
             ]
         );
@@ -982,6 +988,7 @@ mod tests {
                 "textBoxCount",
                 "connectorCount",
                 "inkCanvasCount",
+                "model3dCount",
                 "runCount"
             ]
         );
@@ -1064,6 +1071,7 @@ mod tests {
                 "fieldCount",
                 "tableCount",
                 "oleObjectCount",
+                "model3dCount",
                 "zoomCount",
                 "connectorCount",
                 "animCount",
@@ -1098,6 +1106,7 @@ mod tests {
                 "fieldCount",
                 "tableCount",
                 "oleObjectCount",
+                "model3dCount",
                 "zoomCount",
                 "connectorCount",
                 "animCount",
@@ -1125,6 +1134,7 @@ mod tests {
                 "fieldCount",
                 "tableCount",
                 "oleObjectCount",
+                "model3dCount",
                 "zoomCount",
                 "connectorCount",
                 "animCount"

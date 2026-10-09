@@ -185,6 +185,7 @@ fn create_has_zero_anim_count_without_list() {
             "fieldCount",
             "tableCount",
             "oleObjectCount",
+            "model3dCount",
             "zoomCount",
             "connectorCount",
             "animCount",

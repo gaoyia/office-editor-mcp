@@ -157,6 +157,7 @@ fn inspect_hyperlink_count_without_list() {
             "fieldCount",
             "tableCount",
             "oleObjectCount",
+            "model3dCount",
             "zoomCount",
             "connectorCount",
             "animCount",

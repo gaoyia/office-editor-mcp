@@ -44,6 +44,7 @@ pub struct InspectScope {
     pub sections: bool,
     pub custom_shows: bool,
     pub ole_objects: bool,
+    pub model3ds: bool,
     pub zooms: bool,
 }
 
@@ -815,6 +816,9 @@ pub enum PptxOp {
     DeleteCustomShow(DeleteCustomShowOp),
     InsertOle(super::ole::InsertOleOp),
     DeleteOle(super::ole::DeleteOleOp),
+    InsertModel3d(super::model3d::InsertModel3dOp),
+    ReplaceModel3d(super::model3d::ReplaceModel3dOp),
+    DeleteModel3d(super::model3d::DeleteModel3dOp),
     InsertZoom(super::zoom::InsertZoomOp),
     DeleteZoom(super::zoom::DeleteZoomOp),
     SetShowPr(super::show::SetShowPrOp),
@@ -923,6 +927,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
             "sections",
             "customShows",
             "oleObjects",
+            "model3ds",
             "zooms",
         ],
     )?;
@@ -942,6 +947,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
     let sections = parse_bool_field(obj.get("sections"), "sections")?;
     let custom_shows = parse_bool_field(obj.get("customShows"), "customShows")?;
     let ole_objects = parse_bool_field(obj.get("oleObjects"), "oleObjects")?;
+    let model3ds = parse_bool_field(obj.get("model3ds"), "model3ds")?;
     let zooms = parse_bool_field(obj.get("zooms"), "zooms")?;
     let slide = match obj.get("slide") {
         None => None,
@@ -1019,6 +1025,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
         sections,
         custom_shows,
         ole_objects,
+        model3ds,
         zooms,
     }))
 }
@@ -1116,6 +1123,9 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<PptxOp>, Error> {
             "deleteCustomShow" => PptxOp::DeleteCustomShow(parse_delete_custom_show(obj, i)?),
             "insertOle" => PptxOp::InsertOle(parse_insert_ole(obj, i)?),
             "deleteOle" => PptxOp::DeleteOle(parse_delete_ole(obj, i)?),
+            "insertModel3d" => PptxOp::InsertModel3d(parse_insert_model3d(obj, i)?),
+            "replaceModel3d" => PptxOp::ReplaceModel3d(parse_replace_model3d(obj, i)?),
+            "deleteModel3d" => PptxOp::DeleteModel3d(parse_delete_model3d(obj, i)?),
             "insertZoom" => PptxOp::InsertZoom(parse_insert_zoom(obj, i)?),
             "deleteZoom" => PptxOp::DeleteZoom(parse_delete_zoom(obj, i)?),
             "setShowPr" => PptxOp::SetShowPr(parse_set_show_pr(obj, i)?),
@@ -3531,6 +3541,58 @@ fn parse_delete_ole(obj: &Map<String, Value>, i: usize) -> Result<ole::DeleteOle
     let id = require_id(obj, i)?;
     let target = ole::parse_ole_id(&id, &format!("ops[{i}].id"))?;
     Ok(ole::DeleteOleOp { id, target })
+}
+
+fn parse_insert_model3d(
+    obj: &Map<String, Value>,
+    i: usize,
+) -> Result<super::model3d::InsertModel3dOp, Error> {
+    deny_keys(obj, i, &["op", "id", "file", "x", "y", "cx", "cy"])?;
+    let id = require_id(obj, i)?;
+    let (slide, on_notes) =
+        picture::parse_insert_slide_or_notes(&id, i, IdReason::InsertModel3dNeedsSlide)?;
+    let file = require_file(obj, i, "insertModel3d")?;
+    let cx = parse_emu_field(obj.get("cx"), i, "cx")?;
+    let cy = parse_emu_field(obj.get("cy"), i, "cy")?;
+    if cx.is_some() != cy.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "insertModel3d".into(),
+                field: "cx and cy together".into(),
+            },
+            format!("ops[{i}]"),
+        ));
+    }
+    Ok(super::model3d::InsertModel3dOp {
+        slide,
+        on_notes,
+        file,
+        x: parse_emu_field(obj.get("x"), i, "x")?,
+        y: parse_emu_field(obj.get("y"), i, "y")?,
+        cx,
+        cy,
+    })
+}
+
+fn parse_replace_model3d(
+    obj: &Map<String, Value>,
+    i: usize,
+) -> Result<super::model3d::ReplaceModel3dOp, Error> {
+    deny_keys(obj, i, &["op", "id", "file"])?;
+    let id = require_id(obj, i)?;
+    let target = super::model3d::parse_id(&id, &format!("ops[{i}].id"))?;
+    let file = require_file(obj, i, "replaceModel3d")?;
+    Ok(super::model3d::ReplaceModel3dOp { id, target, file })
+}
+
+fn parse_delete_model3d(
+    obj: &Map<String, Value>,
+    i: usize,
+) -> Result<super::model3d::DeleteModel3dOp, Error> {
+    deny_keys(obj, i, &["op", "id"])?;
+    let id = require_id(obj, i)?;
+    let target = super::model3d::parse_id(&id, &format!("ops[{i}].id"))?;
+    Ok(super::model3d::DeleteModel3dOp { id, target })
 }
 
 fn parse_insert_zoom(obj: &Map<String, Value>, i: usize) -> Result<zoom::InsertZoomOp, Error> {

@@ -13,6 +13,7 @@ mod hyperlink;
 mod inspect;
 mod master;
 mod media;
+mod model3d;
 mod notes;
 mod ole;
 mod picture;

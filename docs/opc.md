@@ -190,6 +190,10 @@ URI 为 `{96DAC541-7B7A-43D3-8B79-37D633B846F1}`，命名空间为 `http://schem
 插入 EMF / WMF / TIFF 时只写一条 image 关系，原字节写入 `/xl/media/imageN.emf` / `.wmf` / `.tif`。
 `[Content_Types].xml` 补 Default：`emf` 为 `image/x-emf`，`wmf` 为 `image/x-wmf`，`tif` 为 `image/tiff`。
 不要 PNG 占位，不要 `svgBlip`。
+apply 或 create 插入工作表 3D 模型时，可能新建 `/xl/media/model3dN.glb`（Default `glb` → `model/gltf.binary`）以及海报 `/xl/media/imageN.png`。
+关系写在 **drawing** `.rels`：一条 Type `http://schemas.microsoft.com/office/2017/06/relationships/model3d` 指向 GLB，一条 image 指向海报。
+drawing 写 `mc:AlternateContent`，Choice `Requires="am3d"`，Choice 里是 `xdr:graphicFrame` 包 `am3d:model3d`，Fallback 是海报 `xdr:pic`。
+`xdr:xfrm` 写 `0×0`。不写 `a16:creationId`。不把 GLB 当 `insertPicture`。create 给了 `sheets[].model3ds` 时同样写入。
 apply 插入工作表图表时，可能再新建 `/xl/charts/chartN.xml`（CT `application/vnd.openxmlformats-officedocument.drawingml.chart+xml`）及 chart 的 `.rels`；
 drawing 关系 Type 以 `/chart` 结尾。
 不写 embedding。apply 插入工作表超链接时，外部链在工作表 `.rels` 上补一条关系（Type
@@ -303,6 +307,10 @@ apply 或 create 插入 SVG 时：
 插入 EMF / WMF / TIFF 时只写一条 image 关系，原字节写入 `/word/media/imageN.emf` / `.wmf` / `.tif`。
 `[Content_Types].xml` 补 Default：`emf` 为 `image/x-emf`，`wmf` 为 `image/x-wmf`，`tif` 为 `image/tiff`。
 不要 PNG 占位，不要 `svgBlip`。
+apply 或 create 插入 3D 模型时，可能新建 `/word/media/model3dN.glb`（Default `glb` → `model/gltf.binary`）以及海报 `/word/media/imageN.png`。
+宿主 `.rels` 补一条 Type `http://schemas.microsoft.com/office/2017/06/relationships/model3d` 指向 GLB，再补一条 image 指向海报。
+宿主写 `mc:AlternateContent`，Choice `Requires="am3d"`，Choice 里是 `w:drawing` / `wp:inline` 包 `am3d:model3d`，Fallback 是海报 `pic`。
+create 给了 `paragraphs[].model3ds` 时同样写入。不把 GLB 当 `insertPicture`。
 
 apply 插入脚注或尾注时，可能新建 `/word/footnotes.xml` 或 `/word/endnotes.xml`（CT 分别为 `…footnotes+xml` / `…endnotes+xml`），
 并在主文档 `.rels` 与 `[Content_Types].xml` 上补关系与 Override。
@@ -325,7 +333,7 @@ Package 为 `http://schemas.openxmlformats.org/officeDocument/2006/relationships
 apply 或 create 插入墨迹画布时，可能新建 `/word/ink/inkN.xml`（CT `application/inkml+xml`）。
 宿主 `.rels` 补一条 `customXml` 关系（`http://schemas.openxmlformats.org/officeDocument/2006/relationships/customXml`），
 `[Content_Types].xml` 补 Override。不写独立 `wordprocessingInk` 部件。
-inspect 两种关系都认。create 给了 `footnote` / `endnote` / `comments` / `charts` / `oleObjects` / `inkCanvases` 时，按对应 insert 同一套规则新建这些部件；也可写 SmartArt 四件套。
+inspect 两种关系都认。create 给了 `footnote` / `endnote` / `comments` / `charts` / `oleObjects` / `inkCanvases` / `model3ds` 时，按对应 insert 同一套规则新建这些部件；也可写 SmartArt 四件套。
 create 给了 `comments[].replies` 时按 `replyComment` 再写回复。
 create 给了 `document.numberings` 时按 `insertNumbering` 新建 `/word/numbering.xml`（CT `…numbering+xml`）。
 create 给了 `hyperlinks` 时按 `insertHyperlink` 在宿主 `.rels` 上补 External hyperlink 关系。
@@ -491,6 +499,10 @@ URI 与命名空间与 Word / Excel 相同。不栅格化。PowerPoint 另存可
 插入 EMF / WMF / TIFF 时只写一条 image 关系，原字节写入 `/ppt/media/imageN.emf` / `.wmf` / `.tif`。
 `[Content_Types].xml` 补 Default：`emf` 为 `image/x-emf`，`wmf` 为 `image/x-wmf`，`tif` 为 `image/tiff`。
 不要 PNG 占位，不要 `svgBlip`。
+apply 或 create 插入幻灯片或备注 3D 模型时，可能新建 `/ppt/media/model3dN.glb`（Default `glb` → `model/gltf.binary`）以及海报 `/ppt/media/imageN.png`。
+该页或 notesSlide `.rels` 补一条 Type `http://schemas.microsoft.com/office/2017/06/relationships/model3d` 指向 GLB，再补一条 image 指向海报。
+宿主是 `p:graphicFrame`，包在 `mc:AlternateContent` 的 Choice 里（`Requires="am3d"`）。Fallback 是海报 `p:pic`。
+create 给了 `slides[].model3ds` 时同样写入。备注 apply 可往 `slide:{n}/notes` 插；create 本期不在 `slides[].notes` 上写 3D。不把 GLB 当 `insertPicture`。
 
 apply 插入幻灯片视频或音频时，可能新建 `/ppt/media/mediaN.mp4` 或 `/ppt/media/mediaN.wav`，以及一张海报 `/ppt/media/imageN.png`。
 该页 `.rels` 补三条关系：MS-PPTX media（Type `http://schemas.microsoft.com/office/2007/relationships/media`）、
@@ -520,7 +532,7 @@ apply 新建备注页时，可能写入 `/ppt/notesSlides/notesSlideN.xml`（CT
 若 presentation 还没有 notesMaster，补 presentation 关系，并在 `presentation.xml` 的 `p:sldMasterIdLst` 之后写入 `p:notesMasterIdLst`。
 notesMaster 的 theme 关系指向新复制的 theme 部件（内容与包内已有 theme 相同，常见为 `/ppt/theme/theme2.xml`），不和 slideMaster 共用同一部件。
 备注页结构对照 PowerPoint 16.0 另存样例：`sldImg`、`body`、`sldNum` 三个占位符。
-往备注插的 `p:pic`、图表 `p:graphicFrame`、SmartArt `p:graphicFrame` 与表 `p:graphicFrame` 写在 notesSlide 的 `p:spTree` 里；
+往备注插的 `p:pic`、图表 `p:graphicFrame`、SmartArt `p:graphicFrame`、表 `p:graphicFrame` 与 3D 模型 `p:graphicFrame` 写在 notesSlide 的 `p:spTree` 里；
 媒体仍在 `/ppt/media/…`，chart / embedding / diagram 部件仍在 `/ppt/charts/…`、`/ppt/embeddings/…`、`/ppt/diagrams/…`，关系写在 notesSlide `.rels`。表不新建部件。
 
 apply 的 `setHandoutText` 可能写入 `/ppt/handoutMasters/handoutMaster1.xml`（CT

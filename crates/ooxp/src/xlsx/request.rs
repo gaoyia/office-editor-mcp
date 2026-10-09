@@ -159,6 +159,7 @@ pub struct InspectScope {
     pub hyperlinks: bool,
     pub sparklines: bool,
     pub ole_objects: bool,
+    pub model3ds: bool,
     pub slicers: bool,
     pub connections: bool,
     pub external_links: bool,
@@ -1657,6 +1658,9 @@ pub enum XlsxOp {
     Ungroup(UngroupOp),
     InsertOle(ole::InsertOleOp),
     DeleteOle(ole::DeleteOleOp),
+    InsertModel3d(super::model3d::InsertModel3dOp),
+    ReplaceModel3d(super::model3d::ReplaceModel3dOp),
+    DeleteModel3d(super::model3d::DeleteModel3dOp),
     InsertSlicer(slicer::InsertSlicerOp),
     DeleteSlicer(slicer::DeleteSlicerOp),
     InsertConnection(connection::InsertConnectionOp),
@@ -1714,6 +1718,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
             "hyperlinks",
             "sparklines",
             "oleObjects",
+            "model3ds",
             "slicers",
             "connections",
             "externalLinks",
@@ -1731,6 +1736,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
     let hyperlinks = parse_bool_field(obj.get("hyperlinks"), "hyperlinks")?;
     let sparklines = parse_bool_field(obj.get("sparklines"), "sparklines")?;
     let ole_objects = parse_bool_field(obj.get("oleObjects"), "oleObjects")?;
+    let model3ds = parse_bool_field(obj.get("model3ds"), "model3ds")?;
     let slicers = parse_bool_field(obj.get("slicers"), "slicers")?;
     let connections = parse_bool_field(obj.get("connections"), "connections")?;
     let external_links = parse_bool_field(obj.get("externalLinks"), "externalLinks")?;
@@ -1791,6 +1797,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
         && !hyperlinks
         && !sparklines
         && !ole_objects
+        && !model3ds
         && !slicers
         && !connections
         && !external_links
@@ -1811,6 +1818,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
         hyperlinks,
         sparklines,
         ole_objects,
+        model3ds,
         slicers,
         connections,
         external_links,
@@ -1937,6 +1945,9 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<XlsxOp>, Error> {
             "ungroup" => XlsxOp::Ungroup(parse_ungroup(obj, i)?),
             "insertOle" => XlsxOp::InsertOle(parse_insert_ole(obj, i)?),
             "deleteOle" => XlsxOp::DeleteOle(parse_delete_ole(obj, i)?),
+            "insertModel3d" => XlsxOp::InsertModel3d(parse_insert_model3d(obj, i)?),
+            "replaceModel3d" => XlsxOp::ReplaceModel3d(parse_replace_model3d(obj, i)?),
+            "deleteModel3d" => XlsxOp::DeleteModel3d(parse_delete_model3d(obj, i)?),
             "insertSlicer" => XlsxOp::InsertSlicer(parse_insert_slicer(obj, i)?),
             "deleteSlicer" => XlsxOp::DeleteSlicer(parse_delete_slicer(obj, i)?),
             "insertConnection" => XlsxOp::InsertConnection(parse_insert_connection(obj, i)?),
@@ -7673,6 +7684,7 @@ fn parse_sheet_only_id(
         || id.contains("/link:")
         || id.contains("/spark:")
         || id.contains("/ole:")
+        || id.contains("/model3d:")
         || id.contains("/slicer:")
         || id.starts_with("cell:")
     {
@@ -8831,6 +8843,126 @@ fn parse_delete_ole(
     let id = require_id(obj, i)?;
     let target = ole::parse_ole_id(&id, &format!("ops[{i}].id"))?;
     Ok(ole::DeleteOleOp { id, target })
+}
+
+fn parse_insert_model3d(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<super::model3d::InsertModel3dOp, Error> {
+    deny_keys(
+        obj,
+        i,
+        &[
+            "op", "id", "file", "cx", "cy", "from", "to", "anchor", "fromOffX", "fromOffY",
+            "toOffX", "toOffY",
+        ],
+    )?;
+    let id = require_id(obj, i)?;
+    let sheet = parse_sheet_only_id(&id, i, "id", IdReason::InsertModel3dNeedsSheet)?;
+    let file = require_file(obj, i, "insertModel3d")?;
+    let cx = parse_emu_field(obj.get("cx"), i, "cx")?;
+    let cy = parse_emu_field(obj.get("cy"), i, "cy")?;
+    if cx.is_some() != cy.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "insertModel3d".into(),
+                field: "cx and cy together".into(),
+            },
+            format!("ops[{i}]"),
+        ));
+    }
+    let from = match obj.get("from") {
+        Some(Value::String(s)) => a1::parse_cell(s).map_err(|e| e.at(format!("ops[{i}].from")))?,
+        None => a1::CellRef { col: 1, row: 1 },
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "from".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].from"),
+            ));
+        }
+    };
+    let anchor = match obj.get("anchor") {
+        None => picture::AnchorKind::OneCell,
+        Some(Value::String(s)) => picture::AnchorKind::parse_insert(s).ok_or_else(|| {
+            Error::with_path(ErrorKind::InvalidXlsxAnchor, format!("ops[{i}].anchor"))
+        })?,
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "anchor".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].anchor"),
+            ));
+        }
+    };
+    let to = match obj.get("to") {
+        None => None,
+        Some(Value::String(s)) => {
+            Some(a1::parse_cell(s).map_err(|e| e.at(format!("ops[{i}].to")))?)
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "to".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].to"),
+            ));
+        }
+    };
+    if anchor == picture::AnchorKind::TwoCell && to.is_none() {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "insertModel3d".into(),
+                field: "to".into(),
+            },
+            format!("ops[{i}].to"),
+        ));
+    }
+    if anchor == picture::AnchorKind::OneCell && to.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::UnknownField { field: "to".into() },
+            format!("ops[{i}].to"),
+        ));
+    }
+    Ok(super::model3d::InsertModel3dOp {
+        sheet,
+        file,
+        cx,
+        cy,
+        from,
+        to,
+        anchor,
+        from_off_x: parse_off_field(obj.get("fromOffX"), i, "fromOffX")?.unwrap_or(0),
+        from_off_y: parse_off_field(obj.get("fromOffY"), i, "fromOffY")?.unwrap_or(0),
+        to_off_x: parse_off_field(obj.get("toOffX"), i, "toOffX")?.unwrap_or(0),
+        to_off_y: parse_off_field(obj.get("toOffY"), i, "toOffY")?.unwrap_or(0),
+    })
+}
+
+fn parse_replace_model3d(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<super::model3d::ReplaceModel3dOp, Error> {
+    deny_keys(obj, i, &["op", "id", "file"])?;
+    let id = require_id(obj, i)?;
+    let target = super::model3d::parse_id(&id, &format!("ops[{i}].id"))?;
+    let file = require_file(obj, i, "replaceModel3d")?;
+    Ok(super::model3d::ReplaceModel3dOp { id, target, file })
+}
+
+fn parse_delete_model3d(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<super::model3d::DeleteModel3dOp, Error> {
+    deny_keys(obj, i, &["op", "id"])?;
+    let id = require_id(obj, i)?;
+    let target = super::model3d::parse_id(&id, &format!("ops[{i}].id"))?;
+    Ok(super::model3d::DeleteModel3dOp { id, target })
 }
 
 fn parse_insert_slicer(

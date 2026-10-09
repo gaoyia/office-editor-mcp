@@ -57,6 +57,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     let expand_txbx = scope.as_ref().is_some_and(|s| s.text_boxes);
     let expand_cxn = scope.as_ref().is_some_and(|s| s.connectors);
     let expand_ink = scope.as_ref().is_some_and(|s| s.ink_canvases);
+    let expand_model3ds = scope.as_ref().is_some_and(|s| s.model3ds);
     let expand_txbx_content = scope.as_ref().is_some_and(|s| s.text_box_content);
     let expand_charts = scope.as_ref().is_some_and(|s| s.charts);
     let expand_smartart = scope.as_ref().is_some_and(|s| s.smart_art);
@@ -75,6 +76,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         text_boxes: expand_txbx,
         connectors: expand_cxn,
         ink_canvases: expand_ink,
+        model3ds: expand_model3ds,
         text_box_content: expand_txbx_content,
         charts: expand_charts,
         smart_art: expand_smartart,
@@ -97,8 +99,10 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     let body_cxns = collect_body_cxns(&paras)?;
     let connector_count = body_cxns.len();
     let mut ink_canvas_count = 0usize;
+    let mut body_model3d_count = 0usize;
     for p in &paras {
         ink_canvas_count += ink::count_in(&pkg, &part, p)?;
+        body_model3d_count += super::model3d::count_in(&pkg, &part, p)?;
     }
     let footnote_count = notes::user_count(&pkg, &part, NoteKind::Footnote)?;
     let endnote_count = notes::user_count(&pkg, &part, NoteKind::Endnote)?;
@@ -156,6 +160,12 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         "protection": super::protect::inspect(&pkg, &part)?,
         "theme": super::theme::inspect(&pkg, &part)?,
     });
+    insert_json_after(
+        tree.as_object_mut().unwrap(),
+        "oleObjectCount",
+        "model3dCount",
+        json!(body_model3d_count),
+    );
     insert_json_after(
         tree.as_object_mut().unwrap(),
         "textBoxCount",
@@ -335,6 +345,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
                         expand_txbx,
                         expand_cxn,
                         expand_ink,
+                        expand_model3ds,
                         expand_txbx_content,
                         expand_charts,
                         expand_smartart,
@@ -458,6 +469,7 @@ struct HfExpand {
     text_boxes: bool,
     connectors: bool,
     ink_canvases: bool,
+    model3ds: bool,
     text_box_content: bool,
     charts: bool,
     smart_art: bool,
@@ -509,10 +521,12 @@ fn hf_node(pkg: &Package, item: &HfPart, expand: &HfExpand) -> Result<Value, Err
     let mut chart_count = 0usize;
     let mut smart_art_count = 0usize;
     let mut ole_count = 0usize;
+    let mut model3d_n = 0usize;
     for p in &paras {
         chart_count += charts::count_charts(p)?;
         smart_art_count += smartart::count_smartarts(p)?;
         ole_count += ole::count_in(pkg, &item.part, p)?;
+        model3d_n += super::model3d::count_in(pkg, &item.part, p)?;
     }
     let mut node = json!({
         "id": item.id,
@@ -537,6 +551,12 @@ fn hf_node(pkg: &Package, item: &HfPart, expand: &HfExpand) -> Result<Value, Err
         "mathCount": math::count_maths(&doc.root),
         "contentControlCount": sdt::count_sdts(&doc.root),
     });
+    insert_json_after(
+        node.as_object_mut().unwrap(),
+        "oleObjectCount",
+        "model3dCount",
+        json!(model3d_n),
+    );
     insert_json_after(
         node.as_object_mut().unwrap(),
         "textBoxCount",
@@ -586,6 +606,16 @@ fn hf_node(pkg: &Package, item: &HfPart, expand: &HfExpand) -> Result<Value, Err
             listed.extend(ink::canvases_json(&ink::collect(pkg, &item.part, p, &id)?));
         }
         node["inkCanvases"] = Value::Array(listed);
+    }
+    if expand.model3ds {
+        let mut listed = Vec::new();
+        for (i, p) in paras.iter().enumerate() {
+            let (id, _) = para::para_stable_id_in(&item.id, p, i + 1);
+            listed.extend(super::model3d::list_json(&super::model3d::collect(
+                pkg, &item.part, p, &id,
+            )?));
+        }
+        node["model3ds"] = Value::Array(listed);
     }
     if expand.charts {
         node["charts"] = Value::Array(charts::collect_hf(pkg, item, &paras)?);
@@ -653,6 +683,7 @@ fn body_para_json(
     expand_txbx: bool,
     expand_cxn: bool,
     expand_ink: bool,
+    expand_model3ds: bool,
     expand_txbx_content: bool,
     expand_charts: bool,
     expand_smartart: bool,
@@ -669,6 +700,7 @@ fn body_para_json(
         .collect();
     let mine_cxn: Vec<_> = cxns_for_para(all_cxns, &id).into_iter().cloned().collect();
     let inks = ink::collect(pkg, host_part, p, &id)?;
+    let m3ds = super::model3d::collect(pkg, host_part, p, &id)?;
     let mut node = para_json(
         p,
         index,
@@ -683,6 +715,12 @@ fn body_para_json(
         "connectorCount",
         "inkCanvasCount",
         json!(inks.len()),
+    );
+    insert_json_after(
+        node.as_object_mut().unwrap(),
+        "inkCanvasCount",
+        "model3dCount",
+        json!(m3ds.len()),
     );
     if expand_pics {
         node["pictures"] = Value::Array(picture::pictures_json(&pics));
@@ -706,6 +744,9 @@ fn body_para_json(
     }
     if expand_ink {
         node["inkCanvases"] = Value::Array(ink::canvases_json(&inks));
+    }
+    if expand_model3ds {
+        node["model3ds"] = Value::Array(super::model3d::list_json(&m3ds));
     }
     let fn_refs = notes::refs_in_para(p, NoteKind::Footnote);
     if !fn_refs.is_empty() {

@@ -159,6 +159,7 @@ fn summary_without_scope() {
             "hyperlinkCount",
             "sparklineCount",
             "oleObjectCount",
+            "model3dCount",
             "slicerCount",
             "hasHeaderFooter",
             "print",

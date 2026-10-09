@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "action": "create",
+  "path": "deck.model3d.pptx",
+  "format": "pptx",
+  "presentation": {
+    "slides": [
+      {
+        "shapes": [{ "text": "标题" }],
+        "model3ds": [{ "file": "model.glb" }]
+      }
+    ]
+  }
+}

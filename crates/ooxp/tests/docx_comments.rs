@@ -212,6 +212,7 @@ fn inspect_counts_without_list() {
             "chartCount",
             "smartArtCount",
             "oleObjectCount",
+            "model3dCount",
             "watermarkCount",
             "tableCount",
             "revisionCount",

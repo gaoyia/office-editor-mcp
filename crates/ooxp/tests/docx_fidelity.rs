@@ -1156,6 +1156,7 @@ fn inspect_lists_header_pictures() {
             "chartCount",
             "smartArtCount",
             "oleObjectCount",
+            "model3dCount",
             "watermarkCount",
             "tableCount",
             "revisionCount",
@@ -1491,6 +1492,7 @@ fn inspect_lists_body_pictures() {
             "textBoxCount",
             "connectorCount",
             "inkCanvasCount",
+            "model3dCount",
             "runCount",
             "pictures"
         ]

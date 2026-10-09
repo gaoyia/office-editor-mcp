@@ -8,7 +8,7 @@
 
 Microsoft Excel 16.0 已打开，用户确认通过。本机若装了 WPS，`Excel.Application` 会被抢走，测试仍直接启动 `EXCEL.EXE` 再挂 COM。
 
-C、I、A、O、Xp、Xvg、Xem、Xc、Xh 这几组现在由 `manual-check/office/cases/xlsx-*.ps1` 自动判定，
+C、I、A、O、Xp、Xvg、Xem、X3d、Xc、Xh 这几组现在由 `manual-check/office/cases/xlsx-*.ps1` 自动判定，
 跑 `pwsh -File manual-check\office\run.ps1 -Case 'xlsx-*'` 即可复现，逐条结果落在 `manual-check/office/out/office-results.csv`。
 2026-09-27 补跑 `xlsx-pictures.ps1`，Xp1–Xp7 通过。同日补跑 `xlsx-charts.ps1`，Xc1–Xc7 通过。
 同日补跑 `xlsx-create-pictures.ps1`，C8–C10 通过。同日补跑 `xlsx-create-charts.ps1`，C11–C13 通过。
@@ -28,6 +28,7 @@ C、I、A、O、Xp、Xvg、Xem、Xc、Xh 这几组现在由 `manual-check/office
 同日补跑 `xlsx-dialog-macro.ps1`，Xdm1–Xdm5 通过。2026-09-28 补跑 `xlsx-chartsheet.ps1`，图表工作表 Xs1–Xs4 通过。同日补跑 `xlsx-table.ps1`，Xt1–Xt5 通过。
 2026-10-09 补跑 `xlsx-svg.ps1`，Xvg1–Xvg6 通过。Excel COM `Type=28`，96×48 对应 914400×457200 EMU。
 同日补跑 `xlsx-emf.ps1`，Xem1–Xem6 通过。Excel COM `Type=13`，无 Repair。
+同日补跑 `xlsx-model3d.ps1`，X3d1–X3d6 通过。Excel COM `Type=30`，无 Repair。
 
 - **C1** ✅
   - Excel 16.0 打开 `manual-check/office/out/xlsx-create.xlsx`，标题栏无 Repair
@@ -68,6 +69,13 @@ C、I、A、O、Xp、Xvg、Xem、Xc、Xh 这几组现在由 `manual-check/office
   - 换成 PNG 后没有 `contentType`、包内没有 `.emf`
   - 奇数页页眉 TIFF 图 id 为 `sheet:Sheet1/hf:odd:header/pic:2`
   - 非图片 `file` 得 `InvalidField`
+- **X3d1–X3d6** ✅
+  - Excel 16.0：`xlsx-model3d.ps1`，6 PASS / 0 FAIL
+  - 插入 / create 树上 `contentType` 为 `model/gltf.binary`，不进 `pictures`，COM `Type=30`，无 Repair
+  - `exportMedia` 为 GLB 原字节
+  - `replaceModel3d` 后 id 不变
+  - `deleteModel3d` 后包内没有 `.glb`
+  - 非 GLB `file` 得 `InvalidField`
 - **Xc1–Xc7** ✅
   - Excel 16.0：无 `charts` 时 `chartCount=1`、没有名单
   - 名单 id 为 `sheet:Sheet1/chart:2`，系列 10/20/30 与单元格一致
@@ -536,6 +544,33 @@ COM 认 `Type=13`（`msoPicture`），不是 SVG 的 `28`。
 - **Xem6**
   - 检查：拒错
   - 通过标准：`file` 不是图片得 `InvalidField`，未写文件
+  - 不强制开 Excel
+
+## 工作表 3D 模型
+
+工作表 drawing 里的 `am3d` AlternateContent。只认 GLB。不进 `pictures`。Fallback 海报不进 `pictures`。不算 3D 渲染引擎。
+手测脚本 `manual-check/office/cases/xlsx-model3d.ps1`。编号用 X3d。
+COM 认 `Type=30`（`mso3DModel`）。页眉槽本期不插。
+
+- **X3d1**
+  - 检查：插入
+  - 通过标准：`insertModel3d` 把本地 GLB 写入工作表后，树上 `contentType` 为 `model/gltf.binary`，不进 `pictures`，Excel 无修复
+  - COM 该形状 `Type=30`，包内有 `.glb`、XML 含 `am3d:model3d`
+- **X3d2**
+  - 检查：导出
+  - 通过标准：对该 3D id `exportMedia` 得到 GLB 原字节，`contentType` 为 `model/gltf.binary`
+- **X3d3**
+  - 检查：create
+  - 通过标准：`sheets[].model3ds[].file` 指向 GLB 后，树上 `contentType` 为 `model/gltf.binary`，不进 `pictures`，Excel 无修复
+- **X3d4**
+  - 检查：替换
+  - 通过标准：`replaceModel3d` 换成另一份 GLB 后 id 不变，导出是新字节，Excel 无修复
+- **X3d5**
+  - 检查：删除
+  - 通过标准：`deleteModel3d` 后 `model3dCount` 为 0，包内没有 `.glb`，Excel 无修复
+- **X3d6**
+  - 检查：拒错
+  - 通过标准：`file` 不是 GLB 得 `InvalidField`，未写文件
   - 不强制开 Excel
 
 ## 工作表图表

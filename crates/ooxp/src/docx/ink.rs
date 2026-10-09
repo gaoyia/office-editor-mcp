@@ -144,7 +144,11 @@ pub fn canvases_json(items: &[InkInfo]) -> Vec<Value> {
 }
 
 pub fn looks_like_ink_id(id: &str) -> bool {
-    id.contains("/ink:") && !id.contains("/pic:") && !id.contains("/txbx:") && !id.contains("/cxn:")
+    id.contains("/ink:")
+        && !id.contains("/pic:")
+        && !id.contains("/txbx:")
+        && !id.contains("/cxn:")
+        && !id.contains("/model3d:")
 }
 
 pub fn parse_ink_id(id: &str, op_index: usize) -> Result<TxbxTarget, Error> {

@@ -1322,6 +1322,44 @@ function Ensure-OoxpTiff([switch]$Force) {
     return $path
 }
 
+# 与库 `sample_glb()` 同一套最小 glTF 2 三角形（JSON chunk 4 字节对齐，BIN 36 字节）。
+function Ensure-OoxpGlb([switch]$Force) {
+    $path = Get-OutPath 'model.glb'
+    if ((Test-Path $path) -and -not $Force) { return $path }
+    $jsonText = '{"asset":{"version":"2.0"},"scene":0,"scenes":[{"nodes":[0]}],"nodes":[{"mesh":0}],"meshes":[{"primitives":[{"attributes":{"POSITION":0}}]}],"accessors":[{"bufferView":0,"componentType":5126,"count":3,"type":"VEC3","max":[1.0,1.0,0.0],"min":[0.0,0.0,0.0]}],"bufferViews":[{"buffer":0,"byteLength":36}],"buffers":[{"byteLength":36}]}'
+    $jsonList = New-Object 'System.Collections.Generic.List[byte]'
+    $jsonList.AddRange([Text.Encoding]::UTF8.GetBytes($jsonText))
+    while ($jsonList.Count % 4 -ne 0) { $jsonList.Add([byte]32) }
+    $binList = New-Object 'System.Collections.Generic.List[byte]'
+    foreach ($v in @(0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0)) {
+        $binList.AddRange([BitConverter]::GetBytes([float]$v))
+    }
+    $jsonLen = [uint32]$jsonList.Count
+    $binLen = [uint32]$binList.Count
+    $total = [uint32](12 + 8 + $jsonLen + 8 + $binLen)
+    $ms = New-Object IO.MemoryStream
+    $bw = New-Object IO.BinaryWriter $ms
+    $bw.Write([uint32]0x46546C67)
+    $bw.Write([uint32]2)
+    $bw.Write($total)
+    $bw.Write($jsonLen)
+    $bw.Write([uint32]0x4E4F534A)
+    $bw.Write($jsonList.ToArray())
+    $bw.Write($binLen)
+    $bw.Write([uint32]0x004E4942)
+    $bw.Write($binList.ToArray())
+    $bw.Flush()
+    return Write-OoxpBytes $path $ms.ToArray()
+}
+
+function Ensure-OoxpGlbB([switch]$Force) {
+    $path = Get-OutPath 'model-b.glb'
+    if ((Test-Path $path) -and -not $Force) { return $path }
+    $a = [IO.File]::ReadAllBytes((Ensure-OoxpGlb))
+    $a[$a.Length - 4] = $a[$a.Length - 4] -bxor 1
+    return Write-OoxpBytes $path $a
+}
+
 # 两节、第二节默认页眉链接前节；页眉里有行内图和浮动图。
 function Ensure-DocxWordPictureSource([switch]$Force) {
     $path = Get-OutPath 'docx-word-picture-source.docx'

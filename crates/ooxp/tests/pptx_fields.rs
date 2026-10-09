@@ -150,6 +150,7 @@ fn bare_inspect_has_zero_field_count() {
             "fieldCount",
             "tableCount",
             "oleObjectCount",
+            "model3dCount",
             "zoomCount",
             "connectorCount",
             "animCount",

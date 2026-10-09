@@ -39,6 +39,7 @@ struct NewSlide {
     comments: Vec<InsertCommentOp>,
     transition: Option<SetTransitionOp>,
     anims: Vec<CreateAnim>,
+    model3ds: Vec<super::model3d::InsertModel3dOp>,
 }
 
 pub fn create(presentation: &Value) -> Result<Vec<u8>, Error> {
@@ -209,6 +210,7 @@ pub fn create(presentation: &Value) -> Result<Vec<u8>, Error> {
     }
 
     attach_pictures(&mut pkg, &slides)?;
+    attach_model3ds(&mut pkg, &slides)?;
     attach_media(&mut pkg, &slides, media::MediaKind::Video)?;
     attach_media(&mut pkg, &slides, media::MediaKind::Audio)?;
     attach_charts(&mut pkg, &slides)?;
@@ -251,6 +253,7 @@ fn parse_slide(v: &Value, i: usize) -> Result<NewSlide, Error> {
                 | "comments"
                 | "transition"
                 | "anims"
+                | "model3ds"
         ) {
             return Err(Error::with_path(
                 ErrorKind::UnknownField { field: k.clone() },
@@ -283,6 +286,7 @@ fn parse_slide(v: &Value, i: usize) -> Result<NewSlide, Error> {
     let comments = parse_comments(obj.get("comments"), i)?;
     let transition = parse_transition(obj.get("transition"), i)?;
     let anims = parse_anims(obj.get("anims"), i)?;
+    let model3ds = parse_model3ds(obj.get("model3ds"), i)?;
     Ok(NewSlide {
         shapes,
         pictures,
@@ -295,6 +299,7 @@ fn parse_slide(v: &Value, i: usize) -> Result<NewSlide, Error> {
         comments,
         transition,
         anims,
+        model3ds,
     })
 }
 
@@ -315,6 +320,34 @@ fn parse_pictures(v: Option<&Value>, slide_i: usize) -> Result<Vec<InsertPicture
     let mut out = Vec::new();
     for (j, item) in arr.iter().enumerate() {
         out.push(request::parse_create_picture(
+            item,
+            &format!("{prefix}[{j}]"),
+            slide_i + 1,
+        )?);
+    }
+    Ok(out)
+}
+
+fn parse_model3ds(
+    v: Option<&Value>,
+    slide_i: usize,
+) -> Result<Vec<super::model3d::InsertModel3dOp>, Error> {
+    let Some(v) = v else {
+        return Ok(Vec::new());
+    };
+    let prefix = format!("presentation.slides[{slide_i}].model3ds");
+    let arr = v.as_array().ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::WrongType {
+                field: "model3ds".into(),
+                expected: TypeName::Array,
+            },
+            prefix.clone(),
+        )
+    })?;
+    let mut out = Vec::new();
+    for (j, item) in arr.iter().enumerate() {
+        out.push(super::model3d::parse_create(
             item,
             &format!("{prefix}[{j}]"),
             slide_i + 1,
@@ -589,6 +622,7 @@ fn empty_slide() -> NewSlide {
         comments: Vec::new(),
         transition: None,
         anims: Vec::new(),
+        model3ds: Vec::new(),
     }
 }
 
@@ -707,6 +741,30 @@ fn validate_anims(slides: &[NewSlide]) -> Result<(), Error> {
                 ));
             }
         }
+    }
+    Ok(())
+}
+
+fn attach_model3ds(pkg: &mut Package, slides: &[NewSlide]) -> Result<(), Error> {
+    if slides.iter().all(|s| s.model3ds.is_empty()) {
+        return Ok(());
+    }
+    for (i, slide) in slides.iter().enumerate() {
+        if slide.model3ds.is_empty() {
+            continue;
+        }
+        let part = format!("/ppt/slides/slide{}.xml", i + 1);
+        let mut doc = xml::parse(pkg.get(&part)?)?;
+        for (j, op) in slide.model3ds.iter().enumerate() {
+            super::model3d::insert(
+                pkg,
+                &mut doc,
+                &part,
+                op,
+                &format!("presentation.slides[{i}].model3ds[{j}].file"),
+            )?;
+        }
+        pkg.set(&part, doc.to_bytes()?)?;
     }
     Ok(())
 }

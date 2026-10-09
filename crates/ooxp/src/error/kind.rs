@@ -111,6 +111,12 @@ pub(crate) enum IdReason {
     DocxInkContainer,
     DocxInkIndexNotInt,
     DocxInkIndexFromOne,
+    /// docx 3D 模型 id 必须是 {段落}/model3d:…
+    DocxModel3dPrefix,
+    /// 段落或容器 id，缺少 /model3d:…
+    DocxModel3dContainer,
+    DocxModel3dIndexNotInt,
+    DocxModel3dIndexFromOne,
     /// docx 的 groupShapes 必须用 docx:document 或页眉/页脚容器
     GroupNeedsDocument,
     /// xlsx 文本框 id 必须是 sheet:{name}/sp:…
@@ -326,6 +332,18 @@ pub(crate) enum IdReason {
     SheetOlePrefix,
     /// xlsx 工作表 id，缺少 /ole:…
     SheetOleContainer,
+    /// xlsx 的 insertModel3d 必须用 sheet:工作表名
+    InsertModel3dNeedsSheet,
+    /// xlsx 3D 模型 id 必须是 sheet:{name}/model3d:…
+    SheetModel3dPrefix,
+    /// 工作表 id，缺少 /model3d:…
+    SheetModel3dContainer,
+    /// pptx 的 insertModel3d 必须用 slide:N 或备注容器
+    InsertModel3dNeedsSlide,
+    /// pptx 3D 模型 id 必须是 slide:N/model3d:… 或备注
+    SlideModel3dPrefix,
+    /// 页 id，缺少 /model3d:…
+    SlideModel3dContainer,
     /// xlsx 的 insertSlicer 必须用 sheet:工作表名
     InsertSlicerNeedsSheet,
     /// xlsx 切片器 id 必须是 sheet:{name}/slicer:…
@@ -653,6 +671,7 @@ define_error_kinds! {
     InsertPictureWorksheetOnly => vec![Self::InsertPictureWorksheetOnly],
     InsertChartWorksheetOnly => vec![Self::InsertChartWorksheetOnly],
     InsertTextBoxWorksheetOnly => vec![Self::InsertTextBoxWorksheetOnly],
+    InsertModel3dWorksheetOnly => vec![Self::InsertModel3dWorksheetOnly],
     InsertSmartArtWorksheetOnly => vec![Self::InsertSmartArtWorksheetOnly],
     CommentsWorksheetOnly => vec![Self::CommentsWorksheetOnly],
     InsertHyperlinkWorksheetOnly => vec![Self::InsertHyperlinkWorksheetOnly],
@@ -817,6 +836,7 @@ define_error_kinds! {
     SmartArtListDepth => vec![Self::SmartArtListDepth],
     OleNotFound { id: String } => vec![Self::OleNotFound { id: "para:1/ole:_1".into() }],
     InkNotFound { id: String } => vec![Self::InkNotFound { id: "para:1/ink:9".into() }],
+    Model3dNotFound { id: String } => vec![Self::Model3dNotFound { id: "para:1/model3d:9".into() }],
     SlicerNotFound { id: String } => vec![Self::SlicerNotFound { id: "sheet:Sheet1/slicer:2".into() }],
     SlicerFieldNotFound { name: String } => vec![Self::SlicerFieldNotFound { name: "产品".into() }],
     ConnectionNotFound { id: String } => vec![Self::ConnectionNotFound { id: "connection:1".into() }],
@@ -1166,6 +1186,10 @@ impl IdReason {
             Self::DocxInkContainer,
             Self::DocxInkIndexNotInt,
             Self::DocxInkIndexFromOne,
+            Self::DocxModel3dPrefix,
+            Self::DocxModel3dContainer,
+            Self::DocxModel3dIndexNotInt,
+            Self::DocxModel3dIndexFromOne,
             Self::GroupNeedsDocument,
             Self::SheetSpPrefix,
             Self::SheetSpContainer,
@@ -1290,6 +1314,12 @@ impl IdReason {
             Self::InsertOleNeedsSheet,
             Self::SheetOlePrefix,
             Self::SheetOleContainer,
+            Self::InsertModel3dNeedsSheet,
+            Self::SheetModel3dPrefix,
+            Self::SheetModel3dContainer,
+            Self::InsertModel3dNeedsSlide,
+            Self::SlideModel3dPrefix,
+            Self::SlideModel3dContainer,
             Self::InsertSlicerNeedsSheet,
             Self::SheetSlicerPrefix,
             Self::SheetSlicerContainer,
@@ -1732,6 +1762,7 @@ impl ErrorKind {
             | Self::InsertPictureWorksheetOnly
             | Self::InsertChartWorksheetOnly
             | Self::InsertTextBoxWorksheetOnly
+            | Self::InsertModel3dWorksheetOnly
             | Self::InsertSmartArtWorksheetOnly
             | Self::CommentsWorksheetOnly
             | Self::InsertHyperlinkWorksheetOnly
@@ -1796,6 +1827,7 @@ impl ErrorKind {
             | Self::SmartArtPointNotFound { .. }
             | Self::OleNotFound { .. }
             | Self::InkNotFound { .. }
+            | Self::Model3dNotFound { .. }
             | Self::SlicerNotFound { .. }
             | Self::ConnectionNotFound { .. }
             | Self::ExternalLinkNotFound { .. }

@@ -161,6 +161,12 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             }
             IdReason::DocxInkIndexNotInt => "ink:index 后面必须是正整数".into(),
             IdReason::DocxInkIndexFromOne => "ink:index 从 1 起".into(),
+            IdReason::DocxModel3dPrefix => "docx 3D 模型 id 必须是段落 id 加上 /model3d:…".into(),
+            IdReason::DocxModel3dContainer => {
+                "段落或容器 id 必须带 /model3d:…（该 id 本身不是 3D 模型）".into()
+            }
+            IdReason::DocxModel3dIndexNotInt => "model3d:index 后面必须是正整数".into(),
+            IdReason::DocxModel3dIndexFromOne => "model3d:index 从 1 起".into(),
             IdReason::GroupNeedsDocument => {
                 "docx 的 groupShapes 的 id 必须是 docx:document 或页眉/页脚容器".into()
             }
@@ -450,6 +456,24 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::SheetOlePrefix => "xlsx OLE id 必须是 sheet:工作表名/ole:…".into(),
             IdReason::SheetOleContainer => {
                 "工作表 id 必须带 /ole:…（该 id 本身不是嵌入对象）".into()
+            }
+            IdReason::InsertModel3dNeedsSheet => {
+                "xlsx 的 insertModel3d 的 id 必须是 sheet:工作表名".into()
+            }
+            IdReason::SheetModel3dPrefix => {
+                "xlsx 3D 模型 id 必须是 sheet:工作表名/model3d:…".into()
+            }
+            IdReason::SheetModel3dContainer => {
+                "工作表 id 必须带 /model3d:…（该 id 本身不是 3D 模型）".into()
+            }
+            IdReason::InsertModel3dNeedsSlide => {
+                "pptx 的 insertModel3d 的 id 必须是 slide:N 或 slide:N/notes".into()
+            }
+            IdReason::SlideModel3dPrefix => {
+                "pptx 3D 模型 id 必须是 slide:N/model3d:… 或 slide:N/notes/model3d:…".into()
+            }
+            IdReason::SlideModel3dContainer => {
+                "页 id 必须带 /model3d:…（该 id 本身不是 3D 模型）".into()
             }
             IdReason::InsertSlicerNeedsSheet => {
                 "xlsx insertSlicer 的 id 必须是 sheet:工作表名".into()
@@ -855,6 +879,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::SmartArtNotFound { id } => format!("找不到 SmartArt：{id}"),
         ErrorKind::OleNotFound { id } => format!("找不到嵌入对象：{id}"),
         ErrorKind::InkNotFound { id } => format!("找不到墨迹画布：{id}"),
+        ErrorKind::Model3dNotFound { id } => format!("找不到 3D 模型：{id}"),
         ErrorKind::SlicerNotFound { id } => format!("找不到切片器：{id}"),
         ErrorKind::SlicerFieldNotFound { name } => {
             format!("切片器字段对不上源：{name}")
@@ -927,6 +952,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::InsertPictureWorksheetOnly => "只能往工作表 insertPicture".into(),
         ErrorKind::InsertChartWorksheetOnly => "只能往工作表 insertChart".into(),
         ErrorKind::InsertTextBoxWorksheetOnly => "只能往工作表插入或改文本框、形状与连接线".into(),
+        ErrorKind::InsertModel3dWorksheetOnly => "只能往工作表插入 3D 模型".into(),
         ErrorKind::InsertSmartArtWorksheetOnly => "只能往工作表 insertSmartArt / 改图示".into(),
         ErrorKind::CommentsWorksheetOnly => "只能对工作表发批注 op".into(),
         ErrorKind::InsertHyperlinkWorksheetOnly => "只能对工作表发超链接 op".into(),

@@ -10,11 +10,14 @@ xlsx / docx / pptx 的片段分别是 [xlsx.schema.json](json-schema/xlsx.schema
 [docx.schema.json](json-schema/docx.schema.json)、[pptx.schema.json](json-schema/pptx.schema.json)。与 Markdown 冲突时以本文及分册为准。
 
 xlsx、docx、pptx 的 inspect、create、apply 已经按本文实现。docx 另有 `exportMedia` 与 `exportChartData`。
-docx 的 `exportMedia` 认图 id、OLE id、墨迹画布 id 与嵌入字体 id：图 id 写出 `/word/media/…`，OLE id 写出 embeddings 部件，
+docx 的 `exportMedia` 认图 id、OLE id、墨迹画布 id、3D 模型 id 与嵌入字体 id：图 id 写出 `/word/media/…`，OLE id 写出 embeddings 部件，
 墨迹画布 id 写出 `/word/ink/…` 的 InkML 原字节，
+3D 模型 id 写出 `/word/media/…` 的 GLB 原字节，
 `font:{n}` 写出 `/word/fonts/…` 的 odttf 原字节（仍是混淆后的，不还原）。
-xlsx 的 `exportMedia` 认工作表图 id、页眉页脚图 id 与 OLE id：图 id 写出 `/xl/media/…`，OLE id 写出 embeddings 部件。
-pptx 的 `exportMedia` 认幻灯片图 id、备注图 id、批注内图 id、视频 id、音频 id 与 OLE id：图 / 视频 / 音频写出 `/ppt/media/…`，OLE 写出 embeddings 部件。
+xlsx 的 `exportMedia` 认工作表图 id、页眉页脚图 id、OLE id 与 3D 模型 id：图 id 写出 `/xl/media/…`，OLE id 写出 embeddings 部件，
+3D 模型 id 写出 `/xl/media/…` 的 GLB 原字节。
+pptx 的 `exportMedia` 认幻灯片图 id、备注图 id、批注内图 id、视频 id、音频 id、OLE id 与 3D 模型 id：图 / 视频 / 音频写出 `/ppt/media/…`，OLE 写出 embeddings 部件，
+3D 模型 id 写出 `/ppt/media/…` 的 GLB 原字节。
 xlsx 的 `scope.charts` 与图表 op 认工作表 / 图表工作表上的图；`scope.headerFooter` 展开工作表上的页眉页脚槽位。
 pptx 的 `scope.charts` 与图表 op 认幻灯片与备注页上的图表 `p:graphicFrame`；`exportChartData` 认这两处图表 id，写出 embedding。
 pptx 的 `scope.smartArt` 与 SmartArt op 认幻灯片与备注页上的 diagram `p:graphicFrame`。
@@ -26,6 +29,8 @@ docx 的 `scope.connectors` 列出正文与页眉页脚里的 `wps` 连接线；
 apply 用 `insertConnector` / `deleteConnector` / `groupShapes` / `ungroup`。
 docx 的 `scope.inkCanvases` 列出正文与页眉页脚里的墨迹画布（`wpc` 画布加 `w14:contentPart` 加 InkML 部件）；
 apply 用 `insertInkCanvas` / `replaceInkCanvas` / `deleteInkCanvas`。xlsx / pptx 拒这些键与 op。
+三种格式的 `scope.model3ds` 列出 3D 模型（`am3d:model3d`，GLB 部件）。
+apply 用 `insertModel3d` / `replaceModel3d` / `deleteModel3d`。不是图，不进 `pictures`。
 xlsx 的 `scope.oleObjects` 与 OLE op 认工作表 `<oleObject>`（ECMA-376 §18.3.1.59），不认 `@link` 与 ActiveX `controls`，不把嵌入字节或预览图塞进树。
 pptx 的 `scope.comments` 与批注 op 认该页 2018 线程化批注（`p188:cmLst`），不认 ECMA-376 §19.4 旧式部件。
 pptx 的 `scope.timing` 列出该页 `<p:timing>` 效果摘要；apply 用 `insertAnim` / `deleteAnim` 按模板增删预设效果，不接受整棵时间轴树。
@@ -224,7 +229,7 @@ create 与 apply 落盘时先写入目标同目录的临时文件，再改名为
 `setSmartArtText`、`addSmartArtPoint`、`deleteSmartArtPoint`、`setSmartArtSize`、`setSmartArtAnchor`、`setSmartArtColors`、
 `setSmartArtStyle`、`setSmartArtLayout`；
 不含 `setSmartArtPos`、`setSmartArtWrap`）、以及超链接 op（`insertHyperlink`、`setHyperlink`、`deleteHyperlink`）、
-以及迷你图 op（`insertSparkline`、`setSparkline`、`deleteSparkline`）、以及 OLE op（`insertOle`、`deleteOle`）、以及切片器 op（`insertSlicer`、
+以及迷你图 op（`insertSparkline`、`setSparkline`、`deleteSparkline`）、以及 OLE op（`insertOle`、`deleteOle`）、以及 3D 模型 op（`insertModel3d`、`replaceModel3d`、`deleteModel3d`）、以及切片器 op（`insertSlicer`、
 `deleteSlicer`）、以及连接 op（`insertConnection`、`deleteConnection`）、以及外部引用 op（`insertExternalLink`、`deleteExternalLink`）、以及 `setProtection`。
 docx 认 `setParaText`、`setHeaderFooterDistance`、`setPageMargin`、`setPageSize`、`setColumns`、`setVerticalAlign`、
 `setLineNumbering`、`setDocGrid`、`setRtlGutter`、`setMirrorMargins`、`setGutterAtTop`、`setHeaderFooterLink`、
@@ -247,7 +252,7 @@ docx 认 `setParaText`、`setHeaderFooterDistance`、`setPageMargin`、`setPageS
 `setTrendline`、`deleteTrendline`、`insertErrorBars`、`setErrorBars`、`deleteErrorBars`、`setChartSeriesAxis`、`setChartSize`、`setChartWrap`；
 不含 `setChartAnchor`、`insertChartSheet`、`deleteChartSheet`）、以及 SmartArt op（`insertSmartArt`、`deleteSmartArt`、
 `setSmartArtText`、`addSmartArtPoint`、`deleteSmartArtPoint`、`setSmartArtSize`、`setSmartArtWrap`、`setSmartArtColors`、
-`setSmartArtStyle`、`setSmartArtLayout`）、以及 OLE op（`insertOle`、`deleteOle`）、以及墨迹画布 op（`insertInkCanvas`、`replaceInkCanvas`、`deleteInkCanvas`）、以及 `setProtection`、
+`setSmartArtStyle`、`setSmartArtLayout`）、以及 OLE op（`insertOle`、`deleteOle`）、以及墨迹画布 op（`insertInkCanvas`、`replaceInkCanvas`、`deleteInkCanvas`）、以及 3D 模型 op（`insertModel3d`、`replaceModel3d`、`deleteModel3d`）、以及 `setProtection`、
 以及 `insertWatermark` / `deleteWatermark`、以及 `setThemeColors` / `setThemeFonts`、
 以及 `setProps` / `setCustomProp` / `deleteCustomProp`。
 pptx 认 `setShapeText`、形状管理 op（`insertShape`、`insertConnector`、`deleteConnector`、`groupShapes`、`ungroup`、`deleteShape`、
@@ -267,7 +272,7 @@ pptx 认 `setShapeText`、形状管理 op（`insertShape`、`insertConnector`、
 以及 `setHandoutText`、以及超链接 op（`insertHyperlink`、`setHyperlink`、`deleteHyperlink`）、以及域 op（`insertField`、`setField`、
 `deleteField`）、以及媒体 op（`insertVideo`、`insertAudio`、`deleteMedia`）、以及幻灯片节 op（`insertSlideSection`、`setSlideSectionName`、
 `deleteSlideSection`、`setSlideSection`）、以及自定义放映 op（`insertCustomShow`、`setCustomShow`、`deleteCustomShow`）、
-以及 OLE op（`insertOle`、`deleteOle`）、以及 Zoom op（`insertZoom`、`deleteZoom`）、以及 `setShowPr`、以及 `setProtection`、
+以及 OLE op（`insertOle`、`deleteOle`）、以及 3D 模型 op（`insertModel3d`、`replaceModel3d`、`deleteModel3d`）、以及 Zoom op（`insertZoom`、`deleteZoom`）、以及 `setShowPr`、以及 `setProtection`、
 以及 `setProps` / `setCustomProp` / `deleteCustomProp`。
 不提供把整棵时间轴当 JSON 写入的 op；`setTiming` 仍报 `UnsupportedOp`。
 对不上格式的 op（例如对 pptx 发 `setCell` / `setCellStyle` / `setParaText` / `setProtection`，
@@ -1806,6 +1811,7 @@ run 级链编进 `hyperlinks`，独立节点用 `insertHyperlink`（`on` 为 `ru
 ## exportMedia
 
 按图 id 把 OPC 里的媒体部件原样写到本地文件。docx 与 pptx 也认 OLE id，写出嵌入部件原字节。docx 也认 `font:{n}`，写出 fontTable 指向的 odttf 原字节（仍是混淆后的，不还原）。
+三种格式也认 3D 模型 id，写出 GLB 原字节。docx 也认墨迹画布 id。
 不读进 inspect 树，不做转码、缩放、子集化或预览。
 
 ```json
@@ -1823,6 +1829,7 @@ run 级链编进 `hyperlinks`，独立节点用 `insertHyperlink`（`on` 为 `ru
 - **`id`**（是）
   - 图 id，与 inspect 的 `pictures[].id` 相同
   - docx / xlsx / pptx 也可以是 OLE id，与 `oleObjects[].id` 相同
+  - docx / xlsx / pptx 也可以是 3D 模型 id，与 `model3ds[].id` 相同
   - docx 也可以是墨迹画布 id，与 `inkCanvases[].id` 相同
   - pptx 也可以是视频 / 音频 id，与 `videos[].id` / `audios[].id` 相同
   - docx 也可以是嵌入字体 id，与 `embeddedFonts[].id` 相同
@@ -1834,10 +1841,10 @@ run 级链编进 `hyperlinks`，独立节点用 `insertHyperlink`（`on` 为 `ru
 - **`format`**（否）
   - 可省略，从 `path` 扩展名推断
 
-`id` 必须是图 id，或 docx / xlsx / pptx 的 OLE id，或 docx 的墨迹画布 id，或 pptx 的视频 / 音频 id，或 docx 的 `font:{n}`。
+`id` 必须是图 id，或 docx / xlsx / pptx 的 OLE id，或三种格式的 3D 模型 id，或 docx 的墨迹画布 id，或 pptx 的视频 / 音频 id，或 docx 的 `font:{n}`。
 对段落 id、工作表 id、单元格 id、页眉页脚容器 id、`section:{n}`、
-形状 id 或 `slide:{n}`（没有 `/pic:` / `/video:` / `/audio:` / `/ole:` / `/ink:`）报 `InvalidId`。
-xlsx / pptx 上发 `font:{n}` 仍按该格式原规则报 `InvalidId`。找不到该图、该嵌入对象、该墨迹画布、该媒体或该嵌入字体报 `IdNotFound`。
+形状 id 或 `slide:{n}`（没有 `/pic:` / `/video:` / `/audio:` / `/ole:` / `/ink:` / `/model3d:`）报 `InvalidId`。
+xlsx / pptx 上发 `font:{n}` 仍按该格式原规则报 `InvalidId`。找不到该图、该嵌入对象、该 3D 模型、该墨迹画布、该媒体或该嵌入字体报 `IdNotFound`。
 图 id 优先走 `a:blip/@r:embed`；只有 `@r:link`、没有 embed 时按外部关系处理，报 `OpcPartMissing`，不下载 http。embed 指向外部关系同样报 `OpcPartMissing`。
 三种格式的图若带 `asvg:svgBlip/@r:embed`，`exportMedia` 改走这条关系，写出 SVG 原字节。
 没有 `svgBlip` 时仍走 `a:blip`。
@@ -1848,9 +1855,12 @@ OLE id 走 oleObject 或 package 关系目标；关系缺失或指向外部同�
 写出的是该媒体部件或嵌入部件的原字节。`contentType` 取自 `[Content_Types].xml` 对该部件的 Default 或 Override；都没有则省略该字段。扩展名由调用方自己定，库不按类型改名。
 
 xlsx 用工作表图 id 或页眉图 id，写出 `/xl/media/…`。xlsx 的 OLE id 写出 `/xl/embeddings/…`，不是预览图。
+xlsx 的 3D 模型 id 写出 `/xl/media/…` 的 GLB 原字节，不是海报 PNG。
 pptx 用幻灯片图 id、备注图 id、批注内图 id、视频 id 或音频 id，写出 `/ppt/media/…`。视频 / 音频导出的是媒体部件（`mediaN.mp4` / `mediaN.wav`），不是海报 PNG。
-pptx 的 OLE id 写出 `/ppt/embeddings/…`，不是预览图。docx 文本框里的图用框内段落上的图 id，同一动作能导出。脚注、尾注里的图用注内段落上的图 id，同一动作能导出。
-docx 的 OLE id 写出 `/word/embeddings/…`，不是预览图。docx 的墨迹画布 id 写出 `/word/ink/…` 的 InkML 原字节。嵌入图表的工作簿另走 `exportChartData`，不在本动作。
+pptx 的 OLE id 写出 `/ppt/embeddings/…`，不是预览图。pptx 的 3D 模型 id 写出 `/ppt/media/…` 的 GLB 原字节，不是海报。
+docx 文本框里的图用框内段落上的图 id，同一动作能导出。脚注、尾注里的图用注内段落上的图 id，同一动作能导出。
+docx 的 OLE id 写出 `/word/embeddings/…`，不是预览图。docx 的墨迹画布 id 写出 `/word/ink/…` 的 InkML 原字节。
+docx 的 3D 模型 id 写出 `/word/media/…` 的 GLB 原字节。嵌入图表的工作簿另走 `exportChartData`，不在本动作。
 
 成功时 stdout 见 [errors.md](errors.md)。源包不写回。
 

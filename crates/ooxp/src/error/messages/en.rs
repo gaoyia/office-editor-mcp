@@ -178,6 +178,16 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             }
             IdReason::DocxInkIndexNotInt => "ink:index must be followed by a positive integer".into(),
             IdReason::DocxInkIndexFromOne => "ink:index starts at 1".into(),
+            IdReason::DocxModel3dPrefix => {
+                "docx 3D model id must be a paragraph id plus /model3d:…".into()
+            }
+            IdReason::DocxModel3dContainer => {
+                "paragraph or container id must include /model3d:… (that id alone is not a 3D model)".into()
+            }
+            IdReason::DocxModel3dIndexNotInt => {
+                "model3d:index must be followed by a positive integer".into()
+            }
+            IdReason::DocxModel3dIndexFromOne => "model3d:index starts at 1".into(),
             IdReason::GroupNeedsDocument => {
                 "docx groupShapes id must be docx:document or a header/footer container".into()
             }
@@ -485,6 +495,20 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::SheetOlePrefix => "xlsx OLE id must be sheet:name/ole:…".into(),
             IdReason::SheetOleContainer => {
                 "Sheet id must include /ole:… (that id alone is not an embedded object)".into()
+            }
+            IdReason::InsertModel3dNeedsSheet => "xlsx insertModel3d id must be sheet:name".into(),
+            IdReason::SheetModel3dPrefix => "xlsx 3D model id must be sheet:name/model3d:…".into(),
+            IdReason::SheetModel3dContainer => {
+                "Sheet id must include /model3d:… (that id alone is not a 3D model)".into()
+            }
+            IdReason::InsertModel3dNeedsSlide => {
+                "pptx insertModel3d id must be slide:N or slide:N/notes".into()
+            }
+            IdReason::SlideModel3dPrefix => {
+                "pptx 3D model id must be slide:N/model3d:… or slide:N/notes/model3d:…".into()
+            }
+            IdReason::SlideModel3dContainer => {
+                "Slide id must include /model3d:… (that id alone is not a 3D model)".into()
             }
             IdReason::InsertSlicerNeedsSheet => "xlsx insertSlicer id must be sheet:name".into(),
             IdReason::SheetSlicerPrefix => "xlsx slicer id must be sheet:name/slicer:…".into(),
@@ -956,6 +980,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::SmartArtNotFound { id } => format!("SmartArt not found: {id}"),
         ErrorKind::OleNotFound { id } => format!("Embedded object not found: {id}"),
         ErrorKind::InkNotFound { id } => format!("Ink canvas not found: {id}"),
+        ErrorKind::Model3dNotFound { id } => format!("3D model not found: {id}"),
         ErrorKind::SlicerNotFound { id } => format!("Slicer not found: {id}"),
         ErrorKind::SlicerFieldNotFound { name } => {
             format!("Slicer field does not match the source: {name}")
@@ -1035,6 +1060,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::InsertTextBoxWorksheetOnly => {
             "insertTextBox, insertShape, insertConnector and related ops only apply to worksheets"
                 .into()
+        }
+        ErrorKind::InsertModel3dWorksheetOnly => {
+            "insertModel3d only applies to worksheets".into()
         }
         ErrorKind::InsertSmartArtWorksheetOnly => {
             "insertSmartArt and SmartArt ops only apply to worksheets".into()

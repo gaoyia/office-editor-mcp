@@ -43,6 +43,8 @@ pub struct InspectScope {
     pub smart_art: bool,
     /// 为 true 时列出嵌入对象。
     pub ole_objects: bool,
+    /// 为 true 时列出 3D 模型。
+    pub model3ds: bool,
     /// 为 true 时列出页眉 DrawingML 水印。
     pub watermarks: bool,
     /// 为 true 时列出表格。
@@ -1101,6 +1103,9 @@ pub enum DocxOp {
     InsertInkCanvas(super::ink::InsertInkCanvasOp),
     ReplaceInkCanvas(super::ink::ReplaceInkCanvasOp),
     DeleteInkCanvas(super::ink::DeleteInkCanvasOp),
+    InsertModel3d(super::model3d::InsertModel3dOp),
+    ReplaceModel3d(super::model3d::ReplaceModel3dOp),
+    DeleteModel3d(super::model3d::DeleteModel3dOp),
     InsertWatermark(super::watermark::InsertWatermarkOp),
     DeleteWatermark(super::watermark::DeleteWatermarkOp),
     SetProtection(super::protect::SetProtectionOp),
@@ -1143,6 +1148,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
             "charts",
             "smartArt",
             "oleObjects",
+            "model3ds",
             "watermarks",
             "tables",
             "revisions",
@@ -1178,6 +1184,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
     let charts = parse_bool_field(obj.get("charts"), "charts")?;
     let smart_art = parse_bool_field(obj.get("smartArt"), "smartArt")?;
     let ole_objects = parse_bool_field(obj.get("oleObjects"), "oleObjects")?;
+    let model3ds = parse_bool_field(obj.get("model3ds"), "model3ds")?;
     let watermarks = parse_bool_field(obj.get("watermarks"), "watermarks")?;
     let tables = parse_bool_field(obj.get("tables"), "tables")?;
     let revisions = parse_bool_field(obj.get("revisions"), "revisions")?;
@@ -1223,6 +1230,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
                 && !obj.contains_key("charts")
                 && !obj.contains_key("smartArt")
                 && !obj.contains_key("oleObjects")
+                && !obj.contains_key("model3ds")
                 && !obj.contains_key("watermarks")
                 && !obj.contains_key("tables")
                 && !obj.contains_key("revisions")
@@ -1261,6 +1269,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
                 charts,
                 smart_art,
                 ole_objects,
+                model3ds,
                 watermarks,
                 tables,
                 revisions,
@@ -1336,6 +1345,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
                 charts,
                 smart_art,
                 ole_objects,
+                model3ds,
                 watermarks,
                 tables,
                 revisions,
@@ -1734,6 +1744,9 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<DocxOp>, Error> {
             "deleteInkCanvas" => {
                 out.push(DocxOp::DeleteInkCanvas(parse_delete_ink_canvas(obj, i)?))
             }
+            "insertModel3d" => out.push(DocxOp::InsertModel3d(parse_insert_model3d(obj, i)?)),
+            "replaceModel3d" => out.push(DocxOp::ReplaceModel3d(parse_replace_model3d(obj, i)?)),
+            "deleteModel3d" => out.push(DocxOp::DeleteModel3d(parse_delete_model3d(obj, i)?)),
             "insertWatermark" => out.push(DocxOp::InsertWatermark(super::watermark::parse_insert(
                 obj, i,
             )?)),
@@ -7256,6 +7269,55 @@ fn parse_delete_ink_canvas(
     let id = require_id(obj, i)?;
     let target = super::ink::parse_ink_id(&id, i)?;
     Ok(super::ink::DeleteInkCanvasOp { id, target })
+}
+
+fn parse_insert_model3d(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<super::model3d::InsertModel3dOp, Error> {
+    deny_keys(obj, i, &["op", "id", "file", "cx", "cy"])?;
+    let id = require_id(obj, i)?;
+    let host = para::parse_host_para_id_at(&id, &format!("ops[{i}].id"))?;
+    let file = require_file(obj, i, "insertModel3d")?;
+    let cx = parse_emu_field(obj.get("cx"), i, "cx")?;
+    let cy = parse_emu_field(obj.get("cy"), i, "cy")?;
+    if cx.is_some() != cy.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "insertModel3d".into(),
+                field: "cx and cy together".into(),
+            },
+            format!("ops[{i}]"),
+        ));
+    }
+    Ok(super::model3d::InsertModel3dOp {
+        id,
+        host,
+        file,
+        cx,
+        cy,
+    })
+}
+
+fn parse_replace_model3d(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<super::model3d::ReplaceModel3dOp, Error> {
+    deny_keys(obj, i, &["op", "id", "file"])?;
+    let id = require_id(obj, i)?;
+    let target = super::model3d::parse_id(&id, i)?;
+    let file = require_file(obj, i, "replaceModel3d")?;
+    Ok(super::model3d::ReplaceModel3dOp { id, target, file })
+}
+
+fn parse_delete_model3d(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<super::model3d::DeleteModel3dOp, Error> {
+    deny_keys(obj, i, &["op", "id"])?;
+    let id = require_id(obj, i)?;
+    let target = super::model3d::parse_id(&id, i)?;
+    Ok(super::model3d::DeleteModel3dOp { id, target })
 }
 
 fn parse_set_chart_title(

@@ -116,6 +116,12 @@ struct NewInkCanvas {
     cy: Option<i64>,
 }
 
+struct NewModel3d {
+    file: String,
+    cx: Option<i64>,
+    cy: Option<i64>,
+}
+
 struct NewPara {
     text: String,
     style: Option<&'static str>,
@@ -125,6 +131,7 @@ struct NewPara {
     charts: Vec<CreateChart>,
     ole_objects: Vec<String>,
     ink_canvases: Vec<NewInkCanvas>,
+    model3ds: Vec<NewModel3d>,
     footnote: Option<String>,
     endnote: Option<String>,
     comments: Vec<NewComment>,
@@ -149,6 +156,7 @@ impl NewPara {
             charts: Vec::new(),
             ole_objects: Vec::new(),
             ink_canvases: Vec::new(),
+            model3ds: Vec::new(),
             footnote: None,
             endnote: None,
             comments: Vec::new(),
@@ -175,6 +183,7 @@ impl NewPara {
         !self.charts.is_empty()
             || !self.ole_objects.is_empty()
             || !self.ink_canvases.is_empty()
+            || !self.model3ds.is_empty()
             || self.footnote.is_some()
             || self.endnote.is_some()
             || !self.comments.is_empty()
@@ -547,6 +556,7 @@ fn parse_para(v: &Value, path: &str, kind: ParaKind, i: usize) -> Result<NewPara
             "charts",
             "oleObjects",
             "inkCanvases",
+            "model3ds",
             "footnote",
             "endnote",
             "comments",
@@ -567,6 +577,7 @@ fn parse_para(v: &Value, path: &str, kind: ParaKind, i: usize) -> Result<NewPara
             "charts",
             "oleObjects",
             "inkCanvases",
+            "model3ds",
             "footnote",
             "endnote",
             "comments",
@@ -626,6 +637,7 @@ fn parse_para(v: &Value, path: &str, kind: ParaKind, i: usize) -> Result<NewPara
     let charts = parse_charts(obj.get("charts"), path)?;
     let ole_objects = parse_ole_objects(obj.get("oleObjects"), path)?;
     let ink_canvases = parse_ink_canvases(obj.get("inkCanvases"), path)?;
+    let model3ds = parse_model3ds(obj.get("model3ds"), path)?;
     let footnote = parse_optional_str(obj.get("footnote"), path, "footnote")?;
     let endnote = parse_optional_str(obj.get("endnote"), path, "endnote")?;
     let comments = parse_comments(obj.get("comments"), &format!("{path}.comments"), false)?;
@@ -648,6 +660,7 @@ fn parse_para(v: &Value, path: &str, kind: ParaKind, i: usize) -> Result<NewPara
         charts,
         ole_objects,
         ink_canvases,
+        model3ds,
         footnote,
         endnote,
         comments,
@@ -1590,6 +1603,75 @@ fn parse_ink_canvases(v: Option<&Value>, prefix: &str) -> Result<Vec<NewInkCanva
             ));
         }
         out.push(NewInkCanvas { file, cx, cy });
+    }
+    Ok(out)
+}
+
+fn parse_model3ds(v: Option<&Value>, prefix: &str) -> Result<Vec<NewModel3d>, Error> {
+    let Some(v) = v else {
+        return Ok(Vec::new());
+    };
+    let path = format!("{prefix}.model3ds");
+    let arr = v.as_array().ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::WrongType {
+                field: "model3ds".into(),
+                expected: TypeName::Array,
+            },
+            path.clone(),
+        )
+    })?;
+    let mut out = Vec::new();
+    for (j, item) in arr.iter().enumerate() {
+        let item_path = format!("{path}[{j}]");
+        let obj = item.as_object().ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::WrongType {
+                    field: item_path.clone(),
+                    expected: TypeName::Object,
+                },
+                item_path.clone(),
+            )
+        })?;
+        for k in obj.keys() {
+            if !matches!(k.as_str(), "file" | "cx" | "cy") {
+                return Err(Error::with_path(
+                    ErrorKind::UnknownField { field: k.clone() },
+                    format!("{item_path}.{k}"),
+                ));
+            }
+        }
+        let file = match obj.get("file") {
+            Some(Value::String(s)) if !s.is_empty() => s.clone(),
+            Some(Value::String(_)) | None => {
+                return Err(Error::with_path(
+                    ErrorKind::MissingField {
+                        field: "file".into(),
+                    },
+                    format!("{item_path}.file"),
+                ));
+            }
+            Some(_) => {
+                return Err(Error::with_path(
+                    ErrorKind::WrongType {
+                        field: "file".into(),
+                        expected: TypeName::NonEmptyString,
+                    },
+                    format!("{item_path}.file"),
+                ));
+            }
+        };
+        let cx = parse_emu(obj.get("cx"), &item_path, "cx")?;
+        let cy = parse_emu(obj.get("cy"), &item_path, "cy")?;
+        if cx.is_some() != cy.is_some() {
+            return Err(Error::with_path(
+                ErrorKind::MissingField {
+                    field: "cx and cy".into(),
+                },
+                item_path.clone(),
+            ));
+        }
+        out.push(NewModel3d { file, cx, cy });
     }
     Ok(out)
 }
@@ -2755,6 +2837,18 @@ fn push_story_ops(
                     file: ink.file.clone(),
                     cx: ink.cx,
                     cy: ink.cy,
+                }));
+            }
+        }
+        if !p.model3ds.is_empty() {
+            let host = para::parse_host_para_id_at(&id, "document")?;
+            for m in &p.model3ds {
+                ops.push(DocxOp::InsertModel3d(super::model3d::InsertModel3dOp {
+                    id: id.clone(),
+                    host: host.clone(),
+                    file: m.file.clone(),
+                    cx: m.cx,
+                    cy: m.cy,
                 }));
             }
         }

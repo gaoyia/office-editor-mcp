@@ -70,7 +70,7 @@ impl AnchorKind {
         }
     }
 
-    fn local_name(self) -> &'static str {
+    pub(crate) fn local_name(self) -> &'static str {
         match self {
             Self::TwoCell => "twoCellAnchor",
             Self::OneCell => "oneCellAnchor",
@@ -616,6 +616,9 @@ pub fn export_media(bytes: &[u8], id: &str) -> Result<super::ExportedMedia, Erro
     if super::ole::is_ole_id(id) {
         return super::ole::export(bytes, id);
     }
+    if super::model3d::looks_like_id(id) {
+        return super::model3d::export(bytes, id);
+    }
     let pkg = Package::open_bytes(bytes.to_vec())?;
     let target = parse_pic_id_at(id, "id")?;
     let sheet_part = lookup_sheet_part(&pkg, &target.sheet, "id")?;
@@ -1071,7 +1074,11 @@ fn snapshot_anchor(root: &Element, search: &PicSearch<'_>) -> Option<AnchorSnap>
     found
 }
 
-fn lookup_sheet_part(pkg: &Package, sheet_name: &str, field_path: &str) -> Result<String, Error> {
+pub(crate) fn lookup_sheet_part(
+    pkg: &Package,
+    sheet_name: &str,
+    field_path: &str,
+) -> Result<String, Error> {
     let wb_part = crate::opc::office_document_part(pkg)?;
     let wb = xml::parse(pkg.get(&wb_part)?)?;
     let rels = Relationships::from_package(pkg, &wb_part)?;

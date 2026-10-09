@@ -18,6 +18,7 @@ use super::extlink;
 use super::hf;
 use super::inspect;
 use super::layout;
+use super::model3d;
 use super::ole;
 use super::picture;
 use super::shape;
@@ -715,6 +716,38 @@ pub fn apply(bytes: &[u8], ops: &[XlsxOp]) -> Result<Vec<u8>, Error> {
                 load_dirty(&pkg, &mut dirty_sheets, &part, false)?;
                 let doc = dirty_of(&mut dirty_sheets, &part);
                 ole::delete(&mut pkg, doc, &part, op, i)?;
+            }
+            XlsxOp::InsertModel3d(op) => {
+                let part = require_drawing_worksheet(
+                    &sheet_index,
+                    &op.sheet,
+                    i,
+                    ErrorKind::InsertModel3dWorksheetOnly,
+                )?;
+                load_dirty(&pkg, &mut dirty_sheets, &part, false)?;
+                let doc = dirty_of(&mut dirty_sheets, &part);
+                model3d::insert(&mut pkg, doc, &part, op, &format!("ops[{i}].file"))?;
+            }
+            XlsxOp::ReplaceModel3d(op) => {
+                let part = require_drawing_worksheet(
+                    &sheet_index,
+                    &op.target.sheet,
+                    i,
+                    ErrorKind::InsertModel3dWorksheetOnly,
+                )?;
+                load_dirty(&pkg, &mut dirty_sheets, &part, false)?;
+                model3d::replace(&mut pkg, &part, op, i)?;
+            }
+            XlsxOp::DeleteModel3d(op) => {
+                let part = require_drawing_worksheet(
+                    &sheet_index,
+                    &op.target.sheet,
+                    i,
+                    ErrorKind::InsertModel3dWorksheetOnly,
+                )?;
+                load_dirty(&pkg, &mut dirty_sheets, &part, false)?;
+                let doc = dirty_of(&mut dirty_sheets, &part);
+                model3d::delete(&mut pkg, doc, &part, op, i)?;
             }
             XlsxOp::InsertSlicer(op) => {
                 let part = require_drawing_worksheet(

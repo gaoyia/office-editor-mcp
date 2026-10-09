@@ -16,6 +16,7 @@ mod hf;
 mod hyperlink;
 mod inspect;
 mod layout;
+mod model3d;
 mod names;
 mod ole;
 mod outline;

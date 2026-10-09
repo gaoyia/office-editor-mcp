@@ -131,6 +131,15 @@
 - **无 `cNvPr/@id` 的嵌入对象**
   - id：`slide:{n}/ole:index:{k}`
   - 例子：`slide:1/ole:index:1`
+- **3D 模型**
+  - id：`slide:{n}/model3d:{cNvPrId}`
+  - 例子：`slide:1/model3d:4`
+- **无 `cNvPr/@id` 的 3D 模型**
+  - id：`slide:{n}/model3d:index:{k}`
+  - 例子：`slide:1/model3d:index:1`
+- **备注 3D 模型**
+  - id：`slide:{n}/notes/model3d:{cNvPrId}`
+  - 例子：`slide:1/notes/model3d:2`
 - **Zoom**
   - id：`slide:{n}/zoom:{cNvPrId}`
   - 例子：`slide:1/zoom:3`
@@ -267,6 +276,17 @@ Choice 里有 `p:oleObj`，带 `p:embed`、没有 `p:link`，且 `r:id` 能对�
 `deleteOle` 的 `id` 必须是 OLE id。对不上的 id 形态报 `InvalidId`。xlsx 见 [xlsx 分册](json-contract-xlsx.md#insertole)。
 docx 上仍是段落 id / Word OLE id，见 [json-contract-docx.md](json-contract-docx.md#insertole)。不提供改尺寸、位置、图标或 ProgID 的 op。不写 `<p:timing>`。
 
+3D 模型 id 的 `{cNvPrId}` 取 Choice 里 `p:graphicFrame` 的 `p:nvGraphicFramePr/p:cNvPr/@id` 原文。
+没有则用 `slide:{n}/model3d:index:{k}`，`stable` 为 `false`。
+`{k}` 只在该页全部被收入的 3D 模型内从 1 计，与 `pic:index` / `ole:index` / `shape:index` 分家。
+只认 `mc:AlternateContent` 且 `Choice Requires` 含 `am3d`，Choice 里 `a:graphicData/@uri` 为
+`http://schemas.microsoft.com/office/drawing/2017/model3d`（可带尾斜杠）。
+只走 `Choice Requires="am3d"`。Fallback 海报 `p:pic` 不进 `pictures`。组合里符合条件的框要展开，组合本身不进树。
+备注页上同样判定，id 带 `slide:{n}/notes/` 前缀。批注、母版、版式上的 3D 本期不进树。
+`insertModel3d` 的 `id` 必须是 `slide:{n}` 或 `slide:{n}/notes`。`replaceModel3d` / `deleteModel3d` 的 `id` 必须是 3D 模型 id。
+只认 GLB。不是 GLB 报 `InvalidImageFile`（对外 `InvalidField`）。`contentType` 恒为 `model/gltf.binary`。
+xlsx 见 [xlsx 分册](json-contract-xlsx.md#insertmodel3d)。docx 见 [json-contract-docx.md](json-contract-docx.md#insertmodel3d)。
+
 Zoom id 的 `{cNvPrId}` 取 Choice 里 `p:graphicFrame` 的 `p:nvGraphicFramePr/p:cNvPr/@id` 原文。
 没有则取 Fallback `p:pic` 的 `cNvPr/@id`。再没有则用 `slide:{n}/zoom:index:{k}`，`stable` 为 `false`。
 `{k}` 只在该页全部被收入的 Zoom 内从 1 计，与 `pic:index` / `ole:index` / `table:index` / `chart:index` / `shape:index` 分家。
@@ -359,6 +379,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
     - `fieldCount`
     - `tableCount`
     - `oleObjectCount`
+    - `model3dCount`
     - `zoomCount`
     - `connectorCount`
     - `animCount`
@@ -371,7 +392,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
     - `modifyProtection`
   - 各页有这些计数、`layoutId`、`hasNotes` 和 `transition`
   - 没有 `shapes`
-  - 也没有 `pictures` / `videos` / `audios` / `charts` / `smartArts` / `tables` / `oleObjects` / `zooms` / `connectors` / `timing` 名单
+  - 也没有 `pictures` / `videos` / `audios` / `charts` / `smartArts` / `tables` / `oleObjects` / `model3ds` / `zooms` / `connectors` / `timing` 名单
   - 也没有 `notes` 对象
   - 也没有 `comments` 名单
   - 也没有 `hyperlinks` 名单
@@ -451,6 +472,13 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   - 备注、批注、母版、版式里的 OLE 本期不进树
   - xlsx 认 `scope.oleObjects`，见 [xlsx 分册](json-contract-xlsx.md#scope)
   - docx 见 [json-contract-docx.md](json-contract-docx.md)
+- **`scope.model3ds`**（否）
+  - 为 `true` 时给每页填 `model3ds`
+  - 省略或 `false` 则只有 `model3dCount`，没有名单
+  - 不依赖 `scope.slide`
+  - 不把 GLB 或海报放进树
+  - 备注里的 3D 不进幻灯片 `model3ds`，只在 `scope.notes` 时出现在 `notes` 上
+  - xlsx / docx 见各自分册
 - **`scope.zooms`**（否）
   - 为 `true` 时给每页填 `zooms`
   - 省略或 `false` 则只有 `zoomCount`，没有名单
@@ -524,6 +552,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   "fieldCount": 0,
   "tableCount": 0,
   "oleObjectCount": 0,
+  "model3dCount": 0,
   "zoomCount": 0,
   "connectorCount": 0,
   "animCount": 0,
@@ -579,6 +608,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
       "fieldCount": 0,
       "tableCount": 0,
       "oleObjectCount": 0,
+      "model3dCount": 0,
       "zoomCount": 0,
       "connectorCount": 0,
       "animCount": 0,
@@ -628,6 +658,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
       "fieldCount": 0,
       "tableCount": 0,
       "oleObjectCount": 0,
+      "model3dCount": 0,
       "zoomCount": 0,
       "connectorCount": 0,
       "animCount": 0
@@ -663,6 +694,8 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
 - `tableCount` 在演示文稿根上始终出现，等于各页被收入的 DrawingML 表之和。每页始终有自己的 `tableCount`。没有表则为 `0`。根上不挂 `tables`，除非给了 `scope.tables`。
 - `oleObjectCount` 在演示文稿根上始终出现，等于各页被收入的嵌入对象之和。每页始终有自己的 `oleObjectCount`。没有则为 `0`。
   根上不挂 `oleObjects`，除非给了 `scope.oleObjects`。不把嵌入字节或预览图放进树。
+- `model3dCount` 在演示文稿根上始终出现，等于各页被收入的 3D 模型之和，不含备注。每页始终有自己的 `model3dCount`。没有则为 `0`。
+  根上不挂 `model3ds`，除非给了 `scope.model3ds`。不把 GLB 或海报放进树。
 - `zoomCount` 在演示文稿根上始终出现，等于各页被收入的 Zoom 之和。每页始终有自己的 `zoomCount`。没有则为 `0`。根上不挂 `zooms`，除非给了 `scope.zooms`。不把预览图放进树。
 - `connectorCount` 在演示文稿根上始终出现，等于各页被收入的 `p:cxnSp` 之和。每页始终有自己的 `connectorCount`。没有则为 `0`。
   根上不挂 `connectors`，除非给了 `scope.connectors`。
@@ -687,7 +720,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   `advTm`：有属性且能解析成正整数则取其毫秒，否则为 `null`。`dir` 取效果子元素的 `dir` 原文；没有该属性则不出现该字段。
   `invX` / `invY` 只在对应属性为 `1` / `true` 时出现且值为 `true`。
 - 省略 `scope` 或只给空对象时，没有 `shapes`、`truncated`，
-  也没有 `pictures` / `videos` / `audios` / `charts` / `smartArts` / `tables` / `oleObjects` / `zooms` / `connectors` / `timing` 名单，
+  也没有 `pictures` / `videos` / `audios` / `charts` / `smartArts` / `tables` / `oleObjects` / `model3ds` / `zooms` / `connectors` / `timing` 名单，
   也没有 `notes`，也没有 `comments`，也没有 `hyperlinks`，也没有根上 `masters`，也没有根上 `handout`，也没有根上 `sections`。
 - 给了 `scope.slide` 时
 - 只给那一页填 `shapes`。该页带 `p:txBody` 的 `p:sp` 超过 `maxShapes` 则 `truncated` 为 `true`
@@ -734,8 +767,11 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   `kind`：关系 Type 后缀为 `/package` 时为 `package`，否则为 `embed`。
   `contentType` 取 embeddings 部件在 `[Content_Types].xml` 里的 Default 或 Override，都没有则为 `null`。
   `showAsIcon`：`p:oleObj/@showAsIcon` 为 `1` / `true` / `True` 则为 `true`，否则为 `false`。
-  `x` / `y` / `cx` / `cy` 取 graphicFrame 的 `p:xfrm`。不把嵌入字节或预览图放进树。
   xlsx 认 `scope.oleObjects`，见 [xlsx 分册](json-contract-xlsx.md#scope)。
+- `scope.model3ds` 为 `true` 时，每页带 `model3ds`。没有 3D 模型时为空数组。不依赖 `scope.slide`。
+  每条字段顺序：`id`、`cNvPrId`、`name`、`x`、`y`、`cx`、`cy`、`contentType`、`stable`。`id` 为 `slide:{n}/model3d:…`。
+  `cNvPrId` / `name` / `x` / `y` / `cx` / `cy` / `stable` 规则与图相同。`contentType` 恒为 `model/gltf.binary`。
+  几何取 graphicFrame 的 `p:xfrm`。不把 GLB 或海报放进树。xlsx / docx 见各自分册。
 - `scope.zooms` 为 `true` 时，每页带 `zooms`。没有 Zoom 时为空数组。不依赖 `scope.slide`。
   每条字段顺序：`id`、`type`，然后 slide / section 有 `target`，summary 有 `targets`，然后 `x`、`y`、`cx`、`cy`、`stable`。
   `id` 为 `slide:{n}/zoom:…`。`type` 为 `slide`（`sldZm`）、`section`（`sectionZm`）或 `summary`（`summaryZm`）。
@@ -812,11 +848,11 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   `type` 取 `p:ph/@type`，缺则为 `null`。`idx` 取 `p:ph/@idx` 原文，缺则为 `null`。几何与 `text` 规则与幻灯片形状相同；没有 `txBody` 则 `text` 为 `""`。
   xlsx / docx 的 `scope` 里出现 `masters` 报 `InvalidField`。
 - `scope.notes` 为 `true` 时，每页带 `notes`。没有 notesSlide 关系则为 `null`。
-  有则为对象，字段顺序：`id`、`pictureCount`、`chartCount`、`smartArtCount`、`tableCount`，有图名单时再跟 `pictures`，有图表名单时再跟 `charts`，
-  有 SmartArt 名单时再跟 `smartArts`，有表名单时再跟 `tables`，然后 `shapes`。
+  有则为对象，字段顺序：`id`、`pictureCount`、`chartCount`、`smartArtCount`、`tableCount`、`model3dCount`，有图名单时再跟 `pictures`，有图表名单时再跟 `charts`，
+  有 SmartArt 名单时再跟 `smartArts`，有表名单时再跟 `tables`，有 3D 模型名单时再跟 `model3ds`，然后 `shapes`。
   `id` 为 `slide:{n}/notes`。`pictureCount` 只计该备注页上被收入的 `p:pic`，不并进幻灯片 `pictures`。
   备注图字段顺序与幻灯片图相同，含末尾 `contentType`。
-  `chartCount` / `smartArtCount` / `tableCount` 只计该备注页，不并进幻灯片计数。
+  `chartCount` / `smartArtCount` / `tableCount` / `model3dCount` 只计该备注页，不并进幻灯片计数。
   备注形状判定与幻灯片形状相同（带 `p:txBody` 的 `p:sp`），id 为 `slide:{n}/notes/shape:…`。
   字段顺序与幻灯片形状相同：`id`、`shapeId`、`name`、`prst`、`x`、`y`、`cx`、`cy`、`text`、`stable`。备注形状一次倒出，不用 `maxShapes`。
 - `scope.comments` 为 `true` 时，每页带 `comments`。没有现代批注时为空数组。不依赖 `scope.slide`。按该页 `p188:cmLst` 里 `p188:cm` 的文档顺序。
@@ -842,12 +878,12 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   `text` 是该域 `a:t` 缓存，不求值。xlsx 的 `scope` 里出现 `fields` 报 `InvalidField`。
   docx 见 [json-contract-docx.md](json-contract-docx.md#inspect)。
 - 页对象字段顺序：`id`、`index`、`name`、`layoutId`、`hidden`、`transition`、`hasNotes`、`pictureCount`、`videoCount`、`audioCount`、
-  `chartCount`、`smartArtCount`、`commentCount`、`hyperlinkCount`、`fieldCount`、`tableCount`、`oleObjectCount`、`zoomCount`、
+  `chartCount`、`smartArtCount`、`commentCount`、`hyperlinkCount`、`fieldCount`、`tableCount`、`oleObjectCount`、`model3dCount`、`zoomCount`、
   `connectorCount`、`animCount`，
-  然后按需 `pictures`，再按需 `videos`，再按需 `audios`，再按需 `charts`，再按需 `smartArts`，再按需 `tables`，再按需 `oleObjects`，再按需 `zooms`，
+  然后按需 `pictures`，再按需 `videos`，再按需 `audios`，再按需 `charts`，再按需 `smartArts`，再按需 `tables`，再按需 `oleObjects`，再按需 `model3ds`，再按需 `zooms`，
   再按需 `connectors`，再按需 `notes`，再按需 `comments`，再按需 `hyperlinks`，再按需 `fields`，再按需 `timing`，再按需 `truncated` 与 `shapes`。
   根对象字段顺序：`schemaVersion`、`format`、`id`、`slideCount`、`pictureCount`、`videoCount`、`audioCount`、`chartCount`、
-  `smartArtCount`、`commentCount`、`hyperlinkCount`、`fieldCount`、`tableCount`、`oleObjectCount`、`zoomCount`、`connectorCount`、
+  `smartArtCount`、`commentCount`、`hyperlinkCount`、`fieldCount`、`tableCount`、`oleObjectCount`、`model3dCount`、`zoomCount`、`connectorCount`、
   `animCount`、`masterCount`、`hasHandout`、`sectionCount`、`slideSize`、`customShowCount`、`showPr`、`modifyProtection`、`props`，
   有 `scope.masters` 时再跟 `masters`，有 `scope.handout` 时再跟 `handout`，有 `scope.sections` 时再跟 `sections`，
   有 `scope.customShows` 时再跟 `customShows`，然后 `slides`。
@@ -938,6 +974,11 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   - 可选
   - 该页上的 DrawingML 表列表
   - 省略或空数组则不写表 `p:graphicFrame`
+- **`slides[].model3ds`**
+  - 可选
+  - 该页上的 3D 模型列表
+  - 省略或空数组则不写
+  - 每项必须有 `file`，可选 `x` / `y` / `cx` / `cy`，规则与 `insertModel3d` 相同
 - **`slides[].notes`**
   - 可选
   - 该页演讲者备注可见纯文本，字符串，可空
@@ -1071,7 +1112,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   - 必须严格递增
   - 超出页数报 `InvalidField`
 
-带图示例见 `docs/examples/pptx-create-pictures.json`。带 SVG 图见 `docs/examples/pptx-create-svg.json`。带图表示例见 `docs/examples/pptx-create-charts.json`。
+带图示例见 `docs/examples/pptx-create-pictures.json`。带 SVG 图见 `docs/examples/pptx-create-svg.json`。带 3D 模型见 `docs/examples/pptx-create-model3d.json`。带图表示例见 `docs/examples/pptx-create-charts.json`。
 带 SmartArt 示例见 `docs/examples/pptx-create-smartart.json`。带表示例见 `docs/examples/pptx-create-tables.json`。
 带备注与批注示例见 `docs/examples/pptx-create-notes-comments.json`。节、链、媒体、切换与动画合在一起的示例见 `docs/examples/pptx-create-remain.json`。
 `kind` / `wrap` / `from` / `to` / `anchor` / `dataFrom` 以及 xlsx 偏移字段出现报 `InvalidField`。
@@ -1092,12 +1133,13 @@ create 写出 Transitional 最小包，见 [opc.md](opc.md)。
 给了 `slides[].charts` 时按 `insertChart` 同一套规则写 `/ppt/charts/…`、embedding 与图表 `p:graphicFrame`。
 给了 `slides[].smartArts` 时按 `insertSmartArt` 同一套规则写 `/ppt/diagrams/…` 与图示 `p:graphicFrame`。
 给了 `slides[].tables` 时按 `insertTable` 同一套规则写表 `p:graphicFrame`（`a:tbl`）。
+给了 `slides[].model3ds` 时按 `insertModel3d` 同一套规则写 GLB、海报 PNG 与 `am3d` AlternateContent。
 给了 `slides[].notes` 时按 `setNotesText` 同一套规则写该页演讲者备注：没有 notesMaster 则新建，再写 notesSlide。
 给了 `slides[].comments` 时按 `insertComment` 同一套规则写该页现代批注（`p188:cmLst`、`/ppt/authors.xml`）。
 给了形状上的 `url` / `file` / `slide` 时按 `insertHyperlink` 同一套规则写 `a:hlinkClick`。create 本期不写 run 级链，也不写批注内图。
 给了 `slides[].transition` 时按 `setTransition` 同一套规则写 `<p:transition>`。给了 `slides[].anims` 时按 `insertAnim` 同一套规则写预设进入淡入。
 给了 `presentation.sections` 时按 `insertSlideSection` 同一套规则写 `p14:sectionLst`：先写第一项（`start` 为 1 则包住全部页；大于 1 则前面的页进空名节），再按数组顺序用 `start` 拆后续节。
-先写该页 `shapes`，再按数组顺序写 `pictures`，再写 `videos`，再写 `audios`，再写 `charts`，再写 `smartArts`，再写 `tables`，再写 `notes`，
+先写该页 `shapes`，再按数组顺序写 `pictures`，再写 `model3ds`，再写 `videos`，再写 `audios`，再写 `charts`，再写 `smartArts`，再写 `tables`，再写 `notes`，
 再按数组顺序写 `comments`，再写形状超链接，再写 `transition`，再按数组顺序写 `anims`。
 全部页写完后再写 `sections`。`p:cNvPr/@id` 取该页已有全部 `cNvPr` 的最大整数加 1，至少为 2。
 `presentation` 根上出现 `pictures` / `charts` / `smartArts` / `tables` / `notes` / `comments` / `videos` / `audios`
@@ -2129,6 +2171,61 @@ docx 上仍用段落 id，见 [json-contract-docx.md](json-contract-docx.md#inse
 xlsx 见 [xlsx 分册](json-contract-xlsx.md#deleteole)。
 
 示例见 `docs/examples/pptx-apply-ole.json`。inspect 示例见 `docs/examples/pptx-inspect-ole.json`。
+
+### insertModel3d
+
+把本地 GLB 作为 3D 模型写入目标幻灯片或备注页。不进 `pictures`。不栅格化模型。海报用 1×1 PNG 占位。不写 `<p:timing>`。
+
+```json
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "C:\\data\\deck.pptx",
+  "ops": [
+    {
+      "op": "insertModel3d",
+      "id": "slide:1",
+      "file": "C:\\\\data\\\\model.glb"
+    }
+  ]
+}
+```
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"insertModel3d"` |
+| `id` | 必须是 `slide:{n}` 或 `slide:{n}/notes` |
+| `file` | 必须。本地 GLB 路径 |
+| `x` / `y` | 可选。画布 EMU。省略为 `0` |
+| `cx` / `cy` | 成对可选。EMU。都省则 `914400` × `914400` |
+
+`id` 不是页 id 或备注容器 id 报 `InvalidId`。找不到该页报 `IdNotFound`。
+`cx` / `cy` 只给一个报 `InvalidField`。找不到 `file` 报 `Io`。空路径或不是 GLB 报 `InvalidField`。
+批注内本期不插。create 本期不在 `slides[].notes` 上写 3D。
+
+AlternateContent 放进 `p:spTree`。Choice 里是 `p:graphicFrame`。关系写在该页或 notesSlide `.rels`。
+`[Content_Types].xml` 补 Default `glb` 为 `model/gltf.binary`。xlsx / docx 见各自分册。
+
+### replaceModel3d
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"replaceModel3d"` |
+| `id` | 必须是 3D 模型 id |
+| `file` | 必须。本地 GLB 路径 |
+
+换 GLB 字节，保留 graphicFrame 与关系 id。海报仍写成 1×1 PNG。不改位置尺寸。找不到报 `IdNotFound`。
+id 不是 3D 模型 id 报 `InvalidId`。xlsx / docx 见各自分册。
+
+### deleteModel3d
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"deleteModel3d"` |
+| `id` | 必须是 3D 模型 id |
+
+找不到报 `IdNotFound`。id 不是 3D 模型 id 报 `InvalidId`。摘整棵 AlternateContent。
+清掉无人引用的关系与 GLB / 海报。xlsx / docx 见各自分册。
 
 ### insertField
 

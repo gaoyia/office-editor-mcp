@@ -150,6 +150,7 @@ fn run_count_without_scope_runs() {
             "textBoxCount",
             "connectorCount",
             "inkCanvasCount",
+            "model3dCount",
             "runCount"
         ]
     );

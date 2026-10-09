@@ -24,10 +24,12 @@ ECMA-376 示例里常见的 Strict 命名空间（`http://purl.oclc.org/ooxml/..
 禁止把 inspect 树当成完整文档模型，改完之后整包重新生成。apply 的入参只能是操作列表，不能是整棵树。
 
 xlsx 另有只读动作 `exportMedia`：按图 id 把媒体部件原字节写到本地。
-xlsx 的 `exportMedia` 认工作表图 id、页眉页脚图 id 与 OLE id：图 id 写出 `/xl/media/…`，OLE id 写出 `/xl/embeddings/…`。
-pptx 的 `exportMedia` 认幻灯片图 id、备注图 id、批注内图 id、视频 id、音频 id 与 OLE id：图 / 视频 / 音频写出 `/ppt/media/…`，OLE 写出 `/ppt/embeddings/…`。
-docx 的 `exportMedia` 认图 id、OLE id、墨迹画布 id 与嵌入字体 id：图写出 `/word/media/…`，OLE 写出 embeddings 部件，
-墨迹画布写出 `/word/ink/…`，`font:{n}` 写出 `/word/fonts/…`。
+xlsx 的 `exportMedia` 认工作表图 id、页眉页脚图 id、OLE id 与 3D 模型 id：图 id 写出 `/xl/media/…`，OLE id 写出 `/xl/embeddings/…`，
+3D 模型 id 写出 `/xl/media/…` 的 GLB。
+pptx 的 `exportMedia` 认幻灯片图 id、备注图 id、批注内图 id、视频 id、音频 id、OLE id 与 3D 模型 id：图 / 视频 / 音频写出 `/ppt/media/…`，OLE 写出 `/ppt/embeddings/…`，
+3D 模型 id 写出 `/ppt/media/…` 的 GLB。
+docx 的 `exportMedia` 认图 id、OLE id、墨迹画布 id、3D 模型 id 与嵌入字体 id：图写出 `/word/media/…`，OLE 写出 embeddings 部件，
+墨迹画布写出 `/word/ink/…`，3D 模型写出 `/word/media/…` 的 GLB，`font:{n}` 写出 `/word/fonts/…`。
 docx 与 pptx 另有 `exportChartData`：按图表 id 把 embedding 工作簿原字节写到本地。它们不改上述三个动作的语义，也不把字节塞进 inspect 树。
 xlsx 对 `exportChartData` 仍报 `InvalidField`（图表数据就在本工作簿单元格里）。
 
@@ -77,15 +79,16 @@ crates/ooxp-cli/             命令行，只依赖 ooxp。二进制名也是 oox
 每张 `worksheet` 与 `chartsheet` 始终带 `print` 与 `view`。每张 `worksheet` 始终带 `autoFilter`。每张 `worksheet` 始终带 `sortState`。
 每张 `worksheet` 始终带 `outline`。每张 `worksheet` 始终带 `commentCount`（只计无 `parentId` 的顶层线程化批注）、
 `hyperlinkCount`（该表 `<hyperlinks>` 里 `<hyperlink>` 的条数）、`sparklineCount`（该表 `x14:sparklineGroup` 的组数）、
-`oleObjectCount`（该表被收入的嵌入对象个数）与 `slicerCount`（该表被收入的切片器个数）。
+`oleObjectCount`（该表被收入的嵌入对象个数）、`model3dCount`（该表被收入的 3D 模型个数）与 `slicerCount`（该表被收入的切片器个数）。
 工作簿与每张 `worksheet` 始终带 `textBoxCount`、`shapeCount`、`connectorCount` 与 `smartArtCount`。
 每张 `worksheet` 与 `chartsheet` 始终带 `sheetProtection`。
-工作簿根始终带 `commentCount`、`hyperlinkCount`、`sparklineCount`、`oleObjectCount` 与 `slicerCount`（各表之和）、`connectionCount`、
+工作簿根始终带 `commentCount`、`hyperlinkCount`、`sparklineCount`、`oleObjectCount`、`model3dCount` 与 `slicerCount`（各表之和）、`connectionCount`、
 `externalLinkCount`、`customViewCount`、`workbookProtection` 与 `props`（core / app / custom，规则见契约「文档属性」）。
 `scope.comments` 为 true 时列出该表线程化批注名单，不读作者不以 `tc=` 开头的旧式 VML 批注。
 `scope.hyperlinks` 为 true 时列出该表 `<hyperlinks>`，不把 `HYPERLINK()` 公式或图上的链算进来。
 `scope.sparklines` 为 true 时列出该表 `x14:sparklineGroups`，数据范围当字符串，不把折线画进树。
 `scope.oleObjects` 为 true 时列出该表 `<oleObjects>`，不把嵌入字节或预览图放进树。
+`scope.model3ds` 为 true 时列出该表 drawing 里的 `am3d` AlternateContent，不把 GLB 或海报放进树。
 `scope.slicers` 为 true 时列出该表 drawing 里的 slicer `graphicFrame`，不把 cache 选项或筛选状态倒进树。
 `scope.connections` 为 true 时列出工作簿 `/xl/connections.xml`，不刷新。
 `scope.externalLinks` 为 true 时列出 workbook `<externalReferences>`，不打开目标文件。
@@ -128,13 +131,13 @@ create 本期不写页眉页脚，也不写 `kind: chartsheet`，也不写列宽
 主文档由根关系里 `/officeDocument` 指向，常见路径 `/word/document.xml`。
 inspect 读该部件里的 `w:p`，返回大纲和按范围截断的段落；并始终列出页眉、页脚容器、各节页面与页眉页脚属性，以及每节是否链接到前一节。
 文档根始终带正文 `pictureCount`、`textBoxCount`、`connectorCount`、`inkCanvasCount`、`footnoteCount`、`endnoteCount`、`commentCount`、`chartCount`、
-`smartArtCount`、`oleObjectCount`、`tableCount`、`revisionCount`、`hyperlinkCount`、`bookmarkCount`、`fieldCount`、`tocCount`、
+`smartArtCount`、`oleObjectCount`、`model3dCount`、`tableCount`、`revisionCount`、`hyperlinkCount`、`bookmarkCount`、`fieldCount`、`tocCount`、
 `captionCount`、`crossRefCount`、`indexCount`、`indexEntryCount`、`sourceCount`、`citationCount`、`bibliographyCount`、
 `docPartCount`、`mathCount`、`contentControlCount`、`numberingCount`、`styleCount`、`embeddedFontCount`，
 以及整篇 `mirrorMargins` / `gutterAtTop`、`props`、`protection`、`theme` 与 `fontEmbed`、`pageBackground`。
-页眉页脚容器始终带前两项与 `connectorCount`、`inkCanvasCount`、`chartCount`、`smartArtCount`、`oleObjectCount`、`tableCount`、`revisionCount`、
+页眉页脚容器始终带前两项与 `connectorCount`、`inkCanvasCount`、`chartCount`、`smartArtCount`、`oleObjectCount`、`model3dCount`、`tableCount`、`revisionCount`、
 `hyperlinkCount`、`bookmarkCount`、`fieldCount`、`mathCount`、`contentControlCount`。
-`scope.pictures` / `scope.textBoxes` / `scope.connectors` / `scope.inkCanvases` 为 true 时列出页眉页脚图、框、连接线或墨迹画布；同时给了正文切片则段落上也列出。
+`scope.pictures` / `scope.textBoxes` / `scope.connectors` / `scope.inkCanvases` / `scope.model3ds` 为 true 时列出页眉页脚图、框、连接线、墨迹画布或 3D 模型；同时给了正文切片则段落上也列出。
 组合本身不进树，组合里的图 / 框 / 连接线 / 墨迹画布展开。`scope.textBoxContent` 再展开框内段落。`scope.notes` 为 true 时列出用户脚注、尾注与分隔符；注内段落一次倒出。
 `scope.comments` 为 true 时列出批注；批注内段落一次倒出。`scope.charts` 为 true 时列出正文、页眉页脚、文本框、脚注、尾注与批注里的嵌入图表；系列一次倒出。
 `scope.smartArt` 为 true 时列出正文、页眉页脚、文本框、脚注、尾注与批注里的 SmartArt；可见点一次倒出。`scope.oleObjects` 为 true 时列出正文与页眉页脚里的嵌入对象。
@@ -161,7 +164,7 @@ apply 可改被点名段落的可见文本（主文档、页眉页脚、框内�
 嵌入图表可插、删、改标题、改系列数据、改类型与图例，并可改宿主 drawing 的尺寸与绕排；宿主可以是正文、页眉页脚、框内、注内或批注内段落。圆环、雷达、气泡与组合图走同一套 op；透视图表只改标题、图例、标签、删除与尺寸绕排，不改数。
 股价、曲面、chartex、次轴、趋势线、误差线除删除与尺寸绕排外报 `NotImplemented`。SmartArt 可插、删、改各点文字、增删点、改配色与快速样式，并可改宿主 drawing 的尺寸与绕排；宿主范围与图表相同。
 三种格式都可改文件属性。docx 还可开关无密码的限制编辑与只读推荐。`exportMedia` 按图 id 写出 `/word/media/…` 原字节，按 OLE id 写出 embeddings 原字节，
-按墨迹画布 id 写出 `/word/ink/…` 原字节。
+按墨迹画布 id 写出 `/word/ink/…` 原字节，按 3D 模型 id 写出 GLB 原字节。
 `exportChartData` 按图表 id 写出 embedding xlsx 原字节。不整篇从 JSON 重建。
 create 生成最小 Transitional 包，含 `styles.xml`（Normal 与 Heading1–3）和 `settings.xml`（`compatibilityMode` 为 15），
 给了 `paragraphs[].sectionType` 时可写多节，给了 `paragraphs[].charts` 时复用 `insertChart`，
@@ -178,10 +181,10 @@ create 生成最小 Transitional 包，含 `styles.xml`（Normal 与 Heading1–
 
 入口由根关系里 `/officeDocument` 指向，常见路径 `/ppt/presentation.xml`。幻灯片顺序跟 `p:sldIdLst`，不跟文件名。
 inspect 默认只返回页名单与各页 `pictureCount`、`videoCount`、`audioCount`、`chartCount`、`smartArtCount`、`commentCount`、
-`hyperlinkCount`、`fieldCount`、`tableCount`、`oleObjectCount`、`zoomCount`、`connectorCount`、`animCount`、`layoutId`、`hasNotes`、`transition`，
+`hyperlinkCount`、`fieldCount`、`tableCount`、`oleObjectCount`、`model3dCount`、`zoomCount`、`connectorCount`、`animCount`、`layoutId`、`hasNotes`、`transition`，
 以及根上 `masterCount`、`hasHandout`、`sectionCount`、`slideSize`、`customShowCount`、`showPr`、`modifyProtection` 与 `props`；
 要形状必须给 `scope.slide`，要图名单必须给 `scope.pictures`，要视频 / 音频名单必须给 `scope.media`，要图表名单必须给 `scope.charts`，
-要 SmartArt 名单必须给 `scope.smartArt`，要表名单必须给 `scope.tables`，要嵌入对象名单必须给 `scope.oleObjects`，要 Zoom 名单必须给 `scope.zooms`，
+要 SmartArt 名单必须给 `scope.smartArt`，要表名单必须给 `scope.tables`，要嵌入对象名单必须给 `scope.oleObjects`，要 3D 模型名单必须给 `scope.model3ds`，要 Zoom 名单必须给 `scope.zooms`，
 要连接线名单必须给 `scope.connectors`，要备注形状必须给 `scope.notes`，要批注名单必须给 `scope.comments`，要超链接名单必须给 `scope.hyperlinks`，
 要域名单必须给 `scope.fields`，要动画摘要必须给 `scope.timing`，要母版与版式名单必须给 `scope.masters`，要讲义母版槽位必须给 `scope.handout`，
 要幻灯片节名单必须给 `scope.sections`，要自定义放映名单必须给 `scope.customShows`。
@@ -201,7 +204,7 @@ apply 可改被点名形状的 `p:txBody` 可见文字（含备注形状与母�
 也可插删改幻灯片文本形状里的 `a:fld`（页码与日期域，不求值）；也可往幻灯片插、删内嵌视频与音频（`p:pic` 上的 `a:videoFile` / `a:audioFile` 与 `p14:media`，不写 timing）；
 也可用 `insertCustomShow` / `setCustomShow` / `deleteCustomShow` 读写 `p:custShowLst`（不算放映引擎）；
 也可插、删幻灯片上的嵌入对象（`p:oleObj`，不激活 OLE 服务器），也可插、删幻灯片上的 Zoom（`sldZm` / `sectionZm`，不写摘要缩放，不实现放映跳转）；也可改文件属性。
-插删重排不重写未点名页。`exportMedia` 按图 id、视频 id、音频 id 或 OLE id 写出 `/ppt/media/…` 或 `/ppt/embeddings/…`。
+插删重排不重写未点名页。`exportMedia` 按图 id、视频 id、音频 id、OLE id 或 3D 模型 id 写出 `/ppt/media/…` 或 `/ppt/embeddings/…`。
 `exportChartData` 按图表 id 写出 embedding。create 生成最小 Transitional 包，
 必含 theme、slideMaster、slideLayout、presentation、各页 slide、presProps。
 给了 `slides[].pictures` 时复用 `insertPicture`，写入 `/ppt/media/…` 与该页 `p:pic`。
@@ -226,15 +229,15 @@ apply 可改被点名形状的 `p:txBody` 可见文字（含备注形状与母�
 xlsx 默认不读完全部单元格，也不展开 `pictures`、`charts`、`textBoxes`、`shapes`、`connectors`、`smartArts`、页眉原文、数据验证名单、条件格式名单、工作表表格名单、透视表名单、
 批注名单、超链接名单、迷你图名单、嵌入对象名单、切片器名单、连接名单、外部引用名单或自定义视图名单（仍返回 `pictureCount`、`chartCount`、`textBoxCount`、`shapeCount`、
 `connectorCount`、`smartArtCount`、`dataValidationCount`、`conditionalFormatCount`、`tableCount`、`pivotCount`、
-`commentCount`、`hyperlinkCount`、`sparklineCount`、`oleObjectCount`、`slicerCount`、`connectionCount`、`externalLinkCount`、
+`commentCount`、`hyperlinkCount`、`sparklineCount`、`oleObjectCount`、`model3dCount`、`slicerCount`、`connectionCount`、`externalLinkCount`、
 `customViewCount`、`hasHeaderFooter`、`print`、`view`、`sheetProtection` 与根上 `props`、`workbookProtection`、`definedNameCount`、`definedNames`）。
 xlsx 的 `worksheet` 还返回 `autoFilter` 与 `sortState`。
 docx 默认不返回正文 `paragraphs` 也不展开页眉页脚段落、任何 `pictures`、`textBoxes`、`connectors`、注名单、批注名单、图表名单、SmartArt 名单、OLE 名单、水印名单、表名单、
 修订名单、超链接名单、书签名单、域名单、目录名单、题注名单、交叉引用名单、构建基块名单、公式名单、内容控件名单、编号名单、样式名单或 run 名单（仍返回根上 `props` 与 `protection`、`theme`、`fontEmbed`、`pageBackground`，
 以及 `watermarkCount`），pptx 默认不返回 `shapes`，
-也不展开 `pictures` / `charts` / `smartArts` / `tables` / `oleObjects` / `zooms` / `connectors` / `notes` / `comments`
+也不展开 `pictures` / `charts` / `smartArts` / `tables` / `oleObjects` / `model3ds` / `zooms` / `connectors` / `notes` / `comments`
  / `hyperlinks` / `fields` / `timing` / `masters` / `handout` / `sections` / `customShows`（仍返回根与各页 `pictureCount`、
-`chartCount`、`smartArtCount`、`commentCount`、`hyperlinkCount`、`fieldCount`、`tableCount`、`oleObjectCount`、`zoomCount`、
+`chartCount`、`smartArtCount`、`commentCount`、`hyperlinkCount`、`fieldCount`、`tableCount`、`oleObjectCount`、`model3dCount`、`zoomCount`、
 `connectorCount`、`animCount`、`masterCount`、`hasHandout`、`sectionCount`、`slideSize`、`customShowCount`，
 以及各页 `layoutId`、`hasNotes`、`transition` 与根上 `props`）。包不写回。
 
@@ -261,6 +264,7 @@ xlsx 也可插删回复并改线程化批注，脏 `/xl/threadedComments/`、`/x
 xlsx 也可插删改工作表文本框、形状、连接线与 SmartArt，脏 worksheet drawing、drawing `.rels`、`/xl/diagrams/` 与内容类型，不标重算。
 xlsx 也可插删改工作表单元格超链接，脏该表 XML 与工作表 `.rels`，不标重算。xlsx 也可插删改工作表迷你图组，脏该表 `extLst`，不新建部件，不标重算。
 xlsx 也可列出、导出、插入并删除工作表嵌入对象，脏 `oleObjects`、worksheet drawing、VML `legacyDrawing`、工作表 `.rels`、embeddings 与预览媒体，不把字节塞进 inspect 树，不标重算。
+xlsx 也可插、删、换工作表 3D 模型，脏 worksheet drawing、drawing `.rels`、GLB 与海报 PNG，不把 GLB 塞进 inspect 树，不标重算。
 xlsx 也可列出、插入并删除工作表切片器，脏 `/xl/slicers/…`、`/xl/slicerCaches/…`、worksheet drawing、工作表 `extLst` 的 `slicerList`、
 workbook `extLst` 的 `slicerCaches`、workbook 的 `<definedNames>`、工作表 / workbook `.rels` 与内容类型；
 透视源的插入还脏 `/xl/pivotCache/pivotCacheDefinitionN.xml` 的 `extLst`（`x14:pivotCacheDefinition/@pivotCacheId`），不在库里执行筛选，不标重算。
@@ -277,6 +281,7 @@ xlsx 也可改文件属性，脏 `docProps`。docx 可改被点名的段落，�
 也可改页眉、页脚、正文、注或批注里被点名的 DrawingML 图与文本框，也可插删连接线并把浮动图 / 框 / 连接线组合或解开，也可插删脚注尾注并改编号属性，也可插删回复批注并改完成标记，也可插删改嵌入图表（含框内、注内、批注内；
 含趋势线、误差线与次轴），也可插删改 SmartArt（宿主范围相同）。
 docx 也可插删嵌入对象，脏宿主 XML、`.rels`、embeddings 与占位预览图。
+docx 也可插删换 3D 模型，脏宿主 XML、`.rels`、GLB 与海报 PNG。
 docx 也可用 `setProtection` 改 `settings.xml` 的保护标记，窗体保护还可脏主文档各节 `w:formProt`。
 docx 也可插删页眉 DrawingML 水印，无 default 页眉时会新建，并可脏页眉部件与媒体。
 docx 也可用 `setThemeColors` / `setThemeFonts` 改主文档 theme 部件的配色与字体方案，只脏该 theme 部件，不重写 `fmtScheme`。
@@ -291,7 +296,7 @@ pptx 可改被点名形状的可见文字（含备注形状与母版 / 版式占
 也可用 `insertSlideSection` / `setSlideSectionName` / `deleteSlideSection` / `setSlideSection` 读写 `p14:sectionLst`（删节时页还在；
 把页划进某节时可重排 `sldIdLst`），也可用 `insertCustomShow` / `setCustomShow`
  / `deleteCustomShow` 读写 `p:custShowLst`（删页时按 `r:id` 清引用），
-也可插、删幻灯片上的嵌入对象（`p:oleObj`，不激活 OLE 服务器），也可插、删幻灯片上的 Zoom（`sldZm` / `sectionZm`，不写摘要缩放，不实现放映跳转），
+也可插、删幻灯片上的嵌入对象（`p:oleObj`，不激活 OLE 服务器），也可插、删、换幻灯片或备注页上的 3D 模型（`am3d:model3d`，不栅格化），也可插、删幻灯片上的 Zoom（`sldZm` / `sectionZm`，不写摘要缩放，不实现放映跳转），
 也可用 `setShowPr` 改 `presProps` 的 `p:showPr`，也可用 `setProtection` 在没有密码哈希时删掉 `p:modifyVerifier`，
 脏 `presentation.xml` 的 `sldIdLst`、presentation 关系、新页或被删页及其备注 / 现代批注、内容类型，以及若有则同步 `p14:sectionLst` 与 `p:custShowLst`。
 未点名页原字节写回。插删改图、图表、SmartArt、备注与批注时仍脏该页 XML、该页 `.rels`、notesSlide 及其 `.rels`、必要时 notesMaster 与 presentation、
@@ -329,9 +334,10 @@ docx 的 `document.protection` 复用 `setProtection`。docx 的 `document.water
 
 ### exportMedia
 
-调用方给出源 docx、xlsx 或 pptx、图 id、docx / xlsx / pptx OLE id、docx 墨迹画布 id、pptx 视频 / 音频 id 或 docx 嵌入字体 id 和本地目标路径。
+调用方给出源 docx、xlsx 或 pptx、图 id、docx / xlsx / pptx OLE id、三种格式 3D 模型 id、docx 墨迹画布 id、pptx 视频 / 音频 id 或 docx 嵌入字体 id 和本地目标路径。
 库打开包，图 id 按 `a:blip` 的关系写出媒体部件；带 `asvg:svgBlip` 时改走 SVG 关系。
 OLE id 按 oleObject 或 package 关系写出 embeddings 部件；
+3D 模型 id 按 model3d 关系写出 GLB 部件；
 docx 墨迹画布 id 按 customXml 关系写出 InkML 部件；
 docx `font:{n}` 按 fontTable 关系写出 odttf 原字节。包不写回。
 

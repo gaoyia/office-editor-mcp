@@ -76,6 +76,7 @@ pub fn notes_json(
     want_charts: bool,
     want_smartarts: bool,
     want_tables: bool,
+    want_model3ds: bool,
 ) -> Result<Value, Error> {
     let Some(part) = notes_slide_part(pkg, slide_part)? else {
         return Ok(Value::Null);
@@ -125,6 +126,8 @@ pub fn notes_json(
     obj.insert("chartCount".into(), json!(n_charts));
     obj.insert("smartArtCount".into(), json!(n_smartarts));
     obj.insert("tableCount".into(), json!(n_tables));
+    let m3ds = super::model3d::collect(&doc.root, &host);
+    obj.insert("model3dCount".into(), json!(m3ds.len()));
     if want_pictures {
         obj.insert(
             "pictures".into(),
@@ -139,6 +142,12 @@ pub fn notes_json(
     }
     if let Some(tables) = tables_list {
         obj.insert("tables".into(), Value::Array(tables));
+    }
+    if want_model3ds {
+        obj.insert(
+            "model3ds".into(),
+            Value::Array(super::model3d::list_json(&m3ds)),
+        );
     }
     obj.insert("shapes".into(), Value::Array(shapes));
     Ok(Value::Object(obj))

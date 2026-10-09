@@ -156,6 +156,7 @@ fn empty_create_has_count_without_list() {
             "fieldCount",
             "tableCount",
             "oleObjectCount",
+            "model3dCount",
             "zoomCount",
             "connectorCount",
             "animCount",

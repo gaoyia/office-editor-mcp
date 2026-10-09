@@ -16,6 +16,7 @@ use super::custom_view;
 use super::extlink;
 use super::formula;
 use super::hf;
+use super::model3d;
 use super::names;
 use super::ole;
 use super::picture;
@@ -83,6 +84,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     let want_hyperlinks = scope.as_ref().is_some_and(|s| s.hyperlinks);
     let want_sparklines = scope.as_ref().is_some_and(|s| s.sparklines);
     let want_ole = scope.as_ref().is_some_and(|s| s.ole_objects);
+    let want_model3ds = scope.as_ref().is_some_and(|s| s.model3ds);
     let want_slicers = scope.as_ref().is_some_and(|s| s.slicers);
     let want_connections = scope.as_ref().is_some_and(|s| s.connections);
     let want_external_links = scope.as_ref().is_some_and(|s| s.external_links);
@@ -104,6 +106,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     let mut hyperlink_count = 0usize;
     let mut sparkline_count = 0usize;
     let mut ole_object_count = 0usize;
+    let mut model3d_count = 0usize;
     let mut slicer_count = 0usize;
     for (sheet_id, sh) in sheets.iter().enumerate() {
         let mut obj = Map::new();
@@ -151,6 +154,9 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
             let n_ole = ole::count(&pkg, &sh.part, &sheet_doc.root)?;
             ole_object_count += n_ole;
             obj.insert("oleObjectCount".into(), json!(n_ole));
+            let n_m3d = model3d::count(&pkg, &sh.part, &sheet_doc.root)?;
+            model3d_count += n_m3d;
+            obj.insert("model3dCount".into(), json!(n_m3d));
             let n_slicer = slicer::count(&pkg, &sh.part)?;
             slicer_count += n_slicer;
             obj.insert("slicerCount".into(), json!(n_slicer));
@@ -231,6 +237,17 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
                 obj.insert(
                     "oleObjects".into(),
                     Value::Array(ole::collect(&pkg, &sh.part, &sheet_doc.root, &sh.name)?),
+                );
+            }
+            if want_model3ds {
+                obj.insert(
+                    "model3ds".into(),
+                    Value::Array(model3d::list_json(&model3d::collect(
+                        &pkg,
+                        &sh.part,
+                        &sheet_doc.root,
+                        &sh.name,
+                    )?)),
                 );
             }
             if want_slicers {
@@ -368,6 +385,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     root.insert("hyperlinkCount".into(), json!(hyperlink_count));
     root.insert("sparklineCount".into(), json!(sparkline_count));
     root.insert("oleObjectCount".into(), json!(ole_object_count));
+    root.insert("model3dCount".into(), json!(model3d_count));
     root.insert("slicerCount".into(), json!(slicer_count));
     root.insert(
         "connectionCount".into(),

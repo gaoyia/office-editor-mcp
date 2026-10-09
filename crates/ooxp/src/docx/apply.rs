@@ -484,6 +484,19 @@ pub fn apply(bytes: &[u8], ops: &[DocxOp]) -> Result<Vec<u8>, Error> {
             DocxOp::DeleteInkCanvas(op) => {
                 ink::apply_delete(&mut pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
             }
+            DocxOp::InsertModel3d(op) => {
+                super::model3d::apply_insert(
+                    &mut pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i,
+                )?;
+            }
+            DocxOp::ReplaceModel3d(op) => {
+                super::model3d::apply_replace(&mut pkg, &mut docs, &doc_part, &catalog, op, i)?;
+            }
+            DocxOp::DeleteModel3d(op) => {
+                super::model3d::apply_delete(
+                    &mut pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i,
+                )?;
+            }
             DocxOp::InsertWatermark(op) => {
                 watermark::apply_insert(&mut pkg, &mut docs, &mut dirty, &doc_part, op, i)?;
                 refresh_hf_catalog(&pkg, &docs, &doc_part, &mut catalog)?;

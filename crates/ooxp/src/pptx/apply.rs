@@ -14,6 +14,7 @@ use super::handout;
 use super::hyperlink;
 use super::master;
 use super::media;
+use super::model3d;
 use super::notes;
 use super::ole;
 use super::picture;
@@ -528,6 +529,67 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                 let part = meta.part.clone();
                 let mut doc = xml::parse(pkg.get(&part)?)?;
                 ole::delete(&mut pkg, &mut doc, &part, op, i)?;
+                pkg.set(&part, doc.to_bytes()?)?;
+            }
+            PptxOp::InsertModel3d(op) => {
+                let meta = slides.get(op.slide - 1).ok_or_else(|| {
+                    Error::with_path(
+                        ErrorKind::SlideNotFound { n: op.slide as u32 },
+                        format!("ops[{i}].id"),
+                    )
+                })?;
+                let part = if op.on_notes {
+                    notes::ensure_notes_slide(&mut pkg, &pres_part, &mut pres, &meta.part)?
+                } else {
+                    meta.part.clone()
+                };
+                let mut doc = xml::parse(pkg.get(&part)?)?;
+                model3d::insert(&mut pkg, &mut doc, &part, op, &format!("ops[{i}].file"))?;
+                pkg.set(&part, doc.to_bytes()?)?;
+            }
+            PptxOp::ReplaceModel3d(op) => {
+                let meta = slides.get(op.target.slide - 1).ok_or_else(|| {
+                    Error::with_path(
+                        ErrorKind::SlideNotFound {
+                            n: op.target.slide as u32,
+                        },
+                        format!("ops[{i}].id"),
+                    )
+                })?;
+                let part = if op.target.on_notes {
+                    notes::notes_slide_part(&pkg, &meta.part)?.ok_or_else(|| {
+                        Error::with_path(
+                            ErrorKind::Model3dNotFound { id: op.id.clone() },
+                            format!("ops[{i}].id"),
+                        )
+                    })?
+                } else {
+                    meta.part.clone()
+                };
+                let doc = xml::parse(pkg.get(&part)?)?;
+                model3d::replace(&mut pkg, &part, &doc.root, op, i)?;
+            }
+            PptxOp::DeleteModel3d(op) => {
+                let meta = slides.get(op.target.slide - 1).ok_or_else(|| {
+                    Error::with_path(
+                        ErrorKind::SlideNotFound {
+                            n: op.target.slide as u32,
+                        },
+                        format!("ops[{i}].id"),
+                    )
+                })?;
+                let part = if op.target.on_notes {
+                    notes::notes_slide_part(&pkg, &meta.part)?.ok_or_else(|| {
+                        Error::with_path(
+                            ErrorKind::Model3dNotFound { id: op.id.clone() },
+                            format!("ops[{i}].id"),
+                        )
+                    })?
+                } else {
+                    meta.part.clone()
+                };
+                let mut doc = xml::parse(pkg.get(&part)?)?;
+                model3d::delete(&mut pkg, &mut doc, &part, op, i)?;
                 pkg.set(&part, doc.to_bytes()?)?;
             }
             PptxOp::InsertZoom(op) => {

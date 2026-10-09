@@ -56,6 +56,7 @@ struct NewSheet {
     shapes: Vec<InsertShapeOp>,
     connectors: Vec<InsertConnectorOp>,
     smartarts: Vec<InsertSmartArtOp>,
+    model3ds: Vec<super::model3d::InsertModel3dOp>,
 }
 
 pub fn create(workbook: &Value) -> Result<Vec<u8>, Error> {
@@ -270,6 +271,7 @@ pub fn create(workbook: &Value) -> Result<Vec<u8>, Error> {
         )?;
     }
     attach_pictures(&mut pkg, &sheets)?;
+    attach_model3ds(&mut pkg, &sheets)?;
     attach_charts(&mut pkg, &sheets)?;
     attach_drawings(&mut pkg, &sheets)?;
     attach_comments(&mut pkg, &sheets)?;
@@ -318,6 +320,7 @@ fn parse_sheet(v: &Value, i: usize) -> Result<NewSheet, Error> {
                 | "shapes"
                 | "connectors"
                 | "smartArts"
+                | "model3ds"
         ) {
             return Err(Error::with_path(
                 ErrorKind::UnknownField { field: k.clone() },
@@ -352,6 +355,7 @@ fn parse_sheet(v: &Value, i: usize) -> Result<NewSheet, Error> {
     let shapes = parse_shapes(obj.get("shapes"), i, name)?;
     let connectors = parse_connectors(obj.get("connectors"), i, name)?;
     let smartarts = parse_smartarts(obj.get("smartArts"), i, name)?;
+    let model3ds = parse_model3ds(obj.get("model3ds"), i, name)?;
     Ok(NewSheet {
         name: name.to_string(),
         chartsheet: None,
@@ -365,6 +369,7 @@ fn parse_sheet(v: &Value, i: usize) -> Result<NewSheet, Error> {
         shapes,
         connectors,
         smartarts,
+        model3ds,
     })
 }
 
@@ -461,6 +466,7 @@ fn parse_chartsheet_sheet(
         shapes: Vec::new(),
         connectors: Vec::new(),
         smartarts: Vec::new(),
+        model3ds: Vec::new(),
     })
 }
 
@@ -553,6 +559,26 @@ fn attach_pictures(pkg: &mut Package, sheets: &[NewSheet]) -> Result<(), Error> 
                 &part,
                 op,
                 &format!("workbook.sheets[{i}].pictures[{j}].file"),
+            )?;
+        }
+        pkg.set(&part, doc.to_bytes()?)?;
+    }
+    Ok(())
+}
+
+fn attach_model3ds(pkg: &mut Package, sheets: &[NewSheet]) -> Result<(), Error> {
+    for (i, part, sh) in each_worksheet(sheets) {
+        if sh.model3ds.is_empty() {
+            continue;
+        }
+        let mut doc = xml::parse(pkg.get(&part)?)?;
+        for (j, op) in sh.model3ds.iter().enumerate() {
+            super::model3d::insert(
+                pkg,
+                &mut doc,
+                &part,
+                op,
+                &format!("workbook.sheets[{i}].model3ds[{j}].file"),
             )?;
         }
         pkg.set(&part, doc.to_bytes()?)?;
@@ -1491,6 +1517,168 @@ fn parse_pictures(
         out.push(parse_picture(item, &format!("{prefix}[{j}]"), sheet)?);
     }
     Ok(out)
+}
+
+fn parse_model3ds(
+    v: Option<&Value>,
+    sheet_i: usize,
+    sheet: &str,
+) -> Result<Vec<super::model3d::InsertModel3dOp>, Error> {
+    let Some(v) = v else {
+        return Ok(Vec::new());
+    };
+    let prefix = format!("workbook.sheets[{sheet_i}].model3ds");
+    let arr = v.as_array().ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::WrongType {
+                field: "model3ds".into(),
+                expected: TypeName::Array,
+            },
+            prefix.clone(),
+        )
+    })?;
+    let mut out = Vec::new();
+    for (j, item) in arr.iter().enumerate() {
+        out.push(parse_create_model3d(
+            item,
+            &format!("{prefix}[{j}]"),
+            sheet,
+        )?);
+    }
+    Ok(out)
+}
+
+fn parse_create_model3d(
+    v: &Value,
+    prefix: &str,
+    sheet: &str,
+) -> Result<super::model3d::InsertModel3dOp, Error> {
+    let obj = v.as_object().ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::WrongType {
+                field: prefix.into(),
+                expected: TypeName::Object,
+            },
+            prefix,
+        )
+    })?;
+    crate::json::deny_unknown(
+        obj,
+        &[
+            "file", "cx", "cy", "from", "to", "anchor", "fromOffX", "fromOffY", "toOffX", "toOffY",
+        ],
+    )?;
+    let file = match obj.get("file") {
+        Some(Value::String(s)) if !s.is_empty() => s.clone(),
+        Some(Value::String(_)) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "file".into(),
+                    expected: TypeName::NonEmptyString,
+                },
+                format!("{prefix}.file"),
+            ));
+        }
+        None => {
+            return Err(Error::with_path(
+                ErrorKind::MissingField {
+                    field: "file".into(),
+                },
+                format!("{prefix}.file"),
+            ));
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "file".into(),
+                    expected: TypeName::String,
+                },
+                format!("{prefix}.file"),
+            ));
+        }
+    };
+    let cx = parse_emu(obj.get("cx"), prefix, "cx")?;
+    let cy = parse_emu(obj.get("cy"), prefix, "cy")?;
+    if cx.is_some() != cy.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "insertModel3d".into(),
+                field: "cx and cy together".into(),
+            },
+            prefix.to_string(),
+        ));
+    }
+    let from = match obj.get("from") {
+        Some(Value::String(s)) => a1::parse_cell(s).map_err(|e| e.at(format!("{prefix}.from")))?,
+        None => a1::CellRef { col: 1, row: 1 },
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "from".into(),
+                    expected: TypeName::String,
+                },
+                format!("{prefix}.from"),
+            ));
+        }
+    };
+    let anchor = match obj.get("anchor") {
+        None => AnchorKind::OneCell,
+        Some(Value::String(s)) => picture::AnchorKind::parse_insert(s).ok_or_else(|| {
+            Error::with_path(ErrorKind::InvalidXlsxAnchor, format!("{prefix}.anchor"))
+        })?,
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "anchor".into(),
+                    expected: TypeName::String,
+                },
+                format!("{prefix}.anchor"),
+            ));
+        }
+    };
+    let to = match obj.get("to") {
+        None => None,
+        Some(Value::String(s)) => {
+            Some(a1::parse_cell(s).map_err(|e| e.at(format!("{prefix}.to")))?)
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "to".into(),
+                    expected: TypeName::String,
+                },
+                format!("{prefix}.to"),
+            ));
+        }
+    };
+    if anchor == AnchorKind::TwoCell && to.is_none() {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "insertModel3d".into(),
+                field: "to".into(),
+            },
+            format!("{prefix}.to"),
+        ));
+    }
+    if anchor == AnchorKind::OneCell && to.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::UnknownField { field: "to".into() },
+            format!("{prefix}.to"),
+        ));
+    }
+    Ok(super::model3d::InsertModel3dOp {
+        sheet: sheet.to_string(),
+        file,
+        cx,
+        cy,
+        from,
+        to,
+        anchor,
+        from_off_x: parse_off(obj.get("fromOffX"), prefix, "fromOffX")?.unwrap_or(0),
+        from_off_y: parse_off(obj.get("fromOffY"), prefix, "fromOffY")?.unwrap_or(0),
+        to_off_x: parse_off(obj.get("toOffX"), prefix, "toOffX")?.unwrap_or(0),
+        to_off_y: parse_off(obj.get("toOffY"), prefix, "toOffY")?.unwrap_or(0),
+    })
 }
 
 fn parse_charts(

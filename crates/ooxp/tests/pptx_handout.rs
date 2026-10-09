@@ -127,6 +127,7 @@ fn create_has_no_handout_without_scope() {
             "fieldCount",
             "tableCount",
             "oleObjectCount",
+            "model3dCount",
             "zoomCount",
             "connectorCount",
             "animCount",

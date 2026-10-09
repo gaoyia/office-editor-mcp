@@ -202,6 +202,7 @@ fn numbering_list_and_para_fields() {
             "textBoxCount",
             "connectorCount",
             "inkCanvasCount",
+            "model3dCount",
             "runCount"
         ]
     );

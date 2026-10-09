@@ -151,6 +151,12 @@
             "$ref": "#/$defs/docxInkCreate"
           }
         },
+        "model3ds": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/docxModel3dCreate"
+          }
+        },
         "footnote": {
           "type": "string"
         },
@@ -265,6 +271,12 @@
             "$ref": "#/$defs/docxInkCreate"
           }
         },
+        "model3ds": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/docxModel3dCreate"
+          }
+        },
         "footnote": {
           "type": "string"
         },
@@ -332,6 +344,27 @@
       }
     },
     "docxInkCreate": {
+      "type": "object",
+      "required": [
+        "file"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "file": {
+          "type": "string",
+          "minLength": 1
+        },
+        "cx": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "cy": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "docxModel3dCreate": {
       "type": "object",
       "required": [
         "file"
@@ -3414,6 +3447,75 @@
       "properties": {
         "op": {
           "const": "deleteInkCanvas"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "insertModel3dOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "file"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "insertModel3d"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "file": {
+          "type": "string",
+          "minLength": 1
+        },
+        "cx": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "cy": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "replaceModel3dOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "file"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "replaceModel3d"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "file": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "deleteModel3dOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "deleteModel3d"
         },
         "id": {
           "type": "string",

@@ -217,6 +217,9 @@
         "inkCanvases": {
           "type": "boolean"
         },
+        "model3ds": {
+          "type": "boolean"
+        },
         "timing": {
           "type": "boolean"
         },
@@ -1087,6 +1090,33 @@
               },
               {
                 "$ref": "docx.schema.json#/$defs/deleteInkCanvasOp"
+              },
+              {
+                "$ref": "xlsx.schema.json#/$defs/insertModel3dOp"
+              },
+              {
+                "$ref": "xlsx.schema.json#/$defs/replaceModel3dOp"
+              },
+              {
+                "$ref": "xlsx.schema.json#/$defs/deleteModel3dOp"
+              },
+              {
+                "$ref": "docx.schema.json#/$defs/insertModel3dOp"
+              },
+              {
+                "$ref": "docx.schema.json#/$defs/replaceModel3dOp"
+              },
+              {
+                "$ref": "docx.schema.json#/$defs/deleteModel3dOp"
+              },
+              {
+                "$ref": "pptx.schema.json#/$defs/insertModel3dOp"
+              },
+              {
+                "$ref": "pptx.schema.json#/$defs/replaceModel3dOp"
+              },
+              {
+                "$ref": "pptx.schema.json#/$defs/deleteModel3dOp"
               },
               {
                 "$ref": "#/$defs/setProtectionOp"

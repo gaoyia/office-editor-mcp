@@ -24,6 +24,7 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 2026-10-09 补跑 `docx-svg.ps1`，Sv1–Sv6 通过。Word COM `Type=17`，72×36 磅。
 2026-10-09 补跑 `docx-ink.ps1`，Ic1–Ic6 通过。Word COM 在 `Shapes` 上 `Type=20`（`msoCanvas`），144×72 磅。
 同日补跑 `docx-emf.ps1`，Dem1–Dem6 通过。Word 行内 COM `Type=3`，无 Repair。
+同日补跑 `docx-model3d.ps1`，D3d1–D3d6 通过。Word 行内 COM `Type=19`，无 Repair。
 
 - **C1** ✅
   - Word 16.0 能打开 `manual-check/office/out/docx-create.docx`，标题栏无 Repair
@@ -1579,6 +1580,32 @@ Word 行内 COM 认 `Type=3`（`wdInlineShapePicture`），不是 SVG 的 `17`�
 - **Dem6**
   - 检查：拒错
   - 通过标准：空文件或不是图片的 `file` 报 `InvalidField`。不强制开 Word
+
+## 正文 3D 模型
+
+正文与页眉页脚里的 `am3d` AlternateContent。只认 GLB。不进 `pictures`。Fallback 海报不进 `pictures`。不算 3D 渲染引擎。xlsx / pptx 见 X3d / P3d（C7）。
+手测脚本 `manual-check/office/cases/docx-model3d.ps1`。编号用 D3d。
+Word 行内 COM 认 `Type=19`（`wdInlineShape3DModel`）。注内、批注内本期不插。
+
+- **D3d1**
+  - 检查：插入
+  - 通过标准：`insertModel3d` 把本地 GLB 写入正文段后，树上 `contentType` 为 `model/gltf.binary`，不进 `pictures`，Word 无修复
+  - 行内 `Type=19`，包内有 `.glb`、XML 含 `am3d:model3d`
+- **D3d2**
+  - 检查：导出
+  - 通过标准：对该 3D id `exportMedia` 得到 GLB 原字节，`contentType` 为 `model/gltf.binary`
+- **D3d3**
+  - 检查：create
+  - 通过标准：`create` 的 `model3ds[].file` 指向 GLB 后 Word 无修复，树上 `contentType` 为 `model/gltf.binary`
+- **D3d4**
+  - 检查：替换
+  - 通过标准：`replaceModel3d` 换成另一份 GLB 后 id 不变，导出是新字节，Word 无修复
+- **D3d5**
+  - 检查：页眉
+  - 通过标准：往页眉段落插 GLB，容器 `model3ds` 的 `contentType` 为 `model/gltf.binary`，根上 `model3dCount` 仍为 0，无修复
+- **D3d6**
+  - 检查：拒错
+  - 通过标准：不是 GLB 的 `file` 报 `InvalidField`。不强制开 Word
 
 ## 墨迹画布
 

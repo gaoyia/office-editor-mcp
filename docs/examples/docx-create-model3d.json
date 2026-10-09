@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "action": "create",
+  "path": "note.model3d.docx",
+  "document": {
+    "paragraphs": [
+      { "style": "Heading1", "text": "标题" },
+      { "text": "hello", "model3ds": [{ "file": "model.glb" }] }
+    ]
+  }
+}

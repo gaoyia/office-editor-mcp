@@ -181,7 +181,11 @@ pub fn parse_para_id(id: &str, op_index: usize) -> Result<ParaTarget, Error> {
 
 pub fn parse_para_id_at(id: &str, path: &str) -> Result<ParaTarget, Error> {
     let path = path.to_string();
-    if id.contains("/pic:") || id.contains("/cxn:") || id.contains("/ink:") {
+    if id.contains("/pic:")
+        || id.contains("/cxn:")
+        || id.contains("/ink:")
+        || id.contains("/model3d:")
+    {
         return Err(Error::with_path(
             ErrorKind::InvalidId {
                 reason: IdReason::ParaPrefix,
@@ -284,7 +288,11 @@ pub fn parse_para_id_at(id: &str, path: &str) -> Result<ParaTarget, Error> {
 }
 
 pub fn parse_host_para_id_at(id: &str, path: &str) -> Result<HostPara, Error> {
-    if id.contains("/txbx:") || id.contains("/pic:") || id.contains("/cxn:") || id.contains("/ink:")
+    if id.contains("/txbx:")
+        || id.contains("/pic:")
+        || id.contains("/cxn:")
+        || id.contains("/ink:")
+        || id.contains("/model3d:")
     {
         return Err(Error::with_path(
             ErrorKind::InvalidId {
@@ -302,7 +310,11 @@ pub fn parse_txbx_id(id: &str, op_index: usize) -> Result<TxbxTarget, Error> {
 
 pub fn parse_txbx_id_at(id: &str, path: &str) -> Result<TxbxTarget, Error> {
     let path = path.to_string();
-    if id.contains("/pic:") || id.contains("/cxn:") || id.contains("/ink:") {
+    if id.contains("/pic:")
+        || id.contains("/cxn:")
+        || id.contains("/ink:")
+        || id.contains("/model3d:")
+    {
         return Err(Error::with_path(
             ErrorKind::InvalidId {
                 reason: IdReason::TxbxPrefix,

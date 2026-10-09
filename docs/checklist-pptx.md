@@ -5,7 +5,7 @@
 检查前用 create 或 apply 在本机生成文件，不要用改过扩展名的 zip 目录冒充。
 本机若 `PowerPoint.Application` 被 WPS 抢走，直接启动 `POWERPNT.EXE` 再挂 COM，不要走被抢的 ProgID。Office 16 的对象模型在 `mdiClass` 上。
 
-C、I、A、Pp、Pvg、Pem、Pc、Psa、Pn、Pcm、Pm、Ps、Sg、Pt、Tn、Tr、Am、Aw、Mm、Mw、Ts、Ho、Phl、Phr、Pcip、Pmd、Psc、Cs、Po、Cr、Pz、Pw、
+C、I、A、Pp、Pvg、Pem、P3d、Pc、Psa、Pn、Pcm、Pm、Ps、Sg、Pt、Tn、Tr、Am、Aw、Mm、Mw、Ts、Ho、Phl、Phr、Pcip、Pmd、Psc、Cs、Po、Cr、Pz、Pw、
 Pf 各组由 `manual-check/office/cases/pptx-*.ps1` 自动判定，
 跑 `pwsh -File manual-check\office\run.ps1 -Case 'pptx-*'` 即可复现。O1 已放弃，与 xlsx / docx 相同。
 
@@ -29,6 +29,7 @@ Ps1–Ps5、Sg1–Sg5、Pt1–Pt6、Tn1–Tn5、Am1–Am5、Mm1–Mm5、Ho1–Ho
 同日补跑 `pptx-comment-pics.ps1`，Pcip1–Pcip5 通过。2026-09-29 补跑 `pptx-charts-rare.ps1`，Pq1–Pq5 通过。
 2026-10-09 补跑 `pptx-svg.ps1`，Pvg1–Pvg6 通过。PowerPoint COM `Type=28`，96×48 对应 914400×457200 EMU。
 同日补跑 `pptx-emf.ps1`，Pem1–Pem6 通过。PowerPoint COM `Type=13`，无 Repair。
+同日补跑 `pptx-model3d.ps1`，P3d1–P3d6 通过。PowerPoint COM `Type=30`，无 Repair。
 
 - **C1** ✅
   - PowerPoint 16.0 能打开 `manual-check/office/out/pptx-create.pptx`，标题栏无 Repair
@@ -80,6 +81,13 @@ Ps1–Ps5、Sg1–Sg5、Pt1–Pt6、Tn1–Tn5、Am1–Am5、Mm1–Mm5、Ho1–Ho
   - 换成 PNG 后没有 `contentType`、包内没有 `.emf`
   - 备注 TIFF 图 id 为 `slide:1/notes/pic:5`
   - 非图片 `file` 得 `InvalidField`
+- **P3d1–P3d6** ✅
+  - PowerPoint 16.0：`pptx-model3d.ps1`，6 PASS / 0 FAIL
+  - 插入 / create 树上 `contentType` 为 `model/gltf.binary`，不进 `pictures`，COM `Type=30`，无 Repair
+  - `exportMedia` 为 GLB 原字节
+  - `replaceModel3d` 后 id 不变
+  - 备注 `slide:1/notes` 插 3D 后根上 `model3dCount` 仍为 0
+  - 非 GLB `file` 得 `InvalidField`
 - **Pc1–Pc7** ✅
   - PowerPoint 16.0：无 `charts` 时 `chartCount=1`
   - 名单 id 为 `slide:1/chart:4`
@@ -472,6 +480,21 @@ COM 认 `Type=13`（`msoPicture`），不是 SVG 的 `28`。
 | Pem4 | 换成位图 | `replacePicture` 换成 PNG 后没有 `contentType`，包内没有 `.emf`，无修复 |
 | Pem5 | 备注 | 往 `slide:1/notes` 插 TIFF 后，备注图名单末尾 `contentType` 为 `image/tiff`，无修复 |
 | Pem6 | 拒错 | `file` 不是图片得 `InvalidField`，未写文件。不强制开 PowerPoint |
+
+## 幻灯片 3D 模型
+
+幻灯片与备注页上的 `am3d` AlternateContent。只认 GLB。不进 `pictures`。Fallback 海报不进 `pictures`。不算 3D 渲染引擎。
+手测脚本 `manual-check/office/cases/pptx-model3d.ps1`。编号用 P3d。
+COM 认 `Type=30`（`mso3DModel`）。批注内本期不插。
+
+| 序号 | 检查 | 通过标准 |
+| --- | --- | --- |
+| P3d1 | 插入 | `insertModel3d` 把本地 GLB 写入第一页后，树上 `contentType` 为 `model/gltf.binary`，不进 `pictures`，无修复。COM `Type=30` |
+| P3d2 | 导出 | 对该 3D id `exportMedia` 得到 GLB 原字节，`contentType` 为 `model/gltf.binary` |
+| P3d3 | create | `slides[].model3ds[].file` 指向 GLB 后，树上 `contentType` 为 `model/gltf.binary`，不进 `pictures`，无修复 |
+| P3d4 | 替换 | `replaceModel3d` 换成另一份 GLB 后 id 不变，导出是新字节，无修复 |
+| P3d5 | 备注 | 往 `slide:1/notes` 插 GLB 后，备注 `model3ds` 末尾 `contentType` 为 `model/gltf.binary`，根上 `model3dCount` 仍为 0，无修复 |
+| P3d6 | 拒错 | `file` 不是 GLB 得 `InvalidField`，未写文件。不强制开 PowerPoint |
 
 ## 幻灯片图表
 

@@ -172,6 +172,7 @@ fn inspect_has_notes_without_notes_object() {
             "fieldCount",
             "tableCount",
             "oleObjectCount",
+            "model3dCount",
             "zoomCount",
             "connectorCount",
             "animCount"
@@ -214,6 +215,7 @@ fn set_notes_text_creates_parts_and_inspects() {
             "chartCount",
             "smartArtCount",
             "tableCount",
+            "model3dCount",
             "shapes"
         ]
     );
@@ -353,6 +355,7 @@ fn insert_picture_on_notes_does_not_join_slide_count() {
             "chartCount",
             "smartArtCount",
             "tableCount",
+            "model3dCount",
             "pictures",
             "shapes"
         ]

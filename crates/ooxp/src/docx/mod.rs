@@ -18,6 +18,7 @@ mod inspect;
 mod link;
 mod math;
 mod math_expr;
+mod model3d;
 mod notes;
 mod numbering;
 mod ole;

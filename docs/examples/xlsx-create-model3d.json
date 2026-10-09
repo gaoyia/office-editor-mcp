@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "action": "create",
+  "path": "book.model3d.xlsx",
+  "format": "xlsx",
+  "workbook": {
+    "sheets": [
+      {
+        "name": "Sheet1",
+        "cells": [{ "ref": "A1", "value": 1 }],
+        "model3ds": [{ "file": "model.glb", "from": "B2" }]
+      }
+    ]
+  }
+}
