@@ -817,6 +817,9 @@ define_error_kinds! {
     InvalidAnimTrigger => vec![Self::InvalidAnimTrigger],
     InvalidAnimDelay => vec![Self::InvalidAnimDelay],
     InvalidAnimDur => vec![Self::InvalidAnimDur],
+    InvalidAnimRepeat => vec![Self::InvalidAnimRepeat],
+    InvalidAnimPara => vec![Self::InvalidAnimPara],
+    InvalidAnimMoveIndex => vec![Self::InvalidAnimMoveIndex],
     NeedAnimSetField => vec![Self::NeedAnimSetField],
     AnimNeedEffectDur => vec![Self::AnimNeedEffectDur],
     InvalidTransitionDur => vec![Self::InvalidTransitionDur],
@@ -1765,6 +1768,9 @@ impl ErrorKind {
             | Self::InvalidAnimTrigger
             | Self::InvalidAnimDelay
             | Self::InvalidAnimDur
+            | Self::InvalidAnimRepeat
+            | Self::InvalidAnimPara
+            | Self::InvalidAnimMoveIndex
             | Self::NeedAnimSetField
             | Self::AnimNeedEffectDur
             | Self::InvalidTransitionDur

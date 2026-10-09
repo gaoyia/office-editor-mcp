@@ -907,7 +907,7 @@ DrawingML 表（`a:tbl` 包在 `p:graphicFrame` 里）。不要把表编进 `sha
 
 ## 动画写入
 
-按模板给对象加、删预设进入淡入。不实现放映引擎，也不接受整棵时间轴 JSON。脚本：`manual-check/office/cases/pptx-anim-write.ps1`。编号用 Aw。
+按模板给对象加、删、改预设效果。不实现放映引擎，也不接受整棵时间轴 JSON。脚本：`manual-check/office/cases/pptx-anim-write.ps1`。编号用 Aw。
 
 - **Aw1**
   - 检查：插入
@@ -959,6 +959,49 @@ DrawingML 表（`a:tbl` 包在 `p:graphicFrame` 里）。不要把表编进 `sha
   - `scope.masters` 与 `scope.timing` 同开时母版或版式 `timing` 一条
   - slideMaster 或 slideLayout 有 `<p:timing>`
   - COM `SlideMaster.TimeLine.MainSequence.Count` 为 1（点在母版上时），无 Repair
+
+- **Aw11**
+  - 检查：进入 / 强调 / 退出 / 路径预设
+  - 通过标准：✅ create 产物分别 `insertAnim` `appear`、`flyIn`、`wipe`、`split`、`zoom`、`spin`、`growShrink`、`fadeOut`、`flyOut`、`wipeOut`、`pathRight`
+  - inspect `type` 与写入相同
+  - PowerPoint 16.0 打开无 Repair
+- **Aw12**
+  - 检查：setAnim 改 type
+  - 通过标准：✅ 先插 `fade`，再 `setAnim` `type=spin`
+  - inspect `type` 为 `spin`
+  - 无 Repair
+- **Aw13**
+  - 检查：repeat
+  - 通过标准：✅ `insertAnim` `repeat=3` 后 inspect `repeat` 为 3，XML `repeatCount="3000"`
+  - `setAnim` `repeat=null` 后 inspect `repeat` 为 `null`
+  - 无 Repair
+- **Aw14**
+  - 检查：效果声音
+  - 通过标准：✅ `insertAnim` 带本地 WAV 后 inspect `sound` 为文件名
+  - 包内有 `/ppt/media/…wav`
+  - `setAnim` `sound=null` 后 `sound` 为 `null`，无人引用则媒体部件删掉
+  - 无 Repair
+- **Aw15**
+  - 检查：按段
+  - 通过标准：✅ 两段文字的框 `insertAnim` `para=2` 后 inspect `para` 为 2，XML 有 `pRg st="1"`
+  - 无 Repair
+- **Aw16**
+  - 检查：点对象触发
+  - 通过标准：✅ `insertAnim` `trigger=clickOn` `clickOn` 为第二框
+  - inspect `trigger` 为 `clickOn`，`clickOn` 对上第二框
+  - COM `InteractiveSequences.Count` 为 1
+  - 无 Repair
+- **Aw17**
+  - 检查：moveAnim
+  - 通过标准：✅ 先插两条，再 `moveAnim` 第二条 `index=1`
+  - inspect 第一条 `target` 变成原先第二条
+  - 无 Repair
+- **Aw18**
+  - 检查：拒错
+  - 通过标准：✅ `type` 不在白名单得 `InvalidField`
+  - `setTiming` 仍为 `UnsupportedOp`
+  - xlsx / docx 发 `moveAnim` 得 `InvalidField`
+  - 均未写文件
 
 ## 母版与版式
 

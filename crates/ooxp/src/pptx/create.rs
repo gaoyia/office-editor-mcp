@@ -976,6 +976,17 @@ fn attach_anims(pkg: &mut Package, slides: &[NewSlide]) -> Result<(), Error> {
                 anim.host,
                 &format!("presentation.slides[{i}].anims[{j}]"),
             )?;
+            let click_on = match anim.click_on {
+                Some(host) => Some(resolve_anim_host(
+                    pkg,
+                    &doc.root,
+                    &part,
+                    n,
+                    host,
+                    &format!("presentation.slides[{i}].anims[{j}].clickOn"),
+                )?),
+                None => None,
+            };
             timing::insert(
                 pkg,
                 &metas,
@@ -983,9 +994,16 @@ fn attach_anims(pkg: &mut Package, slides: &[NewSlide]) -> Result<(), Error> {
                 &pres.root,
                 &host_id,
                 &AnimTarget::Slide { slide: n },
-                &anim.trigger,
-                anim.delay,
-                anim.dur,
+                timing::AnimWrite {
+                    type_name: &anim.type_name,
+                    trigger: &anim.trigger,
+                    delay: anim.delay,
+                    dur: anim.dur,
+                    repeat: anim.repeat,
+                    sound: anim.sound.as_deref(),
+                    para: anim.para,
+                    click_on: click_on.as_deref(),
+                },
                 j,
             )?;
         }

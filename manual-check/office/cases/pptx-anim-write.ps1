@@ -1,4 +1,4 @@
-# pptx 动画写入：docs/checklist-pptx.md 的 Aw1–Aw10。
+# pptx 动画写入：docs/checklist-pptx.md 的 Aw1–Aw18。
 # Aw2 的源文件：PowerPoint 亲手另存，第一页进入淡入。不要只用库 create 产物当带动画的唯一样例。
 
 $ErrorActionPreference = 'Stop'
@@ -53,6 +53,48 @@ function Get-PptMainSeqCount($slide) {
         Release-Com $seq
         Release-Com $tl
     }
+}
+
+function Get-PptInteractiveCount($slide) {
+    $tl = $slide.TimeLine
+    $seq = $tl.InteractiveSequences
+    try { return [int]$seq.Count }
+    finally {
+        Release-Com $seq
+        Release-Com $tl
+    }
+}
+
+function New-TinyWav([string]$path) {
+    $dataLen = 8
+    $buf = New-Object System.Collections.Generic.List[byte]
+    $utf = [Text.Encoding]::ASCII
+    [void]$buf.AddRange($utf.GetBytes('RIFF'))
+    [void]$buf.AddRange([BitConverter]::GetBytes([uint32](36 + $dataLen)))
+    [void]$buf.AddRange($utf.GetBytes('WAVE'))
+    [void]$buf.AddRange($utf.GetBytes('fmt '))
+    [void]$buf.AddRange([BitConverter]::GetBytes([uint32]16))
+    [void]$buf.AddRange([BitConverter]::GetBytes([uint16]1))
+    [void]$buf.AddRange([BitConverter]::GetBytes([uint16]1))
+    [void]$buf.AddRange([BitConverter]::GetBytes([uint32]8000))
+    [void]$buf.AddRange([BitConverter]::GetBytes([uint32]16000))
+    [void]$buf.AddRange([BitConverter]::GetBytes([uint16]2))
+    [void]$buf.AddRange([BitConverter]::GetBytes([uint16]16))
+    [void]$buf.AddRange($utf.GetBytes('data'))
+    [void]$buf.AddRange([BitConverter]::GetBytes([uint32]$dataLen))
+    [void]$buf.AddRange([byte[]](0, 0, 0, 0, 0, 0, 0, 0))
+    [IO.File]::WriteAllBytes($path, $buf.ToArray())
+}
+
+function Zip-HasMediaWav([string]$zipPath) {
+    $zip = [IO.Compression.ZipFile]::OpenRead($zipPath)
+    try {
+        foreach ($e in $zip.Entries) {
+            if ($e.FullName -like 'ppt/media/*.wav') { return $true }
+        }
+        return $false
+    }
+    finally { $zip.Dispose() }
 }
 
 function Add-PptFadeIn($slide) {
@@ -517,4 +559,297 @@ $aw10ok = ($cap10 -notmatch 'Repair') `
     -and ($xml10 -match '<p:timing') `
     -and ($com10 -eq 1)
 Add-Check 'pptx-Aw10' $aw10ok "cap=$cap10 ph=$phId count=$($masterList.Count) com=$com10 hasTiming=$($xml10 -match '<p:timing')"
+
+# Aw11：白名单预设各写一条，inspect type 对上，无 Repair。
+$aw11host = Get-OutPath 'pptx-anim-preset-host.pptx'
+Close-PptPresByPath $ppt $aw11host
+if (Test-Path $aw11host) { Remove-Item -Force $aw11host }
+$presetShapes = 1..11 | ForEach-Object { @{ text = "框$_" } }
+Invoke-OoxpRequest @{
+    schemaVersion = 1; action = 'create'
+    path = $aw11host.Replace('\', '/')
+    presentation = @{ slides = @(@{ shapes = @($presetShapes) }) }
+} 'pptx-aw-preset-host' | Out-Null
+$tree11h = Invoke-OoxpTree @{
+    schemaVersion = 1; action = 'inspect'
+    path = $aw11host.Replace('\', '/'); format = 'pptx'
+    scope = @{ slide = 1 }
+} 'pptx-aw-preset-host-inspect'
+$presetTypes = @(
+    'appear', 'flyIn', 'wipe', 'split', 'zoom', 'spin', 'growShrink',
+    'fadeOut', 'flyOut', 'wipeOut', 'pathRight'
+)
+$aw11ops = @()
+for ($i = 0; $i -lt $presetTypes.Count; $i++) {
+    $aw11ops += @{
+        op = 'insertAnim'
+        id = [string]$tree11h.slides[0].shapes[$i].id
+        type = $presetTypes[$i]
+    }
+}
+$aw11 = Get-OutPath 'pptx-anim-preset-all.pptx'
+Close-PptPresByPath $ppt $aw11
+if (Test-Path $aw11) { Remove-Item -Force $aw11 }
+Invoke-OoxpRequest @{
+    schemaVersion = 1; action = 'apply'
+    path = $aw11host.Replace('\', '/')
+    output = $aw11.Replace('\', '/')
+    ops = $aw11ops
+} 'pptx-aw-preset' | Out-Null
+$tree11 = Invoke-OoxpTree @{
+    schemaVersion = 1; action = 'inspect'
+    path = $aw11.Replace('\', '/'); format = 'pptx'
+    scope = @{ timing = $true; slide = 1 }
+} 'pptx-aw-preset-inspect'
+$list11 = @($tree11.slides[0].timing)
+$typesOk = ($list11.Count -eq 11)
+for ($i = 0; $i -lt $presetTypes.Count; $i++) {
+    if ([string]$list11[$i].type -ne $presetTypes[$i]) { $typesOk = $false }
+}
+$pres11 = Open-PptPres $ppt $aw11
+$cap11 = Get-PptCaption $pres11
+Close-PptPres $pres11
+$aw11ok = ($cap11 -notmatch 'Repair') -and $typesOk
+Add-Check 'pptx-Aw11' $aw11ok "cap=$cap11 count=$($list11.Count) types=$typesOk"
+
+# Aw12：setAnim 改 type=spin。
+$aw12 = Get-OutPath 'pptx-anim-set-type.pptx'
+Close-PptPresByPath $ppt $aw12
+if (Test-Path $aw12) { Remove-Item -Force $aw12 }
+Invoke-OoxpRequest @{
+    schemaVersion = 1; action = 'apply'
+    path = $aw1.Replace('\', '/')
+    output = $aw12.Replace('\', '/')
+    ops = @(@{ op = 'setAnim'; id = 'slide:1/anim:1'; type = 'spin' })
+} 'pptx-aw-set-type' | Out-Null
+$tree12 = Invoke-OoxpTree @{
+    schemaVersion = 1; action = 'inspect'
+    path = $aw12.Replace('\', '/'); format = 'pptx'
+    scope = @{ timing = $true; slide = 1 }
+} 'pptx-aw-set-type-inspect'
+$pres12 = Open-PptPres $ppt $aw12
+$cap12 = Get-PptCaption $pres12
+Close-PptPres $pres12
+$aw12ok = ($cap12 -notmatch 'Repair') -and ([string]$tree12.slides[0].timing[0].type -eq 'spin')
+Add-Check 'pptx-Aw12' $aw12ok "cap=$cap12 type=$($tree12.slides[0].timing[0].type)"
+
+# Aw13：repeat=3 再改成无限。
+$aw13a = Get-OutPath 'pptx-anim-repeat.pptx'
+Close-PptPresByPath $ppt $aw13a
+if (Test-Path $aw13a) { Remove-Item -Force $aw13a }
+Invoke-OoxpRequest @{
+    schemaVersion = 1; action = 'apply'
+    path = $hostPath.Replace('\', '/')
+    output = $aw13a.Replace('\', '/')
+    ops = @(@{ op = 'insertAnim'; id = $shape1; type = 'fade'; repeat = 3 })
+} 'pptx-aw-repeat' | Out-Null
+$tree13a = Invoke-OoxpTree @{
+    schemaVersion = 1; action = 'inspect'
+    path = $aw13a.Replace('\', '/'); format = 'pptx'
+    scope = @{ timing = $true; slide = 1 }
+} 'pptx-aw-repeat-inspect'
+$xml13a = Get-ZipEntryText $aw13a 'ppt/slides/slide1.xml'
+$aw13b = Get-OutPath 'pptx-anim-repeat-inf.pptx'
+Close-PptPresByPath $ppt $aw13b
+if (Test-Path $aw13b) { Remove-Item -Force $aw13b }
+Invoke-OoxpRequest @{
+    schemaVersion = 1; action = 'apply'
+    path = $aw13a.Replace('\', '/')
+    output = $aw13b.Replace('\', '/')
+    ops = @(@{ op = 'setAnim'; id = 'slide:1/anim:1'; repeat = $null })
+} 'pptx-aw-repeat-inf' | Out-Null
+$tree13b = Invoke-OoxpTree @{
+    schemaVersion = 1; action = 'inspect'
+    path = $aw13b.Replace('\', '/'); format = 'pptx'
+    scope = @{ timing = $true; slide = 1 }
+} 'pptx-aw-repeat-inf-inspect'
+$pres13 = Open-PptPres $ppt $aw13b
+$cap13 = Get-PptCaption $pres13
+Close-PptPres $pres13
+$rep13 = $tree13b.slides[0].timing[0].repeat
+$aw13ok = ($cap13 -notmatch 'Repair') `
+    -and ([int]$tree13a.slides[0].timing[0].repeat -eq 3) `
+    -and ($xml13a -match 'repeatCount="3000"') `
+    -and ($null -eq $rep13)
+Add-Check 'pptx-Aw13' $aw13ok "cap=$cap13 n3=$($tree13a.slides[0].timing[0].repeat) inf=$rep13 xml=$($xml13a -match 'repeatCount=`"3000`"')"
+
+# Aw14：效果声音。
+$wav = Get-OutPath 'pptx-anim-beep.wav'
+New-TinyWav $wav
+$aw14a = Get-OutPath 'pptx-anim-sound.pptx'
+Close-PptPresByPath $ppt $aw14a
+if (Test-Path $aw14a) { Remove-Item -Force $aw14a }
+Invoke-OoxpRequest @{
+    schemaVersion = 1; action = 'apply'
+    path = $hostPath.Replace('\', '/')
+    output = $aw14a.Replace('\', '/')
+    ops = @(@{ op = 'insertAnim'; id = $shape1; type = 'fade'; sound = $wav.Replace('\', '/') })
+} 'pptx-aw-sound' | Out-Null
+$tree14a = Invoke-OoxpTree @{
+    schemaVersion = 1; action = 'inspect'
+    path = $aw14a.Replace('\', '/'); format = 'pptx'
+    scope = @{ timing = $true; slide = 1 }
+} 'pptx-aw-sound-inspect'
+$soundName = [string]$tree14a.slides[0].timing[0].sound
+$aw14b = Get-OutPath 'pptx-anim-sound-clear.pptx'
+Close-PptPresByPath $ppt $aw14b
+if (Test-Path $aw14b) { Remove-Item -Force $aw14b }
+Invoke-OoxpRequest @{
+    schemaVersion = 1; action = 'apply'
+    path = $aw14a.Replace('\', '/')
+    output = $aw14b.Replace('\', '/')
+    ops = @(@{ op = 'setAnim'; id = 'slide:1/anim:1'; sound = $null })
+} 'pptx-aw-sound-clear' | Out-Null
+$tree14b = Invoke-OoxpTree @{
+    schemaVersion = 1; action = 'inspect'
+    path = $aw14b.Replace('\', '/'); format = 'pptx'
+    scope = @{ timing = $true; slide = 1 }
+} 'pptx-aw-sound-clear-inspect'
+$pres14 = Open-PptPres $ppt $aw14a
+$cap14 = Get-PptCaption $pres14
+Close-PptPres $pres14
+$aw14ok = ($cap14 -notmatch 'Repair') `
+    -and ($soundName -eq [IO.Path]::GetFileName($wav)) `
+    -and (Zip-HasMediaWav $aw14a) `
+    -and ($null -eq $tree14b.slides[0].timing[0].sound) `
+    -and (-not (Zip-HasMediaWav $aw14b))
+Add-Check 'pptx-Aw14' $aw14ok "cap=$cap14 sound=$soundName hasWav=$(Zip-HasMediaWav $aw14a) cleared=$($tree14b.slides[0].timing[0].sound) left=$(Zip-HasMediaWav $aw14b)"
+
+# Aw15：两段文字 para=2。
+$aw15src = Get-OutPath 'pptx-anim-para-src.pptx'
+Close-PptPresByPath $ppt $aw15src
+if (Test-Path $aw15src) { Remove-Item -Force $aw15src }
+Copy-Item -Force $hostPath $aw15src
+$pres15s = Open-PptPres $ppt $aw15src
+$s15s = Get-PptSlide $pres15s 1
+$box15 = Get-PptShape $s15s 1
+$tf15 = $box15.TextFrame
+$tr15 = $tf15.TextRange
+$tr15.Text = "第一段`r第二段"
+$pres15s.Save()
+Release-Com $tr15
+Release-Com $tf15
+Release-Com $box15
+Release-Com $s15s
+Close-PptPres $pres15s
+$aw15 = Get-OutPath 'pptx-anim-para.pptx'
+Close-PptPresByPath $ppt $aw15
+if (Test-Path $aw15) { Remove-Item -Force $aw15 }
+Invoke-OoxpRequest @{
+    schemaVersion = 1; action = 'apply'
+    path = $aw15src.Replace('\', '/')
+    output = $aw15.Replace('\', '/')
+    ops = @(@{ op = 'insertAnim'; id = $shape1; type = 'fade'; para = 2 })
+} 'pptx-aw-para' | Out-Null
+$tree15 = Invoke-OoxpTree @{
+    schemaVersion = 1; action = 'inspect'
+    path = $aw15.Replace('\', '/'); format = 'pptx'
+    scope = @{ timing = $true; slide = 1 }
+} 'pptx-aw-para-inspect'
+$xml15 = Get-ZipEntryText $aw15 'ppt/slides/slide1.xml'
+$pres15 = Open-PptPres $ppt $aw15
+$cap15 = Get-PptCaption $pres15
+Close-PptPres $pres15
+$aw15ok = ($cap15 -notmatch 'Repair') `
+    -and ([int]$tree15.slides[0].timing[0].para -eq 2) `
+    -and ($xml15 -match 'st="1"')
+Add-Check 'pptx-Aw15' $aw15ok "cap=$cap15 para=$($tree15.slides[0].timing[0].para) xml=$($xml15 -match 'st=`"1`"')"
+
+# Aw16：点对象触发。
+$aw16 = Get-OutPath 'pptx-anim-clickon.pptx'
+Close-PptPresByPath $ppt $aw16
+if (Test-Path $aw16) { Remove-Item -Force $aw16 }
+Invoke-OoxpRequest @{
+    schemaVersion = 1; action = 'apply'
+    path = $hostPath.Replace('\', '/')
+    output = $aw16.Replace('\', '/')
+    ops = @(@{
+        op = 'insertAnim'; id = $shape1; type = 'fade'
+        trigger = 'clickOn'; clickOn = $shape2
+    })
+} 'pptx-aw-clickon' | Out-Null
+$tree16 = Invoke-OoxpTree @{
+    schemaVersion = 1; action = 'inspect'
+    path = $aw16.Replace('\', '/'); format = 'pptx'
+    scope = @{ timing = $true; slide = 1 }
+} 'pptx-aw-clickon-inspect'
+$list16 = @($tree16.slides[0].timing)
+$pres16 = Open-PptPres $ppt $aw16
+$cap16 = Get-PptCaption $pres16
+$s16 = Get-PptSlide $pres16 1
+$ia16 = Get-PptInteractiveCount $s16
+Release-Com $s16
+Close-PptPres $pres16
+$aw16ok = ($cap16 -notmatch 'Repair') `
+    -and ($list16.Count -eq 1) `
+    -and ([string]$list16[0].trigger -eq 'clickOn') `
+    -and ([string]$list16[0].clickOn -eq $shape2) `
+    -and ($ia16 -eq 1)
+Add-Check 'pptx-Aw16' $aw16ok "cap=$cap16 trigger=$($list16[0].trigger) clickOn=$($list16[0].clickOn) ia=$ia16"
+
+# Aw17：moveAnim 第二条到 1。
+$aw17two = Get-OutPath 'pptx-anim-move-two.pptx'
+$aw17 = Get-OutPath 'pptx-anim-move.pptx'
+Close-PptPresByPath $ppt $aw17two
+Close-PptPresByPath $ppt $aw17
+if (Test-Path $aw17two) { Remove-Item -Force $aw17two }
+if (Test-Path $aw17) { Remove-Item -Force $aw17 }
+Invoke-OoxpRequest @{
+    schemaVersion = 1; action = 'apply'
+    path = $hostPath.Replace('\', '/')
+    output = $aw17two.Replace('\', '/')
+    ops = @(
+        @{ op = 'insertAnim'; id = $shape1; type = 'fade' }
+        @{ op = 'insertAnim'; id = $shape2; type = 'fade' }
+    )
+} 'pptx-aw-move-two' | Out-Null
+Invoke-OoxpRequest @{
+    schemaVersion = 1; action = 'apply'
+    path = $aw17two.Replace('\', '/')
+    output = $aw17.Replace('\', '/')
+    ops = @(@{ op = 'moveAnim'; id = 'slide:1/anim:2'; index = 1 })
+} 'pptx-aw-move' | Out-Null
+$tree17 = Invoke-OoxpTree @{
+    schemaVersion = 1; action = 'inspect'
+    path = $aw17.Replace('\', '/'); format = 'pptx'
+    scope = @{ timing = $true; slide = 1 }
+} 'pptx-aw-move-inspect'
+$list17 = @($tree17.slides[0].timing)
+$pres17 = Open-PptPres $ppt $aw17
+$cap17 = Get-PptCaption $pres17
+Close-PptPres $pres17
+$aw17ok = ($cap17 -notmatch 'Repair') `
+    -and ($list17.Count -eq 2) `
+    -and ([string]$list17[0].target -eq $shape2)
+Add-Check 'pptx-Aw17' $aw17ok "cap=$cap17 first=$($list17[0].target) want=$shape2"
+
+# Aw18：拒错。xlsx / docx 在 Aw5 已建。
+$badType18 = Get-OutPath 'pptx-anim-fail-type2.pptx'
+$badOp18 = Get-OutPath 'pptx-anim-fail-settiming.pptx'
+$failType18 = Invoke-OoxpExpectFail @{
+    schemaVersion = 1; action = 'apply'
+    path = $hostPath.Replace('\', '/'); output = $badType18.Replace('\', '/')
+    ops = @(@{ op = 'insertAnim'; id = $shape1; type = 'blinds' })
+} 'pptx-aw-fail-type2'
+$failOp18 = Invoke-OoxpExpectFail @{
+    schemaVersion = 1; action = 'apply'
+    path = $hostPath.Replace('\', '/'); output = $badOp18.Replace('\', '/')
+    ops = @(@{ op = 'setTiming'; id = 'slide:1' })
+} 'pptx-aw-fail-settiming'
+$failX18 = Invoke-OoxpExpectFail @{
+    schemaVersion = 1; action = 'apply'
+    path = $xlsx.Replace('\', '/'); output = (Get-OutPath 'pptx-anim-fail-move.xlsx').Replace('\', '/')
+    ops = @(@{ op = 'moveAnim'; id = 'slide:1/anim:1'; index = 1 })
+} 'pptx-aw-fail-move-xlsx'
+$failD18 = Invoke-OoxpExpectFail @{
+    schemaVersion = 1; action = 'apply'
+    path = $docx.Replace('\', '/'); output = (Get-OutPath 'pptx-anim-fail-move.docx').Replace('\', '/')
+    ops = @(@{ op = 'moveAnim'; id = 'slide:1/anim:1'; index = 1 })
+} 'pptx-aw-fail-move-docx'
+$aw18ok = ((Get-PptErrorCode $failType18) -eq 'InvalidField') -and (-not (Test-Path $badType18)) `
+    -and ((Get-PptErrorCode $failOp18) -eq 'UnsupportedOp') -and (-not (Test-Path $badOp18)) `
+    -and ((Get-PptErrorCode $failX18) -eq 'InvalidField') `
+    -and ((Get-PptErrorCode $failD18) -eq 'InvalidField')
+Add-Check 'pptx-Aw18' $aw18ok "type=$(Get-PptErrorCode $failType18) op=$(Get-PptErrorCode $failOp18) xlsx=$(Get-PptErrorCode $failX18) docx=$(Get-PptErrorCode $failD18)"
+
 

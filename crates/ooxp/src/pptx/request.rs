@@ -21,6 +21,7 @@ use super::section;
 use super::shape;
 use super::smartart;
 use super::table;
+use super::timing;
 use super::transition;
 use super::zoom;
 
@@ -196,9 +197,14 @@ impl AnimTarget {
 pub struct InsertAnimOp {
     pub id: String,
     pub target: AnimTarget,
+    pub type_name: String,
     pub trigger: String,
     pub delay: u32,
     pub dur: u32,
+    pub repeat: timing::RepeatWrite,
+    pub sound: Option<String>,
+    pub para: Option<u32>,
+    pub click_on: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -213,9 +219,22 @@ pub struct SetAnimOp {
     pub id: String,
     pub target: AnimTarget,
     pub index: usize,
+    pub type_name: Option<String>,
     pub trigger: Option<String>,
     pub delay: Option<u32>,
     pub dur: Option<u32>,
+    pub repeat: Option<timing::RepeatWrite>,
+    pub sound: Option<Option<String>>,
+    pub para: Option<Option<u32>>,
+    pub click_on: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct MoveAnimOp {
+    pub id: String,
+    pub target: AnimTarget,
+    pub index: usize,
+    pub dest: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -440,10 +459,15 @@ pub enum CreateAnimHost {
 
 #[derive(Debug, Clone)]
 pub struct CreateAnim {
+    pub type_name: String,
     pub trigger: String,
     pub delay: u32,
     pub dur: u32,
+    pub repeat: timing::RepeatWrite,
+    pub sound: Option<String>,
+    pub para: Option<u32>,
     pub host: CreateAnimHost,
+    pub click_on: Option<CreateAnimHost>,
 }
 
 #[derive(Debug, Clone)]
@@ -930,6 +954,7 @@ pub enum PptxOp {
     InsertAnim(InsertAnimOp),
     SetAnim(SetAnimOp),
     DeleteAnim(DeleteAnimOp),
+    MoveAnim(MoveAnimOp),
     SetSlideLayout(SetSlideLayoutOp),
     InsertLayout(InsertLayoutOp),
     DeleteLayout(DeleteLayoutOp),
@@ -1249,6 +1274,7 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<PptxOp>, Error> {
             "insertAnim" => PptxOp::InsertAnim(parse_insert_anim(obj, i)?),
             "setAnim" => PptxOp::SetAnim(parse_set_anim(obj, i)?),
             "deleteAnim" => PptxOp::DeleteAnim(parse_delete_anim(obj, i)?),
+            "moveAnim" => PptxOp::MoveAnim(parse_move_anim(obj, i)?),
             "setSlideLayout" => PptxOp::SetSlideLayout(parse_set_slide_layout(obj, i)?),
             "insertLayout" => PptxOp::InsertLayout(parse_insert_layout(obj, i)?),
             "deleteLayout" => PptxOp::DeleteLayout(parse_delete_layout(obj, i)?),
@@ -2035,38 +2061,27 @@ const ANIM_HOST_KINDS: &[&str] = &[
 ];
 
 fn parse_insert_anim(obj: &Map<String, Value>, i: usize) -> Result<InsertAnimOp, Error> {
-    deny_keys(obj, i, &["op", "id", "type", "trigger", "delay", "dur"])?;
+    deny_keys(
+        obj,
+        i,
+        &[
+            "op", "id", "type", "trigger", "delay", "dur", "repeat", "sound", "para", "clickOn",
+        ],
+    )?;
     let id = require_id(obj, i)?;
     let target = parse_anim_host(&id, i)?;
-    match obj.get("type") {
-        None => {
-            return Err(Error::with_path(
-                ErrorKind::OpRequiresField {
-                    op: "insertAnim".into(),
-                    field: "type".into(),
-                },
-                format!("ops[{i}].type"),
-            ));
-        }
-        Some(Value::String(s)) if s == "fade" => {}
-        Some(Value::String(_)) => {
-            return Err(Error::with_path(
-                ErrorKind::InvalidAnimType,
-                format!("ops[{i}].type"),
-            ));
-        }
-        Some(_) => {
-            return Err(Error::with_path(
-                ErrorKind::WrongType {
-                    field: "type".into(),
-                    expected: TypeName::String,
-                },
-                format!("ops[{i}].type"),
-            ));
-        }
-    }
-    let trigger = parse_anim_trigger(obj.get("trigger"), i, true)?
-        .expect("insertAnim 省略 trigger 时默认为 click");
+    let type_name = parse_anim_type(obj.get("type"), i, true)?.ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "insertAnim".into(),
+                field: "type".into(),
+            },
+            format!("ops[{i}].type"),
+        )
+    })?;
+    let trigger = parse_anim_trigger(obj.get("trigger"), i, true)?.ok_or_else(|| {
+        Error::with_path(ErrorKind::InvalidAnimTrigger, format!("ops[{i}].trigger"))
+    })?;
     let delay = match obj.get("delay") {
         None => 0,
         Some(v) => parse_transition_ms(v, i, "delay", ErrorKind::InvalidAnimDelay, 0, 60000)?,
@@ -2075,19 +2090,61 @@ fn parse_insert_anim(obj: &Map<String, Value>, i: usize) -> Result<InsertAnimOp,
         None => 500,
         Some(v) => parse_transition_ms(v, i, "dur", ErrorKind::InvalidAnimDur, 1, 60000)?,
     };
+    let repeat = parse_anim_repeat(obj.get("repeat"), i)?;
+    let sound = parse_anim_sound(obj.get("sound"), i)?;
+    let para = parse_anim_para(obj.get("para"), i)?;
+    let click_on = match (trigger.as_str(), obj.get("clickOn")) {
+        ("clickOn", None) => {
+            return Err(Error::with_path(
+                ErrorKind::MissingField {
+                    field: "clickOn".into(),
+                },
+                format!("ops[{i}].clickOn"),
+            ));
+        }
+        ("clickOn", Some(Value::String(s))) if !s.is_empty() => Some(s.clone()),
+        ("clickOn", Some(_)) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "clickOn".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].clickOn"),
+            ));
+        }
+        (_, Some(_)) => {
+            return Err(Error::with_path(
+                ErrorKind::InvalidAnimTrigger,
+                format!("ops[{i}].clickOn"),
+            ));
+        }
+        _ => None,
+    };
     Ok(InsertAnimOp {
         id,
         target,
+        type_name,
         trigger,
         delay,
         dur,
+        repeat,
+        sound,
+        para,
+        click_on,
     })
 }
 
 fn parse_set_anim(obj: &Map<String, Value>, i: usize) -> Result<SetAnimOp, Error> {
-    deny_keys(obj, i, &["op", "id", "trigger", "delay", "dur"])?;
+    deny_keys(
+        obj,
+        i,
+        &[
+            "op", "id", "type", "trigger", "delay", "dur", "repeat", "sound", "para", "clickOn",
+        ],
+    )?;
     let id = require_id(obj, i)?;
     let (target, index) = parse_anim_id(&id, i)?;
+    let type_name = parse_anim_type(obj.get("type"), i, false)?;
     let trigger = parse_anim_trigger(obj.get("trigger"), i, false)?;
     let delay = match obj.get("delay") {
         None => None,
@@ -2111,20 +2168,233 @@ fn parse_set_anim(obj: &Map<String, Value>, i: usize) -> Result<SetAnimOp, Error
             60000,
         )?),
     };
-    if trigger.is_none() && delay.is_none() && dur.is_none() {
+    let repeat = if obj.contains_key("repeat") {
+        Some(parse_anim_repeat(obj.get("repeat"), i)?)
+    } else {
+        None
+    };
+    let sound = match obj.get("sound") {
+        None => None,
+        Some(Value::Null) => Some(None),
+        Some(v) => Some(Some(parse_anim_sound(Some(v), i)?.ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::WrongType {
+                    field: "sound".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].sound"),
+            )
+        })?)),
+    };
+    let para = match obj.get("para") {
+        None => None,
+        Some(Value::Null) => Some(None),
+        Some(v) => Some(Some(parse_anim_para(Some(v), i)?.ok_or_else(|| {
+            Error::with_path(ErrorKind::InvalidAnimPara, format!("ops[{i}].para"))
+        })?)),
+    };
+    let click_on = match obj.get("clickOn") {
+        None => None,
+        Some(Value::String(s)) if !s.is_empty() => Some(s.clone()),
+        Some(Value::String(_)) => {
+            return Err(Error::with_path(
+                ErrorKind::InvalidAnimTrigger,
+                format!("ops[{i}].clickOn"),
+            ));
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "clickOn".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].clickOn"),
+            ));
+        }
+    };
+    if type_name.is_none()
+        && trigger.is_none()
+        && delay.is_none()
+        && dur.is_none()
+        && repeat.is_none()
+        && sound.is_none()
+        && para.is_none()
+        && click_on.is_none()
+    {
         return Err(Error::with_path(
             ErrorKind::NeedAnimSetField,
             format!("ops[{i}]"),
+        ));
+    }
+    if trigger.as_deref() == Some("clickOn") && click_on.is_none() {
+        return Err(Error::with_path(
+            ErrorKind::MissingField {
+                field: "clickOn".into(),
+            },
+            format!("ops[{i}].clickOn"),
         ));
     }
     Ok(SetAnimOp {
         id,
         target,
         index,
+        type_name,
         trigger,
         delay,
         dur,
+        repeat,
+        sound,
+        para,
+        click_on,
     })
+}
+
+fn parse_move_anim(obj: &Map<String, Value>, i: usize) -> Result<MoveAnimOp, Error> {
+    deny_keys(obj, i, &["op", "id", "index"])?;
+    let id = require_id(obj, i)?;
+    let (target, index) = parse_anim_id(&id, i)?;
+    let dest = match obj.get("index") {
+        None => {
+            return Err(Error::with_path(
+                ErrorKind::OpRequiresField {
+                    op: "moveAnim".into(),
+                    field: "index".into(),
+                },
+                format!("ops[{i}].index"),
+            ));
+        }
+        Some(Value::Number(n)) => {
+            let Some(v) = n.as_u64() else {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidAnimMoveIndex,
+                    format!("ops[{i}].index"),
+                ));
+            };
+            if v < 1 {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidAnimMoveIndex,
+                    format!("ops[{i}].index"),
+                ));
+            }
+            v as usize
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "index".into(),
+                    expected: TypeName::Integer,
+                },
+                format!("ops[{i}].index"),
+            ));
+        }
+    };
+    Ok(MoveAnimOp {
+        id,
+        target,
+        index,
+        dest,
+    })
+}
+
+fn parse_anim_type(v: Option<&Value>, i: usize, required: bool) -> Result<Option<String>, Error> {
+    match v {
+        None if required => Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "insertAnim".into(),
+                field: "type".into(),
+            },
+            format!("ops[{i}].type"),
+        )),
+        None => Ok(None),
+        Some(Value::String(s)) if timing::anim_preset_ok(s) => Ok(Some(s.clone())),
+        Some(Value::String(_)) => Err(Error::with_path(
+            ErrorKind::InvalidAnimType,
+            format!("ops[{i}].type"),
+        )),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "type".into(),
+                expected: TypeName::String,
+            },
+            format!("ops[{i}].type"),
+        )),
+    }
+}
+
+fn parse_anim_repeat(v: Option<&Value>, i: usize) -> Result<timing::RepeatWrite, Error> {
+    match v {
+        None => Ok(timing::RepeatWrite::Once),
+        Some(Value::Null) => Ok(timing::RepeatWrite::Indefinite),
+        Some(Value::Number(n)) => {
+            let Some(v) = n.as_u64() else {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidAnimRepeat,
+                    format!("ops[{i}].repeat"),
+                ));
+            };
+            if !(1..=99).contains(&v) {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidAnimRepeat,
+                    format!("ops[{i}].repeat"),
+                ));
+            }
+            if v == 1 {
+                Ok(timing::RepeatWrite::Once)
+            } else {
+                Ok(timing::RepeatWrite::Times(v as u32))
+            }
+        }
+        Some(_) => Err(Error::with_path(
+            ErrorKind::InvalidAnimRepeat,
+            format!("ops[{i}].repeat"),
+        )),
+    }
+}
+
+fn parse_anim_sound(v: Option<&Value>, i: usize) -> Result<Option<String>, Error> {
+    match v {
+        None => Ok(None),
+        Some(Value::String(s)) if !s.is_empty() => Ok(Some(s.clone())),
+        Some(Value::String(_)) | Some(Value::Null) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "sound".into(),
+                expected: TypeName::String,
+            },
+            format!("ops[{i}].sound"),
+        )),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "sound".into(),
+                expected: TypeName::String,
+            },
+            format!("ops[{i}].sound"),
+        )),
+    }
+}
+
+fn parse_anim_para(v: Option<&Value>, i: usize) -> Result<Option<u32>, Error> {
+    match v {
+        None => Ok(None),
+        Some(Value::Number(n)) => {
+            let Some(v) = n.as_u64() else {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidAnimPara,
+                    format!("ops[{i}].para"),
+                ));
+            };
+            if v < 1 {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidAnimPara,
+                    format!("ops[{i}].para"),
+                ));
+            }
+            Ok(Some(v as u32))
+        }
+        Some(_) => Err(Error::with_path(
+            ErrorKind::InvalidAnimPara,
+            format!("ops[{i}].para"),
+        )),
+    }
 }
 
 fn parse_anim_trigger(
@@ -2135,7 +2405,7 @@ fn parse_anim_trigger(
     match v {
         None if required_default_click => Ok(Some("click".to_string())),
         None => Ok(None),
-        Some(Value::String(s)) if matches!(s.as_str(), "click" | "with" | "after") => {
+        Some(Value::String(s)) if matches!(s.as_str(), "click" | "with" | "after" | "clickOn") => {
             Ok(Some(s.clone()))
         }
         Some(Value::String(_)) => Err(Error::with_path(
@@ -6138,11 +6408,11 @@ pub(crate) fn parse_create_anim(v: &Value, prefix: &str) -> Result<CreateAnim, E
         obj,
         prefix,
         &[
-            "type", "trigger", "delay", "dur", "shape", "picture", "video", "audio", "table",
-            "chart", "smartArt",
+            "type", "trigger", "delay", "dur", "repeat", "sound", "para", "clickOn", "shape",
+            "picture", "video", "audio", "table", "chart", "smartArt",
         ],
     )?;
-    match obj.get("type") {
+    let type_name = match obj.get("type") {
         None => {
             return Err(Error::with_path(
                 ErrorKind::OpRequiresField {
@@ -6152,7 +6422,7 @@ pub(crate) fn parse_create_anim(v: &Value, prefix: &str) -> Result<CreateAnim, E
                 format!("{prefix}.type"),
             ));
         }
-        Some(Value::String(s)) if s == "fade" => {}
+        Some(Value::String(s)) if timing::anim_preset_ok(s) => s.clone(),
         Some(Value::String(_)) => {
             return Err(Error::with_path(
                 ErrorKind::InvalidAnimType,
@@ -6168,10 +6438,12 @@ pub(crate) fn parse_create_anim(v: &Value, prefix: &str) -> Result<CreateAnim, E
                 format!("{prefix}.type"),
             ));
         }
-    }
+    };
     let trigger = match obj.get("trigger") {
         None => "click".to_string(),
-        Some(Value::String(s)) if matches!(s.as_str(), "click" | "with" | "after") => s.clone(),
+        Some(Value::String(s)) if matches!(s.as_str(), "click" | "with" | "after" | "clickOn") => {
+            s.clone()
+        }
         Some(Value::String(_)) => {
             return Err(Error::with_path(
                 ErrorKind::InvalidAnimTrigger,
@@ -6210,6 +6482,127 @@ pub(crate) fn parse_create_anim(v: &Value, prefix: &str) -> Result<CreateAnim, E
             60000,
         )?,
     };
+    let repeat = parse_create_anim_repeat(obj.get("repeat"), &format!("{prefix}.repeat"))?;
+    let sound = match obj.get("sound") {
+        None => None,
+        Some(Value::String(s)) if !s.is_empty() => Some(s.clone()),
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "sound".into(),
+                    expected: TypeName::String,
+                },
+                format!("{prefix}.sound"),
+            ));
+        }
+    };
+    let para = match obj.get("para") {
+        None => None,
+        Some(Value::Number(n)) => {
+            let Some(v) = n.as_u64() else {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidAnimPara,
+                    format!("{prefix}.para"),
+                ));
+            };
+            if v < 1 {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidAnimPara,
+                    format!("{prefix}.para"),
+                ));
+            }
+            Some(v as u32)
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::InvalidAnimPara,
+                format!("{prefix}.para"),
+            ));
+        }
+    };
+    let host = parse_create_anim_host(obj, prefix)?;
+    let click_on = match (trigger.as_str(), obj.get("clickOn")) {
+        ("clickOn", None) => {
+            return Err(Error::with_path(
+                ErrorKind::MissingField {
+                    field: "clickOn".into(),
+                },
+                format!("{prefix}.clickOn"),
+            ));
+        }
+        ("clickOn", Some(v)) => Some(parse_create_click_on(v, &format!("{prefix}.clickOn"))?),
+        (_, None) => None,
+        (_, Some(_)) => {
+            return Err(Error::with_path(
+                ErrorKind::InvalidAnimTrigger,
+                format!("{prefix}.clickOn"),
+            ));
+        }
+    };
+    Ok(CreateAnim {
+        type_name,
+        trigger,
+        delay,
+        dur,
+        repeat,
+        sound,
+        para,
+        host,
+        click_on,
+    })
+}
+
+fn parse_create_anim_repeat(v: Option<&Value>, path: &str) -> Result<timing::RepeatWrite, Error> {
+    match v {
+        None => Ok(timing::RepeatWrite::Once),
+        Some(Value::Null) => Ok(timing::RepeatWrite::Indefinite),
+        Some(Value::Number(n)) => {
+            let Some(v) = n.as_u64() else {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidAnimRepeat,
+                    path.to_string(),
+                ));
+            };
+            if !(1..=99).contains(&v) {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidAnimRepeat,
+                    path.to_string(),
+                ));
+            }
+            if v == 1 {
+                Ok(timing::RepeatWrite::Once)
+            } else {
+                Ok(timing::RepeatWrite::Times(v as u32))
+            }
+        }
+        Some(_) => Err(Error::with_path(
+            ErrorKind::InvalidAnimRepeat,
+            path.to_string(),
+        )),
+    }
+}
+
+fn parse_create_click_on(v: &Value, prefix: &str) -> Result<CreateAnimHost, Error> {
+    let obj = v.as_object().ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::WrongType {
+                field: "clickOn".into(),
+                expected: TypeName::Object,
+            },
+            prefix.to_string(),
+        )
+    })?;
+    deny_keys_at(
+        obj,
+        prefix,
+        &[
+            "shape", "picture", "video", "audio", "table", "chart", "smartArt",
+        ],
+    )?;
+    parse_create_anim_host(obj, prefix)
+}
+
+fn parse_create_anim_host(obj: &Map<String, Value>, prefix: &str) -> Result<CreateAnimHost, Error> {
     let mut found: Vec<(&str, CreateAnimHost)> = Vec::new();
     for (field, make) in [
         (
@@ -6247,33 +6640,22 @@ pub(crate) fn parse_create_anim(v: &Value, prefix: &str) -> Result<CreateAnim, E
         }
     }
     match found.len() {
-        0 => {
-            return Err(Error::with_path(
-                ErrorKind::OpRequiresField {
-                    op: "create".into(),
-                    field: "shape".into(),
-                },
-                prefix.to_string(),
-            ));
-        }
-        1 => {}
-        _ => {
-            return Err(Error::with_path(
-                ErrorKind::MutuallyExclusive {
-                    a: found[0].0.into(),
-                    b: found[1].0.into(),
-                },
-                prefix.to_string(),
-            ));
-        }
+        0 => Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "create".into(),
+                field: "shape".into(),
+            },
+            prefix.to_string(),
+        )),
+        1 => Ok(found.remove(0).1),
+        _ => Err(Error::with_path(
+            ErrorKind::MutuallyExclusive {
+                a: found[0].0.into(),
+                b: found[1].0.into(),
+            },
+            prefix.to_string(),
+        )),
     }
-    let host = found.remove(0).1;
-    Ok(CreateAnim {
-        trigger,
-        delay,
-        dur,
-        host,
-    })
 }
 
 pub(crate) fn parse_create_section(v: &Value, prefix: &str) -> Result<CreateSection, Error> {

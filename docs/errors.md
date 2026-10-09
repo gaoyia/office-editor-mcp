@@ -409,9 +409,11 @@
 - 不是这些 id 报 `InvalidId`
 - `deleteAnim` / `setAnim` 的 id 必须是 inspect 名单上的动画 id
 - 序号不存在报 `IdNotFound`，不是动画 id 报 `InvalidId`
-- `insertAnim` 缺 `type`、`type` 不是 `fade`、或 `trigger` 不是 `click` / `with` / `after`，报 `InvalidField`
-- `insertAnim` 的 `delay` 越界或 `dur` 越界报 `InvalidField`
-- `setAnim` 一个可写字段都不给、`trigger` 非法、`delay` / `dur` 越界、或给了 `dur` 但没有 `animEffect`，报 `InvalidField`
+- `insertAnim` 缺 `type`、`type` 不在白名单、或 `trigger` 不是 `click` / `with` / `after` / `clickOn`，报 `InvalidField`
+- `insertAnim` 的 `delay` 越界或 `dur` 越界或 `repeat` 越界报 `InvalidField`
+- `setAnim` 一个可写字段都不给、`type` 不在白名单、`trigger` 非法、`delay` / `dur` / `repeat` 越界、或给了 `dur` 但没有可写时长的行为，报 `InvalidField`
+- `moveAnim` 的 id 必须是 inspect 名单上的动画 id
+- `moveAnim` 缺 `index`、越界、或不是正整数，报 `InvalidField`
 - `setSlideLayout` 的 `layout` 必须是 `master:{n}/layout:{k}`
 - 找不到该版式报 `IdNotFound`
 - `insertLayout` 的 id 必须是 `master:{n}`
@@ -428,8 +430,9 @@
   - `moveSlide` 的 `after` 是自己
   - `setSlideHidden` 缺 `hidden`
   - `setTransition` 缺 `type`，或 `type` 为 `other` 或不认识，或 `dur` 越界
-  - `insertAnim` 的 `delay` / `dur` 越界
-  - `setAnim` 一个可写字段都不给，或 `dur` 点到没有 `animEffect` 的效果
+  - `insertAnim` 的 `delay` / `dur` / `repeat` 越界
+  - `setAnim` 一个可写字段都不给，或 `dur` 点到没有可写时长的效果
+  - `moveAnim` 的 `index` 越界
   - `setSlideLayout` 缺 `layout`
   - `insertPlaceholder` 缺 `type`，或 `type` 不在白名单
   - 该母版只剩一份版式、最后一份母版、或仍有页占用时 `deleteLayout` / `deleteMaster`
@@ -437,7 +440,7 @@
   - `setThemeColors` / `setThemeFonts` 一个可写字段都不给、非法十六进制、或 `majorLatin` / `minorLatin` 空串
 - `setHandoutText` 的 `id` 必须是 `handout`
 - `header` / `footer` / `date` / `sldNum` 一个都不给报 `InvalidField`
-- docx / xlsx 上发这些幻灯片管理 op、母版写入 op、主题与尺寸 op、`insertAnim` / `setAnim` / `deleteAnim`、`setHandoutText` 以及 `setShowPr` 报 `InvalidField`
+- docx / xlsx 上发这些幻灯片管理 op、母版写入 op、主题与尺寸 op、`insertAnim` / `setAnim` / `deleteAnim` / `moveAnim`、`setHandoutText` 以及 `setShowPr` 报 `InvalidField`
 - xlsx 的 `scope` 里出现下列键报 `InvalidField`
   - `textBoxContent`
   - `notes`

@@ -1218,6 +1218,9 @@
                 "$ref": "pptx.schema.json#/$defs/setAnimOp"
               },
               {
+                "$ref": "pptx.schema.json#/$defs/moveAnimOp"
+              },
+              {
                 "$ref": "pptx.schema.json#/$defs/setSlideLayoutOp"
               },
               {

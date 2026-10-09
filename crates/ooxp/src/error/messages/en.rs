@@ -944,14 +944,19 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::InvalidTransitionType => {
             "type must be a writable slide transition, or null to clear".into()
         }
-        ErrorKind::InvalidAnimType => "type must be fade".into(),
-        ErrorKind::InvalidAnimTrigger => "trigger must be click, with, or after".into(),
+        ErrorKind::InvalidAnimType => {
+            "type must be appear, fade, flyIn, wipe, split, zoom, spin, growShrink, fadeOut, flyOut, wipeOut, or pathRight".into()
+        }
+        ErrorKind::InvalidAnimTrigger => "trigger must be click, with, after, or clickOn".into(),
         ErrorKind::InvalidAnimDelay => "delay must be an integer from 0 to 60000".into(),
         ErrorKind::InvalidAnimDur => "dur must be an integer from 1 to 60000".into(),
+        ErrorKind::InvalidAnimRepeat => "repeat must be an integer from 1 to 99, or null".into(),
+        ErrorKind::InvalidAnimPara => "para must be a 1-based paragraph index on the target".into(),
+        ErrorKind::InvalidAnimMoveIndex => "index must be a 1-based position in the animation list".into(),
         ErrorKind::NeedAnimSetField => {
-            "setAnim requires at least one of trigger, delay, or dur".into()
+            "setAnim requires at least one writable field".into()
         }
-        ErrorKind::AnimNeedEffectDur => "dur can only be set on an effect that has animEffect".into(),
+        ErrorKind::AnimNeedEffectDur => "dur can only be set on an effect that has a timed behavior".into(),
         ErrorKind::InvalidTransitionDur => "dur must be an integer from 1 to 60000".into(),
         ErrorKind::InvalidTransitionAdvTm => {
             "advTm must be an integer from 1 to 86400000".into()

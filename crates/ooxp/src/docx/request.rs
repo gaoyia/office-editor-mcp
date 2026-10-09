@@ -1479,6 +1479,7 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<DocxOp>, Error> {
             || op_name == "insertAnim"
             || op_name == "setAnim"
             || op_name == "deleteAnim"
+            || op_name == "moveAnim"
             || op_name == "setSlideLayout"
             || op_name == "insertLayout"
             || op_name == "deleteLayout"

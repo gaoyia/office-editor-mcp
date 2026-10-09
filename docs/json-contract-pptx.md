@@ -529,7 +529,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   - 省略或 `false` 则只有 `animCount`，没有名单
   - 不依赖 `scope.slide`
   - 不返回完整时间轴树
-  - 写入见 `insertAnim` / `setAnim` / `deleteAnim`
+  - 写入见 `insertAnim` / `setAnim` / `deleteAnim` / `moveAnim`
   - `scope.notes` 同开时备注对象带 `timing`
   - `scope.masters` 同开时母版 / 版式带 `timing`
 - **`scope.masters`**（否）
@@ -882,26 +882,32 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
 - `scope.timing` 为 `true` 时，每页带 `timing`。没有效果时为空数组。不依赖 `scope.slide`。inspect 只读 `<p:timing>`。
   按文档顺序收集 `p:cTn` 上 `nodeType` 为 `clickEffect` / `withEffect` / `afterEffect` 的节点（ECMA-376 `ST_TLTimeNodeType`，§19.7.47）；
   `tmRoot` / `mainSeq` / `clickPar` / `withGroup` / `afterGroup` / `interactiveSeq` 不算一条。
-  每条字段顺序：`id`、`target`、`type`、`trigger`、`delay`、`dur`。
+  每条字段顺序：`id`、`target`、`type`、`trigger`、`delay`、`dur`、`repeat`、`sound`、`para`、`clickOn`。
   `id` 为 `slide:{n}/anim:{k}`，`k` 按文档顺序从 1 计；删中间一条后面要重排。
-  `trigger`：`clickEffect` 为 `click`，`withEffect` 为 `with`，`afterEffect` 为 `after`。
-  `delay` 取该效果 `cTn` 自身 `stCondLst` 第一条 `cond/@delay`：
+  `trigger`：祖先是 `interactiveSeq` 则为 `clickOn`；否则 `clickEffect` 为 `click`，`withEffect` 为 `with`，`afterEffect` 为 `after`。
+  `delay` 取该效果 `cTn` 自身 `stCondLst` 第一条不带 `evt` 的 `cond/@delay`：
   无单位整数为该毫秒；`indefinite` 为 `null`；缺则为 `0`。
-  `dur` 取该效果子树第一个 `p:animEffect` 的 `cBhvr/cTn/@dur`：
+  `dur` 取该效果子树第一个 `p:animEffect` 的 `cBhvr/cTn/@dur`；
+  没有则取第一个非 `set` 的行为（`anim` / `animRot` / `animScale` / `animMotion` / `animClr`）的 `cBhvr/cTn/@dur`；
+  再没有则取第一个 `p:set` 的 `cBhvr/cTn/@dur`。
   无单位整数为该毫秒；`indefinite` 为 `null`；缺则为 `500`。
+  `repeat` 取该效果 `cTn/@repeatCount`：缺为 `1`；`indefinite` 为 `null`；无单位整数按千分之一换成次数（`3000` 为 `3`）。
+  `sound` 取该效果 `sndAc/stSnd/snd/@name`；没有则为 `null`。不把字节塞进树。
+  `para` 取该效果子树第一个 `p:pRg/@st` 加 1；没有 `txEl` 则为 `null`。
+  `clickOn`：`trigger` 为 `clickOn` 时，取该 `interactiveSeq` 上 `evt="onClick"` 的 `spTgt/@spid`，对到该宿主对象 id；对不上则为 `null`。其余 trigger 为 `null`。
   `target` 取该效果子树里第一个 `p:spTgt/@spid`（不含嵌套的另一条效果 `cTn`），对到该页对象的 inspect id：带 `p:txBody` 的 `p:sp` 为 `slide:{n}/shape:{id}`，
   `p:cxnSp` 为 `slide:{n}/cxn:{id}`，带 `a:videoFile` 的 `p:pic` 为 `slide:{n}/video:{id}`，
   带 `a:audioFile` / `a:wavAudioFile` 的 `p:pic` 为 `slide:{n}/audio:{id}`，其余 `p:pic` 为 `slide:{n}/pic:{id}`，
   表 graphicFrame 为 `slide:{n}/table:{id}`，图表为 `slide:{n}/chart:{id}`，SmartArt 为 `slide:{n}/smartdiagram:{id}`，OLE 为 `slide:{n}/ole:{id}`。
-  对不上任何 `cNvPr/@id`，或对上的不是上述对象，则为 `null`。`type` 优先取该效果子树里第一个 `p:animEffect/@filter`，
-  去掉括号及之后的参数（`blinds(horizontal)` 为 `blinds`）；
+  对不上任何 `cNvPr/@id`，或对上的不是上述对象，则为 `null`。`type` 若该效果 `presetClass` 与 `presetID` 落在写入白名单，则用对应 JSON 名（见 `insertAnim` 的 `type`）。
+  否则优先取该效果子树里第一个 `p:animEffect/@filter`，去掉括号及之后的参数（`blinds(horizontal)` 为 `blinds`）；
   没有则按第一个行为子元素：`animMotion` 为 `motion`，`animRot` 为 `spin`，`animScale` 为 `scale`，`animClr` 为 `color`，`anim` 为 `anim`，`set` 为 `set`；
   再没有则取该 `cTn` 的 `presetClass`（`entr` / `exit` / `emph` / `path` / `verb` / `mediacall`）；仍没有则为 `other`。
-  不返回路径点、文本范围或完整时间轴树。xlsx / docx 的 `scope` 里出现 `timing` 报 `InvalidField`。
-  apply 用 `insertAnim` / `setAnim` / `deleteAnim` 按模板增删改预设效果。
+  不返回路径点或完整时间轴树。xlsx / docx 的 `scope` 里出现 `timing` 报 `InvalidField`。
+  apply 用 `insertAnim` / `setAnim` / `deleteAnim` / `moveAnim` 按模板增删改预设效果。
   不接受把整棵 `<p:timing>` 当 JSON 写入；`setTiming` 报 `UnsupportedOp`。
   该宿主第一条效果 `trigger` 为 `with` 或 `after` 时，外层包装仍写 `delay="indefinite"`，并加 `evt="onBegin"` 指向 `mainSeq` 的 `cTn/@id`（进片自动播）。
-  第一条 `click` 不加这条。
+  第一条 `click` 不加这条。`clickOn` 不走这条，写在 `interactiveSeq` 里。
 - `scope.masters` 为 `true` 时，根上带 `masters`。没有母版时为空数组。不依赖 `scope.slide`。不算母版排版引擎，也不把母版装饰形（没有 `p:ph` 的 `p:sp`）收进树。
   每份母版字段顺序：`id`、`index`、`name`、`theme`、`animCount`、`placeholders`、`layouts`。
   `scope.timing` 同开时在 `animCount` 之后、`placeholders` 之前带 `timing`。`id` 为 `master:{n}`。
@@ -987,7 +993,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   各文本 run 显式值一致则报该值，不一致或没有显式值则为 `null`，不猜主题。
   `sz` 是百分之一磅。`color` 只报 `a:srgbClr` 的六位大写 RGB。`align` 取 `a:pPr/@algn`。`textAnchor` 取 `a:bodyPr/@anchor`。
 - `stable`：有 `cNvPr/@id` 为 `true`，否则为 `false`。
-- 不返回完整动画时间轴树。效果摘要见上文 `scope.timing`。写入见 `insertAnim` / `setAnim` / `deleteAnim`。母版与版式见上文 `scope.masters`。讲义母版槽位见上文 `scope.handout`。
+- 不返回完整动画时间轴树。效果摘要见上文 `scope.timing`。写入见 `insertAnim` / `setAnim` / `deleteAnim` / `moveAnim`。母版与版式见上文 `scope.masters`。讲义母版槽位见上文 `scope.handout`。
   切换见上文 `transition`。对批注或回复 id 发 `insertPicture` 写 `a:blip`。对批注内图 id 发 `setPictureSize` / `setPicturePos` 报 `InvalidId`。
 
 
@@ -1194,10 +1200,10 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   - 不要 `op` / `id`
 - **`anims[].type`**
   - 必须
-  - 本期只认 `fade`
+  - 规则与 `insertAnim` 的 `type` 相同
 - **`anims[].trigger`**
   - 可选
-  - `click` / `with` / `after`，省略为 `click`
+  - `click` / `with` / `after` / `clickOn`，省略为 `click`
 - **`anims[].delay`**
   - 可选
   - 规则与 `insertAnim` 的 `delay` 相同
@@ -1206,6 +1212,21 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   - 可选
   - 规则与 `insertAnim` 的 `dur` 相同
   - 省略为 `500`
+- **`anims[].repeat`**
+  - 可选
+  - 规则与 `insertAnim` 的 `repeat` 相同
+  - 省略为 `1`
+- **`anims[].sound`**
+  - 可选
+  - 规则与 `insertAnim` 的 `sound` 相同
+- **`anims[].para`**
+  - 可选
+  - 规则与 `insertAnim` 的 `para` 相同
+- **`anims[].clickOn`**
+  - `trigger` 为 `clickOn` 时必须
+  - 规则与 `insertAnim` 的 `clickOn` 相同
+  - 值为该页 create 数组的序号对象：与 `shape` / `picture` 等同一套键，且恰好一个
+  - 不要写成 inspect id
 - **`anims[].shape` / `picture` / `video` / `audio` / `table` / `chart` / `smartArt`**
   - 绑定目标，1 起的序号，且恰好一个
   - 对应该页 create 数组
@@ -1248,7 +1269,7 @@ create 写出 Transitional 最小包，见 [opc.md](opc.md)。
 给了 `slides[].notes` 时按 `setNotesText` 同一套规则写该页演讲者备注：没有 notesMaster 则新建，再写 notesSlide。
 给了 `slides[].comments` 时按 `insertComment` 同一套规则写该页现代批注（`p188:cmLst`、`/ppt/authors.xml`）。
 给了形状上的 `url` / `file` / `slide` 时按 `insertHyperlink` 同一套规则写 `a:hlinkClick`。create 本期不写 run 级链，也不写批注内图。
-给了 `slides[].transition` 时按 `setTransition` 同一套规则写 `<p:transition>`。给了 `slides[].anims` 时按 `insertAnim` 同一套规则写预设进入淡入（第一条 `with` / `after` 进片自动播）。
+给了 `slides[].transition` 时按 `setTransition` 同一套规则写 `<p:transition>`。给了 `slides[].anims` 时按 `insertAnim` 同一套规则写预设效果（第一条 `with` / `after` 进片自动播）。
 给了 `presentation.sections` 时按 `insertSlideSection` 同一套规则写 `p14:sectionLst`：先写第一项（`start` 为 1 则包住全部页；大于 1 则前面的页进空名节），再按数组顺序用 `start` 拆后续节。
 先写该页 `shapes`，再按数组顺序写 `pictures`，再写 `maths`，再写 `model3ds`，再写 `videos`，再写 `audios`，再写 `charts`，再写 `smartArts`，再写 `tables`，再写 `notes`，
 再按数组顺序写 `comments`，再写形状超链接，再写 `transition`，再按数组顺序写 `anims`。
@@ -1398,7 +1419,7 @@ prst 的效果子元素是 `p15:prstTrans`，`prst` 为该 `type`。不写 `sndA
 
 ### insertAnim
 
-给该页对象追加一条预设进入效果。只写与 PowerPoint 16.0 另存同构的最小 `<p:timing>` 树，不接受调用方提交的时间轴 JSON。
+给该页对象追加一条预设效果。只写与 PowerPoint 16.0 另存同构的最小 `<p:timing>` 树，不接受调用方提交的时间轴 JSON。
 
 - **`op`**
   - 必须是 `"insertAnim"`
@@ -1415,37 +1436,65 @@ prst 的效果子元素是 `p15:prstTrans`，`prst` 为该 `type`。不写 `sndA
     - 备注页上同样判定，id 带 `slide:{n}/notes/` 前缀
     - 母版 / 版式占位符：`master:{n}/shape:…` 或 `master:{n}/layout:{k}/shape:…`
 - **`type`**
-  - 本期只认 `fade`
+  - 必须
+  - 白名单：`appear`、`fade`、`flyIn`、`wipe`、`split`、`zoom`、`spin`、`growShrink`、`fadeOut`、`flyOut`、`wipeOut`、`pathRight`
+  - 进入：`appear` / `fade` / `flyIn` / `wipe` / `split` / `zoom`
+  - 强调：`spin` / `growShrink`
+  - 退出：`fadeOut` / `flyOut` / `wipeOut`
+  - 路径：`pathRight`（固定向右曲线，不接受路径点 JSON）
 - **`trigger`**
   - 可选
-  - `click` / `with` / `after`，省略为 `click`
+  - `click` / `with` / `after` / `clickOn`，省略为 `click`
 - **`delay`**
   - 可选
   - 毫秒，整数，范围 `0`–`60000`
   - 省略为 `0`
   - 写入该效果 `cTn` 的 `stCondLst/cond/@delay`
-  - 相对 `trigger`：`with` 是相对上一条开始再等；`after` 是相对上一条结束再等；`click` 是单击后再等
+  - 相对 `trigger`：`with` 是相对上一条开始再等；`after` 是相对上一条结束再等；`click` 是单击后再等；`clickOn` 是单击 `clickOn` 那个对象后再等
 - **`dur`**
   - 可选
   - 毫秒，整数，范围 `1`–`60000`
   - 省略为 `500`
-  - 写入 `p:animEffect` 里 `cBhvr/cTn/@dur`
+  - 写入该模板里带时长的行为（`animEffect` / `anim` / `animRot` / `animScale` / `animMotion` 等）
+- **`repeat`**
+  - 可选
+  - 次数，整数，范围 `1`–`99`；或 `null` 表示无限
+  - 省略为 `1`（不写 `repeatCount`）
+  - 大于 1 时写入效果 `cTn/@repeatCount`，值为次数乘以 1000（`3` 写 `3000`）
+  - `null` 写 `repeatCount="indefinite"`
+- **`sound`**
+  - 可选
+  - 本地 WAV 路径，按文件头认，规则与 `insertAudio` 相同
+  - 省略则不写效果声音
+  - 空串或 `null` 报 `InvalidField`
+- **`para`**
+  - 可选
+  - 1 起的段落序号，写进该效果所有 `spTgt` 的 `txEl/pRg`
+  - 省略则绑整个对象，不写 `txEl`
+  - 目标没有 `txBody`、没有段落、或序号超出，报 `InvalidField`
+- **`clickOn`**
+  - `trigger` 为 `clickOn` 时必须，否则不许出现
+  - 同一宿主上的可绑对象 id（与 `insertAnim` 的 `id` 同一套判定）
+  - 找不到报 `IdNotFound`；不是可绑对象报 `InvalidId`
 
 找不到该页报 `IdNotFound`。找不到该对象报 `IdNotFound`。id 不是上述对象报 `InvalidId`。
-缺 `type`、`type` 不是 `fade`、或 `trigger` 不是三个之一，报 `InvalidField`。
+缺 `type`、`type` 不在白名单、或 `trigger` 不是四个之一，报 `InvalidField`。
 `delay` 不是整数或不在 `0`–`60000`，报 `InvalidField`。
 `dur` 不是整数或不在 `1`–`60000`，报 `InvalidField`。
-没有 `<p:timing>` 时写出带 `mainSeq`、`bldLst` / `bldP` 的最小单击淡入树。
+`repeat` 不是整数、不是 `null`、或不在 `1`–`99`，报 `InvalidField`。
+`trigger` 为 `clickOn` 却缺 `clickOn` 报 `MissingField`。`trigger` 不是 `clickOn` 却给了 `clickOn` 报 `InvalidField`。
+没有 `<p:timing>` 时写出带 `bldLst` / `bldP` 的最小树：`click` / `with` / `after` 走 `mainSeq`；`clickOn` 走 `interactiveSeq`（`evt="onClick"` 指向 `clickOn` 的 `spid`）。
 该宿主第一条 `trigger` 为 `with` / `after` 时，外层包装仍写 `delay="indefinite"`，并加 `evt="onBegin"` 指向 `mainSeq` 的 `cTn/@id`。
-第一条 `click` 不加这条。
-已有树则接到 `mainSeq` 末尾：`click` 再挂一个并列包装组；`with` / `after` 接到现有最后一组里，空树时仍建包装组但 `nodeType` 为 `withEffect` / `afterEffect`。
-新 `cTn/@id` 取该宿主 timing 已有最大整数加 1。该对象尚无 `bldP` 则补一条对应 `spid`、`grpId="0"`。不写 `txEl`。不改 `<p:transition>`。不改未点名效果。
+第一条 `click` 不加这条。`clickOn` 不加这条。
+已有树则接到末尾：`click` 再挂一个并列包装组；`with` / `after` 接到现有最后一组里，空树时仍建包装组但 `nodeType` 为 `withEffect` / `afterEffect`；`clickOn` 再挂一个 `interactiveSeq`。
+新 `cTn/@id` 取该宿主 timing 已有最大整数加 1。该对象尚无 `bldP` 则补一条对应 `spid`、`grpId="0"`。给了 `para` 才写 `txEl`。给了 `sound` 才写 `sndAc`，并可脏该宿主 `.rels`、`/ppt/media/…` 与 `[Content_Types].xml`。
+不改 `<p:transition>`。不改未点名效果。
 备注没有 notesSlide 时报 `IdNotFound`。母版 / 版式只写占位符，装饰形报 `IdNotFound`。
 docx / xlsx 上发此 op 报 `InvalidField`。
 
 ### setAnim
 
-改该宿主名单上已有一条的 `trigger` / `delay` / `dur`。不改 `type`，不换绑定对象。不接受整棵时间轴 JSON。
+改该宿主名单上已有一条的 `type` / `trigger` / `delay` / `dur` / `repeat` / `sound` / `para` / `clickOn`。不换绑定对象。不接受整棵时间轴 JSON。
 
 - **`op`**
   - 必须是 `"setAnim"`
@@ -1454,22 +1503,43 @@ docx / xlsx 上发此 op 报 `InvalidField`。
   - 或 `slide:{n}/notes/anim:{k}`
   - 或 `master:{n}/anim:{k}`
   - 或 `master:{n}/layout:{k}/anim:{m}`
+- **`type`**
+  - 可选
+  - 规则与 `insertAnim` 的 `type` 相同
 - **`trigger`**
   - 可选
-  - `click` / `with` / `after`
+  - `click` / `with` / `after` / `clickOn`
 - **`delay`**
   - 可选
   - 规则与 `insertAnim` 的 `delay` 相同
 - **`dur`**
   - 可选
   - 规则与 `insertAnim` 的 `dur` 相同
+- **`repeat`**
+  - 可选
+  - 规则与 `insertAnim` 的 `repeat` 相同
+  - `1` 表示去掉 `repeatCount`
+- **`sound`**
+  - 可选
+  - 本地 WAV 路径，规则与 `insertAnim` 相同
+  - `null` 表示摘掉该条 `sndAc`；无人再引用则删对应媒体部件
+- **`para`**
+  - 可选
+  - 规则与 `insertAnim` 的 `para` 相同
+  - `null` 表示去掉 `txEl`，改回绑整个对象
+- **`clickOn`**
+  - 把 `trigger` 改成 `clickOn` 时必须
+  - 规则与 `insertAnim` 的 `clickOn` 相同
+  - `trigger` 仍是 `clickOn` 时也可单独改单击对象
 
-`trigger`、`delay`、`dur` 至少一个。都不给报 `InvalidField`。省略的字段不改。
+`type`、`trigger`、`delay`、`dur`、`repeat`、`sound`、`para`、`clickOn` 至少一个。都不给报 `InvalidField`。省略的字段不改。
 找不到该条报 `IdNotFound`。不是动画 id 报 `InvalidId`。
-`trigger` 不是三个之一，或 `delay` / `dur` 越界，报 `InvalidField`。
-给了 `dur` 但该效果没有 `p:animEffect` 报 `InvalidField`。
+`type` 不在白名单、`trigger` 不是四个之一、或 `delay` / `dur` / `repeat` 越界，报 `InvalidField`。
+给了 `dur` 但该效果没有可写时长的行为报 `InvalidField`。
+改 `type` 时按新模板重写该效果子树，保留该效果 `cTn/@id` 与未点名的 `delay` / `trigger` / `repeat` / `sndAc` / `txEl`。
 改 `trigger` 时：第一条改为 `with` / `after` 则给外层包装补 `onBegin`；改为 `click` 则去掉这条。
 非第一条改为 `click` 时抽成新的单击包装组；改为 `with` / `after` 则并进上一组。
+改为 `clickOn` 时把该条挪进 `interactiveSeq`；从 `clickOn` 改为另外三个则挪回 `mainSeq`。
 不改未点名效果。不改 `<p:transition>`。docx / xlsx 上发此 op 报 `InvalidField`。
 
 ### deleteAnim
@@ -1483,6 +1553,26 @@ docx / xlsx 上发此 op 报 `InvalidField`。
 
 找不到该宿主报 `IdNotFound`。序号不存在报 `IdNotFound`。不是动画 id 报 `InvalidId`。
 摘掉对应效果 `cTn`，空壳按 `deleteShape` 清 `tgtEl` 同一套修剪；该 `spid` 没有剩下的效果则摘对应 `bldP`。整节空了则删 `<p:timing>`。删中间一条后面的序号要重排。
+该条带 `sndAc` 且对应媒体无人再引用则删该部件与关系。
+不改 `<p:transition>`。docx / xlsx 上发此 op 报 `InvalidField`。
+
+### moveAnim
+
+把该宿主名单上的一条效果挪到新的文档顺序。不改 `type`，不换绑定对象，不改 delay / dur。不接受整棵时间轴 JSON。
+
+- **`op`**
+  - 必须是 `"moveAnim"`
+- **`id`**
+  - 与 inspect 名单相同的动画 id
+- **`index`**
+  - 必须
+  - 1 起的新位置，范围是该宿主当前条数
+
+找不到该条报 `IdNotFound`。不是动画 id 报 `InvalidId`。
+缺 `index`、不是整数、小于 1、或大于当前条数，报 `InvalidField`。
+已经在目标位置则空操作，仍计入 `opsApplied`。
+只重排该宿主 `<p:timing>` 里效果的文档顺序，使 inspect 名单第 `index` 条变成这条。
+`click` / `with` / `after` 仍在 `mainSeq`；`clickOn` 仍在 `interactiveSeq`。跨这两种 trigger 挪动时按 `setAnim` 改 trigger 同一套搬家。
 不改 `<p:transition>`。docx / xlsx 上发此 op 报 `InvalidField`。
 
 ### setSlideLayout
@@ -2635,7 +2725,8 @@ presentation 关系、新页或被删页及其 `.rels`、内容类型，
 `deleteZoom` 还可清该页 `<p:timing>` 里对应 `tgtEl`。`setShowPr` 只脏 `/ppt/presProps.xml` 的 `p:showPr`；没有该部件报 `OpcPartMissing`。
 `setProtection` 只脏 `presentation.xml` 的 `p:modifyVerifier`。`setSlideHidden` 只脏该页 `p:sld/@show`。
 `setTransition` 只脏该页幻灯片 XML 的 `<p:transition>`（或包住它的 `mc:AlternateContent`），不脏 timing。
-`insertAnim` / `setAnim` / `deleteAnim` 只脏被点名宿主 XML 的 `<p:timing>`（含 `bldLst`），不脏 `<p:transition>`。
+`insertAnim` / `setAnim` / `deleteAnim` / `moveAnim` 脏被点名宿主 XML 的 `<p:timing>`（含 `bldLst`），不脏 `<p:transition>`。
+给了 `sound` 时还可脏该宿主 `.rels`、`/ppt/media/…` 与 `[Content_Types].xml`。
 幻灯片宿主是该页幻灯片 XML；备注是该页 notesSlide；母版 / 版式是被点名的 slideMaster 或 slideLayout。
 `setSlideLayout` 只脏该页 `.rels` 的 `slideLayout` 目标，不脏幻灯片 XML、母版 XML 或版式 XML。
 `insertLayout` 脏新 slideLayout 及其 `.rels`、该母版 XML 与 `.rels`、`[Content_Types].xml`。
@@ -2651,7 +2742,7 @@ presentation 关系、新页或被删页及其 `.rels`、内容类型，
 一次 `ops` 可以混用 `setShapeText`、`setShapeFormat`、形状管理 op、表格 op、`setNotesText`、`setHandoutText`、批注 op、超链接 op、域 op（`insertField`、`setField`、
 `deleteField`）、图片 op、媒体 op、图表 op、SmartArt op、幻灯片管理 op（含 `setTransition`、`setSlideLayout`）、母版写入 op（`insertLayout`、
 `deleteLayout`、`insertPlaceholder`、`deletePlaceholder`、`insertMaster`、`deleteMaster`）、主题与尺寸 op（`setSlideSize`、
-`setThemeColors`、`setThemeFonts`）、动画 op（`insertAnim`、`setAnim`、`deleteAnim`）、幻灯片节 op、自定义放映 op（`insertCustomShow`、`setCustomShow`、
+`setThemeColors`、`setThemeFonts`）、动画 op（`insertAnim`、`setAnim`、`deleteAnim`、`moveAnim`）、幻灯片节 op、自定义放映 op（`insertCustomShow`、`setCustomShow`、
 `deleteCustomShow`）、OLE op（`insertOle`、`deleteOle`）、Zoom op（`insertZoom`、`deleteZoom`）、`setShowPr`、
 `setProtection` 与 `setProps` / `setCustomProp` / `deleteCustomProp`。
 文件属性 op 还可以脏 `/docProps/core.xml`、`/docProps/app.xml`、`/docProps/custom.xml`、根 `.rels` 与 `[Content_Types].xml`。

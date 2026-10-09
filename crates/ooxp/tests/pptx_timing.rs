@@ -1,4 +1,4 @@
-//! 动画清单与预设效果写入：inspect `animCount` / `scope.timing`，以及 `insertAnim` / `setAnim` / `deleteAnim`。
+//! 动画清单与预设效果写入：inspect `animCount` / `scope.timing`，以及 `insertAnim` / `setAnim` / `deleteAnim` / `moveAnim`。
 
 use std::io::{Cursor, Read, Write};
 use std::path::{Path, PathBuf};
@@ -223,9 +223,13 @@ fn timing_scope_does_not_need_slide() {
     assert_eq!(list[0]["delay"], 0);
     assert_eq!(list[0]["dur"], 500);
     assert_eq!(list[0]["id"], "slide:1/anim:1");
+    assert_eq!(list[0]["repeat"], 1);
+    assert_eq!(list[0]["sound"], Value::Null);
+    assert_eq!(list[0]["para"], Value::Null);
+    assert_eq!(list[0]["clickOn"], Value::Null);
     assert_eq!(
         object_keys(&list[0]),
-        ["id", "target", "type", "trigger", "delay", "dur"]
+        ["id", "target", "type", "trigger", "delay", "dur", "repeat", "sound", "para", "clickOn"]
     );
 }
 
@@ -463,7 +467,7 @@ fn insert_fade_writes_office_tree() {
     assert_eq!(list[0]["dur"], 500);
     assert_eq!(
         object_keys(&list[0]),
-        ["id", "target", "type", "trigger", "delay", "dur"]
+        ["id", "target", "type", "trigger", "delay", "dur", "repeat", "sound", "para", "clickOn"]
     );
     let xml = part(&out, "ppt/slides/slide1.xml");
     assert!(xml.contains("<p:timing"));
@@ -1071,6 +1075,266 @@ fn xlsx_and_docx_reject_set_anim() {
         &xlsx,
         &dest,
         json!([{ "op": "setAnim", "id": "slide:1/anim:1", "delay": 10 }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+    assert!(!dest.exists());
+}
+
+fn tiny_wav() -> Vec<u8> {
+    let data_len = 8u32;
+    let mut v = Vec::new();
+    v.extend_from_slice(b"RIFF");
+    v.extend_from_slice(&(36u32 + data_len).to_le_bytes());
+    v.extend_from_slice(b"WAVE");
+    v.extend_from_slice(b"fmt ");
+    v.extend_from_slice(&16u32.to_le_bytes());
+    v.extend_from_slice(&1u16.to_le_bytes());
+    v.extend_from_slice(&1u16.to_le_bytes());
+    v.extend_from_slice(&8000u32.to_le_bytes());
+    v.extend_from_slice(&16000u32.to_le_bytes());
+    v.extend_from_slice(&2u16.to_le_bytes());
+    v.extend_from_slice(&16u16.to_le_bytes());
+    v.extend_from_slice(b"data");
+    v.extend_from_slice(&data_len.to_le_bytes());
+    v.extend_from_slice(&[0u8; 8]);
+    v
+}
+
+fn write_wav(tag: &str) -> PathBuf {
+    let path = tmp_dir().join(format!("{tag}.wav"));
+    std::fs::write(&path, tiny_wav()).unwrap();
+    path
+}
+
+fn add_second_para(xml: &str) -> String {
+    xml.replacen(
+        "</a:p></p:txBody>",
+        "</a:p><a:p><a:r><a:t>第二段</a:t></a:r></a:p></p:txBody>",
+        1,
+    )
+}
+
+#[test]
+fn insert_whitelist_presets_roundtrip() {
+    let names = [
+        "appear",
+        "flyIn",
+        "wipe",
+        "split",
+        "zoom",
+        "spin",
+        "growShrink",
+        "fadeOut",
+        "flyOut",
+        "wipeOut",
+        "pathRight",
+    ];
+    for name in names {
+        let src = create_deck(&format!("p-{name}"));
+        let out = tmp(&format!("p-{name}-out"));
+        apply(
+            &src,
+            &out,
+            json!([{ "op": "insertAnim", "id": "slide:1/shape:2", "type": name }]),
+        )
+        .unwrap();
+        let tree = inspect_scope(&out, json!({ "timing": true }));
+        let list = tree["slides"][0]["timing"].as_array().unwrap();
+        assert_eq!(list.len(), 1, "{name}");
+        assert_eq!(list[0]["type"], name, "{name}");
+        assert_eq!(list[0]["target"], "slide:1/shape:2");
+    }
+}
+
+#[test]
+fn set_anim_changes_type_to_spin() {
+    let src = create_deck("set-type");
+    let mid = tmp("set-type-mid");
+    apply(
+        &src,
+        &mid,
+        json!([{ "op": "insertAnim", "id": "slide:1/shape:2", "type": "fade" }]),
+    )
+    .unwrap();
+    let out = tmp("set-type-out");
+    apply(
+        &mid,
+        &out,
+        json!([{ "op": "setAnim", "id": "slide:1/anim:1", "type": "spin" }]),
+    )
+    .unwrap();
+    let tree = inspect_scope(&out, json!({ "timing": true }));
+    assert_eq!(tree["slides"][0]["timing"][0]["type"], "spin");
+    let xml = part(&out, "ppt/slides/slide1.xml");
+    assert!(xml.contains("presetClass=\"emph\""));
+    assert!(xml.contains("<p:animRot"));
+}
+
+#[test]
+fn insert_and_set_repeat() {
+    let src = create_deck("rep");
+    let out = tmp("rep-out");
+    apply(
+        &src,
+        &out,
+        json!([{ "op": "insertAnim", "id": "slide:1/shape:2", "type": "fade", "repeat": 3 }]),
+    )
+    .unwrap();
+    let tree = inspect_scope(&out, json!({ "timing": true }));
+    assert_eq!(tree["slides"][0]["timing"][0]["repeat"], 3);
+    let xml = part(&out, "ppt/slides/slide1.xml");
+    assert!(xml.contains("repeatCount=\"3000\""));
+
+    let inf = tmp("rep-inf");
+    apply(
+        &out,
+        &inf,
+        json!([{ "op": "setAnim", "id": "slide:1/anim:1", "repeat": null }]),
+    )
+    .unwrap();
+    let tree = inspect_scope(&inf, json!({ "timing": true }));
+    assert_eq!(tree["slides"][0]["timing"][0]["repeat"], Value::Null);
+    let xml = part(&inf, "ppt/slides/slide1.xml");
+    assert!(xml.contains("repeatCount=\"indefinite\""));
+}
+
+#[test]
+fn insert_and_clear_sound() {
+    let wav = write_wav("anim-beep");
+    let src = create_deck("snd");
+    let out = tmp("snd-out");
+    apply(
+        &src,
+        &out,
+        json!([{
+            "op": "insertAnim",
+            "id": "slide:1/shape:2",
+            "type": "fade",
+            "sound": wav.to_string_lossy()
+        }]),
+    )
+    .unwrap();
+    let tree = inspect_scope(&out, json!({ "timing": true }));
+    let sound = tree["slides"][0]["timing"][0]["sound"].as_str().unwrap();
+    assert!(sound.ends_with(".wav"), "{sound}");
+
+    let cleared = tmp("snd-clear");
+    apply(
+        &out,
+        &cleared,
+        json!([{ "op": "setAnim", "id": "slide:1/anim:1", "sound": null }]),
+    )
+    .unwrap();
+    let tree = inspect_scope(&cleared, json!({ "timing": true }));
+    assert_eq!(tree["slides"][0]["timing"][0]["sound"], Value::Null);
+    let xml = part(&cleared, "ppt/slides/slide1.xml");
+    assert!(!xml.contains("<p:sndAc"));
+}
+
+#[test]
+fn insert_para_writes_txel() {
+    let src = create_deck("para");
+    rewrite_part(&src, "ppt/slides/slide1.xml", |data| {
+        add_second_para(&String::from_utf8(data).unwrap()).into_bytes()
+    });
+    let out = tmp("para-out");
+    apply(
+        &src,
+        &out,
+        json!([{ "op": "insertAnim", "id": "slide:1/shape:2", "type": "fade", "para": 2 }]),
+    )
+    .unwrap();
+    let tree = inspect_scope(&out, json!({ "timing": true }));
+    assert_eq!(tree["slides"][0]["timing"][0]["para"], 2);
+    let xml = part(&out, "ppt/slides/slide1.xml");
+    assert!(xml.contains("st=\"1\""));
+}
+
+#[test]
+fn insert_click_on_uses_interactive_seq() {
+    let src = create_deck("ia");
+    let out = tmp("ia-out");
+    apply(
+        &src,
+        &out,
+        json!([{
+            "op": "insertAnim",
+            "id": "slide:1/shape:2",
+            "type": "fade",
+            "trigger": "clickOn",
+            "clickOn": "slide:1/shape:3"
+        }]),
+    )
+    .unwrap();
+    let tree = inspect_scope(&out, json!({ "timing": true }));
+    let list = tree["slides"][0]["timing"].as_array().unwrap();
+    assert_eq!(list.len(), 1);
+    assert_eq!(list[0]["trigger"], "clickOn");
+    assert_eq!(list[0]["clickOn"], "slide:1/shape:3");
+    let xml = part(&out, "ppt/slides/slide1.xml");
+    assert!(xml.contains("nodeType=\"interactiveSeq\""));
+    assert!(xml.contains("evt=\"onClick\""));
+    assert!(!xml.contains("nodeType=\"mainSeq\""));
+}
+
+#[test]
+fn move_anim_swaps_two_clicks() {
+    let src = create_deck("mv");
+    let two = tmp("mv-two");
+    apply(
+        &src,
+        &two,
+        json!([
+            { "op": "insertAnim", "id": "slide:1/shape:2", "type": "fade" },
+            { "op": "insertAnim", "id": "slide:1/shape:3", "type": "fade" }
+        ]),
+    )
+    .unwrap();
+    let out = tmp("mv-out");
+    apply(
+        &two,
+        &out,
+        json!([{ "op": "moveAnim", "id": "slide:1/anim:2", "index": 1 }]),
+    )
+    .unwrap();
+    let tree = inspect_scope(&out, json!({ "timing": true }));
+    let list = tree["slides"][0]["timing"].as_array().unwrap();
+    assert_eq!(list.len(), 2);
+    assert_eq!(list[0]["target"], "slide:1/shape:3");
+    assert_eq!(list[1]["target"], "slide:1/shape:2");
+}
+
+#[test]
+fn xlsx_and_docx_reject_move_anim() {
+    let src = create_deck("mv-ok");
+    let dest = tmp("mv-bad");
+    let err = apply(
+        &src,
+        &dest,
+        json!([{ "op": "moveAnim", "id": "slide:1/anim:1", "index": 0 }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+    assert!(!dest.exists());
+
+    let docx = tmp("d-mv").with_extension("docx");
+    run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "create",
+            "path": docx.to_string_lossy(),
+            "document": { "paragraphs": [{ "text": "a" }] }
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap();
+    let dest = tmp("d-mv-out").with_extension("docx");
+    let err = apply(
+        &docx,
+        &dest,
+        json!([{ "op": "moveAnim", "id": "slide:1/anim:1", "index": 1 }]),
     )
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);

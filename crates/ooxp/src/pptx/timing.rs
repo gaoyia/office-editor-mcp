@@ -5,17 +5,21 @@ use std::collections::HashMap;
 use serde_json::{json, Map, Value};
 
 use crate::chart::{CHARTEX_NS, CHART_NS};
-use crate::error::{Error, ErrorKind};
-use crate::opc::Package;
+use crate::error::{io_path, Error, ErrorKind};
+use crate::opc::{ContentTypes, Package, Relationship, Relationships};
 use crate::smartart::DGM_NS;
 use crate::xml::{Element, Node};
 
+use super::anim_preset::{self, Preset};
 use super::master;
+use super::media::REL_AUDIO;
 use super::notes;
 use super::ole::{OLE_URI, OLE_URI_ISO};
+use super::picture;
 use super::request::AnimTarget;
 use super::shape::{self, SlideMeta};
 use super::table::TABLE_URI;
+use super::REL_NS;
 
 const EFFECT_TYPES: &[&str] = &["clickEffect", "withEffect", "afterEffect"];
 const PRESET_CLASS: &[&str] = &["entr", "exit", "emph", "path", "verb", "mediacall"];
@@ -24,13 +28,93 @@ pub fn list(root: &Element, host: &str, placeholders_only: bool) -> Vec<Value> {
     let objects = object_map(root, host, placeholders_only);
     let mut out = Vec::new();
     walk_timings(root, &mut |timing| {
-        shape::walk_choice(timing, &mut |e| {
-            if is_effect(e) {
-                out.push(effect_json(e, &objects, host, out.len() + 1));
-            }
-        });
+        collect_effects(timing, &objects, host, &mut out);
     });
     out
+}
+
+fn collect_effects(
+    el: &Element,
+    objects: &HashMap<String, String>,
+    host: &str,
+    out: &mut Vec<Value>,
+) {
+    fn rec(
+        el: &Element,
+        objects: &HashMap<String, String>,
+        host: &str,
+        in_ia: bool,
+        click_on: Option<&str>,
+        out: &mut Vec<Value>,
+    ) {
+        if el.local_name() == "AlternateContent" {
+            if let Some(i) = shape::first_alt_child_index(el) {
+                if let Some(Node::Element(child)) = el.children.get(i) {
+                    rec(child, objects, host, in_ia, click_on, out);
+                }
+            }
+            return;
+        }
+        if el.local_name() == "cTn" && el.attr_local("nodeType") == Some("interactiveSeq") {
+            let spid = click_on_spid(el);
+            for c in el.element_children() {
+                rec(c, objects, host, true, spid.as_deref(), out);
+            }
+            return;
+        }
+        if is_effect(el) {
+            out.push(effect_json(
+                el,
+                objects,
+                host,
+                out.len() + 1,
+                in_ia,
+                click_on,
+            ));
+        }
+        for c in el.element_children() {
+            rec(c, objects, host, in_ia, click_on, out);
+        }
+    }
+    rec(el, objects, host, false, None, out);
+}
+
+fn click_on_spid(seq: &Element) -> Option<String> {
+    let lst = seq.child_by_local("stCondLst")?;
+    for cond in lst.element_children() {
+        if cond.local_name() == "cond" && cond.attr_local("evt") == Some("onClick") {
+            if let Some(tgt) = cond.child_by_local("tgtEl") {
+                if let Some(sp) = tgt.child_by_local("spTgt") {
+                    if let Some(v) = sp.attr_local("spid").filter(|s| !s.is_empty()) {
+                        return Some(v.to_string());
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
+pub struct AnimWrite<'a> {
+    pub type_name: &'a str,
+    pub trigger: &'a str,
+    pub delay: u32,
+    pub dur: u32,
+    pub repeat: RepeatWrite,
+    pub sound: Option<&'a str>,
+    pub para: Option<u32>,
+    pub click_on: Option<&'a str>,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum RepeatWrite {
+    Once,
+    Times(u32),
+    Indefinite,
+}
+
+pub fn anim_preset_ok(name: &str) -> bool {
+    anim_preset::by_name(name).is_some()
 }
 
 pub fn insert(
@@ -40,11 +124,12 @@ pub fn insert(
     pres_root: &Element,
     host_id: &str,
     target: &AnimTarget,
-    trigger: &str,
-    delay: u32,
-    dur: u32,
+    args: AnimWrite<'_>,
     op_index: usize,
 ) -> Result<(), Error> {
+    let preset = anim_preset::by_name(args.type_name).ok_or_else(|| {
+        Error::with_path(ErrorKind::InvalidAnimType, format!("ops[{op_index}].type"))
+    })?;
     let (part, prefix) = resolve_part(pkg, slides, pres_part, pres_root, target, op_index)?;
     let mut doc = crate::xml::parse(pkg.get(&part)?)?;
     let spid = spid_for_host(&doc.root, &prefix, host_id, target.placeholders_only()).ok_or_else(
@@ -57,16 +142,83 @@ pub fn insert(
             )
         },
     )?;
-    let node_type = node_type_of(trigger);
+    if let Some(para) = args.para {
+        let n = paragraph_count(&doc.root, &spid);
+        if n == 0 || para < 1 || para > n {
+            return Err(Error::with_path(
+                ErrorKind::InvalidAnimPara,
+                format!("ops[{op_index}].para"),
+            ));
+        }
+    }
+    let click_spid = if args.trigger == "clickOn" {
+        let id = args.click_on.ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::MissingField {
+                    field: "clickOn".into(),
+                },
+                format!("ops[{op_index}].clickOn"),
+            )
+        })?;
+        Some(
+            spid_for_host(&doc.root, &prefix, id, target.placeholders_only()).ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::AnimHostNotFound { id: id.to_string() },
+                    format!("ops[{op_index}].clickOn"),
+                )
+            })?,
+        )
+    } else {
+        None
+    };
+    let node_type = node_type_of(args.trigger);
     match first_timing_mut(&mut doc.root) {
         None => {
-            let timing = build_full_timing(&spid, node_type, 1, delay, dur, trigger != "click");
+            let timing = if args.trigger == "clickOn" {
+                build_full_clickon(
+                    preset,
+                    &spid,
+                    click_spid.as_deref().unwrap_or(&spid),
+                    node_type,
+                    1,
+                    args.delay,
+                    args.dur,
+                    args.para,
+                    args.repeat,
+                )
+            } else {
+                build_full_timing(
+                    preset,
+                    &spid,
+                    node_type,
+                    1,
+                    args.delay,
+                    args.dur,
+                    args.trigger != "click",
+                    args.para,
+                    args.repeat,
+                )
+            };
             let at = timing_insert_index(&doc.root);
             doc.root.children.insert(at, Node::Element(timing));
         }
         Some(timing) => {
-            append_effect(timing, &spid, node_type, trigger, delay, dur);
+            append_effect(
+                timing,
+                preset,
+                &spid,
+                node_type,
+                args.trigger,
+                args.delay,
+                args.dur,
+                args.para,
+                args.repeat,
+                click_spid.as_deref(),
+            );
         }
+    }
+    if let Some(path) = args.sound {
+        attach_sound(pkg, &mut doc.root, &part, path, op_index)?;
     }
     pkg.set(&part, doc.to_bytes()?)?;
     Ok(())
@@ -102,9 +254,13 @@ pub fn delete(
                 format!("ops[{op_index}].id"),
             ));
         }
-        let path = &paths[index - 1];
-        let spid = spid_at(timing, path).map(str::to_string);
-        remove_effect_at(timing, path);
+        let path = paths[index - 1].clone();
+        let mut rids = Vec::new();
+        if let Some(effect) = get_at(timing, &path) {
+            collect_snd_rids(effect, &mut rids);
+        }
+        let spid = spid_at(timing, &path).map(str::to_string);
+        remove_effect_at(timing, &path);
         strip_idle_pars(timing);
         shape::prune_anim(timing);
         if let Some(spid) = spid {
@@ -114,11 +270,13 @@ pub fn delete(
         }
         strip_idle_pars(timing);
         shape::prune_anim(timing);
-        !has_effect(timing)
+        prune_empty_seqs(timing);
+        (!has_effect(timing), rids)
     };
-    if drop_timing {
+    if drop_timing.0 {
         doc.root.children.remove(timing_idx);
     }
+    drop_unused_audio(pkg, &doc.root, &part, &drop_timing.1)?;
     pkg.set(&part, doc.to_bytes()?)?;
     Ok(())
 }
@@ -131,9 +289,152 @@ pub fn set(
     id: &str,
     target: &AnimTarget,
     index: usize,
+    type_name: Option<&str>,
     trigger: Option<&str>,
     delay: Option<u32>,
     dur: Option<u32>,
+    repeat: Option<RepeatWrite>,
+    sound: Option<Option<&str>>,
+    para: Option<Option<u32>>,
+    click_on: Option<&str>,
+    op_index: usize,
+) -> Result<(), Error> {
+    let (part, prefix) = resolve_part(pkg, slides, pres_part, pres_root, target, op_index)?;
+    let mut doc = crate::xml::parse(pkg.get(&part)?)?;
+    let path = {
+        let Some(timing) = first_timing(&doc.root) else {
+            return Err(Error::with_path(
+                ErrorKind::AnimNotFound { id: id.to_string() },
+                format!("ops[{op_index}].id"),
+            ));
+        };
+        let paths = effect_paths(timing);
+        if index < 1 || index > paths.len() {
+            return Err(Error::with_path(
+                ErrorKind::AnimNotFound { id: id.to_string() },
+                format!("ops[{op_index}].id"),
+            ));
+        }
+        paths[index - 1].clone()
+    };
+    if let Some(Some(n)) = para {
+        let spid = first_timing(&doc.root)
+            .and_then(|t| spid_at(t, &path).map(str::to_string))
+            .ok_or_else(|| {
+                Error::with_path(ErrorKind::InvalidAnimPara, format!("ops[{op_index}].para"))
+            })?;
+        let cnt = paragraph_count(&doc.root, &spid);
+        if cnt == 0 || n < 1 || n > cnt {
+            return Err(Error::with_path(
+                ErrorKind::InvalidAnimPara,
+                format!("ops[{op_index}].para"),
+            ));
+        }
+    }
+    let click_spid =
+        if trigger == Some("clickOn") {
+            let click_id = click_on.ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::MissingField {
+                        field: "clickOn".into(),
+                    },
+                    format!("ops[{op_index}].clickOn"),
+                )
+            })?;
+            Some(
+                spid_for_host(&doc.root, &prefix, click_id, target.placeholders_only())
+                    .ok_or_else(|| {
+                        Error::with_path(
+                            ErrorKind::AnimHostNotFound {
+                                id: click_id.to_string(),
+                            },
+                            format!("ops[{op_index}].clickOn"),
+                        )
+                    })?,
+            )
+        } else if let Some(click_id) = click_on {
+            Some(
+                spid_for_host(&doc.root, &prefix, click_id, target.placeholders_only())
+                    .ok_or_else(|| {
+                        Error::with_path(
+                            ErrorKind::AnimHostNotFound {
+                                id: click_id.to_string(),
+                            },
+                            format!("ops[{op_index}].clickOn"),
+                        )
+                    })?,
+            )
+        } else {
+            None
+        };
+    let ctn_id = first_timing(&doc.root)
+        .and_then(|t| get_at(t, &path))
+        .and_then(|e| e.attr_local("id"))
+        .map(str::to_string);
+    {
+        let Some(timing) = first_timing_mut(&mut doc.root) else {
+            return Err(Error::with_path(
+                ErrorKind::AnimNotFound { id: id.to_string() },
+                format!("ops[{op_index}].id"),
+            ));
+        };
+        if let Some(delay) = delay {
+            set_effect_delay(get_mut_at(timing, &path), delay);
+        }
+        if let Some(name) = type_name {
+            let preset = anim_preset::by_name(name).ok_or_else(|| {
+                Error::with_path(ErrorKind::InvalidAnimType, format!("ops[{op_index}].type"))
+            })?;
+            rewrite_type(timing, &path, preset, dur, para.flatten(), op_index)?;
+        }
+        if let Some(dur) = dur {
+            set_effect_dur(get_mut_at(timing, &path), dur, op_index)?;
+        }
+        if let Some(repeat) = repeat {
+            set_repeat(get_mut_at(timing, &path), repeat);
+        }
+        if let Some(para) = para {
+            apply_para_to_tgt(get_mut_at(timing, &path), para);
+        }
+        if let Some(trigger) = trigger {
+            set_effect_trigger(timing, &path, index == 1, trigger, click_spid.as_deref());
+        } else if let Some(spid) = click_spid.as_deref() {
+            set_click_on_spid(timing, &path, spid);
+        }
+    }
+    if let Some(sound) = sound {
+        let path = ctn_id
+            .as_deref()
+            .and_then(|id| first_timing(&doc.root).and_then(|t| effect_path_by_ctn_id(t, id)))
+            .or_else(|| {
+                first_timing(&doc.root).and_then(|t| {
+                    let p = effect_paths(t);
+                    p.get(index.saturating_sub(1)).cloned()
+                })
+            });
+        if let Some(path) = path {
+            match sound {
+                None => strip_sound(pkg, &mut doc.root, &part, &path)?,
+                Some(file) => {
+                    strip_sound(pkg, &mut doc.root, &part, &path)?;
+                    attach_sound_on(pkg, &mut doc.root, &part, &path, file, op_index)?;
+                }
+            }
+        }
+    }
+    pkg.set(&part, doc.to_bytes()?)?;
+    Ok(())
+}
+
+pub fn move_anim(
+    pkg: &mut Package,
+    slides: &[SlideMeta],
+    pres_part: &str,
+    pres_root: &Element,
+    id: &str,
+    target: &AnimTarget,
+    index: usize,
+    dest: usize,
     op_index: usize,
 ) -> Result<(), Error> {
     let (part, _) = resolve_part(pkg, slides, pres_part, pres_root, target, op_index)?;
@@ -144,22 +445,21 @@ pub fn set(
             format!("ops[{op_index}].id"),
         ));
     };
-    let paths = effect_paths(timing);
-    if index < 1 || index > paths.len() {
+    let n = effect_paths(timing).len();
+    if index < 1 || index > n {
         return Err(Error::with_path(
             ErrorKind::AnimNotFound { id: id.to_string() },
             format!("ops[{op_index}].id"),
         ));
     }
-    let path = paths[index - 1].clone();
-    if let Some(delay) = delay {
-        set_effect_delay(get_mut_at(timing, &path), delay);
+    if dest < 1 || dest > n {
+        return Err(Error::with_path(
+            ErrorKind::InvalidAnimMoveIndex,
+            format!("ops[{op_index}].index"),
+        ));
     }
-    if let Some(dur) = dur {
-        set_effect_dur(get_mut_at(timing, &path), dur, op_index)?;
-    }
-    if let Some(trigger) = trigger {
-        set_effect_trigger(timing, &path, index == 1, trigger);
+    if index != dest {
+        reorder_effect(timing, index - 1, dest - 1);
     }
     pkg.set(&part, doc.to_bytes()?)?;
     Ok(())
@@ -234,20 +534,44 @@ fn is_effect(el: &Element) -> bool {
             .is_some_and(|t| EFFECT_TYPES.contains(&t))
 }
 
-fn effect_json(effect: &Element, objects: &HashMap<String, String>, host: &str, k: usize) -> Value {
-    let trigger = match effect.attr_local("nodeType") {
-        Some("withEffect") => "with",
-        Some("afterEffect") => "after",
-        _ => "click",
+fn effect_json(
+    effect: &Element,
+    objects: &HashMap<String, String>,
+    host: &str,
+    k: usize,
+    in_ia: bool,
+    click_on: Option<&str>,
+) -> Value {
+    let trigger = if in_ia {
+        "clickOn"
+    } else {
+        match effect.attr_local("nodeType") {
+            Some("withEffect") => "with",
+            Some("afterEffect") => "after",
+            _ => "click",
+        }
     };
     let mut spid = None;
     let mut filter = None;
     let mut first_behavior = None;
+    let mut para = None;
+    let mut sound = None;
     walk_effect_body(effect, &mut |e| {
         if e.local_name() == "spTgt" && spid.is_none() {
             if let Some(v) = e.attr_local("spid").filter(|s| !s.is_empty()) {
                 spid = Some(v.to_string());
             }
+        }
+        if e.local_name() == "pRg" && para.is_none() {
+            if let Some(st) = e.attr_local("st").and_then(|s| s.parse::<u32>().ok()) {
+                para = Some(st + 1);
+            }
+        }
+        if e.local_name() == "snd" && sound.is_none() {
+            sound = e
+                .attr_local("name")
+                .filter(|s| !s.is_empty())
+                .map(str::to_string);
         }
         if e.local_name() == "animEffect" && filter.is_none() {
             if let Some(v) = e.attr_local("filter").filter(|s| !s.is_empty()) {
@@ -263,7 +587,54 @@ fn effect_json(effect: &Element, objects: &HashMap<String, String>, host: &str, 
             }
         }
     });
-    let type_name = if let Some(f) = filter {
+    let type_name = if let (Some(class), Some(id)) = (
+        effect.attr_local("presetClass"),
+        effect
+            .attr_local("presetID")
+            .and_then(|s| s_to_u32(s).ok())
+            .or_else(|| effect.attr_local("presetID").and_then(|s| s.parse().ok())),
+    ) {
+        anim_preset::by_class_id(class, id)
+            .map(|p| p.name.to_string())
+            .unwrap_or_else(|| fallback_type(filter, first_behavior, effect))
+    } else {
+        fallback_type(filter, first_behavior, effect)
+    };
+    let target = spid
+        .as_deref()
+        .and_then(|s| lookup(objects, s))
+        .map_or(Value::Null, |id| json!(id));
+    let click = if in_ia {
+        click_on
+            .and_then(|s| lookup(objects, s))
+            .map_or(Value::Null, |id| json!(id))
+    } else {
+        Value::Null
+    };
+    let mut obj = Map::new();
+    obj.insert("id".into(), json!(format!("{host}/anim:{k}")));
+    obj.insert("target".into(), target);
+    obj.insert("type".into(), json!(type_name));
+    obj.insert("trigger".into(), json!(trigger));
+    obj.insert("delay".into(), effect_delay_ms(effect));
+    obj.insert("dur".into(), effect_dur_ms(effect));
+    obj.insert("repeat".into(), effect_repeat(effect));
+    obj.insert("sound".into(), sound.map_or(Value::Null, |s| json!(s)));
+    obj.insert("para".into(), para.map_or(Value::Null, |n| json!(n)));
+    obj.insert("clickOn".into(), click);
+    Value::Object(obj)
+}
+
+fn s_to_u32(s: &str) -> Result<u32, ()> {
+    s.parse().map_err(|_| ())
+}
+
+fn fallback_type(
+    filter: Option<String>,
+    first_behavior: Option<String>,
+    effect: &Element,
+) -> String {
+    if let Some(f) = filter {
         f
     } else if let Some(b) = first_behavior {
         match b.as_str() {
@@ -283,19 +654,18 @@ fn effect_json(effect: &Element, objects: &HashMap<String, String>, host: &str, 
         pc.to_string()
     } else {
         "other".into()
-    };
-    let target = spid
-        .as_deref()
-        .and_then(|s| lookup(objects, s))
-        .map_or(Value::Null, |id| json!(id));
-    let mut obj = Map::new();
-    obj.insert("id".into(), json!(format!("{host}/anim:{k}")));
-    obj.insert("target".into(), target);
-    obj.insert("type".into(), json!(type_name));
-    obj.insert("trigger".into(), json!(trigger));
-    obj.insert("delay".into(), effect_delay_ms(effect));
-    obj.insert("dur".into(), effect_dur_ms(effect));
-    Value::Object(obj)
+    }
+}
+
+fn effect_repeat(effect: &Element) -> Value {
+    match effect.attr_local("repeatCount") {
+        None => json!(1),
+        Some("indefinite") => Value::Null,
+        Some(s) => s
+            .parse::<u32>()
+            .map(|n| json!((n / 1000).max(1)))
+            .unwrap_or(Value::Null),
+    }
 }
 
 fn tl_time_ms(raw: Option<&str>, missing: u32) -> Value {
@@ -312,24 +682,36 @@ fn effect_delay_ms(effect: &Element) -> Value {
     };
     let delay = lst
         .element_children()
-        .find(|e| e.local_name() == "cond")
+        .find(|e| e.local_name() == "cond" && e.attr_local("evt").is_none())
         .and_then(|c| c.attr_local("delay"));
     tl_time_ms(delay, 0)
 }
 
 fn effect_dur_ms(effect: &Element) -> Value {
-    let mut found = None;
+    let mut anim_effect = None;
+    let mut other = None;
+    let mut set = None;
     walk_effect_body(effect, &mut |e| {
-        if found.is_some() || e.local_name() != "animEffect" {
+        let local = e.local_name();
+        if !matches!(
+            local,
+            "animEffect" | "anim" | "animRot" | "animScale" | "animMotion" | "animClr" | "set"
+        ) {
             return;
         }
-        found = Some(
-            e.child_by_local("cBhvr")
-                .and_then(|b| b.child_by_local("cTn"))
-                .and_then(|c| c.attr_local("dur"))
-                .map(str::to_string),
-        );
+        let dur = e
+            .child_by_local("cBhvr")
+            .and_then(|b| b.child_by_local("cTn"))
+            .and_then(|c| c.attr_local("dur"))
+            .map(str::to_string);
+        match local {
+            "animEffect" if anim_effect.is_none() => anim_effect = Some(dur),
+            "set" if set.is_none() => set = Some(dur),
+            _ if other.is_none() => other = Some(dur),
+            _ => {}
+        }
     });
+    let found = anim_effect.or(other).or(set);
     match found {
         None => json!(500),
         Some(inner) => tl_time_ms(inner.as_deref(), 500),
@@ -493,15 +875,38 @@ fn node_type_of(trigger: &str) -> &'static str {
 
 fn append_effect(
     timing: &mut Element,
+    preset: Preset,
     spid: &str,
     node_type: &str,
     trigger: &str,
     delay: u32,
     dur: u32,
+    para: Option<u32>,
+    repeat: RepeatWrite,
+    click_spid: Option<&str>,
 ) {
     let mut next = max_ctn_id(timing).saturating_add(1);
     if next < 1 {
         next = 1;
+    }
+    if trigger == "clickOn" {
+        let seq_id = take_ids(&mut next, 1)[0];
+        let wrap = take_ids(&mut next, 2);
+        let n = 1 + preset.behavior_ids();
+        let mut effect = anim_preset::effect_par(
+            preset,
+            &take_ids(&mut next, n),
+            spid,
+            node_type,
+            delay,
+            dur,
+            para,
+        );
+        set_repeat(effect_ctn_mut(&mut effect), repeat);
+        let seq = wrap_interactive(seq_id, click_spid.unwrap_or(spid), &wrap, effect);
+        append_tm_root_seq(timing, seq);
+        ensure_bld_p(timing, spid);
+        return;
     }
     let click_like = trigger != "with" && trigger != "after";
     let has_any = has_effect(timing);
@@ -510,28 +915,44 @@ fn append_effect(
     if click_like || !has_any {
         let auto = !has_any && trigger != "click";
         let group = build_click_group(
-            &take_ids(&mut next, 5),
+            preset,
+            &take_ids(&mut next, 3 + preset.behavior_ids()),
             spid,
             node_type,
             delay,
             dur,
             auto,
             seq_id,
+            para,
+            repeat,
         );
         ensure_main_seq_lst(timing).push_element(group);
     } else if let Some(path) = effect_paths(timing).last().cloned() {
-        // with / after：接到最后一条效果所在 par 的兄弟位置。
-        let sibling = fade_effect_par(&take_ids(&mut next, 3), spid, node_type, delay, dur);
-        append_sibling_par(timing, &path, sibling);
-    } else {
-        let group = build_click_group(
-            &take_ids(&mut next, 5),
+        let n = 1 + preset.behavior_ids();
+        let mut sibling = anim_preset::effect_par(
+            preset,
+            &take_ids(&mut next, n),
             spid,
             node_type,
             delay,
             dur,
-            trigger != "click",
+            para,
+        );
+        set_repeat(effect_ctn_mut(&mut sibling), repeat);
+        append_sibling_par(timing, &path, sibling);
+    } else {
+        let auto = trigger != "click";
+        let group = build_click_group(
+            preset,
+            &take_ids(&mut next, 3 + preset.behavior_ids()),
+            spid,
+            node_type,
+            delay,
+            dur,
+            auto,
             seq_id,
+            para,
+            repeat,
         );
         ensure_main_seq_lst(timing).push_element(group);
     }
@@ -548,24 +969,31 @@ fn take_ids(next: &mut u32, n: usize) -> Vec<u32> {
 }
 
 fn build_full_timing(
+    preset: Preset,
     spid: &str,
     node_type: &str,
     start: u32,
     delay: u32,
     dur: u32,
     auto: bool,
+    para: Option<u32>,
+    repeat: RepeatWrite,
 ) -> Element {
     let mut next = start;
     let root_id = take_ids(&mut next, 1)[0];
     let seq_id = take_ids(&mut next, 1)[0];
+    let n = 3 + preset.behavior_ids();
     let group = build_click_group(
-        &take_ids(&mut next, 5),
+        preset,
+        &take_ids(&mut next, n),
         spid,
         node_type,
         delay,
         dur,
         auto,
         seq_id,
+        para,
+        repeat,
     );
 
     let mut main = Element::new("p:cTn")
@@ -606,7 +1034,56 @@ fn build_full_timing(
     timing
 }
 
+fn build_full_clickon(
+    preset: Preset,
+    spid: &str,
+    click_spid: &str,
+    node_type: &str,
+    start: u32,
+    delay: u32,
+    dur: u32,
+    para: Option<u32>,
+    repeat: RepeatWrite,
+) -> Element {
+    let mut next = start;
+    let root_id = take_ids(&mut next, 1)[0];
+    let seq_id = take_ids(&mut next, 1)[0];
+    let wrap = take_ids(&mut next, 2);
+    let n = 1 + preset.behavior_ids();
+    let mut effect = anim_preset::effect_par(
+        preset,
+        &take_ids(&mut next, n),
+        spid,
+        node_type,
+        delay,
+        dur,
+        para,
+    );
+    set_repeat(effect_ctn_mut(&mut effect), repeat);
+    let seq = wrap_interactive(seq_id, click_spid, &wrap, effect);
+
+    let mut root_lst = Element::new("p:childTnLst");
+    root_lst.push_element(seq);
+    let mut root = Element::new("p:cTn")
+        .with_attr("id", root_id.to_string())
+        .with_attr("dur", "indefinite")
+        .with_attr("restart", "never")
+        .with_attr("nodeType", "tmRoot");
+    root.push_element(root_lst);
+    let mut par = Element::new("p:par");
+    par.push_element(root);
+    let mut tn = Element::new("p:tnLst");
+    tn.push_element(par);
+    let mut bld = Element::new("p:bldLst");
+    bld.push_element(bld_p(spid));
+    let mut timing = Element::new("p:timing");
+    timing.push_element(tn);
+    timing.push_element(bld);
+    timing
+}
+
 fn build_click_group(
+    preset: Preset,
     ids: &[u32],
     spid: &str,
     node_type: &str,
@@ -614,8 +1091,11 @@ fn build_click_group(
     dur: u32,
     auto: bool,
     main_seq_id: u32,
+    para: Option<u32>,
+    repeat: RepeatWrite,
 ) -> Element {
-    let effect = fade_effect_par(&ids[2..5], spid, node_type, delay, dur);
+    let mut effect = anim_preset::effect_par(preset, &ids[2..], spid, node_type, delay, dur, para);
+    set_repeat(effect_ctn_mut(&mut effect), repeat);
 
     let mut inner_lst = Element::new("p:childTnLst");
     inner_lst.push_element(effect);
@@ -650,63 +1130,6 @@ fn click_group_conds(auto: bool, main_seq_id: u32) -> Element {
         lst.push_element(cond);
     }
     lst
-}
-
-fn fade_effect_par(ids: &[u32], spid: &str, node_type: &str, delay: u32, dur: u32) -> Element {
-    let mut name = Element::new("p:attrName");
-    name.set_text("style.visibility");
-    let mut names = Element::new("p:attrNameLst");
-    names.push_element(name);
-
-    let mut set_bhvr = Element::new("p:cBhvr");
-    set_bhvr.push_element(
-        Element::new("p:cTn")
-            .with_attr("id", ids[1].to_string())
-            .with_attr("dur", "1")
-            .with_attr("fill", "hold"),
-    );
-    set_bhvr.push_element(tgt_el(spid));
-    set_bhvr.push_element(names);
-    let mut to = Element::new("p:to");
-    to.push_element(Element::new("p:strVal").with_attr("val", "visible"));
-    let mut set = Element::new("p:set");
-    set.push_element(set_bhvr);
-    set.push_element(to);
-
-    let mut anim_bhvr = Element::new("p:cBhvr");
-    anim_bhvr.push_element(
-        Element::new("p:cTn")
-            .with_attr("id", ids[2].to_string())
-            .with_attr("dur", dur.to_string()),
-    );
-    anim_bhvr.push_element(tgt_el(spid));
-    let mut anim = Element::new("p:animEffect")
-        .with_attr("transition", "in")
-        .with_attr("filter", "fade");
-    anim.push_element(anim_bhvr);
-
-    let mut kids = Element::new("p:childTnLst");
-    kids.push_element(set);
-    kids.push_element(anim);
-    let mut ctn = Element::new("p:cTn")
-        .with_attr("id", ids[0].to_string())
-        .with_attr("presetID", "10")
-        .with_attr("presetClass", "entr")
-        .with_attr("presetSubtype", "0")
-        .with_attr("fill", "hold")
-        .with_attr("grpId", "0")
-        .with_attr("nodeType", node_type);
-    ctn.push_element(cond_lst(&delay.to_string()));
-    ctn.push_element(kids);
-    let mut par = Element::new("p:par");
-    par.push_element(ctn);
-    par
-}
-
-fn tgt_el(spid: &str) -> Element {
-    let mut tgt = Element::new("p:tgtEl");
-    tgt.push_element(Element::new("p:spTgt").with_attr("spid", spid));
-    tgt
 }
 
 fn cond_lst(delay: &str) -> Element {
@@ -813,11 +1236,31 @@ fn ensure_main_seq_lst(timing: &mut Element) -> &mut Element {
         let ctn = get_mut_at(timing, &path);
         return ensure_child(ctn, "p:childTnLst");
     }
-    // 有 timing 却没有 mainSeq：在 tnLst 下补一套。
     let mut next = max_ctn_id(timing).saturating_add(1);
     if next < 1 {
         next = 1;
     }
+    if find_ctn_path(timing, "tmRoot").is_some() {
+        let seq_id = next;
+        let mut main = Element::new("p:cTn")
+            .with_attr("id", seq_id.to_string())
+            .with_attr("dur", "indefinite")
+            .with_attr("nodeType", "mainSeq");
+        main.push_element(Element::new("p:childTnLst"));
+        let mut seq = Element::new("p:seq")
+            .with_attr("concurrent", "1")
+            .with_attr("nextAc", "seek");
+        seq.push_element(main);
+        seq.push_element(nav_cond("prevCondLst", "onPrev"));
+        seq.push_element(nav_cond("nextCondLst", "onNext"));
+        let root_path = find_ctn_path(timing, "tmRoot").expect("刚确认 tmRoot");
+        let root = get_mut_at(timing, &root_path);
+        ensure_child(root, "p:childTnLst").push_element(seq);
+        let path = find_ctn_path(timing, "mainSeq").expect("刚写入 mainSeq");
+        let ctn = get_mut_at(timing, &path);
+        return ensure_child(ctn, "p:childTnLst");
+    }
+    // 有 timing 却没有 tmRoot：在 tnLst 下补一套。
     let tn = ensure_child(timing, "p:tnLst");
     let root_id = next;
     next += 1;
@@ -1097,45 +1540,37 @@ fn set_effect_delay(effect: &mut Element, delay: u32) {
 }
 
 fn set_effect_dur(effect: &mut Element, dur: u32, op_index: usize) -> Result<(), Error> {
-    let mut path = None;
-    find_anim_effect_dur_path(effect, &mut Vec::new(), &mut path);
-    let Some(path) = path else {
+    let mut timed = Vec::new();
+    let mut hidden = Vec::new();
+    collect_dur_targets(effect, &mut Vec::new(), &mut timed, &mut hidden);
+    if timed.is_empty() {
         return Err(Error::with_path(
             ErrorKind::AnimNeedEffectDur,
             format!("ops[{op_index}].dur"),
         ));
-    };
-    get_mut_at(effect, &path).set_attr("dur", dur.to_string());
+    }
+    for path in timed {
+        get_mut_at(effect, &path).set_attr("dur", dur.to_string());
+    }
+    let hidden_delay = dur.saturating_sub(1).to_string();
+    for path in hidden {
+        get_mut_at(effect, &path).set_attr("delay", hidden_delay.clone());
+    }
     Ok(())
 }
 
-fn find_anim_effect_dur_path(el: &Element, path: &mut Vec<usize>, found: &mut Option<Vec<usize>>) {
-    if found.is_some() {
-        return;
-    }
+fn collect_dur_targets(
+    el: &Element,
+    path: &mut Vec<usize>,
+    timed: &mut Vec<Vec<usize>>,
+    hidden: &mut Vec<Vec<usize>>,
+) {
     if el.local_name() == "AlternateContent" {
         if let Some(i) = shape::first_alt_child_index(el) {
             if let Some(Node::Element(child)) = el.children.get(i) {
                 path.push(i);
-                find_anim_effect_dur_path(child, path, found);
+                collect_dur_targets(child, path, timed, hidden);
                 path.pop();
-            }
-        }
-        return;
-    }
-    if el.local_name() == "animEffect" {
-        if let Some((i, ctn)) = el.children.iter().enumerate().find_map(|(i, n)| match n {
-            Node::Element(e) if e.local_name() == "cBhvr" => Some((i, e)),
-            _ => None,
-        }) {
-            if let Some((j, _)) = ctn.children.iter().enumerate().find_map(|(j, n)| match n {
-                Node::Element(e) if e.local_name() == "cTn" => Some((j, e)),
-                _ => None,
-            }) {
-                let mut p = path.clone();
-                p.push(i);
-                p.push(j);
-                *found = Some(p);
             }
         }
         return;
@@ -1143,19 +1578,105 @@ fn find_anim_effect_dur_path(el: &Element, path: &mut Vec<usize>, found: &mut Op
     if is_effect(el) && !path.is_empty() {
         return;
     }
+    let local = el.local_name();
+    if matches!(
+        local,
+        "animEffect" | "anim" | "animRot" | "animScale" | "animMotion" | "animClr"
+    ) {
+        if let Some(ctn_path) = bhvr_ctn_path(el, path) {
+            timed.push(ctn_path);
+        }
+    }
+    if local == "set" && set_is_hidden(el) {
+        if let Some(p) = hidden_delay_path(el, path) {
+            hidden.push(p);
+        }
+    }
     for (i, n) in el.children.iter().enumerate() {
         if let Node::Element(c) = n {
             path.push(i);
-            find_anim_effect_dur_path(c, path, found);
+            collect_dur_targets(c, path, timed, hidden);
             path.pop();
-            if found.is_some() {
-                return;
-            }
         }
     }
 }
 
-fn set_effect_trigger(timing: &mut Element, path: &[usize], is_first: bool, trigger: &str) {
+fn bhvr_ctn_path(el: &Element, prefix: &[usize]) -> Option<Vec<usize>> {
+    let (i, ctn) = el.children.iter().enumerate().find_map(|(i, n)| match n {
+        Node::Element(e) if e.local_name() == "cBhvr" => Some((i, e)),
+        _ => None,
+    })?;
+    let (j, _) = ctn.children.iter().enumerate().find_map(|(j, n)| match n {
+        Node::Element(e) if e.local_name() == "cTn" => Some((j, e)),
+        _ => None,
+    })?;
+    let mut p = prefix.to_vec();
+    p.push(i);
+    p.push(j);
+    Some(p)
+}
+
+fn set_is_hidden(set: &Element) -> bool {
+    set.child_by_local("to")
+        .and_then(|t| t.child_by_local("strVal"))
+        .and_then(|s| s.attr_local("val"))
+        == Some("hidden")
+}
+
+fn hidden_delay_path(set: &Element, prefix: &[usize]) -> Option<Vec<usize>> {
+    let (i, bhvr) = set.children.iter().enumerate().find_map(|(i, n)| match n {
+        Node::Element(e) if e.local_name() == "cBhvr" => Some((i, e)),
+        _ => None,
+    })?;
+    let (j, ctn) = bhvr
+        .children
+        .iter()
+        .enumerate()
+        .find_map(|(j, n)| match n {
+            Node::Element(e) if e.local_name() == "cTn" => Some((j, e)),
+            _ => None,
+        })?;
+    let (k, lst) = ctn.children.iter().enumerate().find_map(|(k, n)| match n {
+        Node::Element(e) if e.local_name() == "stCondLst" => Some((k, e)),
+        _ => None,
+    })?;
+    let (m, _) = lst.children.iter().enumerate().find_map(|(m, n)| match n {
+        Node::Element(e) if e.local_name() == "cond" && e.attr_local("evt").is_none() => {
+            Some((m, e))
+        }
+        _ => None,
+    })?;
+    let mut p = prefix.to_vec();
+    p.push(i);
+    p.push(j);
+    p.push(k);
+    p.push(m);
+    Some(p)
+}
+
+fn set_effect_trigger(
+    timing: &mut Element,
+    path: &[usize],
+    is_first: bool,
+    trigger: &str,
+    click_spid: Option<&str>,
+) {
+    let in_ia = interactive_seq_path(timing, path).is_some();
+    if trigger == "clickOn" {
+        get_mut_at(timing, path).set_attr("nodeType", "clickEffect");
+        if in_ia {
+            if let Some(spid) = click_spid {
+                set_click_on_spid(timing, path, spid);
+            }
+            return;
+        }
+        move_to_interactive(timing, path, click_spid.unwrap_or("2"));
+        return;
+    }
+    if in_ia {
+        move_from_interactive(timing, path, trigger);
+        return;
+    }
     let old = match get_at(timing, path).and_then(|e| e.attr_local("nodeType")) {
         Some("withEffect") => "with",
         Some("afterEffect") => "after",
@@ -1179,6 +1700,85 @@ fn set_effect_trigger(timing: &mut Element, path: &[usize], is_first: bool, trig
     } else {
         merge_into_previous(timing, path);
     }
+}
+
+fn move_to_interactive(timing: &mut Element, path: &[usize], click_spid: &str) {
+    let Some(mut par) = take_effect_par(timing, path) else {
+        return;
+    };
+    effect_ctn_mut(&mut par).set_attr("nodeType", "clickEffect");
+    strip_idle_pars(timing);
+    shape::prune_anim(timing);
+    prune_empty_seqs(timing);
+    let mut next = max_ctn_id(timing).saturating_add(1);
+    if next < 1 {
+        next = 1;
+    }
+    let seq_id = take_ids(&mut next, 1)[0];
+    let wrap = take_ids(&mut next, 2);
+    let seq = wrap_interactive(seq_id, click_spid, &wrap, par);
+    append_tm_root_seq(timing, seq);
+}
+
+fn move_from_interactive(timing: &mut Element, path: &[usize], trigger: &str) {
+    let Some(mut par) = take_effect_par(timing, path) else {
+        return;
+    };
+    effect_ctn_mut(&mut par).set_attr("nodeType", node_type_of(trigger));
+    strip_idle_pars(timing);
+    shape::prune_anim(timing);
+    prune_empty_seqs(timing);
+    let remaining = main_effect_count(timing);
+    let seq_id = main_seq_id(timing).unwrap_or(2);
+    if trigger == "click" || remaining == 0 {
+        let auto = remaining == 0 && trigger != "click";
+        let mut next = max_ctn_id(timing).saturating_add(1);
+        if next < 1 {
+            next = 1;
+        }
+        let group = wrap_par_click_group(par, &take_ids(&mut next, 2), auto, seq_id);
+        ensure_main_seq_lst(timing).push_element(group);
+    } else if let Some(prev) = effect_paths(timing)
+        .into_iter()
+        .rev()
+        .find(|p| interactive_seq_path(timing, p).is_none())
+    {
+        append_sibling_par(timing, &prev, par);
+    } else {
+        let mut next = max_ctn_id(timing).saturating_add(1);
+        if next < 1 {
+            next = 1;
+        }
+        let group = wrap_par_click_group(par, &take_ids(&mut next, 2), true, seq_id);
+        ensure_main_seq_lst(timing).push_element(group);
+    }
+}
+
+fn main_effect_count(timing: &Element) -> usize {
+    effect_paths(timing)
+        .iter()
+        .filter(|p| interactive_seq_path(timing, p).is_none())
+        .count()
+}
+
+fn prune_empty_seqs(timing: &mut Element) {
+    let Some(root_path) = find_ctn_path(timing, "tmRoot") else {
+        return;
+    };
+    let Some(lst_i) = get_at(timing, &root_path).and_then(|root| {
+        root.children
+            .iter()
+            .position(|n| matches!(n, Node::Element(e) if e.local_name() == "childTnLst"))
+    }) else {
+        return;
+    };
+    let mut lst_path = root_path;
+    lst_path.push(lst_i);
+    let lst = get_mut_at(timing, &lst_path);
+    lst.children.retain(|n| match n {
+        Node::Element(e) if e.local_name() == "seq" => has_effect(e),
+        _ => true,
+    });
 }
 
 fn click_group_ctn_path(timing: &Element, effect_path: &[usize]) -> Option<Vec<usize>> {
@@ -1292,4 +1892,509 @@ fn merge_into_previous(timing: &mut Element, path: &[usize]) {
         let group = wrap_par_click_group(par, &take_ids(&mut next, 2), true, seq_id);
         ensure_main_seq_lst(timing).push_element(group);
     }
+}
+
+fn effect_ctn_mut(par: &mut Element) -> &mut Element {
+    par.element_children_mut()
+        .find(|e| e.local_name() == "cTn")
+        .expect("效果 par 里有 cTn")
+}
+
+fn set_repeat(effect: &mut Element, repeat: RepeatWrite) {
+    match repeat {
+        RepeatWrite::Once => effect.remove_attr("repeatCount"),
+        RepeatWrite::Times(n) if n <= 1 => effect.remove_attr("repeatCount"),
+        RepeatWrite::Times(n) => {
+            effect.set_attr("repeatCount", n.saturating_mul(1000).to_string());
+        }
+        RepeatWrite::Indefinite => effect.set_attr("repeatCount", "indefinite"),
+    }
+}
+
+fn wrap_interactive(seq_id: u32, click_spid: &str, wrap_ids: &[u32], effect: Element) -> Element {
+    let inner = wrap_par_delay0(effect, wrap_ids);
+    let mut st = Element::new("p:stCondLst");
+    st.push_element(cond_click(click_spid));
+    let mut end = Element::new("p:endSync")
+        .with_attr("evt", "end")
+        .with_attr("delay", "0");
+    end.push_element(Element::new("p:rtn").with_attr("val", "all"));
+    let mut lst = Element::new("p:childTnLst");
+    lst.push_element(inner);
+    let mut ctn = Element::new("p:cTn")
+        .with_attr("id", seq_id.to_string())
+        .with_attr("restart", "whenNotActive")
+        .with_attr("fill", "hold")
+        .with_attr("evtFilter", "cancelBubble")
+        .with_attr("nodeType", "interactiveSeq");
+    ctn.push_element(st);
+    ctn.push_element(end);
+    ctn.push_element(lst);
+    let mut next = Element::new("p:nextCondLst");
+    next.push_element(cond_click(click_spid));
+    let mut seq = Element::new("p:seq")
+        .with_attr("concurrent", "1")
+        .with_attr("nextAc", "seek");
+    seq.push_element(ctn);
+    seq.push_element(next);
+    seq
+}
+
+fn cond_click(spid: &str) -> Element {
+    let mut cond = Element::new("p:cond")
+        .with_attr("evt", "onClick")
+        .with_attr("delay", "0");
+    cond.push_element(tgt_click(spid));
+    cond
+}
+
+fn tgt_click(spid: &str) -> Element {
+    let mut tgt = Element::new("p:tgtEl");
+    tgt.push_element(Element::new("p:spTgt").with_attr("spid", spid));
+    tgt
+}
+
+fn wrap_par_delay0(effect: Element, ids: &[u32]) -> Element {
+    let mut inner_lst = Element::new("p:childTnLst");
+    inner_lst.push_element(effect);
+    let mut inner_ctn = Element::new("p:cTn")
+        .with_attr("id", ids[1].to_string())
+        .with_attr("fill", "hold");
+    inner_ctn.push_element(cond_lst("0"));
+    inner_ctn.push_element(inner_lst);
+    let mut inner_par = Element::new("p:par");
+    inner_par.push_element(inner_ctn);
+    let mut outer_lst = Element::new("p:childTnLst");
+    outer_lst.push_element(inner_par);
+    let mut outer_ctn = Element::new("p:cTn")
+        .with_attr("id", ids[0].to_string())
+        .with_attr("fill", "hold");
+    outer_ctn.push_element(cond_lst("0"));
+    outer_ctn.push_element(outer_lst);
+    let mut outer = Element::new("p:par");
+    outer.push_element(outer_ctn);
+    outer
+}
+
+fn append_tm_root_seq(timing: &mut Element, seq: Element) {
+    if let Some(path) = find_ctn_path(timing, "tmRoot") {
+        let root = get_mut_at(timing, &path);
+        ensure_child(root, "p:childTnLst").push_element(seq);
+        return;
+    }
+    ensure_main_seq_lst(timing);
+    if let Some(path) = find_ctn_path(timing, "tmRoot") {
+        let root = get_mut_at(timing, &path);
+        ensure_child(root, "p:childTnLst").push_element(seq);
+    }
+}
+
+fn paragraph_count(root: &Element, spid: &str) -> u32 {
+    let mut n = 0u32;
+    shape::walk_choice(root, &mut |e| {
+        if n > 0 {
+            return;
+        }
+        let id = match e.local_name() {
+            "sp" => cnv_id(e, "nvSpPr"),
+            "cxnSp" => cnv_id(e, "nvCxnSpPr"),
+            "pic" => cnv_id(e, "nvPicPr"),
+            "graphicFrame" => cnv_id(e, "nvGraphicFramePr"),
+            _ => None,
+        };
+        let Some(id) = id else {
+            return;
+        };
+        if !ids_match(&id, spid) {
+            return;
+        }
+        if let Some(body) = e.child_by_local("txBody") {
+            n = count_p(body);
+        }
+    });
+    n
+}
+
+fn count_p(el: &Element) -> u32 {
+    let mut n = 0u32;
+    fn rec(el: &Element, n: &mut u32) {
+        if el.local_name() == "p" {
+            *n += 1;
+        }
+        for c in el.element_children() {
+            rec(c, n);
+        }
+    }
+    rec(el, &mut n);
+    n
+}
+
+fn rewrite_type(
+    timing: &mut Element,
+    path: &[usize],
+    preset: Preset,
+    dur: Option<u32>,
+    para: Option<u32>,
+    _op_index: usize,
+) -> Result<(), Error> {
+    let effect = get_at(timing, path).expect("效果路径");
+    let spid = spid_at(timing, path).unwrap_or("2").to_string();
+    let node_type = effect
+        .attr_local("nodeType")
+        .unwrap_or("clickEffect")
+        .to_string();
+    let delay = match effect_delay_ms(effect) {
+        Value::Number(n) => n.as_u64().unwrap_or(0) as u32,
+        _ => 0,
+    };
+    let dur = dur.unwrap_or_else(|| match effect_dur_ms(effect) {
+        Value::Number(n) => n.as_u64().unwrap_or(500) as u32,
+        _ => 500,
+    });
+    let para = para.or_else(|| effect_para(effect));
+    let mut next = max_ctn_id(timing).saturating_add(1);
+    let ids = take_ids(&mut next, preset.behavior_ids());
+    let effect = get_mut_at(timing, path);
+    anim_preset::fill_effect(effect, preset, &ids, &spid, &node_type, delay, dur, para);
+    Ok(())
+}
+
+fn effect_para(effect: &Element) -> Option<u32> {
+    let mut para = None;
+    walk_effect_body(effect, &mut |e| {
+        if para.is_none() && e.local_name() == "pRg" {
+            para = e
+                .attr_local("st")
+                .and_then(|s| s.parse::<u32>().ok())
+                .map(|n| n + 1);
+        }
+    });
+    para
+}
+
+fn apply_para_to_tgt(el: &mut Element, para: Option<u32>) {
+    if el.local_name() == "spTgt" {
+        el.children.retain(|n| match n {
+            Node::Element(e) => e.local_name() != "txEl",
+            _ => true,
+        });
+        if let Some(n) = para {
+            let st = n.saturating_sub(1);
+            let mut tx = Element::new("p:txEl");
+            tx.push_element(
+                Element::new("p:pRg")
+                    .with_attr("st", st.to_string())
+                    .with_attr("end", st.to_string()),
+            );
+            el.push_element(tx);
+        }
+    }
+    for n in &mut el.children {
+        if let Node::Element(c) = n {
+            apply_para_to_tgt(c, para);
+        }
+    }
+}
+
+fn set_click_on_spid(timing: &mut Element, effect_path: &[usize], spid: &str) {
+    let Some(seq_path) = interactive_seq_path(timing, effect_path) else {
+        return;
+    };
+    let seq = get_mut_at(timing, &seq_path);
+    patch_click_spid(seq, spid);
+}
+
+fn interactive_seq_path(timing: &Element, effect_path: &[usize]) -> Option<Vec<usize>> {
+    let mut cur = Vec::new();
+    for &i in effect_path {
+        cur.push(i);
+        if let Some(e) = get_at(timing, &cur) {
+            if e.local_name() == "cTn" && e.attr_local("nodeType") == Some("interactiveSeq") {
+                return Some(cur);
+            }
+        }
+    }
+    None
+}
+
+fn patch_click_spid(el: &mut Element, spid: &str) {
+    if el.local_name() == "cond" && el.attr_local("evt") == Some("onClick") {
+        if let Some(tgt) = el.child_by_local_mut("tgtEl") {
+            if let Some(sp) = tgt.child_by_local_mut("spTgt") {
+                sp.set_attr("spid", spid);
+            }
+        }
+    }
+    for n in &mut el.children {
+        if let Node::Element(c) = n {
+            if is_effect(c) {
+                continue;
+            }
+            patch_click_spid(c, spid);
+        }
+    }
+}
+
+fn reorder_effect(timing: &mut Element, from: usize, to: usize) {
+    let paths = effect_paths(timing);
+    if from >= paths.len() || to >= paths.len() || from == to {
+        return;
+    }
+    let from_path = paths[from].clone();
+    let Some(unit) = take_unit(timing, &from_path) else {
+        return;
+    };
+    strip_idle_pars(timing);
+    shape::prune_anim(timing);
+    prune_empty_seqs(timing);
+    let paths = effect_paths(timing);
+    if paths.is_empty() {
+        let seq_id = main_seq_id(timing).unwrap_or(2);
+        let mut next = max_ctn_id(timing).saturating_add(1);
+        if next < 1 {
+            next = 1;
+        }
+        let group = wrap_par_click_group(unit, &take_ids(&mut next, 2), false, seq_id);
+        ensure_main_seq_lst(timing).push_element(group);
+        return;
+    }
+    let dest_idx = if from < to { to - 1 } else { to };
+    let dest_idx = dest_idx.min(paths.len() - 1);
+    insert_unit(timing, &paths[dest_idx], unit, from < to);
+}
+
+fn unit_path(timing: &Element, effect_path: &[usize]) -> Vec<usize> {
+    if let Some(ia) = interactive_seq_path(timing, effect_path) {
+        if !ia.is_empty() {
+            let parent = &ia[..ia.len() - 1];
+            if is_local_at(timing, parent, "seq") {
+                return parent.to_vec();
+            }
+        }
+        return ia;
+    }
+    if let Some(g) = click_group_ctn_path(timing, effect_path) {
+        if !g.is_empty() {
+            let group_par = &g[..g.len() - 1];
+            if get_at(timing, group_par).is_some_and(|el| effect_count_under(el) <= 1) {
+                return group_par.to_vec();
+            }
+        }
+    }
+    if !effect_path.is_empty() && is_local_at(timing, &effect_path[..effect_path.len() - 1], "par")
+    {
+        return effect_path[..effect_path.len() - 1].to_vec();
+    }
+    effect_path.to_vec()
+}
+
+fn effect_count_under(el: &Element) -> usize {
+    let mut n = 0usize;
+    shape::walk_choice(el, &mut |e| {
+        if is_effect(e) {
+            n += 1;
+        }
+    });
+    n
+}
+
+fn take_unit(timing: &mut Element, effect_path: &[usize]) -> Option<Element> {
+    let u = unit_path(timing, effect_path);
+    let el = get_at(timing, &u)?.clone();
+    remove_at(timing, &u);
+    Some(el)
+}
+
+fn insert_unit(timing: &mut Element, dest_effect_path: &[usize], unit: Element, after: bool) {
+    let dest_unit = unit_path(timing, dest_effect_path);
+    if dest_unit.is_empty() {
+        ensure_main_seq_lst(timing).push_element(unit);
+        return;
+    }
+    let (parent_path, last) = dest_unit.split_at(dest_unit.len() - 1);
+    let parent = if parent_path.is_empty() {
+        timing
+    } else {
+        get_mut_at(timing, parent_path)
+    };
+    let at = if after { last[0] + 1 } else { last[0] };
+    let at = at.min(parent.children.len());
+    parent.children.insert(at, Node::Element(unit));
+}
+
+fn effect_path_by_ctn_id(timing: &Element, id: &str) -> Option<Vec<usize>> {
+    effect_paths(timing).into_iter().find(|p| {
+        get_at(timing, p)
+            .and_then(|e| e.attr_local("id"))
+            .is_some_and(|v| v == id)
+    })
+}
+
+fn attach_sound(
+    pkg: &mut Package,
+    root: &mut Element,
+    part: &str,
+    file: &str,
+    op_index: usize,
+) -> Result<(), Error> {
+    let paths = first_timing(root).map(effect_paths).unwrap_or_default();
+    let Some(path) = paths.last().cloned() else {
+        return Ok(());
+    };
+    attach_sound_on(pkg, root, part, &path, file, op_index)
+}
+
+fn first_timing(root: &Element) -> Option<&Element> {
+    first_timing_index(root).and_then(|i| match &root.children[i] {
+        Node::Element(e) => Some(e),
+        _ => None,
+    })
+}
+
+fn attach_sound_on(
+    pkg: &mut Package,
+    root: &mut Element,
+    part: &str,
+    path: &[usize],
+    file: &str,
+    op_index: usize,
+) -> Result<(), Error> {
+    let p = std::path::PathBuf::from(file);
+    let bytes = std::fs::read(&p)
+        .map_err(|e| io_path(e, p.clone()).at(format!("ops[{op_index}].sound")))?;
+    if !is_wav(&bytes) {
+        return Err(Error::with_path(
+            ErrorKind::InvalidMediaFile,
+            format!("ops[{op_index}].sound"),
+        ));
+    }
+    let name = p
+        .file_name()
+        .and_then(|s| s.to_str())
+        .filter(|s| !s.is_empty())
+        .unwrap_or("sound.wav")
+        .to_string();
+    let media_part = next_wav_part(pkg);
+    pkg.set(&media_part, bytes)?;
+    picture::ensure_xmlns(root, "r", REL_NS);
+    let mut rels = Relationships::from_package(pkg, part)?;
+    let rid = rels.next_rid();
+    rels.push(Relationship {
+        id: rid.clone(),
+        rel_type: REL_AUDIO.into(),
+        target: picture::rel_target_from(part, &media_part),
+        target_mode: None,
+        extra: Vec::new(),
+    });
+    rels.write_to(pkg, part)?;
+    let mut cts = ContentTypes::from_package(pkg)?;
+    cts.ensure_default("wav", "audio/x-wav");
+    cts.write_to(pkg)?;
+    let Some(timing) = first_timing_mut(root) else {
+        return Ok(());
+    };
+    let effect = get_mut_at(timing, path);
+    effect.children.retain(|n| match n {
+        Node::Element(e) => e.local_name() != "sndAc",
+        _ => true,
+    });
+    let snd = Element::new("p:snd")
+        .with_attr("r:embed", rid)
+        .with_attr("name", name);
+    let mut st = Element::new("p:stSnd");
+    st.push_element(snd);
+    let mut ac = Element::new("p:sndAc");
+    ac.push_element(st);
+    effect.push_element(ac);
+    Ok(())
+}
+
+fn strip_sound(
+    pkg: &mut Package,
+    root: &mut Element,
+    part: &str,
+    path: &[usize],
+) -> Result<(), Error> {
+    let Some(timing) = first_timing(root) else {
+        return Ok(());
+    };
+    let Some(effect) = get_at(timing, path) else {
+        return Ok(());
+    };
+    let mut rids = Vec::new();
+    collect_snd_rids(effect, &mut rids);
+    let Some(timing) = first_timing_mut(root) else {
+        return Ok(());
+    };
+    let effect = get_mut_at(timing, path);
+    effect.children.retain(|n| match n {
+        Node::Element(e) => e.local_name() != "sndAc",
+        _ => true,
+    });
+    if rids.is_empty() {
+        return Ok(());
+    }
+    drop_unused_audio(pkg, root, part, &rids)
+}
+
+fn drop_unused_audio(
+    pkg: &mut Package,
+    root: &Element,
+    part: &str,
+    rids: &[String],
+) -> Result<(), Error> {
+    if rids.is_empty() {
+        return Ok(());
+    }
+    let still = {
+        let mut left = Vec::new();
+        if let Some(timing) = first_timing(root) {
+            collect_snd_rids(timing, &mut left);
+        }
+        left
+    };
+    let mut rels = Relationships::from_package(pkg, part)?;
+    let mut old_parts = Vec::new();
+    for rid in rids {
+        if still.iter().any(|s| s == rid) {
+            continue;
+        }
+        if let Ok(p) = crate::opc::resolve_id(pkg, part, rid) {
+            old_parts.push(p);
+        }
+        rels.remove_by_id(rid);
+    }
+    rels.write_to(pkg, part)?;
+    for media in old_parts {
+        if !picture::media_still_used(pkg, &media)? {
+            pkg.remove(&media);
+        }
+    }
+    Ok(())
+}
+
+fn collect_snd_rids(el: &Element, out: &mut Vec<String>) {
+    if el.local_name() == "snd" {
+        if let Some(id) = el.attr_local("embed").filter(|s| !s.is_empty()) {
+            out.push(id.to_string());
+        }
+    }
+    for c in el.element_children() {
+        collect_snd_rids(c, out);
+    }
+}
+
+fn next_wav_part(pkg: &Package) -> String {
+    let mut n = 1u32;
+    loop {
+        let name = format!("/ppt/media/media{n}.wav");
+        if !pkg.contains(&name) {
+            return name;
+        }
+        n += 1;
+    }
+}
+
+fn is_wav(bytes: &[u8]) -> bool {
+    bytes.len() >= 12 && bytes.starts_with(b"RIFF") && &bytes[8..12] == b"WAVE"
 }

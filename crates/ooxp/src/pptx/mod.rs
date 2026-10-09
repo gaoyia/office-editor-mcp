@@ -1,5 +1,6 @@
 //! pptx：inspect / create / apply。
 
+mod anim_preset;
 mod apply;
 mod chart;
 mod comments;

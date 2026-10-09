@@ -2100,6 +2100,7 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<XlsxOp>, Error> {
             | "insertAnim"
             | "setAnim"
             | "deleteAnim"
+            | "moveAnim"
             | "setSlideLayout"
             | "insertLayout"
             | "deleteLayout"

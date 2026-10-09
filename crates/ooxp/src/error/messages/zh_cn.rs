@@ -859,14 +859,19 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::InvalidTransitionType => {
             "type 必须是可写的幻灯片切换名，或 null 表示清除".into()
         }
-        ErrorKind::InvalidAnimType => "type 本期只认 fade".into(),
-        ErrorKind::InvalidAnimTrigger => "trigger 必须是 click、with 或 after".into(),
+        ErrorKind::InvalidAnimType => {
+            "type 必须是 appear、fade、flyIn、wipe、split、zoom、spin、growShrink、fadeOut、flyOut、wipeOut 或 pathRight".into()
+        }
+        ErrorKind::InvalidAnimTrigger => "trigger 必须是 click、with、after 或 clickOn".into(),
         ErrorKind::InvalidAnimDelay => "delay 必须是 0 到 60000 的整数".into(),
         ErrorKind::InvalidAnimDur => "dur 必须是 1 到 60000 的整数".into(),
+        ErrorKind::InvalidAnimRepeat => "repeat 必须是 1 到 99 的整数，或 null".into(),
+        ErrorKind::InvalidAnimPara => "para 必须是目标上从 1 计的段落序号".into(),
+        ErrorKind::InvalidAnimMoveIndex => "index 必须是该宿主动画名单上从 1 计的位置".into(),
         ErrorKind::NeedAnimSetField => {
-            "setAnim 至少要给 trigger、delay 或 dur 之一".into()
+            "setAnim 至少要给一个可写字段".into()
         }
-        ErrorKind::AnimNeedEffectDur => "dur 只能写在带 animEffect 的效果上".into(),
+        ErrorKind::AnimNeedEffectDur => "dur 只能写在带时长行为的效果上".into(),
         ErrorKind::InvalidTransitionDur => "dur 必须是 1 到 60000 的整数".into(),
         ErrorKind::InvalidTransitionAdvTm => "advTm 必须是 1 到 86400000 的整数".into(),
         ErrorKind::InvalidTransitionDir => {

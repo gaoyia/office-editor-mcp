@@ -1218,9 +1218,16 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                     &pres.root,
                     &op.id,
                     &op.target,
-                    &op.trigger,
-                    op.delay,
-                    op.dur,
+                    timing::AnimWrite {
+                        type_name: &op.type_name,
+                        trigger: &op.trigger,
+                        delay: op.delay,
+                        dur: op.dur,
+                        repeat: op.repeat,
+                        sound: op.sound.as_deref(),
+                        para: op.para,
+                        click_on: op.click_on.as_deref(),
+                    },
                     i,
                 )?;
             }
@@ -1233,15 +1240,26 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                     &op.id,
                     &op.target,
                     op.index,
+                    op.type_name.as_deref(),
                     op.trigger.as_deref(),
                     op.delay,
                     op.dur,
+                    op.repeat,
+                    op.sound.as_ref().map(|inner| inner.as_deref()),
+                    op.para,
+                    op.click_on.as_deref(),
                     i,
                 )?;
             }
             PptxOp::DeleteAnim(op) => {
                 timing::delete(
                     &mut pkg, &slides, &pres_part, &pres.root, &op.id, &op.target, op.index, i,
+                )?;
+            }
+            PptxOp::MoveAnim(op) => {
+                timing::move_anim(
+                    &mut pkg, &slides, &pres_part, &pres.root, &op.id, &op.target, op.index,
+                    op.dest, i,
                 )?;
             }
             PptxOp::SetSlideLayout(op) => {
