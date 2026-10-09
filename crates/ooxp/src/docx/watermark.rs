@@ -606,11 +606,18 @@ fn insert_into_header(
 ) -> Result<(), Error> {
     clear_header(pkg, docs, dirty, item)?;
     let drawing = if let Some(file) = op.file.as_deref() {
-        let (rid, cx, cy) = picture::add_media(pkg, &item.part, file, None, None)?;
+        let added = picture::add_media(pkg, &item.part, file, None, None)?;
         let doc = load_cached(pkg, docs, &item.part)?;
         ensure_wm_ns(&mut doc.root);
         let doc_pr = picture::next_docpr_id(&doc.root);
-        let mut drawing = picture::build_inline_drawing(doc_pr, NAME_PIC, &rid, cx, cy);
+        let mut drawing = picture::build_inline_drawing(
+            doc_pr,
+            NAME_PIC,
+            &added.blip_rid,
+            added.svg_rid.as_deref(),
+            added.cx,
+            added.cy,
+        );
         picture::apply_wrap(
             &mut drawing,
             PicKind::Anchor,
@@ -693,9 +700,9 @@ fn delete_one(
     id: &str,
     i: usize,
 ) -> Result<(), Error> {
-    let rid = {
+    let rids = {
         let doc = load_cached(pkg, docs, &item.part)?;
-        let rid = find_wm_blip(&doc.root, key);
+        let rids = find_wm_embeds(&doc.root, key);
         if !remove_one_watermark(&mut doc.root, key) {
             return Err(Error::with_path(
                 ErrorKind::WatermarkNotFound { id: id.into() },
@@ -703,9 +710,9 @@ fn delete_one(
             ));
         }
         dirty.insert(item.part.clone(), ());
-        rid
+        rids
     };
-    if let Some(r) = rid {
+    for r in rids {
         let media = picture::resolve_embed(pkg, &item.part, &r).ok();
         picture::remove_rel_if_unused(pkg, &item.part, &r, &docs.get(&item.part).unwrap().root)?;
         if let Some(m) = media {
@@ -721,9 +728,7 @@ fn collect_blip_rids(root: &Element) -> Vec<String> {
     let mut out = Vec::new();
     let _ = picture::walk_drawings(root, &mut |d| {
         if is_watermark_drawing(d) {
-            if let Some(r) = picture::blip_embed(d) {
-                out.push(r);
-            }
+            out.extend(picture::embed_rids(d));
         }
         Ok(())
     });
@@ -733,7 +738,7 @@ fn collect_blip_rids(root: &Element) -> Vec<String> {
 fn blip_still_used(root: &Element, rid: &str) -> bool {
     let mut used = false;
     let _ = picture::walk_drawings(root, &mut |d| {
-        if picture::blip_embed(d).as_deref() == Some(rid) {
+        if picture::embed_rids(d).iter().any(|x| x == rid) {
             used = true;
         }
         Ok(())
@@ -741,20 +746,20 @@ fn blip_still_used(root: &Element, rid: &str) -> bool {
     used
 }
 
-fn find_wm_blip(root: &Element, key: &WmKey) -> Option<String> {
+fn find_wm_embeds(root: &Element, key: &WmKey) -> Vec<String> {
     let mut index = 0usize;
-    let mut rid = None;
+    let mut rids = Vec::new();
     let _ = picture::walk_drawings(root, &mut |d| {
         if !is_watermark_drawing(d) {
             return Ok(());
         }
         index += 1;
         if matches_key(d, key, index) {
-            rid = picture::blip_embed(d);
+            rids = picture::embed_rids(d);
         }
         Ok(())
     });
-    rid
+    rids
 }
 
 fn remove_all_watermarks(root: &mut Element) -> bool {

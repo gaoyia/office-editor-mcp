@@ -1007,7 +1007,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             "wrap must be square, tight, through, topAndBottom, or none".into()
         }
         ErrorKind::InvalidPicAlign => "alignH must be left/center/right; alignV must be top/center/bottom".into(),
-        ErrorKind::InvalidImageFile => "file is not a recognized bitmap (PNG, JPEG, GIF, or BMP)".into(),
+        ErrorKind::InvalidImageFile => {
+            "file is not a recognized image (PNG, JPEG, GIF, or BMP; Word also accepts SVG)".into()
+        }
         ErrorKind::InvalidMediaFile => {
             "file is not a recognized media clip (insertVideo accepts MP4, insertAudio accepts WAV)"
                 .into()

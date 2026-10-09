@@ -1300,7 +1300,7 @@ fn attach_pictures(pkg: &mut Package, part: &str, paras: &[NewPara]) -> Result<(
     picture::ensure_drawing_ns(&mut doc.root);
     for (i, para) in paras.iter().enumerate() {
         for pic in &para.pictures {
-            let (rid, cx, cy) = picture::add_media(pkg, part, &pic.file, pic.cx, pic.cy)?;
+            let added = picture::add_media(pkg, part, &pic.file, pic.cx, pic.cy)?;
             let doc_pr = picture::next_docpr_id(&doc.root);
             let p = nth_story_para_mut(&mut doc.root, i).ok_or_else(|| {
                 Error::xml_detail(
@@ -1309,7 +1309,15 @@ fn attach_pictures(pkg: &mut Package, part: &str, paras: &[NewPara]) -> Result<(
                 )
             })?;
             picture::insert_prepared_drawing(
-                p, doc_pr, &rid, cx, cy, pic.kind, pic.wrap, &pic.pos,
+                p,
+                doc_pr,
+                &added.blip_rid,
+                added.svg_rid.as_deref(),
+                added.cx,
+                added.cy,
+                pic.kind,
+                pic.wrap,
+                &pic.pos,
             )?;
         }
     }

@@ -526,12 +526,22 @@ pptx 的放映类型、循环与旁白开关用 `setShowPr`，见 [json-contract
   - 本地图片路径，与信封 `path` 一样认正斜杠和反斜杠
   - 不把 base64 放进领域 JSON
 
-找不到该图报 `IdNotFound`。读不到 `file` 报 `Io`。文件不是本库认的位图（见下）报 `InvalidField`。
+找不到该图报 `IdNotFound`。读不到 `file` 报 `Io`。文件不是该格式认的图片报 `InvalidField`。
 
 只换媒体字节与内容类型，不改锚点、绕排和位置。`a:blip/@r:embed` 的关系 id 保持不变。
 docx 扩展名变了就写新的 `/word/media/imageN.*`；xlsx 写新的 `/xl/media/imageN.*`；pptx 写新的 `/ppt/media/imageN.*`。
 改同一条关系的 `Target`，并更新 `[Content_Types].xml` 的 Default 或 Override；旧媒体若重新解析后无人引用则删掉。
-认 PNG、JPEG（`.jpg` / `.jpeg`）、GIF、BMP；按文件头判断，扩展名只用来给新媒体取名。
+三种格式都按文件头认 PNG、JPEG（`.jpg` / `.jpeg`）、GIF、BMP；扩展名只用来给新媒体取名。
+docx 另外认 SVG（见下）。xlsx / pptx 收到 SVG 仍报 `InvalidField`。
+
+docx 换成 SVG 时：
+
+- 保留已有 `a:blip` 后备图与关系 id
+- 在 `a:blip` 上写或改 `asvg:svgBlip`（Office 2016 SVG 扩展）
+- SVG 原字节写入 `/word/media/imageN.svg`
+- `Default Extension="svg"` 为 `image/svg+xml`
+
+docx 从 SVG 换成位图时：按上面换 `a:blip` 媒体，去掉 `svgBlip`；SVG 部件无人引用则删。
 
 ### insertPicture
 
@@ -601,9 +611,15 @@ docx 扩展名变了就写新的 `/word/media/imageN.*`；xlsx 写新的 `/xl/me
   - docx / pptx 上出现报 `InvalidField`
 
 docx：找不到该段落报 `IdNotFound`。`id` 不是段落 id 报 `InvalidId`。
-`cx` / `cy` 都省略时，按 PNG / JPEG / GIF / BMP 的像素尺寸、96 dpi 换算成 EMU（`px × 914400 / 96`）；读不出尺寸则用 1 英寸见方（`914400`）。
-只给一个时报 `InvalidField`。插入 `wp:inline`，挂在该段末尾一个新的 `w:r` 里。写入该部件关系、`/word/media/imageN.*` 与内容类型。
+`cx` / `cy` 都省略时，位图按像素尺寸、96 dpi 换算成 EMU（`px × 914400 / 96`）；读不出尺寸则用 1 英寸见方（`914400`）。
+SVG 按根元素 `width` / `height`（无单位或 `px` 当 CSS 像素，同样 96 dpi）；没有则用 `viewBox`；再没有则 1 英寸见方。
+只给一个时报 `InvalidField`。插入 `wp:inline`，挂在该段末尾一个新的 `w:r` 里。
+位图写入该部件一条 image 关系、`/word/media/imageN.*` 与内容类型。
+SVG 再多写一条 image 关系指向 `/word/media/imageN.svg`。
+`a:blip/@r:embed` 指向 1×1 PNG 占位（不栅格化 SVG）。
+`asvg:svgBlip/@r:embed` 指向 SVG。
 `wp:docPr/@id` 取该部件已有 `docPr` 的最大整数加 1，至少为 1。
+xlsx / pptx 的 `insertPicture` 仍不认 SVG。
 
 xlsx：找不到该表报 `IdNotFound`。`id` 不是 `sheet:{name}` 也不是页眉槽位 id 报 `InvalidId`。该表不是 `worksheet` 报 `InvalidField`。
 往工作表插图必须给 `from`，否则报 `MissingField`。`from` / `to` 不是合法 A1 报 `InvalidRange`。
@@ -1800,6 +1816,8 @@ run 级链编进 `hyperlinks`，独立节点用 `insertHyperlink`（`on` 为 `ru
 形状 id 或 `slide:{n}`（没有 `/pic:` / `/video:` / `/audio:` / `/ole:`）报 `InvalidId`。
 xlsx / pptx 上发 `font:{n}` 仍按该格式原规则报 `InvalidId`。找不到该图、该嵌入对象、该媒体或该嵌入字体报 `IdNotFound`。
 图 id 优先走 `a:blip/@r:embed`；只有 `@r:link`、没有 embed 时按外部关系处理，报 `OpcPartMissing`，不下载 http。embed 指向外部关系同样报 `OpcPartMissing`。
+docx 图若带 `asvg:svgBlip/@r:embed`，`exportMedia` 改走这条关系，写出 SVG 原字节。
+没有 `svgBlip` 时仍走 `a:blip`。
 pptx 视频 / 音频 id 优先走 `p14:media/@r:embed`，没有则走 `a:videoFile` / `a:audioFile` / `a:wavAudioFile` 的关系；外链同样报 `OpcPartMissing`。
 OLE id 走 oleObject 或 package 关系目标；关系缺失或指向外部同样报 `OpcPartMissing`。
 

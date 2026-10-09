@@ -16,6 +16,11 @@ use super::notes;
 use super::para::{self, BodyPara, HostPara, ParaTarget, TxbxKey};
 use super::{A_NS, PIC_NS, REL_IMAGE, REL_NS, WP_NS};
 
+/// Word 16.0 另存的 Office 2016 SVG 扩展。
+const SVG_NS: &str = "http://schemas.microsoft.com/office/drawing/2016/SVG/main";
+const SVG_EXT_URI: &str = "{96DAC541-7B7A-43D3-8B79-37D633B846F1}";
+const SVG_CT: &str = "image/svg+xml";
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PicKind {
     Inline,
@@ -190,12 +195,22 @@ pub struct PicInfo {
     pub cy: Option<i64>,
     pub wrap: Option<WrapKind>,
     pub stable: bool,
+    pub content_type: Option<String>,
 }
 
 pub struct ImageFile {
     pub bytes: Vec<u8>,
     pub ext: String,
     pub content_type: String,
+    pub cx: i64,
+    pub cy: i64,
+    /// 有值表示这是 SVG：`bytes` 是 PNG 占位，原件在这里。
+    pub svg: Option<Vec<u8>>,
+}
+
+pub struct AddedMedia {
+    pub blip_rid: String,
+    pub svg_rid: Option<String>,
     pub cx: i64,
     pub cy: i64,
 }
@@ -247,16 +262,19 @@ pub fn collect_pictures(root: &Element, container_id: &str) -> Result<Vec<PicInf
 pub fn pictures_json(pics: &[PicInfo]) -> Vec<Value> {
     pics.iter()
         .map(|p| {
-            json!({
-                "id": p.id,
-                "docPrId": p.doc_pr_id,
-                "name": p.name,
-                "kind": p.kind.as_str(),
-                "cx": p.cx,
-                "cy": p.cy,
-                "wrap": p.wrap.map(WrapKind::as_str),
-                "stable": p.stable,
-            })
+            let mut m = serde_json::Map::new();
+            m.insert("id".into(), json!(p.id));
+            m.insert("docPrId".into(), json!(p.doc_pr_id));
+            m.insert("name".into(), json!(p.name));
+            m.insert("kind".into(), json!(p.kind.as_str()));
+            m.insert("cx".into(), json!(p.cx));
+            m.insert("cy".into(), json!(p.cy));
+            m.insert("wrap".into(), json!(p.wrap.map(WrapKind::as_str)));
+            m.insert("stable".into(), json!(p.stable));
+            if let Some(ct) = &p.content_type {
+                m.insert("contentType".into(), json!(ct));
+            }
+            Value::Object(m)
         })
         .collect()
 }
@@ -696,7 +714,14 @@ pub fn ensure_drawing_ns(root: &mut Element) {
     ensure_xmlns(root, "pic", PIC_NS);
 }
 
-pub fn build_inline_drawing(doc_pr: u32, name: &str, rid: &str, cx: i64, cy: i64) -> Element {
+pub fn build_inline_drawing(
+    doc_pr: u32,
+    name: &str,
+    rid: &str,
+    svg_rid: Option<&str>,
+    cx: i64,
+    cy: i64,
+) -> Element {
     let mut drawing = Element::new("w:drawing");
     let mut inline = Element::new("wp:inline")
         .with_attr("distT", "0")
@@ -713,7 +738,7 @@ pub fn build_inline_drawing(doc_pr: u32, name: &str, rid: &str, cx: i64, cy: i64
     );
     inline.push_element(doc_pr_el(doc_pr, name));
     inline.push_element(cnv_frame_pr());
-    inline.push_element(graphic_el(name, rid, cx, cy));
+    inline.push_element(graphic_el(name, rid, svg_rid, cx, cy));
     drawing.push_element(inline);
     drawing
 }
@@ -789,6 +814,36 @@ pub fn blip_rid(drawing: &Element) -> Option<String> {
     blip_embed(drawing).or_else(|| blip_link(drawing))
 }
 
+/// `asvg:svgBlip/@r:embed`。没有则为空。
+pub fn svg_blip_rid(drawing: &Element) -> Option<String> {
+    let mut found = None;
+    walk_all(drawing, &mut |e| {
+        if e.local_name() == "svgBlip" && found.is_none() {
+            found = e.attr_local("embed").map(str::to_string);
+        }
+    });
+    found
+}
+
+/// `a:blip` 与 `svgBlip` 上的 embed，去重、按文档顺序。
+pub fn embed_rids(drawing: &Element) -> Vec<String> {
+    let mut out = Vec::new();
+    if let Some(r) = blip_embed(drawing) {
+        out.push(r);
+    }
+    if let Some(r) = svg_blip_rid(drawing) {
+        if !out.iter().any(|x| x == &r) {
+            out.push(r);
+        }
+    }
+    out
+}
+
+/// 导出时优先 SVG 原件。
+pub fn export_rid(drawing: &Element) -> Option<String> {
+    svg_blip_rid(drawing).or_else(|| blip_rid(drawing))
+}
+
 pub fn resolve_embed(pkg: &Package, part: &str, rid: &str) -> Result<String, Error> {
     let rels = Relationships::from_package(pkg, part)?;
     let rel = rels.find_by_id(rid).ok_or_else(|| {
@@ -814,26 +869,40 @@ pub fn update_rel_target(
 }
 
 /// 读本地图、写入 `/word/media/…`、挂关系到 `part`、补内容类型。
-/// `cx`/`cy` 都给则用调用方的尺寸；都省则按像素 96 dpi。
+/// `cx`/`cy` 都给则用调用方的尺寸；都省则按像素 96 dpi。SVG 再写一份原件与 `svgBlip` 关系。
 pub fn add_media(
     pkg: &mut Package,
     part: &str,
     file: &str,
     cx: Option<i64>,
     cy: Option<i64>,
-) -> Result<(String, i64, i64), Error> {
+) -> Result<AddedMedia, Error> {
     let image = read_image(file)?;
     let (cx, cy) = match (cx, cy) {
         (Some(x), Some(y)) => (x, y),
         _ => (image.cx, image.cy),
     };
     let media = next_media_part(pkg, &image.ext);
-    pkg.set(&media, image.bytes)?;
-    let rid = add_image_rel(pkg, part, &media)?;
+    pkg.set(&media, image.bytes.clone())?;
+    let blip_rid = add_image_rel(pkg, part, &media)?;
     let mut cts = ContentTypes::from_package(pkg)?;
     cts.ensure_default(&image.ext, &image.content_type);
+    let svg_rid = if let Some(svg) = image.svg {
+        let svg_part = next_media_part(pkg, "svg");
+        pkg.set(&svg_part, svg)?;
+        let rid = add_image_rel(pkg, part, &svg_part)?;
+        cts.ensure_default("svg", SVG_CT);
+        Some(rid)
+    } else {
+        None
+    };
     cts.write_to(pkg)?;
-    Ok((rid, cx, cy))
+    Ok(AddedMedia {
+        blip_rid,
+        svg_rid,
+        cx,
+        cy,
+    })
 }
 
 /// 在段末写入一张图。行内只接受 `wrap` 为空；浮动必须带绕排。
@@ -841,6 +910,7 @@ pub fn insert_prepared_drawing(
     p: &mut Element,
     doc_pr: u32,
     rid: &str,
+    svg_rid: Option<&str>,
     cx: i64,
     cy: i64,
     kind: PicKind,
@@ -848,7 +918,7 @@ pub fn insert_prepared_drawing(
     pos: &WrapPos,
 ) -> Result<(), Error> {
     let name = format!("图片 {doc_pr}");
-    let mut drawing = build_inline_drawing(doc_pr, &name, rid, cx, cy);
+    let mut drawing = build_inline_drawing(doc_pr, &name, rid, svg_rid, cx, cy);
     apply_wrap(&mut drawing, kind, wrap, pos)?;
     insert_drawing_into_para(p, drawing);
     Ok(())
@@ -968,6 +1038,7 @@ fn pic_info(drawing: &Element, container_id: &str, index: usize) -> Result<PicIn
         cy,
         wrap,
         stable,
+        content_type: svg_content_type(drawing),
     })
 }
 
@@ -1070,6 +1141,7 @@ fn pic_info_grouped(
         cy,
         wrap,
         stable,
+        content_type: svg_content_type(pic),
     })
 }
 
@@ -1508,7 +1580,9 @@ fn is_empty_run(el: &Element) -> bool {
 fn embed_still_in(root: &Element, rid: &str) -> bool {
     let mut found = false;
     walk_all(root, &mut |e| {
-        if e.local_name() == "blip" && e.attr_local("embed") == Some(rid) {
+        if (e.local_name() == "blip" || e.local_name() == "svgBlip")
+            && e.attr_local("embed") == Some(rid)
+        {
             found = true;
         }
     });
@@ -1583,7 +1657,7 @@ fn cnv_frame_pr() -> Element {
     pr
 }
 
-fn graphic_el(name: &str, rid: &str, cx: i64, cy: i64) -> Element {
+fn graphic_el(name: &str, rid: &str, svg_rid: Option<&str>, cx: i64, cy: i64) -> Element {
     let c_nv_pr = Element::new("pic:cNvPr")
         .with_attr("id", "0")
         .with_attr("name", name);
@@ -1594,7 +1668,10 @@ fn graphic_el(name: &str, rid: &str, cx: i64, cy: i64) -> Element {
     nv.push_element(c_nv_pr);
     nv.push_element(c_nv_pic);
 
-    let blip = Element::new("a:blip").with_attr("r:embed", rid);
+    let mut blip = Element::new("a:blip").with_attr("r:embed", rid);
+    if let Some(svg) = svg_rid {
+        blip.push_element(svg_ext_lst(svg));
+    }
     let mut stretch = Element::new("a:stretch");
     stretch.push_element(Element::new("a:fillRect"));
     let mut fill = Element::new("pic:blipFill");
@@ -1775,7 +1852,7 @@ fn position_v(pos: &WrapPos) -> Element {
     el
 }
 
-fn classify_image(bytes: Vec<u8>, path: &Path) -> Result<ImageFile, Error> {
+fn classify_image(bytes: Vec<u8>, _path: &Path) -> Result<ImageFile, Error> {
     if bytes.len() >= 8 && bytes.starts_with(&[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]) {
         let (cx, cy) = png_size(&bytes).unwrap_or((914400, 914400));
         return Ok(ImageFile {
@@ -1784,6 +1861,7 @@ fn classify_image(bytes: Vec<u8>, path: &Path) -> Result<ImageFile, Error> {
             content_type: "image/png".into(),
             cx,
             cy,
+            svg: None,
         });
     }
     if bytes.len() >= 3 && bytes[0] == 0xFF && bytes[1] == 0xD8 && bytes[2] == 0xFF {
@@ -1794,6 +1872,7 @@ fn classify_image(bytes: Vec<u8>, path: &Path) -> Result<ImageFile, Error> {
             content_type: "image/jpeg".into(),
             cx,
             cy,
+            svg: None,
         });
     }
     if bytes.len() >= 6 && (bytes.starts_with(b"GIF87a") || bytes.starts_with(b"GIF89a")) {
@@ -1804,6 +1883,7 @@ fn classify_image(bytes: Vec<u8>, path: &Path) -> Result<ImageFile, Error> {
             content_type: "image/gif".into(),
             cx,
             cy,
+            svg: None,
         });
     }
     if bytes.len() >= 26 && bytes.starts_with(b"BM") {
@@ -1814,9 +1894,20 @@ fn classify_image(bytes: Vec<u8>, path: &Path) -> Result<ImageFile, Error> {
             content_type: "image/bmp".into(),
             cx,
             cy,
+            svg: None,
         });
     }
-    let _ = path;
+    if looks_like_svg(&bytes) {
+        let (cx, cy) = svg_size(&bytes).unwrap_or((914400, 914400));
+        return Ok(ImageFile {
+            bytes: crate::ole::PREVIEW_PNG.to_vec(),
+            ext: "png".into(),
+            content_type: "image/png".into(),
+            cx,
+            cy,
+            svg: Some(bytes),
+        });
+    }
     Err(Error::new(ErrorKind::InvalidImageFile))
 }
 
@@ -1876,6 +1967,293 @@ fn jpeg_size(bytes: &[u8]) -> Option<(i64, i64)> {
         i += 2 + len;
     }
     None
+}
+
+fn svg_content_type(el: &Element) -> Option<String> {
+    if svg_blip_rid(el).is_some() {
+        Some(SVG_CT.into())
+    } else {
+        None
+    }
+}
+
+fn svg_ext_lst(svg_rid: &str) -> Element {
+    let svg_blip = Element::new("asvg:svgBlip")
+        .with_attr("xmlns:asvg", SVG_NS)
+        .with_attr("r:embed", svg_rid);
+    let mut ext = Element::new("a:ext").with_attr("uri", SVG_EXT_URI);
+    ext.push_element(svg_blip);
+    let mut lst = Element::new("a:extLst");
+    lst.push_element(ext);
+    lst
+}
+
+fn looks_like_svg(bytes: &[u8]) -> bool {
+    let mut b = bytes;
+    if b.starts_with(&[0xEF, 0xBB, 0xBF]) {
+        b = &b[3..];
+    }
+    while let Some((&c, rest)) = b.split_first() {
+        if c.is_ascii_whitespace() {
+            b = rest;
+        } else {
+            break;
+        }
+    }
+    let n = b.len().min(8192);
+    let hay = &b[..n];
+    let mut i = 0;
+    while i + 4 <= hay.len() {
+        if hay[i] == b'<' {
+            let rest = &hay[i + 1..];
+            if rest.len() >= 3 && rest[..3].eq_ignore_ascii_case(b"svg") {
+                let next = rest.get(3).copied();
+                if matches!(
+                    next,
+                    None | Some(b' ')
+                        | Some(b'\t')
+                        | Some(b'\n')
+                        | Some(b'\r')
+                        | Some(b'>')
+                        | Some(b'/')
+                ) {
+                    return true;
+                }
+            }
+        }
+        i += 1;
+    }
+    false
+}
+
+fn svg_size(bytes: &[u8]) -> Option<(i64, i64)> {
+    let text = std::str::from_utf8(bytes).ok()?;
+    let tag = svg_open_tag(text)?;
+    match (
+        parse_css_len(svg_attr(tag, "width")),
+        parse_css_len(svg_attr(tag, "height")),
+    ) {
+        (Some(w), Some(h)) => Some((px_to_emu_f(w), px_to_emu_f(h))),
+        _ => viewbox_size(svg_attr(tag, "viewBox")),
+    }
+}
+
+fn svg_open_tag(text: &str) -> Option<&str> {
+    let lower = text.to_ascii_lowercase();
+    let start = lower.find("<svg")?;
+    let rest = &text[start..];
+    let end = rest.find('>')?;
+    Some(&rest[..=end])
+}
+
+fn svg_attr<'a>(tag: &'a str, name: &str) -> Option<&'a str> {
+    let lower = tag.to_ascii_lowercase();
+    let key = format!("{name}=");
+    let i = lower.find(&key)?;
+    let rest = tag[i + key.len()..].trim_start();
+    let quote = rest.as_bytes().first().copied()?;
+    if quote != b'"' && quote != b'\'' {
+        return None;
+    }
+    let inner = &rest[1..];
+    let j = inner.as_bytes().iter().position(|&c| c == quote)?;
+    Some(&inner[..j])
+}
+
+fn viewbox_size(raw: Option<&str>) -> Option<(i64, i64)> {
+    let parts: Vec<&str> = raw?.split_whitespace().collect();
+    if parts.len() != 4 {
+        return None;
+    }
+    let w: f64 = parts[2].parse().ok()?;
+    let h: f64 = parts[3].parse().ok()?;
+    if w <= 0.0 || h <= 0.0 {
+        return None;
+    }
+    Some((px_to_emu_f(w), px_to_emu_f(h)))
+}
+
+fn parse_css_len(raw: Option<&str>) -> Option<f64> {
+    let s = raw?.trim();
+    if s.is_empty() || s.ends_with('%') {
+        return None;
+    }
+    let mut i = 0usize;
+    let bs = s.as_bytes();
+    if i < bs.len() && (bs[i] == b'+' || bs[i] == b'-') {
+        i += 1;
+    }
+    let start_digit = i;
+    while i < bs.len() && (bs[i].is_ascii_digit() || bs[i] == b'.') {
+        i += 1;
+    }
+    if i == start_digit {
+        return None;
+    }
+    let n: f64 = s[..i].parse().ok()?;
+    if n <= 0.0 {
+        return None;
+    }
+    let unit = s[i..].trim().to_ascii_lowercase();
+    let px = match unit.as_str() {
+        "" | "px" => n,
+        "pt" => n * 96.0 / 72.0,
+        "in" => n * 96.0,
+        "cm" => n * 96.0 / 2.54,
+        "mm" => n * 96.0 / 25.4,
+        "pc" => n * 16.0,
+        _ => return None,
+    };
+    Some(px)
+}
+
+fn px_to_emu_f(px: f64) -> i64 {
+    let v = (px * 914400.0 / 96.0).round();
+    if !v.is_finite() || v < 1.0 {
+        914400
+    } else {
+        v.min(i64::MAX as f64) as i64
+    }
+}
+
+pub fn set_svg_blip(drawing: &mut Element, svg_rid: &str) {
+    let Some(blip) = find_local_mut(drawing, "blip") else {
+        return;
+    };
+    if let Some(lst) = blip.child_by_local_mut("extLst") {
+        for child in lst.element_children_mut() {
+            if child.local_name() == "ext" && child.attr("uri") == Some(SVG_EXT_URI) {
+                if let Some(svg) = child.child_by_local_mut("svgBlip") {
+                    set_attr_local(svg, "embed", svg_rid);
+                    return;
+                }
+                child.children.clear();
+                child.push_element(
+                    Element::new("asvg:svgBlip")
+                        .with_attr("xmlns:asvg", SVG_NS)
+                        .with_attr("r:embed", svg_rid),
+                );
+                return;
+            }
+        }
+        let svg_blip = Element::new("asvg:svgBlip")
+            .with_attr("xmlns:asvg", SVG_NS)
+            .with_attr("r:embed", svg_rid);
+        let mut ext = Element::new("a:ext").with_attr("uri", SVG_EXT_URI);
+        ext.push_element(svg_blip);
+        lst.push_element(ext);
+        return;
+    }
+    blip.push_element(svg_ext_lst(svg_rid));
+}
+
+pub fn strip_svg_blip(drawing: &mut Element) {
+    let Some(blip) = find_local_mut(drawing, "blip") else {
+        return;
+    };
+    let empty = {
+        let Some(lst) = blip.child_by_local_mut("extLst") else {
+            return;
+        };
+        lst.children.retain(|n| match n {
+            Node::Element(e) => !(e.local_name() == "ext" && e.attr("uri") == Some(SVG_EXT_URI)),
+            Node::Text(_) => true,
+        });
+        lst.element_children().next().is_none()
+    };
+    if empty {
+        blip.children
+            .retain(|n| !matches!(n, Node::Element(e) if e.local_name() == "extLst"));
+    }
+}
+
+/// 换媒体。返回是否改了 drawing XML，以及要从整部件根上再扫的 SVG 关系 id。
+pub fn replace_media(
+    pkg: &mut Package,
+    part: &str,
+    drawing: &mut Element,
+    file: &str,
+) -> Result<(bool, Option<String>), Error> {
+    let rid = blip_embed(drawing).ok_or_else(|| {
+        Error::xml_detail(crate::error::XmlIssue::Parse, "missing a:blip/@r:embed")
+    })?;
+    let old_svg_rid = svg_blip_rid(drawing);
+    let image = read_image(file)?;
+    if let Some(svg) = image.svg {
+        write_or_update_svg(pkg, part, drawing, &old_svg_rid, svg)?;
+        return Ok((old_svg_rid.is_none(), None));
+    }
+    replace_blip_bytes(pkg, part, &rid, &image)?;
+    if old_svg_rid.is_some() {
+        strip_svg_blip(drawing);
+    }
+    Ok((old_svg_rid.is_some(), old_svg_rid))
+}
+
+fn write_or_update_svg(
+    pkg: &mut Package,
+    part: &str,
+    drawing: &mut Element,
+    old_svg_rid: &Option<String>,
+    svg: Vec<u8>,
+) -> Result<(), Error> {
+    if let Some(rid) = old_svg_rid {
+        let old_media = resolve_embed(pkg, part, rid)?;
+        if old_media
+            .rsplit('.')
+            .next()
+            .unwrap_or("")
+            .eq_ignore_ascii_case("svg")
+        {
+            pkg.set(&old_media, svg)?;
+        } else {
+            let new_media = next_media_part(pkg, "svg");
+            pkg.set(&new_media, svg)?;
+            update_rel_target(pkg, part, rid, &new_media)?;
+            if !media_still_used(pkg, &old_media)? {
+                pkg.remove(&old_media);
+            }
+        }
+        let mut cts = ContentTypes::from_package(pkg)?;
+        cts.ensure_default("svg", SVG_CT);
+        cts.write_to(pkg)?;
+        return Ok(());
+    }
+    let svg_part = next_media_part(pkg, "svg");
+    pkg.set(&svg_part, svg)?;
+    let svg_rid = add_image_rel(pkg, part, &svg_part)?;
+    let mut cts = ContentTypes::from_package(pkg)?;
+    cts.ensure_default("svg", SVG_CT);
+    cts.write_to(pkg)?;
+    set_svg_blip(drawing, &svg_rid);
+    Ok(())
+}
+
+fn replace_blip_bytes(
+    pkg: &mut Package,
+    part: &str,
+    rid: &str,
+    image: &ImageFile,
+) -> Result<(), Error> {
+    let old_media = resolve_embed(pkg, part, rid)?;
+    let old_ext = old_media.rsplit('.').next().unwrap_or("");
+    if old_ext.eq_ignore_ascii_case(&image.ext) {
+        pkg.set(&old_media, image.bytes.clone())?;
+        let mut cts = ContentTypes::from_package(pkg)?;
+        cts.ensure_default(&image.ext, &image.content_type);
+        cts.write_to(pkg)?;
+        return Ok(());
+    }
+    let new_media = next_media_part(pkg, &image.ext);
+    pkg.set(&new_media, image.bytes.clone())?;
+    update_rel_target(pkg, part, rid, &new_media)?;
+    let mut cts = ContentTypes::from_package(pkg)?;
+    cts.ensure_default(&image.ext, &image.content_type);
+    cts.write_to(pkg)?;
+    if !media_still_used(pkg, &old_media)? {
+        pkg.remove(&old_media);
+    }
+    Ok(())
 }
 
 #[allow(dead_code)]

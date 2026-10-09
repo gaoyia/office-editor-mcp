@@ -900,7 +900,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             "wrap 必须是 square、tight、through、topAndBottom 或 none".into()
         }
         ErrorKind::InvalidPicAlign => "alignH 只允许 left/center/right，alignV 只允许 top/center/bottom".into(),
-        ErrorKind::InvalidImageFile => "file 不是本库认的位图（PNG、JPEG、GIF 或 BMP）".into(),
+        ErrorKind::InvalidImageFile => {
+            "file 不是本库认的图片（PNG、JPEG、GIF 或 BMP；Word 还认 SVG）".into()
+        }
         ErrorKind::InvalidMediaFile => {
             "file 不是本库认的媒体（insertVideo 认 MP4，insertAudio 认 WAV）".into()
         }

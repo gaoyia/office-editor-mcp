@@ -280,8 +280,19 @@ apply 的 `setThemeColors` / `setThemeFonts` 只改已有 theme，不新建。
 | `/docProps/custom.xml` | 仅当 `document.props.custom` 非空，或 apply 的 `setCustomProp` 新建了自定义属性 |
 | `/word/header1.xml` | 仅当 `document.headers` 含默认页眉 |
 | `/word/footer1.xml` | 仅当 `document.footers` 含默认页脚 |
-| `/word/media/imageN.ext` | 仅当段落或页眉页脚声明了 `pictures` |
+| `/word/media/imageN.ext` | 仅当段落或页眉页脚声明了 `pictures`；SVG 再写一份 `imageN.svg` |
 | `/word/diagrams/…` | 仅当段落或页眉页脚声明了 `smartArts` |
+
+apply 或 create 插入 SVG 时：
+
+- 宿主 `.rels` 写两条 Type 以 `/image` 结尾的关系
+- 一条指向 1×1 PNG 占位，一条指向 `/word/media/imageN.svg`
+- `[Content_Types].xml` 补 `Default Extension="svg"` 为 `image/svg+xml`
+- `a:blip/@r:embed` 指向 PNG
+- `asvg:svgBlip` 指向 SVG
+- URI 为 `{96DAC541-7B7A-43D3-8B79-37D633B846F1}`
+- 命名空间为 `http://schemas.microsoft.com/office/drawing/2016/SVG/main`
+- 不栅格化
 
 apply 插入脚注或尾注时，可能新建 `/word/footnotes.xml` 或 `/word/endnotes.xml`（CT 分别为 `…footnotes+xml` / `…endnotes+xml`），
 并在主文档 `.rels` 与 `[Content_Types].xml` 上补关系与 Override。

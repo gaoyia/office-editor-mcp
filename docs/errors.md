@@ -283,6 +283,10 @@
 - xlsx `twoCell` 图的 `setPictureSize` 出现 `cx` / `cy`、或 `oneCell` / `absolute` 上出现 `to`，报 `InvalidField`
 - `setPictureAnchor` 互转缺 `posX` / `posY` / `from` / `to` / `cx` / `cy` 时报 `InvalidField`，不写文件
 - 读不到图片 `file` 报 `Io`
+- 文件不是该格式认的图片报 `InvalidField`
+  - docx 认 PNG、JPEG、GIF、BMP、SVG
+  - xlsx / pptx 仍只认位图
+  - 不认 SVGZ
 - create 的 `pictures[]` 缺 `file` 报 `MissingField`
 - 只给 `cx` 或只给 `cy` 报 `InvalidField`
 - xlsx create 的 `sheets[].pictures[]` 还须给 `from`，否则报 `MissingField`

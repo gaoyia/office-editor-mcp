@@ -21,6 +21,7 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 同日补跑 `docx-protect-hash.ps1`，Ph1–Ph5 通过。同日补跑 `docx-revision-remain.ps1`，Rm1–Rm9 通过。同日补跑 `docx-groups.ps1`，Dg1–Dg8 通过。
 2026-10-09 探测框内再套框，Word 16.0 只写出故事级兄弟框，Nt1 放弃。同日补跑 `docx-create-remain.ps1`，Cs1–Cs9 通过。
 2026-10-09 补跑 `docx-field-types.ps1`，Ft1–Ft7 通过。
+2026-10-09 补跑 `docx-svg.ps1`，Sv1–Sv6 通过。Word COM `Type=17`，72×36 磅。
 
 - **C1** ✅
   - Word 16.0 能打开 `manual-check/office/out/docx-create.docx`，标题栏无 Repair
@@ -1526,6 +1527,30 @@ Word 跟踪修订下改表单元格底纹、插入空段、删除表行。`inspe
   - 项：拒写
   - 期望：错 id / 行内当成员 / 对 docx 发 `insertShape` / 对 xlsx 用段落 id 发 `insertConnector` 分别得 `IdNotFound` 或 `InvalidField` / `InvalidId`
   - 均未写文件
+
+## 嵌入 SVG
+
+正文与页眉页脚的 DrawingML 图可带 Office 2016 `asvg:svgBlip`。不算排版引擎，不把 SVG 原文放进 inspect 树。xlsx / pptx 本期不跟。
+手测脚本 `manual-check/office/cases/docx-svg.ps1`。编号用 Sv。
+
+- **Sv1**
+  - 检查：插入
+  - 通过标准：`insertPicture` 把本地 SVG 写入正文段后，树上 `contentType` 为 `image/svg+xml`，Word 无修复
+- **Sv2**
+  - 检查：导出
+  - 通过标准：对该图 `exportMedia` 得到 SVG 原字节，`contentType` 为 `image/svg+xml`
+- **Sv3**
+  - 检查：create
+  - 通过标准：`create` 的 `pictures[].file` 指向 SVG 后 Word 无修复，树上同样有 `contentType`
+- **Sv4**
+  - 检查：换回位图
+  - 通过标准：`replacePicture` 换成 PNG 后树上没有 `contentType`，导出是 PNG，Word 无修复
+- **Sv5**
+  - 检查：页眉
+  - 通过标准：往页眉段落插 SVG，容器 `pictures` 有 `contentType`，无修复
+- **Sv6**
+  - 检查：拒错
+  - 通过标准：空文件或不是 SVG / 位图的 `file` 报 `InvalidField`。不强制开 Word
 
 ## 原样保存（opc 验收）
 

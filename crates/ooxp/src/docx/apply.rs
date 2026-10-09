@@ -2598,12 +2598,19 @@ fn sdt_inline_drawing(
     part_name: &str,
     file: &str,
 ) -> Result<Element, Error> {
-    let (rid, cx, cy) = picture::add_media(pkg, part_name, file, None, None)?;
+    let added = picture::add_media(pkg, part_name, file, None, None)?;
     let doc = load_part(pkg, docs, part_name)?;
     picture::ensure_drawing_ns(&mut doc.root);
     let doc_pr = picture::next_docpr_id(&doc.root);
     let name = format!("图片 {doc_pr}");
-    Ok(picture::build_inline_drawing(doc_pr, &name, &rid, cx, cy))
+    Ok(picture::build_inline_drawing(
+        doc_pr,
+        &name,
+        &added.blip_rid,
+        added.svg_rid.as_deref(),
+        added.cx,
+        added.cy,
+    ))
 }
 
 fn apply_delete_sdt(
@@ -2846,38 +2853,27 @@ fn apply_replace_pic(
     reject_ink_pic(pkg, docs, doc_part, &op.target, &op.id, i)?;
     let part_name = part_for_pic(pkg, catalog, doc_part, &op.target, &op.id, i)?;
     let doc = load_part(pkg, docs, &part_name)?;
-    let drawing = find_target_drawing_mut(&mut doc.root, &op.target).ok_or_else(|| {
-        Error::with_path(
-            ErrorKind::PictureNotFound { id: op.id.clone() },
-            format!("ops[{i}].id"),
-        )
-    })?;
-    let rid = picture::blip_embed(drawing).ok_or_else(|| {
-        Error::xml_detail(
-            crate::error::XmlIssue::Parse,
-            format!("{} missing a:blip/@r:embed", op.id),
-        )
-    })?;
-    let old_media = picture::resolve_embed(pkg, &part_name, &rid)?;
-    let image = picture::read_image(&op.file)?;
-    let old_ext = old_media.rsplit('.').next().unwrap_or("");
-    if old_ext.eq_ignore_ascii_case(&image.ext) {
-        pkg.set(&old_media, image.bytes)?;
-        let mut cts = ContentTypes::from_package(pkg)?;
-        cts.ensure_default(&image.ext, &image.content_type);
-        cts.write_to(pkg)?;
-        return Ok(());
+    let (xml_dirty, drop_rid) = {
+        let drawing = find_target_drawing_mut(&mut doc.root, &op.target).ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::PictureNotFound { id: op.id.clone() },
+                format!("ops[{i}].id"),
+            )
+        })?;
+        picture::replace_media(pkg, &part_name, drawing, &op.file)?
+    };
+    if xml_dirty {
+        dirty.insert(part_name.clone(), ());
     }
-    let new_media = picture::next_media_part(pkg, &image.ext);
-    pkg.set(&new_media, image.bytes)?;
-    picture::update_rel_target(pkg, &part_name, &rid, &new_media)?;
-    let mut cts = ContentTypes::from_package(pkg)?;
-    cts.ensure_default(&image.ext, &image.content_type);
-    cts.write_to(pkg)?;
-    if !picture::media_still_used(pkg, &old_media)? {
-        pkg.remove(&old_media);
+    if let Some(rid) = drop_rid {
+        let media = picture::resolve_embed(pkg, &part_name, &rid).ok();
+        picture::remove_rel_if_unused(pkg, &part_name, &rid, &doc.root)?;
+        if let Some(m) = media {
+            if !picture::media_still_used(pkg, &m)? {
+                pkg.remove(&m);
+            }
+        }
     }
-    let _ = dirty;
     Ok(())
 }
 
@@ -2932,7 +2928,7 @@ fn apply_insert_pic(
             ));
         }
     }
-    let (rid, cx, cy) = picture::add_media(pkg, &part_name, &op.file, op.cx, op.cy)?;
+    let added = picture::add_media(pkg, &part_name, &op.file, op.cx, op.cy)?;
 
     let doc = load_part(pkg, docs, &part_name)?;
     picture::ensure_drawing_ns(&mut doc.root);
@@ -2946,9 +2942,10 @@ fn apply_insert_pic(
     picture::insert_prepared_drawing(
         p,
         doc_pr,
-        &rid,
-        cx,
-        cy,
+        &added.blip_rid,
+        added.svg_rid.as_deref(),
+        added.cx,
+        added.cy,
         picture::PicKind::Inline,
         None,
         &picture::WrapPos::default(),
@@ -2968,34 +2965,32 @@ fn apply_delete_pic(
 ) -> Result<(), Error> {
     reject_ink_pic(pkg, docs, doc_part, &op.target, &op.id, i)?;
     let part_name = part_for_pic(pkg, catalog, doc_part, &op.target, &op.id, i)?;
-    let (rid, media) = {
+    let (rids, medias) = {
         let doc = load_part(pkg, docs, &part_name)?;
-        let rid = {
-            let drawing = find_target_drawing_mut(&mut doc.root, &op.target).ok_or_else(|| {
-                Error::with_path(
-                    ErrorKind::PictureNotFound { id: op.id.clone() },
-                    format!("ops[{i}].id"),
-                )
-            })?;
-            picture::blip_embed(drawing)
-        };
-        let media = match rid.as_deref() {
-            Some(r) => picture::resolve_embed(pkg, &part_name, r).ok(),
-            None => None,
-        };
+        let drawing = find_target_drawing_mut(&mut doc.root, &op.target).ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::PictureNotFound { id: op.id.clone() },
+                format!("ops[{i}].id"),
+            )
+        })?;
+        let rids = picture::embed_rids(drawing);
+        let medias: Vec<String> = rids
+            .iter()
+            .filter_map(|r| picture::resolve_embed(pkg, &part_name, r).ok())
+            .collect();
         if !remove_target_picture(&mut doc.root, &op.target) {
             return Err(Error::with_path(
                 ErrorKind::PictureNotFound { id: op.id.clone() },
                 format!("ops[{i}].id"),
             ));
         }
-        (rid, media)
+        (rids, medias)
     };
     dirty.insert(part_name.clone(), ());
-    if let Some(r) = rid {
+    for r in rids {
         picture::remove_rel_if_unused(pkg, &part_name, &r, &docs.get(&part_name).unwrap().root)?;
     }
-    if let Some(m) = media {
+    for m in medias {
         if !picture::media_still_used(pkg, &m)? {
             pkg.remove(&m);
         }

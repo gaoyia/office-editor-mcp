@@ -1251,7 +1251,7 @@ fn collect_blip_rids(el: &Element) -> Vec<String> {
 }
 
 fn walk_blips(el: &Element, out: &mut Vec<String>) {
-    if el.local_name() == "blip" {
+    if el.local_name() == "blip" || el.local_name() == "svgBlip" {
         if let Some(v) = el.attr_local("embed") {
             out.push(v.to_string());
         }
