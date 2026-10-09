@@ -177,6 +177,15 @@
 - **讲义母版**
   - id：`handout`
   - 例子：`handout`
+- **讲义占位符**
+  - id：`handout/shape:{shapeId}`
+  - 例子：`handout/shape:2`
+- **备注母版**
+  - id：`notesMaster`
+  - 例子：`notesMaster`
+- **备注母版占位符**
+  - id：`notesMaster/shape:{shapeId}`
+  - 例子：`notesMaster/shape:5`
 - **幻灯片节**
   - id：`section:{n}`
   - 例子：`section:1`
@@ -195,7 +204,9 @@
 母版 `{n}` 从 1 起，按 Presentation 里 `p:sldMasterIdLst` / `p:sldMasterId` 的出现顺序（§19.2.1.35、§13.3.10），再跟 `r:id` 找到 slideMaster 部件。
 不是文件名里的数字，也不是 `sldMasterId/@id`。版式 `{k}` 从 1 起，按**该母版** `p:sldLayoutIdLst` / `p:sldLayoutId` 的出现顺序，
 再跟母版 `.rels` 找到 slideLayout 部件（§13.3.9）。
-换页的版式关系不改这些序号。讲义母版最多一份（`p:handoutMasterIdLst` / `p:handoutMasterId`，§19.2.1.24、§19.3.1.24）。容器 id 固定为 `handout`。本期不把讲义占位符编成 `handout/shape:…`。
+换页的版式关系不改这些序号。讲义母版最多一份（`p:handoutMasterIdLst` / `p:handoutMasterId`，§19.2.1.24、§19.3.1.24）。容器 id 固定为 `handout`。
+讲义占位符编成 `handout/shape:…`。备注母版最多一份（`p:notesMasterIdLst` / `p:notesMasterId`，§19.2.1.27、§19.3.1.27）。
+容器 id 固定为 `notesMaster`。备注母版占位符编成 `notesMaster/shape:…`。
 
 `{shapeId}` 取该形状 `p:nvSpPr/p:cNvPr/@id` 的原文（§19.3.1.12）。输出用文件里的原始数字字符串。请求按十进制数值匹配，不因前导零而失败。
 
@@ -349,7 +360,8 @@ apply 不得把**未点名**的形状删掉再重建，以免 `cNvPr/@id` 变化
 `deleteShape` 只摘被点名的那一个 `p:sp`，并清掉 `<p:timing>` 里对应的 `p:tgtEl`（`p:spTgt/@spid` 对该形状 `cNvPr/@id`）；未点名形状的 timing 节点留下，不要整节删掉 `<p:timing>`。
 插、删、重排页只改 `p:sldIdLst` 与被点名页的部件，未点名页 XML 原字节写回。
 
-讲义母版始终给出 `hasHandout`；`scope.handout: true` 时展开根上 `handout` 对象（页眉、页脚、日期、页码槽位）。
+讲义母版始终给出 `hasHandout`；`scope.handout: true` 时展开根上 `handout` 对象（页眉、页脚、日期、页码槽位与占位符名单）。
+`scope.notesMaster: true` 时展开根上 `notesMaster`（占位符名单）。
 幻灯片节始终给出 `sectionCount`；`scope.sections: true` 时展开根上 `sections`。
 自定义放映始终给出 `customShowCount`；`scope.customShows: true` 时展开根上 `customShows`。
 嵌入对象始终给出 `oleObjectCount`；`scope.oleObjects: true` 时展开各页 `oleObjects`。
@@ -421,6 +433,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   - 也没有 `hyperlinks` 名单
   - 也没有 `fields` 名单
   - 也没有根上 `masters`
+  - 也没有根上 `notesMaster`
   - 也没有根上 `handout`
   - 也没有根上 `sections`
   - 也没有根上 `customShows`
@@ -533,12 +546,21 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   - 写入见 `insertAnim` / `setAnim` / `deleteAnim` / `moveAnim`
   - `scope.notes` 同开时备注对象带 `timing`
   - `scope.masters` 同开时母版 / 版式带 `timing`
+  - `scope.notesMaster` 同开时备注母版带 `timing`
+  - `scope.handout` 同开时讲义母版带 `timing`
 - **`scope.masters`**（否）
   - 为 `true` 时根上填 `masters`（母版、版式与占位符）
   - 省略或 `false` 则只有 `masterCount`，没有名单
   - 不依赖 `scope.slide`
   - 不算母版排版引擎
   - xlsx / docx 的 `scope` 里出现 `masters` 报 `InvalidField`
+- **`scope.notesMaster`**（否）
+  - 为 `true` 时根上填 `notesMaster`
+  - 有备注母版关系则为对象，没有则为 `null`
+  - 省略或 `false` 则不挂该字段
+  - 不依赖 `scope.slide`
+  - 不算备注排版引擎
+  - xlsx / docx 的 `scope` 里出现 `notesMaster` 报 `InvalidField`
 - **`scope.handout`**（否）
   - 为 `true` 时根上填 `handout`
   - 有讲义母版则为对象，没有则为 `null`
@@ -560,9 +582,9 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
 
 只要想看形状，就必须给 `slide`。不默认把每一页的文本框都倒出来。只给 `maxShapes`、不给 `slide` 报 `ScopeRequired`。
 只给 `pictures: true`、`charts: true`、`smartArt: true`、`tables: true`、`oleObjects: true`、`zooms: true`、`connectors: true`、
-`notes: true`、`comments: true`、`hyperlinks: true`、`fields: true`、`timing: true`、`masters: true`、`handout: true`、
+`notes: true`、`comments: true`、`hyperlinks: true`、`fields: true`、`timing: true`、`masters: true`、`notesMaster: true`、`handout: true`、
 `sections: true` 或 `customShows: true`、不给 `slide` 合法，各页都带对应名单、都不带幻灯片 `shapes`。
-根上 `masters` 只看 `scope.masters`。根上 `handout` 只看 `scope.handout`。根上 `sections` 只看 `scope.sections`。
+根上 `masters` 只看 `scope.masters`。根上 `notesMaster` 只看 `scope.notesMaster`。根上 `handout` 只看 `scope.handout`。根上 `sections` 只看 `scope.sections`。
 根上 `customShows` 只看 `scope.customShows`。`slide` 小于 `1` 报 `InvalidField`。
 `slide` 超出 `slideCount` 时各页都不带 `shapes`，不报错；
 图名单、图表名单、SmartArt 名单、表名单、嵌入对象名单、Zoom 名单、连接线名单、备注对象、批注名单、超链接名单、域名单与动画摘要仍按各自键决定。
@@ -733,6 +755,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   始终看 `p:custShowLst` 以填 `customShowCount`。始终读 `/ppt/presProps.xml` 的 `p:showPr` 以填 `showPr`。
   始终看 Presentation 的 `p:modifyVerifier` 以填 `modifyProtection`。
   `scope.masters` 为 `true` 时再读各 slideMaster / slideLayout 部件，以及各母版的 theme 部件。
+  `scope.notesMaster` 为 `true` 且有备注母版关系时再读该 notesMaster 部件。
   `scope.handout` 为 `true` 且有讲义母版关系时再读该 handoutMaster 部件。`scope.sections` 为 `true` 时再展开根上 `sections`。
   `scope.customShows` 为 `true` 时再展开根上 `customShows`。备注里的表本期不进树。母版、版式上的图表、SmartArt 与表本期不进树。
 - `slideCount` 是 `p:sldIdLst` 里 `p:sldId` 的个数，始终出现。
@@ -778,7 +801,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   `invX` / `invY` 只在对应属性为 `1` / `true` 时出现且值为 `true`。
 - 省略 `scope` 或只给空对象时，没有 `shapes`、`truncated`，
   也没有 `pictures` / `maths` / `videos` / `audios` / `charts` / `smartArts` / `tables` / `oleObjects` / `model3ds` / `zooms` / `connectors` / `timing` 名单，
-  也没有 `notes`，也没有 `comments`，也没有 `hyperlinks`，也没有根上 `masters`，也没有根上 `handout`，也没有根上 `sections`。
+  也没有 `notes`，也没有 `comments`，也没有 `hyperlinks`，也没有根上 `masters`，也没有根上 `notesMaster`，也没有根上 `handout`，也没有根上 `sections`。
 - 给了 `scope.slide` 时
 - 只给那一页填 `shapes`。该页带 `p:txBody` 的 `p:sp` 超过 `maxShapes` 则 `truncated` 为 `true`
 - 按该页文档顺序截断。未截断则为 `false`。备注形状不算进 `maxShapes`。
@@ -868,10 +891,21 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   字段只有 `hasPassword`：该元素带非空 `algorithmName` / `hashValue` / `saltValue` / `spinCount` / `spinValue` / `hash` / `salt` / `password` 时为 `true`，
   否则为 `false`。
   树上不出现哈希。xlsx / docx 根上不要带此对象。docx 仍用 `protection`，xlsx 用 `sheetProtection` / `workbookProtection`。
-- `scope.handout` 为 `true` 时，根上带 `handout`。没有讲义母版关系则为 `null`。有则为对象，字段顺序：`id`、`header`、`footer`、`date`、`sldNum`。
+- `scope.handout` 为 `true` 时，根上带 `handout`。没有讲义母版关系则为 `null`。有则为对象，字段顺序：`id`、`header`、`footer`、`date`、`sldNum`、`animCount`，
+  `scope.timing` 同开时再跟 `timing`，然后 `placeholders`。
   `id` 为 `handout`。四个槽位分别取 handoutMaster 上第一个 `p:ph/@type` 为 `hdr` / `ftr` / `dt` / `sldNum` 的 `p:sp` 的可见字。
   没有该类型占位符则为 `null`。有占位符但没有 `txBody` 则为 `""`。槽位文字把 `a:fld` 里的 `a:t` 也算进去（与幻灯片形状 `text` 跳过域缓存不同），以便看见日期与页码缓存。
-  xlsx / docx 的 `scope` 里出现 `handout` 报 `InvalidField`。不算讲义打印布局，不列出 `sldImg` 缩略图占位符。
+  `placeholders` 收全部带 `p:nvPr/p:ph` 的 `p:sp`（含 `sldImg`，含组合里的），按文档顺序。
+  字段顺序与幻灯片母版占位符相同。`id` 为 `handout/shape:{cNvPrId}`；没有 `cNvPr/@id` 则为 `handout/shape:index:{i}`，`{i}` 只在该宿主占位符内从 1 计。
+  `animCount` 只计该 handoutMaster 的 `<p:timing>`。讲义 `timing` 的 id 为 `handout/anim:{k}`，`target` 对应该讲义占位符 id。
+  xlsx / docx 的 `scope` 里出现 `handout` 报 `InvalidField`。不算讲义打印布局。
+- `scope.notesMaster` 为 `true` 时，根上带 `notesMaster`。没有备注母版关系则为 `null`。有则为对象，字段顺序：`id`、`animCount`，
+  `scope.timing` 同开时再跟 `timing`，然后 `placeholders`。
+  `id` 为 `notesMaster`。`placeholders` 收全部带 `p:ph` 的 `p:sp`（含 `sldImg`），按文档顺序。
+  `id` 为 `notesMaster/shape:{cNvPrId}`；没有则为 `notesMaster/shape:index:{i}`。
+  `animCount` 只计该 notesMaster 的 `<p:timing>`。备注母版 `timing` 的 id 为 `notesMaster/anim:{k}`。
+  不收没有 `p:ph` 的装饰形。xlsx / docx 的 `scope` 里出现 `notesMaster` 报 `InvalidField`。
+  根上 `animCount` 仍只计幻灯片 XML，不含备注母版与讲义。
 - `scope.sections` 为 `true` 时，根上带 `sections`。没有节时为空数组。不依赖 `scope.slide`。按 `p14:section` 文档顺序。
   每条字段顺序：`id`、`guid`、`name`、`slides`。`id` 为 `section:{n}`。`guid` 取 `p14:section/@id` 原文（含花括号），缺则为 `null`。
   `name` 取 `@name` 原文，缺则为 `""`。`slides` 是该节 `p14:sldIdLst/p14:sldId/@id` 对到 `p:sldIdLst` 之后的 `slide:{n}` 数组；对不上任何页的 `ST_SlideId` 跳过，不编进树。
@@ -984,7 +1018,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   根对象字段顺序：`schemaVersion`、`format`、`id`、`slideCount`、`pictureCount`、`mathCount`、`videoCount`、`audioCount`、`chartCount`、
   `smartArtCount`、`commentCount`、`hyperlinkCount`、`fieldCount`、`tableCount`、`oleObjectCount`、`model3dCount`、`zoomCount`、`connectorCount`、
   `animCount`、`masterCount`、`hasHandout`、`sectionCount`、`slideSize`、`customShowCount`、`showPr`、`modifyProtection`、`props`，
-  有 `scope.masters` 时再跟 `masters`，有 `scope.handout` 时再跟 `handout`，有 `scope.sections` 时再跟 `sections`，
+  有 `scope.masters` 时再跟 `masters`，有 `scope.notesMaster` 时再跟 `notesMaster`，有 `scope.handout` 时再跟 `handout`，有 `scope.sections` 时再跟 `sections`，
   有 `scope.customShows` 时再跟 `customShows`，然后 `slides`。
   `props` 始终出现，规则见 [json-contract.md](json-contract.md#文档属性三格式共用)。
 - `shapeId` 是 `cNvPr/@id` 的原文。走 `shape:index:{k}` 时为 `null`。
@@ -999,7 +1033,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   各文本 run 显式值一致则报该值，不一致或没有显式值则为 `null`，不猜主题。
   `sz` 是百分之一磅。`color` 只报 `a:srgbClr` 的六位大写 RGB。`align` 取 `a:pPr/@algn`。`textAnchor` 取 `a:bodyPr/@anchor`。
 - `stable`：有 `cNvPr/@id` 为 `true`，否则为 `false`。
-- 不返回完整动画时间轴树。效果摘要见上文 `scope.timing`。写入见 `insertAnim` / `setAnim` / `deleteAnim` / `moveAnim`。母版与版式见上文 `scope.masters`。讲义母版槽位见上文 `scope.handout`。
+- 不返回完整动画时间轴树。效果摘要见上文 `scope.timing`。写入见 `insertAnim` / `setAnim` / `deleteAnim` / `moveAnim`。母版与版式见上文 `scope.masters`。备注母版见上文 `scope.notesMaster`。讲义母版槽位与占位符见上文 `scope.handout`。
   切换见上文 `transition`。对批注或回复 id 发 `insertPicture` 写 `a:blip`。对批注内图 id 发 `setPictureSize` / `setPicturePos` 报 `InvalidId`。
 
 
@@ -1281,10 +1315,10 @@ create 写出 Transitional 最小包，见 [opc.md](opc.md)。
 再按数组顺序写 `comments`，再写形状超链接，再写 `transition`，再按数组顺序写 `anims`。
 全部页写完后再写 `sections`。`p:cNvPr/@id` 取该页已有全部 `cNvPr` 的最大整数加 1，至少为 2。
 `presentation` 根上出现 `pictures` / `charts` / `smartArts` / `tables` / `notes` / `comments` / `videos` / `audios`
- / `anims` / `transition` / `masters` / `handout` / `hyperlinks` / `customShows` / `oleObjects` / `zooms` / `showPr`
+ / `anims` / `transition` / `masters` / `notesMaster` / `handout` / `hyperlinks` / `customShows` / `oleObjects` / `zooms` / `showPr`
  / `modifyProtection` 报 `InvalidField`。
 `shapes[]` 上出现 `pictures` / `charts` / `smartArts` / `tables` / `notes` / `comments` / `videos` / `audios` / `anims`
- / `transition` / `masters` / `handout` / `hyperlinks` / `sections` / `customShows` / `oleObjects` / `zooms` / `showPr` 报 `InvalidField`。
+ / `transition` / `masters` / `notesMaster` / `handout` / `hyperlinks` / `sections` / `customShows` / `oleObjects` / `zooms` / `showPr` 报 `InvalidField`。
 `slides[]` 上出现 `hyperlinks` 报未知字段（链写在 `shapes[]` 上，不另开页级名单）。`slides[]` 上出现 `fields` 报未知字段。create 本期不写域。
 `slides[]` 上出现 `timing` 报未知字段。create 本期不写自定义放映。`slides[]` 上出现 `oleObjects` 报未知字段。create 本期不写 OLE。
 `slides[]` 上出现 `zooms` 报未知字段。create 本期不写 Zoom。`presentation` 根上出现 `showPr` / `modifyProtection` 报未知字段。
@@ -1441,6 +1475,8 @@ prst 的效果子元素是 `p15:prstTrans`，`prst` 为该 `type`。不写 `sndA
     - `…/smartdiagram:…`
     - 备注页上同样判定，id 带 `slide:{n}/notes/` 前缀
     - 母版 / 版式形状（占位符与装饰形）：`master:{n}/shape:…` 或 `master:{n}/layout:{k}/shape:…`
+    - 备注母版占位符：`notesMaster/shape:…`
+    - 讲义占位符：`handout/shape:…`
 - **`type`**
   - 必须
   - 白名单：`appear`、`fade`、`flyIn`、`wipe`、`split`、`zoom`、`spin`、`growShrink`、`fadeOut`、`flyOut`、`wipeOut`、`pathRight`
@@ -1496,6 +1532,8 @@ prst 的效果子元素是 `p15:prstTrans`，`prst` 为该 `type`。不写 `sndA
 新 `cTn/@id` 取该宿主 timing 已有最大整数加 1。该对象尚无 `bldP` 则补一条对应 `spid`、`grpId="0"`。给了 `para` 才写 `txEl`。给了 `sound` 才写 `sndAc`，并可脏该宿主 `.rels`、`/ppt/media/…` 与 `[Content_Types].xml`。
 不改 `<p:transition>`。不改未点名效果。
 备注没有 notesSlide 时报 `IdNotFound`。母版 / 版式上占位符与装饰形都能绑。
+备注母版与讲义占位符也能绑。ECMA `CT_NotesMaster` / `CT_HandoutMaster` 没有 `timing`；Office 16.0 另存不剥、无 Repair 则写。
+`<p:timing>` 插在 `clrMap` 之后、`hf` / `notesStyle` 之前。不把这两处动画抄进各页。
 docx / xlsx 上发此 op 报 `InvalidField`。
 
 ### setAnim
@@ -1658,23 +1696,26 @@ pptx：`id` 不是母版 id 报 `InvalidId`（对 `master:{n}/layout:{k}`、占�
 | 字段 | 含义 |
 | --- | --- |
 | `op` | 必须是 `"insertPlaceholder"` |
-| `id` | 必须是 `master:{n}` 或 `master:{n}/layout:{k}` |
+| `id` | 必须是 `master:{n}`、`master:{n}/layout:{k}`、`notesMaster` 或 `handout` |
 | `type` | 必填。`p:ph/@type`。必须是可写占位符类型 |
 | `text` | 可选。可见纯文本，省略则空。`\\n` 写成 `a:br` |
 | `x` / `y` | 可选。画布坐标，EMU，非负整数。必须成对出现或成对省略 |
 | `cx` / `cy` | 可选。尺寸，EMU，正整数。必须成对出现或成对省略。都省略时默认 `5080000` × `2540000` |
 
-pptx：`id` 不是母版 id 也不是版式 id 报 `InvalidId`（对占位符 id、页 id 发本 op 也是这条）。找不到该宿主报 `IdNotFound`。
+pptx：`id` 不是母版 id、版式 id、`notesMaster` 或 `handout` 报 `InvalidId`（对占位符 id、页 id 发本 op 也是这条）。找不到该宿主报 `IdNotFound`。
 缺 `type`、或 `type` 不在白名单，报 `InvalidField`。只给 `x` 或只给 `y`、只给 `cx` 或只给 `cy` 报 `InvalidField`。
-缺坐标时在画布上找空位（画布取 presentation 的 `p:sldSz`，没有则 `12192000` × `6858000`）。
+缺坐标时在画布上找空位。幻灯片母版 / 版式 / 讲义画布取 presentation 的 `p:sldSz`，没有则 `12192000` × `6858000`。
+备注母版画布取 `p:notesSz`，没有则 `6858000` × `9144000`。
+`id` 为 `notesMaster` 且包内还没有 notesMaster 时，按 `setNotesText` 同一套规则新建最小部件再插。
+`id` 为 `handout` 且包内还没有 handoutMaster 时，按 `setHandoutText` 同一套规则新建最小部件再插。
 
 写入该宿主 `p:spTree` 一个新 `p:sp`（插在 `extLst` 之前）。`p:cNvSpPr` 带 `a:spLocks noGrp="1"`，不写 `txBox`。`a:prstGeom/@prst` 为 `rect`。
 默认 `a:noFill` 与 `a:ln/a:noFill`。始终带 `p:txBody`。新 `cNvPr/@id` 取该宿主（含 `spTree` 的 `id="1"`）已有最大加 1，至少为 2。
-`cNvPr/@name` 按类型写成「标题占位符 {该 id}」「居中标题占位符 {该 id}」「副标题占位符 {该 id}」「文本占位符 {该 id}」「日期占位符 {该 id}」「页脚占位符 {该 id}」「幻灯片编号占位符 {该 id}」。
+`cNvPr/@name` 按类型写成「标题占位符 {该 id}」「居中标题占位符 {该 id}」「副标题占位符 {该 id}」「文本占位符 {该 id}」「日期占位符 {该 id}」「页脚占位符 {该 id}」「幻灯片编号占位符 {该 id}」「页眉占位符 {该 id}」。
 `title` / `ctrTitle` 不写 `p:ph/@idx`。其它类型：该宿主已有整数 `@idx` 则取最大加 1；没有则写 `10`（与 Office 16.0 另存正文占位符一致）。
 `body` 另写 `sz="quarter"`。不改各页 XML。docx / xlsx 上发此 op 报 `InvalidField`。
 
-可写 `type`（ECMA-376 `ST_PlaceholderType` 子集，§19.7.10）：`title`、`body`、`ctrTitle`、`subTitle`、`dt`、`ftr`、`sldNum`。
+可写 `type`（ECMA-376 `ST_PlaceholderType` 子集，§19.7.10）：`title`、`body`、`ctrTitle`、`subTitle`、`dt`、`ftr`、`sldNum`、`hdr`。
 不在名单里报 `InvalidField`。`obj` / `chart` / `tbl` / `pic` / `media` / `sldImg` 本期不写。
 
 ### deletePlaceholder
@@ -1682,11 +1723,12 @@ pptx：`id` 不是母版 id 也不是版式 id 报 `InvalidId`（对占位符 id
 | 字段 | 含义 |
 | --- | --- |
 | `op` | 必须是 `"deletePlaceholder"` |
-| `id` | 已有占位符 id（`master:{n}/shape:…` 或 `master:{n}/layout:{k}/shape:…`） |
+| `id` | 已有占位符 id（`master:{n}/shape:…`、`master:{n}/layout:{k}/shape:…`、`notesMaster/shape:…` 或 `handout/shape:…`） |
 
 找不到该占位符报 `IdNotFound`。id 不是占位符 id 报 `InvalidId`。对幻灯片形状 id 发本 op 报 `InvalidId`。只删该 `p:sp`。
 若在 `mc:AlternateContent` 的 Choice 里，整段 `AlternateContent` 删掉。组合里的占位符同样摘掉；组合空了则把空 `p:grpSp` 一并摘掉。
-不改各页 XML，不改未点名占位符的 `cNvPr/@id`。docx / xlsx 上发此 op 报 `InvalidField`。`deleteShape` 对母版 / 版式占位符仍报 `InvalidId`。
+不改各页 XML，不改未点名占位符的 `cNvPr/@id`。不把备注母版 / 讲义的删除抄进 notesSlide 或各页。
+docx / xlsx 上发此 op 报 `InvalidField`。`deleteShape` 对母版 / 版式 / 备注母版 / 讲义占位符仍报 `InvalidId`。
 
 ### insertMaster
 
@@ -1727,7 +1769,7 @@ presentation `.rels` 补一条 `slideMaster`；`p:sldMasterIdLst` 追加一条�
 找不到该母版报 `IdNotFound`。`id` 不是母版 id 报 `InvalidId`（对 `master:{n}/layout:{k}` 或占位符 id 也是这条）。最后一份母版报 `InvalidField`。
 任何页仍使用该母版下的版式报 `InvalidField`，未写文件。摘掉 presentation 的 `p:sldMasterId` 与对应关系，
 以及该母版、其全部版式、仅被它引用的 theme 部件及其 `.rels` 与内容类型 Override。
-不改各页 XML。docx / xlsx 上发此 op 报 `InvalidField`。备注母版本期不写。
+不改各页 XML。docx / xlsx 上发此 op 报 `InvalidField`。不删 notesMaster。
 
 ### setSlideSize
 
@@ -2003,8 +2045,8 @@ docx 见 [docx 分册](json-contract-docx.md#ungroup)。xlsx 见 [xlsx 分册](j
 | `op` | 必须是 `"deleteShape"` |
 | `id` | 形状 id（`slide:{n}/shape:…`、备注上的 `slide:{n}/notes/shape:…`，或母版 / 版式装饰形 `master:…/shape:…`） |
 
-找不到该形状报 `IdNotFound`。id 不是形状 id 报 `InvalidId`。对母版或版式占位符 id 发本 op 报 `InvalidId`。
-插删占位符请用 `insertPlaceholder` / `deletePlaceholder`。对备注页上占位符 `p:ph/@type` 为 `sldImg` 的形状发本 op 报 `InvalidField`，不写文件。
+找不到该形状报 `IdNotFound`。id 不是形状 id 报 `InvalidId`。对母版、版式、备注母版或讲义占位符 id 发本 op 报 `InvalidId`。
+插删占位符请用 `insertPlaceholder` / `deletePlaceholder`。对备注页、备注母版或讲义上占位符 `p:ph/@type` 为 `sldImg` 的形状发本 op 报 `InvalidField`，不写文件。
 删掉对应 `p:sp`。若在 `mc:AlternateContent` 的 Choice 里，整段 `AlternateContent` 删掉。组合本身不进树；删组合内子 `sp` 后若组合空了，把空 `p:grpSp` 一并摘掉。
 不改其它形状的 `cNvPr/@id`。按被删形状的 `cNvPr/@id` 清掉本宿主 `<p:timing>` 里对应的 `p:tgtEl`（其子为 `p:spTgt/@spid`）；祖先因此变空则一并摘掉，未点名形状的 timing 留下。
 不要整节无故删掉仍有内容的 `<p:timing>`。母版 / 版式装饰形只改对应 slideMaster / slideLayout 部件，不改各页 XML。docx 上发此 op 报 `InvalidField`。xlsx 见 [xlsx 分册](json-contract-xlsx.md#deleteshape)。
@@ -2014,11 +2056,12 @@ docx 见 [docx 分册](json-contract-docx.md#ungroup)。xlsx 见 [xlsx 分册](j
 | 字段 | 含义 |
 | --- | --- |
 | `op` | 必须是 `"setShapePos"` |
-| `id` | 形状 id（幻灯片 / 备注上的 `slide:…/shape:…`，母版 / 版式占位符或装饰形 `master:…/shape:…`，或连接线 `slide:…/cxn:…`） |
+| `id` | 形状 id（幻灯片 / 备注上的 `slide:…/shape:…`，母版 / 版式占位符或装饰形 `master:…/shape:…`，备注母版 `notesMaster/shape:…`，讲义 `handout/shape:…`，或连接线 `slide:…/cxn:…`） |
 | `x` / `y` | 至少给一个。EMU，非负整数 |
 
 写入该 `p:sp` 或 `p:cxnSp` 的 `p:spPr/a:xfrm/a:off`。没有 `xfrm` 则补。找不到报 `IdNotFound`。id 不是形状 id 也不是连接线 id 报 `InvalidId`。
 `x` 与 `y` 一个都不给报 `InvalidField`。对 `sldImg` 占位符报 `InvalidField`。母版 / 版式占位符与装饰形只改对应 slideMaster / slideLayout 部件，不改各页 XML。
+备注母版只改 notesMaster 部件。讲义只改 handoutMaster 部件。
 对已组合的子对象只改该子 `xfrm`，不重算父 `p:grpSp` 的包围盒。docx / xlsx 上发此 op 报 `InvalidField`。
 
 ### setShapeSize
@@ -2026,11 +2069,12 @@ docx 见 [docx 分册](json-contract-docx.md#ungroup)。xlsx 见 [xlsx 分册](j
 | 字段 | 含义 |
 | --- | --- |
 | `op` | 必须是 `"setShapeSize"` |
-| `id` | 形状 id（幻灯片 / 备注上的 `slide:…/shape:…`，母版 / 版式占位符或装饰形 `master:…/shape:…`，或连接线 `slide:…/cxn:…`） |
+| `id` | 形状 id（幻灯片 / 备注上的 `slide:…/shape:…`，母版 / 版式占位符或装饰形 `master:…/shape:…`，备注母版 `notesMaster/shape:…`，讲义 `handout/shape:…`，或连接线 `slide:…/cxn:…`） |
 | `cx` / `cy` | 至少给一个。EMU，正整数 |
 
 写入该 `p:sp` 或 `p:cxnSp` 的 `p:spPr/a:xfrm/a:ext`。没有 `xfrm` 则补。找不到报 `IdNotFound`。id 不是形状 id 也不是连接线 id 报 `InvalidId`。
 `cx` 与 `cy` 一个都不给报 `InvalidField`。对 `sldImg` 占位符报 `InvalidField`。母版 / 版式占位符与装饰形只改对应 slideMaster / slideLayout 部件。
+备注母版只改 notesMaster 部件。讲义只改 handoutMaster 部件。
 对已组合的子对象只改该子 `xfrm`，不重算父组合框。docx / xlsx 上发此 op 报 `InvalidField`。
 
 ### setShapeFill
@@ -2160,14 +2204,16 @@ theme 部件按已有 theme 复制一份新的 `/ppt/theme/themeN.xml`，不和 
 
 四个槽位至少给一个，否则报 `InvalidField`。未点名的槽位留下。`id` 不是 `handout` 报 `InvalidId`。
 不要和 `setNotesText` 混用：本 op 只改 `/ppt/handoutMasters/…`，不改 notesSlide。
-对 `handout` 发 `setShapeText` / `setShapeFormat` / `insertShape` / `deleteShape` / `setShapeFill` / `setShapeLine` 报 `InvalidId`。
+对 `handout` 容器发 `setShapeText` / `setShapeFormat` / `insertShape` / `deleteShape` / `setShapeFill` / `setShapeLine` 报 `InvalidId`。
+对 `handout/shape:…` 发 `setShapeText` / `setShapeFormat` / `setShapePos` / `setShapeSize` 认该占位符。
+`sldImg` 仍报 `InvalidField`。`insertShape` / `deleteShape` / `setShapeFill` / `setShapeLine` 对讲义占位符仍报 `InvalidId`。
 
 只改文档顺序中该类型的第一个占位符。没有 handoutMaster 时新建最小 Transitional 讲义母版：写 `/ppt/handoutMasters/handoutMaster1.xml`，
 presentation 关系、`p:handoutMasterIdLst`（插在 `notesMasterIdLst` 之后，没有则插在 `sldMasterIdLst` 之后）与内容类型。
 theme 关系指向**新复制**的 theme 部件（内容与包内已有 theme 相同），不和 slideMaster 共用同一部件。
 新建部件含 `hdr`、`dt`、`ftr`、`sldNum` 四个占位符，结构对照 notesMaster 的页眉页脚框，不写 `sldImg`，不写 `p14:creationId`。
 已有讲义母版却没有被点名类型的占位符时，补一个该类型再写字。写入规则与 `setShapeText` 相同（整框写成新 run）；日期或页码原先若是 `a:fld`，改完变成普通文字，不再自动更新。
-该 handoutMaster 若已有 `p:hf`，把被点名槽位对应属性写成 `1`。不写 `<p:timing>`。xlsx / docx 上发此 op 报 `InvalidField`。`create` 本期不写讲义。
+该 handoutMaster 若已有 `p:hf`，把被点名槽位对应属性写成 `1`。本 op 不写 `<p:timing>`。xlsx / docx 上发此 op 报 `InvalidField`。`create` 本期不写讲义。
 
 示例见 `docs/examples/pptx-apply-handout.json`。inspect 示例见 `docs/examples/pptx-inspect-handout.json`。
 
@@ -2713,7 +2759,7 @@ Fallback 是 `p:pic`，预览同一张 PNG，并带 `a:hlinkClick`（`action="pp
 以及新建或被删的 `/ppt/media/…`、`/ppt/charts/…`、embedding、`/ppt/diagrams/…` 及可选 drawing 缓存，
 以及现代批注部件 `/ppt/comments/modernComment_*.xml` 与 `/ppt/authors.xml`。
 `setShapeText` / `setShapeFormat` 以及 `setShapePos` / `setShapeSize` / `setShapeFill` / `setShapeLine` / `deleteShape` 只脏目标宿主 XML（幻灯片、
-notesSlide、被点名的 slideMaster 或 slideLayout）。
+notesSlide、被点名的 slideMaster 或 slideLayout、notesMaster 或 handoutMaster）。
 `insertShape` 往幻灯片插只脏该页 XML；往备注插时可脏 notesSlide、该页 `.rels`、notesMaster、presentation，与 `setNotesText` 相同。
 往母版 / 版式插只脏目标 slideMaster 或 slideLayout XML。
 `insertConnector` / `deleteConnector` / `groupShapes` / `ungroup` 只脏该页幻灯片 XML。
@@ -2738,11 +2784,12 @@ presentation 关系、新页或被删页及其 `.rels`、内容类型，
 `setTransition` 只脏该页幻灯片 XML 的 `<p:transition>`（或包住它的 `mc:AlternateContent`），不脏 timing。
 `insertAnim` / `setAnim` / `deleteAnim` / `moveAnim` 脏被点名宿主 XML 的 `<p:timing>`（含 `bldLst`），不脏 `<p:transition>`。
 给了 `sound` 时还可脏该宿主 `.rels`、`/ppt/media/…` 与 `[Content_Types].xml`。
-幻灯片宿主是该页幻灯片 XML；备注是该页 notesSlide；母版 / 版式是被点名的 slideMaster 或 slideLayout。
+幻灯片宿主是该页幻灯片 XML；备注是该页 notesSlide；母版 / 版式是被点名的 slideMaster 或 slideLayout；备注母版是 notesMaster；讲义是 handoutMaster。
 `setSlideLayout` 只脏该页 `.rels` 的 `slideLayout` 目标，不脏幻灯片 XML、母版 XML 或版式 XML。
 `insertLayout` 脏新 slideLayout 及其 `.rels`、该母版 XML 与 `.rels`、`[Content_Types].xml`。
 `deleteLayout` 脏该母版 XML 与 `.rels`、被删 slideLayout 及其 `.rels`、内容类型。
-`insertPlaceholder` / `deletePlaceholder` 只脏目标 slideMaster 或 slideLayout XML。
+`insertPlaceholder` / `deletePlaceholder` 脏目标 slideMaster、slideLayout、notesMaster 或 handoutMaster XML。
+往备注母版 / 讲义插且还没有该部件时，还可脏 `presentation.xml` 及其 `.rels`、新建的 notesMaster / handoutMaster 及其 `.rels`、内容类型与 theme 副本。
 `insertMaster` 脏 `presentation.xml` 及其 `.rels`、新 slideMaster / slideLayout / theme 及其 `.rels`、内容类型。
 `deleteMaster` 脏 `presentation.xml` 及其 `.rels`、被删母版及其版式与仅被它引用的 theme、内容类型。
 `setSlideSize` 只脏 `presentation.xml` 的 `p:sldSz`。`setThemeColors` / `setThemeFonts` 只脏该母版指向的 theme 部件。

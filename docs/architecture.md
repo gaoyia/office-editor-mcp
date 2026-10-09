@@ -190,9 +190,9 @@ inspect 默认只返回页名单与各页 `pictureCount`、`mathCount`、`videoC
 要图名单必须给 `scope.pictures`，要公式框名单必须给 `scope.maths`，要视频 / 音频名单必须给 `scope.media`，要图表名单必须给 `scope.charts`，
 要 SmartArt 名单必须给 `scope.smartArt`，要表名单必须给 `scope.tables`，要嵌入对象名单必须给 `scope.oleObjects`，要 3D 模型名单必须给 `scope.model3ds`，要 Zoom 名单必须给 `scope.zooms`，
 要连接线名单必须给 `scope.connectors`，要备注形状必须给 `scope.notes`，要批注名单必须给 `scope.comments`，要超链接名单必须给 `scope.hyperlinks`，
-要域名单必须给 `scope.fields`，要动画摘要必须给 `scope.timing`，要母版与版式名单必须给 `scope.masters`，要讲义母版槽位必须给 `scope.handout`，
+要域名单必须给 `scope.fields`，要动画摘要必须给 `scope.timing`，要母版与版式名单必须给 `scope.masters`，要备注母版占位符必须给 `scope.notesMaster`，要讲义母版槽位必须给 `scope.handout`，
 要幻灯片节名单必须给 `scope.sections`，要自定义放映名单必须给 `scope.customShows`。
-apply 可改被点名形状的 `p:txBody` 可见文字（含备注形状、母版 / 版式占位符与装饰形，缩略图占位符除外），
+apply 可改被点名形状的 `p:txBody` 可见文字（含备注形状、母版 / 版式占位符与装饰形、备注母版与讲义占位符，缩略图占位符除外），
 可插入文本框与非矩形预设几何、插入连接线、组合与解开、删除被点名形状、改画布坐标与尺寸、填充描边与 DrawingML 文字格式。
 母版 / 版式装饰形可用 `deleteShape`，占位符请用 `deletePlaceholder`。
 删除时清掉 timing 里对应 `tgtEl`，不重建未点名形状，不整节无故丢掉仍有内容的 `<p:timing>`。
@@ -203,10 +203,11 @@ apply 可改被点名形状的 `p:txBody` 可见文字（含备注形状、母�
 也可插入空白页、删除、按 `sldIdLst` 重排与隐藏（`p:sld/@show`）；也可用 `setTransition` 写或清除 `<p:transition>`；
 也可用 `insertAnim` / `setAnim` / `deleteAnim` / `moveAnim` 按模板增删改预设效果（不接受整棵时间轴树；第一条 `with` / `after` 进片自动播）；也可用 `setSlideLayout` 只改该页 `.rels` 的版式关系（不删用户形状、不抄占位符进页）；
 也可用 `insertLayout` / `deleteLayout` / `insertPlaceholder` / `deletePlaceholder` / `insertMaster` / `deleteMaster` 插删空白版式、
-带 `p:ph` 的占位符与整份母版（不算母版排版引擎）；
+带 `p:ph` 的占位符与整份母版（不算母版排版引擎；`insertPlaceholder` 还可写备注母版与讲义）；
 也可用 `insertShape` / `deleteShape` 插删母版 / 版式上没有 `p:ph` 的装饰形（不抄进各页）；
 也可用 `setSlideSize` 只改 `p:sldSz`（不重排形状）；也可用 `setThemeColors` / `setThemeFonts` 改该母版 theme 的配色与字体（不重写 `fmtScheme`）；
 也可用 `setHandoutText` 改讲义母版页眉、页脚、日期与页码占位符（没有 handoutMaster 则新建最小部件）；
+讲义与备注母版占位符也可绑同一套预设动画；
 也可插删改幻灯片文本形状上的形状级 `p:cNvPr/a:hlinkClick` 与 run 级 `a:rPr/a:hlinkClick`（URL / 文件 / 跳转到某页）；
 也可插删改幻灯片文本形状里的 `a:fld`（页码与日期域，不求值）；也可往幻灯片插、删内嵌视频与音频（`p:pic` 上的 `a:videoFile` / `a:audioFile` 与 `p14:media`，不写 timing）；
 也可用 `insertCustomShow` / `setCustomShow` / `deleteCustomShow` 读写 `p:custShowLst`（不算放映引擎）；
@@ -246,7 +247,7 @@ docx 默认不返回正文 `paragraphs` 也不展开页眉页脚段落、任何 
 修订名单、超链接名单、书签名单、域名单、目录名单、题注名单、交叉引用名单、构建基块名单、公式名单、内容控件名单、编号名单、样式名单或 run 名单（仍返回根上 `props` 与 `protection`、`theme`、`fontEmbed`、`pageBackground`，
 以及 `watermarkCount`），pptx 默认不返回 `shapes`，
 也不展开 `pictures` / `maths` / `charts` / `smartArts` / `tables` / `oleObjects` / `model3ds` / `zooms` / `connectors` / `notes` / `comments`
- / `hyperlinks` / `fields` / `timing` / `masters` / `handout` / `sections` / `customShows`（仍返回根与各页 `pictureCount`、`mathCount`、
+ / `hyperlinks` / `fields` / `timing` / `masters` / `notesMaster` / `handout` / `sections` / `customShows`（仍返回根与各页 `pictureCount`、`mathCount`、
 `chartCount`、`smartArtCount`、`commentCount`、`hyperlinkCount`、`fieldCount`、`tableCount`、`oleObjectCount`、`model3dCount`、`zoomCount`、
 `connectorCount`、`animCount`、`masterCount`、`hasHandout`、`sectionCount`、`slideSize`、`customShowCount`，
 以及各页 `layoutId`、`hasNotes`、`transition` 与根上 `props`）。包不写回。

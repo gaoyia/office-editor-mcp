@@ -239,7 +239,19 @@ pub fn apply_set_notes_text(
     Ok(())
 }
 
-fn ensure_notes_master(
+pub fn notes_master_part(pkg: &Package, pres_part: &str) -> Result<Option<String>, Error> {
+    let rels = Relationships::from_package(pkg, pres_part)?;
+    let Some(rel) = rels
+        .rels
+        .iter()
+        .find(|r| r.rel_type.ends_with("/notesMaster"))
+    else {
+        return Ok(None);
+    };
+    Ok(Some(opc::resolve_id(pkg, pres_part, &rel.id)?))
+}
+
+pub(crate) fn ensure_notes_master(
     pkg: &mut Package,
     pres_part: &str,
     pres: &mut Document,

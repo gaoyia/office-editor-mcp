@@ -90,7 +90,7 @@ pub fn set_text(
     Ok(())
 }
 
-fn handout_part(pkg: &Package, pres_part: &str) -> Result<Option<String>, Error> {
+pub(crate) fn handout_part(pkg: &Package, pres_part: &str) -> Result<Option<String>, Error> {
     let rels = Relationships::from_package(pkg, pres_part)?;
     let Some(rel) = rels
         .rels
@@ -102,7 +102,7 @@ fn handout_part(pkg: &Package, pres_part: &str) -> Result<Option<String>, Error>
     Ok(Some(opc::resolve_id(pkg, pres_part, &rel.id)?))
 }
 
-fn ensure_handout_master(
+pub(crate) fn ensure_handout_master(
     pkg: &mut Package,
     pres_part: &str,
     pres: &mut Document,

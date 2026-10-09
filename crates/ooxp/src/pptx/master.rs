@@ -17,9 +17,18 @@ use super::{
 };
 
 #[derive(Debug, Clone)]
+pub enum PlaceholderHost {
+    Master {
+        master: usize,
+        layout: Option<usize>,
+    },
+    NotesMaster,
+    Handout,
+}
+
+#[derive(Debug, Clone)]
 pub struct PlaceholderId {
-    pub master: usize,
-    pub layout: Option<usize>,
+    pub host: PlaceholderHost,
     pub key: ShapeKey,
 }
 
@@ -124,33 +133,36 @@ impl Catalog {
             .iter()
             .find(|l| l.index == layout)
     }
+}
 
-    fn part_for(&self, ph: &PlaceholderId, json_path: &str) -> Result<&str, Error> {
-        match ph.layout {
-            Some(k) => self
-                .layout(ph.master, k)
-                .map(|l| l.part.as_str())
-                .ok_or_else(|| {
-                    Error::with_path(
-                        ErrorKind::LayoutNotFound {
-                            master: ph.master as u32,
-                            layout: k as u32,
-                        },
-                        json_path,
-                    )
-                }),
-            None => self
-                .master(ph.master)
-                .map(|m| m.part.as_str())
-                .ok_or_else(|| {
-                    Error::with_path(
-                        ErrorKind::MasterNotFound {
-                            n: ph.master as u32,
-                        },
-                        json_path,
-                    )
-                }),
+fn rel_part(pkg: &Package, pres_part: &str, suffix: &str) -> Result<Option<String>, Error> {
+    let rels = Relationships::from_package(pkg, pres_part)?;
+    let Some(rel) = rels.rels.iter().find(|r| r.rel_type.ends_with(suffix)) else {
+        return Ok(None);
+    };
+    Ok(Some(opc::resolve_id(pkg, pres_part, &rel.id)?))
+}
+
+fn resolve_host_part(
+    pkg: &Package,
+    pres_part: &str,
+    pres_root: &Element,
+    ph: &PlaceholderId,
+    json_path: &str,
+    id: &str,
+) -> Result<String, Error> {
+    match &ph.host {
+        PlaceholderHost::Master { master, layout } => {
+            catalog(pkg, pres_part, pres_root)?.xml_part(*master, *layout, json_path)
         }
+        PlaceholderHost::NotesMaster => {
+            rel_part(pkg, pres_part, "/notesMaster")?.ok_or_else(|| {
+                Error::with_path(ErrorKind::ShapeNotFound { id: id.to_string() }, json_path)
+            })
+        }
+        PlaceholderHost::Handout => rel_part(pkg, pres_part, "/handoutMaster")?.ok_or_else(|| {
+            Error::with_path(ErrorKind::ShapeNotFound { id: id.to_string() }, json_path)
+        }),
     }
 }
 
@@ -394,8 +406,7 @@ pub fn delete_deco(
     op_index: usize,
 ) -> Result<(), Error> {
     let json_path = format!("ops[{op_index}].id");
-    let cat = catalog(pkg, pres_part, pres_root)?;
-    let part = cat.part_for(ph, &json_path)?.to_string();
+    let part = resolve_host_part(pkg, pres_part, pres_root, ph, &json_path, id)?;
     let mut doc = xml::parse(pkg.get(&part)?)?;
     if find_placeholder_mut(&mut doc.root, &ph.key).is_some() {
         return Err(Error::with_path(
@@ -484,8 +495,7 @@ fn apply_on_placeholder(
     f: impl FnOnce(&mut Element) -> Result<(), Error>,
 ) -> Result<(), Error> {
     let json_path = format!("ops[{op_index}].id");
-    let catalog = catalog(pkg, pres_part, pres_root)?;
-    let part = catalog.part_for(ph, &json_path)?.to_string();
+    let part = resolve_host_part(pkg, pres_part, pres_root, ph, &json_path, id)?;
     let mut doc = xml::parse(pkg.get(&part)?)?;
     let sp = find_master_shape_mut(&mut doc.root, &ph.key).ok_or_else(|| {
         Error::with_path(ErrorKind::ShapeNotFound { id: id.to_string() }, json_path)
@@ -496,6 +506,20 @@ fn apply_on_placeholder(
 }
 
 fn parse_placeholder_id_at(id: &str, path: &str) -> Result<PlaceholderId, Error> {
+    if let Some(rest) = id.strip_prefix("notesMaster/") {
+        let key = parse_shape_after(rest, path)?;
+        return Ok(PlaceholderId {
+            host: PlaceholderHost::NotesMaster,
+            key,
+        });
+    }
+    if let Some(rest) = id.strip_prefix("handout/") {
+        let key = parse_shape_after(rest, path)?;
+        return Ok(PlaceholderId {
+            host: PlaceholderHost::Handout,
+            key,
+        });
+    }
     let rest = id.strip_prefix("master:").ok_or_else(|| {
         Error::with_path(
             ErrorKind::InvalidId {
@@ -533,15 +557,19 @@ fn parse_placeholder_id_at(id: &str, path: &str) -> Result<PlaceholderId, Error>
         };
         let key = parse_shape_after(shape_after, path)?;
         return Ok(PlaceholderId {
-            master,
-            layout: Some(layout),
+            host: PlaceholderHost::Master {
+                master,
+                layout: Some(layout),
+            },
             key,
         });
     }
     let key = parse_shape_after(after, path)?;
     Ok(PlaceholderId {
-        master,
-        layout: None,
+        host: PlaceholderHost::Master {
+            master,
+            layout: None,
+        },
         key,
     })
 }
@@ -648,7 +676,7 @@ fn csld_name(root: &Element) -> Option<String> {
         .map(str::to_string)
 }
 
-fn placeholders_json(root: &Element, host: &str) -> Vec<Value> {
+pub(crate) fn placeholders_json(root: &Element, host: &str) -> Vec<Value> {
     let mut out = Vec::new();
     let mut i = 0usize;
     shape::walk_choice(root, &mut |e| {
@@ -895,6 +923,17 @@ pub fn parse_master_only_at(id: &str, path: &str, reason: IdReason) -> Result<us
     parse_from_one(rest, path, reason)
 }
 
+pub fn parse_insert_placeholder_host(id: &str, op_index: usize) -> Result<PlaceholderHost, Error> {
+    if id == "notesMaster" {
+        return Ok(PlaceholderHost::NotesMaster);
+    }
+    if id == "handout" {
+        return Ok(PlaceholderHost::Handout);
+    }
+    let (master, layout) = parse_master_or_layout_host(id, op_index)?;
+    Ok(PlaceholderHost::Master { master, layout })
+}
+
 pub fn parse_master_or_layout_host(
     id: &str,
     op_index: usize,
@@ -943,7 +982,7 @@ pub fn parse_master_or_layout_host(
 pub fn is_writable_placeholder_type(ty: &str) -> bool {
     matches!(
         ty,
-        "title" | "body" | "ctrTitle" | "subTitle" | "dt" | "ftr" | "sldNum"
+        "title" | "body" | "ctrTitle" | "subTitle" | "dt" | "ftr" | "sldNum" | "hdr"
     )
 }
 
@@ -1083,6 +1122,37 @@ pub fn delete_layout(
     Ok(())
 }
 
+pub(crate) fn write_placeholder_into(
+    pkg: &mut Package,
+    part: &str,
+    canvas: (i64, i64),
+    type_name: &str,
+    text: &str,
+    x: Option<i64>,
+    y: Option<i64>,
+    cx: Option<i64>,
+    cy: Option<i64>,
+) -> Result<(), Error> {
+    let mut doc = xml::parse(pkg.get(part)?)?;
+    picture::ensure_xmlns(&mut doc.root, "a", DML_NS);
+    let cx = cx.unwrap_or(PH_CX);
+    let cy = cy.unwrap_or(PH_CY);
+    let (x, y) = match (x, y) {
+        (Some(px), Some(py)) => (px, py),
+        _ => picture::vacant_pos_canvas(canvas, &doc.root, cx, cy),
+    };
+    let idx = next_ph_idx(&doc.root, type_name);
+    let cnv = picture::next_cnv_id(&doc.root);
+    let name = placeholder_name(type_name, cnv);
+    let mut sp = build_placeholder(cnv, &name, type_name, idx, x, y, cx, cy);
+    if let Some(tx) = sp.child_by_local_mut("txBody") {
+        shape::set_txbody_text(tx, text);
+    }
+    picture::insert_into_sp_tree(&mut doc.root, sp)?;
+    pkg.set(part, doc.to_bytes()?)?;
+    Ok(())
+}
+
 pub fn insert_placeholder(
     pkg: &mut Package,
     pres_part: &str,
@@ -1098,47 +1168,18 @@ pub fn insert_placeholder(
     op_index: usize,
 ) -> Result<(), Error> {
     let json_path = format!("ops[{op_index}].id");
-    let part = {
-        let cat = catalog(pkg, pres_part, pres_root)?;
-        match layout {
-            Some(k) => cat
-                .layout(master, k)
-                .map(|l| l.part.clone())
-                .ok_or_else(|| {
-                    Error::with_path(
-                        ErrorKind::LayoutNotFound {
-                            master: master as u32,
-                            layout: k as u32,
-                        },
-                        json_path.clone(),
-                    )
-                })?,
-            None => cat.master(master).map(|m| m.part.clone()).ok_or_else(|| {
-                Error::with_path(
-                    ErrorKind::MasterNotFound { n: master as u32 },
-                    json_path.clone(),
-                )
-            })?,
-        }
-    };
-    let mut doc = xml::parse(pkg.get(&part)?)?;
-    picture::ensure_xmlns(&mut doc.root, "a", DML_NS);
-    let cx = cx.unwrap_or(PH_CX);
-    let cy = cy.unwrap_or(PH_CY);
-    let (x, y) = match (x, y) {
-        (Some(px), Some(py)) => (px, py),
-        _ => picture::vacant_pos_canvas(canvas_sz(pres_root), &doc.root, cx, cy),
-    };
-    let idx = next_ph_idx(&doc.root, type_name);
-    let cnv = picture::next_cnv_id(&doc.root);
-    let name = placeholder_name(type_name, cnv);
-    let mut sp = build_placeholder(cnv, &name, type_name, idx, x, y, cx, cy);
-    if let Some(tx) = sp.child_by_local_mut("txBody") {
-        shape::set_txbody_text(tx, text);
-    }
-    picture::insert_into_sp_tree(&mut doc.root, sp)?;
-    pkg.set(&part, doc.to_bytes()?)?;
-    Ok(())
+    let part = catalog(pkg, pres_part, pres_root)?.xml_part(master, layout, &json_path)?;
+    write_placeholder_into(
+        pkg,
+        &part,
+        canvas_sz(pres_root),
+        type_name,
+        text,
+        x,
+        y,
+        cx,
+        cy,
+    )
 }
 
 pub fn delete_placeholder(
@@ -1150,14 +1191,17 @@ pub fn delete_placeholder(
     op_index: usize,
 ) -> Result<(), Error> {
     let json_path = format!("ops[{op_index}].id");
-    let cat = catalog(pkg, pres_part, pres_root)?;
-    let part = cat.part_for(ph, &json_path)?.to_string();
+    let part = resolve_host_part(pkg, pres_part, pres_root, ph, &json_path, id)?;
     let mut doc = xml::parse(pkg.get(&part)?)?;
+    let spid = placeholder_spid(&doc.root, &ph.key);
     if !remove_placeholder(&mut doc.root, &ph.key) {
         return Err(Error::with_path(
             ErrorKind::ShapeNotFound { id: id.to_string() },
             json_path,
         ));
+    }
+    if let Some(id) = spid {
+        shape::strip_timing_for_spid(&mut doc.root, &id);
     }
     shape::prune_empty_groups(&mut doc.root);
     pkg.set(&part, doc.to_bytes()?)?;
@@ -1392,7 +1436,7 @@ fn next_part(pkg: &Package, dir: &str, stem: &str) -> String {
     }
 }
 
-fn canvas_sz(pres_root: &Element) -> (i64, i64) {
+pub(crate) fn canvas_sz(pres_root: &Element) -> (i64, i64) {
     pres_root
         .child_by_local("sldSz")
         .and_then(|e| {
@@ -1577,6 +1621,7 @@ fn placeholder_name(ty: &str, cnv: u32) -> String {
         "dt" => format!("日期占位符 {cnv}"),
         "ftr" => format!("页脚占位符 {cnv}"),
         "sldNum" => format!("幻灯片编号占位符 {cnv}"),
+        "hdr" => format!("页眉占位符 {cnv}"),
         _ => format!("占位符 {cnv}"),
     }
 }
@@ -1708,6 +1753,30 @@ fn remove_placeholder_in(el: &mut Element, idx: &mut usize, key: &ShapeKey) -> b
         i += 1;
     }
     false
+}
+
+fn placeholder_spid(root: &Element, key: &ShapeKey) -> Option<String> {
+    let mut idx = 0usize;
+    let mut found = None;
+    shape::walk_choice(root, &mut |e| {
+        if found.is_some() || !is_placeholder(e) {
+            return;
+        }
+        idx += 1;
+        let hit = match key {
+            ShapeKey::Index(n) => idx == *n,
+            ShapeKey::Id(req) => shape::cnv_pr(e)
+                .and_then(|c| c.attr("id"))
+                .is_some_and(|id| shape::ids_match(id, req)),
+        };
+        if hit {
+            found = shape::cnv_pr(e)
+                .and_then(|c| c.attr("id"))
+                .filter(|s| !s.is_empty())
+                .map(str::to_string);
+        }
+    });
+    found
 }
 
 fn deco_spid(root: &Element, key: &ShapeKey) -> Option<String> {

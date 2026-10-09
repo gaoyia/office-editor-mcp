@@ -5,7 +5,7 @@
 检查前用 create 或 apply 在本机生成文件，不要用改过扩展名的 zip 目录冒充。
 本机若 `PowerPoint.Application` 被 WPS 抢走，直接启动 `POWERPNT.EXE` 再挂 COM，不要走被抢的 ProgID。Office 16 的对象模型在 `mdiClass` 上。
 
-C、I、A、Pp、Pvg、Pem、P3d、Pom、Pc、Psa、Pn、Pcm、Pm、Ps、Tf、Sg、Pt、Tn、Tr、Am、Aw、Mm、Mw、Md、Ts、Ho、Phl、Phr、Pcip、Pmd、Psc、Cs、Po、Cr、Pz、Pw、
+C、I、A、Pp、Pvg、Pem、P3d、Pom、Pc、Psa、Pn、Pcm、Pm、Ps、Tf、Sg、Pt、Tn、Tr、Am、Aw、Mm、Mw、Md、Ts、Ho、Nh、Phl、Phr、Pcip、Pmd、Psc、Cs、Po、Cr、Pz、Pw、
 Pf 各组由 `manual-check/office/cases/pptx-*.ps1` 自动判定，
 跑 `pwsh -File manual-check\office\run.ps1 -Case 'pptx-*'` 即可复现。O1 已放弃，与 xlsx / docx 相同。
 
@@ -33,6 +33,7 @@ Ps1–Ps5、Sg1–Sg5、Pt1–Pt6、Tn1–Tn5、Am1–Am5、Mm1–Mm5、Ho1–Ho
 同日补跑 `pptx-omml.ps1`，Pom1–Pom6 通过。无 Repair。
 同日补跑 `pptx-shape-format.ps1`，Tf1–Tf5 通过。无 Repair。
 2026-10-10 补跑 `pptx-master-deco.ps1`，Md1–Md5 通过。无 Repair。
+2026-10-10 补跑 `pptx-notes-master.ps1`，Nh1–Nh5 通过。无 Repair。
 
 - **C1** ✅
   - PowerPoint 16.0 能打开 `manual-check/office/out/pptx-create.pptx`，标题栏无 Repair
@@ -273,6 +274,14 @@ Ps1–Ps5、Sg1–Sg5、Pt1–Pt6、Tn1–Tn5、Am1–Am5、Mm1–Mm5、Ho1–Ho
   - create 为 false、展开为 null
   - `setHandoutText` 写页脚 / 页眉后 COM 与 inspect 可见新字、无 Repair
   - xlsx / docx 拒 `scope.handout` 与 `setHandoutText`
+- **Nh1–Nh5** ✅
+  - PowerPoint 16.0：`pptx-notes-master.ps1`，5 PASS / 0 FAIL
+  - `insertPlaceholder` `id=notesMaster` 后 `notesMaster.id` 为 `notesMaster`，`placeholders` 含 `notesMaster/shape:…`，`text` 为「母版备注」
+  - `setShapeText` 为「改过」后对上；`deletePlaceholder` 后该条不在
+  - `insertAnim` `fade` 后 `notesMaster.timing[0].target` 对上
+  - 讲义 `insertPlaceholder` `type=hdr` 后 `handout/shape:…`；`setHandoutText` 仍只认 `handout`；讲义 `timing[0].target` 对上
+  - `insertShape` 对 `handout`、占位符 `deleteShape`、`pptx:presentation` 的 `insertPlaceholder` 得 `InvalidId`；xlsx `scope.notesMaster` 得 `InvalidField`
+  - 无 Repair
 - **Phl1–Phl5** ✅
   - PowerPoint 16.0：`pptx-hyperlinks.ps1`，5 PASS / 0 FAIL
   - 无名单时根与各页有 `hyperlinkCount=0`
@@ -1139,6 +1148,40 @@ inspect 列出讲义母版页眉、页脚、日期、页码槽位。apply 用 `s
 - **Ho5**
   - 检查：拒错
   - 通过标准：xlsx / docx 的 `scope.handout` 与 `setHandoutText` 得 `InvalidField`，未写文件
+
+## 备注母版与讲义形状
+
+备注母版能插删占位符。讲义占位符编成 `handout/shape:…`。这两处能写与幻灯片相同的预设动画。不算打印讲义，不算放映引擎。
+脚本：`manual-check/office/cases/pptx-notes-master.ps1`。编号用 Nh（不要跟 Ho、Pn 混）。
+
+- **Nh1** ✅
+  - 检查：备注母版 inspect
+  - 通过标准：对 create 产物 `insertPlaceholder` `id=notesMaster` `type=body` `text=母版备注`
+  - `scope.notesMaster: true` 时 `notesMaster.id` 为 `notesMaster`，`placeholders` 含 `notesMaster/shape:…`，其中一条 `text` 为「母版备注」
+  - 无 Repair
+- **Nh2** ✅
+  - 检查：改字与删除
+  - 通过标准：对备注母版占位符 `setShapeText` 为「改过」后 `text` 为「改过」
+  - `deletePlaceholder` 后该条不在 `placeholders`
+  - 无 Repair
+- **Nh3** ✅
+  - 检查：备注母版动画
+  - 通过标准：对备注母版占位符 `insertAnim` `type=fade` 后 `scope.notesMaster` 与 `scope.timing` 同开时 `notesMaster.timing[0].target` 对上
+  - 无 Repair
+- **Nh4** ✅
+  - 检查：讲义形状
+  - 通过标准：对 `handout` `insertPlaceholder` `type=hdr` `text=讲义形` 后 `scope.handout` 的 `placeholders` 有一条 `handout/shape:…`
+  - `setShapeText` 后槽位 `header` 对得上（若该条是文档顺序第一个 `hdr`）
+  - 对该条 `insertAnim` `type=fade` 后讲义 `timing[0].target` 对上
+  - `setHandoutText` 仍只认 `id=handout`
+  - 无 Repair
+- **Nh5** ✅
+  - 检查：拒错
+  - 通过标准：对 `handout` 发 `insertShape` 得 `InvalidId`
+  - 对讲义占位符发 `deleteShape` 得 `InvalidId`
+  - 对 `pptx:presentation` 发 `insertPlaceholder` 得 `InvalidId`
+  - xlsx 的 `scope.notesMaster` 得 `InvalidField`
+  - 均未写文件（拒错三条加 xlsx）
 
 ## 超链接
 

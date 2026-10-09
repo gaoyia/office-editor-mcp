@@ -36,7 +36,7 @@ apply 复用 `insertMath` / `setMath` / `deleteMath`。不是单元格 `f`，也
 docx 的 `scope.maths` 仍是段落 `oMath`，见 [docx 分册](json-contract-docx.md#insertmath)。
 xlsx 的 `scope.oleObjects` 与 OLE op 认工作表 `<oleObject>`（ECMA-376 §18.3.1.59），不认 `@link` 与 ActiveX `controls`，不把嵌入字节或预览图塞进树。
 pptx 的 `scope.comments` 与批注 op 认该页 2018 线程化批注（`p188:cmLst`），不认 ECMA-376 §19.4 旧式部件。
-pptx 的 `scope.timing` 列出该页 `<p:timing>` 效果摘要（含 `delay` / `dur` / `repeat` / 声音名 / 段落 / 点对象）；`scope.notes` 与 `scope.timing` 同开时备注对象带 `timing`；`scope.masters` 与 `scope.timing` 同开时母版 / 版式带 `timing`。
+pptx 的 `scope.timing` 列出该页 `<p:timing>` 效果摘要（含 `delay` / `dur` / `repeat` / 声音名 / 段落 / 点对象）；`scope.notes` 与 `scope.timing` 同开时备注对象带 `timing`；`scope.masters` 与 `scope.timing` 同开时母版 / 版式带 `timing`；`scope.notesMaster` / `scope.handout` 与 `scope.timing` 同开时备注母版 / 讲义带 `timing`。
 apply 用 `insertAnim` / `setAnim` / `deleteAnim` / `moveAnim` 按模板增删改预设效果，可写 delay、dur、repeat、效果声音与按段；第一条 `with` / `after` 进片自动播。不接受整棵时间轴树。
 `setTransition` 还可写自动进片、方向与 `p15:prstTrans`。
 pptx 的 `scope.masters` 列出幻灯片母版与版式、占位符与装饰形（含该母版 theme 的配色与字体），根上始终带 `slideSize`，apply 可用 `setSlideLayout` 换页的版式关系，
@@ -44,7 +44,8 @@ pptx 的 `scope.masters` 列出幻灯片母版与版式、占位符与装饰形�
 也可用 `insertShape` / `deleteShape` 插删母版 / 版式上没有 `p:ph` 的装饰形，
 也可用 `setSlideSize` / `setThemeColors` / `setThemeFonts` 改画布尺寸与 theme 配色 / 字体，
 也可用 `setShapeText` / `setShapeFormat` / `setShapePos` / `setShapeSize` 改占位符与装饰形。
-pptx 的 `scope.handout` 列出讲义母版页眉页脚槽位，apply 用 `setHandoutText` 改字。
+pptx 的 `scope.handout` 列出讲义母版页眉页脚槽位与占位符，apply 用 `setHandoutText` 改四个槽位的字，也可用 `insertPlaceholder` / `deletePlaceholder` / `setShapeText` 改讲义占位符。
+pptx 的 `scope.notesMaster` 列出备注母版占位符，apply 用同一套占位符 op 与预设动画。
 pptx 的 `scope.hyperlinks` 与超链接 op 认幻灯片文本形状上的形状级 `p:cNvPr/a:hlinkClick` 与 run 级 `a:rPr/a:hlinkClick`（跳转 / 文件 / URL），不认图、表、图表、SmartArt、备注或母版上的链。
 pptx 的 `scope.fields` 列出幻灯片文本形状里的 `a:fld`；apply 用 `insertField` / `setField` / `deleteField` 写页码与日期域，不求值。
 xlsx 仍拒 `scope.fields` 与这三条。docx 仍写 `w:fldChar` / `instr`，并可按 `code` 写常用域与窗体 `ffData`。
@@ -1778,6 +1779,8 @@ xlsx 规则与图相同：`oneCell` / `absolute` 改 `xdr:ext`，`twoCell` 改�
     - `slide:{n}/notes/shape:…`
     - `master:{n}/shape:…`
     - `master:{n}/layout:{k}/shape:…`
+    - `notesMaster/shape:…`
+    - `handout/shape:…`
   - xlsx：文本框 id（`sheet:{name}/sp:{cNvPrId}` 或 `sheet:{name}/sp:index:{k}`）或形状 id（`sheet:{name}/shape:{cNvPrId}` 或 `sheet:{name}/shape:index:{k}`）
 - **`text`**
   - 新的可见纯文本，字符串，可空
@@ -1785,11 +1788,12 @@ xlsx 规则与图相同：`oneCell` / `absolute` 改 `xdr:ext`，`twoCell` 改�
   - `\\n` 写成 `a:br`，不把字面换行两个字符写进 `a:t`
 
 找不到该形状报 `IdNotFound`。对 `slide:{n}` 或 `slide:{n}/notes`（没有 `/shape:`）发本 op 报 `InvalidId`。
-对备注页或母版 / 版式上占位符 `p:ph/@type` 为 `sldImg` 的形状发本 op 报 `InvalidField`，不写文件。
+对备注页、备注母版或讲义上占位符 `p:ph/@type` 为 `sldImg` 的形状发本 op 报 `InvalidField`，不写文件。
 xlsx 改工作表文本框或无 `txBox` 形状的 `xdr:txBody`，规则与 pptx 相同（把下文的 `p:sp` / `p:txBody` 换成 `xdr:sp` / `xdr:txBody`）。
 对工作表 id、图 id、图表 id 或连接线 id 发本 op 报 `InvalidId`。没有 `txBody` 的形状仍报 `IdNotFound`（不补 `txBody`）。docx 上发此 op 报 `InvalidField`。
 插删形状请用 `insertShape` / `deleteShape`，不要发 Word / Excel 的 `insertTextBox` / `deleteTextBox`（pptx 上这两条仍是外格式，报 `InvalidField`）。
 母版 / 版式占位符与装饰形只改对应 slideMaster / slideLayout 部件，不改各页 XML。没有 `txBody` 的占位符仍报 `IdNotFound`（不补 `txBody`）。
+备注母版占位符只改 notesMaster。讲义占位符只改 handoutMaster。对 `handout` 容器发本 op 仍报 `InvalidId`。
 没有 `txBody` 的装饰形同样报 `IdNotFound`（不补 `txBody`）。
 pptx 含形状级链时：只改 `p:txBody`，不改 `p:cNvPr` 上的 `a:hlinkClick` / `a:hlinkHover`，形状级链必须还在。
 第一个收下新文本的 run 若其 `a:rPr` 带 run 级 `a:hlinkClick`，会随第 5 条抄到新 run 上；其余 run 级链随清多余 run 丢掉。

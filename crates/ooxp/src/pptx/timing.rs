@@ -506,6 +506,28 @@ fn resolve_part(
             let part = catalog.xml_part(*master, *layout, &path)?;
             Ok((part, target.prefix()))
         }
+        AnimTarget::NotesMaster => {
+            let part = notes::notes_master_part(pkg, pres_part)?.ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::AnimHostNotFound {
+                        id: target.prefix(),
+                    },
+                    path,
+                )
+            })?;
+            Ok((part, target.prefix()))
+        }
+        AnimTarget::Handout => {
+            let part = super::handout::handout_part(pkg, pres_part)?.ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::AnimHostNotFound {
+                        id: target.prefix(),
+                    },
+                    path,
+                )
+            })?;
+            Ok((part, target.prefix()))
+        }
     }
 }
 
@@ -1486,7 +1508,7 @@ fn timing_insert_index(root: &Element) -> usize {
             // 幻灯片：cSld / clrMapOvr / transition。母版：clrMap / sldLayoutIdLst。版式同幻灯片再加 hf。
             "cSld" | "clrMap" | "clrMapOvr" | "sldLayoutIdLst" | "transition" => after = i + 1,
             "AlternateContent" if ac_has_transition(e) => after = i + 1,
-            "timing" | "hf" | "txStyles" | "matchingName" | "extLst" => return i,
+            "timing" | "hf" | "notesStyle" | "txStyles" | "matchingName" | "extLst" => return i,
             _ => {}
         }
     }

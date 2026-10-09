@@ -153,6 +153,7 @@ $order = @(
     'pptx-run-links'
     'pptx-comment-pics'
     'pptx-handout'
+    'pptx-notes-master'
     'pptx-hyperlinks'
     'pptx-pictures'
     'pptx-svg'

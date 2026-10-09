@@ -175,7 +175,15 @@ fn set_handout_text_creates_and_sets_slots() {
     assert_eq!(tree["handout"]["footer"], "讲义页脚");
     assert_eq!(
         object_keys(&tree["handout"]),
-        ["id", "header", "footer", "date", "sldNum"]
+        [
+            "id",
+            "header",
+            "footer",
+            "date",
+            "sldNum",
+            "animCount",
+            "placeholders"
+        ]
     );
     let names = part_names(&out);
     assert!(names.iter().any(|n| n.contains("handoutMaster")));

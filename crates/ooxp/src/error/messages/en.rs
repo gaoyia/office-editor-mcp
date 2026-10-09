@@ -316,7 +316,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
                 "id must be slide:N".into()
             }
             IdReason::MasterForm => {
-                "master / placeholder id must be master:N, master:N/layout:K, or …/shape:…".into()
+                "master / placeholder id must be master:N, master:N/layout:K, notesMaster/shape:…, handout/shape:…, or …/shape:…".into()
             }
             IdReason::MasterPlaceholderLocked => {
                 "master / layout placeholders use deletePlaceholder; decorative shapes use deleteShape / setShapeFill / setShapeLine".into()
@@ -328,7 +328,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
                 "insertLayout id must be master:N".into()
             }
             IdReason::InsertPlaceholderNeedsHost => {
-                "insertPlaceholder id must be master:N or master:N/layout:K".into()
+                "insertPlaceholder id must be master:N, master:N/layout:K, notesMaster, or handout".into()
             }
             IdReason::InsertMasterNeedsPresentation => {
                 "insertMaster id must be pptx:presentation".into()
@@ -773,12 +773,12 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             }
             IdReason::CustomPropPrefix => "deleteCustomProp id must be prop:NAME".into(),
             IdReason::AnimForm => {
-                "anim id must be slide:N/anim:K, slide:N/notes/anim:K, master:N/anim:K, or master:N/layout:K/anim:M; insertAnim id must be a bindable object".into()
+                "anim id must be slide:N/anim:K, slide:N/notes/anim:K, master:N/anim:K, master:N/layout:K/anim:M, notesMaster/anim:K, or handout/anim:K; insertAnim id must be a bindable object".into()
             }
             IdReason::AnimIndexNotInt => "anim index must be a positive integer".into(),
             IdReason::AnimIndexFromOne => "anim index is 1-based".into(),
             IdReason::InsertAnimNeedsHost => {
-                "insertAnim id must be a slide or notes shape, picture, table, chart, SmartArt, video, or audio, or a master/layout placeholder".into()
+                "insertAnim id must be a slide or notes shape, picture, table, chart, SmartArt, video, or audio, or a master/layout, notesMaster, or handout placeholder".into()
             }
         },
         ErrorKind::SheetNotFound { name } => format!("Sheet not found: {name}"),

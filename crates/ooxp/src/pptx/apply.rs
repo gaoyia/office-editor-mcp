@@ -41,7 +41,10 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
     for (i, op) in ops.iter().enumerate() {
         match op {
             PptxOp::SetShapeText(op) => {
-                if op.id.starts_with("master:") {
+                if op.id.starts_with("master:")
+                    || op.id.starts_with("notesMaster/")
+                    || op.id.starts_with("handout/")
+                {
                     let ph = master::parse_placeholder_id(&op.id, i)?;
                     master::set_text(&mut pkg, &pres_part, &pres.root, &ph, &op.id, &op.text, i)?;
                     continue;
@@ -1313,22 +1316,52 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                     &mut pkg, &slides, &pres_part, &pres.root, op.master, op.layout, i,
                 )?;
             }
-            PptxOp::InsertPlaceholder(op) => {
-                master::insert_placeholder(
-                    &mut pkg,
-                    &pres_part,
-                    &pres.root,
-                    op.master,
-                    op.layout,
-                    &op.type_name,
-                    &op.text,
-                    op.x,
-                    op.y,
-                    op.cx,
-                    op.cy,
-                    i,
-                )?;
-            }
+            PptxOp::InsertPlaceholder(op) => match &op.host {
+                master::PlaceholderHost::Master { master, layout } => {
+                    master::insert_placeholder(
+                        &mut pkg,
+                        &pres_part,
+                        &pres.root,
+                        *master,
+                        *layout,
+                        &op.type_name,
+                        &op.text,
+                        op.x,
+                        op.y,
+                        op.cx,
+                        op.cy,
+                        i,
+                    )?;
+                }
+                master::PlaceholderHost::NotesMaster => {
+                    let part = notes::ensure_notes_master(&mut pkg, &pres_part, &mut pres)?;
+                    master::write_placeholder_into(
+                        &mut pkg,
+                        &part,
+                        notes::notes_size(&pres.root),
+                        &op.type_name,
+                        &op.text,
+                        op.x,
+                        op.y,
+                        op.cx,
+                        op.cy,
+                    )?;
+                }
+                master::PlaceholderHost::Handout => {
+                    let part = handout::ensure_handout_master(&mut pkg, &pres_part, &mut pres)?;
+                    master::write_placeholder_into(
+                        &mut pkg,
+                        &part,
+                        master::canvas_sz(&pres.root),
+                        &op.type_name,
+                        &op.text,
+                        op.x,
+                        op.y,
+                        op.cx,
+                        op.cy,
+                    )?;
+                }
+            },
             PptxOp::DeletePlaceholder(op) => {
                 master::delete_placeholder(
                     &mut pkg,
@@ -1468,7 +1501,10 @@ fn apply_set_shape_format(
     op: &SetShapeFormatOp,
     i: usize,
 ) -> Result<(), Error> {
-    if op.id.starts_with("master:") {
+    if op.id.starts_with("master:")
+        || op.id.starts_with("notesMaster/")
+        || op.id.starts_with("handout/")
+    {
         let ph = master::parse_placeholder_id(&op.id, i)?;
         return master::set_format(pkg, pres_part, pres_root, &ph, &op.id, &op.format, i);
     }

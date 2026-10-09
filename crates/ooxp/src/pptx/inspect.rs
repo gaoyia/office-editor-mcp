@@ -50,6 +50,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     let want_connectors = scope.as_ref().is_some_and(|s| s.connectors);
     let want_timing = scope.as_ref().is_some_and(|s| s.timing);
     let want_masters = scope.as_ref().is_some_and(|s| s.masters);
+    let want_notes_master = scope.as_ref().is_some_and(|s| s.notes_master);
     let want_handout = scope.as_ref().is_some_and(|s| s.handout);
     let want_sections = scope.as_ref().is_some_and(|s| s.sections);
     let want_custom_shows = scope.as_ref().is_some_and(|s| s.custom_shows);
@@ -352,8 +353,17 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
             master::masters_json(&pkg, &catalog, want_timing)?,
         );
     }
+    if want_notes_master {
+        root.insert(
+            "notesMaster".into(),
+            notes_master_tree(&pkg, &pres_part, want_timing)?,
+        );
+    }
     if want_handout {
-        root.insert("handout".into(), handout::handout_json(&pkg, &pres_part)?);
+        root.insert(
+            "handout".into(),
+            handout_tree(&pkg, &pres_part, want_timing)?,
+        );
     }
     if want_sections {
         root.insert(
@@ -369,4 +379,46 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     }
     root.insert("slides".into(), Value::Array(slide_json));
     Ok(Value::Object(root))
+}
+
+fn notes_master_tree(pkg: &Package, pres_part: &str, want_timing: bool) -> Result<Value, Error> {
+    let Some(part) = notes::notes_master_part(pkg, pres_part)? else {
+        return Ok(Value::Null);
+    };
+    let doc = xml::parse(pkg.get(&part)?)?;
+    let host = "notesMaster";
+    let anims = timing::list(&doc.root, host, true);
+    let mut obj = Map::new();
+    obj.insert("id".into(), json!("notesMaster"));
+    obj.insert("animCount".into(), json!(anims.len()));
+    if want_timing {
+        obj.insert("timing".into(), Value::Array(anims));
+    }
+    obj.insert(
+        "placeholders".into(),
+        json!(master::placeholders_json(&doc.root, host)),
+    );
+    Ok(Value::Object(obj))
+}
+
+fn handout_tree(pkg: &Package, pres_part: &str, want_timing: bool) -> Result<Value, Error> {
+    let mut v = handout::handout_json(pkg, pres_part)?;
+    let Some(obj) = v.as_object_mut() else {
+        return Ok(v);
+    };
+    let Some(part) = handout::handout_part(pkg, pres_part)? else {
+        return Ok(v);
+    };
+    let doc = xml::parse(pkg.get(&part)?)?;
+    let host = "handout";
+    let anims = timing::list(&doc.root, host, true);
+    obj.insert("animCount".into(), json!(anims.len()));
+    if want_timing {
+        obj.insert("timing".into(), Value::Array(anims));
+    }
+    obj.insert(
+        "placeholders".into(),
+        json!(master::placeholders_json(&doc.root, host)),
+    );
+    Ok(v)
 }

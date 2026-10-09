@@ -283,7 +283,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
                 "id 必须是 slide:N".into()
             }
             IdReason::MasterForm => {
-                "母版或占位符 id 必须是 master:N、master:N/layout:K 或 …/shape:…".into()
+                "母版或占位符 id 必须是 master:N、master:N/layout:K、notesMaster/shape:…、handout/shape:… 或 …/shape:…".into()
             }
             IdReason::MasterPlaceholderLocked => {
                 "母版 / 版式占位符请用 deletePlaceholder；装饰形才用 deleteShape / setShapeFill / setShapeLine".into()
@@ -295,7 +295,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
                 "insertLayout 的 id 必须是 master:N".into()
             }
             IdReason::InsertPlaceholderNeedsHost => {
-                "insertPlaceholder 的 id 必须是 master:N 或 master:N/layout:K".into()
+                "insertPlaceholder 的 id 必须是 master:N、master:N/layout:K、notesMaster 或 handout".into()
             }
             IdReason::InsertMasterNeedsPresentation => {
                 "insertMaster 的 id 必须是 pptx:presentation".into()
@@ -727,12 +727,12 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             }
             IdReason::CustomPropPrefix => "deleteCustomProp 的 id 必须是 prop:NAME".into(),
             IdReason::AnimForm => {
-                "动画 id 必须是 slide:N/anim:K、slide:N/notes/anim:K、master:N/anim:K 或 master:N/layout:K/anim:M；insertAnim 的 id 必须是可绑对象".into()
+                "动画 id 必须是 slide:N/anim:K、slide:N/notes/anim:K、master:N/anim:K、master:N/layout:K/anim:M、notesMaster/anim:K 或 handout/anim:K；insertAnim 的 id 必须是可绑对象".into()
             }
             IdReason::AnimIndexNotInt => "anim 后面必须是正整数".into(),
             IdReason::AnimIndexFromOne => "动画序号从 1 起".into(),
             IdReason::InsertAnimNeedsHost => {
-                "insertAnim 的 id 必须是幻灯片或备注上的形状、图、表、图表、SmartArt、视频或音频，或母版 / 版式占位符".into()
+                "insertAnim 的 id 必须是幻灯片或备注上的形状、图、表、图表、SmartArt、视频或音频，或母版 / 版式、备注母版或讲义占位符".into()
             }
         },
         ErrorKind::SheetNotFound { name } => format!("找不到工作表：{name}"),

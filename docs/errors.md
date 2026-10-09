@@ -405,7 +405,7 @@
 - xlsx / docx 上发此 op 报 `InvalidField`
 - `insertSlide` 的 id 必须是 `pptx:presentation`
 - `deleteSlide` / `moveSlide` / `setSlideHidden` / `setTransition` / `setSlideLayout` 的 id 必须是 `slide:{n}`
-- `insertAnim` 的 id 必须是可绑对象（`slide:{n}/shape:…`、`…/cxn:…`、`…/pic:…`、`…/video:…`、`…/audio:…`、`…/table:…`、`…/chart:…`、`…/smartdiagram:…`，或带 `slide:{n}/notes/` 前缀，或母版 / 版式形状）
+- `insertAnim` 的 id 必须是可绑对象（`slide:{n}/shape:…`、`…/cxn:…`、`…/pic:…`、`…/video:…`、`…/audio:…`、`…/table:…`、`…/chart:…`、`…/smartdiagram:…`，或带 `slide:{n}/notes/` 前缀，或母版 / 版式形状，或 `notesMaster/shape:…` / `handout/shape:…`）
 - 找不到该对象报 `IdNotFound`
 - 不是这些 id 报 `InvalidId`
 - `deleteAnim` / `setAnim` 的 id 必须是 inspect 名单上的动画 id
@@ -419,7 +419,7 @@
 - 找不到该版式报 `IdNotFound`
 - `insertLayout` 的 id 必须是 `master:{n}`
 - `deleteLayout` 的 id 必须是 `master:{n}/layout:{k}`
-- `insertPlaceholder` 的 id 必须是 `master:{n}` 或 `master:{n}/layout:{k}`
+- `insertPlaceholder` 的 id 必须是 `master:{n}`、`master:{n}/layout:{k}`、`notesMaster` 或 `handout`
 - `deletePlaceholder` 的 id 必须是占位符 id
 - `insertMaster` 的 id 必须是 `pptx:presentation`
 - `deleteMaster` 的 id 必须是 `master:{n}`
@@ -518,12 +518,13 @@
   - `scope.fields`
   - `scope.timing`
   - `scope.masters`
+  - `scope.notesMaster`
   - `scope.handout`
   - `scope.sections`
   - `scope.customShows`
 - docx 认 `scope.connectors`
 - xlsx 认 `scope.connectors` 与 `scope.shapes`
-- xlsx / docx 的 `scope` 里出现 `handout` 报 `InvalidField`
+- xlsx / docx 的 `scope` 里出现 `handout` 或 `notesMaster` 报 `InvalidField`
 - 找不到页眉槽位所属工作表时，`setHeaderFooterText` 报 `IdNotFound`
 - id 不是 `sheet:{name}/hf:{kind}:{side}` 报 `InvalidId`
 - docx / pptx 上发下列 op 报 `InvalidField`

@@ -41,6 +41,7 @@ pub struct InspectScope {
     pub connectors: bool,
     pub timing: bool,
     pub masters: bool,
+    pub notes_master: bool,
     pub handout: bool,
     pub sections: bool,
     pub custom_shows: bool,
@@ -184,6 +185,8 @@ pub enum AnimTarget {
         master: usize,
         layout: Option<usize>,
     },
+    NotesMaster,
+    Handout,
 }
 
 impl AnimTarget {
@@ -199,11 +202,16 @@ impl AnimTarget {
                 master,
                 layout: Some(k),
             } => format!("master:{master}/layout:{k}"),
+            Self::NotesMaster => "notesMaster".into(),
+            Self::Handout => "handout".into(),
         }
     }
 
     pub fn placeholders_only(&self) -> bool {
-        matches!(self, Self::Master { .. })
+        matches!(
+            self,
+            Self::Master { .. } | Self::NotesMaster | Self::Handout
+        )
     }
 }
 
@@ -272,8 +280,7 @@ pub struct DeleteLayoutOp {
 
 #[derive(Debug, Clone)]
 pub struct InsertPlaceholderOp {
-    pub master: usize,
-    pub layout: Option<usize>,
+    pub host: super::master::PlaceholderHost,
     pub type_name: String,
     pub text: String,
     pub x: Option<i64>,
@@ -1024,6 +1031,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
             "connectors",
             "timing",
             "masters",
+            "notesMaster",
             "handout",
             "sections",
             "customShows",
@@ -1045,6 +1053,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
     let connectors = parse_bool_field(obj.get("connectors"), "connectors")?;
     let timing = parse_bool_field(obj.get("timing"), "timing")?;
     let masters = parse_bool_field(obj.get("masters"), "masters")?;
+    let notes_master = parse_bool_field(obj.get("notesMaster"), "notesMaster")?;
     let handout = parse_bool_field(obj.get("handout"), "handout")?;
     let sections = parse_bool_field(obj.get("sections"), "sections")?;
     let custom_shows = parse_bool_field(obj.get("customShows"), "customShows")?;
@@ -1124,6 +1133,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
         connectors,
         timing,
         masters,
+        notes_master,
         handout,
         sections,
         custom_shows,
@@ -1833,7 +1843,10 @@ fn parse_set_shape_fill(obj: &Map<String, Value>, i: usize) -> Result<SetShapeFi
 fn parse_set_shape_line(obj: &Map<String, Value>, i: usize) -> Result<SetShapeLineOp, Error> {
     deny_keys(obj, i, &["op", "id", "color", "width"])?;
     let id = require_id(obj, i)?;
-    let (target, placeholder, cxn) = if id.starts_with("master:") {
+    let (target, placeholder, cxn) = if id.starts_with("master:")
+        || id.starts_with("notesMaster/")
+        || id.starts_with("handout/")
+    {
         (
             None,
             Some(super::master::parse_placeholder_id(&id, i)?),
@@ -2497,6 +2510,14 @@ fn parse_kind_key(after: &str, path: &str) -> Result<(), Error> {
 
 fn parse_anim_host(id: &str, op_index: usize) -> Result<AnimTarget, Error> {
     let path = format!("ops[{op_index}].id");
+    if let Some(rest) = id.strip_prefix("notesMaster/") {
+        parse_kind_key(rest, &path)?;
+        return Ok(AnimTarget::NotesMaster);
+    }
+    if let Some(rest) = id.strip_prefix("handout/") {
+        parse_kind_key(rest, &path)?;
+        return Ok(AnimTarget::Handout);
+    }
     if let Some(rest) = id.strip_prefix("master:") {
         let Some((n, after)) = rest.split_once('/') else {
             return Err(Error::with_path(
@@ -2601,6 +2622,40 @@ fn parse_anim_host(id: &str, op_index: usize) -> Result<AnimTarget, Error> {
 
 fn parse_anim_id(id: &str, op_index: usize) -> Result<(AnimTarget, usize), Error> {
     let path = format!("ops[{op_index}].id");
+    if let Some(rest) = id.strip_prefix("notesMaster/anim:") {
+        if rest.is_empty() || rest.contains('/') {
+            return Err(Error::with_path(
+                ErrorKind::InvalidId {
+                    reason: IdReason::AnimForm,
+                },
+                path,
+            ));
+        }
+        let index = parse_positive_index(
+            rest,
+            &path,
+            IdReason::AnimIndexNotInt,
+            IdReason::AnimIndexFromOne,
+        )?;
+        return Ok((AnimTarget::NotesMaster, index));
+    }
+    if let Some(rest) = id.strip_prefix("handout/anim:") {
+        if rest.is_empty() || rest.contains('/') {
+            return Err(Error::with_path(
+                ErrorKind::InvalidId {
+                    reason: IdReason::AnimForm,
+                },
+                path,
+            ));
+        }
+        let index = parse_positive_index(
+            rest,
+            &path,
+            IdReason::AnimIndexNotInt,
+            IdReason::AnimIndexFromOne,
+        )?;
+        return Ok((AnimTarget::Handout, index));
+    }
     if let Some(rest) = id.strip_prefix("master:") {
         if let Some((n, after)) = rest.split_once("/layout:") {
             let Some((k, anim)) = after.split_once("/anim:") else {
@@ -2817,7 +2872,7 @@ fn parse_insert_placeholder(
 ) -> Result<InsertPlaceholderOp, Error> {
     deny_keys(obj, i, &["op", "id", "type", "text", "x", "y", "cx", "cy"])?;
     let id = require_id(obj, i)?;
-    let (master, layout) = super::master::parse_master_or_layout_host(&id, i)?;
+    let host = super::master::parse_insert_placeholder_host(&id, i)?;
     let type_name = match obj.get("type") {
         None => {
             return Err(Error::with_path(
@@ -2881,8 +2936,7 @@ fn parse_insert_placeholder(
         ));
     }
     Ok(InsertPlaceholderOp {
-        master,
-        layout,
+        host,
         type_name,
         text,
         x,
@@ -3511,7 +3565,7 @@ type ShapePosHost = (
 );
 
 fn parse_shape_pos_host(id: &str, i: usize) -> Result<ShapePosHost, Error> {
-    if id.starts_with("master:") {
+    if id.starts_with("master:") || id.starts_with("notesMaster/") || id.starts_with("handout/") {
         Ok((
             None,
             Some(super::master::parse_placeholder_id(id, i)?),
@@ -3534,7 +3588,7 @@ fn parse_slide_or_master_shape(
     ),
     Error,
 > {
-    if id.starts_with("master:") {
+    if id.starts_with("master:") || id.starts_with("notesMaster/") || id.starts_with("handout/") {
         Ok((None, Some(super::master::parse_placeholder_id(id, i)?)))
     } else {
         Ok((Some(super::shape::parse_shape_id(id, i)?), None))
