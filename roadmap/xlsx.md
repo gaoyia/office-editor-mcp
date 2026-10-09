@@ -80,7 +80,21 @@ docx 见 [`roadmap/docx.md`](docx.md)。pptx 见 [`roadmap/pptx.md`](pptx.md)。
 
 ## 待做
 
-第一期、第二轮与第三轮顺序待做已空。第三轮是 Office 16.0 跨格式 DrawingML 补齐，不是返工第二轮名单。挂机下一项见「先探测再进待做」。18 不要和艺术字画廊绑在一起。数据透视不要做成计算引擎。
+第四轮。契约缺口以 `docs/` 为准，不是返工已过表。挂机从序号 **32** 起。18 不要和艺术字画廊绑在一起。数据透视不要做成计算引擎。公式求值保持 🚫。
+
+| 序 | 计划 | 前置 |
+| --- | --- | --- |
+| 32 | `.plan/2026年-10月-10日-❌-xlsx-条件格式与迷你图字段.md` | 条件格式、迷你图 |
+| 33 | `.plan/2026年-10月-10日-❌-xlsx-时间线切片器.md` | 切片器 |
+| 34 | `.plan/2026年-10月-10日-❌-xlsx-外部引用路径与数据表公式.md` | 外部引用、公式结构 |
+| 35 | `.plan/2026年-10月-10日-❌-xlsx-隐藏行列与排序字段.md` | 分组、排序 |
+| 36 | `.plan/2026年-10月-10日-❌-xlsx-页眉chartsheet与Drawing链.md` | 页眉、形状、OLE、超链接 |
+| 37 | `.plan/2026年-10月-10日-❌-xlsx-允许编辑区域与xlsm.md` | 保护 |
+| 38 | `.plan/2026年-10月-10日-❌-xlsx-create第四轮.md` | 32–37 对应 apply 已过 |
+| C10 | `.plan/2026年-10月-10日-❌-pptx-xlsx-字填充与轮廓.md` | 形状文字格式 C9；不要改 Word |
+| C11 | `.plan/2026年-10月-10日-❌-图表稀有剩余.md` | 图表稀有类型 C4 |
+
+Power Query 一等公民仍不挂。C10 与 pptx 同一份计划。C11 三家同一份。
 
 ## 先探测再进待做
 
@@ -88,7 +102,7 @@ docx 见 [`roadmap/docx.md`](docx.md)。pptx 见 [`roadmap/pptx.md`](pptx.md)。
 
 - 工作表墨迹（不是批注墨迹，也不是 Word `wpc` 画布）。16.0 没有 `AddInk` / `AddInkComment`，`ExecuteMso('InkStartInking')` 失败。需要 Draw 手写另存样例后再挂
 
-不要自动进第三轮：时间线切片器、Power Query 一等公民、数据表公式、create 不写 OLE / 切片器 / 连接 / 外部引用。不要把 Word 水印、内容控件、编号、修订、参考文献、`wpc` 画布搬过来。
+不要自动挂：Power Query / `queryTables` 结果区。不要把 Word 水印、内容控件、编号、修订、参考文献、`wpc` 画布搬过来。
 
 ## 跨格式（本类型要跟）
 
@@ -101,8 +115,8 @@ docx 见 [`roadmap/docx.md`](docx.md)。pptx 见 [`roadmap/pptx.md`](pptx.md)。
 | C8 | `.plan/2026年-10月-9日-✅-xlsx-pptx-嵌入OMML.md` | 工作表图 / 文本框；不要改 Word 公式 |
 | C9 | `.plan/2026年-10月-9日-✅-pptx-xlsx-形状文字格式.md` | 工作表文本框 / 形状；pptx 形状增删；不要改 Word `setRunFormat` |
 
-xlsx 没有 Word / PowerPoint 那种墨迹批注计划；批注已过（序号 11）。C4、C5、C6、C7、C8、C9 见已过表。C5 与 pptx 同一份计划，不要拆成两家各做一套 `svgBlip`。C6、C7 与 docx 同一份计划。C8 与 pptx 同一份，不改 Word。C9 与 pptx 同一份，不改 Word。
+xlsx 没有 Word / PowerPoint 那种墨迹批注计划；批注已过（序号 11）。C4、C5、C6、C7、C8、C9 见已过表。C10、C11 见待做。C5 与 pptx 同一份计划，不要拆成两家各做一套 `svgBlip`。C6、C7 与 docx 同一份计划。C8 与 pptx 同一份，不改 Word。C9 与 pptx 同一份，不改 Word。C10 与 pptx 同一份，不改 Word。C11 三家同一份。
 
 ## 怎么算 Excel 全量做完
 
-已过表保持 ✅。第二轮按当时名单算完。第三轮顺序待做已空。墨迹未挂不算欠账。永不做的条目不算欠账。公式求值保持 🚫。
+已过表保持 ✅。第四轮待做（32–38、C10、C11）过完。墨迹未挂不算欠账。永不做的条目不算欠账。公式求值保持 🚫。
