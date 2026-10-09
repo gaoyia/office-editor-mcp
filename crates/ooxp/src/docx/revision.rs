@@ -28,8 +28,27 @@ pub struct RevRef {
 enum RevKind {
     Ins,
     Del,
+    ParaMarkIns,
+    ParaMarkDel,
+    RowIns,
+    RowDel,
     RPrChange,
     PPrChange,
+    TblPrChange,
+    TblGridChange,
+    TblPrExChange,
+    TcPrChange,
+    TrPrChange,
+    SectPrChange,
+}
+
+#[derive(Clone, Copy)]
+struct WalkCtx {
+    in_prop: bool,
+    in_tr_pr: bool,
+    in_p_pr: bool,
+    in_run: bool,
+    row_tracked: bool,
 }
 
 impl RevKind {
@@ -37,24 +56,42 @@ impl RevKind {
         match self {
             Self::Ins => "ins",
             Self::Del => "del",
+            Self::ParaMarkIns => "paraMarkIns",
+            Self::ParaMarkDel => "paraMarkDel",
+            Self::RowIns => "rowIns",
+            Self::RowDel => "rowDel",
             Self::RPrChange => "rPrChange",
             Self::PPrChange => "pPrChange",
+            Self::TblPrChange => "tblPrChange",
+            Self::TblGridChange => "tblGridChange",
+            Self::TblPrExChange => "tblPrExChange",
+            Self::TcPrChange => "tcPrChange",
+            Self::TrPrChange => "trPrChange",
+            Self::SectPrChange => "sectPrChange",
         }
     }
 
-    fn from_name(name: &str) -> Option<Self> {
-        match name {
-            "ins" => Some(Self::Ins),
-            "del" => Some(Self::Del),
-            "rPrChange" => Some(Self::RPrChange),
-            "pPrChange" => Some(Self::PPrChange),
+    fn change_inner(self) -> Option<&'static str> {
+        match self {
+            Self::RPrChange => Some("rPr"),
+            Self::PPrChange => Some("pPr"),
+            Self::TblPrChange => Some("tblPr"),
+            Self::TblGridChange => Some("tblGrid"),
+            Self::TblPrExChange => Some("tblPrEx"),
+            Self::TcPrChange => Some("tcPr"),
+            Self::TrPrChange => Some("trPr"),
+            Self::SectPrChange => Some("sectPr"),
             _ => None,
         }
+    }
+
+    fn is_change(self) -> bool {
+        self.change_inner().is_some()
     }
 }
 
 pub fn count_revisions(root: &Element) -> usize {
-    collect_rev_paths(root).len()
+    collect_rev_hits(root).len()
 }
 
 pub fn revisions_json(root: &Element, container: Option<&str>) -> Result<Vec<Value>, Error> {
@@ -63,11 +100,10 @@ pub fn revisions_json(root: &Element, container: Option<&str>) -> Result<Vec<Val
     for (i, p) in paras.iter().enumerate() {
         index_of.push((*p as *const Element, i + 1));
     }
-    let paths = collect_rev_paths(root);
+    let hits = collect_rev_hits(root);
     let mut out = Vec::new();
-    for (i, path) in paths.iter().enumerate() {
+    for (i, (path, kind)) in hits.iter().enumerate() {
         let el = para::element_at(root, path).ok_or_else(|| xml_broken("revision"))?;
-        let kind = RevKind::from_name(el.local_name()).ok_or_else(|| xml_broken("revision"))?;
         let n = i + 1;
         let id = match container {
             Some(c) => format!("{c}/rev:{n}"),
@@ -80,7 +116,7 @@ pub fn revisions_json(root: &Element, container: Option<&str>) -> Result<Vec<Val
         let text = match kind {
             RevKind::Ins => json!(markup_text(el, false)),
             RevKind::Del => json!(markup_text(el, true)),
-            RevKind::RPrChange | RevKind::PPrChange => Value::Null,
+            _ => Value::Null,
         };
         out.push(json!({
             "id": id,
@@ -129,7 +165,7 @@ pub fn part_for_story(
 
 /// 段内是否有本期收入的修订节点。框内段落同样按本段子孙判定。
 pub fn para_blocks_set_text(p: &Element) -> bool {
-    !collect_rev_paths(p).is_empty()
+    !collect_rev_hits(p).is_empty()
 }
 
 pub fn apply_revision(
@@ -139,35 +175,71 @@ pub fn apply_revision(
     id: &str,
     i: usize,
 ) -> Result<(), Error> {
-    let paths = collect_rev_paths(root);
-    if n < 1 || n > paths.len() {
+    let hits = collect_rev_hits(root);
+    if n < 1 || n > hits.len() {
         return Err(missing(id, i));
     }
-    let path = paths[n - 1].clone();
-    let kind = {
-        let el = para::element_at(root, &path).ok_or_else(|| missing(id, i))?;
-        RevKind::from_name(el.local_name()).ok_or_else(|| xml_broken("revision"))?
-    };
+    let (path, kind) = hits[n - 1].clone();
     match (kind, accept) {
         (RevKind::Ins, true) | (RevKind::Del, false) => {
             unwrap_at(root, &path, kind == RevKind::Del)?
         }
         (RevKind::Ins, false) | (RevKind::Del, true) => remove_at(root, &path)?,
-        (RevKind::RPrChange, true) | (RevKind::PPrChange, true) => remove_at(root, &path)?,
-        (RevKind::RPrChange, false) => restore_prev(root, &path, "rPr")?,
-        (RevKind::PPrChange, false) => restore_prev(root, &path, "pPr")?,
+        (k, true) if k.is_change() => remove_at(root, &path)?,
+        (k, false) if k.is_change() => {
+            let inner = k.change_inner().ok_or_else(|| xml_broken("revision"))?;
+            restore_prev(root, &path, inner)?;
+        }
+        (RevKind::ParaMarkIns, true) | (RevKind::ParaMarkDel, false) => remove_at(root, &path)?,
+        (RevKind::ParaMarkIns, false) | (RevKind::ParaMarkDel, true) => {
+            delete_host_para(root, &path, i)?;
+        }
+        (RevKind::RowDel, true) | (RevKind::RowIns, false) => {
+            delete_host_row(root, &path, i)?;
+        }
+        (RevKind::RowIns, true) => settle_row(root, &path, true)?,
+        (RevKind::RowDel, false) => settle_row(root, &path, false)?,
+        _ => return Err(xml_broken("revision")),
     }
     Ok(())
 }
 
-fn collect_rev_paths(root: &Element) -> Vec<Vec<usize>> {
+fn collect_rev_hits(root: &Element) -> Vec<(Vec<usize>, RevKind)> {
     let mut path = Vec::new();
     let mut out = Vec::new();
-    walk_rev(root, &mut path, false, &mut out);
+    walk_rev(root, &mut path, WalkCtx::root(), &mut out);
     out
 }
 
-fn walk_rev(el: &Element, path: &mut Vec<usize>, in_prop: bool, out: &mut Vec<Vec<usize>>) {
+impl WalkCtx {
+    fn root() -> Self {
+        Self {
+            in_prop: false,
+            in_tr_pr: false,
+            in_p_pr: false,
+            in_run: false,
+            row_tracked: false,
+        }
+    }
+
+    fn enter(self, el: &Element) -> Self {
+        let name = el.local_name();
+        Self {
+            in_prop: self.in_prop || is_prop_container(name),
+            in_tr_pr: self.in_tr_pr || name == "trPr",
+            in_p_pr: self.in_p_pr || name == "pPr",
+            in_run: self.in_run || name == "r",
+            row_tracked: self.row_tracked || (name == "tr" && tr_is_tracked(el)),
+        }
+    }
+}
+
+fn walk_rev(
+    el: &Element,
+    path: &mut Vec<usize>,
+    ctx: WalkCtx,
+    out: &mut Vec<(Vec<usize>, RevKind)>,
+) {
     if el.local_name() == "txbxContent" {
         return;
     }
@@ -175,34 +247,71 @@ fn walk_rev(el: &Element, path: &mut Vec<usize>, in_prop: bool, out: &mut Vec<Ve
         if let Some(i) = first_alt(el) {
             path.push(i);
             if let Node::Element(c) = &el.children[i] {
-                walk_rev(c, path, in_prop, out);
+                walk_rev(c, path, ctx, out);
             }
             path.pop();
         }
         return;
     }
-    let name = el.local_name();
-    if matches!(name, "ins" | "del") {
-        if is_run_ins_del(el, in_prop) {
-            out.push(path.clone());
+    if let Some(kind) = classify_rev(el, ctx) {
+        out.push((path.clone(), kind));
+        if kind.is_change() {
+            return;
         }
-    } else if matches!(name, "rPrChange" | "pPrChange") {
-        out.push(path.clone());
     }
-    let next_prop = in_prop || is_prop_container(name);
+    let next = ctx.enter(el);
     for (i, n) in el.children.iter().enumerate() {
         if let Node::Element(e) = n {
             path.push(i);
-            walk_rev(e, path, next_prop, out);
+            walk_rev(e, path, next, out);
             path.pop();
         }
+    }
+}
+
+fn classify_rev(el: &Element, ctx: WalkCtx) -> Option<RevKind> {
+    let name = el.local_name();
+    match name {
+        "rPrChange" => Some(RevKind::RPrChange),
+        "pPrChange" => Some(RevKind::PPrChange),
+        "tblPrChange" => Some(RevKind::TblPrChange),
+        "tblGridChange" => Some(RevKind::TblGridChange),
+        "tblPrExChange" => Some(RevKind::TblPrExChange),
+        "tcPrChange" => Some(RevKind::TcPrChange),
+        "trPrChange" => Some(RevKind::TrPrChange),
+        "sectPrChange" => Some(RevKind::SectPrChange),
+        "ins" | "del" => {
+            let ins = name == "ins";
+            if ctx.in_tr_pr {
+                return Some(if ins {
+                    RevKind::RowIns
+                } else {
+                    RevKind::RowDel
+                });
+            }
+            if ctx.in_p_pr && !ctx.in_run {
+                if ctx.row_tracked {
+                    return None;
+                }
+                return Some(if ins {
+                    RevKind::ParaMarkIns
+                } else {
+                    RevKind::ParaMarkDel
+                });
+            }
+            if is_run_ins_del(el, ctx.in_prop) {
+                return Some(if ins { RevKind::Ins } else { RevKind::Del });
+            }
+            None
+        }
+        _ => None,
     }
 }
 
 fn is_prop_container(name: &str) -> bool {
     matches!(
         name,
-        "pPr" | "rPr" | "trPr" | "tblPr" | "tcPr" | "sectPr" | "numPr"
+        "pPr" | "rPr" | "trPr" | "tblPr" | "tcPr" | "tblPrEx" | "sectPr" | "numPr"
     )
 }
 
@@ -212,6 +321,13 @@ fn is_run_ins_del(el: &Element, in_prop: bool) -> bool {
     }
     !el.element_children()
         .any(|c| matches!(c.local_name(), "p" | "tbl"))
+}
+
+fn tr_is_tracked(tr: &Element) -> bool {
+    tr.child_by_local("trPr").is_some_and(|pr| {
+        pr.element_children()
+            .any(|c| matches!(c.local_name(), "ins" | "del"))
+    })
 }
 
 fn host_para_id(
@@ -320,6 +436,97 @@ fn parse_n(s: &str, path: &str) -> Result<usize, Error> {
         ));
     }
     Ok(n)
+}
+
+fn ancestor_path(root: &Element, path: &[usize], local: &str) -> Option<Vec<usize>> {
+    let mut cur = root;
+    let mut found = None;
+    for (i, &idx) in path.iter().enumerate() {
+        match cur.children.get(idx) {
+            Some(Node::Element(e)) => {
+                if e.local_name() == local {
+                    found = Some(path[..=i].to_vec());
+                }
+                cur = e;
+            }
+            _ => return None,
+        }
+    }
+    found
+}
+
+fn delete_host_para(root: &mut Element, path: &[usize], i: usize) -> Result<(), Error> {
+    let p_path = ancestor_path(root, path, "p").ok_or_else(|| xml_broken("revision"))?;
+    let parent_count = {
+        let (parent_path, _) = split_parent(&p_path)?;
+        let parent = para::element_at(root, parent_path).ok_or_else(|| xml_broken("revision"))?;
+        para::count_direct_p(parent)
+    };
+    if parent_count <= 1 {
+        return Err(Error::with_path(
+            ErrorKind::LastStoryPara,
+            format!("ops[{i}].id"),
+        ));
+    }
+    {
+        let p = para::element_at(root, &p_path).ok_or_else(|| xml_broken("revision"))?;
+        if para::para_has_unmatched_range(p) {
+            return Err(Error::with_path(
+                ErrorKind::CrossParaMarker,
+                format!("ops[{i}].id"),
+            ));
+        }
+        if para::para_has_sect_pr(p) {
+            return Err(Error::with_path(
+                ErrorKind::SectionBreakPara,
+                format!("ops[{i}].id"),
+            ));
+        }
+    }
+    remove_at(root, &p_path)
+}
+
+fn delete_host_row(root: &mut Element, path: &[usize], i: usize) -> Result<(), Error> {
+    let tr_path = ancestor_path(root, path, "tr").ok_or_else(|| xml_broken("revision"))?;
+    let row_count = {
+        let (parent_path, _) = split_parent(&tr_path)?;
+        let parent = para::element_at(root, parent_path).ok_or_else(|| xml_broken("revision"))?;
+        parent
+            .element_children()
+            .filter(|c| c.local_name() == "tr")
+            .count()
+    };
+    if row_count <= 1 {
+        return Err(Error::with_path(
+            ErrorKind::LastTableRow,
+            format!("ops[{i}].id"),
+        ));
+    }
+    remove_at(root, &tr_path)
+}
+
+fn settle_row(root: &mut Element, path: &[usize], unwrap_ins: bool) -> Result<(), Error> {
+    let tr_path = ancestor_path(root, path, "tr").ok_or_else(|| xml_broken("revision"))?;
+    let tr = para::element_at_mut(root, &tr_path).ok_or_else(|| xml_broken("revision"))?;
+    loop {
+        let hits = collect_rev_hits(tr);
+        let run = hits.iter().find(|(_, k)| {
+            matches!(
+                (k, unwrap_ins),
+                (RevKind::Ins, true) | (RevKind::Del, false)
+            )
+        });
+        let Some((rel, kind)) = run.cloned() else {
+            break;
+        };
+        if kind == RevKind::Ins {
+            unwrap_at(tr, &rel, false)?;
+        } else {
+            unwrap_at(tr, &rel, true)?;
+        }
+    }
+    strip_prop_ins_del(tr);
+    Ok(())
 }
 
 fn remove_at(root: &mut Element, path: &[usize]) -> Result<(), Error> {

@@ -50,6 +50,7 @@ $order = @(
     'docx-section'
     'docx-table'
     'docx-revision'
+    'docx-revision-remain'
     'docx-hyperlink'
     'docx-field'
     'docx-numbering'

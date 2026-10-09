@@ -1201,6 +1201,7 @@ fn scan_struct(el: &Element, top: bool) -> bool {
             | "trPrChange"
             | "tcPrChange"
             | "tblGridChange"
+            | "tblPrExChange"
     ) {
         return true;
     }
