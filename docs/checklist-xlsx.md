@@ -8,7 +8,7 @@
 
 Microsoft Excel 16.0 已打开，用户确认通过。本机若装了 WPS，`Excel.Application` 会被抢走，测试仍直接启动 `EXCEL.EXE` 再挂 COM。
 
-C、I、A、O、Xp、Xvg、Xem、X3d、Xom、Xtf、Xc、Xh 这几组现在由 `manual-check/office/cases/xlsx-*.ps1` 自动判定，
+C、I、A、O、Xp、Xvg、Xem、X3d、Xom、Xtf、Xfl、Xc、Xh 这几组现在由 `manual-check/office/cases/xlsx-*.ps1` 自动判定，
 跑 `pwsh -File manual-check\office\run.ps1 -Case 'xlsx-*'` 即可复现，逐条结果落在 `manual-check/office/out/office-results.csv`。
 2026-09-27 补跑 `xlsx-pictures.ps1`，Xp1–Xp7 通过。同日补跑 `xlsx-charts.ps1`，Xc1–Xc7 通过。
 同日补跑 `xlsx-create-pictures.ps1`，C8–C10 通过。同日补跑 `xlsx-create-charts.ps1`，C11–C13 通过。
@@ -31,6 +31,7 @@ C、I、A、O、Xp、Xvg、Xem、X3d、Xom、Xtf、Xc、Xh 这几组现在由 `m
 同日补跑 `xlsx-model3d.ps1`，X3d1–X3d6 通过。Excel COM `Type=30`，无 Repair。
 同日补跑 `xlsx-omml.ps1`，Xom1–Xom6 通过。无 Repair。
 同日补跑 `xlsx-shape-format.ps1`，Xtf1–Xtf5 通过。无 Repair。
+2026-10-10 补跑 `xlsx-text-fill.ps1`，Xfl1–Xfl5 通过。无 Repair。
 
 - **C1** ✅
   - Excel 16.0 打开 `manual-check/office/out/xlsx-create.xlsx`，标题栏无 Repair
@@ -218,6 +219,14 @@ C、I、A、O、Xp、Xvg、Xem、X3d、Xom、Xtf、Xc、Xh 这几组现在由 `m
   - COM 字号与字色对得上
   - create `textBoxes[]` 认格式字段
   - 缺字段为 `InvalidField` 且未写文件
+- **Xfl1–Xfl5** ✅
+  - Excel 16.0：`xlsx-text-fill.ps1`，5 PASS / 0 FAIL
+  - `setShapeFormat` 线性两停 `textFill` 后 COM Fill.Type=3
+  - `textOutline` 宽 19050、COM Line.Visible 为真
+  - `textFill.type=none` 后 `color` 为 null
+  - 同一框两种字号 `runs` 为 2800 / 1200
+  - `color` 与 `textFill` 同给为 `InvalidField` 且未写文件
+  - 无修复
 - **Xhl1–Xhl5** ✅
   - Excel 16.0：`xlsx-hyperlinks.ps1`，5 PASS / 0 FAIL
   - 无名单时根与工作表有 `hyperlinkCount=0`
@@ -1013,6 +1022,31 @@ inspect 只读进树。create 不生成。apply 不新开编辑。脚本 `manual
 - **Xtf5**
   - 检查：缺字段
   - 通过标准：✅ 只给 `op` 与 `id` 的 `setShapeFormat` 得 `InvalidField`，未写文件
+  - 不强制开 Excel
+
+## 字填充与轮廓
+
+工作表文本框的渐变字、字轮廓与混排 `runs`。不算排版引擎。不改 Word。脚本 `manual-check/office/cases/xlsx-text-fill.ps1`。编号用 **Xfl**。不要和 Xtf、Xsa 撞。
+
+- **Xfl1**
+  - 检查：渐变字
+  - 通过标准：✅ `setShapeFormat` 给线性两停 `textFill` 后 inspect 对得上
+  - ZIP 有 `gradFill flip="none" rotWithShape="1"`
+  - Excel 无修复
+- **Xfl2**
+  - 检查：字轮廓
+  - 通过标准：✅ `textOutline` `width=19050` 后 inspect 对得上
+  - COM `Font.Line.Visible` 为真
+  - 无修复
+- **Xfl3**
+  - 检查：无填充
+  - 通过标准：✅ `textFill.type=none` 后 `color` 为 `null`
+- **Xfl4**
+  - 检查：混排 runs
+  - 通过标准：✅ 同一框两种字号后 `runs` 两条 `sz` 为 2800 / 1200
+- **Xfl5**
+  - 检查：拒错
+  - 通过标准：✅ 同时给 `color` 与 `textFill` 得 `InvalidField`，未写文件
   - 不强制开 Excel
 
 ## 无 txBox 的形状与连接线

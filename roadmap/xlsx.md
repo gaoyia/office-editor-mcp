@@ -26,7 +26,7 @@ docx 见 [`roadmap/docx.md`](docx.md)。pptx 见 [`roadmap/pptx.md`](pptx.md)。
 - 组合 `xdr:grpSp` 里的图：不够用时补进 `.plan/2026年-9月-27日-✅-xlsx-工作表图.md`
 - `exportMedia`：跟图走
 - 复制已有文件再 apply：不必新动作
-- 功能区艺术字：另存是无 `txBox` 的 `xdr:sp`。按现有规则不进 `textBoxes`，不扩大收集，不单开对象
+- 功能区艺术字：另存是无 `txBox` 的 `xdr:sp`。按现有规则不进 `textBoxes`，不扩大收集，不单开对象。字填充 / 轮廓见已过 C10
 
 ## 已过
 
@@ -45,6 +45,7 @@ docx 见 [`roadmap/docx.md`](docx.md)。pptx 见 [`roadmap/pptx.md`](pptx.md)。
 | C7 | `.plan/2026年-10月-9日-✅-三家3D模型.md` | 工作表图 |
 | C8 | `.plan/2026年-10月-9日-✅-xlsx-pptx-嵌入OMML.md` | 工作表图 / 文本框；不要改 Word 公式 |
 | C9 | `.plan/2026年-10月-9日-✅-pptx-xlsx-形状文字格式.md` | 工作表文本框 / 形状；pptx 形状增删；不要改 Word `setRunFormat` |
+| C10 | `.plan/2026年-10月-10日-✅-pptx-xlsx-字填充与轮廓.md` | 形状文字格式 C9；不要改 Word |
 | 6 | `.plan/2026年-9月-27日-✅-xlsx-工作表管理.md` | 无 |
 | 7 | `.plan/2026年-9月-27日-✅-xlsx-单元格样式.md` | 无 |
 | 8 | `.plan/2026年-9月-27日-✅-xlsx-列宽行高与合并.md` | 无 |
@@ -91,10 +92,9 @@ docx 见 [`roadmap/docx.md`](docx.md)。pptx 见 [`roadmap/pptx.md`](pptx.md)。
 | 36 | `.plan/2026年-10月-10日-❌-xlsx-页眉chartsheet与Drawing链.md` | 页眉、形状、OLE、超链接 |
 | 37 | `.plan/2026年-10月-10日-❌-xlsx-允许编辑区域与xlsm.md` | 保护 |
 | 38 | `.plan/2026年-10月-10日-❌-xlsx-create第四轮.md` | 32–37 对应 apply 已过 |
-| C10 | `.plan/2026年-10月-10日-❌-pptx-xlsx-字填充与轮廓.md` | 形状文字格式 C9；不要改 Word |
 | C11 | `.plan/2026年-10月-10日-❌-图表稀有剩余.md` | 图表稀有类型 C4 |
 
-Power Query 一等公民仍不挂。C10 与 pptx 同一份计划。C11 三家同一份。
+Power Query 一等公民仍不挂。C11 三家同一份。
 
 ## 先探测再进待做
 
@@ -114,9 +114,10 @@ Power Query 一等公民仍不挂。C10 与 pptx 同一份计划。C11 三家同
 | C7 | `.plan/2026年-10月-9日-✅-三家3D模型.md` | 工作表图 |
 | C8 | `.plan/2026年-10月-9日-✅-xlsx-pptx-嵌入OMML.md` | 工作表图 / 文本框；不要改 Word 公式 |
 | C9 | `.plan/2026年-10月-9日-✅-pptx-xlsx-形状文字格式.md` | 工作表文本框 / 形状；pptx 形状增删；不要改 Word `setRunFormat` |
+| C10 | `.plan/2026年-10月-10日-✅-pptx-xlsx-字填充与轮廓.md` | 形状文字格式 C9；不要改 Word |
 
-xlsx 没有 Word / PowerPoint 那种墨迹批注计划；批注已过（序号 11）。C4、C5、C6、C7、C8、C9 见已过表。C10、C11 见待做。C5 与 pptx 同一份计划，不要拆成两家各做一套 `svgBlip`。C6、C7 与 docx 同一份计划。C8 与 pptx 同一份，不改 Word。C9 与 pptx 同一份，不改 Word。C10 与 pptx 同一份，不改 Word。C11 三家同一份。
+xlsx 没有 Word / PowerPoint 那种墨迹批注计划；批注已过（序号 11）。C4、C5、C6、C7、C8、C9、C10 见已过表。C11 见待做。C5 与 pptx 同一份计划，不要拆成两家各做一套 `svgBlip`。C6、C7 与 docx 同一份计划。C8 与 pptx 同一份，不改 Word。C9 与 pptx 同一份，不改 Word。C10 与 pptx 同一份，不改 Word。C11 三家同一份。
 
 ## 怎么算 Excel 全量做完
 
-已过表保持 ✅。第四轮待做（32–38、C10、C11）过完。墨迹未挂不算欠账。永不做的条目不算欠账。公式求值保持 🚫。
+已过表保持 ✅。第四轮待做（32–38、C11）过完。墨迹未挂不算欠账。永不做的条目不算欠账。公式求值保持 🚫。

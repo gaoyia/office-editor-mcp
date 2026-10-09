@@ -913,7 +913,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   `cNvPrId` / `name` / `stable` 规则与图相同。`x` / `y` / `cx` / `cy` 取 graphicFrame 的 `p:xfrm`。`rowCount` 是 `a:tr` 个数。
   `colCount` 见上文表 id 那节。`rows` 按 `a:tr` 顺序。每行字段顺序：`id`、`index`、`cells`。`cells` 按该行 `a:tc` 文档顺序，不按空网格补格。
   每格字段顺序：`id`、`row`、`col`、`gridSpan`、`rowSpan`、`hMerge`、`vMerge`、`text`，
-  然后 `sz`、`color`、`bold`、`italic`、`underline`、`font`、`eastAsiaFont`、`align`、`textAnchor`。
+  然后 `sz`、`color`、`textFill`、`textOutline`、`bold`、`italic`、`underline`、`font`、`eastAsiaFont`、`align`、`textAnchor`、`runs`。
   `row` / `col` 与 id 里的数字相同。
   `gridSpan` / `rowSpan` 为整数，缺属性则为 `1`。`hMerge` / `vMerge` 为布尔（属性为 `1` / `true` / `on` 则为 `true`）。
   `text` 取该格 `a:txBody` 可见纯文本，规则与形状 `text` 相同。没有 `txBody` 则为 `""`。不把单元格编成段落 id。
@@ -1044,13 +1044,13 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   `animCount` 只计该 slideLayout 的 `<p:timing>`。`name` 取该 slideLayout 的 `p:cSld/@name`，没有则为 `null`。
   `kind` 取 `p:sldLayout/@type` 原文，没有则为 `null`。create 写出的那份空白版式 `kind` 为 `blank`、名为「空白」。
   占位符字段顺序：`id`、`shapeId`、`name`、`type`、`idx`、`x`、`y`、`cx`、`cy`、`text`，
-  然后 `sz`、`color`、`bold`、`italic`、`underline`、`font`、`eastAsiaFont`、`align`、`textAnchor`、`stable`。
+  然后 `sz`、`color`、`textFill`、`textOutline`、`bold`、`italic`、`underline`、`font`、`eastAsiaFont`、`align`、`textAnchor`、`runs`、`stable`。
   `id` 为 `master:{n}/shape:{cNvPrId}` 或 `master:{n}/layout:{k}/shape:{cNvPrId}`；
   没有 `cNvPr/@id` 则为 `…/shape:index:{i}`，`stable` 为 `false`，`{i}` 只在该母版或该版式被收入的占位符内从 1 计。
   `type` 取 `p:ph/@type`，缺则为 `null`。`idx` 取 `p:ph/@idx` 原文，缺则为 `null`。几何与 `text` 规则与幻灯片形状相同；没有 `txBody` 则 `text` 为 `""`。
   装饰形字段顺序与幻灯片形状相同：`id`、`shapeId`、`name`、`prst`，有 `a:custGeom` 时再跟 `geom`，
   然后 `x`、`y`、`cx`、`cy`、`text`，
-  然后 `sz`、`color`、`bold`、`italic`、`underline`、`font`、`eastAsiaFont`、`align`、`textAnchor`、`stable`。
+  然后 `sz`、`color`、`textFill`、`textOutline`、`bold`、`italic`、`underline`、`font`、`eastAsiaFont`、`align`、`textAnchor`、`runs`、`stable`。
   装饰形 `id` 同一套 `…/shape:{cNvPrId}`。没有 `cNvPr/@id` 则为 `…/shape:index:{i}`，`{i}` 只在该宿主被收入的装饰形内从 1 计，不和占位符的 `index` 混编。
   没有 `txBody` 则 `text` 为 `""`。不把这些 `p:sp` 抄进各页。
   xlsx / docx 的 `scope` 里出现 `masters` 报 `InvalidField`。
@@ -1068,7 +1068,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   备注形状判定与幻灯片形状相同（带 `p:txBody` 的 `p:sp`），id 为 `slide:{n}/notes/shape:…`。
   字段顺序与幻灯片形状相同：`id`、`shapeId`、`name`、`prst`，有 `a:custGeom` 时再跟 `geom`，
   然后 `x`、`y`、`cx`、`cy`、`text`，
-  然后 `sz`、`color`、`bold`、`italic`、`underline`、`font`、`eastAsiaFont`、`align`、`textAnchor`、`stable`。
+  然后 `sz`、`color`、`textFill`、`textOutline`、`bold`、`italic`、`underline`、`font`、`eastAsiaFont`、`align`、`textAnchor`、`runs`、`stable`。
   备注形状一次倒出，不用 `maxShapes`。
 - `scope.comments` 为 `true` 时，每页带 `comments`。没有现代批注时为空数组。不依赖 `scope.slide`。按该页 `p188:cmLst` 里 `p188:cm` 的文档顺序。
   每条字段顺序：`id`、`commentId`、`author`、`initials`、`date`、`done`、`kind`、`x`、`y`、`pictureCount`，有图名单时再跟 `pictures`，然后 `text`、`replies`。
@@ -1108,7 +1108,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   `props` 始终出现，规则见 [json-contract.md](json-contract.md#文档属性三格式共用)。
 - `shapeId` 是 `cNvPr/@id` 的原文。走 `shape:index:{k}` 时为 `null`。
   每条字段顺序：`id`、`shapeId`、`name`、`prst`，有 `a:custGeom` 时再跟 `geom`，然后 `x`、`y`、`cx`、`cy`、`text`，
-  然后 `sz`、`color`、`bold`、`italic`、`underline`、`font`、`eastAsiaFont`、`align`、`textAnchor`、`stable`。
+  然后 `sz`、`color`、`textFill`、`textOutline`、`bold`、`italic`、`underline`、`font`、`eastAsiaFont`、`align`、`textAnchor`、`runs`、`stable`。
 - 形状上的 `name` 取 `cNvPr/@name` 的原文。没有则为 `null`。
 - `prst` 取该 `p:sp` 的 `p:spPr/a:prstGeom/@prst`。没有 `prstGeom`（例如 `custGeom`）则为 `null`。
 - `geom` 只在有 `a:custGeom` 时出现，不要给只有 `prstGeom` 的形状补 `null`。
@@ -1124,9 +1124,12 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
 - `x` / `y` 取 `p:spPr/a:xfrm/a:off` 的 EMU；`cx` / `cy` 取 `a:ext`。缺对应属性则为 `null`。备注形状同样。
 - `text` 是可见纯文本：该形状 `p:txBody` 内、位于 `a:r` 里的 `a:t` 按文档顺序拼接；`a:br` 变成 `\n`。不含 run 级样式。
   `a:fld` 是应用程序更新的生成文本（§21.1.2.2.4），域里的 `a:t` 是缓存，不进入。`mc:AlternateContent` 只取一支，判定见上文 pptx 那节。
-- `sz` / `color` / `bold` / `italic` / `underline` / `font` / `eastAsiaFont` / `align` / `textAnchor` 始终出现在 `text` 之后、`stable` 之前。
+- `sz` / `color` / `textFill` / `textOutline` / `bold` / `italic` / `underline` / `font` / `eastAsiaFont` / `align` / `textAnchor` / `runs`
+  始终出现在 `text` 之后、`stable` 之前。
   各文本 run 显式值一致则报该值，不一致或没有显式值则为 `null`，不猜主题。
-  `sz` 是百分之一磅。`color` 只报 `a:srgbClr` 的六位大写 RGB。`align` 取 `a:pPr/@algn`。`textAnchor` 取 `a:bodyPr/@anchor`。
+  `sz` 是百分之一磅。`color` 只报 `a:solidFill/a:srgbClr` 的六位大写 RGB。渐变或 `noFill` 时 `color` 为 `null`。
+  `textFill` / `textOutline` / `runs` 规则见 [json-contract.md](json-contract.md#setshapeformat)。
+  `align` 取 `a:pPr/@algn`。`textAnchor` 取 `a:bodyPr/@anchor`。
 - `stable`：有 `cNvPr/@id` 为 `true`，否则为 `false`。
 - 不返回完整动画时间轴树。效果摘要见上文 `scope.timing`。写入见 `insertAnim` / `setAnim` / `deleteAnim` / `moveAnim`。母版与版式见上文 `scope.masters`。备注母版见上文 `scope.notesMaster`。讲义母版槽位与占位符见上文 `scope.handout`。
   切换见上文 `transition`。对批注或回复 id 发 `insertPicture` 写 `a:blip`。对批注内图 id 发 `setPictureSize` / `setPicturePos` 报 `InvalidId`。
@@ -1290,7 +1293,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   - 可选
   - 形状级超链接提示
   - 没有 `url` / `file` / `slide` 却给了此项报 `InvalidField`
-- **`shapes[].sz` / `color` / `bold` / `italic` / `underline` / `font` / `eastAsiaFont` / `align` / `textAnchor`**
+- **`shapes[].sz` / `color` / `textFill` / `textOutline` / `bold` / `italic` / `underline` / `font` / `eastAsiaFont` / `align` / `textAnchor`**
   - 可选
   - 规则与 `setShapeFormat` 相同
   - 省略则缺省 18 磅黑字 Calibri / 宋体
@@ -1504,7 +1507,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
 OLE、Zoom、域、连接线、自定义放映、讲义、备注动画与放映 / 修改保护合在一起的示例见 `docs/examples/pptx-create-round4.json`。
 `kind` / `wrap` / `from` / `to` / `anchor` / `dataFrom` 以及 xlsx 偏移字段出现报 `InvalidField`。
 `comments[]` 上出现 `op` / `id` / `start` / `end` / `replies` / `ink` 报未知字段。create 不写回复、不写墨迹、不写 ECMA-376 §19.4 旧式批注。
-`shapes[]` 上出现 `text` / `url` / `file` / `slide` / `tooltip` / `on` / `event` / `sz` / `color` / `bold` / `italic` / `underline` / `font` / `eastAsiaFont` / `align` / `textAnchor` / `geom` / `fields` 以外的键报未知字段。
+`shapes[]` 上出现 `text` / `url` / `file` / `slide` / `tooltip` / `on` / `event` / `sz` / `color` / `textFill` / `textOutline` / `bold` / `italic` / `underline` / `font` / `eastAsiaFont` / `align` / `textAnchor` / `geom` / `fields` 以外的键报未知字段。
 `text` / `anchor` / `location` / `ref` / `display` 出现在形状超链接上（除可见 `text` 外）报未知字段。
 `url`、`file`、`slide` 不是恰好一个报 `InvalidField`。空串报 `InvalidField`。`slide` 不是正整数报 `InvalidField`。跳到本页报 `InvalidField`。
 目标页超出 `slides[]` 报 `InvalidField`。
@@ -2166,7 +2169,7 @@ xlsx 上发此 op 报 `InvalidField`。docx 见 [docx 分册](json-contract-docx
   - `moveTo` / `lnTo` 必须给非负整数 `x` / `y`
   - `close` 不要带 `x` / `y`
   - 其它 `type` 报 `InvalidField`
-- **`sz` / `color` / `bold` / `italic` / `underline` / `font` / `eastAsiaFont` / `align` / `textAnchor`**
+- **`sz` / `color` / `textFill` / `textOutline` / `bold` / `italic` / `underline` / `font` / `eastAsiaFont` / `align` / `textAnchor`**
   - 可选
   - 规则与 `setShapeFormat` 相同
   - 省略则缺省 18 磅黑字 Calibri / 宋体

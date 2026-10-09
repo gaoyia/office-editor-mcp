@@ -170,6 +170,8 @@ fn insert_shape_after_create() {
             "text",
             "sz",
             "color",
+            "textFill",
+            "textOutline",
             "bold",
             "italic",
             "underline",
@@ -177,6 +179,7 @@ fn insert_shape_after_create() {
             "eastAsiaFont",
             "align",
             "textAnchor",
+            "runs",
             "stable"
         ]
     );

@@ -135,6 +135,8 @@ fn insert_ellipse_has_prst_and_fill() {
             "text",
             "sz",
             "color",
+            "textFill",
+            "textOutline",
             "bold",
             "italic",
             "underline",
@@ -142,6 +144,7 @@ fn insert_ellipse_has_prst_and_fill() {
             "eastAsiaFont",
             "align",
             "textAnchor",
+            "runs",
             "stable"
         ]
     );

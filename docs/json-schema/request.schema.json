@@ -1552,6 +1552,12 @@
             "null"
           ]
         },
+        "textFill": {
+          "$ref": "pptx.schema.json#/$defs/drawingTextFill"
+        },
+        "textOutline": {
+          "$ref": "pptx.schema.json#/$defs/drawingTextOutline"
+        },
         "bold": {
           "type": "boolean"
         },

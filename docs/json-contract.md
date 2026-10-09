@@ -1848,7 +1848,7 @@ run 级链编进 `hyperlinks`，独立节点用 `insertHyperlink`（`on` 为 `ru
 
 ### setShapeFormat
 
-改 DrawingML 文本框的字号、字色、加粗、斜体、下划线、中英文字体、水平对齐与框内垂直锚点。不改可见字。不要用 Word 的半磅字号。
+改 DrawingML 文本框的字号、字色、字填充、字轮廓、加粗、斜体、下划线、中英文字体、水平对齐与框内垂直锚点。不改可见字。不要用 Word 的半磅字号。
 
 ```json
 {
@@ -1873,7 +1873,9 @@ run 级链编进 `hyperlinks`，独立节点用 `insertHyperlink`（`on` 为 `ru
 | `op` | 必须是 `"setShapeFormat"` |
 | `id` | pptx 形状 id（与 `setShapeText` 相同）、pptx 表单元格 id，或 xlsx 文本框 / 形状 id |
 | `sz` | 可选。百分之一磅，100–400000。`null` 去掉显式字号 |
-| `color` | 可选。六位 RGB，或 `null` 去掉显式填色。写入大写。不写 theme 色 |
+| `color` | 可选。六位 RGB，或 `null` 去掉显式填色。写入大写。不写 theme 色。不要和 `textFill` 一起给 |
+| `textFill` | 可选。字填充。`null` 去掉 `a:rPr` 上的填充子元。对象见下文 |
+| `textOutline` | 可选。字轮廓。`null` 去掉 `a:rPr/a:ln`。对象见下文 |
 | `bold` / `italic` | 可选。布尔。`false` 写成 `b="0"` / `i="0"` |
 | `underline` | 可选。`sng` / `none` / `dbl`，或 `null` 去掉属性 |
 | `font` | 可选。西文 `a:latin/@typeface`。空串报错 |
@@ -1883,13 +1885,29 @@ run 级链编进 `hyperlinks`，独立节点用 `insertHyperlink`（`on` 为 `ru
 
 除 `op` 与 `id` 外至少给一个字段，否则报 `InvalidField`。
 `sz` 小于 100 报 `InvalidField`；大于 400000 报 `TruncatedLimit`。
+`color` 与 `textFill` 同时出现报 `InvalidField`。
+`textFill` 为对象时必须有 `type`：`none` 或 `gradient`。不要写 `solid`（实心仍用 `color`）。
+`type` 为 `gradient` 时必须有 `stops`，至少两项。每项必须有 `pos`（0–100000）与六位 `color`。
+`pos` 重复报 `InvalidField`。可选 `ang`（0–21600000），省略则写 `5400000`（Office 16.0 水平渐变）。
+写入 `a:gradFill`：`flip="none"` `rotWithShape="1"`，`a:lin scaled="1"`，空 `a:tileRect`。不写 `a:path`。不写 theme 色。
+`textOutline` 为对象时必须有 `color`（六位 RGB）与 `width`（正整数 EMU）。
+写入 `a:ln/@w` 与 `a:ln/a:solidFill/a:srgbClr`，插在填充子元之前。不写 `prstDash` / `miter`。不写 `schemeClr`。
+不写 `a:prstTxWarp`，不写 `a:effectLst`。功能区艺术字不新开对象。
 改该 `txBody` 里每个文本 `a:r` 的 `a:rPr`，并同步 `a:endParaRPr`。不改 `a:fld`。不重写 `a:lstStyle`。
-各 run 不一致时 inspect 对应字段为 `null`。没有 `txBody` 报 `IdNotFound`。
+各 run 不一致时 inspect 对应字段为 `null`。
+inspect 在 `color` 之后始终带 `textFill`、`textOutline`；在 `textAnchor` 之后、`stable` 之前始终带 `runs`。
+`textFill`：各 run 都是 `a:noFill` 则为 `{ "type": "none" }`；都是可读的线性 `a:gradFill`（仅 `srgbClr`）则报该对象；否则为 `null`。
+`textOutline`：各 run 都有同一套 `a:ln/@w` 与 `srgbClr` 则报 `{ "color", "width" }`；否则为 `null`。
+`runs` 按文档顺序列出每个文本 `a:r`。每条字段顺序：`text`、`sz`、`color`、`textFill`、`textOutline`、
+`bold`、`italic`、`underline`、`font`、`eastAsiaFont`。
+`text` 取该 run 的 `a:t`。不进 `a:fld`。不算排版引擎。
+没有 `txBody` 报 `IdNotFound`。
 对连接线 id 报 `InvalidId`。对 `sldImg` 占位符报 `InvalidField`。docx 上发此 op 报 `InvalidField`。
 create 的 pptx `shapes[]`、xlsx 的 `textBoxes[]` / `shapes[]`，以及 `insertShape`、xlsx `insertTextBox`，认同一套可选字段。
 pptx create 缺省仍是 18 磅黑字 Calibri / 宋体。xlsx 缺省仍是 `sz="1100"`。
 xlsx 的 `anchor` 仍是单元格锚点，框内垂直对齐只用 `textAnchor`。
-示例见 `docs/examples/pptx-apply-shape-format.json` 与 `docs/examples/xlsx-apply-shape-format.json`。
+示例见 `docs/examples/pptx-apply-shape-format.json`、`docs/examples/xlsx-apply-shape-format.json`、
+`docs/examples/pptx-apply-text-fill.json` 与 `docs/examples/xlsx-apply-text-fill.json`。
 
 ## exportMedia
 

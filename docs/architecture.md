@@ -345,6 +345,7 @@ create 不写修订痕迹。pptx 的 `slides[].pictures` 复用 `insertPicture`�
 `slides[].comments` 复用 `insertComment`，
 形状上的 `url` / `file` / `slide` 复用 `insertHyperlink`（可 `on=run`），
 `shapes[].geom` 复用 `setShapeGeom`，`shapes[].fields` 复用 `insertField`，
+`shapes[].textFill` / `textOutline` 复用 `setShapeFormat`，
 `slides[].transition` 复用 `setTransition`，
 `slides[].anims` 复用 `insertAnim`（白名单预设，可写 `delay` / `dur` / `repeat` / 声音 / 按段，第一条 `with` / `after` 进片自动播，不接受整棵时间轴树），
 `presentation.sections` 复用 `insertSlideSection`，`presentation.customShows` 复用 `insertCustomShow`，

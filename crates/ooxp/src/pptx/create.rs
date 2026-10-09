@@ -1811,6 +1811,8 @@ fn text_paragraphs(text: &str, format: Option<&crate::drawing_text::TextFormat>)
 fn create_rpr(format: Option<&crate::drawing_text::TextFormat>) -> String {
     let mut sz = Some(1800i64);
     let mut color = Some("000000".to_string());
+    let mut fill: Option<Option<crate::drawing_text::TextFill>> = None;
+    let mut outline: Option<Option<crate::drawing_text::TextOutline>> = None;
     let mut bold = None;
     let mut italic = None;
     let mut underline = None;
@@ -1820,9 +1822,14 @@ fn create_rpr(format: Option<&crate::drawing_text::TextFormat>) -> String {
         if let Some(v) = &f.sz {
             sz = *v;
         }
+        if f.color.is_some() || f.text_fill.is_some() {
+            color = None;
+        }
         if let Some(v) = &f.color {
             color = v.clone();
         }
+        fill = f.text_fill.clone();
+        outline = f.text_outline.clone();
         bold = f.bold;
         italic = f.italic;
         if let Some(v) = &f.underline {
@@ -1853,7 +1860,28 @@ fn create_rpr(format: Option<&crate::drawing_text::TextFormat>) -> String {
         attrs.push_str(&format!(r#" u="{u}""#));
     }
     let mut inner = String::new();
-    if let Some(hex) = color {
+    if let Some(Some(o)) = &outline {
+        inner.push_str(&format!(
+            r#"<a:ln w="{}"><a:solidFill><a:srgbClr val="{}"/></a:solidFill></a:ln>"#,
+            o.width,
+            o.color.to_ascii_uppercase()
+        ));
+    }
+    if let Some(Some(crate::drawing_text::TextFill::None)) = &fill {
+        inner.push_str("<a:noFill/>");
+    } else if let Some(Some(crate::drawing_text::TextFill::Gradient { ang, stops })) = &fill {
+        inner.push_str(r#"<a:gradFill flip="none" rotWithShape="1"><a:gsLst>"#);
+        for stop in stops {
+            inner.push_str(&format!(
+                r#"<a:gs pos="{}"><a:srgbClr val="{}"/></a:gs>"#,
+                stop.pos,
+                stop.color.to_ascii_uppercase()
+            ));
+        }
+        inner.push_str(&format!(
+            r#"</a:gsLst><a:lin ang="{ang}" scaled="1"/><a:tileRect/></a:gradFill>"#
+        ));
+    } else if let Some(hex) = color {
         inner.push_str(&format!(
             r#"<a:solidFill><a:srgbClr val="{}"/></a:solidFill>"#,
             hex.to_ascii_uppercase()

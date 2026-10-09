@@ -354,6 +354,8 @@ fn inspect_and_edit_layout_placeholder() {
             "text",
             "sz",
             "color",
+            "textFill",
+            "textOutline",
             "bold",
             "italic",
             "underline",
@@ -361,6 +363,7 @@ fn inspect_and_edit_layout_placeholder() {
             "eastAsiaFont",
             "align",
             "textAnchor",
+            "runs",
             "stable"
         ]
     );

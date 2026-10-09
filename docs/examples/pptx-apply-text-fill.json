@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "deck.pptx",
+  "output": "deck.fill.pptx",
+  "ops": [
+    {
+      "op": "setShapeFormat",
+      "id": "slide:1/shape:2",
+      "textFill": {
+        "type": "gradient",
+        "ang": 5400000,
+        "stops": [
+          { "pos": 0, "color": "FF0000" },
+          { "pos": 100000, "color": "0000FF" }
+        ]
+      },
+      "textOutline": {
+        "color": "FF0000",
+        "width": 19050
+      }
+    }
+  ]
+}

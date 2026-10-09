@@ -907,6 +907,10 @@ define_error_kinds! {
     TextBoxLinkCrossPart => vec![Self::TextBoxLinkCrossPart],
     InvalidHexColor => vec![Self::InvalidHexColor],
     NeedShapeFormatField => vec![Self::NeedShapeFormatField],
+    InvalidTextFillType => vec![Self::InvalidTextFillType],
+    NeedGradientStops => vec![Self::NeedGradientStops],
+    DuplicateGradientPos => vec![Self::DuplicateGradientPos],
+    NeedTextOutlineField => vec![Self::NeedTextOutlineField],
     InvalidTextAlign => vec![Self::InvalidTextAlign],
     InvalidTextAnchor => vec![Self::InvalidTextAnchor],
     InvalidTextUnderline => vec![Self::InvalidTextUnderline],
@@ -1838,6 +1842,10 @@ impl ErrorKind {
             | Self::TextBoxLinkCrossPart
             | Self::InvalidHexColor
             | Self::NeedShapeFormatField
+            | Self::InvalidTextFillType
+            | Self::NeedGradientStops
+            | Self::DuplicateGradientPos
+            | Self::NeedTextOutlineField
             | Self::InvalidTextAlign
             | Self::InvalidTextAnchor
             | Self::InvalidTextUnderline

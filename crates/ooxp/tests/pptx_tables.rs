@@ -206,13 +206,16 @@ fn insert_inspect_cell_text_row_col_pos_delete() {
             "text",
             "sz",
             "color",
+            "textFill",
+            "textOutline",
             "bold",
             "italic",
             "underline",
             "font",
             "eastAsiaFont",
             "align",
-            "textAnchor"
+            "textAnchor",
+            "runs"
         ]
     );
     assert_eq!(t["rows"][0]["cells"][1]["text"], "乙");

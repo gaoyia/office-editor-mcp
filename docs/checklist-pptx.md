@@ -5,7 +5,7 @@
 检查前用 create 或 apply 在本机生成文件，不要用改过扩展名的 zip 目录冒充。
 本机若 `PowerPoint.Application` 被 WPS 抢走，直接启动 `POWERPNT.EXE` 再挂 COM，不要走被抢的 ProgID。Office 16 的对象模型在 `mdiClass` 上。
 
-C、I、A、Pp、Pvg、Pem、P3d、Pom、Pc、Psa、Pn、Pcm、Pm、Ps、Tf、Sg、Pt、Tn、Tr、Td、Mt、Am、Aw、Mm、Mw、Md、Ts、Ho、Nh、Nm、Phl、Phr、Phx、Pcip、Pmd、Psc、Cs、Po、Cr、Cq、Pz、Pzr、Pw、Pph、
+C、I、A、Pp、Pvg、Pem、P3d、Pom、Pc、Psa、Pn、Pcm、Pm、Ps、Tf、Tfl、Sg、Pt、Tn、Tr、Td、Mt、Am、Aw、Mm、Mw、Md、Ts、Ho、Nh、Nm、Phl、Phr、Phx、Pcip、Pmd、Psc、Cs、Po、Cr、Cq、Pz、Pzr、Pw、Pph、
 Pf、Pcg 各组由 `manual-check/office/cases/pptx-*.ps1` 自动判定，
 跑 `pwsh -File manual-check\office\run.ps1 -Case 'pptx-*'` 即可复现。O1 已放弃，与 xlsx / docx 相同。
 
@@ -32,6 +32,7 @@ Ps1–Ps5、Sg1–Sg5、Pt1–Pt6、Tn1–Tn5、Am1–Am5、Mm1–Mm5、Ho1–Ho
 同日补跑 `pptx-model3d.ps1`，P3d1–P3d6 通过。PowerPoint COM `Type=30`，无 Repair。
 同日补跑 `pptx-omml.ps1`，Pom1–Pom6 通过。无 Repair。
 同日补跑 `pptx-shape-format.ps1`，Tf1–Tf5 通过。无 Repair。
+2026-10-10 补跑 `pptx-text-fill.ps1`，Tfl1–Tfl5 通过。无 Repair。
 2026-10-10 补跑 `pptx-master-deco.ps1`，Md1–Md5 通过。无 Repair。
 2026-10-10 补跑 `pptx-notes-master.ps1`，Nh1–Nh5 通过。无 Repair。
 2026-10-10 补跑 `pptx-notes-master-objects.ps1`，Nm1–Nm5 通过。无 Repair。
@@ -198,6 +199,14 @@ Ps1–Ps5、Sg1–Sg5、Pt1–Pt6、Tn1–Tn5、Am1–Am5、Mm1–Mm5、Ho1–Ho
   - `insertShape` 可带格式字段
   - 表单元格 `setShapeFormat` 后 inspect 对得上
   - 缺字段 / `sz` 越界为 `InvalidField` 且未写文件
+  - 无 Repair
+- **Tfl1–Tfl5** ✅
+  - PowerPoint 16.0：`pptx-text-fill.ps1`，5 PASS / 0 FAIL
+  - `setShapeFormat` 线性两停 `textFill` 后 COM Fill.Type=3
+  - `textOutline` 宽 19050、COM Line.Visible 为真
+  - `textFill.type=none` 后 `color` 为 null
+  - 同一框两种字号 `runs` 为 2800 / 1200
+  - 缺字段或 `color` 与 `textFill` 同给为 `InvalidField` 且未写文件
   - 无 Repair
 - **Sg1–Sg5** ✅
   - PowerPoint 16.0：`pptx-shape-geom.ps1`，5 PASS / 0 FAIL
@@ -896,6 +905,33 @@ COM 认 `Type=30`（`mso3DModel`）。批注内本期不插。
 - **Tf5**
   - 检查：拒错
   - 通过标准：✅ 只给 `op` 与 `id`、或 `sz=1`，得 `InvalidField` 且未写文件
+
+## 字填充与轮廓
+
+形状 / 文本框的渐变字、字轮廓与混排 `runs`。不算排版引擎。不写 `prstTxWarp` / `effectLst`。脚本 `manual-check/office/cases/pptx-text-fill.ps1`。编号用 **Tfl**（不要跟 Tf、Sg 混）。
+
+- **Tfl1**
+  - 检查：渐变字
+  - 通过标准：✅ `setShapeFormat` 给线性两停 `textFill` 后 inspect 对得上
+  - ZIP 有 `gradFill flip="none" rotWithShape="1"`、`a:lin scaled="1"`、空 `a:tileRect`
+  - COM `TextFrame2.TextRange.Font.Fill.Type` 为 3
+  - 无 Repair
+- **Tfl2**
+  - 检查：字轮廓
+  - 通过标准：✅ `textOutline` `width=19050` `color=FF0000` 后 inspect 对得上
+  - ZIP 有 `a:ln w="19050"`
+  - COM `Font.Line.Visible` 为真
+  - 无 Repair
+- **Tfl3**
+  - 检查：无填充
+  - 通过标准：✅ `textFill.type=none` 后 `color` 为 `null`，ZIP 有 `a:noFill`
+  - 无 Repair
+- **Tfl4**
+  - 检查：混排 runs
+  - 通过标准：✅ 同一框两种字号后 `runs` 两条 `sz` 为 2800 / 1200，框级 `sz` 为 `null`
+- **Tfl5**
+  - 检查：拒错
+  - 通过标准：✅ 只给 `op` 与 `id`、或同时给 `color` 与 `textFill`，得 `InvalidField` 且未写文件
 
 ## 形状几何剩余
 

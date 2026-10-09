@@ -1161,6 +1161,8 @@ mod tests {
                 "text",
                 "sz",
                 "color",
+                "textFill",
+                "textOutline",
                 "bold",
                 "italic",
                 "underline",
@@ -1168,6 +1170,7 @@ mod tests {
                 "eastAsiaFont",
                 "align",
                 "textAnchor",
+                "runs",
                 "stable"
             ]
         );

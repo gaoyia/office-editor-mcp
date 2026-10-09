@@ -393,6 +393,95 @@
         }
       }
     },
+    "drawingTextFill": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type"
+          ],
+          "properties": {
+            "type": {
+              "enum": [
+                "none"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "stops"
+          ],
+          "properties": {
+            "type": {
+              "const": "gradient"
+            },
+            "ang": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 21600000
+            },
+            "stops": {
+              "type": "array",
+              "minItems": 2,
+              "items": {
+                "type": "object",
+                "required": [
+                  "pos",
+                  "color"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "pos": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 100000
+                  },
+                  "color": {
+                    "type": "string",
+                    "minLength": 6,
+                    "maxLength": 6
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "drawingTextOutline": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "color",
+            "width"
+          ],
+          "properties": {
+            "color": {
+              "type": "string",
+              "minLength": 6,
+              "maxLength": 6
+            },
+            "width": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        }
+      ]
+    },
     "pptxShapeCreate": {
       "type": "object",
       "additionalProperties": false,
@@ -442,6 +531,12 @@
             "string",
             "null"
           ]
+        },
+        "textFill": {
+          "$ref": "#/$defs/drawingTextFill"
+        },
+        "textOutline": {
+          "$ref": "#/$defs/drawingTextOutline"
         },
         "bold": {
           "type": "boolean"
@@ -1209,6 +1304,12 @@
             "null"
           ]
         },
+        "textFill": {
+          "$ref": "#/$defs/drawingTextFill"
+        },
+        "textOutline": {
+          "$ref": "#/$defs/drawingTextOutline"
+        },
         "bold": {
           "type": "boolean"
         },
@@ -1553,6 +1654,12 @@
             "null"
           ]
         },
+        "textFill": {
+          "$ref": "#/$defs/drawingTextFill"
+        },
+        "textOutline": {
+          "$ref": "#/$defs/drawingTextOutline"
+        },
         "bold": {
           "type": "boolean"
         },
@@ -1630,6 +1737,16 @@
         {
           "required": [
             "textAnchor"
+          ]
+        },
+        {
+          "required": [
+            "textFill"
+          ]
+        },
+        {
+          "required": [
+            "textOutline"
           ]
         }
       ]

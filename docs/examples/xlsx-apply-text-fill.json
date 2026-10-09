@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "book.xlsx",
+  "output": "book.fill.xlsx",
+  "ops": [
+    {
+      "op": "setShapeFormat",
+      "id": "sheet:Sheet1/sp:2",
+      "textFill": {
+        "type": "gradient",
+        "stops": [
+          { "pos": 0, "color": "FF0000" },
+          { "pos": 100000, "color": "0000FF" }
+        ]
+      },
+      "textOutline": {
+        "color": "FF0000",
+        "width": 19050
+      }
+    }
+  ]
+}

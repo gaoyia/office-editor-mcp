@@ -399,6 +399,8 @@
 - 对连接线 id 发 `setShapeGeom` 报 `InvalidId`
 - `setShapePos` 的 `x` 与 `y` 一个都不给、`setShapeSize` 的 `cx` 与 `cy` 一个都不给、`setShapeFill` / `setShapeLine` 缺 `color`，或无边框时仍给 `width`，报 `InvalidField`
 - `setShapeFormat` 除 `op` 与 `id` 外一个字段都不给、`sz` 小于 100、`align` 不是 `l` / `ctr` / `r` / `just`、`textAnchor` 不是 `t` / `ctr` / `b`、`underline` 不是 `sng` / `none` / `dbl`、或 `font` / `eastAsiaFont` 为空串，报 `InvalidField`
+- `setShapeFormat` 同时给 `color` 与 `textFill`，或 `textFill.type` 不是 `none` / `gradient`，或渐变 `stops` 少于两项，报 `InvalidField`
+- `setShapeFormat` 的 `textOutline` 缺 `color` 或 `width`，报 `InvalidField`
 - `setShapeFormat` 的 `sz` 大于 400000 报 `TruncatedLimit`
 - 非法六位十六进制 `color` 报 `InvalidField`
 - docx 认 `insertConnector` / `deleteConnector` / `groupShapes` / `ungroup`
