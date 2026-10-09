@@ -2179,7 +2179,35 @@
         "combo",
         "stock",
         "surface",
-        "ofPie"
+        "ofPie",
+        "chartex"
+      ]
+    },
+    "stockKind": {
+      "enum": [
+        "hlc",
+        "ohlc",
+        "vhlc",
+        "vohlc"
+      ]
+    },
+    "surfaceKind": {
+      "enum": [
+        "surface3d",
+        "wireframe",
+        "contour",
+        "contourWire"
+      ]
+    },
+    "chartexLayoutId": {
+      "enum": [
+        "waterfall",
+        "treemap",
+        "sunburst",
+        "funnel",
+        "clusteredColumn",
+        "boxWhisker",
+        "pareto"
       ]
     },
     "comboSeriesType": {
@@ -2256,6 +2284,15 @@
             "pie",
             "bar"
           ]
+        },
+        "stockKind": {
+          "$ref": "#/$defs/stockKind"
+        },
+        "surfaceKind": {
+          "$ref": "#/$defs/surfaceKind"
+        },
+        "layoutId": {
+          "$ref": "#/$defs/chartexLayoutId"
         },
         "title": {
           "type": "string"
@@ -2548,6 +2585,12 @@
             "pie",
             "bar"
           ]
+        },
+        "stockKind": {
+          "$ref": "#/$defs/stockKind"
+        },
+        "surfaceKind": {
+          "$ref": "#/$defs/surfaceKind"
         }
       }
     },
@@ -2799,11 +2842,26 @@
             "stdErr",
             "stdDev",
             "fixedVal",
-            "percentage"
+            "percentage",
+            "cust"
           ]
         },
         "value": {
           "type": "number"
+        },
+        "plus": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "number"
+          }
+        },
+        "minus": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "number"
+          }
         }
       }
     },
@@ -2840,11 +2898,26 @@
             "stdErr",
             "stdDev",
             "fixedVal",
-            "percentage"
+            "percentage",
+            "cust"
           ]
         },
         "value": {
           "type": "number"
+        },
+        "plus": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "number"
+          }
+        },
+        "minus": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "number"
+          }
         }
       },
       "anyOf": [
@@ -2861,6 +2934,16 @@
         {
           "required": [
             "valType"
+          ]
+        },
+        {
+          "required": [
+            "plus"
+          ]
+        },
+        {
+          "required": [
+            "minus"
           ]
         },
         {

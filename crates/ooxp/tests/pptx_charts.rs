@@ -967,11 +967,13 @@ fn insert_stock_surface_ofpie() {
     let charts = tree["slides"][0]["charts"].as_array().unwrap();
     let stock = charts.iter().find(|c| c["type"] == "stock").unwrap();
     assert_eq!(stock["series"].as_array().unwrap().len(), 3);
+    assert_eq!(stock["stockKind"], "hlc");
     let xml = String::from_utf8(part_bytes(&out, "ppt/charts/chart1.xml")).unwrap();
     assert!(xml.contains("stockChart"));
     assert!(xml.contains("hiLowLines"));
     let surface = charts.iter().find(|c| c["type"] == "surface").unwrap();
     assert_eq!(surface["series"].as_array().unwrap().len(), 3);
+    assert_eq!(surface["surfaceKind"], "surface3d");
     let sxml = String::from_utf8(part_bytes(&out, "ppt/charts/chart2.xml")).unwrap();
     assert!(sxml.contains("surface3DChart"));
     assert!(sxml.contains("view3D"));
@@ -1089,4 +1091,168 @@ fn insert_rare_rejects_wrong_series_and_chartex() {
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::NotImplemented);
     assert_eq!(std::fs::read(&stock).unwrap(), before);
+}
+
+#[test]
+fn insert_ohlc_contour_chartex_and_cust_error_bars() {
+    let src = create_deck("cx-remain");
+    let out = tmp("cx-remain").with_extension("pptx");
+    apply(
+        &src,
+        &out,
+        json!([
+            {
+                "op": "insertChart",
+                "id": "slide:1",
+                "type": "stock",
+                "stockKind": "ohlc",
+                "series": [
+                    { "name": "开", "categories": ["甲", "乙"], "values": [20, 25] },
+                    { "name": "高", "categories": ["甲", "乙"], "values": [30, 40] },
+                    { "name": "低", "categories": ["甲", "乙"], "values": [10, 15] },
+                    { "name": "收", "categories": ["甲", "乙"], "values": [22, 28] }
+                ]
+            },
+            {
+                "op": "insertChart",
+                "id": "slide:1",
+                "type": "surface",
+                "surfaceKind": "contourWire",
+                "series": [
+                    { "name": "甲", "categories": ["A", "B"], "values": [1, 2] },
+                    { "name": "乙", "categories": ["A", "B"], "values": [3, 3] },
+                    { "name": "丙", "categories": ["A", "B"], "values": [2, 4] }
+                ]
+            },
+            {
+                "op": "insertChart",
+                "id": "slide:1",
+                "type": "chartex",
+                "layoutId": "funnel",
+                "title": "漏斗",
+                "series": [{ "name": "阶段", "categories": ["A", "B", "C"], "values": [10, 6, 2] }]
+            }
+        ]),
+    )
+    .unwrap();
+    let tree = inspect_charts(&out);
+    let charts = tree["slides"][0]["charts"].as_array().unwrap();
+    let ohlc = charts.iter().find(|c| c["type"] == "stock").unwrap();
+    assert_eq!(ohlc["stockKind"], "ohlc");
+    assert_eq!(ohlc["series"].as_array().unwrap().len(), 4);
+    let xml = String::from_utf8(part_bytes(&out, "ppt/charts/chart1.xml")).unwrap();
+    assert!(xml.contains("upDownBars"));
+    assert!(xml.contains(r#"gapWidth val="150""#));
+    let surface = charts.iter().find(|c| c["type"] == "surface").unwrap();
+    assert_eq!(surface["surfaceKind"], "contourWire");
+    let sxml = String::from_utf8(part_bytes(&out, "ppt/charts/chart2.xml")).unwrap();
+    assert!(sxml.contains("surfaceChart"));
+    assert!(sxml.contains(r#"<c:wireframe val="1"/>"#));
+    assert!(sxml.contains(r#"<c:rotX val="90"/>"#));
+    let cx = charts.iter().find(|c| c["type"] == "chartex").unwrap();
+    assert_eq!(cx["layoutId"], "funnel");
+    assert_eq!(cx["title"], "漏斗");
+    let names = part_names(&out);
+    assert!(names.iter().any(|n| n.contains("chartEx")));
+    let cxml = String::from_utf8(part_bytes(&out, "ppt/charts/chartEx1.xml")).unwrap();
+    assert!(cxml.contains("cx:chartSpace"));
+    assert!(cxml.contains(r#"layoutId="funnel""#));
+    let crels = String::from_utf8(part_bytes(&out, "ppt/charts/_rels/chartEx1.xml.rels")).unwrap();
+    assert!(crels.contains("chartStyle"));
+    assert!(crels.contains("chartColorStyle"));
+    let slide = String::from_utf8(part_bytes(&out, "ppt/slides/slide1.xml")).unwrap();
+    assert!(slide.contains("http://schemas.microsoft.com/office/drawing/2014/chartex"));
+    assert!(slide.contains("cx:chart"));
+    let vol = tmp("cx-vhlc").with_extension("pptx");
+    apply(
+        &src,
+        &vol,
+        json!([{
+            "op": "insertChart",
+            "id": "slide:1",
+            "type": "stock",
+            "stockKind": "vhlc",
+            "series": [
+                { "name": "量", "categories": ["甲", "乙"], "values": [100, 80] },
+                { "name": "高", "categories": ["甲", "乙"], "values": [30, 40] },
+                { "name": "低", "categories": ["甲", "乙"], "values": [10, 15] },
+                { "name": "收", "categories": ["甲", "乙"], "values": [22, 28] }
+            ]
+        }]),
+    )
+    .unwrap();
+    let vtree = inspect_charts(&vol);
+    let vch = &vtree["slides"][0]["charts"][0];
+    assert_eq!(vch["type"], "combo");
+    assert!(vch.get("stockKind").is_none());
+    let col = insert_col_deck("cx-eb");
+    let eb = tmp("cx-eb").with_extension("pptx");
+    apply(
+        &col,
+        &eb,
+        json!([{
+            "op": "insertErrorBars",
+            "id": "slide:1/chart:3/series:0",
+            "valType": "cust",
+            "plus": [0.5, 0.4, 0.3],
+            "minus": [0.2, 0.1, 0.1]
+        }]),
+    )
+    .unwrap();
+    let etree = inspect_charts(&eb);
+    let bars = &etree["slides"][0]["charts"][0]["series"][0]["errorBars"][0];
+    assert_eq!(bars["dir"], "y");
+    assert_eq!(bars["valType"], "cust");
+    assert_eq!(bars["plus"], json!([0.5, 0.4, 0.3]));
+    assert_eq!(bars["minus"], json!([0.2, 0.1, 0.1]));
+    let exml = String::from_utf8(part_bytes(&eb, "ppt/charts/chart1.xml")).unwrap();
+    assert!(!exml.contains("<c:errDir"));
+    assert!(exml.contains("<c:plus>"));
+    let err = apply(
+        &src,
+        &tmp("cx-region").with_extension("pptx"),
+        json!([{
+            "op": "insertChart",
+            "id": "slide:1",
+            "type": "chartex",
+            "layoutId": "regionMap",
+            "series": [{ "values": [1] }]
+        }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::NotImplemented);
+    let err = apply(
+        &col,
+        &tmp("cx-set-type").with_extension("pptx"),
+        json!([{
+            "op": "setChartType",
+            "id": "slide:1/chart:3",
+            "type": "chartex",
+            "layoutId": "funnel"
+        }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+    let err = apply(
+        &col,
+        &tmp("cx-lcaps").with_extension("pptx"),
+        json!([{
+            "op": "insertErrorBars",
+            "id": "slide:1/chart:3/series:0",
+            "valType": "lCaps"
+        }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+    let err = apply(
+        &out,
+        &tmp("cx-data").with_extension("pptx"),
+        json!([{
+            "op": "setChartSeries",
+            "id": format!("{}/series:0", cx["id"].as_str().unwrap()),
+            "values": [1, 2, 3]
+        }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::NotImplemented);
 }

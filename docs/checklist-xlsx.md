@@ -32,6 +32,7 @@ C、I、A、O、Xp、Xvg、Xem、X3d、Xom、Xtf、Xfl、Xc、Xh 这几组现在
 同日补跑 `xlsx-omml.ps1`，Xom1–Xom6 通过。无 Repair。
 同日补跑 `xlsx-shape-format.ps1`，Xtf1–Xtf5 通过。无 Repair。
 2026-10-10 补跑 `xlsx-text-fill.ps1`，Xfl1–Xfl5 通过。无 Repair。
+2026-10-10 补跑 `xlsx-charts-rare-remain.ps1`，Xcx1–Xcx5 通过。无 Repair。
 
 - **C1** ✅
   - Excel 16.0 打开 `manual-check/office/out/xlsx-create.xlsx`，标题栏无 Repair
@@ -135,6 +136,10 @@ C、I、A、O、Xp、Xvg、Xem、X3d、Xom、Xtf、Xfl、Xc、Xh 这几组现在
   - 插入股价 / 曲面 / 复合条无 Repair
   - 股价三条转柱形、复合饼转饼
   - 增系列与 `type=chartex`、两条股价均拒写
+- **Xcx1–Xcx5** ✅
+  - Excel 16.0：`xlsx-charts-rare-remain.ps1`，5 PASS / 0 FAIL
+  - OHLC / 俯视线框 / 自定义误差线 / chartex funnel 无 Repair
+  - 缺 `layoutId` 与两条股价 `InvalidField`，`regionMap` `NotImplemented`
 - **Xm1–Xm7** ✅
   - Excel 16.0：`xlsx-sheets.ps1`，7 PASS / 0 FAIL
   - 无 scope 时每张表有 `hidden`
@@ -691,6 +696,29 @@ Excel 16.0 插入的图通常是 `twoCellAnchor`；真 `oneCell` 由 `insertChar
   - 通过标准：✅ 对股价 `addChartSeries` 得 `NotImplemented`
   - 源无 chartex 时 `insertChart type=chartex` 得 `InvalidField`
   - 两条系列的股价 `insertChart` 得 `InvalidField`
+  - 均未写坏文件
+
+## 图表稀有剩余
+
+OHLC、线框 / 俯视曲面、自定义误差线、chartex 写入。脚本 `manual-check/office/cases/xlsx-charts-rare-remain.ps1`。编号用 Xcx。不要和 Xq、Xc 混。
+
+- **Xcx1**
+  - 检查：OHLC
+  - 通过标准：✅ `insertChart` `type=stock` 四条系列后 Excel 无修复，`type` 为 `stock`，`stockKind` 为 `ohlc`
+- **Xcx2**
+  - 检查：俯视线框
+  - 通过标准：✅ `insertChart` `type=surface` `surfaceKind=contourWire` 三条系列后无修复，`surfaceKind` 为 `contourWire`
+- **Xcx3**
+  - 检查：自定义误差线
+  - 通过标准：✅ 柱形图 `insertErrorBars` `valType=cust` 后无修复，系列上 `plus` / `minus` 对得上
+- **Xcx4**
+  - 检查：chartex funnel
+  - 通过标准：✅ `insertChart` `type=chartex` `layoutId=funnel` 后无修复，`type` 为 `chartex`，`layoutId` 为 `funnel`
+- **Xcx5**
+  - 检查：仍拒绝
+  - 通过标准：✅ `type=chartex` 不带 `layoutId` 得 `InvalidField`
+  - `layoutId=regionMap` 得 `NotImplemented`
+  - 两条系列的股价仍 `InvalidField`
   - 均未写坏文件
 
 ## 页眉页脚

@@ -552,7 +552,8 @@ pub fn insert_chart(
     let embed = chart::embed::build(op.chart_type, &series, &cats)?;
     let embed_part =
         chart::embed::next_part(pkg, "/ppt/embeddings", "Microsoft_Excel_Worksheet", ".xlsx");
-    let chart_part = chart::embed::next_part(pkg, "/ppt/charts", "chart", ".xml");
+    let chart_part =
+        chart::embed::next_part(pkg, "/ppt/charts", chart::part_stem(op.chart_type), ".xml");
     pkg.set(&embed_part, embed)?;
     let xml = chart::build_chart_xml(
         op.chart_type,
@@ -563,6 +564,7 @@ pub fn insert_chart(
         chart::embed::origin(),
         true,
         op.of_pie_type.as_deref(),
+        &op.extra,
     );
     pkg.set(&chart_part, xml.into_bytes())?;
 
@@ -574,13 +576,13 @@ pub fn insert_chart(
         target_mode: None,
         extra: Vec::new(),
     });
-    chart_rels.write_to(pkg, &chart_part)?;
 
+    let (rel_ty, ct, _) = chart::rel_and_ct(op.chart_type);
     let mut slide_rels = Relationships::from_package(pkg, slide_part)?;
     let chart_rid = slide_rels.next_rid();
     slide_rels.push(Relationship {
         id: chart_rid.clone(),
-        rel_type: chart::REL_CHART.into(),
+        rel_type: rel_ty.into(),
         target: picture::rel_target_from(slide_part, &chart_part),
         target_mode: None,
         extra: Vec::new(),
@@ -588,8 +590,12 @@ pub fn insert_chart(
     slide_rels.write_to(pkg, slide_part)?;
 
     let mut cts = ContentTypes::from_package(pkg)?;
-    cts.set_override(&chart_part, chart::CT_CHART)?;
+    cts.set_override(&chart_part, ct)?;
     cts.set_override(&embed_part, chart::embed::CT_EMBED_XLSX)?;
+    if op.chart_type == ChartType::Chartex {
+        chart::chartex::attach_style(pkg, &chart_part, &mut chart_rels, &mut cts)?;
+    }
+    chart_rels.write_to(pkg, &chart_part)?;
     cts.write_to(pkg)?;
 
     let (cx, cy) = (
@@ -614,8 +620,20 @@ pub fn insert_chart(
     picture::ensure_xmlns(&mut slide_doc.root, "r", REL_NS);
     picture::ensure_xmlns(&mut slide_doc.root, "a", DML_NS);
     picture::ensure_xmlns(&mut slide_doc.root, "c", CHART_NS);
+    if op.chart_type == ChartType::Chartex {
+        picture::ensure_xmlns(&mut slide_doc.root, "cx", CHARTEX_NS);
+    }
     let cnv = picture::next_cnv_id(&slide_doc.root);
-    let frame = build_graphic_frame(cnv, &format!("图表 {cnv}"), &chart_rid, x, y, cx, cy);
+    let frame = build_graphic_frame(
+        cnv,
+        &format!("图表 {cnv}"),
+        &chart_rid,
+        x,
+        y,
+        cx,
+        cy,
+        op.chart_type == ChartType::Chartex,
+    );
     picture::insert_into_sp_tree(&mut slide_doc.root, frame)?;
     let _ = i;
     Ok(())
@@ -629,6 +647,7 @@ fn build_graphic_frame(
     y: i64,
     cx: i64,
     cy: i64,
+    chartex: bool,
 ) -> Element {
     let mut nv = Element::new("p:nvGraphicFramePr");
     nv.push_element(
@@ -651,13 +670,9 @@ fn build_graphic_frame(
             .with_attr("cx", cx.to_string())
             .with_attr("cy", cy.to_string()),
     );
-    let mut data = Element::new("a:graphicData").with_attr("uri", CHART_NS);
-    data.push_element(
-        Element::new("c:chart")
-            .with_attr("xmlns:c", CHART_NS)
-            .with_attr("xmlns:r", REL_NS)
-            .with_attr("r:id", rid),
-    );
+    let mut data =
+        Element::new("a:graphicData").with_attr("uri", if chartex { CHARTEX_NS } else { CHART_NS });
+    data.push_element(chart::graphic_chart_el(rid, chartex));
     let mut graphic = Element::new("a:graphic");
     graphic.push_element(data);
     let mut frame = Element::new("p:graphicFrame");
@@ -1057,7 +1072,13 @@ pub fn apply_type(
             format!("ops[{i}].type"),
         ));
     }
-    chart::convert_type(&mut space.root, op.chart_type, op.of_pie_type.as_deref(), i)?;
+    chart::convert_type(
+        &mut space.root,
+        op.chart_type,
+        op.of_pie_type.as_deref(),
+        &op.extra,
+        i,
+    )?;
     pkg.set(&chart_part, space.to_bytes()?)?;
     Ok(())
 }

@@ -972,9 +972,10 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   `fromOffX` / `fromOffY` / `toOffX` / `toOffY` 是 EMU 整数，取 `colOff` / `rowOff`，缺省为 `0`。
 - `scope.charts` 为 `true` 时，每张 `worksheet` 与 `chartsheet` 带 `charts`。没有图表时为空数组。按该表 drawing 部件顺序、同一部件内按锚点文档顺序。
   每张字段顺序：`id`、`cNvPrId`、`name`、`anchor`，然后按锚点种类跟位置字段（规则与工作表图相同），再跟 `type`，`type` 为 `ofPie` 时再跟 `ofPieType`，
+  `type` 为 `stock` 时再跟 `stockKind`，`type` 为 `surface` 时再跟 `surfaceKind`，
   `type` 为 `chartex` 时再跟 `layoutId`，然后 `title`、`catAxisTitle`、`valAxisTitle`、`series`、`legend`、`dataLabels`、`flags`、`stable`。
   `cNvPrId` / `name` / `anchor` / 位置字段 / `stable` 规则与图相同。
-  `type` / `ofPieType` / `layoutId` / `title` / 轴标题 / `legend` / `dataLabels` / `flags` 规则与 docx 图表相同。
+  `type` / `ofPieType` / `stockKind` / `surfaceKind` / `layoutId` / `title` / 轴标题 / `legend` / `dataLabels` / `flags` 规则与 docx 图表相同。
 - 每条系列字段顺序：`id`、`index`、`name`、`nameRef`、`categories`、`catRef`、`values`、`valRef`，气泡再跟 `sizes`、`sizeRef`，再跟 `axis`，
   有趋势线时再跟 `trendlines`，有误差线时再跟 `errorBars`，必要时再跟 `cacheStale`。
   `axis` / `trendlines` / `errorBars` 规则与 docx 图表相同。`index` 即 `{idx}`。

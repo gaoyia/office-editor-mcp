@@ -55,6 +55,7 @@ struct NewPic {
 struct CreateChart {
     chart_type: ChartType,
     of_pie_type: Option<String>,
+    extra: crate::chart::ChartExtra,
     title: Option<String>,
     series: Vec<NewSeries>,
     kind: PicKind,
@@ -1711,7 +1712,17 @@ fn parse_one_chart(v: &Value, path: &str) -> Result<CreateChart, Error> {
     for k in obj.keys() {
         if !matches!(
             k.as_str(),
-            "type" | "ofPieType" | "title" | "series" | "kind" | "wrap" | "cx" | "cy"
+            "type"
+                | "ofPieType"
+                | "stockKind"
+                | "surfaceKind"
+                | "layoutId"
+                | "title"
+                | "series"
+                | "kind"
+                | "wrap"
+                | "cx"
+                | "cy"
         ) {
             return Err(Error::with_path(
                 ErrorKind::UnknownField { field: k.clone() },
@@ -1754,7 +1765,13 @@ fn parse_one_chart(v: &Value, path: &str) -> Result<CreateChart, Error> {
         }
     };
     let series = parse_create_series(obj.get("series"), path)?;
-    crate::chart::validate_insert_series_len(chart_type, series.len(), &format!("{path}.series"))?;
+    let extra = crate::chart::parse_chart_extra(obj, chart_type, series.len(), path, true)?;
+    crate::chart::validate_insert_series_len(
+        chart_type,
+        series.len(),
+        &extra,
+        &format!("{path}.series"),
+    )?;
     let of_pie_type =
         crate::chart::parse_of_pie_type(obj.get("ofPieType"), &format!("{path}.ofPieType"))?;
     crate::chart::reject_of_pie_on_other(
@@ -1840,6 +1857,7 @@ fn parse_one_chart(v: &Value, path: &str) -> Result<CreateChart, Error> {
     Ok(CreateChart {
         chart_type,
         of_pie_type,
+        extra,
         title,
         series,
         kind,
@@ -2812,6 +2830,7 @@ fn push_story_ops(
                 para: host.clone(),
                 chart_type: ch.chart_type,
                 of_pie_type: ch.of_pie_type.clone(),
+                extra: ch.extra.clone(),
                 title: ch.title.clone(),
                 series: ch.series.clone(),
                 kind: ch.kind,

@@ -5,7 +5,7 @@ use serde_json::Value;
 use crate::error::{Error, ErrorKind, IdReason, ScopeNeed, SheetNameReason, TypeName};
 use crate::json;
 
-use crate::chart::{ChartType, NewSeries};
+use crate::chart::{ChartExtra, ChartType, NewSeries};
 
 use crate::smartart::{ColorsKind, LayoutKind, NewPoint, Role, StyleKind};
 
@@ -1138,6 +1138,7 @@ pub struct InsertChartOp {
     pub sheet: String,
     pub chart_type: ChartType,
     pub of_pie_type: Option<String>,
+    pub extra: ChartExtra,
     pub title: Option<String>,
     pub series: Vec<NewSeries>,
     pub cx: Option<i64>,
@@ -1158,6 +1159,7 @@ pub struct InsertChartSheetOp {
     pub data_sheet: Option<String>,
     pub chart_type: ChartType,
     pub of_pie_type: Option<String>,
+    pub extra: ChartExtra,
     pub title: Option<String>,
     pub series: Vec<NewSeries>,
     pub cx: Option<i64>,
@@ -1247,6 +1249,7 @@ pub struct SetChartTypeOp {
     pub target: SheetChartId,
     pub chart_type: ChartType,
     pub of_pie_type: Option<String>,
+    pub extra: ChartExtra,
 }
 
 #[derive(Debug, Clone)]
@@ -3291,6 +3294,9 @@ fn parse_insert_chart(
             "id",
             "type",
             "ofPieType",
+            "stockKind",
+            "surfaceKind",
+            "layoutId",
             "title",
             "series",
             "cx",
@@ -3333,7 +3339,9 @@ fn parse_insert_chart(
     )?;
     let title = parse_chart_title_field(obj.get("title"), i)?;
     let series = parse_insert_series(obj.get("series"), i, chart_type, "insertChart")?;
-    validate_insert_series(chart_type, &series, i)?;
+    let extra =
+        crate::chart::parse_chart_extra(obj, chart_type, series.len(), &format!("ops[{i}]"), true)?;
+    validate_insert_series(chart_type, &series, &extra, i)?;
     let (cx, cy) = parse_chart_size_pair(obj, i, "insertChart")?;
     let from = parse_required_a1(obj, i, "from")?;
     let data_from = parse_required_a1(obj, i, "dataFrom")?;
@@ -3372,6 +3380,7 @@ fn parse_insert_chart(
         sheet,
         chart_type,
         of_pie_type,
+        extra,
         title,
         series,
         cx,
@@ -3401,6 +3410,9 @@ fn parse_insert_chart_sheet(
             "dataSheet",
             "type",
             "ofPieType",
+            "stockKind",
+            "surfaceKind",
+            "layoutId",
             "title",
             "series",
             "cx",
@@ -3471,7 +3483,9 @@ fn parse_insert_chart_sheet(
     )?;
     let title = parse_chart_title_field(obj.get("title"), i)?;
     let series = parse_insert_series(obj.get("series"), i, chart_type, "insertChartSheet")?;
-    validate_insert_series(chart_type, &series, i)?;
+    let extra =
+        crate::chart::parse_chart_extra(obj, chart_type, series.len(), &format!("ops[{i}]"), true)?;
+    validate_insert_series(chart_type, &series, &extra, i)?;
     let (cx, cy) = parse_chart_size_pair(obj, i, "insertChartSheet")?;
     let data_from = parse_required_a1(obj, i, "dataFrom")?;
     Ok(InsertChartSheetOp {
@@ -3479,6 +3493,7 @@ fn parse_insert_chart_sheet(
         data_sheet,
         chart_type,
         of_pie_type,
+        extra,
         title,
         series,
         cx,
@@ -7781,11 +7796,13 @@ fn parse_chart_title_field(v: Option<&Value>, i: usize) -> Result<Option<String>
 fn validate_insert_series(
     chart_type: ChartType,
     series: &[NewSeries],
+    extra: &ChartExtra,
     i: usize,
 ) -> Result<(), Error> {
     crate::chart::validate_insert_series_len(
         chart_type,
         series.len(),
+        extra,
         &format!("ops[{i}].series"),
     )?;
     if chart_type == ChartType::Combo {
@@ -8060,7 +8077,19 @@ fn parse_set_chart_type(
     obj: &serde_json::Map<String, Value>,
     i: usize,
 ) -> Result<SetChartTypeOp, Error> {
-    deny_keys(obj, i, &["op", "id", "type", "ofPieType"])?;
+    deny_keys(
+        obj,
+        i,
+        &[
+            "op",
+            "id",
+            "type",
+            "ofPieType",
+            "stockKind",
+            "surfaceKind",
+            "layoutId",
+        ],
+    )?;
     let id = require_id(obj, i)?;
     let target = chart::parse_chart_id(&id, i)?;
     let chart_type = parse_chart_type_field(obj.get("type"), i, true)?;
@@ -8077,11 +8106,13 @@ fn parse_set_chart_type(
         of_pie_type.as_deref(),
         &format!("ops[{i}].ofPieType"),
     )?;
+    let extra = crate::chart::parse_chart_extra(obj, chart_type, 0, &format!("ops[{i}]"), false)?;
     Ok(SetChartTypeOp {
         id,
         target,
         chart_type,
         of_pie_type,
+        extra,
     })
 }
 
@@ -10056,7 +10087,13 @@ fn parse_insert_error_bars(
     obj: &serde_json::Map<String, Value>,
     i: usize,
 ) -> Result<InsertErrorBarsOp, Error> {
-    deny_keys(obj, i, &["op", "id", "dir", "barType", "valType", "value"])?;
+    deny_keys(
+        obj,
+        i,
+        &[
+            "op", "id", "dir", "barType", "valType", "value", "plus", "minus",
+        ],
+    )?;
     let id = require_id(obj, i)?;
     let (target, index) = chart::parse_series_id(&id, i)?;
     let spec = crate::chart::remain::parse_error_bars_write(obj, i, true)?;
@@ -10072,7 +10109,13 @@ fn parse_set_error_bars(
     obj: &serde_json::Map<String, Value>,
     i: usize,
 ) -> Result<SetErrorBarsOp, Error> {
-    deny_keys(obj, i, &["op", "id", "dir", "barType", "valType", "value"])?;
+    deny_keys(
+        obj,
+        i,
+        &[
+            "op", "id", "dir", "barType", "valType", "value", "plus", "minus",
+        ],
+    )?;
     let id = require_id(obj, i)?;
     let (target, index, eb_index) = chart::parse_error_bars_id(&id, i)?;
     let spec = crate::chart::remain::parse_error_bars_write(obj, i, false)?;

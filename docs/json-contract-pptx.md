@@ -900,9 +900,10 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   xlsx / docx 的 `scope` 里出现 `media` 报 `InvalidField`。
 - `scope.charts` 为 `true` 时，每页带 `charts`。没有图表时为空数组。不依赖 `scope.slide`。
   每张字段顺序：`id`、`cNvPrId`、`name`、`x`、`y`、`cx`、`cy`、`type`，`type` 为 `ofPie` 时再跟 `ofPieType`，
+  `type` 为 `stock` 时再跟 `stockKind`，`type` 为 `surface` 时再跟 `surfaceKind`，
   `type` 为 `chartex` 时再跟 `layoutId`，然后 `title`、`catAxisTitle`、`valAxisTitle`、`series`、`legend`、`dataLabels`、`flags`、`stable`。
   `cNvPrId` / `name` / `stable` 规则与图相同。`x` / `y` / `cx` / `cy` 取 graphicFrame 的 `p:xfrm`。
-  `type` / `ofPieType` / `layoutId` / `title` / 轴标题 / `series` / `legend` / `dataLabels` / `flags` 规则与 docx 图表相同；
+  `type` / `ofPieType` / `stockKind` / `surfaceKind` / `layoutId` / `title` / 轴标题 / `series` / `legend` / `dataLabels` / `flags` 规则与 docx 图表相同；
   系列值优先读 embedding 单元格，读不到再退回 cache。
 - `scope.smartArt` 为 `true` 时，每页带 `smartArts`。没有图示时为空数组。不依赖 `scope.slide`。
   每张字段顺序：`id`、`cNvPrId`、`name`、`x`、`y`、`cx`、`cy`、`layout`、`colors`、`style`、`points`、`stable`。

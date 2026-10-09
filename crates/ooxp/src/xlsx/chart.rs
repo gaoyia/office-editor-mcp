@@ -59,6 +59,8 @@ pub struct ChartInfo {
     pub flags: Vec<Value>,
     pub stable: bool,
     pub of_pie_type: Option<String>,
+    pub stock_kind: Option<String>,
+    pub surface_kind: Option<String>,
     pub layout_id: Option<String>,
 }
 
@@ -264,6 +266,12 @@ fn chart_to_json(c: &ChartInfo) -> Value {
     if let Some(t) = &c.of_pie_type {
         m.insert("ofPieType".into(), json!(t));
     }
+    if let Some(k) = &c.stock_kind {
+        m.insert("stockKind".into(), json!(k));
+    }
+    if let Some(k) = &c.surface_kind {
+        m.insert("surfaceKind".into(), json!(k));
+    }
     if let Some(id) = &c.layout_id {
         m.insert("layoutId".into(), json!(id));
     }
@@ -313,6 +321,8 @@ fn chart_info(
     let mut data_labels = json!({ "show": false });
     let mut flags = Vec::new();
     let mut of_pie_type = None;
+    let mut stock_kind = None;
+    let mut surface_kind = None;
     let mut layout_id = None;
     if let Some(rid) = chart_rid(frame) {
         if let Ok(chart_part) = crate::opc::resolve_id(pkg, drawing_part, &rid) {
@@ -333,6 +343,12 @@ fn chart_info(
                     flags = chart::flags_json(&doc.root, &ty);
                     if ty == "ofPie" {
                         of_pie_type = chart::inspect_of_pie_type(&doc.root);
+                    }
+                    if ty == "stock" {
+                        stock_kind = Some(chart::inspect_stock_kind(&doc.root));
+                    }
+                    if ty == "surface" {
+                        surface_kind = Some(chart::inspect_surface_kind(&doc.root));
                     }
                     if ty == "chartex" {
                         layout_id = chart::inspect_layout_id(&doc.root);
@@ -395,6 +411,8 @@ fn chart_info(
         flags,
         stable,
         of_pie_type,
+        stock_kind,
+        surface_kind,
         layout_id,
     })
 }
@@ -496,8 +514,9 @@ pub fn insert_chart(
         op.data_from,
         false,
         op.of_pie_type.as_deref(),
+        &op.extra,
     );
-    let chart_part = next_chart_part(pkg);
+    let chart_part = next_chart_part_for(pkg, op.chart_type);
     pkg.set(&chart_part, xml.into_bytes())?;
     let drawing_part = {
         let doc = apply::dirty_of(dirty_sheets, sheet_part);
@@ -506,10 +525,16 @@ pub fn insert_chart(
     let mut draw_doc = xml::parse(pkg.get(&drawing_part)?)?;
     picture::ensure_xmlns(&mut draw_doc.root, "r", REL_NS);
     picture::ensure_xmlns(&mut draw_doc.root, "a", picture::A_NS);
-    let rid = add_chart_rel(pkg, &drawing_part, &chart_part)?;
+    let (rel_ty, ct, _) = chart::rel_and_ct(op.chart_type);
+    let rid = add_chart_rel(pkg, &drawing_part, &chart_part, rel_ty)?;
     let mut cts = ContentTypes::from_package(pkg)?;
-    cts.set_override(&chart_part, chart::CT_CHART)?;
+    cts.set_override(&chart_part, ct)?;
     cts.set_override(&drawing_part, picture::CT_DRAWING)?;
+    if op.chart_type == ChartType::Chartex {
+        let mut chart_rels = Relationships { rels: Vec::new() };
+        chart::chartex::attach_style(pkg, &chart_part, &mut chart_rels, &mut cts)?;
+        chart_rels.write_to(pkg, &chart_part)?;
+    }
     cts.write_to(pkg)?;
     let cnv = {
         let doc = apply::dirty_of(dirty_sheets, sheet_part);
@@ -519,7 +544,14 @@ pub fn insert_chart(
         op.cx.unwrap_or(chart::DEFAULT_CX),
         op.cy.unwrap_or(chart::DEFAULT_CY),
     );
-    let frame = build_graphic_frame(cnv, &format!("图表 {cnv}"), &rid, cx, cy);
+    let frame = build_graphic_frame(
+        cnv,
+        &format!("图表 {cnv}"),
+        &rid,
+        cx,
+        cy,
+        op.chart_type == ChartType::Chartex,
+    );
     let anchor = picture::build_anchor(
         op.anchor,
         op.from,
@@ -888,6 +920,7 @@ pub fn set_chart_type(
         &mut space.root,
         op.chart_type,
         op.of_pie_type.as_deref(),
+        &op.extra,
         op_index,
     )?;
     pkg.set(&chart_part, space.to_bytes()?)?;
@@ -1462,7 +1495,14 @@ fn cnv_of_frame(frame: &Element) -> (Option<String>, String) {
     (raw, name)
 }
 
-pub(crate) fn build_graphic_frame(cnv: u32, name: &str, rid: &str, cx: i64, cy: i64) -> Element {
+pub(crate) fn build_graphic_frame(
+    cnv: u32,
+    name: &str,
+    rid: &str,
+    cx: i64,
+    cy: i64,
+    chartex: bool,
+) -> Element {
     let mut nv = Element::new("xdr:nvGraphicFramePr");
     nv.push_element(
         Element::new("xdr:cNvPr")
@@ -1483,13 +1523,9 @@ pub(crate) fn build_graphic_frame(cnv: u32, name: &str, rid: &str, cx: i64, cy: 
             .with_attr("cx", cx.to_string())
             .with_attr("cy", cy.to_string()),
     );
-    let mut data = Element::new("a:graphicData").with_attr("uri", CHART_NS);
-    data.push_element(
-        Element::new("c:chart")
-            .with_attr("xmlns:c", CHART_NS)
-            .with_attr("xmlns:r", REL_NS)
-            .with_attr("r:id", rid),
-    );
+    let mut data =
+        Element::new("a:graphicData").with_attr("uri", if chartex { CHARTEX_NS } else { CHART_NS });
+    data.push_element(chart::graphic_chart_el(rid, chartex));
     let mut graphic = Element::new("a:graphic");
     graphic.push_element(data);
     let mut frame = Element::new("xdr:graphicFrame");
@@ -1499,10 +1535,14 @@ pub(crate) fn build_graphic_frame(cnv: u32, name: &str, rid: &str, cx: i64, cy: 
     frame
 }
 
-pub(crate) fn next_chart_part(pkg: &Package) -> String {
+pub(crate) fn next_chart_part_for(pkg: &Package, ty: ChartType) -> String {
+    next_chart_part_named(pkg, chart::part_stem(ty))
+}
+
+fn next_chart_part_named(pkg: &Package, stem: &str) -> String {
     let mut n = 1u32;
     loop {
-        let name = format!("/xl/charts/chart{n}.xml");
+        let name = format!("/xl/charts/{stem}{n}.xml");
         if !pkg.contains(&name) {
             return name;
         }
@@ -1514,12 +1554,13 @@ pub(crate) fn add_chart_rel(
     pkg: &mut Package,
     drawing_part: &str,
     chart_part: &str,
+    rel_type: &str,
 ) -> Result<String, Error> {
     let mut rels = Relationships::from_package(pkg, drawing_part)?;
     let rid = rels.next_rid();
     rels.push(Relationship {
         id: rid.clone(),
-        rel_type: chart::REL_CHART.into(),
+        rel_type: rel_type.into(),
         target: picture::rel_target_from(drawing_part, chart_part),
         target_mode: None,
         extra: Vec::new(),

@@ -59,18 +59,27 @@ pub fn insert(
         op.data_from,
         false,
         op.of_pie_type.as_deref(),
+        &op.extra,
     );
-    let chart_part = xlsx_chart::next_chart_part(pkg);
+    let chart_part = xlsx_chart::next_chart_part_for(pkg, op.chart_type);
     pkg.set(&chart_part, xml.into_bytes())?;
     let drawing_part = picture::next_drawing_part(pkg);
     let cs_part = next_chartsheet_part(pkg);
-    let rid = xlsx_chart::add_chart_rel(pkg, &drawing_part, &chart_part)?;
+    let (rel_ty, ct, _) = chart::rel_and_ct(op.chart_type);
+    let rid = xlsx_chart::add_chart_rel(pkg, &drawing_part, &chart_part, rel_ty)?;
     let (cx, cy) = (
         op.cx.unwrap_or(chart::DEFAULT_CX),
         op.cy.unwrap_or(chart::DEFAULT_CY),
     );
     let cnv = CHARTSHEET_CNV;
-    let frame = xlsx_chart::build_graphic_frame(cnv, &format!("图表 {cnv}"), &rid, cx, cy);
+    let frame = xlsx_chart::build_graphic_frame(
+        cnv,
+        &format!("图表 {cnv}"),
+        &rid,
+        cx,
+        cy,
+        op.chart_type == crate::chart::ChartType::Chartex,
+    );
     let dummy = a1::CellRef { col: 1, row: 1 };
     let mut draw_root = Element::new("xdr:wsDr")
         .with_attr("xmlns:xdr", picture::XDR_NS)
@@ -140,9 +149,14 @@ pub fn insert(
             .with_attr("r:id", sheet_rid),
     );
     let mut cts = ContentTypes::from_package(pkg)?;
-    cts.set_override(&chart_part, chart::CT_CHART)?;
+    cts.set_override(&chart_part, ct)?;
     cts.set_override(&drawing_part, picture::CT_DRAWING)?;
     cts.set_override(&cs_part, CT_CHARTSHEET)?;
+    if op.chart_type == crate::chart::ChartType::Chartex {
+        let mut chart_rels = Relationships { rels: Vec::new() };
+        chart::chartex::attach_style(pkg, &chart_part, &mut chart_rels, &mut cts)?;
+        chart_rels.write_to(pkg, &chart_part)?;
+    }
     cts.write_to(pkg)?;
     sheet_index.push((op.name.clone(), cs_part, "chartsheet"));
     Ok(())

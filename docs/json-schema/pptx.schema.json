@@ -327,6 +327,15 @@
             "bar"
           ]
         },
+        "stockKind": {
+          "$ref": "request.schema.json#/$defs/stockKind"
+        },
+        "surfaceKind": {
+          "$ref": "request.schema.json#/$defs/surfaceKind"
+        },
+        "layoutId": {
+          "$ref": "request.schema.json#/$defs/chartexLayoutId"
+        },
         "title": {
           "type": "string"
         },

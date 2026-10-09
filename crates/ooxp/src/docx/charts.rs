@@ -18,7 +18,7 @@ use super::notes;
 use super::para::{self, BodyPara, HostPara, ParaTarget, TxbxKey};
 use super::picture::{self, PicKind, WrapKind, WrapPos};
 use super::textbox;
-use super::{A_NS, CT_CHART, REL_CHART, REL_NS};
+use super::{A_NS, CT_CHART, REL_CHART};
 
 pub const CHART_NS: &str = "http://schemas.openxmlformats.org/drawingml/2006/chart";
 pub const CHARTEX_NS: &str = "http://schemas.microsoft.com/office/drawing/2014/chartex";
@@ -48,7 +48,7 @@ const WRAPPERS: &[&str] = &[
     "surface3DChart",
 ];
 
-pub use crate::chart::{ChartType, NewSeries};
+pub use crate::chart::{ChartExtra, ChartType, NewSeries};
 
 /// 哪一类图表 op，用来套分层限制。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -119,6 +119,7 @@ pub struct InsertChartOp {
     pub para: ParaTarget,
     pub chart_type: ChartType,
     pub of_pie_type: Option<String>,
+    pub extra: ChartExtra,
     pub title: Option<String>,
     pub series: Vec<NewSeries>,
     pub kind: PicKind,
@@ -174,6 +175,7 @@ pub struct SetChartTypeOp {
     pub target: ChartTarget,
     pub chart_type: ChartType,
     pub of_pie_type: Option<String>,
+    pub extra: ChartExtra,
 }
 
 #[derive(Debug, Clone)]
@@ -569,7 +571,12 @@ pub fn apply_insert(
         "Microsoft_Excel_Worksheet",
         ".xlsx",
     );
-    let chart_part = next_numbered(pkg, "/word/charts", "chart", ".xml");
+    let chart_part = next_numbered(
+        pkg,
+        "/word/charts",
+        crate::chart::part_stem(op.chart_type),
+        ".xml",
+    );
     pkg.set(&embed_part, embed)?;
     let chart_xml = crate::chart::build_chart_xml(
         op.chart_type,
@@ -580,6 +587,7 @@ pub fn apply_insert(
         crate::chart::embed::origin(),
         true,
         op.of_pie_type.as_deref(),
+        &op.extra,
     );
     pkg.set(&chart_part, chart_xml.into_bytes())?;
 
@@ -591,13 +599,17 @@ pub fn apply_insert(
         target_mode: None,
         extra: Vec::new(),
     });
-    chart_rels.write_to(pkg, &chart_part)?;
 
+    let (rel_ty, ct) = if op.chart_type == ChartType::Chartex {
+        (crate::chart::REL_CHARTEX, crate::chart::CT_CHARTEX)
+    } else {
+        (REL_CHART, CT_CHART)
+    };
     let mut host_rels = Relationships::from_package(pkg, &host)?;
     let chart_rid = host_rels.next_rid();
     host_rels.push(Relationship {
         id: chart_rid.clone(),
-        rel_type: REL_CHART.into(),
+        rel_type: rel_ty.into(),
         target: picture::rel_target_from(&host, &chart_part),
         target_mode: None,
         extra: Vec::new(),
@@ -605,12 +617,19 @@ pub fn apply_insert(
     host_rels.write_to(pkg, &host)?;
 
     let mut cts = ContentTypes::from_package(pkg)?;
-    cts.set_override(&chart_part, CT_CHART)?;
+    cts.set_override(&chart_part, ct)?;
     cts.set_override(&embed_part, CT_EMBED_XLSX)?;
+    if op.chart_type == ChartType::Chartex {
+        crate::chart::chartex::attach_style(pkg, &chart_part, &mut chart_rels, &mut cts)?;
+    }
+    chart_rels.write_to(pkg, &chart_part)?;
     cts.write_to(pkg)?;
 
     let doc = load_part(pkg, docs, &host)?;
     ensure_chart_ns(&mut doc.root);
+    if op.chart_type == ChartType::Chartex {
+        ensure_xmlns(&mut doc.root, "cx", CHARTEX_NS);
+    }
     let doc_pr = picture::next_docpr_id(&doc.root);
     let p = find_para_mut(&mut doc.root, &op.para).ok_or_else(|| {
         Error::with_path(
@@ -618,7 +637,13 @@ pub fn apply_insert(
             format!("ops[{i}].id"),
         )
     })?;
-    let mut drawing = build_chart_drawing(doc_pr, &chart_rid, op.cx, op.cy);
+    let mut drawing = build_chart_drawing(
+        doc_pr,
+        &chart_rid,
+        op.cx,
+        op.cy,
+        op.chart_type == ChartType::Chartex,
+    );
     picture::apply_wrap(&mut drawing, op.kind, op.wrap, &op.pos)
         .map_err(|e| e.at(format!("ops[{i}]")))?;
     picture::insert_drawing_into_para(p, drawing);
@@ -827,7 +852,13 @@ pub fn apply_type(
             format!("ops[{i}].type"),
         ));
     }
-    crate::chart::convert_type(&mut space.root, op.chart_type, op.of_pie_type.as_deref(), i)?;
+    crate::chart::convert_type(
+        &mut space.root,
+        op.chart_type,
+        op.of_pie_type.as_deref(),
+        &op.extra,
+        i,
+    )?;
     pkg.set(&chart_part, space.to_bytes()?)?;
     Ok(())
 }
@@ -1184,6 +1215,9 @@ fn chart_json(
 }
 
 fn series_json(chart_id: &str, space: &Element, embed: Option<&[u8]>) -> Result<Vec<Value>, Error> {
+    if space.child_by_local("chartData").is_some() {
+        return Ok(crate::chart::chartex::series_json(chart_id, space));
+    }
     let mut out = Vec::new();
     let mut index = 0usize;
     let Some(plot) = plot_area(space) else {
@@ -1471,6 +1505,16 @@ fn title_text(title: Option<&Element>) -> Option<String> {
     let title = title?;
     let tx = title.child_by_local("tx")?;
     if let Some(v) = tx.child_by_local("v") {
+        let s = v.text_content();
+        if s.is_empty() {
+            return None;
+        }
+        return Some(s);
+    }
+    if let Some(v) = tx
+        .child_by_local("txData")
+        .and_then(|d| d.child_by_local("v"))
+    {
         let s = v.text_content();
         if s.is_empty() {
             return None;
@@ -2388,7 +2432,7 @@ fn ensure_xmlns(el: &mut Element, prefix: &str, uri: &str) {
     }
 }
 
-fn build_chart_drawing(doc_pr: u32, rid: &str, cx: i64, cy: i64) -> Element {
+fn build_chart_drawing(doc_pr: u32, rid: &str, cx: i64, cy: i64, chartex: bool) -> Element {
     let mut drawing = Element::new("w:drawing");
     let mut inline = Element::new("wp:inline")
         .with_attr("distT", "0")
@@ -2416,13 +2460,9 @@ fn build_chart_drawing(doc_pr: u32, rid: &str, cx: i64, cy: i64) -> Element {
     frame_pr.push_element(Element::new("a:graphicFrameLocks").with_attr("noGrp", "1"));
     inline.push_element(frame_pr);
     let mut graphic = Element::new("a:graphic");
-    let mut data = Element::new("a:graphicData").with_attr("uri", CHART_NS);
-    data.push_element(
-        Element::new("c:chart")
-            .with_attr("xmlns:c", CHART_NS)
-            .with_attr("xmlns:r", REL_NS)
-            .with_attr("r:id", rid),
-    );
+    let mut data =
+        Element::new("a:graphicData").with_attr("uri", if chartex { CHARTEX_NS } else { CHART_NS });
+    data.push_element(crate::chart::graphic_chart_el(rid, chartex));
     graphic.push_element(data);
     inline.push_element(graphic);
     drawing.push_element(inline);

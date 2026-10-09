@@ -90,6 +90,8 @@ xlsx create 生成 Transitional 包，命名空间用 Office 默认的 2006 那�
   - 仅当某张表声明了 `pictures` 或 `headerFooters[].pictures`
 - **`/xl/charts/chartN.xml`**
   - 仅当某张表声明了 `charts`，或声明了 `kind: chartsheet`
+- **`/xl/charts/chartExN.xml`**
+  - 仅当某张表声明了 `type=chartex` 的图表
 - **`/xl/diagrams/…`**
   - 仅当某张表声明了 `smartArts`，或 apply 插入了 SmartArt
 
@@ -199,6 +201,10 @@ drawing 根补 `xmlns:a14` 与 `xmlns:m`。写 `mc:AlternateContent`，Choice `R
 Fallback 是同一套纯文本框，字为调用方 `text`。不栅格化，不写海报。create 给了 `sheets[].maths` 时同样写入。
 apply 插入工作表图表时，可能再新建 `/xl/charts/chartN.xml`（CT `application/vnd.openxmlformats-officedocument.drawingml.chart+xml`）及 chart 的 `.rels`；
 drawing 关系 Type 以 `/chart` 结尾。
+`type=chartex` 时写 `/xl/charts/chartExN.xml`（CT `application/vnd.ms-office.chartex+xml`），
+关系 Type 为 `http://schemas.microsoft.com/office/2014/relationships/chartEx`。
+同目录再写 `styleN.xml` / `colorsN.xml`（CT `application/vnd.ms-office.chartstyle+xml` /
+`application/vnd.ms-office.chartcolorstyle+xml`），chartEx `.rels` 指向它们。
 不写 embedding。apply 插入工作表超链接时，外部链在工作表 `.rels` 上补一条关系（Type
 `http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink`，
 `TargetMode` 为 `External`），工作表 XML 写 `<hyperlinks>/<hyperlink r:id="…"/>`（ECMA-376 §18.3.1.47 / §18.3.1.48）。
@@ -325,6 +331,10 @@ apply 插入批注时，可能新建 `/word/comments.xml`（CT `…comments+xml`
 apply 插入图表时，可能新建 `/word/charts/chartN.xml`（CT `application/vnd.openxmlformats-officedocument.drawingml.chart+xml`）、chart 的 `.rels`，
 以及 `/word/embeddings/….xlsx`（CT `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`），
 并在宿主 `.rels` 与 `[Content_Types].xml` 上补关系与 Override。
+`type=chartex` 时写 `/word/charts/chartExN.xml`（CT `application/vnd.ms-office.chartex+xml`），
+宿主关系 Type 为 `http://schemas.microsoft.com/office/2014/relationships/chartEx`。
+chartEx `.rels` 除 embedding 外再指向同目录 `styleN.xml` / `colorsN.xml`
+（CT `application/vnd.ms-office.chartstyle+xml` / `application/vnd.ms-office.chartcolorstyle+xml`）。
 apply 或 create 插入 SmartArt 时，可能新建 `/word/diagrams/` 下的 data / layout / colors
  / quickStyle（CT 分别为 `application/vnd.openxmlformats-officedocument.drawingml.diagramData+xml`、
 `…diagramLayout+xml`、`…diagramColors+xml`、`…diagramQuickStyle+xml`），
@@ -526,6 +536,10 @@ apply 插入幻灯片图表时，可能新建 `/ppt/charts/chartN.xml`（CT `app
 以及 `/ppt/embeddings/Microsoft_Excel_WorksheetN.xlsx`（CT
 `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`）。
 该页 `.rels` 补一条 chart 关系（Type 以 `/chart` 结尾）。
+`type=chartex` 时写 `/ppt/charts/chartExN.xml`（CT `application/vnd.ms-office.chartex+xml`），
+关系 Type 为 `http://schemas.microsoft.com/office/2014/relationships/chartEx`。
+chartEx `.rels` 除 embedding 外再指向同目录 `styleN.xml` / `colorsN.xml`
+（CT `application/vnd.ms-office.chartstyle+xml` / `application/vnd.ms-office.chartcolorstyle+xml`）。
 chart 部件写 `c:externalData r:id="rId1"`，关系 Type 为
 `http://schemas.openxmlformats.org/officeDocument/2006/relationships/package`。
 宿主是 `p:graphicFrame`，位置与尺寸在 `p:xfrm`。create 给了 `slides[].charts` 时同样写入。

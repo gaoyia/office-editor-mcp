@@ -1144,6 +1144,7 @@ xlsx / pptx 的 `scope.tables` 不是同一件事：xlsx 仍拒绝；pptx 展开
   若同时给了 `scope.notes` / `scope.comments`，每条用户注或批注也带 `charts`（只含该注或批注段落上的，不含框内）。
   没有图表时为空数组。正文按主文档段落文档顺序，同一段内按 drawing 顺序。
   每张字段顺序：`id`、`docPrId`、`name`、`kind`、`cx`、`cy`、`wrap`、`type`，`type` 为 `ofPie` 时再跟 `ofPieType`，
+  `type` 为 `stock` 时再跟 `stockKind`，`type` 为 `surface` 时再跟 `surfaceKind`，
   `type` 为 `chartex` 时再跟 `layoutId`，然后 `title`、`catAxisTitle`、`valAxisTitle`、`series`、`legend`、`dataLabels`、`flags`、`stable`。
   `kind` / `cx` / `cy` / `wrap` / `docPrId` / `name` / `stable` 规则与图相同。
   `type` 为 `bar`、`col`、`line`、`pie`、`area`、`scatter`、`doughnut`、`radar`、`bubble`、`combo`、`stock`、`surface`、`ofPie`、`chartex` 或 `other`。
@@ -1152,7 +1153,12 @@ xlsx / pptx 的 `scope.tables` 不是同一件事：xlsx 仍拒绝；pptx 展开
   `scatterChart` 为 `scatter`，`doughnutChart` 为 `doughnut`，`radarChart` 为 `radar`，`bubbleChart` 为 `bubble`。
   `stockChart` 为 `stock`，`surfaceChart` / `surface3DChart` 为 `surface`，`ofPieChart` 为 `ofPie`。
   `type` 为 `ofPie` 时 `ofPieType` 取 `c:ofPieType/@val`（`pie` / `bar`），缺或对不上则当作 `pie`。
-  `type` 为 `chartex` 时 `layoutId` 取部件里第一条 `cx:series/@layoutId` 原文；没有该属性则没有这个键。
+  `type` 为 `stock` 时 `stockKind` 为 `ohlc`（四条 `c:ser` 或有 `c:upDownBars`）或 `hlc`。
+  带成交量的柱＋股价组合仍是 `combo`，不要报 `stockKind`。
+  `type` 为 `surface` 时 `stockKind` 不出现；`surfaceKind` 为 `wireframe`（`surface3DChart` 且 `wireframe=1`）、
+  `contourWire`（`surfaceChart` 且 `wireframe=1`）、`contour`（`surfaceChart`）或 `surface3d`。
+  `type` 为 `chartex` 时 `layoutId` 取部件里第一条 `cx:series/@layoutId` 原文；若任一条为 `paretoLine` 则报 `pareto`。
+  没有该属性则没有这个键。
   `plotArea` 里出现两种及以上系列包裹（例如 `barChart` 加 `lineChart`）则为 `combo`。其余（chartex 以外的扩展）为 `other`。
   `title` 取 `c:title` 可见文本（`c:tx` 的 `c:rich` 里 `a:t` 拼接，或 `c:strRef` 的 cache）；
   没有标题、或 `c:autoTitleDeleted/@val` 为真则为 `null`。
@@ -1166,7 +1172,8 @@ xlsx / pptx 的 `scope.tables` 不是同一件事：xlsx 仍拒绝；pptx 展开
   `id` 为 `{系列 id}/trendline:{k}`，`index` 与 `{k}` 从 1 起。
   `type` 取 `c:trendlineType/@val`，只认 `linear`、`exp`、`log`、`poly`、`power`、`movingAvg`；缺或对不上则该条仍列出，`type` 为原文。
   `displayRSquared` / `displayEquation` 看 `c:dispRSqr` / `c:dispEq`，缺省 `false`。`errorBars` 按该系列 `c:errBars` 顺序。
-  每条字段顺序：`id`、`index`、`dir`、`barType`、`valType`，有 `c:val` 且能解析成数字再跟 `value`。
+  每条字段顺序：`id`、`index`、`dir`、`barType`、`valType`，有 `c:val` 且能解析成数字再跟 `value`，
+  `valType` 为 `cust` 时再跟 `plus`、`minus`（取 `c:plus` / `c:minus` 的 `numLit` 各点，全是数字则 JSON 数字）。
   `id` 为 `{系列 id}/errorBars:{k}`，`index` 与 `{k}` 从 1 起。`dir` 取 `c:errDir/@val`（`x` / `y`），缺省 `y`。
   `barType` 取 `c:errBarType/@val`（`both` / `plus` / `minus`），缺省 `both`。
   `valType` 取 `c:errValType/@val`（`stdErr` / `stdDev` / `fixedVal` / `percentage` / `cust` / `lCaps`），缺省 `stdErr`。

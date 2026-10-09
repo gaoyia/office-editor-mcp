@@ -1248,9 +1248,9 @@ pptx 没有 `setChartWrap` / `setChartAnchor`，对应例外是 `deleteChart`、
 `flags` 含 `pivot` 时：`setChartSeries`、`addChartSeries`、`deleteChartSeries`、`setChartType` 报 `NotImplemented`；
 装饰 op、删图、尺寸、位置、绕排、锚点，以及趋势线 / 误差线 / 次轴 op 可以。
 `type` 为 `combo` 不再整张锁死，系列留在原来的包裹里改。`type` 为 `stock`、`surface` 或 `ofPie` 时：`setChartSeries` 与装饰 op 可以。
-`addChartSeries`、`deleteChartSeries` 仍报 `NotImplemented`（股价必须保持三条，曲面必须保持三条，复合饼必须保持一条；四条系列的开盘－最高－最低－收盘与带成交量的组合股价本期不写）。
-`setChartType` 可以在系列条数对得上时转入或转出这三种（见该 op）。`insertChart` / create 接受 `stock`、`surface`、`ofPie`。
-`chartex` 仍除删除与尺寸 / 位置 / 绕排 / 锚点外锁死；`insertChart` 不接受 `chartex`。xlsx 上发 `setChartWrap` / `setChartPos` 报 `InvalidField`。
+`addChartSeries`、`deleteChartSeries` 仍报 `NotImplemented`（股价必须保持与 `stockKind` 一致的条数，曲面必须保持三条，复合饼必须保持一条）。
+`setChartType` 可以在系列条数对得上时转入或转出这三种（见该 op）。`insertChart` / create 接受 `stock`、`surface`、`ofPie` 与带 `layoutId` 的 `chartex`。
+已写入的 `chartex` 仍除删除与尺寸 / 位置 / 绕排 / 锚点外锁死。xlsx 上发 `setChartWrap` / `setChartPos` 报 `InvalidField`。
 docx 上发 `setChartAnchor` / `setChartPos` 报 `InvalidField`。pptx 上发 `setChartWrap` / `setChartAnchor` 报 `InvalidField`。`insertChart` 不能插入透视图表。
 
 docx 改系列数据时必须同时改 chart 部件里的 cache（`c:numCache` / `c:strCache` / `c:numLit` / `c:strLit`）以及 embedding 工作簿里公式指向的单元格。
@@ -1336,13 +1336,26 @@ xlsx 能从已有系列的 `c:f` 推出右侧相邻空列则写入；推不出�
   - 只对 `type` 为 `ofPie` 有意义：`pie`（复合饼）或 `bar`（复合条）
   - 省略则：已是复合饼则保留原值，否则写 `pie`
   - 其它 `type` 上出现报 `InvalidField`
+- **`stockKind`**
+  - 可选
+  - 只对 `type` 为 `stock` 有意义：`hlc` 或 `ohlc`
+  - 省略则：三条系列当 `hlc`，四条当 `ohlc`
+  - `vhlc` / `vohlc` 只对 `insertChart` 有意义，本 op 上出现报 `InvalidField`
+  - 其它 `type` 上出现报 `InvalidField`
+- **`surfaceKind`**
+  - 可选
+  - 只对 `type` 为 `surface` 有意义：`surface3d`、`wireframe`、`contour` 或 `contourWire`
+  - 省略则：已是曲面则保留原值，否则写 `surface3d`
+  - 其它 `type` 上出现报 `InvalidField`
 
 不认识的枚举、或值为 `combo`、`chartex`，报 `InvalidField`。当前 `type` 为 `other` 或 `chartex` 时报 `NotImplemented`，不写文件。
-转成 `stock` 必须恰好三条系列，否则 `NotImplemented`。转成 `surface` 必须恰好三条系列，否则 `NotImplemented`。
+转成 `stock` 必须恰好三条（`hlc`）或四条（`ohlc`）系列，否则 `NotImplemented`。从组合图转成股价报 `NotImplemented`。
+转成 `surface` 必须恰好三条系列，否则 `NotImplemented`。
 转成 `ofPie` / `pie` / `doughnut` 必须恰好一条系列，否则 `NotImplemented`。从股价、曲面、复合饼转走时：系列结构按下面同一套规则改包裹；对不上则 `NotImplemented`。
-只改系列的包裹元素（`c:barChart`、`c:stockChart`、`c:surface3DChart`、`c:ofPieChart` 等）和 `c:barDir` / `c:ofPieType`。
+只改系列的包裹元素（`c:barChart`、`c:stockChart`、`c:surface3DChart`、`c:surfaceChart`、`c:ofPieChart` 等）和 `c:barDir` / `c:ofPieType` / `c:wireframe`。
 `bar` 与 `col` 只改 `barDir`。`bar` / `col` / `line` / `area` / `radar` 互换时留下 `c:ser`。
-转成 `stock` 写 `c:stockChart` 与 `c:hiLowLines`。转成 `surface` 写 `c:surface3DChart`、第三条 `c:serAx` 与 `c:view3D`。
+转成 `stock` 写 `c:stockChart` 与 `c:hiLowLines`；`ohlc` 再写 `c:upDownBars`。
+转成 `surface` 按 `surfaceKind` 写 `c:surface3DChart` 或 `c:surfaceChart`、第三条 `c:serAx` 与 `c:view3D`。
 转成 `ofPie` 去掉轴。从曲面转走时去掉 `c:serAx` 与 `c:view3D`。`pie` ↔ `doughnut` 只换包裹，必须恰好一条系列，否则 `NotImplemented`。
 转成 `pie` 或 `doughnut` 时必须恰好一条系列，否则 `NotImplemented`。与 `scatter` 互转：分类当 `xVal`、数值当 `yVal`，或反过来；系列结构对不上则 `NotImplemented`。
 `scatter` → `bubble`：留下 `xVal` / `yVal`，补上与 `yVal` 等长的 `bubbleSize`（值均为 `1`）。`bubble` → `scatter`：丢掉 `bubbleSize`。
@@ -1426,10 +1439,15 @@ id 不是趋势线 id 报 `InvalidId`。找不到报 `IdNotFound`。
 | `id` | 系列 id |
 | `dir` | 可选。`x` 或 `y`。省略则 `y` |
 | `barType` | 可选。`both`、`plus` 或 `minus`。省略则 `both` |
-| `valType` | 可选。`stdErr`、`stdDev`、`fixedVal` 或 `percentage`。省略则 `stdErr` |
-| `value` | 可选。数字。`stdDev` / `fixedVal` / `percentage` 时必须给；`stdErr` 时禁止给 |
+| `valType` | 可选。`stdErr`、`stdDev`、`fixedVal`、`percentage` 或 `cust`。省略则 `stdErr` |
+| `value` | 可选。数字。`stdDev` / `fixedVal` / `percentage` 时必须给；`stdErr` / `cust` 时禁止给 |
+| `plus` | 可选。非空数字数组。只对 `cust` 有意义 |
+| `minus` | 可选。非空数字数组。只对 `cust` 有意义 |
 
-写出一条 `c:errBars`。`valType` 为 `cust` 或 `lCaps` 报 `NotImplemented`。该系列已有同 `dir` 的误差线时报 `InvalidField`。
+写出一条 `c:errBars`。`valType` 为 `cust` 时必须给 `plus` 与 `minus`，写成 `c:plus` / `c:minus` 的 `c:numLit`，不必与系列点数相同。
+非 `cust` 时出现 `plus` / `minus` 报 `InvalidField`。`lCaps` 不是合法 `valType`，报 `InvalidField`。
+`dir` 为 `y` 或缺省时不写 `c:errDir`；`dir` 为 `x` 时写 `c:errDir val="x"`。
+该系列已有同 `dir` 的误差线时报 `InvalidField`。
 饼、圆环、复合饼、曲面、股价、`other`、`chartex` 上报 `InvalidField`。id 不是系列 id 报 `InvalidId`。
 
 ### setErrorBars
@@ -1438,9 +1456,10 @@ id 不是趋势线 id 报 `InvalidId`。找不到报 `IdNotFound`。
 | --- | --- |
 | `op` | 必须是 `"setErrorBars"` |
 | `id` | 误差线 id |
-| `dir` / `barType` / `valType` / `value` | 可选。规则与 `insertErrorBars` 相同 |
+| `dir` / `barType` / `valType` / `value` / `plus` / `minus` | 可选。规则与 `insertErrorBars` 相同 |
 
-至少给一个可写字段。改成 `stdErr` 时去掉 `c:val`。`cust` / `lCaps` 报 `NotImplemented`。id 不是误差线 id 报 `InvalidId`。
+至少给一个可写字段。改成 `stdErr` 时去掉 `c:val`。改成 `cust` 时必须有 `plus` 与 `minus`（本 op 给的，或原节点已有）。
+改成非 `cust` 时去掉 `c:plus` / `c:minus`。`lCaps` 报 `InvalidField`。id 不是误差线 id 报 `InvalidId`。
 
 ### deleteErrorBars
 
@@ -1486,11 +1505,35 @@ id 不是趋势线 id 报 `InvalidId`。找不到报 `IdNotFound`。
     - `stock`
     - `surface`
     - `ofPie`
+    - `chartex`
 - **`ofPieType`**
   - 可选
   - 只对 `type` 为 `ofPie` 有意义：`pie` 或 `bar`
   - 省略则写 `pie`
   - 其它 `type` 上出现报 `InvalidField`
+- **`stockKind`**
+  - 可选
+  - 只对 `type` 为 `stock` 有意义
+    - `hlc`：三条系列，`c:stockChart` 加 `c:hiLowLines`
+    - `ohlc`：四条系列，再写 `c:upDownBars`（`gapWidth=150`、空的 `upBars` / `downBars`）
+    - `vhlc`：四条系列，一条成交量柱加 HLC，inspect `type` 为 `combo`
+    - `vohlc`：五条系列，一条成交量柱加 OHLC，inspect `type` 为 `combo`
+  - 省略则：3 条当 `hlc`，4 条当 `ohlc`
+  - 其它 `type` 上出现报 `InvalidField`
+- **`surfaceKind`**
+  - 可选
+  - 只对 `type` 为 `surface` 有意义
+    - `surface3d`：`c:surface3DChart`，`wireframe=0`，`view3D` 为 `rotX=15` `rotY=20` `rAngAx=0`
+    - `wireframe`：同上包裹，`wireframe=1`
+    - `contour`：`c:surfaceChart`，`wireframe=0`，`view3D` 为 `rotX=90` `rotY=0` `rAngAx=0` `perspective=0`
+    - `contourWire`：俯视包裹，`wireframe=1`
+  - 省略则写 `surface3d`
+  - 其它 `type` 上出现报 `InvalidField`
+- **`layoutId`**
+  - `type` 为 `chartex` 时必须
+  - 可写：`waterfall`、`treemap`、`sunburst`、`funnel`、`clusteredColumn`、`boxWhisker`、`pareto`
+  - `regionMap` 报 `NotImplemented`
+  - 其它值或不在 `chartex` 上出现报 `InvalidField`
 - **`title`**
   - 可选
   - 图表标题
@@ -1567,14 +1610,19 @@ pptx：找不到该页 / 该母版 / 该版式报 `IdNotFound`。`id` 必须是 
 `id` 为 `slide:{n}/notes` 且该页还没有 notesSlide 时，按 `setNotesText` 同一套规则新建最小备注页再插图。不写演示文稿里的工作表。
 
 `type` 不认识或 `series` 为空报 `InvalidField`。`pie`、`doughnut` 与 `ofPie` 只允许恰好一条系列，否则报 `InvalidField`。
-`stock` 与 `surface` 必须恰好三条系列，否则报 `InvalidField`。
-`stock` 写成 `c:stockChart`（HLC：三条 `c:ser`、`c:hiLowLines`、两条轴），不写开盘－最高－最低－收盘，也不写带成交量的柱＋股价组合。
-`surface` 写成 `c:surface3DChart`（`wireframe=0`、三条系列、`c:serAx`、空的 `c:bandFmts`、`c:view3D`），不写俯视 `c:surfaceChart`。
+`surface` 必须恰好三条系列，否则报 `InvalidField`。
+`stock` 必须恰好三条（`hlc`）、四条（`ohlc` / `vhlc`）或五条（`vohlc`），否则报 `InvalidField`。
+`stock` 省略 `stockKind` 时：3 条写成 HLC，4 条写成 OHLC。
+`vhlc` / `vohlc` 写成共享两条轴的 `c:barChart`（成交量）加 `c:stockChart`；inspect 的 `type` 为 `combo`，不要改成 `stock`。
+`surface` 按 `surfaceKind` 写 `c:surface3DChart` 或 `c:surfaceChart`（三条系列、`c:serAx`、空的 `c:bandFmts`、对应 `c:view3D`）。
 `ofPie` 写成 `c:ofPieChart`（`c:ofPieType`、`gapWidth=150`、`secondPieSize=75`、`c:serLines`，没有 `c:axId`）。
+`chartex` 写成 `cx:chartSpace` 部件（路径 `chartExN.xml`，关系 Type 为 `http://schemas.microsoft.com/office/2014/relationships/chartEx`，
+CT `application/vnd.ms-office.chartex+xml`）。宿主 `a:graphicData/@uri` 为 chartex 命名空间，子元是 `cx:chart`。
+系列条数：`boxWhisker` 三条，`pareto` 两条，其余可写 layout 一条。xlsx 把数据写到 `dataFrom`，`cx:f` 用工作表 A1，不要抄 `_xlchart.v1.N`。
 `bubble` 的 `sizes` 省略则写成与 `values` 等长的 `1`。
 `type` 为 `combo` 时，每条系列必须带 `type`（`bar`、`col`、`line`、`area` 或 `scatter`），且至少出现两种不同包裹，否则报 `InvalidField`；
-`combo` 的系列 `type` 不能是 `pie`、`doughnut`、`radar`、`bubble`、`stock`、`surface`、`ofPie`。
-对非组合图的系列给 `type` 报 `InvalidField`。`chartex` 不是合法的 `insertChart` `type`。
+`combo` 的系列 `type` 不能是 `pie`、`doughnut`、`radar`、`bubble`、`stock`、`surface`、`ofPie`、`chartex`。
+对非组合图的系列给 `type` 报 `InvalidField`。`chartex` 不带 `layoutId` 报 `InvalidField`。
 
 ### deleteChart
 

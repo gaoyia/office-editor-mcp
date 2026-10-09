@@ -2,7 +2,7 @@
 
 use serde_json::{Map, Value};
 
-use crate::chart::{ChartType, NewSeries};
+use crate::chart::{ChartExtra, ChartType, NewSeries};
 use crate::error::{Error, ErrorKind, IdReason, ScopeNeed, TypeName};
 use crate::json;
 use crate::smartart::{ColorsKind, LayoutKind, NewPoint, Role, StyleKind};
@@ -715,6 +715,7 @@ pub struct InsertChartOp {
     pub master: Option<(usize, Option<usize>)>,
     pub chart_type: ChartType,
     pub of_pie_type: Option<String>,
+    pub extra: ChartExtra,
     pub title: Option<String>,
     pub series: Vec<NewSeries>,
     pub x: Option<i64>,
@@ -771,6 +772,7 @@ pub struct SetChartTypeOp {
     pub target: chart::ChartTarget,
     pub chart_type: ChartType,
     pub of_pie_type: Option<String>,
+    pub extra: ChartExtra,
 }
 
 #[derive(Debug, Clone)]
@@ -5979,6 +5981,9 @@ fn parse_insert_chart(obj: &Map<String, Value>, i: usize) -> Result<InsertChartO
             "id",
             "type",
             "ofPieType",
+            "stockKind",
+            "surfaceKind",
+            "layoutId",
             "title",
             "series",
             "x",
@@ -5999,7 +6004,9 @@ fn parse_insert_chart(obj: &Map<String, Value>, i: usize) -> Result<InsertChartO
     )?;
     let title = parse_chart_title_field(obj.get("title"), &format!("ops[{i}].title"))?;
     let series = parse_insert_series(obj.get("series"), &format!("ops[{i}]"), "insertChart")?;
-    validate_insert_series(chart_type, &series, &format!("ops[{i}].series"))?;
+    let extra =
+        crate::chart::parse_chart_extra(obj, chart_type, series.len(), &format!("ops[{i}]"), true)?;
+    validate_insert_series(chart_type, &series, &extra, &format!("ops[{i}].series"))?;
     let x = parse_off_field(obj.get("x"), i, "x")?;
     let y = parse_off_field(obj.get("y"), i, "y")?;
     if x.is_some() != y.is_some() {
@@ -6028,6 +6035,7 @@ fn parse_insert_chart(obj: &Map<String, Value>, i: usize) -> Result<InsertChartO
         master,
         chart_type,
         of_pie_type,
+        extra,
         title,
         series,
         x,
@@ -6170,7 +6178,19 @@ fn parse_delete_chart_series(
 }
 
 fn parse_set_chart_type(obj: &Map<String, Value>, i: usize) -> Result<SetChartTypeOp, Error> {
-    deny_keys(obj, i, &["op", "id", "type", "ofPieType"])?;
+    deny_keys(
+        obj,
+        i,
+        &[
+            "op",
+            "id",
+            "type",
+            "ofPieType",
+            "stockKind",
+            "surfaceKind",
+            "layoutId",
+        ],
+    )?;
     let id = require_id(obj, i)?;
     let target = chart::parse_chart_id(&id, &format!("ops[{i}].id"))?;
     let chart_type = parse_chart_type_field(obj.get("type"), &format!("ops[{i}].type"))?;
@@ -6187,11 +6207,13 @@ fn parse_set_chart_type(obj: &Map<String, Value>, i: usize) -> Result<SetChartTy
         of_pie_type.as_deref(),
         &format!("ops[{i}].ofPieType"),
     )?;
+    let extra = crate::chart::parse_chart_extra(obj, chart_type, 0, &format!("ops[{i}]"), false)?;
     Ok(SetChartTypeOp {
         id,
         target,
         chart_type,
         of_pie_type,
+        extra,
     })
 }
 
@@ -6405,7 +6427,13 @@ fn parse_delete_trendline(obj: &Map<String, Value>, i: usize) -> Result<DeleteTr
 }
 
 fn parse_insert_error_bars(obj: &Map<String, Value>, i: usize) -> Result<InsertErrorBarsOp, Error> {
-    deny_keys(obj, i, &["op", "id", "dir", "barType", "valType", "value"])?;
+    deny_keys(
+        obj,
+        i,
+        &[
+            "op", "id", "dir", "barType", "valType", "value", "plus", "minus",
+        ],
+    )?;
     let id = require_id(obj, i)?;
     let (target, index) = chart::parse_series_id(&id, &format!("ops[{i}].id"))?;
     let spec = crate::chart::remain::parse_error_bars_write(obj, i, true)?;
@@ -6418,7 +6446,13 @@ fn parse_insert_error_bars(obj: &Map<String, Value>, i: usize) -> Result<InsertE
 }
 
 fn parse_set_error_bars(obj: &Map<String, Value>, i: usize) -> Result<SetErrorBarsOp, Error> {
-    deny_keys(obj, i, &["op", "id", "dir", "barType", "valType", "value"])?;
+    deny_keys(
+        obj,
+        i,
+        &[
+            "op", "id", "dir", "barType", "valType", "value", "plus", "minus",
+        ],
+    )?;
     let id = require_id(obj, i)?;
     let (target, index, eb_index) = chart::parse_error_bars_id(&id, &format!("ops[{i}].id"))?;
     let spec = crate::chart::remain::parse_error_bars_write(obj, i, false)?;
@@ -6858,12 +6892,13 @@ fn parse_chart_title_field(v: Option<&Value>, path: &str) -> Result<Option<Strin
 fn validate_insert_series(
     chart_type: ChartType,
     series: &[NewSeries],
+    extra: &ChartExtra,
     path: &str,
 ) -> Result<(), Error> {
     if chart_type.needs_one_series() && series.len() != 1 {
         return Err(Error::with_path(ErrorKind::PieNeedsOneSeries, path));
     }
-    crate::chart::validate_insert_series_len(chart_type, series.len(), path)?;
+    crate::chart::validate_insert_series_len(chart_type, series.len(), extra, path)?;
     if chart_type == ChartType::Combo {
         let kinds: std::collections::HashSet<&str> = series
             .iter()
@@ -7093,7 +7128,19 @@ pub(crate) fn parse_create_chart(
     deny_keys_at(
         obj,
         prefix,
-        &["type", "ofPieType", "title", "series", "x", "y", "cx", "cy"],
+        &[
+            "type",
+            "ofPieType",
+            "stockKind",
+            "surfaceKind",
+            "layoutId",
+            "title",
+            "series",
+            "x",
+            "y",
+            "cx",
+            "cy",
+        ],
     )?;
     let chart_type = parse_chart_type_field(obj.get("type"), &format!("{prefix}.type"))?;
     let of_pie_type =
@@ -7105,7 +7152,8 @@ pub(crate) fn parse_create_chart(
     )?;
     let title = parse_chart_title_field(obj.get("title"), &format!("{prefix}.title"))?;
     let series = parse_insert_series(obj.get("series"), prefix, "create")?;
-    validate_insert_series(chart_type, &series, &format!("{prefix}.series"))?;
+    let extra = crate::chart::parse_chart_extra(obj, chart_type, series.len(), prefix, true)?;
+    validate_insert_series(chart_type, &series, &extra, &format!("{prefix}.series"))?;
     let x = parse_off_at(obj.get("x"), &format!("{prefix}.x"), "x")?;
     let y = parse_off_at(obj.get("y"), &format!("{prefix}.y"), "y")?;
     if x.is_some() != y.is_some() {
@@ -7134,6 +7182,7 @@ pub(crate) fn parse_create_chart(
         master: None,
         chart_type,
         of_pie_type,
+        extra,
         title,
         series,
         x,

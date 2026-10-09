@@ -928,16 +928,16 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             "This chart type does not support trendlines".into()
         }
         ErrorKind::InvalidErrorBars => {
-            "dir must be x or y; barType must be both, plus, or minus; valType must be stdErr, stdDev, fixedVal, or percentage".into()
+            "dir must be x or y; barType must be both, plus, or minus; valType must be stdErr, stdDev, fixedVal, percentage, or cust".into()
         }
         ErrorKind::CustomErrorBars => {
-            "Custom error bars (cust / lCaps) are not implemented".into()
+            "valType cust needs plus and minus arrays".into()
         }
         ErrorKind::NeedErrorBarsValue => {
             "value is required when valType is stdDev, fixedVal, or percentage".into()
         }
         ErrorKind::ErrorBarsValueOnStdErr => {
-            "value is not allowed when valType is stdErr".into()
+            "value is not allowed when valType is stdErr or cust".into()
         }
         ErrorKind::ErrorBarsNotSupported => {
             "This chart type does not support error bars".into()
@@ -956,7 +956,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             format!("This chart cannot be edited with this operation: {id}")
         }
         ErrorKind::InvalidChartType => {
-            "type must be bar, col, line, pie, area, scatter, doughnut, radar, bubble, stock, surface, or ofPie; insertChart also allows combo".into()
+            "type must be bar, col, line, pie, area, scatter, doughnut, radar, bubble, stock, surface, or ofPie; insertChart also allows combo or chartex".into()
         }
         ErrorKind::InvalidTransitionType => {
             "type must be a writable slide transition, or null to clear".into()
@@ -1016,7 +1016,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             "A pie, doughnut, or of-pie chart must have exactly one series".into()
         }
         ErrorKind::StockNeedsThreeSeries => {
-            "A stock chart must have exactly three series".into()
+            "A stock chart series count must match stockKind: 3 for hlc, 4 for ohlc or vhlc, 5 for vohlc".into()
         }
         ErrorKind::SurfaceNeedsThreeSeries => {
             "A surface chart must have exactly three series".into()
@@ -1024,6 +1024,16 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::InvalidOfPieType => {
             "ofPieType must be pie or bar, and is only valid when type is ofPie".into()
         }
+        ErrorKind::InvalidStockKind => {
+            "stockKind must be hlc, ohlc, vhlc, or vohlc, and is only valid when type is stock; setChartType cannot use vhlc or vohlc".into()
+        }
+        ErrorKind::InvalidSurfaceKind => {
+            "surfaceKind must be surface3d, wireframe, contour, or contourWire, and is only valid when type is surface".into()
+        }
+        ErrorKind::InvalidLayoutId => {
+            "layoutId must be waterfall, treemap, sunburst, funnel, clusteredColumn, boxWhisker, or pareto, and is only valid when type is chartex".into()
+        }
+        ErrorKind::RegionMapChart => "regionMap charts are not implemented".into(),
         ErrorKind::SizesOnNonBubble => "sizes is only valid on a bubble series".into(),
         ErrorKind::InvalidComboSeriesType => {
             "series type must be bar, col, line, area, or scatter, and only combo charts may use it".into()

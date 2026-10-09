@@ -1,5 +1,6 @@
 //! `c:chart` 部件（§21.2）：类型、标题、系列 cache、图例与标签。embedding 在 `embed`。不含 xlsx 锚点。
 
+pub mod chartex;
 pub mod embed;
 pub mod remain;
 
@@ -19,10 +20,43 @@ pub const A_NS: &str = "http://schemas.openxmlformats.org/drawingml/2006/main";
 pub const REL_NS: &str = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
 pub const REL_CHART: &str =
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart";
+pub const REL_CHARTEX: &str = chartex::REL_CHARTEX;
 pub const CT_CHART: &str = "application/vnd.openxmlformats-officedocument.drawingml.chart+xml";
+pub const CT_CHARTEX: &str = chartex::CT_CHARTEX;
 
 pub const DEFAULT_CX: i64 = 5_486_400;
 pub const DEFAULT_CY: i64 = 3_200_400;
+
+/// 画布 `graphicData` 里的图表指针：普通图是 `c:chart`，chartex 是 `cx:chart`。
+pub fn graphic_chart_el(rid: &str, chartex: bool) -> Element {
+    if chartex {
+        Element::new("cx:chart")
+            .with_attr("xmlns:cx", CHARTEX_NS)
+            .with_attr("xmlns:r", REL_NS)
+            .with_attr("r:id", rid)
+    } else {
+        Element::new("c:chart")
+            .with_attr("xmlns:c", CHART_NS)
+            .with_attr("xmlns:r", REL_NS)
+            .with_attr("r:id", rid)
+    }
+}
+
+pub fn part_stem(ty: ChartType) -> &'static str {
+    if ty == ChartType::Chartex {
+        "chartEx"
+    } else {
+        "chart"
+    }
+}
+
+pub fn rel_and_ct(ty: ChartType) -> (&'static str, &'static str, &'static str) {
+    if ty == ChartType::Chartex {
+        (REL_CHARTEX, CT_CHARTEX, CHARTEX_NS)
+    } else {
+        (REL_CHART, CT_CHART, CHART_NS)
+    }
+}
 
 pub const WRAPPERS: &[&str] = &[
     "barChart",
@@ -58,6 +92,7 @@ pub enum ChartType {
     Stock,
     Surface,
     OfPie,
+    Chartex,
 }
 
 impl ChartType {
@@ -76,6 +111,7 @@ impl ChartType {
             "stock" => Some(Self::Stock),
             "surface" => Some(Self::Surface),
             "ofPie" => Some(Self::OfPie),
+            "chartex" => Some(Self::Chartex),
             _ => None,
         }
     }
@@ -106,6 +142,7 @@ impl ChartType {
             Self::Stock => "stock",
             Self::Surface => "surface",
             Self::OfPie => "ofPie",
+            Self::Chartex => "chartex",
         }
     }
 
@@ -119,7 +156,7 @@ impl ChartType {
             Self::Doughnut => "doughnutChart",
             Self::Radar => "radarChart",
             Self::Bubble => "bubbleChart",
-            Self::Combo => "barChart",
+            Self::Combo | Self::Chartex => "barChart",
             Self::Stock => "stockChart",
             Self::Surface => "surface3DChart",
             Self::OfPie => "ofPieChart",
@@ -139,7 +176,115 @@ impl ChartType {
     }
 
     pub fn needs_three_series(self) -> bool {
-        matches!(self, Self::Stock | Self::Surface)
+        matches!(self, Self::Surface)
+    }
+}
+
+/// 股价写入变体。体积图 inspect 仍是 `combo`。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StockKind {
+    Hlc,
+    Ohlc,
+    Vhlc,
+    Vohlc,
+}
+
+impl StockKind {
+    pub fn parse(s: &str) -> Option<Self> {
+        match s {
+            "hlc" => Some(Self::Hlc),
+            "ohlc" => Some(Self::Ohlc),
+            "vhlc" => Some(Self::Vhlc),
+            "vohlc" => Some(Self::Vohlc),
+            _ => None,
+        }
+    }
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Hlc => "hlc",
+            Self::Ohlc => "ohlc",
+            Self::Vhlc => "vhlc",
+            Self::Vohlc => "vohlc",
+        }
+    }
+
+    pub fn series_len(self) -> usize {
+        match self {
+            Self::Hlc => 3,
+            Self::Ohlc | Self::Vhlc => 4,
+            Self::Vohlc => 5,
+        }
+    }
+
+    pub fn is_volume(self) -> bool {
+        matches!(self, Self::Vhlc | Self::Vohlc)
+    }
+}
+
+/// 曲面写入变体。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SurfaceKind {
+    Surface3d,
+    Wireframe,
+    Contour,
+    ContourWire,
+}
+
+impl SurfaceKind {
+    pub fn parse(s: &str) -> Option<Self> {
+        match s {
+            "surface3d" => Some(Self::Surface3d),
+            "wireframe" => Some(Self::Wireframe),
+            "contour" => Some(Self::Contour),
+            "contourWire" => Some(Self::ContourWire),
+            _ => None,
+        }
+    }
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Surface3d => "surface3d",
+            Self::Wireframe => "wireframe",
+            Self::Contour => "contour",
+            Self::ContourWire => "contourWire",
+        }
+    }
+
+    pub fn wrapper(self) -> &'static str {
+        match self {
+            Self::Surface3d | Self::Wireframe => "surface3DChart",
+            Self::Contour | Self::ContourWire => "surfaceChart",
+        }
+    }
+
+    pub fn wireframe(self) -> bool {
+        matches!(self, Self::Wireframe | Self::ContourWire)
+    }
+
+    pub fn is_contour(self) -> bool {
+        matches!(self, Self::Contour | Self::ContourWire)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ChartExtra {
+    pub stock: StockKind,
+    pub stock_given: bool,
+    pub surface: SurfaceKind,
+    pub surface_given: bool,
+    pub layout_id: Option<String>,
+}
+
+impl Default for ChartExtra {
+    fn default() -> Self {
+        Self {
+            stock: StockKind::Hlc,
+            stock_given: false,
+            surface: SurfaceKind::Surface3d,
+            surface_given: false,
+            layout_id: None,
+        }
     }
 }
 
@@ -235,15 +380,62 @@ pub fn inspect_of_pie_type(space: &Element) -> Option<String> {
     })
 }
 
-/// chartex 第一条 `cx:series/@layoutId`。没有该属性则没有这个键。
+/// chartex 的 `layoutId`：任一条 `paretoLine` 报 `pareto`，否则取第一条原文。
 pub fn inspect_layout_id(space: &Element) -> Option<String> {
-    let ser = find_desc(space, "series")?;
-    ser.attr_local("layoutId")
-        .filter(|s| !s.is_empty())
-        .map(str::to_string)
+    let mut first = None;
+    let mut pareto = false;
+    for ser in descendants_local(space, "series") {
+        let Some(id) = ser.attr_local("layoutId").filter(|s| !s.is_empty()) else {
+            continue;
+        };
+        if id == "paretoLine" {
+            pareto = true;
+        }
+        if first.is_none() {
+            first = Some(id.to_string());
+        }
+    }
+    if pareto {
+        Some("pareto".into())
+    } else {
+        first
+    }
 }
 
-/// 在 `type` 之后按契约插入 `ofPieType` / `layoutId`。
+pub fn inspect_stock_kind(space: &Element) -> String {
+    let n = series_count(space);
+    let has_ud = has_local(space, "upDownBars");
+    if n >= 4 || has_ud {
+        StockKind::Ohlc.as_str().into()
+    } else {
+        StockKind::Hlc.as_str().into()
+    }
+}
+
+pub fn inspect_surface_kind(space: &Element) -> String {
+    let plot = match plot_area(space) {
+        Some(p) => p,
+        None => return SurfaceKind::Surface3d.as_str().into(),
+    };
+    let has_2d = plot
+        .element_children()
+        .any(|c| c.local_name() == "surfaceChart");
+    let wf = plot.element_children().any(|w| {
+        matches!(w.local_name(), "surfaceChart" | "surface3DChart")
+            && w.child_by_local("wireframe")
+                .and_then(|e| e.attr_local("val"))
+                .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+                .unwrap_or(false)
+    });
+    match (has_2d, wf) {
+        (true, true) => SurfaceKind::ContourWire.as_str().into(),
+        (true, false) => SurfaceKind::Contour.as_str().into(),
+        (false, true) => SurfaceKind::Wireframe.as_str().into(),
+        _ => SurfaceKind::Surface3d.as_str().into(),
+    }
+}
+
+/// 在 `type` 之后按契约插入 `ofPieType` / `stockKind` / `surfaceKind` / `layoutId`。
 pub fn insert_type_keys(m: &mut Map<String, Value>, ty: &str, space: &Element) {
     m.insert("type".into(), json!(ty));
     if ty == "ofPie" {
@@ -251,6 +443,12 @@ pub fn insert_type_keys(m: &mut Map<String, Value>, ty: &str, space: &Element) {
             "ofPieType".into(),
             json!(inspect_of_pie_type(space).unwrap_or_else(|| "pie".into())),
         );
+    }
+    if ty == "stock" {
+        m.insert("stockKind".into(), json!(inspect_stock_kind(space)));
+    }
+    if ty == "surface" {
+        m.insert("surfaceKind".into(), json!(inspect_surface_kind(space)));
     }
     if ty == "chartex" {
         if let Some(id) = inspect_layout_id(space) {
@@ -292,17 +490,177 @@ pub fn of_pie_for_insert(given: Option<&str>) -> &str {
     }
 }
 
-pub fn validate_insert_series_len(ty: ChartType, n: usize, path: &str) -> Result<(), Error> {
+pub fn parse_stock_kind(v: Option<&Value>, path: &str) -> Result<Option<StockKind>, Error> {
+    match v {
+        None | Some(Value::Null) => Ok(None),
+        Some(Value::String(s)) => StockKind::parse(s)
+            .map(Some)
+            .ok_or_else(|| Error::with_path(ErrorKind::InvalidStockKind, path)),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "stockKind".into(),
+                expected: crate::error::TypeName::String,
+            },
+            path,
+        )),
+    }
+}
+
+pub fn parse_surface_kind(v: Option<&Value>, path: &str) -> Result<Option<SurfaceKind>, Error> {
+    match v {
+        None | Some(Value::Null) => Ok(None),
+        Some(Value::String(s)) => SurfaceKind::parse(s)
+            .map(Some)
+            .ok_or_else(|| Error::with_path(ErrorKind::InvalidSurfaceKind, path)),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "surfaceKind".into(),
+                expected: crate::error::TypeName::String,
+            },
+            path,
+        )),
+    }
+}
+
+pub fn parse_layout_id_field(v: Option<&Value>, path: &str) -> Result<Option<String>, Error> {
+    match v {
+        None | Some(Value::Null) => Ok(None),
+        Some(Value::String(s)) if chartex::is_region_map(s) => {
+            Err(Error::with_path(ErrorKind::RegionMapChart, path))
+        }
+        Some(Value::String(s)) => chartex::parse_layout_id(s)
+            .map(|s| Some(s.to_string()))
+            .ok_or_else(|| Error::with_path(ErrorKind::InvalidLayoutId, path)),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "layoutId".into(),
+                expected: crate::error::TypeName::String,
+            },
+            path,
+        )),
+    }
+}
+
+pub fn reject_stock_on_other(
+    ty: ChartType,
+    stock: Option<StockKind>,
+    path: &str,
+) -> Result<(), Error> {
+    if stock.is_some() && ty != ChartType::Stock {
+        return Err(Error::with_path(ErrorKind::InvalidStockKind, path));
+    }
+    Ok(())
+}
+
+pub fn reject_surface_on_other(
+    ty: ChartType,
+    surface: Option<SurfaceKind>,
+    path: &str,
+) -> Result<(), Error> {
+    if surface.is_some() && ty != ChartType::Surface {
+        return Err(Error::with_path(ErrorKind::InvalidSurfaceKind, path));
+    }
+    Ok(())
+}
+
+pub fn reject_layout_on_other(
+    ty: ChartType,
+    layout: Option<&str>,
+    path: &str,
+) -> Result<(), Error> {
+    if layout.is_some() && ty != ChartType::Chartex {
+        return Err(Error::with_path(ErrorKind::InvalidLayoutId, path));
+    }
+    Ok(())
+}
+
+/// `insert` 为真时体积图合法，且缺 `stockKind` 可按系列条数推断。
+pub fn parse_chart_extra(
+    obj: &Map<String, Value>,
+    ty: ChartType,
+    series_len: usize,
+    prefix: &str,
+    insert: bool,
+) -> Result<ChartExtra, Error> {
+    let stock_raw = parse_stock_kind(obj.get("stockKind"), &format!("{prefix}.stockKind"))?;
+    let surface_raw = parse_surface_kind(obj.get("surfaceKind"), &format!("{prefix}.surfaceKind"))?;
+    let layout = parse_layout_id_field(obj.get("layoutId"), &format!("{prefix}.layoutId"))?;
+    reject_stock_on_other(ty, stock_raw, &format!("{prefix}.stockKind"))?;
+    reject_surface_on_other(ty, surface_raw, &format!("{prefix}.surfaceKind"))?;
+    reject_layout_on_other(ty, layout.as_deref(), &format!("{prefix}.layoutId"))?;
+    if ty == ChartType::Chartex && !insert {
+        return Err(Error::with_path(
+            ErrorKind::InvalidChartType,
+            format!("{prefix}.type"),
+        ));
+    }
+    if ty == ChartType::Chartex && layout.is_none() {
+        return Err(Error::with_path(
+            ErrorKind::MissingField {
+                field: "layoutId".into(),
+            },
+            format!("{prefix}.layoutId"),
+        ));
+    }
+    let stock = match (ty, stock_raw) {
+        (ChartType::Stock, Some(k)) => {
+            if !insert && k.is_volume() {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidStockKind,
+                    format!("{prefix}.stockKind"),
+                ));
+            }
+            k
+        }
+        (ChartType::Stock, None) if insert => match series_len {
+            3 => StockKind::Hlc,
+            4 => StockKind::Ohlc,
+            _ => StockKind::Hlc,
+        },
+        (ChartType::Stock, None) => StockKind::Hlc,
+        _ => StockKind::Hlc,
+    };
+    let surface = match (ty, surface_raw) {
+        (ChartType::Surface, Some(k)) => k,
+        (ChartType::Surface, None) => SurfaceKind::Surface3d,
+        _ => SurfaceKind::Surface3d,
+    };
+    Ok(ChartExtra {
+        stock,
+        stock_given: stock_raw.is_some(),
+        surface,
+        surface_given: surface_raw.is_some(),
+        layout_id: layout,
+    })
+}
+
+pub fn validate_insert_series_len(
+    ty: ChartType,
+    n: usize,
+    extra: &ChartExtra,
+    path: &str,
+) -> Result<(), Error> {
     if ty.needs_one_series() && n != 1 {
         return Err(Error::with_path(ErrorKind::PieNeedsOneSeries, path));
     }
     if ty.needs_three_series() && n != 3 {
-        let kind = if ty == ChartType::Stock {
-            ErrorKind::StockNeedsThreeSeries
-        } else {
-            ErrorKind::SurfaceNeedsThreeSeries
+        return Err(Error::with_path(ErrorKind::SurfaceNeedsThreeSeries, path));
+    }
+    if ty == ChartType::Stock && n != extra.stock.series_len() {
+        return Err(Error::with_path(ErrorKind::StockNeedsThreeSeries, path));
+    }
+    if ty == ChartType::Chartex {
+        let Some(layout) = extra.layout_id.as_deref() else {
+            return Err(Error::with_path(
+                ErrorKind::MissingField {
+                    field: "layoutId".into(),
+                },
+                path,
+            ));
         };
-        return Err(Error::with_path(kind, path));
+        if n != chartex::series_len_for(layout) {
+            return Err(Error::with_path(ErrorKind::InvalidLayoutId, path));
+        }
     }
     Ok(())
 }
@@ -442,6 +800,9 @@ pub fn series_json<F>(
 where
     F: FnMut(&str) -> Option<Vec<Value>>,
 {
+    if space.child_by_local("chartData").is_some() {
+        return Ok(chartex::series_json(chart_id, space));
+    }
     let mut out = Vec::new();
     let mut index = 0usize;
     let Some(plot) = plot_area(space) else {
@@ -1113,9 +1474,10 @@ pub fn convert_type(
     space: &mut Element,
     target: ChartType,
     of_pie_type: Option<&str>,
+    extra: &ChartExtra,
     i: usize,
 ) -> Result<(), Error> {
-    if target == ChartType::Combo {
+    if matches!(target, ChartType::Combo | ChartType::Chartex) {
         return Err(Error::with_path(
             ErrorKind::InvalidChartType,
             format!("ops[{i}].type"),
@@ -1129,8 +1491,33 @@ pub fn convert_type(
             format!("ops[{i}].type"),
         ));
     }
+    if current == "combo" && target == ChartType::Stock {
+        return Err(Error::with_path(
+            ErrorKind::ChartTypeNotConvertible,
+            format!("ops[{i}].type"),
+        ));
+    }
+    if extra.stock_given && extra.stock.is_volume() && target == ChartType::Stock {
+        return Err(Error::with_path(
+            ErrorKind::InvalidStockKind,
+            format!("ops[{i}].stockKind"),
+        ));
+    }
     let of_pie = resolve_of_pie_for_convert(space, target, of_pie_type, &current);
-    if target.needs_three_series() && series_count(space) != 3 {
+    if target == ChartType::Surface && series_count(space) != 3 {
+        return Err(Error::with_path(
+            ErrorKind::ChartTypeNotConvertible,
+            format!("ops[{i}].type"),
+        ));
+    }
+    let stock_kind = if extra.stock_given {
+        extra.stock
+    } else if series_count(space) == 4 {
+        StockKind::Ohlc
+    } else {
+        StockKind::Hlc
+    };
+    if target == ChartType::Stock && series_count(space) != stock_kind.series_len() {
         return Err(Error::with_path(
             ErrorKind::ChartTypeNotConvertible,
             format!("ops[{i}].type"),
@@ -1142,6 +1529,12 @@ pub fn convert_type(
         }
         if target == ChartType::OfPie {
             set_of_pie_type(space, &of_pie);
+        }
+        if target == ChartType::Surface && extra.surface_given {
+            apply_surface_kind(space, extra.surface);
+        }
+        if target == ChartType::Stock && extra.stock_given {
+            apply_stock_kind(space, extra.stock);
         }
         return Ok(());
     }
@@ -1197,12 +1590,90 @@ pub fn convert_type(
         for ser in &mut sers {
             reshape_ser(ser, target);
         }
-        let wrap = build_type_wrapper(target, sers, &ax_ids, &of_pie);
+        let wrap = build_type_wrapper(target, extra.surface, stock_kind, sers, &ax_ids, &of_pie);
         let at = insert_at.unwrap_or(plot.children.len());
         plot.children.insert(at, Node::Element(wrap));
     }
     retarget_axes(space, target, from_xy);
+    if target == ChartType::Surface {
+        apply_surface_kind(space, extra.surface);
+    }
+    if target == ChartType::Stock {
+        apply_stock_kind(space, stock_kind);
+    }
     Ok(())
+}
+
+fn apply_stock_kind(space: &mut Element, kind: StockKind) {
+    let Some(plot) = plot_area_mut(space) else {
+        return;
+    };
+    for w in plot.element_children_mut() {
+        if w.local_name() != "stockChart" {
+            continue;
+        }
+        let has = w.child_by_local("upDownBars").is_some();
+        if kind == StockKind::Ohlc && !has {
+            w.push_element(up_down_bars_el());
+        }
+        if kind == StockKind::Hlc && has {
+            w.children.retain(|n| match n {
+                Node::Element(e) => e.local_name() != "upDownBars",
+                _ => true,
+            });
+        }
+    }
+}
+
+fn up_down_bars_el() -> Element {
+    let mut el = Element::new("c:upDownBars");
+    el.push_element(Element::new("c:gapWidth").with_attr("val", "150"));
+    el.push_element(Element::new("c:upBars"));
+    el.push_element(Element::new("c:downBars"));
+    el
+}
+
+fn apply_surface_kind(space: &mut Element, kind: SurfaceKind) {
+    let wf = if kind.wireframe() { "1" } else { "0" };
+    if let Some(plot) = plot_area_mut(space) {
+        for w in plot.element_children_mut() {
+            if matches!(w.local_name(), "surfaceChart" | "surface3DChart") {
+                w.name = format!("c:{}", kind.wrapper());
+                if let Some(el) = w.child_by_local_mut("wireframe") {
+                    el.set_attr("val", wf);
+                } else {
+                    w.children.insert(
+                        0,
+                        Node::Element(Element::new("c:wireframe").with_attr("val", wf)),
+                    );
+                }
+            }
+        }
+    }
+    set_surface_view3d(space, kind);
+}
+
+fn set_surface_view3d(space: &mut Element, kind: SurfaceKind) {
+    let Some(chart) = inner_chart_mut(space) else {
+        return;
+    };
+    let xml = if kind.is_contour() {
+        r#"<c:view3D xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:rotX val="90"/><c:rotY val="0"/><c:rAngAx val="0"/><c:perspective val="0"/></c:view3D>"#
+    } else {
+        r#"<c:view3D xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:rotX val="15"/><c:rotY val="20"/><c:rAngAx val="0"/></c:view3D>"#
+    };
+    chart.children.retain(|n| match n {
+        Node::Element(e) => e.local_name() != "view3D",
+        _ => true,
+    });
+    if let Ok(doc) = xml::parse(xml.as_bytes()) {
+        let at = chart
+            .children
+            .iter()
+            .position(|n| matches!(n, Node::Element(e) if e.local_name() == "plotArea"))
+            .unwrap_or(chart.children.len());
+        chart.children.insert(at, Node::Element(doc.root));
+    }
 }
 
 fn resolve_of_pie_for_convert(
@@ -1394,9 +1865,33 @@ pub fn build_chart_xml(
     origin: CellRef,
     include_external_data: bool,
     of_pie_type: Option<&str>,
+    extra: &ChartExtra,
 ) -> String {
+    if ty == ChartType::Chartex {
+        return chartex::build(
+            extra.layout_id.as_deref().unwrap_or("funnel"),
+            title,
+            series,
+            cats,
+            sheet,
+            origin,
+            true,
+            include_external_data,
+        );
+    }
     if ty == ChartType::Combo {
         return build_combo_chart_xml(title, series, cats, sheet, origin, include_external_data);
+    }
+    if ty == ChartType::Stock && extra.stock.is_volume() {
+        return build_volume_stock_xml(
+            title,
+            series,
+            cats,
+            sheet,
+            origin,
+            include_external_data,
+            extra.stock == StockKind::Vohlc,
+        );
     }
     let xy = ty.is_xy();
     let mut sers = String::new();
@@ -1464,9 +1959,22 @@ pub fn build_chart_xml(
             size_pair,
         ));
     }
-    let wrapper = ty.wrapper();
-    let extra = wrapper_prefix_xml(ty, of_pie_for_insert(of_pie_type));
-    let suffix = wrapper_suffix_xml(ty);
+    let wrapper = if ty == ChartType::Surface {
+        extra.surface.wrapper()
+    } else {
+        ty.wrapper()
+    };
+    let wf = if extra.surface.wireframe() { "1" } else { "0" };
+    let prefix = match ty {
+        ChartType::Surface => format!(r#"<c:wireframe val="{wf}"/>"#),
+        _ => wrapper_prefix_xml(ty, of_pie_for_insert(of_pie_type)),
+    };
+    let suffix = match ty {
+        ChartType::Stock if extra.stock == StockKind::Ohlc => {
+            r#"<c:hiLowLines/><c:upDownBars><c:gapWidth val="150"/><c:upBars/><c:downBars/></c:upDownBars>"#
+        }
+        _ => wrapper_suffix_xml(ty),
+    };
     let axes = if ty.no_axes() {
         String::new()
     } else if xy {
@@ -1485,11 +1993,86 @@ pub fn build_chart_xml(
     };
     chart_space_xml(
         title,
-        &format!("<c:{wrapper}>{extra}{sers}<c:dLbls><c:showLegendKey val=\"0\"/><c:showVal val=\"0\"/><c:showCatName val=\"0\"/><c:showSerName val=\"0\"/><c:showPercent val=\"0\"/></c:dLbls>{suffix}{ax_ids}</c:{wrapper}>"),
+        &format!("<c:{wrapper}>{prefix}{sers}<c:dLbls><c:showLegendKey val=\"0\"/><c:showVal val=\"0\"/><c:showCatName val=\"0\"/><c:showSerName val=\"0\"/><c:showPercent val=\"0\"/></c:dLbls>{suffix}{ax_ids}</c:{wrapper}>"),
         &axes,
         include_external_data,
-        ty == ChartType::Surface,
+        if ty == ChartType::Surface {
+            Some(extra.surface)
+        } else {
+            None
+        },
     )
+}
+
+fn build_volume_stock_xml(
+    title: Option<&str>,
+    series: &[NewSeries],
+    cats: &[Value],
+    sheet: &str,
+    origin: CellRef,
+    embed: bool,
+    ohlc: bool,
+) -> String {
+    let mut vol = String::new();
+    let mut stock = String::new();
+    for (i, ser) in series.iter().enumerate() {
+        let col = origin.col + (i as u32) + 1;
+        let name = ser.name.clone().unwrap_or_else(|| format!("系列{}", i + 1));
+        let cat_ref = format_a1_formula(
+            sheet,
+            CellRef {
+                col: origin.col,
+                row: origin.row + 1,
+            },
+            CellRef {
+                col: origin.col,
+                row: origin.row + cats.len() as u32,
+            },
+        );
+        let val_ref = format_a1_formula(
+            sheet,
+            CellRef {
+                col,
+                row: origin.row + 1,
+            },
+            CellRef {
+                col,
+                row: origin.row + ser.values.len() as u32,
+            },
+        );
+        let name_ref = format_a1_cell(
+            sheet,
+            CellRef {
+                col,
+                row: origin.row,
+            },
+        );
+        let xml = ser_xml(
+            i as u32,
+            &name,
+            &name_ref,
+            &cat_ref,
+            cats,
+            &val_ref,
+            &ser.values,
+            false,
+            None,
+        );
+        if i == 0 {
+            vol.push_str(&xml);
+        } else {
+            stock.push_str(&xml);
+        }
+    }
+    let ud = if ohlc {
+        r#"<c:upDownBars><c:gapWidth val="150"/><c:upBars/><c:downBars/></c:upDownBars>"#
+    } else {
+        ""
+    };
+    let body = format!(
+        r#"<c:barChart><c:barDir val="col"/><c:grouping val="clustered"/><c:varyColors val="0"/>{vol}<c:gapWidth val="150"/><c:axId val="1"/><c:axId val="2"/></c:barChart><c:stockChart>{stock}<c:hiLowLines/>{ud}<c:axId val="1"/><c:axId val="2"/></c:stockChart>"#
+    );
+    chart_space_xml(title, &body, &ax_pair(), embed, None)
 }
 
 pub fn ser_xml(
@@ -1695,7 +2278,7 @@ fn build_combo_chart_xml(
     } else {
         ax_pair()
     };
-    chart_space_xml(title, &wrappers, &axes, include_external_data, false)
+    chart_space_xml(title, &wrappers, &axes, include_external_data, None)
 }
 
 fn chart_space_xml(
@@ -1703,7 +2286,7 @@ fn chart_space_xml(
     plot_body: &str,
     axes: &str,
     embed: bool,
-    surface: bool,
+    surface: Option<SurfaceKind>,
 ) -> String {
     let title_xml = match title {
         Some(t) if !t.is_empty() => format!(r#"<c:autoTitleDeleted val="0"/>{}"#, title_el(t)),
@@ -1714,12 +2297,16 @@ fn chart_space_xml(
     } else {
         ""
     };
-    let view3d = if surface {
-        r#"<c:view3D><c:rotX val="15"/><c:rotY val="20"/><c:rAngAx val="0"/></c:view3D>"#
-    } else {
-        ""
+    let view3d = match surface {
+        Some(k) if k.is_contour() => {
+            r#"<c:view3D><c:rotX val="90"/><c:rotY val="0"/><c:rAngAx val="0"/><c:perspective val="0"/></c:view3D>"#
+        }
+        Some(_) => {
+            r#"<c:view3D><c:rotX val="15"/><c:rotY val="20"/><c:rAngAx val="0"/></c:view3D>"#
+        }
+        None => "",
     };
-    let walls = if surface {
+    let walls = if surface.is_some() {
         r#"<c:floor><c:thickness val="0"/></c:floor><c:sideWall><c:thickness val="0"/></c:sideWall><c:backWall><c:thickness val="0"/></c:backWall>"#
     } else {
         ""
@@ -1746,7 +2333,7 @@ fn wrapper_prefix_xml(ty: ChartType, of_pie: &str) -> String {
         ChartType::Combo => {
             r#"<c:barDir val="col"/><c:grouping val="clustered"/><c:varyColors val="0"/>"#.into()
         }
-        ChartType::Stock => String::new(),
+        ChartType::Stock | ChartType::Chartex => String::new(),
         ChartType::Surface => r#"<c:wireframe val="0"/>"#.into(),
         ChartType::OfPie => format!(r#"<c:ofPieType val="{of_pie}"/><c:varyColors val="1"/>"#),
     }
@@ -1796,7 +2383,7 @@ pub(crate) fn wrapper_prefix_els(ty: ChartType, of_pie: &str) -> Vec<Element> {
             Element::new("c:grouping").with_attr("val", "clustered"),
             Element::new("c:varyColors").with_attr("val", "0"),
         ],
-        ChartType::Stock => Vec::new(),
+        ChartType::Stock | ChartType::Chartex => Vec::new(),
         ChartType::Surface => vec![Element::new("c:wireframe").with_attr("val", "0")],
         ChartType::OfPie => vec![
             Element::new("c:ofPieType").with_attr("val", of_pie),
@@ -1915,6 +2502,13 @@ fn title_text(title: Option<&Element>) -> Option<String> {
         let s = v.text_content();
         return if s.is_empty() { None } else { Some(s) };
     }
+    if let Some(v) = tx
+        .child_by_local("txData")
+        .and_then(|d| d.child_by_local("v"))
+    {
+        let s = v.text_content();
+        return if s.is_empty() { None } else { Some(s) };
+    }
     if let Some(rich) = find_desc(tx, "rich") {
         let s = join_t(rich);
         return if s.is_empty() { None } else { Some(s) };
@@ -2009,19 +2603,34 @@ fn extract_wrapper_sers(plot: &mut Element) -> (Option<usize>, Vec<Element>, Vec
 
 fn build_type_wrapper(
     ty: ChartType,
+    surface: SurfaceKind,
+    stock: StockKind,
     sers: Vec<Element>,
     ax_ids: &[String],
     of_pie: &str,
 ) -> Element {
-    let mut w = Element::new(format!("c:{}", ty.wrapper()));
-    for p in wrapper_prefix_els(ty, of_pie) {
-        w.push_element(p);
+    let wrap_name = if ty == ChartType::Surface {
+        surface.wrapper()
+    } else {
+        ty.wrapper()
+    };
+    let mut w = Element::new(format!("c:{wrap_name}"));
+    if ty == ChartType::Surface {
+        let wf = if surface.wireframe() { "1" } else { "0" };
+        w.push_element(Element::new("c:wireframe").with_attr("val", wf));
+    } else {
+        for p in wrapper_prefix_els(ty, of_pie) {
+            w.push_element(p);
+        }
     }
     for s in sers {
         w.push_element(s);
     }
     for s in wrapper_suffix_els(ty) {
         w.push_element(s);
+    }
+    if ty == ChartType::Stock && stock == StockKind::Ohlc {
+        w.push_element(up_down_bars_el());
     }
     if !ty.no_axes() {
         let a = ax_ids.first().map(String::as_str).unwrap_or("1");

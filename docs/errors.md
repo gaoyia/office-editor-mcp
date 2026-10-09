@@ -134,11 +134,11 @@
   - `setCell` 的 `sharedRef` 同时盖住两组及以上已有共享组，或 `sharedRef` / `arrayRef` 盖住数组公式、数据表，或 `arrayRef` 盖住已有共享组
   - `mergeRange` 盖住仍有从属格的共享公式主格、数组公式主格或数据表公式
   - 对墨迹批注发 `setCommentText` / `replyComment`，或在墨迹批注内插图 / 插图表 / 插 SmartArt / 插删段
-  - 对 `other` / `chartex` 发除 `deleteChart`、`setChartSize`、`setChartPos`、`setChartWrap`、`setChartAnchor` 以外的图表 op
+  - 对 `other` / 已写入的 `chartex` 发除 `deleteChart`、`setChartSize`、`setChartPos`、`setChartWrap`、`setChartAnchor` 以外的图表 op
   - 对 `stock` / `surface` / `ofPie` 发 `addChartSeries` / `deleteChartSeries`
   - 对透视图表发 `setChartSeries` / `addChartSeries` / `deleteChartSeries` / `setChartType`
   - `setChartType` 不能无损转换
-  - 自定义误差线（`cust` / `lCaps`）
+  - `regionMap` 地图 chartex
   - xlsx 图表公式是三维引用、带运算符的定义名，或不连续引用长度对不上
   - `setSmartArtLayout` 当前 uniqueId 不在库内 `list` / `org` / `cycle` 三族里
   - 对图表工作表上仅剩的那张图发 `deleteChart`
@@ -699,14 +699,16 @@
 - xlsx `twoCell` 图表的 `setChartSize` 出现 `cx` / `cy` 报 `InvalidField`
 - 改右下角请给 `to`
 - `deleteChartSeries` 删光时报 `InvalidField`
-- `other` / `chartex` 图除 `deleteChart`、`setChartSize`、`setChartPos`、`setChartWrap`、`setChartAnchor` 外报 `NotImplemented`
+- `other` / 已写入的 `chartex` 图除 `deleteChart`、`setChartSize`、`setChartPos`、`setChartWrap`、`setChartAnchor` 外报 `NotImplemented`
 - 带趋势线、误差线或次轴的图可以改结构
 - 透视图表改系列、增删系列或改类型报 `NotImplemented`
 - 改标题、图例、标签、删除、尺寸、位置、绕排与锚点可以
 - 组合图不再整张锁死
 - `insertChart` / `setChartType` 的 `type` 现含 `doughnut`、`radar`、`bubble`
-- `insertChart` 另含 `combo`
-- `setChartType` 收到 `combo` 报 `InvalidField`
+- `insertChart` 另含 `combo` 与带 `layoutId` 的 `chartex`
+- `setChartType` 收到 `combo` 或 `chartex` 报 `InvalidField`
+- `insertChart` 的 `stockKind` / `surfaceKind` / `layoutId` 见主契约
+- `insertErrorBars` 的 `valType=cust` 必须给 `plus` / `minus`；`lCaps` 报 `InvalidField`
 - 找不到 SmartArt 时，SmartArt op 报 `IdNotFound`（`insertSmartArt` 除外）
 - docx 的 `insertSmartArt` 的 `id` 必须是段落 id
 - xlsx 的 `insertSmartArt` 的 `id` 必须是 `sheet:{name}`，且该表为 `worksheet`

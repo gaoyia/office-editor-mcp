@@ -855,13 +855,13 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::TrendlinePeriodNotMovingAvg => "period 只对 movingAvg 有意义".into(),
         ErrorKind::TrendlineNotSupported => "这种图表类型不支持趋势线".into(),
         ErrorKind::InvalidErrorBars => {
-            "dir 必须是 x 或 y；barType 必须是 both、plus 或 minus；valType 必须是 stdErr、stdDev、fixedVal 或 percentage".into()
+            "dir 必须是 x 或 y；barType 必须是 both、plus 或 minus；valType 必须是 stdErr、stdDev、fixedVal、percentage 或 cust".into()
         }
-        ErrorKind::CustomErrorBars => "自定义误差线（cust / lCaps）本期不做".into(),
+        ErrorKind::CustomErrorBars => "valType 为 cust 时必须给 plus 与 minus 数组".into(),
         ErrorKind::NeedErrorBarsValue => {
             "valType 为 stdDev、fixedVal 或 percentage 时必须给 value".into()
         }
-        ErrorKind::ErrorBarsValueOnStdErr => "valType 为 stdErr 时不能给 value".into(),
+        ErrorKind::ErrorBarsValueOnStdErr => "valType 为 stdErr 或 cust 时不能给 value".into(),
         ErrorKind::ErrorBarsNotSupported => "这种图表类型不支持误差线".into(),
         ErrorKind::ErrorBarsDuplicateDir => "该系列这个方向已经有误差线".into(),
         ErrorKind::SecondaryAxisNotSupported => "这种图表类型不支持次轴".into(),
@@ -871,7 +871,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             format!("此图表不能按此操作编辑：{id}")
         }
         ErrorKind::InvalidChartType => {
-            "type 必须是 bar、col、line、pie、area、scatter、doughnut、radar、bubble、stock、surface 或 ofPie；insertChart 还可为 combo".into()
+            "type 必须是 bar、col、line、pie、area、scatter、doughnut、radar、bubble、stock、surface 或 ofPie；insertChart 还可为 combo 或 chartex".into()
         }
         ErrorKind::InvalidTransitionType => {
             "type 必须是可写的幻灯片切换名，或 null 表示清除".into()
@@ -924,11 +924,23 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::InvalidChartAxis => "axis 必须是 cat 或 val，且图表里要有对应主轴".into(),
         ErrorKind::InvalidLegendPos => "pos 必须是 b、t、l、r 或 tr".into(),
         ErrorKind::PieNeedsOneSeries => "饼图、圆环图与复合饼必须恰好一条系列".into(),
-        ErrorKind::StockNeedsThreeSeries => "股价图必须恰好三条系列".into(),
+        ErrorKind::StockNeedsThreeSeries => {
+            "股价图系列条数必须与 stockKind 一致：hlc 三条，ohlc 或 vhlc 四条，vohlc 五条".into()
+        }
         ErrorKind::SurfaceNeedsThreeSeries => "曲面图必须恰好三条系列".into(),
         ErrorKind::InvalidOfPieType => {
             "ofPieType 必须是 pie 或 bar，且只对 type 为 ofPie 有意义".into()
         }
+        ErrorKind::InvalidStockKind => {
+            "stockKind 必须是 hlc、ohlc、vhlc 或 vohlc，且只对 type 为 stock 有意义；setChartType 不能用 vhlc 或 vohlc".into()
+        }
+        ErrorKind::InvalidSurfaceKind => {
+            "surfaceKind 必须是 surface3d、wireframe、contour 或 contourWire，且只对 type 为 surface 有意义".into()
+        }
+        ErrorKind::InvalidLayoutId => {
+            "layoutId 必须是 waterfall、treemap、sunburst、funnel、clusteredColumn、boxWhisker 或 pareto，且只对 type 为 chartex 有意义".into()
+        }
+        ErrorKind::RegionMapChart => "regionMap 地图图本期不做".into(),
         ErrorKind::SizesOnNonBubble => "sizes 只对气泡系列有意义".into(),
         ErrorKind::InvalidComboSeriesType => {
             "系列 type 必须是 bar、col、line、area 或 scatter，且只有组合图才能带".into()

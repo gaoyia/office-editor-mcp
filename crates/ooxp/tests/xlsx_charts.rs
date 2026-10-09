@@ -759,11 +759,13 @@ fn insert_stock_surface_ofpie() {
     let charts = tree["sheets"][0]["charts"].as_array().unwrap();
     let stock = charts.iter().find(|c| c["type"] == "stock").unwrap();
     assert_eq!(stock["series"].as_array().unwrap().len(), 3);
+    assert_eq!(stock["stockKind"], "hlc");
     let xml = part_text(&out, "xl/charts/chart1.xml");
     assert!(xml.contains("stockChart"));
     assert!(xml.contains("hiLowLines"));
     let surface = charts.iter().find(|c| c["type"] == "surface").unwrap();
     assert_eq!(surface["series"].as_array().unwrap().len(), 3);
+    assert_eq!(surface["surfaceKind"], "surface3d");
     let sxml = part_text(&out, "xl/charts/chart2.xml");
     assert!(sxml.contains("surface3DChart"));
     assert!(sxml.contains("view3D"));
@@ -885,4 +887,159 @@ fn insert_rare_rejects_wrong_series_and_chartex() {
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::NotImplemented);
     assert_eq!(std::fs::read(&stock).unwrap(), before);
+}
+
+#[test]
+fn insert_ohlc_contour_chartex_and_cust_error_bars() {
+    let src = create_book("cx-remain");
+    let out = tmp("cx-remain");
+    apply(
+        &src,
+        &out,
+        json!([
+            {
+                "op": "insertChart",
+                "id": "sheet:Sheet1",
+                "type": "stock",
+                "stockKind": "ohlc",
+                "from": "E2",
+                "dataFrom": "A10",
+                "series": [
+                    { "name": "开", "categories": ["甲", "乙"], "values": [20, 25] },
+                    { "name": "高", "categories": ["甲", "乙"], "values": [30, 40] },
+                    { "name": "低", "categories": ["甲", "乙"], "values": [10, 15] },
+                    { "name": "收", "categories": ["甲", "乙"], "values": [22, 28] }
+                ]
+            },
+            {
+                "op": "insertChart",
+                "id": "sheet:Sheet1",
+                "type": "surface",
+                "surfaceKind": "contourWire",
+                "from": "E20",
+                "dataFrom": "F10",
+                "series": [
+                    { "name": "甲", "categories": ["A", "B"], "values": [1, 2] },
+                    { "name": "乙", "categories": ["A", "B"], "values": [3, 3] },
+                    { "name": "丙", "categories": ["A", "B"], "values": [2, 4] }
+                ]
+            },
+            {
+                "op": "insertChart",
+                "id": "sheet:Sheet1",
+                "type": "chartex",
+                "layoutId": "funnel",
+                "from": "E38",
+                "dataFrom": "K10",
+                "title": "漏斗",
+                "series": [{ "name": "阶段", "categories": ["A", "B", "C"], "values": [10, 6, 2] }]
+            }
+        ]),
+    )
+    .unwrap();
+    let tree = inspect_charts(&out);
+    let charts = tree["sheets"][0]["charts"].as_array().unwrap();
+    let ohlc = charts.iter().find(|c| c["type"] == "stock").unwrap();
+    assert_eq!(ohlc["stockKind"], "ohlc");
+    assert_eq!(ohlc["series"].as_array().unwrap().len(), 4);
+    let xml = part_text(&out, "xl/charts/chart1.xml");
+    assert!(xml.contains("upDownBars"));
+    let surface = charts.iter().find(|c| c["type"] == "surface").unwrap();
+    assert_eq!(surface["surfaceKind"], "contourWire");
+    let sxml = part_text(&out, "xl/charts/chart2.xml");
+    assert!(sxml.contains("surfaceChart"));
+    assert!(sxml.contains(r#"<c:wireframe val="1"/>"#));
+    let cx = charts.iter().find(|c| c["type"] == "chartex").unwrap();
+    assert_eq!(cx["layoutId"], "funnel");
+    assert_eq!(cx["title"], "漏斗");
+    let cxml = part_text(&out, "xl/charts/chartEx1.xml");
+    assert!(cxml.contains("cx:chartSpace"));
+    assert!(cxml.contains(r#"layoutId="funnel""#));
+    assert!(cxml.contains("Sheet1"));
+    let crels = part_text(&out, "xl/charts/_rels/chartEx1.xml.rels");
+    assert!(crels.contains("chartStyle"));
+    assert!(crels.contains("chartColorStyle"));
+    let draw = part_text(&out, "xl/drawings/drawing1.xml");
+    assert!(draw.contains("http://schemas.microsoft.com/office/drawing/2014/chartex"));
+    let vol = tmp("cx-vhlc");
+    apply(
+        &src,
+        &vol,
+        json!([{
+            "op": "insertChart",
+            "id": "sheet:Sheet1",
+            "type": "stock",
+            "stockKind": "vhlc",
+            "from": "E2",
+            "dataFrom": "A10",
+            "series": [
+                { "name": "量", "categories": ["甲", "乙"], "values": [100, 80] },
+                { "name": "高", "categories": ["甲", "乙"], "values": [30, 40] },
+                { "name": "低", "categories": ["甲", "乙"], "values": [10, 15] },
+                { "name": "收", "categories": ["甲", "乙"], "values": [22, 28] }
+            ]
+        }]),
+    )
+    .unwrap();
+    let vch = &inspect_charts(&vol)["sheets"][0]["charts"][0];
+    assert_eq!(vch["type"], "combo");
+    assert!(vch.get("stockKind").is_none());
+    let col = insert_col("cx-eb");
+    let eb = tmp("cx-eb");
+    apply(
+        &col,
+        &eb,
+        json!([{
+            "op": "insertErrorBars",
+            "id": "sheet:Sheet1/chart:1/series:0",
+            "valType": "cust",
+            "plus": [0.5, 0.4, 0.3],
+            "minus": [0.2, 0.1, 0.1]
+        }]),
+    )
+    .unwrap();
+    let bars = &inspect_charts(&eb)["sheets"][0]["charts"][0]["series"][0]["errorBars"][0];
+    assert_eq!(bars["dir"], "y");
+    assert_eq!(bars["valType"], "cust");
+    assert_eq!(bars["plus"], json!([0.5, 0.4, 0.3]));
+    let exml = part_text(&eb, "xl/charts/chart1.xml");
+    assert!(!exml.contains("<c:errDir"));
+    let err = apply(
+        &src,
+        &tmp("cx-region"),
+        json!([{
+            "op": "insertChart",
+            "id": "sheet:Sheet1",
+            "type": "chartex",
+            "layoutId": "regionMap",
+            "from": "E2",
+            "dataFrom": "A10",
+            "series": [{ "values": [1] }]
+        }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::NotImplemented);
+    let err = apply(
+        &col,
+        &tmp("cx-set-type"),
+        json!([{
+            "op": "setChartType",
+            "id": "sheet:Sheet1/chart:1",
+            "type": "chartex",
+            "layoutId": "funnel"
+        }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+    let err = apply(
+        &col,
+        &tmp("cx-lcaps"),
+        json!([{
+            "op": "insertErrorBars",
+            "id": "sheet:Sheet1/chart:1/series:0",
+            "valType": "lCaps"
+        }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
 }

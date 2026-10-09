@@ -856,6 +856,10 @@ define_error_kinds! {
     StockNeedsThreeSeries => vec![Self::StockNeedsThreeSeries],
     SurfaceNeedsThreeSeries => vec![Self::SurfaceNeedsThreeSeries],
     InvalidOfPieType => vec![Self::InvalidOfPieType],
+    InvalidStockKind => vec![Self::InvalidStockKind],
+    InvalidSurfaceKind => vec![Self::InvalidSurfaceKind],
+    InvalidLayoutId => vec![Self::InvalidLayoutId],
+    RegionMapChart => vec![Self::RegionMapChart],
     SizesOnNonBubble => vec![Self::SizesOnNonBubble],
     InvalidComboSeriesType => vec![Self::InvalidComboSeriesType],
     ChartTypeNotConvertible => vec![Self::ChartTypeNotConvertible],
@@ -1785,6 +1789,7 @@ impl ErrorKind {
             | Self::TrendlinePeriodNotMovingAvg
             | Self::TrendlineNotSupported
             | Self::InvalidErrorBars
+            | Self::CustomErrorBars
             | Self::NeedErrorBarsValue
             | Self::ErrorBarsValueOnStdErr
             | Self::ErrorBarsNotSupported
@@ -1828,6 +1833,9 @@ impl ErrorKind {
             | Self::StockNeedsThreeSeries
             | Self::SurfaceNeedsThreeSeries
             | Self::InvalidOfPieType
+            | Self::InvalidStockKind
+            | Self::InvalidSurfaceKind
+            | Self::InvalidLayoutId
             | Self::SizesOnNonBubble
             | Self::InvalidComboSeriesType
             | Self::NeedChartCategories
@@ -1971,7 +1979,7 @@ impl ErrorKind {
             | Self::SectionBreakPara
             | Self::RestrictedChart { .. }
             | Self::ChartTypeNotConvertible
-            | Self::CustomErrorBars
+            | Self::RegionMapChart
             | Self::SmartArtLayoutNotConvertible
             | Self::DeleteChartsheetLast
             | Self::ChartFormulaNotA1

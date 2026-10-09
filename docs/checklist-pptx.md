@@ -6,7 +6,7 @@
 本机若 `PowerPoint.Application` 被 WPS 抢走，直接启动 `POWERPNT.EXE` 再挂 COM，不要走被抢的 ProgID。Office 16 的对象模型在 `mdiClass` 上。
 
 C、I、A、Pp、Pvg、Pem、P3d、Pom、Pc、Psa、Pn、Pcm、Pm、Ps、Tf、Tfl、Sg、Pt、Tn、Tr、Td、Mt、Am、Aw、Mm、Mw、Md、Ts、Ho、Nh、Nm、Phl、Phr、Phx、Pcip、Pmd、Psc、Cs、Po、Cr、Cq、Pz、Pzr、Pw、Pph、
-Pf、Pcg 各组由 `manual-check/office/cases/pptx-*.ps1` 自动判定，
+Pf、Pcg、Pcx 各组由 `manual-check/office/cases/pptx-*.ps1` 自动判定，
 跑 `pwsh -File manual-check\office\run.ps1 -Case 'pptx-*'` 即可复现。O1 已放弃，与 xlsx / docx 相同。
 
 ## 本机结果（2026-09-28）
@@ -42,6 +42,7 @@ Ps1–Ps5、Sg1–Sg5、Pt1–Pt6、Tn1–Tn5、Am1–Am5、Mm1–Mm5、Ho1–Ho
 2026-10-10 补跑 `pptx-zoom-remain.ps1`，Pzr1–Pzr5 通过。无 Repair。
 2026-10-10 补跑 `pptx-protect-hash.ps1`，Pph1–Pph5 通过。无 Repair。
 2026-10-10 补跑 `pptx-create-round4.ps1`，Cq1–Cq5 通过。无 Repair。
+2026-10-10 补跑 `pptx-charts-rare-remain.ps1`，Pcx1–Pcx5 通过。无 Repair。
 
 - **C1** ✅
   - PowerPoint 16.0 能打开 `manual-check/office/out/pptx-create.pptx`，标题栏无 Repair
@@ -415,6 +416,10 @@ Ps1–Ps5、Sg1–Sg5、Pt1–Pt6、Tn1–Tn5、Am1–Am5、Mm1–Mm5、Ho1–Ho
   - 插入股价 / 曲面 / 复合条无 Repair
   - 股价三条转柱形、复合饼转饼
   - 增系列与 `type=chartex`、两条股价均拒写
+- **Pcx1–Pcx5** ✅
+  - PowerPoint 16.0：`pptx-charts-rare-remain.ps1`，5 PASS / 0 FAIL
+  - OHLC / 俯视线框 / 自定义误差线 / chartex funnel 无 Repair
+  - 缺 `layoutId` 与两条股价 `InvalidField`，`regionMap` `NotImplemented`
 - **O1** 🚫
   - 领域层不做原样保存，与 xlsx 清单相同
   - 零脏写回见 OPC 库测试
@@ -673,6 +678,29 @@ COM 认 `Type=30`（`mso3DModel`）。批注内本期不插。
   - 通过标准：✅ 对股价 `addChartSeries` 得 `NotImplemented`
   - 源无 chartex 时 `insertChart type=chartex` 得 `InvalidField`
   - 两条系列的股价 `insertChart` 得 `InvalidField`
+  - 均未写坏文件
+
+## 图表稀有剩余
+
+OHLC、线框 / 俯视曲面、自定义误差线、chartex 写入。脚本 `manual-check/office/cases/pptx-charts-rare-remain.ps1`。编号用 Pcx。不要和 Pq、Pc、Cq 混。
+
+- **Pcx1**
+  - 检查：OHLC
+  - 通过标准：✅ `insertChart` `type=stock` 四条系列后 PowerPoint 无修复，`type` 为 `stock`，`stockKind` 为 `ohlc`
+- **Pcx2**
+  - 检查：俯视线框
+  - 通过标准：✅ `insertChart` `type=surface` `surfaceKind=contourWire` 三条系列后无修复，`surfaceKind` 为 `contourWire`
+- **Pcx3**
+  - 检查：自定义误差线
+  - 通过标准：✅ 柱形图 `insertErrorBars` `valType=cust` 后无修复，系列上 `plus` / `minus` 对得上
+- **Pcx4**
+  - 检查：chartex funnel
+  - 通过标准：✅ `insertChart` `type=chartex` `layoutId=funnel` 后无修复，`type` 为 `chartex`，`layoutId` 为 `funnel`
+- **Pcx5**
+  - 检查：仍拒绝
+  - 通过标准：✅ `type=chartex` 不带 `layoutId` 得 `InvalidField`
+  - `layoutId=regionMap` 得 `NotImplemented`
+  - 两条系列的股价仍 `InvalidField`
   - 均未写坏文件
 
 ## SmartArt

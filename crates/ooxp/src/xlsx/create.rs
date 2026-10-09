@@ -17,7 +17,7 @@ use super::request::{
 };
 use super::shape;
 use super::smartart;
-use crate::chart::{ChartType, NewSeries};
+use crate::chart::{ChartExtra, ChartType, NewSeries};
 use crate::error::{Error, ErrorKind, SheetNameReason, TypeName};
 use crate::opc::{
     ContentTypes, Package, Relationship, Relationships, CONTENT_TYPES_PART, ROOT_RELS_PART,
@@ -411,6 +411,9 @@ fn parse_chartsheet_sheet(
                 | "kind"
                 | "type"
                 | "ofPieType"
+                | "stockKind"
+                | "surfaceKind"
+                | "layoutId"
                 | "title"
                 | "series"
                 | "dataFrom"
@@ -454,6 +457,7 @@ fn parse_chartsheet_sheet(
             data_sheet,
             chart_type: common.chart_type,
             of_pie_type: common.of_pie_type,
+            extra: common.extra,
             title: common.title,
             series: common.series,
             cx: common.cx,
@@ -1789,6 +1793,7 @@ fn parse_charts(
 struct ChartCommon {
     chart_type: ChartType,
     of_pie_type: Option<String>,
+    extra: ChartExtra,
     title: Option<String>,
     series: Vec<NewSeries>,
     cx: Option<i64>,
@@ -1832,9 +1837,11 @@ fn parse_chart_common(obj: &Map<String, Value>, prefix: &str) -> Result<ChartCom
         }
     };
     let series = parse_chart_series(obj.get("series"), prefix, chart_type)?;
+    let extra = crate::chart::parse_chart_extra(obj, chart_type, series.len(), prefix, true)?;
     crate::chart::validate_insert_series_len(
         chart_type,
         series.len(),
+        &extra,
         &format!("{prefix}.series"),
     )?;
     let of_pie_type =
@@ -1881,6 +1888,7 @@ fn parse_chart_common(obj: &Map<String, Value>, prefix: &str) -> Result<ChartCom
     Ok(ChartCommon {
         chart_type,
         of_pie_type,
+        extra,
         title,
         series,
         cx,
@@ -1909,6 +1917,9 @@ fn parse_chart(v: &Value, prefix: &str, sheet: &str) -> Result<InsertChartOp, Er
             k.as_str(),
             "type"
                 | "ofPieType"
+                | "stockKind"
+                | "surfaceKind"
+                | "layoutId"
                 | "title"
                 | "series"
                 | "from"
@@ -1977,6 +1988,7 @@ fn parse_chart(v: &Value, prefix: &str, sheet: &str) -> Result<InsertChartOp, Er
         sheet: sheet.to_string(),
         chart_type: common.chart_type,
         of_pie_type: common.of_pie_type,
+        extra: common.extra,
         title: common.title,
         series: common.series,
         cx: common.cx,

@@ -28,6 +28,8 @@ pub struct ErrorBarsWrite {
     pub bar_type: Option<String>,
     pub val_type: Option<String>,
     pub value: Option<f64>,
+    pub plus: Option<Vec<f64>>,
+    pub minus: Option<Vec<f64>>,
 }
 
 pub fn split_member<'a>(id: &'a str, member: &str) -> Option<(&'a str, &'a str)> {
@@ -235,7 +237,14 @@ fn error_bars_json(chart_id: &str, ser_index: usize, ser: &Element) -> Vec<Value
         m.insert("dir".into(), json!(dir));
         m.insert("barType".into(), json!(bar_type));
         m.insert("valType".into(), json!(val_type));
-        if let Some(v) = c
+        if val_type == "cust" {
+            if let Some(plus) = num_lit_vals(c.child_by_local("plus")) {
+                m.insert("plus".into(), json!(plus));
+            }
+            if let Some(minus) = num_lit_vals(c.child_by_local("minus")) {
+                m.insert("minus".into(), json!(minus));
+            }
+        } else if let Some(v) = c
             .child_by_local("val")
             .and_then(|e| e.attr_local("val"))
             .and_then(|s| s.parse::<f64>().ok())
@@ -420,7 +429,16 @@ pub fn insert_error_bars(
     let dir = spec.dir.as_deref().unwrap_or("y");
     let bar_type = spec.bar_type.as_deref().unwrap_or("both");
     let val_type = spec.val_type.as_deref().unwrap_or("stdErr");
-    check_error_bars_fields(dir, bar_type, val_type, spec.value, true, i)?;
+    check_error_bars_fields(
+        dir,
+        bar_type,
+        val_type,
+        spec.value,
+        spec.plus.as_deref(),
+        spec.minus.as_deref(),
+        true,
+        i,
+    )?;
     let dup = with_ser_mut(space, ser_index, |ser| {
         ser.element_children().any(|c| {
             c.local_name() == "errBars"
@@ -437,7 +455,14 @@ pub fn insert_error_bars(
             format!("ops[{i}].dir"),
         ));
     }
-    let el = build_error_bars(dir, bar_type, val_type, spec.value);
+    let el = build_error_bars(
+        dir,
+        bar_type,
+        val_type,
+        spec.value,
+        spec.plus.as_deref(),
+        spec.minus.as_deref(),
+    );
     with_ser_mut(space, ser_index, |ser| {
         insert_before_data(
             ser,
@@ -498,7 +523,10 @@ pub fn set_error_bars(
     });
     drop(bars);
     drop(sers);
-    let require_value_rules = spec.val_type.is_some() || spec.value.is_some();
+    let require_value_rules = spec.val_type.is_some()
+        || spec.value.is_some()
+        || spec.plus.is_some()
+        || spec.minus.is_some();
     check_error_bars_fields(
         &dir,
         &bar_type,
@@ -508,6 +536,8 @@ pub fn set_error_bars(
         } else {
             spec.value
         },
+        spec.plus.as_deref(),
+        spec.minus.as_deref(),
         require_value_rules,
         i,
     )?;
@@ -516,19 +546,35 @@ pub fn set_error_bars(
             return false;
         };
         if let Some(d) = spec.dir.as_deref() {
-            set_val_child(el, "errDir", d);
+            if d == "x" {
+                set_val_child(el, "errDir", d);
+            } else {
+                remove_local(el, "errDir");
+            }
         }
         if let Some(b) = spec.bar_type.as_deref() {
             set_val_child(el, "errBarType", b);
         }
         if let Some(v) = spec.val_type.as_deref() {
             set_val_child(el, "errValType", v);
-            if v == "stdErr" {
+            if v == "stdErr" || v == "cust" {
                 remove_local(el, "val");
+            }
+            if v != "cust" {
+                remove_local(el, "plus");
+                remove_local(el, "minus");
             }
         }
         if let Some(v) = spec.value {
             set_val_child(el, "val", format_num(v));
+        }
+        if let Some(p) = spec.plus.as_deref() {
+            remove_local(el, "plus");
+            el.push_element(cust_lit("c:plus", p));
+        }
+        if let Some(m) = spec.minus.as_deref() {
+            remove_local(el, "minus");
+            el.push_element(cust_lit("c:minus", m));
         }
         true
     })
@@ -874,6 +920,8 @@ fn check_error_bars_fields(
     bar_type: &str,
     val_type: &str,
     value: Option<f64>,
+    plus: Option<&[f64]>,
+    minus: Option<&[f64]>,
     require_value_rules: bool,
     i: usize,
 ) -> Result<(), Error> {
@@ -889,16 +937,25 @@ fn check_error_bars_fields(
             format!("ops[{i}].barType"),
         ));
     }
-    if matches!(val_type, "cust" | "lCaps") {
-        return Err(Error::with_path(
-            ErrorKind::CustomErrorBars,
-            format!("ops[{i}].valType"),
-        ));
-    }
-    if !matches!(val_type, "stdErr" | "stdDev" | "fixedVal" | "percentage") {
+    if val_type == "lCaps" {
         return Err(Error::with_path(
             ErrorKind::InvalidErrorBars,
             format!("ops[{i}].valType"),
+        ));
+    }
+    if !matches!(
+        val_type,
+        "stdErr" | "stdDev" | "fixedVal" | "percentage" | "cust"
+    ) {
+        return Err(Error::with_path(
+            ErrorKind::InvalidErrorBars,
+            format!("ops[{i}].valType"),
+        ));
+    }
+    if val_type != "cust" && (plus.is_some() || minus.is_some()) {
+        return Err(Error::with_path(
+            ErrorKind::InvalidErrorBars,
+            format!("ops[{i}].plus"),
         ));
     }
     if require_value_rules {
@@ -908,11 +965,21 @@ fn check_error_bars_fields(
                 format!("ops[{i}].value"),
             ));
         }
-        if val_type == "stdErr" && value.is_some() {
+        if matches!(val_type, "stdErr" | "cust") && value.is_some() {
             return Err(Error::with_path(
                 ErrorKind::ErrorBarsValueOnStdErr,
                 format!("ops[{i}].value"),
             ));
+        }
+        if val_type == "cust" {
+            let p = plus.filter(|a| !a.is_empty());
+            let m = minus.filter(|a| !a.is_empty());
+            if p.is_none() || m.is_none() {
+                return Err(Error::with_path(
+                    ErrorKind::CustomErrorBars,
+                    format!("ops[{i}].plus"),
+                ));
+            }
         }
     }
     Ok(())
@@ -951,16 +1018,72 @@ fn build_trendline(spec: &TrendlineWrite, kind: &str) -> Element {
     el
 }
 
-fn build_error_bars(dir: &str, bar_type: &str, val_type: &str, value: Option<f64>) -> Element {
+fn build_error_bars(
+    dir: &str,
+    bar_type: &str,
+    val_type: &str,
+    value: Option<f64>,
+    plus: Option<&[f64]>,
+    minus: Option<&[f64]>,
+) -> Element {
     let mut el = Element::new("c:errBars");
-    el.push_element(val_el("c:errDir", dir));
+    if dir == "x" {
+        el.push_element(val_el("c:errDir", dir));
+    }
     el.push_element(val_el("c:errBarType", bar_type));
     el.push_element(val_el("c:errValType", val_type));
     el.push_element(val_el("c:noEndCap", "0"));
-    if let Some(v) = value {
+    if val_type == "cust" {
+        if let Some(p) = plus {
+            el.push_element(cust_lit("c:plus", p));
+        }
+        if let Some(m) = minus {
+            el.push_element(cust_lit("c:minus", m));
+        }
+    } else if let Some(v) = value {
         el.push_element(val_el("c:val", format_num(v)));
     }
     el
+}
+
+fn cust_lit(name: &str, pts: &[f64]) -> Element {
+    let mut lit = Element::new("c:numLit");
+    lit.push_element({
+        let mut f = Element::new("c:formatCode");
+        f.set_text("General");
+        f
+    });
+    lit.push_element(Element::new("c:ptCount").with_attr("val", pts.len().to_string()));
+    for (i, v) in pts.iter().enumerate() {
+        let mut pt = Element::new("c:pt").with_attr("idx", i.to_string());
+        let mut vv = Element::new("c:v");
+        vv.set_text(format_num(*v));
+        pt.push_element(vv);
+        lit.push_element(pt);
+    }
+    let mut wrap = Element::new(name);
+    wrap.push_element(lit);
+    wrap
+}
+
+fn num_lit_vals(el: Option<&Element>) -> Option<Vec<f64>> {
+    let lit = el.and_then(|e| e.child_by_local("numLit").or(Some(e)))?;
+    let mut out = Vec::new();
+    for pt in lit.element_children() {
+        if pt.local_name() != "pt" {
+            continue;
+        }
+        let t = pt
+            .child_by_local("v")
+            .map(|v| v.text_content())
+            .unwrap_or_default();
+        out.push(t.parse().ok()?);
+    }
+    if out.is_empty() {
+        None
+    } else {
+        Some(out)
+    }
 }
 
 fn insert_before_data(ser: &mut Element, el: Element, stops: &[&str]) {
@@ -1392,14 +1515,17 @@ pub fn parse_error_bars_write(
         ErrorKind::InvalidErrorBars,
     )?;
     let val_type = match obj.get("valType") {
-        Some(Value::String(s)) if matches!(s.as_str(), "cust" | "lCaps") => {
+        Some(Value::String(s)) if s == "lCaps" => {
             return Err(Error::with_path(
-                ErrorKind::CustomErrorBars,
+                ErrorKind::InvalidErrorBars,
                 format!("ops[{i}].valType"),
             ));
         }
         Some(Value::String(s))
-            if matches!(s.as_str(), "stdErr" | "stdDev" | "fixedVal" | "percentage") =>
+            if matches!(
+                s.as_str(),
+                "stdErr" | "stdDev" | "fixedVal" | "percentage" | "cust"
+            ) =>
         {
             Some(s.clone())
         }
@@ -1421,7 +1547,16 @@ pub fn parse_error_bars_write(
         None => None,
     };
     let value = parse_opt_f64(obj, i, "value")?;
-    if !insert && dir.is_none() && bar_type.is_none() && val_type.is_none() && value.is_none() {
+    let plus = parse_opt_f64_array(obj, i, "plus")?;
+    let minus = parse_opt_f64_array(obj, i, "minus")?;
+    if !insert
+        && dir.is_none()
+        && bar_type.is_none()
+        && val_type.is_none()
+        && value.is_none()
+        && plus.is_none()
+        && minus.is_none()
+    {
         return Err(Error::with_path(
             ErrorKind::NeedErrorBarsField,
             format!("ops[{i}]"),
@@ -1431,13 +1566,15 @@ pub fn parse_error_bars_write(
         let d = dir.as_deref().unwrap_or("y");
         let b = bar_type.as_deref().unwrap_or("both");
         let v = val_type.as_deref().unwrap_or("stdErr");
-        check_error_bars_fields(d, b, v, value, true, i)?;
+        check_error_bars_fields(d, b, v, value, plus.as_deref(), minus.as_deref(), true, i)?;
     }
     Ok(ErrorBarsWrite {
         dir,
         bar_type,
         val_type,
         value,
+        plus,
+        minus,
     })
 }
 
@@ -1595,6 +1732,51 @@ fn parse_opt_f64(obj: &Map<String, Value>, i: usize, field: &str) -> Result<Opti
             ErrorKind::WrongType {
                 field: field.into(),
                 expected: TypeName::Integer,
+            },
+            format!("ops[{i}].{field}"),
+        )),
+    }
+}
+
+fn parse_opt_f64_array(
+    obj: &Map<String, Value>,
+    i: usize,
+    field: &str,
+) -> Result<Option<Vec<f64>>, Error> {
+    match obj.get(field) {
+        None | Some(Value::Null) => Ok(None),
+        Some(Value::Array(a)) if a.is_empty() => Ok(None),
+        Some(Value::Array(a)) => {
+            let mut out = Vec::with_capacity(a.len());
+            for (j, v) in a.iter().enumerate() {
+                let n = match v {
+                    Value::Number(n) => n.as_f64().ok_or_else(|| {
+                        Error::with_path(
+                            ErrorKind::WrongType {
+                                field: format!("{field}[{j}]"),
+                                expected: TypeName::Integer,
+                            },
+                            format!("ops[{i}].{field}[{j}]"),
+                        )
+                    })?,
+                    _ => {
+                        return Err(Error::with_path(
+                            ErrorKind::WrongType {
+                                field: format!("{field}[{j}]"),
+                                expected: TypeName::Integer,
+                            },
+                            format!("ops[{i}].{field}[{j}]"),
+                        ));
+                    }
+                };
+                out.push(n);
+            }
+            Ok(Some(out))
+        }
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::Array,
             },
             format!("ops[{i}].{field}"),
         )),

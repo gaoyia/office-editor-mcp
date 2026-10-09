@@ -25,6 +25,7 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 2026-10-09 补跑 `docx-ink.ps1`，Ic1–Ic6 通过。Word COM 在 `Shapes` 上 `Type=20`（`msoCanvas`），144×72 磅。
 同日补跑 `docx-emf.ps1`，Dem1–Dem6 通过。Word 行内 COM `Type=3`，无 Repair。
 同日补跑 `docx-model3d.ps1`，D3d1–D3d6 通过。Word 行内 COM `Type=19`，无 Repair。
+2026-10-10 补跑 `docx-charts-rare-remain.ps1`，Ccx1–Ccx5 通过。无 Repair。
 
 - **C1** ✅
   - Word 16.0 能打开 `manual-check/office/out/docx-create.docx`，标题栏无 Repair
@@ -111,6 +112,10 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
   - 插入股价 / 曲面 / 复合条无 Repair
   - 股价三条转柱形、复合饼转饼
   - 增系列与 `type=chartex`、两条股价均拒写
+- **Ccx1–Ccx5** ✅
+  - Word 16.0：`docx-charts-rare-remain.ps1`，5 PASS / 0 FAIL
+  - OHLC / 俯视线框 / 自定义误差线 / chartex funnel 无 Repair
+  - 缺 `layoutId` 与两条股价 `InvalidField`，`regionMap` `NotImplemented`
 - **Sa1–Sa9** ✅
   - Word 16.0：`docx-smartart.ps1`，10 PASS / 0 FAIL
   - 列表型改字、插删、增删点、尺寸
@@ -751,6 +756,29 @@ Word 亲手另存或在另存批注样例的 `comments.xml` 里带 `inkml:ink`�
   - 通过标准：✅ 对股价 `addChartSeries` 得 `NotImplemented`
   - 源无 chartex 时 `insertChart type=chartex` 得 `InvalidField`
   - 两条系列的股价 `insertChart` 得 `InvalidField`
+  - 均未写坏文件
+
+## 图表稀有剩余
+
+OHLC、线框 / 俯视曲面、自定义误差线、chartex 写入。脚本 `manual-check/office/cases/docx-charts-rare-remain.ps1`。编号用 Ccx。不要和 Cq、Cx、Cr 混。Word 不能靠 `AddChart` 插 chartex，手测打开库写出的文件。
+
+- **Ccx1**
+  - 检查：OHLC
+  - 通过标准：✅ `insertChart` `type=stock` 四条系列后 Word 无修复，`type` 为 `stock`，`stockKind` 为 `ohlc`
+- **Ccx2**
+  - 检查：俯视线框
+  - 通过标准：✅ `insertChart` `type=surface` `surfaceKind=contourWire` 三条系列后无修复，`surfaceKind` 为 `contourWire`
+- **Ccx3**
+  - 检查：自定义误差线
+  - 通过标准：✅ 柱形图 `insertErrorBars` `valType=cust` 后无修复，系列上 `plus` / `minus` 对得上
+- **Ccx4**
+  - 检查：chartex funnel
+  - 通过标准：✅ `insertChart` `type=chartex` `layoutId=funnel` 后无修复，`type` 为 `chartex`，`layoutId` 为 `funnel`
+- **Ccx5**
+  - 检查：仍拒绝
+  - 通过标准：✅ `type=chartex` 不带 `layoutId` 得 `InvalidField`
+  - `layoutId=regionMap` 得 `NotImplemented`
+  - 两条系列的股价仍 `InvalidField`
   - 均未写坏文件
 
 ## 图表剩余
