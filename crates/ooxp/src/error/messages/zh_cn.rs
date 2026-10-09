@@ -908,7 +908,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         }
         ErrorKind::InvalidPicAlign => "alignH 只允许 left/center/right，alignV 只允许 top/center/bottom".into(),
         ErrorKind::InvalidImageFile => {
-            "file 不是本库认的图片（PNG、JPEG、GIF 或 BMP；Word 还认 SVG）".into()
+            "file 不是本库认的图片（PNG、JPEG、GIF、BMP 或 SVG）".into()
         }
         ErrorKind::InvalidInkMl => {
             "file 不是 InkML（根元素必须是 InkML 命名空间下的 ink）".into()

@@ -331,8 +331,11 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                     &op.id,
                     format!("ops[{i}].id"),
                 )?;
-                let doc = xml::parse(pkg.get(&part)?)?;
-                picture::replace_picture(&mut pkg, &part, &doc.root, op, i)?;
+                let mut doc = xml::parse(pkg.get(&part)?)?;
+                let dirty = picture::replace_picture(&mut pkg, &part, &mut doc.root, op, i)?;
+                if dirty {
+                    pkg.set(&part, doc.to_bytes()?)?;
+                }
             }
             PptxOp::InsertPicture(op) => {
                 let meta = slides.get(op.slide - 1).ok_or_else(|| {

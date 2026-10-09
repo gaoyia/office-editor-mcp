@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "action": "create",
+  "path": "book.svg.xlsx",
+  "format": "xlsx",
+  "workbook": {
+    "sheets": [
+      {
+        "name": "Sheet1",
+        "cells": [{ "ref": "A1", "value": 1 }],
+        "pictures": [{ "file": "pic.svg", "from": "B2" }]
+      }
+    ]
+  }
+}

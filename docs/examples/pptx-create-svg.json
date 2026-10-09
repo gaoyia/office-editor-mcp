@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "action": "create",
+  "path": "deck.svg.pptx",
+  "format": "pptx",
+  "presentation": {
+    "slides": [
+      {
+        "shapes": [{ "text": "标题" }],
+        "pictures": [{ "file": "pic.svg" }]
+      }
+    ]
+  }
+}

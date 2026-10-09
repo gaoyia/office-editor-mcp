@@ -8,9 +8,9 @@ use crate::xml::{self, Document, Element, Node};
 
 use super::a1;
 use super::picture::{
-    self, add_image_rel, build_anchor, drawing_hf_parts, drawing_hf_parts_from, ensure_xmlns,
-    next_cnv_id, next_drawing_part, next_media_part, pictures_json, read_image, rel_target_from,
-    walk_anchors, AnchorKind, EditAs, PicInfo, A_NS, CT_DRAWING, REL_DRAWING, XDR_NS,
+    self, build_anchor, drawing_hf_parts, drawing_hf_parts_from, ensure_xmlns, next_cnv_id,
+    next_drawing_part, pictures_json, read_image, rel_target_from, walk_anchors, AnchorKind,
+    EditAs, PicInfo, A_NS, CT_DRAWING, REL_DRAWING, XDR_NS,
 };
 use super::request::{HfSlot, InsertPictureOp, SetHeaderFooterTextOp};
 use super::REL_NS;
@@ -323,16 +323,13 @@ pub(crate) fn insert_picture(
     ensure_xmlns(&mut draw_doc.root, "a", A_NS);
     // Excel 16.0：drawingHF 的 cho 等属性若写成 1，打开工作簿会被拒绝。
     let cnv = next_cnv_id(pkg, sheet_part, &sheet_doc.root)?.max(2);
-    let media = next_media_part(pkg, &image.ext);
-    pkg.set(&media, image.bytes)?;
-    let rid = add_image_rel(pkg, &drawing_part, &media)?;
+    let (rid, svg_rid) = picture::write_picture_media(pkg, &drawing_part, &image)?;
     let mut cts = ContentTypes::from_package(pkg)?;
-    cts.ensure_default(&image.ext, &image.content_type);
     cts.set_override(&drawing_part, CT_DRAWING)?;
     cts.write_to(pkg)?;
     let name = format!("图片 {cnv}");
     let from = a1::CellRef { col: 1, row: 1 };
-    let anchor = build_anchor(
+    let mut anchor = build_anchor(
         AnchorKind::OneCell,
         from,
         None,
@@ -350,6 +347,9 @@ pub(crate) fn insert_picture(
         &rid,
         None,
     );
+    if let Some(svg) = svg_rid {
+        crate::svg::set_svg_blip(&mut anchor, &svg);
+    }
     draw_doc.root.push_element(anchor);
     pkg.set(&drawing_part, draw_doc.to_bytes()?)?;
     assign_hf_attr(&mut sheet_doc.root, slot, cnv);

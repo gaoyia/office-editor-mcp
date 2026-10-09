@@ -886,9 +886,12 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
 - `scope.headerFooter` 为 `true` 时，每张表带 `headerFooters`，固定六个对象，顺序见上文 id 表。
   每个槽位字段顺序：`id`、`kind`、`side`、`text`；`worksheet` 再跟 `pictureCount`，若同时 `pictures: true` 再跟 `pictures`。
   `kind` / `side` 与 id 里那两段相同。`text` 为该 XML 元素原文，没有该元素则为 `null`。空串是合法原文，与 `null` 不同。`pictureCount` 是分到该槽的 DrawingML 页眉图个数。
+  页眉图字段顺序与工作表图相同，有 `asvg:svgBlip` 时同样末尾带 `contentType`。
   `chartsheet` / `dialogsheet` / `macrosheet` 的槽位没有 `pictureCount` / `pictures`。
 - `scope.pictures` 为 `true` 时，每张 `worksheet` 带工作表 `pictures`。没有图时为空数组。按该表 `<drawing>` 部件顺序、同一部件内按锚点文档顺序。
-  每张字段顺序：`id`、`cNvPrId`、`name`、`anchor`，然后按锚点种类跟位置字段，最后 `stable`。`cNvPrId` 是 `xdr:cNvPr/@id` 原文，没有则为 `null`。
+  每张字段顺序：`id`、`cNvPrId`、`name`、`anchor`，然后按锚点种类跟位置字段，最后 `stable`。
+  有 `asvg:svgBlip` 时再跟 `contentType`，值为 `image/svg+xml`。位图图没有该字段。不把 SVG 原文放进树。
+  `cNvPrId` 是 `xdr:cNvPr/@id` 原文，没有则为 `null`。
   `name` 取 `xdr:cNvPr/@name`，没有则为 `""`。`anchor` 为 `twoCell`、`oneCell` 或 `absolute`。
   单独 `pictures: true`、不开 `headerFooter`：只列工作表图，不含页眉图。
 - `twoCell`（§20.5.2.33）再跟 `from`、`fromOffX`、`fromOffY`、`to`、`toOffX`、`toOffY`、`editAs`。
@@ -1095,11 +1098,11 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
 | `cells[].value` | 数字、字符串、布尔、或 `null`。`null` 表示不写这个格 |
 | `cells[].formula` | 以 `=` 开头的公式文本。库不求值 |
 
-| `pictures[].file` | 本地路径，与 `insertPicture` 相同，按文件头认 PNG / JPEG / GIF / BMP。缺此字段报 `MissingField` |
+| `pictures[].file` | 本地路径，与 `insertPicture` 相同。按文件头认 PNG / JPEG / GIF / BMP / SVG。缺此字段报 `MissingField` |
 | `pictures[].from` | 必须。左上角单元格，A1。缺此字段报 `MissingField`。不是合法 A1 报 `InvalidRange` |
 | `pictures[].to` | `anchor` 为 `twoCell` 时必须。右下角单元格，A1 |
 | `pictures[].anchor` | 可选。`oneCell`（缺省）或 `twoCell`。不认 `absolute` |
-| `pictures[].cx` / `pictures[].cy` | 可选，EMU，正整数。都省则按图片像素以 96 dpi 换算。只给一个时报 `InvalidField`。`twoCell` 也要写 `xdr:pic` 里的 `a:ext`，显示尺寸仍由起止格决定 |
+| `pictures[].cx` / `pictures[].cy` | 可选，EMU，正整数。都省则按文件头尺寸以 96 dpi 换算。只给一个时报 `InvalidField`。`twoCell` 也要写 `xdr:pic` 里的 `a:ext`，显示尺寸仍由起止格决定 |
 | `pictures[].fromOffX` / `fromOffY` / `toOffX` / `toOffY` | 可选。与 `insertPicture` 相同 |
 | `charts[].type` | 必须。与 `insertChart` 相同 |
 | `charts[].series` | 必须。非空。字段与 `insertChart` 相同 |
@@ -1112,7 +1115,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
 | `headerFooters[].text` | 可选。该槽位原文，与 `setHeaderFooterText` 相同，含 `&P` / `&C` 这类代码。空串不当作内容 |
 | `headerFooters[].pictures` | 可选。往该槽 `drawingHF` 插图。省略或空数组则不写图 |
 | `headerFooters[].pictures[].file` | 必须。本地路径，与页眉 `insertPicture` 相同 |
-| `headerFooters[].pictures[].cx` / `cy` | 可选，EMU，正整数。都省则按图片像素以 96 dpi 换算。只给一个时报 `InvalidField` |
+| `headerFooters[].pictures[].cx` / `cy` | 可选，EMU，正整数。都省则按文件头尺寸以 96 dpi 换算。只给一个时报 `InvalidField` |
 | `comments[].cell` | 必须。宿主单元格，单格 A1。缺此字段报 `MissingField`。不是合法单格报 `InvalidRange` |
 | `comments[].text` | 可选。可见纯文本，省略当作 `""` |
 | `comments[].author` | 可选。省略当作 `"ooxp"` |
@@ -1137,6 +1140,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
 页眉图禁止出现 `from` / `to` / `anchor` / `fromOffX` / `fromOffY` / `toOffX` / `toOffY`，出现报 `InvalidField`。
 不要把页眉图写进 `sheets[].pictures`。不要用单数 `headerFooter`（那是 inspect 的 scope 键），`sheets[]` 上出现它报 `InvalidField`。
 写 `even` 槽位时给 `headerFooter` 设 `differentOddEven="1"`；写 `first` 槽位时设 `differentFirst="1"`。先写各槽原文，再按数组顺序往对应槽插图。不写 VML `legacyDrawingHF`。不解释 `&P`。
+带 SVG 图的示例见 `docs/examples/xlsx-create-svg.json`。
 
 `value` 和 `formula` 不能在同一格同时出现。要公式就只写 `formula`。
 公式格不写缓存 `<v>`，并在 `workbook.xml` 的 `calcPr` 上设 `fullCalcOnLoad="1"`，让 Excel 打开时重算。

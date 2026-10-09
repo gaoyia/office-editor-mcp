@@ -1531,7 +1531,7 @@ Word 跟踪修订下改表单元格底纹、插入空段、删除表行。`inspe
 
 ## 嵌入 SVG
 
-正文与页眉页脚的 DrawingML 图可带 Office 2016 `asvg:svgBlip`。不算排版引擎，不把 SVG 原文放进 inspect 树。xlsx / pptx 本期不跟。
+正文与页眉页脚的 DrawingML 图可带 Office 2016 `asvg:svgBlip`。不算排版引擎，不把 SVG 原文放进 inspect 树。xlsx / pptx 见 Xvg / Pvg（C5）。
 手测脚本 `manual-check/office/cases/docx-svg.ps1`。编号用 Sv。
 
 - **Sv1**

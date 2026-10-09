@@ -330,7 +330,7 @@ docx 的 `document.protection` 复用 `setProtection`。docx 的 `document.water
 ### exportMedia
 
 调用方给出源 docx、xlsx 或 pptx、图 id、docx / xlsx / pptx OLE id、docx 墨迹画布 id、pptx 视频 / 音频 id 或 docx 嵌入字体 id 和本地目标路径。
-库打开包，图 id 按 `a:blip` 的关系写出媒体部件；docx 带 `asvg:svgBlip` 时改走 SVG 关系。
+库打开包，图 id 按 `a:blip` 的关系写出媒体部件；带 `asvg:svgBlip` 时改走 SVG 关系。
 OLE id 按 oleObject 或 package 关系写出 embeddings 部件；
 docx 墨迹画布 id 按 customXml 关系写出 InkML 部件；
 docx `font:{n}` 按 fontTable 关系写出 odttf 原字节。包不写回。

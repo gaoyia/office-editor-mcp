@@ -8,7 +8,7 @@
 
 Microsoft Excel 16.0 已打开，用户确认通过。本机若装了 WPS，`Excel.Application` 会被抢走，测试仍直接启动 `EXCEL.EXE` 再挂 COM。
 
-C、I、A、O、Xp、Xc、Xh 这几组现在由 `manual-check/office/cases/xlsx-*.ps1` 自动判定，
+C、I、A、O、Xp、Xvg、Xc、Xh 这几组现在由 `manual-check/office/cases/xlsx-*.ps1` 自动判定，
 跑 `pwsh -File manual-check\office\run.ps1 -Case 'xlsx-*'` 即可复现，逐条结果落在 `manual-check/office/out/office-results.csv`。
 2026-09-27 补跑 `xlsx-pictures.ps1`，Xp1–Xp7 通过。同日补跑 `xlsx-charts.ps1`，Xc1–Xc7 通过。
 同日补跑 `xlsx-create-pictures.ps1`，C8–C10 通过。同日补跑 `xlsx-create-charts.ps1`，C11–C13 通过。
@@ -26,6 +26,7 @@ C、I、A、O、Xp、Xc、Xh 这几组现在由 `manual-check/office/cases/xlsx-
 同日补跑 `xlsx-create-chartsheet.ps1`，C22–C24 通过。同日补跑 `xlsx-sort.ps1`，Xsr1–Xsr5 通过。
 同日补跑 `xlsx-external-link.ps1`，Xel1–Xel5 通过。同日补跑 `xlsx-protect-hash.ps1`，Xph1–Xph5 通过。
 同日补跑 `xlsx-dialog-macro.ps1`，Xdm1–Xdm5 通过。2026-09-28 补跑 `xlsx-chartsheet.ps1`，图表工作表 Xs1–Xs4 通过。同日补跑 `xlsx-table.ps1`，Xt1–Xt5 通过。
+2026-10-09 补跑 `xlsx-svg.ps1`，Xvg1–Xvg6 通过。Excel COM `Type=28`，96×48 对应 914400×457200 EMU。
 
 - **C1** ✅
   - Excel 16.0 打开 `manual-check/office/out/xlsx-create.xlsx`，标题栏无 Repair
@@ -52,6 +53,13 @@ C、I、A、O、Xp、Xc、Xh 这几组现在由 `manual-check/office/cases/xlsx-
   - `oneCell` 尺寸 144 磅
   - 锚点改到 F12
   - export 与 `/xl/media/…` 字节一致
+- **Xvg1–Xvg6** ✅
+  - Excel 16.0：`xlsx-svg.ps1`，6 PASS / 0 FAIL
+  - 插入 / create 树上 `contentType=image/svg+xml`，COM `Type=28`，无 Repair
+  - `exportMedia` 为 SVG 原字节
+  - 换成 PNG 后没有 `contentType`、包内没有 `.svg`
+  - 奇数页页眉图 id 为 `sheet:Sheet1/hf:odd:header/pic:2`
+  - 非图片 `file` 得 `InvalidField`
 - **Xc1–Xc7** ✅
   - Excel 16.0：无 `charts` 时 `chartCount=1`、没有名单
   - 名单 id 为 `sheet:Sheet1/chart:2`，系列 10/20/30 与单元格一致
@@ -466,6 +474,33 @@ Excel 16.0 的 `Shapes.AddPicture` 只写 `twoCellAnchor`（`Placement` 只改 `
 - **Xp7**
   - 检查：导出
   - 通过标准：`exportMedia` 写出的文件与 `/xl/media/…` 字节一致
+  - 不强制开 Excel
+
+## 嵌入 SVG
+
+工作表图与页眉图可带 Office 2016 `asvg:svgBlip`。不算渲染引擎，不把 SVG 原文放进 inspect 树。
+手测脚本 `manual-check/office/cases/xlsx-svg.ps1`。编号用 Xvg，避免和自定义视图的 Xsv、Word 的 Sv 混号。
+COM 认 `Type=28`（`msoGraphic`），不是普通图的 `13`。
+
+- **Xvg1**
+  - 检查：插入
+  - 通过标准：`insertPicture` 把本地 SVG 写入工作表后，树上 `contentType` 为 `image/svg+xml`，Excel 无修复
+  - COM 该形状 `Type=28`
+- **Xvg2**
+  - 检查：导出
+  - 通过标准：对该图 `exportMedia` 得到 SVG 原字节，`contentType` 为 `image/svg+xml`
+- **Xvg3**
+  - 检查：create
+  - 通过标准：`sheets[].pictures[].file` 指向 SVG 后，树上有 `contentType`，Excel 无修复
+- **Xvg4**
+  - 检查：换成位图
+  - 通过标准：`replacePicture` 换成 PNG 后没有 `contentType`，包内没有 `.svg`，Excel 无修复
+- **Xvg5**
+  - 检查：页眉
+  - 通过标准：往奇数页页眉插 SVG 后，页眉图名单末尾有 `contentType`，Excel 无修复
+- **Xvg6**
+  - 检查：拒错
+  - 通过标准：`file` 不是图片得 `InvalidField`，未写文件
   - 不强制开 Excel
 
 ## 工作表图表

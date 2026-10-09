@@ -327,47 +327,6 @@ fn xml_prolog_svg_is_accepted() {
 }
 
 #[test]
-fn xlsx_and_pptx_reject_svg() {
-    let svg = write_svg("foreign");
-    let xlsx = seq_path("xlsx-svg", "xlsx");
-    let err = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": xlsx.to_string_lossy(),
-            "format": "xlsx",
-            "workbook": {
-                "sheets": [{
-                    "name": "Sheet1",
-                    "pictures": [{ "file": svg.to_string_lossy(), "from": "A1" }]
-                }]
-            }
-        })
-        .to_string(),
-        None,
-    )
-    .unwrap_err();
-    assert_eq!(err.code(), ErrorCode::InvalidField);
-
-    let pptx = seq_path("pptx-svg", "pptx");
-    let err = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": pptx.to_string_lossy(),
-            "format": "pptx",
-            "presentation": {
-                "slides": [{ "pictures": [{ "file": svg.to_string_lossy() }] }]
-            }
-        })
-        .to_string(),
-        None,
-    )
-    .unwrap_err();
-    assert_eq!(err.code(), ErrorCode::InvalidField);
-}
-
-#[test]
 fn reject_not_an_image() {
     let src = create_docx("rej-src", json!({ "paragraphs": [{ "text": "hello" }] }));
     let tree = inspect_pics(&src);

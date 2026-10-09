@@ -13,6 +13,7 @@ mod password;
 mod pptx;
 mod props;
 mod smartart;
+mod svg;
 mod theme;
 mod xlsx;
 mod xml;

@@ -287,7 +287,7 @@ xlsx / docx 上发这两条报 `InvalidField`。本期 `insertZoom` 不写 `type
 ECMA-376 §19.4 旧式 `/ppt/comments/commentN.xml` 与 `commentAuthors` 不进树、不接受 apply；
 只有旧式时 `commentCount` 为 `0`，`scope.comments` 为空数组。insert 只写现代部件。
 
-现代批注没有 `p:pic`。批注内图只收该 `p188:cm`（不含 `replyLst`）下带 `r:embed` 的 `a:blip`。`{k}` 只在该条批注内从 1 计。
+现代批注没有 `p:pic`。批注内图只收该 `p188:cm`（不含 `replyLst`）下带 `r:embed` 或 `asvg:svgBlip` 的 `a:blip`。`{k}` 只在该条批注内从 1 计。
 回复内同样判定，id 为 `{回复 id}/pic:{k}`。不并进幻灯片 `pictureCount`。`insertPicture` 的 `id` 为批注或回复 id，写入 `a:blip`（见主契约）。
 对 `kind` 为 `ink` 的批注或回复报 `NotImplemented`。`replacePicture` / `deletePicture` / `exportMedia` 认批注内图 id。
 `setPictureSize` / `setPicturePos` 仍报 `InvalidId`（没有画布 `xfrm`）。
@@ -694,7 +694,9 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
 - 按该页文档顺序截断。未截断则为 `false`。备注形状不算进 `maxShapes`。
 - `scope.slide` 大于 `slideCount` 时，各页都不带 `shapes`，不报错。
 - `scope.pictures` 为 `true` 时，每页带 `pictures`。没有图时为空数组。不依赖 `scope.slide`。
-  每张字段顺序：`id`、`cNvPrId`、`name`、`x`、`y`、`cx`、`cy`、`stable`。`cNvPrId` 是 `p:cNvPr/@id` 原文，没有则为 `null`。
+  每张字段顺序：`id`、`cNvPrId`、`name`、`x`、`y`、`cx`、`cy`、`stable`。
+  有 `asvg:svgBlip` 时再跟 `contentType`，值为 `image/svg+xml`。位图图没有该字段。不把 SVG 原文放进树。
+  `cNvPrId` 是 `p:cNvPr/@id` 原文，没有则为 `null`。
   `name` 取 `p:cNvPr/@name`，没有则为 `""`。`x` / `y` 取 `p:spPr/a:xfrm/a:off` 的 EMU；`cx` / `cy` 取 `a:ext`。缺对应属性则为 `null`。不读媒体字节。
   幻灯片图 id 为 `slide:{n}/pic:…`。
 - `scope.media` 为 `true` 时，每页带 `videos` 与 `audios`（先 `videos` 后 `audios`）。没有则为空数组。不依赖 `scope.slide`。
@@ -810,6 +812,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   有则为对象，字段顺序：`id`、`pictureCount`、`chartCount`、`smartArtCount`、`tableCount`，有图名单时再跟 `pictures`，有图表名单时再跟 `charts`，
   有 SmartArt 名单时再跟 `smartArts`，有表名单时再跟 `tables`，然后 `shapes`。
   `id` 为 `slide:{n}/notes`。`pictureCount` 只计该备注页上被收入的 `p:pic`，不并进幻灯片 `pictures`。
+  备注图字段顺序与幻灯片图相同，含末尾 `contentType`。
   `chartCount` / `smartArtCount` / `tableCount` 只计该备注页，不并进幻灯片计数。
   备注形状判定与幻灯片形状相同（带 `p:txBody` 的 `p:sp`），id 为 `slide:{n}/notes/shape:…`。
   字段顺序与幻灯片形状相同：`id`、`shapeId`、`name`、`prst`、`x`、`y`、`cx`、`cy`、`text`、`stable`。备注形状一次倒出，不用 `maxShapes`。
@@ -818,9 +821,10 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   `commentId` 是 `p188:cm/@id` 原文。`author` / `initials` 按 `authorId` 去 `/ppt/authors.xml` 的 `p188:author` 取 `name` / `initials`，对不上则为 `null`。
   `date` 取 `created` 原文，缺则为 `null`。`done`：`status` 为 `resolved` 或 `closed` 为 `true`；缺 `status`（即 active）为 `false`。
   `kind` 为 `normal`；该 `cm` 内出现墨迹标记（本地名为 `ink`）则为 `ink`。`x` / `y` 取 `p188:pos` 的 EMU，缺则为 `null`。
-  `pictureCount` 只计该条 `cm` 下、不含 `replyLst` 的 `a:blip[@r:embed]`。`text` 取 `p188:txBody` 可见纯文本，规则与形状 `text` 相同。
+  `pictureCount` 只计该条 `cm` 下、不含 `replyLst` 的 `a:blip`（带 `r:embed` 或 `asvg:svgBlip`）。`text` 取 `p188:txBody` 可见纯文本，规则与形状 `text` 相同。
   回复嵌在 `replies` 里，不单独占 `commentCount`。回复字段顺序：`id`、`commentId`、`author`、`initials`、`date`、`done`、`kind`、`pictureCount`，
   有图名单时再跟 `pictures`，然后 `text`（无 `x` / `y`）。回复 `id` 为 `{父批注 id}/reply:{guid}`。
+  批注 / 回复内每张图字段顺序：`id`，有 `asvg:svgBlip` 时再跟 `contentType`（`image/svg+xml`）。
 - `scope.hyperlinks` 为 `true` 时，每页带 `hyperlinks`。没有链时为空数组。不依赖 `scope.slide`。
   按该页被收入形状文档顺序：每个形状先 `p:cNvPr/a:hlinkClick`（若有），再按该框 `a:r` 文档顺序收 `a:rPr/a:hlinkClick`。
   每条字段顺序：`id`、`index`、`kind`、`on`、`host`、`rId`、`url`、`file`、`slide`、`tooltip`、`text`。`index` 与 id 里的 `{k}` 相同。
@@ -961,7 +965,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   - 形状级超链接提示
   - 没有 `url` / `file` / `slide` 却给了此项报 `InvalidField`
 - **`pictures[].file`**
-  - 本地路径，与 `insertPicture` 相同，按文件头认 PNG / JPEG / GIF / BMP
+  - 本地路径，与 `insertPicture` 相同，按文件头认 PNG / JPEG / GIF / BMP / SVG
   - 缺此字段报 `MissingField`
 - **`pictures[].x` / `pictures[].y`**
   - 可选，EMU，非负整数
@@ -970,7 +974,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   - 缺则放到该页空白处，规则与 pptx `insertPicture` 相同
 - **`pictures[].cx` / `pictures[].cy`**
   - 可选，EMU，正整数
-  - 都省则按图片像素以 96 dpi 换算
+  - 都省则按文件头尺寸以 96 dpi 换算（位图像素或 SVG 根尺寸）
   - 只给一个时报 `InvalidField`
 - **`charts[].type`**
   - 必须
@@ -1064,7 +1068,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   - 必须严格递增
   - 超出页数报 `InvalidField`
 
-带图示例见 `docs/examples/pptx-create-pictures.json`。带图表示例见 `docs/examples/pptx-create-charts.json`。
+带图示例见 `docs/examples/pptx-create-pictures.json`。带 SVG 图见 `docs/examples/pptx-create-svg.json`。带图表示例见 `docs/examples/pptx-create-charts.json`。
 带 SmartArt 示例见 `docs/examples/pptx-create-smartart.json`。带表示例见 `docs/examples/pptx-create-tables.json`。
 带备注与批注示例见 `docs/examples/pptx-create-notes-comments.json`。节、链、媒体、切换与动画合在一起的示例见 `docs/examples/pptx-create-remain.json`。
 `kind` / `wrap` / `from` / `to` / `anchor` / `dataFrom` 以及 xlsx 偏移字段出现报 `InvalidField`。

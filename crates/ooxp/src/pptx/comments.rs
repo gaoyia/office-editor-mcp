@@ -270,30 +270,43 @@ fn comment_json(
 }
 
 fn comment_pictures(host: &str, el: &Element, skip_reply_lst: bool) -> Vec<Value> {
-    collect_embed_blips(el, skip_reply_lst)
+    collect_counted_blips(el, skip_reply_lst)
         .into_iter()
         .enumerate()
-        .map(|(i, _)| json!({ "id": format!("{host}/pic:{}", i + 1) }))
+        .map(|(i, blip)| {
+            let mut m = Map::new();
+            m.insert("id".into(), json!(format!("{host}/pic:{}", i + 1)));
+            if let Some(ct) = crate::svg::content_type(blip) {
+                m.insert("contentType".into(), json!(ct));
+            }
+            Value::Object(m)
+        })
         .collect()
 }
 
-fn collect_embed_blips(el: &Element, skip_reply_lst: bool) -> Vec<&Element> {
+fn collect_counted_blips(el: &Element, skip_reply_lst: bool) -> Vec<&Element> {
     let mut out = Vec::new();
-    walk_embed_blips(el, skip_reply_lst, &mut out);
+    walk_counted_blips(el, skip_reply_lst, &mut out);
     out
 }
 
-fn walk_embed_blips<'a>(el: &'a Element, skip_reply_lst: bool, out: &mut Vec<&'a Element>) {
+fn walk_counted_blips<'a>(el: &'a Element, skip_reply_lst: bool, out: &mut Vec<&'a Element>) {
     if skip_reply_lst && el.local_name() == "replyLst" {
         return;
     }
-    if el.local_name() == "blip" && el.attr_local("embed").is_some_and(|s| !s.is_empty()) {
+    if is_counted_blip(el) {
         out.push(el);
         return;
     }
     for child in el.element_children() {
-        walk_embed_blips(child, skip_reply_lst, out);
+        walk_counted_blips(child, skip_reply_lst, out);
     }
+}
+
+fn is_counted_blip(el: &Element) -> bool {
+    el.local_name() == "blip"
+        && (el.attr_local("embed").is_some_and(|s| !s.is_empty())
+            || crate::svg::blip_rid(el).is_some())
 }
 
 pub fn export_pic(
@@ -315,14 +328,18 @@ pub fn export_pic(
     let host = find_comment_host(&doc.root, cm)
         .ok_or_else(|| Error::with_path(ErrorKind::PictureNotFound { id: id.to_string() }, "id"))?;
     let skip_reply_lst = cm.reply.is_none();
-    let blips = collect_embed_blips(host, skip_reply_lst);
+    let blips = collect_counted_blips(host, skip_reply_lst);
     let blip = blips
         .get(*k - 1)
         .ok_or_else(|| Error::with_path(ErrorKind::PictureNotFound { id: id.to_string() }, "id"))?;
-    let rid = blip
-        .attr_local("embed")
+    let rid = crate::svg::blip_rid(blip)
+        .or_else(|| {
+            blip.attr_local("embed")
+                .filter(|s| !s.is_empty())
+                .map(str::to_string)
+        })
         .ok_or_else(|| Error::with_path(ErrorKind::PictureNotFound { id: id.to_string() }, "id"))?;
-    let media = opc::resolve_id(pkg, &part, rid)?;
+    let media = opc::resolve_id(pkg, &part, &rid)?;
     let media_bytes = pkg.get(&media)?.to_vec();
     let cts = ContentTypes::from_package(pkg)?;
     let content_type = cts.content_type_of(&media).map(str::to_string);
@@ -355,8 +372,11 @@ fn skip_reply_lst(key: &CommentKey) -> bool {
     matches!(key, CommentKey::Top(_))
 }
 
-fn insert_blip(host: &mut Element, rid: &str) {
-    let blip = Element::new("a:blip").with_attr("r:embed", rid);
+fn insert_blip(host: &mut Element, rid: &str, svg_rid: Option<&str>) {
+    let mut blip = Element::new("a:blip").with_attr("r:embed", rid);
+    if let Some(svg) = svg_rid {
+        crate::svg::set_svg_blip(&mut blip, svg);
+    }
     if let Some(i) = host
         .children
         .iter()
@@ -368,12 +388,16 @@ fn insert_blip(host: &mut Element, rid: &str) {
     }
 }
 
-fn remove_nth_blip(host: &mut Element, skip: bool, index: usize) -> Option<String> {
+fn remove_nth_blip(host: &mut Element, skip: bool, index: usize) -> Option<Vec<String>> {
     let mut remaining = index;
     remove_nth_blip_walk(host, skip, &mut remaining)
 }
 
-fn remove_nth_blip_walk(el: &mut Element, skip: bool, remaining: &mut usize) -> Option<String> {
+fn remove_nth_blip_walk(
+    el: &mut Element,
+    skip: bool,
+    remaining: &mut usize,
+) -> Option<Vec<String>> {
     if skip && el.local_name() == "replyLst" {
         return None;
     }
@@ -381,26 +405,24 @@ fn remove_nth_blip_walk(el: &mut Element, skip: bool, remaining: &mut usize) -> 
     while i < el.children.len() {
         let is_target = matches!(
             &el.children[i],
-            Node::Element(child)
-                if child.local_name() == "blip"
-                    && child.attr_local("embed").is_some_and(|s| !s.is_empty())
+            Node::Element(child) if is_counted_blip(child)
         );
         if is_target {
             if *remaining == 0 {
-                let rid = match &el.children[i] {
-                    Node::Element(child) => child.attr_local("embed").unwrap_or("").to_string(),
-                    _ => String::new(),
+                let rids = match &el.children[i] {
+                    Node::Element(child) => blip_image_rids(child),
+                    _ => Vec::new(),
                 };
                 el.children.remove(i);
-                return Some(rid);
+                return Some(rids);
             }
             *remaining = remaining.saturating_sub(1);
             i += 1;
             continue;
         }
         if let Node::Element(child) = &mut el.children[i] {
-            if let Some(rid) = remove_nth_blip_walk(child, skip, remaining) {
-                return Some(rid);
+            if let Some(rids) = remove_nth_blip_walk(child, skip, remaining) {
+                return Some(rids);
             }
         }
         i += 1;
@@ -408,10 +430,64 @@ fn remove_nth_blip_walk(el: &mut Element, skip: bool, remaining: &mut usize) -> 
     None
 }
 
+fn blip_image_rids(blip: &Element) -> Vec<String> {
+    let mut out = Vec::new();
+    if let Some(r) = blip
+        .attr_local("embed")
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
+    {
+        out.push(r);
+    }
+    if let Some(r) = crate::svg::blip_rid(blip) {
+        if !out.iter().any(|x| x == &r) {
+            out.push(r);
+        }
+    }
+    out
+}
+
+fn map_nth_blip<F>(
+    el: &mut Element,
+    skip: bool,
+    remaining: &mut usize,
+    f: &mut F,
+) -> Result<bool, Error>
+where
+    F: FnMut(&mut Element) -> Result<(), Error>,
+{
+    if skip && el.local_name() == "replyLst" {
+        return Ok(false);
+    }
+    let mut i = 0;
+    while i < el.children.len() {
+        let is_blip = matches!(&el.children[i], Node::Element(c) if is_counted_blip(c));
+        if is_blip {
+            if *remaining == 0 {
+                let Node::Element(child) = &mut el.children[i] else {
+                    return Ok(false);
+                };
+                f(child)?;
+                return Ok(true);
+            }
+            *remaining = remaining.saturating_sub(1);
+            i += 1;
+            continue;
+        }
+        if let Node::Element(child) = &mut el.children[i] {
+            if map_nth_blip(child, skip, remaining, f)? {
+                return Ok(true);
+            }
+        }
+        i += 1;
+    }
+    Ok(false)
+}
+
 fn blip_still_on_host(host: &Element, skip: bool, rid: &str) -> bool {
-    collect_embed_blips(host, skip)
-        .iter()
-        .any(|b| b.attr_local("embed") == Some(rid))
+    collect_counted_blips(host, skip).iter().any(|b| {
+        b.attr_local("embed") == Some(rid) || crate::svg::blip_rid(b).as_deref() == Some(rid)
+    })
 }
 
 pub fn insert_picture(
@@ -449,12 +525,7 @@ pub fn insert_picture(
         reject_ink(host, &comment_id_of(target), op_index)?;
     }
     let image = picture::read_image(&op.file).map_err(|e| e.at(format!("ops[{op_index}].file")))?;
-    let media = picture::next_media_part(pkg, &image.ext);
-    pkg.set(&media, image.bytes)?;
-    let rid = picture::add_image_rel(pkg, &part, &media)?;
-    let mut cts = ContentTypes::from_package(pkg)?;
-    cts.ensure_default(&image.ext, &image.content_type);
-    cts.write_to(pkg)?;
+    let (rid, svg_rid) = picture::write_picture_media(pkg, &part, &image)?;
     picture::ensure_xmlns(&mut doc.root, "r", REL_NS);
     picture::ensure_xmlns(&mut doc.root, "a", DML_NS);
     let host = find_host_mut(&mut doc.root, &target.key).ok_or_else(|| {
@@ -465,7 +536,7 @@ pub fn insert_picture(
             format!("ops[{op_index}].id"),
         )
     })?;
-    insert_blip(host, &rid);
+    insert_blip(host, &rid, svg_rid.as_deref());
     pkg.set(&part, doc.to_bytes()?)?;
     Ok(())
 }
@@ -507,36 +578,31 @@ pub fn replace_picture(
             format!("ops[{op_index}].id"),
         )
     })?;
-    let doc = xml::parse(pkg.get(&part)?)?;
-    let host = find_comment_host(&doc.root, cm).ok_or_else(|| {
-        Error::with_path(
-            ErrorKind::PictureNotFound { id: op.id.clone() },
-            format!("ops[{op_index}].id"),
-        )
-    })?;
-    let blips = collect_embed_blips(host, skip);
-    let blip = blips.get(k - 1).ok_or_else(|| {
-        Error::with_path(
-            ErrorKind::PictureNotFound { id: op.id.clone() },
-            format!("ops[{op_index}].id"),
-        )
-    })?;
-    let rid = blip.attr_local("embed").ok_or_else(|| {
-        Error::with_path(
-            ErrorKind::PictureNotFound { id: op.id.clone() },
-            format!("ops[{op_index}].id"),
-        )
-    })?;
-    let old_media = opc::resolve_id(pkg, &part, rid)?;
+    let mut doc = xml::parse(pkg.get(&part)?)?;
     let image = picture::read_image(&op.file).map_err(|e| e.at(format!("ops[{op_index}].file")))?;
-    let media = picture::next_media_part(pkg, &image.ext);
-    pkg.set(&media, image.bytes)?;
-    picture::update_rel_target(pkg, &part, rid, &media)?;
-    let mut cts = ContentTypes::from_package(pkg)?;
-    cts.ensure_default(&image.ext, &image.content_type);
-    cts.write_to(pkg)?;
-    if old_media != media && !picture::media_still_used(pkg, &old_media)? {
-        pkg.remove(&old_media);
+    let dirty = {
+        let host = find_host_mut(&mut doc.root, &key).ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::PictureNotFound { id: op.id.clone() },
+                format!("ops[{op_index}].id"),
+            )
+        })?;
+        let mut remaining = k - 1;
+        let mut xml_dirty = false;
+        let found = map_nth_blip(host, skip, &mut remaining, &mut |blip| {
+            xml_dirty = picture::apply_image_to_host(pkg, &part, blip, &image)?;
+            Ok(())
+        })?;
+        if !found {
+            return Err(Error::with_path(
+                ErrorKind::PictureNotFound { id: op.id.clone() },
+                format!("ops[{op_index}].id"),
+            ));
+        }
+        xml_dirty
+    };
+    if dirty {
+        pkg.set(&part, doc.to_bytes()?)?;
     }
     Ok(())
 }
@@ -579,7 +645,7 @@ pub fn delete_picture(
         )
     })?;
     let mut doc = xml::parse(pkg.get(&part)?)?;
-    let rid = {
+    let rids = {
         let host = find_host_mut(&mut doc.root, &key).ok_or_else(|| {
             Error::with_path(
                 ErrorKind::PictureNotFound { id: op.id.clone() },
@@ -593,19 +659,21 @@ pub fn delete_picture(
             )
         })?
     };
-    let old_media = opc::resolve_id(pkg, &part, &rid).ok();
-    let still = find_host_mut(&mut doc.root, &key)
-        .map(|host| blip_still_on_host(host, skip, &rid))
-        .unwrap_or(false);
-    if !still {
-        let mut rels = Relationships::from_package(pkg, &part)?;
-        rels.remove_by_id(&rid);
-        rels.write_to(pkg, &part)?;
-    }
     pkg.set(&part, doc.to_bytes()?)?;
-    if let Some(old) = old_media {
-        if !picture::media_still_used(pkg, &old)? {
-            pkg.remove(&old);
+    for rid in rids {
+        let old_media = opc::resolve_id(pkg, &part, &rid).ok();
+        let still = find_host_mut(&mut doc.root, &key)
+            .map(|host| blip_still_on_host(host, skip, &rid))
+            .unwrap_or(false);
+        if !still {
+            let mut rels = Relationships::from_package(pkg, &part)?;
+            rels.remove_by_id(&rid);
+            rels.write_to(pkg, &part)?;
+        }
+        if let Some(old) = old_media {
+            if !picture::media_still_used(pkg, &old)? {
+                pkg.remove(&old);
+            }
         }
     }
     Ok(())

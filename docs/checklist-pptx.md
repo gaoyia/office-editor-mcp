@@ -5,7 +5,7 @@
 检查前用 create 或 apply 在本机生成文件，不要用改过扩展名的 zip 目录冒充。
 本机若 `PowerPoint.Application` 被 WPS 抢走，直接启动 `POWERPNT.EXE` 再挂 COM，不要走被抢的 ProgID。Office 16 的对象模型在 `mdiClass` 上。
 
-C、I、A、Pp、Pc、Psa、Pn、Pcm、Pm、Ps、Sg、Pt、Tn、Tr、Am、Aw、Mm、Mw、Ts、Ho、Phl、Phr、Pcip、Pmd、Psc、Cs、Po、Cr、Pz、Pw、
+C、I、A、Pp、Pvg、Pc、Psa、Pn、Pcm、Pm、Ps、Sg、Pt、Tn、Tr、Am、Aw、Mm、Mw、Ts、Ho、Phl、Phr、Pcip、Pmd、Psc、Cs、Po、Cr、Pz、Pw、
 Pf 各组由 `manual-check/office/cases/pptx-*.ps1` 自动判定，
 跑 `pwsh -File manual-check\office\run.ps1 -Case 'pptx-*'` 即可复现。O1 已放弃，与 xlsx / docx 相同。
 
@@ -27,6 +27,7 @@ Ps1–Ps5、Sg1–Sg5、Pt1–Pt6、Tn1–Tn5、Am1–Am5、Mm1–Mm5、Ho1–Ho
 2026-09-29 补跑 `pptx-create-remain.ps1`，Cr1–Cr5 通过。同日补跑 `pptx-notes.ps1`，Pn7–Pn11 通过。同日补跑 `pptx-zoom.ps1`，Pz1–Pz5 通过。
 同日补跑 `pptx-protect.ps1`，Pw1–Pw5 通过。同日补跑 `pptx-fields.ps1`，Pf1–Pf5 通过。同日补跑 `pptx-run-links.ps1`，Phr1–Phr5 通过。
 同日补跑 `pptx-comment-pics.ps1`，Pcip1–Pcip5 通过。2026-09-29 补跑 `pptx-charts-rare.ps1`，Pq1–Pq5 通过。
+2026-10-09 补跑 `pptx-svg.ps1`，Pvg1–Pvg6 通过。PowerPoint COM `Type=28`，96×48 对应 914400×457200 EMU。
 
 - **C1** ✅
   - PowerPoint 16.0 能打开 `manual-check/office/out/pptx-create.pptx`，标题栏无 Repair
@@ -64,6 +65,13 @@ Ps1–Ps5、Sg1–Sg5、Pt1–Pt6、Tn1–Tn5、Am1–Am5、Mm1–Mm5、Ho1–Ho
   - 尺寸 144 磅
   - 位置 72×108 磅
   - export 与 `/ppt/media/…` 字节一致
+- **Pvg1–Pvg6** ✅
+  - PowerPoint 16.0：`pptx-svg.ps1`，6 PASS / 0 FAIL
+  - 插入 / create 树上 `contentType=image/svg+xml`，COM `Type=28`，无 Repair
+  - `exportMedia` 为 SVG 原字节
+  - 换成 PNG 后没有 `contentType`、包内没有 `.svg`
+  - 备注图 id 为 `slide:1/notes/pic:5`
+  - 非图片 `file` 得 `InvalidField`
 - **Pc1–Pc7** ✅
   - PowerPoint 16.0：无 `charts` 时 `chartCount=1`
   - 名单 id 为 `slide:1/chart:4`
@@ -426,6 +434,21 @@ create 补齐节、形状级超链接、内嵌视频 / 音频、页切换和预�
 | Pp5 | 尺寸 | `setPictureSize` 后 COM 或目视尺寸对上（允许 EMU 误差） |
 | Pp6 | 位置 | `setPicturePos` 后图跟着走，无修复 |
 | Pp7 | 导出 | `exportMedia` 与 `/ppt/media/…` 字节一致。不强制开 PowerPoint |
+
+## 嵌入 SVG
+
+幻灯片图、备注图、批注内图可带 Office 2016 `asvg:svgBlip`。不算渲染引擎，不把 SVG 原文放进 inspect 树。
+手测脚本 `manual-check/office/cases/pptx-svg.ps1`。编号用 Pvg，避免和 Word 的 Sv 混号。
+COM 认 `Type=28`（`msoGraphic`），不是普通图的 `13`。
+
+| 序号 | 检查 | 通过标准 |
+| --- | --- | --- |
+| Pvg1 | 插入 | `insertPicture` 把本地 SVG 写入第一页后，树上 `contentType` 为 `image/svg+xml`，无修复。COM `Type=28` |
+| Pvg2 | 导出 | 对该图 `exportMedia` 得到 SVG 原字节，`contentType` 为 `image/svg+xml` |
+| Pvg3 | create | `slides[].pictures[].file` 指向 SVG 后，树上有 `contentType`，无修复 |
+| Pvg4 | 换成位图 | `replacePicture` 换成 PNG 后没有 `contentType`，包内没有 `.svg`，无修复 |
+| Pvg5 | 备注 | 往 `slide:1/notes` 插 SVG 后，备注图名单末尾有 `contentType`，无修复 |
+| Pvg6 | 拒错 | `file` 不是图片得 `InvalidField`，未写文件。不强制开 PowerPoint |
 
 ## 幻灯片图表
 

@@ -429,6 +429,7 @@ pub struct PicInfo {
     pub cy: Option<i64>,
     pub edit_as: Option<EditAs>,
     pub stable: bool,
+    pub content_type: Option<String>,
 }
 
 pub struct ImageFile {
@@ -437,6 +438,7 @@ pub struct ImageFile {
     pub content_type: String,
     pub cx: i64,
     pub cy: i64,
+    pub svg: Option<Vec<u8>>,
 }
 
 pub fn parse_insert_sheet_id(id: &str, op_index: usize) -> Result<(String, Option<HfSlot>), Error> {
@@ -603,6 +605,9 @@ fn pic_to_json(p: &PicInfo) -> Value {
         }
     }
     m.insert("stable".into(), json!(p.stable));
+    if let Some(ct) = &p.content_type {
+        m.insert("contentType".into(), json!(ct));
+    }
     Value::Object(m)
 }
 
@@ -620,7 +625,7 @@ pub fn export_media(bytes: &[u8], id: &str) -> Result<super::ExportedMedia, Erro
         target: &target,
         hf_el: hf_el.as_ref(),
     };
-    let rid = find_blip_embed(&doc.root, &search).ok_or_else(|| {
+    let rid = find_export_rid(&doc.root, &search).ok_or_else(|| {
         Error::with_path(
             ErrorKind::PartMissing {
                 name: format!("{id} a:blip/@r:embed"),
@@ -646,24 +651,65 @@ pub fn replace_picture(
 ) -> Result<(), Error> {
     let path = format!("ops[{op_index}].id");
     let drawing_part = find_drawing_for(pkg, sheet_part, &op.target, &op.id, &path)?;
-    let doc = xml::parse(pkg.get(&drawing_part)?)?;
+    let mut doc = xml::parse(pkg.get(&drawing_part)?)?;
     let hf_el = load_hf_el(pkg, sheet_part)?;
     let search = PicSearch {
         target: &op.target,
         hf_el: hf_el.as_ref(),
     };
-    let rid = find_blip_embed(&doc.root, &search)
-        .ok_or_else(|| Error::with_path(ErrorKind::PictureNotFound { id: op.id.clone() }, path))?;
-    let old_media = crate::opc::resolve_id(pkg, &drawing_part, &rid)?;
     let image = read_image(&op.file).map_err(|e| e.at(format!("ops[{op_index}].file")))?;
-    let media = next_media_part(pkg, &image.ext);
-    pkg.set(&media, image.bytes)?;
-    update_rel_target(pkg, &drawing_part, &rid, &media)?;
-    let mut cts = ContentTypes::from_package(pkg)?;
-    cts.ensure_default(&image.ext, &image.content_type);
-    cts.write_to(pkg)?;
-    if old_media != media && !media_still_used(pkg, &old_media)? {
-        pkg.remove(&old_media);
+    let mut xml_dirty = false;
+    let mut drop_svg = None;
+    let found = map_pic_mut(&mut doc.root, &search, |pic| {
+        let old_svg = crate::svg::blip_rid(pic);
+        if let Some(svg) = &image.svg {
+            if blip_embed(pic).is_none() {
+                let png_part = next_media_part(pkg, "png");
+                pkg.set(&png_part, crate::ole::PREVIEW_PNG.to_vec())?;
+                let rid = add_image_rel(pkg, &drawing_part, &png_part)?;
+                let mut cts = ContentTypes::from_package(pkg)?;
+                cts.ensure_default("png", "image/png");
+                cts.write_to(pkg)?;
+                crate::svg::set_blip_embed(pic, &rid);
+            }
+            write_or_update_svg(pkg, &drawing_part, pic, &old_svg, svg.clone())?;
+            xml_dirty = true;
+            return Ok(());
+        }
+        let rid = blip_embed(pic).ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::PictureNotFound { id: op.id.clone() },
+                path.clone(),
+            )
+        })?;
+        let old_media = crate::opc::resolve_id(pkg, &drawing_part, &rid)?;
+        let media = next_media_part(pkg, &image.ext);
+        pkg.set(&media, image.bytes.clone())?;
+        update_rel_target(pkg, &drawing_part, &rid, &media)?;
+        let mut cts = ContentTypes::from_package(pkg)?;
+        cts.ensure_default(&image.ext, &image.content_type);
+        cts.write_to(pkg)?;
+        if old_media != media && !media_still_used(pkg, &old_media)? {
+            pkg.remove(&old_media);
+        }
+        if old_svg.is_some() {
+            crate::svg::strip_svg_blip(pic);
+            xml_dirty = true;
+            drop_svg = old_svg;
+        }
+        Ok(())
+    })?;
+    if !found {
+        return Err(Error::with_path(
+            ErrorKind::PictureNotFound { id: op.id.clone() },
+            path,
+        ));
+    }
+    if xml_dirty {
+        pkg.set(&drawing_part, doc.to_bytes()?)?;
+    }
+    if let Some(rid) = drop_svg {
+        drop_rel_if_unused(pkg, &drawing_part, &doc.root, &rid)?;
     }
     Ok(())
 }
@@ -686,15 +732,12 @@ pub fn insert_picture(
     ensure_xmlns(&mut draw_doc.root, "r", REL_NS);
     ensure_xmlns(&mut draw_doc.root, "a", A_NS);
     let cnv = next_cnv_id(pkg, sheet_part, &sheet_doc.root)?;
-    let media = next_media_part(pkg, &image.ext);
-    pkg.set(&media, image.bytes)?;
-    let rid = add_image_rel(pkg, &drawing_part, &media)?;
+    let (rid, svg_rid) = write_picture_media(pkg, &drawing_part, &image)?;
     let mut cts = ContentTypes::from_package(pkg)?;
-    cts.ensure_default(&image.ext, &image.content_type);
     cts.set_override(&drawing_part, CT_DRAWING)?;
     cts.write_to(pkg)?;
     let name = format!("图片 {cnv}");
-    let anchor = build_anchor(
+    let mut anchor = build_anchor(
         op.anchor,
         op.from,
         op.to,
@@ -712,6 +755,9 @@ pub fn insert_picture(
         &rid,
         None,
     );
+    if let Some(svg) = svg_rid {
+        crate::svg::set_svg_blip(&mut anchor, &svg);
+    }
     draw_doc.root.push_element(anchor);
     pkg.set(&drawing_part, draw_doc.to_bytes()?)?;
     Ok(())
@@ -736,13 +782,16 @@ pub fn delete_picture(
         PicKey::Cnv(s) => Some(s.clone()),
         PicKey::Index(_) => None,
     };
-    let rid = find_blip_rid(&doc.root, &search).ok_or_else(|| {
+    let rids = find_image_rids(&doc.root, &search).ok_or_else(|| {
         Error::with_path(
             ErrorKind::PictureNotFound { id: op.id.clone() },
             path.clone(),
         )
     })?;
-    let media = crate::opc::resolve_id(pkg, &drawing_part, &rid).ok();
+    let medias: Vec<String> = rids
+        .iter()
+        .filter_map(|rid| crate::opc::resolve_id(pkg, &drawing_part, rid).ok())
+        .collect();
     let cnv_for_hf = cnv_for_hf.or_else(|| {
         // index 命中时从当前 drawing 再找一次 cNvPr。
         let mut found = None;
@@ -785,14 +834,16 @@ pub fn delete_picture(
     } else {
         pkg.set(&drawing_part, doc.to_bytes()?)?;
         let mut rels = Relationships::from_package(pkg, &drawing_part)?;
-        rels.remove_by_id(&rid);
+        for rid in &rids {
+            rels.remove_by_id(rid);
+        }
         if rels.rels.is_empty() {
             pkg.remove(&rels_part_name(&drawing_part));
         } else {
             rels.write_to(pkg, &drawing_part)?;
         }
     }
-    if let Some(media) = media {
+    for media in medias {
         if !media_still_used(pkg, &media)? {
             pkg.remove(&media);
         }
@@ -1308,6 +1359,7 @@ pub(crate) fn pic_info_at(
             None
         },
         stable,
+        content_type: crate::svg::content_type(pic).map(str::to_string),
     })
 }
 
@@ -1401,8 +1453,96 @@ fn find_blip_rid(root: &Element, search: &PicSearch<'_>) -> Option<String> {
     find_blip_attr(root, search, false)
 }
 
-fn find_blip_embed(root: &Element, search: &PicSearch<'_>) -> Option<String> {
-    find_blip_attr(root, search, true)
+fn find_export_rid(root: &Element, search: &PicSearch<'_>) -> Option<String> {
+    let mut index = 0usize;
+    let mut rid = None;
+    let _ = walk_anchors(root, &mut |anchor, _| {
+        if rid.is_some() {
+            return Ok(());
+        }
+        let Some(pic) = direct_pic(anchor) else {
+            return Ok(());
+        };
+        if search.hit(&cnv_of(pic).0, &mut index) {
+            rid = crate::svg::blip_rid(pic).or_else(|| blip_embed(pic));
+        }
+        Ok(())
+    });
+    rid
+}
+
+fn find_image_rids(root: &Element, search: &PicSearch<'_>) -> Option<Vec<String>> {
+    let mut index = 0usize;
+    let mut rids = None;
+    let _ = walk_anchors(root, &mut |anchor, _| {
+        if rids.is_some() {
+            return Ok(());
+        }
+        let Some(pic) = direct_pic(anchor) else {
+            return Ok(());
+        };
+        if search.hit(&cnv_of(pic).0, &mut index) {
+            rids = Some(image_rids(pic));
+        }
+        Ok(())
+    });
+    rids
+}
+
+fn image_rids(pic: &Element) -> Vec<String> {
+    let mut out = Vec::new();
+    if let Some(r) = blip_embed(pic).or_else(|| blip_rid(pic)) {
+        out.push(r);
+    }
+    if let Some(r) = crate::svg::blip_rid(pic) {
+        if !out.iter().any(|x| x == &r) {
+            out.push(r);
+        }
+    }
+    out
+}
+
+fn map_pic_mut<F>(root: &mut Element, search: &PicSearch<'_>, mut f: F) -> Result<bool, Error>
+where
+    F: FnMut(&mut Element) -> Result<(), Error>,
+{
+    let mut index = 0usize;
+    let mut found = false;
+    let mut err = None;
+    walk_anchors_mut(root, &mut |anchor, _| {
+        if found || err.is_some() {
+            return true;
+        }
+        let Some(pic) = direct_pic_mut(anchor) else {
+            return false;
+        };
+        if !has_blip(pic) {
+            return false;
+        }
+        if search.hit(&cnv_of(pic).0, &mut index) {
+            found = true;
+            if let Err(e) = f(pic) {
+                err = Some(e);
+            }
+            return true;
+        }
+        false
+    });
+    if let Some(e) = err {
+        return Err(e);
+    }
+    Ok(found)
+}
+
+fn direct_pic_mut(anchor: &mut Element) -> Option<&mut Element> {
+    let idx = anchor.children.iter().position(|n| match n {
+        Node::Element(c) => c.local_name() == "pic" && has_blip(c),
+        _ => false,
+    })?;
+    match &mut anchor.children[idx] {
+        Node::Element(pic) => Some(pic),
+        _ => None,
+    }
 }
 
 fn find_blip_attr(root: &Element, search: &PicSearch<'_>, embed_only: bool) -> Option<String> {
@@ -1846,6 +1986,109 @@ pub(crate) fn add_image_rel(
     Ok(rid)
 }
 
+pub(crate) fn write_picture_media(
+    pkg: &mut Package,
+    part: &str,
+    image: &ImageFile,
+) -> Result<(String, Option<String>), Error> {
+    let media = next_media_part(pkg, &image.ext);
+    pkg.set(&media, image.bytes.clone())?;
+    let rid = add_image_rel(pkg, part, &media)?;
+    let mut cts = ContentTypes::from_package(pkg)?;
+    cts.ensure_default(&image.ext, &image.content_type);
+    let svg_rid = if let Some(svg) = &image.svg {
+        let svg_part = next_media_part(pkg, "svg");
+        pkg.set(&svg_part, svg.clone())?;
+        let svg_rid = add_image_rel(pkg, part, &svg_part)?;
+        cts.ensure_default("svg", crate::svg::CT);
+        Some(svg_rid)
+    } else {
+        None
+    };
+    cts.write_to(pkg)?;
+    Ok((rid, svg_rid))
+}
+
+fn write_or_update_svg(
+    pkg: &mut Package,
+    part: &str,
+    host: &mut Element,
+    old_svg_rid: &Option<String>,
+    svg: Vec<u8>,
+) -> Result<(), Error> {
+    if let Some(rid) = old_svg_rid {
+        let old_media = crate::opc::resolve_id(pkg, part, rid)?;
+        if old_media
+            .rsplit('.')
+            .next()
+            .unwrap_or("")
+            .eq_ignore_ascii_case("svg")
+        {
+            pkg.set(&old_media, svg)?;
+        } else {
+            let new_media = next_media_part(pkg, "svg");
+            pkg.set(&new_media, svg)?;
+            update_rel_target(pkg, part, rid, &new_media)?;
+            if !media_still_used(pkg, &old_media)? {
+                pkg.remove(&old_media);
+            }
+        }
+        let mut cts = ContentTypes::from_package(pkg)?;
+        cts.ensure_default("svg", crate::svg::CT);
+        cts.write_to(pkg)?;
+        return Ok(());
+    }
+    let svg_part = next_media_part(pkg, "svg");
+    pkg.set(&svg_part, svg)?;
+    let svg_rid = add_image_rel(pkg, part, &svg_part)?;
+    let mut cts = ContentTypes::from_package(pkg)?;
+    cts.ensure_default("svg", crate::svg::CT);
+    cts.write_to(pkg)?;
+    crate::svg::set_svg_blip(host, &svg_rid);
+    Ok(())
+}
+
+fn drop_rel_if_unused(
+    pkg: &mut Package,
+    part: &str,
+    root: &Element,
+    rid: &str,
+) -> Result<(), Error> {
+    if rid_in_tree(root, rid) {
+        return Ok(());
+    }
+    let media = crate::opc::resolve_id(pkg, part, rid).ok();
+    let mut rels = Relationships::from_package(pkg, part)?;
+    rels.remove_by_id(rid);
+    if rels.rels.is_empty() {
+        pkg.remove(&rels_part_name(part));
+    } else {
+        rels.write_to(pkg, part)?;
+    }
+    if let Some(m) = media {
+        if !media_still_used(pkg, &m)? {
+            pkg.remove(&m);
+        }
+    }
+    Ok(())
+}
+
+fn rid_in_tree(root: &Element, rid: &str) -> bool {
+    let mut used = false;
+    walk_all(root, &mut |e| {
+        if used {
+            return;
+        }
+        let local = e.local_name();
+        if (local == "blip" || local == "svgBlip")
+            && (e.attr_local("embed") == Some(rid) || e.attr_local("link") == Some(rid))
+        {
+            used = true;
+        }
+    });
+    used
+}
+
 fn update_rel_target(
     pkg: &mut Package,
     part: &str,
@@ -2104,6 +2347,7 @@ fn classify_image(bytes: Vec<u8>, path: &Path) -> Result<ImageFile, Error> {
             content_type: "image/png".into(),
             cx,
             cy,
+            svg: None,
         });
     }
     if bytes.len() >= 3 && bytes[0] == 0xFF && bytes[1] == 0xD8 && bytes[2] == 0xFF {
@@ -2114,6 +2358,7 @@ fn classify_image(bytes: Vec<u8>, path: &Path) -> Result<ImageFile, Error> {
             content_type: "image/jpeg".into(),
             cx,
             cy,
+            svg: None,
         });
     }
     if bytes.len() >= 6 && (bytes.starts_with(b"GIF87a") || bytes.starts_with(b"GIF89a")) {
@@ -2124,6 +2369,7 @@ fn classify_image(bytes: Vec<u8>, path: &Path) -> Result<ImageFile, Error> {
             content_type: "image/gif".into(),
             cx,
             cy,
+            svg: None,
         });
     }
     if bytes.len() >= 26 && bytes.starts_with(b"BM") {
@@ -2134,6 +2380,18 @@ fn classify_image(bytes: Vec<u8>, path: &Path) -> Result<ImageFile, Error> {
             content_type: "image/bmp".into(),
             cx,
             cy,
+            svg: None,
+        });
+    }
+    if crate::svg::looks_like(&bytes) {
+        let (cx, cy) = crate::svg::size(&bytes).unwrap_or((914400, 914400));
+        return Ok(ImageFile {
+            bytes: crate::ole::PREVIEW_PNG.to_vec(),
+            ext: "png".into(),
+            content_type: "image/png".into(),
+            cx,
+            cy,
+            svg: Some(bytes),
         });
     }
     let _ = path;

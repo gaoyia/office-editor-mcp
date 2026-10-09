@@ -534,17 +534,19 @@ pptx 的放映类型、循环与旁白开关用 `setShowPr`，见 [json-contract
 只换媒体字节与内容类型，不改锚点、绕排和位置。`a:blip/@r:embed` 的关系 id 保持不变。
 docx 扩展名变了就写新的 `/word/media/imageN.*`；xlsx 写新的 `/xl/media/imageN.*`；pptx 写新的 `/ppt/media/imageN.*`。
 改同一条关系的 `Target`，并更新 `[Content_Types].xml` 的 Default 或 Override；旧媒体若重新解析后无人引用则删掉。
-三种格式都按文件头认 PNG、JPEG（`.jpg` / `.jpeg`）、GIF、BMP；扩展名只用来给新媒体取名。
-docx 另外认 SVG（见下）。xlsx / pptx 收到 SVG 仍报 `InvalidField`。
+三种格式都按文件头认 PNG、JPEG（`.jpg` / `.jpeg`）、GIF、BMP、SVG；扩展名只用来给新媒体取名。不认 SVGZ。
 
-docx 换成 SVG 时：
+换成 SVG 时：
 
 - 保留已有 `a:blip` 后备图与关系 id
 - 在 `a:blip` 上写或改 `asvg:svgBlip`（Office 2016 SVG 扩展）
-- SVG 原字节写入 `/word/media/imageN.svg`
+- SVG 原字节写入该格式的 media 部件
+  - docx：`/word/media/imageN.svg`
+  - xlsx：`/xl/media/imageN.svg`
+  - pptx：`/ppt/media/imageN.svg`
 - `Default Extension="svg"` 为 `image/svg+xml`
 
-docx 从 SVG 换成位图时：按上面换 `a:blip` 媒体，去掉 `svgBlip`；SVG 部件无人引用则删。
+从 SVG 换成位图时：按上面换 `a:blip` 媒体，去掉 `svgBlip`；SVG 部件无人引用则删。
 
 ### insertPicture
 
@@ -622,7 +624,6 @@ SVG 再多写一条 image 关系指向 `/word/media/imageN.svg`。
 `a:blip/@r:embed` 指向 1×1 PNG 占位（不栅格化 SVG）。
 `asvg:svgBlip/@r:embed` 指向 SVG。
 `wp:docPr/@id` 取该部件已有 `docPr` 的最大整数加 1，至少为 1。
-xlsx / pptx 的 `insertPicture` 仍不认 SVG。
 
 xlsx：找不到该表报 `IdNotFound`。`id` 不是 `sheet:{name}` 也不是页眉槽位 id 报 `InvalidId`。该表不是 `worksheet` 报 `InvalidField`。
 往工作表插图必须给 `from`，否则报 `MissingField`。`from` / `to` 不是合法 A1 报 `InvalidRange`。
@@ -630,6 +631,8 @@ xlsx：找不到该表报 `IdNotFound`。`id` 不是 `sheet:{name}` 也不是页
 `cx` / `cy` 规则与 docx 相同；`twoCell` 也要写 `xdr:pic` 里的 `a:ext`（给 Excel 一个内部尺寸），显示尺寸仍由起止格决定。
 没有 drawing 部件则新建 `/xl/drawings/drawingN.xml`、工作表关系、`[Content_Types].xml` 的 Override，并在工作表上写 `<drawing r:id="…"/>`。
 往页眉槽位插图时不写 `<drawing>`，改写或新建 `<drawingHF r:id="…"/>`。新媒体写入 `/xl/media/imageN.*`。
+SVG 再多写一条 image 关系指向 `/xl/media/imageN.svg`。
+`a:blip/@r:embed` 指向 1×1 PNG 占位。`asvg:svgBlip/@r:embed` 指向 SVG。
 `xdr:cNvPr/@id` 取该表工作表 drawing 与 `drawingHF` 里已有 `cNvPr` 的最大整数加 1。工作表图至少为 1。
 页眉图至少为 2：Excel 16.0 若 `drawingHF` 的 `cho` / `lho` 等属性指向 id 1，会拒绝打开该工作簿。锚点必须带空的 `xdr:clientData`（§20.5.2.3）。
 
@@ -641,11 +644,15 @@ pptx：找不到该页报 `IdNotFound`。`id` 必须是 `slide:{n}`、`slide:{n}
 扫描该宿主已有 `p:sp` / `p:pic` / `p:graphicFrame` / 嵌套 `p:grpSp` 的 `a:xfrm`，优先放到最右侧空隙，放不下再放到下方。
 `kind` / `wrap` / `from` / `to` / `anchor` 以及 xlsx 偏移字段出现报 `InvalidField`。
 写入该宿主 `p:spTree` 一个新的 `p:pic`（带 `a:blip`），关系指向 `/ppt/media/imageN.*`。
+SVG 再多写一条 image 关系指向 `/ppt/media/imageN.svg`。
+`a:blip/@r:embed` 指向 1×1 PNG 占位。`asvg:svgBlip/@r:embed` 指向 SVG。
 `p:cNvPr/@id` 取该宿主已有全部 `cNvPr`（`sp` / `pic` / `graphicFrame` / 组合，含 `spTree` 自己的 `id="1"`）的最大整数加 1，至少为 2。
 `id` 为 `slide:{n}/notes` 且该页还没有 notesSlide 时，按 `setNotesText` 同一套规则新建最小备注页再插图。
 往批注或回复插时：不要 `x` / `y` / `cx` / `cy`（出现报未知字段）。找不到该批注报 `IdNotFound`。
 写入该 `p188:cm` 或 `p188:reply`：插在 `txBody` 之后、`extLst` 之前一个 `a:blip r:embed="…"`（没有 `extLst` 则放在该宿主末尾）。
-comments 部件 `.rels` 补一条 image 关系，媒体写入 `/ppt/media/imageN.*`。不写 `p:pic`，不写尺寸位置。不并进幻灯片 `pictureCount`。
+comments 部件 `.rels` 补一条 image 关系，媒体写入 `/ppt/media/imageN.*`。
+SVG 时该 `a:blip` 仍指向 1×1 PNG 占位，再补一条 image 关系指向 `/ppt/media/imageN.svg`，并写 `asvg:svgBlip`。
+不写 `p:pic`，不写尺寸位置。不并进幻灯片 `pictureCount`。
 对 `kind` 为 `ink` 的批注或回复报 `NotImplemented`。PowerPoint 16.0：COM 批注对象没有插图方法；另存接受这种 `a:blip`，标题栏无 Repair。
 
 ### deletePicture
@@ -1820,8 +1827,9 @@ run 级链编进 `hyperlinks`，独立节点用 `insertHyperlink`（`on` 为 `ru
 形状 id 或 `slide:{n}`（没有 `/pic:` / `/video:` / `/audio:` / `/ole:` / `/ink:`）报 `InvalidId`。
 xlsx / pptx 上发 `font:{n}` 仍按该格式原规则报 `InvalidId`。找不到该图、该嵌入对象、该墨迹画布、该媒体或该嵌入字体报 `IdNotFound`。
 图 id 优先走 `a:blip/@r:embed`；只有 `@r:link`、没有 embed 时按外部关系处理，报 `OpcPartMissing`，不下载 http。embed 指向外部关系同样报 `OpcPartMissing`。
-docx 图若带 `asvg:svgBlip/@r:embed`，`exportMedia` 改走这条关系，写出 SVG 原字节。
+三种格式的图若带 `asvg:svgBlip/@r:embed`，`exportMedia` 改走这条关系，写出 SVG 原字节。
 没有 `svgBlip` 时仍走 `a:blip`。
+PowerPoint 另存的 SVG 可以没有 `a:blip/@r:embed`，此时只走 `svgBlip`。
 pptx 视频 / 音频 id 优先走 `p14:media/@r:embed`，没有则走 `a:videoFile` / `a:audioFile` / `a:wavAudioFile` 的关系；外链同样报 `OpcPartMissing`。
 OLE id 走 oleObject 或 package 关系目标；关系缺失或指向外部同样报 `OpcPartMissing`。
 

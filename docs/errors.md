@@ -284,8 +284,7 @@
 - `setPictureAnchor` 互转缺 `posX` / `posY` / `from` / `to` / `cx` / `cy` 时报 `InvalidField`，不写文件
 - 读不到图片 `file` 报 `Io`
 - 文件不是该格式认的图片报 `InvalidField`
-  - docx 认 PNG、JPEG、GIF、BMP、SVG
-  - xlsx / pptx 仍只认位图
+  - 三种格式都认 PNG、JPEG、GIF、BMP、SVG
   - 不认 SVGZ
 - create 的 `pictures[]` 缺 `file` 报 `MissingField`
 - 只给 `cx` 或只给 `cy` 报 `InvalidField`
