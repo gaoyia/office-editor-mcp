@@ -815,6 +815,8 @@ define_error_kinds! {
     InvalidTransitionType => vec![Self::InvalidTransitionType],
     InvalidAnimType => vec![Self::InvalidAnimType],
     InvalidAnimTrigger => vec![Self::InvalidAnimTrigger],
+    InvalidAnimDelay => vec![Self::InvalidAnimDelay],
+    InvalidAnimDur => vec![Self::InvalidAnimDur],
     InvalidTransitionDur => vec![Self::InvalidTransitionDur],
     InvalidTransitionAdvTm => vec![Self::InvalidTransitionAdvTm],
     InvalidTransitionDir => vec![Self::InvalidTransitionDir],
@@ -1759,6 +1761,8 @@ impl ErrorKind {
             | Self::InvalidFldType
             | Self::ZoomTargetSelf
             | Self::InvalidAnimTrigger
+            | Self::InvalidAnimDelay
+            | Self::InvalidAnimDur
             | Self::InvalidTransitionDur
             | Self::InvalidTransitionAdvTm
             | Self::InvalidTransitionDir

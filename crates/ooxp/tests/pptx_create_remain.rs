@@ -127,7 +127,7 @@ fn create_remain_writes_sections_link_transition_anim() {
                 {
                     "shapes": [{ "text": "标题", "url": "https://example.com/" }],
                     "transition": { "type": "fade" },
-                    "anims": [{ "type": "fade", "shape": 1 }]
+                    "anims": [{ "type": "fade", "shape": 1, "delay": 380 }]
                 },
                 { "shapes": [{ "text": "第二页" }] }
             ]
@@ -155,6 +155,8 @@ fn create_remain_writes_sections_link_transition_anim() {
     assert_eq!(tree["slides"][0]["animCount"], 1);
     assert_eq!(tree["slides"][0]["timing"][0]["type"], "fade");
     assert_eq!(tree["slides"][0]["timing"][0]["target"], "slide:1/shape:2");
+    assert_eq!(tree["slides"][0]["timing"][0]["delay"], 380);
+    assert_eq!(tree["slides"][0]["timing"][0]["dur"], 500);
     let xml = part_text(&path, "ppt/slides/slide1.xml");
     assert!(xml.contains("hlinkClick"));
     assert!(xml.contains("<p:transition"));
@@ -280,6 +282,17 @@ fn create_remain_rejects_unknown_and_bad_fields() {
             "slides": [{
                 "shapes": [{ "text": "a" }],
                 "anims": [{ "type": "fade", "shape": 1, "picture": 1 }]
+            }]
+        }),
+    );
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+
+    let err = create_err(
+        &path,
+        json!({
+            "slides": [{
+                "shapes": [{ "text": "a" }],
+                "anims": [{ "type": "fade", "shape": 1, "delay": 60001 }]
             }]
         }),
     );

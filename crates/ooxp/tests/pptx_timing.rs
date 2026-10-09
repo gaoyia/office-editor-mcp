@@ -220,8 +220,13 @@ fn timing_scope_does_not_need_slide() {
     assert_eq!(list[0]["target"], "slide:1/shape:2");
     assert_eq!(list[0]["type"], "fade");
     assert_eq!(list[0]["trigger"], "click");
+    assert_eq!(list[0]["delay"], 0);
+    assert_eq!(list[0]["dur"], 500);
     assert_eq!(list[0]["id"], "slide:1/anim:1");
-    assert_eq!(object_keys(&list[0]), ["id", "target", "type", "trigger"]);
+    assert_eq!(
+        object_keys(&list[0]),
+        ["id", "target", "type", "trigger", "delay", "dur"]
+    );
 }
 
 #[test]
@@ -454,7 +459,12 @@ fn insert_fade_writes_office_tree() {
     assert_eq!(list[0]["target"], "slide:1/shape:2");
     assert_eq!(list[0]["type"], "fade");
     assert_eq!(list[0]["trigger"], "click");
-    assert_eq!(object_keys(&list[0]), ["id", "target", "type", "trigger"]);
+    assert_eq!(list[0]["delay"], 0);
+    assert_eq!(list[0]["dur"], 500);
+    assert_eq!(
+        object_keys(&list[0]),
+        ["id", "target", "type", "trigger", "delay", "dur"]
+    );
     let xml = part(&out, "ppt/slides/slide1.xml");
     assert!(xml.contains("<p:timing"));
     assert!(xml.contains("nodeType=\"mainSeq\""));
@@ -519,6 +529,40 @@ fn insert_with_attaches_to_last_group() {
     assert_eq!(list[0]["trigger"], "click");
     assert_eq!(list[1]["trigger"], "with");
     assert_eq!(list[1]["target"], "slide:1/shape:3");
+}
+
+#[test]
+fn insert_anim_writes_delay_and_dur() {
+    let src = create_deck("stagger");
+    let out = tmp("stagger-out");
+    apply(
+        &src,
+        &out,
+        json!([
+            { "op": "insertAnim", "id": "slide:1/shape:2", "type": "fade" },
+            {
+                "op": "insertAnim",
+                "id": "slide:1/shape:3",
+                "type": "fade",
+                "trigger": "with",
+                "delay": 380,
+                "dur": 800
+            }
+        ]),
+    )
+    .unwrap();
+    let tree = inspect_scope(&out, json!({ "timing": true }));
+    let list = tree["slides"][0]["timing"].as_array().unwrap();
+    assert_eq!(list.len(), 2);
+    assert_eq!(list[0]["delay"], 0);
+    assert_eq!(list[0]["dur"], 500);
+    assert_eq!(list[1]["trigger"], "with");
+    assert_eq!(list[1]["delay"], 380);
+    assert_eq!(list[1]["dur"], 800);
+    let xml = part(&out, "ppt/slides/slide1.xml");
+    assert!(xml.contains("delay=\"380\""));
+    assert!(xml.contains("dur=\"800\""));
+    assert_eq!(xml.matches("delay=\"indefinite\"").count(), 1);
 }
 
 #[test]
@@ -627,6 +671,24 @@ fn insert_anim_rejects_bad_fields() {
     )
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::IdNotFound);
+    assert!(!dest.exists());
+
+    let err = apply(
+        &src,
+        &dest,
+        json!([{ "op": "insertAnim", "id": "slide:1/shape:2", "type": "fade", "delay": 60001 }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+    assert!(!dest.exists());
+
+    let err = apply(
+        &src,
+        &dest,
+        json!([{ "op": "insertAnim", "id": "slide:1/shape:2", "type": "fade", "dur": 0 }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
     assert!(!dest.exists());
 
     let err = apply(

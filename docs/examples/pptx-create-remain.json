@@ -14,7 +14,7 @@
           { "text": "标题", "url": "https://example.com/" }
         ],
         "transition": { "type": "fade" },
-        "anims": [{ "type": "fade", "shape": 1 }]
+        "anims": [{ "type": "fade", "shape": 1, "delay": 380 }]
       },
       {
         "shapes": [{ "text": "第二页" }],

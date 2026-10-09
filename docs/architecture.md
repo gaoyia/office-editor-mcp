@@ -218,7 +218,7 @@ apply 可改被点名形状的 `p:txBody` 可见文字（含备注形状与母�
 给了 `slides[].charts` 时复用 `insertChart`，写入 `/ppt/charts/…`、embedding 与 `p:graphicFrame`。
 给了 `slides[].smartArts` 时复用 `insertSmartArt`，写入 `/ppt/diagrams/…` 与图示 `p:graphicFrame`。
 给了 `slides[].tables` 时复用 `insertTable`，写入表 `p:graphicFrame`。给了 `slides[].notes` 时复用 `setNotesText`。
-给了 `slides[].comments` 时复用 `insertComment`。给了 `slides[].anims` 时复用 `insertAnim`（只写 fade）。
+给了 `slides[].comments` 时复用 `insertComment`。给了 `slides[].anims` 时复用 `insertAnim`（只写 fade，可写 `delay` / `dur`）。
 母版与版式进树（`scope.masters`），`setSlideLayout` 只换关系，写入用 `insertLayout` / `insertPlaceholder` / `insertMaster` 等。
 动画效果摘要进树（`scope.timing`），写入用 `insertAnim` / `deleteAnim`。切换进树，用 `setTransition` 改。幻灯片尺寸始终进树，写入用 `setSlideSize`。
 主题配色与字体挂在 `scope.masters` 的 `theme` 上，写入用 `setThemeColors` / `setThemeFonts`。`mc:AlternateContent` 只走第一个 `Choice`。
@@ -336,7 +336,7 @@ create 不写修订痕迹。pptx 的 `slides[].pictures` 复用 `insertPicture`�
 `slides[].charts` 复用 `insertChart`（数据写 embedding），`slides[].smartArts` 复用 `insertSmartArt`，
 `slides[].tables` 复用 `insertTable`，`slides[].notes` 复用 `setNotesText`，`slides[].comments` 复用 `insertComment`，
 形状上的 `url` / `file` / `slide` 复用 `insertHyperlink`，`slides[].transition` 复用 `setTransition`，
-`slides[].anims` 复用 `insertAnim`（只写 fade，不接受整棵时间轴树），`presentation.sections` 复用 `insertSlideSection`。
+`slides[].anims` 复用 `insertAnim`（只写 fade，可写 `delay` / `dur`，不接受整棵时间轴树），`presentation.sections` 复用 `insertSlideSection`。
 create 本期不写 OLE，也不写 Zoom，也不写域，也不写 run 级超链接，也不写批注内图，也不写 `showPr` / `modifyVerifier`。
 三种格式的 `props` 复用 `setProps` / `setCustomProp` 同一套字段写 core / app / custom。
 docx 的 `document.protection` 复用 `setProtection`。docx 的 `document.watermarks` 复用 `insertWatermark`。create 不写 theme 部件。

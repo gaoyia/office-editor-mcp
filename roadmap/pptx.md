@@ -74,6 +74,7 @@ pptx 模块不要引用 `docx::` 或 `xlsx::`。`c:chart`（§21.2）用 `crates
 | C7 | `.plan/2026年-10月-9日-✅-三家3D模型.md` | 幻灯片图 |
 | C8 | `.plan/2026年-10月-9日-✅-xlsx-pptx-嵌入OMML.md` | 幻灯片图；不要改 Word 公式 |
 | C9 | `.plan/2026年-10月-9日-✅-pptx-xlsx-形状文字格式.md` | 形状增删；xlsx 文本框 / 形状；不要改 Word `setRunFormat` |
+| 26 | `.plan/2026年-10月-9日-✅-pptx-动画延迟.md` | 动画写入 |
 
 0 与 2 不要合成一份。图是 `p:pic`，图表是 `p:graphicFrame`，位置是画布 `a:xfrm`。第一期页名单和 `setShapeText` 见总计划。
 

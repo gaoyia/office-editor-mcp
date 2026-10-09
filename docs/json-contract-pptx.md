@@ -880,8 +880,13 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
 - `scope.timing` 为 `true` 时，每页带 `timing`。没有效果时为空数组。不依赖 `scope.slide`。inspect 只读 `<p:timing>`。
   按文档顺序收集 `p:cTn` 上 `nodeType` 为 `clickEffect` / `withEffect` / `afterEffect` 的节点（ECMA-376 `ST_TLTimeNodeType`，§19.7.47）；
   `tmRoot` / `mainSeq` / `clickPar` / `withGroup` / `afterGroup` / `interactiveSeq` 不算一条。
-  每条字段顺序：`id`、`target`、`type`、`trigger`。`id` 为 `slide:{n}/anim:{k}`，`k` 按文档顺序从 1 计；删中间一条后面要重排。
+  每条字段顺序：`id`、`target`、`type`、`trigger`、`delay`、`dur`。
+  `id` 为 `slide:{n}/anim:{k}`，`k` 按文档顺序从 1 计；删中间一条后面要重排。
   `trigger`：`clickEffect` 为 `click`，`withEffect` 为 `with`，`afterEffect` 为 `after`。
+  `delay` 取该效果 `cTn` 自身 `stCondLst` 第一条 `cond/@delay`：
+  无单位整数为该毫秒；`indefinite` 为 `null`；缺则为 `0`。
+  `dur` 取该效果子树第一个 `p:animEffect` 的 `cBhvr/cTn/@dur`：
+  无单位整数为该毫秒；`indefinite` 为 `null`；缺则为 `500`。
   `target` 取该效果子树里第一个 `p:spTgt/@spid`（不含嵌套的另一条效果 `cTn`），对到该页对象的 inspect id：带 `p:txBody` 的 `p:sp` 为 `slide:{n}/shape:{id}`，
   `p:cxnSp` 为 `slide:{n}/cxn:{id}`，带 `a:videoFile` 的 `p:pic` 为 `slide:{n}/video:{id}`，
   带 `a:audioFile` / `a:wavAudioFile` 的 `p:pic` 为 `slide:{n}/audio:{id}`，其余 `p:pic` 为 `slide:{n}/pic:{id}`，
@@ -890,7 +895,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   去掉括号及之后的参数（`blinds(horizontal)` 为 `blinds`）；
   没有则按第一个行为子元素：`animMotion` 为 `motion`，`animRot` 为 `spin`，`animScale` 为 `scale`，`animClr` 为 `color`，`anim` 为 `anim`，`set` 为 `set`；
   再没有则取该 `cTn` 的 `presetClass`（`entr` / `exit` / `emph` / `path` / `verb` / `mediacall`）；仍没有则为 `other`。
-  不返回时长、路径点、文本范围或完整时间轴树。xlsx / docx 的 `scope` 里出现 `timing` 报 `InvalidField`。apply 用 `insertAnim` / `deleteAnim` 按模板增删预设效果。
+  不返回路径点、文本范围或完整时间轴树。xlsx / docx 的 `scope` 里出现 `timing` 报 `InvalidField`。apply 用 `insertAnim` / `deleteAnim` 按模板增删预设效果。
   不接受把整棵 `<p:timing>` 当 JSON 写入；`setTiming` 报 `UnsupportedOp`。
 - `scope.masters` 为 `true` 时，根上带 `masters`。没有母版时为空数组。不依赖 `scope.slide`。不算母版排版引擎，也不把母版装饰形（没有 `p:ph` 的 `p:sp`）收进树。
   每份母版字段顺序：`id`、`index`、`name`、`theme`、`placeholders`、`layouts`。`id` 为 `master:{n}`。
@@ -1176,6 +1181,14 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
 - **`anims[].trigger`**
   - 可选
   - `click` / `with` / `after`，省略为 `click`
+- **`anims[].delay`**
+  - 可选
+  - 规则与 `insertAnim` 的 `delay` 相同
+  - 省略为 `0`
+- **`anims[].dur`**
+  - 可选
+  - 规则与 `insertAnim` 的 `dur` 相同
+  - 省略为 `500`
 - **`anims[].shape` / `picture` / `video` / `audio` / `table` / `chart` / `smartArt`**
   - 绑定目标，1 起的序号，且恰好一个
   - 对应该页 create 数组
@@ -1387,9 +1400,23 @@ prst 的效果子元素是 `p15:prstTrans`，`prst` 为该 `type`。不写 `sndA
 - **`trigger`**
   - 可选
   - `click` / `with` / `after`，省略为 `click`
+- **`delay`**
+  - 可选
+  - 毫秒，整数，范围 `0`–`60000`
+  - 省略为 `0`
+  - 写入该效果 `cTn` 的 `stCondLst/cond/@delay`
+  - 相对 `trigger`：`with` 是相对上一条开始再等；`after` 是相对上一条结束再等；`click` 是单击后再等
+- **`dur`**
+  - 可选
+  - 毫秒，整数，范围 `1`–`60000`
+  - 省略为 `500`
+  - 写入 `p:animEffect` 里 `cBhvr/cTn/@dur`
 
 找不到该页报 `IdNotFound`。找不到该对象报 `IdNotFound`。id 不是上述对象、或是备注 / 母版上的对象，报 `InvalidId`。
-缺 `type`、`type` 不是 `fade`、或 `trigger` 不是三个之一，报 `InvalidField`。没有 `<p:timing>` 时写出带 `mainSeq`、`bldLst` / `bldP` 的最小单击淡入树。
+缺 `type`、`type` 不是 `fade`、或 `trigger` 不是三个之一，报 `InvalidField`。
+`delay` 不是整数或不在 `0`–`60000`，报 `InvalidField`。
+`dur` 不是整数或不在 `1`–`60000`，报 `InvalidField`。
+没有 `<p:timing>` 时写出带 `mainSeq`、`bldLst` / `bldP` 的最小单击淡入树。
 已有树则接到 `mainSeq` 末尾：`click` 再挂一个并列包装组；`with` / `after` 接到现有最后一组里，空树时仍建包装组但 `nodeType` 为 `withEffect` / `afterEffect`。
 新 `cTn/@id` 取该页 timing 已有最大整数加 1。该对象尚无 `bldP` 则补一条对应 `spid`、`grpId="0"`。不写 `txEl`。不改 `<p:transition>`。不改未点名效果。
 docx / xlsx 上发此 op 报 `InvalidField`。

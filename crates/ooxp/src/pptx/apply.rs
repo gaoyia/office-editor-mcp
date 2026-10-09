@@ -1211,7 +1211,16 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                 )?;
             }
             PptxOp::InsertAnim(op) => {
-                timing::insert(&mut pkg, &slides, &op.id, op.slide, &op.trigger, i)?;
+                timing::insert(
+                    &mut pkg,
+                    &slides,
+                    &op.id,
+                    op.slide,
+                    &op.trigger,
+                    op.delay,
+                    op.dur,
+                    i,
+                )?;
             }
             PptxOp::DeleteAnim(op) => {
                 timing::delete(&mut pkg, &slides, &op.id, op.slide, op.index, i)?;

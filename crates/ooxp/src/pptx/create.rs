@@ -975,7 +975,16 @@ fn attach_anims(pkg: &mut Package, slides: &[NewSlide]) -> Result<(), Error> {
                 anim.host,
                 &format!("presentation.slides[{i}].anims[{j}]"),
             )?;
-            timing::insert(pkg, &metas, &host_id, n, &anim.trigger, j)?;
+            timing::insert(
+                pkg,
+                &metas,
+                &host_id,
+                n,
+                &anim.trigger,
+                anim.delay,
+                anim.dur,
+                j,
+            )?;
         }
     }
     Ok(())

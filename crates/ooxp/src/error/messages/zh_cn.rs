@@ -861,6 +861,8 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         }
         ErrorKind::InvalidAnimType => "type 本期只认 fade".into(),
         ErrorKind::InvalidAnimTrigger => "trigger 必须是 click、with 或 after".into(),
+        ErrorKind::InvalidAnimDelay => "delay 必须是 0 到 60000 的整数".into(),
+        ErrorKind::InvalidAnimDur => "dur 必须是 1 到 60000 的整数".into(),
         ErrorKind::InvalidTransitionDur => "dur 必须是 1 到 60000 的整数".into(),
         ErrorKind::InvalidTransitionAdvTm => "advTm 必须是 1 到 86400000 的整数".into(),
         ErrorKind::InvalidTransitionDir => {

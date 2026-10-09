@@ -138,6 +138,7 @@ $treeHost = Invoke-OoxpTree @{
     scope = @{ slide = 1 }
 } 'pptx-aw-host-shapes'
 $shape1 = [string]$treeHost.slides[0].shapes[0].id
+$shape2 = [string]$treeHost.slides[0].shapes[1].id
 
 # Aw1：create 后 insertAnim fade，名单一条，COM Count=1，无 Repair。
 $aw1 = Get-OutPath 'pptx-anim-write-insert.pptx'
@@ -319,3 +320,39 @@ $aw5ok = ((Get-PptErrorCode $failId) -eq 'InvalidId') -and (-not (Test-Path $bad
     -and ((Get-PptErrorCode $failX) -eq 'InvalidField') `
     -and ((Get-PptErrorCode $failD) -eq 'InvalidField')
 Add-Check 'pptx-Aw5' $aw5ok "id=$(Get-PptErrorCode $failId) type=$(Get-PptErrorCode $failType) op=$(Get-PptErrorCode $failOp) xlsx=$(Get-PptErrorCode $failX) docx=$(Get-PptErrorCode $failD)"
+
+# Aw6：delay / dur 写入并能 inspect 回来。
+$aw6 = Get-OutPath 'pptx-anim-write-delay.pptx'
+Close-PptPresByPath $ppt $aw6
+if (Test-Path $aw6) { Remove-Item -Force $aw6 }
+$shape2 = [string]$treeHost.slides[0].shapes[1].id
+Invoke-OoxpRequest @{
+    schemaVersion = 1; action = 'apply'
+    path = $hostPath.Replace('\', '/')
+    output = $aw6.Replace('\', '/')
+    ops = @(
+        @{ op = 'insertAnim'; id = $shape1; type = 'fade' }
+        @{ op = 'insertAnim'; id = $shape2; type = 'fade'; trigger = 'with'; delay = 380; dur = 800 }
+    )
+} 'pptx-aw-delay' | Out-Null
+$tree6 = Invoke-OoxpTree @{
+    schemaVersion = 1; action = 'inspect'
+    path = $aw6.Replace('\', '/'); format = 'pptx'
+    scope = @{ timing = $true; slide = 1 }
+} 'pptx-aw-delay-inspect'
+$list6 = @($tree6.slides[0].timing)
+$xml6 = Get-ZipEntryText $aw6 'ppt/slides/slide1.xml'
+$pres6 = Open-PptPres $ppt $aw6
+$cap6 = Get-PptCaption $pres6
+$s6 = Get-PptSlide $pres6 1
+$com6 = Get-PptMainSeqCount $s6
+Release-Com $s6
+Close-PptPres $pres6
+$aw6ok = ($cap6 -notmatch 'Repair') `
+    -and ($list6.Count -eq 2) `
+    -and ([int]$list6[1].delay -eq 380) `
+    -and ([int]$list6[1].dur -eq 800) `
+    -and ($xml6 -match 'delay="380"') `
+    -and ($xml6 -match 'dur="800"') `
+    -and ($com6 -eq 2)
+Add-Check 'pptx-Aw6' $aw6ok "cap=$cap6 delay=$($list6[1].delay) dur=$($list6[1].dur) com=$com6"

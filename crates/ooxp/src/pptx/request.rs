@@ -162,6 +162,8 @@ pub struct InsertAnimOp {
     pub id: String,
     pub slide: usize,
     pub trigger: String,
+    pub delay: u32,
+    pub dur: u32,
 }
 
 #[derive(Debug, Clone)]
@@ -394,6 +396,8 @@ pub enum CreateAnimHost {
 #[derive(Debug, Clone)]
 pub struct CreateAnim {
     pub trigger: String,
+    pub delay: u32,
+    pub dur: u32,
     pub host: CreateAnimHost,
 }
 
@@ -1985,7 +1989,7 @@ const ANIM_HOST_KINDS: &[&str] = &[
 ];
 
 fn parse_insert_anim(obj: &Map<String, Value>, i: usize) -> Result<InsertAnimOp, Error> {
-    deny_keys(obj, i, &["op", "id", "type", "trigger"])?;
+    deny_keys(obj, i, &["op", "id", "type", "trigger", "delay", "dur"])?;
     let id = require_id(obj, i)?;
     let slide = parse_anim_host(&id, i)?;
     match obj.get("type") {
@@ -2034,7 +2038,21 @@ fn parse_insert_anim(obj: &Map<String, Value>, i: usize) -> Result<InsertAnimOp,
             ));
         }
     };
-    Ok(InsertAnimOp { id, slide, trigger })
+    let delay = match obj.get("delay") {
+        None => 0,
+        Some(v) => parse_transition_ms(v, i, "delay", ErrorKind::InvalidAnimDelay, 0, 60000)?,
+    };
+    let dur = match obj.get("dur") {
+        None => 500,
+        Some(v) => parse_transition_ms(v, i, "dur", ErrorKind::InvalidAnimDur, 1, 60000)?,
+    };
+    Ok(InsertAnimOp {
+        id,
+        slide,
+        trigger,
+        delay,
+        dur,
+    })
 }
 
 fn parse_delete_anim(obj: &Map<String, Value>, i: usize) -> Result<DeleteAnimOp, Error> {
@@ -5859,7 +5877,8 @@ pub(crate) fn parse_create_anim(v: &Value, prefix: &str) -> Result<CreateAnim, E
         obj,
         prefix,
         &[
-            "type", "trigger", "shape", "picture", "video", "audio", "table", "chart", "smartArt",
+            "type", "trigger", "delay", "dur", "shape", "picture", "video", "audio", "table",
+            "chart", "smartArt",
         ],
     )?;
     match obj.get("type") {
@@ -5907,6 +5926,28 @@ pub(crate) fn parse_create_anim(v: &Value, prefix: &str) -> Result<CreateAnim, E
                 format!("{prefix}.trigger"),
             ));
         }
+    };
+    let delay = match obj.get("delay") {
+        None => 0,
+        Some(v) => parse_transition_ms_at(
+            v,
+            &format!("{prefix}.delay"),
+            "delay",
+            ErrorKind::InvalidAnimDelay,
+            0,
+            60000,
+        )?,
+    };
+    let dur = match obj.get("dur") {
+        None => 500,
+        Some(v) => parse_transition_ms_at(
+            v,
+            &format!("{prefix}.dur"),
+            "dur",
+            ErrorKind::InvalidAnimDur,
+            1,
+            60000,
+        )?,
     };
     let mut found: Vec<(&str, CreateAnimHost)> = Vec::new();
     for (field, make) in [
@@ -5966,7 +6007,12 @@ pub(crate) fn parse_create_anim(v: &Value, prefix: &str) -> Result<CreateAnim, E
         }
     }
     let host = found.remove(0).1;
-    Ok(CreateAnim { trigger, host })
+    Ok(CreateAnim {
+        trigger,
+        delay,
+        dur,
+        host,
+    })
 }
 
 pub(crate) fn parse_create_section(v: &Value, prefix: &str) -> Result<CreateSection, Error> {

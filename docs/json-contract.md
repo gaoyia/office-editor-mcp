@@ -36,7 +36,7 @@ apply 复用 `insertMath` / `setMath` / `deleteMath`。不是单元格 `f`，也
 docx 的 `scope.maths` 仍是段落 `oMath`，见 [docx 分册](json-contract-docx.md#insertmath)。
 xlsx 的 `scope.oleObjects` 与 OLE op 认工作表 `<oleObject>`（ECMA-376 §18.3.1.59），不认 `@link` 与 ActiveX `controls`，不把嵌入字节或预览图塞进树。
 pptx 的 `scope.comments` 与批注 op 认该页 2018 线程化批注（`p188:cmLst`），不认 ECMA-376 §19.4 旧式部件。
-pptx 的 `scope.timing` 列出该页 `<p:timing>` 效果摘要；apply 用 `insertAnim` / `deleteAnim` 按模板增删预设效果，不接受整棵时间轴树。
+pptx 的 `scope.timing` 列出该页 `<p:timing>` 效果摘要（含 `delay` / `dur`）；apply 用 `insertAnim` / `deleteAnim` 按模板增删预设效果，可写 delay 与 dur，不接受整棵时间轴树。
 `setTransition` 还可写自动进片、方向与 `p15:prstTrans`。
 pptx 的 `scope.masters` 列出幻灯片母版与版式及占位符（含该母版 theme 的配色与字体），根上始终带 `slideSize`，apply 可用 `setSlideLayout` 换页的版式关系，
 也可用 `insertLayout` / `deleteLayout` / `insertPlaceholder` / `deletePlaceholder` / `insertMaster` / `deleteMaster` 插删版式、占位符与母版，

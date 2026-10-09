@@ -410,6 +410,7 @@
 - `deleteAnim` 的 id 必须是 `slide:{n}/anim:{k}`
 - 序号不存在报 `IdNotFound`，不是动画 id 报 `InvalidId`
 - `insertAnim` 缺 `type`、`type` 不是 `fade`、或 `trigger` 不是 `click` / `with` / `after`，报 `InvalidField`
+- `insertAnim` 的 `delay` 越界或 `dur` 越界报 `InvalidField`
 - `setSlideLayout` 的 `layout` 必须是 `master:{n}/layout:{k}`
 - 找不到该版式报 `IdNotFound`
 - `insertLayout` 的 id 必须是 `master:{n}`
@@ -426,6 +427,7 @@
   - `moveSlide` 的 `after` 是自己
   - `setSlideHidden` 缺 `hidden`
   - `setTransition` 缺 `type`，或 `type` 为 `other` 或不认识，或 `dur` 越界
+  - `insertAnim` 的 `delay` / `dur` 越界
   - `setSlideLayout` 缺 `layout`
   - `insertPlaceholder` 缺 `type`，或 `type` 不在白名单
   - 该母版只剩一份版式、最后一份母版、或仍有页占用时 `deleteLayout` / `deleteMaster`

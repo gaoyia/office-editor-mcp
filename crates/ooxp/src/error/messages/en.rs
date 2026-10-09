@@ -946,6 +946,8 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         }
         ErrorKind::InvalidAnimType => "type must be fade".into(),
         ErrorKind::InvalidAnimTrigger => "trigger must be click, with, or after".into(),
+        ErrorKind::InvalidAnimDelay => "delay must be an integer from 0 to 60000".into(),
+        ErrorKind::InvalidAnimDur => "dur must be an integer from 1 to 60000".into(),
         ErrorKind::InvalidTransitionDur => "dur must be an integer from 1 to 60000".into(),
         ErrorKind::InvalidTransitionAdvTm => {
             "advTm must be an integer from 1 to 86400000".into()

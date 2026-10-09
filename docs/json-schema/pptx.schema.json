@@ -509,6 +509,16 @@
             "after"
           ]
         },
+        "delay": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 60000
+        },
+        "dur": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 60000
+        },
         "shape": {
           "type": "integer",
           "minimum": 1
@@ -1424,6 +1434,16 @@
             "with",
             "after"
           ]
+        },
+        "delay": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 60000
+        },
+        "dur": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 60000
         }
       }
     },

@@ -930,6 +930,13 @@ DrawingML 表（`a:tbl` 包在 `p:graphicFrame` 里）。不要把表编进 `sha
   - 均未写文件
   - `setTiming` 仍为 `UnsupportedOp`
 
+- **Aw6**
+  - 检查：delay / dur
+  - 通过标准：✅ create 产物连续两条 `insertAnim`，第二条 `trigger=with` `delay=380` `dur=800`
+  - inspect 第二条 `delay` 为 380、`dur` 为 800
+  - XML 有 `delay="380"` 与 `dur="800"`
+  - COM `MainSequence.Count` 为 2，无 Repair
+
 ## 母版与版式
 
 inspect 列出 slideMaster / slideLayout 与占位符。apply 改占位符文字与几何，并用 `setSlideLayout` 只换页的版式关系。不算母版排版引擎。

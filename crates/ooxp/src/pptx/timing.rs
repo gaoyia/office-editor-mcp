@@ -36,6 +36,8 @@ pub fn insert(
     host_id: &str,
     slide: usize,
     trigger: &str,
+    delay: u32,
+    dur: u32,
     op_index: usize,
 ) -> Result<(), Error> {
     if slide < 1 || slide > slides.len() {
@@ -57,12 +59,12 @@ pub fn insert(
     let node_type = node_type_of(trigger);
     match first_timing_mut(&mut doc.root) {
         None => {
-            let timing = build_full_timing(&spid, node_type, 1);
+            let timing = build_full_timing(&spid, node_type, 1, delay, dur);
             let at = timing_insert_index(&doc.root);
             doc.root.children.insert(at, Node::Element(timing));
         }
         Some(timing) => {
-            append_effect(timing, &spid, node_type, trigger);
+            append_effect(timing, &spid, node_type, trigger, delay, dur);
         }
     }
     pkg.set(&part, doc.to_bytes()?)?;
@@ -213,7 +215,47 @@ fn effect_json(
     obj.insert("target".into(), target);
     obj.insert("type".into(), json!(type_name));
     obj.insert("trigger".into(), json!(trigger));
+    obj.insert("delay".into(), effect_delay_ms(effect));
+    obj.insert("dur".into(), effect_dur_ms(effect));
     Value::Object(obj)
+}
+
+fn tl_time_ms(raw: Option<&str>, missing: u32) -> Value {
+    match raw {
+        None => json!(missing),
+        Some("indefinite") => Value::Null,
+        Some(s) => s.parse::<u32>().map_or(Value::Null, |n| json!(n)),
+    }
+}
+
+fn effect_delay_ms(effect: &Element) -> Value {
+    let Some(lst) = effect.child_by_local("stCondLst") else {
+        return json!(0);
+    };
+    let delay = lst
+        .element_children()
+        .find(|e| e.local_name() == "cond")
+        .and_then(|c| c.attr_local("delay"));
+    tl_time_ms(delay, 0)
+}
+
+fn effect_dur_ms(effect: &Element) -> Value {
+    let mut found = None;
+    walk_effect_body(effect, &mut |e| {
+        if found.is_some() || e.local_name() != "animEffect" {
+            return;
+        }
+        found = Some(
+            e.child_by_local("cBhvr")
+                .and_then(|b| b.child_by_local("cTn"))
+                .and_then(|c| c.attr_local("dur"))
+                .map(str::to_string),
+        );
+    });
+    match found {
+        None => json!(500),
+        Some(inner) => tl_time_ms(inner.as_deref(), 500),
+    }
 }
 
 fn walk_effect_body<'a>(effect: &'a Element, f: &mut impl FnMut(&'a Element)) {
@@ -348,7 +390,14 @@ fn node_type_of(trigger: &str) -> &'static str {
     }
 }
 
-fn append_effect(timing: &mut Element, spid: &str, node_type: &str, trigger: &str) {
+fn append_effect(
+    timing: &mut Element,
+    spid: &str,
+    node_type: &str,
+    trigger: &str,
+    delay: u32,
+    dur: u32,
+) {
     let mut next = max_ctn_id(timing).saturating_add(1);
     if next < 1 {
         next = 1;
@@ -356,14 +405,14 @@ fn append_effect(timing: &mut Element, spid: &str, node_type: &str, trigger: &st
     let click_like = trigger != "with" && trigger != "after";
     let has_any = has_effect(timing);
     if click_like || !has_any {
-        let group = build_click_group(&take_ids(&mut next, 5), spid, node_type);
+        let group = build_click_group(&take_ids(&mut next, 5), spid, node_type, delay, dur);
         ensure_main_seq_lst(timing).push_element(group);
     } else if let Some(path) = effect_paths(timing).last().cloned() {
         // with / after：接到最后一条效果所在 par 的兄弟位置。
-        let sibling = fade_effect_par(&take_ids(&mut next, 3), spid, node_type);
+        let sibling = fade_effect_par(&take_ids(&mut next, 3), spid, node_type, delay, dur);
         append_sibling_par(timing, &path, sibling);
     } else {
-        let group = build_click_group(&take_ids(&mut next, 5), spid, node_type);
+        let group = build_click_group(&take_ids(&mut next, 5), spid, node_type, delay, dur);
         ensure_main_seq_lst(timing).push_element(group);
     }
     ensure_bld_p(timing, spid);
@@ -378,11 +427,11 @@ fn take_ids(next: &mut u32, n: usize) -> Vec<u32> {
     out
 }
 
-fn build_full_timing(spid: &str, node_type: &str, start: u32) -> Element {
+fn build_full_timing(spid: &str, node_type: &str, start: u32, delay: u32, dur: u32) -> Element {
     let mut next = start;
     let root_id = take_ids(&mut next, 1)[0];
     let seq_id = take_ids(&mut next, 1)[0];
-    let group = build_click_group(&take_ids(&mut next, 5), spid, node_type);
+    let group = build_click_group(&take_ids(&mut next, 5), spid, node_type, delay, dur);
 
     let mut main = Element::new("p:cTn")
         .with_attr("id", seq_id.to_string())
@@ -422,8 +471,8 @@ fn build_full_timing(spid: &str, node_type: &str, start: u32) -> Element {
     timing
 }
 
-fn build_click_group(ids: &[u32], spid: &str, node_type: &str) -> Element {
-    let effect = fade_effect_par(&ids[2..5], spid, node_type);
+fn build_click_group(ids: &[u32], spid: &str, node_type: &str, delay: u32, dur: u32) -> Element {
+    let effect = fade_effect_par(&ids[2..5], spid, node_type, delay, dur);
 
     let mut inner_lst = Element::new("p:childTnLst");
     inner_lst.push_element(effect);
@@ -447,7 +496,7 @@ fn build_click_group(ids: &[u32], spid: &str, node_type: &str) -> Element {
     outer_par
 }
 
-fn fade_effect_par(ids: &[u32], spid: &str, node_type: &str) -> Element {
+fn fade_effect_par(ids: &[u32], spid: &str, node_type: &str, delay: u32, dur: u32) -> Element {
     let mut name = Element::new("p:attrName");
     name.set_text("style.visibility");
     let mut names = Element::new("p:attrNameLst");
@@ -472,7 +521,7 @@ fn fade_effect_par(ids: &[u32], spid: &str, node_type: &str) -> Element {
     anim_bhvr.push_element(
         Element::new("p:cTn")
             .with_attr("id", ids[2].to_string())
-            .with_attr("dur", "500"),
+            .with_attr("dur", dur.to_string()),
     );
     anim_bhvr.push_element(tgt_el(spid));
     let mut anim = Element::new("p:animEffect")
@@ -491,7 +540,7 @@ fn fade_effect_par(ids: &[u32], spid: &str, node_type: &str) -> Element {
         .with_attr("fill", "hold")
         .with_attr("grpId", "0")
         .with_attr("nodeType", node_type);
-    ctn.push_element(cond_lst("0"));
+    ctn.push_element(cond_lst(&delay.to_string()));
     ctn.push_element(kids);
     let mut par = Element::new("p:par");
     par.push_element(ctn);
