@@ -612,6 +612,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
         "activeCell": "A1"
       },
       "autoFilter": null,
+      "sortState": null,
       "outline": {
         "summaryBelow": true,
         "summaryRight": true,
@@ -726,6 +727,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
         "activeCell": "A1"
       },
       "autoFilter": null,
+      "sortState": null,
       "outline": {
         "summaryBelow": true,
         "summaryRight": true,

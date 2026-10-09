@@ -331,9 +331,11 @@
   - `comments`
   - `hyperlinks`
   - `textBoxes`
+  - `maths`
   - `shapes`
   - `connectors`
   - `smartArts`
+  - `model3ds`
   - `from`
   - `to`
   - `anchor`
@@ -431,7 +433,6 @@
 - xlsx 的 `scope` 里出现下列键报 `InvalidField`
   - `textBoxContent`
   - `notes`
-  - `oleObjects`
   - `watermarks`
   - `tables`
   - `timing`
@@ -449,7 +450,6 @@
   - `citations`
   - `bibliographies`
   - `docParts`
-  - `maths`
   - `contentControls`
   - `numbering`
   - `styles`
@@ -457,12 +457,14 @@
 - xlsx 认
   - `scope.comments`
   - `scope.textBoxes`
+  - `scope.maths`
   - `scope.shapes`
   - `scope.connectors`
   - `scope.smartArt`
   - `scope.hyperlinks`
   - `scope.sparklines`
   - `scope.oleObjects`
+  - `scope.model3ds`
   - `scope.slicers`
   - `scope.connections`
   - `scope.customViews`
@@ -483,18 +485,20 @@
   - `citations`
   - `bibliographies`
   - `docParts`
-  - `maths`
   - `contentControls`
   - `numbering`
   - `styles`
   - `runs`
 - pptx 认
   - `scope.pictures`
+  - `scope.maths`
   - `scope.media`
   - `scope.charts`
   - `scope.smartArt`
   - `scope.tables`
   - `scope.oleObjects`
+  - `scope.model3ds`
+  - `scope.zooms`
   - `scope.connectors`
   - `scope.notes`
   - `scope.comments`
@@ -568,7 +572,6 @@
     - `setTextBoxDirection`
   - 脚注尾注 op
   - `setSmartArtPos` / `setSmartArtWrap`
-  - `insertOle` / `deleteOle`
   - `insertWatermark` / `deleteWatermark`
   - `insertInkCanvas` / `replaceInkCanvas` / `deleteInkCanvas`
   - 表格结构 op、修订 op、书签 op、域 op

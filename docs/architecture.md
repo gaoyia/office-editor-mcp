@@ -125,8 +125,10 @@ insert / delete 线程化批注时只追加或去掉对应 Note `v:shape` 与占
 也可插、删、改工作表迷你图组：脏该表 `extLst` 里的 `x14:sparklineGroups`，不新建部件，不标重算。
 也可用 `setProtection` 开关工作表 `sheetProtection` 与工作簿 `workbookProtection`：脏该表 XML 或 `workbook.xml`；
 无密码时不写哈希，给了 `password` 则写 Excel 16.0 的 SHA-512 哈希，不新建部件，不标重算。
-create 本期不写页眉页脚，也不写 `kind: chartsheet`，也不写列宽、行高、合并、数据验证、条件格式，也不写共享公式或数组公式。
-也不写打印设置、视图与筛选、排序、分组、批注、文本框、形状、连接线、SmartArt、超链接、迷你图、OLE、切片器或保护。
+create 可写图、图表、图表工作表、页眉页脚、批注、超链接、文本框、公式框、形状、连接线、SmartArt 与 3D 模型，细则见下文 create。
+本期不写列宽、行高、合并、数据验证、条件格式、工作表表格、透视表或定义名。
+也不写打印、视图、筛选、排序、分组、自定义视图、迷你图、OLE、切片器、连接、外部引用、保护或组合。
+也不写共享公式或数组公式。
 
 ### docx
 
@@ -205,16 +207,18 @@ apply 可改被点名形状的 `p:txBody` 可见文字（含备注形状与母�
 也可插删改幻灯片文本形状上的形状级 `p:cNvPr/a:hlinkClick` 与 run 级 `a:rPr/a:hlinkClick`（URL / 文件 / 跳转到某页）；
 也可插删改幻灯片文本形状里的 `a:fld`（页码与日期域，不求值）；也可往幻灯片插、删内嵌视频与音频（`p:pic` 上的 `a:videoFile` / `a:audioFile` 与 `p14:media`，不写 timing）；
 也可用 `insertCustomShow` / `setCustomShow` / `deleteCustomShow` 读写 `p:custShowLst`（不算放映引擎）；
-也可插、删幻灯片上的嵌入对象（`p:oleObj`，不激活 OLE 服务器），也可插、删幻灯片上的 Zoom（`sldZm` / `sectionZm`，不写摘要缩放，不实现放映跳转）；也可改文件属性。
+也可插、删幻灯片上的嵌入对象（`p:oleObj`，不激活 OLE 服务器），也可插、删、换幻灯片或备注页上的 3D 模型（`am3d:model3d`，不栅格化），
+也可插改删幻灯片或备注页上的 drawing 公式框（`a14:m`，不实现排版引擎），也可插、删幻灯片上的 Zoom（`sldZm` / `sectionZm`，不写摘要缩放，不实现放映跳转）；也可改文件属性。
 插删重排不重写未点名页。`exportMedia` 按图 id、视频 id、音频 id、OLE id 或 3D 模型 id 写出 `/ppt/media/…` 或 `/ppt/embeddings/…`。
 `exportChartData` 按图表 id 写出 embedding。create 生成最小 Transitional 包，
 必含 theme、slideMaster、slideLayout、presentation、各页 slide、presProps。
 给了 `slides[].pictures` 时复用 `insertPicture`，写入 `/ppt/media/…` 与该页 `p:pic`。
 给了 `slides[].maths` 时复用 `insertMath`，写入 `a14:m` AlternateContent。
+给了 `slides[].model3ds` 时复用 `insertModel3d`，写入 GLB、海报 PNG 与 `am3d` AlternateContent。
 给了 `slides[].charts` 时复用 `insertChart`，写入 `/ppt/charts/…`、embedding 与 `p:graphicFrame`。
 给了 `slides[].smartArts` 时复用 `insertSmartArt`，写入 `/ppt/diagrams/…` 与图示 `p:graphicFrame`。
 给了 `slides[].tables` 时复用 `insertTable`，写入表 `p:graphicFrame`。给了 `slides[].notes` 时复用 `setNotesText`。
-给了 `slides[].comments` 时复用 `insertComment`。create 本期不写动画。
+给了 `slides[].comments` 时复用 `insertComment`。给了 `slides[].anims` 时复用 `insertAnim`（只写 fade）。
 母版与版式进树（`scope.masters`），`setSlideLayout` 只换关系，写入用 `insertLayout` / `insertPlaceholder` / `insertMaster` 等。
 动画效果摘要进树（`scope.timing`），写入用 `insertAnim` / `deleteAnim`。切换进树，用 `setTransition` 改。幻灯片尺寸始终进树，写入用 `setSlideSize`。
 主题配色与字体挂在 `scope.masters` 的 `theme` 上，写入用 `setThemeColors` / `setThemeFonts`。`mc:AlternateContent` 只走第一个 `Choice`。
@@ -320,13 +324,14 @@ xlsx 的 `sheets[].pictures` 复用 `insertPicture`，`sheets[].charts` 复用 `
 `sheets[].kind: chartsheet` 复用 `insertChartSheet`（数据写点名的普通表，不写 embedding），
 `sheets[].headerFooters` 复用 `setHeaderFooterText` 与页眉 `insertPicture`（不写 VML），
 `sheets[].comments` 复用 `insertComment`（不写回复），`sheets[].hyperlinks` 复用 `insertHyperlink`，
-`sheets[].textBoxes` / `shapes` / `connectors` / `smartArts` 复用对应 insert。
+`sheets[].textBoxes` / `maths` / `shapes` / `connectors` / `smartArts` / `model3ds` 复用对应 insert。
 docx 段落与页眉页脚上的 `pictures` 同样复用插图，`charts` 复用 `insertChart`（数据写 embedding），`oleObjects` 复用 `insertOle`，
 `inkCanvases` 复用 `insertInkCanvas`，
 `footnote` / `endnote` / `comments` 复用对应 insert，`comments[].replies` 复用 `replyComment`，
 `hyperlinks` / `bookmarks` / `fields` / `maths` / `contentControls` 复用对应 insert。
 `document.numberings` 复用 `insertNumbering`，`paragraphs[].num` 复用 `setParaNumbering`。`document.tocs` 复用 `insertToc`。
 create 不写修订痕迹。pptx 的 `slides[].pictures` 复用 `insertPicture`，
+`slides[].maths` 复用 `insertMath`，`slides[].model3ds` 复用 `insertModel3d`，
 `slides[].videos` / `slides[].audios` 复用 `insertVideo` / `insertAudio`，
 `slides[].charts` 复用 `insertChart`（数据写 embedding），`slides[].smartArts` 复用 `insertSmartArt`，
 `slides[].tables` 复用 `insertTable`，`slides[].notes` 复用 `setNotesText`，`slides[].comments` 复用 `insertComment`，

@@ -4,6 +4,21 @@
   "id": "xlsx:workbook",
   "pictureCount": 0,
   "chartCount": 0,
+  "textBoxCount": 0,
+  "mathCount": 0,
+  "shapeCount": 0,
+  "connectorCount": 0,
+  "smartArtCount": 0,
+  "commentCount": 0,
+  "hyperlinkCount": 0,
+  "sparklineCount": 0,
+  "oleObjectCount": 0,
+  "model3dCount": 0,
+  "slicerCount": 0,
+  "connectionCount": 0,
+  "externalLinkCount": 0,
+  "customViewCount": 0,
+  "definedNameCount": 0,
   "props": {
     "title": "",
     "subject": null,
@@ -18,6 +33,12 @@
     "manager": null,
     "custom": []
   },
+  "workbookProtection": {
+    "lockStructure": false,
+    "lockWindows": false,
+    "lockRevision": false,
+    "hasPassword": false
+  },
   "sheets": [
     {
       "id": "sheet:Sheet1",
@@ -26,6 +47,78 @@
       "hidden": false,
       "pictureCount": 0,
       "chartCount": 0,
+      "textBoxCount": 0,
+      "mathCount": 0,
+      "shapeCount": 0,
+      "connectorCount": 0,
+      "smartArtCount": 0,
+      "dataValidationCount": 0,
+      "conditionalFormatCount": 0,
+      "tableCount": 0,
+      "pivotCount": 0,
+      "commentCount": 0,
+      "hyperlinkCount": 0,
+      "sparklineCount": 0,
+      "oleObjectCount": 0,
+      "model3dCount": 0,
+      "slicerCount": 0,
+      "hasHeaderFooter": false,
+      "print": {
+        "left": 0.7,
+        "right": 0.7,
+        "top": 0.75,
+        "bottom": 0.75,
+        "header": 0.3,
+        "footer": 0.3,
+        "paperSize": 1,
+        "orientation": "portrait",
+        "scale": 100,
+        "fitToPage": false,
+        "fitToWidth": 1,
+        "fitToHeight": 1,
+        "gridLines": false,
+        "headings": false,
+        "hCenter": false,
+        "vCenter": false,
+        "printArea": null,
+        "rowBreaks": [],
+        "colBreaks": []
+      },
+      "view": {
+        "zoom": 100,
+        "frozenRows": 0,
+        "frozenCols": 0,
+        "splitRows": 0,
+        "splitCols": 0,
+        "activeCell": "A1"
+      },
+      "autoFilter": null,
+      "sortState": null,
+      "outline": {
+        "summaryBelow": true,
+        "summaryRight": true,
+        "rows": [],
+        "cols": []
+      },
+      "sheetProtection": {
+        "enforced": false,
+        "hasPassword": false,
+        "objects": false,
+        "scenarios": false,
+        "formatCells": true,
+        "formatColumns": true,
+        "formatRows": true,
+        "insertColumns": true,
+        "insertRows": true,
+        "insertHyperlinks": true,
+        "deleteColumns": true,
+        "deleteRows": true,
+        "selectLockedCells": false,
+        "sort": true,
+        "autoFilter": true,
+        "pivotTables": true,
+        "selectUnlockedCells": false
+      },
       "truncated": false,
       "range": "A1:D20",
       "cells": [
@@ -66,5 +159,6 @@
       "rows": [],
       "merges": []
     }
-  ]
+  ],
+  "definedNames": []
 }
