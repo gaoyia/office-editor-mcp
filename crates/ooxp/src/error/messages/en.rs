@@ -315,6 +315,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::SlideOpNeedsSlide => {
                 "id must be slide:N".into()
             }
+            IdReason::SetTransitionNeedsHost => {
+                "setTransition id must be slide:N, master:N, or master:N/layout:K".into()
+            }
             IdReason::MasterForm => {
                 "master / placeholder id must be master:N, master:N/layout:K, notesMaster/shape:…, handout/shape:…, or …/shape:…".into()
             }
@@ -977,6 +980,12 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         }
         ErrorKind::InvalidTransitionDir => {
             "dir must be allowed for this transition; invX / invY are only valid on prstTrans presets".into()
+        }
+        ErrorKind::InvalidTransitionOrient => {
+            "orient is only valid on split and must be horz or vert".into()
+        }
+        ErrorKind::InvalidTransitionSpokes => {
+            "spokes is only valid on wheel / wheelReverse and must be an integer from 1 to 8".into()
         }
         ErrorKind::InvalidShapePrst => {
             "prst must be a writable preset geometry; use insertConnector for connector geometries".into()

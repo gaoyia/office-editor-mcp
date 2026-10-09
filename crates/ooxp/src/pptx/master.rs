@@ -207,6 +207,10 @@ pub fn masters_json(
             layout_obj.insert("index".into(), json!(l.index));
             layout_obj.insert("name".into(), json!(l.name));
             layout_obj.insert("kind".into(), json!(l.kind));
+            layout_obj.insert(
+                "transition".into(),
+                super::transition::inspect(&layout_doc.root),
+            );
             layout_obj.insert("animCount".into(), json!(layout_anims.len()));
             if want_timing {
                 layout_obj.insert("timing".into(), Value::Array(layout_anims));
@@ -248,6 +252,7 @@ pub fn masters_json(
         obj.insert("index".into(), json!(m.index));
         obj.insert("name".into(), json!(m.name));
         obj.insert("theme".into(), theme);
+        obj.insert("transition".into(), super::transition::inspect(&doc.root));
         obj.insert("animCount".into(), json!(master_anims.len()));
         if want_timing {
             obj.insert("timing".into(), Value::Array(master_anims));

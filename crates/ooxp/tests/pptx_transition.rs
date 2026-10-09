@@ -570,3 +570,192 @@ fn reject_dir_and_inv_on_fade() {
     assert_eq!(err.code(), ErrorCode::InvalidField);
     assert!(!dest.exists());
 }
+
+fn tiny_wav() -> Vec<u8> {
+    let data_len = 8u32;
+    let mut v = Vec::new();
+    v.extend_from_slice(b"RIFF");
+    v.extend_from_slice(&(36u32 + data_len).to_le_bytes());
+    v.extend_from_slice(b"WAVE");
+    v.extend_from_slice(b"fmt ");
+    v.extend_from_slice(&16u32.to_le_bytes());
+    v.extend_from_slice(&1u16.to_le_bytes());
+    v.extend_from_slice(&1u16.to_le_bytes());
+    v.extend_from_slice(&8000u32.to_le_bytes());
+    v.extend_from_slice(&16000u32.to_le_bytes());
+    v.extend_from_slice(&2u16.to_le_bytes());
+    v.extend_from_slice(&16u16.to_le_bytes());
+    v.extend_from_slice(b"data");
+    v.extend_from_slice(&data_len.to_le_bytes());
+    v.extend_from_slice(&[0u8; 8]);
+    v
+}
+
+fn write_wav(tag: &str) -> PathBuf {
+    let path = tmp(tag).with_extension("wav");
+    std::fs::write(&path, tiny_wav()).unwrap();
+    path
+}
+
+#[test]
+fn fade_inspect_has_null_sound() {
+    let src = create_deck("snd-null");
+    let out = tmp("snd-null-out");
+    apply(
+        &src,
+        &out,
+        json!([{ "op": "setTransition", "id": "slide:1", "type": "fade" }]),
+    )
+    .unwrap();
+    let tr = &inspect(&out)["slides"][0]["transition"];
+    assert_eq!(tr["type"], "fade");
+    assert_eq!(tr["sound"], Value::Null);
+    assert!(tr.get("orient").is_none());
+    assert!(tr.get("spokes").is_none());
+}
+
+#[test]
+fn set_transition_sound_split_wheel_and_master() {
+    let src = create_deck("td");
+    let wav = write_wav("beep");
+    let named = tmp("snd-named").with_extension("wav");
+    std::fs::copy(&wav, &named).unwrap();
+
+    let snd = tmp("td-snd");
+    apply(
+        &src,
+        &snd,
+        json!([{
+            "op": "setTransition",
+            "id": "slide:1",
+            "type": "fade",
+            "sound": named.to_string_lossy()
+        }]),
+    )
+    .unwrap();
+    let tr = &inspect(&snd)["slides"][0]["transition"];
+    assert_eq!(tr["type"], "fade");
+    assert_eq!(tr["sound"], named.file_name().unwrap().to_str().unwrap());
+    let xml = part(&snd, "ppt/slides/slide1.xml");
+    assert!(xml.contains("<p:sndAc>"));
+    assert!(xml.contains("<p:stSnd>"));
+    assert!(xml.contains("<p:snd "));
+    assert!(xml.contains("r:embed="));
+
+    let split = tmp("td-split");
+    apply(
+        &src,
+        &split,
+        json!([{
+            "op": "setTransition",
+            "id": "slide:1",
+            "type": "split",
+            "orient": "vert",
+            "dir": "in"
+        }]),
+    )
+    .unwrap();
+    let tr = &inspect(&split)["slides"][0]["transition"];
+    assert_eq!(tr["type"], "split");
+    assert_eq!(tr["orient"], "vert");
+    assert_eq!(tr["dir"], "in");
+    let xml = part(&split, "ppt/slides/slide1.xml");
+    assert!(xml.contains("<p:split"));
+    assert!(xml.contains("orient=\"vert\""));
+    assert!(xml.contains("dir=\"in\""));
+
+    let wheel = tmp("td-wheel");
+    apply(
+        &src,
+        &wheel,
+        json!([{ "op": "setTransition", "id": "slide:1", "type": "wheel", "spokes": 8 }]),
+    )
+    .unwrap();
+    let tr = &inspect(&wheel)["slides"][0]["transition"];
+    assert_eq!(tr["type"], "wheel");
+    assert_eq!(tr["spokes"], 8);
+    let xml = part(&wheel, "ppt/slides/slide1.xml");
+    assert!(xml.contains("<p:wheel spokes=\"8\""));
+
+    let master = tmp("td-master");
+    apply(
+        &src,
+        &master,
+        json!([{ "op": "setTransition", "id": "master:1", "type": "fade" }]),
+    )
+    .unwrap();
+    let tree = inspect_scope(&master, json!({ "masters": true }));
+    assert_eq!(tree["masters"][0]["transition"]["type"], "fade");
+    assert_eq!(tree["masters"][0]["layouts"][0]["transition"], Value::Null);
+    let xml = part(&master, "ppt/slideMasters/slideMaster1.xml");
+    assert!(xml.contains("</p:sldLayoutIdLst><p:transition"));
+    assert!(xml.contains("<p:fade"));
+
+    let layout = tmp("td-layout");
+    apply(
+        &src,
+        &layout,
+        json!([{ "op": "setTransition", "id": "master:1/layout:1", "type": "wipe", "dir": "r" }]),
+    )
+    .unwrap();
+    let tree = inspect_scope(&layout, json!({ "masters": true }));
+    assert_eq!(
+        tree["masters"][0]["layouts"][0]["transition"]["type"],
+        "wipe"
+    );
+    assert_eq!(tree["masters"][0]["layouts"][0]["transition"]["dir"], "r");
+}
+
+#[test]
+fn reject_transition_sound_orient_spokes_host() {
+    let src = create_deck("td-bad");
+    let dest = tmp("td-nm");
+    let err = apply(
+        &src,
+        &dest,
+        json!([{ "op": "setTransition", "id": "notesMaster", "type": "fade" }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidId);
+    assert!(!dest.exists());
+
+    let dest = tmp("td-notes");
+    let err = apply(
+        &src,
+        &dest,
+        json!([{ "op": "setTransition", "id": "slide:1/notes", "type": "fade" }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidId);
+    assert!(!dest.exists());
+
+    let dest = tmp("td-orient");
+    let err = apply(
+        &src,
+        &dest,
+        json!([{ "op": "setTransition", "id": "slide:1", "type": "fade", "orient": "vert" }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+    assert!(!dest.exists());
+
+    let dest = tmp("td-spokes");
+    let err = apply(
+        &src,
+        &dest,
+        json!([{ "op": "setTransition", "id": "slide:1", "type": "fade", "spokes": 8 }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+    assert!(!dest.exists());
+
+    let dest = tmp("td-spokes-0");
+    let err = apply(
+        &src,
+        &dest,
+        json!([{ "op": "setTransition", "id": "slide:1", "type": "wheel", "spokes": 0 }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+    assert!(!dest.exists());
+}

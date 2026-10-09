@@ -38,7 +38,7 @@ xlsx 的 `scope.oleObjects` 与 OLE op 认工作表 `<oleObject>`（ECMA-376 §1
 pptx 的 `scope.comments` 与批注 op 认该页 2018 线程化批注（`p188:cmLst`），不认 ECMA-376 §19.4 旧式部件。
 pptx 的 `scope.timing` 列出该页 `<p:timing>` 效果摘要（含 `delay` / `dur` / `repeat` / 声音名 / 段落 / 点对象）；`scope.notes` 与 `scope.timing` 同开时备注对象带 `timing`；`scope.masters` 与 `scope.timing` 同开时母版 / 版式带 `timing`；`scope.notesMaster` / `scope.handout` 与 `scope.timing` 同开时备注母版 / 讲义带 `timing`。
 apply 用 `insertAnim` / `setAnim` / `deleteAnim` / `moveAnim` 按模板增删改预设效果，可写 delay、dur、repeat、效果声音与按段；第一条 `with` / `after` 进片自动播。不接受整棵时间轴树。
-`setTransition` 还可写自动进片、方向与 `p15:prstTrans`。
+`setTransition` 还可写自动进片、方向、`p15:prstTrans`、切换声音、`split` 的 `orient`、`wheel` 的 `spokes`，以及母版 / 版式上的切换。
 pptx 的 `scope.masters` 列出幻灯片母版与版式、占位符与装饰形（含该母版 theme 的配色与字体），根上始终带 `slideSize`，apply 可用 `setSlideLayout` 换页的版式关系，
 也可用 `insertLayout` / `deleteLayout` / `insertPlaceholder` / `deletePlaceholder` / `insertMaster` / `deleteMaster` 插删版式、占位符与母版，
 也可用 `insertShape` / `deleteShape` 插删母版 / 版式上没有 `p:ph` 的装饰形，

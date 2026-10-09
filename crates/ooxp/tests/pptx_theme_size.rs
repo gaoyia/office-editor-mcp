@@ -137,6 +137,7 @@ fn inspect_slide_size_and_theme_keys() {
             "index",
             "name",
             "theme",
+            "transition",
             "animCount",
             "placeholders",
             "shapes",

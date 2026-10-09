@@ -164,6 +164,7 @@ pub struct SetSlideHiddenOp {
 #[derive(Debug, Clone)]
 pub struct SetTransitionOp {
     pub slide: usize,
+    pub master: Option<(usize, Option<usize>)>,
     pub type_name: Option<String>,
     pub dur: Option<u32>,
     pub adv_click: bool,
@@ -171,6 +172,9 @@ pub struct SetTransitionOp {
     pub dir: Option<String>,
     pub inv_x: bool,
     pub inv_y: bool,
+    pub sound: Option<String>,
+    pub orient: Option<String>,
+    pub spokes: Option<u32>,
 }
 
 #[derive(Debug, Clone)]
@@ -2012,10 +2016,21 @@ fn parse_set_transition(obj: &Map<String, Value>, i: usize) -> Result<SetTransit
         obj,
         i,
         &[
-            "op", "id", "type", "dur", "advClick", "advTm", "dir", "invX", "invY",
+            "op", "id", "type", "dur", "advClick", "advTm", "dir", "invX", "invY", "sound",
+            "orient", "spokes",
         ],
     )?;
     let id = require_id(obj, i)?;
+    let host = picture::parse_insert_host(&id, i, IdReason::SetTransitionNeedsHost)?;
+    if host.on_notes() {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::SetTransitionNeedsHost,
+            },
+            format!("ops[{i}].id"),
+        ));
+    }
+    let (slide, _, master) = host.parts();
     let type_name = match obj.get("type") {
         None => {
             return Err(Error::with_path(
@@ -2091,8 +2106,39 @@ fn parse_set_transition(obj: &Map<String, Value>, i: usize) -> Result<SetTransit
     };
     let inv_x = parse_optional_flag(obj.get("invX"), i, "invX")?;
     let inv_y = parse_optional_flag(obj.get("invY"), i, "invY")?;
+    let sound = match obj.get("sound") {
+        None => None,
+        Some(_) if type_name.is_none() => None,
+        Some(_) => parse_anim_sound(obj.get("sound"), i)?,
+    };
+    let orient = match obj.get("orient") {
+        None => None,
+        Some(_) if type_name.is_none() => None,
+        Some(Value::String(s)) if !s.is_empty() => Some(s.clone()),
+        Some(Value::String(_)) => {
+            return Err(Error::with_path(
+                ErrorKind::InvalidTransitionOrient,
+                format!("ops[{i}].orient"),
+            ));
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "orient".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].orient"),
+            ));
+        }
+    };
+    let spokes = match obj.get("spokes") {
+        None => None,
+        Some(_) if type_name.is_none() => None,
+        Some(v) => Some(parse_transition_spokes(v, &format!("ops[{i}].spokes"))?),
+    };
     Ok(SetTransitionOp {
-        slide: parse_slide_only_id(&id, i, "id")?,
+        slide,
+        master,
         type_name,
         dur,
         adv_click,
@@ -2100,6 +2146,9 @@ fn parse_set_transition(obj: &Map<String, Value>, i: usize) -> Result<SetTransit
         dir,
         inv_x,
         inv_y,
+        sound,
+        orient,
+        spokes,
     })
 }
 
@@ -3679,6 +3728,30 @@ fn parse_transition_adv_tm(v: &Value, i: usize) -> Result<u32, Error> {
         1,
         86400000,
     )
+}
+
+fn parse_transition_spokes(v: &Value, path: &str) -> Result<u32, Error> {
+    let n = match v {
+        Value::Number(num) => num.as_u64().ok_or_else(|| {
+            Error::with_path(ErrorKind::InvalidTransitionSpokes, path.to_string())
+        })?,
+        _ => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "spokes".into(),
+                    expected: TypeName::Integer,
+                },
+                path.to_string(),
+            ));
+        }
+    };
+    if !(1..=8).contains(&n) {
+        return Err(Error::with_path(
+            ErrorKind::InvalidTransitionSpokes,
+            path.to_string(),
+        ));
+    }
+    Ok(n as u32)
 }
 
 fn parse_transition_ms(
@@ -6481,7 +6554,9 @@ pub(crate) fn parse_create_transition(
     deny_keys_at(
         obj,
         prefix,
-        &["type", "dur", "advClick", "advTm", "dir", "invX", "invY"],
+        &[
+            "type", "dur", "advClick", "advTm", "dir", "invX", "invY", "sound", "orient", "spokes",
+        ],
     )?;
     let type_name = match obj.get("type") {
         None => {
@@ -6574,8 +6649,54 @@ pub(crate) fn parse_create_transition(
     };
     let inv_x = parse_optional_flag_at(obj.get("invX"), &format!("{prefix}.invX"), "invX")?;
     let inv_y = parse_optional_flag_at(obj.get("invY"), &format!("{prefix}.invY"), "invY")?;
+    let sound = match obj.get("sound") {
+        None => None,
+        Some(Value::String(s)) if !s.is_empty() => Some(s.clone()),
+        Some(Value::String(_)) | Some(Value::Null) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "sound".into(),
+                    expected: TypeName::String,
+                },
+                format!("{prefix}.sound"),
+            ));
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "sound".into(),
+                    expected: TypeName::String,
+                },
+                format!("{prefix}.sound"),
+            ));
+        }
+    };
+    let orient = match obj.get("orient") {
+        None => None,
+        Some(Value::String(s)) if !s.is_empty() => Some(s.clone()),
+        Some(Value::String(_)) => {
+            return Err(Error::with_path(
+                ErrorKind::InvalidTransitionOrient,
+                format!("{prefix}.orient"),
+            ));
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "orient".into(),
+                    expected: TypeName::String,
+                },
+                format!("{prefix}.orient"),
+            ));
+        }
+    };
+    let spokes = match obj.get("spokes") {
+        None => None,
+        Some(v) => Some(parse_transition_spokes(v, &format!("{prefix}.spokes"))?),
+    };
     Ok(SetTransitionOp {
         slide,
+        master: None,
         type_name: Some(type_name),
         dur,
         adv_click,
@@ -6583,6 +6704,9 @@ pub(crate) fn parse_create_transition(
         dir,
         inv_x,
         inv_y,
+        sound,
+        orient,
+        spokes,
     })
 }
 

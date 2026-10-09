@@ -829,7 +829,8 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   找不到该关系、或对不上任何已编母版版式，则为 `null`。不因换页关系改母版 / 版式序号。
 - `hidden`：`p:sld/@show` 为 `0` 或 `false` 时为 `true`，其余为 `false`。
 - `transition` 在每页始终出现。没有 `<p:transition>`（含包在 `mc:AlternateContent` 里的）则为 `null`。
-  有则为对象，字段顺序：`type`、`dur`、`advClick`、`advTm`，有 `dir` 再跟 `dir`，`invX` / `invY` 为真再跟。
+  有则为对象，字段顺序：`type`、`dur`、`advClick`、`advTm`、`sound`，
+  有 `dir` 再跟 `dir`，有 `orient` 再跟 `orient`，有 `spokes` 再跟 `spokes`，`invX` / `invY` 为真再跟。
   `type` 取效果子元素的本地名（`sndAc` / `extLst` 不算）。
   效果本地名为 `prstTrans` 时，`type` 改取 `prst` 属性：值为 `fallOver` / `drape` / `curtains` / `wind` / `prestige` / `fracture`
    / `crush` / `peelOff` / `pageCurlSingle` / `pageCurlDouble` / `airplane` / `origami` 则按该名返回，其余 `prst` 仍为 `other`。
@@ -840,7 +841,11 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   不在这份名单、也不是上述 prst 名的效果为 `other`。`mc:AlternateContent` 只走第一个 Choice。
   `dur` 优先取 `p14:dur`（毫秒，无单位整数）；没有则按 `spd` 折算：`slow` 为 `1000`，`med` 为 `750`，`fast` 或缺 `spd` 为 `500`。
   没有效果子元素但仍有 `<p:transition>` 时 `type` 为 `none`。`advClick`：属性为 `0` / `false` 则为 `false`，缺属性或其余值为 `true`。
-  `advTm`：有属性且能解析成正整数则取其毫秒，否则为 `null`。`dir` 取效果子元素的 `dir` 原文；没有该属性则不出现该字段。
+  `advTm`：有属性且能解析成正整数则取其毫秒，否则为 `null`。
+  `sound` 取 `sndAc/stSnd/snd/@name`；没有则为 `null`。不把字节塞进树。只有 `endSnd`、没有 `stSnd` 时仍为 `null`。
+  `dir` 取效果子元素的 `dir` 原文；没有该属性则不出现该字段。
+  `orient` 取效果子元素的 `orient` 原文；没有该属性则不出现该字段。
+  `spokes` 取效果子元素的 `spokes`；能解析成非负整数才出现，否则不出现该字段。
   `invX` / `invY` 只在对应属性为 `1` / `true` 时出现且值为 `true`。
 - 省略 `scope` 或只给空对象时，没有 `shapes`、`truncated`，
   也没有 `pictures` / `maths` / `videos` / `audios` / `charts` / `smartArts` / `tables` / `oleObjects` / `model3ds` / `zooms` / `connectors` / `timing` 名单，
@@ -987,8 +992,9 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   该宿主第一条效果 `trigger` 为 `with` 或 `after` 时，外层包装仍写 `delay="indefinite"`，并加 `evt="onBegin"` 指向 `mainSeq` 的 `cTn/@id`（进片自动播）。
   第一条 `click` 不加这条。`clickOn` 不走这条，写在 `interactiveSeq` 里。
 - `scope.masters` 为 `true` 时，根上带 `masters`。没有母版时为空数组。不依赖 `scope.slide`。不算母版排版引擎。不把母版装饰形抄进各页。
-  每份母版字段顺序：`id`、`index`、`name`、`theme`、`animCount`、`placeholders`、`shapes`、`layouts`。
-  `scope.timing` 同开时在 `animCount` 之后、`placeholders` 之前带 `timing`。`id` 为 `master:{n}`。
+  每份母版字段顺序：`id`、`index`、`name`、`theme`、`transition`、`animCount`、`placeholders`、`shapes`、`layouts`。
+  `transition` 规则与幻灯片相同，读该 slideMaster 的 `<p:transition>`。`scope.timing` 同开时在 `animCount` 之后、`placeholders` 之前带 `timing`。
+  `id` 为 `master:{n}`。
   `animCount` 只计该 slideMaster 的 `<p:timing>`，不含其版式。
   母版不新增永远出现的对象 Count。名单只在 `scope.masters` 与该对象自己的 scope 同开时出现，插在 `shapes` 之后、`layouts` 之前。
   顺序与幻灯片相同：按需 `pictures`、`maths`、`videos`、`audios`、`charts`、`smartArts`、`tables`、`oleObjects`、`model3ds`、`zooms`、`connectors`、`hyperlinks`、`fields`。
@@ -1003,7 +1009,8 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   其余取 `a:majorFont` / `a:minorFont` 下 `a:latin` / `a:ea` / `a:cs` 的 `typeface` 原文，没有该元素则为 `null`。不算主题排版引擎，不展开 `fmtScheme`。
   `placeholders` 只收带 `p:nvPr/p:ph` 的 `p:sp`（含组合里的），按文档顺序。
   `shapes` 只收没有 `p:ph` 的 `p:sp`（含组合里的，含无 `txBody`），按文档顺序。不收 `p:pic`、`p:cxnSp`、`p:graphicFrame`。
-  每份版式字段顺序：`id`、`index`、`name`、`kind`、`animCount`、`placeholders`、`shapes`。
+  每份版式字段顺序：`id`、`index`、`name`、`kind`、`transition`、`animCount`、`placeholders`、`shapes`。
+  `transition` 规则与幻灯片相同，读该 slideLayout 的 `<p:transition>`。
   `scope.timing` 同开时在 `animCount` 之后、`placeholders` 之前带 `timing`。
   版式对象名单规则与母版相同，插在 `shapes` 之后。
   `id` 为 `master:{n}/layout:{k}`。
@@ -1281,7 +1288,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   - 必须
   - 效果名，规则与 `setTransition` 相同
   - `null`、空串或 `other` 报 `InvalidField`（create 没有「清除」）
-- **`transition.dur` / `advClick` / `advTm` / `dir` / `invX` / `invY`**
+- **`transition.dur` / `advClick` / `advTm` / `dir` / `invX` / `invY` / `sound` / `orient` / `spokes`**
   - 可选
   - 规则与 `setTransition` 相同
   - 不要 `op` / `id`
@@ -1476,33 +1483,46 @@ pptx：`id` 不是 `pptx:presentation` 报 `InvalidId`。`after` 找不到报 `I
 
 ### setTransition
 
-写或清除该页 `<p:transition>`。不写 `<p:timing>`。
+写或清除该宿主 `<p:transition>`。不写 `<p:timing>`。
 
 | 字段 | 含义 |
 | --- | --- |
 | `op` | 必须是 `"setTransition"` |
-| `id` | `slide:{n}` |
+| `id` | `slide:{n}`、`master:{n}` 或 `master:{n}/layout:{k}` |
 | `type` | 效果名，或 `null` 表示去掉切换。必填 |
 | `dur` | 可选。时长，毫秒，整数，范围 `1`–`60000` |
 | `advClick` | 可选。`false` 表示不单击进片。省略为 `true` |
 | `advTm` | 可选。自动进片延迟，毫秒，整数，范围 `1`–`86400000`。`null` 或不给表示不定时 |
 | `dir` | 可选。效果子元素的方向。省略则不写该属性 |
 | `invX` / `invY` | 可选。只对 prst 名有意义。`true` 时写 `invX="1"` / `invY="1"` |
+| `sound` | 可选。本地 WAV 路径，按文件头认，规则与 `insertAnim` 的 `sound` 相同 |
+| `orient` | 可选。只对 `split`。`horz` 或 `vert`。省略则不写该属性 |
+| `spokes` | 可选。只对 `wheel` / `wheelReverse`。整数 `1`–`8`。省略则不写该属性 |
 
-找不到该页报 `IdNotFound`。id 不是页 id 报 `InvalidId`。缺 `type` 报 `InvalidField`。
+找不到该页或该母版 / 版式报 `IdNotFound`。id 不是上述宿主报 `InvalidId`。
+对 `slide:{n}/notes`、`notesMaster`、`handout` 报 `InvalidId`。缺 `type` 报 `InvalidField`。
 `type` 为 `other`、空串、或不在 inspect 那份可写名单里（`none` 可写，表示空的 `<p:transition>` 且没有效果子元素；prst 白名单见上文 inspect）报 `InvalidField`。
 `dur` 不是正整数或不在范围内报 `InvalidField`。`advTm` 不是正整数或不在范围内报 `InvalidField`。
 该效果没有 `dir` 却给了 `dir`、`dir` 不在该效果允许值、或非 prst 却给了 `invX` / `invY`，报 `InvalidField`。
-`type` 为 `null` 时忽略 `dur` / `advClick` / `advTm` / `dir` / `invX` / `invY`，删掉该页的 `<p:transition>`；
+非 `split` 却给了 `orient`、或 `orient` 不是 `horz` / `vert`，报 `InvalidField`。
+非 `wheel` / `wheelReverse` 却给了 `spokes`、或 `spokes` 不是 `1`–`8` 的整数，报 `InvalidField`。
+`sound` 空串或 `null` 报错，规则与 `insertAnim` 相同。不是 WAV 报 `InvalidMediaFile`。
+`type` 为 `null` 时忽略 `dur` / `advClick` / `advTm` / `dir` / `invX` / `invY` / `sound` / `orient` / `spokes`，
+删掉该宿主的 `<p:transition>`；
 若它包在只含切换的 `mc:AlternateContent` 里，整段 AlternateContent 删掉。已经没有切换则空操作。
+清掉该切换不再引用的音频关系；仍被同部件 `<p:timing>` 引用的不删。
 
 `type` 不是 `null` 时整段换成新的 `<p:transition>`（含原先的 AlternateContent）。
-ECMA 名单里的效果写成 `p:` 子元素，直接放在 `p:sld` 下，不包 AlternateContent。
+ECMA 名单里的效果写成 `p:` 子元素，直接放在该宿主根下，不包 AlternateContent。
+母版插在 `sldLayoutIdLst` 之后、`timing` / `hf` / `txStyles` 之前。版式与幻灯片插在 `cSld` / `clrMapOvr` 之后、`timing` 之前。
 prst 白名单与 `morph` 写成 `p15:`，其余 MS-PPTX 名单写成 `p14:`，外包 `mc:AlternateContent`：Choice 要求对应前缀，Fallback 写 `p:fade`。
-prst 的效果子元素是 `p15:prstTrans`，`prst` 为该 `type`。不写 `sndAc`。`dur` 省略则按 `500`。
+prst 的效果子元素是 `p15:prstTrans`，`prst` 为该 `type`。`dur` 省略则按 `500`。
 同时写 `p14:dur` 与 `spd`：`dur<=500` 为 `fast`，`dur<=750` 为 `med`，其余为 `slow`。
-`advClick` 为 `true` 或不给则不写该属性；`false` 写 `advClick="0"`。给了 `advTm` 则写在 `<p:transition>` 上。给了 `dir` 则写在效果子元素上。
-`invX` / `invY` 为真只写在 `p15:prstTrans` 上。不改 `<p:timing>`。docx / xlsx 上发此 op 报 `InvalidField`。
+`advClick` 为 `true` 或不给则不写该属性；`false` 写 `advClick="0"`。给了 `advTm` 则写在 `<p:transition>` 上。
+给了 `dir` / `orient` / `spokes` 则写在效果子元素上。
+`invX` / `invY` 为真只写在 `p15:prstTrans` 上。
+给了 `sound` 才写 `p:sndAc/p:stSnd/p:snd`（`r:embed` 与 `name`），Choice 与 Fallback 各写一份同一 `rId`。不写 `loop`。不写 `endSnd`。
+不改 `<p:timing>`。docx / xlsx 上发此 op 报 `InvalidField`。
 
 ### insertAnim
 
@@ -2835,7 +2855,9 @@ presentation 关系、新页或被删页及其 `.rels`、内容类型，
 `insertZoom` / `deleteZoom` 脏该宿主 XML 及其 `.rels`、`[Content_Types].xml`，以及新建或被删的预览 `/ppt/media/imageN.*`。
 `deleteZoom` 还可清该页 `<p:timing>` 里对应 `tgtEl`。`setShowPr` 只脏 `/ppt/presProps.xml` 的 `p:showPr`；没有该部件报 `OpcPartMissing`。
 `setProtection` 只脏 `presentation.xml` 的 `p:modifyVerifier`。`setSlideHidden` 只脏该页 `p:sld/@show`。
-`setTransition` 只脏该页幻灯片 XML 的 `<p:transition>`（或包住它的 `mc:AlternateContent`），不脏 timing。
+`setTransition` 只脏被点名宿主 XML 的 `<p:transition>`（或包住它的 `mc:AlternateContent`），不脏 timing。
+给了 `sound` 时还可脏该宿主 `.rels`、`/ppt/media/…` 与 `[Content_Types].xml`。
+幻灯片宿主是该页幻灯片 XML；母版 / 版式是被点名的 slideMaster 或 slideLayout。
 `insertAnim` / `setAnim` / `deleteAnim` / `moveAnim` 脏被点名宿主 XML 的 `<p:timing>`（含 `bldLst`），不脏 `<p:transition>`。
 给了 `sound` 时还可脏该宿主 `.rels`、`/ppt/media/…` 与 `[Content_Types].xml`。
 幻灯片宿主是该页幻灯片 XML；备注是该页 notesSlide；母版 / 版式是被点名的 slideMaster 或 slideLayout；备注母版是 notesMaster；讲义是 handoutMaster。

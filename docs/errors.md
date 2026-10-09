@@ -404,7 +404,9 @@
 - `setNotesText` 的 `id` 必须是 `slide:{n}` 或 `slide:{n}/notes`
 - xlsx / docx 上发此 op 报 `InvalidField`
 - `insertSlide` 的 id 必须是 `pptx:presentation`
-- `deleteSlide` / `moveSlide` / `setSlideHidden` / `setTransition` / `setSlideLayout` 的 id 必须是 `slide:{n}`
+- `deleteSlide` / `moveSlide` / `setSlideHidden` / `setSlideLayout` 的 id 必须是 `slide:{n}`
+- `setTransition` 的 id 必须是 `slide:{n}`、`master:{n}` 或 `master:{n}/layout:{k}`
+- 对 `slide:{n}/notes`、`notesMaster`、`handout` 发 `setTransition` 报 `InvalidId`
 - `insertAnim` 的 id 必须是可绑对象（`slide:{n}/shape:…`、`…/cxn:…`、`…/pic:…`、`…/video:…`、`…/audio:…`、`…/table:…`、`…/chart:…`、`…/smartdiagram:…`，或带 `slide:{n}/notes/` 前缀，或母版 / 版式形状，或 `notesMaster/shape:…` / `handout/shape:…`）
 - 找不到该对象报 `IdNotFound`
 - 不是这些 id 报 `InvalidId`
@@ -431,6 +433,8 @@
   - `moveSlide` 的 `after` 是自己
   - `setSlideHidden` 缺 `hidden`
   - `setTransition` 缺 `type`，或 `type` 为 `other` 或不认识，或 `dur` 越界
+  - 该效果没有 `dir` / `orient` / `spokes` 却给了对应字段，或值不在允许范围
+  - `setTransition` 的 `sound` 不是 WAV
   - `insertAnim` 的 `delay` / `dur` / `repeat` 越界
   - `setAnim` 一个可写字段都不给，或 `dur` 点到没有可写时长的效果
   - `moveAnim` 的 `index` 越界

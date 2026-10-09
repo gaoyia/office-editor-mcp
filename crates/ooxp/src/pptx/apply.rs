@@ -1371,8 +1371,11 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                 transition::apply(
                     &mut pkg,
                     &slides,
+                    &pres_part,
+                    &pres.root,
                     transition::SetArgs {
                         slide: op.slide,
+                        master: op.master,
                         type_name: op.type_name.as_deref(),
                         dur: op.dur,
                         adv_click: op.adv_click,
@@ -1380,6 +1383,9 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                         dir: op.dir.as_deref(),
                         inv_x: op.inv_x,
                         inv_y: op.inv_y,
+                        sound: op.sound.as_deref(),
+                        orient: op.orient.as_deref(),
+                        spokes: op.spokes,
                     },
                     i,
                 )?;

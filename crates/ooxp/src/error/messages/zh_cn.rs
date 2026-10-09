@@ -282,6 +282,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::SlideOpNeedsSlide => {
                 "id 必须是 slide:N".into()
             }
+            IdReason::SetTransitionNeedsHost => {
+                "setTransition 的 id 必须是 slide:N、master:N 或 master:N/layout:K".into()
+            }
             IdReason::MasterForm => {
                 "母版或占位符 id 必须是 master:N、master:N/layout:K、notesMaster/shape:…、handout/shape:… 或 …/shape:…".into()
             }
@@ -890,6 +893,12 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::InvalidTransitionAdvTm => "advTm 必须是 1 到 86400000 的整数".into(),
         ErrorKind::InvalidTransitionDir => {
             "dir 必须是该切换允许的方向；invX / invY 只对 prstTrans 预设有效".into()
+        }
+        ErrorKind::InvalidTransitionOrient => {
+            "orient 只对 split 有效，且必须是 horz 或 vert".into()
+        }
+        ErrorKind::InvalidTransitionSpokes => {
+            "spokes 只对 wheel / wheelReverse 有效，且必须是 1 到 8 的整数".into()
         }
         ErrorKind::InvalidShapePrst => {
             "prst 必须是可写的预设几何名；连接线几何请用 insertConnector".into()

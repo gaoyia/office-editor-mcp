@@ -1,13 +1,15 @@
-//! 幻灯片 `<p:transition>`：名单、时长、自动进片、方向与 prstTrans。不写 `<p:timing>`。
+//! 幻灯片、母版、版式上的 `<p:transition>`。不写 `<p:timing>`。
 
 use serde_json::{json, Map, Value};
 
-use crate::error::{Error, ErrorKind};
-use crate::opc::Package;
+use crate::error::{io_path, Error, ErrorKind};
+use crate::opc::{ContentTypes, Package, Relationship, Relationships};
 use crate::xml::{Element, Node};
 
+use super::media::REL_AUDIO;
 use super::picture;
 use super::shape::SlideMeta;
+use super::REL_NS;
 
 const MC_NS: &str = "http://schemas.openxmlformats.org/markup-compatibility/2006";
 const P14_NS: &str = "http://schemas.microsoft.com/office/powerpoint/2010/main";
@@ -83,6 +85,7 @@ const LEFT_RIGHT: &[&str] = &["l", "r"];
 
 pub struct SetArgs<'a> {
     pub slide: usize,
+    pub master: Option<(usize, Option<usize>)>,
     pub type_name: Option<&'a str>,
     pub dur: Option<u32>,
     pub adv_click: bool,
@@ -90,6 +93,9 @@ pub struct SetArgs<'a> {
     pub dir: Option<&'a str>,
     pub inv_x: bool,
     pub inv_y: bool,
+    pub sound: Option<&'a str>,
+    pub orient: Option<&'a str>,
+    pub spokes: Option<u32>,
 }
 
 pub fn is_writable_type(name: &str) -> bool {
@@ -115,8 +121,21 @@ pub fn inspect(root: &Element) -> Value {
                     None => Value::Null,
                 },
             );
+            m.insert(
+                "sound".into(),
+                match sound_name(el) {
+                    Some(s) => json!(s),
+                    None => Value::Null,
+                },
+            );
             if let Some(d) = effect_dir(el) {
                 m.insert("dir".into(), json!(d));
+            }
+            if let Some(o) = effect_orient(el) {
+                m.insert("orient".into(), json!(o));
+            }
+            if let Some(n) = effect_spokes(el) {
+                m.insert("spokes".into(), json!(n));
             }
             if xml_flag(first_effect_el(el).and_then(|e| e.attr_local("invX"))) {
                 m.insert("invX".into(), json!(true));
@@ -132,19 +151,28 @@ pub fn inspect(root: &Element) -> Value {
 pub fn apply(
     pkg: &mut Package,
     slides: &[SlideMeta],
+    pres_part: &str,
+    pres_root: &Element,
     args: SetArgs<'_>,
     op_index: usize,
 ) -> Result<(), Error> {
-    if args.slide < 1 || args.slide > slides.len() {
-        return Err(Error::with_path(
-            ErrorKind::SlideNotFound {
-                n: args.slide as u32,
-            },
-            format!("ops[{op_index}].id"),
-        ));
-    }
-    let part = slides[args.slide - 1].part.clone();
+    let json_path = format!("ops[{op_index}].id");
+    let host = picture::TreeHost::from_parts(args.slide, false, args.master);
+    let part = picture::resolve_tree_part(
+        pkg,
+        pres_part,
+        pres_root,
+        slides,
+        &host,
+        ErrorKind::MasterNotFound { n: 0 },
+        &json_path,
+    )?;
     let mut doc = crate::xml::parse(pkg.get(&part)?)?;
+    let old_rids = {
+        let mut rids = Vec::new();
+        collect_snd_rids(&doc.root, &mut rids);
+        rids
+    };
     match args.type_name {
         None => {
             if !remove_all_transitions(&mut doc.root) {
@@ -162,8 +190,12 @@ pub fn apply(
             let node = build_transition_node(name, dur, &args);
             let at = insert_index(&doc.root);
             doc.root.children.insert(at, node);
+            if let Some(path) = args.sound {
+                attach_sound(pkg, &mut doc.root, &part, path, op_index)?;
+            }
         }
     }
+    drop_unused_audio(pkg, &doc.root, &part, &old_rids)?;
     pkg.set(&part, doc.to_bytes()?)?;
     Ok(())
 }
@@ -204,6 +236,22 @@ fn validate_extras(name: &str, args: &SetArgs<'_>, i: usize) -> Result<(), Error
             ErrorKind::InvalidTransitionDir,
             format!("ops[{i}].{field}"),
         ));
+    }
+    if let Some(orient) = args.orient {
+        if name != "split" || !ORIENT.contains(&orient) {
+            return Err(Error::with_path(
+                ErrorKind::InvalidTransitionOrient,
+                format!("ops[{i}].orient"),
+            ));
+        }
+    }
+    if let Some(spokes) = args.spokes {
+        if !matches!(name, "wheel" | "wheelReverse") || !(1..=8).contains(&spokes) {
+            return Err(Error::with_path(
+                ErrorKind::InvalidTransitionSpokes,
+                format!("ops[{i}].spokes"),
+            ));
+        }
     }
     Ok(())
 }
@@ -256,6 +304,39 @@ fn effect_dir(el: &Element) -> Option<String> {
     first_effect_el(el)
         .and_then(|e| e.attr_local("dir"))
         .map(str::to_string)
+}
+
+fn effect_orient(el: &Element) -> Option<String> {
+    first_effect_el(el)
+        .and_then(|e| e.attr_local("orient"))
+        .map(str::to_string)
+}
+
+fn effect_spokes(el: &Element) -> Option<u64> {
+    first_effect_el(el)
+        .and_then(|e| e.attr_local("spokes"))
+        .and_then(|s| s.parse().ok())
+}
+
+fn sound_name(el: &Element) -> Option<String> {
+    for c in el.element_children() {
+        if c.local_name() != "sndAc" {
+            continue;
+        }
+        for st in c.element_children() {
+            if st.local_name() != "stSnd" {
+                continue;
+            }
+            for snd in st.element_children() {
+                if snd.local_name() == "snd" {
+                    if let Some(n) = snd.attr_local("name").filter(|s| !s.is_empty()) {
+                        return Some(n.to_string());
+                    }
+                }
+            }
+        }
+    }
+    None
 }
 
 fn xml_flag(raw: Option<&str>) -> bool {
@@ -326,8 +407,8 @@ fn insert_index(root: &Element) -> usize {
             continue;
         };
         match e.local_name() {
-            "cSld" | "clrMapOvr" => after = i + 1,
-            "timing" | "extLst" => return i,
+            "cSld" | "clrMapOvr" | "clrMap" | "sldLayoutIdLst" => after = i + 1,
+            "timing" | "extLst" | "hf" | "txStyles" => return i,
             _ => {}
         }
     }
@@ -371,6 +452,16 @@ fn build_effect_el(name: &str, args: &SetArgs<'_>) -> Option<Element> {
             e = e.with_attr("dir", dir);
         }
     }
+    if name == "split" {
+        if let Some(orient) = args.orient {
+            e = e.with_attr("orient", orient);
+        }
+    }
+    if matches!(name, "wheel" | "wheelReverse") {
+        if let Some(spokes) = args.spokes {
+            e = e.with_attr("spokes", spokes.to_string());
+        }
+    }
     Some(e)
 }
 
@@ -409,4 +500,139 @@ fn build_transition_node(name: &str, dur: u32, args: &SetArgs<'_>) -> Node {
     ac.push_element(choice);
     ac.push_element(fallback);
     Node::Element(ac)
+}
+
+fn attach_sound(
+    pkg: &mut Package,
+    root: &mut Element,
+    part: &str,
+    file: &str,
+    op_index: usize,
+) -> Result<(), Error> {
+    let p = std::path::PathBuf::from(file);
+    let bytes = std::fs::read(&p)
+        .map_err(|e| io_path(e, p.clone()).at(format!("ops[{op_index}].sound")))?;
+    if !is_wav(&bytes) {
+        return Err(Error::with_path(
+            ErrorKind::InvalidMediaFile,
+            format!("ops[{op_index}].sound"),
+        ));
+    }
+    let name = p
+        .file_name()
+        .and_then(|s| s.to_str())
+        .filter(|s| !s.is_empty())
+        .unwrap_or("sound.wav")
+        .to_string();
+    let media_part = next_wav_part(pkg);
+    pkg.set(&media_part, bytes)?;
+    picture::ensure_xmlns(root, "r", REL_NS);
+    let mut rels = Relationships::from_package(pkg, part)?;
+    let rid = rels.next_rid();
+    rels.push(Relationship {
+        id: rid.clone(),
+        rel_type: REL_AUDIO.into(),
+        target: picture::rel_target_from(part, &media_part),
+        target_mode: None,
+        extra: Vec::new(),
+    });
+    rels.write_to(pkg, part)?;
+    let mut cts = ContentTypes::from_package(pkg)?;
+    cts.ensure_default("wav", "audio/x-wav");
+    cts.write_to(pkg)?;
+    push_snd_ac_on_transitions(root, &rid, &name);
+    Ok(())
+}
+
+fn push_snd_ac_on_transitions(root: &mut Element, rid: &str, name: &str) {
+    for n in &mut root.children {
+        let Node::Element(e) = n else {
+            continue;
+        };
+        if e.local_name() == "transition" {
+            push_snd_ac(e, rid, name);
+        } else if e.local_name() == "AlternateContent" {
+            for child in e.element_children_mut() {
+                if matches!(child.local_name(), "Choice" | "Fallback") {
+                    for t in child.element_children_mut() {
+                        if t.local_name() == "transition" {
+                            push_snd_ac(t, rid, name);
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn push_snd_ac(tr: &mut Element, rid: &str, name: &str) {
+    tr.children.retain(|n| match n {
+        Node::Element(e) => e.local_name() != "sndAc",
+        _ => true,
+    });
+    let snd = Element::new("p:snd")
+        .with_attr("r:embed", rid)
+        .with_attr("name", name);
+    let mut st = Element::new("p:stSnd");
+    st.push_element(snd);
+    let mut ac = Element::new("p:sndAc");
+    ac.push_element(st);
+    tr.push_element(ac);
+}
+
+fn drop_unused_audio(
+    pkg: &mut Package,
+    root: &Element,
+    part: &str,
+    rids: &[String],
+) -> Result<(), Error> {
+    if rids.is_empty() {
+        return Ok(());
+    }
+    let mut still = Vec::new();
+    collect_snd_rids(root, &mut still);
+    let mut rels = Relationships::from_package(pkg, part)?;
+    let mut old_parts = Vec::new();
+    for rid in rids {
+        if still.iter().any(|s| s == rid) {
+            continue;
+        }
+        if let Ok(p) = crate::opc::resolve_id(pkg, part, rid) {
+            old_parts.push(p);
+        }
+        rels.remove_by_id(rid);
+    }
+    rels.write_to(pkg, part)?;
+    for media in old_parts {
+        if !picture::media_still_used(pkg, &media)? {
+            pkg.remove(&media);
+        }
+    }
+    Ok(())
+}
+
+fn collect_snd_rids(el: &Element, out: &mut Vec<String>) {
+    if el.local_name() == "snd" {
+        if let Some(id) = el.attr_local("embed").filter(|s| !s.is_empty()) {
+            out.push(id.to_string());
+        }
+    }
+    for c in el.element_children() {
+        collect_snd_rids(c, out);
+    }
+}
+
+fn next_wav_part(pkg: &Package) -> String {
+    let mut n = 1u32;
+    loop {
+        let name = format!("/ppt/media/media{n}.wav");
+        if !pkg.contains(&name) {
+            return name;
+        }
+        n += 1;
+    }
+}
+
+fn is_wav(bytes: &[u8]) -> bool {
+    bytes.len() >= 12 && bytes.starts_with(b"RIFF") && &bytes[8..12] == b"WAVE"
 }

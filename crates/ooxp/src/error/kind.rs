@@ -204,8 +204,10 @@ pub(crate) enum IdReason {
     CustomShowIndexFromOne,
     /// setSlideSection 必须用 slide:N
     SetSlideSectionNeedsSlide,
-    /// deleteSlide / moveSlide / setSlideHidden / setTransition / setSlideLayout 必须用 slide:N
+    /// deleteSlide / moveSlide / setSlideHidden / setSlideLayout 必须用 slide:N
     SlideOpNeedsSlide,
+    /// setTransition 必须用 slide:N、master:N 或 master:N/layout:K
+    SetTransitionNeedsHost,
     /// 母版或占位符 id 形态不对
     MasterForm,
     /// 母版 / 版式占位符请用 deletePlaceholder，不要用 deleteShape / setShapeFill / setShapeLine
@@ -833,6 +835,8 @@ define_error_kinds! {
     InvalidTransitionDur => vec![Self::InvalidTransitionDur],
     InvalidTransitionAdvTm => vec![Self::InvalidTransitionAdvTm],
     InvalidTransitionDir => vec![Self::InvalidTransitionDir],
+    InvalidTransitionOrient => vec![Self::InvalidTransitionOrient],
+    InvalidTransitionSpokes => vec![Self::InvalidTransitionSpokes],
     InvalidShapePrst => vec![Self::InvalidShapePrst],
     InvalidConnectorPrst => vec![Self::InvalidConnectorPrst],
     GroupNeedsTwo => vec![Self::GroupNeedsTwo],
@@ -1287,6 +1291,7 @@ impl IdReason {
             Self::SetThemeNeedsDocument,
             Self::SetSlideSectionNeedsSlide,
             Self::SlideOpNeedsSlide,
+            Self::SetTransitionNeedsHost,
             Self::MasterForm,
             Self::MasterPlaceholderLocked,
             Self::LayoutForm,
@@ -1786,6 +1791,8 @@ impl ErrorKind {
             | Self::InvalidTransitionDur
             | Self::InvalidTransitionAdvTm
             | Self::InvalidTransitionDir
+            | Self::InvalidTransitionOrient
+            | Self::InvalidTransitionSpokes
             | Self::InvalidShapePrst
             | Self::InvalidConnectorPrst
             | Self::GroupNeedsTwo

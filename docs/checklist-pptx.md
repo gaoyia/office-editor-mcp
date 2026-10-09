@@ -5,7 +5,7 @@
 检查前用 create 或 apply 在本机生成文件，不要用改过扩展名的 zip 目录冒充。
 本机若 `PowerPoint.Application` 被 WPS 抢走，直接启动 `POWERPNT.EXE` 再挂 COM，不要走被抢的 ProgID。Office 16 的对象模型在 `mdiClass` 上。
 
-C、I、A、Pp、Pvg、Pem、P3d、Pom、Pc、Psa、Pn、Pcm、Pm、Ps、Tf、Sg、Pt、Tn、Tr、Am、Aw、Mm、Mw、Md、Ts、Ho、Nh、Nm、Phl、Phr、Pcip、Pmd、Psc、Cs、Po、Cr、Pz、Pw、
+C、I、A、Pp、Pvg、Pem、P3d、Pom、Pc、Psa、Pn、Pcm、Pm、Ps、Tf、Sg、Pt、Tn、Tr、Td、Am、Aw、Mm、Mw、Md、Ts、Ho、Nh、Nm、Phl、Phr、Pcip、Pmd、Psc、Cs、Po、Cr、Pz、Pw、
 Pf 各组由 `manual-check/office/cases/pptx-*.ps1` 自动判定，
 跑 `pwsh -File manual-check\office\run.ps1 -Case 'pptx-*'` 即可复现。O1 已放弃，与 xlsx / docx 相同。
 
@@ -34,6 +34,8 @@ Ps1–Ps5、Sg1–Sg5、Pt1–Pt6、Tn1–Tn5、Am1–Am5、Mm1–Mm5、Ho1–Ho
 同日补跑 `pptx-shape-format.ps1`，Tf1–Tf5 通过。无 Repair。
 2026-10-10 补跑 `pptx-master-deco.ps1`，Md1–Md5 通过。无 Repair。
 2026-10-10 补跑 `pptx-notes-master.ps1`，Nh1–Nh5 通过。无 Repair。
+2026-10-10 补跑 `pptx-notes-master-objects.ps1`，Nm1–Nm5 通过。无 Repair。
+2026-10-10 补跑 `pptx-transition-sound.ps1`，Td1–Td5 通过。无 Repair。
 
 - **C1** ✅
   - PowerPoint 16.0 能打开 `manual-check/office/out/pptx-create.pptx`，标题栏无 Repair
@@ -909,6 +911,35 @@ DrawingML 表（`a:tbl` 包在 `p:graphicFrame` 里）。不要把表编进 `sha
   - 检查：拒错
   - 通过标准：✅ 对 `fade` 发 `dir` 得 `InvalidField`
   - 对 `fade` 发 `invX` 得 `InvalidField`
+  - 均未写文件
+
+## 切换声音与细节
+
+切换声音、`split` 的 `orient`、`wheel` 的 `spokes`，以及母版 / 版式上的切换。仍只动 `<p:transition>`，不写 `<p:timing>`。
+脚本：`manual-check/office/cases/pptx-transition-sound.ps1`。编号用 Td（不要跟 Tn、Tr、Ts 混）。
+
+- **Td1**
+  - 检查：切换声音
+  - 通过标准：✅ create 产物 `setTransition` `type=fade` 且给 `sound` 一段 WAV 后 inspect `sound` 对上文件名
+  - ZIP 有 `p:sndAc/p:stSnd/p:snd`
+  - PowerPoint 无 Repair
+- **Td2**
+  - 检查：split orient
+  - 通过标准：✅ `type=split` `orient=vert` `dir=in` 后 inspect `orient` 为 `vert`、`dir` 为 `in`
+  - 无 Repair
+- **Td3**
+  - 检查：wheel spokes
+  - 通过标准：✅ `type=wheel` `spokes=8` 后 inspect `spokes` 为 8
+  - 无 Repair
+- **Td4**
+  - 检查：母版切换
+  - 通过标准：✅ 对 `master:1` 发 `setTransition` `type=fade` 后 `scope.masters` 下 `masters[0].transition.type` 为 `fade`
+  - 无 Repair
+- **Td5**
+  - 检查：拒错
+  - 通过标准：✅ 对 `notesMaster` 发 `setTransition` 得 `InvalidId`
+  - 对 `fade` 发 `orient` 得 `InvalidField`
+  - 对 `fade` 发 `spokes` 得 `InvalidField`
   - 均未写文件
 
 ## 动画清单

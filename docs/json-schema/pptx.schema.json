@@ -488,6 +488,22 @@
         },
         "invY": {
           "type": "boolean"
+        },
+        "sound": {
+          "type": "string",
+          "minLength": 1
+        },
+        "orient": {
+          "type": "string",
+          "enum": [
+            "horz",
+            "vert"
+          ]
+        },
+        "spokes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 8
         }
       }
     },
@@ -1473,6 +1489,22 @@
         },
         "invY": {
           "type": "boolean"
+        },
+        "sound": {
+          "type": "string",
+          "minLength": 1
+        },
+        "orient": {
+          "type": "string",
+          "enum": [
+            "horz",
+            "vert"
+          ]
+        },
+        "spokes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 8
         }
       }
     },
