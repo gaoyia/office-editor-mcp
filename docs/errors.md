@@ -111,6 +111,7 @@
     - 自定义属性
     - 迷你图组
     - 自定义放映
+    - Zoom
 - **`ScopeRequired`**（退出码 2）
   - inspect 要单元格却没给 `sheet`+`range`，要段落正文却没给 `from`+`maxParas`，或要形状却没给 `slide`
 - **`TruncatedLimit`**（退出码 2）
@@ -927,6 +928,16 @@
 - xlsx / pptx 空 `text`、出现 `expr` / `kind` 报 `InvalidField`
 - 目标段落落在本期收入的 `oMath` 范围内时 `setParaText` 报 `NotImplemented`
 - 公式落在带分节符且删掉后该段会变空的段落上时，`deleteMath` 报 `NotImplemented`
+- 找不到 Zoom 时，`deleteZoom` / `setZoom` 报 `IdNotFound`
+- `insertZoom` 的 `id` 必须是 `slide:{n}`、`slide:{n}/notes`、`master:{n}` 或 `master:{n}/layout:{k}`
+- `deleteZoom` / `setZoom` 的 `id` 必须是 Zoom id
+- 不是这些 id 报 `InvalidId`
+- `insertZoom` 的 `type` 不是 `slide` / `section` / `summary` 报 `InvalidField`
+- `type=summary` 却给 `target`，或 `slide` / `section` 却给 `targets`，报 `InvalidField`
+- `targets` 为空或含重复节报 `InvalidField`
+- `setZoom` 除 op 与 id 外一个字段都不给、`target` 与 `targets` 同时出现、或字段与当前 Zoom 种类对不上，报 `InvalidField`
+- `setZoom` 的 `file` 不是该格式认的图片报 `InvalidField`
+- xlsx / docx 上发 `insertZoom` / `setZoom` / `deleteZoom` 报 `InvalidField`
 - 找不到内容控件时，内容控件 op 报 `IdNotFound`（`insertContentControl` 除外）
 - id 不是内容控件 id 报 `InvalidId`
 - `insertContentControl` 的 `id` 必须是正文或页眉页脚段落 id 或 `docx:document`

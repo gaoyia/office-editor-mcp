@@ -1062,6 +1062,7 @@ pub enum PptxOp {
     DeleteMath(super::omml::DeleteMathOp),
     InsertZoom(super::zoom::InsertZoomOp),
     DeleteZoom(super::zoom::DeleteZoomOp),
+    SetZoom(super::zoom::SetZoomOp),
     SetShowPr(super::show::SetShowPrOp),
     SetProtection(super::protect::SetProtectionOp),
     InsertChart(InsertChartOp),
@@ -1382,6 +1383,7 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<PptxOp>, Error> {
             "deleteMath" => PptxOp::DeleteMath(parse_delete_math(obj, i)?),
             "insertZoom" => PptxOp::InsertZoom(parse_insert_zoom(obj, i)?),
             "deleteZoom" => PptxOp::DeleteZoom(parse_delete_zoom(obj, i)?),
+            "setZoom" => PptxOp::SetZoom(parse_set_zoom(obj, i)?),
             "setShowPr" => PptxOp::SetShowPr(parse_set_show_pr(obj, i)?),
             "setProtection" => PptxOp::SetProtection(parse_set_protection(obj, i)?),
             "insertChart" => PptxOp::InsertChart(parse_insert_chart(obj, i)?),
@@ -5048,7 +5050,9 @@ fn parse_insert_zoom(obj: &Map<String, Value>, i: usize) -> Result<zoom::InsertZ
     deny_keys(
         obj,
         i,
-        &["op", "id", "type", "target", "x", "y", "cx", "cy"],
+        &[
+            "op", "id", "type", "target", "targets", "x", "y", "cx", "cy",
+        ],
     )?;
     let id = require_id(obj, i)?;
     let (slide, on_notes, master) = zoom::parse_insert_slide_id(&id, i)?.parts();
@@ -5061,7 +5065,7 @@ fn parse_insert_zoom(obj: &Map<String, Value>, i: usize) -> Result<zoom::InsertZ
                 format!("ops[{i}].type"),
             ));
         }
-        Some(Value::String(s)) if s == "slide" || s == "section" => s.clone(),
+        Some(Value::String(s)) if s == "slide" || s == "section" || s == "summary" => s.clone(),
         Some(Value::String(_)) => {
             return Err(Error::with_path(
                 ErrorKind::InvalidZoomType,
@@ -5078,46 +5082,71 @@ fn parse_insert_zoom(obj: &Map<String, Value>, i: usize) -> Result<zoom::InsertZ
             ));
         }
     };
-    let target_s = match obj.get("target") {
-        None => {
+    if obj.contains_key("target") && obj.contains_key("targets") {
+        return Err(Error::with_path(
+            ErrorKind::MutuallyExclusive {
+                a: "target".into(),
+                b: "targets".into(),
+            },
+            format!("ops[{i}]"),
+        ));
+    }
+    let kind = if kind_s == "summary" {
+        if obj.contains_key("target") {
             return Err(Error::with_path(
-                ErrorKind::MissingField {
-                    field: "target".into(),
-                },
+                ErrorKind::InvalidZoomTargets,
                 format!("ops[{i}].target"),
             ));
         }
-        Some(Value::String(s)) if !s.is_empty() => s.as_str(),
-        Some(Value::String(_)) => {
-            return Err(Error::with_path(
-                ErrorKind::MissingField {
-                    field: "target".into(),
-                },
-                format!("ops[{i}].target"),
-            ));
-        }
-        Some(_) => {
-            return Err(Error::with_path(
-                ErrorKind::WrongType {
-                    field: "target".into(),
-                    expected: TypeName::String,
-                },
-                format!("ops[{i}].target"),
-            ));
-        }
-    };
-    let kind = if kind_s == "slide" {
-        let target = zoom::parse_slide_target(target_s, &format!("ops[{i}].target"))?;
-        if target == slide {
-            return Err(Error::with_path(
-                ErrorKind::ZoomTargetSelf,
-                format!("ops[{i}].target"),
-            ));
-        }
-        zoom::InsertKind::Slide { target }
+        let targets = parse_zoom_targets(obj, i)?;
+        zoom::InsertKind::Summary { targets }
+    } else if obj.contains_key("targets") {
+        return Err(Error::with_path(
+            ErrorKind::InvalidZoomTargets,
+            format!("ops[{i}].targets"),
+        ));
     } else {
-        let target = section::parse_section_id(target_s, &format!("ops[{i}].target"))?;
-        zoom::InsertKind::Section { target }
+        let target_s = match obj.get("target") {
+            None => {
+                return Err(Error::with_path(
+                    ErrorKind::MissingField {
+                        field: "target".into(),
+                    },
+                    format!("ops[{i}].target"),
+                ));
+            }
+            Some(Value::String(s)) if !s.is_empty() => s.as_str(),
+            Some(Value::String(_)) => {
+                return Err(Error::with_path(
+                    ErrorKind::MissingField {
+                        field: "target".into(),
+                    },
+                    format!("ops[{i}].target"),
+                ));
+            }
+            Some(_) => {
+                return Err(Error::with_path(
+                    ErrorKind::WrongType {
+                        field: "target".into(),
+                        expected: TypeName::String,
+                    },
+                    format!("ops[{i}].target"),
+                ));
+            }
+        };
+        if kind_s == "slide" {
+            let target = zoom::parse_slide_target(target_s, &format!("ops[{i}].target"))?;
+            if target == slide {
+                return Err(Error::with_path(
+                    ErrorKind::ZoomTargetSelf,
+                    format!("ops[{i}].target"),
+                ));
+            }
+            zoom::InsertKind::Slide { target }
+        } else {
+            let target = section::parse_section_id(target_s, &format!("ops[{i}].target"))?;
+            zoom::InsertKind::Section { target }
+        }
     };
     let x = parse_off_field(obj.get("x"), i, "x")?;
     let y = parse_off_field(obj.get("y"), i, "y")?;
@@ -5153,11 +5182,138 @@ fn parse_insert_zoom(obj: &Map<String, Value>, i: usize) -> Result<zoom::InsertZ
     })
 }
 
+fn parse_zoom_targets(obj: &Map<String, Value>, i: usize) -> Result<Vec<usize>, Error> {
+    match obj.get("targets") {
+        None => Err(Error::with_path(
+            ErrorKind::MissingField {
+                field: "targets".into(),
+            },
+            format!("ops[{i}].targets"),
+        )),
+        Some(Value::Array(arr)) if arr.is_empty() => Err(Error::with_path(
+            ErrorKind::InvalidZoomTargets,
+            format!("ops[{i}].targets"),
+        )),
+        Some(Value::Array(arr)) => {
+            let mut out = Vec::new();
+            for (j, v) in arr.iter().enumerate() {
+                let s = v.as_str().ok_or_else(|| {
+                    Error::with_path(
+                        ErrorKind::WrongType {
+                            field: format!("targets[{j}]"),
+                            expected: TypeName::String,
+                        },
+                        format!("ops[{i}].targets[{j}]"),
+                    )
+                })?;
+                let n = section::parse_section_id(s, &format!("ops[{i}].targets[{j}]"))?;
+                if out.contains(&n) {
+                    return Err(Error::with_path(
+                        ErrorKind::InvalidZoomTargets,
+                        format!("ops[{i}].targets[{j}]"),
+                    ));
+                }
+                out.push(n);
+            }
+            Ok(out)
+        }
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "targets".into(),
+                expected: TypeName::Array,
+            },
+            format!("ops[{i}].targets"),
+        )),
+    }
+}
+
 fn parse_delete_zoom(obj: &Map<String, Value>, i: usize) -> Result<zoom::DeleteZoomOp, Error> {
     deny_keys(obj, i, &["op", "id"])?;
     let id = require_id(obj, i)?;
     let target = zoom::parse_zoom_id(&id, &format!("ops[{i}].id"))?;
     Ok(zoom::DeleteZoomOp { id, target })
+}
+
+fn parse_set_zoom(obj: &Map<String, Value>, i: usize) -> Result<zoom::SetZoomOp, Error> {
+    deny_keys(obj, i, &["op", "id", "target", "targets", "file"])?;
+    let id = require_id(obj, i)?;
+    let target = zoom::parse_zoom_id(&id, &format!("ops[{i}].id"))?;
+    if obj.contains_key("target") && obj.contains_key("targets") {
+        return Err(Error::with_path(
+            ErrorKind::MutuallyExclusive {
+                a: "target".into(),
+                b: "targets".into(),
+            },
+            format!("ops[{i}]"),
+        ));
+    }
+    let dest = if obj.contains_key("targets") {
+        Some(zoom::SetZoomDest::Summary {
+            targets: parse_zoom_targets(obj, i)?,
+        })
+    } else {
+        match obj.get("target") {
+            None => None,
+            Some(Value::String(s)) if s.starts_with("slide:") => {
+                let n = zoom::parse_slide_target(s, &format!("ops[{i}].target"))?;
+                Some(zoom::SetZoomDest::Slide { target: n })
+            }
+            Some(Value::String(s)) if s.starts_with("section:") => {
+                let n = section::parse_section_id(s, &format!("ops[{i}].target"))?;
+                Some(zoom::SetZoomDest::Section { target: n })
+            }
+            Some(Value::String(_)) => {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidId {
+                        reason: IdReason::ZoomTargetSlide,
+                    },
+                    format!("ops[{i}].target"),
+                ));
+            }
+            Some(_) => {
+                return Err(Error::with_path(
+                    ErrorKind::WrongType {
+                        field: "target".into(),
+                        expected: TypeName::String,
+                    },
+                    format!("ops[{i}].target"),
+                ));
+            }
+        }
+    };
+    let file = match obj.get("file") {
+        None => None,
+        Some(Value::String(s)) if !s.is_empty() => Some(s.clone()),
+        Some(Value::String(_)) => {
+            return Err(Error::with_path(
+                ErrorKind::MissingField {
+                    field: "file".into(),
+                },
+                format!("ops[{i}].file"),
+            ));
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "file".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].file"),
+            ));
+        }
+    };
+    if dest.is_none() && file.is_none() {
+        return Err(Error::with_path(
+            ErrorKind::NeedZoomSetField,
+            format!("ops[{i}]"),
+        ));
+    }
+    Ok(zoom::SetZoomOp {
+        id,
+        target,
+        dest,
+        file,
+    })
 }
 
 fn parse_set_show_pr(

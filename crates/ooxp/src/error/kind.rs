@@ -897,6 +897,8 @@ define_error_kinds! {
     InvalidShowPrType => vec![Self::InvalidShowPrType],
     InvalidFldType => vec![Self::InvalidFldType],
     ZoomTargetSelf => vec![Self::ZoomTargetSelf],
+    NeedZoomSetField => vec![Self::NeedZoomSetField],
+    InvalidZoomTargets => vec![Self::InvalidZoomTargets],
     WatermarkNotFound { id: String } => vec![Self::WatermarkNotFound { id: "header:default:1/watermark:1".into() }],
     WatermarkNeedTextOrFile => vec![Self::WatermarkNeedTextOrFile],
     TextBoxLinkCrossPart => vec![Self::TextBoxLinkCrossPart],
@@ -1790,6 +1792,8 @@ impl ErrorKind {
             | Self::InvalidShowPrType
             | Self::InvalidFldType
             | Self::ZoomTargetSelf
+            | Self::NeedZoomSetField
+            | Self::InvalidZoomTargets
             | Self::InvalidAnimTrigger
             | Self::InvalidAnimDelay
             | Self::InvalidAnimDur

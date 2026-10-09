@@ -357,8 +357,8 @@ Zoom id 的 `{cNvPrId}` 取 Choice 里 `p:graphicFrame` 的 `p:nvGraphicFramePr/
 `http://schemas.microsoft.com/office/powerpoint/2016/summaryzoom`（可带尾斜杠，MS-PPTX §2.2.15 / §2.9–2.11）。
 无 AlternateContent、仅 `p:graphicFrame` 且 uri 对上上述三者，也收。整段 AlternateContent 算 1 个 Zoom；摘要缩放多个 `summaryZmObj` 仍是一条。
 组合里符合条件的要展开，组合本身不进树。Fallback 预览 `p:pic` 不进 `pictures`，也不计入 `pictureCount`。备注页、幻灯片母版、版式上的 Zoom 进树，id 带对应前缀。批注、备注母版、讲义上的 Zoom 不进树。
-`insertZoom` 的 `id` 必须是 `slide:{n}`、`slide:{n}/notes`、`master:{n}` 或 `master:{n}/layout:{k}`。`deleteZoom` 的 `id` 必须是 Zoom id。对不上的 id 形态报 `InvalidId`。
-xlsx / docx 上发这两条报 `InvalidField`。本期 `insertZoom` 不写 `type=summary`。不提供改目标或改预览的独立 op。不写 `<p:timing>`。不算放映引擎。
+`insertZoom` 的 `id` 必须是 `slide:{n}`、`slide:{n}/notes`、`master:{n}` 或 `master:{n}/layout:{k}`。`deleteZoom` / `setZoom` 的 `id` 必须是 Zoom id。对不上的 id 形态报 `InvalidId`。
+xlsx / docx 上发这三条报 `InvalidField`。`insertZoom` 可写 `type=summary`。`setZoom` 改已有 Zoom 的目标或预览。不写 `<p:timing>`。不算放映引擎。
 
 同一页里若出现重复的 `cNvPr/@id`，inspect 照样列出每一处；apply 命中该页文档顺序中的第一处。
 
@@ -2846,7 +2846,7 @@ xlsx / docx 上发此 op 报 `InvalidField`。没有 presProps 部件报 `OpcPar
 
 ### insertZoom
 
-把幻灯片缩放或节缩放写入目标宿主。不实现放映跳转，不写 `<p:timing>`，不生成真实预览图（写入一张最小 PNG 占位）。不进批注、备注母版、讲义。本期不写摘要缩放。
+把幻灯片缩放、节缩放或摘要缩放写入目标宿主。不实现放映跳转，不写 `<p:timing>`，不生成真实预览图（写入一张最小 PNG 占位）。不进批注、备注母版、讲义。
 
 ```json
 {
@@ -2859,6 +2859,12 @@ xlsx / docx 上发此 op 报 `InvalidField`。没有 presProps 部件报 `OpcPar
       "id": "slide:1",
       "type": "slide",
       "target": "slide:2"
+    },
+    {
+      "op": "insertZoom",
+      "id": "slide:1",
+      "type": "summary",
+      "targets": ["section:1", "section:2"]
     }
   ]
 }
@@ -2868,21 +2874,29 @@ xlsx / docx 上发此 op 报 `InvalidField`。没有 presProps 部件报 `OpcPar
 | --- | --- |
 | `op` | 必须是 `"insertZoom"` |
 | `id` | 必须是 `slide:{n}`、`slide:{n}/notes`、`master:{n}` 或 `master:{n}/layout:{k}` |
-| `type` | 必须是 `"slide"` 或 `"section"`。`"summary"` 以及其它字符串报 `InvalidField` |
-| `target` | 必须。`type` 为 `slide` 时是 `slide:{m}`，且不能是宿主自己；`type` 为 `section` 时是 `section:{n}` |
+| `type` | 必须是 `"slide"`、`"section"` 或 `"summary"`。其它字符串报 `InvalidField` |
+| `target` | `type` 为 `slide` / `section` 时必须。`slide` 时是 `slide:{m}`，且不能是宿主自己；`section` 时是 `section:{n}`。`type` 为 `summary` 时出现报 `InvalidField` |
+| `targets` | `type` 为 `summary` 时必须。节 id 数组，至少一条，按文档顺序写入 `summaryZmObj`。不许重复。`type` 为 `slide` / `section` 时出现报 `InvalidField` |
 | `x` / `y` | 可选。画布坐标，EMU，非负整数。必须成对出现或成对省略；只给一个时报 `InvalidField`。缺则走该页空白处（与 `insertPicture` 同一套 `vacant_pos`） |
 | `cx` / `cy` | 可选。尺寸，EMU，正整数。必须成对出现或成对省略。缺则用 `3657600` × `2743200` EMU |
 
-`id` 不是页 id 报 `InvalidId`。找不到该页报 `IdNotFound`。`type` 缺省报 `MissingField`。`target` 缺省报 `MissingField`。
+`id` 不是页 id 报 `InvalidId`。找不到该页报 `IdNotFound`。`type` 缺省报 `MissingField`。
+`type` 为 `slide` / `section` 时 `target` 缺省报 `MissingField`。`type` 为 `summary` 时 `targets` 缺省报 `MissingField`。
+`target` 与 `targets` 同时出现报 `InvalidField`。`targets` 为空或含重复节报 `InvalidField`。
 `type` 为 `slide` 时 `target` 不是页 id 报 `InvalidId`；找不到目标页报 `IdNotFound`；目标就是宿主自己报 `InvalidField`。
-`type` 为 `section` 时 `target` 不是节 id 报 `InvalidId`；找不到该节、节没有 GUID、或节里没有页报 `IdNotFound`。xlsx / docx 上发此 op 报 `InvalidField`。
+`type` 为 `section` 时 `target` 不是节 id 报 `InvalidId`；找不到该节、节没有 GUID、或节里没有页报 `IdNotFound`。
+`type` 为 `summary` 时 `targets` 各项不是节 id 报 `InvalidId`；找不到该节、节没有 GUID、或节里没有页报 `IdNotFound`。
+xlsx / docx 上发此 op 报 `InvalidField`。
 
 宿主是 `p:graphicFrame`，包在 `mc:AlternateContent` 的 Choice 里。
 幻灯片缩放 `a:graphicData/@uri` 为 `http://schemas.microsoft.com/office/powerpoint/2016/slidezoom`，`Requires` 为 `pslz`；
-节缩放 uri 为 `http://schemas.microsoft.com/office/powerpoint/2016/sectionzoom`，`Requires` 为 `psez`。
-Choice 里是 graphicFrame，内含 `sldZm` / `sectionZm`。`sldZmObj/@sldId` 取目标页 `p:sldId` 的无前缀 `id`（`ST_SlideId`）。
-`sectionZmObj/@sectionId` 取该节 GUID。`zmPr` 写新 GUID，幻灯片缩放写 `returnToParent="1"`。预览关系写 `p166:blipFill/a:blip/@r:embed`。
-Fallback 是 `p:pic`，预览同一张 PNG，并带 `a:hlinkClick`（`action="ppaction://hlinksldjump"`）：幻灯片缩放跳到目标页，节缩放跳到该节第一页。
+节缩放 uri 为 `http://schemas.microsoft.com/office/powerpoint/2016/sectionzoom`，`Requires` 为 `psez`；
+摘要缩放 uri 为 `http://schemas.microsoft.com/office/powerpoint/2016/summaryzoom`，`Requires` 为 `psuz`。
+Choice 里是 graphicFrame，内含 `sldZm` / `sectionZm` / `summaryZm`。`sldZmObj/@sldId` 取目标页 `p:sldId` 的无前缀 `id`（`ST_SlideId`）。
+`sectionZmObj/@sectionId` 与 `summaryZmObj/@sectionId` 取该节 GUID。`zmPr` 写新 GUID，幻灯片缩放写 `returnToParent="1"`。预览关系写 `p166:blipFill/a:blip/@r:embed`。
+摘要缩放按 `targets` 顺序写多个 `summaryZmObj`，再写空的 `psuz:gridLayout`。不写 `title` / `descr` / 偏移比例。
+Fallback 是 `p:pic`，预览同一张 PNG，并带 `a:hlinkClick`（`action="ppaction://hlinksldjump"`）：
+幻灯片缩放跳到目标页，节缩放跳到该节第一页，摘要缩放跳到 `targets` 第一节的第一页。
 根 `p:sld` 补 `xmlns:mc`、对应 Zoom 前缀与 `xmlns:p166`（`http://schemas.microsoft.com/office/powerpoint/2016/6/main`），`mc:Ignorable` 含该前缀与 `p166`。
 `p:cNvPr/@id` 取该页已有全部 `cNvPr` 的最大整数加 1，至少为 2。`p:cNvPr/@name` 为 `Zoom {n}`，`{n}` 为该页已有 Zoom 个数加 1。
 
@@ -2895,6 +2909,37 @@ Fallback 是 `p:pic`，预览同一张 PNG，并带 `a:hlinkClick`（`action="pp
 
 找不到报 `IdNotFound`。id 不是 Zoom id 报 `InvalidId`。摘整段 AlternateContent（或无 AC 时的 graphicFrame）。两支都扫关系 id。
 清掉无人引用的预览媒体与指向目标页的 slide 关系。按 `deleteShape` 同一套规则清该 graphicFrame `cNvPr/@id` 的 timing `tgtEl`。xlsx / docx 上发此 op 报 `InvalidField`。
+
+### setZoom
+
+```json
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "C:\\data\\deck.pptx",
+  "ops": [
+    { "op": "setZoom", "id": "slide:1/zoom:3", "target": "slide:3" },
+    { "op": "setZoom", "id": "slide:1/zoom:4", "targets": ["section:1", "section:2"] },
+    { "op": "setZoom", "id": "slide:1/zoom:3", "file": "C:\\img\\cover.png" }
+  ]
+}
+```
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"setZoom"` |
+| `id` | 必须是 Zoom id |
+| `target` | 可选。幻灯片缩放改为 `slide:{m}`，节缩放改为 `section:{n}`。摘要缩放上出现报 `InvalidField` |
+| `targets` | 可选。摘要缩放改为这个节 id 数组。幻灯片缩放 / 节缩放上出现报 `InvalidField` |
+| `file` | 可选。本地图片路径。换成自定义封面 |
+
+`target`、`targets`、`file` 至少给一个，否则报 `InvalidField`。`target` 与 `targets` 同时出现报 `InvalidField`。
+`targets` 为空或含重复节报 `InvalidField`。空 `file` 报 `InvalidField`。读不到 `file` 报 `Io`。不是该格式认的图片报 `InvalidField`。
+SVG 只写入 PNG 海报，不写 `svgBlip`。
+给了 `target` / `targets` 时改对应 `@sldId` / `@sectionId`，并改 Fallback `a:hlinkClick` 的 slide 关系。
+给了 `file` 时换该 Zoom 内全部 `a:blip/@r:embed`（含 Fallback `p:pic`），各 `zmPr` 写 `imageType="cover"`。
+不改 `type`。不改画布坐标。不写 `<p:timing>`。找不到报 `IdNotFound`。id 不是 Zoom id 报 `InvalidId`。
+xlsx / docx 上发此 op 报 `InvalidField`。
 
 示例见 `docs/examples/pptx-apply-zoom.json`。inspect 示例见 `docs/examples/pptx-inspect-zoom.json`。
 
@@ -2924,7 +2969,7 @@ presentation 关系、新页或被删页及其 `.rels`、内容类型，
 `insertOle` / `deleteOle` 脏该宿主 XML 及其 `.rels`、`[Content_Types].xml`，
 以及新建或被删的 `/ppt/embeddings/…` 与预览 `/ppt/media/imageN.*`。
 `deleteOle` 还可清该页 `<p:timing>` 里对应 `tgtEl`。
-`insertZoom` / `deleteZoom` 脏该宿主 XML 及其 `.rels`、`[Content_Types].xml`，以及新建或被删的预览 `/ppt/media/imageN.*`。
+`insertZoom` / `setZoom` / `deleteZoom` 脏该宿主 XML 及其 `.rels`、`[Content_Types].xml`，以及新建或被删的预览 `/ppt/media/imageN.*`。
 `deleteZoom` 还可清该页 `<p:timing>` 里对应 `tgtEl`。`setShowPr` 只脏 `/ppt/presProps.xml` 的 `p:showPr`；没有该部件报 `OpcPartMissing`。
 `setProtection` 只脏 `presentation.xml` 的 `p:modifyVerifier`。`setSlideHidden` 只脏该页 `p:sld/@show`。
 `setTransition` 只脏被点名宿主 XML 的 `<p:transition>`（或包住它的 `mc:AlternateContent`），不脏 timing。
@@ -2950,7 +2995,7 @@ presentation 关系、新页或被删页及其 `.rels`、内容类型，
 `deleteField`）、图片 op、媒体 op（含 `setMedia`）、图表 op、SmartArt op、幻灯片管理 op（含 `setTransition`、`setSlideLayout`）、母版写入 op（`insertLayout`、
 `deleteLayout`、`insertPlaceholder`、`deletePlaceholder`、`insertMaster`、`deleteMaster`）、主题与尺寸 op（`setSlideSize`、
 `setThemeColors`、`setThemeFonts`）、动画 op（`insertAnim`、`setAnim`、`deleteAnim`、`moveAnim`）、幻灯片节 op、自定义放映 op（`insertCustomShow`、`setCustomShow`、
-`deleteCustomShow`）、OLE op（`insertOle`、`deleteOle`）、Zoom op（`insertZoom`、`deleteZoom`）、`setShowPr`、
+`deleteCustomShow`）、OLE op（`insertOle`、`deleteOle`）、Zoom op（`insertZoom`、`setZoom`、`deleteZoom`）、`setShowPr`、
 `setProtection` 与 `setProps` / `setCustomProp` / `deleteCustomProp`。
 文件属性 op 还可以脏 `/docProps/core.xml`、`/docProps/app.xml`、`/docProps/custom.xml`、根 `.rels` 与 `[Content_Types].xml`。
 只改 core 字段时不要新建 custom。未点名的 `Slides` 留下。只改 SmartArt 点文字或增删点、且宿主 graphicFrame 未动时，该页 XML 按「drawing 未动」验收。

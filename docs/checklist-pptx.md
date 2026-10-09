@@ -5,7 +5,7 @@
 检查前用 create 或 apply 在本机生成文件，不要用改过扩展名的 zip 目录冒充。
 本机若 `PowerPoint.Application` 被 WPS 抢走，直接启动 `POWERPNT.EXE` 再挂 COM，不要走被抢的 ProgID。Office 16 的对象模型在 `mdiClass` 上。
 
-C、I、A、Pp、Pvg、Pem、P3d、Pom、Pc、Psa、Pn、Pcm、Pm、Ps、Tf、Sg、Pt、Tn、Tr、Td、Mt、Am、Aw、Mm、Mw、Md、Ts、Ho、Nh、Nm、Phl、Phr、Phx、Pcip、Pmd、Psc、Cs、Po、Cr、Pz、Pw、
+C、I、A、Pp、Pvg、Pem、P3d、Pom、Pc、Psa、Pn、Pcm、Pm、Ps、Tf、Sg、Pt、Tn、Tr、Td、Mt、Am、Aw、Mm、Mw、Md、Ts、Ho、Nh、Nm、Phl、Phr、Phx、Pcip、Pmd、Psc、Cs、Po、Cr、Pz、Pzr、Pw、
 Pf 各组由 `manual-check/office/cases/pptx-*.ps1` 自动判定，
 跑 `pwsh -File manual-check\office\run.ps1 -Case 'pptx-*'` 即可复现。O1 已放弃，与 xlsx / docx 相同。
 
@@ -38,6 +38,7 @@ Ps1–Ps5、Sg1–Sg5、Pt1–Pt6、Tn1–Tn5、Am1–Am5、Mm1–Mm5、Ho1–Ho
 2026-10-10 补跑 `pptx-transition-sound.ps1`，Td1–Td5 通过。无 Repair。
 2026-10-10 补跑 `pptx-media-trim.ps1`，Mt1–Mt5 通过。无 Repair。
 2026-10-10 补跑 `pptx-hyperlinks-remain.ps1`，Phx1–Phx5 通过。无 Repair。
+2026-10-10 补跑 `pptx-zoom-remain.ps1`，Pzr1–Pzr5 通过。无 Repair。
 
 - **C1** ✅
   - PowerPoint 16.0 能打开 `manual-check/office/out/pptx-create.pptx`，标题栏无 Repair
@@ -347,7 +348,15 @@ Ps1–Ps5、Sg1–Sg5、Pt1–Pt6、Tn1–Tn5、Am1–Am5、Mm1–Mm5、Ho1–Ho
   - `insertZoom` 后 id 为 `slide:1/zoom:3`、`type=slide`、`target=slide:2`，不并进 `pictures`
   - COM Type=-2 且 Name 以 Zoom 开头
   - `deleteZoom` 后 Count=0
-  - 页 id / Zoom id 错配、`type=summary`、目标是自己、xlsx 拒写
+  - `type=summary` 却给 `target`、目标是自己、xlsx 拒写
+  - 无 Repair
+- **Pzr1–Pzr5** ✅
+  - PowerPoint 16.0：`pptx-zoom-remain.ps1`，5 PASS / 0 FAIL
+  - `insertZoom` `type=summary` 后 inspect `targets` 为 `section:1` 与 `section:2`，ZIP 有 `summaryZm` / `psuz`
+  - COM Type=-2 且无 Repair
+  - `setZoom` 改目标后 `target=slide:3`
+  - `file` 后 ZIP 预览字节对上，不并进 `pictures`
+  - 空字段 / 错 `targets` / 页 id / xlsx 拒写
   - 无 Repair
 - **Pw1–Pw5** ✅
   - PowerPoint 16.0：`pptx-protect.ps1`，5 PASS / 0 FAIL
@@ -1443,7 +1452,7 @@ inspect 计 `oleObjectCount`，`scope.oleObjects` 列名单。`exportMedia` 按 
 
 ## 幻灯片缩放
 
-inspect 计 `zoomCount`，`scope.zooms` 列名单。apply 能插入幻灯片缩放 / 节缩放、能删除。不算放映引擎，不写 `<p:timing>`。
+inspect 计 `zoomCount`，`scope.zooms` 列名单。apply 能插入幻灯片缩放 / 节缩放 / 摘要缩放、能改目标与预览、能删除。不算放映引擎，不写 `<p:timing>`。
 Fallback 预览 `p:pic` 不进 `pictures`。插入走 ooxp，不要 `ExecuteMso`。COM 认 `Type=-2` 且 `Name` 以 `Zoom` 开头。
 脚本：`manual-check/office/cases/pptx-zoom.ps1`。编号用 Pz。
 
@@ -1466,8 +1475,36 @@ Fallback 预览 `p:pic` 不进 `pictures`。插入走 ooxp，不要 `ExecuteMso`
   - 检查：拒错
   - 通过标准：对页 id 发 `deleteZoom` 得 `InvalidId`
   - 对 Zoom id 发 `insertZoom` 得 `InvalidId`
-  - `type=summary` 或目标是自己得 `InvalidField`
+  - `type=summary` 却给 `target`，或目标是自己，得 `InvalidField`
   - xlsx 发 `insertZoom` 得 `InvalidField`，未写文件
+
+## Zoom 剩余
+
+`insertZoom` `type=summary` 能写摘要缩放。`setZoom` 能改目标与预览。create 仍不写 Zoom。不算放映引擎。
+脚本：`manual-check/office/cases/pptx-zoom-remain.ps1`。编号用 **Pzr**（不要跟 Pz、Pw 撞）。
+
+- **Pzr1**
+  - 检查：摘要缩放
+  - 通过标准：✅ 两节文稿 `insertZoom` `type=summary` 后 inspect `type=summary`，`targets` 为 `section:1` 与 `section:2`
+  - ZIP 有 `summaryZm` 与 `Requires="psuz"`
+- **Pzr2**
+  - 检查：打开
+  - 通过标准：✅ PowerPoint 16.0 无 Repair
+  - COM `Type=-2` 且 `Name` 以 Zoom 开头
+- **Pzr3**
+  - 检查：改目标
+  - 通过标准：✅ 幻灯片缩放 `setZoom` `target=slide:3` 后 inspect `target` 为 `slide:3`
+  - 无 Repair
+- **Pzr4**
+  - 检查：预览
+  - 通过标准：✅ `setZoom` `file` 后 ZIP 预览字节与源 PNG 一致，不并进 `pictures`
+  - 无 Repair
+- **Pzr5**
+  - 检查：拒错
+  - 通过标准：✅ `setZoom` 一个可写字段都不给得 `InvalidField`
+  - 对幻灯片缩放发 `targets` 得 `InvalidField`
+  - 页 id 发 `setZoom` 得 `InvalidId`
+  - xlsx 发 `setZoom` 得 `InvalidField`，未写文件
 
 ## 修改密码与放映保护
 

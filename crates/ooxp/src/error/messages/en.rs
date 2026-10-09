@@ -1054,12 +1054,19 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             format!("{field} is not a valid custom view value")
         }
         ErrorKind::ZoomNotFound { id } => format!("Zoom not found: {id}"),
-        ErrorKind::InvalidZoomType => "type must be slide or section".into(),
+        ErrorKind::InvalidZoomType => "type must be slide, section, or summary".into(),
         ErrorKind::InvalidShowPrType => "type must be present, browse, or kiosk".into(),
         ErrorKind::InvalidFldType => {
             "type must be slidenum, datetime, or datetime1–datetime13".into()
         }
         ErrorKind::ZoomTargetSelf => "insertZoom target cannot be the host slide".into(),
+        ErrorKind::NeedZoomSetField => {
+            "setZoom requires at least one of target, targets, or file".into()
+        }
+        ErrorKind::InvalidZoomTargets => {
+            "target and targets must match the Zoom kind, and targets cannot be empty or duplicated"
+                .into()
+        }
         ErrorKind::WatermarkNotFound { id } => format!("Watermark not found: {id}"),
         ErrorKind::WatermarkNeedTextOrFile => {
             "insertWatermark requires exactly one of text or file".into()

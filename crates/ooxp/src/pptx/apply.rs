@@ -762,6 +762,22 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                 zoom::delete(&mut pkg, &mut doc, &part, op, i)?;
                 pkg.set(&part, doc.to_bytes()?)?;
             }
+            PptxOp::SetZoom(op) => {
+                let part = host_xml_part(
+                    &pkg,
+                    &pres_part,
+                    &pres.root,
+                    &slides,
+                    op.target.slide,
+                    op.target.on_notes,
+                    op.target.master,
+                    ErrorKind::ZoomNotFound { id: op.id.clone() },
+                    format!("ops[{i}].id"),
+                )?;
+                let mut doc = xml::parse(pkg.get(&part)?)?;
+                zoom::set(&mut pkg, &mut doc, &part, &pres.root, &slides, op, i)?;
+                pkg.set(&part, doc.to_bytes()?)?;
+            }
             PptxOp::SetShowPr(op) => {
                 show::apply(&mut pkg, &pres_part, op, i)?;
             }

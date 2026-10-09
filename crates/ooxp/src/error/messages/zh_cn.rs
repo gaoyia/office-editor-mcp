@@ -954,12 +954,16 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             format!("自定义视图的 {field} 不合法")
         }
         ErrorKind::ZoomNotFound { id } => format!("找不到 Zoom：{id}"),
-        ErrorKind::InvalidZoomType => "type 必须是 slide 或 section".into(),
+        ErrorKind::InvalidZoomType => "type 必须是 slide、section 或 summary".into(),
         ErrorKind::InvalidShowPrType => "type 必须是 present、browse 或 kiosk".into(),
         ErrorKind::InvalidFldType => {
             "type 必须是 slidenum、datetime 或 datetime1–datetime13".into()
         }
         ErrorKind::ZoomTargetSelf => "insertZoom 的 target 不能是宿主自己".into(),
+        ErrorKind::NeedZoomSetField => "setZoom 必须给 target、targets 或 file 之一".into(),
+        ErrorKind::InvalidZoomTargets => {
+            "target 与 targets 必须与 Zoom 种类一致，且 targets 不能为空或重复".into()
+        }
         ErrorKind::WatermarkNotFound { id } => format!("找不到水印：{id}"),
         ErrorKind::WatermarkNeedTextOrFile => {
             "insertWatermark 必须恰好给 text 或 file 之一".into()

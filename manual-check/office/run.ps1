@@ -149,6 +149,7 @@ $order = @(
     'pptx-custom-show'
     'pptx-ole'
     'pptx-zoom'
+    'pptx-zoom-remain'
     'pptx-protect'
     'pptx-fields'
     'pptx-run-links'

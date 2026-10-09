@@ -59,6 +59,7 @@ pub struct ZoomTarget {
 pub enum InsertKind {
     Slide { target: usize },
     Section { target: usize },
+    Summary { targets: Vec<usize> },
 }
 
 #[derive(Debug, Clone)]
@@ -77,6 +78,46 @@ pub struct InsertZoomOp {
 pub struct DeleteZoomOp {
     pub id: String,
     pub target: ZoomTarget,
+}
+
+#[derive(Debug, Clone)]
+pub enum SetZoomDest {
+    Slide { target: usize },
+    Section { target: usize },
+    Summary { targets: Vec<usize> },
+}
+
+#[derive(Debug, Clone)]
+pub struct SetZoomOp {
+    pub id: String,
+    pub target: ZoomTarget,
+    pub dest: Option<SetZoomDest>,
+    pub file: Option<String>,
+}
+
+struct ZoomTile {
+    obj_name: &'static str,
+    sld_id: Option<u32>,
+    section_guid: Option<String>,
+}
+
+struct InsertPlan {
+    prefix: &'static str,
+    uri: &'static str,
+    kind_local: &'static str,
+    tiles: Vec<ZoomTile>,
+    slide_parts: Vec<String>,
+    return_to_parent: bool,
+}
+
+struct SectionDest {
+    guid: String,
+    part: String,
+}
+
+struct SlideRef {
+    part: String,
+    sld_id: u32,
 }
 
 pub fn parse_insert_slide_id(id: &str, op_index: usize) -> Result<picture::TreeHost, Error> {
@@ -184,7 +225,7 @@ pub fn insert(
     op: &InsertZoomOp,
     i: usize,
 ) -> Result<(), Error> {
-    let (target_part, sld_id, section_guid, prefix, uri, obj_name, kind_local) = match &op.kind {
+    let plan = match &op.kind {
         InsertKind::Slide { target } => {
             if *target == op.slide {
                 return Err(Error::with_path(
@@ -192,77 +233,58 @@ pub fn insert(
                     format!("ops[{i}].target"),
                 ));
             }
-            let meta = slides.get(target - 1).ok_or_else(|| {
-                Error::with_path(
-                    ErrorKind::SlideNotFound { n: *target as u32 },
-                    format!("ops[{i}].target"),
-                )
-            })?;
-            let sld_id = meta.sld_id.ok_or_else(|| {
-                Error::with_path(
-                    ErrorKind::SlideNotFound { n: *target as u32 },
-                    format!("ops[{i}].target"),
-                )
-            })?;
-            (
-                meta.part.clone(),
-                Some(sld_id),
-                None,
-                "pslz",
-                SLIDE_ZOOM_URI,
-                "sldZmObj",
-                "sldZm",
-            )
+            let meta = slide_meta(slides, *target, &format!("ops[{i}].target"))?;
+            InsertPlan {
+                prefix: "pslz",
+                uri: SLIDE_ZOOM_URI,
+                kind_local: "sldZm",
+                tiles: vec![ZoomTile {
+                    obj_name: "sldZmObj",
+                    sld_id: Some(meta.sld_id),
+                    section_guid: None,
+                }],
+                slide_parts: vec![meta.part],
+                return_to_parent: true,
+            }
         }
         InsertKind::Section { target } => {
-            let secs = section::collect(pres_root);
-            let info = secs
-                .into_iter()
-                .find(|s| s.index == *target)
-                .ok_or_else(|| {
-                    Error::with_path(
-                        ErrorKind::SectionNotFound {
-                            id: format!("section:{target}"),
-                        },
-                        format!("ops[{i}].target"),
-                    )
-                })?;
-            let guid = info.guid.clone().filter(|s| !s.is_empty()).ok_or_else(|| {
-                Error::with_path(
-                    ErrorKind::SectionNotFound {
-                        id: format!("section:{target}"),
-                    },
-                    format!("ops[{i}].target"),
-                )
-            })?;
-            let first_sid = *info.sids.first().ok_or_else(|| {
-                Error::with_path(
-                    ErrorKind::SectionNotFound {
-                        id: format!("section:{target}"),
-                    },
-                    format!("ops[{i}].target"),
-                )
-            })?;
-            let meta = slides
-                .iter()
-                .find(|s| s.sld_id == Some(first_sid))
-                .ok_or_else(|| {
-                    Error::with_path(
-                        ErrorKind::SectionNotFound {
-                            id: format!("section:{target}"),
-                        },
-                        format!("ops[{i}].target"),
-                    )
-                })?;
-            (
-                meta.part.clone(),
-                None,
-                Some(guid),
-                "psez",
-                SECTION_ZOOM_URI,
-                "sectionZmObj",
-                "sectionZm",
-            )
+            let dest = resolve_section(pres_root, slides, *target, &format!("ops[{i}].target"))?;
+            InsertPlan {
+                prefix: "psez",
+                uri: SECTION_ZOOM_URI,
+                kind_local: "sectionZm",
+                tiles: vec![ZoomTile {
+                    obj_name: "sectionZmObj",
+                    sld_id: None,
+                    section_guid: Some(dest.guid),
+                }],
+                slide_parts: vec![dest.part],
+                return_to_parent: false,
+            }
+        }
+        InsertKind::Summary { targets } => {
+            let mut tiles = Vec::new();
+            let mut slide_parts = Vec::new();
+            for (j, t) in targets.iter().enumerate() {
+                let dest =
+                    resolve_section(pres_root, slides, *t, &format!("ops[{i}].targets[{j}]"))?;
+                if !slide_parts.iter().any(|p| p == &dest.part) {
+                    slide_parts.push(dest.part);
+                }
+                tiles.push(ZoomTile {
+                    obj_name: "summaryZmObj",
+                    sld_id: None,
+                    section_guid: Some(dest.guid),
+                });
+            }
+            InsertPlan {
+                prefix: "psuz",
+                uri: SUMMARY_ZOOM_URI,
+                kind_local: "summaryZm",
+                tiles,
+                slide_parts,
+                return_to_parent: true,
+            }
         }
     };
 
@@ -278,7 +300,13 @@ pub fn insert(
         target_mode: None,
         extra: Vec::new(),
     });
-    let slide_rid = ensure_slide_rel(&mut rels, slide_part, target_part.as_str());
+    let fallback_part = plan.slide_parts.first().cloned().ok_or_else(|| {
+        Error::with_path(ErrorKind::InvalidZoomTargets, format!("ops[{i}].targets"))
+    })?;
+    let slide_rid = ensure_slide_rel(&mut rels, slide_part, fallback_part.as_str());
+    for part in &plan.slide_parts {
+        ensure_slide_rel(&mut rels, slide_part, part);
+    }
     rels.write_to(pkg, slide_part)?;
 
     let mut cts = ContentTypes::from_package(pkg)?;
@@ -295,28 +323,26 @@ pub fn insert(
     picture::ensure_xmlns(&mut slide_doc.root, "r", REL_NS);
     picture::ensure_xmlns(&mut slide_doc.root, "a", DML_NS);
     picture::ensure_xmlns(&mut slide_doc.root, "mc", MC_NS);
-    picture::ensure_xmlns(&mut slide_doc.root, prefix, uri);
+    picture::ensure_xmlns(&mut slide_doc.root, plan.prefix, plan.uri);
     picture::ensure_xmlns(&mut slide_doc.root, "p166", P166_NS);
-    ensure_ignorable(&mut slide_doc.root, &[prefix, "p166"]);
+    ensure_ignorable(&mut slide_doc.root, &[plan.prefix, "p166"]);
 
     let cnv = picture::next_cnv_id(&slide_doc.root);
     let zoom_n = count(&slide_doc.root) + 1;
     let ac = build_zoom(
         cnv,
         zoom_n,
-        prefix,
-        uri,
-        kind_local,
-        obj_name,
-        sld_id,
-        section_guid.as_deref(),
+        plan.prefix,
+        plan.uri,
+        plan.kind_local,
+        &plan.tiles,
         &img_rid,
         &slide_rid,
         x,
         y,
         cx,
         cy,
-        matches!(op.kind, InsertKind::Slide { .. }),
+        plan.return_to_parent,
     );
     picture::insert_into_sp_tree(&mut slide_doc.root, ac)?;
     Ok(())
@@ -360,6 +386,113 @@ pub fn delete(
             rels.remove_by_id(rid);
             dirty = true;
         }
+    }
+    if dirty {
+        rels.write_to(pkg, slide_part)?;
+    }
+    for part in old_parts {
+        if part.contains("/media/") && !picture::media_still_used(pkg, &part)? {
+            pkg.remove(&part);
+            let mut cts = ContentTypes::from_package(pkg)?;
+            cts.remove_override(&part);
+            cts.write_to(pkg)?;
+        }
+    }
+    Ok(())
+}
+
+pub fn set(
+    pkg: &mut Package,
+    slide_doc: &mut Document,
+    slide_part: &str,
+    pres_root: &Element,
+    slides: &[SlideMeta],
+    op: &SetZoomOp,
+    i: usize,
+) -> Result<(), Error> {
+    let path = format!("ops[{i}].id");
+    let mut old_rids = Vec::new();
+    let kind = {
+        let node = find_node(&slide_doc.root, &op.target.key)?.ok_or_else(|| {
+            Error::with_path(ErrorKind::ZoomNotFound { id: op.id.clone() }, path.clone())
+        })?;
+        collect_rids(node, &mut old_rids);
+        zoom_in(node).unwrap_or(ZoomType::Slide)
+    };
+    match (&op.dest, kind) {
+        (Some(SetZoomDest::Slide { .. }), ZoomType::Slide)
+        | (Some(SetZoomDest::Section { .. }), ZoomType::Section)
+        | (Some(SetZoomDest::Summary { .. }), ZoomType::Summary)
+        | (None, _) => {}
+        (Some(_), _) => {
+            return Err(Error::with_path(
+                ErrorKind::InvalidZoomTargets,
+                format!("ops[{i}]"),
+            ));
+        }
+    }
+
+    let mut new_slide_rid = None;
+    if let Some(dest) = &op.dest {
+        let mut rels = Relationships::from_package(pkg, slide_part)?;
+        match dest {
+            SetZoomDest::Slide { target } => {
+                if *target == op.target.slide {
+                    return Err(Error::with_path(
+                        ErrorKind::ZoomTargetSelf,
+                        format!("ops[{i}].target"),
+                    ));
+                }
+                let meta = slide_meta(slides, *target, &format!("ops[{i}].target"))?;
+                new_slide_rid = Some(ensure_slide_rel(&mut rels, slide_part, &meta.part));
+            }
+            SetZoomDest::Section { target } => {
+                let dest =
+                    resolve_section(pres_root, slides, *target, &format!("ops[{i}].target"))?;
+                new_slide_rid = Some(ensure_slide_rel(&mut rels, slide_part, &dest.part));
+            }
+            SetZoomDest::Summary { targets } => {
+                let mut first = None;
+                for (j, t) in targets.iter().enumerate() {
+                    let dest =
+                        resolve_section(pres_root, slides, *t, &format!("ops[{i}].targets[{j}]"))?;
+                    let rid = ensure_slide_rel(&mut rels, slide_part, &dest.part);
+                    if first.is_none() {
+                        first = Some(rid);
+                    }
+                }
+                new_slide_rid = first;
+            }
+        }
+        rels.write_to(pkg, slide_part)?;
+    }
+
+    {
+        let node = find_node_mut(&mut slide_doc.root, &op.target.key).ok_or_else(|| {
+            Error::with_path(ErrorKind::ZoomNotFound { id: op.id.clone() }, path.clone())
+        })?;
+        if let Some(dest) = &op.dest {
+            apply_dest(node, pres_root, slides, dest, i, new_slide_rid.as_deref())?;
+        }
+        if let Some(file) = &op.file {
+            replace_preview(pkg, slide_part, node, file, i)?;
+        }
+    }
+
+    let mut rels = Relationships::from_package(pkg, slide_part)?;
+    let mut dirty = false;
+    let mut old_parts = Vec::new();
+    for rid in &old_rids {
+        if rid_still_on_slide(&slide_doc.root, rid) {
+            continue;
+        }
+        if let Ok(p) = resolve_id(pkg, slide_part, rid) {
+            if !old_parts.iter().any(|x| x == &p) {
+                old_parts.push(p);
+            }
+        }
+        rels.remove_by_id(rid);
+        dirty = true;
     }
     if dirty {
         rels.write_to(pkg, slide_part)?;
@@ -766,9 +899,7 @@ fn build_zoom(
     prefix: &str,
     uri: &str,
     kind_local: &str,
-    obj_name: &str,
-    sld_id: Option<u32>,
-    section_guid: Option<&str>,
+    tiles: &[ZoomTile],
     img_rid: &str,
     slide_rid: &str,
     x: i64,
@@ -777,45 +908,13 @@ fn build_zoom(
     cy: i64,
     return_to_parent: bool,
 ) -> Element {
-    let guid = section::new_guid();
-    let mut zm_pr = Element::new(format!("{prefix}:zmPr")).with_attr("id", guid);
-    if return_to_parent {
-        zm_pr = zm_pr.with_attr("returnToParent", "1");
-    }
-    let mut fill = Element::new("p166:blipFill").with_attr("xmlns:p166", P166_NS);
-    fill.push_element(Element::new("a:blip").with_attr("r:embed", img_rid));
-    let mut stretch = Element::new("a:stretch");
-    stretch.push_element(Element::new("a:fillRect"));
-    fill.push_element(stretch);
-    zm_pr.push_element(fill);
-    let mut sp_pr = Element::new("p166:spPr").with_attr("xmlns:p166", P166_NS);
-    let mut xfrm = Element::new("a:xfrm");
-    xfrm.push_element(
-        Element::new("a:off")
-            .with_attr("x", "0")
-            .with_attr("y", "0"),
-    );
-    xfrm.push_element(
-        Element::new("a:ext")
-            .with_attr("cx", cx.to_string())
-            .with_attr("cy", cy.to_string()),
-    );
-    sp_pr.push_element(xfrm);
-    let mut geom = Element::new("a:prstGeom").with_attr("prst", "rect");
-    geom.push_element(Element::new("a:avLst"));
-    sp_pr.push_element(geom);
-    zm_pr.push_element(sp_pr);
-
-    let mut obj = Element::new(format!("{prefix}:{obj_name}"));
-    if let Some(sid) = sld_id {
-        obj = obj.with_attr("sldId", sid.to_string());
-    }
-    if let Some(g) = section_guid {
-        obj = obj.with_attr("sectionId", g);
-    }
-    obj.push_element(zm_pr);
     let mut zm = Element::new(format!("{prefix}:{kind_local}"));
-    zm.push_element(obj);
+    for tile in tiles {
+        zm.push_element(build_tile(prefix, tile, img_rid, cx, cy, return_to_parent));
+    }
+    if kind_local == "summaryZm" {
+        zm.push_element(Element::new(format!("{prefix}:gridLayout")));
+    }
 
     let mut nv = Element::new("p:nvGraphicFramePr");
     nv.push_element(
@@ -898,6 +997,366 @@ fn build_zoom(
     ac.push_element(choice);
     ac.push_element(fallback);
     ac
+}
+
+fn build_tile(
+    prefix: &str,
+    tile: &ZoomTile,
+    img_rid: &str,
+    cx: i64,
+    cy: i64,
+    return_to_parent: bool,
+) -> Element {
+    let guid = section::new_guid();
+    let mut zm_pr = Element::new(format!("{prefix}:zmPr")).with_attr("id", guid);
+    if return_to_parent {
+        zm_pr = zm_pr.with_attr("returnToParent", "1");
+    }
+    let mut fill = Element::new("p166:blipFill").with_attr("xmlns:p166", P166_NS);
+    fill.push_element(Element::new("a:blip").with_attr("r:embed", img_rid));
+    let mut stretch = Element::new("a:stretch");
+    stretch.push_element(Element::new("a:fillRect"));
+    fill.push_element(stretch);
+    zm_pr.push_element(fill);
+    let mut sp_pr = Element::new("p166:spPr").with_attr("xmlns:p166", P166_NS);
+    let mut xfrm = Element::new("a:xfrm");
+    xfrm.push_element(
+        Element::new("a:off")
+            .with_attr("x", "0")
+            .with_attr("y", "0"),
+    );
+    xfrm.push_element(
+        Element::new("a:ext")
+            .with_attr("cx", cx.to_string())
+            .with_attr("cy", cy.to_string()),
+    );
+    sp_pr.push_element(xfrm);
+    let mut geom = Element::new("a:prstGeom").with_attr("prst", "rect");
+    geom.push_element(Element::new("a:avLst"));
+    sp_pr.push_element(geom);
+    zm_pr.push_element(sp_pr);
+
+    let mut obj = Element::new(format!("{prefix}:{}", tile.obj_name));
+    if let Some(sid) = tile.sld_id {
+        obj = obj.with_attr("sldId", sid.to_string());
+    }
+    if let Some(g) = &tile.section_guid {
+        obj = obj.with_attr("sectionId", g);
+    }
+    obj.push_element(zm_pr);
+    obj
+}
+
+fn slide_meta(slides: &[SlideMeta], n: usize, path: &str) -> Result<SlideRef, Error> {
+    let meta = slides
+        .get(n.wrapping_sub(1))
+        .filter(|_| n >= 1)
+        .ok_or_else(|| {
+            Error::with_path(ErrorKind::SlideNotFound { n: n as u32 }, path.to_string())
+        })?;
+    let sld_id = meta.sld_id.ok_or_else(|| {
+        Error::with_path(ErrorKind::SlideNotFound { n: n as u32 }, path.to_string())
+    })?;
+    Ok(SlideRef {
+        part: meta.part.clone(),
+        sld_id,
+    })
+}
+
+fn resolve_section(
+    pres_root: &Element,
+    slides: &[SlideMeta],
+    target: usize,
+    json_path: &str,
+) -> Result<SectionDest, Error> {
+    let secs = section::collect(pres_root);
+    let info = secs
+        .into_iter()
+        .find(|s| s.index == target)
+        .ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::SectionNotFound {
+                    id: format!("section:{target}"),
+                },
+                json_path.to_string(),
+            )
+        })?;
+    let guid = info.guid.clone().filter(|s| !s.is_empty()).ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::SectionNotFound {
+                id: format!("section:{target}"),
+            },
+            json_path.to_string(),
+        )
+    })?;
+    let first_sid = *info.sids.first().ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::SectionNotFound {
+                id: format!("section:{target}"),
+            },
+            json_path.to_string(),
+        )
+    })?;
+    let meta = slides
+        .iter()
+        .find(|s| s.sld_id == Some(first_sid))
+        .ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::SectionNotFound {
+                    id: format!("section:{target}"),
+                },
+                json_path.to_string(),
+            )
+        })?;
+    Ok(SectionDest {
+        guid,
+        part: meta.part.clone(),
+    })
+}
+
+fn apply_dest(
+    node: &mut Element,
+    pres_root: &Element,
+    slides: &[SlideMeta],
+    dest: &SetZoomDest,
+    i: usize,
+    slide_rid: Option<&str>,
+) -> Result<(), Error> {
+    match dest {
+        SetZoomDest::Slide { target } => {
+            let meta = slide_meta(slides, *target, &format!("ops[{i}].target"))?;
+            if let Some(obj) = find_local_mut(node, "sldZmObj") {
+                obj.set_attr("sldId", meta.sld_id.to_string());
+            }
+        }
+        SetZoomDest::Section { target } => {
+            let dest = resolve_section(pres_root, slides, *target, &format!("ops[{i}].target"))?;
+            if let Some(obj) = find_local_mut(node, "sectionZmObj") {
+                obj.set_attr("sectionId", dest.guid);
+            }
+        }
+        SetZoomDest::Summary { targets } => {
+            rebuild_summary(node, pres_root, slides, targets, i)?;
+        }
+    }
+    if let Some(rid) = slide_rid {
+        set_fallback_hlink(node, rid);
+    }
+    Ok(())
+}
+
+fn rebuild_summary(
+    node: &mut Element,
+    pres_root: &Element,
+    slides: &[SlideMeta],
+    targets: &[usize],
+    i: usize,
+) -> Result<(), Error> {
+    let img_rid = first_embed(node).unwrap_or_else(|| "rId1".into());
+    let (_, _, cx, cy) = xfrm_of(node);
+    let cx = cx.unwrap_or(DEFAULT_CX);
+    let cy = cy.unwrap_or(DEFAULT_CY);
+    let Some(zm) = find_local_mut(node, "summaryZm") else {
+        return Err(Error::with_path(
+            ErrorKind::InvalidZoomTargets,
+            format!("ops[{i}].targets"),
+        ));
+    };
+    let prefix = prefix_of(&zm.name).to_string();
+    let mut leftover = Vec::new();
+    let mut old_objs = Vec::new();
+    for n in std::mem::take(&mut zm.children) {
+        match n {
+            Node::Element(e) if e.local_name() == "summaryZmObj" => old_objs.push(e),
+            other => leftover.push(other),
+        }
+    }
+    let mut new_children = Vec::new();
+    for (j, t) in targets.iter().enumerate() {
+        let dest = resolve_section(pres_root, slides, *t, &format!("ops[{i}].targets[{j}]"))?;
+        let want = norm_guid(&dest.guid);
+        if let Some(pos) = old_objs
+            .iter()
+            .position(|e| e.attr("sectionId").is_some_and(|g| norm_guid(g) == want))
+        {
+            new_children.push(Node::Element(old_objs.remove(pos)));
+        } else {
+            let tile = ZoomTile {
+                obj_name: "summaryZmObj",
+                sld_id: None,
+                section_guid: Some(dest.guid),
+            };
+            new_children.push(Node::Element(build_tile(
+                &prefix, &tile, &img_rid, cx, cy, true,
+            )));
+        }
+    }
+    new_children.extend(leftover);
+    zm.children = new_children;
+    Ok(())
+}
+
+fn replace_preview(
+    pkg: &mut Package,
+    slide_part: &str,
+    node: &mut Element,
+    file: &str,
+    i: usize,
+) -> Result<(), Error> {
+    let image = picture::read_image(file).map_err(|e| e.at(format!("ops[{i}].file")))?;
+    let media = picture::next_media_part(pkg, &image.ext);
+    pkg.set(&media, image.bytes.clone())?;
+    let rid = picture::add_image_rel(pkg, slide_part, &media)?;
+    let mut cts = ContentTypes::from_package(pkg)?;
+    cts.ensure_default(&image.ext, &image.content_type);
+    cts.write_to(pkg)?;
+    set_all_embeds(node, &rid);
+    set_cover_image_type(node);
+    Ok(())
+}
+
+fn first_embed(el: &Element) -> Option<String> {
+    for (k, v) in &el.attrs {
+        if k == "r:embed" && !v.is_empty() {
+            return Some(v.clone());
+        }
+    }
+    for n in &el.children {
+        if let Node::Element(e) = n {
+            if let Some(v) = first_embed(e) {
+                return Some(v);
+            }
+        }
+    }
+    None
+}
+
+fn set_all_embeds(el: &mut Element, rid: &str) {
+    for (k, v) in &mut el.attrs {
+        if k == "r:embed" {
+            *v = rid.to_string();
+        }
+    }
+    for n in &mut el.children {
+        if let Node::Element(e) = n {
+            set_all_embeds(e, rid);
+        }
+    }
+}
+
+fn set_cover_image_type(el: &mut Element) {
+    if el.local_name() == "zmPr" {
+        el.set_attr("imageType", "cover");
+    }
+    for n in &mut el.children {
+        if let Node::Element(e) = n {
+            set_cover_image_type(e);
+        }
+    }
+}
+
+fn set_fallback_hlink(node: &mut Element, rid: &str) {
+    if let Some(pic) = find_fallback_pic_mut(node) {
+        if let Some(nv) = pic.child_by_local_mut("nvPicPr") {
+            if let Some(pr) = nv.child_by_local_mut("cNvPr") {
+                if let Some(h) = pr.child_by_local_mut("hlinkClick") {
+                    h.set_attr("r:id", rid);
+                }
+            }
+        }
+    }
+}
+
+fn find_fallback_pic_mut(el: &mut Element) -> Option<&mut Element> {
+    let i = el
+        .children
+        .iter()
+        .position(|n| matches!(n, Node::Element(e) if e.local_name() == "Fallback"))?;
+    let Node::Element(fb) = &mut el.children[i] else {
+        return None;
+    };
+    find_local_mut(fb, "pic")
+}
+
+fn find_local_mut<'a>(el: &'a mut Element, name: &str) -> Option<&'a mut Element> {
+    if el.local_name() == name {
+        return Some(el);
+    }
+    let i = el.children.iter().position(|n| match n {
+        Node::Element(e) => contains_local(e, name),
+        _ => false,
+    })?;
+    let Node::Element(child) = &mut el.children[i] else {
+        return None;
+    };
+    find_local_mut(child, name)
+}
+
+fn contains_local(el: &Element, name: &str) -> bool {
+    el.local_name() == name || el.element_children().any(|c| contains_local(c, name))
+}
+
+fn find_node_mut<'a>(root: &'a mut Element, key: &ZoomKey) -> Option<&'a mut Element> {
+    let path = zoom_path(root, key)?;
+    follow_mut(root, &path)
+}
+
+fn zoom_path(root: &Element, key: &ZoomKey) -> Option<Vec<usize>> {
+    let mut path = Vec::new();
+    let mut idx = 0usize;
+    if zoom_path_in(root, &mut path, &mut idx, key) {
+        Some(path)
+    } else {
+        None
+    }
+}
+
+fn zoom_path_in(el: &Element, path: &mut Vec<usize>, idx: &mut usize, key: &ZoomKey) -> bool {
+    if el.local_name() == "AlternateContent" {
+        if zoom_in(el).is_some() {
+            *idx += 1;
+            return node_matches(el, *idx, key);
+        }
+        if let Some(i) = first_alt_child_index(el) {
+            path.push(i);
+            if let Node::Element(child) = &el.children[i] {
+                if zoom_path_in(child, path, idx, key) {
+                    return true;
+                }
+            }
+            path.pop();
+        }
+        return false;
+    }
+    if is_zoom_frame(el) {
+        *idx += 1;
+        return node_matches(el, *idx, key);
+    }
+    for (i, n) in el.children.iter().enumerate() {
+        if let Node::Element(e) = n {
+            path.push(i);
+            if zoom_path_in(e, path, idx, key) {
+                return true;
+            }
+            path.pop();
+        }
+    }
+    false
+}
+
+fn follow_mut<'a>(root: &'a mut Element, path: &[usize]) -> Option<&'a mut Element> {
+    let mut cur = root;
+    for &i in path {
+        let Node::Element(e) = cur.children.get_mut(i)? else {
+            return None;
+        };
+        cur = e;
+    }
+    Some(cur)
+}
+
+fn prefix_of(name: &str) -> &str {
+    name.split_once(':').map(|(p, _)| p).unwrap_or(name)
 }
 
 fn parse_i64_attr(el: &Element, name: &str) -> Option<i64> {

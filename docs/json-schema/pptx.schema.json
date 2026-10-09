@@ -2271,8 +2271,7 @@
       "required": [
         "op",
         "id",
-        "type",
-        "target"
+        "type"
       ],
       "additionalProperties": false,
       "properties": {
@@ -2290,6 +2289,13 @@
         "target": {
           "type": "string",
           "minLength": 1
+        },
+        "targets": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
         },
         "x": {
           "type": "integer",
@@ -2321,6 +2327,38 @@
           "const": "deleteZoom"
         },
         "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "setZoomOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setZoom"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "target": {
+          "type": "string",
+          "minLength": 1
+        },
+        "targets": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "file": {
           "type": "string",
           "minLength": 1
         }

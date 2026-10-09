@@ -2132,6 +2132,7 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<XlsxOp>, Error> {
             | "deleteCustomShow"
             | "insertZoom"
             | "deleteZoom"
+            | "setZoom"
             | "setShowPr" => {
                 return Err(Error::with_path(
                     ErrorKind::OpNotForFormat {

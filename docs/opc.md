@@ -578,9 +578,9 @@ CT 与该格式主文档一致）或 `/ppt/embeddings/oleObjectN.bin`（CT `appl
 宿主是 `p:graphicFrame`，`a:graphicData/@uri` 为 `http://schemas.openxmlformats.org/presentationml/2006/ole`。
 `mc:AlternateContent` 的 Choice 只有 `p:oleObj`，Fallback 带 `p:pic` 预览。位置与尺寸在 `p:xfrm`。不写 `<p:timing>`。create 本期不写 OLE。
 
-apply 插入幻灯片 Zoom 时，可能新建一张预览 `/ppt/media/imageN.png`。该页 `.rels` 补一条 image 关系指向预览，再补一条 slide 关系指向目标页（节缩放则指向该节第一页）。
+apply 插入幻灯片 Zoom 时，可能新建一张预览 `/ppt/media/imageN.png`。该页 `.rels` 补一条 image 关系指向预览，再补一条 slide 关系指向目标页（节缩放则指向该节第一页；摘要缩放指向 `targets` 各节第一页）。
 宿主是 `p:graphicFrame`，包在 `mc:AlternateContent` 的 Choice 里；
-`a:graphicData/@uri` 为 `http://schemas.microsoft.com/office/powerpoint/2016/slidezoom` 或 `…/sectionzoom`。
+`a:graphicData/@uri` 为 `http://schemas.microsoft.com/office/powerpoint/2016/slidezoom`、`…/sectionzoom` 或 `…/summaryzoom`。
 Fallback 是带 `ppaction://hlinksldjump` 的 `p:pic`。位置与尺寸在 graphicFrame 的 `p:xfrm`。不写 `<p:timing>`。create 本期不写 Zoom。
 
 ## 验收（第 2 项）

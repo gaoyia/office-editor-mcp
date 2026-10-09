@@ -279,7 +279,7 @@ pptx 认 `setShapeText`、`setShapeFormat`、形状管理 op（`insertShape`、`
 以及 `setHandoutText`、以及超链接 op（`insertHyperlink`、`setHyperlink`、`deleteHyperlink`）、以及域 op（`insertField`、`setField`、
 `deleteField`）、以及媒体 op（`insertVideo`、`insertAudio`、`deleteMedia`、`setMedia`）、以及幻灯片节 op（`insertSlideSection`、`setSlideSectionName`、
 `deleteSlideSection`、`setSlideSection`）、以及自定义放映 op（`insertCustomShow`、`setCustomShow`、`deleteCustomShow`）、
-以及 OLE op（`insertOle`、`deleteOle`）、以及 3D 模型 op（`insertModel3d`、`replaceModel3d`、`deleteModel3d`）、以及公式 op（`insertMath`、`setMath`、`deleteMath`）、以及 Zoom op（`insertZoom`、`deleteZoom`）、以及 `setShowPr`、以及 `setProtection`、
+以及 OLE op（`insertOle`、`deleteOle`）、以及 3D 模型 op（`insertModel3d`、`replaceModel3d`、`deleteModel3d`）、以及公式 op（`insertMath`、`setMath`、`deleteMath`）、以及 Zoom op（`insertZoom`、`setZoom`、`deleteZoom`）、以及 `setShowPr`、以及 `setProtection`、
 以及 `setProps` / `setCustomProp` / `deleteCustomProp`。
 不提供把整棵时间轴当 JSON 写入的 op；`setTiming` 仍报 `UnsupportedOp`。
 对不上格式的 op（例如对 pptx 发 `setCell` / `setCellStyle` / `setParaText` / `setProtection`，
@@ -306,7 +306,7 @@ pptx 认 `setShapeText`、`setShapeFormat`、形状管理 op（`insertShape`、`
  / `setThemeColors` / `setThemeFonts` / `setHandoutText` / `setShapePos` / `setShapeSize` / `setShapeFill`
  / `setShapeLine` / `setTableCellText` / `setTablePos` / `setTableSize` / `insertVideo` / `insertAudio`
  / `deleteMedia` / `setMedia` / `insertSlideSection` / `setSlideSectionName` / `deleteSlideSection` / `setSlideSection`
- / `insertCustomShow` / `setCustomShow` / `deleteCustomShow` / `insertZoom` / `deleteZoom`）报 `InvalidField`。
+ / `insertCustomShow` / `setCustomShow` / `deleteCustomShow` / `insertZoom` / `setZoom` / `deleteZoom`）报 `InvalidField`。
 xlsx 上发 `insertTable` / `deleteTable` / `insertRow` / `deleteRow` / `insertCol` / `deleteCol` / `mergeCells` / `splitCells` 仍报 `InvalidField`。
 对 docx 发 `insertShape` / `deleteShape` / `setShapeFormat` 报 `InvalidField`。pptx 上发 `mergeCells` / `splitCells` 报 `InvalidField`。
 

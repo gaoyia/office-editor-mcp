@@ -396,3 +396,180 @@ fn wrong_ids_and_foreign_reject() {
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);
 }
+
+fn create_sectioned_deck(tag: &str) -> PathBuf {
+    let path = tmp(tag).with_extension("pptx");
+    run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "create",
+            "path": path.to_string_lossy(),
+            "presentation": {
+                "sections": [
+                    { "name": "开场", "start": 1 },
+                    { "name": "内容", "start": 2 }
+                ],
+                "slides": [
+                    { "shapes": [{ "text": "甲" }] },
+                    { "shapes": [{ "text": "乙" }] },
+                    { "shapes": [{ "text": "丙" }] }
+                ]
+            }
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap();
+    path
+}
+
+const PNG_1X1: &[u8] = &[
+    0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52,
+    0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x02, 0x00, 0x00, 0x00, 0x90, 0x77, 0x53,
+    0xDE, 0x00, 0x00, 0x00, 0x0C, 0x49, 0x44, 0x41, 0x54, 0x08, 0xD7, 0x63, 0xF8, 0xCF, 0xC0, 0x00,
+    0x00, 0x03, 0x01, 0x01, 0x00, 0x18, 0xDD, 0x8D, 0xB4, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4E,
+    0x44, 0xAE, 0x42, 0x60, 0x82,
+];
+
+fn write_png(tag: &str) -> PathBuf {
+    let path = tmp(tag).with_extension("png");
+    std::fs::write(&path, PNG_1X1).unwrap();
+    path
+}
+
+fn zip_media_png(path: &Path) -> Option<Vec<u8>> {
+    let bytes = std::fs::read(path).unwrap();
+    let mut zip = ZipArchive::new(Cursor::new(bytes)).unwrap();
+    for i in 0..zip.len() {
+        let mut f = zip.by_index(i).unwrap();
+        let name = f.name().replace('\\', "/");
+        if name.starts_with("ppt/media/") && name.ends_with(".png") {
+            let mut buf = Vec::new();
+            f.read_to_end(&mut buf).unwrap();
+            return Some(buf);
+        }
+    }
+    None
+}
+
+#[test]
+fn insert_summary_zoom_lists_targets() {
+    let src = create_sectioned_deck("sum-src");
+    let out = tmp("sum").with_extension("pptx");
+    apply(
+        &src,
+        &out,
+        json!([{
+            "op": "insertZoom",
+            "id": "slide:1",
+            "type": "summary",
+            "targets": ["section:1", "section:2"]
+        }]),
+    )
+    .unwrap();
+    let tree = inspect(&out, json!({ "zooms": true, "pictures": true }));
+    let z = &tree["slides"][0]["zooms"][0];
+    assert_eq!(z["type"], "summary");
+    assert_eq!(z["targets"], json!(["section:1", "section:2"]));
+    assert!(z.get("target").is_none());
+    assert_eq!(tree["pictureCount"], 0);
+    let xml =
+        String::from_utf8(zip_entry(&out, "ppt/slides/slide1.xml").unwrap_or_default()).unwrap();
+    assert!(xml.contains("summaryZm"));
+    assert!(xml.contains("Requires=\"psuz\""));
+    assert!(xml.contains("gridLayout"));
+}
+
+#[test]
+fn set_zoom_changes_slide_target_and_cover() {
+    let src = create_deck("set-host", 3);
+    let with = insert_slide_zoom(&src);
+    let listed = inspect(&with, json!({ "zooms": true }));
+    let id = listed["slides"][0]["zooms"][0]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let out = tmp("set-tgt").with_extension("pptx");
+    apply(
+        &with,
+        &out,
+        json!([{ "op": "setZoom", "id": id, "target": "slide:3" }]),
+    )
+    .unwrap();
+    let tree = inspect(&out, json!({ "zooms": true }));
+    assert_eq!(tree["slides"][0]["zooms"][0]["target"], "slide:3");
+
+    let png = write_png("cover");
+    let cover = tmp("set-cover").with_extension("pptx");
+    apply(
+        &out,
+        &cover,
+        json!([{
+            "op": "setZoom",
+            "id": tree["slides"][0]["zooms"][0]["id"],
+            "file": png.to_string_lossy()
+        }]),
+    )
+    .unwrap();
+    let media = zip_media_png(&cover).unwrap();
+    assert_eq!(media, PNG_1X1);
+    let xml =
+        String::from_utf8(zip_entry(&cover, "ppt/slides/slide1.xml").unwrap_or_default()).unwrap();
+    assert!(xml.contains("imageType=\"cover\""));
+    let tree2 = inspect(&cover, json!({ "zooms": true, "pictures": true }));
+    assert_eq!(tree2["pictureCount"], 0);
+}
+
+#[test]
+fn set_zoom_rejects_wrong_fields() {
+    let src = create_deck("set-bad", 3);
+    let with = insert_slide_zoom(&src);
+    let id = inspect(&with, json!({ "zooms": true }))["slides"][0]["zooms"][0]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let out = tmp("set-empty").with_extension("pptx");
+    let err = apply(&with, &out, json!([{ "op": "setZoom", "id": id }])).unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+    assert!(!out.exists());
+
+    let id = inspect(&with, json!({ "zooms": true }))["slides"][0]["zooms"][0]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let err = apply(
+        &with,
+        &out,
+        json!([{ "op": "setZoom", "id": id, "targets": ["section:1"] }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+
+    let err = apply(
+        &src,
+        &out,
+        json!([{ "op": "setZoom", "id": "slide:1", "target": "slide:2" }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidId);
+
+    let book = tmp("xlsx-set-zoom").with_extension("xlsx");
+    run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "create",
+            "path": book.to_string_lossy(),
+            "workbook": { "sheets": [{ "name": "Sheet1" }] }
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap();
+    let err = apply(
+        &book,
+        &tmp("xlsx-set-zoom-out").with_extension("xlsx"),
+        json!([{ "op": "setZoom", "id": "slide:1/zoom:3", "target": "slide:2" }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+}
