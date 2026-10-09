@@ -76,18 +76,21 @@ docx 见 [`roadmap/docx.md`](docx.md)。pptx 见 [`roadmap/pptx.md`](pptx.md)。
 
 ## 待做
 
-第一期、第二轮与第三轮顺序待做已空。第三轮是 Office 16.0 跨格式 DrawingML 补齐，不是返工第二轮名单。18 不要和艺术字画廊绑在一起。数据透视不要做成计算引擎。
+第一期与第二轮顺序待做已空。第三轮是 Office 16.0 跨格式 DrawingML 补齐，不是返工第二轮名单。挂机从 C6 起，一次一份，顺序 C6 → C7 → C8。18 不要和艺术字画廊绑在一起。数据透视不要做成计算引擎。
+
+| 序 | 计划 | 前置 |
+| --- | --- | --- |
+| C6 | `.plan/2026年-10月-9日-❌-三家图嗅探补EMF-WMF-TIFF.md` | 工作表图；C5 已过 |
+| C7 | `.plan/2026年-10月-9日-❌-三家3D模型.md` | 工作表图 |
+| C8 | `.plan/2026年-10月-9日-❌-xlsx-pptx-嵌入OMML.md` | 工作表图 / 文本框；不要改 Word 公式 |
 
 ## 先探测再进待做
 
 探测 Office 16.0 另存后再挂序号。未探测的不算欠账。
 
-- 三家图嗅探补 EMF / WMF / TIFF。不认 SVGZ。WebP 16.0 不稳，不挂
-- 3D 模型（`am3d`）
-- 工作表墨迹（不是批注墨迹，也不是 Word `wpc` 画布）
-- 工作表 / 图表工作表里的 OMML
+- 工作表墨迹（不是批注墨迹，也不是 Word `wpc` 画布）。16.0 没有 `AddInk` / `AddInkComment`，`ExecuteMso('InkStartInking')` 失败。需要 Draw 手写另存样例后再挂
 
-不要自动进第三轮：时间线切片器、Power Query 一等公民、数据表公式、create 不写 OLE / 切片器 / 连接 / 外部引用。不要把 Word 水印、内容控件、编号、修订、参考文献搬过来。
+不要自动进第三轮：时间线切片器、Power Query 一等公民、数据表公式、create 不写 OLE / 切片器 / 连接 / 外部引用。不要把 Word 水印、内容控件、编号、修订、参考文献、`wpc` 画布搬过来。
 
 ## 跨格式（本类型要跟）
 
@@ -96,8 +99,8 @@ docx 见 [`roadmap/docx.md`](docx.md)。pptx 见 [`roadmap/pptx.md`](pptx.md)。
 | C2 | `.plan/2026年-9月-27日-✅-SmartArt跨家族.md` | Word / PowerPoint 已过；工作表图示已进树（序号 12） |
 | C5 | `.plan/2026年-10月-9日-✅-xlsx-pptx-嵌入SVG.md` | 工作表图；docx 44 已过 |
 
-xlsx 没有 Word / PowerPoint 那种墨迹批注计划；批注已过（序号 11）。C4 见已过表。C5 与 pptx 同一份计划，不要拆成两家各做一套 `svgBlip`。
+xlsx 没有 Word / PowerPoint 那种墨迹批注计划；批注已过（序号 11）。C4 见已过表。C5 与 pptx 同一份计划，不要拆成两家各做一套 `svgBlip`。C6 / C7 / C8 见待做。C6、C7 与 docx 同一份计划。C8 与 pptx 同一份，不改 Word。
 
 ## 怎么算 Excel 全量做完
 
-已过表保持 ✅。第二轮按当时名单算完。第三轮 C5 已过；「先探测」未挂序号的不算欠账。永不做的条目不算欠账。公式求值保持 🚫。
+已过表保持 ✅。第二轮按当时名单算完。第三轮见待做 C6–C8。墨迹未挂不算欠账。永不做的条目不算欠账。公式求值保持 🚫。
