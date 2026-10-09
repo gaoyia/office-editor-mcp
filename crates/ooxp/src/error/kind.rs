@@ -596,6 +596,7 @@ define_error_kinds! {
     EmptyArray { field: String } => vec![Self::EmptyArray { field: "ops".into() }],
     OutOfRange { field: String, min: i64, max: i64 } => vec![Self::OutOfRange { field: "maxCells".into(), min: 1, max: 20000 }],
     MinValue { field: String, min: i64 } => vec![Self::MinValue { field: "from".into(), min: 1 }],
+    CreateIndexOutOfRange { field: String, max: i64 } => vec![Self::CreateIndexOutOfRange { field: "after".into(), max: 2 }],
     MutuallyExclusive { a: String, b: String } => vec![Self::MutuallyExclusive { a: "value".into(), b: "formula".into() }],
     ContentObjectsExclusive => vec![Self::ContentObjectsExclusive],
     CreateNeedsObject { format: String, field: String } => vec![Self::CreateNeedsObject { format: "xlsx".into(), field: "workbook".into() }],
@@ -1472,6 +1473,7 @@ impl ErrorKind {
             | Self::WrongType { .. }
             | Self::EmptyArray { .. }
             | Self::MinValue { .. }
+            | Self::CreateIndexOutOfRange { .. }
             | Self::MutuallyExclusive { .. }
             | Self::ContentObjectsExclusive
             | Self::CreateNeedsObject { .. }

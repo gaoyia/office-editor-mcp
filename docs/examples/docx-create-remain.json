@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "action": "create",
+  "path": "note-remain.docx",
+  "format": "docx",
+  "document": {
+    "numberings": [{ "kind": "decimal" }],
+    "paragraphs": [
+      {
+        "style": "Heading1",
+        "text": "第一章",
+        "bookmarks": [{ "name": "ch1" }],
+        "comments": [
+          {
+            "text": "批注一",
+            "author": "ooxp",
+            "initials": "oo",
+            "replies": [{ "text": "回复一" }]
+          }
+        ]
+      },
+      {
+        "text": "列表项",
+        "num": 1,
+        "hyperlinks": [
+          {
+            "text": "点这里",
+            "url": "https://example.com"
+          }
+        ],
+        "fields": [{ "instr": " DATE ", "result": "2026" }],
+        "maths": [{ "text": "x+1", "kind": "inline" }],
+        "contentControls": [{ "text": "控件值", "kind": "plainText" }]
+      }
+    ],
+    "tocs": [{ "kind": "toc" }]
+  }
+}

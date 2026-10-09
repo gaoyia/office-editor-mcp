@@ -14,7 +14,7 @@
 
 没有 `w14:paraId` 时：`para:index:{n}`，`n` 从 1 起，按主文档部件里 `w:p` 的文档顺序（含表格单元格里的段落）。树上同时给 `"stable": false`。这类 id 在增删段落后会变，只够同一次 inspect 之后立刻 apply。
 
-标题和正文都是段落，不另编一套 id。脚注、尾注、批注都是独立故事：根上始终有计数；给了对应 `scope` 才列出名单，并可 apply。分隔符三条不进用户名单，禁止 apply。文本框是独立节点：框本身、框内段落与框内图按下面规则进树，并可 apply。页眉、页脚按下面规则进树，可按 id 改字；节上的页眉页脚距边界、页面边距、纸张、分栏、垂直对齐、行号、文档网格、装订线侧、页面边框，以及是否链接到前一节，都可以读写。整篇的镜像边距与装订线在上，写在 `settings.xml`。整篇页面背景色写在主文档 `w:background`，是否显示看 `settings.xml` 的 `w:displayBackgroundShape`。页眉、页脚、正文、注和批注里的 DrawingML 图片可查、换、插、删，并可改尺寸与绕排。正文与页眉页脚里的嵌入对象（OLE / 包）可查、插、删，并可按 id 导出嵌入部件；框内、注内、批注内的 OLE 本期不编。正文与页眉页脚里的 `w:tbl` 可查、插、删，并可插删行与列、合并与拆分单元格。正文与页眉页脚里的 run 级插入、删除与段落/run 属性修订可按范围列出，并可接受或拒绝被点名的一条。apply 可用 `insertHeaderFooter` 为某节某类型新建页眉或页脚部件，可用 `setTitlePage` 写本节 `w:titlePg`，可用 `setEvenAndOddHeaders` 写整篇 `w:evenAndOddHeaders`，可用 `insertSection` 在某段之后插入分节符，可用 `deleteSection` 删掉非末节并把内容并进下一节，可用 `insertToc` 插入目录域、用 `deleteToc` 删掉目录块，可用 `insertCaption` 插入题注、用 `insertCrossRef` 插入交叉引用、用 `deleteCaption` / `deleteCrossRef` 删掉，可用 `insertIndex` 插入索引、用 `insertIndexEntry` 插入索引项、用 `deleteIndex` / `deleteIndexEntry` 删掉，可用 `insertSource` 插入书目源、用 `insertCitation` 插入引文、用 `insertBibliography` 插入书目、用 `deleteSource` / `deleteCitation` / `deleteBibliography` 删掉，可用 `insertDocPart` 插入构建基块、用 `insertDocPartContent` 把基块复制进正文、用 `deleteDocPart` 删掉，可用 `insertEmbeddedFont` / `deleteEmbeddedFont` / `setFontEmbed` 读写嵌入字体，可用 `setPageBackground` 写整篇页面背景色、用 `setPageBorders` 写节上页面边框，可用 `insertMath` / `setMath` / `deleteMath` 插改删 OMML 公式，可用 `insertContentControl` / `setContentControl` / `deleteContentControl` 插改删内容控件。docx 可用 `setProtection` 开关无密码的限制编辑与只读推荐。xlsx 可用同一 `op` 开关工作表保护与工作簿结构保护（可写 SHA-512 哈希），不要复用 docx 根上那个 `protection` 对象。docx 可用 `insertWatermark` / `deleteWatermark` 读写页眉里的 DrawingML 水印。正文与页眉页脚里的浮动图 / 文本框 / 连接线可用 `groupShapes` / `ungroup` 组合或解开；Word 写出的连接线可进 inspect，并可用 `insertConnector` / `deleteConnector` 增删。组合本身不进树。docx 可用 `setThemeColors` / `setThemeFonts` 改主文档 theme 部件的配色与字体方案。三种格式都可用 `setProps` / `setCustomProp` / `deleteCustomProp` 改文件属性。`create` 可在正文和页眉页脚上写 DrawingML 图，也可写文本框、SmartArt、图表、脚注、尾注与批注；页眉页脚允许 `default` / `even` / `first`；不写修订。字段见下文 create。嵌入图表不是 `pic:pic`：根上始终有 `chartCount`；给了 `scope.charts` 才列出名单，并可 apply。SmartArt 不是 `pic:pic`：根上始终有 `smartArtCount`；给了 `scope.smartArt` 才列出名单，并可 apply。正文与页眉页脚、文本框、脚注、尾注、批注里的图表与 SmartArt 走同一套 op，id 带所在段落前缀。注内与批注内的文本框同样进树，并可 apply。框内再套框仍拒绝：Word 16.0 只写出故事级兄弟框，`w:txbxContent` 里没有嵌套 `wps:wsp`。对框 id 或框内段落发 `insertTextBox` 报 `InvalidId`。
+标题和正文都是段落，不另编一套 id。脚注、尾注、批注都是独立故事：根上始终有计数；给了对应 `scope` 才列出名单，并可 apply。分隔符三条不进用户名单，禁止 apply。文本框是独立节点：框本身、框内段落与框内图按下面规则进树，并可 apply。页眉、页脚按下面规则进树，可按 id 改字；节上的页眉页脚距边界、页面边距、纸张、分栏、垂直对齐、行号、文档网格、装订线侧、页面边框，以及是否链接到前一节，都可以读写。整篇的镜像边距与装订线在上，写在 `settings.xml`。整篇页面背景色写在主文档 `w:background`，是否显示看 `settings.xml` 的 `w:displayBackgroundShape`。页眉、页脚、正文、注和批注里的 DrawingML 图片可查、换、插、删，并可改尺寸与绕排。正文与页眉页脚里的嵌入对象（OLE / 包）可查、插、删，并可按 id 导出嵌入部件；框内、注内、批注内的 OLE 本期不编。正文与页眉页脚里的 `w:tbl` 可查、插、删，并可插删行与列、合并与拆分单元格。正文与页眉页脚里的 run 级插入、删除与段落/run 属性修订可按范围列出，并可接受或拒绝被点名的一条。apply 可用 `insertHeaderFooter` 为某节某类型新建页眉或页脚部件，可用 `setTitlePage` 写本节 `w:titlePg`，可用 `setEvenAndOddHeaders` 写整篇 `w:evenAndOddHeaders`，可用 `insertSection` 在某段之后插入分节符，可用 `deleteSection` 删掉非末节并把内容并进下一节，可用 `insertToc` 插入目录域、用 `deleteToc` 删掉目录块，可用 `insertCaption` 插入题注、用 `insertCrossRef` 插入交叉引用、用 `deleteCaption` / `deleteCrossRef` 删掉，可用 `insertIndex` 插入索引、用 `insertIndexEntry` 插入索引项、用 `deleteIndex` / `deleteIndexEntry` 删掉，可用 `insertSource` 插入书目源、用 `insertCitation` 插入引文、用 `insertBibliography` 插入书目、用 `deleteSource` / `deleteCitation` / `deleteBibliography` 删掉，可用 `insertDocPart` 插入构建基块、用 `insertDocPartContent` 把基块复制进正文、用 `deleteDocPart` 删掉，可用 `insertEmbeddedFont` / `deleteEmbeddedFont` / `setFontEmbed` 读写嵌入字体，可用 `setPageBackground` 写整篇页面背景色、用 `setPageBorders` 写节上页面边框，可用 `insertMath` / `setMath` / `deleteMath` 插改删 OMML 公式，可用 `insertContentControl` / `setContentControl` / `deleteContentControl` 插改删内容控件。docx 可用 `setProtection` 开关无密码的限制编辑与只读推荐。xlsx 可用同一 `op` 开关工作表保护与工作簿结构保护（可写 SHA-512 哈希），不要复用 docx 根上那个 `protection` 对象。docx 可用 `insertWatermark` / `deleteWatermark` 读写页眉里的 DrawingML 水印。正文与页眉页脚里的浮动图 / 文本框 / 连接线可用 `groupShapes` / `ungroup` 组合或解开；Word 写出的连接线可进 inspect，并可用 `insertConnector` / `deleteConnector` 增删。组合本身不进树。docx 可用 `setThemeColors` / `setThemeFonts` 改主文档 theme 部件的配色与字体方案。三种格式都可用 `setProps` / `setCustomProp` / `deleteCustomProp` 改文件属性。`create` 可在正文和页眉页脚上写 DrawingML 图，也可写文本框、SmartArt、图表、脚注、尾注、批注与回复、超链接、书签、域、公式、内容控件；根上可写编号定义与目录块；页眉页脚允许 `default` / `even` / `first`；不写修订痕迹。字段见下文 create。嵌入图表不是 `pic:pic`：根上始终有 `chartCount`；给了 `scope.charts` 才列出名单，并可 apply。SmartArt 不是 `pic:pic`：根上始终有 `smartArtCount`；给了 `scope.smartArt` 才列出名单，并可 apply。正文与页眉页脚、文本框、脚注、尾注、批注里的图表与 SmartArt 走同一套 op，id 带所在段落前缀。注内与批注内的文本框同样进树，并可 apply。框内再套框仍拒绝：Word 16.0 只写出故事级兄弟框，`w:txbxContent` 里没有嵌套 `wps:wsp`。对框 id 或框内段落发 `insertTextBox` 报 `InvalidId`。
 
 页眉、页脚 id 按部件编，不按节编。`w:sectPr` 里的 `w:headerReference` / `w:footerReference`（§17.10.2、§17.10.5）经主文档关系解到部件路径。同一部件只出一个容器节点；多个节引用同一部件时，`sections` 列出所有节号。后一节某类型引用省略时按规范继承前节（§17.10.2）；`even` 是否继承还看 `settings.xml` 的 `w:evenAndOddHeaders`（§17.10.1），`first` 是否继承还看该节的 `w:titlePg`（§17.10.6）。OOXML 没有「链接到前一节」元素；Word UI 的勾选就是这种省略。inspect 在每个节上用 `headerLink` / `footerLink` 标出该类型是显式引用、继承前节，还是对本节不生效。apply 用 `setHeaderFooterLink` 断开或重新链接；用 `insertHeaderFooter` 在空白槽位新建部件。两节显式指向同一部件不算链接，两边都是 `false`。
 
@@ -570,7 +570,7 @@ docx 根上始终带 `theme`，不要另给 scope 键。来源是主文档 `.rel
 }
 ```
 
-带图表、注、批注与两节的示例见 `docs/examples/docx-create-full.json`。
+带图表、注、批注与两节的示例见 `docs/examples/docx-create-full.json`。带超链接、书签、域、目录、编号、公式、内容控件与批注回复的示例见 `docs/examples/docx-create-remain.json`。
 
 | 字段 | 含义 |
 | --- | --- |
@@ -586,14 +586,23 @@ docx 根上始终带 `theme`，不要另给 scope 键。来源是主文档 `.rel
 | `paragraphs[].oleObjects` | 可选。该段上的嵌入对象列表。省略则不写。每项只要 `file`，规则与 `insertOle` 相同。页眉页脚段落同样允许 |
 | `paragraphs[].footnote` | 可选。字符串。在该段末插入一条脚注，规则与 `insertFootnote` 的 `text` 相同，可空。省略则不写。页眉页脚段落同样允许 |
 | `paragraphs[].endnote` | 可选。字符串。在该段末插入一条尾注，规则与 `insertEndnote` 相同。可与 `footnote` 同时出现。页眉页脚段落同样允许 |
-| `paragraphs[].comments` | 可选。该段上的批注列表。每条范围的 start 与 end 都是该段自身，不跨段。不写回复。页眉页脚段落同样允许 |
+| `paragraphs[].comments` | 可选。该段上的批注列表。每条范围的 start 与 end 都是该段自身，不跨段。页眉页脚段落同样允许 |
+| `paragraphs[].hyperlinks` | 可选。该段上的超链接列表。省略则不写。字段与 `insertHyperlink` 相同，不含 `op` / `id`。必须有 `text`。`url` 与 `anchor` 恰好一个。出现 `location` / `file` / `slide` / `ref` / `display` / `on` 报未知字段。页眉页脚段落同样允许 |
+| `paragraphs[].bookmarks` | 可选。该段上的书签列表。省略则不写。`name` 可选；省略则按 `insertBookmark` 分配尚未占用的 `ooxp{n}`。`end` 可选，为同一故事 `paragraphs` 的 1 起下标；省略则起止都是本段。`end` 小于本段下标、大于该故事段数、为 0 或不是正整数，报 `InvalidField`。不要 `id`。页眉页脚段落同样允许 |
+| `paragraphs[].fields` | 可选。该段上的域列表。省略则不写。`instr` 必填，`result` 可选，规则与 `insertField` 相同。不要 `id`。页眉页脚段落同样允许 |
+| `paragraphs[].maths` | 可选。该段上的公式列表。省略则不写。`text` 必填非空，`kind` 可选 `inline`（缺省）或 `display`，规则与 `insertMath` 相同。不要 `id`。页眉页脚段落同样允许 |
+| `paragraphs[].contentControls` | 可选。该段上的内容控件列表。省略则不写。字段与 `insertContentControl` 相同，不含 `op` / `id`。`text` 必填非空。页眉页脚段落同样允许 |
+| `paragraphs[].num` | 可选。从 1 起的整数，指向 `document.numberings` 的下标（不是 `num:{n}`）。省略则该段不绑编号。没有 `numberings`、越界或为 0 报 `InvalidField`。页眉页脚段落同样允许 |
+| `paragraphs[].ilvl` | 可选。绑定级别，缺省 `0`，取值 0 到 8。只给 `ilvl` 不给 `num` 报 `InvalidField` |
+| `document.numberings` | 可选。编号定义列表。省略或空数组则不写 numbering 部件。每项只要 `kind`：`decimal` 或 `bullet`，按数组顺序发 `insertNumbering` |
+| `document.tocs` | 可选。目录块列表。省略或空数组则不写。只挂在 `document` 上。每项 `kind` / `instr` 与 `insertToc` 相同；`after` 可选，为正文 `paragraphs` 的 1 起下标（插在该段之后）。省略 `after` 则插到正文末尾。`after` 为 0 或超过段数报 `InvalidField`。页眉、页脚上出现 `tocs` 报未知字段 |
 | `document.headers` / `document.footers` | 可选。页眉或页脚。省略则不写对应部件 |
 | `document.props` | 可选。文件属性，字段与 [json-contract.md](json-contract.md#setprops) 的 `setProps` / `setCustomProp` 相同 |
 | `document.protection` | 可选。文档保护，字段与 [json-contract.md](json-contract.md#setprotection) 的 `setProtection` 相同（不要 `id`，不要 `hasPassword`）。出现 `password` 仍报 `NotImplemented` |
 | `document.watermarks` | 可选。水印列表。省略或空数组则不写。每项恰好给 `text` 或 `file` 之一，规则与 `insertWatermark` 相同（不要 `id`）。在 follow-up 与 `protection` 之后写入 |
 | `document.tables` | 可选。正文表列表。省略或空数组则不写 `w:tbl` |
 | `headers[].type` / `footers[].type` | `default`、`even` 或 `first`；省略当作 `default`。同一侧同一 `type` 只能出现一次，否则报 `InvalidField`。给了 `even` 则写入整篇 `w:evenAndOddHeaders`；给了 `first` 则第一节写入 `w:titlePg` |
-| `headers[].paragraphs` / `footers[].paragraphs` | 可选。空或省略则写一个空的 `w:p`。字段与正文段落相同，但不允许 `style`、不允许 `textBoxes`、不允许 `sectionType`；允许 `pictures`、`smartArts`、`charts`、`oleObjects`、`footnote`、`endnote`、`comments` |
+| `headers[].paragraphs` / `footers[].paragraphs` | 可选。空或省略则写一个空的 `w:p`。字段与正文段落相同，但不允许 `style`、不允许 `textBoxes`、不允许 `sectionType`；允许 `pictures`、`smartArts`、`charts`、`oleObjects`、`footnote`、`endnote`、`comments`、`hyperlinks`、`bookmarks`、`fields`、`maths`、`contentControls`、`num`、`ilvl` |
 | `headers[].tables` / `footers[].tables` | 可选。该部件里的表，规则与 `document.tables` 相同，`after` 相对该部件的 `paragraphs` |
 
 | `tables[].cells` | 必须。二维字符串数组。至少一行一列，至多 500 行、63 列（Word 列上限）。每一行的长度必须相同，否则报 `InvalidField`。每个字符串是该格第一段可见文本，可空 |
@@ -622,12 +631,36 @@ docx 根上始终带 `theme`，不要另给 scope 键。来源是主文档 `.rel
 | `comments[].author` | 可选。省略当作 `"ooxp"` |
 | `comments[].initials` | 可选。省略当作 `"oo"` |
 | `comments[].date` | 可选。`xsd:dateTime` 字符串。省略则不写 `w:date` |
+| `comments[].replies` | 可选。该批注的回复列表。每项字段与 `comments[]` 相同，但不允许再套 `replies`。按 `replyComment` 写入。省略或空数组则不写回复 |
+
+| `numberings[].kind` | 必须。`decimal` 或 `bullet`，与 `insertNumbering` 相同 |
+
+| `tocs[].kind` | 可选。`toc` / `tof` / `toa`。省略且没有 `instr` 时当作 `toc` |
+| `tocs[].instr` | 可选。与 `insertToc` 相同 |
+| `tocs[].after` | 可选。正文段落 1 起下标。省略则插到正文末尾 |
+
+| `hyperlinks[].text` | 必须。显示文本，可空 |
+| `hyperlinks[].url` / `anchor` | 恰好一个。规则与 `insertHyperlink` 相同 |
+| `hyperlinks[].tooltip` | 可选 |
+
+| `bookmarks[].name` | 可选。书签名。规则与 `insertBookmark` 相同 |
+| `bookmarks[].end` | 可选。同一故事段落的 1 起下标 |
+
+| `fields[].instr` | 必须。域指令 |
+| `fields[].result` | 可选。缓存结果 |
+
+| `maths[].text` | 必须。非空 |
+| `maths[].kind` | 可选。`inline` 或 `display` |
+
+| `contentControls[].text` | 必须。非空 |
+| `contentControls[].kind` | 可选。`plainText`（缺省）、`richText`、`dropDown`、`comboBox`、`date` |
+| `contentControls[].tag` / `alias` / `items` / `fullDate` | 可选。规则与 `insertContentControl` 相同 |
 
 不把 base64 写进 create JSON。xlsx 的图只认 `workbook.sheets[].pictures`，图表只认 `workbook.sheets[].charts`。pptx 的图只认 `presentation.slides[].pictures`，图表只认 `presentation.slides[].charts`，SmartArt 只认 `presentation.slides[].smartArts`，表只认 `presentation.slides[].tables`。`presentation` 根上或 `shapes[]` 上出现 `pictures` / `charts` / `smartArts` / `tables` 报 `InvalidField`。xlsx 上出现 `smartArts` 或 `textBoxes` 同样报 `InvalidField`。
 
 create 写出 Transitional 最小包，见 [opc.md](opc.md)。每个 `w:p` 都带唯一的 `w14:paraId` 和 `w14:textId`（取值大于 0、小于 `0x80000000`，MS-DOCX §2.6.2.3 / §2.6.2.4），并在根元素上把 `w14` 列入 `mc:Ignorable`。这样随后 inspect 得到的 id 都是 `para:{paraId}`，`stable` 为 `true`。图的 `wp:docPr/@id` 在该部件内从 `1` 起递增，与 `insertPicture` 同一套写入。
 
-标题段写出 `<w:pStyle w:val="Heading1"/>` 这类引用，样式定义放在 `/word/styles.xml`。同时写 `/word/settings.xml`，含 `<w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="15"/>`（MS-DOCX §2.3.5）。缺这项时 Word 按兼容模式打开（默认 12）。`textBoxes` 写成浮动 `square` 的 `wps:wsp`，与 `insertTextBox` 同一套最小 Choice。`smartArts` 复用 `insertSmartArt` 的四件套生成。给了 `headers` / `footers` 时按出现顺序写 `/word/headerN.xml` 或 `/word/footerN.xml`，并在第一节 `sectPr` 上挂对应 `w:type` 的引用。若第一节在某段上结束，引用写在该段的 `sectPr` 上，不要留在 `w:body`。给了 `even` 则 `settings.xml` 含 `<w:evenAndOddHeaders/>`。给了 `first` 则第一节 `sectPr` 含 `<w:titlePg/>`。给了 `paragraphs[].sectionType` 时写出对应中间节；末节的 `sectPr` 仍在 `w:body` 末尾。给了 `paragraphs[].charts` 时按 `insertChart` 同一套规则写 `/word/charts/…`、embedding 与宿主 `w:drawing`。给了 `paragraphs[].oleObjects` 时按 `insertOle` 同一套规则写 embeddings、预览图与 `w:object`。给了 `footnote` / `endnote` 时按对应 insert 同一套规则写注部件、分隔符与引用 run。给了 `comments` 时按 `insertComment` 同一套规则写 `comments.xml`、`commentsExtended.xml`、`people.xml` 与范围标记。同一段上先写骨架里的文字 / 图 / 框 / SmartArt，再图表，再 OLE，再脚注，再尾注，再批注。不要生成目录、修订、超链接、书签、域、编号、公式、内容控件，也不写批注回复。给了 `document.props` 时按 `setProps` / `setCustomProp` 同一套规则写 core / app / custom；省略则仍写空的 `dc:title` 与 `dc:creator` 为 `ooxp`，不写 custom 部件。给了 `document.protection` 时按 `setProtection` 同一套规则写 `settings.xml`，窗体保护还可写各节 `w:formProt`。给了 `document.watermarks` 时按 `insertWatermark` 同一套规则写入页眉。不写 theme 部件。默认页眉页脚带框不在本期 create。给了 `tables` 时写出带单线边框的 `w:tbl`，每列 `gridCol` 宽 1440 twip，每格一段，带新的 `w14:paraId`。不写 `tblStyle`。不算列宽。框内、表内、注内本期 create 不写图表或注。
+标题段写出 `<w:pStyle w:val="Heading1"/>` 这类引用，样式定义放在 `/word/styles.xml`。同时写 `/word/settings.xml`，含 `<w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="15"/>`（MS-DOCX §2.3.5）。缺这项时 Word 按兼容模式打开（默认 12）。`textBoxes` 写成浮动 `square` 的 `wps:wsp`，与 `insertTextBox` 同一套最小 Choice。`smartArts` 复用 `insertSmartArt` 的四件套生成。给了 `headers` / `footers` 时按出现顺序写 `/word/headerN.xml` 或 `/word/footerN.xml`，并在第一节 `sectPr` 上挂对应 `w:type` 的引用。若第一节在某段上结束，引用写在该段的 `sectPr` 上，不要留在 `w:body`。给了 `even` 则 `settings.xml` 含 `<w:evenAndOddHeaders/>`。给了 `first` 则第一节 `sectPr` 含 `<w:titlePg/>`。给了 `paragraphs[].sectionType` 时写出对应中间节；末节的 `sectPr` 仍在 `w:body` 末尾。给了 `paragraphs[].charts` 时按 `insertChart` 同一套规则写 `/word/charts/…`、embedding 与宿主 `w:drawing`。给了 `paragraphs[].oleObjects` 时按 `insertOle` 同一套规则写 embeddings、预览图与 `w:object`。给了 `footnote` / `endnote` 时按对应 insert 同一套规则写注部件、分隔符与引用 run。给了 `comments` 时按 `insertComment` 同一套规则写 `comments.xml`、`commentsExtended.xml`、`people.xml` 与范围标记。给了 `comments[].replies` 时按 `replyComment` 写回复。给了 `hyperlinks` / `bookmarks` / `fields` / `maths` / `contentControls` 时按对应 insert 写入。给了 `document.numberings` 时按 `insertNumbering` 写 `/word/numbering.xml`，再按 `paragraphs[].num` 发 `setParaNumbering`。给了 `document.tocs` 时按 `insertToc` 在正文插入目录块。同一段上先写骨架里的文字 / 图 / 框 / SmartArt，再图表，再 OLE，再脚注，再尾注，再批注，再该条批注的回复，再书签，再超链接，再域，再公式，再内容控件，再绑编号。全部故事写完后再写 `tocs`。`numberings` 在任何段落绑定之前写入。不写修订痕迹。不写题注、交叉引用、索引、参考文献、构建基块、嵌入字体、theme、页面背景、页面边框或连接线。也不写批注的回复再回复。给了 `document.props` 时按 `setProps` / `setCustomProp` 同一套规则写 core / app / custom；省略则仍写空的 `dc:title` 与 `dc:creator` 为 `ooxp`，不写 custom 部件。给了 `document.protection` 时按 `setProtection` 同一套规则写 `settings.xml`，窗体保护还可写各节 `w:formProt`。给了 `document.watermarks` 时按 `insertWatermark` 同一套规则写入页眉。不写 theme 部件。默认页眉页脚带框不在本期 create。给了 `tables` 时写出带单线边框的 `w:tbl`，每列 `gridCol` 宽 1440 twip，每格一段，带新的 `w14:paraId`。不写 `tblStyle`。不算列宽。框内、表内、注内本期 create 不写图表或注。
 
 
 ## apply
@@ -1598,7 +1631,7 @@ run 级 `ins`：删掉整个 `w:ins`。run 级 `del`：拆掉 `w:del` 外壳，�
 
 `kind` 为 `display`：在点名段之后新插一个 `w:p`（新 `w14:paraId`），里面是 `m:oMathPara`/`m:oMath`。`id` 为 `docx:document` 时插到正文末尾、`sectPr` 之前。
 
-不把 `text` 解析成分数、根号等结构化 OMML。框内、注内、批注内的段落，以及公式 id、容器 id、表 id、run id、`section:{n}`，一律报 `InvalidId`。找不到段落报 `IdNotFound`。空 `text` 或不认识的 `kind` 报 `InvalidField`。xlsx / pptx 上发此 op 报 `InvalidField`。create 本期不写公式。
+不把 `text` 解析成分数、根号等结构化 OMML。框内、注内、批注内的段落，以及公式 id、容器 id、表 id、run id、`section:{n}`，一律报 `InvalidId`。找不到段落报 `IdNotFound`。空 `text` 或不认识的 `kind` 报 `InvalidField`。xlsx / pptx 上发此 op 报 `InvalidField`。create 给了 `paragraphs[].maths` 时按同一套规则写入。
 
 ### setMath
 
@@ -1638,7 +1671,7 @@ run 级 `ins`：删掉整个 `w:ins`。run 级 `del`：拆掉 `w:del` 外壳，�
 
 在点名段末尾追加一个行内 `w:sdt`（`sdtPr` 含 `w:id`，值为本故事里尚未占用的十进制数字；有 `tag` / `alias` 则写入；类型元素按 `kind`；`sdtContent` 里一条 `w:r`/`w:t`）。元素名跟宿主段落同一 `w:` 前缀。`id` 为 `docx:document` 时在正文末尾、`sectPr` 之前新插一个只含该控件的 `w:p`。不插入块级控件。不写 `w:dataBinding`。不写占位符 `showingPlcHdr`。
 
-框内、注内、批注内的段落，以及控件 id、容器 id、表 id、run id、`section:{n}`，一律报 `InvalidId`。找不到段落报 `IdNotFound`。空 `text`、不认识的 `kind`、给了 `items` 却不是 `dropDown`/`comboBox`、给了 `fullDate` 却不是 `date`、或 `items` 不是非空字符串数组，报 `InvalidField`。xlsx / pptx 上发此 op 报 `InvalidField`。create 本期不写内容控件。
+框内、注内、批注内的段落，以及控件 id、容器 id、表 id、run id、`section:{n}`，一律报 `InvalidId`。找不到段落报 `IdNotFound`。空 `text`、不认识的 `kind`、给了 `items` 却不是 `dropDown`/`comboBox`、给了 `fullDate` 却不是 `date`、或 `items` 不是非空字符串数组，报 `InvalidField`。xlsx / pptx 上发此 op 报 `InvalidField`。create 给了 `paragraphs[].contentControls` 时按同一套规则写入。
 
 ### setContentControl
 
@@ -1676,7 +1709,7 @@ run 级 `ins`：删掉整个 `w:ins`。run 级 `del`：拆掉 `w:del` 外壳，�
 | `id` | 必须是 `docx:document` |
 | `kind` | `"decimal"` 或 `"bullet"` |
 
-写入一份抽象定义（9 级 `hybridMultilevel`）加一个 `w:num` 实例。没有 `/word/numbering.xml` 则新建该部件、主文档关系与内容类型 Override。`decimal` 的 `lvlText` 为 `%1.`、`%1.%2.` 这类累计小数；`bullet` 用 Symbol 字体，各级 `lvlText` 轮换实心点、`o` 与节号。apply 不返回新 id；随后 inspect 按 `w:num` 文档顺序，新实例在名单末尾。`kind` 缺或不认识报 `InvalidField`。id 不是 `docx:document` 报 `InvalidId`。xlsx / pptx 上发此 op 报 `InvalidField`。create 本期不写编号。
+写入一份抽象定义（9 级 `hybridMultilevel`）加一个 `w:num` 实例。没有 `/word/numbering.xml` 则新建该部件、主文档关系与内容类型 Override。`decimal` 的 `lvlText` 为 `%1.`、`%1.%2.` 这类累计小数；`bullet` 用 Symbol 字体，各级 `lvlText` 轮换实心点、`o` 与节号。apply 不返回新 id；随后 inspect 按 `w:num` 文档顺序，新实例在名单末尾。`kind` 缺或不认识报 `InvalidField`。id 不是 `docx:document` 报 `InvalidId`。xlsx / pptx 上发此 op 报 `InvalidField`。create 给了 `document.numberings` 时按同一套规则写入，再用 `paragraphs[].num` 绑到段落。
 
 ### setNumbering
 

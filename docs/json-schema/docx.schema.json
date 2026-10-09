@@ -48,6 +48,18 @@
           "items": {
             "$ref": "#/$defs/createWatermark"
           }
+        },
+        "numberings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/docxNumberingCreate"
+          }
+        },
+        "tocs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/docxTocCreate"
+          }
         }
       }
     },
@@ -144,6 +156,45 @@
           "items": {
             "$ref": "#/$defs/docxCommentCreate"
           }
+        },
+        "hyperlinks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/docxHyperlinkCreate"
+          }
+        },
+        "bookmarks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/docxBookmarkCreate"
+          }
+        },
+        "fields": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/docxFieldCreate"
+          }
+        },
+        "maths": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/docxMathCreate"
+          }
+        },
+        "contentControls": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/docxSdtCreate"
+          }
+        },
+        "num": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "ilvl": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 8
         }
       }
     },
@@ -213,6 +264,45 @@
           "items": {
             "$ref": "#/$defs/docxCommentCreate"
           }
+        },
+        "hyperlinks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/docxHyperlinkCreate"
+          }
+        },
+        "bookmarks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/docxBookmarkCreate"
+          }
+        },
+        "fields": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/docxFieldCreate"
+          }
+        },
+        "maths": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/docxMathCreate"
+          }
+        },
+        "contentControls": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/docxSdtCreate"
+          }
+        },
+        "num": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "ilvl": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 8
         }
       }
     },
@@ -311,6 +401,179 @@
         "date": {
           "type": "string",
           "minLength": 1
+        },
+        "replies": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/docxCommentReplyCreate"
+          }
+        }
+      }
+    },
+    "docxCommentReplyCreate": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "text": {
+          "type": "string"
+        },
+        "author": {
+          "type": "string"
+        },
+        "initials": {
+          "type": "string"
+        },
+        "date": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "docxHyperlinkCreate": {
+      "type": "object",
+      "required": [
+        "text"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "text": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string",
+          "minLength": 1
+        },
+        "anchor": {
+          "type": "string",
+          "minLength": 1
+        },
+        "tooltip": {
+          "type": "string"
+        }
+      }
+    },
+    "docxBookmarkCreate": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "end": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "docxFieldCreate": {
+      "type": "object",
+      "required": [
+        "instr"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "instr": {
+          "type": "string",
+          "minLength": 1
+        },
+        "result": {
+          "type": "string"
+        }
+      }
+    },
+    "docxMathCreate": {
+      "type": "object",
+      "required": [
+        "text"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "text": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "enum": [
+            "inline",
+            "display"
+          ]
+        }
+      }
+    },
+    "docxSdtCreate": {
+      "type": "object",
+      "required": [
+        "text"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "text": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "enum": [
+            "plainText",
+            "richText",
+            "dropDown",
+            "comboBox",
+            "date"
+          ]
+        },
+        "tag": {
+          "type": "string"
+        },
+        "alias": {
+          "type": "string"
+        },
+        "items": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "fullDate": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "docxNumberingCreate": {
+      "type": "object",
+      "required": [
+        "kind"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "decimal",
+            "bullet"
+          ]
+        }
+      }
+    },
+    "docxTocCreate": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "toc",
+            "tof",
+            "toa"
+          ]
+        },
+        "instr": {
+          "type": "string",
+          "minLength": 1
+        },
+        "after": {
+          "type": "integer",
+          "minimum": 1
         }
       }
     },

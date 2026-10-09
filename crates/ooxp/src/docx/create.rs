@@ -4,7 +4,7 @@ use std::collections::HashSet;
 
 use serde_json::Value;
 
-use crate::error::{Error, ErrorKind, TypeName};
+use crate::error::{Error, ErrorKind, IdReason, TypeName};
 use crate::opc::{
     ContentTypes, Package, Relationship, Relationships, CONTENT_TYPES_PART, ROOT_RELS_PART,
 };
@@ -12,11 +12,19 @@ use crate::xml::{self, Element, Node};
 
 use super::apply;
 use super::charts::{self, ChartType, InsertChartOp, NewSeries};
+use super::field;
 use super::hf::{HfKind, HfType};
+use super::math::MathKind;
+use super::numbering::NumberingKind;
 use super::ole::InsertOleOp;
-use super::para;
+use super::para::{self, ParaTarget};
 use super::picture::{self, PicKind, WrapKind, WrapPos};
-use super::request::{DocxOp, InsertCommentOp, InsertNoteOp};
+use super::request::{
+    DocxOp, InsertBookmarkOp, InsertCommentOp, InsertContentControlOp, InsertFieldOp,
+    InsertHyperlinkOp, InsertMathOp, InsertMathPlace, InsertNoteOp, InsertNumberingOp,
+    InsertSdtPlace, InsertTocOp, InsertTocPlace, ReplyCommentOp, SetParaNumberingOp,
+};
+use super::sdt::SdtKind;
 use super::sect::SectionBreakType;
 use super::smartart::{self, InsertSpec};
 use super::tbl;
@@ -58,6 +66,43 @@ struct NewComment {
     author: String,
     initials: String,
     date: Option<String>,
+    replies: Vec<NewComment>,
+}
+
+struct NewHyperlink {
+    text: String,
+    url: Option<String>,
+    anchor: Option<String>,
+    tooltip: Option<String>,
+}
+
+struct NewBookmark {
+    name: Option<String>,
+    end: Option<u32>,
+}
+
+struct NewField {
+    instr: String,
+    result: Option<String>,
+}
+
+struct NewMath {
+    text: String,
+    kind: MathKind,
+}
+
+struct NewSdt {
+    text: String,
+    kind: SdtKind,
+    tag: Option<String>,
+    alias: Option<String>,
+    items: Vec<String>,
+    full_date: Option<String>,
+}
+
+struct NewToc {
+    after: Option<u32>,
+    instr: String,
 }
 
 struct NewPara {
@@ -71,6 +116,13 @@ struct NewPara {
     footnote: Option<String>,
     endnote: Option<String>,
     comments: Vec<NewComment>,
+    hyperlinks: Vec<NewHyperlink>,
+    bookmarks: Vec<NewBookmark>,
+    fields: Vec<NewField>,
+    maths: Vec<NewMath>,
+    content_controls: Vec<NewSdt>,
+    num: Option<u32>,
+    ilvl: u32,
     section_type: Option<SectionBreakType>,
 }
 
@@ -87,6 +139,13 @@ impl NewPara {
             footnote: None,
             endnote: None,
             comments: Vec::new(),
+            hyperlinks: Vec::new(),
+            bookmarks: Vec::new(),
+            fields: Vec::new(),
+            maths: Vec::new(),
+            content_controls: Vec::new(),
+            num: None,
+            ilvl: 0,
             section_type: None,
         }
     }
@@ -105,6 +164,12 @@ impl NewPara {
             || self.footnote.is_some()
             || self.endnote.is_some()
             || !self.comments.is_empty()
+            || !self.hyperlinks.is_empty()
+            || !self.bookmarks.is_empty()
+            || !self.fields.is_empty()
+            || !self.maths.is_empty()
+            || !self.content_controls.is_empty()
+            || self.num.is_some()
     }
 }
 
@@ -137,7 +202,15 @@ pub fn create(document: &Value) -> Result<Vec<u8>, Error> {
     for k in obj.keys() {
         if !matches!(
             k.as_str(),
-            "paragraphs" | "headers" | "footers" | "tables" | "props" | "protection" | "watermarks"
+            "paragraphs"
+                | "headers"
+                | "footers"
+                | "tables"
+                | "props"
+                | "protection"
+                | "watermarks"
+                | "numberings"
+                | "tocs"
         ) {
             return Err(Error::with_path(
                 ErrorKind::UnknownField { field: k.clone() },
@@ -185,6 +258,8 @@ pub fn create(document: &Value) -> Result<Vec<u8>, Error> {
         paras.push(NewPara::empty());
     }
     let tables = parse_tables(obj.get("tables"), "document.tables", paras.len())?;
+    let numberings = parse_numberings(obj.get("numberings"), "document.numberings")?;
+    let tocs = parse_tocs(obj.get("tocs"), "document.tocs", paras.len())?;
 
     let header_items = parse_hf_side(obj.get("headers"), "headers")?;
     let footer_items = parse_hf_side(obj.get("footers"), "footers")?;
@@ -321,7 +396,14 @@ pub fn create(document: &Value) -> Result<Vec<u8>, Error> {
     }
 
     let bytes = pkg.save_to_vec()?;
-    let bytes = apply_follow_ups(bytes, &paras, &header_items, &footer_items)?;
+    let bytes = apply_follow_ups(
+        bytes,
+        &paras,
+        &header_items,
+        &footer_items,
+        &numberings,
+        &tocs,
+    )?;
     if obj.get("protection").is_some() || obj.get("watermarks").is_some() {
         let mut pkg = crate::opc::Package::open_bytes(bytes)?;
         super::protect::apply_create(&mut pkg, obj.get("protection"))?;
@@ -453,6 +535,13 @@ fn parse_para(v: &Value, path: &str, kind: ParaKind, i: usize) -> Result<NewPara
             "footnote",
             "endnote",
             "comments",
+            "hyperlinks",
+            "bookmarks",
+            "fields",
+            "maths",
+            "contentControls",
+            "num",
+            "ilvl",
             "sectionType",
         ]
         .as_slice(),
@@ -465,6 +554,13 @@ fn parse_para(v: &Value, path: &str, kind: ParaKind, i: usize) -> Result<NewPara
             "footnote",
             "endnote",
             "comments",
+            "hyperlinks",
+            "bookmarks",
+            "fields",
+            "maths",
+            "contentControls",
+            "num",
+            "ilvl",
         ]
         .as_slice(),
     };
@@ -515,7 +611,13 @@ fn parse_para(v: &Value, path: &str, kind: ParaKind, i: usize) -> Result<NewPara
     let ole_objects = parse_ole_objects(obj.get("oleObjects"), path)?;
     let footnote = parse_optional_str(obj.get("footnote"), path, "footnote")?;
     let endnote = parse_optional_str(obj.get("endnote"), path, "endnote")?;
-    let comments = parse_comments(obj.get("comments"), path)?;
+    let comments = parse_comments(obj.get("comments"), &format!("{path}.comments"), false)?;
+    let hyperlinks = parse_hyperlinks(obj.get("hyperlinks"), path)?;
+    let bookmarks = parse_bookmarks(obj.get("bookmarks"), path)?;
+    let fields = parse_fields(obj.get("fields"), path)?;
+    let maths = parse_maths(obj.get("maths"), path)?;
+    let content_controls = parse_sdts(obj.get("contentControls"), path)?;
+    let (num, ilvl) = parse_para_num(obj, path)?;
     let section_type = match kind {
         ParaKind::Body => parse_create_section_type(obj.get("sectionType"), path)?,
         ParaKind::HeaderFooter => None,
@@ -531,6 +633,13 @@ fn parse_para(v: &Value, path: &str, kind: ParaKind, i: usize) -> Result<NewPara
         footnote,
         endnote,
         comments,
+        hyperlinks,
+        bookmarks,
+        fields,
+        maths,
+        content_controls,
+        num,
+        ilvl,
         section_type,
     })
 }
@@ -1218,18 +1327,18 @@ fn parse_optional_str(v: Option<&Value>, path: &str, field: &str) -> Result<Opti
     }
 }
 
-fn parse_comments(v: Option<&Value>, prefix: &str) -> Result<Vec<NewComment>, Error> {
+fn parse_comments(v: Option<&Value>, path: &str, reply: bool) -> Result<Vec<NewComment>, Error> {
     let Some(v) = v else {
         return Ok(Vec::new());
     };
-    let path = format!("{prefix}.comments");
+    let field = if reply { "replies" } else { "comments" };
     let arr = v.as_array().ok_or_else(|| {
         Error::with_path(
             ErrorKind::WrongType {
-                field: "comments".into(),
+                field: field.into(),
                 expected: TypeName::Array,
             },
-            path.clone(),
+            path,
         )
     })?;
     let mut out = Vec::new();
@@ -1245,7 +1354,17 @@ fn parse_comments(v: Option<&Value>, prefix: &str) -> Result<Vec<NewComment>, Er
             )
         })?;
         for k in obj.keys() {
-            if !matches!(k.as_str(), "text" | "author" | "initials" | "date") {
+            if reply {
+                if !matches!(k.as_str(), "text" | "author" | "initials" | "date") {
+                    return Err(Error::with_path(
+                        ErrorKind::UnknownField { field: k.clone() },
+                        format!("{item_path}.{k}"),
+                    ));
+                }
+            } else if !matches!(
+                k.as_str(),
+                "text" | "author" | "initials" | "date" | "replies"
+            ) {
                 return Err(Error::with_path(
                     ErrorKind::UnknownField { field: k.clone() },
                     format!("{item_path}.{k}"),
@@ -1270,11 +1389,17 @@ fn parse_comments(v: Option<&Value>, prefix: &str) -> Result<Vec<NewComment>, Er
         let initials = parse_comment_attr(obj.get("initials"), &item_path, "initials")?
             .unwrap_or_else(|| "oo".into());
         let date = parse_comment_attr(obj.get("date"), &item_path, "date")?;
+        let replies = if reply {
+            Vec::new()
+        } else {
+            parse_comments(obj.get("replies"), &format!("{item_path}.replies"), true)?
+        };
         out.push(NewComment {
             text,
             author,
             initials,
             date,
+            replies,
         });
     }
     Ok(out)
@@ -1663,13 +1788,743 @@ fn parse_datum_list(v: Option<&Value>, path: &str) -> Result<Option<Vec<Value>>,
     }
 }
 
+fn parse_hyperlinks(v: Option<&Value>, prefix: &str) -> Result<Vec<NewHyperlink>, Error> {
+    let Some(v) = v else {
+        return Ok(Vec::new());
+    };
+    let path = format!("{prefix}.hyperlinks");
+    let arr = v.as_array().ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::WrongType {
+                field: "hyperlinks".into(),
+                expected: TypeName::Array,
+            },
+            path.clone(),
+        )
+    })?;
+    let mut out = Vec::new();
+    for (j, item) in arr.iter().enumerate() {
+        let item_path = format!("{path}[{j}]");
+        let obj = item.as_object().ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::WrongType {
+                    field: item_path.clone(),
+                    expected: TypeName::Object,
+                },
+                item_path.clone(),
+            )
+        })?;
+        for k in obj.keys() {
+            if !matches!(k.as_str(), "text" | "url" | "anchor" | "tooltip") {
+                return Err(Error::with_path(
+                    ErrorKind::UnknownField { field: k.clone() },
+                    format!("{item_path}.{k}"),
+                ));
+            }
+        }
+        let text = match obj.get("text") {
+            Some(Value::String(s)) => s.clone(),
+            Some(_) => {
+                return Err(Error::with_path(
+                    ErrorKind::WrongType {
+                        field: "text".into(),
+                        expected: TypeName::String,
+                    },
+                    format!("{item_path}.text"),
+                ));
+            }
+            None => {
+                return Err(Error::with_path(
+                    ErrorKind::MissingField {
+                        field: "text".into(),
+                    },
+                    format!("{item_path}.text"),
+                ));
+            }
+        };
+        let url = parse_optional_str(obj.get("url"), &item_path, "url")?;
+        let anchor = parse_optional_str(obj.get("anchor"), &item_path, "anchor")?;
+        match (&url, &anchor) {
+            (Some(_), Some(_)) => {
+                return Err(Error::with_path(
+                    ErrorKind::MutuallyExclusive {
+                        a: "url".into(),
+                        b: "anchor".into(),
+                    },
+                    item_path.clone(),
+                ));
+            }
+            (None, None) => {
+                return Err(Error::with_path(ErrorKind::HyperlinkNeedTarget, item_path));
+            }
+            _ => {}
+        }
+        if let Some(u) = url.as_deref() {
+            if u.is_empty() {
+                return Err(Error::with_path(
+                    ErrorKind::EmptyHyperlinkUrl,
+                    format!("{item_path}.url"),
+                ));
+            }
+        }
+        if let Some(a) = anchor.as_deref() {
+            if a.is_empty() || a.starts_with('_') || a.chars().any(char::is_whitespace) {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidBookmarkName,
+                    format!("{item_path}.anchor"),
+                ));
+            }
+        }
+        let tooltip = parse_optional_str(obj.get("tooltip"), &item_path, "tooltip")?;
+        out.push(NewHyperlink {
+            text,
+            url,
+            anchor,
+            tooltip,
+        });
+    }
+    Ok(out)
+}
+
+fn parse_bookmarks(v: Option<&Value>, prefix: &str) -> Result<Vec<NewBookmark>, Error> {
+    let Some(v) = v else {
+        return Ok(Vec::new());
+    };
+    let path = format!("{prefix}.bookmarks");
+    let arr = v.as_array().ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::WrongType {
+                field: "bookmarks".into(),
+                expected: TypeName::Array,
+            },
+            path.clone(),
+        )
+    })?;
+    let mut out = Vec::new();
+    for (j, item) in arr.iter().enumerate() {
+        let item_path = format!("{path}[{j}]");
+        let obj = item.as_object().ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::WrongType {
+                    field: item_path.clone(),
+                    expected: TypeName::Object,
+                },
+                item_path.clone(),
+            )
+        })?;
+        for k in obj.keys() {
+            if !matches!(k.as_str(), "name" | "end") {
+                return Err(Error::with_path(
+                    ErrorKind::UnknownField { field: k.clone() },
+                    format!("{item_path}.{k}"),
+                ));
+            }
+        }
+        let name = match obj.get("name") {
+            None => None,
+            Some(Value::String(s)) => {
+                if s.is_empty() || s.starts_with('_') || s.chars().any(char::is_whitespace) {
+                    return Err(Error::with_path(
+                        ErrorKind::InvalidBookmarkName,
+                        format!("{item_path}.name"),
+                    ));
+                }
+                Some(s.clone())
+            }
+            Some(_) => {
+                return Err(Error::with_path(
+                    ErrorKind::WrongType {
+                        field: "name".into(),
+                        expected: TypeName::String,
+                    },
+                    format!("{item_path}.name"),
+                ));
+            }
+        };
+        let end = parse_index1(obj.get("end"), &format!("{item_path}.end"))?;
+        out.push(NewBookmark { name, end });
+    }
+    Ok(out)
+}
+
+fn parse_fields(v: Option<&Value>, prefix: &str) -> Result<Vec<NewField>, Error> {
+    let Some(v) = v else {
+        return Ok(Vec::new());
+    };
+    let path = format!("{prefix}.fields");
+    let arr = v.as_array().ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::WrongType {
+                field: "fields".into(),
+                expected: TypeName::Array,
+            },
+            path.clone(),
+        )
+    })?;
+    let mut out = Vec::new();
+    for (j, item) in arr.iter().enumerate() {
+        let item_path = format!("{path}[{j}]");
+        let obj = item.as_object().ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::WrongType {
+                    field: item_path.clone(),
+                    expected: TypeName::Object,
+                },
+                item_path.clone(),
+            )
+        })?;
+        for k in obj.keys() {
+            if !matches!(k.as_str(), "instr" | "result") {
+                return Err(Error::with_path(
+                    ErrorKind::UnknownField { field: k.clone() },
+                    format!("{item_path}.{k}"),
+                ));
+            }
+        }
+        let instr = match obj.get("instr") {
+            Some(Value::String(s)) if !s.trim().is_empty() => s.clone(),
+            Some(Value::String(_)) => {
+                return Err(Error::with_path(
+                    ErrorKind::EmptyFieldInstr,
+                    format!("{item_path}.instr"),
+                ));
+            }
+            None => {
+                return Err(Error::with_path(
+                    ErrorKind::MissingField {
+                        field: "instr".into(),
+                    },
+                    format!("{item_path}.instr"),
+                ));
+            }
+            Some(_) => {
+                return Err(Error::with_path(
+                    ErrorKind::WrongType {
+                        field: "instr".into(),
+                        expected: TypeName::String,
+                    },
+                    format!("{item_path}.instr"),
+                ));
+            }
+        };
+        let result = parse_optional_str(obj.get("result"), &item_path, "result")?;
+        out.push(NewField { instr, result });
+    }
+    Ok(out)
+}
+
+fn parse_maths(v: Option<&Value>, prefix: &str) -> Result<Vec<NewMath>, Error> {
+    let Some(v) = v else {
+        return Ok(Vec::new());
+    };
+    let path = format!("{prefix}.maths");
+    let arr = v.as_array().ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::WrongType {
+                field: "maths".into(),
+                expected: TypeName::Array,
+            },
+            path.clone(),
+        )
+    })?;
+    let mut out = Vec::new();
+    for (j, item) in arr.iter().enumerate() {
+        let item_path = format!("{path}[{j}]");
+        let obj = item.as_object().ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::WrongType {
+                    field: item_path.clone(),
+                    expected: TypeName::Object,
+                },
+                item_path.clone(),
+            )
+        })?;
+        for k in obj.keys() {
+            if !matches!(k.as_str(), "text" | "kind") {
+                return Err(Error::with_path(
+                    ErrorKind::UnknownField { field: k.clone() },
+                    format!("{item_path}.{k}"),
+                ));
+            }
+        }
+        let text = match obj.get("text") {
+            Some(Value::String(s)) if !s.is_empty() => s.clone(),
+            Some(Value::String(_)) => {
+                return Err(Error::with_path(
+                    ErrorKind::EmptyMathText,
+                    format!("{item_path}.text"),
+                ));
+            }
+            Some(_) => {
+                return Err(Error::with_path(
+                    ErrorKind::WrongType {
+                        field: "text".into(),
+                        expected: TypeName::String,
+                    },
+                    format!("{item_path}.text"),
+                ));
+            }
+            None => {
+                return Err(Error::with_path(
+                    ErrorKind::MissingField {
+                        field: "text".into(),
+                    },
+                    format!("{item_path}.text"),
+                ));
+            }
+        };
+        let kind = match obj.get("kind") {
+            None => MathKind::Inline,
+            Some(Value::String(s)) if s == "inline" => MathKind::Inline,
+            Some(Value::String(s)) if s == "display" => MathKind::Display,
+            Some(Value::String(_)) => {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidMathKind,
+                    format!("{item_path}.kind"),
+                ));
+            }
+            Some(_) => {
+                return Err(Error::with_path(
+                    ErrorKind::WrongType {
+                        field: "kind".into(),
+                        expected: TypeName::String,
+                    },
+                    format!("{item_path}.kind"),
+                ));
+            }
+        };
+        out.push(NewMath { text, kind });
+    }
+    Ok(out)
+}
+
+fn parse_sdts(v: Option<&Value>, prefix: &str) -> Result<Vec<NewSdt>, Error> {
+    let Some(v) = v else {
+        return Ok(Vec::new());
+    };
+    let path = format!("{prefix}.contentControls");
+    let arr = v.as_array().ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::WrongType {
+                field: "contentControls".into(),
+                expected: TypeName::Array,
+            },
+            path.clone(),
+        )
+    })?;
+    let mut out = Vec::new();
+    for (j, item) in arr.iter().enumerate() {
+        let item_path = format!("{path}[{j}]");
+        let obj = item.as_object().ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::WrongType {
+                    field: item_path.clone(),
+                    expected: TypeName::Object,
+                },
+                item_path.clone(),
+            )
+        })?;
+        for k in obj.keys() {
+            if !matches!(
+                k.as_str(),
+                "text" | "kind" | "tag" | "alias" | "items" | "fullDate"
+            ) {
+                return Err(Error::with_path(
+                    ErrorKind::UnknownField { field: k.clone() },
+                    format!("{item_path}.{k}"),
+                ));
+            }
+        }
+        let text = match obj.get("text") {
+            Some(Value::String(s)) if !s.is_empty() => s.clone(),
+            Some(Value::String(_)) => {
+                return Err(Error::with_path(
+                    ErrorKind::EmptyContentControlText,
+                    format!("{item_path}.text"),
+                ));
+            }
+            Some(_) => {
+                return Err(Error::with_path(
+                    ErrorKind::WrongType {
+                        field: "text".into(),
+                        expected: TypeName::String,
+                    },
+                    format!("{item_path}.text"),
+                ));
+            }
+            None => {
+                return Err(Error::with_path(
+                    ErrorKind::MissingField {
+                        field: "text".into(),
+                    },
+                    format!("{item_path}.text"),
+                ));
+            }
+        };
+        let kind = match obj.get("kind") {
+            None => SdtKind::PlainText,
+            Some(Value::String(s)) => SdtKind::parse(s).ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::InvalidContentControlKind,
+                    format!("{item_path}.kind"),
+                )
+            })?,
+            Some(_) => {
+                return Err(Error::with_path(
+                    ErrorKind::WrongType {
+                        field: "kind".into(),
+                        expected: TypeName::String,
+                    },
+                    format!("{item_path}.kind"),
+                ));
+            }
+        };
+        let tag = parse_optional_str(obj.get("tag"), &item_path, "tag")?;
+        let alias = parse_optional_str(obj.get("alias"), &item_path, "alias")?;
+        let items = parse_sdt_items(obj.get("items"), &item_path)?;
+        if !items.is_empty() && !matches!(kind, SdtKind::DropDown | SdtKind::ComboBox) {
+            return Err(Error::with_path(
+                ErrorKind::ContentControlFieldMismatch,
+                format!("{item_path}.items"),
+            ));
+        }
+        let full_date = parse_optional_str(obj.get("fullDate"), &item_path, "fullDate")?;
+        if full_date.is_some() && kind != SdtKind::Date {
+            return Err(Error::with_path(
+                ErrorKind::ContentControlFieldMismatch,
+                format!("{item_path}.fullDate"),
+            ));
+        }
+        if let Some(fd) = &full_date {
+            if fd.is_empty() {
+                return Err(Error::with_path(
+                    ErrorKind::EmptyContentControlText,
+                    format!("{item_path}.fullDate"),
+                ));
+            }
+        }
+        out.push(NewSdt {
+            text,
+            kind,
+            tag,
+            alias,
+            items,
+            full_date,
+        });
+    }
+    Ok(out)
+}
+
+fn parse_sdt_items(v: Option<&Value>, item_path: &str) -> Result<Vec<String>, Error> {
+    match v {
+        None => Ok(Vec::new()),
+        Some(Value::Array(arr)) => {
+            if arr.is_empty() {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidContentControlItems,
+                    format!("{item_path}.items"),
+                ));
+            }
+            let mut out = Vec::new();
+            for (j, item) in arr.iter().enumerate() {
+                let s = item.as_str().ok_or_else(|| {
+                    Error::with_path(
+                        ErrorKind::WrongType {
+                            field: "items".into(),
+                            expected: TypeName::String,
+                        },
+                        format!("{item_path}.items[{j}]"),
+                    )
+                })?;
+                if s.is_empty() {
+                    return Err(Error::with_path(
+                        ErrorKind::InvalidContentControlItems,
+                        format!("{item_path}.items[{j}]"),
+                    ));
+                }
+                out.push(s.to_string());
+            }
+            Ok(out)
+        }
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "items".into(),
+                expected: TypeName::Array,
+            },
+            format!("{item_path}.items"),
+        )),
+    }
+}
+
+fn parse_para_num(
+    obj: &serde_json::Map<String, Value>,
+    path: &str,
+) -> Result<(Option<u32>, u32), Error> {
+    let num = parse_index1(obj.get("num"), &format!("{path}.num"))?;
+    let ilvl = match obj.get("ilvl") {
+        None => 0,
+        Some(Value::Number(n)) => {
+            let Some(u) = n.as_u64() else {
+                return Err(Error::with_path(
+                    ErrorKind::WrongType {
+                        field: "ilvl".into(),
+                        expected: TypeName::Integer,
+                    },
+                    format!("{path}.ilvl"),
+                ));
+            };
+            if u > 8 {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidIlvl,
+                    format!("{path}.ilvl"),
+                ));
+            }
+            u as u32
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "ilvl".into(),
+                    expected: TypeName::Integer,
+                },
+                format!("{path}.ilvl"),
+            ));
+        }
+    };
+    if obj.get("ilvl").is_some() && num.is_none() {
+        return Err(Error::with_path(
+            ErrorKind::MissingField {
+                field: "num".into(),
+            },
+            format!("{path}.num"),
+        ));
+    }
+    Ok((num, ilvl))
+}
+
+fn parse_numberings(v: Option<&Value>, path: &str) -> Result<Vec<NumberingKind>, Error> {
+    let Some(v) = v else {
+        return Ok(Vec::new());
+    };
+    let arr = v.as_array().ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::WrongType {
+                field: "numberings".into(),
+                expected: TypeName::Array,
+            },
+            path,
+        )
+    })?;
+    let mut out = Vec::new();
+    for (i, item) in arr.iter().enumerate() {
+        let item_path = format!("{path}[{i}]");
+        let obj = item.as_object().ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::WrongType {
+                    field: item_path.clone(),
+                    expected: TypeName::Object,
+                },
+                item_path.clone(),
+            )
+        })?;
+        for k in obj.keys() {
+            if k.as_str() != "kind" {
+                return Err(Error::with_path(
+                    ErrorKind::UnknownField { field: k.clone() },
+                    format!("{item_path}.{k}"),
+                ));
+            }
+        }
+        let kind = match obj.get("kind") {
+            Some(Value::String(s)) => super::numbering::parse_kind(s).ok_or_else(|| {
+                Error::with_path(ErrorKind::InvalidNumberingKind, format!("{item_path}.kind"))
+            })?,
+            Some(_) => {
+                return Err(Error::with_path(
+                    ErrorKind::WrongType {
+                        field: "kind".into(),
+                        expected: TypeName::String,
+                    },
+                    format!("{item_path}.kind"),
+                ));
+            }
+            None => {
+                return Err(Error::with_path(
+                    ErrorKind::MissingField {
+                        field: "kind".into(),
+                    },
+                    format!("{item_path}.kind"),
+                ));
+            }
+        };
+        out.push(kind);
+    }
+    Ok(out)
+}
+
+fn parse_tocs(v: Option<&Value>, path: &str, para_n: usize) -> Result<Vec<NewToc>, Error> {
+    let Some(v) = v else {
+        return Ok(Vec::new());
+    };
+    let arr = v.as_array().ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::WrongType {
+                field: "tocs".into(),
+                expected: TypeName::Array,
+            },
+            path,
+        )
+    })?;
+    let mut out = Vec::new();
+    for (i, item) in arr.iter().enumerate() {
+        let item_path = format!("{path}[{i}]");
+        let obj = item.as_object().ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::WrongType {
+                    field: item_path.clone(),
+                    expected: TypeName::Object,
+                },
+                item_path.clone(),
+            )
+        })?;
+        for k in obj.keys() {
+            if !matches!(k.as_str(), "kind" | "instr" | "after") {
+                return Err(Error::with_path(
+                    ErrorKind::UnknownField { field: k.clone() },
+                    format!("{item_path}.{k}"),
+                ));
+            }
+        }
+        let kind = match obj.get("kind") {
+            None => None,
+            Some(Value::String(s)) => Some(
+                field::parse_toc_kind(s)
+                    .map_err(|kind| Error::with_path(kind, format!("{item_path}.kind")))?,
+            ),
+            Some(_) => {
+                return Err(Error::with_path(
+                    ErrorKind::WrongType {
+                        field: "kind".into(),
+                        expected: TypeName::String,
+                    },
+                    format!("{item_path}.kind"),
+                ));
+            }
+        };
+        let instr = match obj.get("instr") {
+            None => None,
+            Some(Value::String(s)) => {
+                if s.trim().is_empty() {
+                    return Err(Error::with_path(
+                        ErrorKind::EmptyFieldInstr,
+                        format!("{item_path}.instr"),
+                    ));
+                }
+                if !field::instr_is_toc_or_toa(s) {
+                    return Err(Error::with_path(
+                        ErrorKind::InvalidTocKind,
+                        format!("{item_path}.instr"),
+                    ));
+                }
+                Some(s.clone())
+            }
+            Some(_) => {
+                return Err(Error::with_path(
+                    ErrorKind::WrongType {
+                        field: "instr".into(),
+                        expected: TypeName::String,
+                    },
+                    format!("{item_path}.instr"),
+                ));
+            }
+        };
+        let instr = match instr {
+            Some(s) => s,
+            None => kind
+                .unwrap_or(field::TocKind::Toc)
+                .default_instr()
+                .to_string(),
+        };
+        let after = parse_index1(obj.get("after"), &format!("{item_path}.after"))?;
+        if let Some(n) = after {
+            if n as usize > para_n {
+                return Err(Error::with_path(
+                    ErrorKind::CreateIndexOutOfRange {
+                        field: "after".into(),
+                        max: para_n as i64,
+                    },
+                    format!("{item_path}.after"),
+                ));
+            }
+        }
+        out.push(NewToc { after, instr });
+    }
+    Ok(out)
+}
+
+fn parse_index1(v: Option<&Value>, path: &str) -> Result<Option<u32>, Error> {
+    match v {
+        None => Ok(None),
+        Some(Value::Number(n)) => {
+            let Some(u) = n.as_u64() else {
+                if n.as_i64().is_some_and(|x| x < 1) {
+                    return Err(Error::with_path(
+                        ErrorKind::MinValue {
+                            field: path.rsplit('.').next().unwrap_or("index").into(),
+                            min: 1,
+                        },
+                        path,
+                    ));
+                }
+                return Err(Error::with_path(
+                    ErrorKind::WrongType {
+                        field: path.rsplit('.').next().unwrap_or("index").into(),
+                        expected: TypeName::Integer,
+                    },
+                    path,
+                ));
+            };
+            if u == 0 {
+                return Err(Error::with_path(
+                    ErrorKind::MinValue {
+                        field: path.rsplit('.').next().unwrap_or("index").into(),
+                        min: 1,
+                    },
+                    path,
+                ));
+            }
+            if u > u32::MAX as u64 {
+                return Err(Error::with_path(
+                    ErrorKind::WrongType {
+                        field: path.rsplit('.').next().unwrap_or("index").into(),
+                        expected: TypeName::Integer,
+                    },
+                    path,
+                ));
+            }
+            Ok(Some(u as u32))
+        }
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: path.rsplit('.').next().unwrap_or("index").into(),
+                expected: TypeName::Integer,
+            },
+            path,
+        )),
+    }
+}
+
 fn apply_follow_ups(
     bytes: Vec<u8>,
     paras: &[NewPara],
     headers: &[HfCreateItem],
     footers: &[HfCreateItem],
+    numberings: &[NumberingKind],
+    tocs: &[NewToc],
 ) -> Result<Vec<u8>, Error> {
-    let need = paras.iter().any(NewPara::has_follow_ups)
+    let need = !numberings.is_empty()
+        || !tocs.is_empty()
+        || paras.iter().any(NewPara::has_follow_ups)
         || headers
             .iter()
             .any(|h| h.paras.iter().any(NewPara::has_follow_ups))
@@ -1680,12 +2535,51 @@ fn apply_follow_ups(
         return Ok(bytes);
     }
     let mut ops = Vec::new();
-    push_story_ops(&mut ops, paras, None)?;
+    for kind in numberings {
+        ops.push(DocxOp::InsertNumbering(InsertNumberingOp { kind: *kind }));
+    }
+    let mut comment_seq: i64 = 0;
+    push_story_ops(&mut ops, paras, None, numberings.len(), &mut comment_seq)?;
     for item in headers {
-        push_story_ops(&mut ops, &item.paras, Some((HfKind::Header, item.hf_type)))?;
+        push_story_ops(
+            &mut ops,
+            &item.paras,
+            Some((HfKind::Header, item.hf_type)),
+            numberings.len(),
+            &mut comment_seq,
+        )?;
     }
     for item in footers {
-        push_story_ops(&mut ops, &item.paras, Some((HfKind::Footer, item.hf_type)))?;
+        push_story_ops(
+            &mut ops,
+            &item.paras,
+            Some((HfKind::Footer, item.hf_type)),
+            numberings.len(),
+            &mut comment_seq,
+        )?;
+    }
+    for toc in tocs {
+        let (id, place) = match toc.after {
+            None => ("docx:document".to_string(), InsertTocPlace::EndOfDocument),
+            Some(n) => {
+                let id = story_para_id(None, (n as usize) - 1);
+                let host = para::parse_para_id_at(&id, "document.tocs")?;
+                let ParaTarget::Body(p) = host else {
+                    return Err(Error::with_path(
+                        ErrorKind::InvalidId {
+                            reason: IdReason::InsertTocNeedsBodyPara,
+                        },
+                        "document.tocs",
+                    ));
+                };
+                (id, InsertTocPlace::After(p))
+            }
+        };
+        ops.push(DocxOp::InsertToc(InsertTocOp {
+            id,
+            place,
+            instr: toc.instr.clone(),
+        }));
     }
     apply::apply(&bytes, &ops)
 }
@@ -1694,6 +2588,8 @@ fn push_story_ops(
     ops: &mut Vec<DocxOp>,
     paras: &[NewPara],
     hf: Option<(HfKind, HfType)>,
+    numbering_n: usize,
+    comment_seq: &mut i64,
 ) -> Result<(), Error> {
     for (i, p) in paras.iter().enumerate() {
         let id = story_para_id(hf, i);
@@ -1745,6 +2641,105 @@ fn push_story_ops(
                 initials: c.initials.clone(),
                 date: c.date.clone(),
             }));
+            let parent_id = comment_seq.to_string();
+            *comment_seq += 1;
+            for r in &c.replies {
+                ops.push(DocxOp::ReplyComment(ReplyCommentOp {
+                    id: format!("comment:{parent_id}"),
+                    comment_id: parent_id.clone(),
+                    text: r.text.clone(),
+                    author: r.author.clone(),
+                    initials: r.initials.clone(),
+                    date: r.date.clone(),
+                }));
+                *comment_seq += 1;
+            }
+        }
+        for bm in &p.bookmarks {
+            let end_id = match bm.end {
+                None => id.clone(),
+                Some(n) => {
+                    let idx = n as usize;
+                    if n < (i as u32 + 1) {
+                        return Err(Error::with_path(
+                            ErrorKind::BookmarkRangeReversed,
+                            story_field_path(hf, i, "bookmarks"),
+                        ));
+                    }
+                    if idx > paras.len() {
+                        return Err(Error::with_path(
+                            ErrorKind::CreateIndexOutOfRange {
+                                field: "end".into(),
+                                max: paras.len() as i64,
+                            },
+                            story_field_path(hf, i, "bookmarks"),
+                        ));
+                    }
+                    story_para_id(hf, idx - 1)
+                }
+            };
+            let end = para::parse_para_id_at(&end_id, "document")?;
+            ops.push(DocxOp::InsertBookmark(InsertBookmarkOp {
+                id: id.clone(),
+                start: host.clone(),
+                end,
+                name: bm.name.clone(),
+            }));
+        }
+        for h in &p.hyperlinks {
+            ops.push(DocxOp::InsertHyperlink(InsertHyperlinkOp {
+                id: id.clone(),
+                para: host.clone(),
+                text: h.text.clone(),
+                url: h.url.clone(),
+                anchor: h.anchor.clone(),
+                tooltip: h.tooltip.clone(),
+            }));
+        }
+        for f in &p.fields {
+            ops.push(DocxOp::InsertField(InsertFieldOp {
+                id: id.clone(),
+                para: host.clone(),
+                instr: f.instr.clone(),
+                result: f.result.clone(),
+            }));
+        }
+        for m in &p.maths {
+            ops.push(DocxOp::InsertMath(InsertMathOp {
+                id: id.clone(),
+                place: InsertMathPlace::After(host.clone()),
+                kind: m.kind,
+                text: m.text.clone(),
+            }));
+        }
+        for s in &p.content_controls {
+            ops.push(DocxOp::InsertContentControl(InsertContentControlOp {
+                id: id.clone(),
+                place: InsertSdtPlace::After(host.clone()),
+                kind: s.kind,
+                text: s.text.clone(),
+                tag: s.tag.clone(),
+                alias: s.alias.clone(),
+                items: s.items.clone(),
+                full_date: s.full_date.clone(),
+            }));
+        }
+        if let Some(n) = p.num {
+            if n as usize > numbering_n {
+                return Err(Error::with_path(
+                    ErrorKind::CreateIndexOutOfRange {
+                        field: "num".into(),
+                        max: numbering_n as i64,
+                    },
+                    story_field_path(hf, i, "num"),
+                ));
+            }
+            ops.push(DocxOp::SetParaNumbering(SetParaNumberingOp {
+                id: id.clone(),
+                para: host.clone(),
+                num: Some(n),
+                ilvl: p.ilvl,
+            }));
         }
     }
     Ok(())
@@ -1755,6 +2750,22 @@ fn story_para_id(hf: Option<(HfKind, HfType)>, index: usize) -> String {
     match hf {
         None => format!("para:{hex}"),
         Some((kind, hf_type)) => format!("{}:{}:1/para:{hex}", kind.as_str(), hf_type.as_str()),
+    }
+}
+
+fn story_field_path(hf: Option<(HfKind, HfType)>, index: usize, field: &str) -> String {
+    match hf {
+        None => format!("document.paragraphs[{index}].{field}"),
+        Some((kind, hf_type)) => {
+            let side = match kind {
+                HfKind::Header => "headers",
+                HfKind::Footer => "footers",
+            };
+            format!(
+                "document.{side}/{}/paragraphs[{index}].{field}",
+                hf_type.as_str()
+            )
+        }
     }
 }
 

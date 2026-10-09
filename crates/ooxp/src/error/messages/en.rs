@@ -24,6 +24,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             format!("{field} must be between {min} and {max}")
         }
         ErrorKind::MinValue { field, min } => format!("{field} starts at {min}"),
+        ErrorKind::CreateIndexOutOfRange { field, max } => format!("{field} must not exceed {max}"),
         ErrorKind::MutuallyExclusive { a, b } => format!("{a} and {b} cannot both be present"),
         ErrorKind::ContentObjectsExclusive => {
             "workbook, document, and presentation cannot appear together".into()

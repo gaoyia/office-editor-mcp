@@ -24,6 +24,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             format!("{field} 允许范围是 {min} 到 {max}")
         }
         ErrorKind::MinValue { field, min } => format!("{field} 从 {min} 起"),
+        ErrorKind::CreateIndexOutOfRange { field, max } => format!("{field} 不能超过 {max}"),
         ErrorKind::MutuallyExclusive { a, b } => format!("{a} 和 {b} 不能同时出现"),
         ErrorKind::ContentObjectsExclusive => {
             "workbook、document、presentation 不能同时出现".into()

@@ -8,7 +8,7 @@
 
 Microsoft Word 16.0 已打开，用户确认通过。create、inspect、apply 三组都过了。O1 已放弃，见下表。本机若装了 WPS，`Word.Application` 会被抢走，测试仍直接启动 `WINWORD.EXE` 再挂 COM。A11 补过 `word/settings.xml` 之后，2026-09-26 用新 `docx-create.docx` 重跑，Word 报 `CompatibilityMode=15`。
 
-C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，跑 `pwsh -File manual-check\office\run.ps1 -Case 'docx-*'` 即可复现，逐条结果落在 `manual-check/office/out/office-results.csv`。2026-09-27 补跑 `docx-charts-remain.ps1`，Cr1–Cr6 通过。同日重跑 `docx-charts-ext.ps1`，Cx8 股价三条转柱形。2026-09-29 补跑 `docx-charts-rare.ps1`，Cq1–Cq5 通过。同日重跑 `docx-smartart.ps1`，Sa1–Sa9 通过。同日重跑 `docx-comments.ps1`，Cmt1–Cmt7、Ik1–Ik4 通过。2026-09-28 补跑 `docx-format.ps1`，Pf1–Pf6 通过。同日补跑 `docx-ole.ps1`，Ol1–Ol5 通过。同日补跑 `docx-protect.ps1`，Pr1–Pr6 通过。同日补跑 `docx-watermark.ps1`，Wm1–Wm5 通过。2026-10-09 补跑 `docx-theme.ps1`，Th1–Th5 通过。同日补跑 `docx-caption-xref.ps1`，Cp1–Cp6 通过。同日补跑 `docx-index.ps1`，Ix1–Ix6 通过。同日补跑 `docx-biblio.ps1`，Bi1–Bi6 通过。同日补跑 `docx-glossary.ps1`，Bb1–Bb6 通过。同日补跑 `docx-font-embed.ps1`，Fe1–Fe6 通过。同日补跑 `docx-page-bg.ps1`，Pb1–Pb6 通过。同日补跑 `docx-protect-hash.ps1`，Ph1–Ph5 通过。同日补跑 `docx-revision-remain.ps1`，Rm1–Rm9 通过。同日补跑 `docx-groups.ps1`，Dg1–Dg8 通过。2026-10-09 探测框内再套框，Word 16.0 只写出故事级兄弟框，Nt1 放弃。
+C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，跑 `pwsh -File manual-check\office\run.ps1 -Case 'docx-*'` 即可复现，逐条结果落在 `manual-check/office/out/office-results.csv`。2026-09-27 补跑 `docx-charts-remain.ps1`，Cr1–Cr6 通过。同日重跑 `docx-charts-ext.ps1`，Cx8 股价三条转柱形。2026-09-29 补跑 `docx-charts-rare.ps1`，Cq1–Cq5 通过。同日重跑 `docx-smartart.ps1`，Sa1–Sa9 通过。同日重跑 `docx-comments.ps1`，Cmt1–Cmt7、Ik1–Ik4 通过。2026-09-28 补跑 `docx-format.ps1`，Pf1–Pf6 通过。同日补跑 `docx-ole.ps1`，Ol1–Ol5 通过。同日补跑 `docx-protect.ps1`，Pr1–Pr6 通过。同日补跑 `docx-watermark.ps1`，Wm1–Wm5 通过。2026-10-09 补跑 `docx-theme.ps1`，Th1–Th5 通过。同日补跑 `docx-caption-xref.ps1`，Cp1–Cp6 通过。同日补跑 `docx-index.ps1`，Ix1–Ix6 通过。同日补跑 `docx-biblio.ps1`，Bi1–Bi6 通过。同日补跑 `docx-glossary.ps1`，Bb1–Bb6 通过。同日补跑 `docx-font-embed.ps1`，Fe1–Fe6 通过。同日补跑 `docx-page-bg.ps1`，Pb1–Pb6 通过。同日补跑 `docx-protect-hash.ps1`，Ph1–Ph5 通过。同日补跑 `docx-revision-remain.ps1`，Rm1–Rm9 通过。同日补跑 `docx-groups.ps1`，Dg1–Dg8 通过。2026-10-09 探测框内再套框，Word 16.0 只写出故事级兄弟框，Nt1 放弃。同日补跑 `docx-create-remain.ps1`，Cs1–Cs9 通过。
 
 | 序号 | 状态 | 结果 |
 | --- | --- | --- |
@@ -49,6 +49,7 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 | Mm1–Mm6 | ✅ | Word 16.0：`docx-math.ps1`，6 PASS / 0 FAIL。无 `scope.maths` 时只有 `mathCount`；inline 插入后 `math:1` / `kind=inline`；打开无修复且 `OMaths.Count=1`、`Type=1`；`setMath` 后仍是公式；display `Type=0`；删后 `mathCount=0` 标题还在；页眉 `mathCount=1` 且无修复。标题栏无 Repair |
 | Cc1–Cc6 | ✅ | Word 16.0：`docx-sdt.ps1`，6 PASS / 0 FAIL。无 `scope.contentControls` 时只有 `contentControlCount`；plainText 插入后 `sdt:1` / `kind=plainText`；打开无修复且 `ContentControls.Count=1`、`Type=1`；`setContentControl` 后仍是纯文本控件；下拉 `Type=4`；删后 `contentControlCount=0` 标题与原文还在；页眉 `contentControlCount=1` 且无修复。标题栏无 Repair |
 | Cf1–Cf6 | ✅ | Word 16.0：`docx-create-full.ps1`，6 PASS / 0 FAIL。两节、饼图、脚注、尾注、批注；标题栏无 Repair。`commentsExtended` 的 CT 须为 `…wordprocessingml.commentsExtended+xml` |
+| Cs1–Cs9 | ✅ | Word 16.0：`docx-create-remain.ps1`，9 PASS / 0 FAIL。链 / 书签 / DATE 与 TOC 域 / `num:1` / 行内公式 / 纯文本控件 / `tocCount=1` / 批注回复 `parent=comment:0`；打开无 Repair，COM 能看见链、书签、编号、公式、内容控件与回复 |
 | Cd1–Cd6 | ✅ | Word 16.0：`docx-container-drawing.ps1`，6 PASS / 0 FAIL。批注内柱形图；注内与批注内 `insertTextBox` 为 `InvalidField`；框内图表根计数不含该图。标题栏无 Repair |
 | Dp1–Dp5 | ✅ | Word 16.0：`docx-docprops.ps1`，5 PASS / 0 FAIL。根上 `props`、`creator=ooxp`；只改标题后面板标题是新字、公司名还在；自定义 `prop:部门`；删后名单空；错 id 为 `InvalidId`。标题栏无 Repair |
 | Pf1–Pf6 | ✅ | Word 16.0：`docx-format.ps1`，6 PASS / 0 FAIL。无 `scope.runs` 时有 `runCount`、没有名单；对齐为居中；第一 run 加粗后第二 run 红色还在；段前 12 磅、段后 6 磅。标题栏无 Repair |
@@ -78,6 +79,7 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 | C6 | 带图页眉 | 同上，默认页眉有浮动 `square`，Word 能看见 |
 | C7 | Word 打开带图产物 | 无修复；图可见 |
 | C8 | 补齐 | 用 `docs/examples/docx-create-full.json` 生成：两节、饼图、一条脚注、一条尾注、一条批注。inspect 对得上；Word 无修复。见下方 Cf 组 |
+| C9 | 剩余 | 用 `docs/examples/docx-create-remain.json` 生成：超链接、书签、域、目录、编号、公式、内容控件、批注回复。inspect 对得上；Word 无修复。见下方 Cs 组 |
 
 ## inspect
 
@@ -597,6 +599,22 @@ Word 跟踪修订下改表单元格底纹、插入空段、删除表行。`inspe
 | Cf4 | 尾注 | `endnoteCount` 为 1，注内可见文字为写入的原文 |
 | Cf5 | 批注 | `commentCount` 为 1，批注内可见文字为写入的原文 |
 | Cf6 | 打开 | Word 打开后无修复；能看见饼图、脚注、尾注与批注 |
+
+## create 补齐剩余
+
+`paragraphs[].hyperlinks` / `bookmarks` / `fields` / `maths` / `contentControls`、`comments[].replies`、`document.numberings` / `tocs` 写进同一份 create JSON。不写修订痕迹。手测脚本 `manual-check/office/cases/docx-create-remain.ps1`。
+
+| 序号 | 检查 | 通过标准 |
+| --- | --- | --- |
+| Cs1 | 超链接 | `hyperlinkCount` 为 1；给了 `scope.hyperlinks` 时 `url` 为 `https://example.com`，显示字为 `点这里` |
+| Cs2 | 书签 | `bookmarkCount` 为 1；给了 `scope.bookmarks` 时 `name` 为 `ch1` |
+| Cs3 | 域 | `fieldCount` 至少为 2（含目录域）；给了 `scope.fields` 时有一条 `instr` 含 `DATE` |
+| Cs4 | 编号 | `numberingCount` 为 1；第二段绑了 `num:1` |
+| Cs5 | 公式 | `mathCount` 为 1；给了 `scope.maths` 时 `text` 为 `x+1`，`kind` 为 `inline` |
+| Cs6 | 内容控件 | `contentControlCount` 为 1；给了 `scope.contentControls` 时 `text` 为 `控件值`，`kind` 为 `plainText` |
+| Cs7 | 目录 | `tocCount` 为 1 |
+| Cs8 | 回复 | `commentCount` 为 2；给了 `scope.comments` 时一条 `parent` 为 `comment:0`，可见字为 `回复一` |
+| Cs9 | 打开 | Word 打开后无修复；能看见链、书签、编号、公式、内容控件与批注回复 |
 
 ## 容器内 drawing
 

@@ -251,6 +251,47 @@ function Ensure-DocxCreateFull([switch]$Force) {
     return $path
 }
 
+# 链、书签、域、目录、编号、公式、内容控件与批注回复。内容与 docs/examples/docx-create-remain.json 相同。
+function Ensure-DocxCreateRemain([switch]$Force) {
+    $path = Get-OutPath 'docx-create-remain.docx'
+    if ((Test-Path $path) -and -not $Force) { return $path }
+    $req = @{
+        schemaVersion = 1; action = 'create'
+        path = $path.Replace('\', '/'); format = 'docx'
+        document = @{
+            numberings = @(@{ kind = 'decimal' })
+            paragraphs = @(
+                @{
+                    style = 'Heading1'
+                    text = '第一章'
+                    bookmarks = @(@{ name = 'ch1' })
+                    comments = @(
+                        @{
+                            text = '批注一'
+                            author = 'ooxp'
+                            initials = 'oo'
+                            replies = @(@{ text = '回复一' })
+                        }
+                    )
+                }
+                @{
+                    text = '列表项'
+                    num = 1
+                    hyperlinks = @(
+                        @{ text = '点这里'; url = 'https://example.com' }
+                    )
+                    fields = @(@{ instr = ' DATE '; result = '2026' })
+                    maths = @(@{ text = 'x+1'; kind = 'inline' })
+                    contentControls = @(@{ text = '控件值'; kind = 'plainText' })
+                }
+            )
+            tocs = @(@{ kind = 'toc' })
+        }
+    }
+    Invoke-OoxpRequest $req 'docx-create-remain' | Out-Null
+    return $path
+}
+
 function Ensure-PptxCreate([switch]$Force) {
     $path = Get-OutPath 'pptx-create.pptx'
     if ((Test-Path $path) -and -not $Force) { return $path }

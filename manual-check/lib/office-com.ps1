@@ -149,7 +149,9 @@ function Ensure-MsWord([string]$seedDoc) {
     $p = Wait-OfficeProcess 'WINWORD' 40
     $app = Bind-OfficeApp $p 'OpusApp' '_WwG'
     $app.DisplayAlerts = 0
+    try { $app.AskToUpdateLinks = $false } catch {}
     try { $app.Options.ConfirmConversions = $false } catch {}
+    try { $app.Options.UpdateLinksAtOpen = $false } catch {}
     try { $app.Options.BackgroundSave = $false } catch {}
     Write-Log ("Word Name=$($app.Name) Ver=$($app.Version) Path=$($app.Path) Pid=$($p.Id)")
     $global:OoxpWord = $app
