@@ -899,6 +899,7 @@ mod tests {
                 "pictureCount",
                 "textBoxCount",
                 "connectorCount",
+                "inkCanvasCount",
                 "footnoteCount",
                 "endnoteCount",
                 "commentCount",
@@ -960,6 +961,7 @@ mod tests {
                 "pictureCount",
                 "textBoxCount",
                 "connectorCount",
+                "inkCanvasCount",
                 "runCount"
             ]
         );
@@ -977,6 +979,7 @@ mod tests {
                 "pictureCount",
                 "textBoxCount",
                 "connectorCount",
+                "inkCanvasCount",
                 "runCount"
             ]
         );

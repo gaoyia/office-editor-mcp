@@ -26,7 +26,8 @@ ECMA-376 示例里常见的 Strict 命名空间（`http://purl.oclc.org/ooxml/..
 xlsx 另有只读动作 `exportMedia`：按图 id 把媒体部件原字节写到本地。
 xlsx 的 `exportMedia` 认工作表图 id、页眉页脚图 id 与 OLE id：图 id 写出 `/xl/media/…`，OLE id 写出 `/xl/embeddings/…`。
 pptx 的 `exportMedia` 认幻灯片图 id、备注图 id、批注内图 id、视频 id、音频 id 与 OLE id：图 / 视频 / 音频写出 `/ppt/media/…`，OLE 写出 `/ppt/embeddings/…`。
-docx 的 `exportMedia` 认图 id、OLE id 与嵌入字体 id：图写出 `/word/media/…`，OLE 写出 embeddings 部件，`font:{n}` 写出 `/word/fonts/…`。
+docx 的 `exportMedia` 认图 id、OLE id、墨迹画布 id 与嵌入字体 id：图写出 `/word/media/…`，OLE 写出 embeddings 部件，
+墨迹画布写出 `/word/ink/…`，`font:{n}` 写出 `/word/fonts/…`。
 docx 与 pptx 另有 `exportChartData`：按图表 id 把 embedding 工作簿原字节写到本地。它们不改上述三个动作的语义，也不把字节塞进 inspect 树。
 xlsx 对 `exportChartData` 仍报 `InvalidField`（图表数据就在本工作簿单元格里）。
 
@@ -126,15 +127,15 @@ create 本期不写页眉页脚，也不写 `kind: chartsheet`，也不写列宽
 
 主文档由根关系里 `/officeDocument` 指向，常见路径 `/word/document.xml`。
 inspect 读该部件里的 `w:p`，返回大纲和按范围截断的段落；并始终列出页眉、页脚容器、各节页面与页眉页脚属性，以及每节是否链接到前一节。
-文档根始终带正文 `pictureCount`、`textBoxCount`、`connectorCount`、`footnoteCount`、`endnoteCount`、`commentCount`、`chartCount`、
+文档根始终带正文 `pictureCount`、`textBoxCount`、`connectorCount`、`inkCanvasCount`、`footnoteCount`、`endnoteCount`、`commentCount`、`chartCount`、
 `smartArtCount`、`oleObjectCount`、`tableCount`、`revisionCount`、`hyperlinkCount`、`bookmarkCount`、`fieldCount`、`tocCount`、
 `captionCount`、`crossRefCount`、`indexCount`、`indexEntryCount`、`sourceCount`、`citationCount`、`bibliographyCount`、
 `docPartCount`、`mathCount`、`contentControlCount`、`numberingCount`、`styleCount`、`embeddedFontCount`，
 以及整篇 `mirrorMargins` / `gutterAtTop`、`props`、`protection`、`theme` 与 `fontEmbed`、`pageBackground`。
-页眉页脚容器始终带前两项与 `connectorCount`、`chartCount`、`smartArtCount`、`oleObjectCount`、`tableCount`、`revisionCount`、
+页眉页脚容器始终带前两项与 `connectorCount`、`inkCanvasCount`、`chartCount`、`smartArtCount`、`oleObjectCount`、`tableCount`、`revisionCount`、
 `hyperlinkCount`、`bookmarkCount`、`fieldCount`、`mathCount`、`contentControlCount`。
-`scope.pictures` / `scope.textBoxes` / `scope.connectors` 为 true 时列出页眉页脚图、框或连接线；同时给了正文切片则段落上也列出。
-组合本身不进树，组合里的图 / 框 / 连接线展开。`scope.textBoxContent` 再展开框内段落。`scope.notes` 为 true 时列出用户脚注、尾注与分隔符；注内段落一次倒出。
+`scope.pictures` / `scope.textBoxes` / `scope.connectors` / `scope.inkCanvases` 为 true 时列出页眉页脚图、框、连接线或墨迹画布；同时给了正文切片则段落上也列出。
+组合本身不进树，组合里的图 / 框 / 连接线 / 墨迹画布展开。`scope.textBoxContent` 再展开框内段落。`scope.notes` 为 true 时列出用户脚注、尾注与分隔符；注内段落一次倒出。
 `scope.comments` 为 true 时列出批注；批注内段落一次倒出。`scope.charts` 为 true 时列出正文、页眉页脚、文本框、脚注、尾注与批注里的嵌入图表；系列一次倒出。
 `scope.smartArt` 为 true 时列出正文、页眉页脚、文本框、脚注、尾注与批注里的 SmartArt；可见点一次倒出。`scope.oleObjects` 为 true 时列出正文与页眉页脚里的嵌入对象。
 `scope.tables` 为 true 时列出正文与页眉页脚里的表；单元格段落一次倒出。`scope.revisions` 为 true 时列出正文与页眉页脚里的 run 级插入、删除与属性修订。
@@ -155,10 +156,12 @@ apply 可改被点名段落的可见文本（主文档、页眉页脚、框内�
 也可在正文段后插入分节符或删除非末节，也可插入或删除目录块，也可插入题注与交叉引用（不在库里求 SEQ / REF 的值），也可插入书目源、引文与书目块（不在库里按样式表排版），也可插删构建基块并把基块正文复制进主文档，也可插改删 OMML 公式，也可插改删内容控件。
 页眉、页脚、正文、注和批注里的 DrawingML 图片可换、插、删，并可改尺寸与绕排。
 文本框可插、删（不含注内、批注内与框内再套框；Word 16.0 不会把框写进另一个 `w:txbxContent`），可改尺寸、绕排、填色、描边、横竖排与链接。连接线可插、删（不含注内、批注内与框内）。
+墨迹画布可插、换、删（不含注内、批注内与框内），并可按 id 导出 InkML。
 浮动图 / 框 / 连接线可组合或解开。脚注、尾注可插、删，可改编号格式（整篇同时写 `settings.xml` 与各节 `sectPr`，Word 读节属性）。批注可插、删、回复、改字、改作者与完成标记。
 嵌入图表可插、删、改标题、改系列数据、改类型与图例，并可改宿主 drawing 的尺寸与绕排；宿主可以是正文、页眉页脚、框内、注内或批注内段落。圆环、雷达、气泡与组合图走同一套 op；透视图表只改标题、图例、标签、删除与尺寸绕排，不改数。
 股价、曲面、chartex、次轴、趋势线、误差线除删除与尺寸绕排外报 `NotImplemented`。SmartArt 可插、删、改各点文字、增删点、改配色与快速样式，并可改宿主 drawing 的尺寸与绕排；宿主范围与图表相同。
-三种格式都可改文件属性。docx 还可开关无密码的限制编辑与只读推荐。`exportMedia` 按图 id 写出 `/word/media/…` 原字节，按 OLE id 写出 embeddings 原字节。
+三种格式都可改文件属性。docx 还可开关无密码的限制编辑与只读推荐。`exportMedia` 按图 id 写出 `/word/media/…` 原字节，按 OLE id 写出 embeddings 原字节，
+按墨迹画布 id 写出 `/word/ink/…` 原字节。
 `exportChartData` 按图表 id 写出 embedding xlsx 原字节。不整篇从 JSON 重建。
 create 生成最小 Transitional 包，含 `styles.xml`（Normal 与 Heading1–3）和 `settings.xml`（`compatibilityMode` 为 15），
 给了 `paragraphs[].sectionType` 时可写多节，给了 `paragraphs[].charts` 时复用 `insertChart`，
@@ -310,6 +313,7 @@ xlsx 的 `sheets[].pictures` 复用 `insertPicture`，`sheets[].charts` 复用 `
 `sheets[].comments` 复用 `insertComment`（不写回复），`sheets[].hyperlinks` 复用 `insertHyperlink`，
 `sheets[].textBoxes` / `shapes` / `connectors` / `smartArts` 复用对应 insert。
 docx 段落与页眉页脚上的 `pictures` 同样复用插图，`charts` 复用 `insertChart`（数据写 embedding），`oleObjects` 复用 `insertOle`，
+`inkCanvases` 复用 `insertInkCanvas`，
 `footnote` / `endnote` / `comments` 复用对应 insert，`comments[].replies` 复用 `replyComment`，
 `hyperlinks` / `bookmarks` / `fields` / `maths` / `contentControls` 复用对应 insert。
 `document.numberings` 复用 `insertNumbering`，`paragraphs[].num` 复用 `setParaNumbering`。`document.tocs` 复用 `insertToc`。
@@ -325,9 +329,10 @@ docx 的 `document.protection` 复用 `setProtection`。docx 的 `document.water
 
 ### exportMedia
 
-调用方给出源 docx、xlsx 或 pptx、图 id、docx / xlsx / pptx OLE id、pptx 视频 / 音频 id 或 docx 嵌入字体 id 和本地目标路径。
+调用方给出源 docx、xlsx 或 pptx、图 id、docx / xlsx / pptx OLE id、docx 墨迹画布 id、pptx 视频 / 音频 id 或 docx 嵌入字体 id 和本地目标路径。
 库打开包，图 id 按 `a:blip` 的关系写出媒体部件；docx 带 `asvg:svgBlip` 时改走 SVG 关系。
 OLE id 按 oleObject 或 package 关系写出 embeddings 部件；
+docx 墨迹画布 id 按 customXml 关系写出 InkML 部件；
 docx `font:{n}` 按 fontTable 关系写出 odttf 原字节。包不写回。
 
 ### exportChartData

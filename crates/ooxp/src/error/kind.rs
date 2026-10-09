@@ -105,6 +105,12 @@ pub(crate) enum IdReason {
     DocxCxnPrefix,
     /// 段落或容器 id，缺少 /cxn:…
     DocxCxnContainer,
+    /// docx 墨迹画布 id 必须是 {段落}/ink:…
+    DocxInkPrefix,
+    /// 段落或容器 id，缺少 /ink:…
+    DocxInkContainer,
+    DocxInkIndexNotInt,
+    DocxInkIndexFromOne,
     /// docx 的 groupShapes 必须用 docx:document 或页眉/页脚容器
     GroupNeedsDocument,
     /// xlsx 文本框 id 必须是 sheet:{name}/sp:…
@@ -718,6 +724,7 @@ define_error_kinds! {
     InvalidPicWrap => vec![Self::InvalidPicWrap],
     InvalidPicAlign => vec![Self::InvalidPicAlign],
     InvalidImageFile => vec![Self::InvalidImageFile],
+    InvalidInkMl => vec![Self::InvalidInkMl],
     InvalidMediaFile => vec![Self::InvalidMediaFile],
     NeedsPptxSectionList => vec![Self::NeedsPptxSectionList],
     SlideNotInPptxSection => vec![Self::SlideNotInPptxSection],
@@ -809,6 +816,7 @@ define_error_kinds! {
     SmartArtAsstOnList => vec![Self::SmartArtAsstOnList],
     SmartArtListDepth => vec![Self::SmartArtListDepth],
     OleNotFound { id: String } => vec![Self::OleNotFound { id: "para:1/ole:_1".into() }],
+    InkNotFound { id: String } => vec![Self::InkNotFound { id: "para:1/ink:9".into() }],
     SlicerNotFound { id: String } => vec![Self::SlicerNotFound { id: "sheet:Sheet1/slicer:2".into() }],
     SlicerFieldNotFound { name: String } => vec![Self::SlicerFieldNotFound { name: "产品".into() }],
     ConnectionNotFound { id: String } => vec![Self::ConnectionNotFound { id: "connection:1".into() }],
@@ -1154,6 +1162,10 @@ impl IdReason {
             Self::InsertNeedsHostPara,
             Self::DocxCxnPrefix,
             Self::DocxCxnContainer,
+            Self::DocxInkPrefix,
+            Self::DocxInkContainer,
+            Self::DocxInkIndexNotInt,
+            Self::DocxInkIndexFromOne,
             Self::GroupNeedsDocument,
             Self::SheetSpPrefix,
             Self::SheetSpContainer,
@@ -1566,6 +1578,7 @@ impl ErrorKind {
             | Self::InvalidPicWrap
             | Self::InvalidPicAlign
             | Self::InvalidImageFile
+            | Self::InvalidInkMl
             | Self::InvalidMediaFile
             | Self::NeedsPptxSectionList
             | Self::SlideNotInPptxSection
@@ -1782,6 +1795,7 @@ impl ErrorKind {
             | Self::SmartArtNotFound { .. }
             | Self::SmartArtPointNotFound { .. }
             | Self::OleNotFound { .. }
+            | Self::InkNotFound { .. }
             | Self::SlicerNotFound { .. }
             | Self::ConnectionNotFound { .. }
             | Self::ExternalLinkNotFound { .. }

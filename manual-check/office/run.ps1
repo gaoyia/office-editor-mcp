@@ -70,6 +70,7 @@ $order = @(
     'docx-picture'
     'docx-body-picture'
     'docx-svg'
+    'docx-ink'
     'docx-textbox'
     'docx-notes'
     'docx-comments'

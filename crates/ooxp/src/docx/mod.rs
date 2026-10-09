@@ -13,6 +13,7 @@ mod format;
 mod glossary;
 mod group;
 mod hf;
+mod ink;
 mod inspect;
 mod link;
 mod math;

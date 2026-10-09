@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "action": "create",
+  "path": "note.ink.docx",
+  "document": {
+    "paragraphs": [
+      { "style": "Heading1", "text": "标题" },
+      { "text": "hello", "inkCanvases": [{ "file": "ink.xml" }] }
+    ]
+  }
+}

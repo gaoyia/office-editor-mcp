@@ -145,6 +145,12 @@
             "$ref": "#/$defs/docxOleCreate"
           }
         },
+        "inkCanvases": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/docxInkCreate"
+          }
+        },
         "footnote": {
           "type": "string"
         },
@@ -253,6 +259,12 @@
             "$ref": "#/$defs/docxOleCreate"
           }
         },
+        "inkCanvases": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/docxInkCreate"
+          }
+        },
         "footnote": {
           "type": "string"
         },
@@ -316,6 +328,27 @@
         "file": {
           "type": "string",
           "minLength": 1
+        }
+      }
+    },
+    "docxInkCreate": {
+      "type": "object",
+      "required": [
+        "file"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "file": {
+          "type": "string",
+          "minLength": 1
+        },
+        "cx": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "cy": {
+          "type": "integer",
+          "minimum": 1
         }
       }
     },
@@ -3312,6 +3345,75 @@
       "properties": {
         "op": {
           "const": "deleteOle"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "insertInkCanvasOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "file"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "insertInkCanvas"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "file": {
+          "type": "string",
+          "minLength": 1
+        },
+        "cx": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "cy": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "replaceInkCanvasOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "file"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "replaceInkCanvas"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "file": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "deleteInkCanvasOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "deleteInkCanvas"
         },
         "id": {
           "type": "string",

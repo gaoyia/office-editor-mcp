@@ -205,6 +205,7 @@ fn inspect_counts_without_list() {
             "pictureCount",
             "textBoxCount",
             "connectorCount",
+            "inkCanvasCount",
             "footnoteCount",
             "endnoteCount",
             "commentCount",

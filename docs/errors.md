@@ -566,6 +566,7 @@
   - `setSmartArtPos` / `setSmartArtWrap`
   - `insertOle` / `deleteOle`
   - `insertWatermark` / `deleteWatermark`
+  - `insertInkCanvas` / `replaceInkCanvas` / `deleteInkCanvas`
   - 表格结构 op、修订 op、书签 op、域 op
   - `insertCaption` / `deleteCaption` / `insertCrossRef` / `deleteCrossRef`
   - `insertIndex` / `deleteIndex` / `insertIndexEntry` / `deleteIndexEntry`
@@ -611,6 +612,7 @@
   - `setPictureWrap`、`setPictureAnchor`、`setChartWrap`、`setChartAnchor`
   - `insertChartSheet`、`deleteChartSheet`
   - `insertWatermark` / `deleteWatermark`
+  - `insertInkCanvas` / `replaceInkCanvas` / `deleteInkCanvas`
 - pptx 的 `insertComment` 的 `id` 必须是 `slide:{n}`
 - 对其余批注 op，id 必须是 `slide:{n}/comment:{guid}`（回复则再加 `/reply:{guid}`）
 - docx / pptx 上发 `setChartAnchor` 报 `InvalidField`
@@ -676,6 +678,13 @@
 - `deleteOle` 的 `id` 必须是 OLE id
 - 空 `file` 报 `InvalidField`
 - 读不到文件报 `Io`
+- 找不到墨迹画布时，`replaceInkCanvas` / `deleteInkCanvas` 报 `IdNotFound`
+- `insertInkCanvas` 的 `id` 必须是正文或页眉页脚段落 id
+- 对注内或批注内段落发该 op 报 `InvalidField`
+- 对框内段落、图 id、墨迹 id 或容器 id 发该 op 报 `InvalidId`
+- `replaceInkCanvas` / `deleteInkCanvas` 的 `id` 必须是墨迹画布 id
+- 根本地名不是 `ink` 或命名空间不是 InkML 报 `InvalidField`
+- xlsx / pptx 上发 `insertInkCanvas` / `replaceInkCanvas` / `deleteInkCanvas` 报 `InvalidField`
 - 找不到水印时，`deleteWatermark` 报 `IdNotFound`
 - `insertWatermark` 的 id 不是 `docx:document` 报 `InvalidId`
 - `deleteWatermark` 的 id 不是水印 id 也不是 `docx:document` 报 `InvalidId`
@@ -876,8 +885,8 @@
 - 目标段落含本期收入的行内内容控件时 `setParaText` 报 `NotImplemented`
 - 带 `w:dataBinding`、重复节改值、组合控件改值，或块级控件里有表，报 `NotImplemented`
 - 控件落在带分节符且删掉后该段会变空的段落上时，`deleteContentControl` 报 `NotImplemented`
-- `exportMedia` 找不到图、嵌入对象或媒体报 `IdNotFound`
-- docx 的 `id` 可以是图 id 或 OLE id
+- `exportMedia` 找不到图、嵌入对象、墨迹画布或媒体报 `IdNotFound`
+- docx 的 `id` 可以是图 id、OLE id 或墨迹画布 id
 - pptx 的 `id` 可以是图 id（含批注内图）、视频 / 音频 id 或 OLE id
 - xlsx 只认图 id
 - 不是这些 id 报 `InvalidId`

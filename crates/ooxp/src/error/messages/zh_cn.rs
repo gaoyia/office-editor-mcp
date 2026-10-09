@@ -149,12 +149,18 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::TxbxIndexFromOne => "txbx:index 从 1 起".into(),
             IdReason::SetParaOnBox => "setParaText 的 id 必须是段落 id，不能是文本框 id".into(),
             IdReason::InsertNeedsHostPara => {
-                "insertTextBox / insertConnector 的 id 必须是宿主段落 id".into()
+                "insertTextBox / insertConnector / insertInkCanvas 的 id 必须是宿主段落 id".into()
             }
             IdReason::DocxCxnPrefix => "docx 连接线 id 必须是段落 id 加上 /cxn:…".into(),
             IdReason::DocxCxnContainer => {
                 "段落或容器 id 必须带 /cxn:…（该 id 本身不是连接线）".into()
             }
+            IdReason::DocxInkPrefix => "docx 墨迹画布 id 必须是段落 id 加上 /ink:…".into(),
+            IdReason::DocxInkContainer => {
+                "段落或容器 id 必须带 /ink:…（该 id 本身不是墨迹画布）".into()
+            }
+            IdReason::DocxInkIndexNotInt => "ink:index 后面必须是正整数".into(),
+            IdReason::DocxInkIndexFromOne => "ink:index 从 1 起".into(),
             IdReason::GroupNeedsDocument => {
                 "docx 的 groupShapes 的 id 必须是 docx:document 或页眉/页脚容器".into()
             }
@@ -848,6 +854,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         }
         ErrorKind::SmartArtNotFound { id } => format!("找不到 SmartArt：{id}"),
         ErrorKind::OleNotFound { id } => format!("找不到嵌入对象：{id}"),
+        ErrorKind::InkNotFound { id } => format!("找不到墨迹画布：{id}"),
         ErrorKind::SlicerNotFound { id } => format!("找不到切片器：{id}"),
         ErrorKind::SlicerFieldNotFound { name } => {
             format!("切片器字段对不上源：{name}")
@@ -902,6 +909,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::InvalidPicAlign => "alignH 只允许 left/center/right，alignV 只允许 top/center/bottom".into(),
         ErrorKind::InvalidImageFile => {
             "file 不是本库认的图片（PNG、JPEG、GIF 或 BMP；Word 还认 SVG）".into()
+        }
+        ErrorKind::InvalidInkMl => {
+            "file 不是 InkML（根元素必须是 InkML 命名空间下的 ink）".into()
         }
         ErrorKind::InvalidMediaFile => {
             "file 不是本库认的媒体（insertVideo 认 MP4，insertAudio 认 WAV）".into()

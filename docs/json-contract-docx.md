@@ -38,9 +38,11 @@ docx 可用 `setProtection` 开关无密码的限制编辑与只读推荐。xlsx
 docx 可用 `insertWatermark` / `deleteWatermark` 读写页眉里的 DrawingML 水印。
 正文与页眉页脚里的浮动图 / 文本框 / 连接线可用 `groupShapes` / `ungroup` 组合或解开；
 Word 写出的连接线可进 inspect，并可用 `insertConnector` / `deleteConnector` 增删。
+正文与页眉页脚里的墨迹画布（非批注）可进 inspect，并可用 `insertInkCanvas` / `replaceInkCanvas` / `deleteInkCanvas` 增删换，
+也可按墨迹 id `exportMedia`。不要和批注里的 `kind: ink` 混。
 组合本身不进树。docx 可用 `setThemeColors` / `setThemeFonts` 改主文档 theme 部件的配色与字体方案。
 三种格式都可用 `setProps` / `setCustomProp` / `deleteCustomProp` 改文件属性。
-`create` 可在正文和页眉页脚上写 DrawingML 图，也可写文本框、SmartArt、图表、脚注、尾注、批注与回复、超链接、书签、域、公式、内容控件；根上可写编号定义与目录块；
+`create` 可在正文和页眉页脚上写 DrawingML 图，也可写文本框、SmartArt、图表、墨迹画布、脚注、尾注、批注与回复、超链接、书签、域、公式、内容控件；根上可写编号定义与目录块；
 页眉页脚允许 `default` / `even` / `first`；不写修订痕迹。
 字段见下文 create。嵌入图表不是 `pic:pic`：根上始终有 `chartCount`；给了 `scope.charts` 才列出名单，并可 apply。
 SmartArt 不是 `pic:pic`：根上始终有 `smartArtCount`；给了 `scope.smartArt` 才列出名单，并可 apply。
@@ -66,6 +68,8 @@ apply 用 `setHeaderFooterLink` 断开或重新链接；用 `insertHeaderFooter`
 | 页眉/页脚文本框 | `{页眉或页脚段落 id}/txbx:{docPrId}` | `header:default:1/para:AA/txbx:8` |
 | 正文连接线 | `{段落 id}/cxn:{docPrId}` 或 `{段落 id}/cxn:index:{k}` | `para:3F2A1B00/cxn:8` |
 | 页眉/页脚连接线 | `{页眉或页脚段落 id}/cxn:{docPrId}` | `header:default:1/para:AA/cxn:8` |
+| 正文墨迹画布 | `{段落 id}/ink:{cNvPrId}` 或 `{段落 id}/ink:index:{k}` | `para:3F2A1B00/ink:9` |
+| 页眉/页脚墨迹画布 | `{页眉或页脚段落 id}/ink:{cNvPrId}` | `header:default:1/para:AA/ink:9` |
 | 框内段落 | `{框 id}/para:{paraId}` 或 `{框 id}/para:index:{k}` | `para:3F2A1B00/txbx:8/para:00FF00AA` |
 | 框内图 | `{框内段落 id}/pic:{docPrId}` | `para:3F2A1B00/txbx:8/para:00FF00AA/pic:1` |
 | 框内图表 | `{框内段落 id}/chart:{docPrId}` | `para:3F2A1B00/txbx:8/para:00FF00AA/chart:1` |
@@ -383,6 +387,20 @@ Word 16.0 把连接线写成 `wps:wsp`，不是独立 `cxnSp`。无 `txbx` 的�
 注内、批注内、框内本期不编连接线；对这些容器发 `insertConnector` 报 `InvalidField` 或 `InvalidId`（见 apply）。
 `insertConnector` 的 `id` 必须是正文或页眉页脚段落 id。`deleteConnector` 的 `id` 必须是连接线 id。
 `groupShapes` 的 `id` 必须是 `docx:document` 或页眉/页脚容器 id。`ungroup` 的 `id` 必须是该组合内一个图 / 文本框 / 连接线 id。
+`groupShapes` 不收墨迹画布成员；对墨迹 id 发 `groupShapes` 报 `InvalidId`。
+
+墨迹画布只认 DrawingML 里本地名为 `contentPart` 的节点，且关系目标部件 Content Type 为 `application/inkml+xml`，
+或该部件根元素本地名为 `ink`、命名空间为 `http://www.w3.org/2003/InkML`。
+空 `wpc`（只有 `bg` / `whole`）不算。批注里的 `inkml:ink` / `wpi:ink` 仍只标 `kind: ink`，不进 `inkCanvases`。
+`{cNvPrId}` 优先取该 `contentPart` 的 `cNvPr/@id`；没有则用外层 `wp:docPr/@id`；再没有则 `ink:index:{k}`，
+树上 `"stable": false`。`k` 只在该宿主段内从 1 计。页眉页脚墨迹挂在它所在的页眉或页脚段落上，名单出现在该容器的 `inkCanvases` 上。
+正文墨迹只收主文档段落的子孙，遇 `w:txbxContent` 停住。组合 `wpg:wgp` 本身不进树，里面符合条件的 contentPart 展开。
+`mc:AlternateContent` 只进 Choice。注内、批注内、框内本期不编。
+`insertInkCanvas` 的 `id` 必须是正文或页眉页脚段落 id；对注内或批注内段落报 `InvalidField`，对框内段落报 `InvalidId`。
+`replaceInkCanvas` / `deleteInkCanvas` 的 `id` 必须是墨迹画布 id。xlsx / pptx 上这些 op 与 `scope.inkCanvases` 报 `InvalidField`。
+写入只走 `wpc` 画布加 `w14:contentPart` 加 InkML 部件；独立 `wpi` / `wordprocessingInk` 不作为写入路径。
+inspect 若文件里已有这种 markup，仍认 `contentPart` 加 InkML。
+不把 InkML 原文摊进树。
 
 「宿主段落遇到框就停住」仍成立，否则外层 `paraCount` 会把框内段算进去。边界按下面两条划：
 
@@ -391,7 +409,7 @@ Word 16.0 把连接线写成 `wps:wsp`，不是独立 `cxnSp`。无 `txbx` 的�
   拿框内 `paraId` 当正文 `para:` 发 apply，报 `IdNotFound`。框内段落必须用带框前缀的 id。
 - 遇到 `mc:AlternateContent` 只走第一个 `mc:Choice`；没有 `mc:Choice` 才走 `mc:Fallback`。两支都走会把同一份内容读出两遍，也会让 apply 只改到其中一支、另一支不同步。
   这条对 `paraCount`、`outline`、`paragraphs`、`text`、`runCount`、`runs`、页眉页脚、`pictureCount`、`pictures`、`textBoxCount`、
-  `textBoxes`、`connectorCount`、`connectors`、`chartCount`、`charts`、`smartArtCount`、`smartArts`、`oleObjectCount`、
+  `textBoxes`、`connectorCount`、`connectors`、`inkCanvasCount`、`inkCanvases`、`chartCount`、`charts`、`smartArtCount`、`smartArts`、`oleObjectCount`、
   `oleObjects`、`watermarkCount`、`watermarks` 和 apply 一律适用。
 
 Word 2010 以后插入文本框、图表、SmartArt 都是 `mc:AlternateContent` 套 `w:txbxContent` 的写法，所以这两条不是边角情况。
@@ -418,6 +436,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
     "pictures": true,
     "textBoxes": true,
     "connectors": true,
+    "inkCanvases": true,
     "notes": true,
     "comments": true,
     "charts": true,
@@ -456,6 +475,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
     - `pictureCount`
     - `textBoxCount`
     - `connectorCount`
+    - `inkCanvasCount`
     - `footnoteCount`
     - `endnoteCount`
     - `commentCount`
@@ -545,6 +565,14 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   - 省略或 `false` 则这些节点上都没有 `connectors`
   - 不依赖 `headerFooter`
   - xlsx / pptx 也认此键，见各自分册
+- **`scope.inkCanvases`**（否）
+  - 为 `true` 时给每个页眉、页脚节点填 `inkCanvases`
+  - 若同时给了 `from` 与 `maxParas`，切片里每段也填 `inkCanvases`
+  - 省略或 `false` 则这些节点上都没有 `inkCanvases`
+  - 不依赖 `headerFooter`
+  - 根上不挂正文 `inkCanvases`
+  - 注节点与批注节点不填此名单
+  - xlsx / pptx 上出现此键报 `InvalidField`
 - **`scope.textBoxContent`**（否）
   - 为 `true` 且该节点已有 `textBoxes` 时，每个框再带全部 `paragraphs`
   - 若同时 `pictures: true`，框内段再带 `pictures`
@@ -673,12 +701,13 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   - 省略或 `false` 则这些段只有 `runCount`，没有名单
 
 `from` / `maxParas` 只切正文，`headerFooter` 只管页眉页脚段落，`pictures` 只展开图名单，`textBoxes` 只展开框名单，`connectors` 只展开连接线名单，
+`inkCanvases` 只展开墨迹画布名单，
 `notes` 只展开脚注尾注，`comments` 只展开批注，`charts` 只展开图表名单，`smartArt` 只展开图示名单，`oleObjects` 只展开嵌入对象名单，`watermarks` 只展开水印名单，
 `tables` 只展开表名单，`revisions` 只展开修订名单，`hyperlinks` 只展开超链接名单，`bookmarks` 只展开书签名单，`fields` 只展开域名单，`tocs` 只展开目录名单，
 `captions` 只展开题注名单，`crossRefs` 只展开交叉引用名单，`indexes` 只展开索引名单，`indexEntries` 只展开索引项名单，`sources` 只展开书目源名单，
 `citations` 只展开引文名单，`bibliographies` 只展开书目块名单，`docParts` 只展开构建基块名单，`embeddedFonts` 只展开嵌入字体名单，`maths` 只展开公式名单，
 `contentControls` 只展开内容控件名单，`numbering` 只展开编号实例名单，`styles` 只展开样式定义名单，`runs` 只展开已列出段落上的 run 名单。
-这些键彼此独立，可只开一边。只要想看正文段落，就必须同时给 `from` 和 `maxParas`。不默认把全文倒出来。正文图、正文框与正文连接线名单只出现在已切出的段落上，不挂到文档根。
+这些键彼此独立，可只开一边。只要想看正文段落，就必须同时给 `from` 和 `maxParas`。不默认把全文倒出来。正文图、正文框、正文连接线与正文墨迹画布名单只出现在已切出的段落上，不挂到文档根。
 正文图表名单、正文 SmartArt 名单、正文 OLE 名单、水印名单、正文表名单、正文修订名单、正文超链接名单、正文书签名单、正文域名单、目录名单、题注名单、交叉引用名单、索引名单、索引项名单、书目源名单、引文名单、书目块名单、
 构建基块名单、嵌入字体名单、公式名单、内容控件名单、编号实例名单与样式定义名单挂在文档根上，不挂在段落上。
 `from` 超出 `paraCount` 时正文 `paragraphs` 为空数组，`truncated` 为 `false`，不报错。
@@ -690,11 +719,11 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
 样式定义通常不多，给了 `styles: true` 就返回全部样式。已列出的段落始终有 `runCount`；给了 `runs: true` 才带 `runs`。
 xlsx 的 `scope` 里出现 `textBoxContent`、`notes`、`oleObjects`、`watermarks`、`tables`、`timing`、`revisions`、`hyperlinks`、
 `bookmarks`、`fields`、`tocs`、`captions`、`crossRefs`、`indexes`、`indexEntries`、`sources`、`citations`、`bibliographies`、
-`docParts`、`maths`、`contentControls`、`numbering`、`styles` 或 `runs` 报 `InvalidField`。
+`docParts`、`maths`、`contentControls`、`numbering`、`styles`、`runs` 或 `inkCanvases` 报 `InvalidField`。
 xlsx 认 `scope.pictures`、`scope.charts`、`scope.headerFooter`、`scope.comments`、`scope.textBoxes` 与 `scope.smartArt`。
 pptx 的 `scope` 里出现 `headerFooter`、`textBoxes`、`textBoxContent`、`revisions`、`hyperlinks`、`bookmarks`、`fields`、`tocs`、
 `captions`、`crossRefs`、`indexes`、`indexEntries`、`sources`、`citations`、`bibliographies`、`docParts`、`maths`、
-`contentControls`、`numbering`、`styles`、`oleObjects`、`watermarks` 或 `runs` 报 `InvalidField`。
+`contentControls`、`numbering`、`styles`、`oleObjects`、`watermarks`、`runs` 或 `inkCanvases` 报 `InvalidField`。
 pptx 认 `scope.pictures`、`scope.charts`、`scope.smartArt`、`scope.tables`、`scope.notes`、`scope.comments` 与 `scope.timing`。
 xlsx / pptx 的 `scope.tables` 不是同一件事：xlsx 仍拒绝；pptx 展开幻灯片 DrawingML 表；docx 展开 `w:tbl`。
 只给 `textBoxContent`、不给 `textBoxes` 报 `InvalidField`。xlsx 的 `scope` 里出现 `textBoxContent` 仍报 `InvalidField`。
@@ -711,6 +740,7 @@ xlsx / pptx 的 `scope.tables` 不是同一件事：xlsx 仍拒绝；pptx 展开
   "pictureCount": 0,
   "textBoxCount": 0,
   "connectorCount": 0,
+  "inkCanvasCount": 0,
   "footnoteCount": 0,
   "endnoteCount": 0,
   "commentCount": 0,
@@ -757,6 +787,7 @@ xlsx / pptx 的 `scope.tables` 不是同一件事：xlsx 仍拒绝；pptx 展开
       "pictureCount": 0,
       "textBoxCount": 0,
       "connectorCount": 0,
+      "inkCanvasCount": 0,
       "chartCount": 0,
       "smartArtCount": 0,
       "oleObjectCount": 0,
@@ -781,6 +812,7 @@ xlsx / pptx 的 `scope.tables` 不是同一件事：xlsx 仍拒绝；pptx 展开
       "pictureCount": 0,
       "textBoxCount": 0,
       "connectorCount": 0,
+      "inkCanvasCount": 0,
       "chartCount": 0,
       "smartArtCount": 0,
       "oleObjectCount": 0,
@@ -880,7 +912,8 @@ xlsx / pptx 的 `scope.tables` 不是同一件事：xlsx 仍拒绝；pptx 展开
       "stable": true,
       "pictureCount": 0,
       "textBoxCount": 0,
-      "connectorCount": 0
+      "connectorCount": 0,
+      "inkCanvasCount": 0
     },
     {
       "id": "para:index:2",
@@ -890,7 +923,8 @@ xlsx / pptx 的 `scope.tables` 不是同一件事：xlsx 仍拒绝；pptx 展开
       "stable": false,
       "pictureCount": 0,
       "textBoxCount": 0,
-      "connectorCount": 0
+      "connectorCount": 0,
+      "inkCanvasCount": 0
     }
   ]
 }
@@ -901,7 +935,7 @@ xlsx / pptx 的 `scope.tables` 不是同一件事：xlsx 仍拒绝；pptx 展开
 - 主文档部件（根关系里 `/officeDocument` 那条，常见路径 `/word/document.xml`）始终读。页眉、页脚部件按节引用与继承解析后读。
   脚注、尾注、批注部件按主文档关系去读（常见 `/word/footnotes.xml`、`/word/endnotes.xml`、`/word/comments.xml`）；没有对应关系则对应计数为 0。
   `commentsExtended`、`people`、`commentsIds`、`commentsExtensible` 有则读，没有不报错。
-- 文档根字段顺序：`id`、`paraCount`、`pictureCount`、`textBoxCount`、`connectorCount`、`footnoteCount`、`endnoteCount`、`commentCount`、
+- 文档根字段顺序：`id`、`paraCount`、`pictureCount`、`textBoxCount`、`connectorCount`、`inkCanvasCount`、`footnoteCount`、`endnoteCount`、`commentCount`、
   `chartCount`、`smartArtCount`、`oleObjectCount`、`watermarkCount`、`tableCount`、`revisionCount`、`hyperlinkCount`、
   `bookmarkCount`、`fieldCount`、`tocCount`、`captionCount`、`crossRefCount`、`indexCount`、`indexEntryCount`、`sourceCount`、
   `citationCount`、`bibliographyCount`、`docPartCount`、`mathCount`、`contentControlCount`、`numberingCount`、`styleCount`、
@@ -921,6 +955,8 @@ xlsx / pptx 的 `scope.tables` 不是同一件事：xlsx 仍拒绝；pptx 展开
 - 文档根上的 `pictureCount` 始终出现，只计主文档里被收入的 DrawingML 图片个数（判定见上文 docx 图 id 那节），不含页眉页脚，也不含框内图、注内图、批注内图。根上不挂正文 `pictures`。
 - 文档根上的 `textBoxCount` 始终出现，只计主文档里被收入的文本框个数，不含页眉页脚，也不含注内、批注内的框。根上不挂正文 `textBoxes`。
 - 文档根上的 `connectorCount` 始终出现，只计主文档里被收入的连接线个数（判定见上文连接线 id 那节），不含页眉页脚，也不含注内、批注内、框内。根上不挂正文 `connectors`。
+- 文档根上的 `inkCanvasCount` 始终出现，只计主文档里被收入的墨迹画布个数（判定见上文墨迹画布 id 那节），不含页眉页脚，也不含注内、批注内、框内。没有则为 `0`。
+  根上不挂正文 `inkCanvases`。注节点与批注节点不加 `inkCanvasCount`。
 - 文档根上的 `footnoteCount` / `endnoteCount` 始终出现，只计用户注（`normal` 或未写 type），不含分隔符。没有注部件则为 `0`。根上不挂注名单，除非给了 `scope.notes`。
 - 文档根上的 `commentCount` 始终出现，计 `comments.xml` 里全部 `w:comment`（含回复与墨迹）。没有批注部件则为 `0`。根上不挂批注名单，除非给了 `scope.comments`。
 - 文档根上的 `chartCount` 始终出现，只计主文档里被收入的图表个数（判定见上文 docx 图表 id 那节），不含页眉页脚，也不含框内、注内、批注内的图表。没有图表则为 `0`。根上不挂正文 `charts`，除非给了 `scope.charts`。
@@ -972,14 +1008,15 @@ xlsx / pptx 的 `scope.tables` 不是同一件事：xlsx 仍拒绝；pptx 展开
 - `outline` 始终出现，只含主文档标题段。收入满足下面任一条件的段落：`w:pStyle/@w:val` 为 `Heading1`–`Heading9`（大小写不敏感）或 `标题1`–`标题9`；或者 `w:outlineLvl/@w:val` 为 `0`–`8`。
   树上 `level` 从 1 到 9。`Heading1` / `标题1` / `outlineLvl=0` 都是 `level: 1`。不是标题的段落不进 `outline`。页眉页脚段落不进 `outline`。
 - `headers`、`footers` 始终出现。没有引用则为空数组。容器字段顺序：`id`、`type`、`sections`、`paraCount`、`pictureCount`、`textBoxCount`、
-  `connectorCount`、`chartCount`、`smartArtCount`、`oleObjectCount`、`watermarkCount`、`tableCount`、`revisionCount`、
+  `connectorCount`、`inkCanvasCount`、`chartCount`、`smartArtCount`、`oleObjectCount`、`watermarkCount`、`tableCount`、`revisionCount`、
   `hyperlinkCount`、`bookmarkCount`、`fieldCount`、`mathCount`、`contentControlCount`，
-  有图名单时再跟 `pictures`，有框名单时再跟 `textBoxes`，有连接线名单时再跟 `connectors`，有图表名单时再跟 `charts`，有 SmartArt 名单时再跟 `smartArts`，
+  有图名单时再跟 `pictures`，有框名单时再跟 `textBoxes`，有连接线名单时再跟 `connectors`，有墨迹画布名单时再跟 `inkCanvases`，有图表名单时再跟 `charts`，有 SmartArt 名单时再跟 `smartArts`，
   有 OLE 名单时再跟 `oleObjects`，有表名单时再跟 `tables`，有修订名单时再跟 `revisions`，有超链接名单时再跟 `hyperlinks`，有书签名单时再跟 `bookmarks`，
   有域名单时再跟 `fields`，有公式名单时再跟 `maths`，有内容控件名单时再跟 `contentControls`，有段落时再跟 `paragraphs`。
   `sections` 是从 1 起的节号数组，按主文档里 `w:sectPr` 的文档顺序。容器上的 `paraCount` 是该部件内 `w:p` 的个数（边界与正文相同）。
   `pictureCount` 始终出现，是该部件内被收入的 DrawingML 图片个数（不含框内图）。`textBoxCount` 始终出现，是该部件内被收入的文本框个数。
-  `connectorCount` 始终出现，是该部件内被收入的连接线个数。`chartCount` 始终出现，是该部件内被收入的图表个数（不含框内图表）。
+  `connectorCount` 始终出现，是该部件内被收入的连接线个数。`inkCanvasCount` 始终出现，是该部件内被收入的墨迹画布个数。
+  `chartCount` 始终出现，是该部件内被收入的图表个数（不含框内图表）。
   `smartArtCount` 始终出现，是该部件内被收入的 SmartArt 个数（不含框内图示）。`oleObjectCount` 始终出现，是该部件内被收入的嵌入对象个数（不含框内）。
   `watermarkCount` 始终出现，是该部件内被收入的 DrawingML 水印个数（页脚恒为 `0`）。`tableCount` 始终出现，是该部件内被收入的 `w:tbl` 个数（含嵌套表，不含框内表）。
   `revisionCount` 始终出现，是该部件内被收入的修订节点个数（不含框内修订）。`hyperlinkCount` 始终出现，是该部件内被收入的 `w:hyperlink` 个数（不含框内链）。
@@ -1015,16 +1052,17 @@ xlsx / pptx 的 `scope.tables` 不是同一件事：xlsx 仍拒绝；pptx 展开
   第一节生效的 `even` / `first` 若无引用也是 `false`（空白，不是链接）。两节显式指向同一部件时两边都是 `false`。`headers` / `footers` 仍按部件去重；断开链接后会出现新的容器 id。
 - 省略 `scope`、或没有 `from`/`maxParas` 时，没有正文 `paragraphs`、`from`、`truncated`。
 - 给了 `from` 和 `maxParas` 时，正文 `paragraphs` 按文档顺序切片。范围内段落数超过 `maxParas` 则 `truncated` 为 `true`。
-  切片里每段始终有 `pictureCount`、`textBoxCount`、`connectorCount` 与 `runCount`。
+  切片里每段始终有 `pictureCount`、`textBoxCount`、`connectorCount`、`inkCanvasCount` 与 `runCount`。
   段落字段顺序：`id`、`index`、`style`、`level`（标题才有）、该段自己的 `w:pPr/w:numPr` 且 `numId` 非 0 时再跟 `num`、`ilvl`、然后始终跟 `align`、`indent`、
-  `spacing`、`text`、`stable`、`pictureCount`、`textBoxCount`、`connectorCount`、`runCount`，
-  有图名单时再跟 `pictures`，有框名单时再跟 `textBoxes`，有连接线名单时再跟 `connectors`，该段有脚注或尾注引用时再跟 `footnoteRef` / `endnoteRef`（注 id 数组，
+  `spacing`、`text`、`stable`、`pictureCount`、`textBoxCount`、`connectorCount`、`inkCanvasCount`、`runCount`，
+  有图名单时再跟 `pictures`，有框名单时再跟 `textBoxes`，有连接线名单时再跟 `connectors`，有墨迹画布名单时再跟 `inkCanvases`，该段有脚注或尾注引用时再跟 `footnoteRef` / `endnoteRef`（注 id 数组，
   按引用在该段内的文档顺序），该段落落在批注范围内时再跟 `commentIds`（批注 id 数组，按范围开始在文档中的顺序；同一段重叠多条都列出），给了 `scope.runs` 时再跟 `runs`。
   没有引用或范围则没有这些键。已展开的页眉页脚、框内、注内段落同样可以带 `commentIds`。不解析 `styles.xml` 继承的编号：样式上有 `numPr`、段上没有的，树上没有 `num` / `ilvl`。
   缺 `ilvl` 当作 `0`。`num` 是 `num:{numId}`。
 - `scope.headerFooter` 为 `true` 时，每个页眉、页脚节点带 `paragraphs`；否则容器上没有该字段。
   页眉页脚段落节点不带 `pictureCount` / `pictures` / `textBoxCount` / `textBoxes` / `connectorCount` / `connectors`
-   / `chartCount` / `charts` / `smartArtCount` / `smartArts` / `oleObjectCount` / `oleObjects`，图、框、连接线、图表、SmartArt 与嵌入对象仍挂在容器上。
+   / `inkCanvasCount` / `inkCanvases`
+   / `chartCount` / `charts` / `smartArtCount` / `smartArts` / `oleObjectCount` / `oleObjects`，图、框、连接线、墨迹画布、图表、SmartArt 与嵌入对象仍挂在容器上。
   页眉页脚段落仍有 `align`、`indent`、`spacing`、`runCount`；给了 `scope.runs` 时再带 `runs`。
 - `scope.pictures` 为 `true` 时，每个页眉、页脚节点带 `pictures`；若同时给了 `from` 与 `maxParas`，切片里每段也带 `pictures`。否则这些节点上都没有该字段。不把媒体字节放进树。
   每张图的字段顺序：`id`、`docPrId`、`name`、`kind`、`cx`、`cy`、`wrap`、`stable`。
@@ -1038,6 +1076,11 @@ xlsx / pptx 的 `scope.tables` 不是同一件事：xlsx 仍拒绝；pptx 展开
   只给 `connectors`、不给 `from` / `maxParas`：只展开页眉页脚容器上的连接线。
   每条字段顺序：`id`、`docPrId`、`name`、`kind`、`cx`、`cy`、`wrap`、`prst`、`stable`。
   `kind` / `cx` / `cy` / `wrap` / `docPrId` / `name` / `stable` 规则与图相同。`prst` 取 `a:prstGeom/@prst`，没有则为 `null`。不报 `text`。组合里的连接线要展开。
+- `scope.inkCanvases` 为 `true` 时，每个页眉、页脚节点带 `inkCanvases`；若同时给了 `from` 与 `maxParas`，切片里每段也带 `inkCanvases`。否则这些节点上都没有该字段。
+  只给 `inkCanvases`、不给 `from` / `maxParas`：只展开页眉页脚容器上的墨迹画布。
+  每条字段顺序：`id`、`name`、`kind`、`cx`、`cy`、`wrap`、`contentType`、`stable`。
+  `kind` / `cx` / `cy` / `wrap` / `name` / `stable` 规则与图相同。`contentType` 恒为 `application/inkml+xml`。不把 InkML 原文放进树。
+  组合里符合条件的 contentPart 要展开。注内、批注内、框内不列出。
 - `scope.notes` 为 `true` 时，根上带 `footnotes`、`endnotes`、`noteSeparators`。没有用户注时前两个为空数组；没有分隔符时 `noteSeparators` 为空数组。
   用户注按部件内文档顺序。每条用户注字段顺序：`id`、`noteId`、`type`、`host`、`paraCount`、`pictureCount`、`textBoxCount`、`connectorCount`、`chartCount`、`smartArtCount`，
   有图名单时再跟 `pictures`，有框名单时再跟 `textBoxes`，有连接线名单时再跟 `connectors`，有图表名单时再跟 `charts`，有 SmartArt 名单时再跟 `smartArts`，然后 `paragraphs`。
@@ -1380,6 +1423,7 @@ ECMA-376 §14.2.7 / DrawingML `a:theme`）。
 带图表、注、批注与两节的示例见 `docs/examples/docx-create-full.json`。
 带超链接、书签、域、目录、编号、公式、内容控件与批注回复的示例见 `docs/examples/docx-create-remain.json`。
 带 SVG 图的示例见 `docs/examples/docx-create-svg.json`。
+带墨迹画布的示例见 `docs/examples/docx-create-ink.json`。
 
 - **`path`**
   - 输出路径
@@ -1429,6 +1473,12 @@ ECMA-376 §14.2.7 / DrawingML `a:theme`）。
   - 该段上的嵌入对象列表
   - 省略则不写
   - 每项只要 `file`，规则与 `insertOle` 相同
+  - 页眉页脚段落同样允许
+- **`paragraphs[].inkCanvases`**
+  - 可选
+  - 该段上的墨迹画布列表
+  - 省略则不写
+  - 每项必须有 `file`，可选成对的 `cx` / `cy`，规则与 `insertInkCanvas` 相同
   - 页眉页脚段落同样允许
 - **`paragraphs[].footnote`**
   - 可选
@@ -1557,6 +1607,7 @@ ECMA-376 §14.2.7 / DrawingML `a:theme`）。
     - `smartArts`
     - `charts`
     - `oleObjects`
+    - `inkCanvases`
     - `footnote`
     - `endnote`
     - `comments`
@@ -1657,13 +1708,14 @@ create 写出 Transitional 最小包，见 [opc.md](opc.md)。
 给了 `first` 则第一节 `sectPr` 含 `<w:titlePg/>`。给了 `paragraphs[].sectionType` 时写出对应中间节；末节的 `sectPr` 仍在 `w:body` 末尾。
 给了 `paragraphs[].charts` 时按 `insertChart` 同一套规则写 `/word/charts/…`、embedding 与宿主 `w:drawing`。
 给了 `paragraphs[].oleObjects` 时按 `insertOle` 同一套规则写 embeddings、预览图与 `w:object`。
+给了 `paragraphs[].inkCanvases` 时按 `insertInkCanvas` 同一套规则写 `/word/ink/…` 与宿主 `w:drawing`。
 给了 `footnote` / `endnote` 时按对应 insert 同一套规则写注部件、分隔符与引用 run。
 给了 `comments` 时按 `insertComment` 同一套规则写 `comments.xml`、`commentsExtended.xml`、`people.xml` 与范围标记。
 给了 `comments[].replies` 时按 `replyComment` 写回复。
 给了 `hyperlinks` / `bookmarks` / `fields` / `maths` / `contentControls` 时按对应 insert 写入。
 给了 `document.numberings` 时按 `insertNumbering` 写 `/word/numbering.xml`，再按 `paragraphs[].num` 发 `setParaNumbering`。
 给了 `document.tocs` 时按 `insertToc` 在正文插入目录块。
-同一段上先写骨架里的文字 / 图 / 框 / SmartArt，再图表，再 OLE，再脚注，再尾注，再批注，再该条批注的回复，再书签，再超链接，再域，再公式，再内容控件，再绑编号。全部故事写完后再写 `tocs`。
+同一段上先写骨架里的文字 / 图 / 框 / SmartArt，再图表，再 OLE，再墨迹画布，再脚注，再尾注，再批注，再该条批注的回复，再书签，再超链接，再域，再公式，再内容控件，再绑编号。全部故事写完后再写 `tocs`。
 `numberings` 在任何段落绑定之前写入。不写修订痕迹。不写题注、交叉引用、索引、参考文献、构建基块、嵌入字体、theme、页面背景、页面边框或连接线。也不写批注的回复再回复。
 给了 `document.props` 时按 `setProps` / `setCustomProp` 同一套规则写 core / app / custom；
 省略则仍写空的 `dc:title` 与 `dc:creator` 为 `ooxp`，不写 custom 部件。
@@ -3453,7 +3505,7 @@ pptx 见 [pptx 分册](json-contract-pptx.md#ungroup)。
 ### 改动范围（docx）
 
 允许变脏的部件：主文档 XML（通常是 `/word/document.xml`）及其 `.rels`，
-被 `setParaText`、`setParaFormat`、`setRunFormat`、图片 op、文本框 op、连接线与组合 op、图表 op、SmartArt op、OLE op、表格结构 op、修订 op、超链接与书签 op、
+被 `setParaText`、`setParaFormat`、`setRunFormat`、图片 op、文本框 op、连接线与组合 op、墨迹画布 op、图表 op、SmartArt op、OLE op、表格结构 op、修订 op、超链接与书签 op、
 域 op、公式 op、内容控件 op、`setParaNumbering` 或 `setParaStyle` 点名的页眉、页脚部件及其 `.rels`，
 `setHeaderFooterLink` / `insertHeaderFooter` / `deleteSection` 改到的主文档关系、`[Content_Types].xml`、新建或删除的 header/footer 部件及其 `.rels`，
 脚注 / 尾注部件及其 `.rels`，批注部件 `/word/comments.xml`、`commentsExtended.xml`、`people.xml`，
@@ -3464,7 +3516,8 @@ SmartArt 四件套 `/word/diagrams/…` 及可选 drawing 缓存，`setNoteNumbe
 `insertWatermark` / `deleteWatermark` 改到的页眉部件及其 `.rels`、必要时新建的 `/word/headerN.xml`、主文档关系、
 `[Content_Types].xml` 与 `/word/media/…`，
 编号 op 改到的 `/word/numbering.xml`、主文档 `.rels` 与 `[Content_Types].xml`，`setStyle` 改到的 `/word/styles.xml`，以及新媒体或被删的 `/word/media/…`。
-OLE op 还可以脏 `/word/embeddings/…` 与预览图媒体。图表 op、SmartArt op 与文本框 op 点名注内或批注内段落时，还可以脏对应 notes / comments 部件及其 `.rels`。
+OLE op 还可以脏 `/word/embeddings/…` 与预览图媒体。墨迹画布 op 还可以脏 `/word/ink/…`、宿主 `.rels` 与 `[Content_Types].xml`。
+图表 op、SmartArt op 与文本框 op 点名注内或批注内段落时，还可以脏对应 notes / comments 部件及其 `.rels`。
 `setHeaderFooterDistance`、`setPageMargin`、`setPageSize`、`setColumns`、`setVerticalAlign`、`setLineNumbering`、`setDocGrid`、
 `setRtlGutter`、`setPageBorders`、`setTitlePage`、`insertSection`、`insertToc`、`deleteToc`、`insertCaption`、`deleteCaption`、
 `insertCrossRef`、`deleteCrossRef`、`insertIndex`、`deleteIndex`、`insertIndexEntry`、`deleteIndexEntry`、`insertSource`、
@@ -3490,7 +3543,7 @@ OLE op 还可以脏 `/word/embeddings/…` 与预览图媒体。图表 op、Smar
 `insertBibliography`、`deleteBibliography`、`insertDocPart`、`deleteDocPart`、`insertDocPartContent`、`insertEmbeddedFont`、
 `deleteEmbeddedFont`、`setFontEmbed`、`setPageBackground`、`insertMath`、`setMath`、`deleteMath`、`insertContentControl`、
 `setContentControl`、`deleteContentControl`、图片 op、文本框 op、
-`insertConnector` / `deleteConnector` / `groupShapes` / `ungroup`、脚注尾注 op、批注 op、图表 op、SmartArt op、表格结构 op、修订 op、
+`insertConnector` / `deleteConnector` / `groupShapes` / `ungroup`、墨迹画布 op、脚注尾注 op、批注 op、图表 op、SmartArt op、表格结构 op、修订 op、
 超链接 / 书签 op、域 op 与编号 op、样式 op、直接格式 op、以及 `setProtection`、以及 `insertWatermark` / `deleteWatermark`、
 以及 `setProps` / `setCustomProp` / `deleteCustomProp`。
 文件属性 op 还可以脏 `/docProps/core.xml`、`/docProps/app.xml`、`/docProps/custom.xml`、根 `.rels` 与 `[Content_Types].xml`。
@@ -3548,6 +3601,65 @@ pptx 上的语义见 [json-contract-pptx.md](json-contract-pptx.md#insertole)。
 
 找不到报 `IdNotFound`。删掉整棵 `w:object`（含预览 markup），去掉 oleObject / package 关系与 embeddings 部件；预览图若无其它关系再指向则一并去掉。
 xlsx 上发此 op 报 `InvalidField`。pptx 上的语义见 [json-contract-pptx.md](json-contract-pptx.md#deleteole)。
+
+### insertInkCanvas
+
+把本地 InkML 作为墨迹画布写入目标段落。不把手写识别成字。不写独立 `wpi` 画布。
+
+```json
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "C:\\data\\note.docx",
+  "ops": [
+    {
+      "op": "insertInkCanvas",
+      "id": "para:3F2A1B00",
+      "file": "C:\\\\data\\\\ink.xml"
+    }
+  ]
+}
+```
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"insertInkCanvas"` |
+| `id` | 必须是正文或页眉页脚段落 id |
+| `file` | 必须。本地 InkML 路径 |
+| `cx` / `cy` | 成对可选。EMU。都省则 `1828800` × `914400` |
+
+- 只给其中一个报 `InvalidField`
+- 根本地名不是 `ink`，或命名空间不是 `http://www.w3.org/2003/InkML`，报 `InvalidField`
+- 找不到 `file` 报 `Io`
+- 空路径报 `InvalidField`
+- 对注内或批注内段落报 `InvalidField`
+- 对框内段落、图 id、墨迹 id、容器 id 或 `section:{n}` 报 `InvalidId`
+- xlsx / pptx 上发此 op 报 `InvalidField`
+
+写入 `mc:AlternateContent`（`Requires="wpc"`），Choice 里是 `wpc:wpc` 加 `w14:contentPart`，Fallback 为 `<w:pict/>`。
+InkML 部件路径 `/word/ink/inkN.xml`，Content Type `application/inkml+xml`，关系 Type 为 `customXml`。
+`wp:docPr/@name` 用「墨迹画布 {id}」，contentPart `cNvPr/@name` 用「墨迹 {id}」。
+`mc:Ignorable` 不要写入未声明的 `w15`。不必强塞 `isComment`。
+
+### replaceInkCanvas
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"replaceInkCanvas"` |
+| `id` | 必须是墨迹画布 id |
+| `file` | 必须。本地 InkML 路径 |
+
+换 InkML 字节，保留 drawing 与关系 id。找不到报 `IdNotFound`。不是墨迹 id 报 `InvalidId`。坏 InkML 报 `InvalidField`。xlsx / pptx 上发此 op 报 `InvalidField`。
+
+### deleteInkCanvas
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"deleteInkCanvas"` |
+| `id` | 必须是墨迹画布 id |
+
+找不到报 `IdNotFound`。删掉该 `contentPart`；若宿主 `wpc` 只剩 `bg` / `whole` 则删整段 drawing / AlternateContent。
+关系无人引用则删部件与 Override。xlsx / pptx 上发此 op 报 `InvalidField`。
 
 ### setThemeColors
 

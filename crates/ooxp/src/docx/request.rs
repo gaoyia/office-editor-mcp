@@ -29,6 +29,8 @@ pub struct InspectScope {
     pub text_boxes: bool,
     /// 为 true 时列出连接线。
     pub connectors: bool,
+    /// 为 true 时列出墨迹画布。
+    pub ink_canvases: bool,
     /// 为 true 时展开框内段落。
     pub text_box_content: bool,
     /// 为 true 时列出脚注、尾注与分隔符。
@@ -1096,6 +1098,9 @@ pub enum DocxOp {
     SetSmartArtLayout(super::smartart::SetSmartArtLayoutOp),
     InsertOle(super::ole::InsertOleOp),
     DeleteOle(super::ole::DeleteOleOp),
+    InsertInkCanvas(super::ink::InsertInkCanvasOp),
+    ReplaceInkCanvas(super::ink::ReplaceInkCanvasOp),
+    DeleteInkCanvas(super::ink::DeleteInkCanvasOp),
     InsertWatermark(super::watermark::InsertWatermarkOp),
     DeleteWatermark(super::watermark::DeleteWatermarkOp),
     SetProtection(super::protect::SetProtectionOp),
@@ -1131,6 +1136,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
             "pictures",
             "textBoxes",
             "connectors",
+            "inkCanvases",
             "textBoxContent",
             "notes",
             "comments",
@@ -1165,6 +1171,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
     let pictures = parse_bool_field(obj.get("pictures"), "pictures")?;
     let text_boxes = parse_bool_field(obj.get("textBoxes"), "textBoxes")?;
     let connectors = parse_bool_field(obj.get("connectors"), "connectors")?;
+    let ink_canvases = parse_bool_field(obj.get("inkCanvases"), "inkCanvases")?;
     let text_box_content = parse_bool_field(obj.get("textBoxContent"), "textBoxContent")?;
     let notes = parse_bool_field(obj.get("notes"), "notes")?;
     let comments = parse_bool_field(obj.get("comments"), "comments")?;
@@ -1209,6 +1216,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
                 && !obj.contains_key("pictures")
                 && !obj.contains_key("textBoxes")
                 && !obj.contains_key("connectors")
+                && !obj.contains_key("inkCanvases")
                 && !obj.contains_key("textBoxContent")
                 && !obj.contains_key("notes")
                 && !obj.contains_key("comments")
@@ -1246,6 +1254,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
                 pictures,
                 text_boxes,
                 connectors,
+                ink_canvases,
                 text_box_content,
                 notes,
                 comments,
@@ -1320,6 +1329,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
                 pictures,
                 text_boxes,
                 connectors,
+                ink_canvases,
                 text_box_content,
                 notes,
                 comments,
@@ -1715,6 +1725,15 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<DocxOp>, Error> {
             )?)),
             "insertOle" => out.push(DocxOp::InsertOle(parse_insert_ole(obj, i)?)),
             "deleteOle" => out.push(DocxOp::DeleteOle(parse_delete_ole(obj, i)?)),
+            "insertInkCanvas" => {
+                out.push(DocxOp::InsertInkCanvas(parse_insert_ink_canvas(obj, i)?))
+            }
+            "replaceInkCanvas" => {
+                out.push(DocxOp::ReplaceInkCanvas(parse_replace_ink_canvas(obj, i)?))
+            }
+            "deleteInkCanvas" => {
+                out.push(DocxOp::DeleteInkCanvas(parse_delete_ink_canvas(obj, i)?))
+            }
             "insertWatermark" => out.push(DocxOp::InsertWatermark(super::watermark::parse_insert(
                 obj, i,
             )?)),
@@ -7188,6 +7207,55 @@ fn parse_delete_ole(
     let id = require_id(obj, i)?;
     let target = super::ole::parse_ole_id(&id, i)?;
     Ok(super::ole::DeleteOleOp { id, target })
+}
+
+fn parse_insert_ink_canvas(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<super::ink::InsertInkCanvasOp, Error> {
+    deny_keys(obj, i, &["op", "id", "file", "cx", "cy"])?;
+    let id = require_id(obj, i)?;
+    let host = para::parse_host_para_id_at(&id, &format!("ops[{i}].id"))?;
+    let file = require_file(obj, i, "insertInkCanvas")?;
+    let cx = parse_emu_field(obj.get("cx"), i, "cx")?;
+    let cy = parse_emu_field(obj.get("cy"), i, "cy")?;
+    if cx.is_some() != cy.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "insertInkCanvas".into(),
+                field: "cx and cy together".into(),
+            },
+            format!("ops[{i}]"),
+        ));
+    }
+    Ok(super::ink::InsertInkCanvasOp {
+        id,
+        host,
+        file,
+        cx,
+        cy,
+    })
+}
+
+fn parse_replace_ink_canvas(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<super::ink::ReplaceInkCanvasOp, Error> {
+    deny_keys(obj, i, &["op", "id", "file"])?;
+    let id = require_id(obj, i)?;
+    let target = super::ink::parse_ink_id(&id, i)?;
+    let file = require_file(obj, i, "replaceInkCanvas")?;
+    Ok(super::ink::ReplaceInkCanvasOp { id, target, file })
+}
+
+fn parse_delete_ink_canvas(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<super::ink::DeleteInkCanvasOp, Error> {
+    deny_keys(obj, i, &["op", "id"])?;
+    let id = require_id(obj, i)?;
+    let target = super::ink::parse_ink_id(&id, i)?;
+    Ok(super::ink::DeleteInkCanvasOp { id, target })
 }
 
 fn parse_set_chart_title(

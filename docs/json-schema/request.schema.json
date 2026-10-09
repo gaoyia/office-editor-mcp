@@ -214,6 +214,9 @@
         "connectors": {
           "type": "boolean"
         },
+        "inkCanvases": {
+          "type": "boolean"
+        },
         "timing": {
           "type": "boolean"
         },
@@ -1075,6 +1078,15 @@
               },
               {
                 "$ref": "docx.schema.json#/$defs/deleteOleOp"
+              },
+              {
+                "$ref": "docx.schema.json#/$defs/insertInkCanvasOp"
+              },
+              {
+                "$ref": "docx.schema.json#/$defs/replaceInkCanvasOp"
+              },
+              {
+                "$ref": "docx.schema.json#/$defs/deleteInkCanvasOp"
               },
               {
                 "$ref": "#/$defs/setProtectionOp"

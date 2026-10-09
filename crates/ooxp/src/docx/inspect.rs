@@ -12,6 +12,7 @@ use super::connector;
 use super::field;
 use super::format;
 use super::hf::{self, HfKind, HfPart};
+use super::ink;
 use super::link;
 use super::math;
 use super::notes;
@@ -55,6 +56,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     let expand_pics = scope.as_ref().is_some_and(|s| s.pictures);
     let expand_txbx = scope.as_ref().is_some_and(|s| s.text_boxes);
     let expand_cxn = scope.as_ref().is_some_and(|s| s.connectors);
+    let expand_ink = scope.as_ref().is_some_and(|s| s.ink_canvases);
     let expand_txbx_content = scope.as_ref().is_some_and(|s| s.text_box_content);
     let expand_charts = scope.as_ref().is_some_and(|s| s.charts);
     let expand_smartart = scope.as_ref().is_some_and(|s| s.smart_art);
@@ -72,6 +74,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         pictures: expand_pics,
         text_boxes: expand_txbx,
         connectors: expand_cxn,
+        ink_canvases: expand_ink,
         text_box_content: expand_txbx_content,
         charts: expand_charts,
         smart_art: expand_smartart,
@@ -93,6 +96,10 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     let text_box_count = body_boxes.len();
     let body_cxns = collect_body_cxns(&paras)?;
     let connector_count = body_cxns.len();
+    let mut ink_canvas_count = 0usize;
+    for p in &paras {
+        ink_canvas_count += ink::count_in(&pkg, &part, p)?;
+    }
     let footnote_count = notes::user_count(&pkg, &part, NoteKind::Footnote)?;
     let endnote_count = notes::user_count(&pkg, &part, NoteKind::Endnote)?;
     let comment_count = comments::count(&pkg, &part)?;
@@ -154,6 +161,12 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         "textBoxCount",
         "connectorCount",
         json!(connector_count),
+    );
+    insert_json_after(
+        tree.as_object_mut().unwrap(),
+        "connectorCount",
+        "inkCanvasCount",
+        json!(ink_canvas_count),
     );
     insert_json_after(
         tree.as_object_mut().unwrap(),
@@ -315,6 +328,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
                         expand_pics,
                         expand_txbx,
                         expand_cxn,
+                        expand_ink,
                         expand_txbx_content,
                         expand_charts,
                         expand_smartart,
@@ -437,6 +451,7 @@ struct HfExpand {
     pictures: bool,
     text_boxes: bool,
     connectors: bool,
+    ink_canvases: bool,
     text_box_content: bool,
     charts: bool,
     smart_art: bool,
@@ -521,6 +536,16 @@ fn hf_node(pkg: &Package, item: &HfPart, expand: &HfExpand) -> Result<Value, Err
         "connectorCount",
         json!(cxns.len()),
     );
+    let mut ink_n = 0usize;
+    for p in &paras {
+        ink_n += ink::count_in(pkg, &item.part, p)?;
+    }
+    insert_json_after(
+        node.as_object_mut().unwrap(),
+        "connectorCount",
+        "inkCanvasCount",
+        json!(ink_n),
+    );
     if expand.pictures {
         node["pictures"] = Value::Array(picture::pictures_json(&pics));
     }
@@ -546,6 +571,14 @@ fn hf_node(pkg: &Package, item: &HfPart, expand: &HfExpand) -> Result<Value, Err
     }
     if expand.connectors {
         node["connectors"] = Value::Array(connector::connectors_json(&cxns));
+    }
+    if expand.ink_canvases {
+        let mut listed = Vec::new();
+        for (i, p) in paras.iter().enumerate() {
+            let (id, _) = para::para_stable_id_in(&item.id, p, i + 1);
+            listed.extend(ink::canvases_json(&ink::collect(pkg, &item.part, p, &id)?));
+        }
+        node["inkCanvases"] = Value::Array(listed);
     }
     if expand.charts {
         node["charts"] = Value::Array(charts::collect_hf(pkg, item, &paras)?);
@@ -610,6 +643,7 @@ fn body_para_json(
     expand_pics: bool,
     expand_txbx: bool,
     expand_cxn: bool,
+    expand_ink: bool,
     expand_txbx_content: bool,
     expand_charts: bool,
     expand_smartart: bool,
@@ -624,6 +658,7 @@ fn body_para_json(
         .cloned()
         .collect();
     let mine_cxn: Vec<_> = cxns_for_para(all_cxns, &id).into_iter().cloned().collect();
+    let inks = ink::collect(pkg, host_part, p, &id)?;
     let mut node = para_json(
         p,
         index,
@@ -632,6 +667,12 @@ fn body_para_json(
         Some(mine.len()),
         Some(mine_cxn.len()),
         false,
+    );
+    insert_json_after(
+        node.as_object_mut().unwrap(),
+        "connectorCount",
+        "inkCanvasCount",
+        json!(inks.len()),
     );
     if expand_pics {
         node["pictures"] = Value::Array(picture::pictures_json(&pics));
@@ -652,6 +693,9 @@ fn body_para_json(
     }
     if expand_cxn {
         node["connectors"] = Value::Array(connector::connectors_json(&mine_cxn));
+    }
+    if expand_ink {
+        node["inkCanvases"] = Value::Array(ink::canvases_json(&inks));
     }
     let fn_refs = notes::refs_in_para(p, NoteKind::Footnote);
     if !fn_refs.is_empty() {

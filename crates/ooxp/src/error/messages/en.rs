@@ -162,7 +162,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::TxbxIndexFromOne => "txbx:index starts at 1".into(),
             IdReason::SetParaOnBox => "setParaText id must be a paragraph id, not a text box id".into(),
             IdReason::InsertNeedsHostPara => {
-                "insertTextBox / insertConnector id must be a host paragraph id".into()
+                "insertTextBox / insertConnector / insertInkCanvas id must be a host paragraph id".into()
             }
             IdReason::DocxCxnPrefix => {
                 "docx connector id must be a paragraph id plus /cxn:…".into()
@@ -170,6 +170,14 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::DocxCxnContainer => {
                 "paragraph or container id must include /cxn:… (that id alone is not a connector)".into()
             }
+            IdReason::DocxInkPrefix => {
+                "docx ink canvas id must be a paragraph id plus /ink:…".into()
+            }
+            IdReason::DocxInkContainer => {
+                "paragraph or container id must include /ink:… (that id alone is not an ink canvas)".into()
+            }
+            IdReason::DocxInkIndexNotInt => "ink:index must be followed by a positive integer".into(),
+            IdReason::DocxInkIndexFromOne => "ink:index starts at 1".into(),
             IdReason::GroupNeedsDocument => {
                 "docx groupShapes id must be docx:document or a header/footer container".into()
             }
@@ -947,6 +955,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         }
         ErrorKind::SmartArtNotFound { id } => format!("SmartArt not found: {id}"),
         ErrorKind::OleNotFound { id } => format!("Embedded object not found: {id}"),
+        ErrorKind::InkNotFound { id } => format!("Ink canvas not found: {id}"),
         ErrorKind::SlicerNotFound { id } => format!("Slicer not found: {id}"),
         ErrorKind::SlicerFieldNotFound { name } => {
             format!("Slicer field does not match the source: {name}")
@@ -1009,6 +1018,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::InvalidPicAlign => "alignH must be left/center/right; alignV must be top/center/bottom".into(),
         ErrorKind::InvalidImageFile => {
             "file is not a recognized image (PNG, JPEG, GIF, or BMP; Word also accepts SVG)".into()
+        }
+        ErrorKind::InvalidInkMl => {
+            "file is not InkML (root element must be ink in the InkML namespace)".into()
         }
         ErrorKind::InvalidMediaFile => {
             "file is not a recognized media clip (insertVideo accepts MP4, insertAudio accepts WAV)"

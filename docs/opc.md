@@ -312,7 +312,10 @@ apply 或 create 插入 SmartArt 时，可能新建 `/word/diagrams/` 下的 dat
 Package 为 `application/vnd.openxmlformats-officedocument.oleObject`）以及占位预览图 `/word/media/imageN.png`。
 Office 文件的关系 Type 为 `http://schemas.openxmlformats.org/officeDocument/2006/relationships/package`（与 Word 16.0 另存一致）；
 Package 为 `http://schemas.openxmlformats.org/officeDocument/2006/relationships/oleObject`。
-inspect 两种关系都认。create 给了 `footnote` / `endnote` / `comments` / `charts` / `oleObjects` 时，按对应 insert 同一套规则新建这些部件；也可写 SmartArt 四件套。
+apply 或 create 插入墨迹画布时，可能新建 `/word/ink/inkN.xml`（CT `application/inkml+xml`）。
+宿主 `.rels` 补一条 `customXml` 关系（`http://schemas.openxmlformats.org/officeDocument/2006/relationships/customXml`），
+`[Content_Types].xml` 补 Override。不写独立 `wordprocessingInk` 部件。
+inspect 两种关系都认。create 给了 `footnote` / `endnote` / `comments` / `charts` / `oleObjects` / `inkCanvases` 时，按对应 insert 同一套规则新建这些部件；也可写 SmartArt 四件套。
 create 给了 `comments[].replies` 时按 `replyComment` 再写回复。
 create 给了 `document.numberings` 时按 `insertNumbering` 新建 `/word/numbering.xml`（CT `…numbering+xml`）。
 create 给了 `hyperlinks` 时按 `insertHyperlink` 在宿主 `.rels` 上补 External hyperlink 关系。

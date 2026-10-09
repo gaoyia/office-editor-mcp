@@ -60,6 +60,14 @@ pub fn parse_group_host(id: &str, op_index: usize) -> Result<GroupHost, Error> {
 
 pub fn parse_member_id(id: &str, op_index: usize) -> Result<GroupMember, Error> {
     let path = format!("ops[{op_index}].id");
+    if super::ink::looks_like_ink_id(id) {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::DocxInkPrefix,
+            },
+            path,
+        ));
+    }
     if connector::looks_like_cxn_id(id) {
         return Ok(GroupMember::Connector(connector::parse_cxn_id_at(
             id, &path,

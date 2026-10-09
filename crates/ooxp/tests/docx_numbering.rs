@@ -201,6 +201,7 @@ fn numbering_list_and_para_fields() {
             "pictureCount",
             "textBoxCount",
             "connectorCount",
+            "inkCanvasCount",
             "runCount"
         ]
     );

@@ -14,6 +14,7 @@ use super::apply;
 use super::charts::{self, ChartType, InsertChartOp, NewSeries};
 use super::field;
 use super::hf::{HfKind, HfType};
+use super::ink::InsertInkCanvasOp;
 use super::math::MathKind;
 use super::math_expr::{self, MathBody};
 use super::numbering::NumberingKind;
@@ -109,6 +110,12 @@ struct NewToc {
     instr: String,
 }
 
+struct NewInkCanvas {
+    file: String,
+    cx: Option<i64>,
+    cy: Option<i64>,
+}
+
 struct NewPara {
     text: String,
     style: Option<&'static str>,
@@ -117,6 +124,7 @@ struct NewPara {
     smart_arts: Vec<InsertSpec>,
     charts: Vec<CreateChart>,
     ole_objects: Vec<String>,
+    ink_canvases: Vec<NewInkCanvas>,
     footnote: Option<String>,
     endnote: Option<String>,
     comments: Vec<NewComment>,
@@ -140,6 +148,7 @@ impl NewPara {
             smart_arts: Vec::new(),
             charts: Vec::new(),
             ole_objects: Vec::new(),
+            ink_canvases: Vec::new(),
             footnote: None,
             endnote: None,
             comments: Vec::new(),
@@ -165,6 +174,7 @@ impl NewPara {
     fn has_follow_ups(&self) -> bool {
         !self.charts.is_empty()
             || !self.ole_objects.is_empty()
+            || !self.ink_canvases.is_empty()
             || self.footnote.is_some()
             || self.endnote.is_some()
             || !self.comments.is_empty()
@@ -536,6 +546,7 @@ fn parse_para(v: &Value, path: &str, kind: ParaKind, i: usize) -> Result<NewPara
             "smartArts",
             "charts",
             "oleObjects",
+            "inkCanvases",
             "footnote",
             "endnote",
             "comments",
@@ -555,6 +566,7 @@ fn parse_para(v: &Value, path: &str, kind: ParaKind, i: usize) -> Result<NewPara
             "smartArts",
             "charts",
             "oleObjects",
+            "inkCanvases",
             "footnote",
             "endnote",
             "comments",
@@ -613,6 +625,7 @@ fn parse_para(v: &Value, path: &str, kind: ParaKind, i: usize) -> Result<NewPara
     let smart_arts = parse_smartarts(obj.get("smartArts"), path)?;
     let charts = parse_charts(obj.get("charts"), path)?;
     let ole_objects = parse_ole_objects(obj.get("oleObjects"), path)?;
+    let ink_canvases = parse_ink_canvases(obj.get("inkCanvases"), path)?;
     let footnote = parse_optional_str(obj.get("footnote"), path, "footnote")?;
     let endnote = parse_optional_str(obj.get("endnote"), path, "endnote")?;
     let comments = parse_comments(obj.get("comments"), &format!("{path}.comments"), false)?;
@@ -634,6 +647,7 @@ fn parse_para(v: &Value, path: &str, kind: ParaKind, i: usize) -> Result<NewPara
         smart_arts,
         charts,
         ole_objects,
+        ink_canvases,
         footnote,
         endnote,
         comments,
@@ -1507,6 +1521,75 @@ fn parse_ole_objects(v: Option<&Value>, prefix: &str) -> Result<Vec<String>, Err
             }
         };
         out.push(file);
+    }
+    Ok(out)
+}
+
+fn parse_ink_canvases(v: Option<&Value>, prefix: &str) -> Result<Vec<NewInkCanvas>, Error> {
+    let Some(v) = v else {
+        return Ok(Vec::new());
+    };
+    let path = format!("{prefix}.inkCanvases");
+    let arr = v.as_array().ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::WrongType {
+                field: "inkCanvases".into(),
+                expected: TypeName::Array,
+            },
+            path.clone(),
+        )
+    })?;
+    let mut out = Vec::new();
+    for (j, item) in arr.iter().enumerate() {
+        let item_path = format!("{path}[{j}]");
+        let obj = item.as_object().ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::WrongType {
+                    field: item_path.clone(),
+                    expected: TypeName::Object,
+                },
+                item_path.clone(),
+            )
+        })?;
+        for k in obj.keys() {
+            if !matches!(k.as_str(), "file" | "cx" | "cy") {
+                return Err(Error::with_path(
+                    ErrorKind::UnknownField { field: k.clone() },
+                    format!("{item_path}.{k}"),
+                ));
+            }
+        }
+        let file = match obj.get("file") {
+            Some(Value::String(s)) if !s.is_empty() => s.clone(),
+            Some(Value::String(_)) | None => {
+                return Err(Error::with_path(
+                    ErrorKind::MissingField {
+                        field: "file".into(),
+                    },
+                    format!("{item_path}.file"),
+                ));
+            }
+            Some(_) => {
+                return Err(Error::with_path(
+                    ErrorKind::WrongType {
+                        field: "file".into(),
+                        expected: TypeName::NonEmptyString,
+                    },
+                    format!("{item_path}.file"),
+                ));
+            }
+        };
+        let cx = parse_emu(obj.get("cx"), &item_path, "cx")?;
+        let cy = parse_emu(obj.get("cy"), &item_path, "cy")?;
+        if cx.is_some() != cy.is_some() {
+            return Err(Error::with_path(
+                ErrorKind::MissingField {
+                    field: "cx and cy".into(),
+                },
+                item_path.clone(),
+            ));
+        }
+        out.push(NewInkCanvas { file, cx, cy });
     }
     Ok(out)
 }
@@ -2662,6 +2745,18 @@ fn push_story_ops(
                 para: host.clone(),
                 file: file.clone(),
             }));
+        }
+        if !p.ink_canvases.is_empty() {
+            let ink_host = para::parse_host_para_id_at(&id, "document")?;
+            for ink in &p.ink_canvases {
+                ops.push(DocxOp::InsertInkCanvas(InsertInkCanvasOp {
+                    id: id.clone(),
+                    host: ink_host.clone(),
+                    file: ink.file.clone(),
+                    cx: ink.cx,
+                    cy: ink.cy,
+                }));
+            }
         }
         if let Some(text) = &p.footnote {
             ops.push(DocxOp::InsertFootnote(InsertNoteOp {

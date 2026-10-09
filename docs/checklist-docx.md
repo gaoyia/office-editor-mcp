@@ -22,6 +22,7 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 2026-10-09 探测框内再套框，Word 16.0 只写出故事级兄弟框，Nt1 放弃。同日补跑 `docx-create-remain.ps1`，Cs1–Cs9 通过。
 2026-10-09 补跑 `docx-field-types.ps1`，Ft1–Ft7 通过。
 2026-10-09 补跑 `docx-svg.ps1`，Sv1–Sv6 通过。Word COM `Type=17`，72×36 磅。
+2026-10-09 补跑 `docx-ink.ps1`，Ic1–Ic6 通过。Word COM 在 `Shapes` 上 `Type=20`（`msoCanvas`），144×72 磅。
 
 - **C1** ✅
   - Word 16.0 能打开 `manual-check/office/out/docx-create.docx`，标题栏无 Repair
@@ -1551,6 +1552,30 @@ Word 跟踪修订下改表单元格底纹、插入空段、删除表行。`inspe
 - **Sv6**
   - 检查：拒错
   - 通过标准：空文件或不是 SVG / 位图的 `file` 报 `InvalidField`。不强制开 Word
+
+## 墨迹画布
+
+正文与页眉页脚里的 `wpc` 画布加 InkML 部件。不算排版引擎，不把 InkML 原文放进 inspect 树，不编批注墨迹。xlsx / pptx 本期不跟。
+手测脚本 `manual-check/office/cases/docx-ink.ps1`。编号用 Ic，不要和批注墨迹 Ik 混号。
+
+- **Ic1**
+  - 检查：插入
+  - 通过标准：`insertInkCanvas` 写入正文段后，树上 `contentType` 为 `application/inkml+xml`，Word 无修复。COM 在 `Shapes` 上 `Type=20`（`msoCanvas`），`InlineShapes.Count` 为 0
+- **Ic2**
+  - 检查：导出
+  - 通过标准：对该墨迹 `exportMedia` 得到 InkML 原字节，`contentType` 为 `application/inkml+xml`
+- **Ic3**
+  - 检查：create
+  - 通过标准：`create` 的 `inkCanvases[].file` 指向 InkML 后 Word 无修复，树上同样有 `contentType`
+- **Ic4**
+  - 检查：替换
+  - 通过标准：`replaceInkCanvas` 换成另一份 InkML 后导出是新字节，Word 无修复
+- **Ic5**
+  - 检查：页眉
+  - 通过标准：往页眉段落插墨迹画布，容器 `inkCanvases` 有 `contentType`，根上 `inkCanvasCount` 仍为 0，无修复
+- **Ic6**
+  - 检查：拒错
+  - 通过标准：不是 InkML 的 `file` 报 `InvalidField`。不强制开 Word
 
 ## 原样保存（opc 验收）
 

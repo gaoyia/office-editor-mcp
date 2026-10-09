@@ -1347,6 +1347,9 @@ fn is_foreign_op(op_name: &str) -> bool {
             | "setSmartArtWrap"
             | "insertWatermark"
             | "deleteWatermark"
+            | "insertInkCanvas"
+            | "replaceInkCanvas"
+            | "deleteInkCanvas"
     )
 }
 

@@ -16,6 +16,7 @@ use super::format;
 use super::glossary;
 use super::group::{self, GroupHost, GroupMember};
 use super::hf::{self, HfKind};
+use super::ink;
 use super::link;
 use super::math;
 use super::notes;
@@ -473,6 +474,15 @@ pub fn apply(bytes: &[u8], ops: &[DocxOp]) -> Result<Vec<u8>, Error> {
             }
             DocxOp::DeleteOle(op) => {
                 ole::apply_delete(&mut pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
+            }
+            DocxOp::InsertInkCanvas(op) => {
+                ink::apply_insert(&mut pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
+            }
+            DocxOp::ReplaceInkCanvas(op) => {
+                ink::apply_replace(&mut pkg, &mut docs, &doc_part, &catalog, op, i)?;
+            }
+            DocxOp::DeleteInkCanvas(op) => {
+                ink::apply_delete(&mut pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
             }
             DocxOp::InsertWatermark(op) => {
                 watermark::apply_insert(&mut pkg, &mut docs, &mut dirty, &doc_part, op, i)?;
