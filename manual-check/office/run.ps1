@@ -152,6 +152,7 @@ $order = @(
     'pptx-protect'
     'pptx-fields'
     'pptx-run-links'
+    'pptx-hyperlinks-remain'
     'pptx-comment-pics'
     'pptx-handout'
     'pptx-notes-master'

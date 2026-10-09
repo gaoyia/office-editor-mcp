@@ -375,6 +375,20 @@
         "tooltip": {
           "type": "string"
         },
+        "on": {
+          "type": "string",
+          "enum": [
+            "shape",
+            "run"
+          ]
+        },
+        "event": {
+          "type": "string",
+          "enum": [
+            "click",
+            "hover"
+          ]
+        },
         "sz": {
           "type": [
             "integer",

@@ -372,11 +372,14 @@ ECMA-376 §19.4 旧式 `/ppt/comments/commentN.xml` 与 `commentAuthors` 不进�
 对 `kind` 为 `ink` 的批注或回复报 `NotImplemented`。`replacePicture` / `deletePicture` / `exportMedia` 认批注内图 id。
 `setPictureSize` / `setPicturePos` 仍报 `InvalidId`（没有画布 `xfrm`）。
 
-超链接 `{k}` 从 1 起，按该页被收入的文本形状文档顺序（与 `shapes` 同一套判定：带 `p:txBody` 的 `p:sp`，含组合里的；
-`mc:AlternateContent` 只进第一个 Choice）：每个形状先形状级 `p:cNvPr/a:hlinkClick`（若有），再按该框 `a:r` 文档顺序收 `a:rPr/a:hlinkClick`。
-不认 `a:hlinkHover`，不认 `a:fld` / `a:br` / `endParaRPr` 上的链，不认图、表、图表、SmartArt 上的链。
-备注页、幻灯片母版、版式上的文本形状链进树，id 带对应前缀。批注、备注母版、讲义、表上的链不进树。
-增删之后 `{k}` 会变，只够同一次 inspect 之后立刻 apply。`insertHyperlink` 的 `id` 必须是幻灯片、备注、母版或版式文本形状 id。
+超链接 `{k}` 从 1 起，按该页 `spTree` 文档顺序（含组合；`mc:AlternateContent` 只进第一个 Choice）：
+每个对象先 `cNvPr` 的 `a:hlinkClick`（若有），再 `a:hlinkHover`（若有）；
+文本形状再按 `a:r` 顺序收 `a:rPr/a:hlinkClick` 与 `a:hlinkMouseOver`；
+表框之后再按单元格行列收格内 run 链。
+不认 `a:fld` / `a:br` / `endParaRPr` 上的链。不把 `ppaction://media` 收进树。不收 Zoom。
+备注页、幻灯片母版、版式上同样走这套对象。批注、备注母版、讲义上的链不进树。
+增删之后 `{k}` 会变，只够同一次 inspect 之后立刻 apply。
+`insertHyperlink` 的 `id` 必须是文本形状、图、表、图表、SmartArt 或表单元格 id。
 `setHyperlink` / `deleteHyperlink` 的 `id` 必须是超链接 id。对不上的 id 形态报 `InvalidId`。
 
 字段 `{guid}` 取该 `a:fld/@id` 原文（ECMA-376 §21.1.2.2.4，`ST_Guid`，含花括号）。没有 `@id` 则为 `slide:{n}/fld:index:{k}`。
@@ -526,10 +529,9 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   - 没有链时为空数组
   - 省略或 `false` 则只有 `hyperlinkCount`，没有名单
   - 不依赖 `scope.slide`
-  - 同时收形状级与 run 级链
+  - 同时收形状级、run 级、悬停，以及图 / 表 / 图表 / SmartArt / 单元格上的链
   - 若同时 `notes: true` 且该页有备注对象，备注上也填 `hyperlinks`
   - 若同时 `masters: true`，母版 / 版式上也填
-  - 不认图、表、图表、SmartArt 上的链
   - xlsx / docx 的 `scope.hyperlinks` 见各自响应
 - **`scope.fields`**（否）
   - 为 `true` 时给每页填 `fields`
@@ -810,7 +812,8 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
 - `chartCount` 在演示文稿根上始终出现，等于各页幻灯片被收入的图表之和，不含备注图表。每页始终有自己的 `chartCount`，同样只计该页幻灯片。
 - `smartArtCount` 在演示文稿根上始终出现，等于各页幻灯片被收入的 SmartArt 之和，不含备注图示。每页始终有自己的 `smartArtCount`，同样只计该页幻灯片。
 - `commentCount` 在演示文稿根上始终出现，等于各页 `p188:cm` 之和，不含 `p188:reply`。每页始终有自己的 `commentCount`，只计该页。旧式 §19.4 批注不计。
-- `hyperlinkCount` 在演示文稿根上始终出现，等于各页被收入的形状级与 run 级 `a:hlinkClick` 之和。每页始终有自己的 `hyperlinkCount`，只计该页幻灯片。没有链则为 `0`。
+- `hyperlinkCount` 在演示文稿根上始终出现，等于各页被收入的超链接之和（含悬停，含图 / 表 / 图表 / SmartArt / 单元格）。
+  每页始终有自己的 `hyperlinkCount`，只计该页幻灯片。没有链则为 `0`。
   不计备注或母版上的链。备注链只在 `scope.notes` 与 `scope.hyperlinks` 同开时出现在 `notes` 上。母版 / 版式链只在 `scope.masters` 与 `scope.hyperlinks` 同开时出现。
 - `fieldCount` 在演示文稿根上始终出现，等于各页被收入的 `a:fld` 之和。每页始终有自己的 `fieldCount`，只计该页幻灯片文本形状里的域。没有域则为 `0`。
   根上不挂 `fields`，除非给了 `scope.fields`。不计备注、母版、版式、表或讲义上的域。
@@ -1069,14 +1072,17 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   有图名单时再跟 `pictures`，然后 `text`（无 `x` / `y`）。回复 `id` 为 `{父批注 id}/reply:{guid}`。
   批注 / 回复内每张图字段顺序：`id`，再跟 `contentType`（规则与幻灯片图相同）。
 - `scope.hyperlinks` 为 `true` 时，每页带 `hyperlinks`。没有链时为空数组。不依赖 `scope.slide`。
-  按该页被收入形状文档顺序：每个形状先 `p:cNvPr/a:hlinkClick`（若有），再按该框 `a:r` 文档顺序收 `a:rPr/a:hlinkClick`。
-  每条字段顺序：`id`、`index`、`kind`、`on`、`host`、`rId`、`url`、`file`、`slide`、`tooltip`、`text`。`index` 与 id 里的 `{k}` 相同。
-  `on` 为 `shape` 或 `run`。`host` 是所在形状 id。`rId` 是 `r:id` 原文，缺则为 `null`。
+  顺序见上文超链接 `{k}`。每条字段顺序：`id`、`index`、`kind`、`on`、`event`、`host`、`rId`、`url`、`file`、`slide`、`tooltip`、`text`。
+  `index` 与 id 里的 `{k}` 相同。
+  `on` 为 `shape` / `run` / `pic` / `table` / `chart` / `smartArt` / `cell`。
+  `event` 为 `click`（`hlinkClick`）或 `hover`（`cNvPr` 上 `hlinkHover`，run 上 `hlinkMouseOver`）。
+  `host` 是所在对象 id（单元格链用单元格 id）。`rId` 是 `r:id` 原文，缺则为 `null`。
   `kind` 为 `url`（External hyperlink 关系且没有文件跳转 `action`）、`file`（`action` 为 `ppaction://hlinkfile`）或 `slide`（slide 关系，
   或 `action` 为 `ppaction://hlinksldjump`）。
   `url` / `file` / `slide` 按 kind 填对应目标，其余为 `null`。`url` 与 `file` 取该关系 `Target` 原文，缺关系则为 `null`。
-  `slide` 对到 `slide:{n}`，对不上则为 `null`。`tooltip` 取 `tooltip` 属性，缺则为 `null`。`text`：run 级取该 `a:r` 的 `a:t`；形状级为 `null`。
-  不把形状整框可见字抄进形状级这条。xlsx / docx 的 `scope.hyperlinks` 见各自分册。
+  `slide` 对到 `slide:{n}`，对不上则为 `null`。`tooltip` 取 `tooltip` 属性，缺则为 `null`。
+  `text`：run / cell 取该 `a:r` 的 `a:t`；框级为 `null`。
+  不把形状整框可见字抄进框级这条。xlsx / docx 的 `scope.hyperlinks` 见各自分册。
 - `scope.fields` 为 `true` 时，每页带 `fields`。没有域时为空数组。不依赖 `scope.slide`。按该页被收入文本形状里 `a:fld` 的文档顺序。
   每条字段顺序：`id`、`type`、`host`、`text`。`type` 取 `@type` 原文，缺则为 `""`。inspect 不白名单；Office 自造类型原样回。`host` 是所在形状 id。
   `text` 是该域 `a:t` 缓存，不求值。xlsx 的 `scope` 里出现 `fields` 报 `InvalidField`。
@@ -1217,8 +1223,12 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   - `\n` 写成 `a:br`
 - **`shapes[].url` / `shapes[].file` / `shapes[].slide`**
   - 可选
-  - 形状级超链接，规则与 pptx `insertHyperlink` 相同，三者必须恰好一个
+  - 超链接，规则与 pptx `insertHyperlink` 相同，三者必须恰好一个
   - `slide` 是 `slides[]` 的 1 起下标，不是 `slide:{n}` 字符串
+- **`shapes[].on`**
+  - 可选。`shape`（缺省）或 `run`
+- **`shapes[].event`**
+  - 可选。`click`（缺省）或 `hover`
 - **`shapes[].tooltip`**
   - 可选
   - 形状级超链接提示
@@ -1385,7 +1395,7 @@ create 写出 Transitional 最小包，见 [opc.md](opc.md)。
 给了 `slides[].model3ds` 时按 `insertModel3d` 同一套规则写 GLB、海报 PNG 与 `am3d` AlternateContent。
 给了 `slides[].notes` 时按 `setNotesText` 同一套规则写该页演讲者备注：没有 notesMaster 则新建，再写 notesSlide。
 给了 `slides[].comments` 时按 `insertComment` 同一套规则写该页现代批注（`p188:cmLst`、`/ppt/authors.xml`）。
-给了形状上的 `url` / `file` / `slide` 时按 `insertHyperlink` 同一套规则写 `a:hlinkClick`。create 本期不写 run 级链，也不写批注内图。
+给了形状上的 `url` / `file` / `slide` 时按 `insertHyperlink` 同一套规则写链（可 `on=run`，可 `event=hover`）。create 本期不写图 / 表 / 图表 / SmartArt 上的链，也不写批注内图。
 给了 `slides[].transition` 时按 `setTransition` 同一套规则写 `<p:transition>`。给了 `slides[].anims` 时按 `insertAnim` 同一套规则写预设效果（第一条 `with` / `after` 进片自动播）。
 给了 `presentation.sections` 时按 `insertSlideSection` 同一套规则写 `p14:sectionLst`：先写第一项（`start` 为 1 则包住全部页；大于 1 则前面的页进空名节），再按数组顺序用 `start` 拆后续节。
 先写该页 `shapes`，再按数组顺序写 `pictures`，再写 `maths`，再写 `model3ds`，再写 `videos`，再写 `audios`，再写 `charts`，再写 `smartArts`，再写 `tables`，再写 `notes`，

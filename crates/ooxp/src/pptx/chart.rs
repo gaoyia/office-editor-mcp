@@ -353,7 +353,7 @@ fn key_matches(frame: &Element, index: usize, key: &ChartKey) -> bool {
     }
 }
 
-fn find_frame_mut<'a>(root: &'a mut Element, key: &ChartKey) -> Option<&'a mut Element> {
+pub(crate) fn find_frame_mut<'a>(root: &'a mut Element, key: &ChartKey) -> Option<&'a mut Element> {
     let mut idx = 0usize;
     find_frame_in(root, &mut idx, key)
 }

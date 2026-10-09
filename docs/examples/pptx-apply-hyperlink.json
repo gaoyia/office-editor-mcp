@@ -26,6 +26,17 @@
       "url": "https://example.com/run"
     },
     {
+      "op": "insertHyperlink",
+      "id": "slide:1/shape:2",
+      "event": "hover",
+      "url": "https://example.com/hover"
+    },
+    {
+      "op": "insertHyperlink",
+      "id": "slide:1/pic:4",
+      "url": "https://example.com/pic"
+    },
+    {
       "op": "deleteHyperlink",
       "id": "slide:1/link:1"
     }

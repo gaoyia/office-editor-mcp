@@ -1547,14 +1547,15 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                 handout::set_text(&mut pkg, &pres_part, &mut pres, op, i)?;
             }
             PptxOp::InsertHyperlink(op) => {
+                let (slide, on_notes, master) = op.host.parts();
                 let part = ensure_host_part(
                     &mut pkg,
                     &pres_part,
                     &mut pres,
                     &slides,
-                    op.shape.slide,
-                    op.shape.on_notes,
-                    op.shape.master,
+                    slide,
+                    on_notes,
+                    master,
                     format!("ops[{i}].id"),
                 )?;
                 let mut doc = xml::parse(pkg.get(&part)?)?;

@@ -13,8 +13,8 @@ use super::{
     request::{
         self, AnimTarget, CreateAnim, CreateAnimHost, CreateHyperlink, CreateSection,
         InsertChartOp, InsertCommentOp, InsertHyperlinkOp, InsertMediaOp, InsertPictureOp,
-        InsertSlideSectionOp, InsertSmartArtOp, InsertTableOp, PptxLinkKind, SetNotesTextOp,
-        SetTransitionOp,
+        InsertSlideSectionOp, InsertSmartArtOp, InsertTableOp, LinkInsertHost, LinkOn,
+        PptxLinkKind, SetNotesTextOp, SetTransitionOp,
     },
     section,
     shape::{self, ShapeKey, ShapeTarget, SlideMeta},
@@ -903,15 +903,20 @@ fn attach_hyperlinks(pkg: &mut Package, slides: &[NewSlide]) -> Result<(), Error
             let cnv = (j as u32 + 2).to_string();
             let op = InsertHyperlinkOp {
                 id: format!("slide:{n}/shape:{cnv}"),
-                shape: ShapeTarget {
+                host: LinkInsertHost::Shape(ShapeTarget {
                     slide: n,
                     on_notes: false,
                     master: None,
                     key: ShapeKey::Id(cnv),
-                },
+                }),
                 target: link.target.clone(),
                 tooltip: link.tooltip.clone(),
-                on_run: false,
+                on: if link.on_run {
+                    LinkOn::Run
+                } else {
+                    LinkOn::Shape
+                },
+                event: link.event,
                 text: None,
             };
             hyperlink::apply_insert(pkg, &mut doc, &part, &metas, &op, 0)?;

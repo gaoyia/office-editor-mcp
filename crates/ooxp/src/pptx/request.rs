@@ -343,13 +343,99 @@ pub enum PptxLinkKind {
     Slide(usize),
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LinkEvent {
+    Click,
+    Hover,
+}
+
+impl LinkEvent {
+    pub fn cnv_tag(self) -> &'static str {
+        match self {
+            Self::Click => "hlinkClick",
+            Self::Hover => "hlinkHover",
+        }
+    }
+
+    pub fn run_tag(self) -> &'static str {
+        match self {
+            Self::Click => "hlinkClick",
+            Self::Hover => "hlinkMouseOver",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LinkOn {
+    Shape,
+    Run,
+    Pic,
+    Table,
+    Chart,
+    SmartArt,
+    Cell,
+}
+
+impl LinkOn {
+    pub fn is_run_like(self) -> bool {
+        matches!(self, Self::Run | Self::Cell)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum LinkInsertHost {
+    Shape(super::shape::ShapeTarget),
+    Pic(picture::PicTarget),
+    Table(table::TableTarget),
+    Chart(chart::ChartTarget),
+    SmartArt(smartart::SmartArtTarget),
+    Cell(table::CellTarget),
+}
+
+impl LinkInsertHost {
+    pub fn parts(&self) -> (usize, bool, Option<(usize, Option<usize>)>) {
+        match self {
+            Self::Shape(t) => (t.slide, t.on_notes, t.master),
+            Self::Pic(t) => (t.slide, t.on_notes, t.master),
+            Self::Table(t) => (t.slide, t.on_notes, t.master),
+            Self::Chart(t) => (t.slide, t.on_notes, t.master),
+            Self::SmartArt(t) => (t.slide, t.on_notes, t.master),
+            Self::Cell(c) => (c.table.slide, c.table.on_notes, c.table.master),
+        }
+    }
+
+    fn default_on(&self) -> LinkOn {
+        match self {
+            Self::Shape(_) => LinkOn::Shape,
+            Self::Pic(_) => LinkOn::Pic,
+            Self::Table(_) => LinkOn::Table,
+            Self::Chart(_) => LinkOn::Chart,
+            Self::SmartArt(_) => LinkOn::SmartArt,
+            Self::Cell(_) => LinkOn::Cell,
+        }
+    }
+
+    fn on_ok(&self, on: LinkOn) -> bool {
+        matches!(
+            (self, on),
+            (Self::Shape(_), LinkOn::Shape | LinkOn::Run)
+                | (Self::Pic(_), LinkOn::Pic)
+                | (Self::Table(_), LinkOn::Table)
+                | (Self::Chart(_), LinkOn::Chart)
+                | (Self::SmartArt(_), LinkOn::SmartArt)
+                | (Self::Cell(_), LinkOn::Cell)
+        )
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct InsertHyperlinkOp {
     pub id: String,
-    pub shape: super::shape::ShapeTarget,
+    pub host: LinkInsertHost,
     pub target: PptxLinkKind,
     pub tooltip: Option<String>,
-    pub on_run: bool,
+    pub on: LinkOn,
+    pub event: LinkEvent,
     pub text: Option<String>,
 }
 
@@ -506,6 +592,8 @@ pub struct SetMediaOp {
 pub struct CreateHyperlink {
     pub target: PptxLinkKind,
     pub tooltip: Option<String>,
+    pub on_run: bool,
+    pub event: LinkEvent,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -3293,23 +3381,44 @@ fn parse_set_handout_text(obj: &Map<String, Value>, i: usize) -> Result<SetHando
 }
 
 fn parse_insert_hyperlink(obj: &Map<String, Value>, i: usize) -> Result<InsertHyperlinkOp, Error> {
-    let on_run = parse_pptx_link_on(obj, i)?;
-    let mut allowed = vec!["op", "id", "url", "file", "slide", "tooltip", "on"];
-    if on_run {
+    let on = parse_pptx_link_on(obj, i)?;
+    let event = parse_pptx_link_event(obj, i)?;
+    let run_like = on.is_some_and(LinkOn::is_run_like);
+    let mut allowed = vec!["op", "id", "url", "file", "slide", "tooltip", "on", "event"];
+    if run_like || on.is_none() {
         allowed.push("text");
     }
     deny_keys(obj, i, &allowed)?;
     let id = require_id(obj, i)?;
-    let shape = parse_insert_hyperlink_shape(&id, i)?;
+    let host = parse_insert_hyperlink_host(&id, i)?;
+    let on = match on {
+        Some(v) => v,
+        None => host.default_on(),
+    };
+    if !host.on_ok(on) {
+        return Err(Error::with_path(
+            ErrorKind::InvalidHyperlinkOn,
+            format!("ops[{i}].on"),
+        ));
+    }
+    if obj.get("text").is_some() && !on.is_run_like() {
+        return Err(Error::with_path(
+            ErrorKind::UnknownField {
+                field: "text".into(),
+            },
+            format!("ops[{i}].text"),
+        ));
+    }
     let target = parse_pptx_link_target(obj, i)?
         .ok_or_else(|| Error::with_path(ErrorKind::PptxHyperlinkNeedTarget, format!("ops[{i}]")))?;
     Ok(InsertHyperlinkOp {
         id,
-        shape,
+        host,
         target,
         tooltip: parse_optional_tooltip(obj, i)?,
-        on_run,
-        text: if on_run {
+        on,
+        event,
+        text: if on.is_run_like() {
             parse_optional_run_text(obj, i)?
         } else {
             None
@@ -3317,11 +3426,16 @@ fn parse_insert_hyperlink(obj: &Map<String, Value>, i: usize) -> Result<InsertHy
     })
 }
 
-fn parse_pptx_link_on(obj: &Map<String, Value>, i: usize) -> Result<bool, Error> {
+fn parse_pptx_link_on(obj: &Map<String, Value>, i: usize) -> Result<Option<LinkOn>, Error> {
     match obj.get("on") {
-        None => Ok(false),
-        Some(Value::String(s)) if s == "shape" => Ok(false),
-        Some(Value::String(s)) if s == "run" => Ok(true),
+        None => Ok(None),
+        Some(Value::String(s)) if s == "shape" => Ok(Some(LinkOn::Shape)),
+        Some(Value::String(s)) if s == "run" => Ok(Some(LinkOn::Run)),
+        Some(Value::String(s)) if s == "pic" => Ok(Some(LinkOn::Pic)),
+        Some(Value::String(s)) if s == "table" => Ok(Some(LinkOn::Table)),
+        Some(Value::String(s)) if s == "chart" => Ok(Some(LinkOn::Chart)),
+        Some(Value::String(s)) if s == "smartArt" => Ok(Some(LinkOn::SmartArt)),
+        Some(Value::String(s)) if s == "cell" => Ok(Some(LinkOn::Cell)),
         Some(Value::String(_)) => Err(Error::with_path(
             ErrorKind::InvalidHyperlinkOn,
             format!("ops[{i}].on"),
@@ -3332,6 +3446,25 @@ fn parse_pptx_link_on(obj: &Map<String, Value>, i: usize) -> Result<bool, Error>
                 expected: TypeName::String,
             },
             format!("ops[{i}].on"),
+        )),
+    }
+}
+
+fn parse_pptx_link_event(obj: &Map<String, Value>, i: usize) -> Result<LinkEvent, Error> {
+    match obj.get("event") {
+        None => Ok(LinkEvent::Click),
+        Some(Value::String(s)) if s == "click" => Ok(LinkEvent::Click),
+        Some(Value::String(s)) if s == "hover" => Ok(LinkEvent::Hover),
+        Some(Value::String(_)) => Err(Error::with_path(
+            ErrorKind::InvalidHyperlinkEvent,
+            format!("ops[{i}].event"),
+        )),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "event".into(),
+                expected: TypeName::String,
+            },
+            format!("ops[{i}].event"),
         )),
     }
 }
@@ -3506,6 +3639,75 @@ fn parse_delete_field(obj: &Map<String, Value>, i: usize) -> Result<field::Delet
         key,
         keep,
     })
+}
+
+fn parse_insert_hyperlink_host(id: &str, i: usize) -> Result<LinkInsertHost, Error> {
+    let path = format!("ops[{i}].id");
+    if id.starts_with("notesMaster") || id.starts_with("handout") {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::InsertHyperlinkNeedsShape,
+            },
+            path,
+        ));
+    }
+    if id.contains("/r:") {
+        let cell = table::parse_cell_id(id, &path).map_err(|_| {
+            Error::with_path(
+                ErrorKind::InvalidId {
+                    reason: IdReason::InsertHyperlinkNeedsShape,
+                },
+                path.clone(),
+            )
+        })?;
+        return Ok(LinkInsertHost::Cell(cell));
+    }
+    if id.contains("/pic:") {
+        let pic = picture::parse_pic_id(id, &path).map_err(|_| {
+            Error::with_path(
+                ErrorKind::InvalidId {
+                    reason: IdReason::InsertHyperlinkNeedsShape,
+                },
+                path.clone(),
+            )
+        })?;
+        if pic.comment.is_some() {
+            return Err(Error::with_path(
+                ErrorKind::InvalidId {
+                    reason: IdReason::InsertHyperlinkNeedsShape,
+                },
+                path,
+            ));
+        }
+        return Ok(LinkInsertHost::Pic(pic));
+    }
+    if id.contains("/table:") {
+        let table = table::parse_table_id(id, &path, IdReason::InsertHyperlinkNeedsShape)?;
+        return Ok(LinkInsertHost::Table(table));
+    }
+    if id.contains("/chart:") {
+        let chart = chart::parse_chart_id(id, &path).map_err(|_| {
+            Error::with_path(
+                ErrorKind::InvalidId {
+                    reason: IdReason::InsertHyperlinkNeedsShape,
+                },
+                path,
+            )
+        })?;
+        return Ok(LinkInsertHost::Chart(chart));
+    }
+    if id.contains("/smartdiagram:") {
+        let art = smartart::parse_diagram_id(id, &path).map_err(|_| {
+            Error::with_path(
+                ErrorKind::InvalidId {
+                    reason: IdReason::InsertHyperlinkNeedsShape,
+                },
+                path,
+            )
+        })?;
+        return Ok(LinkInsertHost::SmartArt(art));
+    }
+    Ok(LinkInsertHost::Shape(parse_insert_hyperlink_shape(id, i)?))
 }
 
 fn parse_insert_field_shape(id: &str, i: usize) -> Result<shape::ShapeTarget, Error> {
@@ -6783,6 +6985,8 @@ pub(crate) fn parse_create_shape(
             "file",
             "slide",
             "tooltip",
+            "on",
+            "event",
             "sz",
             "color",
             "bold",
@@ -6879,7 +7083,58 @@ pub(crate) fn parse_create_shape(
             format!("{prefix}.tooltip"),
         ));
     }
-    let link = target.map(|target| CreateHyperlink { target, tooltip });
+    let on_run = match obj.get("on") {
+        None => false,
+        Some(Value::String(s)) if s == "shape" => false,
+        Some(Value::String(s)) if s == "run" => true,
+        Some(Value::String(_)) => {
+            return Err(Error::with_path(
+                ErrorKind::InvalidHyperlinkOn,
+                format!("{prefix}.on"),
+            ));
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "on".into(),
+                    expected: TypeName::String,
+                },
+                format!("{prefix}.on"),
+            ));
+        }
+    };
+    let event = match obj.get("event") {
+        None => LinkEvent::Click,
+        Some(Value::String(s)) if s == "click" => LinkEvent::Click,
+        Some(Value::String(s)) if s == "hover" => LinkEvent::Hover,
+        Some(Value::String(_)) => {
+            return Err(Error::with_path(
+                ErrorKind::InvalidHyperlinkEvent,
+                format!("{prefix}.event"),
+            ));
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "event".into(),
+                    expected: TypeName::String,
+                },
+                format!("{prefix}.event"),
+            ));
+        }
+    };
+    if target.is_none() && (on_run || obj.get("on").is_some() || obj.get("event").is_some()) {
+        return Err(Error::with_path(
+            ErrorKind::PptxHyperlinkNeedTarget,
+            prefix.to_string(),
+        ));
+    }
+    let link = target.map(|target| CreateHyperlink {
+        target,
+        tooltip,
+        on_run,
+        event,
+    });
     let format = crate::drawing_text::parse(obj, prefix, false)?;
     Ok((text, link, format))
 }

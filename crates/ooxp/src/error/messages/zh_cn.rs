@@ -589,7 +589,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
                 "xlsx 的 insertHyperlink 的 id 必须是 sheet:工作表名".into()
             }
             IdReason::InsertHyperlinkNeedsShape => {
-                "pptx 的 insertHyperlink 的 id 必须是幻灯片、备注、母版或版式文本形状 id".into()
+                "pptx 的 insertHyperlink 的 id 必须是幻灯片、备注、母版或版式上的文本形状、图、表、图表、SmartArt 或表单元格 id".into()
             }
             IdReason::SlideLinkPrefix => {
                 "pptx 超链接 id 必须是 slide:N/link:k、slide:N/notes/link:k、master:N/link:k 或 master:N/layout:K/link:k".into()
@@ -1207,10 +1207,11 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             "pptx 的 setHyperlink 至少要给 url、file、slide 或 tooltip 之一".into()
         }
         ErrorKind::ShapeAlreadyHasHyperlink => {
-            "该形状已有形状级超链接，请用 setHyperlink".into()
+            "该对象已有同事件的框级超链接，请用 setHyperlink".into()
         }
-        ErrorKind::InvalidHyperlinkOn => "on 必须是 shape 或 run".into(),
-        ErrorKind::RunAlreadyHasHyperlink => "该 run 已有超链接，请用 setHyperlink".into(),
+        ErrorKind::InvalidHyperlinkOn => "on 必须与 id 种类一致".into(),
+        ErrorKind::InvalidHyperlinkEvent => "event 必须是 click 或 hover".into(),
+        ErrorKind::RunAlreadyHasHyperlink => "该 run 已有同事件超链接，请用 setHyperlink".into(),
         ErrorKind::PptxRunLinkNeedsRun => "on 为 run 时需要已有文本 run，或给 text".into(),
         ErrorKind::PptxHyperlinkSelfSlide => "不能把超链接跳到本页".into(),
         ErrorKind::EmptyHyperlinkFile => "file 不能为空".into(),

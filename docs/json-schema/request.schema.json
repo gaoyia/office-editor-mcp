@@ -1841,7 +1841,19 @@
           "type": "string",
           "enum": [
             "shape",
-            "run"
+            "run",
+            "pic",
+            "table",
+            "chart",
+            "smartArt",
+            "cell"
+          ]
+        },
+        "event": {
+          "type": "string",
+          "enum": [
+            "click",
+            "hover"
           ]
         },
         "file": {

@@ -208,7 +208,7 @@ apply 可改被点名形状的 `p:txBody` 可见文字（含备注形状、母�
 也可用 `setSlideSize` 只改 `p:sldSz`（不重排形状）；也可用 `setThemeColors` / `setThemeFonts` 改该母版 theme 的配色与字体（不重写 `fmtScheme`）；
 也可用 `setHandoutText` 改讲义母版页眉、页脚、日期与页码占位符（没有 handoutMaster 则新建最小部件）；
 讲义与备注母版占位符也可绑同一套预设动画；
-也可插删改幻灯片、备注页与幻灯片母版 / 版式文本形状上的形状级 `p:cNvPr/a:hlinkClick` 与 run 级 `a:rPr/a:hlinkClick`（URL / 文件 / 跳转到某页）；
+也可插删改幻灯片、备注页与幻灯片母版 / 版式上的 `a:hlinkClick` / `a:hlinkHover` / `a:hlinkMouseOver`（URL / 文件 / 跳转到某页，含图、表、图表、SmartArt 与表单元格）；
 也可插删改幻灯片、备注页与幻灯片母版 / 版式文本形状里的 `a:fld`（页码与日期域，不求值）；也可往幻灯片、备注页与幻灯片母版 / 版式插、删内嵌视频与音频（`p:pic` 上的 `a:videoFile` / `a:audioFile` 与 `p14:media`，不写 timing），
 也可用 `setMedia` 改裁剪、书签与字幕轨（不写 fade）；
 也可用 `insertCustomShow` / `setCustomShow` / `deleteCustomShow` 读写 `p:custShowLst`（不算放映引擎）；

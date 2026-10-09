@@ -940,16 +940,25 @@ pptx：删掉对应 `a:gridCol`。该列落在某格 `gridSpan` 内部时，`gri
 - **`id`**
   - docx：段落 id（正文或页眉页脚）
   - xlsx：工作表 id `sheet:{name}`
-  - pptx：幻灯片、备注、母版或版式文本形状 id（不含 `notesMaster` / `handout`）
+  - pptx：文本形状、图、表、图表、SmartArt 或表单元格 id（不含 `notesMaster` / `handout`）
 - **`text`**
   - docx 必填，显示文本，字符串，可空
   - xlsx 上出现报 `InvalidField`（显示字走 `setCell`）
-  - pptx 仅当 `on` 为 `run` 时可选，写入新 `a:r` 的 `a:t`
-  - 形状级出现报未知字段
+  - pptx 仅当 `on` 为 `run` 或 `cell` 时可选，写入新 `a:r` 的 `a:t`
+  - 框级出现报未知字段
 - **`on`**
   - pptx 可选
-  - `shape`（缺省）写到 `p:cNvPr`
-  - `run` 写到 `a:rPr`
+  - `shape`（文本形状缺省）写到 `p:cNvPr`
+  - `run` 写到文本形状 `a:rPr`
+  - `pic` / `table` / `chart` / `smartArt` 写到对应框 `cNvPr`
+  - `cell` 写到表单元格 `a:rPr`
+  - 省略则按 `id` 种类：形状为 `shape`，图 / 表 / 图表 / SmartArt 为对应值，单元格为 `cell`
+  - 与 `id` 种类对不上报 `InvalidField`
+  - xlsx / docx 上出现报未知字段
+- **`event`**
+  - pptx 可选。`click`（缺省）或 `hover`
+  - `click` 写 `a:hlinkClick`
+  - `hover` 在 `cNvPr` 上写 `a:hlinkHover`，在 run 上写 `a:hlinkMouseOver`
   - xlsx / docx 上出现报未知字段
 - **`url`**
   - 外部 URL
@@ -976,7 +985,7 @@ pptx：删掉对应 `a:gridCol`。该列落在某格 `gridSpan` 内部时，`gri
   - 可选
   - docx 写 `w:tooltip`
   - xlsx 写 `@tooltip`
-  - pptx 写 `a:hlinkClick/@tooltip`
+  - pptx 写在对应 `a:hlinkClick` / `a:hlinkHover` / `a:hlinkMouseOver` 的 `tooltip`
 - **`display`**
   - xlsx 可选
   - 写 `@display`
@@ -996,19 +1005,23 @@ xlsx：在该表 `<hyperlinks>` 末尾追加一条 `<hyperlink>`。没有该元�
 不标重算。`create` 给了 `sheets[].hyperlinks` 时按同一套规则写 `<hyperlinks>`。
 
 pptx：`url`、`file`、`slide` 必须恰好一个，否则报 `InvalidField`。空串报 `InvalidField`。
-`on` 省略或为 `shape`：在该形状 `p:nvSpPr/p:cNvPr` 下写入一条 `a:hlinkClick`（ECMA-376 `CT_NonVisualDrawingProps`，§19.3.1.12 / §20.1.2.2.28）。
-不写 `a:hlinkHover`。该 `cNvPr` 已有 `hlinkClick` 时报 `InvalidField`（改地址请用 `setHyperlink`）。不改 `p:txBody`。
-`on` 为 `run`：写入该框最后一段里 run 的 `a:rPr/a:hlinkClick`（§21.1.2.3.5）。
-给了 `text`：在 `endParaRPr` 之前追加一个新 `a:r`，抄该段最后一个 `a:r` / `a:fld` 的 `a:rPr`（没有则抄 `endParaRPr`），去掉已有 `hlinkClick` 再写入新链，`a:t` 为 `text`。
-没给 `text`：把链写到该段最后一个 `a:r`；该 run 已有 `hlinkClick` 时报 `InvalidField`；没有 `a:r` 时报 `InvalidField`。不写下划线或主题超链接色。
-不认 `a:fld` / `a:br` / `endParaRPr` 上的链。`on` 不是 `shape` / `run` 报 `InvalidField`。id 不是幻灯片文本形状 id 报 `InvalidId`。
-对备注形状、母版 / 版式占位符、图 id、表 id、页 id 或 `pptx:presentation` 报 `InvalidId`。找不到形状报 `IdNotFound`。
+框级（`on` 为 `shape` / `pic` / `table` / `chart` / `smartArt`，或按 id 种类缺省）：
+在该对象 `cNvPr` 下写入 `a:hlinkClick`（`event` 缺省或 `click`）或 `a:hlinkHover`（`event` 为 `hover`）。
+`cNvPr` 子顺序为 `hlinkClick`、`hlinkHover`、`extLst`。
+同一宿主同一 `event` 的框级链已有时报 `InvalidField`（改地址请用 `setHyperlink`）。不改 `p:txBody`。
+`on` 为 `run`（仅文本形状）或 `cell`：写入该框或该格最后一段里 run 的 `a:rPr/a:hlinkClick`（`event` 为 `click`）或 `a:hlinkMouseOver`（`event` 为 `hover`）。
+给了 `text`：在 `endParaRPr` 之前追加一个新 `a:r`，抄该段最后一个 `a:r` / `a:fld` 的 `a:rPr`（没有则抄 `endParaRPr`），去掉同事件已有链再写入新链，`a:t` 为 `text`。
+没给 `text`：把链写到该段最后一个 `a:r`；该 run 同一 `event` 已有链时报 `InvalidField`；没有 `a:r` 时报 `InvalidField`。不写下划线或主题超链接色。
+不认 `a:fld` / `a:br` / `endParaRPr` 上的链。不把 `ppaction://media` 收进树。不收 Zoom。
+`on` 与 `id` 种类对不上报 `InvalidField`。`event` 不是 `click` / `hover` 报 `InvalidField`。
+id 必须是文本形状、图、表、图表、SmartArt 或表单元格 id。
+对备注母版、讲义、批注内图、页 id 或 `pptx:presentation` 报 `InvalidId`。找不到对象报 `IdNotFound`。
 给了 `url`：该页 `.rels` 新建 Type 以 `/hyperlink` 结尾的关系，`TargetMode` 为 `External`，`Target` 为 `url` 原文，不写 `action`。
 给了 `file`：同样写 External hyperlink 关系，并写 `action="ppaction://hlinkfile"`。
 给了 `slide`：必须是已有页的 `slide:{n}`，不能是本页；目标页不存在报 `IdNotFound`；跳到自己报 `InvalidField`。
 写入 Type 以 `/slide` 结尾的内部关系，`Target` 为相对目标页部件，并写 `action="ppaction://hlinksldjump"`。幻灯片根上补 `xmlns:r`（若还没有）。不写放映宏动作。
-create 给了 `shapes[].url` / `file` / `slide` 时仍按形状级规则写 `a:hlinkClick`；
-create 上 `slide` 是页序整数，见 [json-contract-pptx.md](json-contract-pptx.md#create)。create 本期不写 run 级链。
+create 给了 `shapes[].url` / `file` / `slide` 时按同一套规则写链，可 `on=run`，可 `event=hover`。
+create 上 `slide` 是页序整数，见 [json-contract-pptx.md](json-contract-pptx.md#create)。create 本期不写图 / 表 / 图表 / SmartArt 上的链。
 
 ### setHyperlink
 
@@ -1038,8 +1051,8 @@ xlsx：`url`、`location`、`tooltip`、`display`、`ref` 至少给一个。
 id 不是超链接 id 报 `InvalidId`。只能改 `worksheet`。
 
 pptx：`url`、`file`、`slide`、`tooltip` 至少给一个。`url`、`file`、`slide` 最多给一个，多了报 `InvalidField`。
-给了 `url` / `file` / `slide`：改该 `a:hlinkClick` 的关系与 `action`，不论宿主是 `p:cNvPr` 还是 `a:rPr`，
-规则与 `insertHyperlink` 相同（可从 URL 改成跳转或文件）。
+给了 `url` / `file` / `slide`：改该链元素（`a:hlinkClick` / `a:hlinkHover` / `a:hlinkMouseOver`）的关系与 `action`，
+不论宿主是 `cNvPr` 还是 `a:rPr`，规则与 `insertHyperlink` 相同（可从 URL 改成跳转或文件）。
 `url` / `file` / `slide` 为 `null` 或空串报 `InvalidField`（不能只拆链；拆链请用 `deleteHyperlink`）。给了 `tooltip` 字符串则写属性；为 `null` 则去掉属性。
 不改形状可见文字，也不改 run 的 `a:t`。找不到报 `IdNotFound`。id 不是超链接 id 报 `InvalidId`。目标页不存在报 `IdNotFound`。跳到自己报 `InvalidField`。旧关系在本页 XML 里无人引用则删除。
 

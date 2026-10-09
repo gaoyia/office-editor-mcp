@@ -423,7 +423,7 @@ pub(crate) enum IdReason {
     SheetLinkPrefix,
     /// xlsx 的 insertHyperlink 必须用 sheet:工作表名
     InsertHyperlinkNeedsSheet,
-    /// pptx 的 insertHyperlink 必须用幻灯片文本形状 id
+    /// pptx 的 insertHyperlink 必须用文本形状、图、表、图表、SmartArt 或表单元格 id
     InsertHyperlinkNeedsShape,
     /// pptx 超链接 id 必须是 slide:N/link:K
     SlideLinkPrefix,
@@ -954,6 +954,7 @@ define_error_kinds! {
     PptxNeedSetHyperlinkField => vec![Self::PptxNeedSetHyperlinkField],
     ShapeAlreadyHasHyperlink => vec![Self::ShapeAlreadyHasHyperlink],
     InvalidHyperlinkOn => vec![Self::InvalidHyperlinkOn],
+    InvalidHyperlinkEvent => vec![Self::InvalidHyperlinkEvent],
     RunAlreadyHasHyperlink => vec![Self::RunAlreadyHasHyperlink],
     PptxRunLinkNeedsRun => vec![Self::PptxRunLinkNeedsRun],
     PptxHyperlinkSelfSlide => vec![Self::PptxHyperlinkSelfSlide],
@@ -1693,6 +1694,7 @@ impl ErrorKind {
             | Self::PptxNeedSetHyperlinkField
             | Self::ShapeAlreadyHasHyperlink
             | Self::InvalidHyperlinkOn
+            | Self::InvalidHyperlinkEvent
             | Self::RunAlreadyHasHyperlink
             | Self::PptxRunLinkNeedsRun
             | Self::PptxHyperlinkSelfSlide

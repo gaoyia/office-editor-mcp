@@ -211,12 +211,16 @@ fn insert_url_inspect_set_delete() {
     assert_eq!(links.len(), 1);
     assert_eq!(
         object_keys(&links[0]),
-        ["id", "index", "kind", "on", "host", "rId", "url", "file", "slide", "tooltip", "text"]
+        [
+            "id", "index", "kind", "on", "event", "host", "rId", "url", "file", "slide", "tooltip",
+            "text"
+        ]
     );
     assert_eq!(links[0]["id"], "slide:1/link:1");
     assert_eq!(links[0]["index"], 1);
     assert_eq!(links[0]["kind"], "url");
     assert_eq!(links[0]["on"], "shape");
+    assert_eq!(links[0]["event"], "click");
     assert_eq!(links[0]["host"], shape);
     assert_eq!(links[0]["url"], "https://example.com/");
     assert!(links[0]["file"].is_null());
@@ -614,4 +618,280 @@ fn reject_bad_on_and_shape_text() {
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);
     assert!(!twice_out.exists());
+}
+
+const PNG_1X1: &[u8] = &[
+    0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52,
+    0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x02, 0x00, 0x00, 0x00, 0x90, 0x77, 0x53,
+    0xDE, 0x00, 0x00, 0x00, 0x0C, 0x49, 0x44, 0x41, 0x54, 0x08, 0xD7, 0x63, 0xF8, 0xCF, 0xC0, 0x00,
+    0x00, 0x03, 0x01, 0x01, 0x00, 0x18, 0xDD, 0x8D, 0xB4, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4E,
+    0x44, 0xAE, 0x42, 0x60, 0x82,
+];
+
+fn write_png(tag: &str) -> PathBuf {
+    let path = tmp(tag).with_extension("png");
+    std::fs::write(&path, PNG_1X1).unwrap();
+    path
+}
+
+fn inspect_scope(path: &Path, scope: Value) -> Value {
+    let RunOutput::Inspect(tree) = run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "inspect",
+            "path": path.to_string_lossy(),
+            "scope": scope
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap() else {
+        panic!("inspect 应返回树");
+    };
+    tree
+}
+
+#[test]
+fn insert_hover_on_shape() {
+    let src = create_deck("hover");
+    let shape = first_shape_id(&src);
+    let out = tmp("hover").with_extension("pptx");
+    apply(
+        &src,
+        &out,
+        json!([{
+            "op": "insertHyperlink",
+            "id": shape,
+            "event": "hover",
+            "url": "https://example.com/hover"
+        }]),
+    )
+    .unwrap();
+    let xml = part_text(&out, "ppt/slides/slide1.xml");
+    assert!(xml.contains("hlinkHover"));
+    let in_cnv = xml.split("<p:cNvPr").any(|chunk| {
+        chunk
+            .split("</p:cNvPr>")
+            .next()
+            .unwrap_or("")
+            .contains("hlinkHover")
+    });
+    assert!(in_cnv, "hlinkHover 应在 cNvPr 内");
+    let tree = inspect_links(&out);
+    let link = &tree["slides"][0]["hyperlinks"][0];
+    assert_eq!(link["on"], "shape");
+    assert_eq!(link["event"], "hover");
+    assert_eq!(link["url"], "https://example.com/hover");
+}
+
+#[test]
+fn insert_click_then_hover_orders_click_first() {
+    let src = create_deck("both-ev");
+    let shape = first_shape_id(&src);
+    let out = tmp("both-ev").with_extension("pptx");
+    apply(
+        &src,
+        &out,
+        json!([
+            { "op": "insertHyperlink", "id": shape, "event": "hover", "url": "https://example.com/h" },
+            { "op": "insertHyperlink", "id": shape, "url": "https://example.com/c" }
+        ]),
+    )
+    .unwrap();
+    let tree = inspect_links(&out);
+    let links = tree["slides"][0]["hyperlinks"].as_array().unwrap();
+    assert_eq!(links.len(), 2);
+    assert_eq!(links[0]["event"], "click");
+    assert_eq!(links[0]["url"], "https://example.com/c");
+    assert_eq!(links[1]["event"], "hover");
+    assert_eq!(links[1]["url"], "https://example.com/h");
+}
+
+#[test]
+fn insert_run_hover_writes_mouse_over() {
+    let src = create_deck("run-hover");
+    let shape = first_shape_id(&src);
+    let out = tmp("run-hover").with_extension("pptx");
+    apply(
+        &src,
+        &out,
+        json!([{
+            "op": "insertHyperlink",
+            "id": shape,
+            "on": "run",
+            "event": "hover",
+            "url": "https://example.com/rh"
+        }]),
+    )
+    .unwrap();
+    let xml = part_text(&out, "ppt/slides/slide1.xml");
+    assert!(xml.contains("hlinkMouseOver"));
+    let cnv = xml
+        .split("<p:cNvPr")
+        .nth(1)
+        .and_then(|s| s.split("</p:cNvPr>").next())
+        .unwrap_or("");
+    assert!(!cnv.contains("hlinkHover"));
+    let tree = inspect_links(&out);
+    let link = &tree["slides"][0]["hyperlinks"][0];
+    assert_eq!(link["on"], "run");
+    assert_eq!(link["event"], "hover");
+}
+
+#[test]
+fn insert_on_pic_table_chart_smartart_and_cell() {
+    let src = create_deck("objs");
+    let png = write_png("pic");
+    let with_objs = tmp("objs-host").with_extension("pptx");
+    apply(
+        &src,
+        &with_objs,
+        json!([
+            { "op": "insertPicture", "id": "slide:1", "file": png.to_string_lossy() },
+            {
+                "op": "insertTable",
+                "id": "slide:1",
+                "rows": 2,
+                "cols": 2,
+                "cells": [["甲", "乙"], ["丙", "丁"]]
+            },
+            {
+                "op": "insertChart",
+                "id": "slide:1",
+                "type": "col",
+                "series": [{ "name": "s", "categories": ["A", "B"], "values": [1, 2] }]
+            },
+            {
+                "op": "insertSmartArt",
+                "id": "slide:1",
+                "layout": "list",
+                "points": [{ "text": "甲" }, { "text": "乙" }]
+            }
+        ]),
+    )
+    .unwrap();
+    let objs = inspect_scope(
+        &with_objs,
+        json!({ "pictures": true, "tables": true, "charts": true, "smartArt": true }),
+    );
+    let pic = objs["slides"][0]["pictures"][0]["id"].as_str().unwrap();
+    let table = objs["slides"][0]["tables"][0]["id"].as_str().unwrap();
+    let cell = objs["slides"][0]["tables"][0]["rows"][0]["cells"][0]["id"]
+        .as_str()
+        .unwrap();
+    let chart = objs["slides"][0]["charts"][0]["id"].as_str().unwrap();
+    let art = objs["slides"][0]["smartArts"][0]["id"].as_str().unwrap();
+    assert!(art.contains("smartdiagram:"));
+    let out = tmp("objs-links").with_extension("pptx");
+    apply(
+        &with_objs,
+        &out,
+        json!([
+            { "op": "insertHyperlink", "id": pic, "url": "https://example.com/pic" },
+            { "op": "insertHyperlink", "id": table, "url": "https://example.com/table" },
+            { "op": "insertHyperlink", "id": cell, "url": "https://example.com/cell" },
+            { "op": "insertHyperlink", "id": chart, "url": "https://example.com/chart" },
+            { "op": "insertHyperlink", "id": art, "url": "https://example.com/sa" }
+        ]),
+    )
+    .unwrap();
+    let tree = inspect_links(&out);
+    let links = tree["slides"][0]["hyperlinks"].as_array().unwrap();
+    let by_on = |on: &str| {
+        links
+            .iter()
+            .find(|l| l["on"] == on)
+            .unwrap_or_else(|| panic!("缺少 on={on}"))
+    };
+    assert_eq!(by_on("pic")["url"], "https://example.com/pic");
+    assert_eq!(by_on("pic")["host"], pic);
+    assert_eq!(by_on("table")["url"], "https://example.com/table");
+    assert_eq!(by_on("table")["host"], table);
+    assert_eq!(by_on("cell")["url"], "https://example.com/cell");
+    assert_eq!(by_on("cell")["host"], cell);
+    assert_eq!(by_on("cell")["text"], "甲");
+    assert_eq!(by_on("chart")["url"], "https://example.com/chart");
+    assert_eq!(by_on("chart")["on"], "chart");
+    assert_eq!(by_on("smartArt")["url"], "https://example.com/sa");
+    assert_eq!(by_on("smartArt")["on"], "smartArt");
+}
+
+#[test]
+fn create_run_and_hover_link() {
+    let path = tmp("create-ev").with_extension("pptx");
+    run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "create",
+            "path": path.to_string_lossy(),
+            "presentation": {
+                "slides": [{
+                    "shapes": [{
+                        "text": "悬停",
+                        "url": "https://example.com/c-hover",
+                        "event": "hover"
+                    }, {
+                        "text": "run链",
+                        "url": "https://example.com/c-run",
+                        "on": "run"
+                    }]
+                }]
+            }
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap();
+    let tree = inspect_links(&path);
+    let links = tree["slides"][0]["hyperlinks"].as_array().unwrap();
+    assert_eq!(links[0]["event"], "hover");
+    assert_eq!(links[0]["on"], "shape");
+    assert_eq!(links[1]["on"], "run");
+    assert_eq!(links[1]["event"], "click");
+    let xml = part_text(&path, "ppt/slides/slide1.xml");
+    assert!(xml.contains("hlinkHover"));
+    assert!(xml.contains("hlinkClick"));
+}
+
+#[test]
+fn reject_bad_event_and_on_mismatch() {
+    let src = create_deck("bad-ev");
+    let png = write_png("bad-pic");
+    let with_pic = tmp("bad-pic-host").with_extension("pptx");
+    apply(
+        &src,
+        &with_pic,
+        json!([{ "op": "insertPicture", "id": "slide:1", "file": png.to_string_lossy() }]),
+    )
+    .unwrap();
+    let pic = inspect_scope(&with_pic, json!({ "pictures": true }))["slides"][0]["pictures"][0]
+        ["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let err = apply(
+        &src,
+        &tmp("ev-foo").with_extension("pptx"),
+        json!([{
+            "op": "insertHyperlink",
+            "id": first_shape_id(&src),
+            "event": "foo",
+            "url": "https://example.com/"
+        }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+
+    let err = apply(
+        &with_pic,
+        &tmp("pic-run").with_extension("pptx"),
+        json!([{
+            "op": "insertHyperlink",
+            "id": pic,
+            "on": "run",
+            "url": "https://example.com/"
+        }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
 }

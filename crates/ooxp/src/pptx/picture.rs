@@ -643,7 +643,7 @@ fn is_media_host(el: &Element) -> bool {
         })
 }
 
-fn is_counted_pic(el: &Element) -> bool {
+pub(crate) fn is_counted_pic(el: &Element) -> bool {
     el.local_name() == "pic" && blip_el(el).is_some() && !is_media_host(el)
 }
 
@@ -685,7 +685,7 @@ fn pic_matches(pic: &Element, index: usize, key: &PicKey) -> bool {
     }
 }
 
-fn find_pic_mut<'a>(root: &'a mut Element, key: &PicKey) -> Option<&'a mut Element> {
+pub(crate) fn find_pic_mut<'a>(root: &'a mut Element, key: &PicKey) -> Option<&'a mut Element> {
     let mut idx = 0usize;
     find_pic_in(root, &mut idx, key)
 }

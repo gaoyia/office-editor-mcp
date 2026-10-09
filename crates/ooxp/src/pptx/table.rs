@@ -472,6 +472,31 @@ fn find_tbl_mut(frame: &mut Element) -> Option<&mut Element> {
     find_tbl_mut_in(frame)
 }
 
+pub(crate) fn cell_tx_mut<'a>(
+    root: &'a mut Element,
+    target: &CellTarget,
+) -> Option<&'a mut Element> {
+    let frame = find_frame_mut(root, &target.table.key)?;
+    let tbl = find_tbl_mut(frame)?;
+    let tr_pos = tr_child_indices(tbl);
+    if target.row < 1 || target.row > tr_pos.len() {
+        return None;
+    }
+    let tr = match &mut tbl.children[tr_pos[target.row - 1]] {
+        Node::Element(e) => e,
+        _ => return None,
+    };
+    let tcs = tc_child_indices(tr);
+    if target.col < 1 || target.col > tcs.len() {
+        return None;
+    }
+    let tc = match &mut tr.children[tcs[target.col - 1]] {
+        Node::Element(e) => e,
+        _ => return None,
+    };
+    tc.child_by_local_mut("txBody")
+}
+
 fn find_tbl_mut_in(el: &mut Element) -> Option<&mut Element> {
     if el.local_name() == "AlternateContent" {
         if let Some(i) = shape::first_alt_child_index(el) {
@@ -616,7 +641,7 @@ fn ids_match(file: &str, req: &str) -> bool {
     }
 }
 
-fn find_frame_mut<'a>(root: &'a mut Element, key: &TableKey) -> Option<&'a mut Element> {
+pub(crate) fn find_frame_mut<'a>(root: &'a mut Element, key: &TableKey) -> Option<&'a mut Element> {
     let mut idx = 0usize;
     find_frame_in(root, &mut idx, key)
 }

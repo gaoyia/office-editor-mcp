@@ -5,7 +5,7 @@
 检查前用 create 或 apply 在本机生成文件，不要用改过扩展名的 zip 目录冒充。
 本机若 `PowerPoint.Application` 被 WPS 抢走，直接启动 `POWERPNT.EXE` 再挂 COM，不要走被抢的 ProgID。Office 16 的对象模型在 `mdiClass` 上。
 
-C、I、A、Pp、Pvg、Pem、P3d、Pom、Pc、Psa、Pn、Pcm、Pm、Ps、Tf、Sg、Pt、Tn、Tr、Td、Mt、Am、Aw、Mm、Mw、Md、Ts、Ho、Nh、Nm、Phl、Phr、Pcip、Pmd、Psc、Cs、Po、Cr、Pz、Pw、
+C、I、A、Pp、Pvg、Pem、P3d、Pom、Pc、Psa、Pn、Pcm、Pm、Ps、Tf、Sg、Pt、Tn、Tr、Td、Mt、Am、Aw、Mm、Mw、Md、Ts、Ho、Nh、Nm、Phl、Phr、Phx、Pcip、Pmd、Psc、Cs、Po、Cr、Pz、Pw、
 Pf 各组由 `manual-check/office/cases/pptx-*.ps1` 自动判定，
 跑 `pwsh -File manual-check\office\run.ps1 -Case 'pptx-*'` 即可复现。O1 已放弃，与 xlsx / docx 相同。
 
@@ -37,6 +37,7 @@ Ps1–Ps5、Sg1–Sg5、Pt1–Pt6、Tn1–Tn5、Am1–Am5、Mm1–Mm5、Ho1–Ho
 2026-10-10 补跑 `pptx-notes-master-objects.ps1`，Nm1–Nm5 通过。无 Repair。
 2026-10-10 补跑 `pptx-transition-sound.ps1`，Td1–Td5 通过。无 Repair。
 2026-10-10 补跑 `pptx-media-trim.ps1`，Mt1–Mt5 通过。无 Repair。
+2026-10-10 补跑 `pptx-hyperlinks-remain.ps1`，Phx1–Phx5 通过。无 Repair。
 
 - **C1** ✅
   - PowerPoint 16.0 能打开 `manual-check/office/out/pptx-create.pptx`，标题栏无 Repair
@@ -299,6 +300,12 @@ Ps1–Ps5、Sg1–Sg5、Pt1–Pt6、Tn1–Tn5、Am1–Am5、Mm1–Mm5、Ho1–Ho
   - 改地址后 COM 文本范围对上
   - 删除后字还在、没有 `a:hlinkClick`
   - `on=other` / xlsx `on` 得 `InvalidField`，页 id 得 `InvalidId`
+  - 无 Repair
+- **Phx1–Phx5** ✅
+  - PowerPoint 16.0：`pptx-hyperlinks-remain.ps1`，5 PASS / 0 FAIL
+  - 形状 `event=hover` 后 inspect 对上，ZIP 有 `a:hlinkHover`，COM `Item(2)` 地址对上
+  - 图 / 表 / 单元格 / 图表 / SmartArt 单击链 inspect `on` 对上，COM 地址对上
+  - `event=foo`、对图 id 发 `on=run` 得 `InvalidField`，页 id 得 `InvalidId`，均未写文件
   - 无 Repair
 - **Pmd1–Pmd5** ✅
   - PowerPoint 16.0：`pptx-media.ps1`，8 PASS / 0 FAIL
@@ -1291,7 +1298,7 @@ inspect 列出讲义母版页眉、页脚、日期、页码槽位。apply 用 `s
 
 ## run 级超链接
 
-run 的 `a:rPr/a:hlinkClick`。与形状级编进同一份 `hyperlinks`。`insertHyperlink` 的 `on` 为 `run`。不写 `a:hlinkHover`，不写下划线。
+run 的 `a:rPr/a:hlinkClick`。与形状级编进同一份 `hyperlinks`。`insertHyperlink` 的 `on` 为 `run`。不写下划线。
 脚本：`manual-check/office/cases/pptx-run-links.ps1`。编号用 Phr。
 
 | 序号 | 检查 | 通过标准 |
@@ -1301,6 +1308,29 @@ run 的 `a:rPr/a:hlinkClick`。与形状级编进同一份 `hyperlinks`。`inser
 | Phr3 | 改地址 | `setHyperlink` 改 URL 后 COM 文本范围地址是新值；无 Repair |
 | Phr4 | 删链留字 | `deleteHyperlink` 后没有 `a:hlinkClick`，框上字还在；无 Repair |
 | Phr5 | 拒错 | `on=other` 得 `InvalidField`；xlsx 出现 `on` 得 `InvalidField`；页 id 得 `InvalidId`，均未写文件 |
+
+## 超链接剩余
+
+悬停链，以及图 / 表 / 图表 / SmartArt / 表单元格上的链。不写宏动作。
+脚本：`manual-check/office/cases/pptx-hyperlinks-remain.ps1`。编号用 Phx（不要跟 Phl、Phr 混）。
+
+- **Phx1**
+  - 检查：形状悬停
+  - 通过标准：✅ `insertHyperlink` `event=hover` 后 inspect `event` 为 `hover`
+  - ZIP 有 `a:hlinkHover`
+  - COM `ActionSettings.Item(2)` 地址对上，无 Repair
+- **Phx2**
+  - 检查：图
+  - 通过标准：✅ 对图 id `insertHyperlink` 后 `on=pic`，COM 图单击地址对上，无 Repair
+- **Phx3**
+  - 检查：表
+  - 通过标准：✅ 对表 id 写框链、对单元格 id `on=cell` 写 run 链，inspect 对上，无 Repair
+- **Phx4**
+  - 检查：图表与 SmartArt
+  - 通过标准：✅ 对图表 id 与 SmartArt id 写单击链后 `on` 为 `chart` / `smartArt`，无 Repair
+- **Phx5**
+  - 检查：拒错
+  - 通过标准：✅ `event=foo` 得 `InvalidField`；对图 id 发 `on=run` 得 `InvalidField`；页 id 得 `InvalidId`；均未写文件
 
 ## 媒体
 

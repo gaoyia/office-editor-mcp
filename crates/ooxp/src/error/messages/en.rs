@@ -620,7 +620,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
                 "xlsx insertHyperlink id must be sheet:name".into()
             }
             IdReason::InsertHyperlinkNeedsShape => {
-                "pptx insertHyperlink id must be a slide, notes, master or layout text shape id".into()
+                "pptx insertHyperlink id must be a slide, notes, master or layout text shape, picture, table, chart, SmartArt or table cell id".into()
             }
             IdReason::SlideLinkPrefix => {
                 "pptx hyperlink id must be slide:N/link:k, slide:N/notes/link:k, master:N/link:k or master:N/layout:K/link:k".into()
@@ -1380,11 +1380,12 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             "pptx setHyperlink requires at least one of url, file, slide, or tooltip".into()
         }
         ErrorKind::ShapeAlreadyHasHyperlink => {
-            "this shape already has a shape-level hyperlink; use setHyperlink".into()
+            "this object already has a box-level hyperlink for this event; use setHyperlink".into()
         }
-        ErrorKind::InvalidHyperlinkOn => "on must be shape or run".into(),
+        ErrorKind::InvalidHyperlinkOn => "on must match the id kind".into(),
+        ErrorKind::InvalidHyperlinkEvent => "event must be click or hover".into(),
         ErrorKind::RunAlreadyHasHyperlink => {
-            "this run already has a hyperlink; use setHyperlink".into()
+            "this run already has a hyperlink for this event; use setHyperlink".into()
         }
         ErrorKind::PptxRunLinkNeedsRun => {
             "on=run needs an existing text run or a text field".into()

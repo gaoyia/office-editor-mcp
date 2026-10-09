@@ -757,9 +757,10 @@
 - id 不是超链接 id 报 `InvalidId`
 - docx 的 `insertHyperlink` 的 `id` 必须是段落 id
 - `url` 与 `anchor` 必须恰好给一个
-- pptx 的 `insertHyperlink` 的 `id` 必须是幻灯片、备注、母版或版式文本形状 id
+- pptx 的 `insertHyperlink` 的 `id` 必须是文本形状、图、表、图表、SmartArt 或表单元格 id
 - `url` / `file` / `slide` 必须恰好一个
-- 空串、已有形状级链、或跳到本页报 `InvalidField`
+- 空串、已有同事件框级链、或跳到本页报 `InvalidField`
+- `event` 不是 `click` / `hover`，或 `on` 与 `id` 种类对不上，报 `InvalidField`
 - 目标页不存在报 `IdNotFound`
 - xlsx 的 `insertHyperlink` 的 `id` 必须是 `sheet:{name}`，必须给 `ref`，且 `url` 与 `location` 至少给一个
 - `ref` 非法报 `InvalidRange`
