@@ -16,13 +16,13 @@ docx 的 `exportMedia` 认图 id、OLE id、墨迹画布 id、3D 模型 id 与�
 `font:{n}` 写出 `/word/fonts/…` 的 odttf 原字节（仍是混淆后的，不还原）。
 xlsx 的 `exportMedia` 认工作表图 id、页眉页脚图 id、OLE id 与 3D 模型 id：图 id 写出 `/xl/media/…`，OLE id 写出 embeddings 部件，
 3D 模型 id 写出 `/xl/media/…` 的 GLB 原字节。
-pptx 的 `exportMedia` 认幻灯片图 id、备注图 id、批注内图 id、视频 id、音频 id、OLE id 与 3D 模型 id：图 / 视频 / 音频写出 `/ppt/media/…`，OLE 写出 embeddings 部件，
+pptx 的 `exportMedia` 认幻灯片图 id、备注图 id、批注内图 id、母版 / 版式图 id、视频 id、音频 id、OLE id 与 3D 模型 id：图 / 视频 / 音频写出 `/ppt/media/…`，OLE 写出 embeddings 部件，
 3D 模型 id 写出 `/ppt/media/…` 的 GLB 原字节。
 xlsx 的 `scope.charts` 与图表 op 认工作表 / 图表工作表上的图；`scope.headerFooter` 展开工作表上的页眉页脚槽位。
-pptx 的 `scope.charts` 与图表 op 认幻灯片与备注页上的图表 `p:graphicFrame`；`exportChartData` 认这两处图表 id，写出 embedding。
-pptx 的 `scope.smartArt` 与 SmartArt op 认幻灯片与备注页上的 diagram `p:graphicFrame`。
-pptx 的 `scope.tables` 与表格 op 认幻灯片与备注页上 DrawingML 表 `p:graphicFrame`（`a:tbl`，ECMA-376 §21.1.3.13），不认 `w:tbl`，也不认工作表表格。
-pptx 的 `scope.connectors` 列出该页 `p:cxnSp`；
+pptx 的 `scope.charts` 与图表 op 认幻灯片、备注页与幻灯片母版 / 版式上的图表 `p:graphicFrame`；`exportChartData` 认这些图表 id，写出 embedding。
+pptx 的 `scope.smartArt` 与 SmartArt op 认幻灯片、备注页与幻灯片母版 / 版式上的 diagram `p:graphicFrame`。
+pptx 的 `scope.tables` 与表格 op 认幻灯片、备注页与幻灯片母版 / 版式上 DrawingML 表 `p:graphicFrame`（`a:tbl`，ECMA-376 §21.1.3.13），不认 `w:tbl`，也不认工作表表格。
+pptx 的 `scope.connectors` 列出该页 `p:cxnSp`；`scope.notes` 与 `scope.connectors` 同开时备注上也列；`scope.masters` 同开时母版 / 版式上也列。
 apply 用 `insertConnector` / `deleteConnector` / `groupShapes` / `ungroup`，以及 `insertShape` 的 `prst`。
 xlsx 的 `groupShapes` / `ungroup` 认工作表文本框、无 `txBox` 形状与连接线。
 docx 的 `scope.connectors` 列出正文与页眉页脚里的 `wps` 连接线；
@@ -587,7 +587,7 @@ docx 扩展名变了就写新的 `/word/media/imageN.*`；xlsx 写新的 `/xl/me
 - **`id`**
   - docx：段落 id（正文用 `para:…` / `para:index:{n}`，页眉页脚用 `{容器}/para:…`）
   - xlsx：工作表 id `sheet:{name}`，或页眉槽位 id `sheet:{name}/hf:{kind}:{side}`
-  - pptx：页 id `slide:{n}`、备注容器 id `slide:{n}/notes`，或批注 / 回复 id
+  - pptx：页 id `slide:{n}`、备注容器 id `slide:{n}/notes`、母版 id `master:{n}`、版式 id `master:{n}/layout:{k}`，或批注 / 回复 id
 - **`file`**
   - 本地图片路径
 - **`cx`**
@@ -657,11 +657,11 @@ SVG 再多写一条 image 关系指向 `/xl/media/imageN.svg`。
 `xdr:cNvPr/@id` 取该表工作表 drawing 与 `drawingHF` 里已有 `cNvPr` 的最大整数加 1。工作表图至少为 1。
 页眉图至少为 2：Excel 16.0 若 `drawingHF` 的 `cho` / `lho` 等属性指向 id 1，会拒绝打开该工作簿。锚点必须带空的 `xdr:clientData`（§20.5.2.3）。
 
-pptx：找不到该页报 `IdNotFound`。`id` 必须是 `slide:{n}`、`slide:{n}/notes`，
+pptx：找不到该页 / 该母版 / 该版式报 `IdNotFound`。`id` 必须是 `slide:{n}`、`slide:{n}/notes`、`master:{n}`、`master:{n}/layout:{k}`，
 或批注 / 回复 id（`slide:{n}/comment:{guid}` 或 `{批注 id}/reply:{guid}`）。
 对图 id、形状 id、批注内图 id 或 `pptx:presentation` 发此 op 报 `InvalidId`。
 往幻灯片或备注插时：`cx` / `cy` 规则与 docx 相同；`x` / `y` 必须成对出现或成对省略；只给一个时报 `InvalidField`。
-缺坐标则放到该宿主空白处，不要叠在 `(0,0)`：往幻灯片插时读取 `presentation.xml` 的 `p:sldSz`；往备注插时读取 `p:notesSz`（没有则用 `6858000` × `9144000`）。
+缺坐标则放到该宿主空白处，不要叠在 `(0,0)`：往幻灯片或母版 / 版式插时读取 `presentation.xml` 的 `p:sldSz`；往备注插时读取 `p:notesSz`（没有则用 `6858000` × `9144000`）。
 扫描该宿主已有 `p:sp` / `p:pic` / `p:graphicFrame` / 嵌套 `p:grpSp` 的 `a:xfrm`，优先放到最右侧空隙，放不下再放到下方。
 `kind` / `wrap` / `from` / `to` / `anchor` 以及 xlsx 偏移字段出现报 `InvalidField`。
 写入该宿主 `p:spTree` 一个新的 `p:pic`（带 `a:blip`），关系指向 `/ppt/media/imageN.*`。
@@ -839,7 +839,7 @@ xlsx 规则与图相同：`oneCell` / `absolute` 改 `xdr:ext`，`twoCell` 改�
   - 必须是 `"insertTable"`
 - **`id`**
   - 见 [docx 表 id](json-contract-docx.md#稳定-id) 与 [pptx 表 id](json-contract-pptx.md#稳定-id)：docx 为段落、`docx:document`、页眉页脚容器、表或单元格
-  - pptx 必须是 `slide:{n}` 或 `slide:{n}/notes`
+  - pptx 必须是 `slide:{n}`、`slide:{n}/notes`、`master:{n}` 或 `master:{n}/layout:{k}`
 - **`rows`**
   - 行数
   - docx：1–500
@@ -860,7 +860,7 @@ xlsx 规则与图相同：`oneCell` / `absolute` 改 `xdr:ext`，`twoCell` 改�
 
 写出带单线边框的 `w:tbl`，每列宽 1440 twip，每格至少一段并带新的 `w14:paraId`。插在单元格末尾时，该格末尾仍保留一个 `w:p`（可在新表之后补空段）。
 `rows` / `cols` 越界或不是正整数报 `InvalidField`。id 形态不对报 `InvalidId`。找不到锚点报 `IdNotFound`。xlsx 上发此 op 报 `InvalidField`。
-pptx：`id` 必须是 `slide:{n}` 或 `slide:{n}/notes`；对表 id、形状 id、图 id 或 `pptx:presentation` 发此 op 报 `InvalidId`。
+pptx：`id` 必须是 `slide:{n}`、`slide:{n}/notes`、`master:{n}` 或 `master:{n}/layout:{k}`；对表 id、形状 id、图 id 或 `pptx:presentation` 发此 op 报 `InvalidId`。
 找不到该页报 `IdNotFound`。`rows` 为 1–500，`cols` 为 1–75，越界报 `InvalidField`。
 `cells` 可选，必须是 `rows`×`cols` 的字符串数组，否则报 `InvalidField`。`x` / `y` 与 `cx` / `cy` 必须成对；只给一个报 `InvalidField`。
 docx 上出现 `x` / `y` / `cx` / `cy` 报 `InvalidField`。pptx 都省略尺寸则用 `5486400` × `3200400`。
@@ -939,7 +939,7 @@ pptx：删掉对应 `a:gridCol`。该列落在某格 `gridSpan` 内部时，`gri
 - **`id`**
   - docx：段落 id（正文或页眉页脚）
   - xlsx：工作表 id `sheet:{name}`
-  - pptx：幻灯片文本形状 id（`slide:{n}/shape:…`，不含备注、母版）
+  - pptx：幻灯片、备注、母版或版式文本形状 id（不含 `notesMaster` / `handout`）
 - **`text`**
   - docx 必填，显示文本，字符串，可空
   - xlsx 上出现报 `InvalidField`（显示字走 `setCell`）
@@ -1444,7 +1444,7 @@ id 不是趋势线 id 报 `InvalidId`。找不到报 `IdNotFound`。
 - **`id`**
   - docx：宿主段落 id（正文、页眉页脚、框内、注内或批注内段落）
   - xlsx：工作表 id `sheet:{name}`
-  - pptx：页 id `slide:{n}`，或备注容器 id `slide:{n}/notes`
+  - pptx：页 id `slide:{n}`、备注容器 id `slide:{n}/notes`、母版 id `master:{n}` 或版式 id `master:{n}/layout:{k}`
 - **`type`**
   - 包括
     - `bar`
@@ -1532,7 +1532,7 @@ xlsx：找不到该表报 `IdNotFound`。`id` 不是 `sheet:{name}` 报 `Invalid
 没有 drawing 则按插图同一套规则新建 drawing，并在锚点下写 `xdr:graphicFrame`（须带空的 `xdr:clientData`）。
 `xdr:cNvPr/@id` 取该表已有全部 `cNvPr`（图与框）的最大整数加 1，至少为 1。对图 id、图表 id、系列 id 或单元格 id 发此 op 报 `InvalidId`。不要用本 op 新建图表工作表。
 
-pptx：找不到该页报 `IdNotFound`。`id` 必须是 `slide:{n}` 或 `slide:{n}/notes`。
+pptx：找不到该页 / 该母版 / 该版式报 `IdNotFound`。`id` 必须是 `slide:{n}`、`slide:{n}/notes`、`master:{n}` 或 `master:{n}/layout:{k}`。
 对图 id、形状 id、图表 id、批注 id 或 `pptx:presentation` 发此 op 报 `InvalidId`。
 写入该宿主 `p:spTree` 一个 `p:graphicFrame`，新建 `/ppt/charts/chartN.xml`、chart 的 `.rels`、
 一份最小 embedding（`/ppt/embeddings/Microsoft_Excel_WorksheetN.xlsx`，规则与 docx 相同）。
@@ -1637,7 +1637,7 @@ pptx 认同一套 SmartArt op。改点只动 data 部件里对应 `dgm:pt` 的 `
 - **`id`**
   - docx：宿主段落 id，正文、页眉页脚、框内、注内或批注内段落
   - xlsx：工作表 id `sheet:{name}`
-  - pptx：页 id `slide:{n}`，或备注容器 id `slide:{n}/notes`
+  - pptx：页 id `slide:{n}`、备注容器 id `slide:{n}/notes`、母版 id `master:{n}` 或版式 id `master:{n}/layout:{k}`
 - **`layout`**
   - `list`、`org` 或 `cycle`
 - **`points`**

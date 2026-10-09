@@ -79,12 +79,24 @@ pub fn notes_json(
     want_model3ds: bool,
     want_maths: bool,
     want_timing: bool,
+    want_media: bool,
+    want_ole_objects: bool,
+    want_zooms: bool,
+    want_connectors: bool,
+    want_hyperlinks: bool,
+    want_fields: bool,
+    slides: &[shape::SlideMeta],
+    pres_root: &Element,
 ) -> Result<Value, Error> {
     let Some(part) = notes_slide_part(pkg, slide_part)? else {
         return Ok(Value::Null);
     };
     let doc = xml::parse(pkg.get(&part)?)?;
-    let host = format!("slide:{slide}/notes");
+    let host = picture::TreeHost::Slide {
+        n: slide,
+        on_notes: true,
+    }
+    .prefix();
     let rels = crate::opc::Relationships::from_package(pkg, &part)?;
     let pics = picture::collect_pictures_with(&doc.root, &host, Some(&rels));
     let charts_list = if want_charts {
@@ -116,6 +128,41 @@ pub fn notes_json(
         .as_ref()
         .map(|c| c.len())
         .unwrap_or_else(|| super::table::count_tables(&doc.root));
+    let (n_videos, n_audios) = super::media::count(&doc.root);
+    let media_lists = if want_media {
+        Some(super::media::collect(pkg, &part, &doc.root, &host)?)
+    } else {
+        None
+    };
+    let ole_list = if want_ole_objects {
+        Some(super::ole::collect(pkg, &part, &doc.root, &host)?)
+    } else {
+        None
+    };
+    let n_ole = ole_list
+        .as_ref()
+        .map(|c| c.len())
+        .unwrap_or_else(|| super::ole::count(pkg, &part, &doc.root).unwrap_or(0));
+    let zooms_list = if want_zooms {
+        Some(super::zoom::collect(&doc.root, &host, slides, pres_root))
+    } else {
+        None
+    };
+    let n_zoom = zooms_list
+        .as_ref()
+        .map(|c| c.len())
+        .unwrap_or_else(|| super::zoom::count(&doc.root));
+    let connectors_list = if want_connectors {
+        Some(super::connector::list_json(&doc.root, &host))
+    } else {
+        None
+    };
+    let n_cxn = connectors_list
+        .as_ref()
+        .map(|c| c.len())
+        .unwrap_or_else(|| super::connector::count(&doc.root));
+    let n_links = super::hyperlink::count(&doc.root);
+    let n_fields = super::field::count(&doc.root);
     let all = shape::collect_text_shapes(&doc.root);
     let mut shapes = Vec::new();
     for (i, sp) in all.iter().enumerate() {
@@ -127,11 +174,18 @@ pub fn notes_json(
     obj.insert("pictureCount".into(), json!(pics.len()));
     let maths = super::omml::collect(&doc.root, &host);
     obj.insert("mathCount".into(), json!(maths.len()));
+    obj.insert("videoCount".into(), json!(n_videos));
+    obj.insert("audioCount".into(), json!(n_audios));
     obj.insert("chartCount".into(), json!(n_charts));
     obj.insert("smartArtCount".into(), json!(n_smartarts));
+    obj.insert("hyperlinkCount".into(), json!(n_links));
+    obj.insert("fieldCount".into(), json!(n_fields));
     obj.insert("tableCount".into(), json!(n_tables));
+    obj.insert("oleObjectCount".into(), json!(n_ole));
     let m3ds = super::model3d::collect(&doc.root, &host);
     obj.insert("model3dCount".into(), json!(m3ds.len()));
+    obj.insert("zoomCount".into(), json!(n_zoom));
+    obj.insert("connectorCount".into(), json!(n_cxn));
     let anims = super::timing::list(&doc.root, &host, false);
     obj.insert("animCount".into(), json!(anims.len()));
     if want_pictures {
@@ -143,6 +197,16 @@ pub fn notes_json(
     if want_maths {
         obj.insert("maths".into(), Value::Array(super::omml::list_json(&maths)));
     }
+    if let Some((videos, audios)) = media_lists {
+        obj.insert(
+            "videos".into(),
+            Value::Array(super::media::list_json(&videos)),
+        );
+        obj.insert(
+            "audios".into(),
+            Value::Array(super::media::list_json(&audios)),
+        );
+    }
     if let Some(charts) = charts_list {
         obj.insert("charts".into(), Value::Array(charts));
     }
@@ -152,11 +216,29 @@ pub fn notes_json(
     if let Some(tables) = tables_list {
         obj.insert("tables".into(), Value::Array(tables));
     }
+    if let Some(oles) = ole_list {
+        obj.insert("oleObjects".into(), Value::Array(oles));
+    }
     if want_model3ds {
         obj.insert(
             "model3ds".into(),
             Value::Array(super::model3d::list_json(&m3ds)),
         );
+    }
+    if let Some(zooms) = zooms_list {
+        obj.insert("zooms".into(), Value::Array(zooms));
+    }
+    if let Some(connectors) = connectors_list {
+        obj.insert("connectors".into(), Value::Array(connectors));
+    }
+    if want_hyperlinks {
+        obj.insert(
+            "hyperlinks".into(),
+            super::hyperlink::list_json(&doc.root, &host, &part, &rels, slides),
+        );
+    }
+    if want_fields {
+        obj.insert("fields".into(), super::field::list_json(&doc.root, &host));
     }
     if want_timing {
         obj.insert("timing".into(), Value::Array(anims));

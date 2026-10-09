@@ -327,6 +327,7 @@ pub(crate) enum IdReason {
     /// pptx OLE id 必须是 slide:N/ole:…
     SlideOlePrefix,
     /// 页 id，缺少 /ole:…
+    #[allow(dead_code)]
     SlideOleContainer,
     /// pptx 的 insertOle 必须用 slide:N
     InsertOleNeedsSlide,
@@ -347,6 +348,7 @@ pub(crate) enum IdReason {
     /// pptx 3D 模型 id 必须是 slide:N/model3d:… 或备注
     SlideModel3dPrefix,
     /// 页 id，缺少 /model3d:…
+    #[allow(dead_code)]
     SlideModel3dContainer,
     /// xlsx 的 insertMath 必须用 sheet:工作表名
     InsertMathNeedsSheet,
@@ -359,6 +361,7 @@ pub(crate) enum IdReason {
     /// pptx 公式框 id 必须是 slide:N/math:… 或备注
     SlideMathPrefix,
     /// 页 id，缺少 /math:…
+    #[allow(dead_code)]
     SlideMathContainer,
     /// xlsx 的 insertSlicer 必须用 sheet:工作表名
     InsertSlicerNeedsSheet,
@@ -377,6 +380,7 @@ pub(crate) enum IdReason {
     /// pptx Zoom id 必须是 slide:N/zoom:…
     SlideZoomPrefix,
     /// 页 id，缺少 /zoom:…
+    #[allow(dead_code)]
     SlideZoomContainer,
     ZoomIndexNotInt,
     ZoomIndexFromOne,

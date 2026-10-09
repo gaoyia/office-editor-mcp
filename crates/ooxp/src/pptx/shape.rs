@@ -31,6 +31,7 @@ pub enum ShapeKey {
 pub struct ShapeTarget {
     pub slide: usize,
     pub on_notes: bool,
+    pub master: Option<(usize, Option<usize>)>,
     pub key: ShapeKey,
 }
 
@@ -100,12 +101,14 @@ pub fn parse_shape_id(id: &str, op_index: usize) -> Result<ShapeTarget, Error> {
         return Ok(ShapeTarget {
             slide,
             on_notes,
+            master: None,
             key: ShapeKey::Index(idx),
         });
     }
     Ok(ShapeTarget {
         slide,
         on_notes,
+        master: None,
         key: ShapeKey::Id(after.to_string()),
     })
 }

@@ -111,7 +111,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
                 "xlsx insertPicture id must be sheet:name or sheet:name/hf:kind:side".into()
             }
             IdReason::SlidePicPrefix => {
-                "pptx picture id must be slide:N/pic:…, slide:N/notes/pic:…, or slide:N/comment:GUID/pic:n".into()
+                "pptx picture id must be slide:N/pic:…, slide:N/notes/pic:…, master:N/pic:…, master:N/layout:K/pic:…, or slide:N/comment:GUID/pic:n".into()
             }
             IdReason::SlidePicContainer => {
                 "Slide id must include /pic:… (that id alone is not a picture)".into()
@@ -120,19 +120,19 @@ pub(super) fn render(kind: &ErrorKind) -> String {
                 "comment pictures have no canvas size or position".into()
             }
             IdReason::SlideMediaForm => {
-                "pptx video / audio id must be slide:N/video:… or slide:N/audio:…".into()
+                "pptx video / audio id must be slide:N/video:…, slide:N/audio:…, slide:N/notes/…, master:N/… or master:N/layout:K/…".into()
             }
             IdReason::InsertMediaNeedsSlide => {
-                "pptx insertVideo / insertAudio id must be slide:N".into()
+                "pptx insertVideo / insertAudio id must be slide:N, slide:N/notes, master:N or master:N/layout:K".into()
             }
             IdReason::SlideCxnForm => {
-                "pptx connector id must be slide:N/cxn:…".into()
+                "pptx connector id must be slide:N/cxn:…, slide:N/notes/cxn:…, master:N/cxn:… or master:N/layout:K/cxn:…".into()
             }
             IdReason::InsertConnectorNeedsSlide => {
-                "pptx insertConnector / groupShapes id must be slide:N".into()
+                "pptx insertConnector id must be slide:N, slide:N/notes, master:N or master:N/layout:K".into()
             }
             IdReason::InsertNeedsSlide => {
-                "pptx insertPicture id must be slide:N or slide:N/notes".into()
+                "pptx insertPicture id must be slide:N, slide:N/notes, master:N, master:N/layout:K, or a comment id".into()
             }
             IdReason::InsertShapeHost => {
                 "pptx insertShape id must be slide:N, slide:N/notes, master:N or master:N/layout:K".into()
@@ -289,7 +289,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
                 "xlsx insertChart id must be sheet:name".into()
             }
             IdReason::InsertChartNeedsSlide => {
-                "pptx insertChart id must be slide:N or slide:N/notes".into()
+                "pptx insertChart id must be slide:N, slide:N/notes, master:N or master:N/layout:K".into()
             }
             IdReason::InsertChartSheetNeedsWorkbook => {
                 "insertChartSheet id must be xlsx:workbook".into()
@@ -429,7 +429,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
                 "Sheet id must include /chart:… (that id alone is not a chart)".into()
             }
             IdReason::SlideChartPrefix => {
-                "pptx chart id must be slide:N/chart:… or slide:N/notes/chart:…".into()
+                "pptx chart id must be slide:N/chart:…, slide:N/notes/chart:…, master:N/chart:… or master:N/layout:K/chart:…".into()
             }
             IdReason::SlideChartContainer => {
                 "Slide id must include /chart:… (that id alone is not a chart)".into()
@@ -451,16 +451,16 @@ pub(super) fn render(kind: &ErrorKind) -> String {
                 "insertSmartArt id must be a body or header/footer paragraph id".into()
             }
             IdReason::SlideSmartArtPrefix => {
-                "pptx SmartArt id must be slide:N/smartdiagram:… or slide:N/notes/smartdiagram:…".into()
+                "pptx SmartArt id must be slide:N/smartdiagram:…, slide:N/notes/smartdiagram:…, master:N/smartdiagram:… or master:N/layout:K/smartdiagram:…".into()
             }
             IdReason::SlideSmartArtContainer => {
                 "Slide id must include /smartdiagram:… (that id alone is not a SmartArt)".into()
             }
             IdReason::InsertSmartArtNeedsSlide => {
-                "pptx insertSmartArt id must be slide:N or slide:N/notes".into()
+                "pptx insertSmartArt id must be slide:N, slide:N/notes, master:N or master:N/layout:K".into()
             }
             IdReason::SlideTablePrefix => {
-                "pptx table id must be slide:N/table:… or slide:N/notes/table:…".into()
+                "pptx table id must be slide:N/table:…, slide:N/notes/table:…, master:N/table:… or master:N/layout:K/table:…".into()
             }
             IdReason::SlideTableContainer => {
                 "Slide id must include /table:… (that id alone is not a table)".into()
@@ -474,7 +474,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
                 "Cell id must be a table id plus /r:R/c:C, R and C starting at 1".into()
             }
             IdReason::InsertTableNeedsSlide => {
-                "pptx insertTable id must be slide:N or slide:N/notes".into()
+                "pptx insertTable id must be slide:N, slide:N/notes, master:N or master:N/layout:K".into()
             }
             IdReason::SetTableCellNeedsCell => {
                 "setTableCellText id must be a DrawingML table cell id".into()
@@ -492,11 +492,15 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::InsertOleNeedsPara => {
                 "insertOle id must be a body or header/footer paragraph id".into()
             }
-            IdReason::SlideOlePrefix => "OLE id must be slide:N/ole:…".into(),
+            IdReason::SlideOlePrefix => {
+                "OLE id must be slide:N/ole:…, slide:N/notes/ole:…, master:N/ole:… or master:N/layout:K/ole:…".into()
+            }
             IdReason::SlideOleContainer => {
                 "Slide id must include /ole:… (that id alone is not an embedded object)".into()
             }
-            IdReason::InsertOleNeedsSlide => "pptx insertOle id must be slide:N".into(),
+            IdReason::InsertOleNeedsSlide => {
+                "pptx insertOle id must be slide:N, slide:N/notes, master:N or master:N/layout:K".into()
+            }
             IdReason::InsertOleNeedsSheet => "xlsx insertOle id must be sheet:name".into(),
             IdReason::SheetOlePrefix => "xlsx OLE id must be sheet:name/ole:…".into(),
             IdReason::SheetOleContainer => {
@@ -508,10 +512,10 @@ pub(super) fn render(kind: &ErrorKind) -> String {
                 "Sheet id must include /model3d:… (that id alone is not a 3D model)".into()
             }
             IdReason::InsertModel3dNeedsSlide => {
-                "pptx insertModel3d id must be slide:N or slide:N/notes".into()
+                "pptx insertModel3d id must be slide:N, slide:N/notes, master:N or master:N/layout:K".into()
             }
             IdReason::SlideModel3dPrefix => {
-                "pptx 3D model id must be slide:N/model3d:… or slide:N/notes/model3d:…".into()
+                "pptx 3D model id must be slide:N/model3d:…, slide:N/notes/model3d:…, master:N/model3d:… or master:N/layout:K/model3d:…".into()
             }
             IdReason::SlideModel3dContainer => {
                 "Slide id must include /model3d:… (that id alone is not a 3D model)".into()
@@ -522,10 +526,10 @@ pub(super) fn render(kind: &ErrorKind) -> String {
                 "Sheet id must include /math:… (that id alone is not a math drawing)".into()
             }
             IdReason::InsertMathNeedsSlide => {
-                "pptx insertMath id must be slide:N or slide:N/notes".into()
+                "pptx insertMath id must be slide:N, slide:N/notes, master:N or master:N/layout:K".into()
             }
             IdReason::SlideMathPrefix => {
-                "pptx math drawing id must be slide:N/math:… or slide:N/notes/math:…".into()
+                "pptx math drawing id must be slide:N/math:…, slide:N/notes/math:…, master:N/math:… or master:N/layout:K/math:…".into()
             }
             IdReason::SlideMathContainer => {
                 "Slide id must include /math:… (that id alone is not a math drawing)".into()
@@ -542,11 +546,15 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::InsertSlicerNeedsTableOrPivot => {
                 "insertSlicer source must be a table or pivot id on the same sheet".into()
             }
-            IdReason::InsertZoomNeedsSlide => "insertZoom id must be slide:N".into(),
+            IdReason::InsertZoomNeedsSlide => {
+                "insertZoom id must be slide:N, slide:N/notes, master:N or master:N/layout:K".into()
+            }
             IdReason::ZoomTargetSlide => {
                 "insertZoom target must be slide:N when type is slide".into()
             }
-            IdReason::SlideZoomPrefix => "Zoom id must be slide:N/zoom:…".into(),
+            IdReason::SlideZoomPrefix => {
+                "Zoom id must be slide:N/zoom:…, slide:N/notes/zoom:…, master:N/zoom:… or master:N/layout:K/zoom:…".into()
+            }
             IdReason::SlideZoomContainer => {
                 "Slide id must include /zoom:… (that id alone is not a Zoom)".into()
             }
@@ -609,10 +617,10 @@ pub(super) fn render(kind: &ErrorKind) -> String {
                 "xlsx insertHyperlink id must be sheet:name".into()
             }
             IdReason::InsertHyperlinkNeedsShape => {
-                "pptx insertHyperlink id must be a slide text shape id".into()
+                "pptx insertHyperlink id must be a slide, notes, master or layout text shape id".into()
             }
             IdReason::SlideLinkPrefix => {
-                "pptx hyperlink id must be slide:n/link:k, n and k starting at 1".into()
+                "pptx hyperlink id must be slide:N/link:k, slide:N/notes/link:k, master:N/link:k or master:N/layout:K/link:k".into()
             }
             IdReason::PptxJumpNeedsSlide => {
                 "pptx internal jump must be slide:n, n starting at 1".into()
@@ -643,10 +651,10 @@ pub(super) fn render(kind: &ErrorKind) -> String {
                 "insertField id must be a body or header/footer paragraph id".into()
             }
             IdReason::PptxFieldForm => {
-                "pptx field id must be slide:N/fld:GUID or slide:N/fld:index:K".into()
+                "pptx field id must be slide:N/fld:…, slide:N/notes/fld:…, master:N/fld:… or master:N/layout:K/fld:…".into()
             }
             IdReason::InsertFieldNeedsShape => {
-                "pptx insertField id must be a slide text shape id".into()
+                "pptx insertField id must be a slide, notes, master or layout text shape id".into()
             }
             IdReason::InsertNumberingNeedsDocument => {
                 "insertNumbering id must be docx:document".into()

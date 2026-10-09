@@ -23,6 +23,7 @@ pub enum Model3dKey {
 pub struct Model3dTarget {
     pub slide: usize,
     pub on_notes: bool,
+    pub master: Option<(usize, Option<usize>)>,
     pub key: Model3dKey,
 }
 
@@ -30,6 +31,7 @@ pub struct Model3dTarget {
 pub struct InsertModel3dOp {
     pub slide: usize,
     pub on_notes: bool,
+    pub master: Option<(usize, Option<usize>)>,
     pub file: String,
     pub x: Option<i64>,
     pub y: Option<i64>,
@@ -62,50 +64,13 @@ pub struct Model3dInfo {
 }
 
 pub fn looks_like_id(id: &str) -> bool {
-    id.contains("/model3d:") && id.starts_with("slide:")
+    id.contains("/model3d:") && (id.starts_with("slide:") || id.starts_with("master:"))
 }
 
 pub fn parse_id(id: &str, json_path: &str) -> Result<Model3dTarget, Error> {
-    let rest = id.strip_prefix("slide:").ok_or_else(|| {
-        Error::with_path(
-            ErrorKind::InvalidId {
-                reason: IdReason::SlideModel3dPrefix,
-            },
-            json_path.to_string(),
-        )
-    })?;
-    let (host, after, on_notes) = if let Some((n, rest)) = rest.split_once("/notes/model3d:") {
-        (n, rest, true)
-    } else if let Some((n, rest)) = rest.split_once("/model3d:") {
-        if n.contains('/') {
-            return Err(Error::with_path(
-                ErrorKind::InvalidId {
-                    reason: IdReason::SlideModel3dPrefix,
-                },
-                json_path.to_string(),
-            ));
-        }
-        (n, rest, false)
-    } else if rest.contains("/notes") && !rest.contains("/model3d:") {
-        return Err(Error::with_path(
-            ErrorKind::InvalidId {
-                reason: IdReason::SlideModel3dContainer,
-            },
-            json_path.to_string(),
-        ));
-    } else {
-        return Err(Error::with_path(
-            ErrorKind::InvalidId {
-                reason: if rest.contains('/') {
-                    IdReason::SlideModel3dPrefix
-                } else {
-                    IdReason::SlideModel3dContainer
-                },
-            },
-            json_path.to_string(),
-        ));
-    };
-    if host.is_empty() || after.is_empty() {
+    let (host, after) =
+        picture::parse_object_id(id, json_path, "model3d", IdReason::SlideModel3dPrefix)?;
+    if after.is_empty() {
         return Err(Error::with_path(
             ErrorKind::InvalidId {
                 reason: IdReason::SlideModel3dPrefix,
@@ -113,25 +78,11 @@ pub fn parse_id(id: &str, json_path: &str) -> Result<Model3dTarget, Error> {
             json_path.to_string(),
         ));
     }
-    let slide: usize = host.parse().map_err(|_| {
-        Error::with_path(
-            ErrorKind::InvalidId {
-                reason: IdReason::SlideIndexNotInt,
-            },
-            json_path.to_string(),
-        )
-    })?;
-    if slide < 1 {
-        return Err(Error::with_path(
-            ErrorKind::InvalidId {
-                reason: IdReason::SlideIndexFromOne,
-            },
-            json_path.to_string(),
-        ));
-    }
+    let (slide, on_notes, master) = host.parts();
     Ok(Model3dTarget {
         slide,
         on_notes,
+        master,
         key: parse_key(after, json_path)?,
     })
 }
@@ -269,21 +220,16 @@ pub fn export(bytes: &[u8], id: &str) -> Result<super::ExportedMedia, Error> {
     let pres_part = crate::opc::office_document_part(&pkg)?;
     let pres = crate::xml::parse(pkg.get(&pres_part)?)?;
     let slides = shape::list_slides(&pkg, &pres_part, &pres.root)?;
-    let meta = slides.get(target.slide - 1).ok_or_else(|| {
-        Error::with_path(
-            ErrorKind::SlideNotFound {
-                n: target.slide as u32,
-            },
-            "id",
-        )
-    })?;
-    let part = if target.on_notes {
-        super::notes::notes_slide_part(&pkg, &meta.part)?.ok_or_else(|| {
-            Error::with_path(ErrorKind::Model3dNotFound { id: id.to_string() }, "id")
-        })?
-    } else {
-        meta.part.clone()
-    };
+    let host = super::picture::TreeHost::from_parts(target.slide, target.on_notes, target.master);
+    let part = super::picture::resolve_tree_part(
+        &pkg,
+        &pres_part,
+        &pres.root,
+        &slides,
+        &host,
+        ErrorKind::Model3dNotFound { id: id.to_string() },
+        "id",
+    )?;
     let doc = crate::xml::parse(pkg.get(&part)?)?;
     let frame = find_frame(&doc.root, &target.key)
         .ok_or_else(|| Error::with_path(ErrorKind::Model3dNotFound { id: id.to_string() }, "id"))?;
@@ -678,6 +624,7 @@ pub(crate) fn parse_create(
     Ok(InsertModel3dOp {
         slide,
         on_notes: false,
+        master: None,
         file,
         x: parse_emu(obj.get("x"), prefix, "x")?,
         y: parse_emu(obj.get("y"), prefix, "y")?,

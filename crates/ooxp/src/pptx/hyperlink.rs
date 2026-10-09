@@ -30,22 +30,21 @@ pub fn count(root: &Element) -> usize {
 
 pub fn list_json(
     root: &Element,
-    slide: usize,
+    host_prefix: &str,
     part: &str,
     rels: &Relationships,
     slides: &[SlideMeta],
 ) -> Value {
-    let host_prefix = format!("slide:{slide}");
     let mut out = Vec::new();
     let mut index = 0usize;
     for (shape_index, sp) in shape::collect_text_shapes(root).into_iter().enumerate() {
-        let (host, _, _) = shape::shape_stable_id(sp, &host_prefix, shape_index + 1);
+        let (host, _, _) = shape::shape_stable_id(sp, host_prefix, shape_index + 1);
         for view in clicks_in_shape(sp) {
             index += 1;
             out.push(item_json(
                 view.click,
                 index,
-                slide,
+                host_prefix,
                 &host,
                 part,
                 rels,
@@ -218,44 +217,13 @@ pub fn apply_delete(
     Ok(())
 }
 
-pub fn parse_link_id(id: &str, op_index: usize) -> Result<(usize, usize), Error> {
+pub fn parse_link_id(id: &str, op_index: usize) -> Result<(picture::TreeHost, usize), Error> {
     let path = format!("ops[{op_index}].id");
-    let rest = id.strip_prefix("slide:").ok_or_else(|| {
-        Error::with_path(
-            ErrorKind::InvalidId {
-                reason: IdReason::SlideLinkPrefix,
-            },
-            path.clone(),
-        )
-    })?;
-    let Some((n, after)) = rest.split_once("/link:") else {
+    let (host, after) = picture::parse_object_id(id, &path, "link", IdReason::SlideLinkPrefix)?;
+    if after.contains('/') {
         return Err(Error::with_path(
             ErrorKind::InvalidId {
                 reason: IdReason::SlideLinkPrefix,
-            },
-            path,
-        ));
-    };
-    if n.contains('/') || after.contains('/') {
-        return Err(Error::with_path(
-            ErrorKind::InvalidId {
-                reason: IdReason::SlideLinkPrefix,
-            },
-            path,
-        ));
-    }
-    let slide: usize = n.parse().map_err(|_| {
-        Error::with_path(
-            ErrorKind::InvalidId {
-                reason: IdReason::SlideIndexNotInt,
-            },
-            path.clone(),
-        )
-    })?;
-    if slide < 1 {
-        return Err(Error::with_path(
-            ErrorKind::InvalidId {
-                reason: IdReason::SlideIndexFromOne,
             },
             path,
         ));
@@ -276,7 +244,7 @@ pub fn parse_link_id(id: &str, op_index: usize) -> Result<(usize, usize), Error>
             path,
         ));
     }
-    Ok((slide, index))
+    Ok((host, index))
 }
 
 pub fn parse_jump_slide(value: &str, i: usize, field: &str) -> Result<usize, Error> {
@@ -319,7 +287,7 @@ pub fn parse_jump_slide(value: &str, i: usize, field: &str) -> Result<usize, Err
 fn item_json(
     click: &Element,
     index: usize,
-    slide: usize,
+    host_prefix: &str,
     host: &str,
     part: &str,
     rels: &Relationships,
@@ -353,7 +321,7 @@ fn item_json(
         _ => {}
     }
     let mut obj = Map::new();
-    obj.insert("id".into(), json!(format!("slide:{slide}/link:{index}")));
+    obj.insert("id".into(), json!(format!("{host_prefix}/link:{index}")));
     obj.insert("index".into(), json!(index));
     obj.insert("kind".into(), json!(kind));
     obj.insert("on".into(), json!(on));

@@ -74,6 +74,8 @@ impl MediaKind {
 #[derive(Debug, Clone)]
 pub struct MediaTarget {
     pub slide: usize,
+    pub on_notes: bool,
+    pub master: Option<(usize, Option<usize>)>,
     pub kind: MediaKind,
     pub key: PicKey,
 }
@@ -93,29 +95,20 @@ pub struct MediaInfo {
 }
 
 pub fn is_media_id(id: &str) -> bool {
-    let Some(rest) = id.strip_prefix("slide:") else {
-        return false;
-    };
-    let Some((_, after)) = rest.split_once('/') else {
-        return false;
-    };
-    after.starts_with("video:") || after.starts_with("audio:")
+    (id.starts_with("slide:") || id.starts_with("master:"))
+        && (id.contains("/video:") || id.contains("/audio:"))
 }
 
 pub fn parse_media_id(id: &str, json_path: &str) -> Result<MediaTarget, Error> {
     let path = json_path.to_string();
-    let rest = id.strip_prefix("slide:").ok_or_else(|| {
-        Error::with_path(
-            ErrorKind::InvalidId {
-                reason: IdReason::SlideMediaForm,
-            },
-            path.clone(),
-        )
-    })?;
-    let (n, after, kind) = if let Some((n, after)) = rest.split_once("/video:") {
-        (n, after, MediaKind::Video)
-    } else if let Some((n, after)) = rest.split_once("/audio:") {
-        (n, after, MediaKind::Audio)
+    let (host, after, kind) = if let Ok((host, after)) =
+        picture::parse_object_id(id, json_path, "video", IdReason::SlideMediaForm)
+    {
+        (host, after, MediaKind::Video)
+    } else if let Ok((host, after)) =
+        picture::parse_object_id(id, json_path, "audio", IdReason::SlideMediaForm)
+    {
+        (host, after, MediaKind::Audio)
     } else {
         return Err(Error::with_path(
             ErrorKind::InvalidId {
@@ -124,32 +117,15 @@ pub fn parse_media_id(id: &str, json_path: &str) -> Result<MediaTarget, Error> {
             path,
         ));
     };
-    if n.is_empty() || n.contains('/') {
-        return Err(Error::with_path(
-            ErrorKind::InvalidId {
-                reason: IdReason::SlideMediaForm,
-            },
-            path,
-        ));
-    }
-    let slide: usize = n.parse().map_err(|_| {
-        Error::with_path(
-            ErrorKind::InvalidId {
-                reason: IdReason::SlideIndexNotInt,
-            },
-            path.clone(),
-        )
-    })?;
-    if slide < 1 {
-        return Err(Error::with_path(
-            ErrorKind::InvalidId {
-                reason: IdReason::SlideIndexFromOne,
-            },
-            path,
-        ));
-    }
+    let (slide, on_notes, master) = host.parts();
     let key = parse_media_key(after, &path)?;
-    Ok(MediaTarget { slide, kind, key })
+    Ok(MediaTarget {
+        slide,
+        on_notes,
+        master,
+        kind,
+        key,
+    })
 }
 
 fn parse_media_key(after: &str, path: &str) -> Result<PicKey, Error> {
@@ -183,18 +159,8 @@ fn parse_media_key(after: &str, path: &str) -> Result<PicKey, Error> {
     Ok(PicKey::Id(after.to_string()))
 }
 
-pub fn parse_insert_slide(id: &str, op_index: usize) -> Result<usize, Error> {
-    let (slide, on_notes) =
-        picture::parse_insert_slide_or_notes(id, op_index, IdReason::InsertMediaNeedsSlide)?;
-    if on_notes {
-        return Err(Error::with_path(
-            ErrorKind::InvalidId {
-                reason: IdReason::InsertMediaNeedsSlide,
-            },
-            format!("ops[{op_index}].id"),
-        ));
-    }
-    Ok(slide)
+pub fn parse_insert_slide(id: &str, op_index: usize) -> Result<picture::TreeHost, Error> {
+    picture::parse_insert_host(id, op_index, IdReason::InsertMediaNeedsSlide)
 }
 
 /// 同时带 `videoFile` 时算视频。
@@ -520,20 +486,22 @@ pub fn export(bytes: &[u8], id: &str) -> Result<ExportedMedia, Error> {
     let pres_part = crate::opc::office_document_part(&pkg)?;
     let pres = crate::xml::parse(pkg.get(&pres_part)?)?;
     let slides = shape::list_slides(&pkg, &pres_part, &pres.root)?;
-    let meta = slides.get(target.slide - 1).ok_or_else(|| {
-        Error::with_path(
-            ErrorKind::SlideNotFound {
-                n: target.slide as u32,
-            },
-            "id",
-        )
-    })?;
-    let doc = crate::xml::parse(pkg.get(&meta.part)?)?;
+    let host = picture::TreeHost::from_parts(target.slide, target.on_notes, target.master);
+    let part = picture::resolve_tree_part(
+        &pkg,
+        &pres_part,
+        &pres.root,
+        &slides,
+        &host,
+        ErrorKind::MediaNotFound { id: id.to_string() },
+        "id",
+    )?;
+    let doc = crate::xml::parse(pkg.get(&part)?)?;
     let pic = find_media(&doc.root, target.kind, &target.key)
         .ok_or_else(|| Error::with_path(ErrorKind::MediaNotFound { id: id.to_string() }, "id"))?;
     let rid = media_rel_id(pic)
         .ok_or_else(|| Error::with_path(ErrorKind::MediaNotFound { id: id.to_string() }, "id"))?;
-    let media = crate::opc::resolve_id(&pkg, &meta.part, &rid)?;
+    let media = crate::opc::resolve_id(&pkg, &part, &rid)?;
     let media_bytes = pkg.get(&media)?.to_vec();
     let cts = ContentTypes::from_package(&pkg)?;
     let content_type = cts.content_type_of(&media).map(str::to_string);
@@ -559,7 +527,7 @@ pub fn insert(
     };
     let (x, y) = match (op.x, op.y) {
         (Some(px), Some(py)) => (px, py),
-        _ => picture::vacant_pos(pres_root, &slide_doc.root, cx, cy),
+        _ => picture::vacant_pos_host(op.on_notes, pres_root, &slide_doc.root, cx, cy),
     };
     picture::ensure_xmlns(&mut slide_doc.root, "r", REL_NS);
     picture::ensure_xmlns(&mut slide_doc.root, "a", DML_NS);

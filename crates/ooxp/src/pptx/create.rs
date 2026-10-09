@@ -906,6 +906,7 @@ fn attach_hyperlinks(pkg: &mut Package, slides: &[NewSlide]) -> Result<(), Error
                 shape: ShapeTarget {
                     slide: n,
                     on_notes: false,
+                    master: None,
                     key: ShapeKey::Id(cnv),
                 },
                 target: link.target.clone(),

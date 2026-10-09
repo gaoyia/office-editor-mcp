@@ -301,10 +301,10 @@ fn reject_bad_id_type_and_foreign() {
 
     let err = apply(
         &src,
-        &tmp("notes").with_extension("pptx"),
+        &tmp("notes-master").with_extension("pptx"),
         json!([{
             "op": "insertField",
-            "id": "slide:1/notes/shape:2",
+            "id": "notesMaster/shape:2",
             "type": "slidenum"
         }]),
     )

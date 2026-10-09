@@ -29,47 +29,23 @@ pub enum ChartKey {
 pub struct ChartTarget {
     pub slide: usize,
     pub on_notes: bool,
+    pub master: Option<(usize, Option<usize>)>,
     pub key: ChartKey,
 }
 
 pub fn parse_chart_id(id: &str, json_path: &str) -> Result<ChartTarget, Error> {
     let path = json_path.to_string();
-    let rest = id.strip_prefix("slide:").ok_or_else(|| {
-        Error::with_path(
-            ErrorKind::InvalidId {
-                reason: IdReason::SlideChartPrefix,
-            },
-            path.clone(),
-        )
-    })?;
-    let (n, after, on_notes) = if let Some((n, after)) = rest.split_once("/notes/chart:") {
-        (n, after, true)
-    } else if let Some((n, after)) = rest.split_once("/chart:") {
-        (n, after, false)
-    } else {
+    let (host, after) =
+        picture::parse_object_id(id, json_path, "chart", IdReason::SlideChartPrefix)?;
+    if after.is_empty() {
         return Err(Error::with_path(
             ErrorKind::InvalidId {
                 reason: IdReason::SlideChartContainer,
             },
-            path.clone(),
-        ));
-    };
-    let slide: usize = n.parse().map_err(|_| {
-        Error::with_path(
-            ErrorKind::InvalidId {
-                reason: IdReason::SlideIndexNotInt,
-            },
-            path.clone(),
-        )
-    })?;
-    if slide < 1 {
-        return Err(Error::with_path(
-            ErrorKind::InvalidId {
-                reason: IdReason::SlideIndexFromOne,
-            },
             path,
         ));
     }
+    let (slide, on_notes, master) = host.parts();
     if let Some(rest) = after.strip_prefix("index:") {
         let k: usize = rest.parse().map_err(|_| {
             Error::with_path(
@@ -90,10 +66,11 @@ pub fn parse_chart_id(id: &str, json_path: &str) -> Result<ChartTarget, Error> {
         return Ok(ChartTarget {
             slide,
             on_notes,
+            master,
             key: ChartKey::Index(k),
         });
     }
-    if after.is_empty() || after.contains('/') {
+    if after.contains('/') {
         return Err(Error::with_path(
             ErrorKind::InvalidId {
                 reason: IdReason::SlideChartPrefix,
@@ -104,6 +81,7 @@ pub fn parse_chart_id(id: &str, json_path: &str) -> Result<ChartTarget, Error> {
     Ok(ChartTarget {
         slide,
         on_notes,
+        master,
         key: ChartKey::Id(after.to_string()),
     })
 }
@@ -155,8 +133,8 @@ pub fn parse_error_bars_id(
     Ok((target, index, k))
 }
 
-pub fn parse_insert_slide_id(id: &str, op_index: usize) -> Result<(usize, bool), Error> {
-    picture::parse_insert_slide_or_notes(id, op_index, IdReason::InsertChartNeedsSlide)
+pub fn parse_insert_slide_id(id: &str, op_index: usize) -> Result<picture::TreeHost, Error> {
+    picture::parse_insert_host(id, op_index, IdReason::InsertChartNeedsSlide)
 }
 
 pub fn count_charts(root: &Element) -> usize {
@@ -526,21 +504,16 @@ pub fn export_chart_data(bytes: &[u8], id: &str) -> Result<ExportedMedia, Error>
     let pres_part = crate::opc::office_document_part(&pkg)?;
     let pres = xml::parse(pkg.get(&pres_part)?)?;
     let slides = shape::list_slides(&pkg, &pres_part, &pres.root)?;
-    let meta = slides.get(target.slide - 1).ok_or_else(|| {
-        Error::with_path(
-            ErrorKind::SlideNotFound {
-                n: target.slide as u32,
-            },
-            "id",
-        )
-    })?;
-    let part = if target.on_notes {
-        super::notes::notes_slide_part(&pkg, &meta.part)?.ok_or_else(|| {
-            Error::with_path(ErrorKind::ChartNotFound { id: id.to_string() }, "id")
-        })?
-    } else {
-        meta.part.clone()
-    };
+    let host = super::picture::TreeHost::from_parts(target.slide, target.on_notes, target.master);
+    let part = super::picture::resolve_tree_part(
+        &pkg,
+        &pres_part,
+        &pres.root,
+        &slides,
+        &host,
+        ErrorKind::ChartNotFound { id: id.to_string() },
+        "id",
+    )?;
     let doc = xml::parse(pkg.get(&part)?)?;
     let frame = find_frame_immut(&doc.root, &target.key)
         .ok_or_else(|| Error::with_path(ErrorKind::ChartNotFound { id: id.to_string() }, "id"))?;

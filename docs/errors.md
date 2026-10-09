@@ -266,14 +266,14 @@
 - xlsx 的 `insertPicture` 的 `id` 必须是 `sheet:{name}` 或页眉槽位 id `sheet:{name}/hf:{kind}:{side}`
 - 对图 id 或单元格 id 发该 op 报 `InvalidId`
 - 对 `chartsheet` / `dialogsheet` 发该 op 报 `InvalidField`
-- pptx 的 `insertPicture` 的 `id` 必须是 `slide:{n}`、`slide:{n}/notes`，或批注 / 回复 id
+- pptx 的 `insertPicture` 的 `id` 必须是 `slide:{n}`、`slide:{n}/notes`、`master:{n}`、`master:{n}/layout:{k}`，或批注 / 回复 id
 - 对图 id、形状 id、批注内图 id 或 `pptx:presentation` 发该 op 报 `InvalidId`
 - 找不到该批注报 `IdNotFound`
 - 往批注或回复插时出现 `x` / `y` / `cx` / `cy` 报 `InvalidField`
 - 往页眉槽位插图时出现 `from` / `to` / `anchor` 或偏移字段报 `InvalidField`
 - pptx 的 `insertPicture` 出现 `kind` / `wrap` / `from` / `to` / `anchor` 或 xlsx 偏移字段报 `InvalidField`
 - `x` / `y` 只给一个时报 `InvalidField`
-- 下列图片 op 的 `id` 必须是图 id（xlsx 含页眉图 id，pptx 为 `slide:{n}/pic:…`、`slide:{n}/notes/pic:…` 或批注内图 id）
+- 下列图片 op 的 `id` 必须是图 id（xlsx 含页眉图 id，pptx 为 `slide:{n}/pic:…`、`slide:{n}/notes/pic:…`、`master:{n}/pic:…`、`master:{n}/layout:{k}/pic:…` 或批注内图 id）
   - `replacePicture`
   - `deletePicture`
   - `setPictureSize`
@@ -394,8 +394,8 @@
 - xlsx 认 `insertShape` / `deleteShape` / `insertConnector` / `deleteConnector` / `setShapeFormat`
 - 找不到连接线时，`deleteConnector` / 对连接线发的 `setShapePos` / `setShapeSize` / `setShapeLine` 报 `IdNotFound`
 - 对连接线发 `setShapeText` / `setShapeFormat` / `setShapeFill` / `deleteShape` 报 `InvalidId`
-- pptx 的 `insertConnector` 的 id 必须是 `slide:{n}`
-- 对备注容器或形状 id 发该 op 报 `InvalidId`
+- pptx 的 `insertConnector` 的 id 必须是 `slide:{n}`、`slide:{n}/notes`、`master:{n}` 或 `master:{n}/layout:{k}`
+- 对 `notesMaster` / `handout` 或形状 id 发该 op 报 `InvalidId`
 - xlsx 的 `insertConnector` 的 id 必须是 `sheet:{name}`，必须给 `from`
 - 出现 `x` / `y` 报 `InvalidField`
 - `groupShapes` 的 ids 少于两个、有重复、或成员已在组合里报 `InvalidField`
@@ -662,7 +662,7 @@
 - 找不到图表时，图表 op 报 `IdNotFound`（`insertChart` 除外）
 - docx 的 `insertChart` 的 `id` 必须是段落 id
 - xlsx 的 `insertChart` 的 `id` 必须是 `sheet:{name}`，且该表为 `worksheet`
-- pptx 的 `insertChart` 的 `id` 必须是 `slide:{n}`
+- pptx 的 `insertChart` 的 `id` 必须是 `slide:{n}`、`slide:{n}/notes`、`master:{n}` 或 `master:{n}/layout:{k}`
 - `setChartSeries` / `deleteChartSeries` / `insertTrendline` / `insertErrorBars` / `setChartSeriesAxis` 的 `id` 必须是系列 id
 - `setTrendline` / `deleteTrendline` 的 `id` 必须是趋势线 id
 - `setErrorBars` / `deleteErrorBars` 的 `id` 必须是误差线 id
@@ -689,7 +689,7 @@
 - 找不到 SmartArt 时，SmartArt op 报 `IdNotFound`（`insertSmartArt` 除外）
 - docx 的 `insertSmartArt` 的 `id` 必须是段落 id
 - xlsx 的 `insertSmartArt` 的 `id` 必须是 `sheet:{name}`，且该表为 `worksheet`
-- pptx 的 `insertSmartArt` 的 `id` 必须是 `slide:{n}`
+- pptx 的 `insertSmartArt` 的 `id` 必须是 `slide:{n}`、`slide:{n}/notes`、`master:{n}` 或 `master:{n}/layout:{k}`
 - `setSmartArtText` / `deleteSmartArtPoint` 的 `id` 必须是点 id
 - `deleteSmartArtPoint` 删光可见点时报 `InvalidField`
 - `setSmartArtLayout` 当前 uniqueId 不在 `list` / `org` / `cycle` 三族里，报 `NotImplemented`
@@ -697,7 +697,7 @@
 - docx 的 `insertOle` 的 `id` 必须是正文或页眉页脚段落 id
 - 对 OLE id、图 id、容器 id、框内、注内或批注内段落发该 op 报 `InvalidId`
 - xlsx 的 `insertOle` 的 `id` 必须是 `sheet:{name}`
-- pptx 的 `insertOle` 的 `id` 必须是 `slide:{n}`
+- pptx 的 `insertOle` 的 `id` 必须是 `slide:{n}`、`slide:{n}/notes`、`master:{n}` 或 `master:{n}/layout:{k}`
 - `deleteOle` 的 `id` 必须是 OLE id
 - 空 `file` 报 `InvalidField`
 - 读不到文件报 `Io`
@@ -709,7 +709,7 @@
 - 根本地名不是 `ink` 或命名空间不是 InkML 报 `InvalidField`
 - xlsx / pptx 上发 `insertInkCanvas` / `replaceInkCanvas` / `deleteInkCanvas` 报 `InvalidField`
 - 找不到 3D 模型时，`replaceModel3d` / `deleteModel3d` 报 `IdNotFound`
-- `insertModel3d` 的 `id`：docx 必须是正文或页眉页脚段落 id，xlsx 必须是 `sheet:{name}`，pptx 必须是 `slide:{n}` 或 `slide:{n}/notes`
+- `insertModel3d` 的 `id`：docx 必须是正文或页眉页脚段落 id，xlsx 必须是 `sheet:{name}`，pptx 必须是 `slide:{n}`、`slide:{n}/notes`、`master:{n}` 或 `master:{n}/layout:{k}`
 - 对图 id、OLE id 发 3D op，或对 3D id 发图 op，报 `InvalidId`
 - `replaceModel3d` / `deleteModel3d` 的 `id` 必须是 3D 模型 id
 - `file` 不是 GLB（文件头不是小端 `glTF` version=2）报 `InvalidField`（`InvalidImageFile`）
@@ -724,7 +724,7 @@
 - `insertTable` 的锚点找不到同样报 `IdNotFound`
 - id 形态不对报 `InvalidId`
 - 只剩一行时 `deleteRow`、只剩一列时 `deleteCol` 报 `InvalidField`
-- pptx 的 `insertTable` 的 id 必须是 `slide:{n}`
+- pptx 的 `insertTable` 的 id 必须是 `slide:{n}`、`slide:{n}/notes`、`master:{n}` 或 `master:{n}/layout:{k}`
 - 对表 id、备注容器或 `pptx:presentation` 发该 op 报 `InvalidId`
 - `setTableCellText` 的 id 必须是 `slide:{n}/table:…/r:{r}/c:{c}`，缺 `text` 报 `InvalidField`，找不到该格报 `IdNotFound`
 - `setTablePos` / `setTableSize` 的 id 必须是 pptx 表 id
@@ -743,7 +743,7 @@
 - id 不是超链接 id 报 `InvalidId`
 - docx 的 `insertHyperlink` 的 `id` 必须是段落 id
 - `url` 与 `anchor` 必须恰好给一个
-- pptx 的 `insertHyperlink` 的 `id` 必须是幻灯片文本形状 id
+- pptx 的 `insertHyperlink` 的 `id` 必须是幻灯片、备注、母版或版式文本形状 id
 - `url` / `file` / `slide` 必须恰好一个
 - 空串、已有形状级链、或跳到本页报 `InvalidField`
 - 目标页不存在报 `IdNotFound`
@@ -815,8 +815,8 @@
 - 找不到域时，域 op 报 `IdNotFound`（`insertField` 除外）
 - docx 的域 id 不是 `field:{n}` 或容器前缀报 `InvalidId`
 - docx 的 `insertField` 的 `id` 必须是段落 id
-- pptx 的 `insertField` 的 `id` 必须是幻灯片文本形状 id
-- `setField` / `deleteField` 的 id 必须是 `slide:{n}/fld:{guid}` 或 `slide:{n}/fld:index:{k}`
+- pptx 的 `insertField` 的 `id` 必须是幻灯片、备注、母版或版式文本形状 id
+- `setField` / `deleteField` 的 id 必须是 pptx 域 id（含 `notes/` 与母版 / 版式前缀）
 - pptx 的 `type` 不是 `slidenum` / `datetime` / `datetime1`–`datetime13` 报 `InvalidField`
 - docx 的 `insertField` / create `fields[]` 必须恰好给 `instr` 或 `code` 其中一个
 - `instr` 去掉首尾空白后不能为空
@@ -905,7 +905,7 @@
 - docx：`insertMath` 的 `id` 必须是正文或页眉页脚段落 id 或 `docx:document`
 - xlsx：`insertMath` 的 `id` 必须是 `sheet:{name}`
 - xlsx：`setMath` / `deleteMath` 的 `id` 必须是公式框 id
-- pptx：`insertMath` 的 `id` 必须是 `slide:{n}` 或 `slide:{n}/notes`
+- pptx：`insertMath` 的 `id` 必须是 `slide:{n}`、`slide:{n}/notes`、`master:{n}` 或 `master:{n}/layout:{k}`
 - pptx：`setMath` / `deleteMath` 的 `id` 必须是公式框 id
 - 对单元格 id、图 id、文本框 id 发公式 op 报 `InvalidId`
 - docx 空 `text` / 空 `expr` / 同时给 / 两个都不给或不认识的 `kind` 报 `InvalidField`

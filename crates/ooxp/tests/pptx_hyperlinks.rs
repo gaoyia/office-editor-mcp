@@ -357,10 +357,10 @@ fn reject_bad_id_and_missing_target() {
 
     let err = apply(
         &src,
-        &tmp("notes").with_extension("pptx"),
+        &tmp("notes-master").with_extension("pptx"),
         json!([{
             "op": "insertHyperlink",
-            "id": "slide:1/notes/shape:2",
+            "id": "notesMaster/shape:2",
             "url": "https://example.com/"
         }]),
     )

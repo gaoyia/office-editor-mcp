@@ -17,51 +17,14 @@ const LINE_W: i64 = 12_700;
 #[derive(Debug, Clone)]
 pub struct CxnTarget {
     pub slide: usize,
+    pub on_notes: bool,
+    pub master: Option<(usize, Option<usize>)>,
     pub key: ShapeKey,
 }
 
 pub fn parse_cxn_id(id: &str, op_index: usize) -> Result<CxnTarget, Error> {
     let path = format!("ops[{op_index}].id");
-    let rest = id.strip_prefix("slide:").ok_or_else(|| {
-        Error::with_path(
-            ErrorKind::InvalidId {
-                reason: IdReason::SlideCxnForm,
-            },
-            path.clone(),
-        )
-    })?;
-    let Some((n, after)) = rest.split_once("/cxn:") else {
-        return Err(Error::with_path(
-            ErrorKind::InvalidId {
-                reason: IdReason::SlideCxnForm,
-            },
-            path,
-        ));
-    };
-    if n.is_empty() || n.contains('/') {
-        return Err(Error::with_path(
-            ErrorKind::InvalidId {
-                reason: IdReason::SlideCxnForm,
-            },
-            path,
-        ));
-    }
-    let slide: usize = n.parse().map_err(|_| {
-        Error::with_path(
-            ErrorKind::InvalidId {
-                reason: IdReason::SlideIndexNotInt,
-            },
-            path.clone(),
-        )
-    })?;
-    if slide < 1 {
-        return Err(Error::with_path(
-            ErrorKind::InvalidId {
-                reason: IdReason::SlideIndexFromOne,
-            },
-            path,
-        ));
-    }
+    let (host, after) = picture::parse_object_id(id, &path, "cxn", IdReason::SlideCxnForm)?;
     if after.is_empty() {
         return Err(Error::with_path(
             ErrorKind::InvalidId {
@@ -70,6 +33,7 @@ pub fn parse_cxn_id(id: &str, op_index: usize) -> Result<CxnTarget, Error> {
             path,
         ));
     }
+    let (slide, on_notes, master) = host.parts();
     if let Some(k) = after.strip_prefix("index:") {
         let idx: usize = k.parse().map_err(|_| {
             Error::with_path(
@@ -89,17 +53,21 @@ pub fn parse_cxn_id(id: &str, op_index: usize) -> Result<CxnTarget, Error> {
         }
         return Ok(CxnTarget {
             slide,
+            on_notes,
+            master,
             key: ShapeKey::Index(idx),
         });
     }
     Ok(CxnTarget {
         slide,
+        on_notes,
+        master,
         key: ShapeKey::Id(after.to_string()),
     })
 }
 
-pub fn parse_insert_slide_id(id: &str, op_index: usize) -> Result<usize, Error> {
-    parse_slide_only(id, op_index, IdReason::InsertConnectorNeedsSlide)
+pub fn parse_insert_slide_id(id: &str, op_index: usize) -> Result<picture::TreeHost, Error> {
+    picture::parse_insert_host(id, op_index, IdReason::InsertConnectorNeedsSlide)
 }
 
 pub(crate) fn parse_slide_only(
@@ -154,10 +122,7 @@ pub fn is_writable_prst(s: &str) -> bool {
 }
 
 pub fn looks_like_cxn_id(id: &str) -> bool {
-    let Some(rest) = id.strip_prefix("slide:") else {
-        return false;
-    };
-    rest.contains("/cxn:") && !rest.contains("/notes/")
+    (id.starts_with("slide:") || id.starts_with("master:")) && id.contains("/cxn:")
 }
 
 pub fn collect(root: &Element) -> Vec<&Element> {
@@ -209,12 +174,11 @@ fn node_json(el: &Element, host: &str, index: usize) -> Value {
     Value::Object(obj)
 }
 
-pub fn list_json(root: &Element, slide: usize) -> Vec<Value> {
-    let host = format!("slide:{slide}");
+pub fn list_json(root: &Element, host: &str) -> Vec<Value> {
     collect(root)
         .into_iter()
         .enumerate()
-        .map(|(i, el)| node_json(el, &host, i + 1))
+        .map(|(i, el)| node_json(el, host, i + 1))
         .collect()
 }
 

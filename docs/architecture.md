@@ -26,7 +26,7 @@ ECMA-376 示例里常见的 Strict 命名空间（`http://purl.oclc.org/ooxml/..
 xlsx 另有只读动作 `exportMedia`：按图 id 把媒体部件原字节写到本地。
 xlsx 的 `exportMedia` 认工作表图 id、页眉页脚图 id、OLE id 与 3D 模型 id：图 id 写出 `/xl/media/…`，OLE id 写出 `/xl/embeddings/…`，
 3D 模型 id 写出 `/xl/media/…` 的 GLB。
-pptx 的 `exportMedia` 认幻灯片图 id、备注图 id、批注内图 id、视频 id、音频 id、OLE id 与 3D 模型 id：图 / 视频 / 音频写出 `/ppt/media/…`，OLE 写出 `/ppt/embeddings/…`，
+pptx 的 `exportMedia` 认幻灯片图 id、备注图 id、批注内图 id、母版 / 版式图 id、视频 id、音频 id、OLE id 与 3D 模型 id：图 / 视频 / 音频写出 `/ppt/media/…`，OLE 写出 `/ppt/embeddings/…`，
 3D 模型 id 写出 `/ppt/media/…` 的 GLB。
 docx 的 `exportMedia` 认图 id、OLE id、墨迹画布 id、3D 模型 id 与嵌入字体 id：图写出 `/word/media/…`，OLE 写出 embeddings 部件，
 墨迹画布写出 `/word/ink/…`，3D 模型写出 `/word/media/…` 的 GLB，`font:{n}` 写出 `/word/fonts/…`。
@@ -208,12 +208,12 @@ apply 可改被点名形状的 `p:txBody` 可见文字（含备注形状、母�
 也可用 `setSlideSize` 只改 `p:sldSz`（不重排形状）；也可用 `setThemeColors` / `setThemeFonts` 改该母版 theme 的配色与字体（不重写 `fmtScheme`）；
 也可用 `setHandoutText` 改讲义母版页眉、页脚、日期与页码占位符（没有 handoutMaster 则新建最小部件）；
 讲义与备注母版占位符也可绑同一套预设动画；
-也可插删改幻灯片文本形状上的形状级 `p:cNvPr/a:hlinkClick` 与 run 级 `a:rPr/a:hlinkClick`（URL / 文件 / 跳转到某页）；
-也可插删改幻灯片文本形状里的 `a:fld`（页码与日期域，不求值）；也可往幻灯片插、删内嵌视频与音频（`p:pic` 上的 `a:videoFile` / `a:audioFile` 与 `p14:media`，不写 timing）；
+也可插删改幻灯片、备注页与幻灯片母版 / 版式文本形状上的形状级 `p:cNvPr/a:hlinkClick` 与 run 级 `a:rPr/a:hlinkClick`（URL / 文件 / 跳转到某页）；
+也可插删改幻灯片、备注页与幻灯片母版 / 版式文本形状里的 `a:fld`（页码与日期域，不求值）；也可往幻灯片、备注页与幻灯片母版 / 版式插、删内嵌视频与音频（`p:pic` 上的 `a:videoFile` / `a:audioFile` 与 `p14:media`，不写 timing）；
 也可用 `insertCustomShow` / `setCustomShow` / `deleteCustomShow` 读写 `p:custShowLst`（不算放映引擎）；
-也可插、删幻灯片上的嵌入对象（`p:oleObj`，不激活 OLE 服务器），也可插、删、换幻灯片或备注页上的 3D 模型（`am3d:model3d`，不栅格化），
-也可插改删幻灯片或备注页上的 drawing 公式框（`a14:m`，不实现排版引擎），也可插、删幻灯片上的 Zoom（`sldZm` / `sectionZm`，不写摘要缩放，不实现放映跳转）；也可改文件属性。
-插删重排不重写未点名页。`exportMedia` 按图 id、视频 id、音频 id、OLE id 或 3D 模型 id 写出 `/ppt/media/…` 或 `/ppt/embeddings/…`。
+也可插、删幻灯片、备注页与幻灯片母版 / 版式上的嵌入对象（`p:oleObj`，不激活 OLE 服务器），也可插、删、换幻灯片、备注页与幻灯片母版 / 版式上的 3D 模型（`am3d:model3d`，不栅格化），
+也可插改删幻灯片、备注页与幻灯片母版 / 版式上的 drawing 公式框（`a14:m`，不实现排版引擎），也可插、删幻灯片、备注页与幻灯片母版 / 版式上的 Zoom（`sldZm` / `sectionZm`，不写摘要缩放，不实现放映跳转）；也可改文件属性。
+插删重排不重写未点名页。`exportMedia` 按幻灯片、备注页、批注、母版 / 版式上的图 id、视频 id、音频 id、OLE id 或 3D 模型 id 写出 `/ppt/media/…` 或 `/ppt/embeddings/…`。
 `exportChartData` 按图表 id 写出 embedding。create 生成最小 Transitional 包，
 必含 theme、slideMaster、slideLayout、presentation、各页 slide、presProps。
 给了 `slides[].pictures` 时复用 `insertPicture`，写入 `/ppt/media/…` 与该页 `p:pic`。
@@ -297,25 +297,25 @@ docx 也可插删换 3D 模型，脏宿主 XML、`.rels`、GLB 与海报 PNG。
 docx 也可用 `setProtection` 改 `settings.xml` 的保护标记，窗体保护还可脏主文档各节 `w:formProt`。
 docx 也可插删页眉 DrawingML 水印，无 default 页眉时会新建，并可脏页眉部件与媒体。
 docx 也可用 `setThemeColors` / `setThemeFonts` 改主文档 theme 部件的配色与字体方案，只脏该 theme 部件，不重写 `fmtScheme`。
-pptx 可改被点名形状的可见文字（含备注形状与母版 / 版式占位符），可插入文本框与非矩形预设几何、插入连接线、组合与解开、删除被点名形状并清对应 timing `tgtEl`、改画布坐标与尺寸、填充描边与 DrawingML 文字格式，
-可用 `setNotesText` 按页改或新建演讲者备注，也可改被点名的幻灯片图与备注图（换、插、删、改尺寸、改画布坐标），也可插删改幻灯片或备注页图表，也可插删改幻灯片或备注页 SmartArt，
-也可插删改幻灯片 DrawingML 表，也可插删回复并改现代批注，也可对批注或回复 id 插图并换、删批注内图（不改尺寸位置），也可按批注内图 id `exportMedia`，也可插入、删除、重排与隐藏幻灯片，
+pptx 可改被点名形状的可见文字（含备注形状与母版 / 版式占位符），可插入文本框与非矩形预设几何、插入连接线（幻灯片、备注页与母版 / 版式）、组合与解开、删除被点名形状并清对应 timing `tgtEl`、改画布坐标与尺寸、填充描边与 DrawingML 文字格式，
+可用 `setNotesText` 按页改或新建演讲者备注，也可改被点名的幻灯片图、备注图与母版 / 版式图（换、插、删、改尺寸、改画布坐标），也可插删改幻灯片、备注页与母版 / 版式图表，也可插删改幻灯片、备注页与母版 / 版式 SmartArt，
+也可插删改幻灯片、备注页与母版 / 版式 DrawingML 表，也可插删回复并改现代批注，也可对批注或回复 id 插图并换、删批注内图（不改尺寸位置），也可按批注内图 id `exportMedia`，也可插入、删除、重排与隐藏幻灯片，
 也可用 `setTransition` 写或清除该页 `<p:transition>`（含自动进片、方向与 `p15:prstTrans`），
 也可用 `insertAnim` / `setAnim` / `deleteAnim` / `moveAnim` 按模板增删改该宿主 `<p:timing>` 里的预设效果（不接受整棵时间轴树），也可用 `setSlideLayout` 只改该页 `.rels` 的版式关系，
 也可用 `insertLayout` / `deleteLayout` / `insertPlaceholder` / `deletePlaceholder` / `insertMaster` / `deleteMaster` 插删版式、占位符与母版，
 也可用 `setSlideSize` 只改 `p:sldSz`，也可用 `setThemeColors` / `setThemeFonts` 改该母版 theme，也可用 `setHandoutText` 改或新建讲义母版，
-也可用 `insertField` / `setField` / `deleteField` 插删改幻灯片文本形状里的 `a:fld`（不求值），
+也可用 `insertField` / `setField` / `deleteField` 插删改幻灯片、备注页与母版 / 版式文本形状里的 `a:fld`（不求值），
 也可用 `insertSlideSection` / `setSlideSectionName` / `deleteSlideSection` / `setSlideSection` 读写 `p14:sectionLst`（删节时页还在；
 把页划进某节时可重排 `sldIdLst`），也可用 `insertCustomShow` / `setCustomShow`
  / `deleteCustomShow` 读写 `p:custShowLst`（删页时按 `r:id` 清引用），
-也可插、删幻灯片上的嵌入对象（`p:oleObj`，不激活 OLE 服务器），也可插、删、换幻灯片或备注页上的 3D 模型（`am3d:model3d`，不栅格化），也可插改删幻灯片或备注页上的 drawing 公式框（`a14:m`，不实现排版引擎），也可插、删幻灯片上的 Zoom（`sldZm` / `sectionZm`，不写摘要缩放，不实现放映跳转），
+也可插、删幻灯片、备注页与母版 / 版式上的嵌入对象（`p:oleObj`，不激活 OLE 服务器），也可插、删、换幻灯片、备注页与母版 / 版式上的 3D 模型（`am3d:model3d`，不栅格化），也可插改删幻灯片、备注页与母版 / 版式上的 drawing 公式框（`a14:m`，不实现排版引擎），也可插、删幻灯片、备注页与母版 / 版式上的 Zoom（`sldZm` / `sectionZm`，不写摘要缩放，不实现放映跳转），
 也可用 `setShowPr` 改 `presProps` 的 `p:showPr`，也可用 `setProtection` 在没有密码哈希时删掉 `p:modifyVerifier`，
 脏 `presentation.xml` 的 `sldIdLst`、presentation 关系、新页或被删页及其备注 / 现代批注、内容类型，以及若有则同步 `p14:sectionLst` 与 `p:custShowLst`。
 未点名页原字节写回。插删改图、图表、SmartArt、备注与批注时仍脏该页 XML、该页 `.rels`、notesSlide 及其 `.rels`、必要时 notesMaster 与 presentation、
 `/ppt/charts/`、embedding、`/ppt/diagrams/`、`/ppt/comments/` 与 `/ppt/authors.xml`。
-表格 op 只脏该页幻灯片 XML。形状管理 op 只脏目标宿主 XML（含被点名的 slideMaster / slideLayout）；
+表格 op 只脏该宿主 XML（幻灯片、notesSlide、slideMaster 或 slideLayout）。形状管理 op 只脏目标宿主 XML（含被点名的 slideMaster / slideLayout）；
 `insertShape` 往备注插时与 `setNotesText` 相同，还可脏 notesMaster 与 presentation。
-超链接 op 脏该页幻灯片 XML 与该页 `.rels`。域 op（`insertField` / `setField` / `deleteField`）只脏该页幻灯片 XML。`setSlideLayout` 只脏该页 `.rels`。
+超链接 op 脏该宿主 XML（幻灯片、notesSlide、slideMaster 或 slideLayout）与该宿主 `.rels`。域 op（`insertField` / `setField` / `deleteField`）只脏该宿主 XML。`setSlideLayout` 只脏该页 `.rels`。
 `insertLayout` / `deleteLayout` / `insertMaster` / `deleteMaster` 还可脏母版 / 版式 / theme 部件、presentation 与内容类型；
 `insertPlaceholder` / `deletePlaceholder` 只脏目标母版或版式 XML。
 `setSlideSize` 只脏 `presentation.xml` 的 `p:sldSz`。`setThemeColors` / `setThemeFonts` 只脏该母版指向的 theme 部件。

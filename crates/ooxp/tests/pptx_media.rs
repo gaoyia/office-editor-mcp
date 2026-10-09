@@ -325,15 +325,15 @@ fn insert_audio_and_wrong_file() {
 }
 
 #[test]
-fn insert_rejects_notes_and_root_id() {
+fn insert_rejects_notes_master_and_root_id() {
     let src = create_deck("bad-id");
     let mp4 = write_mp4("clip");
     let err = apply(
         &src,
-        &tmp("notes").with_extension("pptx"),
+        &tmp("notes-master").with_extension("pptx"),
         json!([{
             "op": "insertVideo",
-            "id": "slide:1/notes",
+            "id": "notesMaster",
             "file": mp4.to_string_lossy()
         }]),
     )

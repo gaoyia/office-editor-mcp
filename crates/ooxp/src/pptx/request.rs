@@ -353,6 +353,8 @@ pub struct InsertHyperlinkOp {
 pub struct SetHyperlinkOp {
     pub id: String,
     pub slide: usize,
+    pub on_notes: bool,
+    pub master: Option<(usize, Option<usize>)>,
     pub index: usize,
     pub target: Option<PptxLinkKind>,
     pub tooltip: Option<Option<String>>,
@@ -362,6 +364,8 @@ pub struct SetHyperlinkOp {
 pub struct DeleteHyperlinkOp {
     pub id: String,
     pub slide: usize,
+    pub on_notes: bool,
+    pub master: Option<(usize, Option<usize>)>,
     pub index: usize,
 }
 
@@ -421,6 +425,7 @@ pub struct ReplacePictureOp {
 pub struct InsertPictureOp {
     pub slide: usize,
     pub on_notes: bool,
+    pub master: Option<(usize, Option<usize>)>,
     pub comment: Option<comments::CommentTarget>,
     pub file: String,
     pub x: Option<i64>,
@@ -454,6 +459,8 @@ pub struct SetPicturePosOp {
 #[derive(Debug, Clone)]
 pub struct InsertMediaOp {
     pub slide: usize,
+    pub on_notes: bool,
+    pub master: Option<(usize, Option<usize>)>,
     pub file: String,
     pub x: Option<i64>,
     pub y: Option<i64>,
@@ -550,6 +557,7 @@ pub struct DeleteCustomShowOp {
 pub struct InsertChartOp {
     pub slide: usize,
     pub on_notes: bool,
+    pub master: Option<(usize, Option<usize>)>,
     pub chart_type: ChartType,
     pub of_pie_type: Option<String>,
     pub title: Option<String>,
@@ -711,6 +719,7 @@ pub struct SetChartSeriesAxisOp {
 pub struct InsertSmartArtOp {
     pub slide: usize,
     pub on_notes: bool,
+    pub master: Option<(usize, Option<usize>)>,
     pub layout: LayoutKind,
     pub points: Option<Vec<NewPoint>>,
     pub x: Option<i64>,
@@ -787,6 +796,7 @@ pub struct SetSmartArtLayoutOp {
 pub struct InsertTableOp {
     pub slide: usize,
     pub on_notes: bool,
+    pub master: Option<(usize, Option<usize>)>,
     pub rows: usize,
     pub cols: usize,
     pub cells: Vec<Vec<String>>,
@@ -855,6 +865,8 @@ pub struct SetTableSizeOp {
 #[derive(Debug, Clone)]
 pub struct InsertConnectorOp {
     pub slide: usize,
+    pub on_notes: bool,
+    pub master: Option<(usize, Option<usize>)>,
     pub prst: String,
     pub x: Option<i64>,
     pub y: Option<i64>,
@@ -1629,7 +1641,7 @@ fn parse_set_shape_format(obj: &Map<String, Value>, i: usize) -> Result<SetShape
 fn parse_insert_connector(obj: &Map<String, Value>, i: usize) -> Result<InsertConnectorOp, Error> {
     deny_keys(obj, i, &["op", "id", "prst", "x", "y", "cx", "cy"])?;
     let id = require_id(obj, i)?;
-    let slide = connector::parse_insert_slide_id(&id, i)?;
+    let (slide, on_notes, master) = connector::parse_insert_slide_id(&id, i)?.parts();
     let prst = match obj.get("prst") {
         None => "straightConnector1".to_string(),
         Some(Value::String(s)) => {
@@ -1676,6 +1688,8 @@ fn parse_insert_connector(obj: &Map<String, Value>, i: usize) -> Result<InsertCo
     }
     Ok(InsertConnectorOp {
         slide,
+        on_notes,
+        master,
         prst,
         x,
         y,
@@ -1694,8 +1708,7 @@ fn parse_delete_connector(obj: &Map<String, Value>, i: usize) -> Result<DeleteCo
 fn parse_group_shapes(obj: &Map<String, Value>, i: usize) -> Result<GroupShapesOp, Error> {
     deny_keys(obj, i, &["op", "id", "ids"])?;
     let id = require_id(obj, i)?;
-    let slide =
-        connector::parse_slide_only(&id, i, crate::error::IdReason::InsertConnectorNeedsSlide)?;
+    let slide = connector::parse_slide_only(&id, i, crate::error::IdReason::SlideOpNeedsSlide)?;
     let ids = match obj.get("ids") {
         Some(Value::Array(arr)) => {
             if arr.len() < 2 {
@@ -3259,7 +3272,8 @@ fn parse_optional_run_text(obj: &Map<String, Value>, i: usize) -> Result<Option<
 fn parse_set_hyperlink(obj: &Map<String, Value>, i: usize) -> Result<SetHyperlinkOp, Error> {
     deny_keys(obj, i, &["op", "id", "url", "file", "slide", "tooltip"])?;
     let id = require_id(obj, i)?;
-    let (slide, index) = hyperlink::parse_link_id(&id, i)?;
+    let (host, index) = hyperlink::parse_link_id(&id, i)?;
+    let (slide, on_notes, master) = host.parts();
     let target = parse_pptx_link_target(obj, i)?;
     let tooltip = parse_set_tooltip(obj, i)?;
     if target.is_none() && tooltip.is_none() {
@@ -3271,6 +3285,8 @@ fn parse_set_hyperlink(obj: &Map<String, Value>, i: usize) -> Result<SetHyperlin
     Ok(SetHyperlinkOp {
         id,
         slide,
+        on_notes,
+        master,
         index,
         target,
         tooltip,
@@ -3280,8 +3296,15 @@ fn parse_set_hyperlink(obj: &Map<String, Value>, i: usize) -> Result<SetHyperlin
 fn parse_delete_hyperlink(obj: &Map<String, Value>, i: usize) -> Result<DeleteHyperlinkOp, Error> {
     deny_keys(obj, i, &["op", "id"])?;
     let id = require_id(obj, i)?;
-    let (slide, index) = hyperlink::parse_link_id(&id, i)?;
-    Ok(DeleteHyperlinkOp { id, slide, index })
+    let (host, index) = hyperlink::parse_link_id(&id, i)?;
+    let (slide, on_notes, master) = host.parts();
+    Ok(DeleteHyperlinkOp {
+        id,
+        slide,
+        on_notes,
+        master,
+        index,
+    })
 }
 
 fn parse_insert_field(obj: &Map<String, Value>, i: usize) -> Result<field::InsertFieldOp, Error> {
@@ -3313,7 +3336,8 @@ fn parse_insert_field(obj: &Map<String, Value>, i: usize) -> Result<field::Inser
 fn parse_set_field(obj: &Map<String, Value>, i: usize) -> Result<field::SetFieldOp, Error> {
     deny_keys(obj, i, &["op", "id", "type", "text"])?;
     let id = require_id(obj, i)?;
-    let (slide, key) = field::parse_field_id(&id, i)?;
+    let (host, key) = field::parse_field_id(&id, i)?;
+    let (slide, on_notes, master) = host.parts();
     let type_name = match obj.get("type") {
         None => None,
         Some(Value::String(s)) => {
@@ -3360,6 +3384,8 @@ fn parse_set_field(obj: &Map<String, Value>, i: usize) -> Result<field::SetField
     Ok(field::SetFieldOp {
         id,
         slide,
+        on_notes,
+        master,
         key,
         type_name,
         text,
@@ -3369,7 +3395,8 @@ fn parse_set_field(obj: &Map<String, Value>, i: usize) -> Result<field::SetField
 fn parse_delete_field(obj: &Map<String, Value>, i: usize) -> Result<field::DeleteFieldOp, Error> {
     deny_keys(obj, i, &["op", "id", "keep"])?;
     let id = require_id(obj, i)?;
-    let (slide, key) = field::parse_field_id(&id, i)?;
+    let (host, key) = field::parse_field_id(&id, i)?;
+    let (slide, on_notes, master) = host.parts();
     let keep = match obj.get("keep") {
         None => field::FieldKeep::Result,
         Some(Value::String(s)) if s == "result" => field::FieldKeep::Result,
@@ -3393,21 +3420,56 @@ fn parse_delete_field(obj: &Map<String, Value>, i: usize) -> Result<field::Delet
     Ok(field::DeleteFieldOp {
         id,
         slide,
+        on_notes,
+        master,
         key,
         keep,
     })
 }
 
 fn parse_insert_field_shape(id: &str, i: usize) -> Result<shape::ShapeTarget, Error> {
-    match shape::parse_shape_id(id, i) {
-        Ok(t) if !t.on_notes => Ok(t),
-        Ok(_) | Err(_) => Err(Error::with_path(
-            ErrorKind::InvalidId {
-                reason: IdReason::InsertFieldNeedsShape,
-            },
+    parse_link_or_field_shape(id, i, IdReason::InsertFieldNeedsShape)
+}
+
+fn parse_insert_hyperlink_shape(id: &str, i: usize) -> Result<shape::ShapeTarget, Error> {
+    parse_link_or_field_shape(id, i, IdReason::InsertHyperlinkNeedsShape)
+}
+
+fn parse_link_or_field_shape(
+    id: &str,
+    i: usize,
+    bad: IdReason,
+) -> Result<shape::ShapeTarget, Error> {
+    if id.starts_with("notesMaster") || id.starts_with("handout") {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId { reason: bad },
             format!("ops[{i}].id"),
-        )),
+        ));
     }
+    if id.starts_with("master:") {
+        let ph = super::master::parse_placeholder_id(id, i).map_err(|_| {
+            Error::with_path(
+                ErrorKind::InvalidId {
+                    reason: bad.clone(),
+                },
+                format!("ops[{i}].id"),
+            )
+        })?;
+        let super::master::PlaceholderHost::Master { master, layout } = ph.host else {
+            return Err(Error::with_path(
+                ErrorKind::InvalidId { reason: bad },
+                format!("ops[{i}].id"),
+            ));
+        };
+        return Ok(shape::ShapeTarget {
+            slide: 0,
+            on_notes: false,
+            master: Some((master, layout)),
+            key: ph.key,
+        });
+    }
+    shape::parse_shape_id(id, i)
+        .map_err(|_| Error::with_path(ErrorKind::InvalidId { reason: bad }, format!("ops[{i}].id")))
 }
 
 fn require_fld_type(obj: &Map<String, Value>, i: usize) -> Result<String, Error> {
@@ -3429,18 +3491,6 @@ fn require_fld_type(obj: &Map<String, Value>, i: usize) -> Result<String, Error>
                 field: "type".into(),
             },
             format!("ops[{i}].type"),
-        )),
-    }
-}
-
-fn parse_insert_hyperlink_shape(id: &str, i: usize) -> Result<shape::ShapeTarget, Error> {
-    match shape::parse_shape_id(id, i) {
-        Ok(t) if !t.on_notes => Ok(t),
-        Ok(_) | Err(_) => Err(Error::with_path(
-            ErrorKind::InvalidId {
-                reason: IdReason::InsertHyperlinkNeedsShape,
-            },
-            format!("ops[{i}].id"),
         )),
     }
 }
@@ -3965,6 +4015,7 @@ fn parse_insert_pic(obj: &Map<String, Value>, i: usize) -> Result<InsertPictureO
         return Ok(InsertPictureOp {
             slide: target.slide,
             on_notes: false,
+            master: None,
             comment: Some(target),
             file,
             x: None,
@@ -3974,8 +4025,8 @@ fn parse_insert_pic(obj: &Map<String, Value>, i: usize) -> Result<InsertPictureO
         });
     }
     deny_keys(obj, i, &["op", "id", "file", "x", "y", "cx", "cy"])?;
-    let (slide, on_notes) =
-        picture::parse_insert_slide_or_notes(&id, i, crate::error::IdReason::InsertNeedsSlide)?;
+    let host = picture::parse_insert_host(&id, i, crate::error::IdReason::InsertNeedsSlide)?;
+    let (slide, on_notes, master) = host.parts();
     let file = require_file(obj, i, "insertPicture")?;
     let x = parse_off_field(obj.get("x"), i, "x")?;
     let y = parse_off_field(obj.get("y"), i, "y")?;
@@ -4002,6 +4053,7 @@ fn parse_insert_pic(obj: &Map<String, Value>, i: usize) -> Result<InsertPictureO
     Ok(InsertPictureOp {
         slide,
         on_notes,
+        master,
         comment: None,
         file,
         x,
@@ -4063,7 +4115,7 @@ fn parse_insert_media(
 ) -> Result<InsertMediaOp, Error> {
     deny_keys(obj, i, &["op", "id", "file", "x", "y", "cx", "cy"])?;
     let id = require_id(obj, i)?;
-    let slide = media::parse_insert_slide(&id, i)?;
+    let (slide, on_notes, master) = media::parse_insert_slide(&id, i)?.parts();
     let file = require_file(obj, i, op)?;
     let x = parse_off_field(obj.get("x"), i, "x")?;
     let y = parse_off_field(obj.get("y"), i, "y")?;
@@ -4089,6 +4141,8 @@ fn parse_insert_media(
     }
     Ok(InsertMediaOp {
         slide,
+        on_notes,
+        master,
         file,
         x,
         y,
@@ -4263,9 +4317,14 @@ fn parse_delete_custom_show(
 fn parse_insert_ole(obj: &Map<String, Value>, i: usize) -> Result<ole::InsertOleOp, Error> {
     deny_keys(obj, i, &["op", "id", "file"])?;
     let id = require_id(obj, i)?;
-    let slide = ole::parse_insert_slide_id(&id, i)?;
+    let (slide, on_notes, master) = ole::parse_insert_slide_id(&id, i)?.parts();
     let file = require_file(obj, i, "insertOle")?;
-    Ok(ole::InsertOleOp { slide, file })
+    Ok(ole::InsertOleOp {
+        slide,
+        on_notes,
+        master,
+        file,
+    })
 }
 
 fn parse_delete_ole(obj: &Map<String, Value>, i: usize) -> Result<ole::DeleteOleOp, Error> {
@@ -4281,8 +4340,8 @@ fn parse_insert_model3d(
 ) -> Result<super::model3d::InsertModel3dOp, Error> {
     deny_keys(obj, i, &["op", "id", "file", "x", "y", "cx", "cy"])?;
     let id = require_id(obj, i)?;
-    let (slide, on_notes) =
-        picture::parse_insert_slide_or_notes(&id, i, IdReason::InsertModel3dNeedsSlide)?;
+    let (slide, on_notes, master) =
+        picture::parse_insert_host(&id, i, IdReason::InsertModel3dNeedsSlide)?.parts();
     let file = require_file(obj, i, "insertModel3d")?;
     let cx = parse_emu_field(obj.get("cx"), i, "cx")?;
     let cy = parse_emu_field(obj.get("cy"), i, "cy")?;
@@ -4298,6 +4357,7 @@ fn parse_insert_model3d(
     Ok(super::model3d::InsertModel3dOp {
         slide,
         on_notes,
+        master,
         file,
         x: parse_emu_field(obj.get("x"), i, "x")?,
         y: parse_emu_field(obj.get("y"), i, "y")?,
@@ -4338,8 +4398,8 @@ fn parse_insert_math(
     )?;
     crate::drawing_math::reject_expr_kind(obj, &format!("ops[{i}]"))?;
     let id = require_id(obj, i)?;
-    let (slide, on_notes) =
-        picture::parse_insert_slide_or_notes(&id, i, IdReason::InsertMathNeedsSlide)?;
+    let (slide, on_notes, master) =
+        picture::parse_insert_host(&id, i, IdReason::InsertMathNeedsSlide)?.parts();
     let text = crate::drawing_math::require_text(obj, &format!("ops[{i}]"))?;
     let cx = parse_emu_field(obj.get("cx"), i, "cx")?;
     let cy = parse_emu_field(obj.get("cy"), i, "cy")?;
@@ -4355,6 +4415,7 @@ fn parse_insert_math(
     Ok(super::omml::InsertMathOp {
         slide,
         on_notes,
+        master,
         text,
         x: parse_emu_field(obj.get("x"), i, "x")?,
         y: parse_emu_field(obj.get("y"), i, "y")?,
@@ -4389,7 +4450,7 @@ fn parse_insert_zoom(obj: &Map<String, Value>, i: usize) -> Result<zoom::InsertZ
         &["op", "id", "type", "target", "x", "y", "cx", "cy"],
     )?;
     let id = require_id(obj, i)?;
-    let slide = zoom::parse_insert_slide_id(&id, i)?;
+    let (slide, on_notes, master) = zoom::parse_insert_slide_id(&id, i)?.parts();
     let kind_s = match obj.get("type") {
         None => {
             return Err(Error::with_path(
@@ -4481,6 +4542,8 @@ fn parse_insert_zoom(obj: &Map<String, Value>, i: usize) -> Result<zoom::InsertZ
     }
     Ok(zoom::InsertZoomOp {
         slide,
+        on_notes,
+        master,
         kind,
         x,
         y,
@@ -4747,7 +4810,7 @@ fn parse_insert_chart(obj: &Map<String, Value>, i: usize) -> Result<InsertChartO
         ],
     )?;
     let id = require_id(obj, i)?;
-    let (slide, on_notes) = chart::parse_insert_slide_id(&id, i)?;
+    let (slide, on_notes, master) = chart::parse_insert_slide_id(&id, i)?.parts();
     let chart_type = parse_chart_type_field(obj.get("type"), &format!("ops[{i}].type"))?;
     let of_pie_type =
         crate::chart::parse_of_pie_type(obj.get("ofPieType"), &format!("ops[{i}].ofPieType"))?;
@@ -4784,6 +4847,7 @@ fn parse_insert_chart(obj: &Map<String, Value>, i: usize) -> Result<InsertChartO
     Ok(InsertChartOp {
         slide,
         on_notes,
+        master,
         chart_type,
         of_pie_type,
         title,
@@ -5224,7 +5288,7 @@ fn parse_insert_smartart(obj: &Map<String, Value>, i: usize) -> Result<InsertSma
         &["op", "id", "layout", "points", "x", "y", "cx", "cy"],
     )?;
     let id = require_id(obj, i)?;
-    let (slide, on_notes) = smartart::parse_insert_slide_id(&id, i)?;
+    let (slide, on_notes, master) = smartart::parse_insert_slide_id(&id, i)?.parts();
     let (layout, points) = crate::smartart::parse_layout_and_points(obj, &format!("ops[{i}]"))?;
     let x = parse_off_field(obj.get("x"), i, "x")?;
     let y = parse_off_field(obj.get("y"), i, "y")?;
@@ -5251,6 +5315,7 @@ fn parse_insert_smartart(obj: &Map<String, Value>, i: usize) -> Result<InsertSma
     Ok(InsertSmartArtOp {
         slide,
         on_notes,
+        master,
         layout,
         points,
         x,
@@ -5412,7 +5477,7 @@ fn parse_insert_table(obj: &Map<String, Value>, i: usize) -> Result<InsertTableO
         &["op", "id", "rows", "cols", "cells", "x", "y", "cx", "cy"],
     )?;
     let id = require_id(obj, i)?;
-    let (slide, on_notes) = table::parse_insert_slide_id(&id, i)?;
+    let (slide, on_notes, master) = table::parse_insert_slide_id(&id, i)?.parts();
     let rows = table::parse_dim(
         obj.get("rows"),
         &format!("ops[{i}].rows"),
@@ -5453,6 +5518,7 @@ fn parse_insert_table(obj: &Map<String, Value>, i: usize) -> Result<InsertTableO
     Ok(InsertTableOp {
         slide,
         on_notes,
+        master,
         rows,
         cols,
         cells,
@@ -5887,6 +5953,7 @@ pub(crate) fn parse_create_chart(
     Ok(InsertChartOp {
         slide,
         on_notes: false,
+        master: None,
         chart_type,
         of_pie_type,
         title,
@@ -5939,6 +6006,7 @@ pub(crate) fn parse_create_smartart(
     Ok(InsertSmartArtOp {
         slide,
         on_notes: false,
+        master: None,
         layout,
         points,
         x,
@@ -6007,6 +6075,7 @@ pub(crate) fn parse_create_table(
     Ok(InsertTableOp {
         slide,
         on_notes: false,
+        master: None,
         rows,
         cols,
         cells,
@@ -6084,6 +6153,7 @@ pub(crate) fn parse_create_picture(
     Ok(InsertPictureOp {
         slide,
         on_notes: false,
+        master: None,
         comment: None,
         file,
         x,
@@ -6254,6 +6324,8 @@ pub(crate) fn parse_create_media(
     }
     Ok(InsertMediaOp {
         slide,
+        on_notes: false,
+        master: None,
         file,
         x,
         y,

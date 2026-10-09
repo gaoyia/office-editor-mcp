@@ -187,7 +187,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
             .unwrap_or_else(|| zoom::count(&doc.root));
         zoom_count += n_zoom;
         let connectors_list = if want_connectors {
-            Some(connector::list_json(&doc.root, s.index))
+            Some(connector::list_json(&doc.root, &host))
         } else {
             None
         };
@@ -273,6 +273,14 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
                     want_model3ds,
                     want_maths,
                     want_timing,
+                    want_media,
+                    want_ole_objects,
+                    want_zooms,
+                    want_connectors,
+                    want_hyperlinks,
+                    want_fields,
+                    &slides,
+                    &pres.root,
                 )?,
             );
         }
@@ -282,11 +290,11 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         if want_hyperlinks {
             obj.insert(
                 "hyperlinks".into(),
-                hyperlink::list_json(&doc.root, s.index, &s.part, &rels, &slides),
+                hyperlink::list_json(&doc.root, &host, &s.part, &rels, &slides),
             );
         }
         if want_fields {
-            obj.insert("fields".into(), field::list_json(&doc.root, s.index));
+            obj.insert("fields".into(), field::list_json(&doc.root, &host));
         }
         if want_timing {
             obj.insert("timing".into(), Value::Array(anims));
@@ -350,7 +358,25 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     if want_masters {
         root.insert(
             "masters".into(),
-            master::masters_json(&pkg, &catalog, want_timing)?,
+            master::masters_json(
+                &pkg,
+                &catalog,
+                want_timing,
+                want_pictures,
+                want_media,
+                want_charts,
+                want_smartarts,
+                want_tables,
+                want_ole_objects,
+                want_model3ds,
+                want_maths,
+                want_zooms,
+                want_connectors,
+                want_hyperlinks,
+                want_fields,
+                &slides,
+                &pres.root,
+            )?,
         );
     }
     if want_notes_master {

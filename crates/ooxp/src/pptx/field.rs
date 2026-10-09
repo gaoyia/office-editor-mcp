@@ -29,6 +29,8 @@ pub struct InsertFieldOp {
 pub struct SetFieldOp {
     pub id: String,
     pub slide: usize,
+    pub on_notes: bool,
+    pub master: Option<(usize, Option<usize>)>,
     pub key: FieldKey,
     pub type_name: Option<String>,
     pub text: Option<String>,
@@ -38,6 +40,8 @@ pub struct SetFieldOp {
 pub struct DeleteFieldOp {
     pub id: String,
     pub slide: usize,
+    pub on_notes: bool,
+    pub master: Option<(usize, Option<usize>)>,
     pub key: FieldKey,
     pub keep: FieldKeep,
 }
@@ -77,23 +81,22 @@ pub fn count(root: &Element) -> usize {
     n
 }
 
-pub fn list_json(root: &Element, slide: usize) -> Value {
-    let host_prefix = format!("slide:{slide}");
+pub fn list_json(root: &Element, host_prefix: &str) -> Value {
     let mut out = Vec::new();
     let mut index = 0usize;
     for (shape_index, sp) in shape::collect_text_shapes(root).into_iter().enumerate() {
-        let (host, _, _) = shape::shape_stable_id(sp, &host_prefix, shape_index + 1);
+        let (host, _, _) = shape::shape_stable_id(sp, host_prefix, shape_index + 1);
         for el in flds_in(sp) {
             index += 1;
-            out.push(item_json(el, slide, &host, index));
+            out.push(item_json(el, host_prefix, &host, index));
         }
     }
     Value::Array(out)
 }
 
-fn item_json(el: &Element, slide: usize, host: &str, index: usize) -> Value {
+fn item_json(el: &Element, host_prefix: &str, host: &str, index: usize) -> Value {
     let mut obj = Map::new();
-    obj.insert("id".into(), json!(field_id(el, slide, index)));
+    obj.insert("id".into(), json!(field_id(el, host_prefix, index)));
     obj.insert(
         "type".into(),
         json!(el
@@ -106,10 +109,10 @@ fn item_json(el: &Element, slide: usize, host: &str, index: usize) -> Value {
     Value::Object(obj)
 }
 
-fn field_id(el: &Element, slide: usize, index: usize) -> String {
+fn field_id(el: &Element, host_prefix: &str, index: usize) -> String {
     match el.attr("id").or_else(|| el.attr_local("id")) {
-        Some(g) if !g.is_empty() => format!("slide:{slide}/fld:{g}"),
-        _ => format!("slide:{slide}/fld:index:{index}"),
+        Some(g) if !g.is_empty() => format!("{host_prefix}/fld:{g}"),
+        _ => format!("{host_prefix}/fld:index:{index}"),
     }
 }
 
@@ -147,32 +150,11 @@ fn collect_flds<'a>(el: &'a Element, out: &mut Vec<&'a Element>) {
     }
 }
 
-pub fn parse_field_id(id: &str, op_index: usize) -> Result<(usize, FieldKey), Error> {
+pub fn parse_field_id(id: &str, op_index: usize) -> Result<(picture::TreeHost, FieldKey), Error> {
     let path = format!("ops[{op_index}].id");
-    let rest = id
-        .strip_prefix("slide:")
-        .ok_or_else(|| invalid_form(&path))?;
-    let Some((n, after)) = rest.split_once("/fld:") else {
-        return Err(invalid_form(&path));
-    };
+    let (host, after) = picture::parse_object_id(id, &path, "fld", IdReason::PptxFieldForm)?;
     if after.starts_with("notes/") || after.contains("/shape:") {
         return Err(invalid_form(&path));
-    }
-    let slide: usize = n.parse().map_err(|_| {
-        Error::with_path(
-            ErrorKind::InvalidId {
-                reason: IdReason::SlideIndexNotInt,
-            },
-            path.clone(),
-        )
-    })?;
-    if slide < 1 {
-        return Err(Error::with_path(
-            ErrorKind::InvalidId {
-                reason: IdReason::SlideIndexFromOne,
-            },
-            path,
-        ));
     }
     if let Some(idx) = after.strip_prefix("index:") {
         let k: usize = idx.parse().map_err(|_| {
@@ -191,10 +173,10 @@ pub fn parse_field_id(id: &str, op_index: usize) -> Result<(usize, FieldKey), Er
                 path,
             ));
         }
-        return Ok((slide, FieldKey::Index(k)));
+        return Ok((host, FieldKey::Index(k)));
     }
     if after.starts_with('{') && after.ends_with('}') && after.len() > 2 {
-        return Ok((slide, FieldKey::Guid(after.to_string())));
+        return Ok((host, FieldKey::Guid(after.to_string())));
     }
     Err(invalid_form(&path))
 }

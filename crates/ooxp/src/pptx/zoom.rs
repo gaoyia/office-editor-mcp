@@ -50,6 +50,8 @@ pub enum ZoomKey {
 #[derive(Debug, Clone)]
 pub struct ZoomTarget {
     pub slide: usize,
+    pub on_notes: bool,
+    pub master: Option<(usize, Option<usize>)>,
     pub key: ZoomKey,
 }
 
@@ -62,6 +64,8 @@ pub enum InsertKind {
 #[derive(Debug, Clone)]
 pub struct InsertZoomOp {
     pub slide: usize,
+    pub on_notes: bool,
+    pub master: Option<(usize, Option<usize>)>,
     pub kind: InsertKind,
     pub x: Option<i64>,
     pub y: Option<i64>,
@@ -75,14 +79,8 @@ pub struct DeleteZoomOp {
     pub target: ZoomTarget,
 }
 
-pub fn parse_insert_slide_id(id: &str, op_index: usize) -> Result<usize, Error> {
-    let path = format!("ops[{op_index}].id");
-    parse_slide_ref(
-        id,
-        &path,
-        IdReason::InsertZoomNeedsSlide,
-        IdReason::InsertZoomNeedsSlide,
-    )
+pub fn parse_insert_slide_id(id: &str, op_index: usize) -> Result<picture::TreeHost, Error> {
+    picture::parse_insert_host(id, op_index, IdReason::InsertZoomNeedsSlide)
 }
 
 pub fn parse_slide_target(id: &str, json_path: &str) -> Result<usize, Error> {
@@ -120,22 +118,7 @@ fn parse_slide_ref(
 }
 
 pub fn parse_zoom_id(id: &str, json_path: &str) -> Result<ZoomTarget, Error> {
-    let rest = id.strip_prefix("slide:").ok_or_else(|| {
-        Error::with_path(
-            ErrorKind::InvalidId {
-                reason: IdReason::SlideZoomPrefix,
-            },
-            json_path.to_string(),
-        )
-    })?;
-    let Some((n, after)) = rest.split_once("/zoom:") else {
-        return Err(Error::with_path(
-            ErrorKind::InvalidId {
-                reason: IdReason::SlideZoomContainer,
-            },
-            json_path.to_string(),
-        ));
-    };
+    let (host, after) = picture::parse_object_id(id, json_path, "zoom", IdReason::SlideZoomPrefix)?;
     if after.is_empty() {
         return Err(Error::with_path(
             ErrorKind::InvalidId {
@@ -144,7 +127,7 @@ pub fn parse_zoom_id(id: &str, json_path: &str) -> Result<ZoomTarget, Error> {
             json_path.to_string(),
         ));
     }
-    let slide = parse_slide_n(n, json_path)?;
+    let (slide, on_notes, master) = host.parts();
     let key = if let Some(rest) = after.strip_prefix("index:") {
         let k: usize = rest.parse().map_err(|_| {
             Error::with_path(
@@ -166,7 +149,12 @@ pub fn parse_zoom_id(id: &str, json_path: &str) -> Result<ZoomTarget, Error> {
     } else {
         ZoomKey::Id(after.to_string())
     };
-    Ok(ZoomTarget { slide, key })
+    Ok(ZoomTarget {
+        slide,
+        on_notes,
+        master,
+        key,
+    })
 }
 
 pub fn count(root: &Element) -> usize {
@@ -301,7 +289,7 @@ pub fn insert(
     let cy = op.cy.unwrap_or(DEFAULT_CY);
     let (x, y) = match (op.x, op.y) {
         (Some(x), Some(y)) => (x, y),
-        _ => picture::vacant_pos(pres_root, &slide_doc.root, cx, cy),
+        _ => picture::vacant_pos_host(op.on_notes, pres_root, &slide_doc.root, cx, cy),
     };
 
     picture::ensure_xmlns(&mut slide_doc.root, "r", REL_NS);

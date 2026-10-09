@@ -100,7 +100,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
                 "xlsx 的 insertPicture 的 id 必须是 sheet:工作表名 或页眉槽位 id".into()
             }
             IdReason::SlidePicPrefix => {
-                "pptx 图 id 必须是 slide:N/pic:…、slide:N/notes/pic:… 或 slide:N/comment:GUID/pic:n".into()
+                "pptx 图 id 必须是 slide:N/pic:…、slide:N/notes/pic:…、master:N/pic:…、master:N/layout:K/pic:… 或 slide:N/comment:GUID/pic:n".into()
             }
             IdReason::SlidePicContainer => {
                 "页 id 必须带 /pic:…（该 id 本身不是图）".into()
@@ -109,19 +109,19 @@ pub(super) fn render(kind: &ErrorKind) -> String {
                 "批注内图没有画布尺寸和位置，不能 setPictureSize / setPicturePos".into()
             }
             IdReason::SlideMediaForm => {
-                "pptx 视频 / 音频 id 必须是 slide:N/video:… 或 slide:N/audio:…".into()
+                "pptx 视频 / 音频 id 必须是 slide:N/video:…、slide:N/audio:…、slide:N/notes/…、master:N/… 或 master:N/layout:K/…".into()
             }
             IdReason::InsertMediaNeedsSlide => {
-                "pptx 的 insertVideo / insertAudio 的 id 必须是 slide:N".into()
+                "pptx 的 insertVideo / insertAudio 的 id 必须是 slide:N、slide:N/notes、master:N 或 master:N/layout:K".into()
             }
             IdReason::SlideCxnForm => {
-                "pptx 连接线 id 必须是 slide:N/cxn:…".into()
+                "pptx 连接线 id 必须是 slide:N/cxn:…、slide:N/notes/cxn:…、master:N/cxn:… 或 master:N/layout:K/cxn:…".into()
             }
             IdReason::InsertConnectorNeedsSlide => {
-                "pptx 的 insertConnector / groupShapes 的 id 必须是 slide:N".into()
+                "pptx 的 insertConnector 的 id 必须是 slide:N、slide:N/notes、master:N 或 master:N/layout:K".into()
             }
             IdReason::InsertNeedsSlide => {
-                "pptx 的 `insertPicture` 的 id 必须是 slide:N 或 slide:N/notes".into()
+                "pptx 的 insertPicture 的 id 必须是 slide:N、slide:N/notes、master:N、master:N/layout:K 或批注 id".into()
             }
             IdReason::InsertShapeHost => {
                 "pptx 的 insertShape 的 id 必须是 slide:N、slide:N/notes、master:N 或 master:N/layout:K".into()
@@ -256,7 +256,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
                 "xlsx 的 insertChart 的 id 必须是 sheet:工作表名".into()
             }
             IdReason::InsertChartNeedsSlide => {
-                "pptx 的 insertChart 的 id 必须是 slide:N 或 slide:N/notes".into()
+                "pptx 的 insertChart 的 id 必须是 slide:N、slide:N/notes、master:N 或 master:N/layout:K".into()
             }
             IdReason::InsertChartSheetNeedsWorkbook => {
                 "insertChartSheet 的 id 必须是 xlsx:workbook".into()
@@ -396,7 +396,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
                 "工作表 id 必须带 /chart:…（该 id 本身不是图表）".into()
             }
             IdReason::SlideChartPrefix => {
-                "pptx 图表 id 必须是 slide:N/chart:… 或 slide:N/notes/chart:…".into()
+                "pptx 图表 id 必须是 slide:N/chart:…、slide:N/notes/chart:…、master:N/chart:… 或 master:N/layout:K/chart:…".into()
             }
             IdReason::SlideChartContainer => {
                 "页 id 必须带 /chart:…（该 id 本身不是图表）".into()
@@ -416,16 +416,16 @@ pub(super) fn render(kind: &ErrorKind) -> String {
                 "insertSmartArt 的 id 必须是正文或页眉页脚段落 id".into()
             }
             IdReason::SlideSmartArtPrefix => {
-                "pptx SmartArt id 必须是 slide:N/smartdiagram:… 或 slide:N/notes/smartdiagram:…".into()
+                "pptx SmartArt id 必须是 slide:N/smartdiagram:…、slide:N/notes/smartdiagram:…、master:N/smartdiagram:… 或 master:N/layout:K/smartdiagram:…".into()
             }
             IdReason::SlideSmartArtContainer => {
                 "页 id 必须带 /smartdiagram:…（该 id 本身不是 SmartArt）".into()
             }
             IdReason::InsertSmartArtNeedsSlide => {
-                "pptx insertSmartArt 的 id 必须是 slide:N 或 slide:N/notes".into()
+                "pptx insertSmartArt 的 id 必须是 slide:N、slide:N/notes、master:N 或 master:N/layout:K".into()
             }
             IdReason::SlideTablePrefix => {
-                "pptx 表 id 必须是 slide:N/table:… 或 slide:N/notes/table:…".into()
+                "pptx 表 id 必须是 slide:N/table:…、slide:N/notes/table:…、master:N/table:… 或 master:N/layout:K/table:…".into()
             }
             IdReason::SlideTableContainer => {
                 "页 id 必须带 /table:…（该 id 本身不是表）".into()
@@ -437,7 +437,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
                 "单元格 id 必须是表 id 加上 /r:R/c:C，R 与 C 从 1 起".into()
             }
             IdReason::InsertTableNeedsSlide => {
-                "pptx insertTable 的 id 必须是 slide:N 或 slide:N/notes".into()
+                "pptx insertTable 的 id 必须是 slide:N、slide:N/notes、master:N 或 master:N/layout:K".into()
             }
             IdReason::SetTableCellNeedsCell => {
                 "setTableCellText 的 id 必须是 DrawingML 表单元格 id".into()
@@ -453,11 +453,15 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::InsertOleNeedsPara => {
                 "insertOle 的 id 必须是正文或页眉页脚段落 id".into()
             }
-            IdReason::SlideOlePrefix => "OLE id 必须是 slide:N/ole:…".into(),
+            IdReason::SlideOlePrefix => {
+                "OLE id 必须是 slide:N/ole:…、slide:N/notes/ole:…、master:N/ole:… 或 master:N/layout:K/ole:…".into()
+            }
             IdReason::SlideOleContainer => {
                 "页 id 必须带 /ole:…（该 id 本身不是嵌入对象）".into()
             }
-            IdReason::InsertOleNeedsSlide => "pptx insertOle 的 id 必须是 slide:N".into(),
+            IdReason::InsertOleNeedsSlide => {
+                "pptx insertOle 的 id 必须是 slide:N、slide:N/notes、master:N 或 master:N/layout:K".into()
+            }
             IdReason::InsertOleNeedsSheet => "xlsx insertOle 的 id 必须是 sheet:工作表名".into(),
             IdReason::SheetOlePrefix => "xlsx OLE id 必须是 sheet:工作表名/ole:…".into(),
             IdReason::SheetOleContainer => {
@@ -473,10 +477,10 @@ pub(super) fn render(kind: &ErrorKind) -> String {
                 "工作表 id 必须带 /model3d:…（该 id 本身不是 3D 模型）".into()
             }
             IdReason::InsertModel3dNeedsSlide => {
-                "pptx 的 insertModel3d 的 id 必须是 slide:N 或 slide:N/notes".into()
+                "pptx 的 insertModel3d 的 id 必须是 slide:N、slide:N/notes、master:N 或 master:N/layout:K".into()
             }
             IdReason::SlideModel3dPrefix => {
-                "pptx 3D 模型 id 必须是 slide:N/model3d:… 或 slide:N/notes/model3d:…".into()
+                "pptx 3D 模型 id 必须是 slide:N/model3d:…、slide:N/notes/model3d:…、master:N/model3d:… 或 master:N/layout:K/model3d:…".into()
             }
             IdReason::SlideModel3dContainer => {
                 "页 id 必须带 /model3d:…（该 id 本身不是 3D 模型）".into()
@@ -491,10 +495,10 @@ pub(super) fn render(kind: &ErrorKind) -> String {
                 "工作表 id 必须带 /math:…（该 id 本身不是公式框）".into()
             }
             IdReason::InsertMathNeedsSlide => {
-                "pptx 的 insertMath 的 id 必须是 slide:N 或 slide:N/notes".into()
+                "pptx 的 insertMath 的 id 必须是 slide:N、slide:N/notes、master:N 或 master:N/layout:K".into()
             }
             IdReason::SlideMathPrefix => {
-                "pptx 公式框 id 必须是 slide:N/math:… 或 slide:N/notes/math:…".into()
+                "pptx 公式框 id 必须是 slide:N/math:…、slide:N/notes/math:…、master:N/math:… 或 master:N/layout:K/math:…".into()
             }
             IdReason::SlideMathContainer => {
                 "页 id 必须带 /math:…（该 id 本身不是公式框）".into()
@@ -513,11 +517,15 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::InsertSlicerNeedsTableOrPivot => {
                 "insertSlicer 的 source 必须是本表表格 id 或透视表 id".into()
             }
-            IdReason::InsertZoomNeedsSlide => "insertZoom 的 id 必须是 slide:N".into(),
+            IdReason::InsertZoomNeedsSlide => {
+                "insertZoom 的 id 必须是 slide:N、slide:N/notes、master:N 或 master:N/layout:K".into()
+            }
             IdReason::ZoomTargetSlide => {
                 "insertZoom 的 type 为 slide 时 target 必须是 slide:N".into()
             }
-            IdReason::SlideZoomPrefix => "Zoom id 必须是 slide:N/zoom:…".into(),
+            IdReason::SlideZoomPrefix => {
+                "Zoom id 必须是 slide:N/zoom:…、slide:N/notes/zoom:…、master:N/zoom:… 或 master:N/layout:K/zoom:…".into()
+            }
             IdReason::SlideZoomContainer => {
                 "页 id 必须带 /zoom:…（该 id 本身不是 Zoom）".into()
             }
@@ -578,10 +586,10 @@ pub(super) fn render(kind: &ErrorKind) -> String {
                 "xlsx 的 insertHyperlink 的 id 必须是 sheet:工作表名".into()
             }
             IdReason::InsertHyperlinkNeedsShape => {
-                "pptx 的 insertHyperlink 的 id 必须是幻灯片文本形状 id".into()
+                "pptx 的 insertHyperlink 的 id 必须是幻灯片、备注、母版或版式文本形状 id".into()
             }
             IdReason::SlideLinkPrefix => {
-                "pptx 超链接 id 必须是 slide:n/link:k，n 与 k 从 1 起".into()
+                "pptx 超链接 id 必须是 slide:N/link:k、slide:N/notes/link:k、master:N/link:k 或 master:N/layout:K/link:k".into()
             }
             IdReason::PptxJumpNeedsSlide => {
                 "pptx 内部跳转必须是 slide:n，n 从 1 起".into()
@@ -611,10 +619,10 @@ pub(super) fn render(kind: &ErrorKind) -> String {
                 "insertField 的 id 必须是正文或页眉页脚段落 id".into()
             }
             IdReason::PptxFieldForm => {
-                "pptx 域 id 必须是 slide:n/fld:GUID 或 slide:n/fld:index:k".into()
+                "pptx 域 id 必须是 slide:N/fld:…、slide:N/notes/fld:…、master:N/fld:… 或 master:N/layout:K/fld:…".into()
             }
             IdReason::InsertFieldNeedsShape => {
-                "pptx 的 insertField 的 id 必须是幻灯片文本形状 id".into()
+                "pptx 的 insertField 的 id 必须是幻灯片、备注、母版或版式文本形状 id".into()
             }
             IdReason::InsertNumberingNeedsDocument => {
                 "insertNumbering 的 id 必须是 docx:document".into()

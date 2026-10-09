@@ -31,6 +31,7 @@ pub enum SmartArtKey {
 pub struct SmartArtTarget {
     pub slide: usize,
     pub on_notes: bool,
+    pub master: Option<(usize, Option<usize>)>,
     pub key: SmartArtKey,
 }
 
@@ -48,42 +49,17 @@ pub enum AddParent {
 
 pub fn parse_diagram_id(id: &str, json_path: &str) -> Result<SmartArtTarget, Error> {
     let path = json_path.to_string();
-    let rest = id.strip_prefix("slide:").ok_or_else(|| {
-        Error::with_path(
-            ErrorKind::InvalidId {
-                reason: IdReason::SlideSmartArtPrefix,
-            },
-            path.clone(),
-        )
-    })?;
-    let (n, after, on_notes) = if let Some((n, after)) = rest.split_once("/notes/smartdiagram:") {
-        (n, after, true)
-    } else if let Some((n, after)) = rest.split_once("/smartdiagram:") {
-        (n, after, false)
-    } else {
+    let (host, after) =
+        picture::parse_object_id(id, json_path, "smartdiagram", IdReason::SlideSmartArtPrefix)?;
+    if after.is_empty() {
         return Err(Error::with_path(
             ErrorKind::InvalidId {
                 reason: IdReason::SlideSmartArtContainer,
             },
-            path.clone(),
-        ));
-    };
-    let slide: usize = n.parse().map_err(|_| {
-        Error::with_path(
-            ErrorKind::InvalidId {
-                reason: IdReason::SlideIndexNotInt,
-            },
-            path.clone(),
-        )
-    })?;
-    if slide < 1 {
-        return Err(Error::with_path(
-            ErrorKind::InvalidId {
-                reason: IdReason::SlideIndexFromOne,
-            },
             path,
         ));
     }
+    let (slide, on_notes, master) = host.parts();
     if let Some(rest) = after.strip_prefix("index:") {
         let k: usize = rest.parse().map_err(|_| {
             Error::with_path(
@@ -104,10 +80,11 @@ pub fn parse_diagram_id(id: &str, json_path: &str) -> Result<SmartArtTarget, Err
         return Ok(SmartArtTarget {
             slide,
             on_notes,
+            master,
             key: SmartArtKey::Index(k),
         });
     }
-    if after.is_empty() || after.contains('/') {
+    if after.contains('/') {
         return Err(Error::with_path(
             ErrorKind::InvalidId {
                 reason: IdReason::SlideSmartArtPrefix,
@@ -118,6 +95,7 @@ pub fn parse_diagram_id(id: &str, json_path: &str) -> Result<SmartArtTarget, Err
     Ok(SmartArtTarget {
         slide,
         on_notes,
+        master,
         key: SmartArtKey::Id(after.to_string()),
     })
 }
@@ -155,8 +133,8 @@ pub fn parse_add_parent(id: &str, json_path: &str) -> Result<AddParent, Error> {
     }
 }
 
-pub fn parse_insert_slide_id(id: &str, op_index: usize) -> Result<(usize, bool), Error> {
-    picture::parse_insert_slide_or_notes(id, op_index, IdReason::InsertSmartArtNeedsSlide)
+pub fn parse_insert_slide_id(id: &str, op_index: usize) -> Result<picture::TreeHost, Error> {
+    picture::parse_insert_host(id, op_index, IdReason::InsertSmartArtNeedsSlide)
 }
 
 pub fn count_smartarts(root: &Element) -> usize {

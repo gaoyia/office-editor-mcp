@@ -44,10 +44,65 @@ pub struct CommentPic {
     pub reply: Option<String>,
 }
 
+/// 幻灯片、备注页、幻灯片母版或版式。不含备注母版 / 讲义。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TreeHost {
+    Slide {
+        n: usize,
+        on_notes: bool,
+    },
+    Master {
+        master: usize,
+        layout: Option<usize>,
+    },
+}
+
+impl TreeHost {
+    pub fn prefix(&self) -> String {
+        match self {
+            Self::Slide { n, on_notes: false } => format!("slide:{n}"),
+            Self::Slide { n, on_notes: true } => format!("slide:{n}/notes"),
+            Self::Master {
+                master,
+                layout: None,
+            } => format!("master:{master}"),
+            Self::Master {
+                master,
+                layout: Some(k),
+            } => format!("master:{master}/layout:{k}"),
+        }
+    }
+
+    #[allow(clippy::type_complexity)]
+    pub fn parts(&self) -> (usize, bool, Option<(usize, Option<usize>)>) {
+        match *self {
+            Self::Slide { n, on_notes } => (n, on_notes, None),
+            Self::Master { master, layout } => (0, false, Some((master, layout))),
+        }
+    }
+
+    pub fn on_notes(&self) -> bool {
+        matches!(self, Self::Slide { on_notes: true, .. })
+    }
+
+    #[allow(clippy::type_complexity)]
+    pub fn from_parts(
+        slide: usize,
+        on_notes: bool,
+        master: Option<(usize, Option<usize>)>,
+    ) -> Self {
+        match master {
+            Some((master, layout)) => Self::Master { master, layout },
+            None => Self::Slide { n: slide, on_notes },
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct PicTarget {
     pub slide: usize,
     pub on_notes: bool,
+    pub master: Option<(usize, Option<usize>)>,
     pub comment: Option<CommentPic>,
     pub key: PicKey,
 }
@@ -66,34 +121,26 @@ pub struct PicInfo {
 
 pub fn parse_pic_id(id: &str, json_path: &str) -> Result<PicTarget, Error> {
     let path = json_path.to_string();
-    let rest = id.strip_prefix("slide:").ok_or_else(|| {
-        Error::with_path(
-            ErrorKind::InvalidId {
-                reason: IdReason::SlidePicPrefix,
-            },
-            path.clone(),
-        )
-    })?;
-    if let Some((n, after)) = rest.split_once("/comment:") {
-        return parse_comment_pic_id(n, after, path);
+    if let Some(rest) = id.strip_prefix("slide:") {
+        if let Some((n, after)) = rest.split_once("/comment:") {
+            return parse_comment_pic_id(n, after, path);
+        }
     }
-    let (n, after, on_notes) = if let Some((n, after)) = rest.split_once("/notes/pic:") {
-        (n, after, true)
-    } else if let Some((n, after)) = rest.split_once("/pic:") {
-        (n, after, false)
-    } else {
+    let (host, after) = parse_object_id(id, json_path, "pic", IdReason::SlidePicPrefix)?;
+    if after.is_empty() {
         return Err(Error::with_path(
             ErrorKind::InvalidId {
                 reason: IdReason::SlidePicContainer,
             },
             path,
         ));
-    };
-    let slide = parse_slide_n(n, &path)?;
+    }
+    let (slide, on_notes, master) = host.parts();
     let key = parse_pic_key(after, &path)?;
     Ok(PicTarget {
         slide,
         on_notes,
+        master,
         comment: None,
         key,
     })
@@ -134,6 +181,7 @@ fn parse_comment_pic_id(n: &str, after: &str, path: String) -> Result<PicTarget,
     Ok(PicTarget {
         slide,
         on_notes: false,
+        master: None,
         comment: Some(CommentPic {
             guid: guid.to_string(),
             reply,
@@ -269,6 +317,238 @@ pub fn parse_insert_slide_or_notes(
         ));
     }
     Ok((slide, on_notes))
+}
+
+/// 解析 `slide:N`、`slide:N/notes`、`master:N`、`master:N/layout:K`。
+/// `notesMaster` 与 `handout` 仍报 `bad`。
+pub fn parse_insert_host(id: &str, op_index: usize, bad: IdReason) -> Result<TreeHost, Error> {
+    let path = format!("ops[{op_index}].id");
+    if id == "notesMaster"
+        || id == "handout"
+        || id.starts_with("notesMaster/")
+        || id.starts_with("handout/")
+    {
+        return Err(Error::with_path(ErrorKind::InvalidId { reason: bad }, path));
+    }
+    if id.starts_with("master:") {
+        return parse_master_insert_host(id, &path, bad);
+    }
+    let (n, on_notes) = parse_insert_slide_or_notes(id, op_index, bad)?;
+    Ok(TreeHost::Slide { n, on_notes })
+}
+
+fn parse_master_insert_host(id: &str, path: &str, bad: IdReason) -> Result<TreeHost, Error> {
+    let rest = id.strip_prefix("master:").ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::InvalidId {
+                reason: bad.clone(),
+            },
+            path.to_string(),
+        )
+    })?;
+    if let Some((n_str, after)) = rest.split_once('/') {
+        let Some(k_str) = after.strip_prefix("layout:") else {
+            return Err(Error::with_path(
+                ErrorKind::InvalidId { reason: bad },
+                path.to_string(),
+            ));
+        };
+        if k_str.is_empty() || k_str.contains('/') {
+            return Err(Error::with_path(
+                ErrorKind::InvalidId { reason: bad },
+                path.to_string(),
+            ));
+        }
+        return Ok(TreeHost::Master {
+            master: parse_slide_n(n_str, path)?,
+            layout: Some(parse_slide_n(k_str, path)?),
+        });
+    }
+    if rest.is_empty() || rest.contains('/') {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId { reason: bad },
+            path.to_string(),
+        ));
+    }
+    Ok(TreeHost::Master {
+        master: parse_slide_n(rest, path)?,
+        layout: None,
+    })
+}
+
+/// 解析 `slide:N/seg:`、`slide:N/notes/seg:`、`master:N/seg:`、`master:N/layout:K/seg:`。
+pub fn parse_object_id<'a>(
+    id: &'a str,
+    json_path: &str,
+    seg: &str,
+    form: IdReason,
+) -> Result<(TreeHost, &'a str), Error> {
+    let path = json_path.to_string();
+    let notes_pat = format!("/notes/{seg}:");
+    let obj_pat = format!("/{seg}:");
+    if let Some(rest) = id.strip_prefix("slide:") {
+        if let Some((n, after)) = rest.split_once(&notes_pat) {
+            if n.is_empty() || n.contains('/') {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidId { reason: form },
+                    path,
+                ));
+            }
+            return Ok((
+                TreeHost::Slide {
+                    n: parse_slide_n(n, &path)?,
+                    on_notes: true,
+                },
+                after,
+            ));
+        }
+        if let Some((n, after)) = rest.split_once(&obj_pat) {
+            if n.is_empty() || n.contains('/') {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidId { reason: form },
+                    path,
+                ));
+            }
+            return Ok((
+                TreeHost::Slide {
+                    n: parse_slide_n(n, &path)?,
+                    on_notes: false,
+                },
+                after,
+            ));
+        }
+        return Err(Error::with_path(
+            ErrorKind::InvalidId { reason: form },
+            path,
+        ));
+    }
+    if let Some(rest) = id.strip_prefix("master:") {
+        if let Some((left, after)) = rest.split_once(&obj_pat) {
+            let host = parse_master_object_left(left, &path, form)?;
+            return Ok((host, after));
+        }
+        return Err(Error::with_path(
+            ErrorKind::InvalidId { reason: form },
+            path,
+        ));
+    }
+    Err(Error::with_path(
+        ErrorKind::InvalidId { reason: form },
+        path,
+    ))
+}
+
+fn parse_master_object_left(left: &str, path: &str, form: IdReason) -> Result<TreeHost, Error> {
+    if let Some((n_str, after)) = left.split_once('/') {
+        let Some(k_str) = after.strip_prefix("layout:") else {
+            return Err(Error::with_path(
+                ErrorKind::InvalidId { reason: form },
+                path.to_string(),
+            ));
+        };
+        if k_str.is_empty() || k_str.contains('/') {
+            return Err(Error::with_path(
+                ErrorKind::InvalidId { reason: form },
+                path.to_string(),
+            ));
+        }
+        return Ok(TreeHost::Master {
+            master: parse_slide_n(n_str, path)?,
+            layout: Some(parse_slide_n(k_str, path)?),
+        });
+    }
+    if left.is_empty() {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId { reason: form },
+            path.to_string(),
+        ));
+    }
+    Ok(TreeHost::Master {
+        master: parse_slide_n(left, path)?,
+        layout: None,
+    })
+}
+
+/// 按宿主取出 XML 部件。母版 / 版式按 presentation 的 `sldMasterIdLst` 计。
+pub fn resolve_tree_part(
+    pkg: &Package,
+    pres_part: &str,
+    pres_root: &Element,
+    slides: &[super::shape::SlideMeta],
+    host: &TreeHost,
+    missing: ErrorKind,
+    json_path: &str,
+) -> Result<String, Error> {
+    match host {
+        TreeHost::Slide { n, on_notes } => {
+            let meta = slides.get(n.saturating_sub(1)).ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::SlideNotFound { n: *n as u32 },
+                    json_path.to_string(),
+                )
+            })?;
+            if *on_notes {
+                super::notes::notes_slide_part(pkg, &meta.part)?
+                    .ok_or_else(|| Error::with_path(missing, json_path.to_string()))
+            } else {
+                Ok(meta.part.clone())
+            }
+        }
+        TreeHost::Master { master, layout } => {
+            master_or_layout_part(pkg, pres_part, pres_root, *master, *layout, json_path)
+        }
+    }
+}
+
+fn master_or_layout_part(
+    pkg: &Package,
+    pres_part: &str,
+    pres_root: &Element,
+    master: usize,
+    layout: Option<usize>,
+    json_path: &str,
+) -> Result<String, Error> {
+    let mut masters = Vec::new();
+    if let Some(lst) = pres_root.child_by_local("sldMasterIdLst") {
+        for el in lst
+            .element_children()
+            .filter(|e| e.local_name() == "sldMasterId")
+        {
+            if let Some(rid) = super::shape::rid_attr(el) {
+                masters.push(crate::opc::resolve_id(pkg, pres_part, rid)?);
+            }
+        }
+    }
+    let mpart = masters.get(master.saturating_sub(1)).ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::MasterNotFound { n: master as u32 },
+            json_path.to_string(),
+        )
+    })?;
+    let Some(k) = layout else {
+        return Ok(mpart.clone());
+    };
+    let doc = crate::xml::parse(pkg.get(mpart)?)?;
+    let mut layouts = Vec::new();
+    if let Some(lst) = doc.root.child_by_local("sldLayoutIdLst") {
+        for el in lst
+            .element_children()
+            .filter(|e| e.local_name() == "sldLayoutId")
+        {
+            if let Some(rid) = super::shape::rid_attr(el) {
+                layouts.push(crate::opc::resolve_id(pkg, mpart, rid)?);
+            }
+        }
+    }
+    layouts.get(k.saturating_sub(1)).cloned().ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::LayoutNotFound {
+                master: master as u32,
+                layout: k as u32,
+            },
+            json_path.to_string(),
+        )
+    })
 }
 
 pub fn collect_pictures(root: &Element, host: &str) -> Vec<PicInfo> {
@@ -553,6 +833,26 @@ pub(crate) fn vacant_pos(
     vacant_pos_canvas(slide_size(pres_root), slide_root, pic_cx, pic_cy)
 }
 
+/// 备注页用 `p:notesSz`，幻灯片与母版 / 版式用 `p:sldSz`。
+pub(crate) fn vacant_pos_host(
+    on_notes: bool,
+    pres_root: &Element,
+    slide_root: &Element,
+    pic_cx: i64,
+    pic_cy: i64,
+) -> (i64, i64) {
+    if on_notes {
+        vacant_pos_canvas(
+            super::notes::notes_size(pres_root),
+            slide_root,
+            pic_cx,
+            pic_cy,
+        )
+    } else {
+        vacant_pos(pres_root, slide_root, pic_cx, pic_cy)
+    }
+}
+
 pub(crate) fn vacant_pos_canvas(
     (slide_cx, slide_cy): (i64, i64),
     slide_root: &Element,
@@ -617,22 +917,45 @@ pub fn export_media(bytes: &[u8], id: &str) -> Result<ExportedMedia, Error> {
     let pres_part = crate::opc::office_document_part(&pkg)?;
     let pres = crate::xml::parse(pkg.get(&pres_part)?)?;
     let slides = shape::list_slides(&pkg, &pres_part, &pres.root)?;
-    let meta = slides.get(target.slide - 1).ok_or_else(|| {
-        Error::with_path(
-            ErrorKind::SlideNotFound {
-                n: target.slide as u32,
+    let host = TreeHost::from_parts(target.slide, target.on_notes, target.master);
+    if target.comment.is_some() && target.master.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::SlidePicPrefix,
             },
             "id",
-        )
-    })?;
-    let part = if target.on_notes {
-        super::notes::notes_slide_part(&pkg, &meta.part)?.ok_or_else(|| {
-            Error::with_path(ErrorKind::PictureNotFound { id: id.to_string() }, "id")
-        })?
-    } else {
+        ));
+    }
+    let part = if target.comment.is_some() {
+        let meta = slides.get(target.slide - 1).ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::SlideNotFound {
+                    n: target.slide as u32,
+                },
+                "id",
+            )
+        })?;
         meta.part.clone()
+    } else {
+        resolve_tree_part(
+            &pkg,
+            &pres_part,
+            &pres.root,
+            &slides,
+            &host,
+            ErrorKind::PictureNotFound { id: id.to_string() },
+            "id",
+        )?
     };
     if let Some(cm) = &target.comment {
+        let meta = slides.get(target.slide - 1).ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::SlideNotFound {
+                    n: target.slide as u32,
+                },
+                "id",
+            )
+        })?;
         return super::comments::export_pic(&pkg, &meta.part, cm, &target.key, id);
     }
     let doc = crate::xml::parse(pkg.get(&part)?)?;
@@ -696,7 +1019,7 @@ pub fn insert_picture(
     let (x, y) = match (op.x, op.y) {
         (Some(px), Some(py)) => (px, py),
         _ => {
-            let canvas = if op.on_notes {
+            let canvas = if TreeHost::from_parts(op.slide, op.on_notes, op.master).on_notes() {
                 super::notes::notes_size(pres_root)
             } else {
                 slide_size(pres_root)

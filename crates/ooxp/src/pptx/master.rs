@@ -173,7 +173,25 @@ pub fn layout_id_json(pkg: &Package, catalog: &Catalog, slide_part: &str) -> Res
     Ok(json!(catalog.layout_id_of(&part)))
 }
 
-pub fn masters_json(pkg: &Package, catalog: &Catalog, want_timing: bool) -> Result<Value, Error> {
+pub fn masters_json(
+    pkg: &Package,
+    catalog: &Catalog,
+    want_timing: bool,
+    want_pictures: bool,
+    want_media: bool,
+    want_charts: bool,
+    want_smartarts: bool,
+    want_tables: bool,
+    want_ole_objects: bool,
+    want_model3ds: bool,
+    want_maths: bool,
+    want_zooms: bool,
+    want_connectors: bool,
+    want_hyperlinks: bool,
+    want_fields: bool,
+    slides: &[SlideMeta],
+    pres_root: &Element,
+) -> Result<Value, Error> {
     let mut out = Vec::new();
     for m in &catalog.masters {
         let doc = xml::parse(pkg.get(&m.part)?)?;
@@ -201,6 +219,27 @@ pub fn masters_json(pkg: &Package, catalog: &Catalog, want_timing: bool) -> Resu
                 "shapes".into(),
                 json!(deco_json(&layout_doc.root, &layout_host)),
             );
+            attach_object_lists(
+                pkg,
+                &l.part,
+                &layout_doc.root,
+                &layout_host,
+                &mut layout_obj,
+                want_pictures,
+                want_media,
+                want_charts,
+                want_smartarts,
+                want_tables,
+                want_ole_objects,
+                want_model3ds,
+                want_maths,
+                want_zooms,
+                want_connectors,
+                want_hyperlinks,
+                want_fields,
+                slides,
+                pres_root,
+            )?;
             layouts.push(Value::Object(layout_obj));
         }
         let theme = super::theme::theme_json(pkg, &m.part)?;
@@ -218,10 +257,131 @@ pub fn masters_json(pkg: &Package, catalog: &Catalog, want_timing: bool) -> Resu
             json!(placeholders_json(&doc.root, &host)),
         );
         obj.insert("shapes".into(), json!(deco_json(&doc.root, &host)));
+        attach_object_lists(
+            pkg,
+            &m.part,
+            &doc.root,
+            &host,
+            &mut obj,
+            want_pictures,
+            want_media,
+            want_charts,
+            want_smartarts,
+            want_tables,
+            want_ole_objects,
+            want_model3ds,
+            want_maths,
+            want_zooms,
+            want_connectors,
+            want_hyperlinks,
+            want_fields,
+            slides,
+            pres_root,
+        )?;
         obj.insert("layouts".into(), Value::Array(layouts));
         out.push(Value::Object(obj));
     }
     Ok(Value::Array(out))
+}
+
+fn attach_object_lists(
+    pkg: &Package,
+    part: &str,
+    root: &Element,
+    host: &str,
+    obj: &mut Map<String, Value>,
+    want_pictures: bool,
+    want_media: bool,
+    want_charts: bool,
+    want_smartarts: bool,
+    want_tables: bool,
+    want_ole_objects: bool,
+    want_model3ds: bool,
+    want_maths: bool,
+    want_zooms: bool,
+    want_connectors: bool,
+    want_hyperlinks: bool,
+    want_fields: bool,
+    slides: &[SlideMeta],
+    pres_root: &Element,
+) -> Result<(), Error> {
+    if want_pictures {
+        let rels = crate::opc::Relationships::from_package(pkg, part)?;
+        let pics = picture::collect_pictures_with(root, host, Some(&rels));
+        obj.insert(
+            "pictures".into(),
+            Value::Array(picture::pictures_json(&pics)),
+        );
+    }
+    if want_maths {
+        let maths = super::omml::collect(root, host);
+        obj.insert("maths".into(), Value::Array(super::omml::list_json(&maths)));
+    }
+    if want_media {
+        let (videos, audios) = super::media::collect(pkg, part, root, host)?;
+        obj.insert(
+            "videos".into(),
+            Value::Array(super::media::list_json(&videos)),
+        );
+        obj.insert(
+            "audios".into(),
+            Value::Array(super::media::list_json(&audios)),
+        );
+    }
+    if want_charts {
+        obj.insert(
+            "charts".into(),
+            Value::Array(super::chart::collect_charts(pkg, root, host, part)?),
+        );
+    }
+    if want_smartarts {
+        obj.insert(
+            "smartArts".into(),
+            Value::Array(super::smartart::collect_smartarts(pkg, root, host, part)?),
+        );
+    }
+    if want_tables {
+        obj.insert(
+            "tables".into(),
+            Value::Array(super::table::collect_tables(root, host)),
+        );
+    }
+    if want_ole_objects {
+        obj.insert(
+            "oleObjects".into(),
+            Value::Array(super::ole::collect(pkg, part, root, host)?),
+        );
+    }
+    if want_model3ds {
+        let m3ds = super::model3d::collect(root, host);
+        obj.insert(
+            "model3ds".into(),
+            Value::Array(super::model3d::list_json(&m3ds)),
+        );
+    }
+    if want_zooms {
+        obj.insert(
+            "zooms".into(),
+            Value::Array(super::zoom::collect(root, host, slides, pres_root)),
+        );
+    }
+    if want_connectors {
+        obj.insert(
+            "connectors".into(),
+            Value::Array(super::connector::list_json(root, host)),
+        );
+    }
+    if want_hyperlinks {
+        let rels = crate::opc::Relationships::from_package(pkg, part)?;
+        obj.insert(
+            "hyperlinks".into(),
+            super::hyperlink::list_json(root, host, part, &rels, slides),
+        );
+    }
+    if want_fields {
+        obj.insert("fields".into(), super::field::list_json(root, host));
+    }
+    Ok(())
 }
 
 pub fn parse_placeholder_id(id: &str, op_index: usize) -> Result<PlaceholderId, Error> {

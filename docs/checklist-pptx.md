@@ -5,7 +5,7 @@
 检查前用 create 或 apply 在本机生成文件，不要用改过扩展名的 zip 目录冒充。
 本机若 `PowerPoint.Application` 被 WPS 抢走，直接启动 `POWERPNT.EXE` 再挂 COM，不要走被抢的 ProgID。Office 16 的对象模型在 `mdiClass` 上。
 
-C、I、A、Pp、Pvg、Pem、P3d、Pom、Pc、Psa、Pn、Pcm、Pm、Ps、Tf、Sg、Pt、Tn、Tr、Am、Aw、Mm、Mw、Md、Ts、Ho、Nh、Phl、Phr、Pcip、Pmd、Psc、Cs、Po、Cr、Pz、Pw、
+C、I、A、Pp、Pvg、Pem、P3d、Pom、Pc、Psa、Pn、Pcm、Pm、Ps、Tf、Sg、Pt、Tn、Tr、Am、Aw、Mm、Mw、Md、Ts、Ho、Nh、Nm、Phl、Phr、Pcip、Pmd、Psc、Cs、Po、Cr、Pz、Pw、
 Pf 各组由 `manual-check/office/cases/pptx-*.ps1` 自动判定，
 跑 `pwsh -File manual-check\office\run.ps1 -Case 'pptx-*'` 即可复现。O1 已放弃，与 xlsx / docx 相同。
 
@@ -1182,6 +1182,35 @@ inspect 列出讲义母版页眉、页脚、日期、页码槽位。apply 用 `s
   - 对 `pptx:presentation` 发 `insertPlaceholder` 得 `InvalidId`
   - xlsx 的 `scope.notesMaster` 得 `InvalidField`
   - 均未写文件（拒错三条加 xlsx）
+
+## 备注与母版对象
+
+备注页扩视频、音频、OLE、Zoom、连接线、超链接、域。幻灯片母版 / 版式扩图、图表、SmartArt、表、媒体、OLE、Zoom、连接线、公式、3D、超链接、域。复用已有 op，只扩合法 `id` 宿主。不算放映引擎，不激活 OLE 服务器。
+脚本：`manual-check/office/cases/pptx-notes-master-objects.ps1`。编号用 Nm（不要跟 Nh、Pn、Mm、Md、Pmd 混）。
+
+- **Nm1**
+  - 检查：备注插视频
+  - 通过标准：对 `slide:1/notes` 发 `insertVideo` 后 `notes.videoCount` 为 1，id 带 `slide:1/notes/video:`
+  - 根上 `videoCount` 仍为 0
+  - PowerPoint 无 Repair
+- **Nm2**
+  - 检查：备注插超链接
+  - 通过标准：对备注正文框 `insertHyperlink` 后 `notes.hyperlinkCount` 为 1，id 为 `slide:1/notes/link:1`
+  - 无 Repair
+- **Nm3**
+  - 检查：母版插图
+  - 通过标准：对 `master:1` 发 `insertPicture` 后 `scope.masters` 与 `scope.pictures` 同开时 `masters[0].pictures` 有一条，id 带 `master:1/pic:`
+  - 根上 `pictureCount` 仍为 0
+  - 无 Repair
+- **Nm4**
+  - 检查：母版插表
+  - 通过标准：对 `master:1` 发 `insertTable` 后 `scope.masters` 与 `scope.tables` 同开时 `masters[0].tables` 长度为 1，id 带 `master:1/table:`
+  - 无 Repair
+- **Nm5**
+  - 检查：拒错
+  - 通过标准：对 `notesMaster` 发 `insertPicture` 得 `InvalidId`
+  - 对批注 id 发 `insertVideo` 得 `InvalidId`
+  - 均未写文件
 
 ## 超链接
 

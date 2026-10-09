@@ -21,6 +21,7 @@ pub enum MathKey {
 pub struct MathTarget {
     pub slide: usize,
     pub on_notes: bool,
+    pub master: Option<(usize, Option<usize>)>,
     pub key: MathKey,
 }
 
@@ -28,6 +29,7 @@ pub struct MathTarget {
 pub struct InsertMathOp {
     pub slide: usize,
     pub on_notes: bool,
+    pub master: Option<(usize, Option<usize>)>,
     pub text: String,
     pub x: Option<i64>,
     pub y: Option<i64>,
@@ -61,50 +63,12 @@ pub struct MathInfo {
 }
 
 pub fn looks_like_id(id: &str) -> bool {
-    id.contains("/math:") && id.starts_with("slide:")
+    id.contains("/math:") && (id.starts_with("slide:") || id.starts_with("master:"))
 }
 
 pub fn parse_id(id: &str, json_path: &str) -> Result<MathTarget, Error> {
-    let rest = id.strip_prefix("slide:").ok_or_else(|| {
-        Error::with_path(
-            ErrorKind::InvalidId {
-                reason: IdReason::SlideMathPrefix,
-            },
-            json_path.to_string(),
-        )
-    })?;
-    let (host, after, on_notes) = if let Some((n, rest)) = rest.split_once("/notes/math:") {
-        (n, rest, true)
-    } else if let Some((n, rest)) = rest.split_once("/math:") {
-        if n.contains('/') {
-            return Err(Error::with_path(
-                ErrorKind::InvalidId {
-                    reason: IdReason::SlideMathPrefix,
-                },
-                json_path.to_string(),
-            ));
-        }
-        (n, rest, false)
-    } else if rest.contains("/notes") && !rest.contains("/math:") {
-        return Err(Error::with_path(
-            ErrorKind::InvalidId {
-                reason: IdReason::SlideMathContainer,
-            },
-            json_path.to_string(),
-        ));
-    } else {
-        return Err(Error::with_path(
-            ErrorKind::InvalidId {
-                reason: if rest.contains('/') {
-                    IdReason::SlideMathPrefix
-                } else {
-                    IdReason::SlideMathContainer
-                },
-            },
-            json_path.to_string(),
-        ));
-    };
-    if host.is_empty() || after.is_empty() {
+    let (host, after) = picture::parse_object_id(id, json_path, "math", IdReason::SlideMathPrefix)?;
+    if after.is_empty() {
         return Err(Error::with_path(
             ErrorKind::InvalidId {
                 reason: IdReason::SlideMathPrefix,
@@ -112,25 +76,11 @@ pub fn parse_id(id: &str, json_path: &str) -> Result<MathTarget, Error> {
             json_path.to_string(),
         ));
     }
-    let slide: usize = host.parse().map_err(|_| {
-        Error::with_path(
-            ErrorKind::InvalidId {
-                reason: IdReason::SlideIndexNotInt,
-            },
-            json_path.to_string(),
-        )
-    })?;
-    if slide < 1 {
-        return Err(Error::with_path(
-            ErrorKind::InvalidId {
-                reason: IdReason::SlideIndexFromOne,
-            },
-            json_path.to_string(),
-        ));
-    }
+    let (slide, on_notes, master) = host.parts();
     Ok(MathTarget {
         slide,
         on_notes,
+        master,
         key: parse_key(after, json_path)?,
     })
 }
@@ -528,6 +478,7 @@ pub(crate) fn parse_create(v: &Value, prefix: &str, slide: usize) -> Result<Inse
     Ok(InsertMathOp {
         slide,
         on_notes: false,
+        master: None,
         text,
         x: parse_emu(obj.get("x"), prefix, "x")?,
         y: parse_emu(obj.get("y"), prefix, "y")?,

@@ -31,12 +31,16 @@ pub enum OleKey {
 #[derive(Debug, Clone)]
 pub struct OleTarget {
     pub slide: usize,
+    pub on_notes: bool,
+    pub master: Option<(usize, Option<usize>)>,
     pub key: OleKey,
 }
 
 #[derive(Debug, Clone)]
 pub struct InsertOleOp {
     pub slide: usize,
+    pub on_notes: bool,
+    pub master: Option<(usize, Option<usize>)>,
     pub file: String,
 }
 
@@ -46,44 +50,12 @@ pub struct DeleteOleOp {
     pub target: OleTarget,
 }
 
-pub fn parse_insert_slide_id(id: &str, op_index: usize) -> Result<usize, Error> {
-    let path = format!("ops[{op_index}].id");
-    let rest = id.strip_prefix("slide:").ok_or_else(|| {
-        Error::with_path(
-            ErrorKind::InvalidId {
-                reason: IdReason::InsertOleNeedsSlide,
-            },
-            path.clone(),
-        )
-    })?;
-    if rest.is_empty() || rest.contains('/') {
-        return Err(Error::with_path(
-            ErrorKind::InvalidId {
-                reason: IdReason::InsertOleNeedsSlide,
-            },
-            path,
-        ));
-    }
-    parse_slide_n(rest, &path)
+pub fn parse_insert_slide_id(id: &str, op_index: usize) -> Result<picture::TreeHost, Error> {
+    picture::parse_insert_host(id, op_index, IdReason::InsertOleNeedsSlide)
 }
 
 pub fn parse_ole_id(id: &str, json_path: &str) -> Result<OleTarget, Error> {
-    let rest = id.strip_prefix("slide:").ok_or_else(|| {
-        Error::with_path(
-            ErrorKind::InvalidId {
-                reason: IdReason::SlideOlePrefix,
-            },
-            json_path.to_string(),
-        )
-    })?;
-    let Some((n, after)) = rest.split_once("/ole:") else {
-        return Err(Error::with_path(
-            ErrorKind::InvalidId {
-                reason: IdReason::SlideOleContainer,
-            },
-            json_path.to_string(),
-        ));
-    };
+    let (host, after) = picture::parse_object_id(id, json_path, "ole", IdReason::SlideOlePrefix)?;
     if after.is_empty() {
         return Err(Error::with_path(
             ErrorKind::InvalidId {
@@ -92,7 +64,7 @@ pub fn parse_ole_id(id: &str, json_path: &str) -> Result<OleTarget, Error> {
             json_path.to_string(),
         ));
     }
-    let slide = parse_slide_n(n, json_path)?;
+    let (slide, on_notes, master) = host.parts();
     let key = if let Some(rest) = after.strip_prefix("index:") {
         let k: usize = rest.parse().map_err(|_| {
             Error::with_path(
@@ -114,7 +86,12 @@ pub fn parse_ole_id(id: &str, json_path: &str) -> Result<OleTarget, Error> {
     } else {
         OleKey::Id(after.to_string())
     };
-    Ok(OleTarget { slide, key })
+    Ok(OleTarget {
+        slide,
+        on_notes,
+        master,
+        key,
+    })
 }
 
 pub fn is_ole_id(id: &str) -> bool {
@@ -146,16 +123,18 @@ pub fn export(bytes: &[u8], id: &str) -> Result<super::ExportedMedia, Error> {
     let pres_part = crate::opc::office_document_part(&pkg)?;
     let pres = crate::xml::parse(pkg.get(&pres_part)?)?;
     let slides = shape::list_slides(&pkg, &pres_part, &pres.root)?;
-    let meta = slides.get(target.slide - 1).ok_or_else(|| {
-        Error::with_path(
-            ErrorKind::SlideNotFound {
-                n: target.slide as u32,
-            },
-            "id",
-        )
-    })?;
-    let doc = crate::xml::parse(pkg.get(&meta.part)?)?;
-    let frame = find_frame(&pkg, &meta.part, &doc.root, &target.key)?
+    let host = picture::TreeHost::from_parts(target.slide, target.on_notes, target.master);
+    let host_part = picture::resolve_tree_part(
+        &pkg,
+        &pres_part,
+        &pres.root,
+        &slides,
+        &host,
+        ErrorKind::OleNotFound { id: id.to_string() },
+        "id",
+    )?;
+    let doc = crate::xml::parse(pkg.get(&host_part)?)?;
+    let frame = find_frame(&pkg, &host_part, &doc.root, &target.key)?
         .ok_or_else(|| Error::with_path(ErrorKind::OleNotFound { id: id.to_string() }, "id"))?;
     let obj = find_ole_obj(frame)
         .ok_or_else(|| Error::with_path(ErrorKind::OleNotFound { id: id.to_string() }, "id"))?;
@@ -167,7 +146,7 @@ pub fn export(bytes: &[u8], id: &str) -> Result<super::ExportedMedia, Error> {
             "id",
         )
     })?;
-    let part = resolve_id(&pkg, &meta.part, rid)?;
+    let part = resolve_id(&pkg, &host_part, rid)?;
     let embed_bytes = pkg.get(&part)?.to_vec();
     let cts = ContentTypes::from_package(&pkg)?;
     let content_type = cts.content_type_of(&part).map(str::to_string);
@@ -230,7 +209,7 @@ pub fn insert(
     cts.write_to(pkg)?;
 
     let (cx, cy) = (DEFAULT_CX, DEFAULT_CY);
-    let (x, y) = picture::vacant_pos(pres_root, &slide_doc.root, cx, cy);
+    let (x, y) = picture::vacant_pos_host(op.on_notes, pres_root, &slide_doc.root, cx, cy);
     picture::ensure_xmlns(&mut slide_doc.root, "r", REL_NS);
     picture::ensure_xmlns(&mut slide_doc.root, "a", DML_NS);
     picture::ensure_xmlns(&mut slide_doc.root, "mc", MC_NS);
@@ -460,26 +439,6 @@ fn cnv_of_frame(frame: &Element) -> (Option<String>, String) {
 
 fn parse_i64_attr(el: &Element, name: &str) -> Option<i64> {
     el.attr(name)?.parse().ok()
-}
-
-fn parse_slide_n(n: &str, path: &str) -> Result<usize, Error> {
-    let slide: usize = n.parse().map_err(|_| {
-        Error::with_path(
-            ErrorKind::InvalidId {
-                reason: IdReason::SlideIndexNotInt,
-            },
-            path.to_string(),
-        )
-    })?;
-    if slide < 1 {
-        return Err(Error::with_path(
-            ErrorKind::InvalidId {
-                reason: IdReason::SlideIndexFromOne,
-            },
-            path.to_string(),
-        ));
-    }
-    Ok(slide)
 }
 
 fn ids_match(file: &str, req: &str) -> bool {

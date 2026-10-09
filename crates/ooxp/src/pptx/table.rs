@@ -30,6 +30,7 @@ pub enum TableKey {
 pub struct TableTarget {
     pub slide: usize,
     pub on_notes: bool,
+    pub master: Option<(usize, Option<usize>)>,
     pub key: TableKey,
 }
 
@@ -46,8 +47,8 @@ pub struct CellTarget {
     pub col: usize,
 }
 
-pub fn parse_insert_slide_id(id: &str, op_index: usize) -> Result<(usize, bool), Error> {
-    super::picture::parse_insert_slide_or_notes(id, op_index, IdReason::InsertTableNeedsSlide)
+pub fn parse_insert_slide_id(id: &str, op_index: usize) -> Result<picture::TreeHost, Error> {
+    picture::parse_insert_host(id, op_index, IdReason::InsertTableNeedsSlide)
 }
 
 pub fn parse_table_id(id: &str, json_path: &str, wrong: IdReason) -> Result<TableTarget, Error> {
@@ -115,27 +116,17 @@ pub fn parse_cell_id(id: &str, json_path: &str) -> Result<CellTarget, Error> {
 
 fn parse_table_rest(id: &str, json_path: &str, wrong: IdReason) -> Result<TableTarget, Error> {
     let path = json_path.to_string();
-    let rest = id.strip_prefix("slide:").ok_or_else(|| {
-        Error::with_path(
-            ErrorKind::InvalidId {
-                reason: IdReason::SlideTablePrefix,
-            },
-            path.clone(),
-        )
-    })?;
-    let (n, after, on_notes) = if let Some((n, after)) = rest.split_once("/notes/table:") {
-        (n, after, true)
-    } else if let Some((n, after)) = rest.split_once("/table:") {
-        (n, after, false)
-    } else {
+    let (host, after) =
+        picture::parse_object_id(id, json_path, "table", IdReason::SlideTablePrefix)?;
+    if after.is_empty() {
         return Err(Error::with_path(
             ErrorKind::InvalidId {
                 reason: IdReason::SlideTableContainer,
             },
-            path.clone(),
+            path,
         ));
-    };
-    let slide = parse_slide_n(n, &path)?;
+    }
+    let (slide, on_notes, master) = host.parts();
     if let Some(rest) = after.strip_prefix("index:") {
         if rest.contains('/') {
             return Err(Error::with_path(
@@ -164,10 +155,11 @@ fn parse_table_rest(id: &str, json_path: &str, wrong: IdReason) -> Result<TableT
         return Ok(TableTarget {
             slide,
             on_notes,
+            master,
             key: TableKey::Index(k),
         });
     }
-    if after.is_empty() || after.contains('/') {
+    if after.contains('/') {
         return Err(Error::with_path(
             ErrorKind::InvalidId { reason: wrong },
             path,
@@ -176,28 +168,9 @@ fn parse_table_rest(id: &str, json_path: &str, wrong: IdReason) -> Result<TableT
     Ok(TableTarget {
         slide,
         on_notes,
+        master,
         key: TableKey::Id(after.to_string()),
     })
-}
-
-fn parse_slide_n(n: &str, path: &str) -> Result<usize, Error> {
-    let slide: usize = n.parse().map_err(|_| {
-        Error::with_path(
-            ErrorKind::InvalidId {
-                reason: IdReason::SlideIndexNotInt,
-            },
-            path.to_string(),
-        )
-    })?;
-    if slide < 1 {
-        return Err(Error::with_path(
-            ErrorKind::InvalidId {
-                reason: IdReason::SlideIndexFromOne,
-            },
-            path.to_string(),
-        ));
-    }
-    Ok(slide)
 }
 
 fn parse_from_one(s: &str, json_path: &str, reason: IdReason) -> Result<usize, Error> {
