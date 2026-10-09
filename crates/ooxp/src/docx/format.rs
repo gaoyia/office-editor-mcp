@@ -69,6 +69,7 @@ pub fn para_node(
     container: Option<&str>,
     picture_count: Option<usize>,
     text_box_count: Option<usize>,
+    connector_count: Option<usize>,
 ) -> Value {
     let (id, stable) = match container {
         Some(c) => para::para_stable_id_in(c, p, index),
@@ -102,6 +103,9 @@ pub fn para_node(
         }
         if let Some(n) = text_box_count {
             obj.insert("textBoxCount".into(), json!(n));
+        }
+        if let Some(n) = connector_count {
+            obj.insert("connectorCount".into(), json!(n));
         }
         stamp_run_count(obj, p);
     }
@@ -299,7 +303,9 @@ fn stamp_ppr(node: &mut Map<String, Value>, p: &Element) {
 
 fn stamp_run_count(node: &mut Map<String, Value>, p: &Element) {
     let n = collect_runs(p).len();
-    let after = if node.contains_key("textBoxCount") {
+    let after = if node.contains_key("connectorCount") {
+        "connectorCount"
+    } else if node.contains_key("textBoxCount") {
         "textBoxCount"
     } else if node.contains_key("pictureCount") {
         "pictureCount"

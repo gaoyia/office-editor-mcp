@@ -14,7 +14,6 @@ use super::{format, MC_NS, W14_NS, WP_NS};
 
 /// 现代文本框命名空间（MS-DOCX WordprocessingShape）。
 pub const WPS_NS: &str = "http://schemas.microsoft.com/office/word/2010/wordprocessingShape";
-#[allow(dead_code)]
 pub const WPG_NS: &str = "http://schemas.microsoft.com/office/word/2010/wordprocessingGroup";
 
 #[derive(Clone)]
@@ -162,7 +161,7 @@ fn fill_one_box(
         let index = i + 1;
         let (pid, _) = para::para_stable_id_in(&info.id, p, index);
         let pics = picture::collect_pictures(p, &pid)?;
-        let mut node = format::para_node(p, index, Some(&info.id), Some(pics.len()), None);
+        let mut node = format::para_node(p, index, Some(&info.id), Some(pics.len()), None, None);
         if pictures {
             node["pictures"] = Value::Array(picture::pictures_json(&pics));
             pic_nodes.extend(picture::pictures_json(&pics));
@@ -410,7 +409,7 @@ fn is_textbox(drawing: &Element) -> bool {
     has_txbx(drawing)
 }
 
-fn is_group(drawing: &Element) -> bool {
+pub fn is_group(drawing: &Element) -> bool {
     let mut group = false;
     walk_shape(drawing, &mut |e| {
         if e.local_name() == "wgp" {
@@ -647,10 +646,14 @@ pub fn ensure_textbox_ns(root: &mut Element) {
     ensure_xmlns(root, "wps", WPS_NS);
     ensure_xmlns(root, "w14", W14_NS);
     ensure_xmlns(root, "wp", WP_NS);
+    ensure_xmlns(root, "wpg", WPG_NS);
 }
 
 pub fn insert_textbox(p: &mut Element, doc_pr: u32, cx: i64, cy: i64, text: &str, para_id: &str) {
-    let ac = build_textbox_ac(doc_pr, cx, cy, text, para_id);
+    insert_ac(p, build_textbox_ac(doc_pr, cx, cy, text, para_id));
+}
+
+pub fn insert_ac(p: &mut Element, ac: Element) {
     let mut run = Element::new(p.prefixed("r"));
     run.push_element(ac);
     p.children.push(Node::Element(run));
@@ -1079,6 +1082,10 @@ fn remove_textbox_walk(el: &mut Element, key: &TxbxKey, index: &mut usize) -> bo
                     if let Some(idx) = first_alt_child_index(ac) {
                         if let Node::Element(branch) = &mut ac.children[idx] {
                             if remove_textbox_walk(branch, key, index) {
+                                let empty = !group_has_member(ac);
+                                if empty {
+                                    el.children.remove(i);
+                                }
                                 return true;
                             }
                         }
@@ -1115,7 +1122,7 @@ fn remove_textbox_walk(el: &mut Element, key: &TxbxKey, index: &mut usize) -> bo
             }
             if let Node::Element(d) = &mut el.children[i] {
                 if is_group(d) && remove_group_wsp(d, key, index) {
-                    if !group_has_wsp(d) {
+                    if !group_has_member(d) {
                         el.children.remove(i);
                     }
                     return true;
@@ -1219,14 +1226,54 @@ fn remove_group_wsp(el: &mut Element, key: &TxbxKey, index: &mut usize) -> bool 
     false
 }
 
-fn group_has_wsp(el: &Element) -> bool {
+pub fn group_has_member(el: &Element) -> bool {
     let mut found = false;
     walk_shape(el, &mut |e| {
+        if e.local_name() == "pic" {
+            found = true;
+        }
+        if e.local_name() == "blip" {
+            found = true;
+        }
         if e.local_name() == "wsp" && has_txbx(e) {
+            found = true;
+        }
+        if e.local_name() == "wsp" && is_connector_wsp_local(e) {
             found = true;
         }
     });
     found
+}
+
+fn is_connector_wsp_local(wsp: &Element) -> bool {
+    if wsp.local_name() != "wsp" || has_txbx(wsp) {
+        return false;
+    }
+    let mut cn = false;
+    let mut prst = None;
+    walk_all(wsp, &mut |e| {
+        if e.local_name() == "cNvCnPr" {
+            cn = true;
+        }
+        if e.local_name() == "prstGeom" && prst.is_none() {
+            prst = e.attr_local("prst").map(str::to_string);
+        }
+    });
+    cn || prst.as_deref().is_some_and(|p| {
+        matches!(
+            p,
+            "line"
+                | "straightConnector1"
+                | "bentConnector2"
+                | "bentConnector3"
+                | "bentConnector4"
+                | "bentConnector5"
+                | "curvedConnector2"
+                | "curvedConnector3"
+                | "curvedConnector4"
+                | "curvedConnector5"
+        )
+    })
 }
 
 fn is_empty_run(el: &Element) -> bool {

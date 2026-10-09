@@ -99,8 +99,14 @@ pub(crate) enum IdReason {
     TxbxIndexFromOne,
     /// 对框 id 发 setParaText
     SetParaOnBox,
-    /// insertTextBox 必须是宿主段落
+    /// insertTextBox / insertConnector 必须是宿主段落
     InsertNeedsHostPara,
+    /// docx 连接线 id 必须是 {段落}/cxn:…
+    DocxCxnPrefix,
+    /// 段落或容器 id，缺少 /cxn:…
+    DocxCxnContainer,
+    /// docx 的 groupShapes 必须用 docx:document 或页眉/页脚容器
+    GroupNeedsDocument,
     /// xlsx 文本框 id 必须是 sheet:{name}/sp:…
     SheetSpPrefix,
     /// 工作表 id，缺少 /sp:…
@@ -1137,6 +1143,9 @@ impl IdReason {
             Self::TxbxIndexFromOne,
             Self::SetParaOnBox,
             Self::InsertNeedsHostPara,
+            Self::DocxCxnPrefix,
+            Self::DocxCxnContainer,
+            Self::GroupNeedsDocument,
             Self::SheetSpPrefix,
             Self::SheetSpContainer,
             Self::SpIndexNotInt,

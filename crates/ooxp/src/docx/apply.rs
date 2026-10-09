@@ -9,10 +9,12 @@ use crate::xml::{self, Document, Element, Node};
 use super::biblio;
 use super::charts;
 use super::comments;
+use super::connector;
 use super::field;
 use super::font_embed;
 use super::format;
 use super::glossary;
+use super::group::{self, GroupHost, GroupMember};
 use super::hf::{self, HfKind};
 use super::link;
 use super::math;
@@ -25,25 +27,26 @@ use super::picture;
 use super::protect;
 use super::request::{
     DeleteBibliographyOp, DeleteBookmarkOp, DeleteCaptionOp, DeleteCitationOp, DeleteColOp,
-    DeleteCommentOp, DeleteContentControlOp, DeleteCrossRefOp, DeleteDocPartOp, DeleteFieldOp,
-    DeleteHyperlinkOp, DeleteIndexEntryOp, DeleteIndexOp, DeleteMathOp, DeleteNoteOp, DeleteParaOp,
-    DeletePictureOp, DeleteRowOp, DeleteSectionOp, DeleteSourceOp, DeleteTableOp, DeleteTextBoxOp,
-    DeleteTocOp, DocxOp, InsertBibliographyOp, InsertBibliographyPlace, InsertBookmarkOp,
-    InsertCaptionOp, InsertCaptionPlace, InsertCitationOp, InsertColOp, InsertCommentOp,
-    InsertContentControlOp, InsertCrossRefOp, InsertDocPartContentOp, InsertDocPartContentPlace,
-    InsertDocPartOp, InsertFieldOp, InsertHeaderFooterOp, InsertHyperlinkOp, InsertIndexEntryOp,
-    InsertIndexOp, InsertIndexPlace, InsertMathOp, InsertMathPlace, InsertNoteOp,
-    InsertNumberingOp, InsertParaOp, InsertParaPlace, InsertPictureOp, InsertRowOp, InsertSdtPlace,
-    InsertSectionOp, InsertSectionPlace, InsertSourceOp, InsertTableOp, InsertTextBoxOp,
-    InsertTocOp, InsertTocPlace, MergeCellsOp, NoteNumberTarget, ReplacePictureOp, ReplyCommentOp,
-    RevisionOp, SetBookmarkOp, SetColumnsOp, SetCommentDoneOp, SetCommentMetaOp, SetCommentTextOp,
+    DeleteCommentOp, DeleteConnectorOp, DeleteContentControlOp, DeleteCrossRefOp, DeleteDocPartOp,
+    DeleteFieldOp, DeleteHyperlinkOp, DeleteIndexEntryOp, DeleteIndexOp, DeleteMathOp,
+    DeleteNoteOp, DeleteParaOp, DeletePictureOp, DeleteRowOp, DeleteSectionOp, DeleteSourceOp,
+    DeleteTableOp, DeleteTextBoxOp, DeleteTocOp, DocxOp, GroupShapesOp, InsertBibliographyOp,
+    InsertBibliographyPlace, InsertBookmarkOp, InsertCaptionOp, InsertCaptionPlace,
+    InsertCitationOp, InsertColOp, InsertCommentOp, InsertConnectorOp, InsertContentControlOp,
+    InsertCrossRefOp, InsertDocPartContentOp, InsertDocPartContentPlace, InsertDocPartOp,
+    InsertFieldOp, InsertHeaderFooterOp, InsertHyperlinkOp, InsertIndexEntryOp, InsertIndexOp,
+    InsertIndexPlace, InsertMathOp, InsertMathPlace, InsertNoteOp, InsertNumberingOp, InsertParaOp,
+    InsertParaPlace, InsertPictureOp, InsertRowOp, InsertSdtPlace, InsertSectionOp,
+    InsertSectionPlace, InsertSourceOp, InsertTableOp, InsertTextBoxOp, InsertTocOp,
+    InsertTocPlace, MergeCellsOp, NoteNumberTarget, ReplacePictureOp, ReplyCommentOp, RevisionOp,
+    SetBookmarkOp, SetColumnsOp, SetCommentDoneOp, SetCommentMetaOp, SetCommentTextOp,
     SetContentControlOp, SetDocGridOp, SetEvenAndOddHeadersOp, SetFieldOp, SetGutterAtTopOp,
     SetHfDistanceOp, SetHfLinkOp, SetHyperlinkOp, SetLineNumberingOp, SetMathOp,
     SetMirrorMarginsOp, SetNoteNumberingOp, SetNumberingOp, SetPageBordersOp, SetPageMarginOp,
     SetPageSizeOp, SetParaFormatOp, SetParaNumberingOp, SetParaStyleOp, SetParaTextOp,
     SetPictureSizeOp, SetPictureWrapOp, SetRtlGutterOp, SetRunFormatOp, SetStyleOp,
     SetTextBoxDirectionOp, SetTextBoxFillOp, SetTextBoxLineOp, SetTextBoxLinkOp, SetTextBoxSizeOp,
-    SetTextBoxWrapOp, SetTitlePageOp, SetVerticalAlignOp, SplitCellsOp,
+    SetTextBoxWrapOp, SetTitlePageOp, SetVerticalAlignOp, SplitCellsOp, UngroupOp,
 };
 use super::revision;
 use super::sdt;
@@ -293,6 +296,22 @@ pub fn apply(bytes: &[u8], ops: &[DocxOp]) -> Result<Vec<u8>, Error> {
             }
             DocxOp::SetTextBoxDirection(op) => {
                 apply_txbx_dir(&mut pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
+            }
+            DocxOp::InsertConnector(op) => {
+                apply_insert_connector(
+                    &mut pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i,
+                )?;
+            }
+            DocxOp::DeleteConnector(op) => {
+                apply_delete_connector(
+                    &mut pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i,
+                )?;
+            }
+            DocxOp::GroupShapes(op) => {
+                apply_group_shapes(&mut pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
+            }
+            DocxOp::Ungroup(op) => {
+                apply_ungroup(&mut pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
             }
             DocxOp::InsertPara(op) => {
                 apply_insert_para(&mut pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
@@ -3212,6 +3231,135 @@ fn apply_txbx_dir(
     .ok_or_else(|| txbx_missing(&op.id, i))?;
     dirty.insert(part_name, ());
     Ok(())
+}
+
+fn cxn_missing(id: &str, i: usize) -> Error {
+    Error::with_path(
+        ErrorKind::ConnectorNotFound { id: id.to_string() },
+        format!("ops[{i}].id"),
+    )
+}
+
+fn apply_insert_connector(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &InsertConnectorOp,
+    i: usize,
+) -> Result<(), Error> {
+    if matches!(
+        &op.host,
+        HostPara::InNote { .. } | HostPara::InComment { .. }
+    ) {
+        return Err(Error::with_path(
+            ErrorKind::GraphicInRestrictedStory,
+            format!("ops[{i}].id"),
+        ));
+    }
+    let part_name = part_for_host(pkg, catalog, doc_part, &op.host, &op.id, i)?;
+    let doc = load_part(pkg, docs, &part_name)?;
+    textbox::ensure_textbox_ns(&mut doc.root);
+    let doc_pr = picture::next_docpr_id(&doc.root);
+    let (cx, cy) = match (op.cx, op.cy) {
+        (Some(x), Some(y)) => (x, y),
+        _ => (connector::DEFAULT_CX, connector::DEFAULT_CY),
+    };
+    let p = para::find_paragraph_mut(&mut doc.root, op.host.body()).ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::ParaNotFound { id: op.id.clone() },
+            format!("ops[{i}].id"),
+        )
+    })?;
+    connector::insert_connector(p, doc_pr, cx, cy, &op.prst);
+    dirty.insert(part_name, ());
+    Ok(())
+}
+
+fn apply_delete_connector(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &DeleteConnectorOp,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name = part_for_txbx(pkg, catalog, doc_part, &op.target, &op.id, i)?;
+    let doc = load_part(pkg, docs, &part_name)?;
+    let host = para::find_paragraph_mut(&mut doc.root, op.target.host.body())
+        .ok_or_else(|| cxn_missing(&op.id, i))?;
+    if !connector::remove_connector(host, &op.target.key) {
+        return Err(cxn_missing(&op.id, i));
+    }
+    dirty.insert(part_name, ());
+    Ok(())
+}
+
+fn apply_group_shapes(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &GroupShapesOp,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name = part_for_group_host(catalog, doc_part, &op.host, &op.id, i)?;
+    let doc = load_part(pkg, docs, &part_name)?;
+    textbox::ensure_textbox_ns(&mut doc.root);
+    group::group_shapes(&mut doc.root, &op.host, &op.members, i)?;
+    dirty.insert(part_name, ());
+    Ok(())
+}
+
+fn apply_ungroup(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &UngroupOp,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name = part_for_group_member(pkg, catalog, doc_part, &op.member, &op.id, i)?;
+    let doc = load_part(pkg, docs, &part_name)?;
+    textbox::ensure_textbox_ns(&mut doc.root);
+    group::ungroup(&mut doc.root, &op.member, i)?;
+    dirty.insert(part_name, ());
+    Ok(())
+}
+
+fn part_for_group_host(
+    catalog: &[hf::HfPart],
+    doc_part: &str,
+    host: &GroupHost,
+    id: &str,
+    i: usize,
+) -> Result<String, Error> {
+    match host {
+        GroupHost::Document => Ok(doc_part.to_string()),
+        GroupHost::HeaderFooter { kind, hf_type, n } => {
+            part_for_hf(catalog, *kind, *hf_type, *n, id, i)
+        }
+    }
+}
+
+fn part_for_group_member(
+    pkg: &Package,
+    catalog: &[hf::HfPart],
+    doc_part: &str,
+    member: &GroupMember,
+    id: &str,
+    i: usize,
+) -> Result<String, Error> {
+    match member {
+        GroupMember::Picture(target) => part_for_pic(pkg, catalog, doc_part, target, id, i),
+        GroupMember::TextBox(t) | GroupMember::Connector(t) => {
+            part_for_txbx(pkg, catalog, doc_part, t, id, i)
+        }
+    }
 }
 
 fn apply_insert_para(

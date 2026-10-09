@@ -26,6 +26,8 @@ pub struct InspectScope {
     pub pictures: bool,
     /// 为 true 时列出文本框。
     pub text_boxes: bool,
+    /// 为 true 时列出连接线。
+    pub connectors: bool,
     /// 为 true 时展开框内段落。
     pub text_box_content: bool,
     /// 为 true 时列出脚注、尾注与分隔符。
@@ -306,6 +308,34 @@ pub struct SetTextBoxDirectionOp {
     pub id: String,
     pub target: TxbxTarget,
     pub vertical: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct InsertConnectorOp {
+    pub id: String,
+    pub host: para::HostPara,
+    pub cx: Option<i64>,
+    pub cy: Option<i64>,
+    pub prst: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct DeleteConnectorOp {
+    pub id: String,
+    pub target: TxbxTarget,
+}
+
+#[derive(Debug, Clone)]
+pub struct GroupShapesOp {
+    pub id: String,
+    pub host: super::group::GroupHost,
+    pub members: Vec<super::group::GroupMember>,
+}
+
+#[derive(Debug, Clone)]
+pub struct UngroupOp {
+    pub id: String,
+    pub member: super::group::GroupMember,
 }
 
 #[derive(Debug, Clone)]
@@ -985,6 +1015,10 @@ pub enum DocxOp {
     SetTextBoxFill(SetTextBoxFillOp),
     SetTextBoxLine(SetTextBoxLineOp),
     SetTextBoxDirection(SetTextBoxDirectionOp),
+    InsertConnector(InsertConnectorOp),
+    DeleteConnector(DeleteConnectorOp),
+    GroupShapes(GroupShapesOp),
+    Ungroup(UngroupOp),
     InsertPara(InsertParaOp),
     DeletePara(DeleteParaOp),
     InsertTable(InsertTableOp),
@@ -1090,6 +1124,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
             "headerFooter",
             "pictures",
             "textBoxes",
+            "connectors",
             "textBoxContent",
             "notes",
             "comments",
@@ -1123,6 +1158,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
     let header_footer = parse_header_footer(obj.get("headerFooter"))?;
     let pictures = parse_bool_field(obj.get("pictures"), "pictures")?;
     let text_boxes = parse_bool_field(obj.get("textBoxes"), "textBoxes")?;
+    let connectors = parse_bool_field(obj.get("connectors"), "connectors")?;
     let text_box_content = parse_bool_field(obj.get("textBoxContent"), "textBoxContent")?;
     let notes = parse_bool_field(obj.get("notes"), "notes")?;
     let comments = parse_bool_field(obj.get("comments"), "comments")?;
@@ -1166,6 +1202,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
             if !obj.contains_key("headerFooter")
                 && !obj.contains_key("pictures")
                 && !obj.contains_key("textBoxes")
+                && !obj.contains_key("connectors")
                 && !obj.contains_key("textBoxContent")
                 && !obj.contains_key("notes")
                 && !obj.contains_key("comments")
@@ -1202,6 +1239,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
                 header_footer,
                 pictures,
                 text_boxes,
+                connectors,
                 text_box_content,
                 notes,
                 comments,
@@ -1275,6 +1313,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
                 header_footer,
                 pictures,
                 text_boxes,
+                connectors,
                 text_box_content,
                 notes,
                 comments,
@@ -1423,10 +1462,6 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<DocxOp>, Error> {
             || op_name == "setSlideSize"
             || op_name == "setHandoutText"
             || op_name == "insertShape"
-            || op_name == "insertConnector"
-            || op_name == "deleteConnector"
-            || op_name == "groupShapes"
-            || op_name == "ungroup"
             || op_name == "deleteShape"
             || op_name == "setShapePos"
             || op_name == "setShapeSize"
@@ -1551,6 +1586,10 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<DocxOp>, Error> {
             "setTextBoxDirection" => {
                 out.push(DocxOp::SetTextBoxDirection(parse_set_txbx_dir(obj, i)?))
             }
+            "insertConnector" => out.push(DocxOp::InsertConnector(parse_insert_connector(obj, i)?)),
+            "deleteConnector" => out.push(DocxOp::DeleteConnector(parse_delete_connector(obj, i)?)),
+            "groupShapes" => out.push(DocxOp::GroupShapes(parse_group_shapes(obj, i)?)),
+            "ungroup" => out.push(DocxOp::Ungroup(parse_ungroup(obj, i)?)),
             "insertPara" => out.push(DocxOp::InsertPara(parse_insert_para(obj, i)?)),
             "deletePara" => out.push(DocxOp::DeletePara(parse_delete_para(obj, i)?)),
             "insertTable" => out.push(DocxOp::InsertTable(parse_insert_table(obj, i)?)),
@@ -6058,6 +6097,139 @@ fn parse_set_txbx_dir(
         target,
         vertical,
     })
+}
+
+fn parse_insert_connector(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<InsertConnectorOp, Error> {
+    deny_keys(obj, i, &["op", "id", "prst", "cx", "cy"])?;
+    let id = require_id(obj, i)?;
+    let host = para::parse_host_para_id_at(&id, &format!("ops[{i}].id"))?;
+    let cx = parse_emu_field(obj.get("cx"), i, "cx")?;
+    let cy = parse_emu_field(obj.get("cy"), i, "cy")?;
+    if cx.is_some() != cy.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "insertConnector".into(),
+                field: "cx and cy together".into(),
+            },
+            format!("ops[{i}]"),
+        ));
+    }
+    let prst = match obj.get("prst") {
+        None => "straightConnector1".to_string(),
+        Some(Value::String(s)) => {
+            if super::connector::is_writable_prst(s) {
+                s.clone()
+            } else {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidConnectorPrst,
+                    format!("ops[{i}].prst"),
+                ));
+            }
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "prst".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].prst"),
+            ));
+        }
+    };
+    Ok(InsertConnectorOp {
+        id,
+        host,
+        cx,
+        cy,
+        prst,
+    })
+}
+
+fn parse_delete_connector(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<DeleteConnectorOp, Error> {
+    deny_keys(obj, i, &["op", "id"])?;
+    let id = require_id(obj, i)?;
+    let target = super::connector::parse_cxn_id(&id, i)?;
+    Ok(DeleteConnectorOp { id, target })
+}
+
+fn parse_group_shapes(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<GroupShapesOp, Error> {
+    deny_keys(obj, i, &["op", "id", "ids"])?;
+    let id = require_id(obj, i)?;
+    let host = super::group::parse_group_host(&id, i)?;
+    let ids = match obj.get("ids") {
+        Some(Value::Array(arr)) => {
+            if arr.len() < 2 {
+                return Err(Error::with_path(
+                    ErrorKind::GroupNeedsTwo,
+                    format!("ops[{i}].ids"),
+                ));
+            }
+            let mut out = Vec::new();
+            for (k, v) in arr.iter().enumerate() {
+                let s = v.as_str().ok_or_else(|| {
+                    Error::with_path(
+                        ErrorKind::WrongType {
+                            field: format!("ids[{k}]"),
+                            expected: TypeName::String,
+                        },
+                        format!("ops[{i}].ids[{k}]"),
+                    )
+                })?;
+                if s.is_empty() {
+                    return Err(Error::with_path(
+                        ErrorKind::WrongType {
+                            field: format!("ids[{k}]"),
+                            expected: TypeName::NonEmptyString,
+                        },
+                        format!("ops[{i}].ids[{k}]"),
+                    ));
+                }
+                out.push(s.to_string());
+            }
+            out
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "ids".into(),
+                    expected: TypeName::Array,
+                },
+                format!("ops[{i}].ids"),
+            ));
+        }
+        None => {
+            return Err(Error::with_path(
+                ErrorKind::OpRequiresField {
+                    op: "groupShapes".into(),
+                    field: "ids".into(),
+                },
+                format!("ops[{i}].ids"),
+            ));
+        }
+    };
+    let mut members = Vec::new();
+    for (k, mid) in ids.iter().enumerate() {
+        let parsed = super::group::parse_member_id(mid, i)
+            .map_err(|e| e.at(format!("ops[{i}].ids[{k}]")))?;
+        members.push(parsed);
+    }
+    Ok(GroupShapesOp { id, host, members })
+}
+
+fn parse_ungroup(obj: &serde_json::Map<String, Value>, i: usize) -> Result<UngroupOp, Error> {
+    deny_keys(obj, i, &["op", "id"])?;
+    let id = require_id(obj, i)?;
+    let member = super::group::parse_member_id(&id, i)?;
+    Ok(UngroupOp { id, member })
 }
 
 fn parse_insert_para(

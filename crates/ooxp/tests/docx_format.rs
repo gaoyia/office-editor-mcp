@@ -148,6 +148,7 @@ fn run_count_without_scope_runs() {
             "stable",
             "pictureCount",
             "textBoxCount",
+            "connectorCount",
             "runCount"
         ]
     );

@@ -181,7 +181,7 @@ pub fn parse_para_id(id: &str, op_index: usize) -> Result<ParaTarget, Error> {
 
 pub fn parse_para_id_at(id: &str, path: &str) -> Result<ParaTarget, Error> {
     let path = path.to_string();
-    if id.contains("/pic:") {
+    if id.contains("/pic:") || id.contains("/cxn:") {
         return Err(Error::with_path(
             ErrorKind::InvalidId {
                 reason: IdReason::ParaPrefix,
@@ -284,7 +284,7 @@ pub fn parse_para_id_at(id: &str, path: &str) -> Result<ParaTarget, Error> {
 }
 
 pub fn parse_host_para_id_at(id: &str, path: &str) -> Result<HostPara, Error> {
-    if id.contains("/txbx:") || id.contains("/pic:") {
+    if id.contains("/txbx:") || id.contains("/pic:") || id.contains("/cxn:") {
         return Err(Error::with_path(
             ErrorKind::InvalidId {
                 reason: IdReason::InsertNeedsHostPara,
@@ -301,7 +301,7 @@ pub fn parse_txbx_id(id: &str, op_index: usize) -> Result<TxbxTarget, Error> {
 
 pub fn parse_txbx_id_at(id: &str, path: &str) -> Result<TxbxTarget, Error> {
     let path = path.to_string();
-    if id.contains("/pic:") {
+    if id.contains("/pic:") || id.contains("/cxn:") {
         return Err(Error::with_path(
             ErrorKind::InvalidId {
                 reason: IdReason::TxbxPrefix,
@@ -855,6 +855,15 @@ pub fn find_paragraph<'a>(root: &'a Element, target: &BodyPara) -> Option<&'a El
 pub fn find_paragraph_mut<'a>(root: &'a mut Element, target: &BodyPara) -> Option<&'a mut Element> {
     let mut idx = 0usize;
     find_p_mut(root, &mut idx, target)
+}
+
+pub fn same_para(p: &Element, target: &BodyPara, index: usize) -> bool {
+    match target {
+        BodyPara::Index(n) => *n == index,
+        BodyPara::Hex(hex) => p
+            .attr_local("paraId")
+            .is_some_and(|id| id.eq_ignore_ascii_case(hex)),
+    }
 }
 
 pub fn find_paragraph_in_txbx<'a>(content: &'a Element, target: &BodyPara) -> Option<&'a Element> {

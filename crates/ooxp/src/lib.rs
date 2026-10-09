@@ -898,6 +898,7 @@ mod tests {
                 "paraCount",
                 "pictureCount",
                 "textBoxCount",
+                "connectorCount",
                 "footnoteCount",
                 "endnoteCount",
                 "commentCount",
@@ -958,6 +959,7 @@ mod tests {
                 "stable",
                 "pictureCount",
                 "textBoxCount",
+                "connectorCount",
                 "runCount"
             ]
         );
@@ -974,6 +976,7 @@ mod tests {
                 "stable",
                 "pictureCount",
                 "textBoxCount",
+                "connectorCount",
                 "runCount"
             ]
         );

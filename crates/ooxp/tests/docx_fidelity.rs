@@ -1151,6 +1151,7 @@ fn inspect_lists_header_pictures() {
             "paraCount",
             "pictureCount",
             "textBoxCount",
+            "connectorCount",
             "chartCount",
             "smartArtCount",
             "oleObjectCount",
@@ -1487,6 +1488,7 @@ fn inspect_lists_body_pictures() {
             "stable",
             "pictureCount",
             "textBoxCount",
+            "connectorCount",
             "runCount",
             "pictures"
         ]

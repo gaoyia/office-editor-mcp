@@ -212,6 +212,7 @@ fn inspect_count_without_list() {
             "paraCount",
             "pictureCount",
             "textBoxCount",
+            "connectorCount",
             "footnoteCount",
             "endnoteCount",
             "commentCount",

@@ -204,6 +204,7 @@ fn inspect_counts_without_list() {
             "paraCount",
             "pictureCount",
             "textBoxCount",
+            "connectorCount",
             "footnoteCount",
             "endnoteCount",
             "commentCount",
@@ -301,6 +302,7 @@ fn inspect_lists_parent_range_and_comment_ids() {
             "paraCount",
             "pictureCount",
             "textBoxCount",
+            "connectorCount",
             "chartCount",
             "smartArtCount",
             "paragraphs"

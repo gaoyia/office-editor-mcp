@@ -8,7 +8,7 @@
 
 Microsoft Word 16.0 已打开，用户确认通过。create、inspect、apply 三组都过了。O1 已放弃，见下表。本机若装了 WPS，`Word.Application` 会被抢走，测试仍直接启动 `WINWORD.EXE` 再挂 COM。A11 补过 `word/settings.xml` 之后，2026-09-26 用新 `docx-create.docx` 重跑，Word 报 `CompatibilityMode=15`。
 
-C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，跑 `pwsh -File manual-check\office\run.ps1 -Case 'docx-*'` 即可复现，逐条结果落在 `manual-check/office/out/office-results.csv`。2026-09-27 补跑 `docx-charts-remain.ps1`，Cr1–Cr6 通过。同日重跑 `docx-charts-ext.ps1`，Cx8 股价三条转柱形。2026-09-29 补跑 `docx-charts-rare.ps1`，Cq1–Cq5 通过。同日重跑 `docx-smartart.ps1`，Sa1–Sa9 通过。同日重跑 `docx-comments.ps1`，Cmt1–Cmt7、Ik1–Ik4 通过。2026-09-28 补跑 `docx-format.ps1`，Pf1–Pf6 通过。同日补跑 `docx-ole.ps1`，Ol1–Ol5 通过。同日补跑 `docx-protect.ps1`，Pr1–Pr6 通过。同日补跑 `docx-watermark.ps1`，Wm1–Wm5 通过。2026-10-09 补跑 `docx-theme.ps1`，Th1–Th5 通过。同日补跑 `docx-caption-xref.ps1`，Cp1–Cp6 通过。同日补跑 `docx-index.ps1`，Ix1–Ix6 通过。同日补跑 `docx-biblio.ps1`，Bi1–Bi6 通过。同日补跑 `docx-glossary.ps1`，Bb1–Bb6 通过。同日补跑 `docx-font-embed.ps1`，Fe1–Fe6 通过。同日补跑 `docx-page-bg.ps1`，Pb1–Pb6 通过。同日补跑 `docx-protect-hash.ps1`，Ph1–Ph5 通过。同日补跑 `docx-revision-remain.ps1`，Rm1–Rm9 通过。
+C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，跑 `pwsh -File manual-check\office\run.ps1 -Case 'docx-*'` 即可复现，逐条结果落在 `manual-check/office/out/office-results.csv`。2026-09-27 补跑 `docx-charts-remain.ps1`，Cr1–Cr6 通过。同日重跑 `docx-charts-ext.ps1`，Cx8 股价三条转柱形。2026-09-29 补跑 `docx-charts-rare.ps1`，Cq1–Cq5 通过。同日重跑 `docx-smartart.ps1`，Sa1–Sa9 通过。同日重跑 `docx-comments.ps1`，Cmt1–Cmt7、Ik1–Ik4 通过。2026-09-28 补跑 `docx-format.ps1`，Pf1–Pf6 通过。同日补跑 `docx-ole.ps1`，Ol1–Ol5 通过。同日补跑 `docx-protect.ps1`，Pr1–Pr6 通过。同日补跑 `docx-watermark.ps1`，Wm1–Wm5 通过。2026-10-09 补跑 `docx-theme.ps1`，Th1–Th5 通过。同日补跑 `docx-caption-xref.ps1`，Cp1–Cp6 通过。同日补跑 `docx-index.ps1`，Ix1–Ix6 通过。同日补跑 `docx-biblio.ps1`，Bi1–Bi6 通过。同日补跑 `docx-glossary.ps1`，Bb1–Bb6 通过。同日补跑 `docx-font-embed.ps1`，Fe1–Fe6 通过。同日补跑 `docx-page-bg.ps1`，Pb1–Pb6 通过。同日补跑 `docx-protect-hash.ps1`，Ph1–Ph5 通过。同日补跑 `docx-revision-remain.ps1`，Rm1–Rm9 通过。同日补跑 `docx-groups.ps1`，Dg1–Dg8 通过。
 
 | 序号 | 状态 | 结果 |
 | --- | --- | --- |
@@ -38,6 +38,7 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 | Tb1–Tb8 | ✅ | Word 16.0：`docx-table.ps1`，8 PASS / 0 FAIL。名单、改字、增行增列、删表、create 2×2、合并、最后一行 `InvalidField`。标题栏无 Repair |
 | Rv1–Rv6 | ✅ | Word 16.0：`docx-revision.ps1`，6 PASS / 0 FAIL。名单、接受删除、拒绝插入、接受插入、拒绝删除、带修订段 `setParaText` 得 `NotImplemented`。标题栏无 Repair |
 | Rm1–Rm9 | ✅ | Word 16.0：`docx-revision-remain.ps1`，9 PASS / 0 FAIL。表属性 Change 名单与接受 / 拒绝、段落标记插入接受 / 拒绝、表行删除接受 / 拒绝。标题栏无 Repair |
+| Dg1–Dg8 | ✅ | Word 16.0：`docx-groups.ps1`，8 PASS / 0 FAIL。无名单时根上有 `connectorCount=0`；`insertConnector` 后 `prst=straightConnector1`、COM 连接线可见；删后计数为 0；两框 / 两浮动图 `groupShapes` 后 COM `Type=6`、树上仍是两个成员；`ungroup` 后独立；页眉连接线容器计数为 1、正文仍为 0；行内当成员 / `insertShape` / 错 id / xlsx 用段落 id 分别得 `InvalidField` / `IdNotFound` / `InvalidId`。标题栏无 Repair |
 | Hb1–Hb7 | ✅ | Word 16.0：`docx-hyperlink.ps1`，7 PASS / 0 FAIL。名单、改 URL、插链、删链、插书签、删书签、带链段 `setParaText` 得 `NotImplemented`。标题栏无 Repair |
 | Fd1–Fd7 | ✅ | Word 16.0：`docx-field.ps1`，7 PASS / 0 FAIL。名单、改 PAGE 为 DATE、插 DATE、删域留结果、删域留指令、页眉 PAGE、带域段 `setParaText` 得 `NotImplemented`。标题栏无 Repair |
 | Nl1–Nl6 | ✅ | Word 16.0：`docx-numbering.ps1`，6 PASS / 0 FAIL。名单、段上 `num`/`ilvl`、插 decimal 定义、绑两段、改 bullet、解绑。标题栏无 Repair |
@@ -682,6 +683,21 @@ Word 跟踪修订下改表单元格底纹、插入空段、删除表行。`inspe
 | Th3 | 改字 | `setThemeFonts` `majorLatin` 为 `Arial` 后树上为 `Arial`，Word 无修复 |
 | Th4 | 无 theme | 对 ooxp create（无 theme 部件）发 `setThemeColors` 得 `IdNotFound`，不写文件。不强制开 Word |
 | Th5 | 拒错 id | 对段落 id 发 `setThemeColors` 得 `InvalidId`；一个槽位都不给得 `InvalidField`。不强制开 Word |
+
+## 组合与连接线
+
+正文与页眉页脚里的浮动图 / 文本框 / 连接线可组合、解开；Word 写成 `wps:wsp` 的连接线可插删。组合本身不进树。手测脚本 `manual-check/office/cases/docx-groups.ps1`。编号用 Dg。不要和 T、Tb、Rv、Rm、Pb、Ph 撞。不实现放映引擎。不做 `insertShape`。
+
+| 编号 | 项 | 期望 |
+| --- | --- | --- |
+| Dg1 | 名单 | 无 scope 时根上有 `connectorCount`、没有正文 `connectors` |
+| Dg2 | 插连接线 | `insertConnector` 后 Word 无 Repair，COM `Type=9` 或 `Connector`，树上 `prst=straightConnector1` |
+| Dg3 | 删连接线 | `deleteConnector` 后 `connectorCount` 为 0 |
+| Dg4 | 组合框 | 两个 `insertTextBox` 再 `groupShapes`，Word `Type=6`，树上仍是两个框 |
+| Dg5 | 解组 | `ungroup` 后仍是独立框，无 Repair |
+| Dg6 | 组合图 | 两张浮动图 group 后 `pictureCount=2`（须先 `setPictureWrap` 成浮动） |
+| Dg7 | 页眉 | 页眉 `insertConnector` 后容器 `connectorCount=1`，根上正文计数仍为 0；无 Repair |
+| Dg8 | 拒写 | 错 id / 行内当成员 / 对 docx 发 `insertShape` / 对 xlsx 用段落 id 发 `insertConnector` 分别得 `IdNotFound` 或 `InvalidField` / `InvalidId`；均未写文件 |
 
 ## 原样保存（opc 验收）
 

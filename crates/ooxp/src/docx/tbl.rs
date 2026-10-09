@@ -930,7 +930,7 @@ fn rebuild_para_node(
     expand_runs: bool,
     pics: &[super::picture::PicInfo],
 ) -> Result<Value, Error> {
-    let mut node = format::para_node(p, idx, None, Some(pic_n), Some(box_n));
+    let mut node = format::para_node(p, idx, None, Some(pic_n), Some(box_n), None);
     // 单元格段落 id 已按故事序号算好，覆盖 format 按该 p 自己算出来的 id。
     node["id"] = json!(id);
     node["stable"] = json!(stable);

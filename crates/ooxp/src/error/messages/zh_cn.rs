@@ -147,7 +147,16 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::TxbxIndexNotInt => "txbx:index 后面必须是正整数".into(),
             IdReason::TxbxIndexFromOne => "txbx:index 从 1 起".into(),
             IdReason::SetParaOnBox => "setParaText 的 id 必须是段落 id，不能是文本框 id".into(),
-            IdReason::InsertNeedsHostPara => "insertTextBox 的 id 必须是宿主段落 id".into(),
+            IdReason::InsertNeedsHostPara => {
+                "insertTextBox / insertConnector 的 id 必须是宿主段落 id".into()
+            }
+            IdReason::DocxCxnPrefix => "docx 连接线 id 必须是段落 id 加上 /cxn:…".into(),
+            IdReason::DocxCxnContainer => {
+                "段落或容器 id 必须带 /cxn:…（该 id 本身不是连接线）".into()
+            }
+            IdReason::GroupNeedsDocument => {
+                "docx 的 groupShapes 的 id 必须是 docx:document 或页眉/页脚容器".into()
+            }
             IdReason::SheetSpPrefix => {
                 "xlsx 文本框 id 必须是 sheet:工作表名/sp:…".into()
             }

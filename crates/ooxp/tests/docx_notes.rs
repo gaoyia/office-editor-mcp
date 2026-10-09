@@ -155,6 +155,7 @@ fn inspect_counts_without_lists() {
             "paraCount",
             "pictureCount",
             "textBoxCount",
+            "connectorCount",
             "footnoteCount",
             "endnoteCount",
             "commentCount",
@@ -230,6 +231,7 @@ fn inspect_notes_lists_hosts_and_separators() {
             "paraCount",
             "pictureCount",
             "textBoxCount",
+            "connectorCount",
             "chartCount",
             "smartArtCount",
             "paragraphs"

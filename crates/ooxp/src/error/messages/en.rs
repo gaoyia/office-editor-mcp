@@ -160,7 +160,18 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::TxbxIndexNotInt => "txbx:index must be followed by a positive integer".into(),
             IdReason::TxbxIndexFromOne => "txbx:index starts at 1".into(),
             IdReason::SetParaOnBox => "setParaText id must be a paragraph id, not a text box id".into(),
-            IdReason::InsertNeedsHostPara => "insertTextBox id must be a host paragraph id".into(),
+            IdReason::InsertNeedsHostPara => {
+                "insertTextBox / insertConnector id must be a host paragraph id".into()
+            }
+            IdReason::DocxCxnPrefix => {
+                "docx connector id must be a paragraph id plus /cxn:…".into()
+            }
+            IdReason::DocxCxnContainer => {
+                "paragraph or container id must include /cxn:… (that id alone is not a connector)".into()
+            }
+            IdReason::GroupNeedsDocument => {
+                "docx groupShapes id must be docx:document or a header/footer container".into()
+            }
             IdReason::SheetSpPrefix => {
                 "xlsx text box id must be sheet:name/sp:…".into()
             }

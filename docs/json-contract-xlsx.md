@@ -132,7 +132,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
 | `scope.comments` | 否 | 为 `true` 时给每张 `worksheet` 填 `comments`。没有线程化批注时为空数组。省略或 `false` 则只有 `commentCount`，没有名单。不依赖 `sheet` / `range` / `pictures` / `charts` / `headerFooter`。不读旧式 VML 批注 |
 | `scope.textBoxes` | 否 | 为 `true` 时给每张 `worksheet` 填 `textBoxes`。没有文本框时为空数组。省略或 `false` 则只有 `textBoxCount`，没有名单。不依赖 `sheet` / `range` / `pictures` / `charts` / `headerFooter` / `comments`。不把框内字做成段落树 |
 | `scope.shapes` | 否 | 为 `true` 时给每张 `worksheet` 填 `shapes`。没有形状时为空数组。省略或 `false` 则只有 `shapeCount`，没有名单。不依赖 `sheet` / `range` / 其它名单键。不把无 `txBox` 的形状并进 `textBoxes` |
-| `scope.connectors` | 否 | 为 `true` 时给每张 `worksheet` 填 `connectors`。没有连接线时为空数组。省略或 `false` 则只有 `connectorCount`，没有名单。不依赖 `sheet` / `range` / 其它名单键。docx 的 `scope` 里出现 `connectors` 仍报 `InvalidField` |
+| `scope.connectors` | 否 | 为 `true` 时给每张 `worksheet` 填 `connectors`。没有连接线时为空数组。省略或 `false` 则只有 `connectorCount`，没有名单。不依赖 `sheet` / `range` / 其它名单键。docx 也认 `scope.connectors`，见 [docx 分册](json-contract-docx.md#scope) |
 | `scope.smartArt` | 否 | 为 `true` 时给每张 `worksheet` 填 `smartArts`。没有图示时为空数组。省略或 `false` 则只有 `smartArtCount`，没有名单。不把图示画成图，不读 Fallback 位图。不依赖 `sheet` / `range` / `pictures` / `charts` / `headerFooter` / `comments` / `textBoxes` / `shapes` / `connectors` |
 | `scope.hyperlinks` | 否 | 为 `true` 时给每张 `worksheet` 填 `hyperlinks`。没有链时为空数组。省略或 `false` 则只有 `hyperlinkCount`，没有名单。不依赖 `sheet` / `range` / `pictures` / `charts` / `headerFooter` / `comments` / `textBoxes` / `shapes` / `connectors` / `smartArt`。不把 `HYPERLINK()` 公式或图上的链算进来 |
 | `scope.sparklines` | 否 | 为 `true` 时给每张 `worksheet` 填 `sparklines`。没有迷你图组时为空数组。省略或 `false` 则只有 `sparklineCount`，没有名单。不依赖 `sheet` / `range` / 其它名单键。不把折线画进树 |
@@ -1405,7 +1405,7 @@ create 本期仍只写普通 `<f>`，不写 `t="shared"` / `t="array"`。
 | `prst` | 可选。缺省 `straightConnector1`。允许 `line`、`straightConnector1`、`bentConnector2`–`5`、`curvedConnector2`–`5` |
 | `x` / `y` | 禁止。出现报 `InvalidField` |
 
-写入 `xdr:cxnSp`：`xdr:nvCxnSpPr` / 空 `xdr:cNvCxnSpPr`，无 `txBody`，无填充，线宽 `9525` 的黑色描边。不写 `xdr:style`。`cNvPr/@name` 写成「连接线 {cnv}」。新 `cNvPr/@id` 规则与 `insertShape` 相同。docx 上发此 op 报 `InvalidField`。
+写入 `xdr:cxnSp`：`xdr:nvCxnSpPr` / 空 `xdr:cNvCxnSpPr`，无 `txBody`，无填充，线宽 `9525` 的黑色描边。不写 `xdr:style`。`cNvPr/@name` 写成「连接线 {cnv}」。新 `cNvPr/@id` 规则与 `insertShape` 相同。docx 见 [docx 分册](json-contract-docx.md#insertconnector)。
 
 ### deleteShape
 
@@ -1423,7 +1423,7 @@ create 本期仍只写普通 `<f>`，不写 `t="shared"` / `t="array"`。
 | `op` | 必须是 `"deleteConnector"` |
 | `id` | 连接线 id `sheet:{name}/cxn:…` |
 
-找不到该连接线报 `IdNotFound`。id 不是 xlsx 连接线 id 报 `InvalidId`。删掉对应 `xdr:cxnSp`，空组合与空锚点规则与 `deleteShape` 相同。docx 上发此 op 报 `InvalidField`。pptx 规则见 [pptx 分册](json-contract-pptx.md#deleteconnector)。
+找不到该连接线报 `IdNotFound`。id 不是 xlsx 连接线 id 报 `InvalidId`。删掉对应 `xdr:cxnSp`，空组合与空锚点规则与 `deleteShape` 相同。docx 见 [docx 分册](json-contract-docx.md#deleteconnector)。pptx 规则见 [pptx 分册](json-contract-pptx.md#deleteconnector)。
 
 ### groupShapes
 
@@ -1435,7 +1435,7 @@ create 本期仍只写普通 `<f>`，不写 `t="shared"` / `t="array"`。
 | `id` | 必须是 `sheet:{name}` |
 | `ids` | 必填。至少两个成员 id。每个必须是该表的文本框 id、形状 id 或连接线 id，且当前是某个 `twoCellAnchor` / `oneCellAnchor` / `absoluteAnchor` 的直接子节点 |
 
-成员少于 2 个、有重复、不在同一张表、已经在某个 `xdr:grpSp` 里、或不是 `xdr:sp` / `xdr:cxnSp`，报 `InvalidField`。找不到某个成员报 `IdNotFound`。`id` 不是工作表 id 报 `InvalidId`。对图 id、图表 id、SmartArt id、单元格 id 或 `xlsx:workbook` 发此 op 报 `InvalidId`。对 `chartsheet` 发此 op 报 `InvalidField`。对 `dialogsheet` / `macrosheet` 报 `NotImplemented`。新组合 `cNvPr/@id` 取该表已有全部 `cNvPr` 的最大整数加 1；`name` 写成「组合 {该 id}」。不写 `xdr:nvPr`，不写 `a16:creationId`，不写 `xdr:style`。外层写成一个 `xdr:twoCellAnchor`（不写 `editAs`），`from` / `to` 覆盖成员包围盒。组合 `xfrm` 的 `off` / `ext` / `chOff` / `chExt` 取该包围盒；把各成员 `a:off` / `a:ext` 写成工作表空间的绝对 EMU（与 Excel 16.0 `Range.Group()` 另存一致）。包围盒按该表 `cols` / `row/@ht` / `sheetFormatPr` 换算，缺省列宽 8.43 字符（64 像素）、行高 15 磅；不保证与 Excel 像素级一致。不重算已有组合框。不把图、图表、SmartArt、OLE 当成员。docx 上发此 op 报 `InvalidField`。pptx 见 [pptx 分册](json-contract-pptx.md#groupshapes)。
+成员少于 2 个、有重复、不在同一张表、已经在某个 `xdr:grpSp` 里、或不是 `xdr:sp` / `xdr:cxnSp`，报 `InvalidField`。找不到某个成员报 `IdNotFound`。`id` 不是工作表 id 报 `InvalidId`。对图 id、图表 id、SmartArt id、单元格 id 或 `xlsx:workbook` 发此 op 报 `InvalidId`。对 `chartsheet` 发此 op 报 `InvalidField`。对 `dialogsheet` / `macrosheet` 报 `NotImplemented`。新组合 `cNvPr/@id` 取该表已有全部 `cNvPr` 的最大整数加 1；`name` 写成「组合 {该 id}」。不写 `xdr:nvPr`，不写 `a16:creationId`，不写 `xdr:style`。外层写成一个 `xdr:twoCellAnchor`（不写 `editAs`），`from` / `to` 覆盖成员包围盒。组合 `xfrm` 的 `off` / `ext` / `chOff` / `chExt` 取该包围盒；把各成员 `a:off` / `a:ext` 写成工作表空间的绝对 EMU（与 Excel 16.0 `Range.Group()` 另存一致）。包围盒按该表 `cols` / `row/@ht` / `sheetFormatPr` 换算，缺省列宽 8.43 字符（64 像素）、行高 15 磅；不保证与 Excel 像素级一致。不重算已有组合框。不把图、图表、SmartArt、OLE 当成员。docx 见 [docx 分册](json-contract-docx.md#groupshapes)。pptx 见 [pptx 分册](json-contract-pptx.md#groupshapes)。
 
 ### ungroup
 
@@ -1446,7 +1446,7 @@ create 本期仍只写普通 `<f>`，不写 `t="shared"` / `t="array"`。
 | `op` | 必须是 `"ungroup"` |
 | `id` | 该组合内一个文本框 id、形状 id 或连接线 id |
 
-找不到该对象报 `IdNotFound`。id 不是文本框 / 形状 / 连接线 id 报 `InvalidId`。该对象不在 `xdr:grpSp` 里报 `InvalidField`。只解开包含该成员的那一层；嵌套组合仍是 `grpSp`。子节点 `cNvPr/@id` 不变。各子对象写成自己的 `xdr:twoCellAnchor`，`from` / `to` 由其 `a:xfrm` 按同一套列宽行高换回单元格。docx 上发此 op 报 `InvalidField`。pptx 见 [pptx 分册](json-contract-pptx.md#ungroup)。
+找不到该对象报 `IdNotFound`。id 不是文本框 / 形状 / 连接线 id 报 `InvalidId`。该对象不在 `xdr:grpSp` 里报 `InvalidField`。只解开包含该成员的那一层；嵌套组合仍是 `grpSp`。子节点 `cNvPr/@id` 不变。各子对象写成自己的 `xdr:twoCellAnchor`，`from` / `to` 由其 `a:xfrm` 按同一套列宽行高换回单元格。docx 见 [docx 分册](json-contract-docx.md#ungroup)。pptx 见 [pptx 分册](json-contract-pptx.md#ungroup)。
 
 ### insertOle
 

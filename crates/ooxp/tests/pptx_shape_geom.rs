@@ -73,20 +73,6 @@ fn inspect_scope(path: &Path, scope: Value) -> Value {
     tree
 }
 
-fn inspect_err(path: &Path, scope: Value) -> ooxp::Error {
-    run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "inspect",
-            "path": path.to_string_lossy(),
-            "scope": scope
-        })
-        .to_string(),
-        None,
-    )
-    .unwrap_err()
-}
-
 fn object_keys(v: &Value) -> Vec<&str> {
     v.as_object().unwrap().keys().map(|s| s.as_str()).collect()
 }
@@ -404,7 +390,7 @@ fn rejects_illegal_prst_group_and_ids() {
 }
 
 #[test]
-fn xlsx_and_docx_reject_connectors() {
+fn xlsx_and_docx_reject_pptx_connector_ids() {
     let xlsx = tmp("scope").with_extension("xlsx");
     run(
         &json!({
@@ -446,19 +432,35 @@ fn xlsx_and_docx_reject_connectors() {
         None,
     )
     .unwrap();
-    let err = inspect_err(&docx, json!({ "connectors": true }));
-    assert_eq!(err.code(), ErrorCode::InvalidField);
+    let tree = inspect_scope(&docx, json!({ "connectors": true }));
+    assert_eq!(tree["connectorCount"], 0);
+    assert!(tree.get("connectors").is_none());
+    let dest = tmp("docx-out").with_extension("docx");
     let err = run(
         &json!({
             "schemaVersion": 1,
             "action": "apply",
             "path": docx.to_string_lossy(),
-            "output": tmp("docx-out").with_extension("docx").to_string_lossy(),
+            "output": dest.to_string_lossy(),
+            "ops": [{ "op": "insertConnector", "id": "slide:1" }]
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidId);
+    let err = run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "apply",
+            "path": docx.to_string_lossy(),
+            "output": dest.to_string_lossy(),
             "ops": [{ "op": "groupShapes", "id": "slide:1", "ids": ["slide:1/shape:2", "slide:1/shape:3"] }]
         })
         .to_string(),
         None,
     )
     .unwrap_err();
-    assert_eq!(err.code(), ErrorCode::InvalidField);
+    assert_eq!(err.code(), ErrorCode::InvalidId);
+    assert!(!dest.exists());
 }

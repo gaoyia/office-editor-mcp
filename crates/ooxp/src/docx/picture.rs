@@ -225,6 +225,15 @@ pub fn collect_pictures(root: &Element, container_id: &str) -> Result<Vec<PicInf
         if super::watermark::is_watermark_drawing(drawing) {
             return Ok(());
         }
+        if is_group_drawing(drawing) {
+            walk_group_pics(drawing, &mut |pic| {
+                index += 1;
+                if let Ok(info) = pic_info_grouped(drawing, pic, container_id, index) {
+                    out.push(info);
+                }
+            });
+            return Ok(());
+        }
         if !is_picture(drawing) {
             return Ok(());
         }
@@ -669,7 +678,7 @@ pub fn rel_target_from(source_part: &str, target_opc: &str) -> String {
 pub fn next_docpr_id(root: &Element) -> u32 {
     let mut max = 0u32;
     walk_all(root, &mut |e| {
-        if e.local_name() == "docPr" {
+        if e.local_name() == "docPr" || e.local_name() == "cNvPr" {
             if let Some(id) = e.attr_local("id") {
                 if let Ok(n) = id.parse::<u32>() {
                     max = max.max(n);
@@ -989,6 +998,240 @@ fn is_picture(drawing: &Element) -> bool {
     has_pic && has_blip
 }
 
+fn is_group_drawing(drawing: &Element) -> bool {
+    let mut group = false;
+    walk_outside_txbx(drawing, &mut |e| {
+        if e.local_name() == "wgp" {
+            group = true;
+        }
+    });
+    group
+}
+
+fn walk_group_pics(drawing: &Element, f: &mut impl FnMut(&Element)) {
+    fn walk(el: &Element, f: &mut impl FnMut(&Element)) {
+        if el.local_name() == "txbxContent" || el.local_name() == "object" {
+            return;
+        }
+        if el.local_name() == "pic" && pic_has_blip(el) {
+            f(el);
+            return;
+        }
+        for n in &el.children {
+            if let Node::Element(e) = n {
+                walk(e, f);
+            }
+        }
+    }
+    walk(drawing, f);
+}
+
+fn pic_has_blip(pic: &Element) -> bool {
+    let mut blip = false;
+    walk_outside_txbx(pic, &mut |e| {
+        if e.local_name() == "blip" {
+            blip = true;
+        }
+    });
+    blip
+}
+
+fn pic_info_grouped(
+    drawing: &Element,
+    pic: &Element,
+    container_id: &str,
+    index: usize,
+) -> Result<PicInfo, Error> {
+    let frame = frame(drawing);
+    let kind = match frame.map(Element::local_name) {
+        Some("anchor") => PicKind::Anchor,
+        _ => PicKind::Inline,
+    };
+    let (raw_id, name) = cnv_pr_of(pic);
+    let (id, stable, doc_pr_id) = match raw_id.filter(|s| !s.is_empty()) {
+        Some(v) => (format!("{container_id}/pic:{v}"), true, Some(v)),
+        None => (format!("{container_id}/pic:index:{index}"), false, None),
+    };
+    let (cx, cy) = xfrm_ext(pic).unwrap_or((None, None));
+    let wrap = if kind == PicKind::Anchor {
+        frame.and_then(|f| {
+            f.element_children()
+                .find_map(|c| WrapKind::from_local(c.local_name()))
+        })
+    } else {
+        None
+    };
+    Ok(PicInfo {
+        id,
+        doc_pr_id,
+        name,
+        kind,
+        cx,
+        cy,
+        wrap,
+        stable,
+    })
+}
+
+fn cnv_pr_of(el: &Element) -> (Option<String>, Option<String>) {
+    let mut id = None;
+    let mut name = None;
+    walk_outside_txbx(el, &mut |e| {
+        if e.local_name() == "cNvPr" && id.is_none() {
+            id = e.attr_local("id").map(str::to_string);
+            name = e
+                .attr_local("name")
+                .filter(|s| !s.is_empty())
+                .map(str::to_string);
+        }
+    });
+    (id, name)
+}
+
+fn xfrm_ext(el: &Element) -> Option<(Option<i64>, Option<i64>)> {
+    let mut cx = None;
+    let mut cy = None;
+    walk_outside_txbx(el, &mut |e| {
+        if e.local_name() == "ext" && cx.is_none() {
+            if let Some(v) = e.attr_local("cx").and_then(|s| s.parse().ok()) {
+                cx = Some(v);
+            }
+            if let Some(v) = e.attr_local("cy").and_then(|s| s.parse().ok()) {
+                cy = Some(v);
+            }
+        }
+    });
+    if cx.is_some() || cy.is_some() {
+        Some((cx, cy))
+    } else {
+        None
+    }
+}
+
+fn matches_grouped(pic: &Element, key: &PicKey, index: usize) -> bool {
+    match key {
+        PicKey::Index(n) => index == *n,
+        PicKey::DocPr(want) => {
+            let Some(got) = cnv_pr_of(pic).0 else {
+                return false;
+            };
+            if let (Ok(a), Ok(b)) = (want.parse::<u32>(), got.parse::<u32>()) {
+                a == b
+            } else {
+                want.as_str() == got
+            }
+        }
+    }
+}
+
+fn drawing_has_pic_match(drawing: &Element, idx: &mut usize, key: &PicKey) -> bool {
+    if is_group_drawing(drawing) {
+        let mut hit = false;
+        walk_group_pics(drawing, &mut |pic| {
+            *idx += 1;
+            if matches_grouped(pic, key, *idx) {
+                hit = true;
+            }
+        });
+        return hit;
+    }
+    if is_picture(drawing) {
+        *idx += 1;
+        return matches_key(drawing, key, *idx);
+    }
+    false
+}
+
+fn group_has_remaining(el: &Element) -> bool {
+    let mut found = false;
+    walk_outside_txbx(el, &mut |e| {
+        if e.local_name() == "pic" && pic_has_blip(e) {
+            found = true;
+        }
+        if e.local_name() == "wsp" {
+            let mut txbx = false;
+            let mut cn = false;
+            let mut prst = None::<String>;
+            walk_outside_txbx(e, &mut |c| match c.local_name() {
+                "txbxContent" | "txbx" | "linkedTxbx" => txbx = true,
+                "cNvCnPr" => cn = true,
+                "prstGeom" if prst.is_none() => {
+                    prst = c.attr_local("prst").map(str::to_string);
+                }
+                _ => {}
+            });
+            if txbx
+                || cn
+                || prst.as_deref().is_some_and(|p| {
+                    matches!(
+                        p,
+                        "line"
+                            | "straightConnector1"
+                            | "bentConnector2"
+                            | "bentConnector3"
+                            | "bentConnector4"
+                            | "bentConnector5"
+                            | "curvedConnector2"
+                            | "curvedConnector3"
+                            | "curvedConnector4"
+                            | "curvedConnector5"
+                    )
+                })
+            {
+                found = true;
+            }
+        }
+    });
+    found
+}
+
+fn remove_group_pic(el: &mut Element, idx: &mut usize, key: &PicKey) -> bool {
+    if el.local_name() == "txbxContent" || el.local_name() == "object" {
+        return false;
+    }
+    let mut i = 0;
+    while i < el.children.len() {
+        let is_pic = matches!(&el.children[i], Node::Element(c) if c.local_name() == "pic" && pic_has_blip(c));
+        if is_pic {
+            *idx += 1;
+            let hit = match &el.children[i] {
+                Node::Element(c) => matches_grouped(c, key, *idx),
+                Node::Text(_) => false,
+            };
+            if hit {
+                el.children.remove(i);
+                return true;
+            }
+        }
+        if let Node::Element(child) = &mut el.children[i] {
+            if remove_group_pic(child, idx, key) {
+                return true;
+            }
+        }
+        i += 1;
+    }
+    false
+}
+
+fn ac_is_group(node: &Node) -> bool {
+    let Node::Element(ac) = node else {
+        return false;
+    };
+    let Some(i) = first_alt_child_index(ac) else {
+        return false;
+    };
+    let Node::Element(branch) = &ac.children[i] else {
+        return false;
+    };
+    let mut group = false;
+    walk_outside_txbx(branch, &mut |e| {
+        if e.local_name() == "wgp" {
+            group = true;
+        }
+    });
+    group
+}
+
 fn walk_outside_txbx(el: &Element, f: &mut impl FnMut(&Element)) {
     if el.local_name() == "txbxContent" || el.local_name() == "object" {
         return;
@@ -1094,9 +1337,8 @@ fn find_drawing_walk<'a>(el: &'a Element, idx: &mut usize, key: &PicKey) -> Opti
         }
         return None;
     }
-    if el.local_name() == "drawing" && is_picture(el) {
-        *idx += 1;
-        if matches_key(el, key, *idx) {
+    if el.local_name() == "drawing" {
+        if drawing_has_pic_match(el, idx, key) {
             return Some(el);
         }
         return None;
@@ -1127,9 +1369,8 @@ fn find_drawing_mut_walk<'a>(
         }
         return None;
     }
-    if el.local_name() == "drawing" && is_picture(el) {
-        *idx += 1;
-        if matches_key(el, key, *idx) {
+    if el.local_name() == "drawing" {
+        if drawing_has_pic_match(el, idx, key) {
             return Some(el);
         }
         return None;
@@ -1163,6 +1404,24 @@ fn remove_picture_walk(el: &mut Element, idx: &mut usize, key: &PicKey) -> bool 
             }
         };
         if local == "AlternateContent" {
+            if ac_is_group(&el.children[i]) {
+                let hit = match &mut el.children[i] {
+                    Node::Element(ac) => remove_group_pic(ac, idx, key),
+                    Node::Text(_) => false,
+                };
+                if hit {
+                    let empty = match &el.children[i] {
+                        Node::Element(ac) => !group_has_remaining(ac),
+                        Node::Text(_) => false,
+                    };
+                    if empty {
+                        el.children.remove(i);
+                    }
+                    return true;
+                }
+                i += 1;
+                continue;
+            }
             if ac_has_match(&el.children[i], idx, key) {
                 el.children.remove(i);
                 return true;
@@ -1171,6 +1430,25 @@ fn remove_picture_walk(el: &mut Element, idx: &mut usize, key: &PicKey) -> bool 
             continue;
         }
         if local == "drawing" {
+            let is_group = matches!(&el.children[i], Node::Element(c) if is_group_drawing(c));
+            if is_group {
+                let hit = match &mut el.children[i] {
+                    Node::Element(c) => remove_group_pic(c, idx, key),
+                    Node::Text(_) => false,
+                };
+                if hit {
+                    let empty = match &el.children[i] {
+                        Node::Element(c) => !group_has_remaining(c),
+                        Node::Text(_) => false,
+                    };
+                    if empty {
+                        el.children.remove(i);
+                    }
+                    return true;
+                }
+                i += 1;
+                continue;
+            }
             let is_pic = matches!(&el.children[i], Node::Element(c) if is_picture(c));
             if is_pic {
                 *idx += 1;
@@ -1215,11 +1493,8 @@ fn ac_has_match(node: &Node, idx: &mut usize, key: &PicKey) -> bool {
     };
     let mut hit = false;
     let _ = walk_drawings(branch, &mut |d| {
-        if is_picture(d) {
-            *idx += 1;
-            if matches_key(d, key, *idx) {
-                hit = true;
-            }
+        if drawing_has_pic_match(d, idx, key) {
+            hit = true;
         }
         Ok(())
     });

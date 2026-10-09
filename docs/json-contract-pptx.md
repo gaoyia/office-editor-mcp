@@ -155,7 +155,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
 | `scope.tables` | 否 | 为 `true` 时给每页填 `tables`。省略或 `false` 则只有 `tableCount`，没有名单。不依赖 `scope.slide`。备注里的表不进幻灯片 `tables`，只在 `scope.notes` 时出现在 `notes` 上 |
 | `scope.oleObjects` | 否 | 为 `true` 时给每页填 `oleObjects`。省略或 `false` 则只有 `oleObjectCount`，没有名单。不依赖 `scope.slide`。不把嵌入字节或预览图放进树。备注、批注、母版、版式里的 OLE 本期不进树。xlsx 认 `scope.oleObjects`，见 [xlsx 分册](json-contract-xlsx.md#scope)。docx 见 [json-contract-docx.md](json-contract-docx.md) |
 | `scope.zooms` | 否 | 为 `true` 时给每页填 `zooms`。省略或 `false` 则只有 `zoomCount`，没有名单。不依赖 `scope.slide`。不把预览图放进树。备注、批注、母版、版式里的 Zoom 本期不进树。xlsx / docx 的 `scope` 里出现 `zooms` 报 `InvalidField` |
-| `scope.connectors` | 否 | 为 `true` 时给每页填 `connectors`。省略或 `false` 则只有 `connectorCount`，没有名单。不依赖 `scope.slide`。备注里的连接线本期不进树。docx 的 `scope` 里出现 `connectors` 报 `InvalidField`。xlsx 认 `scope.connectors`，见 [xlsx 分册](json-contract-xlsx.md#scope) |
+| `scope.connectors` | 否 | 为 `true` 时给每页填 `connectors`。省略或 `false` 则只有 `connectorCount`，没有名单。不依赖 `scope.slide`。备注里的连接线本期不进树。docx 也认 `scope.connectors`，见 [docx 分册](json-contract-docx.md#scope)。xlsx 认 `scope.connectors`，见 [xlsx 分册](json-contract-xlsx.md#scope) |
 | `scope.timing` | 否 | 为 `true` 时给每页填 `timing`（动画效果摘要）。省略或 `false` 则只有 `animCount`，没有名单。不依赖 `scope.slide`。不返回完整时间轴树。写入见 `insertAnim` / `deleteAnim` |
 | `scope.masters` | 否 | 为 `true` 时根上填 `masters`（母版、版式与占位符）。省略或 `false` 则只有 `masterCount`，没有名单。不依赖 `scope.slide`。不算母版排版引擎。xlsx / docx 的 `scope` 里出现 `masters` 报 `InvalidField` |
 | `scope.handout` | 否 | 为 `true` 时根上填 `handout`。有讲义母版则为对象，没有则为 `null`。省略或 `false` 则只有 `hasHandout`，不倒出槽位文字。不依赖 `scope.slide`。不算讲义打印布局。xlsx / docx 的 `scope` 里出现 `handout` 报 `InvalidField` |
@@ -321,7 +321,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
 - `scope.tables` 为 `true` 时，每页带 `tables`。没有表时为空数组。不依赖 `scope.slide`。每张字段顺序：`id`、`cNvPrId`、`name`、`x`、`y`、`cx`、`cy`、`rowCount`、`colCount`、`rows`、`stable`。`cNvPrId` / `name` / `stable` 规则与图相同。`x` / `y` / `cx` / `cy` 取 graphicFrame 的 `p:xfrm`。`rowCount` 是 `a:tr` 个数。`colCount` 见上文表 id 那节。`rows` 按 `a:tr` 顺序。每行字段顺序：`id`、`index`、`cells`。`cells` 按该行 `a:tc` 文档顺序，不按空网格补格。每格字段顺序：`id`、`row`、`col`、`gridSpan`、`rowSpan`、`hMerge`、`vMerge`、`text`。`row` / `col` 与 id 里的数字相同。`gridSpan` / `rowSpan` 为整数，缺属性则为 `1`。`hMerge` / `vMerge` 为布尔（属性为 `1` / `true` / `on` 则为 `true`）。`text` 取该格 `a:txBody` 可见纯文本，规则与形状 `text` 相同。没有 `txBody` 则为 `""`。不把单元格编成段落 id。
 - `scope.oleObjects` 为 `true` 时，每页带 `oleObjects`。没有嵌入对象时为空数组。不依赖 `scope.slide`。每条字段顺序：`id`、`progId`、`name`、`kind`、`contentType`、`showAsIcon`、`x`、`y`、`cx`、`cy`、`stable`。`id` 为 `slide:{n}/ole:…`。`progId` 取 `p:oleObj/@progId`，缺则为 `null`。`name` 取 `p:oleObj/@name`，缺则为 `""`。`kind`：关系 Type 后缀为 `/package` 时为 `package`，否则为 `embed`。`contentType` 取 embeddings 部件在 `[Content_Types].xml` 里的 Default 或 Override，都没有则为 `null`。`showAsIcon`：`p:oleObj/@showAsIcon` 为 `1` / `true` / `True` 则为 `true`，否则为 `false`。`x` / `y` / `cx` / `cy` 取 graphicFrame 的 `p:xfrm`。不把嵌入字节或预览图放进树。xlsx 认 `scope.oleObjects`，见 [xlsx 分册](json-contract-xlsx.md#scope)。
 - `scope.zooms` 为 `true` 时，每页带 `zooms`。没有 Zoom 时为空数组。不依赖 `scope.slide`。每条字段顺序：`id`、`type`，然后 slide / section 有 `target`，summary 有 `targets`，然后 `x`、`y`、`cx`、`cy`、`stable`。`id` 为 `slide:{n}/zoom:…`。`type` 为 `slide`（`sldZm`）、`section`（`sectionZm`）或 `summary`（`summaryZm`）。`target`：幻灯片缩放取 `sldZmObj/@sldId` 对到 `p:sldIdLst` 的 `slide:{n}`；节缩放取 `sectionZmObj/@sectionId` 对到 `section:{n}`；对不上则为 `null`。`targets` 是摘要缩放各 `summaryZmObj/@sectionId` 对到的 `section:{n}` 数组，对不上的 GUID 跳过。`x` / `y` / `cx` / `cy` 取 graphicFrame 的 `p:xfrm`；没有 graphicFrame 则取 `spPr/a:xfrm` 或 Fallback `p:pic` 的 `spPr/a:xfrm`。不把预览图放进树。xlsx / docx 的 `scope` 里出现 `zooms` 报 `InvalidField`。
-- `scope.connectors` 为 `true` 时，每页带 `connectors`。没有连接线时为空数组。不依赖 `scope.slide`。每条字段顺序：`id`、`cNvPrId`、`name`、`prst`、`x`、`y`、`cx`、`cy`、`stable`。`cNvPrId` / `name` / `stable` 规则与图相同。`prst` 取 `a:prstGeom/@prst`，没有则为 `null`。`x` / `y` / `cx` / `cy` 取 `p:spPr/a:xfrm`。组合里的 `p:cxnSp` 要展开。docx 的 `scope` 里出现 `connectors` 报 `InvalidField`。xlsx 认 `scope.connectors`，见 [xlsx 分册](json-contract-xlsx.md#scope)。
+- `scope.connectors` 为 `true` 时，每页带 `connectors`。没有连接线时为空数组。不依赖 `scope.slide`。每条字段顺序：`id`、`cNvPrId`、`name`、`prst`、`x`、`y`、`cx`、`cy`、`stable`。`cNvPrId` / `name` / `stable` 规则与图相同。`prst` 取 `a:prstGeom/@prst`，没有则为 `null`。`x` / `y` / `cx` / `cy` 取 `p:spPr/a:xfrm`。组合里的 `p:cxnSp` 要展开。docx 也认 `scope.connectors`，见 [docx 分册](json-contract-docx.md#scope)。xlsx 认 `scope.connectors`，见 [xlsx 分册](json-contract-xlsx.md#scope)。
 - `animCount` 在演示文稿根上始终出现，等于各页效果摘要条数之和。每页始终有自己的 `animCount`。没有效果则为 `0`。根上不挂 `timing` 数组。名单只出现在各页上。本期不截断，一页全部列出。
 - `masterCount` 在演示文稿根上始终出现，等于 `p:sldMasterIdLst` 里 `p:sldMasterId` 的个数。没有该表则为 `0`。根上不挂 `masters`，除非给了 `scope.masters`。不算讲义母版。本期不截断。
 - `hasHandout` 在演示文稿根上始终出现：presentation `.rels` 有 Type 以 `/handoutMaster` 结尾的关系则为 `true`，否则为 `false`。根上不挂 `handout`，除非给了 `scope.handout`。
@@ -801,7 +801,7 @@ pptx：`id` 不是页 id 或备注容器 id 报 `InvalidId`（对形状 id、图
 | `x` / `y` | 可选。画布坐标，EMU，非负整数。必须成对出现或成对省略 |
 | `cx` / `cy` | 可选。尺寸，EMU，正整数。必须成对出现或成对省略。都省略时默认 `1828800` × `762000` |
 
-pptx：`id` 不是页 id 报 `InvalidId`（对 `slide:{n}/notes`、形状 id、连接线 id 或 `pptx:presentation` 也是这条）。找不到该页报 `IdNotFound`。只给 `x` 或只给 `y`、只给 `cx` 或只给 `cy` 报 `InvalidField`。`prst` 不在名单里报 `InvalidField`。缺坐标时在画布上找空位。写入 `p:cxnSp`：`p:nvCxnSpPr` / 空 `p:cNvCxnSpPr`，`a:prstGeom` 为该 `prst`，默认线宽 `12700` 的黑色描边，无填充、无 `p:style`、无 `txBody`。新 `cNvPr/@id` 规则与 `insertShape` 相同。`cNvPr/@name` 写成「连接线 {该 id}」。docx 上发此 op 报 `InvalidField`。xlsx 见 [xlsx 分册](json-contract-xlsx.md#insertconnector)。
+pptx：`id` 不是页 id 报 `InvalidId`（对 `slide:{n}/notes`、形状 id、连接线 id 或 `pptx:presentation` 也是这条）。找不到该页报 `IdNotFound`。只给 `x` 或只给 `y`、只给 `cx` 或只给 `cy` 报 `InvalidField`。`prst` 不在名单里报 `InvalidField`。缺坐标时在画布上找空位。写入 `p:cxnSp`：`p:nvCxnSpPr` / 空 `p:cNvCxnSpPr`，`a:prstGeom` 为该 `prst`，默认线宽 `12700` 的黑色描边，无填充、无 `p:style`、无 `txBody`。新 `cNvPr/@id` 规则与 `insertShape` 相同。`cNvPr/@name` 写成「连接线 {该 id}」。docx 见 [docx 分册](json-contract-docx.md#insertconnector)。xlsx 见 [xlsx 分册](json-contract-xlsx.md#insertconnector)。
 
 ### deleteConnector
 
@@ -810,7 +810,7 @@ pptx：`id` 不是页 id 报 `InvalidId`（对 `slide:{n}/notes`、形状 id、�
 | `op` | 必须是 `"deleteConnector"` |
 | `id` | 连接线 id（`slide:{n}/cxn:…`） |
 
-找不到该连接线报 `IdNotFound`。id 不是连接线 id 报 `InvalidId`。删掉对应 `p:cxnSp`。若在 `mc:AlternateContent` 的 Choice 里，整段 `AlternateContent` 删掉。删组合内连接线后若组合空了，把空 `p:grpSp` 一并摘掉。不改其它对象的 `cNvPr/@id`。按被删连接线的 `cNvPr/@id` 清掉本页 `<p:timing>` 里对应的 `p:tgtEl`。docx 上发此 op 报 `InvalidField`。xlsx 见 [xlsx 分册](json-contract-xlsx.md#deleteconnector)。
+找不到该连接线报 `IdNotFound`。id 不是连接线 id 报 `InvalidId`。删掉对应 `p:cxnSp`。若在 `mc:AlternateContent` 的 Choice 里，整段 `AlternateContent` 删掉。删组合内连接线后若组合空了，把空 `p:grpSp` 一并摘掉。不改其它对象的 `cNvPr/@id`。按被删连接线的 `cNvPr/@id` 清掉本页 `<p:timing>` 里对应的 `p:tgtEl`。docx 见 [docx 分册](json-contract-docx.md#deleteconnector)。xlsx 见 [xlsx 分册](json-contract-xlsx.md#deleteconnector)。
 
 ### groupShapes
 
@@ -822,7 +822,7 @@ pptx：`id` 不是页 id 报 `InvalidId`（对 `slide:{n}/notes`、形状 id、�
 | `id` | 必须是 `slide:{n}` |
 | `ids` | 必填。至少两个成员 id。每个必须是该页的形状 id 或连接线 id，且当前是 `spTree` 的直接子节点 |
 
-成员少于 2 个、有重复、不在同一页、已经在某个 `p:grpSp` 里、或不是 `p:sp`（带 `txBody`）/ `p:cxnSp`，报 `InvalidField`。找不到某个成员报 `IdNotFound`。`id` 不是页 id 报 `InvalidId`。新组合 `cNvPr/@id` 取该页最大加 1；`name` 写成「组合 {该 id}」。组合 `xfrm` 的 `off` / `ext` / `chOff` / `chExt` 取成员包围盒；成员自己的 `a:off` 不改（与 Office 16.0 另存一致）。不写 `a16:creationId`。不重算已有组合框。docx 上发此 op 报 `InvalidField`。xlsx 见 [xlsx 分册](json-contract-xlsx.md#groupshapes)。
+成员少于 2 个、有重复、不在同一页、已经在某个 `p:grpSp` 里、或不是 `p:sp`（带 `txBody`）/ `p:cxnSp`，报 `InvalidField`。找不到某个成员报 `IdNotFound`。`id` 不是页 id 报 `InvalidId`。新组合 `cNvPr/@id` 取该页最大加 1；`name` 写成「组合 {该 id}」。组合 `xfrm` 的 `off` / `ext` / `chOff` / `chExt` 取成员包围盒；成员自己的 `a:off` 不改（与 Office 16.0 另存一致）。不写 `a16:creationId`。不重算已有组合框。docx 见 [docx 分册](json-contract-docx.md#groupshapes)。xlsx 见 [xlsx 分册](json-contract-xlsx.md#groupshapes)。
 
 ### ungroup
 
@@ -833,7 +833,7 @@ pptx：`id` 不是页 id 报 `InvalidId`（对 `slide:{n}/notes`、形状 id、�
 | `op` | 必须是 `"ungroup"` |
 | `id` | 该组合内一个形状 id 或连接线 id |
 
-找不到该对象报 `IdNotFound`。id 不是形状 id 也不是连接线 id 报 `InvalidId`。该对象不在 `p:grpSp` 里报 `InvalidField`。子节点 `cNvPr/@id` 与各自 `xfrm` 不变。docx 上发此 op 报 `InvalidField`。xlsx 见 [xlsx 分册](json-contract-xlsx.md#ungroup)。
+找不到该对象报 `IdNotFound`。id 不是形状 id 也不是连接线 id 报 `InvalidId`。该对象不在 `p:grpSp` 里报 `InvalidField`。子节点 `cNvPr/@id` 与各自 `xfrm` 不变。docx 见 [docx 分册](json-contract-docx.md#ungroup)。xlsx 见 [xlsx 分册](json-contract-xlsx.md#ungroup)。
 
 ### deleteShape
 

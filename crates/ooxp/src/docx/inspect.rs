@@ -8,6 +8,7 @@ use crate::xml;
 
 use super::charts;
 use super::comments;
+use super::connector;
 use super::field;
 use super::format;
 use super::hf::{self, HfKind, HfPart};
@@ -53,6 +54,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     let expand_hf = scope.as_ref().is_some_and(|s| s.header_footer);
     let expand_pics = scope.as_ref().is_some_and(|s| s.pictures);
     let expand_txbx = scope.as_ref().is_some_and(|s| s.text_boxes);
+    let expand_cxn = scope.as_ref().is_some_and(|s| s.connectors);
     let expand_txbx_content = scope.as_ref().is_some_and(|s| s.text_box_content);
     let expand_charts = scope.as_ref().is_some_and(|s| s.charts);
     let expand_smartart = scope.as_ref().is_some_and(|s| s.smart_art);
@@ -69,6 +71,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         paragraphs: expand_hf,
         pictures: expand_pics,
         text_boxes: expand_txbx,
+        connectors: expand_cxn,
         text_box_content: expand_txbx_content,
         charts: expand_charts,
         smart_art: expand_smartart,
@@ -88,6 +91,8 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     let picture_count = body_picture_count(&paras)?;
     let body_boxes = collect_body_boxes(&paras)?;
     let text_box_count = body_boxes.len();
+    let body_cxns = collect_body_cxns(&paras)?;
+    let connector_count = body_cxns.len();
     let footnote_count = notes::user_count(&pkg, &part, NoteKind::Footnote)?;
     let endnote_count = notes::user_count(&pkg, &part, NoteKind::Endnote)?;
     let comment_count = comments::count(&pkg, &part)?;
@@ -146,6 +151,12 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     });
     insert_json_after(
         tree.as_object_mut().unwrap(),
+        "textBoxCount",
+        "connectorCount",
+        json!(connector_count),
+    );
+    insert_json_after(
+        tree.as_object_mut().unwrap(),
         "styleCount",
         "embeddedFontCount",
         json!(super::font_embed::count(&pkg, &part)?),
@@ -173,6 +184,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
                 NoteKind::Footnote,
                 expand_pics,
                 expand_txbx,
+                expand_cxn,
                 expand_txbx_content,
                 expand_charts,
                 expand_smartart,
@@ -186,6 +198,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
                 NoteKind::Endnote,
                 expand_pics,
                 expand_txbx,
+                expand_cxn,
                 expand_txbx_content,
                 expand_charts,
                 expand_smartart,
@@ -205,6 +218,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
                 &coverage,
                 expand_pics,
                 expand_txbx,
+                expand_cxn,
                 expand_txbx_content,
                 expand_charts,
                 expand_smartart,
@@ -300,11 +314,13 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
                         index,
                         expand_pics,
                         expand_txbx,
+                        expand_cxn,
                         expand_txbx_content,
                         expand_charts,
                         expand_smartart,
                         expand_runs,
                         &body_boxes,
+                        &body_cxns,
                     )?);
                 }
             }
@@ -402,10 +418,25 @@ fn boxes_for_para<'a>(all: &'a [textbox::TxbxInfo], para_id: &str) -> Vec<&'a te
     all.iter().filter(|b| b.id.starts_with(&prefix)).collect()
 }
 
+fn collect_body_cxns(paras: &[&crate::xml::Element]) -> Result<Vec<connector::CxnInfo>, Error> {
+    let mut all = Vec::new();
+    for (i, p) in paras.iter().enumerate() {
+        let (id, _) = para::para_stable_id(p, i + 1);
+        all.extend(connector::collect_connectors(p, &id)?);
+    }
+    Ok(all)
+}
+
+fn cxns_for_para<'a>(all: &'a [connector::CxnInfo], para_id: &str) -> Vec<&'a connector::CxnInfo> {
+    let prefix = format!("{para_id}/cxn:");
+    all.iter().filter(|c| c.id.starts_with(&prefix)).collect()
+}
+
 struct HfExpand {
     paragraphs: bool,
     pictures: bool,
     text_boxes: bool,
+    connectors: bool,
     text_box_content: bool,
     charts: bool,
     smart_art: bool,
@@ -448,6 +479,11 @@ fn hf_node(pkg: &Package, item: &HfPart, expand: &HfExpand) -> Result<Value, Err
         boxes.extend(textbox::collect_textboxes(p, &id)?);
     }
     textbox::resolve_links(&mut boxes);
+    let mut cxns = Vec::new();
+    for (i, p) in paras.iter().enumerate() {
+        let (id, _) = para::para_stable_id_in(&item.id, p, i + 1);
+        cxns.extend(connector::collect_connectors(p, &id)?);
+    }
     let mut chart_count = 0usize;
     let mut smart_art_count = 0usize;
     let mut ole_count = 0usize;
@@ -479,6 +515,12 @@ fn hf_node(pkg: &Package, item: &HfPart, expand: &HfExpand) -> Result<Value, Err
         "mathCount": math::count_maths(&doc.root),
         "contentControlCount": sdt::count_sdts(&doc.root),
     });
+    insert_json_after(
+        node.as_object_mut().unwrap(),
+        "textBoxCount",
+        "connectorCount",
+        json!(cxns.len()),
+    );
     if expand.pictures {
         node["pictures"] = Value::Array(picture::pictures_json(&pics));
     }
@@ -501,6 +543,9 @@ fn hf_node(pkg: &Package, item: &HfPart, expand: &HfExpand) -> Result<Value, Err
             )?);
         }
         node["textBoxes"] = Value::Array(listed);
+    }
+    if expand.connectors {
+        node["connectors"] = Value::Array(connector::connectors_json(&cxns));
     }
     if expand.charts {
         node["charts"] = Value::Array(charts::collect_hf(pkg, item, &paras)?);
@@ -542,7 +587,15 @@ fn hf_node(pkg: &Package, item: &HfPart, expand: &HfExpand) -> Result<Value, Err
         let mut paragraphs = Vec::new();
         for (i, p) in paras.iter().enumerate() {
             let index = i + 1;
-            paragraphs.push(para_json(p, index, Some(&item.id), None, None, expand.runs));
+            paragraphs.push(para_json(
+                p,
+                index,
+                Some(&item.id),
+                None,
+                None,
+                None,
+                expand.runs,
+            ));
         }
         node["paragraphs"] = Value::Array(paragraphs);
     }
@@ -556,11 +609,13 @@ fn body_para_json(
     index: usize,
     expand_pics: bool,
     expand_txbx: bool,
+    expand_cxn: bool,
     expand_txbx_content: bool,
     expand_charts: bool,
     expand_smartart: bool,
     expand_runs: bool,
     all_boxes: &[textbox::TxbxInfo],
+    all_cxns: &[connector::CxnInfo],
 ) -> Result<Value, Error> {
     let (id, _) = para::para_stable_id(p, index);
     let pics = picture::collect_pictures(p, &id)?;
@@ -568,7 +623,16 @@ fn body_para_json(
         .into_iter()
         .cloned()
         .collect();
-    let mut node = para_json(p, index, None, Some(pics.len()), Some(mine.len()), false);
+    let mine_cxn: Vec<_> = cxns_for_para(all_cxns, &id).into_iter().cloned().collect();
+    let mut node = para_json(
+        p,
+        index,
+        None,
+        Some(pics.len()),
+        Some(mine.len()),
+        Some(mine_cxn.len()),
+        false,
+    );
     if expand_pics {
         node["pictures"] = Value::Array(picture::pictures_json(&pics));
     }
@@ -585,6 +649,9 @@ fn body_para_json(
             expand_charts,
             expand_smartart,
         )?);
+    }
+    if expand_cxn {
+        node["connectors"] = Value::Array(connector::connectors_json(&mine_cxn));
     }
     let fn_refs = notes::refs_in_para(p, NoteKind::Footnote);
     if !fn_refs.is_empty() {
@@ -610,9 +677,17 @@ fn para_json(
     container: Option<&str>,
     picture_count: Option<usize>,
     text_box_count: Option<usize>,
+    connector_count: Option<usize>,
     expand_runs: bool,
 ) -> Value {
-    let mut node = format::para_node(p, index, container, picture_count, text_box_count);
+    let mut node = format::para_node(
+        p,
+        index,
+        container,
+        picture_count,
+        text_box_count,
+        connector_count,
+    );
     format::maybe_runs(&mut node, p, expand_runs);
     node
 }
@@ -625,6 +700,7 @@ fn notes_array(
     kind: NoteKind,
     expand_pics: bool,
     expand_txbx: bool,
+    expand_cxn: bool,
     expand_txbx_content: bool,
     expand_charts: bool,
     expand_smartart: bool,
@@ -651,6 +727,7 @@ fn notes_array(
             &inspect_id,
             expand_pics,
             expand_txbx,
+            expand_cxn,
             expand_txbx_content,
             expand_charts,
             expand_smartart,
@@ -664,6 +741,7 @@ fn notes_array(
             "paraCount": media.para_count,
             "pictureCount": media.pic_count,
             "textBoxCount": media.box_count,
+            "connectorCount": media.cxn_count,
             "chartCount": media.chart_count,
             "smartArtCount": media.smart_art_count,
         });
@@ -672,6 +750,7 @@ fn notes_array(
             &media,
             expand_pics,
             expand_txbx,
+            expand_cxn,
             expand_charts,
             expand_smartart,
         );
@@ -728,6 +807,7 @@ fn comments_array(
     coverage: &Option<comments::CommentCoverage>,
     expand_pics: bool,
     expand_txbx: bool,
+    expand_cxn: bool,
     expand_txbx_content: bool,
     expand_charts: bool,
     expand_smartart: bool,
@@ -765,6 +845,7 @@ fn comments_array(
             &inspect_id,
             expand_pics,
             expand_txbx,
+            expand_cxn,
             expand_txbx_content,
             expand_charts,
             expand_smartart,
@@ -794,6 +875,7 @@ fn comments_array(
             "paraCount": media.para_count,
             "pictureCount": media.pic_count,
             "textBoxCount": media.box_count,
+            "connectorCount": media.cxn_count,
             "chartCount": media.chart_count,
             "smartArtCount": media.smart_art_count,
         });
@@ -802,6 +884,7 @@ fn comments_array(
             &media,
             expand_pics,
             expand_txbx,
+            expand_cxn,
             expand_charts,
             expand_smartart,
         );
@@ -814,10 +897,12 @@ struct StoryMedia {
     para_count: usize,
     pic_count: usize,
     box_count: usize,
+    cxn_count: usize,
     chart_count: usize,
     smart_art_count: usize,
     pictures: Vec<picture::PicInfo>,
     text_boxes: Vec<Value>,
+    connectors: Vec<Value>,
     charts: Vec<Value>,
     smart_arts: Vec<Value>,
     paragraphs: Vec<Value>,
@@ -830,6 +915,7 @@ fn story_media(
     container_id: &str,
     expand_pics: bool,
     expand_txbx: bool,
+    expand_cxn: bool,
     expand_txbx_content: bool,
     expand_charts: bool,
     expand_smartart: bool,
@@ -837,9 +923,11 @@ fn story_media(
 ) -> Result<StoryMedia, Error> {
     let paras = para::collect_paragraphs(story);
     let mut all_boxes = Vec::new();
+    let mut all_cxns = Vec::new();
     for (i, p) in paras.iter().enumerate() {
         let (pid, _) = para::para_stable_id_in(container_id, p, i + 1);
         all_boxes.extend(textbox::collect_textboxes(p, &pid)?);
+        all_cxns.extend(connector::collect_connectors(p, &pid)?);
     }
     textbox::resolve_links(&mut all_boxes);
     let mut pic_count = 0usize;
@@ -849,6 +937,7 @@ fn story_media(
     let mut charts_list = Vec::new();
     let mut smart_list = Vec::new();
     let mut listed_boxes = Vec::new();
+    let mut listed_cxns = Vec::new();
     let mut para_nodes = Vec::new();
     for (i, p) in paras.iter().enumerate() {
         let index = i + 1;
@@ -861,12 +950,17 @@ fn story_media(
             .into_iter()
             .cloned()
             .collect();
+        let mine_cxn: Vec<_> = cxns_for_para(&all_cxns, &pid)
+            .into_iter()
+            .cloned()
+            .collect();
         let mut node = para_json(
             p,
             index,
             Some(container_id),
             Some(pics.len()),
             Some(mine.len()),
+            Some(mine_cxn.len()),
             false,
         );
         if expand_pics {
@@ -887,6 +981,11 @@ fn story_media(
             )?;
             node["textBoxes"] = Value::Array(json_boxes.clone());
             listed_boxes.extend(json_boxes);
+        }
+        if expand_cxn {
+            let json_cxns = connector::connectors_json(&mine_cxn);
+            node["connectors"] = Value::Array(json_cxns.clone());
+            listed_cxns.extend(json_cxns);
         }
         format::maybe_runs(&mut node, p, expand_runs);
         all_pics.extend(pics);
@@ -909,10 +1008,12 @@ fn story_media(
         para_count: paras.len(),
         pic_count,
         box_count: all_boxes.len(),
+        cxn_count: all_cxns.len(),
         chart_count,
         smart_art_count,
         pictures: all_pics,
         text_boxes: listed_boxes,
+        connectors: listed_cxns,
         charts: charts_list,
         smart_arts: smart_list,
         paragraphs: para_nodes,
@@ -924,6 +1025,7 @@ fn attach_story_lists(
     media: &StoryMedia,
     expand_pics: bool,
     expand_txbx: bool,
+    expand_cxn: bool,
     expand_charts: bool,
     expand_smartart: bool,
 ) {
@@ -932,6 +1034,9 @@ fn attach_story_lists(
     }
     if expand_txbx {
         node["textBoxes"] = Value::Array(media.text_boxes.clone());
+    }
+    if expand_cxn {
+        node["connectors"] = Value::Array(media.connectors.clone());
     }
     if expand_charts {
         node["charts"] = Value::Array(media.charts.clone());
@@ -976,6 +1081,7 @@ fn stamp_value(v: &mut Value, coverage: &comments::CommentCoverage) {
                     k.as_str(),
                     "paragraphs"
                         | "textBoxes"
+                        | "connectors"
                         | "headers"
                         | "footers"
                         | "footnotes"

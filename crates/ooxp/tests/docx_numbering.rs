@@ -200,6 +200,7 @@ fn numbering_list_and_para_fields() {
             "stable",
             "pictureCount",
             "textBoxCount",
+            "connectorCount",
             "runCount"
         ]
     );
