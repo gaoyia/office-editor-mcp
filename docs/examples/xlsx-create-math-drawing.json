@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "action": "create",
+  "path": "book.math.xlsx",
+  "format": "xlsx",
+  "workbook": {
+    "sheets": [
+      {
+        "name": "Sheet1",
+        "cells": [{ "ref": "A1", "value": 1 }],
+        "maths": [{ "text": "E=mc^2", "from": "B2" }]
+      }
+    ]
+  }
+}

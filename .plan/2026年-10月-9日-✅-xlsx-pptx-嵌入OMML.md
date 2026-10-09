@@ -1,6 +1,6 @@
 # xlsx / pptx 嵌入 OMML
 
-状态：❌ 探测已过，规则已锁，文档与代码未动
+状态：✅ 文档、代码、库测试与 Office 16.0 手测已过
 日期：2026-10-09
 
 对应 `roadmap/xlsx.md` 与 `roadmap/pptx.md` 跨格式 **C8**。前置：工作表图 / 文本框、幻灯片图。Word 公式已过（`.plan/2026年-9月-27日-✅-docx-公式.md`），**不要改 Word 写入路径**。不要和 EMF / 3D / 墨迹捆在一起。不算公式排版引擎。
@@ -17,9 +17,9 @@ Excel 工作表 drawing、PowerPoint 幻灯片（及备注）里的 OMML 公式�
 | --- | --- | --- |
 | 0 | Excel / PowerPoint 16.0 探测插入公式后的 XML | ✅ |
 | 1 | 锁 id、与文本框的分界、写入 | ✅ |
-| 2 | 文档 | ❌ |
-| 3 | inspect / apply / create | ❌ |
-| 4 | 库测试与 Office 16.0 手测 | ❌ |
+| 2 | 文档 | ✅ |
+| 3 | inspect / apply / create | ✅ |
+| 4 | 库测试与 Office 16.0 手测 | ✅ |
 
 ## 探测结论（Office 16.0）
 

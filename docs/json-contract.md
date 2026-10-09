@@ -31,6 +31,9 @@ docx 的 `scope.inkCanvases` 列出正文与页眉页脚里的墨迹画布（`wp
 apply 用 `insertInkCanvas` / `replaceInkCanvas` / `deleteInkCanvas`。xlsx / pptx 拒这些键与 op。
 三种格式的 `scope.model3ds` 列出 3D 模型（`am3d:model3d`，GLB 部件）。
 apply 用 `insertModel3d` / `replaceModel3d` / `deleteModel3d`。不是图，不进 `pictures`。
+xlsx / pptx 的 `scope.maths` 列出 drawing 公式框（`a14:m` 包 OMML）。
+apply 复用 `insertMath` / `setMath` / `deleteMath`。不是单元格 `f`，也不把 Word 的 `expr` 搬过去。
+docx 的 `scope.maths` 仍是段落 `oMath`，见 [docx 分册](json-contract-docx.md#insertmath)。
 xlsx 的 `scope.oleObjects` 与 OLE op 认工作表 `<oleObject>`（ECMA-376 §18.3.1.59），不认 `@link` 与 ActiveX `controls`，不把嵌入字节或预览图塞进树。
 pptx 的 `scope.comments` 与批注 op 认该页 2018 线程化批注（`p188:cmLst`），不认 ECMA-376 §19.4 旧式部件。
 pptx 的 `scope.timing` 列出该页 `<p:timing>` 效果摘要；apply 用 `insertAnim` / `deleteAnim` 按模板增删预设效果，不接受整棵时间轴树。
@@ -229,7 +232,7 @@ create 与 apply 落盘时先写入目标同目录的临时文件，再改名为
 `setSmartArtText`、`addSmartArtPoint`、`deleteSmartArtPoint`、`setSmartArtSize`、`setSmartArtAnchor`、`setSmartArtColors`、
 `setSmartArtStyle`、`setSmartArtLayout`；
 不含 `setSmartArtPos`、`setSmartArtWrap`）、以及超链接 op（`insertHyperlink`、`setHyperlink`、`deleteHyperlink`）、
-以及迷你图 op（`insertSparkline`、`setSparkline`、`deleteSparkline`）、以及 OLE op（`insertOle`、`deleteOle`）、以及 3D 模型 op（`insertModel3d`、`replaceModel3d`、`deleteModel3d`）、以及切片器 op（`insertSlicer`、
+以及迷你图 op（`insertSparkline`、`setSparkline`、`deleteSparkline`）、以及 OLE op（`insertOle`、`deleteOle`）、以及 3D 模型 op（`insertModel3d`、`replaceModel3d`、`deleteModel3d`）、以及公式 op（`insertMath`、`setMath`、`deleteMath`）、以及切片器 op（`insertSlicer`、
 `deleteSlicer`）、以及连接 op（`insertConnection`、`deleteConnection`）、以及外部引用 op（`insertExternalLink`、`deleteExternalLink`）、以及 `setProtection`。
 docx 认 `setParaText`、`setHeaderFooterDistance`、`setPageMargin`、`setPageSize`、`setColumns`、`setVerticalAlign`、
 `setLineNumbering`、`setDocGrid`、`setRtlGutter`、`setMirrorMargins`、`setGutterAtTop`、`setHeaderFooterLink`、
@@ -272,7 +275,7 @@ pptx 认 `setShapeText`、形状管理 op（`insertShape`、`insertConnector`、
 以及 `setHandoutText`、以及超链接 op（`insertHyperlink`、`setHyperlink`、`deleteHyperlink`）、以及域 op（`insertField`、`setField`、
 `deleteField`）、以及媒体 op（`insertVideo`、`insertAudio`、`deleteMedia`）、以及幻灯片节 op（`insertSlideSection`、`setSlideSectionName`、
 `deleteSlideSection`、`setSlideSection`）、以及自定义放映 op（`insertCustomShow`、`setCustomShow`、`deleteCustomShow`）、
-以及 OLE op（`insertOle`、`deleteOle`）、以及 3D 模型 op（`insertModel3d`、`replaceModel3d`、`deleteModel3d`）、以及 Zoom op（`insertZoom`、`deleteZoom`）、以及 `setShowPr`、以及 `setProtection`、
+以及 OLE op（`insertOle`、`deleteOle`）、以及 3D 模型 op（`insertModel3d`、`replaceModel3d`、`deleteModel3d`）、以及公式 op（`insertMath`、`setMath`、`deleteMath`）、以及 Zoom op（`insertZoom`、`deleteZoom`）、以及 `setShowPr`、以及 `setProtection`、
 以及 `setProps` / `setCustomProp` / `deleteCustomProp`。
 不提供把整棵时间轴当 JSON 写入的 op；`setTiming` 仍报 `UnsupportedOp`。
 对不上格式的 op（例如对 pptx 发 `setCell` / `setCellStyle` / `setParaText` / `setProtection`，

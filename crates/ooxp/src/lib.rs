@@ -5,6 +5,7 @@
 mod chart;
 mod dispatch;
 mod docx;
+mod drawing_math;
 mod error;
 mod image;
 mod json;
@@ -801,6 +802,7 @@ mod tests {
                 "pictureCount",
                 "chartCount",
                 "textBoxCount",
+                "mathCount",
                 "shapeCount",
                 "connectorCount",
                 "smartArtCount",
@@ -830,6 +832,7 @@ mod tests {
                 "pictureCount",
                 "chartCount",
                 "textBoxCount",
+                "mathCount",
                 "shapeCount",
                 "connectorCount",
                 "smartArtCount",
@@ -1062,6 +1065,7 @@ mod tests {
                 "id",
                 "slideCount",
                 "pictureCount",
+                "mathCount",
                 "videoCount",
                 "audioCount",
                 "chartCount",
@@ -1097,6 +1101,7 @@ mod tests {
                 "transition",
                 "hasNotes",
                 "pictureCount",
+                "mathCount",
                 "videoCount",
                 "audioCount",
                 "chartCount",
@@ -1125,6 +1130,7 @@ mod tests {
                 "transition",
                 "hasNotes",
                 "pictureCount",
+                "mathCount",
                 "videoCount",
                 "audioCount",
                 "chartCount",

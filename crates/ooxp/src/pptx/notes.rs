@@ -77,6 +77,7 @@ pub fn notes_json(
     want_smartarts: bool,
     want_tables: bool,
     want_model3ds: bool,
+    want_maths: bool,
 ) -> Result<Value, Error> {
     let Some(part) = notes_slide_part(pkg, slide_part)? else {
         return Ok(Value::Null);
@@ -123,6 +124,8 @@ pub fn notes_json(
     let mut obj = Map::new();
     obj.insert("id".into(), json!(host));
     obj.insert("pictureCount".into(), json!(pics.len()));
+    let maths = super::omml::collect(&doc.root, &host);
+    obj.insert("mathCount".into(), json!(maths.len()));
     obj.insert("chartCount".into(), json!(n_charts));
     obj.insert("smartArtCount".into(), json!(n_smartarts));
     obj.insert("tableCount".into(), json!(n_tables));
@@ -133,6 +136,9 @@ pub fn notes_json(
             "pictures".into(),
             Value::Array(picture::pictures_json(&pics)),
         );
+    }
+    if want_maths {
+        obj.insert("maths".into(), Value::Array(super::omml::list_json(&maths)));
     }
     if let Some(charts) = charts_list {
         obj.insert("charts".into(), Value::Array(charts));

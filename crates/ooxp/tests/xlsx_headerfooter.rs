@@ -148,6 +148,7 @@ fn summary_without_scope() {
             "pictureCount",
             "chartCount",
             "textBoxCount",
+            "mathCount",
             "shapeCount",
             "connectorCount",
             "smartArtCount",

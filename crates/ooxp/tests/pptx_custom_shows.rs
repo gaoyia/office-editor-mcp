@@ -126,6 +126,7 @@ fn create_has_zero_custom_show_count_without_list() {
             "id",
             "slideCount",
             "pictureCount",
+            "mathCount",
             "videoCount",
             "audioCount",
             "chartCount",

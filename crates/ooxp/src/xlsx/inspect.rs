@@ -19,6 +19,7 @@ use super::hf;
 use super::model3d;
 use super::names;
 use super::ole;
+use super::omml;
 use super::picture;
 use super::pivot;
 use super::shape;
@@ -85,6 +86,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     let want_sparklines = scope.as_ref().is_some_and(|s| s.sparklines);
     let want_ole = scope.as_ref().is_some_and(|s| s.ole_objects);
     let want_model3ds = scope.as_ref().is_some_and(|s| s.model3ds);
+    let want_maths = scope.as_ref().is_some_and(|s| s.maths);
     let want_slicers = scope.as_ref().is_some_and(|s| s.slicers);
     let want_connections = scope.as_ref().is_some_and(|s| s.connections);
     let want_external_links = scope.as_ref().is_some_and(|s| s.external_links);
@@ -99,6 +101,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     let mut picture_count = 0usize;
     let mut chart_count = 0usize;
     let mut text_box_count = 0usize;
+    let mut math_count = 0usize;
     let mut shape_count = 0usize;
     let mut connector_count = 0usize;
     let mut smart_art_count = 0usize;
@@ -125,6 +128,9 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
             let boxes = shape::collect_textboxes(&pkg, &sh.part, &sh.name)?;
             text_box_count += boxes.len();
             obj.insert("textBoxCount".into(), json!(boxes.len()));
+            let maths = omml::collect(&pkg, &sh.part, &sheet_doc.root, &sh.name)?;
+            math_count += maths.len();
+            obj.insert("mathCount".into(), json!(maths.len()));
             let shapes = shape::collect_shapes(&pkg, &sh.part, &sh.name)?;
             shape_count += shapes.len();
             obj.insert("shapeCount".into(), json!(shapes.len()));
@@ -204,6 +210,9 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
             }
             if want_text_boxes {
                 obj.insert("textBoxes".into(), Value::Array(boxes));
+            }
+            if want_maths {
+                obj.insert("maths".into(), Value::Array(omml::list_json(&maths)));
             }
             if want_shapes {
                 obj.insert("shapes".into(), Value::Array(shapes));
@@ -378,6 +387,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     root.insert("pictureCount".into(), json!(picture_count));
     root.insert("chartCount".into(), json!(chart_count));
     root.insert("textBoxCount".into(), json!(text_box_count));
+    root.insert("mathCount".into(), json!(math_count));
     root.insert("shapeCount".into(), json!(shape_count));
     root.insert("connectorCount".into(), json!(connector_count));
     root.insert("smartArtCount".into(), json!(smart_art_count));

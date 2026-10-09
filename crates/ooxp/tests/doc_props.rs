@@ -192,6 +192,7 @@ fn inspect_default_props_on_three_formats() {
             "pictureCount",
             "chartCount",
             "textBoxCount",
+            "mathCount",
             "shapeCount",
             "connectorCount",
             "smartArtCount",

@@ -1,4 +1,5 @@
-//! docx 公式：insertMath / setMath / deleteMath、inspect mathCount、xlsx/pptx 拒绝。
+//! docx 公式：insertMath / setMath / deleteMath、inspect mathCount。
+//! xlsx / pptx 上 Word 段落 id 报 InvalidId；xlsx 认 scope.maths。
 
 use std::io::{Cursor, Write};
 use std::path::{Path, PathBuf};
@@ -290,9 +291,9 @@ fn xlsx_pptx_reject_math_ops() {
         None,
     )
     .unwrap_err();
-    assert_eq!(err_x.code(), ErrorCode::InvalidField);
+    assert_eq!(err_x.code(), ErrorCode::InvalidId);
 
-    let err_scope = run(
+    let listed = run(
         &json!({
             "schemaVersion": 1,
             "action": "inspect",
@@ -302,8 +303,12 @@ fn xlsx_pptx_reject_math_ops() {
         .to_string(),
         None,
     )
-    .unwrap_err();
-    assert_eq!(err_scope.code(), ErrorCode::InvalidField);
+    .unwrap();
+    let RunOutput::Inspect(tree) = listed else {
+        panic!("inspect 应返回树");
+    };
+    assert_eq!(tree["mathCount"], 0);
+    assert_eq!(tree["sheets"][0]["maths"], json!([]));
 
     let pptx = seq_path("math-p", "pptx");
     run(
@@ -330,7 +335,7 @@ fn xlsx_pptx_reject_math_ops() {
         None,
     )
     .unwrap_err();
-    assert_eq!(err_p.code(), ErrorCode::InvalidField);
+    assert_eq!(err_p.code(), ErrorCode::InvalidId);
 }
 
 const CT: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>"#;

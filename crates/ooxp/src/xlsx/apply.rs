@@ -20,6 +20,7 @@ use super::inspect;
 use super::layout;
 use super::model3d;
 use super::ole;
+use super::omml;
 use super::picture;
 use super::shape;
 use super::sheets;
@@ -748,6 +749,39 @@ pub fn apply(bytes: &[u8], ops: &[XlsxOp]) -> Result<Vec<u8>, Error> {
                 load_dirty(&pkg, &mut dirty_sheets, &part, false)?;
                 let doc = dirty_of(&mut dirty_sheets, &part);
                 model3d::delete(&mut pkg, doc, &part, op, i)?;
+            }
+            XlsxOp::InsertMath(op) => {
+                let part = require_drawing_worksheet(
+                    &sheet_index,
+                    &op.sheet,
+                    i,
+                    ErrorKind::InsertMathWorksheetOnly,
+                )?;
+                load_dirty(&pkg, &mut dirty_sheets, &part, false)?;
+                let doc = dirty_of(&mut dirty_sheets, &part);
+                omml::insert(&mut pkg, doc, &part, op)?;
+            }
+            XlsxOp::SetMath(op) => {
+                let part = require_drawing_worksheet(
+                    &sheet_index,
+                    &op.target.sheet,
+                    i,
+                    ErrorKind::InsertMathWorksheetOnly,
+                )?;
+                load_dirty(&pkg, &mut dirty_sheets, &part, false)?;
+                let doc = dirty_of(&mut dirty_sheets, &part);
+                omml::set(&mut pkg, doc, &part, op, i)?;
+            }
+            XlsxOp::DeleteMath(op) => {
+                let part = require_drawing_worksheet(
+                    &sheet_index,
+                    &op.target.sheet,
+                    i,
+                    ErrorKind::InsertMathWorksheetOnly,
+                )?;
+                load_dirty(&pkg, &mut dirty_sheets, &part, false)?;
+                let doc = dirty_of(&mut dirty_sheets, &part);
+                omml::delete(&mut pkg, doc, &part, op, i)?;
             }
             XlsxOp::InsertSlicer(op) => {
                 let part = require_drawing_worksheet(

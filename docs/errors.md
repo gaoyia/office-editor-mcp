@@ -576,7 +576,7 @@
   - `insertIndex` / `deleteIndex` / `insertIndexEntry` / `deleteIndexEntry`
   - `insertSource` / `deleteSource` / `insertCitation` / `deleteCitation`
   - `insertBibliography` / `deleteBibliography` / `insertDocPart` / `deleteDocPart` / `insertDocPartContent`
-  - 公式 op、内容控件 op、编号 op、样式 op、直接格式 op 或节结构 op
+  - 内容控件 op、编号 op、样式 op、直接格式 op 或节结构 op
 - xlsx 认下列 op
   - `setSortState` 与分组：`groupRows`、`ungroupRows`、`groupCols`、`ungroupCols`、`setOutline`
   - 批注 op
@@ -588,6 +588,7 @@
   - 迷你图：`insertSparkline`、`setSparkline`、`deleteSparkline`
   - OLE：`insertOle`、`deleteOle`
   - 3D 模型：`insertModel3d`、`replaceModel3d`、`deleteModel3d`
+  - 公式：`insertMath`、`setMath`、`deleteMath`
   - 切片器：`insertSlicer`、`deleteSlicer`
   - 连接：`insertConnection`、`deleteConnection`
   - 外部引用：`insertExternalLink`、`deleteExternalLink`
@@ -613,7 +614,7 @@
   - `insertIndex` / `deleteIndex` / `insertIndexEntry` / `deleteIndexEntry`
   - `insertSource` / `deleteSource` / `insertCitation` / `deleteCitation`
   - `insertBibliography` / `deleteBibliography` / `insertDocPart` / `deleteDocPart` / `insertDocPartContent`
-  - 公式 op、内容控件 op、编号 op、样式 op、直接格式 op、节结构 op
+  - 内容控件 op、编号 op、样式 op、直接格式 op、节结构 op
   - `setPictureWrap`、`setPictureAnchor`、`setChartWrap`、`setChartAnchor`
   - `insertChartSheet`、`deleteChartSheet`
   - `insertWatermark` / `deleteWatermark`
@@ -883,10 +884,15 @@
 - `insertDocPartContent` 的 `id` 必须是主文档 `w:body` 的直接子段落 id 或 `docx:document`
 - xlsx / pptx 上发 `insertDocPart` / `deleteDocPart` / `insertDocPartContent` 报 `InvalidField`
 - 找不到公式时，公式 op 报 `IdNotFound`（`insertMath` 除外）
-- id 不是公式 id 报 `InvalidId`
-- `insertMath` 的 `id` 必须是正文或页眉页脚段落 id 或 `docx:document`
-- 空 `text` / 空 `expr` / 同时给 `text` 与 `expr` / 两个都不给或不认识的 `kind` 报 `InvalidField`
-- xlsx / pptx 上发公式 op 报 `InvalidField`
+- docx：id 不是公式 id 报 `InvalidId`
+- docx：`insertMath` 的 `id` 必须是正文或页眉页脚段落 id 或 `docx:document`
+- xlsx：`insertMath` 的 `id` 必须是 `sheet:{name}`
+- xlsx：`setMath` / `deleteMath` 的 `id` 必须是公式框 id
+- pptx：`insertMath` 的 `id` 必须是 `slide:{n}` 或 `slide:{n}/notes`
+- pptx：`setMath` / `deleteMath` 的 `id` 必须是公式框 id
+- 对单元格 id、图 id、文本框 id 发公式 op 报 `InvalidId`
+- docx 空 `text` / 空 `expr` / 同时给 / 两个都不给或不认识的 `kind` 报 `InvalidField`
+- xlsx / pptx 空 `text`、出现 `expr` / `kind` 报 `InvalidField`
 - 目标段落落在本期收入的 `oMath` 范围内时 `setParaText` 报 `NotImplemented`
 - 公式落在带分节符且删掉后该段会变空的段落上时，`deleteMath` 报 `NotImplemented`
 - 找不到内容控件时，内容控件 op 报 `IdNotFound`（`insertContentControl` 除外）

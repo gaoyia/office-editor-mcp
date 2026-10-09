@@ -619,6 +619,14 @@ pub fn export_media(bytes: &[u8], id: &str) -> Result<super::ExportedMedia, Erro
     if super::model3d::looks_like_id(id) {
         return super::model3d::export(bytes, id);
     }
+    if super::omml::looks_like_id(id) {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::SheetMathPrefix,
+            },
+            "id",
+        ));
+    }
     let pkg = Package::open_bytes(bytes.to_vec())?;
     let target = parse_pic_id_at(id, "id")?;
     let sheet_part = lookup_sheet_part(&pkg, &target.sheet, "id")?;

@@ -475,6 +475,24 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::SlideModel3dContainer => {
                 "页 id 必须带 /model3d:…（该 id 本身不是 3D 模型）".into()
             }
+            IdReason::InsertMathNeedsSheet => {
+                "xlsx 的 insertMath 的 id 必须是 sheet:工作表名".into()
+            }
+            IdReason::SheetMathPrefix => {
+                "xlsx 公式框 id 必须是 sheet:工作表名/math:…".into()
+            }
+            IdReason::SheetMathContainer => {
+                "工作表 id 必须带 /math:…（该 id 本身不是公式框）".into()
+            }
+            IdReason::InsertMathNeedsSlide => {
+                "pptx 的 insertMath 的 id 必须是 slide:N 或 slide:N/notes".into()
+            }
+            IdReason::SlideMathPrefix => {
+                "pptx 公式框 id 必须是 slide:N/math:… 或 slide:N/notes/math:…".into()
+            }
+            IdReason::SlideMathContainer => {
+                "页 id 必须带 /math:…（该 id 本身不是公式框）".into()
+            }
             IdReason::InsertSlicerNeedsSheet => {
                 "xlsx insertSlicer 的 id 必须是 sheet:工作表名".into()
             }
@@ -880,6 +898,10 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::OleNotFound { id } => format!("找不到嵌入对象：{id}"),
         ErrorKind::InkNotFound { id } => format!("找不到墨迹画布：{id}"),
         ErrorKind::Model3dNotFound { id } => format!("找不到 3D 模型：{id}"),
+        ErrorKind::MathDrawingNotFound { id } => format!("找不到公式框：{id}"),
+        ErrorKind::MathDrawingNoExpr => {
+            "xlsx / pptx 公式框只认非空 text，不要给 expr 或 kind".into()
+        },
         ErrorKind::SlicerNotFound { id } => format!("找不到切片器：{id}"),
         ErrorKind::SlicerFieldNotFound { name } => {
             format!("切片器字段对不上源：{name}")
@@ -953,6 +975,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::InsertChartWorksheetOnly => "只能往工作表 insertChart".into(),
         ErrorKind::InsertTextBoxWorksheetOnly => "只能往工作表插入或改文本框、形状与连接线".into(),
         ErrorKind::InsertModel3dWorksheetOnly => "只能往工作表插入 3D 模型".into(),
+        ErrorKind::InsertMathWorksheetOnly => "只能往工作表插入公式框".into(),
         ErrorKind::InsertSmartArtWorksheetOnly => "只能往工作表 insertSmartArt / 改图示".into(),
         ErrorKind::CommentsWorksheetOnly => "只能对工作表发批注 op".into(),
         ErrorKind::InsertHyperlinkWorksheetOnly => "只能对工作表发超链接 op".into(),

@@ -265,6 +265,9 @@ pub fn txbody_visible_text(tx: &Element) -> String {
 /// `a:fld` 是生成文本（§21.1.2.2.4），缓存的 `a:t` 不进 inspect 的 `text`。
 fn collect_visible_text(el: &Element, out: &mut String) {
     if el.local_name() == "AlternateContent" {
+        if crate::drawing_math::is_math_ac(el) {
+            return;
+        }
         if let Some(i) = first_alt_child_index(el) {
             if let Node::Element(child) = &el.children[i] {
                 collect_visible_text(child, out);
@@ -298,6 +301,9 @@ fn find_sp_mut<'a>(
     target: &ShapeKey,
 ) -> Option<&'a mut Element> {
     if el.local_name() == "AlternateContent" {
+        if crate::drawing_math::is_math_ac(el) {
+            return None;
+        }
         if let Some(i) = first_alt_child_index(el) {
             if let Node::Element(child) = &mut el.children[i] {
                 return find_sp_mut(child, idx, target);
@@ -620,8 +626,12 @@ fn needs_xml_space(text: &str) -> bool {
 }
 
 /// 遇到 `mc:AlternateContent` 只进第一个 `Choice`，没有才进 `Fallback`。
+/// 公式框整段不进 `shapes`。
 pub fn walk_choice<'a>(el: &'a Element, f: &mut impl FnMut(&'a Element)) {
     if el.local_name() == "AlternateContent" {
+        if crate::drawing_math::is_math_ac(el) {
+            return;
+        }
         if let Some(i) = first_alt_child_index(el) {
             if let Node::Element(child) = &el.children[i] {
                 walk_choice(child, f);

@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "action": "create",
+  "path": "deck.math.pptx",
+  "format": "pptx",
+  "presentation": {
+    "slides": [
+      {
+        "shapes": [{ "text": "公式" }],
+        "maths": [{ "text": "E=mc^2" }]
+      }
+    ]
+  }
+}

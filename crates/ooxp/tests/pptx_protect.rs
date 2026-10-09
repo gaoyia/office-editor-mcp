@@ -120,6 +120,7 @@ fn create_defaults_and_root_key_order() {
             "id",
             "slideCount",
             "pictureCount",
+            "mathCount",
             "videoCount",
             "audioCount",
             "chartCount",

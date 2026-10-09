@@ -194,6 +194,9 @@ apply 或 create 插入工作表 3D 模型时，可能新建 `/xl/media/model3dN
 关系写在 **drawing** `.rels`：一条 Type `http://schemas.microsoft.com/office/2017/06/relationships/model3d` 指向 GLB，一条 image 指向海报。
 drawing 写 `mc:AlternateContent`，Choice `Requires="am3d"`，Choice 里是 `xdr:graphicFrame` 包 `am3d:model3d`，Fallback 是海报 `xdr:pic`。
 `xdr:xfrm` 写 `0×0`。不写 `a16:creationId`。不把 GLB 当 `insertPicture`。create 给了 `sheets[].model3ds` 时同样写入。
+apply 或 create 插入工作表公式框时，只改 worksheet drawing XML，不新建部件。
+drawing 根补 `xmlns:a14` 与 `xmlns:m`。写 `mc:AlternateContent`，Choice `Requires="a14"`，Choice 里是 `xdr:sp`（`txBox="1"`）包 `a14:m` / `m:oMathPara`。
+Fallback 是同一套纯文本框，字为调用方 `text`。不栅格化，不写海报。create 给了 `sheets[].maths` 时同样写入。
 apply 插入工作表图表时，可能再新建 `/xl/charts/chartN.xml`（CT `application/vnd.openxmlformats-officedocument.drawingml.chart+xml`）及 chart 的 `.rels`；
 drawing 关系 Type 以 `/chart` 结尾。
 不写 embedding。apply 插入工作表超链接时，外部链在工作表 `.rels` 上补一条关系（Type
@@ -503,6 +506,10 @@ apply 或 create 插入幻灯片或备注 3D 模型时，可能新建 `/ppt/medi
 该页或 notesSlide `.rels` 补一条 Type `http://schemas.microsoft.com/office/2017/06/relationships/model3d` 指向 GLB，再补一条 image 指向海报。
 宿主是 `p:graphicFrame`，包在 `mc:AlternateContent` 的 Choice 里（`Requires="am3d"`）。Fallback 是海报 `p:pic`。
 create 给了 `slides[].model3ds` 时同样写入。备注 apply 可往 `slide:{n}/notes` 插；create 本期不在 `slides[].notes` 上写 3D。不把 GLB 当 `insertPicture`。
+apply 或 create 插入幻灯片或备注公式框时，只改该页或 notesSlide XML，不新建部件。
+宿主根补 `xmlns:a14` 与 `xmlns:m`。写 `mc:AlternateContent`，Choice `Requires="a14"`，Choice 里是 `p:sp`（`txBox="1"`）包 `a14:m` / `m:oMathPara`。
+Fallback 是同一套纯文本框，字为调用方 `text`。不栅格化，不写海报。create 给了 `slides[].maths` 时同样写入。
+备注 apply 可往 `slide:{n}/notes` 插；create 本期不在 `slides[].notes` 上写公式。
 
 apply 插入幻灯片视频或音频时，可能新建 `/ppt/media/mediaN.mp4` 或 `/ppt/media/mediaN.wav`，以及一张海报 `/ppt/media/imageN.png`。
 该页 `.rels` 补三条关系：MS-PPTX media（Type `http://schemas.microsoft.com/office/2007/relationships/media`）、

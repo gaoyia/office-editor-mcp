@@ -148,6 +148,7 @@ fn inspect_hyperlink_count_without_list() {
             "id",
             "slideCount",
             "pictureCount",
+            "mathCount",
             "videoCount",
             "audioCount",
             "chartCount",

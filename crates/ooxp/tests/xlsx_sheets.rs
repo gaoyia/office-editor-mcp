@@ -227,6 +227,7 @@ fn inspect_lists_hidden() {
             "pictureCount",
             "chartCount",
             "textBoxCount",
+            "mathCount",
             "shapeCount",
             "connectorCount",
             "smartArtCount",

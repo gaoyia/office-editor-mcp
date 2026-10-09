@@ -163,6 +163,7 @@ fn inspect_has_notes_without_notes_object() {
             "transition",
             "hasNotes",
             "pictureCount",
+            "mathCount",
             "videoCount",
             "audioCount",
             "chartCount",
@@ -212,6 +213,7 @@ fn set_notes_text_creates_parts_and_inspects() {
         [
             "id",
             "pictureCount",
+            "mathCount",
             "chartCount",
             "smartArtCount",
             "tableCount",
@@ -352,6 +354,7 @@ fn insert_picture_on_notes_does_not_join_slide_count() {
         [
             "id",
             "pictureCount",
+            "mathCount",
             "chartCount",
             "smartArtCount",
             "tableCount",

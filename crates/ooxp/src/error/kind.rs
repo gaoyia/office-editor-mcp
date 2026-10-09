@@ -344,6 +344,18 @@ pub(crate) enum IdReason {
     SlideModel3dPrefix,
     /// 页 id，缺少 /model3d:…
     SlideModel3dContainer,
+    /// xlsx 的 insertMath 必须用 sheet:工作表名
+    InsertMathNeedsSheet,
+    /// xlsx 公式框 id 必须是 sheet:{name}/math:…
+    SheetMathPrefix,
+    /// 工作表 id，缺少 /math:…
+    SheetMathContainer,
+    /// pptx 的 insertMath 必须用 slide:N 或备注容器
+    InsertMathNeedsSlide,
+    /// pptx 公式框 id 必须是 slide:N/math:… 或备注
+    SlideMathPrefix,
+    /// 页 id，缺少 /math:…
+    SlideMathContainer,
     /// xlsx 的 insertSlicer 必须用 sheet:工作表名
     InsertSlicerNeedsSheet,
     /// xlsx 切片器 id 必须是 sheet:{name}/slicer:…
@@ -672,6 +684,7 @@ define_error_kinds! {
     InsertChartWorksheetOnly => vec![Self::InsertChartWorksheetOnly],
     InsertTextBoxWorksheetOnly => vec![Self::InsertTextBoxWorksheetOnly],
     InsertModel3dWorksheetOnly => vec![Self::InsertModel3dWorksheetOnly],
+    InsertMathWorksheetOnly => vec![Self::InsertMathWorksheetOnly],
     InsertSmartArtWorksheetOnly => vec![Self::InsertSmartArtWorksheetOnly],
     CommentsWorksheetOnly => vec![Self::CommentsWorksheetOnly],
     InsertHyperlinkWorksheetOnly => vec![Self::InsertHyperlinkWorksheetOnly],
@@ -837,6 +850,10 @@ define_error_kinds! {
     OleNotFound { id: String } => vec![Self::OleNotFound { id: "para:1/ole:_1".into() }],
     InkNotFound { id: String } => vec![Self::InkNotFound { id: "para:1/ink:9".into() }],
     Model3dNotFound { id: String } => vec![Self::Model3dNotFound { id: "para:1/model3d:9".into() }],
+    MathDrawingNotFound { id: String } => {
+        vec![Self::MathDrawingNotFound { id: "sheet:Sheet1/math:2".into() }]
+    },
+    MathDrawingNoExpr => vec![Self::MathDrawingNoExpr],
     SlicerNotFound { id: String } => vec![Self::SlicerNotFound { id: "sheet:Sheet1/slicer:2".into() }],
     SlicerFieldNotFound { name: String } => vec![Self::SlicerFieldNotFound { name: "产品".into() }],
     ConnectionNotFound { id: String } => vec![Self::ConnectionNotFound { id: "connection:1".into() }],
@@ -1320,6 +1337,12 @@ impl IdReason {
             Self::InsertModel3dNeedsSlide,
             Self::SlideModel3dPrefix,
             Self::SlideModel3dContainer,
+            Self::InsertMathNeedsSheet,
+            Self::SheetMathPrefix,
+            Self::SheetMathContainer,
+            Self::InsertMathNeedsSlide,
+            Self::SlideMathPrefix,
+            Self::SlideMathContainer,
             Self::InsertSlicerNeedsSheet,
             Self::SheetSlicerPrefix,
             Self::SheetSlicerContainer,
@@ -1763,6 +1786,8 @@ impl ErrorKind {
             | Self::InsertChartWorksheetOnly
             | Self::InsertTextBoxWorksheetOnly
             | Self::InsertModel3dWorksheetOnly
+            | Self::InsertMathWorksheetOnly
+            | Self::MathDrawingNoExpr
             | Self::InsertSmartArtWorksheetOnly
             | Self::CommentsWorksheetOnly
             | Self::InsertHyperlinkWorksheetOnly
@@ -1828,6 +1853,7 @@ impl ErrorKind {
             | Self::OleNotFound { .. }
             | Self::InkNotFound { .. }
             | Self::Model3dNotFound { .. }
+            | Self::MathDrawingNotFound { .. }
             | Self::SlicerNotFound { .. }
             | Self::ConnectionNotFound { .. }
             | Self::ExternalLinkNotFound { .. }

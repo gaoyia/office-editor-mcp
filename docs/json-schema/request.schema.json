@@ -1119,6 +1119,24 @@
                 "$ref": "pptx.schema.json#/$defs/deleteModel3dOp"
               },
               {
+                "$ref": "xlsx.schema.json#/$defs/insertMathOp"
+              },
+              {
+                "$ref": "xlsx.schema.json#/$defs/setMathOp"
+              },
+              {
+                "$ref": "xlsx.schema.json#/$defs/deleteMathOp"
+              },
+              {
+                "$ref": "pptx.schema.json#/$defs/insertMathOp"
+              },
+              {
+                "$ref": "pptx.schema.json#/$defs/setMathOp"
+              },
+              {
+                "$ref": "pptx.schema.json#/$defs/deleteMathOp"
+              },
+              {
                 "$ref": "#/$defs/setProtectionOp"
               },
               {

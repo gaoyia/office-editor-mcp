@@ -18,6 +18,7 @@ use super::media;
 use super::model3d;
 use super::notes;
 use super::ole;
+use super::omml;
 use super::picture;
 use super::protect;
 use super::request::InspectScope;
@@ -54,11 +55,13 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     let want_custom_shows = scope.as_ref().is_some_and(|s| s.custom_shows);
     let want_ole_objects = scope.as_ref().is_some_and(|s| s.ole_objects);
     let want_model3ds = scope.as_ref().is_some_and(|s| s.model3ds);
+    let want_maths = scope.as_ref().is_some_and(|s| s.maths);
     let want_zooms = scope.as_ref().is_some_and(|s| s.zooms);
     let catalog = master::catalog(&pkg, &pres_part, &pres.root)?;
 
     let mut slide_json = Vec::new();
     let mut picture_count = 0usize;
+    let mut math_count = 0usize;
     let mut video_count = 0usize;
     let mut audio_count = 0usize;
     let mut chart_count = 0usize;
@@ -78,6 +81,16 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         let rels = opc::Relationships::from_package(&pkg, &s.part)?;
         let pics = picture::collect_pictures_with(&doc.root, &host, Some(&rels));
         picture_count += pics.len();
+        let maths_list = if want_maths {
+            Some(omml::collect(&doc.root, &host))
+        } else {
+            None
+        };
+        let n_math = maths_list
+            .as_ref()
+            .map(|c| c.len())
+            .unwrap_or_else(|| omml::count(&doc.root));
+        math_count += n_math;
         let media_lists = if want_media {
             Some(media::collect(&pkg, &s.part, &doc.root, &host)?)
         } else {
@@ -197,6 +210,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         obj.insert("transition".into(), transition::inspect(&doc.root));
         obj.insert("hasNotes".into(), json!(has));
         obj.insert("pictureCount".into(), json!(pics.len()));
+        obj.insert("mathCount".into(), json!(n_math));
         obj.insert("videoCount".into(), json!(n_videos));
         obj.insert("audioCount".into(), json!(n_audios));
         obj.insert("chartCount".into(), json!(n_charts));
@@ -215,6 +229,9 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
                 "pictures".into(),
                 Value::Array(picture::pictures_json(&pics)),
             );
+        }
+        if let Some(items) = maths_list {
+            obj.insert("maths".into(), Value::Array(omml::list_json(&items)));
         }
         if let Some((videos, audios)) = media_lists {
             obj.insert("videos".into(), Value::Array(media::list_json(&videos)));
@@ -253,6 +270,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
                     want_smartarts,
                     want_tables,
                     want_model3ds,
+                    want_maths,
                 )?,
             );
         }
@@ -299,6 +317,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     root.insert("id".into(), json!("pptx:presentation"));
     root.insert("slideCount".into(), json!(slide_count));
     root.insert("pictureCount".into(), json!(picture_count));
+    root.insert("mathCount".into(), json!(math_count));
     root.insert("videoCount".into(), json!(video_count));
     root.insert("audioCount".into(), json!(audio_count));
     root.insert("chartCount".into(), json!(chart_count));

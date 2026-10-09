@@ -510,6 +510,20 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::SlideModel3dContainer => {
                 "Slide id must include /model3d:… (that id alone is not a 3D model)".into()
             }
+            IdReason::InsertMathNeedsSheet => "xlsx insertMath id must be sheet:name".into(),
+            IdReason::SheetMathPrefix => "xlsx math drawing id must be sheet:name/math:…".into(),
+            IdReason::SheetMathContainer => {
+                "Sheet id must include /math:… (that id alone is not a math drawing)".into()
+            }
+            IdReason::InsertMathNeedsSlide => {
+                "pptx insertMath id must be slide:N or slide:N/notes".into()
+            }
+            IdReason::SlideMathPrefix => {
+                "pptx math drawing id must be slide:N/math:… or slide:N/notes/math:…".into()
+            }
+            IdReason::SlideMathContainer => {
+                "Slide id must include /math:… (that id alone is not a math drawing)".into()
+            }
             IdReason::InsertSlicerNeedsSheet => "xlsx insertSlicer id must be sheet:name".into(),
             IdReason::SheetSlicerPrefix => "xlsx slicer id must be sheet:name/slicer:…".into(),
             IdReason::SheetSlicerContainer => {
@@ -981,6 +995,11 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::OleNotFound { id } => format!("Embedded object not found: {id}"),
         ErrorKind::InkNotFound { id } => format!("Ink canvas not found: {id}"),
         ErrorKind::Model3dNotFound { id } => format!("3D model not found: {id}"),
+        ErrorKind::MathDrawingNotFound { id } => format!("math drawing not found: {id}"),
+        ErrorKind::MathDrawingNoExpr => {
+            "xlsx / pptx math drawings only accept non-empty text; do not give expr or kind"
+                .into()
+        }
         ErrorKind::SlicerNotFound { id } => format!("Slicer not found: {id}"),
         ErrorKind::SlicerFieldNotFound { name } => {
             format!("Slicer field does not match the source: {name}")
@@ -1064,6 +1083,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::InsertModel3dWorksheetOnly => {
             "insertModel3d only applies to worksheets".into()
         }
+        ErrorKind::InsertMathWorksheetOnly => "insertMath only applies to worksheets".into(),
         ErrorKind::InsertSmartArtWorksheetOnly => {
             "insertSmartArt and SmartArt ops only apply to worksheets".into()
         }

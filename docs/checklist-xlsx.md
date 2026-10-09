@@ -8,7 +8,7 @@
 
 Microsoft Excel 16.0 已打开，用户确认通过。本机若装了 WPS，`Excel.Application` 会被抢走，测试仍直接启动 `EXCEL.EXE` 再挂 COM。
 
-C、I、A、O、Xp、Xvg、Xem、X3d、Xc、Xh 这几组现在由 `manual-check/office/cases/xlsx-*.ps1` 自动判定，
+C、I、A、O、Xp、Xvg、Xem、X3d、Xom、Xc、Xh 这几组现在由 `manual-check/office/cases/xlsx-*.ps1` 自动判定，
 跑 `pwsh -File manual-check\office\run.ps1 -Case 'xlsx-*'` 即可复现，逐条结果落在 `manual-check/office/out/office-results.csv`。
 2026-09-27 补跑 `xlsx-pictures.ps1`，Xp1–Xp7 通过。同日补跑 `xlsx-charts.ps1`，Xc1–Xc7 通过。
 同日补跑 `xlsx-create-pictures.ps1`，C8–C10 通过。同日补跑 `xlsx-create-charts.ps1`，C11–C13 通过。
@@ -29,6 +29,7 @@ C、I、A、O、Xp、Xvg、Xem、X3d、Xc、Xh 这几组现在由 `manual-check/
 2026-10-09 补跑 `xlsx-svg.ps1`，Xvg1–Xvg6 通过。Excel COM `Type=28`，96×48 对应 914400×457200 EMU。
 同日补跑 `xlsx-emf.ps1`，Xem1–Xem6 通过。Excel COM `Type=13`，无 Repair。
 同日补跑 `xlsx-model3d.ps1`，X3d1–X3d6 通过。Excel COM `Type=30`，无 Repair。
+同日补跑 `xlsx-omml.ps1`，Xom1–Xom6 通过。无 Repair。
 
 - **C1** ✅
   - Excel 16.0 打开 `manual-check/office/out/xlsx-create.xlsx`，标题栏无 Repair
@@ -76,6 +77,13 @@ C、I、A、O、Xp、Xvg、Xem、X3d、Xc、Xh 这几组现在由 `manual-check/
   - `replaceModel3d` 后 id 不变
   - `deleteModel3d` 后包内没有 `.glb`
   - 非 GLB `file` 得 `InvalidField`
+- **Xom1–Xom6** ✅
+  - Excel 16.0：`xlsx-omml.ps1`，6 PASS / 0 FAIL
+  - `insertMath` 后树上 `text` 为 `E=mc^2`，不进 `textBoxes`，XML 含 `a14:m`，无 Repair
+  - `setMath` 后 id 不变、`text` 换成新字
+  - create `sheets[].maths` 同样写出
+  - `deleteMath` 后 `mathCount` 为 0
+  - 出现 `expr` / 空 `text` 得 `InvalidField`
 - **Xc1–Xc7** ✅
   - Excel 16.0：无 `charts` 时 `chartCount=1`、没有名单
   - 名单 id 为 `sheet:Sheet1/chart:2`，系列 10/20/30 与单元格一致
@@ -571,6 +579,33 @@ COM 认 `Type=30`（`mso3DModel`）。页眉槽本期不插。
 - **X3d6**
   - 检查：拒错
   - 通过标准：`file` 不是 GLB 得 `InvalidField`，未写文件
+  - 不强制开 Excel
+
+## 工作表公式框
+
+工作表 drawing 里的 `a14:m` AlternateContent。不是单元格 `f`。不进 `textBoxes`。不算公式排版引擎。
+手测脚本 `manual-check/office/cases/xlsx-omml.ps1`。编号用 Xom。
+页眉槽本期不插。
+
+- **Xom1**
+  - 检查：插入
+  - 通过标准：`insertMath` 写入 `E=mc^2` 后，树上 `text` 对得上，不进 `textBoxes`，Excel 无修复
+  - 包内 XML 含 `a14:m` 与 `Requires="a14"`
+- **Xom2**
+  - 检查：改字
+  - 通过标准：`setMath` 换成 `a^2+b^2=c^2` 后 id 不变，`text` 为新字，Excel 无修复
+- **Xom3**
+  - 检查：create
+  - 通过标准：`sheets[].maths[].text` 写入后树上 `text` 对得上，不进 `textBoxes`，Excel 无修复
+- **Xom4**
+  - 检查：删除
+  - 通过标准：`deleteMath` 后 `mathCount` 为 0，Excel 无修复
+- **Xom5**
+  - 检查：备注无关
+  - 通过标准：插入后 `textBoxCount` 仍为 0，公式框不进 `textBoxes`
+- **Xom6**
+  - 检查：拒错
+  - 通过标准：出现 `expr` 或空 `text` 得 `InvalidField`，未写文件
   - 不强制开 Excel
 
 ## 工作表图表

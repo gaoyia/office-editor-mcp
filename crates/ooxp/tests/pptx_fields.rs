@@ -141,6 +141,7 @@ fn bare_inspect_has_zero_field_count() {
             "id",
             "slideCount",
             "pictureCount",
+            "mathCount",
             "videoCount",
             "audioCount",
             "chartCount",

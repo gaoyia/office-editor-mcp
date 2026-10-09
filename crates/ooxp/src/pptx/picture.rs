@@ -482,15 +482,19 @@ fn remove_pic_in(el: &mut Element, idx: &mut usize, key: &PicKey) -> bool {
 
 pub(crate) fn next_cnv_id(root: &Element) -> u32 {
     let mut max = 1u32;
-    shape::walk_choice(root, &mut |e| {
-        if e.local_name() != "cNvPr" {
-            return;
-        }
-        if let Some(n) = e.attr("id").and_then(|s| s.parse::<u32>().ok()) {
-            max = max.max(n);
-        }
-    });
+    walk_all_cnv(root, &mut max);
     max.saturating_add(1).max(2)
+}
+
+fn walk_all_cnv(el: &Element, max: &mut u32) {
+    if el.local_name() == "cNvPr" {
+        if let Some(n) = el.attr("id").and_then(|s| s.parse::<u32>().ok()) {
+            *max = (*max).max(n);
+        }
+    }
+    for c in el.element_children() {
+        walk_all_cnv(c, max);
+    }
 }
 
 fn slide_size(pres_root: &Element) -> (i64, i64) {
@@ -596,6 +600,14 @@ pub fn export_media(bytes: &[u8], id: &str) -> Result<ExportedMedia, Error> {
     }
     if super::model3d::looks_like_id(id) {
         return super::model3d::export(bytes, id);
+    }
+    if super::omml::looks_like_id(id) {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::SlideMathPrefix,
+            },
+            "id",
+        ));
     }
     if super::media::is_media_id(id) {
         return super::media::export(bytes, id);

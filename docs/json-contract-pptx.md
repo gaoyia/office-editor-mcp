@@ -140,6 +140,15 @@
 - **备注 3D 模型**
   - id：`slide:{n}/notes/model3d:{cNvPrId}`
   - 例子：`slide:1/notes/model3d:2`
+- **公式框**
+  - id：`slide:{n}/math:{cNvPrId}`
+  - 例子：`slide:1/math:4`
+- **无 `cNvPr/@id` 的公式框**
+  - id：`slide:{n}/math:index:{k}`
+  - 例子：`slide:1/math:index:1`
+- **备注公式框**
+  - id：`slide:{n}/notes/math:{cNvPrId}`
+  - 例子：`slide:1/notes/math:2`
 - **Zoom**
   - id：`slide:{n}/zoom:{cNvPrId}`
   - 例子：`slide:1/zoom:3`
@@ -287,6 +296,17 @@ docx 上仍是段落 id / Word OLE id，见 [json-contract-docx.md](json-contrac
 只认 GLB。不是 GLB 报 `InvalidImageFile`（对外 `InvalidField`）。`contentType` 恒为 `model/gltf.binary`。
 xlsx 见 [xlsx 分册](json-contract-xlsx.md#insertmodel3d)。docx 见 [json-contract-docx.md](json-contract-docx.md#insertmodel3d)。
 
+公式框 id 的 `{cNvPrId}` 取 Choice 里 `p:sp` 的 `p:nvSpPr/p:cNvPr/@id` 原文。
+没有则用 `slide:{n}/math:index:{k}`，`stable` 为 `false`。
+`{k}` 只在该页全部被收入的公式框内从 1 计，与 `shape:index` / `pic:index` 分家。
+只认 `mc:AlternateContent` 且 Choice `Requires` 含 `a14`，子孙有 `a14:m` 或 `m:oMath`。整段只进 `maths`。
+Choice 与 Fallback 都不进 `shapes`，也不计入 `shapeCount`。组合里符合条件的公式框要展开，组合本身不进树。
+备注页上同样判定，id 带 `slide:{n}/notes/` 前缀。批注、母版、版式本期不进树。
+`insertMath` 的 `id` 必须是 `slide:{n}` 或 `slide:{n}/notes`。`setMath` / `deleteMath` 的 `id` 必须是公式框 id。
+对形状 id、图 id、`pptx:presentation` 发公式 op 报 `InvalidId`。出现 `expr` / `kind` 报 `InvalidField`。
+不把 OMML 原文、不把 `expr` 放进树。create 可用 `slides[].maths`。create 本期不在 `slides[].notes` 上写公式。
+xlsx 见 [xlsx 分册](json-contract-xlsx.md#insertmath)。docx 见 [json-contract-docx.md](json-contract-docx.md#insertmath)。
+
 Zoom id 的 `{cNvPrId}` 取 Choice 里 `p:graphicFrame` 的 `p:nvGraphicFramePr/p:cNvPr/@id` 原文。
 没有则取 Fallback `p:pic` 的 `cNvPr/@id`。再没有则用 `slide:{n}/zoom:index:{k}`，`stable` 为 `false`。
 `{k}` 只在该页全部被收入的 Zoom 内从 1 计，与 `pic:index` / `ole:index` / `table:index` / `chart:index` / `shape:index` 分家。
@@ -343,6 +363,7 @@ pptx 批注走 `slide:{n}/comment:{guid}`，不走 `comment:{w:id}`。
 - 不收 `p:pic`、`p:cxnSp`、`p:graphicFrame`（表格、图表、SmartArt 等）、`p:contentPart`。组合本身不进树，只展开里面符合条件的 `p:sp`。
   连接线另走 `connectors`，id 前缀是 `cxn:`，不要编进 `shapes`。
 - 遇到 `mc:AlternateContent` 只走第一个 `mc:Choice`；没有 `mc:Choice` 才走 `mc:Fallback`。两支都走会把同一份内容读出两遍，也会让 apply 只改到其中一支。这条对 `shapes`、`text` 和 apply 一律适用。
+  若 Choice `Requires` 含 `a14` 且子孙有 `a14:m` 或 `m:oMath`，整段不进 `shapes`，只进 `maths`。
 
 
 ## inspect
@@ -370,6 +391,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   - 省略或空对象：返回下列计数、结构和页名单
     - `slideCount`
     - `pictureCount`
+    - `mathCount`
     - `videoCount`
     - `audioCount`
     - `chartCount`
@@ -392,7 +414,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
     - `modifyProtection`
   - 各页有这些计数、`layoutId`、`hasNotes` 和 `transition`
   - 没有 `shapes`
-  - 也没有 `pictures` / `videos` / `audios` / `charts` / `smartArts` / `tables` / `oleObjects` / `model3ds` / `zooms` / `connectors` / `timing` 名单
+  - 也没有 `pictures` / `maths` / `videos` / `audios` / `charts` / `smartArts` / `tables` / `oleObjects` / `model3ds` / `zooms` / `connectors` / `timing` 名单
   - 也没有 `notes` 对象
   - 也没有 `comments` 名单
   - 也没有 `hyperlinks` 名单
@@ -413,6 +435,15 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   - 省略或 `false` 则只有计数，没有名单
   - 不读媒体字节
   - 不依赖 `scope.slide`
+- **`scope.maths`**（否）
+  - 为 `true` 时给每页填 `maths`
+  - 若同时 `notes: true` 且该页有备注对象，备注上也填 `maths`
+  - 省略或 `false` 则只有 `mathCount`，没有名单
+  - 不依赖 `scope.slide`
+  - 不把 OMML 原文、不把 `expr` 放进树
+  - 备注里的公式框不进幻灯片 `maths`，只在 `scope.notes` 时出现在 `notes` 上
+  - 不是单元格 `f`
+  - docx 的 `scope.maths` 见 [docx 分册](json-contract-docx.md#inspect)
 - **`scope.media`**（否）
   - 为 `true` 时给每页填 `videos` 与 `audios`
   - 省略或 `false` 则只有 `videoCount` / `audioCount`，没有名单
@@ -543,6 +574,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   "id": "pptx:presentation",
   "slideCount": 2,
   "pictureCount": 0,
+  "mathCount": 0,
   "videoCount": 0,
   "audioCount": 0,
   "chartCount": 0,
@@ -599,6 +631,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
       "transition": null,
       "hasNotes": false,
       "pictureCount": 0,
+      "mathCount": 0,
       "videoCount": 0,
       "audioCount": 0,
       "chartCount": 0,
@@ -649,6 +682,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
       "transition": null,
       "hasNotes": false,
       "pictureCount": 0,
+      "mathCount": 0,
       "videoCount": 0,
       "audioCount": 0,
       "chartCount": 0,
@@ -682,6 +716,8 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   `scope.customShows` 为 `true` 时再展开根上 `customShows`。备注里的表本期不进树。母版、版式上的图表、SmartArt 与表本期不进树。
 - `slideCount` 是 `p:sldIdLst` 里 `p:sldId` 的个数，始终出现。
 - `pictureCount` 在演示文稿根上始终出现，等于各页幻灯片被收入的图之和，不含备注图，也不含视频 / 音频 `p:pic`。每页始终有自己的 `pictureCount`，同样只计该页幻灯片。
+- `mathCount` 在演示文稿根上始终出现，等于各页幻灯片被收入的公式框之和，不含备注。每页始终有自己的 `mathCount`。没有则为 `0`。
+  根上不挂 `maths`，除非给了 `scope.maths`。不把 OMML 原文或 `expr` 放进树。
 - `videoCount` 在演示文稿根上始终出现，等于各页幻灯片被收入的视频之和。每页始终有自己的 `videoCount`。没有则为 `0`。根上不挂 `videos`，除非给了 `scope.media`。
 - `audioCount` 在演示文稿根上始终出现，等于各页幻灯片被收入的音频之和。每页始终有自己的 `audioCount`。没有则为 `0`。根上不挂 `audios`，除非给了 `scope.media`。
 - `chartCount` 在演示文稿根上始终出现，等于各页幻灯片被收入的图表之和，不含备注图表。每页始终有自己的 `chartCount`，同样只计该页幻灯片。
@@ -720,7 +756,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   `advTm`：有属性且能解析成正整数则取其毫秒，否则为 `null`。`dir` 取效果子元素的 `dir` 原文；没有该属性则不出现该字段。
   `invX` / `invY` 只在对应属性为 `1` / `true` 时出现且值为 `true`。
 - 省略 `scope` 或只给空对象时，没有 `shapes`、`truncated`，
-  也没有 `pictures` / `videos` / `audios` / `charts` / `smartArts` / `tables` / `oleObjects` / `model3ds` / `zooms` / `connectors` / `timing` 名单，
+  也没有 `pictures` / `maths` / `videos` / `audios` / `charts` / `smartArts` / `tables` / `oleObjects` / `model3ds` / `zooms` / `connectors` / `timing` 名单，
   也没有 `notes`，也没有 `comments`，也没有 `hyperlinks`，也没有根上 `masters`，也没有根上 `handout`，也没有根上 `sections`。
 - 给了 `scope.slide` 时
 - 只给那一页填 `shapes`。该页带 `p:txBody` 的 `p:sp` 超过 `maxShapes` 则 `truncated` 为 `true`
@@ -735,6 +771,12 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   `cNvPrId` 是 `p:cNvPr/@id` 原文，没有则为 `null`。
   `name` 取 `p:cNvPr/@name`，没有则为 `""`。`x` / `y` 取 `p:spPr/a:xfrm/a:off` 的 EMU；`cx` / `cy` 取 `a:ext`。缺对应属性则为 `null`。不读媒体字节。
   幻灯片图 id 为 `slide:{n}/pic:…`。
+- `scope.maths` 为 `true` 时，每页带 `maths`。没有公式框时为空数组。不依赖 `scope.slide`。
+  每条字段顺序：`id`、`cNvPrId`、`name`、`x`、`y`、`cx`、`cy`、`text`、`stable`。`id` 为 `slide:{n}/math:…`。
+  `cNvPrId` 是 Choice 里 `p:cNvPr/@id` 原文，没有则为 `null`。`name` 取 `cNvPr/@name`，没有则为 `""`。
+  `x` / `y` / `cx` / `cy` 取 Choice 里该 `p:sp` 的 `a:xfrm`。缺对应属性则为 `null`。
+  `text` 为该 `oMath` 内 `m:t` 拼接；忽略 `a:fld` 外壳。不把 OMML 原文、不把 `expr` 放进树。
+  Fallback 文本框不进 `shapes`。xlsx / docx 见各自分册。
 - `scope.media` 为 `true` 时，每页带 `videos` 与 `audios`（先 `videos` 后 `audios`）。没有则为空数组。不依赖 `scope.slide`。
   每条字段顺序：`id`、`cNvPrId`、`name`、`x`、`y`、`cx`、`cy`、`embedded`、`fileName`、`contentType`、`stable`。
   `cNvPrId` / `name` / `x` / `y` / `cx` / `cy` / `stable` 规则与图相同。
@@ -848,11 +890,11 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   `type` 取 `p:ph/@type`，缺则为 `null`。`idx` 取 `p:ph/@idx` 原文，缺则为 `null`。几何与 `text` 规则与幻灯片形状相同；没有 `txBody` 则 `text` 为 `""`。
   xlsx / docx 的 `scope` 里出现 `masters` 报 `InvalidField`。
 - `scope.notes` 为 `true` 时，每页带 `notes`。没有 notesSlide 关系则为 `null`。
-  有则为对象，字段顺序：`id`、`pictureCount`、`chartCount`、`smartArtCount`、`tableCount`、`model3dCount`，有图名单时再跟 `pictures`，有图表名单时再跟 `charts`，
+  有则为对象，字段顺序：`id`、`pictureCount`、`mathCount`、`chartCount`、`smartArtCount`、`tableCount`、`model3dCount`，有图名单时再跟 `pictures`，有公式框名单时再跟 `maths`，有图表名单时再跟 `charts`，
   有 SmartArt 名单时再跟 `smartArts`，有表名单时再跟 `tables`，有 3D 模型名单时再跟 `model3ds`，然后 `shapes`。
   `id` 为 `slide:{n}/notes`。`pictureCount` 只计该备注页上被收入的 `p:pic`，不并进幻灯片 `pictures`。
   备注图字段顺序与幻灯片图相同，含末尾 `contentType`。
-  `chartCount` / `smartArtCount` / `tableCount` / `model3dCount` 只计该备注页，不并进幻灯片计数。
+  `mathCount` / `chartCount` / `smartArtCount` / `tableCount` / `model3dCount` 只计该备注页，不并进幻灯片计数。
   备注形状判定与幻灯片形状相同（带 `p:txBody` 的 `p:sp`），id 为 `slide:{n}/notes/shape:…`。
   字段顺序与幻灯片形状相同：`id`、`shapeId`、`name`、`prst`、`x`、`y`、`cx`、`cy`、`text`、`stable`。备注形状一次倒出，不用 `maxShapes`。
 - `scope.comments` 为 `true` 时，每页带 `comments`。没有现代批注时为空数组。不依赖 `scope.slide`。按该页 `p188:cmLst` 里 `p188:cm` 的文档顺序。
@@ -877,12 +919,12 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   每条字段顺序：`id`、`type`、`host`、`text`。`type` 取 `@type` 原文，缺则为 `""`。inspect 不白名单；Office 自造类型原样回。`host` 是所在形状 id。
   `text` 是该域 `a:t` 缓存，不求值。xlsx 的 `scope` 里出现 `fields` 报 `InvalidField`。
   docx 见 [json-contract-docx.md](json-contract-docx.md#inspect)。
-- 页对象字段顺序：`id`、`index`、`name`、`layoutId`、`hidden`、`transition`、`hasNotes`、`pictureCount`、`videoCount`、`audioCount`、
+- 页对象字段顺序：`id`、`index`、`name`、`layoutId`、`hidden`、`transition`、`hasNotes`、`pictureCount`、`mathCount`、`videoCount`、`audioCount`、
   `chartCount`、`smartArtCount`、`commentCount`、`hyperlinkCount`、`fieldCount`、`tableCount`、`oleObjectCount`、`model3dCount`、`zoomCount`、
   `connectorCount`、`animCount`，
-  然后按需 `pictures`，再按需 `videos`，再按需 `audios`，再按需 `charts`，再按需 `smartArts`，再按需 `tables`，再按需 `oleObjects`，再按需 `model3ds`，再按需 `zooms`，
+  然后按需 `pictures`，再按需 `maths`，再按需 `videos`，再按需 `audios`，再按需 `charts`，再按需 `smartArts`，再按需 `tables`，再按需 `oleObjects`，再按需 `model3ds`，再按需 `zooms`，
   再按需 `connectors`，再按需 `notes`，再按需 `comments`，再按需 `hyperlinks`，再按需 `fields`，再按需 `timing`，再按需 `truncated` 与 `shapes`。
-  根对象字段顺序：`schemaVersion`、`format`、`id`、`slideCount`、`pictureCount`、`videoCount`、`audioCount`、`chartCount`、
+  根对象字段顺序：`schemaVersion`、`format`、`id`、`slideCount`、`pictureCount`、`mathCount`、`videoCount`、`audioCount`、`chartCount`、
   `smartArtCount`、`commentCount`、`hyperlinkCount`、`fieldCount`、`tableCount`、`oleObjectCount`、`model3dCount`、`zoomCount`、`connectorCount`、
   `animCount`、`masterCount`、`hasHandout`、`sectionCount`、`slideSize`、`customShowCount`、`showPr`、`modifyProtection`、`props`，
   有 `scope.masters` 时再跟 `masters`，有 `scope.handout` 时再跟 `handout`，有 `scope.sections` 时再跟 `sections`，
@@ -954,6 +996,12 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   - 可选
   - 该页上的图列表
   - 省略或空数组则不写 `p:pic`
+- **`slides[].maths`**
+  - 可选
+  - 该页上的 drawing 公式框
+  - 省略或空数组则不写
+  - 每项必须有 `text`，可选 `x` / `y` / `cx` / `cy`，规则与 `insertMath` 相同
+  - 不要写进 `shapes[]`
 - **`slides[].videos`**
   - 可选
   - 该页上的内嵌视频
@@ -1112,7 +1160,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   - 必须严格递增
   - 超出页数报 `InvalidField`
 
-带图示例见 `docs/examples/pptx-create-pictures.json`。带 SVG 图见 `docs/examples/pptx-create-svg.json`。带 3D 模型见 `docs/examples/pptx-create-model3d.json`。带图表示例见 `docs/examples/pptx-create-charts.json`。
+带图示例见 `docs/examples/pptx-create-pictures.json`。带 SVG 图见 `docs/examples/pptx-create-svg.json`。带 3D 模型见 `docs/examples/pptx-create-model3d.json`。带公式框见 `docs/examples/pptx-create-math-drawing.json`。带图表示例见 `docs/examples/pptx-create-charts.json`。
 带 SmartArt 示例见 `docs/examples/pptx-create-smartart.json`。带表示例见 `docs/examples/pptx-create-tables.json`。
 带备注与批注示例见 `docs/examples/pptx-create-notes-comments.json`。节、链、媒体、切换与动画合在一起的示例见 `docs/examples/pptx-create-remain.json`。
 `kind` / `wrap` / `from` / `to` / `anchor` / `dataFrom` 以及 xlsx 偏移字段出现报 `InvalidField`。
@@ -1129,6 +1177,7 @@ create 写出 Transitional 最小包，见 [opc.md](opc.md)。
 必须带 theme、slideMaster、slideLayout、presentation、各页 slide、presProps，不能只写 ECMA 示例里那个仅含 `notesSz` 的 presentation。
 幻灯片尺寸用 16:9（`sldSz` 为 `cx="12192000"` `cy="6858000"`）。不要生成讲义。不要在 `slides[]` 上写整棵 `timing` 树。
 给了 `slides[].pictures` 时按 `insertPicture` 同一套规则写 `/ppt/media/…`、该页 `.rels` 与 `p:pic`。
+给了 `slides[].maths` 时按 `insertMath` 同一套规则写 `a14:m` AlternateContent。不写进 `shapes[]`。
 给了 `slides[].videos` 时按 `insertVideo` 同一套规则写媒体与视频 `p:pic`。给了 `slides[].audios` 时按 `insertAudio` 同一套规则写媒体与音频 `p:pic`。
 给了 `slides[].charts` 时按 `insertChart` 同一套规则写 `/ppt/charts/…`、embedding 与图表 `p:graphicFrame`。
 给了 `slides[].smartArts` 时按 `insertSmartArt` 同一套规则写 `/ppt/diagrams/…` 与图示 `p:graphicFrame`。
@@ -1139,7 +1188,7 @@ create 写出 Transitional 最小包，见 [opc.md](opc.md)。
 给了形状上的 `url` / `file` / `slide` 时按 `insertHyperlink` 同一套规则写 `a:hlinkClick`。create 本期不写 run 级链，也不写批注内图。
 给了 `slides[].transition` 时按 `setTransition` 同一套规则写 `<p:transition>`。给了 `slides[].anims` 时按 `insertAnim` 同一套规则写预设进入淡入。
 给了 `presentation.sections` 时按 `insertSlideSection` 同一套规则写 `p14:sectionLst`：先写第一项（`start` 为 1 则包住全部页；大于 1 则前面的页进空名节），再按数组顺序用 `start` 拆后续节。
-先写该页 `shapes`，再按数组顺序写 `pictures`，再写 `model3ds`，再写 `videos`，再写 `audios`，再写 `charts`，再写 `smartArts`，再写 `tables`，再写 `notes`，
+先写该页 `shapes`，再按数组顺序写 `pictures`，再写 `maths`，再写 `model3ds`，再写 `videos`，再写 `audios`，再写 `charts`，再写 `smartArts`，再写 `tables`，再写 `notes`，
 再按数组顺序写 `comments`，再写形状超链接，再写 `transition`，再按数组顺序写 `anims`。
 全部页写完后再写 `sections`。`p:cNvPr/@id` 取该页已有全部 `cNvPr` 的最大整数加 1，至少为 2。
 `presentation` 根上出现 `pictures` / `charts` / `smartArts` / `tables` / `notes` / `comments` / `videos` / `audios`
@@ -2226,6 +2275,62 @@ id 不是 3D 模型 id 报 `InvalidId`。xlsx / docx 见各自分册。
 
 找不到报 `IdNotFound`。id 不是 3D 模型 id 报 `InvalidId`。摘整棵 AlternateContent。
 清掉无人引用的关系与 GLB / 海报。xlsx / docx 见各自分册。
+
+### insertMath
+
+把一条线性公式写入目标幻灯片或备注页。不进 `shapes`。不实现排版引擎。不写 `<p:timing>`。
+
+```json
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "C:\\data\\deck.pptx",
+  "ops": [
+    {
+      "op": "insertMath",
+      "id": "slide:1",
+      "text": "E=mc^2"
+    }
+  ]
+}
+```
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"insertMath"` |
+| `id` | 必须是 `slide:{n}` 或 `slide:{n}/notes` |
+| `text` | 必须。非空。写入一条 `m:r` / `m:t` |
+| `x` / `y` | 可选。画布 EMU。省略为 `0` |
+| `cx` / `cy` | 成对可选。EMU。都省则 `914400` × `914400` |
+
+`id` 不是页 id 或备注容器 id 报 `InvalidId`。找不到该页报 `IdNotFound`。
+`cx` / `cy` 只给一个报 `InvalidField`。空 `text` 报 `InvalidField`。出现 `expr` / `kind` 报 `InvalidField`。
+出现 `tex` / `unicodemath` / `omml` 报未知字段。批注内本期不插。create 本期不在 `slides[].notes` 上写公式。
+
+AlternateContent 放进 `p:spTree`。Choice 里是 `p:sp`（`txBox="1"`），`p:txBody/a:p` 里是 `a14:m` 包 `m:oMathPara` / `m:oMath`。
+不要写 `mathplaceholder` 域。Fallback 是同一套纯文本框，字为该 `text`。不栅格化，不写 `a:blipFill`。
+xlsx / docx 见各自分册。
+
+### setMath
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"setMath"` |
+| `id` | 必须是公式框 id |
+| `text` | 必须。非空。用一条 `m:r` / `m:t` 替换该 `oMath` 子节点 |
+
+不改位置尺寸。出现 `expr` / `kind` 报 `InvalidField`。空 `text` 报 `InvalidField`。
+找不到报 `IdNotFound`。id 不是公式框 id 报 `InvalidId`。xlsx / docx 见各自分册。
+
+### deleteMath
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"deleteMath"` |
+| `id` | 必须是公式框 id |
+
+找不到报 `IdNotFound`。id 不是公式框 id 报 `InvalidId`。摘整棵 AlternateContent。
+海报无人引用则删。xlsx / docx 见各自分册。
 
 ### insertField
 

@@ -1291,7 +1291,8 @@ xlsx / pptx 的 `scope.tables` 不是同一件事：xlsx 仍拒绝；pptx 展开
 - `scope.maths` 为 `true` 时，根上带 `maths`（正文），每个页眉、页脚容器带 `maths`。没有公式时为空数组。按该故事里顶层 `m:oMath` 的文档顺序。
   每条字段顺序：`id`、`index`、`kind`、`host`、`text`、`expr`。`id` 是 `math:{n}` 或 `{容器}/math:{n}`。`kind` 为 `inline` 或 `display`。
   `host` 是所在段落 id；不在任何 `w:p` 里则为 `null`。`text` 为该 `oMath` 子孙里所有 `t`（即 `m:t`）按文档顺序拼接，不做 UnicodeMath 全量互转。
-  `expr` 是 `oMath` 直接子节点的数组，节点 `type` 见下文「公式 expr」。xlsx / pptx 的 `scope` 里出现 `maths` 报 `InvalidField`。
+  `expr` 是 `oMath` 直接子节点的数组，节点 `type` 见下文「公式 expr」。
+  xlsx / pptx 的 drawing 公式框见 [xlsx 分册](json-contract-xlsx.md#inspect) 与 [pptx 分册](json-contract-pptx.md#inspect)。
 - `scope.contentControls` 为 `true` 时，根上带 `contentControls`（正文），每个页眉、页脚容器带 `contentControls`。没有控件时为空数组。
   按该故事里被收入的 `w:sdt` 的文档顺序。每条字段顺序：`id`、`index`、`kind`、`level`、`host`、`tag`、`alias`、`xmlId`、`bound`、`parent`、`text`；
   `kind` 为 `dropDown` 或 `comboBox` 时再跟 `items`；`kind` 为 `date` 时再跟 `fullDate`；`kind` 为 `checkbox` 时再跟 `checked`。
@@ -3128,7 +3129,7 @@ id 不是 `docx:document` 报 `InvalidId`。xlsx / pptx 上发此 op 报 `Invali
 给了 `text` 时不解析成分数、根号。给了 `expr` 时按树写最小 OMML，不写 `m:rPr` / `ctrlPr`。
 框内、注内、批注内的段落，以及公式 id、容器 id、表 id、run id、`section:{n}`，一律报 `InvalidId`。找不到段落报 `IdNotFound`。
 空 `text`、空 `expr`、同时给两者、两个都不给、或不认识的 `kind` / `type`，报 `InvalidField`。出现 `tex` / `unicodemath` / `omml` 报未知字段。
-xlsx / pptx 上发此 op 报 `InvalidField`。create 给了 `paragraphs[].maths` 时按同一套规则写入。
+xlsx / pptx 的 drawing 公式框见 [xlsx 分册](json-contract-xlsx.md#insertmath) 与 [pptx 分册](json-contract-pptx.md#insertmath)。create 给了 `paragraphs[].maths` 时按同一套规则写入。
 
 ### 公式 expr
 
@@ -3161,7 +3162,7 @@ xlsx / pptx 上发此 op 报 `InvalidField`。create 给了 `paragraphs[].maths`
 | `expr` | 与 `text` 恰好一个。按树替换 `oMath` 子节点，不摊平 |
 
 不改 `kind`，不拆 `oMathPara` 外壳。空 `text` / 空 `expr` / 同时给 / 两个都不给报 `InvalidField`。找不到报 `IdNotFound`。
-id 不是公式 id 报 `InvalidId`。xlsx / pptx 上发此 op 报 `InvalidField`。
+id 不是公式 id 报 `InvalidId`。xlsx / pptx 的 drawing 公式框见各自分册。
 
 ### deleteMath
 
@@ -3172,7 +3173,7 @@ id 不是公式 id 报 `InvalidId`。xlsx / pptx 上发此 op 报 `InvalidField`
 
 删掉该 `oMath`；若父 `oMathPara` 里已经没有 `oMath`，连 `oMathPara` 一起删。因此变空且无 `sectPr` 的正文段可删掉。表格单元格内的空段留下。
 删完后若 `w:body` 里没有 `w:p`，在 `sectPr` 之前补一个空段。某段带分节符且不能整段删掉时，报 `NotImplemented`。找不到报 `IdNotFound`。id 不是公式 id 报 `InvalidId`。
-xlsx / pptx 上发此 op 报 `InvalidField`。
+xlsx / pptx 的 drawing 公式框见各自分册。
 
 对含本期收入的 `oMath` 的段落发 `setParaText` 报 `NotImplemented`。
 

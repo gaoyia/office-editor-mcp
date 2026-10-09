@@ -5,7 +5,7 @@
 检查前用 create 或 apply 在本机生成文件，不要用改过扩展名的 zip 目录冒充。
 本机若 `PowerPoint.Application` 被 WPS 抢走，直接启动 `POWERPNT.EXE` 再挂 COM，不要走被抢的 ProgID。Office 16 的对象模型在 `mdiClass` 上。
 
-C、I、A、Pp、Pvg、Pem、P3d、Pc、Psa、Pn、Pcm、Pm、Ps、Sg、Pt、Tn、Tr、Am、Aw、Mm、Mw、Ts、Ho、Phl、Phr、Pcip、Pmd、Psc、Cs、Po、Cr、Pz、Pw、
+C、I、A、Pp、Pvg、Pem、P3d、Pom、Pc、Psa、Pn、Pcm、Pm、Ps、Sg、Pt、Tn、Tr、Am、Aw、Mm、Mw、Ts、Ho、Phl、Phr、Pcip、Pmd、Psc、Cs、Po、Cr、Pz、Pw、
 Pf 各组由 `manual-check/office/cases/pptx-*.ps1` 自动判定，
 跑 `pwsh -File manual-check\office\run.ps1 -Case 'pptx-*'` 即可复现。O1 已放弃，与 xlsx / docx 相同。
 
@@ -30,6 +30,7 @@ Ps1–Ps5、Sg1–Sg5、Pt1–Pt6、Tn1–Tn5、Am1–Am5、Mm1–Mm5、Ho1–Ho
 2026-10-09 补跑 `pptx-svg.ps1`，Pvg1–Pvg6 通过。PowerPoint COM `Type=28`，96×48 对应 914400×457200 EMU。
 同日补跑 `pptx-emf.ps1`，Pem1–Pem6 通过。PowerPoint COM `Type=13`，无 Repair。
 同日补跑 `pptx-model3d.ps1`，P3d1–P3d6 通过。PowerPoint COM `Type=30`，无 Repair。
+同日补跑 `pptx-omml.ps1`，Pom1–Pom6 通过。无 Repair。
 
 - **C1** ✅
   - PowerPoint 16.0 能打开 `manual-check/office/out/pptx-create.pptx`，标题栏无 Repair
@@ -88,6 +89,13 @@ Ps1–Ps5、Sg1–Sg5、Pt1–Pt6、Tn1–Tn5、Am1–Am5、Mm1–Mm5、Ho1–Ho
   - `replaceModel3d` 后 id 不变
   - 备注 `slide:1/notes` 插 3D 后根上 `model3dCount` 仍为 0
   - 非 GLB `file` 得 `InvalidField`
+- **Pom1–Pom6** ✅
+  - PowerPoint 16.0：`pptx-omml.ps1`，6 PASS / 0 FAIL
+  - `insertMath` 后树上 `text` 为 `E=mc^2`，不进 `shapes`，XML 含 `a14:m`，无 Repair
+  - `setMath` 后 id 不变
+  - create `slides[].maths` 同样写出
+  - 备注 `slide:1/notes` 插公式后根上 `mathCount` 仍为 0
+  - 出现 `expr` / 空 `text` 得 `InvalidField`
 - **Pc1–Pc7** ✅
   - PowerPoint 16.0：无 `charts` 时 `chartCount=1`
   - 名单 id 为 `slide:1/chart:4`
@@ -495,6 +503,21 @@ COM 认 `Type=30`（`mso3DModel`）。批注内本期不插。
 | P3d4 | 替换 | `replaceModel3d` 换成另一份 GLB 后 id 不变，导出是新字节，无修复 |
 | P3d5 | 备注 | 往 `slide:1/notes` 插 GLB 后，备注 `model3ds` 末尾 `contentType` 为 `model/gltf.binary`，根上 `model3dCount` 仍为 0，无修复 |
 | P3d6 | 拒错 | `file` 不是 GLB 得 `InvalidField`，未写文件。不强制开 PowerPoint |
+
+## 幻灯片公式框
+
+幻灯片与备注页上的 `a14:m` AlternateContent。不进 `shapes`。不算公式排版引擎。
+手测脚本 `manual-check/office/cases/pptx-omml.ps1`。编号用 Pom。
+批注内本期不插。
+
+| 序号 | 检查 | 通过标准 |
+| --- | --- | --- |
+| Pom1 | 插入 | `insertMath` 写入 `E=mc^2` 后树上 `text` 对得上，不进 `shapes`，无修复。XML 含 `a14:m` |
+| Pom2 | 改字 | `setMath` 换成 `a^2+b^2=c^2` 后 id 不变，`text` 为新字，无修复 |
+| Pom3 | create | `slides[].maths[].text` 写入后树上 `text` 对得上，不进 `shapes`，无修复 |
+| Pom4 | 删除 | `deleteMath` 后 `mathCount` 为 0，无修复 |
+| Pom5 | 备注 | 往 `slide:1/notes` 插公式后，备注 `maths` 末尾 `text` 对得上，根上 `mathCount` 仍为 0，无修复 |
+| Pom6 | 拒错 | 出现 `expr` 或空 `text` 得 `InvalidField`，未写文件。不强制开 PowerPoint |
 
 ## 幻灯片图表
 

@@ -1101,6 +1101,9 @@ where
     F: FnMut(&Element) -> Result<(), Error>,
 {
     if el.local_name() == "AlternateContent" {
+        if crate::drawing_math::is_math_ac(el) {
+            return Ok(());
+        }
         if let Some(c) = first_choice(el) {
             for child in c.element_children() {
                 visit_one(child, f)?;
@@ -1372,6 +1375,9 @@ fn find_object_in<'a>(
     index: &mut usize,
 ) -> Option<&'a mut Element> {
     if el.local_name() == "AlternateContent" {
+        if crate::drawing_math::is_math_ac(el) {
+            return None;
+        }
         let i = el
             .children
             .iter()
@@ -1434,6 +1440,9 @@ fn find_object_immut<'a>(
     index: &mut usize,
 ) -> Option<&'a Element> {
     if el.local_name() == "AlternateContent" {
+        if crate::drawing_math::is_math_ac(el) {
+            return None;
+        }
         if let Some(c) = first_choice(el) {
             return find_object_immut(c, is_obj, key, index);
         }
@@ -1576,6 +1585,9 @@ fn peek_match(
     found: &mut bool,
 ) {
     if el.local_name() == "AlternateContent" {
+        if crate::drawing_math::is_math_ac(el) {
+            return;
+        }
         if let Some(c) = first_choice(el) {
             peek_match(c, is_obj, key, index, found);
         }

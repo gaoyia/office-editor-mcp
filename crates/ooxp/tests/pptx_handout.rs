@@ -118,6 +118,7 @@ fn create_has_no_handout_without_scope() {
             "id",
             "slideCount",
             "pictureCount",
+            "mathCount",
             "videoCount",
             "audioCount",
             "chartCount",

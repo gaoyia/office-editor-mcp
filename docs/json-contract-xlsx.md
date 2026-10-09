@@ -43,6 +43,9 @@
 - **工作表文本框**
   - id：`sheet:{name}/sp:{cNvPrId}` 或 `sheet:{name}/sp:index:{k}`
   - 例子：`sheet:Sheet1/sp:2`
+- **工作表公式框**
+  - id：`sheet:{name}/math:{cNvPrId}` 或 `sheet:{name}/math:index:{k}`
+  - 例子：`sheet:Sheet1/math:2`
 - **工作表形状**
   - id：`sheet:{name}/shape:{cNvPrId}` 或 `sheet:{name}/shape:index:{k}`
   - 例子：`sheet:Sheet1/shape:2`
@@ -155,7 +158,8 @@ Office 2016 以后的 chartex URI（`http://schemas.microsoft.com/office/drawing
 没有该属性时用 `sp:index:{k}`，树上 `"stable": false`。`{k}` 只在该表全部 worksheet drawing 部件内从 1 计，只计入被收入的文本框。
 只认 `xdr:sp` 且 `xdr:cNvSpPr/@txBox` 为 `1` / `true`（Excel 16.0 另存如此）。
 连接线 `xdr:cxnSp`、无 `txBox` 的普通 `xdr:sp`、VML 控件不进 `textBoxes`。组合 `xdr:grpSp` 本身不进树，里面符合条件的文本框要展开；几何仍取外层锚点。页眉页脚里的形状本期不进树。
-`mc:AlternateContent` 只进第一个 `Choice`。可见字在 `xdr:txBody` 的 `a:t`，规则对齐 pptx 形状 `text`（`a:br` 变成 `\n`，不收 `a:fld`）。不要做成 docx 那种框内 `w:p`。
+`mc:AlternateContent` 只进第一个 `Choice`。若 Choice `Requires` 含 `a14` 且子孙有 `a14:m` 或 `m:oMath`，整段不进 `textBoxes`，只进 `maths`。
+可见字在 `xdr:txBody` 的 `a:t`，规则对齐 pptx 形状 `text`（`a:br` 变成 `\n`，不收 `a:fld`）。不要做成 docx 那种框内 `w:p`。
 
 工作表形状挂在该 `worksheet` 上，与文本框分家。`{cNvPrId}` 取该 `xdr:sp` 里 `xdr:cNvPr/@id` 的原文，匹配规则与工作表图相同。
 没有该属性时用 `shape:index:{k}`，树上 `"stable": false`。`{k}` 只在该表全部 worksheet drawing 部件内从 1 计，只计入被收入的形状。
@@ -163,11 +167,23 @@ Office 2016 以后的 chartex URI（`http://schemas.microsoft.com/office/drawing
 `prst` 取 `a:prstGeom/@prst`，没有（含只有 `a:custGeom`）则为 `null`。组合里符合条件的形状要展开；几何仍取外层锚点。
 与该表 `oleObject/@shapeId` 相同的隐藏 `xdr:sp` 不进 `shapes` / `shapeCount`，也不当 `groupShapes` 成员。页眉页脚与 `chartsheet` 上的形状本期不进树。
 VML 不进。`mc:AlternateContent` 只进第一个 `Choice`。
+若 Choice `Requires` 含 `a14` 且子孙有 `a14:m` 或 `m:oMath`，整段不进 `shapes`。
 
 工作表连接线挂在该 `worksheet` 上。`{cNvPrId}` 取该 `xdr:cxnSp` 里 `xdr:nvCxnSpPr/xdr:cNvPr/@id` 的原文，匹配规则与工作表图相同。
 没有该属性时用 `cxn:index:{k}`，树上 `"stable": false`。`{k}` 只在该表全部 worksheet drawing 部件内从 1 计，只计入被收入的 `xdr:cxnSp`。
 只认 `xdr:cxnSp`，不把无 `txBox` 的 `xdr:sp` 算进来。`prst` 取 `a:prstGeom/@prst`，没有则为 `null`。不写 `text`。
 空 `cNvCxnSpPr`（未绑 `stCxn` / `endCxn`）仍列入。组合里符合条件的连接线要展开；几何仍取外层锚点。页眉页脚与 `chartsheet` 上的连接线本期不进树。`mc:AlternateContent` 只进第一个 `Choice`。
+
+工作表公式框挂在该 `worksheet` 上。`{cNvPrId}` 取 Choice 里 `xdr:sp` 的 `xdr:cNvPr/@id` 原文，匹配规则与工作表图相同。
+没有该属性时用 `math:index:{k}`，树上 `"stable": false`。`{k}` 只在该表全部 worksheet drawing 部件内从 1 计，只计入被收入的公式框。
+只认 `mc:AlternateContent` 且 Choice `Requires` 含 `a14`，子孙有 `a14:m` 或 `m:oMath`。整段只进 `maths`。
+Choice 与 Fallback 都不进 `textBoxes` / `shapes`，也不计入 `textBoxCount` / `shapeCount`。
+组合里符合条件的公式框要展开，组合本身不进树。页眉、`chartsheet` 本期不进树。
+不是单元格 `f`。`insertMath` 的 `id` 必须是 `sheet:{name}`。`setMath` / `deleteMath` 的 `id` 必须是公式框 id。
+对单元格 id、图 id、文本框 id、形状 id 或 `xlsx:workbook` 发公式 op 报 `InvalidId`。
+对 `chartsheet` 报 `InvalidField`。对 `dialogsheet` / `macrosheet` 报 `NotImplemented`。
+出现 `expr` / `kind` 报 `InvalidField`。不把 OMML 原文、不把 `expr` 放进树。create 可用 `sheets[].maths`。
+docx 见 [docx 分册](json-contract-docx.md#insertmath)。pptx 见 [pptx 分册](json-contract-pptx.md#insertmath)。
 
 `insertTextBox` 的 `id` 必须是 `sheet:{name}`，且该表 `kind` 为 `worksheet`。
 对文本框 id、形状 id、连接线 id、图 id、图表 id、单元格 id、页眉槽位 id 或 `xlsx:workbook` 发 `insertTextBox` 报 `InvalidId`。
@@ -374,6 +390,15 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
     - `headerFooter`
     - `comments`
   - 不把框内字做成段落树
+- **`scope.maths`**（否）
+  - 为 `true` 时给每张 `worksheet` 填 `maths`
+  - 没有公式框时为空数组
+  - 省略或 `false` 则只有 `mathCount`，没有名单
+  - 不依赖 `sheet` / `range` / 其它名单键
+  - 不把 OMML 原文、不把 `expr` 放进树
+  - 页眉、`chartsheet` 本期不进树
+  - 不是单元格 `f`
+  - docx 的 `scope.maths` 见 [docx 分册](json-contract-docx.md#inspect)
 - **`scope.shapes`**（否）
   - 为 `true` 时给每张 `worksheet` 填 `shapes`
   - 没有形状时为空数组
@@ -469,9 +494,9 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   - docx / pptx 的 `scope` 里出现 `customViews` 报 `InvalidField`
 
 省略 `scope`、或只给空对象：返回工作簿节点和表名单，每张表不含 `cells`，
-也没有 `pictures` / `charts` / `headerFooters` / `textBoxes` / `shapes` / `connectors` / `smartArts` / `comments`
+也没有 `pictures` / `charts` / `headerFooters` / `textBoxes` / `maths` / `shapes` / `connectors` / `smartArts` / `comments`
  / `hyperlinks` / `sparklines` / `oleObjects` / `model3ds` / `slicers`。
-工作簿与每张 `worksheet` 仍有 `pictureCount`、`textBoxCount`、`shapeCount`、`connectorCount`、`smartArtCount`。
+工作簿与每张 `worksheet` 仍有 `pictureCount`、`textBoxCount`、`mathCount`、`shapeCount`、`connectorCount`、`smartArtCount`。
 工作簿、每张 `worksheet` 与每张 `chartsheet` 仍有 `chartCount`。
 工作簿与每张 `worksheet` 仍有 `commentCount`、`hyperlinkCount`、`sparklineCount`、`oleObjectCount`、`model3dCount` 与 `slicerCount`。
 工作簿仍有 `connectionCount`、`externalLinkCount`、`customViewCount`、`definedNameCount` 与 `definedNames`。
@@ -481,7 +506,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
 
 只要想看单元格，就必须同时给 `sheet` 和 `range`。不默认扫第一张表的整张纸。
 `scope.sheet` 点名 `chartsheet` / `dialogsheet` / `macrosheet` 报 `InvalidField`。只要想看工作表图名单，就给 `pictures: true`。
-只要想看图表名单，就给 `charts: true`。只要想看页眉原文，就给 `headerFooter: true`。只要想看文本框名单，就给 `textBoxes: true`。只要想看形状名单，就给 `shapes: true`。
+只要想看图表名单，就给 `charts: true`。只要想看页眉原文，就给 `headerFooter: true`。只要想看文本框名单，就给 `textBoxes: true`。只要想看公式框名单，就给 `maths: true`。只要想看形状名单，就给 `shapes: true`。
 只要想看连接线名单，就给 `connectors: true`。只要想看 SmartArt 名单，就给 `smartArt: true`。只要想看批注名单，就给 `comments: true`。
 只要想看超链接名单，就给 `hyperlinks: true`。只要想看迷你图名单，就给 `sparklines: true`。只要想看嵌入对象名单，就给 `oleObjects: true`。
 只要想看 3D 模型名单，就给 `model3ds: true`。
@@ -499,6 +524,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   "pictureCount": 0,
   "chartCount": 0,
   "textBoxCount": 0,
+  "mathCount": 0,
   "shapeCount": 0,
   "connectorCount": 0,
   "smartArtCount": 0,
@@ -541,6 +567,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
       "pictureCount": 0,
       "chartCount": 0,
       "textBoxCount": 0,
+      "mathCount": 0,
       "shapeCount": 0,
       "connectorCount": 0,
       "smartArtCount": 0,
@@ -654,6 +681,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
       "pictureCount": 0,
       "chartCount": 0,
       "textBoxCount": 0,
+      "mathCount": 0,
       "shapeCount": 0,
       "connectorCount": 0,
       "smartArtCount": 0,
@@ -731,13 +759,13 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
 
 规则：
 
-- 工作簿字段顺序：`id`、`pictureCount`、`chartCount`、`textBoxCount`、`shapeCount`、`connectorCount`、`smartArtCount`、`commentCount`、
+- 工作簿字段顺序：`id`、`pictureCount`、`chartCount`、`textBoxCount`、`mathCount`、`shapeCount`、`connectorCount`、`smartArtCount`、`commentCount`、
   `hyperlinkCount`、`sparklineCount`、`oleObjectCount`、`model3dCount`、`slicerCount`、`connectionCount`、`externalLinkCount`、
   `customViewCount`、`definedNameCount`、`props`、`workbookProtection`、`sheets`、`definedNames`，
   有连接名单时再跟 `connections`，有外部引用名单时再跟 `externalLinks`，有自定义视图名单时再跟 `customViews`。
   `pictureCount` 始终出现，等于各 `worksheet` 的 `pictureCount` 之和，不含 `chartsheet` / `dialogsheet` / `macrosheet`。
   `chartCount` 始终出现，等于各 `worksheet` 与 `chartsheet` 的 `chartCount` 之和，不含 `dialogsheet` / `macrosheet`。
-  `textBoxCount` 始终出现，等于各 `worksheet` 的 `textBoxCount` 之和。`shapeCount` 始终出现，等于各 `worksheet` 的 `shapeCount` 之和。
+  `textBoxCount` 始终出现，等于各 `worksheet` 的 `textBoxCount` 之和。`mathCount` 始终出现，等于各 `worksheet` 的 `mathCount` 之和。`shapeCount` 始终出现，等于各 `worksheet` 的 `shapeCount` 之和。
   `connectorCount` 始终出现，等于各 `worksheet` 的 `connectorCount` 之和。`smartArtCount` 始终出现，等于各 `worksheet` 的 `smartArtCount` 之和。
   `commentCount` 始终出现，等于各 `worksheet` 的 `commentCount` 之和。`hyperlinkCount` 始终出现，等于各 `worksheet` 的 `hyperlinkCount` 之和。
   `sparklineCount` 始终出现，等于各 `worksheet` 的 `sparklineCount` 之和。`oleObjectCount` 始终出现，等于各 `worksheet` 的 `oleObjectCount` 之和。
@@ -763,17 +791,17 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   每张 `worksheet` 始终填 `outline`（对象，不另编 id）。每张 `worksheet` 与 `chartsheet` 始终填 `sheetProtection`（对象，不另编 id）。
   `dialogsheet` / `macrosheet` 没有 `print` / `view` / `autoFilter` / `sortState` / `outline` / `sheetProtection`。
   `chartsheet` 没有 `autoFilter`，也没有 `sortState`，也没有 `outline`。
-- `worksheet` 字段顺序：`id`、`name`、`kind`、`hidden`、`pictureCount`、`chartCount`、`textBoxCount`、`shapeCount`、`connectorCount`、
+- `worksheet` 字段顺序：`id`、`name`、`kind`、`hidden`、`pictureCount`、`chartCount`、`textBoxCount`、`mathCount`、`shapeCount`、`connectorCount`、
   `smartArtCount`、`dataValidationCount`、`conditionalFormatCount`、`tableCount`、`pivotCount`、`commentCount`、
   `hyperlinkCount`、`sparklineCount`、`oleObjectCount`、`model3dCount`、`slicerCount`、`hasHeaderFooter`、`print`、`view`、`autoFilter`、
   `sortState`、`outline`、`sheetProtection`，
-  有页眉名单时再跟 `headerFooters`，有图名单时再跟 `pictures`，有图表名单时再跟 `charts`，有文本框名单时再跟 `textBoxes`，有形状名单时再跟 `shapes`，
+  有页眉名单时再跟 `headerFooters`，有图名单时再跟 `pictures`，有图表名单时再跟 `charts`，有文本框名单时再跟 `textBoxes`，有公式框名单时再跟 `maths`，有形状名单时再跟 `shapes`，
   有连接线名单时再跟 `connectors`，有 SmartArt 名单时再跟 `smartArts`，有批注名单时再跟 `comments`，有超链接名单时再跟 `hyperlinks`，有迷你图名单时再跟 `sparklines`，
   有嵌入对象名单时再跟 `oleObjects`，有 3D 模型名单时再跟 `model3ds`，有切片器名单时再跟 `slicers`，
   有单元格切片时再跟 `truncated`、`range`、`cells`、`cols`、`rows`、`merges`、`dataValidations`、`conditionalFormats`、`tables`、`pivots`。
   `pictureCount` 始终出现，是该表工作表 drawing 里被收入的 `xdr:pic` 个数（判定见上文 xlsx 图 id 那节），不含页眉图。没有图则为 `0`。
   `chartCount` 始终出现，是该表被收入的图表个数（判定见上文 xlsx 图表 id 那节）。没有图表则为 `0`。`textBoxCount` 始终出现，是该表被收入的文本框个数（判定见上文 xlsx 文本框 id 那节）。
-  没有则为 `0`。`shapeCount` 始终出现，是该表被收入的形状个数（判定见上文 xlsx 形状 id 那节）。没有则为 `0`。
+  没有则为 `0`。`mathCount` 始终出现，是该表被收入的公式框个数（判定见上文 xlsx 公式框 id 那节）。没有则为 `0`。`shapeCount` 始终出现，是该表被收入的形状个数（判定见上文 xlsx 形状 id 那节）。没有则为 `0`。
   `connectorCount` 始终出现，是该表被收入的连接线个数（判定见上文 xlsx 连接线 id 那节）。没有则为 `0`。
   `smartArtCount` 始终出现，是该表被收入的 SmartArt 个数（判定见上文 xlsx SmartArt id 那节）。没有则为 `0`。
   `dataValidationCount` 始终出现，是该表 `<dataValidations>` 里 `<dataValidation>` 的个数，不含 `extLst` 里的 `x14:dataValidations`。
@@ -787,14 +815,14 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   `oleObjectCount` 始终出现，是该表被收入的嵌入对象个数（判定见上文 xlsx OLE id 那节）。没有则为 `0`。
   `model3dCount` 始终出现，是该表被收入的 3D 模型个数（判定见上文 xlsx 3D 模型 id 那节）。没有则为 `0`。
   `slicerCount` 始终出现，是该表被收入的切片器个数（判定见上文 xlsx 切片器 id 那节）。没有则为 `0`。`sheetProtection` 始终出现，规则见下文「工作表保护」。
-  `chartsheet` 没有 `pictureCount`，也没有 `pictures`，也没有 `textBoxCount` / `textBoxes`，也没有 `shapeCount` / `shapes`，
+  `chartsheet` 没有 `pictureCount`，也没有 `pictures`，也没有 `textBoxCount` / `textBoxes`，也没有 `mathCount` / `maths`，也没有 `shapeCount` / `shapes`，
   也没有 `connectorCount` / `connectors`，也没有 `smartArtCount` / `smartArts`，也没有 `dataValidationCount`，
   也没有 `conditionalFormatCount`，也没有 `tableCount`，也没有 `pivotCount`，也没有 `commentCount`，也没有 `hyperlinkCount`，
   也没有 `sparklineCount`，也没有 `oleObjectCount`，也没有 `model3dCount`，也没有 `autoFilter`，也没有 `sortState`，也没有 `outline`；
   字段顺序：`id`、`name`、`kind`、`hidden`、`chartCount`、`hasHeaderFooter`、`print`、`view`、`sheetProtection`，
   有页眉名单时再跟 `headerFooters`，有图表名单时再跟 `charts`。
   `dialogsheet` / `macrosheet` 没有 `pictureCount` / `pictures` / `chartCount` / `charts` / `textBoxCount` / `textBoxes`
-   / `shapeCount` / `shapes` / `connectorCount` / `connectors` / `smartArtCount` / `smartArts` / `dataValidationCount`
+   / `mathCount` / `maths` / `shapeCount` / `shapes` / `connectorCount` / `connectors` / `smartArtCount` / `smartArts` / `dataValidationCount`
    / `conditionalFormatCount` / `tableCount` / `pivotCount` / `commentCount` / `hyperlinkCount` / `sparklineCount`
    / `oleObjectCount` / `model3dCount` / `print` / `view` / `autoFilter` / `sortState` / `outline` / `sheetProtection`；
   字段顺序：`id`、`name`、`kind`、`hidden`、`hasHeaderFooter`，有页眉名单时再跟 `headerFooters`。
@@ -953,6 +981,12 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   按该表 worksheet drawing 部件顺序、同一部件内按锚点文档顺序，组合里符合条件的框展开后仍按遇到的顺序。
   每张字段顺序：`id`、`cNvPrId`、`name`、`anchor`，然后按锚点种类跟位置字段（规则与工作表图相同），再跟 `text`、`stable`。
   `cNvPrId` / `name` / `anchor` / 位置字段 / `stable` 规则与图相同。`text` 取 `xdr:txBody` 可见 `a:t`，规则对齐 pptx 形状 `text`。不把框内字做成段落树。
+- `scope.maths` 为 `true` 时，每张 `worksheet` 带 `maths`。没有公式框时为空数组。不依赖单元格切片。
+  按该表 worksheet drawing 里被收入的公式框文档顺序。组合里符合条件的展开。
+  每条字段顺序：`id`、`cNvPrId`、`name`、`anchor`，然后按锚点种类跟位置字段（规则与工作表图相同），再跟 `text`、`stable`。
+  `cNvPrId` 是 Choice 里 `xdr:cNvPr/@id` 原文，没有则为 `null`。`name` 取 `cNvPr/@name`，没有则为 `""`。
+  `text` 为该 `oMath` 内 `m:t` 拼接；忽略 `a:fld` 外壳。不把 OMML 原文、不把 `expr` 放进树。
+  Fallback 文本框不进 `textBoxes`。docx / pptx 见各自分册。
 - `scope.shapes` 为 `true` 时，每张 `worksheet` 带 `shapes`。没有形状时为空数组。顺序与文本框相同。
   每张字段顺序：`id`、`cNvPrId`、`name`、`anchor`，然后按锚点种类跟位置字段（规则与工作表图相同），再跟 `prst`，有 `xdr:txBody` 再跟 `text`，最后 `stable`。
   `prst` 取 `a:prstGeom/@prst`，没有则为 `null`。`text` 规则与文本框相同。
@@ -1130,6 +1164,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
 | `sheets[].comments` | 可选。该表线程化批注列表。省略或空数组则不写批注部件。不写回复 |
 | `sheets[].hyperlinks` | 可选。该表 `<hyperlinks>` 列表。省略或空数组则不写。不写单元格值 |
 | `sheets[].textBoxes` | 可选。该表文本框列表。省略或空数组则不写 |
+| `sheets[].maths` | 可选。该表 drawing 公式框。省略或空数组则不写。图表工作表上出现报未知字段 |
 | `sheets[].shapes` | 可选。该表无 `txBox` 的 `xdr:sp` 列表。省略或空数组则不写 |
 | `sheets[].connectors` | 可选。该表 `xdr:cxnSp` 列表。省略或空数组则不写 |
 | `sheets[].smartArts` | 可选。该表 SmartArt 列表。省略或空数组则不写 |
@@ -1171,6 +1206,9 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
 | `model3ds[]` 的 `to` / `anchor` / 偏移 / `cx` / `cy` | 可选。规则与 `insertModel3d` 相同 |
 | `textBoxes[]` / `shapes[]` / `connectors[]` / `smartArts[]` 的 `to` / `anchor` / 偏移 / `cx` / `cy` | 可选。规则与对应 insert 相同 |
 | `textBoxes[].text` / `shapes[].text` | 可选。可见纯文本 |
+| `maths[].text` | 必须。非空。写入一条 `m:r` / `m:t`。出现 `expr` / `kind` 报 `InvalidField` |
+| `maths[].from` | 可选。左上角单元格，A1。省略当作 `A1` |
+| `maths[]` 的 `to` / `anchor` / 偏移 / `cx` / `cy` | 可选。规则与 `insertMath` 相同 |
 | `shapes[].prst` | 可选。省略为 `rect`。必须是 pptx `insertShape` 那份可写预设名。连接线几何名报 `InvalidField` |
 | `connectors[].prst` | 可选。缺省 `straightConnector1`。允许取值与 `insertConnector` 相同 |
 | `smartArts[].layout` | 必须。`list` / `org` / `cycle` |
@@ -1196,7 +1234,9 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
 给了 `sheets[].pictures` 时按 `insertPicture` 同一套规则写 worksheet drawing 与 media。
 给了 `sheets[].charts` 时按 `insertChart` 同一套规则写 `/xl/charts/chartN.xml`、`xdr:graphicFrame` 和 `dataFrom` 一带单元格，不写 embedding。
 给了 `sheets[].textBoxes` / `shapes` / `connectors` / `smartArts` 时按对应 insert 同一套规则写入同一份 worksheet drawing：先写 `pictures`，
-再写 `model3ds`，再写 `charts`，再按 `textBoxes`、`shapes`、`connectors`、`smartArts` 数组顺序写入。
+再写 `model3ds`，再写 `charts`，再按 `textBoxes`、`maths`、`shapes`、`connectors`、`smartArts` 数组顺序写入。
+给了 `sheets[].maths` 时按 `insertMath` 同一套规则写 `a14:m` AlternateContent。不写进 `textBoxes[]`。
+带公式框的示例见 `docs/examples/xlsx-create-math-drawing.json`。
 给了 `sheets[].model3ds` 时按 `insertModel3d` 同一套规则写 GLB、海报 PNG 与 `am3d` AlternateContent。
 带 3D 模型的示例见 `docs/examples/xlsx-create-model3d.json`。
 给了 `sheets[].comments` 时按 `insertComment` 同一套规则写线程化批注、占位 `comments.xml` 与 Note `v:shape`；不写回复。
@@ -1216,7 +1256,7 @@ create 本期不写外部引用。`workbook` 根上或 `cells[]` 上出现 `pict
 或 `sheets[]` 上出现 `wrap` / `sparklines` / `oleObjects` / `slicers` / `sheetProtection` / `protection` / `headerFooter`
  / `outline` / `sortState` / `sort`，报 `InvalidField`。
 `kind` 只能是 `worksheet` 或 `chartsheet`。图表工作表上出现 `cells` / `pictures` / `charts` / `headerFooters` / `comments`
- / `hyperlinks` / `textBoxes` / `shapes` / `connectors` / `smartArts` / `model3ds` / `from` / `to` / `anchor` / 偏移 / `wrap` / `id` 报 `InvalidField`。
+ / `hyperlinks` / `textBoxes` / `maths` / `shapes` / `connectors` / `smartArts` / `model3ds` / `from` / `to` / `anchor` / 偏移 / `wrap` / `id` 报 `InvalidField`。
 `comments[]` 上出现 `id` / `replies` / `start` / `end` / `x` / `y`，`hyperlinks[]` 上出现 `text` / `anchor` / `id`，
 或 drawing 项上出现 `kind` / `wrap` / `x` / `y` / `id`，报 `InvalidField`。
 给了 `workbook.props` 时按 `setProps` / `setCustomProp` 同一套规则写 core / app / custom；
@@ -2618,6 +2658,71 @@ id 不是 3D 模型 id 报 `InvalidId`。不是 GLB 报 `InvalidField`。docx / 
 找不到报 `IdNotFound`。id 不是 3D 模型 id 报 `InvalidId`。
 摘该条 `mc:AlternateContent`；若锚点只剩 `from` / `to` / `ext` / `pos` / `clientData` 则删整个锚点。
 GLB 与海报无人引用则删。docx / pptx 见各自分册。
+
+### insertMath
+
+把一条线性公式写入目标工作表 drawing。不进单元格 `f`。不进 `textBoxes`。不实现排版引擎。
+
+```json
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "C:\\data\\book.xlsx",
+  "ops": [
+    {
+      "op": "insertMath",
+      "id": "sheet:Sheet1",
+      "text": "E=mc^2"
+    }
+  ]
+}
+```
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"insertMath"` |
+| `id` | 必须是 `sheet:{name}` |
+| `text` | 必须。非空。写入一条 `m:r` / `m:t` |
+| `from` | 可选。左上角单元格，A1。省略当作 `A1` |
+| `to` | `anchor` 为 `twoCell` 时必填。右下角单元格，A1 |
+| `anchor` | 可选。`oneCell`（缺省）或 `twoCell`。不认 `absolute` |
+| `cx` / `cy` | 可选。EMU 正整数，须成对。缺省 `914400` × `914400` |
+| `fromOffX` / `fromOffY` | 可选。相对 `from` 的 EMU 偏移，缺省 `0`，不得为负 |
+| `toOffX` / `toOffY` | `twoCell` 时可选。相对 `to` 的 EMU 偏移，缺省 `0`，不得为负 |
+
+`id` 不是工作表 id 报 `InvalidId`。找不到该表报 `IdNotFound`。对 `chartsheet` 报 `InvalidField`。
+对 `dialogsheet` / `macrosheet` 报 `NotImplemented`。`from` / `to` 不是合法 A1 报 `InvalidRange`。
+`anchor` 为 `twoCell` 却没有 `to` 报 `InvalidField`。`oneCell` 出现 `to` 报未知字段。
+`anchor` 为 `absolute` 或不认识报 `InvalidField`。出现 `x` / `y` 报未知字段。
+`cx` / `cy` 只给一个报 `InvalidField`。空 `text` 报 `InvalidField`。出现 `expr` / `kind` 报 `InvalidField`。
+出现 `tex` / `unicodemath` / `omml` 报未知字段。
+
+写成 `mc:AlternateContent`，Choice `Requires="a14"`，Choice 里是 `xdr:sp`（`txBox="1"`），
+`xdr:txBody/a:p` 里是 `a14:m` 包 `m:oMathPara` / `m:oMath`。不要写 `mathplaceholder` 域。
+Fallback 是同一套纯文本框，字为该 `text`。不栅格化，不写 `a:blipFill`。
+页眉本期不插。docx / pptx 见各自分册。
+
+### setMath
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"setMath"` |
+| `id` | 必须是公式框 id |
+| `text` | 必须。非空。用一条 `m:r` / `m:t` 替换该 `oMath` 子节点 |
+
+不改锚点与尺寸。出现 `expr` / `kind` 报 `InvalidField`。空 `text` 报 `InvalidField`。
+找不到报 `IdNotFound`。id 不是公式框 id 报 `InvalidId`。docx / pptx 见各自分册。
+
+### deleteMath
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"deleteMath"` |
+| `id` | 必须是公式框 id |
+
+找不到报 `IdNotFound`。id 不是公式框 id 报 `InvalidId`。
+摘该条 `mc:AlternateContent`；若锚点只剩 `from` / `to` / `ext` / `pos` / `clientData` 则删整个锚点。
+海报无人引用则删。docx / pptx 见各自分册。
 
 ### insertSlicer
 

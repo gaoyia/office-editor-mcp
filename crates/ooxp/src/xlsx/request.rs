@@ -160,6 +160,7 @@ pub struct InspectScope {
     pub sparklines: bool,
     pub ole_objects: bool,
     pub model3ds: bool,
+    pub maths: bool,
     pub slicers: bool,
     pub connections: bool,
     pub external_links: bool,
@@ -1661,6 +1662,9 @@ pub enum XlsxOp {
     InsertModel3d(super::model3d::InsertModel3dOp),
     ReplaceModel3d(super::model3d::ReplaceModel3dOp),
     DeleteModel3d(super::model3d::DeleteModel3dOp),
+    InsertMath(super::omml::InsertMathOp),
+    SetMath(super::omml::SetMathOp),
+    DeleteMath(super::omml::DeleteMathOp),
     InsertSlicer(slicer::InsertSlicerOp),
     DeleteSlicer(slicer::DeleteSlicerOp),
     InsertConnection(connection::InsertConnectionOp),
@@ -1719,6 +1723,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
             "sparklines",
             "oleObjects",
             "model3ds",
+            "maths",
             "slicers",
             "connections",
             "externalLinks",
@@ -1737,6 +1742,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
     let sparklines = parse_bool_field(obj.get("sparklines"), "sparklines")?;
     let ole_objects = parse_bool_field(obj.get("oleObjects"), "oleObjects")?;
     let model3ds = parse_bool_field(obj.get("model3ds"), "model3ds")?;
+    let maths = parse_bool_field(obj.get("maths"), "maths")?;
     let slicers = parse_bool_field(obj.get("slicers"), "slicers")?;
     let connections = parse_bool_field(obj.get("connections"), "connections")?;
     let external_links = parse_bool_field(obj.get("externalLinks"), "externalLinks")?;
@@ -1798,6 +1804,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
         && !sparklines
         && !ole_objects
         && !model3ds
+        && !maths
         && !slicers
         && !connections
         && !external_links
@@ -1819,6 +1826,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
         sparklines,
         ole_objects,
         model3ds,
+        maths,
         slicers,
         connections,
         external_links,
@@ -1948,6 +1956,9 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<XlsxOp>, Error> {
             "insertModel3d" => XlsxOp::InsertModel3d(parse_insert_model3d(obj, i)?),
             "replaceModel3d" => XlsxOp::ReplaceModel3d(parse_replace_model3d(obj, i)?),
             "deleteModel3d" => XlsxOp::DeleteModel3d(parse_delete_model3d(obj, i)?),
+            "insertMath" => XlsxOp::InsertMath(parse_insert_math(obj, i)?),
+            "setMath" => XlsxOp::SetMath(parse_set_math(obj, i)?),
+            "deleteMath" => XlsxOp::DeleteMath(parse_delete_math(obj, i)?),
             "insertSlicer" => XlsxOp::InsertSlicer(parse_insert_slicer(obj, i)?),
             "deleteSlicer" => XlsxOp::DeleteSlicer(parse_delete_slicer(obj, i)?),
             "insertConnection" => XlsxOp::InsertConnection(parse_insert_connection(obj, i)?),
@@ -2053,9 +2064,6 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<XlsxOp>, Error> {
             | "setFontEmbed"
             | "setPageBackground"
             | "setPageBorders"
-            | "insertMath"
-            | "setMath"
-            | "deleteMath"
             | "insertContentControl"
             | "setContentControl"
             | "deleteContentControl"
@@ -7685,6 +7693,7 @@ fn parse_sheet_only_id(
         || id.contains("/spark:")
         || id.contains("/ole:")
         || id.contains("/model3d:")
+        || id.contains("/math:")
         || id.contains("/slicer:")
         || id.starts_with("cell:")
     {
@@ -8963,6 +8972,128 @@ fn parse_delete_model3d(
     let id = require_id(obj, i)?;
     let target = super::model3d::parse_id(&id, &format!("ops[{i}].id"))?;
     Ok(super::model3d::DeleteModel3dOp { id, target })
+}
+
+fn parse_insert_math(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<super::omml::InsertMathOp, Error> {
+    deny_keys(
+        obj,
+        i,
+        &[
+            "op", "id", "text", "cx", "cy", "from", "to", "anchor", "fromOffX", "fromOffY",
+            "toOffX", "toOffY", "expr", "kind",
+        ],
+    )?;
+    crate::drawing_math::reject_expr_kind(obj, &format!("ops[{i}]"))?;
+    let id = require_id(obj, i)?;
+    let sheet = parse_sheet_only_id(&id, i, "id", IdReason::InsertMathNeedsSheet)?;
+    let text = crate::drawing_math::require_text(obj, &format!("ops[{i}]"))?;
+    let cx = parse_emu_field(obj.get("cx"), i, "cx")?;
+    let cy = parse_emu_field(obj.get("cy"), i, "cy")?;
+    if cx.is_some() != cy.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "insertMath".into(),
+                field: "cx and cy together".into(),
+            },
+            format!("ops[{i}]"),
+        ));
+    }
+    let from = match obj.get("from") {
+        Some(Value::String(s)) => a1::parse_cell(s).map_err(|e| e.at(format!("ops[{i}].from")))?,
+        None => a1::CellRef { col: 1, row: 1 },
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "from".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].from"),
+            ));
+        }
+    };
+    let anchor = match obj.get("anchor") {
+        None => picture::AnchorKind::OneCell,
+        Some(Value::String(s)) => picture::AnchorKind::parse_insert(s).ok_or_else(|| {
+            Error::with_path(ErrorKind::InvalidXlsxAnchor, format!("ops[{i}].anchor"))
+        })?,
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "anchor".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].anchor"),
+            ));
+        }
+    };
+    let to = match obj.get("to") {
+        None => None,
+        Some(Value::String(s)) => {
+            Some(a1::parse_cell(s).map_err(|e| e.at(format!("ops[{i}].to")))?)
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "to".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].to"),
+            ));
+        }
+    };
+    if anchor == picture::AnchorKind::TwoCell && to.is_none() {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "insertMath".into(),
+                field: "to".into(),
+            },
+            format!("ops[{i}].to"),
+        ));
+    }
+    if anchor == picture::AnchorKind::OneCell && to.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::UnknownField { field: "to".into() },
+            format!("ops[{i}].to"),
+        ));
+    }
+    Ok(super::omml::InsertMathOp {
+        sheet,
+        text,
+        cx,
+        cy,
+        from,
+        to,
+        anchor,
+        from_off_x: parse_off_field(obj.get("fromOffX"), i, "fromOffX")?.unwrap_or(0),
+        from_off_y: parse_off_field(obj.get("fromOffY"), i, "fromOffY")?.unwrap_or(0),
+        to_off_x: parse_off_field(obj.get("toOffX"), i, "toOffX")?.unwrap_or(0),
+        to_off_y: parse_off_field(obj.get("toOffY"), i, "toOffY")?.unwrap_or(0),
+    })
+}
+
+fn parse_set_math(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<super::omml::SetMathOp, Error> {
+    deny_keys(obj, i, &["op", "id", "text", "expr", "kind"])?;
+    crate::drawing_math::reject_expr_kind(obj, &format!("ops[{i}]"))?;
+    let id = require_id(obj, i)?;
+    let target = super::omml::parse_id(&id, &format!("ops[{i}].id"))?;
+    let text = crate::drawing_math::require_text(obj, &format!("ops[{i}]"))?;
+    Ok(super::omml::SetMathOp { id, target, text })
+}
+
+fn parse_delete_math(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<super::omml::DeleteMathOp, Error> {
+    deny_keys(obj, i, &["op", "id"])?;
+    let id = require_id(obj, i)?;
+    let target = super::omml::parse_id(&id, &format!("ops[{i}].id"))?;
+    Ok(super::omml::DeleteMathOp { id, target })
 }
 
 fn parse_insert_slicer(

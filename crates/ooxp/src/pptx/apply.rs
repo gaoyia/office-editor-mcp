@@ -17,6 +17,7 @@ use super::media;
 use super::model3d;
 use super::notes;
 use super::ole;
+use super::omml;
 use super::picture;
 use super::protect;
 use super::request::PptxOp;
@@ -590,6 +591,68 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                 };
                 let mut doc = xml::parse(pkg.get(&part)?)?;
                 model3d::delete(&mut pkg, &mut doc, &part, op, i)?;
+                pkg.set(&part, doc.to_bytes()?)?;
+            }
+            PptxOp::InsertMath(op) => {
+                let meta = slides.get(op.slide - 1).ok_or_else(|| {
+                    Error::with_path(
+                        ErrorKind::SlideNotFound { n: op.slide as u32 },
+                        format!("ops[{i}].id"),
+                    )
+                })?;
+                let part = if op.on_notes {
+                    notes::ensure_notes_slide(&mut pkg, &pres_part, &mut pres, &meta.part)?
+                } else {
+                    meta.part.clone()
+                };
+                let mut doc = xml::parse(pkg.get(&part)?)?;
+                omml::insert(&mut pkg, &mut doc, &part, op)?;
+                pkg.set(&part, doc.to_bytes()?)?;
+            }
+            PptxOp::SetMath(op) => {
+                let meta = slides.get(op.target.slide - 1).ok_or_else(|| {
+                    Error::with_path(
+                        ErrorKind::SlideNotFound {
+                            n: op.target.slide as u32,
+                        },
+                        format!("ops[{i}].id"),
+                    )
+                })?;
+                let part = if op.target.on_notes {
+                    notes::notes_slide_part(&pkg, &meta.part)?.ok_or_else(|| {
+                        Error::with_path(
+                            ErrorKind::MathDrawingNotFound { id: op.id.clone() },
+                            format!("ops[{i}].id"),
+                        )
+                    })?
+                } else {
+                    meta.part.clone()
+                };
+                let mut doc = xml::parse(pkg.get(&part)?)?;
+                omml::set(&mut doc, op, i)?;
+                pkg.set(&part, doc.to_bytes()?)?;
+            }
+            PptxOp::DeleteMath(op) => {
+                let meta = slides.get(op.target.slide - 1).ok_or_else(|| {
+                    Error::with_path(
+                        ErrorKind::SlideNotFound {
+                            n: op.target.slide as u32,
+                        },
+                        format!("ops[{i}].id"),
+                    )
+                })?;
+                let part = if op.target.on_notes {
+                    notes::notes_slide_part(&pkg, &meta.part)?.ok_or_else(|| {
+                        Error::with_path(
+                            ErrorKind::MathDrawingNotFound { id: op.id.clone() },
+                            format!("ops[{i}].id"),
+                        )
+                    })?
+                } else {
+                    meta.part.clone()
+                };
+                let mut doc = xml::parse(pkg.get(&part)?)?;
+                omml::delete(&mut pkg, &mut doc, &part, op, i)?;
                 pkg.set(&part, doc.to_bytes()?)?;
             }
             PptxOp::InsertZoom(op) => {

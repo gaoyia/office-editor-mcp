@@ -16,6 +16,7 @@ mod media;
 mod model3d;
 mod notes;
 mod ole;
+mod omml;
 mod picture;
 mod protect;
 mod request;

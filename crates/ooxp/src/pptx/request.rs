@@ -45,6 +45,7 @@ pub struct InspectScope {
     pub custom_shows: bool,
     pub ole_objects: bool,
     pub model3ds: bool,
+    pub maths: bool,
     pub zooms: bool,
 }
 
@@ -819,6 +820,9 @@ pub enum PptxOp {
     InsertModel3d(super::model3d::InsertModel3dOp),
     ReplaceModel3d(super::model3d::ReplaceModel3dOp),
     DeleteModel3d(super::model3d::DeleteModel3dOp),
+    InsertMath(super::omml::InsertMathOp),
+    SetMath(super::omml::SetMathOp),
+    DeleteMath(super::omml::DeleteMathOp),
     InsertZoom(super::zoom::InsertZoomOp),
     DeleteZoom(super::zoom::DeleteZoomOp),
     SetShowPr(super::show::SetShowPrOp),
@@ -928,6 +932,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
             "customShows",
             "oleObjects",
             "model3ds",
+            "maths",
             "zooms",
         ],
     )?;
@@ -948,6 +953,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
     let custom_shows = parse_bool_field(obj.get("customShows"), "customShows")?;
     let ole_objects = parse_bool_field(obj.get("oleObjects"), "oleObjects")?;
     let model3ds = parse_bool_field(obj.get("model3ds"), "model3ds")?;
+    let maths = parse_bool_field(obj.get("maths"), "maths")?;
     let zooms = parse_bool_field(obj.get("zooms"), "zooms")?;
     let slide = match obj.get("slide") {
         None => None,
@@ -1026,6 +1032,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
         custom_shows,
         ole_objects,
         model3ds,
+        maths,
         zooms,
     }))
 }
@@ -1126,6 +1133,9 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<PptxOp>, Error> {
             "insertModel3d" => PptxOp::InsertModel3d(parse_insert_model3d(obj, i)?),
             "replaceModel3d" => PptxOp::ReplaceModel3d(parse_replace_model3d(obj, i)?),
             "deleteModel3d" => PptxOp::DeleteModel3d(parse_delete_model3d(obj, i)?),
+            "insertMath" => PptxOp::InsertMath(parse_insert_math(obj, i)?),
+            "setMath" => PptxOp::SetMath(parse_set_math(obj, i)?),
+            "deleteMath" => PptxOp::DeleteMath(parse_delete_math(obj, i)?),
             "insertZoom" => PptxOp::InsertZoom(parse_insert_zoom(obj, i)?),
             "deleteZoom" => PptxOp::DeleteZoom(parse_delete_zoom(obj, i)?),
             "setShowPr" => PptxOp::SetShowPr(parse_set_show_pr(obj, i)?),
@@ -1304,9 +1314,6 @@ fn is_foreign_op(op_name: &str) -> bool {
             | "setFontEmbed"
             | "setPageBackground"
             | "setPageBorders"
-            | "insertMath"
-            | "setMath"
-            | "deleteMath"
             | "insertContentControl"
             | "setContentControl"
             | "deleteContentControl"
@@ -3593,6 +3600,61 @@ fn parse_delete_model3d(
     let id = require_id(obj, i)?;
     let target = super::model3d::parse_id(&id, &format!("ops[{i}].id"))?;
     Ok(super::model3d::DeleteModel3dOp { id, target })
+}
+
+fn parse_insert_math(
+    obj: &Map<String, Value>,
+    i: usize,
+) -> Result<super::omml::InsertMathOp, Error> {
+    deny_keys(
+        obj,
+        i,
+        &["op", "id", "text", "x", "y", "cx", "cy", "expr", "kind"],
+    )?;
+    crate::drawing_math::reject_expr_kind(obj, &format!("ops[{i}]"))?;
+    let id = require_id(obj, i)?;
+    let (slide, on_notes) =
+        picture::parse_insert_slide_or_notes(&id, i, IdReason::InsertMathNeedsSlide)?;
+    let text = crate::drawing_math::require_text(obj, &format!("ops[{i}]"))?;
+    let cx = parse_emu_field(obj.get("cx"), i, "cx")?;
+    let cy = parse_emu_field(obj.get("cy"), i, "cy")?;
+    if cx.is_some() != cy.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "insertMath".into(),
+                field: "cx and cy together".into(),
+            },
+            format!("ops[{i}]"),
+        ));
+    }
+    Ok(super::omml::InsertMathOp {
+        slide,
+        on_notes,
+        text,
+        x: parse_emu_field(obj.get("x"), i, "x")?,
+        y: parse_emu_field(obj.get("y"), i, "y")?,
+        cx,
+        cy,
+    })
+}
+
+fn parse_set_math(obj: &Map<String, Value>, i: usize) -> Result<super::omml::SetMathOp, Error> {
+    deny_keys(obj, i, &["op", "id", "text", "expr", "kind"])?;
+    crate::drawing_math::reject_expr_kind(obj, &format!("ops[{i}]"))?;
+    let id = require_id(obj, i)?;
+    let target = super::omml::parse_id(&id, &format!("ops[{i}].id"))?;
+    let text = crate::drawing_math::require_text(obj, &format!("ops[{i}]"))?;
+    Ok(super::omml::SetMathOp { id, target, text })
+}
+
+fn parse_delete_math(
+    obj: &Map<String, Value>,
+    i: usize,
+) -> Result<super::omml::DeleteMathOp, Error> {
+    deny_keys(obj, i, &["op", "id"])?;
+    let id = require_id(obj, i)?;
+    let target = super::omml::parse_id(&id, &format!("ops[{i}].id"))?;
+    Ok(super::omml::DeleteMathOp { id, target })
 }
 
 fn parse_insert_zoom(obj: &Map<String, Value>, i: usize) -> Result<zoom::InsertZoomOp, Error> {

@@ -176,6 +176,7 @@ fn create_has_zero_anim_count_without_list() {
             "id",
             "slideCount",
             "pictureCount",
+            "mathCount",
             "videoCount",
             "audioCount",
             "chartCount",
