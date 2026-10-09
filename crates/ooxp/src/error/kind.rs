@@ -546,11 +546,11 @@ pub(crate) enum IdReason {
     SetPropsNeedsRoot,
     /// deleteCustomProp 必须用 prop:{name}
     CustomPropPrefix,
-    /// 动画 id 必须是 slide:N/anim:K
+    /// 动画 id 必须是 slide:N/anim:K、备注或母版上的对应 anim
     AnimForm,
     AnimIndexNotInt,
     AnimIndexFromOne,
-    /// insertAnim 必须用幻灯片上的可绑对象，不能是备注或母版
+    /// insertAnim 必须用幻灯片、备注或母版占位符上的可绑对象
     InsertAnimNeedsHost,
 }
 
@@ -817,6 +817,8 @@ define_error_kinds! {
     InvalidAnimTrigger => vec![Self::InvalidAnimTrigger],
     InvalidAnimDelay => vec![Self::InvalidAnimDelay],
     InvalidAnimDur => vec![Self::InvalidAnimDur],
+    NeedAnimSetField => vec![Self::NeedAnimSetField],
+    AnimNeedEffectDur => vec![Self::AnimNeedEffectDur],
     InvalidTransitionDur => vec![Self::InvalidTransitionDur],
     InvalidTransitionAdvTm => vec![Self::InvalidTransitionAdvTm],
     InvalidTransitionDir => vec![Self::InvalidTransitionDir],
@@ -1763,6 +1765,8 @@ impl ErrorKind {
             | Self::InvalidAnimTrigger
             | Self::InvalidAnimDelay
             | Self::InvalidAnimDur
+            | Self::NeedAnimSetField
+            | Self::AnimNeedEffectDur
             | Self::InvalidTransitionDur
             | Self::InvalidTransitionAdvTm
             | Self::InvalidTransitionDir

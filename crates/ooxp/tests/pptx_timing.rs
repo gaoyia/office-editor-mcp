@@ -1,4 +1,4 @@
-//! 动画清单与预设效果写入：inspect `animCount` / `scope.timing`，以及 `insertAnim` / `deleteAnim`。
+//! 动画清单与预设效果写入：inspect `animCount` / `scope.timing`，以及 `insertAnim` / `setAnim` / `deleteAnim`。
 
 use std::io::{Cursor, Read, Write};
 use std::path::{Path, PathBuf};
@@ -471,6 +471,8 @@ fn insert_fade_writes_office_tree() {
     assert!(xml.contains("filter=\"fade\""));
     assert!(xml.contains("<p:bldLst"));
     assert!(xml.contains("spid=\"2\""));
+    assert!(xml.contains("delay=\"indefinite\""));
+    assert!(!xml.contains("evt=\"onBegin\""));
     assert!(!xml.contains("<p:txEl"));
 }
 
@@ -661,7 +663,7 @@ fn insert_anim_rejects_bad_fields() {
         json!([{ "op": "insertAnim", "id": "slide:1/notes/shape:2", "type": "fade" }]),
     )
     .unwrap_err();
-    assert_eq!(err.code(), ErrorCode::InvalidId);
+    assert_eq!(err.code(), ErrorCode::IdNotFound);
     assert!(!dest.exists());
 
     let err = apply(
@@ -742,6 +744,333 @@ fn xlsx_and_docx_reject_insert_anim() {
         &xlsx,
         &dest,
         json!([{ "op": "insertAnim", "id": "slide:1/shape:2", "type": "fade" }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+    assert!(!dest.exists());
+}
+
+#[test]
+fn first_with_writes_onbegin_keeps_indefinite() {
+    let src = create_deck("auto");
+    let out = tmp("auto-out");
+    apply(
+        &src,
+        &out,
+        json!([{
+            "op": "insertAnim",
+            "id": "slide:1/shape:2",
+            "type": "fade",
+            "trigger": "with"
+        }]),
+    )
+    .unwrap();
+    let tree = inspect_scope(&out, json!({ "timing": true }));
+    let list = tree["slides"][0]["timing"].as_array().unwrap();
+    assert_eq!(list.len(), 1);
+    assert_eq!(list[0]["trigger"], "with");
+    let xml = part(&out, "ppt/slides/slide1.xml");
+    assert!(xml.contains("evt=\"onBegin\""));
+    assert!(xml.contains("delay=\"indefinite\""));
+    assert!(xml.contains("nodeType=\"withEffect\""));
+    assert!(xml.contains("<p:tn val=\"2\""));
+}
+
+#[test]
+fn set_anim_updates_delay_dur_trigger() {
+    let src = create_deck("set");
+    let two = tmp("set-two");
+    apply(
+        &src,
+        &two,
+        json!([
+            { "op": "insertAnim", "id": "slide:1/shape:2", "type": "fade" },
+            { "op": "insertAnim", "id": "slide:1/shape:3", "type": "fade" }
+        ]),
+    )
+    .unwrap();
+    let out = tmp("set-out");
+    apply(
+        &two,
+        &out,
+        json!([{
+            "op": "setAnim",
+            "id": "slide:1/anim:2",
+            "trigger": "after",
+            "delay": 200,
+            "dur": 700
+        }]),
+    )
+    .unwrap();
+    let tree = inspect_scope(&out, json!({ "timing": true }));
+    let list = tree["slides"][0]["timing"].as_array().unwrap();
+    assert_eq!(list.len(), 2);
+    assert_eq!(list[0]["trigger"], "click");
+    assert_eq!(list[0]["delay"], 0);
+    assert_eq!(list[0]["dur"], 500);
+    assert_eq!(list[1]["trigger"], "after");
+    assert_eq!(list[1]["delay"], 200);
+    assert_eq!(list[1]["dur"], 700);
+    let xml = part(&out, "ppt/slides/slide1.xml");
+    assert!(xml.contains("delay=\"200\""));
+    assert!(xml.contains("dur=\"700\""));
+    assert!(xml.contains("nodeType=\"afterEffect\""));
+}
+
+#[test]
+fn set_anim_first_with_adds_onbegin_click_removes() {
+    let src = create_deck("set-first");
+    let click = tmp("set-first-click");
+    apply(
+        &src,
+        &click,
+        json!([{ "op": "insertAnim", "id": "slide:1/shape:2", "type": "fade" }]),
+    )
+    .unwrap();
+    let with = tmp("set-first-with");
+    apply(
+        &click,
+        &with,
+        json!([{ "op": "setAnim", "id": "slide:1/anim:1", "trigger": "with" }]),
+    )
+    .unwrap();
+    let tree = inspect_scope(&with, json!({ "timing": true }));
+    assert_eq!(tree["slides"][0]["timing"][0]["trigger"], "with");
+    let xml = part(&with, "ppt/slides/slide1.xml");
+    assert!(xml.contains("evt=\"onBegin\""));
+    assert!(xml.contains("delay=\"indefinite\""));
+
+    let back = tmp("set-first-back");
+    apply(
+        &with,
+        &back,
+        json!([{ "op": "setAnim", "id": "slide:1/anim:1", "trigger": "click" }]),
+    )
+    .unwrap();
+    let tree = inspect_scope(&back, json!({ "timing": true }));
+    assert_eq!(tree["slides"][0]["timing"][0]["trigger"], "click");
+    let xml = part(&back, "ppt/slides/slide1.xml");
+    assert!(!xml.contains("evt=\"onBegin\""));
+    assert!(xml.contains("delay=\"indefinite\""));
+}
+
+#[test]
+fn set_anim_splits_and_merges_click_groups() {
+    let src = create_deck("regroup");
+    let two = tmp("regroup-two");
+    apply(
+        &src,
+        &two,
+        json!([
+            { "op": "insertAnim", "id": "slide:1/shape:2", "type": "fade" },
+            { "op": "insertAnim", "id": "slide:1/shape:3", "type": "fade" }
+        ]),
+    )
+    .unwrap();
+    let merged = tmp("regroup-merged");
+    apply(
+        &two,
+        &merged,
+        json!([{ "op": "setAnim", "id": "slide:1/anim:2", "trigger": "with" }]),
+    )
+    .unwrap();
+    let tree = inspect_scope(&merged, json!({ "timing": true }));
+    assert_eq!(tree["slides"][0]["timing"][0]["trigger"], "click");
+    assert_eq!(tree["slides"][0]["timing"][1]["trigger"], "with");
+    let xml = part(&merged, "ppt/slides/slide1.xml");
+    assert_eq!(xml.matches("delay=\"indefinite\"").count(), 1);
+
+    let split = tmp("regroup-split");
+    apply(
+        &merged,
+        &split,
+        json!([{ "op": "setAnim", "id": "slide:1/anim:2", "trigger": "click" }]),
+    )
+    .unwrap();
+    let tree = inspect_scope(&split, json!({ "timing": true }));
+    assert_eq!(tree["slides"][0]["timing"][1]["trigger"], "click");
+    let xml = part(&split, "ppt/slides/slide1.xml");
+    assert_eq!(xml.matches("delay=\"indefinite\"").count(), 2);
+}
+
+#[test]
+fn set_anim_rejects_empty_and_need_effect_dur() {
+    let src = create_deck("set-bad");
+    let dest = tmp("set-bad-out");
+    let err = apply(
+        &src,
+        &dest,
+        json!([{ "op": "setAnim", "id": "slide:1/anim:1", "delay": 10 }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::IdNotFound);
+    assert!(!dest.exists());
+
+    let with = tmp("set-empty-src");
+    apply(
+        &src,
+        &with,
+        json!([{ "op": "insertAnim", "id": "slide:1/shape:2", "type": "fade" }]),
+    )
+    .unwrap();
+    let err = apply(
+        &with,
+        &dest,
+        json!([{ "op": "setAnim", "id": "slide:1/anim:1" }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+    assert!(!dest.exists());
+
+    rewrite_part(&src, "ppt/slides/slide1.xml", |data| {
+        inject_before_end(
+            &String::from_utf8(data).unwrap(),
+            concat!(
+                r#"<p:timing><p:tnLst><p:par>"#,
+                r#"<p:cTn id="1" nodeType="clickEffect"><p:childTnLst>"#,
+                r#"<p:set><p:cBhvr><p:tgtEl><p:spTgt spid="2"/></p:tgtEl></p:cBhvr></p:set>"#,
+                r#"</p:childTnLst></p:cTn></p:par></p:tnLst></p:timing>"#
+            ),
+        )
+        .into_bytes()
+    });
+    let err = apply(
+        &src,
+        &dest,
+        json!([{ "op": "setAnim", "id": "slide:1/anim:1", "dur": 400 }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+    assert!(!dest.exists());
+}
+
+#[test]
+fn notes_anim_writes_and_stays_off_slide_count() {
+    let src = create_deck("notes-anim");
+    let noted = tmp("notes-src");
+    apply(
+        &src,
+        &noted,
+        json!([{ "op": "setNotesText", "id": "slide:1", "text": "演讲者备注" }]),
+    )
+    .unwrap();
+    let out = tmp("notes-anim-out");
+    apply(
+        &noted,
+        &out,
+        json!([{
+            "op": "insertAnim",
+            "id": "slide:1/notes/shape:3",
+            "type": "fade",
+            "delay": 120,
+            "dur": 400
+        }]),
+    )
+    .unwrap();
+    let tree = inspect_scope(&out, json!({ "notes": true, "timing": true }));
+    assert_eq!(tree["animCount"], 0);
+    assert_eq!(tree["slides"][0]["animCount"], 0);
+    let notes = &tree["slides"][0]["notes"];
+    assert_eq!(notes["animCount"], 1);
+    assert_eq!(notes["timing"][0]["id"], "slide:1/notes/anim:1");
+    assert_eq!(notes["timing"][0]["target"], "slide:1/notes/shape:3");
+    assert_eq!(notes["timing"][0]["trigger"], "click");
+    assert_eq!(notes["timing"][0]["delay"], 120);
+    assert_eq!(notes["timing"][0]["dur"], 400);
+    assert!(tree["slides"][0].get("timing").is_none() || tree["slides"][0]["timing"] == json!([]));
+    let xml = part(&out, "ppt/notesSlides/notesSlide1.xml");
+    assert!(xml.contains("<p:timing"));
+    assert!(xml.contains("delay=\"120\""));
+    assert!(xml.contains("dur=\"400\""));
+    let slide_xml = part(&out, "ppt/slides/slide1.xml");
+    assert!(!slide_xml.contains("<p:timing"));
+}
+
+#[test]
+fn master_placeholder_anim_writes_on_master_xml() {
+    let src = create_deck("master-anim");
+    let with_ph = tmp("master-ph");
+    apply(
+        &src,
+        &with_ph,
+        json!([{
+            "op": "insertPlaceholder",
+            "id": "master:1",
+            "type": "title",
+            "text": "母版标题"
+        }]),
+    )
+    .unwrap();
+    let tree = inspect_scope(&with_ph, json!({ "masters": true }));
+    let ph = tree["masters"][0]["placeholders"][0]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    assert!(ph.starts_with("master:1/shape:"));
+    let out = tmp("master-anim-out");
+    apply(
+        &with_ph,
+        &out,
+        json!([{ "op": "insertAnim", "id": ph, "type": "fade" }]),
+    )
+    .unwrap();
+    let tree = inspect_scope(&out, json!({ "masters": true, "timing": true }));
+    assert_eq!(tree["animCount"], 0);
+    assert_eq!(tree["masters"][0]["animCount"], 1);
+    assert_eq!(tree["masters"][0]["timing"][0]["id"], "master:1/anim:1");
+    assert_eq!(tree["masters"][0]["timing"][0]["target"], ph);
+    assert_eq!(tree["masters"][0]["layouts"][0]["animCount"], 0);
+    let xml = part(&out, "ppt/slideMasters/slideMaster1.xml");
+    assert!(xml.contains("<p:timing"));
+    assert!(xml.contains("</p:sldLayoutIdLst><p:timing"));
+    assert!(xml.contains("</p:timing><p:txStyles"));
+    let layout = part(&out, "ppt/slideLayouts/slideLayout1.xml");
+    assert!(!layout.contains("<p:timing"));
+    let slide = part(&out, "ppt/slides/slide1.xml");
+    assert!(!slide.contains("<p:timing"));
+}
+
+#[test]
+fn xlsx_and_docx_reject_set_anim() {
+    let docx = tmp("d-set").with_extension("docx");
+    run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "create",
+            "path": docx.to_string_lossy(),
+            "document": { "paragraphs": [{ "text": "a" }] }
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap();
+    let dest = tmp("d-set-out").with_extension("docx");
+    let err = apply(
+        &docx,
+        &dest,
+        json!([{ "op": "setAnim", "id": "slide:1/anim:1", "delay": 10 }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+    assert!(!dest.exists());
+
+    let xlsx = tmp("x-set").with_extension("xlsx");
+    run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "create",
+            "path": xlsx.to_string_lossy(),
+            "workbook": { "sheets": [{ "name": "Sheet1" }] }
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap();
+    let dest = tmp("x-set-out").with_extension("xlsx");
+    let err = apply(
+        &xlsx,
+        &dest,
+        json!([{ "op": "setAnim", "id": "slide:1/anim:1", "delay": 10 }]),
     )
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);

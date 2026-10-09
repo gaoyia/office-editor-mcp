@@ -721,12 +721,12 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             }
             IdReason::CustomPropPrefix => "deleteCustomProp 的 id 必须是 prop:NAME".into(),
             IdReason::AnimForm => {
-                "动画 id 必须是 slide:N/anim:K，insertAnim 的 id 必须是幻灯片上的可绑对象".into()
+                "动画 id 必须是 slide:N/anim:K、slide:N/notes/anim:K、master:N/anim:K 或 master:N/layout:K/anim:M；insertAnim 的 id 必须是可绑对象".into()
             }
             IdReason::AnimIndexNotInt => "anim 后面必须是正整数".into(),
             IdReason::AnimIndexFromOne => "动画序号从 1 起".into(),
             IdReason::InsertAnimNeedsHost => {
-                "insertAnim 的 id 必须是幻灯片上的形状、图、表、图表、SmartArt、视频或音频，不能是备注或母版".into()
+                "insertAnim 的 id 必须是幻灯片或备注上的形状、图、表、图表、SmartArt、视频或音频，或母版 / 版式占位符".into()
             }
         },
         ErrorKind::SheetNotFound { name } => format!("找不到工作表：{name}"),
@@ -863,6 +863,10 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::InvalidAnimTrigger => "trigger 必须是 click、with 或 after".into(),
         ErrorKind::InvalidAnimDelay => "delay 必须是 0 到 60000 的整数".into(),
         ErrorKind::InvalidAnimDur => "dur 必须是 1 到 60000 的整数".into(),
+        ErrorKind::NeedAnimSetField => {
+            "setAnim 至少要给 trigger、delay 或 dur 之一".into()
+        }
+        ErrorKind::AnimNeedEffectDur => "dur 只能写在带 animEffect 的效果上".into(),
         ErrorKind::InvalidTransitionDur => "dur 必须是 1 到 60000 的整数".into(),
         ErrorKind::InvalidTransitionAdvTm => "advTm 必须是 1 到 86400000 的整数".into(),
         ErrorKind::InvalidTransitionDir => {

@@ -404,13 +404,14 @@
 - xlsx / docx 上发此 op 报 `InvalidField`
 - `insertSlide` 的 id 必须是 `pptx:presentation`
 - `deleteSlide` / `moveSlide` / `setSlideHidden` / `setTransition` / `setSlideLayout` 的 id 必须是 `slide:{n}`
-- `insertAnim` 的 id 必须是幻灯片上可绑对象（`slide:{n}/shape:…`、`…/cxn:…`、`…/pic:…`、`…/video:…`、`…/audio:…`、`…/table:…`、`…/chart:…`、`…/smartdiagram:…`）
+- `insertAnim` 的 id 必须是可绑对象（`slide:{n}/shape:…`、`…/cxn:…`、`…/pic:…`、`…/video:…`、`…/audio:…`、`…/table:…`、`…/chart:…`、`…/smartdiagram:…`，或带 `slide:{n}/notes/` 前缀，或母版 / 版式占位符）
 - 找不到该对象报 `IdNotFound`
-- 不是这些 id 或指向备注 / 母版报 `InvalidId`
-- `deleteAnim` 的 id 必须是 `slide:{n}/anim:{k}`
+- 不是这些 id 报 `InvalidId`
+- `deleteAnim` / `setAnim` 的 id 必须是 inspect 名单上的动画 id
 - 序号不存在报 `IdNotFound`，不是动画 id 报 `InvalidId`
 - `insertAnim` 缺 `type`、`type` 不是 `fade`、或 `trigger` 不是 `click` / `with` / `after`，报 `InvalidField`
 - `insertAnim` 的 `delay` 越界或 `dur` 越界报 `InvalidField`
+- `setAnim` 一个可写字段都不给、`trigger` 非法、`delay` / `dur` 越界、或给了 `dur` 但没有 `animEffect`，报 `InvalidField`
 - `setSlideLayout` 的 `layout` 必须是 `master:{n}/layout:{k}`
 - 找不到该版式报 `IdNotFound`
 - `insertLayout` 的 id 必须是 `master:{n}`
@@ -428,6 +429,7 @@
   - `setSlideHidden` 缺 `hidden`
   - `setTransition` 缺 `type`，或 `type` 为 `other` 或不认识，或 `dur` 越界
   - `insertAnim` 的 `delay` / `dur` 越界
+  - `setAnim` 一个可写字段都不给，或 `dur` 点到没有 `animEffect` 的效果
   - `setSlideLayout` 缺 `layout`
   - `insertPlaceholder` 缺 `type`，或 `type` 不在白名单
   - 该母版只剩一份版式、最后一份母版、或仍有页占用时 `deleteLayout` / `deleteMaster`
@@ -435,7 +437,7 @@
   - `setThemeColors` / `setThemeFonts` 一个可写字段都不给、非法十六进制、或 `majorLatin` / `minorLatin` 空串
 - `setHandoutText` 的 `id` 必须是 `handout`
 - `header` / `footer` / `date` / `sldNum` 一个都不给报 `InvalidField`
-- docx / xlsx 上发这些幻灯片管理 op、母版写入 op、主题与尺寸 op、`insertAnim` / `deleteAnim`、`setHandoutText` 以及 `setShowPr` 报 `InvalidField`
+- docx / xlsx 上发这些幻灯片管理 op、母版写入 op、主题与尺寸 op、`insertAnim` / `setAnim` / `deleteAnim`、`setHandoutText` 以及 `setShowPr` 报 `InvalidField`
 - xlsx 的 `scope` 里出现下列键报 `InvalidField`
   - `textBoxContent`
   - `notes`

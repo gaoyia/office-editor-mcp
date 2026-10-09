@@ -218,6 +218,7 @@ fn set_notes_text_creates_parts_and_inspects() {
             "smartArtCount",
             "tableCount",
             "model3dCount",
+            "animCount",
             "shapes"
         ]
     );
@@ -359,6 +360,7 @@ fn insert_picture_on_notes_does_not_join_slide_count() {
             "smartArtCount",
             "tableCount",
             "model3dCount",
+            "animCount",
             "pictures",
             "shapes"
         ]

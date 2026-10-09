@@ -1214,16 +1214,35 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                 timing::insert(
                     &mut pkg,
                     &slides,
+                    &pres_part,
+                    &pres.root,
                     &op.id,
-                    op.slide,
+                    &op.target,
                     &op.trigger,
                     op.delay,
                     op.dur,
                     i,
                 )?;
             }
+            PptxOp::SetAnim(op) => {
+                timing::set(
+                    &mut pkg,
+                    &slides,
+                    &pres_part,
+                    &pres.root,
+                    &op.id,
+                    &op.target,
+                    op.index,
+                    op.trigger.as_deref(),
+                    op.delay,
+                    op.dur,
+                    i,
+                )?;
+            }
             PptxOp::DeleteAnim(op) => {
-                timing::delete(&mut pkg, &slides, &op.id, op.slide, op.index, i)?;
+                timing::delete(
+                    &mut pkg, &slides, &pres_part, &pres.root, &op.id, &op.target, op.index, i,
+                )?;
             }
             PptxOp::SetSlideLayout(op) => {
                 master::set_slide_layout(

@@ -199,7 +199,7 @@ apply 可改被点名形状的 `p:txBody` 可见文字（含备注形状与母�
 也可插、删、改幻灯片与备注页上的 DrawingML 表（改单元格字、插删行列、改画布坐标与尺寸；删表时清对应 timing `tgtEl`）；
 也可插、删、回复、改字、改作者与完成标记现代批注（MS-PPTX 2018/8 `p188:cmLst`，不写 ECMA-376 §19.4 旧式部件）；
 也可插入空白页、删除、按 `sldIdLst` 重排与隐藏（`p:sld/@show`）；也可用 `setTransition` 写或清除 `<p:transition>`；
-也可用 `insertAnim` / `deleteAnim` 按模板增删预设效果（不接受整棵时间轴树）；也可用 `setSlideLayout` 只改该页 `.rels` 的版式关系（不删用户形状、不抄占位符进页）；
+也可用 `insertAnim` / `setAnim` / `deleteAnim` 按模板增删改预设效果（不接受整棵时间轴树；第一条 `with` / `after` 进片自动播）；也可用 `setSlideLayout` 只改该页 `.rels` 的版式关系（不删用户形状、不抄占位符进页）；
 也可用 `insertLayout` / `deleteLayout` / `insertPlaceholder` / `deletePlaceholder` / `insertMaster` / `deleteMaster` 插删空白版式、
 带 `p:ph` 的占位符与整份母版（不算母版排版引擎）；
 也可用 `setSlideSize` 只改 `p:sldSz`（不重排形状）；也可用 `setThemeColors` / `setThemeFonts` 改该母版 theme 的配色与字体（不重写 `fmtScheme`）；
@@ -218,9 +218,9 @@ apply 可改被点名形状的 `p:txBody` 可见文字（含备注形状与母�
 给了 `slides[].charts` 时复用 `insertChart`，写入 `/ppt/charts/…`、embedding 与 `p:graphicFrame`。
 给了 `slides[].smartArts` 时复用 `insertSmartArt`，写入 `/ppt/diagrams/…` 与图示 `p:graphicFrame`。
 给了 `slides[].tables` 时复用 `insertTable`，写入表 `p:graphicFrame`。给了 `slides[].notes` 时复用 `setNotesText`。
-给了 `slides[].comments` 时复用 `insertComment`。给了 `slides[].anims` 时复用 `insertAnim`（只写 fade，可写 `delay` / `dur`）。
+给了 `slides[].comments` 时复用 `insertComment`。给了 `slides[].anims` 时复用 `insertAnim`（只写 fade，可写 `delay` / `dur`；第一条 `with` / `after` 进片自动播）。
 母版与版式进树（`scope.masters`），`setSlideLayout` 只换关系，写入用 `insertLayout` / `insertPlaceholder` / `insertMaster` 等。
-动画效果摘要进树（`scope.timing`），写入用 `insertAnim` / `deleteAnim`。切换进树，用 `setTransition` 改。幻灯片尺寸始终进树，写入用 `setSlideSize`。
+动画效果摘要进树（`scope.timing`），写入用 `insertAnim` / `setAnim` / `deleteAnim`。切换进树，用 `setTransition` 改。幻灯片尺寸始终进树，写入用 `setSlideSize`。
 主题配色与字体挂在 `scope.masters` 的 `theme` 上，写入用 `setThemeColors` / `setThemeFonts`。`mc:AlternateContent` 只走第一个 `Choice`。
 
 ### cli
@@ -297,7 +297,7 @@ pptx 可改被点名形状的可见文字（含备注形状与母版 / 版式占
 可用 `setNotesText` 按页改或新建演讲者备注，也可改被点名的幻灯片图与备注图（换、插、删、改尺寸、改画布坐标），也可插删改幻灯片或备注页图表，也可插删改幻灯片或备注页 SmartArt，
 也可插删改幻灯片 DrawingML 表，也可插删回复并改现代批注，也可对批注或回复 id 插图并换、删批注内图（不改尺寸位置），也可按批注内图 id `exportMedia`，也可插入、删除、重排与隐藏幻灯片，
 也可用 `setTransition` 写或清除该页 `<p:transition>`（含自动进片、方向与 `p15:prstTrans`），
-也可用 `insertAnim` / `deleteAnim` 按模板增删该页 `<p:timing>` 里的预设效果（不接受整棵时间轴树），也可用 `setSlideLayout` 只改该页 `.rels` 的版式关系，
+也可用 `insertAnim` / `setAnim` / `deleteAnim` 按模板增删改该宿主 `<p:timing>` 里的预设效果（不接受整棵时间轴树），也可用 `setSlideLayout` 只改该页 `.rels` 的版式关系，
 也可用 `insertLayout` / `deleteLayout` / `insertPlaceholder` / `deletePlaceholder` / `insertMaster` / `deleteMaster` 插删版式、占位符与母版，
 也可用 `setSlideSize` 只改 `p:sldSz`，也可用 `setThemeColors` / `setThemeFonts` 改该母版 theme，也可用 `setHandoutText` 改或新建讲义母版，
 也可用 `insertField` / `setField` / `deleteField` 插删改幻灯片文本形状里的 `a:fld`（不求值），
@@ -336,7 +336,7 @@ create 不写修订痕迹。pptx 的 `slides[].pictures` 复用 `insertPicture`�
 `slides[].charts` 复用 `insertChart`（数据写 embedding），`slides[].smartArts` 复用 `insertSmartArt`，
 `slides[].tables` 复用 `insertTable`，`slides[].notes` 复用 `setNotesText`，`slides[].comments` 复用 `insertComment`，
 形状上的 `url` / `file` / `slide` 复用 `insertHyperlink`，`slides[].transition` 复用 `setTransition`，
-`slides[].anims` 复用 `insertAnim`（只写 fade，可写 `delay` / `dur`，不接受整棵时间轴树），`presentation.sections` 复用 `insertSlideSection`。
+`slides[].anims` 复用 `insertAnim`（只写 fade，可写 `delay` / `dur`，第一条 `with` / `after` 进片自动播，不接受整棵时间轴树），`presentation.sections` 复用 `insertSlideSection`。
 create 本期不写 OLE，也不写 Zoom，也不写域，也不写 run 级超链接，也不写批注内图，也不写 `showPr` / `modifyVerifier`。
 三种格式的 `props` 复用 `setProps` / `setCustomProp` 同一套字段写 core / app / custom。
 docx 的 `document.protection` 复用 `setProtection`。docx 的 `document.watermarks` 复用 `insertWatermark`。create 不写 theme 部件。

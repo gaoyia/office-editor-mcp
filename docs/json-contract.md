@@ -36,7 +36,8 @@ apply 复用 `insertMath` / `setMath` / `deleteMath`。不是单元格 `f`，也
 docx 的 `scope.maths` 仍是段落 `oMath`，见 [docx 分册](json-contract-docx.md#insertmath)。
 xlsx 的 `scope.oleObjects` 与 OLE op 认工作表 `<oleObject>`（ECMA-376 §18.3.1.59），不认 `@link` 与 ActiveX `controls`，不把嵌入字节或预览图塞进树。
 pptx 的 `scope.comments` 与批注 op 认该页 2018 线程化批注（`p188:cmLst`），不认 ECMA-376 §19.4 旧式部件。
-pptx 的 `scope.timing` 列出该页 `<p:timing>` 效果摘要（含 `delay` / `dur`）；apply 用 `insertAnim` / `deleteAnim` 按模板增删预设效果，可写 delay 与 dur，不接受整棵时间轴树。
+pptx 的 `scope.timing` 列出该页 `<p:timing>` 效果摘要（含 `delay` / `dur`）；`scope.notes` 与 `scope.timing` 同开时备注对象带 `timing`；`scope.masters` 与 `scope.timing` 同开时母版 / 版式带 `timing`。
+apply 用 `insertAnim` / `setAnim` / `deleteAnim` 按模板增删改预设效果，可写 delay 与 dur；第一条 `with` / `after` 进片自动播。不接受整棵时间轴树。
 `setTransition` 还可写自动进片、方向与 `p15:prstTrans`。
 pptx 的 `scope.masters` 列出幻灯片母版与版式及占位符（含该母版 theme 的配色与字体），根上始终带 `slideSize`，apply 可用 `setSlideLayout` 换页的版式关系，
 也可用 `insertLayout` / `deleteLayout` / `insertPlaceholder` / `deletePlaceholder` / `insertMaster` / `deleteMaster` 插删版式、占位符与母版，
@@ -271,7 +272,7 @@ pptx 认 `setShapeText`、`setShapeFormat`、形状管理 op（`insertShape`、`
 `setSmartArtColors`、`setSmartArtStyle`、`setSmartArtLayout`；
 不含 `setSmartArtWrap`）、以及幻灯片管理 op（`insertSlide`、`deleteSlide`、`moveSlide`、`setSlideHidden`、`setTransition`、
 `setSlideLayout`）、以及母版写入 op（`insertLayout`、`deleteLayout`、`insertPlaceholder`、`deletePlaceholder`、`insertMaster`、
-`deleteMaster`）、以及主题与尺寸 op（`setSlideSize`、`setThemeColors`、`setThemeFonts`）、以及动画 op（`insertAnim`、`deleteAnim`）、
+`deleteMaster`）、以及主题与尺寸 op（`setSlideSize`、`setThemeColors`、`setThemeFonts`）、以及动画 op（`insertAnim`、`setAnim`、`deleteAnim`）、
 以及 `setHandoutText`、以及超链接 op（`insertHyperlink`、`setHyperlink`、`deleteHyperlink`）、以及域 op（`insertField`、`setField`、
 `deleteField`）、以及媒体 op（`insertVideo`、`insertAudio`、`deleteMedia`）、以及幻灯片节 op（`insertSlideSection`、`setSlideSectionName`、
 `deleteSlideSection`、`setSlideSection`）、以及自定义放映 op（`insertCustomShow`、`setCustomShow`、`deleteCustomShow`）、
@@ -297,7 +298,7 @@ pptx 认 `setShapeText`、`setShapeFormat`、形状管理 op（`insertShape`、`
 对 docx 发 `setPictureAnchor` / `setChartAnchor` / `setSmartArtPos` / `setNotesText`，
 对 pptx 发 `setPictureWrap` / `setPictureAnchor` / `setChartWrap` / `setChartAnchor` / `setSmartArtWrap`，
 对 docx / xlsx 发 `setPicturePos` / `setChartPos` / `setSmartArtPos` / `setNotesText` / `insertSlide` / `deleteSlide`
- / `moveSlide` / `setSlideHidden` / `setTransition` / `insertAnim` / `deleteAnim` / `setSlideLayout` / `insertLayout`
+ / `moveSlide` / `setSlideHidden` / `setTransition` / `insertAnim` / `setAnim` / `deleteAnim` / `setSlideLayout` / `insertLayout`
  / `deleteLayout` / `insertPlaceholder` / `deletePlaceholder` / `insertMaster` / `deleteMaster` / `setSlideSize`
  / `setThemeColors` / `setThemeFonts` / `setHandoutText` / `setShapePos` / `setShapeSize` / `setShapeFill`
  / `setShapeLine` / `setTableCellText` / `setTablePos` / `setTableSize` / `insertVideo` / `insertAudio`

@@ -937,6 +937,29 @@ DrawingML 表（`a:tbl` 包在 `p:graphicFrame` 里）。不要把表编进 `sha
   - XML 有 `delay="380"` 与 `dur="800"`
   - COM `MainSequence.Count` 为 2，无 Repair
 
+- **Aw7**
+  - 检查：setAnim
+  - 通过标准：✅ 先插两条，再 `setAnim` 第二条 `delay=200` `dur=700` `trigger=after`
+  - inspect 第二条为 `after`、200、700
+  - 无 Repair
+- **Aw8**
+  - 检查：进片自动播
+  - 通过标准：✅ 第一条 `insertAnim` `trigger=with`
+  - XML 外层包装有 `evt="onBegin"`，仍有 `delay="indefinite"`
+  - inspect `trigger` 为 `with`
+  - COM Count 为 1，无 Repair
+- **Aw9**
+  - 检查：备注动画
+  - 通过标准：✅ `setNotesText` 后对备注正文 `insertAnim`
+  - `scope.notes` 与 `scope.timing` 同开时 `notes.timing` 一条
+  - notesSlide 有 `<p:timing>`，无 Repair
+- **Aw10**
+  - 检查：母版动画
+  - 通过标准：✅ `insertPlaceholder` 后对占位符 `insertAnim`
+  - `scope.masters` 与 `scope.timing` 同开时母版或版式 `timing` 一条
+  - slideMaster 或 slideLayout 有 `<p:timing>`
+  - COM `SlideMaster.TimeLine.MainSequence.Count` 为 1（点在母版上时），无 Repair
+
 ## 母版与版式
 
 inspect 列出 slideMaster / slideLayout 与占位符。apply 改占位符文字与几何，并用 `setSlideLayout` 只换页的版式关系。不算母版排版引擎。

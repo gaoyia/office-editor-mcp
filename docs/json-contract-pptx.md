@@ -529,7 +529,9 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   - 省略或 `false` 则只有 `animCount`，没有名单
   - 不依赖 `scope.slide`
   - 不返回完整时间轴树
-  - 写入见 `insertAnim` / `deleteAnim`
+  - 写入见 `insertAnim` / `setAnim` / `deleteAnim`
+  - `scope.notes` 同开时备注对象带 `timing`
+  - `scope.masters` 同开时母版 / 版式带 `timing`
 - **`scope.masters`**（否）
   - 为 `true` 时根上填 `masters`（母版、版式与占位符）
   - 省略或 `false` 则只有 `masterCount`，没有名单
@@ -895,10 +897,17 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   去掉括号及之后的参数（`blinds(horizontal)` 为 `blinds`）；
   没有则按第一个行为子元素：`animMotion` 为 `motion`，`animRot` 为 `spin`，`animScale` 为 `scale`，`animClr` 为 `color`，`anim` 为 `anim`，`set` 为 `set`；
   再没有则取该 `cTn` 的 `presetClass`（`entr` / `exit` / `emph` / `path` / `verb` / `mediacall`）；仍没有则为 `other`。
-  不返回路径点、文本范围或完整时间轴树。xlsx / docx 的 `scope` 里出现 `timing` 报 `InvalidField`。apply 用 `insertAnim` / `deleteAnim` 按模板增删预设效果。
+  不返回路径点、文本范围或完整时间轴树。xlsx / docx 的 `scope` 里出现 `timing` 报 `InvalidField`。
+  apply 用 `insertAnim` / `setAnim` / `deleteAnim` 按模板增删改预设效果。
   不接受把整棵 `<p:timing>` 当 JSON 写入；`setTiming` 报 `UnsupportedOp`。
+  该宿主第一条效果 `trigger` 为 `with` 或 `after` 时，外层包装仍写 `delay="indefinite"`，并加 `evt="onBegin"` 指向 `mainSeq` 的 `cTn/@id`（进片自动播）。
+  第一条 `click` 不加这条。
 - `scope.masters` 为 `true` 时，根上带 `masters`。没有母版时为空数组。不依赖 `scope.slide`。不算母版排版引擎，也不把母版装饰形（没有 `p:ph` 的 `p:sp`）收进树。
-  每份母版字段顺序：`id`、`index`、`name`、`theme`、`placeholders`、`layouts`。`id` 为 `master:{n}`。
+  每份母版字段顺序：`id`、`index`、`name`、`theme`、`animCount`、`placeholders`、`layouts`。
+  `scope.timing` 同开时在 `animCount` 之后、`placeholders` 之前带 `timing`。`id` 为 `master:{n}`。
+  `animCount` 只计该 slideMaster 的 `<p:timing>`，不含其版式。
+  母版 `timing` 的 id 为 `master:{n}/anim:{k}`，`target` 对应该母版占位符 id。
+  只收带 `p:ph` 的占位符；母版装饰形不进名单。
   `name` 取该 slideMaster 的 `p:cSld/@name`，没有则为 `null`。`theme` 取该母版 `.rels` 里 Type 以 `/theme` 结尾的部件。没有该关系或部件不在包内则为 `null`。
   有则为对象，字段顺序：`name`、`colors`、`fonts`。`theme.name` 取 `a:theme/@name`，没有则为 `null`。
   `colors` 字段顺序：`name`、`dk1`、`lt1`、`dk2`、`lt2`、`accent1`、`accent2`、`accent3`、`accent4`、`accent5`、`accent6`、`hlink`、`folHlink`。
@@ -906,8 +915,12 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   `fonts` 字段顺序：`name`、`majorLatin`、`minorLatin`、`majorEa`、`minorEa`、`majorCs`、`minorCs`。
   `fonts.name` 取 `a:fontScheme/@name`，没有则为 `null`。
   其余取 `a:majorFont` / `a:minorFont` 下 `a:latin` / `a:ea` / `a:cs` 的 `typeface` 原文，没有该元素则为 `null`。不算主题排版引擎，不展开 `fmtScheme`。
-  `placeholders` 只收带 `p:nvPr/p:ph` 的 `p:sp`（含组合里的），按文档顺序。每份版式字段顺序：`id`、`index`、`name`、`kind`、`placeholders`。
-  `id` 为 `master:{n}/layout:{k}`。`name` 取该 slideLayout 的 `p:cSld/@name`，没有则为 `null`。
+  `placeholders` 只收带 `p:nvPr/p:ph` 的 `p:sp`（含组合里的），按文档顺序。
+  每份版式字段顺序：`id`、`index`、`name`、`kind`、`animCount`、`placeholders`。
+  `scope.timing` 同开时在 `animCount` 之后、`placeholders` 之前带 `timing`。
+  `id` 为 `master:{n}/layout:{k}`。
+  版式 `timing` 的 id 为 `master:{n}/layout:{k}/anim:{m}`，`target` 对应该版式占位符 id。
+  `animCount` 只计该 slideLayout 的 `<p:timing>`。`name` 取该 slideLayout 的 `p:cSld/@name`，没有则为 `null`。
   `kind` 取 `p:sldLayout/@type` 原文，没有则为 `null`。create 写出的那份空白版式 `kind` 为 `blank`、名为「空白」。
   占位符字段顺序：`id`、`shapeId`、`name`、`type`、`idx`、`x`、`y`、`cx`、`cy`、`text`，
   然后 `sz`、`color`、`bold`、`italic`、`underline`、`font`、`eastAsiaFont`、`align`、`textAnchor`、`stable`。
@@ -916,11 +929,15 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   `type` 取 `p:ph/@type`，缺则为 `null`。`idx` 取 `p:ph/@idx` 原文，缺则为 `null`。几何与 `text` 规则与幻灯片形状相同；没有 `txBody` 则 `text` 为 `""`。
   xlsx / docx 的 `scope` 里出现 `masters` 报 `InvalidField`。
 - `scope.notes` 为 `true` 时，每页带 `notes`。没有 notesSlide 关系则为 `null`。
-  有则为对象，字段顺序：`id`、`pictureCount`、`mathCount`、`chartCount`、`smartArtCount`、`tableCount`、`model3dCount`，有图名单时再跟 `pictures`，有公式框名单时再跟 `maths`，有图表名单时再跟 `charts`，
-  有 SmartArt 名单时再跟 `smartArts`，有表名单时再跟 `tables`，有 3D 模型名单时再跟 `model3ds`，然后 `shapes`。
+  有则为对象，字段顺序：`id`、`pictureCount`、`mathCount`、`chartCount`、`smartArtCount`、`tableCount`、`model3dCount`、`animCount`，
+  有图名单时再跟 `pictures`，有公式框名单时再跟 `maths`，有图表名单时再跟 `charts`，
+  有 SmartArt 名单时再跟 `smartArts`，有表名单时再跟 `tables`，有 3D 模型名单时再跟 `model3ds`，
+  `scope.timing` 同开时再跟 `timing`，然后 `shapes`。
   `id` 为 `slide:{n}/notes`。`pictureCount` 只计该备注页上被收入的 `p:pic`，不并进幻灯片 `pictures`。
   备注图字段顺序与幻灯片图相同，含末尾 `contentType`。
-  `mathCount` / `chartCount` / `smartArtCount` / `tableCount` / `model3dCount` 只计该备注页，不并进幻灯片计数。
+  `mathCount` / `chartCount` / `smartArtCount` / `tableCount` / `model3dCount` / `animCount` 只计该备注页，不并进幻灯片计数。
+  备注 `timing` 的 id 为 `slide:{n}/notes/anim:{k}`，`target` 对该备注页对象。
+  根上 `animCount` 与各页 `animCount` 仍只计该页幻灯片 XML，不含备注与母版。
   备注形状判定与幻灯片形状相同（带 `p:txBody` 的 `p:sp`），id 为 `slide:{n}/notes/shape:…`。
   字段顺序与幻灯片形状相同：`id`、`shapeId`、`name`、`prst`、`x`、`y`、`cx`、`cy`、`text`，
   然后 `sz`、`color`、`bold`、`italic`、`underline`、`font`、`eastAsiaFont`、`align`、`textAnchor`、`stable`。
@@ -970,7 +987,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   各文本 run 显式值一致则报该值，不一致或没有显式值则为 `null`，不猜主题。
   `sz` 是百分之一磅。`color` 只报 `a:srgbClr` 的六位大写 RGB。`align` 取 `a:pPr/@algn`。`textAnchor` 取 `a:bodyPr/@anchor`。
 - `stable`：有 `cNvPr/@id` 为 `true`，否则为 `false`。
-- 不返回完整动画时间轴树。效果摘要见上文 `scope.timing`。写入见 `insertAnim` / `deleteAnim`。母版与版式见上文 `scope.masters`。讲义母版槽位见上文 `scope.handout`。
+- 不返回完整动画时间轴树。效果摘要见上文 `scope.timing`。写入见 `insertAnim` / `setAnim` / `deleteAnim`。母版与版式见上文 `scope.masters`。讲义母版槽位见上文 `scope.handout`。
   切换见上文 `transition`。对批注或回复 id 发 `insertPicture` 写 `a:blip`。对批注内图 id 发 `setPictureSize` / `setPicturePos` 报 `InvalidId`。
 
 
@@ -1231,7 +1248,7 @@ create 写出 Transitional 最小包，见 [opc.md](opc.md)。
 给了 `slides[].notes` 时按 `setNotesText` 同一套规则写该页演讲者备注：没有 notesMaster 则新建，再写 notesSlide。
 给了 `slides[].comments` 时按 `insertComment` 同一套规则写该页现代批注（`p188:cmLst`、`/ppt/authors.xml`）。
 给了形状上的 `url` / `file` / `slide` 时按 `insertHyperlink` 同一套规则写 `a:hlinkClick`。create 本期不写 run 级链，也不写批注内图。
-给了 `slides[].transition` 时按 `setTransition` 同一套规则写 `<p:transition>`。给了 `slides[].anims` 时按 `insertAnim` 同一套规则写预设进入淡入。
+给了 `slides[].transition` 时按 `setTransition` 同一套规则写 `<p:transition>`。给了 `slides[].anims` 时按 `insertAnim` 同一套规则写预设进入淡入（第一条 `with` / `after` 进片自动播）。
 给了 `presentation.sections` 时按 `insertSlideSection` 同一套规则写 `p14:sectionLst`：先写第一项（`start` 为 1 则包住全部页；大于 1 则前面的页进空名节），再按数组顺序用 `start` 拆后续节。
 先写该页 `shapes`，再按数组顺序写 `pictures`，再写 `maths`，再写 `model3ds`，再写 `videos`，再写 `audios`，再写 `charts`，再写 `smartArts`，再写 `tables`，再写 `notes`，
 再按数组顺序写 `comments`，再写形状超链接，再写 `transition`，再按数组顺序写 `anims`。
@@ -1395,6 +1412,8 @@ prst 的效果子元素是 `p15:prstTrans`，`prst` 为该 `type`。不写 `sndA
     - `…/table:…`
     - `…/chart:…`
     - `…/smartdiagram:…`
+    - 备注页上同样判定，id 带 `slide:{n}/notes/` 前缀
+    - 母版 / 版式占位符：`master:{n}/shape:…` 或 `master:{n}/layout:{k}/shape:…`
 - **`type`**
   - 本期只认 `fade`
 - **`trigger`**
@@ -1412,26 +1431,58 @@ prst 的效果子元素是 `p15:prstTrans`，`prst` 为该 `type`。不写 `sndA
   - 省略为 `500`
   - 写入 `p:animEffect` 里 `cBhvr/cTn/@dur`
 
-找不到该页报 `IdNotFound`。找不到该对象报 `IdNotFound`。id 不是上述对象、或是备注 / 母版上的对象，报 `InvalidId`。
+找不到该页报 `IdNotFound`。找不到该对象报 `IdNotFound`。id 不是上述对象报 `InvalidId`。
 缺 `type`、`type` 不是 `fade`、或 `trigger` 不是三个之一，报 `InvalidField`。
 `delay` 不是整数或不在 `0`–`60000`，报 `InvalidField`。
 `dur` 不是整数或不在 `1`–`60000`，报 `InvalidField`。
 没有 `<p:timing>` 时写出带 `mainSeq`、`bldLst` / `bldP` 的最小单击淡入树。
+该宿主第一条 `trigger` 为 `with` / `after` 时，外层包装仍写 `delay="indefinite"`，并加 `evt="onBegin"` 指向 `mainSeq` 的 `cTn/@id`。
+第一条 `click` 不加这条。
 已有树则接到 `mainSeq` 末尾：`click` 再挂一个并列包装组；`with` / `after` 接到现有最后一组里，空树时仍建包装组但 `nodeType` 为 `withEffect` / `afterEffect`。
-新 `cTn/@id` 取该页 timing 已有最大整数加 1。该对象尚无 `bldP` 则补一条对应 `spid`、`grpId="0"`。不写 `txEl`。不改 `<p:transition>`。不改未点名效果。
+新 `cTn/@id` 取该宿主 timing 已有最大整数加 1。该对象尚无 `bldP` 则补一条对应 `spid`、`grpId="0"`。不写 `txEl`。不改 `<p:transition>`。不改未点名效果。
+备注没有 notesSlide 时报 `IdNotFound`。母版 / 版式只写占位符，装饰形报 `IdNotFound`。
 docx / xlsx 上发此 op 报 `InvalidField`。
+
+### setAnim
+
+改该宿主名单上已有一条的 `trigger` / `delay` / `dur`。不改 `type`，不换绑定对象。不接受整棵时间轴 JSON。
+
+- **`op`**
+  - 必须是 `"setAnim"`
+- **`id`**
+  - `slide:{n}/anim:{k}`
+  - 或 `slide:{n}/notes/anim:{k}`
+  - 或 `master:{n}/anim:{k}`
+  - 或 `master:{n}/layout:{k}/anim:{m}`
+- **`trigger`**
+  - 可选
+  - `click` / `with` / `after`
+- **`delay`**
+  - 可选
+  - 规则与 `insertAnim` 的 `delay` 相同
+- **`dur`**
+  - 可选
+  - 规则与 `insertAnim` 的 `dur` 相同
+
+`trigger`、`delay`、`dur` 至少一个。都不给报 `InvalidField`。省略的字段不改。
+找不到该条报 `IdNotFound`。不是动画 id 报 `InvalidId`。
+`trigger` 不是三个之一，或 `delay` / `dur` 越界，报 `InvalidField`。
+给了 `dur` 但该效果没有 `p:animEffect` 报 `InvalidField`。
+改 `trigger` 时：第一条改为 `with` / `after` 则给外层包装补 `onBegin`；改为 `click` 则去掉这条。
+非第一条改为 `click` 时抽成新的单击包装组；改为 `with` / `after` 则并进上一组。
+不改未点名效果。不改 `<p:transition>`。docx / xlsx 上发此 op 报 `InvalidField`。
 
 ### deleteAnim
 
-摘掉该页名单上的一条效果。
+摘掉该宿主名单上的一条效果。
 
 | 字段 | 含义 |
 | --- | --- |
 | `op` | 必须是 `"deleteAnim"` |
-| `id` | `slide:{n}/anim:{k}`，`k` 与 inspect 名单文档顺序相同，从 1 计 |
+| `id` | 与 inspect 名单相同的动画 id，从 1 计 |
 
-找不到该页报 `IdNotFound`。序号不存在报 `IdNotFound`。不是动画 id 报 `InvalidId`。
-摘掉对应效果 `cTn`，空壳按 `deleteShape` 清 `tgtEl` 同一套修剪；该 `spid` 没有剩下的效果则摘对应 `bldP`。整节空了则删 `<p:timing>`。删中间一条后面的 `anim:{k}` 要重排。
+找不到该宿主报 `IdNotFound`。序号不存在报 `IdNotFound`。不是动画 id 报 `InvalidId`。
+摘掉对应效果 `cTn`，空壳按 `deleteShape` 清 `tgtEl` 同一套修剪；该 `spid` 没有剩下的效果则摘对应 `bldP`。整节空了则删 `<p:timing>`。删中间一条后面的序号要重排。
 不改 `<p:transition>`。docx / xlsx 上发此 op 报 `InvalidField`。
 
 ### setSlideLayout
@@ -2584,7 +2635,8 @@ presentation 关系、新页或被删页及其 `.rels`、内容类型，
 `deleteZoom` 还可清该页 `<p:timing>` 里对应 `tgtEl`。`setShowPr` 只脏 `/ppt/presProps.xml` 的 `p:showPr`；没有该部件报 `OpcPartMissing`。
 `setProtection` 只脏 `presentation.xml` 的 `p:modifyVerifier`。`setSlideHidden` 只脏该页 `p:sld/@show`。
 `setTransition` 只脏该页幻灯片 XML 的 `<p:transition>`（或包住它的 `mc:AlternateContent`），不脏 timing。
-`insertAnim` / `deleteAnim` 只脏该页幻灯片 XML 的 `<p:timing>`（含 `bldLst`），不脏 `<p:transition>`。
+`insertAnim` / `setAnim` / `deleteAnim` 只脏被点名宿主 XML 的 `<p:timing>`（含 `bldLst`），不脏 `<p:transition>`。
+幻灯片宿主是该页幻灯片 XML；备注是该页 notesSlide；母版 / 版式是被点名的 slideMaster 或 slideLayout。
 `setSlideLayout` 只脏该页 `.rels` 的 `slideLayout` 目标，不脏幻灯片 XML、母版 XML 或版式 XML。
 `insertLayout` 脏新 slideLayout 及其 `.rels`、该母版 XML 与 `.rels`、`[Content_Types].xml`。
 `deleteLayout` 脏该母版 XML 与 `.rels`、被删 slideLayout 及其 `.rels`、内容类型。
@@ -2599,7 +2651,7 @@ presentation 关系、新页或被删页及其 `.rels`、内容类型，
 一次 `ops` 可以混用 `setShapeText`、`setShapeFormat`、形状管理 op、表格 op、`setNotesText`、`setHandoutText`、批注 op、超链接 op、域 op（`insertField`、`setField`、
 `deleteField`）、图片 op、媒体 op、图表 op、SmartArt op、幻灯片管理 op（含 `setTransition`、`setSlideLayout`）、母版写入 op（`insertLayout`、
 `deleteLayout`、`insertPlaceholder`、`deletePlaceholder`、`insertMaster`、`deleteMaster`）、主题与尺寸 op（`setSlideSize`、
-`setThemeColors`、`setThemeFonts`）、动画 op（`insertAnim`、`deleteAnim`）、幻灯片节 op、自定义放映 op（`insertCustomShow`、`setCustomShow`、
+`setThemeColors`、`setThemeFonts`）、动画 op（`insertAnim`、`setAnim`、`deleteAnim`）、幻灯片节 op、自定义放映 op（`insertCustomShow`、`setCustomShow`、
 `deleteCustomShow`）、OLE op（`insertOle`、`deleteOle`）、Zoom op（`insertZoom`、`deleteZoom`）、`setShowPr`、
 `setProtection` 与 `setProps` / `setCustomProp` / `deleteCustomProp`。
 文件属性 op 还可以脏 `/docProps/core.xml`、`/docProps/app.xml`、`/docProps/custom.xml`、根 `.rels` 与 `[Content_Types].xml`。

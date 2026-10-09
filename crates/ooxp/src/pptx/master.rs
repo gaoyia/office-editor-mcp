@@ -92,6 +92,31 @@ impl Catalog {
         self.master(n).map(|m| m.part.as_str())
     }
 
+    pub fn xml_part(
+        &self,
+        master: usize,
+        layout: Option<usize>,
+        path: &str,
+    ) -> Result<String, Error> {
+        match layout {
+            Some(k) => self
+                .layout(master, k)
+                .map(|l| l.part.clone())
+                .ok_or_else(|| {
+                    Error::with_path(
+                        ErrorKind::LayoutNotFound {
+                            master: master as u32,
+                            layout: k as u32,
+                        },
+                        path,
+                    )
+                }),
+            None => self.master(master).map(|m| m.part.clone()).ok_or_else(|| {
+                Error::with_path(ErrorKind::MasterNotFound { n: master as u32 }, path)
+            }),
+        }
+    }
+
     fn layout(&self, master: usize, layout: usize) -> Option<&LayoutRec> {
         self.master(master)?
             .layouts
@@ -135,32 +160,48 @@ pub fn layout_id_json(pkg: &Package, catalog: &Catalog, slide_part: &str) -> Res
     Ok(json!(catalog.layout_id_of(&part)))
 }
 
-pub fn masters_json(pkg: &Package, catalog: &Catalog) -> Result<Value, Error> {
+pub fn masters_json(pkg: &Package, catalog: &Catalog, want_timing: bool) -> Result<Value, Error> {
     let mut out = Vec::new();
     for m in &catalog.masters {
         let doc = xml::parse(pkg.get(&m.part)?)?;
         let host = format!("master:{}", m.index);
+        let master_anims = super::timing::list(&doc.root, &host, true);
         let mut layouts = Vec::new();
         for l in &m.layouts {
             let layout_doc = xml::parse(pkg.get(&l.part)?)?;
             let layout_host = format!("{host}/layout:{}", l.index);
-            layouts.push(json!({
-                "id": layout_host,
-                "index": l.index,
-                "name": l.name,
-                "kind": l.kind,
-                "placeholders": placeholders_json(&layout_doc.root, &layout_host),
-            }));
+            let layout_anims = super::timing::list(&layout_doc.root, &layout_host, true);
+            let mut layout_obj = Map::new();
+            layout_obj.insert("id".into(), json!(layout_host));
+            layout_obj.insert("index".into(), json!(l.index));
+            layout_obj.insert("name".into(), json!(l.name));
+            layout_obj.insert("kind".into(), json!(l.kind));
+            layout_obj.insert("animCount".into(), json!(layout_anims.len()));
+            if want_timing {
+                layout_obj.insert("timing".into(), Value::Array(layout_anims));
+            }
+            layout_obj.insert(
+                "placeholders".into(),
+                json!(placeholders_json(&layout_doc.root, &layout_host)),
+            );
+            layouts.push(Value::Object(layout_obj));
         }
         let theme = super::theme::theme_json(pkg, &m.part)?;
-        out.push(json!({
-            "id": host,
-            "index": m.index,
-            "name": m.name,
-            "theme": theme,
-            "placeholders": placeholders_json(&doc.root, &host),
-            "layouts": layouts,
-        }));
+        let mut obj = Map::new();
+        obj.insert("id".into(), json!(host));
+        obj.insert("index".into(), json!(m.index));
+        obj.insert("name".into(), json!(m.name));
+        obj.insert("theme".into(), theme);
+        obj.insert("animCount".into(), json!(master_anims.len()));
+        if want_timing {
+            obj.insert("timing".into(), Value::Array(master_anims));
+        }
+        obj.insert(
+            "placeholders".into(),
+            json!(placeholders_json(&doc.root, &host)),
+        );
+        obj.insert("layouts".into(), Value::Array(layouts));
+        out.push(Value::Object(obj));
     }
     Ok(Value::Array(out))
 }

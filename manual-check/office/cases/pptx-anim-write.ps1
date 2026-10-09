@@ -1,4 +1,4 @@
-# pptx 动画写入：docs/checklist-pptx.md 的 Aw1–Aw5。
+# pptx 动画写入：docs/checklist-pptx.md 的 Aw1–Aw10。
 # Aw2 的源文件：PowerPoint 亲手另存，第一页进入淡入。不要只用库 create 产物当带动画的唯一样例。
 
 $ErrorActionPreference = 'Stop'
@@ -356,3 +356,165 @@ $aw6ok = ($cap6 -notmatch 'Repair') `
     -and ($xml6 -match 'dur="800"') `
     -and ($com6 -eq 2)
 Add-Check 'pptx-Aw6' $aw6ok "cap=$cap6 delay=$($list6[1].delay) dur=$($list6[1].dur) com=$com6"
+
+# Aw7：setAnim 改已有第二条的 trigger / delay / dur。
+$aw7 = Get-OutPath 'pptx-anim-write-set.pptx'
+Close-PptPresByPath $ppt $aw7
+if (Test-Path $aw7) { Remove-Item -Force $aw7 }
+Invoke-OoxpRequest @{
+    schemaVersion = 1; action = 'apply'
+    path = $aw6.Replace('\', '/')
+    output = $aw7.Replace('\', '/')
+    ops = @(@{ op = 'setAnim'; id = 'slide:1/anim:2'; trigger = 'after'; delay = 200; dur = 700 })
+} 'pptx-aw-set' | Out-Null
+$tree7 = Invoke-OoxpTree @{
+    schemaVersion = 1; action = 'inspect'
+    path = $aw7.Replace('\', '/'); format = 'pptx'
+    scope = @{ timing = $true; slide = 1 }
+} 'pptx-aw-set-inspect'
+$list7 = @($tree7.slides[0].timing)
+$pres7 = Open-PptPres $ppt $aw7
+$cap7 = Get-PptCaption $pres7
+$s7 = Get-PptSlide $pres7 1
+$com7 = Get-PptMainSeqCount $s7
+Release-Com $s7
+Close-PptPres $pres7
+$aw7ok = ($cap7 -notmatch 'Repair') `
+    -and ($list7.Count -eq 2) `
+    -and ([string]$list7[1].trigger -eq 'after') `
+    -and ([int]$list7[1].delay -eq 200) `
+    -and ([int]$list7[1].dur -eq 700) `
+    -and ($com7 -eq 2)
+Add-Check 'pptx-Aw7' $aw7ok "cap=$cap7 trigger=$($list7[1].trigger) delay=$($list7[1].delay) dur=$($list7[1].dur) com=$com7"
+
+# Aw8：第一条 with 进片自动播：外层有 onBegin，仍有 delay=indefinite。
+$aw8 = Get-OutPath 'pptx-anim-write-onbegin.pptx'
+Close-PptPresByPath $ppt $aw8
+if (Test-Path $aw8) { Remove-Item -Force $aw8 }
+Invoke-OoxpRequest @{
+    schemaVersion = 1; action = 'apply'
+    path = $hostPath.Replace('\', '/')
+    output = $aw8.Replace('\', '/')
+    ops = @(@{ op = 'insertAnim'; id = $shape1; type = 'fade'; trigger = 'with' })
+} 'pptx-aw-onbegin' | Out-Null
+$tree8 = Invoke-OoxpTree @{
+    schemaVersion = 1; action = 'inspect'
+    path = $aw8.Replace('\', '/'); format = 'pptx'
+    scope = @{ timing = $true; slide = 1 }
+} 'pptx-aw-onbegin-inspect'
+$list8 = @($tree8.slides[0].timing)
+$xml8 = Get-ZipEntryText $aw8 'ppt/slides/slide1.xml'
+$pres8 = Open-PptPres $ppt $aw8
+$cap8 = Get-PptCaption $pres8
+$s8 = Get-PptSlide $pres8 1
+$com8 = Get-PptMainSeqCount $s8
+Release-Com $s8
+Close-PptPres $pres8
+$aw8ok = ($cap8 -notmatch 'Repair') `
+    -and ($list8.Count -eq 1) `
+    -and ([string]$list8[0].trigger -eq 'with') `
+    -and ($xml8 -match 'evt="onBegin"') `
+    -and ($xml8 -match 'delay="indefinite"') `
+    -and ($com8 -eq 1)
+Add-Check 'pptx-Aw8' $aw8ok "cap=$cap8 trigger=$($list8[0].trigger) com=$com8"
+
+# Aw9：备注页动画。不要用 NotesPage COM Count。
+$aw9 = Get-OutPath 'pptx-anim-write-notes.pptx'
+Close-PptPresByPath $ppt $aw9
+if (Test-Path $aw9) { Remove-Item -Force $aw9 }
+$noted = Get-OutPath 'pptx-anim-write-notes-src.pptx'
+Close-PptPresByPath $ppt $noted
+if (Test-Path $noted) { Remove-Item -Force $noted }
+Invoke-OoxpRequest @{
+    schemaVersion = 1; action = 'apply'
+    path = $hostPath.Replace('\', '/')
+    output = $noted.Replace('\', '/')
+    ops = @(@{ op = 'setNotesText'; id = 'slide:1'; text = '演讲者备注' })
+} 'pptx-aw-notes-src' | Out-Null
+$treeNotes = Invoke-OoxpTree @{
+    schemaVersion = 1; action = 'inspect'
+    path = $noted.Replace('\', '/'); format = 'pptx'
+    scope = @{ notes = $true; slide = 1 }
+} 'pptx-aw-notes-shapes'
+$notesBody = $null
+try {
+    foreach ($sp in @($treeNotes.slides[0].notes.shapes)) {
+        if ([string]$sp.text -eq '演讲者备注') { $notesBody = [string]$sp.id; break }
+    }
+} catch {}
+Invoke-OoxpRequest @{
+    schemaVersion = 1; action = 'apply'
+    path = $noted.Replace('\', '/')
+    output = $aw9.Replace('\', '/')
+    ops = @(@{ op = 'insertAnim'; id = $notesBody; type = 'fade' })
+} 'pptx-aw-notes' | Out-Null
+$tree9 = Invoke-OoxpTree @{
+    schemaVersion = 1; action = 'inspect'
+    path = $aw9.Replace('\', '/'); format = 'pptx'
+    scope = @{ notes = $true; timing = $true }
+} 'pptx-aw-notes-inspect'
+$notesList = @()
+try { $notesList = @($tree9.slides[0].notes.timing) } catch {}
+$xml9 = Get-ZipEntryText $aw9 'ppt/notesSlides/notesSlide1.xml'
+$pres9 = Open-PptPres $ppt $aw9
+$cap9 = Get-PptCaption $pres9
+Close-PptPres $pres9
+$aw9ok = ($cap9 -notmatch 'Repair') `
+    -and ([int]$tree9.animCount -eq 0) `
+    -and ($notesList.Count -eq 1) `
+    -and ([string]$notesList[0].id -eq 'slide:1/notes/anim:1') `
+    -and ($xml9 -match '<p:timing')
+Add-Check 'pptx-Aw9' $aw9ok "cap=$cap9 host=$notesBody count=$($notesList.Count) root=$($tree9.animCount) hasTiming=$($xml9 -match '<p:timing')"
+
+# Aw10：母版占位符动画。COM 读 SlideMaster.TimeLine。
+$aw10 = Get-OutPath 'pptx-anim-write-master.pptx'
+Close-PptPresByPath $ppt $aw10
+if (Test-Path $aw10) { Remove-Item -Force $aw10 }
+$masterPh = Get-OutPath 'pptx-anim-write-master-ph.pptx'
+Close-PptPresByPath $ppt $masterPh
+if (Test-Path $masterPh) { Remove-Item -Force $masterPh }
+Invoke-OoxpRequest @{
+    schemaVersion = 1; action = 'apply'
+    path = $hostPath.Replace('\', '/')
+    output = $masterPh.Replace('\', '/')
+    ops = @(@{ op = 'insertPlaceholder'; id = 'master:1'; type = 'title'; text = '母版标题' })
+} 'pptx-aw-master-ph' | Out-Null
+$treePh = Invoke-OoxpTree @{
+    schemaVersion = 1; action = 'inspect'
+    path = $masterPh.Replace('\', '/'); format = 'pptx'
+    scope = @{ masters = $true }
+} 'pptx-aw-master-ph-inspect'
+$phId = $null
+try { $phId = [string]$treePh.masters[0].placeholders[0].id } catch {}
+Invoke-OoxpRequest @{
+    schemaVersion = 1; action = 'apply'
+    path = $masterPh.Replace('\', '/')
+    output = $aw10.Replace('\', '/')
+    ops = @(@{ op = 'insertAnim'; id = $phId; type = 'fade' })
+} 'pptx-aw-master' | Out-Null
+$tree10 = Invoke-OoxpTree @{
+    schemaVersion = 1; action = 'inspect'
+    path = $aw10.Replace('\', '/'); format = 'pptx'
+    scope = @{ masters = $true; timing = $true }
+} 'pptx-aw-master-inspect'
+$masterList = @()
+try { $masterList = @($tree10.masters[0].timing) } catch {}
+$xml10 = Get-ZipEntryText $aw10 'ppt/slideMasters/slideMaster1.xml'
+$pres10 = Open-PptPres $ppt $aw10
+$cap10 = Get-PptCaption $pres10
+$master10 = $pres10.SlideMaster
+$tl10 = $master10.TimeLine
+$seq10 = $tl10.MainSequence
+try { $com10 = [int]$seq10.Count } catch { $com10 = -1 }
+Release-Com $seq10
+Release-Com $tl10
+Release-Com $master10
+Close-PptPres $pres10
+$aw10ok = ($cap10 -notmatch 'Repair') `
+    -and ([int]$tree10.animCount -eq 0) `
+    -and ($masterList.Count -eq 1) `
+    -and ([string]$masterList[0].id -eq 'master:1/anim:1') `
+    -and ($xml10 -match '<p:timing') `
+    -and ($com10 -eq 1)
+Add-Check 'pptx-Aw10' $aw10ok "cap=$cap10 ph=$phId count=$($masterList.Count) com=$com10 hasTiming=$($xml10 -match '<p:timing')"
+

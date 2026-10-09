@@ -78,6 +78,7 @@ pub fn notes_json(
     want_tables: bool,
     want_model3ds: bool,
     want_maths: bool,
+    want_timing: bool,
 ) -> Result<Value, Error> {
     let Some(part) = notes_slide_part(pkg, slide_part)? else {
         return Ok(Value::Null);
@@ -131,6 +132,8 @@ pub fn notes_json(
     obj.insert("tableCount".into(), json!(n_tables));
     let m3ds = super::model3d::collect(&doc.root, &host);
     obj.insert("model3dCount".into(), json!(m3ds.len()));
+    let anims = super::timing::list(&doc.root, &host, false);
+    obj.insert("animCount".into(), json!(anims.len()));
     if want_pictures {
         obj.insert(
             "pictures".into(),
@@ -154,6 +157,9 @@ pub fn notes_json(
             "model3ds".into(),
             Value::Array(super::model3d::list_json(&m3ds)),
         );
+    }
+    if want_timing {
+        obj.insert("timing".into(), Value::Array(anims));
     }
     obj.insert("shapes".into(), Value::Array(shapes));
     Ok(Value::Object(obj))

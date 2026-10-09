@@ -75,12 +75,13 @@ pptx 模块不要引用 `docx::` 或 `xlsx::`。`c:chart`（§21.2）用 `crates
 | C8 | `.plan/2026年-10月-9日-✅-xlsx-pptx-嵌入OMML.md` | 幻灯片图；不要改 Word 公式 |
 | C9 | `.plan/2026年-10月-9日-✅-pptx-xlsx-形状文字格式.md` | 形状增删；xlsx 文本框 / 形状；不要改 Word `setRunFormat` |
 | 26 | `.plan/2026年-10月-9日-✅-pptx-动画延迟.md` | 动画写入 |
+| 27 | `.plan/2026年-10月-9日-✅-pptx-动画setAnim与进片.md` | 动画延迟 |
 
 0 与 2 不要合成一份。图是 `p:pic`，图表是 `p:graphicFrame`，位置是画布 `a:xfrm`。第一期页名单和 `setShapeText` 见总计划。
 
 ## 待做
 
-第一期、第二轮与第三轮顺序待做已空。第三轮是 Office 16.0 跨格式 DrawingML 补齐，不是返工第二轮名单。挂机下一项见「先探测再进待做」。
+无。第三轮顺序待做已空。序号 27 已过。挂机下一项见「先探测再进待做」。
 
 完整放映引擎仍永不做。不按新画布重排。create 补齐不含 OLE。备注里的表不含 create。Zoom 本期不写摘要缩放，也不写放映跳转。
 

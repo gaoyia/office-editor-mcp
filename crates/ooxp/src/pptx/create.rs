@@ -11,9 +11,10 @@ use crate::xml;
 use super::{
     chart, comments, hyperlink, media, notes, picture,
     request::{
-        self, CreateAnim, CreateAnimHost, CreateHyperlink, CreateSection, InsertChartOp,
-        InsertCommentOp, InsertHyperlinkOp, InsertMediaOp, InsertPictureOp, InsertSlideSectionOp,
-        InsertSmartArtOp, InsertTableOp, PptxLinkKind, SetNotesTextOp, SetTransitionOp,
+        self, AnimTarget, CreateAnim, CreateAnimHost, CreateHyperlink, CreateSection,
+        InsertChartOp, InsertCommentOp, InsertHyperlinkOp, InsertMediaOp, InsertPictureOp,
+        InsertSlideSectionOp, InsertSmartArtOp, InsertTableOp, PptxLinkKind, SetNotesTextOp,
+        SetTransitionOp,
     },
     section,
     shape::{self, ShapeKey, ShapeTarget, SlideMeta},
@@ -978,8 +979,10 @@ fn attach_anims(pkg: &mut Package, slides: &[NewSlide]) -> Result<(), Error> {
             timing::insert(
                 pkg,
                 &metas,
+                pres_part,
+                &pres.root,
                 &host_id,
-                n,
+                &AnimTarget::Slide { slide: n },
                 &anim.trigger,
                 anim.delay,
                 anim.dur,

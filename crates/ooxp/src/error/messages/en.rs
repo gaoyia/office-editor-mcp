@@ -767,12 +767,12 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             }
             IdReason::CustomPropPrefix => "deleteCustomProp id must be prop:NAME".into(),
             IdReason::AnimForm => {
-                "anim id must be slide:N/anim:K; insertAnim id must be a slide object".into()
+                "anim id must be slide:N/anim:K, slide:N/notes/anim:K, master:N/anim:K, or master:N/layout:K/anim:M; insertAnim id must be a bindable object".into()
             }
             IdReason::AnimIndexNotInt => "anim index must be a positive integer".into(),
             IdReason::AnimIndexFromOne => "anim index is 1-based".into(),
             IdReason::InsertAnimNeedsHost => {
-                "insertAnim id must be a slide shape, picture, table, chart, SmartArt, video, or audio; notes and masters are not allowed".into()
+                "insertAnim id must be a slide or notes shape, picture, table, chart, SmartArt, video, or audio, or a master/layout placeholder".into()
             }
         },
         ErrorKind::SheetNotFound { name } => format!("Sheet not found: {name}"),
@@ -948,6 +948,10 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::InvalidAnimTrigger => "trigger must be click, with, or after".into(),
         ErrorKind::InvalidAnimDelay => "delay must be an integer from 0 to 60000".into(),
         ErrorKind::InvalidAnimDur => "dur must be an integer from 1 to 60000".into(),
+        ErrorKind::NeedAnimSetField => {
+            "setAnim requires at least one of trigger, delay, or dur".into()
+        }
+        ErrorKind::AnimNeedEffectDur => "dur can only be set on an effect that has animEffect".into(),
         ErrorKind::InvalidTransitionDur => "dur must be an integer from 1 to 60000".into(),
         ErrorKind::InvalidTransitionAdvTm => {
             "advTm must be an integer from 1 to 86400000".into()

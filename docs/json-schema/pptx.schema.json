@@ -1464,6 +1464,41 @@
         }
       }
     },
+    "setAnimOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setAnim"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "trigger": {
+          "type": "string",
+          "enum": [
+            "click",
+            "with",
+            "after"
+          ]
+        },
+        "delay": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 60000
+        },
+        "dur": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 60000
+        }
+      }
+    },
     "setSlideLayoutOp": {
       "type": "object",
       "required": [

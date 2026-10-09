@@ -195,7 +195,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
             .map(|c| c.len())
             .unwrap_or_else(|| connector::count(&doc.root));
         connector_count += n_cxn;
-        let anims = timing::list(&doc.root, s.index);
+        let anims = timing::list(&doc.root, &host, false);
         let n_anims = anims.len();
         anim_count += n_anims;
         let mut obj = Map::new();
@@ -271,6 +271,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
                     want_tables,
                     want_model3ds,
                     want_maths,
+                    want_timing,
                 )?,
             );
         }
@@ -346,7 +347,10 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     root.insert("modifyProtection".into(), protect::inspect(&pres.root));
     root.insert("props".into(), crate::props::inspect(&pkg)?);
     if want_masters {
-        root.insert("masters".into(), master::masters_json(&pkg, &catalog)?);
+        root.insert(
+            "masters".into(),
+            master::masters_json(&pkg, &catalog, want_timing)?,
+        );
     }
     if want_handout {
         root.insert("handout".into(), handout::handout_json(&pkg, &pres_part)?);

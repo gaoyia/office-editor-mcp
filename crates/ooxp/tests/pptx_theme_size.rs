@@ -132,7 +132,15 @@ fn inspect_slide_size_and_theme_keys() {
     let m = &masters["masters"][0];
     assert_eq!(
         object_keys(m),
-        ["id", "index", "name", "theme", "placeholders", "layouts"]
+        [
+            "id",
+            "index",
+            "name",
+            "theme",
+            "animCount",
+            "placeholders",
+            "layouts"
+        ]
     );
     let theme = &m["theme"];
     assert_eq!(object_keys(theme), ["name", "colors", "fonts"]);

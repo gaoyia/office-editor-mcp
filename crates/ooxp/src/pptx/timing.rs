@@ -10,20 +10,23 @@ use crate::opc::Package;
 use crate::smartart::DGM_NS;
 use crate::xml::{Element, Node};
 
+use super::master;
+use super::notes;
 use super::ole::{OLE_URI, OLE_URI_ISO};
+use super::request::AnimTarget;
 use super::shape::{self, SlideMeta};
 use super::table::TABLE_URI;
 
 const EFFECT_TYPES: &[&str] = &["clickEffect", "withEffect", "afterEffect"];
 const PRESET_CLASS: &[&str] = &["entr", "exit", "emph", "path", "verb", "mediacall"];
 
-pub fn list(root: &Element, slide: usize) -> Vec<Value> {
-    let objects = object_map(root, slide);
+pub fn list(root: &Element, host: &str, placeholders_only: bool) -> Vec<Value> {
+    let objects = object_map(root, host, placeholders_only);
     let mut out = Vec::new();
     walk_timings(root, &mut |timing| {
         shape::walk_choice(timing, &mut |e| {
             if is_effect(e) {
-                out.push(effect_json(e, &objects, slide, out.len() + 1));
+                out.push(effect_json(e, &objects, host, out.len() + 1));
             }
         });
     });
@@ -33,33 +36,31 @@ pub fn list(root: &Element, slide: usize) -> Vec<Value> {
 pub fn insert(
     pkg: &mut Package,
     slides: &[SlideMeta],
+    pres_part: &str,
+    pres_root: &Element,
     host_id: &str,
-    slide: usize,
+    target: &AnimTarget,
     trigger: &str,
     delay: u32,
     dur: u32,
     op_index: usize,
 ) -> Result<(), Error> {
-    if slide < 1 || slide > slides.len() {
-        return Err(Error::with_path(
-            ErrorKind::SlideNotFound { n: slide as u32 },
-            format!("ops[{op_index}].id"),
-        ));
-    }
-    let part = slides[slide - 1].part.clone();
+    let (part, prefix) = resolve_part(pkg, slides, pres_part, pres_root, target, op_index)?;
     let mut doc = crate::xml::parse(pkg.get(&part)?)?;
-    let spid = spid_for_host(&doc.root, slide, host_id).ok_or_else(|| {
-        Error::with_path(
-            ErrorKind::AnimHostNotFound {
-                id: host_id.to_string(),
-            },
-            format!("ops[{op_index}].id"),
-        )
-    })?;
+    let spid = spid_for_host(&doc.root, &prefix, host_id, target.placeholders_only()).ok_or_else(
+        || {
+            Error::with_path(
+                ErrorKind::AnimHostNotFound {
+                    id: host_id.to_string(),
+                },
+                format!("ops[{op_index}].id"),
+            )
+        },
+    )?;
     let node_type = node_type_of(trigger);
     match first_timing_mut(&mut doc.root) {
         None => {
-            let timing = build_full_timing(&spid, node_type, 1, delay, dur);
+            let timing = build_full_timing(&spid, node_type, 1, delay, dur, trigger != "click");
             let at = timing_insert_index(&doc.root);
             doc.root.children.insert(at, Node::Element(timing));
         }
@@ -74,18 +75,14 @@ pub fn insert(
 pub fn delete(
     pkg: &mut Package,
     slides: &[SlideMeta],
+    pres_part: &str,
+    pres_root: &Element,
     id: &str,
-    slide: usize,
+    target: &AnimTarget,
     index: usize,
     op_index: usize,
 ) -> Result<(), Error> {
-    if slide < 1 || slide > slides.len() {
-        return Err(Error::with_path(
-            ErrorKind::SlideNotFound { n: slide as u32 },
-            format!("ops[{op_index}].id"),
-        ));
-    }
-    let part = slides[slide - 1].part.clone();
+    let (part, _) = resolve_part(pkg, slides, pres_part, pres_root, target, op_index)?;
     let mut doc = crate::xml::parse(pkg.get(&part)?)?;
     let Some(timing_idx) = first_timing_index(&doc.root) else {
         return Err(Error::with_path(
@@ -126,6 +123,92 @@ pub fn delete(
     Ok(())
 }
 
+pub fn set(
+    pkg: &mut Package,
+    slides: &[SlideMeta],
+    pres_part: &str,
+    pres_root: &Element,
+    id: &str,
+    target: &AnimTarget,
+    index: usize,
+    trigger: Option<&str>,
+    delay: Option<u32>,
+    dur: Option<u32>,
+    op_index: usize,
+) -> Result<(), Error> {
+    let (part, _) = resolve_part(pkg, slides, pres_part, pres_root, target, op_index)?;
+    let mut doc = crate::xml::parse(pkg.get(&part)?)?;
+    let Some(timing) = first_timing_mut(&mut doc.root) else {
+        return Err(Error::with_path(
+            ErrorKind::AnimNotFound { id: id.to_string() },
+            format!("ops[{op_index}].id"),
+        ));
+    };
+    let paths = effect_paths(timing);
+    if index < 1 || index > paths.len() {
+        return Err(Error::with_path(
+            ErrorKind::AnimNotFound { id: id.to_string() },
+            format!("ops[{op_index}].id"),
+        ));
+    }
+    let path = paths[index - 1].clone();
+    if let Some(delay) = delay {
+        set_effect_delay(get_mut_at(timing, &path), delay);
+    }
+    if let Some(dur) = dur {
+        set_effect_dur(get_mut_at(timing, &path), dur, op_index)?;
+    }
+    if let Some(trigger) = trigger {
+        set_effect_trigger(timing, &path, index == 1, trigger);
+    }
+    pkg.set(&part, doc.to_bytes()?)?;
+    Ok(())
+}
+
+fn resolve_part(
+    pkg: &Package,
+    slides: &[SlideMeta],
+    pres_part: &str,
+    pres_root: &Element,
+    target: &AnimTarget,
+    op_index: usize,
+) -> Result<(String, String), Error> {
+    let path = format!("ops[{op_index}].id");
+    match target {
+        AnimTarget::Slide { slide } => {
+            if *slide < 1 || *slide > slides.len() {
+                return Err(Error::with_path(
+                    ErrorKind::SlideNotFound { n: *slide as u32 },
+                    path,
+                ));
+            }
+            Ok((slides[slide - 1].part.clone(), target.prefix()))
+        }
+        AnimTarget::Notes { slide } => {
+            if *slide < 1 || *slide > slides.len() {
+                return Err(Error::with_path(
+                    ErrorKind::SlideNotFound { n: *slide as u32 },
+                    path,
+                ));
+            }
+            let part = notes::notes_slide_part(pkg, &slides[slide - 1].part)?.ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::AnimHostNotFound {
+                        id: target.prefix(),
+                    },
+                    path,
+                )
+            })?;
+            Ok((part, target.prefix()))
+        }
+        AnimTarget::Master { master, layout } => {
+            let catalog = master::catalog(pkg, pres_part, pres_root)?;
+            let part = catalog.xml_part(*master, *layout, &path)?;
+            Ok((part, target.prefix()))
+        }
+    }
+}
+
 fn walk_timings<'a>(el: &'a Element, f: &mut impl FnMut(&'a Element)) {
     if el.local_name() == "AlternateContent" {
         if let Some(i) = shape::first_alt_child_index(el) {
@@ -151,12 +234,7 @@ fn is_effect(el: &Element) -> bool {
             .is_some_and(|t| EFFECT_TYPES.contains(&t))
 }
 
-fn effect_json(
-    effect: &Element,
-    objects: &HashMap<String, String>,
-    slide: usize,
-    k: usize,
-) -> Value {
+fn effect_json(effect: &Element, objects: &HashMap<String, String>, host: &str, k: usize) -> Value {
     let trigger = match effect.attr_local("nodeType") {
         Some("withEffect") => "with",
         Some("afterEffect") => "after",
@@ -211,7 +289,7 @@ fn effect_json(
         .and_then(|s| lookup(objects, s))
         .map_or(Value::Null, |id| json!(id));
     let mut obj = Map::new();
-    obj.insert("id".into(), json!(format!("slide:{slide}/anim:{k}")));
+    obj.insert("id".into(), json!(format!("{host}/anim:{k}")));
     obj.insert("target".into(), target);
     obj.insert("type".into(), json!(type_name));
     obj.insert("trigger".into(), json!(trigger));
@@ -303,46 +381,69 @@ fn ids_match(file: &str, req: &str) -> bool {
     }
 }
 
-fn object_map(root: &Element, slide: usize) -> HashMap<String, String> {
-    let host = format!("slide:{slide}");
+fn object_map(root: &Element, host: &str, placeholders_only: bool) -> HashMap<String, String> {
     let mut map = HashMap::new();
-    shape::walk_choice(root, &mut |e| match e.local_name() {
-        "sp" => {
-            if e.child_by_local("txBody").is_some() {
+    shape::walk_choice(root, &mut |e| {
+        if placeholders_only {
+            if is_placeholder_sp(e) {
                 if let Some(id) = cnv_id(e, "nvSpPr") {
                     map.insert(id.clone(), format!("{host}/shape:{id}"));
                 }
             }
+            return;
         }
-        "cxnSp" => {
-            if let Some(id) = cnv_id(e, "nvCxnSpPr") {
-                map.insert(id.clone(), format!("{host}/cxn:{id}"));
+        match e.local_name() {
+            "sp" => {
+                if e.child_by_local("txBody").is_some() {
+                    if let Some(id) = cnv_id(e, "nvSpPr") {
+                        map.insert(id.clone(), format!("{host}/shape:{id}"));
+                    }
+                }
             }
-        }
-        "pic" => {
-            if let Some(id) = cnv_id(e, "nvPicPr") {
-                let kind = match super::media::media_kind(e) {
-                    Some(super::media::MediaKind::Video) => "video",
-                    Some(super::media::MediaKind::Audio) => "audio",
-                    None => "pic",
-                };
-                map.insert(id.clone(), format!("{host}/{kind}:{id}"));
+            "cxnSp" => {
+                if let Some(id) = cnv_id(e, "nvCxnSpPr") {
+                    map.insert(id.clone(), format!("{host}/cxn:{id}"));
+                }
             }
-        }
-        "graphicFrame" => {
-            if let Some(id) = cnv_id(e, "nvGraphicFramePr") {
-                if let Some(kind) = frame_kind(e) {
+            "pic" => {
+                if let Some(id) = cnv_id(e, "nvPicPr") {
+                    let kind = match super::media::media_kind(e) {
+                        Some(super::media::MediaKind::Video) => "video",
+                        Some(super::media::MediaKind::Audio) => "audio",
+                        None => "pic",
+                    };
                     map.insert(id.clone(), format!("{host}/{kind}:{id}"));
                 }
             }
+            "graphicFrame" => {
+                if let Some(id) = cnv_id(e, "nvGraphicFramePr") {
+                    if let Some(kind) = frame_kind(e) {
+                        map.insert(id.clone(), format!("{host}/{kind}:{id}"));
+                    }
+                }
+            }
+            _ => {}
         }
-        _ => {}
     });
     map
 }
 
-fn spid_for_host(root: &Element, slide: usize, host_id: &str) -> Option<String> {
-    object_map(root, slide)
+fn is_placeholder_sp(el: &Element) -> bool {
+    el.local_name() == "sp"
+        && el
+            .child_by_local("nvSpPr")
+            .and_then(|nv| nv.child_by_local("nvPr"))
+            .and_then(|nv| nv.child_by_local("ph"))
+            .is_some()
+}
+
+fn spid_for_host(
+    root: &Element,
+    host: &str,
+    host_id: &str,
+    placeholders_only: bool,
+) -> Option<String> {
+    object_map(root, host, placeholders_only)
         .into_iter()
         .find(|(_, id)| id == host_id)
         .map(|(spid, _)| spid)
@@ -404,15 +505,34 @@ fn append_effect(
     }
     let click_like = trigger != "with" && trigger != "after";
     let has_any = has_effect(timing);
+    ensure_main_seq_lst(timing);
+    let seq_id = main_seq_id(timing).unwrap_or(2);
     if click_like || !has_any {
-        let group = build_click_group(&take_ids(&mut next, 5), spid, node_type, delay, dur);
+        let auto = !has_any && trigger != "click";
+        let group = build_click_group(
+            &take_ids(&mut next, 5),
+            spid,
+            node_type,
+            delay,
+            dur,
+            auto,
+            seq_id,
+        );
         ensure_main_seq_lst(timing).push_element(group);
     } else if let Some(path) = effect_paths(timing).last().cloned() {
         // with / after：接到最后一条效果所在 par 的兄弟位置。
         let sibling = fade_effect_par(&take_ids(&mut next, 3), spid, node_type, delay, dur);
         append_sibling_par(timing, &path, sibling);
     } else {
-        let group = build_click_group(&take_ids(&mut next, 5), spid, node_type, delay, dur);
+        let group = build_click_group(
+            &take_ids(&mut next, 5),
+            spid,
+            node_type,
+            delay,
+            dur,
+            trigger != "click",
+            seq_id,
+        );
         ensure_main_seq_lst(timing).push_element(group);
     }
     ensure_bld_p(timing, spid);
@@ -427,11 +547,26 @@ fn take_ids(next: &mut u32, n: usize) -> Vec<u32> {
     out
 }
 
-fn build_full_timing(spid: &str, node_type: &str, start: u32, delay: u32, dur: u32) -> Element {
+fn build_full_timing(
+    spid: &str,
+    node_type: &str,
+    start: u32,
+    delay: u32,
+    dur: u32,
+    auto: bool,
+) -> Element {
     let mut next = start;
     let root_id = take_ids(&mut next, 1)[0];
     let seq_id = take_ids(&mut next, 1)[0];
-    let group = build_click_group(&take_ids(&mut next, 5), spid, node_type, delay, dur);
+    let group = build_click_group(
+        &take_ids(&mut next, 5),
+        spid,
+        node_type,
+        delay,
+        dur,
+        auto,
+        seq_id,
+    );
 
     let mut main = Element::new("p:cTn")
         .with_attr("id", seq_id.to_string())
@@ -471,7 +606,15 @@ fn build_full_timing(spid: &str, node_type: &str, start: u32, delay: u32, dur: u
     timing
 }
 
-fn build_click_group(ids: &[u32], spid: &str, node_type: &str, delay: u32, dur: u32) -> Element {
+fn build_click_group(
+    ids: &[u32],
+    spid: &str,
+    node_type: &str,
+    delay: u32,
+    dur: u32,
+    auto: bool,
+    main_seq_id: u32,
+) -> Element {
     let effect = fade_effect_par(&ids[2..5], spid, node_type, delay, dur);
 
     let mut inner_lst = Element::new("p:childTnLst");
@@ -489,11 +632,24 @@ fn build_click_group(ids: &[u32], spid: &str, node_type: &str, delay: u32, dur: 
     let mut outer_ctn = Element::new("p:cTn")
         .with_attr("id", ids[0].to_string())
         .with_attr("fill", "hold");
-    outer_ctn.push_element(cond_lst("indefinite"));
+    outer_ctn.push_element(click_group_conds(auto, main_seq_id));
     outer_ctn.push_element(outer_lst);
     let mut outer_par = Element::new("p:par");
     outer_par.push_element(outer_ctn);
     outer_par
+}
+
+fn click_group_conds(auto: bool, main_seq_id: u32) -> Element {
+    let mut lst = Element::new("p:stCondLst");
+    lst.push_element(Element::new("p:cond").with_attr("delay", "indefinite"));
+    if auto {
+        let mut cond = Element::new("p:cond")
+            .with_attr("evt", "onBegin")
+            .with_attr("delay", "0");
+        cond.push_element(Element::new("p:tn").with_attr("val", main_seq_id.to_string()));
+        lst.push_element(cond);
+    }
+    lst
 }
 
 fn fade_effect_par(ids: &[u32], spid: &str, node_type: &str, delay: u32, dur: u32) -> Element {
@@ -740,6 +896,17 @@ fn get_mut_at<'a>(root: &'a mut Element, path: &[usize]) -> &'a mut Element {
     cur
 }
 
+fn get_at<'a>(root: &'a Element, path: &[usize]) -> Option<&'a Element> {
+    let mut cur = root;
+    for &i in path {
+        cur = match cur.children.get(i) {
+            Some(Node::Element(e)) => e,
+            _ => return None,
+        };
+    }
+    Some(cur)
+}
+
 fn ensure_child<'a>(parent: &'a mut Element, name: &str) -> &'a mut Element {
     let local = name.rsplit(':').next().unwrap_or(name);
     if parent.child_by_local(local).is_none() {
@@ -882,9 +1049,10 @@ fn timing_insert_index(root: &Element) -> usize {
             continue;
         };
         match e.local_name() {
-            "cSld" | "clrMapOvr" | "transition" => after = i + 1,
+            // 幻灯片：cSld / clrMapOvr / transition。母版：clrMap / sldLayoutIdLst。版式同幻灯片再加 hf。
+            "cSld" | "clrMap" | "clrMapOvr" | "sldLayoutIdLst" | "transition" => after = i + 1,
             "AlternateContent" if ac_has_transition(e) => after = i + 1,
-            "timing" | "extLst" => return i,
+            "timing" | "hf" | "txStyles" | "matchingName" | "extLst" => return i,
             _ => {}
         }
     }
@@ -894,4 +1062,234 @@ fn timing_insert_index(root: &Element) -> usize {
 fn ac_has_transition(ac: &Element) -> bool {
     ac.element_children()
         .any(|c| c.element_children().any(|g| g.local_name() == "transition"))
+}
+
+fn main_seq_id(timing: &Element) -> Option<u32> {
+    let path = find_ctn_path(timing, "mainSeq")?;
+    get_at(timing, &path)?
+        .attr_local("id")
+        .and_then(|s| s.parse().ok())
+}
+
+fn set_effect_delay(effect: &mut Element, delay: u32) {
+    let lst = ensure_child(effect, "p:stCondLst");
+    let mut found = false;
+    for n in &mut lst.children {
+        let Node::Element(cond) = n else {
+            continue;
+        };
+        if cond.local_name() != "cond" {
+            continue;
+        }
+        if cond.attr_local("evt").is_some() {
+            continue;
+        }
+        cond.set_attr("delay", delay.to_string());
+        found = true;
+        break;
+    }
+    if !found {
+        lst.children.insert(
+            0,
+            Node::Element(Element::new("p:cond").with_attr("delay", delay.to_string())),
+        );
+    }
+}
+
+fn set_effect_dur(effect: &mut Element, dur: u32, op_index: usize) -> Result<(), Error> {
+    let mut path = None;
+    find_anim_effect_dur_path(effect, &mut Vec::new(), &mut path);
+    let Some(path) = path else {
+        return Err(Error::with_path(
+            ErrorKind::AnimNeedEffectDur,
+            format!("ops[{op_index}].dur"),
+        ));
+    };
+    get_mut_at(effect, &path).set_attr("dur", dur.to_string());
+    Ok(())
+}
+
+fn find_anim_effect_dur_path(el: &Element, path: &mut Vec<usize>, found: &mut Option<Vec<usize>>) {
+    if found.is_some() {
+        return;
+    }
+    if el.local_name() == "AlternateContent" {
+        if let Some(i) = shape::first_alt_child_index(el) {
+            if let Some(Node::Element(child)) = el.children.get(i) {
+                path.push(i);
+                find_anim_effect_dur_path(child, path, found);
+                path.pop();
+            }
+        }
+        return;
+    }
+    if el.local_name() == "animEffect" {
+        if let Some((i, ctn)) = el.children.iter().enumerate().find_map(|(i, n)| match n {
+            Node::Element(e) if e.local_name() == "cBhvr" => Some((i, e)),
+            _ => None,
+        }) {
+            if let Some((j, _)) = ctn.children.iter().enumerate().find_map(|(j, n)| match n {
+                Node::Element(e) if e.local_name() == "cTn" => Some((j, e)),
+                _ => None,
+            }) {
+                let mut p = path.clone();
+                p.push(i);
+                p.push(j);
+                *found = Some(p);
+            }
+        }
+        return;
+    }
+    if is_effect(el) && !path.is_empty() {
+        return;
+    }
+    for (i, n) in el.children.iter().enumerate() {
+        if let Node::Element(c) = n {
+            path.push(i);
+            find_anim_effect_dur_path(c, path, found);
+            path.pop();
+            if found.is_some() {
+                return;
+            }
+        }
+    }
+}
+
+fn set_effect_trigger(timing: &mut Element, path: &[usize], is_first: bool, trigger: &str) {
+    let old = match get_at(timing, path).and_then(|e| e.attr_local("nodeType")) {
+        Some("withEffect") => "with",
+        Some("afterEffect") => "after",
+        _ => "click",
+    };
+    get_mut_at(timing, path).set_attr("nodeType", node_type_of(trigger));
+    let seq_id = main_seq_id(timing).unwrap_or(2);
+    if is_first {
+        if let Some(group) = click_group_ctn_path(timing, path) {
+            set_group_auto(get_mut_at(timing, &group), trigger != "click", seq_id);
+        }
+        return;
+    }
+    let was_click = old == "click";
+    let now_click = trigger == "click";
+    if was_click == now_click {
+        return;
+    }
+    if now_click {
+        extract_to_click_group(timing, path, seq_id);
+    } else {
+        merge_into_previous(timing, path);
+    }
+}
+
+fn click_group_ctn_path(timing: &Element, effect_path: &[usize]) -> Option<Vec<usize>> {
+    let main = find_ctn_path(timing, "mainSeq")?;
+    let lst_i = get_at(timing, &main)?
+        .children
+        .iter()
+        .position(|n| matches!(n, Node::Element(e) if e.local_name() == "childTnLst"))?;
+    let mut lst_path = main;
+    lst_path.push(lst_i);
+    if effect_path.len() <= lst_path.len() || !effect_path.starts_with(&lst_path) {
+        return None;
+    }
+    let mut group = lst_path;
+    group.push(effect_path[group.len()]);
+    let ctn_i = get_at(timing, &group)?
+        .children
+        .iter()
+        .position(|n| matches!(n, Node::Element(e) if e.local_name() == "cTn"))?;
+    group.push(ctn_i);
+    Some(group)
+}
+
+fn set_group_auto(outer_ctn: &mut Element, auto: bool, seq_id: u32) {
+    let lst = ensure_child(outer_ctn, "p:stCondLst");
+    lst.children.retain(|n| match n {
+        Node::Element(e) if e.local_name() == "cond" => e.attr_local("evt") != Some("onBegin"),
+        _ => true,
+    });
+    let has_indef = lst
+        .element_children()
+        .any(|e| e.local_name() == "cond" && e.attr_local("evt").is_none());
+    if !has_indef {
+        lst.children.insert(
+            0,
+            Node::Element(Element::new("p:cond").with_attr("delay", "indefinite")),
+        );
+    }
+    if auto {
+        let mut cond = Element::new("p:cond")
+            .with_attr("evt", "onBegin")
+            .with_attr("delay", "0");
+        cond.push_element(Element::new("p:tn").with_attr("val", seq_id.to_string()));
+        lst.push_element(cond);
+    }
+}
+
+fn take_effect_par(timing: &mut Element, effect_path: &[usize]) -> Option<Element> {
+    if effect_path.len() < 2 {
+        return None;
+    }
+    let par_path = &effect_path[..effect_path.len() - 1];
+    if !is_local_at(timing, par_path, "par") {
+        return None;
+    }
+    let par = get_at(timing, par_path)?.clone();
+    remove_at(timing, par_path);
+    Some(par)
+}
+
+fn wrap_par_click_group(effect_par: Element, ids: &[u32], auto: bool, seq_id: u32) -> Element {
+    let mut inner_lst = Element::new("p:childTnLst");
+    inner_lst.push_element(effect_par);
+    let mut inner_ctn = Element::new("p:cTn")
+        .with_attr("id", ids[1].to_string())
+        .with_attr("fill", "hold");
+    inner_ctn.push_element(cond_lst("0"));
+    inner_ctn.push_element(inner_lst);
+    let mut inner_par = Element::new("p:par");
+    inner_par.push_element(inner_ctn);
+    let mut outer_lst = Element::new("p:childTnLst");
+    outer_lst.push_element(inner_par);
+    let mut outer_ctn = Element::new("p:cTn")
+        .with_attr("id", ids[0].to_string())
+        .with_attr("fill", "hold");
+    outer_ctn.push_element(click_group_conds(auto, seq_id));
+    outer_ctn.push_element(outer_lst);
+    let mut outer_par = Element::new("p:par");
+    outer_par.push_element(outer_ctn);
+    outer_par
+}
+
+fn extract_to_click_group(timing: &mut Element, path: &[usize], seq_id: u32) {
+    let Some(par) = take_effect_par(timing, path) else {
+        return;
+    };
+    strip_idle_pars(timing);
+    shape::prune_anim(timing);
+    let mut next = max_ctn_id(timing).saturating_add(1);
+    if next < 1 {
+        next = 1;
+    }
+    let group = wrap_par_click_group(par, &take_ids(&mut next, 2), false, seq_id);
+    ensure_main_seq_lst(timing).push_element(group);
+}
+
+fn merge_into_previous(timing: &mut Element, path: &[usize]) {
+    let Some(par) = take_effect_par(timing, path) else {
+        return;
+    };
+    strip_idle_pars(timing);
+    shape::prune_anim(timing);
+    if let Some(prev) = effect_paths(timing).last().cloned() {
+        append_sibling_par(timing, &prev, par);
+    } else {
+        let seq_id = main_seq_id(timing).unwrap_or(2);
+        let mut next = max_ctn_id(timing).saturating_add(1);
+        if next < 1 {
+            next = 1;
+        }
+        let group = wrap_par_click_group(par, &take_ids(&mut next, 2), true, seq_id);
+        ensure_main_seq_lst(timing).push_element(group);
+    }
 }

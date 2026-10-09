@@ -1215,6 +1215,9 @@
                 "$ref": "pptx.schema.json#/$defs/deleteAnimOp"
               },
               {
+                "$ref": "pptx.schema.json#/$defs/setAnimOp"
+              },
+              {
                 "$ref": "pptx.schema.json#/$defs/setSlideLayoutOp"
               },
               {
