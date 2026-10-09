@@ -255,7 +255,7 @@ fn create_remain_rejects_unknown_and_bad_fields() {
     let err = create_err(
         &path,
         json!({
-            "slides": [{ "shapes": [{ "text": "a" }], "oleObjects": [{ "file": "a.xlsx" }] }]
+            "slides": [{ "shapes": [{ "text": "a" }], "fields": [] }]
         }),
     );
     assert_eq!(err.code(), ErrorCode::InvalidField);

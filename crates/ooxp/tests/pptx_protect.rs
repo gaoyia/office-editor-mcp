@@ -386,7 +386,7 @@ fn rejects_missing_field_wrong_id_and_foreign() {
     assert_eq!(err.code(), ErrorCode::InvalidField);
 
     let created = tmp("create-show").with_extension("pptx");
-    let err = run(
+    run(
         &json!({
             "schemaVersion": 1,
             "action": "create",
@@ -399,6 +399,7 @@ fn rejects_missing_field_wrong_id_and_foreign() {
         .to_string(),
         None,
     )
-    .unwrap_err();
-    assert_eq!(err.code(), ErrorCode::InvalidField);
+    .unwrap();
+    assert_eq!(inspect(&created)["showPr"]["type"], "kiosk");
+    assert_eq!(inspect(&created)["showPr"]["loop"], false);
 }

@@ -339,10 +339,18 @@ create 不写修订痕迹。pptx 的 `slides[].pictures` 复用 `insertPicture`�
 `slides[].maths` 复用 `insertMath`，`slides[].model3ds` 复用 `insertModel3d`，
 `slides[].videos` / `slides[].audios` 复用 `insertVideo` / `insertAudio`，
 `slides[].charts` 复用 `insertChart`（数据写 embedding），`slides[].smartArts` 复用 `insertSmartArt`，
-`slides[].tables` 复用 `insertTable`，`slides[].notes` 复用 `setNotesText`，`slides[].comments` 复用 `insertComment`，
-形状上的 `url` / `file` / `slide` 复用 `insertHyperlink`，`slides[].transition` 复用 `setTransition`，
-`slides[].anims` 复用 `insertAnim`（白名单预设，可写 `delay` / `dur` / `repeat` / 声音 / 按段，第一条 `with` / `after` 进片自动播，不接受整棵时间轴树），`presentation.sections` 复用 `insertSlideSection`。
-create 本期不写 OLE，也不写 Zoom，也不写域，也不写 run 级超链接，也不写批注内图，也不写 `showPr` / `modifyVerifier`。
+`slides[].tables` 复用 `insertTable`，`slides[].oleObjects` 复用 `insertOle`，
+`slides[].connectors` 复用 `insertConnector`，`slides[].zooms` 复用 `insertZoom`，
+`slides[].notes` 复用 `setNotesText`（对象形态的 `anims` 复用 `insertAnim` 写到备注页），
+`slides[].comments` 复用 `insertComment`，
+形状上的 `url` / `file` / `slide` 复用 `insertHyperlink`（可 `on=run`），
+`shapes[].geom` 复用 `setShapeGeom`，`shapes[].fields` 复用 `insertField`，
+`slides[].transition` 复用 `setTransition`，
+`slides[].anims` 复用 `insertAnim`（白名单预设，可写 `delay` / `dur` / `repeat` / 声音 / 按段，第一条 `with` / `after` 进片自动播，不接受整棵时间轴树），
+`presentation.sections` 复用 `insertSlideSection`，`presentation.customShows` 复用 `insertCustomShow`，
+`presentation.handout` 复用 `setHandoutText`，`presentation.showPr` 复用 `setShowPr`，
+`presentation.modifyProtection` 复用 `setProtection`。
+create 本期不写批注内图，也不写图 / 表 / 图表 / SmartArt 上的链。
 三种格式的 `props` 复用 `setProps` / `setCustomProp` 同一套字段写 core / app / custom。
 docx 的 `document.protection` 复用 `setProtection`。docx 的 `document.watermarks` 复用 `insertWatermark`。create 不写 theme 部件。
 

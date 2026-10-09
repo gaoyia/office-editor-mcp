@@ -409,7 +409,7 @@ pptx create 同样生成 Transitional 包，命名空间用 2006 那套。
 | `/_rels/.rels` | 指向 Presentation，以及可选的核心属性 |
 | `/ppt/presentation.xml` | 页名单、母版关系、幻灯片尺寸；可选 `p:modifyVerifier` |
 | `/ppt/_rels/presentation.xml.rels` | 指向 slideMaster、各 slide、presProps |
-| `/ppt/presProps.xml` | Presentation Properties（§13.3.7，包内应当恰好一份）。create 只有 `clrMru`；`setShowPr` 写 `p:showPr` |
+| `/ppt/presProps.xml` | Presentation Properties（§13.3.7，包内应当恰好一份）。缺省只有 `clrMru`；给了 `showPr` 或 `setShowPr` 写 `p:showPr` |
 | `/ppt/slides/slideN.xml` | 每一页 |
 | `/ppt/slides/_rels/slideN.xml.rels` | 指向 slideLayout1；有图时再加 image 关系 |
 | `/ppt/slideLayouts/slideLayout1.xml` | 一张空白版式 |
@@ -427,12 +427,16 @@ pptx create 同样生成 Transitional 包，命名空间用 2006 那套。
 | `/docProps/custom.xml` | 仅当 `presentation.props.custom` 非空，或 apply 的 `setCustomProp` 新建了自定义属性 |
 | `/ppt/media/imageN.*` | 给了 `slides[].pictures` 时写入 |
 
-create 不写讲义、`viewProps`、`tableStyles`、动画、OLE 与 Zoom。
+create 不写 `viewProps`、`tableStyles`。
+给了 `slides[].anims` 或 `notes.anims` 时写 `<p:timing>`。
+给了 `slides[].oleObjects` 时写 embedding 与 `p:oleObj`。
+给了 `slides[].zooms` 时写 Zoom。
+给了 `presentation.handout` 时与 apply 的 `setHandoutText` 相同，可能新建 `/ppt/handoutMasters/handoutMaster1.xml`。
 给了 `slides[].notes` 时与 apply 的 `setNotesText` 相同，
 可能新建 `/ppt/notesMasters/notesMaster1.xml`、独立 theme 副本（常见为 `/ppt/theme/theme2.xml`）与 `/ppt/notesSlides/notesSlideN.xml`。
 给了 `slides[].comments` 时与 apply 的 `insertComment` 相同，
 可能新建 `/ppt/comments/modernComment_{sldId}_N.xml` 与 `/ppt/authors.xml`。
-apply 的 `setHandoutText` 可能新建 `/ppt/handoutMasters/handoutMaster1.xml`。
+apply 的 `setHandoutText` 也可能新建讲义母版。
 
 `presentation.xml` 里：`p:sldMasterIdLst` 一条、`p:sldIdLst` 按页顺序、`p:sldSz` 为 16:9（`cx="12192000"` `cy="6858000"`）、
 `p:notesSz` 为 `cx="6858000"` `cy="9144000"`。
@@ -578,12 +582,14 @@ apply 插入幻灯片 OLE 时，可能新建 `/ppt/embeddings/Microsoft_Excel_Wo
 CT 与该格式主文档一致）或 `/ppt/embeddings/oleObjectN.bin`（CT `application/vnd.openxmlformats-officedocument.oleObject`），以及一张预览 `/ppt/media/imageN.png`。
 该页 `.rels` 补一条 package 或 oleObject 关系指向 embeddings，再补一条 image 关系指向预览。
 宿主是 `p:graphicFrame`，`a:graphicData/@uri` 为 `http://schemas.openxmlformats.org/presentationml/2006/ole`。
-`mc:AlternateContent` 的 Choice 只有 `p:oleObj`，Fallback 带 `p:pic` 预览。位置与尺寸在 `p:xfrm`。不写 `<p:timing>`。create 本期不写 OLE。
+`mc:AlternateContent` 的 Choice 只有 `p:oleObj`，Fallback 带 `p:pic` 预览。位置与尺寸在 `p:xfrm`。不写 `<p:timing>`。
+create 给了 `slides[].oleObjects` 时复用本写入。
 
 apply 插入幻灯片 Zoom 时，可能新建一张预览 `/ppt/media/imageN.png`。该页 `.rels` 补一条 image 关系指向预览，再补一条 slide 关系指向目标页（节缩放则指向该节第一页；摘要缩放指向 `targets` 各节第一页）。
 宿主是 `p:graphicFrame`，包在 `mc:AlternateContent` 的 Choice 里；
 `a:graphicData/@uri` 为 `http://schemas.microsoft.com/office/powerpoint/2016/slidezoom`、`…/sectionzoom` 或 `…/summaryzoom`。
-Fallback 是带 `ppaction://hlinksldjump` 的 `p:pic`。位置与尺寸在 graphicFrame 的 `p:xfrm`。不写 `<p:timing>`。create 本期不写 Zoom。
+Fallback 是带 `ppaction://hlinksldjump` 的 `p:pic`。位置与尺寸在 graphicFrame 的 `p:xfrm`。不写 `<p:timing>`。
+create 给了 `slides[].zooms` 时复用本写入。
 
 ## 验收（第 2 项）
 

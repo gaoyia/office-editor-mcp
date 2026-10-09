@@ -5,8 +5,8 @@
 检查前用 create 或 apply 在本机生成文件，不要用改过扩展名的 zip 目录冒充。
 本机若 `PowerPoint.Application` 被 WPS 抢走，直接启动 `POWERPNT.EXE` 再挂 COM，不要走被抢的 ProgID。Office 16 的对象模型在 `mdiClass` 上。
 
-C、I、A、Pp、Pvg、Pem、P3d、Pom、Pc、Psa、Pn、Pcm、Pm、Ps、Tf、Sg、Pt、Tn、Tr、Td、Mt、Am、Aw、Mm、Mw、Md、Ts、Ho、Nh、Nm、Phl、Phr、Phx、Pcip、Pmd、Psc、Cs、Po、Cr、Pz、Pzr、Pw、Pph、
-Pf 各组由 `manual-check/office/cases/pptx-*.ps1` 自动判定，
+C、I、A、Pp、Pvg、Pem、P3d、Pom、Pc、Psa、Pn、Pcm、Pm、Ps、Tf、Sg、Pt、Tn、Tr、Td、Mt、Am、Aw、Mm、Mw、Md、Ts、Ho、Nh、Nm、Phl、Phr、Phx、Pcip、Pmd、Psc、Cs、Po、Cr、Cq、Pz、Pzr、Pw、Pph、
+Pf、Pcg 各组由 `manual-check/office/cases/pptx-*.ps1` 自动判定，
 跑 `pwsh -File manual-check\office\run.ps1 -Case 'pptx-*'` 即可复现。O1 已放弃，与 xlsx / docx 相同。
 
 ## 本机结果（2026-09-28）
@@ -40,6 +40,7 @@ Ps1–Ps5、Sg1–Sg5、Pt1–Pt6、Tn1–Tn5、Am1–Am5、Mm1–Mm5、Ho1–Ho
 2026-10-10 补跑 `pptx-hyperlinks-remain.ps1`，Phx1–Phx5 通过。无 Repair。
 2026-10-10 补跑 `pptx-zoom-remain.ps1`，Pzr1–Pzr5 通过。无 Repair。
 2026-10-10 补跑 `pptx-protect-hash.ps1`，Pph1–Pph5 通过。无 Repair。
+2026-10-10 补跑 `pptx-create-round4.ps1`，Cq1–Cq5 通过。无 Repair。
 
 - **C1** ✅
   - PowerPoint 16.0 能打开 `manual-check/office/out/pptx-create.pptx`，标题栏无 Repair
@@ -64,7 +65,17 @@ Ps1–Ps5、Sg1–Sg5、Pt1–Pt6、Tn1–Tn5、Am1–Am5、Mm1–Mm5、Ho1–Ho
   - 第二页 Type=16 且 `audioCount=1`
   - 淡入 EntryEffect=3849
   - MainSequence.Count=1
-  - 页级 `hyperlinks` / `oleObjects`、`type:null`、xlsx `sections` 拒写
+  - 页级 `hyperlinks` / `timing`、`type:null`、xlsx `sections` 拒写
+  - 无 Repair
+- **Cq1–Cq5** ✅
+  - PowerPoint 16.0：`pptx-create-round4.ps1`，5 PASS / 0 FAIL
+  - 第一页 OLE COM Type=7，自定义放映名「预演」含两页
+  - 讲义页眉「讲义头」
+  - 第二页 Zoom 目标为第 1 页
+  - 第一框 `a:custGeom` 与 `a:fld`，连接线绑第 1、2 框
+  - 备注页有 `<p:timing>`，`showPr.type=kiosk` 后 COM ShowType=3
+  - 页级 `timing` / `fields` / `hyperlinks` 拒写
+  - 口令产物 ZIP 有 `p:modifyVerifier`，未开 PowerPoint
   - 无 Repair
 - **I1–I5** ✅
   - `pptx:presentation`、`slideCount=2`、无 scope 时没有 `shapes`、仍有 `pictureCount`、形状 id 为 `slide:1/shape:2` 且 `stable`
@@ -474,7 +485,38 @@ create 补齐节、形状级超链接、内嵌视频 / 音频、页切换和预�
 - **Cr5**
   - 检查：动画与拒写
   - 通过标准：第一页 `anims` 绑第一框 fade 后 COM MainSequence.Count=1
-  - `slides[]` 上 `hyperlinks` / `oleObjects`、`transition.type=null`、xlsx 上 `sections` 拒写
+  - `slides[]` 上 `hyperlinks` / `timing`、`transition.type=null`、xlsx 上 `sections` 拒写
+
+create 第四轮复用本轮已有 apply：OLE、Zoom、域、连接线、自定义放映、讲义、备注动画、放映设置与修改保护。不算放映引擎。脚本：`manual-check/office/cases/pptx-create-round4.ps1`。编号用 Cq（不要跟 C1–C13、Cr、Cs、C4 撞）。
+
+- **Cq1**
+  - 检查：OLE 与自定义放映、讲义
+  - 通过标准：两页 create 第一页 `oleObjects` 嵌本机 xlsx
+  - inspect `oleObjectCount=1`
+  - `customShows` 名「预演」含第 1、2 页
+  - 讲义页眉「讲义头」
+  - COM 无 Repair
+- **Cq2**
+  - 检查：Zoom
+  - 通过标准：第二页 `zooms` `type=slide` `target=1`
+  - inspect Zoom 目标对上第 1 页
+  - 无 Repair
+- **Cq3**
+  - 检查：域、自由形状、连接线
+  - 通过标准：第一框 `fields` `type=slidenum` 且 `geom` 后 ZIP 有 `a:custGeom` 与 `a:fld`
+  - 连接线绑第 1、2 框
+  - 无 Repair
+- **Cq4**
+  - 检查：备注动画与放映设置
+  - 通过标准：`notes` 对象带 `anims` 后备注页 ZIP 有 `<p:timing>`
+  - `showPr.type=kiosk` 后 COM ShowType=3
+  - 无 Repair
+- **Cq5**
+  - 检查：拒写与修改口令
+  - 通过标准：`slides[]` 上 `timing` / `fields` / `hyperlinks` 拒写
+  - `modifyProtection.password` 后 ZIP 有 `p:modifyVerifier`
+  - 带哈希产物不要开 PowerPoint
+  - xlsx 上 `customShows` 拒写
 
 ## inspect
 
@@ -1602,7 +1644,7 @@ inspect 仍只报 `hasPassword`。不破解密码。带哈希或空 verifier 的
 
 ## 字段
 
-inspect 计 `fieldCount`，`scope.fields` 列名单。apply 能往幻灯片文本形状插入、改类型、删除 `a:fld`。不算放映引擎，不刷新缓存。create 本期不写域。备注 / 母版上的域不进本期。
+inspect 计 `fieldCount`，`scope.fields` 列名单。apply 能往幻灯片文本形状插入、改类型、删除 `a:fld`。不算放映引擎，不刷新缓存。create 用 `shapes[].fields` 复用 `insertField`。备注 / 母版上的域不进本期。
 脚本：`manual-check/office/cases/pptx-fields.ps1`。编号用 **Pf**（不要跟 Pw、Pz、Po、Pd 撞）。
 
 - **Pf1**

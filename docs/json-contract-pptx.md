@@ -1120,7 +1120,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   - `cubicBezTo` / `quadBezTo`：`type` 为该名，再跟 `pts`（各 `a:pt` 的 `x` / `y` 数组）
   - `arcTo`：`type` 为 `arcTo`，再跟 `wR`、`hR`、`stAng`、`swAng`（属性原文，能解析为整数则报整数）
   - 其它子元素：`type` 为本地名；有 `a:pt` 则再跟 `pts`
-  `x` / `y` / `pts[].x` / `pts[].y` 解析失败则为 `null`。create 的 `shapes[]` 不要写 `geom`。
+  `x` / `y` / `pts[].x` / `pts[].y` 解析失败则为 `null`。create 给了 `shapes[].geom` 时按下文 create 写入。
 - `x` / `y` 取 `p:spPr/a:xfrm/a:off` 的 EMU；`cx` / `cy` 取 `a:ext`。缺对应属性则为 `null`。备注形状同样。
 - `text` 是可见纯文本：该形状 `p:txBody` 内、位于 `a:r` 里的 `a:t` 按文档顺序拼接；`a:br` 变成 `\n`。不含 run 级样式。
   `a:fld` 是应用程序更新的生成文本（§21.1.2.2.4），域里的 `a:t` 是缓存，不进入。`mc:AlternateContent` 只取一支，判定见上文 pptx 那节。
@@ -1179,12 +1179,26 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   - 可选
   - 幻灯片节列表
   - 省略或空数组则不写 `p14:sectionLst`
+- **`presentation.customShows`**
+  - 可选
+  - 自定义放映列表
+  - 省略或空数组则不写 `p:custShowLst`
+- **`presentation.handout`**
+  - 可选
+  - 讲义母版页眉页脚文字
+  - 省略则不写讲义母版
+- **`presentation.showPr`**
+  - 可选
+  - 放映设置
+  - 省略则 `presProps` 仍只有 `clrMru`，inspect 根上仍是 PowerPoint 缺省
+- **`presentation.modifyProtection`**
+  - 可选
+  - 修改保护
+  - 省略则不写 `p:modifyVerifier`
 - **`slides[].shapes`**
   - 该页文本框列表
   - 可空
   - 空则生成一个空文本框
-  - 出现 `geom` 报 `InvalidField`
-  - 自定义几何走 apply 的 `insertShape` / `setShapeGeom`
 - **`slides[].pictures`**
   - 可选
   - 该页上的图列表
@@ -1220,11 +1234,25 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   - 该页上的 3D 模型列表
   - 省略或空数组则不写
   - 每项必须有 `file`，可选 `x` / `y` / `cx` / `cy`，规则与 `insertModel3d` 相同
+- **`slides[].oleObjects`**
+  - 可选
+  - 该页嵌入对象
+  - 省略或空数组则不写 `p:oleObj`
+- **`slides[].connectors`**
+  - 可选
+  - 该页连接线
+  - 省略或空数组则不写 `p:cxnSp`
+- **`slides[].zooms`**
+  - 可选
+  - 该页 Zoom
+  - 省略或空数组则不写 Zoom
 - **`slides[].notes`**
   - 可选
-  - 该页演讲者备注可见纯文本，字符串，可空
+  - 该页演讲者备注
+  - 可以是字符串，可空
+  - 也可以是对象：`text` 加可选 `anims`
   - 省略则不写 notesSlide
-  - 出现（含空串）则按 `setNotesText` 写该页 `body` 占位符
+  - 字符串或对象出现（含空串）则按 `setNotesText` 写该页 `body` 占位符
 - **`slides[].comments`**
   - 可选
   - 该页现代批注列表
@@ -1249,6 +1277,15 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   - 可选。`shape`（缺省）或 `run`
 - **`shapes[].event`**
   - 可选。`click`（缺省）或 `hover`
+- **`shapes[].geom`**
+  - 可选
+  - 自定义几何，规则与 `insertShape` 的 `geom` 相同
+  - 不要给矩形补 `geom`
+- **`shapes[].fields`**
+  - 可选
+  - 写入该文本框的 `a:fld` 列表
+  - 省略或空数组则不写域
+  - 不要在 `slides[]` 上开 `fields` 名单
 - **`shapes[].tooltip`**
   - 可选
   - 形状级超链接提示
@@ -1389,13 +1426,85 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   - `slides[]` 的 1 起下标，不是 `slide:{n}`
   - 必须严格递增
   - 超出页数报 `InvalidField`
+- **`shapes[].fields[].type`**
+  - 必须
+  - 规则与 `insertField` 的 `type` 相同
+- **`shapes[].fields[].text`**
+  - 可选
+  - 规则与 `insertField` 的 `text` 相同
+  - 省略当作 `""`
+- **`oleObjects[].file`**
+  - 必须
+  - 本地路径，规则与 `insertOle` 相同
+- **`connectors[].prst`**
+  - 可选
+  - 规则与 `insertConnector` 的 `prst` 相同
+  - 省略为 `straightConnector1`
+- **`connectors[].x` / `y` / `cx` / `cy`**
+  - 可选
+  - 规则与 `insertConnector` 相同
+- **`connectors[].start` / `connectors[].end`**
+  - 可选
+  - 对象，必须有 `shape`，可选 `site`
+  - `shape` 是该页 `shapes[]` 的 1 起下标，不是 inspect id
+  - `site` 为正整数，省略为 `1`，写入 `idx = site - 1`
+  - 不要写成 `{ "id": "slide:…/shape:…" }`
+- **`zooms[].type`**
+  - 必须
+  - `slide` / `section` / `summary`，规则与 `insertZoom` 相同
+- **`zooms[].target`**
+  - `type` 为 `slide` 时必须，值为 `slides[]` 的 1 起下标，不能是本页
+  - `type` 为 `section` 时必须，值为 `sections[]` 的 1 起下标
+  - `type` 为 `summary` 时不要写 `target`
+  - 不要写成 `slide:{n}` / `section:{n}`
+- **`zooms[].targets`**
+  - `type` 为 `summary` 时必须
+  - 非空数组，每项是 `sections[]` 的 1 起下标
+  - 其它 `type` 上出现报 `InvalidField`
+- **`zooms[].x` / `y` / `cx` / `cy`**
+  - 可选
+  - 规则与 `insertZoom` 相同
+- **`notes.text`**
+  - `notes` 为对象时可选
+  - 省略当作 `""`
+- **`notes.anims`**
+  - `notes` 为对象时可选
+  - 备注页预设进入效果，规则与 `slides[].anims` 相同
+  - `shape` 等序号对应该页备注页对象，不是幻灯片 `shapes[]`
+  - 省略或空数组则备注页不写 `<p:timing>`
+- **`customShows[].name`**
+  - 必须
+  - 规则与 `insertCustomShow` 的 `name` 相同
+- **`customShows[].slides`**
+  - 可选
+  - `slides[]` 的 1 起下标数组，不是 `slide:{n}`
+  - 省略或空数组则该放映没有页
+- **`handout.header` / `footer` / `date` / `sldNum`**
+  - 至少一个必须
+  - 规则与 `setHandoutText` 相同
+- **`showPr.type`**
+  - 可选
+  - `present` / `browse` / `kiosk`，规则与 `setShowPr` 相同
+- **`showPr.loop` / `showNarration` / `showAnimation` / `useTimings`**
+  - 可选
+  - 规则与 `setShowPr` 相同
+  - `showPr` 对象至少要有上述字段之一
+- **`modifyProtection.enforced`**
+  - 必须
+  - 规则与 `setProtection` 相同
+- **`modifyProtection.password`**
+  - 可选
+  - 给了则写 PowerPoint 16.0 的 SHA-512 `crypt*`
+  - 空串报 `InvalidField`
+  - 带哈希产物不要用 COM 打开
 
 带图示例见 `docs/examples/pptx-create-pictures.json`。带 SVG 图见 `docs/examples/pptx-create-svg.json`。带 3D 模型见 `docs/examples/pptx-create-model3d.json`。带公式框见 `docs/examples/pptx-create-math-drawing.json`。带图表示例见 `docs/examples/pptx-create-charts.json`。
 带 SmartArt 示例见 `docs/examples/pptx-create-smartart.json`。带表示例见 `docs/examples/pptx-create-tables.json`。
 带备注与批注示例见 `docs/examples/pptx-create-notes-comments.json`。节、链、媒体、切换与动画合在一起的示例见 `docs/examples/pptx-create-remain.json`。
+OLE、Zoom、域、连接线、自定义放映、讲义、备注动画与放映 / 修改保护合在一起的示例见 `docs/examples/pptx-create-round4.json`。
 `kind` / `wrap` / `from` / `to` / `anchor` / `dataFrom` 以及 xlsx 偏移字段出现报 `InvalidField`。
 `comments[]` 上出现 `op` / `id` / `start` / `end` / `replies` / `ink` 报未知字段。create 不写回复、不写墨迹、不写 ECMA-376 §19.4 旧式批注。
-`shapes[]` 上出现 `text` / `url` / `file` / `slide` / `tooltip` / `sz` / `color` / `bold` / `italic` / `underline` / `font` / `eastAsiaFont` / `align` / `textAnchor` 以外的键报未知字段。
+`shapes[]` 上出现 `text` / `url` / `file` / `slide` / `tooltip` / `on` / `event` / `sz` / `color` / `bold` / `italic` / `underline` / `font` / `eastAsiaFont` / `align` / `textAnchor` / `geom` / `fields` 以外的键报未知字段。
 `text` / `anchor` / `location` / `ref` / `display` 出现在形状超链接上（除可见 `text` 外）报未知字段。
 `url`、`file`、`slide` 不是恰好一个报 `InvalidField`。空串报 `InvalidField`。`slide` 不是正整数报 `InvalidField`。跳到本页报 `InvalidField`。
 目标页超出 `slides[]` 报 `InvalidField`。
@@ -1405,7 +1514,7 @@ xlsx 路径必须用 `workbook`，docx 路径必须用 `document`，pptx 路径�
 
 create 写出 Transitional 最小包，见 [opc.md](opc.md)。
 必须带 theme、slideMaster、slideLayout、presentation、各页 slide、presProps，不能只写 ECMA 示例里那个仅含 `notesSz` 的 presentation。
-幻灯片尺寸用 16:9（`sldSz` 为 `cx="12192000"` `cy="6858000"`）。不要生成讲义。不要在 `slides[]` 上写整棵 `timing` 树。
+幻灯片尺寸用 16:9（`sldSz` 为 `cx="12192000"` `cy="6858000"`）。省略 `handout` 则不写讲义母版。不要在 `slides[]` 上写整棵 `timing` 树。
 给了 `slides[].pictures` 时按 `insertPicture` 同一套规则写 `/ppt/media/…`、该页 `.rels` 与 `p:pic`。
 给了 `slides[].maths` 时按 `insertMath` 同一套规则写 `a14:m` AlternateContent。不写进 `shapes[]`。
 给了 `slides[].videos` 时按 `insertVideo` 同一套规则写媒体与视频 `p:pic`。给了 `slides[].audios` 时按 `insertAudio` 同一套规则写媒体与音频 `p:pic`。
@@ -1413,23 +1522,32 @@ create 写出 Transitional 最小包，见 [opc.md](opc.md)。
 给了 `slides[].smartArts` 时按 `insertSmartArt` 同一套规则写 `/ppt/diagrams/…` 与图示 `p:graphicFrame`。
 给了 `slides[].tables` 时按 `insertTable` 同一套规则写表 `p:graphicFrame`（`a:tbl`）。
 给了 `slides[].model3ds` 时按 `insertModel3d` 同一套规则写 GLB、海报 PNG 与 `am3d` AlternateContent。
+给了 `shapes[].geom` 时按 `setShapeGeom` 同一套规则把该文本框改成 `a:custGeom`。不要另写一套 XML。
+给了 `shapes[].fields` 时按 `insertField` 同一套规则往该文本框写 `a:fld`。
+给了 `slides[].oleObjects` 时按 `insertOle` 同一套规则写 embedding 与 `p:oleObj`。
+给了 `slides[].connectors` 时按 `insertConnector` 同一套规则写 `p:cxnSp`。
 给了 `slides[].notes` 时按 `setNotesText` 同一套规则写该页演讲者备注：没有 notesMaster 则新建，再写 notesSlide。
+`notes` 为对象且给了 `anims` 时，按 `insertAnim` 同一套规则写到该页备注页，不算放映引擎。
 给了 `slides[].comments` 时按 `insertComment` 同一套规则写该页现代批注（`p188:cmLst`、`/ppt/authors.xml`）。
 给了形状上的 `url` / `file` / `slide` 时按 `insertHyperlink` 同一套规则写链（可 `on=run`，可 `event=hover`）。create 本期不写图 / 表 / 图表 / SmartArt 上的链，也不写批注内图。
 给了 `slides[].transition` 时按 `setTransition` 同一套规则写 `<p:transition>`。给了 `slides[].anims` 时按 `insertAnim` 同一套规则写预设效果（第一条 `with` / `after` 进片自动播）。
 给了 `presentation.sections` 时按 `insertSlideSection` 同一套规则写 `p14:sectionLst`：先写第一项（`start` 为 1 则包住全部页；大于 1 则前面的页进空名节），再按数组顺序用 `start` 拆后续节。
-先写该页 `shapes`，再按数组顺序写 `pictures`，再写 `maths`，再写 `model3ds`，再写 `videos`，再写 `audios`，再写 `charts`，再写 `smartArts`，再写 `tables`，再写 `notes`，
-再按数组顺序写 `comments`，再写形状超链接，再写 `transition`，再按数组顺序写 `anims`。
-全部页写完后再写 `sections`。`p:cNvPr/@id` 取该页已有全部 `cNvPr` 的最大整数加 1，至少为 2。
+给了 `slides[].zooms` 时按 `insertZoom` 同一套规则写 Zoom。节缩放 / 摘要缩放在 `sections` 写完之后再写。
+给了 `presentation.customShows` 时按 `insertCustomShow` 同一套规则写 `p:custShowLst`。
+给了 `presentation.handout` 时按 `setHandoutText` 同一套规则写讲义母版。
+给了 `presentation.showPr` 时按 `setShowPr` 同一套规则写 `p:showPr`。
+给了 `presentation.modifyProtection` 时按 `setProtection` 同一套规则写 `p:modifyVerifier`。
+先写该页 `shapes`（含 `geom` 与 `fields`），再按数组顺序写 `pictures`，再写 `maths`，再写 `model3ds`，再写 `videos`，再写 `audios`，再写 `charts`，再写 `smartArts`，再写 `tables`，
+再写 `oleObjects`，再写 `connectors`，再写 `notes`，
+再按数组顺序写 `comments`，再写形状超链接，再写 `transition`，再按数组顺序写 `anims`，再写 `notes.anims`。
+全部页写完后再写 `sections`，再写 `zooms`，再写 `customShows`，再写 `handout`，再写 `showPr`，再写 `modifyProtection`。
+`p:cNvPr/@id` 取该页已有全部 `cNvPr` 的最大整数加 1，至少为 2。
 `presentation` 根上出现 `pictures` / `charts` / `smartArts` / `tables` / `notes` / `comments` / `videos` / `audios`
- / `anims` / `transition` / `masters` / `notesMaster` / `handout` / `hyperlinks` / `customShows` / `oleObjects` / `zooms` / `showPr`
- / `modifyProtection` 报 `InvalidField`。
+ / `anims` / `transition` / `masters` / `notesMaster` / `hyperlinks` / `oleObjects` / `zooms` 报 `InvalidField`。
 `shapes[]` 上出现 `pictures` / `charts` / `smartArts` / `tables` / `notes` / `comments` / `videos` / `audios` / `anims`
  / `transition` / `masters` / `notesMaster` / `handout` / `hyperlinks` / `sections` / `customShows` / `oleObjects` / `zooms` / `showPr` 报 `InvalidField`。
-`slides[]` 上出现 `hyperlinks` 报未知字段（链写在 `shapes[]` 上，不另开页级名单）。`slides[]` 上出现 `fields` 报未知字段。create 本期不写域。
-`slides[]` 上出现 `timing` 报未知字段。create 本期不写自定义放映。`slides[]` 上出现 `oleObjects` 报未知字段。create 本期不写 OLE。
-`slides[]` 上出现 `zooms` 报未知字段。create 本期不写 Zoom。`presentation` 根上出现 `showPr` / `modifyProtection` 报未知字段。
-create 不写 `p:modifyVerifier`，也不写 `p:showPr`（presProps 仍只有 `clrMru`）。
+`slides[]` 上出现 `hyperlinks` 报未知字段（链写在 `shapes[]` 上，不另开页级名单）。`slides[]` 上出现 `fields` 报未知字段（域写在 `shapes[].fields`）。
+`slides[]` 上出现 `timing` 报未知字段。不算放映引擎。
 create 仍只写一份 `type="blank"`、名为「空白」的版式，不按 JSON 生成多份母版。
 给了 `presentation.props` 时按 `setProps` / `setCustomProp` 同一套规则写 core / app / custom；
 省略则仍写空的 `dc:title` 与 `dc:creator` 为 `ooxp`，不写 custom 部件。
@@ -2452,7 +2570,8 @@ presentation 关系、`p:handoutMasterIdLst`（插在 `notesMasterIdLst` 之后�
 theme 关系指向**新复制**的 theme 部件（内容与包内已有 theme 相同），不和 slideMaster 共用同一部件。
 新建部件含 `hdr`、`dt`、`ftr`、`sldNum` 四个占位符，结构对照 notesMaster 的页眉页脚框，不写 `sldImg`，不写 `p14:creationId`。
 已有讲义母版却没有被点名类型的占位符时，补一个该类型再写字。写入规则与 `setShapeText` 相同（整框写成新 run）；日期或页码原先若是 `a:fld`，改完变成普通文字，不再自动更新。
-该 handoutMaster 若已有 `p:hf`，把被点名槽位对应属性写成 `1`。本 op 不写 `<p:timing>`。xlsx / docx 上发此 op 报 `InvalidField`。`create` 本期不写讲义。
+该 handoutMaster 若已有 `p:hf`，把被点名槽位对应属性写成 `1`。本 op 不写 `<p:timing>`。xlsx / docx 上发此 op 报 `InvalidField`。
+`create` 给了 `presentation.handout` 时复用本 op。
 
 示例见 `docs/examples/pptx-apply-handout.json`。inspect 示例见 `docs/examples/pptx-inspect-handout.json`。
 

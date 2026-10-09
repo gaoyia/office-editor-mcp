@@ -362,7 +362,7 @@ fn wrong_ids_and_xlsx_reject() {
             "action": "create",
             "path": tmp("create-ole").with_extension("pptx").to_string_lossy(),
             "presentation": {
-                "slides": [{ "shapes": [{ "text": "a" }], "oleObjects": [{ "file": "a.xlsx" }] }]
+                "slides": [{ "shapes": [{ "text": "a" }], "fields": [] }]
             }
         })
         .to_string(),

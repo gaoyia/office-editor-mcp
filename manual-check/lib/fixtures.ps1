@@ -456,6 +456,81 @@ function Ensure-PptxCreateRemain([switch]$Force) {
     return $path
 }
 
+# 两页：第一节「开场」、第二节「内容」；第一页 OLE / 域 / 自由形状 / 连接线 / 备注动画；
+# 第二页 Zoom；根上自定义放映、讲义与放映设置。口令哈希另造，不要走这份夹具。
+function Ensure-PptxCreateRound4([switch]$Force) {
+    $path = Get-OutPath 'pptx-create-round4.pptx'
+    if ((Test-Path $path) -and -not $Force) { return $path }
+    $xlsx = Get-OutPath 'pptx-create-round4-embed.xlsx'
+    Invoke-OoxpRequest @{
+        schemaVersion = 1; action = 'create'
+        path = $xlsx.Replace('\', '/'); format = 'xlsx'
+        workbook = @{
+            sheets = @(
+                @{ name = 'Sheet1'; cells = @(@{ ref = 'A1'; value = '嵌入' }) }
+            )
+        }
+    } 'pptx-create-round4-embed' | Out-Null
+    $paths = @(
+        @{
+            w = 1905001
+            h = 1270001
+            ops = @(
+                @{ type = 'moveTo'; x = 0; y = 0 }
+                @{ type = 'lnTo'; x = 1905000; y = 0 }
+                @{ type = 'lnTo'; x = 1905000; y = 1270000 }
+                @{ type = 'lnTo'; x = 0; y = 1270000 }
+                @{ type = 'close' }
+            )
+        }
+    )
+    $req = @{
+        schemaVersion = 1; action = 'create'
+        path = $path.Replace('\', '/'); format = 'pptx'
+        presentation = @{
+            sections = @(
+                @{ name = '开场'; start = 1 }
+                @{ name = '内容'; start = 2 }
+            )
+            customShows = @(
+                @{ name = '预演'; slides = @(1, 2) }
+            )
+            handout = @{ header = '讲义头'; footer = '讲义尾' }
+            showPr = @{ type = 'kiosk'; loop = $true }
+            slides = @(
+                @{
+                    shapes = @(
+                        @{
+                            text = '甲'
+                            fields = @(@{ type = 'slidenum' })
+                            geom = @{ paths = $paths }
+                        }
+                        @{ text = '乙' }
+                    )
+                    connectors = @(
+                        @{
+                            prst = 'straightConnector1'
+                            start = @{ shape = 1; site = 1 }
+                            end = @{ shape = 2; site = 1 }
+                        }
+                    )
+                    oleObjects = @(@{ file = $xlsx.Replace('\', '/') })
+                    notes = @{
+                        text = '备注'
+                        anims = @(@{ type = 'fade'; shape = 1 })
+                    }
+                }
+                @{
+                    shapes = @(@{ text = '第二页' })
+                    zooms = @(@{ type = 'slide'; target = 1 })
+                }
+            )
+        }
+    }
+    Invoke-OoxpRequest $req 'pptx-create-round4' | Out-Null
+    return $path
+}
+
 # apply 的源文件要由 Excel 亲手存出来，不能拿 ooxp 自己的产物冒充，
 # 否则等于自己造自己读，测不到真实文件的写法。
 function Ensure-XlsxExcelSource([switch]$Force) {

@@ -1,6 +1,6 @@
 # pptx create 补齐：docs/checklist-pptx.md 的 Cr1–Cr5。
 # 节、形状级超链接、媒体、切换、预设进入淡入。不算放映引擎。
-# 不含 OLE、自定义放映、讲义、多份母版。
+# OLE、自定义放映、讲义见 pptx-create-round4.ps1。
 
 $ErrorActionPreference = 'Stop'
 . ([IO.Path]::Combine($PSScriptRoot, '..', '..', 'lib', 'bootstrap.ps1'))
@@ -169,10 +169,10 @@ $cr4ok = ($trType -eq 'fade') -and ([int]$tr.EntryEffect -eq 3849)
 Add-Check 'pptx-Cr4' $cr4ok "type=$trType entry=$($tr.EntryEffect)"
 
 $failHl = Get-OutPath 'pptx-create-remain-fail-hyperlinks.pptx'
-$failOle = Get-OutPath 'pptx-create-remain-fail-ole.pptx'
+$failTiming = Get-OutPath 'pptx-create-remain-fail-timing.pptx'
 $failNull = Get-OutPath 'pptx-create-remain-fail-null.pptx'
 $failXlsx = Get-OutPath 'pptx-create-remain-fail-xlsx.xlsx'
-foreach ($p in @($failHl, $failOle, $failNull, $failXlsx)) {
+foreach ($p in @($failHl, $failTiming, $failNull, $failXlsx)) {
     if (Test-Path $p) { Remove-Item -Force $p }
 }
 
@@ -183,16 +183,16 @@ $rawHl = Invoke-OoxpExpectFail @{
         slides = @(@{ shapes = @(@{ text = 'a' }); hyperlinks = @() })
     }
 } 'pptx-cr-fail-hyperlinks'
-$rawOle = Invoke-OoxpExpectFail @{
+$rawTiming = Invoke-OoxpExpectFail @{
     schemaVersion = 1; action = 'create'
-    path = $failOle.Replace('\', '/'); format = 'pptx'
+    path = $failTiming.Replace('\', '/'); format = 'pptx'
     presentation = @{
         slides = @(@{
             shapes = @(@{ text = 'a' })
-            oleObjects = @(@{ file = 'a.xlsx' })
+            timing = @()
         })
     }
-} 'pptx-cr-fail-ole'
+} 'pptx-cr-fail-timing'
 $rawNull = Invoke-OoxpExpectFail @{
     schemaVersion = 1; action = 'create'
     path = $failNull.Replace('\', '/'); format = 'pptx'
@@ -217,11 +217,11 @@ $cr5ok = ([int]$animN -eq 1) `
     -and ([int]$tree.slides[0].animCount -eq 1) `
     -and ([string]$timing.type -eq 'fade') `
     -and ((Get-PptErrorCode $rawHl) -eq 'InvalidField') `
-    -and ((Get-PptErrorCode $rawOle) -eq 'InvalidField') `
+    -and ((Get-PptErrorCode $rawTiming) -eq 'InvalidField') `
     -and ((Get-PptErrorCode $rawNull) -eq 'InvalidField') `
     -and ((Get-PptErrorCode $rawXlsx) -eq 'InvalidField') `
     -and (-not (Test-Path $failHl)) `
-    -and (-not (Test-Path $failOle)) `
+    -and (-not (Test-Path $failTiming)) `
     -and (-not (Test-Path $failNull)) `
     -and (-not (Test-Path $failXlsx))
-Add-Check 'pptx-Cr5' $cr5ok "anim=$animN type=$($timing.type) hl=$(Get-PptErrorCode $rawHl) ole=$(Get-PptErrorCode $rawOle) null=$(Get-PptErrorCode $rawNull) x=$(Get-PptErrorCode $rawXlsx)"
+Add-Check 'pptx-Cr5' $cr5ok "anim=$animN type=$($timing.type) hl=$(Get-PptErrorCode $rawHl) timing=$(Get-PptErrorCode $rawTiming) null=$(Get-PptErrorCode $rawNull) x=$(Get-PptErrorCode $rawXlsx)"

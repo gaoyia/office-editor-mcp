@@ -38,6 +38,7 @@ $order = @(
     'pptx-create-charts'
     'pptx-create-notes-comments'
     'pptx-create-remain'
+    'pptx-create-round4'
     'xlsx-apply'
     'xlsx-pictures'
     'xlsx-svg'

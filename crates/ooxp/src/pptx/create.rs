@@ -9,24 +9,34 @@ use crate::opc::{
 use crate::xml;
 
 use super::{
-    chart, comments, hyperlink, media, notes, picture,
+    chart, comments, connector, custom_show, field, handout, hyperlink, media, notes, ole, picture,
+    protect,
     request::{
-        self, AnimTarget, CreateAnim, CreateAnimHost, CreateHyperlink, CreateSection,
-        InsertChartOp, InsertCommentOp, InsertHyperlinkOp, InsertMediaOp, InsertPictureOp,
+        self, AnimTarget, CreateAnim, CreateAnimHost, CreateConnector, CreateCxnBind,
+        CreateHyperlink, CreateSection, InsertChartOp, InsertCommentOp, InsertConnectorOp,
+        InsertCustomShowOp, InsertHyperlinkOp, InsertMediaOp, InsertPictureOp,
         InsertSlideSectionOp, InsertSmartArtOp, InsertTableOp, LinkInsertHost, LinkOn,
-        PptxLinkKind, SetNotesTextOp, SetTransitionOp,
+        PptxLinkKind, SetHandoutTextOp, SetNotesTextOp, SetShapeGeomOp, SetTransitionOp,
     },
     section,
     shape::{self, ShapeKey, ShapeTarget, SlideMeta},
-    smartart, table, timing, transition, CT_APP, CT_CORE, CT_PRESENTATION, CT_PRES_PROPS, CT_SLIDE,
-    CT_SLIDE_LAYOUT, CT_SLIDE_MASTER, CT_THEME, DML_NS, PML_NS, REL_APP, REL_CORE, REL_NS,
-    REL_OFFICE_DOCUMENT, REL_PRES_PROPS, REL_SLIDE, REL_SLIDE_LAYOUT, REL_SLIDE_MASTER, REL_THEME,
+    show, smartart, table, timing, transition, zoom, CT_APP, CT_CORE, CT_PRESENTATION,
+    CT_PRES_PROPS, CT_SLIDE, CT_SLIDE_LAYOUT, CT_SLIDE_MASTER, CT_THEME, DML_NS, PML_NS, REL_APP,
+    REL_CORE, REL_NS, REL_OFFICE_DOCUMENT, REL_PRES_PROPS, REL_SLIDE, REL_SLIDE_LAYOUT,
+    REL_SLIDE_MASTER, REL_THEME,
 };
 
 struct NewShape {
     text: String,
     link: Option<CreateHyperlink>,
     format: Option<crate::drawing_text::TextFormat>,
+    geom: Option<Vec<super::geom::Path>>,
+    fields: Vec<request::CreateField>,
+}
+
+struct NewNotes {
+    text: String,
+    anims: Vec<CreateAnim>,
 }
 
 struct NewSlide {
@@ -37,12 +47,15 @@ struct NewSlide {
     charts: Vec<InsertChartOp>,
     smart_arts: Vec<InsertSmartArtOp>,
     tables: Vec<InsertTableOp>,
-    notes: Option<String>,
+    notes: Option<NewNotes>,
     comments: Vec<InsertCommentOp>,
     transition: Option<SetTransitionOp>,
     anims: Vec<CreateAnim>,
     model3ds: Vec<super::model3d::InsertModel3dOp>,
     maths: Vec<super::omml::InsertMathOp>,
+    ole_objects: Vec<ole::InsertOleOp>,
+    connectors: Vec<CreateConnector>,
+    zooms: Vec<zoom::InsertZoomOp>,
 }
 
 pub fn create(presentation: &Value) -> Result<Vec<u8>, Error> {
@@ -56,7 +69,16 @@ pub fn create(presentation: &Value) -> Result<Vec<u8>, Error> {
         )
     })?;
     for k in obj.keys() {
-        if k != "slides" && k != "props" && k != "sections" {
+        if !matches!(
+            k.as_str(),
+            "slides"
+                | "props"
+                | "sections"
+                | "customShows"
+                | "handout"
+                | "showPr"
+                | "modifyProtection"
+        ) {
             return Err(Error::with_path(
                 ErrorKind::UnknownField { field: k.clone() },
                 format!("presentation.{k}"),
@@ -94,11 +116,30 @@ pub fn create(presentation: &Value) -> Result<Vec<u8>, Error> {
                 text: String::new(),
                 link: None,
                 format: None,
+                geom: None,
+                fields: Vec::new(),
             });
         }
     }
     let sections = parse_sections(obj.get("sections"), slides.len())?;
+    let custom_shows = parse_custom_shows(obj.get("customShows"), slides.len())?;
+    let handout = match obj.get("handout") {
+        None => None,
+        Some(v) => Some(request::parse_create_handout(v, "presentation.handout")?),
+    };
+    let show_pr = match obj.get("showPr") {
+        None => None,
+        Some(v) => Some(request::parse_create_show_pr(v, "presentation.showPr")?),
+    };
+    let protection = match obj.get("modifyProtection") {
+        None => None,
+        Some(v) => Some(request::parse_create_protection(
+            v,
+            "presentation.modifyProtection",
+        )?),
+    };
     validate_anims(&slides)?;
+    validate_zooms(&slides, sections.len())?;
 
     let mut pkg = Package::create();
     let mut overrides = vec![
@@ -221,12 +262,22 @@ pub fn create(presentation: &Value) -> Result<Vec<u8>, Error> {
     attach_charts(&mut pkg, &slides)?;
     attach_smartarts(&mut pkg, &slides)?;
     attach_tables(&mut pkg, &slides)?;
+    attach_fields(&mut pkg, &slides)?;
+    attach_geom(&mut pkg, &slides)?;
+    attach_ole(&mut pkg, &slides)?;
+    attach_connectors(&mut pkg, &slides)?;
     attach_notes(&mut pkg, &slides)?;
     attach_comments(&mut pkg, &slides)?;
     attach_hyperlinks(&mut pkg, &slides)?;
     attach_transitions(&mut pkg, &slides)?;
     attach_anims(&mut pkg, &slides)?;
+    attach_notes_anims(&mut pkg, &slides)?;
     attach_sections(&mut pkg, &sections)?;
+    attach_zooms(&mut pkg, &slides)?;
+    attach_custom_shows(&mut pkg, &custom_shows)?;
+    attach_handout(&mut pkg, handout.as_ref())?;
+    attach_show_pr(&mut pkg, show_pr.as_ref())?;
+    attach_protection(&mut pkg, protection.as_ref())?;
 
     pkg.set("/docProps/core.xml", core_xml().into_bytes())?;
     pkg.set("/docProps/app.xml", app_xml(slides.len()).into_bytes())?;
@@ -260,6 +311,9 @@ fn parse_slide(v: &Value, i: usize) -> Result<NewSlide, Error> {
                 | "anims"
                 | "model3ds"
                 | "maths"
+                | "oleObjects"
+                | "connectors"
+                | "zooms"
         ) {
             return Err(Error::with_path(
                 ErrorKind::UnknownField { field: k.clone() },
@@ -294,6 +348,9 @@ fn parse_slide(v: &Value, i: usize) -> Result<NewSlide, Error> {
     let anims = parse_anims(obj.get("anims"), i)?;
     let model3ds = parse_model3ds(obj.get("model3ds"), i)?;
     let maths = parse_maths(obj.get("maths"), i)?;
+    let ole_objects = parse_ole_objects(obj.get("oleObjects"), i)?;
+    let connectors = parse_connectors(obj.get("connectors"), i)?;
+    let zooms = parse_zooms(obj.get("zooms"), i)?;
     Ok(NewSlide {
         shapes,
         pictures,
@@ -308,6 +365,9 @@ fn parse_slide(v: &Value, i: usize) -> Result<NewSlide, Error> {
         anims,
         model3ds,
         maths,
+        ole_objects,
+        connectors,
+        zooms,
     })
 }
 
@@ -464,18 +524,121 @@ fn parse_tables(v: Option<&Value>, slide_i: usize) -> Result<Vec<InsertTableOp>,
     Ok(out)
 }
 
-fn parse_notes(v: Option<&Value>, slide_i: usize) -> Result<Option<String>, Error> {
+fn parse_ole_objects(v: Option<&Value>, slide_i: usize) -> Result<Vec<ole::InsertOleOp>, Error> {
+    let Some(v) = v else {
+        return Ok(Vec::new());
+    };
+    let prefix = format!("presentation.slides[{slide_i}].oleObjects");
+    let arr = v.as_array().ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::WrongType {
+                field: "oleObjects".into(),
+                expected: TypeName::Array,
+            },
+            prefix.clone(),
+        )
+    })?;
+    let mut out = Vec::new();
+    for (j, item) in arr.iter().enumerate() {
+        out.push(request::parse_create_ole(
+            item,
+            &format!("{prefix}[{j}]"),
+            slide_i + 1,
+        )?);
+    }
+    Ok(out)
+}
+
+fn parse_connectors(v: Option<&Value>, slide_i: usize) -> Result<Vec<CreateConnector>, Error> {
+    let Some(v) = v else {
+        return Ok(Vec::new());
+    };
+    let prefix = format!("presentation.slides[{slide_i}].connectors");
+    let arr = v.as_array().ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::WrongType {
+                field: "connectors".into(),
+                expected: TypeName::Array,
+            },
+            prefix.clone(),
+        )
+    })?;
+    let mut out = Vec::new();
+    for (j, item) in arr.iter().enumerate() {
+        out.push(request::parse_create_connector(
+            item,
+            &format!("{prefix}[{j}]"),
+        )?);
+    }
+    Ok(out)
+}
+
+fn parse_zooms(v: Option<&Value>, slide_i: usize) -> Result<Vec<zoom::InsertZoomOp>, Error> {
+    let Some(v) = v else {
+        return Ok(Vec::new());
+    };
+    let prefix = format!("presentation.slides[{slide_i}].zooms");
+    let arr = v.as_array().ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::WrongType {
+                field: "zooms".into(),
+                expected: TypeName::Array,
+            },
+            prefix.clone(),
+        )
+    })?;
+    let mut out = Vec::new();
+    for (j, item) in arr.iter().enumerate() {
+        out.push(request::parse_create_zoom(
+            item,
+            &format!("{prefix}[{j}]"),
+            slide_i + 1,
+        )?);
+    }
+    Ok(out)
+}
+
+fn parse_notes(v: Option<&Value>, slide_i: usize) -> Result<Option<NewNotes>, Error> {
     let Some(v) = v else {
         return Ok(None);
     };
+    let prefix = format!("presentation.slides[{slide_i}].notes");
     match v {
-        Value::String(s) => Ok(Some(s.clone())),
+        Value::String(s) => Ok(Some(NewNotes {
+            text: s.clone(),
+            anims: Vec::new(),
+        })),
+        Value::Object(obj) => {
+            for k in obj.keys() {
+                if k != "text" && k != "anims" {
+                    return Err(Error::with_path(
+                        ErrorKind::UnknownField { field: k.clone() },
+                        format!("{prefix}.{k}"),
+                    ));
+                }
+            }
+            let text = match obj.get("text") {
+                None => String::new(),
+                Some(Value::String(s)) => s.clone(),
+                Some(_) => {
+                    return Err(Error::with_path(
+                        ErrorKind::WrongType {
+                            field: "text".into(),
+                            expected: TypeName::String,
+                        },
+                        format!("{prefix}.text"),
+                    ));
+                }
+            };
+            let anims = parse_anims_at(obj.get("anims"), &format!("{prefix}.anims"))?;
+            Ok(Some(NewNotes { text, anims }))
+        }
         _ => Err(Error::with_path(
             ErrorKind::WrongType {
                 field: "notes".into(),
                 expected: TypeName::String,
             },
-            format!("presentation.slides[{slide_i}].notes"),
+            prefix,
         )),
     }
 }
@@ -592,6 +755,189 @@ fn attach_tables(pkg: &mut Package, slides: &[NewSlide]) -> Result<(), Error> {
     Ok(())
 }
 
+fn attach_fields(pkg: &mut Package, slides: &[NewSlide]) -> Result<(), Error> {
+    if slides
+        .iter()
+        .all(|s| s.shapes.iter().all(|sh| sh.fields.is_empty()))
+    {
+        return Ok(());
+    }
+    for (i, slide) in slides.iter().enumerate() {
+        if slide.shapes.iter().all(|sh| sh.fields.is_empty()) {
+            continue;
+        }
+        let n = i + 1;
+        let part = format!("/ppt/slides/slide{n}.xml");
+        let mut doc = xml::parse(pkg.get(&part)?)?;
+        for (j, sh) in slide.shapes.iter().enumerate() {
+            if sh.fields.is_empty() {
+                continue;
+            }
+            let cnv = (j as u32 + 2).to_string();
+            let id = format!("slide:{n}/shape:{cnv}");
+            let shape = ShapeTarget {
+                slide: n,
+                on_notes: false,
+                master: None,
+                key: ShapeKey::Id(cnv),
+            };
+            for (k, fld) in sh.fields.iter().enumerate() {
+                let op = field::InsertFieldOp {
+                    id: id.clone(),
+                    shape: shape.clone(),
+                    type_name: fld.type_name.clone(),
+                    text: fld.text.clone(),
+                };
+                field::apply_insert(&mut doc.root, &op, k)?;
+            }
+        }
+        pkg.set(&part, doc.to_bytes()?)?;
+    }
+    Ok(())
+}
+
+fn attach_geom(pkg: &mut Package, slides: &[NewSlide]) -> Result<(), Error> {
+    if slides
+        .iter()
+        .all(|s| s.shapes.iter().all(|sh| sh.geom.is_none()))
+    {
+        return Ok(());
+    }
+    for (i, slide) in slides.iter().enumerate() {
+        if slide.shapes.iter().all(|sh| sh.geom.is_none()) {
+            continue;
+        }
+        let n = i + 1;
+        let part = format!("/ppt/slides/slide{n}.xml");
+        let mut doc = xml::parse(pkg.get(&part)?)?;
+        for (j, sh) in slide.shapes.iter().enumerate() {
+            let Some(paths) = &sh.geom else {
+                continue;
+            };
+            let cnv = (j as u32 + 2).to_string();
+            let op = SetShapeGeomOp {
+                id: format!("slide:{n}/shape:{cnv}"),
+                target: Some(ShapeTarget {
+                    slide: n,
+                    on_notes: false,
+                    master: None,
+                    key: ShapeKey::Id(cnv),
+                }),
+                placeholder: None,
+                paths: paths.clone(),
+            };
+            shape::set_shape_geom(&mut doc, &op, j)?;
+        }
+        pkg.set(&part, doc.to_bytes()?)?;
+    }
+    Ok(())
+}
+
+fn attach_ole(pkg: &mut Package, slides: &[NewSlide]) -> Result<(), Error> {
+    if slides.iter().all(|s| s.ole_objects.is_empty()) {
+        return Ok(());
+    }
+    let pres = xml::parse(pkg.get("/ppt/presentation.xml")?)?;
+    for (i, slide) in slides.iter().enumerate() {
+        if slide.ole_objects.is_empty() {
+            continue;
+        }
+        let n = i + 1;
+        let part = format!("/ppt/slides/slide{n}.xml");
+        let mut doc = xml::parse(pkg.get(&part)?)?;
+        for (j, op) in slide.ole_objects.iter().enumerate() {
+            ole::insert(pkg, &mut doc, &part, &pres.root, op, j)?;
+        }
+        pkg.set(&part, doc.to_bytes()?)?;
+    }
+    Ok(())
+}
+
+fn attach_connectors(pkg: &mut Package, slides: &[NewSlide]) -> Result<(), Error> {
+    if slides.iter().all(|s| s.connectors.is_empty()) {
+        return Ok(());
+    }
+    let pres = xml::parse(pkg.get("/ppt/presentation.xml")?)?;
+    let canvas = picture::canvas_size(&pres.root);
+    for (i, slide) in slides.iter().enumerate() {
+        if slide.connectors.is_empty() {
+            continue;
+        }
+        let n = i + 1;
+        let part = format!("/ppt/slides/slide{n}.xml");
+        let mut doc = xml::parse(pkg.get(&part)?)?;
+        for (j, c) in slide.connectors.iter().enumerate() {
+            let prefix = format!("presentation.slides[{i}].connectors[{j}]");
+            let start = match &c.start {
+                Some(b) => Some(resolve_create_cxn_bind(
+                    &doc.root,
+                    n,
+                    b,
+                    &format!("{prefix}.start"),
+                )?),
+                None => None,
+            };
+            let end = match &c.end {
+                Some(b) => Some(resolve_create_cxn_bind(
+                    &doc.root,
+                    n,
+                    b,
+                    &format!("{prefix}.end"),
+                )?),
+                None => None,
+            };
+            let op = InsertConnectorOp {
+                slide: n,
+                on_notes: false,
+                master: None,
+                prst: c.prst.clone(),
+                x: c.x,
+                y: c.y,
+                cx: c.cx,
+                cy: c.cy,
+                start,
+                end,
+            };
+            connector::insert(&mut doc, canvas, &op, j)?;
+        }
+        pkg.set(&part, doc.to_bytes()?)?;
+    }
+    Ok(())
+}
+
+fn resolve_create_cxn_bind(
+    root: &crate::xml::Element,
+    slide: usize,
+    bind: &CreateCxnBind,
+    prefix: &str,
+) -> Result<connector::CxnBind, Error> {
+    let list = shape::collect_text_shapes(root);
+    let sp = list.get(bind.shape - 1).ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "create".into(),
+                field: "shape".into(),
+            },
+            format!("{prefix}.shape"),
+        )
+    })?;
+    let host = format!("slide:{slide}");
+    let (id, cnv, _) = shape::shape_stable_id(sp, &host, bind.shape);
+    let key = match cnv {
+        Some(v) => ShapeKey::Id(v),
+        None => ShapeKey::Index(bind.shape),
+    };
+    Ok(connector::CxnBind {
+        id,
+        slide,
+        on_notes: false,
+        master: None,
+        key,
+        is_cxn: false,
+        site: bind.site,
+    })
+}
+
 fn attach_notes(pkg: &mut Package, slides: &[NewSlide]) -> Result<(), Error> {
     if slides.iter().all(|s| s.notes.is_none()) {
         return Ok(());
@@ -599,7 +945,7 @@ fn attach_notes(pkg: &mut Package, slides: &[NewSlide]) -> Result<(), Error> {
     let pres_part = "/ppt/presentation.xml";
     let mut pres = xml::parse(pkg.get(pres_part)?)?;
     for (i, slide) in slides.iter().enumerate() {
-        let Some(text) = &slide.notes else {
+        let Some(notes) = &slide.notes else {
             continue;
         };
         let n = i + 1;
@@ -607,7 +953,7 @@ fn attach_notes(pkg: &mut Package, slides: &[NewSlide]) -> Result<(), Error> {
         let op = SetNotesTextOp {
             slide: n,
             id: format!("slide:{n}"),
-            text: text.clone(),
+            text: notes.text.clone(),
         };
         notes::apply_set_notes_text(pkg, pres_part, &mut pres, &part, &op, 0)?;
     }
@@ -645,6 +991,8 @@ fn empty_slide() -> NewSlide {
             text: String::new(),
             link: None,
             format: None,
+            geom: None,
+            fields: Vec::new(),
         }],
         pictures: Vec::new(),
         videos: Vec::new(),
@@ -658,6 +1006,9 @@ fn empty_slide() -> NewSlide {
         anims: Vec::new(),
         model3ds: Vec::new(),
         maths: Vec::new(),
+        ole_objects: Vec::new(),
+        connectors: Vec::new(),
+        zooms: Vec::new(),
     }
 }
 
@@ -702,17 +1053,20 @@ fn parse_transition(v: Option<&Value>, slide_i: usize) -> Result<Option<SetTrans
 }
 
 fn parse_anims(v: Option<&Value>, slide_i: usize) -> Result<Vec<CreateAnim>, Error> {
+    parse_anims_at(v, &format!("presentation.slides[{slide_i}].anims"))
+}
+
+fn parse_anims_at(v: Option<&Value>, prefix: &str) -> Result<Vec<CreateAnim>, Error> {
     let Some(v) = v else {
         return Ok(Vec::new());
     };
-    let prefix = format!("presentation.slides[{slide_i}].anims");
     let arr = v.as_array().ok_or_else(|| {
         Error::with_path(
             ErrorKind::WrongType {
                 field: "anims".into(),
                 expected: TypeName::Array,
             },
-            prefix.clone(),
+            prefix.to_string(),
         )
     })?;
     let mut out = Vec::new();
@@ -752,6 +1106,88 @@ fn parse_sections(v: Option<&Value>, slide_count: usize) -> Result<Vec<CreateSec
         out.push(sec);
     }
     Ok(out)
+}
+
+fn parse_custom_shows(
+    v: Option<&Value>,
+    slide_count: usize,
+) -> Result<Vec<InsertCustomShowOp>, Error> {
+    let Some(v) = v else {
+        return Ok(Vec::new());
+    };
+    let arr = v.as_array().ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::WrongType {
+                field: "customShows".into(),
+                expected: TypeName::Array,
+            },
+            "presentation.customShows",
+        )
+    })?;
+    let mut out = Vec::new();
+    for (j, item) in arr.iter().enumerate() {
+        let show =
+            request::parse_create_custom_show(item, &format!("presentation.customShows[{j}]"))?;
+        for (k, n) in show.slides.iter().enumerate() {
+            if *n > slide_count {
+                return Err(Error::with_path(
+                    ErrorKind::OpRequiresField {
+                        op: "create".into(),
+                        field: "slides".into(),
+                    },
+                    format!("presentation.customShows[{j}].slides[{k}]"),
+                ));
+            }
+        }
+        out.push(show);
+    }
+    Ok(out)
+}
+
+fn validate_zooms(slides: &[NewSlide], section_count: usize) -> Result<(), Error> {
+    for (i, slide) in slides.iter().enumerate() {
+        for (j, op) in slide.zooms.iter().enumerate() {
+            let prefix = format!("presentation.slides[{i}].zooms[{j}]");
+            match &op.kind {
+                zoom::InsertKind::Slide { target } => {
+                    if *target < 1 || *target > slides.len() {
+                        return Err(Error::with_path(
+                            ErrorKind::OpRequiresField {
+                                op: "create".into(),
+                                field: "target".into(),
+                            },
+                            format!("{prefix}.target"),
+                        ));
+                    }
+                }
+                zoom::InsertKind::Section { target } => {
+                    if *target < 1 || *target > section_count {
+                        return Err(Error::with_path(
+                            ErrorKind::OpRequiresField {
+                                op: "create".into(),
+                                field: "target".into(),
+                            },
+                            format!("{prefix}.target"),
+                        ));
+                    }
+                }
+                zoom::InsertKind::Summary { targets } => {
+                    for (k, n) in targets.iter().enumerate() {
+                        if *n < 1 || *n > section_count {
+                            return Err(Error::with_path(
+                                ErrorKind::OpRequiresField {
+                                    op: "create".into(),
+                                    field: "targets".into(),
+                                },
+                                format!("{prefix}.targets[{k}]"),
+                            ));
+                        }
+                    }
+                }
+            }
+        }
+    }
+    Ok(())
 }
 
 fn validate_anims(slides: &[NewSlide]) -> Result<(), Error> {
@@ -985,6 +1421,7 @@ fn attach_anims(pkg: &mut Package, slides: &[NewSlide]) -> Result<(), Error> {
                 &doc.root,
                 &part,
                 n,
+                false,
                 anim.host,
                 &format!("presentation.slides[{i}].anims[{j}]"),
             )?;
@@ -994,6 +1431,7 @@ fn attach_anims(pkg: &mut Package, slides: &[NewSlide]) -> Result<(), Error> {
                     &doc.root,
                     &part,
                     n,
+                    false,
                     host,
                     &format!("presentation.slides[{i}].anims[{j}].clickOn"),
                 )?),
@@ -1023,15 +1461,89 @@ fn attach_anims(pkg: &mut Package, slides: &[NewSlide]) -> Result<(), Error> {
     Ok(())
 }
 
+fn attach_notes_anims(pkg: &mut Package, slides: &[NewSlide]) -> Result<(), Error> {
+    if slides
+        .iter()
+        .all(|s| s.notes.as_ref().map(|n| n.anims.is_empty()).unwrap_or(true))
+    {
+        return Ok(());
+    }
+    let pres_part = "/ppt/presentation.xml";
+    let pres = xml::parse(pkg.get(pres_part)?)?;
+    let metas = shape::list_slides(pkg, pres_part, &pres.root)?;
+    for (i, slide) in slides.iter().enumerate() {
+        let Some(notes) = &slide.notes else {
+            continue;
+        };
+        if notes.anims.is_empty() {
+            continue;
+        }
+        let n = i + 1;
+        let slide_part = format!("/ppt/slides/slide{n}.xml");
+        let notes_part = notes::notes_slide_part(pkg, &slide_part)?.ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::OpRequiresField {
+                    op: "create".into(),
+                    field: "notes".into(),
+                },
+                format!("presentation.slides[{i}].notes.anims"),
+            )
+        })?;
+        let doc = xml::parse(pkg.get(&notes_part)?)?;
+        for (j, anim) in notes.anims.iter().enumerate() {
+            let prefix = format!("presentation.slides[{i}].notes.anims[{j}]");
+            let host_id =
+                resolve_anim_host(pkg, &doc.root, &notes_part, n, true, anim.host, &prefix)?;
+            let click_on = match anim.click_on {
+                Some(host) => Some(resolve_anim_host(
+                    pkg,
+                    &doc.root,
+                    &notes_part,
+                    n,
+                    true,
+                    host,
+                    &format!("{prefix}.clickOn"),
+                )?),
+                None => None,
+            };
+            timing::insert(
+                pkg,
+                &metas,
+                pres_part,
+                &pres.root,
+                &host_id,
+                &AnimTarget::Notes { slide: n },
+                timing::AnimWrite {
+                    type_name: &anim.type_name,
+                    trigger: &anim.trigger,
+                    delay: anim.delay,
+                    dur: anim.dur,
+                    repeat: anim.repeat,
+                    sound: anim.sound.as_deref(),
+                    para: anim.para,
+                    click_on: click_on.as_deref(),
+                },
+                j,
+            )?;
+        }
+    }
+    Ok(())
+}
+
 fn resolve_anim_host(
     pkg: &Package,
     root: &crate::xml::Element,
     part: &str,
     slide: usize,
+    on_notes: bool,
     host: CreateAnimHost,
     prefix: &str,
 ) -> Result<String, Error> {
-    let host_s = format!("slide:{slide}");
+    let host_s = if on_notes {
+        format!("slide:{slide}/notes")
+    } else {
+        format!("slide:{slide}")
+    };
     match host {
         CreateAnimHost::Shape(n) => {
             let list = shape::collect_text_shapes(root);
@@ -1060,12 +1572,9 @@ fn resolve_anim_host(
                 .map(|p| p.id.clone())
                 .ok_or_else(|| anim_host_err(prefix, "audio"))
         }
-        CreateAnimHost::Table(n) => json_id(
-            &table::collect_tables(root, &format!("slide:{slide}")),
-            n,
-            prefix,
-            "table",
-        ),
+        CreateAnimHost::Table(n) => {
+            json_id(&table::collect_tables(root, &host_s), n, prefix, "table")
+        }
         CreateAnimHost::Chart(n) => json_id(
             &chart::collect_charts(pkg, root, &host_s, part)?,
             n,
@@ -1126,10 +1635,78 @@ fn attach_sections(pkg: &mut Package, sections: &[CreateSection]) -> Result<(), 
     Ok(())
 }
 
+fn attach_zooms(pkg: &mut Package, slides: &[NewSlide]) -> Result<(), Error> {
+    if slides.iter().all(|s| s.zooms.is_empty()) {
+        return Ok(());
+    }
+    let pres_part = "/ppt/presentation.xml";
+    let pres = xml::parse(pkg.get(pres_part)?)?;
+    let metas = shape::list_slides(pkg, pres_part, &pres.root)?;
+    for (i, slide) in slides.iter().enumerate() {
+        if slide.zooms.is_empty() {
+            continue;
+        }
+        let n = i + 1;
+        let part = format!("/ppt/slides/slide{n}.xml");
+        let mut doc = xml::parse(pkg.get(&part)?)?;
+        for (j, op) in slide.zooms.iter().enumerate() {
+            zoom::insert(pkg, &mut doc, &part, &pres.root, &metas, op, j)?;
+        }
+        pkg.set(&part, doc.to_bytes()?)?;
+    }
+    Ok(())
+}
+
+fn attach_custom_shows(pkg: &mut Package, shows: &[InsertCustomShowOp]) -> Result<(), Error> {
+    if shows.is_empty() {
+        return Ok(());
+    }
+    let pres_part = "/ppt/presentation.xml";
+    let mut pres = xml::parse(pkg.get(pres_part)?)?;
+    for (j, op) in shows.iter().enumerate() {
+        custom_show::insert(pkg, pres_part, &mut pres, op, j)?;
+    }
+    Ok(())
+}
+
+fn attach_handout(pkg: &mut Package, op: Option<&SetHandoutTextOp>) -> Result<(), Error> {
+    let Some(op) = op else {
+        return Ok(());
+    };
+    let pres_part = "/ppt/presentation.xml";
+    let mut pres = xml::parse(pkg.get(pres_part)?)?;
+    handout::set_text(pkg, pres_part, &mut pres, op, 0)?;
+    Ok(())
+}
+
+fn attach_show_pr(pkg: &mut Package, op: Option<&show::SetShowPrOp>) -> Result<(), Error> {
+    let Some(op) = op else {
+        return Ok(());
+    };
+    show::apply(pkg, "/ppt/presentation.xml", op, 0)
+}
+
+fn attach_protection(
+    pkg: &mut Package,
+    op: Option<&protect::SetProtectionOp>,
+) -> Result<(), Error> {
+    let Some(op) = op else {
+        return Ok(());
+    };
+    let pres_part = "/ppt/presentation.xml";
+    let mut pres = xml::parse(pkg.get(pres_part)?)?;
+    protect::apply(pkg, pres_part, &mut pres, op, 0)
+}
+
 fn parse_shape(v: &Value, slide: usize, i: usize) -> Result<NewShape, Error> {
-    let (text, link, format) =
-        request::parse_create_shape(v, &format!("presentation.slides[{slide}].shapes[{i}]"))?;
-    Ok(NewShape { text, link, format })
+    let sh = request::parse_create_shape(v, &format!("presentation.slides[{slide}].shapes[{i}]"))?;
+    Ok(NewShape {
+        text: sh.text,
+        link: sh.link,
+        format: sh.format,
+        geom: sh.geom,
+        fields: sh.fields,
+    })
 }
 
 fn rel(id: &str, rel_type: &str, target: &str) -> Relationship {

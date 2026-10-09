@@ -454,13 +454,13 @@ fn rejects_bad_id_empty_name_taken_and_need_field() {
 }
 
 #[test]
-fn create_rejects_presentation_custom_shows() {
-    let bad = tmp("create-cs").with_extension("pptx");
-    let err = run(
+fn create_empty_custom_shows_ok() {
+    let path = tmp("create-cs").with_extension("pptx");
+    run(
         &json!({
             "schemaVersion": 1,
             "action": "create",
-            "path": bad.to_string_lossy(),
+            "path": path.to_string_lossy(),
             "presentation": {
                 "customShows": [],
                 "slides": [{ "shapes": [{ "text": "甲" }] }]
@@ -469,9 +469,10 @@ fn create_rejects_presentation_custom_shows() {
         .to_string(),
         None,
     )
-    .unwrap_err();
-    assert_eq!(err.code(), ErrorCode::InvalidField);
-    assert!(!bad.exists());
+    .unwrap();
+    let tree = inspect_scope(&path, Some(json!({ "customShows": true })));
+    assert_eq!(tree["customShowCount"], 0);
+    assert_eq!(tree["customShows"], json!([]));
 }
 
 #[test]

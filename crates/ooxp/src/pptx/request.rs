@@ -597,6 +597,38 @@ pub struct CreateHyperlink {
     pub event: LinkEvent,
 }
 
+#[derive(Debug, Clone)]
+pub struct CreateField {
+    pub type_name: String,
+    pub text: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct CreateShape {
+    pub text: String,
+    pub link: Option<CreateHyperlink>,
+    pub format: Option<crate::drawing_text::TextFormat>,
+    pub geom: Option<Vec<super::geom::Path>>,
+    pub fields: Vec<CreateField>,
+}
+
+#[derive(Debug, Clone)]
+pub struct CreateCxnBind {
+    pub shape: usize,
+    pub site: u32,
+}
+
+#[derive(Debug, Clone)]
+pub struct CreateConnector {
+    pub prst: String,
+    pub x: Option<i64>,
+    pub y: Option<i64>,
+    pub cx: Option<i64>,
+    pub cy: Option<i64>,
+    pub start: Option<CreateCxnBind>,
+    pub end: Option<CreateCxnBind>,
+}
+
 #[derive(Debug, Clone, Copy)]
 pub enum CreateAnimHost {
     Shape(usize),
@@ -2118,25 +2150,32 @@ fn parse_set_connector(obj: &Map<String, Value>, i: usize) -> Result<SetConnecto
 }
 
 fn parse_geom_object(v: &Value, i: usize, field: &str) -> Result<Vec<super::geom::Path>, Error> {
-    let prefix = format!("ops[{i}].{field}");
+    parse_geom_object_at(v, &format!("ops[{i}].{field}"), "insertShape")
+}
+
+pub(crate) fn parse_geom_object_at(
+    v: &Value,
+    prefix: &str,
+    op: &str,
+) -> Result<Vec<super::geom::Path>, Error> {
     let obj = match v {
         Value::Object(m) => m,
         _ => {
             return Err(Error::with_path(
                 ErrorKind::WrongType {
-                    field: field.into(),
+                    field: "geom".into(),
                     expected: TypeName::Object,
                 },
-                prefix,
+                prefix.to_string(),
             ));
         }
     };
-    deny_keys_at(obj, &prefix, &["paths"])?;
+    deny_keys_at(obj, prefix, &["paths"])?;
     match obj.get("paths") {
-        Some(v) => parse_geom_paths(v, i, &format!("{field}.paths")),
+        Some(v) => parse_geom_paths_at(v, &format!("{prefix}.paths")),
         None => Err(Error::with_path(
             ErrorKind::OpRequiresField {
-                op: "insertShape".into(),
+                op: op.into(),
                 field: "geom.paths".into(),
             },
             format!("{prefix}.paths"),
@@ -2145,49 +2184,51 @@ fn parse_geom_object(v: &Value, i: usize, field: &str) -> Result<Vec<super::geom
 }
 
 fn parse_geom_paths(v: &Value, i: usize, field: &str) -> Result<Vec<super::geom::Path>, Error> {
-    let prefix = format!("ops[{i}].{field}");
+    parse_geom_paths_at(v, &format!("ops[{i}].{field}"))
+}
+
+fn parse_geom_paths_at(v: &Value, prefix: &str) -> Result<Vec<super::geom::Path>, Error> {
     let arr = match v {
         Value::Array(a) => a,
         _ => {
             return Err(Error::with_path(
                 ErrorKind::WrongType {
-                    field: field.into(),
+                    field: "paths".into(),
                     expected: TypeName::Array,
                 },
-                prefix,
+                prefix.to_string(),
             ));
         }
     };
     if arr.is_empty() {
         return Err(Error::with_path(
             ErrorKind::EmptyArray {
-                field: field.into(),
+                field: "paths".into(),
             },
-            prefix,
+            prefix.to_string(),
         ));
     }
     let mut out = Vec::with_capacity(arr.len());
     for (j, item) in arr.iter().enumerate() {
-        out.push(parse_geom_path(item, i, &format!("{field}[{j}]"))?);
+        out.push(parse_geom_path_at(item, &format!("{prefix}[{j}]"))?);
     }
     Ok(out)
 }
 
-fn parse_geom_path(v: &Value, i: usize, field: &str) -> Result<super::geom::Path, Error> {
-    let prefix = format!("ops[{i}].{field}");
+fn parse_geom_path_at(v: &Value, prefix: &str) -> Result<super::geom::Path, Error> {
     let obj = match v {
         Value::Object(m) => m,
         _ => {
             return Err(Error::with_path(
                 ErrorKind::WrongType {
-                    field: field.into(),
+                    field: "paths".into(),
                     expected: TypeName::Object,
                 },
-                prefix,
+                prefix.to_string(),
             ));
         }
     };
-    deny_keys_at(obj, &prefix, &["w", "h", "ops"])?;
+    deny_keys_at(obj, prefix, &["w", "h", "ops"])?;
     let w = parse_emu_at(obj.get("w"), &format!("{prefix}.w"), "w")?.ok_or_else(|| {
         Error::with_path(
             ErrorKind::OpRequiresField {
@@ -2237,22 +2278,21 @@ fn parse_geom_path(v: &Value, i: usize, field: &str) -> Result<super::geom::Path
     }
     let mut ops = Vec::with_capacity(ops_arr.len());
     for (j, item) in ops_arr.iter().enumerate() {
-        ops.push(parse_geom_op(item, i, &format!("{field}.ops[{j}]"))?);
+        ops.push(parse_geom_op_at(item, &format!("{prefix}.ops[{j}]"))?);
     }
     Ok(super::geom::Path { w, h, ops })
 }
 
-fn parse_geom_op(v: &Value, i: usize, field: &str) -> Result<super::geom::Op, Error> {
-    let prefix = format!("ops[{i}].{field}");
+fn parse_geom_op_at(v: &Value, prefix: &str) -> Result<super::geom::Op, Error> {
     let obj = match v {
         Value::Object(m) => m,
         _ => {
             return Err(Error::with_path(
                 ErrorKind::WrongType {
-                    field: field.into(),
+                    field: "ops".into(),
                     expected: TypeName::Object,
                 },
-                prefix,
+                prefix.to_string(),
             ));
         }
     };
@@ -2279,7 +2319,7 @@ fn parse_geom_op(v: &Value, i: usize, field: &str) -> Result<super::geom::Op, Er
     };
     match ty {
         "moveTo" | "lnTo" => {
-            deny_keys_at(obj, &prefix, &["type", "x", "y"])?;
+            deny_keys_at(obj, prefix, &["type", "x", "y"])?;
             let x = parse_off_at(obj.get("x"), &format!("{prefix}.x"), "x")?.ok_or_else(|| {
                 Error::with_path(
                     ErrorKind::OpRequiresField {
@@ -2305,7 +2345,7 @@ fn parse_geom_op(v: &Value, i: usize, field: &str) -> Result<super::geom::Op, Er
             }
         }
         "close" => {
-            deny_keys_at(obj, &prefix, &["type"])?;
+            deny_keys_at(obj, prefix, &["type"])?;
             Ok(super::geom::Op::Close)
         }
         _ => Err(Error::with_path(
@@ -7489,17 +7529,7 @@ pub(crate) fn parse_create_media(
     })
 }
 
-pub(crate) fn parse_create_shape(
-    v: &Value,
-    prefix: &str,
-) -> Result<
-    (
-        String,
-        Option<CreateHyperlink>,
-        Option<crate::drawing_text::TextFormat>,
-    ),
-    Error,
-> {
+pub(crate) fn parse_create_shape(v: &Value, prefix: &str) -> Result<CreateShape, Error> {
     let obj = v.as_object().ok_or_else(|| {
         Error::with_path(
             ErrorKind::WrongType {
@@ -7529,6 +7559,8 @@ pub(crate) fn parse_create_shape(
             "eastAsiaFont",
             "align",
             "textAnchor",
+            "geom",
+            "fields",
         ],
     )?;
     let text = match obj.get("text") {
@@ -7669,7 +7701,22 @@ pub(crate) fn parse_create_shape(
         event,
     });
     let format = crate::drawing_text::parse(obj, prefix, false)?;
-    Ok((text, link, format))
+    let geom = match obj.get("geom") {
+        None => None,
+        Some(v) => Some(parse_geom_object_at(
+            v,
+            &format!("{prefix}.geom"),
+            "create",
+        )?),
+    };
+    let fields = parse_create_fields(obj.get("fields"), &format!("{prefix}.fields"))?;
+    Ok(CreateShape {
+        text,
+        link,
+        format,
+        geom,
+        fields,
+    })
 }
 
 pub(crate) fn parse_create_transition(
@@ -8152,6 +8199,634 @@ pub(crate) fn parse_create_section(v: &Value, prefix: &str) -> Result<CreateSect
         Some(v) => parse_create_index(Some(v), &format!("{prefix}.start"), "start")?,
     };
     Ok(CreateSection { name, start })
+}
+
+fn parse_create_fields(v: Option<&Value>, prefix: &str) -> Result<Vec<CreateField>, Error> {
+    let Some(v) = v else {
+        return Ok(Vec::new());
+    };
+    let arr = v.as_array().ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::WrongType {
+                field: "fields".into(),
+                expected: TypeName::Array,
+            },
+            prefix.to_string(),
+        )
+    })?;
+    let mut out = Vec::new();
+    for (j, item) in arr.iter().enumerate() {
+        out.push(parse_create_field(item, &format!("{prefix}[{j}]"))?);
+    }
+    Ok(out)
+}
+
+fn parse_create_field(v: &Value, prefix: &str) -> Result<CreateField, Error> {
+    let obj = v.as_object().ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::WrongType {
+                field: "fields".into(),
+                expected: TypeName::Object,
+            },
+            prefix.to_string(),
+        )
+    })?;
+    deny_keys_at(obj, prefix, &["type", "text"])?;
+    let type_name = match obj.get("type") {
+        Some(Value::String(s)) if field::is_reserved_type(s) => s.clone(),
+        Some(Value::String(_)) => {
+            return Err(Error::with_path(
+                ErrorKind::InvalidFldType,
+                format!("{prefix}.type"),
+            ));
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "type".into(),
+                    expected: TypeName::String,
+                },
+                format!("{prefix}.type"),
+            ));
+        }
+        None => {
+            return Err(Error::with_path(
+                ErrorKind::MissingField {
+                    field: "type".into(),
+                },
+                format!("{prefix}.type"),
+            ));
+        }
+    };
+    let text = match obj.get("text") {
+        None => String::new(),
+        Some(Value::String(s)) => s.clone(),
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "text".into(),
+                    expected: TypeName::String,
+                },
+                format!("{prefix}.text"),
+            ));
+        }
+    };
+    Ok(CreateField { type_name, text })
+}
+
+pub(crate) fn parse_create_ole(
+    v: &Value,
+    prefix: &str,
+    slide: usize,
+) -> Result<ole::InsertOleOp, Error> {
+    let obj = v.as_object().ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::WrongType {
+                field: "oleObjects".into(),
+                expected: TypeName::Object,
+            },
+            prefix.to_string(),
+        )
+    })?;
+    deny_keys_at(obj, prefix, &["file"])?;
+    let file = match obj.get("file") {
+        Some(Value::String(s)) if !s.is_empty() => s.clone(),
+        Some(Value::String(_)) | None => {
+            return Err(Error::with_path(
+                ErrorKind::MissingField {
+                    field: "file".into(),
+                },
+                format!("{prefix}.file"),
+            ));
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "file".into(),
+                    expected: TypeName::NonEmptyString,
+                },
+                format!("{prefix}.file"),
+            ));
+        }
+    };
+    Ok(ole::InsertOleOp {
+        slide,
+        on_notes: false,
+        master: None,
+        file,
+    })
+}
+
+pub(crate) fn parse_create_connector(v: &Value, prefix: &str) -> Result<CreateConnector, Error> {
+    let obj = v.as_object().ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::WrongType {
+                field: "connectors".into(),
+                expected: TypeName::Object,
+            },
+            prefix.to_string(),
+        )
+    })?;
+    deny_keys_at(obj, prefix, &["prst", "x", "y", "cx", "cy", "start", "end"])?;
+    let prst = match obj.get("prst") {
+        None => "straightConnector1".to_string(),
+        Some(Value::String(s)) => {
+            if connector::is_writable_prst(s) {
+                s.clone()
+            } else {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidConnectorPrst,
+                    format!("{prefix}.prst"),
+                ));
+            }
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "prst".into(),
+                    expected: TypeName::String,
+                },
+                format!("{prefix}.prst"),
+            ));
+        }
+    };
+    let x = parse_off_at(obj.get("x"), &format!("{prefix}.x"), "x")?;
+    let y = parse_off_at(obj.get("y"), &format!("{prefix}.y"), "y")?;
+    if x.is_some() != y.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "create".into(),
+                field: "x and y together".into(),
+            },
+            prefix.to_string(),
+        ));
+    }
+    let cx = parse_emu_at(obj.get("cx"), &format!("{prefix}.cx"), "cx")?;
+    let cy = parse_emu_at(obj.get("cy"), &format!("{prefix}.cy"), "cy")?;
+    if cx.is_some() != cy.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "create".into(),
+                field: "cx and cy together".into(),
+            },
+            prefix.to_string(),
+        ));
+    }
+    Ok(CreateConnector {
+        prst,
+        x,
+        y,
+        cx,
+        cy,
+        start: parse_create_cxn_bind(obj.get("start"), &format!("{prefix}.start"))?,
+        end: parse_create_cxn_bind(obj.get("end"), &format!("{prefix}.end"))?,
+    })
+}
+
+fn parse_create_cxn_bind(v: Option<&Value>, prefix: &str) -> Result<Option<CreateCxnBind>, Error> {
+    let Some(v) = v else {
+        return Ok(None);
+    };
+    let obj = v.as_object().ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::WrongType {
+                field: "start".into(),
+                expected: TypeName::Object,
+            },
+            prefix.to_string(),
+        )
+    })?;
+    deny_keys_at(obj, prefix, &["shape", "site"])?;
+    let shape = parse_create_index(obj.get("shape"), &format!("{prefix}.shape"), "shape")?;
+    let site = match obj.get("site") {
+        None => 1,
+        Some(v) => {
+            let n = parse_create_index(Some(v), &format!("{prefix}.site"), "site")?;
+            u32::try_from(n).map_err(|_| {
+                Error::with_path(
+                    ErrorKind::MinValue {
+                        field: "site".into(),
+                        min: 1,
+                    },
+                    format!("{prefix}.site"),
+                )
+            })?
+        }
+    };
+    Ok(Some(CreateCxnBind { shape, site }))
+}
+
+pub(crate) fn parse_create_zoom(
+    v: &Value,
+    prefix: &str,
+    slide: usize,
+) -> Result<zoom::InsertZoomOp, Error> {
+    let obj = v.as_object().ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::WrongType {
+                field: "zooms".into(),
+                expected: TypeName::Object,
+            },
+            prefix.to_string(),
+        )
+    })?;
+    deny_keys_at(
+        obj,
+        prefix,
+        &["type", "target", "targets", "x", "y", "cx", "cy"],
+    )?;
+    let kind_s = match obj.get("type") {
+        None => {
+            return Err(Error::with_path(
+                ErrorKind::MissingField {
+                    field: "type".into(),
+                },
+                format!("{prefix}.type"),
+            ));
+        }
+        Some(Value::String(s)) if s == "slide" || s == "section" || s == "summary" => s.clone(),
+        Some(Value::String(_)) => {
+            return Err(Error::with_path(
+                ErrorKind::InvalidZoomType,
+                format!("{prefix}.type"),
+            ));
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "type".into(),
+                    expected: TypeName::String,
+                },
+                format!("{prefix}.type"),
+            ));
+        }
+    };
+    if obj.contains_key("target") && obj.contains_key("targets") {
+        return Err(Error::with_path(
+            ErrorKind::MutuallyExclusive {
+                a: "target".into(),
+                b: "targets".into(),
+            },
+            prefix.to_string(),
+        ));
+    }
+    let kind = if kind_s == "summary" {
+        if obj.contains_key("target") {
+            return Err(Error::with_path(
+                ErrorKind::InvalidZoomTargets,
+                format!("{prefix}.target"),
+            ));
+        }
+        let targets = parse_create_zoom_targets(obj, prefix)?;
+        zoom::InsertKind::Summary { targets }
+    } else if obj.contains_key("targets") {
+        return Err(Error::with_path(
+            ErrorKind::InvalidZoomTargets,
+            format!("{prefix}.targets"),
+        ));
+    } else {
+        let target = parse_create_index(obj.get("target"), &format!("{prefix}.target"), "target")?;
+        if kind_s == "slide" {
+            if target == slide {
+                return Err(Error::with_path(
+                    ErrorKind::ZoomTargetSelf,
+                    format!("{prefix}.target"),
+                ));
+            }
+            zoom::InsertKind::Slide { target }
+        } else {
+            zoom::InsertKind::Section { target }
+        }
+    };
+    let x = parse_off_at(obj.get("x"), &format!("{prefix}.x"), "x")?;
+    let y = parse_off_at(obj.get("y"), &format!("{prefix}.y"), "y")?;
+    if x.is_some() != y.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "create".into(),
+                field: "x and y together".into(),
+            },
+            prefix.to_string(),
+        ));
+    }
+    let cx = parse_emu_at(obj.get("cx"), &format!("{prefix}.cx"), "cx")?;
+    let cy = parse_emu_at(obj.get("cy"), &format!("{prefix}.cy"), "cy")?;
+    if cx.is_some() != cy.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "create".into(),
+                field: "cx and cy together".into(),
+            },
+            prefix.to_string(),
+        ));
+    }
+    Ok(zoom::InsertZoomOp {
+        slide,
+        on_notes: false,
+        master: None,
+        kind,
+        x,
+        y,
+        cx,
+        cy,
+    })
+}
+
+fn parse_create_zoom_targets(obj: &Map<String, Value>, prefix: &str) -> Result<Vec<usize>, Error> {
+    match obj.get("targets") {
+        None => Err(Error::with_path(
+            ErrorKind::MissingField {
+                field: "targets".into(),
+            },
+            format!("{prefix}.targets"),
+        )),
+        Some(Value::Array(arr)) if arr.is_empty() => Err(Error::with_path(
+            ErrorKind::InvalidZoomTargets,
+            format!("{prefix}.targets"),
+        )),
+        Some(Value::Array(arr)) => {
+            let mut out = Vec::new();
+            for (j, v) in arr.iter().enumerate() {
+                let n = parse_create_index(Some(v), &format!("{prefix}.targets[{j}]"), "targets")?;
+                if out.contains(&n) {
+                    return Err(Error::with_path(
+                        ErrorKind::InvalidZoomTargets,
+                        format!("{prefix}.targets[{j}]"),
+                    ));
+                }
+                out.push(n);
+            }
+            Ok(out)
+        }
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "targets".into(),
+                expected: TypeName::Array,
+            },
+            format!("{prefix}.targets"),
+        )),
+    }
+}
+
+pub(crate) fn parse_create_custom_show(
+    v: &Value,
+    prefix: &str,
+) -> Result<InsertCustomShowOp, Error> {
+    let obj = v.as_object().ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::WrongType {
+                field: "customShows".into(),
+                expected: TypeName::Object,
+            },
+            prefix.to_string(),
+        )
+    })?;
+    deny_keys_at(obj, prefix, &["name", "slides"])?;
+    let name = match obj.get("name") {
+        Some(Value::String(s)) => {
+            custom_show::check_name(s, &format!("{prefix}.name"))?;
+            s.clone()
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "name".into(),
+                    expected: TypeName::String,
+                },
+                format!("{prefix}.name"),
+            ));
+        }
+        None => {
+            return Err(Error::with_path(
+                ErrorKind::MissingField {
+                    field: "name".into(),
+                },
+                format!("{prefix}.name"),
+            ));
+        }
+    };
+    let slides = match obj.get("slides") {
+        None => Vec::new(),
+        Some(Value::Array(arr)) => {
+            let mut out = Vec::new();
+            for (j, item) in arr.iter().enumerate() {
+                out.push(parse_create_index(
+                    Some(item),
+                    &format!("{prefix}.slides[{j}]"),
+                    "slides",
+                )?);
+            }
+            out
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "slides".into(),
+                    expected: TypeName::Array,
+                },
+                format!("{prefix}.slides"),
+            ));
+        }
+    };
+    Ok(InsertCustomShowOp {
+        name,
+        slides,
+        after: None,
+    })
+}
+
+pub(crate) fn parse_create_handout(v: &Value, prefix: &str) -> Result<SetHandoutTextOp, Error> {
+    let obj = v.as_object().ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::WrongType {
+                field: "handout".into(),
+                expected: TypeName::Object,
+            },
+            prefix.to_string(),
+        )
+    })?;
+    deny_keys_at(obj, prefix, &["header", "footer", "date", "sldNum"])?;
+    let header = parse_create_opt_string(obj, prefix, "header")?;
+    let footer = parse_create_opt_string(obj, prefix, "footer")?;
+    let date = parse_create_opt_string(obj, prefix, "date")?;
+    let sld_num = parse_create_opt_string(obj, prefix, "sldNum")?;
+    if header.is_none() && footer.is_none() && date.is_none() && sld_num.is_none() {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "create".into(),
+                field: "header, footer, date, or sldNum".into(),
+            },
+            prefix.to_string(),
+        ));
+    }
+    Ok(SetHandoutTextOp {
+        header,
+        footer,
+        date,
+        sld_num,
+    })
+}
+
+pub(crate) fn parse_create_show_pr(
+    v: &Value,
+    prefix: &str,
+) -> Result<super::show::SetShowPrOp, Error> {
+    let obj = v.as_object().ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::WrongType {
+                field: "showPr".into(),
+                expected: TypeName::Object,
+            },
+            prefix.to_string(),
+        )
+    })?;
+    deny_keys_at(
+        obj,
+        prefix,
+        &[
+            "type",
+            "loop",
+            "showNarration",
+            "showAnimation",
+            "useTimings",
+        ],
+    )?;
+    let type_name = match obj.get("type") {
+        None => None,
+        Some(Value::String(s)) if matches!(s.as_str(), "present" | "browse" | "kiosk") => {
+            Some(s.clone())
+        }
+        Some(Value::String(_)) => {
+            return Err(Error::with_path(
+                ErrorKind::InvalidShowPrType,
+                format!("{prefix}.type"),
+            ));
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "type".into(),
+                    expected: TypeName::String,
+                },
+                format!("{prefix}.type"),
+            ));
+        }
+    };
+    let loop_ = parse_create_opt_bool(obj, prefix, "loop")?;
+    let show_narration = parse_create_opt_bool(obj, prefix, "showNarration")?;
+    let show_animation = parse_create_opt_bool(obj, prefix, "showAnimation")?;
+    let use_timings = parse_create_opt_bool(obj, prefix, "useTimings")?;
+    if type_name.is_none()
+        && loop_.is_none()
+        && show_narration.is_none()
+        && show_animation.is_none()
+        && use_timings.is_none()
+    {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "create".into(),
+                field: "type".into(),
+            },
+            prefix.to_string(),
+        ));
+    }
+    Ok(super::show::SetShowPrOp {
+        type_name,
+        loop_,
+        show_narration,
+        show_animation,
+        use_timings,
+    })
+}
+
+pub(crate) fn parse_create_protection(
+    v: &Value,
+    prefix: &str,
+) -> Result<super::protect::SetProtectionOp, Error> {
+    let obj = v.as_object().ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::WrongType {
+                field: "modifyProtection".into(),
+                expected: TypeName::Object,
+            },
+            prefix.to_string(),
+        )
+    })?;
+    deny_keys_at(obj, prefix, &["enforced", "password"])?;
+    let enforced = match obj.get("enforced") {
+        Some(Value::Bool(b)) => *b,
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "enforced".into(),
+                    expected: TypeName::Boolean,
+                },
+                format!("{prefix}.enforced"),
+            ));
+        }
+        None => {
+            return Err(Error::with_path(
+                ErrorKind::NeedProtectionField,
+                format!("{prefix}.enforced"),
+            ));
+        }
+    };
+    let password = match obj.get("password") {
+        None => None,
+        Some(Value::String(s)) if !s.is_empty() => Some(s.clone()),
+        Some(Value::String(_)) => {
+            return Err(Error::with_path(
+                ErrorKind::ProtectionPasswordBlank,
+                format!("{prefix}.password"),
+            ));
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "password".into(),
+                    expected: TypeName::String,
+                },
+                format!("{prefix}.password"),
+            ));
+        }
+    };
+    Ok(super::protect::SetProtectionOp { enforced, password })
+}
+
+fn parse_create_opt_string(
+    obj: &Map<String, Value>,
+    prefix: &str,
+    field: &str,
+) -> Result<Option<String>, Error> {
+    match obj.get(field) {
+        None => Ok(None),
+        Some(Value::String(s)) => Ok(Some(s.clone())),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::String,
+            },
+            format!("{prefix}.{field}"),
+        )),
+    }
+}
+
+fn parse_create_opt_bool(
+    obj: &Map<String, Value>,
+    prefix: &str,
+    field: &str,
+) -> Result<Option<bool>, Error> {
+    match obj.get(field) {
+        None => Ok(None),
+        Some(Value::Bool(b)) => Ok(Some(*b)),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::Boolean,
+            },
+            format!("{prefix}.{field}"),
+        )),
+    }
 }
 
 fn parse_create_index(v: Option<&Value>, path: &str, field: &str) -> Result<usize, Error> {

@@ -362,7 +362,7 @@ fn wrong_ids_and_foreign_reject() {
             "action": "create",
             "path": tmp("create-zoom").with_extension("pptx").to_string_lossy(),
             "presentation": {
-                "slides": [{ "shapes": [{ "text": "a" }], "zooms": [] }]
+                "slides": [{ "shapes": [{ "text": "a" }], "zooms": [{}] }]
             }
         })
         .to_string(),

@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 1,
+  "action": "create",
+  "path": "deck.pptx",
+  "format": "pptx",
+  "presentation": {
+    "sections": [
+      { "name": "开场", "start": 1 },
+      { "name": "内容", "start": 2 }
+    ],
+    "customShows": [
+      { "name": "预演", "slides": [1, 2] }
+    ],
+    "handout": {
+      "header": "讲义头",
+      "footer": "讲义尾"
+    },
+    "showPr": {
+      "type": "kiosk",
+      "loop": true
+    },
+    "slides": [
+      {
+        "shapes": [
+          {
+            "text": "甲",
+            "fields": [{ "type": "slidenum" }],
+            "geom": {
+              "paths": [
+                {
+                  "w": 1905001,
+                  "h": 1270001,
+                  "ops": [
+                    { "type": "moveTo", "x": 0, "y": 0 },
+                    { "type": "lnTo", "x": 1905000, "y": 0 },
+                    { "type": "lnTo", "x": 1905000, "y": 1270000 },
+                    { "type": "lnTo", "x": 0, "y": 1270000 },
+                    { "type": "close" }
+                  ]
+                }
+              ]
+            }
+          },
+          { "text": "乙" }
+        ],
+        "connectors": [
+          {
+            "prst": "straightConnector1",
+            "start": { "shape": 1, "site": 1 },
+            "end": { "shape": 2, "site": 1 }
+          }
+        ],
+        "oleObjects": [{ "file": "embed.xlsx" }],
+        "notes": {
+          "text": "备注",
+          "anims": [{ "type": "fade", "shape": 1 }]
+        }
+      },
+      {
+        "shapes": [{ "text": "第二页" }],
+        "zooms": [{ "type": "slide", "target": 1 }]
+      }
+    ]
+  }
+}
