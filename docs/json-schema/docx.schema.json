@@ -548,9 +548,6 @@
     },
     "docxSdtCreate": {
       "type": "object",
-      "required": [
-        "text"
-      ],
       "additionalProperties": false,
       "properties": {
         "text": {
@@ -563,7 +560,11 @@
             "richText",
             "dropDown",
             "comboBox",
-            "date"
+            "date",
+            "checkbox",
+            "picture",
+            "group",
+            "equation"
           ]
         },
         "tag": {
@@ -583,6 +584,13 @@
         "fullDate": {
           "type": "string",
           "minLength": 1
+        },
+        "file": {
+          "type": "string",
+          "minLength": 1
+        },
+        "checked": {
+          "type": "boolean"
         }
       }
     },
@@ -2539,8 +2547,7 @@
       "type": "object",
       "required": [
         "op",
-        "id",
-        "text"
+        "id"
       ],
       "additionalProperties": false,
       "properties": {
@@ -2561,7 +2568,11 @@
             "richText",
             "dropDown",
             "comboBox",
-            "date"
+            "date",
+            "checkbox",
+            "picture",
+            "group",
+            "equation"
           ]
         },
         "tag": {
@@ -2581,6 +2592,13 @@
         "fullDate": {
           "type": "string",
           "minLength": 1
+        },
+        "file": {
+          "type": "string",
+          "minLength": 1
+        },
+        "checked": {
+          "type": "boolean"
         }
       }
     },
@@ -2588,8 +2606,7 @@
       "type": "object",
       "required": [
         "op",
-        "id",
-        "text"
+        "id"
       ],
       "additionalProperties": false,
       "properties": {
@@ -2621,6 +2638,13 @@
         "fullDate": {
           "type": "string",
           "minLength": 1
+        },
+        "file": {
+          "type": "string",
+          "minLength": 1
+        },
+        "checked": {
+          "type": "boolean"
         }
       }
     },

@@ -152,7 +152,7 @@ OLE 的 `{token}` 优先取 `o:OLEObject/@ObjectID` 原文（常带前导 `_`）
 
 公式的 `{n}` 从 1 起，按该故事里顶层 `m:oMath` 的文档顺序（遇 `w:txbxContent` 停住；`mc:AlternateContent` 只进 Choice）。嵌在另一个 `oMath` 里的不算一条。`oMathPara` 里的每个 `oMath` 各算一条。`math:{n}` 在插删公式之后会变，只够同一次 inspect 之后立刻 apply。父节点是 `oMathPara` 时 `kind` 为 `display`，否则为 `inline`。正文用 `math:{n}`，页眉页脚用 `{容器}/math:{n}`。框内、注内、批注内的公式本期不编；对这些容器发公式 op 报 `InvalidId`。Equation Editor 3.0 的 OLE / `w:object` 不编。只认 OMML。名单带 `expr` 结构树，不另编嵌套对象 id。不解析 UnicodeMath / TeX，也不实现排版引擎。
 
-内容控件的 `{n}` 从 1 起，按该故事里被收入的 `w:sdt` 的文档顺序（遇 `w:txbxContent` 停住；`mc:AlternateContent` 只进 Choice，ECMA-376 §17.5.2）。嵌套控件各算一条，外层 `{n}` 更小。`sdt:{n}` 在插删控件之后会变，只够同一次 inspect 之后立刻 apply。正文用 `sdt:{n}`，页眉页脚用 `{容器}/sdt:{n}`。框内、注内、批注内的控件本期不编；对这些容器发内容控件 op 报 `InvalidId`。本期收入：`plainText`（`w:text`）、`richText`（`w:richText`，或 `sdtPr` 未写类型元素，规范缺省为富文本）、`dropDown`（`w:dropDownList`）、`comboBox`（`w:comboBox`）、`date`（`w:date`）、`repeatingSection`（`repeatingSection` / `repeatingSectionItem`）。不收 `docPartObj`（目录等构建基块库仍走 `toc:`）、`bibliography`、`citation`、`picture`、`group`、`equation`、`checkbox`。祖先里有 `w:p` 时 `level` 为 `inline`，否则为 `block`。控件内段落仍走段落 id。`w:sdtPr/w:id/@w:val` 进 `xmlId`，不是树上的唯一键。带 `w:dataBinding` 的仍列出，`bound` 为 `true`。不实现 Word 开发者模式 UI，也不写自定义 XML 部件。
+内容控件的 `{n}` 从 1 起，按该故事里被收入的 `w:sdt` 的文档顺序（遇 `w:txbxContent` 停住；`mc:AlternateContent` 只进 Choice，ECMA-376 §17.5.2）。嵌套控件各算一条，外层 `{n}` 更小。`sdt:{n}` 在插删控件之后会变，只够同一次 inspect 之后立刻 apply。正文用 `sdt:{n}`，页眉页脚用 `{容器}/sdt:{n}`。框内、注内、批注内的控件本期不编；对这些容器发内容控件 op 报 `InvalidId`。本期收入：`plainText`（`w:text`）、`richText`（`w:richText`，或 `sdtPr` 未写类型元素，规范缺省为富文本）、`dropDown`（`w:dropDownList`）、`comboBox`（`w:comboBox`）、`date`（`w:date`）、`repeatingSection`（`repeatingSection` / `repeatingSectionItem`）、`checkbox`（`w14:checkbox`，MS-DOCX `CT_SdtCheckbox`）、`picture`（`w:picture`）、`group`（`w:group`）、`equation`（`w:equation`）。不收 `docPartObj` / `docPartList`（目录等构建基块库仍走 `toc:` / `docPart:`）、`bibliography`、`citation`。祖先里有 `w:p` 时 `level` 为 `inline`，否则为 `block`。控件内段落仍走段落 id。`w:sdtPr/w:id/@w:val` 进 `xmlId`，不是树上的唯一键。带 `w:dataBinding` 的仍列出，`bound` 为 `true`。不实现 Word 开发者模式 UI，也不写自定义 XML 部件。
 
 编号定义在 `/word/numbering.xml`（关系 `/numbering`，ECMA-376 §17.9）。实例 id 用 `w:num/@w:numId`：`num:{numId}`。抽象定义 id 用 `w:abstractNum/@w:abstractNumId`：`abstractNum:{abstractNumId}`。`numId` 为 0 表示无编号，不进树。这与 `table:{n}` 不同：编号 XML 本身有稳定数字 id，增删定义后已有实例的 id 不变。不实现编号计算引擎，树上不出现「显示为 3.」这类结果。页眉页脚容器不挂编号计数（整篇共用一份定义）。框内、注内、批注内的段若自带 `w:numPr` 仍能看见 `num` / `ilvl`，但编号 op 只接受正文或页眉页脚段落。
 
@@ -498,7 +498,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
 - 文档根上的 `pageBackground` 始终出现，对象字段顺序：`color`、`display`。`color` 取主文档根上 `w:background/@w:color` 原文（ECMA-376 §17.2.1），没有 `w:background` 或缺该属性则为 `null`。本期只认 `@w:color`，不读 `themeColor`，也不把 `w:drawing` 渐变 / 图片背景摊进树。`display` 对应 `settings.xml` 的 `w:displayBackgroundShape`：有元素且 OnOff 为开为 `true`，否则为 `false`。没有 settings 则为 `false`。页眉页脚容器不出现 `pageBackground`。xlsx / pptx 根上不要带 `pageBackground`。不实现排版引擎，不算页面上实际画出的像素。create 本期不写页面背景。
 - 节上的 `pageBorders` 始终出现。没有 `w:pgBorders` 为 `null`。有则对象字段顺序：`offsetFrom`、`display`、`zOrder`、`top`、`left`、`bottom`、`right`。前三项取对应属性原文，缺则为 `null`。四边取 `w:top` / `w:left` / `w:bottom` / `w:right`，没有该子元素为 `null`。每边对象字段顺序：`val`、`sz`、`space`、`color`。`val` 取 `@w:val`，缺则为 `""`。`sz` 为八分之一磅（`ST_EighthPointMeasure`），能解析成非负整数则写整数，否则为 `null`。`space` 为单位磅的非负整数，缺或解析失败为 `null`。`color` 取 `@w:color` 原文，缺则为 `null`。本期不读 `art` 艺术型边框，也不把 `bordersDoNotSurroundHeader` / `bordersDoNotSurroundFooter` / `alignBordersAndEdges` 单开到树上。xlsx / pptx 节上不要带 `pageBorders`。create 本期不写页面边框。
 - `scope.maths` 为 `true` 时，根上带 `maths`（正文），每个页眉、页脚容器带 `maths`。没有公式时为空数组。按该故事里顶层 `m:oMath` 的文档顺序。每条字段顺序：`id`、`index`、`kind`、`host`、`text`、`expr`。`id` 是 `math:{n}` 或 `{容器}/math:{n}`。`kind` 为 `inline` 或 `display`。`host` 是所在段落 id；不在任何 `w:p` 里则为 `null`。`text` 为该 `oMath` 子孙里所有 `t`（即 `m:t`）按文档顺序拼接，不做 UnicodeMath 全量互转。`expr` 是 `oMath` 直接子节点的数组，节点 `type` 见下文「公式 expr」。xlsx / pptx 的 `scope` 里出现 `maths` 报 `InvalidField`。
-- `scope.contentControls` 为 `true` 时，根上带 `contentControls`（正文），每个页眉、页脚容器带 `contentControls`。没有控件时为空数组。按该故事里被收入的 `w:sdt` 的文档顺序。每条字段顺序：`id`、`index`、`kind`、`level`、`host`、`tag`、`alias`、`xmlId`、`bound`、`parent`、`text`；`kind` 为 `dropDown` 或 `comboBox` 时再跟 `items`；`kind` 为 `date` 时再跟 `fullDate`。`id` 是 `sdt:{n}` 或 `{容器}/sdt:{n}`。`kind` 为 `plainText`、`richText`、`dropDown`、`comboBox`、`date` 或 `repeatingSection`。`level` 为 `inline` 或 `block`。`host` 是所在段落 id（行内为祖先 `w:p`；块级为 `sdtContent` 里第一个 `w:p`）；对不上则为 `null`。`tag` / `alias` 取 `w:tag` / `w:alias` 的 `w:val`，缺则为 `null`。`xmlId` 是 `w:sdtPr/w:id/@w:val` 原文，缺则为 `null`。`bound` 在有 `w:dataBinding` 时为 `true`，否则为 `false`。`parent` 是最近一层被收入的祖先控件 id，没有则为 `null`。`text` 为 `sdtContent` 子孙里所有 `w:t` 按文档顺序拼接。`items` 是 `w:listItem` 数组，每项字段顺序：`display`、`value`，取 `w:displayText` / `w:value`，缺则为 `null`。`fullDate` 取 `w:date/@w:fullDate` 原文，缺则为 `null`。xlsx / pptx 的 `scope` 里出现 `contentControls` 报 `InvalidField`。
+- `scope.contentControls` 为 `true` 时，根上带 `contentControls`（正文），每个页眉、页脚容器带 `contentControls`。没有控件时为空数组。按该故事里被收入的 `w:sdt` 的文档顺序。每条字段顺序：`id`、`index`、`kind`、`level`、`host`、`tag`、`alias`、`xmlId`、`bound`、`parent`、`text`；`kind` 为 `dropDown` 或 `comboBox` 时再跟 `items`；`kind` 为 `date` 时再跟 `fullDate`；`kind` 为 `checkbox` 时再跟 `checked`。`id` 是 `sdt:{n}` 或 `{容器}/sdt:{n}`。`kind` 为 `plainText`、`richText`、`dropDown`、`comboBox`、`date`、`repeatingSection`、`checkbox`、`picture`、`group` 或 `equation`。`level` 为 `inline` 或 `block`。`host` 是所在段落 id（行内为祖先 `w:p`；块级为 `sdtContent` 里第一个 `w:p`）；对不上则为 `null`。`tag` / `alias` 取 `w:tag` / `w:alias` 的 `w:val`，缺则为 `null`。`xmlId` 是 `w:sdtPr/w:id/@w:val` 原文，缺则为 `null`。`bound` 在有 `w:dataBinding` 时为 `true`，否则为 `false`。`parent` 是最近一层被收入的祖先控件 id，没有则为 `null`。`text` 为 `sdtContent` 子孙里所有 `w:t` 按文档顺序拼接。`items` 是 `w:listItem` 数组，每项字段顺序：`display`、`value`，取 `w:displayText` / `w:value`，缺则为 `null`。`fullDate` 取 `w:date/@w:fullDate` 原文，缺则为 `null`。`checked` 看 `w14:checkbox/w14:checked`：没有该子元素为 `false`；有且 OnOff 为开为 `true`，否则为 `false`。图片控件的 `text` 通常为空（内容是 DrawingML，没有 `w:t`）；图仍走该段 `pictures` / `exportMedia`，不把字节放进控件节点。xlsx / pptx 的 `scope` 里出现 `contentControls` 报 `InvalidField`。
 - `scope.numbering` 为 `true` 时，根上带 `numberings`。没有实例时为空数组。按 `numbering.xml` 里 `w:num`（`numId` 非 0）的文档顺序。每条字段顺序：`id`、`numId`、`abstractId`、`abstractNumId`、`multiLevelType`、`levels`。`id` 是 `num:{numId}`。`abstractId` 是 `abstractNum:{abstractNumId}`。`multiLevelType` 取该实例指向的抽象定义上 `w:multiLevelType/@w:val`，缺则为 `null`。`levels` 按 `ilvl` 升序。每一级先取抽象定义上的 `w:lvl`，该实例上同 `ilvl` 的 `w:lvlOverride/w:lvl` 盖住对应级。每级字段顺序：`ilvl`、`numFmt`、`lvlText`、`start`、`lvlJc`。`numFmt` / `lvlText` / `lvlJc` 取对应子元素 `@w:val` 原文，缺则为 `null`。`start` 能解析成整数则写整数，否则为 `null`。inspect 列出 XML 原文，不把 `numFmt` 收成白名单。xlsx / pptx 的 `scope` 里出现 `numbering` 报 `InvalidField`。
 - `scope.styles` 为 `true` 时，根上带 `styles`。没有样式时为空数组。按 `styles.xml` 里 `w:style`（`styleId` 非空）的文档顺序。每条字段顺序：`id`、`styleId`、`type`、`name`、`basedOn`、`default`。`id` 是 `style:{styleId}`。`styleId` 是 `w:styleId` 原文。`type` 取 `w:type` 原文，缺则为 `null`（规范缺省为段落样式，树上不猜）。`name` 取 `w:name/@w:val`，缺则为 `null`。`basedOn` 取 `w:basedOn/@w:val`，缺则为 `null`。`default` 看 `w:default`：`1` / `true` / `on` 为 `true`，其余或没有为 `false`。`w:latentStyles` 与 `w:docDefaults` 不进名单。xlsx / pptx 的 `scope` 里出现 `styles` 报 `InvalidField`。
 - `align` 取该段自己的 `w:pPr/w:jc/@w:val`（§17.3.1.13），没有 `jc` 则为 `null`。不把 `styles.xml` 摊进来。
@@ -591,7 +591,7 @@ docx 根上始终带 `theme`，不要另给 scope 键。来源是主文档 `.rel
 | `paragraphs[].bookmarks` | 可选。该段上的书签列表。省略则不写。`name` 可选；省略则按 `insertBookmark` 分配尚未占用的 `ooxp{n}`。`end` 可选，为同一故事 `paragraphs` 的 1 起下标；省略则起止都是本段。`end` 小于本段下标、大于该故事段数、为 0 或不是正整数，报 `InvalidField`。不要 `id`。页眉页脚段落同样允许 |
 | `paragraphs[].fields` | 可选。该段上的域列表。省略则不写。`instr` 与 `code` 恰好一个，规则与 `insertField` 相同。不要 `id`。页眉页脚段落同样允许 |
 | `paragraphs[].maths` | 可选。该段上的公式列表。省略则不写。`text` 与 `expr` 恰好一个，规则与 `insertMath` 相同。`kind` 可选 `inline`（缺省）或 `display`。不要 `id`。页眉页脚段落同样允许 |
-| `paragraphs[].contentControls` | 可选。该段上的内容控件列表。省略则不写。字段与 `insertContentControl` 相同，不含 `op` / `id`。`text` 必填非空。页眉页脚段落同样允许 |
+| `paragraphs[].contentControls` | 可选。该段上的内容控件列表。省略则不写。字段与 `insertContentControl` 相同，不含 `op` / `id`。`checkbox` / `picture` 不要 `text`；其余 kind `text` 必填非空。页眉页脚段落同样允许 |
 | `paragraphs[].num` | 可选。从 1 起的整数，指向 `document.numberings` 的下标（不是 `num:{n}`）。省略则该段不绑编号。没有 `numberings`、越界或为 0 报 `InvalidField`。页眉页脚段落同样允许 |
 | `paragraphs[].ilvl` | 可选。绑定级别，缺省 `0`，取值 0 到 8。只给 `ilvl` 不给 `num` 报 `InvalidField` |
 | `document.numberings` | 可选。编号定义列表。省略或空数组则不写 numbering 部件。每项只要 `kind`：`decimal` 或 `bullet`，按数组顺序发 `insertNumbering` |
@@ -655,8 +655,10 @@ docx 根上始终带 `theme`，不要另给 scope 键。来源是主文档 `.rel
 | `maths[].expr` | 与 `text` 恰好一个。规则与 `insertMath` 相同 |
 | `maths[].kind` | 可选。`inline` 或 `display` |
 
-| `contentControls[].text` | 必须。非空 |
-| `contentControls[].kind` | 可选。`plainText`（缺省）、`richText`、`dropDown`、`comboBox`、`date` |
+| `contentControls[].text` | `checkbox` / `picture` 不要此字段。其余 kind 必须非空 |
+| `contentControls[].kind` | 可选。`plainText`（缺省）、`richText`、`dropDown`、`comboBox`、`date`、`checkbox`、`picture`、`group`、`equation` |
+| `contentControls[].file` | 只用于 `picture`。本地图片路径，规则与 `insertPicture` 相同 |
+| `contentControls[].checked` | 只用于 `checkbox`。布尔，缺省 `false` |
 | `contentControls[].tag` / `alias` / `items` / `fullDate` | 可选。规则与 `insertContentControl` 相同 |
 
 不把 base64 写进 create JSON。xlsx 的图只认 `workbook.sheets[].pictures`，图表只认 `workbook.sheets[].charts`。pptx 的图只认 `presentation.slides[].pictures`，图表只认 `presentation.slides[].charts`，SmartArt 只认 `presentation.slides[].smartArts`，表只认 `presentation.slides[].tables`。`presentation` 根上或 `shapes[]` 上出现 `pictures` / `charts` / `smartArts` / `tables` 报 `InvalidField`。xlsx 上出现 `smartArts` 或 `textBoxes` 同样报 `InvalidField`。
@@ -1693,16 +1695,18 @@ run 级 `ins`：删掉整个 `w:ins`。run 级 `del`：拆掉 `w:del` 外壳，�
 | --- | --- |
 | `op` | 必须是 `"insertContentControl"` |
 | `id` | 段落 id（正文或页眉页脚），或 `docx:document` |
-| `text` | 必填，非空。写入控件当前值 |
-| `kind` | 可选。`plainText`（缺省）、`richText`、`dropDown`、`comboBox`、`date` |
+| `text` | `checkbox` / `picture` 不要此字段。其余 kind 必填非空，写入控件当前值 |
+| `kind` | 可选。`plainText`（缺省）、`richText`、`dropDown`、`comboBox`、`date`、`checkbox`、`picture`、`group`、`equation` |
+| `file` | 只用于 `picture`。本地图片路径，规则与 `insertPicture` 相同 |
+| `checked` | 只用于 `checkbox`。布尔。省略当作 `false` |
 | `tag` | 可选。写入 `w:tag/@w:val` |
 | `alias` | 可选。写入 `w:alias/@w:val` |
 | `items` | 可选。字符串数组。只用于 `dropDown` / `comboBox`。省略时用 `text` 作为唯一列表项 |
 | `fullDate` | 可选。写入 `w:date/@w:fullDate`。只用于 `date` |
 
-在点名段末尾追加一个行内 `w:sdt`（`sdtPr` 含 `w:id`，值为本故事里尚未占用的十进制数字；有 `tag` / `alias` 则写入；类型元素按 `kind`；`sdtContent` 里一条 `w:r`/`w:t`）。元素名跟宿主段落同一 `w:` 前缀。`id` 为 `docx:document` 时在正文末尾、`sectPr` 之前新插一个只含该控件的 `w:p`。不插入块级控件。不写 `w:dataBinding`。不写占位符 `showingPlcHdr`。
+在点名段末尾追加一个行内 `w:sdt`（`sdtPr` 含 `w:id`，值为本故事里尚未占用的十进制数字；有 `tag` / `alias` 则写入；类型元素按 `kind`）。`checkbox` 写 `w14:checkbox`（`checked` / `checkedState` / `uncheckedState`，缺省符号 U+2612 / U+2610、字体 MS Gothic），`sdtContent` 里一条带 `MS Gothic` 的 `w:r`/`w:t`（勾选 ☒、未勾 ☐）。根元素补 `xmlns:w14`，并把 `w14` 列入 `mc:Ignorable`。`picture` 写空的 `w:picture`，`sdtContent` 里一张行内 DrawingML（媒体与 `wp:docPr/@id` 与 `insertPicture` 同一套）。不写 `w:showingPlcHdr`，不写 Word 自带占位图。`group` 写空的 `w:group`；`equation` 写空的 `w:equation`。这两类以及旧 kind 的 `sdtContent` 仍是一条 `w:r`/`w:t`。元素名跟宿主段落同一 `w:` 前缀（`w14:checkbox` 除外）。`id` 为 `docx:document` 时在正文末尾、`sectPr` 之前新插一个只含该控件的 `w:p`。不插入块级控件。不写 `w:dataBinding`。不写占位符 `showingPlcHdr`。不写 `w:lock`。
 
-框内、注内、批注内的段落，以及控件 id、容器 id、表 id、run id、`section:{n}`，一律报 `InvalidId`。找不到段落报 `IdNotFound`。空 `text`、不认识的 `kind`、给了 `items` 却不是 `dropDown`/`comboBox`、给了 `fullDate` 却不是 `date`、或 `items` 不是非空字符串数组，报 `InvalidField`。xlsx / pptx 上发此 op 报 `InvalidField`。create 给了 `paragraphs[].contentControls` 时按同一套规则写入。
+框内、注内、批注内的段落，以及控件 id、容器 id、表 id、run id、`section:{n}`，一律报 `InvalidId`。找不到段落报 `IdNotFound`。空 `text`、不认识的 `kind`、给了 `items` 却不是 `dropDown`/`comboBox`、给了 `fullDate` 却不是 `date`、给了 `file` 却不是 `picture`、给了 `checked` 却不是 `checkbox`、`picture` 没有 `file`、或 `items` 不是非空字符串数组，报 `InvalidField`。xlsx / pptx 上发此 op 报 `InvalidField`。create 给了 `paragraphs[].contentControls` 时按同一套规则写入。
 
 ### setContentControl
 
@@ -1710,13 +1714,15 @@ run 级 `ins`：删掉整个 `w:ins`。run 级 `del`：拆掉 `w:del` 外壳，�
 | --- | --- |
 | `op` | 必须是 `"setContentControl"` |
 | `id` | 内容控件 id |
-| `text` | 必填，非空 |
+| `text` | `checkbox` / `picture` / `group` 不要此字段。其余 kind 必填非空 |
+| `file` | 只用于 `picture`。本地图片路径，规则与 `insertPicture` 相同 |
+| `checked` | 只用于 `checkbox`。布尔 |
 | `tag` | 可选。改 `w:tag/@w:val`；给空串则删掉 `w:tag` |
 | `alias` | 可选。改 `w:alias/@w:val`；给空串则删掉 `w:alias` |
 | `items` | 可选。只用于 `dropDown` / `comboBox`，整份替换 `w:listItem` |
 | `fullDate` | 可选。只用于 `date`，写入 `w:date/@w:fullDate` |
 
-用新文本替换该控件当前值：行内把 `sdtContent` 换成一条 `w:r`/`w:t`；块级只改 `sdtContent` 里第一个 `w:p` 的可见文本，并去掉其余 `w:p`。有 `w:showingPlcHdr` 则删掉。不改 `kind`，不改 `w:id`。带 `w:dataBinding` 报 `NotImplemented`。`kind` 为 `repeatingSection` 报 `NotImplemented`。块级 `sdtContent` 里有 `w:tbl` 报 `NotImplemented`。空 `text`、给了 `items` 却不是下拉/组合框、给了 `fullDate` 却不是日期，报 `InvalidField`。找不到报 `IdNotFound`。id 不是内容控件 id 报 `InvalidId`。xlsx / pptx 上发此 op 报 `InvalidField`。
+`checkbox`：改 `w14:checked` 与内容符号字符，不把 `sdtContent` 换成任意文本。`picture`：用新的行内 DrawingML 换掉控件里的图，旧媒体关系若已无引用则删掉。其余 kind 用新文本替换当前值：行内把 `sdtContent` 换成一条 `w:r`/`w:t`；块级只改 `sdtContent` 里第一个 `w:p` 的可见文本，并去掉其余 `w:p`。有 `w:showingPlcHdr` 则删掉。不改 `kind`，不改 `w:id`。带 `w:dataBinding` 报 `NotImplemented`。`kind` 为 `repeatingSection` 或 `group` 报 `NotImplemented`。块级 `sdtContent` 里有 `w:tbl` 报 `NotImplemented`。空 `text`、给了 `items` 却不是下拉/组合框、给了 `fullDate` 却不是日期、给了 `file` 却不是图片控件、给了 `checked` 却不是复选控件、图片控件没有 `file`、复选控件没有 `checked`，报 `InvalidField`。找不到报 `IdNotFound`。id 不是内容控件 id 报 `InvalidId`。xlsx / pptx 上发此 op 报 `InvalidField`。
 
 ### deleteContentControl
 

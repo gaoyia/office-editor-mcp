@@ -1341,7 +1341,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::InvalidMathExprType { got } => format!("unknown math node type: {got}"),
         ErrorKind::EmptyMathSlot { field } => format!("{field} must not be empty"),
         ErrorKind::InvalidContentControlKind => {
-            "kind must be plainText, richText, dropDown, comboBox, or date".into()
+            "kind must be plainText, richText, dropDown, comboBox, date, checkbox, picture, group, or equation".into()
         }
         ErrorKind::EmptyContentControlText => "text must not be empty".into(),
         ErrorKind::InvalidContentControlKeep => "keep must be content or none".into(),
@@ -1349,13 +1349,16 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             "items must be a non-empty array of non-empty strings".into()
         }
         ErrorKind::ContentControlFieldMismatch => {
-            "items is only for dropDown/comboBox, and fullDate is only for date".into()
+            "items is only for dropDown/comboBox, fullDate is only for date, file is only for picture, and checked is only for checkbox".into()
         }
         ErrorKind::ContentControlBound => {
             "Cannot change a content control that is bound to custom XML".into()
         }
         ErrorKind::ContentControlRepeating => {
             "Cannot change the value of a repeating-section content control".into()
+        }
+        ErrorKind::ContentControlGroup => {
+            "Cannot change the value of a group content control".into()
         }
         ErrorKind::ContentControlHasTable => {
             "Cannot flatten a block content control that contains a table".into()

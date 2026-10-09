@@ -100,6 +100,8 @@ struct NewSdt {
     alias: Option<String>,
     items: Vec<String>,
     full_date: Option<String>,
+    file: Option<String>,
+    checked: bool,
 }
 
 struct NewToc {
@@ -1329,6 +1331,20 @@ fn parse_optional_str(v: Option<&Value>, path: &str, field: &str) -> Result<Opti
     }
 }
 
+fn parse_optional_bool(v: Option<&Value>, path: &str, field: &str) -> Result<Option<bool>, Error> {
+    match v {
+        None => Ok(None),
+        Some(Value::Bool(b)) => Ok(Some(*b)),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::Boolean,
+            },
+            format!("{path}.{field}"),
+        )),
+    }
+}
+
 fn parse_comments(v: Option<&Value>, path: &str, reply: bool) -> Result<Vec<NewComment>, Error> {
     let Some(v) = v else {
         return Ok(Vec::new());
@@ -2085,7 +2101,7 @@ fn parse_sdts(v: Option<&Value>, prefix: &str) -> Result<Vec<NewSdt>, Error> {
         for k in obj.keys() {
             if !matches!(
                 k.as_str(),
-                "text" | "kind" | "tag" | "alias" | "items" | "fullDate"
+                "text" | "kind" | "tag" | "alias" | "items" | "fullDate" | "file" | "checked"
             ) {
                 return Err(Error::with_path(
                     ErrorKind::UnknownField { field: k.clone() },
@@ -2093,32 +2109,6 @@ fn parse_sdts(v: Option<&Value>, prefix: &str) -> Result<Vec<NewSdt>, Error> {
                 ));
             }
         }
-        let text = match obj.get("text") {
-            Some(Value::String(s)) if !s.is_empty() => s.clone(),
-            Some(Value::String(_)) => {
-                return Err(Error::with_path(
-                    ErrorKind::EmptyContentControlText,
-                    format!("{item_path}.text"),
-                ));
-            }
-            Some(_) => {
-                return Err(Error::with_path(
-                    ErrorKind::WrongType {
-                        field: "text".into(),
-                        expected: TypeName::String,
-                    },
-                    format!("{item_path}.text"),
-                ));
-            }
-            None => {
-                return Err(Error::with_path(
-                    ErrorKind::MissingField {
-                        field: "text".into(),
-                    },
-                    format!("{item_path}.text"),
-                ));
-            }
-        };
         let kind = match obj.get("kind") {
             None => SdtKind::PlainText,
             Some(Value::String(s)) => SdtKind::parse(s).ok_or_else(|| {
@@ -2136,6 +2126,25 @@ fn parse_sdts(v: Option<&Value>, prefix: &str) -> Result<Vec<NewSdt>, Error> {
                     format!("{item_path}.kind"),
                 ));
             }
+        };
+        let text_opt = match obj.get("text") {
+            Some(Value::String(s)) if !s.is_empty() => Some(s.clone()),
+            Some(Value::String(_)) => {
+                return Err(Error::with_path(
+                    ErrorKind::EmptyContentControlText,
+                    format!("{item_path}.text"),
+                ));
+            }
+            Some(_) => {
+                return Err(Error::with_path(
+                    ErrorKind::WrongType {
+                        field: "text".into(),
+                        expected: TypeName::String,
+                    },
+                    format!("{item_path}.text"),
+                ));
+            }
+            None => None,
         };
         let tag = parse_optional_str(obj.get("tag"), &item_path, "tag")?;
         let alias = parse_optional_str(obj.get("alias"), &item_path, "alias")?;
@@ -2161,13 +2170,85 @@ fn parse_sdts(v: Option<&Value>, prefix: &str) -> Result<Vec<NewSdt>, Error> {
                 ));
             }
         }
+        let file = match obj.get("file") {
+            None => None,
+            Some(Value::String(s)) if !s.is_empty() => Some(s.clone()),
+            Some(Value::String(_)) => {
+                return Err(Error::with_path(
+                    ErrorKind::MissingField {
+                        field: "file".into(),
+                    },
+                    format!("{item_path}.file"),
+                ));
+            }
+            Some(_) => {
+                return Err(Error::with_path(
+                    ErrorKind::WrongType {
+                        field: "file".into(),
+                        expected: TypeName::NonEmptyString,
+                    },
+                    format!("{item_path}.file"),
+                ));
+            }
+        };
+        if file.is_some() && kind != SdtKind::Picture {
+            return Err(Error::with_path(
+                ErrorKind::ContentControlFieldMismatch,
+                format!("{item_path}.file"),
+            ));
+        }
+        let checked = parse_optional_bool(obj.get("checked"), &item_path, "checked")?;
+        if checked.is_some() && kind != SdtKind::Checkbox {
+            return Err(Error::with_path(
+                ErrorKind::ContentControlFieldMismatch,
+                format!("{item_path}.checked"),
+            ));
+        }
+        match kind {
+            SdtKind::Picture => {
+                if file.is_none() {
+                    return Err(Error::with_path(
+                        ErrorKind::MissingField {
+                            field: "file".into(),
+                        },
+                        format!("{item_path}.file"),
+                    ));
+                }
+                if text_opt.is_some() {
+                    return Err(Error::with_path(
+                        ErrorKind::ContentControlFieldMismatch,
+                        format!("{item_path}.text"),
+                    ));
+                }
+            }
+            SdtKind::Checkbox => {
+                if text_opt.is_some() {
+                    return Err(Error::with_path(
+                        ErrorKind::ContentControlFieldMismatch,
+                        format!("{item_path}.text"),
+                    ));
+                }
+            }
+            _ => {
+                if text_opt.is_none() {
+                    return Err(Error::with_path(
+                        ErrorKind::MissingField {
+                            field: "text".into(),
+                        },
+                        format!("{item_path}.text"),
+                    ));
+                }
+            }
+        }
         out.push(NewSdt {
-            text,
+            text: text_opt.unwrap_or_default(),
             kind,
             tag,
             alias,
             items,
             full_date,
+            file,
+            checked: checked.unwrap_or(false),
         });
     }
     Ok(out)
@@ -2681,6 +2762,8 @@ fn push_story_ops(
                 alias: s.alias.clone(),
                 items: s.items.clone(),
                 full_date: s.full_date.clone(),
+                file: s.file.clone(),
+                checked: s.checked,
             }));
         }
         if let Some(n) = p.num {

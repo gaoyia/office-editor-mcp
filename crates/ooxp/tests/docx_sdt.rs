@@ -1,6 +1,6 @@
 //! docx 内容控件：insertContentControl / setContentControl / deleteContentControl。
 
-use std::io::{Cursor, Write};
+use std::io::{Cursor, Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU32, Ordering};
 
@@ -8,9 +8,28 @@ use ooxp::{run, ErrorCode, RunOutput};
 use serde_json::{json, Value};
 use zip::write::SimpleFileOptions;
 use zip::CompressionMethod;
+use zip::ZipArchive;
 use zip::ZipWriter;
 
 static SEQ: AtomicU32 = AtomicU32::new(0);
+
+/// 1×1 红 PNG。
+const PNG_1X1: &[u8] = &[
+    0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52,
+    0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x02, 0x00, 0x00, 0x00, 0x90, 0x77, 0x53,
+    0xDE, 0x00, 0x00, 0x00, 0x0C, 0x49, 0x44, 0x41, 0x54, 0x08, 0xD7, 0x63, 0xF8, 0xCF, 0xC0, 0x00,
+    0x00, 0x03, 0x01, 0x01, 0x00, 0x18, 0xDD, 0x8D, 0xB4, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4E,
+    0x44, 0xAE, 0x42, 0x60, 0x82,
+];
+
+/// 另一份 1×1 PNG，用来换图片控件。
+const PNG_1X1_B: &[u8] = &[
+    0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52,
+    0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x02, 0x00, 0x00, 0x00, 0x90, 0x77, 0x53,
+    0xDE, 0x00, 0x00, 0x00, 0x0C, 0x49, 0x44, 0x41, 0x54, 0x08, 0xD7, 0x63, 0x60, 0x60, 0x60, 0x00,
+    0x00, 0x00, 0x04, 0x00, 0x01, 0xA3, 0x0A, 0x15, 0xE3, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4E,
+    0x44, 0xAE, 0x42, 0x60, 0x82,
+];
 
 fn tmp_dir() -> PathBuf {
     let dir = std::env::temp_dir().join("ooxp-docx-sdt");
@@ -100,6 +119,38 @@ fn first_body_para_id(tree: &Value) -> String {
 
 fn object_keys(v: &Value) -> Vec<&str> {
     v.as_object().unwrap().keys().map(|k| k.as_str()).collect()
+}
+
+fn write_png(tag: &str, bytes: &[u8]) -> PathBuf {
+    let path = seq_path(tag, "png");
+    std::fs::write(&path, bytes).unwrap();
+    path
+}
+
+fn part_text(path: &Path, name: &str) -> String {
+    let bytes = std::fs::read(path).unwrap();
+    let mut zip = ZipArchive::new(Cursor::new(bytes)).unwrap();
+    let mut file = zip.by_name(name.trim_start_matches('/')).unwrap();
+    let mut s = String::new();
+    file.read_to_string(&mut s).unwrap();
+    s
+}
+
+fn part_bytes(path: &Path, name: &str) -> Vec<u8> {
+    let bytes = std::fs::read(path).unwrap();
+    let mut zip = ZipArchive::new(Cursor::new(bytes)).unwrap();
+    let mut file = zip.by_name(name.trim_start_matches('/')).unwrap();
+    let mut out = Vec::new();
+    file.read_to_end(&mut out).unwrap();
+    out
+}
+
+fn zip_has(path: &Path, name: &str) -> bool {
+    let bytes = std::fs::read(path).unwrap();
+    let zip = ZipArchive::new(Cursor::new(bytes)).unwrap();
+    let needle = name.trim_start_matches('/');
+    let names: Vec<String> = zip.file_names().map(|s| s.to_string()).collect();
+    names.iter().any(|n| n == needle)
 }
 
 #[test]
@@ -385,4 +436,178 @@ fn gallery_sdt_skipped_nested_and_bound_not_implemented() {
         json!([{ "op": "setContentControl", "id": "sdt:3", "text": "新" }]),
     );
     assert_eq!(err.code(), ErrorCode::NotImplemented);
+}
+
+#[test]
+fn insert_checkbox_picture_group_equation() {
+    let png_a = write_png("sdt-a", PNG_1X1);
+    let png_b = write_png("sdt-b", PNG_1X1_B);
+    let src = create_docx("sdt-types-src", json!({ "paragraphs": [{ "text": "甲" }] }));
+    let p1 = first_body_para_id(&inspect(&src, false, false));
+    let out = seq_path("sdt-types", "docx");
+    apply(
+        &src,
+        &out,
+        json!([
+            { "op": "insertContentControl", "id": p1, "kind": "checkbox", "checked": true },
+            { "op": "insertContentControl", "id": p1, "kind": "picture", "file": png_a },
+            { "op": "insertContentControl", "id": p1, "kind": "group", "text": "组" },
+            { "op": "insertContentControl", "id": p1, "kind": "equation", "text": "x" }
+        ]),
+    );
+    let tree = inspect(&out, true, false);
+    assert_eq!(tree["contentControlCount"], 4);
+    assert_eq!(
+        object_keys(&tree["contentControls"][0]),
+        [
+            "id", "index", "kind", "level", "host", "tag", "alias", "xmlId", "bound", "parent",
+            "text", "checked"
+        ]
+    );
+    assert_eq!(tree["contentControls"][0]["kind"], "checkbox");
+    assert_eq!(tree["contentControls"][0]["checked"], true);
+    assert_eq!(tree["contentControls"][0]["text"], "☒");
+    assert_eq!(tree["contentControls"][1]["kind"], "picture");
+    assert_eq!(tree["contentControls"][2]["kind"], "group");
+    assert_eq!(tree["contentControls"][2]["text"], "组");
+    assert_eq!(tree["contentControls"][3]["kind"], "equation");
+    assert_eq!(tree["contentControls"][3]["text"], "x");
+    let xml = part_text(&out, "word/document.xml");
+    assert!(xml.contains("w14:checkbox"));
+    assert!(xml.contains("<w:picture/>") || xml.contains("<w:picture "));
+    assert!(xml.contains("<w:group/>") || xml.contains("<w:group "));
+    assert!(xml.contains("<w:equation/>") || xml.contains("<w:equation "));
+    assert_eq!(part_bytes(&out, "word/media/image1.png"), PNG_1X1);
+
+    let RunOutput::Inspect(pic_tree) = run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "inspect",
+            "path": out.to_string_lossy(),
+            "scope": { "from": 1, "maxParas": 20, "pictures": true }
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap() else {
+        panic!("inspect 应返回树");
+    };
+    assert!(pic_tree["pictureCount"].as_u64().unwrap() >= 1);
+
+    let set_cb = seq_path("sdt-cb-set", "docx");
+    apply(
+        &out,
+        &set_cb,
+        json!([{ "op": "setContentControl", "id": "sdt:1", "checked": false }]),
+    );
+    let tree_cb = inspect(&set_cb, true, false);
+    assert_eq!(tree_cb["contentControls"][0]["checked"], false);
+    assert_eq!(tree_cb["contentControls"][0]["text"], "☐");
+
+    let set_pic = seq_path("sdt-pic-set", "docx");
+    apply(
+        &out,
+        &set_pic,
+        json!([{
+            "op": "setContentControl",
+            "id": "sdt:2",
+            "file": png_b
+        }]),
+    );
+    assert_eq!(part_bytes(&set_pic, "word/media/image2.png"), PNG_1X1_B);
+    assert!(!zip_has(&set_pic, "word/media/image1.png"));
+
+    let set_eq = seq_path("sdt-eq-set", "docx");
+    apply(
+        &out,
+        &set_eq,
+        json!([{ "op": "setContentControl", "id": "sdt:4", "text": "y" }]),
+    );
+    assert_eq!(
+        inspect(&set_eq, true, false)["contentControls"][3]["text"],
+        "y"
+    );
+
+    let err_group = apply_err(
+        &out,
+        json!([{ "op": "setContentControl", "id": "sdt:3", "text": "改" }]),
+    );
+    assert_eq!(err_group.code(), ErrorCode::NotImplemented);
+
+    let err_pic = apply_err(
+        &src,
+        json!([{ "op": "insertContentControl", "id": p1, "kind": "picture" }]),
+    );
+    assert_eq!(err_pic.code(), ErrorCode::InvalidField);
+
+    let err_pic_text = apply_err(
+        &src,
+        json!([{
+            "op": "insertContentControl",
+            "id": p1,
+            "kind": "picture",
+            "file": png_a,
+            "text": "x"
+        }]),
+    );
+    assert_eq!(err_pic_text.code(), ErrorCode::InvalidField);
+}
+
+#[test]
+fn create_sdt_types_and_handmade_inspect() {
+    let png = write_png("sdt-create", PNG_1X1);
+    let path = create_docx(
+        "sdt-create-types",
+        json!({
+            "paragraphs": [{
+                "text": "段",
+                "contentControls": [
+                    { "kind": "checkbox", "checked": true },
+                    { "kind": "picture", "file": png },
+                    { "kind": "group", "text": "组" },
+                    { "kind": "equation", "text": "x" }
+                ]
+            }]
+        }),
+    );
+    let tree = inspect(&path, true, false);
+    assert_eq!(tree["contentControlCount"], 4);
+    assert_eq!(tree["contentControls"][0]["kind"], "checkbox");
+    assert_eq!(tree["contentControls"][0]["checked"], true);
+    assert_eq!(tree["contentControls"][1]["kind"], "picture");
+    assert_eq!(tree["contentControls"][2]["kind"], "group");
+    assert_eq!(tree["contentControls"][3]["kind"], "equation");
+    let xml = part_text(&path, "word/document.xml");
+    assert!(xml.contains("<w:equation/>") || xml.contains("<w:equation "));
+
+    let err = run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "create",
+            "path": seq_path("sdt-create-bad", "docx").to_string_lossy(),
+            "format": "docx",
+            "document": {
+                "paragraphs": [{
+                    "text": "段",
+                    "contentControls": [{ "kind": "picture" }]
+                }]
+            }
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+
+    let handmade = write_docx_xml(
+        "sdt-kinds",
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml"><w:body><w:p w14:paraId="AAAA0001"><w:sdt><w:sdtPr><w:id w:val="1"/><w14:checkbox><w14:checked w14:val="0"/><w14:checkedState w14:val="2612" w14:font="MS Gothic"/><w14:uncheckedState w14:val="2610" w14:font="MS Gothic"/></w14:checkbox></w:sdtPr><w:sdtContent><w:r><w:t>☐</w:t></w:r></w:sdtContent></w:sdt></w:p><w:p w14:paraId="AAAA0002"><w:sdt><w:sdtPr><w:id w:val="2"/><w:picture/></w:sdtPr><w:sdtContent><w:r><w:t></w:t></w:r></w:sdtContent></w:sdt></w:p><w:p w14:paraId="AAAA0003"><w:sdt><w:sdtPr><w:id w:val="3"/><w:group/></w:sdtPr><w:sdtContent><w:r><w:t>组</w:t></w:r></w:sdtContent></w:sdt></w:p><w:p w14:paraId="AAAA0004"><w:sdt><w:sdtPr><w:id w:val="4"/><w:equation/></w:sdtPr><w:sdtContent><w:r><w:t>x</w:t></w:r></w:sdtContent></w:sdt></w:p><w:sectPr><w:pgSz w:w="11906" w:h="16838"/></w:sectPr></w:body></w:document>"#,
+    );
+    let kinds = inspect(&handmade, true, false);
+    assert_eq!(kinds["contentControlCount"], 4);
+    assert_eq!(kinds["contentControls"][0]["kind"], "checkbox");
+    assert_eq!(kinds["contentControls"][0]["checked"], false);
+    assert_eq!(kinds["contentControls"][1]["kind"], "picture");
+    assert_eq!(kinds["contentControls"][2]["kind"], "group");
+    assert_eq!(kinds["contentControls"][3]["kind"], "equation");
 }

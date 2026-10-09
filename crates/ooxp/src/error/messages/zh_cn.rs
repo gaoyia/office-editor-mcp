@@ -1161,16 +1161,17 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::InvalidMathExprType { got } => format!("不认识的公式节点 type：{got}"),
         ErrorKind::EmptyMathSlot { field } => format!("{field} 不能为空"),
         ErrorKind::InvalidContentControlKind => {
-            "kind 只能是 plainText、richText、dropDown、comboBox 或 date".into()
+            "kind 只能是 plainText、richText、dropDown、comboBox、date、checkbox、picture、group 或 equation".into()
         }
         ErrorKind::EmptyContentControlText => "text 不能为空".into(),
         ErrorKind::InvalidContentControlKeep => "keep 只能是 content 或 none".into(),
         ErrorKind::InvalidContentControlItems => "items 必须是非空字符串组成的非空数组".into(),
         ErrorKind::ContentControlFieldMismatch => {
-            "items 只用于 dropDown/comboBox，fullDate 只用于 date".into()
+            "items 只用于 dropDown/comboBox，fullDate 只用于 date，file 只用于 picture，checked 只用于 checkbox".into()
         }
         ErrorKind::ContentControlBound => "不能改绑定到自定义 XML 的内容控件".into(),
         ErrorKind::ContentControlRepeating => "不能改重复节内容控件的值".into(),
+        ErrorKind::ContentControlGroup => "不能改组合内容控件的值".into(),
         ErrorKind::ContentControlHasTable => "不能摊平含表格的块级内容控件".into(),
         ErrorKind::InvalidFieldKeep => "keep 只能是 result 或 instr".into(),
         ErrorKind::NeedSetFieldInstr => "setField 必须有 instr".into(),

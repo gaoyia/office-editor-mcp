@@ -186,7 +186,7 @@ WordprocessingML 主命名空间：
 
 `http://schemas.openxmlformats.org/wordprocessingml/2006/main`
 
-`w14` 命名空间（paraId）：
+`w14` 命名空间（paraId 与内容控件复选框）：
 
 `http://schemas.microsoft.com/office/word/2010/wordml`
 

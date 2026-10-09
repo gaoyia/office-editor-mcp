@@ -50,6 +50,7 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 | Mm1–Mm6 | ✅ | Word 16.0：`docx-math.ps1`，6 PASS / 0 FAIL。无 `scope.maths` 时只有 `mathCount`；inline 插入后 `math:1` / `kind=inline`；打开无修复且 `OMaths.Count=1`、`Type=1`；`setMath` 后仍是公式；display `Type=0`；删后 `mathCount=0` 标题还在；页眉 `mathCount=1` 且无修复。标题栏无 Repair |
 | Ms1–Ms8 | ✅ | Word 16.0：`docx-math-struct.ps1`，8 PASS / 0 FAIL。insert 分数后 `expr[0].type=frac`、display；平方根 `degHide`；nary `∑`；嵌套 `sSup`；`setMath` 给 `expr` 不摊平；只给 `text` 摊成一条 `text`；同时给 `text` 与 `expr` 为 `InvalidField`；create `expr` 为分数。标题栏无 Repair |
 | Cc1–Cc6 | ✅ | Word 16.0：`docx-sdt.ps1`，6 PASS / 0 FAIL。无 `scope.contentControls` 时只有 `contentControlCount`；plainText 插入后 `sdt:1` / `kind=plainText`；打开无修复且 `ContentControls.Count=1`、`Type=1`；`setContentControl` 后仍是纯文本控件；下拉 `Type=4`；删后 `contentControlCount=0` 标题与原文还在；页眉 `contentControlCount=1` 且无修复。标题栏无 Repair |
+| Ct1–Ct8 | ✅ | Word 16.0：`docx-sdt-types.ps1`，8 PASS / 0 FAIL。复选 `kind=checkbox` 且 `checked=true`、COM Type=8；图片 `kind=picture` 且 Type=2；组合 `kind=group` 且 Type=7；公式 `kind=equation`、XML 含 `w:equation`、COM 可以没有该控件；改复选、换图；给 `group` 发 `setContentControl` 为 `NotImplemented`；`picture` 不给 `file` 为 `InvalidField`。标题栏无 Repair |
 | Cf1–Cf6 | ✅ | Word 16.0：`docx-create-full.ps1`，6 PASS / 0 FAIL。两节、饼图、脚注、尾注、批注；标题栏无 Repair。`commentsExtended` 的 CT 须为 `…wordprocessingml.commentsExtended+xml` |
 | Cs1–Cs9 | ✅ | Word 16.0：`docx-create-remain.ps1`，9 PASS / 0 FAIL。链 / 书签 / DATE 与 TOC 域 / `num:1` / 行内公式 / 纯文本控件 / `tocCount=1` / 批注回复 `parent=comment:0`；打开无 Repair，COM 能看见链、书签、编号、公式、内容控件与回复 |
 | Cd1–Cd6 | ✅ | Word 16.0：`docx-container-drawing.ps1`，6 PASS / 0 FAIL。批注内柱形图；注内与批注内 `insertTextBox` 为 `InvalidField`；框内图表根计数不含该图。标题栏无 Repair |
@@ -617,6 +618,19 @@ Word 跟踪修订下改表单元格底纹、插入空段、删除表行。`inspe
 | Cc4 | 下拉 | `kind` 为 `dropDown` 的插入产物树上 `kind` 为 `dropDown`，Word 无修复 |
 | Cc5 | 删除 | `deleteContentControl` 且 `keep` 为 `content` 之后 `contentControlCount` 为 0，原文字还在，标题段还在，Word 无修复 |
 | Cc6 | 页眉 | 默认页眉插入一条纯文本控件后，容器上 `contentControlCount` 为 1，Word 无修复 |
+
+手测脚本 `manual-check/office/cases/docx-sdt-types.ps1`。
+
+| 序号 | 检查 | 通过标准 |
+| --- | --- | --- |
+| Ct1 | 复选 | `insertContentControl` `kind` 为 `checkbox`、`checked` 为 true 之后树上 `kind` 为 `checkbox`、`checked` 为 true；Word 无修复且 `Type=8` |
+| Ct2 | 图片 | `kind` 为 `picture` 且给了 `file` 之后树上 `kind` 为 `picture`；Word 无修复且 `Type=2` |
+| Ct3 | 组合 | `kind` 为 `group` 之后树上 `kind` 为 `group`；Word 无修复且 `Type=7` |
+| Ct4 | 公式 | `kind` 为 `equation` 之后树上 `kind` 为 `equation`，ZIP 含 `w:equation`；Word 无修复。COM `ContentControls` 可以没有这一条 |
+| Ct5 | 改复选 | `setContentControl` 给 `checked` 为 false 之后树上 `checked` 为 false；Word 仍是复选控件 |
+| Ct6 | 换图 | 图片控件上 `setContentControl` 给另一份 `file` 之后 Word 无修复，仍是 `Type=2` |
+| Ct7 | 拒改组 | 对 `group` 发 `setContentControl` 得 `NotImplemented`，不写输出文件 |
+| Ct8 | 拒无图 | `kind` 为 `picture` 却没有 `file` 得 `InvalidField`，不写输出文件 |
 
 ## create 补齐
 

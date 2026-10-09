@@ -939,6 +939,7 @@ define_error_kinds! {
     ContentControlFieldMismatch => vec![Self::ContentControlFieldMismatch],
     ContentControlBound => vec![Self::ContentControlBound],
     ContentControlRepeating => vec![Self::ContentControlRepeating],
+    ContentControlGroup => vec![Self::ContentControlGroup],
     ContentControlHasTable => vec![Self::ContentControlHasTable],
     SetParaTextHasField => vec![Self::SetParaTextHasField],
     SetParaTextHasMath => vec![Self::SetParaTextHasMath],
@@ -1843,6 +1844,7 @@ impl ErrorKind {
             | Self::SetParaTextHasSdt
             | Self::ContentControlBound
             | Self::ContentControlRepeating
+            | Self::ContentControlGroup
             | Self::ContentControlHasTable
             | Self::ProtectionPassword
             | Self::ProtectionHasPassword => NotImplemented,

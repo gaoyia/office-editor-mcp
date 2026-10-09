@@ -218,10 +218,10 @@ pub fn apply(bytes: &[u8], ops: &[DocxOp]) -> Result<Vec<u8>, Error> {
                 apply_delete_math(&pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
             }
             DocxOp::InsertContentControl(op) => {
-                apply_insert_sdt(&pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
+                apply_insert_sdt(&mut pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
             }
             DocxOp::SetContentControl(op) => {
-                apply_set_sdt(&pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
+                apply_set_sdt(&mut pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
             }
             DocxOp::DeleteContentControl(op) => {
                 apply_delete_sdt(&pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
@@ -2443,7 +2443,7 @@ fn apply_delete_math(
 }
 
 fn apply_insert_sdt(
-    pkg: &Package,
+    pkg: &mut Package,
     docs: &mut HashMap<String, Document>,
     dirty: &mut HashMap<String, ()>,
     doc_part: &str,
@@ -2451,6 +2451,24 @@ fn apply_insert_sdt(
     op: &InsertContentControlOp,
     i: usize,
 ) -> Result<(), Error> {
+    let part_name = match &op.place {
+        InsertSdtPlace::EndOfDocument => doc_part.to_string(),
+        InsertSdtPlace::After(target) => part_for_para(pkg, catalog, doc_part, target, &op.id, i)?,
+    };
+    let drawing = if op.kind == sdt::SdtKind::Picture {
+        let file = op.file.as_deref().ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::OpRequiresField {
+                    op: "insertContentControl".into(),
+                    field: "file".into(),
+                },
+                format!("ops[{i}].file"),
+            )
+        })?;
+        Some(sdt_inline_drawing(pkg, docs, &part_name, file)?)
+    } else {
+        None
+    };
     let write = sdt::SdtWrite {
         kind: op.kind,
         text: &op.text,
@@ -2458,15 +2476,16 @@ fn apply_insert_sdt(
         alias: op.alias.as_deref(),
         items: &op.items,
         full_date: op.full_date.as_deref(),
+        checked: op.checked,
+        drawing,
     };
     match &op.place {
         InsertSdtPlace::EndOfDocument => {
             let doc = docs.get_mut(doc_part).unwrap();
-            sdt::insert_sdt(&mut doc.root, None, &write, &op.id, i)?;
+            sdt::insert_sdt(&mut doc.root, None, write, &op.id, i)?;
             dirty.insert(doc_part.to_string(), ());
         }
         InsertSdtPlace::After(target) => {
-            let part_name = part_for_para(pkg, catalog, doc_part, target, &op.id, i)?;
             let doc = load_part(pkg, docs, &part_name)?;
             let para = match target {
                 ParaTarget::Body(p) | ParaTarget::HeaderFooter { para: p, .. } => p,
@@ -2479,7 +2498,7 @@ fn apply_insert_sdt(
                     ));
                 }
             };
-            sdt::insert_sdt(&mut doc.root, Some(para), &write, &op.id, i)?;
+            sdt::insert_sdt(&mut doc.root, Some(para), write, &op.id, i)?;
             dirty.insert(part_name, ());
         }
     }
@@ -2487,7 +2506,7 @@ fn apply_insert_sdt(
 }
 
 fn apply_set_sdt(
-    pkg: &Package,
+    pkg: &mut Package,
     docs: &mut HashMap<String, Document>,
     dirty: &mut HashMap<String, ()>,
     doc_part: &str,
@@ -2498,22 +2517,93 @@ fn apply_set_sdt(
     let part_name = sdt::part_for_story(catalog, doc_part, &op.target.story, || {
         sdt::missing_sdt_err(&op.id, i)
     })?;
+    if let Some(file) = &op.file {
+        if op.text.is_some() {
+            return Err(Error::with_path(
+                ErrorKind::ContentControlFieldMismatch,
+                format!("ops[{i}].text"),
+            ));
+        }
+        if op.checked.is_some() {
+            return Err(Error::with_path(
+                ErrorKind::ContentControlFieldMismatch,
+                format!("ops[{i}].checked"),
+            ));
+        }
+        if op.items.is_some() {
+            return Err(Error::with_path(
+                ErrorKind::ContentControlFieldMismatch,
+                format!("ops[{i}].items"),
+            ));
+        }
+        if op.full_date.is_some() {
+            return Err(Error::with_path(
+                ErrorKind::ContentControlFieldMismatch,
+                format!("ops[{i}].fullDate"),
+            ));
+        }
+        let old_rids = {
+            let doc = load_part(pkg, docs, &part_name)?;
+            sdt::sdt_picture_rids(&doc.root, op.target.n, &op.id, i)?
+        };
+        let old_media: Vec<String> = old_rids
+            .iter()
+            .filter_map(|r| picture::resolve_embed(pkg, &part_name, r).ok())
+            .collect();
+        let drawing = sdt_inline_drawing(pkg, docs, &part_name, file)?;
+        let doc = load_part(pkg, docs, &part_name)?;
+        sdt::set_sdt_picture(
+            &mut doc.root,
+            op.target.n,
+            drawing,
+            op.tag.as_deref(),
+            op.alias.as_deref(),
+            &op.id,
+            i,
+        )?;
+        dirty.insert(part_name.clone(), ());
+        for r in &old_rids {
+            picture::remove_rel_if_unused(pkg, &part_name, r, &docs.get(&part_name).unwrap().root)?;
+        }
+        for m in old_media {
+            if !picture::media_still_used(pkg, &m)? {
+                pkg.remove(&m);
+            }
+        }
+        return Ok(());
+    }
     let doc = load_part(pkg, docs, &part_name)?;
     sdt::set_sdt(
         &mut doc.root,
         &sdt::SdtSet {
             n: op.target.n,
-            text: &op.text,
+            text: op.text.as_deref(),
             tag: op.tag.as_deref(),
             alias: op.alias.as_deref(),
             items: op.items.as_deref(),
             full_date: op.full_date.as_deref(),
+            checked: op.checked,
             id: &op.id,
             i,
         },
     )?;
     dirty.insert(part_name, ());
     Ok(())
+}
+
+/// 读本地图、挂关系到当前故事部件，并生成一张行内 DrawingML。
+fn sdt_inline_drawing(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    part_name: &str,
+    file: &str,
+) -> Result<Element, Error> {
+    let (rid, cx, cy) = picture::add_media(pkg, part_name, file, None, None)?;
+    let doc = load_part(pkg, docs, part_name)?;
+    picture::ensure_drawing_ns(&mut doc.root);
+    let doc_pr = picture::next_docpr_id(&doc.root);
+    let name = format!("图片 {doc_pr}");
+    Ok(picture::build_inline_drawing(doc_pr, &name, &rid, cx, cy))
 }
 
 fn apply_delete_sdt(

@@ -936,17 +936,21 @@ pub struct InsertContentControlOp {
     pub alias: Option<String>,
     pub items: Vec<String>,
     pub full_date: Option<String>,
+    pub file: Option<String>,
+    pub checked: bool,
 }
 
 #[derive(Debug, Clone)]
 pub struct SetContentControlOp {
     pub id: String,
     pub target: super::sdt::SdtRef,
-    pub text: String,
+    pub text: Option<String>,
     pub tag: Option<String>,
     pub alias: Option<String>,
     pub items: Option<Vec<String>>,
     pub full_date: Option<String>,
+    pub file: Option<String>,
+    pub checked: Option<bool>,
 }
 
 #[derive(Debug, Clone)]
@@ -3158,7 +3162,7 @@ fn parse_insert_sdt(
         obj,
         i,
         &[
-            "op", "id", "kind", "text", "tag", "alias", "items", "fullDate",
+            "op", "id", "kind", "text", "tag", "alias", "items", "fullDate", "file", "checked",
         ],
     )?;
     let id = require_op_id(obj, i)?;
@@ -3180,7 +3184,7 @@ fn parse_insert_sdt(
             ));
         }
     };
-    let text = parse_sdt_text(obj, i, "insertContentControl")?;
+    let text_opt = parse_sdt_text_opt(obj, i)?;
     let tag = optional_op_string(obj, i, "tag")?;
     let alias = optional_op_string(obj, i, "alias")?;
     let items = parse_sdt_items(obj, i)?;
@@ -3210,6 +3214,41 @@ fn parse_insert_sdt(
             ));
         }
     }
+    let file = match obj.get("file") {
+        None => None,
+        Some(_) => Some(require_file(obj, i, "insertContentControl")?),
+    };
+    if file.is_some() && kind != super::sdt::SdtKind::Picture {
+        return Err(Error::with_path(
+            ErrorKind::ContentControlFieldMismatch,
+            format!("ops[{i}].file"),
+        ));
+    }
+    let checked = parse_optional_bool_field(obj.get("checked"), i, "checked")?;
+    if checked.is_some() && kind != super::sdt::SdtKind::Checkbox {
+        return Err(Error::with_path(
+            ErrorKind::ContentControlFieldMismatch,
+            format!("ops[{i}].checked"),
+        ));
+    }
+    if kind.needs_text() {
+        parse_sdt_text(obj, i, "insertContentControl")?;
+    } else if text_opt.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::ContentControlFieldMismatch,
+            format!("ops[{i}].text"),
+        ));
+    }
+    if kind == super::sdt::SdtKind::Picture && file.is_none() {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "insertContentControl".into(),
+                field: "file".into(),
+            },
+            format!("ops[{i}].file"),
+        ));
+    }
+    let text = text_opt.unwrap_or_default();
     let path = format!("ops[{i}].id");
     let place = if id == "docx:document" {
         InsertSdtPlace::EndOfDocument
@@ -3229,6 +3268,8 @@ fn parse_insert_sdt(
         alias,
         items,
         full_date,
+        file,
+        checked: checked.unwrap_or(false),
     })
 }
 
@@ -3239,11 +3280,13 @@ fn parse_set_sdt(
     deny_keys(
         obj,
         i,
-        &["op", "id", "text", "tag", "alias", "items", "fullDate"],
+        &[
+            "op", "id", "text", "tag", "alias", "items", "fullDate", "file", "checked",
+        ],
     )?;
     let id = require_op_id(obj, i)?;
     let target = super::sdt::parse_sdt_ref(&id, &format!("ops[{i}].id"))?;
-    let text = parse_sdt_text(obj, i, "setContentControl")?;
+    let text = parse_sdt_text_opt(obj, i)?;
     let tag = optional_op_string(obj, i, "tag")?;
     let alias = optional_op_string(obj, i, "alias")?;
     let items = if obj.contains_key("items") {
@@ -3252,6 +3295,23 @@ fn parse_set_sdt(
         None
     };
     let full_date = optional_op_string(obj, i, "fullDate")?;
+    let file = match obj.get("file") {
+        None => None,
+        Some(_) => Some(require_file(obj, i, "setContentControl")?),
+    };
+    let checked = parse_optional_bool_field(obj.get("checked"), i, "checked")?;
+    if file.is_some() && text.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::ContentControlFieldMismatch,
+            format!("ops[{i}].file"),
+        ));
+    }
+    if checked.is_some() && (text.is_some() || file.is_some()) {
+        return Err(Error::with_path(
+            ErrorKind::ContentControlFieldMismatch,
+            format!("ops[{i}].checked"),
+        ));
+    }
     Ok(SetContentControlOp {
         id,
         target,
@@ -3260,6 +3320,8 @@ fn parse_set_sdt(
         alias,
         items,
         full_date,
+        file,
+        checked,
     })
 }
 
@@ -3296,6 +3358,22 @@ fn parse_sdt_text(
     i: usize,
     op: &str,
 ) -> Result<String, Error> {
+    match parse_sdt_text_opt(obj, i)? {
+        Some(s) => Ok(s),
+        None => Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: op.into(),
+                field: "text".into(),
+            },
+            format!("ops[{i}].text"),
+        )),
+    }
+}
+
+fn parse_sdt_text_opt(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<Option<String>, Error> {
     match obj.get("text") {
         Some(Value::String(s)) => {
             if s.is_empty() {
@@ -3304,7 +3382,7 @@ fn parse_sdt_text(
                     format!("ops[{i}].text"),
                 ));
             }
-            Ok(s.clone())
+            Ok(Some(s.clone()))
         }
         Some(_) => Err(Error::with_path(
             ErrorKind::WrongType {
@@ -3313,13 +3391,7 @@ fn parse_sdt_text(
             },
             format!("ops[{i}].text"),
         )),
-        None => Err(Error::with_path(
-            ErrorKind::OpRequiresField {
-                op: op.into(),
-                field: "text".into(),
-            },
-            format!("ops[{i}].text"),
-        )),
+        None => Ok(None),
     }
 }
 

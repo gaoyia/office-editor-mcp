@@ -8,6 +8,11 @@ use crate::xml::{Element, Node};
 use super::hf::HfPart;
 use super::link::{self, LinkStory};
 use super::para::{self, BodyPara};
+use super::{MC_NS, W14_NS};
+
+const CHECKED_MARK: &str = "\u{2612}";
+const UNCHECKED_MARK: &str = "\u{2610}";
+const CHECKBOX_FONT: &str = "MS Gothic";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SdtKind {
@@ -17,6 +22,10 @@ pub enum SdtKind {
     ComboBox,
     Date,
     RepeatingSection,
+    Checkbox,
+    Picture,
+    Group,
+    Equation,
 }
 
 impl SdtKind {
@@ -28,6 +37,10 @@ impl SdtKind {
             Self::ComboBox => "comboBox",
             Self::Date => "date",
             Self::RepeatingSection => "repeatingSection",
+            Self::Checkbox => "checkbox",
+            Self::Picture => "picture",
+            Self::Group => "group",
+            Self::Equation => "equation",
         }
     }
 
@@ -38,6 +51,10 @@ impl SdtKind {
             "dropDown" => Some(Self::DropDown),
             "comboBox" => Some(Self::ComboBox),
             "date" => Some(Self::Date),
+            "checkbox" => Some(Self::Checkbox),
+            "picture" => Some(Self::Picture),
+            "group" => Some(Self::Group),
+            "equation" => Some(Self::Equation),
             _ => None,
         }
     }
@@ -50,7 +67,15 @@ impl SdtKind {
             Self::ComboBox => "comboBox",
             Self::Date => "date",
             Self::RepeatingSection => "repeatingSection",
+            Self::Checkbox => "checkbox",
+            Self::Picture => "picture",
+            Self::Group => "group",
+            Self::Equation => "equation",
         }
+    }
+
+    pub fn needs_text(self) -> bool {
+        !matches!(self, Self::Checkbox | Self::Picture)
     }
 }
 
@@ -137,6 +162,9 @@ pub fn sdts_json(root: &Element, container: Option<&str>) -> Result<Vec<Value>, 
         if rec.kind == SdtKind::Date {
             node["fullDate"] = date_full(pr);
         }
+        if rec.kind == SdtKind::Checkbox {
+            node["checked"] = json!(checkbox_checked(pr));
+        }
         out.push(node);
     }
     Ok(out)
@@ -194,15 +222,21 @@ pub struct SdtWrite<'a> {
     pub alias: Option<&'a str>,
     pub items: &'a [String],
     pub full_date: Option<&'a str>,
+    pub checked: bool,
+    pub drawing: Option<Element>,
 }
 
 pub fn insert_sdt(
     root: &mut Element,
     after: Option<&BodyPara>,
-    write: &SdtWrite<'_>,
+    mut write: SdtWrite<'_>,
     err_id: &str,
     op_i: usize,
 ) -> Result<(), Error> {
+    if write.kind == SdtKind::Checkbox {
+        ensure_w14(root);
+    }
+    let drawing = write.drawing.take();
     match after {
         Some(para) => {
             let path = para::find_paragraph_path(root, para).ok_or_else(|| {
@@ -222,20 +256,21 @@ pub fn insert_sdt(
                     format!("ops[{op_i}].id"),
                 )
             })?;
-            el.push_element(new_inline_sdt(el, write, xml_id));
+            el.push_element(new_inline_sdt(el, &write, xml_id, drawing));
             Ok(())
         }
-        None => insert_at_body_end(root, write, op_i),
+        None => insert_at_body_end(root, &write, drawing, op_i),
     }
 }
 
 pub struct SdtSet<'a> {
     pub n: usize,
-    pub text: &'a str,
+    pub text: Option<&'a str>,
     pub tag: Option<&'a str>,
     pub alias: Option<&'a str>,
     pub items: Option<&'a [String]>,
     pub full_date: Option<&'a str>,
+    pub checked: Option<bool>,
     pub id: &'a str,
     pub i: usize,
 }
@@ -245,6 +280,12 @@ pub fn set_sdt(root: &mut Element, set: &SdtSet<'_>) -> Result<(), Error> {
     if rec.kind == SdtKind::RepeatingSection {
         return Err(Error::with_path(
             ErrorKind::ContentControlRepeating,
+            format!("ops[{}].id", set.i),
+        ));
+    }
+    if rec.kind == SdtKind::Group {
+        return Err(Error::with_path(
+            ErrorKind::ContentControlGroup,
             format!("ops[{}].id", set.i),
         ));
     }
@@ -258,6 +299,54 @@ pub fn set_sdt(root: &mut Element, set: &SdtSet<'_>) -> Result<(), Error> {
         return Err(Error::with_path(
             ErrorKind::ContentControlFieldMismatch,
             format!("ops[{}].fullDate", set.i),
+        ));
+    }
+    if set.checked.is_some() && rec.kind != SdtKind::Checkbox {
+        return Err(Error::with_path(
+            ErrorKind::ContentControlFieldMismatch,
+            format!("ops[{}].checked", set.i),
+        ));
+    }
+    if rec.kind == SdtKind::Checkbox {
+        if set.checked.is_none() {
+            return Err(Error::with_path(
+                ErrorKind::OpRequiresField {
+                    op: "setContentControl".into(),
+                    field: "checked".into(),
+                },
+                format!("ops[{}].checked", set.i),
+            ));
+        }
+        if set.text.is_some() {
+            return Err(Error::with_path(
+                ErrorKind::ContentControlFieldMismatch,
+                format!("ops[{}].text", set.i),
+            ));
+        }
+        ensure_w14(root);
+    }
+    if rec.kind == SdtKind::Picture {
+        if set.text.is_some() {
+            return Err(Error::with_path(
+                ErrorKind::ContentControlFieldMismatch,
+                format!("ops[{}].text", set.i),
+            ));
+        }
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "setContentControl".into(),
+                field: "file".into(),
+            },
+            format!("ops[{}].file", set.i),
+        ));
+    }
+    if rec.kind != SdtKind::Checkbox && set.text.is_none() {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "setContentControl".into(),
+                field: "text".into(),
+            },
+            format!("ops[{}].text", set.i),
         ));
     }
     let path = rec.path.clone();
@@ -287,7 +376,62 @@ pub fn set_sdt(root: &mut Element, set: &SdtSet<'_>) -> Result<(), Error> {
     if let Some(fd) = set.full_date {
         set_full_date(sdt, fd);
     }
-    replace_content(sdt, level, set.text);
+    if kind == SdtKind::Checkbox {
+        set_checkbox(sdt, set.checked.unwrap_or(false), level);
+    } else if let Some(text) = set.text {
+        replace_content(sdt, level, text);
+    }
+    Ok(())
+}
+
+pub fn sdt_picture_rids(
+    root: &Element,
+    n: usize,
+    id: &str,
+    i: usize,
+) -> Result<Vec<String>, Error> {
+    let rec = sdt_at(root, n, id, i)?;
+    let sdt = para::element_at(root, &rec.path).ok_or_else(|| missing_sdt(id, i))?;
+    Ok(collect_blip_rids(sdt))
+}
+
+pub fn set_sdt_picture(
+    root: &mut Element,
+    n: usize,
+    drawing: Element,
+    tag: Option<&str>,
+    alias: Option<&str>,
+    id: &str,
+    i: usize,
+) -> Result<(), Error> {
+    let rec = sdt_at(root, n, id, i)?;
+    if rec.kind != SdtKind::Picture {
+        return Err(Error::with_path(
+            ErrorKind::ContentControlFieldMismatch,
+            format!("ops[{i}].file"),
+        ));
+    }
+    let path = rec.path.clone();
+    let level = rec.level;
+    {
+        let sdt = para::element_at(root, &path).ok_or_else(|| missing_sdt(id, i))?;
+        if pr_has_binding(sdt) {
+            return Err(Error::with_path(
+                ErrorKind::ContentControlBound,
+                format!("ops[{i}].id"),
+            ));
+        }
+        if level == SdtLevel::Block && content_has_tbl(sdt) {
+            return Err(Error::with_path(
+                ErrorKind::ContentControlHasTable,
+                format!("ops[{i}].id"),
+            ));
+        }
+    }
+    let sdt = para::element_at_mut(root, &path).ok_or_else(|| missing_sdt(id, i))?;
+    clear_showing_plchdr(sdt);
+    apply_pr_meta(sdt, tag, alias);
+    replace_picture_content(sdt, level, drawing);
     Ok(())
 }
 
@@ -319,7 +463,12 @@ pub fn delete_sdt(
     Ok(())
 }
 
-fn insert_at_body_end(root: &mut Element, write: &SdtWrite<'_>, op_i: usize) -> Result<(), Error> {
+fn insert_at_body_end(
+    root: &mut Element,
+    write: &SdtWrite<'_>,
+    drawing: Option<Element>,
+    op_i: usize,
+) -> Result<(), Error> {
     let xml_id = next_sdt_id(root);
     let new_id = para::next_para_hex(root);
     let body = para::story_body_mut(root).ok_or_else(|| {
@@ -332,7 +481,7 @@ fn insert_at_body_end(root: &mut Element, write: &SdtWrite<'_>, op_i: usize) -> 
         )
     })?;
     let mut new_p = para::new_paragraph(body, &new_id, "");
-    new_p.push_element(new_inline_sdt(&new_p, write, xml_id));
+    new_p.push_element(new_inline_sdt(&new_p, write, xml_id, drawing));
     para::append_before_body_sect_pr(body, new_p);
     Ok(())
 }
@@ -413,8 +562,11 @@ fn classify(sdt: &Element) -> Option<SdtKind> {
             "comboBox" => found = Some(SdtKind::ComboBox),
             "date" => found = Some(SdtKind::Date),
             "repeatingSection" | "repeatingSectionItem" => found = Some(SdtKind::RepeatingSection),
-            "docPartObj" | "bibliography" | "citation" | "picture" | "group" | "equation"
-            | "checkbox" => return None,
+            "docPartObj" | "bibliography" | "citation" => return None,
+            "picture" => found = Some(SdtKind::Picture),
+            "group" => found = Some(SdtKind::Group),
+            "equation" => found = Some(SdtKind::Equation),
+            "checkbox" => found = Some(SdtKind::Checkbox),
             _ => {}
         }
     }
@@ -429,7 +581,12 @@ fn sdt_at(root: &Element, n: usize, id: &str, i: usize) -> Result<SdtRec, Error>
     Ok(recs.into_iter().nth(n - 1).expect("n 已检查"))
 }
 
-fn new_inline_sdt(parent: &Element, write: &SdtWrite<'_>, xml_id: i64) -> Element {
+fn new_inline_sdt(
+    parent: &Element,
+    write: &SdtWrite<'_>,
+    xml_id: i64,
+    drawing: Option<Element>,
+) -> Element {
     let mut sdt = Element::new(parent.prefixed("sdt"));
     let mut pr = Element::new(sdt.prefixed("sdtPr"));
     if let Some(a) = write.alias.filter(|s| !s.is_empty()) {
@@ -439,26 +596,41 @@ fn new_inline_sdt(parent: &Element, write: &SdtWrite<'_>, xml_id: i64) -> Elemen
         pr.push_element(val_el(&pr, "tag", t));
     }
     pr.push_element(val_el(&pr, "id", &xml_id.to_string()));
-    let mut ty = Element::new(pr.prefixed(write.kind.type_local()));
-    if write.kind == SdtKind::Date {
-        if let Some(fd) = write.full_date {
-            ty.set_attr("w:fullDate", fd);
+    if write.kind == SdtKind::Checkbox {
+        pr.push_element(checkbox_pr(write.checked));
+    } else {
+        let mut ty = Element::new(pr.prefixed(write.kind.type_local()));
+        if write.kind == SdtKind::Date {
+            if let Some(fd) = write.full_date {
+                ty.set_attr("w:fullDate", fd);
+            }
         }
-    }
-    if matches!(write.kind, SdtKind::DropDown | SdtKind::ComboBox) {
-        let list = if write.items.is_empty() {
-            vec![write.text.to_string()]
-        } else {
-            write.items.to_vec()
-        };
-        for it in &list {
-            ty.push_element(list_item_el(&ty, it));
+        if matches!(write.kind, SdtKind::DropDown | SdtKind::ComboBox) {
+            let list = if write.items.is_empty() {
+                vec![write.text.to_string()]
+            } else {
+                write.items.to_vec()
+            };
+            for it in &list {
+                ty.push_element(list_item_el(&ty, it));
+            }
         }
+        pr.push_element(ty);
     }
-    pr.push_element(ty);
     sdt.push_element(pr);
     let mut content = Element::new(sdt.prefixed("sdtContent"));
-    content.push_element(para::new_text_run(&content, write.text));
+    if let Some(drawing) = drawing {
+        let mut run = Element::new(content.prefixed("r"));
+        let mut rpr = Element::new(run.prefixed("rPr"));
+        rpr.push_element(Element::new(rpr.prefixed("noProof")));
+        run.push_element(rpr);
+        run.push_element(drawing);
+        content.push_element(run);
+    } else if write.kind == SdtKind::Checkbox {
+        content.push_element(checkbox_run(&content, write.checked));
+    } else {
+        content.push_element(para::new_text_run(&content, write.text));
+    }
     sdt.push_element(content);
     sdt
 }
@@ -956,4 +1128,164 @@ fn missing_sdt(id: &str, i: usize) -> Error {
         ErrorKind::ContentControlNotFound { id: id.to_string() },
         format!("ops[{i}].id"),
     )
+}
+
+fn checkbox_pr(checked: bool) -> Element {
+    let mut box_el = Element::new("w14:checkbox");
+    let mut ch = Element::new("w14:checked");
+    ch.set_attr("w14:val", if checked { "1" } else { "0" });
+    box_el.push_element(ch);
+    box_el.push_element(checkbox_state("checkedState", "2612"));
+    box_el.push_element(checkbox_state("uncheckedState", "2610"));
+    box_el
+}
+
+fn checkbox_state(local: &str, val: &str) -> Element {
+    let mut el = Element::new(format!("w14:{local}"));
+    el.set_attr("w14:val", val);
+    el.set_attr("w14:font", CHECKBOX_FONT);
+    el
+}
+
+fn checkbox_run(parent: &Element, checked: bool) -> Element {
+    let mut rpr = Element::new(parent.prefixed("rPr"));
+    let mut fonts = Element::new(rpr.prefixed("rFonts"));
+    fonts.set_attr("w:ascii", CHECKBOX_FONT);
+    fonts.set_attr("w:eastAsia", CHECKBOX_FONT);
+    fonts.set_attr("w:hAnsi", CHECKBOX_FONT);
+    fonts.set_attr("w:hint", "eastAsia");
+    rpr.push_element(fonts);
+    let mut t = Element::new(parent.prefixed("t"));
+    t.children.push(Node::Text(
+        if checked {
+            CHECKED_MARK
+        } else {
+            UNCHECKED_MARK
+        }
+        .into(),
+    ));
+    let mut r = Element::new(parent.prefixed("r"));
+    r.push_element(rpr);
+    r.push_element(t);
+    r
+}
+
+fn checkbox_checked(pr: Option<&Element>) -> bool {
+    let Some(pr) = pr else {
+        return false;
+    };
+    let Some(box_el) = pr.child_by_local("checkbox") else {
+        return false;
+    };
+    let Some(ch) = box_el.child_by_local("checked") else {
+        return false;
+    };
+    match ch.attr_local("val") {
+        None => true,
+        Some(v) => matches!(v, "1" | "true" | "on" | "True" | "TRUE"),
+    }
+}
+
+fn set_checkbox(sdt: &mut Element, checked: bool, level: SdtLevel) {
+    ensure_pr(sdt);
+    if let Some(pr) = sdt.child_by_local_mut("sdtPr") {
+        if let Some(box_el) = pr.child_by_local_mut("checkbox") {
+            if let Some(ch) = box_el.child_by_local_mut("checked") {
+                ch.set_attr("w14:val", if checked { "1" } else { "0" });
+            } else {
+                let mut ch = Element::new("w14:checked");
+                ch.set_attr("w14:val", if checked { "1" } else { "0" });
+                box_el.children.insert(0, Node::Element(ch));
+            }
+        } else {
+            pr.push_element(checkbox_pr(checked));
+        }
+    }
+    ensure_content(sdt);
+    let Some(content) = sdt.child_by_local_mut("sdtContent") else {
+        return;
+    };
+    let run = checkbox_run(content, checked);
+    match level {
+        SdtLevel::Inline => {
+            content.children.clear();
+            content.push_element(run);
+        }
+        SdtLevel::Block => {
+            let mut p = Element::new(content.prefixed("p"));
+            p.push_element(run);
+            content.children.clear();
+            content.push_element(p);
+        }
+    }
+}
+
+fn replace_picture_content(sdt: &mut Element, level: SdtLevel, drawing: Element) {
+    ensure_content(sdt);
+    let Some(content) = sdt.child_by_local_mut("sdtContent") else {
+        return;
+    };
+    let mut run = Element::new(content.prefixed("r"));
+    let mut rpr = Element::new(run.prefixed("rPr"));
+    rpr.push_element(Element::new(rpr.prefixed("noProof")));
+    run.push_element(rpr);
+    run.push_element(drawing);
+    match level {
+        SdtLevel::Inline => {
+            content.children.clear();
+            content.push_element(run);
+        }
+        SdtLevel::Block => {
+            let mut p = Element::new(content.prefixed("p"));
+            p.push_element(run);
+            content.children.clear();
+            content.push_element(p);
+        }
+    }
+}
+
+fn collect_blip_rids(el: &Element) -> Vec<String> {
+    let mut out = Vec::new();
+    walk_blips(el, &mut out);
+    out
+}
+
+fn walk_blips(el: &Element, out: &mut Vec<String>) {
+    if el.local_name() == "blip" {
+        if let Some(v) = el.attr_local("embed") {
+            out.push(v.to_string());
+        }
+    }
+    for c in el.element_children() {
+        walk_blips(c, out);
+    }
+}
+
+fn ensure_w14(root: &mut Element) {
+    let key = "xmlns:w14";
+    if root.attr(key).is_none() {
+        root.set_attr(key, W14_NS);
+    }
+    let mc = "xmlns:mc";
+    if root.attr(mc).is_none() {
+        root.set_attr(mc, MC_NS);
+    }
+    let cur = root.attr_local("Ignorable").unwrap_or("").to_string();
+    if cur.split_whitespace().any(|t| t == "w14") {
+        return;
+    }
+    let next = if cur.is_empty() {
+        "w14".into()
+    } else {
+        format!("{cur} w14")
+    };
+    if let Some((_, v)) = root
+        .attrs
+        .iter_mut()
+        .find(|(k, _)| k.rsplit(':').next() == Some("Ignorable"))
+    {
+        *v = next;
+        return;
+    }
+    root.set_attr("mc:Ignorable", next);
 }
