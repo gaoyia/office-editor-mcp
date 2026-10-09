@@ -1073,7 +1073,25 @@ fn parse_textbox(v: &Value, prefix: &str, sheet: &str) -> Result<InsertTextBoxOp
         obj,
         prefix,
         &[
-            "text", "cx", "cy", "from", "to", "anchor", "fromOffX", "fromOffY", "toOffX", "toOffY",
+            "text",
+            "cx",
+            "cy",
+            "from",
+            "to",
+            "anchor",
+            "fromOffX",
+            "fromOffY",
+            "toOffX",
+            "toOffY",
+            "sz",
+            "color",
+            "bold",
+            "italic",
+            "underline",
+            "font",
+            "eastAsiaFont",
+            "align",
+            "textAnchor",
         ],
     )?;
     let a = parse_create_anchor(obj, prefix)?;
@@ -1089,6 +1107,7 @@ fn parse_textbox(v: &Value, prefix: &str, sheet: &str) -> Result<InsertTextBoxOp
         from_off_y: a.from_off_y,
         to_off_x: a.to_off_x,
         to_off_y: a.to_off_y,
+        format: crate::drawing_text::parse(obj, prefix, false)?,
     })
 }
 
@@ -1114,8 +1133,26 @@ fn parse_shape(v: &Value, prefix: &str, sheet: &str) -> Result<InsertShapeOp, Er
         obj,
         prefix,
         &[
-            "text", "cx", "cy", "from", "to", "anchor", "fromOffX", "fromOffY", "toOffX", "toOffY",
+            "text",
+            "cx",
+            "cy",
+            "from",
+            "to",
+            "anchor",
+            "fromOffX",
+            "fromOffY",
+            "toOffX",
+            "toOffY",
             "prst",
+            "sz",
+            "color",
+            "bold",
+            "italic",
+            "underline",
+            "font",
+            "eastAsiaFont",
+            "align",
+            "textAnchor",
         ],
     )?;
     let a = parse_create_anchor(obj, prefix)?;
@@ -1132,6 +1169,7 @@ fn parse_shape(v: &Value, prefix: &str, sheet: &str) -> Result<InsertShapeOp, Er
         to_off_x: a.to_off_x,
         to_off_y: a.to_off_y,
         prst: parse_shape_prst(obj, prefix)?,
+        format: crate::drawing_text::parse(obj, prefix, false)?,
     })
 }
 

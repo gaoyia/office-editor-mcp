@@ -56,6 +56,12 @@ pub struct SetShapeTextOp {
 }
 
 #[derive(Debug, Clone)]
+pub struct SetShapeFormatOp {
+    pub id: String,
+    pub format: crate::drawing_text::TextFormat,
+}
+
+#[derive(Debug, Clone)]
 pub struct InsertShapeOp {
     pub slide: usize,
     pub on_notes: bool,
@@ -65,6 +71,7 @@ pub struct InsertShapeOp {
     pub cx: Option<i64>,
     pub cy: Option<i64>,
     pub prst: String,
+    pub format: Option<crate::drawing_text::TextFormat>,
 }
 
 #[derive(Debug, Clone)]
@@ -792,6 +799,7 @@ pub enum PptxOp {
     SetShapePos(SetShapePosOp),
     SetShapeSize(SetShapeSizeOp),
     SetShapeFill(SetShapeFillOp),
+    SetShapeFormat(SetShapeFormatOp),
     SetShapeLine(SetShapeLineOp),
     SetNotesText(SetNotesTextOp),
     InsertComment(InsertCommentOp),
@@ -1103,6 +1111,7 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<PptxOp>, Error> {
             "setShapePos" => PptxOp::SetShapePos(parse_set_shape_pos(obj, i)?),
             "setShapeSize" => PptxOp::SetShapeSize(parse_set_shape_size(obj, i)?),
             "setShapeFill" => PptxOp::SetShapeFill(parse_set_shape_fill(obj, i)?),
+            "setShapeFormat" => PptxOp::SetShapeFormat(parse_set_shape_format(obj, i)?),
             "setShapeLine" => PptxOp::SetShapeLine(parse_set_shape_line(obj, i)?),
             "setNotesText" => PptxOp::SetNotesText(parse_set_notes_text(obj, i)?),
             "insertComment" => PptxOp::InsertComment(parse_insert_comment(obj, i)?),
@@ -1398,7 +1407,29 @@ fn parse_set_shape_text(obj: &Map<String, Value>, i: usize) -> Result<SetShapeTe
 }
 
 fn parse_insert_shape(obj: &Map<String, Value>, i: usize) -> Result<InsertShapeOp, Error> {
-    deny_keys(obj, i, &["op", "id", "text", "x", "y", "cx", "cy", "prst"])?;
+    deny_keys(
+        obj,
+        i,
+        &[
+            "op",
+            "id",
+            "text",
+            "x",
+            "y",
+            "cx",
+            "cy",
+            "prst",
+            "sz",
+            "color",
+            "bold",
+            "italic",
+            "underline",
+            "font",
+            "eastAsiaFont",
+            "align",
+            "textAnchor",
+        ],
+    )?;
     let id = require_id(obj, i)?;
     let (slide, on_notes) =
         picture::parse_insert_slide_or_notes(&id, i, crate::error::IdReason::InsertNeedsSlide)?;
@@ -1468,7 +1499,32 @@ fn parse_insert_shape(obj: &Map<String, Value>, i: usize) -> Result<InsertShapeO
         cx,
         cy,
         prst,
+        format: crate::drawing_text::parse(obj, &format!("ops[{i}]"), false)?,
     })
+}
+
+fn parse_set_shape_format(obj: &Map<String, Value>, i: usize) -> Result<SetShapeFormatOp, Error> {
+    deny_keys(
+        obj,
+        i,
+        &[
+            "op",
+            "id",
+            "sz",
+            "color",
+            "bold",
+            "italic",
+            "underline",
+            "font",
+            "eastAsiaFont",
+            "align",
+            "textAnchor",
+        ],
+    )?;
+    let id = require_id(obj, i)?;
+    let format = crate::drawing_text::parse(obj, &format!("ops[{i}]"), true)?
+        .expect("require_one 已保证有补丁");
+    Ok(SetShapeFormatOp { id, format })
 }
 
 fn parse_insert_connector(obj: &Map<String, Value>, i: usize) -> Result<InsertConnectorOp, Error> {
@@ -5540,7 +5596,14 @@ pub(crate) fn parse_create_media(
 pub(crate) fn parse_create_shape(
     v: &Value,
     prefix: &str,
-) -> Result<(String, Option<CreateHyperlink>), Error> {
+) -> Result<
+    (
+        String,
+        Option<CreateHyperlink>,
+        Option<crate::drawing_text::TextFormat>,
+    ),
+    Error,
+> {
     let obj = v.as_object().ok_or_else(|| {
         Error::with_path(
             ErrorKind::WrongType {
@@ -5550,7 +5613,26 @@ pub(crate) fn parse_create_shape(
             prefix.to_string(),
         )
     })?;
-    deny_keys_at(obj, prefix, &["text", "url", "file", "slide", "tooltip"])?;
+    deny_keys_at(
+        obj,
+        prefix,
+        &[
+            "text",
+            "url",
+            "file",
+            "slide",
+            "tooltip",
+            "sz",
+            "color",
+            "bold",
+            "italic",
+            "underline",
+            "font",
+            "eastAsiaFont",
+            "align",
+            "textAnchor",
+        ],
+    )?;
     let text = match obj.get("text") {
         None => String::new(),
         Some(Value::String(s)) => s.clone(),
@@ -5637,7 +5719,8 @@ pub(crate) fn parse_create_shape(
         ));
     }
     let link = target.map(|target| CreateHyperlink { target, tooltip });
-    Ok((text, link))
+    let format = crate::drawing_text::parse(obj, prefix, false)?;
+    Ok((text, link, format))
 }
 
 pub(crate) fn parse_create_transition(

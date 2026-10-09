@@ -206,7 +206,7 @@
 只认 `p:cxnSp`，不认无 `txBody` 的 `p:sp`。组合里符合条件的连接线要展开，组合本身不进树。备注、批注、母版、版式上的连接线本期不进树。
 `insertConnector` 的 `id` 必须是 `slide:{n}`。`deleteConnector` 的 `id` 必须是连接线 id。
 `setShapePos` / `setShapeSize` / `setShapeLine` 也认连接线 id。
-对连接线发 `setShapeText` / `setShapeFill` / `deleteShape` 报 `InvalidId`。
+对连接线发 `setShapeText` / `setShapeFormat` / `setShapeFill` / `deleteShape` 报 `InvalidId`。
 
 图 id 的 `{cNvPrId}` 取该 `p:pic` 的 `p:nvPicPr/p:cNvPr/@id` 原文。没有该属性时用 `slide:{n}/pic:index:{k}`，`stable` 为 `false`。
 `{k}` 只在该页全部被收入的 `p:pic` 内从 1 计，与形状的 `shape:index` 分家，互不影响。
@@ -657,6 +657,15 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
           "cx": 10515600,
           "cy": 800100,
           "text": "标题",
+          "sz": 1800,
+          "color": "000000",
+          "bold": null,
+          "italic": null,
+          "underline": null,
+          "font": "Calibri",
+          "eastAsiaFont": "宋体",
+          "align": null,
+          "textAnchor": null,
           "stable": true
         },
         {
@@ -669,6 +678,15 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
           "cx": 10515600,
           "cy": 800100,
           "text": "hello",
+          "sz": 1800,
+          "color": "000000",
+          "bold": null,
+          "italic": null,
+          "underline": null,
+          "font": "Calibri",
+          "eastAsiaFont": "宋体",
+          "align": null,
+          "textAnchor": null,
           "stable": true
         }
       ]
@@ -800,7 +818,9 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   每张字段顺序：`id`、`cNvPrId`、`name`、`x`、`y`、`cx`、`cy`、`rowCount`、`colCount`、`rows`、`stable`。
   `cNvPrId` / `name` / `stable` 规则与图相同。`x` / `y` / `cx` / `cy` 取 graphicFrame 的 `p:xfrm`。`rowCount` 是 `a:tr` 个数。
   `colCount` 见上文表 id 那节。`rows` 按 `a:tr` 顺序。每行字段顺序：`id`、`index`、`cells`。`cells` 按该行 `a:tc` 文档顺序，不按空网格补格。
-  每格字段顺序：`id`、`row`、`col`、`gridSpan`、`rowSpan`、`hMerge`、`vMerge`、`text`。`row` / `col` 与 id 里的数字相同。
+  每格字段顺序：`id`、`row`、`col`、`gridSpan`、`rowSpan`、`hMerge`、`vMerge`、`text`，
+  然后 `sz`、`color`、`bold`、`italic`、`underline`、`font`、`eastAsiaFont`、`align`、`textAnchor`。
+  `row` / `col` 与 id 里的数字相同。
   `gridSpan` / `rowSpan` 为整数，缺属性则为 `1`。`hMerge` / `vMerge` 为布尔（属性为 `1` / `true` / `on` 则为 `true`）。
   `text` 取该格 `a:txBody` 可见纯文本，规则与形状 `text` 相同。没有 `txBody` 则为 `""`。不把单元格编成段落 id。
 - `scope.oleObjects` 为 `true` 时，每页带 `oleObjects`。没有嵌入对象时为空数组。不依赖 `scope.slide`。
@@ -884,7 +904,8 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   `placeholders` 只收带 `p:nvPr/p:ph` 的 `p:sp`（含组合里的），按文档顺序。每份版式字段顺序：`id`、`index`、`name`、`kind`、`placeholders`。
   `id` 为 `master:{n}/layout:{k}`。`name` 取该 slideLayout 的 `p:cSld/@name`，没有则为 `null`。
   `kind` 取 `p:sldLayout/@type` 原文，没有则为 `null`。create 写出的那份空白版式 `kind` 为 `blank`、名为「空白」。
-  `insertLayout` 写出的新版式同样 `kind` 为 `blank`。占位符字段顺序：`id`、`shapeId`、`name`、`type`、`idx`、`x`、`y`、`cx`、`cy`、`text`、`stable`。
+  占位符字段顺序：`id`、`shapeId`、`name`、`type`、`idx`、`x`、`y`、`cx`、`cy`、`text`，
+  然后 `sz`、`color`、`bold`、`italic`、`underline`、`font`、`eastAsiaFont`、`align`、`textAnchor`、`stable`。
   `id` 为 `master:{n}/shape:{cNvPrId}` 或 `master:{n}/layout:{k}/shape:{cNvPrId}`；
   没有 `cNvPr/@id` 则为 `…/shape:index:{i}`，`stable` 为 `false`，`{i}` 只在该母版或该版式被收入的占位符内从 1 计。
   `type` 取 `p:ph/@type`，缺则为 `null`。`idx` 取 `p:ph/@idx` 原文，缺则为 `null`。几何与 `text` 规则与幻灯片形状相同；没有 `txBody` 则 `text` 为 `""`。
@@ -896,7 +917,9 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   备注图字段顺序与幻灯片图相同，含末尾 `contentType`。
   `mathCount` / `chartCount` / `smartArtCount` / `tableCount` / `model3dCount` 只计该备注页，不并进幻灯片计数。
   备注形状判定与幻灯片形状相同（带 `p:txBody` 的 `p:sp`），id 为 `slide:{n}/notes/shape:…`。
-  字段顺序与幻灯片形状相同：`id`、`shapeId`、`name`、`prst`、`x`、`y`、`cx`、`cy`、`text`、`stable`。备注形状一次倒出，不用 `maxShapes`。
+  字段顺序与幻灯片形状相同：`id`、`shapeId`、`name`、`prst`、`x`、`y`、`cx`、`cy`、`text`，
+  然后 `sz`、`color`、`bold`、`italic`、`underline`、`font`、`eastAsiaFont`、`align`、`textAnchor`、`stable`。
+  备注形状一次倒出，不用 `maxShapes`。
 - `scope.comments` 为 `true` 时，每页带 `comments`。没有现代批注时为空数组。不依赖 `scope.slide`。按该页 `p188:cmLst` 里 `p188:cm` 的文档顺序。
   每条字段顺序：`id`、`commentId`、`author`、`initials`、`date`、`done`、`kind`、`x`、`y`、`pictureCount`，有图名单时再跟 `pictures`，然后 `text`、`replies`。
   `commentId` 是 `p188:cm/@id` 原文。`author` / `initials` 按 `authorId` 去 `/ppt/authors.xml` 的 `p188:author` 取 `name` / `initials`，对不上则为 `null`。
@@ -931,11 +954,16 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   有 `scope.customShows` 时再跟 `customShows`，然后 `slides`。
   `props` 始终出现，规则见 [json-contract.md](json-contract.md#文档属性三格式共用)。
 - `shapeId` 是 `cNvPr/@id` 的原文。走 `shape:index:{k}` 时为 `null`。
+  每条字段顺序：`id`、`shapeId`、`name`、`prst`、`x`、`y`、`cx`、`cy`、`text`，
+  然后 `sz`、`color`、`bold`、`italic`、`underline`、`font`、`eastAsiaFont`、`align`、`textAnchor`、`stable`。
 - 形状上的 `name` 取 `cNvPr/@name` 的原文。没有则为 `null`。
 - `prst` 取该 `p:sp` 的 `p:spPr/a:prstGeom/@prst`。没有 `prstGeom`（例如 `custGeom`）则为 `null`。
 - `x` / `y` 取 `p:spPr/a:xfrm/a:off` 的 EMU；`cx` / `cy` 取 `a:ext`。缺对应属性则为 `null`。备注形状同样。
 - `text` 是可见纯文本：该形状 `p:txBody` 内、位于 `a:r` 里的 `a:t` 按文档顺序拼接；`a:br` 变成 `\n`。不含 run 级样式。
   `a:fld` 是应用程序更新的生成文本（§21.1.2.2.4），域里的 `a:t` 是缓存，不进入。`mc:AlternateContent` 只取一支，判定见上文 pptx 那节。
+- `sz` / `color` / `bold` / `italic` / `underline` / `font` / `eastAsiaFont` / `align` / `textAnchor` 始终出现在 `text` 之后、`stable` 之前。
+  各文本 run 显式值一致则报该值，不一致或没有显式值则为 `null`，不猜主题。
+  `sz` 是百分之一磅。`color` 只报 `a:srgbClr` 的六位大写 RGB。`align` 取 `a:pPr/@algn`。`textAnchor` 取 `a:bodyPr/@anchor`。
 - `stable`：有 `cNvPr/@id` 为 `true`，否则为 `false`。
 - 不返回完整动画时间轴树。效果摘要见上文 `scope.timing`。写入见 `insertAnim` / `deleteAnim`。母版与版式见上文 `scope.masters`。讲义母版槽位见上文 `scope.handout`。
   切换见上文 `transition`。对批注或回复 id 发 `insertPicture` 写 `a:blip`。对批注内图 id 发 `setPictureSize` / `setPicturePos` 报 `InvalidId`。
@@ -1056,6 +1084,10 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   - 可选
   - 形状级超链接提示
   - 没有 `url` / `file` / `slide` 却给了此项报 `InvalidField`
+- **`shapes[].sz` / `color` / `bold` / `italic` / `underline` / `font` / `eastAsiaFont` / `align` / `textAnchor`**
+  - 可选
+  - 规则与 `setShapeFormat` 相同
+  - 省略则缺省 18 磅黑字 Calibri / 宋体
 - **`pictures[].file`**
   - 本地路径，与 `insertPicture` 相同，按文件头认 PNG / JPEG / GIF / BMP / SVG / EMF / WMF / TIFF
   - 缺此字段报 `MissingField`
@@ -1165,7 +1197,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
 带备注与批注示例见 `docs/examples/pptx-create-notes-comments.json`。节、链、媒体、切换与动画合在一起的示例见 `docs/examples/pptx-create-remain.json`。
 `kind` / `wrap` / `from` / `to` / `anchor` / `dataFrom` 以及 xlsx 偏移字段出现报 `InvalidField`。
 `comments[]` 上出现 `op` / `id` / `start` / `end` / `replies` / `ink` 报未知字段。create 不写回复、不写墨迹、不写 ECMA-376 §19.4 旧式批注。
-`shapes[]` 上出现 `text` / `url` / `file` / `slide` / `tooltip` 以外的键报未知字段。
+`shapes[]` 上出现 `text` / `url` / `file` / `slide` / `tooltip` / `sz` / `color` / `bold` / `italic` / `underline` / `font` / `eastAsiaFont` / `align` / `textAnchor` 以外的键报未知字段。
 `text` / `anchor` / `location` / `ref` / `display` 出现在形状超链接上（除可见 `text` 外）报未知字段。
 `url`、`file`、`slide` 不是恰好一个报 `InvalidField`。空串报 `InvalidField`。`slide` 不是正整数报 `InvalidField`。跳到本页报 `InvalidField`。
 目标页超出 `slides[]` 报 `InvalidField`。
@@ -1669,6 +1701,10 @@ xlsx 上发此 op 报 `InvalidField`。docx 见 [docx 分册](json-contract-docx
   - 省略为 `rect`
   - 必须是可写预设名
   - 连接线几何名（`straightConnector1` 等）报 `InvalidField`，请用 `insertConnector`
+- **`sz` / `color` / `bold` / `italic` / `underline` / `font` / `eastAsiaFont` / `align` / `textAnchor`**
+  - 可选
+  - 规则与 `setShapeFormat` 相同
+  - 省略则缺省 18 磅黑字 Calibri / 宋体
 
 pptx：`id` 不是页 id 或备注容器 id 报 `InvalidId`（对形状 id、图 id、母版 id 或 `pptx:presentation` 发本 op 也是这条）。找不到该页报 `IdNotFound`。
 只给 `x` 或只给 `y`、只给 `cx` 或只给 `cy` 报 `InvalidField`。缺坐标时在画布上找空位（幻灯片读 `p:sldSz`，备注读 `p:notesSz`），不要叠在 `(0,0)`。
@@ -1677,6 +1713,7 @@ pptx：`id` 不是页 id 或备注容器 id 报 `InvalidId`（对形状 id、图
 写入该宿主 `p:spTree` 一个新 `p:sp`（插在 `extLst` 之前）。
 `prst` 为 `rect`（或缺省）时：`p:cNvSpPr/@txBox` 为 `1`，默认 `a:noFill` 与 `a:ln/a:noFill`，`cNvPr/@name` 写成「文本框 {该 id}」。
 其它可写 `prst`：不写 `txBox`，默认实心填充 `5B9BD5` 与线宽 `12700` 的描边 `2E75B6`，`cNvPr/@name` 写成「形状 {该 id}」。始终带 `p:txBody`。
+给了文字格式字段则按 `setShapeFormat` 写入该 `txBody`。省略则缺省 18 磅黑字 Calibri / 宋体。
 新 `cNvPr/@id` 取该页（含 `spTree` 的 `id="1"`）已有最大加 1，至少为 2。不写 `p:style`，不写 `a16:creationId`。不改未点名形状，不改已有 `<p:timing>`。
 docx 上发此 op 报 `InvalidField`。xlsx 见 [xlsx 分册](json-contract-xlsx.md#insertshape)：`id` 为 `sheet:{name}`，必须给 `from`，出现 `x` / `y` 报 `InvalidField`。
 
@@ -1945,7 +1982,7 @@ theme 部件按已有 theme 复制一份新的 `/ppt/theme/themeN.xml`，不和 
 
 四个槽位至少给一个，否则报 `InvalidField`。未点名的槽位留下。`id` 不是 `handout` 报 `InvalidId`。
 不要和 `setNotesText` 混用：本 op 只改 `/ppt/handoutMasters/…`，不改 notesSlide。
-对 `handout` 发 `setShapeText` / `insertShape` / `deleteShape` / `setShapeFill` / `setShapeLine` 报 `InvalidId`。
+对 `handout` 发 `setShapeText` / `setShapeFormat` / `insertShape` / `deleteShape` / `setShapeFill` / `setShapeLine` 报 `InvalidId`。
 
 只改文档顺序中该类型的第一个占位符。没有 handoutMaster 时新建最小 Transitional 讲义母版：写 `/ppt/handoutMasters/handoutMaster1.xml`，
 presentation 关系、`p:handoutMasterIdLst`（插在 `notesMasterIdLst` 之后，没有则插在 `sldMasterIdLst` 之后）与内容类型。
@@ -2497,7 +2534,7 @@ Fallback 是 `p:pic`，预览同一张 PNG，并带 `a:hlinkClick`（`action="pp
 必要时 `presentation.xml` 及其 `.rels`、新建的 notesMaster 及其 `.rels`，`[Content_Types].xml`，
 以及新建或被删的 `/ppt/media/…`、`/ppt/charts/…`、embedding、`/ppt/diagrams/…` 及可选 drawing 缓存，
 以及现代批注部件 `/ppt/comments/modernComment_*.xml` 与 `/ppt/authors.xml`。
-`setShapeText` 以及 `setShapePos` / `setShapeSize` / `setShapeFill` / `setShapeLine` / `deleteShape` 只脏目标宿主 XML（幻灯片、
+`setShapeText` / `setShapeFormat` 以及 `setShapePos` / `setShapeSize` / `setShapeFill` / `setShapeLine` / `deleteShape` 只脏目标宿主 XML（幻灯片、
 notesSlide、被点名的 slideMaster 或 slideLayout）。
 `insertShape` 往幻灯片插只脏该页 XML；往备注插时可脏 notesSlide、该页 `.rels`、notesMaster、presentation，与 `setNotesText` 相同。
 `insertConnector` / `deleteConnector` / `groupShapes` / `ungroup` 只脏该页幻灯片 XML。
@@ -2532,7 +2569,7 @@ presentation 关系、新页或被删页及其 `.rels`、内容类型，
 超链接 op 脏该页幻灯片 XML 与该页 `.rels`（新建或删除 hyperlink / slide 关系）。域 op（`insertField` / `setField` / `deleteField`）只脏该页幻灯片 XML。
 媒体 op 还可脏该页 `.rels`、`[Content_Types].xml`，以及新建或被删的 `/ppt/media/mediaN.*` 与海报 `/ppt/media/imageN.*`。
 其他页、未点名的幻灯片母版、未点名的版式、主题一律原样写回。未点名的 `presProps` 原样写回。
-一次 `ops` 可以混用 `setShapeText`、形状管理 op、表格 op、`setNotesText`、`setHandoutText`、批注 op、超链接 op、域 op（`insertField`、`setField`、
+一次 `ops` 可以混用 `setShapeText`、`setShapeFormat`、形状管理 op、表格 op、`setNotesText`、`setHandoutText`、批注 op、超链接 op、域 op（`insertField`、`setField`、
 `deleteField`）、图片 op、媒体 op、图表 op、SmartArt op、幻灯片管理 op（含 `setTransition`、`setSlideLayout`）、母版写入 op（`insertLayout`、
 `deleteLayout`、`insertPlaceholder`、`deletePlaceholder`、`insertMaster`、`deleteMaster`）、主题与尺寸 op（`setSlideSize`、
 `setThemeColors`、`setThemeFonts`）、动画 op（`insertAnim`、`deleteAnim`）、幻灯片节 op、自定义放映 op（`insertCustomShow`、`setCustomShow`、

@@ -107,7 +107,7 @@ apply 可改目标单元格，也可换、插、删工作表图，并可改 `one
 也可按槽位改页眉页脚原文，并可对 `worksheet` 的页眉槽位插、换、删 DrawingML 图。
 插图或插图表可能新建 `/xl/drawings/drawingN.xml`、`/xl/media/…`、`/xl/charts/chartN.xml` 以及工作表上的 `<drawing>`。
 也可插、删、改工作表文本框（`xdr:sp` `txBox`）、无 `txBox` 的形状、
-连接线（`xdr:cxnSp`）与 SmartArt（diagram `graphicFrame`）：改字只动 `xdr:txBody` 或 data 部件可见点；几何走锚点。
+连接线（`xdr:cxnSp`）与 SmartArt（diagram `graphicFrame`）：改字只动 `xdr:txBody` 或 data 部件可见点；文字格式走 `setShapeFormat`；几何走锚点。
 也可插改删工作表 drawing 公式框（`a14:m`），不进 `textBoxes`。
 插 SmartArt 再新建 `/xl/diagrams/` 四件套，关系写在 drawing `.rels`。`insertChartSheet` 再新建 `/xl/chartsheets/sheetN.xml`。
 往页眉插图可能新建另一份 drawing 并写 `<drawingHF>`。改单元格值或公式之后，把工作簿标成打开时需要重算，必要时删掉 `xl/calcChain.xml`。
@@ -192,7 +192,7 @@ inspect 默认只返回页名单与各页 `pictureCount`、`mathCount`、`videoC
 要连接线名单必须给 `scope.connectors`，要备注形状必须给 `scope.notes`，要批注名单必须给 `scope.comments`，要超链接名单必须给 `scope.hyperlinks`，
 要域名单必须给 `scope.fields`，要动画摘要必须给 `scope.timing`，要母版与版式名单必须给 `scope.masters`，要讲义母版槽位必须给 `scope.handout`，
 要幻灯片节名单必须给 `scope.sections`，要自定义放映名单必须给 `scope.customShows`。
-apply 可改被点名形状的 `p:txBody` 可见文字（含备注形状与母版 / 版式占位符，缩略图占位符除外），可插入文本框与非矩形预设几何、插入连接线、组合与解开、删除被点名形状、改画布坐标与尺寸与填充描边；
+apply 可改被点名形状的 `p:txBody` 可见文字（含备注形状与母版 / 版式占位符，缩略图占位符除外），可插入文本框与非矩形预设几何、插入连接线、组合与解开、删除被点名形状、改画布坐标与尺寸、填充描边与 DrawingML 文字格式；
 删除时清掉 timing 里对应 `tgtEl`，不重建未点名形状，不整节无故丢掉仍有内容的 `<p:timing>`。
 可用 `setNotesText` 按页改演讲者备注；也可换、插、删幻灯片或备注页上的 `p:pic` 并改尺寸与画布坐标；也可插、删、改幻灯片或备注页上的嵌入图表（改系列时 cache 与 embedding 双写；
 也可增删趋势线、误差线，并把系列挂到次轴）；也可插、删、改幻灯片或备注页上的 SmartArt（改点时写 data 部件，对不上 drawing 缓存则删缓存）；
@@ -268,7 +268,7 @@ xlsx 也可用 `groupRows` / `ungroupRows` / `groupCols` / `ungroupCols` / `setO
 xlsx 也可用 `setAutoFilter` 改工作表级筛选范围，脏该表 `autoFilter`，不改表格部件，不隐藏行，不标重算。
 xlsx 也可用 `setSortState` 改工作表级排序条件，脏该表 `sortState`，不重排 `sheetData`，不标重算。
 xlsx 也可插删回复并改线程化批注，脏 `/xl/threadedComments/`、`/xl/persons/person.xml`、占位 `/xl/commentsN.xml`、VML、工作表 `legacyDrawing`、关系与内容类型，不标重算。
-xlsx 也可插删改工作表文本框、形状、连接线与 SmartArt，脏 worksheet drawing、drawing `.rels`、`/xl/diagrams/` 与内容类型，不标重算。
+xlsx 也可插删改工作表文本框、形状、连接线与 SmartArt，可用 `setShapeFormat` 改 DrawingML 文字格式，脏 worksheet drawing、drawing `.rels`、`/xl/diagrams/` 与内容类型，不标重算。
 xlsx 也可插删改工作表单元格超链接，脏该表 XML 与工作表 `.rels`，不标重算。xlsx 也可插删改工作表迷你图组，脏该表 `extLst`，不新建部件，不标重算。
 xlsx 也可列出、导出、插入并删除工作表嵌入对象，脏 `oleObjects`、worksheet drawing、VML `legacyDrawing`、工作表 `.rels`、embeddings 与预览媒体，不把字节塞进 inspect 树，不标重算。
 xlsx 也可插、删、换工作表 3D 模型，脏 worksheet drawing、drawing `.rels`、GLB 与海报 PNG，不把 GLB 塞进 inspect 树，不标重算。
@@ -293,7 +293,7 @@ docx 也可插删换 3D 模型，脏宿主 XML、`.rels`、GLB 与海报 PNG。
 docx 也可用 `setProtection` 改 `settings.xml` 的保护标记，窗体保护还可脏主文档各节 `w:formProt`。
 docx 也可插删页眉 DrawingML 水印，无 default 页眉时会新建，并可脏页眉部件与媒体。
 docx 也可用 `setThemeColors` / `setThemeFonts` 改主文档 theme 部件的配色与字体方案，只脏该 theme 部件，不重写 `fmtScheme`。
-pptx 可改被点名形状的可见文字（含备注形状与母版 / 版式占位符），可插入文本框与非矩形预设几何、插入连接线、组合与解开、删除被点名形状并清对应 timing `tgtEl`、改画布坐标与尺寸与填充描边，
+pptx 可改被点名形状的可见文字（含备注形状与母版 / 版式占位符），可插入文本框与非矩形预设几何、插入连接线、组合与解开、删除被点名形状并清对应 timing `tgtEl`、改画布坐标与尺寸、填充描边与 DrawingML 文字格式，
 可用 `setNotesText` 按页改或新建演讲者备注，也可改被点名的幻灯片图与备注图（换、插、删、改尺寸、改画布坐标），也可插删改幻灯片或备注页图表，也可插删改幻灯片或备注页 SmartArt，
 也可插删改幻灯片 DrawingML 表，也可插删回复并改现代批注，也可对批注或回复 id 插图并换、删批注内图（不改尺寸位置），也可按批注内图 id `exportMedia`，也可插入、删除、重排与隐藏幻灯片，
 也可用 `setTransition` 写或清除该页 `<p:transition>`（含自动进片、方向与 `p15:prstTrans`），

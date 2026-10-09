@@ -123,7 +123,27 @@ fn insert_ellipse_has_prst_and_fill() {
     assert_eq!(neu["stable"], true);
     assert_eq!(
         object_keys(neu),
-        ["id", "shapeId", "name", "prst", "x", "y", "cx", "cy", "text", "stable"]
+        [
+            "id",
+            "shapeId",
+            "name",
+            "prst",
+            "x",
+            "y",
+            "cx",
+            "cy",
+            "text",
+            "sz",
+            "color",
+            "bold",
+            "italic",
+            "underline",
+            "font",
+            "eastAsiaFont",
+            "align",
+            "textAnchor",
+            "stable"
+        ]
     );
     let xml = part(&out, "ppt/slides/slide1.xml");
     assert!(xml.contains("prst=\"ellipse\""));

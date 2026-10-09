@@ -6,6 +6,7 @@ mod chart;
 mod dispatch;
 mod docx;
 mod drawing_math;
+mod drawing_text;
 mod error;
 mod image;
 mod json;
@@ -1148,7 +1149,27 @@ mod tests {
         );
         assert_eq!(
             object_keys(&tree["slides"][0]["shapes"][0]),
-            ["id", "shapeId", "name", "prst", "x", "y", "cx", "cy", "text", "stable"]
+            [
+                "id",
+                "shapeId",
+                "name",
+                "prst",
+                "x",
+                "y",
+                "cx",
+                "cy",
+                "text",
+                "sz",
+                "color",
+                "bold",
+                "italic",
+                "underline",
+                "font",
+                "eastAsiaFont",
+                "align",
+                "textAnchor",
+                "stable"
+            ]
         );
     }
 }

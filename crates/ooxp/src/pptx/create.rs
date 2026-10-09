@@ -25,6 +25,7 @@ use super::{
 struct NewShape {
     text: String,
     link: Option<CreateHyperlink>,
+    format: Option<crate::drawing_text::TextFormat>,
 }
 
 struct NewSlide {
@@ -91,6 +92,7 @@ pub fn create(presentation: &Value) -> Result<Vec<u8>, Error> {
             s.shapes.push(NewShape {
                 text: String::new(),
                 link: None,
+                format: None,
             });
         }
     }
@@ -641,6 +643,7 @@ fn empty_slide() -> NewSlide {
         shapes: vec![NewShape {
             text: String::new(),
             link: None,
+            format: None,
         }],
         pictures: Vec::new(),
         videos: Vec::new(),
@@ -1082,9 +1085,9 @@ fn attach_sections(pkg: &mut Package, sections: &[CreateSection]) -> Result<(), 
 }
 
 fn parse_shape(v: &Value, slide: usize, i: usize) -> Result<NewShape, Error> {
-    let (text, link) =
+    let (text, link, format) =
         request::parse_create_shape(v, &format!("presentation.slides[{slide}].shapes[{i}]"))?;
-    Ok(NewShape { text, link })
+    Ok(NewShape { text, link, format })
 }
 
 fn rel(id: &str, rel_type: &str, target: &str) -> Relationship {
@@ -1127,23 +1130,46 @@ fn slide_xml(shapes: &[NewShape]) -> String {
         let id = i as u32 + 2;
         let name = format!("文本框 {}", i + 1);
         let y = 685800 + i as i64 * 914400;
-        body.push_str(&text_box_xml(id, &name, 838200, y, &sh.text));
+        body.push_str(&text_box_xml(
+            id,
+            &name,
+            838200,
+            y,
+            &sh.text,
+            sh.format.as_ref(),
+        ));
     }
     format!(
         r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><p:sld xmlns:a="{DML_NS}" xmlns:r="{REL_NS}" xmlns:p="{PML_NS}"><p:cSld><p:spTree>{tree}{body}</p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sld>"#
     )
 }
 
-fn text_box_xml(id: u32, name: &str, x: i64, y: i64, text: &str) -> String {
-    let paras = text_paragraphs(text);
+fn text_box_xml(
+    id: u32,
+    name: &str,
+    x: i64,
+    y: i64,
+    text: &str,
+    format: Option<&crate::drawing_text::TextFormat>,
+) -> String {
+    let paras = text_paragraphs(text, format);
+    let body_anchor = match format.and_then(|f| f.text_anchor.as_ref()) {
+        Some(Some(v)) => format!(r#" anchor="{v}""#),
+        _ => String::new(),
+    };
     format!(
-        r#"<p:sp><p:nvSpPr><p:cNvPr id="{id}" name="{}"/><p:cNvSpPr txBox="1"/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="{x}" y="{y}"/><a:ext cx="10515600" cy="800100"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/><a:ln><a:noFill/></a:ln></p:spPr><p:txBody><a:bodyPr wrap="square" lIns="91440" tIns="45720" rIns="91440" bIns="45720"/><a:lstStyle/>{paras}</p:txBody></p:sp>"#,
+        r#"<p:sp><p:nvSpPr><p:cNvPr id="{id}" name="{}"/><p:cNvSpPr txBox="1"/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="{x}" y="{y}"/><a:ext cx="10515600" cy="800100"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/><a:ln><a:noFill/></a:ln></p:spPr><p:txBody><a:bodyPr wrap="square" lIns="91440" tIns="45720" rIns="91440" bIns="45720"{body_anchor}/><a:lstStyle/>{paras}</p:txBody></p:sp>"#,
         xml::escape_attr(name),
     )
 }
 
-fn text_paragraphs(text: &str) -> String {
-    let mut out = String::from("<a:p>");
+fn text_paragraphs(text: &str, format: Option<&crate::drawing_text::TextFormat>) -> String {
+    let ppr = match format.and_then(|f| f.align.as_ref()) {
+        Some(Some(v)) => format!(r#"<a:pPr algn="{v}"/>"#),
+        _ => String::new(),
+    };
+    let rpr = create_rpr(format);
+    let mut out = format!("<a:p>{ppr}");
     let lines: Vec<&str> = text.split('\n').collect();
     for (i, line) in lines.iter().enumerate() {
         if i > 0 {
@@ -1155,12 +1181,78 @@ fn text_paragraphs(text: &str) -> String {
             ""
         };
         out.push_str(&format!(
-            r#"<a:r><a:rPr lang="zh-CN" sz="1800" dirty="0"><a:solidFill><a:srgbClr val="000000"/></a:solidFill><a:latin typeface="Calibri"/><a:ea typeface="宋体"/></a:rPr><a:t{space}>{}</a:t></a:r>"#,
+            r#"<a:r>{rpr}<a:t{space}>{}</a:t></a:r>"#,
             xml::escape_text(line)
         ));
     }
     out.push_str("</a:p>");
     out
+}
+
+fn create_rpr(format: Option<&crate::drawing_text::TextFormat>) -> String {
+    let mut sz = Some(1800i64);
+    let mut color = Some("000000".to_string());
+    let mut bold = None;
+    let mut italic = None;
+    let mut underline = None;
+    let mut latin = Some("Calibri".to_string());
+    let mut ea = Some("宋体".to_string());
+    if let Some(f) = format {
+        if let Some(v) = &f.sz {
+            sz = *v;
+        }
+        if let Some(v) = &f.color {
+            color = v.clone();
+        }
+        bold = f.bold;
+        italic = f.italic;
+        if let Some(v) = &f.underline {
+            underline = v.clone();
+        }
+        if let Some(v) = &f.font {
+            latin = Some(v.clone());
+        }
+        if let Some(v) = &f.east_asia_font {
+            ea = Some(v.clone());
+        }
+    }
+    let mut attrs = String::from(r#" lang="zh-CN" dirty="0""#);
+    if let Some(n) = sz {
+        attrs.push_str(&format!(r#" sz="{n}""#));
+    }
+    if let Some(true) = bold {
+        attrs.push_str(r#" b="1""#);
+    } else if let Some(false) = bold {
+        attrs.push_str(r#" b="0""#);
+    }
+    if let Some(true) = italic {
+        attrs.push_str(r#" i="1""#);
+    } else if let Some(false) = italic {
+        attrs.push_str(r#" i="0""#);
+    }
+    if let Some(u) = underline {
+        attrs.push_str(&format!(r#" u="{u}""#));
+    }
+    let mut inner = String::new();
+    if let Some(hex) = color {
+        inner.push_str(&format!(
+            r#"<a:solidFill><a:srgbClr val="{}"/></a:solidFill>"#,
+            hex.to_ascii_uppercase()
+        ));
+    }
+    if let Some(face) = latin {
+        inner.push_str(&format!(
+            r#"<a:latin typeface="{}"/>"#,
+            xml::escape_attr(&face)
+        ));
+    }
+    if let Some(face) = ea {
+        inner.push_str(&format!(
+            r#"<a:ea typeface="{}"/>"#,
+            xml::escape_attr(&face)
+        ));
+    }
+    format!("<a:rPr{attrs}>{inner}</a:rPr>")
 }
 
 fn needs_xml_space(text: &str) -> bool {

@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "book.xlsx",
+  "output": "book.fmt.xlsx",
+  "ops": [
+    {
+      "op": "insertTextBox",
+      "id": "sheet:Sheet1",
+      "from": "B2",
+      "text": "你好",
+      "sz": 2400,
+      "color": "0000FF"
+    },
+    {
+      "op": "setShapeFormat",
+      "id": "sheet:Sheet1/sp:2",
+      "sz": 1800,
+      "color": "C41E3A",
+      "bold": true,
+      "align": "ctr"
+    }
+  ]
+}

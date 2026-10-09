@@ -339,7 +339,28 @@ fn inspect_and_edit_layout_placeholder() {
     assert_eq!(ph["stable"], true);
     assert_eq!(
         object_keys(ph),
-        ["id", "shapeId", "name", "type", "idx", "x", "y", "cx", "cy", "text", "stable"]
+        [
+            "id",
+            "shapeId",
+            "name",
+            "type",
+            "idx",
+            "x",
+            "y",
+            "cx",
+            "cy",
+            "text",
+            "sz",
+            "color",
+            "bold",
+            "italic",
+            "underline",
+            "font",
+            "eastAsiaFont",
+            "align",
+            "textAnchor",
+            "stable"
+        ]
     );
 
     let out = tmp("ph-text");

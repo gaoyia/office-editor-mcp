@@ -1054,6 +1054,13 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             "Text boxes in a link chain must be in the same part".into()
         }
         ErrorKind::InvalidHexColor => "color must be a 6-digit RGB hex value or null".into(),
+        ErrorKind::NeedShapeFormatField => {
+            "setShapeFormat requires at least one of sz, color, bold, italic, underline, font, eastAsiaFont, align, or textAnchor".into()
+        }
+        ErrorKind::InvalidTextAlign => "align must be l, ctr, r, or just".into(),
+        ErrorKind::InvalidTextAnchor => "textAnchor must be t, ctr, or b".into(),
+        ErrorKind::InvalidTextUnderline => "underline must be sng, none, or dbl".into(),
+        ErrorKind::EmptyShapeTypeface => "font and eastAsiaFont must not be empty".into(),
         ErrorKind::InvalidTextBoxDirection => "direction must be horizontal or vertical".into(),
         ErrorKind::InvalidPicKind => "kind must be inline or anchor".into(),
         ErrorKind::InvalidPicWrap => {

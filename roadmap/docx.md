@@ -90,7 +90,7 @@ xlsx 见 [`roadmap/xlsx.md`](xlsx.md)。pptx 见 [`roadmap/pptx.md`](pptx.md)。
 
 ## 待做
 
-第一期、第二轮与第三轮顺序待做已空。第三轮 C8 已过（xlsx / pptx 嵌入 OMML），不改 Word。挂机下一项见「先探测再进待做」。注内 / 批注内插入文本框不列入：Word 不能把图形对象放到那些故事里。框内再套框已放弃，见已过 39。Word 嵌入 SVG 已过（44）。跨格式 C5、C6、C7、C8 已过，见已过表。
+第一期、第二轮与第三轮顺序待做已空。第三轮 C8、C9 已过（C8 是 xlsx / pptx 嵌入 OMML；C9 是 pptx / xlsx 形状文字格式），不改 Word。挂机下一项见「先探测再进待做」。注内 / 批注内插入文本框不列入：Word 不能把图形对象放到那些故事里。框内再套框已放弃，见已过 39。Word 嵌入 SVG 已过（44）。跨格式 C5、C6、C7、C8 已过，见已过表。C9 不套 Word。
 
 ## 先探测再进待做
 
@@ -100,7 +100,7 @@ xlsx 见 [`roadmap/xlsx.md`](xlsx.md)。pptx 见 [`roadmap/pptx.md`](pptx.md)。
 
 ## 跨格式（本类型要跟）
 
-会动 `crates/ooxp/src/chart/` 或批注墨迹，三种格式的契约可能一起改。xlsx / pptx 各有自己的表，不要只改 Word 就当三家都过。C4、C5、C6、C7、C8 见已过表。Word 44 已过，C5 只改了主契约里原先「xlsx / pptx 仍只认位图」那几句。C8 已过，未改 Word。
+会动 `crates/ooxp/src/chart/` 或批注墨迹，三种格式的契约可能一起改。xlsx / pptx 各有自己的表，不要只改 Word 就当三家都过。C4、C5、C6、C7、C8 见已过表。C9 不套本文。Word 44 已过，C5 只改了主契约里原先「xlsx / pptx 仍只认位图」那几句。C8 已过，未改 Word。
 
 ## 怎么算 Word 全量做完
 

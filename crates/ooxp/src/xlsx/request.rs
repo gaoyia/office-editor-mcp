@@ -1372,6 +1372,7 @@ pub struct InsertTextBoxOp {
     pub from_off_y: i64,
     pub to_off_x: i64,
     pub to_off_y: i64,
+    pub format: Option<crate::drawing_text::TextFormat>,
 }
 
 #[derive(Debug, Clone)]
@@ -1388,6 +1389,7 @@ pub struct InsertShapeOp {
     pub to_off_x: i64,
     pub to_off_y: i64,
     pub prst: String,
+    pub format: Option<crate::drawing_text::TextFormat>,
 }
 
 #[derive(Debug, Clone)]
@@ -1474,6 +1476,14 @@ pub struct SetShapeTextOp {
     pub target: SheetDrawId,
     pub kind: DrawObjKind,
     pub text: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetShapeFormatOp {
+    pub id: String,
+    pub target: SheetDrawId,
+    pub kind: DrawObjKind,
+    pub format: crate::drawing_text::TextFormat,
 }
 
 #[derive(Debug, Clone)]
@@ -1674,6 +1684,7 @@ pub enum XlsxOp {
     SetTextBoxSize(SetTextBoxSizeOp),
     SetTextBoxAnchor(SetTextBoxAnchorOp),
     SetShapeText(SetShapeTextOp),
+    SetShapeFormat(SetShapeFormatOp),
     InsertSmartArt(InsertSmartArtOp),
     DeleteSmartArt(DeleteSmartArtOp),
     SetSmartArtText(SetSmartArtTextOp),
@@ -1968,6 +1979,7 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<XlsxOp>, Error> {
             "setTextBoxSize" => XlsxOp::SetTextBoxSize(parse_set_textbox_size(obj, i)?),
             "setTextBoxAnchor" => XlsxOp::SetTextBoxAnchor(parse_set_textbox_anchor(obj, i)?),
             "setShapeText" => XlsxOp::SetShapeText(parse_set_shape_text(obj, i)?),
+            "setShapeFormat" => XlsxOp::SetShapeFormat(parse_set_shape_format(obj, i)?),
             "insertSmartArt" => XlsxOp::InsertSmartArt(parse_insert_smartart(obj, i)?),
             "deleteSmartArt" => XlsxOp::DeleteSmartArt(parse_delete_smartart(obj, i)?),
             "setSmartArtText" => XlsxOp::SetSmartArtText(parse_set_smartart_text(obj, i)?),
@@ -8501,8 +8513,27 @@ fn parse_insert_textbox(
         obj,
         i,
         &[
-            "op", "id", "text", "cx", "cy", "from", "to", "anchor", "fromOffX", "fromOffY",
-            "toOffX", "toOffY",
+            "op",
+            "id",
+            "text",
+            "cx",
+            "cy",
+            "from",
+            "to",
+            "anchor",
+            "fromOffX",
+            "fromOffY",
+            "toOffX",
+            "toOffY",
+            "sz",
+            "color",
+            "bold",
+            "italic",
+            "underline",
+            "font",
+            "eastAsiaFont",
+            "align",
+            "textAnchor",
         ],
     )?;
     let id = require_id(obj, i)?;
@@ -8520,6 +8551,7 @@ fn parse_insert_textbox(
         from_off_y: a.from_off_y,
         to_off_x: a.to_off_x,
         to_off_y: a.to_off_y,
+        format: crate::drawing_text::parse(obj, &format!("ops[{i}]"), false)?,
     })
 }
 
@@ -8531,8 +8563,28 @@ fn parse_insert_shape(
         obj,
         i,
         &[
-            "op", "id", "text", "cx", "cy", "from", "to", "anchor", "fromOffX", "fromOffY",
-            "toOffX", "toOffY", "prst",
+            "op",
+            "id",
+            "text",
+            "cx",
+            "cy",
+            "from",
+            "to",
+            "anchor",
+            "fromOffX",
+            "fromOffY",
+            "toOffX",
+            "toOffY",
+            "prst",
+            "sz",
+            "color",
+            "bold",
+            "italic",
+            "underline",
+            "font",
+            "eastAsiaFont",
+            "align",
+            "textAnchor",
         ],
     )?;
     let id = require_id(obj, i)?;
@@ -8551,6 +8603,7 @@ fn parse_insert_shape(
         to_off_x: a.to_off_x,
         to_off_y: a.to_off_y,
         prst: parse_shape_prst(obj, i)?,
+        format: crate::drawing_text::parse(obj, &format!("ops[{i}]"), false)?,
     })
 }
 
@@ -9698,6 +9751,39 @@ fn parse_set_shape_text(
         target,
         kind,
         text,
+    })
+}
+
+fn parse_set_shape_format(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<SetShapeFormatOp, Error> {
+    deny_keys(
+        obj,
+        i,
+        &[
+            "op",
+            "id",
+            "sz",
+            "color",
+            "bold",
+            "italic",
+            "underline",
+            "font",
+            "eastAsiaFont",
+            "align",
+            "textAnchor",
+        ],
+    )?;
+    let id = require_id(obj, i)?;
+    let (target, kind) = shape::parse_shape_text_id(&id, i)?;
+    let format = crate::drawing_text::parse(obj, &format!("ops[{i}]"), true)?
+        .expect("require_one 已保证有补丁");
+    Ok(SetShapeFormatOp {
+        id,
+        target,
+        kind,
+        format,
     })
 }
 

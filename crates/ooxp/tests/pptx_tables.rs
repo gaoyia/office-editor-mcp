@@ -195,7 +195,25 @@ fn insert_inspect_cell_text_row_col_pos_delete() {
     assert_eq!(c["text"], "甲");
     assert_eq!(
         object_keys(c),
-        ["id", "row", "col", "gridSpan", "rowSpan", "hMerge", "vMerge", "text"]
+        [
+            "id",
+            "row",
+            "col",
+            "gridSpan",
+            "rowSpan",
+            "hMerge",
+            "vMerge",
+            "text",
+            "sz",
+            "color",
+            "bold",
+            "italic",
+            "underline",
+            "font",
+            "eastAsiaFont",
+            "align",
+            "textAnchor"
+        ]
     );
     assert_eq!(t["rows"][0]["cells"][1]["text"], "乙");
     assert_eq!(t["rows"][1]["cells"][0]["text"], "丙");

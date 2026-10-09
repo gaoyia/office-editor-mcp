@@ -73,6 +73,7 @@ pptx 模块不要引用 `docx::` 或 `xlsx::`。`c:chart`（§21.2）用 `crates
 | C6 | `.plan/2026年-10月-9日-✅-三家图嗅探补EMF-WMF-TIFF.md` | 幻灯片图；C5 已过 |
 | C7 | `.plan/2026年-10月-9日-✅-三家3D模型.md` | 幻灯片图 |
 | C8 | `.plan/2026年-10月-9日-✅-xlsx-pptx-嵌入OMML.md` | 幻灯片图；不要改 Word 公式 |
+| C9 | `.plan/2026年-10月-9日-✅-pptx-xlsx-形状文字格式.md` | 形状增删；xlsx 文本框 / 形状；不要改 Word `setRunFormat` |
 
 0 与 2 不要合成一份。图是 `p:pic`，图表是 `p:graphicFrame`，位置是画布 `a:xfrm`。第一期页名单和 `setShapeText` 见总计划。
 
@@ -92,7 +93,7 @@ pptx 模块不要引用 `docx::` 或 `xlsx::`。`c:chart`（§21.2）用 `crates
 
 ## 跨格式（本类型要跟）
 
-C4、C5、C6、C7、C8 见已过表。xlsx 批注墨迹不套本文。C5 与 xlsx 同一份计划，不要拆成两家各做一套 `svgBlip`。C6、C7 与 docx 同一份计划。C8 与 xlsx 同一份，不改 Word。
+C4、C5、C6、C7、C8、C9 见已过表。xlsx 批注墨迹不套本文。C5 与 xlsx 同一份计划，不要拆成两家各做一套 `svgBlip`。C6、C7 与 docx 同一份计划。C8 与 xlsx 同一份，不改 Word。C9 与 xlsx 同一份，不改 Word。
 
 ## 怎么算 PowerPoint 全量做完
 

@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "deck.pptx",
+  "output": "deck.fmt.pptx",
+  "ops": [
+    {
+      "op": "setShapeFormat",
+      "id": "slide:1/shape:2",
+      "sz": 3600,
+      "color": "C41E3A",
+      "bold": true,
+      "align": "ctr",
+      "textAnchor": "ctr"
+    }
+  ]
+}

@@ -878,6 +878,11 @@ define_error_kinds! {
     WatermarkNeedTextOrFile => vec![Self::WatermarkNeedTextOrFile],
     TextBoxLinkCrossPart => vec![Self::TextBoxLinkCrossPart],
     InvalidHexColor => vec![Self::InvalidHexColor],
+    NeedShapeFormatField => vec![Self::NeedShapeFormatField],
+    InvalidTextAlign => vec![Self::InvalidTextAlign],
+    InvalidTextAnchor => vec![Self::InvalidTextAnchor],
+    InvalidTextUnderline => vec![Self::InvalidTextUnderline],
+    EmptyShapeTypeface => vec![Self::EmptyShapeTypeface],
     InvalidTextBoxDirection => vec![Self::InvalidTextBoxDirection],
     CannotLinkFirstSection => vec![Self::CannotLinkFirstSection],
     HfTypeInactive { kind: String, hf_type: String } => vec![Self::HfTypeInactive {
@@ -1781,6 +1786,11 @@ impl ErrorKind {
             | Self::SmartArtListDepth
             | Self::TextBoxLinkCrossPart
             | Self::InvalidHexColor
+            | Self::NeedShapeFormatField
+            | Self::InvalidTextAlign
+            | Self::InvalidTextAnchor
+            | Self::InvalidTextUnderline
+            | Self::EmptyShapeTypeface
             | Self::InvalidTextBoxDirection
             | Self::InsertPictureWorksheetOnly
             | Self::InsertChartWorksheetOnly

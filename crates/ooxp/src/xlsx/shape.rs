@@ -11,7 +11,7 @@ use super::ole;
 use super::picture::{self, AnchorKind, EditAs};
 use super::request::{
     DeleteConnectorOp, DeleteShapeOp, DeleteTextBoxOp, InsertConnectorOp, InsertShapeOp,
-    InsertTextBoxOp, SetShapeTextOp, SetTextBoxAnchorOp, SetTextBoxSizeOp,
+    InsertTextBoxOp, SetShapeFormatOp, SetShapeTextOp, SetTextBoxAnchorOp, SetTextBoxSizeOp,
 };
 
 pub const DEFAULT_CX: i64 = 1_828_800;
@@ -264,6 +264,7 @@ fn object_json(
     }
     if with_text {
         m.insert("text".into(), json!(crate::pptx::shape::visible_text(el)));
+        crate::drawing_text::insert_inspect(&mut m, el.child_by_local("txBody"));
     }
     m.insert("stable".into(), stable_v);
     Value::Object(m)
@@ -340,7 +341,12 @@ pub fn insert_textbox(
     picture::ensure_xmlns(&mut draw_doc.root, "a", picture::A_NS);
     let cnv = picture::next_cnv_id(pkg, sheet_part, &sheet_doc.root)?;
     let name = format!("文本框 {cnv}");
-    let sp = build_textbox_sp(cnv, &name, cx, cy, op.text.as_deref().unwrap_or(""));
+    let mut sp = build_textbox_sp(cnv, &name, cx, cy, op.text.as_deref().unwrap_or(""));
+    if let Some(fmt) = &op.format {
+        if let Some(tx) = sp.child_by_local_mut("txBody") {
+            crate::drawing_text::apply(tx, fmt);
+        }
+    }
     push_anchor(
         pkg,
         sheet_doc,
@@ -376,7 +382,7 @@ pub fn insert_shape(
     picture::ensure_xmlns(&mut draw_doc.root, "a", picture::A_NS);
     let cnv = picture::next_cnv_id(pkg, sheet_part, &sheet_doc.root)?;
     let name = format!("形状 {cnv}");
-    let sp = build_shape_sp(
+    let mut sp = build_shape_sp(
         cnv,
         &name,
         cx,
@@ -384,6 +390,11 @@ pub fn insert_shape(
         &op.prst,
         op.text.as_deref().unwrap_or(""),
     );
+    if let Some(fmt) = &op.format {
+        if let Some(tx) = sp.child_by_local_mut("txBody") {
+            crate::drawing_text::apply(tx, fmt);
+        }
+    }
     push_anchor(
         pkg,
         sheet_doc,
@@ -717,6 +728,31 @@ pub fn set_shape_text(
         ));
     };
     crate::pptx::shape::set_txbody_text(tx, &op.text);
+    pkg.set(&drawing_part, doc.to_bytes()?)?;
+    Ok(())
+}
+
+pub fn set_shape_format(
+    pkg: &mut Package,
+    sheet_root: &Element,
+    sheet_part: &str,
+    op: &SetShapeFormatOp,
+    op_index: usize,
+) -> Result<(), Error> {
+    let path = format!("ops[{op_index}].id");
+    let is_obj = op.kind.matcher();
+    let drawing_part = find_drawing_for(pkg, sheet_part, sheet_root, is_obj, &op.target.key)
+        .ok_or_else(|| Error::with_path(op.kind.not_found(op.id.clone()), path.clone()))?;
+    let mut doc = xml::parse(pkg.get(&drawing_part)?)?;
+    let sp = find_object_mut(&mut doc.root, is_obj, &op.target.key)
+        .ok_or_else(|| Error::with_path(op.kind.not_found(op.id.clone()), path.clone()))?;
+    let Some(tx) = sp.child_by_local_mut("txBody") else {
+        return Err(Error::with_path(
+            ErrorKind::ShapeHasNoText { id: op.id.clone() },
+            path,
+        ));
+    };
+    crate::drawing_text::apply(tx, &op.format);
     pkg.set(&drawing_part, doc.to_bytes()?)?;
     Ok(())
 }

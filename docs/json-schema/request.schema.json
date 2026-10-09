@@ -1179,6 +1179,9 @@
                 "$ref": "pptx.schema.json#/$defs/setShapeFillOp"
               },
               {
+                "$ref": "pptx.schema.json#/$defs/setShapeFormatOp"
+              },
+              {
                 "$ref": "pptx.schema.json#/$defs/setShapeLineOp"
               },
               {
@@ -1513,6 +1516,52 @@
         "toOffY": {
           "type": "integer",
           "minimum": 0
+        },
+        "sz": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 100,
+          "maximum": 400000
+        },
+        "color": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "bold": {
+          "type": "boolean"
+        },
+        "italic": {
+          "type": "boolean"
+        },
+        "underline": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "font": {
+          "type": "string",
+          "minLength": 1
+        },
+        "eastAsiaFont": {
+          "type": "string",
+          "minLength": 1
+        },
+        "align": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "textAnchor": {
+          "type": [
+            "string",
+            "null"
+          ]
         }
       }
     },

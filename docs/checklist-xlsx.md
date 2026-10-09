@@ -8,7 +8,7 @@
 
 Microsoft Excel 16.0 已打开，用户确认通过。本机若装了 WPS，`Excel.Application` 会被抢走，测试仍直接启动 `EXCEL.EXE` 再挂 COM。
 
-C、I、A、O、Xp、Xvg、Xem、X3d、Xom、Xc、Xh 这几组现在由 `manual-check/office/cases/xlsx-*.ps1` 自动判定，
+C、I、A、O、Xp、Xvg、Xem、X3d、Xom、Xtf、Xc、Xh 这几组现在由 `manual-check/office/cases/xlsx-*.ps1` 自动判定，
 跑 `pwsh -File manual-check\office\run.ps1 -Case 'xlsx-*'` 即可复现，逐条结果落在 `manual-check/office/out/office-results.csv`。
 2026-09-27 补跑 `xlsx-pictures.ps1`，Xp1–Xp7 通过。同日补跑 `xlsx-charts.ps1`，Xc1–Xc7 通过。
 同日补跑 `xlsx-create-pictures.ps1`，C8–C10 通过。同日补跑 `xlsx-create-charts.ps1`，C11–C13 通过。
@@ -30,6 +30,7 @@ C、I、A、O、Xp、Xvg、Xem、X3d、Xom、Xc、Xh 这几组现在由 `manual-
 同日补跑 `xlsx-emf.ps1`，Xem1–Xem6 通过。Excel COM `Type=13`，无 Repair。
 同日补跑 `xlsx-model3d.ps1`，X3d1–X3d6 通过。Excel COM `Type=30`，无 Repair。
 同日补跑 `xlsx-omml.ps1`，Xom1–Xom6 通过。无 Repair。
+同日补跑 `xlsx-shape-format.ps1`，Xtf1–Xtf5 通过。无 Repair。
 
 - **C1** ✅
   - Excel 16.0 打开 `manual-check/office/out/xlsx-create.xlsx`，标题栏无 Repair
@@ -210,6 +211,13 @@ C、I、A、O、Xp、Xvg、Xem、X3d、Xom、Xc、Xh 这几组现在由 `manual-
   - `insertSmartArt` `layout=list` 后 COM 能看见 SmartArt，inspect `layout` 对得上
   - 删除后计数为 0
   - 缺 `from` 得 `InvalidField` 且未写文件
+- **Xtf1–Xtf5** ✅
+  - Excel 16.0：`xlsx-shape-format.ps1`，5 PASS / 0 FAIL
+  - `insertTextBox` 可带 `sz` / `color`
+  - `setShapeFormat` 后 inspect 对得上
+  - COM 字号与字色对得上
+  - create `textBoxes[]` 认格式字段
+  - 缺字段为 `InvalidField` 且未写文件
 - **Xhl1–Xhl5** ✅
   - Excel 16.0：`xlsx-hyperlinks.ps1`，5 PASS / 0 FAIL
   - 无名单时根与工作表有 `hyperlinkCount=0`
@@ -981,6 +989,30 @@ inspect 只读进树。create 不生成。apply 不新开编辑。脚本 `manual
 - **Xsa5**
   - 检查：缺字段
   - 通过标准：只给 `op` 与 `id` 的 `insertTextBox`（缺 `from`）得 `InvalidField`，未写文件
+  - 不强制开 Excel
+
+## 形状文字格式
+
+工作表文本框 / 带 `txBody` 的形状的 DrawingML 文字格式。脚本 `manual-check/office/cases/xlsx-shape-format.ps1`。编号用 **Xtf**。不要和 Xsa、Xsg 撞。xlsx 的 `anchor` 仍是单元格锚点，垂直对齐只用 `textAnchor`。
+
+- **Xtf1**
+  - 检查：插入带格式
+  - 通过标准：✅ `insertTextBox` 带 `sz=2400` `color=0000FF` 后 inspect 对得上
+  - Excel 无修复
+- **Xtf2**
+  - 检查：改格式
+  - 通过标准：✅ `setShapeFormat` 后 `sz=1800`、`color=C41E3A`、`bold=true`
+- **Xtf3**
+  - 检查：COM
+  - 通过标准：✅ COM `Font.Size` 为 18 磅，`Color.RGB` 为 OLE 色 `C41E3A`
+  - 无修复
+- **Xtf4**
+  - 检查：create
+  - 通过标准：✅ create `textBoxes[]` 带 `sz=2200` 后 inspect 对得上
+  - 无修复
+- **Xtf5**
+  - 检查：缺字段
+  - 通过标准：✅ 只给 `op` 与 `id` 的 `setShapeFormat` 得 `InvalidField`，未写文件
   - 不强制开 Excel
 
 ## 无 txBox 的形状与连接线

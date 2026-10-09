@@ -948,6 +948,13 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::SmartArtListDepth => "list / cycle 版式只接受顶层点（parent 必须省略或为 null）".into(),
         ErrorKind::TextBoxLinkCrossPart => "链接文本框必须在同一部件里".into(),
         ErrorKind::InvalidHexColor => "color 必须是六位 RGB 十六进制或 null".into(),
+        ErrorKind::NeedShapeFormatField => {
+            "setShapeFormat 至少要给 sz、color、bold、italic、underline、font、eastAsiaFont、align 或 textAnchor 之一".into()
+        }
+        ErrorKind::InvalidTextAlign => "align 必须是 l、ctr、r 或 just".into(),
+        ErrorKind::InvalidTextAnchor => "textAnchor 必须是 t、ctr 或 b".into(),
+        ErrorKind::InvalidTextUnderline => "underline 必须是 sng、none 或 dbl".into(),
+        ErrorKind::EmptyShapeTypeface => "font 与 eastAsiaFont 不能为空串".into(),
         ErrorKind::InvalidTextBoxDirection => "direction 必须是 horizontal 或 vertical".into(),
         ErrorKind::InvalidPicKind => "kind 必须是 inline 或 anchor".into(),
         ErrorKind::InvalidPicWrap => {

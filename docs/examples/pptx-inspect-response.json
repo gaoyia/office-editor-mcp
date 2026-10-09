@@ -87,6 +87,15 @@
           "cx": 10515600,
           "cy": 800100,
           "text": "标题",
+          "sz": 1800,
+          "color": "000000",
+          "bold": null,
+          "italic": null,
+          "underline": null,
+          "font": "Calibri",
+          "eastAsiaFont": "宋体",
+          "align": null,
+          "textAnchor": null,
           "stable": true
         },
         {
@@ -99,6 +108,15 @@
           "cx": 10515600,
           "cy": 800100,
           "text": "hello",
+          "sz": 1800,
+          "color": "000000",
+          "bold": null,
+          "italic": null,
+          "underline": null,
+          "font": "Calibri",
+          "eastAsiaFont": "宋体",
+          "align": null,
+          "textAnchor": null,
           "stable": true
         }
       ]

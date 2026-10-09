@@ -234,6 +234,28 @@ pub fn set_text(
     })
 }
 
+pub fn set_format(
+    pkg: &mut Package,
+    pres_part: &str,
+    pres_root: &Element,
+    ph: &PlaceholderId,
+    id: &str,
+    fmt: &crate::drawing_text::TextFormat,
+    op_index: usize,
+) -> Result<(), Error> {
+    apply_on_placeholder(pkg, pres_part, pres_root, ph, id, op_index, |sp| {
+        notes::reject_slide_image(sp, op_index)?;
+        let tx = sp.child_by_local_mut("txBody").ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::ShapeNotFound { id: id.to_string() },
+                format!("ops[{op_index}].id"),
+            )
+        })?;
+        crate::drawing_text::apply(tx, fmt);
+        Ok(())
+    })
+}
+
 pub fn set_pos(
     pkg: &mut Package,
     pres_part: &str,
@@ -533,6 +555,7 @@ fn placeholder_json(sp: &Element, host: &str, index: usize) -> Value {
     obj.insert("cx".into(), cx);
     obj.insert("cy".into(), cy);
     obj.insert("text".into(), json!(shape::visible_text(sp)));
+    crate::drawing_text::insert_inspect(&mut obj, sp.child_by_local("txBody"));
     obj.insert("stable".into(), json!(stable));
     Value::Object(obj)
 }

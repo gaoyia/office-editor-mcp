@@ -587,16 +587,17 @@ fn table_json(frame: &Element, host: &str, index: usize) -> Value {
                 .child_by_local("txBody")
                 .map(shape::txbody_visible_text)
                 .unwrap_or_default();
-            cells.push(json!({
-                "id": format!("{id}/r:{row_n}/c:{col}"),
-                "row": row_n,
-                "col": col,
-                "gridSpan": span as i64,
-                "rowSpan": rspan as i64,
-                "hMerge": h_merge,
-                "vMerge": v_merge,
-                "text": text,
-            }));
+            let mut cell = Map::new();
+            cell.insert("id".into(), json!(format!("{id}/r:{row_n}/c:{col}")));
+            cell.insert("row".into(), json!(row_n));
+            cell.insert("col".into(), json!(col));
+            cell.insert("gridSpan".into(), json!(span as i64));
+            cell.insert("rowSpan".into(), json!(rspan as i64));
+            cell.insert("hMerge".into(), json!(h_merge));
+            cell.insert("vMerge".into(), json!(v_merge));
+            cell.insert("text".into(), json!(text));
+            crate::drawing_text::insert_inspect(&mut cell, tc.child_by_local("txBody"));
+            cells.push(Value::Object(cell));
         }
         rows.push(json!({
             "id": format!("{id}/row:{row_n}"),
@@ -1337,6 +1338,37 @@ pub fn set_cell_text(
         .child_by_local_mut("txBody")
         .ok_or_else(|| missing_table(&op.id, i))?;
     shape::set_txbody_text(tx, &op.text);
+    Ok(())
+}
+
+pub fn set_cell_format(
+    slide_doc: &mut Document,
+    id: &str,
+    target: &CellTarget,
+    fmt: &crate::drawing_text::TextFormat,
+    i: usize,
+) -> Result<(), Error> {
+    let tbl = require_tbl(slide_doc, &target.table.key, id, i)?;
+    let tr_pos = tr_child_indices(tbl);
+    if target.row < 1 || target.row > tr_pos.len() {
+        return Err(missing_table(id, i));
+    }
+    let tr = match &mut tbl.children[tr_pos[target.row - 1]] {
+        Node::Element(e) => e,
+        _ => return Err(missing_table(id, i)),
+    };
+    let tcs = tc_child_indices(tr);
+    if target.col < 1 || target.col > tcs.len() {
+        return Err(missing_table(id, i));
+    }
+    let tc = match &mut tr.children[tcs[target.col - 1]] {
+        Node::Element(e) => e,
+        _ => return Err(missing_table(id, i)),
+    };
+    let tx = tc
+        .child_by_local_mut("txBody")
+        .ok_or_else(|| missing_table(id, i))?;
+    crate::drawing_text::apply(tx, fmt);
     Ok(())
 }
 

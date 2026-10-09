@@ -41,7 +41,7 @@ pptx 的 `scope.timing` 列出该页 `<p:timing>` 效果摘要；apply 用 `inse
 pptx 的 `scope.masters` 列出幻灯片母版与版式及占位符（含该母版 theme 的配色与字体），根上始终带 `slideSize`，apply 可用 `setSlideLayout` 换页的版式关系，
 也可用 `insertLayout` / `deleteLayout` / `insertPlaceholder` / `deletePlaceholder` / `insertMaster` / `deleteMaster` 插删版式、占位符与母版，
 也可用 `setSlideSize` / `setThemeColors` / `setThemeFonts` 改画布尺寸与 theme 配色 / 字体，
-也可用 `setShapeText` / `setShapePos` / `setShapeSize` 改占位符。
+也可用 `setShapeText` / `setShapeFormat` / `setShapePos` / `setShapeSize` 改占位符。
 pptx 的 `scope.handout` 列出讲义母版页眉页脚槽位，apply 用 `setHandoutText` 改字。
 pptx 的 `scope.hyperlinks` 与超链接 op 认幻灯片文本形状上的形状级 `p:cNvPr/a:hlinkClick` 与 run 级 `a:rPr/a:hlinkClick`（跳转 / 文件 / URL），不认图、表、图表、SmartArt、备注或母版上的链。
 pptx 的 `scope.fields` 列出幻灯片文本形状里的 `a:fld`；apply 用 `insertField` / `setField` / `deleteField` 写页码与日期域，不求值。
@@ -53,7 +53,7 @@ pptx 的 `scope.oleObjects` 与 OLE op 认幻灯片上带嵌入关系的 `p:oleO
 不认 `p:link` 与 ActiveX `p:control`，不把嵌入字节或预览图塞进树。
 pptx 的 `scope.zooms` 与 Zoom op 认幻灯片上的 `sldZm` / `sectionZm` / `summaryZm`（MS-PPTX §2.2.15），Fallback 预览不进 `pictures`，不实现放映跳转。
 xlsx 的 `scope.comments` 与批注 op 认工作表上的 MS-XLSX 线程化批注（`threadedComment`），不认作者不以 `tc=` 开头的旧式 VML 批注。
-xlsx 的 `scope.textBoxes` 与文本框 op、`setShapeText` 认工作表 DrawingML 文本框（`xdr:sp` 且 `txBox`）。
+xlsx 的 `scope.textBoxes` 与文本框 op、`setShapeText` / `setShapeFormat` 认工作表 DrawingML 文本框（`xdr:sp` 且 `txBox`）。
 xlsx 的 `scope.shapes` 列出工作表上无 `txBox` 的 `xdr:sp`；`scope.connectors` 列出工作表 `xdr:cxnSp`。
 apply 用 `insertShape` / `deleteShape` / `insertConnector` / `deleteConnector`。
 `setTextBoxSize` / `setTextBoxAnchor` 也认形状 id 与连接线 id。
@@ -225,7 +225,7 @@ create 与 apply 落盘时先写入目标同目录的临时文件，再改名为
 `deleteDefinedName`）、以及 `setPrintSetup`、`setSheetView`、`setAutoFilter`、`setSortState`、以及自定义视图 op（`insertCustomView`、
 `deleteCustomView`、`showCustomView`）、以及分组 op（`groupRows`、`ungroupRows`、`groupCols`、`ungroupCols`、`setOutline`）、
 以及批注 op（`insertComment`、`deleteComment`、`replyComment`、`setCommentText`、`setCommentMeta`、`setCommentDone`）、
-以及 `setShapeText`、以及文本框 op（`insertTextBox`、`deleteTextBox`、`setTextBoxSize`、`setTextBoxAnchor`；
+以及 `setShapeText`、`setShapeFormat`、以及文本框 op（`insertTextBox`、`deleteTextBox`、`setTextBoxSize`、`setTextBoxAnchor`；
 不含 `setTextBoxWrap`、`setTextBoxFill`、`setTextBoxLine`、`setTextBoxDirection`）、以及形状管理 op（`insertShape`、`deleteShape`、
 `insertConnector`、`deleteConnector`、`groupShapes`、`ungroup`；
 不含 `setShapePos`、`setShapeSize`、`setShapeFill`、`setShapeLine`）、以及 SmartArt op（`insertSmartArt`、`deleteSmartArt`、
@@ -238,7 +238,7 @@ docx 认 `setParaText`、`setHeaderFooterDistance`、`setPageMargin`、`setPageS
 `setLineNumbering`、`setDocGrid`、`setRtlGutter`、`setMirrorMargins`、`setGutterAtTop`、`setHeaderFooterLink`、
 `insertHeaderFooter`、`setTitlePage`、`setEvenAndOddHeaders`、图片 op（含 `setPictureWrap`，
 不含 `setPictureAnchor`）、文本框 op、组合与连接线 op（`insertConnector`、`deleteConnector`、`groupShapes`、`ungroup`；
-不含 `insertShape`、`deleteShape`、`setShapePos`、`setShapeSize`、`setShapeFill`、`setShapeLine`）、`insertPara` / `deletePara`、
+不含 `insertShape`、`deleteShape`、`setShapePos`、`setShapeSize`、`setShapeFill`、`setShapeLine`、`setShapeFormat`）、`insertPara` / `deletePara`、
 表格 op（`insertTable`、`deleteTable`、`insertRow`、`deleteRow`、`insertCol`、`deleteCol`、`mergeCells`、`splitCells`）、
 修订 op（`acceptRevision`、`rejectRevision`）、超链接与书签 op（`insertHyperlink`、`setHyperlink`、`deleteHyperlink`、`insertBookmark`、
 `setBookmark`、`deleteBookmark`）、域 op（`insertField`、`setField`、`deleteField`）、目录 op（`insertToc`、`deleteToc`）、
@@ -258,7 +258,7 @@ docx 认 `setParaText`、`setHeaderFooterDistance`、`setPageMargin`、`setPageS
 `setSmartArtStyle`、`setSmartArtLayout`）、以及 OLE op（`insertOle`、`deleteOle`）、以及墨迹画布 op（`insertInkCanvas`、`replaceInkCanvas`、`deleteInkCanvas`）、以及 3D 模型 op（`insertModel3d`、`replaceModel3d`、`deleteModel3d`）、以及 `setProtection`、
 以及 `insertWatermark` / `deleteWatermark`、以及 `setThemeColors` / `setThemeFonts`、
 以及 `setProps` / `setCustomProp` / `deleteCustomProp`。
-pptx 认 `setShapeText`、形状管理 op（`insertShape`、`insertConnector`、`deleteConnector`、`groupShapes`、`ungroup`、`deleteShape`、
+pptx 认 `setShapeText`、`setShapeFormat`、形状管理 op（`insertShape`、`insertConnector`、`deleteConnector`、`groupShapes`、`ungroup`、`deleteShape`、
 `setShapePos`、`setShapeSize`、`setShapeFill`、`setShapeLine`）、表格 op（`insertTable`、`deleteTable`、`insertRow`、`deleteRow`、
 `insertCol`、`deleteCol`、`setTableCellText`、`setTablePos`、`setTableSize`；
 不含 `mergeCells`、`splitCells`）、`setNotesText`、批注 op（`insertComment`、`deleteComment`、`replyComment`、`setCommentText`、
@@ -304,7 +304,7 @@ pptx 认 `setShapeText`、形状管理 op（`insertShape`、`insertConnector`、
  / `deleteMedia` / `insertSlideSection` / `setSlideSectionName` / `deleteSlideSection` / `setSlideSection`
  / `insertCustomShow` / `setCustomShow` / `deleteCustomShow` / `insertZoom` / `deleteZoom`）报 `InvalidField`。
 xlsx 上发 `insertTable` / `deleteTable` / `insertRow` / `deleteRow` / `insertCol` / `deleteCol` / `mergeCells` / `splitCells` 仍报 `InvalidField`。
-对 docx 发 `insertShape` / `deleteShape` 报 `InvalidField`。pptx 上发 `mergeCells` / `splitCells` 报 `InvalidField`。
+对 docx 发 `insertShape` / `deleteShape` / `setShapeFormat` 报 `InvalidField`。pptx 上发 `mergeCells` / `splitCells` 报 `InvalidField`。
 
 ### setProps
 
@@ -767,6 +767,7 @@ docx / pptx 上出现 `to` / `toOffX` / `toOffY` 报 `InvalidField`。pptx：写
 | `text` | 可选。框内第一段可见文本，省略则为空段 |
 | `from` | xlsx 必须。左上角单元格，A1。docx 上出现报 `InvalidField` |
 | `to` / `anchor` / 偏移 | xlsx 可选。规则与 `insertPicture` 相同。docx 上出现报 `InvalidField` |
+| `sz` 等格式字段 | xlsx 可选。与 `setShapeFormat` 相同。docx 上出现报未知字段 |
 
 `id` 必须是段落 id，对图 id、框 id、容器 id、框内段落 id 或 `section:{n}` 报 `InvalidId`。找不到该段报 `IdNotFound`。
 `cx` / `cy` 都省略时用 2 英寸宽、1 英寸高（`1828800` / `914400`）。只给一个时报 `InvalidField`。
@@ -777,7 +778,8 @@ Word 16.0 另存探测：选中框内再 AddTextbox、以框内 Range 作 Anchor
 已有文件里若出现注内或批注内的框，inspect 仍列出，apply 仍可改、删。xlsx：`id` 必须是 `sheet:{name}`，且该表 `kind` 为 `worksheet`。
 锚点字段对齐 `insertPicture`：`from` 必填，可选 `anchor` / `to` / `cx` / `cy` 与偏移。缺 `cx` / `cy` 时用 `1828800` × `914400`。
 写入 `xdr:sp`，`xdr:cNvSpPr/@txBox="1"`，可见字在 `xdr:txBody`。`xdr:cNvPr/@name` 写成「文本框 {cnv}」。
-`kind` / `wrap` 出现报 `InvalidField`。pptx 上发此 op 报 `InvalidField`。
+xlsx 可带 DrawingML 文字格式字段，规则与 `setShapeFormat` 相同。xlsx 的 `anchor` 仍是单元格锚点，框内垂直对齐只用 `textAnchor`。
+docx 上这些格式键仍是未知字段。`kind` / `wrap` 出现报 `InvalidField`。pptx 上发此 op 报 `InvalidField`。
 
 ### deleteTextBox
 
@@ -1810,6 +1812,51 @@ run 级链编进 `hyperlinks`，独立节点用 `insertHyperlink`（`on` 为 `ru
    写进去的用户文本因此能原样读回；屏幕上域的缓存字（页码、日期）仍可能跟在旁边。独立节点用 `insertField` / `setField` / `deleteField`，
    见 [json-contract-pptx.md](json-contract-pptx.md#insertfield)。
 9. apply 写进去的文本，随后 inspect 读回来必须与写入值相同。第 9 条只对用户 run 文本成立；域缓存不在此列。
+
+### setShapeFormat
+
+改 DrawingML 文本框的字号、字色、加粗、斜体、下划线、中英文字体、水平对齐与框内垂直锚点。不改可见字。不要用 Word 的半磅字号。
+
+```json
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "C:\\data\\deck.pptx",
+  "ops": [
+    {
+      "op": "setShapeFormat",
+      "id": "slide:1/shape:2",
+      "sz": 3600,
+      "color": "C41E3A",
+      "bold": true,
+      "align": "ctr"
+    }
+  ]
+}
+```
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"setShapeFormat"` |
+| `id` | pptx 形状 id（与 `setShapeText` 相同）、pptx 表单元格 id，或 xlsx 文本框 / 形状 id |
+| `sz` | 可选。百分之一磅，100–400000。`null` 去掉显式字号 |
+| `color` | 可选。六位 RGB，或 `null` 去掉显式填色。写入大写。不写 theme 色 |
+| `bold` / `italic` | 可选。布尔。`false` 写成 `b="0"` / `i="0"` |
+| `underline` | 可选。`sng` / `none` / `dbl`，或 `null` 去掉属性 |
+| `font` | 可选。西文 `a:latin/@typeface`。空串报错 |
+| `eastAsiaFont` | 可选。中文 `a:ea/@typeface`。空串报错 |
+| `align` | 可选。`l` / `ctr` / `r` / `just`，或 `null` 去掉属性 |
+| `textAnchor` | 可选。`t` / `ctr` / `b`，或 `null` 去掉 `bodyPr/@anchor`。不能叫 `anchor` |
+
+除 `op` 与 `id` 外至少给一个字段，否则报 `InvalidField`。
+`sz` 小于 100 报 `InvalidField`；大于 400000 报 `TruncatedLimit`。
+改该 `txBody` 里每个文本 `a:r` 的 `a:rPr`，并同步 `a:endParaRPr`。不改 `a:fld`。不重写 `a:lstStyle`。
+各 run 不一致时 inspect 对应字段为 `null`。没有 `txBody` 报 `IdNotFound`。
+对连接线 id 报 `InvalidId`。对 `sldImg` 占位符报 `InvalidField`。docx 上发此 op 报 `InvalidField`。
+create 的 pptx `shapes[]`、xlsx 的 `textBoxes[]` / `shapes[]`，以及 `insertShape`、xlsx `insertTextBox`，认同一套可选字段。
+pptx create 缺省仍是 18 磅黑字 Calibri / 宋体。xlsx 缺省仍是 `sz="1100"`。
+xlsx 的 `anchor` 仍是单元格锚点，框内垂直对齐只用 `textAnchor`。
+示例见 `docs/examples/pptx-apply-shape-format.json` 与 `docs/examples/xlsx-apply-shape-format.json`。
 
 ## exportMedia
 

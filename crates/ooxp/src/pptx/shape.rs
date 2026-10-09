@@ -212,6 +212,7 @@ pub fn shape_node_json(sp: &Element, host: &str, index: usize) -> Value {
     sh.insert("cx".into(), cx);
     sh.insert("cy".into(), cy);
     sh.insert("text".into(), json!(visible_text(sp)));
+    crate::drawing_text::insert_inspect(&mut sh, sp.child_by_local("txBody"));
     sh.insert("stable".into(), json!(stable));
     Value::Object(sh)
 }
@@ -868,6 +869,9 @@ pub fn insert_shape(
     let mut sp = build_sp(cnv, &name, &op.prst, is_box, x, y, cx, cy);
     if let Some(tx) = sp.child_by_local_mut("txBody") {
         set_txbody_text(tx, &op.text);
+        if let Some(fmt) = &op.format {
+            crate::drawing_text::apply(tx, fmt);
+        }
     }
     picture::insert_into_sp_tree(&mut doc.root, sp)?;
     Ok(())

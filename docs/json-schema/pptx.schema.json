@@ -374,6 +374,52 @@
         },
         "tooltip": {
           "type": "string"
+        },
+        "sz": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 100,
+          "maximum": 400000
+        },
+        "color": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "bold": {
+          "type": "boolean"
+        },
+        "italic": {
+          "type": "boolean"
+        },
+        "underline": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "font": {
+          "type": "string",
+          "minLength": 1
+        },
+        "eastAsiaFont": {
+          "type": "string",
+          "minLength": 1
+        },
+        "align": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "textAnchor": {
+          "type": [
+            "string",
+            "null"
+          ]
         }
       }
     },
@@ -689,6 +735,52 @@
           "type": "string",
           "minLength": 1
         },
+        "sz": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 100,
+          "maximum": 400000
+        },
+        "color": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "bold": {
+          "type": "boolean"
+        },
+        "italic": {
+          "type": "boolean"
+        },
+        "underline": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "font": {
+          "type": "string",
+          "minLength": 1
+        },
+        "eastAsiaFont": {
+          "type": "string",
+          "minLength": 1
+        },
+        "align": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "textAnchor": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "from": {
           "type": "string",
           "minLength": 1
@@ -962,6 +1054,116 @@
           ]
         }
       }
+    },
+    "setShapeFormatOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setShapeFormat"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sz": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 100,
+          "maximum": 400000
+        },
+        "color": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "bold": {
+          "type": "boolean"
+        },
+        "italic": {
+          "type": "boolean"
+        },
+        "underline": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "font": {
+          "type": "string",
+          "minLength": 1
+        },
+        "eastAsiaFont": {
+          "type": "string",
+          "minLength": 1
+        },
+        "align": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "textAnchor": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "anyOf": [
+        {
+          "required": [
+            "sz"
+          ]
+        },
+        {
+          "required": [
+            "color"
+          ]
+        },
+        {
+          "required": [
+            "bold"
+          ]
+        },
+        {
+          "required": [
+            "italic"
+          ]
+        },
+        {
+          "required": [
+            "underline"
+          ]
+        },
+        {
+          "required": [
+            "font"
+          ]
+        },
+        {
+          "required": [
+            "eastAsiaFont"
+          ]
+        },
+        {
+          "required": [
+            "align"
+          ]
+        },
+        {
+          "required": [
+            "textAnchor"
+          ]
+        }
+      ]
     },
     "setShapeLineOp": {
       "type": "object",

@@ -185,11 +185,12 @@ Choice 与 Fallback 都不进 `textBoxes` / `shapes`，也不计入 `textBoxCoun
 出现 `expr` / `kind` 报 `InvalidField`。不把 OMML 原文、不把 `expr` 放进树。create 可用 `sheets[].maths`。
 docx 见 [docx 分册](json-contract-docx.md#insertmath)。pptx 见 [pptx 分册](json-contract-pptx.md#insertmath)。
 
+`insertTextBox` / `insertShape` 可带 `setShapeFormat` 同一套可选字段。xlsx 的 `anchor` 仍是单元格锚点，框内垂直对齐只用 `textAnchor`。
 `insertTextBox` 的 `id` 必须是 `sheet:{name}`，且该表 `kind` 为 `worksheet`。
 对文本框 id、形状 id、连接线 id、图 id、图表 id、单元格 id、页眉槽位 id 或 `xlsx:workbook` 发 `insertTextBox` 报 `InvalidId`。
 对 `chartsheet` 发此 op 报 `InvalidField`。对 `dialogsheet` / `macrosheet` 报 `NotImplemented`。
 `deleteTextBox` 的 `id` 必须是 xlsx 文本框 id。`setTextBoxSize` / `setTextBoxAnchor` 的 `id` 可以是文本框 id、形状 id 或连接线 id。
-`setShapeText` 的 `id` 必须是文本框 id 或形状 id；对连接线 id 报 `InvalidId`。
+`setShapeText` / `setShapeFormat` 的 `id` 必须是文本框 id 或形状 id；对连接线 id 报 `InvalidId`。
 `setTextBoxWrap` / `setTextBoxFill` / `setTextBoxLine` / `setTextBoxDirection` 是 Word 框属性，xlsx 上报 `InvalidField`。
 
 `insertShape` 的 `id` 必须是 `sheet:{name}`，且该表 `kind` 为 `worksheet`。
@@ -981,8 +982,10 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   `nameRef` / `catRef` / `valRef` / `sizeRef` 取对应 `c:f` 原文；没有公式则为 `null`。单元格值与 chart cache 不一致时该系列 `cacheStale: true`。
 - `scope.textBoxes` 为 `true` 时，每张 `worksheet` 带 `textBoxes`。没有文本框时为空数组。
   按该表 worksheet drawing 部件顺序、同一部件内按锚点文档顺序，组合里符合条件的框展开后仍按遇到的顺序。
-  每张字段顺序：`id`、`cNvPrId`、`name`、`anchor`，然后按锚点种类跟位置字段（规则与工作表图相同），再跟 `text`、`stable`。
+  每张字段顺序：`id`、`cNvPrId`、`name`、`anchor`，然后按锚点种类跟位置字段（规则与工作表图相同），再跟 `text`，
+  然后 `sz`、`color`、`bold`、`italic`、`underline`、`font`、`eastAsiaFont`、`align`、`textAnchor`、`stable`。
   `cNvPrId` / `name` / `anchor` / 位置字段 / `stable` 规则与图相同。`text` 取 `xdr:txBody` 可见 `a:t`，规则对齐 pptx 形状 `text`。不把框内字做成段落树。
+  `anchor` 仍是单元格锚点。框内垂直对齐是 `textAnchor`。九个格式键规则与 pptx 形状相同。
 - `scope.maths` 为 `true` 时，每张 `worksheet` 带 `maths`。没有公式框时为空数组。不依赖单元格切片。
   按该表 worksheet drawing 里被收入的公式框文档顺序。组合里符合条件的展开。
   每条字段顺序：`id`、`cNvPrId`、`name`、`anchor`，然后按锚点种类跟位置字段（规则与工作表图相同），再跟 `text`、`stable`。
@@ -990,8 +993,9 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   `text` 为该 `oMath` 内 `m:t` 拼接；忽略 `a:fld` 外壳。不把 OMML 原文、不把 `expr` 放进树。
   Fallback 文本框不进 `textBoxes`。docx / pptx 见各自分册。
 - `scope.shapes` 为 `true` 时，每张 `worksheet` 带 `shapes`。没有形状时为空数组。顺序与文本框相同。
-  每张字段顺序：`id`、`cNvPrId`、`name`、`anchor`，然后按锚点种类跟位置字段（规则与工作表图相同），再跟 `prst`，有 `xdr:txBody` 再跟 `text`，最后 `stable`。
-  `prst` 取 `a:prstGeom/@prst`，没有则为 `null`。`text` 规则与文本框相同。
+  每张字段顺序：`id`、`cNvPrId`、`name`、`anchor`，然后按锚点种类跟位置字段（规则与工作表图相同），再跟 `prst`，有 `xdr:txBody` 再跟 `text`，
+  然后 `sz`、`color`、`bold`、`italic`、`underline`、`font`、`eastAsiaFont`、`align`、`textAnchor`，最后 `stable`。
+  `prst` 取 `a:prstGeom/@prst`，没有则为 `null`。`text` 规则与文本框相同。没有 `txBody` 则没有 `text` 与格式键。
 - `scope.connectors` 为 `true` 时，每张 `worksheet` 带 `connectors`。没有连接线时为空数组。顺序与文本框相同。
   每条字段顺序：`id`、`cNvPrId`、`name`、`anchor`，然后按锚点种类跟位置字段（规则与工作表图相同），再跟 `prst`、`stable`。
   `prst` 取 `a:prstGeom/@prst`，没有则为 `null`。不报 `text`。
@@ -1208,6 +1212,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
 | `model3ds[]` 的 `to` / `anchor` / 偏移 / `cx` / `cy` | 可选。规则与 `insertModel3d` 相同 |
 | `textBoxes[]` / `shapes[]` / `connectors[]` / `smartArts[]` 的 `to` / `anchor` / 偏移 / `cx` / `cy` | 可选。规则与对应 insert 相同 |
 | `textBoxes[].text` / `shapes[].text` | 可选。可见纯文本 |
+| `textBoxes[]` / `shapes[]` 的文字格式 | 可选。与 `setShapeFormat` 相同 |
 | `maths[].text` | 必须。非空。写入一条 `m:r` / `m:t`。出现 `expr` / `kind` 报 `InvalidField` |
 | `maths[].from` | 可选。左上角单元格，A1。省略当作 `A1` |
 | `maths[]` 的 `to` / `anchor` / 偏移 / `cx` / `cy` | 可选。规则与 `insertMath` 相同 |
@@ -1976,7 +1981,7 @@ docx / pptx 上发此 op 报 `InvalidField`。不标重算。
 `customSheetViews` / 当前 `sheetViews` / 可选 `pageMargins`，不新建部件。
 `groupRows` / `ungroupRows` / `groupCols` / `ungroupCols` / `setOutline` 脏目标表的 `sheetPr` / `sheetFormatPr` / `cols` / `sheetData` 行属性，不新建部件。
 页眉图还可以脏 `drawingHF` 指向的 drawing、工作表 `.rels`、`/xl/media/…` 与 `[Content_Types].xml`。
-文本框、形状与连接线 op、`groupShapes` / `ungroup` 以及 `setShapeText` 还可以脏 worksheet drawing 及其 `.rels`。
+文本框、形状与连接线 op、`groupShapes` / `ungroup` 以及 `setShapeText` / `setShapeFormat` 还可以脏 worksheet drawing 及其 `.rels`。
 `insertOle` / `deleteOle` 还可以脏工作表 `oleObjects`、worksheet drawing、`legacyDrawing` VML、工作表 `.rels`、VML `.rels`、
 `/xl/embeddings/…`、`/xl/media/…` 与 `[Content_Types].xml`。
 `insertSlicer` / `deleteSlicer` 还可以脏 `/xl/slicers/…`、`/xl/slicerCaches/…`、worksheet drawing、工作表 `extLst` 的 `slicerList`、
@@ -2439,6 +2444,10 @@ docx / pptx 上发此 op 报 `InvalidField`。pptx 改画布坐标请用 `setPic
 - **`text`**
   - 可选
   - 可见纯文本，省略则空 `txBody`
+- **`sz` / `color` / `bold` / `italic` / `underline` / `font` / `eastAsiaFont` / `align` / `textAnchor`**
+  - 可选
+  - 规则与主契约 `setShapeFormat` 相同
+  - `anchor` 仍是单元格锚点，不要用来表示框内垂直对齐
 - **`prst`**
   - 可选
   - `a:prstGeom/@prst`
@@ -2450,6 +2459,7 @@ docx / pptx 上发此 op 报 `InvalidField`。pptx 改画布坐标请用 `setPic
   - 出现报 `InvalidField`
 
 写入 `xdr:sp`：空 `xdr:cNvSpPr`（不写 `txBox`），始终带空或有字的 `xdr:txBody`，默认实心填充 `FFFFFF` 与线宽 `9525` 的黑色描边，与已过 `insertTextBox` 同一套线填。
+给了文字格式字段则按 `setShapeFormat` 写入该 `txBody`。省略则缺省 `sz="1100"`。
 不写 `xdr:style`，不写 `a16:creationId`。`cNvPr/@name` 写成「形状 {cnv}」。新 `cNvPr/@id` 取该表已有全部 `cNvPr` 的最大整数加 1。
 缺 `cx` / `cy` 时用 `1828800` × `914400`。docx 上发此 op 报 `InvalidField`。
 

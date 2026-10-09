@@ -20,7 +20,7 @@ use super::ole;
 use super::omml;
 use super::picture;
 use super::protect;
-use super::request::PptxOp;
+use super::request::{PptxOp, SetShapeFormatOp};
 use super::section;
 use super::shape;
 use super::show;
@@ -88,6 +88,9 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                 })?;
                 shape::set_txbody_text(tx, &op.text);
                 pkg.set(&part, doc.to_bytes()?)?;
+            }
+            PptxOp::SetShapeFormat(op) => {
+                apply_set_shape_format(&mut pkg, &pres_part, &pres.root, &slides, op, i)?;
             }
             PptxOp::InsertShape(op) => {
                 let meta = slides.get(op.slide - 1).ok_or_else(|| {
@@ -1370,6 +1373,78 @@ fn reject_notes_image(
     if let Some(sp) = notes::find_any_sp_by_key(root, key) {
         notes::reject_slide_image(sp, i)?;
     }
+    Ok(())
+}
+
+fn apply_set_shape_format(
+    pkg: &mut Package,
+    pres_part: &str,
+    pres_root: &crate::xml::Element,
+    slides: &[shape::SlideMeta],
+    op: &SetShapeFormatOp,
+    i: usize,
+) -> Result<(), Error> {
+    if op.id.starts_with("master:") {
+        let ph = master::parse_placeholder_id(&op.id, i)?;
+        return master::set_format(pkg, pres_part, pres_root, &ph, &op.id, &op.format, i);
+    }
+    if op.id.contains("/table:") {
+        let target = table::parse_cell_id(&op.id, &format!("ops[{i}].id"))?;
+        let part = notes_or_slide_part(
+            pkg,
+            slides,
+            target.table.slide,
+            target.table.on_notes,
+            ErrorKind::TableNotFound { id: op.id.clone() },
+            format!("ops[{i}].id"),
+        )?;
+        let mut doc = xml::parse(pkg.get(&part)?)?;
+        table::set_cell_format(&mut doc, &op.id, &target, &op.format, i)?;
+        pkg.set(&part, doc.to_bytes()?)?;
+        return Ok(());
+    }
+    let target = shape::parse_shape_id(&op.id, i)?;
+    let meta = slides.get(target.slide - 1).ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::SlideNotFound {
+                n: target.slide as u32,
+            },
+            format!("ops[{i}].id"),
+        )
+    })?;
+    let part = if target.on_notes {
+        notes::notes_slide_part(pkg, &meta.part)?.ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::ShapeNotFound { id: op.id.clone() },
+                format!("ops[{i}].id"),
+            )
+        })?
+    } else {
+        meta.part.clone()
+    };
+    let mut doc = xml::parse(pkg.get(&part)?)?;
+    if target.on_notes {
+        if let Some(sp) = notes::find_any_sp_by_key(&doc.root, &target.key) {
+            notes::reject_slide_image(sp, i)?;
+        }
+    }
+    let sp = shape::find_shape_mut(&mut doc.root, &target.key).ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::ShapeNotFound { id: op.id.clone() },
+            format!("ops[{i}].id"),
+        )
+    })?;
+    if target.on_notes {
+        notes::reject_slide_image(sp, i)?;
+    }
+    let tx = sp.child_by_local_mut("txBody").ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::ShapeHasNoText { id: op.id.clone() },
+            format!("ops[{i}].id"),
+        )
+    })?;
+    crate::drawing_text::apply(tx, &op.format);
+    pkg.set(&part, doc.to_bytes()?)?;
     Ok(())
 }
 
