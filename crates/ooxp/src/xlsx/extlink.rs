@@ -32,6 +32,13 @@ pub struct DeleteExternalLinkOp {
     pub index: usize,
 }
 
+#[derive(Debug, Clone)]
+pub struct SetExternalLinkOp {
+    pub id: String,
+    pub index: usize,
+    pub path: String,
+}
+
 pub fn parse_external_link_id(id: &str, json_path: &str) -> Result<usize, Error> {
     let rest = id.strip_prefix("extlink:").ok_or_else(|| {
         Error::with_path(
@@ -211,6 +218,63 @@ pub(crate) fn delete(
         rels.remove_by_id(&rid);
         rels.write_to(pkg, wb_part)?;
     }
+    Ok(())
+}
+
+pub(crate) fn set_path(
+    pkg: &mut Package,
+    wb: &Document,
+    wb_part: &str,
+    op: &SetExternalLinkOp,
+    op_index: usize,
+) -> Result<(), Error> {
+    let n = count(&wb.root);
+    if op.index == 0 || op.index > n {
+        return Err(not_found(&op.id, op_index));
+    }
+    let parent = wb
+        .root
+        .child_by_local("externalReferences")
+        .ok_or_else(|| not_found(&op.id, op_index))?;
+    let el = parent
+        .children_by_local("externalReference")
+        .into_iter()
+        .nth(op.index - 1)
+        .ok_or_else(|| not_found(&op.id, op_index))?;
+    let rid = el.attr_local("id").ok_or_else(|| {
+        Error::new(ErrorKind::XmlMissing {
+            parent: "externalReference".into(),
+            child: "r:id".into(),
+        })
+    })?;
+    let Some(part) = resolve_internal_part(pkg, wb_part, rid)? else {
+        return Err(not_found(&op.id, op_index));
+    };
+    let doc = xml::parse(pkg.get(&part)?)?;
+    let Some(book) = doc.root.child_by_local("externalBook") else {
+        return Err(Error::with_path(
+            ErrorKind::InvalidExternalLink {
+                field: "kind".into(),
+            },
+            format!("ops[{op_index}].id"),
+        ));
+    };
+    let book_rid = book.attr_local("id").ok_or_else(|| {
+        Error::new(ErrorKind::XmlMissing {
+            parent: "externalBook".into(),
+            child: "r:id".into(),
+        })
+    })?;
+    let target = target_from_path(&op.path);
+    let mut rels = Relationships::from_package(pkg, &part)?;
+    let rel = rels.find_by_id_mut(book_rid).ok_or_else(|| {
+        Error::new(ErrorKind::RelNotFound {
+            source: RelSource::Part(part.clone()),
+            rid: book_rid.to_string(),
+        })
+    })?;
+    rel.target = target;
+    rels.write_to(pkg, &part)?;
     Ok(())
 }
 

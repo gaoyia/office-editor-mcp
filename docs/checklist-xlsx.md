@@ -8,7 +8,7 @@
 
 Microsoft Excel 16.0 已打开，用户确认通过。本机若装了 WPS，`Excel.Application` 会被抢走，测试仍直接启动 `EXCEL.EXE` 再挂 COM。
 
-C、I、A、O、Xp、Xvg、Xem、X3d、Xom、Xtf、Xfl、Xc、Xh、Xfs、Xtl 这几组现在由 `manual-check/office/cases/xlsx-*.ps1` 自动判定，
+C、I、A、O、Xp、Xvg、Xem、X3d、Xom、Xtf、Xfl、Xc、Xh、Xfs、Xtl、Xef 这几组现在由 `manual-check/office/cases/xlsx-*.ps1` 自动判定，
 跑 `pwsh -File manual-check\office\run.ps1 -Case 'xlsx-*'` 即可复现，逐条结果落在 `manual-check/office/out/office-results.csv`。
 2026-09-27 补跑 `xlsx-pictures.ps1`，Xp1–Xp7 通过。同日补跑 `xlsx-charts.ps1`，Xc1–Xc7 通过。
 同日补跑 `xlsx-create-pictures.ps1`，C8–C10 通过。同日补跑 `xlsx-create-charts.ps1`，C11–C13 通过。
@@ -35,6 +35,7 @@ C、I、A、O、Xp、Xvg、Xem、X3d、Xom、Xtf、Xfl、Xc、Xh、Xfs、Xtl 这
 2026-10-10 补跑 `xlsx-charts-rare-remain.ps1`，Xcx1–Xcx5 通过。无 Repair。
 2026-10-10 补跑 `xlsx-cf-spark-style.ps1`，Xfs1–Xfs5 通过。无 Repair。
 2026-10-10 补跑 `xlsx-timelines.ps1`，Xtl1–Xtl5 通过。COM `SlicerCaches` 类型为 2，无 Repair。
+2026-10-10 补跑 `xlsx-extpath-datatable.ps1`，Xef1–Xef5 通过。无 Repair。
 
 - **C1** ✅
   - Excel 16.0 打开 `manual-check/office/out/xlsx-create.xlsx`，标题栏无 Repair
@@ -331,6 +332,13 @@ C、I、A、O、Xp、Xvg、Xem、X3d、Xom、Xtf、Xfl、Xc、Xh、Xfs、Xtl 这
   - 占用时删得 `NotImplemented`
   - 清公式后再删计数为 0
   - 缺 `path` / `id=slide:1` 拒写
+- **Xef1–Xef5** ✅
+  - Excel 16.0：`xlsx-extpath-datatable.ps1`，5 PASS / 0 FAIL
+  - 列输入表主格 `=TABLE(,C1)`、`dataTableRef=B2:B4`，从属格 `dataTable` 且 `formula` 为 null
+  - Excel 打开数据表无 Repair，COM `B2` 为 `=TABLE(,C1)`
+  - `setExternalLink` 后 `LinkSources` 含新文件、单元格公式仍含 `[1]`
+  - 主格改成 `=TABLE(,D1)` 后 inspect 与 COM 一致，XML `<f>` 无正文
+  - 从属格 / 非 TABLE / 缺 `path` / 错 id 拒写
 - **Xon1–Xon5** ✅
   - Excel 16.0：`xlsx-outline.ps1`，5 PASS / 0 FAIL
   - 默认 `outline.summaryBelow=true`、名单空
@@ -1279,6 +1287,36 @@ inspect 只读进树。create 不生成。apply 不新开编辑。脚本 `manual
 - **Xel5**
   - 检查：拒写
   - 通过标准：缺 `path`、`id` 为 `slide:1` 得 `InvalidField` 或 `InvalidId`
+  - 均未写文件
+  - 不强制开 Excel
+
+## 外部引用路径与数据表公式
+
+用库 create 产物再 apply；数据表先由 Excel 16.0 `Range.Table` 写入再 inspect / 改主格。
+脚本 `manual-check/office/cases/xlsx-extpath-datatable.ps1`。编号用 **Xef**。不要和 Xel、Xf 撞。不打开目标文件求值。不求 TABLE 结果。
+
+- **Xef1**
+  - 检查：inspect 数据表
+  - 通过标准：列输入表主格 `dataTable` 为真，`dataTableRef` 为 `B2:B4`，`formula` 为 `=TABLE(,C1)`
+  - 从属格 `B3` 有 `dataTable` 且 `formula` 为 `null`
+- **Xef2**
+  - 检查：Excel 打开数据表
+  - 通过标准：无 Repair
+  - COM `B2` 公式为 `=TABLE(,C1)`
+- **Xef3**
+  - 检查：改路径
+  - 通过标准：`setExternalLink` 后 Excel 无 Repair
+  - COM `LinkSources` 含新文件名
+  - inspect `path` 含新文件名
+  - 单元格公式仍含 `[1]`
+- **Xef4**
+  - 检查：改主格 TABLE
+  - 通过标准：主格改成 `=TABLE(,D1)` 后 inspect 与 COM 均为 `=TABLE(,D1)`
+  - 无 Repair
+  - XML `<f>` 无正文
+- **Xef5**
+  - 检查：拒写
+  - 通过标准：对从属格 `setCell`、对主格写 `=A1`、`setExternalLink` 缺 `path`、`id` 为 `slide:1` 得 `NotImplemented` 或 `InvalidField` / `InvalidId`
   - 均未写文件
   - 不强制开 Excel
 

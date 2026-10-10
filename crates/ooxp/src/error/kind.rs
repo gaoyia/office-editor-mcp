@@ -726,6 +726,7 @@ define_error_kinds! {
     CustomPropNotFound { id: String } => vec![Self::CustomPropNotFound { id: "prop:Editor".into() }],
     SharedFormulaMaster { cell: String } => vec![Self::SharedFormulaMaster { cell: "A1".into() }],
     DataTableFormula { cell: String } => vec![Self::DataTableFormula { cell: "A1".into() }],
+    InvalidDataTableFormula => vec![Self::InvalidDataTableFormula],
     ArrayFormulaPart { cell: String } => vec![Self::ArrayFormulaPart { cell: "A1".into() }],
     FormulaGroupOverlap { cell: String } => vec![Self::FormulaGroupOverlap { cell: "A1".into() }],
     FormulaRangeNotTopLeft => vec![Self::FormulaRangeNotTopLeft],
@@ -1607,6 +1608,7 @@ impl ErrorKind {
             | Self::FormulaRangeNotTopLeft
             | Self::SharedNeedsRef
             | Self::FormulaMustStartWithEquals
+            | Self::InvalidDataTableFormula
             | Self::InvalidCellValue
             | Self::OpRequiresField { .. }
             | Self::SetCellWorksheetOnly

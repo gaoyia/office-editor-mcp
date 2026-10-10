@@ -263,7 +263,8 @@ workbook `.rels` 补一条 externalLink 关系（Type
 `http://schemas.openxmlformats.org/officeDocument/2006/relationships/externalLink`）。
 该部件 `.rels` 一条 externalLinkPath（Type `http://schemas.openxmlformats.org/officeDocument/2006/relationships/externalLinkPath`，
 `TargetMode` 为 `External`）。
-workbook.xml 写 `<externalReferences>`。不写 `xxl21` / 缓存值。删光则去掉 `<externalReferences>`、部件、关系与 Override。create 本期不写外部引用。
+workbook.xml 写 `<externalReferences>`。不写 `xxl21` / 缓存值。删光则去掉 `<externalReferences>`、部件、关系与 Override。
+`setExternalLink` 只改该链 `.rels` 的 `Target`，不新建部件，已有 `xxl21:alternateUrls` 原样留下。create 本期不写外部引用。
 
 ## create 时的最小包（docx）
 

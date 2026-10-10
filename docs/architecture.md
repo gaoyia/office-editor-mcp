@@ -113,7 +113,7 @@ apply 可改目标单元格，也可换、插、删工作表图，并可改 `one
 往页眉插图可能新建另一份 drawing 并写 `<drawingHF>`。改单元格值或公式之后，把工作簿标成打开时需要重算，必要时删掉 `xl/calcChain.xml`。
 `setCellStyle` 可改 `styles.xml`，不求值公式。也可用 `setColWidth` / `setRowHeight` / `mergeRange` / `unmergeRange` 写 `cols`、
 `row/@ht` 与 `mergeCells`：只改被点名的列、行与合并区，不算最适列宽，不按列宽反推 `twoCell` 图尺寸。
-也可改共享公式主格（保住整组或拆成独立公式）并读写数组公式 `t="array"`，不求值、不改数据表公式。
+也可改共享公式主格（保住整组或拆成独立公式）并读写数组公式 `t="array"`，并可改数据表主格的 `TABLE` 输入格，不求值、不新建数据表。
 也可用 `insertDataValidation` / `setDataValidation` / `deleteDataValidation` 读写工作表 `dataValidations`：公式当字符串，不求值、不展开下拉列表；`extLst` 里的扩展校验原样留下。
 也可用 `insertConditionalFormat` / `setConditionalFormat` / `deleteConditionalFormat` 读写工作表 `conditionalFormatting`：公式当字符串，
 颜色写入 `styles.xml` 的 `dxf`；可写 `top10` / `aboveAverage` / 文本类规则；不渲染、不求值；`extLst` 里的扩展条件格式原样留下。
@@ -283,7 +283,7 @@ workbook `extLst` 的 `slicerCaches` / `timelineCacheRefs`、workbook 的 `<defi
 透视源的插入还脏 `/xl/pivotCache/pivotCacheDefinitionN.xml` 的 `extLst`（`x14:pivotCacheDefinition/@pivotCacheId`）。
 时间线还会把该透视表 `updatedVersion` 升到至少 8，不在库里执行筛选，不标重算。
 xlsx 也可列出、插入并删除工作簿外部数据连接，脏 `/xl/connections.xml`、workbook `.rels` 与内容类型，不向数据源发请求，不把查询结果写进 `sheetData`，不标重算。
-xlsx 也可列出、插入并删除对其他工作簿的外部引用，脏 workbook `<externalReferences>`、`/xl/externalLinks/…` 及其 `.rels`、关系与内容类型，不打开目标文件，不求值，不标重算。
+xlsx 也可列出、插入、删除并改路径对其他工作簿的外部引用，脏 workbook `<externalReferences>`、`/xl/externalLinks/…` 及其 `.rels`、关系与内容类型；改路径只动该链 `.rels` 的 `Target`，不写 `xxl21:alternateUrls`，不打开目标文件，不求值，不标重算。
 xlsx 也可用 `setProtection` 改工作表 `sheetProtection` 或 workbook `workbookProtection`，可写 SHA-512 哈希，不标重算。
 xlsx 也可改工作表上的页眉页脚原文，并可对 `worksheet` 页眉槽位插换删 DrawingML 图，脏 `headerFooter` / `drawingHF` 与对应 drawing。
 xlsx 也可改文件属性，脏 `docProps`。docx 可改被点名的段落，可在主文档、页眉页脚与表格单元格插删段落，可插删表以及行与列并合并拆分单元格，可接受或拒绝 run 级、段落标记、表行与表属性修订，可插删改超链接与书签，可插改删域指令（不求值；

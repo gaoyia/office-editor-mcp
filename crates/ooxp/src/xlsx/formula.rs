@@ -1,6 +1,7 @@
-//! 共享公式与数组公式：inspect 索引、相对 A1 展开、apply 占用检查。
+//! 共享公式、数组公式与数据表公式：inspect 索引、相对 A1 展开、apply 占用检查。
 //!
 //! 展开只平移公式里的 A1 单元格与 A1 区域（尊重 `$`）。这不是插行引用平移引擎。
+//! 数据表不求值；主格 `TABLE` 只对应 `r1` / `r2` / `dt2D` / `dtr`。
 
 use std::collections::HashMap;
 
@@ -49,6 +50,110 @@ pub fn shown_formula(body: &str) -> String {
 
 pub fn formula_body(formula: &str) -> &str {
     formula.strip_prefix('=').unwrap_or(formula)
+}
+
+pub fn xml_true(val: Option<&str>) -> bool {
+    matches!(val.map(str::trim), Some("1" | "true" | "TRUE" | "on"))
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TableShape {
+    Column,
+    Row,
+    TwoD,
+}
+
+pub fn table_shape(dt2d: bool, dtr: bool) -> TableShape {
+    if dt2d {
+        TableShape::TwoD
+    } else if dtr {
+        TableShape::Row
+    } else {
+        TableShape::Column
+    }
+}
+
+pub fn shown_cell_ref(raw: &str) -> String {
+    match a1::parse_cell(raw) {
+        Ok(c) => a1::format_cell(c.col, c.row),
+        Err(_) => raw.to_string(),
+    }
+}
+
+pub fn shown_table_formula(dt2d: bool, dtr: bool, r1: &str, r2: Option<&str>) -> String {
+    let r1 = shown_cell_ref(r1);
+    if dt2d {
+        let r2 = r2.map(shown_cell_ref).unwrap_or_default();
+        format!("=TABLE({r1},{r2})")
+    } else if dtr {
+        format!("=TABLE({r1},)")
+    } else {
+        format!("=TABLE(,{r1})")
+    }
+}
+
+pub fn shown_table_from_elem(f: &Element) -> Option<String> {
+    let r1 = f.attr("r1")?;
+    if r1.trim().is_empty() {
+        return None;
+    }
+    Some(shown_table_formula(
+        xml_true(f.attr("dt2D")),
+        xml_true(f.attr("dtr")),
+        r1,
+        f.attr("r2"),
+    ))
+}
+
+/// 解析 `=TABLE(a,b)`。空参数为 `None`。不是恰好一个逗号的 `TABLE(...)` 则 `None`。
+pub fn parse_table_formula(formula: &str) -> Option<(Option<CellRef>, Option<CellRef>)> {
+    let body = formula_body(formula).trim();
+    let rest = strip_prefix_ci(body, "TABLE")?;
+    let rest = rest.trim();
+    if !rest.starts_with('(') || !rest.ends_with(')') {
+        return None;
+    }
+    let inner = &rest[1..rest.len() - 1];
+    let comma = inner.find(',')?;
+    if inner[comma + 1..].contains(',') {
+        return None;
+    }
+    let a = inner[..comma].trim();
+    let b = inner[comma + 1..].trim();
+    let first = if a.is_empty() {
+        None
+    } else {
+        Some(a1::parse_cell(a).ok()?)
+    };
+    let second = if b.is_empty() {
+        None
+    } else {
+        Some(a1::parse_cell(b).ok()?)
+    };
+    Some((first, second))
+}
+
+pub fn args_match_shape(
+    first: Option<CellRef>,
+    second: Option<CellRef>,
+    shape: TableShape,
+) -> bool {
+    match shape {
+        TableShape::TwoD => first.is_some() && second.is_some(),
+        TableShape::Row => first.is_some() && second.is_none(),
+        TableShape::Column => first.is_none() && second.is_some(),
+    }
+}
+
+fn strip_prefix_ci<'a>(s: &'a str, prefix: &str) -> Option<&'a str> {
+    if s.len() < prefix.len() {
+        return None;
+    }
+    if s.get(..prefix.len())?.eq_ignore_ascii_case(prefix) {
+        Some(&s[prefix.len()..])
+    } else {
+        None
+    }
 }
 
 pub fn index_sheet(sheet_data: &Element) -> FormulaIndex {
@@ -456,5 +561,36 @@ mod tests {
     #[test]
     fn shift_out_of_bounds_is_ref() {
         assert_eq!(shift_a1_formula("A1048576", c(1, 1), c(1, 2)), "#REF!");
+    }
+
+    #[test]
+    fn parse_table_column_and_row() {
+        assert_eq!(
+            parse_table_formula("=TABLE(,C1)"),
+            Some((None, Some(c(3, 1))))
+        );
+        assert_eq!(
+            parse_table_formula("=TABLE(C10,)"),
+            Some((Some(c(3, 10)), None))
+        );
+        assert_eq!(
+            parse_table_formula("=TABLE(X1,Y1)"),
+            Some((Some(c(24, 1)), Some(c(25, 1))))
+        );
+        assert!(parse_table_formula("=A1").is_none());
+        assert!(parse_table_formula("=TABLE(C1)").is_none());
+    }
+
+    #[test]
+    fn shown_table_matches_excel() {
+        assert_eq!(shown_table_formula(false, false, "C1", None), "=TABLE(,C1)");
+        assert_eq!(
+            shown_table_formula(false, true, "C10", None),
+            "=TABLE(C10,)"
+        );
+        assert_eq!(
+            shown_table_formula(true, true, "X1", Some("Y1")),
+            "=TABLE(X1,Y1)"
+        );
     }
 }

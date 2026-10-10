@@ -3883,6 +3883,28 @@
         }
       }
     },
+    "setExternalLinkOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "path"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setExternalLink"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
     "insertChartSheetOp": {
       "type": "object",
       "required": [

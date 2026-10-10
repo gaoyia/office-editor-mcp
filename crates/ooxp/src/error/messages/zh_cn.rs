@@ -1115,7 +1115,10 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             "{cell} 是仍有从属格的共享公式主格，mergeRange 不能盖住它"
         ),
         ErrorKind::DataTableFormula { cell } => {
-            format!("{cell} 属于数据表公式，本期不能改")
+            format!("{cell} 属于数据表公式，请改主格的 TABLE 公式")
+        }
+        ErrorKind::InvalidDataTableFormula => {
+            "数据表主格公式必须是与现有行列方向一致的 TABLE".into()
         }
         ErrorKind::ArrayFormulaPart { cell } => {
             format!("{cell} 落在数组公式范围内，请改左上角主格")

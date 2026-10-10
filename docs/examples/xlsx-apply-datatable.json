@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "C:\\data\\book.xlsx",
+  "output": "C:\\data\\book.table.xlsx",
+  "ops": [
+    {
+      "op": "setCell",
+      "id": "cell:Sheet1!B2",
+      "formula": "=TABLE(,D1)"
+    }
+  ]
+}

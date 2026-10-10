@@ -75,6 +75,10 @@ impl Relationships {
         self.rels.iter().find(|r| r.id == id)
     }
 
+    pub fn find_by_id_mut(&mut self, id: &str) -> Option<&mut Relationship> {
+        self.rels.iter_mut().find(|r| r.id == id)
+    }
+
     pub fn find_office_document(&self) -> Option<&Relationship> {
         self.rels
             .iter()

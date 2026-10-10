@@ -829,6 +829,9 @@ pub fn apply(bytes: &[u8], ops: &[XlsxOp]) -> Result<Vec<u8>, Error> {
                 )?;
                 workbook_dirty = true;
             }
+            XlsxOp::SetExternalLink(op) => {
+                extlink::set_path(&mut pkg, &wb_doc, &wb_part, op, i)?;
+            }
             XlsxOp::SetTextBoxSize(op) => {
                 let part = require_drawing_worksheet(
                     &sheet_index,
@@ -1391,13 +1394,21 @@ pub(crate) fn apply_set_cell(
         .map(formula::index_sheet)
         .unwrap_or_default();
 
-    if let Some(formula::Occupied::DataTable { .. }) = formula::occupy_at(&index, cell) {
-        return Err(Error::with_path(
-            ErrorKind::DataTableFormula {
-                cell: a1::format_cell(cell.col, cell.row),
-            },
-            format!("ops[{op_index}].id"),
-        ));
+    if let Some(formula::Occupied::DataTable { master }) = formula::occupy_at(&index, cell) {
+        let extras = op.array.is_some()
+            || op.array_ref.is_some()
+            || op.shared.is_some()
+            || op.shared_ref.is_some()
+            || op.value.is_some();
+        if master != cell || op.formula.is_none() || extras {
+            return Err(Error::with_path(
+                ErrorKind::DataTableFormula {
+                    cell: a1::format_cell(cell.col, cell.row),
+                },
+                format!("ops[{op_index}].id"),
+            ));
+        }
+        return write_data_table_inputs(worksheet, cell, op, op_index);
     }
 
     let array_master = match formula::occupy_at(&index, cell) {
@@ -1482,6 +1493,59 @@ pub(crate) fn apply_set_cell(
     }
 
     apply_plain_or_clear(worksheet, cell, op);
+    Ok(())
+}
+
+fn write_data_table_inputs(
+    worksheet: &mut Element,
+    cell: a1::CellRef,
+    op: &SetCellOp,
+    op_index: usize,
+) -> Result<(), Error> {
+    let formula = op.formula.as_deref().unwrap_or("");
+    let Some((first, second)) = formula::parse_table_formula(formula) else {
+        return Err(Error::with_path(
+            ErrorKind::InvalidDataTableFormula,
+            format!("ops[{op_index}].formula"),
+        ));
+    };
+    let sheet_data = ensure_sheet_data(worksheet);
+    let c = ensure_cell(sheet_data, cell);
+    let Some(f) = c.child_by_local_mut("f") else {
+        return Err(Error::new(ErrorKind::XmlMissing {
+            parent: "c".into(),
+            child: "f".into(),
+        }));
+    };
+    let shape = formula::table_shape(
+        formula::xml_true(f.attr("dt2D")),
+        formula::xml_true(f.attr("dtr")),
+    );
+    if !formula::args_match_shape(first, second, shape) {
+        return Err(Error::with_path(
+            ErrorKind::InvalidDataTableFormula,
+            format!("ops[{op_index}].formula"),
+        ));
+    }
+    match (shape, first, second) {
+        (formula::TableShape::TwoD, Some(r1), Some(r2)) => {
+            f.set_attr("r1", a1::format_cell(r1.col, r1.row));
+            f.set_attr("r2", a1::format_cell(r2.col, r2.row));
+        }
+        (formula::TableShape::Row, Some(r1), None) => {
+            f.set_attr("r1", a1::format_cell(r1.col, r1.row));
+        }
+        (formula::TableShape::Column, None, Some(r1)) => {
+            f.set_attr("r1", a1::format_cell(r1.col, r1.row));
+        }
+        _ => {
+            return Err(Error::with_path(
+                ErrorKind::InvalidDataTableFormula,
+                format!("ops[{op_index}].formula"),
+            ));
+        }
+    }
+    f.children.clear();
     Ok(())
 }
 

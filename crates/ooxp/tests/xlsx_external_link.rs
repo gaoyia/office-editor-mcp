@@ -308,3 +308,107 @@ fn create_rejects_external_links() {
     assert_eq!(err.code(), ErrorCode::InvalidField);
     assert!(!path.exists());
 }
+
+#[test]
+fn set_external_link_changes_target() {
+    let src = create_book("setp");
+    let linked = tmp("setp-in");
+    apply(
+        &src,
+        &linked,
+        json!([{
+            "op": "insertExternalLink",
+            "id": "xlsx:workbook",
+            "path": r"C:\data\source.xlsx",
+            "sheets": ["Sheet1"]
+        }]),
+    )
+    .unwrap();
+    let with_f = tmp("setp-f");
+    apply(
+        &linked,
+        &with_f,
+        json!([{ "op": "setCell", "id": "cell:Sheet1!B1", "formula": "=[1]Sheet1!A1" }]),
+    )
+    .unwrap();
+    let out = tmp("setp-out");
+    apply(
+        &with_f,
+        &out,
+        json!([{
+            "op": "setExternalLink",
+            "id": "extlink:1",
+            "path": r"C:\data\other.xlsx"
+        }]),
+    )
+    .unwrap();
+    let tree = inspect(&out, json!({ "externalLinks": true }));
+    assert_eq!(
+        tree["externalLinks"][0]["path"],
+        r"file:///C:\data\other.xlsx"
+    );
+    let rels = part_text(&out, "xl/externalLinks/_rels/externalLink1.xml.rels");
+    assert!(rels.contains("other.xlsx"), "{rels}");
+    assert!(!rels.contains("source.xlsx"), "{rels}");
+    let xml = part_text(&out, "xl/externalLinks/externalLink1.xml");
+    assert!(!xml.contains("xxl21"), "{xml}");
+    let cells = inspect(&out, json!({ "sheet": "Sheet1", "range": "A1:B1" }));
+    let b1 = &cells["sheets"][0]["cells"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c["id"] == "cell:Sheet1!B1")
+        .unwrap();
+    assert_eq!(b1["formula"], json!("=[1]Sheet1!A1"));
+}
+
+#[test]
+fn set_external_link_rejects_bad_id_and_path() {
+    let src = create_book("setp-bad");
+    let linked = tmp("setp-bad-in");
+    apply(
+        &src,
+        &linked,
+        json!([{
+            "op": "insertExternalLink",
+            "id": "xlsx:workbook",
+            "path": "a.xlsx"
+        }]),
+    )
+    .unwrap();
+    let out = tmp("setp-bad-out");
+    let err = apply(
+        &linked,
+        &out,
+        json!([{ "op": "setExternalLink", "id": "extlink:1" }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+    assert!(!out.exists());
+
+    let err = apply(
+        &linked,
+        &out,
+        json!([{
+            "op": "setExternalLink",
+            "id": "slide:1",
+            "path": "b.xlsx"
+        }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidId);
+    assert!(!out.exists());
+
+    let err = apply(
+        &src,
+        &out,
+        json!([{
+            "op": "setExternalLink",
+            "id": "extlink:1",
+            "path": "b.xlsx"
+        }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::IdNotFound);
+    assert!(!out.exists());
+}

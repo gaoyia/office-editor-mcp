@@ -1080,6 +1080,9 @@
                 "$ref": "xlsx.schema.json#/$defs/deleteExternalLinkOp"
               },
               {
+                "$ref": "xlsx.schema.json#/$defs/setExternalLinkOp"
+              },
+              {
                 "$ref": "docx.schema.json#/$defs/insertOleOp"
               },
               {

@@ -128,6 +128,7 @@ $order = @(
     'xlsx-timelines'
     'xlsx-connections'
     'xlsx-external-link'
+    'xlsx-extpath-datatable'
     'xlsx-outline'
     'xlsx-custom-view'
     'xlsx-hyperlinks'

@@ -1251,8 +1251,12 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             "{cell} is a shared formula master with dependents; mergeRange cannot cover it"
         ),
         ErrorKind::DataTableFormula { cell } => format!(
-            "{cell} is part of a data table formula, which this version does not change"
+            "{cell} is part of a data table formula; change the master TABLE formula instead"
         ),
+        ErrorKind::InvalidDataTableFormula => {
+            "data table master formula must be TABLE matching the existing row or column layout"
+                .into()
+        }
         ErrorKind::ArrayFormulaPart { cell } => format!(
             "{cell} is inside an array formula; change the top-left master cell instead"
         ),

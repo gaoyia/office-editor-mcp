@@ -1579,6 +1579,7 @@ fn is_foreign_op(op_name: &str) -> bool {
             | "insertConnection"
             | "deleteConnection"
             | "insertExternalLink"
+            | "setExternalLink"
             | "deleteExternalLink"
             | "insertCustomView"
             | "deleteCustomView"

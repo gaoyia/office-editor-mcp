@@ -1,10 +1,13 @@
 //! 共享公式与数组公式：inspect 展开、主格保住或拆组、数组读写。
 
+use std::io::{Cursor, Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU32, Ordering};
 
 use ooxp::{run, ErrorCode, RunOutput};
 use serde_json::json;
+use zip::write::SimpleFileOptions;
+use zip::{CompressionMethod, ZipArchive, ZipWriter};
 
 static SEQ: AtomicU32 = AtomicU32::new(0);
 
@@ -58,12 +61,16 @@ fn apply(src: &Path, out: &Path, ops: serde_json::Value) -> Result<RunOutput, oo
 }
 
 fn inspect_cells(path: &Path) -> serde_json::Value {
+    inspect_cells_range(path, "A1:C3")
+}
+
+fn inspect_cells_range(path: &Path, range: &str) -> serde_json::Value {
     let RunOutput::Inspect(tree) = run(
         &json!({
             "schemaVersion": 1,
             "action": "inspect",
             "path": path.to_string_lossy(),
-            "scope": { "sheet": "Sheet1", "range": "A1:C3" }
+            "scope": { "sheet": "Sheet1", "range": range }
         })
         .to_string(),
         None,
@@ -73,6 +80,37 @@ fn inspect_cells(path: &Path) -> serde_json::Value {
     };
     tree["sheets"][0]["cells"].clone()
 }
+
+fn replace_sheet1(path: &Path, sheet_xml: &str) {
+    let bytes = std::fs::read(path).unwrap();
+    let mut zip = ZipArchive::new(Cursor::new(bytes)).unwrap();
+    let mut files = Vec::new();
+    for i in 0..zip.len() {
+        let mut f = zip.by_index(i).unwrap();
+        let name = f.name().to_string();
+        let mut buf = Vec::new();
+        f.read_to_end(&mut buf).unwrap();
+        files.push((name, buf));
+    }
+    drop(zip);
+    let mut cursor = Cursor::new(Vec::new());
+    {
+        let mut zw = ZipWriter::new(&mut cursor);
+        let opt = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
+        for (name, buf) in files {
+            zw.start_file(&name, opt).unwrap();
+            if name == "xl/worksheets/sheet1.xml" {
+                zw.write_all(sheet_xml.as_bytes()).unwrap();
+            } else {
+                zw.write_all(&buf).unwrap();
+            }
+        }
+        zw.finish().unwrap();
+    }
+    std::fs::write(path, cursor.into_inner()).unwrap();
+}
+
+const COL_TABLE: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData><row r="1"><c r="C1"><v>10</v></c><c r="D1"><v>20</v></c></row><row r="2"><c r="A2"><v>1</v></c><c r="B2"><f t="dataTable" ref="B2:B4" dt2D="0" dtr="0" r1="C1"/></c></row><row r="3"><c r="A3"><v>2</v></c><c r="B3"><v>4</v></c></row><row r="4"><c r="A4"><v>3</v></c><c r="B4"><v>6</v></c></row></sheetData></worksheet>"#;
 
 fn cell_of<'a>(cells: &'a serde_json::Value, id: &str) -> &'a serde_json::Value {
     cells
@@ -432,4 +470,113 @@ fn dependent_shared_ref_must_be_top_left() {
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);
     assert!(!out.exists());
+}
+
+fn with_col_table(tag: &str) -> PathBuf {
+    let path = create_book(tag);
+    replace_sheet1(&path, COL_TABLE);
+    path
+}
+
+fn part_text(path: &Path, name: &str) -> String {
+    let f = std::fs::File::open(path).unwrap();
+    let mut zip = ZipArchive::new(f).unwrap();
+    let mut zf = zip.by_name(name).unwrap();
+    let mut s = String::new();
+    zf.read_to_string(&mut s).unwrap();
+    s
+}
+
+#[test]
+fn inspect_expands_data_table() {
+    let path = with_col_table("dt-insp");
+    let cells = inspect_cells_range(&path, "A1:D4");
+    let b2 = cell_of(&cells, "cell:Sheet1!B2");
+    let b3 = cell_of(&cells, "cell:Sheet1!B3");
+    assert_eq!(b2["formula"], json!("=TABLE(,C1)"));
+    assert_eq!(b2["dataTable"], json!(true));
+    assert_eq!(b2["dataTableRef"], json!("B2:B4"));
+    assert_eq!(b3["dataTable"], json!(true));
+    assert!(b3["formula"].is_null());
+    assert!(b3.get("dataTableRef").is_none());
+}
+
+#[test]
+fn data_table_master_updates_r1() {
+    let src = with_col_table("dt-r1");
+    let out = tmp("dt-r1-out");
+    apply(
+        &src,
+        &out,
+        json!([{ "op": "setCell", "id": "cell:Sheet1!B2", "formula": "=TABLE(,D1)" }]),
+    )
+    .unwrap();
+    let cells = inspect_cells_range(&out, "A1:D4");
+    let b2 = cell_of(&cells, "cell:Sheet1!B2");
+    assert_eq!(b2["formula"], json!("=TABLE(,D1)"));
+    assert_eq!(b2["dataTable"], json!(true));
+    assert_eq!(b2["dataTableRef"], json!("B2:B4"));
+    let xml = part_text(&out, "xl/worksheets/sheet1.xml");
+    assert!(xml.contains(r#"r1="D1""#), "{xml}");
+    assert!(
+        xml.contains(r#"t="dataTable""#) && !xml.contains(">TABLE"),
+        "{xml}"
+    );
+}
+
+#[test]
+fn data_table_non_table_formula_is_invalid() {
+    let src = with_col_table("dt-bad");
+    let out = tmp("dt-bad-out");
+    let err = apply(
+        &src,
+        &out,
+        json!([{ "op": "setCell", "id": "cell:Sheet1!B2", "formula": "=A1" }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+    assert!(!out.exists());
+}
+
+#[test]
+fn data_table_dependent_is_not_implemented() {
+    let src = with_col_table("dt-dep");
+    let out = tmp("dt-dep-out");
+    let err = apply(
+        &src,
+        &out,
+        json!([{ "op": "setCell", "id": "cell:Sheet1!B3", "formula": "=A3" }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::NotImplemented);
+    assert!(!out.exists());
+}
+
+#[test]
+fn inspect_row_and_two_d_data_table() {
+    let row_path = create_book("dt-row");
+    replace_sheet1(
+        &row_path,
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData><row r="2"><c r="B2"><f t="dataTable" ref="B2:D2" dt2D="0" dtr="1" r1="C10"/></c><c r="C2"/><c r="D2"/></row></sheetData></worksheet>"#,
+    );
+    let row_cells = inspect_cells_range(&row_path, "A1:D2");
+    let b2 = cell_of(&row_cells, "cell:Sheet1!B2");
+    assert_eq!(b2["formula"], json!("=TABLE(C10,)"));
+    assert_eq!(b2["dataTableRef"], json!("B2:D2"));
+
+    let two = create_book("dt-2d");
+    replace_sheet1(
+        &two,
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData><row r="2"><c r="B2"><f t="dataTable" ref="B2:C3" dt2D="1" dtr="1" r1="X1" r2="Y1"/></c><c r="C2"/></row><row r="3"><c r="B3"/><c r="C3"/></row></sheetData></worksheet>"#,
+    );
+    let two_cells = inspect_cells_range(&two, "A1:C3");
+    let master = cell_of(&two_cells, "cell:Sheet1!B2");
+    assert_eq!(master["formula"], json!("=TABLE(X1,Y1)"));
+    assert_eq!(master["dataTableRef"], json!("B2:C3"));
+    apply(
+        &two,
+        &tmp("dt-2d-out"),
+        json!([{ "op": "setCell", "id": "cell:Sheet1!B2", "formula": "=TABLE(A1,B1)" }]),
+    )
+    .unwrap();
 }

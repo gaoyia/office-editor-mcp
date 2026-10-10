@@ -570,6 +570,7 @@ fn cell_to_json(
     let mut array = false;
     let mut array_ref: Option<String> = None;
     let mut data_table = false;
+    let mut data_table_ref: Option<String> = None;
     if let Some(f) = f_el {
         let ft = f.attr("t").unwrap_or("");
         let text = f.text_content();
@@ -609,8 +610,18 @@ fn cell_to_json(
             }
             "dataTable" => {
                 data_table = true;
+                if let Some(g) = index.tables.iter().find(|g| g.master == pref) {
+                    data_table_ref = Some(a1::format_range(g.start, g.end));
+                } else {
+                    data_table_ref = f
+                        .attr("ref")
+                        .and_then(|r| a1::parse_range(r).ok())
+                        .map(|(a, b)| a1::format_range(a, b));
+                }
                 if !text.trim().is_empty() {
                     formula = json!(formula::shown_formula(&text));
+                } else if let Some(s) = formula::shown_table_from_elem(f) {
+                    formula = json!(s);
                 }
             }
             _ if !text.trim().is_empty() => {
@@ -618,9 +629,15 @@ fn cell_to_json(
             }
             _ => {}
         }
-    } else if let Some(formula::Occupied::Array { master }) = formula::occupy_at(index, pref) {
-        if master != pref {
-            array = true;
+    } else {
+        match formula::occupy_at(index, pref) {
+            Some(formula::Occupied::Array { master }) if master != pref => {
+                array = true;
+            }
+            Some(formula::Occupied::DataTable { master }) if master != pref => {
+                data_table = true;
+            }
+            _ => {}
         }
     }
 
@@ -656,6 +673,9 @@ fn cell_to_json(
     }
     if data_table {
         obj["dataTable"] = json!(true);
+    }
+    if let Some(r) = data_table_ref {
+        obj["dataTableRef"] = json!(r);
     }
     Ok(obj)
 }

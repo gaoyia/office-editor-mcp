@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "C:\\data\\book.xlsx",
+  "output": "C:\\data\\book.repath.xlsx",
+  "ops": [
+    {
+      "op": "setExternalLink",
+      "id": "extlink:1",
+      "path": "C:\\data\\other.xlsx"
+    }
+  ]
+}

@@ -129,7 +129,7 @@
   - 读盘、写盘、创建目录失败
 - **`NotImplemented`**（退出码 2）
   - 第一期明确不做的动作
-  - 目前：对数据表公式发 `setCell`
+  - 目前：对数据表公式范围内非主格发 `setCell`，或对主格写 `value` / 清空 / `shared` / `array`
   - 对数组公式范围内非主格发 `setCell`
   - `setCell` 的 `sharedRef` 同时盖住两组及以上已有共享组，或 `sharedRef` / `arrayRef` 盖住数组公式、数据表，或 `arrayRef` 盖住已有共享组
   - `mergeRange` 盖住仍有从属格的共享公式主格、数组公式主格或数据表公式
@@ -629,7 +629,7 @@
   - 公式：`insertMath`、`setMath`、`deleteMath`
   - 切片器：`insertSlicer`、`deleteSlicer`
   - 连接：`insertConnection`、`deleteConnection`
-  - 外部引用：`insertExternalLink`、`deleteExternalLink`
+  - 外部引用：`insertExternalLink`、`setExternalLink`、`deleteExternalLink`
   - 自定义视图：`insertCustomView`、`deleteCustomView`、`showCustomView`
   - `setProtection`
 - xlsx 的 `insertComment` 的 `id` 必须是单元格 id
@@ -800,8 +800,11 @@
 - xlsx 的 `insertExternalLink` 的 id 必须是 `xlsx:workbook`
 - 必须给非空 `path`
 - `sheets` 为空数组或空表名报 `InvalidField`
-- `deleteExternalLink` 的 id 必须是 `extlink:{n}`
+- `deleteExternalLink` / `setExternalLink` 的 id 必须是 `extlink:{n}`
 - 序号不存在报 `IdNotFound`，不是外部引用 id 报 `InvalidId`
+- `setExternalLink` 必须给非空 `path`
+- `kind` 不是 `book` 报 `InvalidField`
+- 数据表主格 `formula` 不是与现有行列方向一致的 `TABLE` 报 `InvalidField`
 - xlsx 的 `insertCustomView` 的 id 必须是 `xlsx:workbook`
 - 必须给非空 `name`
 - 工作簿内大小写不敏感重名报 `InvalidField`
@@ -813,6 +816,7 @@
   - `insertConnection`
   - `deleteConnection`
   - `insertExternalLink`
+  - `setExternalLink`
   - `deleteExternalLink`
   - `insertCustomView`
   - `deleteCustomView`

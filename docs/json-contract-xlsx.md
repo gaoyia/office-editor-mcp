@@ -335,8 +335,9 @@ create 本期不写连接。不向数据源发请求，不把查询结果写进 
 外部工作簿引用挂在工作簿上，不是某张表。id 为 `extlink:{n}`，`{n}` 从 1 起，
 按 `/xl/workbook.xml` 里 `<externalReferences>/<externalReference>` 的文档顺序（ECMA-376 §18.2.8 / §18.14）。
 与单元格公式里的 `[n]` 同一套下标。增删之后旧的 `extlink:{n}` 会变，只够同一次 inspect 之后立刻 apply。不要用关系 `r:id` 或目标文件名编树 id。
-`insertExternalLink` 的 `id` 必须是 `xlsx:workbook`。`deleteExternalLink` 的 `id` 必须是 `extlink:{n}`。对不上的 id 形态报 `InvalidId`。
-不提供改路径的 op。create 本期不写外部引用。不打开目标文件，不求值。DDE / OLE 外部链只读进树。不要和 `connections.xml` 混用。
+`insertExternalLink` 的 `id` 必须是 `xlsx:workbook`。`setExternalLink` / `deleteExternalLink` 的 `id` 必须是 `extlink:{n}`。
+对不上的 id 形态报 `InvalidId`。create 本期不写外部引用。不打开目标文件，不求值。DDE / OLE 外部链只读进树，不接受改路径。
+不要和 `connections.xml` 混用。
 
 自定义视图挂在工作簿上。`{n}` 从 1 起，按 `<customWorkbookView>` 文档顺序（ECMA-376 §18.2.3 / §18.2.4）。
 增删之后旧的 `customView:{n}` 会变，只够同一次 inspect 之后立刻 apply。不要用 `@name` 或 guid 编树 id。
@@ -1082,12 +1083,15 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   从属格带 `"shared": true`；`formula` 按主格到该格的行列差展开成该格的 A1 文本（规则与下文 apply 的相对展开相同）。找不到主格或主格没有公式文本时，从属格 `formula` 仍为 `null`。
 - 数组公式（`<f t="array"`）：主格返回公式文本，并带 `"array": true` 与 `"arrayRef"`（取 `f/@ref`，同样规范化；没有 `ref` 则当作该格自己）。
   落在该 `ref` 内、自己没有公式的格子带 `"array": true`，`formula` 为 `null`。
-- 数据表公式（`<f t="dataTable"`）：带 `"dataTable": true`。本期不展开，也不在 apply 里改。
+- 数据表公式（`<f t="dataTable"`，§18.3.1.40）：主格带 `"dataTable": true` 与 `"dataTableRef"`（取 `f/@ref`，规范化成 `A1` 或 `A1:B2`；没有 `ref` 则当作该格自己）。
+  `<f>` 正文为空时，`formula` 按 Excel 16.0 公式栏合成：列输入 `=TABLE(,r1)`，行输入 `=TABLE(r1,)`，二维 `=TABLE(r1,r2)`。
+  `r1` / `r2` 能解析成 A1 的写成无 `$` 的格子，解析不了的原样留下。正文非空时仍报正文（由库补 `=`），不覆盖合成。
+  落在该 `ref` 内、自己没有公式的格子带 `"dataTable": true`，`formula` 为 `null`。库不求值。
 - 内联字符串（`t="inlineStr"`）和共享字符串（`t="s"`）在树上都是 `type: "text"`，`value` 为拼接后的可见纯文本，不含 run 级样式。
   `t="s"` 的 `<v>` 必须是共享字符串表里的合法非负整数索引。越界或无法解析报 `XmlBroken`，不要当成空串。
 - 单元格字段顺序：`id`、`ref`、`type`、`value`、`formula`，然后始终跟 `numFmt`，有非默认字体 / 填充 / 边框 / 对齐时再跟 `font`、`fill`、`border`、`align`，
-  然后按需跟 `array`、`arrayRef`、`shared`、`sharedRef`、`dataTable`。
-  只在为真或有值时出现：`array` / `shared` / `dataTable` 为 `true`，`arrayRef` / `sharedRef` 为规范化后的区域字符串。
+  然后按需跟 `array`、`arrayRef`、`shared`、`sharedRef`、`dataTable`、`dataTableRef`。
+  只在为真或有值时出现：`array` / `shared` / `dataTable` 为 `true`，`arrayRef` / `sharedRef` / `dataTableRef` 为规范化后的区域字符串。
 - `numFmt` 是数字格式代码字符串，不是 `numFmtId`。缺 `<c>/@s` 或 `s` 越界时按 `cellXfs` 第 0 条。
   内置 id 0–49 用 ECMA-376 §18.8.30 的英文代码（例如 `0` → `"General"`，`2` → `"0.00"`，`14` → `"mm-dd-yy"`），不按打开 Excel 的区域设置改写。
   自定义格式取 `numFmts` 里对应 `formatCode`。没有 styles 部件时当作 `"General"`。
@@ -1284,7 +1288,7 @@ drawing 上那一张 `xdr:absoluteAnchor` 框和 `/xl/charts/chartN.xml`，数�
 `app.xml` 的 HeadingPairs：普通表算 Worksheets，图表工作表算 Charts；TitlesOfParts 按 `sheets[]` 顺序。
 至少一张 `worksheet`，否则报 `InvalidField`。不要生成透视表、条件格式。
 create 本期不写列宽、行高、合并、数据验证、条件格式、工作表表格、透视表、定义名、打印设置、视图与筛选、排序、分组、拆分窗格、自定义视图、迷你图、OLE、切片器、外部数据连接、保护或组合，
-也不写共享公式或数组公式（`cells[]` 出现 `shared` / `sharedRef` / `array` / `arrayRef` 报 `InvalidField`）。
+也不写共享公式、数组公式或数据表公式（`cells[]` 出现 `shared` / `sharedRef` / `array` / `arrayRef` / `dataTable` / `dataTableRef` 报 `InvalidField`）。
 create 本期不写外部引用。`workbook` 根上或 `cells[]` 上出现 `pictures` / `charts` / `headerFooters` / `headerFooter`
  / `definedNames` / `connections` / `externalLinks` / `externalReferences` / `customViews` / `comments`
  / `hyperlinks` / `textBoxes` / `shapes` / `connectors` / `smartArts` / `workbookProtection` / `protection`，
@@ -1319,7 +1323,7 @@ create 本期不写外部引用。`workbook` 根上或 `cells[]` 上出现 `pict
 `value` 不能与 `shared: true`、`array: true`、`sharedRef`、`arrayRef` 同时出现。`shared: false` 不能与 `sharedRef` 同时出现。
 `array: false` 不能与 `arrayRef` 同时出现。目标格不是 `arrayRef` / `sharedRef` 的左上角时报 `InvalidField`。
 `arrayRef` / `sharedRef` 非法时报 `InvalidRange`。`setCell` 不改工作表 `<hyperlinks>`，也不改 `extLst` 里的迷你图。
-示例见 `docs/examples/xlsx-apply-formula.json` 与 `docs/examples/xlsx-apply-shared-master.json`。
+示例见 `docs/examples/xlsx-apply-formula.json`、`docs/examples/xlsx-apply-shared-master.json` 与 `docs/examples/xlsx-apply-datatable.json`。
 
 共享公式（§18.3.1.40，`t="shared"`）：主格的 `<f>` 带 `ref` 和 `si`，从属格只带 `si`。
 对**从属格**发 `setCell`（不带 `shared` / `sharedRef`）仍写成独立 `<f>`，主格不动。
@@ -1337,9 +1341,13 @@ create 本期不写外部引用。`workbook` 根上或 `cells[]` 上出现 `pict
 范围内其它格不写公式；还不存在则插入只有 `r` 的 `<c>`。对已有数组主格只给 `formula`、不给 `array: false`：保留 `t="array"` 与现有 `ref`，只改公式文本。
 对数组主格写 `value` / 清空 / `array: false`：主格改成普通值或普通公式，范围内其它格留下缓存值。对数组范围内非主格发 `setCell` 报 `NotImplemented`。
 
-数据表公式（`t="dataTable"`）：对主格或 `ref` 范围内的格子发 `setCell` 报 `NotImplemented`。本期不读写数据表。
+数据表公式（`t="dataTable"`）：对主格只给 `formula`、不给 `shared` / `array`：保住 `t="dataTable"` 与现有 `ref` / `dt2D` / `dtr`，按 `TABLE` 改 `r1` / `r2`，不写 `<f>` 正文。
+Excel 16.0 主格正文为空；正文非空时打开会修复。
+列输入（`dt2D` 为假且 `dtr` 为假）必须是 `=TABLE(,格子)`；行输入（`dtr` 为真且 `dt2D` 为假）必须是 `=TABLE(格子,)`；二维（`dt2D` 为真）必须是 `=TABLE(格子1,格子2)`。
+格子只认 A1（可带 `$`），写入去掉 `$`。形状对不上、不是 `TABLE`、或缺逗号报 `InvalidField`。
+对范围内非主格、对主格写 `value` / 清空 / `shared` / `array` 报 `NotImplemented`。本期不新建、不拆、不扩缩数据表。
 
-create 本期仍只写普通 `<f>`，不写 `t="shared"` / `t="array"`。
+create 本期仍只写普通 `<f>`，不写 `t="shared"` / `t="array"` / `t="dataTable"`。
 
 ### setCellStyle
 
@@ -2066,6 +2074,7 @@ workbook `extLst` 的 `timelineCacheRefs`，以及该透视表的 `updatedVersio
 `insertConnection` / `deleteConnection` 还可以脏 `/xl/connections.xml`、workbook `.rels` 与 `[Content_Types].xml`。
 `insertExternalLink` / `deleteExternalLink` 还可以脏 `/xl/workbook.xml` 的 `<externalReferences>`、
 `/xl/externalLinks/…` 及其 `.rels`、workbook `.rels` 与 `[Content_Types].xml`。
+`setExternalLink` 只改该外部链部件 `.rels` 里 `externalBook` 的 `r:id` 对应 `Target`，不改 workbook、不写 `xxl21:alternateUrls`、不改 `sheetNames` / `sheetDataSet`、不重写单元格 `[n]`。
 SmartArt op 还可以脏 worksheet drawing、drawing `.rels`、`/xl/diagrams/` 四件套与可选 drawing 缓存、以及 `[Content_Types].xml`。
 `setProps` / `setCustomProp` / `deleteCustomProp` 还可以脏 `/docProps/core.xml`、`/docProps/app.xml`、`/docProps/custom.xml`、
 根 `.rels` 与 `[Content_Types].xml`。
@@ -3000,6 +3009,39 @@ docx / pptx 上发此 op 报 `InvalidField`。create 本期不写外部引用。
 找不到报 `IdNotFound`。id 不是外部引用 id 报 `InvalidId`。若任一工作表 `<f>` 或定义名文本含 `[k]`（k 为该条下标或更大）报 `NotImplemented`，不写文件。
 否则摘该条 `<externalReference>`、对应 `externalLink` 部件及其 `.rels`、workbook 关系与 Override。删光则去掉 `<externalReferences>`。
 不重写其余公式的 `[n]`。docx / pptx 上发此 op 报 `InvalidField`。
+
+### setExternalLink
+
+改已有外部引用的路径。不打开目标文件，不刷新 `sheetDataSet`，也不改单元格公式里的 `[n]`。
+
+```json
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "C:\\data\\book.xlsx",
+  "output": "C:\\data\\book.repath.xlsx",
+  "ops": [
+    {
+      "op": "setExternalLink",
+      "id": "extlink:1",
+      "path": "C:\\data\\other.xlsx"
+    }
+  ]
+}
+```
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"setExternalLink"` |
+| `id` | 必须是 `extlink:{n}` |
+| `path` | 必须。非空。写入该外部链部件 `.rels` 里 `externalBook/@r:id` 对应关系的 `Target` |
+
+`id` 不是外部引用 id 报 `InvalidId`。找不到报 `IdNotFound`。缺 `path` 报 `MissingField`。`path` 为空串报 `InvalidField`。
+`kind` 不是 `book`（没有 `externalBook`，含 DDE / OLE）报 `InvalidField`。
+`path` 编码规则与 `insertExternalLink` 相同。已有 `xxl21:alternateUrls` 原样留下，本期不写、不删。
+不改 `sheetNames`。docx / pptx 上发此 op 报 `InvalidField`。不标重算。
+
+示例见 `docs/examples/xlsx-apply-external-link-path.json`。
 
 ### insertSparkline
 

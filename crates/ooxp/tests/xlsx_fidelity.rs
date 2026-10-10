@@ -207,7 +207,7 @@ fn data_table_formula_is_rejected() {
         json!([{ "op": "setCell", "id": "cell:Sheet1!B1", "formula": "=A1" }]),
     )
     .unwrap_err();
-    assert_eq!(err.code(), ErrorCode::NotImplemented);
+    assert_eq!(err.code(), ErrorCode::InvalidField);
     assert!(!out.exists() || std::fs::read(&out).unwrap() == std::fs::read(&src).unwrap());
 }
 

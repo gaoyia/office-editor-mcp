@@ -1838,6 +1838,7 @@ pub enum XlsxOp {
     DeleteConnection(connection::DeleteConnectionOp),
     InsertExternalLink(extlink::InsertExternalLinkOp),
     DeleteExternalLink(extlink::DeleteExternalLinkOp),
+    SetExternalLink(extlink::SetExternalLinkOp),
     SetTextBoxSize(SetTextBoxSizeOp),
     SetTextBoxAnchor(SetTextBoxAnchorOp),
     SetShapeText(SetShapeTextOp),
@@ -2133,6 +2134,7 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<XlsxOp>, Error> {
             "deleteConnection" => XlsxOp::DeleteConnection(parse_delete_connection(obj, i)?),
             "insertExternalLink" => XlsxOp::InsertExternalLink(parse_insert_external_link(obj, i)?),
             "deleteExternalLink" => XlsxOp::DeleteExternalLink(parse_delete_external_link(obj, i)?),
+            "setExternalLink" => XlsxOp::SetExternalLink(parse_set_external_link(obj, i)?),
             "setTextBoxSize" => XlsxOp::SetTextBoxSize(parse_set_textbox_size(obj, i)?),
             "setTextBoxAnchor" => XlsxOp::SetTextBoxAnchor(parse_set_textbox_anchor(obj, i)?),
             "setShapeText" => XlsxOp::SetShapeText(parse_set_shape_text(obj, i)?),
@@ -10669,6 +10671,44 @@ fn parse_delete_external_link(
     let id = require_id(obj, i)?;
     let index = extlink::parse_external_link_id(&id, &format!("ops[{i}].id"))?;
     Ok(extlink::DeleteExternalLinkOp { id, index })
+}
+
+fn parse_set_external_link(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<extlink::SetExternalLinkOp, Error> {
+    deny_keys(obj, i, &["op", "id", "path"])?;
+    let id = require_id(obj, i)?;
+    let index = extlink::parse_external_link_id(&id, &format!("ops[{i}].id"))?;
+    let path = match obj.get("path") {
+        Some(Value::String(s)) if !s.is_empty() => s.clone(),
+        None => {
+            return Err(Error::with_path(
+                ErrorKind::MissingField {
+                    field: "path".into(),
+                },
+                format!("ops[{i}].path"),
+            ));
+        }
+        Some(Value::String(_)) => {
+            return Err(Error::with_path(
+                ErrorKind::InvalidExternalLink {
+                    field: "path".into(),
+                },
+                format!("ops[{i}].path"),
+            ));
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "path".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].path"),
+            ));
+        }
+    };
+    Ok(extlink::SetExternalLinkOp { id, index, path })
 }
 
 fn parse_set_textbox_size(
