@@ -69,6 +69,57 @@
           "items": {
             "$ref": "#/$defs/docxTocCreate"
           }
+        },
+        "captions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/docxCaptionCreate"
+          }
+        },
+        "indexes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/docxIndexCreate"
+          }
+        },
+        "bibliographies": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/docxBibliographyCreate"
+          }
+        },
+        "sources": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/docxSourceCreate"
+          }
+        },
+        "bibliographyStyle": {
+          "enum": ["APA", "MLA", "Chicago", "IEEE", "GB7714"]
+        },
+        "docParts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/docxDocPartCreate"
+          }
+        },
+        "styles": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/docxStyleCreate"
+          }
+        },
+        "embeddedFonts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/docxEmbeddedFontCreate"
+          }
+        },
+        "fontEmbed": {
+          "$ref": "#/$defs/docxFontEmbedCreate"
+        },
+        "eastAsianSettings": {
+          "$ref": "#/$defs/docxEastAsianSettingsCreate"
         }
       }
     },
@@ -119,6 +170,51 @@
             "items": {
               "type": "string"
             }
+          }
+        },
+        "style": {
+          "type": "string"
+        },
+        "look": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "firstRow": { "type": "boolean" },
+            "lastRow": { "type": "boolean" },
+            "firstColumn": { "type": "boolean" },
+            "lastColumn": { "type": "boolean" },
+            "bandedRows": { "type": "boolean" },
+            "bandedColumns": { "type": "boolean" }
+          }
+        },
+        "pos": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "horzAnchor": { "enum": ["margin", "page", "text"] },
+            "vertAnchor": { "enum": ["margin", "page", "text"] },
+            "x": { "type": "integer" },
+            "y": { "type": "integer" },
+            "leftFromText": { "type": "integer", "minimum": 0 },
+            "rightFromText": { "type": "integer", "minimum": 0 },
+            "topFromText": { "type": "integer", "minimum": 0 },
+            "bottomFromText": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "cellMar": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "top": { "type": "integer", "minimum": 0 },
+            "left": { "type": "integer", "minimum": 0 },
+            "bottom": { "type": "integer", "minimum": 0 },
+            "right": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "cellFormats": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/docxCellFormatCreate"
           }
         }
       }
@@ -207,6 +303,48 @@
           "items": {
             "$ref": "#/$defs/docxSdtCreate"
           }
+        },
+        "shapes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/docxShapeCreate"
+          }
+        },
+        "connectors": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/docxConnectorCreate"
+          }
+        },
+        "rubies": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/docxRubyCreate"
+          }
+        },
+        "citations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/docxCitationCreate"
+          }
+        },
+        "indexEntries": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/docxIndexEntryCreate"
+          }
+        },
+        "crossRefs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/docxCrossRefCreate"
+          }
+        },
+        "editRange": {
+          "oneOf": [
+            { "type": "boolean" },
+            { "$ref": "#/$defs/docxEditRangeCreate" }
+          ]
         },
         "num": {
           "type": "integer",
@@ -327,6 +465,48 @@
           "items": {
             "$ref": "#/$defs/docxSdtCreate"
           }
+        },
+        "shapes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/docxShapeCreate"
+          }
+        },
+        "connectors": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/docxConnectorCreate"
+          }
+        },
+        "rubies": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/docxRubyCreate"
+          }
+        },
+        "citations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/docxCitationCreate"
+          }
+        },
+        "indexEntries": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/docxIndexEntryCreate"
+          }
+        },
+        "crossRefs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/docxCrossRefCreate"
+          }
+        },
+        "editRange": {
+          "oneOf": [
+            { "type": "boolean" },
+            { "$ref": "#/$defs/docxEditRangeCreate" }
+          ]
         },
         "num": {
           "type": "integer",
@@ -767,6 +947,9 @@
         },
         "offsetY": {
           "type": "integer"
+        },
+        "hyperlink": {
+          "$ref": "#/$defs/docxDrawingHlinkCreate"
         }
       }
     },
@@ -784,6 +967,9 @@
         "cy": {
           "type": "integer",
           "minimum": 1
+        },
+        "hyperlink": {
+          "$ref": "#/$defs/docxDrawingHlinkCreate"
         }
       }
     },
@@ -4664,6 +4850,198 @@
           }
         }
       ]
+    },
+    "docxDrawingHlinkCreate": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "url": { "type": "string" },
+        "anchor": { "type": "string" },
+        "tooltip": { "type": "string" }
+      }
+    },
+    "docxShapeCreate": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "prst": { "type": "string" },
+        "cx": { "type": "integer", "minimum": 1 },
+        "cy": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "docxConnectorCreate": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "prst": { "type": "string" },
+        "cx": { "type": "integer", "minimum": 1 },
+        "cy": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "docxRubyCreate": {
+      "type": "object",
+      "required": ["base", "rt"],
+      "additionalProperties": false,
+      "properties": {
+        "base": { "type": "string", "minLength": 1 },
+        "rt": { "type": "string", "minLength": 1 },
+        "align": { "type": "string" },
+        "hps": { "type": "integer", "minimum": 2, "maximum": 3276 },
+        "hpsRaise": { "type": "integer", "minimum": 2, "maximum": 3276 },
+        "hpsBaseText": { "type": "integer", "minimum": 2, "maximum": 3276 },
+        "lid": { "type": "string" }
+      }
+    },
+    "docxCitationCreate": {
+      "type": "object",
+      "required": ["tag"],
+      "additionalProperties": false,
+      "properties": {
+        "tag": { "type": "string", "minLength": 1 }
+      }
+    },
+    "docxIndexEntryCreate": {
+      "type": "object",
+      "required": ["entry"],
+      "additionalProperties": false,
+      "properties": {
+        "entry": { "type": "string", "minLength": 1 }
+      }
+    },
+    "docxCrossRefCreate": {
+      "type": "object",
+      "required": ["bookmark"],
+      "additionalProperties": false,
+      "properties": {
+        "bookmark": { "type": "string", "minLength": 1 },
+        "kind": { "enum": ["ref", "page"] }
+      }
+    },
+    "docxEditRangeCreate": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "edGrp": {
+          "enum": [
+            "everyone",
+            "administrators",
+            "contributors",
+            "editors",
+            "owners",
+            "current"
+          ]
+        },
+        "ed": { "type": "string" }
+      }
+    },
+    "docxCaptionCreate": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "after": { "type": "integer", "minimum": 1 },
+        "label": { "type": "string" },
+        "title": { "type": "string" },
+        "bookmark": { "type": "string" }
+      }
+    },
+    "docxIndexCreate": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "after": { "type": "integer", "minimum": 1 },
+        "instr": { "type": "string" }
+      }
+    },
+    "docxBibliographyCreate": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "after": { "type": "integer", "minimum": 1 },
+        "instr": { "type": "string" }
+      }
+    },
+    "docxSourceCreate": {
+      "type": "object",
+      "required": ["tag", "title"],
+      "additionalProperties": false,
+      "properties": {
+        "tag": { "type": "string" },
+        "sourceType": { "type": "string" },
+        "title": { "type": "string" },
+        "year": { "type": "string" },
+        "last": { "type": "string" },
+        "first": { "type": "string" },
+        "city": { "type": "string" },
+        "publisher": { "type": "string" }
+      }
+    },
+    "docxDocPartCreate": {
+      "type": "object",
+      "required": ["name", "text"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string" },
+        "text": { "type": "string" },
+        "gallery": { "type": "string" },
+        "category": { "type": "string" },
+        "behavior": { "enum": ["content", "p", "pg"] }
+      }
+    },
+    "docxStyleCreate": {
+      "type": "object",
+      "required": ["styleId", "type"],
+      "additionalProperties": false,
+      "properties": {
+        "styleId": { "type": "string" },
+        "type": { "enum": ["paragraph", "character", "table"] },
+        "name": { "type": "string" },
+        "basedOn": { "type": "string" }
+      }
+    },
+    "docxEmbeddedFontCreate": {
+      "type": "object",
+      "required": ["name", "file"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string" },
+        "file": { "type": "string" },
+        "style": { "enum": ["regular", "bold", "italic", "boldItalic"] }
+      }
+    },
+    "docxFontEmbedCreate": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "trueType": { "type": "boolean" },
+        "systemFonts": { "type": "boolean" },
+        "subset": { "type": "boolean" }
+      }
+    },
+    "docxEastAsianSettingsCreate": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "characterSpacingControl": { "type": "string" },
+        "strictFirstAndLastChars": { "type": ["boolean", "null"] },
+        "noLineBreaksBefore": { "type": ["object", "null"] },
+        "noLineBreaksAfter": { "type": ["object", "null"] }
+      }
+    },
+    "docxCellFormatCreate": {
+      "type": "object",
+      "required": ["r", "c"],
+      "additionalProperties": false,
+      "properties": {
+        "r": { "type": "integer", "minimum": 1 },
+        "c": { "type": "integer", "minimum": 1 },
+        "fill": { "type": "string" },
+        "top": { "type": "integer", "minimum": 0 },
+        "left": { "type": "integer", "minimum": 0 },
+        "bottom": { "type": "integer", "minimum": 0 },
+        "right": { "type": "integer", "minimum": 0 },
+        "tl2br": { "type": "object" },
+        "tr2bl": { "type": "object" }
+      }
     }
   }
 }

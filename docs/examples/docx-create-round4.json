@@ -1,0 +1,75 @@
+{
+  "schemaVersion": 1,
+  "action": "create",
+  "path": "C:\\out\\round4.docx",
+  "format": "docx",
+  "document": {
+    "styles": [
+      {
+        "styleId": "ooxpTbl",
+        "type": "table",
+        "name": "ooxpTbl"
+      }
+    ],
+    "sources": [
+      {
+        "tag": "Book1",
+        "title": "Sample Book",
+        "sourceType": "Book"
+      }
+    ],
+    "bibliographyStyle": "MLA",
+    "embeddedFonts": [
+      {
+        "name": "Calibri",
+        "file": "C:\\\\Windows\\\\Fonts\\\\calibri.ttf"
+      }
+    ],
+    "fontEmbed": {
+      "trueType": true
+    },
+    "eastAsianSettings": {
+      "characterSpacingControl": "compressPunctuation"
+    },
+    "docParts": [
+      {
+        "name": "qp1",
+        "text": "基块正文"
+      }
+    ],
+    "paragraphs": [
+      {
+        "style": "Heading1",
+        "text": "标题",
+        "bookmarks": [{ "name": "ch1" }]
+      },
+      {
+        "text": "hello",
+        "pictures": [
+          {
+            "file": "C:\\\\img\\\\a.png",
+            "hyperlink": { "url": "https://example.com" }
+          }
+        ],
+        "shapes": [{ "prst": "ellipse" }],
+        "connectors": [{ "prst": "straightConnector1" }],
+        "rubies": [{ "base": "汉字", "rt": "hànzì" }],
+        "citations": [{ "tag": "Book1" }],
+        "indexEntries": [{ "entry": "hello" }],
+        "crossRefs": [{ "bookmark": "ch1" }],
+        "editRange": true
+      }
+    ],
+    "tables": [
+      {
+        "cells": [["A", "B"]],
+        "style": "style:ooxpTbl",
+        "look": { "firstRow": true },
+        "cellFormats": [{ "r": 1, "c": 1, "fill": "FF0000" }]
+      }
+    ],
+    "captions": [{ "label": "Figure", "title": "图一" }],
+    "indexes": [{}],
+    "bibliographies": [{}]
+  }
+}

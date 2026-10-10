@@ -349,6 +349,7 @@ docx 段落与页眉页脚上的 `pictures` 同样复用插图，`charts` 复用
 `footnote` / `endnote` / `comments` 复用对应 insert，`comments[].replies` 复用 `replyComment`，
 `hyperlinks` / `bookmarks` / `fields` / `maths` / `contentControls` 复用对应 insert。
 `document.numberings` 复用 `insertNumbering`，`paragraphs[].num` 复用 `setParaNumbering`。`document.tocs` 复用 `insertToc`。
+docx create 第四轮同样复用已有 apply：`styles` / `sources` / `bibliographyStyle` / `bibliographies` / `captions` / `indexes` / `docParts` / `embeddedFonts` / `fontEmbed` / `eastAsianSettings`，以及段上 `shapes` / `connectors` / `rubies` / `citations` / `indexEntries` / `crossRefs` / `editRange`、图与框的 DrawingML 链、表外观。不写修订痕迹，也不写 `writePassword`。
 create 不写修订痕迹。pptx 的 `slides[].pictures` 复用 `insertPicture`，
 `slides[].maths` 复用 `insertMath`，`slides[].model3ds` 复用 `insertModel3d`，
 `slides[].videos` / `slides[].audios` 复用 `insertVideo` / `insertAudio`，

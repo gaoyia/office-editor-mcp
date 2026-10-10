@@ -6,6 +6,7 @@ mod charts;
 mod comments;
 mod connector;
 mod create;
+mod create_round4;
 mod drawing_hlink;
 mod east_asia;
 mod export;

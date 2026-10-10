@@ -12,6 +12,10 @@ use crate::xml::{self, Element, Node};
 
 use super::apply;
 use super::charts::{self, ChartType, InsertChartOp, NewSeries};
+use super::create_round4::{
+    self, CitationSpec, CrossRefSpec, DocExtra, DrawingHlink, EditRangeSpec, IndexEntrySpec,
+    RubySpec, ShapeSpec, TableExtra,
+};
 use super::field;
 use super::hf::{HfKind, HfType};
 use super::ink::InsertInkCanvasOp;
@@ -22,15 +26,19 @@ use super::ole::InsertOleOp;
 use super::para::{self, ParaTarget};
 use super::picture::{self, PicKind, WrapKind, WrapPos};
 use super::request::{
-    DocxOp, InsertBookmarkOp, InsertCommentOp, InsertContentControlOp, InsertFieldOp,
-    InsertHyperlinkHost, InsertHyperlinkOp, InsertMathOp, InsertMathPlace, InsertNoteOp,
-    InsertNumberingOp, InsertSdtPlace, InsertTocOp, InsertTocPlace, ReplyCommentOp,
-    SetParaNumberingOp,
+    DocxOp, InsertBibliographyOp, InsertBibliographyPlace, InsertBookmarkOp, InsertCaptionOp,
+    InsertCaptionPlace, InsertCitationOp, InsertCommentOp, InsertConnectorOp,
+    InsertContentControlOp, InsertCrossRefOp, InsertEditRangeOp, InsertFieldOp,
+    InsertHyperlinkHost, InsertHyperlinkOp, InsertIndexEntryOp, InsertIndexOp, InsertIndexPlace,
+    InsertMathOp, InsertMathPlace, InsertNoteOp, InsertNumberingOp, InsertRubyOp, InsertRubyPlace,
+    InsertSdtPlace, InsertShapeOp, InsertTocOp, InsertTocPlace, ReplyCommentOp,
+    SetBibliographyStyleOp, SetCellFormatOp, SetParaNumberingOp, SetTableCellMarOp,
+    SetTableFloatOp, SetTableStyleOp,
 };
 use super::sdt::SdtKind;
 use super::sect::SectionBreakType;
 use super::smartart::{self, InsertSpec};
-use super::tbl;
+use super::tbl::{self, TableRef, TableStory};
 use super::textbox::{self, DEFAULT_CX, DEFAULT_CY, WPS_NS};
 use super::{
     A_NS, CT_APP, CT_CORE, CT_DOCUMENT, CT_FOOTER, CT_HEADER, CT_SETTINGS, CT_STYLES, MC_NS,
@@ -42,6 +50,8 @@ struct NewBox {
     text: String,
     cx: i64,
     cy: i64,
+    doc_pr: u32,
+    hyperlink: Option<DrawingHlink>,
 }
 
 struct NewPic {
@@ -51,6 +61,8 @@ struct NewPic {
     kind: PicKind,
     wrap: Option<WrapKind>,
     pos: WrapPos,
+    doc_pr: u32,
+    hyperlink: Option<DrawingHlink>,
 }
 
 struct CreateChart {
@@ -143,6 +155,13 @@ struct NewPara {
     fields: Vec<NewField>,
     maths: Vec<NewMath>,
     content_controls: Vec<NewSdt>,
+    shapes: Vec<ShapeSpec>,
+    connectors: Vec<ShapeSpec>,
+    rubies: Vec<RubySpec>,
+    citations: Vec<CitationSpec>,
+    index_entries: Vec<IndexEntrySpec>,
+    cross_refs: Vec<CrossRefSpec>,
+    edit_range: Option<EditRangeSpec>,
     num: Option<u32>,
     ilvl: u32,
     section_type: Option<SectionBreakType>,
@@ -168,6 +187,13 @@ impl NewPara {
             fields: Vec::new(),
             maths: Vec::new(),
             content_controls: Vec::new(),
+            shapes: Vec::new(),
+            connectors: Vec::new(),
+            rubies: Vec::new(),
+            citations: Vec::new(),
+            index_entries: Vec::new(),
+            cross_refs: Vec::new(),
+            edit_range: None,
             num: None,
             ilvl: 0,
             section_type: None,
@@ -195,7 +221,16 @@ impl NewPara {
             || !self.fields.is_empty()
             || !self.maths.is_empty()
             || !self.content_controls.is_empty()
+            || !self.shapes.is_empty()
+            || !self.connectors.is_empty()
+            || !self.rubies.is_empty()
+            || !self.citations.is_empty()
+            || !self.index_entries.is_empty()
+            || !self.cross_refs.is_empty()
+            || self.edit_range.is_some()
             || self.num.is_some()
+            || self.boxes.iter().any(|b| b.hyperlink.is_some())
+            || self.pictures.iter().any(|p| p.hyperlink.is_some())
     }
 }
 
@@ -213,6 +248,7 @@ struct HfCreateItem {
 struct NewTable {
     after: u32,
     cells: Vec<Vec<String>>,
+    extra: TableExtra,
 }
 
 pub fn create(document: &Value) -> Result<Vec<u8>, Error> {
@@ -240,7 +276,8 @@ pub fn create(document: &Value) -> Result<Vec<u8>, Error> {
                 | "theme"
                 | "pageBackground"
                 | "pageBorders"
-        ) {
+        ) && !create_round4::ROOT_KEYS.contains(&k.as_str())
+        {
             return Err(Error::with_path(
                 ErrorKind::UnknownField { field: k.clone() },
                 format!("document.{k}"),
@@ -286,12 +323,20 @@ pub fn create(document: &Value) -> Result<Vec<u8>, Error> {
     if paras.is_empty() {
         paras.push(NewPara::empty());
     }
+    assign_story_docpr(&mut paras);
+    let extra = create_round4::parse(obj, paras.len())?;
     let tables = parse_tables(obj.get("tables"), "document.tables", paras.len())?;
     let numberings = parse_numberings(obj.get("numberings"), "document.numberings")?;
     let tocs = parse_tocs(obj.get("tocs"), "document.tocs", paras.len())?;
 
-    let header_items = parse_hf_side(obj.get("headers"), "headers")?;
-    let footer_items = parse_hf_side(obj.get("footers"), "footers")?;
+    let mut header_items = parse_hf_side(obj.get("headers"), "headers")?;
+    let mut footer_items = parse_hf_side(obj.get("footers"), "footers")?;
+    for item in &mut header_items {
+        assign_story_docpr(&mut item.paras);
+    }
+    for item in &mut footer_items {
+        assign_story_docpr(&mut item.paras);
+    }
     let need_even = header_items.iter().any(|h| h.hf_type == HfType::Even)
         || footer_items.iter().any(|h| h.hf_type == HfType::Even);
     let need_first = header_items.iter().any(|h| h.hf_type == HfType::First)
@@ -436,6 +481,8 @@ pub fn create(document: &Value) -> Result<Vec<u8>, Error> {
         &footer_items,
         &numberings,
         &tocs,
+        &extra,
+        &tables,
     )?;
     let bytes = if obj.get("pageBackground").is_some() || obj.get("pageBorders").is_some() {
         let mut pkg = crate::opc::Package::open_bytes(bytes)?;
@@ -582,6 +629,13 @@ fn parse_para(v: &Value, path: &str, kind: ParaKind, i: usize) -> Result<NewPara
             "fields",
             "maths",
             "contentControls",
+            "shapes",
+            "connectors",
+            "rubies",
+            "citations",
+            "indexEntries",
+            "crossRefs",
+            "editRange",
             "num",
             "ilvl",
             "sectionType",
@@ -603,6 +657,13 @@ fn parse_para(v: &Value, path: &str, kind: ParaKind, i: usize) -> Result<NewPara
             "fields",
             "maths",
             "contentControls",
+            "shapes",
+            "connectors",
+            "rubies",
+            "citations",
+            "indexEntries",
+            "crossRefs",
+            "editRange",
             "num",
             "ilvl",
         ]
@@ -663,6 +724,13 @@ fn parse_para(v: &Value, path: &str, kind: ParaKind, i: usize) -> Result<NewPara
     let fields = parse_fields(obj.get("fields"), path)?;
     let maths = parse_maths(obj.get("maths"), path)?;
     let content_controls = parse_sdts(obj.get("contentControls"), path)?;
+    let shapes = create_round4::parse_shapes(obj.get("shapes"), path)?;
+    let connectors = create_round4::parse_connectors(obj.get("connectors"), path)?;
+    let rubies = create_round4::parse_rubies(obj.get("rubies"), path)?;
+    let citations = create_round4::parse_citations(obj.get("citations"), path)?;
+    let index_entries = create_round4::parse_index_entries(obj.get("indexEntries"), path)?;
+    let cross_refs = create_round4::parse_cross_refs(obj.get("crossRefs"), path)?;
+    let edit_range = create_round4::parse_edit_range(obj.get("editRange"), path)?;
     let (num, ilvl) = parse_para_num(obj, path)?;
     let section_type = match kind {
         ParaKind::Body => parse_create_section_type(obj.get("sectionType"), path)?,
@@ -686,6 +754,13 @@ fn parse_para(v: &Value, path: &str, kind: ParaKind, i: usize) -> Result<NewPara
         fields,
         maths,
         content_controls,
+        shapes,
+        connectors,
+        rubies,
+        citations,
+        index_entries,
+        cross_refs,
+        edit_range,
         num,
         ilvl,
         section_type,
@@ -736,7 +811,7 @@ fn parse_boxes(v: Option<&Value>, i: usize) -> Result<Vec<NewBox>, Error> {
             )
         })?;
         for k in obj.keys() {
-            if !matches!(k.as_str(), "text" | "cx" | "cy") {
+            if !matches!(k.as_str(), "text" | "cx" | "cy" | "hyperlink") {
                 return Err(Error::with_path(
                     ErrorKind::UnknownField { field: k.clone() },
                     format!("document.paragraphs[{i}].textBoxes[{j}].{k}"),
@@ -759,7 +834,17 @@ fn parse_boxes(v: Option<&Value>, i: usize) -> Result<Vec<NewBox>, Error> {
         let prefix = format!("document.paragraphs[{i}].textBoxes[{j}]");
         let cx = parse_emu(obj.get("cx"), &prefix, "cx")?.unwrap_or(DEFAULT_CX);
         let cy = parse_emu(obj.get("cy"), &prefix, "cy")?.unwrap_or(DEFAULT_CY);
-        out.push(NewBox { text, cx, cy });
+        let hyperlink = create_round4::parse_drawing_hlink(
+            obj.get("hyperlink"),
+            &format!("{prefix}.hyperlink"),
+        )?;
+        out.push(NewBox {
+            text,
+            cx,
+            cy,
+            doc_pr: 0,
+            hyperlink,
+        });
     }
     Ok(out)
 }
@@ -802,6 +887,7 @@ fn parse_pictures(v: Option<&Value>, prefix: &str) -> Result<Vec<NewPic>, Error>
                     | "alignV"
                     | "offsetX"
                     | "offsetY"
+                    | "hyperlink"
             ) {
                 return Err(Error::with_path(
                     ErrorKind::UnknownField { field: k.clone() },
@@ -915,6 +1001,10 @@ fn parse_pictures(v: Option<&Value>, prefix: &str) -> Result<Vec<NewPic>, Error>
                 item_path,
             ));
         }
+        let hyperlink = create_round4::parse_drawing_hlink(
+            obj.get("hyperlink"),
+            &format!("{item_path}.hyperlink"),
+        )?;
         out.push(NewPic {
             file,
             cx,
@@ -927,6 +1017,8 @@ fn parse_pictures(v: Option<&Value>, prefix: &str) -> Result<Vec<NewPic>, Error>
                 offset_x,
                 offset_y,
             },
+            doc_pr: 0,
+            hyperlink,
         });
     }
     Ok(out)
@@ -1045,7 +1137,6 @@ fn para_xml(
     p: &NewPara,
     id: &str,
     next_para: &mut u32,
-    doc_pr: &mut u32,
     first_break: bool,
     refs_xml: &str,
     title_pg: bool,
@@ -1080,9 +1171,8 @@ fn para_xml(
         *next_para += 1;
         boxes.push_str(&format!(
             "<w:r>{}</w:r>",
-            textbox::textbox_ac_xml(*doc_pr, b.cx, b.cy, &b.text, &inner_id)
+            textbox::textbox_ac_xml(b.doc_pr, b.cx, b.cy, &b.text, &inner_id)
         ));
-        *doc_pr += 1;
     }
     format!(r#"<w:p w14:paraId="{id}" w14:textId="{id}">{ppr}{t}{boxes}</w:p>"#)
 }
@@ -1148,14 +1238,12 @@ fn emit_story_blocks(
 ) -> String {
     let mut para_xmls = Vec::new();
     let mut next_para = paras.len() as u32 + 1;
-    let mut doc_pr = 1u32;
     for (i, p) in paras.iter().enumerate() {
         let id = format!("{:08X}", i as u32 + 1);
         para_xmls.push(para_xml(
             p,
             &id,
             &mut next_para,
-            &mut doc_pr,
             first_break == Some(i),
             refs_xml,
             title_pg,
@@ -1214,7 +1302,10 @@ fn parse_tables(v: Option<&Value>, path: &str, para_n: usize) -> Result<Vec<NewT
             )
         })?;
         for k in obj.keys() {
-            if !matches!(k.as_str(), "cells" | "after") {
+            if !matches!(
+                k.as_str(),
+                "cells" | "after" | "style" | "look" | "pos" | "cellMar" | "cellFormats"
+            ) {
                 return Err(Error::with_path(
                     ErrorKind::UnknownField { field: k.clone() },
                     format!("{item_path}.{k}"),
@@ -1231,7 +1322,14 @@ fn parse_tables(v: Option<&Value>, path: &str, para_n: usize) -> Result<Vec<NewT
         })?;
         let cells = tbl::parse_create_cells(cells_v, &format!("{item_path}.cells"))?;
         let after = parse_table_after(obj.get("after"), &format!("{item_path}.after"), para_n)?;
-        out.push(NewTable { after, cells });
+        let rows = cells.len();
+        let cols = cells.first().map(|r| r.len()).unwrap_or(0);
+        let extra = create_round4::parse_table_extra(obj, &item_path, rows, cols)?;
+        out.push(NewTable {
+            after,
+            cells,
+            extra,
+        });
     }
     Ok(out)
 }
@@ -1345,7 +1443,7 @@ fn attach_pictures(pkg: &mut Package, part: &str, paras: &[NewPara]) -> Result<(
     for (i, para) in paras.iter().enumerate() {
         for pic in &para.pictures {
             let added = picture::add_media(pkg, part, &pic.file, pic.cx, pic.cy)?;
-            let doc_pr = picture::next_docpr_id(&doc.root);
+            let doc_pr = pic.doc_pr;
             let p = nth_story_para_mut(&mut doc.root, i).ok_or_else(|| {
                 Error::xml_detail(
                     crate::error::XmlIssue::Parse,
@@ -2792,20 +2890,46 @@ fn apply_follow_ups(
     footers: &[HfCreateItem],
     numberings: &[NumberingKind],
     tocs: &[NewToc],
+    extra: &DocExtra,
+    tables: &[NewTable],
 ) -> Result<Vec<u8>, Error> {
     let need = !numberings.is_empty()
         || !tocs.is_empty()
+        || !create_round4::is_empty(extra)
         || paras.iter().any(NewPara::has_follow_ups)
-        || headers
-            .iter()
-            .any(|h| h.paras.iter().any(NewPara::has_follow_ups))
-        || footers
-            .iter()
-            .any(|h| h.paras.iter().any(NewPara::has_follow_ups));
+        || headers.iter().any(|h| {
+            h.paras.iter().any(NewPara::has_follow_ups)
+                || h.tables.iter().any(|t| t.extra.has_follow_ups())
+        })
+        || footers.iter().any(|h| {
+            h.paras.iter().any(NewPara::has_follow_ups)
+                || h.tables.iter().any(|t| t.extra.has_follow_ups())
+        })
+        || tables.iter().any(|t| t.extra.has_follow_ups());
     if !need {
         return Ok(bytes);
     }
     let mut ops = Vec::new();
+    for s in &extra.styles {
+        ops.push(DocxOp::InsertStyle(s.clone()));
+    }
+    for f in &extra.fonts {
+        ops.push(DocxOp::InsertEmbeddedFont(f.clone()));
+    }
+    if let Some(fe) = extra.font_embed.clone() {
+        ops.push(DocxOp::SetFontEmbed(fe));
+    }
+    if let Some(ea) = extra.east_asia.clone() {
+        ops.push(DocxOp::SetEastAsianSettings(ea));
+    }
+    for s in &extra.sources {
+        ops.push(DocxOp::InsertSource(s.clone()));
+    }
+    if let Some(name) = extra.bibliography_style.clone() {
+        ops.push(DocxOp::SetBibliographyStyle(SetBibliographyStyleOp {
+            style_name: name,
+        }));
+    }
     for kind in numberings {
         ops.push(DocxOp::InsertNumbering(InsertNumberingOp { kind: *kind }));
     }
@@ -2852,7 +2976,121 @@ fn apply_follow_ups(
             instr: toc.instr.clone(),
         }));
     }
+    push_after_blocks(
+        &mut ops,
+        &extra.captions,
+        |block, id, place| {
+            DocxOp::InsertCaption(InsertCaptionOp {
+                id,
+                place,
+                label: block.label.clone(),
+                title: block.title.clone(),
+                bookmark: block.bookmark.clone(),
+            })
+        },
+        InsertCaptionPlace::EndOfDocument,
+        InsertCaptionPlace::After,
+        "document.captions",
+    )?;
+    push_instr_blocks(
+        &mut ops,
+        &extra.indexes,
+        |block, id, place| {
+            DocxOp::InsertIndex(InsertIndexOp {
+                id,
+                place,
+                instr: block.instr.clone(),
+            })
+        },
+        InsertIndexPlace::EndOfDocument,
+        InsertIndexPlace::After,
+        "document.indexes",
+    )?;
+    push_instr_blocks(
+        &mut ops,
+        &extra.bibliographies,
+        |block, id, place| {
+            DocxOp::InsertBibliography(InsertBibliographyOp {
+                id,
+                place,
+                instr: block.instr.clone(),
+            })
+        },
+        InsertBibliographyPlace::EndOfDocument,
+        InsertBibliographyPlace::After,
+        "document.bibliographies",
+    )?;
+    for p in &extra.doc_parts {
+        ops.push(DocxOp::InsertDocPart(p.clone()));
+    }
+    push_table_ops(&mut ops, tables, None)?;
+    for item in headers {
+        push_table_ops(&mut ops, &item.tables, Some((HfKind::Header, item.hf_type)))?;
+    }
+    for item in footers {
+        push_table_ops(&mut ops, &item.tables, Some((HfKind::Footer, item.hf_type)))?;
+    }
     apply::apply(&bytes, &ops)
+}
+
+fn push_after_blocks(
+    ops: &mut Vec<DocxOp>,
+    blocks: &[create_round4::CaptionBlock],
+    build: impl Fn(&create_round4::CaptionBlock, String, InsertCaptionPlace) -> DocxOp,
+    end: InsertCaptionPlace,
+    after: fn(para::BodyPara) -> InsertCaptionPlace,
+    path: &str,
+) -> Result<(), Error> {
+    for block in blocks {
+        let (id, place) = match block.after {
+            None => ("docx:document".to_string(), end.clone()),
+            Some(n) => {
+                let id = story_para_id(None, (n as usize) - 1);
+                let host = para::parse_para_id_at(&id, path)?;
+                let ParaTarget::Body(p) = host else {
+                    return Err(Error::with_path(
+                        ErrorKind::InvalidId {
+                            reason: IdReason::InsertTocNeedsBodyPara,
+                        },
+                        path,
+                    ));
+                };
+                (id, after(p))
+            }
+        };
+        ops.push(build(block, id, place));
+    }
+    Ok(())
+}
+
+fn push_instr_blocks<P: Clone>(
+    ops: &mut Vec<DocxOp>,
+    blocks: &[create_round4::AfterBlock],
+    build: impl Fn(&create_round4::AfterBlock, String, P) -> DocxOp,
+    end: P,
+    after: fn(para::BodyPara) -> P,
+    path: &str,
+) -> Result<(), Error> {
+    for block in blocks {
+        let (id, place) = match block.after {
+            None => ("docx:document".to_string(), end.clone()),
+            Some(n) => {
+                let id = story_para_id(None, (n as usize) - 1);
+                let host = para::parse_para_id_at(&id, path)?;
+                let ParaTarget::Body(p) = host else {
+                    return Err(Error::with_path(
+                        ErrorKind::InvalidId {
+                            reason: IdReason::InsertTocNeedsBodyPara,
+                        },
+                        path,
+                    ));
+                };
+                (id, after(p))
+            }
+        };
+        ops.push(build(block, id, place));
+    }
+    Ok(())
 }
 
 fn push_story_ops(
@@ -3026,6 +3264,70 @@ fn push_story_ops(
                 checked: s.checked,
             }));
         }
+        if !p.shapes.is_empty() || !p.connectors.is_empty() {
+            let shape_host = para::parse_host_para_id_at(&id, "document")?;
+            for s in &p.shapes {
+                ops.push(DocxOp::InsertShape(InsertShapeOp {
+                    id: id.clone(),
+                    host: shape_host.clone(),
+                    cx: s.cx,
+                    cy: s.cy,
+                    prst: s.prst.clone(),
+                }));
+            }
+            for s in &p.connectors {
+                ops.push(DocxOp::InsertConnector(InsertConnectorOp {
+                    id: id.clone(),
+                    host: shape_host.clone(),
+                    cx: s.cx,
+                    cy: s.cy,
+                    prst: s.prst.clone(),
+                }));
+            }
+        }
+        for r in &p.rubies {
+            ops.push(DocxOp::InsertRuby(InsertRubyOp {
+                id: id.clone(),
+                place: InsertRubyPlace::After(host.clone()),
+                base: r.base.clone(),
+                rt: r.rt.clone(),
+                align: r.align.clone(),
+                hps: r.hps,
+                hps_raise: r.hps_raise,
+                hps_base_text: r.hps_base_text,
+                lid: r.lid.clone(),
+            }));
+        }
+        for e in &p.index_entries {
+            ops.push(DocxOp::InsertIndexEntry(InsertIndexEntryOp {
+                id: id.clone(),
+                para: host.clone(),
+                entry: e.entry.clone(),
+            }));
+        }
+        for c in &p.citations {
+            ops.push(DocxOp::InsertCitation(InsertCitationOp {
+                id: id.clone(),
+                para: host.clone(),
+                tag: c.tag.clone(),
+            }));
+        }
+        for c in &p.cross_refs {
+            ops.push(DocxOp::InsertCrossRef(InsertCrossRefOp {
+                id: id.clone(),
+                para: host.clone(),
+                bookmark: c.bookmark.clone(),
+                kind: c.kind,
+            }));
+        }
+        if let Some(er) = &p.edit_range {
+            ops.push(DocxOp::InsertEditRange(InsertEditRangeOp {
+                id: id.clone(),
+                para: host.clone(),
+                ed_grp: er.ed_grp.clone(),
+                ed: er.ed.clone(),
+            }));
+        }
         if let Some(n) = p.num {
             if n as usize > numbering_n {
                 return Err(Error::with_path(
@@ -3041,6 +3343,136 @@ fn push_story_ops(
                 para: host.clone(),
                 num: Some(n),
                 ilvl: p.ilvl,
+            }));
+        }
+        for pic in &p.pictures {
+            if let Some(h) = &pic.hyperlink {
+                let pic_id = format!("{id}/pic:{}", pic.doc_pr);
+                let pic_t = picture::parse_pic_id_at(&pic_id, "document")?;
+                ops.push(DocxOp::InsertHyperlink(InsertHyperlinkOp {
+                    id: pic_id,
+                    host: InsertHyperlinkHost::Picture(pic_t),
+                    url: h.url.clone(),
+                    anchor: h.anchor.clone(),
+                    tooltip: h.tooltip.clone(),
+                }));
+            }
+        }
+        for b in &p.boxes {
+            if let Some(h) = &b.hyperlink {
+                let box_id = format!("{id}/txbx:{}", b.doc_pr);
+                let box_t = para::parse_txbx_id_at(&box_id, "document")?;
+                ops.push(DocxOp::InsertHyperlink(InsertHyperlinkOp {
+                    id: box_id,
+                    host: InsertHyperlinkHost::TextBox(box_t),
+                    url: h.url.clone(),
+                    anchor: h.anchor.clone(),
+                    tooltip: h.tooltip.clone(),
+                }));
+            }
+        }
+    }
+    Ok(())
+}
+
+fn assign_story_docpr(paras: &mut [NewPara]) {
+    let mut n = 1u32;
+    for p in paras.iter_mut() {
+        for b in &mut p.boxes {
+            b.doc_pr = n;
+            n += 1;
+        }
+    }
+    for p in paras.iter_mut() {
+        for pic in &mut p.pictures {
+            pic.doc_pr = n;
+            n += 1;
+        }
+    }
+}
+
+fn story_table_id(hf: Option<(HfKind, HfType)>, index: usize) -> String {
+    match hf {
+        None => format!("table:{}", index + 1),
+        Some((kind, hf_type)) => format!(
+            "{}:{}:1/table:{}",
+            kind.as_str(),
+            hf_type.as_str(),
+            index + 1
+        ),
+    }
+}
+
+fn story_table_ref(hf: Option<(HfKind, HfType)>, index: usize) -> TableRef {
+    let n = index + 1;
+    let story = match hf {
+        None => TableStory::Body,
+        Some((kind, hf_type)) => TableStory::HeaderFooter {
+            kind,
+            hf_type,
+            n: 1,
+        },
+    };
+    TableRef::Table { story, n }
+}
+
+fn story_cell_ref(hf: Option<(HfKind, HfType)>, index: usize, r: u32, c: u32) -> TableRef {
+    match story_table_ref(hf, index) {
+        TableRef::Table { story, n } => TableRef::Cell {
+            story,
+            n,
+            row: r as usize,
+            col: c as usize,
+        },
+        other => other,
+    }
+}
+
+fn push_table_ops(
+    ops: &mut Vec<DocxOp>,
+    tables: &[NewTable],
+    hf: Option<(HfKind, HfType)>,
+) -> Result<(), Error> {
+    for (i, t) in tables.iter().enumerate() {
+        let id = story_table_id(hf, i);
+        let target = story_table_ref(hf, i);
+        if t.extra.style.is_some() || t.extra.look.is_some() {
+            ops.push(DocxOp::SetTableStyle(SetTableStyleOp {
+                id: id.clone(),
+                target: target.clone(),
+                style: t.extra.style.clone().map(Some),
+                look: t.extra.look.clone().map(Some),
+            }));
+        }
+        if let Some(pos) = t.extra.pos.clone() {
+            ops.push(DocxOp::SetTableFloat(SetTableFloatOp {
+                id: id.clone(),
+                target: target.clone(),
+                pos: Some(pos),
+            }));
+        }
+        if let Some(mar) = &t.extra.cell_mar {
+            ops.push(DocxOp::SetTableCellMar(SetTableCellMarOp {
+                id: id.clone(),
+                target: target.clone(),
+                top: mar.top,
+                left: mar.left,
+                bottom: mar.bottom,
+                right: mar.right,
+            }));
+        }
+        for cf in &t.extra.cell_formats {
+            let cell_id = format!("{id}/r{}c{}", cf.r, cf.c);
+            ops.push(DocxOp::SetCellFormat(SetCellFormatOp {
+                id: cell_id,
+                target: story_cell_ref(hf, i, cf.r, cf.c),
+                fill: cf.fill.clone(),
+                top: cf.top,
+                left: cf.left,
+                bottom: cf.bottom,
+                right: cf.right,
+                tl2br: cf.tl2br.clone(),
+                tr2bl: cf.tr2bl.clone(),
             }));
         }
     }

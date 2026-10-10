@@ -52,7 +52,8 @@ Word 写出的连接线可进 inspect，并可用 `insertConnector` / `deleteCon
 也可按 3D id `exportMedia`。不是图，不进 `pictures`。注内、批注内本期不插。
 组合本身不进树。docx 可用 `setThemeColors` / `setThemeFonts` / `setThemeFmt` 改主文档 theme 的配色、字体与 `fmtScheme` 常用槽，可用 `setThemeOverride` 读写主文档 `themeOverride` 部件。
 三种格式都可用 `setProps` / `setCustomProp` / `deleteCustomProp` 改文件属性。
-`create` 可在正文和页眉页脚上写 DrawingML 图，也可写文本框、SmartArt、图表、墨迹画布、3D 模型、脚注、尾注、批注与回复、超链接、书签、域、公式、内容控件；根上可写编号定义、目录块、theme 与页面背景 / 页面边框；
+`create` 可在正文和页眉页脚上写 DrawingML 图，也可写文本框、SmartArt、图表、墨迹画布、3D 模型、脚注、尾注、批注与回复、超链接、书签、域、公式、内容控件、拼音、无框形状与连接线；
+根上可写编号定义、目录块、自定义样式、题注、交叉引用、索引、参考文献、构建基块、嵌入字体、东亚设置、theme 与页面背景 / 页面边框；
 页眉页脚允许 `default` / `even` / `first`；不写修订痕迹。
 字段见下文 create。嵌入图表不是 `pic:pic`：根上始终有 `chartCount`；给了 `scope.charts` 才列出名单，并可 apply。
 SmartArt 不是 `pic:pic`：根上始终有 `smartArtCount`；给了 `scope.smartArt` 才列出名单，并可 apply。
@@ -298,7 +299,7 @@ run 级与 `*Change` 只动被点名的那一个 XML 节点，`rowIns` / `rowDel
   `hyperlink` 对象字段顺序：`kind`、`rId`、`url`、`anchor`、`tooltip`。
   `kind` 为 `url`（有 `r:id` 且 Target 不以 `#` 开头）或 `anchor`。
   框内图、注内 / 批注内的图或框、连接线、无框形状、SmartArt、图表、墨迹、3D、OLE 本期不写 DrawingML 链；对这些 id 发超链接 op 报 `InvalidId`。
-  create 本期不写对象上的 `hyperlink`，见待做 52。
+  create 给了 `pictures[].hyperlink` 或 `textBoxes[].hyperlink` 时按同一套规则写入。
   xlsx / pptx 行为不变。docx 上出现 `location` / `ref` / `on` / `event` 报未知字段或 `InvalidField`（内部用 `anchor`）。
 
 书签的 `{n}` 从 1 起，按该故事里被收入的 `w:bookmarkStart` 的文档顺序（同一套边界）。只收起止都在同一故事里、且 `w:name` 不以 `_` 开头的配对（Word 隐藏书签含 `_GoBack` 不进树）。
@@ -353,7 +354,7 @@ Word 给题注写的 `_Ref*` 书签仍不进 `bookmarks`（隐藏书签规则不
 嵌入字体的 `{n}` 从 1 起，按 `fontTable` 里所有 `w:embedRegular` / `w:embedBold` / `w:embedItalic` / `w:embedBoldItalic` 的文档顺序（每个嵌入面一条，不是每个 `w:font`）。
 没有 fontTable 或没有任何 embed* 则为 0。`font:{n}` 在插删嵌入面之后会变。
 `insertEmbeddedFont` / `deleteEmbeddedFont` / `setFontEmbed` 的 id 规则见 apply。不把 odttf 字节塞进 inspect 树。
-不实现字体渲染、PANOSE 替换或 TTF 子集化引擎。create 本期不写嵌入字体。不改用户本机字体库。
+不实现字体渲染、PANOSE 替换或 TTF 子集化引擎。create 给了 `document.embeddedFonts` 时按 `insertEmbeddedFont` 写入。不改用户本机字体库。
 
 公式的 `{n}` 从 1 起，按该故事里顶层 `m:oMath` 的文档顺序（遇 `w:txbxContent` 停住；`mc:AlternateContent` 只进 Choice）。嵌在另一个 `oMath` 里的不算一条。
 `oMathPara` 里的每个 `oMath` 各算一条。`math:{n}` 在插删公式之后会变，只够同一次 inspect 之后立刻 apply。
@@ -1433,10 +1434,10 @@ xlsx / pptx 的 `scope.tables` 不是同一件事：xlsx 仍拒绝；pptx 展开
   `strictFirstAndLastChars` 取 `w:strictFirstAndLastChars`（§17.15.1.82）：没有元素为 `null`；有且 OnOff 为开为 `true`，为关为 `false`。
   `noLineBreaksBefore` / `noLineBreaksAfter` 取 `w:noLineBreaksBefore` / `w:noLineBreaksAfter`（§17.15.1.59、§17.15.1.58）。
   没有该元素为 `null`。有则对象字段顺序：`lang`、`chars`，对应 `w:lang` / `w:val`，缺则为 `null`。
-  没有 settings 部件则四项都是 `null`。页眉页脚容器不出现 `eastAsianSettings`。xlsx / pptx 根上不要带此对象。create 本期不写。
+  没有 settings 部件则四项都是 `null`。页眉页脚容器不出现 `eastAsianSettings`。xlsx / pptx 根上不要带此对象。create 给了 `document.eastAsianSettings` 时按 `setEastAsianSettings` 写入。
 - 文档根上的 `bibliographyStyle` 始终出现。没有 bibliography customXml 为 `null`。有则对象字段顺序：`selectedStyle`、`styleName`、`version`。
   三者取 `b:Sources` 的 `SelectedStyle` / `StyleName` / `Version` 原文，缺为 `null`。不跑 XSL。
-  页眉页脚容器不出现此对象。xlsx / pptx 根上不要带 `bibliographyStyle`。create 本期不写。
+  页眉页脚容器不出现此对象。xlsx / pptx 根上不要带 `bibliographyStyle`。create 给了 `document.bibliographyStyle` 时按 `setBibliographyStyle` 写入。
 - 节上的 `pageBorders` 始终出现。没有 `w:pgBorders` 为 `null`。有则对象字段顺序：`offsetFrom`、`display`、`zOrder`、`top`、`left`、`bottom`、`right`。
   前三项取对应属性原文，缺则为 `null`。四边取 `w:top` / `w:left` / `w:bottom` / `w:right`，没有该子元素为 `null`。
   每边对象字段顺序：`val`、`sz`、`space`、`color`。`val` 取 `@w:val`，缺则为 `""`。
@@ -1653,6 +1654,7 @@ Word 16.0 另存通常不写该部件；自行写入后 Word 仍能打开。xlsx
 带墨迹画布的示例见 `docs/examples/docx-create-ink.json`。
 带 3D 模型的示例见 `docs/examples/docx-create-model3d.json`。
 带 theme 与页面背景的示例见 `docs/examples/docx-create-theme-bg.json`。
+带样式、表外观、形状、连接线、题注、索引、参考文献、构建基块、嵌入字体、拼音与 DrawingML 链的示例见 `docs/examples/docx-create-round4.json`。
 
 - **`path`**
   - 输出路径
@@ -1792,6 +1794,42 @@ Word 16.0 另存通常不写该部件；自行写入后 Word 仍能打开。xlsx
   - `checkbox` / `picture` 不要 `text`
   - 其余 kind `text` 必填非空
   - 页眉页脚段落同样允许
+- **`paragraphs[].shapes`**
+  - 可选
+  - 该段上的无框形状列表
+  - 字段与 `insertShape` 相同，不含 `op` / `id`
+  - 页眉页脚段落同样允许
+- **`paragraphs[].connectors`**
+  - 可选
+  - 该段上的连接线列表
+  - 字段与 `insertConnector` 相同，不含 `op` / `id`
+  - 页眉页脚段落同样允许
+- **`paragraphs[].rubies`**
+  - 可选
+  - 该段上的拼音列表
+  - 字段与 `insertRuby` 相同，不含 `op` / `id`
+  - 页眉页脚段落同样允许
+- **`paragraphs[].citations`**
+  - 可选
+  - 该段上的引文列表
+  - 每项只要 `tag`，规则与 `insertCitation` 相同
+  - 页眉页脚段落同样允许
+- **`paragraphs[].indexEntries`**
+  - 可选
+  - 该段上的索引项列表
+  - 每项只要 `entry`，规则与 `insertIndexEntry` 相同
+  - 页眉页脚段落同样允许
+- **`paragraphs[].crossRefs`**
+  - 可选
+  - 该段上的交叉引用列表
+  - 字段与 `insertCrossRef` 相同，不含 `op` / `id`
+  - 页眉页脚段落同样允许
+- **`paragraphs[].editRange`**
+  - 可选
+  - `true` 时按 `insertEditRange` 省略 `edGrp` / `ed` 写入
+  - 对象时字段与 `insertEditRange` 相同，不含 `op` / `id`
+  - `false` 报 `InvalidField`
+  - 页眉页脚段落同样允许
 - **`paragraphs[].num`**
   - 可选
   - 从 1 起的整数，指向 `document.numberings` 的下标（不是 `num:{n}`）
@@ -1817,6 +1855,49 @@ Word 16.0 另存通常不写该部件；自行写入后 Word 仍能打开。xlsx
   - 省略 `after` 则插到正文末尾
   - `after` 为 0 或超过段数报 `InvalidField`
   - 页眉、页脚上出现 `tocs` 报未知字段
+- **`document.captions`**
+  - 可选
+  - 题注列表
+  - 只挂在 `document` 上
+  - 每项 `label` / `title` / `bookmark` 与 `insertCaption` 相同（不要 `id`）
+  - `after` 规则与 `tocs` 相同
+- **`document.indexes`**
+  - 可选
+  - 索引块列表
+  - 只挂在 `document` 上
+  - 每项 `instr` 与 `insertIndex` 相同
+  - `after` 规则与 `tocs` 相同
+- **`document.bibliographies`**
+  - 可选
+  - 书目块列表
+  - 只挂在 `document` 上
+  - 每项 `instr` 与 `insertBibliography` 相同
+  - `after` 规则与 `tocs` 相同
+- **`document.sources`**
+  - 可选
+  - 书目源列表
+  - 每项字段与 `insertSource` 相同（不要 `op` / `id`）
+- **`document.bibliographyStyle`**
+  - 可选字符串
+  - 取值与 `setBibliographyStyle` 的 `styleName` 相同
+- **`document.docParts`**
+  - 可选
+  - 构建基块列表
+  - 每项字段与 `insertDocPart` 相同（不要 `op` / `id`）
+- **`document.styles`**
+  - 可选
+  - 自定义样式列表
+  - 每项字段与 `insertStyle` 相同（不要 `op` / `id`）
+- **`document.embeddedFonts`**
+  - 可选
+  - 嵌入字体列表
+  - 每项字段与 `insertEmbeddedFont` 相同（不要 `op` / `id`）
+- **`document.fontEmbed`**
+  - 可选对象
+  - 字段与 `setFontEmbed` 相同（不要 `id`）
+- **`document.eastAsianSettings`**
+  - 可选对象
+  - 字段与 `setEastAsianSettings` 相同（不要 `id`）
 - **`document.headers` / `document.footers`**
   - 可选
   - 页眉或页脚
@@ -1828,6 +1909,7 @@ Word 16.0 另存通常不写该部件；自行写入后 Word 仍能打开。xlsx
   - 可选
   - 文档保护，字段与 [json-contract.md](json-contract.md#setprotection) 的 `setProtection` 相同（不要 `id`，不要 `hasPassword`）
   - 出现 `password` 仍报 `NotImplemented`
+  - 出现 `writePassword` 仍报 `NotImplemented`
 - **`document.watermarks`**
   - 可选
   - 水印列表
@@ -1863,6 +1945,13 @@ Word 16.0 另存通常不写该部件；自行写入后 Word 仍能打开。xlsx
     - `fields`
     - `maths`
     - `contentControls`
+    - `shapes`
+    - `connectors`
+    - `rubies`
+    - `citations`
+    - `indexEntries`
+    - `crossRefs`
+    - `editRange`
     - `num`
     - `ilvl`
 - **`headers[].tables` / `footers[].tables`**
@@ -1871,11 +1960,16 @@ Word 16.0 另存通常不写该部件；自行写入后 Word 仍能打开。xlsx
 
 | `tables[].cells` | 必须。二维字符串数组。至少一行一列，至多 500 行、63 列（Word 列上限）。每一行的长度必须相同，否则报 `InvalidField`。每个字符串是该格第一段可见文本，可空 |
 | `tables[].after` | 可选。非负整数。表插在第 `after` 个段落之后（段落按下标从 1 计）；`0` 表示插在第一段之前。省略则插在全部段落之后。超过段落个数报 `InvalidField`。多张表 `after` 相同则按数组顺序相邻 |
+| `tables[].style` | 可选。`style:{styleId}`，规则与 `setTableStyle` 相同 |
+| `tables[].look` | 可选。对象，规则与 `setTableStyle` 的 `look` 相同 |
+| `tables[].pos` | 可选。对象，规则与 `setTableFloat` 相同 |
+| `tables[].cellMar` | 可选。对象，字段 `top` / `left` / `bottom` / `right`，规则与 `setTableCellMar` 相同 |
+| `tables[].cellFormats` | 可选。每项必须有 1 起的 `r` / `c`，其余字段与 `setCellFormat` 相同（不要 `id`） |
 
 | `textBoxes[].text` | 框内第一段可见文本，可空。省略当作 `""` |
 | `textBoxes[].cx` | 可选。宽度，EMU。省略为 `1828800` |
 | `textBoxes[].cy` | 可选。高度，EMU。省略为 `914400` |
-| `textBoxes[].hyperlink` | 本期不写。出现报未知字段。见待做 52 |
+| `textBoxes[].hyperlink` | 可选。`url` 与 `anchor` 恰好一个，可选 `tooltip`。不要 `text`。规则与 DrawingML `insertHyperlink` 相同 |
 
 - **`pictures[].file`**
   - 本地路径，与 `insertPicture` 相同
@@ -1893,9 +1987,11 @@ Word 16.0 另存通常不写该部件；自行写入后 Word 仍能打开。xlsx
 - **`pictures[].alignH` / `alignV` / `offsetX` / `offsetY`**
   - 仅浮动，规则与 `setPictureWrap` 相同
 - **`pictures[].hyperlink`**
-  - 本期不写
-  - 出现报未知字段
-  - 见待做 52
+  - 可选对象
+  - `url` 与 `anchor` 恰好一个
+  - 可选 `tooltip`
+  - 不要 `text`
+  - 规则与 DrawingML `insertHyperlink` 相同
 
 | `smartArts[].layout` | 必须。`list`、`org` 或 `cycle`，与 `insertSmartArt` 相同 |
 | `smartArts[].points` | 可选。与 `insertSmartArt` 相同；省略则用该版式的缺省占位点 |
@@ -1934,6 +2030,14 @@ Word 16.0 另存通常不写该部件；自行写入后 Word 仍能打开。xlsx
 | `maths[].expr` | 与 `text` 恰好一个。规则与 `insertMath` 相同 |
 | `maths[].kind` | 可选。`inline` 或 `display` |
 
+| `shapes[].prst` / `cx` / `cy` | 可选。与 `insertShape` 相同 |
+| `connectors[].prst` / `cx` / `cy` | 可选。与 `insertConnector` 相同 |
+| `rubies[].base` / `rt` | 必须非空。其余字段与 `insertRuby` 相同 |
+| `citations[].tag` | 必须。与 `insertCitation` 相同 |
+| `indexEntries[].entry` | 必须。与 `insertIndexEntry` 相同 |
+| `crossRefs[].bookmark` | 必须。可选 `kind`，与 `insertCrossRef` 相同 |
+| `editRange` | `true` 或对象。对象字段与 `insertEditRange` 相同 |
+
 | `contentControls[].text` | `checkbox` / `picture` 不要此字段。其余 kind 必须非空 |
 | `contentControls[].kind` | 可选。`plainText`（缺省）、`richText`、`dropDown`、`comboBox`、`date`、`checkbox`、`picture`、`group`、`equation` |
 | `contentControls[].file` | 只用于 `picture`。本地图片路径，规则与 `insertPicture` 相同 |
@@ -1966,12 +2070,21 @@ create 写出 Transitional 最小包，见 [opc.md](opc.md)。
 给了 `comments` 时按 `insertComment` 同一套规则写 `comments.xml`、`commentsExtended.xml`、`people.xml` 与范围标记。
 给了 `comments[].replies` 时按 `replyComment` 写回复。
 给了 `hyperlinks` / `bookmarks` / `fields` / `maths` / `contentControls` 时按对应 insert 写入。
+给了 `shapes` / `connectors` / `rubies` / `citations` / `indexEntries` / `crossRefs` / `editRange` 时按对应 insert 写入。
+给了 `pictures[].hyperlink` 或 `textBoxes[].hyperlink` 时按 DrawingML `insertHyperlink` 写入。
 给了 `document.numberings` 时按 `insertNumbering` 写 `/word/numbering.xml`，再按 `paragraphs[].num` 发 `setParaNumbering`。
+给了 `document.styles` 时按 `insertStyle` 追加自定义样式。
+给了 `document.sources` 时按 `insertSource` 写入。给了 `document.bibliographyStyle` 时按 `setBibliographyStyle` 写入。
+给了 `document.embeddedFonts` 时按 `insertEmbeddedFont` 写入。给了 `document.fontEmbed` 时按 `setFontEmbed` 写入。
+给了 `document.eastAsianSettings` 时按 `setEastAsianSettings` 写入。
+给了 `document.docParts` 时按 `insertDocPart` 写入。
 给了 `document.tocs` 时按 `insertToc` 在正文插入目录块。
-同一段上先写骨架里的文字 / 图 / 框 / SmartArt，再图表，再 OLE，再墨迹画布，再 3D 模型，再脚注，再尾注，再批注，再该条批注的回复，再书签，再超链接，再域，再公式，再内容控件，再绑编号。全部故事写完后再写 `tocs`。
-`numberings` 在任何段落绑定之前写入。不写修订痕迹。不写题注、交叉引用、索引、参考文献、构建基块、嵌入字体、连接线或无框形状。
-也不写批注的回复再回复。create 不写 `styles[]`。
-不写表上的 `tblLook` / `tblpPr` / `tblCellMar`，不写格上的底纹、`tcMar` 与斜线。
+给了 `document.captions` / `indexes` / `bibliographies` 时按对应 insert 插入新段。
+同一段上先写骨架里的文字 / 图 / 框 / SmartArt，再图表，再 OLE，再墨迹画布，再 3D 模型，再脚注，再尾注，再批注，再该条批注的回复，再书签，再超链接，再域，再公式，再内容控件，再无框形状，再连接线，再拼音，再索引项，再引文，再交叉引用，再例外编辑区，再绑编号。
+全部故事写完后再写 `tocs` / `captions` / `indexes` / `bibliographies`。
+`numberings` 与 `styles` 在任何段落绑定之前写入。`sources` 在引文之前写入。不写修订痕迹。
+也不写批注的回复再回复。出现 `writePassword` 仍报 `NotImplemented`。
+给了 `tables[].style` / `look` / `pos` / `cellMar` / `cellFormats` 时按对应 set op 写入。
 给了 `document.props` 时按 `setProps` / `setCustomProp` 同一套规则写 core / app / custom；
 省略则仍写空的 `dc:title` 与 `dc:creator` 为 `ooxp`，不写 custom 部件。
 给了 `document.protection` 时按 `setProtection` 同一套规则写 `settings.xml`，窗体保护还可写各节 `w:formProt`。
@@ -1979,7 +2092,7 @@ create 写出 Transitional 最小包，见 [opc.md](opc.md)。
 给了 `document.theme` 时写 `/word/theme/theme1.xml` 与主文档 theme 关系；省略则不写 theme。
 给了 `document.pageBackground` 时按 `setPageBackground` 写入。给了 `document.pageBorders` 时按 `setPageBorders` 写入末节。
 默认页眉页脚带框不在本期 create。
-给了 `tables` 时写出带单线边框的 `w:tbl`，每列 `gridCol` 宽 1440 twip，每格一段，带新的 `w14:paraId`。不写 `tblStyle`。不算列宽。框内、表内、注内本期 create 不写图表或注。表格外观与自定义样式定义见待做 52。
+给了 `tables` 时写出带单线边框的 `w:tbl`，每列 `gridCol` 宽 1440 twip，每格一段，带新的 `w14:paraId`。不算列宽。框内、表内、注内本期 create 不写图表或注。
 
 
 ## apply
@@ -3587,7 +3700,7 @@ xlsx / pptx 上发此 op 报 `InvalidField`。create 给了 `document.numberings
 `type` 为 `numbering` 或不认识时报 `InvalidField`。空 `name` 报 `InvalidField`。
 省略 `basedOn` 时绑到同类型 `w:default` 样式；没有默认样式、或默认就是自己，则不写 `basedOn`。给了 `basedOn` 时按原文写入，不先查目标是否存在。
 写入 `w:customStyle="1"`。表格样式另写空的 `w:tblPr`。不写 `tblStylePr`。
-id 不是 `docx:document` 报 `InvalidId`。xlsx / pptx 上发此 op 报 `InvalidField`。create 本期不写样式定义。
+id 不是 `docx:document` 报 `InvalidId`。xlsx / pptx 上发此 op 报 `InvalidField`。create 给了 `document.styles` 时按同一套规则写入。
 
 ### deleteStyle
 
@@ -3683,7 +3796,7 @@ xlsx / pptx 上发此 op 报 `InvalidField`。
 - `topFromText` / `bottomFromText`：可选。单位 twip。省略则不写该属性
 
 不认识的锚点报 `InvalidField`。写入对象时同时写 `tblOverlap val="never"`。
-找不到表报 `IdNotFound`。id 不是表 id 报 `InvalidId`。xlsx / pptx 上发此 op 报 `InvalidField`。create 本期不写浮动表。
+找不到表报 `IdNotFound`。id 不是表 id 报 `InvalidId`。xlsx / pptx 上发此 op 报 `InvalidField`。create 给了 `tables[].pos` 时按同一套规则写入。
 
 ### setTableCellMar
 
@@ -3710,7 +3823,7 @@ xlsx / pptx 上发此 op 报 `InvalidField`。
 斜线对象字段：`val`（省略为 `single`）、`sz`（可选，八分之一磅）、`color`（省略为 `auto`）。写出 `space="0"`。
 `val` 与页面边框同一套：`nil` / `none` / `single` / `dashed` / `dotted` / `double` / `thick` / `wave` / `dashSmallGap` / `dotDash` / `dotDotDash`。
 不认识的 `val` 或非法 `color` 报 `InvalidField`。两条斜线都删光且没有其它边时去掉空的 `tcBorders`。
-找不到单元格报 `IdNotFound`。id 不是单元格 id 报 `InvalidId`。xlsx / pptx 上发此 op 报 `InvalidField`。create 本期不写格外观。
+找不到单元格报 `IdNotFound`。id 不是单元格 id 报 `InvalidId`。xlsx / pptx 上发此 op 报 `InvalidField`。create 给了 `tables[].cellFormats` 时按同一套规则写入。
 
 ### setParaFormat
 
@@ -3828,7 +3941,7 @@ id 不是 run id 报 `InvalidId`。xlsx / pptx 上发此 op 报 `InvalidField`�
 `id` 为 `docx:document` 时在正文末尾、`sectPr` 之前新插一个只含该拼音的 `w:p`。
 框内、注内、批注内的段落，以及拼音 id、容器 id、表 id、run id、`section:{n}`，一律报 `InvalidId`。找不到段落报 `IdNotFound`。
 空 `base` / `rt`、空 `lid`、不认识的 `align`、或 `hps` / `hpsRaise` / `hpsBaseText` 越界，报 `InvalidField`。
-xlsx / pptx 上发此 op 报 `InvalidField`。create 本期不写拼音。
+xlsx / pptx 上发此 op 报 `InvalidField`。create 给了 `paragraphs[].rubies` 时按同一套规则写入。
 
 ### setRuby
 
@@ -3875,7 +3988,7 @@ id 不是拼音 id 报 `InvalidId`。xlsx / pptx 上发此 op 报 `InvalidField`
 
 四个字段至少给一个。对象必须同时有非空 `lang` 与非空 `chars`。不认识的 `characterSpacingControl` 报 `InvalidField`。
 id 不是 `docx:document` 报 `InvalidId`。没有 settings 且要写入时新建 `/word/settings.xml` 与主文档 settings 关系。
-xlsx / pptx 上发此 op 报 `InvalidField`。create 本期不写。
+xlsx / pptx 上发此 op 报 `InvalidField`。create 给了 `document.eastAsianSettings` 时按同一套规则写入。
 
 ### setTextBoxLink
 

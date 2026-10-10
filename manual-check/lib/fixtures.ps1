@@ -354,6 +354,67 @@ function Ensure-DocxCreateRemain([switch]$Force) {
     return $path
 }
 
+function Ensure-DocxCreateRound4([switch]$Force) {
+    $path = Get-OutPath 'docx-create-round4.docx'
+    if ((Test-Path $path) -and -not $Force) { return $path }
+    $png = Ensure-OoxpPngA
+    $font = 'C:\Windows\Fonts\calibri.ttf'
+    $req = @{
+        schemaVersion = 1; action = 'create'
+        path = $path.Replace('\', '/'); format = 'docx'
+        document = @{
+            styles = @(
+                @{ styleId = 'ooxpTbl'; type = 'table'; name = 'ooxpTbl' }
+            )
+            sources = @(
+                @{ tag = 'Book1'; title = 'Sample Book'; sourceType = 'Book' }
+            )
+            bibliographyStyle = 'MLA'
+            embeddedFonts = @(
+                @{ name = 'Calibri'; file = $font.Replace('\', '/') }
+            )
+            fontEmbed = @{ trueType = $true }
+            eastAsianSettings = @{ characterSpacingControl = 'compressPunctuation' }
+            docParts = @(
+                @{ name = 'qp1'; text = '基块正文' }
+            )
+            paragraphs = @(
+                @{
+                    style = 'Heading1'
+                    text = '标题'
+                    bookmarks = @(@{ name = 'ch1' })
+                }
+                @{
+                    text = 'hello'
+                    pictures = @(
+                        @{ file = $png.Replace('\', '/'); hyperlink = @{ url = 'https://example.com' } }
+                    )
+                    shapes = @(@{ prst = 'ellipse' })
+                    connectors = @(@{ prst = 'straightConnector1' })
+                    rubies = @(@{ base = '汉字'; rt = 'hànzì' })
+                    citations = @(@{ tag = 'Book1' })
+                    indexEntries = @(@{ entry = 'hello' })
+                    crossRefs = @(@{ bookmark = 'ch1' })
+                    editRange = $true
+                }
+            )
+            tables = @(
+                @{
+                    cells = @(, @('A', 'B'))
+                    style = 'style:ooxpTbl'
+                    look = @{ firstRow = $true }
+                    cellFormats = @(@{ r = 1; c = 1; fill = 'FF0000' })
+                }
+            )
+            captions = @(@{ label = 'Figure'; title = '图一' })
+            indexes = @(@{})
+            bibliographies = @(@{})
+        }
+    }
+    Invoke-OoxpRequest $req 'docx-create-round4' | Out-Null
+    return $path
+}
+
 function Ensure-PptxCreate([switch]$Force) {
     $path = Get-OutPath 'pptx-create.pptx'
     if ((Test-Path $path) -and -not $Force) { return $path }

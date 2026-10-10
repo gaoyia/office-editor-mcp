@@ -32,6 +32,7 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 2026-10-10 补跑 `docx-style-table.ps1`，Sy1–Sy6、Tf1–Tf6 通过。无 Repair。COM 字符样式 `Color` RGB=255、`Bold=-1`。表 `WrapAroundText=True`，格底纹 `RGB=255`，斜线 `Borders.Item(-7)` 的 `LineStyle=1`。
 2026-10-10 补跑 `docx-theme-bg-remain.ps1`，Fm1–Fm7 通过。无 Repair。
 2026-10-10 补跑 `docx-protect-rev-math.ps1`，Pq1–Pq8 通过。无 Repair。COM `OMath.Justification=2`，`BibliographyStyle=MLA`。窗体 `ProtectionType=2`。修改密码 `WriteReserved=True`。
+2026-10-10 补跑 `docx-create-round4.ps1`，Cy1–Cy8 通过。无 Repair。COM `Shapes.Count=2`，第一格底纹 RGB=255，图上 `Hyperlink.Address` 为 example.com，`BibliographyStyle=MLA`。
 
 - **C1** ✅
   - Word 16.0 能打开 `manual-check/office/out/docx-create.docx`，标题栏无 Repair
@@ -279,6 +280,11 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
   - Word 16.0：`docx-create-remain.ps1`，9 PASS / 0 FAIL
   - 链 / 书签 / DATE 与 TOC 域 / `num:1` / 行内公式 / 纯文本控件 / `tocCount=1` / 批注回复 `parent=comment:0`
   - 打开无 Repair，COM 能看见链、书签、编号、公式、内容控件与回复
+- **Cy1–Cy8** ✅
+  - Word 16.0：`docx-create-round4.ps1`，8 PASS / 0 FAIL
+  - 样式、表外观、形状、连接线、拼音、题注 / 索引 / 书目、嵌入字体、DrawingML 链
+  - `writePassword` 仍为 `NotImplemented`
+  - 标题栏无 Repair
 - **Cd1–Cd6** ✅
   - Word 16.0：`docx-container-drawing.ps1`，6 PASS / 0 FAIL
   - 批注内柱形图
@@ -1486,6 +1492,22 @@ Word 跟踪修订下改表单元格底纹、插入空段、删除表行。`inspe
 | Cs7 | 目录 | `tocCount` 为 1 |
 | Cs8 | 回复 | `commentCount` 为 2；给了 `scope.comments` 时一条 `parent` 为 `comment:0`，可见字为 `回复一` |
 | Cs9 | 打开 | Word 打开后无修复；能看见链、书签、编号、公式、内容控件与批注回复 |
+
+## create 第四轮
+
+create 复用 46–51 已有 apply：自定义样式、表外观、无框形状、连接线、拼音、题注 / 交叉引用 / 索引 / 参考文献 / 构建基块、嵌入字体、东亚设置、例外编辑区、图与框上的 DrawingML 链。不写修订痕迹。`writePassword` 仍报 `NotImplemented`。不算排版引擎。
+手测脚本 `manual-check/office/cases/docx-create-round4.ps1`。编号用 Cy（不要和 Cd、Cs、Cf、C、Pq 撞）。
+
+| 序号 | 检查 | 通过标准 |
+| --- | --- | --- |
+| Cy1 | 样式与表 | `styleCount` 至少 5，名单含 `styleId=ooxpTbl` 且 `type=table`；`tableCount` 为 1，`style` 为 `ooxpTbl`，`look.firstRow` 为 true，第一格 `fill` 为 `FF0000` |
+| Cy2 | 形状与连接线 | 第二段 `shapeCount` / `connectorCount` 为 1，`prst` 为 `ellipse` / `straightConnector1` |
+| Cy3 | 拼音与引用 | `rubyCount` 为 1，`base` / `rt` 为汉字与拼音；`indexEntryCount`、`citationCount`、`crossRefCount`、`editRangeCount` 均为 1，`edGrp` 为 everyone |
+| Cy4 | 题注书目基块 | `captionCount` / `indexCount` / `bibliographyCount` / `sourceCount` / `docPartCount` 均为 1，`bibliographyStyle.styleName` 为 MLA |
+| Cy5 | 字体与东亚 | `embeddedFontCount` 为 1，名为 Calibri；`fontEmbed.trueType` 为 true；`eastAsianSettings.characterSpacingControl` 为 `compressPunctuation` |
+| Cy6 | DrawingML 链 | `pictureCount` 为 1，图上 `hyperlink.url` 为 `https://example.com`；根上 `hyperlinkCount` 仍为 0 |
+| Cy7 | writePassword | create 给 `protection.writePassword` 报 `NotImplemented` |
+| Cy8 | 打开 | Word 打开后无修复；COM `Shapes.Count` 至少 2，第一格底纹 RGB=255，图上 Hyperlink.Address 为 example.com，`BibliographyStyle` 为 MLA |
 
 ## 容器内 drawing
 
