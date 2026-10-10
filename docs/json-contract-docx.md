@@ -1703,6 +1703,7 @@ Word 16.0 另存通常不写该部件；自行写入后 Word 仍能打开。xlsx
 带 3D 模型的示例见 `docs/examples/docx-create-model3d.json`。
 带 theme 与页面背景的示例见 `docs/examples/docx-create-theme-bg.json`。
 带样式、表外观、形状、连接线、题注、索引、参考文献、构建基块、嵌入字体、拼音与 DrawingML 链的示例见 `docs/examples/docx-create-round4.json`。
+带框内表、框内链、段边框底纹制表位、`runs[]`、组合与 `writePassword` 的示例见 `docs/examples/docx-create-round5.json`。
 
 - **`path`**
   - 输出路径
@@ -1726,6 +1727,7 @@ Word 16.0 另存通常不写该部件；自行写入后 Word 仍能打开。xlsx
 - **`paragraphs[].text`**
   - 可见文本，可空字符串
   - 省略当作 `""`
+  - 同段给了 `runs` 则忽略此字段
 - **`paragraphs[].style`**
   - 段落样式 id
   - 省略或 `Normal` 表示正文
@@ -1888,6 +1890,39 @@ Word 16.0 另存通常不写该部件；自行写入后 Word 仍能打开。xlsx
   - 可选
   - 绑定级别，缺省 `0`，取值 0 到 8
   - 只给 `ilvl` 不给 `num` 报 `InvalidField`
+- **`paragraphs[].borders` / `paragraphs[].shd` / `paragraphs[].tabs`**
+  - 可选
+  - 与 `setParaFormat` 相同（不要 `op` / `id`）
+  - 不要 `align`、缩进、段距、行距、东亚开关
+  - 页眉页脚段落同样允许
+- **`paragraphs[].runs`**
+  - 可选
+  - 该段的 run 列表
+  - 有则忽略同段 `text`
+  - 空数组报 `InvalidField`
+  - 每项必须有 `text`（可空字符串）
+  - 其余字段与 `setRunFormat` 相同（不要 `op` / `id`）
+  - 某项除 `text` 外没有可写字段则只写骨架文字，不发 `setRunFormat`
+  - 页眉页脚段落同样允许
+- **`document.groups`**
+  - 可选
+  - 正文组合列表
+  - 每项只要 `ids`，至少两个 inspect 风格字符串
+  - 成员必须是该故事已写出的浮动图、文本框、无框形状或连接线
+  - 段 id 为 `para:{8 位大写十六进制}`，从 `00000001` 起
+  - 框为 `{段 id}/txbx:{docPr}`
+  - 无框形状为 `{段 id}/shape:{docPr}`
+  - 连接线为 `{段 id}/cxn:{docPr}`
+  - 浮动图为 `{段 id}/pic:{docPr}`
+  - 行内图不能进组
+  - 不要 `op` / `id`
+  - 组合本身不进 inspect 树
+  - 复用 `groupShapes`，`id` 为 `docx:document`
+- **`headers[].groups` / `footers[].groups`**
+  - 可选
+  - 规则与 `document.groups` 相同
+  - 成员 id 带页眉或页脚容器前缀，例如 `header:default:1/para:00000001/txbx:1`
+  - `groupShapes` 的 `id` 为该部件容器 id
 - **`document.numberings`**
   - 可选
   - 编号定义列表
@@ -1957,7 +1992,7 @@ Word 16.0 另存通常不写该部件；自行写入后 Word 仍能打开。xlsx
   - 可选
   - 文档保护，字段与 [json-contract.md](json-contract.md#setprotection) 的 `setProtection` 相同（不要 `id`，不要 `hasPassword`）
   - 出现 `password` 仍报 `NotImplemented`
-  - 出现 `writePassword` 仍报 `NotImplemented`
+  - `writePassword` 按 `setProtection` 同一套规则写修改密码哈希
 - **`document.watermarks`**
   - 可选
   - 水印列表
@@ -2002,6 +2037,10 @@ Word 16.0 另存通常不写该部件；自行写入后 Word 仍能打开。xlsx
     - `editRange`
     - `num`
     - `ilvl`
+    - `borders`
+    - `shd`
+    - `tabs`
+    - `runs`
 - **`headers[].tables` / `footers[].tables`**
   - 可选
   - 该部件里的表，规则与 `document.tables` 相同，`after` 相对该部件的 `paragraphs`
@@ -2018,6 +2057,13 @@ Word 16.0 另存通常不写该部件；自行写入后 Word 仍能打开。xlsx
 | `textBoxes[].cx` | 可选。宽度，EMU。省略为 `1828800` |
 | `textBoxes[].cy` | 可选。高度，EMU。省略为 `914400` |
 | `textBoxes[].hyperlink` | 可选。`url` 与 `anchor` 恰好一个，可选 `tooltip`。不要 `text`。规则与 DrawingML `insertHyperlink` 相同 |
+| `textBoxes[].tables` | 可选。框内表列表。字段与 `document.tables` 相同。`after` 相对该框骨架段落。省略 `after` 或 `after` 等于框内现有段数（骨架为 1）时插到框末。`after` 为 0 报 `InvalidField` |
+| `textBoxes[].hyperlinks` | 可选。作用在框内第一段。规则与 `paragraphs[].hyperlinks` 相同 |
+| `textBoxes[].bookmarks` | 可选。作用在框内第一段。规则与 `paragraphs[].bookmarks` 相同。`end` 相对该框段落 |
+| `textBoxes[].fields` | 可选。作用在框内第一段。规则与 `paragraphs[].fields` 相同 |
+| `textBoxes[].maths` | 可选。作用在框内第一段。规则与 `paragraphs[].maths` 相同 |
+| `textBoxes[].contentControls` | 可选。作用在框内第一段。规则与 `paragraphs[].contentControls` 相同 |
+| `textBoxes[].rubies` | 可选。作用在框内第一段。规则与 `paragraphs[].rubies` 相同 |
 
 - **`pictures[].file`**
   - 本地路径，与 `insertPicture` 相同
@@ -2128,11 +2174,11 @@ create 写出 Transitional 最小包，见 [opc.md](opc.md)。
 给了 `document.docParts` 时按 `insertDocPart` 写入。
 给了 `document.tocs` 时按 `insertToc` 在正文插入目录块。
 给了 `document.captions` / `indexes` / `bibliographies` 时按对应 insert 插入新段。
-同一段上先写骨架里的文字 / 图 / 框 / SmartArt，再图表，再 OLE，再墨迹画布，再 3D 模型，再脚注，再尾注，再批注，再该条批注的回复，再书签，再超链接，再域，再公式，再内容控件，再无框形状，再连接线，再拼音，再索引项，再引文，再交叉引用，再例外编辑区，再绑编号。
-全部故事写完后再写 `tocs` / `captions` / `indexes` / `bibliographies`。
+同一段上先写骨架里的文字或 `runs[]` / 图 / 框 / SmartArt，再图表，再 OLE，再墨迹画布，再 3D 模型，再脚注，再尾注，再批注，再该条批注的回复，再段 `borders` / `shd` / `tabs`，再 run 格式，再框内表，再框内书签 / 链 / 域 / 公式 / 控件 / 拼音，再正文书签，再超链接，再域，再公式，再内容控件，再无框形状，再连接线，再拼音，再索引项，再引文，再交叉引用，再例外编辑区，再绑编号。
+全部故事写完后再写 `tocs` / `captions` / `indexes` / `bibliographies`，再写 `groups`。
 `numberings` 与 `styles` 在任何段落绑定之前写入。`sources` 在引文之前写入。不写修订痕迹。
-也不写批注的回复再回复。出现 `writePassword` 仍报 `NotImplemented`。
-给了 `tables[].style` / `look` / `pos` / `cellMar` / `cellFormats` 时按对应 set op 写入。
+也不写批注的回复再回复。出现 `password` 仍报 `NotImplemented`。给了 `writePassword` 时按 `setProtection` 写入。
+给了 `tables[].style` / `look` / `pos` / `cellMar` / `cellFormats` 时按对应 set op 写入。框内表同样。
 给了 `document.props` 时按 `setProps` / `setCustomProp` 同一套规则写 core / app / custom；
 省略则仍写空的 `dc:title` 与 `dc:creator` 为 `ooxp`，不写 custom 部件。
 给了 `document.protection` 时按 `setProtection` 同一套规则写 `settings.xml`，窗体保护还可写各节 `w:formProt`。

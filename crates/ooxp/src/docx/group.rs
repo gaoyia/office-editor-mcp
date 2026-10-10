@@ -46,7 +46,10 @@ struct Payload {
 }
 
 pub fn parse_group_host(id: &str, op_index: usize) -> Result<GroupHost, Error> {
-    let path = format!("ops[{op_index}].id");
+    parse_group_host_at(id, &format!("ops[{op_index}].id"))
+}
+
+pub fn parse_group_host_at(id: &str, path: &str) -> Result<GroupHost, Error> {
     if id == "docx:document" {
         return Ok(GroupHost::Document);
     }
@@ -57,12 +60,16 @@ pub fn parse_group_host(id: &str, op_index: usize) -> Result<GroupHost, Error> {
         ErrorKind::InvalidId {
             reason: IdReason::GroupNeedsDocument,
         },
-        path,
+        path.to_string(),
     ))
 }
 
 pub fn parse_member_id(id: &str, op_index: usize) -> Result<GroupMember, Error> {
-    let path = format!("ops[{op_index}].id");
+    parse_member_id_at(id, &format!("ops[{op_index}].id"))
+}
+
+pub fn parse_member_id_at(id: &str, path: &str) -> Result<GroupMember, Error> {
+    let path = path.to_string();
     if super::ink::looks_like_ink_id(id) {
         return Err(Error::with_path(
             ErrorKind::InvalidId {

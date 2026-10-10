@@ -3829,6 +3829,10 @@
         },
         "readOnlyRecommended": {
           "type": "boolean"
+        },
+        "writePassword": {
+          "type": "string",
+          "minLength": 1
         }
       },
       "anyOf": [
@@ -3850,6 +3854,11 @@
         {
           "required": [
             "readOnlyRecommended"
+          ]
+        },
+        {
+          "required": [
+            "writePassword"
           ]
         }
       ]

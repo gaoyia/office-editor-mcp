@@ -1,0 +1,71 @@
+{
+  "schemaVersion": 1,
+  "action": "create",
+  "path": "C:\\out\\round5.docx",
+  "format": "docx",
+  "document": {
+    "paragraphs": [
+      {
+        "borders": {
+          "top": {
+            "val": "single",
+            "sz": 12,
+            "space": 1,
+            "color": "000000"
+          }
+        },
+        "shd": {
+          "fill": "ffff00"
+        },
+        "tabs": [
+          {
+            "val": "left",
+            "pos": 720
+          }
+        ],
+        "runs": [
+          {
+            "text": "黄",
+            "highlight": "yellow",
+            "strike": true
+          },
+          {
+            "text": "常"
+          }
+        ]
+      },
+      {
+        "text": "框",
+        "textBoxes": [
+          {
+            "text": "框内",
+            "tables": [
+              {
+                "cells": [["A"]]
+              }
+            ],
+            "hyperlinks": [
+              {
+                "text": "链",
+                "url": "https://example.com"
+              }
+            ]
+          }
+        ],
+        "shapes": [
+          {
+            "prst": "ellipse"
+          }
+        ]
+      }
+    ],
+    "groups": [
+      {
+        "ids": [
+          "para:00000002/txbx:1",
+          "para:00000002/shape:2"
+        ]
+      }
+    ]
+  }
+}

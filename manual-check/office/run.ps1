@@ -36,6 +36,7 @@ $order = @(
     'docx-create-full'
     'docx-create-remain'
     'docx-create-round4'
+    'docx-create-round5'
     'pptx-create'
     'pptx-create-pictures'
     'pptx-create-charts'

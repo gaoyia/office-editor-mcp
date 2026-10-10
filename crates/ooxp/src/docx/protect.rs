@@ -434,16 +434,10 @@ pub fn apply_create(pkg: &mut Package, v: Option<&Value>) -> Result<(), Error> {
             "document.protection.password",
         ));
     }
-    if obj.contains_key("writePassword") {
-        return Err(Error::with_path(
-            ErrorKind::ProtectionPassword,
-            "document.protection.writePassword",
-        ));
-    }
     for k in obj.keys() {
         if !matches!(
             k.as_str(),
-            "enforced" | "edit" | "formatting" | "readOnlyRecommended"
+            "enforced" | "edit" | "formatting" | "readOnlyRecommended" | "writePassword"
         ) {
             return Err(Error::with_path(
                 ErrorKind::UnknownField { field: k.clone() },

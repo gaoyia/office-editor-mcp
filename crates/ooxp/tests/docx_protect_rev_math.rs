@@ -406,7 +406,7 @@ fn write_password_hash_gate_and_create_reject() {
         "format": "docx",
         "document": {
             "paragraphs": [{ "text": "a" }],
-            "protection": { "writePassword": "secret" }
+            "protection": { "password": "secret" }
         }
     }))
     .unwrap_err();

@@ -351,7 +351,8 @@ docx 段落与页眉页脚上的 `pictures` 同样复用插图，`charts` 复用
 `footnote` / `endnote` / `comments` 复用对应 insert，`comments[].replies` 复用 `replyComment`，
 `hyperlinks` / `bookmarks` / `fields` / `maths` / `contentControls` 复用对应 insert。
 `document.numberings` 复用 `insertNumbering`，`paragraphs[].num` 复用 `setParaNumbering`。`document.tocs` 复用 `insertToc`。
-docx create 第四轮同样复用已有 apply：`styles` / `sources` / `bibliographyStyle` / `bibliographies` / `captions` / `indexes` / `docParts` / `embeddedFonts` / `fontEmbed` / `eastAsianSettings`，以及段上 `shapes` / `connectors` / `rubies` / `citations` / `indexEntries` / `crossRefs` / `editRange`、图与框的 DrawingML 链、表外观。不写修订痕迹，也不写 `writePassword`。
+docx create 第四轮同样复用已有 apply：`styles` / `sources` / `bibliographyStyle` / `bibliographies` / `captions` / `indexes` / `docParts` / `embeddedFonts` / `fontEmbed` / `eastAsianSettings`，以及段上 `shapes` / `connectors` / `rubies` / `citations` / `indexEntries` / `crossRefs` / `editRange`、图与框的 DrawingML 链、表外观。不写修订痕迹。
+docx create 第五轮复用已有 apply：框内表与框内链 / 书签 / 域 / 公式 / 控件 / 拼音、段 `borders` / `shd` / `tabs`、`runs[]` 的 `setRunFormat`、`groups[]` 的 `groupShapes`，以及 `protection.writePassword`。不写修订痕迹。限制编辑口令 `password` 仍报 `NotImplemented`。
 create 不写修订痕迹。pptx 的 `slides[].pictures` 复用 `insertPicture`，
 `slides[].maths` 复用 `insertMath`，`slides[].model3ds` 复用 `insertModel3d`，
 `slides[].videos` / `slides[].audios` 复用 `insertVideo` / `insertAudio`，

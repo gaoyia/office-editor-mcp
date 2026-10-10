@@ -245,10 +245,10 @@ fn create_round4_writes_styles_table_shapes_ruby_biblio_and_drawing_link() {
 }
 
 #[test]
-fn create_round4_rejects_write_password_edit_range_false_and_foreign_fields() {
+fn create_round4_rejects_password_edit_range_false_and_foreign_fields() {
     let err = create_err(json!({
         "paragraphs": [{ "text": "a" }],
-        "protection": { "writePassword": "secret" }
+        "protection": { "password": "secret" }
     }));
     assert_eq!(err.code(), ErrorCode::NotImplemented);
 

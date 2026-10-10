@@ -36,6 +36,7 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 2026-10-11 补跑 `docx-box-table.ps1`，Bx1–Bx5 通过。无 Repair。COM 框内 `TextFrame.TextRange.Tables.Count=1`。标题栏仍是 `docx-box-table-nest.docx`。
 2026-10-11 补跑 `docx-box-fields.ps1`，Bf1–Bf5 通过。无 Repair。COM 框内 `TextFrame.TextRange.Hyperlinks.Count=1`。标题栏仍是 `docx-box-fields-link.docx`。
 2026-10-11 补跑 `docx-para-run-remain.ps1`，Bd1–Bd3、Rh1–Rh3 通过。无 Repair。COM 段底纹 RGB=65535、上边框 `LineStyle=1`。`HighlightColorIndex=7`，`StrikeThrough=-1`。标题栏仍是对应文件名。
+2026-10-11 补跑 `docx-create-round5.ps1`，Cz1–Cz7 通过。无 Repair。COM `Shapes` 有 `Type=6` 的组合。段底纹 RGB=65535。修改密码 `WriteReserved=True`。标题栏仍是 `docx-create-round5.docx`。
 
 - **C1** ✅
   - Word 16.0 能打开 `manual-check/office/out/docx-create.docx`，标题栏无 Repair
@@ -294,7 +295,7 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 - **Cy1–Cy8** ✅
   - Word 16.0：`docx-create-round4.ps1`，8 PASS / 0 FAIL
   - 样式、表外观、形状、连接线、拼音、题注 / 索引 / 书目、嵌入字体、DrawingML 链
-  - `writePassword` 仍为 `NotImplemented`
+  - create 给 `protection.password` 仍为 `NotImplemented`
   - 标题栏无 Repair
 - **Cd1–Cd6** ✅
   - Word 16.0：`docx-container-drawing.ps1`，6 PASS / 0 FAIL
@@ -1554,7 +1555,7 @@ Word 跟踪修订下改表单元格底纹、插入空段、删除表行。`inspe
 
 ## create 第四轮
 
-create 复用 46–51 已有 apply：自定义样式、表外观、无框形状、连接线、拼音、题注 / 交叉引用 / 索引 / 参考文献 / 构建基块、嵌入字体、东亚设置、例外编辑区、图与框上的 DrawingML 链。不写修订痕迹。`writePassword` 仍报 `NotImplemented`。不算排版引擎。
+create 复用 46–51 已有 apply：自定义样式、表外观、无框形状、连接线、拼音、题注 / 交叉引用 / 索引 / 参考文献 / 构建基块、嵌入字体、东亚设置、例外编辑区、图与框上的 DrawingML 链。不写修订痕迹。`protection.password` 仍报 `NotImplemented`。不算排版引擎。
 手测脚本 `manual-check/office/cases/docx-create-round4.ps1`。编号用 Cy（不要和 Cd、Cs、Cf、C、Pq 撞）。
 
 | 序号 | 检查 | 通过标准 |
@@ -1565,8 +1566,23 @@ create 复用 46–51 已有 apply：自定义样式、表外观、无框形状�
 | Cy4 | 题注书目基块 | `captionCount` / `indexCount` / `bibliographyCount` / `sourceCount` / `docPartCount` 均为 1，`bibliographyStyle.styleName` 为 MLA |
 | Cy5 | 字体与东亚 | `embeddedFontCount` 为 1，名为 Calibri；`fontEmbed.trueType` 为 true；`eastAsianSettings.characterSpacingControl` 为 `compressPunctuation` |
 | Cy6 | DrawingML 链 | `pictureCount` 为 1，图上 `hyperlink.url` 为 `https://example.com`；根上 `hyperlinkCount` 仍为 0 |
-| Cy7 | writePassword | create 给 `protection.writePassword` 报 `NotImplemented` |
+| Cy7 | password | create 给 `protection.password` 报 `NotImplemented` |
 | Cy8 | 打开 | Word 打开后无修复；COM `Shapes.Count` 至少 2，第一格底纹 RGB=255，图上 Hyperlink.Address 为 example.com，`BibliographyStyle` 为 MLA |
+
+## create 第五轮
+
+create 复用 53–55 已有 apply：框内表、框内链 / 书签 / 域 / 公式 / 控件 / 拼音、段边框底纹制表位、run 突出显示 / 删除线 / 上下标、组合、`writePassword`。不写修订痕迹。限制编辑口令 `password` 仍报 `NotImplemented`。不算排版引擎。
+手测脚本 `manual-check/office/cases/docx-create-round5.ps1`。编号用 Cz（不要和 Cy、Cs、Cf、C、Cd、Bx、Bf、Bd、Rh 撞）。
+
+| 序号 | 检查 | 通过标准 |
+| --- | --- | --- |
+| Cz1 | 框内表 | 框上 `tableCount` 为 1，根上 `tableCount` 为 0 |
+| Cz2 | 框内链 | 框上 `hyperlinkCount` 为 1，根上 `hyperlinkCount` 为 0 |
+| Cz3 | 段与 run | 段 `borders.top.val` 为 `single`，`shd.fill` 为 `FFFF00`，`tabs[0].pos` 为 720；run `highlight` 为 `yellow`，`strike` 为 true |
+| Cz4 | 组合 | Word 无 Repair；COM `Shapes` 有 `Type=6` 的组合，或两个成员仍在 |
+| Cz5 | writePassword | `hasPassword` 为 true，树里没有明文 |
+| Cz6 | 打开 | Word 打开无 Repair；COM 能看见框内表或链、段底纹或突出显示。标题含文件名 |
+| Cz7 | 拒写 | 空 `runs` 或 xlsx 上这些字段报 `InvalidField`。不强制开 Word |
 
 ## 容器内 drawing
 

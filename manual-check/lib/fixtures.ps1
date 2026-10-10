@@ -415,6 +415,46 @@ function Ensure-DocxCreateRound4([switch]$Force) {
     return $path
 }
 
+function Ensure-DocxCreateRound5([switch]$Force) {
+    $path = Get-OutPath 'docx-create-round5.docx'
+    if ((Test-Path $path) -and -not $Force) { return $path }
+    $req = @{
+        schemaVersion = 1; action = 'create'
+        path = $path.Replace('\', '/'); format = 'docx'
+        document = @{
+            paragraphs = @(
+                @{
+                    borders = @{
+                        top = @{ val = 'single'; sz = 12; space = 1; color = '000000' }
+                    }
+                    shd = @{ fill = 'ffff00' }
+                    tabs = @(@{ val = 'left'; pos = 720 })
+                    runs = @(
+                        @{ text = 'Hi'; highlight = 'yellow'; strike = $true }
+                        @{ text = 'Ok' }
+                    )
+                }
+                @{
+                    text = 'box'
+                    textBoxes = @(
+                        @{
+                            text = 'inner'
+                            tables = @(@{ cells = @(, @('A')) })
+                            hyperlinks = @(@{ text = 'link'; url = 'https://example.com' })
+                        }
+                    )
+                    shapes = @(@{ prst = 'ellipse' })
+                }
+            )
+            groups = @(
+                @{ ids = @('para:00000002/txbx:1', 'para:00000002/shape:2') }
+            )
+        }
+    }
+    Invoke-OoxpRequest $req 'docx-create-round5' | Out-Null
+    return $path
+}
+
 function Ensure-PptxCreate([switch]$Force) {
     $path = Get-OutPath 'pptx-create.pptx'
     if ((Test-Path $path) -and -not $Force) { return $path }

@@ -120,6 +120,12 @@
         },
         "eastAsianSettings": {
           "$ref": "#/$defs/docxEastAsianSettingsCreate"
+        },
+        "groups": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/docxGroupCreate"
+          }
         }
       }
     },
@@ -144,6 +150,12 @@
           "type": "array",
           "items": {
             "$ref": "#/$defs/docxTableCreate"
+          }
+        },
+        "groups": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/docxGroupCreate"
           }
         }
       }
@@ -354,6 +366,34 @@
           "type": "integer",
           "minimum": 0,
           "maximum": 8
+        },
+        "borders": {
+          "oneOf": [
+            { "$ref": "#/$defs/paraBorders" },
+            { "type": "null" }
+          ]
+        },
+        "shd": {
+          "oneOf": [
+            { "$ref": "#/$defs/paraShd" },
+            { "type": "null" }
+          ]
+        },
+        "tabs": {
+          "oneOf": [
+            {
+              "type": "array",
+              "items": { "$ref": "#/$defs/paraTabStop" }
+            },
+            { "type": "null" }
+          ]
+        },
+        "runs": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/docxRunCreate"
+          }
         }
       }
     },
@@ -516,6 +556,34 @@
           "type": "integer",
           "minimum": 0,
           "maximum": 8
+        },
+        "borders": {
+          "oneOf": [
+            { "$ref": "#/$defs/paraBorders" },
+            { "type": "null" }
+          ]
+        },
+        "shd": {
+          "oneOf": [
+            { "$ref": "#/$defs/paraShd" },
+            { "type": "null" }
+          ]
+        },
+        "tabs": {
+          "oneOf": [
+            {
+              "type": "array",
+              "items": { "$ref": "#/$defs/paraTabStop" }
+            },
+            { "type": "null" }
+          ]
+        },
+        "runs": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/docxRunCreate"
+          }
         }
       }
     },
@@ -970,6 +1038,187 @@
         },
         "hyperlink": {
           "$ref": "#/$defs/docxDrawingHlinkCreate"
+        },
+        "tables": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/docxTableCreate"
+          }
+        },
+        "hyperlinks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/docxHyperlinkCreate"
+          }
+        },
+        "bookmarks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/docxBookmarkCreate"
+          }
+        },
+        "fields": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/docxFieldCreate"
+          }
+        },
+        "maths": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/docxMathCreate"
+          }
+        },
+        "contentControls": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/docxSdtCreate"
+          }
+        },
+        "rubies": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/docxRubyCreate"
+          }
+        }
+      }
+    },
+    "docxRunCreate": {
+      "type": "object",
+      "required": ["text"],
+      "additionalProperties": false,
+      "properties": {
+        "text": {
+          "type": "string"
+        },
+        "bold": {
+          "type": "boolean"
+        },
+        "italic": {
+          "type": "boolean"
+        },
+        "underline": {
+          "oneOf": [
+            {
+              "type": "string",
+              "enum": [
+                "single",
+                "none",
+                "double",
+                "thick",
+                "dotted",
+                "dash",
+                "wave",
+                "words",
+                "dottedHeavy",
+                "dashedHeavy",
+                "dashLong",
+                "dashLongHeavy",
+                "dotDash",
+                "dashDotHeavy",
+                "dotDotDash",
+                "dashDotDotHeavy",
+                "wavyHeavy",
+                "wavyDouble"
+              ]
+            },
+            { "type": "null" }
+          ]
+        },
+        "sz": {
+          "type": "integer",
+          "minimum": 2,
+          "maximum": 3276
+        },
+        "color": {
+          "type": "string",
+          "pattern": "^[0-9A-Fa-f]{6}$"
+        },
+        "font": {
+          "type": "string",
+          "minLength": 1
+        },
+        "eastAsiaFont": {
+          "type": "string",
+          "minLength": 1
+        },
+        "em": {
+          "oneOf": [
+            {
+              "type": "string",
+              "enum": ["none", "dot", "comma", "circle", "underDot"]
+            },
+            { "type": "null" }
+          ]
+        },
+        "eastAsianLayout": {
+          "oneOf": [
+            { "$ref": "#/$defs/eastAsianLayout" },
+            { "type": "null" }
+          ]
+        },
+        "highlight": {
+          "oneOf": [
+            {
+              "type": "string",
+              "enum": [
+                "yellow",
+                "green",
+                "cyan",
+                "magenta",
+                "red",
+                "blue",
+                "black",
+                "white",
+                "darkBlue",
+                "darkCyan",
+                "darkGreen",
+                "darkMagenta",
+                "darkRed",
+                "darkYellow",
+                "darkGray",
+                "lightGray",
+                "none"
+              ]
+            },
+            { "type": "null" }
+          ]
+        },
+        "strike": {
+          "oneOf": [
+            { "type": "boolean" },
+            { "type": "null" }
+          ]
+        },
+        "dstrike": {
+          "oneOf": [
+            { "type": "boolean" },
+            { "type": "null" }
+          ]
+        },
+        "vertAlign": {
+          "oneOf": [
+            {
+              "type": "string",
+              "enum": ["superscript", "subscript", "baseline"]
+            },
+            { "type": "null" }
+          ]
+        }
+      }
+    },
+    "docxGroupCreate": {
+      "type": "object",
+      "required": ["ids"],
+      "additionalProperties": false,
+      "properties": {
+        "ids": {
+          "type": "array",
+          "minItems": 2,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
         }
       }
     },

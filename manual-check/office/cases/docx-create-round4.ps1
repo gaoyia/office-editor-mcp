@@ -119,7 +119,7 @@ $fail = Invoke-OoxpExpectFail @{
     format = 'docx'
     document = @{
         paragraphs = @(@{ text = 'a' })
-        protection = @{ writePassword = 'secret' }
+        protection = @{ password = 'secret' }
     }
 } 'docx-create-round4-write-password'
 Add-Check 'docx-Cy7' (
