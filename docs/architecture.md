@@ -107,6 +107,7 @@ apply 可改目标单元格，也可换、插、删工作表图，并可改 `one
 也可新建或删除图表工作表：数据仍写在点名的普通表上，图表工作表本身没有 `sheetData`。也可插入、删除、改名、重排与隐藏普通工作表，脏 `workbook.xml` 的 `sheets` 与对应 worksheet 部件。
 对 `dialogsheet` / `macrosheet` 这些 op 仍报 `NotImplemented`。
 也可用 `setCellStyle` 写单元格数字格式、字体、填充、边框与对齐：复用或追加 `styles.xml` 里的 `xf`，只改被点名格子的 `s`。边框含对角线，对齐可写缩进、旋转与缩小字体。
+也可用 `insertCellStyle` / `deleteCellStyle` / `setCellNamedStyle` 读写 `cellStyles`：insert 写入 `cellStyleXfs` 再挂名，套用时把格子的 `s` 指到引用该 `xfId` 的 `cellXfs`。不改主题。
 也可插、删、改工作表单元格超链接：脏该表 XML 的 `<hyperlinks>` 与工作表 `.rels`（Type 以 `/hyperlink` 结尾、`TargetMode` 为 `External`），不标重算，不改单元格值。
 也可插、删、改图 / 文本框 / 形状 / SmartArt 上的 DrawingML 链：脏 drawing 的 `a:hlinkClick` 与 drawing `.rels`。
 也可按槽位改页眉页脚原文，并可对 `worksheet` 与 `chartsheet` 的页眉槽位插、换、删 DrawingML 图。

@@ -2,7 +2,7 @@
 
 use serde_json::{json, Map, Value};
 
-use crate::error::Error;
+use crate::error::{Error, ErrorKind, IdReason};
 use crate::opc::{self, ContentTypes, Package, Relationship, Relationships};
 use crate::xml::{self, Document, Element, Node};
 
@@ -23,6 +23,7 @@ pub struct Stylebook {
     borders: Vec<Element>,
     xfs: Vec<Element>,
     dxfs: Vec<Element>,
+    cell_styles: Vec<Element>,
 }
 
 impl Stylebook {
@@ -34,12 +35,102 @@ impl Stylebook {
             borders: Vec::new(),
             xfs: Vec::new(),
             dxfs: Vec::new(),
+            cell_styles: Vec::new(),
         }
     }
 
     pub fn dxf_json(&self, id: usize) -> Option<Value> {
         self.dxfs.get(id).and_then(dxf_summary)
     }
+
+    pub fn named_count(&self) -> usize {
+        self.cell_styles.len()
+    }
+
+    pub fn named_json(&self) -> Value {
+        let items: Vec<Value> = self
+            .cell_styles
+            .iter()
+            .enumerate()
+            .map(|(i, el)| named_style_json(el, i + 1))
+            .collect();
+        Value::Array(items)
+    }
+}
+
+/// 追加命名单元格样式。格式字段与 `setCellStyle` 相同。
+#[derive(Debug, Clone)]
+pub struct InsertCellStyleOp {
+    pub name: String,
+    pub num_fmt: Patch<String>,
+    pub font: Patch<FontPatch>,
+    pub fill: Patch<FillPatch>,
+    pub border: Patch<BorderPatch>,
+    pub align: Patch<AlignPatch>,
+}
+
+#[derive(Debug, Clone)]
+pub struct DeleteCellStyleOp {
+    #[allow(dead_code)]
+    pub id: String,
+    pub index: usize,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetCellNamedStyleOp {
+    pub id: String,
+    pub style_index: usize,
+}
+
+fn named_style_json(el: &Element, n: usize) -> Value {
+    let mut obj = Map::new();
+    obj.insert("id".into(), json!(format!("cellStyle:{n}")));
+    obj.insert("index".into(), json!(n));
+    obj.insert("name".into(), json!(el.attr("name").unwrap_or("")));
+    let xf_id = el
+        .attr("xfId")
+        .and_then(|s| s.parse::<i64>().ok())
+        .unwrap_or(0);
+    obj.insert("xfId".into(), json!(xf_id));
+    let builtin = el.attr("builtinId").and_then(|s| s.parse::<i64>().ok());
+    obj.insert("builtinId".into(), json!(builtin));
+    Value::Object(obj)
+}
+
+pub fn parse_cell_style_id(id: &str, json_path: &str) -> Result<usize, Error> {
+    let rest = id.strip_prefix("cellStyle:").ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::CellStylePrefix,
+            },
+            json_path.to_string(),
+        )
+    })?;
+    if rest.is_empty() {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::CellStylePrefix,
+            },
+            json_path.to_string(),
+        ));
+    }
+    let n: usize = rest.parse().map_err(|_| {
+        Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::CellStyleIndexNotInt,
+            },
+            json_path.to_string(),
+        )
+    })?;
+    if n < 1 {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::CellStyleIndexFromOne,
+            },
+            json_path.to_string(),
+        ));
+    }
+    Ok(n)
 }
 
 pub fn load_for_inspect(
@@ -143,6 +234,161 @@ pub fn apply_set_cell_style(
     Ok(())
 }
 
+pub fn insert_cell_style(
+    styles: &mut Element,
+    op: &InsertCellStyleOp,
+    i: usize,
+) -> Result<(), Error> {
+    if name_taken(styles, &op.name) {
+        return Err(Error::with_path(
+            ErrorKind::InvalidNamedCellStyle {
+                field: "name".into(),
+            },
+            format!("ops[{i}].name"),
+        ));
+    }
+    let xf_id = intern_xf_into(
+        styles,
+        "cellStyleXfs",
+        None,
+        false,
+        &op.num_fmt,
+        &op.font,
+        &op.fill,
+        &op.border,
+        &op.align,
+    )?;
+    let el = Element::new("cellStyle")
+        .with_attr("name", &op.name)
+        .with_attr("xfId", xf_id.to_string());
+    let idx = ensure_collection(styles, "cellStyles");
+    if let Node::Element(col) = &mut styles.children[idx] {
+        col.push_element(el);
+        set_count(col, "cellStyle");
+    }
+    Ok(())
+}
+
+pub fn delete_cell_style(
+    styles: &mut Element,
+    op: &DeleteCellStyleOp,
+    i: usize,
+) -> Result<(), Error> {
+    let json_path = format!("ops[{i}].id");
+    let (exists, is_builtin) = {
+        let Some(parent) = styles.child_by_local("cellStyles") else {
+            return Err(Error::with_path(
+                ErrorKind::CellStyleNotFound {
+                    id: format!("cellStyle:{}", op.index),
+                },
+                json_path,
+            ));
+        };
+        match parent
+            .children_by_local("cellStyle")
+            .get(op.index.wrapping_sub(1))
+        {
+            None => (false, false),
+            Some(el) => (true, el.attr("builtinId").is_some()),
+        }
+    };
+    if !exists {
+        return Err(Error::with_path(
+            ErrorKind::CellStyleNotFound {
+                id: format!("cellStyle:{}", op.index),
+            },
+            json_path,
+        ));
+    }
+    if is_builtin {
+        return Err(Error::with_path(
+            ErrorKind::CannotDeleteBuiltinCellStyle,
+            json_path,
+        ));
+    }
+    let parent = styles.child_by_local_mut("cellStyles").unwrap();
+    let mut seen = 0usize;
+    parent.children.retain(|n| match n {
+        Node::Element(e) if e.local_name() == "cellStyle" => {
+            seen += 1;
+            seen != op.index
+        }
+        _ => true,
+    });
+    set_count(parent, "cellStyle");
+    Ok(())
+}
+
+pub fn apply_set_cell_named_style(
+    worksheet: &mut Element,
+    styles: &mut Element,
+    cell: a1::CellRef,
+    op: &SetCellNamedStyleOp,
+    i: usize,
+) -> Result<(), Error> {
+    let json_path = format!("ops[{i}].style");
+    let (xf_id, mut xf) = {
+        let items = styles
+            .child_by_local("cellStyles")
+            .map(|c| c.children_by_local("cellStyle"))
+            .unwrap_or_default();
+        let Some(style_el) = items.get(op.style_index.wrapping_sub(1)) else {
+            return Err(Error::with_path(
+                ErrorKind::CellStyleNotFound {
+                    id: format!("cellStyle:{}", op.style_index),
+                },
+                json_path,
+            ));
+        };
+        let xf_id = style_el
+            .attr("xfId")
+            .and_then(|s| s.parse::<usize>().ok())
+            .unwrap_or(0);
+        let style_xfs = styles
+            .child_by_local("cellStyleXfs")
+            .map(|c| c.children_by_local("xf"))
+            .unwrap_or_default();
+        let Some(src) = style_xfs.get(xf_id) else {
+            return Err(Error::with_path(
+                ErrorKind::InvalidNamedCellStyle {
+                    field: "xfId".into(),
+                },
+                json_path,
+            ));
+        };
+        (xf_id, (*src).clone())
+    };
+    xf.remove_attr("applyNumberFormat");
+    xf.remove_attr("applyFont");
+    xf.remove_attr("applyFill");
+    xf.remove_attr("applyBorder");
+    xf.remove_attr("applyAlignment");
+    xf.remove_attr("applyProtection");
+    xf.set_attr("xfId", xf_id.to_string());
+    let xf_idx = intern_child(styles, "cellXfs", "xf", &xf);
+    let sheet_data = apply::ensure_sheet_data(worksheet);
+    let c = apply::ensure_cell(sheet_data, cell);
+    if xf_idx == 0 {
+        c.remove_attr("s");
+    } else {
+        c.set_attr("s", xf_idx.to_string());
+    }
+    apply::expand_dimension(worksheet, cell);
+    Ok(())
+}
+
+fn name_taken(styles: &Element, name: &str) -> bool {
+    styles
+        .child_by_local("cellStyles")
+        .map(|c| c.children_by_local("cellStyle"))
+        .unwrap_or_default()
+        .iter()
+        .any(|el| {
+            el.attr("name")
+                .is_some_and(|n| n.eq_ignore_ascii_case(name))
+        })
+}
+
 fn load_or_create_styles(pkg: &mut Package, wb_part: &str) -> Result<String, Error> {
     let rels = Relationships::from_package(pkg, wb_part)?;
     if let Some(part) = styles_part(wb_part, &rels) {
@@ -218,6 +464,7 @@ fn stylebook_from_root(root: &Element) -> Stylebook {
         borders: clone_children(root.child_by_local("borders"), "border"),
         xfs: clone_children(root.child_by_local("cellXfs"), "xf"),
         dxfs: clone_children(root.child_by_local("dxfs"), "dxf"),
+        cell_styles: clone_children(root.child_by_local("cellStyles"), "cellStyle"),
     }
 }
 
@@ -434,72 +681,119 @@ fn intern_xf(
     current_s: Option<usize>,
     op: &SetCellStyleOp,
 ) -> Result<usize, Error> {
+    intern_xf_into(
+        styles,
+        "cellXfs",
+        current_s,
+        true,
+        &op.num_fmt,
+        &op.font,
+        &op.fill,
+        &op.border,
+        &op.align,
+    )
+}
+
+fn intern_xf_into(
+    styles: &mut Element,
+    collection: &str,
+    current_s: Option<usize>,
+    write_apply: bool,
+    num_fmt: &Patch<String>,
+    font: &Patch<FontPatch>,
+    fill: &Patch<FillPatch>,
+    border: &Patch<BorderPatch>,
+    align: &Patch<AlignPatch>,
+) -> Result<usize, Error> {
     let xfs: Vec<Element> = styles
-        .child_by_local("cellXfs")
+        .child_by_local(collection)
         .map(|c| c.children_by_local("xf").into_iter().cloned().collect())
         .unwrap_or_default();
     let src_i = current_s.filter(|i| *i < xfs.len()).unwrap_or(0);
-    let mut xf = xfs.get(src_i).cloned().unwrap_or_else(default_xf);
+    let mut xf = if collection == "cellStyleXfs" && current_s.is_none() {
+        default_style_xf()
+    } else {
+        xfs.get(src_i).cloned().unwrap_or_else(default_xf)
+    };
+    if collection == "cellStyleXfs" {
+        xf.remove_attr("xfId");
+    }
 
-    match &op.num_fmt {
+    match num_fmt {
         Patch::Absent => {}
         Patch::Clear => {
             xf.set_attr("numFmtId", "0");
-            xf.set_attr("applyNumberFormat", "1");
+            if write_apply {
+                xf.set_attr("applyNumberFormat", "1");
+            }
         }
         Patch::Set(code) => {
             let id = intern_num_fmt(styles, code);
             xf.set_attr("numFmtId", id.to_string());
-            xf.set_attr("applyNumberFormat", "1");
+            if write_apply {
+                xf.set_attr("applyNumberFormat", "1");
+            }
         }
     }
 
-    match &op.font {
+    match font {
         Patch::Absent => {}
         Patch::Clear => {
             xf.set_attr("fontId", "0");
-            xf.set_attr("applyFont", "1");
+            if write_apply {
+                xf.set_attr("applyFont", "1");
+            }
         }
         Patch::Set(patch) => {
             let cur = font_at(styles, attr_usize(&xf, "fontId").unwrap_or(0));
             let next = apply_font_patch(cur, patch);
             let id = intern_child(styles, "fonts", "font", &next);
             xf.set_attr("fontId", id.to_string());
-            xf.set_attr("applyFont", "1");
+            if write_apply {
+                xf.set_attr("applyFont", "1");
+            }
         }
     }
 
-    match &op.fill {
+    match fill {
         Patch::Absent => {}
         Patch::Clear => {
             xf.set_attr("fillId", "0");
-            xf.set_attr("applyFill", "1");
+            if write_apply {
+                xf.set_attr("applyFill", "1");
+            }
         }
         Patch::Set(patch) => {
             let cur = fill_at(styles, attr_usize(&xf, "fillId").unwrap_or(0));
             let next = apply_fill_patch(cur, patch);
             let id = intern_child(styles, "fills", "fill", &next);
             xf.set_attr("fillId", id.to_string());
-            xf.set_attr("applyFill", "1");
+            if write_apply {
+                xf.set_attr("applyFill", "1");
+            }
         }
     }
 
-    match &op.border {
+    match border {
         Patch::Absent => {}
         Patch::Clear => {
             xf.set_attr("borderId", "0");
-            xf.set_attr("applyBorder", "1");
+            if write_apply {
+                xf.set_attr("applyBorder", "1");
+            }
         }
         Patch::Set(patch) => {
             let cur = border_at(styles, attr_usize(&xf, "borderId").unwrap_or(0));
             let next = apply_border_patch(cur, patch);
             let id = intern_child(styles, "borders", "border", &next);
             xf.set_attr("borderId", id.to_string());
-            xf.set_attr("applyBorder", "1");
+            if write_apply {
+                xf.set_attr("applyBorder", "1");
+            }
         }
     }
 
-    match &op.align {
+    match align {
         Patch::Absent => {}
         Patch::Clear => {
             remove_children(&mut xf, "alignment");
@@ -511,14 +805,28 @@ fn intern_xf(
             remove_children(&mut xf, "alignment");
             if alignment_has_content(&next) {
                 xf.children.insert(0, Node::Element(next));
-                xf.set_attr("applyAlignment", "1");
+                if write_apply {
+                    xf.set_attr("applyAlignment", "1");
+                }
             } else {
                 xf.remove_attr("applyAlignment");
             }
         }
     }
 
-    Ok(intern_child(styles, "cellXfs", "xf", &xf))
+    if collection == "cellStyleXfs" {
+        xf.remove_attr("xfId");
+    }
+    if !write_apply {
+        xf.remove_attr("applyNumberFormat");
+        xf.remove_attr("applyFont");
+        xf.remove_attr("applyFill");
+        xf.remove_attr("applyBorder");
+        xf.remove_attr("applyAlignment");
+        xf.remove_attr("applyProtection");
+    }
+
+    Ok(intern_child(styles, collection, "xf", &xf))
 }
 
 /// 把条件格式差分写入 `<dxfs>`，相同定义复用下标。空补丁不写。
@@ -622,6 +930,14 @@ fn default_xf() -> Element {
         .with_attr("fillId", "0")
         .with_attr("borderId", "0")
         .with_attr("xfId", "0")
+}
+
+fn default_style_xf() -> Element {
+    Element::new("xf")
+        .with_attr("numFmtId", "0")
+        .with_attr("fontId", "0")
+        .with_attr("fillId", "0")
+        .with_attr("borderId", "0")
 }
 
 fn intern_num_fmt(styles: &mut Element, code: &str) -> u32 {

@@ -114,6 +114,7 @@ $order = @(
     'xlsx-docprops'
     'xlsx-sheets'
     'xlsx-cellstyle'
+    'xlsx-named-style'
     'xlsx-layout'
     'xlsx-formula'
     'xlsx-formula-master'

@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "C:\\data\\book.xlsx",
+  "output": "C:\\data\\book.named-style.xlsx",
+  "ops": [
+    {
+      "op": "insertCellStyle",
+      "id": "xlsx:workbook",
+      "name": "OoxpNamed",
+      "font": { "bold": true },
+      "fill": { "pattern": "solid", "fg": { "rgb": "FFFFFF00" } }
+    },
+    {
+      "op": "setCellNamedStyle",
+      "id": "cell:Sheet1!A1",
+      "style": "cellStyle:2"
+    }
+  ]
+}

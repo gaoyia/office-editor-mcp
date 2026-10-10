@@ -177,7 +177,7 @@
 
 ### 各码在具体 op 上的判定
 
-- 找不到单元格时，`setCell` 与 `setCellStyle` 的语义是新建该单元格，因此空单元格不是 `IdNotFound`
+- 找不到单元格时，`setCell`、`setCellStyle` 与 `setCellNamedStyle` 的语义是新建该单元格，因此空单元格不是 `IdNotFound`
 - 找不到工作表才是 `IdNotFound`
 - `inspect` 的 `scope.sheet` 点名 `chartsheet` / `dialogsheet` / `macrosheet` 报 `InvalidField`
 - 下列 op 的 id 是工作表
@@ -561,6 +561,9 @@
 - docx / pptx 上发下列 op 报 `InvalidField`
   - `setHeaderFooterText`
   - `setCellStyle`
+  - `insertCellStyle`
+  - `deleteCellStyle`
+  - `setCellNamedStyle`
   - `insertDataValidation`
   - `setDataValidation`
   - `deleteDataValidation`
@@ -834,6 +837,17 @@
 - 工作簿内大小写不敏感重名报 `InvalidField`
 - `deleteCustomView` / `showCustomView` 的 id 必须是 `customView:{n}`
 - 序号不存在报 `IdNotFound`，不是自定义视图 id 报 `InvalidId`
+- xlsx 的 `insertCellStyle` 的 id 必须是 `xlsx:workbook`
+- 必须给非空 `name`
+- `numFmt` / `font` / `fill` / `border` / `align` 至少给一个
+- 工作簿内大小写不敏感重名报 `InvalidField`
+- `deleteCellStyle` 的 id 必须是 `cellStyle:{n}`
+- 带 `@builtinId` 的内置样式报 `InvalidField`
+- 序号不存在报 `IdNotFound`，不是命名单元格样式 id 报 `InvalidId`
+- `setCellNamedStyle` 的 id 必须是单元格 id，`style` 必须是 `cellStyle:{n}`
+- 缺 `style` 报 `InvalidField`
+- `style` 序号不存在报 `IdNotFound`，不是命名单元格样式 id 报 `InvalidId`
+- 对图表工作表上的格子报 `InvalidField`
 - docx / pptx 上发下列 op 报 `InvalidField`
   - `insertSlicer`
   - `deleteSlicer`
@@ -845,6 +859,9 @@
   - `insertCustomView`
   - `deleteCustomView`
   - `showCustomView`
+  - `insertCellStyle`
+  - `deleteCellStyle`
+  - `setCellNamedStyle`
 - xlsx 的 `insertSparkline` 的 id 是工作表
 - 必须给 `ref` 与 `formula`
 - `ref` 不是单格、与已有宿主相交、或公式既跨行又跨列，报 `InvalidField`

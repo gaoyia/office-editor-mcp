@@ -123,6 +123,7 @@ fn inspect_empty_on_create() {
             "externalLinkCount",
             "customViewCount",
             "definedNameCount",
+            "cellStyleCount",
             "props",
             "workbookProtection",
             "sheets",

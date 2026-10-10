@@ -107,6 +107,44 @@ pub fn apply(bytes: &[u8], ops: &[XlsxOp]) -> Result<Vec<u8>, Error> {
                 let doc = dirty_of(&mut dirty_sheets, &part);
                 style::apply_set_cell_style(&mut doc.root, styles_root, cell, op, i)?;
             }
+            XlsxOp::InsertCellStyle(op) => {
+                let styles_root = style::ensure_styles(&mut pkg, &wb_part, &mut styles_doc)?;
+                style::insert_cell_style(styles_root, op, i)?;
+            }
+            XlsxOp::DeleteCellStyle(op) => {
+                let styles_root = style::ensure_styles(&mut pkg, &wb_part, &mut styles_doc)?;
+                style::delete_cell_style(styles_root, op, i)?;
+            }
+            XlsxOp::SetCellNamedStyle(op) => {
+                let (sheet_name, a1) = parse_cell_id(&op.id, i)?;
+                let meta = sheet_index
+                    .iter()
+                    .find(|(n, _, k)| n.eq_ignore_ascii_case(&sheet_name) && *k == "worksheet")
+                    .ok_or_else(|| {
+                        if sheet_index
+                            .iter()
+                            .any(|(n, _, _)| n.eq_ignore_ascii_case(&sheet_name))
+                        {
+                            Error::with_path(
+                                ErrorKind::SetCellWorksheetOnly,
+                                format!("ops[{i}].id"),
+                            )
+                        } else {
+                            Error::with_path(
+                                ErrorKind::SheetNotFound {
+                                    name: sheet_name.clone(),
+                                },
+                                format!("ops[{i}].id"),
+                            )
+                        }
+                    })?;
+                let part = meta.1.clone();
+                let cell = a1::parse_cell(&a1)?;
+                load_dirty(&pkg, &mut dirty_sheets, &part, true)?;
+                let styles_root = style::ensure_styles(&mut pkg, &wb_part, &mut styles_doc)?;
+                let doc = dirty_of(&mut dirty_sheets, &part);
+                style::apply_set_cell_named_style(&mut doc.root, styles_root, cell, op, i)?;
+            }
             XlsxOp::SetHeaderFooterText(op) => {
                 let (part, _kind) = require_named_sheet(&sheet_index, &op.sheet, i)?;
                 load_dirty(&pkg, &mut dirty_sheets, &part, false)?;

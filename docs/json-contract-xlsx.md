@@ -106,6 +106,9 @@
 - **自定义视图**
   - id：`customView:{n}`
   - 例子：`customView:1`
+- **命名单元格样式**
+  - id：`cellStyle:{n}`
+  - 例子：`cellStyle:1`
 
 `{name}` 是 `workbook.xml` 里 `<sheet name="...">` 的值，不是 `sheetId`，也不是 `r:id`。查找工作表时大小写不敏感，输出 id 时用文件里的原始大小写。
 
@@ -393,6 +396,11 @@ create 可写连接。不向数据源发请求，不把查询结果写进 `sheet
 `insertCustomView` 的 `id` 必须是 `xlsx:workbook`。`deleteCustomView` / `showCustomView` 的 `id` 必须是自定义视图 id。
 对不上的 id 形态报 `InvalidId`。create 可写自定义视图。不按视图恢复隐藏行 / 列。
 
+命名单元格样式挂在工作簿上，来源是 `/xl/styles.xml` 的 `<cellStyles>/<cellStyle>`（ECMA-376 §18.8.7）。
+`{n}` 从 1 起，按该元素的文档顺序。内置名（如 `Normal`）同样列出。增删之后旧的 `cellStyle:{n}` 会变，只够同一次 inspect 之后立刻 apply。
+不要用 `@name` 或 `cellStyleXfs` 下标编树 id。`insertCellStyle` 的 `id` 必须是 `xlsx:workbook`。
+`deleteCellStyle` 的 `id` 必须是命名单元格样式 id。`setCellNamedStyle` 的 `id` 必须是单元格 id，`style` 必须是命名单元格样式 id。
+对不上的 id 形态报 `InvalidId`。create 本期不写命名样式。不把 `cellStyleXfs` 里的字体 / 填充摊进名单。
 
 ## inspect
 
@@ -546,6 +554,13 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   - 不依赖 `sheet` / `range` / 其它名单键
   - 不把 guid 或各表 `customSheetView` 细节放进树
   - docx / pptx 的 `scope` 里出现 `customViews` 报 `InvalidField`
+- **`scope.cellStyles`**（否）
+  - 为 `true` 时给工作簿根填 `cellStyles`
+  - 没有命名单元格样式时为空数组
+  - 省略或 `false` 则只有 `cellStyleCount`，没有名单
+  - 不依赖 `sheet` / `range` / 其它名单键
+  - 不把 `cellStyleXfs` 的字体 / 填充摊进名单
+  - docx / pptx 的 `scope` 里出现 `cellStyles` 报 `InvalidField`
 
 省略 `scope`、或只给空对象：返回工作簿节点和表名单，每张表不含 `cells`，
 也没有 `pictures` / `charts` / `headerFooters` / `textBoxes` / `maths` / `shapes` / `connectors` / `smartArts` / `comments`
@@ -554,8 +569,8 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
 工作簿、每张 `worksheet` 与每张 `chartsheet` 仍有 `chartCount`。
 工作簿与每张 `worksheet` 仍有 `commentCount`、`hyperlinkCount`、`sparklineCount`、`oleObjectCount`、`model3dCount` 与 `slicerCount`。
 每张 `worksheet` 仍有 `protectedRangeCount`。
-工作簿仍有 `connectionCount`、`externalLinkCount`、`customViewCount`、`definedNameCount` 与 `definedNames`。
-没有 `connections` / `externalLinks` / `customViews` 名单。每张表仍有 `hasHeaderFooter`。
+工作簿仍有 `connectionCount`、`externalLinkCount`、`customViewCount`、`definedNameCount`、`cellStyleCount` 与 `definedNames`。
+没有 `connections` / `externalLinks` / `customViews` / `cellStyles` 名单。每张表仍有 `hasHeaderFooter`。
 每张 `worksheet` / `chartsheet` 仍有 `print` 与 `view`。每张 `worksheet` 仍有 `autoFilter`。每张 `worksheet` 仍有 `outline`。
 工作簿仍有 `workbookProtection`。每张 `worksheet` 与 `chartsheet` 仍有 `sheetProtection`。这是默认截断。
 
@@ -566,7 +581,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
 只要想看超链接名单，就给 `hyperlinks: true`。只要想看迷你图名单，就给 `sparklines: true`。只要想看嵌入对象名单，就给 `oleObjects: true`。
 只要想看 3D 模型名单，就给 `model3ds: true`。
 只要想看切片器名单，就给 `slicers: true`。只要想看允许编辑区域名单，就给 `protectedRanges: true`。只要想看连接名单，就给 `connections: true`。只要想看外部引用名单，就给 `externalLinks: true`。
-只要想看自定义视图名单，就给 `customViews: true`。这些键彼此独立，可只开一边。页眉图名单出现在已展开的槽位上，须同时 `headerFooter: true` 与 `pictures: true`。
+只要想看自定义视图名单，就给 `customViews: true`。只要想看命名单元格样式名单，就给 `cellStyles: true`。这些键彼此独立，可只开一边。页眉图名单出现在已展开的槽位上，须同时 `headerFooter: true` 与 `pictures: true`。
 
 
 ### 响应
@@ -593,6 +608,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   "externalLinkCount": 0,
   "customViewCount": 0,
   "definedNameCount": 0,
+  "cellStyleCount": 1,
   "props": {
     "title": "",
     "subject": null,
@@ -820,8 +836,9 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
 
 - 工作簿字段顺序：`id`、`pictureCount`、`chartCount`、`textBoxCount`、`mathCount`、`shapeCount`、`connectorCount`、`smartArtCount`、`commentCount`、
   `hyperlinkCount`、`sparklineCount`、`oleObjectCount`、`model3dCount`、`slicerCount`、`connectionCount`、`externalLinkCount`、
-  `customViewCount`、`definedNameCount`、`props`、`workbookProtection`、`sheets`、`definedNames`，
-  有连接名单时再跟 `connections`，有外部引用名单时再跟 `externalLinks`，有自定义视图名单时再跟 `customViews`。
+  `customViewCount`、`definedNameCount`、`cellStyleCount`、`props`、`workbookProtection`、`sheets`、`definedNames`，
+  有连接名单时再跟 `connections`，有外部引用名单时再跟 `externalLinks`，有自定义视图名单时再跟 `customViews`，
+  有命名单元格样式名单时再跟 `cellStyles`。
   `pictureCount` 始终出现，等于各 `worksheet` 与 `chartsheet` 的 `pictureCount` 之和，不含 `dialogsheet` / `macrosheet`，也不含页眉图。
   `chartCount` 始终出现，等于各 `worksheet` 与 `chartsheet` 的 `chartCount` 之和，不含 `dialogsheet` / `macrosheet`。
   `textBoxCount` 始终出现，等于各 `worksheet` 与 `chartsheet` 的 `textBoxCount` 之和。`mathCount` 始终出现，等于各 `worksheet` 的 `mathCount` 之和，外加 `chartsheet` SpreadsheetDrawing 里已有的公式框。`shapeCount` 始终出现，等于各 `worksheet` 与 `chartsheet` 的 `shapeCount` 之和。
@@ -834,6 +851,8 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   `externalLinkCount` 始终出现，是 workbook `<externalReferences>` 里 `<externalReference>` 的个数。没有则为 `0`。
   `customViewCount` 始终出现，是 workbook `<customWorkbookViews>` 里 `<customWorkbookView>` 的个数；没有则为 `0`。
   `definedNameCount` 始终出现，是 workbook `<definedNames>` 里 `<definedName>` 的个数。没有则为 `0`。
+  `cellStyleCount` 始终出现，是 `/xl/styles.xml` 里 `<cellStyles>` 下 `<cellStyle>` 的个数。没有 styles 部件或没有该元素则为 `0`。
+  create 最小样式表含一条内置 `Normal`，因此默认为 `1`。
   `definedNames` 始终列出，可为空数组，不另加 scope 键。`props` 始终出现，规则见 [json-contract.md](json-contract.md#文档属性三格式共用)。
   `workbookProtection` 始终出现，规则见下文「工作簿保护」。xlsx 根上不要带 docx 那个 `protection`。
 - `definedNames` 每项字段顺序：`id`、`name`、`formula`、`hidden`、`localSheet`。`name` 取 `@name`，没有则为 `""`。
@@ -1048,6 +1067,13 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   `includePrintSettings` / `includeHiddenRowCol`：属性为 `0` / `false` / `FALSE` / `off` 则为 `false`，缺属性或其余为 `true`。
   `activeSheet` 按 `@activeSheetId` 对上 `sheets/sheet/@sheetId` 的表 `name`；对不上则为 `null`。
   不把 guid、窗口坐标或各表 `customSheetView` 放进树。docx / pptx 的 `scope` 里出现 `customViews` 报 `InvalidField`。
+- `scope.cellStyles` 为 `true` 时，工作簿根带 `cellStyles`。没有命名单元格样式时为空数组。不依赖单元格切片。
+  按 `/xl/styles.xml` 里 `<cellStyle>` 的文档顺序（ECMA-376 §18.8.7）。
+  每条字段顺序：`id`、`index`、`name`、`xfId`、`builtinId`。`index` 与 id 里的 `{n}` 相同。
+  `name` 取 `@name`，没有则为 `""`。`xfId` 取 `@xfId` 的整数；缺属性或无法解析则为 `0`。
+  `builtinId` 取 `@builtinId` 的整数；缺属性或无法解析则为 `null`。
+  不把 `xr:uid`、`iLevel`、`hidden`、`customBuiltin` 或 `cellStyleXfs` 里的字体 / 填充摊进名单。
+  要看套用后的效果仍走格子上的 `setCellStyle` 摘要。docx / pptx 的 `scope` 里出现 `cellStyles` 报 `InvalidField`。
 - `scope.headerFooter` 为 `true` 时，每张表带 `headerFooters`，固定六个对象，顺序见上文 id 表。
   每个槽位字段顺序：`id`、`kind`、`side`、`text`；`worksheet` 与 `chartsheet` 再跟 `pictureCount`、`textBoxCount`、`shapeCount`、`connectorCount`，
   若同时对应 scope 为 true 再跟 `pictures` / `textBoxes` / `shapes` / `connectors`。
@@ -1540,8 +1566,103 @@ create 本期仍只在骨架里写普通 `<f>`；`cells[]` 上的 `shared` / `sh
 写 `styles.xml` 时：能在已有 `numFmts` / `fonts` / `fills` / `borders` / `cellXfs` 里找到相同定义就复用下标，否则追加。不重排、不删、不改写未点名的 `xf` 条目。
 未点名格子的 `s` 不变。`s="0"` 可省略该属性。没有 styles 部件则按 create 那份最小表新建，并补 workbook 关系与 Override。不改 `cellStyleXfs`、主题。
 `setCellStyle` 不改 `dxfs`；条件格式写 `dxfs` 见 `insertConditionalFormat`。create 见上文 `cells[]` 样式字段。
+不要和 `insertCellStyle` / `setCellNamedStyle` 合成一个 op。
 
 示例见 `docs/examples/xlsx-apply-cellstyle.json`。
+
+### insertCellStyle
+
+往 `styles.xml` 追加一条命名单元格样式。不套到任何格子上。
+
+```json
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "C:\\data\\book.xlsx",
+  "output": "C:\\data\\book.named-style.xlsx",
+  "ops": [
+    {
+      "op": "insertCellStyle",
+      "id": "xlsx:workbook",
+      "name": "OoxpNamed",
+      "font": {
+        "bold": true
+      },
+      "fill": {
+        "pattern": "solid",
+        "fg": {
+          "rgb": "FFFFFF00"
+        }
+      }
+    }
+  ]
+}
+```
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"insertCellStyle"` |
+| `id` | 必须是 `xlsx:workbook` |
+| `name` | 必须。非空。工作簿内大小写不敏感唯一 |
+| `numFmt` | 可选。与 `setCellStyle` 相同 |
+| `font` | 可选。与 `setCellStyle` 相同 |
+| `fill` | 可选。与 `setCellStyle` 相同 |
+| `border` | 可选。与 `setCellStyle` 相同 |
+| `align` | 可选。与 `setCellStyle` 相同 |
+
+`numFmt`、`font`、`fill`、`border`、`align` 至少给一个，否则报 `InvalidField`。缺 `name` 或空串报 `InvalidField`。重名报 `InvalidField`。
+id 不是 `xlsx:workbook` 报 `InvalidId`。docx / pptx 上发此 op 报 `InvalidField`。
+写入一条 `cellStyleXfs` 的 `xf`（能复用则复用），再在 `cellStyles` 末尾挂 `<cellStyle name="…" xfId="…">`。
+不写 `builtinId`、不写 `xr:uid`。不重排已有 `cellStyle` / `cellStyleXfs`。不改格子上已有 `s`。不标重算。
+Excel 16.0 另存探测：自定义样式没有 `builtinId`；`cellStyleXfs` 的 `xf` 不写 `apply*`（规范对该集合缺省为真）。
+create 本期不写命名样式。
+
+示例见 `docs/examples/xlsx-apply-named-style.json`。
+
+### deleteCellStyle
+
+删掉一条命名单元格样式。不删 `cellStyleXfs`，不改格子上已有 `s`。
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"deleteCellStyle"` |
+| `id` | 命名单元格样式 id `cellStyle:{n}` |
+
+带 `@builtinId` 的内置样式报 `InvalidField`。找不到该序号报 `IdNotFound`。id 不是命名单元格样式 id 报 `InvalidId`。
+去掉该 `<cellStyle>`，更新 `count`。不重排未点名条目。docx / pptx 上发此 op 报 `InvalidField`。不标重算。
+
+### setCellNamedStyle
+
+把单元格的 `s` 指到一条引用该命名样式 `xfId` 的 `cellXfs`。
+
+```json
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "C:\\data\\book.xlsx",
+  "output": "C:\\data\\book.named-apply.xlsx",
+  "ops": [
+    {
+      "op": "setCellNamedStyle",
+      "id": "cell:Sheet1!A1",
+      "style": "cellStyle:2"
+    }
+  ]
+}
+```
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"setCellNamedStyle"` |
+| `id` | 单元格 id |
+| `style` | 必须。命名单元格样式 id `cellStyle:{n}` |
+
+缺 `style` 报 `InvalidField`。`style` 不是命名单元格样式 id 报 `InvalidId`。序号不存在报 `IdNotFound`。
+目标格还不存在时按 `setCell` 同一套规则插入 `<row>` / `<c>`，只写 `r` 与 `s`。找不到工作表报 `IdNotFound`。id 不是单元格 id 报 `InvalidId`。
+只能改 `worksheet`；对图表工作表上的格子报 `InvalidField`（与 `setCellStyle` 相同）。docx / pptx 上发此 op 报 `InvalidField`。
+从该 `cellStyle` 的 `@xfId` 取出 `cellStyleXfs` 对应 `xf`，写入一条 `cellXfs`（带 `xfId`，不写 `apply*`；能复用则复用），再把该格 `s` 指过去。
+Excel 16.0 另存探测：套用后格子 `s` 指向带同一 `xfId` 的 `cellXfs`，该 `xf` 不写 `apply*`（规范对 `cellXfs` 缺省为假，表示跟命名样式走）。
+不改值、不改公式、不改 `cellStyleXfs`。不标重算。不要和 `setCellStyle` 合成一个 op。
 
 ### setColWidth
 
@@ -2232,7 +2353,7 @@ docx / pptx 上发此 op 报 `InvalidField`。create 可写允许编辑区域。
 - 目标工作表 XML
 - `/xl/workbook.xml`（仅 `calcPr`，以及给隐式编号补 `r` 这类语义等价的改写；`setCellStyle` 单独出现时不要为重算去改它）
 - 可能被删除的 `/xl/calcChain.xml` 以及因此修改的关系与内容类型（仅 `setCell` 等改了值或公式时）
-- `setCellStyle` 还可脏 styles 部件（常见 `/xl/styles.xml`），必要时补 workbook 关系与 Override
+- `setCellStyle` / `insertCellStyle` / `deleteCellStyle` / `setCellNamedStyle` 还可脏 styles 部件（常见 `/xl/styles.xml`），必要时补 workbook 关系与 Override
 
 未点名的 `xf` 条目、其他工作表、主题一律按原来的语义留下：不要重排或改写未点名下标。只改单元格值、不改样式、不改图、图表或页眉时，`styles.xml` 与绘图原样写回。
 图表 op 还可以脏 drawing、`/xl/charts/…` 及其 `.rels`、`[Content_Types].xml`，以及被写入数据的工作表 XML；写入单元格时走上面同一套重算标记。

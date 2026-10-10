@@ -206,6 +206,9 @@
         "customViews": {
           "type": "boolean"
         },
+        "cellStyles": {
+          "type": "boolean"
+        },
         "oleObjects": {
           "type": "boolean"
         },
@@ -602,6 +605,15 @@
               },
               {
                 "$ref": "xlsx.schema.json#/$defs/showCustomViewOp"
+              },
+              {
+                "$ref": "xlsx.schema.json#/$defs/insertCellStyleOp"
+              },
+              {
+                "$ref": "xlsx.schema.json#/$defs/deleteCellStyleOp"
+              },
+              {
+                "$ref": "xlsx.schema.json#/$defs/setCellNamedStyleOp"
               },
               {
                 "$ref": "xlsx.schema.json#/$defs/groupRowsOp"

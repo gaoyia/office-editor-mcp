@@ -347,6 +347,16 @@ pub(super) fn render(kind: &ErrorKind) -> String {
                 "customView 后面必须是正整数".into()
             }
             IdReason::CustomViewIndexFromOne => "customView 从 1 起".into(),
+            IdReason::InsertCellStyleNeedsWorkbook => {
+                "insertCellStyle 的 id 必须是 xlsx:workbook".into()
+            }
+            IdReason::CellStylePrefix => {
+                "命名单元格样式 id 必须是 cellStyle:n，n 从 1 起".into()
+            }
+            IdReason::CellStyleIndexNotInt => {
+                "cellStyle 后面必须是正整数".into()
+            }
+            IdReason::CellStyleIndexFromOne => "cellStyle 从 1 起".into(),
             IdReason::ConnectionPrefix => {
                 "连接 id 必须是 connection:ID 或 connection:index:N".into()
             }
@@ -1015,6 +1025,14 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::InvalidCustomView { field } => {
             format!("自定义视图的 {field} 不合法")
         }
+        ErrorKind::CellStyleNotFound { id } => format!("找不到命名单元格样式：{id}"),
+        ErrorKind::NeedInsertCellStyleField => {
+            "insertCellStyle 至少要给 numFmt、font、fill、border 或 align 之一".into()
+        }
+        ErrorKind::InvalidNamedCellStyle { field } => {
+            format!("命名单元格样式的 {field} 不合法")
+        }
+        ErrorKind::CannotDeleteBuiltinCellStyle => "不能删除内置单元格样式".into(),
         ErrorKind::ZoomNotFound { id } => format!("找不到 Zoom：{id}"),
         ErrorKind::InvalidZoomType => "type 必须是 slide、section 或 summary".into(),
         ErrorKind::InvalidShowPrType => "type 必须是 present、browse 或 kiosk".into(),

@@ -382,6 +382,16 @@ pub(super) fn render(kind: &ErrorKind) -> String {
                 "customView must be followed by a positive integer".into()
             }
             IdReason::CustomViewIndexFromOne => "customView starts at 1".into(),
+            IdReason::InsertCellStyleNeedsWorkbook => {
+                "insertCellStyle id must be xlsx:workbook".into()
+            }
+            IdReason::CellStylePrefix => {
+                "named cell style id must be cellStyle:n, n starting at 1".into()
+            }
+            IdReason::CellStyleIndexNotInt => {
+                "cellStyle must be followed by a positive integer".into()
+            }
+            IdReason::CellStyleIndexFromOne => "cellStyle starts at 1".into(),
             IdReason::ConnectionPrefix => {
                 "connection id must be connection:ID or connection:index:N".into()
             }
@@ -1118,6 +1128,16 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::CustomViewNotFound { id } => format!("Custom view not found: {id}"),
         ErrorKind::InvalidCustomView { field } => {
             format!("{field} is not a valid custom view value")
+        }
+        ErrorKind::CellStyleNotFound { id } => format!("Named cell style not found: {id}"),
+        ErrorKind::NeedInsertCellStyleField => {
+            "insertCellStyle requires at least one of numFmt, font, fill, border, or align".into()
+        }
+        ErrorKind::InvalidNamedCellStyle { field } => {
+            format!("{field} is not a valid named cell style value")
+        }
+        ErrorKind::CannotDeleteBuiltinCellStyle => {
+            "cannot delete a built-in cell style".into()
         }
         ErrorKind::ZoomNotFound { id } => format!("Zoom not found: {id}"),
         ErrorKind::InvalidZoomType => "type must be slide, section, or summary".into(),

@@ -8,7 +8,7 @@
 
 Microsoft Excel 16.0 已打开，用户确认通过。本机若装了 WPS，`Excel.Application` 会被抢走，测试仍直接启动 `EXCEL.EXE` 再挂 COM。
 
-C、I、A、O、Xp、Xvg、Xem、X3d、Xom、Xtf、Xfl、Xc、Xh、Xfs、Xtl、Xef 这几组现在由 `manual-check/office/cases/xlsx-*.ps1` 自动判定，
+C、I、A、O、Xp、Xvg、Xem、X3d、Xom、Xtf、Xfl、Xc、Xh、Xfs、Xtl、Xef、Xns 这几组现在由 `manual-check/office/cases/xlsx-*.ps1` 自动判定，
 跑 `pwsh -File manual-check\office\run.ps1 -Case 'xlsx-*'` 即可复现，逐条结果落在 `manual-check/office/out/office-results.csv`。
 2026-09-27 补跑 `xlsx-pictures.ps1`，Xp1–Xp7 通过。同日补跑 `xlsx-charts.ps1`，Xc1–Xc7 通过。
 同日补跑 `xlsx-create-pictures.ps1`，C8–C10 通过。同日补跑 `xlsx-create-charts.ps1`，C11–C13 通过。
@@ -38,6 +38,7 @@ C、I、A、O、Xp、Xvg、Xem、X3d、Xom、Xtf、Xfl、Xc、Xh、Xfs、Xtl、X
 2026-10-10 补跑 `xlsx-extpath-datatable.ps1`，Xef1–Xef5 通过。无 Repair。
 2026-10-10 补跑 `xlsx-edit-range.ps1`，Xer1–Xer5 通过。无 Repair。COM `AllowEditRanges` 能看见区域，`.xlsm` 无 Repair。
 2026-10-10 补跑 `xlsx-create-round4.ps1`，C25–C29 通过。无 Repair。COM 能见表、AllowEditRanges、OutlineLevel，组合 `Type=6`。
+2026-10-10 补跑 `xlsx-named-style.ps1`，Xns1–Xns5 通过。无 Repair。COM `Styles` 能看见自定义名，套用后 `Style.Name` 对得上，黄底 `Interior.Color=65535`。
 
 - **C1** ✅
   - Excel 16.0 打开 `manual-check/office/out/xlsx-create.xlsx`，标题栏无 Repair
@@ -155,6 +156,13 @@ C、I、A、O、Xp、Xvg、Xem、X3d、Xom、Xtf、Xfl、Xc、Xh、Xfs、Xtl、X
   - 默认 `numFmt=General`
   - A1 写成 `0.00` 与黄底后值还在、无 Repair
   - B1 仍是通用格式且无黄底
+  - 缺字段得 `InvalidField` 且未写文件
+- **Xns1–Xns5** ✅
+  - Excel 16.0：`xlsx-named-style.ps1`，5 PASS / 0 FAIL
+  - create 默认 `cellStyleCount=1`，名单含 `Normal`
+  - 插入自定义样式后 COM 能看见、无 Repair
+  - 套到 A1 后 `Style.Name` 对得上
+  - 删除自定义样式后格子格式仍在；不能删 `Normal`
   - 缺字段得 `InvalidField` 且未写文件
 - **Xl1–Xl5** ✅
   - Excel 16.0：`xlsx-layout.ps1`，5 PASS / 0 FAIL
@@ -896,6 +904,18 @@ inspect 只读进树。create 不生成。apply 不新开编辑。脚本 `manual
 | Xs3 | 未点名 | B1 未出现在 ops 里，打开后样式与打补丁前观感一致 |
 | Xs4 | 与 setCell 同批 | 同一 `ops` 先 `setCell` 再 `setCellStyle`（或反过来），值与格式都在，无修复 |
 | Xs5 | 缺字段 | 只给 `op` 与 `id` 得 `InvalidField`，未写文件。不强制开 Excel |
+
+## 命名单元格样式
+
+用库 create 产物再 apply。脚本 `manual-check/office/cases/xlsx-named-style.ps1`。编号用 **Xns**。不要和 Xs、Xcs 撞。不改主题。
+
+| 序号 | 检查 | 通过标准 |
+| --- | --- | --- |
+| Xns1 | inspect | 无 scope 时根上有 `cellStyleCount`；create 默认为 `1`。给了 `scope.cellStyles` 时名单含 `Normal`，`builtinId` 为 `0` |
+| Xns2 | 插入 | `insertCellStyle` 写黄底加粗后，Excel 无修复，COM `Styles` 能看见该名，inspect `cellStyleCount` 为 `2` |
+| Xns3 | 套用 | `setCellNamedStyle` 后 A1 的 COM `Style.Name` 对得上，填充为黄，值还在，无修复 |
+| Xns4 | 删除 | `deleteCellStyle` 后名单不再含该自定义名；A1 格式仍在；对 `Normal` 发删除得 `InvalidField`。无修复 |
+| Xns5 | 缺字段 | 只给 `op` 与 `id` 的 `insertCellStyle` 得 `InvalidField`，未写文件。不强制开 Excel |
 
 ## 列宽行高与合并
 

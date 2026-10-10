@@ -250,6 +250,12 @@ pub(crate) enum IdReason {
     CustomViewPrefix,
     CustomViewIndexNotInt,
     CustomViewIndexFromOne,
+    /// insertCellStyle 必须用 xlsx:workbook
+    InsertCellStyleNeedsWorkbook,
+    /// 命名单元格样式 id 必须是 cellStyle:n
+    CellStylePrefix,
+    CellStyleIndexNotInt,
+    CellStyleIndexFromOne,
     /// 连接 id 必须是 connection:{xmlId} 或 connection:index:{k}
     ConnectionPrefix,
     ConnectionIndexNotInt,
@@ -930,6 +936,12 @@ define_error_kinds! {
     },
     ExternalLinkInUse => vec![Self::ExternalLinkInUse],
     CustomViewNotFound { id: String } => vec![Self::CustomViewNotFound { id: "customView:1".into() }],
+    CellStyleNotFound { id: String } => vec![Self::CellStyleNotFound { id: "cellStyle:1".into() }],
+    NeedInsertCellStyleField => vec![Self::NeedInsertCellStyleField],
+    InvalidNamedCellStyle { field: String } => {
+        vec![Self::InvalidNamedCellStyle { field: "name".into() }]
+    },
+    CannotDeleteBuiltinCellStyle => vec![Self::CannotDeleteBuiltinCellStyle],
     InvalidCustomView { field: String } => {
         vec![Self::InvalidCustomView { field: "name".into() }]
     },
@@ -1403,6 +1415,10 @@ impl IdReason {
             Self::CustomViewPrefix,
             Self::CustomViewIndexNotInt,
             Self::CustomViewIndexFromOne,
+            Self::InsertCellStyleNeedsWorkbook,
+            Self::CellStylePrefix,
+            Self::CellStyleIndexNotInt,
+            Self::CellStyleIndexFromOne,
             Self::ConnectionPrefix,
             Self::ConnectionIndexNotInt,
             Self::ConnectionIndexFromOne,
@@ -1865,6 +1881,9 @@ impl ErrorKind {
             | Self::NeedSetRunFormatField
             | Self::NeedSetCellStyleField
             | Self::InvalidCellStyle { .. }
+            | Self::NeedInsertCellStyleField
+            | Self::InvalidNamedCellStyle { .. }
+            | Self::CannotDeleteBuiltinCellStyle
             | Self::NeedSetColWidthField
             | Self::InvalidColWidth
             | Self::NeedSetRowHeightField
@@ -2075,6 +2094,7 @@ impl ErrorKind {
             | Self::ConnectionNotFound { .. }
             | Self::ExternalLinkNotFound { .. }
             | Self::CustomViewNotFound { .. }
+            | Self::CellStyleNotFound { .. }
             | Self::ZoomNotFound { .. }
             | Self::WatermarkNotFound { .. }
             | Self::TableNotFound { .. }

@@ -92,6 +92,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     let want_connections = scope.as_ref().is_some_and(|s| s.connections);
     let want_external_links = scope.as_ref().is_some_and(|s| s.external_links);
     let want_custom_views = scope.as_ref().is_some_and(|s| s.custom_views);
+    let want_cell_styles = scope.as_ref().is_some_and(|s| s.cell_styles);
     let cells_scope = scope.as_ref().and_then(|s| s.cells.as_ref());
     let sheet_parts: Vec<(String, String)> = sheets
         .iter()
@@ -458,6 +459,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         json!(custom_view::count(&wb.root)),
     );
     root.insert("definedNameCount".into(), json!(names::count(&wb.root)));
+    root.insert("cellStyleCount".into(), json!(styles.named_count()));
     root.insert("props".into(), crate::props::inspect(&pkg)?);
     root.insert(
         "workbookProtection".into(),
@@ -480,6 +482,9 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     }
     if want_custom_views {
         root.insert("customViews".into(), custom_view::inspect(&wb.root));
+    }
+    if want_cell_styles {
+        root.insert("cellStyles".into(), styles.named_json());
     }
     Ok(Value::Object(root))
 }

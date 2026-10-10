@@ -21,6 +21,7 @@ use super::picture::{self, SheetPicId};
 use super::shape::{self, DrawObjKind, SheetDrawId};
 use super::slicer;
 use super::smartart as xlsx_smartart;
+use super::style;
 
 /// 工作表页眉页脚六个槽位之一。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -166,6 +167,7 @@ pub struct InspectScope {
     pub connections: bool,
     pub external_links: bool,
     pub custom_views: bool,
+    pub cell_styles: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -1878,6 +1880,9 @@ pub enum XlsxOp {
     InsertCustomView(custom_view::InsertCustomViewOp),
     DeleteCustomView(custom_view::DeleteCustomViewOp),
     ShowCustomView(custom_view::ShowCustomViewOp),
+    InsertCellStyle(style::InsertCellStyleOp),
+    DeleteCellStyle(style::DeleteCellStyleOp),
+    SetCellNamedStyle(style::SetCellNamedStyleOp),
     GroupRows(GroupRowsOp),
     UngroupRows(UngroupRowsOp),
     GroupCols(GroupColsOp),
@@ -2001,6 +2006,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
             "connections",
             "externalLinks",
             "customViews",
+            "cellStyles",
         ],
     )?;
     let pictures = parse_bool_field(obj.get("pictures"), "pictures")?;
@@ -2021,6 +2027,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
     let connections = parse_bool_field(obj.get("connections"), "connections")?;
     let external_links = parse_bool_field(obj.get("externalLinks"), "externalLinks")?;
     let custom_views = parse_bool_field(obj.get("customViews"), "customViews")?;
+    let cell_styles = parse_bool_field(obj.get("cellStyles"), "cellStyles")?;
     let sheet = obj.get("sheet").and_then(Value::as_str);
     let range = obj.get("range").and_then(Value::as_str);
     let max_cells = match obj.get("maxCells") {
@@ -2084,6 +2091,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
         && !connections
         && !external_links
         && !custom_views
+        && !cell_styles
     {
         return Ok(None);
     }
@@ -2107,6 +2115,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
         connections,
         external_links,
         custom_views,
+        cell_styles,
     }))
 }
 
@@ -2181,6 +2190,9 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<XlsxOp>, Error> {
             "insertCustomView" => XlsxOp::InsertCustomView(parse_insert_custom_view(obj, i)?),
             "deleteCustomView" => XlsxOp::DeleteCustomView(parse_delete_custom_view(obj, i)?),
             "showCustomView" => XlsxOp::ShowCustomView(parse_show_custom_view(obj, i)?),
+            "insertCellStyle" => XlsxOp::InsertCellStyle(parse_insert_cell_style(obj, i)?),
+            "deleteCellStyle" => XlsxOp::DeleteCellStyle(parse_delete_cell_style(obj, i)?),
+            "setCellNamedStyle" => XlsxOp::SetCellNamedStyle(parse_set_cell_named_style(obj, i)?),
             "groupRows" => XlsxOp::GroupRows(parse_group_rows(obj, i)?),
             "ungroupRows" => XlsxOp::UngroupRows(parse_ungroup_rows(obj, i)?),
             "groupCols" => XlsxOp::GroupCols(parse_group_cols(obj, i)?),
@@ -11248,6 +11260,128 @@ fn parse_show_custom_view(
     let id = require_id(obj, i)?;
     let index = custom_view::parse_custom_view_id(&id, &format!("ops[{i}].id"))?;
     Ok(custom_view::ShowCustomViewOp { id, index })
+}
+
+fn parse_insert_cell_style(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<style::InsertCellStyleOp, Error> {
+    deny_keys(
+        obj,
+        i,
+        &[
+            "op", "id", "name", "numFmt", "font", "fill", "border", "align",
+        ],
+    )?;
+    let id = require_id(obj, i)?;
+    if id != "xlsx:workbook" {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::InsertCellStyleNeedsWorkbook,
+            },
+            format!("ops[{i}].id"),
+        ));
+    }
+    let name = match obj.get("name") {
+        Some(Value::String(s)) if !s.is_empty() => s.clone(),
+        None => {
+            return Err(Error::with_path(
+                ErrorKind::MissingField {
+                    field: "name".into(),
+                },
+                format!("ops[{i}].name"),
+            ));
+        }
+        Some(Value::String(_)) => {
+            return Err(Error::with_path(
+                ErrorKind::InvalidNamedCellStyle {
+                    field: "name".into(),
+                },
+                format!("ops[{i}].name"),
+            ));
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "name".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].name"),
+            ));
+        }
+    };
+    let num_fmt = parse_patch_string(obj, i, "numFmt")?;
+    let font = parse_patch_object(obj, i, "font", parse_font_patch)?;
+    let fill = parse_patch_object(obj, i, "fill", parse_fill_patch)?;
+    let border = parse_patch_object(obj, i, "border", parse_border_patch)?;
+    let align = parse_patch_object(obj, i, "align", parse_align_patch)?;
+    if num_fmt.is_absent()
+        && font.is_absent()
+        && fill.is_absent()
+        && border.is_absent()
+        && align.is_absent()
+    {
+        return Err(Error::with_path(
+            ErrorKind::NeedInsertCellStyleField,
+            format!("ops[{i}]"),
+        ));
+    }
+    Ok(style::InsertCellStyleOp {
+        name,
+        num_fmt,
+        font,
+        fill,
+        border,
+        align,
+    })
+}
+
+fn parse_delete_cell_style(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<style::DeleteCellStyleOp, Error> {
+    deny_keys(obj, i, &["op", "id"])?;
+    let id = require_id(obj, i)?;
+    let index = style::parse_cell_style_id(&id, &format!("ops[{i}].id"))?;
+    Ok(style::DeleteCellStyleOp { id, index })
+}
+
+fn parse_set_cell_named_style(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<style::SetCellNamedStyleOp, Error> {
+    deny_keys(obj, i, &["op", "id", "style"])?;
+    let id = require_id(obj, i)?;
+    let style_id = match obj.get("style") {
+        Some(Value::String(s)) if !s.is_empty() => s.clone(),
+        None => {
+            return Err(Error::with_path(
+                ErrorKind::MissingField {
+                    field: "style".into(),
+                },
+                format!("ops[{i}].style"),
+            ));
+        }
+        Some(Value::String(_)) => {
+            return Err(Error::with_path(
+                ErrorKind::InvalidNamedCellStyle {
+                    field: "style".into(),
+                },
+                format!("ops[{i}].style"),
+            ));
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "style".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].style"),
+            ));
+        }
+    };
+    let style_index = style::parse_cell_style_id(&style_id, &format!("ops[{i}].style"))?;
+    Ok(style::SetCellNamedStyleOp { id, style_index })
 }
 
 fn parse_insert_connection(

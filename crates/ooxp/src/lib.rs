@@ -819,6 +819,7 @@ mod tests {
                 "externalLinkCount",
                 "customViewCount",
                 "definedNameCount",
+                "cellStyleCount",
                 "props",
                 "workbookProtection",
                 "sheets",

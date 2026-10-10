@@ -206,6 +206,7 @@ fn inspect_default_props_on_three_formats() {
             "externalLinkCount",
             "customViewCount",
             "definedNameCount",
+            "cellStyleCount",
             "props",
             "workbookProtection",
             "sheets",

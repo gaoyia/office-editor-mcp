@@ -148,7 +148,8 @@ SpreadsheetML 主命名空间：
 
 `http://schemas.openxmlformats.org/spreadsheetml/2006/main`
 
-apply 的 `setCellStyle` 可能改 `/xl/styles.xml`（复用或追加 `xf`）。
+apply 的 `setCellStyle` 可能改 `/xl/styles.xml`（复用或追加 `cellXfs` 的 `xf`）。
+apply 的 `insertCellStyle` / `deleteCellStyle` / `setCellNamedStyle` 改同一份 styles：insert 复用或追加 `cellStyleXfs` 并挂 `cellStyles`；delete 只去掉点名的 `cellStyle`；套用复用或追加引用该 `xfId` 的 `cellXfs`。
 apply 的 `setColWidth` / `setRowHeight` / `mergeRange` / `unmergeRange` 只改目标工作表 XML 的 `cols`、`row/@ht` 与 `mergeCells`，不新建部件。
 apply 的 `groupRows` / `ungroupRows` / `groupCols` / `ungroupCols` / `setOutline` 只改目标工作表 XML 的 `sheetPr/outlinePr`、
 `sheetFormatPr`（同步 `@outlineLevelRow` / `@outlineLevelCol`，
@@ -238,7 +239,7 @@ apply 插入工作表 SmartArt 时，可能再新建 `/xl/diagrams/` 下 data / 
 drawing 上写一张 `absoluteAnchor` 的 `xdr:graphicFrame`。
 `insertSheet` 新建 `/xl/worksheets/sheetN.xml`（CT
 `application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml`），workbook 关系 Type 以 `/worksheet` 结尾。
-`setCellStyle` 改 styles 部件（关系 Type 以 `/styles` 结尾，常见 `/xl/styles.xml`）；没有该部件则按 create 的最小样式表新建，并补 Override。不重排未点名的 `xf`。
+`setCellStyle` / `insertCellStyle` / `deleteCellStyle` / `setCellNamedStyle` 改 styles 部件（关系 Type 以 `/styles` 结尾，常见 `/xl/styles.xml`）；没有该部件则按 create 的最小样式表新建，并补 Override。不重排未点名的 `xf`。
 create 声明了 `sheets[].pictures` 或 `sheets[].charts` 时按同一套规则写 drawing、media 与 chart 部件。
 create 声明了 `sheets[].textBoxes` / `shapes` / `connectors`
  / `smartArts` 时按对应 insert 写同一份 worksheet drawing 与 `/xl/diagrams/`。

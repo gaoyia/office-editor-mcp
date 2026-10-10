@@ -4078,6 +4078,224 @@
         }
       }
     },
+    "insertCellStyleOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "name"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "insertCellStyle"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "numFmt": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        },
+        "font": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "name": {
+              "type": "string",
+              "minLength": 1
+            },
+            "sz": {
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "maximum": 409
+            },
+            "bold": {
+              "type": "boolean"
+            },
+            "italic": {
+              "type": "boolean"
+            },
+            "underline": {
+              "type": [
+                "boolean",
+                "string",
+                "null"
+              ]
+            },
+            "color": {
+              "$ref": "#/$defs/cellColor"
+            }
+          }
+        },
+        "fill": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "pattern": {
+              "type": "string",
+              "minLength": 1
+            },
+            "fg": {
+              "$ref": "#/$defs/cellColor"
+            },
+            "bg": {
+              "$ref": "#/$defs/cellColor"
+            }
+          }
+        },
+        "border": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "style": {
+              "type": "string",
+              "minLength": 1
+            },
+            "color": {
+              "$ref": "#/$defs/cellColor"
+            },
+            "left": {
+              "$ref": "#/$defs/cellBorderSide"
+            },
+            "right": {
+              "$ref": "#/$defs/cellBorderSide"
+            },
+            "top": {
+              "$ref": "#/$defs/cellBorderSide"
+            },
+            "bottom": {
+              "$ref": "#/$defs/cellBorderSide"
+            },
+            "diagonal": {
+              "$ref": "#/$defs/cellBorderSide"
+            },
+            "diagonalUp": {
+              "type": "boolean"
+            },
+            "diagonalDown": {
+              "type": "boolean"
+            }
+          }
+        },
+        "align": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "horizontal": {
+              "type": "string",
+              "minLength": 1
+            },
+            "vertical": {
+              "type": "string",
+              "minLength": 1
+            },
+            "wrap": {
+              "type": "boolean"
+            },
+            "indent": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 250
+            },
+            "rotation": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 180
+            },
+            "shrink": {
+              "type": "boolean"
+            }
+          }
+        }
+      },
+      "anyOf": [
+        {
+          "required": [
+            "numFmt"
+          ]
+        },
+        {
+          "required": [
+            "font"
+          ]
+        },
+        {
+          "required": [
+            "fill"
+          ]
+        },
+        {
+          "required": [
+            "border"
+          ]
+        },
+        {
+          "required": [
+            "align"
+          ]
+        }
+      ]
+    },
+    "deleteCellStyleOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "deleteCellStyle"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "setCellNamedStyleOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "style"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setCellNamedStyle"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "style": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
     "groupRowsOp": {
       "type": "object",
       "required": [
