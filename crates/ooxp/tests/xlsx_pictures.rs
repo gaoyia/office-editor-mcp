@@ -192,8 +192,21 @@ fn insert_inspect_replace_size_anchor_delete_export() {
     assert_eq!(pics[0]["stable"], true);
     assert_eq!(
         object_keys(&pics[0]),
-        ["id", "cNvPrId", "name", "anchor", "from", "fromOffX", "fromOffY", "cx", "cy", "stable"]
+        [
+            "id",
+            "cNvPrId",
+            "name",
+            "anchor",
+            "from",
+            "fromOffX",
+            "fromOffY",
+            "cx",
+            "cy",
+            "stable",
+            "hyperlink"
+        ]
     );
+    assert!(pics[0]["hyperlink"].is_null());
     assert_eq!(part_bytes(&inserted, "xl/media/image1.png"), PNG_1X1);
 
     let replaced = tmp("rep").with_extension("xlsx");
@@ -302,10 +315,22 @@ fn insert_two_cell_and_reject_size() {
     assert_eq!(
         object_keys(pic),
         [
-            "id", "cNvPrId", "name", "anchor", "from", "fromOffX", "fromOffY", "to", "toOffX",
-            "toOffY", "editAs", "stable"
+            "id",
+            "cNvPrId",
+            "name",
+            "anchor",
+            "from",
+            "fromOffX",
+            "fromOffY",
+            "to",
+            "toOffX",
+            "toOffY",
+            "editAs",
+            "stable",
+            "hyperlink"
         ]
     );
+    assert!(pic["hyperlink"].is_null());
     let err = apply(
         &out,
         &tmp("two-size").with_extension("xlsx"),

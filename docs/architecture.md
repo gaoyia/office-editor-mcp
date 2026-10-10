@@ -104,8 +104,10 @@ apply 可改目标单元格，也可换、插、删工作表图，并可改 `one
 也可新建或删除图表工作表：数据仍写在点名的普通表上，图表工作表本身没有 `sheetData`。也可插入、删除、改名、重排与隐藏普通工作表，脏 `workbook.xml` 的 `sheets` 与对应 worksheet 部件。
 对 `dialogsheet` / `macrosheet` 这些 op 仍报 `NotImplemented`。
 也可用 `setCellStyle` 写单元格数字格式、字体、填充、边框与对齐：复用或追加 `styles.xml` 里的 `xf`，只改被点名格子的 `s`。边框含对角线，对齐可写缩进、旋转与缩小字体。
-也可按槽位改页眉页脚原文，并可对 `worksheet` 的页眉槽位插、换、删 DrawingML 图。
-插图或插图表可能新建 `/xl/drawings/drawingN.xml`、`/xl/media/…`、`/xl/charts/chartN.xml` 以及工作表上的 `<drawing>`。
+也可插、删、改工作表单元格超链接：脏该表 XML 的 `<hyperlinks>` 与工作表 `.rels`（Type 以 `/hyperlink` 结尾、`TargetMode` 为 `External`），不标重算，不改单元格值。
+也可插、删、改图 / 文本框 / 形状 / SmartArt 上的 DrawingML 链：脏 drawing 的 `a:hlinkClick` 与 drawing `.rels`。
+也可按槽位改页眉页脚原文，并可对 `worksheet` 与 `chartsheet` 的页眉槽位插、换、删 DrawingML 图。
+也可往图表工作表的 Chart Drawing（`c:userShapes`）插图、形状、文本框与连接线，锚点用 0–1 分数。
 也可插、删、改工作表文本框（`xdr:sp` `txBox`）、无 `txBox` 的形状、
 连接线（`xdr:cxnSp`）与 SmartArt（diagram `graphicFrame`）：改字只动 `xdr:txBody` 或 data 部件可见点；文字格式走 `setShapeFormat`；几何走锚点。
 也可插改删工作表 drawing 公式框（`a14:m`），不进 `textBoxes`。
@@ -121,7 +123,6 @@ apply 可改目标单元格，也可换、插、删工作表图，并可改 `one
 insert / delete 线程化批注时只追加或去掉对应 Note `v:shape` 与占位 `comments.xml`，不改已有框的几何。
 也可插、删、回复、改字、改作者与完成标记线程化批注（MS-XLSX `threadedComment`），
 脏 threadedComments、persons、占位 comments、VML、工作表 `legacyDrawing`、关系与内容类型。
-也可插、删、改工作表单元格超链接：脏该表 XML 的 `<hyperlinks>` 与工作表 `.rels`（Type 以 `/hyperlink` 结尾、`TargetMode` 为 `External`），不标重算，不改单元格值。
 也可插、删、改工作表迷你图组：脏该表 `extLst` 里的 `x14:sparklineGroups`，可改颜色、标记与坐标轴，不新建部件，不标重算。
 也可用 `setProtection` 开关工作表 `sheetProtection` 与工作簿 `workbookProtection`：脏该表 XML 或 `workbook.xml`；
 无密码时不写哈希，给了 `password` 则写 Excel 16.0 的 SHA-512 哈希，不新建部件，不标重算。
@@ -286,7 +287,7 @@ workbook `extLst` 的 `slicerCaches` / `timelineCacheRefs`、workbook 的 `<defi
 xlsx 也可列出、插入并删除工作簿外部数据连接，脏 `/xl/connections.xml`、workbook `.rels` 与内容类型，不向数据源发请求，不把查询结果写进 `sheetData`，不标重算。
 xlsx 也可列出、插入、删除并改路径对其他工作簿的外部引用，脏 workbook `<externalReferences>`、`/xl/externalLinks/…` 及其 `.rels`、关系与内容类型；改路径只动该链 `.rels` 的 `Target`，不写 `xxl21:alternateUrls`，不打开目标文件，不求值，不标重算。
 xlsx 也可用 `setProtection` 改工作表 `sheetProtection` 或 workbook `workbookProtection`，可写 SHA-512 哈希，不标重算。
-xlsx 也可改工作表上的页眉页脚原文，并可对 `worksheet` 页眉槽位插换删 DrawingML 图，脏 `headerFooter` / `drawingHF` 与对应 drawing。
+xlsx 也可改工作表上的页眉页脚原文，并可对 `worksheet` 与 `chartsheet` 页眉槽位插换删 DrawingML 图，脏 `headerFooter` / `drawingHF` 与对应 drawing。
 xlsx 也可改文件属性，脏 `docProps`。docx 可改被点名的段落，可在主文档、页眉页脚与表格单元格插删段落，可插删表以及行与列并合并拆分单元格，可接受或拒绝 run 级、段落标记、表行与表属性修订，可插删改超链接与书签，可插改删域指令（不求值；
 可按 code 写常用域与窗体 ffData），可插入或删除目录块（不在库里算页码），可插入题注与交叉引用（不在库里求 SEQ / REF），可插删构建基块并把基块正文复制进主文档，
 可嵌入或删除 TrueType 字体并改 `embedTrueTypeFonts` / `embedSystemFonts` / `saveSubsetFonts`，可改页面背景色与节上页面边框，可插改删 OMML 公式（不实现排版引擎），

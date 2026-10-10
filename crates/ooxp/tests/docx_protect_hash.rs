@@ -260,7 +260,7 @@ fn other_hash_stays_not_implemented_even_with_password() {
 }
 
 #[test]
-fn pptx_password_still_not_implemented() {
+fn pptx_rejects_word_edit_field() {
     let pptx = tmp_dir().join(format!("rej-{}.pptx", SEQ.fetch_add(1, Ordering::Relaxed)));
     run_json(&json!({
         "schemaVersion": 1,
@@ -274,9 +274,9 @@ fn pptx_password_still_not_implemented() {
         json!([{
             "op": "setProtection",
             "id": "pptx:presentation",
-            "enforced": false,
-            "password": "secret"
+            "enforced": true,
+            "edit": "readOnly"
         }]),
-        ErrorCode::NotImplemented,
+        ErrorCode::InvalidField,
     );
 }

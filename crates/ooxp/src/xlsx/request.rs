@@ -1033,6 +1033,24 @@ pub struct InsertHyperlinkOp {
     pub location: Option<String>,
     pub tooltip: Option<String>,
     pub display: Option<String>,
+    pub drawing: Option<DrawingHlinkHost>,
+}
+
+#[derive(Debug, Clone)]
+pub enum DrawingHlinkHost {
+    Picture(picture::SheetPicId),
+    TextBox(SheetDrawId),
+    Shape(SheetDrawId),
+    SmartArt(SheetDrawId),
+}
+
+impl DrawingHlinkHost {
+    pub fn sheet(&self) -> &str {
+        match self {
+            Self::Picture(p) => &p.sheet,
+            Self::TextBox(d) | Self::Shape(d) | Self::SmartArt(d) => &d.sheet,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -1045,6 +1063,7 @@ pub struct SetHyperlinkOp {
     pub tooltip: Patch<String>,
     pub display: Patch<String>,
     pub refer: Option<(String, a1::CellRef, a1::CellRef)>,
+    pub drawing: Option<DrawingHlinkHost>,
 }
 
 #[derive(Debug, Clone)]
@@ -1052,6 +1071,7 @@ pub struct DeleteHyperlinkOp {
     pub id: String,
     pub sheet: String,
     pub index: usize,
+    pub drawing: Option<DrawingHlinkHost>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1261,6 +1281,14 @@ pub struct ReplacePictureOp {
     pub file: String,
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct RelBox {
+    pub from_x: f64,
+    pub from_y: f64,
+    pub to_x: f64,
+    pub to_y: f64,
+}
+
 #[derive(Debug, Clone)]
 pub struct InsertPictureOp {
     pub sheet: String,
@@ -1275,6 +1303,7 @@ pub struct InsertPictureOp {
     pub from_off_y: i64,
     pub to_off_x: i64,
     pub to_off_y: i64,
+    pub rel: Option<RelBox>,
 }
 
 #[derive(Debug, Clone)]
@@ -1294,6 +1323,14 @@ pub struct SetPictureSizeOp {
     pub to_off_y: Option<i64>,
 }
 
+#[derive(Debug, Clone, Copy, Default)]
+pub struct RelBoxPatch {
+    pub from_x: Option<f64>,
+    pub from_y: Option<f64>,
+    pub to_x: Option<f64>,
+    pub to_y: Option<f64>,
+}
+
 #[derive(Debug, Clone)]
 pub struct SetPictureAnchorOp {
     pub id: String,
@@ -1310,6 +1347,7 @@ pub struct SetPictureAnchorOp {
     pub edit_as: Option<picture::EditAs>,
     pub cx: Option<i64>,
     pub cy: Option<i64>,
+    pub rel: Option<RelBoxPatch>,
 }
 
 #[derive(Debug, Clone)]
@@ -1555,6 +1593,7 @@ pub struct InsertTextBoxOp {
     pub to_off_x: i64,
     pub to_off_y: i64,
     pub format: Option<crate::drawing_text::TextFormat>,
+    pub rel: Option<RelBox>,
 }
 
 #[derive(Debug, Clone)]
@@ -1572,6 +1611,7 @@ pub struct InsertShapeOp {
     pub to_off_y: i64,
     pub prst: String,
     pub format: Option<crate::drawing_text::TextFormat>,
+    pub rel: Option<RelBox>,
 }
 
 #[derive(Debug, Clone)]
@@ -1587,6 +1627,7 @@ pub struct InsertConnectorOp {
     pub to_off_x: i64,
     pub to_off_y: i64,
     pub prst: String,
+    pub rel: Option<RelBox>,
 }
 
 #[derive(Debug, Clone)]
@@ -1650,6 +1691,7 @@ pub struct SetTextBoxAnchorOp {
     pub edit_as: Option<picture::EditAs>,
     pub cx: Option<i64>,
     pub cy: Option<i64>,
+    pub rel: Option<RelBoxPatch>,
 }
 
 #[derive(Debug, Clone)]
@@ -3092,7 +3134,7 @@ fn parse_insert_pic(
         i,
         &[
             "op", "id", "file", "cx", "cy", "from", "to", "anchor", "fromOffX", "fromOffY",
-            "toOffX", "toOffY",
+            "toOffX", "toOffY", "fromX", "fromY", "toX", "toY",
         ],
     )?;
     let id = require_id(obj, i)?;
@@ -3111,7 +3153,8 @@ fn parse_insert_pic(
     }
     if hf.is_some() {
         for field in [
-            "from", "to", "anchor", "fromOffX", "fromOffY", "toOffX", "toOffY",
+            "from", "to", "anchor", "fromOffX", "fromOffY", "toOffX", "toOffY", "fromX", "fromY",
+            "toX", "toY",
         ] {
             if obj.contains_key(field) {
                 return Err(Error::with_path(
@@ -3135,6 +3178,37 @@ fn parse_insert_pic(
             from_off_y: 0,
             to_off_x: 0,
             to_off_y: 0,
+            rel: None,
+        });
+    }
+    let rel = parse_rel_box(obj, i)?;
+    if rel.is_some() {
+        for field in [
+            "from", "to", "anchor", "fromOffX", "fromOffY", "toOffX", "toOffY",
+        ] {
+            if obj.contains_key(field) {
+                return Err(Error::with_path(
+                    ErrorKind::UnknownField {
+                        field: field.into(),
+                    },
+                    format!("ops[{i}].{field}"),
+                ));
+            }
+        }
+        return Ok(InsertPictureOp {
+            sheet,
+            hf: None,
+            file,
+            cx,
+            cy,
+            from: a1::CellRef { col: 1, row: 1 },
+            to: None,
+            anchor: picture::AnchorKind::RelSize,
+            from_off_x: 0,
+            from_off_y: 0,
+            to_off_x: 0,
+            to_off_y: 0,
+            rel,
         });
     }
     let from = match obj.get("from") {
@@ -3215,6 +3289,7 @@ fn parse_insert_pic(
         from_off_y: parse_off_field(obj.get("fromOffY"), i, "fromOffY")?.unwrap_or(0),
         to_off_x: parse_off_field(obj.get("toOffX"), i, "toOffX")?.unwrap_or(0),
         to_off_y: parse_off_field(obj.get("toOffY"), i, "toOffY")?.unwrap_or(0),
+        rel: None,
     })
 }
 
@@ -3256,7 +3331,7 @@ fn parse_set_pic_anchor(
         i,
         &[
             "op", "id", "anchor", "from", "to", "fromOffX", "fromOffY", "toOffX", "toOffY", "posX",
-            "posY", "editAs", "cx", "cy",
+            "posY", "editAs", "cx", "cy", "fromX", "fromY", "toX", "toY",
         ],
     )?;
     let id = require_id(obj, i)?;
@@ -3277,6 +3352,7 @@ fn parse_set_pic_anchor(
         edit_as: p.edit_as,
         cx: p.cx,
         cy: p.cy,
+        rel: p.rel,
     })
 }
 
@@ -5487,10 +5563,60 @@ fn parse_insert_hyperlink(
         &["op", "id", "ref", "url", "location", "tooltip", "display"],
     )?;
     let id = require_id(obj, i)?;
-    let sheet = parse_sheet_only_id(&id, i, "id", IdReason::InsertHyperlinkNeedsSheet)?;
-    let (refer, start, end) = parse_required_range(obj, i)?;
     let url = parse_opt_target(obj, i, "url", ErrorKind::EmptyHyperlinkUrl)?;
     let location = parse_opt_target(obj, i, "location", ErrorKind::EmptyHyperlinkLocation)?;
+    let tooltip = parse_opt_plain(obj, i, "tooltip")?;
+    let display = parse_opt_plain(obj, i, "display")?;
+    if let Some(drawing) = parse_drawing_hlink_host(&id, i)? {
+        if obj.contains_key("ref") {
+            return Err(Error::with_path(
+                ErrorKind::UnknownField {
+                    field: "ref".into(),
+                },
+                format!("ops[{i}].ref"),
+            ));
+        }
+        if display.is_some() {
+            return Err(Error::with_path(
+                ErrorKind::UnknownField {
+                    field: "display".into(),
+                },
+                format!("ops[{i}].display"),
+            ));
+        }
+        match (url.is_some(), location.is_some()) {
+            (true, false) | (false, true) => {}
+            (true, true) => {
+                return Err(Error::with_path(
+                    ErrorKind::MutuallyExclusive {
+                        a: "url".into(),
+                        b: "location".into(),
+                    },
+                    format!("ops[{i}]"),
+                ));
+            }
+            (false, false) => {
+                return Err(Error::with_path(
+                    ErrorKind::XlsxHyperlinkNeedTarget,
+                    format!("ops[{i}]"),
+                ));
+            }
+        }
+        let sheet = drawing.sheet().to_string();
+        return Ok(InsertHyperlinkOp {
+            sheet,
+            refer: String::new(),
+            start: a1::CellRef { col: 1, row: 1 },
+            end: a1::CellRef { col: 1, row: 1 },
+            url,
+            location,
+            tooltip,
+            display: None,
+            drawing: Some(drawing),
+        });
+    }
+    let sheet = parse_sheet_only_id(&id, i, "id", IdReason::InsertHyperlinkNeedsSheet)?;
+    let (refer, start, end) = parse_required_range(obj, i)?;
     if url.is_none() && location.is_none() {
         return Err(Error::with_path(
             ErrorKind::XlsxHyperlinkNeedTarget,
@@ -5504,9 +5630,30 @@ fn parse_insert_hyperlink(
         end,
         url,
         location,
-        tooltip: parse_opt_plain(obj, i, "tooltip")?,
-        display: parse_opt_plain(obj, i, "display")?,
+        tooltip,
+        display,
+        drawing: None,
     })
+}
+
+fn parse_drawing_hlink_host(id: &str, i: usize) -> Result<Option<DrawingHlinkHost>, Error> {
+    if id.contains("/pic:") {
+        return Ok(Some(DrawingHlinkHost::Picture(picture::parse_pic_id(
+            id, i,
+        )?)));
+    }
+    if id.contains("/smartdiagram:") {
+        return Ok(Some(DrawingHlinkHost::SmartArt(
+            xlsx_smartart::parse_diagram_id(id, i)?,
+        )));
+    }
+    if id.contains("/shape:") {
+        return Ok(Some(DrawingHlinkHost::Shape(shape::parse_shape_id(id, i)?)));
+    }
+    if id.contains("/sp:") {
+        return Ok(Some(DrawingHlinkHost::TextBox(shape::parse_sp_id(id, i)?)));
+    }
+    Ok(None)
 }
 
 fn parse_set_hyperlink(
@@ -5519,12 +5666,57 @@ fn parse_set_hyperlink(
         &["op", "id", "url", "location", "tooltip", "display", "ref"],
     )?;
     let id = require_id(obj, i)?;
-    let (sheet, index) = parse_link_id(&id, i)?;
     let url = parse_hyperlink_patch(obj, i, "url", Some(ErrorKind::EmptyHyperlinkUrl))?;
     let location =
         parse_hyperlink_patch(obj, i, "location", Some(ErrorKind::EmptyHyperlinkLocation))?;
     let tooltip = parse_hyperlink_patch(obj, i, "tooltip", None)?;
     let display = parse_hyperlink_patch(obj, i, "display", None)?;
+    if let Some(drawing) = parse_drawing_hlink_host(&id, i)? {
+        if obj.contains_key("ref") {
+            return Err(Error::with_path(
+                ErrorKind::UnknownField {
+                    field: "ref".into(),
+                },
+                format!("ops[{i}].ref"),
+            ));
+        }
+        if !matches!(display, Patch::Absent) {
+            return Err(Error::with_path(
+                ErrorKind::UnknownField {
+                    field: "display".into(),
+                },
+                format!("ops[{i}].display"),
+            ));
+        }
+        if matches!(url, Patch::Set(_)) && matches!(location, Patch::Set(_)) {
+            return Err(Error::with_path(
+                ErrorKind::MutuallyExclusive {
+                    a: "url".into(),
+                    b: "location".into(),
+                },
+                format!("ops[{i}]"),
+            ));
+        }
+        if url.is_absent() && location.is_absent() && tooltip.is_absent() {
+            return Err(Error::with_path(
+                ErrorKind::NeedXlsxSetHyperlinkField,
+                format!("ops[{i}]"),
+            ));
+        }
+        let sheet = drawing.sheet().to_string();
+        return Ok(SetHyperlinkOp {
+            id,
+            sheet,
+            index: 0,
+            url,
+            location,
+            tooltip,
+            display: Patch::Absent,
+            refer: None,
+            drawing: Some(drawing),
+        });
+    }
+    let (sheet, index) = parse_link_id(&id, i)?;
     let refer = parse_opt_range(obj, i)?;
     if url.is_absent()
         && location.is_absent()
@@ -5546,6 +5738,7 @@ fn parse_set_hyperlink(
         tooltip,
         display,
         refer,
+        drawing: None,
     })
 }
 
@@ -5555,8 +5748,22 @@ fn parse_delete_hyperlink(
 ) -> Result<DeleteHyperlinkOp, Error> {
     deny_keys(obj, i, &["op", "id"])?;
     let id = require_id(obj, i)?;
+    if let Some(drawing) = parse_drawing_hlink_host(&id, i)? {
+        let sheet = drawing.sheet().to_string();
+        return Ok(DeleteHyperlinkOp {
+            id,
+            sheet,
+            index: 0,
+            drawing: Some(drawing),
+        });
+    }
     let (sheet, index) = parse_link_id(&id, i)?;
-    Ok(DeleteHyperlinkOp { id, sheet, index })
+    Ok(DeleteHyperlinkOp {
+        id,
+        sheet,
+        index,
+        drawing: None,
+    })
 }
 
 const SPARK_KEYS: &[&str] = &[
@@ -9479,6 +9686,84 @@ struct InsertAnchorSpec {
     to_off_y: i64,
     cx: Option<i64>,
     cy: Option<i64>,
+    rel: Option<RelBox>,
+}
+
+fn parse_unit_frac(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+    field: &str,
+) -> Result<Option<f64>, Error> {
+    match obj.get(field) {
+        None => Ok(None),
+        Some(Value::Number(n)) => {
+            let v = n.as_f64().ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::WrongType {
+                        field: field.into(),
+                        expected: TypeName::Integer,
+                    },
+                    format!("ops[{i}].{field}"),
+                )
+            })?;
+            if !(0.0..=1.0).contains(&v) {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidXlsxAnchor,
+                    format!("ops[{i}].{field}"),
+                ));
+            }
+            Ok(Some(v))
+        }
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::Integer,
+            },
+            format!("ops[{i}].{field}"),
+        )),
+    }
+}
+
+fn parse_rel_box(obj: &serde_json::Map<String, Value>, i: usize) -> Result<Option<RelBox>, Error> {
+    let fx = parse_unit_frac(obj, i, "fromX")?;
+    let fy = parse_unit_frac(obj, i, "fromY")?;
+    let tx = parse_unit_frac(obj, i, "toX")?;
+    let ty = parse_unit_frac(obj, i, "toY")?;
+    match (fx, fy, tx, ty) {
+        (None, None, None, None) => Ok(None),
+        (Some(from_x), Some(from_y), Some(to_x), Some(to_y)) => Ok(Some(RelBox {
+            from_x,
+            from_y,
+            to_x,
+            to_y,
+        })),
+        _ => Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "insert".into(),
+                field: "fromX/fromY/toX/toY together".into(),
+            },
+            format!("ops[{i}]"),
+        )),
+    }
+}
+
+fn parse_rel_box_patch(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<Option<RelBoxPatch>, Error> {
+    let from_x = parse_unit_frac(obj, i, "fromX")?;
+    let from_y = parse_unit_frac(obj, i, "fromY")?;
+    let to_x = parse_unit_frac(obj, i, "toX")?;
+    let to_y = parse_unit_frac(obj, i, "toY")?;
+    if from_x.is_none() && from_y.is_none() && to_x.is_none() && to_y.is_none() {
+        return Ok(None);
+    }
+    Ok(Some(RelBoxPatch {
+        from_x,
+        from_y,
+        to_x,
+        to_y,
+    }))
 }
 
 fn parse_insert_anchor(
@@ -9486,6 +9771,44 @@ fn parse_insert_anchor(
     i: usize,
     op: &str,
 ) -> Result<InsertAnchorSpec, Error> {
+    let rel = parse_rel_box(obj, i)?;
+    if rel.is_some() {
+        for field in [
+            "from", "to", "anchor", "fromOffX", "fromOffY", "toOffX", "toOffY",
+        ] {
+            if obj.contains_key(field) {
+                return Err(Error::with_path(
+                    ErrorKind::UnknownField {
+                        field: field.into(),
+                    },
+                    format!("ops[{i}].{field}"),
+                ));
+            }
+        }
+        let cx = parse_emu_field(obj.get("cx"), i, "cx")?;
+        let cy = parse_emu_field(obj.get("cy"), i, "cy")?;
+        if cx.is_some() != cy.is_some() {
+            return Err(Error::with_path(
+                ErrorKind::OpRequiresField {
+                    op: op.into(),
+                    field: "cx and cy together".into(),
+                },
+                format!("ops[{i}]"),
+            ));
+        }
+        return Ok(InsertAnchorSpec {
+            from: a1::CellRef { col: 1, row: 1 },
+            to: None,
+            anchor: picture::AnchorKind::RelSize,
+            from_off_x: 0,
+            from_off_y: 0,
+            to_off_x: 0,
+            to_off_y: 0,
+            cx,
+            cy,
+            rel,
+        });
+    }
     let from = parse_required_a1(obj, i, "from")?;
     let anchor = match obj.get("anchor") {
         None => picture::AnchorKind::OneCell,
@@ -9539,6 +9862,7 @@ fn parse_insert_anchor(
         to_off_y: parse_off_field(obj.get("toOffY"), i, "toOffY")?.unwrap_or(0),
         cx,
         cy,
+        rel: None,
     })
 }
 
@@ -9648,6 +9972,7 @@ struct DrawingAnchorPatch {
     edit_as: Option<picture::EditAs>,
     cx: Option<i64>,
     cy: Option<i64>,
+    rel: Option<RelBoxPatch>,
 }
 
 fn parse_drawing_anchor_patch(
@@ -9695,6 +10020,7 @@ fn parse_drawing_anchor_patch(
     let pos_y = parse_off_field(obj.get("posY"), i, "posY")?;
     let cx = parse_emu_field(obj.get("cx"), i, "cx")?;
     let cy = parse_emu_field(obj.get("cy"), i, "cy")?;
+    let rel = parse_rel_box_patch(obj, i)?;
     let has_any = anchor.is_some()
         || from.is_some()
         || to.is_some()
@@ -9706,7 +10032,8 @@ fn parse_drawing_anchor_patch(
         || pos_y.is_some()
         || edit_as.is_some()
         || cx.is_some()
-        || cy.is_some();
+        || cy.is_some()
+        || rel.is_some();
     if !has_any {
         return Err(Error::with_path(
             ErrorKind::OpRequiresField {
@@ -9729,6 +10056,7 @@ fn parse_drawing_anchor_patch(
         edit_as,
         cx,
         cy,
+        rel,
     })
 }
 
@@ -9752,6 +10080,10 @@ fn parse_insert_textbox(
             "fromOffY",
             "toOffX",
             "toOffY",
+            "fromX",
+            "fromY",
+            "toX",
+            "toY",
             "sz",
             "color",
             "textFill",
@@ -9781,6 +10113,7 @@ fn parse_insert_textbox(
         to_off_x: a.to_off_x,
         to_off_y: a.to_off_y,
         format: crate::drawing_text::parse(obj, &format!("ops[{i}]"), false)?,
+        rel: a.rel,
     })
 }
 
@@ -9804,6 +10137,10 @@ fn parse_insert_shape(
             "fromOffY",
             "toOffX",
             "toOffY",
+            "fromX",
+            "fromY",
+            "toX",
+            "toY",
             "prst",
             "sz",
             "color",
@@ -9835,6 +10172,7 @@ fn parse_insert_shape(
         to_off_y: a.to_off_y,
         prst: parse_shape_prst(obj, i)?,
         format: crate::drawing_text::parse(obj, &format!("ops[{i}]"), false)?,
+        rel: a.rel,
     })
 }
 
@@ -9847,7 +10185,7 @@ fn parse_insert_connector(
         i,
         &[
             "op", "id", "cx", "cy", "from", "to", "anchor", "fromOffX", "fromOffY", "toOffX",
-            "toOffY", "prst",
+            "toOffY", "fromX", "fromY", "toX", "toY", "prst",
         ],
     )?;
     let id = require_id(obj, i)?;
@@ -9865,6 +10203,7 @@ fn parse_insert_connector(
         to_off_x: a.to_off_x,
         to_off_y: a.to_off_y,
         prst: parse_connector_prst(obj, i)?,
+        rel: a.rel,
     })
 }
 
@@ -11040,7 +11379,7 @@ fn parse_set_textbox_anchor(
         i,
         &[
             "op", "id", "anchor", "from", "to", "fromOffX", "fromOffY", "toOffX", "toOffY", "posX",
-            "posY", "editAs", "cx", "cy",
+            "posY", "editAs", "cx", "cy", "fromX", "fromY", "toX", "toY",
         ],
     )?;
     let id = require_id(obj, i)?;
@@ -11062,6 +11401,7 @@ fn parse_set_textbox_anchor(
         edit_as: p.edit_as,
         cx: p.cx,
         cy: p.cy,
+        rel: p.rel,
     })
 }
 

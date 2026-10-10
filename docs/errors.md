@@ -644,9 +644,11 @@
 - 对工作表 id、页 id 或 `xlsx:workbook` 发这些 op 报 `InvalidId`
 - 对 `chartsheet` 发批注 op 报 `InvalidField`
 - 对 `dialogsheet` / `macrosheet` 发批注 op 报 `NotImplemented`
-- xlsx 的 `insertTextBox` / `insertSmartArt` / `insertShape` / `insertConnector` 的 `id` 必须是 `sheet:{name}`，且该表为 `worksheet`
+- xlsx 的 `insertTextBox` / `insertShape` / `insertConnector` 的 `id` 必须是 `sheet:{name}`，且该表为 `worksheet` 或 `chartsheet`
+- `insertSmartArt` 的 `id` 必须是 `sheet:{name}`，且该表为 `worksheet`
 - 对文本框 id、形状 id、连接线 id、图示 id 或单元格 id 发这些 insert 报 `InvalidId`
-- 对 `chartsheet` 发这些 insert 报 `InvalidField`
+- 对 `chartsheet` 发 `insertSmartArt` / `groupShapes` / `ungroup` / `insertMath` 报 `InvalidField`
+- 对 `chartsheet` 发形状 / 图 / 文本框 / 连接线 insert 却给了单元格 `from`，或对 `worksheet` 给了 `fromX`，报 `InvalidField`
 - 对 `dialogsheet` / `macrosheet` 发这些 insert 以及文本框 / 形状 / 连接线 / SmartArt 其它 op 报 `NotImplemented`
 - 找不到文本框、形状、连接线或 SmartArt 报 `IdNotFound`
 - xlsx `twoCell` 文本框、形状、 连接线或 SmartArt 的 `setTextBoxSize` / `setSmartArtSize` 出现 `cx` / `cy` 报 `InvalidField`
@@ -778,12 +780,13 @@
 - 空串、已有同事件框级链、或跳到本页报 `InvalidField`
 - `event` 不是 `click` / `hover`，或 `on` 与 `id` 种类对不上，报 `InvalidField`
 - 目标页不存在报 `IdNotFound`
-- xlsx 的 `insertHyperlink` 的 `id` 必须是 `sheet:{name}`，必须给 `ref`，且 `url` 与 `location` 至少给一个
+- xlsx 的 `insertHyperlink` 的 `id` 是 `sheet:{name}`（单元格链，必须给 `ref`，`url` 与 `location` 至少给一个）或图 / 文本框 / 形状 / SmartArt 图示 id（DrawingML 链，禁止 `ref`，`url` 与 `location` 恰好一个）
 - `ref` 非法报 `InvalidRange`
-- 与已有链相交、空 `url` / `location`、或出现 `text` / `anchor`，报 `InvalidField`
-- 对 `chartsheet` 发超链接 op 报 `InvalidField`
+- 与已有单元格链相交、空 `url` / `location`、或出现 `text` / `anchor`，报 `InvalidField`
+- DrawingML 链已有 `hlinkClick`、或同时给了 `url` 与 `location`，报 `InvalidField`
+- 对 `chartsheet` 发单元格超链接 op 报 `InvalidField`
 - 对 `dialogsheet` / `macrosheet` 报 `NotImplemented`
-- xlsx 的 `setHyperlink` / `deleteHyperlink` 的 id 是 `sheet:{name}/link:{n}`
+- xlsx 的 `setHyperlink` / `deleteHyperlink` 的 id 是 `sheet:{name}/link:{n}` 或带 DrawingML 链的图 / 框 / 形状 / SmartArt id
 - 序号不存在报 `IdNotFound`
 - `setHyperlink` 改完后既没有 `r:id` 也没有 `location` 报 `InvalidField`
 - xlsx 的 `insertSlicer` 的 id 必须是 `sheet:{name}`

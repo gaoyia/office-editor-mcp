@@ -327,7 +327,7 @@ fn xlsx_and_pptx_reject_set_protection() {
     .unwrap();
     let err = apply_err(
         &pptx,
-        json!([{ "op": "setProtection", "id": "pptx:presentation", "enforced": true }]),
+        json!([{ "op": "setProtection", "id": "pptx:presentation", "edit": "readOnly" }]),
     );
-    assert_eq!(err.code(), ErrorCode::NotImplemented);
+    assert_eq!(err.code(), ErrorCode::InvalidField);
 }

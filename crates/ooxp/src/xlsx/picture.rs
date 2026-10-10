@@ -32,6 +32,8 @@ pub enum AnchorKind {
     TwoCell,
     OneCell,
     Absolute,
+    RelSize,
+    AbsSize,
 }
 
 impl AnchorKind {
@@ -40,6 +42,8 @@ impl AnchorKind {
             Self::TwoCell => "twoCell",
             Self::OneCell => "oneCell",
             Self::Absolute => "absolute",
+            Self::RelSize => "relSize",
+            Self::AbsSize => "absSize",
         }
     }
 
@@ -57,6 +61,7 @@ impl AnchorKind {
             "oneCell" => Some(Self::OneCell),
             "twoCell" => Some(Self::TwoCell),
             "absolute" => Some(Self::Absolute),
+            "relSize" => Some(Self::RelSize),
             _ => None,
         }
     }
@@ -66,6 +71,8 @@ impl AnchorKind {
             "twoCellAnchor" => Some(Self::TwoCell),
             "oneCellAnchor" => Some(Self::OneCell),
             "absoluteAnchor" => Some(Self::Absolute),
+            "relSizeAnchor" => Some(Self::RelSize),
+            "absSizeAnchor" => Some(Self::AbsSize),
             _ => None,
         }
     }
@@ -75,6 +82,8 @@ impl AnchorKind {
             Self::TwoCell => "twoCellAnchor",
             Self::OneCell => "oneCellAnchor",
             Self::Absolute => "absoluteAnchor",
+            Self::RelSize => "relSizeAnchor",
+            Self::AbsSize => "absSizeAnchor",
         }
     }
 }
@@ -396,6 +405,9 @@ pub(crate) fn plan_size(
                 cy: patch.cy,
             })
         }
+        AnchorKind::RelSize | AnchorKind::AbsSize => {
+            Err(unknown_field("cx", format!("ops[{op_index}].cx")))
+        }
     }
 }
 
@@ -430,6 +442,11 @@ pub struct PicInfo {
     pub edit_as: Option<EditAs>,
     pub stable: bool,
     pub content_type: Option<String>,
+    pub hyperlink: Value,
+    pub from_x: Option<f64>,
+    pub from_y: Option<f64>,
+    pub to_x: Option<f64>,
+    pub to_y: Option<f64>,
 }
 
 pub struct ImageFile {
@@ -550,7 +567,10 @@ pub fn collect_sheet_pictures(
 ) -> Result<Vec<PicInfo>, Error> {
     let mut out = Vec::new();
     let mut index = 0usize;
-    for drawing_part in drawing_parts(pkg, sheet_part)? {
+    let sheet = xml::parse(pkg.get(sheet_part)?)?;
+    for drawing_part in
+        super::chart_drawing::object_drawing_parts_from(pkg, sheet_part, &sheet.root)?
+    {
         let doc = xml::parse(pkg.get(&drawing_part)?)?;
         let rels = Relationships::from_package(pkg, &drawing_part)?;
         walk_anchors(&doc.root, &mut |anchor, kind| {
@@ -604,11 +624,24 @@ fn pic_to_json(p: &PicInfo) -> Value {
             m.insert("cx".into(), json!(p.cx));
             m.insert("cy".into(), json!(p.cy));
         }
+        AnchorKind::RelSize => {
+            m.insert("fromX".into(), json!(p.from_x));
+            m.insert("fromY".into(), json!(p.from_y));
+            m.insert("toX".into(), json!(p.to_x));
+            m.insert("toY".into(), json!(p.to_y));
+        }
+        AnchorKind::AbsSize => {
+            m.insert("fromX".into(), json!(p.from_x));
+            m.insert("fromY".into(), json!(p.from_y));
+            m.insert("cx".into(), json!(p.cx));
+            m.insert("cy".into(), json!(p.cy));
+        }
     }
     m.insert("stable".into(), json!(p.stable));
     if let Some(ct) = &p.content_type {
         m.insert("contentType".into(), json!(ct));
     }
+    m.insert("hyperlink".into(), p.hyperlink.clone());
     Value::Object(m)
 }
 
@@ -738,6 +771,19 @@ pub fn insert_picture(
         (Some(x), Some(y)) => (x, y),
         _ => (image.cx, image.cy),
     };
+    if let Some(rel) = op.rel {
+        let drawing_part =
+            super::chart_drawing::ensure_user_shapes(pkg, sheet_part, &sheet_doc.root)?;
+        let cnv = next_cnv_id(pkg, sheet_part, &sheet_doc.root)?;
+        let (rid, svg_rid) = write_picture_media(pkg, &drawing_part, &image)?;
+        let name = format!("图片 {cnv}");
+        let mut pic = build_pic(cnv, &name, &rid, cx, cy);
+        if let Some(svg) = svg_rid {
+            crate::svg::set_svg_blip(&mut pic, &svg);
+        }
+        super::chart_drawing::push_rel_anchor(pkg, &drawing_part, rel, pic)?;
+        return Ok(());
+    }
     let drawing_part = ensure_drawing_part(pkg, sheet_doc, sheet_part)?;
     let mut draw_doc = xml::parse(pkg.get(&drawing_part)?)?;
     // Excel 存的 wsDr 常常只在 a:blip 上写 xmlns:r，根上没有。新锚点用 r:embed，必须把关系命名空间补到根上。
@@ -833,16 +879,20 @@ pub fn delete_picture(
         hf::clear_cnv_attrs(&mut sheet_doc.root, &cnv);
     }
     if drawing_is_empty(&doc.root) {
-        pkg.remove(&drawing_part);
-        pkg.remove(&rels_part_name(&drawing_part));
-        if op.target.hf.is_some() {
-            hf::remove_drawing_hf_ref(&mut sheet_doc.root, sheet_part, pkg, &drawing_part)?;
+        if super::chart_drawing::is_user_shapes(&doc.root) {
+            super::chart_drawing::drop_user_shapes(pkg, sheet_part, &drawing_part)?;
         } else {
-            remove_drawing_ref(&mut sheet_doc.root, sheet_part, pkg, &drawing_part)?;
+            pkg.remove(&drawing_part);
+            pkg.remove(&rels_part_name(&drawing_part));
+            if op.target.hf.is_some() {
+                hf::remove_drawing_hf_ref(&mut sheet_doc.root, sheet_part, pkg, &drawing_part)?;
+            } else {
+                remove_drawing_ref(&mut sheet_doc.root, sheet_part, pkg, &drawing_part)?;
+            }
+            let mut cts = ContentTypes::from_package(pkg)?;
+            cts.remove_override(&drawing_part);
+            cts.write_to(pkg)?;
         }
-        let mut cts = ContentTypes::from_package(pkg)?;
-        cts.remove_override(&drawing_part);
-        cts.write_to(pkg)?;
     } else {
         pkg.set(&drawing_part, doc.to_bytes()?)?;
         let mut rels = Relationships::from_package(pkg, &drawing_part)?;
@@ -934,6 +984,44 @@ pub fn set_picture_anchor(
             path.clone(),
         )
     })?;
+    if matches!(snapshot.kind, AnchorKind::RelSize | AnchorKind::AbsSize) {
+        if op.anchor.is_some() && op.anchor != Some(snapshot.kind) {
+            return Err(unknown_field("anchor", format!("ops[{op_index}].anchor")));
+        }
+        super::chart_drawing::reject_cell_anchor_fields(
+            op.from.is_some(),
+            op.to.is_some(),
+            op.from_off_x.is_some() || op.from_off_y.is_some(),
+            op.to_off_x.is_some() || op.to_off_y.is_some(),
+            op_index,
+        )?;
+        if op.pos_x.is_some() {
+            return Err(unknown_field("posX", format!("ops[{op_index}].posX")));
+        }
+        if op.pos_y.is_some() {
+            return Err(unknown_field("posY", format!("ops[{op_index}].posY")));
+        }
+        let Some(rel) = op.rel else {
+            return Err(Error::with_path(
+                ErrorKind::MissingField {
+                    field: "fromX".into(),
+                },
+                format!("ops[{op_index}].fromX"),
+            ));
+        };
+        let patched = patch_matched_rel(&mut doc.root, &search, rel)?;
+        if !patched {
+            return Err(Error::with_path(
+                ErrorKind::PictureNotFound { id: op.id.clone() },
+                path,
+            ));
+        }
+        pkg.set(&drawing_part, doc.to_bytes()?)?;
+        return Ok(());
+    }
+    if op.rel.is_some() {
+        return Err(unknown_field("fromX", format!("ops[{op_index}].fromX")));
+    }
     let planned = plan_anchor(
         &snapshot.geom(),
         &AnchorPatch {
@@ -1189,7 +1277,7 @@ impl PicSearch<'_> {
     }
 }
 
-fn find_drawing_for(
+pub(crate) fn find_drawing_for(
     pkg: &Package,
     sheet_part: &str,
     target: &SheetPicId,
@@ -1204,7 +1292,8 @@ fn find_drawing_for(
     let parts = if target.hf.is_some() {
         drawing_hf_parts(pkg, sheet_part)?
     } else {
-        drawing_parts(pkg, sheet_part)?
+        let sheet = xml::parse(pkg.get(sheet_part)?)?;
+        super::chart_drawing::object_drawing_parts_from(pkg, sheet_part, &sheet.root)?
     };
     for part in parts {
         let doc = xml::parse(pkg.get(&part)?)?;
@@ -1216,6 +1305,97 @@ fn find_drawing_for(
         ErrorKind::PictureNotFound { id: id.to_string() },
         field_path,
     ))
+}
+
+pub(crate) fn find_pic_element_mut<'a>(
+    root: &'a mut Element,
+    target: &SheetPicId,
+    hf_el: Option<&Element>,
+) -> Option<&'a mut Element> {
+    let search = PicSearch { target, hf_el };
+    find_pic_mut_in(root, &search, &mut 0)
+}
+
+fn find_pic_mut_in<'a>(
+    el: &'a mut Element,
+    search: &PicSearch<'_>,
+    index: &mut usize,
+) -> Option<&'a mut Element> {
+    if el.local_name() == "AlternateContent" {
+        if let Some(choice) = el
+            .children
+            .iter()
+            .position(|n| matches!(n, Node::Element(e) if e.local_name() == "Choice"))
+            .or_else(|| {
+                el.children
+                    .iter()
+                    .position(|n| matches!(n, Node::Element(e) if e.local_name() == "Fallback"))
+            })
+        {
+            if let Node::Element(child) = &mut el.children[choice] {
+                return find_pic_mut_in(child, search, index);
+            }
+        }
+        return None;
+    }
+    if AnchorKind::from_local(el.local_name()).is_some() {
+        let pic_i = el
+            .children
+            .iter()
+            .position(|n| matches!(n, Node::Element(e) if e.local_name() == "pic" && has_blip(e)));
+        if let Some(pic_i) = pic_i {
+            let cnv = if let Node::Element(pic) = &el.children[pic_i] {
+                cnv_of(pic).0
+            } else {
+                return None;
+            };
+            if search.hit(&cnv, index) {
+                if let Node::Element(pic) = &mut el.children[pic_i] {
+                    return Some(pic);
+                }
+            }
+        }
+        return None;
+    }
+    if el.local_name() == "grpSp" {
+        return None;
+    }
+    for child in el.children.as_mut_slice() {
+        if let Node::Element(c) = child {
+            if let Some(found) = find_pic_mut_in(c, search, index) {
+                return Some(found);
+            }
+        }
+    }
+    None
+}
+
+fn patch_matched_rel(
+    root: &mut Element,
+    search: &PicSearch<'_>,
+    rel: super::request::RelBoxPatch,
+) -> Result<bool, Error> {
+    let mut index = 0usize;
+    let mut hit = false;
+    walk_anchors_mut(root, &mut |anchor, _| {
+        let cnv = {
+            let Some(pic) = direct_pic(anchor) else {
+                return false;
+            };
+            if !has_blip(pic) {
+                return false;
+            }
+            cnv_of(pic).0
+        };
+        if search.hit(&cnv, &mut index) {
+            let _ = super::chart_drawing::patch_rel_box(anchor, rel);
+            hit = true;
+            true
+        } else {
+            false
+        }
+    });
+    Ok(hit)
 }
 
 pub(crate) fn walk_anchors<F>(root: &Element, f: &mut F) -> Result<(), Error>
@@ -1339,23 +1519,25 @@ pub(crate) fn pic_info_at(
     let (to, to_off_x, to_off_y) = read_marker(anchor.child_by_local("to"));
     let (cx, cy) = read_ext(anchor);
     let (pos_x, pos_y) = read_pos(anchor);
+    let (from_x, from_y, to_x, to_y) = super::chart_drawing::read_rel_box(anchor);
+    let cell = matches!(kind, AnchorKind::TwoCell | AnchorKind::OneCell);
     Ok(PicInfo {
         id,
         cnv_pr_id: raw_id,
         name,
         anchor: kind,
-        from: from.map(|c| a1::format_cell(c.col, c.row)),
-        from_off_x: if kind == AnchorKind::Absolute {
-            None
+        from: if cell {
+            from.map(|c| a1::format_cell(c.col, c.row))
         } else {
-            Some(from_off_x)
-        },
-        from_off_y: if kind == AnchorKind::Absolute {
             None
-        } else {
-            Some(from_off_y)
         },
-        to: to.map(|c| a1::format_cell(c.col, c.row)),
+        from_off_x: if cell { Some(from_off_x) } else { None },
+        from_off_y: if cell { Some(from_off_y) } else { None },
+        to: if kind == AnchorKind::TwoCell {
+            to.map(|c| a1::format_cell(c.col, c.row))
+        } else {
+            None
+        },
         to_off_x: if kind == AnchorKind::TwoCell {
             Some(to_off_x)
         } else {
@@ -1368,12 +1550,12 @@ pub(crate) fn pic_info_at(
         },
         pos_x,
         pos_y,
-        cx: if kind == AnchorKind::TwoCell {
+        cx: if matches!(kind, AnchorKind::TwoCell | AnchorKind::RelSize) {
             None
         } else {
             cx
         },
-        cy: if kind == AnchorKind::TwoCell {
+        cy: if matches!(kind, AnchorKind::TwoCell | AnchorKind::RelSize) {
             None
         } else {
             cy
@@ -1389,6 +1571,27 @@ pub(crate) fn pic_info_at(
             blip_embed(pic).as_deref(),
             rels,
         ),
+        hyperlink: super::hyperlink::inspect_cnv(pic, rels),
+        from_x: if matches!(kind, AnchorKind::RelSize | AnchorKind::AbsSize) {
+            from_x
+        } else {
+            None
+        },
+        from_y: if matches!(kind, AnchorKind::RelSize | AnchorKind::AbsSize) {
+            from_y
+        } else {
+            None
+        },
+        to_x: if kind == AnchorKind::RelSize {
+            to_x
+        } else {
+            None
+        },
+        to_y: if kind == AnchorKind::RelSize {
+            to_y
+        } else {
+            None
+        },
     })
 }
 
@@ -1959,6 +2162,9 @@ pub(crate) fn next_cnv_id(
     };
     scan(drawing_parts_from(pkg, sheet_part, sheet_root)?)?;
     scan(drawing_hf_parts_from(pkg, sheet_part, sheet_root)?)?;
+    scan(super::chart_drawing::user_shape_parts(
+        pkg, sheet_part, sheet_root,
+    )?)?;
     Ok(max + 1)
 }
 
@@ -2249,6 +2455,7 @@ pub(crate) fn build_anchor(
                     .with_attr("cy", cy.to_string()),
             );
         }
+        AnchorKind::RelSize | AnchorKind::AbsSize => {}
     }
     let pic = match existing_pic {
         Some(mut pic) => {

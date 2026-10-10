@@ -278,6 +278,7 @@ fn info_json(p: &MathInfo) -> Value {
             m.insert("cx".into(), json!(p.cx));
             m.insert("cy".into(), json!(p.cy));
         }
+        AnchorKind::RelSize | AnchorKind::AbsSize => {}
     }
     m.insert("text".into(), json!(p.text));
     m.insert("stable".into(), json!(p.stable));
@@ -388,6 +389,9 @@ pub fn insert(
             );
         }
         AnchorKind::Absolute => {
+            return Err(Error::with_path(ErrorKind::InvalidXlsxAnchor, "ops.anchor"));
+        }
+        AnchorKind::RelSize | AnchorKind::AbsSize => {
             return Err(Error::with_path(ErrorKind::InvalidXlsxAnchor, "ops.anchor"));
         }
     }

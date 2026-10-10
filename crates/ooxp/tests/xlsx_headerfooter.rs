@@ -201,8 +201,21 @@ fn expand_six_slots_and_set_text() {
     assert_eq!(slots[1]["text"], serde_json::Value::Null);
     assert_eq!(
         object_keys(&slots[0]),
-        ["id", "kind", "side", "text", "pictureCount"]
+        [
+            "id",
+            "kind",
+            "side",
+            "text",
+            "pictureCount",
+            "textBoxCount",
+            "shapeCount",
+            "connectorCount"
+        ]
     );
+    assert_eq!(slots[0]["pictureCount"], 0);
+    assert_eq!(slots[0]["textBoxCount"], 0);
+    assert_eq!(slots[0]["shapeCount"], 0);
+    assert_eq!(slots[0]["connectorCount"], 0);
     let xml = part_text(&out, "xl/worksheets/sheet1.xml");
     assert!(xml.contains("&amp;C新页眉"), "{xml}");
     assert!(!xml.contains("differentOddEven"), "{xml}");

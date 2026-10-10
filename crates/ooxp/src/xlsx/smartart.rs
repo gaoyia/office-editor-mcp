@@ -154,10 +154,15 @@ fn smartart_json(
     m.insert("style".into(), json!(style));
     m.insert("points".into(), Value::Array(points));
     m.insert("stable".into(), stable_v);
+    let rels = crate::opc::Relationships::from_package(pkg, drawing_part).ok();
+    m.insert(
+        "hyperlink".into(),
+        super::hyperlink::inspect_cnv(frame, rels.as_ref()),
+    );
     Ok(Value::Object(m))
 }
 
-fn is_diagram_frame(el: &Element) -> bool {
+pub(crate) fn is_diagram_frame(el: &Element) -> bool {
     el.local_name() == "graphicFrame"
         && graphic_uri(el).is_some_and(|u| smartart::is_diagram_uri(&u))
 }
@@ -614,6 +619,7 @@ pub fn set_smartart_anchor(
             cy: op.cy,
             default_cx: DEFAULT_CX,
             default_cy: DEFAULT_CY,
+            rel: None,
         },
         op_index,
         ErrorKind::SmartArtNotFound { id: op.id.clone() },

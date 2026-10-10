@@ -133,6 +133,7 @@ $order = @(
     'xlsx-outline'
     'xlsx-custom-view'
     'xlsx-hyperlinks'
+    'xlsx-drawing-hlink'
     'xlsx-sparklines'
     'xlsx-protect'
     'xlsx-protect-hash'

@@ -13,6 +13,7 @@ use super::picture::{
     EditAs, PicInfo, A_NS, CT_DRAWING, REL_DRAWING, XDR_NS,
 };
 use super::request::{HfSlot, InsertPictureOp, SetHeaderFooterTextOp};
+use super::shape;
 use super::REL_NS;
 
 const SLOT_XML: [(&str, HfSlot); 6] = [
@@ -141,17 +142,36 @@ pub(crate) fn inspect_slots(
     root: &Element,
     sheet_kind: &str,
     want_pictures: bool,
+    want_text_boxes: bool,
+    want_shapes: bool,
+    want_connectors: bool,
 ) -> Result<Vec<Value>, Error> {
     let hf = root.child_by_local("headerFooter");
     let hf_el = root.child_by_local("drawingHF");
+    let drawing = sheet_kind == "worksheet" || sheet_kind == "chartsheet";
     let mut grouped: Vec<(HfSlot, Vec<PicInfo>)> =
         HfSlot::ALL.iter().map(|s| (*s, Vec::new())).collect();
-    if sheet_kind == "worksheet" {
+    let mut boxes: Vec<(HfSlot, Vec<Value>)> =
+        HfSlot::ALL.iter().map(|s| (*s, Vec::new())).collect();
+    let mut shapes: Vec<(HfSlot, Vec<Value>)> =
+        HfSlot::ALL.iter().map(|s| (*s, Vec::new())).collect();
+    let mut connectors: Vec<(HfSlot, Vec<Value>)> =
+        HfSlot::ALL.iter().map(|s| (*s, Vec::new())).collect();
+    if drawing {
         for pic in collect_hf_pictures(pkg, sheet_part, sheet_name, hf_el)? {
             if let Some((_, bucket)) = grouped.iter_mut().find(|(s, _)| *s == pic.0) {
                 bucket.push(pic.1);
             }
         }
+        collect_hf_objects(
+            pkg,
+            sheet_part,
+            sheet_name,
+            hf_el,
+            &mut boxes,
+            &mut shapes,
+            &mut connectors,
+        )?;
     }
     let mut out = Vec::new();
     for (i, slot) in HfSlot::ALL.iter().enumerate() {
@@ -165,11 +185,23 @@ pub(crate) fn inspect_slots(
         m.insert("kind".into(), json!(slot.kind_str()));
         m.insert("side".into(), json!(slot.side_str()));
         m.insert("text".into(), text);
-        if sheet_kind == "worksheet" {
+        if drawing {
             let pics = &grouped[i].1;
             m.insert("pictureCount".into(), json!(pics.len()));
+            m.insert("textBoxCount".into(), json!(boxes[i].1.len()));
+            m.insert("shapeCount".into(), json!(shapes[i].1.len()));
+            m.insert("connectorCount".into(), json!(connectors[i].1.len()));
             if want_pictures {
                 m.insert("pictures".into(), Value::Array(pictures_json(pics)));
+            }
+            if want_text_boxes {
+                m.insert("textBoxes".into(), Value::Array(boxes[i].1.clone()));
+            }
+            if want_shapes {
+                m.insert("shapes".into(), Value::Array(shapes[i].1.clone()));
+            }
+            if want_connectors {
+                m.insert("connectors".into(), Value::Array(connectors[i].1.clone()));
             }
         }
         out.push(Value::Object(m));
@@ -218,7 +250,67 @@ fn collect_hf_pictures(
     Ok(out)
 }
 
-/// create 写 even / first 槽位时补属性；没有原文时也要有空的 `headerFooter`。
+fn collect_hf_objects(
+    pkg: &Package,
+    sheet_part: &str,
+    sheet_name: &str,
+    hf_el: Option<&Element>,
+    boxes: &mut [(HfSlot, Vec<Value>)],
+    shapes: &mut [(HfSlot, Vec<Value>)],
+    connectors: &mut [(HfSlot, Vec<Value>)],
+) -> Result<(), Error> {
+    let mut box_n = [0usize; 6];
+    let mut shape_n = [0usize; 6];
+    let mut cxn_n = [0usize; 6];
+    for drawing_part in drawing_hf_parts(pkg, sheet_part)? {
+        let doc = xml::parse(pkg.get(&drawing_part)?)?;
+        let rels = Relationships::from_package(pkg, &drawing_part)?;
+        walk_anchors(&doc.root, &mut |anchor, kind| {
+            shape::visit_payloads(anchor, &mut |el| {
+                let (cnv, _) = shape::cnv_of_object(el);
+                let slot = slot_for_cnv(hf_el, cnv.as_deref());
+                let i = slot.index();
+                let id_base = slot.id(sheet_name);
+                if shape::is_textbox(el) {
+                    box_n[i] += 1;
+                    boxes[i].1.push(shape::object_json(
+                        anchor,
+                        kind,
+                        el,
+                        &id_base,
+                        box_n[i],
+                        shape::DrawObjKind::TextBox,
+                        Some(&rels),
+                    ));
+                } else if shape::is_shape(el) {
+                    shape_n[i] += 1;
+                    shapes[i].1.push(shape::object_json(
+                        anchor,
+                        kind,
+                        el,
+                        &id_base,
+                        shape_n[i],
+                        shape::DrawObjKind::Shape,
+                        Some(&rels),
+                    ));
+                } else if shape::is_connector(el) {
+                    cxn_n[i] += 1;
+                    connectors[i].1.push(shape::object_json(
+                        anchor,
+                        kind,
+                        el,
+                        &id_base,
+                        cxn_n[i],
+                        shape::DrawObjKind::Connector,
+                        Some(&rels),
+                    ));
+                }
+                Ok(())
+            })
+        })?;
+    }
+    Ok(())
+}
 pub(crate) fn ensure_create_slot_flags(sheet: &mut Element, slot: HfSlot) {
     let hf = ensure_header_footer(sheet);
     match slot.kind_str() {

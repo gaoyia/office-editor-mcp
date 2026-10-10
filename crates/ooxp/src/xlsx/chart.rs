@@ -261,6 +261,7 @@ fn chart_to_json(c: &ChartInfo) -> Value {
             m.insert("cx".into(), json!(c.cx));
             m.insert("cy".into(), json!(c.cy));
         }
+        AnchorKind::RelSize | AnchorKind::AbsSize => {}
     }
     m.insert("type".into(), json!(c.chart_type));
     if let Some(t) = &c.of_pie_type {

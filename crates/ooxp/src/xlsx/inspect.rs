@@ -196,6 +196,9 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
                         &sheet_doc.root,
                         sh.kind,
                         want_pictures,
+                        want_text_boxes,
+                        want_shapes,
+                        want_connectors,
                     )?),
                 );
             }
@@ -296,9 +299,24 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
                 }
             }
         } else if sh.kind == "chartsheet" {
+            let pics = picture::collect_sheet_pictures(&pkg, &sh.part, &sh.name)?;
+            picture_count += pics.len();
+            obj.insert("pictureCount".into(), json!(pics.len()));
             let charts = chart::collect_sheet_charts(&pkg, &sh.part, &sh.name, &sst, &sheet_parts)?;
             chart_count += charts.len();
             obj.insert("chartCount".into(), json!(charts.len()));
+            let boxes = shape::collect_textboxes(&pkg, &sh.part, &sh.name)?;
+            text_box_count += boxes.len();
+            obj.insert("textBoxCount".into(), json!(boxes.len()));
+            let maths = omml::collect(&pkg, &sh.part, &sheet_doc.root, &sh.name)?;
+            math_count += maths.len();
+            obj.insert("mathCount".into(), json!(maths.len()));
+            let shapes = shape::collect_shapes(&pkg, &sh.part, &sh.name)?;
+            shape_count += shapes.len();
+            obj.insert("shapeCount".into(), json!(shapes.len()));
+            let connectors = shape::collect_connectors(&pkg, &sh.part, &sh.name)?;
+            connector_count += connectors.len();
+            obj.insert("connectorCount".into(), json!(connectors.len()));
             obj.insert(
                 "hasHeaderFooter".into(),
                 json!(hf::has_header_footer(&sheet_doc.root)),
@@ -321,12 +339,33 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
                         &sh.name,
                         &sheet_doc.root,
                         sh.kind,
-                        false,
+                        want_pictures,
+                        want_text_boxes,
+                        want_shapes,
+                        want_connectors,
                     )?),
+                );
+            }
+            if want_pictures {
+                obj.insert(
+                    "pictures".into(),
+                    Value::Array(picture::pictures_json(&pics)),
                 );
             }
             if want_charts {
                 obj.insert("charts".into(), Value::Array(chart::charts_json(&charts)));
+            }
+            if want_text_boxes {
+                obj.insert("textBoxes".into(), Value::Array(boxes));
+            }
+            if want_maths {
+                obj.insert("maths".into(), Value::Array(omml::list_json(&maths)));
+            }
+            if want_shapes {
+                obj.insert("shapes".into(), Value::Array(shapes));
+            }
+            if want_connectors {
+                obj.insert("connectors".into(), Value::Array(connectors));
             }
             if let Some(cs) = cells_scope {
                 if sh.name.eq_ignore_ascii_case(&cs.sheet) {
@@ -350,6 +389,9 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
                         &sh.name,
                         &sheet_doc.root,
                         sh.kind,
+                        false,
+                        false,
+                        false,
                         false,
                     )?),
                 );

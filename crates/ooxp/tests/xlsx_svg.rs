@@ -178,7 +178,8 @@ fn create_svg_writes_svgblip_and_inspect_content_type() {
             "cx",
             "cy",
             "stable",
-            "contentType"
+            "contentType",
+            "hyperlink"
         ]
     );
     let names = zip_names(&path);

@@ -3010,7 +3010,8 @@
           "enum": [
             "oneCell",
             "twoCell",
-            "absolute"
+            "absolute",
+            "relSize"
           ]
         },
         "from": {
@@ -3042,6 +3043,26 @@
         },
         "posY": {
           "type": "integer"
+        },
+        "fromX": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "fromY": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "toX": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "toY": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
         },
         "editAs": {
           "enum": [
@@ -3141,7 +3162,8 @@
           "enum": [
             "oneCell",
             "twoCell",
-            "absolute"
+            "absolute",
+            "relSize"
           ]
         },
         "from": {
@@ -3173,6 +3195,26 @@
         },
         "posY": {
           "type": "integer"
+        },
+        "fromX": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "fromY": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "toX": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "toY": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
         },
         "editAs": {
           "enum": [

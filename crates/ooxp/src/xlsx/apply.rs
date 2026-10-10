@@ -120,11 +120,15 @@ pub fn apply(bytes: &[u8], ops: &[XlsxOp]) -> Result<Vec<u8>, Error> {
             }
             XlsxOp::InsertPicture(op) => {
                 let (part, kind) = require_named_sheet(&sheet_index, &op.sheet, i)?;
-                if kind != "worksheet" {
+                reject_hf_pic_sheet(kind, op.hf, i)?;
+                if kind != "worksheet" && kind != "chartsheet" {
                     return Err(Error::with_path(
                         ErrorKind::InsertPictureWorksheetOnly,
                         format!("ops[{i}].id"),
                     ));
+                }
+                if op.hf.is_none() {
+                    reject_rel_mismatch(kind, op.rel.is_some(), i)?;
                 }
                 load_dirty(&pkg, &mut dirty_sheets, &part, false)?;
                 let doc = dirty_of(&mut dirty_sheets, &part);
@@ -542,43 +546,81 @@ pub fn apply(bytes: &[u8], ops: &[XlsxOp]) -> Result<Vec<u8>, Error> {
                 comments::apply_set_done(&mut pkg, &part, op, i)?;
             }
             XlsxOp::InsertHyperlink(op) => {
-                let part = require_drawing_worksheet(
-                    &sheet_index,
-                    &op.sheet,
-                    i,
-                    ErrorKind::InsertHyperlinkWorksheetOnly,
-                )?;
-                load_dirty(&pkg, &mut dirty_sheets, &part, false)?;
-                let doc = dirty_of(&mut dirty_sheets, &part);
-                hyperlink::apply_insert(
-                    &mut pkg,
-                    &mut doc.root,
-                    &part,
-                    op,
-                    &format!("ops[{i}].ref"),
-                )?;
+                if let Some(host) = &op.drawing {
+                    let (part, _) = require_ws_or_chartsheet(
+                        &sheet_index,
+                        &op.sheet,
+                        i,
+                        ErrorKind::InsertHyperlinkWorksheetOnly,
+                    )?;
+                    hyperlink::apply_insert_drawing(
+                        &mut pkg,
+                        &part,
+                        host,
+                        op.url.as_deref(),
+                        op.location.as_deref(),
+                        op.tooltip.as_deref(),
+                        i,
+                    )?;
+                } else {
+                    let part = require_drawing_worksheet(
+                        &sheet_index,
+                        &op.sheet,
+                        i,
+                        ErrorKind::InsertHyperlinkWorksheetOnly,
+                    )?;
+                    load_dirty(&pkg, &mut dirty_sheets, &part, false)?;
+                    let doc = dirty_of(&mut dirty_sheets, &part);
+                    hyperlink::apply_insert(
+                        &mut pkg,
+                        &mut doc.root,
+                        &part,
+                        op,
+                        &format!("ops[{i}].ref"),
+                    )?;
+                }
             }
             XlsxOp::SetHyperlink(op) => {
-                let part = require_drawing_worksheet(
-                    &sheet_index,
-                    &op.sheet,
-                    i,
-                    ErrorKind::InsertHyperlinkWorksheetOnly,
-                )?;
-                load_dirty(&pkg, &mut dirty_sheets, &part, false)?;
-                let doc = dirty_of(&mut dirty_sheets, &part);
-                hyperlink::apply_set(&mut pkg, &mut doc.root, &part, op, i)?;
+                if let Some(host) = &op.drawing {
+                    let (part, _) = require_ws_or_chartsheet(
+                        &sheet_index,
+                        &op.sheet,
+                        i,
+                        ErrorKind::InsertHyperlinkWorksheetOnly,
+                    )?;
+                    hyperlink::apply_set_drawing(&mut pkg, &part, host, op, i)?;
+                } else {
+                    let part = require_drawing_worksheet(
+                        &sheet_index,
+                        &op.sheet,
+                        i,
+                        ErrorKind::InsertHyperlinkWorksheetOnly,
+                    )?;
+                    load_dirty(&pkg, &mut dirty_sheets, &part, false)?;
+                    let doc = dirty_of(&mut dirty_sheets, &part);
+                    hyperlink::apply_set(&mut pkg, &mut doc.root, &part, op, i)?;
+                }
             }
             XlsxOp::DeleteHyperlink(op) => {
-                let part = require_drawing_worksheet(
-                    &sheet_index,
-                    &op.sheet,
-                    i,
-                    ErrorKind::InsertHyperlinkWorksheetOnly,
-                )?;
-                load_dirty(&pkg, &mut dirty_sheets, &part, false)?;
-                let doc = dirty_of(&mut dirty_sheets, &part);
-                hyperlink::apply_delete(&mut pkg, &mut doc.root, &part, op, i)?;
+                if let Some(host) = &op.drawing {
+                    let (part, _) = require_ws_or_chartsheet(
+                        &sheet_index,
+                        &op.sheet,
+                        i,
+                        ErrorKind::InsertHyperlinkWorksheetOnly,
+                    )?;
+                    hyperlink::apply_delete_drawing(&mut pkg, &part, host, &op.id, i)?;
+                } else {
+                    let part = require_drawing_worksheet(
+                        &sheet_index,
+                        &op.sheet,
+                        i,
+                        ErrorKind::InsertHyperlinkWorksheetOnly,
+                    )?;
+                    load_dirty(&pkg, &mut dirty_sheets, &part, false)?;
+                    let doc = dirty_of(&mut dirty_sheets, &part);
+                    hyperlink::apply_delete(&mut pkg, &mut doc.root, &part, op, i)?;
+                }
             }
             XlsxOp::InsertSparkline(op) => {
                 let part = require_drawing_worksheet(
@@ -626,40 +668,43 @@ pub fn apply(bytes: &[u8], ops: &[XlsxOp]) -> Result<Vec<u8>, Error> {
                 }
             },
             XlsxOp::InsertTextBox(op) => {
-                let part = require_drawing_worksheet(
+                let (part, kind) = require_ws_or_chartsheet(
                     &sheet_index,
                     &op.sheet,
                     i,
                     ErrorKind::InsertTextBoxWorksheetOnly,
                 )?;
+                reject_rel_mismatch(kind, op.rel.is_some(), i)?;
                 load_dirty(&pkg, &mut dirty_sheets, &part, false)?;
                 let doc = dirty_of(&mut dirty_sheets, &part);
                 shape::insert_textbox(&mut pkg, doc, &part, op)?;
             }
             XlsxOp::InsertShape(op) => {
-                let part = require_drawing_worksheet(
+                let (part, kind) = require_ws_or_chartsheet(
                     &sheet_index,
                     &op.sheet,
                     i,
                     ErrorKind::InsertTextBoxWorksheetOnly,
                 )?;
+                reject_rel_mismatch(kind, op.rel.is_some(), i)?;
                 load_dirty(&pkg, &mut dirty_sheets, &part, false)?;
                 let doc = dirty_of(&mut dirty_sheets, &part);
                 shape::insert_shape(&mut pkg, doc, &part, op)?;
             }
             XlsxOp::InsertConnector(op) => {
-                let part = require_drawing_worksheet(
+                let (part, kind) = require_ws_or_chartsheet(
                     &sheet_index,
                     &op.sheet,
                     i,
                     ErrorKind::InsertTextBoxWorksheetOnly,
                 )?;
+                reject_rel_mismatch(kind, op.rel.is_some(), i)?;
                 load_dirty(&pkg, &mut dirty_sheets, &part, false)?;
                 let doc = dirty_of(&mut dirty_sheets, &part);
                 shape::insert_connector(&mut pkg, doc, &part, op)?;
             }
             XlsxOp::DeleteTextBox(op) => {
-                let part = require_drawing_worksheet(
+                let (part, _) = require_ws_or_chartsheet(
                     &sheet_index,
                     &op.target.sheet,
                     i,
@@ -670,7 +715,7 @@ pub fn apply(bytes: &[u8], ops: &[XlsxOp]) -> Result<Vec<u8>, Error> {
                 shape::delete_textbox(&mut pkg, doc, &part, op, i)?;
             }
             XlsxOp::DeleteShape(op) => {
-                let part = require_drawing_worksheet(
+                let (part, _) = require_ws_or_chartsheet(
                     &sheet_index,
                     &op.target.sheet,
                     i,
@@ -681,7 +726,7 @@ pub fn apply(bytes: &[u8], ops: &[XlsxOp]) -> Result<Vec<u8>, Error> {
                 shape::delete_shape(&mut pkg, doc, &part, op, i)?;
             }
             XlsxOp::DeleteConnector(op) => {
-                let part = require_drawing_worksheet(
+                let (part, _) = require_ws_or_chartsheet(
                     &sheet_index,
                     &op.target.sheet,
                     i,
@@ -850,7 +895,7 @@ pub fn apply(bytes: &[u8], ops: &[XlsxOp]) -> Result<Vec<u8>, Error> {
                 extlink::set_path(&mut pkg, &wb_doc, &wb_part, op, i)?;
             }
             XlsxOp::SetTextBoxSize(op) => {
-                let part = require_drawing_worksheet(
+                let (part, _) = require_ws_or_chartsheet(
                     &sheet_index,
                     &op.target.sheet,
                     i,
@@ -861,7 +906,7 @@ pub fn apply(bytes: &[u8], ops: &[XlsxOp]) -> Result<Vec<u8>, Error> {
                 shape::set_textbox_size(&mut pkg, &doc.root, &part, op, i)?;
             }
             XlsxOp::SetTextBoxAnchor(op) => {
-                let part = require_drawing_worksheet(
+                let (part, _) = require_ws_or_chartsheet(
                     &sheet_index,
                     &op.target.sheet,
                     i,
@@ -872,7 +917,7 @@ pub fn apply(bytes: &[u8], ops: &[XlsxOp]) -> Result<Vec<u8>, Error> {
                 shape::set_textbox_anchor(&mut pkg, &doc.root, &part, op, i)?;
             }
             XlsxOp::SetShapeText(op) => {
-                let part = require_drawing_worksheet(
+                let (part, _) = require_ws_or_chartsheet(
                     &sheet_index,
                     &op.target.sheet,
                     i,
@@ -883,7 +928,7 @@ pub fn apply(bytes: &[u8], ops: &[XlsxOp]) -> Result<Vec<u8>, Error> {
                 shape::set_shape_text(&mut pkg, &doc.root, &part, op, i)?;
             }
             XlsxOp::SetShapeFormat(op) => {
-                let part = require_drawing_worksheet(
+                let (part, _) = require_ws_or_chartsheet(
                     &sheet_index,
                     &op.target.sheet,
                     i,
@@ -1241,12 +1286,57 @@ fn require_layout_worksheet(
     ))
 }
 
+fn require_ws_or_chartsheet(
+    index: &[(String, String, &'static str)],
+    name: &str,
+    op_index: usize,
+    other_err: ErrorKind,
+) -> Result<(String, &'static str), Error> {
+    let meta = index.iter().find(|(n, _, _)| n.eq_ignore_ascii_case(name));
+    let Some((_, part, kind)) = meta else {
+        return Err(Error::with_path(
+            ErrorKind::SheetNotFound {
+                name: name.to_string(),
+            },
+            format!("ops[{op_index}].id"),
+        ));
+    };
+    match *kind {
+        "worksheet" | "chartsheet" => Ok((part.clone(), *kind)),
+        "dialogsheet" | "macrosheet" => Err(Error::with_path(
+            ErrorKind::DialogOrMacroSheet,
+            format!("ops[{op_index}].id"),
+        )),
+        _ => Err(Error::with_path(other_err, format!("ops[{op_index}].id"))),
+    }
+}
+
+fn reject_rel_mismatch(kind: &str, has_rel: bool, op_index: usize) -> Result<(), Error> {
+    if kind == "chartsheet" && !has_rel {
+        return Err(Error::with_path(
+            ErrorKind::UnknownField {
+                field: "from".into(),
+            },
+            format!("ops[{op_index}].from"),
+        ));
+    }
+    if kind == "worksheet" && has_rel {
+        return Err(Error::with_path(
+            ErrorKind::UnknownField {
+                field: "fromX".into(),
+            },
+            format!("ops[{op_index}].fromX"),
+        ));
+    }
+    Ok(())
+}
+
 fn reject_hf_pic_sheet(
     kind: &str,
     hf: Option<super::request::HfSlot>,
     op_index: usize,
 ) -> Result<(), Error> {
-    if hf.is_some() && kind != "worksheet" {
+    if hf.is_some() && kind != "worksheet" && kind != "chartsheet" {
         return Err(Error::with_path(
             ErrorKind::InsertPictureWorksheetOnly,
             format!("ops[{op_index}].id"),

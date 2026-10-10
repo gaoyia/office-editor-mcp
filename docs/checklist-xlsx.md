@@ -379,6 +379,13 @@ C、I、A、O、Xp、Xvg、Xem、X3d、Xom、Xtf、Xfl、Xc、Xh、Xfs、Xtl、X
   - `customList=Low,Medium,High` 后 inspect 对上，A1 仍为 `Low`
   - `sortBy=cellColor` 且 `sortMethod=stroke` 后 inspect 对上，无 Repair
   - `cellColor` 不给 `color`、`icon` 带 `customList` 得 `InvalidField`；`id=slide:1` 得 `InvalidId`，均未写文件
+- **Xdh1–Xdh5** ✅
+  - Excel 16.0：`xlsx-drawing-hlink.ps1`，5 PASS / 0 FAIL
+  - 图上 `insertHyperlink` 后 inspect `url` 对得上，COM Address 对得上，`hyperlinkCount=0`，无 Repair
+  - `setHyperlink` 改 `url` 后 COM 更新；`deleteHyperlink` 后 `hyperlink` 为 `null`、图还在、无 Repair
+  - chartsheet `insertShape` 带 `fromX` 四元组，inspect `anchor=relSize`，COM `Shapes.Count>=1`，无 Repair
+  - chartsheet `insertPicture` 后 `pictureCount>=1`，无 Repair
+  - chartsheet 单元格 `from`、图 id 带 `ref` 得 `InvalidField`，均未写文件
 - **图表工作表 Xs1–Xs4** ✅
   - Excel 16.0：`xlsx-chartsheet.ps1`，4 PASS / 0 FAIL
   - `insertChartSheet` 后 `kind=chartsheet`、`chartCount=1`，无 Repair
@@ -1420,6 +1427,18 @@ inspect 只读进树。create 不生成。apply 不新开编辑。脚本 `manual
 | Xhl3 | 改地址 | `setHyperlink` 改 `url` 后 COM `Address` 对得上、无修复 |
 | Xhl4 | 删除 | `deleteHyperlink` 后 `hyperlinkCount=0`、单元格文字还在、无修复 |
 | Xhl5 | 缺字段 | 只给 `op` 与 `id` 的 `insertHyperlink`（缺 `ref`）得 `InvalidField`，未写文件。不强制开 Excel |
+
+## 页眉、图表工作表 drawing 与 DrawingML 链
+
+图表工作表叠加对象走 Chart Drawing。图 / 框 / 形状 / SmartArt 上的链走 `a:hlinkClick`。脚本 `manual-check/office/cases/xlsx-drawing-hlink.ps1`。编号用 **Xdh**。不要和 Xh、Xhl、Xsa、Xs、Xp 撞。不编辑 VML。
+
+| 序号 | 检查 | 通过标准 |
+| --- | --- | --- |
+| Xdh1 | 图上链 | `insertPicture` 后再 `insertHyperlink` 点图 id，inspect `hyperlink.url` 对得上；Excel 无修复；COM 该形状 `Hyperlink.Address` 对得上 |
+| Xdh2 | 改删链 | `setHyperlink` 改 `url` 后 COM 地址更新；`deleteHyperlink` 后 `hyperlink` 为 `null`、图还在、无修复 |
+| Xdh3 | 图表工作表插形状 | `insertChartSheet` 后 `insertShape` 带 `fromX` 四元组，inspect `anchor=relSize`；Excel 无修复；COM `Charts.Item(1).Shapes.Count` 至少为 1 |
+| Xdh4 | 图表工作表插图 | 对 `chartsheet` 发 `insertPicture` 带 `fromX` 四元组后 `pictureCount>=1`，无修复 |
+| Xdh5 | 拒写 | 对 `chartsheet` 发带单元格 `from` 的 `insertShape`、对工作表图发带 `ref` 的 DrawingML `insertHyperlink` 得 `InvalidField`。未写文件。不强制开 Excel |
 
 ## 迷你图
 

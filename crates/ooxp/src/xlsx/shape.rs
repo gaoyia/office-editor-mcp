@@ -230,21 +230,35 @@ fn collect_kind(
 ) -> Result<Vec<Value>, Error> {
     let mut out = Vec::new();
     let mut index = 0usize;
-    for_each_object(pkg, sheet_part, kind.matcher(), |anchor, akind, el| {
-        index += 1;
-        out.push(object_json(anchor, akind, el, sheet_name, index, kind));
-        Ok(())
-    })?;
+    for_each_object(
+        pkg,
+        sheet_part,
+        kind.matcher(),
+        |anchor, akind, el, rels| {
+            index += 1;
+            out.push(object_json(
+                anchor,
+                akind,
+                el,
+                &format!("sheet:{sheet_name}"),
+                index,
+                kind,
+                Some(rels),
+            ));
+            Ok(())
+        },
+    )?;
     Ok(out)
 }
 
-fn object_json(
+pub(crate) fn object_json(
     anchor: &Element,
     akind: AnchorKind,
     el: &Element,
-    sheet_name: &str,
+    id_base: &str,
     index: usize,
     kind: DrawObjKind,
+    rels: Option<&Relationships>,
 ) -> Value {
     let (raw_id, name) = cnv_of_object(el);
     let (prefix, with_text, with_prst) = match kind {
@@ -254,8 +268,8 @@ fn object_json(
     };
     let stable = raw_id.is_some();
     let id = match &raw_id {
-        Some(v) => format!("sheet:{sheet_name}/{prefix}:{v}"),
-        None => format!("sheet:{sheet_name}/{prefix}:index:{index}"),
+        Some(v) => format!("{id_base}/{prefix}:{v}"),
+        None => format!("{id_base}/{prefix}:index:{index}"),
     };
     let mut m = geom_map(anchor, akind, id, raw_id, name, stable);
     let stable_v = m.remove("stable").unwrap_or(json!(stable));
@@ -267,6 +281,9 @@ fn object_json(
         crate::drawing_text::insert_inspect(&mut m, el.child_by_local("txBody"));
     }
     m.insert("stable".into(), stable_v);
+    if kind != DrawObjKind::Connector {
+        m.insert("hyperlink".into(), super::hyperlink::inspect_cnv(el, rels));
+    }
     Value::Object(m)
 }
 
@@ -322,6 +339,9 @@ pub(crate) fn geom_map(
             m.insert("cx".into(), json!(cx));
             m.insert("cy".into(), json!(cy));
         }
+        AnchorKind::RelSize | AnchorKind::AbsSize => {
+            super::chart_drawing::fill_rel_json(&mut m, anchor);
+        }
     }
     m.insert("stable".into(), json!(stable));
     m
@@ -335,10 +355,6 @@ pub fn insert_textbox(
 ) -> Result<(), Error> {
     let cx = op.cx.unwrap_or(DEFAULT_CX);
     let cy = op.cy.unwrap_or(DEFAULT_CY);
-    let drawing_part = picture::ensure_drawing_part(pkg, sheet_doc, sheet_part)?;
-    let mut draw_doc = xml::parse(pkg.get(&drawing_part)?)?;
-    picture::ensure_xmlns(&mut draw_doc.root, "r", super::REL_NS);
-    picture::ensure_xmlns(&mut draw_doc.root, "a", picture::A_NS);
     let cnv = picture::next_cnv_id(pkg, sheet_part, &sheet_doc.root)?;
     let name = format!("文本框 {cnv}");
     let mut sp = build_textbox_sp(cnv, &name, cx, cy, op.text.as_deref().unwrap_or(""));
@@ -347,6 +363,15 @@ pub fn insert_textbox(
             crate::drawing_text::apply(tx, fmt);
         }
     }
+    if let Some(rel) = op.rel {
+        let drawing_part =
+            super::chart_drawing::ensure_user_shapes(pkg, sheet_part, &sheet_doc.root)?;
+        return super::chart_drawing::push_rel_anchor(pkg, &drawing_part, rel, sp);
+    }
+    let drawing_part = picture::ensure_drawing_part(pkg, sheet_doc, sheet_part)?;
+    let mut draw_doc = xml::parse(pkg.get(&drawing_part)?)?;
+    picture::ensure_xmlns(&mut draw_doc.root, "r", super::REL_NS);
+    picture::ensure_xmlns(&mut draw_doc.root, "a", picture::A_NS);
     push_anchor(
         pkg,
         sheet_doc,
@@ -376,10 +401,6 @@ pub fn insert_shape(
 ) -> Result<(), Error> {
     let cx = op.cx.unwrap_or(DEFAULT_CX);
     let cy = op.cy.unwrap_or(DEFAULT_CY);
-    let drawing_part = picture::ensure_drawing_part(pkg, sheet_doc, sheet_part)?;
-    let mut draw_doc = xml::parse(pkg.get(&drawing_part)?)?;
-    picture::ensure_xmlns(&mut draw_doc.root, "r", super::REL_NS);
-    picture::ensure_xmlns(&mut draw_doc.root, "a", picture::A_NS);
     let cnv = picture::next_cnv_id(pkg, sheet_part, &sheet_doc.root)?;
     let name = format!("形状 {cnv}");
     let mut sp = build_shape_sp(
@@ -395,6 +416,15 @@ pub fn insert_shape(
             crate::drawing_text::apply(tx, fmt);
         }
     }
+    if let Some(rel) = op.rel {
+        let drawing_part =
+            super::chart_drawing::ensure_user_shapes(pkg, sheet_part, &sheet_doc.root)?;
+        return super::chart_drawing::push_rel_anchor(pkg, &drawing_part, rel, sp);
+    }
+    let drawing_part = picture::ensure_drawing_part(pkg, sheet_doc, sheet_part)?;
+    let mut draw_doc = xml::parse(pkg.get(&drawing_part)?)?;
+    picture::ensure_xmlns(&mut draw_doc.root, "r", super::REL_NS);
+    picture::ensure_xmlns(&mut draw_doc.root, "a", picture::A_NS);
     push_anchor(
         pkg,
         sheet_doc,
@@ -424,13 +454,18 @@ pub fn insert_connector(
 ) -> Result<(), Error> {
     let cx = op.cx.unwrap_or(DEFAULT_CX);
     let cy = op.cy.unwrap_or(DEFAULT_CY);
+    let cnv = picture::next_cnv_id(pkg, sheet_part, &sheet_doc.root)?;
+    let name = format!("连接线 {cnv}");
+    let sp = build_cxn_sp(cnv, &name, cx, cy, &op.prst);
+    if let Some(rel) = op.rel {
+        let drawing_part =
+            super::chart_drawing::ensure_user_shapes(pkg, sheet_part, &sheet_doc.root)?;
+        return super::chart_drawing::push_rel_anchor(pkg, &drawing_part, rel, sp);
+    }
     let drawing_part = picture::ensure_drawing_part(pkg, sheet_doc, sheet_part)?;
     let mut draw_doc = xml::parse(pkg.get(&drawing_part)?)?;
     picture::ensure_xmlns(&mut draw_doc.root, "r", super::REL_NS);
     picture::ensure_xmlns(&mut draw_doc.root, "a", picture::A_NS);
-    let cnv = picture::next_cnv_id(pkg, sheet_part, &sheet_doc.root)?;
-    let name = format!("连接线 {cnv}");
-    let sp = build_cxn_sp(cnv, &name, cx, cy, &op.prst);
     push_anchor(
         pkg,
         sheet_doc,
@@ -813,6 +848,7 @@ pub fn set_textbox_anchor(
             cy: op.cy,
             default_cx: DEFAULT_CX,
             default_cy: DEFAULT_CY,
+            rel: op.rel,
         },
         op_index,
         op.kind.not_found(op.id.clone()),
@@ -835,6 +871,7 @@ pub(crate) struct AnchorWrite {
     pub cy: Option<i64>,
     pub default_cx: i64,
     pub default_cy: i64,
+    pub rel: Option<super::request::RelBoxPatch>,
 }
 
 pub(crate) fn set_object_size(
@@ -889,6 +926,52 @@ pub(crate) fn set_object_anchor(
     let mut doc = xml::parse(pkg.get(&drawing_part)?)?;
     let snapshot = snapshot_outer(&doc.root, is_obj, key)
         .ok_or_else(|| Error::with_path(not_found.clone(), &path))?;
+    if matches!(snapshot.kind, AnchorKind::RelSize | AnchorKind::AbsSize) {
+        if w.anchor.is_some() && w.anchor != Some(snapshot.kind) {
+            return Err(Error::with_path(
+                ErrorKind::UnknownField {
+                    field: "anchor".into(),
+                },
+                format!("ops[{op_index}].anchor"),
+            ));
+        }
+        super::chart_drawing::reject_cell_anchor_fields(
+            w.from.is_some(),
+            w.to.is_some(),
+            w.from_off_x.is_some() || w.from_off_y.is_some(),
+            w.to_off_x.is_some() || w.to_off_y.is_some(),
+            op_index,
+        )?;
+        let Some(rel) = w.rel else {
+            return Err(Error::with_path(
+                ErrorKind::MissingField {
+                    field: "fromX".into(),
+                },
+                format!("ops[{op_index}].fromX"),
+            ));
+        };
+        let mut index = 0usize;
+        let patched = picture::walk_anchors_mut(&mut doc.root, &mut |anchor, _| {
+            if !outer_contains(anchor, is_obj, key, &mut index) {
+                return false;
+            }
+            let _ = super::chart_drawing::patch_rel_box(anchor, rel);
+            true
+        });
+        if !patched {
+            return Err(Error::with_path(not_found, path));
+        }
+        pkg.set(&drawing_part, doc.to_bytes()?)?;
+        return Ok(());
+    }
+    if w.rel.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::UnknownField {
+                field: "fromX".into(),
+            },
+            format!("ops[{op_index}].fromX"),
+        ));
+    }
     let planned = picture::plan_anchor(
         &snapshot.geom(),
         &picture::AnchorPatch {
@@ -952,12 +1035,16 @@ pub(crate) fn write_or_drop_drawing(
     doc: Document,
 ) -> Result<(), Error> {
     if picture::drawing_is_empty(&doc.root) {
-        pkg.remove(drawing_part);
-        pkg.remove(&rels_part_name(drawing_part));
-        picture::remove_drawing_ref(&mut sheet_doc.root, sheet_part, pkg, drawing_part)?;
-        let mut cts = crate::opc::ContentTypes::from_package(pkg)?;
-        cts.remove_override(drawing_part);
-        cts.write_to(pkg)?;
+        if super::chart_drawing::is_user_shapes(&doc.root) {
+            super::chart_drawing::drop_user_shapes(pkg, sheet_part, drawing_part)?;
+        } else {
+            pkg.remove(drawing_part);
+            pkg.remove(&rels_part_name(drawing_part));
+            picture::remove_drawing_ref(&mut sheet_doc.root, sheet_part, pkg, drawing_part)?;
+            let mut cts = crate::opc::ContentTypes::from_package(pkg)?;
+            cts.remove_override(drawing_part);
+            cts.write_to(pkg)?;
+        }
     } else {
         pkg.set(drawing_part, doc.to_bytes()?)?;
     }
@@ -971,12 +1058,15 @@ pub(crate) fn for_each_object<F>(
     mut f: F,
 ) -> Result<(), Error>
 where
-    F: FnMut(&Element, AnchorKind, &Element) -> Result<(), Error>,
+    F: FnMut(&Element, AnchorKind, &Element, &Relationships) -> Result<(), Error>,
 {
     let sheet = xml::parse(pkg.get(sheet_part)?)?;
     let dummies = ole::dummy_ids(&sheet.root);
-    for drawing_part in picture::drawing_parts_from(pkg, sheet_part, &sheet.root)? {
+    for drawing_part in
+        super::chart_drawing::object_drawing_parts_from(pkg, sheet_part, &sheet.root)?
+    {
         let doc = xml::parse(pkg.get(&drawing_part)?)?;
+        let rels = Relationships::from_package(pkg, &drawing_part)?;
         picture::walk_anchors(&doc.root, &mut |anchor, kind| {
             visit_payloads(anchor, &mut |el| {
                 if is_obj(el) {
@@ -985,7 +1075,7 @@ where
                             return Ok(());
                         }
                     }
-                    f(anchor, kind, el)?;
+                    f(anchor, kind, el, &rels)?;
                 }
                 Ok(())
             })
@@ -1003,7 +1093,8 @@ pub(crate) fn find_drawing_for(
 ) -> Option<String> {
     let dummies = ole::dummy_ids(sheet_root);
     let mut index = 0usize;
-    let Ok(parts) = picture::drawing_parts_from(pkg, sheet_part, sheet_root) else {
+    let Ok(parts) = super::chart_drawing::object_drawing_parts_from(pkg, sheet_part, sheet_root)
+    else {
         return None;
     };
     for part in parts {

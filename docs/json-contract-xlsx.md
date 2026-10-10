@@ -117,18 +117,22 @@
 `insertComment` 只写线程化部件，并按 Excel 16.0 另存补占位 `comments.xml` 与 Note `v:shape`。
 
 图表工作表、宏表、对话表出现在 inspect 的表名单里，但没有单元格 id。它们的 id 仍是 `sheet:{name}`。对它们发 `setCell` 报 `InvalidField`。
-对它们发 `insertPicture` / `insertChart` 报 `InvalidField`。图表工作表上的那张 `xdr:graphicFrame` 走下面的图表 id，不另编图 id。
+对 `dialogsheet` / `macrosheet` 发 `insertPicture` / `insertChart` 报 `InvalidField`。
+对 `chartsheet` 发 `insertChart` 仍报 `InvalidField`（一张表就这一张框）。
+`insertPicture` / `insertShape` / `insertTextBox` / `insertConnector` 可以点 `chartsheet`，见下文。
+图表工作表上的那张 `xdr:graphicFrame` 走下面的图表 id，不另编图 id。
 新建、删除图表工作表用 `insertChartSheet` / `deleteChartSheet`，不要复用 `insertChart` 往 `chartsheet` 上插第二张。
 普通工作表的插、删、改名、重排与隐藏用 `insertSheet` / `deleteSheet` / `renameSheet` / `moveSheet` / `setSheetHidden`，不要复用 `insertChartSheet`。
 
-工作表图挂在该 `worksheet` 上，不挂在单元格上，也不挂在工作簿根上。图的 `{cNvPrId}` 取该 `xdr:pic` 里 `xdr:cNvPr/@id` 的原文（ECMA-376 §20.5.2.8）。
+工作表图挂在该 `worksheet` 或 `chartsheet` 上，不挂在单元格上，也不挂在工作簿根上。图的 `{cNvPrId}` 取该 `pic` 里 `cNvPr/@id` 的原文（ECMA-376 §20.5.2.8）。
 输出用文件里的原始大小写与数字写法。请求里若双方都能解析成十进制整数，按数值匹配（`1` 与 `01` 视为同一处）；否则按原文精确比。同一张表内重复 `cNvPr/@id` 时，inspect 都列出，apply 命中该表文档顺序第一处。
 没有 `cNvPr/@id` 时用 `pic:index:{k}`，树上 `"stable": false`。`{k}` 只在该表全部 drawing 部件内从 1 计，计入该表所有被收入的图，不只是缺 id 的那些。
 
-只认锚点（`xdr:twoCellAnchor` / `xdr:oneCellAnchor` / `xdr:absoluteAnchor`）的直接子元素 `xdr:pic` 且带 `a:blip`。
-组合 `xdr:grpSp` 里的图、`xdr:graphicFrame`（图表、SmartArt）、`xdr:sp`、连接线不进 `pictures`。VML / `legacyDrawing`（批注框、旧式控件）不编。
-工作表图只跟工作表元素 `<drawing r:id>` 指向的 drawing 部件，不跟 `<drawingHF>`。`mc:AlternateContent` 只进第一个 `Choice`。
-一张表可以有多个 worksheet drawing 关系，按工作表 XML 里 `<drawing>` 的文档顺序拼接后再编号。文本框与 SmartArt 见下文，不要把它们编进 `pictures`。
+只认锚点的直接子元素 `pic` 且带 `a:blip`。锚点可以是 `xdr:twoCellAnchor` / `xdr:oneCellAnchor` / `xdr:absoluteAnchor`，或 Chart Drawing 的 `cdr:relSizeAnchor` / `cdr:absSizeAnchor`。
+组合里的图、`graphicFrame`（图表、SmartArt）、`sp`、连接线不进 `pictures`。VML / `legacyDrawing`（批注框、旧式控件）不编。
+工作表图跟 `<drawing r:id>` 指向的 SpreadsheetDrawing，以及该表图表上的 Chart Drawing；不跟 `<drawingHF>`。`mc:AlternateContent` 只进第一个 `Choice`。
+一张表可以有多个 worksheet drawing 关系，按工作表 XML 里 `<drawing>` 的文档顺序拼接，再拼 Chart Drawing，然后再编号。
+有 DrawingML 链时节点带 `hyperlink`（见上文超链接）；没有则为 `null`。文本框与 SmartArt 见下文，不要把它们编进 `pictures`。
 
 xlsx 页眉页脚是工作表上的 `headerFooter`（ECMA-376 §18.3.1.46），不是 Word 那种独立 header 部件，不要套 `header:default:1/para:…`。
 `{kind}` 为 `odd` / `even` / `first`，`{side}` 为 `header` / `footer`，一律小写。六个槽位始终按这个顺序：奇数页页眉、奇数页页脚、偶数页页眉、偶数页页脚、首页页眉、首页页脚。
@@ -141,7 +145,11 @@ Excel 16.0 另存的页眉图通常是 VML，因此默认样例常常没有 Draw
 `drawingHF` 上的 `cho` / `lho` / `rho`（奇数页页眉中/左/右）、`che` / `lhe` / `rhe`（偶数页页眉）、`chf` / `lhf` / `rhf`（首页页眉）、
 `cfo` / `lfo` / `rfo`（奇数页页脚）、`cfe` / `lfe` / `rfe`（偶数页页脚）、`cff` / `lff` / `rff`（首页页脚）把 `cNvPr/@id` 分到对应槽；对不上的图归 `odd:header`。
 没有 `cNvPr/@id` 时用 `pic:index:{k}`，`{k}` 只在该槽位从 1 计，`stable` 为 `false`。
-`chartsheet` / `dialogsheet` / `macrosheet` 本期只读页眉文本，不列出、不接受页眉图。页眉页脚里的图表、形状、OLE 本期不进树。
+`dialogsheet` / `macrosheet` 只读页眉文本，不列出、不接受页眉图。
+`worksheet` 与 `chartsheet` 都列出、都接受页眉图（`insertPicture` 点槽位 id）。
+页眉 `drawingHF` 里的形状 / 文本框 / 连接线，有则进对应槽位名单；不提供往槽位 `insertShape` / `insertTextBox` / `insertConnector` / `insertOle` / `insertChart`。
+Excel 16.0 另存会把 DrawingML 页眉收成 VML，形状不会留下。不编辑 VML / `legacyDrawingHF`。
+页眉页脚里的图表、OLE、SmartArt、3D 仍不进树。
 
 工作表图表挂在该 `worksheet` 或 `chartsheet` 上，不挂在单元格上，也不挂在工作簿根上。
 图表的 `{cNvPrId}` 取该 `xdr:graphicFrame` 里 `xdr:nvGraphicFramePr/xdr:cNvPr/@id` 的原文（§20.5.2.8），匹配规则与工作表图相同。
@@ -151,58 +159,70 @@ Excel 16.0 另存的页眉图通常是 VML，因此默认样例常常没有 Draw
 
 只认锚点的直接子元素 `xdr:graphicFrame`，且 `a:graphicData/@uri` 为 `http://schemas.openxmlformats.org/drawingml/2006/chart`（可带尾斜杠，ECMA-376 §21.2）。
 Office 2016 以后的 chartex URI（`http://schemas.microsoft.com/office/drawing/2014/chartex`）也列入，`type` 为 `chartex`。
-组合 `xdr:grpSp` 里的框、`xdr:pic`、形状、SmartArt、OLE、VML 不进 `charts`。页眉页脚里的图表本期不进树。`mc:AlternateContent` 只进第一个 `Choice`。
+组合 `xdr:grpSp` 里的框、`xdr:pic`、形状、SmartArt、OLE、VML 不进 `charts`。页眉页脚里的图表不进树。`mc:AlternateContent` 只进第一个 `Choice`。
+图表工作表上 COM 往图上加的形状 / 图 / 连接线不在 SpreadsheetDrawing，而在该图表部件的 Chart Drawing（`c:userShapes` / `cdr:relSizeAnchor`，关系 Type 以 `/chartUserShapes` 结尾）。
+这些对象进该 `chartsheet` 的 `pictures` / `shapes` / `textBoxes` / `connectors`，id 前缀与工作表相同。
+SpreadsheetDrawing 里除那张图表框以外的 `xdr:pic` / `xdr:sp` / `xdr:cxnSp` 也收。
+Chart Drawing 的锚点 `anchor` 为 `relSize`（`fromX` / `fromY` / `toX` / `toY`，0–1 的分数）或 `absSize`（`fromX` / `fromY` 加 `cx` / `cy`）。
+不要把分数换成 EMU，也不要按图表框反推。
 同一张表上同时有 `xdr:pic`、图表、文本框和 SmartArt 的，各走各的名单。diagram URI 的 `graphicFrame` 走 SmartArt，不要算进 `chartCount`。
 
-工作表文本框挂在该 `worksheet` 上。`{cNvPrId}` 取该 `xdr:sp` 里 `xdr:cNvPr/@id` 的原文，匹配规则与工作表图相同。
-没有该属性时用 `sp:index:{k}`，树上 `"stable": false`。`{k}` 只在该表全部 worksheet drawing 部件内从 1 计，只计入被收入的文本框。
-只认 `xdr:sp` 且 `xdr:cNvSpPr/@txBox` 为 `1` / `true`（Excel 16.0 另存如此）。
-连接线 `xdr:cxnSp`、无 `txBox` 的普通 `xdr:sp`、VML 控件不进 `textBoxes`。组合 `xdr:grpSp` 本身不进树，里面符合条件的文本框要展开；几何仍取外层锚点。页眉页脚里的形状本期不进树。
+工作表文本框挂在该 `worksheet` 或 `chartsheet` 上。`{cNvPrId}` 取该 `xdr:sp` / `cdr:sp` 里 `cNvPr/@id` 的原文，匹配规则与工作表图相同。
+没有该属性时用 `sp:index:{k}`，树上 `"stable": false`。`{k}` 只在该表全部 SpreadsheetDrawing 与 Chart Drawing 部件内从 1 计，只计入被收入的文本框。
+只认 `sp` 且 `cNvSpPr/@txBox` 为 `1` / `true`（Excel 16.0 另存如此）。
+连接线 `cxnSp`、无 `txBox` 的普通 `sp`、VML 控件不进 `textBoxes`。组合本身不进树，里面符合条件的文本框要展开；几何仍取外层锚点。
+页眉 `drawingHF` 里符合条件的文本框进对应槽位，不进表级 `textBoxes`。
 `mc:AlternateContent` 只进第一个 `Choice`。若 Choice `Requires` 含 `a14` 且子孙有 `a14:m` 或 `m:oMath`，整段不进 `textBoxes`，只进 `maths`。
 可见字在 `xdr:txBody` 的 `a:t`，规则对齐 pptx 形状 `text`（`a:br` 变成 `\n`，不收 `a:fld`）。不要做成 docx 那种框内 `w:p`。
 
-工作表形状挂在该 `worksheet` 上，与文本框分家。`{cNvPrId}` 取该 `xdr:sp` 里 `xdr:cNvPr/@id` 的原文，匹配规则与工作表图相同。
-没有该属性时用 `shape:index:{k}`，树上 `"stable": false`。`{k}` 只在该表全部 worksheet drawing 部件内从 1 计，只计入被收入的形状。
-只认 `xdr:sp` 且不是文本框：没有 `xdr:cNvSpPr/@txBox`，或取值不是 `1` / `true` / `True`。有 `xdr:txBody` 则 `text` 规则与文本框相同；没有则省略 `text`。
+工作表形状挂在该 `worksheet` 或 `chartsheet` 上，与文本框分家。`{cNvPrId}` 取该 `sp` 里 `cNvPr/@id` 的原文，匹配规则与工作表图相同。
+没有该属性时用 `shape:index:{k}`，树上 `"stable": false`。`{k}` 只在该表全部 SpreadsheetDrawing 与 Chart Drawing 部件内从 1 计，只计入被收入的形状。
+只认 `sp` 且不是文本框：没有 `cNvSpPr/@txBox`，或取值不是 `1` / `true` / `True`。有 `txBody` 则 `text` 规则与文本框相同；没有则省略 `text`。
 `prst` 取 `a:prstGeom/@prst`，没有（含只有 `a:custGeom`）则为 `null`。组合里符合条件的形状要展开；几何仍取外层锚点。
-与该表 `oleObject/@shapeId` 相同的隐藏 `xdr:sp` 不进 `shapes` / `shapeCount`，也不当 `groupShapes` 成员。页眉页脚与 `chartsheet` 上的形状本期不进树。
+与该表 `oleObject/@shapeId` 相同的隐藏 `sp` 不进 `shapes` / `shapeCount`，也不当 `groupShapes` 成员。
+页眉 `drawingHF` 里符合条件的形状进对应槽位，不进表级 `shapes`。
 VML 不进。`mc:AlternateContent` 只进第一个 `Choice`。
 若 Choice `Requires` 含 `a14` 且子孙有 `a14:m` 或 `m:oMath`，整段不进 `shapes`。
 
-工作表连接线挂在该 `worksheet` 上。`{cNvPrId}` 取该 `xdr:cxnSp` 里 `xdr:nvCxnSpPr/xdr:cNvPr/@id` 的原文，匹配规则与工作表图相同。
-没有该属性时用 `cxn:index:{k}`，树上 `"stable": false`。`{k}` 只在该表全部 worksheet drawing 部件内从 1 计，只计入被收入的 `xdr:cxnSp`。
-只认 `xdr:cxnSp`，不把无 `txBox` 的 `xdr:sp` 算进来。`prst` 取 `a:prstGeom/@prst`，没有则为 `null`。不写 `text`。
-空 `cNvCxnSpPr`（未绑 `stCxn` / `endCxn`）仍列入。组合里符合条件的连接线要展开；几何仍取外层锚点。页眉页脚与 `chartsheet` 上的连接线本期不进树。`mc:AlternateContent` 只进第一个 `Choice`。
+工作表连接线挂在该 `worksheet` 或 `chartsheet` 上。`{cNvPrId}` 取该 `cxnSp` 里 `nvCxnSpPr/cNvPr/@id` 的原文，匹配规则与工作表图相同。
+没有该属性时用 `cxn:index:{k}`，树上 `"stable": false`。`{k}` 只在该表全部 SpreadsheetDrawing 与 Chart Drawing 部件内从 1 计，只计入被收入的 `cxnSp`。
+只认 `cxnSp`，不把无 `txBox` 的 `sp` 算进来。`prst` 取 `a:prstGeom/@prst`，没有则为 `null`。不写 `text`。
+空 `cNvCxnSpPr`（未绑 `stCxn` / `endCxn`）仍列入。组合里符合条件的连接线要展开；几何仍取外层锚点。
+页眉 `drawingHF` 里符合条件的连接线进对应槽位，不进表级 `connectors`。`mc:AlternateContent` 只进第一个 `Choice`。
 
 工作表公式框挂在该 `worksheet` 上。`{cNvPrId}` 取 Choice 里 `xdr:sp` 的 `xdr:cNvPr/@id` 原文，匹配规则与工作表图相同。
 没有该属性时用 `math:index:{k}`，树上 `"stable": false`。`{k}` 只在该表全部 worksheet drawing 部件内从 1 计，只计入被收入的公式框。
 只认 `mc:AlternateContent` 且 Choice `Requires` 含 `a14`，子孙有 `a14:m` 或 `m:oMath`。整段只进 `maths`。
 Choice 与 Fallback 都不进 `textBoxes` / `shapes`，也不计入 `textBoxCount` / `shapeCount`。
-组合里符合条件的公式框要展开，组合本身不进树。页眉、`chartsheet` 本期不进树。
+组合里符合条件的公式框要展开，组合本身不进树。页眉不进树。`chartsheet` 的 SpreadsheetDrawing 里若有公式框则列出；不提供对 `chartsheet` 发 `insertMath`。
 不是单元格 `f`。`insertMath` 的 `id` 必须是 `sheet:{name}`。`setMath` / `deleteMath` 的 `id` 必须是公式框 id。
 对单元格 id、图 id、文本框 id、形状 id 或 `xlsx:workbook` 发公式 op 报 `InvalidId`。
 对 `chartsheet` 报 `InvalidField`。对 `dialogsheet` / `macrosheet` 报 `NotImplemented`。
 出现 `expr` / `kind` 报 `InvalidField`。不把 OMML 原文、不把 `expr` 放进树。create 可用 `sheets[].maths`。
 docx 见 [docx 分册](json-contract-docx.md#insertmath)。pptx 见 [pptx 分册](json-contract-pptx.md#insertmath)。
 
-`insertTextBox` / `insertShape` 可带 `setShapeFormat` 同一套可选字段。xlsx 的 `anchor` 仍是单元格锚点，框内垂直对齐只用 `textAnchor`。
-`insertTextBox` 的 `id` 必须是 `sheet:{name}`，且该表 `kind` 为 `worksheet`。
+`insertTextBox` / `insertShape` 可带 `setShapeFormat` 同一套可选字段。xlsx 的 `anchor` 在工作表上仍是单元格锚点，框内垂直对齐只用 `textAnchor`。
+`insertTextBox` 的 `id` 必须是 `sheet:{name}`，且该表 `kind` 为 `worksheet` 或 `chartsheet`。
 对文本框 id、形状 id、连接线 id、图 id、图表 id、单元格 id、页眉槽位 id 或 `xlsx:workbook` 发 `insertTextBox` 报 `InvalidId`。
-对 `chartsheet` 发此 op 报 `InvalidField`。对 `dialogsheet` / `macrosheet` 报 `NotImplemented`。
+对 `chartsheet` 发此 op 时禁止 `from` / `to` / `fromOffX` / `fromOffY` / `toOffX` / `toOffY`，必须给 `fromX` / `fromY` / `toX` / `toY`（`relSize`，0–1）。
+对 `dialogsheet` / `macrosheet` 报 `NotImplemented`。
 `deleteTextBox` 的 `id` 必须是 xlsx 文本框 id。`setTextBoxSize` / `setTextBoxAnchor` 的 `id` 可以是文本框 id、形状 id 或连接线 id。
 `setShapeText` / `setShapeFormat` 的 `id` 必须是文本框 id 或形状 id；对连接线 id 报 `InvalidId`。
 `setTextBoxWrap` / `setTextBoxFill` / `setTextBoxLine` / `setTextBoxDirection` 是 Word 框属性，xlsx 上报 `InvalidField`。
 
-`insertShape` 的 `id` 必须是 `sheet:{name}`，且该表 `kind` 为 `worksheet`。
-对形状 id、文本框 id、连接线 id、图 id、单元格 id 或 `xlsx:workbook` 发 `insertShape` 报 `InvalidId`。对 `chartsheet` 发此 op 报 `InvalidField`。
+`insertShape` 的 `id` 必须是 `sheet:{name}`，且该表 `kind` 为 `worksheet` 或 `chartsheet`。
+对形状 id、文本框 id、连接线 id、图 id、单元格 id 或 `xlsx:workbook` 发 `insertShape` 报 `InvalidId`。
+对 `chartsheet` 发此 op 时锚点字段与 `insertTextBox` 相同（`fromX` 四元组，禁止单元格 `from`）。
 对 `dialogsheet` / `macrosheet` 报 `NotImplemented`。`deleteShape` 的 `id` 必须是 xlsx 形状 id。
 对文本框 id 或连接线 id 发 `deleteShape` 报 `InvalidId`。
 
-`insertConnector` 的 `id` 必须是 `sheet:{name}`，且该表 `kind` 为 `worksheet`。
+`insertConnector` 的 `id` 必须是 `sheet:{name}`，且该表 `kind` 为 `worksheet` 或 `chartsheet`。
 对连接线 id、形状 id、文本框 id、图 id、单元格 id 或 `xlsx:workbook` 发 `insertConnector` 报 `InvalidId`。
-对 `chartsheet` 发此 op 报 `InvalidField`。对 `dialogsheet` / `macrosheet` 报 `NotImplemented`。
-`deleteConnector` 的 `id` 必须是 xlsx 连接线 id。`groupShapes` 的 `id` 必须是 `sheet:{name}`。
+对 `chartsheet` 发此 op 时锚点字段与 `insertTextBox` 相同。
+对 `dialogsheet` / `macrosheet` 报 `NotImplemented`。
+`deleteConnector` 的 `id` 必须是 xlsx 连接线 id。`groupShapes` 的 `id` 必须是 `sheet:{name}`，且该表为 `worksheet`。
 `ungroup` 的 `id` 必须是该组合内一个文本框 id、形状 id 或连接线 id。
+对 `chartsheet` 发 `groupShapes` / `ungroup` 报 `InvalidField`。
 `setShapePos` / `setShapeSize` / `setShapeFill` / `setShapeLine` 在 xlsx 上报 `InvalidField`。
 xlsx 改几何请用 `setTextBoxSize` / `setTextBoxAnchor`。出现 `x` / `y` 报 `InvalidField`。
 
@@ -221,15 +241,31 @@ xlsx 改几何请用 `setTextBoxSize` / `setTextBoxAnchor`。出现 `x` / `y` �
 `setSmartArtText` / `deleteSmartArtPoint` 的 `id` 必须是点 id。`addSmartArtPoint` 的 `id` 是图示 id 或点 id。
 `setSmartArtPos` / `setSmartArtWrap` 在 xlsx 上报 `InvalidField`。xlsx 改锚点请用 `setSmartArtAnchor`。
 
-工作表超链接挂在该 `worksheet` 上，不挂在单元格节点上。`{n}` 从 1 起，按该表 `<hyperlinks>` 里 `<hyperlink>` 的文档顺序（ECMA-376 §18.3.1.47）。
-增删之后 `{n}` 会变，只够同一次 inspect 之后立刻 apply。只认工作表 XML 里的 `<hyperlink>`。
-`HYPERLINK()` 公式、图上 `a:hlinkClick`、文本框 / SmartArt 上的链不进树。
-外部链的关系写在**工作表** `.rels`，Type 以 `/hyperlink` 结尾，`TargetMode` 为 `External`。内部位置只写 `@location`，不写关系。`setCell` 改格子显示文本，不改 `<hyperlinks>`。
+工作表超链接有两套，不要混：
 
-`insertHyperlink` 的 `id` 必须是 `sheet:{name}`，且该表 `kind` 为 `worksheet`。
-对超链接 id、单元格 id、图 id 或 `xlsx:workbook` 发 `insertHyperlink` 报 `InvalidId`。对 `chartsheet` 发此 op 报 `InvalidField`。
-对 `dialogsheet` / `macrosheet` 报 `NotImplemented`。`setHyperlink` / `deleteHyperlink` 的 id 必须是 xlsx 超链接 id。
-xlsx 上出现 `text` / `anchor` 报 `InvalidField`（Word 字段；内部位置用 `location`，显示字走 `setCell`）。
+- 单元格链：挂在该 `worksheet` 上，不挂在单元格节点上。`{n}` 从 1 起，按该表 `<hyperlinks>` 里 `<hyperlink>` 的文档顺序（ECMA-376 §18.3.1.47）。
+  增删之后 `{n}` 会变，只够同一次 inspect 之后立刻 apply。只认工作表 XML 里的 `<hyperlink>`。
+  外部链的关系写在**工作表** `.rels`，Type 以 `/hyperlink` 结尾，`TargetMode` 为 `External`。内部位置只写 `@location`，不写关系。
+  `setCell` 改格子显示文本，不改 `<hyperlinks>`。
+  根上 `hyperlinkCount` 与表上 `hyperlinkCount` 只计这一套。
+- DrawingML 链：写在图 / 文本框 / 形状 / SmartArt 的 `cNvPr/a:hlinkClick`，关系在 **drawing** `.rels`（含 Chart Drawing）。
+  外部链 `Target` 为 URL，`TargetMode` 为 `External`。内部位置 `Target` 为 `#{location}`（Excel 16.0 另存如此，例如 `#Sheet1!A1`），不写 `TargetMode`。
+  `tooltip` 取 `a:hlinkClick/@tooltip`。不写 `display`，不写 `hlinkHover`，不写 run 级链。
+  inspect 时出现在该对象的 `hyperlink` 字段（对象，没有链则为 `null`），不进 `hyperlinks` 名单，也不计入 `hyperlinkCount`。
+
+`HYPERLINK()` 公式仍当公式字符串，不要和上面两套混成一个节点。
+
+`insertHyperlink` 的 `id`：
+
+- `sheet:{name}` 且该表为 `worksheet`：写单元格 `<hyperlink>`，必须给 `ref`，`url` 与 `location` 至少给一个。
+- 图 id、文本框 id、形状 id 或 SmartArt 图示 id：写该对象 `cNvPr/a:hlinkClick`。禁止 `ref` / `display`。`url` 与 `location` 必须恰好给一个。
+
+对超链接 id、单元格 id 或 `xlsx:workbook` 发 `insertHyperlink` 报 `InvalidId`。
+对 `chartsheet` 发单元格链（工作表 id）报 `InvalidField`；对该表上的图 / 形状 / 文本框 id 可以写 DrawingML 链。
+对 `dialogsheet` / `macrosheet` 报 `NotImplemented`。
+`setHyperlink` / `deleteHyperlink` 的 id 可以是单元格超链接 id，也可以是带 DrawingML 链的图 / 文本框 / 形状 / SmartArt id。
+xlsx 上出现 `text` / `anchor` 报 `InvalidField`（Word 字段；内部位置用 `location`）。
+xlsx 上出现 `on` / `event` 报未知字段（PowerPoint 字段；xlsx 只写 `hlinkClick`）。
 
 工作表迷你图挂在该 `worksheet` 上，不挂在单元格节点上。`{n}` 从 1 起，按该表 `extLst` 里全部 `x14:sparklineGroup` 的文档顺序（MS-XLSX §2.4.8 / §2.2.4.12，
 URI `{05C60535-1F16-4FD2-B633-F4F36F0B64E0}`，大小写不敏感）。
@@ -242,7 +278,8 @@ URI `{05C60535-1F16-4FD2-B633-F4F36F0B64E0}`，大小写不敏感）。
 工作表嵌入对象挂在该 `worksheet` 上。`{shapeId}` 取 `oleObject/@shapeId` 原文。没有该属性时用 `ole:index:{k}`，树上 `"stable": false`。
 `{k}` 只在该表被收入的嵌入对象内从 1 计。只认工作表 `<oleObjects>` 里的 `oleObject`，
 且 `r:id` 能对上非 External、Type 后缀为 `oleObject` 或 `package` 的**工作表**关系。
-有 `@link` 的链接对象、ActiveX `controls` 不进树。`mc:AlternateContent` 只进第一个 `Choice`。页眉、`chartsheet`、组合里的 OLE 本期不进树。
+有 `@link` 的链接对象、ActiveX `controls` 不进树。`mc:AlternateContent` 只进第一个 `Choice`。
+页眉、`chartsheet`、组合里的 OLE 本期不进树。Excel 16.0 COM 在图表工作表与链接 OLE 上建对象失败，不另开 apply。
 预览图不进 `pictures`。`insertOle` 的 `id` 必须是 `sheet:{name}`。`deleteOle` 的 `id` 必须是 OLE id。对不上的 id 形态报 `InvalidId`。
 不提供改尺寸、位置、图标或 ProgID 的 op。create 本期不写 OLE。docx / pptx 见各自分册。
 
@@ -274,15 +311,19 @@ xlsx 的 `setProtection` 的 `id` 必须是 `sheet:{name}`（该表 `sheetProtec
 docx 的 `setProtection` 仍只用 `docx:document`。
 pptx 的 `setProtection` 用 `pptx:presentation` 改 `p:modifyVerifier`，放映设置用 `setShowPr`。
 
-`insertPicture` 的 `id` 必须是 `sheet:{name}`（往工作表 drawing 插图）或页眉槽位 id `sheet:{name}/hf:{kind}:{side}`（往该侧 `drawingHF` 插图），且该表 `kind` 为 `worksheet`。
+`insertPicture` 的 `id` 必须是 `sheet:{name}`（往该表 drawing 插图）或页眉槽位 id `sheet:{name}/hf:{kind}:{side}`（往该侧 `drawingHF` 插图），且该表 `kind` 为 `worksheet` 或 `chartsheet`。
 对图 id、图表 id、系列 id、单元格 id 或 `xlsx:workbook` 发 `insertPicture` 报 `InvalidId`。
-对 `chartsheet` / `dialogsheet` 发 `insertPicture`（含往其页眉槽位插图）报 `InvalidField`。对工作表 id 发 `insertPicture` 仍只插工作表图，不进页眉。
-往页眉槽位插图时禁止出现 `from` / `to` / `anchor` / `fromOffX` / `fromOffY` / `toOffX` / `toOffY`，出现报 `InvalidField`；只要 `file`，可选 `cx` / `cy`。
-写入 `oneCell`、从 A1、偏移 0，并把 `drawingHF` 上该侧中区属性写成新图的 `cNvPr` id（奇数页页眉 `cho`，偶数页页眉 `che`，首页页眉 `chf`，奇数页页脚 `cfo`，偶数页页脚 `cfe`，首页页脚 `cff`）。
+对 `dialogsheet` 发 `insertPicture`（含往其页眉槽位插图）报 `InvalidField`。对工作表 id 发 `insertPicture` 仍只插工作表图，不进页眉。
+往页眉槽位插图时禁止出现 `from` / `to` / `anchor` / `fromOffX` / `fromOffY` / `toOffX` / `toOffY` / `fromX` / `fromY` / `toX` / `toY`，出现报 `InvalidField`；只要 `file`，可选 `cx` / `cy`。
+对 `chartsheet` 表 id（不是槽位）发 `insertPicture` 时禁止单元格 `from` / `to` / 偏移；必须给 `fromX` / `fromY` / `toX` / `toY`，写入该表图表的 Chart Drawing `cdr:relSizeAnchor`。
+对 `worksheet` 表 id 发 `insertPicture` 时禁止 `fromX` / `fromY` / `toX` / `toY`。
+往页眉槽位插图时写入 `oneCell`、从 A1、偏移 0，并把 `drawingHF` 上该侧中区属性写成新图的 `cNvPr` id（奇数页页眉 `cho`，偶数页页眉 `che`，首页页眉 `chf`，奇数页页脚 `cfo`，偶数页页脚 `cfe`，首页页脚 `cff`）。
 该中区已被占用则改写左区（`lh*`），再右区（`rh*`）；三区都占用仍插入 drawing，不再写属性，inspect 把它归到 `odd:header`。
 表上只有 `legacyDrawingHF`、没有 `drawingHF` 时，新建 DrawingML 的 `drawingHF`，不动 VML。
-`replacePicture` / `deletePicture` / `setPictureSize` / `setPictureAnchor` 的 `id` 必须是工作表图 id 或页眉图 id。
-对工作表 id、页眉槽位 id、单元格 id 或图表 id 发这四个 op 报 `InvalidId`。对 `chartsheet` / `dialogsheet` 上的页眉图发这四个 op 报 `InvalidField`。
+`replacePicture` / `deletePicture` / `setPictureSize` / `setPictureAnchor` 的 `id` 必须是工作表图 id、图表工作表 Chart Drawing 图 id 或页眉图 id。
+对工作表 id、页眉槽位 id、单元格 id 或图表 id 发这四个 op 报 `InvalidId`。对 `dialogsheet` 上的页眉图发这四个 op 报 `InvalidField`。
+`chartsheet` 上 `relSize` 图的 `setPictureAnchor` 可改 `fromX` / `fromY` / `toX` / `toY`；禁止改成单元格锚点。
+`setPictureSize` 对 `relSize` 报 `InvalidField`（改 `toX` / `toY` 请用 `setPictureAnchor`）。
 `setPictureWrap` 是 Word 绕排，xlsx 上报 `InvalidField`。`exportMedia` 认工作表图 id 与页眉图 id，写出 `/xl/media/…`。
 `exportMedia` 也认工作表 OLE id，写出 `/xl/embeddings/…`，不是预览图。
 `exportMedia` 也认工作表 3D 模型 id，写出 GLB 原字节，不是海报。必须在解析图 id 之前分流 `/model3d:`。
@@ -363,7 +404,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
 - **`scope.maxCells`**（否）
   - 返回单元格上限，默认 `5000`，允许范围 `1` 到 `20000`
 - **`scope.pictures`**（否）
-  - 为 `true` 时给每张 `worksheet` 填工作表 `pictures`
+  - 为 `true` 时给每张 `worksheet` 与 `chartsheet` 填工作表 `pictures`
   - 省略或 `false` 则只有 `pictureCount`，没有工作表图名单
   - 不读媒体字节
   - 不依赖 `sheet` / `range`
@@ -385,7 +426,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   - 不依赖 `sheet` / `range` / `pictures` / `charts` / `headerFooter`
   - 不读旧式 VML 批注
 - **`scope.textBoxes`**（否）
-  - 为 `true` 时给每张 `worksheet` 填 `textBoxes`
+  - 为 `true` 时给每张 `worksheet` 与 `chartsheet` 填 `textBoxes`
   - 没有文本框时为空数组
   - 省略或 `false` 则只有 `textBoxCount`，没有名单
   - 不依赖
@@ -397,22 +438,22 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
     - `comments`
   - 不把框内字做成段落树
 - **`scope.maths`**（否）
-  - 为 `true` 时给每张 `worksheet` 填 `maths`
+  - 为 `true` 时给每张 `worksheet` 与 `chartsheet` 填 `maths`
   - 没有公式框时为空数组
   - 省略或 `false` 则只有 `mathCount`，没有名单
   - 不依赖 `sheet` / `range` / 其它名单键
   - 不把 OMML 原文、不把 `expr` 放进树
-  - 页眉、`chartsheet` 本期不进树
+  - 页眉不进树
   - 不是单元格 `f`
   - docx 的 `scope.maths` 见 [docx 分册](json-contract-docx.md#inspect)
 - **`scope.shapes`**（否）
-  - 为 `true` 时给每张 `worksheet` 填 `shapes`
+  - 为 `true` 时给每张 `worksheet` 与 `chartsheet` 填 `shapes`
   - 没有形状时为空数组
   - 省略或 `false` 则只有 `shapeCount`，没有名单
   - 不依赖 `sheet` / `range` / 其它名单键
   - 不把无 `txBox` 的形状并进 `textBoxes`
 - **`scope.connectors`**（否）
-  - 为 `true` 时给每张 `worksheet` 填 `connectors`
+  - 为 `true` 时给每张 `worksheet` 与 `chartsheet` 填 `connectors`
   - 没有连接线时为空数组
   - 省略或 `false` 则只有 `connectorCount`，没有名单
   - 不依赖 `sheet` / `range` / 其它名单键
@@ -433,21 +474,12 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
     - `shapes`
     - `connectors`
 - **`scope.hyperlinks`**（否）
-  - 为 `true` 时给每张 `worksheet` 填 `hyperlinks`
+  - 为 `true` 时给每张 `worksheet` 填单元格 `hyperlinks`
   - 没有链时为空数组
   - 省略或 `false` 则只有 `hyperlinkCount`，没有名单
-  - 不依赖
-    - `sheet`
-    - `range`
-    - `pictures`
-    - `charts`
-    - `headerFooter`
-    - `comments`
-    - `textBoxes`
-    - `shapes`
-    - `connectors`
-    - `smartArt`
-  - 不把 `HYPERLINK()` 公式或图上的链算进来
+  - 不依赖 `sheet` / `range` / 其它名单键
+  - 不把 `HYPERLINK()` 公式算进来
+  - DrawingML 链不进这份名单，而在图 / 框 / 形状 / SmartArt 节点的 `hyperlink` 字段
 - **`scope.sparklines`**（否）
   - 为 `true` 时给每张 `worksheet` 填 `sparklines`
   - 没有迷你图组时为空数组
@@ -771,10 +803,10 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   `hyperlinkCount`、`sparklineCount`、`oleObjectCount`、`model3dCount`、`slicerCount`、`connectionCount`、`externalLinkCount`、
   `customViewCount`、`definedNameCount`、`props`、`workbookProtection`、`sheets`、`definedNames`，
   有连接名单时再跟 `connections`，有外部引用名单时再跟 `externalLinks`，有自定义视图名单时再跟 `customViews`。
-  `pictureCount` 始终出现，等于各 `worksheet` 的 `pictureCount` 之和，不含 `chartsheet` / `dialogsheet` / `macrosheet`。
+  `pictureCount` 始终出现，等于各 `worksheet` 与 `chartsheet` 的 `pictureCount` 之和，不含 `dialogsheet` / `macrosheet`，也不含页眉图。
   `chartCount` 始终出现，等于各 `worksheet` 与 `chartsheet` 的 `chartCount` 之和，不含 `dialogsheet` / `macrosheet`。
-  `textBoxCount` 始终出现，等于各 `worksheet` 的 `textBoxCount` 之和。`mathCount` 始终出现，等于各 `worksheet` 的 `mathCount` 之和。`shapeCount` 始终出现，等于各 `worksheet` 的 `shapeCount` 之和。
-  `connectorCount` 始终出现，等于各 `worksheet` 的 `connectorCount` 之和。`smartArtCount` 始终出现，等于各 `worksheet` 的 `smartArtCount` 之和。
+  `textBoxCount` 始终出现，等于各 `worksheet` 与 `chartsheet` 的 `textBoxCount` 之和。`mathCount` 始终出现，等于各 `worksheet` 的 `mathCount` 之和，外加 `chartsheet` SpreadsheetDrawing 里已有的公式框。`shapeCount` 始终出现，等于各 `worksheet` 与 `chartsheet` 的 `shapeCount` 之和。
+  `connectorCount` 始终出现，等于各 `worksheet` 与 `chartsheet` 的 `connectorCount` 之和。`smartArtCount` 始终出现，等于各 `worksheet` 的 `smartArtCount` 之和。
   `commentCount` 始终出现，等于各 `worksheet` 的 `commentCount` 之和。`hyperlinkCount` 始终出现，等于各 `worksheet` 的 `hyperlinkCount` 之和。
   `sparklineCount` 始终出现，等于各 `worksheet` 的 `sparklineCount` 之和。`oleObjectCount` 始终出现，等于各 `worksheet` 的 `oleObjectCount` 之和。
   `model3dCount` 始终出现，等于各 `worksheet` 的 `model3dCount` 之和。
@@ -807,7 +839,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   有连接线名单时再跟 `connectors`，有 SmartArt 名单时再跟 `smartArts`，有批注名单时再跟 `comments`，有超链接名单时再跟 `hyperlinks`，有迷你图名单时再跟 `sparklines`，
   有嵌入对象名单时再跟 `oleObjects`，有 3D 模型名单时再跟 `model3ds`，有切片器名单时再跟 `slicers`，
   有单元格切片时再跟 `truncated`、`range`、`cells`、`cols`、`rows`、`merges`、`dataValidations`、`conditionalFormats`、`tables`、`pivots`。
-  `pictureCount` 始终出现，是该表工作表 drawing 里被收入的 `xdr:pic` 个数（判定见上文 xlsx 图 id 那节），不含页眉图。没有图则为 `0`。
+  `pictureCount` 始终出现，是该表 SpreadsheetDrawing 与 Chart Drawing 里被收入的 `pic` 个数（判定见上文 xlsx 图 id 那节），不含页眉图。没有图则为 `0`。
   `chartCount` 始终出现，是该表被收入的图表个数（判定见上文 xlsx 图表 id 那节）。没有图表则为 `0`。`textBoxCount` 始终出现，是该表被收入的文本框个数（判定见上文 xlsx 文本框 id 那节）。
   没有则为 `0`。`mathCount` 始终出现，是该表被收入的公式框个数（判定见上文 xlsx 公式框 id 那节）。没有则为 `0`。`shapeCount` 始终出现，是该表被收入的形状个数（判定见上文 xlsx 形状 id 那节）。没有则为 `0`。
   `connectorCount` 始终出现，是该表被收入的连接线个数（判定见上文 xlsx 连接线 id 那节）。没有则为 `0`。
@@ -823,12 +855,15 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   `oleObjectCount` 始终出现，是该表被收入的嵌入对象个数（判定见上文 xlsx OLE id 那节）。没有则为 `0`。
   `model3dCount` 始终出现，是该表被收入的 3D 模型个数（判定见上文 xlsx 3D 模型 id 那节）。没有则为 `0`。
   `slicerCount` 始终出现，是该表被收入的切片器个数（判定见上文 xlsx 切片器 id 那节）。没有则为 `0`。`sheetProtection` 始终出现，规则见下文「工作表保护」。
-  `chartsheet` 没有 `pictureCount`，也没有 `pictures`，也没有 `textBoxCount` / `textBoxes`，也没有 `mathCount` / `maths`，也没有 `shapeCount` / `shapes`，
-  也没有 `connectorCount` / `connectors`，也没有 `smartArtCount` / `smartArts`，也没有 `dataValidationCount`，
+  `chartsheet` 没有 `smartArtCount` / `smartArts`，也没有 `dataValidationCount`，
   也没有 `conditionalFormatCount`，也没有 `tableCount`，也没有 `pivotCount`，也没有 `commentCount`，也没有 `hyperlinkCount`，
   也没有 `sparklineCount`，也没有 `oleObjectCount`，也没有 `model3dCount`，也没有 `autoFilter`，也没有 `sortState`，也没有 `outline`；
-  字段顺序：`id`、`name`、`kind`、`hidden`、`chartCount`、`hasHeaderFooter`、`print`、`view`、`sheetProtection`，
-  有页眉名单时再跟 `headerFooters`，有图表名单时再跟 `charts`。
+  字段顺序：`id`、`name`、`kind`、`hidden`、`pictureCount`、`chartCount`、`textBoxCount`、`mathCount`、`shapeCount`、`connectorCount`、
+  `hasHeaderFooter`、`print`、`view`、`sheetProtection`，
+  有页眉名单时再跟 `headerFooters`，有图名单时再跟 `pictures`，有图表名单时再跟 `charts`，有文本框名单时再跟 `textBoxes`，
+  有公式框名单时再跟 `maths`，有形状名单时再跟 `shapes`，有连接线名单时再跟 `connectors`。
+  `pictureCount` / `textBoxCount` / `shapeCount` / `connectorCount` 计入 SpreadsheetDrawing 与 Chart Drawing，不含页眉。
+  `mathCount` 只计 SpreadsheetDrawing 里已有的公式框，不提供对 `chartsheet` 发 `insertMath`。
   `dialogsheet` / `macrosheet` 没有 `pictureCount` / `pictures` / `chartCount` / `charts` / `textBoxCount` / `textBoxes`
    / `mathCount` / `maths` / `shapeCount` / `shapes` / `connectorCount` / `connectors` / `smartArtCount` / `smartArts` / `dataValidationCount`
    / `conditionalFormatCount` / `tableCount` / `pivotCount` / `commentCount` / `hyperlinkCount` / `sparklineCount`
@@ -916,12 +951,15 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   `ref` 取 `@ref`，能解析成单一 A1 时规范化成列字母加大写行号；解析不了或缺失则为 `null`。`text` 取 `<text>` 的可见文本。回复嵌在 `replies` 里，不单独占 `commentCount`。
   回复字段顺序：`id`、`commentId`、`author`、`initials`、`date`、`done`、`kind`、`text`（无 `ref`）。回复 `id` 为 `{父批注 id}/reply:{guid}`。
   找线程化关系必须比完整 URI `http://schemas.microsoft.com/office/2017/10/relationships/threadedComment`。
-- `scope.hyperlinks` 为 `true` 时，每张 `worksheet` 带 `hyperlinks`。没有链时为空数组。不依赖单元格切片。按该表 `<hyperlinks>` 里 `<hyperlink>` 的文档顺序。
+- `scope.hyperlinks` 为 `true` 时，每张 `worksheet` 带单元格 `hyperlinks`。没有链时为空数组。不依赖单元格切片。按该表 `<hyperlinks>` 里 `<hyperlink>` 的文档顺序。
   每条字段顺序：`id`、`index`、`kind`、`ref`、`rId`、`url`、`location`、`tooltip`、`display`。`index` 与 id 里的 `{n}` 相同。
   `kind` 为 `url`（有 `r:id`）或 `location`（没有 `r:id`）。`ref` 取 `@ref`，能解析成单一 A1 或闭区间时规范化成 `A1` 或 `A1:B2`；解析不了或缺失则为 `null`。
   `rId` 是关系 id 原文，缺则为 `null`。`url` 是该关系的 `Target` 原文，缺关系则为 `null`。`location` 取 `@location` 原文，缺则为 `null`。
   有 `r:id` 时树上仍可带 `location`（规范说这是靶内位置）。`tooltip` 取 `@tooltip`，缺则为 `null`。`display` 取 `@display`，缺则为 `null`。
-  不把单元格可见值抄进这条；显示字仍走单元格。`HYPERLINK()` 公式不进本名单。pptx 的 `scope.hyperlinks` 见 [pptx 响应](json-contract-pptx.md#响应)。
+  不把单元格可见值抄进这条；显示字仍走单元格。`HYPERLINK()` 公式不进本名单。
+  图 / 文本框 / 形状 / SmartArt 节点另有 `hyperlink`：`null` 或对象，字段顺序 `kind`、`url`、`location`、`tooltip`。
+  `kind` 为 `url` 或 `location`。内部链的 `location` 去掉关系 `Target` 开头的 `#`。
+  不进 `hyperlinks` 名单，也不计入 `hyperlinkCount`。pptx 的 `scope.hyperlinks` 见 [pptx 响应](json-contract-pptx.md#响应)。
 - `scope.sparklines` 为 `true` 时，每张 `worksheet` 带 `sparklines`。没有组时为空数组。不依赖单元格切片。按该表全部 `x14:sparklineGroup` 的文档顺序。
   每条字段顺序：`id`、`index`、`type`、`displayEmptyCellsAs`，再按需跟标记与轴，有颜色子元素时跟 `colors`，最后 `sparklines`。
   `index` 与 id 里的 `{n}` 相同。
@@ -982,25 +1020,30 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   `activeSheet` 按 `@activeSheetId` 对上 `sheets/sheet/@sheetId` 的表 `name`；对不上则为 `null`。
   不把 guid、窗口坐标或各表 `customSheetView` 放进树。docx / pptx 的 `scope` 里出现 `customViews` 报 `InvalidField`。
 - `scope.headerFooter` 为 `true` 时，每张表带 `headerFooters`，固定六个对象，顺序见上文 id 表。
-  每个槽位字段顺序：`id`、`kind`、`side`、`text`；`worksheet` 再跟 `pictureCount`，若同时 `pictures: true` 再跟 `pictures`。
+  每个槽位字段顺序：`id`、`kind`、`side`、`text`；`worksheet` 与 `chartsheet` 再跟 `pictureCount`、`textBoxCount`、`shapeCount`、`connectorCount`，
+  若同时对应 scope 为 true 再跟 `pictures` / `textBoxes` / `shapes` / `connectors`。
   `kind` / `side` 与 id 里那两段相同。`text` 为该 XML 元素原文，没有该元素则为 `null`。空串是合法原文，与 `null` 不同。`pictureCount` 是分到该槽的 DrawingML 页眉图个数。
   页眉图字段顺序与工作表图相同，末尾 `contentType` 规则与工作表图相同。
-  `chartsheet` / `dialogsheet` / `macrosheet` 的槽位没有 `pictureCount` / `pictures`。
-- `scope.pictures` 为 `true` 时，每张 `worksheet` 带工作表 `pictures`。没有图时为空数组。按该表 `<drawing>` 部件顺序、同一部件内按锚点文档顺序。
-  每张字段顺序：`id`、`cNvPrId`、`name`、`anchor`，然后按锚点种类跟位置字段，最后 `stable`。
-  有 `asvg:svgBlip` 时再跟 `contentType`，值为 `image/svg+xml`。
+  `dialogsheet` / `macrosheet` 的槽位没有这些计数与名单。
+- `scope.pictures` 为 `true` 时，每张 `worksheet` 与 `chartsheet` 带工作表 `pictures`。没有图时为空数组。按该表 `<drawing>` 部件顺序、再按 Chart Drawing、同一部件内按锚点文档顺序。
+  每张字段顺序：`id`、`cNvPrId`、`name`、`anchor`，然后按锚点种类跟位置字段，再跟 `stable`，
+  有 `contentType` 时跟 `contentType`，最后 `hyperlink`。
+  有 `asvg:svgBlip` 时 `contentType` 为 `image/svg+xml`。
   没有 `svgBlip` 时，按 image 关系 Target 扩展名：
   `.emf` 为 `image/x-emf`，`.wmf` 为 `image/x-wmf`，`.tif` / `.tiff` 为 `image/tiff`。
   PNG / JPEG / GIF / BMP 没有该字段。不读媒体字节，不把原图放进树。
-  `cNvPrId` 是 `xdr:cNvPr/@id` 原文，没有则为 `null`。
-  `name` 取 `xdr:cNvPr/@name`，没有则为 `""`。`anchor` 为 `twoCell`、`oneCell` 或 `absolute`。
-  单独 `pictures: true`、不开 `headerFooter`：只列工作表图，不含页眉图。
+  `cNvPrId` 是 `cNvPr/@id` 原文，没有则为 `null`。
+  `name` 取 `cNvPr/@name`，没有则为 `""`。`anchor` 为 `twoCell`、`oneCell`、`absolute`、`relSize` 或 `absSize`。
+  `hyperlink` 为 `null` 或对象（字段顺序 `kind`、`url`、`location`、`tooltip`），见上文 DrawingML 链。
+  单独 `pictures: true`、不开 `headerFooter`：只列工作表图与 Chart Drawing 图，不含页眉图。
 - `twoCell`（§20.5.2.33）再跟 `from`、`fromOffX`、`fromOffY`、`to`、`toOffX`、`toOffY`、`editAs`。
   不报 `cx` / `cy`（显示尺寸由起止格与列宽行高决定，库不算）。`editAs` 取 `twoCellAnchor/@editAs`：`twoCell`、`oneCell` 或 `absolute`；缺省当作 `twoCell`。
 - `oneCell`（§20.5.2.24）再跟 `from`、`fromOffX`、`fromOffY`、`cx`、`cy`。`cx` / `cy` 取 `xdr:ext`，没有则为 `null`。
 - `absolute`（§20.5.2.1）再跟 `posX`、`posY`、`cx`、`cy`。`posX` / `posY` 取 `xdr:pos`。
 - `from` / `to` 是 A1（列字母加大写行号）。XML 里 `xdr:col` / `xdr:row` 从 0 计（§20.5.3.1、§20.5.3.3），树上换成 A1，与单元格 id 同一套写法。
   `fromOffX` / `fromOffY` / `toOffX` / `toOffY` 是 EMU 整数，取 `colOff` / `rowOff`，缺省为 `0`。
+- `relSize` 再跟 `fromX`、`fromY`、`toX`、`toY`，取值是 0–1 的分数，取 Chart Drawing `cdr:from` / `cdr:to` 的 `x` / `y`。不报单元格 `from` / `to`，也不报 EMU。
+- `absSize` 再跟 `fromX`、`fromY`、`cx`、`cy`。`cx` / `cy` 取 `cdr:ext`。
 - `scope.charts` 为 `true` 时，每张 `worksheet` 与 `chartsheet` 带 `charts`。没有图表时为空数组。按该表 drawing 部件顺序、同一部件内按锚点文档顺序。
   每张字段顺序：`id`、`cNvPrId`、`name`、`anchor`，然后按锚点种类跟位置字段（规则与工作表图相同），再跟 `type`，`type` 为 `ofPie` 时再跟 `ofPieType`，
   `type` 为 `stock` 时再跟 `stockKind`，`type` 为 `surface` 时再跟 `surfaceKind`，
@@ -1012,28 +1055,30 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   `axis` / `trendlines` / `errorBars` 规则与 docx 图表相同。`index` 即 `{idx}`。
   `name` / `categories` / `values` / `sizes` 优先取 `c:f` 指向的单元格缓存值（与 inspect 单元格同一套 `<v>`）；读不到再退回 chart 的 cache / lit。
   `nameRef` / `catRef` / `valRef` / `sizeRef` 取对应 `c:f` 原文；没有公式则为 `null`。单元格值与 chart cache 不一致时该系列 `cacheStale: true`。
-- `scope.textBoxes` 为 `true` 时，每张 `worksheet` 带 `textBoxes`。没有文本框时为空数组。
+- `scope.textBoxes` 为 `true` 时，每张 `worksheet` 与 `chartsheet` 带 `textBoxes`。没有文本框时为空数组。
   按该表 worksheet drawing 部件顺序、同一部件内按锚点文档顺序，组合里符合条件的框展开后仍按遇到的顺序。
   每张字段顺序：`id`、`cNvPrId`、`name`、`anchor`，然后按锚点种类跟位置字段（规则与工作表图相同），再跟 `text`，
-  然后 `sz`、`color`、`textFill`、`textOutline`、`bold`、`italic`、`underline`、`font`、`eastAsiaFont`、`align`、`textAnchor`、`runs`、`stable`。
+  然后 `sz`、`color`、`textFill`、`textOutline`、`bold`、`italic`、`underline`、`font`、`eastAsiaFont`、`align`、`textAnchor`、`runs`、`stable`、`hyperlink`。
   `cNvPrId` / `name` / `anchor` / 位置字段 / `stable` 规则与图相同。`text` 取 `xdr:txBody` 可见 `a:t`，规则对齐 pptx 形状 `text`。不把框内字做成段落树。
-  `anchor` 仍是单元格锚点。框内垂直对齐是 `textAnchor`。格式键规则与 pptx 形状相同，见 [json-contract.md](json-contract.md#setshapeformat)。
+  Chart Drawing 上的框 `anchor` 为 `relSize` / `absSize`。框内垂直对齐是 `textAnchor`。格式键规则与 pptx 形状相同，见 [json-contract.md](json-contract.md#setshapeformat)。
 - `scope.maths` 为 `true` 时，每张 `worksheet` 带 `maths`。没有公式框时为空数组。不依赖单元格切片。
   按该表 worksheet drawing 里被收入的公式框文档顺序。组合里符合条件的展开。
   每条字段顺序：`id`、`cNvPrId`、`name`、`anchor`，然后按锚点种类跟位置字段（规则与工作表图相同），再跟 `text`、`stable`。
   `cNvPrId` 是 Choice 里 `xdr:cNvPr/@id` 原文，没有则为 `null`。`name` 取 `cNvPr/@name`，没有则为 `""`。
   `text` 为该 `oMath` 内 `m:t` 拼接；忽略 `a:fld` 外壳。不把 OMML 原文、不把 `expr` 放进树。
   Fallback 文本框不进 `textBoxes`。docx / pptx 见各自分册。
-- `scope.shapes` 为 `true` 时，每张 `worksheet` 带 `shapes`。没有形状时为空数组。顺序与文本框相同。
+- `scope.shapes` 为 `true` 时，每张 `worksheet` 与 `chartsheet` 带 `shapes`。没有形状时为空数组。顺序与文本框相同。
   每张字段顺序：`id`、`cNvPrId`、`name`、`anchor`，然后按锚点种类跟位置字段（规则与工作表图相同），再跟 `prst`，有 `xdr:txBody` 再跟 `text`，
-  然后 `sz`、`color`、`textFill`、`textOutline`、`bold`、`italic`、`underline`、`font`、`eastAsiaFont`、`align`、`textAnchor`、`runs`，最后 `stable`。
+  然后 `sz`、`color`、`textFill`、`textOutline`、`bold`、`italic`、`underline`、`font`、`eastAsiaFont`、`align`、`textAnchor`、`runs`，最后 `stable`、`hyperlink`。
   `prst` 取 `a:prstGeom/@prst`，没有则为 `null`。`text` 规则与文本框相同。没有 `txBody` 则没有 `text` 与格式键。
-- `scope.connectors` 为 `true` 时，每张 `worksheet` 带 `connectors`。没有连接线时为空数组。顺序与文本框相同。
+  `hyperlink` 规则与图相同。连接线没有该字段。
+- `scope.connectors` 为 `true` 时，每张 `worksheet` 与 `chartsheet` 带 `connectors`。没有连接线时为空数组。顺序与文本框相同。
   每条字段顺序：`id`、`cNvPrId`、`name`、`anchor`，然后按锚点种类跟位置字段（规则与工作表图相同），再跟 `prst`、`stable`。
   `prst` 取 `a:prstGeom/@prst`，没有则为 `null`。不报 `text`。
 - `scope.smartArt` 为 `true` 时，每张 `worksheet` 带 `smartArts`。没有图示时为空数组。顺序与文本框相同。
-  每张字段顺序：`id`、`cNvPrId`、`name`、`anchor`，然后按锚点种类跟位置字段（规则与工作表图相同），再跟 `layout`、`colors`、`style`、`points`、`stable`。
+  每张字段顺序：`id`、`cNvPrId`、`name`、`anchor`，然后按锚点种类跟位置字段（规则与工作表图相同），再跟 `layout`、`colors`、`style`、`points`、`stable`、`hyperlink`。
   `layout` / `colors` / `style` / `points` 规则与 docx / pptx SmartArt 相同。四条关系从 **drawing** `.rels` 解。
+  `hyperlink` 规则与图相同。
 - 不把媒体字节、chart 部件或 diagram 四件套放进树。
 - `cells` 稀疏：范围内没有 `<c>` 的格子不出现。
 - 有单元格切片时始终带 `cols`、`rows`、`merges`、`dataValidations`、`conditionalFormats`、`tables`、`pivots`（可为空数组）。未点名的表、以及没有单元格切片的表不带这七项。
@@ -2613,11 +2658,14 @@ docx / pptx 上发此 op 报 `InvalidField`。pptx 改画布坐标请用 `setPic
 - **`id`**
   - 必须是 `sheet:{name}`
 - **`from`**
-  - 必须
-  - 左上角单元格，A1
+  - `worksheet` 必须。左上角单元格，A1
+  - `chartsheet` 禁止
+- **`fromX` / `fromY` / `toX` / `toY`**
+  - `chartsheet` 必须。0–1 的分数
+  - `worksheet` 禁止
 - **`to` / `anchor` / 偏移 / `cx` / `cy`**
   - 可选
-  - 规则与 `insertTextBox` 相同
+  - 规则与 `insertTextBox` 相同；`chartsheet` 上不要给单元格锚点字段
 - **`text`**
   - 可选
   - 可见纯文本，省略则空 `txBody`
@@ -2635,7 +2683,7 @@ docx / pptx 上发此 op 报 `InvalidField`。pptx 改画布坐标请用 `setPic
   - 禁止
   - 出现报 `InvalidField`
 
-写入 `xdr:sp`：空 `xdr:cNvSpPr`（不写 `txBox`），始终带空或有字的 `xdr:txBody`，默认实心填充 `FFFFFF` 与线宽 `9525` 的黑色描边，与已过 `insertTextBox` 同一套线填。
+写入 `xdr:sp` 或 Chart Drawing 的 `cdr:sp`：空 `cNvSpPr`（不写 `txBox`），始终带空或有字的 `txBody`，默认实心填充 `FFFFFF` 与线宽 `9525` 的黑色描边，与已过 `insertTextBox` 同一套线填。
 给了文字格式字段则按 `setShapeFormat` 写入该 `txBody`。省略则缺省 `sz="1100"`。
 不写 `xdr:style`，不写 `a16:creationId`。`cNvPr/@name` 写成「形状 {cnv}」。新 `cNvPr/@id` 取该表已有全部 `cNvPr` 的最大整数加 1。
 缺 `cx` / `cy` 时用 `1828800` × `914400`。docx 上发此 op 报 `InvalidField`。
@@ -2649,11 +2697,14 @@ docx / pptx 上发此 op 报 `InvalidField`。pptx 改画布坐标请用 `setPic
 - **`id`**
   - 必须是 `sheet:{name}`
 - **`from`**
-  - 必须
-  - 左上角单元格，A1
+  - `worksheet` 必须。左上角单元格，A1
+  - `chartsheet` 禁止
+- **`fromX` / `fromY` / `toX` / `toY`**
+  - `chartsheet` 必须。0–1 的分数
+  - `worksheet` 禁止
 - **`to` / `anchor` / 偏移 / `cx` / `cy`**
   - 可选
-  - 规则与 `insertTextBox` 相同
+  - 规则与 `insertTextBox` 相同；`chartsheet` 上不要给单元格锚点字段
 - **`prst`**
   - 可选
   - 缺省 `straightConnector1`
@@ -2662,7 +2713,7 @@ docx / pptx 上发此 op 报 `InvalidField`。pptx 改画布坐标请用 `setPic
   - 禁止
   - 出现报 `InvalidField`
 
-写入 `xdr:cxnSp`：`xdr:nvCxnSpPr` / 空 `xdr:cNvCxnSpPr`，无 `txBody`，无填充，线宽 `9525` 的黑色描边。不写 `xdr:style`。
+写入 `xdr:cxnSp` 或 Chart Drawing 的 `cdr:cxnSp`：空 `cNvCxnSpPr`，无 `txBody`，无填充，线宽 `9525` 的黑色描边。不写 `style`。
 `cNvPr/@name` 写成「连接线 {cnv}」。新 `cNvPr/@id` 规则与 `insertShape` 相同。docx 见 [docx 分册](json-contract-docx.md#insertconnector)。
 
 ### deleteShape

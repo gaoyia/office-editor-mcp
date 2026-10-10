@@ -139,7 +139,7 @@ fn insert_emf_writes_original_and_content_type() {
         .keys()
         .map(|k| k.as_str())
         .collect();
-    assert!(keys.last() == Some(&"contentType"), "{keys:?}");
+    assert!(keys.last() == Some(&"hyperlink"), "{keys:?}");
     let names = zip_names(&out);
     assert!(names.iter().any(|n| n.ends_with(".emf")), "{names:?}");
     assert!(!names.iter().any(|n| n.ends_with(".svg")), "{names:?}");

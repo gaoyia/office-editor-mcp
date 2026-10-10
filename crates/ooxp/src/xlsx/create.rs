@@ -1012,6 +1012,7 @@ fn parse_hyperlink(v: &Value, prefix: &str, sheet: &str) -> Result<InsertHyperli
         location,
         tooltip: parse_opt_plain(obj, prefix, "tooltip")?,
         display: parse_opt_plain(obj, prefix, "display")?,
+        drawing: None,
     })
 }
 
@@ -1114,6 +1115,7 @@ fn parse_textbox(v: &Value, prefix: &str, sheet: &str) -> Result<InsertTextBoxOp
         to_off_x: a.to_off_x,
         to_off_y: a.to_off_y,
         format: crate::drawing_text::parse(obj, prefix, false)?,
+        rel: None,
     })
 }
 
@@ -1178,6 +1180,7 @@ fn parse_shape(v: &Value, prefix: &str, sheet: &str) -> Result<InsertShapeOp, Er
         to_off_y: a.to_off_y,
         prst: parse_shape_prst(obj, prefix)?,
         format: crate::drawing_text::parse(obj, prefix, false)?,
+        rel: None,
     })
 }
 
@@ -1219,6 +1222,7 @@ fn parse_connector(v: &Value, prefix: &str, sheet: &str) -> Result<InsertConnect
         to_off_x: a.to_off_x,
         to_off_y: a.to_off_y,
         prst: parse_connector_prst(obj, prefix)?,
+        rel: None,
     })
 }
 
@@ -1546,6 +1550,7 @@ fn parse_hf_picture(
         from_off_y: 0,
         to_off_x: 0,
         to_off_y: 0,
+        rel: None,
     })
 }
 
@@ -2292,6 +2297,7 @@ fn parse_picture(v: &Value, prefix: &str, sheet: &str) -> Result<InsertPictureOp
         from_off_y: parse_off(obj.get("fromOffY"), prefix, "fromOffY")?.unwrap_or(0),
         to_off_x: parse_off(obj.get("toOffX"), prefix, "toOffX")?.unwrap_or(0),
         to_off_y: parse_off(obj.get("toOffY"), prefix, "toOffY")?.unwrap_or(0),
+        rel: None,
     })
 }
 

@@ -64,7 +64,8 @@ xlsx 的 `scope.shapes` 列出工作表上无 `txBox` 的 `xdr:sp`；`scope.conn
 apply 用 `insertShape` / `deleteShape` / `insertConnector` / `deleteConnector`。
 `setTextBoxSize` / `setTextBoxAnchor` 也认形状 id 与连接线 id。
 xlsx 的 `scope.smartArt` 与 SmartArt op 认工作表 diagram `xdr:graphicFrame`。
-xlsx 的 `scope.hyperlinks` 与超链接 op 认工作表 `<hyperlinks>`（ECMA-376 §18.3.1.47），不认 `HYPERLINK()` 公式，也不认图或框上的 DrawingML 链。
+xlsx 的 `scope.hyperlinks` 与单元格超链接 op 认工作表 `<hyperlinks>`（ECMA-376 §18.3.1.47），不认 `HYPERLINK()` 公式。
+图 / 文本框 / 形状 / SmartArt 上的 DrawingML 链走对象节点的 `hyperlink` 字段，不进这份名单。
 xlsx 的 `scope.sparklines` 与迷你图 op 认工作表 `extLst` 里的 `x14:sparklineGroups`（MS-XLSX §2.4.8），可读写颜色、标记与坐标轴，不把折线画进树。
 xlsx 的 `scope.connections` 与连接 op 认工作簿 `/xl/connections.xml`（ECMA-376 §18.13），不刷新、不把查询结果写进单元格。
 xlsx 的 `scope.externalLinks` 与外部引用 op 认工作簿 `<externalReferences>`（ECMA-376 §18.14），不打开目标文件，不求值。
@@ -952,7 +953,7 @@ pptx：删掉对应 `a:gridCol`。该列落在某格 `gridSpan` 内部时，`gri
   - 必须是 `"insertHyperlink"`
 - **`id`**
   - docx：段落 id（正文或页眉页脚）
-  - xlsx：工作表 id `sheet:{name}`
+  - xlsx：工作表 id `sheet:{name}`（单元格链），或图 / 文本框 / 形状 / SmartArt 图示 id（DrawingML 链）
   - pptx：文本形状、图、表、图表、SmartArt 或表单元格 id（不含 `notesMaster` / `handout`）
 - **`text`**
   - docx 必填，显示文本，字符串，可空
@@ -985,7 +986,8 @@ pptx：删掉对应 `a:gridCol`。该列落在某格 `gridSpan` 内部时，`gri
   - xlsx 内部位置（本工作簿的表单元格或定义名，或外部靶内位置）
   - docx / pptx 上出现报 `InvalidField`
 - **`ref`**
-  - xlsx 必填
+  - xlsx 单元格链必填
+  - DrawingML 链禁止出现
   - 该链覆盖的 A1 或闭区间
   - docx / pptx 上出现报 `InvalidField`
 - **`file`**
@@ -1009,13 +1011,16 @@ docx：在该段已有内容之后插入一个 `w:hyperlink`，内含一个带 `
 `url` 与 `anchor` 同时出现或一个都不给报 `InvalidField`。`url` 为空串报 `InvalidField`。`anchor` 为空串或以 `_` 开头报 `InvalidField`。
 找不到段落报 `IdNotFound`。id 不是段落 id 报 `InvalidId`。
 
-xlsx：在该表 `<hyperlinks>` 末尾追加一条 `<hyperlink>`。没有该元素则按 `CT_Worksheet` 顺序插在 `dataValidations` 之后、`printOptions` 之前。
+xlsx：单元格链在该表 `<hyperlinks>` 末尾追加一条 `<hyperlink>`。没有该元素则按 `CT_Worksheet` 顺序插在 `dataValidations` 之后、`printOptions` 之前。
 `ref` 能解析则规范化成 `A1` 或 `A1:B2`；非法报 `InvalidRange`。与同一张表上已有链的单元格相交报 `InvalidField`。
 给了 `url`：工作表 `.rels` 新建 Type 以 `/hyperlink` 结尾的关系，`TargetMode` 为 `External`，`Target` 为 `url` 原文，并写 `r:id`。
 给了 `location`：写 `@location`。只给 `location` 不写关系。`url` 与 `location` 一个都不给报 `InvalidField`。
-`url` 或 `location` 为空串报 `InvalidField`。工作表根上补 `xmlns:r`（若还没有）。不写单元格值，也不改已有格子的样式。id 不是工作表 id 报 `InvalidId`。
-找不到工作表报 `IdNotFound`。只能写 `worksheet`；对 `chartsheet` 报 `InvalidField`；对 `dialogsheet` / `macrosheet` 报 `NotImplemented`。
-不标重算。`create` 给了 `sheets[].hyperlinks` 时按同一套规则写 `<hyperlinks>`。
+`url` 或 `location` 为空串报 `InvalidField`。工作表根上补 `xmlns:r`（若还没有）。不写单元格值，也不改已有格子的样式。id 不是工作表 id 且不是图 / 文本框 / 形状 / SmartArt id 报 `InvalidId`。
+找不到工作表报 `IdNotFound`。单元格链只能写 `worksheet`；对 `chartsheet` 发工作表 id 报 `InvalidField`；对 `dialogsheet` / `macrosheet` 报 `NotImplemented`。
+DrawingML 链：`id` 是图 / 文本框 / 形状 / SmartArt 图示 id。禁止 `ref` / `display`。`url` 与 `location` 必须恰好一个。
+写入该对象 `cNvPr/a:hlinkClick`，关系写在 **drawing** `.rels`。外部链 `TargetMode=External`。内部位置 `Target` 为 `#{location}`，不写 `TargetMode`。
+同一对象已有 `hlinkClick` 时报 `InvalidField`（改地址请用 `setHyperlink`）。
+不标重算。`create` 给了 `sheets[].hyperlinks` 时按单元格链同一套规则写 `<hyperlinks>`。
 
 pptx：`url`、`file`、`slide` 必须恰好一个，否则报 `InvalidField`。空串报 `InvalidField`。
 框级（`on` 为 `shape` / `pic` / `table` / `chart` / `smartArt`，或按 id 种类缺省）：
@@ -1041,7 +1046,7 @@ create 上 `slide` 是页序整数，见 [json-contract-pptx.md](json-contract-p
 | 字段 | 含义 |
 | --- | --- |
 | `op` | 必须是 `"setHyperlink"` |
-| `id` | 超链接 id。docx 为 `link:{n}` 或容器前缀；xlsx 为 `sheet:{name}/link:{n}`；pptx 为 `slide:{n}/link:{k}` |
+| `id` | 超链接 id。docx 为 `link:{n}` 或容器前缀；xlsx 为 `sheet:{name}/link:{n}` 或图 / 文本框 / 形状 / SmartArt 图示 id；pptx 为 `slide:{n}/link:{k}` |
 | `url` | 可选。改成外部 URL。xlsx 为 `null` 则去掉 `r:id`。pptx 为 `null` 或空串报 `InvalidField` |
 | `file` | pptx 可选。改成外部文件目标。xlsx / docx 上出现报 `InvalidField` |
 | `slide` | pptx 可选。改成内部跳转 `slide:{n}`。xlsx / docx 上出现报 `InvalidField` |
@@ -1057,11 +1062,13 @@ docx：`url`、`anchor`、`text`、`tooltip` 至少给一个。`url` 与 `anchor
 `text` 只改该 `w:hyperlink` 内可见 `w:t`（规则与 `setParaText` 第 2–4 条相同，范围限于该元素）。`tooltip` 为字符串则写属性；为 `null` 则去掉属性。
 找不到报 `IdNotFound`。id 不是超链接 id 报 `InvalidId`。
 
-xlsx：`url`、`location`、`tooltip`、`display`、`ref` 至少给一个。
+xlsx：单元格链：`url`、`location`、`tooltip`、`display`、`ref` 至少给一个。
 给了 `url` 字符串：有已有 `r:id` 且该关系 Type 以 `/hyperlink` 结尾则改 `Target`；否则新建关系并写 `r:id`。`url` 为 `null`：去掉 `r:id`，该关系无人引用则删除。
 给了 `location` 字符串则写属性；为 `null` 则去掉属性。改完之后必须仍有 `r:id` 或 `location`，否则报 `InvalidField`。
 `ref` 非法报 `InvalidRange`；与其它链相交报 `InvalidField`。`tooltip` / `display` 为字符串则写属性；为 `null` 则去掉。不改单元格值。找不到报 `IdNotFound`。
-id 不是超链接 id 报 `InvalidId`。只能改 `worksheet`。
+id 不是单元格超链接 id 且不是图 / 文本框 / 形状 / SmartArt 图示 id 报 `InvalidId`。单元格链只能改 `worksheet`。
+DrawingML 链：禁止 `ref` / `display`。`url` 与 `location` 最多给一个。改 `a:hlinkClick` 的关系与 `tooltip`。
+`url` 与 `location` 都去掉后必须 `deleteHyperlink`。找不到对象或该对象没有链报 `IdNotFound`。
 
 pptx：`url`、`file`、`slide`、`tooltip` 至少给一个。`url`、`file`、`slide` 最多给一个，多了报 `InvalidField`。
 给了 `url` / `file` / `slide`：改该链元素（`a:hlinkClick` / `a:hlinkHover` / `a:hlinkMouseOver`）的关系与 `action`，
@@ -1078,8 +1085,10 @@ pptx：`url`、`file`、`slide`、`tooltip` 至少给一个。`url`、`file`、`
 
 docx：拆掉 `w:hyperlink` 外壳，留下内部 `w:r`。该 `r:id` 在本部件 XML 里无人引用则删除关系。找不到报 `IdNotFound`。id 不是超链接 id 报 `InvalidId`。
 
-xlsx：去掉该 `<hyperlink>`。该 `r:id` 在本表其余链里无人引用则删除关系。删光则去掉 `<hyperlinks>`。不改单元格值。找不到报 `IdNotFound`。
-id 不是超链接 id 报 `InvalidId`。只能改 `worksheet`。
+xlsx：单元格链去掉该 `<hyperlink>`。该 `r:id` 在本表其余链里无人引用则删除关系。删光则去掉 `<hyperlinks>`。不改单元格值。
+DrawingML 链去掉 `a:hlinkClick`，drawing `.rels` 无人引用则删除关系。不删图或形状。
+找不到报 `IdNotFound`。id 不是单元格超链接 id 且不是带链的图 / 文本框 / 形状 / SmartArt id 报 `InvalidId`。
+单元格链只能改 `worksheet`。
 
 pptx：去掉该条 `a:hlinkClick`。形状级从 `p:cNvPr` 摘掉；run 级从 `a:rPr` 摘掉，`a:r` 与 `a:t` 留下。该 `r:id` 在本页 XML 里无人引用则删除关系。不改可见文字。
 找不到报 `IdNotFound`。id 不是超链接 id 报 `InvalidId`。

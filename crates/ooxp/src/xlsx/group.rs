@@ -477,6 +477,7 @@ fn anchor_box(sheet: &Element, root: &Element, anchor_index: usize) -> Option<Em
                 cy: (y2 - y).max(1),
             })
         }
+        AnchorKind::RelSize | AnchorKind::AbsSize => None,
     }
 }
 

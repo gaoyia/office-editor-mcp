@@ -535,6 +535,7 @@ fn fill_geom(
                 AnchorKind::TwoCell => fill_two_cell(m, &el),
                 AnchorKind::OneCell => fill_one_cell(m, &el),
                 AnchorKind::Absolute => fill_abs(m, &el),
+                AnchorKind::RelSize | AnchorKind::AbsSize => {}
             }
             return Ok(());
         }

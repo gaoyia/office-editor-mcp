@@ -1417,6 +1417,26 @@
         "toOffY": {
           "type": "integer",
           "minimum": 0
+        },
+        "fromX": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "fromY": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "toX": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "toY": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
         }
       }
     },
@@ -1546,6 +1566,26 @@
         "toOffY": {
           "type": "integer",
           "minimum": 0
+        },
+        "fromX": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "fromY": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "toX": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "toY": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
         },
         "sz": {
           "type": [

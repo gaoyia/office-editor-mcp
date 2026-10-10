@@ -4,6 +4,7 @@ pub(crate) mod a1;
 mod apply;
 mod cf;
 mod chart;
+mod chart_drawing;
 mod chartsheet;
 mod comments;
 mod connection;
