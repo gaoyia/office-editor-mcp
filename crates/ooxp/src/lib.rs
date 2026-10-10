@@ -949,6 +949,7 @@ mod tests {
                 "props",
                 "protection",
                 "theme",
+                "themeOverride",
                 "fontEmbed",
                 "pageBackground",
                 "eastAsianSettings",

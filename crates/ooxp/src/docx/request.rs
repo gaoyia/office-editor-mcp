@@ -1011,6 +1011,7 @@ pub struct SetFontEmbedOp {
 #[derive(Debug, Clone)]
 pub struct SetPageBackgroundOp {
     pub color: Option<String>,
+    pub fill: Option<super::page_bg::PageFill>,
 }
 
 #[derive(Debug, Clone)]
@@ -1304,6 +1305,8 @@ pub enum DocxOp {
     SetProtection(super::protect::SetProtectionOp),
     SetThemeColors(super::theme::SetThemeColorsOp),
     SetThemeFonts(super::theme::SetThemeFontsOp),
+    SetThemeFmt(super::theme::SetThemeFmtOp),
+    SetThemeOverride(super::theme::SetThemeOverrideOp),
     SetProps(crate::props::SetPropsOp),
     SetCustomProp(crate::props::SetCustomPropOp),
     DeleteCustomProp(crate::props::DeleteCustomPropOp),
@@ -1991,6 +1994,10 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<DocxOp>, Error> {
             "setThemeFonts" => out.push(DocxOp::SetThemeFonts(super::theme::parse_set_fonts(
                 obj, i,
             )?)),
+            "setThemeFmt" => out.push(DocxOp::SetThemeFmt(super::theme::parse_set_fmt(obj, i)?)),
+            "setThemeOverride" => out.push(DocxOp::SetThemeOverride(
+                super::theme::parse_set_override(obj, i)?,
+            )),
             "setProps" => out.push(DocxOp::SetProps(crate::props::parse_set_props(
                 obj,
                 i,
@@ -3059,7 +3066,7 @@ fn parse_set_page_background(
     obj: &serde_json::Map<String, Value>,
     i: usize,
 ) -> Result<SetPageBackgroundOp, Error> {
-    deny_keys(obj, i, &["op", "id", "color"])?;
+    deny_keys(obj, i, &["op", "id", "color", "fill"])?;
     let id = require_op_id(obj, i)?;
     require_document_id(&id, i, IdReason::SetPageBackgroundNeedsDocument)?;
     let color = match obj.get("color") {
@@ -3092,7 +3099,17 @@ fn parse_set_page_background(
             ));
         }
     };
-    Ok(SetPageBackgroundOp { color })
+    let fill = match obj.get("fill") {
+        None => None,
+        Some(v) => Some(super::page_bg::parse_fill(v, &format!("ops[{i}].fill"))?),
+    };
+    if color.is_none() && fill.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::InvalidPageBackgroundFill,
+            format!("ops[{i}].fill"),
+        ));
+    }
+    Ok(SetPageBackgroundOp { color, fill })
 }
 
 fn parse_set_page_borders(

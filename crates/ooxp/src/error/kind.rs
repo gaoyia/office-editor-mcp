@@ -1020,6 +1020,10 @@ define_error_kinds! {
     InvalidFontFile => vec![Self::InvalidFontFile],
     NeedFontEmbedField => vec![Self::NeedFontEmbedField],
     InvalidPageBackgroundColor => vec![Self::InvalidPageBackgroundColor],
+    InvalidPageBackgroundFill => vec![Self::InvalidPageBackgroundFill],
+    InvalidThemeFmtIndex => vec![Self::InvalidThemeFmtIndex],
+    InvalidThemeFmtKind => vec![Self::InvalidThemeFmtKind],
+    NeedThemeOverrideField => vec![Self::NeedThemeOverrideField],
     NeedPageBordersField => vec![Self::NeedPageBordersField],
     InvalidPageBorderVal => vec![Self::InvalidPageBorderVal],
     InvalidPageBorderOffset => vec![Self::InvalidPageBorderOffset],
@@ -1723,6 +1727,10 @@ impl ErrorKind {
             | Self::InvalidFontFile
             | Self::NeedFontEmbedField
             | Self::InvalidPageBackgroundColor
+            | Self::InvalidPageBackgroundFill
+            | Self::InvalidThemeFmtIndex
+            | Self::InvalidThemeFmtKind
+            | Self::NeedThemeOverrideField
             | Self::NeedPageBordersField
             | Self::InvalidPageBorderVal
             | Self::InvalidPageBorderOffset

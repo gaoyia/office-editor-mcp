@@ -167,7 +167,8 @@ fn insert_export_set_flags_then_delete() {
     let outline = keys.iter().position(|k| *k == "outline").unwrap();
     assert!(style < efc && efc < outline, "{keys:?}");
     let theme = keys.iter().position(|k| *k == "theme").unwrap();
-    assert_eq!(keys[theme + 1], "fontEmbed");
+    assert_eq!(keys[theme + 1], "themeOverride");
+    assert_eq!(keys[theme + 2], "fontEmbed");
     assert_eq!(
         object_keys(&bare["fontEmbed"]),
         ["trueType", "systemFonts", "subset"]

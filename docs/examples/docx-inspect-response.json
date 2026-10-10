@@ -93,6 +93,7 @@
     "readOnlyRecommended": false
   },
   "theme": null,
+  "themeOverride": null,
   "fontEmbed": {
     "trueType": false,
     "systemFonts": false,
@@ -100,7 +101,8 @@
   },
   "pageBackground": {
     "color": null,
-    "display": false
+    "display": false,
+    "fill": null
   },
   "from": 1,
   "truncated": false,

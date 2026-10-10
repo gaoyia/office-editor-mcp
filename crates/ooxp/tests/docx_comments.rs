@@ -244,6 +244,7 @@ fn inspect_counts_without_list() {
             "props",
             "protection",
             "theme",
+            "themeOverride",
             "fontEmbed",
             "pageBackground",
             "eastAsianSettings"

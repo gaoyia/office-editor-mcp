@@ -212,6 +212,7 @@ pub fn apply(bytes: &[u8], ops: &[DocxOp]) -> Result<Vec<u8>, Error> {
                     &mut dirty,
                     &doc_part,
                     op.color.as_deref(),
+                    op.fill.as_ref(),
                 )?;
             }
             DocxOp::SetPageBorders(op) => {
@@ -561,6 +562,12 @@ pub fn apply(bytes: &[u8], ops: &[DocxOp]) -> Result<Vec<u8>, Error> {
             }
             DocxOp::SetThemeFonts(op) => {
                 super::theme::set_fonts(&mut pkg, &doc_part, op, i)?;
+            }
+            DocxOp::SetThemeFmt(op) => {
+                super::theme::set_fmt(&mut pkg, &doc_part, op, i)?;
+            }
+            DocxOp::SetThemeOverride(op) => {
+                super::theme::set_override(&mut pkg, &doc_part, op, i)?;
             }
             DocxOp::SetProps(op) => {
                 crate::props::apply_set_props(&mut pkg, op, i)?;

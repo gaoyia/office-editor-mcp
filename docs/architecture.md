@@ -143,7 +143,7 @@ inspect 读该部件里的 `w:p`，返回大纲和按范围截断的段落；并
 `smartArtCount`、`oleObjectCount`、`model3dCount`、`tableCount`、`revisionCount`、`hyperlinkCount`、`bookmarkCount`、`fieldCount`、`tocCount`、
 `captionCount`、`crossRefCount`、`indexCount`、`indexEntryCount`、`sourceCount`、`citationCount`、`bibliographyCount`、
 `docPartCount`、`mathCount`、`contentControlCount`、`numberingCount`、`styleCount`、`embeddedFontCount`，
-以及整篇 `mirrorMargins` / `gutterAtTop`、`props`、`protection`、`theme` 与 `fontEmbed`、`pageBackground`。
+以及整篇 `mirrorMargins` / `gutterAtTop`、`props`、`protection`、`theme`、`themeOverride` 与 `fontEmbed`、`pageBackground`。
 页眉页脚容器始终带前两项与 `connectorCount`、`shapeCount`、`inkCanvasCount`、`chartCount`、`smartArtCount`、`oleObjectCount`、`model3dCount`、`tableCount`、`revisionCount`、
 `hyperlinkCount`、`bookmarkCount`、`fieldCount`、`mathCount`、`contentControlCount`。
 `scope.pictures` / `scope.textBoxes` / `scope.connectors` / `scope.shapes` / `scope.inkCanvases` / `scope.model3ds` 为 true 时列出页眉页脚图、框、连接线、无框形状、墨迹画布或 3D 模型；同时给了正文切片则段落上也列出。
@@ -253,7 +253,7 @@ xlsx 默认不读完全部单元格，也不展开 `pictures`、`charts`、`text
 `customViewCount`、`hasHeaderFooter`、`print`、`view`、`sheetProtection` 与根上 `props`、`workbookProtection`、`definedNameCount`、`definedNames`）。
 xlsx 的 `worksheet` 还返回 `autoFilter` 与 `sortState`。
 docx 默认不返回正文 `paragraphs` 也不展开页眉页脚段落、任何 `pictures`、`textBoxes`、`connectors`、注名单、批注名单、图表名单、SmartArt 名单、OLE 名单、水印名单、表名单、
-修订名单、超链接名单、书签名单、域名单、目录名单、题注名单、交叉引用名单、构建基块名单、公式名单、内容控件名单、编号名单、样式名单或 run 名单（仍返回根上 `props` 与 `protection`、`theme`、`fontEmbed`、`pageBackground`，
+修订名单、超链接名单、书签名单、域名单、目录名单、题注名单、交叉引用名单、构建基块名单、公式名单、内容控件名单、编号名单、样式名单或 run 名单（仍返回根上 `props` 与 `protection`、`theme`、`themeOverride`、`fontEmbed`、`pageBackground`，
 以及 `watermarkCount`），pptx 默认不返回 `shapes`，
 也不展开 `pictures` / `maths` / `charts` / `smartArts` / `tables` / `oleObjects` / `model3ds` / `zooms` / `connectors` / `notes` / `comments`
  / `hyperlinks` / `fields` / `timing` / `masters` / `notesMaster` / `handout` / `sections` / `customShows`（仍返回根与各页 `pictureCount`、`mathCount`、
@@ -308,7 +308,8 @@ docx 也可插删嵌入对象，脏宿主 XML、`.rels`、embeddings 与占位�
 docx 也可插删换 3D 模型，脏宿主 XML、`.rels`、GLB 与海报 PNG。
 docx 也可用 `setProtection` 改 `settings.xml` 的保护标记，窗体保护还可脏主文档各节 `w:formProt`。
 docx 也可插删页眉 DrawingML 水印，无 default 页眉时会新建，并可脏页眉部件与媒体。
-docx 也可用 `setThemeColors` / `setThemeFonts` 改主文档 theme 部件的配色与字体方案，只脏该 theme 部件，不重写 `fmtScheme`。
+docx 也可用 `setThemeColors` / `setThemeFonts` / `setThemeFmt` 改主文档 theme 部件的配色、字体与 `fmtScheme` 常用槽，只脏该 theme 部件；
+也可用 `setThemeOverride` 新建或改主文档 themeOverride 部件。
 pptx 可改被点名形状的可见文字（含备注形状与母版 / 版式占位符），可插入文本框与非矩形预设几何、写入自定义路径、插入连接线（幻灯片、备注页与母版 / 版式，可写 `stCxn` / `endCxn`）、组合与解开、删除被点名形状并清对应 timing `tgtEl`、改画布坐标与尺寸、填充描边与 DrawingML 文字格式，
 可用 `setNotesText` 按页改或新建演讲者备注，也可改被点名的幻灯片图、备注图与母版 / 版式图（换、插、删、改尺寸、改画布坐标），也可插删改幻灯片、备注页与母版 / 版式图表，也可插删改幻灯片、备注页与母版 / 版式 SmartArt，
 也可插删改幻灯片、备注页与母版 / 版式 DrawingML 表，也可插删回复并改现代批注，也可对批注或回复 id 插图并换、删批注内图（不改尺寸位置），也可按批注内图 id `exportMedia`，也可插入、删除、重排与隐藏幻灯片，
@@ -365,7 +366,8 @@ create 不写修订痕迹。pptx 的 `slides[].pictures` 复用 `insertPicture`�
 `presentation.modifyProtection` 复用 `setProtection`。
 create 本期不写批注内图，也不写图 / 表 / 图表 / SmartArt 上的链。
 三种格式的 `props` 复用 `setProps` / `setCustomProp` 同一套字段写 core / app / custom。
-docx 的 `document.protection` 复用 `setProtection`。docx 的 `document.watermarks` 复用 `insertWatermark`。create 不写 theme 部件。
+docx 的 `document.protection` 复用 `setProtection`。docx 的 `document.watermarks` 复用 `insertWatermark`。
+docx 的 `document.theme` 写入 theme 部件；`document.pageBackground` / `document.pageBorders` 复用对应 apply。省略 `theme` 则不写该部件。
 
 ### exportMedia
 

@@ -1631,6 +1631,8 @@ fn is_foreign_op(op_name: &str) -> bool {
             | "setFontEmbed"
             | "setPageBackground"
             | "setPageBorders"
+            | "setThemeFmt"
+            | "setThemeOverride"
             | "insertContentControl"
             | "setContentControl"
             | "deleteContentControl"

@@ -30,6 +30,7 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 2026-10-10 补跑 `docx-drawing-hlink.ps1`，Dh1–Dh6 通过。无 Repair。COM 图上 `Hyperlink.Address` 对得上。`hyperlinkCount` 仍为 0。内部书签关系 `Target="#SrcBm"` 且无 `TargetMode`。
 2026-10-10 补跑 `docx-drawing-shape.ps1`，Ds1–Ds8 通过。无 Repair。COM 矩形 `AutoShapeType=1`，椭圆 `9`，填色红 `RGB=255`，描边蓝 `RGB=16711680`。
 2026-10-10 补跑 `docx-style-table.ps1`，Sy1–Sy6、Tf1–Tf6 通过。无 Repair。COM 字符样式 `Color` RGB=255、`Bold=-1`。表 `WrapAroundText=True`，格底纹 `RGB=255`，斜线 `Borders.Item(-7)` 的 `LineStyle=1`。
+2026-10-10 补跑 `docx-theme-bg-remain.ps1`，Fm1–Fm7 通过。无 Repair。
 
 - **C1** ✅
   - Word 16.0 能打开 `manual-check/office/out/docx-create.docx`，标题栏无 Repair
@@ -1321,8 +1322,8 @@ Word 跟踪修订下改表单元格底纹、插入空段、删除表行。`inspe
 
 ## 页面背景与边框
 
-`setPageBackground` 写整篇 `w:background` 与 `displayBackgroundShape`；`setPageBorders` 写节上 `w:pgBorders`。
-不实现排版引擎，不写艺术型边框或 DrawingML 渐变。手测脚本 `manual-check/office/cases/docx-page-bg.ps1`。
+`setPageBackground` 写整篇 `w:background` 与 `displayBackgroundShape`，并可写 DrawingML 渐变或 VML 图片填充；`setPageBorders` 写节上 `w:pgBorders`，`val` 含艺术型。
+不实现排版引擎。手测脚本 `manual-check/office/cases/docx-page-bg.ps1`。艺术型与 DrawingML 背景见 Fm 组。
 
 | 编号 | 项 | 期望 |
 | --- | --- | --- |
@@ -1626,7 +1627,7 @@ Word 跟踪修订下改表单元格底纹、插入空段、删除表行。`inspe
 
 ## 主题
 
-主文档 theme 部件的配色与字体方案。不算主题排版引擎。手测脚本 `manual-check/office/cases/docx-theme.ps1`。编号用 Th。不要和表格 / 文本框的 T 组撞。
+主文档 theme 部件的配色与字体方案。不算主题排版引擎。手测脚本 `manual-check/office/cases/docx-theme.ps1`。编号用 Th。不要和表格 / 文本框的 T 组撞。`fmtScheme` 与 `themeOverride` 见 Fm 组。
 
 | 序号 | 检查 | 通过标准 |
 | --- | --- | --- |
@@ -1635,6 +1636,22 @@ Word 跟踪修订下改表单元格底纹、插入空段、删除表行。`inspe
 | Th3 | 改字 | `setThemeFonts` `majorLatin` 为 `Arial` 后树上为 `Arial`，Word 无修复 |
 | Th4 | 无 theme | 对 ooxp create（无 theme 部件）发 `setThemeColors` 得 `IdNotFound`，不写文件。不强制开 Word |
 | Th5 | 拒错 id | 对段落 id 发 `setThemeColors` 得 `InvalidId`；一个槽位都不给得 `InvalidField`。不强制开 Word |
+
+## 主题与页面背景剩余
+
+`setThemeFmt` 改 `fmtScheme` 常用槽；`setThemeOverride` 读写主文档 themeOverride；`setPageBorders` 的 `val` 含艺术型；`setPageBackground` 可写 DrawingML 渐变或 VML 图片。
+create 可写 `document.theme` / `pageBackground` / `pageBorders`。不算主题排版引擎。
+手测脚本 `manual-check/office/cases/docx-theme-bg-remain.ps1`。编号用 Fm。不要和 Fe、Ft、Tf、Th、Pb 撞。
+
+| 编号 | 项 | 期望 |
+| --- | --- | --- |
+| Fm1 | fmt | Word 空白另存后 `theme.fmt.name` 为 `Office`，`fills` / `lines` 长度为 3；`themeOverride` 为 `null`。无 Repair |
+| Fm2 | 改槽 | `setThemeFmt` 把 `line.index=0` 的 `w` 写成 `38100` 后树上对得上，Word 无修复 |
+| Fm3 | 覆盖 | `setThemeOverride` `accent1=FF0000` 后树上 `themeOverride.colors.accent1` 为 `FF0000`，Word 无修复；`enabled: false` 后为 `null` |
+| Fm4 | 艺术边框 | `setPageBorders` 四边 `val=apples` 后树上为 `apples`，Word 无修复 |
+| Fm5 | DrawingML 背景 | `setPageBackground` `fill.kind=gradient` 后 `pageBackground.fill.kind` 为 `drawing`，Word 无修复 |
+| Fm6 | create | 给了 `document.theme` 与 `pageBackground` 后树上有 theme 与背景色，Word 无修复。默认 create 仍无 theme |
+| Fm7 | 拒错 | 对段落 id 发 `setThemeFmt` 得 `InvalidId`；xlsx 上发 `setThemeOverride` 得 `InvalidField`。未写文件 |
 
 ## 组合与连接线
 

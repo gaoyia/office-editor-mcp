@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "action": "create",
+  "path": "C:\\out\\theme-bg.docx",
+  "format": "docx",
+  "document": {
+    "paragraphs": [
+      { "text": "hello" }
+    ],
+    "theme": {
+      "name": "Office Theme",
+      "colors": { "accent1": "FF0000" },
+      "fonts": { "majorLatin": "Arial" }
+    },
+    "pageBackground": { "color": "EEEEEE" },
+    "pageBorders": {
+      "offsetFrom": "page",
+      "top": { "val": "apples", "sz": 20, "space": 24, "color": "auto" },
+      "left": { "val": "apples", "sz": 20, "space": 24, "color": "auto" },
+      "bottom": { "val": "apples", "sz": 20, "space": 24, "color": "auto" },
+      "right": { "val": "apples", "sz": 20, "space": 24, "color": "auto" }
+    }
+  }
+}

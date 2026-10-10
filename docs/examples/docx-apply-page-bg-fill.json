@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "C:\\data\\note.docx",
+  "ops": [
+    {
+      "op": "setPageBackground",
+      "id": "docx:document",
+      "color": "FF0000",
+      "fill": { "kind": "gradient", "color": "0000FF" }
+    }
+  ]
+}

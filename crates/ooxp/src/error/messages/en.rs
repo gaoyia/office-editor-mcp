@@ -358,7 +358,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
                 "setThemeColors / setThemeFonts id must be master:N".into()
             }
             IdReason::SetThemeNeedsDocument => {
-                "setThemeColors / setThemeFonts id must be docx:document".into()
+                "setThemeColors / setThemeFonts / setThemeFmt / setThemeOverride id must be docx:document".into()
             }
             IdReason::SetHandoutTextNeedsHandout => {
                 "setHandoutText id must be handout".into()
@@ -1499,11 +1499,21 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::InvalidPageBackgroundColor => {
             "color must be a 6-digit RGB hex value, or null".into()
         }
+        ErrorKind::InvalidPageBackgroundFill => {
+            "fill.kind must be gradient or picture; color null cannot include fill; picture requires file".into()
+        }
+        ErrorKind::InvalidThemeFmtIndex => {
+            "index must be 0, 1, or 2 and the fmtScheme list must contain that slot".into()
+        }
+        ErrorKind::InvalidThemeFmtKind => "kind must be solid or grad".into(),
+        ErrorKind::NeedThemeOverrideField => {
+            "setThemeOverride requires a color slot, or enabled: false without color slots".into()
+        }
         ErrorKind::NeedPageBordersField => {
             "setPageBorders requires enabled, offsetFrom, display, zOrder, or at least one side".into()
         }
         ErrorKind::InvalidPageBorderVal => {
-            "val must be nil, none, single, dashed, dotted, double, thick, wave, dashSmallGap, dotDash, or dotDotDash".into()
+            "val must be an ST_Border value such as single or apples".into()
         }
         ErrorKind::InvalidPageBorderOffset => "offsetFrom must be page or text".into(),
         ErrorKind::InvalidPageBorderDisplay => {

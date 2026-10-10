@@ -252,6 +252,7 @@ fn inspect_count_without_list() {
             "props",
             "protection",
             "theme",
+            "themeOverride",
             "fontEmbed",
             "pageBackground",
             "eastAsianSettings"

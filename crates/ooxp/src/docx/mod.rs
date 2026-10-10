@@ -66,6 +66,10 @@ pub const REL_NUMBERING: &str =
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering";
 pub const REL_SETTINGS: &str =
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/settings";
+pub const REL_THEME: &str =
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme";
+pub const REL_THEME_OVERRIDE: &str =
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/themeOverride";
 pub const REL_HEADER: &str =
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/header";
 pub const REL_FOOTER: &str =
@@ -99,6 +103,9 @@ pub const CT_NUMBERING: &str =
     "application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml";
 pub const CT_SETTINGS: &str =
     "application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml";
+pub const CT_THEME: &str = "application/vnd.openxmlformats-officedocument.theme+xml";
+pub const CT_THEME_OVERRIDE: &str =
+    "application/vnd.openxmlformats-officedocument.themeOverride+xml";
 pub const REL_GLOSSARY: &str =
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/glossaryDocument";
 pub const CT_GLOSSARY: &str =

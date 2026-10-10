@@ -299,8 +299,10 @@ docx create 同样生成 Transitional 包，命名空间用 2006 那套。
   - `setProtection` 带 `password` 时 `documentProtection` 另写 `crypt*` 与 `hash` / `salt`
   - `setEastAsianSettings` 还可含 `characterSpacingControl` / `strictFirstAndLastChars` / `noLineBreaksBefore` / `noLineBreaksAfter`
 
-inspect 认主文档 `.rels` 里 Type 以 `/theme` 结尾的部件（Word 16.0 另存常见 `/word/theme/theme1.xml`）。create 不写该部件。
-apply 的 `setThemeColors` / `setThemeFonts` 只改已有 theme，不新建。
+inspect 认主文档 `.rels` 里 Type 以 `/theme` 结尾的部件（Word 16.0 另存常见 `/word/theme/theme1.xml`）。
+也认 Type 以 `/themeOverride` 结尾的部件。create 给了 `document.theme` 时写 theme；省略则不写。
+apply 的 `setThemeColors` / `setThemeFonts` / `setThemeFmt` 只改已有 theme，不新建。
+`setThemeOverride` 缺则新建 `/word/theme/themeOverride1.xml`。
 
 可选但 create 要写：
 
@@ -397,9 +399,13 @@ Document Settings：
 
 `application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml`
 
-Theme（inspect 认，create 不写）：
+Theme（inspect 认；create 给了 `document.theme` 时写）：
 
 `application/vnd.openxmlformats-officedocument.theme+xml`
+
+Theme Override：
+
+`application/vnd.openxmlformats-officedocument.themeOverride+xml`
 
 settings 关系 Type：
 
@@ -408,6 +414,10 @@ settings 关系 Type：
 theme 关系 Type：
 
 `http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme`
+
+themeOverride 关系 Type：
+
+`http://schemas.openxmlformats.org/officeDocument/2006/relationships/themeOverride`
 
 `compatibilityMode` 的 `w:uri` 必须是 `http://schemas.microsoft.com/office/word`。
 

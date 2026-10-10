@@ -323,7 +323,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
                 "setThemeColors / setThemeFonts 的 id 必须是 master:N".into()
             }
             IdReason::SetThemeNeedsDocument => {
-                "setThemeColors / setThemeFonts 的 id 必须是 docx:document".into()
+                "setThemeColors / setThemeFonts / setThemeFmt / setThemeOverride 的 id 必须是 docx:document".into()
             }
             IdReason::SetHandoutTextNeedsHandout => {
                 "setHandoutText 的 id 必须是 handout".into()
@@ -1307,11 +1307,21 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::InvalidPageBackgroundColor => {
             "color 必须是六位 RGB 十六进制，或 null".into()
         }
+        ErrorKind::InvalidPageBackgroundFill => {
+            "fill.kind 只能是 gradient 或 picture；color 为 null 时不能带 fill；picture 必须给 file".into()
+        }
+        ErrorKind::InvalidThemeFmtIndex => {
+            "index 必须是 0、1 或 2，且 fmtScheme 列表里要有这一槽".into()
+        }
+        ErrorKind::InvalidThemeFmtKind => "kind 只能是 solid 或 grad".into(),
+        ErrorKind::NeedThemeOverrideField => {
+            "setThemeOverride 至少要给一个配色槽，或只给 enabled: false".into()
+        }
         ErrorKind::NeedPageBordersField => {
             "setPageBorders 至少要给 enabled、offsetFrom、display、zOrder 或某一边".into()
         }
         ErrorKind::InvalidPageBorderVal => {
-            "val 只能是 nil、none、single、dashed、dotted、double、thick、wave、dashSmallGap、dotDash 或 dotDotDash".into()
+            "val 必须是 ST_Border 取值，例如 single 或 apples".into()
         }
         ErrorKind::InvalidPageBorderOffset => "offsetFrom 只能是 page 或 text".into(),
         ErrorKind::InvalidPageBorderDisplay => {

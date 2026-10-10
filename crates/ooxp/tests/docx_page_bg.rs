@@ -112,12 +112,16 @@ fn inspect_has_page_background_after_font_embed() {
     let tree = inspect(&src);
     assert!(tree["pageBackground"]["color"].is_null());
     assert_eq!(tree["pageBackground"]["display"], false);
+    assert!(tree["pageBackground"]["fill"].is_null());
     assert!(tree["sections"][0]["pageBorders"].is_null());
     let keys = object_keys(&tree);
     let font = keys.iter().position(|k| *k == "fontEmbed").unwrap();
     assert_eq!(keys[font + 1], "pageBackground");
     assert_eq!(keys[font + 2], "eastAsianSettings");
-    assert_eq!(object_keys(&tree["pageBackground"]), ["color", "display"]);
+    assert_eq!(
+        object_keys(&tree["pageBackground"]),
+        ["color", "display", "fill"]
+    );
     let sect_keys = object_keys(&tree["sections"][0]);
     assert_eq!(*sect_keys.last().unwrap(), "pageBorders");
 }
@@ -296,4 +300,70 @@ fn page_bg_ops_not_for_xlsx() {
     .unwrap_err();
     assert_eq!(err_x.code(), ErrorCode::InvalidField);
     assert!(!xout.exists());
+}
+
+#[test]
+fn art_page_borders_and_gradient_fill() {
+    let src = create_docx("remain");
+    let bordered = seq_path("apples", "docx");
+    apply(
+        &src,
+        &bordered,
+        json!([{
+            "op": "setPageBorders",
+            "id": "section:1",
+            "top": { "val": "apples", "sz": 20, "space": 24, "color": "auto" },
+            "left": { "val": "apples", "sz": 20, "space": 24, "color": "auto" },
+            "bottom": { "val": "apples", "sz": 20, "space": 24, "color": "auto" },
+            "right": { "val": "apples", "sz": 20, "space": 24, "color": "auto" }
+        }]),
+    );
+    let tree = inspect(&bordered);
+    assert_eq!(tree["sections"][0]["pageBorders"]["top"]["val"], "apples");
+    let xml = part_text(&bordered, "word/document.xml");
+    assert!(xml.contains(r#"w:val="apples""#));
+
+    let grad = seq_path("grad", "docx");
+    apply(
+        &src,
+        &grad,
+        json!([{
+            "op": "setPageBackground",
+            "id": "docx:document",
+            "color": "FF0000",
+            "fill": { "kind": "gradient", "color": "0000FF" }
+        }]),
+    );
+    let tree = inspect(&grad);
+    assert_eq!(tree["pageBackground"]["color"], "FF0000");
+    assert_eq!(tree["pageBackground"]["fill"]["kind"], "drawing");
+    let xml = part_text(&grad, "word/document.xml");
+    assert!(xml.contains("w:drawing"));
+    assert!(xml.contains("a:gradFill"));
+    assert!(xml.contains("wps:wsp"));
+
+    let created = seq_path("create-bg", "docx");
+    run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "create",
+            "path": created.to_string_lossy(),
+            "format": "docx",
+            "document": {
+                "paragraphs": [{ "text": "hello" }],
+                "pageBackground": { "color": "EEEEEE" },
+                "pageBorders": {
+                    "offsetFrom": "page",
+                    "top": { "val": "apples", "sz": 20, "space": 24, "color": "auto" }
+                }
+            }
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap();
+    let tree = inspect(&created);
+    assert_eq!(tree["pageBackground"]["color"], "EEEEEE");
+    assert_eq!(tree["pageBackground"]["display"], true);
+    assert_eq!(tree["sections"][0]["pageBorders"]["top"]["val"], "apples");
 }

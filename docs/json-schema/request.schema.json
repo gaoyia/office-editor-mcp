@@ -1318,6 +1318,12 @@
                 "$ref": "pptx.schema.json#/$defs/setThemeFontsOp"
               },
               {
+                "$ref": "docx.schema.json#/$defs/setThemeFmtOp"
+              },
+              {
+                "$ref": "docx.schema.json#/$defs/setThemeOverrideOp"
+              },
+              {
                 "$ref": "pptx.schema.json#/$defs/setHandoutTextOp"
               },
               {

@@ -49,6 +49,15 @@
             "$ref": "#/$defs/createWatermark"
           }
         },
+        "theme": {
+          "$ref": "#/$defs/docxThemeCreate"
+        },
+        "pageBackground": {
+          "$ref": "#/$defs/docxPageBackgroundCreate"
+        },
+        "pageBorders": {
+          "$ref": "#/$defs/docxPageBordersCreate"
+        },
         "numberings": {
           "type": "array",
           "items": {
@@ -2394,6 +2403,32 @@
               "type": "null"
             }
           ]
+        },
+        "fill": {
+          "$ref": "#/$defs/pageBackgroundFill"
+        }
+      }
+    },
+    "pageBackgroundFill": {
+      "type": "object",
+      "required": [
+        "kind"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "gradient",
+            "picture"
+          ]
+        },
+        "color": {
+          "type": "string",
+          "pattern": "^[0-9A-Fa-f]{6}$"
+        },
+        "file": {
+          "type": "string",
+          "minLength": 1
         }
       }
     },
@@ -2405,19 +2440,9 @@
       "additionalProperties": false,
       "properties": {
         "val": {
-          "enum": [
-            "nil",
-            "none",
-            "single",
-            "dashed",
-            "dotted",
-            "double",
-            "thick",
-            "wave",
-            "dashSmallGap",
-            "dotDash",
-            "dotDotDash"
-          ]
+          "type": "string",
+          "minLength": 1,
+          "$comment": "ECMA-376 ST_Border，含艺术型如 apples"
         },
         "sz": {
           "type": "integer",
@@ -2509,6 +2534,128 @@
             }
           ]
         }
+      }
+    },
+    "docxThemeCreate": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string" },
+        "colors": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "dk1": { "type": "string" },
+            "lt1": { "type": "string" },
+            "dk2": { "type": "string" },
+            "lt2": { "type": "string" },
+            "accent1": { "type": "string" },
+            "accent2": { "type": "string" },
+            "accent3": { "type": "string" },
+            "accent4": { "type": "string" },
+            "accent5": { "type": "string" },
+            "accent6": { "type": "string" },
+            "hlink": { "type": "string" },
+            "folHlink": { "type": "string" }
+          }
+        },
+        "fonts": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "majorLatin": { "type": "string" },
+            "minorLatin": { "type": "string" },
+            "majorEa": { "type": "string" },
+            "minorEa": { "type": "string" },
+            "majorCs": { "type": "string" },
+            "minorCs": { "type": "string" }
+          }
+        }
+      }
+    },
+    "docxPageBackgroundCreate": {
+      "type": "object",
+      "required": ["color"],
+      "additionalProperties": false,
+      "properties": {
+        "color": {
+          "anyOf": [
+            { "type": "string", "pattern": "^[0-9A-Fa-f]{6}$" },
+            { "type": "null" }
+          ]
+        },
+        "fill": { "$ref": "#/$defs/pageBackgroundFill" }
+      }
+    },
+    "docxPageBordersCreate": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "offsetFrom": { "enum": ["page", "text"] },
+        "display": { "enum": ["allPages", "firstPage", "notFirstPage"] },
+        "zOrder": { "enum": ["front", "back"] },
+        "top": { "anyOf": [{ "$ref": "#/$defs/pageBorderSide" }, { "type": "null" }] },
+        "left": { "anyOf": [{ "$ref": "#/$defs/pageBorderSide" }, { "type": "null" }] },
+        "bottom": { "anyOf": [{ "$ref": "#/$defs/pageBorderSide" }, { "type": "null" }] },
+        "right": { "anyOf": [{ "$ref": "#/$defs/pageBorderSide" }, { "type": "null" }] }
+      }
+    },
+    "setThemeFmtOp": {
+      "type": "object",
+      "required": ["op", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "setThemeFmt" },
+        "id": { "type": "string", "minLength": 1 },
+        "line": {
+          "type": "object",
+          "required": ["index", "w"],
+          "additionalProperties": false,
+          "properties": {
+            "index": { "type": "integer", "minimum": 0, "maximum": 2 },
+            "w": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "fill": {
+          "type": "object",
+          "required": ["index", "kind"],
+          "additionalProperties": false,
+          "properties": {
+            "index": { "type": "integer", "minimum": 0, "maximum": 2 },
+            "kind": { "enum": ["solid", "grad"] }
+          }
+        },
+        "bgFill": {
+          "type": "object",
+          "required": ["index", "kind"],
+          "additionalProperties": false,
+          "properties": {
+            "index": { "type": "integer", "minimum": 0, "maximum": 2 },
+            "kind": { "enum": ["solid", "grad"] }
+          }
+        }
+      }
+    },
+    "setThemeOverrideOp": {
+      "type": "object",
+      "required": ["op", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "setThemeOverride" },
+        "id": { "type": "string", "minLength": 1 },
+        "enabled": { "const": false },
+        "dk1": { "type": "string" },
+        "lt1": { "type": "string" },
+        "dk2": { "type": "string" },
+        "lt2": { "type": "string" },
+        "accent1": { "type": "string" },
+        "accent2": { "type": "string" },
+        "accent3": { "type": "string" },
+        "accent4": { "type": "string" },
+        "accent5": { "type": "string" },
+        "accent6": { "type": "string" },
+        "hlink": { "type": "string" },
+        "folHlink": { "type": "string" }
       }
     },
     "mathNode": {

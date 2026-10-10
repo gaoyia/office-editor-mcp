@@ -236,6 +236,9 @@ pub fn create(document: &Value) -> Result<Vec<u8>, Error> {
                 | "watermarks"
                 | "numberings"
                 | "tocs"
+                | "theme"
+                | "pageBackground"
+                | "pageBorders"
         ) {
             return Err(Error::with_path(
                 ErrorKind::UnknownField { field: k.clone() },
@@ -407,6 +410,10 @@ pub fn create(document: &Value) -> Result<Vec<u8>, Error> {
     pkg.set("/docProps/app.xml", app_xml().into_bytes())?;
     crate::props::apply_create(&mut pkg, obj.get("props"), "document.props")?;
 
+    if let Some(v) = obj.get("theme") {
+        super::theme::write_create(&mut pkg, &super::theme::parse_create(v)?)?;
+    }
+
     attach_pictures(&mut pkg, "/word/document.xml", &paras)?;
     attach_smartarts(&mut pkg, "/word/document.xml", &paras)?;
     for (i, item) in header_items.iter().enumerate() {
@@ -429,6 +436,13 @@ pub fn create(document: &Value) -> Result<Vec<u8>, Error> {
         &numberings,
         &tocs,
     )?;
+    let bytes = if obj.get("pageBackground").is_some() || obj.get("pageBorders").is_some() {
+        let mut pkg = crate::opc::Package::open_bytes(bytes)?;
+        super::page_bg::apply_create(&mut pkg, obj.get("pageBackground"), obj.get("pageBorders"))?;
+        pkg.save_to_vec()?
+    } else {
+        bytes
+    };
     if obj.get("protection").is_some() || obj.get("watermarks").is_some() {
         let mut pkg = crate::opc::Package::open_bytes(bytes)?;
         super::protect::apply_create(&mut pkg, obj.get("protection"))?;

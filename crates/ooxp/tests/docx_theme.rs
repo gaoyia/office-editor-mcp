@@ -149,9 +149,11 @@ fn create_theme_is_null_after_protection() {
     let path = create_docx("empty");
     let tree = inspect(&path);
     assert!(tree["theme"].is_null());
+    assert!(tree["themeOverride"].is_null());
     let keys = object_keys(&tree);
     let prot = keys.iter().position(|k| *k == "protection").unwrap();
     assert_eq!(keys[prot + 1], "theme");
+    assert_eq!(keys[prot + 2], "themeOverride");
 }
 
 #[test]
@@ -159,10 +161,19 @@ fn inspect_theme_slots_and_order() {
     let path = inject_theme(&create_docx("inspect"));
     let tree = inspect(&path);
     let theme = &tree["theme"];
-    assert_eq!(object_keys(theme), ["name", "colors", "fonts"]);
+    assert_eq!(object_keys(theme), ["name", "colors", "fonts", "fmt"]);
     assert_eq!(theme["name"], "Office Theme");
     assert_eq!(object_keys(&theme["colors"]), COLOR_KEYS);
     assert_eq!(object_keys(&theme["fonts"]), FONT_KEYS);
+    assert_eq!(
+        object_keys(&theme["fmt"]),
+        ["name", "fills", "lines", "effects", "bgFills"]
+    );
+    assert_eq!(theme["fmt"]["name"], "Office");
+    assert_eq!(theme["fmt"]["fills"][0]["kind"], "solid");
+    assert_eq!(theme["fmt"]["lines"][0]["w"], 9525);
+    assert_eq!(theme["fmt"]["effects"][0]["kind"], "none");
+    assert!(tree["themeOverride"].is_null());
     assert_eq!(theme["colors"]["accent1"], "4F81BD");
     assert_eq!(theme["colors"]["dk1"], "000000");
     assert_eq!(theme["fonts"]["majorLatin"], "Calibri Light");
@@ -259,6 +270,148 @@ fn xlsx_rejects_theme_ops() {
         &path,
         &out,
         json!([{ "op": "setThemeColors", "id": "xlsx:workbook", "accent1": "FF0000" }]),
+    )
+    .unwrap_err();
+    assert_eq!(err_code(err), ErrorCode::InvalidField);
+}
+
+#[test]
+fn set_theme_fmt_line_width() {
+    let src = inject_theme(&create_docx("fmt-src"));
+    let out = tmp("fmt");
+    apply(
+        &src,
+        &out,
+        json!([{
+            "op": "setThemeFmt",
+            "id": "docx:document",
+            "line": { "index": 0, "w": 38100 },
+            "fill": { "index": 0, "kind": "grad" }
+        }]),
+    )
+    .unwrap();
+    let tree = inspect(&out);
+    assert_eq!(tree["theme"]["fmt"]["lines"][0]["w"], 38100);
+    assert_eq!(tree["theme"]["fmt"]["fills"][0]["kind"], "grad");
+    let xml = part(&out, "word/theme/theme1.xml");
+    assert!(xml.contains(r#"w="38100""#));
+    assert!(xml.contains("gradFill"));
+}
+
+#[test]
+fn set_theme_override_and_clear() {
+    let src = inject_theme(&create_docx("ov-src"));
+    let out = tmp("ov");
+    apply(
+        &src,
+        &out,
+        json!([{ "op": "setThemeOverride", "id": "docx:document", "accent1": "FF0000" }]),
+    )
+    .unwrap();
+    let tree = inspect(&out);
+    assert_eq!(tree["themeOverride"]["colors"]["accent1"], "FF0000");
+    assert_eq!(tree["themeOverride"]["colors"]["accent2"], "C0504D");
+    assert_eq!(
+        object_keys(&tree["themeOverride"]),
+        ["name", "colors", "fonts", "fmt"]
+    );
+    let xml = part(&out, "word/theme/themeOverride1.xml");
+    assert!(xml.contains("themeOverride"));
+    assert!(xml.contains(r#"<a:accent1><a:srgbClr val="FF0000"/>"#));
+    let cleared = tmp("ov-off");
+    apply(
+        &out,
+        &cleared,
+        json!([{ "op": "setThemeOverride", "id": "docx:document", "enabled": false }]),
+    )
+    .unwrap();
+    let tree = inspect(&cleared);
+    assert!(tree["themeOverride"].is_null());
+}
+
+#[test]
+fn create_writes_theme_and_keeps_default_without() {
+    let with_theme = tmp("create-theme");
+    run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "create",
+            "path": with_theme.to_string_lossy(),
+            "format": "docx",
+            "document": {
+                "paragraphs": [{ "text": "hello" }],
+                "theme": {
+                    "name": "Office Theme",
+                    "colors": { "accent1": "FF0000" },
+                    "fonts": { "majorLatin": "Arial" }
+                }
+            }
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap();
+    let tree = inspect(&with_theme);
+    assert_eq!(tree["theme"]["name"], "Office Theme");
+    assert_eq!(tree["theme"]["colors"]["accent1"], "FF0000");
+    assert_eq!(tree["theme"]["fonts"]["majorLatin"], "Arial");
+    assert_eq!(tree["theme"]["fmt"]["name"], "Office");
+    assert_eq!(tree["theme"]["fmt"]["fills"].as_array().unwrap().len(), 3);
+    let bare = create_docx("still-null");
+    assert!(inspect(&bare)["theme"].is_null());
+}
+
+#[test]
+fn set_theme_fmt_needs_theme_and_document_id() {
+    let src = create_docx("fmt-missing");
+    let out = tmp("fmt-missing-out");
+    let err = apply(
+        &src,
+        &out,
+        json!([{ "op": "setThemeFmt", "id": "docx:document", "line": { "index": 0, "w": 1 } }]),
+    )
+    .unwrap_err();
+    assert_eq!(err_code(err), ErrorCode::IdNotFound);
+    let themed = inject_theme(&create_docx("fmt-bad-id"));
+    let err = apply(
+        &themed,
+        &out,
+        json!([{ "op": "setThemeFmt", "id": "para:index:1", "line": { "index": 0, "w": 1 } }]),
+    )
+    .unwrap_err();
+    assert_eq!(err_code(err), ErrorCode::InvalidId);
+}
+
+#[test]
+fn xlsx_rejects_theme_fmt_and_override() {
+    let path = tmp_dir().join(format!(
+        "xlsx-reject-fmt-{}.xlsx",
+        SEQ.fetch_add(1, Ordering::Relaxed)
+    ));
+    run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "create",
+            "path": path.to_string_lossy(),
+            "format": "xlsx",
+            "workbook": { "sheets": [{ "name": "Sheet1", "cells": [{ "ref": "A1", "value": 1 }] }] }
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap();
+    let out = tmp("xlsx-fmt-out");
+    let err = apply(
+        &path,
+        &out,
+        json!([{ "op": "setThemeOverride", "id": "xlsx:workbook", "accent1": "FF0000" }]),
+    )
+    .unwrap_err();
+    assert_eq!(err_code(err), ErrorCode::InvalidField);
+    let err = apply(
+        &path,
+        &out,
+        json!([{ "op": "setThemeFmt", "id": "xlsx:workbook", "line": { "index": 0, "w": 1 } }]),
     )
     .unwrap_err();
     assert_eq!(err_code(err), ErrorCode::InvalidField);

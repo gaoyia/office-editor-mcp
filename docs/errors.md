@@ -261,7 +261,7 @@
 - 对页眉页脚、框内、注内、批注内、表格单元格内的段落或 `section:{n}` 发该 op 报 `InvalidId`
 - 找不到段落时报 `IdNotFound`
 - 不认识的分节 `type` / `sectionType`，或 create 时最后一段带 `sectionType`，报 `InvalidField`
-- `setEvenAndOddHeaders` / `setMirrorMargins` / `setGutterAtTop` / `setPageBackground` 的 id 不是 `docx:document` 报 `InvalidId`
+- `setEvenAndOddHeaders` / `setMirrorMargins` / `setGutterAtTop` / `setPageBackground` / `setThemeFmt` / `setThemeOverride` 的 id 不是 `docx:document` 报 `InvalidId`
 - docx 的 `setProtection` 的 id 不是 `docx:document` 报 `InvalidId`
 - xlsx 的 `setProtection` 的 id 不是 `sheet:{name}` 也不是 `xlsx:workbook` 报 `InvalidId`
 - `insertProtectedRange` 的 id 不是 `sheet:{name}` 报 `InvalidId`
@@ -452,7 +452,7 @@
 - `insertMaster` 的 id 必须是 `pptx:presentation`
 - `deleteMaster` 的 id 必须是 `master:{n}`
 - `setSlideSize` 的 id 必须是 `pptx:presentation`
-- `setThemeColors` / `setThemeFonts` 的 id：pptx 必须是 `master:{n}`，docx 必须是 `docx:document`
+- `setThemeColors` / `setThemeFonts` / `setThemeFmt` / `setThemeOverride` 的 id：pptx 的前两条必须是 `master:{n}`，docx 必须是 `docx:document`
 - 找不到该母版 / 版式 / 占位符 / theme 部件报 `IdNotFound`
 - 下列情况报 `InvalidField`
   - 删掉最后一页
@@ -468,7 +468,7 @@
   - `insertPlaceholder` 缺 `type`，或 `type` 不在白名单
   - 该母版只剩一份版式、最后一份母版、或仍有页占用时 `deleteLayout` / `deleteMaster`
   - `setSlideSize` 缺 `cx` / `cy`、越界、或 `type` 不在白名单
-  - `setThemeColors` / `setThemeFonts` 一个可写字段都不给、非法十六进制、或 `majorLatin` / `minorLatin` 空串
+  - `setThemeColors` / `setThemeFonts` / `setThemeFmt` / `setThemeOverride` 一个可写字段都不给、非法十六进制、`majorLatin` / `minorLatin` 空串、或 `setThemeFmt` 的 `index` / `kind` / `w` 非法
 - `setHandoutText` 的 `id` 必须是 `handout`
 - `header` / `footer` / `date` / `sldNum` 一个都不给报 `InvalidField`
 - docx / xlsx 上发这些幻灯片管理 op、母版写入 op、主题与尺寸 op、`insertAnim` / `setAnim` / `deleteAnim` / `moveAnim`、`setHandoutText` 以及 `setShowPr` 报 `InvalidField`
@@ -604,6 +604,8 @@
     - `setRtlGutter`
     - `setPageBackground`
     - `setPageBorders`
+    - `setThemeFmt`
+    - `setThemeOverride`
     - `setMirrorMargins`
     - `setGutterAtTop`
     - `setHeaderFooterLink`

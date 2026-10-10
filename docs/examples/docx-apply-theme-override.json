@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "C:\\data\\note.docx",
+  "ops": [
+    {
+      "op": "setThemeOverride",
+      "id": "docx:document",
+      "accent1": "FF0000"
+    },
+    {
+      "op": "setThemeOverride",
+      "id": "docx:document",
+      "enabled": false
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "C:\\data\\note.docx",
+  "ops": [
+    {
+      "op": "setThemeFmt",
+      "id": "docx:document",
+      "line": { "index": 0, "w": 38100 },
+      "fill": { "index": 0, "kind": "solid" }
+    }
+  ]
+}

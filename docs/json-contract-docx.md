@@ -21,6 +21,8 @@
 文本框是独立节点：框本身、框内段落与框内图按下面规则进树，并可 apply。页眉、页脚按下面规则进树，可按 id 改字；
 节上的页眉页脚距边界、页面边距、纸张、分栏、垂直对齐、行号、文档网格、装订线侧、页面边框，以及是否链接到前一节，都可以读写。
 整篇的镜像边距与装订线在上，写在 `settings.xml`。整篇页面背景色写在主文档 `w:background`，是否显示看 `settings.xml` 的 `w:displayBackgroundShape`。
+页面填充可以是 VML 渐变 / 图片，也可以是 `w:drawing` 里的 DrawingML。
+节上页面边框的 `val` 认 `ST_Border` 全套，含艺术型（如 `apples`）。
 页眉、页脚、正文、注和批注里的 DrawingML 图片可查、换、插、删，并可改尺寸与绕排。正文与页眉页脚里的嵌入对象（OLE / 包）可查、插、删，并可按 id 导出嵌入部件；框内、注内、批注内的 OLE 本期不编。
 正文与页眉页脚里的 `w:tbl` 可查、插、删，并可插删行与列、合并与拆分单元格。
 也可改表格样式、`tblLook`、浮动定位、表级格边距，以及单元格底纹、格边距与斜线。
@@ -35,7 +37,7 @@ apply 可用 `insertHeaderFooter` 为某节某类型新建页眉或页脚部件�
 用 `deleteSource` / `deleteCitation` / `deleteBibliography` 删掉，
 可用 `insertDocPart` 插入构建基块、用 `insertDocPartContent` 把基块复制进正文、用 `deleteDocPart` 删掉，
 可用 `insertEmbeddedFont` / `deleteEmbeddedFont` / `setFontEmbed` 读写嵌入字体，
-可用 `setPageBackground` 写整篇页面背景色、用 `setPageBorders` 写节上页面边框，可用 `insertMath` / `setMath` / `deleteMath` 插改删 OMML 公式，
+可用 `setPageBackground` 写整篇页面背景色或 DrawingML / 图片填充、用 `setPageBorders` 写节上页面边框（含艺术型），可用 `insertMath` / `setMath` / `deleteMath` 插改删 OMML 公式，
 可用 `insertContentControl` / `setContentControl` / `deleteContentControl` 插改删内容控件，
 可用 `setParaFormat` / `setRunFormat` 写禁则、强调点与压缩排版，可用 `insertRuby` / `setRuby` / `deleteRuby` 插改删拼音，
 可用 `setEastAsianSettings` 写整篇压缩与自定义禁则字符。
@@ -48,9 +50,9 @@ Word 写出的连接线可进 inspect，并可用 `insertConnector` / `deleteCon
 也可按墨迹 id `exportMedia`。不要和批注里的 `kind: ink` 混。
 正文与页眉页脚里的 3D 模型可进 inspect，并可用 `insertModel3d` / `replaceModel3d` / `deleteModel3d` 增删换，
 也可按 3D id `exportMedia`。不是图，不进 `pictures`。注内、批注内本期不插。
-组合本身不进树。docx 可用 `setThemeColors` / `setThemeFonts` 改主文档 theme 部件的配色与字体方案。
+组合本身不进树。docx 可用 `setThemeColors` / `setThemeFonts` / `setThemeFmt` 改主文档 theme 的配色、字体与 `fmtScheme` 常用槽，可用 `setThemeOverride` 读写主文档 `themeOverride` 部件。
 三种格式都可用 `setProps` / `setCustomProp` / `deleteCustomProp` 改文件属性。
-`create` 可在正文和页眉页脚上写 DrawingML 图，也可写文本框、SmartArt、图表、墨迹画布、3D 模型、脚注、尾注、批注与回复、超链接、书签、域、公式、内容控件；根上可写编号定义与目录块；
+`create` 可在正文和页眉页脚上写 DrawingML 图，也可写文本框、SmartArt、图表、墨迹画布、3D 模型、脚注、尾注、批注与回复、超链接、书签、域、公式、内容控件；根上可写编号定义、目录块、theme 与页面背景 / 页面边框；
 页眉页脚允许 `default` / `even` / `first`；不写修订痕迹。
 字段见下文 create。嵌入图表不是 `pic:pic`：根上始终有 `chartCount`；给了 `scope.charts` 才列出名单，并可 apply。
 SmartArt 不是 `pic:pic`：根上始终有 `smartArtCount`；给了 `scope.smartArt` 才列出名单，并可 apply。
@@ -405,7 +407,7 @@ run 上的 `style` 只读自己的 `w:rStyle/@w:val`。框内、注内、批注�
 `insertBibliography` 的 `id` 必须是主文档 `w:body` 的直接子段落 id 或 `docx:document`。`deleteBibliography` 的 `id` 必须是 `biblio:{n}`。
 `insertDocPart` 的 `id` 必须是 `docx:document`。`deleteDocPart` 的 `id` 必须是 `docPart:{n}`。
 `insertDocPartContent` 的 `id` 必须是主文档 `w:body` 的直接子段落 id 或 `docx:document`。
-`insertEmbeddedFont` / `setFontEmbed` / `setPageBackground` 的 `id` 必须是 `docx:document`。
+`insertEmbeddedFont` / `setFontEmbed` / `setPageBackground` / `setThemeFmt` / `setThemeOverride` 的 `id` 必须是 `docx:document`。
 `deleteEmbeddedFont` 的 `id` 必须是 `font:{n}`。`setPageBorders` 的 `id` 必须是 `section:{n}`。
 `insertMath` 的 `id` 必须是段落 id（正文或页眉页脚）或 `docx:document`。`setMath` / `deleteMath` 的 `id` 必须是公式 id。
 `insertRuby` 的 `id` 必须是段落 id（正文或页眉页脚）或 `docx:document`。`setRuby` / `deleteRuby` 的 `id` 必须是拼音 id。
@@ -985,6 +987,7 @@ xlsx / pptx 的 `scope.tables` 不是同一件事：xlsx 仍拒绝；pptx 展开
     "readOnlyRecommended": false
   },
   "theme": null,
+  "themeOverride": null,
   "fontEmbed": {
     "trueType": false,
     "systemFonts": false,
@@ -992,7 +995,8 @@ xlsx / pptx 的 `scope.tables` 不是同一件事：xlsx 仍拒绝；pptx 展开
   },
   "pageBackground": {
     "color": null,
-    "display": false
+    "display": false,
+    "fill": null
   },
   "eastAsianSettings": {
     "characterSpacingControl": null,
@@ -1041,7 +1045,7 @@ xlsx / pptx 的 `scope.tables` 不是同一件事：xlsx 仍拒绝；pptx 展开
   `chartCount`、`smartArtCount`、`oleObjectCount`、`model3dCount`、`watermarkCount`、`tableCount`、`revisionCount`、`hyperlinkCount`、
   `bookmarkCount`、`fieldCount`、`tocCount`、`captionCount`、`crossRefCount`、`indexCount`、`indexEntryCount`、`sourceCount`、
   `citationCount`、`bibliographyCount`、`docPartCount`、`mathCount`、`contentControlCount`、`numberingCount`、`styleCount`、
-  `embeddedFontCount`、`outline`、`headers`、`footers`、`sections`、`mirrorMargins`、`gutterAtTop`、`props`、`protection`、`theme`、
+  `embeddedFontCount`、`outline`、`headers`、`footers`、`sections`、`mirrorMargins`、`gutterAtTop`、`props`、`protection`、`theme`、`themeOverride`、
   `fontEmbed`、`pageBackground`，
   有注名单时再跟 `footnotes`、`endnotes`、`noteSeparators`，有批注名单时再跟 `comments`，有图表名单时再跟 `charts`，有 SmartArt 名单时再跟 `smartArts`，
   有 OLE 名单时再跟 `oleObjects`，有水印名单时再跟 `watermarks`，有表名单时再跟 `tables`，有修订名单时再跟 `revisions`，有超链接名单时再跟 `hyperlinks`，
@@ -1049,9 +1053,9 @@ xlsx / pptx 的 `scope.tables` 不是同一件事：xlsx 仍拒绝；pptx 展开
   有索引项名单时再跟 `indexEntries`，有书目源名单时再跟 `sources`，有引文名单时再跟 `citations`，有书目块名单时再跟 `bibliographies`，有构建基块名单时再跟 `docParts`，
   有嵌入字体名单时再跟 `embeddedFonts`，有公式名单时再跟 `maths`，有内容控件名单时再跟 `contentControls`，有编号名单时再跟 `numberings`，有样式名单时再跟 `styles`，
   有正文切片时再跟 `from`、`truncated`、`paragraphs`。
-  `props` 始终出现，规则见 [json-contract.md](json-contract.md#文档属性三格式共用)。`protection` 始终出现，规则见下文「文档保护」。`theme` 始终出现，规则见下文「主题」。
+  `props` 始终出现，规则见 [json-contract.md](json-contract.md#文档属性三格式共用)。`protection` 始终出现，规则见下文「文档保护」。`theme` 与 `themeOverride` 始终出现，规则见下文「主题」。
   xlsx / pptx 根上不要带 `protection`，也不要带 `watermarkCount` / `watermarks`，
-  也不要带 `embeddedFontCount` / `fontEmbed` / `embeddedFonts`，也不要带 `pageBackground`。
+  也不要带 `embeddedFontCount` / `fontEmbed` / `embeddedFonts`，也不要带 `pageBackground`，也不要带 `themeOverride`。
   pptx 的 theme 挂在 `masters[].theme`。xlsx 根上带 `workbookProtection`，见 [xlsx 响应](json-contract-xlsx.md#响应)。
 - `paraCount` 是主文档里 `w:p` 的总数，含表格单元格里的段落，不含文本框里的段落，始终出现。
 - 文档根上的 `pictureCount` 始终出现，只计主文档里被收入的 DrawingML 图片个数（判定见上文 docx 图 id 那节），不含页眉页脚，也不含框内图、注内图、批注内图。根上不挂正文 `pictures`。
@@ -1390,11 +1394,16 @@ xlsx / pptx 的 `scope.tables` 不是同一件事：xlsx 仍拒绝；pptx 展开
   三者都是布尔，分别对应 `settings.xml` 的 `w:embedTrueTypeFonts` / `w:embedSystemFonts` / `w:saveSubsetFonts`。
   没有对应元素为 `false`；有元素且省略 `val`、或 `val` 为 `1` / `true` / `on` 为 `true`。没有 settings 部件则三者都是 `false`。页眉页脚容器不出现 `fontEmbed`。
   xlsx / pptx 根上不要带 `fontEmbed`。
-- 文档根上的 `pageBackground` 始终出现，对象字段顺序：`color`、`display`。
+- 文档根上的 `pageBackground` 始终出现，对象字段顺序：`color`、`display`、`fill`。
   `color` 取主文档根上 `w:background/@w:color` 原文（ECMA-376 §17.2.1），没有 `w:background` 或缺该属性则为 `null`。
-  本期只认 `@w:color`，不读 `themeColor`，也不把 `w:drawing` 渐变 / 图片背景摊进树。
+  不读 `themeColor`，不算页面上实际画出的像素。
   `display` 对应 `settings.xml` 的 `w:displayBackgroundShape`：有元素且 OnOff 为开为 `true`，否则为 `false`。没有 settings 则为 `false`。
-  页眉页脚容器不出现 `pageBackground`。xlsx / pptx 根上不要带 `pageBackground`。不实现排版引擎，不算页面上实际画出的像素。create 本期不写页面背景。
+  `fill` 没有 `v:background` 也没有 `w:drawing` 时为 `null`。有则对象只有 `kind`：
+  - `w:drawing` 为 `"drawing"`
+  - 否则 VML `v:fill/@type` 为 `gradient` 时为 `"gradient"`
+  - VML 图片填（`frame` / `tile` / 带 `r:id`）为 `"picture"`
+  - 其余 VML 为 `"gradient"`
+  页眉页脚容器不出现 `pageBackground`。xlsx / pptx 根上不要带 `pageBackground`。create 给了 `document.pageBackground` 时按 `setPageBackground` 写入。
 - 文档根上的 `eastAsianSettings` 始终出现，对象字段顺序：`characterSpacingControl`、`strictFirstAndLastChars`、`noLineBreaksBefore`、`noLineBreaksAfter`。
   `characterSpacingControl` 取 `settings.xml` 的 `w:characterSpacingControl/@w:val`（§17.15.1.18），没有该元素或缺 `val` 则为 `null`。
   `strictFirstAndLastChars` 取 `w:strictFirstAndLastChars`（§17.15.1.82）：没有元素为 `null`；有且 OnOff 为开为 `true`，为关为 `false`。
@@ -1405,9 +1414,9 @@ xlsx / pptx 的 `scope.tables` 不是同一件事：xlsx 仍拒绝；pptx 展开
   前三项取对应属性原文，缺则为 `null`。四边取 `w:top` / `w:left` / `w:bottom` / `w:right`，没有该子元素为 `null`。
   每边对象字段顺序：`val`、`sz`、`space`、`color`。`val` 取 `@w:val`，缺则为 `""`。
   `sz` 为八分之一磅（`ST_EighthPointMeasure`），能解析成非负整数则写整数，否则为 `null`。`space` 为单位磅的非负整数，缺或解析失败为 `null`。
-  `color` 取 `@w:color` 原文，缺则为 `null`。本期不读 `art` 艺术型边框，
-  也不把 `bordersDoNotSurroundHeader` / `bordersDoNotSurroundFooter` / `alignBordersAndEdges` 单开到树上。
-  xlsx / pptx 节上不要带 `pageBorders`。create 本期不写页面边框。
+  `color` 取 `@w:color` 原文，缺则为 `null`。`val` 认 ECMA-376 `ST_Border` 全套，含艺术型（Word 16.0 把苹果边框写成 `w:val="apples"`，没有独立 `w:art`）。
+  不把 `bordersDoNotSurroundHeader` / `bordersDoNotSurroundFooter` / `alignBordersAndEdges` 单开到树上。
+  xlsx / pptx 节上不要带 `pageBorders`。create 给了 `document.pageBorders` 时写入末节 `sectPr`。
 - `scope.maths` 为 `true` 时，根上带 `maths`（正文），每个页眉、页脚容器带 `maths`。没有公式时为空数组。按该故事里顶层 `m:oMath` 的文档顺序。
   每条字段顺序：`id`、`index`、`kind`、`host`、`text`、`expr`。`id` 是 `math:{n}` 或 `{容器}/math:{n}`。`kind` 为 `inline` 或 `display`。
   `host` 是所在段落 id；不在任何 `w:p` 里则为 `null`。`text` 为该 `oMath` 子孙里所有 `t`（即 `m:t`）按文档顺序拼接，不做 UnicodeMath 全量互转。
@@ -1540,9 +1549,20 @@ pptx 根上用 `modifyProtection`，不要带 `protection`。
 
 docx 根上始终带 `theme`，不要另给 scope 键。来源是主文档 `.rels` 里 Type 以 `/theme` 结尾的部件（Word 16.0 另存常见 `/word/theme/theme1.xml`，
 ECMA-376 §14.2.7 / DrawingML `a:theme`）。
-没有该关系或部件不在包内时为 `null`，不报错。xlsx / pptx 根上不要带此对象。pptx 的 theme 见 [pptx 响应](json-contract-pptx.md#响应) 的 `masters[].theme`。create 本期不写 theme 部件。
+没有该关系或部件不在包内时为 `null`，不报错。xlsx / pptx 根上不要带此对象。pptx 的 theme 见 [pptx 响应](json-contract-pptx.md#响应) 的 `masters[].theme`。create 给了 `document.theme` 时写 theme 部件；省略则仍不写。
 
-有部件时字段顺序：`name`、`colors`、`fonts`。规则与 pptx 母版 `theme` 相同：不算 `fmtScheme`，不把段落 / run 上的 `themeColor` 展开成 RGB。不读 `themeOverride`。
+有部件时字段顺序：`name`、`colors`、`fonts`、`fmt`。配色与字体规则与 pptx 母版 `theme` 相同，不把段落 / run 上的 `themeColor` 展开成 RGB。pptx 母版 `theme` 仍不算 `fmtScheme`。
+
+`fmt` 取 `a:fmtScheme`。没有该元素时四项都是空数组，`name` 为 `null`。有则字段顺序：`name`、`fills`、`lines`、`effects`、`bgFills`。
+`name` 取 `@name`，缺则为 `null`。四个数组按 `fillStyleLst` / `lnStyleLst` / `effectStyleLst` / `bgFillStyleLst` 的直接子元素顺序。
+`fills[]` / `bgFills[]` 对象只有 `kind`：`solidFill` 为 `solid`，`gradFill` 为 `grad`，`blipFill` 为 `blip`，`noFill` 为 `none`，`pattFill` 为 `patt`，其余为其本地名。
+`lines[]` 对象只有 `w`：能解析成非负整数则写整数（EMU），否则为 `null`。
+`effects[]` 对象只有 `kind`：`effectLst` 为空或没有子元素为 `none`，否则取第一个效果的本地名（如 `outerShdw`）。
+不展开 `phClr`、渐变停点或效果参数。
+
+根上始终有 `themeOverride`，放在 `theme` 之后。来源是主文档 `.rels` 里 Type 以 `/themeOverride` 结尾的部件（ECMA-376 §14.2.8 / DrawingML `a:themeOverride`）。
+没有该关系或部件不在包内时为 `null`。有则字段顺序与 `theme` 相同；配色 / 字体 / `fmt` 取根下的 `clrScheme` / `fontScheme` / `fmtScheme`，不经 `themeElements`。
+Word 16.0 另存通常不写该部件；自行写入后 Word 仍能打开。xlsx / pptx 根上不要带此对象。
 
 `colors` 字段顺序：`name`、`dk1`、`lt1`、`dk2`、`lt2`、`accent1`、`accent2`、`accent3`、`accent4`、`accent5`、`accent6`、`hlink`、`folHlink`。
 `colors.name` 取 `a:clrScheme/@name`，没有则为 `null`。每个槽位：有 `a:srgbClr/@val` 取其原文；否则有 `a:sysClr/@lastClr` 取该原文；再没有则为 `null`。
@@ -1600,6 +1620,7 @@ ECMA-376 §14.2.7 / DrawingML `a:theme`）。
 带 SVG 图的示例见 `docs/examples/docx-create-svg.json`。
 带墨迹画布的示例见 `docs/examples/docx-create-ink.json`。
 带 3D 模型的示例见 `docs/examples/docx-create-model3d.json`。
+带 theme 与页面背景的示例见 `docs/examples/docx-create-theme-bg.json`。
 
 - **`path`**
   - 输出路径
@@ -1609,6 +1630,17 @@ ECMA-376 §14.2.7 / DrawingML `a:theme`）。
   - 段落列表
   - 可空
   - 空则生成一个空的 `w:p`，否则 Word 可能打不开
+- **`document.theme`**
+  - 可选对象
+  - 字段只认 `name`、`colors`、`fonts`
+  - 出现则写 `/word/theme/theme1.xml`；`fmtScheme` 用库内默认矩阵，不要在 JSON 里给 `fmt`
+  - `colors` / `fonts` 槽位与 `setThemeColors` / `setThemeFonts` 相同，省略的槽用 Office 默认
+- **`document.pageBackground`**
+  - 可选对象
+  - 字段与 `setPageBackground` 相同（`color` 必填，`fill` 可选）
+- **`document.pageBorders`**
+  - 可选对象
+  - 字段与 `setPageBorders` 相同（不要 `id` / `enabled`），写入末节 `sectPr`
 - **`paragraphs[].text`**
   - 可见文本，可空字符串
   - 省略当作 `""`
@@ -1905,13 +1937,16 @@ create 写出 Transitional 最小包，见 [opc.md](opc.md)。
 给了 `document.numberings` 时按 `insertNumbering` 写 `/word/numbering.xml`，再按 `paragraphs[].num` 发 `setParaNumbering`。
 给了 `document.tocs` 时按 `insertToc` 在正文插入目录块。
 同一段上先写骨架里的文字 / 图 / 框 / SmartArt，再图表，再 OLE，再墨迹画布，再 3D 模型，再脚注，再尾注，再批注，再该条批注的回复，再书签，再超链接，再域，再公式，再内容控件，再绑编号。全部故事写完后再写 `tocs`。
-`numberings` 在任何段落绑定之前写入。不写修订痕迹。不写题注、交叉引用、索引、参考文献、构建基块、嵌入字体、theme、页面背景、页面边框、连接线或无框形状。
+`numberings` 在任何段落绑定之前写入。不写修订痕迹。不写题注、交叉引用、索引、参考文献、构建基块、嵌入字体、连接线或无框形状。
 也不写批注的回复再回复。create 不写 `styles[]`。
 不写表上的 `tblLook` / `tblpPr` / `tblCellMar`，不写格上的底纹、`tcMar` 与斜线。
 给了 `document.props` 时按 `setProps` / `setCustomProp` 同一套规则写 core / app / custom；
 省略则仍写空的 `dc:title` 与 `dc:creator` 为 `ooxp`，不写 custom 部件。
 给了 `document.protection` 时按 `setProtection` 同一套规则写 `settings.xml`，窗体保护还可写各节 `w:formProt`。
-给了 `document.watermarks` 时按 `insertWatermark` 同一套规则写入页眉。不写 theme 部件。默认页眉页脚带框不在本期 create。
+给了 `document.watermarks` 时按 `insertWatermark` 同一套规则写入页眉。
+给了 `document.theme` 时写 `/word/theme/theme1.xml` 与主文档 theme 关系；省略则不写 theme。
+给了 `document.pageBackground` 时按 `setPageBackground` 写入。给了 `document.pageBorders` 时按 `setPageBorders` 写入末节。
+默认页眉页脚带框不在本期 create。
 给了 `tables` 时写出带单线边框的 `w:tbl`，每列 `gridCol` 宽 1440 twip，每格一段，带新的 `w14:paraId`。不写 `tblStyle`。不算列宽。框内、表内、注内本期 create 不写图表或注。表格外观与自定义样式定义见待做 52。
 
 
@@ -3188,11 +3223,17 @@ id 不是 `font:{n}` 报 `InvalidId`。xlsx / pptx 上发此 op 报 `InvalidFiel
   - 字符串写入主文档 `w:background/@w:color`（写出大写），并在 `settings.xml` 写入空元素 `<w:displayBackgroundShape/>`
   - `null` 删掉 `w:background` 与 `displayBackgroundShape`
 
-缺 `color`、不是字符串也不是 `null`、或非空却不是六位十六进制，报 `InvalidField`。不写 `themeColor`，不写 `w:drawing` 渐变 / 图片背景。
+缺 `color`、不是字符串也不是 `null`、或非空却不是六位十六进制，报 `InvalidField`。不写 `themeColor`。
+可选 `fill`：省略则只改 `@w:color`，并删掉已有 `v:background` 与 `w:drawing`。
+`fill` 必须是对象，字段只认 `kind`、`color`、`file`。`kind` 必填，只能是 `gradient` 或 `picture`。
+`kind` 为 `gradient`：写入 `w:drawing` / `wp:anchor` / `wps:wsp` 矩形，`a:gradFill` 两停点为 `color`（第一停）与 `fill.color`（第二停，省略为 `FFFFFF`）。
+`kind` 为 `picture`：必须给 `file`（本地路径），写入 VML `v:background` / `v:fill`（`type="frame"`）与主文档 image 关系。
+`color` 为 `null` 时不能带 `fill`，并删掉 `w:background`、填充与 `displayBackgroundShape`。
+出现 `art` 或其它未知字段报 `UnknownField`。
 不新建 footnotes / theme / webSettings / fontTable。没有 settings 且要写成显示时新建 `/word/settings.xml` 与主文档 settings 关系。
-id 不是 `docx:document` 报 `InvalidId`。xlsx / pptx 上发此 op 报 `InvalidField`。create 本期不写页面背景。
+id 不是 `docx:document` 报 `InvalidId`。xlsx / pptx 上发此 op 报 `InvalidField`。create 给了 `document.pageBackground` 时按同一套规则写入。
 
-示例见 `docs/examples/docx-apply-page-bg.json`。
+示例见 `docs/examples/docx-apply-page-bg.json`、`docs/examples/docx-apply-page-bg-fill.json`。
 
 ### setPageBorders
 
@@ -3246,12 +3287,12 @@ id 不是 `docx:document` 报 `InvalidId`。xlsx / pptx 上发此 op 报 `Invali
 | `top` / `left` / `bottom` / `right` | 可选。对象写入对应边；JSON `null` 删掉该边子元素；省略则不改该边 |
 
 `enabled: false` 与其它字段不能同时出现。其余字段至少给一个，否则报 `InvalidField`。边对象必须有 `val`。
-本期 `val` 只认 `nil` / `none` / `single` / `dashed` / `dotted` / `double` / `thick` / `wave` / `dashSmallGap` / `dotDash` / `dotDotDash`。
+`val` 认 ECMA-376 `ST_Border` 全套（含 `apples` 等艺术型）。不认识的令牌报 `InvalidField`。JSON 不要 `art` 字段，出现则报 `UnknownField`。
 `sz` 为非负整数（八分之一磅）。`space` 为非负整数（磅）。`color` 为 `auto` 或六位十六进制。
-不认识的 `val` / `offsetFrom` / `display` / `zOrder`，或非法 `color`，报 `InvalidField`。出现 `art` 报 `UnknownField`。
-不写艺术型边框，不写 `bordersDoNotSurroundHeader` / `bordersDoNotSurroundFooter` / `alignBordersAndEdges`。
+不认识的 `offsetFrom` / `display` / `zOrder`，或非法 `color`，报 `InvalidField`。
+不写 `bordersDoNotSurroundHeader` / `bordersDoNotSurroundFooter` / `alignBordersAndEdges`。
 没有 `w:pgBorders` 且不是删除时，按 `EG_SectPrContents` 插在 `pgMar` 之后。不新建 footnotes / theme / webSettings / fontTable。
-节不存在报 `IdNotFound`。id 不是 `section:{n}` 报 `InvalidId`。xlsx / pptx 上发此 op 报 `InvalidField`。create 本期不写页面边框。
+节不存在报 `IdNotFound`。id 不是 `section:{n}` 报 `InvalidId`。xlsx / pptx 上发此 op 报 `InvalidField`。create 给了 `document.pageBorders` 时写入末节。
 
 ### insertMath
 
@@ -4005,7 +4046,9 @@ OLE op 还可以脏 `/word/embeddings/…` 与预览图媒体。墨迹画布 op 
 其卫星 `styles.xml` / `settings.xml` / `webSettings.xml` / `fontTable.xml`、glossary `.rels`、主文档 `.rels` 与 `[Content_Types].xml`。
 `insertDocPartContent` 只脏主文档。`insertEmbeddedFont` / `deleteEmbeddedFont` 还可以脏 `/word/fontTable.xml`、fontTable `.rels`、
 `/word/fonts/fontN.odttf`、主文档 `.rels`、`[Content_Types].xml` 与 `settings.xml`。
-`setFontEmbed` 只脏 `settings.xml`（缺则新建）。`setPageBackground` 脏主文档与 `settings.xml`（缺则新建）。
+`setFontEmbed` 只脏 `settings.xml`（缺则新建）。`setPageBackground` 脏主文档与 `settings.xml`（缺则新建），图片填充还可脏 `/word/media/…` 与主文档 `.rels`。
+`setThemeColors` / `setThemeFonts` / `setThemeFmt` 只脏已有 theme 部件。
+`setThemeOverride` 脏 `/word/theme/themeOverride1.xml`、主文档 `.rels` 与 `[Content_Types].xml`；`enabled: false` 时删掉该部件。
 `setEastAsianSettings` 只脏 `settings.xml`（缺则新建）。
 `insertContentControl`、`setContentControl` 与 `deleteContentControl` 只脏主文档（页眉页脚上的内容控件 op 另脏对应 header/footer 部件）。
 `deleteSection` 脏主文档，并可能删掉不再被引用的 header/footer 部件。
@@ -4019,7 +4062,7 @@ OLE op 还可以脏 `/word/embeddings/…` 与预览图媒体。墨迹画布 op 
 `insertToc`、`deleteToc`、`insertCaption`、`deleteCaption`、`insertCrossRef`、`deleteCrossRef`、`insertIndex`、`deleteIndex`、
 `insertIndexEntry`、`deleteIndexEntry`、`insertSource`、`deleteSource`、`insertCitation`、`deleteCitation`、
 `insertBibliography`、`deleteBibliography`、`insertDocPart`、`deleteDocPart`、`insertDocPartContent`、`insertEmbeddedFont`、
-`deleteEmbeddedFont`、`setFontEmbed`、`setPageBackground`、`insertMath`、`setMath`、`deleteMath`、`insertRuby`、`setRuby`、`deleteRuby`、`setEastAsianSettings`、`insertContentControl`、
+`deleteEmbeddedFont`、`setFontEmbed`、`setPageBackground`、`setThemeFmt`、`setThemeOverride`、`insertMath`、`setMath`、`deleteMath`、`insertRuby`、`setRuby`、`deleteRuby`、`setEastAsianSettings`、`insertContentControl`、
 `setContentControl`、`deleteContentControl`、图片 op、文本框 op、
 `insertConnector` / `deleteConnector` / `insertShape` / `deleteShape` / `setShapePos` / `setShapeSize` / `setShapeFill` / `setShapeLine` / `groupShapes` / `ungroup`、墨迹画布 op、脚注尾注 op、批注 op、图表 op、SmartArt op、表格结构 op、修订 op、
 超链接 / 书签 op、域 op 与编号 op、样式 op、表格外观 op、直接格式 op、以及 `setProtection`、以及 `insertWatermark` / `deleteWatermark`、
@@ -4200,7 +4243,7 @@ GLB 部件路径 `/word/media/model3dN.glb`，Content Type `model/gltf.binary`�
 
 ### setThemeColors
 
-改主文档 theme 部件的 `a:clrScheme` 槽位。不重写 `fmtScheme`。不把段落 / run 上的 `themeColor` 展开成直接色。
+改主文档 theme 部件的 `a:clrScheme` 槽位。不改未点名的 `fmtScheme` 槽。不把段落 / run 上的 `themeColor` 展开成直接色。
 
 ```json
 {
@@ -4225,12 +4268,12 @@ GLB 部件路径 `/word/media/model3dN.glb`，Content Type `model/gltf.binary`�
 
 docx：`id` 不是 `docx:document` 报 `InvalidId`。没有 theme 关系或部件不在包内报 `IdNotFound`。
 除 op 与 id 外一个槽位都不给、或某槽位不是六位十六进制，报 `InvalidField`。写入时把被点名槽位的子元素换成 `a:srgbClr`（原先若是 `sysClr` 也换成 `srgbClr`）。未点名槽位留下。
-不改 `a:clrScheme/@name`、不改 `a:theme/@name`、不改 `fmtScheme`。不改正文 XML。xlsx 上发此 op 报 `InvalidField`。
+不改 `a:clrScheme/@name`、不改 `a:theme/@name`。未点名的 `fmtScheme` 槽留下。不改正文 XML。xlsx 上发此 op 报 `InvalidField`。
 pptx 见 [pptx 分册](json-contract-pptx.md#setthemecolors)，`id` 为 `master:{n}`。
 
 ### setThemeFonts
 
-改主文档 theme 部件的 `a:fontScheme`。不重写 `fmtScheme`。
+改主文档 theme 部件的 `a:fontScheme`。未点名的 `fmtScheme` 槽留下。
 
 ```json
 {
@@ -4257,4 +4300,67 @@ docx：`id` 不是 `docx:document` 报 `InvalidId`。找不到 theme 部件报 `
 `majorLatin` / `minorLatin` 空串报 `InvalidField`。`ea` / `cs` 允许空串。
 没有 `fontScheme` / `majorFont` / `minorFont` 或对应 `latin` / `ea` / `cs` 则按需补上。只改 `typeface`，其它属性（如 `panose`）留下。
 不改 `a:fontScheme/@name`。不改正文 XML。xlsx 上发此 op 报 `InvalidField`。pptx 见 [pptx 分册](json-contract-pptx.md#setthemefonts)。
+
+### setThemeFmt
+
+改主文档 theme 部件 `a:fmtScheme` 的常用槽。不算主题排版引擎，不把 `phClr` 展开成 RGB。
+
+```json
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "C:\\data\\note.docx",
+  "ops": [
+    {
+      "op": "setThemeFmt",
+      "id": "docx:document",
+      "line": { "index": 0, "w": 38100 },
+      "fill": { "index": 0, "kind": "solid" }
+    }
+  ]
+}
+```
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"setThemeFmt"` |
+| `id` | 必须是 `docx:document` |
+| `line` | 可选。对象须有 `index`（0、1 或 2）与 `w`（非负整数，EMU） |
+| `fill` | 可选。对象须有 `index`（0、1 或 2）与 `kind`（`solid` 或 `grad`） |
+| `bgFill` | 可选。同 `fill`，改 `bgFillStyleLst` |
+
+`line` / `fill` / `bgFill` 至少给一个。写入时只替换被点名槽：线改 `@w`；填充写成带 `schemeClr phClr` 的 `solidFill` 或两停点 `gradFill`。未点名槽留下。
+`index` 超出该列表长度、缺少 `fmtScheme` 或对应列表，报 `InvalidField`。没有 theme 部件报 `IdNotFound`，不新建。
+id 不是 `docx:document` 报 `InvalidId`。xlsx / pptx 上发此 op 报 `InvalidField`。
+示例见 `docs/examples/docx-apply-theme-fmt.json`。
+
+### setThemeOverride
+
+读写主文档 `themeOverride` 部件的配色槽。根元素是 `a:themeOverride`，配色写在根下 `clrScheme`。
+
+```json
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "C:\\data\\note.docx",
+  "ops": [
+    {
+      "op": "setThemeOverride",
+      "id": "docx:document",
+      "accent1": "FF0000"
+    }
+  ]
+}
+```
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"setThemeOverride"` |
+| `id` | 必须是 `docx:document` |
+| `enabled` | 可选。只能是 `false`：删掉 themeOverride 部件与主文档关系 |
+| `dk1` / `lt1` / `dk2` / `lt2` / `accent1`–`accent6` / `hlink` / `folHlink` | 可选。六位 RGB 十六进制 |
+
+`enabled: false` 与配色槽不能同时出现。否则至少给一个槽位。没有部件时按 Office 默认十二槽新建 `/word/theme/themeOverride1.xml`，再把点名槽换成 `srgbClr`。有主文档 theme 时先抄它的 `clrScheme` 再打补丁。
+id 不是 `docx:document` 报 `InvalidId`。xlsx / pptx 上发此 op 报 `InvalidField`。
+示例见 `docs/examples/docx-apply-theme-override.json`。
 

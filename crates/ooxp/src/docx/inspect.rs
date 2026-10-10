@@ -203,6 +203,12 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     insert_json_after(
         tree.as_object_mut().unwrap(),
         "theme",
+        "themeOverride",
+        super::theme::inspect_override(&pkg, &part)?,
+    );
+    insert_json_after(
+        tree.as_object_mut().unwrap(),
+        "themeOverride",
         "fontEmbed",
         super::font_embed::flags_json(&pkg, &part)?,
     );
