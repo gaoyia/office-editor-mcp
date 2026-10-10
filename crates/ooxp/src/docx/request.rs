@@ -57,6 +57,8 @@ pub struct InspectScope {
     pub hyperlinks: bool,
     /// 为 true 时列出书签。
     pub bookmarks: bool,
+    /// 为 true 时列出例外编辑区。
+    pub edit_ranges: bool,
     /// 为 true 时列出域。
     pub fields: bool,
     /// 为 true 时列出目录块。
@@ -643,6 +645,20 @@ pub struct DeleteBookmarkOp {
 }
 
 #[derive(Debug, Clone)]
+pub struct InsertEditRangeOp {
+    pub id: String,
+    pub para: ParaTarget,
+    pub ed_grp: Option<String>,
+    pub ed: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct DeleteEditRangeOp {
+    pub id: String,
+    pub target: super::perm::PermRef,
+}
+
+#[derive(Debug, Clone)]
 pub struct InsertFieldOp {
     pub id: String,
     pub para: ParaTarget,
@@ -1029,6 +1045,18 @@ pub struct SetPageBordersOp {
 }
 
 #[derive(Debug, Clone)]
+pub struct SetFormProtOp {
+    pub id: String,
+    pub n: usize,
+    pub form_prot: Option<bool>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetBibliographyStyleOp {
+    pub style_name: String,
+}
+
+#[derive(Debug, Clone)]
 pub enum InsertMathPlace {
     After(ParaTarget),
     EndOfDocument,
@@ -1040,13 +1068,15 @@ pub struct InsertMathOp {
     pub place: InsertMathPlace,
     pub kind: super::math::MathKind,
     pub body: MathBody,
+    pub jc: Option<String>,
 }
 
 #[derive(Debug, Clone)]
 pub struct SetMathOp {
     pub id: String,
     pub target: super::math::MathRef,
-    pub body: MathBody,
+    pub body: Option<MathBody>,
+    pub jc: Option<Option<String>>,
 }
 
 #[derive(Debug, Clone)]
@@ -1165,6 +1195,7 @@ pub enum DocxOp {
     DeleteCitation(DeleteCitationOp),
     InsertBibliography(InsertBibliographyOp),
     DeleteBibliography(DeleteBibliographyOp),
+    SetBibliographyStyle(SetBibliographyStyleOp),
     InsertDocPart(InsertDocPartOp),
     DeleteDocPart(DeleteDocPartOp),
     InsertDocPartContent(InsertDocPartContentOp),
@@ -1173,6 +1204,7 @@ pub enum DocxOp {
     SetFontEmbed(SetFontEmbedOp),
     SetPageBackground(SetPageBackgroundOp),
     SetPageBorders(SetPageBordersOp),
+    SetFormProt(SetFormProtOp),
     InsertMath(InsertMathOp),
     SetMath(SetMathOp),
     DeleteMath(DeleteMathOp),
@@ -1234,6 +1266,8 @@ pub enum DocxOp {
     InsertBookmark(InsertBookmarkOp),
     SetBookmark(SetBookmarkOp),
     DeleteBookmark(DeleteBookmarkOp),
+    InsertEditRange(InsertEditRangeOp),
+    DeleteEditRange(DeleteEditRangeOp),
     InsertField(InsertFieldOp),
     SetField(SetFieldOp),
     DeleteField(DeleteFieldOp),
@@ -1351,6 +1385,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
             "revisions",
             "hyperlinks",
             "bookmarks",
+            "editRanges",
             "fields",
             "tocs",
             "captions",
@@ -1389,6 +1424,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
     let revisions = parse_bool_field(obj.get("revisions"), "revisions")?;
     let hyperlinks = parse_bool_field(obj.get("hyperlinks"), "hyperlinks")?;
     let bookmarks = parse_bool_field(obj.get("bookmarks"), "bookmarks")?;
+    let edit_ranges = parse_bool_field(obj.get("editRanges"), "editRanges")?;
     let fields = parse_bool_field(obj.get("fields"), "fields")?;
     let tocs = parse_bool_field(obj.get("tocs"), "tocs")?;
     let captions = parse_bool_field(obj.get("captions"), "captions")?;
@@ -1437,6 +1473,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
                 && !obj.contains_key("revisions")
                 && !obj.contains_key("hyperlinks")
                 && !obj.contains_key("bookmarks")
+                && !obj.contains_key("editRanges")
                 && !obj.contains_key("fields")
                 && !obj.contains_key("tocs")
                 && !obj.contains_key("captions")
@@ -1478,6 +1515,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
                 revisions,
                 hyperlinks,
                 bookmarks,
+                edit_ranges,
                 fields,
                 tocs,
                 captions,
@@ -1556,6 +1594,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
                 revisions,
                 hyperlinks,
                 bookmarks,
+                edit_ranges,
                 fields,
                 tocs,
                 captions,
@@ -1766,6 +1805,9 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<DocxOp>, Error> {
             "deleteBibliography" => out.push(DocxOp::DeleteBibliography(
                 parse_delete_bibliography(obj, i)?,
             )),
+            "setBibliographyStyle" => out.push(DocxOp::SetBibliographyStyle(
+                parse_set_bibliography_style(obj, i)?,
+            )),
             "insertDocPart" => out.push(DocxOp::InsertDocPart(parse_insert_doc_part(obj, i)?)),
             "deleteDocPart" => out.push(DocxOp::DeleteDocPart(parse_delete_doc_part(obj, i)?)),
             "insertDocPartContent" => out.push(DocxOp::InsertDocPartContent(
@@ -1782,6 +1824,7 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<DocxOp>, Error> {
                 obj, i,
             )?)),
             "setPageBorders" => out.push(DocxOp::SetPageBorders(parse_set_page_borders(obj, i)?)),
+            "setFormProt" => out.push(DocxOp::SetFormProt(parse_set_form_prot(obj, i)?)),
             "insertMath" => out.push(DocxOp::InsertMath(parse_insert_math(obj, i)?)),
             "setMath" => out.push(DocxOp::SetMath(parse_set_math(obj, i)?)),
             "deleteMath" => out.push(DocxOp::DeleteMath(parse_delete_math(obj, i)?)),
@@ -1859,6 +1902,12 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<DocxOp>, Error> {
             "insertBookmark" => out.push(DocxOp::InsertBookmark(parse_insert_bookmark(obj, i)?)),
             "setBookmark" => out.push(DocxOp::SetBookmark(parse_set_bookmark(obj, i)?)),
             "deleteBookmark" => out.push(DocxOp::DeleteBookmark(parse_delete_bookmark(obj, i)?)),
+            "insertEditRange" => {
+                out.push(DocxOp::InsertEditRange(parse_insert_edit_range(obj, i)?))
+            }
+            "deleteEditRange" => {
+                out.push(DocxOp::DeleteEditRange(parse_delete_edit_range(obj, i)?))
+            }
             "insertField" => out.push(DocxOp::InsertField(parse_insert_field(obj, i)?)),
             "setField" => out.push(DocxOp::SetField(parse_set_field(obj, i)?)),
             "deleteField" => out.push(DocxOp::DeleteField(parse_delete_field(obj, i)?)),
@@ -2808,6 +2857,23 @@ fn parse_delete_bibliography(
     Ok(DeleteBibliographyOp { id, n })
 }
 
+fn parse_set_bibliography_style(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<SetBibliographyStyleOp, Error> {
+    deny_keys(obj, i, &["op", "id", "styleName"])?;
+    let id = require_op_id(obj, i)?;
+    require_document_id(&id, i, IdReason::SetBibliographyStyleNeedsDocument)?;
+    let style_name = require_string_field(obj, i, "setBibliographyStyle", "styleName")?;
+    if !super::biblio::style_ok(&style_name) {
+        return Err(Error::with_path(
+            ErrorKind::InvalidBibliographyStyle,
+            format!("ops[{i}].styleName"),
+        ));
+    }
+    Ok(SetBibliographyStyleOp { style_name })
+}
+
 fn parse_insert_doc_part(
     obj: &serde_json::Map<String, Value>,
     i: usize,
@@ -3187,6 +3253,28 @@ fn parse_set_page_borders(
     })
 }
 
+fn parse_set_form_prot(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<SetFormProtOp, Error> {
+    deny_keys(obj, i, &["op", "id", "formProt"])?;
+    let id = require_op_id(obj, i)?;
+    let n = parse_section_id(&id, i)?;
+    let form_prot = match parse_opt_null_bool(obj, i, "formProt")? {
+        Some(v) => v,
+        None => {
+            return Err(Error::with_path(
+                ErrorKind::OpRequiresField {
+                    op: "setFormProt".into(),
+                    field: "formProt".into(),
+                },
+                format!("ops[{i}].formProt"),
+            ));
+        }
+    };
+    Ok(SetFormProtOp { id, n, form_prot })
+}
+
 fn parse_page_border_enum(
     v: Option<&Value>,
     i: usize,
@@ -3375,7 +3463,7 @@ fn parse_insert_math(
     obj: &serde_json::Map<String, Value>,
     i: usize,
 ) -> Result<InsertMathOp, Error> {
-    deny_keys(obj, i, &["op", "id", "kind", "text", "expr"])?;
+    deny_keys(obj, i, &["op", "id", "kind", "text", "expr", "jc"])?;
     let id = require_op_id(obj, i)?;
     let kind = match obj.get("kind") {
         None => super::math::MathKind::Inline,
@@ -3397,6 +3485,31 @@ fn parse_insert_math(
             ));
         }
     };
+    let jc = match obj.get("jc") {
+        None => None,
+        Some(Value::String(s)) if super::math::MATH_JC.contains(&s.as_str()) => Some(s.clone()),
+        Some(Value::String(_)) => {
+            return Err(Error::with_path(
+                ErrorKind::InvalidMathJc,
+                format!("ops[{i}].jc"),
+            ));
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "jc".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].jc"),
+            ));
+        }
+    };
+    if jc.is_some() && kind == super::math::MathKind::Inline {
+        return Err(Error::with_path(
+            ErrorKind::MathJcOnInline,
+            format!("ops[{i}].jc"),
+        ));
+    }
     let body = super::math_expr::parse_math_body(obj, &format!("ops[{i}]"))?;
     let path = format!("ops[{i}].id");
     let place = if id == "docx:document" {
@@ -3413,15 +3526,36 @@ fn parse_insert_math(
         place,
         kind,
         body,
+        jc,
     })
 }
 
 fn parse_set_math(obj: &serde_json::Map<String, Value>, i: usize) -> Result<SetMathOp, Error> {
-    deny_keys(obj, i, &["op", "id", "text", "expr"])?;
+    deny_keys(obj, i, &["op", "id", "text", "expr", "jc"])?;
     let id = require_op_id(obj, i)?;
     let target = super::math::parse_math_ref(&id, &format!("ops[{i}].id"))?;
-    let body = super::math_expr::parse_math_body(obj, &format!("ops[{i}]"))?;
-    Ok(SetMathOp { id, target, body })
+    let jc = parse_opt_null_enum(obj, i, "jc", super::math::MATH_JC, ErrorKind::InvalidMathJc)?;
+    let has_text = obj.contains_key("text");
+    let has_expr = obj.contains_key("expr");
+    let body = if has_text || has_expr {
+        Some(super::math_expr::parse_math_body(
+            obj,
+            &format!("ops[{i}]"),
+        )?)
+    } else if jc.is_some() {
+        None
+    } else {
+        return Err(Error::with_path(
+            ErrorKind::MathNeedTextOrExpr,
+            format!("ops[{i}]"),
+        ));
+    };
+    Ok(SetMathOp {
+        id,
+        target,
+        body,
+        jc,
+    })
 }
 
 fn parse_delete_math(
@@ -5230,6 +5364,87 @@ fn parse_delete_bookmark(
     let id = require_op_id(obj, i)?;
     let target = super::link::parse_bookmark_ref(&id, &format!("ops[{i}].id"))?;
     Ok(DeleteBookmarkOp { id, target })
+}
+
+fn parse_insert_edit_range(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<InsertEditRangeOp, Error> {
+    deny_keys(obj, i, &["op", "id", "edGrp", "ed"])?;
+    let id = require_op_id(obj, i)?;
+    let para = parse_story_para_at(
+        &id,
+        &format!("ops[{i}].id"),
+        IdReason::InsertEditRangeNeedsPara,
+    )?;
+    let ed_grp = match obj.get("edGrp") {
+        None => None,
+        Some(Value::String(s)) if super::perm::ed_grp_ok(s) => Some(s.clone()),
+        Some(Value::String(_)) => {
+            return Err(Error::with_path(
+                ErrorKind::InvalidEdGrp,
+                format!("ops[{i}].edGrp"),
+            ));
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "edGrp".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].edGrp"),
+            ));
+        }
+    };
+    let ed = match obj.get("ed") {
+        None => None,
+        Some(Value::String(s)) if !s.is_empty() => Some(s.clone()),
+        Some(Value::String(_)) => {
+            return Err(Error::with_path(
+                ErrorKind::EmptyEditRangeEd,
+                format!("ops[{i}].ed"),
+            ));
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "ed".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].ed"),
+            ));
+        }
+    };
+    if ed_grp.is_some() && ed.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::MutuallyExclusive {
+                a: "edGrp".into(),
+                b: "ed".into(),
+            },
+            format!("ops[{i}]"),
+        ));
+    }
+    let ed_grp = if ed_grp.is_none() && ed.is_none() {
+        Some("everyone".into())
+    } else {
+        ed_grp
+    };
+    Ok(InsertEditRangeOp {
+        id,
+        para,
+        ed_grp,
+        ed,
+    })
+}
+
+fn parse_delete_edit_range(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<DeleteEditRangeOp, Error> {
+    deny_keys(obj, i, &["op", "id"])?;
+    let id = require_op_id(obj, i)?;
+    let target = super::perm::parse_perm_ref(&id, &format!("ops[{i}].id"))?;
+    Ok(DeleteEditRangeOp { id, target })
 }
 
 fn require_instr(

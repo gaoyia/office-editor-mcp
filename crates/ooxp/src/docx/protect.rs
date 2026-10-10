@@ -1,5 +1,5 @@
 //! 文档保护：`settings.xml` 的 `documentProtection` 与 `writeProtection`。
-//! 可写 Word 16.0 的限制编辑 SHA-512 哈希，不破解密码，不写 `writeProtection` 修改密码。
+//! 限制编辑哈希走遗留预处理；修改密码走 UTF-16LE SHA-512。不破解密码。
 
 use std::collections::HashMap;
 
@@ -9,7 +9,7 @@ use serde_json::{json, Value};
 
 use crate::error::{Error, ErrorKind};
 use crate::opc::Package;
-use crate::password::word_sha512_spin;
+use crate::password::{sha512_spin, word_sha512_spin};
 use crate::xml::{self, Document, Element, Node};
 
 use super::hf;
@@ -37,6 +37,7 @@ pub struct SetProtectionOp {
     pub formatting: Option<bool>,
     pub read_only_recommended: Option<bool>,
     pub password: Option<String>,
+    pub write_password: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -148,7 +149,8 @@ pub fn apply(
     let snap = snapshot_from_root(&settings_doc.root)?;
     let touch_doc = op.enforced.is_some() || op.edit.is_some() || op.formatting.is_some();
     let touch_ror = op.read_only_recommended.is_some();
-    if op.password.is_some() && !touch_doc && touch_ror {
+    let touch_write_pw = op.write_password.is_some();
+    if op.password.is_some() && !touch_doc {
         return Err(Error::with_path(
             ErrorKind::ProtectionPasswordNeedsDoc,
             format!("ops[{i}].password"),
@@ -161,13 +163,16 @@ pub fn apply(
                 "documentProtection hash attributes present but the element is missing",
             ));
         };
-        gate_existing_hash(el, op.password.as_deref(), i)?;
+        gate_existing_hash(el, op.password.as_deref(), i, "password", true)?;
     }
-    if touch_ror && snap.write_has_password {
-        return Err(Error::with_path(
-            ErrorKind::ProtectionHasPassword,
-            format!("ops[{i}].readOnlyRecommended"),
-        ));
+    if (touch_write_pw || touch_ror) && snap.write_has_password {
+        let Some(el) = settings_doc.root.child_by_local("writeProtection") else {
+            return Err(Error::xml_detail(
+                crate::error::XmlIssue::Parse,
+                "writeProtection hash attributes present but the element is missing",
+            ));
+        };
+        gate_existing_hash(el, op.write_password.as_deref(), i, "writePassword", false)?;
     }
 
     let mut next_enforced = op.enforced.unwrap_or(snap.enforced);
@@ -207,7 +212,20 @@ pub fn apply(
         }
     }
 
-    if touch_ror {
+    if touch_write_pw {
+        let settings_doc = load_cached(pkg, docs, &settings_name)?;
+        if op.read_only_recommended == Some(false) {
+            hf::remove_local(&mut settings_doc.root, "writeProtection");
+        } else {
+            write_write_protection_hash(
+                &mut settings_doc.root,
+                op.write_password
+                    .as_deref()
+                    .expect("touch_write_pw 时必有口令"),
+            );
+        }
+        dirty.insert(settings_name, ());
+    } else if touch_ror {
         let settings_doc = load_cached(pkg, docs, &settings_name)?;
         write_read_only_recommended(&mut settings_doc.root, next_ror);
         dirty.insert(settings_name, ());
@@ -232,15 +250,26 @@ fn write_document_protection(
         el.set_attr(&fmt_attr, "1");
     }
     if let Some(pw) = password {
-        write_word_hash(root, &mut el, pw);
+        write_sha512_attrs(root, &mut el, pw, true);
     }
     insert_child(root, el, "documentProtection");
 }
 
-fn write_word_hash(root: &Element, el: &mut Element, password: &str) {
+fn write_write_protection_hash(root: &mut Element, password: &str) {
+    hf::remove_local(root, "writeProtection");
+    let mut el = Element::new(root.prefixed("writeProtection"));
+    write_sha512_attrs(root, &mut el, password, false);
+    insert_child(root, el, "writeProtection");
+}
+
+fn write_sha512_attrs(root: &Element, el: &mut Element, password: &str, word_legacy: bool) {
     let mut salt = [0u8; 16];
     getrandom::getrandom(&mut salt).expect("系统随机数不可用");
-    let hash = word_sha512_spin(password, &salt, SPIN_COUNT);
+    let hash = if word_legacy {
+        word_sha512_spin(password, &salt, SPIN_COUNT)
+    } else {
+        sha512_spin(password, &salt, SPIN_COUNT)
+    };
     el.set_attr(&root.prefixed("cryptProviderType"), "rsaAES");
     el.set_attr(&root.prefixed("cryptAlgorithmClass"), "hash");
     el.set_attr(&root.prefixed("cryptAlgorithmType"), "typeAny");
@@ -256,7 +285,13 @@ struct WordHashSpec {
     spin: u32,
 }
 
-fn gate_existing_hash(el: &Element, password: Option<&str>, i: usize) -> Result<(), Error> {
+fn gate_existing_hash(
+    el: &Element,
+    password: Option<&str>,
+    i: usize,
+    field: &str,
+    word_legacy: bool,
+) -> Result<(), Error> {
     let Some(pw) = password else {
         return Err(Error::with_path(
             ErrorKind::ProtectionHasPassword,
@@ -269,10 +304,15 @@ fn gate_existing_hash(el: &Element, password: Option<&str>, i: usize) -> Result<
             format!("ops[{i}]"),
         ));
     };
-    if word_sha512_spin(pw, &spec.salt, spec.spin) != spec.hash {
+    let got = if word_legacy {
+        word_sha512_spin(pw, &spec.salt, spec.spin)
+    } else {
+        sha512_spin(pw, &spec.salt, spec.spin)
+    };
+    if got != spec.hash {
         return Err(Error::with_path(
             ErrorKind::ProtectionPasswordWrong,
-            format!("ops[{i}].password"),
+            format!("ops[{i}].{field}"),
         ));
     }
     Ok(())
@@ -394,6 +434,12 @@ pub fn apply_create(pkg: &mut Package, v: Option<&Value>) -> Result<(), Error> {
             "document.protection.password",
         ));
     }
+    if obj.contains_key("writePassword") {
+        return Err(Error::with_path(
+            ErrorKind::ProtectionPassword,
+            "document.protection.writePassword",
+        ));
+    }
     for k in obj.keys() {
         if !matches!(
             k.as_str(),
@@ -421,7 +467,13 @@ pub fn parse_op(obj: &serde_json::Map<String, Value>, i: usize) -> Result<SetPro
     for k in obj.keys() {
         if !matches!(
             k.as_str(),
-            "op" | "id" | "enforced" | "edit" | "formatting" | "readOnlyRecommended" | "password"
+            "op" | "id"
+                | "enforced"
+                | "edit"
+                | "formatting"
+                | "readOnlyRecommended"
+                | "password"
+                | "writePassword"
         ) {
             return Err(Error::with_path(
                 ErrorKind::UnknownField { field: k.clone() },
@@ -478,7 +530,8 @@ fn parse_fields(
     let formatting = parse_opt_bool(obj.get("formatting"), path, "formatting")?;
     let read_only_recommended =
         parse_opt_bool(obj.get("readOnlyRecommended"), path, "readOnlyRecommended")?;
-    let password = parse_opt_password(obj.get("password"), path)?;
+    let password = parse_opt_password(obj.get("password"), path, "password")?;
+    let write_password = parse_opt_password(obj.get("writePassword"), path, "writePassword")?;
     let edit = match obj.get("edit") {
         None => None,
         Some(Value::String(s)) => {
@@ -505,6 +558,7 @@ fn parse_fields(
         && edit.is_none()
         && formatting.is_none()
         && read_only_recommended.is_none()
+        && write_password.is_none()
     {
         return Err(Error::with_path(ErrorKind::NeedProtectionField, path));
     }
@@ -515,23 +569,24 @@ fn parse_fields(
         formatting,
         read_only_recommended,
         password,
+        write_password,
     })
 }
 
-fn parse_opt_password(v: Option<&Value>, path: &str) -> Result<Option<String>, Error> {
+fn parse_opt_password(v: Option<&Value>, path: &str, field: &str) -> Result<Option<String>, Error> {
     match v {
         None => Ok(None),
         Some(Value::String(s)) if !s.is_empty() => Ok(Some(s.clone())),
         Some(Value::String(_)) => Err(Error::with_path(
             ErrorKind::ProtectionPasswordBlank,
-            format!("{path}.password"),
+            format!("{path}.{field}"),
         )),
         Some(_) => Err(Error::with_path(
             ErrorKind::WrongType {
-                field: "password".into(),
+                field: field.into(),
                 expected: crate::error::TypeName::String,
             },
-            format!("{path}.password"),
+            format!("{path}.{field}"),
         )),
     }
 }
@@ -548,4 +603,18 @@ fn parse_opt_bool(v: Option<&Value>, path: &str, field: &str) -> Result<Option<b
             format!("{path}.{field}"),
         )),
     }
+}
+
+#[cfg(test)]
+#[test]
+fn write_protection_uses_utf16_sha512() {
+    let root = Element::new("w:settings");
+    let mut el = Element::new("w:writeProtection");
+    write_sha512_attrs(&root, &mut el, "secret", false);
+    let salt = STANDARD.decode(el.attr_local("salt").unwrap()).unwrap();
+    let hash = STANDARD.decode(el.attr_local("hash").unwrap()).unwrap();
+    assert_eq!(hash, sha512_spin("secret", &salt, SPIN_COUNT));
+    assert_ne!(hash, word_sha512_spin("secret", &salt, SPIN_COUNT));
+    assert_eq!(el.attr_local("cryptAlgorithmSid"), Some("14"));
+    assert_eq!(el.attr_local("cryptSpinCount"), Some("100000"));
 }

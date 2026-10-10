@@ -146,6 +146,7 @@ fn inspect_always_has_ruby_count_and_settings() {
     assert_eq!(keys[math + 1], "rubyCount");
     let bg = keys.iter().position(|k| *k == "pageBackground").unwrap();
     assert_eq!(keys[bg + 1], "eastAsianSettings");
+    assert_eq!(keys[bg + 2], "bibliographyStyle");
 }
 
 #[test]

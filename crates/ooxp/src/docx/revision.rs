@@ -40,6 +40,8 @@ enum RevKind {
     TcPrChange,
     TrPrChange,
     SectPrChange,
+    MoveFrom,
+    MoveTo,
 }
 
 #[derive(Clone, Copy)]
@@ -68,6 +70,8 @@ impl RevKind {
             Self::TcPrChange => "tcPrChange",
             Self::TrPrChange => "trPrChange",
             Self::SectPrChange => "sectPrChange",
+            Self::MoveFrom => "moveFrom",
+            Self::MoveTo => "moveTo",
         }
     }
 
@@ -114,7 +118,7 @@ pub fn revisions_json(root: &Element, container: Option<&str>) -> Result<Vec<Val
         let date = el.attr_local("date");
         let host = host_para_id(root, path, container, &index_of);
         let text = match kind {
-            RevKind::Ins => json!(markup_text(el, false)),
+            RevKind::Ins | RevKind::MoveFrom | RevKind::MoveTo => json!(markup_text(el, false)),
             RevKind::Del => json!(markup_text(el, true)),
             _ => Value::Null,
         };
@@ -199,6 +203,12 @@ pub fn apply_revision(
         }
         (RevKind::RowIns, true) => settle_row(root, &path, true)?,
         (RevKind::RowDel, false) => settle_row(root, &path, false)?,
+        (RevKind::MoveFrom, true) | (RevKind::MoveTo, false) => {
+            apply_move(root, &path, kind, true)?
+        }
+        (RevKind::MoveFrom, false) | (RevKind::MoveTo, true) => {
+            apply_move(root, &path, kind, false)?
+        }
         _ => return Err(xml_broken("revision")),
     }
     Ok(())
@@ -301,6 +311,16 @@ fn classify_rev(el: &Element, ctx: WalkCtx) -> Option<RevKind> {
             }
             if is_run_ins_del(el, ctx.in_prop) {
                 return Some(if ins { RevKind::Ins } else { RevKind::Del });
+            }
+            None
+        }
+        "moveFrom" | "moveTo" => {
+            if is_run_ins_del(el, ctx.in_prop) {
+                return Some(if name == "moveFrom" {
+                    RevKind::MoveFrom
+                } else {
+                    RevKind::MoveTo
+                });
             }
             None
         }
@@ -527,6 +547,91 @@ fn settle_row(root: &mut Element, path: &[usize], unwrap_ins: bool) -> Result<()
     }
     strip_prop_ins_del(tr);
     Ok(())
+}
+
+fn apply_move(
+    root: &mut Element,
+    path: &[usize],
+    kind: RevKind,
+    drop_content: bool,
+) -> Result<(), Error> {
+    let xml_id = para::element_at(root, path)
+        .and_then(|el| el.attr_local("id"))
+        .map(str::to_string);
+    if drop_content {
+        remove_at(root, path)?;
+    } else {
+        unwrap_at(root, path, false)?;
+    }
+    let Some(id) = xml_id else {
+        return Ok(());
+    };
+    let (start, end) = match kind {
+        RevKind::MoveFrom => ("moveFromRangeStart", "moveFromRangeEnd"),
+        RevKind::MoveTo => ("moveToRangeStart", "moveToRangeEnd"),
+        _ => return Ok(()),
+    };
+    remove_named_markers(root, start, end, &id)
+}
+
+fn remove_named_markers(
+    root: &mut Element,
+    start: &str,
+    end: &str,
+    xml_id: &str,
+) -> Result<(), Error> {
+    let mut paths = Vec::new();
+    let mut path = Vec::new();
+    collect_named_markers(root, &mut path, start, end, xml_id, &mut paths);
+    paths.sort_by(|a, b| cmp_path_rev(a, b));
+    for p in paths {
+        remove_at(root, &p)?;
+    }
+    Ok(())
+}
+
+fn collect_named_markers(
+    el: &Element,
+    path: &mut Vec<usize>,
+    start: &str,
+    end: &str,
+    xml_id: &str,
+    out: &mut Vec<Vec<usize>>,
+) {
+    if el.local_name() == "txbxContent" {
+        return;
+    }
+    if el.local_name() == "AlternateContent" {
+        if let Some(i) = first_alt(el) {
+            path.push(i);
+            if let Node::Element(c) = &el.children[i] {
+                collect_named_markers(c, path, start, end, xml_id, out);
+            }
+            path.pop();
+        }
+        return;
+    }
+    let name = el.local_name();
+    if (name == start || name == end) && el.attr_local("id") == Some(xml_id) {
+        out.push(path.clone());
+    }
+    for (i, n) in el.children.iter().enumerate() {
+        if let Node::Element(e) = n {
+            path.push(i);
+            collect_named_markers(e, path, start, end, xml_id, out);
+            path.pop();
+        }
+    }
+}
+
+fn cmp_path_rev(a: &[usize], b: &[usize]) -> std::cmp::Ordering {
+    for (x, y) in a.iter().zip(b.iter()) {
+        match x.cmp(y) {
+            std::cmp::Ordering::Equal => continue,
+            o => return o.reverse(),
+        }
+    }
+    b.len().cmp(&a.len())
 }
 
 fn remove_at(root: &mut Element, path: &[usize]) -> Result<(), Error> {

@@ -123,7 +123,8 @@ fn inspect_has_page_background_after_font_embed() {
         ["color", "display", "fill"]
     );
     let sect_keys = object_keys(&tree["sections"][0]);
-    assert_eq!(*sect_keys.last().unwrap(), "pageBorders");
+    assert_eq!(*sect_keys.last().unwrap(), "formProt");
+    assert!(tree["sections"][0]["formProt"].is_null());
 }
 
 #[test]

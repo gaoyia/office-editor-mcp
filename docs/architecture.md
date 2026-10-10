@@ -306,7 +306,8 @@ xlsx 也可改文件属性，脏 `docProps`。docx 可改被点名的段落，�
 含趋势线、误差线与次轴），也可插删改 SmartArt（宿主范围相同）。
 docx 也可插删嵌入对象，脏宿主 XML、`.rels`、embeddings 与占位预览图。
 docx 也可插删换 3D 模型，脏宿主 XML、`.rels`、GLB 与海报 PNG。
-docx 也可用 `setProtection` 改 `settings.xml` 的保护标记，窗体保护还可脏主文档各节 `w:formProt`。
+docx 也可用 `setProtection` 改 `settings.xml` 的保护标记（限制编辑哈希走遗留预处理，修改密码走 UTF-16LE SHA-512），窗体保护还可脏主文档各节 `w:formProt`，
+也可用 `setFormProt` 把某节改成例外，也可用 `insertEditRange` / `deleteEditRange` 读写 `w:permStart` / `w:permEnd`。
 docx 也可插删页眉 DrawingML 水印，无 default 页眉时会新建，并可脏页眉部件与媒体。
 docx 也可用 `setThemeColors` / `setThemeFonts` / `setThemeFmt` 改主文档 theme 部件的配色、字体与 `fmtScheme` 常用槽，只脏该 theme 部件；
 也可用 `setThemeOverride` 新建或改主文档 themeOverride 部件。

@@ -255,11 +255,11 @@ docx 认 `setParaText`、`setHeaderFooterDistance`、`setPageMargin`、`setPageS
 表格 op（`insertTable`、`deleteTable`、`insertRow`、`deleteRow`、`insertCol`、`deleteCol`、`mergeCells`、`splitCells`、
 `setTableStyle`、`setTableFloat`、`setTableCellMar`、`setCellFormat`）、
 修订 op（`acceptRevision`、`rejectRevision`）、超链接与书签 op（`insertHyperlink`、`setHyperlink`、`deleteHyperlink`、`insertBookmark`、
-`setBookmark`、`deleteBookmark`）、域 op（`insertField`、`setField`、`deleteField`）、目录 op（`insertToc`、`deleteToc`）、
+`setBookmark`、`deleteBookmark`）、例外编辑区 op（`insertEditRange`、`deleteEditRange`）、域 op（`insertField`、`setField`、`deleteField`）、目录 op（`insertToc`、`deleteToc`）、
 题注与交叉引用 op（`insertCaption`、`deleteCaption`、`insertCrossRef`、`deleteCrossRef`）、索引 op（`insertIndex`、`deleteIndex`、
-`insertIndexEntry`、`deleteIndexEntry`）、参考文献 op（`insertSource`、`deleteSource`、`insertCitation`、`deleteCitation`、
+`insertIndexEntry`、`deleteIndexEntry`）、参考文献 op（`insertSource`、`deleteSource`、`setBibliographyStyle`、`insertCitation`、`deleteCitation`、
 `insertBibliography`、`deleteBibliography`）、构建基块 op（`insertDocPart`、`deleteDocPart`、`insertDocPartContent`）、
-字体嵌入 op（`insertEmbeddedFont`、`deleteEmbeddedFont`、`setFontEmbed`）、页面背景与边框 op（`setPageBackground`、`setPageBorders`）、
+字体嵌入 op（`insertEmbeddedFont`、`deleteEmbeddedFont`、`setFontEmbed`）、页面背景与边框 op（`setPageBackground`、`setPageBorders`、`setFormProt`）、
 公式 op（`insertMath`、`setMath`、`deleteMath`）、拼音 op（`insertRuby`、`setRuby`、`deleteRuby`）、`setEastAsianSettings`、内容控件 op（`insertContentControl`、`setContentControl`、`deleteContentControl`）、
 编号 op（`insertNumbering`、`setNumbering`、`setParaNumbering`）、
 样式 op（`insertStyle`、`deleteStyle`、`setStyle`、`setParaStyle`、`setRunStyle`）、直接格式 op（`setParaFormat`、
@@ -295,10 +295,10 @@ pptx 认 `setShapeText`、`setShapeFormat`、形状管理 op（`insertShape`、`
 不提供把整棵时间轴当 JSON 写入的 op；`setTiming` 仍报 `UnsupportedOp`。
 对不上格式的 op（例如对 pptx 发 `setCell` / `setCellStyle` / `setParaText` / `setProtection`，
 对 xlsx 发 `setPictureWrap`、`setChartWrap` 或 `setHeaderFooterDistance` / `setPageMargin` / `setPageSize` / `setColumns`
- / `setVerticalAlign` / `setLineNumbering` / `setDocGrid` / `setRtlGutter` / `setPageBackground` / `setPageBorders`
+ / `setVerticalAlign` / `setLineNumbering` / `setDocGrid` / `setRtlGutter` / `setPageBackground` / `setPageBorders` / `setFormProt`
  / `setMirrorMargins` / `setGutterAtTop` / `setHeaderFooterLink` / `insertHeaderFooter` / `setTitlePage` / `setEvenAndOddHeaders`、
 `setTextBoxWrap` / `setTextBoxFill` / `setTextBoxLine` / `setTextBoxDirection`、注、`setSmartArtPos` / `setSmartArtWrap`、
-`insertWatermark` / `deleteWatermark`、`insertInkCanvas` / `replaceInkCanvas` / `deleteInkCanvas`、表格 op、修订 op、书签 op、域 op、题注与交叉引用 op、索引 op、参考文献 op、构建基块 op、字体嵌入 op、编号 op、样式 op、
+`insertWatermark` / `deleteWatermark`、`insertInkCanvas` / `replaceInkCanvas` / `deleteInkCanvas`、表格 op、修订 op、书签 op、例外编辑区 op、域 op、题注与交叉引用 op、索引 op、参考文献 op、`setBibliographyStyle`、构建基块 op、字体嵌入 op、编号 op、样式 op、
 直接格式 op、拼音 op、`setEastAsianSettings`、节结构 op 或 `setNotesText`，
 对 docx / pptx 发 `setHeaderFooterText`、`insertChartSheet`、`deleteChartSheet`、`insertSheet`、`deleteSheet`、`renameSheet`、
 `moveSheet`、`setSheetHidden`、`setCellStyle`、`setColWidth`、`setRowHeight`、`mergeRange` 或 `unmergeRange`、
@@ -439,10 +439,12 @@ docx：
 | `formatting` | 可选。布尔。对应 `w:formatting` |
 | `readOnlyRecommended` | 可选。布尔。`true` 写出 `<w:writeProtection w:recommended="true"/>`；`false` 在没有写保护密码时删掉该元素 |
 | `password` | 可选。非空字符串。按 Word 16.0 写限制编辑 SHA-512 哈希 |
+| `writePassword` | 可选。非空字符串。按 Word 16.0 写修改密码 SHA-512 哈希 |
 
-这四个可写字段至少给一个，否则报 `InvalidField`。`password` 不算「至少一个可写字段」。未点名的字段留下。`edit` 为 `none` 或不认识的字符串报 `InvalidField`。
-关掉强制请用 `enforced: false`，不要写 `edit: none`。空 `password` 报 `InvalidField`。
+`enforced` / `edit` / `formatting` / `readOnlyRecommended` / `writePassword` 至少给一个，否则报 `InvalidField`。`password` 不算「至少一个可写字段」。未点名的字段留下。`edit` 为 `none` 或不认识的字符串报 `InvalidField`。
+关掉强制请用 `enforced: false`，不要写 `edit: none`。空 `password` / `writePassword` 报 `InvalidField`。
 `password` 只用于 `documentProtection`；只改 `readOnlyRecommended` 却给了 `password` 报 `InvalidField`。
+`writePassword` 只用于 `writeProtection`。xlsx / pptx 出现 `writePassword` 报未知字段。
 出现 `hasPassword` 报 `InvalidField`。id 不是 `docx:document` 报 `InvalidId`。没有 `settings.xml` 报 `OpcPartMissing`。
 对 pptx 发此 op 且 id 为 `pptx:presentation` 时走下面 pptx 那一节。
 
@@ -455,12 +457,18 @@ docx：
 已有 `cryptAlgorithmSid=14` 且 `hash` / `salt` / `cryptSpinCount` 齐时必须给对得上的 `password`，否则报 `NotImplemented`；口令对不上报 `InvalidField`。
 对得上则可改种类，或 `enforced: false` 解开（删掉元素）。改写时换新盐重算。
 其它哈希（缺 sid、sid 不是 14、只有 ISO `hashValue`、`reservationPassword` 等）即使给了 `password` 也报 `NotImplemented`。
-无哈希时 `enforced: false` 直接删掉元素。`writeProtection` 已有密码哈希时，改 `readOnlyRecommended` 报 `NotImplemented`，即使给了 `password`。
+无哈希时 `enforced: false` 直接删掉元素。
+给了 `writePassword` 时写 `writeProtection`：`crypt*` 属性组与限制编辑相同（`sid=14`、`spin=100000`、`hash`/`salt` 标准 Base64）。
+口令按 UTF-16LE；`H0 = SHA-512(salt || password)`，再对 `i = 0 .. 99999` 做 SHA-512 迭代。不要做限制编辑那套遗留预处理。
+已有 `cryptAlgorithmSid=14` 且 `hash` / `salt` / `cryptSpinCount` 齐时，改或删 `writeProtection` 必须给对得上的 `writePassword`，否则报 `NotImplemented`；口令对不上报 `InvalidField`。
+`writePassword` 且 `readOnlyRecommended: false`：校验后删掉该元素。只给 `writePassword`：换新盐重写哈希。有哈希时规范要求忽略 `recommended`，树上 `readOnlyRecommended` 仍为 `false`。
+其它算法即使给了 `writePassword` 也报 `NotImplemented`。只改限制编辑时不要动已有 `writeProtection` 哈希。
 `edit` 为 `trackedChanges` 时同时写出空的 `w:trackRevisions`；关掉保护时不要删已有的 `trackRevisions`。
-`edit` 为 `forms` 时给主文档每一个 `w:sectPr` 写 `w:formProt`；关掉窗体保护或关掉强制时删掉各节 `w:formProt`。不读写 `w:permStart` / `w:permEnd`。
+`edit` 为 `forms` 时给主文档每一个 `w:sectPr` 写 `w:formProt`；关掉窗体保护或关掉强制时删掉各节 `w:formProt`。
+某节例外见 [docx 分册](json-contract-docx.md#setformprot) 的 `setFormProt`。`w:permStart` / `w:permEnd` 见该分册例外编辑区。
 已经是目标状态则空操作，仍计入 `opsApplied`。不把哈希放进树。
 
-create 的 `document.protection` 复用同一套规则，但出现 `password` 仍报 `NotImplemented`。
+create 的 `document.protection` 复用同一套规则，但出现 `password` / `writePassword` 仍报 `NotImplemented`。
 出现 `hasPassword` 报 `InvalidField`（`hasPassword` 是树上的只读字段）。
 
 带密码示例见 `docs/examples/docx-apply-protect-password.json`。

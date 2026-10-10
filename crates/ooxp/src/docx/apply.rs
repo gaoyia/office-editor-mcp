@@ -31,29 +31,29 @@ use super::protect;
 use super::request::{
     DeleteBibliographyOp, DeleteBookmarkOp, DeleteCaptionOp, DeleteCitationOp, DeleteColOp,
     DeleteCommentOp, DeleteConnectorOp, DeleteContentControlOp, DeleteCrossRefOp, DeleteDocPartOp,
-    DeleteFieldOp, DeleteHyperlinkOp, DeleteIndexEntryOp, DeleteIndexOp, DeleteMathOp,
-    DeleteNoteOp, DeleteParaOp, DeletePictureOp, DeleteRowOp, DeleteRubyOp, DeleteSectionOp,
-    DeleteShapeOp, DeleteSourceOp, DeleteStyleOp, DeleteTableOp, DeleteTextBoxOp, DeleteTocOp,
-    DocxOp, GroupShapesOp, HyperlinkTarget, InsertBibliographyOp, InsertBibliographyPlace,
-    InsertBookmarkOp, InsertCaptionOp, InsertCaptionPlace, InsertCitationOp, InsertColOp,
-    InsertCommentOp, InsertConnectorOp, InsertContentControlOp, InsertCrossRefOp,
-    InsertDocPartContentOp, InsertDocPartContentPlace, InsertDocPartOp, InsertFieldOp,
-    InsertHeaderFooterOp, InsertHyperlinkHost, InsertHyperlinkOp, InsertIndexEntryOp,
-    InsertIndexOp, InsertIndexPlace, InsertMathOp, InsertMathPlace, InsertNoteOp,
-    InsertNumberingOp, InsertParaOp, InsertParaPlace, InsertPictureOp, InsertRowOp, InsertRubyOp,
-    InsertRubyPlace, InsertSdtPlace, InsertSectionOp, InsertSectionPlace, InsertShapeOp,
-    InsertSourceOp, InsertStyleOp, InsertTableOp, InsertTextBoxOp, InsertTocOp, InsertTocPlace,
-    MergeCellsOp, NoteNumberTarget, ReplacePictureOp, ReplyCommentOp, RevisionOp, SetBookmarkOp,
-    SetCellFormatOp, SetColumnsOp, SetCommentDoneOp, SetCommentMetaOp, SetCommentTextOp,
-    SetContentControlOp, SetDocGridOp, SetEvenAndOddHeadersOp, SetFieldOp, SetGutterAtTopOp,
-    SetHfDistanceOp, SetHfLinkOp, SetHyperlinkOp, SetLineNumberingOp, SetMathOp,
-    SetMirrorMarginsOp, SetNoteNumberingOp, SetNumberingOp, SetPageBordersOp, SetPageMarginOp,
-    SetPageSizeOp, SetParaFormatOp, SetParaNumberingOp, SetParaStyleOp, SetParaTextOp,
-    SetPictureSizeOp, SetPictureWrapOp, SetRtlGutterOp, SetRubyOp, SetRunFormatOp, SetRunStyleOp,
-    SetShapeFillOp, SetShapeLineOp, SetShapePosOp, SetShapeSizeOp, SetStyleOp, SetTableCellMarOp,
-    SetTableFloatOp, SetTableStyleOp, SetTextBoxDirectionOp, SetTextBoxFillOp, SetTextBoxLineOp,
-    SetTextBoxLinkOp, SetTextBoxSizeOp, SetTextBoxWrapOp, SetTitlePageOp, SetVerticalAlignOp,
-    SplitCellsOp, UngroupOp,
+    DeleteEditRangeOp, DeleteFieldOp, DeleteHyperlinkOp, DeleteIndexEntryOp, DeleteIndexOp,
+    DeleteMathOp, DeleteNoteOp, DeleteParaOp, DeletePictureOp, DeleteRowOp, DeleteRubyOp,
+    DeleteSectionOp, DeleteShapeOp, DeleteSourceOp, DeleteStyleOp, DeleteTableOp, DeleteTextBoxOp,
+    DeleteTocOp, DocxOp, GroupShapesOp, HyperlinkTarget, InsertBibliographyOp,
+    InsertBibliographyPlace, InsertBookmarkOp, InsertCaptionOp, InsertCaptionPlace,
+    InsertCitationOp, InsertColOp, InsertCommentOp, InsertConnectorOp, InsertContentControlOp,
+    InsertCrossRefOp, InsertDocPartContentOp, InsertDocPartContentPlace, InsertDocPartOp,
+    InsertEditRangeOp, InsertFieldOp, InsertHeaderFooterOp, InsertHyperlinkHost, InsertHyperlinkOp,
+    InsertIndexEntryOp, InsertIndexOp, InsertIndexPlace, InsertMathOp, InsertMathPlace,
+    InsertNoteOp, InsertNumberingOp, InsertParaOp, InsertParaPlace, InsertPictureOp, InsertRowOp,
+    InsertRubyOp, InsertRubyPlace, InsertSdtPlace, InsertSectionOp, InsertSectionPlace,
+    InsertShapeOp, InsertSourceOp, InsertStyleOp, InsertTableOp, InsertTextBoxOp, InsertTocOp,
+    InsertTocPlace, MergeCellsOp, NoteNumberTarget, ReplacePictureOp, ReplyCommentOp, RevisionOp,
+    SetBookmarkOp, SetCellFormatOp, SetColumnsOp, SetCommentDoneOp, SetCommentMetaOp,
+    SetCommentTextOp, SetContentControlOp, SetDocGridOp, SetEvenAndOddHeadersOp, SetFieldOp,
+    SetFormProtOp, SetGutterAtTopOp, SetHfDistanceOp, SetHfLinkOp, SetHyperlinkOp,
+    SetLineNumberingOp, SetMathOp, SetMirrorMarginsOp, SetNoteNumberingOp, SetNumberingOp,
+    SetPageBordersOp, SetPageMarginOp, SetPageSizeOp, SetParaFormatOp, SetParaNumberingOp,
+    SetParaStyleOp, SetParaTextOp, SetPictureSizeOp, SetPictureWrapOp, SetRtlGutterOp, SetRubyOp,
+    SetRunFormatOp, SetRunStyleOp, SetShapeFillOp, SetShapeLineOp, SetShapePosOp, SetShapeSizeOp,
+    SetStyleOp, SetTableCellMarOp, SetTableFloatOp, SetTableStyleOp, SetTextBoxDirectionOp,
+    SetTextBoxFillOp, SetTextBoxLineOp, SetTextBoxLinkOp, SetTextBoxSizeOp, SetTextBoxWrapOp,
+    SetTitlePageOp, SetVerticalAlignOp, SplitCellsOp, UngroupOp,
 };
 use super::revision;
 use super::ruby;
@@ -169,6 +169,16 @@ pub fn apply(bytes: &[u8], ops: &[DocxOp]) -> Result<Vec<u8>, Error> {
             DocxOp::DeleteBibliography(op) => {
                 apply_delete_bibliography(&mut docs, &mut dirty, &doc_part, op, i)?;
             }
+            DocxOp::SetBibliographyStyle(op) => {
+                biblio::set_style(
+                    &mut pkg,
+                    &mut docs,
+                    &mut dirty,
+                    &doc_part,
+                    &op.style_name,
+                    i,
+                )?;
+            }
             DocxOp::InsertDocPart(op) => {
                 apply_insert_doc_part(&mut pkg, &mut docs, &mut dirty, &doc_part, op, i)?;
             }
@@ -217,6 +227,9 @@ pub fn apply(bytes: &[u8], ops: &[DocxOp]) -> Result<Vec<u8>, Error> {
             }
             DocxOp::SetPageBorders(op) => {
                 apply_page_borders(&mut docs, &mut dirty, &doc_part, op, i)?;
+            }
+            DocxOp::SetFormProt(op) => {
+                apply_set_form_prot(&mut docs, &mut dirty, &doc_part, op, i)?;
             }
             DocxOp::InsertMath(op) => {
                 apply_insert_math(&pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
@@ -633,6 +646,12 @@ pub fn apply(bytes: &[u8], ops: &[DocxOp]) -> Result<Vec<u8>, Error> {
             }
             DocxOp::DeleteBookmark(op) => {
                 apply_delete_bookmark(&pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
+            }
+            DocxOp::InsertEditRange(op) => {
+                apply_insert_edit_range(&pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
+            }
+            DocxOp::DeleteEditRange(op) => {
+                apply_delete_edit_range(&pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
             }
             DocxOp::InsertField(op) => {
                 apply_insert_field(&pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
@@ -1403,6 +1422,55 @@ fn apply_insert_bookmark(
     })?;
     let doc = load_part(pkg, docs, &part_name)?;
     link::insert_bookmark(&mut doc.root, start, end, op.name.as_deref(), &op.id, i)?;
+    dirty.insert(part_name, ());
+    Ok(())
+}
+
+fn apply_insert_edit_range(
+    pkg: &Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &InsertEditRangeOp,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name = part_for_para(pkg, catalog, doc_part, &op.para, &op.id, i)?;
+    let para = story_body_para(&op.para).ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::InvalidId {
+                reason: crate::error::IdReason::InsertEditRangeNeedsPara,
+            },
+            format!("ops[{i}].id"),
+        )
+    })?;
+    let doc = load_part(pkg, docs, &part_name)?;
+    super::perm::insert_edit_range(
+        &mut doc.root,
+        para,
+        op.ed_grp.as_deref(),
+        op.ed.as_deref(),
+        &op.id,
+        i,
+    )?;
+    dirty.insert(part_name, ());
+    Ok(())
+}
+
+fn apply_delete_edit_range(
+    pkg: &Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &DeleteEditRangeOp,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name = super::perm::part_for_story(catalog, doc_part, &op.target.story, || {
+        super::perm::missing_perm_err(&op.id, i)
+    })?;
+    let doc = load_part(pkg, docs, &part_name)?;
+    super::perm::delete_edit_range(&mut doc.root, op.target.n, &op.id, i)?;
     dirty.insert(part_name, ());
     Ok(())
 }
@@ -2434,6 +2502,18 @@ fn apply_page_borders(
     Ok(())
 }
 
+fn apply_set_form_prot(
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    op: &SetFormProtOp,
+    i: usize,
+) -> Result<(), Error> {
+    let sect = find_sect_for_apply(docs, dirty, doc_part, op.n, &op.id, i)?;
+    hf::set_form_prot(sect, op.form_prot);
+    Ok(())
+}
+
 fn apply_page_margin(
     docs: &mut HashMap<String, Document>,
     dirty: &mut HashMap<String, ()>,
@@ -3122,7 +3202,15 @@ fn apply_insert_math(
         InsertMathPlace::EndOfDocument => {
             let doc = docs.get_mut(doc_part).unwrap();
             math::ensure_math_ns(&mut doc.root);
-            math::insert_math(&mut doc.root, None, op.kind, &op.body, &op.id, i)?;
+            math::insert_math(
+                &mut doc.root,
+                None,
+                op.kind,
+                &op.body,
+                op.jc.as_deref(),
+                &op.id,
+                i,
+            )?;
             dirty.insert(doc_part.to_string(), ());
         }
         InsertMathPlace::After(target) => {
@@ -3140,7 +3228,15 @@ fn apply_insert_math(
                     ));
                 }
             };
-            math::insert_math(&mut doc.root, Some(para), op.kind, &op.body, &op.id, i)?;
+            math::insert_math(
+                &mut doc.root,
+                Some(para),
+                op.kind,
+                &op.body,
+                op.jc.as_deref(),
+                &op.id,
+                i,
+            )?;
             dirty.insert(part_name, ());
         }
     }
@@ -3161,7 +3257,14 @@ fn apply_set_math(
     })?;
     let doc = load_part(pkg, docs, &part_name)?;
     math::ensure_math_ns(&mut doc.root);
-    math::set_math(&mut doc.root, op.target.n, &op.body, &op.id, i)?;
+    math::set_math(
+        &mut doc.root,
+        op.target.n,
+        op.body.as_ref(),
+        op.jc.as_ref().map(|v| v.as_deref()),
+        &op.id,
+        i,
+    )?;
     dirty.insert(part_name, ());
     Ok(())
 }

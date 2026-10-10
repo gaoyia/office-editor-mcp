@@ -1173,6 +1173,7 @@ fn inspect_lists_header_pictures() {
             "revisionCount",
             "hyperlinkCount",
             "bookmarkCount",
+            "editRangeCount",
             "fieldCount",
             "mathCount",
             "rubyCount",

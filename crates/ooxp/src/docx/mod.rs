@@ -26,6 +26,7 @@ mod numbering;
 mod ole;
 mod page_bg;
 mod para;
+mod perm;
 mod picture;
 mod protect;
 mod request;

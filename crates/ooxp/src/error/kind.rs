@@ -451,6 +451,14 @@ pub(crate) enum IdReason {
     BookmarkIndexFromOne,
     /// insertBookmark 必须用正文或页眉页脚段落 id
     InsertBookmarkNeedsPara,
+    /// 例外编辑区 id 必须是 perm:N 或 {容器}/perm:N
+    PermPrefix,
+    PermIndexNotInt,
+    PermIndexFromOne,
+    /// insertEditRange 必须用正文或页眉页脚段落 id
+    InsertEditRangeNeedsPara,
+    /// setBibliographyStyle 必须用 docx:document
+    SetBibliographyStyleNeedsDocument,
     /// 域 id 必须是 field:N 或 {容器}/field:N
     FieldPrefix,
     FieldIndexNotInt,
@@ -966,6 +974,10 @@ define_error_kinds! {
     SetParaTextHasRevision => vec![Self::SetParaTextHasRevision],
     HyperlinkNotFound { id: String } => vec![Self::HyperlinkNotFound { id: "link:1".into() }],
     BookmarkNotFound { id: String } => vec![Self::BookmarkNotFound { id: "bookmark:1".into() }],
+    EditRangeNotFound { id: String } => vec![Self::EditRangeNotFound { id: "perm:1".into() }],
+    InvalidEdGrp => vec![Self::InvalidEdGrp],
+    EmptyEditRangeEd => vec![Self::EmptyEditRangeEd],
+    InvalidBibliographyStyle => vec![Self::InvalidBibliographyStyle],
     SetParaTextHasHyperlink => vec![Self::SetParaTextHasHyperlink],
     HyperlinkNeedTarget => vec![Self::HyperlinkNeedTarget],
     XlsxHyperlinkNeedTarget => vec![Self::XlsxHyperlinkNeedTarget],
@@ -1048,6 +1060,8 @@ define_error_kinds! {
     InvalidCitationTag => vec![Self::InvalidCitationTag],
     InvalidBibliographyInstr => vec![Self::InvalidBibliographyInstr],
     InvalidMathKind => vec![Self::InvalidMathKind],
+    InvalidMathJc => vec![Self::InvalidMathJc],
+    MathJcOnInline => vec![Self::MathJcOnInline],
     EmptyMathText => vec![Self::EmptyMathText],
     MathNeedTextOrExpr => vec![Self::MathNeedTextOrExpr],
     EmptyMathExpr => vec![Self::EmptyMathExpr],
@@ -1509,6 +1523,11 @@ impl IdReason {
             Self::BookmarkIndexNotInt,
             Self::BookmarkIndexFromOne,
             Self::InsertBookmarkNeedsPara,
+            Self::PermPrefix,
+            Self::PermIndexNotInt,
+            Self::PermIndexFromOne,
+            Self::InsertEditRangeNeedsPara,
+            Self::SetBibliographyStyleNeedsDocument,
             Self::FieldPrefix,
             Self::FieldIndexNotInt,
             Self::FieldIndexFromOne,
@@ -1741,6 +1760,11 @@ impl ErrorKind {
             | Self::InvalidDocPartBehavior
             | Self::EmptyDocPartText
             | Self::InvalidMathKind
+            | Self::InvalidMathJc
+            | Self::MathJcOnInline
+            | Self::InvalidEdGrp
+            | Self::EmptyEditRangeEd
+            | Self::InvalidBibliographyStyle
             | Self::EmptyMathText
             | Self::InvalidEm
             | Self::NeedEastAsianLayoutField
@@ -2058,6 +2082,7 @@ impl ErrorKind {
             | Self::HyperlinkNotFound { .. }
             | Self::SparklineNotFound { .. }
             | Self::BookmarkNotFound { .. }
+            | Self::EditRangeNotFound { .. }
             | Self::FieldNotFound { .. }
             | Self::TocNotFound { .. }
             | Self::CaptionNotFound { .. }

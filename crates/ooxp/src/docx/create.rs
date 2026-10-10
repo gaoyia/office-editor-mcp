@@ -94,6 +94,7 @@ struct NewField {
 struct NewMath {
     body: MathBody,
     kind: MathKind,
+    jc: Option<String>,
 }
 
 struct NewSdt {
@@ -2245,7 +2246,7 @@ fn parse_maths(v: Option<&Value>, prefix: &str) -> Result<Vec<NewMath>, Error> {
             )
         })?;
         for k in obj.keys() {
-            if !matches!(k.as_str(), "text" | "kind" | "expr") {
+            if !matches!(k.as_str(), "text" | "kind" | "expr" | "jc") {
                 return Err(Error::with_path(
                     ErrorKind::UnknownField { field: k.clone() },
                     format!("{item_path}.{k}"),
@@ -2273,7 +2274,32 @@ fn parse_maths(v: Option<&Value>, prefix: &str) -> Result<Vec<NewMath>, Error> {
                 ));
             }
         };
-        out.push(NewMath { body, kind });
+        let jc = match obj.get("jc") {
+            None => None,
+            Some(Value::String(s)) if super::math::MATH_JC.contains(&s.as_str()) => Some(s.clone()),
+            Some(Value::String(_)) => {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidMathJc,
+                    format!("{item_path}.jc"),
+                ));
+            }
+            Some(_) => {
+                return Err(Error::with_path(
+                    ErrorKind::WrongType {
+                        field: "jc".into(),
+                        expected: TypeName::String,
+                    },
+                    format!("{item_path}.jc"),
+                ));
+            }
+        };
+        if jc.is_some() && kind == MathKind::Inline {
+            return Err(Error::with_path(
+                ErrorKind::MathJcOnInline,
+                format!("{item_path}.jc"),
+            ));
+        }
+        out.push(NewMath { body, kind, jc });
     }
     Ok(out)
 }
@@ -2983,6 +3009,7 @@ fn push_story_ops(
                 place: InsertMathPlace::After(host.clone()),
                 kind: m.kind,
                 body: m.body.clone(),
+                jc: m.jc.clone(),
             }));
         }
         for s in &p.content_controls {

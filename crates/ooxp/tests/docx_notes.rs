@@ -170,6 +170,7 @@ fn inspect_counts_without_lists() {
             "revisionCount",
             "hyperlinkCount",
             "bookmarkCount",
+            "editRangeCount",
             "fieldCount",
             "tocCount",
             "captionCount",
@@ -198,7 +199,8 @@ fn inspect_counts_without_lists() {
             "themeOverride",
             "fontEmbed",
             "pageBackground",
-            "eastAsianSettings"
+            "eastAsianSettings",
+            "bibliographyStyle"
         ]
     );
 }

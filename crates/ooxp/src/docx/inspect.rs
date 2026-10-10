@@ -70,6 +70,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     let expand_revisions = scope.as_ref().is_some_and(|s| s.revisions);
     let expand_hyperlinks = scope.as_ref().is_some_and(|s| s.hyperlinks);
     let expand_bookmarks = scope.as_ref().is_some_and(|s| s.bookmarks);
+    let expand_edit_ranges = scope.as_ref().is_some_and(|s| s.edit_ranges);
     let expand_fields = scope.as_ref().is_some_and(|s| s.fields);
     let expand_maths = scope.as_ref().is_some_and(|s| s.maths);
     let expand_rubies = scope.as_ref().is_some_and(|s| s.rubies);
@@ -91,6 +92,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         revisions: expand_revisions,
         hyperlinks: expand_hyperlinks,
         bookmarks: expand_bookmarks,
+        edit_ranges: expand_edit_ranges,
         fields: expand_fields,
         maths: expand_maths,
         rubies: expand_rubies,
@@ -224,6 +226,18 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         "eastAsianSettings",
         east_asia::settings_json(&pkg, &part)?,
     );
+    insert_json_after(
+        tree.as_object_mut().unwrap(),
+        "eastAsianSettings",
+        "bibliographyStyle",
+        super::biblio::style_json(&pkg, &part)?,
+    );
+    insert_json_after(
+        tree.as_object_mut().unwrap(),
+        "bookmarkCount",
+        "editRangeCount",
+        json!(super::perm::count_edit_ranges(&doc.root)),
+    );
 
     if let Some(scope) = scope {
         if scope.notes {
@@ -307,6 +321,9 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         }
         if scope.bookmarks {
             tree["bookmarks"] = Value::Array(link::bookmarks_json(&doc.root, None)?);
+        }
+        if scope.edit_ranges {
+            tree["editRanges"] = Value::Array(super::perm::edit_ranges_json(&doc.root, None)?);
         }
         if scope.fields {
             tree["fields"] = Value::Array(field::fields_json(&doc.root, None)?);
@@ -462,6 +479,10 @@ fn section_nodes(
                 "first": link.footer.first,
             },
             "pageBorders": super::page_bg::borders_json(sect),
+            "formProt": match hf::on_off_opt(sect, "formProt") {
+                Some(b) => json!(b),
+                None => Value::Null,
+            },
         }));
     }
     Ok(out)
@@ -526,6 +547,7 @@ struct HfExpand {
     revisions: bool,
     hyperlinks: bool,
     bookmarks: bool,
+    edit_ranges: bool,
     fields: bool,
     maths: bool,
     rubies: bool,
@@ -611,6 +633,12 @@ fn hf_node(pkg: &Package, item: &HfPart, expand: &HfExpand) -> Result<Value, Err
         "oleObjectCount",
         "model3dCount",
         json!(model3d_n),
+    );
+    insert_json_after(
+        node.as_object_mut().unwrap(),
+        "bookmarkCount",
+        "editRangeCount",
+        json!(super::perm::count_edit_ranges(&doc.root)),
     );
     insert_json_after(
         node.as_object_mut().unwrap(),
@@ -709,6 +737,10 @@ fn hf_node(pkg: &Package, item: &HfPart, expand: &HfExpand) -> Result<Value, Err
     }
     if expand.bookmarks {
         node["bookmarks"] = Value::Array(link::bookmarks_json(&doc.root, Some(&item.id))?);
+    }
+    if expand.edit_ranges {
+        node["editRanges"] =
+            Value::Array(super::perm::edit_ranges_json(&doc.root, Some(&item.id))?);
     }
     if expand.fields {
         node["fields"] = Value::Array(field::fields_json(&doc.root, Some(&item.id))?);

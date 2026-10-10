@@ -16,6 +16,8 @@ pub enum MathKind {
     Display,
 }
 
+pub const MATH_JC: &[&str] = &["center", "centerGroup", "left", "right"];
+
 impl MathKind {
     pub fn as_str(self) -> &'static str {
         match self {
@@ -51,10 +53,12 @@ pub fn maths_json(root: &Element, container: Option<&str>) -> Result<Vec<Value>,
             None => format!("math:{n}"),
         };
         let om = para::element_at(root, &rec.path).ok_or_else(|| xml_broken("math"))?;
+        let jc = read_jc(root, &rec.path)?;
         out.push(json!({
             "id": id,
             "index": n,
             "kind": rec.kind.as_str(),
+            "jc": jc,
             "host": host_para_id(root, &rec.path, container, &index_of),
             "text": math_text(om),
             "expr": super::math_expr::expr_of_omath(om),
@@ -124,9 +128,16 @@ pub fn insert_math(
     after: Option<&BodyPara>,
     kind: MathKind,
     body: &super::math_expr::MathBody,
+    jc: Option<&str>,
     err_id: &str,
     op_i: usize,
 ) -> Result<(), Error> {
+    if jc.is_some() && kind == MathKind::Inline {
+        return Err(Error::with_path(
+            ErrorKind::MathJcOnInline,
+            format!("ops[{op_i}].jc"),
+        ));
+    }
     match after {
         Some(para) => match kind {
             MathKind::Inline => {
@@ -149,22 +160,34 @@ pub fn insert_math(
                 append_inline(el, body);
                 Ok(())
             }
-            MathKind::Display => insert_display_after(root, para, body, err_id, op_i),
+            MathKind::Display => insert_display_after(root, para, body, jc, err_id, op_i),
         },
-        None => insert_at_body_end(root, kind, body, op_i),
+        None => insert_at_body_end(root, kind, body, jc, op_i),
     }
 }
 
 pub fn set_math(
     root: &mut Element,
     n: usize,
-    body: &super::math_expr::MathBody,
+    body: Option<&super::math_expr::MathBody>,
+    jc: Option<Option<&str>>,
     id: &str,
     i: usize,
 ) -> Result<(), Error> {
     let rec = math_at(root, n, id, i)?;
-    let om = para::element_at_mut(root, &rec.path).ok_or_else(|| missing_math(id, i))?;
-    body.apply_to_omath(om);
+    if jc.is_some() && rec.kind == MathKind::Inline {
+        return Err(Error::with_path(
+            ErrorKind::MathJcOnInline,
+            format!("ops[{i}].jc"),
+        ));
+    }
+    if let Some(body) = body {
+        let om = para::element_at_mut(root, &rec.path).ok_or_else(|| missing_math(id, i))?;
+        body.apply_to_omath(om);
+    }
+    if let Some(jc) = jc {
+        set_omath_jc(root, &rec.path, jc, i)?;
+    }
     Ok(())
 }
 
@@ -189,6 +212,7 @@ fn insert_display_after(
     root: &mut Element,
     para: &BodyPara,
     body: &super::math_expr::MathBody,
+    jc: Option<&str>,
     err_id: &str,
     op_i: usize,
 ) -> Result<(), Error> {
@@ -212,7 +236,7 @@ fn insert_display_after(
             )
         })?;
         let mut p = para::new_paragraph(parent, &new_id, "");
-        p.push_element(body.to_omath_para());
+        p.push_element(body.to_omath_para_jc(jc));
         p
     };
     let (host, idx) = para::parent_and_index_mut(root, &path).ok_or_else(|| {
@@ -231,6 +255,7 @@ fn insert_at_body_end(
     root: &mut Element,
     kind: MathKind,
     math: &super::math_expr::MathBody,
+    jc: Option<&str>,
     op_i: usize,
 ) -> Result<(), Error> {
     let new_id = para::next_para_hex(root);
@@ -246,7 +271,7 @@ fn insert_at_body_end(
     let mut new_p = para::new_paragraph(body, &new_id, "");
     match kind {
         MathKind::Inline => new_p.push_element(math.to_omath()),
-        MathKind::Display => new_p.push_element(math.to_omath_para()),
+        MathKind::Display => new_p.push_element(math.to_omath_para_jc(jc)),
     }
     para::append_before_body_sect_pr(body, new_p);
     Ok(())
@@ -421,6 +446,94 @@ fn enclosing_para(root: &Element, path: &[usize]) -> Option<Vec<usize>> {
     found
 }
 
+fn read_jc(root: &Element, omath_path: &[usize]) -> Result<Value, Error> {
+    if omath_path.is_empty() {
+        return Ok(Value::Null);
+    }
+    let parent_path = &omath_path[..omath_path.len() - 1];
+    let Some(parent) = para::element_at(root, parent_path) else {
+        return Ok(Value::Null);
+    };
+    if parent.local_name() != "oMathPara" {
+        return Ok(Value::Null);
+    }
+    let Some(pr) = parent.child_by_local("oMathParaPr") else {
+        return Ok(Value::Null);
+    };
+    let Some(jc) = pr.child_by_local("jc") else {
+        return Ok(Value::Null);
+    };
+    let Some(raw) = jc.attr_local("val") else {
+        return Ok(Value::Null);
+    };
+    if !MATH_JC.contains(&raw) {
+        return Err(Error::xml_detail(
+            XmlIssue::Parse,
+            format!("m:jc/@m:val is not a known justification: {raw}"),
+        ));
+    }
+    Ok(json!(raw))
+}
+
+fn set_omath_jc(
+    root: &mut Element,
+    omath_path: &[usize],
+    jc: Option<&str>,
+    i: usize,
+) -> Result<(), Error> {
+    if omath_path.is_empty() {
+        return Err(Error::with_path(
+            ErrorKind::MathJcOnInline,
+            format!("ops[{i}].jc"),
+        ));
+    }
+    let parent_path = &omath_path[..omath_path.len() - 1];
+    let parent = para::element_at_mut(root, parent_path)
+        .ok_or_else(|| Error::with_path(ErrorKind::MathJcOnInline, format!("ops[{i}].jc")))?;
+    if parent.local_name() != "oMathPara" {
+        return Err(Error::with_path(
+            ErrorKind::MathJcOnInline,
+            format!("ops[{i}].jc"),
+        ));
+    }
+    match jc {
+        Some(val) => {
+            if parent.child_by_local("oMathParaPr").is_none() {
+                parent
+                    .children
+                    .insert(0, Node::Element(Element::new("m:oMathParaPr")));
+            }
+            let pr = parent.child_by_local_mut("oMathParaPr").expect("刚补过");
+            pr.children.retain(|n| match n {
+                Node::Element(e) => e.local_name() != "jc",
+                _ => true,
+            });
+            let mut jc_el = Element::new("m:jc");
+            jc_el.set_attr("m:val", val);
+            pr.children.insert(0, Node::Element(jc_el));
+        }
+        None => {
+            let empty = {
+                let Some(pr) = parent.child_by_local_mut("oMathParaPr") else {
+                    return Ok(());
+                };
+                pr.children.retain(|n| match n {
+                    Node::Element(e) => e.local_name() != "jc",
+                    _ => true,
+                });
+                pr.element_children().next().is_none()
+            };
+            if empty {
+                parent.children.retain(|n| match n {
+                    Node::Element(e) => e.local_name() != "oMathParaPr",
+                    _ => true,
+                });
+            }
+        }
+    }
+    Ok(())
+}
+
 pub(crate) fn math_text(el: &Element) -> String {
     let mut out = String::new();
     collect_t(el, &mut out);
@@ -448,12 +561,21 @@ pub(crate) fn math_run_text(el: &Element) -> String {
 }
 
 pub(crate) fn new_math_run(text: &str) -> Element {
+    new_math_run_brk(text, false)
+}
+
+pub(crate) fn new_math_run_brk(text: &str, brk: bool) -> Element {
     let mut t = Element::new("m:t");
     if needs_xml_space(text) {
         t.set_attr("xml:space", "preserve");
     }
     t.set_text(text);
     let mut r = Element::new("m:r");
+    if brk {
+        let mut rpr = Element::new("m:rPr");
+        rpr.push_element(Element::new("m:brk"));
+        r.push_element(rpr);
+    }
     r.push_element(t);
     r
 }

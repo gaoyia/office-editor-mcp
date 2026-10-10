@@ -840,6 +840,21 @@ pub fn set_on_off(parent: &mut Element, local: &str, on: bool, order: &[&str]) {
         .insert(dest, Node::Element(Element::new(parent.prefixed(local))));
 }
 
+/// 节窗体保护：`true` 写无 val；`false` 写 `val="0"`；`None` 删掉元素。
+pub fn set_form_prot(parent: &mut Element, val: Option<bool>) {
+    remove_local(parent, "formProt");
+    let Some(on) = val else {
+        return;
+    };
+    let dest = insert_index_by_order(parent, "formProt", TITLE_PG_ORDER);
+    let mut el = Element::new(parent.prefixed("formProt"));
+    if !on {
+        let key = parent.prefixed("val");
+        el.set_attr(&key, "0");
+    }
+    parent.children.insert(dest, Node::Element(el));
+}
+
 pub fn remove_local(parent: &mut Element, local: &str) {
     parent.children.retain(|n| match n {
         Node::Element(e) => e.local_name() != local,

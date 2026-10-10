@@ -42,6 +42,25 @@ const SOURCE_TYPES: &[&str] = &[
 
 pub const DEFAULT_SOURCE_TYPE: &str = "Book";
 
+const BIBLIO_STYLES: &[(&str, &str, &str)] = &[
+    ("APA", r"\APASixthEditionOfficeOnline.xsl", "6"),
+    ("MLA", r"\MLASeventhEditionOfficeOnline.xsl", "7"),
+    ("Chicago", r"\CHICAGO.XSL", "15"),
+    ("IEEE", r"\IEEE2006OfficeOnline.xsl", "2006"),
+    ("GB7714", r"\GB.XSL", "2005"),
+];
+
+pub fn style_ok(s: &str) -> bool {
+    BIBLIO_STYLES.iter().any(|(n, _, _)| *n == s)
+}
+
+pub fn style_attrs(name: &str) -> Option<(&'static str, &'static str, &'static str)> {
+    BIBLIO_STYLES
+        .iter()
+        .find(|(n, _, _)| *n == name)
+        .map(|(n, sel, ver)| (*n, *sel, *ver))
+}
+
 pub struct SourceWrite<'a> {
     pub tag: &'a str,
     pub source_type: &'a str,
@@ -89,6 +108,60 @@ pub fn sources_json(pkg: &Package, doc_part: &str) -> Result<Vec<Value>, Error> 
         }));
     }
     Ok(out)
+}
+
+pub fn style_json(pkg: &Package, doc_part: &str) -> Result<Value, Error> {
+    let Some(part) = find_biblio_part(pkg, doc_part)? else {
+        return Ok(Value::Null);
+    };
+    let doc = xml::parse(pkg.get(&part)?)?;
+    Ok(json!({
+        "selectedStyle": attr_or_null(&doc.root, "SelectedStyle"),
+        "styleName": attr_or_null(&doc.root, "StyleName"),
+        "version": attr_or_null(&doc.root, "Version"),
+    }))
+}
+
+fn attr_or_null(el: &Element, local: &str) -> Value {
+    el.attr_local(local)
+        .map(|s| json!(s))
+        .unwrap_or(Value::Null)
+}
+
+pub fn set_style(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    style_name: &str,
+    op_i: usize,
+) -> Result<(), Error> {
+    let Some((_, selected, version)) = style_attrs(style_name) else {
+        return Err(Error::with_path(
+            ErrorKind::InvalidBibliographyStyle,
+            format!("ops[{op_i}].styleName"),
+        ));
+    };
+    let part = ensure_biblio_part(pkg, docs, dirty, doc_part)?;
+    let doc = docs.get_mut(&part).expect("ensure 已载入书目部件");
+    set_local_attr(&mut doc.root, "SelectedStyle", selected);
+    set_local_attr(&mut doc.root, "StyleName", style_name);
+    set_local_attr(&mut doc.root, "Version", version);
+    dirty.insert(part, ());
+    Ok(())
+}
+
+fn set_local_attr(el: &mut Element, local: &str, val: &str) {
+    if let Some((k, v)) = el
+        .attrs
+        .iter_mut()
+        .find(|(k, _)| k.rsplit(':').next() == Some(local))
+    {
+        let _ = k;
+        *v = val.to_string();
+        return;
+    }
+    el.set_attr(local, val);
 }
 
 pub fn has_tag(

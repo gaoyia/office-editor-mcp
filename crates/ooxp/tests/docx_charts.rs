@@ -227,6 +227,7 @@ fn inspect_count_without_list() {
             "revisionCount",
             "hyperlinkCount",
             "bookmarkCount",
+            "editRangeCount",
             "fieldCount",
             "tocCount",
             "captionCount",
@@ -255,7 +256,8 @@ fn inspect_count_without_list() {
             "themeOverride",
             "fontEmbed",
             "pageBackground",
-            "eastAsianSettings"
+            "eastAsianSettings",
+            "bibliographyStyle"
         ]
     );
     assert_eq!(tree["headers"], json!([]));

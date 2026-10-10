@@ -661,6 +661,18 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::InsertBookmarkNeedsPara => {
                 "insertBookmark id and end must be a body or header/footer paragraph id".into()
             }
+            IdReason::PermPrefix => {
+                "Exception range id must be perm:N or a header/footer container id plus /perm:N"
+                    .into()
+            }
+            IdReason::PermIndexNotInt => "exception range index must be a positive integer".into(),
+            IdReason::PermIndexFromOne => "exception range index starts at 1".into(),
+            IdReason::InsertEditRangeNeedsPara => {
+                "insertEditRange id must be a body or header/footer paragraph id".into()
+            }
+            IdReason::SetBibliographyStyleNeedsDocument => {
+                "setBibliographyStyle id must be docx:document".into()
+            }
             IdReason::FieldPrefix => {
                 "Field id must be field:N or a header/footer container id plus /field:N".into()
             }
@@ -1273,7 +1285,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::ProtectionHasPassword => {
             "this document has a password hash; protection fields cannot be changed".into()
         }
-        ErrorKind::ProtectionPasswordBlank => "password must be a non-empty string".into(),
+        ErrorKind::ProtectionPasswordBlank => {
+            "password and writePassword must be non-empty strings".into()
+        }
         ErrorKind::ProtectionPasswordWrong => {
             "password does not match the existing SHA-512 hash".into()
         }
@@ -1395,6 +1409,15 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         }
         ErrorKind::HyperlinkNotFound { id } => format!("Hyperlink not found: {id}"),
         ErrorKind::BookmarkNotFound { id } => format!("Bookmark not found: {id}"),
+        ErrorKind::EditRangeNotFound { id } => format!("Exception editing range not found: {id}"),
+        ErrorKind::InvalidEdGrp => {
+            "edGrp must be everyone, administrators, contributors, editors, owners, or current"
+                .into()
+        }
+        ErrorKind::EmptyEditRangeEd => "ed must be a non-empty string".into(),
+        ErrorKind::InvalidBibliographyStyle => {
+            "styleName must be APA, MLA, Chicago, IEEE, or GB7714".into()
+        }
         ErrorKind::SetParaTextHasHyperlink => {
             "Cannot change visible text in a paragraph that contains a hyperlink".into()
         }
@@ -1544,6 +1567,8 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::FieldNeedArg { code } => format!("{code} requires arg"),
         ErrorKind::EmptyMathText => "text must not be empty".into(),
         ErrorKind::InvalidMathKind => "kind must be inline or display".into(),
+        ErrorKind::InvalidMathJc => "jc must be center, centerGroup, left, or right".into(),
+        ErrorKind::MathJcOnInline => "inline math cannot have jc".into(),
         ErrorKind::MathNeedTextOrExpr => "exactly one of text or expr is required".into(),
         ErrorKind::EmptyMathExpr => "expr must not be empty".into(),
         ErrorKind::InvalidMathExprType { got } => format!("unknown math node type: {got}"),

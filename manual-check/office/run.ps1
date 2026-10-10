@@ -97,6 +97,7 @@ $order = @(
     'docx-ole'
     'docx-protect'
     'docx-protect-hash'
+    'docx-protect-rev-math'
     'docx-watermark'
     'docx-theme'
     'docx-caption-xref'

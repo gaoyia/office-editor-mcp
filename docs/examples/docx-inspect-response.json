@@ -14,11 +14,13 @@
   "chartCount": 0,
   "smartArtCount": 0,
   "oleObjectCount": 0,
+  "model3dCount": 0,
   "watermarkCount": 0,
   "tableCount": 0,
   "revisionCount": 0,
   "hyperlinkCount": 0,
   "bookmarkCount": 0,
+  "editRangeCount": 0,
   "fieldCount": 0,
   "tocCount": 0,
   "captionCount": 0,
@@ -30,6 +32,7 @@
   "bibliographyCount": 0,
   "docPartCount": 0,
   "mathCount": 0,
+  "rubyCount": 0,
   "contentControlCount": 0,
   "numberingCount": 0,
   "styleCount": 4,
@@ -66,7 +69,8 @@
       "rtlGutter": null,
       "headerLink": { "default": false, "even": null, "first": null },
       "footerLink": { "default": false, "even": null, "first": null },
-      "pageBorders": null
+      "pageBorders": null,
+      "formProt": null
     }
   ],
   "mirrorMargins": null,
@@ -104,6 +108,13 @@
     "display": false,
     "fill": null
   },
+  "eastAsianSettings": {
+    "characterSpacingControl": null,
+    "strictFirstAndLastChars": null,
+    "noLineBreaksBefore": null,
+    "noLineBreaksAfter": null
+  },
+  "bibliographyStyle": null,
   "from": 1,
   "truncated": false,
   "paragraphs": [

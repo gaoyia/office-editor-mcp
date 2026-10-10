@@ -54,7 +54,10 @@ impl FracType {
 
 #[derive(Debug, Clone)]
 pub enum MathNode {
-    Text(String),
+    Text {
+        text: String,
+        brk: bool,
+    },
     Frac {
         frac_type: FracType,
         num: Vec<MathNode>,
@@ -117,6 +120,21 @@ pub enum MathNode {
     EqArr {
         rows: Vec<Vec<MathNode>>,
     },
+    Phant {
+        e: Vec<MathNode>,
+        show: Option<bool>,
+        zero_wid: Option<bool>,
+        zero_asc: Option<bool>,
+        zero_desc: Option<bool>,
+        transp: Option<bool>,
+    },
+    BorderBox {
+        e: Vec<MathNode>,
+        hide_top: Option<bool>,
+        hide_bot: Option<bool>,
+        hide_left: Option<bool>,
+        hide_right: Option<bool>,
+    },
     Other {
         name: String,
         text: String,
@@ -171,8 +189,15 @@ impl MathBody {
         }
     }
 
-    pub fn to_omath_para(&self) -> Element {
+    pub fn to_omath_para_jc(&self, jc: Option<&str>) -> Element {
         let mut wrap = Element::new("m:oMathPara");
+        if let Some(val) = jc {
+            let mut jc_el = Element::new("m:jc");
+            jc_el.set_attr("m:val", val);
+            let mut pr = Element::new("m:oMathParaPr");
+            pr.push_element(jc_el);
+            wrap.push_element(pr);
+        }
         wrap.push_element(self.to_omath());
         wrap
     }
@@ -193,7 +218,7 @@ impl MathBody {
 impl MathNode {
     fn to_element(&self) -> Element {
         match self {
-            Self::Text(t) => math::new_math_run(t),
+            Self::Text { text, brk } => math::new_math_run_brk(text, *brk),
             Self::Frac {
                 frac_type,
                 num,
@@ -298,6 +323,52 @@ impl MathNode {
                 }
                 arr
             }
+            Self::Phant {
+                e,
+                show,
+                zero_wid,
+                zero_asc,
+                zero_desc,
+                transp,
+            } => {
+                let mut phant = Element::new("m:phant");
+                if let Some(pr) = pr_with_flags(
+                    "m:phantPr",
+                    &[
+                        ("show", *show),
+                        ("zeroWid", *zero_wid),
+                        ("zeroAsc", *zero_asc),
+                        ("zeroDesc", *zero_desc),
+                        ("transp", *transp),
+                    ],
+                ) {
+                    phant.push_element(pr);
+                }
+                phant.push_element(wrap_slot("m:e", e));
+                phant
+            }
+            Self::BorderBox {
+                e,
+                hide_top,
+                hide_bot,
+                hide_left,
+                hide_right,
+            } => {
+                let mut box_el = Element::new("m:borderBox");
+                if let Some(pr) = pr_with_flags(
+                    "m:borderBoxPr",
+                    &[
+                        ("hideTop", *hide_top),
+                        ("hideBot", *hide_bot),
+                        ("hideLeft", *hide_left),
+                        ("hideRight", *hide_right),
+                    ],
+                ) {
+                    box_el.push_element(pr);
+                }
+                box_el.push_element(wrap_slot("m:e", e));
+                box_el
+            }
             Self::Other { .. } => math::new_math_run(""),
         }
     }
@@ -373,7 +444,13 @@ fn read_seq(el: &Element) -> Vec<MathNode> {
 
 fn read_node(el: &Element) -> MathNode {
     match el.local_name() {
-        "r" => MathNode::Text(math::math_run_text(el)),
+        "r" => MathNode::Text {
+            text: math::math_run_text(el),
+            brk: el
+                .child_by_local("rPr")
+                .and_then(|pr| pr.child_by_local("brk"))
+                .is_some(),
+        },
         "f" => MathNode::Frac {
             frac_type: read_frac_type(el),
             num: slot_nodes(el, "num"),
@@ -460,6 +537,21 @@ fn read_node(el: &Element) -> MathNode {
                 .map(read_seq)
                 .collect(),
         },
+        "phant" => MathNode::Phant {
+            e: slot_nodes(el, "e"),
+            show: pr_flag_opt(el, "phantPr", "show"),
+            zero_wid: pr_flag_opt(el, "phantPr", "zeroWid"),
+            zero_asc: pr_flag_opt(el, "phantPr", "zeroAsc"),
+            zero_desc: pr_flag_opt(el, "phantPr", "zeroDesc"),
+            transp: pr_flag_opt(el, "phantPr", "transp"),
+        },
+        "borderBox" => MathNode::BorderBox {
+            e: slot_nodes(el, "e"),
+            hide_top: pr_flag_opt(el, "borderBoxPr", "hideTop"),
+            hide_bot: pr_flag_opt(el, "borderBoxPr", "hideBot"),
+            hide_left: pr_flag_opt(el, "borderBoxPr", "hideLeft"),
+            hide_right: pr_flag_opt(el, "borderBoxPr", "hideRight"),
+        },
         name => MathNode::Other {
             name: name.to_string(),
             text: math::math_text(el),
@@ -487,15 +579,47 @@ fn pr_chr(el: &Element, pr: &str) -> Option<String> {
 }
 
 fn pr_flag(el: &Element, pr: &str, flag: &str) -> bool {
-    el.child_by_local(pr)
-        .and_then(|pr| pr.child_by_local(flag))
-        .and_then(|f| f.attr_local("val"))
-        .is_some_and(|v| v == "1" || v == "true" || v == "on")
+    pr_flag_opt(el, pr, flag).unwrap_or(false)
+}
+
+fn pr_flag_opt(el: &Element, pr: &str, flag: &str) -> Option<bool> {
+    let child = el.child_by_local(pr)?.child_by_local(flag)?;
+    Some(match child.attr_local("val") {
+        None => true,
+        Some(v) => {
+            let lower = v.to_ascii_lowercase();
+            matches!(lower.as_str(), "1" | "true" | "on")
+        }
+    })
+}
+
+fn pr_with_flags(name: &str, flags: &[(&str, Option<bool>)]) -> Option<Element> {
+    if flags.iter().all(|(_, v)| v.is_none()) {
+        return None;
+    }
+    let mut pr = Element::new(name);
+    for (local, val) in flags {
+        let Some(b) = val else {
+            continue;
+        };
+        let mut f = Element::new(format!("m:{local}"));
+        f.set_attr("m:val", if *b { "1" } else { "0" });
+        pr.push_element(f);
+    }
+    Some(pr)
 }
 
 fn node_to_json(n: &MathNode) -> Value {
     match n {
-        MathNode::Text(t) => json!({ "type": "text", "text": t }),
+        MathNode::Text { text, brk } => {
+            let mut o = Map::new();
+            o.insert("type".into(), json!("text"));
+            o.insert("text".into(), json!(text));
+            if *brk {
+                o.insert("brk".into(), json!(true));
+            }
+            Value::Object(o)
+        }
         MathNode::Frac {
             frac_type,
             num,
@@ -602,6 +726,40 @@ fn node_to_json(n: &MathNode) -> Value {
             "type": "eqArr",
             "rows": rows.iter().map(|r| nodes_to_json(r)).collect::<Vec<_>>(),
         }),
+        MathNode::Phant {
+            e,
+            show,
+            zero_wid,
+            zero_asc,
+            zero_desc,
+            transp,
+        } => {
+            let mut o = Map::new();
+            o.insert("type".into(), json!("phant"));
+            insert_opt_bool(&mut o, "show", *show);
+            insert_opt_bool(&mut o, "zeroWid", *zero_wid);
+            insert_opt_bool(&mut o, "zeroAsc", *zero_asc);
+            insert_opt_bool(&mut o, "zeroDesc", *zero_desc);
+            insert_opt_bool(&mut o, "transp", *transp);
+            o.insert("e".into(), json!(nodes_to_json(e)));
+            Value::Object(o)
+        }
+        MathNode::BorderBox {
+            e,
+            hide_top,
+            hide_bot,
+            hide_left,
+            hide_right,
+        } => {
+            let mut o = Map::new();
+            o.insert("type".into(), json!("borderBox"));
+            insert_opt_bool(&mut o, "hideTop", *hide_top);
+            insert_opt_bool(&mut o, "hideBot", *hide_bot);
+            insert_opt_bool(&mut o, "hideLeft", *hide_left);
+            insert_opt_bool(&mut o, "hideRight", *hide_right);
+            o.insert("e".into(), json!(nodes_to_json(e)));
+            Value::Object(o)
+        }
         MathNode::Other { name, text } => json!({
             "type": "other",
             "name": name,
@@ -693,11 +851,12 @@ fn parse_node(v: &Value, path: &str) -> Result<MathNode, Error> {
     };
     match ty {
         "text" => {
-            deny_node_keys(obj, path, &["type", "text"])?;
-            Ok(MathNode::Text(parse_nonempty_text(
-                obj.get("text"),
-                &format!("{path}.text"),
-            )?))
+            deny_node_keys(obj, path, &["type", "text", "brk"])?;
+            let brk = parse_opt_node_bool(obj, path, "brk")?.unwrap_or(false);
+            Ok(MathNode::Text {
+                text: parse_nonempty_text(obj.get("text"), &format!("{path}.text"))?,
+                brk,
+            })
         }
         "frac" => {
             deny_node_keys(obj, path, &["type", "fracType", "num", "den"])?;
@@ -885,11 +1044,66 @@ fn parse_node(v: &Value, path: &str) -> Result<MathNode, Error> {
                 rows: parse_eq_rows(obj.get("rows"), &format!("{path}.rows"))?,
             })
         }
+        "phant" => {
+            deny_node_keys(
+                obj,
+                path,
+                &[
+                    "type", "e", "show", "zeroWid", "zeroAsc", "zeroDesc", "transp",
+                ],
+            )?;
+            Ok(MathNode::Phant {
+                e: require_slot(obj, path, "e")?,
+                show: parse_opt_node_bool(obj, path, "show")?,
+                zero_wid: parse_opt_node_bool(obj, path, "zeroWid")?,
+                zero_asc: parse_opt_node_bool(obj, path, "zeroAsc")?,
+                zero_desc: parse_opt_node_bool(obj, path, "zeroDesc")?,
+                transp: parse_opt_node_bool(obj, path, "transp")?,
+            })
+        }
+        "borderBox" => {
+            deny_node_keys(
+                obj,
+                path,
+                &["type", "e", "hideTop", "hideBot", "hideLeft", "hideRight"],
+            )?;
+            Ok(MathNode::BorderBox {
+                e: require_slot(obj, path, "e")?,
+                hide_top: parse_opt_node_bool(obj, path, "hideTop")?,
+                hide_bot: parse_opt_node_bool(obj, path, "hideBot")?,
+                hide_left: parse_opt_node_bool(obj, path, "hideLeft")?,
+                hide_right: parse_opt_node_bool(obj, path, "hideRight")?,
+            })
+        }
         other => Err(Error::with_path(
             ErrorKind::InvalidMathExprType {
                 got: other.to_string(),
             },
             format!("{path}.type"),
+        )),
+    }
+}
+
+fn insert_opt_bool(o: &mut Map<String, Value>, key: &str, val: Option<bool>) {
+    if let Some(b) = val {
+        o.insert(key.into(), json!(b));
+    }
+}
+
+fn parse_opt_node_bool(
+    obj: &Map<String, Value>,
+    path: &str,
+    field: &str,
+) -> Result<Option<bool>, Error> {
+    match obj.get(field) {
+        None => Ok(None),
+        Some(Value::Bool(b)) => Ok(Some(*b)),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::Boolean,
+            },
+            format!("{path}.{field}"),
         )),
     }
 }

@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "C:\\data\\note.docx",
+  "output": "C:\\data\\note.edit-range.docx",
+  "ops": [
+    { "op": "insertEditRange", "id": "para:3F2A1B00" },
+    { "op": "deleteEditRange", "id": "perm:1" },
+    { "op": "setFormProt", "id": "section:1", "formProt": false }
+  ]
+}

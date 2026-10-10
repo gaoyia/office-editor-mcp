@@ -260,6 +260,9 @@
         "bookmarks": {
           "type": "boolean"
         },
+        "editRanges": {
+          "type": "boolean"
+        },
         "fields": {
           "type": "boolean"
         },
@@ -850,6 +853,9 @@
                 "$ref": "docx.schema.json#/$defs/deleteBibliographyOp"
               },
               {
+                "$ref": "docx.schema.json#/$defs/setBibliographyStyleOp"
+              },
+              {
                 "$ref": "docx.schema.json#/$defs/insertDocPartOp"
               },
               {
@@ -872,6 +878,15 @@
               },
               {
                 "$ref": "docx.schema.json#/$defs/setPageBordersOp"
+              },
+              {
+                "$ref": "docx.schema.json#/$defs/setFormProtOp"
+              },
+              {
+                "$ref": "docx.schema.json#/$defs/insertEditRangeOp"
+              },
+              {
+                "$ref": "docx.schema.json#/$defs/deleteEditRangeOp"
               },
               {
                 "$ref": "docx.schema.json#/$defs/insertMathOp"
@@ -3658,6 +3673,10 @@
         "password": {
           "type": "string",
           "minLength": 1
+        },
+        "writePassword": {
+          "type": "string",
+          "minLength": 1
         }
       },
       "anyOf": [
@@ -3769,6 +3788,11 @@
         {
           "required": [
             "lockRevision"
+          ]
+        },
+        {
+          "required": [
+            "writePassword"
           ]
         }
       ]

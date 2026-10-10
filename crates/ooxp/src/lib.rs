@@ -204,6 +204,8 @@ mod tests {
         assert_eq!(tree["revisionCount"], 0);
         assert_eq!(tree["hyperlinkCount"], 0);
         assert_eq!(tree["bookmarkCount"], 0);
+        assert_eq!(tree["editRangeCount"], 0);
+        assert!(tree["bibliographyStyle"].is_null());
         assert!(tree.get("comments").is_none());
         assert!(tree.get("charts").is_none());
         assert!(tree.get("smartArts").is_none());
@@ -924,6 +926,7 @@ mod tests {
                 "revisionCount",
                 "hyperlinkCount",
                 "bookmarkCount",
+                "editRangeCount",
                 "fieldCount",
                 "tocCount",
                 "captionCount",
@@ -953,6 +956,7 @@ mod tests {
                 "fontEmbed",
                 "pageBackground",
                 "eastAsianSettings",
+                "bibliographyStyle",
                 "from",
                 "truncated",
                 "paragraphs"
@@ -1027,7 +1031,8 @@ mod tests {
                 "rtlGutter",
                 "headerLink",
                 "footerLink",
-                "pageBorders"
+                "pageBorders",
+                "formProt"
             ]
         );
         assert_eq!(

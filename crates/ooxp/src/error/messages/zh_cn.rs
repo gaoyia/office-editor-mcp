@@ -625,6 +625,17 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::InsertBookmarkNeedsPara => {
                 "insertBookmark 的 id 与 end 必须是正文或页眉页脚段落 id".into()
             }
+            IdReason::PermPrefix => {
+                "例外编辑区 id 必须是 perm:N，或页眉页脚容器 id 加上 /perm:N".into()
+            }
+            IdReason::PermIndexNotInt => "例外编辑区序号必须是正整数".into(),
+            IdReason::PermIndexFromOne => "例外编辑区序号从 1 起".into(),
+            IdReason::InsertEditRangeNeedsPara => {
+                "insertEditRange 的 id 必须是正文或页眉页脚段落 id".into()
+            }
+            IdReason::SetBibliographyStyleNeedsDocument => {
+                "setBibliographyStyle 的 id 必须是 docx:document".into()
+            }
             IdReason::FieldPrefix => {
                 "域 id 必须是 field:N，或页眉页脚容器 id 加上 /field:N".into()
             }
@@ -1134,8 +1145,10 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::ProtectionHasPassword => {
             "这份文件带密码哈希，不能改保护字段".into()
         }
-        ErrorKind::ProtectionPasswordBlank => "password 必须是非空字符串".into(),
-        ErrorKind::ProtectionPasswordWrong => "password 与已有 SHA-512 哈希对不上".into(),
+        ErrorKind::ProtectionPasswordBlank => {
+            "password 与 writePassword 必须是非空字符串".into()
+        }
+        ErrorKind::ProtectionPasswordWrong => "口令与已有 SHA-512 哈希对不上".into(),
         ErrorKind::ProtectionPasswordNeedsDoc => {
             "password 只能配限制编辑，不能只配 readOnlyRecommended".into()
         }
@@ -1227,6 +1240,15 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::SetParaTextHasRevision => "不能改带修订痕迹的段落的可见文本".into(),
         ErrorKind::HyperlinkNotFound { id } => format!("找不到超链接：{id}"),
         ErrorKind::BookmarkNotFound { id } => format!("找不到书签：{id}"),
+        ErrorKind::EditRangeNotFound { id } => format!("找不到例外编辑区：{id}"),
+        ErrorKind::InvalidEdGrp => {
+            "edGrp 必须是 everyone、administrators、contributors、editors、owners 或 current"
+                .into()
+        }
+        ErrorKind::EmptyEditRangeEd => "ed 必须是非空字符串".into(),
+        ErrorKind::InvalidBibliographyStyle => {
+            "styleName 必须是 APA、MLA、Chicago、IEEE 或 GB7714".into()
+        }
         ErrorKind::SetParaTextHasHyperlink => "不能改带超链接的段落的可见文本".into(),
         ErrorKind::HyperlinkNeedTarget => "必须恰好给 url 或 anchor 之一".into(),
         ErrorKind::XlsxHyperlinkNeedTarget => {
@@ -1344,6 +1366,8 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::FieldNeedArg { code } => format!("{code} 必须给 arg"),
         ErrorKind::EmptyMathText => "text 不能为空".into(),
         ErrorKind::InvalidMathKind => "kind 只能是 inline 或 display".into(),
+        ErrorKind::InvalidMathJc => "jc 必须是 center、centerGroup、left 或 right".into(),
+        ErrorKind::MathJcOnInline => "行内公式不能带 jc".into(),
         ErrorKind::MathNeedTextOrExpr => "必须恰好给 text 或 expr 其中一个".into(),
         ErrorKind::EmptyMathExpr => "expr 不能为空".into(),
         ErrorKind::InvalidMathExprType { got } => format!("不认识的公式节点 type：{got}"),

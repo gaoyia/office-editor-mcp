@@ -31,6 +31,7 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 2026-10-10 补跑 `docx-drawing-shape.ps1`，Ds1–Ds8 通过。无 Repair。COM 矩形 `AutoShapeType=1`，椭圆 `9`，填色红 `RGB=255`，描边蓝 `RGB=16711680`。
 2026-10-10 补跑 `docx-style-table.ps1`，Sy1–Sy6、Tf1–Tf6 通过。无 Repair。COM 字符样式 `Color` RGB=255、`Bold=-1`。表 `WrapAroundText=True`，格底纹 `RGB=255`，斜线 `Borders.Item(-7)` 的 `LineStyle=1`。
 2026-10-10 补跑 `docx-theme-bg-remain.ps1`，Fm1–Fm7 通过。无 Repair。
+2026-10-10 补跑 `docx-protect-rev-math.ps1`，Pq1–Pq8 通过。无 Repair。COM `OMath.Justification=2`，`BibliographyStyle=MLA`。窗体 `ProtectionType=2`。修改密码 `WriteReserved=True`。
 
 - **C1** ✅
   - Word 16.0 能打开 `manual-check/office/out/docx-create.docx`，标题栏无 Repair
@@ -1600,6 +1601,25 @@ Word 跟踪修订下改表单元格底纹、插入空段、删除表行。`inspe
   - 均未写文件
   - 不强制为拒写开 Word
 
+## 保护修订与公式属性
+
+按节例外编辑区、节窗体保护、writeProtection 修改密码、修订 move、OMML 对齐 / 幻影 / 边框盒、参考文献 SelectedStyle。
+不算排版引擎，不破解密码。
+手测脚本 `manual-check/office/cases/docx-protect-rev-math.ps1`。编号用 Pq。不要和 Pr、Ph、Rm、Mm、Ms、Bi 撞。
+
+| 编号 | 项 | 期望 |
+| --- | --- | --- |
+| Pq1 | 例外区 | `insertEditRange` 后正文与页眉各 1 条，`edGrp` 为 everyone / editors。无 Repair |
+| Pq2 | formProt | 窗体保护后第 1 节 `formProt=false`。Word `ProtectionType=2` 且 `ProtectedForForms=false`。无 Repair |
+| Pq3 | writePassword | `hasPassword=true`，树里没有明文，settings 有 sid=14 的 `writeProtection`。用 `WritePasswordDocument` 打开无 Repair，`ReadOnly=false` |
+| Pq4 | 拒写 | 空 `writePassword`、错口令、不给口令改哈希，分别得 `InvalidField` / `InvalidField` / `NotImplemented`。未写文件 |
+| Pq5 | move | inspect 收入 `moveFrom` / `moveTo`，接受后 Word `Revisions.Count=0`。无 Repair |
+| Pq6 | OMML | 显示公式 `jc=center`，expr 含 phant / borderBox / brk。Word `OMath.Justification=2`。无 Repair |
+| Pq7 | 参考文献样式 | `styleName=MLA`、`version=7`。Word `BibliographyStyle` 为 MLA 或空。无 Repair |
+| Pq8 | 跨格式拒写 | xlsx `insertEditRange`、pptx `setBibliographyStyle` 报 `InvalidField`。未写文件。不强制开 Word |
+
+- **Pq1–Pq8** ✅
+  - Word 16.0：`docx-protect-rev-math.ps1`，8 PASS / 0 FAIL
 
 ## 水印
 

@@ -171,7 +171,7 @@
   - 段内本期收入的行内内容控件
   - docx 表格结构 op 碰到表/行/单元格上的修订痕迹、网格变更标记，或某行占的列数对不上 `colCount`
   - docx create 出现 `password`
-  - 目标 `writeProtection` 已有密码哈希却要改对应字段
+  - 目标 `writeProtection` 已有密码哈希却不给对得上的 `writePassword` 就要改对应字段
   - `p:modifyVerifier` / docx / xlsx 已有密码哈希却不给对得上的 `password`
     （含 pptx 非 `cryptAlgorithmSid=14` 加 `hashData`、docx 非 `cryptAlgorithmSid=14`、xlsx 遗留 XOR）
 
@@ -249,6 +249,7 @@
   - `setDocGrid`
   - `setRtlGutter`
   - `setPageBorders`
+  - `setFormProt`
   - `setHeaderFooterLink`
   - `insertHeaderFooter`
   - `setTitlePage`
@@ -261,7 +262,7 @@
 - 对页眉页脚、框内、注内、批注内、表格单元格内的段落或 `section:{n}` 发该 op 报 `InvalidId`
 - 找不到段落时报 `IdNotFound`
 - 不认识的分节 `type` / `sectionType`，或 create 时最后一段带 `sectionType`，报 `InvalidField`
-- `setEvenAndOddHeaders` / `setMirrorMargins` / `setGutterAtTop` / `setPageBackground` / `setThemeFmt` / `setThemeOverride` 的 id 不是 `docx:document` 报 `InvalidId`
+- `setEvenAndOddHeaders` / `setMirrorMargins` / `setGutterAtTop` / `setPageBackground` / `setThemeFmt` / `setThemeOverride` / `setBibliographyStyle` 的 id 不是 `docx:document` 报 `InvalidId`
 - docx 的 `setProtection` 的 id 不是 `docx:document` 报 `InvalidId`
 - xlsx 的 `setProtection` 的 id 不是 `sheet:{name}` 也不是 `xlsx:workbook` 报 `InvalidId`
 - `insertProtectedRange` 的 id 不是 `sheet:{name}` 报 `InvalidId`
@@ -621,10 +622,10 @@
   - `setSmartArtPos` / `setSmartArtWrap`
   - `insertWatermark` / `deleteWatermark`
   - `insertInkCanvas` / `replaceInkCanvas` / `deleteInkCanvas`
-  - 表格结构 op、修订 op、书签 op、域 op
+  - 表格结构 op、修订 op、书签 op、例外编辑区 op、域 op
   - `insertCaption` / `deleteCaption` / `insertCrossRef` / `deleteCrossRef`
   - `insertIndex` / `deleteIndex` / `insertIndexEntry` / `deleteIndexEntry`
-  - `insertSource` / `deleteSource` / `insertCitation` / `deleteCitation`
+  - `insertSource` / `deleteSource` / `setBibliographyStyle` / `insertCitation` / `deleteCitation`
   - `insertBibliography` / `deleteBibliography` / `insertDocPart` / `deleteDocPart` / `insertDocPartContent`
   - 内容控件 op、编号 op、样式 op、直接格式 op、拼音 op、`setEastAsianSettings` 或节结构 op
 - xlsx 认下列 op
@@ -663,10 +664,10 @@
 - 对 pptx 发下列内容报 `InvalidField`
   - 文本框 op、脚注尾注 op
   - `mergeCells` / `splitCells`
-  - 修订 op、书签 op
+  - 修订 op、书签 op、例外编辑区 op
   - `insertCaption` / `deleteCaption` / `insertCrossRef` / `deleteCrossRef`
   - `insertIndex` / `deleteIndex` / `insertIndexEntry` / `deleteIndexEntry`
-  - `insertSource` / `deleteSource` / `insertCitation` / `deleteCitation`
+  - `insertSource` / `deleteSource` / `setBibliographyStyle` / `insertCitation` / `deleteCitation`
   - `insertBibliography` / `deleteBibliography` / `insertDocPart` / `deleteDocPart` / `insertDocPartContent`
   - 内容控件 op、编号 op、样式 op、直接格式 op、拼音 op、`setEastAsianSettings`、节结构 op
   - `setPictureWrap`、`setPictureAnchor`、`setChartWrap`、`setChartAnchor`
@@ -873,6 +874,11 @@
 - 书签名非法或重名报 `InvalidField`
 - pptx 上发书签 op 报 `InvalidField`
 - xlsx 上发书签 op 报 `InvalidField`
+- 找不到例外编辑区时，`deleteEditRange` 报 `IdNotFound`
+- id 不是 `perm:{n}` 或页眉页脚前缀报 `InvalidId`
+- `insertEditRange` 的 `id` 必须是正文或页眉页脚段落 id
+- `edGrp` 与 `ed` 同时给、不认识的 `edGrp`、或空 `ed` 报 `InvalidField`
+- xlsx / pptx 上发 `insertEditRange` / `deleteEditRange` 报 `InvalidField`
 - pptx 认超链接 op
 - 段内有本期收入的 `w:hyperlink` 时 `setParaText` 报 `NotImplemented`
 - 找不到域时，域 op 报 `IdNotFound`（`insertField` 除外）
@@ -972,6 +978,9 @@
 - 空或非法的 `tag` 报 `InvalidField`
 - 源名单里没有该 `tag` 报 `IdNotFound`
 - xlsx / pptx 上发 `insertSource` / `deleteSource` / `insertCitation` / `deleteCitation` 报 `InvalidField`
+- `setBibliographyStyle` 的 id 必须是 `docx:document`
+- 不认识的 `styleName` 报 `InvalidField`
+- xlsx / pptx 上发 `setBibliographyStyle` 报 `InvalidField`
 - 找不到书目块时，`deleteBibliography` 报 `IdNotFound`
 - id 不是 `biblio:{n}` 报 `InvalidId`
 - `insertBibliography` 的 `id` 必须是主文档 `w:body` 的直接子段落 id 或 `docx:document`
@@ -991,7 +1000,7 @@
 - pptx：`insertMath` 的 `id` 必须是 `slide:{n}`、`slide:{n}/notes`、`master:{n}` 或 `master:{n}/layout:{k}`
 - pptx：`setMath` / `deleteMath` 的 `id` 必须是公式框 id
 - 对单元格 id、图 id、文本框 id 发公式 op 报 `InvalidId`
-- docx 空 `text` / 空 `expr` / 同时给 / 两个都不给或不认识的 `kind` 报 `InvalidField`
+- docx 空 `text` / 空 `expr` / 同时给 / 两个都不给且 `setMath` 也没有 `jc`、或不认识的 `kind` / `jc` / 行内带 `jc` 报 `InvalidField`
 - xlsx / pptx 空 `text`、出现 `expr` / `kind` 报 `InvalidField`
 - 目标段落落在本期收入的 `oMath` 范围内时 `setParaText` 报 `NotImplemented`
 - 公式落在带分节符且删掉后该段会变空的段落上时，`deleteMath` 报 `NotImplemented`

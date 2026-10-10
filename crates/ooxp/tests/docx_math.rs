@@ -128,10 +128,11 @@ fn insert_inline_lists_and_delete_keeps_heading() {
     assert_eq!(tree["mathCount"], 1);
     assert_eq!(
         object_keys(&tree["maths"][0]),
-        ["id", "index", "kind", "host", "text", "expr"]
+        ["id", "index", "kind", "jc", "host", "text", "expr"]
     );
     assert_eq!(tree["maths"][0]["id"], "math:1");
     assert_eq!(tree["maths"][0]["kind"], "inline");
+    assert!(tree["maths"][0]["jc"].is_null());
     assert_eq!(tree["maths"][0]["text"], "E=mc^2");
     assert_eq!(
         tree["maths"][0]["expr"],

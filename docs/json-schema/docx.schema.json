@@ -2220,6 +2220,33 @@
         }
       }
     },
+    "setBibliographyStyleOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "styleName"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setBibliographyStyle"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "styleName": {
+          "enum": [
+            "APA",
+            "MLA",
+            "Chicago",
+            "IEEE",
+            "GB7714"
+          ]
+        }
+      }
+    },
     "insertDocPartOp": {
       "type": "object",
       "required": [
@@ -2536,6 +2563,78 @@
         }
       }
     },
+    "setFormProtOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "formProt"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setFormProt"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "formProt": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      }
+    },
+    "insertEditRangeOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "insertEditRange"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "edGrp": {
+          "enum": [
+            "everyone",
+            "administrators",
+            "contributors",
+            "editors",
+            "owners",
+            "current"
+          ]
+        },
+        "ed": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "deleteEditRangeOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "deleteEditRange"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
     "docxThemeCreate": {
       "type": "object",
       "additionalProperties": false,
@@ -2681,7 +2780,9 @@
             "bar",
             "limLow",
             "limUpp",
-            "eqArr"
+            "eqArr",
+            "phant",
+            "borderBox"
           ]
         }
       }
@@ -2717,6 +2818,14 @@
             "inline",
             "display"
           ]
+        },
+        "jc": {
+          "enum": [
+            "center",
+            "centerGroup",
+            "left",
+            "right"
+          ]
         }
       }
     },
@@ -2745,6 +2854,21 @@
           "items": {
             "$ref": "#/$defs/mathNode"
           }
+        },
+        "jc": {
+          "anyOf": [
+            {
+              "enum": [
+                "center",
+                "centerGroup",
+                "left",
+                "right"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       }
     },
