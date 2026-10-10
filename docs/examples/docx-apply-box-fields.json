@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "note.docx",
+  "output": "note.box-fields.docx",
+  "ops": [
+    {
+      "op": "insertHyperlink",
+      "id": "para:3F2A1B00/txbx:8/para:00FF00AA",
+      "text": "例",
+      "url": "https://example.com"
+    },
+    {
+      "op": "insertBookmark",
+      "id": "para:3F2A1B00/txbx:8/para:00FF00AA",
+      "name": "BoxBm"
+    },
+    {
+      "op": "insertField",
+      "id": "para:3F2A1B00/txbx:8/para:00FF00AA",
+      "code": "DATE"
+    },
+    {
+      "op": "insertMath",
+      "id": "para:3F2A1B00/txbx:8/para:00FF00AA",
+      "text": "x"
+    },
+    {
+      "op": "insertRuby",
+      "id": "para:3F2A1B00/txbx:8/para:00FF00AA",
+      "base": "汉",
+      "rt": "hàn"
+    },
+    {
+      "op": "insertContentControl",
+      "id": "para:3F2A1B00/txbx:8/para:00FF00AA",
+      "kind": "plainText",
+      "text": "控"
+    }
+  ]
+}

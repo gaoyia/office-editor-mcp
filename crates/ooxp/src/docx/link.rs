@@ -1,4 +1,4 @@
-//! 正文与页眉页脚里的 `w:hyperlink` 与配对书签：inspect 名单与插改删。
+//! 正文、页眉页脚与文本框里的 `w:hyperlink` 与配对书签：inspect 名单与插改删。
 
 use std::collections::{HashMap, HashSet};
 
@@ -9,7 +9,7 @@ use crate::opc::Relationships;
 use crate::xml::{Element, Node};
 
 use super::hf::{self, HfKind, HfPart, HfType};
-use super::para::{self, BodyPara};
+use super::para::{self, HostPara, TxbxKey};
 
 #[derive(Debug, Clone)]
 pub enum LinkStory {
@@ -18,6 +18,10 @@ pub enum LinkStory {
         kind: HfKind,
         hf_type: HfType,
         n: u32,
+    },
+    TextBox {
+        host: HostPara,
+        key: TxbxKey,
     },
 }
 
@@ -167,6 +171,22 @@ pub fn part_for_story(
             let item = hf::find_by_id(catalog, &cid).ok_or_else(missing)?;
             Ok(item.part.clone())
         }
+        LinkStory::TextBox { host, .. } => match host {
+            HostPara::Body(_) => Ok(doc_part.to_string()),
+            HostPara::HeaderFooter {
+                kind, hf_type, n, ..
+            } => part_for_story(
+                catalog,
+                doc_part,
+                &LinkStory::HeaderFooter {
+                    kind: *kind,
+                    hf_type: *hf_type,
+                    n: *n,
+                },
+                missing,
+            ),
+            HostPara::InNote { .. } | HostPara::InComment { .. } => Err(missing()),
+        },
     }
 }
 
@@ -252,15 +272,13 @@ pub fn hyperlink_at_mut<'a>(
 
 pub fn insert_bookmark(
     root: &mut Element,
-    start: &BodyPara,
-    end: &BodyPara,
+    start_path: &[usize],
+    end_path: &[usize],
     name: Option<&str>,
     id: &str,
     i: usize,
 ) -> Result<(), Error> {
-    let start_path = para::find_paragraph_path(root, start).ok_or_else(|| missing_para(id, i))?;
-    let end_path = para::find_paragraph_path(root, end).ok_or_else(|| missing_para(id, i))?;
-    if para_is_before(root, end, start)? {
+    if end_path < start_path {
         return Err(Error::with_path(
             ErrorKind::BookmarkRangeReversed,
             format!("ops[{i}].end"),
@@ -282,16 +300,16 @@ pub fn insert_bookmark(
     };
     let xml_id = next_bookmark_xml_id(root);
     if start_path == end_path {
-        let p = para::element_at_mut(root, &start_path).ok_or_else(|| missing_para(id, i))?;
+        let p = para::element_at_mut(root, start_path).ok_or_else(|| missing_para(id, i))?;
         insert_bookmark_start(p, &xml_id, &name);
         insert_bookmark_end(p, &xml_id);
     } else {
         {
-            let p = para::element_at_mut(root, &start_path).ok_or_else(|| missing_para(id, i))?;
+            let p = para::element_at_mut(root, start_path).ok_or_else(|| missing_para(id, i))?;
             insert_bookmark_start(p, &xml_id, &name);
         }
         {
-            let p = para::element_at_mut(root, &end_path).ok_or_else(|| missing_para(id, i))?;
+            let p = para::element_at_mut(root, end_path).ok_or_else(|| missing_para(id, i))?;
             insert_bookmark_end(p, &xml_id);
         }
     }
@@ -302,9 +320,10 @@ pub fn set_bookmark_name(
     root: &mut Element,
     n: usize,
     name: &str,
+    taken: &HashSet<String>,
     id: &str,
     i: usize,
-) -> Result<(), Error> {
+) -> Result<Option<(String, String)>, Error> {
     check_bookmark_name(name, i, "name")?;
     let pairs = collect_bookmark_pairs(root);
     if n < 1 || n > pairs.len() {
@@ -312,9 +331,8 @@ pub fn set_bookmark_name(
     }
     let pair = &pairs[n - 1];
     if pair.name == name {
-        return Ok(());
+        return Ok(None);
     }
-    let taken = all_bookmark_names(root);
     if taken.contains(name) {
         return Err(Error::with_path(
             ErrorKind::BookmarkNameTaken,
@@ -329,8 +347,7 @@ pub fn set_bookmark_name(
         let key = start.prefixed("name");
         start.set_attr(&key, name);
     }
-    rename_hyperlink_anchors(root, &old, name);
-    Ok(())
+    Ok(Some((old, name.to_string())))
 }
 
 pub fn delete_bookmark(root: &mut Element, n: usize, id: &str, i: usize) -> Result<(), Error> {
@@ -359,7 +376,9 @@ pub fn check_bookmark_name(name: &str, i: usize, field: &str) -> Result<(), Erro
 fn collect_hyperlink_paths(root: &Element) -> Vec<Vec<usize>> {
     let mut path = Vec::new();
     let mut out = Vec::new();
-    walk_hyperlinks(root, &mut path, &mut out);
+    para::walk_from_story_root(root, &mut path, |el, path| {
+        walk_hyperlinks(el, path, &mut out);
+    });
     out
 }
 
@@ -393,7 +412,9 @@ fn collect_bookmark_pairs(root: &Element) -> Vec<BookmarkPair> {
     let mut starts = Vec::new();
     let mut ends: HashMap<String, Vec<usize>> = HashMap::new();
     let mut path = Vec::new();
-    walk_bookmarks(root, &mut path, true, &mut starts, &mut ends);
+    para::walk_from_story_root(root, &mut path, |el, path| {
+        walk_bookmarks(el, path, true, &mut starts, &mut ends);
+    });
     let mut out = Vec::new();
     for (start, xml_id, name) in starts {
         if name.starts_with('_') {
@@ -550,7 +571,7 @@ pub(crate) fn insert_bookmark_end(p: &mut Element, xml_id: &str) {
     p.push_element(end);
 }
 
-fn rename_hyperlink_anchors(el: &mut Element, old: &str, new: &str) {
+pub(crate) fn rename_hyperlink_anchors(el: &mut Element, old: &str, new: &str) {
     if el.local_name() == "hyperlink" && el.attr_local("anchor") == Some(old) {
         let key = el
             .attrs
@@ -567,33 +588,8 @@ fn rename_hyperlink_anchors(el: &mut Element, old: &str, new: &str) {
     }
 }
 
-fn para_is_before(root: &Element, a: &BodyPara, b: &BodyPara) -> Result<bool, Error> {
-    let paras = para::collect_paragraphs(root);
-    let ai = paras
-        .iter()
-        .enumerate()
-        .position(|(i, p)| para_matches(p, i + 1, a));
-    let bi = paras
-        .iter()
-        .enumerate()
-        .position(|(i, p)| para_matches(p, i + 1, b));
-    match (ai, bi) {
-        (Some(a), Some(b)) => Ok(a < b),
-        _ => Err(xml_broken("bookmark para")),
-    }
-}
-
-fn para_matches(p: &Element, index: usize, target: &BodyPara) -> bool {
-    match target {
-        BodyPara::Index(n) => index == *n,
-        BodyPara::Hex(hex) => p
-            .attr_local("paraId")
-            .is_some_and(|id| id.eq_ignore_ascii_case(hex)),
-    }
-}
-
 fn para_index_map(root: &Element) -> Vec<(*const Element, usize)> {
-    para::collect_paragraphs(root)
+    para::collect_story_paragraphs(root)
         .into_iter()
         .enumerate()
         .map(|(i, p)| (p as *const Element, i + 1))
@@ -650,6 +646,21 @@ pub(crate) fn split_story<'a>(
     if let Some((pre, rest)) = id.split_once(&needle) {
         if let Some((kind, hf_type, n)) = para::parse_hf_container_id(pre) {
             return Ok((LinkStory::HeaderFooter { kind, hf_type, n }, rest));
+        }
+        if let Ok(tx) = para::parse_txbx_id_at(pre, path) {
+            return match tx.host {
+                HostPara::Body(_) | HostPara::HeaderFooter { .. } => Ok((
+                    LinkStory::TextBox {
+                        host: tx.host,
+                        key: tx.key,
+                    },
+                    rest,
+                )),
+                HostPara::InNote { .. } | HostPara::InComment { .. } => Err(Error::with_path(
+                    ErrorKind::InvalidId { reason },
+                    path.to_string(),
+                )),
+            };
         }
     }
     Err(Error::with_path(

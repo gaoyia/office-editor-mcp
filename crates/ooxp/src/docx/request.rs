@@ -3518,7 +3518,7 @@ fn parse_insert_math(
     let place = if id == "docx:document" {
         InsertMathPlace::EndOfDocument
     } else {
-        InsertMathPlace::After(parse_story_para_at(
+        InsertMathPlace::After(parse_story_or_box_para_at(
             &id,
             &path,
             IdReason::InsertMathNeedsPara,
@@ -3642,7 +3642,7 @@ fn parse_insert_ruby(
     let place = if id == "docx:document" {
         InsertRubyPlace::EndOfDocument
     } else {
-        InsertRubyPlace::After(parse_story_para_at(
+        InsertRubyPlace::After(parse_story_or_box_para_at(
             &id,
             &path,
             IdReason::InsertRubyNeedsPara,
@@ -4008,7 +4008,7 @@ fn parse_insert_sdt(
     let place = if id == "docx:document" {
         InsertSdtPlace::EndOfDocument
     } else {
-        InsertSdtPlace::After(parse_story_para_at(
+        InsertSdtPlace::After(parse_story_or_box_para_at(
             &id,
             &path,
             IdReason::InsertSdtNeedsPara,
@@ -5022,6 +5022,24 @@ fn parse_story_para_at(id: &str, path: &str, reason: IdReason) -> Result<ParaTar
     }
 }
 
+fn parse_story_or_box_para_at(id: &str, path: &str, reason: IdReason) -> Result<ParaTarget, Error> {
+    let target = para::parse_para_id_at(id, path)?;
+    match &target {
+        ParaTarget::Body(_) | ParaTarget::HeaderFooter { .. } => Ok(target),
+        ParaTarget::InTextBox { host, .. } => match host {
+            HostPara::Body(_) | HostPara::HeaderFooter { .. } => Ok(target),
+            HostPara::InNote { .. } | HostPara::InComment { .. } => Err(Error::with_path(
+                ErrorKind::InvalidId { reason },
+                path.to_string(),
+            )),
+        },
+        _ => Err(Error::with_path(
+            ErrorKind::InvalidId { reason },
+            path.to_string(),
+        )),
+    }
+}
+
 fn same_story(a: &ParaTarget, b: &ParaTarget) -> bool {
     match (a, b) {
         (ParaTarget::Body(_), ParaTarget::Body(_)) => true,
@@ -5039,6 +5057,14 @@ fn same_story(a: &ParaTarget, b: &ParaTarget) -> bool {
                 ..
             },
         ) => k1 == k2 && t1 == t2 && n1 == n2,
+        (
+            ParaTarget::InTextBox {
+                host: h1, key: k1, ..
+            },
+            ParaTarget::InTextBox {
+                host: h2, key: k2, ..
+            },
+        ) => h1 == h2 && k1 == k2,
         _ => false,
     }
 }
@@ -5079,7 +5105,7 @@ fn parse_insert_hyperlink(
         InsertHyperlinkHost::TextBox(box_t)
     } else {
         deny_keys(obj, i, &["op", "id", "text", "url", "anchor", "tooltip"])?;
-        let para = parse_story_para_at(&id, &path, IdReason::InsertLinkNeedsPara)?;
+        let para = parse_story_or_box_para_at(&id, &path, IdReason::InsertLinkNeedsPara)?;
         let text = match obj.get("text") {
             Some(Value::String(s)) => s.clone(),
             Some(_) => {
@@ -5229,7 +5255,10 @@ fn looks_like_pic_hlink_id(id: &str) -> bool {
 }
 
 fn looks_like_txbx_hlink_id(id: &str) -> bool {
-    id.contains("/txbx:") && !id.contains("/pic:")
+    let Some(rest) = id.split_once("/txbx:").map(|(_, r)| r) else {
+        return false;
+    };
+    !rest.contains('/') && !id.contains("/pic:")
 }
 
 fn parse_hyperlink_target(id: &str, path: &str) -> Result<HyperlinkTarget, Error> {
@@ -5277,14 +5306,14 @@ fn parse_insert_bookmark(
 ) -> Result<InsertBookmarkOp, Error> {
     deny_keys(obj, i, &["op", "id", "name", "end"])?;
     let id = require_op_id(obj, i)?;
-    let start = parse_story_para_at(
+    let start = parse_story_or_box_para_at(
         &id,
         &format!("ops[{i}].id"),
         IdReason::InsertBookmarkNeedsPara,
     )?;
     let end = match obj.get("end") {
         None => start.clone(),
-        Some(Value::String(s)) if !s.is_empty() => parse_story_para_at(
+        Some(Value::String(s)) if !s.is_empty() => parse_story_or_box_para_at(
             s,
             &format!("ops[{i}].end"),
             IdReason::InsertBookmarkNeedsPara,
@@ -5488,7 +5517,8 @@ fn parse_insert_field(
         ],
     )?;
     let id = require_op_id(obj, i)?;
-    let para = parse_story_para_at(&id, &format!("ops[{i}].id"), IdReason::InsertFieldNeedsPara)?;
+    let para =
+        parse_story_or_box_para_at(&id, &format!("ops[{i}].id"), IdReason::InsertFieldNeedsPara)?;
     let body = super::field::parse_field_body(obj, &format!("ops[{i}]"))?;
     Ok(InsertFieldOp {
         id,

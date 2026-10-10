@@ -974,7 +974,7 @@ pptx：删掉对应 `a:gridCol`。该列落在某格 `gridSpan` 内部时，`gri
 - **`op`**
   - 必须是 `"insertHyperlink"`
 - **`id`**
-  - docx：段落 id（正文或页眉页脚）写 `w:hyperlink`；或正文 / 页眉页脚的图 id / 文本框 id 写 DrawingML `a:hlinkClick`
+  - docx：段落 id（正文、页眉页脚或框内）写 `w:hyperlink`；或正文 / 页眉页脚的图 id / 文本框 id 写 DrawingML `a:hlinkClick`
   - xlsx：工作表 id `sheet:{name}`（单元格链），或图 / 文本框 / 形状 / SmartArt 图示 id（DrawingML 链）
   - pptx：文本形状、图、表、图表、SmartArt 或表单元格 id（不含 `notesMaster` / `handout`）
 - **`text`**

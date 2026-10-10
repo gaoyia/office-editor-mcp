@@ -1,4 +1,4 @@
-//! 正文与页眉页脚里的 `w:fldChar` / `w:fldSimple`：inspect 名单与插改删。
+//! 正文、页眉页脚与文本框里的 `w:fldChar` / `w:fldSimple`：inspect 名单与插改删。
 
 use std::collections::HashSet;
 
@@ -286,7 +286,9 @@ fn collect_fields(root: &Element) -> Vec<FieldRec> {
     let mut path = Vec::new();
     let mut stack = Vec::new();
     let mut out = Vec::new();
-    walk_fields(root, &mut path, &mut stack, &mut out);
+    para::walk_from_story_root(root, &mut path, |el, path| {
+        walk_fields(el, path, &mut stack, &mut out);
+    });
     // 按起点文档顺序编号：嵌套域的外层 begin 早于内层，应排在前面。
     out.sort_by(|a, b| path_cmp(&a.start, &b.start));
     out
@@ -453,7 +455,9 @@ fn para_overlaps(
 fn collect_para_paths(root: &Element) -> Vec<Vec<usize>> {
     let mut path = Vec::new();
     let mut out = Vec::new();
-    collect_p_paths(root, &mut path, &mut out);
+    para::walk_from_story_root(root, &mut path, |el, path| {
+        collect_p_paths(el, path, &mut out);
+    });
     out
 }
 
@@ -484,7 +488,7 @@ fn collect_p_paths(el: &Element, path: &mut Vec<usize>, out: &mut Vec<Vec<usize>
 }
 
 fn para_index_map(root: &Element) -> Vec<(*const Element, usize)> {
-    para::collect_paragraphs(root)
+    para::collect_story_paragraphs(root)
         .into_iter()
         .enumerate()
         .map(|(i, p)| (p as *const Element, i + 1))

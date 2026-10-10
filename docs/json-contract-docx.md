@@ -92,6 +92,12 @@ apply 用 `setHeaderFooterLink` 断开或重新链接；用 `insertHeaderFooter`
 | 框内表 | `{框 id}/table:{n}` | `para:3F2A1B00/txbx:8/table:1` |
 | 框内表行 | `{框 id}/table:{n}/row:{r}` | `para:3F2A1B00/txbx:8/table:1/row:1` |
 | 框内单元格 | `{框 id}/table:{n}/r{r}c{c}` | `para:3F2A1B00/txbx:8/table:1/r1c1` |
+| 框内超链接 | `{框 id}/link:{n}` | `para:3F2A1B00/txbx:8/link:1` |
+| 框内书签 | `{框 id}/bookmark:{n}` | `para:3F2A1B00/txbx:8/bookmark:1` |
+| 框内域 | `{框 id}/field:{n}` | `para:3F2A1B00/txbx:8/field:1` |
+| 框内公式 | `{框 id}/math:{n}` | `para:3F2A1B00/txbx:8/math:1` |
+| 框内拼音 | `{框 id}/ruby:{n}` | `para:3F2A1B00/txbx:8/ruby:1` |
+| 框内内容控件 | `{框 id}/sdt:{n}` | `para:3F2A1B00/txbx:8/sdt:1` |
 | 脚注 | `footnote:{id}` | `footnote:2` |
 | 尾注 | `endnote:{id}` | `endnote:2` |
 | 注内段落 | `{注 id}/para:{paraId}` 或 `{注 id}/para:index:{k}` | `footnote:2/para:3F2A1B00` |
@@ -300,7 +306,9 @@ run 级与 `*Change` 只动被点名的那一个 XML 节点，`rowIns` / `rowDel
   关系 `r:id` 不当树上的唯一键，只进 `rId`。`link:{n}` 在增删链之后会变，只够同一次 inspect 之后立刻 apply。
   本期只收 `w:hyperlink` 元素（ECMA-376 §17.16.22）。
   HYPERLINK 域不进本名单，仍走域切片。
-  框内 / 注内 / 批注内的 `w:hyperlink` 不进树；对这些容器发 `w:hyperlink` 超链接 op 报 `InvalidId`。
+  文本框里的 `w:hyperlink` 另编号，id 为 `{框 id}/link:{n}`。`{n}` 是该框 `w:txbxContent` 里链的文档顺序。
+  根上 `hyperlinkCount` 仍只计正文。框节点另报 `hyperlinkCount`。`scope.hyperlinks` 为 true 时框上带 `hyperlinks`。
+  注内 / 批注内的 `w:hyperlink` 仍不进树；对注内 / 批注内段落或注内 / 批注内框发 `w:hyperlink` 超链接 op 报 `InvalidId`。
   有 `r:id` 时为外部链（规范说此时忽略 `w:anchor`）；只有 `w:anchor` 时为内部链，指向书签名。两者都没有仍列出，`kind` 为 `anchor`，`anchor` 为 `null`。
   根上 `hyperlinkCount` 与页眉页脚容器上的 `hyperlinkCount` 只计这一套。
 - DrawingML 链：写在正文或页眉页脚里图、文本框上的 `a:hlinkClick`。
@@ -319,14 +327,18 @@ run 级与 `*Change` 只动被点名的那一个 XML 节点，`rowIns` / `rowDel
 
 书签的 `{n}` 从 1 起，按该故事里被收入的 `w:bookmarkStart` 的文档顺序（同一套边界）。只收起止都在同一故事里、且 `w:name` 不以 `_` 开头的配对（Word 隐藏书签含 `_GoBack` 不进树）。
 配对按 `w:id`（§17.13.6.1、§17.13.6.2）。找不到配对的不进树。`w:id` 进 `xmlId`，缺则为 `null`。`w:name` 进 `name`。
-框内、注内、批注内的书签本期不编；对这些容器发书签 op 报 `InvalidId`。
+文本框里的书签另编号，id 为 `{框 id}/bookmark:{n}`。起止必须同在该框。
+根上 `bookmarkCount` 仍只计正文。框节点另报 `bookmarkCount`。`scope.bookmarks` 为 true 时框上带 `bookmarks`。
+注内、批注内的书签仍不编；对这些容器发书签 op 报 `InvalidId`。
 
 例外编辑区的 `{n}` 从 1 起，按该故事里被收入的 `w:permStart` 的文档顺序（同一套边界）。配对按 `w:id`。不成对的 Start 仍列出。
 框内、注内、批注内的 `permStart` 本期不编；对这些容器发例外区 op 报 `InvalidId`。
 
 域的 `{n}` 从 1 起，按该故事里被收入域起点的文档顺序（遇 `w:txbxContent` 停住；`mc:AlternateContent` 只进 Choice）。
 起点是 `w:fldSimple`，或配对完整的 `w:fldChar/@w:fldCharType="begin"`（§17.16.18、§17.16.19）。
-嵌套域各算一条：外层 begin 先于内层 begin，因此外层 `{n}` 更小。故事结束时尚未配对 end 的 begin 不进树。框内、注内、批注内的域本期不编；对这些容器发域 op 报 `InvalidId`。
+嵌套域各算一条：外层 begin 先于内层 begin，因此外层 `{n}` 更小。故事结束时尚未配对 end 的 begin 不进树。
+文本框里的域另编号，id 为 `{框 id}/field:{n}`。根上 `fieldCount` 仍只计正文。框节点另报 `fieldCount`。
+`scope.fields` 为 true 时框上带 `fields`。注内、批注内的域仍不编；对这些容器发域 op 报 `InvalidId`。
 HYPERLINK 域进本名单，不进 `hyperlinks`。主文档里 `code` 为 `TOC` 或 `TOA` 的域另外编目录 id，它们仍出现在 `fields` 里。
 主文档里顶层 `SEQ` 另外编题注 id，顶层 `REF` / `PAGEREF` / `NOTEREF` 另外编交叉引用 id，顶层 `INDEX` 另外编索引 id，顶层 `XE` 另外编索引项 id，它们仍出现在 `fields` 里。
 
@@ -374,16 +386,19 @@ Word 给题注写的 `_Ref*` 书签仍不进 `bookmarks`（隐藏书签规则不
 公式的 `{n}` 从 1 起，按该故事里顶层 `m:oMath` 的文档顺序（遇 `w:txbxContent` 停住；`mc:AlternateContent` 只进 Choice）。嵌在另一个 `oMath` 里的不算一条。
 `oMathPara` 里的每个 `oMath` 各算一条。`math:{n}` 在插删公式之后会变，只够同一次 inspect 之后立刻 apply。
 父节点是 `oMathPara` 时 `kind` 为 `display`，否则为 `inline`。正文用 `math:{n}`，页眉页脚用 `{容器}/math:{n}`。
-框内、注内、批注内的公式本期不编；对这些容器发公式 op 报 `InvalidId`。Equation Editor 3.0 的 OLE / `w:object` 不编。只认 OMML。名单带 `expr` 结构树，不另编嵌套对象 id。
+文本框用 `{框 id}/math:{n}`。根上 `mathCount` 仍只计正文。框节点另报 `mathCount`。`scope.maths` 为 true 时框上带 `maths`。
+注内、批注内的公式仍不编；对这些容器发公式 op 报 `InvalidId`。Equation Editor 3.0 的 OLE / `w:object` 不编。只认 OMML。名单带 `expr` 结构树，不另编嵌套对象 id。
 不解析 UnicodeMath / TeX，也不实现排版引擎。
 
 拼音的 `{n}` 从 1 起，按该故事里 `w:ruby` 的文档顺序（遇 `w:txbxContent` 停住；`mc:AlternateContent` 只进 Choice；`w:del` 里的不编）。
 `ruby:{n}` 在插删拼音之后会变，只够同一次 inspect 之后立刻 apply。正文用 `ruby:{n}`，页眉页脚用 `{容器}/ruby:{n}`。
-框内、注内、批注内的拼音本期不编；对这些容器发拼音 op 报 `InvalidId`。不实现注音排版引擎。
+文本框用 `{框 id}/ruby:{n}`。根上 `rubyCount` 仍只计正文。框节点另报 `rubyCount`。`scope.rubies` 为 true 时框上带 `rubies`。
+注内、批注内的拼音仍不编；对这些容器发拼音 op 报 `InvalidId`。不实现注音排版引擎。
 
 内容控件的 `{n}` 从 1 起，按该故事里被收入的 `w:sdt` 的文档顺序（遇 `w:txbxContent` 停住；`mc:AlternateContent` 只进 Choice，ECMA-376 §17.5.2）。
 嵌套控件各算一条，外层 `{n}` 更小。`sdt:{n}` 在插删控件之后会变，只够同一次 inspect 之后立刻 apply。正文用 `sdt:{n}`，页眉页脚用 `{容器}/sdt:{n}`。
-框内、注内、批注内的控件本期不编；对这些容器发内容控件 op 报 `InvalidId`。
+文本框用 `{框 id}/sdt:{n}`。根上 `contentControlCount` 仍只计正文。框节点另报 `contentControlCount`。
+`scope.contentControls` 为 true 时框上带 `contentControls`。注内、批注内的控件仍不编；对这些容器发内容控件 op 报 `InvalidId`。
 本期收入：`plainText`（`w:text`）、`richText`（`w:richText`，或 `sdtPr` 未写类型元素，
 规范缺省为富文本）、`dropDown`（`w:dropDownList`）、`comboBox`（`w:comboBox`）、`date`（`w:date`）、
 `repeatingSection`（`repeatingSection` / `repeatingSectionItem`）、`checkbox`（`w14:checkbox`，
@@ -408,12 +423,12 @@ run 上的 `style` 只读自己的 `w:rStyle/@w:val`。框内、注内、批注�
 遇 `w:txbxContent` 停住；`mc:AlternateContent` 只进 Choice；`w:del` 里的 run 不编。`w:ins`、`w:hyperlink` 里的 run 要编。
 增删 run 之后 `{n}` 会变，只够同一次 inspect 之后立刻 apply。对 run id 发 `setParaText` / `setParaFormat` 报 `InvalidId`。对段落 id 发 `setRunFormat` 报 `InvalidId`。
 
-`insertHyperlink` 的 `id` 必须是段落 id（正文或页眉页脚，写 `w:hyperlink`），或正文 / 页眉页脚的图 id / 文本框 id（写 `a:hlinkClick`）。
+`insertHyperlink` 的 `id` 必须是段落 id（正文、页眉页脚或框内，写 `w:hyperlink`），或正文 / 页眉页脚的图 id / 文本框 id（写 `a:hlinkClick`）。
 对图 / 框禁止 `text`。`url` 与 `anchor` 必须恰好一个。同一对象已有 `hlinkClick` 报 `InvalidField`（改地址用 `setHyperlink`）。
-`setHyperlink` / `deleteHyperlink` 的 `id` 必须是超链接 id（`link:{n}`，含页眉页脚前缀），或带（或要改）DrawingML 链的图 id / 文本框 id。
+`setHyperlink` / `deleteHyperlink` 的 `id` 必须是超链接 id（`link:{n}`，含页眉页脚前缀与框前缀），或带（或要改）DrawingML 链的图 id / 文本框 id。
 对 DrawingML 链禁止 `text`。对象上没有 `hlinkClick` 时 `set` / `delete` 报 `IdNotFound`。删 DrawingML 链时去掉 `a:hlinkClick` 和无人引用的 hyperlink 关系，不删图或框。
-`insertBookmark` 的 `id` 必须是起始段落 id；可选 `end` 为同一故事里的结束段落 id。`setBookmark` / `deleteBookmark` 的 `id` 必须是书签 id。
-`insertField` 的 `id` 必须是段落 id（正文或页眉页脚）。`setField` / `deleteField` 的 `id` 必须是域 id。
+`insertBookmark` 的 `id` 必须是起始段落 id（正文、页眉页脚或框内）；可选 `end` 为同一故事里的结束段落 id。`setBookmark` / `deleteBookmark` 的 `id` 必须是书签 id。
+`insertField` 的 `id` 必须是段落 id（正文、页眉页脚或框内）。`setField` / `deleteField` 的 `id` 必须是域 id。
 `insertNumbering` 的 `id` 必须是 `docx:document`。`setNumbering` 的 `id` 必须是抽象编号 id。
 `setParaNumbering` 的 `id` 必须是段落 id（正文或页眉页脚）。`setStyle` / `deleteStyle` 的 `id` 必须是样式 id。
 `insertStyle` 的 `id` 必须是 `docx:document`。`setParaStyle` 的 `id` 必须是段落 id（正文或页眉页脚）。
@@ -432,10 +447,10 @@ run 上的 `style` 只读自己的 `w:rStyle/@w:val`。框内、注内、批注�
 `insertDocPartContent` 的 `id` 必须是主文档 `w:body` 的直接子段落 id 或 `docx:document`。
 `insertEmbeddedFont` / `setFontEmbed` / `setPageBackground` / `setThemeFmt` / `setThemeOverride` 的 `id` 必须是 `docx:document`。
 `deleteEmbeddedFont` 的 `id` 必须是 `font:{n}`。`setPageBorders` 的 `id` 必须是 `section:{n}`。
-`insertMath` 的 `id` 必须是段落 id（正文或页眉页脚）或 `docx:document`。`setMath` / `deleteMath` 的 `id` 必须是公式 id。
-`insertRuby` 的 `id` 必须是段落 id（正文或页眉页脚）或 `docx:document`。`setRuby` / `deleteRuby` 的 `id` 必须是拼音 id。
+`insertMath` 的 `id` 必须是段落 id（正文、页眉页脚或框内）或 `docx:document`。`setMath` / `deleteMath` 的 `id` 必须是公式 id。
+`insertRuby` 的 `id` 必须是段落 id（正文、页眉页脚或框内）或 `docx:document`。`setRuby` / `deleteRuby` 的 `id` 必须是拼音 id。
 `setEastAsianSettings` 的 `id` 必须是 `docx:document`。
-`insertContentControl` 的 `id` 必须是段落 id（正文或页眉页脚）或 `docx:document`。
+`insertContentControl` 的 `id` 必须是段落 id（正文、页眉页脚或框内）或 `docx:document`。
 `setContentControl` / `deleteContentControl` 的 `id` 必须是内容控件 id。对不上的 id 形态报 `InvalidId`。
 
 图的 `{docPrId}` 取该 `w:drawing` 里 `wp:docPr/@id` 的原文（ECMA-376 §20.4）。输出用文件里的原始大小写与数字写法。
@@ -1222,12 +1237,15 @@ xlsx / pptx 的 `scope.tables` 不是同一件事：xlsx 仍拒绝；pptx 展开
   最后始终跟 `hyperlink`（`null` 或对象，字段顺序 `kind`、`rId`、`url`、`anchor`、`tooltip`），见上文 DrawingML 链。
 - `scope.textBoxes` 为 `true` 时，每个页眉、页脚节点带 `textBoxes`；若同时给了 `from` 与 `maxParas`，切片里每段也带 `textBoxes`。否则这些节点上都没有该字段。
   只给 `textBoxes`、不给 `from` / `maxParas`：只展开页眉页脚容器上的框。
-  每个框的字段顺序：`id`、`docPrId`、`name`、`kind`、`cx`、`cy`、`wrap`、`link`、`paraCount`、`pictureCount`、`chartCount`、`smartArtCount`、`tableCount`、`stable`、`hyperlink`，
-  有框内段名单时再跟 `paragraphs`，有框内图名单时再跟 `pictures`，给了 `scope.charts` 时再跟 `charts`，给了 `scope.smartArt` 时再跟 `smartArts`，给了 `scope.tables` 时再跟 `tables`。
+  每个框的字段顺序：`id`、`docPrId`、`name`、`kind`、`cx`、`cy`、`wrap`、`link`、`paraCount`、`pictureCount`、`chartCount`、`smartArtCount`、`tableCount`、`hyperlinkCount`、`bookmarkCount`、`fieldCount`、`mathCount`、`rubyCount`、`contentControlCount`、`stable`、`hyperlink`，
+  有框内段名单时再跟 `paragraphs`，有框内图名单时再跟 `pictures`，给了 `scope.charts` 时再跟 `charts`，给了 `scope.smartArt` 时再跟 `smartArts`，给了 `scope.tables` 时再跟 `tables`，
+  给了 `scope.hyperlinks` 时再跟 `hyperlinks`，给了 `scope.bookmarks` 时再跟 `bookmarks`，给了 `scope.fields` 时再跟 `fields`，
+  给了 `scope.maths` 时再跟 `maths`，给了 `scope.rubies` 时再跟 `rubies`，给了 `scope.contentControls` 时再跟 `contentControls`。
   `hyperlink` 为 `null` 或对象（字段顺序 `kind`、`rId`、`url`、`anchor`、`tooltip`），见上文 DrawingML 链。
   `chartCount` / `smartArtCount` 始终出现，只计该框 `w:txbxContent` 内、再遇嵌套 `w:txbxContent` 停住之后的图表与 SmartArt。框内图表与 SmartArt 不挂到文档根，也不挂到宿主段落。
   `tableCount` 始终出现，只计该框 `w:txbxContent` 内、再遇嵌套 `w:txbxContent` 停住之后的 `w:tbl`（含嵌套表）。
-  注内 / 批注内的框此项为 `0`，也不带 `tables`。框内表不挂到文档根，也不挂到宿主段落。
+  `hyperlinkCount` / `bookmarkCount` / `fieldCount` / `mathCount` / `rubyCount` / `contentControlCount` 始终出现，只计该框内容，规则与正文同一套边界。
+  注内 / 批注内的框这几项计数为 `0`，也不带对应名单。框内这些对象不挂到文档根，也不挂到宿主段落。
 - `scope.connectors` 为 `true` 时，每个页眉、页脚节点带 `connectors`；若同时给了 `from` 与 `maxParas`，切片里每段也带 `connectors`。否则这些节点上都没有该字段。
   只给 `connectors`、不给 `from` / `maxParas`：只展开页眉页脚容器上的连接线。
   每条字段顺序：`id`、`docPrId`、`name`、`kind`、`cx`、`cy`、`wrap`、`prst`、`stable`。
@@ -2872,7 +2890,7 @@ xlsx / pptx 上发此 op 报 `InvalidField`。
 | 字段 | 含义 |
 | --- | --- |
 | `op` | 必须是 `"insertBookmark"` |
-| `id` | 起始段落 id（正文或页眉页脚） |
+| `id` | 起始段落 id（正文、页眉页脚或框内） |
 | `name` | 可选。书签名。省略则用尚未占用的 `ooxp{n}`（n 从 1 起） |
 | `end` | 可选。结束段落 id。省略则与 `id` 相同 |
 
@@ -2902,13 +2920,14 @@ xlsx / pptx 上发此 op 报 `InvalidField`。
 xlsx / pptx 上发此 op 报 `InvalidField`。
 
 示例见 `docs/examples/docx-apply-hyperlink.json`、`docs/examples/docx-apply-drawing-hlink.json`。
+框内链、书签、域、公式、拼音与控件见 `docs/examples/docx-apply-box-fields.json`。
 
 ### insertField
 
 - **`op`**
   - 必须是 `"insertField"`
 - **`id`**
-  - 段落 id（正文或页眉页脚）
+  - 段落 id（正文、页眉页脚或框内）
 - **`instr`**
   - 与 `code` 恰好一个
   - 去掉首尾空白后不能为空
@@ -2982,6 +3001,7 @@ xlsx 上发此 op 报 `InvalidField`。pptx 用同一 op 名改 `a:fld` 的 `typ
 pptx 用同一 op 名拆 `a:fld`，见 [json-contract-pptx.md](json-contract-pptx.md#deletefield)。
 
 示例见 `docs/examples/docx-apply-field.json`。
+框内域见 `docs/examples/docx-apply-box-fields.json`。
 
 ### insertToc
 
@@ -3521,7 +3541,7 @@ id 不是 `docx:document` 报 `InvalidId`。xlsx / pptx 上发此 op 报 `Invali
 | 字段 | 含义 |
 | --- | --- |
 | `op` | 必须是 `"insertMath"` |
-| `id` | 段落 id（正文或页眉页脚），或 `docx:document` |
+| `id` | 段落 id（正文、页眉页脚或框内），或 `docx:document` |
 | `text` | 与 `expr` 恰好一个。非空。写入一条 `m:r` / `m:t` |
 | `expr` | 与 `text` 恰好一个。`oMath` 子节点数组，见「公式 expr」 |
 | `kind` | 可选。`inline`（缺省）或 `display` |
@@ -3593,13 +3613,14 @@ xlsx / pptx 的 drawing 公式框见各自分册。
 对含本期收入的 `oMath` 的段落发 `setParaText` 报 `NotImplemented`。
 
 示例见 `docs/examples/docx-apply-math.json`。
+框内公式与拼音见 `docs/examples/docx-apply-box-fields.json`。
 
 ### insertContentControl
 
 | 字段 | 含义 |
 | --- | --- |
 | `op` | 必须是 `"insertContentControl"` |
-| `id` | 段落 id（正文或页眉页脚），或 `docx:document` |
+| `id` | 段落 id（正文、页眉页脚或框内），或 `docx:document` |
 | `text` | `checkbox` / `picture` 不要此字段。其余 kind 必填非空，写入控件当前值 |
 | `kind` | 可选。`plainText`（缺省）、`richText`、`dropDown`、`comboBox`、`date`、`checkbox`、`picture`、`group`、`equation` |
 | `file` | 只用于 `picture`。本地图片路径，规则与 `insertPicture` 相同 |
@@ -3658,6 +3679,7 @@ xlsx / pptx 上发此 op 报 `InvalidField`。create 给了 `paragraphs[].conten
 对含本期收入的行内内容控件的段落发 `setParaText` 报 `NotImplemented`。块级控件里的内层段落仍可 `setParaText`。
 
 示例见 `docs/examples/docx-apply-sdt.json`。
+框内控件见 `docs/examples/docx-apply-box-fields.json`。
 
 ### insertNumbering
 
@@ -3945,7 +3967,7 @@ id 不是 run id 报 `InvalidId`。xlsx / pptx 上发此 op 报 `InvalidField`�
 | 字段 | 含义 |
 | --- | --- |
 | `op` | 必须是 `"insertRuby"` |
-| `id` | 段落 id（正文或页眉页脚），或 `docx:document` |
+| `id` | 段落 id（正文、页眉页脚或框内），或 `docx:document` |
 | `base` | 必填非空。基文，写入 `w:rubyBase` 一条 `w:r` / `w:t` |
 | `rt` | 必填非空。拼音，写入 `w:rt` 一条 `w:r` / `w:t` |
 | `align` | 可选。`center`、`distributeLetter`、`distributeSpace`、`left`、`right` 或 `rightVertical`。缺省 `distributeSpace` |

@@ -148,20 +148,20 @@ inspect 读该部件里的 `w:p`，返回大纲和按范围截断的段落；并
 页眉页脚容器始终带前两项与 `connectorCount`、`shapeCount`、`inkCanvasCount`、`chartCount`、`smartArtCount`、`oleObjectCount`、`model3dCount`、`tableCount`、`revisionCount`、
 `hyperlinkCount`、`bookmarkCount`、`fieldCount`、`mathCount`、`contentControlCount`。
 `scope.pictures` / `scope.textBoxes` / `scope.connectors` / `scope.shapes` / `scope.inkCanvases` / `scope.model3ds` 为 true 时列出页眉页脚图、框、连接线、无框形状、墨迹画布或 3D 模型；同时给了正文切片则段落上也列出。
-组合本身不进树，组合里的图 / 框 / 连接线 / 无框形状 / 墨迹画布展开。`scope.textBoxContent` 再展开框内段落。`scope.tables` 为 true 时框节点带框内表名单。`scope.notes` 为 true 时列出用户脚注、尾注与分隔符；注内段落一次倒出。
+组合本身不进树，组合里的图 / 框 / 连接线 / 无框形状 / 墨迹画布展开。`scope.textBoxContent` 再展开框内段落。`scope.tables` 为 true 时框节点带框内表名单。对应 `scope` 为 true 时框节点还带框内 `w:hyperlink`、书签、域、公式、拼音与内容控件名单。`scope.notes` 为 true 时列出用户脚注、尾注与分隔符；注内段落一次倒出。
 `scope.comments` 为 true 时列出批注；批注内段落一次倒出。`scope.charts` 为 true 时列出正文、页眉页脚、文本框、脚注、尾注与批注里的嵌入图表；系列一次倒出。
 `scope.smartArt` 为 true 时列出正文、页眉页脚、文本框、脚注、尾注与批注里的 SmartArt；可见点一次倒出。`scope.oleObjects` 为 true 时列出正文与页眉页脚里的嵌入对象。
 `scope.tables` 为 true 时列出正文与页眉页脚里的表；单元格段落一次倒出。`scope.revisions` 为 true 时列出正文与页眉页脚里的 run 级插入、删除与属性修订。
-`scope.hyperlinks` 为 true 时列出正文与页眉页脚里的 `w:hyperlink`。`scope.bookmarks` 为 true 时列出正文与页眉页脚里的配对书签。
-`scope.fields` 为 true 时列出正文与页眉页脚里的 `w:fldChar` / `w:fldSimple`。`scope.tocs` 为 true 时列出主文档目录块。
+`scope.hyperlinks` 为 true 时列出正文、页眉页脚与文本框里的 `w:hyperlink`。`scope.bookmarks` 为 true 时列出正文、页眉页脚与文本框里的配对书签。
+`scope.fields` 为 true 时列出正文、页眉页脚与文本框里的 `w:fldChar` / `w:fldSimple`。`scope.tocs` 为 true 时列出主文档目录块。
 `scope.captions` 为 true 时列出主文档题注。`scope.crossRefs` 为 true 时列出主文档交叉引用。`scope.indexes` 为 true 时列出主文档 INDEX 块。
 `scope.indexEntries` 为 true 时列出主文档 XE 索引项。`scope.sources` 为 true 时列出书目源。`scope.citations` 为 true 时列出主文档 CITATION。
 `scope.bibliographies` 为 true 时列出主文档 BIBLIOGRAPHY 块。`scope.docParts` 为 true 时列出 glossary 构建基块。
-`scope.embeddedFonts` 为 true 时列出 fontTable 里的嵌入字体面。`scope.maths` 为 true 时列出正文与页眉页脚里的顶层 `m:oMath`，名单带 `expr`。
-`scope.contentControls` 为 true 时列出正文与页眉页脚里被收入的 `w:sdt`。`scope.numbering` 为 true 时列出 `numbering.xml` 里的编号实例。
+`scope.embeddedFonts` 为 true 时列出 fontTable 里的嵌入字体面。`scope.maths` 为 true 时列出正文、页眉页脚与文本框里的顶层 `m:oMath`，名单带 `expr`。
+`scope.contentControls` 为 true 时列出正文、页眉页脚与文本框里被收入的 `w:sdt`。`scope.numbering` 为 true 时列出 `numbering.xml` 里的编号实例。
 `scope.styles` 为 true 时列出 `styles.xml` 里的样式定义。`scope.runs` 为 true 时已列出的段落带 run 名单。
 apply 可改被点名段落的可见文本（主文档、页眉页脚、框内、注内或批注内），可在主文档、页眉页脚与表格单元格插删 `w:p`，可插删 `w:tbl` 以及行与列（含文本框里的表，不含注内 / 批注内），并可按 `gridSpan` / `vMerge` 合并与拆分，
-可接受或拒绝被点名的修订，可插、删、改超链接地址与显示文本，也可给正文与页眉页脚里的图、文本框写 DrawingML `a:hlinkClick`，可插、删、改书签名，可插、改指令、删域（不求值），可写入编号定义并把段落套上或去掉编号，
+可接受或拒绝被点名的修订，可插、删、改超链接地址与显示文本（含文本框里的 `w:hyperlink`），也可给正文与页眉页脚里的图、文本框写 DrawingML `a:hlinkClick`，可插、删、改书签名（含框内），可插、改指令、删域（不求值，含框内），可写入编号定义并把段落套上或去掉编号，
 可增删自定义样式，可给段落换 `pStyle`，可给 run 套字符样式，并可改被点名段落、字符或表格样式的字体、字号、加粗、颜色与段前段后（字符样式不能写段距），
 可改表的 `tblStyle`、`tblLook`、浮动 `tblpPr`、表级 `tblCellMar`，以及单元格底纹、格边距与斜线，
 可改段上直接对齐、缩进与间距，可改被点名 run 的加粗、斜体、下划线、字号、颜色与字体，

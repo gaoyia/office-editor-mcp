@@ -1,5 +1,5 @@
-//! 正文与页眉页脚里的 `w:ruby`：inspect 名单与插改删。
-//! 框内、注内、批注内本期不编。不算排版引擎。
+//! 正文、页眉页脚与文本框里的 `w:ruby`：inspect 名单与插改删。
+//! 注内、批注内本期不编。不算排版引擎。
 
 use serde_json::{json, Value};
 
@@ -130,22 +130,14 @@ pub fn para_blocks_set_text(root: &Element, target: &BodyPara) -> bool {
 
 pub fn insert_ruby(
     root: &mut Element,
-    after: Option<&BodyPara>,
+    after: Option<&[usize]>,
     spec: &InsertSpec<'_>,
     err_id: &str,
     op_i: usize,
 ) -> Result<(), Error> {
     match after {
-        Some(para) => {
-            let path = para::find_paragraph_path(root, para).ok_or_else(|| {
-                Error::with_path(
-                    ErrorKind::ParaNotFound {
-                        id: err_id.to_string(),
-                    },
-                    format!("ops[{op_i}].id"),
-                )
-            })?;
-            let el = para::element_at_mut(root, &path).ok_or_else(|| {
+        Some(path) => {
+            let el = para::element_at_mut(root, path).ok_or_else(|| {
                 Error::with_path(
                     ErrorKind::ParaNotFound {
                         id: err_id.to_string(),
@@ -332,7 +324,9 @@ fn stamp_sz_walk(el: &mut Element, hps: u32) {
 fn collect_rubies(root: &Element) -> Vec<RubyRec> {
     let mut path = Vec::new();
     let mut out = Vec::new();
-    walk_rubies(root, &mut path, false, &mut out);
+    para::walk_from_story_root(root, &mut path, |el, path| {
+        walk_rubies(el, path, false, &mut out);
+    });
     out
 }
 
@@ -443,7 +437,7 @@ fn pr_int(pr: &Element, local: &str) -> Option<u32> {
 }
 
 fn para_index_map(root: &Element) -> Vec<(*const Element, usize)> {
-    para::collect_paragraphs(root)
+    para::collect_story_paragraphs(root)
         .into_iter()
         .enumerate()
         .map(|(i, p)| (p as *const Element, i + 1))

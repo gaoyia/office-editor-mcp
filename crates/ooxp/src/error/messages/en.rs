@@ -633,12 +633,12 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::RevIndexNotInt => "revision index must be a positive integer".into(),
             IdReason::RevIndexFromOne => "revision index starts at 1".into(),
             IdReason::LinkPrefix => {
-                "Hyperlink id must be link:N or a header/footer container id plus /link:N".into()
+                "Hyperlink id must be link:N, a header/footer container id plus /link:N, or a text box id plus /link:N".into()
             }
             IdReason::LinkIndexNotInt => "hyperlink index must be a positive integer".into(),
             IdReason::LinkIndexFromOne => "hyperlink index starts at 1".into(),
             IdReason::InsertLinkNeedsPara => {
-                "insertHyperlink id must be a body or header/footer paragraph id, or a body/header/footer picture or text box id".into()
+                "insertHyperlink id must be a body, header/footer or text box paragraph id, or a body/header/footer picture or text box id".into()
             }
             IdReason::SheetLinkPrefix => {
                 "xlsx hyperlink id must be sheet:name/link:n, n starting at 1".into()
@@ -664,13 +664,13 @@ pub(super) fn render(kind: &ErrorKind) -> String {
                 "xlsx insertSparkline id must be sheet:name".into()
             }
             IdReason::BookmarkPrefix => {
-                "Bookmark id must be bookmark:N or a header/footer container id plus /bookmark:N"
+                "Bookmark id must be bookmark:N, a header/footer container id plus /bookmark:N, or a text box id plus /bookmark:N"
                     .into()
             }
             IdReason::BookmarkIndexNotInt => "bookmark index must be a positive integer".into(),
             IdReason::BookmarkIndexFromOne => "bookmark index starts at 1".into(),
             IdReason::InsertBookmarkNeedsPara => {
-                "insertBookmark id and end must be a body or header/footer paragraph id".into()
+                "insertBookmark id and end must be a body, header/footer or text box paragraph id".into()
             }
             IdReason::PermPrefix => {
                 "Exception range id must be perm:N or a header/footer container id plus /perm:N"
@@ -685,12 +685,12 @@ pub(super) fn render(kind: &ErrorKind) -> String {
                 "setBibliographyStyle id must be docx:document".into()
             }
             IdReason::FieldPrefix => {
-                "Field id must be field:N or a header/footer container id plus /field:N".into()
+                "Field id must be field:N, a header/footer container id plus /field:N, or a text box id plus /field:N".into()
             }
             IdReason::FieldIndexNotInt => "field index must be a positive integer".into(),
             IdReason::FieldIndexFromOne => "field index starts at 1".into(),
             IdReason::InsertFieldNeedsPara => {
-                "insertField id must be a body or header/footer paragraph id".into()
+                "insertField id must be a body, header/footer or text box paragraph id".into()
             }
             IdReason::PptxFieldForm => {
                 "pptx field id must be slide:N/fld:…, slide:N/notes/fld:…, master:N/fld:… or master:N/layout:K/fld:…".into()
@@ -805,34 +805,34 @@ pub(super) fn render(kind: &ErrorKind) -> String {
                 "setPageBackground id must be docx:document".into()
             }
             IdReason::MathPrefix => {
-                "Math id must be math:N or a header/footer container id plus /math:N".into()
+                "Math id must be math:N, a header/footer container id plus /math:N, or a text box id plus /math:N".into()
             }
             IdReason::MathIndexNotInt => "math index must be a positive integer".into(),
             IdReason::MathIndexFromOne => "math index starts at 1".into(),
             IdReason::InsertMathNeedsPara => {
-                "insertMath id must be a body or header/footer paragraph id, or docx:document"
+                "insertMath id must be a body, header/footer or text box paragraph id, or docx:document"
                     .into()
             }
             IdReason::RubyPrefix => {
-                "Ruby id must be ruby:N or a header/footer container id plus /ruby:N".into()
+                "Ruby id must be ruby:N, a header/footer container id plus /ruby:N, or a text box id plus /ruby:N".into()
             }
             IdReason::RubyIndexNotInt => "ruby index must be a positive integer".into(),
             IdReason::RubyIndexFromOne => "ruby index starts at 1".into(),
             IdReason::InsertRubyNeedsPara => {
-                "insertRuby id must be a body or header/footer paragraph id, or docx:document"
+                "insertRuby id must be a body, header/footer or text box paragraph id, or docx:document"
                     .into()
             }
             IdReason::SetEastAsianSettingsNeedsDocument => {
                 "setEastAsianSettings id must be docx:document".into()
             }
             IdReason::SdtPrefix => {
-                "Content control id must be sdt:N or a header/footer container id plus /sdt:N"
+                "Content control id must be sdt:N, a header/footer container id plus /sdt:N, or a text box id plus /sdt:N"
                     .into()
             }
             IdReason::SdtIndexNotInt => "sdt index must be a positive integer".into(),
             IdReason::SdtIndexFromOne => "sdt index starts at 1".into(),
             IdReason::InsertSdtNeedsPara => {
-                "insertContentControl id must be a body or header/footer paragraph id, or docx:document"
+                "insertContentControl id must be a body, header/footer or text box paragraph id, or docx:document"
                     .into()
             }
             IdReason::SetPropsNeedsRoot => {

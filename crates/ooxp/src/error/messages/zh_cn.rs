@@ -597,12 +597,12 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::RevIndexNotInt => "修订序号必须是正整数".into(),
             IdReason::RevIndexFromOne => "修订序号从 1 起".into(),
             IdReason::LinkPrefix => {
-                "超链接 id 必须是 link:N，或页眉页脚容器 id 加上 /link:N".into()
+                "超链接 id 必须是 link:N，或页眉页脚容器 id 加上 /link:N，或文本框 id 加上 /link:N".into()
             }
             IdReason::LinkIndexNotInt => "超链接序号必须是正整数".into(),
             IdReason::LinkIndexFromOne => "超链接序号从 1 起".into(),
             IdReason::InsertLinkNeedsPara => {
-                "insertHyperlink 的 id 必须是正文或页眉页脚段落 id，或正文 / 页眉页脚里的图 id / 文本框 id".into()
+                "insertHyperlink 的 id 必须是正文、页眉页脚或框内段落 id，或正文 / 页眉页脚里的图 id / 文本框 id".into()
             }
             IdReason::SheetLinkPrefix => {
                 "xlsx 超链接 id 必须是 sheet:工作表名/link:n，n 从 1 起".into()
@@ -628,12 +628,12 @@ pub(super) fn render(kind: &ErrorKind) -> String {
                 "xlsx 的 insertSparkline 的 id 必须是 sheet:工作表名".into()
             }
             IdReason::BookmarkPrefix => {
-                "书签 id 必须是 bookmark:N，或页眉页脚容器 id 加上 /bookmark:N".into()
+                "书签 id 必须是 bookmark:N，或页眉页脚容器 id 加上 /bookmark:N，或文本框 id 加上 /bookmark:N".into()
             }
             IdReason::BookmarkIndexNotInt => "书签序号必须是正整数".into(),
             IdReason::BookmarkIndexFromOne => "书签序号从 1 起".into(),
             IdReason::InsertBookmarkNeedsPara => {
-                "insertBookmark 的 id 与 end 必须是正文或页眉页脚段落 id".into()
+                "insertBookmark 的 id 与 end 必须是正文、页眉页脚或框内段落 id".into()
             }
             IdReason::PermPrefix => {
                 "例外编辑区 id 必须是 perm:N，或页眉页脚容器 id 加上 /perm:N".into()
@@ -647,12 +647,12 @@ pub(super) fn render(kind: &ErrorKind) -> String {
                 "setBibliographyStyle 的 id 必须是 docx:document".into()
             }
             IdReason::FieldPrefix => {
-                "域 id 必须是 field:N，或页眉页脚容器 id 加上 /field:N".into()
+                "域 id 必须是 field:N，或页眉页脚容器 id 加上 /field:N，或文本框 id 加上 /field:N".into()
             }
             IdReason::FieldIndexNotInt => "域序号必须是正整数".into(),
             IdReason::FieldIndexFromOne => "域序号从 1 起".into(),
             IdReason::InsertFieldNeedsPara => {
-                "insertField 的 id 必须是正文或页眉页脚段落 id".into()
+                "insertField 的 id 必须是正文、页眉页脚或框内段落 id".into()
             }
             IdReason::PptxFieldForm => {
                 "pptx 域 id 必须是 slide:N/fld:…、slide:N/notes/fld:…、master:N/fld:… 或 master:N/layout:K/fld:…".into()
@@ -756,31 +756,31 @@ pub(super) fn render(kind: &ErrorKind) -> String {
                 "setPageBackground 的 id 必须是 docx:document".into()
             }
             IdReason::MathPrefix => {
-                "公式 id 必须是 math:N，或页眉页脚容器 id 加上 /math:N".into()
+                "公式 id 必须是 math:N，或页眉页脚容器 id 加上 /math:N，或文本框 id 加上 /math:N".into()
             }
             IdReason::MathIndexNotInt => "公式序号必须是正整数".into(),
             IdReason::MathIndexFromOne => "公式序号从 1 起".into(),
             IdReason::InsertMathNeedsPara => {
-                "insertMath 的 id 必须是正文或页眉页脚段落 id，或 docx:document".into()
+                "insertMath 的 id 必须是正文、页眉页脚或框内段落 id，或 docx:document".into()
             }
             IdReason::RubyPrefix => {
-                "拼音 id 必须是 ruby:N，或页眉页脚容器 id 加上 /ruby:N".into()
+                "拼音 id 必须是 ruby:N，或页眉页脚容器 id 加上 /ruby:N，或文本框 id 加上 /ruby:N".into()
             }
             IdReason::RubyIndexNotInt => "拼音序号必须是正整数".into(),
             IdReason::RubyIndexFromOne => "拼音序号从 1 起".into(),
             IdReason::InsertRubyNeedsPara => {
-                "insertRuby 的 id 必须是正文或页眉页脚段落 id，或 docx:document".into()
+                "insertRuby 的 id 必须是正文、页眉页脚或框内段落 id，或 docx:document".into()
             }
             IdReason::SetEastAsianSettingsNeedsDocument => {
                 "setEastAsianSettings 的 id 必须是 docx:document".into()
             }
             IdReason::SdtPrefix => {
-                "内容控件 id 必须是 sdt:N，或页眉页脚容器 id 加上 /sdt:N".into()
+                "内容控件 id 必须是 sdt:N，或页眉页脚容器 id 加上 /sdt:N，或文本框 id 加上 /sdt:N".into()
             }
             IdReason::SdtIndexNotInt => "内容控件序号必须是正整数".into(),
             IdReason::SdtIndexFromOne => "内容控件序号从 1 起".into(),
             IdReason::InsertSdtNeedsPara => {
-                "insertContentControl 的 id 必须是正文或页眉页脚段落 id，或 docx:document".into()
+                "insertContentControl 的 id 必须是正文、页眉页脚或框内段落 id，或 docx:document".into()
             }
             IdReason::SetPropsNeedsRoot => {
                 "setProps / setCustomProp 的 id 必须是 xlsx:workbook、docx:document 或 pptx:presentation"

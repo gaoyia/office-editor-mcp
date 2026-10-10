@@ -1056,7 +1056,10 @@ fn apply_set_para_hyperlink(
     })?;
     let old_rid = {
         let doc = load_part(pkg, docs, &part_name)?;
-        let el = link::hyperlink_at_mut(&mut doc.root, target.n, id, i)?;
+        let story = story_xml_mut(&mut doc.root, &target.story, || {
+            link::missing_link_err(id, i)
+        })?;
+        let el = link::hyperlink_at_mut(story, target.n, id, i)?;
         link::r_id(el).map(str::to_string)
     };
     if let Some(url) = op.url.as_deref() {
@@ -1080,13 +1083,19 @@ fn apply_set_para_hyperlink(
         };
         rels.write_to(pkg, &part_name)?;
         let doc = load_part(pkg, docs, &part_name)?;
-        let el = link::hyperlink_at_mut(&mut doc.root, target.n, id, i)?;
+        let story = story_xml_mut(&mut doc.root, &target.story, || {
+            link::missing_link_err(id, i)
+        })?;
+        let el = link::hyperlink_at_mut(story, target.n, id, i)?;
         link::set_hyperlink_url(el, &rid);
     }
     if let Some(anchor) = op.anchor.as_deref() {
         {
             let doc = load_part(pkg, docs, &part_name)?;
-            let el = link::hyperlink_at_mut(&mut doc.root, target.n, id, i)?;
+            let story = story_xml_mut(&mut doc.root, &target.story, || {
+                link::missing_link_err(id, i)
+            })?;
+            let el = link::hyperlink_at_mut(story, target.n, id, i)?;
             link::set_hyperlink_anchor(el, anchor);
         }
         if let Some(rid) = old_rid.as_deref() {
@@ -1096,12 +1105,18 @@ fn apply_set_para_hyperlink(
     }
     if let Some(text) = op.text.as_deref() {
         let doc = load_part(pkg, docs, &part_name)?;
-        let el = link::hyperlink_at_mut(&mut doc.root, target.n, id, i)?;
+        let story = story_xml_mut(&mut doc.root, &target.story, || {
+            link::missing_link_err(id, i)
+        })?;
+        let el = link::hyperlink_at_mut(story, target.n, id, i)?;
         para::set_visible_text(el, text);
     }
     if let Some(tooltip) = op.tooltip.as_ref() {
         let doc = load_part(pkg, docs, &part_name)?;
-        let el = link::hyperlink_at_mut(&mut doc.root, target.n, id, i)?;
+        let story = story_xml_mut(&mut doc.root, &target.story, || {
+            link::missing_link_err(id, i)
+        })?;
+        let el = link::hyperlink_at_mut(story, target.n, id, i)?;
         link::set_hyperlink_tooltip(el, tooltip.as_deref());
     }
     dirty.insert(part_name, ());
@@ -1286,12 +1301,18 @@ fn apply_delete_para_hyperlink(
     })?;
     let old_rid = {
         let doc = load_part(pkg, docs, &part_name)?;
-        let el = link::hyperlink_at_mut(&mut doc.root, target.n, id, i)?;
+        let story = story_xml_mut(&mut doc.root, &target.story, || {
+            link::missing_link_err(id, i)
+        })?;
+        let el = link::hyperlink_at_mut(story, target.n, id, i)?;
         link::r_id(el).map(str::to_string)
     };
     {
         let doc = load_part(pkg, docs, &part_name)?;
-        link::unwrap_hyperlink(&mut doc.root, target.n, id, i)?;
+        let story = story_xml_mut(&mut doc.root, &target.story, || {
+            link::missing_link_err(id, i)
+        })?;
+        link::unwrap_hyperlink(story, target.n, id, i)?;
     }
     if let Some(rid) = old_rid {
         let doc = load_part(pkg, docs, &part_name)?;
@@ -1394,6 +1415,40 @@ fn story_body_para(target: &ParaTarget) -> Option<&BodyPara> {
     }
 }
 
+fn para_target_path(root: &Element, target: &ParaTarget) -> Option<Vec<usize>> {
+    match target {
+        ParaTarget::Body(p) | ParaTarget::HeaderFooter { para: p, .. } => {
+            para::find_paragraph_path(root, p)
+        }
+        ParaTarget::InTextBox { host, key, para } => {
+            let hp = para::find_paragraph_path(root, host.body())?;
+            let host_el = para::element_at(root, &hp)?;
+            let mut path = hp;
+            path.extend(textbox::content_path(host_el, key)?);
+            let content = para::element_at(root, &path)?;
+            path.extend(para::find_paragraph_path_in_txbx(content, para)?);
+            Some(path)
+        }
+        _ => None,
+    }
+}
+
+fn story_xml_mut<'a>(
+    root: &'a mut Element,
+    story: &link::LinkStory,
+    missing: impl FnOnce() -> Error,
+) -> Result<&'a mut Element, Error> {
+    match story {
+        link::LinkStory::Body | link::LinkStory::HeaderFooter { .. } => Ok(root),
+        link::LinkStory::TextBox { host, key } => {
+            let Some(host_p) = para::find_paragraph_mut(root, host.body()) else {
+                return Err(missing());
+            };
+            textbox::find_txbx_content_by_key_mut(host_p, key).ok_or_else(missing)
+        }
+    }
+}
+
 fn apply_insert_bookmark(
     pkg: &Package,
     docs: &mut HashMap<String, Document>,
@@ -1404,7 +1459,8 @@ fn apply_insert_bookmark(
     i: usize,
 ) -> Result<(), Error> {
     let part_name = part_for_para(pkg, catalog, doc_part, &op.start, &op.id, i)?;
-    let start = story_body_para(&op.start).ok_or_else(|| {
+    let doc = load_part(pkg, docs, &part_name)?;
+    let start = para_target_path(&doc.root, &op.start).ok_or_else(|| {
         Error::with_path(
             ErrorKind::InvalidId {
                 reason: crate::error::IdReason::InsertBookmarkNeedsPara,
@@ -1412,7 +1468,7 @@ fn apply_insert_bookmark(
             format!("ops[{i}].id"),
         )
     })?;
-    let end = story_body_para(&op.end).ok_or_else(|| {
+    let end = para_target_path(&doc.root, &op.end).ok_or_else(|| {
         Error::with_path(
             ErrorKind::InvalidId {
                 reason: crate::error::IdReason::InsertBookmarkNeedsPara,
@@ -1420,8 +1476,7 @@ fn apply_insert_bookmark(
             format!("ops[{i}].end"),
         )
     })?;
-    let doc = load_part(pkg, docs, &part_name)?;
-    link::insert_bookmark(&mut doc.root, start, end, op.name.as_deref(), &op.id, i)?;
+    link::insert_bookmark(&mut doc.root, &start, &end, op.name.as_deref(), &op.id, i)?;
     dirty.insert(part_name, ());
     Ok(())
 }
@@ -1488,7 +1543,16 @@ fn apply_set_bookmark(
         link::missing_bookmark_err(&op.id, i)
     })?;
     let doc = load_part(pkg, docs, &part_name)?;
-    link::set_bookmark_name(&mut doc.root, op.target.n, &op.name, &op.id, i)?;
+    let taken = link::all_bookmark_names(&doc.root);
+    let renamed = {
+        let story = story_xml_mut(&mut doc.root, &op.target.story, || {
+            link::missing_bookmark_err(&op.id, i)
+        })?;
+        link::set_bookmark_name(story, op.target.n, &op.name, &taken, &op.id, i)?
+    };
+    if let Some((old, new)) = renamed {
+        link::rename_hyperlink_anchors(&mut doc.root, &old, &new);
+    }
     dirty.insert(part_name, ());
     Ok(())
 }
@@ -1506,7 +1570,10 @@ fn apply_delete_bookmark(
         link::missing_bookmark_err(&op.id, i)
     })?;
     let doc = load_part(pkg, docs, &part_name)?;
-    link::delete_bookmark(&mut doc.root, op.target.n, &op.id, i)?;
+    let story = story_xml_mut(&mut doc.root, &op.target.story, || {
+        link::missing_bookmark_err(&op.id, i)
+    })?;
+    link::delete_bookmark(story, op.target.n, &op.id, i)?;
     dirty.insert(part_name, ());
     Ok(())
 }
@@ -1546,7 +1613,10 @@ fn apply_set_field(
         field::missing_field_err(&op.id, i)
     })?;
     let doc = load_part(pkg, docs, &part_name)?;
-    field::set_field_instr(&mut doc.root, op.target.n, &op.instr, &op.id, i)?;
+    let story = story_xml_mut(&mut doc.root, &op.target.story, || {
+        field::missing_field_err(&op.id, i)
+    })?;
+    field::set_field_instr(story, op.target.n, &op.instr, &op.id, i)?;
     dirty.insert(part_name, ());
     Ok(())
 }
@@ -1564,7 +1634,10 @@ fn apply_delete_field(
         field::missing_field_err(&op.id, i)
     })?;
     let doc = load_part(pkg, docs, &part_name)?;
-    field::delete_field(&mut doc.root, op.target.n, op.keep, &op.id, i)?;
+    let story = story_xml_mut(&mut doc.root, &op.target.story, || {
+        field::missing_field_err(&op.id, i)
+    })?;
+    field::delete_field(story, op.target.n, op.keep, &op.id, i)?;
     dirty.insert(part_name, ());
     Ok(())
 }
@@ -2192,6 +2265,10 @@ fn apply_para_text(
                     format!("ops[{i}].id"),
                 )
             })?;
+            refuse_set_text_if_field(content, para, i)?;
+            refuse_set_text_if_math(content, para, i)?;
+            refuse_set_text_if_ruby(content, para, i)?;
+            refuse_set_text_if_sdt(content, para, i)?;
             let el = para::find_paragraph_in_txbx_mut(content, para).ok_or_else(|| {
                 Error::with_path(
                     ErrorKind::ParaNotFound { id: op.id.clone() },
@@ -2199,6 +2276,7 @@ fn apply_para_text(
                 )
             })?;
             refuse_set_text_if_revision(el, i)?;
+            refuse_set_text_if_hyperlink(el, i)?;
             para::set_visible_text(el, &op.text);
             dirty.insert(part_name, ());
         }
@@ -3217,20 +3295,17 @@ fn apply_insert_math(
             let part_name = part_for_para(pkg, catalog, doc_part, target, &op.id, i)?;
             let doc = load_part(pkg, docs, &part_name)?;
             math::ensure_math_ns(&mut doc.root);
-            let para = match target {
-                ParaTarget::Body(p) | ParaTarget::HeaderFooter { para: p, .. } => p,
-                _ => {
-                    return Err(Error::with_path(
-                        ErrorKind::InvalidId {
-                            reason: crate::error::IdReason::InsertMathNeedsPara,
-                        },
-                        format!("ops[{i}].id"),
-                    ));
-                }
-            };
+            let path = para_target_path(&doc.root, target).ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::InvalidId {
+                        reason: crate::error::IdReason::InsertMathNeedsPara,
+                    },
+                    format!("ops[{i}].id"),
+                )
+            })?;
             math::insert_math(
                 &mut doc.root,
-                Some(para),
+                Some(path.as_slice()),
                 op.kind,
                 &op.body,
                 op.jc.as_deref(),
@@ -3257,8 +3332,11 @@ fn apply_set_math(
     })?;
     let doc = load_part(pkg, docs, &part_name)?;
     math::ensure_math_ns(&mut doc.root);
+    let story = story_xml_mut(&mut doc.root, &op.target.story, || {
+        math::missing_math_err(&op.id, i)
+    })?;
     math::set_math(
-        &mut doc.root,
+        story,
         op.target.n,
         op.body.as_ref(),
         op.jc.as_ref().map(|v| v.as_deref()),
@@ -3282,7 +3360,10 @@ fn apply_delete_math(
         math::missing_math_err(&op.id, i)
     })?;
     let doc = load_part(pkg, docs, &part_name)?;
-    math::delete_math(&mut doc.root, op.target.n, &op.id, i)?;
+    let story = story_xml_mut(&mut doc.root, &op.target.story, || {
+        math::missing_math_err(&op.id, i)
+    })?;
+    math::delete_math(story, op.target.n, &op.id, i)?;
     dirty.insert(part_name, ());
     Ok(())
 }
@@ -3314,18 +3395,15 @@ fn apply_insert_ruby(
         InsertRubyPlace::After(target) => {
             let part_name = part_for_para(pkg, catalog, doc_part, target, &op.id, i)?;
             let doc = load_part(pkg, docs, &part_name)?;
-            let para = match target {
-                ParaTarget::Body(p) | ParaTarget::HeaderFooter { para: p, .. } => p,
-                _ => {
-                    return Err(Error::with_path(
-                        ErrorKind::InvalidId {
-                            reason: crate::error::IdReason::InsertRubyNeedsPara,
-                        },
-                        format!("ops[{i}].id"),
-                    ));
-                }
-            };
-            ruby::insert_ruby(&mut doc.root, Some(para), &spec, &op.id, i)?;
+            let path = para_target_path(&doc.root, target).ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::InvalidId {
+                        reason: crate::error::IdReason::InsertRubyNeedsPara,
+                    },
+                    format!("ops[{i}].id"),
+                )
+            })?;
+            ruby::insert_ruby(&mut doc.root, Some(path.as_slice()), &spec, &op.id, i)?;
             dirty.insert(part_name, ());
         }
     }
@@ -3345,8 +3423,11 @@ fn apply_set_ruby(
         ruby::missing_ruby_err(&op.id, i)
     })?;
     let doc = load_part(pkg, docs, &part_name)?;
+    let story = story_xml_mut(&mut doc.root, &op.target.story, || {
+        ruby::missing_ruby_err(&op.id, i)
+    })?;
     ruby::set_ruby(
-        &mut doc.root,
+        story,
         op.target.n,
         &ruby::SetPatch {
             base: op.base.as_deref(),
@@ -3377,7 +3458,10 @@ fn apply_delete_ruby(
         ruby::missing_ruby_err(&op.id, i)
     })?;
     let doc = load_part(pkg, docs, &part_name)?;
-    ruby::delete_ruby(&mut doc.root, op.target.n, &op.id, i)?;
+    let story = story_xml_mut(&mut doc.root, &op.target.story, || {
+        ruby::missing_ruby_err(&op.id, i)
+    })?;
+    ruby::delete_ruby(story, op.target.n, &op.id, i)?;
     dirty.insert(part_name, ());
     Ok(())
 }
@@ -3427,18 +3511,15 @@ fn apply_insert_sdt(
         }
         InsertSdtPlace::After(target) => {
             let doc = load_part(pkg, docs, &part_name)?;
-            let para = match target {
-                ParaTarget::Body(p) | ParaTarget::HeaderFooter { para: p, .. } => p,
-                _ => {
-                    return Err(Error::with_path(
-                        ErrorKind::InvalidId {
-                            reason: crate::error::IdReason::InsertSdtNeedsPara,
-                        },
-                        format!("ops[{i}].id"),
-                    ));
-                }
-            };
-            sdt::insert_sdt(&mut doc.root, Some(para), write, &op.id, i)?;
+            let path = para_target_path(&doc.root, target).ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::InvalidId {
+                        reason: crate::error::IdReason::InsertSdtNeedsPara,
+                    },
+                    format!("ops[{i}].id"),
+                )
+            })?;
+            sdt::insert_sdt(&mut doc.root, Some(path.as_slice()), write, &op.id, i)?;
             dirty.insert(part_name, ());
         }
     }
@@ -3484,7 +3565,10 @@ fn apply_set_sdt(
         }
         let old_rids = {
             let doc = load_part(pkg, docs, &part_name)?;
-            sdt::sdt_picture_rids(&doc.root, op.target.n, &op.id, i)?
+            let story = story_xml_mut(&mut doc.root, &op.target.story, || {
+                sdt::missing_sdt_err(&op.id, i)
+            })?;
+            sdt::sdt_picture_rids(story, op.target.n, &op.id, i)?
         };
         let old_media: Vec<String> = old_rids
             .iter()
@@ -3492,8 +3576,11 @@ fn apply_set_sdt(
             .collect();
         let drawing = sdt_inline_drawing(pkg, docs, &part_name, file)?;
         let doc = load_part(pkg, docs, &part_name)?;
+        let story = story_xml_mut(&mut doc.root, &op.target.story, || {
+            sdt::missing_sdt_err(&op.id, i)
+        })?;
         sdt::set_sdt_picture(
-            &mut doc.root,
+            story,
             op.target.n,
             drawing,
             op.tag.as_deref(),
@@ -3513,8 +3600,11 @@ fn apply_set_sdt(
         return Ok(());
     }
     let doc = load_part(pkg, docs, &part_name)?;
+    let story = story_xml_mut(&mut doc.root, &op.target.story, || {
+        sdt::missing_sdt_err(&op.id, i)
+    })?;
     sdt::set_sdt(
-        &mut doc.root,
+        story,
         &sdt::SdtSet {
             n: op.target.n,
             text: op.text.as_deref(),
@@ -3566,7 +3656,10 @@ fn apply_delete_sdt(
         sdt::missing_sdt_err(&op.id, i)
     })?;
     let doc = load_part(pkg, docs, &part_name)?;
-    sdt::delete_sdt(&mut doc.root, op.target.n, op.keep, &op.id, i)?;
+    let story = story_xml_mut(&mut doc.root, &op.target.story, || {
+        sdt::missing_sdt_err(&op.id, i)
+    })?;
+    sdt::delete_sdt(story, op.target.n, op.keep, &op.id, i)?;
     dirty.insert(part_name, ());
     Ok(())
 }

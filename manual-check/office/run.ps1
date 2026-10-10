@@ -70,6 +70,7 @@ $order = @(
     'docx-style'
     'docx-style-table'
     'docx-box-table'
+    'docx-box-fields'
     'docx-format'
     'docx-east-asia'
     'docx-insert-section'

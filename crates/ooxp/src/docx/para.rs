@@ -126,7 +126,7 @@ pub enum CommentIdTarget {
     Para { comment_id: String, para: BodyPara },
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum HostPara {
     Body(BodyPara),
     HeaderFooter {
@@ -157,7 +157,7 @@ impl HostPara {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TxbxKey {
     DocPr(String),
     Index(usize),
@@ -169,7 +169,7 @@ pub struct TxbxTarget {
     pub key: TxbxKey,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BodyPara {
     Index(usize),
     Hex(String),
@@ -718,6 +718,34 @@ pub fn collect_paragraphs(root: &Element) -> Vec<&Element> {
     out
 }
 
+/// 根是 `txbxContent` 时收框内段；否则与 `collect_paragraphs` 相同。
+pub fn collect_story_paragraphs(root: &Element) -> Vec<&Element> {
+    if root.local_name() == "txbxContent" {
+        collect_paragraphs_in_txbx(root)
+    } else {
+        collect_paragraphs(root)
+    }
+}
+
+/// 若 `root` 是 `txbxContent`，对每个子元素调用 `walk`；否则对 `root` 自身调用。
+pub fn walk_from_story_root(
+    root: &Element,
+    path: &mut Vec<usize>,
+    mut walk: impl FnMut(&Element, &mut Vec<usize>),
+) {
+    if root.local_name() == "txbxContent" {
+        for (i, n) in root.children.iter().enumerate() {
+            if let Node::Element(e) = n {
+                path.push(i);
+                walk(e, path);
+                path.pop();
+            }
+        }
+    } else {
+        walk(root, path);
+    }
+}
+
 /// 从 `w:txbxContent` 里收段落。根就是框内容时，不能走 `collect_paragraphs`（它遇框就停）。
 pub fn collect_paragraphs_in_txbx(content: &Element) -> Vec<&Element> {
     let mut out = Vec::new();
@@ -866,11 +894,17 @@ fn walk_visible(el: &Element, in_del: bool, out: &mut String) {
 }
 
 pub fn find_paragraph<'a>(root: &'a Element, target: &BodyPara) -> Option<&'a Element> {
+    if root.local_name() == "txbxContent" {
+        return find_paragraph_in_txbx(root, target);
+    }
     let mut idx = 0usize;
     find_p(root, &mut idx, target)
 }
 
 pub fn find_paragraph_mut<'a>(root: &'a mut Element, target: &BodyPara) -> Option<&'a mut Element> {
+    if root.local_name() == "txbxContent" {
+        return find_paragraph_in_txbx_mut(root, target);
+    }
     let mut idx = 0usize;
     find_p_mut(root, &mut idx, target)
 }
@@ -1149,6 +1183,9 @@ fn p_matches(el: &Element, idx: usize, target: &BodyPara) -> bool {
 
 /// 从部件根走到目标 `w:p` 的子节点下标路径。
 pub fn find_paragraph_path(root: &Element, target: &BodyPara) -> Option<Vec<usize>> {
+    if root.local_name() == "txbxContent" {
+        return find_paragraph_path_in_txbx(root, target);
+    }
     let mut idx = 0usize;
     let mut path = Vec::new();
     if find_p_path_from(root, &mut idx, target, &mut path) {

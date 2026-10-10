@@ -34,6 +34,7 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 2026-10-10 补跑 `docx-protect-rev-math.ps1`，Pq1–Pq8 通过。无 Repair。COM `OMath.Justification=2`，`BibliographyStyle=MLA`。窗体 `ProtectionType=2`。修改密码 `WriteReserved=True`。
 2026-10-10 补跑 `docx-create-round4.ps1`，Cy1–Cy8 通过。无 Repair。COM `Shapes.Count=2`，第一格底纹 RGB=255，图上 `Hyperlink.Address` 为 example.com，`BibliographyStyle=MLA`。
 2026-10-11 补跑 `docx-box-table.ps1`，Bx1–Bx5 通过。无 Repair。COM 框内 `TextFrame.TextRange.Tables.Count=1`。标题栏仍是 `docx-box-table-nest.docx`。
+2026-10-11 补跑 `docx-box-fields.ps1`，Bf1–Bf5 通过。无 Repair。COM 框内 `TextFrame.TextRange.Hyperlinks.Count=1`。标题栏仍是 `docx-box-fields-link.docx`。
 
 - **C1** ✅
   - Word 16.0 能打开 `manual-check/office/out/docx-create.docx`，标题栏无 Repair
@@ -153,6 +154,10 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
   - Word 16.0：`docx-box-table.ps1`，5 PASS / 0 FAIL
   - 框上 `tableCount`、根上不加；`insertRow` 与黄底；嵌套表 `table:2`；打开 `docx-box-table-nest.docx` 无 Repair；脚注 `insertTable` 得 `InvalidId`
   - COM `Tables.Count=1`
+- **Bf1–Bf5** ✅
+  - Word 16.0：`docx-box-fields.ps1`，5 PASS / 0 FAIL
+  - 框上 `hyperlinkCount`、根上不加；书签与 DATE 域；公式拼音控件各 1；含链段 `setParaText` 得 `NotImplemented`；脚注 `insertField` 得 `InvalidId`
+  - COM `Hyperlinks.Count=1`
 - **Rv1–Rv6** ✅
   - Word 16.0：`docx-revision.ps1`，6 PASS / 0 FAIL
   - 名单、接受删除、拒绝插入、接受插入、拒绝删除、带修订段 `setParaText` 得 `NotImplemented`
@@ -965,6 +970,19 @@ Word COM 的 `PageSetup` 边距与纸张单位是磅，等于 twip ÷ 20。手�
 | Bx3 | 嵌套 | 对框内单元格 `insertTable` 后该格里出现嵌套表，id 为 `{框 id}/table:2` |
 | Bx4 | 打开 | Word 16.0 打开无 Repair。COM 该形状 `TextFrame.TextRange.Tables.Count` 至少为 1 |
 | Bx5 | 拒写 | 对脚注段落发 `insertTable` 得 `InvalidId`，未写文件 |
+
+## 框内域、书签与公式控件
+
+文本框 `w:txbxContent` 里的 `w:hyperlink`、书签、域、公式、拼音与内容控件。不求值域，不算公式排版。注内 / 批注内不测。create 本期不写，见待做 56。
+手测脚本 `manual-check/office/cases/docx-box-fields.ps1`。编号 Bf，不要和 Bb、Bx、Bi、Fd 撞。
+
+| 序号 | 检查 | 通过标准 |
+| --- | --- | --- |
+| Bf1 | 链 | 对框内段落 `insertHyperlink` 后框上 `hyperlinkCount` 为 1，`scope.hyperlinks` 下列出 `{框 id}/link:1`，根上 `hyperlinkCount` 不加。Word 无 Repair。COM 该形状 `TextFrame.TextRange.Hyperlinks.Count` 至少为 1 |
+| Bf2 | 书签与域 | `insertBookmark` 与 `insertField` 后框上对应计数为 1，id 带框前缀。Word 无 Repair |
+| Bf3 | 公式拼音控件 | `insertMath`、`insertRuby`、`insertContentControl` 后框上对应计数各为 1。Word 无 Repair |
+| Bf4 | 拒改字 | 对含链的框内段落发 `setParaText` 得 `NotImplemented` |
+| Bf5 | 拒写 | 对脚注段落发 `insertField` 得 `InvalidId`，未写文件 |
 
 ## 修订痕迹
 

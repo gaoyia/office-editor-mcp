@@ -1,4 +1,4 @@
-//! 正文与页眉页脚里被收入的 `w:sdt`：inspect 名单与插改删。
+//! 正文、页眉页脚与文本框里被收入的 `w:sdt`：inspect 名单与插改删。
 
 use serde_json::{json, Value};
 
@@ -228,7 +228,7 @@ pub struct SdtWrite<'a> {
 
 pub fn insert_sdt(
     root: &mut Element,
-    after: Option<&BodyPara>,
+    after: Option<&[usize]>,
     mut write: SdtWrite<'_>,
     err_id: &str,
     op_i: usize,
@@ -238,17 +238,9 @@ pub fn insert_sdt(
     }
     let drawing = write.drawing.take();
     match after {
-        Some(para) => {
-            let path = para::find_paragraph_path(root, para).ok_or_else(|| {
-                Error::with_path(
-                    ErrorKind::ParaNotFound {
-                        id: err_id.to_string(),
-                    },
-                    format!("ops[{op_i}].id"),
-                )
-            })?;
+        Some(path) => {
             let xml_id = next_sdt_id(root);
-            let el = para::element_at_mut(root, &path).ok_or_else(|| {
+            let el = para::element_at_mut(root, path).ok_or_else(|| {
                 Error::with_path(
                     ErrorKind::ParaNotFound {
                         id: err_id.to_string(),
@@ -489,7 +481,9 @@ fn insert_at_body_end(
 fn collect_sdts(root: &Element) -> Vec<SdtRec> {
     let mut path = Vec::new();
     let mut out = Vec::new();
-    walk_sdts(root, &mut path, false, None, &mut out);
+    para::walk_from_story_root(root, &mut path, |el, path| {
+        walk_sdts(el, path, false, None, &mut out);
+    });
     out
 }
 
@@ -1010,7 +1004,7 @@ fn enclosing_para(root: &Element, path: &[usize]) -> Option<Vec<usize>> {
 }
 
 fn para_index_map(root: &Element) -> Vec<(*const Element, usize)> {
-    para::collect_paragraphs(root)
+    para::collect_story_paragraphs(root)
         .into_iter()
         .enumerate()
         .map(|(i, p)| (p as *const Element, i + 1))

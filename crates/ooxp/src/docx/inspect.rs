@@ -395,11 +395,21 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
                         expand_shapes,
                         expand_ink,
                         expand_model3ds,
-                        expand_txbx_content,
-                        expand_charts,
-                        expand_smartart,
                         expand_runs,
-                        expand_tables,
+                        textbox::TxbxExpand {
+                            content: expand_txbx_content,
+                            pictures: expand_pics,
+                            runs: expand_runs,
+                            charts: expand_charts,
+                            smart_art: expand_smartart,
+                            tables: expand_tables,
+                            hyperlinks: expand_hyperlinks,
+                            bookmarks: expand_bookmarks,
+                            fields: expand_fields,
+                            maths: expand_maths,
+                            rubies: expand_rubies,
+                            content_controls: expand_sdts,
+                        },
                         &body_boxes,
                         &body_cxns,
                         &body_shapes,
@@ -677,12 +687,20 @@ fn hf_node(pkg: &Package, item: &HfPart, expand: &HfExpand) -> Result<Value, Err
                 p,
                 &id,
                 &mine,
-                expand.text_box_content,
-                expand.pictures,
-                expand.runs,
-                expand.charts,
-                expand.smart_art,
-                expand.tables,
+                textbox::TxbxExpand {
+                    content: expand.text_box_content,
+                    pictures: expand.pictures,
+                    runs: expand.runs,
+                    charts: expand.charts,
+                    smart_art: expand.smart_art,
+                    tables: expand.tables,
+                    hyperlinks: expand.hyperlinks,
+                    bookmarks: expand.bookmarks,
+                    fields: expand.fields,
+                    maths: expand.maths,
+                    rubies: expand.rubies,
+                    content_controls: expand.content_controls,
+                },
             )?);
         }
         node["textBoxes"] = Value::Array(listed);
@@ -786,11 +804,8 @@ fn body_para_json(
     expand_shapes: bool,
     expand_ink: bool,
     expand_model3ds: bool,
-    expand_txbx_content: bool,
-    expand_charts: bool,
-    expand_smartart: bool,
     expand_runs: bool,
-    expand_tables: bool,
+    txbx: textbox::TxbxExpand,
     all_boxes: &[textbox::TxbxInfo],
     all_cxns: &[connector::CxnInfo],
     all_shapes: &[shape::ShapeInfo],
@@ -841,17 +856,7 @@ fn body_para_json(
     }
     if expand_txbx {
         node["textBoxes"] = Value::Array(textbox::textboxes_json(
-            pkg,
-            host_part,
-            p,
-            &id,
-            &mine,
-            expand_txbx_content,
-            expand_pics,
-            expand_runs,
-            expand_charts,
-            expand_smartart,
-            expand_tables,
+            pkg, host_part, p, &id, &mine, txbx,
         )?);
     }
     if expand_cxn {
@@ -941,11 +946,18 @@ fn notes_array(
             expand_pics,
             expand_txbx,
             expand_cxn,
-            expand_txbx_content,
             expand_charts,
             expand_smartart,
             expand_runs,
-            false,
+            textbox::TxbxExpand {
+                content: expand_txbx_content,
+                pictures: expand_pics,
+                runs: expand_runs,
+                charts: expand_charts,
+                smart_art: expand_smartart,
+                tables: false,
+                ..Default::default()
+            },
         )?;
         let mut node = json!({
             "id": inspect_id,
@@ -1060,11 +1072,18 @@ fn comments_array(
             expand_pics,
             expand_txbx,
             expand_cxn,
-            expand_txbx_content,
             expand_charts,
             expand_smartart,
             expand_runs,
-            false,
+            textbox::TxbxExpand {
+                content: expand_txbx_content,
+                pictures: expand_pics,
+                runs: expand_runs,
+                charts: expand_charts,
+                smart_art: expand_smartart,
+                tables: false,
+                ..Default::default()
+            },
         )?;
         let start = coverage
             .as_ref()
@@ -1131,11 +1150,10 @@ fn story_media(
     expand_pics: bool,
     expand_txbx: bool,
     expand_cxn: bool,
-    expand_txbx_content: bool,
     expand_charts: bool,
     expand_smartart: bool,
     expand_runs: bool,
-    expand_tables: bool,
+    txbx: textbox::TxbxExpand,
 ) -> Result<StoryMedia, Error> {
     let paras = para::collect_paragraphs(story);
     let mut all_boxes = Vec::new();
@@ -1184,19 +1202,7 @@ fn story_media(
             node["pictures"] = Value::Array(picture::pictures_json(&pics));
         }
         if expand_txbx {
-            let json_boxes = textbox::textboxes_json(
-                pkg,
-                host_part,
-                p,
-                &pid,
-                &mine,
-                expand_txbx_content,
-                expand_pics,
-                expand_runs,
-                expand_charts,
-                expand_smartart,
-                expand_tables,
-            )?;
+            let json_boxes = textbox::textboxes_json(pkg, host_part, p, &pid, &mine, txbx)?;
             node["textBoxes"] = Value::Array(json_boxes.clone());
             listed_boxes.extend(json_boxes);
         }

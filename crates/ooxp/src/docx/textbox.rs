@@ -7,8 +7,13 @@ use crate::opc::{Package, Relationships};
 use crate::xml::{Element, Node};
 
 use super::charts;
+use super::field;
+use super::link;
+use super::math;
 use super::para::{self, BodyPara, TxbxKey, TxbxTarget};
 use super::picture::{self, PicKind, WrapKind};
+use super::ruby;
+use super::sdt;
 use super::smartart;
 use super::tbl;
 use super::{format, MC_NS, W14_NS, WP_NS};
@@ -32,6 +37,12 @@ pub struct TxbxInfo {
     pub chart_count: usize,
     pub smart_art_count: usize,
     pub table_count: usize,
+    pub hyperlink_count: usize,
+    pub bookmark_count: usize,
+    pub field_count: usize,
+    pub math_count: usize,
+    pub ruby_count: usize,
+    pub content_control_count: usize,
     pub story_id: Option<String>,
     pub seq: u32,
     pub prev: Option<String>,
@@ -88,18 +99,29 @@ pub fn resolve_links(boxes: &mut [TxbxInfo]) {
     }
 }
 
+#[derive(Clone, Copy, Default)]
+pub struct TxbxExpand {
+    pub content: bool,
+    pub pictures: bool,
+    pub runs: bool,
+    pub charts: bool,
+    pub smart_art: bool,
+    pub tables: bool,
+    pub hyperlinks: bool,
+    pub bookmarks: bool,
+    pub fields: bool,
+    pub maths: bool,
+    pub rubies: bool,
+    pub content_controls: bool,
+}
+
 pub fn textboxes_json(
     pkg: &Package,
     host_part: &str,
     host: &Element,
     host_para_id: &str,
     boxes: &[TxbxInfo],
-    content: bool,
-    pictures: bool,
-    runs: bool,
-    charts: bool,
-    smart_art: bool,
-    tables: bool,
+    expand: TxbxExpand,
 ) -> Result<Vec<Value>, Error> {
     let mut out = Vec::new();
     for b in boxes {
@@ -120,6 +142,12 @@ pub fn textboxes_json(
             "chartCount": b.chart_count,
             "smartArtCount": b.smart_art_count,
             "tableCount": b.table_count,
+            "hyperlinkCount": b.hyperlink_count,
+            "bookmarkCount": b.bookmark_count,
+            "fieldCount": b.field_count,
+            "mathCount": b.math_count,
+            "rubyCount": b.ruby_count,
+            "contentControlCount": b.content_control_count,
             "stable": b.stable,
         });
         let rels = Relationships::from_package(pkg, host_part)?;
@@ -127,7 +155,7 @@ pub fn textboxes_json(
             Some(d) => super::drawing_hlink::inspect_textbox(d, Some(&rels)),
             None => Value::Null,
         };
-        if content {
+        if expand.content {
             fill_one_box(
                 pkg,
                 host_part,
@@ -135,15 +163,15 @@ pub fn textboxes_json(
                 host_para_id,
                 b,
                 &mut node,
-                pictures,
-                runs,
+                expand.pictures,
+                expand.runs,
             )?;
         }
-        if charts {
+        if expand.charts {
             node["charts"] =
                 Value::Array(collect_inner_charts(pkg, host_part, host, host_para_id, b)?);
         }
-        if smart_art {
+        if expand.smart_art {
             node["smartArts"] = Value::Array(collect_inner_smartarts(
                 pkg,
                 host_part,
@@ -152,18 +180,60 @@ pub fn textboxes_json(
                 b,
             )?);
         }
-        if tables && !is_note_or_comment_box(&b.id) {
+        if expand.tables && !is_note_or_comment_box(&b.id) {
             node["tables"] = match find_txbx_content_for(host, host_para_id, &b.id)? {
                 Some(content) => Value::Array(tbl::tables_json(
                     pkg,
                     host_part,
                     content,
                     Some(&b.id),
-                    pictures,
-                    runs,
+                    expand.pictures,
+                    expand.runs,
                 )?),
                 None => json!([]),
             };
+        }
+        if !is_note_or_comment_box(&b.id) {
+            if let Some(content) = find_txbx_content_for(host, host_para_id, &b.id)? {
+                if expand.hyperlinks {
+                    node["hyperlinks"] =
+                        Value::Array(link::hyperlinks_json(content, Some(&b.id), &rels)?);
+                }
+                if expand.bookmarks {
+                    node["bookmarks"] = Value::Array(link::bookmarks_json(content, Some(&b.id))?);
+                }
+                if expand.fields {
+                    node["fields"] = Value::Array(field::fields_json(content, Some(&b.id))?);
+                }
+                if expand.maths {
+                    node["maths"] = Value::Array(math::maths_json(content, Some(&b.id))?);
+                }
+                if expand.rubies {
+                    node["rubies"] = Value::Array(ruby::rubies_json(content, Some(&b.id))?);
+                }
+                if expand.content_controls {
+                    node["contentControls"] = Value::Array(sdt::sdts_json(content, Some(&b.id))?);
+                }
+            } else {
+                if expand.hyperlinks {
+                    node["hyperlinks"] = json!([]);
+                }
+                if expand.bookmarks {
+                    node["bookmarks"] = json!([]);
+                }
+                if expand.fields {
+                    node["fields"] = json!([]);
+                }
+                if expand.maths {
+                    node["maths"] = json!([]);
+                }
+                if expand.rubies {
+                    node["rubies"] = json!([]);
+                }
+                if expand.content_controls {
+                    node["contentControls"] = json!([]);
+                }
+            }
         }
         out.push(node);
     }
@@ -237,8 +307,7 @@ fn txbx_from_drawing(drawing: &Element, host: &str, index: usize) -> Result<Txbx
     let (doc_pr_id, name) = doc_pr(drawing);
     let (id, stable) = box_id(host, &doc_pr_id, index);
     let content = find_txbx_content(drawing);
-    let (para_count, picture_count, chart_count, smart_art_count, table_count) =
-        content_counts(content, &id)?;
+    let counts = content_counts(content, &id)?;
     let (story_id, seq) = story_of(drawing);
     Ok(TxbxInfo {
         id,
@@ -249,11 +318,17 @@ fn txbx_from_drawing(drawing: &Element, host: &str, index: usize) -> Result<Txbx
         cy,
         wrap,
         stable,
-        para_count,
-        picture_count,
-        chart_count,
-        smart_art_count,
-        table_count,
+        para_count: counts.paras,
+        picture_count: counts.pics,
+        chart_count: counts.charts,
+        smart_art_count: counts.smart,
+        table_count: counts.tables,
+        hyperlink_count: counts.hyperlinks,
+        bookmark_count: counts.bookmarks,
+        field_count: counts.fields,
+        math_count: counts.maths,
+        ruby_count: counts.rubies,
+        content_control_count: counts.sdts,
         story_id,
         seq,
         prev: None,
@@ -272,8 +347,7 @@ fn txbx_from_wsp(
     let (doc_pr_id, name) = cnv_pr(wsp);
     let (id, stable) = box_id(host, &doc_pr_id, index);
     let content = find_txbx_content(wsp);
-    let (para_count, picture_count, chart_count, smart_art_count, table_count) =
-        content_counts(content, &id)?;
+    let counts = content_counts(content, &id)?;
     let (story_id, seq) = story_of(wsp);
     Ok(TxbxInfo {
         id,
@@ -284,11 +358,17 @@ fn txbx_from_wsp(
         cy: extent.1,
         wrap,
         stable,
-        para_count,
-        picture_count,
-        chart_count,
-        smart_art_count,
-        table_count,
+        para_count: counts.paras,
+        picture_count: counts.pics,
+        chart_count: counts.charts,
+        smart_art_count: counts.smart,
+        table_count: counts.tables,
+        hyperlink_count: counts.hyperlinks,
+        bookmark_count: counts.bookmarks,
+        field_count: counts.fields,
+        math_count: counts.maths,
+        ruby_count: counts.rubies,
+        content_control_count: counts.sdts,
         story_id,
         seq,
         prev: None,
@@ -303,12 +383,36 @@ fn box_id(host: &str, doc_pr_id: &Option<String>, index: usize) -> (String, bool
     }
 }
 
-fn content_counts(
-    content: Option<&Element>,
-    box_id: &str,
-) -> Result<(usize, usize, usize, usize, usize), Error> {
+struct ContentCounts {
+    paras: usize,
+    pics: usize,
+    charts: usize,
+    smart: usize,
+    tables: usize,
+    hyperlinks: usize,
+    bookmarks: usize,
+    fields: usize,
+    maths: usize,
+    rubies: usize,
+    sdts: usize,
+}
+
+fn content_counts(content: Option<&Element>, box_id: &str) -> Result<ContentCounts, Error> {
+    let empty = ContentCounts {
+        paras: 0,
+        pics: 0,
+        charts: 0,
+        smart: 0,
+        tables: 0,
+        hyperlinks: 0,
+        bookmarks: 0,
+        fields: 0,
+        maths: 0,
+        rubies: 0,
+        sdts: 0,
+    };
     let Some(content) = content else {
-        return Ok((0, 0, 0, 0, 0));
+        return Ok(empty);
     };
     let paras = para::collect_paragraphs_in_txbx(content);
     let mut pics = 0usize;
@@ -320,12 +424,32 @@ fn content_counts(
         chart_n += charts::count_charts(p)?;
         smart_n += smartart::count_smartarts(p)?;
     }
-    let table_n = if is_note_or_comment_box(box_id) {
-        0
-    } else {
-        tbl::count_tables(content)
-    };
-    Ok((paras.len(), pics, chart_n, smart_n, table_n))
+    let skip = is_note_or_comment_box(box_id);
+    Ok(ContentCounts {
+        paras: paras.len(),
+        pics,
+        charts: chart_n,
+        smart: smart_n,
+        tables: if skip { 0 } else { tbl::count_tables(content) },
+        hyperlinks: if skip {
+            0
+        } else {
+            link::count_hyperlinks(content)
+        },
+        bookmarks: if skip {
+            0
+        } else {
+            link::count_bookmarks(content)
+        },
+        fields: if skip {
+            0
+        } else {
+            field::count_fields(content)
+        },
+        maths: if skip { 0 } else { math::count_maths(content) },
+        rubies: if skip { 0 } else { ruby::count_rubies(content) },
+        sdts: if skip { 0 } else { sdt::count_sdts(content) },
+    })
 }
 
 fn is_note_or_comment_box(id: &str) -> bool {

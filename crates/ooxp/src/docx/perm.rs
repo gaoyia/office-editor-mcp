@@ -79,7 +79,7 @@ pub fn edit_ranges_json(root: &Element, container: Option<&str>) -> Result<Vec<V
 
 pub fn parse_perm_ref(id: &str, path: &str) -> Result<PermRef, Error> {
     let (story, rest) = link::split_story(id, path, "perm", IdReason::PermPrefix)?;
-    if rest.contains('/') {
+    if matches!(story, LinkStory::TextBox { .. }) || rest.contains('/') {
         return Err(Error::with_path(
             ErrorKind::InvalidId {
                 reason: IdReason::PermPrefix,

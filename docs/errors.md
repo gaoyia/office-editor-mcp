@@ -786,12 +786,12 @@
 - 段内有本期收入的修订节点时 `setParaText` 报 `NotImplemented`
 - 找不到超链接时，超链接 op 报 `IdNotFound`（`insertHyperlink` 除外）
 - id 不是超链接 id 报 `InvalidId`
-- docx 的 `insertHyperlink` 的 `id` 必须是正文或页眉页脚段落 id，或正文 / 页眉页脚的图 id / 文本框 id
+- docx 的 `insertHyperlink` 的 `id` 必须是正文、页眉页脚或框内段落 id，或正文 / 页眉页脚的图 id / 文本框 id
 - 对图 / 框禁止 `text`
 - `url` 与 `anchor` 必须恰好给一个
 - 同一图 / 框已有 `hlinkClick` 报 `InvalidField`
 - 框内图、注内 / 批注内的图或框、连接线、SmartArt、图表、墨迹、3D、OLE 报 `InvalidId`
-- docx 的 `setHyperlink` / `deleteHyperlink` 的 id 是 `link:{n}`（含页眉页脚前缀）或带 DrawingML 链的图 / 文本框 id
+- docx 的 `setHyperlink` / `deleteHyperlink` 的 id 是 `link:{n}`（含页眉页脚前缀与框前缀）或带 DrawingML 链的图 / 文本框 id
 - 对象上没有链时报 `IdNotFound`
 - pptx 的 `insertHyperlink` 的 `id` 必须是文本形状、图、表、图表、SmartArt 或表单元格 id
 - `url` / `file` / `slide` 必须恰好一个
@@ -888,7 +888,7 @@
 - 已有 SHA-512 却不给或给错 `password` 的规则与 `setProtection` 相同
 - 找不到书签时，`setBookmark` / `deleteBookmark` 报 `IdNotFound`
 - id 不是书签 id 报 `InvalidId`
-- `insertBookmark` 的 `id` 必须是段落 id
+- `insertBookmark` 的 `id` 必须是正文、页眉页脚或框内段落 id
 - 书签名非法或重名报 `InvalidField`
 - pptx 上发书签 op 报 `InvalidField`
 - xlsx 上发书签 op 报 `InvalidField`
@@ -900,8 +900,8 @@
 - pptx 认超链接 op
 - 段内有本期收入的 `w:hyperlink` 时 `setParaText` 报 `NotImplemented`
 - 找不到域时，域 op 报 `IdNotFound`（`insertField` 除外）
-- docx 的域 id 不是 `field:{n}` 或容器前缀报 `InvalidId`
-- docx 的 `insertField` 的 `id` 必须是段落 id
+- docx 的域 id 不是 `field:{n}` 或容器 / 框前缀报 `InvalidId`
+- docx 的 `insertField` 的 `id` 必须是正文、页眉页脚或框内段落 id
 - pptx 的 `insertField` 的 `id` 必须是幻灯片、备注、母版或版式文本形状 id
 - `setField` / `deleteField` 的 id 必须是 pptx 域 id（含 `notes/` 与母版 / 版式前缀）
 - pptx 的 `type` 不是 `slidenum` / `datetime` / `datetime1`–`datetime13` 报 `InvalidField`
@@ -945,8 +945,8 @@
 - xlsx / pptx 上发直接格式 op 报 `InvalidField`
 - 找不到拼音时，`setRuby` / `deleteRuby` 报 `IdNotFound`
 - id 不是拼音 id 报 `InvalidId`
-- `insertRuby` 的 `id` 必须是正文或页眉页脚段落 id 或 `docx:document`
-- 对框内、注内、批注内段落发 `insertRuby` 报 `InvalidId`
+- `insertRuby` 的 `id` 必须是正文、页眉页脚或框内段落 id 或 `docx:document`
+- 对注内、批注内段落发 `insertRuby` 报 `InvalidId`
 - 空 `base` / `rt` / `lid`、不认识的 `align`、或字号越界报 `InvalidField`
 - 目标段落落在本期收入的拼音范围内时 `setParaText` 报 `NotImplemented`
 - `setEastAsianSettings` 的 `id` 必须是 `docx:document`
@@ -1012,7 +1012,7 @@
 - xlsx / pptx 上发 `insertDocPart` / `deleteDocPart` / `insertDocPartContent` 报 `InvalidField`
 - 找不到公式时，公式 op 报 `IdNotFound`（`insertMath` 除外）
 - docx：id 不是公式 id 报 `InvalidId`
-- docx：`insertMath` 的 `id` 必须是正文或页眉页脚段落 id 或 `docx:document`
+- docx：`insertMath` 的 `id` 必须是正文、页眉页脚或框内段落 id 或 `docx:document`
 - xlsx：`insertMath` 的 `id` 必须是 `sheet:{name}`
 - xlsx：`setMath` / `deleteMath` 的 `id` 必须是公式框 id
 - pptx：`insertMath` 的 `id` 必须是 `slide:{n}`、`slide:{n}/notes`、`master:{n}` 或 `master:{n}/layout:{k}`
@@ -1034,7 +1034,7 @@
 - xlsx / docx 上发 `insertZoom` / `setZoom` / `deleteZoom` 报 `InvalidField`
 - 找不到内容控件时，内容控件 op 报 `IdNotFound`（`insertContentControl` 除外）
 - id 不是内容控件 id 报 `InvalidId`
-- `insertContentControl` 的 `id` 必须是正文或页眉页脚段落 id 或 `docx:document`
+- `insertContentControl` 的 `id` 必须是正文、页眉页脚或框内段落 id 或 `docx:document`
 - 空 `text`、不认识的 `kind` / `keep`、或 `items` / `fullDate` / `file` / `checked` 与 `kind` 不匹配，或 `picture` 没有 `file`，报 `InvalidField`
 - xlsx / pptx 上发内容控件 op 报 `InvalidField`
 - 目标段落含本期收入的行内内容控件时 `setParaText` 报 `NotImplemented`
