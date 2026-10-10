@@ -177,6 +177,9 @@
         "cy": {
           "type": "integer",
           "minimum": 1
+        },
+        "hyperlink": {
+          "$ref": "#/$defs/pptxObjectHyperlinkCreate"
         }
       }
     },
@@ -203,9 +206,12 @@
           "items": {
             "type": "array",
             "items": {
-              "type": "string"
+              "$ref": "#/$defs/pptxTableCellCreate"
             }
           }
+        },
+        "hyperlink": {
+          "$ref": "#/$defs/pptxObjectHyperlinkCreate"
         },
         "x": {
           "type": "integer",
@@ -370,6 +376,9 @@
         "cy": {
           "type": "integer",
           "minimum": 1
+        },
+        "hyperlink": {
+          "$ref": "#/$defs/pptxObjectHyperlinkCreate"
         }
       }
     },
@@ -399,6 +408,9 @@
         "cy": {
           "type": "integer",
           "minimum": 1
+        },
+        "hyperlink": {
+          "$ref": "#/$defs/pptxObjectHyperlinkCreate"
         }
       }
     },
@@ -1017,8 +1029,84 @@
           "items": {
             "$ref": "#/$defs/pptxAnimCreate"
           }
+        },
+        "maths": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/pptxMathCreate"
+          }
+        },
+        "model3ds": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/pptxModel3dCreate"
+          }
         }
       }
+    },
+    "pptxObjectHyperlinkCreate": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "url": {
+          "type": "string",
+          "minLength": 1
+        },
+        "file": {
+          "type": "string",
+          "minLength": 1
+        },
+        "slide": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "tooltip": {
+          "type": "string"
+        },
+        "event": {
+          "enum": [
+            "click",
+            "hover"
+          ]
+        }
+      }
+    },
+    "pptxTableCellCreate": {
+      "oneOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "text": {
+              "type": "string"
+            },
+            "url": {
+              "type": "string",
+              "minLength": 1
+            },
+            "file": {
+              "type": "string",
+              "minLength": 1
+            },
+            "slide": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "tooltip": {
+              "type": "string"
+            },
+            "event": {
+              "enum": [
+                "click",
+                "hover"
+              ]
+            }
+          }
+        }
+      ]
     },
     "pptxCustomShowCreate": {
       "type": "object",

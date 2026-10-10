@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "action": "create",
+  "path": "deck.pptx",
+  "format": "pptx",
+  "presentation": {
+    "slides": [
+      {
+        "shapes": [{ "text": "第一页" }],
+        "pictures": [
+          {
+            "file": "pic.png",
+            "hyperlink": { "url": "https://example.com/pic" }
+          }
+        ],
+        "tables": [
+          {
+            "rows": 1,
+            "cols": 2,
+            "hyperlink": { "url": "https://example.com/table" },
+            "cells": [
+              [
+                "甲",
+                { "text": "乙", "url": "https://example.com/cell" }
+              ]
+            ]
+          }
+        ],
+        "charts": [
+          {
+            "type": "col",
+            "series": [{ "values": [1, 2, 3] }],
+            "hyperlink": { "url": "https://example.com/chart" }
+          }
+        ],
+        "smartArts": [
+          {
+            "layout": "list",
+            "hyperlink": { "url": "https://example.com/sa" }
+          }
+        ],
+        "notes": {
+          "text": "备注",
+          "maths": [{ "text": "E=mc^2" }],
+          "model3ds": [{ "file": "model.glb" }]
+        }
+      },
+      {
+        "shapes": [{ "text": "第二页" }]
+      }
+    ]
+  }
+}

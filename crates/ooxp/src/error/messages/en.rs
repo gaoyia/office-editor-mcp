@@ -1400,9 +1400,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::MergeNotSimple => {
             "mergeCells needs a rectangle of unmerged cells that line up on the grid".into()
         }
-        ErrorKind::NeedTableCellsMatch => {
-            "cells must be a rows×cols array of strings".into()
-        },
+        ErrorKind::NeedTableCellsMatch => "cells must be a rows×cols 2D array".into(),
         ErrorKind::RevisionNotFound { id } => format!("Revision not found: {id}"),
         ErrorKind::SetParaTextHasRevision => {
             "Cannot change visible text in a paragraph that contains tracked revisions".into()

@@ -1235,7 +1235,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::TableHasRevision => "表、行或单元格上有修订痕迹时不能改结构".into(),
         ErrorKind::TableGridMismatch => "这一行占的网格列数对不上 colCount，不能改结构".into(),
         ErrorKind::MergeNotSimple => "mergeCells 需要一块尚未合并、对齐网格的矩形".into(),
-        ErrorKind::NeedTableCellsMatch => "cells 必须是 rows×cols 的字符串数组".into(),
+        ErrorKind::NeedTableCellsMatch => "cells 必须是 rows×cols 的二维数组".into(),
         ErrorKind::RevisionNotFound { id } => format!("找不到修订：{id}"),
         ErrorKind::SetParaTextHasRevision => "不能改带修订痕迹的段落的可见文本".into(),
         ErrorKind::HyperlinkNotFound { id } => format!("找不到超链接：{id}"),

@@ -344,7 +344,8 @@ Choice 与 Fallback 都不进 `shapes`，也不计入 `shapeCount`。组合里�
 备注页上同样判定，id 带 `slide:{n}/notes/` 前缀。幻灯片母版 / 版式上同样判定，id 带 `master:{n}/` 或 `master:{n}/layout:{k}/` 前缀。批注、备注母版、讲义不进树。
 `insertMath` 的 `id` 必须是 `slide:{n}`、`slide:{n}/notes`、`master:{n}` 或 `master:{n}/layout:{k}`。`setMath` / `deleteMath` 的 `id` 必须是公式框 id。
 对形状 id、图 id、`pptx:presentation` 发公式 op 报 `InvalidId`。出现 `expr` / `kind` 报 `InvalidField`。
-不把 OMML 原文、不把 `expr` 放进树。create 可用 `slides[].maths`。create 本期不在 `slides[].notes` 上写公式。
+不把 OMML 原文、不把 `expr` 放进树。create 可用 `slides[].maths`。
+`slides[].notes` 为对象时可带 `maths`，字段与页上 `maths[]` 相同。字符串形式的 `notes` 仍只表示备注文本。
 xlsx 见 [xlsx 分册](json-contract-xlsx.md#insertmath)。docx 见 [json-contract-docx.md](json-contract-docx.md#insertmath)。
 
 Zoom id 的 `{cNvPrId}` 取 Choice 里 `p:graphicFrame` 的 `p:nvGraphicFramePr/p:cNvPr/@id` 原文。
@@ -1254,9 +1255,10 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   - 可选
   - 该页演讲者备注
   - 可以是字符串，可空
-  - 也可以是对象：`text` 加可选 `anims`
+  - 也可以是对象：`text` 加可选 `anims`、`maths`、`model3ds`
   - 省略则不写 notesSlide
   - 字符串或对象出现（含空串）则按 `setNotesText` 写该页 `body` 占位符
+  - 字符串形式仍只表示备注文本，不能带公式或 3D
 - **`slides[].comments`**
   - 可选
   - 该页现代批注列表
@@ -1310,6 +1312,13 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   - 可选，EMU，正整数
   - 都省则与 `insertPicture` 相同
   - 只给一个时报 `InvalidField`
+- **`pictures[].hyperlink`**
+  - 可选对象
+  - 字段与 `insertHyperlink` 相同：`url` / `file` / `slide` 恰好一个
+  - 可选 `tooltip`
+  - 可选 `event`（`click` 或缺省，或 `hover`）
+  - 不要 `text`、不要 `on`、不要 `op` / `id`
+  - `slide` 是 `slides[]` 的 1 起下标，不是 `slide:{n}`
 - **`charts[].type`**
   - 必须
   - 与 pptx `insertChart` 相同
@@ -1322,6 +1331,9 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
 - **`charts[].x` / `charts[].y` / `charts[].cx` / `charts[].cy`**
   - 可选
   - 规则与 pptx `insertChart` 相同
+- **`charts[].hyperlink`**
+  - 可选对象
+  - 字段与 `pictures[].hyperlink` 相同
 - **`smartArts[].layout`**
   - 必须
   - `list`、`org` 或 `cycle`，与 pptx `insertSmartArt` 相同
@@ -1332,12 +1344,25 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
 - **`smartArts[].x` / `smartArts[].y` / `smartArts[].cx` / `smartArts[].cy`**
   - 可选
   - 规则与 pptx `insertSmartArt` 相同
+- **`smartArts[].hyperlink`**
+  - 可选对象
+  - 字段与 `pictures[].hyperlink` 相同
 - **`tables[].rows` / `tables[].cols`**
   - 必须
   - 正整数，规则与 pptx `insertTable` 相同
 - **`tables[].cells`**
   - 可选
-  - 二维字符串，行数与列数必须与 `rows` / `cols` 一致
+  - 二维数组，行数与列数必须与 `rows` / `cols` 一致
+  - 每格可以是字符串，也可以是对象
+  - 对象可有 `text`（省略当作 `""`）
+  - 对象上的 `url` / `file` / `slide` 有则写格内链，规则与 `insertHyperlink` 相同，三者必须恰好一个
+  - 可选 `tooltip`、可选 `event`
+  - 都没有 `url` / `file` / `slide` 则只写文本
+  - 不要 `on`、不要嵌套 `hyperlink`
+- **`tables[].hyperlink`**
+  - 可选对象
+  - 写在表框上，字段与 `pictures[].hyperlink` 相同
+  - 与格内链可以同时有
 - **`tables[].x` / `tables[].y` / `tables[].cx` / `tables[].cy`**
   - 可选
   - 规则与 pptx `insertTable` 相同
@@ -1476,6 +1501,18 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   - 备注页预设进入效果，规则与 `slides[].anims` 相同
   - `shape` 等序号对应该页备注页对象，不是幻灯片 `shapes[]`
   - 省略或空数组则备注页不写 `<p:timing>`
+- **`notes.maths`**
+  - `notes` 为对象时可选
+  - 备注页 drawing 公式框
+  - 每项字段与 `slides[].maths` 相同
+  - 不要 `op` / `id`
+  - 省略或空数组则不写
+- **`notes.model3ds`**
+  - `notes` 为对象时可选
+  - 备注页 3D 模型
+  - 每项字段与 `slides[].model3ds` 相同
+  - 不要 `op` / `id`
+  - 省略或空数组则不写
 - **`customShows[].name`**
   - 必须
   - 规则与 `insertCustomShow` 的 `name` 相同
@@ -1506,10 +1543,13 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
 带 SmartArt 示例见 `docs/examples/pptx-create-smartart.json`。带表示例见 `docs/examples/pptx-create-tables.json`。
 带备注与批注示例见 `docs/examples/pptx-create-notes-comments.json`。节、链、媒体、切换与动画合在一起的示例见 `docs/examples/pptx-create-remain.json`。
 OLE、Zoom、域、连接线、自定义放映、讲义、备注动画与放映 / 修改保护合在一起的示例见 `docs/examples/pptx-create-round4.json`。
+备注页公式 / 3D 与图 / 表 / 图表 / SmartArt 链合在一起的示例见 `docs/examples/pptx-create-round5.json`。
 `kind` / `wrap` / `from` / `to` / `anchor` / `dataFrom` 以及 xlsx 偏移字段出现报 `InvalidField`。
 `comments[]` 上出现 `op` / `id` / `start` / `end` / `replies` / `ink` 报未知字段。create 不写回复、不写墨迹、不写 ECMA-376 §19.4 旧式批注。
 `shapes[]` 上出现 `text` / `url` / `file` / `slide` / `tooltip` / `on` / `event` / `sz` / `color` / `textFill` / `textOutline` / `bold` / `italic` / `underline` / `font` / `eastAsiaFont` / `align` / `textAnchor` / `geom` / `fields` 以外的键报未知字段。
 `text` / `anchor` / `location` / `ref` / `display` 出现在形状超链接上（除可见 `text` 外）报未知字段。
+`pictures[].hyperlink` / `tables[].hyperlink` / `charts[].hyperlink` / `smartArts[].hyperlink` 上出现 `text` / `on` / `op` / `id` 报未知字段。
+`tables[].cells` 对象上出现 `on` / `hyperlink` 报未知字段。
 `url`、`file`、`slide` 不是恰好一个报 `InvalidField`。空串报 `InvalidField`。`slide` 不是正整数报 `InvalidField`。跳到本页报 `InvalidField`。
 目标页超出 `slides[]` 报 `InvalidField`。
 
@@ -1532,8 +1572,13 @@ create 写出 Transitional 最小包，见 [opc.md](opc.md)。
 给了 `slides[].connectors` 时按 `insertConnector` 同一套规则写 `p:cxnSp`。
 给了 `slides[].notes` 时按 `setNotesText` 同一套规则写该页演讲者备注：没有 notesMaster 则新建，再写 notesSlide。
 `notes` 为对象且给了 `anims` 时，按 `insertAnim` 同一套规则写到该页备注页，不算放映引擎。
+`notes` 为对象且给了 `maths` 时，按 `insertMath` 同一套规则写到该页备注页。
+`notes` 为对象且给了 `model3ds` 时，按 `insertModel3d` 同一套规则写到该页备注页。
 给了 `slides[].comments` 时按 `insertComment` 同一套规则写该页现代批注（`p188:cmLst`、`/ppt/authors.xml`）。
-给了形状上的 `url` / `file` / `slide` 时按 `insertHyperlink` 同一套规则写链（可 `on=run`，可 `event=hover`）。create 本期不写图 / 表 / 图表 / SmartArt 上的链，也不写批注内图。
+给了形状上的 `url` / `file` / `slide` 时按 `insertHyperlink` 同一套规则写链（可 `on=run`，可 `event=hover`）。
+给了 `pictures[].hyperlink` / `tables[].hyperlink` / `charts[].hyperlink` / `smartArts[].hyperlink` 时按 `insertHyperlink` 同一套规则写到对应对象上。
+给了表单元格上的 `url` / `file` / `slide` 时按 `insertHyperlink` 同一套规则写格内链。
+create 本期不写批注内图。
 给了 `slides[].transition` 时按 `setTransition` 同一套规则写 `<p:transition>`。给了 `slides[].anims` 时按 `insertAnim` 同一套规则写预设效果（第一条 `with` / `after` 进片自动播）。
 给了 `presentation.sections` 时按 `insertSlideSection` 同一套规则写 `p14:sectionLst`：先写第一项（`start` 为 1 则包住全部页；大于 1 则前面的页进空名节），再按数组顺序用 `start` 拆后续节。
 给了 `slides[].zooms` 时按 `insertZoom` 同一套规则写 Zoom。节缩放 / 摘要缩放在 `sections` 写完之后再写。
@@ -1542,15 +1587,17 @@ create 写出 Transitional 最小包，见 [opc.md](opc.md)。
 给了 `presentation.showPr` 时按 `setShowPr` 同一套规则写 `p:showPr`。
 给了 `presentation.modifyProtection` 时按 `setProtection` 同一套规则写 `p:modifyVerifier`。
 先写该页 `shapes`（含 `geom` 与 `fields`），再按数组顺序写 `pictures`，再写 `maths`，再写 `model3ds`，再写 `videos`，再写 `audios`，再写 `charts`，再写 `smartArts`，再写 `tables`，
-再写 `oleObjects`，再写 `connectors`，再写 `notes`，
-再按数组顺序写 `comments`，再写形状超链接，再写 `transition`，再按数组顺序写 `anims`，再写 `notes.anims`。
+再写 `oleObjects`，再写 `connectors`，再写 `notes`，再写 `notes.maths`，再写 `notes.model3ds`，
+再按数组顺序写 `comments`，再写形状超链接，再写图 / 表框 / 表单元格 / 图表 / SmartArt 超链接，再写 `transition`，再按数组顺序写 `anims`，再写 `notes.anims`。
 全部页写完后再写 `sections`，再写 `zooms`，再写 `customShows`，再写 `handout`，再写 `showPr`，再写 `modifyProtection`。
 `p:cNvPr/@id` 取该页已有全部 `cNvPr` 的最大整数加 1，至少为 2。
 `presentation` 根上出现 `pictures` / `charts` / `smartArts` / `tables` / `notes` / `comments` / `videos` / `audios`
  / `anims` / `transition` / `masters` / `notesMaster` / `hyperlinks` / `oleObjects` / `zooms` 报 `InvalidField`。
 `shapes[]` 上出现 `pictures` / `charts` / `smartArts` / `tables` / `notes` / `comments` / `videos` / `audios` / `anims`
  / `transition` / `masters` / `notesMaster` / `handout` / `hyperlinks` / `sections` / `customShows` / `oleObjects` / `zooms` / `showPr` 报 `InvalidField`。
-`slides[]` 上出现 `hyperlinks` 报未知字段（链写在 `shapes[]` 上，不另开页级名单）。`slides[]` 上出现 `fields` 报未知字段（域写在 `shapes[].fields`）。
+`slides[]` 上出现 `hyperlinks` 报未知字段。
+链写在 `shapes[]` 上，以及 `pictures[]` / `tables[]` / `charts[]` / `smartArts[]` 的 `hyperlink` 与 `tables[].cells` 的链字段上，不另开页级名单。
+`slides[]` 上出现 `fields` 报未知字段（域写在 `shapes[].fields`）。
 `slides[]` 上出现 `timing` 报未知字段。不算放映引擎。
 create 仍只写一份 `type="blank"`、名为「空白」的版式，不按 JSON 生成多份母版。
 给了 `presentation.props` 时按 `setProps` / `setCustomProp` 同一套规则写 core / app / custom；
@@ -2916,7 +2963,7 @@ xlsx 见 [xlsx 分册](json-contract-xlsx.md#deleteole)。
 
 `id` 不是页 id 或备注容器 id 报 `InvalidId`。找不到该页报 `IdNotFound`。
 `cx` / `cy` 只给一个报 `InvalidField`。找不到 `file` 报 `Io`。空路径或不是 GLB 报 `InvalidField`。
-批注内本期不插。create 本期不在 `slides[].notes` 上写 3D。
+批注内本期不插。create 可在 `slides[].notes` 对象上写 `model3ds`。
 
 AlternateContent 放进 `p:spTree`。Choice 里是 `p:graphicFrame`。关系写在该页或 notesSlide `.rels`。
 `[Content_Types].xml` 补 Default `glb` 为 `model/gltf.binary`。xlsx / docx 见各自分册。
@@ -2971,7 +3018,7 @@ id 不是 3D 模型 id 报 `InvalidId`。xlsx / docx 见各自分册。
 
 `id` 不是页 id 或备注容器 id 报 `InvalidId`。找不到该页报 `IdNotFound`。
 `cx` / `cy` 只给一个报 `InvalidField`。空 `text` 报 `InvalidField`。出现 `expr` / `kind` 报 `InvalidField`。
-出现 `tex` / `unicodemath` / `omml` 报未知字段。批注内本期不插。create 本期不在 `slides[].notes` 上写公式。
+出现 `tex` / `unicodemath` / `omml` 报未知字段。批注内本期不插。create 可在 `slides[].notes` 对象上写 `maths`。
 
 AlternateContent 放进 `p:spTree`。Choice 里是 `p:sp`（`txBox="1"`），`p:txBody/a:p` 里是 `a14:m` 包 `m:oMathPara` / `m:oMath`。
 不要写 `mathplaceholder` 域。Fallback 是同一套纯文本框，字为该 `text`。不栅格化，不写 `a:blipFill`。

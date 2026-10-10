@@ -451,7 +451,12 @@ fn rid_still_used(root: &Element, rid: &str) -> bool {
     used
 }
 
-pub(crate) fn parse_create(v: &Value, prefix: &str, slide: usize) -> Result<InsertMathOp, Error> {
+pub(crate) fn parse_create(
+    v: &Value,
+    prefix: &str,
+    slide: usize,
+    on_notes: bool,
+) -> Result<InsertMathOp, Error> {
     let obj = v.as_object().ok_or_else(|| {
         Error::with_path(
             ErrorKind::WrongType {
@@ -477,7 +482,7 @@ pub(crate) fn parse_create(v: &Value, prefix: &str, slide: usize) -> Result<Inse
     }
     Ok(InsertMathOp {
         slide,
-        on_notes: false,
+        on_notes,
         master: None,
         text,
         x: parse_emu(obj.get("x"), prefix, "x")?,

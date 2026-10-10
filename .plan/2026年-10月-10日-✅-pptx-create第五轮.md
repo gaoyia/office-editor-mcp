@@ -1,11 +1,11 @@
 # pptx create 第五轮
 
-状态：❌
+状态：✅
 日期：2026-10-10
 
 对应 `roadmap/pptx.md` 待做序号 **39**。前置：第四轮 create 已过；图 / 表 / 图表 / SmartArt 链与备注页公式 / 3D 的 apply 已过。
 
-`.plan/2026年-10月-10日-✅-pptx-create第四轮.md` 明确不写图 / 表 / 图表 / SmartArt 上的链。契约还写：create 本期不在 `slides[].notes` 上写公式与 3D，也不写批注内图。
+`.plan/2026年-10月-10日-✅-pptx-create第四轮.md` 明确不写图 / 表 / 图表 / SmartArt 上的链。契约还写：create 本期不在 `slides[].notes` 上写公式与 3D，也不写批注内图。本切片把这几项补上。批注内图仍不写。
 
 ## 目标
 
@@ -15,9 +15,11 @@ create 复用已有 apply，写出备注页公式与 3D、以及图 / 表 / 图�
 
 | 序号 | 项 | 状态 |
 | --- | --- | --- |
-| 0 | 文档：create 字段 | ❌ |
-| 1 | 库：create 复用 apply | ❌ |
-| 2 | 库测试与 PowerPoint 16.0 手测 | ❌ |
+| 0 | 文档：create 字段 | ✅ |
+| 1 | 库：create 复用 apply | ✅ |
+| 2 | 库测试与 PowerPoint 16.0 手测 | ✅ |
+
+PowerPoint 16.0 手测 `pptx-create-round5.ps1`，Ck1–Ck5 通过，无 Repair。
 
 ## 已锁定
 

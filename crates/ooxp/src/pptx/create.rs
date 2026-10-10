@@ -12,11 +12,11 @@ use super::{
     chart, comments, connector, custom_show, field, handout, hyperlink, media, notes, ole, picture,
     protect,
     request::{
-        self, AnimTarget, CreateAnim, CreateAnimHost, CreateConnector, CreateCxnBind,
-        CreateHyperlink, CreateSection, InsertChartOp, InsertCommentOp, InsertConnectorOp,
-        InsertCustomShowOp, InsertHyperlinkOp, InsertMediaOp, InsertPictureOp,
-        InsertSlideSectionOp, InsertSmartArtOp, InsertTableOp, LinkInsertHost, LinkOn,
-        PptxLinkKind, SetHandoutTextOp, SetNotesTextOp, SetShapeGeomOp, SetTransitionOp,
+        self, AnimTarget, CreateAnim, CreateAnimHost, CreateChart, CreateConnector, CreateCxnBind,
+        CreateHyperlink, CreatePicture, CreateSection, CreateSmartArt, CreateTable,
+        InsertCommentOp, InsertConnectorOp, InsertCustomShowOp, InsertHyperlinkOp, InsertMediaOp,
+        InsertSlideSectionOp, LinkInsertHost, LinkOn, PptxLinkKind, SetHandoutTextOp,
+        SetNotesTextOp, SetShapeGeomOp, SetTransitionOp,
     },
     section,
     shape::{self, ShapeKey, ShapeTarget, SlideMeta},
@@ -37,16 +37,18 @@ struct NewShape {
 struct NewNotes {
     text: String,
     anims: Vec<CreateAnim>,
+    maths: Vec<super::omml::InsertMathOp>,
+    model3ds: Vec<super::model3d::InsertModel3dOp>,
 }
 
 struct NewSlide {
     shapes: Vec<NewShape>,
-    pictures: Vec<InsertPictureOp>,
+    pictures: Vec<CreatePicture>,
     videos: Vec<InsertMediaOp>,
     audios: Vec<InsertMediaOp>,
-    charts: Vec<InsertChartOp>,
-    smart_arts: Vec<InsertSmartArtOp>,
-    tables: Vec<InsertTableOp>,
+    charts: Vec<CreateChart>,
+    smart_arts: Vec<CreateSmartArt>,
+    tables: Vec<CreateTable>,
     notes: Option<NewNotes>,
     comments: Vec<InsertCommentOp>,
     transition: Option<SetTransitionOp>,
@@ -267,6 +269,7 @@ pub fn create(presentation: &Value) -> Result<Vec<u8>, Error> {
     attach_ole(&mut pkg, &slides)?;
     attach_connectors(&mut pkg, &slides)?;
     attach_notes(&mut pkg, &slides)?;
+    attach_notes_drawings(&mut pkg, &slides)?;
     attach_comments(&mut pkg, &slides)?;
     attach_hyperlinks(&mut pkg, &slides)?;
     attach_transitions(&mut pkg, &slides)?;
@@ -346,8 +349,18 @@ fn parse_slide(v: &Value, i: usize) -> Result<NewSlide, Error> {
     let comments = parse_comments(obj.get("comments"), i)?;
     let transition = parse_transition(obj.get("transition"), i)?;
     let anims = parse_anims(obj.get("anims"), i)?;
-    let model3ds = parse_model3ds(obj.get("model3ds"), i)?;
-    let maths = parse_maths(obj.get("maths"), i)?;
+    let model3ds = parse_model3ds(
+        obj.get("model3ds"),
+        i,
+        format!("presentation.slides[{i}].model3ds"),
+        false,
+    )?;
+    let maths = parse_maths(
+        obj.get("maths"),
+        i,
+        format!("presentation.slides[{i}].maths"),
+        false,
+    )?;
     let ole_objects = parse_ole_objects(obj.get("oleObjects"), i)?;
     let connectors = parse_connectors(obj.get("connectors"), i)?;
     let zooms = parse_zooms(obj.get("zooms"), i)?;
@@ -371,7 +384,7 @@ fn parse_slide(v: &Value, i: usize) -> Result<NewSlide, Error> {
     })
 }
 
-fn parse_pictures(v: Option<&Value>, slide_i: usize) -> Result<Vec<InsertPictureOp>, Error> {
+fn parse_pictures(v: Option<&Value>, slide_i: usize) -> Result<Vec<CreatePicture>, Error> {
     let Some(v) = v else {
         return Ok(Vec::new());
     };
@@ -399,11 +412,12 @@ fn parse_pictures(v: Option<&Value>, slide_i: usize) -> Result<Vec<InsertPicture
 fn parse_model3ds(
     v: Option<&Value>,
     slide_i: usize,
+    prefix: String,
+    on_notes: bool,
 ) -> Result<Vec<super::model3d::InsertModel3dOp>, Error> {
     let Some(v) = v else {
         return Ok(Vec::new());
     };
-    let prefix = format!("presentation.slides[{slide_i}].model3ds");
     let arr = v.as_array().ok_or_else(|| {
         Error::with_path(
             ErrorKind::WrongType {
@@ -419,16 +433,21 @@ fn parse_model3ds(
             item,
             &format!("{prefix}[{j}]"),
             slide_i + 1,
+            on_notes,
         )?);
     }
     Ok(out)
 }
 
-fn parse_maths(v: Option<&Value>, slide_i: usize) -> Result<Vec<super::omml::InsertMathOp>, Error> {
+fn parse_maths(
+    v: Option<&Value>,
+    slide_i: usize,
+    prefix: String,
+    on_notes: bool,
+) -> Result<Vec<super::omml::InsertMathOp>, Error> {
     let Some(v) = v else {
         return Ok(Vec::new());
     };
-    let prefix = format!("presentation.slides[{slide_i}].maths");
     let arr = v.as_array().ok_or_else(|| {
         Error::with_path(
             ErrorKind::WrongType {
@@ -444,12 +463,13 @@ fn parse_maths(v: Option<&Value>, slide_i: usize) -> Result<Vec<super::omml::Ins
             item,
             &format!("{prefix}[{j}]"),
             slide_i + 1,
+            on_notes,
         )?);
     }
     Ok(out)
 }
 
-fn parse_charts(v: Option<&Value>, slide_i: usize) -> Result<Vec<InsertChartOp>, Error> {
+fn parse_charts(v: Option<&Value>, slide_i: usize) -> Result<Vec<CreateChart>, Error> {
     let Some(v) = v else {
         return Ok(Vec::new());
     };
@@ -474,7 +494,7 @@ fn parse_charts(v: Option<&Value>, slide_i: usize) -> Result<Vec<InsertChartOp>,
     Ok(out)
 }
 
-fn parse_smartarts(v: Option<&Value>, slide_i: usize) -> Result<Vec<InsertSmartArtOp>, Error> {
+fn parse_smartarts(v: Option<&Value>, slide_i: usize) -> Result<Vec<CreateSmartArt>, Error> {
     let Some(v) = v else {
         return Ok(Vec::new());
     };
@@ -499,7 +519,7 @@ fn parse_smartarts(v: Option<&Value>, slide_i: usize) -> Result<Vec<InsertSmartA
     Ok(out)
 }
 
-fn parse_tables(v: Option<&Value>, slide_i: usize) -> Result<Vec<InsertTableOp>, Error> {
+fn parse_tables(v: Option<&Value>, slide_i: usize) -> Result<Vec<CreateTable>, Error> {
     let Some(v) = v else {
         return Ok(Vec::new());
     };
@@ -607,10 +627,12 @@ fn parse_notes(v: Option<&Value>, slide_i: usize) -> Result<Option<NewNotes>, Er
         Value::String(s) => Ok(Some(NewNotes {
             text: s.clone(),
             anims: Vec::new(),
+            maths: Vec::new(),
+            model3ds: Vec::new(),
         })),
         Value::Object(obj) => {
             for k in obj.keys() {
-                if k != "text" && k != "anims" {
+                if k != "text" && k != "anims" && k != "maths" && k != "model3ds" {
                     return Err(Error::with_path(
                         ErrorKind::UnknownField { field: k.clone() },
                         format!("{prefix}.{k}"),
@@ -631,7 +653,19 @@ fn parse_notes(v: Option<&Value>, slide_i: usize) -> Result<Option<NewNotes>, Er
                 }
             };
             let anims = parse_anims_at(obj.get("anims"), &format!("{prefix}.anims"))?;
-            Ok(Some(NewNotes { text, anims }))
+            let maths = parse_maths(obj.get("maths"), slide_i, format!("{prefix}.maths"), true)?;
+            let model3ds = parse_model3ds(
+                obj.get("model3ds"),
+                slide_i,
+                format!("{prefix}.model3ds"),
+                true,
+            )?;
+            Ok(Some(NewNotes {
+                text,
+                anims,
+                maths,
+                model3ds,
+            }))
         }
         _ => Err(Error::with_path(
             ErrorKind::WrongType {
@@ -680,13 +714,13 @@ fn attach_pictures(pkg: &mut Package, slides: &[NewSlide]) -> Result<(), Error> 
         let n = i + 1;
         let part = format!("/ppt/slides/slide{n}.xml");
         let mut doc = xml::parse(pkg.get(&part)?)?;
-        for (j, op) in slide.pictures.iter().enumerate() {
+        for (j, pic) in slide.pictures.iter().enumerate() {
             picture::insert_picture(
                 pkg,
                 &mut doc,
                 &part,
                 &pres.root,
-                op,
+                &pic.op,
                 &format!("presentation.slides[{i}].pictures[{j}].file"),
             )?;
         }
@@ -707,8 +741,8 @@ fn attach_charts(pkg: &mut Package, slides: &[NewSlide]) -> Result<(), Error> {
         let n = i + 1;
         let part = format!("/ppt/slides/slide{n}.xml");
         let mut doc = xml::parse(pkg.get(&part)?)?;
-        for (j, op) in slide.charts.iter().enumerate() {
-            chart::insert_chart(pkg, &mut doc, &part, &pres.root, op, j)?;
+        for (j, chart) in slide.charts.iter().enumerate() {
+            chart::insert_chart(pkg, &mut doc, &part, &pres.root, &chart.op, j)?;
         }
         pkg.set(&part, doc.to_bytes()?)?;
     }
@@ -727,8 +761,8 @@ fn attach_smartarts(pkg: &mut Package, slides: &[NewSlide]) -> Result<(), Error>
         let n = i + 1;
         let part = format!("/ppt/slides/slide{n}.xml");
         let mut doc = xml::parse(pkg.get(&part)?)?;
-        for (j, op) in slide.smart_arts.iter().enumerate() {
-            smartart::insert_smartart(pkg, &mut doc, &part, &pres.root, op, j)?;
+        for (j, art) in slide.smart_arts.iter().enumerate() {
+            smartart::insert_smartart(pkg, &mut doc, &part, &pres.root, &art.op, j)?;
         }
         pkg.set(&part, doc.to_bytes()?)?;
     }
@@ -747,8 +781,8 @@ fn attach_tables(pkg: &mut Package, slides: &[NewSlide]) -> Result<(), Error> {
         let n = i + 1;
         let part = format!("/ppt/slides/slide{n}.xml");
         let mut doc = xml::parse(pkg.get(&part)?)?;
-        for (j, op) in slide.tables.iter().enumerate() {
-            table::insert_table(&mut doc, &pres.root, op, j)?;
+        for (j, table) in slide.tables.iter().enumerate() {
+            table::insert_table(&mut doc, &pres.root, &table.op, j)?;
         }
         pkg.set(&part, doc.to_bytes()?)?;
     }
@@ -956,6 +990,51 @@ fn attach_notes(pkg: &mut Package, slides: &[NewSlide]) -> Result<(), Error> {
             text: notes.text.clone(),
         };
         notes::apply_set_notes_text(pkg, pres_part, &mut pres, &part, &op, 0)?;
+    }
+    Ok(())
+}
+
+fn attach_notes_drawings(pkg: &mut Package, slides: &[NewSlide]) -> Result<(), Error> {
+    if slides.iter().all(|s| {
+        s.notes
+            .as_ref()
+            .map(|n| n.maths.is_empty() && n.model3ds.is_empty())
+            .unwrap_or(true)
+    }) {
+        return Ok(());
+    }
+    for (i, slide) in slides.iter().enumerate() {
+        let Some(notes) = &slide.notes else {
+            continue;
+        };
+        if notes.maths.is_empty() && notes.model3ds.is_empty() {
+            continue;
+        }
+        let n = i + 1;
+        let slide_part = format!("/ppt/slides/slide{n}.xml");
+        let notes_part = notes::notes_slide_part(pkg, &slide_part)?.ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::OpRequiresField {
+                    op: "create".into(),
+                    field: "notes".into(),
+                },
+                format!("presentation.slides[{i}].notes"),
+            )
+        })?;
+        let mut doc = xml::parse(pkg.get(&notes_part)?)?;
+        for op in &notes.maths {
+            super::omml::insert(pkg, &mut doc, &notes_part, op)?;
+        }
+        for (j, op) in notes.model3ds.iter().enumerate() {
+            super::model3d::insert(
+                pkg,
+                &mut doc,
+                &notes_part,
+                op,
+                &format!("presentation.slides[{i}].notes.model3ds[{j}].file"),
+            )?;
+        }
+        pkg.set(&notes_part, doc.to_bytes()?)?;
     }
     Ok(())
 }
@@ -1303,10 +1382,15 @@ fn attach_media(
 }
 
 fn attach_hyperlinks(pkg: &mut Package, slides: &[NewSlide]) -> Result<(), Error> {
-    if slides
-        .iter()
-        .all(|s| s.shapes.iter().all(|sh| sh.link.is_none()))
-    {
+    if slides.iter().all(|s| {
+        s.shapes.iter().all(|sh| sh.link.is_none())
+            && s.pictures.iter().all(|p| p.link.is_none())
+            && s.charts.iter().all(|c| c.link.is_none())
+            && s.smart_arts.iter().all(|a| a.link.is_none())
+            && s.tables
+                .iter()
+                .all(|t| t.link.is_none() && t.cell_links.is_empty())
+    }) {
         return Ok(());
     }
     let pres_part = "/ppt/presentation.xml";
@@ -1321,41 +1405,135 @@ fn attach_hyperlinks(pkg: &mut Package, slides: &[NewSlide]) -> Result<(), Error
             let Some(link) = &sh.link else {
                 continue;
             };
-            if let PptxLinkKind::Slide(target) = link.target {
-                if target == n || target < 1 || target > slides.len() {
-                    return Err(Error::with_path(
-                        if target == n {
-                            ErrorKind::PptxHyperlinkSelfSlide
-                        } else {
-                            ErrorKind::OpRequiresField {
-                                op: "create".into(),
-                                field: "slide".into(),
-                            }
-                        },
-                        format!("presentation.slides[{i}].shapes[{j}].slide"),
-                    ));
-                }
-            }
+            reject_create_jump(
+                link,
+                n,
+                slides.len(),
+                format!("presentation.slides[{i}].shapes[{j}].slide"),
+            )?;
             let cnv = (j as u32 + 2).to_string();
-            let op = InsertHyperlinkOp {
-                id: format!("slide:{n}/shape:{cnv}"),
-                host: LinkInsertHost::Shape(ShapeTarget {
+            apply_create_object_link(
+                pkg,
+                &mut doc,
+                &part,
+                &metas,
+                LinkInsertHost::Shape(ShapeTarget {
                     slide: n,
                     on_notes: false,
                     master: None,
-                    key: ShapeKey::Id(cnv),
+                    key: ShapeKey::Id(cnv.clone()),
                 }),
-                target: link.target.clone(),
-                tooltip: link.tooltip.clone(),
-                on: if link.on_run {
+                format!("slide:{n}/shape:{cnv}"),
+                link,
+                if link.on_run {
                     LinkOn::Run
                 } else {
                     LinkOn::Shape
                 },
-                event: link.event,
-                text: None,
+            )?;
+            dirty = true;
+        }
+        let host = format!("slide:{n}");
+        let pics = picture::collect_pictures(&doc.root, &host);
+        for (j, pic) in slide.pictures.iter().enumerate() {
+            let Some(link) = &pic.link else {
+                continue;
             };
-            hyperlink::apply_insert(pkg, &mut doc, &part, &metas, &op, 0)?;
+            let path = format!("presentation.slides[{i}].pictures[{j}].hyperlink");
+            reject_create_jump(link, n, slides.len(), format!("{path}.slide"))?;
+            let id = pics.get(j).map(|p| p.id.clone()).ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::OpRequiresField {
+                        op: "create".into(),
+                        field: "hyperlink".into(),
+                    },
+                    path.clone(),
+                )
+            })?;
+            let host = LinkInsertHost::Pic(picture::parse_pic_id(&id, &path)?);
+            apply_create_object_link(pkg, &mut doc, &part, &metas, host, id, link, LinkOn::Pic)?;
+            dirty = true;
+        }
+        let tables = table::collect_tables(&doc.root, &host);
+        for (j, tbl) in slide.tables.iter().enumerate() {
+            if tbl.link.is_none() && tbl.cell_links.is_empty() {
+                continue;
+            }
+            let table_path = format!("presentation.slides[{i}].tables[{j}]");
+            let table_id = json_host_id(&tables, j, &table_path)?;
+            if let Some(link) = &tbl.link {
+                reject_create_jump(
+                    link,
+                    n,
+                    slides.len(),
+                    format!("{table_path}.hyperlink.slide"),
+                )?;
+                let host = LinkInsertHost::Table(table::parse_table_id(
+                    &table_id,
+                    &format!("{table_path}.hyperlink"),
+                    crate::error::IdReason::InsertHyperlinkNeedsShape,
+                )?);
+                apply_create_object_link(
+                    pkg,
+                    &mut doc,
+                    &part,
+                    &metas,
+                    host,
+                    table_id.clone(),
+                    link,
+                    LinkOn::Table,
+                )?;
+                dirty = true;
+            }
+            for cell in &tbl.cell_links {
+                let cell_path = format!("{table_path}.cells[{}][{}]", cell.row - 1, cell.col - 1);
+                reject_create_jump(&cell.link, n, slides.len(), format!("{cell_path}.slide"))?;
+                let cell_id = format!("{table_id}/r:{}/c:{}", cell.row, cell.col);
+                let host = LinkInsertHost::Cell(table::parse_cell_id(&cell_id, &cell_path)?);
+                apply_create_object_link(
+                    pkg,
+                    &mut doc,
+                    &part,
+                    &metas,
+                    host,
+                    cell_id,
+                    &cell.link,
+                    LinkOn::Cell,
+                )?;
+                dirty = true;
+            }
+        }
+        let charts = chart::collect_charts(pkg, &doc.root, &host, &part)?;
+        for (j, item) in slide.charts.iter().enumerate() {
+            let Some(link) = &item.link else {
+                continue;
+            };
+            let path = format!("presentation.slides[{i}].charts[{j}].hyperlink");
+            reject_create_jump(link, n, slides.len(), format!("{path}.slide"))?;
+            let id = json_host_id(&charts, j, &path)?;
+            let host = LinkInsertHost::Chart(chart::parse_chart_id(&id, &path)?);
+            apply_create_object_link(pkg, &mut doc, &part, &metas, host, id, link, LinkOn::Chart)?;
+            dirty = true;
+        }
+        let arts = smartart::collect_smartarts(pkg, &doc.root, &host, &part)?;
+        for (j, item) in slide.smart_arts.iter().enumerate() {
+            let Some(link) = &item.link else {
+                continue;
+            };
+            let path = format!("presentation.slides[{i}].smartArts[{j}].hyperlink");
+            reject_create_jump(link, n, slides.len(), format!("{path}.slide"))?;
+            let id = json_host_id(&arts, j, &path)?;
+            let host = LinkInsertHost::SmartArt(smartart::parse_diagram_id(&id, &path)?);
+            apply_create_object_link(
+                pkg,
+                &mut doc,
+                &part,
+                &metas,
+                host,
+                id,
+                link,
+                LinkOn::SmartArt,
+            )?;
             dirty = true;
         }
         if dirty {
@@ -1363,6 +1541,68 @@ fn attach_hyperlinks(pkg: &mut Package, slides: &[NewSlide]) -> Result<(), Error
         }
     }
     Ok(())
+}
+
+fn reject_create_jump(
+    link: &CreateHyperlink,
+    from: usize,
+    slide_count: usize,
+    path: String,
+) -> Result<(), Error> {
+    if let PptxLinkKind::Slide(target) = link.target {
+        if target == from || target < 1 || target > slide_count {
+            return Err(Error::with_path(
+                if target == from {
+                    ErrorKind::PptxHyperlinkSelfSlide
+                } else {
+                    ErrorKind::OpRequiresField {
+                        op: "create".into(),
+                        field: "slide".into(),
+                    }
+                },
+                path,
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn apply_create_object_link(
+    pkg: &mut Package,
+    doc: &mut crate::xml::Document,
+    part: &str,
+    metas: &[SlideMeta],
+    host: LinkInsertHost,
+    id: String,
+    link: &CreateHyperlink,
+    on: LinkOn,
+) -> Result<(), Error> {
+    let op = InsertHyperlinkOp {
+        id,
+        host,
+        target: link.target.clone(),
+        tooltip: link.tooltip.clone(),
+        on,
+        event: link.event,
+        text: None,
+    };
+    hyperlink::apply_insert(pkg, doc, part, metas, &op, 0)
+}
+
+fn json_host_id(list: &[Value], index: usize, path: &str) -> Result<String, Error> {
+    list.get(index)
+        .and_then(|v| v.get("id"))
+        .and_then(Value::as_str)
+        .map(str::to_string)
+        .ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::OpRequiresField {
+                    op: "create".into(),
+                    field: "hyperlink".into(),
+                },
+                path.to_string(),
+            )
+        })
 }
 
 fn attach_transitions(pkg: &mut Package, slides: &[NewSlide]) -> Result<(), Error> {

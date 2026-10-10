@@ -5,7 +5,7 @@
 检查前用 create 或 apply 在本机生成文件，不要用改过扩展名的 zip 目录冒充。
 本机若 `PowerPoint.Application` 被 WPS 抢走，直接启动 `POWERPNT.EXE` 再挂 COM，不要走被抢的 ProgID。Office 16 的对象模型在 `mdiClass` 上。
 
-C、I、A、Pp、Pvg、Pem、P3d、Pom、Pc、Psa、Pn、Pcm、Pm、Ps、Tf、Tfl、Sg、Pt、Tn、Tr、Td、Mt、Am、Aw、Mm、Mw、Md、Ts、Ho、Nh、Nm、Phl、Phr、Phx、Pcip、Pmd、Psc、Cs、Po、Cr、Cq、Pz、Pzr、Pw、Pph、
+C、I、A、Pp、Pvg、Pem、P3d、Pom、Pc、Psa、Pn、Pcm、Pm、Ps、Tf、Tfl、Sg、Pt、Tn、Tr、Td、Mt、Am、Aw、Mm、Mw、Md、Ts、Ho、Nh、Nm、Phl、Phr、Phx、Pcip、Pmd、Psc、Cs、Po、Cr、Cq、Ck、Pz、Pzr、Pw、Pph、
 Pf、Pcg、Pcx 各组由 `manual-check/office/cases/pptx-*.ps1` 自动判定，
 跑 `pwsh -File manual-check\office\run.ps1 -Case 'pptx-*'` 即可复现。O1 已放弃，与 xlsx / docx 相同。
 
@@ -42,6 +42,7 @@ Ps1–Ps5、Sg1–Sg5、Pt1–Pt6、Tn1–Tn5、Am1–Am5、Mm1–Mm5、Ho1–Ho
 2026-10-10 补跑 `pptx-zoom-remain.ps1`，Pzr1–Pzr5 通过。无 Repair。
 2026-10-10 补跑 `pptx-protect-hash.ps1`，Pph1–Pph5 通过。无 Repair。
 2026-10-10 补跑 `pptx-create-round4.ps1`，Cq1–Cq5 通过。无 Repair。
+2026-10-10 补跑 `pptx-create-round5.ps1`，Ck1–Ck5 通过。无 Repair。
 2026-10-10 补跑 `pptx-charts-rare-remain.ps1`，Pcx1–Pcx5 通过。无 Repair。
 
 - **C1** ✅
@@ -78,6 +79,13 @@ Ps1–Ps5、Sg1–Sg5、Pt1–Pt6、Tn1–Tn5、Am1–Am5、Mm1–Mm5、Ho1–Ho
   - 备注页有 `<p:timing>`，`showPr.type=kiosk` 后 COM ShowType=3
   - 页级 `timing` / `fields` / `hyperlinks` 拒写
   - 口令产物 ZIP 有 `p:modifyVerifier`，未开 PowerPoint
+  - 无 Repair
+- **Ck1–Ck5** ✅
+  - PowerPoint 16.0：`pptx-create-round5.ps1`，5 PASS / 0 FAIL
+  - 备注页 `mathCount=1`、`model3dCount=1`，根上这两项仍为 0
+  - 图 / 表 / 单元格 / 图表 / SmartArt 链 inspect `on` 与 COM Address 对上
+  - `slides[]` 上 `timing`、`pictures[].hyperlink.text` 拒写
+  - 字符串 `notes` 仍只写备注文本
   - 无 Repair
 - **I1–I5** ✅
   - `pptx:presentation`、`slideCount=2`、无 scope 时没有 `shapes`、仍有 `pictureCount`、形状 id 为 `slide:1/shape:2` 且 `stable`
@@ -531,6 +539,32 @@ create 第四轮复用本轮已有 apply：OLE、Zoom、域、连接线、自定
   - `modifyProtection.password` 后 ZIP 有 `p:modifyVerifier`
   - 带哈希产物不要开 PowerPoint
   - xlsx 上 `customShows` 拒写
+
+create 第五轮复用已有 apply：备注页公式与 3D、图 / 表 / 图表 / SmartArt 上的链、表单元格链。不算放映引擎。不写批注内图。脚本：`manual-check/office/cases/pptx-create-round5.ps1`。编号用 Ck（不要跟 Cq、C、Phr、Pcip 撞）。
+
+- **Ck1**
+  - 检查：备注页公式与 3D
+  - 通过标准：`notes` 对象带 `maths` / `model3ds` 后 inspect 备注 `mathCount=1`、`model3dCount=1`
+  - 根上这两项计数仍为 0
+  - 无 Repair
+- **Ck2**
+  - 检查：图上的链
+  - 通过标准：`pictures[].hyperlink.url` 后 inspect `on=pic`
+  - COM 该图 Address 对上
+  - 无 Repair
+- **Ck3**
+  - 检查：表框与单元格链
+  - 通过标准：`tables[].hyperlink` 与单元格 `url` 后 inspect 有 `on=table` 与 `on=cell`
+  - 无 Repair
+- **Ck4**
+  - 检查：图表与 SmartArt 链
+  - 通过标准：`charts[].hyperlink` 与 `smartArts[].hyperlink` 后 inspect `on=chart` / `on=smartArt`
+  - 无 Repair
+- **Ck5**
+  - 检查：拒写
+  - 通过标准：`slides[]` 上 `timing` 拒写
+  - `pictures[].hyperlink.text` 拒写
+  - 字符串 `notes` 仍只写备注文本
 
 ## inspect
 

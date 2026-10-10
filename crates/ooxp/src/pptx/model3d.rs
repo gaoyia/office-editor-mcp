@@ -570,6 +570,7 @@ pub(crate) fn parse_create(
     v: &Value,
     prefix: &str,
     slide: usize,
+    on_notes: bool,
 ) -> Result<InsertModel3dOp, Error> {
     let obj = v.as_object().ok_or_else(|| {
         Error::with_path(
@@ -623,7 +624,7 @@ pub(crate) fn parse_create(
     }
     Ok(InsertModel3dOp {
         slide,
-        on_notes: false,
+        on_notes,
         master: None,
         file,
         x: parse_emu(obj.get("x"), prefix, "x")?,

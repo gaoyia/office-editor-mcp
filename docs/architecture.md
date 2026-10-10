@@ -356,9 +356,11 @@ create 不写修订痕迹。pptx 的 `slides[].pictures` 复用 `insertPicture`�
 `slides[].charts` 复用 `insertChart`（数据写 embedding），`slides[].smartArts` 复用 `insertSmartArt`，
 `slides[].tables` 复用 `insertTable`，`slides[].oleObjects` 复用 `insertOle`，
 `slides[].connectors` 复用 `insertConnector`，`slides[].zooms` 复用 `insertZoom`，
-`slides[].notes` 复用 `setNotesText`（对象形态的 `anims` 复用 `insertAnim` 写到备注页），
+`slides[].notes` 复用 `setNotesText`（对象形态的 `anims` 复用 `insertAnim` 写到备注页，
+`maths` / `model3ds` 复用 `insertMath` / `insertModel3d` 写到备注页），
 `slides[].comments` 复用 `insertComment`，
 形状上的 `url` / `file` / `slide` 复用 `insertHyperlink`（可 `on=run`），
+`pictures[].hyperlink` / `tables[].hyperlink` / `charts[].hyperlink` / `smartArts[].hyperlink` 以及表单元格链字段同样复用 `insertHyperlink`，
 `shapes[].geom` 复用 `setShapeGeom`，`shapes[].fields` 复用 `insertField`，
 `shapes[].textFill` / `textOutline` 复用 `setShapeFormat`，
 `slides[].transition` 复用 `setTransition`，
@@ -366,7 +368,7 @@ create 不写修订痕迹。pptx 的 `slides[].pictures` 复用 `insertPicture`�
 `presentation.sections` 复用 `insertSlideSection`，`presentation.customShows` 复用 `insertCustomShow`，
 `presentation.handout` 复用 `setHandoutText`，`presentation.showPr` 复用 `setShowPr`，
 `presentation.modifyProtection` 复用 `setProtection`。
-create 本期不写批注内图，也不写图 / 表 / 图表 / SmartArt 上的链。
+create 本期不写批注内图。
 三种格式的 `props` 复用 `setProps` / `setCustomProp` 同一套字段写 core / app / custom。
 docx 的 `document.protection` 复用 `setProtection`。docx 的 `document.watermarks` 复用 `insertWatermark`。
 docx 的 `document.theme` 写入 theme 部件；`document.pageBackground` / `document.pageBorders` 复用对应 apply。省略 `theme` 则不写该部件。

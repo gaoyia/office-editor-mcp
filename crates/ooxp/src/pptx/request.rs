@@ -598,6 +598,38 @@ pub struct CreateHyperlink {
 }
 
 #[derive(Debug, Clone)]
+pub struct CreatePicture {
+    pub op: InsertPictureOp,
+    pub link: Option<CreateHyperlink>,
+}
+
+#[derive(Debug, Clone)]
+pub struct CreateChart {
+    pub op: InsertChartOp,
+    pub link: Option<CreateHyperlink>,
+}
+
+#[derive(Debug, Clone)]
+pub struct CreateSmartArt {
+    pub op: InsertSmartArtOp,
+    pub link: Option<CreateHyperlink>,
+}
+
+#[derive(Debug, Clone)]
+pub struct CreateTableCellLink {
+    pub row: usize,
+    pub col: usize,
+    pub link: CreateHyperlink,
+}
+
+#[derive(Debug, Clone)]
+pub struct CreateTable {
+    pub op: InsertTableOp,
+    pub link: Option<CreateHyperlink>,
+    pub cell_links: Vec<CreateTableCellLink>,
+}
+
+#[derive(Debug, Clone)]
 pub struct CreateField {
     pub type_name: String,
     pub text: String,
@@ -7138,7 +7170,7 @@ pub(crate) fn parse_create_chart(
     v: &Value,
     prefix: &str,
     slide: usize,
-) -> Result<InsertChartOp, Error> {
+) -> Result<CreateChart, Error> {
     let obj = v.as_object().ok_or_else(|| {
         Error::with_path(
             ErrorKind::WrongType {
@@ -7163,6 +7195,7 @@ pub(crate) fn parse_create_chart(
             "y",
             "cx",
             "cy",
+            "hyperlink",
         ],
     )?;
     let chart_type = parse_chart_type_field(obj.get("type"), &format!("{prefix}.type"))?;
@@ -7199,7 +7232,7 @@ pub(crate) fn parse_create_chart(
             prefix.to_string(),
         ));
     }
-    Ok(InsertChartOp {
+    let op = InsertChartOp {
         slide,
         on_notes: false,
         master: None,
@@ -7212,14 +7245,16 @@ pub(crate) fn parse_create_chart(
         y,
         cx,
         cy,
-    })
+    };
+    let link = parse_create_opt_hyperlink(obj, prefix)?;
+    Ok(CreateChart { op, link })
 }
 
 pub(crate) fn parse_create_smartart(
     v: &Value,
     prefix: &str,
     slide: usize,
-) -> Result<InsertSmartArtOp, Error> {
+) -> Result<CreateSmartArt, Error> {
     let obj = v.as_object().ok_or_else(|| {
         Error::with_path(
             ErrorKind::WrongType {
@@ -7229,7 +7264,11 @@ pub(crate) fn parse_create_smartart(
             prefix.to_string(),
         )
     })?;
-    deny_keys_at(obj, prefix, &["layout", "points", "x", "y", "cx", "cy"])?;
+    deny_keys_at(
+        obj,
+        prefix,
+        &["layout", "points", "x", "y", "cx", "cy", "hyperlink"],
+    )?;
     let (layout, points) = crate::smartart::parse_layout_and_points(obj, prefix)?;
     let x = parse_off_at(obj.get("x"), &format!("{prefix}.x"), "x")?;
     let y = parse_off_at(obj.get("y"), &format!("{prefix}.y"), "y")?;
@@ -7253,7 +7292,7 @@ pub(crate) fn parse_create_smartart(
             prefix.to_string(),
         ));
     }
-    Ok(InsertSmartArtOp {
+    let op = InsertSmartArtOp {
         slide,
         on_notes: false,
         master: None,
@@ -7263,14 +7302,16 @@ pub(crate) fn parse_create_smartart(
         y,
         cx,
         cy,
-    })
+    };
+    let link = parse_create_opt_hyperlink(obj, prefix)?;
+    Ok(CreateSmartArt { op, link })
 }
 
 pub(crate) fn parse_create_table(
     v: &Value,
     prefix: &str,
     slide: usize,
-) -> Result<InsertTableOp, Error> {
+) -> Result<CreateTable, Error> {
     let obj = v.as_object().ok_or_else(|| {
         Error::with_path(
             ErrorKind::WrongType {
@@ -7283,7 +7324,7 @@ pub(crate) fn parse_create_table(
     deny_keys_at(
         obj,
         prefix,
-        &["rows", "cols", "cells", "x", "y", "cx", "cy"],
+        &["rows", "cols", "cells", "x", "y", "cx", "cy", "hyperlink"],
     )?;
     let rows = table::parse_dim(
         obj.get("rows"),
@@ -7299,7 +7340,8 @@ pub(crate) fn parse_create_table(
         1,
         table::max_cols(),
     )?;
-    let cells = table::parse_cells(obj.get("cells"), &format!("{prefix}.cells"), rows, cols)?;
+    let (cells, cell_links) =
+        parse_create_table_cells(obj.get("cells"), &format!("{prefix}.cells"), rows, cols)?;
     let x = parse_off_at(obj.get("x"), &format!("{prefix}.x"), "x")?;
     let y = parse_off_at(obj.get("y"), &format!("{prefix}.y"), "y")?;
     if x.is_some() != y.is_some() {
@@ -7322,7 +7364,7 @@ pub(crate) fn parse_create_table(
             prefix.to_string(),
         ));
     }
-    Ok(InsertTableOp {
+    let op = InsertTableOp {
         slide,
         on_notes: false,
         master: None,
@@ -7333,6 +7375,12 @@ pub(crate) fn parse_create_table(
         y,
         cx,
         cy,
+    };
+    let link = parse_create_opt_hyperlink(obj, prefix)?;
+    Ok(CreateTable {
+        op,
+        link,
+        cell_links,
     })
 }
 
@@ -7340,7 +7388,7 @@ pub(crate) fn parse_create_picture(
     v: &Value,
     prefix: &str,
     slide: usize,
-) -> Result<InsertPictureOp, Error> {
+) -> Result<CreatePicture, Error> {
     let obj = v.as_object().ok_or_else(|| {
         Error::with_path(
             ErrorKind::WrongType {
@@ -7351,7 +7399,7 @@ pub(crate) fn parse_create_picture(
         )
     })?;
     for k in obj.keys() {
-        if !matches!(k.as_str(), "file" | "x" | "y" | "cx" | "cy") {
+        if !matches!(k.as_str(), "file" | "x" | "y" | "cx" | "cy" | "hyperlink") {
             return Err(Error::with_path(
                 ErrorKind::UnknownField { field: k.clone() },
                 format!("{prefix}.{k}"),
@@ -7400,7 +7448,7 @@ pub(crate) fn parse_create_picture(
             prefix.to_string(),
         ));
     }
-    Ok(InsertPictureOp {
+    let op = InsertPictureOp {
         slide,
         on_notes: false,
         master: None,
@@ -7410,7 +7458,9 @@ pub(crate) fn parse_create_picture(
         y,
         cx,
         cy,
-    })
+    };
+    let link = parse_create_opt_hyperlink(obj, prefix)?;
+    Ok(CreatePicture { op, link })
 }
 
 pub(crate) fn parse_create_comment(
@@ -8943,6 +8993,230 @@ fn parse_create_index(v: Option<&Value>, path: &str, field: &str) -> Result<usiz
             },
             path.to_string(),
         )),
+    }
+}
+
+fn parse_create_opt_hyperlink(
+    obj: &Map<String, Value>,
+    prefix: &str,
+) -> Result<Option<CreateHyperlink>, Error> {
+    match obj.get("hyperlink") {
+        None => Ok(None),
+        Some(v) => {
+            let inner = v.as_object().ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::WrongType {
+                        field: "hyperlink".into(),
+                        expected: TypeName::Object,
+                    },
+                    format!("{prefix}.hyperlink"),
+                )
+            })?;
+            let path = format!("{prefix}.hyperlink");
+            deny_keys_at(inner, &path, &["url", "file", "slide", "tooltip", "event"])?;
+            parse_create_link_fields(inner, &path, true)
+        }
+    }
+}
+
+fn parse_create_table_cells(
+    v: Option<&Value>,
+    path: &str,
+    rows: usize,
+    cols: usize,
+) -> Result<(Vec<Vec<String>>, Vec<CreateTableCellLink>), Error> {
+    match v {
+        None => Ok((vec![vec![String::new(); cols]; rows], Vec::new())),
+        Some(Value::Array(arr)) => {
+            if arr.len() != rows {
+                return Err(Error::with_path(
+                    ErrorKind::NeedTableCellsMatch,
+                    path.to_string(),
+                ));
+            }
+            let mut texts = Vec::new();
+            let mut links = Vec::new();
+            for (ri, row) in arr.iter().enumerate() {
+                let Some(cells) = row.as_array() else {
+                    return Err(Error::with_path(
+                        ErrorKind::WrongType {
+                            field: "cells".into(),
+                            expected: TypeName::Array,
+                        },
+                        format!("{path}[{ri}]"),
+                    ));
+                };
+                if cells.len() != cols {
+                    return Err(Error::with_path(
+                        ErrorKind::NeedTableCellsMatch,
+                        format!("{path}[{ri}]"),
+                    ));
+                }
+                let mut line = Vec::new();
+                for (ci, c) in cells.iter().enumerate() {
+                    let cell_path = format!("{path}[{ri}][{ci}]");
+                    match c {
+                        Value::String(s) => line.push(s.clone()),
+                        Value::Object(obj) => {
+                            deny_keys_at(
+                                obj,
+                                &cell_path,
+                                &["text", "url", "file", "slide", "tooltip", "event"],
+                            )?;
+                            let text = match obj.get("text") {
+                                None => String::new(),
+                                Some(Value::String(s)) => s.clone(),
+                                Some(_) => {
+                                    return Err(Error::with_path(
+                                        ErrorKind::WrongType {
+                                            field: "text".into(),
+                                            expected: TypeName::String,
+                                        },
+                                        format!("{cell_path}.text"),
+                                    ));
+                                }
+                            };
+                            if let Some(link) = parse_create_link_fields(obj, &cell_path, false)? {
+                                links.push(CreateTableCellLink {
+                                    row: ri + 1,
+                                    col: ci + 1,
+                                    link,
+                                });
+                            }
+                            line.push(text);
+                        }
+                        _ => {
+                            return Err(Error::with_path(
+                                ErrorKind::WrongType {
+                                    field: "cells".into(),
+                                    expected: TypeName::String,
+                                },
+                                cell_path,
+                            ));
+                        }
+                    }
+                }
+                texts.push(line);
+            }
+            Ok((texts, links))
+        }
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "cells".into(),
+                expected: TypeName::Array,
+            },
+            path.to_string(),
+        )),
+    }
+}
+
+fn parse_create_link_fields(
+    obj: &Map<String, Value>,
+    prefix: &str,
+    required: bool,
+) -> Result<Option<CreateHyperlink>, Error> {
+    let url = parse_create_link_string(obj, prefix, "url", ErrorKind::EmptyHyperlinkUrl)?;
+    let file = parse_create_link_string(obj, prefix, "file", ErrorKind::EmptyHyperlinkFile)?;
+    let slide = match obj.get("slide") {
+        None => None,
+        Some(Value::Null) => {
+            return Err(Error::with_path(
+                ErrorKind::PptxHyperlinkNeedTarget,
+                format!("{prefix}.slide"),
+            ));
+        }
+        Some(Value::Number(n)) => {
+            let Some(u) = n.as_u64() else {
+                return Err(Error::with_path(
+                    ErrorKind::WrongType {
+                        field: "slide".into(),
+                        expected: TypeName::Integer,
+                    },
+                    format!("{prefix}.slide"),
+                ));
+            };
+            if u < 1 || u > usize::MAX as u64 {
+                return Err(Error::with_path(
+                    ErrorKind::MinValue {
+                        field: "slide".into(),
+                        min: 1,
+                    },
+                    format!("{prefix}.slide"),
+                ));
+            }
+            Some(u as usize)
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "slide".into(),
+                    expected: TypeName::Integer,
+                },
+                format!("{prefix}.slide"),
+            ));
+        }
+    };
+    let tooltip = match obj.get("tooltip") {
+        None => None,
+        Some(Value::String(s)) => Some(s.clone()),
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "tooltip".into(),
+                    expected: TypeName::String,
+                },
+                format!("{prefix}.tooltip"),
+            ));
+        }
+    };
+    let target = match (url, file, slide) {
+        (Some(u), None, None) => Some(PptxLinkKind::Url(u)),
+        (None, Some(f), None) => Some(PptxLinkKind::File(f)),
+        (None, None, Some(n)) => Some(PptxLinkKind::Slide(n)),
+        (None, None, None) => None,
+        _ => {
+            return Err(Error::with_path(
+                ErrorKind::PptxHyperlinkNeedTarget,
+                prefix.to_string(),
+            ));
+        }
+    };
+    let event = match obj.get("event") {
+        None => LinkEvent::Click,
+        Some(Value::String(s)) if s == "click" => LinkEvent::Click,
+        Some(Value::String(s)) if s == "hover" => LinkEvent::Hover,
+        Some(Value::String(_)) => {
+            return Err(Error::with_path(
+                ErrorKind::InvalidHyperlinkEvent,
+                format!("{prefix}.event"),
+            ));
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "event".into(),
+                    expected: TypeName::String,
+                },
+                format!("{prefix}.event"),
+            ));
+        }
+    };
+    match target {
+        Some(target) => Ok(Some(CreateHyperlink {
+            target,
+            tooltip,
+            on_run: false,
+            event,
+        })),
+        None => {
+            if required || tooltip.is_some() || obj.contains_key("event") {
+                return Err(Error::with_path(
+                    ErrorKind::PptxHyperlinkNeedTarget,
+                    prefix.to_string(),
+                ));
+            }
+            Ok(None)
+        }
     }
 }
 
