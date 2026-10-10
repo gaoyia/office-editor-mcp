@@ -853,7 +853,7 @@ fn attr_or_null(el: &Element, local: &str) -> Value {
     el.attr_local(local).map_or(Value::Null, |s| json!(s))
 }
 
-fn side_json(parent: &Element, local: &str) -> Value {
+pub(crate) fn side_json(parent: &Element, local: &str) -> Value {
     let Some(el) = parent.child_by_local(local) else {
         return Value::Null;
     };

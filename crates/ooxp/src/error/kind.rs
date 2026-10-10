@@ -1126,6 +1126,10 @@ define_error_kinds! {
     NeedSetParaStyleStyle => vec![Self::NeedSetParaStyleStyle],
     NeedSetParaFormatField => vec![Self::NeedSetParaFormatField],
     NeedSetRunFormatField => vec![Self::NeedSetRunFormatField],
+    NeedParaBordersField => vec![Self::NeedParaBordersField],
+    InvalidHighlight => vec![Self::InvalidHighlight],
+    InvalidVertAlign => vec![Self::InvalidVertAlign],
+    InvalidTabVal => vec![Self::InvalidTabVal],
     InvalidEm => vec![Self::InvalidEm],
     NeedEastAsianLayoutField => vec![Self::NeedEastAsianLayoutField],
     InvalidCombineBrackets => vec![Self::InvalidCombineBrackets],
@@ -1783,6 +1787,9 @@ impl ErrorKind {
             | Self::InvalidBibliographyStyle
             | Self::EmptyMathText
             | Self::InvalidEm
+            | Self::InvalidHighlight
+            | Self::InvalidVertAlign
+            | Self::InvalidTabVal
             | Self::NeedEastAsianLayoutField
             | Self::InvalidCombineBrackets
             | Self::EmptyRubyBase
@@ -1879,6 +1886,7 @@ impl ErrorKind {
             | Self::NeedSetParaStyleStyle
             | Self::NeedSetParaFormatField
             | Self::NeedSetRunFormatField
+            | Self::NeedParaBordersField
             | Self::NeedSetCellStyleField
             | Self::InvalidCellStyle { .. }
             | Self::NeedInsertCellStyleField

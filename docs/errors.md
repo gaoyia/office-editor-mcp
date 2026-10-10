@@ -941,7 +941,7 @@
 - id 不是段落 id 报 `InvalidId`
 - 找不到 run 时，`setRunFormat` 报 `IdNotFound`
 - id 不是 run id 报 `InvalidId`
-- `align` / `lineRule` / `underline` / `em` / `combineBrackets` 不合法，`firstLine` 与 `hanging` 同时给数字，`eastAsianLayout` 的 `combine` 与 `vert` 都不给，或改动字段一个都不给，报 `InvalidField`
+- `align` / `lineRule` / `underline` / `em` / `combineBrackets` / `highlight` / `vertAlign` / `tabs[].val` 不合法，`firstLine` 与 `hanging` 同时给数字，`eastAsianLayout` 的 `combine` 与 `vert` 都不给，`borders` 一边都不给，或改动字段一个都不给，报 `InvalidField`
 - xlsx / pptx 上发直接格式 op 报 `InvalidField`
 - 找不到拼音时，`setRuby` / `deleteRuby` 报 `IdNotFound`
 - id 不是拼音 id 报 `InvalidId`

@@ -72,6 +72,7 @@ $order = @(
     'docx-box-table'
     'docx-box-fields'
     'docx-format'
+    'docx-para-run-remain'
     'docx-east-asia'
     'docx-insert-section'
     'docx-toc'

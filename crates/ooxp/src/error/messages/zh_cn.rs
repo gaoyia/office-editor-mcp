@@ -1453,12 +1453,24 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             "setParaStyle / setRunStyle 必须有 style（style: 样式 id 或 null）".into()
         }
         ErrorKind::NeedSetParaFormatField => {
-            "setParaFormat 至少要给 align、left、right、firstLine、hanging、before、after、line、lineRule、kinsoku、overflowPunct、topLinePunct、autoSpaceDE 或 autoSpaceDN 之一"
+            "setParaFormat 至少要给 align、left、right、firstLine、hanging、before、after、line、lineRule、kinsoku、overflowPunct、topLinePunct、autoSpaceDE、autoSpaceDN、borders、shd 或 tabs 之一"
                 .into()
         }
         ErrorKind::NeedSetRunFormatField => {
-            "setRunFormat 至少要给 bold、italic、underline、sz、color、font、eastAsiaFont、em 或 eastAsianLayout 之一"
+            "setRunFormat 至少要给 bold、italic、underline、sz、color、font、eastAsiaFont、em、eastAsianLayout、highlight、strike、dstrike 或 vertAlign 之一"
                 .into()
+        }
+        ErrorKind::NeedParaBordersField => {
+            "borders 至少要给 top、left、bottom 或 right 之一".into()
+        }
+        ErrorKind::InvalidHighlight => {
+            "highlight 不是认识的 ST_HighlightColor 值".into()
+        }
+        ErrorKind::InvalidVertAlign => {
+            "vertAlign 必须是 superscript、subscript 或 baseline".into()
+        }
+        ErrorKind::InvalidTabVal => {
+            "tabs[].val 必须是 left、center、right、decimal 或 bar".into()
         }
         ErrorKind::InvalidEm => {
             "em 必须是 none、dot、comma、circle 或 underDot".into()

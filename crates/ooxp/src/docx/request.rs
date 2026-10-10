@@ -802,6 +802,9 @@ pub struct SetParaFormatOp {
     pub top_line_punct: Option<Option<bool>>,
     pub auto_space_de: Option<Option<bool>>,
     pub auto_space_dn: Option<Option<bool>>,
+    pub borders: Option<Option<super::format::ParaBordersPatch>>,
+    pub shd: Option<Option<String>>,
+    pub tabs: Option<Option<Vec<super::format::TabStop>>>,
 }
 
 #[derive(Debug, Clone)]
@@ -818,6 +821,10 @@ pub struct SetRunFormatOp {
     pub east_asia_font: Option<String>,
     pub em: Option<Option<String>>,
     pub east_asian_layout: Option<Option<super::format::EastAsianLayout>>,
+    pub highlight: Option<Option<String>>,
+    pub strike: Option<Option<bool>>,
+    pub dstrike: Option<Option<bool>>,
+    pub vert_align: Option<Option<String>>,
 }
 
 #[derive(Debug, Clone)]
@@ -6275,6 +6282,9 @@ fn parse_set_para_format(
             "topLinePunct",
             "autoSpaceDE",
             "autoSpaceDN",
+            "borders",
+            "shd",
+            "tabs",
         ],
     )?;
     let id = require_op_id(obj, i)?;
@@ -6314,6 +6324,9 @@ fn parse_set_para_format(
     let top_line_punct = parse_opt_null_bool(obj, i, "topLinePunct")?;
     let auto_space_de = parse_opt_null_bool(obj, i, "autoSpaceDE")?;
     let auto_space_dn = parse_opt_null_bool(obj, i, "autoSpaceDN")?;
+    let borders = parse_para_borders(obj, i)?;
+    let shd = parse_para_shd(obj, i)?;
+    let tabs = parse_para_tabs(obj, i)?;
     if align.is_none()
         && left.is_none()
         && right.is_none()
@@ -6328,6 +6341,9 @@ fn parse_set_para_format(
         && top_line_punct.is_none()
         && auto_space_de.is_none()
         && auto_space_dn.is_none()
+        && borders.is_none()
+        && shd.is_none()
+        && tabs.is_none()
     {
         return Err(Error::with_path(
             ErrorKind::NeedSetParaFormatField,
@@ -6351,6 +6367,9 @@ fn parse_set_para_format(
         top_line_punct,
         auto_space_de,
         auto_space_dn,
+        borders,
+        shd,
+        tabs,
     })
 }
 
@@ -6373,6 +6392,10 @@ fn parse_set_run_format(
             "eastAsiaFont",
             "em",
             "eastAsianLayout",
+            "highlight",
+            "strike",
+            "dstrike",
+            "vertAlign",
         ],
     )?;
     let id = require_op_id(obj, i)?;
@@ -6412,6 +6435,22 @@ fn parse_set_run_format(
     let east_asia_font = parse_nonempty_opt_string(obj, i, "eastAsiaFont")?;
     let em = parse_opt_null_enum(obj, i, "em", super::format::EM_SET, ErrorKind::InvalidEm)?;
     let east_asian_layout = parse_opt_east_asian_layout(obj, i)?;
+    let highlight = parse_opt_null_enum(
+        obj,
+        i,
+        "highlight",
+        super::format::HIGHLIGHT_SET,
+        ErrorKind::InvalidHighlight,
+    )?;
+    let strike = parse_opt_null_bool(obj, i, "strike")?;
+    let dstrike = parse_opt_null_bool(obj, i, "dstrike")?;
+    let vert_align = parse_opt_null_enum(
+        obj,
+        i,
+        "vertAlign",
+        super::format::VERT_ALIGN_SET,
+        ErrorKind::InvalidVertAlign,
+    )?;
     if bold.is_none()
         && italic.is_none()
         && underline.is_none()
@@ -6421,6 +6460,10 @@ fn parse_set_run_format(
         && east_asia_font.is_none()
         && em.is_none()
         && east_asian_layout.is_none()
+        && highlight.is_none()
+        && strike.is_none()
+        && dstrike.is_none()
+        && vert_align.is_none()
     {
         return Err(Error::with_path(
             ErrorKind::NeedSetRunFormatField,
@@ -6440,7 +6483,223 @@ fn parse_set_run_format(
         east_asia_font,
         em,
         east_asian_layout,
+        highlight,
+        strike,
+        dstrike,
+        vert_align,
     })
+}
+
+fn parse_para_borders(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<Option<Option<super::format::ParaBordersPatch>>, Error> {
+    match obj.get("borders") {
+        None => Ok(None),
+        Some(Value::Null) => Ok(Some(None)),
+        Some(Value::Object(map)) => {
+            for k in map.keys() {
+                if !["top", "left", "bottom", "right"].contains(&k.as_str()) {
+                    return Err(Error::with_path(
+                        ErrorKind::UnknownField { field: k.clone() },
+                        format!("ops[{i}].borders.{k}"),
+                    ));
+                }
+            }
+            let top = parse_border_side(map.get("top"), i, "borders.top")?;
+            let left = parse_border_side(map.get("left"), i, "borders.left")?;
+            let bottom = parse_border_side(map.get("bottom"), i, "borders.bottom")?;
+            let right = parse_border_side(map.get("right"), i, "borders.right")?;
+            if top.is_none() && left.is_none() && bottom.is_none() && right.is_none() {
+                return Err(Error::with_path(
+                    ErrorKind::NeedParaBordersField,
+                    format!("ops[{i}].borders"),
+                ));
+            }
+            Ok(Some(Some(super::format::ParaBordersPatch {
+                top,
+                left,
+                bottom,
+                right,
+            })))
+        }
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "borders".into(),
+                expected: TypeName::Object,
+            },
+            format!("ops[{i}].borders"),
+        )),
+    }
+}
+
+fn parse_para_shd(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<Option<Option<String>>, Error> {
+    match obj.get("shd") {
+        None => Ok(None),
+        Some(Value::Null) => Ok(Some(None)),
+        Some(Value::Object(map)) => {
+            for k in map.keys() {
+                if k != "fill" {
+                    return Err(Error::with_path(
+                        ErrorKind::UnknownField { field: k.clone() },
+                        format!("ops[{i}].shd.{k}"),
+                    ));
+                }
+            }
+            let fill = match map.get("fill") {
+                Some(Value::String(s)) if is_rgb_hex(s) => s.to_ascii_uppercase(),
+                Some(Value::String(_)) => {
+                    return Err(Error::with_path(
+                        ErrorKind::InvalidStyleColor,
+                        format!("ops[{i}].shd.fill"),
+                    ));
+                }
+                Some(_) => {
+                    return Err(Error::with_path(
+                        ErrorKind::WrongType {
+                            field: "fill".into(),
+                            expected: TypeName::String,
+                        },
+                        format!("ops[{i}].shd.fill"),
+                    ));
+                }
+                None => {
+                    return Err(Error::with_path(
+                        ErrorKind::OpRequiresField {
+                            op: "setParaFormat".into(),
+                            field: "shd.fill".into(),
+                        },
+                        format!("ops[{i}].shd"),
+                    ));
+                }
+            };
+            Ok(Some(Some(fill)))
+        }
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "shd".into(),
+                expected: TypeName::Object,
+            },
+            format!("ops[{i}].shd"),
+        )),
+    }
+}
+
+fn parse_para_tabs(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<Option<Option<Vec<super::format::TabStop>>>, Error> {
+    match obj.get("tabs") {
+        None => Ok(None),
+        Some(Value::Null) => Ok(Some(None)),
+        Some(Value::Array(arr)) => {
+            if arr.is_empty() {
+                return Ok(Some(None));
+            }
+            let mut out = Vec::new();
+            for (j, item) in arr.iter().enumerate() {
+                let Value::Object(map) = item else {
+                    return Err(Error::with_path(
+                        ErrorKind::WrongType {
+                            field: "tabs".into(),
+                            expected: TypeName::Object,
+                        },
+                        format!("ops[{i}].tabs[{j}]"),
+                    ));
+                };
+                for k in map.keys() {
+                    if !["val", "pos"].contains(&k.as_str()) {
+                        return Err(Error::with_path(
+                            ErrorKind::UnknownField { field: k.clone() },
+                            format!("ops[{i}].tabs[{j}].{k}"),
+                        ));
+                    }
+                }
+                let val = match map.get("val") {
+                    Some(Value::String(s)) if super::format::TAB_VAL_SET.contains(&s.as_str()) => {
+                        s.clone()
+                    }
+                    Some(Value::String(_)) => {
+                        return Err(Error::with_path(
+                            ErrorKind::InvalidTabVal,
+                            format!("ops[{i}].tabs[{j}].val"),
+                        ));
+                    }
+                    Some(_) => {
+                        return Err(Error::with_path(
+                            ErrorKind::WrongType {
+                                field: "val".into(),
+                                expected: TypeName::String,
+                            },
+                            format!("ops[{i}].tabs[{j}].val"),
+                        ));
+                    }
+                    None => {
+                        return Err(Error::with_path(
+                            ErrorKind::OpRequiresField {
+                                op: "setParaFormat".into(),
+                                field: "tabs.val".into(),
+                            },
+                            format!("ops[{i}].tabs[{j}]"),
+                        ));
+                    }
+                };
+                let pos = match map.get("pos") {
+                    Some(Value::Number(n)) => {
+                        let Some(v) = n.as_u64() else {
+                            return Err(Error::with_path(
+                                ErrorKind::WrongType {
+                                    field: "pos".into(),
+                                    expected: TypeName::Integer,
+                                },
+                                format!("ops[{i}].tabs[{j}].pos"),
+                            ));
+                        };
+                        if v > u32::MAX as u64 {
+                            return Err(Error::with_path(
+                                ErrorKind::WrongType {
+                                    field: "pos".into(),
+                                    expected: TypeName::Integer,
+                                },
+                                format!("ops[{i}].tabs[{j}].pos"),
+                            ));
+                        }
+                        v as u32
+                    }
+                    Some(_) => {
+                        return Err(Error::with_path(
+                            ErrorKind::WrongType {
+                                field: "pos".into(),
+                                expected: TypeName::Integer,
+                            },
+                            format!("ops[{i}].tabs[{j}].pos"),
+                        ));
+                    }
+                    None => {
+                        return Err(Error::with_path(
+                            ErrorKind::OpRequiresField {
+                                op: "setParaFormat".into(),
+                                field: "tabs.pos".into(),
+                            },
+                            format!("ops[{i}].tabs[{j}]"),
+                        ));
+                    }
+                };
+                out.push(super::format::TabStop { val, pos });
+            }
+            Ok(Some(Some(out)))
+        }
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "tabs".into(),
+                expected: TypeName::Array,
+            },
+            format!("ops[{i}].tabs"),
+        )),
+    }
 }
 
 fn parse_opt_null_bool(

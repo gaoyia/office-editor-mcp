@@ -35,6 +35,7 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 2026-10-10 补跑 `docx-create-round4.ps1`，Cy1–Cy8 通过。无 Repair。COM `Shapes.Count=2`，第一格底纹 RGB=255，图上 `Hyperlink.Address` 为 example.com，`BibliographyStyle=MLA`。
 2026-10-11 补跑 `docx-box-table.ps1`，Bx1–Bx5 通过。无 Repair。COM 框内 `TextFrame.TextRange.Tables.Count=1`。标题栏仍是 `docx-box-table-nest.docx`。
 2026-10-11 补跑 `docx-box-fields.ps1`，Bf1–Bf5 通过。无 Repair。COM 框内 `TextFrame.TextRange.Hyperlinks.Count=1`。标题栏仍是 `docx-box-fields-link.docx`。
+2026-10-11 补跑 `docx-para-run-remain.ps1`，Bd1–Bd3、Rh1–Rh3 通过。无 Repair。COM 段底纹 RGB=65535、上边框 `LineStyle=1`。`HighlightColorIndex=7`，`StrikeThrough=-1`。标题栏仍是对应文件名。
 
 - **C1** ✅
   - Word 16.0 能打开 `manual-check/office/out/docx-create.docx`，标题栏无 Repair
@@ -315,6 +316,14 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
   - 对齐为居中
   - 第一 run 加粗后第二 run 红色还在
   - 段前 12 磅、段后 6 磅
+  - 标题栏无 Repair
+- **Bd1–Bd3、Rh1–Rh3** ✅
+  - Word 16.0：`docx-para-run-remain.ps1`，6 PASS / 0 FAIL
+  - 上边框 `single`、黄底 `FFFF00`、左对齐制表位 720
+  - COM 底纹 RGB=65535、上边框 `LineStyle=1`
+  - `highlight=yellow` 时 `HighlightColorIndex=7`，`StrikeThrough=-1`
+  - 上下标与双删除线树上对得上
+  - xlsx / 不认识的 `highlight` 为 `InvalidField`
   - 标题栏无 Repair
 - **Ea1–Ea8** ✅
   - Word 16.0：`docx-east-asia.ps1`，8 PASS / 0 FAIL
@@ -1170,6 +1179,20 @@ Word 跟踪修订下改表单元格底纹、插入空段、删除表行。`inspe
 | Pf4 | run 加粗 | `setRunFormat` 把第一段第一个 run 设为加粗后 Word 该 run 加粗，无修复 |
 | Pf5 | 未点名 | 同一段未点名的 run 颜色还在 |
 | Pf6 | 间距 | `setParaFormat` 写 `before` / `after` 后 Word 段前段后距对得上（允许 0.05 磅误差），无修复 |
+
+## 段落边框底纹与 run 剩余
+
+段上 `pBdr` / `shd` / `tabs`，以及 run 上 `highlight` / `strike` / `dstrike` / `vertAlign`。只写该节点直接格式，不摊 `styles.xml`。
+手测脚本 `manual-check/office/cases/docx-para-run-remain.ps1`。编号 Bd / Rh，不要和 Pb、Pf、Ea、Th 撞。create 本期不写，见待做 56。
+
+| 序号 | 检查 | 通过标准 |
+| --- | --- | --- |
+| Bd1 | 段边框底纹制表位 | `setParaFormat` 写上边框、黄底与左对齐制表位后，树上 `borders.top.val`、`shd.fill`、`tabs[0]` 对得上 |
+| Bd2 | 打开 | Word 16.0 无 Repair。COM 该段底纹 RGB 对得上，上边框 `LineStyle` 非 0 |
+| Bd3 | 删除 | 把 `borders` / `shd` / `tabs` 写成 `null` 后树上三项都是 `null`，无 Repair |
+| Rh1 | 突出显示与删除线 | `setRunFormat` 写 `highlight: yellow` 与 `strike: true` 后树上对得上。Word 无 Repair。COM `HighlightColorIndex` 非 0，`StrikeThrough` 为真 |
+| Rh2 | 上下标与双删除线 | `setRunFormat` 写 `vertAlign: superscript` 与 `dstrike: true` 后树上对得上，无 Repair |
+| Rh3 | 拒错 | 对 xlsx 发带 `highlight` 的 `setRunFormat` 报 `InvalidField`。不认识的 `highlight` 报 `InvalidField`。不强制开 Word |
 
 ## 东亚排版
 

@@ -2149,6 +2149,9 @@ fn apply_set_para_format(
             top_line_punct: op.top_line_punct,
             auto_space_de: op.auto_space_de,
             auto_space_dn: op.auto_space_dn,
+            borders: op.borders.as_ref().map(|v| v.as_ref()),
+            shd: op.shd.as_ref().map(|v| v.as_deref()),
+            tabs: op.tabs.as_ref().map(|v| v.as_deref()),
         },
     );
     dirty.insert(part_name, ());
@@ -2193,6 +2196,10 @@ fn apply_set_run_format(
                     vert_compress: s.vert_compress,
                 })
             }),
+            highlight: op.highlight.as_ref().map(|v| v.as_deref()),
+            strike: op.strike,
+            dstrike: op.dstrike,
+            vert_align: op.vert_align.as_ref().map(|v| v.as_deref()),
         },
     );
     dirty.insert(part_name, ());

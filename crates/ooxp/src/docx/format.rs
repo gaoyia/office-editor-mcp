@@ -46,6 +46,30 @@ pub const EM_SET: &[&str] = &["none", "dot", "comma", "circle", "underDot"];
 
 pub const COMBINE_BRACKETS_SET: &[&str] = &["none", "round", "square", "angle", "curly"];
 
+pub const TAB_VAL_SET: &[&str] = &["left", "center", "right", "decimal", "bar"];
+
+pub const HIGHLIGHT_SET: &[&str] = &[
+    "yellow",
+    "green",
+    "cyan",
+    "magenta",
+    "red",
+    "blue",
+    "black",
+    "white",
+    "darkBlue",
+    "darkCyan",
+    "darkGreen",
+    "darkMagenta",
+    "darkRed",
+    "darkYellow",
+    "darkGray",
+    "lightGray",
+    "none",
+];
+
+pub const VERT_ALIGN_SET: &[&str] = &["superscript", "subscript", "baseline"];
+
 /// `CT_PPrBase` 里禁则开关与 spacing / ind / jc 的相对顺序。
 const PPR_ORDER: &[&str] = &[
     "pStyle",
@@ -74,6 +98,8 @@ const PPR_ORDER: &[&str] = &[
     "contextualSpacing",
     "jc",
 ];
+
+const PBDR_ORDER: &[&str] = &["top", "left", "bottom", "right", "between", "bar"];
 
 /// `EG_RPrBase` 里 `em` / `eastAsianLayout` 相对 `cs` / `lang` 的位置。
 const RPR_ORDER: &[&str] = &[
@@ -131,6 +157,9 @@ pub struct ParaFormatPatch<'a> {
     pub top_line_punct: Option<Option<bool>>,
     pub auto_space_de: Option<Option<bool>>,
     pub auto_space_dn: Option<Option<bool>>,
+    pub borders: Option<Option<&'a ParaBordersPatch>>,
+    pub shd: Option<Option<&'a str>>,
+    pub tabs: Option<Option<&'a [TabStop]>>,
 }
 
 #[derive(Debug, Clone)]
@@ -140,6 +169,20 @@ pub struct EastAsianLayout {
     pub combine_brackets: Option<String>,
     pub vert: Option<bool>,
     pub vert_compress: Option<bool>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ParaBordersPatch {
+    pub top: Option<Option<super::page_bg::BorderSide>>,
+    pub left: Option<Option<super::page_bg::BorderSide>>,
+    pub bottom: Option<Option<super::page_bg::BorderSide>>,
+    pub right: Option<Option<super::page_bg::BorderSide>>,
+}
+
+#[derive(Debug, Clone)]
+pub struct TabStop {
+    pub val: String,
+    pub pos: u32,
 }
 
 pub struct RunFormatPatch<'a> {
@@ -152,6 +195,10 @@ pub struct RunFormatPatch<'a> {
     pub east_asia_font: Option<&'a str>,
     pub em: Option<Option<&'a str>>,
     pub east_asian_layout: Option<Option<EastAsianLayout>>,
+    pub highlight: Option<Option<&'a str>>,
+    pub strike: Option<Option<bool>>,
+    pub dstrike: Option<Option<bool>>,
+    pub vert_align: Option<Option<&'a str>>,
 }
 
 pub fn para_node(
@@ -277,6 +324,9 @@ pub fn apply_para(p: &mut Element, patch: ParaFormatPatch<'_>) {
         || patch.top_line_punct.is_some()
         || patch.auto_space_de.is_some()
         || patch.auto_space_dn.is_some()
+        || patch.borders.is_some()
+        || patch.shd.is_some()
+        || patch.tabs.is_some()
     {
         ensure_ppr(p);
     }
@@ -313,6 +363,9 @@ pub fn apply_para(p: &mut Element, patch: ParaFormatPatch<'_>) {
     apply_on_off(ppr, "topLinePunct", patch.top_line_punct);
     apply_on_off(ppr, "autoSpaceDE", patch.auto_space_de);
     apply_on_off(ppr, "autoSpaceDN", patch.auto_space_dn);
+    apply_p_borders(ppr, patch.borders);
+    apply_shd(ppr, patch.shd);
+    apply_tabs(ppr, patch.tabs);
 }
 
 pub fn bind_run_style(r: &mut Element, style_id: &str) {
@@ -402,6 +455,10 @@ pub fn apply_run(r: &mut Element, patch: RunFormatPatch<'_>) {
             None => remove_child(rpr, "eastAsianLayout"),
         }
     }
+    apply_val_elem(rpr, "highlight", patch.highlight);
+    apply_on_off_rpr(rpr, "strike", patch.strike);
+    apply_on_off_rpr(rpr, "dstrike", patch.dstrike);
+    apply_val_elem(rpr, "vertAlign", patch.vert_align);
 }
 
 pub fn find_run_mut(p: &mut Element, n: usize) -> Option<&mut Element> {
@@ -427,6 +484,9 @@ fn stamp_ppr(node: &mut Map<String, Value>, p: &Element) {
             ("indent", json!(indent)),
             ("spacing", json!(spacing)),
             ("eastAsia", east_asia_json(ppr)),
+            ("borders", ppr.map(borders_json).unwrap_or(Value::Null)),
+            ("shd", ppr.map(shd_json).unwrap_or(Value::Null)),
+            ("tabs", ppr.map(tabs_json).unwrap_or(Value::Null)),
         ],
     );
 }
@@ -478,6 +538,16 @@ fn runs_json(p: &Element, para_id: &str) -> Vec<Value> {
                     .and_then(|e| e.attr_local("val"))
                     .map(str::to_string),
                 "eastAsianLayout": rpr.map(east_asian_layout_json).unwrap_or(Value::Null),
+                "highlight": rpr
+                    .and_then(|e| e.child_by_local("highlight"))
+                    .and_then(|e| e.attr_local("val"))
+                    .map(str::to_string),
+                "strike": rpr.and_then(|e| on_off_of(e, "strike")),
+                "dstrike": rpr.and_then(|e| on_off_of(e, "dstrike")),
+                "vertAlign": rpr
+                    .and_then(|e| e.child_by_local("vertAlign"))
+                    .and_then(|e| e.attr_local("val"))
+                    .map(str::to_string),
             })
         })
         .collect()
@@ -590,6 +660,51 @@ fn spacing_json(sp: &Element) -> Value {
         "line": int_attr(sp, "line"),
         "lineRule": sp.attr_local("lineRule"),
     })
+}
+
+fn borders_json(ppr: &Element) -> Value {
+    let Some(el) = ppr.child_by_local("pBdr") else {
+        return Value::Null;
+    };
+    json!({
+        "top": super::page_bg::side_json(el, "top"),
+        "left": super::page_bg::side_json(el, "left"),
+        "bottom": super::page_bg::side_json(el, "bottom"),
+        "right": super::page_bg::side_json(el, "right"),
+    })
+}
+
+fn shd_json(ppr: &Element) -> Value {
+    let Some(el) = ppr.child_by_local("shd") else {
+        return Value::Null;
+    };
+    json!({
+        "fill": el.attr_local("fill"),
+    })
+}
+
+fn tabs_json(ppr: &Element) -> Value {
+    let Some(el) = ppr.child_by_local("tabs") else {
+        return Value::Null;
+    };
+    let mut out = Vec::new();
+    for n in &el.children {
+        let Node::Element(tab) = n else {
+            continue;
+        };
+        if tab.local_name() != "tab" {
+            continue;
+        }
+        out.push(json!({
+            "val": tab.attr_local("val"),
+            "pos": int_attr(tab, "pos"),
+        }));
+    }
+    if out.is_empty() {
+        Value::Null
+    } else {
+        Value::Array(out)
+    }
 }
 
 fn east_asia_json(ppr: Option<&Element>) -> Value {
@@ -784,6 +899,126 @@ fn apply_on_off(ppr: &mut Element, local: &str, val: Option<Option<bool>>) {
         Some(None) => remove_child(ppr, local),
         Some(Some(on)) => {
             let el = hf::ensure_child_in_order(ppr, local, PPR_ORDER);
+            let key = el.prefixed("val");
+            if on {
+                el.remove_attr(&key);
+            } else {
+                el.set_attr(&key, "0");
+            }
+        }
+    }
+}
+
+fn apply_p_borders(ppr: &mut Element, patch: Option<Option<&ParaBordersPatch>>) {
+    match patch {
+        None => {}
+        Some(None) => remove_child(ppr, "pBdr"),
+        Some(Some(sides)) => {
+            {
+                let el = hf::ensure_child_in_order(ppr, "pBdr", PPR_ORDER);
+                write_p_side(el, "top", sides.top.as_ref());
+                write_p_side(el, "left", sides.left.as_ref());
+                write_p_side(el, "bottom", sides.bottom.as_ref());
+                write_p_side(el, "right", sides.right.as_ref());
+            }
+            let empty = ppr
+                .child_by_local("pBdr")
+                .is_some_and(|e| e.element_children().next().is_none());
+            if empty {
+                remove_child(ppr, "pBdr");
+            }
+        }
+    }
+}
+
+fn write_p_side(
+    parent: &mut Element,
+    local: &str,
+    slot: Option<&Option<super::page_bg::BorderSide>>,
+) {
+    let Some(slot) = slot else {
+        return;
+    };
+    match slot {
+        None => remove_child(parent, local),
+        Some(b) => {
+            remove_child(parent, local);
+            let el = hf::ensure_child_in_order(parent, local, PBDR_ORDER);
+            hf::set_local_attr(el, "val", &b.val);
+            if let Some(sz) = b.sz {
+                hf::set_local_attr(el, "sz", sz.to_string());
+            }
+            if let Some(space) = b.space {
+                hf::set_local_attr(el, "space", space.to_string());
+            }
+            if let Some(color) = &b.color {
+                hf::set_local_attr(el, "color", color);
+            }
+        }
+    }
+}
+
+fn apply_shd(ppr: &mut Element, patch: Option<Option<&str>>) {
+    match patch {
+        None => {}
+        Some(None) => remove_child(ppr, "shd"),
+        Some(Some(fill)) => {
+            let el = hf::ensure_child_in_order(ppr, "shd", PPR_ORDER);
+            el.attrs.retain(|(k, _)| {
+                let local = k.rsplit(':').next().unwrap_or(k);
+                !matches!(
+                    local,
+                    "themeFill"
+                        | "themeFillTint"
+                        | "themeFillShade"
+                        | "themeColor"
+                        | "themeTint"
+                        | "themeShade"
+                )
+            });
+            hf::set_local_attr(el, "val", "clear");
+            hf::set_local_attr(el, "color", "auto");
+            hf::set_local_attr(el, "fill", fill.to_ascii_uppercase());
+        }
+    }
+}
+
+fn apply_tabs(ppr: &mut Element, patch: Option<Option<&[TabStop]>>) {
+    match patch {
+        None => {}
+        Some(None) => remove_child(ppr, "tabs"),
+        Some(Some([])) => remove_child(ppr, "tabs"),
+        Some(Some(tabs)) => {
+            remove_child(ppr, "tabs");
+            let el = hf::ensure_child_in_order(ppr, "tabs", PPR_ORDER);
+            for tab in tabs {
+                let mut child = Element::new(el.prefixed("tab"));
+                hf::set_local_attr(&mut child, "val", &tab.val);
+                hf::set_local_attr(&mut child, "pos", tab.pos.to_string());
+                el.push_element(child);
+            }
+        }
+    }
+}
+
+fn apply_val_elem(rpr: &mut Element, local: &str, patch: Option<Option<&str>>) {
+    match patch {
+        None => {}
+        Some(None) => remove_child(rpr, local),
+        Some(Some(v)) => {
+            let el = hf::ensure_child_in_order(rpr, local, RPR_ORDER);
+            let key = el.prefixed("val");
+            el.set_attr(&key, v);
+        }
+    }
+}
+
+fn apply_on_off_rpr(rpr: &mut Element, local: &str, patch: Option<Option<bool>>) {
+    match patch {
+        None => {}
+        Some(None) => remove_child(rpr, local),
+        Some(Some(on)) => {
+            let el = hf::ensure_child_in_order(rpr, local, RPR_ORDER);
             let key = el.prefixed("val");
             if on {
                 el.remove_attr(&key);

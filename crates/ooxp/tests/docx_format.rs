@@ -145,6 +145,9 @@ fn run_count_without_scope_runs() {
             "indent",
             "spacing",
             "eastAsia",
+            "borders",
+            "shd",
+            "tabs",
             "text",
             "stable",
             "pictureCount",
@@ -187,7 +190,11 @@ fn runs_list_with_scope() {
             "font",
             "eastAsiaFont",
             "em",
-            "eastAsianLayout"
+            "eastAsianLayout",
+            "highlight",
+            "strike",
+            "dstrike",
+            "vertAlign"
         ]
     );
     assert_eq!(runs[0]["id"], "para:AAAA0001/run:1");
@@ -438,4 +445,152 @@ fn format_not_for_xlsx_or_pptx() {
     )
     .unwrap_err();
     assert_eq!(err_p_op.code(), ErrorCode::InvalidField);
+}
+
+#[test]
+fn para_borders_shd_tabs_and_run_remain() {
+    let path = write_sample("remain");
+    let tree0 = inspect(&path, json!({ "from": 1, "maxParas": 20, "runs": true }));
+    let p1 = para(&tree0, "para:AAAA0001");
+    assert!(p1["borders"].is_null());
+    assert!(p1["shd"].is_null());
+    assert!(p1["tabs"].is_null());
+    let r0 = &p1["runs"][0];
+    assert!(r0["highlight"].is_null());
+    assert!(r0["strike"].is_null());
+    assert!(r0["dstrike"].is_null());
+    assert!(r0["vertAlign"].is_null());
+
+    let out = tmp_dir().join("remain-out.docx");
+    apply(
+        &path,
+        &out,
+        json!([
+            {
+                "op": "setParaFormat",
+                "id": "para:AAAA0001",
+                "borders": {
+                    "top": { "val": "single", "sz": 12, "space": 1, "color": "000000" }
+                },
+                "shd": { "fill": "ffff00" },
+                "tabs": [{ "val": "left", "pos": 720 }]
+            },
+            {
+                "op": "setRunFormat",
+                "id": "para:AAAA0001/run:1",
+                "highlight": "yellow",
+                "strike": true,
+                "dstrike": true,
+                "vertAlign": "superscript"
+            }
+        ]),
+    );
+    let tree = inspect(&out, json!({ "from": 1, "maxParas": 20, "runs": true }));
+    let p = para(&tree, "para:AAAA0001");
+    assert_eq!(p["borders"]["top"]["val"], "single");
+    assert_eq!(p["borders"]["top"]["sz"], 12);
+    assert_eq!(p["shd"]["fill"], "FFFF00");
+    assert_eq!(p["tabs"][0]["val"], "left");
+    assert_eq!(p["tabs"][0]["pos"], 720);
+    let r = &p["runs"][0];
+    assert_eq!(r["highlight"], "yellow");
+    assert_eq!(r["strike"], true);
+    assert_eq!(r["dstrike"], true);
+    assert_eq!(r["vertAlign"], "superscript");
+    let xml = unzip(&out, "word/document.xml");
+    assert!(xml.contains("w:pBdr"), "{xml}");
+    assert!(xml.contains("w:shd"), "{xml}");
+    assert!(xml.contains("w:tabs"), "{xml}");
+    assert!(xml.contains("w:highlight"), "{xml}");
+    assert!(xml.contains("w:strike"), "{xml}");
+    assert!(xml.contains("w:dstrike"), "{xml}");
+    assert!(xml.contains("w:vertAlign"), "{xml}");
+
+    let cleared = tmp_dir().join("remain-clear.docx");
+    apply(
+        &out,
+        &cleared,
+        json!([
+            {
+                "op": "setParaFormat",
+                "id": "para:AAAA0001",
+                "borders": null,
+                "shd": null,
+                "tabs": null
+            },
+            {
+                "op": "setRunFormat",
+                "id": "para:AAAA0001/run:1",
+                "highlight": null,
+                "strike": null,
+                "dstrike": null,
+                "vertAlign": null
+            }
+        ]),
+    );
+    let tree2 = inspect(&cleared, json!({ "from": 1, "maxParas": 20, "runs": true }));
+    let p2 = para(&tree2, "para:AAAA0001");
+    assert!(p2["borders"].is_null());
+    assert!(p2["shd"].is_null());
+    assert!(p2["tabs"].is_null());
+    let r2 = &p2["runs"][0];
+    assert!(r2["highlight"].is_null());
+    assert!(r2["strike"].is_null());
+    assert!(r2["dstrike"].is_null());
+    assert!(r2["vertAlign"].is_null());
+
+    let err_hl = apply_err(
+        &path,
+        json!([{
+            "op": "setRunFormat",
+            "id": "para:AAAA0001/run:1",
+            "highlight": "pink"
+        }]),
+    );
+    assert_eq!(err_hl.code(), ErrorCode::InvalidField);
+    let err_tab = apply_err(
+        &path,
+        json!([{
+            "op": "setParaFormat",
+            "id": "para:AAAA0001",
+            "tabs": [{ "val": "start", "pos": 720 }]
+        }]),
+    );
+    assert_eq!(err_tab.code(), ErrorCode::InvalidField);
+    let err_box = apply_err(
+        &path,
+        json!([{ "op": "setParaFormat", "id": "para:AAAA0001", "borders": {} }]),
+    );
+    assert_eq!(err_box.code(), ErrorCode::InvalidField);
+
+    let xlsx = tmp_dir().join("remain.xlsx");
+    run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "create",
+            "path": xlsx.to_string_lossy(),
+            "workbook": { "sheets": [{ "name": "Sheet1" }] }
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap();
+    let xout = tmp_dir().join("remain-x-out.xlsx");
+    let err_x = run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "apply",
+            "path": xlsx.to_string_lossy(),
+            "output": xout.to_string_lossy(),
+            "ops": [{
+                "op": "setRunFormat",
+                "id": "para:AAAA0001/run:1",
+                "highlight": "yellow"
+            }]
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap_err();
+    assert_eq!(err_x.code(), ErrorCode::InvalidField);
 }

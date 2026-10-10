@@ -4125,6 +4125,122 @@
               "type": "null"
             }
           ]
+        },
+        "borders": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/paraBorders"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "shd": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/paraShd"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "tabs": {
+          "oneOf": [
+            {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/paraTabStop"
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "paraBorders": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "top": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/pageBorderSide"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "left": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/pageBorderSide"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "bottom": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/pageBorderSide"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "right": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/pageBorderSide"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "paraShd": {
+      "type": "object",
+      "required": [
+        "fill"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "fill": {
+          "type": "string",
+          "pattern": "^[0-9A-Fa-f]{6}$"
+        }
+      }
+    },
+    "paraTabStop": {
+      "type": "object",
+      "required": [
+        "val",
+        "pos"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "val": {
+          "type": "string",
+          "enum": [
+            "left",
+            "center",
+            "right",
+            "decimal",
+            "bar"
+          ]
+        },
+        "pos": {
+          "type": "integer",
+          "minimum": 0
         }
       }
     },
@@ -4217,6 +4333,70 @@
           "oneOf": [
             {
               "$ref": "#/$defs/eastAsianLayout"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "highlight": {
+          "oneOf": [
+            {
+              "type": "string",
+              "enum": [
+                "yellow",
+                "green",
+                "cyan",
+                "magenta",
+                "red",
+                "blue",
+                "black",
+                "white",
+                "darkBlue",
+                "darkCyan",
+                "darkGreen",
+                "darkMagenta",
+                "darkRed",
+                "darkYellow",
+                "darkGray",
+                "lightGray",
+                "none"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "strike": {
+          "oneOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "dstrike": {
+          "oneOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "vertAlign": {
+          "oneOf": [
+            {
+              "type": "string",
+              "enum": [
+                "superscript",
+                "subscript",
+                "baseline"
+              ]
             },
             {
               "type": "null"

@@ -1669,12 +1669,24 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             "setParaStyle / setRunStyle requires style (a style: id or null)".into()
         }
         ErrorKind::NeedSetParaFormatField => {
-            "setParaFormat requires at least one of align, left, right, firstLine, hanging, before, after, line, lineRule, kinsoku, overflowPunct, topLinePunct, autoSpaceDE, or autoSpaceDN"
+            "setParaFormat requires at least one of align, left, right, firstLine, hanging, before, after, line, lineRule, kinsoku, overflowPunct, topLinePunct, autoSpaceDE, autoSpaceDN, borders, shd, or tabs"
                 .into()
         }
         ErrorKind::NeedSetRunFormatField => {
-            "setRunFormat requires at least one of bold, italic, underline, sz, color, font, eastAsiaFont, em, or eastAsianLayout"
+            "setRunFormat requires at least one of bold, italic, underline, sz, color, font, eastAsiaFont, em, eastAsianLayout, highlight, strike, dstrike, or vertAlign"
                 .into()
+        }
+        ErrorKind::NeedParaBordersField => {
+            "borders requires at least one of top, left, bottom, or right".into()
+        }
+        ErrorKind::InvalidHighlight => {
+            "highlight is not a known ST_HighlightColor value".into()
+        }
+        ErrorKind::InvalidVertAlign => {
+            "vertAlign must be superscript, subscript, or baseline".into()
+        }
+        ErrorKind::InvalidTabVal => {
+            "tabs[].val must be left, center, right, decimal, or bar".into()
         }
         ErrorKind::InvalidEm => {
             "em must be none, dot, comma, circle, or underDot".into()

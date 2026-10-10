@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "C:\\data\\note.docx",
+  "output": "C:\\data\\note-para-run-remain.docx",
+  "ops": [
+    {
+      "op": "setParaFormat",
+      "id": "para:3F2A1B00",
+      "borders": {
+        "top": {
+          "val": "single",
+          "sz": 12,
+          "space": 1,
+          "color": "000000"
+        }
+      },
+      "shd": {
+        "fill": "FFFF00"
+      },
+      "tabs": [
+        {
+          "val": "left",
+          "pos": 720
+        }
+      ]
+    },
+    {
+      "op": "setRunFormat",
+      "id": "para:3F2A1B00/run:1",
+      "highlight": "yellow",
+      "strike": true,
+      "vertAlign": "superscript"
+    }
+  ]
+}

@@ -39,7 +39,7 @@ apply 可用 `insertHeaderFooter` 为某节某类型新建页眉或页脚部件�
 可用 `insertEmbeddedFont` / `deleteEmbeddedFont` / `setFontEmbed` 读写嵌入字体，
 可用 `setPageBackground` 写整篇页面背景色或 DrawingML / 图片填充、用 `setPageBorders` 写节上页面边框（含艺术型），可用 `insertMath` / `setMath` / `deleteMath` 插改删 OMML 公式，
 可用 `insertContentControl` / `setContentControl` / `deleteContentControl` 插改删内容控件，
-可用 `setParaFormat` / `setRunFormat` 写禁则、强调点与压缩排版，可用 `insertRuby` / `setRuby` / `deleteRuby` 插改删拼音，
+可用 `setParaFormat` / `setRunFormat` 写禁则、强调点、压缩排版、段边框、段底纹、制表位，以及 run 的突出显示、删除线与上下标，可用 `insertRuby` / `setRuby` / `deleteRuby` 插改删拼音，
 可用 `setEastAsianSettings` 写整篇压缩与自定义禁则字符。
 docx 可用 `setProtection` 开关无密码的限制编辑与只读推荐。xlsx 可用同一 `op` 开关工作表保护与工作簿结构保护（可写 SHA-512 哈希），不要复用 docx 根上那个 `protection` 对象。
 docx 可用 `insertWatermark` / `deleteWatermark` 读写页眉里的 DrawingML 水印。
@@ -1216,7 +1216,7 @@ xlsx / pptx 的 `scope.tables` 不是同一件事：xlsx 仍拒绝；pptx 展开
 - 给了 `from` 和 `maxParas` 时，正文 `paragraphs` 按文档顺序切片。范围内段落数超过 `maxParas` 则 `truncated` 为 `true`。
   切片里每段始终有 `pictureCount`、`textBoxCount`、`connectorCount`、`shapeCount`、`inkCanvasCount`、`model3dCount` 与 `runCount`。
   段落字段顺序：`id`、`index`、`style`、`level`（标题才有）、该段自己的 `w:pPr/w:numPr` 且 `numId` 非 0 时再跟 `num`、`ilvl`、然后始终跟 `align`、`indent`、
-  `spacing`、`eastAsia`、`text`、`stable`、`pictureCount`、`textBoxCount`、`connectorCount`、`shapeCount`、`inkCanvasCount`、`model3dCount`、`runCount`，
+  `spacing`、`eastAsia`、`borders`、`shd`、`tabs`、`text`、`stable`、`pictureCount`、`textBoxCount`、`connectorCount`、`shapeCount`、`inkCanvasCount`、`model3dCount`、`runCount`，
   有图名单时再跟 `pictures`，有框名单时再跟 `textBoxes`，有连接线名单时再跟 `connectors`，有形状名单时再跟 `shapes`，有墨迹画布名单时再跟 `inkCanvases`，有 3D 模型名单时再跟 `model3ds`，该段有脚注或尾注引用时再跟 `footnoteRef` / `endnoteRef`（注 id 数组，
   按引用在该段内的文档顺序），该段落落在批注范围内时再跟 `commentIds`（批注 id 数组，按范围开始在文档中的顺序；同一段重叠多条都列出），给了 `scope.runs` 时再跟 `runs`。
   没有引用或范围则没有这些键。已展开的页眉页脚、框内、注内段落同样可以带 `commentIds`。不解析 `styles.xml` 继承的编号：样式上有 `numPr`、段上没有的，树上没有 `num` / `ilvl`。
@@ -1227,7 +1227,7 @@ xlsx / pptx 的 `scope.tables` 不是同一件事：xlsx 仍拒绝；pptx 展开
    / `inkCanvasCount` / `inkCanvases`
    / `model3dCount` / `model3ds`
    / `chartCount` / `charts` / `smartArtCount` / `smartArts` / `oleObjectCount` / `oleObjects`，图、框、连接线、无框形状、墨迹画布、3D 模型、图表、SmartArt 与嵌入对象仍挂在容器上。
-  页眉页脚段落仍有 `align`、`indent`、`spacing`、`eastAsia`、`runCount`；给了 `scope.runs` 时再带 `runs`。
+  页眉页脚段落仍有 `align`、`indent`、`spacing`、`eastAsia`、`borders`、`shd`、`tabs`、`runCount`；给了 `scope.runs` 时再带 `runs`。
 - `scope.pictures` 为 `true` 时，每个页眉、页脚节点带 `pictures`；若同时给了 `from` 与 `maxParas`，切片里每段也带 `pictures`。否则这些节点上都没有该字段。不把媒体字节放进树。
   每张图的字段顺序：`id`、`docPrId`、`name`、`kind`、`cx`、`cy`、`wrap`、`stable`。
   有 `asvg:svgBlip` 时再跟 `contentType`，值为 `image/svg+xml`。
@@ -1530,8 +1530,18 @@ xlsx / pptx 的 `scope.tables` 不是同一件事：xlsx 仍拒绝；pptx 展开
 - `eastAsia` 取该段自己的 `w:pPr` 上东亚排版开关（§17.3.1.16、§17.3.1.23、§17.3.1.45、§17.3.1.2、§17.3.1.3）。
   五个子元素都没有则为 `null`。有任意一个则对象字段顺序：`kinsoku`、`overflowPunct`、`topLinePunct`、`autoSpaceDE`、`autoSpaceDN`。
   各键：没有该子元素为 `null`；有且 OnOff 为关为 `false`，否则为 `true`。不把 `styles.xml` 摊进来。不计算禁则断行。
+- `borders` 取该段自己的 `w:pPr/w:pBdr`（§17.3.1.24）。没有该元素则为 `null`。有则对象字段顺序：`top`、`left`、`bottom`、`right`。
+  每边取对应子元素，没有则为 `null`。有则字段顺序与页面边框相同：`val`、`sz`、`space`、`color`。
+  `val` 取 `@w:val`，缺则为 `""`。`sz` 为八分之一磅，能解析成非负整数则写整数，否则为 `null`。
+  `space` 为单位磅的非负整数，缺或解析失败为 `null`。`color` 取 `@w:color` 原文，缺则为 `null`。
+  不把 `between` / `bar` 放进树。不把 `styles.xml` 摊进来。
+- `shd` 取该段自己的 `w:pPr/w:shd`（§17.3.1.31）。没有该元素则为 `null`。有则对象字段顺序只有 `fill`。
+  `fill` 取 `@w:fill` 原文，缺则为 `null`。不解析 theme。
+- `tabs` 取该段自己的 `w:pPr/w:tabs`（§17.3.1.38）。没有该元素、或没有 `w:tab` 子元素，则为 `null`。
+  有则数组按 `w:tab` 文档顺序。每项字段顺序：`val`、`pos`。
+  `val` 取 `@w:val` 原文，缺则为 `null`。`pos` 能解析成非负整数则写整数，否则为 `null`。单位 twip。不报 `leader`。
 - `runCount` 始终出现在已列出的段落上（正文切片、页眉页脚段落、框内、注内、批注内、表格单元格）。计该段内被收入的 `w:r` 个数，规则与 run id 相同。
-- `scope.runs` 为 `true` 时，已列出的段落带 `runs`。每条字段顺序：`id`、`index`、`style`、`text`、`bold`、`italic`、`underline`、`sz`、`color`、`font`、`eastAsiaFont`、`em`、`eastAsianLayout`。
+- `scope.runs` 为 `true` 时，已列出的段落带 `runs`。每条字段顺序：`id`、`index`、`style`、`text`、`bold`、`italic`、`underline`、`sz`、`color`、`font`、`eastAsiaFont`、`em`、`eastAsianLayout`、`highlight`、`strike`、`dstrike`、`vertAlign`。
   `id` 是 `{段落 id}/run:{n}`。`index` 与 `{n}` 相同。
   `style` 取该 run 自己的 `w:rStyle/@w:val`，没有 `rStyle` 则为 `null`。不把 `styles.xml` 摊进来。
   `text` 是该 run 内可见纯文本，规则与段上 `text` 相同，范围限于这个 `w:r`。
@@ -1543,6 +1553,9 @@ xlsx / pptx 的 `scope.tables` 不是同一件事：xlsx 仍拒绝；pptx 展开
   `eastAsianLayout` 取 `w:eastAsianLayout`（§17.3.2.10）。没有该元素为 `null`。有则对象字段顺序：`id`、`combine`、`combineBrackets`、`vert`、`vertCompress`。
   `id` 能解析成整数则写整数，否则为 `null`。`combine` / `vert` / `vertCompress` 取对应属性 OnOff：`1` / `true` / `on` 为 `true`，`0` / `false` / `off` 为 `false`，缺属性为 `null`。
   `combineBrackets` 取 `w:combineBrackets` 原文，缺则为 `null`。xlsx / pptx 的 `scope` 里出现 `runs` 报 `InvalidField`。
+  `highlight` 取 `w:highlight/@w:val`（§17.3.2.15），没有 `highlight` 为 `null`。
+  `strike` / `dstrike` 取该 run 自己的 `w:strike` / `w:dstrike`（§17.3.2.37、§17.3.2.9）：没有元素为 `null`；有且 OnOff 为关为 `false`，否则为 `true`。
+  `vertAlign` 取 `w:vertAlign/@w:val`（§17.3.2.41），没有 `vertAlign` 为 `null`。不把 `styles.xml` 摊进来。
 - `link` 始终出现。未链接则为 `{ "prev": null, "next": null }`。链接时 `prev` / `next` 是相邻框的 id，没有那一端则为 `null`。
 - 框内 `paragraphs` 的字段顺序与正文段落相同（含 `pictureCount`）。框内图的字段顺序与宿主图相同，id 带框前缀。
 - `kind`：`inline`（`wp:inline`）或 `anchor`（`wp:anchor`）。
@@ -3884,11 +3897,23 @@ xlsx / pptx 上发此 op 报 `InvalidField`。
 | `topLinePunct` | 可选。写入 `w:topLinePunct`。开关规则与 `kinsoku` 相同 |
 | `autoSpaceDE` | 可选。写入 `w:autoSpaceDE`。开关规则与 `kinsoku` 相同 |
 | `autoSpaceDN` | 可选。写入 `w:autoSpaceDN`。开关规则与 `kinsoku` 相同 |
+| `borders` | 可选。对象写入 `w:pBdr`；`null` 删掉整个 `w:pBdr`（含未编的 `between` / `bar`） |
+| `shd` | 可选。对象写入 `w:shd`；`null` 删掉该元素 |
+| `tabs` | 可选。数组按顺序重写 `w:tabs`；`null` 或空数组删掉该元素 |
 
 `align`、`left`、`right`、`firstLine`、`hanging`、`before`、`after`、`line`、`lineRule`、
-`kinsoku`、`overflowPunct`、`topLinePunct`、`autoSpaceDE`、`autoSpaceDN` 至少给一个。
+`kinsoku`、`overflowPunct`、`topLinePunct`、`autoSpaceDE`、`autoSpaceDN`、`borders`、`shd`、`tabs` 至少给一个。
 `firstLine` 与 `hanging` 不能同时写成非 `null` 的数字。不认识的 `align` / `lineRule` 报 `InvalidField`。只改该段自己的 `w:pPr`，不改 `styles.xml`。
 属性删光后去掉空的 `w:ind` / `w:spacing`。找不到段落报 `IdNotFound`。id 不是段落 id 报 `InvalidId`。xlsx / pptx 上发此 op 报 `InvalidField`。
+
+`borders` 对象字段顺序：`top`、`left`、`bottom`、`right`。至少给一边。每边为页面边框同一套对象，或 JSON `null` 删掉该边。省略的边不改。
+四边都删光且没有 `between` / `bar` 时去掉空的 `w:pBdr`。边对象必须有 `val`。`val` 认 `ST_Border` 全套。不认识的令牌报 `InvalidField`。
+`sz` 为非负整数（八分之一磅）。`space` 为非负整数（磅）。`color` 为 `auto` 或六位十六进制。
+
+`shd` 对象只有 `fill`，必须是六位 RGB。写入 `w:shd val="clear" color="auto"`，并去掉 theme 填充属性。不是六位十六进制报 `InvalidField`。
+
+`tabs` 数组每项字段顺序：`val`、`pos`。`val` 为 `left` / `center` / `right` / `decimal` / `bar`。`pos` 为非负整数，单位 twip。
+不认识的 `val` 报 `InvalidField`。不写 `leader`。
 
 ### setRunFormat
 
@@ -3955,12 +3980,35 @@ xlsx / pptx 上发此 op 报 `InvalidField`。
   - 整份替换该元素上的这些属性；没点名的属性不写出
   - `combine` 与 `vert` 至少给一个
   - `combineBrackets` 只在 `combine` 为 `true` 时有效，否则报 `InvalidField`
+- **`highlight`**
+  - 可选
+  - `ST_HighlightColor`：`yellow`、`green`、`cyan`、`magenta`、`red`、`blue`、`black`、`white`、`darkBlue`、`darkCyan`、`darkGreen`、`darkMagenta`、`darkRed`、`darkYellow`、`darkGray`、`lightGray`、`none`
+  - 写入 `w:highlight/@w:val`
+  - `null` 表示去掉 `w:highlight`
+- **`strike`**
+  - 可选
+  - 布尔
+  - 写入 `w:strike`
+  - `false` 显式 `val="0"`
+  - `null` 表示去掉该元素
+- **`dstrike`**
+  - 可选
+  - 布尔
+  - 写入 `w:dstrike`
+  - `false` 显式 `val="0"`
+  - `null` 表示去掉该元素
+- **`vertAlign`**
+  - 可选
+  - `superscript`、`subscript` 或 `baseline`
+  - 写入 `w:vertAlign/@w:val`
+  - `null` 表示去掉 `w:vertAlign`
 
-`bold`、`italic`、`underline`、`sz`、`color`、`font`、`eastAsiaFont`、`em`、`eastAsianLayout` 至少给一个。只改被点名的那一个 `w:r` 的 `w:rPr`，不拆 run，不改 `styles.xml`。
-不认识的 `underline` / `em` / `combineBrackets`、空 `font` / `eastAsiaFont`、不是六位十六进制的 `color`、`sz` 越界报 `InvalidField`。找不到 run 报 `IdNotFound`。
+`bold`、`italic`、`underline`、`sz`、`color`、`font`、`eastAsiaFont`、`em`、`eastAsianLayout`、`highlight`、`strike`、`dstrike`、`vertAlign` 至少给一个。只改被点名的那一个 `w:r` 的 `w:rPr`，不拆 run，不改 `styles.xml`。
+不认识的 `underline` / `em` / `combineBrackets` / `highlight` / `vertAlign`、空 `font` / `eastAsiaFont`、不是六位十六进制的 `color`、`sz` 越界报 `InvalidField`。找不到 run 报 `IdNotFound`。
 id 不是 run id 报 `InvalidId`。xlsx / pptx 上发此 op 报 `InvalidField`。
 
 示例见 `docs/examples/docx-apply-format.json`。
+段边框、底纹、制表位与 run 剩余见 `docs/examples/docx-apply-para-run-remain.json`。
 
 ### insertRuby
 
