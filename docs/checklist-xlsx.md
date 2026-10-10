@@ -39,6 +39,7 @@ C、I、A、O、Xp、Xvg、Xem、X3d、Xom、Xtf、Xfl、Xc、Xh、Xfs、Xtl、X
 2026-10-10 补跑 `xlsx-edit-range.ps1`，Xer1–Xer5 通过。无 Repair。COM `AllowEditRanges` 能看见区域，`.xlsm` 无 Repair。
 2026-10-10 补跑 `xlsx-create-round4.ps1`，C25–C29 通过。无 Repair。COM 能见表、AllowEditRanges、OutlineLevel，组合 `Type=6`。
 2026-10-10 补跑 `xlsx-named-style.ps1`，Xns1–Xns5 通过。无 Repair。COM `Styles` 能看见自定义名，套用后 `Style.Name` 对得上，黄底 `Interior.Color=65535`。
+2026-10-10 补跑 `xlsx-create-round5.ps1`，C30–C32 通过。无 Repair。COM `Style.Name` 为 `OoxpNamed`，黄底 `Interior.Color=65535`，`CommentsThreaded` 能看见一层回复。
 
 - **C1** ✅
   - Excel 16.0 打开 `manual-check/office/out/xlsx-create.xlsx`，标题栏无 Repair
@@ -389,6 +390,11 @@ C、I、A、O、Xp、Xvg、Xem、X3d、Xom、Xtf、Xfl、Xc、Xh、Xfs、Xtl、X
   - 无密码保护，允许编辑区域 `Range1`
   - 大纲、冻结 1 行、drawing 含 `xdr:grpSp`
   - 打开无 Repair，COM 能见表、AllowEditRanges、OutlineLevel，组合 `Type=6`
+- **C30–C32** ✅
+  - Excel 16.0：`xlsx-create-round5.ps1`，3 PASS / 0 FAIL
+  - inspect `cellStyleCount=2`，名单含 `OoxpNamed`，A1 黄底加粗
+  - A1 批注正文与 `replies[0].text` 对得上
+  - 打开无 Repair，COM `Style.Name=OoxpNamed`，`CommentsThreaded` 能看见回复
 - **Xsr1–Xsr5** ✅
   - Excel 16.0：`xlsx-sort.ps1`，5 PASS / 0 FAIL
   - 默认 `sortState` 为 `null`
@@ -534,6 +540,18 @@ C、I、A、O、Xp、Xvg、Xem、X3d、Xom、Xtf、Xfl、Xc、Xh、Xfs、Xtl、X
   - 检查：Excel 打开第四轮产物
   - 通过标准：无修复
   - COM 能见表、AllowEditRanges、OutlineLevel；不要 COM 打开带哈希或外部链的产物
+- **C30**
+  - 检查：create 第五轮命名单元格样式
+  - 通过标准：用 `docs/examples/xlsx-create-round5.json` 生成
+  - inspect `cellStyleCount=2`，名单含 `OoxpNamed`，A1 有黄底加粗
+- **C31**
+  - 检查：一层批注回复
+  - 通过标准：同上
+  - `comments: true` 时 A1 批注正文对得上，`replies[0].text` 对得上
+- **C32**
+  - 检查：Excel 打开第五轮产物
+  - 通过标准：无修复
+  - COM `Style.Name` 为 `OoxpNamed`，`CommentsThreaded` 能看见回复
 
 ## inspect
 

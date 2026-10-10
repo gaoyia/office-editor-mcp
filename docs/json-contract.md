@@ -1164,7 +1164,7 @@ workbook `.rels` 的 Type 为 `http://schemas.microsoft.com/office/2017/10/relat
 `date` 省略则写入当前 UTC `xsd:dateTime`（无尾 `Z`）。新 `threadedComment/@id` 为带花括号的 GUID，`@ref` 为该格 A1。
 同时按 Excel 16.0 另存写占位 `/xl/commentsN.xml`（作者 `tc={GUID}`，`xr:uid` 同 GUID）以及 Note `v:shape` 与工作表 `<legacyDrawing>`。
 不把旧式 VML 批注当树节点，也不改已有框的几何。同一张表多条批注共用一个 threadedComments 部件。
-`create` 给了 `sheets[].comments` 时按同一套规则写线程化批注，字段用 `cell` 代替 `id`，不写回复。pptx 不认 `start` / `end`；出现这两个字段报 `InvalidField`。
+`create` 给了 `sheets[].comments` 时按同一套规则写线程化批注，字段用 `cell` 代替 `id`；给了 `replies` 再按 `replyComment` 写一层回复，不要再套 `replies`。pptx 不认 `start` / `end`；出现这两个字段报 `InvalidField`。
 pptx 的 `id` 必须是 `slide:{n}`，对备注容器 id、图 id、形状 id 或 `pptx:presentation` 报 `InvalidId`。
 可选 `x` / `y` 为 EMU 非负整数，必须成对出现或成对省略；只给一个时报 `InvalidField`。缺坐标则放到该页空白处，规则与 pptx `insertPicture` 相同。
 写入该页现代批注部件（MS-PPTX 2018/8 `p188:cmLst`，内容类型 `application/vnd.ms-powerpoint.comments+xml`），

@@ -1,4 +1,6 @@
-//! create 第四轮：把骨架之外的字段解析成已有 apply op。
+//! create 第四轮与第五轮：把骨架之外的字段解析成已有 apply op。
+
+use std::collections::HashMap;
 
 use serde_json::{json, Map, Value};
 
@@ -13,6 +15,7 @@ pub(crate) const WORKBOOK_REMAIN_KEYS: &[&str] = &[
     "connections",
     "externalLinks",
     "customViews",
+    "cellStyles",
     "workbookProtection",
 ];
 
@@ -51,6 +54,7 @@ pub(crate) const CELL_REMAIN_KEYS: &[&str] = &[
     "fill",
     "border",
     "align",
+    "namedStyle",
 ];
 
 const CELL_STYLE_KEYS: &[&str] = &["numFmt", "font", "fill", "border", "align"];
@@ -123,6 +127,9 @@ pub(crate) fn apply_remain(
     if has_groups(workbook) {
         append_group_ops(&bytes, workbook, &mut ops, &mut paths)?;
     }
+    if has_comment_replies(workbook) {
+        append_reply_ops(&bytes, workbook, &mut ops, &mut paths)?;
+    }
     if ops.is_empty() {
         return Ok(bytes);
     }
@@ -134,6 +141,7 @@ fn collect_all(
     ops: &mut Vec<XlsxOp>,
     paths: &mut Vec<String>,
 ) -> Result<(), Error> {
+    let style_map = collect_cell_styles(workbook, ops, paths)?;
     let sheets = workbook["sheets"].as_array().expect("create 已校验 sheets");
     for (i, sheet) in sheets.iter().enumerate() {
         let Some(obj) = sheet.as_object() else {
@@ -142,7 +150,7 @@ fn collect_all(
         let prefix = format!("workbook.sheets[{i}]");
         let name = sheet_name(obj);
         let id = format!("sheet:{name}");
-        collect_cells(obj, name, &prefix, ops, paths)?;
+        collect_cells(obj, name, &prefix, &style_map, ops, paths)?;
         if is_chartsheet(obj) {
             continue;
         }
@@ -331,10 +339,42 @@ fn collect_all(
     Ok(())
 }
 
+fn collect_cell_styles(
+    workbook: &Map<String, Value>,
+    ops: &mut Vec<XlsxOp>,
+    paths: &mut Vec<String>,
+) -> Result<HashMap<String, usize>, Error> {
+    let mut map = HashMap::new();
+    map.insert("normal".into(), 1usize);
+    collect_insert_array(
+        workbook,
+        "cellStyles",
+        "insertCellStyle",
+        "xlsx:workbook",
+        "workbook",
+        ops,
+        paths,
+    )?;
+    let Some(arr) = optional_array(workbook, "cellStyles", "workbook")? else {
+        return Ok(map);
+    };
+    for (j, item) in arr.iter().enumerate() {
+        let cp = format!("workbook.cellStyles[{j}]");
+        let obj = require_object(item, &cp)?;
+        if let Some(Value::String(name)) = obj.get("name") {
+            if !name.is_empty() {
+                map.insert(name.to_ascii_lowercase(), j + 2);
+            }
+        }
+    }
+    Ok(map)
+}
+
 fn collect_cells(
     sheet: &Map<String, Value>,
     name: &str,
     prefix: &str,
+    style_map: &HashMap<String, usize>,
     ops: &mut Vec<XlsxOp>,
     paths: &mut Vec<String>,
 ) -> Result<(), Error> {
@@ -367,6 +407,42 @@ fn collect_cells(
                 }
             }
             push_op(ops, paths, m, "setCellStyle", &id, &cp)?;
+        }
+        if let Some(v) = obj.get("namedStyle") {
+            if cell_has_style(obj) {
+                let other = CELL_STYLE_KEYS
+                    .iter()
+                    .copied()
+                    .find(|k| obj.contains_key(*k))
+                    .unwrap_or("numFmt");
+                return Err(Error::with_path(
+                    ErrorKind::MutuallyExclusive {
+                        a: "namedStyle".into(),
+                        b: other.into(),
+                    },
+                    cp,
+                ));
+            }
+            let style_name = v.as_str().ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::WrongType {
+                        field: "namedStyle".into(),
+                        expected: TypeName::String,
+                    },
+                    format!("{cp}.namedStyle"),
+                )
+            })?;
+            let Some(&index) = style_map.get(&style_name.to_ascii_lowercase()) else {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidNamedCellStyle {
+                        field: "namedStyle".into(),
+                    },
+                    format!("{cp}.namedStyle"),
+                ));
+            };
+            let mut m = Map::new();
+            m.insert("style".into(), json!(format!("cellStyle:{index}")));
+            push_op(ops, paths, m, "setCellNamedStyle", &id, &cp)?;
         }
     }
     Ok(())
@@ -562,6 +638,105 @@ fn has_groups(workbook: &Map<String, Value>) -> bool {
             .and_then(Value::as_array)
             .is_some_and(|a| !a.is_empty())
     })
+}
+
+fn has_comment_replies(workbook: &Map<String, Value>) -> bool {
+    let Some(sheets) = workbook.get("sheets").and_then(Value::as_array) else {
+        return false;
+    };
+    sheets.iter().any(|s| {
+        s.get("comments")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .any(|c| {
+                c.get("replies")
+                    .and_then(Value::as_array)
+                    .is_some_and(|a| !a.is_empty())
+            })
+    })
+}
+
+fn append_reply_ops(
+    bytes: &[u8],
+    workbook: &Map<String, Value>,
+    ops: &mut Vec<XlsxOp>,
+    paths: &mut Vec<String>,
+) -> Result<(), Error> {
+    let scope =
+        request::parse_scope(Some(&json!({ "comments": true })))?.expect("批注 inspect 范围非空");
+    let tree = inspect::inspect(bytes, Some(scope))?;
+    let sheets = workbook["sheets"].as_array().expect("create 已校验 sheets");
+    for (i, sheet) in sheets.iter().enumerate() {
+        let Some(obj) = sheet.as_object() else {
+            continue;
+        };
+        let prefix = format!("workbook.sheets[{i}]");
+        let Some(arr) = optional_array(obj, "comments", &prefix)? else {
+            continue;
+        };
+        let name = sheet_name(obj);
+        let Some(ins) = tree["sheets"]
+            .as_array()
+            .and_then(|a| a.iter().find(|s| s["name"].as_str() == Some(name)))
+        else {
+            continue;
+        };
+        let listed = ins["comments"].as_array();
+        let mut used = Vec::new();
+        for (j, item) in arr.iter().enumerate() {
+            let cp = format!("{prefix}.comments[{j}]");
+            let cobj = require_object(item, &cp)?;
+            let Some(replies) = optional_array(cobj, "replies", &cp)? else {
+                continue;
+            };
+            if replies.is_empty() {
+                continue;
+            }
+            let cell = cobj.get("cell").and_then(Value::as_str).unwrap_or("");
+            let want = a1::parse_cell(cell)
+                .ok()
+                .map(|c| a1::format_cell(c.col, c.row));
+            let host_id = listed.and_then(|cs| {
+                cs.iter().find_map(|c| {
+                    let id = c["id"].as_str()?;
+                    if used.iter().any(|u: &String| u == id) {
+                        return None;
+                    }
+                    let got = c["ref"].as_str().map(|s| s.to_string());
+                    if got == want {
+                        Some(id.to_string())
+                    } else {
+                        None
+                    }
+                })
+            });
+            let Some(host_id) = host_id else {
+                return Err(Error::with_path(
+                    ErrorKind::CommentNotFound {
+                        id: format!("cell:{name}!{}", want.as_deref().unwrap_or(cell)),
+                    },
+                    format!("{cp}.replies"),
+                ));
+            };
+            used.push(host_id.clone());
+            for (k, reply) in replies.iter().enumerate() {
+                let rp = format!("{cp}.replies[{k}]");
+                let robj = require_object(reply, &rp)?;
+                deny_create_meta(robj, &rp)?;
+                if robj.contains_key("replies") {
+                    return Err(Error::with_path(
+                        ErrorKind::UnknownField {
+                            field: "replies".into(),
+                        },
+                        format!("{rp}.replies"),
+                    ));
+                }
+                push_op(ops, paths, robj.clone(), "replyComment", &host_id, &rp)?;
+            }
+        }
+    }
+    Ok(())
 }
 
 fn append_group_ops(

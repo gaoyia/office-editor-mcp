@@ -342,8 +342,9 @@ pptx 可改被点名形状的可见文字（含备注形状与母版 / 版式占
 xlsx 的 `sheets[].pictures` 复用 `insertPicture`，`sheets[].charts` 复用 `insertChart`（数据写本表单元格，不写 embedding），
 `sheets[].kind: chartsheet` 复用 `insertChartSheet`（数据写点名的普通表，不写 embedding），
 `sheets[].headerFooters` 复用 `setHeaderFooterText` 与页眉 `insertPicture`（不写 VML），
-`sheets[].comments` 复用 `insertComment`（不写回复），`sheets[].hyperlinks` 复用 `insertHyperlink`，
+`sheets[].comments` 复用 `insertComment`，`comments[].replies` 复用 `replyComment`（只一层），`sheets[].hyperlinks` 复用 `insertHyperlink`，
 `sheets[].textBoxes` / `maths` / `shapes` / `connectors` / `smartArts` / `model3ds` 复用对应 insert。
+`workbook.cellStyles` 复用 `insertCellStyle`，`cells[].namedStyle` 复用 `setCellNamedStyle`。
 其余第四轮字段（列宽、表格、保护、迷你图、OLE、切片器等）复用对应 apply，见 [json-contract-xlsx.md](json-contract-xlsx.md#create)。
 docx 段落与页眉页脚上的 `pictures` 同样复用插图，`charts` 复用 `insertChart`（数据写 embedding），`oleObjects` 复用 `insertOle`，
 `inkCanvases` 复用 `insertInkCanvas`，

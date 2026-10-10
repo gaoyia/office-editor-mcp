@@ -176,30 +176,8 @@ fn create_empty_arrays_omit_parts() {
 }
 
 #[test]
-fn create_rejects_comment_replies_and_root_comments() {
+fn create_rejects_root_comments() {
     let path = tmp("bad");
-    let err = run(
-        &json!({
-            "schemaVersion": 1,
-            "action": "create",
-            "path": path.to_string_lossy(),
-            "workbook": {
-                "sheets": [{
-                    "name": "Sheet1",
-                    "comments": [{ "cell": "A1", "replies": [] }]
-                }]
-            }
-        })
-        .to_string(),
-        None,
-    )
-    .unwrap_err();
-    assert_eq!(err.code(), ErrorCode::InvalidField);
-    assert_eq!(
-        err.field_path(),
-        Some("workbook.sheets[0].comments[0].replies")
-    );
-
     let err = run(
         &json!({
             "schemaVersion": 1,

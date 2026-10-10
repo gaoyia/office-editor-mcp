@@ -1313,7 +1313,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
 | `sheets[].pictures` | 可选。该表工作表 drawing 上的图列表。省略或空数组则不写工作表图。不进页眉。图表工作表上出现报 `InvalidField` |
 | `sheets[].charts` | 可选。该表上的图表列表。省略或空数组则不写图表。图表工作表上出现报 `InvalidField` |
 | `sheets[].headerFooters` | 可选。该表页眉页脚槽位列表。省略或空数组则不写 `headerFooter` / `drawingHF` |
-| `sheets[].comments` | 可选。该表线程化批注列表。省略或空数组则不写批注部件。不写回复 |
+| `sheets[].comments` | 可选。该表线程化批注列表。省略或空数组则不写批注部件。可写一层 `replies` |
 | `sheets[].hyperlinks` | 可选。该表 `<hyperlinks>` 列表。省略或空数组则不写。不写单元格值 |
 | `sheets[].textBoxes` | 可选。该表文本框列表。省略或空数组则不写 |
 | `sheets[].maths` | 可选。该表 drawing 公式框。省略或空数组则不写。图表工作表上出现报未知字段 |
@@ -1325,6 +1325,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
 | `workbook.connections` | 可选。复用 `insertConnection` |
 | `workbook.externalLinks` | 可选。复用 `insertExternalLink` |
 | `workbook.customViews` | 可选。复用 `insertCustomView`。写在视图 / 打印 / 隐藏之后 |
+| `workbook.cellStyles` | 可选。复用 `insertCellStyle`。不要 `op` / `id`。写在格子 `namedStyle` 之前 |
 | `workbook.workbookProtection` | 可选。复用 `setProtection` 点 `xlsx:workbook` |
 | `sheets[].cols` | 可选。`col` 必须。有 `width` / `bestFit` 则走 `setColWidth`，有 `hidden` 再走 `setColHidden` |
 | `sheets[].rows` | 可选。`row` 必须。有 `height` 则走 `setRowHeight`，有 `hidden` 再走 `setRowHidden`。可给 `toRow` |
@@ -1351,6 +1352,8 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
 | `cells[].formula` | 以 `=` 开头的公式文本。库不求值 |
 | `cells[].shared` / `sharedRef` / `array` / `arrayRef` | 可选。与 `setCell` 相同。出现 `dataTable` / `dataTableRef` 报 `InvalidField` |
 | `cells[].numFmt` / `font` / `fill` / `border` / `align` | 可选。与 `setCellStyle` 相同 |
+| `cells[].namedStyle` | 可选。字符串。对应该工作簿 `cellStyles[]` 的 `name`（大小写不敏感），或内置 `Normal`。复用 `setCellNamedStyle`。不要与 `numFmt` / `font` / `fill` / `border` / `align` 同时给 |
+| `comments[].replies` | 可选。一层回复。每项字段与 `replyComment` 相同（不要 `op` / `id`）。不要再套 `replies`。省略或空数组则不写回复 |
 
 | `pictures[].file` | 本地路径，与 `insertPicture` 相同。按文件头认 PNG / JPEG / GIF / BMP / SVG / EMF / WMF / TIFF。缺此字段报 `MissingField` |
 | `pictures[].from` | 必须。左上角单元格，A1。缺此字段报 `MissingField`。不是合法 A1 报 `InvalidRange` |
@@ -1403,6 +1406,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
 写 `even` 槽位时给 `headerFooter` 设 `differentOddEven="1"`；写 `first` 槽位时设 `differentFirst="1"`。先写各槽原文，再按数组顺序往对应槽插图。不写 VML `legacyDrawingHF`。不解释 `&P`。
 带 SVG 图的示例见 `docs/examples/xlsx-create-svg.json`。
 带第四轮字段的示例见 `docs/examples/xlsx-create-round4.json`。
+带第五轮命名样式与批注回复的示例见 `docs/examples/xlsx-create-round5.json`。
 
 `value` 和 `formula` 不能在同一格同时出现。要公式就只写 `formula`。
 公式格不写缓存 `<v>`，并在 `workbook.xml` 的 `calcPr` 上设 `fullCalcOnLoad="1"`，让 Excel 打开时重算。
@@ -1420,7 +1424,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
 带公式框的示例见 `docs/examples/xlsx-create-math-drawing.json`。
 给了 `sheets[].model3ds` 时按 `insertModel3d` 同一套规则写 GLB、海报 PNG 与 `am3d` AlternateContent。
 带 3D 模型的示例见 `docs/examples/xlsx-create-model3d.json`。
-给了 `sheets[].comments` 时按 `insertComment` 同一套规则写线程化批注、占位 `comments.xml` 与 Note `v:shape`；不写回复。
+给了 `sheets[].comments` 时按 `insertComment` 同一套规则写线程化批注、占位 `comments.xml` 与 Note `v:shape`；给了 `replies` 再按 `replyComment` 写一层回复。
 给了 `sheets[].hyperlinks` 时按 `insertHyperlink` 同一套规则写 `<hyperlinks>` 与外部链关系。
 给了 `sheets[].headerFooters` 时按 `setHeaderFooterText` 写 `headerFooter` 六个槽位，按页眉 `insertPicture` 写 `drawingHF` 与 media；页眉图不进 worksheet drawing。
 `xdr:cNvPr/@id` 取该表已有全部 `cNvPr` 的最大整数加 1；页眉图至少为 2。
@@ -1429,11 +1433,14 @@ drawing 上那一张 `xdr:absoluteAnchor` 框和 `/xl/charts/chartN.xml`，数�
 图表工作表的 `dataFrom` 在该数据表 `charts[]` 之后写入，会覆盖同一格。`workbook.xml` 的 `<sheet>` 顺序与 `sheets[]` 一致。
 `app.xml` 的 HeadingPairs：普通表算 Worksheets，图表工作表算 Charts；TitlesOfParts 按 `sheets[]` 顺序。
 至少一张 `worksheet`，否则报 `InvalidField`。
-骨架写完后，上表这些字段按文档顺序解析成已有 apply op，再调用 `apply`：先单元格样式与共享 / 数组公式，再列宽行高隐藏与合并，
+骨架写完后，上表这些字段按文档顺序解析成已有 apply op，再调用 `apply`：先 `workbook.cellStyles`，再单元格 `namedStyle` / 单元格样式与共享 / 数组公式，再列宽行高隐藏与合并，
 再打印 / 视图 / 筛选 / 排序 / 分组，再数据验证与条件格式，再表格与透视，再定义名 / 连接 / 外部引用，
-再工作表保护与允许编辑区域，再工作簿保护，再迷你图与 OLE，再切片器，再自定义视图，最后 `groups`。
+再工作表保护与允许编辑区域，再工作簿保护，再迷你图与 OLE，再切片器，再自定义视图，再 `groups`，最后批注 `replies`。
 不要另写一套 XML。公式格仍不写缓存 `<v>`。不求值，不刷新透视，不刷新外部连接。不新建数据表公式。
 `cells[]` 出现 `dataTable` / `dataTableRef` 报 `InvalidField`。
+`cells[].namedStyle` 与 `numFmt` / `font` / `fill` / `border` / `align` 同时出现报 `InvalidField`。
+`namedStyle` 对不上 `cellStyles[]` 的 `name` 且不是 `Normal` 时报 `InvalidField`。
+`comments[].replies[]` 再套 `replies` 报 `InvalidField`。
 `groups[]` 每项可给 `textBoxes` / `shapes` / `connectors`，值为该表对应数组的 1 起下标；合计至少 2 个，复用 `groupShapes`。
 图表工作表可给 `print` / `view` / `sheetProtection`；其它本轮字段出现报 `InvalidField`。
 给了保护口令则写 SHA-512。create 项上不要出现 `op` / `id`。
@@ -1442,7 +1449,7 @@ drawing 上那一张 `xdr:absoluteAnchor` 框和 `/xl/charts/chartN.xml`，数�
  / `externalReferences`，或 `sheets[]` 上出现 `wrap` / `protection` / `headerFooter` / `sort`，报 `InvalidField`。
 `kind` 只能是 `worksheet` 或 `chartsheet`。图表工作表上出现 `cells` / `pictures` / `charts` / `headerFooters` / `comments`
  / `hyperlinks` / `textBoxes` / `maths` / `shapes` / `connectors` / `smartArts` / `model3ds` / `from` / `to` / `anchor` / 偏移 / `wrap` / `id` 报 `InvalidField`。
-`comments[]` 上出现 `id` / `replies` / `start` / `end` / `x` / `y`，`hyperlinks[]` 上出现 `text` / `anchor` / `id`，
+`comments[]` 上出现 `id` / `start` / `end` / `x` / `y`，`hyperlinks[]` 上出现 `text` / `anchor` / `id`，
 或 drawing 项上出现 `kind` / `wrap` / `x` / `y` / `id`，报 `InvalidField`。
 给了 `workbook.props` 时按 `setProps` / `setCustomProp` 同一套规则写 core / app / custom；
 省略则仍写空的 `dc:title` 与 `dc:creator` 为 `ooxp`，不写 custom 部件。
@@ -1615,7 +1622,7 @@ id 不是 `xlsx:workbook` 报 `InvalidId`。docx / pptx 上发此 op 报 `Invali
 写入一条 `cellStyleXfs` 的 `xf`（能复用则复用），再在 `cellStyles` 末尾挂 `<cellStyle name="…" xfId="…">`。
 不写 `builtinId`、不写 `xr:uid`。不重排已有 `cellStyle` / `cellStyleXfs`。不改格子上已有 `s`。不标重算。
 Excel 16.0 另存探测：自定义样式没有 `builtinId`；`cellStyleXfs` 的 `xf` 不写 `apply*`（规范对该集合缺省为真）。
-create 本期不写命名样式。
+create 第五轮可写 `workbook.cellStyles` 与 `cells[].namedStyle`，见上文 create。
 
 示例见 `docs/examples/xlsx-apply-named-style.json`。
 

@@ -45,6 +45,12 @@
             "$ref": "#/$defs/xlsxCreateCustomView"
           }
         },
+        "cellStyles": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/xlsxCreateCellStyle"
+          }
+        },
         "workbookProtection": {
           "$ref": "#/$defs/xlsxCreateWorkbookProtection"
         }
@@ -507,6 +513,31 @@
           "type": "string",
           "minLength": 1
         },
+        "text": {
+          "type": "string"
+        },
+        "author": {
+          "type": "string"
+        },
+        "initials": {
+          "type": "string"
+        },
+        "date": {
+          "type": "string",
+          "minLength": 1
+        },
+        "replies": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/xlsxCreateCommentReply"
+          }
+        }
+      }
+    },
+    "xlsxCreateCommentReply": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
         "text": {
           "type": "string"
         },
@@ -1034,6 +1065,10 @@
             "object",
             "null"
           ]
+        },
+        "namedStyle": {
+          "type": "string",
+          "minLength": 1
         }
       },
       "not": {
@@ -1053,9 +1088,94 @@
             "required": [
               "dataTableRef"
             ]
+          },
+          {
+            "required": [
+              "namedStyle",
+              "numFmt"
+            ]
+          },
+          {
+            "required": [
+              "namedStyle",
+              "font"
+            ]
+          },
+          {
+            "required": [
+              "namedStyle",
+              "fill"
+            ]
+          },
+          {
+            "required": [
+              "namedStyle",
+              "border"
+            ]
+          },
+          {
+            "required": [
+              "namedStyle",
+              "align"
+            ]
           }
         ]
       }
+    },
+    "xlsxCreateCellStyle": {
+      "type": "object",
+      "required": [
+        "name"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "numFmt": {
+          "$ref": "#/$defs/insertCellStyleOp/properties/numFmt"
+        },
+        "font": {
+          "$ref": "#/$defs/insertCellStyleOp/properties/font"
+        },
+        "fill": {
+          "$ref": "#/$defs/insertCellStyleOp/properties/fill"
+        },
+        "border": {
+          "$ref": "#/$defs/insertCellStyleOp/properties/border"
+        },
+        "align": {
+          "$ref": "#/$defs/insertCellStyleOp/properties/align"
+        }
+      },
+      "anyOf": [
+        {
+          "required": [
+            "numFmt"
+          ]
+        },
+        {
+          "required": [
+            "font"
+          ]
+        },
+        {
+          "required": [
+            "fill"
+          ]
+        },
+        {
+          "required": [
+            "border"
+          ]
+        },
+        {
+          "required": [
+            "align"
+          ]
+        }
+      ]
     },
     "xlsxCreateDefinedName": {
       "type": "object",

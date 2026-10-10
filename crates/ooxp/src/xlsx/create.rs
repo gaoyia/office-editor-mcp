@@ -855,7 +855,12 @@ fn parse_comments(
 
 fn parse_comment(v: &Value, prefix: &str, sheet: &str) -> Result<InsertCommentOp, Error> {
     let obj = require_object(v, "comments", prefix)?;
-    deny_unknown(obj, prefix, &["cell", "text", "author", "initials", "date"])?;
+    deny_unknown(
+        obj,
+        prefix,
+        &["cell", "text", "author", "initials", "date", "replies"],
+    )?;
+    let _ = parse_object_array(obj.get("replies"), "replies", &format!("{prefix}.replies"))?;
     let cell = parse_required_a1_field(obj.get("cell"), prefix, "cell")?;
     let text = match obj.get("text") {
         None => String::new(),

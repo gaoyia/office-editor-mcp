@@ -30,6 +30,7 @@ $order = @(
     'xlsx-create-drawing'
     'xlsx-create-chartsheet'
     'xlsx-create-round4'
+    'xlsx-create-round5'
     'docx-create'
     'docx-create-pictures'
     'docx-create-full'

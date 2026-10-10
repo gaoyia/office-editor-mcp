@@ -1,9 +1,9 @@
 # xlsx create 第五轮
 
-状态：❌
+状态：✅
 日期：2026-10-10
 
-对应 `roadmap/xlsx.md` 待做序号 **40**。前置：本轮 39 的 apply 已过。
+对应 `roadmap/xlsx.md` 待做序号 **40**。前置：本轮 39 的 apply 已过。不要和 39 合成一份。
 
 第四轮 create 不写回复批注、不新建数据表公式。命名单元格样式当时还没有 apply。
 
@@ -15,9 +15,9 @@ create 复用已有 apply，写出命名单元格样式，并可写一层批注�
 
 | 序号 | 项 | 状态 |
 | --- | --- | --- |
-| 0 | 文档：create 字段 | ❌ |
-| 1 | 库：create 复用 apply | ❌ |
-| 2 | 库测试与 Excel 16.0 手测 | ❌ |
+| 0 | 文档：create 字段 | ✅ |
+| 1 | 库：create 复用 apply | ✅ |
+| 2 | 库测试与 Excel 16.0 手测 | ✅ |
 
 ## 已锁定
 
@@ -28,15 +28,11 @@ create 复用已有 apply，写出命名单元格样式，并可写一层批注�
 - 出现 `dataTable` / `dataTableRef` 仍报 `InvalidField`。
 - 手测编号 **C30–C32**。脚本 `manual-check/office/cases/xlsx-create-round5.ps1`。不要和 C25–C29、Xns 撞。
 
+Excel 16.0 手测 C30–C32 通过。无 Repair。COM `Style.Name` 为 `OoxpNamed`，`CommentsThreaded` 能看见回复。
+
 ## 不做
 
 - 公式求值、透视聚合引擎
 - 新建数据表公式
 - 从已有文件当模板复制
 - Power Query / queryTable
-
-## 确认后要改的文档
-
-- `docs/json-contract-xlsx.md`、`docs/json-schema/`、`docs/examples/`
-- `docs/architecture.md`、`docs/checklist-xlsx.md`
-- `roadmap/xlsx.md` 待做 40
