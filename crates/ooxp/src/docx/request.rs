@@ -11,7 +11,7 @@ use super::charts::{self, ChartType, NewSeries};
 use super::hf::{HfKind, HfType};
 use super::math_expr::MathBody;
 use super::para::{
-    self, BodyPara, CommentIdTarget, NoteIdTarget, NoteKind, ParaTarget, TxbxTarget,
+    self, BodyPara, CommentIdTarget, HostPara, NoteIdTarget, NoteKind, ParaTarget, TxbxTarget,
 };
 use super::picture::{self, AlignH, AlignV, PicKind, PicTarget, WrapKind, WrapPos};
 use super::tbl::{self, InsertAnchor, TableRef};
@@ -535,10 +535,23 @@ pub struct RevisionOp {
 }
 
 #[derive(Debug, Clone)]
+pub enum InsertHyperlinkHost {
+    Para { para: ParaTarget, text: String },
+    Picture(PicTarget),
+    TextBox(TxbxTarget),
+}
+
+#[derive(Debug, Clone)]
+pub enum HyperlinkTarget {
+    Link(super::link::LinkRef),
+    Picture(PicTarget),
+    TextBox(TxbxTarget),
+}
+
+#[derive(Debug, Clone)]
 pub struct InsertHyperlinkOp {
     pub id: String,
-    pub para: ParaTarget,
-    pub text: String,
+    pub host: InsertHyperlinkHost,
     pub url: Option<String>,
     pub anchor: Option<String>,
     pub tooltip: Option<String>,
@@ -547,7 +560,7 @@ pub struct InsertHyperlinkOp {
 #[derive(Debug, Clone)]
 pub struct SetHyperlinkOp {
     pub id: String,
-    pub target: super::link::LinkRef,
+    pub target: HyperlinkTarget,
     pub url: Option<String>,
     pub anchor: Option<String>,
     pub text: Option<String>,
@@ -557,7 +570,7 @@ pub struct SetHyperlinkOp {
 #[derive(Debug, Clone)]
 pub struct DeleteHyperlinkOp {
     pub id: String,
-    pub target: super::link::LinkRef,
+    pub target: HyperlinkTarget,
 }
 
 #[derive(Debug, Clone)]
@@ -4763,29 +4776,43 @@ fn parse_insert_hyperlink(
     obj: &serde_json::Map<String, Value>,
     i: usize,
 ) -> Result<InsertHyperlinkOp, Error> {
-    deny_keys(obj, i, &["op", "id", "text", "url", "anchor", "tooltip"])?;
     let id = require_op_id(obj, i)?;
-    let para = parse_story_para_at(&id, &format!("ops[{i}].id"), IdReason::InsertLinkNeedsPara)?;
-    let text = match obj.get("text") {
-        Some(Value::String(s)) => s.clone(),
-        Some(_) => {
-            return Err(Error::with_path(
-                ErrorKind::WrongType {
-                    field: "text".into(),
-                    expected: TypeName::String,
-                },
-                format!("ops[{i}].text"),
-            ));
-        }
-        None => {
-            return Err(Error::with_path(
-                ErrorKind::OpRequiresField {
-                    op: "insertHyperlink".into(),
-                    field: "text".into(),
-                },
-                format!("ops[{i}].text"),
-            ));
-        }
+    let path = format!("ops[{i}].id");
+    let host = if looks_like_pic_hlink_id(&id) {
+        deny_keys(obj, i, &["op", "id", "url", "anchor", "tooltip"])?;
+        let pic = picture::parse_pic_id_at(&id, &path)?;
+        reject_pic_for_hlink(&pic, &path)?;
+        InsertHyperlinkHost::Picture(pic)
+    } else if looks_like_txbx_hlink_id(&id) {
+        deny_keys(obj, i, &["op", "id", "url", "anchor", "tooltip"])?;
+        let box_t = para::parse_txbx_id_at(&id, &path)?;
+        reject_txbx_for_hlink(&box_t, &path)?;
+        InsertHyperlinkHost::TextBox(box_t)
+    } else {
+        deny_keys(obj, i, &["op", "id", "text", "url", "anchor", "tooltip"])?;
+        let para = parse_story_para_at(&id, &path, IdReason::InsertLinkNeedsPara)?;
+        let text = match obj.get("text") {
+            Some(Value::String(s)) => s.clone(),
+            Some(_) => {
+                return Err(Error::with_path(
+                    ErrorKind::WrongType {
+                        field: "text".into(),
+                        expected: TypeName::String,
+                    },
+                    format!("ops[{i}].text"),
+                ));
+            }
+            None => {
+                return Err(Error::with_path(
+                    ErrorKind::OpRequiresField {
+                        op: "insertHyperlink".into(),
+                        field: "text".into(),
+                    },
+                    format!("ops[{i}].text"),
+                ));
+            }
+        };
+        InsertHyperlinkHost::Para { para, text }
     };
     let url = optional_op_string(obj, i, "url")?;
     let anchor = optional_op_string(obj, i, "anchor")?;
@@ -4821,8 +4848,7 @@ fn parse_insert_hyperlink(
     let tooltip = optional_op_string(obj, i, "tooltip")?;
     Ok(InsertHyperlinkOp {
         id,
-        para,
-        text,
+        host,
         url,
         anchor,
         tooltip,
@@ -4833,12 +4859,22 @@ fn parse_set_hyperlink(
     obj: &serde_json::Map<String, Value>,
     i: usize,
 ) -> Result<SetHyperlinkOp, Error> {
-    deny_keys(obj, i, &["op", "id", "url", "anchor", "text", "tooltip"])?;
     let id = require_op_id(obj, i)?;
-    let target = super::link::parse_link_ref(&id, &format!("ops[{i}].id"))?;
+    let path = format!("ops[{i}].id");
+    let drawing = looks_like_pic_hlink_id(&id) || looks_like_txbx_hlink_id(&id);
+    if drawing {
+        deny_keys(obj, i, &["op", "id", "url", "anchor", "tooltip"])?;
+    } else {
+        deny_keys(obj, i, &["op", "id", "url", "anchor", "text", "tooltip"])?;
+    }
+    let target = parse_hyperlink_target(&id, &path)?;
     let url = optional_op_string(obj, i, "url")?;
     let anchor = optional_op_string(obj, i, "anchor")?;
-    let text = optional_op_string(obj, i, "text")?;
+    let text = if drawing {
+        None
+    } else {
+        optional_op_string(obj, i, "text")?
+    };
     let tooltip = match obj.get("tooltip") {
         None => None,
         Some(Value::Null) => Some(None),
@@ -4895,8 +4931,55 @@ fn parse_delete_hyperlink(
 ) -> Result<DeleteHyperlinkOp, Error> {
     deny_keys(obj, i, &["op", "id"])?;
     let id = require_op_id(obj, i)?;
-    let target = super::link::parse_link_ref(&id, &format!("ops[{i}].id"))?;
+    let target = parse_hyperlink_target(&id, &format!("ops[{i}].id"))?;
     Ok(DeleteHyperlinkOp { id, target })
+}
+
+fn looks_like_pic_hlink_id(id: &str) -> bool {
+    id.contains("/pic:")
+}
+
+fn looks_like_txbx_hlink_id(id: &str) -> bool {
+    id.contains("/txbx:") && !id.contains("/pic:")
+}
+
+fn parse_hyperlink_target(id: &str, path: &str) -> Result<HyperlinkTarget, Error> {
+    if looks_like_pic_hlink_id(id) {
+        let pic = picture::parse_pic_id_at(id, path)?;
+        reject_pic_for_hlink(&pic, path)?;
+        return Ok(HyperlinkTarget::Picture(pic));
+    }
+    if looks_like_txbx_hlink_id(id) {
+        let box_t = para::parse_txbx_id_at(id, path)?;
+        reject_txbx_for_hlink(&box_t, path)?;
+        return Ok(HyperlinkTarget::TextBox(box_t));
+    }
+    let link = super::link::parse_link_ref(id, path)?;
+    Ok(HyperlinkTarget::Link(link))
+}
+
+fn reject_pic_for_hlink(target: &PicTarget, path: &str) -> Result<(), Error> {
+    match target {
+        PicTarget::Body { .. } | PicTarget::HeaderFooter { .. } => Ok(()),
+        _ => Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::InsertLinkNeedsPara,
+            },
+            path.to_string(),
+        )),
+    }
+}
+
+fn reject_txbx_for_hlink(target: &TxbxTarget, path: &str) -> Result<(), Error> {
+    match &target.host {
+        HostPara::Body(_) | HostPara::HeaderFooter { .. } => Ok(()),
+        _ => Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::InsertLinkNeedsPara,
+            },
+            path.to_string(),
+        )),
+    }
 }
 
 fn parse_insert_bookmark(

@@ -1128,7 +1128,17 @@ fn inspect_lists_header_pictures() {
     assert_eq!(pics.len(), 2);
     assert_eq!(
         object_keys(&pics[0]),
-        ["id", "docPrId", "name", "kind", "cx", "cy", "wrap", "stable"]
+        [
+            "id",
+            "docPrId",
+            "name",
+            "kind",
+            "cx",
+            "cy",
+            "wrap",
+            "stable",
+            "hyperlink"
+        ]
     );
     assert_eq!(pics[0]["id"], "header:default:1/pic:1");
     assert_eq!(pics[0]["docPrId"], "1");

@@ -778,8 +778,13 @@
 - 段内有本期收入的修订节点时 `setParaText` 报 `NotImplemented`
 - 找不到超链接时，超链接 op 报 `IdNotFound`（`insertHyperlink` 除外）
 - id 不是超链接 id 报 `InvalidId`
-- docx 的 `insertHyperlink` 的 `id` 必须是段落 id
+- docx 的 `insertHyperlink` 的 `id` 必须是正文或页眉页脚段落 id，或正文 / 页眉页脚的图 id / 文本框 id
+- 对图 / 框禁止 `text`
 - `url` 与 `anchor` 必须恰好给一个
+- 同一图 / 框已有 `hlinkClick` 报 `InvalidField`
+- 框内图、注内 / 批注内的图或框、连接线、SmartArt、图表、墨迹、3D、OLE 报 `InvalidId`
+- docx 的 `setHyperlink` / `deleteHyperlink` 的 id 是 `link:{n}`（含页眉页脚前缀）或带 DrawingML 链的图 / 文本框 id
+- 对象上没有链时报 `IdNotFound`
 - pptx 的 `insertHyperlink` 的 `id` 必须是文本形状、图、表、图表、SmartArt 或表单元格 id
 - `url` / `file` / `slide` 必须恰好一个
 - 空串、已有同事件框级链、或跳到本页报 `InvalidField`

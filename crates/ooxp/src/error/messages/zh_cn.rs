@@ -588,7 +588,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::LinkIndexNotInt => "超链接序号必须是正整数".into(),
             IdReason::LinkIndexFromOne => "超链接序号从 1 起".into(),
             IdReason::InsertLinkNeedsPara => {
-                "insertHyperlink 的 id 必须是正文或页眉页脚段落 id".into()
+                "insertHyperlink 的 id 必须是正文或页眉页脚段落 id，或正文 / 页眉页脚里的图 id / 文本框 id".into()
             }
             IdReason::SheetLinkPrefix => {
                 "xlsx 超链接 id 必须是 sheet:工作表名/link:n，n 从 1 起".into()

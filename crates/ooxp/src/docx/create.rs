@@ -23,8 +23,9 @@ use super::para::{self, ParaTarget};
 use super::picture::{self, PicKind, WrapKind, WrapPos};
 use super::request::{
     DocxOp, InsertBookmarkOp, InsertCommentOp, InsertContentControlOp, InsertFieldOp,
-    InsertHyperlinkOp, InsertMathOp, InsertMathPlace, InsertNoteOp, InsertNumberingOp,
-    InsertSdtPlace, InsertTocOp, InsertTocPlace, ReplyCommentOp, SetParaNumberingOp,
+    InsertHyperlinkHost, InsertHyperlinkOp, InsertMathOp, InsertMathPlace, InsertNoteOp,
+    InsertNumberingOp, InsertSdtPlace, InsertTocOp, InsertTocPlace, ReplyCommentOp,
+    SetParaNumberingOp,
 };
 use super::sdt::SdtKind;
 use super::sect::SectionBreakType;
@@ -2944,8 +2945,10 @@ fn push_story_ops(
         for h in &p.hyperlinks {
             ops.push(DocxOp::InsertHyperlink(InsertHyperlinkOp {
                 id: id.clone(),
-                para: host.clone(),
-                text: h.text.clone(),
+                host: InsertHyperlinkHost::Para {
+                    para: host.clone(),
+                    text: h.text.clone(),
+                },
                 url: h.url.clone(),
                 anchor: h.anchor.clone(),
                 tooltip: h.tooltip.clone(),

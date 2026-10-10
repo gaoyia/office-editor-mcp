@@ -621,7 +621,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::LinkIndexNotInt => "hyperlink index must be a positive integer".into(),
             IdReason::LinkIndexFromOne => "hyperlink index starts at 1".into(),
             IdReason::InsertLinkNeedsPara => {
-                "insertHyperlink id must be a body or header/footer paragraph id".into()
+                "insertHyperlink id must be a body or header/footer paragraph id, or a body/header/footer picture or text box id".into()
             }
             IdReason::SheetLinkPrefix => {
                 "xlsx hyperlink id must be sheet:name/link:n, n starting at 1".into()

@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "note.docx",
+  "output": "note.drawing-hlink.docx",
+  "ops": [
+    {
+      "op": "insertHyperlink",
+      "id": "para:AAAA0001/pic:1",
+      "url": "https://example.com"
+    },
+    {
+      "op": "setHyperlink",
+      "id": "para:AAAA0001/pic:1",
+      "url": "https://example.org"
+    },
+    {
+      "op": "insertHyperlink",
+      "id": "para:AAAA0002/txbx:1",
+      "url": "https://example.net",
+      "tooltip": "框链"
+    },
+    {
+      "op": "deleteHyperlink",
+      "id": "para:AAAA0001/pic:1"
+    }
+  ]
+}

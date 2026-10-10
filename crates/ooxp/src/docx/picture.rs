@@ -186,6 +186,18 @@ pub enum PicTarget {
     },
 }
 
+impl PicTarget {
+    pub fn key(&self) -> &PicKey {
+        match self {
+            Self::HeaderFooter { key, .. }
+            | Self::Body { key, .. }
+            | Self::InTextBox { key, .. }
+            | Self::InNote { key, .. }
+            | Self::InComment { key, .. } => key,
+        }
+    }
+}
+
 pub struct PicInfo {
     pub id: String,
     pub doc_pr_id: Option<String>,
@@ -196,6 +208,7 @@ pub struct PicInfo {
     pub wrap: Option<WrapKind>,
     pub stable: bool,
     pub content_type: Option<String>,
+    pub hyperlink: Value,
 }
 
 pub struct ImageFile {
@@ -282,6 +295,7 @@ pub fn pictures_json(pics: &[PicInfo]) -> Vec<Value> {
             if let Some(ct) = &p.content_type {
                 m.insert("contentType".into(), json!(ct));
             }
+            m.insert("hyperlink".into(), p.hyperlink.clone());
             Value::Object(m)
         })
         .collect()
@@ -1056,6 +1070,7 @@ fn pic_info(
             blip_embed(drawing).as_deref(),
             rels,
         ),
+        hyperlink: super::drawing_hlink::inspect_picture(drawing, rels),
     })
 }
 
@@ -1086,7 +1101,7 @@ fn is_picture(drawing: &Element) -> bool {
     has_pic && has_blip
 }
 
-fn is_group_drawing(drawing: &Element) -> bool {
+pub(crate) fn is_group_drawing(drawing: &Element) -> bool {
     let mut group = false;
     walk_outside_txbx(drawing, &mut |e| {
         if e.local_name() == "wgp" {
@@ -1112,6 +1127,85 @@ fn walk_group_pics(drawing: &Element, f: &mut impl FnMut(&Element)) {
         }
     }
     walk(drawing, f);
+}
+
+pub(crate) fn grouped_pic_has_click(drawing: &Element, key: &PicKey) -> bool {
+    let mut idx = 0usize;
+    let mut hit = false;
+    walk_group_pics(drawing, &mut |pic| {
+        idx += 1;
+        if matches_grouped(pic, key, idx) {
+            let mut found = false;
+            walk_outside_txbx(pic, &mut |e| {
+                if e.local_name() == "hlinkClick" {
+                    found = true;
+                }
+            });
+            hit = found;
+        }
+    });
+    hit
+}
+
+pub(crate) fn find_grouped_pic_cnv_pr_mut<'a>(
+    drawing: &'a mut Element,
+    key: &PicKey,
+) -> Option<&'a mut Element> {
+    let mut idx = 0usize;
+    find_grouped_pic_cnv_walk(drawing, key, &mut idx)
+}
+
+fn find_grouped_pic_cnv_walk<'a>(
+    el: &'a mut Element,
+    key: &PicKey,
+    idx: &mut usize,
+) -> Option<&'a mut Element> {
+    if el.local_name() == "txbxContent" || el.local_name() == "object" {
+        return None;
+    }
+    if el.local_name() == "pic" && pic_has_blip(el) {
+        *idx += 1;
+        if matches_grouped(el, key, *idx) {
+            return find_cnv_pr_mut(el);
+        }
+        return None;
+    }
+    let children = el.children.as_mut_slice();
+    for child in children {
+        if let Node::Element(e) = child {
+            if let Some(found) = find_grouped_pic_cnv_walk(e, key, idx) {
+                return Some(found);
+            }
+        }
+    }
+    None
+}
+
+fn find_cnv_pr_mut(el: &mut Element) -> Option<&mut Element> {
+    if el.local_name() == "cNvPr" {
+        return Some(el);
+    }
+    if el.local_name() == "txbxContent" {
+        return None;
+    }
+    for child in el.children.as_mut_slice() {
+        if let Node::Element(c) = child {
+            if c.local_name() == "cNvPr" || has_cnv_pr(c) {
+                return find_cnv_pr_mut(c);
+            }
+        }
+    }
+    None
+}
+
+fn has_cnv_pr(el: &Element) -> bool {
+    let mut hit = false;
+    walk_outside_txbx(el, &mut |e| {
+        if e.local_name() == "cNvPr" {
+            hit = true;
+        }
+    });
+    hit
 }
 
 fn pic_has_blip(pic: &Element) -> bool {
@@ -1164,6 +1258,7 @@ fn pic_info_grouped(
             blip_embed(pic).as_deref(),
             rels,
         ),
+        hyperlink: super::drawing_hlink::inspect_pic_nv(pic, rels),
     })
 }
 

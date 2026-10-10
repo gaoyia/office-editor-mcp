@@ -362,6 +362,9 @@ inspect 两种关系都认。create 给了 `footnote` / `endnote` / `comments` /
 create 给了 `comments[].replies` 时按 `replyComment` 再写回复。
 create 给了 `document.numberings` 时按 `insertNumbering` 新建 `/word/numbering.xml`（CT `…numbering+xml`）。
 create 给了 `hyperlinks` 时按 `insertHyperlink` 在宿主 `.rels` 上补 External hyperlink 关系。
+apply 给正文或页眉页脚里的图 / 文本框写 DrawingML 链时，同样在该故事部件 `.rels` 补 Type 以 `/hyperlink` 结尾的关系。
+外部链 `TargetMode` 为 `External`。内部书签 `Target` 为 `#{name}`，不写 `TargetMode`。不新建部件。
+删 DrawingML 链只摘 `a:hlinkClick`，孤儿关系删掉，不删图或框。
 create 给了 `document.tocs` / `fields` / `maths` / `contentControls` / `bookmarks` 时只改宿主 XML（目录块会新插 `w:p`），不另建部件。
 apply 的 `insertField` 给窗体 `code` 时在 begin 里写 `w:ffData`，仍只改宿主 XML，不新建部件。
 apply 的 `insertMath` / `setMath` 无论 `text` 还是 `expr` 都只改宿主 XML 里的 `m:oMath`，不新建部件。

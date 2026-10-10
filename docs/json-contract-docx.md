@@ -264,10 +264,28 @@ run 级与 `*Change` 只动被点名的那一个 XML 节点，`rowIns` / `rowDel
 
 `acceptRevision` / `rejectRevision` 的 `id` 必须是修订 id。对段落 id、表 id、容器 id 或 `section:{n}` 发这两个 op 报 `InvalidId`。
 
-超链接的 `{n}` 从 1 起，按该故事里 `w:hyperlink` 的文档顺序（遇 `w:txbxContent` 停住；`mc:AlternateContent` 只进 Choice）。
-关系 `r:id` 不当树上的唯一键，只进 `rId`。`link:{n}` 在增删链之后会变，只够同一次 inspect 之后立刻 apply。本期只收 `w:hyperlink` 元素（ECMA-376 §17.16.22）。
-HYPERLINK 域、图上 `a:hlinkClick`、框内 / 注内 / 批注内的链不进树；对这些容器发超链接 op 报 `InvalidId`。
-有 `r:id` 时为外部链（规范说此时忽略 `w:anchor`）；只有 `w:anchor` 时为内部链，指向书签名。两者都没有仍列出，`kind` 为 `anchor`，`anchor` 为 `null`。
+超链接有两套，不要混：
+
+- `w:hyperlink`：挂在故事上，不挂在段落节点上。`{n}` 从 1 起，按该故事里 `w:hyperlink` 的文档顺序（遇 `w:txbxContent` 停住；`mc:AlternateContent` 只进 Choice）。
+  关系 `r:id` 不当树上的唯一键，只进 `rId`。`link:{n}` 在增删链之后会变，只够同一次 inspect 之后立刻 apply。
+  本期只收 `w:hyperlink` 元素（ECMA-376 §17.16.22）。
+  HYPERLINK 域不进本名单，仍走域切片。
+  框内 / 注内 / 批注内的 `w:hyperlink` 不进树；对这些容器发 `w:hyperlink` 超链接 op 报 `InvalidId`。
+  有 `r:id` 时为外部链（规范说此时忽略 `w:anchor`）；只有 `w:anchor` 时为内部链，指向书签名。两者都没有仍列出，`kind` 为 `anchor`，`anchor` 为 `null`。
+  根上 `hyperlinkCount` 与页眉页脚容器上的 `hyperlinkCount` 只计这一套。
+- DrawingML 链：写在正文或页眉页脚里图、文本框上的 `a:hlinkClick`。
+  图读 `wp:docPr/a:hlinkClick`；没有则读该 `pic` 的 `cNvPr/a:hlinkClick`（组合子图）。
+  文本框读 `wps:cNvPr/a:hlinkClick`；没有则读外层 `wp:docPr/a:hlinkClick`。
+  外部链关系写在该**故事部件** `.rels`（`document.xml.rels` / `headerN.xml.rels`），Type 以 `/hyperlink` 结尾，`TargetMode` 为 `External`，`Target` 为 URL 原文。
+  内部书签：无 `r:id` 时 `kind` 为 `anchor`；有 `r:id` 且关系 Target 以 `#` 开头时 `kind` 为 `anchor`，`anchor` 为去掉开头 `#` 的书签名。
+  apply 写内部书签时在宿主 `.rels` 写关系，`Target` 为 `#{name}`，不写 `TargetMode`。
+  `tooltip` 取 `a:hlinkClick/@tooltip`。不写 `hlinkHover`。
+  inspect 时出现在该对象的 `hyperlink` 字段（对象；没有链则为 `null`），不进 `hyperlinks` 名单，也不计入 `hyperlinkCount`。
+  `hyperlink` 对象字段顺序：`kind`、`rId`、`url`、`anchor`、`tooltip`。
+  `kind` 为 `url`（有 `r:id` 且 Target 不以 `#` 开头）或 `anchor`。
+  框内图、注内 / 批注内的图或框、连接线、SmartArt、图表、墨迹、3D、OLE 本期不写 DrawingML 链；对这些 id 发超链接 op 报 `InvalidId`。
+  create 本期不写对象上的 `hyperlink`，见待做 52。
+  xlsx / pptx 行为不变。docx 上出现 `location` / `ref` / `on` / `event` 报未知字段或 `InvalidField`（内部用 `anchor`）。
 
 书签的 `{n}` 从 1 起，按该故事里被收入的 `w:bookmarkStart` 的文档顺序（同一套边界）。只收起止都在同一故事里、且 `w:name` 不以 `_` 开头的配对（Word 隐藏书签含 `_GoBack` 不进树）。
 配对按 `w:id`（§17.13.6.1、§17.13.6.2）。找不到配对的不进树。`w:id` 进 `xmlId`，缺则为 `null`。`w:name` 进 `name`。
@@ -355,7 +373,10 @@ MS-DOCX `CT_SdtCheckbox`）、`picture`（`w:picture`）、`group`（`w:group`�
 遇 `w:txbxContent` 停住；`mc:AlternateContent` 只进 Choice；`w:del` 里的 run 不编。`w:ins`、`w:hyperlink` 里的 run 要编。
 增删 run 之后 `{n}` 会变，只够同一次 inspect 之后立刻 apply。对 run id 发 `setParaText` / `setParaFormat` 报 `InvalidId`。对段落 id 发 `setRunFormat` 报 `InvalidId`。
 
-`insertHyperlink` 的 `id` 必须是段落 id（正文或页眉页脚）。`setHyperlink` / `deleteHyperlink` 的 `id` 必须是超链接 id。
+`insertHyperlink` 的 `id` 必须是段落 id（正文或页眉页脚，写 `w:hyperlink`），或正文 / 页眉页脚的图 id / 文本框 id（写 `a:hlinkClick`）。
+对图 / 框禁止 `text`。`url` 与 `anchor` 必须恰好一个。同一对象已有 `hlinkClick` 报 `InvalidField`（改地址用 `setHyperlink`）。
+`setHyperlink` / `deleteHyperlink` 的 `id` 必须是超链接 id（`link:{n}`，含页眉页脚前缀），或带（或要改）DrawingML 链的图 id / 文本框 id。
+对 DrawingML 链禁止 `text`。对象上没有 `hlinkClick` 时 `set` / `delete` 报 `IdNotFound`。删 DrawingML 链时去掉 `a:hlinkClick` 和无人引用的 hyperlink 关系，不删图或框。
 `insertBookmark` 的 `id` 必须是起始段落 id；可选 `end` 为同一故事里的结束段落 id。`setBookmark` / `deleteBookmark` 的 `id` 必须是书签 id。
 `insertField` 的 `id` 必须是段落 id（正文或页眉页脚）。`setField` / `deleteField` 的 `id` 必须是域 id。
 `insertNumbering` 的 `id` 必须是 `docx:document`。`setNumbering` 的 `id` 必须是抽象编号 id。
@@ -650,9 +671,10 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   - 不依赖 `from` / `maxParas`
   - 省略或 `false` 则只有 `revisionCount`，没有名单
 - **`scope.hyperlinks`**（否）
-  - 为 `true` 时列出正文超链接（根上 `hyperlinks`）以及每个页眉、页脚容器上的 `hyperlinks`
+  - 为 `true` 时列出正文 `w:hyperlink`（根上 `hyperlinks`）以及每个页眉、页脚容器上的 `hyperlinks`
   - 不依赖 `from` / `maxParas`
   - 省略或 `false` 则只有 `hyperlinkCount`，没有名单
+  - DrawingML 链不进这份名单，而在图 / 文本框节点的 `hyperlink` 字段
 - **`scope.bookmarks`**（否）
   - 为 `true` 时列出正文书签（根上 `bookmarks`）以及每个页眉、页脚容器上的 `bookmarks`
   - 不依赖 `from` / `maxParas`
@@ -1022,7 +1044,7 @@ xlsx / pptx 的 `scope.tables` 不是同一件事：xlsx 仍拒绝；pptx 展开
 - 文档根上的 `tableCount` 始终出现，只计主文档里被收入的 `w:tbl` 个数（含嵌套表，判定见上文表 id 那节），不含页眉页脚，也不含框内、注内、批注内的表。没有表则为 `0`。根上不挂正文 `tables`，除非给了 `scope.tables`。
 - 文档根上的 `revisionCount` 始终出现，只计主文档里被收入的修订节点个数（判定见上文修订 id 那节），不含页眉页脚，也不含框内、注内、批注内的修订。没有修订则为 `0`。
   根上不挂正文 `revisions`，除非给了 `scope.revisions`。
-- 文档根上的 `hyperlinkCount` 始终出现，只计主文档里被收入的 `w:hyperlink` 个数（判定见上文超链接 id 那节），不含页眉页脚，也不含框内、注内、批注内的链。没有链则为 `0`。
+- 文档根上的 `hyperlinkCount` 始终出现，只计主文档里被收入的 `w:hyperlink` 个数（判定见上文超链接 id 那节），不含页眉页脚，也不含框内、注内、批注内的链，也不含 DrawingML `a:hlinkClick`。没有链则为 `0`。
   根上不挂正文 `hyperlinks`，除非给了 `scope.hyperlinks`。
 - 文档根上的 `bookmarkCount` 始终出现，只计主文档里被收入的书签个数（判定见上文书签 id 那节），不含页眉页脚，也不含框内、注内、批注内的书签。没有书签则为 `0`。
   根上不挂正文 `bookmarks`，除非给了 `scope.bookmarks`。
@@ -1121,10 +1143,12 @@ xlsx / pptx 的 `scope.tables` 不是同一件事：xlsx 仍拒绝；pptx 展开
   没有 `svgBlip` 时，按 image 关系 Target 扩展名：
   `.emf` 为 `image/x-emf`，`.wmf` 为 `image/x-wmf`，`.tif` / `.tiff` 为 `image/tiff`。
   PNG / JPEG / GIF / BMP 没有该字段。不读媒体字节，不把原图放进树。
+  最后始终跟 `hyperlink`（`null` 或对象，字段顺序 `kind`、`rId`、`url`、`anchor`、`tooltip`），见上文 DrawingML 链。
 - `scope.textBoxes` 为 `true` 时，每个页眉、页脚节点带 `textBoxes`；若同时给了 `from` 与 `maxParas`，切片里每段也带 `textBoxes`。否则这些节点上都没有该字段。
   只给 `textBoxes`、不给 `from` / `maxParas`：只展开页眉页脚容器上的框。
-  每个框的字段顺序：`id`、`docPrId`、`name`、`kind`、`cx`、`cy`、`wrap`、`link`、`paraCount`、`pictureCount`、`chartCount`、`smartArtCount`、`stable`，
+  每个框的字段顺序：`id`、`docPrId`、`name`、`kind`、`cx`、`cy`、`wrap`、`link`、`paraCount`、`pictureCount`、`chartCount`、`smartArtCount`、`stable`、`hyperlink`，
   有框内段名单时再跟 `paragraphs`，有框内图名单时再跟 `pictures`，给了 `scope.charts` 时再跟 `charts`，给了 `scope.smartArt` 时再跟 `smartArts`。
+  `hyperlink` 为 `null` 或对象（字段顺序 `kind`、`rId`、`url`、`anchor`、`tooltip`），见上文 DrawingML 链。
   `chartCount` / `smartArtCount` 始终出现，只计该框 `w:txbxContent` 内、再遇嵌套 `w:txbxContent` 停住之后的图表与 SmartArt。框内图表与 SmartArt 不挂到文档根，也不挂到宿主段落。
 - `scope.connectors` 为 `true` 时，每个页眉、页脚节点带 `connectors`；若同时给了 `from` 与 `maxParas`，切片里每段也带 `connectors`。否则这些节点上都没有该字段。
   只给 `connectors`、不给 `from` / `maxParas`：只展开页眉页脚容器上的连接线。
@@ -1247,7 +1271,9 @@ xlsx / pptx 的 `scope.tables` 不是同一件事：xlsx 仍拒绝；pptx 展开
   每条字段顺序：`id`、`index`、`kind`、`rId`、`url`、`anchor`、`tooltip`、`host`、`text`。`kind` 为 `url`（有 `r:id`）或 `anchor`（没有 `r:id`）。
   `rId` 是关系 id 原文，缺则为 `null`。`url` 是该关系的 `Target` 原文，缺关系则为 `null`。`anchor` 是 `w:anchor` 原文，缺则为 `null`。
   有 `r:id` 时树上仍可带 `anchor`，但规范说跳转时忽略它。`tooltip` 取 `w:tooltip`，缺则为 `null`。`host` 是所在段落 id；不在任何 `w:p` 里则为 `null`。
-  `text` 为该节点内可见 `w:t` 拼接。pptx 的 `scope.hyperlinks` 见 [pptx 响应](json-contract-pptx.md#响应)。
+  `text` 为该节点内可见 `w:t` 拼接。HYPERLINK 域不进本名单。DrawingML 链不进本名单。
+  图 / 文本框节点另有 `hyperlink`：`null` 或对象，字段顺序 `kind`、`rId`、`url`、`anchor`、`tooltip`。
+  pptx 的 `scope.hyperlinks` 见 [pptx 响应](json-contract-pptx.md#响应)。
   xlsx 的 `scope.hyperlinks` 见 [xlsx 响应](json-contract-xlsx.md#响应)。
 - `scope.bookmarks` 为 `true` 时，根上带 `bookmarks`（正文），每个页眉、页脚容器带 `bookmarks`。没有书签时为空数组。按该故事里被收入的 `w:bookmarkStart` 的文档顺序。
   每条字段顺序：`id`、`index`、`name`、`xmlId`、`start`、`end`。`name` 是 `w:name` 原文。`xmlId` 是 `w:id` 原文，缺则为 `null`。
@@ -1726,6 +1752,7 @@ ECMA-376 §14.2.7 / DrawingML `a:theme`）。
 | `textBoxes[].text` | 框内第一段可见文本，可空。省略当作 `""` |
 | `textBoxes[].cx` | 可选。宽度，EMU。省略为 `1828800` |
 | `textBoxes[].cy` | 可选。高度，EMU。省略为 `914400` |
+| `textBoxes[].hyperlink` | 本期不写。出现报未知字段。见待做 52 |
 
 - **`pictures[].file`**
   - 本地路径，与 `insertPicture` 相同
@@ -1742,6 +1769,10 @@ ECMA-376 §14.2.7 / DrawingML `a:theme`）。
   - `kind` 为 `inline` 时必须省略
 - **`pictures[].alignH` / `alignV` / `offsetX` / `offsetY`**
   - 仅浮动，规则与 `setPictureWrap` 相同
+- **`pictures[].hyperlink`**
+  - 本期不写
+  - 出现报未知字段
+  - 见待做 52
 
 | `smartArts[].layout` | 必须。`list`、`org` 或 `cycle`，与 `insertSmartArt` 相同 |
 | `smartArts[].points` | 可选。与 `insertSmartArt` 相同；省略则用该版式的缺省占位点 |
@@ -2584,7 +2615,7 @@ xlsx / pptx 上发此 op 报 `InvalidField`。
 去掉配对的 `w:bookmarkStart` 与 `w:bookmarkEnd`。不改指向该书签的 `w:hyperlink/@w:anchor`。找不到报 `IdNotFound`。id 不是书签 id 报 `InvalidId`。
 xlsx / pptx 上发此 op 报 `InvalidField`。
 
-示例见 `docs/examples/docx-apply-hyperlink.json`。
+示例见 `docs/examples/docx-apply-hyperlink.json`、`docs/examples/docx-apply-drawing-hlink.json`。
 
 ### insertField
 

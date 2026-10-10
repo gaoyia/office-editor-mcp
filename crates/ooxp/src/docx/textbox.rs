@@ -118,6 +118,11 @@ pub fn textboxes_json(
             "smartArtCount": b.smart_art_count,
             "stable": b.stable,
         });
+        let rels = Relationships::from_package(pkg, host_part)?;
+        node["hyperlink"] = match key_of_info(b).and_then(|k| find_textbox_drawing(host, &k)) {
+            Some(d) => super::drawing_hlink::inspect_textbox(d, Some(&rels)),
+            None => Value::Null,
+        };
         if content {
             fill_one_box(
                 pkg,
@@ -642,6 +647,11 @@ pub fn find_textbox_drawing_mut<'a>(
     find_drawing_by_key_mut(host, key, &mut index)
 }
 
+pub fn find_textbox_drawing<'a>(host: &'a Element, key: &TxbxKey) -> Option<&'a Element> {
+    let mut index = 0usize;
+    find_drawing_by_key(host, key, &mut index)
+}
+
 pub fn with_wsp_mut<T>(
     host: &mut Element,
     key: &TxbxKey,
@@ -906,6 +916,38 @@ fn find_txbx_content_mut(el: &mut Element) -> Option<&mut Element> {
     for child in children {
         if let Node::Element(e) = child {
             if let Some(found) = find_txbx_content_mut(e) {
+                return Some(found);
+            }
+        }
+    }
+    None
+}
+
+fn find_drawing_by_key<'a>(
+    el: &'a Element,
+    key: &TxbxKey,
+    index: &mut usize,
+) -> Option<&'a Element> {
+    if el.local_name() == "txbxContent" {
+        return None;
+    }
+    if el.local_name() == "AlternateContent" {
+        if let Some(i) = first_alt_child_index(el) {
+            if let Node::Element(child) = &el.children[i] {
+                return find_drawing_by_key(child, key, index);
+            }
+        }
+        return None;
+    }
+    if el.local_name() == "drawing" {
+        if drawing_matches(el, key, index) {
+            return Some(el);
+        }
+        return None;
+    }
+    for n in &el.children {
+        if let Node::Element(e) = n {
+            if let Some(found) = find_drawing_by_key(e, key, index) {
                 return Some(found);
             }
         }
@@ -1588,6 +1630,18 @@ fn info_of_target(root: &Element, t: &TxbxTarget) -> Option<TxbxInfo> {
     boxes
         .into_iter()
         .find(|b| matches_info(&b.doc_pr_id, &b.id, &t.key))
+}
+
+fn key_of_info(b: &TxbxInfo) -> Option<TxbxKey> {
+    match &b.doc_pr_id {
+        Some(d) => Some(TxbxKey::DocPr(d.clone())),
+        None => {
+            b.id.rsplit("/txbx:index:")
+                .next()
+                .and_then(|s| s.parse().ok())
+                .map(TxbxKey::Index)
+        }
+    }
 }
 
 fn matches_info(doc_pr_id: &Option<String>, id: &str, key: &TxbxKey) -> bool {

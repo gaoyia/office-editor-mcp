@@ -27,6 +27,7 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 同日补跑 `docx-model3d.ps1`，D3d1–D3d6 通过。Word 行内 COM `Type=19`，无 Repair。
 2026-10-10 补跑 `docx-charts-rare-remain.ps1`，Ccx1–Ccx5 通过。无 Repair。
 2026-10-10 补跑 `docx-east-asia.ps1`，Ea1–Ea8 通过。无 Repair。COM `FarEastLineBreakControl` / `HangingPunctuation` / `AddSpaceBetweenFarEastAndAlpha` 对得上，`EmphasisMark=1`。
+2026-10-10 补跑 `docx-drawing-hlink.ps1`，Dh1–Dh6 通过。无 Repair。COM 图上 `Hyperlink.Address` 对得上。`hyperlinkCount` 仍为 0。内部书签关系 `Target="#SrcBm"` 且无 `TargetMode`。
 
 - **C1** ✅
   - Word 16.0 能打开 `manual-check/office/out/docx-create.docx`，标题栏无 Repair
@@ -159,6 +160,14 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 - **Hb1–Hb7** ✅
   - Word 16.0：`docx-hyperlink.ps1`，7 PASS / 0 FAIL
   - 名单、改 URL、插链、删链、插书签、删书签、带链段 `setParaText` 得 `NotImplemented`
+  - 标题栏无 Repair
+- **Dh1–Dh6** ✅
+  - Word 16.0：`docx-drawing-hlink.ps1`，6 PASS / 0 FAIL
+  - 图上 `insertHyperlink` 后 inspect `hyperlink.url` 与 COM `Hyperlink.Address` 对得上，`hyperlinkCount` 为 0
+  - `setHyperlink` 改 URL；`deleteHyperlink` 后 `hyperlink` 为 `null`、图还在
+  - 文本框链 inspect 对得上
+  - 内部书签 `kind=anchor`，关系 `Target="#SrcBm"` 且无 `TargetMode`
+  - 图上带 `text`、框内图分别得 `InvalidField` / `InvalidId`
   - 标题栏无 Repair
 - **Fd1–Fd7** ✅
   - Word 16.0：`docx-field.ps1`，7 PASS / 0 FAIL
@@ -973,6 +982,33 @@ Word 跟踪修订下改表单元格底纹、插入空段、删除表行。`inspe
 - **Hb7**
   - 检查：改字拒绝
   - 通过标准：对仍带本期超链接的段发 `setParaText` 得 `NotImplemented`，文件未写坏
+
+## 图与形状超链接
+
+正文与页眉页脚里图、文本框上的 `a:hlinkClick`。不进 `hyperlinks` 名单，不计入 `hyperlinkCount`。用库 create 产物再 apply。脚本 `manual-check/office/cases/docx-drawing-hlink.ps1`。编号用 **Dh**。不要和 Hb、B、T 撞。
+
+- **Dh1**
+  - 检查：图上链
+  - 通过标准：`insertPicture` 后再 `insertHyperlink` 点图 id，inspect `hyperlink.url` 对得上
+  - Word 无修复
+  - COM 该形状 `Hyperlink.Address` 对得上
+  - `hyperlinkCount` 仍为 0
+- **Dh2**
+  - 检查：改 URL
+  - 通过标准：`setHyperlink` 改 `url` 后 COM 地址更新，无修复
+- **Dh3**
+  - 检查：删链
+  - 通过标准：`deleteHyperlink` 后 `hyperlink` 为 `null`、图还在、无修复
+- **Dh4**
+  - 检查：文本框链
+  - 通过标准：`insertTextBox` 后再 `insertHyperlink` 点框 id，inspect `hyperlink.url` 对得上，无修复
+- **Dh5**
+  - 检查：内部书签
+  - 通过标准：图上 `insertHyperlink` 给 `anchor` 后 inspect `kind` 为 `anchor`，关系 Target 以 `#` 开头且无 `TargetMode`，无修复
+- **Dh6**
+  - 检查：拒写
+  - 通过标准：对图发带 `text` 的 `insertHyperlink`、对框内图发 `insertHyperlink` 得 `InvalidField` / `InvalidId`，未写文件
+  - 不强制开 Word
 
 ## 域
 

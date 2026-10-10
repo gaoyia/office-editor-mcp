@@ -60,6 +60,7 @@ $order = @(
     'docx-revision'
     'docx-revision-remain'
     'docx-hyperlink'
+    'docx-drawing-hlink'
     'docx-field'
     'docx-field-types'
     'docx-numbering'

@@ -3999,6 +3999,57 @@
           }
         }
       ]
+    },
+    "docxDrawingHyperlink": {
+      "description": "inspect 图 / 文本框上的 DrawingML 链。没有链则为 null。create 本期不写。",
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "rId",
+            "url",
+            "anchor",
+            "tooltip"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "enum": [
+                "url",
+                "anchor"
+              ]
+            },
+            "rId": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "url": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "anchor": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "tooltip": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        }
+      ]
     }
   }
 }
