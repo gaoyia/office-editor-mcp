@@ -382,9 +382,9 @@ fn formula_must_be_line_and_gets_sheet_prefix() {
 }
 
 #[test]
-fn create_rejects_sheet_sparklines() {
+fn create_empty_sparklines_is_ok() {
     let path = tmp("create");
-    let err = run(
+    run(
         &json!({
             "schemaVersion": 1,
             "action": "create",
@@ -399,8 +399,8 @@ fn create_rejects_sheet_sparklines() {
         .to_string(),
         None,
     )
-    .unwrap_err();
-    assert_eq!(err.code(), ErrorCode::InvalidField);
+    .unwrap();
+    assert_eq!(inspect_sparks(&path)["sheets"][0]["sparklineCount"], 0);
 }
 
 #[test]

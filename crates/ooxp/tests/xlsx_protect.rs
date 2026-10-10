@@ -349,7 +349,7 @@ fn missing_field_wrong_id_password_and_create() {
     assert_eq!(err_id.code(), ErrorCode::InvalidId);
 
     let created = tmp("create-prot");
-    let err_create = run(
+    run(
         &json!({
             "schemaVersion": 1,
             "action": "create",
@@ -364,14 +364,18 @@ fn missing_field_wrong_id_password_and_create() {
         .to_string(),
         None,
     )
-    .unwrap_err();
-    assert_eq!(err_create.code(), ErrorCode::InvalidField);
+    .unwrap();
+    assert_eq!(
+        inspect(&created)["sheets"][0]["sheetProtection"]["enforced"],
+        true
+    );
 
-    let err_wb = run(
+    let created_wb = tmp("create-wb");
+    run(
         &json!({
             "schemaVersion": 1,
             "action": "create",
-            "path": created.to_string_lossy(),
+            "path": created_wb.to_string_lossy(),
             "workbook": {
                 "workbookProtection": { "lockStructure": true },
                 "sheets": [{ "name": "Sheet1" }]
@@ -380,8 +384,11 @@ fn missing_field_wrong_id_password_and_create() {
         .to_string(),
         None,
     )
-    .unwrap_err();
-    assert_eq!(err_wb.code(), ErrorCode::InvalidField);
+    .unwrap();
+    assert_eq!(
+        inspect(&created_wb)["workbookProtection"]["lockStructure"],
+        true
+    );
 }
 
 #[test]

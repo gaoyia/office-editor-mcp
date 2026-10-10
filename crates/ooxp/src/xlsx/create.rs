@@ -75,7 +75,7 @@ pub fn create_with_workbook_ct(workbook: &Value, workbook_ct: &str) -> Result<Ve
         )
     })?;
     for k in obj.keys() {
-        if k != "sheets" && k != "props" {
+        if !super::create_remain::is_workbook_key(k) {
             return Err(Error::with_path(
                 ErrorKind::UnknownField { field: k.clone() },
                 format!("workbook.{k}"),
@@ -283,7 +283,8 @@ pub fn create_with_workbook_ct(workbook: &Value, workbook_ct: &str) -> Result<Ve
     attach_hyperlinks(&mut pkg, &sheets)?;
     attach_header_footers(&mut pkg, &sheets)?;
     attach_chartsheets(&mut pkg, &sheets)?;
-    pkg.save_to_vec()
+    let bytes = pkg.save_to_vec()?;
+    super::create_remain::apply_remain(bytes, obj)
 }
 
 fn parse_sheet(v: &Value, i: usize) -> Result<NewSheet, Error> {
@@ -311,23 +312,7 @@ fn parse_sheet(v: &Value, i: usize) -> Result<NewSheet, Error> {
         return parse_chartsheet_sheet(obj, i, name);
     }
     for k in obj.keys() {
-        if !matches!(
-            k.as_str(),
-            "name"
-                | "kind"
-                | "cells"
-                | "pictures"
-                | "charts"
-                | "headerFooters"
-                | "comments"
-                | "hyperlinks"
-                | "textBoxes"
-                | "shapes"
-                | "connectors"
-                | "smartArts"
-                | "model3ds"
-                | "maths"
-        ) {
+        if !super::create_remain::is_sheet_key(k) {
             return Err(Error::with_path(
                 ErrorKind::UnknownField { field: k.clone() },
                 format!("{prefix}.{k}"),
@@ -409,22 +394,7 @@ fn parse_chartsheet_sheet(
 ) -> Result<NewSheet, Error> {
     let prefix = format!("workbook.sheets[{i}]");
     for k in obj.keys() {
-        if !matches!(
-            k.as_str(),
-            "name"
-                | "kind"
-                | "type"
-                | "ofPieType"
-                | "stockKind"
-                | "surfaceKind"
-                | "layoutId"
-                | "title"
-                | "series"
-                | "dataFrom"
-                | "dataSheet"
-                | "cx"
-                | "cy"
-        ) {
+        if !super::create_remain::is_chartsheet_key(k) {
             return Err(Error::with_path(
                 ErrorKind::UnknownField { field: k.clone() },
                 format!("{prefix}.{k}"),
@@ -2402,7 +2372,7 @@ fn parse_new_cell(v: &Value, i: usize, j: usize) -> Result<Option<NewCell>, Erro
         )
     })?;
     for k in obj.keys() {
-        if !matches!(k.as_str(), "ref" | "value" | "formula") {
+        if !super::create_remain::is_cell_key(k) {
             return Err(Error::with_path(
                 ErrorKind::UnknownField { field: k.clone() },
                 format!("workbook.sheets[{i}].cells[{j}].{k}"),

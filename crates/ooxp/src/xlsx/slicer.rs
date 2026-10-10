@@ -299,7 +299,15 @@ fn insert_table(
     index: usize,
     op_index: usize,
 ) -> Result<(), Error> {
-    let (table_id, display, col_id) = table_column(pkg, sheet_part, index, &op.field, op_index)?;
+    let (table_id, display, col_id) = table_column(
+        pkg,
+        &sheet_doc.root,
+        sheet_part,
+        &op.sheet,
+        index,
+        &op.field,
+        op_index,
+    )?;
     let cx = op.cx.unwrap_or(DEFAULT_CX);
     let cy = op.cy.unwrap_or(DEFAULT_CY);
     let (to, to_off_x, to_off_y) = dest_to(&sheet_doc.root, op, cx, cy);
@@ -907,18 +915,22 @@ fn table_display_by_id(pkg: &Package, wb_part: &str, table_id: Option<u32>) -> O
     None
 }
 
+/// 读当前工作表文档上的 `tableParts`，不要从包里重解析。
+/// 同一批 apply 刚插入的表还只写在 dirty 文档里。
 fn table_column(
     pkg: &Package,
+    sheet: &Element,
     sheet_part: &str,
+    sheet_name: &str,
     index: usize,
     field: &str,
     op_index: usize,
 ) -> Result<(u32, String, u32), Error> {
-    let sheet = xml::parse(pkg.get(sheet_part)?)?;
-    let parent = sheet.root.child_by_local("tableParts").ok_or_else(|| {
+    let table_id = format!("sheet:{sheet_name}/table:{index}");
+    let parent = sheet.child_by_local("tableParts").ok_or_else(|| {
         Error::with_path(
             ErrorKind::SheetTableNotFound {
-                id: format!("sheet:?/table:{index}"),
+                id: table_id.clone(),
             },
             format!("ops[{op_index}].source"),
         )
@@ -926,9 +938,7 @@ fn table_column(
     let parts = parent.children_by_local("tablePart");
     if index == 0 || index > parts.len() {
         return Err(Error::with_path(
-            ErrorKind::SheetTableNotFound {
-                id: format!("sheet:?/table:{index}"),
-            },
+            ErrorKind::SheetTableNotFound { id: table_id },
             format!("ops[{op_index}].source"),
         ));
     }
@@ -947,7 +957,7 @@ fn table_column(
     })?;
     let part = resolve_rel_target(sheet_part, &rel.target)?;
     let doc = xml::parse(pkg.get(&part)?)?;
-    let table_id = doc
+    let xml_id = doc
         .root
         .attr("id")
         .and_then(|s| s.parse::<u32>().ok())
@@ -967,7 +977,7 @@ fn table_column(
                 .attr("id")
                 .and_then(|s| s.parse::<u32>().ok())
                 .unwrap_or(1);
-            return Ok((table_id, display, col_id));
+            return Ok((xml_id, display, col_id));
         }
     }
     Err(field_err(field, op_index))

@@ -420,7 +420,7 @@ fn duplicate_name_and_chartsheet_and_missing_fields() {
     );
 
     let created = tmp("create-pr");
-    let err_create = run(
+    run(
         &json!({
             "schemaVersion": 1,
             "action": "create",
@@ -435,8 +435,12 @@ fn duplicate_name_and_chartsheet_and_missing_fields() {
         .to_string(),
         None,
     )
-    .unwrap_err();
-    assert_eq!(err_create.code(), ErrorCode::InvalidField);
+    .unwrap();
+    let created_tree = inspect_with(&created, json!({ "protectedRanges": true }));
+    assert_eq!(
+        created_tree["sheets"][0]["protectedRanges"][0]["name"],
+        "Range1"
+    );
 }
 
 #[test]

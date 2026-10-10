@@ -20,6 +20,33 @@
         },
         "props": {
           "$ref": "request.schema.json#/$defs/createProps"
+        },
+        "definedNames": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/xlsxCreateDefinedName"
+          }
+        },
+        "connections": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/xlsxCreateConnection"
+          }
+        },
+        "externalLinks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/xlsxCreateExternalLink"
+          }
+        },
+        "customViews": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/xlsxCreateCustomView"
+          }
+        },
+        "workbookProtection": {
+          "$ref": "#/$defs/xlsxCreateWorkbookProtection"
         }
       }
     },
@@ -164,6 +191,111 @@
           "type": "array",
           "items": {
             "$ref": "#/$defs/xlsxModel3dCreate"
+          }
+        },
+        "cols": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/xlsxCreateCol"
+          }
+        },
+        "rows": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/xlsxCreateRow"
+          }
+        },
+        "merges": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "dataValidations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/xlsxCreateDataValidation"
+          }
+        },
+        "conditionalFormats": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/xlsxCreateConditionalFormat"
+          }
+        },
+        "tables": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/xlsxCreateTable"
+          }
+        },
+        "pivots": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/xlsxCreatePivot"
+          }
+        },
+        "print": {
+          "$ref": "#/$defs/xlsxCreatePrint"
+        },
+        "view": {
+          "$ref": "#/$defs/xlsxCreateView"
+        },
+        "autoFilter": {
+          "$ref": "#/$defs/xlsxCreateAutoFilter"
+        },
+        "sortState": {
+          "$ref": "#/$defs/xlsxCreateSortState"
+        },
+        "groupRows": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "groupCols": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "outline": {
+          "$ref": "#/$defs/xlsxCreateOutline"
+        },
+        "sheetProtection": {
+          "$ref": "#/$defs/xlsxCreateSheetProtection"
+        },
+        "protectedRanges": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/xlsxCreateProtectedRange"
+          }
+        },
+        "sparklines": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/xlsxCreateSparkline"
+          }
+        },
+        "oleObjects": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/xlsxCreateOle"
+          }
+        },
+        "slicers": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/xlsxCreateSlicer"
+          }
+        },
+        "groups": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/xlsxCreateGroup"
           }
         }
       }
@@ -857,13 +989,1062 @@
         "formula": {
           "type": "string",
           "pattern": "^="
+        },
+        "shared": {
+          "type": "boolean"
+        },
+        "sharedRef": {
+          "type": "string",
+          "minLength": 1
+        },
+        "array": {
+          "type": "boolean"
+        },
+        "arrayRef": {
+          "type": "string",
+          "minLength": 1
+        },
+        "numFmt": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        },
+        "font": {
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "fill": {
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "border": {
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "align": {
+          "type": [
+            "object",
+            "null"
+          ]
         }
       },
       "not": {
-        "required": [
-          "value",
-          "formula"
+        "anyOf": [
+          {
+            "required": [
+              "value",
+              "formula"
+            ]
+          },
+          {
+            "required": [
+              "dataTable"
+            ]
+          },
+          {
+            "required": [
+              "dataTableRef"
+            ]
+          }
         ]
+      }
+    },
+    "xlsxCreateDefinedName": {
+      "type": "object",
+      "required": [
+        "name",
+        "formula"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "formula": {
+          "type": "string",
+          "minLength": 1
+        },
+        "hidden": {
+          "type": "boolean"
+        },
+        "localSheet": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "xlsxCreateConnection": {
+      "type": "object",
+      "required": [
+        "name",
+        "type"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "type": {
+          "enum": [
+            "web",
+            "text"
+          ]
+        },
+        "url": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sourceFile": {
+          "type": "string",
+          "minLength": 1
+        },
+        "description": {
+          "type": "string"
+        }
+      }
+    },
+    "xlsxCreateExternalLink": {
+      "type": "object",
+      "required": [
+        "path"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sheets": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "xlsxCreateCustomView": {
+      "type": "object",
+      "required": [
+        "name"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "includePrintSettings": {
+          "type": "boolean"
+        },
+        "includeHiddenRowCol": {
+          "type": "boolean"
+        }
+      }
+    },
+    "xlsxCreateWorkbookProtection": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "lockStructure": {
+          "type": "boolean"
+        },
+        "lockWindows": {
+          "type": "boolean"
+        },
+        "lockRevision": {
+          "type": "boolean"
+        },
+        "password": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "xlsxCreateCol": {
+      "type": "object",
+      "required": [
+        "col"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "col": {
+          "type": "string",
+          "minLength": 1
+        },
+        "width": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "exclusiveMinimum": 0,
+          "maximum": 255
+        },
+        "bestFit": {
+          "type": "boolean"
+        },
+        "hidden": {
+          "type": "boolean"
+        }
+      },
+      "anyOf": [
+        {
+          "required": [
+            "width"
+          ]
+        },
+        {
+          "required": [
+            "bestFit"
+          ]
+        },
+        {
+          "required": [
+            "hidden"
+          ]
+        }
+      ]
+    },
+    "xlsxCreateRow": {
+      "type": "object",
+      "required": [
+        "row"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "row": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1048576
+        },
+        "toRow": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1048576
+        },
+        "height": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "exclusiveMinimum": 0,
+          "maximum": 409
+        },
+        "hidden": {
+          "type": "boolean"
+        }
+      },
+      "anyOf": [
+        {
+          "required": [
+            "height"
+          ]
+        },
+        {
+          "required": [
+            "hidden"
+          ]
+        }
+      ]
+    },
+    "xlsxCreateDataValidation": {
+      "type": "object",
+      "required": [
+        "sqref",
+        "type"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "sqref": {
+          "oneOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          ]
+        },
+        "type": {
+          "enum": [
+            "none",
+            "whole",
+            "decimal",
+            "list",
+            "date",
+            "time",
+            "textLength",
+            "custom"
+          ]
+        },
+        "operator": {
+          "enum": [
+            "between",
+            "notBetween",
+            "equal",
+            "notEqual",
+            "lessThan",
+            "lessThanOrEqual",
+            "greaterThan",
+            "greaterThanOrEqual"
+          ]
+        },
+        "formula1": {
+          "type": "string"
+        },
+        "formula2": {
+          "type": "string"
+        },
+        "allowBlank": {
+          "type": "boolean"
+        },
+        "dropdown": {
+          "type": "boolean"
+        },
+        "showInputMessage": {
+          "type": "boolean"
+        },
+        "showErrorMessage": {
+          "type": "boolean"
+        },
+        "errorStyle": {
+          "enum": [
+            "stop",
+            "warning",
+            "information"
+          ]
+        },
+        "errorTitle": {
+          "type": "string"
+        },
+        "error": {
+          "type": "string"
+        },
+        "promptTitle": {
+          "type": "string"
+        },
+        "prompt": {
+          "type": "string"
+        }
+      }
+    },
+    "xlsxCreateConditionalFormat": {
+      "type": "object",
+      "required": [
+        "sqref",
+        "type"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "sqref": {
+          "$ref": "#/$defs/cfSqref"
+        },
+        "type": {
+          "$ref": "#/$defs/cfWritableType"
+        },
+        "operator": {
+          "$ref": "#/$defs/cfOperator"
+        },
+        "formulas": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 3,
+          "items": {
+            "type": "string"
+          }
+        },
+        "dxf": {
+          "$ref": "#/$defs/cfDxf"
+        },
+        "colorScale": {
+          "$ref": "#/$defs/cfColorScale"
+        },
+        "dataBar": {
+          "$ref": "#/$defs/cfDataBar"
+        },
+        "iconSet": {
+          "$ref": "#/$defs/cfIconSet"
+        },
+        "priority": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "stopIfTrue": {
+          "type": "boolean"
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1
+        },
+        "rank": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "percent": {
+          "type": "boolean"
+        },
+        "bottom": {
+          "type": "boolean"
+        },
+        "aboveAverage": {
+          "type": "boolean"
+        },
+        "equalAverage": {
+          "type": "boolean"
+        },
+        "stdDev": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "xlsxCreateTable": {
+      "type": "object",
+      "required": [
+        "ref"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "ref": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "columns": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "xlsxCreatePivot": {
+      "type": "object",
+      "required": [
+        "source",
+        "location",
+        "values"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "source": {
+          "$ref": "#/$defs/pivotSource"
+        },
+        "location": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "rows": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "cols": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "filters": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "values": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "xlsxCreatePrint": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "left": {
+          "type": "number",
+          "minimum": 0
+        },
+        "right": {
+          "type": "number",
+          "minimum": 0
+        },
+        "top": {
+          "type": "number",
+          "minimum": 0
+        },
+        "bottom": {
+          "type": "number",
+          "minimum": 0
+        },
+        "header": {
+          "type": "number",
+          "minimum": 0
+        },
+        "footer": {
+          "type": "number",
+          "minimum": 0
+        },
+        "paperSize": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "orientation": {
+          "enum": [
+            "portrait",
+            "landscape"
+          ]
+        },
+        "scale": {
+          "type": "integer",
+          "minimum": 10,
+          "maximum": 400
+        },
+        "fitToPage": {
+          "type": "boolean"
+        },
+        "fitToWidth": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "fitToHeight": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "gridLines": {
+          "type": "boolean"
+        },
+        "headings": {
+          "type": "boolean"
+        },
+        "hCenter": {
+          "type": "boolean"
+        },
+        "vCenter": {
+          "type": "boolean"
+        },
+        "printArea": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        },
+        "rowBreaks": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "colBreaks": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      }
+    },
+    "xlsxCreateView": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "zoom": {
+          "type": "integer",
+          "minimum": 10,
+          "maximum": 400
+        },
+        "frozenRows": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1048575
+        },
+        "frozenCols": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 16383
+        },
+        "splitRows": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1048575
+        },
+        "splitCols": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 16383
+        },
+        "activeCell": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "xlsxCreateAutoFilter": {
+      "type": "object",
+      "required": [
+        "ref"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "ref": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        }
+      }
+    },
+    "xlsxCreateSortState": {
+      "type": "object",
+      "required": [
+        "ref",
+        "columns"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "ref": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        },
+        "caseSensitive": {
+          "type": "boolean"
+        },
+        "columnSort": {
+          "type": "boolean"
+        },
+        "sortMethod": {
+          "enum": [
+            "none",
+            "pinYin",
+            "stroke"
+          ]
+        },
+        "columns": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": [
+              "ref"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "ref": {
+                "type": "string",
+                "minLength": 1
+              },
+              "descending": {
+                "type": "boolean"
+              },
+              "sortBy": {
+                "enum": [
+                  "value",
+                  "cellColor",
+                  "fontColor",
+                  "icon"
+                ]
+              },
+              "customList": {
+                "type": "string",
+                "minLength": 1
+              },
+              "dxfId": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "color": {
+                "$ref": "#/$defs/cellColor"
+              },
+              "iconSet": {
+                "type": "string",
+                "minLength": 1
+              },
+              "iconId": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          }
+        }
+      }
+    },
+    "xlsxCreateOutline": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "summaryBelow": {
+          "type": "boolean"
+        },
+        "summaryRight": {
+          "type": "boolean"
+        },
+        "collapseRows": {
+          "type": "string",
+          "minLength": 1
+        },
+        "collapseCols": {
+          "type": "string",
+          "minLength": 1
+        },
+        "collapsed": {
+          "type": "boolean"
+        }
+      }
+    },
+    "xlsxCreateSheetProtection": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enforced": {
+          "type": "boolean"
+        },
+        "objects": {
+          "type": "boolean"
+        },
+        "scenarios": {
+          "type": "boolean"
+        },
+        "formatCells": {
+          "type": "boolean"
+        },
+        "formatColumns": {
+          "type": "boolean"
+        },
+        "formatRows": {
+          "type": "boolean"
+        },
+        "insertColumns": {
+          "type": "boolean"
+        },
+        "insertRows": {
+          "type": "boolean"
+        },
+        "insertHyperlinks": {
+          "type": "boolean"
+        },
+        "deleteColumns": {
+          "type": "boolean"
+        },
+        "deleteRows": {
+          "type": "boolean"
+        },
+        "selectLockedCells": {
+          "type": "boolean"
+        },
+        "sort": {
+          "type": "boolean"
+        },
+        "autoFilter": {
+          "type": "boolean"
+        },
+        "pivotTables": {
+          "type": "boolean"
+        },
+        "selectUnlockedCells": {
+          "type": "boolean"
+        },
+        "password": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "xlsxCreateProtectedRange": {
+      "type": "object",
+      "required": [
+        "name",
+        "sqref"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255
+        },
+        "sqref": {
+          "oneOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          ]
+        },
+        "password": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "xlsxCreateSparkline": {
+      "type": "object",
+      "required": [
+        "ref",
+        "formula"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "ref": {
+          "type": "string",
+          "minLength": 1
+        },
+        "formula": {
+          "type": "string",
+          "minLength": 1
+        },
+        "type": {
+          "enum": [
+            "line",
+            "column",
+            "stacked"
+          ]
+        },
+        "displayEmptyCellsAs": {
+          "enum": [
+            "gap",
+            "span",
+            "zero"
+          ]
+        },
+        "markers": {
+          "type": "boolean"
+        },
+        "high": {
+          "type": "boolean"
+        },
+        "low": {
+          "type": "boolean"
+        },
+        "first": {
+          "type": "boolean"
+        },
+        "last": {
+          "type": "boolean"
+        },
+        "negative": {
+          "type": "boolean"
+        },
+        "displayXAxis": {
+          "type": "boolean"
+        },
+        "lineWeight": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1584
+        },
+        "minAxisType": {
+          "$ref": "#/$defs/sparkAxisType"
+        },
+        "maxAxisType": {
+          "$ref": "#/$defs/sparkAxisType"
+        },
+        "manualMin": {
+          "type": "number"
+        },
+        "manualMax": {
+          "type": "number"
+        },
+        "colors": {
+          "type": "object"
+        }
+      }
+    },
+    "xlsxCreateOle": {
+      "type": "object",
+      "required": [
+        "file",
+        "from"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "file": {
+          "type": "string",
+          "minLength": 1
+        },
+        "from": {
+          "type": "string",
+          "minLength": 1
+        },
+        "to": {
+          "type": "string",
+          "minLength": 1
+        },
+        "anchor": {
+          "type": "string",
+          "enum": [
+            "oneCell",
+            "twoCell"
+          ]
+        },
+        "cx": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "cy": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "fromOffX": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "fromOffY": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "toOffX": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "toOffY": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "xlsxCreateSlicer": {
+      "type": "object",
+      "required": [
+        "source",
+        "field",
+        "from"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "source": {
+          "type": "string",
+          "minLength": 1
+        },
+        "field": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "slicer",
+            "timeline"
+          ]
+        },
+        "level": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3
+        },
+        "from": {
+          "type": "string",
+          "minLength": 1
+        },
+        "to": {
+          "type": "string",
+          "minLength": 1
+        },
+        "anchor": {
+          "type": "string",
+          "enum": [
+            "oneCell",
+            "twoCell"
+          ]
+        },
+        "cx": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "cy": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "fromOffX": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "fromOffY": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "toOffX": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "toOffY": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "xlsxCreateGroup": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "textBoxes": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "shapes": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "connectors": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
       }
     },
     "setCellOp": {

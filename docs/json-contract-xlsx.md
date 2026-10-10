@@ -284,7 +284,7 @@ URI `{05C60535-1F16-4FD2-B633-F4F36F0B64E0}`，大小写不敏感）。
 有 `@link` 的链接对象、ActiveX `controls` 不进树。`mc:AlternateContent` 只进第一个 `Choice`。
 页眉、`chartsheet`、组合里的 OLE 本期不进树。Excel 16.0 COM 在图表工作表与链接 OLE 上建对象失败，不另开 apply。
 预览图不进 `pictures`。`insertOle` 的 `id` 必须是 `sheet:{name}`。`deleteOle` 的 `id` 必须是 OLE id。对不上的 id 形态报 `InvalidId`。
-不提供改尺寸、位置、图标或 ProgID 的 op。create 本期不写 OLE。docx / pptx 见各自分册。
+不提供改尺寸、位置、图标或 ProgID 的 op。create 可写 OLE。docx / pptx 见各自分册。
 
 工作表 3D 模型挂在该 `worksheet` 上。`{cNvPrId}` 取 Choice 里 `xdr:graphicFrame` 的 `xdr:cNvPr/@id` 原文。
 没有该属性时用 `model3d:index:{k}`，树上 `"stable": false`。`{k}` 只在该表被收入的 3D 模型内从 1 计。
@@ -307,7 +307,7 @@ id 仍是 `sheet:{name}/slicer:{cNvPrId}`，时间线不另开前缀。
 - `a:graphicData/@uri` 为 `http://schemas.microsoft.com/office/drawing/2012/timeslicer`（可带尾斜杠），且 `tsle:timeslicer/@name` 对上 timelines 部件里的 `timeline/@name`
 
 OLAP、没有 drawing 的孤立 slicer / timeline 部件本期不进树。`insertSlicer` 的 `id` 必须是 `sheet:{name}`。
-`deleteSlicer` 的 `id` 必须是切片器 id（含时间线）。对不上的 id 形态报 `InvalidId`。不提供改筛选、样式或标题的 op。create 本期不写切片器或时间线。不在库里执行筛选或刷新透视。
+`deleteSlicer` 的 `id` 必须是切片器 id（含时间线）。对不上的 id 形态报 `InvalidId`。不提供改筛选、样式或标题的 op。create 可写切片器与时间线。不在库里执行筛选或刷新透视。
 
 xlsx 的 `setProtection` 的 `id` 必须是 `sheet:{name}`（该表 `sheetProtection`）或 `xlsx:workbook`（`workbookProtection`）。
 对单元格 id、迷你图 id 或图 id 发此 op 报 `InvalidId`。对 `dialogsheet` / `macrosheet` 报 `NotImplemented`。
@@ -379,19 +379,19 @@ pptx 的 `setProtection` 用 `pptx:presentation` 改 `p:modifyVerifier`，放映
 没有 `@id` 时用 `connection:index:{k}`，树上 `"stable": false`。`{k}` 只在被收入的连接内从 1 计。`deleted="true"` 的连接不进树。
 只读 Connections 部件（至多一份）。queryTable、Power Query、ODBC / OLE DB / OLAP 本期不另编 id；inspect 见到其它 `type` 仍列入，`kind` 为 `"other"`。
 `insertConnection` 的 `id` 必须是 `xlsx:workbook`。`deleteConnection` 的 `id` 必须是连接 id。对不上的 id 形态报 `InvalidId`。不提供改连接或刷新的 op。
-create 本期不写连接。不向数据源发请求，不把查询结果写进 `sheetData`。
+create 可写连接。不向数据源发请求，不把查询结果写进 `sheetData`。
 
 外部工作簿引用挂在工作簿上，不是某张表。id 为 `extlink:{n}`，`{n}` 从 1 起，
 按 `/xl/workbook.xml` 里 `<externalReferences>/<externalReference>` 的文档顺序（ECMA-376 §18.2.8 / §18.14）。
 与单元格公式里的 `[n]` 同一套下标。增删之后旧的 `extlink:{n}` 会变，只够同一次 inspect 之后立刻 apply。不要用关系 `r:id` 或目标文件名编树 id。
 `insertExternalLink` 的 `id` 必须是 `xlsx:workbook`。`setExternalLink` / `deleteExternalLink` 的 `id` 必须是 `extlink:{n}`。
-对不上的 id 形态报 `InvalidId`。create 本期不写外部引用。不打开目标文件，不求值。DDE / OLE 外部链只读进树，不接受改路径。
+对不上的 id 形态报 `InvalidId`。create 可写外部引用。不打开目标文件，不求值。DDE / OLE 外部链只读进树，不接受改路径。
 不要和 `connections.xml` 混用。
 
 自定义视图挂在工作簿上。`{n}` 从 1 起，按 `<customWorkbookView>` 文档顺序（ECMA-376 §18.2.3 / §18.2.4）。
 增删之后旧的 `customView:{n}` 会变，只够同一次 inspect 之后立刻 apply。不要用 `@name` 或 guid 编树 id。
 `insertCustomView` 的 `id` 必须是 `xlsx:workbook`。`deleteCustomView` / `showCustomView` 的 `id` 必须是自定义视图 id。
-对不上的 id 形态报 `InvalidId`。create 本期不写自定义视图。不按视图恢复隐藏行 / 列。
+对不上的 id 形态报 `InvalidId`。create 可写自定义视图。不按视图恢复隐藏行 / 列。
 
 
 ## inspect
@@ -1295,9 +1295,36 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
 | `sheets[].connectors` | 可选。该表 `xdr:cxnSp` 列表。省略或空数组则不写 |
 | `sheets[].smartArts` | 可选。该表 SmartArt 列表。省略或空数组则不写 |
 | `sheets[].model3ds` | 可选。该表工作表 drawing 上的 3D 模型。省略或空数组则不写。图表工作表上出现报 `InvalidField` |
+| `workbook.definedNames` | 可选。复用 `insertDefinedName`。不要 `op` / `id` |
+| `workbook.connections` | 可选。复用 `insertConnection` |
+| `workbook.externalLinks` | 可选。复用 `insertExternalLink` |
+| `workbook.customViews` | 可选。复用 `insertCustomView`。写在视图 / 打印 / 隐藏之后 |
+| `workbook.workbookProtection` | 可选。复用 `setProtection` 点 `xlsx:workbook` |
+| `sheets[].cols` | 可选。`col` 必须。有 `width` / `bestFit` 则走 `setColWidth`，有 `hidden` 再走 `setColHidden` |
+| `sheets[].rows` | 可选。`row` 必须。有 `height` 则走 `setRowHeight`，有 `hidden` 再走 `setRowHidden`。可给 `toRow` |
+| `sheets[].merges` | 可选。A1 闭区间字符串数组，复用 `mergeRange` |
+| `sheets[].dataValidations` | 可选。复用 `insertDataValidation` |
+| `sheets[].conditionalFormats` | 可选。复用 `insertConditionalFormat` |
+| `sheets[].tables` | 可选。复用 `insertSheetTable`。`tables[0]` 之后 id 为 `sheet:{name}/table:1` |
+| `sheets[].pivots` | 可选。复用 `insertPivotTable`。`pivots[0]` 之后 id 为 `sheet:{name}/pivot:1` |
+| `sheets[].print` | 可选。复用 `setPrintSetup` |
+| `sheets[].view` | 可选。复用 `setSheetView` |
+| `sheets[].autoFilter` | 可选。对象，必须有 `ref`，复用 `setAutoFilter` |
+| `sheets[].sortState` | 可选。复用 `setSortState` |
+| `sheets[].groupRows` | 可选。行区间字符串数组，每项复用 `groupRows` |
+| `sheets[].groupCols` | 可选。列区间字符串数组，每项复用 `groupCols` |
+| `sheets[].outline` | 可选。复用 `setOutline` |
+| `sheets[].sheetProtection` | 可选。复用 `setProtection` 点该表 |
+| `sheets[].protectedRanges` | 可选。复用 `insertProtectedRange` |
+| `sheets[].sparklines` | 可选。复用 `insertSparkline` |
+| `sheets[].oleObjects` | 可选。复用 `insertOle` |
+| `sheets[].slicers` | 可选。复用 `insertSlicer`。`source` 用完整表格 / 透视 id |
+| `sheets[].groups` | 可选。把该表 `textBoxes` / `shapes` / `connectors` 包进 `xdr:grpSp` |
 | `cells[].ref` | A1 地址 |
-| `cells[].value` | 数字、字符串、布尔、或 `null`。`null` 表示不写这个格 |
+| `cells[].value` | 数字、字符串、布尔、或 `null`。`null` 表示不写这个格的值 |
 | `cells[].formula` | 以 `=` 开头的公式文本。库不求值 |
+| `cells[].shared` / `sharedRef` / `array` / `arrayRef` | 可选。与 `setCell` 相同。出现 `dataTable` / `dataTableRef` 报 `InvalidField` |
+| `cells[].numFmt` / `font` / `fill` / `border` / `align` | 可选。与 `setCellStyle` 相同 |
 
 | `pictures[].file` | 本地路径，与 `insertPicture` 相同。按文件头认 PNG / JPEG / GIF / BMP / SVG / EMF / WMF / TIFF。缺此字段报 `MissingField` |
 | `pictures[].from` | 必须。左上角单元格，A1。缺此字段报 `MissingField`。不是合法 A1 报 `InvalidRange` |
@@ -1349,6 +1376,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
 不要把页眉图写进 `sheets[].pictures`。不要用单数 `headerFooter`（那是 inspect 的 scope 键），`sheets[]` 上出现它报 `InvalidField`。
 写 `even` 槽位时给 `headerFooter` 设 `differentOddEven="1"`；写 `first` 槽位时设 `differentFirst="1"`。先写各槽原文，再按数组顺序往对应槽插图。不写 VML `legacyDrawingHF`。不解释 `&P`。
 带 SVG 图的示例见 `docs/examples/xlsx-create-svg.json`。
+带第四轮字段的示例见 `docs/examples/xlsx-create-round4.json`。
 
 `value` 和 `formula` 不能在同一格同时出现。要公式就只写 `formula`。
 公式格不写缓存 `<v>`，并在 `workbook.xml` 的 `calcPr` 上设 `fullCalcOnLoad="1"`，让 Excel 打开时重算。
@@ -1374,14 +1402,18 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
 drawing 上那一张 `xdr:absoluteAnchor` 框和 `/xl/charts/chartN.xml`，数据写到点名的普通表；`cNvPr/@id` 至少为 2。
 图表工作表的 `dataFrom` 在该数据表 `charts[]` 之后写入，会覆盖同一格。`workbook.xml` 的 `<sheet>` 顺序与 `sheets[]` 一致。
 `app.xml` 的 HeadingPairs：普通表算 Worksheets，图表工作表算 Charts；TitlesOfParts 按 `sheets[]` 顺序。
-至少一张 `worksheet`，否则报 `InvalidField`。不要生成透视表、条件格式。
-create 本期不写列宽、行高、合并、数据验证、条件格式、工作表表格、透视表、定义名、打印设置、视图与筛选、排序、分组、隐藏行 / 列、拆分窗格、自定义视图、迷你图、OLE、切片器、外部数据连接、保护、允许编辑区域或组合，
-也不写共享公式、数组公式或数据表公式（`cells[]` 出现 `shared` / `sharedRef` / `array` / `arrayRef` / `dataTable` / `dataTableRef` 报 `InvalidField`）。
-create 本期不写外部引用。`workbook` 根上或 `cells[]` 上出现 `pictures` / `charts` / `headerFooters` / `headerFooter`
- / `definedNames` / `connections` / `externalLinks` / `externalReferences` / `customViews` / `comments`
- / `hyperlinks` / `textBoxes` / `shapes` / `connectors` / `smartArts` / `workbookProtection` / `protection`，
-或 `sheets[]` 上出现 `wrap` / `sparklines` / `oleObjects` / `slicers` / `sheetProtection` / `protection` / `headerFooter`
- / `outline` / `sortState` / `sort` / `protectedRanges`，报 `InvalidField`。
+至少一张 `worksheet`，否则报 `InvalidField`。
+骨架写完后，上表这些字段按文档顺序解析成已有 apply op，再调用 `apply`：先单元格样式与共享 / 数组公式，再列宽行高隐藏与合并，
+再打印 / 视图 / 筛选 / 排序 / 分组，再数据验证与条件格式，再表格与透视，再定义名 / 连接 / 外部引用，
+再工作表保护与允许编辑区域，再工作簿保护，再迷你图与 OLE，再切片器，再自定义视图，最后 `groups`。
+不要另写一套 XML。公式格仍不写缓存 `<v>`。不求值，不刷新透视，不刷新外部连接。不新建数据表公式。
+`cells[]` 出现 `dataTable` / `dataTableRef` 报 `InvalidField`。
+`groups[]` 每项可给 `textBoxes` / `shapes` / `connectors`，值为该表对应数组的 1 起下标；合计至少 2 个，复用 `groupShapes`。
+图表工作表可给 `print` / `view` / `sheetProtection`；其它本轮字段出现报 `InvalidField`。
+给了保护口令则写 SHA-512。create 项上不要出现 `op` / `id`。
+`workbook` 根上或 `cells[]` 上出现 `pictures` / `charts` / `headerFooters` / `headerFooter`
+ / `comments` / `hyperlinks` / `textBoxes` / `shapes` / `connectors` / `smartArts` / `protection`
+ / `externalReferences`，或 `sheets[]` 上出现 `wrap` / `protection` / `headerFooter` / `sort`，报 `InvalidField`。
 `kind` 只能是 `worksheet` 或 `chartsheet`。图表工作表上出现 `cells` / `pictures` / `charts` / `headerFooters` / `comments`
  / `hyperlinks` / `textBoxes` / `maths` / `shapes` / `connectors` / `smartArts` / `model3ds` / `from` / `to` / `anchor` / 偏移 / `wrap` / `id` 报 `InvalidField`。
 `comments[]` 上出现 `id` / `replies` / `start` / `end` / `x` / `y`，`hyperlinks[]` 上出现 `text` / `anchor` / `id`，
@@ -1435,7 +1467,7 @@ Excel 16.0 主格正文为空；正文非空时打开会修复。
 格子只认 A1（可带 `$`），写入去掉 `$`。形状对不上、不是 `TABLE`、或缺逗号报 `InvalidField`。
 对范围内非主格、对主格写 `value` / 清空 / `shared` / `array` 报 `NotImplemented`。本期不新建、不拆、不扩缩数据表。
 
-create 本期仍只写普通 `<f>`，不写 `t="shared"` / `t="array"` / `t="dataTable"`。
+create 本期仍只在骨架里写普通 `<f>`；`cells[]` 上的 `shared` / `sharedRef` / `array` / `arrayRef` 随后按 `setCell` 同一套规则改写。不新建数据表公式。
 
 ### setCellStyle
 
@@ -1507,7 +1539,7 @@ create 本期仍只写普通 `<f>`，不写 `t="shared"` / `t="array"` / `t="dat
 
 写 `styles.xml` 时：能在已有 `numFmts` / `fonts` / `fills` / `borders` / `cellXfs` 里找到相同定义就复用下标，否则追加。不重排、不删、不改写未点名的 `xf` 条目。
 未点名格子的 `s` 不变。`s="0"` 可省略该属性。没有 styles 部件则按 create 那份最小表新建，并补 workbook 关系与 Override。不改 `cellStyleXfs`、主题。
-`setCellStyle` 不改 `dxfs`；条件格式写 `dxfs` 见 `insertConditionalFormat`。create 本期不写单元格样式。
+`setCellStyle` 不改 `dxfs`；条件格式写 `dxfs` 见 `insertConditionalFormat`。create 见上文 `cells[]` 样式字段。
 
 示例见 `docs/examples/xlsx-apply-cellstyle.json`。
 
@@ -1545,7 +1577,7 @@ create 本期仍只写普通 `<f>`，不写 `t="shared"` / `t="array"` / `t="dat
 `width` 为 `null` 时去掉这段的 `width` 与 `customWidth`。只改被点名的列：已有 `<col>` 的 `min`/`max` 盖住更多列时先拆开，未点名列的属性不变。
 没有 `<cols>` 则在 `sheetData` 之前插入。相邻且属性相同的 `<col>` 可以合并，不是必须。找不到工作表报 `IdNotFound`。id 不是工作表 id 报 `InvalidId`。
 只能改 `worksheet`；对图表工作表报 `InvalidField`。`col` 非法报 `InvalidRange`。docx / pptx 上发此 op 报 `InvalidField`。不标重算，不删 `calcChain`。
-不按列宽反推 `twoCell` 图尺寸。create 本期不写列宽。
+不按列宽反推 `twoCell` 图尺寸。create 可写列宽。
 
 ### setRowHeight
 
@@ -1560,7 +1592,7 @@ create 本期仍只写普通 `<f>`，不写 `t="shared"` / `t="array"` / `t="dat
 | `height` | 必须。大于 0 且不超过 409 的数字，或 `null`（去掉这些行的 `ht` 与 `customHeight`） |
 
 给了数字时写 `customHeight="1"`。目标行还不存在时插入只有 `r` / `ht` / `customHeight` 的 `<row>`，插在正确行号顺序上。找不到工作表报 `IdNotFound`。
-id 不是工作表 id 报 `InvalidId`。只能改 `worksheet`。docx / pptx 上发此 op 报 `InvalidField`。不标重算。create 本期不写行高。
+id 不是工作表 id 报 `InvalidId`。只能改 `worksheet`。docx / pptx 上发此 op 报 `InvalidField`。不标重算。create 可写行高。
 
 ### mergeRange
 
@@ -1575,7 +1607,7 @@ id 不是工作表 id 报 `InvalidId`。只能改 `worksheet`。docx / pptx 上�
 内容留在左上角：范围内其余格子按 `setCell` 清空值和公式，保留 `s`。与新区域相交的已有 `<mergeCell>` 先删掉再写入这一条。
 `mergeCells/@count` 写成子元素个数；删光则去掉 `mergeCells`。插入位置在 `sheetData` 之后、`phoneticPr` 等后续元素之前（§A.2 `CT_Worksheet`）。
 范围内若有共享公式主格且仍有从属格、或数组公式主格、或数据表公式，报 `NotImplemented`，不写文件。找不到工作表报 `IdNotFound`。id 不是工作表 id 报 `InvalidId`。只能改 `worksheet`。
-`range` 非法报 `InvalidRange`。docx / pptx 上发此 op 报 `InvalidField`。xlsx 上仍不要发 Word 的 `mergeCells`。不标重算。create 本期不写合并。
+`range` 非法报 `InvalidRange`。docx / pptx 上发此 op 报 `InvalidField`。xlsx 上仍不要发 Word 的 `mergeCells`。不标重算。create 可写合并。
 
 ### unmergeRange
 
@@ -1677,7 +1709,7 @@ docx / pptx 上发此 op 报 `InvalidField`。不标重算。
 新规则追加到该表 `<dataValidations>` 末尾；没有该元素则按 `CT_Worksheet` 顺序插在 `conditionalFormatting` 之后、`hyperlinks` 之前。`count` 写成子元素个数。
 不检查与其它规则的 `sqref` 是否重叠。找不到工作表报 `IdNotFound`。id 不是工作表 id 报 `InvalidId`。只能改 `worksheet`。`sqref` 非法报 `InvalidRange`。
 不认识的 `type` / `operator` / `errorStyle` 报 `InvalidField`。docx / pptx 上发此 op 报 `InvalidField`。不标重算，不删 `calcChain`。
-不改 `extLst` 里的扩展校验。create 本期不写数据验证。
+不改 `extLst` 里的扩展校验。create 可写数据验证。
 
 ### setDataValidation
 
@@ -1846,7 +1878,7 @@ docx / pptx 上发此 op 报 `InvalidField`。不标重算。
 `type` 为 `cellIs` / `expression` / `top10` / `aboveAverage` 以及文本类时不要出现 `colorScale` / `dataBar` / `iconSet`。
 `type` 为 `colorScale` 时不要出现 `dataBar` / `iconSet` / `operator` / `formulas` / `dxf` / `text` / `rank`，以此类推。找不到工作表报 `IdNotFound`。
 id 不是工作表 id 报 `InvalidId`。只能改 `worksheet`。`sqref` 非法报 `InvalidRange`。不认识的枚举报 `InvalidField`。
-docx / pptx 上发此 op 报 `InvalidField`。不标重算，不删 `calcChain`。不写 `x14` 扩展数据条（渐变、负值色、轴）或扩展图标集。create 本期不写条件格式。
+docx / pptx 上发此 op 报 `InvalidField`。不标重算，不删 `calcChain`。不写 `x14` 扩展数据条（渐变、负值色、轴）或扩展图标集。create 可写条件格式。
 
 ### setConditionalFormat
 
@@ -1928,7 +1960,7 @@ docx / pptx 上发此 op 报 `InvalidField`。不标重算，不删 `calcChain`�
 XML `id` 取整本工作簿已有表格 `id` 的最大整数加 1，至少为 1。部件路径为未占用的 `/xl/tables/tableN.xml`。工作表关系 Type 以 `/table` 结尾。
 Content Type 为 `application/vnd.openxmlformats-officedocument.spreadsheetml.table+xml`。
 `<tableParts>` 按 `CT_Worksheet` 顺序插在 `extLst` 之前，`count` 写成子元素个数。不改工作表级 `<autoFilter>`。找不到工作表报 `IdNotFound`。
-id 不是工作表 id 报 `InvalidId`。只能改 `worksheet`。docx / pptx 上发此 op 报 `InvalidField`。不标重算，不删 `calcChain`。create 本期不写表格。
+id 不是工作表 id 报 `InvalidId`。只能改 `worksheet`。docx / pptx 上发此 op 报 `InvalidField`。不标重算，不删 `calcChain`。create 可写表格。
 
 ### setSheetTable
 
@@ -2016,7 +2048,7 @@ workbook 写 `<pivotCaches>`（`CT_Workbook` 里插在 `customWorkbookViews` 之
 对应 Content Type 为 `spreadsheetml.pivotCacheDefinition+xml`、`pivotCacheRecords+xml`、`pivotTable+xml`。
 `<location>/@ref` 写成能盖住主体的最小矩形（含表头行与至少一行数据区），`firstHeaderRow="1"`、`firstDataRow="2"`、`firstDataCol="1"`。
 缓存 `refreshOnLoad="1"`。不写 OLAP。找不到工作表报 `IdNotFound`。id 不是工作表 id 报 `InvalidId`。只能改 `worksheet`。
-docx / pptx 上发此 op 报 `InvalidField`。不标重算。create 本期不写透视表。
+docx / pptx 上发此 op 报 `InvalidField`。不标重算。create 可写透视表。
 
 ### setPivotTable
 
@@ -2086,7 +2118,7 @@ docx / pptx 上发此 op 报 `InvalidField`。不标重算。
 同一作用域内大小写不敏感唯一：簿级互斥；同一 `localSheetId` 互斥；簿级与表级可以同名。还须与整本工作簿表格的 `displayName` / `name` 互斥。
 `formula` 去掉首尾空白后不能为空，且不能以 `=` 开头。`localSheet` 必须是已有表名；找不到报 `IdNotFound`。空串或 `null` 报 `InvalidField`。
 id 不是 `xlsx:workbook` 报 `InvalidId`。`<definedNames>` 按 `CT_Workbook` 插在 `externalReferences` 之后、`calcPr` 之前；`count` 写成子元素个数。
-docx / pptx 上发此 op 报 `InvalidField`。不标重算，不删 `calcChain`。create 本期不写定义名。
+docx / pptx 上发此 op 报 `InvalidField`。不标重算，不删 `calcChain`。create 可写定义名。
 
 ### setDefinedName
 
@@ -2152,7 +2184,7 @@ docx / pptx 上发此 op 报 `InvalidField`。不标重算。
 空 `password` 报 `InvalidField`。不写遗留 XOR `@password`，不写 `securityDescriptor`。
 `<protectedRanges>` 按 `CT_Worksheet` 插在 `sheetProtection` 之后、`scenarios` 之前。
 id 不是工作表 id 报 `InvalidId`。只能改 `worksheet`。对 `chartsheet` 报 `InvalidField`。对 `dialogsheet` / `macrosheet` 报 `NotImplemented`。
-docx / pptx 上发此 op 报 `InvalidField`。create 本期不写允许编辑区域。
+docx / pptx 上发此 op 报 `InvalidField`。create 可写允许编辑区域。
 
 ### setProtectedRange
 
@@ -2311,7 +2343,7 @@ docx / pptx 上发此 op 报 `InvalidField`。create 写页眉页脚见上文 `s
 id 不是工作表 id 报 `InvalidId`。对 `dialogsheet` / `macrosheet` 报 `NotImplemented`。
 对 `chartsheet` 发 `scale` / `fitToPage` / `fitToWidth` / `fitToHeight` / `gridLines` / `headings` / `hCenter`
  / `vCenter` / `rowBreaks` / `colBreaks` 报 `InvalidField`（图表工作表没有这些 XML）。
-不改 `headerFooter`。docx / pptx 上发此 op 报 `InvalidField`。不标重算。create 本期不写打印设置。
+不改 `headerFooter`。docx / pptx 上发此 op 报 `InvalidField`。不标重算。create 可写打印设置。
 
 示例见 `docs/examples/xlsx-apply-print.json`。
 
@@ -2358,7 +2390,7 @@ id 不是工作表 id 报 `InvalidId`。对 `dialogsheet` / `macrosheet` 报 `No
 `activeCell` 须能解析成单格；写成该选区的 `activeCell` 与 `sqref`。
 对 `chartsheet` 发 `frozenRows` / `frozenCols` / `splitRows` / `splitCols` / `activeCell` 报 `InvalidField`。
 对 `chartsheet` 给了 `zoom` 时写 `@zoomScale` 并把 `@zoomToFit` 写成 `0`。找不到该表报 `IdNotFound`。id 不是工作表 id 报 `InvalidId`。
-对 `dialogsheet` / `macrosheet` 报 `NotImplemented`。docx / pptx 上发此 op 报 `InvalidField`。不标重算。create 本期不写视图。
+对 `dialogsheet` / `macrosheet` 报 `NotImplemented`。docx / pptx 上发此 op 报 `InvalidField`。不标重算。create 可写视图。
 
 示例见 `docs/examples/xlsx-apply-view.json`。
 
@@ -2391,7 +2423,7 @@ id 不是工作表 id 报 `InvalidId`。对 `dialogsheet` / `macrosheet` 报 `No
 缺 `ref` 报 `InvalidField`。写入 `<autoFilter>/@ref`，能解析则规范化成 `A1` 或 `A1:B2`。已有该元素时只改 `@ref`，`filterColumn` 等子元素留下。
 没有则按 `CT_Worksheet` 插在 `scenarios` 之后、`sortState` 之前。`null` 去掉该元素。与同一张工作表上已有表格的 `ref` 相交报 `InvalidField`。
 只能改 `worksheet`。对 `chartsheet` 报 `InvalidField`。找不到该表报 `IdNotFound`。id 不是工作表 id 报 `InvalidId`。
-对 `dialogsheet` / `macrosheet` 报 `NotImplemented`。docx / pptx 上发此 op 报 `InvalidField`。不标重算。create 本期不写筛选。
+对 `dialogsheet` / `macrosheet` 报 `NotImplemented`。docx / pptx 上发此 op 报 `InvalidField`。不标重算。create 可写筛选。
 
 示例见 `docs/examples/xlsx-apply-view.json`。
 
@@ -2450,7 +2482,7 @@ id 不是工作表 id 报 `InvalidId`。对 `dialogsheet` / `macrosheet` 报 `No
 为真的 `caseSensitive` / `columnSort` / `descending` 写成 `"1"`。`sortMethod` 为 `pinYin` / `stroke` 才写属性。
 不写 `xmlns:xlrd2`。不重排格子。不算表格部件里的排序。只能改 `worksheet`。
 对 `chartsheet` 报 `InvalidField`。找不到该表报 `IdNotFound`。id 不是工作表 id 报 `InvalidId`。
-对 `dialogsheet` / `macrosheet` 报 `NotImplemented`。docx / pptx 上发此 op 报 `InvalidField`。不标重算。create 本期不写排序。
+对 `dialogsheet` / `macrosheet` 报 `NotImplemented`。docx / pptx 上发此 op 报 `InvalidField`。不标重算。create 可写排序。
 
 示例见 `docs/examples/xlsx-apply-sort.json` 与 `docs/examples/xlsx-apply-sort-fields.json`。
 
@@ -2492,7 +2524,7 @@ id 不是工作表 id 报 `InvalidId`。对 `dialogsheet` / `macrosheet` 报 `No
 `includePrintSettings` / `includeHiddenRowCol` 为真则不写属性（规范缺省为真），为假则写成 `"0"`。
 给每张 `worksheet` 与 `chartsheet` 写一条同一 `guid` 的 `customSheetView`：有冻结或拆分则复制当前第一个 `sheetView` 的 `pane` 与 `selection`；
 `includePrintSettings` 为真时再写该表 `pageMargins`（没有则用缺省边距）。
-不写 `xr:uid`。不把隐藏行 / 列抄进快照。docx / pptx 上发此 op 报 `InvalidField`。不标重算。create 本期不写自定义视图。
+不写 `xr:uid`。不把隐藏行 / 列抄进快照。docx / pptx 上发此 op 报 `InvalidField`。不标重算。create 可写自定义视图。
 
 ### deleteCustomView
 
@@ -2550,7 +2582,7 @@ id 不是自定义视图 id 报 `InvalidId`。docx / pptx 上发此 op 报 `Inva
 没有 `sheetFormatPr` 则新建，并写 `defaultRowHeight`（15，与列宽行高缺省同一套）；
 已有该元素却缺 `defaultRowHeight` 则补上，不覆盖已有值（ECMA-376 §18.3.1.81 该属性为必填，缺了 Excel 会修复）。
 `rows` 非法报 `InvalidRange`。找不到该表报 `IdNotFound`。id 不是工作表 id 报 `InvalidId`。只能改 `worksheet`。对 `chartsheet` 报 `InvalidField`。
-对 `dialogsheet` / `macrosheet` 报 `NotImplemented`。docx / pptx 上发此 op 报 `InvalidField`。不标重算。create 本期不写分组。
+对 `dialogsheet` / `macrosheet` 报 `NotImplemented`。docx / pptx 上发此 op 报 `InvalidField`。不标重算。create 可写分组。
 
 示例见 `docs/examples/xlsx-apply-outline.json`。
 
@@ -2615,7 +2647,7 @@ id 不是自定义视图 id 报 `InvalidId`。docx / pptx 上发此 op 报 `Inva
 给了折叠范围却没有 `collapsed`，或只给 `collapsed` 没有范围，报 `InvalidField`。折叠不把细节列改成 `width="0"`。
 新建仅含 `collapsed` 的汇总列时，若没有 `width` 则补缺省列宽。`outlinePr` 两个属性都缺省且没有子元素时去掉该元素。只能改 `worksheet`。
 对 `chartsheet` 报 `InvalidField`。找不到该表报 `IdNotFound`。id 不是工作表 id 报 `InvalidId`。
-对 `dialogsheet` / `macrosheet` 报 `NotImplemented`。docx / pptx 上发此 op 报 `InvalidField`。不标重算。create 本期不写分组。
+对 `dialogsheet` / `macrosheet` 报 `NotImplemented`。docx / pptx 上发此 op 报 `InvalidField`。不标重算。create 可写分组。
 
 ### setRowHidden
 
@@ -2649,7 +2681,7 @@ id 不是自定义视图 id 报 `InvalidId`。docx / pptx 上发此 op 报 `Inva
 `false` 去掉 `@hidden`；若该行只剩 `r` 且没有格子则删掉该 `<row>`。
 不改 `ht`。只能改 `worksheet`。对 `chartsheet` 报 `InvalidField`。找不到该表报 `IdNotFound`。
 id 不是工作表 id 报 `InvalidId`。对 `dialogsheet` / `macrosheet` 报 `NotImplemented`。
-docx / pptx 上发此 op 报 `InvalidField`。不标重算。create 本期不写隐藏行。
+docx / pptx 上发此 op 报 `InvalidField`。不标重算。create 可写隐藏行。
 
 ### setColHidden
 
@@ -2681,7 +2713,7 @@ docx / pptx 上发此 op 报 `InvalidField`。不标重算。create 本期不写
 
 `true` 写 `@hidden="1"`。没有对应 `<col>` 则新建，并按 `groupCols` 同一套规则补缺省 `width`。已有 `width` 不改成 0。
 `false` 去掉 `@hidden`。若 `width` 为 `0`（Excel 另存隐藏列常见），改回与 `setColWidth` 同一套缺省列宽，避免看起来仍是隐藏。
-只能改 `worksheet`。错误与 `setRowHidden` 相同。create 本期不写隐藏列。
+只能改 `worksheet`。错误与 `setRowHidden` 相同。create 可写隐藏列。
 
 示例见 `docs/examples/xlsx-apply-hidden.json`。
 
@@ -3184,7 +3216,7 @@ slicers 部件删光则去掉该部件与工作表 `slicerList` 条目。timelin
 文本连接跟 Excel 16.0 文本另存：`type="6"`、`refreshedVersion="8"`、`background="1"`、`saveData="1"`，
 `textPr` 写 `prompt="0"`、`codePage="65001"`、`comma="1"`，以及一个空 `textField`。
 不写 `xr16:uid`。不写 `refreshOnLoad`。不写 queryTable。不写 ODBC / OLE DB / OLAP / Power Query。
-docx / pptx 上发此 op 报 `InvalidField`。create 本期不写连接。不标重算。
+docx / pptx 上发此 op 报 `InvalidField`。create 可写连接。不标重算。
 
 ### deleteConnection
 
@@ -3236,7 +3268,7 @@ docx / pptx 上发此 op 报 `InvalidField`。create 本期不写连接。不标
 `path` 已是 `file:` / `http:` / `https:` 则原样当 Target；绝对盘符（`X:\`）或 UNC（`\\`）写成 `file:///` 加原文；其余当相对路径原样写入。
 `TargetMode` 为 `External`。追加到 `<externalReferences>` 末尾。部件路径 `/xl/externalLinks/externalLinkN.xml`，N 取未占用的最小正整数。
 写出 `externalBook`、`sheetNames` 与每个表一条空的 `<sheetData sheetId>`（从 0 计）。不写 `xxl21` / `x14` / `mc:Ignorable`。不写缓存 `<v>`。
-docx / pptx 上发此 op 报 `InvalidField`。create 本期不写外部引用。不标重算。
+docx / pptx 上发此 op 报 `InvalidField`。create 可写外部引用。不标重算。
 
 跨工作簿公式请先 insert，再 `setCell` 写 `=[n]Sheet1!A1`。`[n]` 是 1 基下标，与 `extlink:{n}` 相同。库不把文件路径改写成 `[n]`，也不把 `[n]` 展开成路径。
 
@@ -3312,7 +3344,7 @@ docx / pptx 上发此 op 报 `InvalidField`。create 本期不写外部引用。
 插入时未给的颜色仍按 Excel 16.0 另存写默认 `rgb`（系列 `FF376092`，其余 `FFD00000` 或轴 `FF000000`）。给了 `colors` 的键覆盖对应子元素。
 不写 `xr2:uid`。不写单元格值。id 不是工作表 id 报 `InvalidId`。找不到工作表报 `IdNotFound`。
 只能写 `worksheet`；对 `chartsheet` 报 `InvalidField`；对 `dialogsheet` / `macrosheet` 报 `NotImplemented`。不标重算。不新建部件。
-其它 `ext` 原样留下。docx / pptx 上发此 op 报 `InvalidField`。create 本期不写迷你图。
+其它 `ext` 原样留下。docx / pptx 上发此 op 报 `InvalidField`。create 可写迷你图。
 
 ### setSparkline
 

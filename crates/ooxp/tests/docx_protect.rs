@@ -313,7 +313,7 @@ fn xlsx_and_pptx_reject_set_protection() {
     .unwrap();
     let err = apply_err(
         &xlsx,
-        json!([{ "op": "setProtection", "id": "xlsx:workbook", "enforced": true }]),
+        json!([{ "op": "setProtection", "id": "xlsx:workbook", "edit": "readOnly" }]),
     );
     assert_eq!(err.code(), ErrorCode::InvalidField);
 

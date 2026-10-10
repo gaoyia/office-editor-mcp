@@ -37,6 +37,7 @@ C、I、A、O、Xp、Xvg、Xem、X3d、Xom、Xtf、Xfl、Xc、Xh、Xfs、Xtl、X
 2026-10-10 补跑 `xlsx-timelines.ps1`，Xtl1–Xtl5 通过。COM `SlicerCaches` 类型为 2，无 Repair。
 2026-10-10 补跑 `xlsx-extpath-datatable.ps1`，Xef1–Xef5 通过。无 Repair。
 2026-10-10 补跑 `xlsx-edit-range.ps1`，Xer1–Xer5 通过。无 Repair。COM `AllowEditRanges` 能看见区域，`.xlsm` 无 Repair。
+2026-10-10 补跑 `xlsx-create-round4.ps1`，C25–C29 通过。无 Repair。COM 能见表、AllowEditRanges、OutlineLevel，组合 `Type=6`。
 
 - **C1** ✅
   - Excel 16.0 打开 `manual-check/office/out/xlsx-create.xlsx`，标题栏无 Repair
@@ -373,6 +374,13 @@ C、I、A、O、Xp、Xvg、Xem、X3d、Xom、Xtf、Xfl、Xc、Xh、Xfs、Xtl、X
   - inspect `kind=chartsheet`、id 为 `sheet:Chart1/chart:2`
   - 系列 1/2/3 与 `A10` 一带单元格一致
   - 打开无 Repair，COM 图表工作表系列值对得上
+- **C25–C29** ✅
+  - Excel 16.0：`xlsx-create-round4.ps1`，5 PASS / 0 FAIL
+  - inspect 列宽 14、合并 `G1:G2`、数据验证、横向打印、G1 `numFmt=0.00`
+  - 表 `SalesTbl`、定义名 `Sales`、迷你图 `D2`
+  - 无密码保护，允许编辑区域 `Range1`
+  - 大纲、冻结 1 行、drawing 含 `xdr:grpSp`
+  - 打开无 Repair，COM 能见表、AllowEditRanges、OutlineLevel，组合 `Type=6`
 - **Xsr1–Xsr5** ✅
   - Excel 16.0：`xlsx-sort.ps1`，5 PASS / 0 FAIL
   - 默认 `sortState` 为 `null`
@@ -497,7 +505,27 @@ C、I、A、O、Xp、Xvg、Xem、X3d、Xom、Xtf、Xfl、Xc、Xh、Xfs、Xtl、X
 - **C24**
   - 检查：Excel 打开带图表工作表产物
   - 通过标准：无修复
-  - COM 图表工作表能看见，系列值对得上
+  - COM 图表工作表系列值对得上
+- **C25**
+  - 检查：create 第四轮列宽、合并、数据验证、打印、单元格样式
+  - 通过标准：用 `docs/examples/xlsx-create-round4.json` 生成
+  - inspect `cols` 宽 14、`merges` 含 `G1:G2`、`dataValidations` 一条、`print.orientation=landscape`、G1 `numFmt` 为 `0.00`
+- **C26**
+  - 检查：表格、定义名、迷你图
+  - 通过标准：同上
+  - `tableCount=1` 名 `SalesTbl`，`definedNames` 含 `Sales`，`sparklineCount=1`
+- **C27**
+  - 检查：无密码保护与允许编辑区域
+  - 通过标准：同上
+  - `sheetProtection.enforced=true`、`hasPassword=false`，`protectedRanges` 名为 `Range1`
+- **C28**
+  - 检查：大纲、冻结、组合
+  - 通过标准：同上
+  - `outline.summaryBelow=true`、`view.frozenRows=1`，drawing 含 `xdr:grpSp`
+- **C29**
+  - 检查：Excel 打开第四轮产物
+  - 通过标准：无修复
+  - COM 能见表、AllowEditRanges、OutlineLevel；不要 COM 打开带哈希或外部链的产物
 
 ## inspect
 

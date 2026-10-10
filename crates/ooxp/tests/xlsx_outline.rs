@@ -333,9 +333,9 @@ fn outline_level_eight_rejected() {
 }
 
 #[test]
-fn create_rejects_outline_on_sheet() {
+fn create_writes_outline() {
     let path = tmp("create-outline");
-    let err = run(
+    run(
         &json!({
             "schemaVersion": 1,
             "action": "create",
@@ -343,16 +343,16 @@ fn create_rejects_outline_on_sheet() {
             "workbook": {
                 "sheets": [{
                     "name": "Sheet1",
-                    "outline": { "summaryBelow": true }
+                    "outline": { "summaryBelow": false }
                 }]
             }
         })
         .to_string(),
         None,
     )
-    .unwrap_err();
-    assert_eq!(err.code(), ErrorCode::InvalidField);
-    assert!(!path.exists());
+    .unwrap();
+    let tree = inspect_tree(&path, false);
+    assert_eq!(tree["sheets"][0]["outline"]["summaryBelow"], false);
 }
 
 #[test]

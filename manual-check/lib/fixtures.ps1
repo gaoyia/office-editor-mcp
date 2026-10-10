@@ -99,6 +99,68 @@ function Ensure-XlsxCreateChartSheet([switch]$Force) {
     return $path
 }
 
+function Ensure-XlsxCreateRound4([switch]$Force) {
+    $path = Get-OutPath 'xlsx-create-round4.xlsx'
+    if ((Test-Path $path) -and -not $Force) { return $path }
+    $req = @{
+        schemaVersion = 1; action = 'create'
+        path = $path.Replace('\', '/'); format = 'xlsx'
+        workbook = @{
+            definedNames = @(@{ name = 'Sales'; formula = 'Sheet1!$A$1:$C$3' })
+            sheets = @(
+                @{
+                    name = 'Sheet1'
+                    cells = @(
+                        @{ ref = 'A1'; value = '产品'; font = @{ bold = $true } }
+                        @{ ref = 'B1'; value = '数量' }
+                        @{ ref = 'C1'; value = '金额' }
+                        @{ ref = 'A2'; value = '甲' }
+                        @{ ref = 'B2'; value = 1 }
+                        @{ ref = 'C2'; value = 10 }
+                        @{ ref = 'A3'; value = '乙' }
+                        @{ ref = 'B3'; value = 2 }
+                        @{ ref = 'C3'; value = 20 }
+                        @{ ref = 'E1'; formula = '=B2'; shared = $true; sharedRef = 'E1:E2' }
+                        @{ ref = 'G1'; value = 1; numFmt = '0.00' }
+                    )
+                    cols = @(@{ col = 'A'; width = 14 })
+                    rows = @(@{ row = 1; height = 22 })
+                    merges = @('G1:G2')
+                    dataValidations = @(
+                        @{
+                            sqref = 'B2:B3'
+                            type = 'whole'
+                            operator = 'greaterThan'
+                            formula1 = '0'
+                        }
+                    )
+                    tables = @(
+                        @{
+                            ref = 'A1:C3'
+                            name = 'SalesTbl'
+                            columns = @('产品', '数量', '金额')
+                        }
+                    )
+                    print = @{ orientation = 'landscape' }
+                    view = @{ frozenRows = 1 }
+                    groupRows = @('2:3')
+                    outline = @{ summaryBelow = $true }
+                    sheetProtection = @{ enforced = $true }
+                    protectedRanges = @(@{ name = 'Range1'; sqref = 'A1:C3' })
+                    sparklines = @(@{ ref = 'D2'; formula = 'B2:C2' })
+                    shapes = @(
+                        @{ from = 'F4'; prst = 'rect'; text = '甲' }
+                        @{ from = 'H4'; prst = 'ellipse'; text = '乙' }
+                    )
+                    groups = @(@{ shapes = @(1, 2) })
+                }
+            )
+        }
+    }
+    Invoke-OoxpRequest $req 'xlsx-create-round4' | Out-Null
+    return $path
+}
+
 function Ensure-XlsxCreateHeaderFooter([switch]$Force) {
     $path = Get-OutPath 'xlsx-create-headerfooter.xlsx'
     if ((Test-Path $path) -and -not $Force) { return $path }

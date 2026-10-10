@@ -281,9 +281,9 @@ fn duplicate_and_bad_ids() {
 }
 
 #[test]
-fn create_rejects_custom_views() {
+fn create_empty_custom_views_is_ok() {
     let path = tmp("create-cv");
-    let err = run(
+    run(
         &json!({
             "schemaVersion": 1,
             "action": "create",
@@ -296,9 +296,10 @@ fn create_rejects_custom_views() {
         .to_string(),
         None,
     )
-    .unwrap_err();
-    assert_eq!(err.code(), ErrorCode::InvalidField);
-    assert!(!path.exists());
+    .unwrap();
+    let tree = inspect(&path, json!({ "customViews": true }));
+    assert_eq!(tree["customViewCount"], 0);
+    assert_eq!(tree["customViews"], json!([]));
 }
 
 #[test]

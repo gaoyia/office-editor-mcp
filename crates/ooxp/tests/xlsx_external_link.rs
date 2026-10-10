@@ -289,9 +289,9 @@ fn wrong_ids_and_missing_path() {
 }
 
 #[test]
-fn create_rejects_external_links() {
+fn create_empty_external_links_is_ok() {
     let path = tmp("create-el");
-    let err = run(
+    run(
         &json!({
             "schemaVersion": 1,
             "action": "create",
@@ -304,9 +304,10 @@ fn create_rejects_external_links() {
         .to_string(),
         None,
     )
-    .unwrap_err();
-    assert_eq!(err.code(), ErrorCode::InvalidField);
-    assert!(!path.exists());
+    .unwrap();
+    let tree = inspect(&path, json!({ "externalLinks": true }));
+    assert_eq!(tree["externalLinkCount"], 0);
+    assert_eq!(tree["externalLinks"], json!([]));
 }
 
 #[test]

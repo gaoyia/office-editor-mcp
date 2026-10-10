@@ -130,11 +130,10 @@ insert / delete 线程化批注时只追加或去掉对应 Note `v:shape` 与占
 也可用 `setProtection` 开关工作表 `sheetProtection` 与工作簿 `workbookProtection`：脏该表 XML 或 `workbook.xml`；
 无密码时不写哈希，给了 `password` 则写 Excel 16.0 的 SHA-512 哈希，不新建部件，不标重算。
 也可用 `insertProtectedRange` / `setProtectedRange` / `deleteProtectedRange` 写工作表 `<protectedRanges>`：只改 `worksheet`，不标重算，不新建部件。
-create 可写图、图表、图表工作表、页眉页脚、批注、超链接、文本框、公式框、形状、连接线、SmartArt 与 3D 模型，细则见下文 create。
-本期不写列宽、行高、合并、数据验证、条件格式、工作表表格、透视表或定义名。
-也不写打印、视图、筛选、排序、分组、自定义视图、迷你图、OLE、切片器、连接、外部引用、保护、允许编辑区域或组合。
+create 可写图、图表、图表工作表、页眉页脚、批注、超链接、文本框、公式框、形状、连接线、SmartArt 与 3D 模型，
+也可按已有 apply 写出列宽、行高、合并、数据验证、条件格式、表格、透视、定义名、打印、视图、筛选、排序、分组、隐藏行列、拆分、自定义视图、迷你图、OLE、切片器、连接、外部引用、保护、允许编辑区域、组合，以及单元格样式与共享 / 数组公式。
+不新建数据表公式。细则见 create。
 create 到 `.xlsm` 时 workbook Override 用 macroEnabled Content Type，不建空的 `vbaProject.bin`。
-也不写共享公式或数组公式。
 
 ### docx
 
@@ -339,6 +338,7 @@ xlsx 的 `sheets[].pictures` 复用 `insertPicture`，`sheets[].charts` 复用 `
 `sheets[].headerFooters` 复用 `setHeaderFooterText` 与页眉 `insertPicture`（不写 VML），
 `sheets[].comments` 复用 `insertComment`（不写回复），`sheets[].hyperlinks` 复用 `insertHyperlink`，
 `sheets[].textBoxes` / `maths` / `shapes` / `connectors` / `smartArts` / `model3ds` 复用对应 insert。
+其余第四轮字段（列宽、表格、保护、迷你图、OLE、切片器等）复用对应 apply，见 [json-contract-xlsx.md](json-contract-xlsx.md#create)。
 docx 段落与页眉页脚上的 `pictures` 同样复用插图，`charts` 复用 `insertChart`（数据写 embedding），`oleObjects` 复用 `insertOle`，
 `inkCanvases` 复用 `insertInkCanvas`，
 `footnote` / `endnote` / `comments` 复用对应 insert，`comments[].replies` 复用 `replyComment`，

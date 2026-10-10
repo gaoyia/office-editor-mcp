@@ -276,9 +276,9 @@ fn wrong_ids_and_missing_type() {
 }
 
 #[test]
-fn create_rejects_connections() {
+fn create_empty_connections_is_ok() {
     let path = tmp("create-conn");
-    let err = run(
+    run(
         &json!({
             "schemaVersion": 1,
             "action": "create",
@@ -291,7 +291,8 @@ fn create_rejects_connections() {
         .to_string(),
         None,
     )
-    .unwrap_err();
-    assert_eq!(err.code(), ErrorCode::InvalidField);
-    assert!(!path.exists());
+    .unwrap();
+    let tree = inspect(&path, json!({ "connections": true }));
+    assert_eq!(tree["connectionCount"], 0);
+    assert_eq!(tree["connections"], json!([]));
 }

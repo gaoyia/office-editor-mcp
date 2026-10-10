@@ -29,6 +29,7 @@ $order = @(
     'xlsx-create-headerfooter'
     'xlsx-create-drawing'
     'xlsx-create-chartsheet'
+    'xlsx-create-round4'
     'docx-create'
     'docx-create-pictures'
     'docx-create-full'

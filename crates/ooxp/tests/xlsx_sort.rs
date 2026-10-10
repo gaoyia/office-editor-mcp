@@ -274,9 +274,9 @@ fn rejects_missing_ref_and_out_of_range() {
 }
 
 #[test]
-fn create_rejects_sort_state_field() {
+fn create_writes_sort_state() {
     let path = tmp("create-sort");
-    let err = run(
+    run(
         &json!({
             "schemaVersion": 1,
             "action": "create",
@@ -284,16 +284,25 @@ fn create_rejects_sort_state_field() {
             "workbook": {
                 "sheets": [{
                     "name": "Sheet1",
-                    "sortState": { "ref": "A1:A3" }
+                    "cells": [
+                        { "ref": "A1", "value": 3 },
+                        { "ref": "A2", "value": 1 },
+                        { "ref": "A3", "value": 2 }
+                    ],
+                    "sortState": {
+                        "ref": "A1:A3",
+                        "columns": [{ "ref": "A1:A3", "descending": true }]
+                    }
                 }]
             }
         })
         .to_string(),
         None,
     )
-    .unwrap_err();
-    assert_eq!(err.code(), ErrorCode::InvalidField);
-    assert!(!path.exists());
+    .unwrap();
+    let st = &inspect_tree(&path)["sheets"][0]["sortState"];
+    assert_eq!(st["ref"], json!("A1:A3"));
+    assert_eq!(st["columns"][0]["descending"], json!(true));
 }
 
 #[test]

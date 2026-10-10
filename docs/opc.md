@@ -222,7 +222,7 @@ apply 插入工作表 OLE 时，可能新建 `/xl/embeddings/…`（Office 文�
 工作表 `.rels` 补一条 package 或 oleObject 关系指向 embeddings，再补一条 image 关系指向预览。
 工作表 XML 写 `<oleObjects>`（`mc:AlternateContent`，Choice 带 `objectPr`）。
 隐藏 dummy `xdr:sp` 写在 worksheet drawing 里（`cNvPr/@id` 与 `shapeId` 相同）。VML Pict 占位写在 `legacyDrawing`，预览关系在 VML `.rels`。
-`progId` 嵌入工作簿为 `Worksheet`。create 本期不写 OLE。
+`progId` 嵌入工作簿为 `Worksheet`。create 可写 OLE，见 [json-contract-xlsx.md](json-contract-xlsx.md#create)。
 apply 的 `setProtection` 改目标工作表或图表工作表 XML 的 `<sheetProtection>`（§18.3.1.85 / `CT_ChartsheetProtection`），
 或 `/xl/workbook.xml` 的 `<workbookProtection>`（§18.2.29），按子元素顺序插入，不新建部件。
 无密码时不写哈希。给了 `password` 则写 Excel 16.0 的 `algorithmName` / `hashValue` / `saltValue` / `spinCount`（工作簿为 `workbook*` 前缀），不写遗留 XOR `@password`。
@@ -246,6 +246,7 @@ create 声明了 `sheets[].comments` 时按 `insertComment` 写线程化批注�
 create 声明了 `sheets[].hyperlinks` 时按 `insertHyperlink` 写工作表 `<hyperlinks>` 与外部链关系。
 create 声明了 `sheets[].headerFooters` 时按 `setHeaderFooterText` / 页眉 `insertPicture` 写工作表 `headerFooter` 与可选 `drawingHF`，不写 `legacyDrawingHF`。
 create 声明了 `kind: chartsheet` 时按 `insertChartSheet` 写 `/xl/chartsheets/sheetN.xml`、drawing 与 chart 部件。
+create 声明了第四轮字段时按对应 apply 写，见 [json-contract-xlsx.md](json-contract-xlsx.md#create)。
 `setProps` / `setCustomProp` 可能新建 `/docProps/core.xml`、`/docProps/app.xml`、`/docProps/custom.xml`（三种格式相同）。
 core 关系 Type 为 `http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties`，
 CT `application/vnd.openxmlformats-package.core-properties+xml`。
@@ -260,12 +261,12 @@ CT `application/vnd.openxmlformats-officedocument.custom-properties+xml`。
  还可在 workbook `<definedNames>` 写一条公式为 `#N/A` 的定义名（MS-XLSX 2.3.2.3）。
  透视源还在 `/xl/pivotCache/pivotCacheDefinitionN.xml` 的 `extLst` 写 `x14:pivotCacheDefinition/@pivotCacheId`（URI
 `{725AE2AE-9491-48BE-B2B4-4EB974FC3084}`），与 `tabular/@pivotCacheId` 相同。
- drawing 宿主是 `mc:AlternateContent` 里的 slicer `graphicFrame`。create 本期不写切片器。
+ drawing 宿主是 `mc:AlternateContent` 里的 slicer `graphicFrame`。create 可写切片器，见 [json-contract-xlsx.md](json-contract-xlsx.md#create)。
 apply 的外部数据连接 op 可能新建或删除 `/xl/connections.xml`（CT
 `application/vnd.openxmlformats-officedocument.spreadsheetml.connections+xml`，ECMA-376 §12.3.4 / §18.13）。
 workbook `.rels` 补一条 connections 关系（Type
 `http://schemas.openxmlformats.org/officeDocument/2006/relationships/connections`，Target `connections.xml`）。
-不写 `xr16:uid`，不写 `refreshOnLoad`。删光则去掉该部件、workbook 关系与 Override。不强制写 queryTable。create 本期不写连接。
+不写 `xr16:uid`，不写 `refreshOnLoad`。删光则去掉该部件、workbook 关系与 Override。不强制写 queryTable。create 可写连接，见 [json-contract-xlsx.md](json-contract-xlsx.md#create)。
 apply 的外部引用 op 可能新建或删除 `/xl/externalLinks/externalLinkN.xml`（CT
 `application/vnd.openxmlformats-officedocument.spreadsheetml.externalLink+xml`，ECMA-376 §12.3.7 / §18.14）。
 workbook `.rels` 补一条 externalLink 关系（Type
@@ -273,7 +274,7 @@ workbook `.rels` 补一条 externalLink 关系（Type
 该部件 `.rels` 一条 externalLinkPath（Type `http://schemas.openxmlformats.org/officeDocument/2006/relationships/externalLinkPath`，
 `TargetMode` 为 `External`）。
 workbook.xml 写 `<externalReferences>`。不写 `xxl21` / 缓存值。删光则去掉 `<externalReferences>`、部件、关系与 Override。
-`setExternalLink` 只改该链 `.rels` 的 `Target`，不新建部件，已有 `xxl21:alternateUrls` 原样留下。create 本期不写外部引用。
+`setExternalLink` 只改该链 `.rels` 的 `Target`，不新建部件，已有 `xxl21:alternateUrls` 原样留下。create 可写外部引用，见 [json-contract-xlsx.md](json-contract-xlsx.md#create)。
 
 ## create 时的最小包（docx）
 
