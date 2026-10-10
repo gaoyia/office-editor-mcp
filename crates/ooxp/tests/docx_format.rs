@@ -144,6 +144,7 @@ fn run_count_without_scope_runs() {
             "align",
             "indent",
             "spacing",
+            "eastAsia",
             "text",
             "stable",
             "pictureCount",
@@ -182,7 +183,9 @@ fn runs_list_with_scope() {
             "sz",
             "color",
             "font",
-            "eastAsiaFont"
+            "eastAsiaFont",
+            "em",
+            "eastAsianLayout"
         ]
     );
     assert_eq!(runs[0]["id"], "para:AAAA0001/run:1");

@@ -224,7 +224,7 @@ fn set_display(
     Ok(())
 }
 
-fn ensure_settings(
+pub(crate) fn ensure_settings(
     pkg: &mut Package,
     docs: &mut HashMap<String, Document>,
     dirty: &mut HashMap<String, ()>,

@@ -33,7 +33,9 @@ apply 可用 `insertHeaderFooter` 为某节某类型新建页眉或页脚部件�
 可用 `insertDocPart` 插入构建基块、用 `insertDocPartContent` 把基块复制进正文、用 `deleteDocPart` 删掉，
 可用 `insertEmbeddedFont` / `deleteEmbeddedFont` / `setFontEmbed` 读写嵌入字体，
 可用 `setPageBackground` 写整篇页面背景色、用 `setPageBorders` 写节上页面边框，可用 `insertMath` / `setMath` / `deleteMath` 插改删 OMML 公式，
-可用 `insertContentControl` / `setContentControl` / `deleteContentControl` 插改删内容控件。
+可用 `insertContentControl` / `setContentControl` / `deleteContentControl` 插改删内容控件，
+可用 `setParaFormat` / `setRunFormat` 写禁则、强调点与压缩排版，可用 `insertRuby` / `setRuby` / `deleteRuby` 插改删拼音，
+可用 `setEastAsianSettings` 写整篇压缩与自定义禁则字符。
 docx 可用 `setProtection` 开关无密码的限制编辑与只读推荐。xlsx 可用同一 `op` 开关工作表保护与工作簿结构保护（可写 SHA-512 哈希），不要复用 docx 根上那个 `protection` 对象。
 docx 可用 `insertWatermark` / `deleteWatermark` 读写页眉里的 DrawingML 水印。
 正文与页眉页脚里的浮动图 / 文本框 / 连接线可用 `groupShapes` / `ungroup` 组合或解开；
@@ -122,6 +124,8 @@ apply 用 `setHeaderFooterLink` 断开或重新链接；用 `insertHeaderFooter`
 | 正文交叉引用 | `xref:{n}` | `xref:1` |
 | 正文公式 | `math:{n}` | `math:1` |
 | 页眉/页脚公式 | `{容器 id}/math:{n}` | `header:default:1/math:1` |
+| 正文拼音 | `ruby:{n}` | `ruby:1` |
+| 页眉/页脚拼音 | `{容器 id}/ruby:{n}` | `header:default:1/ruby:1` |
 | 正文内容控件 | `sdt:{n}` | `sdt:1` |
 | 页眉/页脚内容控件 | `{容器 id}/sdt:{n}` | `header:default:1/sdt:1` |
 | 编号实例 | `num:{numId}` | `num:1` |
@@ -322,6 +326,10 @@ Word 给题注写的 `_Ref*` 书签仍不进 `bookmarks`（隐藏书签规则不
 框内、注内、批注内的公式本期不编；对这些容器发公式 op 报 `InvalidId`。Equation Editor 3.0 的 OLE / `w:object` 不编。只认 OMML。名单带 `expr` 结构树，不另编嵌套对象 id。
 不解析 UnicodeMath / TeX，也不实现排版引擎。
 
+拼音的 `{n}` 从 1 起，按该故事里 `w:ruby` 的文档顺序（遇 `w:txbxContent` 停住；`mc:AlternateContent` 只进 Choice；`w:del` 里的不编）。
+`ruby:{n}` 在插删拼音之后会变，只够同一次 inspect 之后立刻 apply。正文用 `ruby:{n}`，页眉页脚用 `{容器}/ruby:{n}`。
+框内、注内、批注内的拼音本期不编；对这些容器发拼音 op 报 `InvalidId`。不实现注音排版引擎。
+
 内容控件的 `{n}` 从 1 起，按该故事里被收入的 `w:sdt` 的文档顺序（遇 `w:txbxContent` 停住；`mc:AlternateContent` 只进 Choice，ECMA-376 §17.5.2）。
 嵌套控件各算一条，外层 `{n}` 更小。`sdt:{n}` 在插删控件之后会变，只够同一次 inspect 之后立刻 apply。正文用 `sdt:{n}`，页眉页脚用 `{容器}/sdt:{n}`。
 框内、注内、批注内的控件本期不编；对这些容器发内容控件 op 报 `InvalidId`。
@@ -367,6 +375,8 @@ MS-DOCX `CT_SdtCheckbox`）、`picture`（`w:picture`）、`group`（`w:group`�
 `insertEmbeddedFont` / `setFontEmbed` / `setPageBackground` 的 `id` 必须是 `docx:document`。
 `deleteEmbeddedFont` 的 `id` 必须是 `font:{n}`。`setPageBorders` 的 `id` 必须是 `section:{n}`。
 `insertMath` 的 `id` 必须是段落 id（正文或页眉页脚）或 `docx:document`。`setMath` / `deleteMath` 的 `id` 必须是公式 id。
+`insertRuby` 的 `id` 必须是段落 id（正文或页眉页脚）或 `docx:document`。`setRuby` / `deleteRuby` 的 `id` 必须是拼音 id。
+`setEastAsianSettings` 的 `id` 必须是 `docx:document`。
 `insertContentControl` 的 `id` 必须是段落 id（正文或页眉页脚）或 `docx:document`。
 `setContentControl` / `deleteContentControl` 的 `id` 必须是内容控件 id。对不上的 id 形态报 `InvalidId`。
 
@@ -719,6 +729,10 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
 - **`scope.runs`**（否）
   - 为 `true` 时，已列出的段落（正文切片、已展开的页眉页脚、框内、注内、批注内、表格单元格）带 `runs`
   - 省略或 `false` 则这些段只有 `runCount`，没有名单
+- **`scope.rubies`**（否）
+  - 为 `true` 时列出正文拼音（根上 `rubies`）以及每个页眉、页脚容器上的 `rubies`
+  - 不依赖 `from` / `maxParas`
+  - 省略或 `false` 则只有 `rubyCount`，没有名单
 
 `from` / `maxParas` 只切正文，`headerFooter` 只管页眉页脚段落，`pictures` 只展开图名单，`textBoxes` 只展开框名单，`connectors` 只展开连接线名单，
 `inkCanvases` 只展开墨迹画布名单，
@@ -726,12 +740,12 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
 `tables` 只展开表名单，`revisions` 只展开修订名单，`hyperlinks` 只展开超链接名单，`bookmarks` 只展开书签名单，`fields` 只展开域名单，`tocs` 只展开目录名单，
 `captions` 只展开题注名单，`crossRefs` 只展开交叉引用名单，`indexes` 只展开索引名单，`indexEntries` 只展开索引项名单，`sources` 只展开书目源名单，
 `citations` 只展开引文名单，`bibliographies` 只展开书目块名单，`docParts` 只展开构建基块名单，`embeddedFonts` 只展开嵌入字体名单，`maths` 只展开公式名单，
-`contentControls` 只展开内容控件名单，`numbering` 只展开编号实例名单，`styles` 只展开样式定义名单，`runs` 只展开已列出段落上的 run 名单。
+`contentControls` 只展开内容控件名单，`numbering` 只展开编号实例名单，`styles` 只展开样式定义名单，`runs` 只展开已列出段落上的 run 名单，`rubies` 只展开拼音名单。
 这些键彼此独立，可只开一边。只要想看正文段落，就必须同时给 `from` 和 `maxParas`。不默认把全文倒出来。正文图、正文框、正文连接线与正文墨迹画布名单只出现在已切出的段落上，不挂到文档根。
 正文图表名单、正文 SmartArt 名单、正文 OLE 名单、水印名单、正文表名单、正文修订名单、正文超链接名单、正文书签名单、正文域名单、目录名单、题注名单、交叉引用名单、索引名单、索引项名单、书目源名单、引文名单、书目块名单、
-构建基块名单、嵌入字体名单、公式名单、内容控件名单、编号实例名单与样式定义名单挂在文档根上，不挂在段落上。
+构建基块名单、嵌入字体名单、公式名单、拼音名单、内容控件名单、编号实例名单与样式定义名单挂在文档根上，不挂在段落上。
 `from` 超出 `paraCount` 时正文 `paragraphs` 为空数组，`truncated` 为 `false`，不报错。
-页眉页脚通常很短，给了对应键就返回该部件全部段落、图、框、图表、SmartArt、嵌入对象、表、修订、超链接、书签、域、公式或内容控件，都不再单独分页。
+页眉页脚通常很短，给了对应键就返回该部件全部段落、图、框、图表、SmartArt、嵌入对象、表、修订、超链接、书签、域、公式、拼音或内容控件，都不再单独分页。
 框通常短，给了 `textBoxContent: true` 就返回该框全部段落，不再单独分页。用户注和批注通常不多，给了 `notes: true` 或 `comments: true` 就返回全部名单，每条倒出全部段落，不再单独分页。
 图表通常不多，给了 `charts: true` 就返回全部名单，每张带全部系列，不再单独分页。SmartArt 通常不多，给了 `smartArt: true` 就返回全部名单，每张带全部可见点，不再单独分页。
 嵌入对象通常不多，给了 `oleObjects: true` 就返回全部名单。水印通常不多，给了 `watermarks: true` 就返回全部名单。表通常不多，给了 `tables: true` 就返回全部名单。
@@ -739,11 +753,11 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
 样式定义通常不多，给了 `styles: true` 就返回全部样式。已列出的段落始终有 `runCount`；给了 `runs: true` 才带 `runs`。
 xlsx 的 `scope` 里出现 `textBoxContent`、`notes`、`oleObjects`、`watermarks`、`tables`、`timing`、`revisions`、`hyperlinks`、
 `bookmarks`、`fields`、`tocs`、`captions`、`crossRefs`、`indexes`、`indexEntries`、`sources`、`citations`、`bibliographies`、
-`docParts`、`maths`、`contentControls`、`numbering`、`styles`、`runs` 或 `inkCanvases` 报 `InvalidField`。
+`docParts`、`maths`、`contentControls`、`numbering`、`styles`、`runs`、`rubies` 或 `inkCanvases` 报 `InvalidField`。
 xlsx 认 `scope.pictures`、`scope.charts`、`scope.headerFooter`、`scope.comments`、`scope.textBoxes` 与 `scope.smartArt`。
 pptx 的 `scope` 里出现 `headerFooter`、`textBoxes`、`textBoxContent`、`revisions`、`hyperlinks`、`bookmarks`、`fields`、`tocs`、
 `captions`、`crossRefs`、`indexes`、`indexEntries`、`sources`、`citations`、`bibliographies`、`docParts`、`maths`、
-`contentControls`、`numbering`、`styles`、`oleObjects`、`watermarks`、`runs` 或 `inkCanvases` 报 `InvalidField`。
+`contentControls`、`numbering`、`styles`、`oleObjects`、`watermarks`、`runs`、`rubies` 或 `inkCanvases` 报 `InvalidField`。
 pptx 认 `scope.pictures`、`scope.charts`、`scope.smartArt`、`scope.tables`、`scope.notes`、`scope.comments` 与 `scope.timing`。
 xlsx / pptx 的 `scope.tables` 不是同一件事：xlsx 仍拒绝；pptx 展开幻灯片 DrawingML 表；docx 展开 `w:tbl`。
 只给 `textBoxContent`、不给 `textBoxes` 报 `InvalidField`。xlsx 的 `scope` 里出现 `textBoxContent` 仍报 `InvalidField`。
@@ -784,6 +798,7 @@ xlsx / pptx 的 `scope.tables` 不是同一件事：xlsx 仍拒绝；pptx 展开
   "bibliographyCount": 0,
   "docPartCount": 0,
   "mathCount": 0,
+  "rubyCount": 0,
   "contentControlCount": 0,
   "numberingCount": 0,
   "styleCount": 4,
@@ -820,6 +835,7 @@ xlsx / pptx 的 `scope.tables` 不是同一件事：xlsx 仍拒绝；pptx 展开
       "bookmarkCount": 0,
       "fieldCount": 0,
       "mathCount": 0,
+      "rubyCount": 0,
       "contentControlCount": 0
     }
   ],
@@ -846,6 +862,7 @@ xlsx / pptx 的 `scope.tables` 不是同一件事：xlsx 仍拒绝；pptx 展开
       "bookmarkCount": 0,
       "fieldCount": 0,
       "mathCount": 0,
+      "rubyCount": 0,
       "contentControlCount": 0,
       "paragraphs": [
         {
@@ -922,6 +939,12 @@ xlsx / pptx 的 `scope.tables` 不是同一件事：xlsx 仍拒绝；pptx 展开
   "pageBackground": {
     "color": null,
     "display": false
+  },
+  "eastAsianSettings": {
+    "characterSpacingControl": null,
+    "strictFirstAndLastChars": null,
+    "noLineBreaksBefore": null,
+    "noLineBreaksAfter": null
   },
   "from": 1,
   "truncated": false,
@@ -1024,6 +1047,7 @@ xlsx / pptx 的 `scope.tables` 不是同一件事：xlsx 仍拒绝；pptx 展开
 - 文档根上的 `embeddedFontCount` 始终出现，只计 fontTable 里 `w:embedRegular` / `w:embedBold` / `w:embedItalic` / `w:embedBoldItalic` 的个数。
   没有 fontTable 或没有任何 embed* 则为 `0`。根上不挂 `embeddedFonts`，除非给了 `scope.embeddedFonts`。页眉页脚容器不出现 `embeddedFontCount`。
 - 文档根上的 `mathCount` 始终出现，只计主文档里被收入的顶层 `m:oMath` 个数（判定见上文公式 id 那节），不含页眉页脚，也不含框内、注内、批注内的公式。没有公式则为 `0`。根上不挂 `maths`，除非给了 `scope.maths`。
+- 文档根上的 `rubyCount` 始终出现，只计主文档里被收入的 `w:ruby` 个数（判定见上文拼音 id 那节），不含页眉页脚，也不含框内、注内、批注内的拼音。没有拼音则为 `0`。根上不挂 `rubies`，除非给了 `scope.rubies`。
 - 文档根上的 `contentControlCount` 始终出现，只计主文档里被收入的 `w:sdt` 个数（判定见上文内容控件 id 那节），不含页眉页脚，也不含框内、注内、批注内的控件。没有控件则为 `0`。
   根上不挂 `contentControls`，除非给了 `scope.contentControls`。
 - 文档根上的 `numberingCount` 始终出现，计 `numbering.xml` 里 `w:num` 且 `numId` 不为 0 的个数。没有 numbering 部件则为 `0`。
@@ -1034,10 +1058,10 @@ xlsx / pptx 的 `scope.tables` 不是同一件事：xlsx 仍拒绝；pptx 展开
   树上 `level` 从 1 到 9。`Heading1` / `标题1` / `outlineLvl=0` 都是 `level: 1`。不是标题的段落不进 `outline`。页眉页脚段落不进 `outline`。
 - `headers`、`footers` 始终出现。没有引用则为空数组。容器字段顺序：`id`、`type`、`sections`、`paraCount`、`pictureCount`、`textBoxCount`、
   `connectorCount`、`inkCanvasCount`、`chartCount`、`smartArtCount`、`oleObjectCount`、`model3dCount`、`watermarkCount`、`tableCount`、`revisionCount`、
-  `hyperlinkCount`、`bookmarkCount`、`fieldCount`、`mathCount`、`contentControlCount`，
+  `hyperlinkCount`、`bookmarkCount`、`fieldCount`、`mathCount`、`rubyCount`、`contentControlCount`，
   有图名单时再跟 `pictures`，有框名单时再跟 `textBoxes`，有连接线名单时再跟 `connectors`，有墨迹画布名单时再跟 `inkCanvases`，有图表名单时再跟 `charts`，有 SmartArt 名单时再跟 `smartArts`，
   有 OLE 名单时再跟 `oleObjects`，有 3D 模型名单时再跟 `model3ds`，有表名单时再跟 `tables`，有修订名单时再跟 `revisions`，有超链接名单时再跟 `hyperlinks`，有书签名单时再跟 `bookmarks`，
-  有域名单时再跟 `fields`，有公式名单时再跟 `maths`，有内容控件名单时再跟 `contentControls`，有段落时再跟 `paragraphs`。
+  有域名单时再跟 `fields`，有公式名单时再跟 `maths`，有拼音名单时再跟 `rubies`，有内容控件名单时再跟 `contentControls`，有段落时再跟 `paragraphs`。
   `sections` 是从 1 起的节号数组，按主文档里 `w:sectPr` 的文档顺序。容器上的 `paraCount` 是该部件内 `w:p` 的个数（边界与正文相同）。
   `pictureCount` 始终出现，是该部件内被收入的 DrawingML 图片个数（不含框内图）。`textBoxCount` 始终出现，是该部件内被收入的文本框个数。
   `connectorCount` 始终出现，是该部件内被收入的连接线个数。`inkCanvasCount` 始终出现，是该部件内被收入的墨迹画布个数。
@@ -1047,7 +1071,7 @@ xlsx / pptx 的 `scope.tables` 不是同一件事：xlsx 仍拒绝；pptx 展开
   `watermarkCount` 始终出现，是该部件内被收入的 DrawingML 水印个数（页脚恒为 `0`）。`tableCount` 始终出现，是该部件内被收入的 `w:tbl` 个数（含嵌套表，不含框内表）。
   `revisionCount` 始终出现，是该部件内被收入的修订节点个数（不含框内修订）。`hyperlinkCount` 始终出现，是该部件内被收入的 `w:hyperlink` 个数（不含框内链）。
   `bookmarkCount` 始终出现，是该部件内被收入的书签个数（不含框内书签）。`fieldCount` 始终出现，是该部件内被收入的域个数（不含框内域）。
-  `mathCount` 始终出现，是该部件内被收入的顶层 `m:oMath` 个数（不含框内公式）。`contentControlCount` 始终出现，是该部件内被收入的内容控件个数（不含框内控件）。
+  `mathCount` 始终出现，是该部件内被收入的顶层 `m:oMath` 个数（不含框内公式）。`rubyCount` 始终出现，是该部件内被收入的 `w:ruby` 个数（不含框内拼音）。`contentControlCount` 始终出现，是该部件内被收入的内容控件个数（不含框内控件）。
 - 文档根上的 `sections` 始终出现。每个 `w:sectPr` 一项，字段顺序：`id`、`index`、`headerDistance`、`footerDistance`、`top`、`bottom`、`left`、
   `right`、`gutter`、`pageWidth`、`pageHeight`、`orient`、`columns`、`vAlign`、`lineNumbering`、`docGrid`、`rtlGutter`、
   `headerLink`、`footerLink`、`pageBorders`。
@@ -1080,7 +1104,7 @@ xlsx / pptx 的 `scope.tables` 不是同一件事：xlsx 仍拒绝；pptx 展开
 - 给了 `from` 和 `maxParas` 时，正文 `paragraphs` 按文档顺序切片。范围内段落数超过 `maxParas` 则 `truncated` 为 `true`。
   切片里每段始终有 `pictureCount`、`textBoxCount`、`connectorCount`、`inkCanvasCount`、`model3dCount` 与 `runCount`。
   段落字段顺序：`id`、`index`、`style`、`level`（标题才有）、该段自己的 `w:pPr/w:numPr` 且 `numId` 非 0 时再跟 `num`、`ilvl`、然后始终跟 `align`、`indent`、
-  `spacing`、`text`、`stable`、`pictureCount`、`textBoxCount`、`connectorCount`、`inkCanvasCount`、`model3dCount`、`runCount`，
+  `spacing`、`eastAsia`、`text`、`stable`、`pictureCount`、`textBoxCount`、`connectorCount`、`inkCanvasCount`、`model3dCount`、`runCount`，
   有图名单时再跟 `pictures`，有框名单时再跟 `textBoxes`，有连接线名单时再跟 `connectors`，有墨迹画布名单时再跟 `inkCanvases`，有 3D 模型名单时再跟 `model3ds`，该段有脚注或尾注引用时再跟 `footnoteRef` / `endnoteRef`（注 id 数组，
   按引用在该段内的文档顺序），该段落落在批注范围内时再跟 `commentIds`（批注 id 数组，按范围开始在文档中的顺序；同一段重叠多条都列出），给了 `scope.runs` 时再跟 `runs`。
   没有引用或范围则没有这些键。已展开的页眉页脚、框内、注内段落同样可以带 `commentIds`。不解析 `styles.xml` 继承的编号：样式上有 `numPr`、段上没有的，树上没有 `num` / `ilvl`。
@@ -1090,7 +1114,7 @@ xlsx / pptx 的 `scope.tables` 不是同一件事：xlsx 仍拒绝；pptx 展开
    / `inkCanvasCount` / `inkCanvases`
    / `model3dCount` / `model3ds`
    / `chartCount` / `charts` / `smartArtCount` / `smartArts` / `oleObjectCount` / `oleObjects`，图、框、连接线、墨迹画布、3D 模型、图表、SmartArt 与嵌入对象仍挂在容器上。
-  页眉页脚段落仍有 `align`、`indent`、`spacing`、`runCount`；给了 `scope.runs` 时再带 `runs`。
+  页眉页脚段落仍有 `align`、`indent`、`spacing`、`eastAsia`、`runCount`；给了 `scope.runs` 时再带 `runs`。
 - `scope.pictures` 为 `true` 时，每个页眉、页脚节点带 `pictures`；若同时给了 `from` 与 `maxParas`，切片里每段也带 `pictures`。否则这些节点上都没有该字段。不把媒体字节放进树。
   每张图的字段顺序：`id`、`docPrId`、`name`、`kind`、`cx`、`cy`、`wrap`、`stable`。
   有 `asvg:svgBlip` 时再跟 `contentType`，值为 `image/svg+xml`。
@@ -1288,6 +1312,12 @@ xlsx / pptx 的 `scope.tables` 不是同一件事：xlsx 仍拒绝；pptx 展开
   本期只认 `@w:color`，不读 `themeColor`，也不把 `w:drawing` 渐变 / 图片背景摊进树。
   `display` 对应 `settings.xml` 的 `w:displayBackgroundShape`：有元素且 OnOff 为开为 `true`，否则为 `false`。没有 settings 则为 `false`。
   页眉页脚容器不出现 `pageBackground`。xlsx / pptx 根上不要带 `pageBackground`。不实现排版引擎，不算页面上实际画出的像素。create 本期不写页面背景。
+- 文档根上的 `eastAsianSettings` 始终出现，对象字段顺序：`characterSpacingControl`、`strictFirstAndLastChars`、`noLineBreaksBefore`、`noLineBreaksAfter`。
+  `characterSpacingControl` 取 `settings.xml` 的 `w:characterSpacingControl/@w:val`（§17.15.1.18），没有该元素或缺 `val` 则为 `null`。
+  `strictFirstAndLastChars` 取 `w:strictFirstAndLastChars`（§17.15.1.82）：没有元素为 `null`；有且 OnOff 为开为 `true`，为关为 `false`。
+  `noLineBreaksBefore` / `noLineBreaksAfter` 取 `w:noLineBreaksBefore` / `w:noLineBreaksAfter`（§17.15.1.59、§17.15.1.58）。
+  没有该元素为 `null`。有则对象字段顺序：`lang`、`chars`，对应 `w:lang` / `w:val`，缺则为 `null`。
+  没有 settings 部件则四项都是 `null`。页眉页脚容器不出现 `eastAsianSettings`。xlsx / pptx 根上不要带此对象。create 本期不写。
 - 节上的 `pageBorders` 始终出现。没有 `w:pgBorders` 为 `null`。有则对象字段顺序：`offsetFrom`、`display`、`zOrder`、`top`、`left`、`bottom`、`right`。
   前三项取对应属性原文，缺则为 `null`。四边取 `w:top` / `w:left` / `w:bottom` / `w:right`，没有该子元素为 `null`。
   每边对象字段顺序：`val`、`sz`、`space`、`color`。`val` 取 `@w:val`，缺则为 `""`。
@@ -1300,6 +1330,13 @@ xlsx / pptx 的 `scope.tables` 不是同一件事：xlsx 仍拒绝；pptx 展开
   `host` 是所在段落 id；不在任何 `w:p` 里则为 `null`。`text` 为该 `oMath` 子孙里所有 `t`（即 `m:t`）按文档顺序拼接，不做 UnicodeMath 全量互转。
   `expr` 是 `oMath` 直接子节点的数组，节点 `type` 见下文「公式 expr」。
   xlsx / pptx 的 drawing 公式框见 [xlsx 分册](json-contract-xlsx.md#inspect) 与 [pptx 分册](json-contract-pptx.md#inspect)。
+- `scope.rubies` 为 `true` 时，根上带 `rubies`（正文），每个页眉、页脚容器带 `rubies`。没有拼音时为空数组。按该故事里 `w:ruby` 的文档顺序。
+  每条字段顺序：`id`、`index`、`host`、`base`、`rt`、`align`、`hps`、`hpsRaise`、`hpsBaseText`、`lid`。
+  `id` 是 `ruby:{n}` 或 `{容器}/ruby:{n}`。`host` 是所在段落 id；不在任何 `w:p` 里则为 `null`。
+  `base` 为 `w:rubyBase` 子孙可见 `w:t` 拼接。`rt` 为 `w:rt` 子孙可见 `w:t` 拼接。
+  `align` 取 `w:rubyPr/w:rubyAlign/@w:val`，缺则为 `null`。
+  `hps` / `hpsRaise` / `hpsBaseText` 取对应子元素 `@w:val`，能解析成整数则写整数，否则为 `null`。
+  `lid` 取 `w:lid/@w:val`，缺则为 `null`。xlsx / pptx 的 `scope` 里出现 `rubies` 报 `InvalidField`。
 - `scope.contentControls` 为 `true` 时，根上带 `contentControls`（正文），每个页眉、页脚容器带 `contentControls`。没有控件时为空数组。
   按该故事里被收入的 `w:sdt` 的文档顺序。每条字段顺序：`id`、`index`、`kind`、`level`、`host`、`tag`、`alias`、`xmlId`、`bound`、`parent`、`text`；
   `kind` 为 `dropDown` 或 `comboBox` 时再跟 `items`；`kind` 为 `date` 时再跟 `fullDate`；`kind` 为 `checkbox` 时再跟 `checked`。
@@ -1331,13 +1368,20 @@ xlsx / pptx 的 `scope.tables` 不是同一件事：xlsx 仍拒绝；pptx 展开
   `left` 取 `w:left`，没有则取 `w:start`。`right` 取 `w:right`，没有则取 `w:end`。能解析成非负整数则写整数，否则为 `null`。缺属性为 `null`。单位 twip。
 - `spacing` 取该段自己的 `w:pPr/w:spacing`（§17.3.1.33）。没有该元素则为 `null`。有则对象字段顺序：`before`、`after`、`line`、`lineRule`。
   前三项能解析成非负整数则写整数，否则为 `null`。`lineRule` 取 `w:lineRule` 原文，缺则为 `null`。单位 twip。不计算自动行距。
+- `eastAsia` 取该段自己的 `w:pPr` 上东亚排版开关（§17.3.1.16、§17.3.1.23、§17.3.1.45、§17.3.1.2、§17.3.1.3）。
+  五个子元素都没有则为 `null`。有任意一个则对象字段顺序：`kinsoku`、`overflowPunct`、`topLinePunct`、`autoSpaceDE`、`autoSpaceDN`。
+  各键：没有该子元素为 `null`；有且 OnOff 为关为 `false`，否则为 `true`。不把 `styles.xml` 摊进来。不计算禁则断行。
 - `runCount` 始终出现在已列出的段落上（正文切片、页眉页脚段落、框内、注内、批注内、表格单元格）。计该段内被收入的 `w:r` 个数，规则与 run id 相同。
-- `scope.runs` 为 `true` 时，已列出的段落带 `runs`。每条字段顺序：`id`、`index`、`text`、`bold`、`italic`、`underline`、`sz`、`color`、`font`、`eastAsiaFont`。
+- `scope.runs` 为 `true` 时，已列出的段落带 `runs`。每条字段顺序：`id`、`index`、`text`、`bold`、`italic`、`underline`、`sz`、`color`、`font`、`eastAsiaFont`、`em`、`eastAsianLayout`。
   `id` 是 `{段落 id}/run:{n}`。`index` 与 `{n}` 相同。`text` 是该 run 内可见纯文本，规则与段上 `text` 相同，范围限于这个 `w:r`。
   `bold` / `italic` 只看该 run 自己的 `w:b` / `w:i`：没有元素为 `null`；有且 OnOff 为关为 `false`，否则为 `true`。
   `underline` 取 `w:u/@w:val`，没有 `u` 为 `null`，有元素却没有 `val` 则当作 `single`。`sz` 取 `w:sz/@w:val` 能解析成整数则写整数，否则为 `null`。
   `color` 取 `w:color/@w:val` 原文，缺则为 `null`；不解析 theme。`font` 取 `w:rFonts` 的 `ascii`，没有则取 `hAnsi`，再没有为 `null`。
-  `eastAsiaFont` 取 `eastAsia`，缺则为 `null`。xlsx / pptx 的 `scope` 里出现 `runs` 报 `InvalidField`。
+  `eastAsiaFont` 取 `eastAsia`，缺则为 `null`。
+  `em` 取 `w:em/@w:val`（§17.3.2.12），没有 `em` 为 `null`。
+  `eastAsianLayout` 取 `w:eastAsianLayout`（§17.3.2.10）。没有该元素为 `null`。有则对象字段顺序：`id`、`combine`、`combineBrackets`、`vert`、`vertCompress`。
+  `id` 能解析成整数则写整数，否则为 `null`。`combine` / `vert` / `vertCompress` 取对应属性 OnOff：`1` / `true` / `on` 为 `true`，`0` / `false` / `off` 为 `false`，缺属性为 `null`。
+  `combineBrackets` 取 `w:combineBrackets` 原文，缺则为 `null`。xlsx / pptx 的 `scope` 里出现 `runs` 报 `InvalidField`。
 - `link` 始终出现。未链接则为 `{ "prev": null, "next": null }`。链接时 `prev` / `next` 是相邻框的 id，没有那一端则为 `null`。
 - 框内 `paragraphs` 的字段顺序与正文段落相同（含 `pictureCount`）。框内图的字段顺序与宿主图相同，id 带框前缀。
 - `kind`：`inline`（`wp:inline`）或 `anchor`（`wp:anchor`）。
@@ -1357,6 +1401,7 @@ xlsx / pptx 的 `scope.tables` 不是同一件事：xlsx 仍拒绝；pptx 展开
 - `stable`：有 `w14:paraId` 为 `true`，否则为 `false`。
 - 无 `scope.revisions` 时不返回修订名单，仍返回 `revisionCount`。无 `scope.hyperlinks` 时不返回超链接名单，仍返回 `hyperlinkCount`。
   无 `scope.bookmarks` 时不返回书签名单，仍返回 `bookmarkCount`。无 `scope.fields` 时不返回域名单，仍返回 `fieldCount`。
+  无 `scope.maths` 时不返回公式名单，仍返回 `mathCount`。无 `scope.rubies` 时不返回拼音名单，仍返回 `rubyCount`。
   无 `scope.tocs` 时不返回目录名单，仍返回 `tocCount`。无 `scope.captions` 时不返回题注名单，仍返回 `captionCount`。
   无 `scope.crossRefs` 时不返回交叉引用名单，仍返回 `crossRefCount`。无 `scope.indexes` 时不返回索引名单，仍返回 `indexCount`。
   无 `scope.indexEntries` 时不返回索引项名单，仍返回 `indexEntryCount`。无 `scope.sources` 时不返回书目源名单，仍返回 `sourceCount`。
@@ -1370,7 +1415,7 @@ xlsx / pptx 的 `scope.tables` 不是同一件事：xlsx 仍拒绝；pptx 展开
   顶层 XE 同时出现在 `fields` 与 `indexEntries` 里。顶层 CITATION 同时出现在 `fields` 与 `citations` 里。
   顶层 BIBLIOGRAPHY 同时出现在 `fields` 与 `bibliographies` 里。
   文本框里的段落不并进外层段落的 `text`；它们只出现在对应框的 `paragraphs` 里（需 `textBoxContent`）。
-  含超链接或域或公式或行内内容控件的段落仍出现在树上，`text` 只含可见结果（不含 `w:instrText`）。apply 的 `setParaText` 验收只用无域、无超链接、无公式、无行内内容控件的页眉页脚段落。
+  含超链接或域或公式或拼音或行内内容控件的段落仍出现在树上，`text` 只含可见结果（不含 `w:instrText`）。apply 的 `setParaText` 验收只用无域、无超链接、无公式、无拼音、无行内内容控件的页眉页脚段落。
 
 
 ### 文档保护（仅 docx）
@@ -3339,8 +3384,14 @@ id 不是正文或页眉页脚段落 id 报 `InvalidId`。xlsx / pptx 上发此 
 | `after` | 可选。段后距，单位 twip。写入 `w:spacing/@w:after`。`null` 表示去掉该属性 |
 | `line` | 可选。行距，单位 twip。写入 `w:spacing/@w:line`。`null` 表示去掉该属性 |
 | `lineRule` | 可选。`auto`、`exact` 或 `atLeast`。写入 `w:spacing/@w:lineRule`。`null` 表示去掉该属性 |
+| `kinsoku` | 可选。写入 `w:kinsoku`。`true` 省略 `val` 或按开写出；`false` 写 `val="0"`；`null` 删掉该元素 |
+| `overflowPunct` | 可选。写入 `w:overflowPunct`。开关规则与 `kinsoku` 相同 |
+| `topLinePunct` | 可选。写入 `w:topLinePunct`。开关规则与 `kinsoku` 相同 |
+| `autoSpaceDE` | 可选。写入 `w:autoSpaceDE`。开关规则与 `kinsoku` 相同 |
+| `autoSpaceDN` | 可选。写入 `w:autoSpaceDN`。开关规则与 `kinsoku` 相同 |
 
-`align`、`left`、`right`、`firstLine`、`hanging`、`before`、`after`、`line`、`lineRule` 至少给一个。
+`align`、`left`、`right`、`firstLine`、`hanging`、`before`、`after`、`line`、`lineRule`、
+`kinsoku`、`overflowPunct`、`topLinePunct`、`autoSpaceDE`、`autoSpaceDN` 至少给一个。
 `firstLine` 与 `hanging` 不能同时写成非 `null` 的数字。不认识的 `align` / `lineRule` 报 `InvalidField`。只改该段自己的 `w:pPr`，不改 `styles.xml`。
 属性删光后去掉空的 `w:ind` / `w:spacing`。找不到段落报 `IdNotFound`。id 不是段落 id 报 `InvalidId`。xlsx / pptx 上发此 op 报 `InvalidField`。
 
@@ -3396,12 +3447,92 @@ id 不是正文或页眉页脚段落 id 报 `InvalidId`。xlsx / pptx 上发此 
 - **`eastAsiaFont`**
   - 可选
   - 写入 `w:rFonts` 的 `eastAsia`
+- **`em`**
+  - 可选
+  - `none`、`dot`、`comma`、`circle` 或 `underDot`
+  - 写入 `w:em/@w:val`
+  - `null` 表示去掉 `w:em`
+- **`eastAsianLayout`**
+  - 可选
+  - 对象或 `null`
+  - `null` 表示去掉 `w:eastAsianLayout`
+  - 对象字段：`id`（可选整数）、`combine`（可选布尔）、`combineBrackets`（可选 `none` / `round` / `square` / `angle` / `curly`）、`vert`（可选布尔）、`vertCompress`（可选布尔）
+  - 整份替换该元素上的这些属性；没点名的属性不写出
+  - `combine` 与 `vert` 至少给一个
+  - `combineBrackets` 只在 `combine` 为 `true` 时有效，否则报 `InvalidField`
 
-`bold`、`italic`、`underline`、`sz`、`color`、`font`、`eastAsiaFont` 至少给一个。只改被点名的那一个 `w:r` 的 `w:rPr`，不拆 run，不改 `styles.xml`。
-不认识的 `underline`、空 `font` / `eastAsiaFont`、不是六位十六进制的 `color`、`sz` 越界报 `InvalidField`。找不到 run 报 `IdNotFound`。
+`bold`、`italic`、`underline`、`sz`、`color`、`font`、`eastAsiaFont`、`em`、`eastAsianLayout` 至少给一个。只改被点名的那一个 `w:r` 的 `w:rPr`，不拆 run，不改 `styles.xml`。
+不认识的 `underline` / `em` / `combineBrackets`、空 `font` / `eastAsiaFont`、不是六位十六进制的 `color`、`sz` 越界报 `InvalidField`。找不到 run 报 `IdNotFound`。
 id 不是 run id 报 `InvalidId`。xlsx / pptx 上发此 op 报 `InvalidField`。
 
 示例见 `docs/examples/docx-apply-format.json`。
+
+### insertRuby
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"insertRuby"` |
+| `id` | 段落 id（正文或页眉页脚），或 `docx:document` |
+| `base` | 必填非空。基文，写入 `w:rubyBase` 一条 `w:r` / `w:t` |
+| `rt` | 必填非空。拼音，写入 `w:rt` 一条 `w:r` / `w:t` |
+| `align` | 可选。`center`、`distributeLetter`、`distributeSpace`、`left`、`right` 或 `rightVertical`。缺省 `distributeSpace` |
+| `hps` | 可选。拼音字号，半磅整数，2 到 3276。缺省 `12` |
+| `hpsRaise` | 可选。拼音抬升，半磅整数，2 到 3276。省略则与 `hps` 相同 |
+| `hpsBaseText` | 可选。基文字号，半磅整数，2 到 3276。缺省 `24` |
+| `lid` | 可选。语言标签，写入 `w:lid/@w:val`。缺省 `zh-CN` |
+
+在点名段末尾追加一个 `w:r`，里面是 `w:ruby`（`rubyPr` + `rt` + `rubyBase`）。
+`id` 为 `docx:document` 时在正文末尾、`sectPr` 之前新插一个只含该拼音的 `w:p`。
+框内、注内、批注内的段落，以及拼音 id、容器 id、表 id、run id、`section:{n}`，一律报 `InvalidId`。找不到段落报 `IdNotFound`。
+空 `base` / `rt`、空 `lid`、不认识的 `align`、或 `hps` / `hpsRaise` / `hpsBaseText` 越界，报 `InvalidField`。
+xlsx / pptx 上发此 op 报 `InvalidField`。create 本期不写拼音。
+
+### setRuby
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"setRuby"` |
+| `id` | 拼音 id |
+| `base` | 可选。非空。替换 `rubyBase` 里的可见文本 |
+| `rt` | 可选。非空。替换 `rt` 里的可见文本 |
+| `align` | 可选。写入 `w:rubyAlign/@w:val` |
+| `hps` | 可选。半磅整数，2 到 3276 |
+| `hpsRaise` | 可选。半磅整数，2 到 3276 |
+| `hpsBaseText` | 可选。半磅整数，2 到 3276 |
+| `lid` | 可选。非空。写入 `w:lid/@w:val` |
+
+`base`、`rt`、`align`、`hps`、`hpsRaise`、`hpsBaseText`、`lid` 至少给一个。只改被点名的那一个 `w:ruby`。
+空 `base` / `rt` / `lid`、不认识的 `align`、或字号越界报 `InvalidField`。找不到报 `IdNotFound`。
+id 不是拼音 id 报 `InvalidId`。xlsx / pptx 上发此 op 报 `InvalidField`。
+
+### deleteRuby
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"deleteRuby"` |
+| `id` | 拼音 id |
+
+删掉该 `w:ruby`。若宿主 `w:r` 里除 `w:rPr` 外只剩这一份拼音，连该 run 一起删。不因此删掉空段。
+找不到报 `IdNotFound`。id 不是拼音 id 报 `InvalidId`。xlsx / pptx 上发此 op 报 `InvalidField`。
+
+对含本期收入的 `w:ruby` 的段落发 `setParaText` 报 `NotImplemented`。
+
+示例见 `docs/examples/docx-apply-east-asia.json`。
+
+### setEastAsianSettings
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"setEastAsianSettings"` |
+| `id` | 必须是 `docx:document` |
+| `characterSpacingControl` | 可选。`doNotCompress`、`compressPunctuation` 或 `compressPunctuationAndJapaneseKana`。`null` 删掉该元素 |
+| `strictFirstAndLastChars` | 可选。布尔。`true` 写入空元素；`false` 写 `val="0"`；`null` 删掉该元素 |
+| `noLineBreaksBefore` | 可选。对象 `{ "lang", "chars" }` 或 `null`。`null` 删掉该元素 |
+| `noLineBreaksAfter` | 可选。对象 `{ "lang", "chars" }` 或 `null` |
+
+四个字段至少给一个。对象必须同时有非空 `lang` 与非空 `chars`。不认识的 `characterSpacingControl` 报 `InvalidField`。
+id 不是 `docx:document` 报 `InvalidId`。没有 settings 且要写入时新建 `/word/settings.xml` 与主文档 settings 关系。
+xlsx / pptx 上发此 op 报 `InvalidField`。create 本期不写。
 
 ### setTextBoxLink
 
@@ -3560,12 +3691,12 @@ pptx 见 [pptx 分册](json-contract-pptx.md#ungroup)。
 
 允许变脏的部件：主文档 XML（通常是 `/word/document.xml`）及其 `.rels`，
 被 `setParaText`、`setParaFormat`、`setRunFormat`、图片 op、文本框 op、连接线与组合 op、墨迹画布 op、图表 op、SmartArt op、OLE op、表格结构 op、修订 op、超链接与书签 op、
-域 op、公式 op、内容控件 op、`setParaNumbering` 或 `setParaStyle` 点名的页眉、页脚部件及其 `.rels`，
+域 op、公式 op、拼音 op、内容控件 op、`setParaNumbering` 或 `setParaStyle` 点名的页眉、页脚部件及其 `.rels`，
 `setHeaderFooterLink` / `insertHeaderFooter` / `deleteSection` 改到的主文档关系、`[Content_Types].xml`、新建或删除的 header/footer 部件及其 `.rels`，
 脚注 / 尾注部件及其 `.rels`，批注部件 `/word/comments.xml`、`commentsExtended.xml`、`people.xml`，
 以及文件里已有的 `commentsIds.xml` / `commentsExtensible.xml`，图表部件 `/word/charts/…` 及其 `.rels`，embedding `/word/embeddings/…`，
 SmartArt 四件套 `/word/diagrams/…` 及可选 drawing 缓存，`setNoteNumbering` 在整篇上改到的 `settings.xml` 与主文档（各节 `sectPr`），
-`setEvenAndOddHeaders` / `setMirrorMargins` / `setGutterAtTop` / `setProtection` 改到的 `settings.xml`，
+`setEvenAndOddHeaders` / `setMirrorMargins` / `setGutterAtTop` / `setProtection` / `setEastAsianSettings` 改到的 `settings.xml`，
 `setProtection` 打开或关掉窗体保护时还可以脏主文档各节 `w:formProt`，
 `insertWatermark` / `deleteWatermark` 改到的页眉部件及其 `.rels`、必要时新建的 `/word/headerN.xml`、主文档关系、
 `[Content_Types].xml` 与 `/word/media/…`，
@@ -3577,7 +3708,7 @@ OLE op 还可以脏 `/word/embeddings/…` 与预览图媒体。墨迹画布 op 
 `insertCrossRef`、`deleteCrossRef`、`insertIndex`、`deleteIndex`、`insertIndexEntry`、`deleteIndexEntry`、`insertSource`、
 `deleteSource`、`insertCitation`、`deleteCitation`、`insertBibliography`、`deleteBibliography`、`insertDocPart`、
 `deleteDocPart`、`insertDocPartContent`、`insertEmbeddedFont`、`deleteEmbeddedFont`、`setFontEmbed`、`insertMath`、
-`setMath` 与 `deleteMath` 只脏主文档（页眉页脚上的公式 op、`insertCrossRef`、
+`setMath`、`deleteMath`、`insertRuby`、`setRuby` 与 `deleteRuby` 只脏主文档（页眉页脚上的公式 op、拼音 op、`insertCrossRef`、
 `insertIndexEntry` 与 `insertCitation` 另脏对应 header/footer 部件）。
 `insertSource` / `deleteSource` 还可以脏 `/customXml/itemN.xml`、`itemPropsN.xml`、`itemN.xml.rels`、主文档 `.rels` 与 `[Content_Types].xml`。
 `insertDocPart` / `deleteDocPart` 还可以脏 `/word/glossary/document.xml`、
@@ -3585,9 +3716,10 @@ OLE op 还可以脏 `/word/embeddings/…` 与预览图媒体。墨迹画布 op 
 `insertDocPartContent` 只脏主文档。`insertEmbeddedFont` / `deleteEmbeddedFont` 还可以脏 `/word/fontTable.xml`、fontTable `.rels`、
 `/word/fonts/fontN.odttf`、主文档 `.rels`、`[Content_Types].xml` 与 `settings.xml`。
 `setFontEmbed` 只脏 `settings.xml`（缺则新建）。`setPageBackground` 脏主文档与 `settings.xml`（缺则新建）。
+`setEastAsianSettings` 只脏 `settings.xml`（缺则新建）。
 `insertContentControl`、`setContentControl` 与 `deleteContentControl` 只脏主文档（页眉页脚上的内容控件 op 另脏对应 header/footer 部件）。
 `deleteSection` 脏主文档，并可能删掉不再被引用的 header/footer 部件。
-正文图片 op、文本框 op、图表 op、SmartArt op、正文表格结构 op、正文修订 op、正文超链接 / 书签 op、正文域 op、正文公式 op、正文内容控件 op、正文 `setParaNumbering`、
+正文图片 op、文本框 op、图表 op、SmartArt op、正文表格结构 op、正文修订 op、正文超链接 / 书签 op、正文域 op、正文公式 op、正文拼音 op、正文内容控件 op、正文 `setParaNumbering`、
 正文 `setParaStyle`、正文 `setParaFormat` 与正文 `setRunFormat` 脏主文档与主文档 `.rels`。
 一次 `ops` 可以混用 `setParaText`、`setHeaderFooterDistance`、`setPageMargin`、`setPageSize`、`setColumns`、`setVerticalAlign`、
 `setLineNumbering`、`setDocGrid`、`setRtlGutter`、`setPageBorders`、`setMirrorMargins`、`setGutterAtTop`、
@@ -3595,7 +3727,7 @@ OLE op 还可以脏 `/word/embeddings/…` 与预览图媒体。墨迹画布 op 
 `insertToc`、`deleteToc`、`insertCaption`、`deleteCaption`、`insertCrossRef`、`deleteCrossRef`、`insertIndex`、`deleteIndex`、
 `insertIndexEntry`、`deleteIndexEntry`、`insertSource`、`deleteSource`、`insertCitation`、`deleteCitation`、
 `insertBibliography`、`deleteBibliography`、`insertDocPart`、`deleteDocPart`、`insertDocPartContent`、`insertEmbeddedFont`、
-`deleteEmbeddedFont`、`setFontEmbed`、`setPageBackground`、`insertMath`、`setMath`、`deleteMath`、`insertContentControl`、
+`deleteEmbeddedFont`、`setFontEmbed`、`setPageBackground`、`insertMath`、`setMath`、`deleteMath`、`insertRuby`、`setRuby`、`deleteRuby`、`setEastAsianSettings`、`insertContentControl`、
 `setContentControl`、`deleteContentControl`、图片 op、文本框 op、
 `insertConnector` / `deleteConnector` / `groupShapes` / `ungroup`、墨迹画布 op、脚注尾注 op、批注 op、图表 op、SmartArt op、表格结构 op、修订 op、
 超链接 / 书签 op、域 op 与编号 op、样式 op、直接格式 op、以及 `setProtection`、以及 `insertWatermark` / `deleteWatermark`、

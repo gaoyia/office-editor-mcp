@@ -116,6 +116,7 @@ fn inspect_has_page_background_after_font_embed() {
     let keys = object_keys(&tree);
     let font = keys.iter().position(|k| *k == "fontEmbed").unwrap();
     assert_eq!(keys[font + 1], "pageBackground");
+    assert_eq!(keys[font + 2], "eastAsianSettings");
     assert_eq!(object_keys(&tree["pageBackground"]), ["color", "display"]);
     let sect_keys = object_keys(&tree["sections"][0]);
     assert_eq!(*sect_keys.last().unwrap(), "pageBorders");

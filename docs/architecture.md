@@ -295,7 +295,7 @@ xlsx 也可插、改、删工作表允许编辑区域，脏该表 `<protectedRan
 xlsx 也可改工作表上的页眉页脚原文，并可对 `worksheet` 与 `chartsheet` 页眉槽位插换删 DrawingML 图，脏 `headerFooter` / `drawingHF` 与对应 drawing。
 xlsx 也可改文件属性，脏 `docProps`。docx 可改被点名的段落，可在主文档、页眉页脚与表格单元格插删段落，可插删表以及行与列并合并拆分单元格，可接受或拒绝 run 级、段落标记、表行与表属性修订，可插删改超链接与书签，可插改删域指令（不求值；
 可按 code 写常用域与窗体 ffData），可插入或删除目录块（不在库里算页码），可插入题注与交叉引用（不在库里求 SEQ / REF），可插删构建基块并把基块正文复制进主文档，
-可嵌入或删除 TrueType 字体并改 `embedTrueTypeFonts` / `embedSystemFonts` / `saveSubsetFonts`，可改页面背景色与节上页面边框，可插改删 OMML 公式（不实现排版引擎），
+可嵌入或删除 TrueType 字体并改 `embedTrueTypeFonts` / `embedSystemFonts` / `saveSubsetFonts`，可改页面背景色与节上页面边框，可插改删 OMML 公式（不实现排版引擎），可插改删拼音（不实现注音排版），可改段上禁则与 run 强调 / 压缩排版，可改整篇压缩与自定义禁则字符，
 可插改删内容控件（含复选、图片、组合外壳与公式外壳；
 不实现开发者模式 UI），可写入编号定义并把段落套上或去掉编号，可给段落换样式并改样式定义上的一批常见属性，可改段与 run 上的直接格式，可改节上页边距、纸张、分栏、垂直对齐、行号、文档网格与装订线侧，可改整篇镜像边距与装订线在上，
 可改节上页眉页脚距边界，也可改节上页眉页脚是否链接前节，也可为空白槽位新建页眉页脚，也可写 `titlePg` 与 `evenAndOddHeaders`，也可插入或删除节，

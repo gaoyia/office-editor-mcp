@@ -256,7 +256,7 @@ docx 认 `setParaText`、`setHeaderFooterDistance`、`setPageMargin`、`setPageS
 `insertIndexEntry`、`deleteIndexEntry`）、参考文献 op（`insertSource`、`deleteSource`、`insertCitation`、`deleteCitation`、
 `insertBibliography`、`deleteBibliography`）、构建基块 op（`insertDocPart`、`deleteDocPart`、`insertDocPartContent`）、
 字体嵌入 op（`insertEmbeddedFont`、`deleteEmbeddedFont`、`setFontEmbed`）、页面背景与边框 op（`setPageBackground`、`setPageBorders`）、
-公式 op（`insertMath`、`setMath`、`deleteMath`）、内容控件 op（`insertContentControl`、`setContentControl`、`deleteContentControl`）、
+公式 op（`insertMath`、`setMath`、`deleteMath`）、拼音 op（`insertRuby`、`setRuby`、`deleteRuby`）、`setEastAsianSettings`、内容控件 op（`insertContentControl`、`setContentControl`、`deleteContentControl`）、
 编号 op（`insertNumbering`、`setNumbering`、`setParaNumbering`）、样式 op（`setStyle`、`setParaStyle`）、直接格式 op（`setParaFormat`、
 `setRunFormat`）、节结构 op（`insertSection`、`deleteSection`）、脚注尾注 op（`insertFootnote`、`insertEndnote`、`deleteFootnote`、
 `deleteEndnote`、`setNoteNumbering`）、批注 op（`insertComment`、`deleteComment`、`replyComment`、`setCommentText`、
@@ -294,7 +294,7 @@ pptx 认 `setShapeText`、`setShapeFormat`、形状管理 op（`insertShape`、`
  / `setMirrorMargins` / `setGutterAtTop` / `setHeaderFooterLink` / `insertHeaderFooter` / `setTitlePage` / `setEvenAndOddHeaders`、
 `setTextBoxWrap` / `setTextBoxFill` / `setTextBoxLine` / `setTextBoxDirection`、注、`setSmartArtPos` / `setSmartArtWrap`、
 `insertWatermark` / `deleteWatermark`、`insertInkCanvas` / `replaceInkCanvas` / `deleteInkCanvas`、表格 op、修订 op、书签 op、域 op、题注与交叉引用 op、索引 op、参考文献 op、构建基块 op、字体嵌入 op、编号 op、样式 op、
-直接格式 op、节结构 op 或 `setNotesText`，
+直接格式 op、拼音 op、`setEastAsianSettings`、节结构 op 或 `setNotesText`，
 对 docx / pptx 发 `setHeaderFooterText`、`insertChartSheet`、`deleteChartSheet`、`insertSheet`、`deleteSheet`、`renameSheet`、
 `moveSheet`、`setSheetHidden`、`setCellStyle`、`setColWidth`、`setRowHeight`、`mergeRange` 或 `unmergeRange`、
 `setRowHidden` / `setColHidden`、

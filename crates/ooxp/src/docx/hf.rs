@@ -821,6 +821,11 @@ pub const SETTINGS_ORDER: &[&str] = &[
     "clickAndTypeStyle",
     "defaultTableStyle",
     "evenAndOddHeaders",
+    "characterSpacingControl",
+    "printTwoOnOne",
+    "strictFirstAndLastChars",
+    "noLineBreaksAfter",
+    "noLineBreaksBefore",
     "compat",
 ];
 

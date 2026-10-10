@@ -180,6 +180,7 @@ fn inspect_counts_without_lists() {
             "bibliographyCount",
             "docPartCount",
             "mathCount",
+            "rubyCount",
             "contentControlCount",
             "numberingCount",
             "styleCount",
@@ -194,7 +195,8 @@ fn inspect_counts_without_lists() {
             "protection",
             "theme",
             "fontEmbed",
-            "pageBackground"
+            "pageBackground",
+            "eastAsianSettings"
         ]
     );
 }

@@ -308,6 +308,9 @@
         "runs": {
           "type": "boolean"
         },
+        "rubies": {
+          "type": "boolean"
+        },
         "slide": {
           "type": "integer",
           "minimum": 1
@@ -878,6 +881,18 @@
               },
               {
                 "$ref": "docx.schema.json#/$defs/deleteMathOp"
+              },
+              {
+                "$ref": "docx.schema.json#/$defs/insertRubyOp"
+              },
+              {
+                "$ref": "docx.schema.json#/$defs/setRubyOp"
+              },
+              {
+                "$ref": "docx.schema.json#/$defs/deleteRubyOp"
+              },
+              {
+                "$ref": "docx.schema.json#/$defs/setEastAsianSettingsOp"
               },
               {
                 "$ref": "docx.schema.json#/$defs/insertContentControlOp"

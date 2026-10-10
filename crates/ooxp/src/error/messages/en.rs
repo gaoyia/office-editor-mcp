@@ -778,6 +778,18 @@ pub(super) fn render(kind: &ErrorKind) -> String {
                 "insertMath id must be a body or header/footer paragraph id, or docx:document"
                     .into()
             }
+            IdReason::RubyPrefix => {
+                "Ruby id must be ruby:N or a header/footer container id plus /ruby:N".into()
+            }
+            IdReason::RubyIndexNotInt => "ruby index must be a positive integer".into(),
+            IdReason::RubyIndexFromOne => "ruby index starts at 1".into(),
+            IdReason::InsertRubyNeedsPara => {
+                "insertRuby id must be a body or header/footer paragraph id, or docx:document"
+                    .into()
+            }
+            IdReason::SetEastAsianSettingsNeedsDocument => {
+                "setEastAsianSettings id must be docx:document".into()
+            }
             IdReason::SdtPrefix => {
                 "Content control id must be sdt:N or a header/footer container id plus /sdt:N"
                     .into()
@@ -1487,12 +1499,16 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             "border color must be auto or a 6-digit RGB hex value".into()
         }
         ErrorKind::MathNotFound { id } => format!("Equation not found: {id}"),
+        ErrorKind::RubyNotFound { id } => format!("Ruby not found: {id}"),
         ErrorKind::ContentControlNotFound { id } => format!("Content control not found: {id}"),
         ErrorKind::SetParaTextHasField => {
             "Cannot change visible text in a paragraph that contains a field".into()
         }
         ErrorKind::SetParaTextHasMath => {
             "Cannot change visible text in a paragraph that contains an equation".into()
+        }
+        ErrorKind::SetParaTextHasRuby => {
+            "Cannot change visible text in a paragraph that contains ruby".into()
         }
         ErrorKind::SetParaTextHasSdt => {
             "Cannot change visible text in a paragraph that contains a content control".into()
@@ -1559,13 +1575,44 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             "setParaStyle requires style (a style: id or null)".into()
         }
         ErrorKind::NeedSetParaFormatField => {
-            "setParaFormat requires at least one of align, left, right, firstLine, hanging, before, after, line, or lineRule"
+            "setParaFormat requires at least one of align, left, right, firstLine, hanging, before, after, line, lineRule, kinsoku, overflowPunct, topLinePunct, autoSpaceDE, or autoSpaceDN"
                 .into()
         }
         ErrorKind::NeedSetRunFormatField => {
-            "setRunFormat requires at least one of bold, italic, underline, sz, color, font, or eastAsiaFont"
+            "setRunFormat requires at least one of bold, italic, underline, sz, color, font, eastAsiaFont, em, or eastAsianLayout"
                 .into()
         }
+        ErrorKind::InvalidEm => {
+            "em must be none, dot, comma, circle, or underDot".into()
+        }
+        ErrorKind::NeedEastAsianLayoutField => {
+            "eastAsianLayout requires combine or vert".into()
+        }
+        ErrorKind::InvalidCombineBrackets => {
+            "combineBrackets is only valid when combine is true, and must be none, round, square, angle, or curly"
+                .into()
+        }
+        ErrorKind::EmptyRubyBase => "base must not be empty".into(),
+        ErrorKind::EmptyRubyRt => "rt must not be empty".into(),
+        ErrorKind::EmptyRubyLid => "lid must not be empty".into(),
+        ErrorKind::InvalidRubyAlign => {
+            "align must be center, distributeLetter, distributeSpace, left, right, or rightVertical"
+                .into()
+        }
+        ErrorKind::NeedSetRubyField => {
+            "setRuby requires at least one of base, rt, align, hps, hpsRaise, hpsBaseText, or lid"
+                .into()
+        }
+        ErrorKind::InvalidCharacterSpacing => {
+            "characterSpacingControl must be doNotCompress, compressPunctuation, or compressPunctuationAndJapaneseKana"
+                .into()
+        }
+        ErrorKind::NeedSetEastAsianSettingsField => {
+            "setEastAsianSettings requires at least one of characterSpacingControl, strictFirstAndLastChars, noLineBreaksBefore, or noLineBreaksAfter"
+                .into()
+        }
+        ErrorKind::EmptyKinsokuLang => "lang must not be empty".into(),
+        ErrorKind::EmptyKinsokuChars => "chars must not be empty".into(),
         ErrorKind::NeedSetCellStyleField => {
             "setCellStyle requires at least one of numFmt, font, fill, border, or align".into()
         }

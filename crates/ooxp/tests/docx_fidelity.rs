@@ -1164,6 +1164,7 @@ fn inspect_lists_header_pictures() {
             "bookmarkCount",
             "fieldCount",
             "mathCount",
+            "rubyCount",
             "contentControlCount",
             "pictures"
         ]
@@ -1486,6 +1487,7 @@ fn inspect_lists_body_pictures() {
             "align",
             "indent",
             "spacing",
+            "eastAsia",
             "text",
             "stable",
             "pictureCount",

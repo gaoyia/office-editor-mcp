@@ -9,6 +9,7 @@ use crate::xml;
 use super::charts;
 use super::comments;
 use super::connector;
+use super::east_asia;
 use super::field;
 use super::format;
 use super::hf::{self, HfKind, HfPart};
@@ -22,6 +23,7 @@ use super::para::{self, NoteKind};
 use super::picture;
 use super::request::InspectScope;
 use super::revision;
+use super::ruby;
 use super::sdt;
 use super::smartart;
 use super::styles;
@@ -68,6 +70,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     let expand_bookmarks = scope.as_ref().is_some_and(|s| s.bookmarks);
     let expand_fields = scope.as_ref().is_some_and(|s| s.fields);
     let expand_maths = scope.as_ref().is_some_and(|s| s.maths);
+    let expand_rubies = scope.as_ref().is_some_and(|s| s.rubies);
     let expand_sdts = scope.as_ref().is_some_and(|s| s.content_controls);
     let expand_runs = scope.as_ref().is_some_and(|s| s.runs);
     let hf_expand = HfExpand {
@@ -87,6 +90,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         bookmarks: expand_bookmarks,
         fields: expand_fields,
         maths: expand_maths,
+        rubies: expand_rubies,
         content_controls: expand_sdts,
         runs: expand_runs,
     };
@@ -147,6 +151,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         "bibliographyCount": field::count_bibliographies(&doc.root),
         "docPartCount": super::glossary::count_parts(&pkg, &part)?,
         "mathCount": math::count_maths(&doc.root),
+        "rubyCount": ruby::count_rubies(&doc.root),
         "contentControlCount": sdt::count_sdts(&doc.root),
         "numberingCount": numbering::count_nums(&pkg, &part)?,
         "styleCount": styles::count_styles(&pkg, &part)?,
@@ -195,6 +200,12 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         "fontEmbed",
         "pageBackground",
         super::page_bg::background_json(&pkg, &part, &doc.root)?,
+    );
+    insert_json_after(
+        tree.as_object_mut().unwrap(),
+        "pageBackground",
+        "eastAsianSettings",
+        east_asia::settings_json(&pkg, &part)?,
     );
 
     if let Some(scope) = scope {
@@ -315,6 +326,9 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         }
         if scope.maths {
             tree["maths"] = Value::Array(math::maths_json(&doc.root, None)?);
+        }
+        if scope.rubies {
+            tree["rubies"] = Value::Array(ruby::rubies_json(&doc.root, None)?);
         }
         if scope.content_controls {
             tree["contentControls"] = Value::Array(sdt::sdts_json(&doc.root, None)?);
@@ -480,6 +494,7 @@ struct HfExpand {
     bookmarks: bool,
     fields: bool,
     maths: bool,
+    rubies: bool,
     content_controls: bool,
     runs: bool,
 }
@@ -549,6 +564,7 @@ fn hf_node(pkg: &Package, item: &HfPart, expand: &HfExpand) -> Result<Value, Err
         "bookmarkCount": link::count_bookmarks(&doc.root),
         "fieldCount": field::count_fields(&doc.root),
         "mathCount": math::count_maths(&doc.root),
+        "rubyCount": ruby::count_rubies(&doc.root),
         "contentControlCount": sdt::count_sdts(&doc.root),
     });
     insert_json_after(
@@ -651,6 +667,9 @@ fn hf_node(pkg: &Package, item: &HfPart, expand: &HfExpand) -> Result<Value, Err
     }
     if expand.maths {
         node["maths"] = Value::Array(math::maths_json(&doc.root, Some(&item.id))?);
+    }
+    if expand.rubies {
+        node["rubies"] = Value::Array(ruby::rubies_json(&doc.root, Some(&item.id))?);
     }
     if expand.content_controls {
         node["contentControls"] = Value::Array(sdt::sdts_json(&doc.root, Some(&item.id))?);

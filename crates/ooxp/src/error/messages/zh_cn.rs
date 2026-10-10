@@ -732,6 +732,17 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::InsertMathNeedsPara => {
                 "insertMath 的 id 必须是正文或页眉页脚段落 id，或 docx:document".into()
             }
+            IdReason::RubyPrefix => {
+                "拼音 id 必须是 ruby:N，或页眉页脚容器 id 加上 /ruby:N".into()
+            }
+            IdReason::RubyIndexNotInt => "拼音序号必须是正整数".into(),
+            IdReason::RubyIndexFromOne => "拼音序号从 1 起".into(),
+            IdReason::InsertRubyNeedsPara => {
+                "insertRuby 的 id 必须是正文或页眉页脚段落 id，或 docx:document".into()
+            }
+            IdReason::SetEastAsianSettingsNeedsDocument => {
+                "setEastAsianSettings 的 id 必须是 docx:document".into()
+            }
             IdReason::SdtPrefix => {
                 "内容控件 id 必须是 sdt:N，或页眉页脚容器 id 加上 /sdt:N".into()
             }
@@ -1298,9 +1309,11 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             "边框 color 只能是 auto 或六位 RGB 十六进制".into()
         }
         ErrorKind::MathNotFound { id } => format!("找不到公式：{id}"),
+        ErrorKind::RubyNotFound { id } => format!("找不到拼音：{id}"),
         ErrorKind::ContentControlNotFound { id } => format!("找不到内容控件：{id}"),
         ErrorKind::SetParaTextHasField => "不能改带域的段落的可见文本".into(),
         ErrorKind::SetParaTextHasMath => "不能改带公式的段落的可见文本".into(),
+        ErrorKind::SetParaTextHasRuby => "不能改带拼音的段落的可见文本".into(),
         ErrorKind::SetParaTextHasSdt => "不能改带内容控件的段落的可见文本".into(),
         ErrorKind::EmptyFieldInstr => "instr 不能为空".into(),
         ErrorKind::FieldNeedInstrOrCode => "必须恰好给 instr 或 code 其中一个".into(),
@@ -1352,13 +1365,43 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             "setParaStyle 必须有 style（style: 样式 id 或 null）".into()
         }
         ErrorKind::NeedSetParaFormatField => {
-            "setParaFormat 至少要给 align、left、right、firstLine、hanging、before、after、line 或 lineRule 之一"
+            "setParaFormat 至少要给 align、left、right、firstLine、hanging、before、after、line、lineRule、kinsoku、overflowPunct、topLinePunct、autoSpaceDE 或 autoSpaceDN 之一"
                 .into()
         }
         ErrorKind::NeedSetRunFormatField => {
-            "setRunFormat 至少要给 bold、italic、underline、sz、color、font 或 eastAsiaFont 之一"
+            "setRunFormat 至少要给 bold、italic、underline、sz、color、font、eastAsiaFont、em 或 eastAsianLayout 之一"
                 .into()
         }
+        ErrorKind::InvalidEm => {
+            "em 必须是 none、dot、comma、circle 或 underDot".into()
+        }
+        ErrorKind::NeedEastAsianLayoutField => {
+            "eastAsianLayout 必须给 combine 或 vert 之一".into()
+        }
+        ErrorKind::InvalidCombineBrackets => {
+            "combineBrackets 只在 combine 为 true 时有效，且必须是 none、round、square、angle 或 curly"
+                .into()
+        }
+        ErrorKind::EmptyRubyBase => "base 不能为空".into(),
+        ErrorKind::EmptyRubyRt => "rt 不能为空".into(),
+        ErrorKind::EmptyRubyLid => "lid 不能为空".into(),
+        ErrorKind::InvalidRubyAlign => {
+            "align 必须是 center、distributeLetter、distributeSpace、left、right 或 rightVertical"
+                .into()
+        }
+        ErrorKind::NeedSetRubyField => {
+            "setRuby 至少要给 base、rt、align、hps、hpsRaise、hpsBaseText 或 lid 之一".into()
+        }
+        ErrorKind::InvalidCharacterSpacing => {
+            "characterSpacingControl 必须是 doNotCompress、compressPunctuation 或 compressPunctuationAndJapaneseKana"
+                .into()
+        }
+        ErrorKind::NeedSetEastAsianSettingsField => {
+            "setEastAsianSettings 至少要给 characterSpacingControl、strictFirstAndLastChars、noLineBreaksBefore 或 noLineBreaksAfter 之一"
+                .into()
+        }
+        ErrorKind::EmptyKinsokuLang => "lang 不能为空".into(),
+        ErrorKind::EmptyKinsokuChars => "chars 不能为空".into(),
         ErrorKind::NeedSetCellStyleField => {
             "setCellStyle 至少要给 numFmt、font、fill、border 或 align 之一".into()
         }

@@ -98,6 +98,7 @@
     - 构建基块
     - 嵌入字体
     - 公式
+    - 拼音
     - 内容控件
     - 编号实例
     - 抽象编号
@@ -166,6 +167,7 @@
   - 段内本期收入的 `w:hyperlink`
   - 段内本期收入的域
   - 段内本期收入的公式
+  - 段内本期收入的拼音
   - 段内本期收入的行内内容控件
   - docx 表格结构 op 碰到表/行/单元格上的修订痕迹、网格变更标记，或某行占的列数对不上 `colCount`
   - docx create 出现 `password`
@@ -622,7 +624,7 @@
   - `insertIndex` / `deleteIndex` / `insertIndexEntry` / `deleteIndexEntry`
   - `insertSource` / `deleteSource` / `insertCitation` / `deleteCitation`
   - `insertBibliography` / `deleteBibliography` / `insertDocPart` / `deleteDocPart` / `insertDocPartContent`
-  - 内容控件 op、编号 op、样式 op、直接格式 op 或节结构 op
+  - 内容控件 op、编号 op、样式 op、直接格式 op、拼音 op、`setEastAsianSettings` 或节结构 op
 - xlsx 认下列 op
   - `setSortState` 与分组：`groupRows`、`ungroupRows`、`groupCols`、`ungroupCols`、`setOutline`
   - 隐藏行列：`setRowHidden`、`setColHidden`
@@ -664,7 +666,7 @@
   - `insertIndex` / `deleteIndex` / `insertIndexEntry` / `deleteIndexEntry`
   - `insertSource` / `deleteSource` / `insertCitation` / `deleteCitation`
   - `insertBibliography` / `deleteBibliography` / `insertDocPart` / `deleteDocPart` / `insertDocPartContent`
-  - 内容控件 op、编号 op、样式 op、直接格式 op、节结构 op
+  - 内容控件 op、编号 op、样式 op、直接格式 op、拼音 op、`setEastAsianSettings`、节结构 op
   - `setPictureWrap`、`setPictureAnchor`、`setChartWrap`、`setChartAnchor`
   - `insertChartSheet`、`deleteChartSheet`
   - `insertWatermark` / `deleteWatermark`
@@ -896,8 +898,17 @@
 - id 不是段落 id 报 `InvalidId`
 - 找不到 run 时，`setRunFormat` 报 `IdNotFound`
 - id 不是 run id 报 `InvalidId`
-- `align` / `lineRule` / `underline` 不合法，`firstLine` 与 `hanging` 同时给数字，或改动字段一个都不给，报 `InvalidField`
+- `align` / `lineRule` / `underline` / `em` / `combineBrackets` 不合法，`firstLine` 与 `hanging` 同时给数字，`eastAsianLayout` 的 `combine` 与 `vert` 都不给，或改动字段一个都不给，报 `InvalidField`
 - xlsx / pptx 上发直接格式 op 报 `InvalidField`
+- 找不到拼音时，`setRuby` / `deleteRuby` 报 `IdNotFound`
+- id 不是拼音 id 报 `InvalidId`
+- `insertRuby` 的 `id` 必须是正文或页眉页脚段落 id 或 `docx:document`
+- 对框内、注内、批注内段落发 `insertRuby` 报 `InvalidId`
+- 空 `base` / `rt` / `lid`、不认识的 `align`、或字号越界报 `InvalidField`
+- 目标段落落在本期收入的拼音范围内时 `setParaText` 报 `NotImplemented`
+- `setEastAsianSettings` 的 `id` 必须是 `docx:document`
+- 不认识的 `characterSpacingControl`、禁则字符对象缺 `lang` / `chars`、或四个字段一个都不给，报 `InvalidField`
+- xlsx / pptx 上发拼音 op 或 `setEastAsianSettings` 报 `InvalidField`
 - xlsx / pptx 上发 `insertSection` / `deleteSection` 报 `InvalidField`
 - 找不到目录时，`deleteToc` 报 `IdNotFound`
 - id 不是 `toc:{n}` 报 `InvalidId`

@@ -50,5 +50,9 @@
     "saInsert2": "插入乙",
     "saPointNew": "丁",
     "notesSrc": "源备注",
-    "notesNew": "新备注"
+    "notesNew": "新备注",
+    "eaPara": "汉字禁则",
+    "eaRubyBase": "汉",
+    "eaRubyRt": "han",
+    "eaRubyRtNew": "hann"
 }

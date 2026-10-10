@@ -5,6 +5,7 @@ use serde_json::{json, Map, Value};
 use crate::error::{Error, ErrorKind, IdReason};
 use crate::xml::{Element, Node};
 
+use super::hf;
 use super::numbering;
 use super::para::{self, ParaTarget};
 
@@ -41,6 +42,80 @@ pub const UNDERLINE_SET: &[&str] = &[
     "wavyDouble",
 ];
 
+pub const EM_SET: &[&str] = &["none", "dot", "comma", "circle", "underDot"];
+
+pub const COMBINE_BRACKETS_SET: &[&str] = &["none", "round", "square", "angle", "curly"];
+
+/// `CT_PPrBase` 里禁则开关与 spacing / ind / jc 的相对顺序。
+const PPR_ORDER: &[&str] = &[
+    "pStyle",
+    "keepNext",
+    "keepLines",
+    "pageBreakBefore",
+    "framePr",
+    "widowControl",
+    "numPr",
+    "suppressLineNumbers",
+    "pBdr",
+    "shd",
+    "tabs",
+    "suppressAutoHyphens",
+    "kinsoku",
+    "wordWrap",
+    "overflowPunct",
+    "topLinePunct",
+    "autoSpaceDE",
+    "autoSpaceDN",
+    "bidi",
+    "adjustRightInd",
+    "snapToGrid",
+    "spacing",
+    "ind",
+    "contextualSpacing",
+    "jc",
+];
+
+/// `EG_RPrBase` 里 `em` / `eastAsianLayout` 相对 `cs` / `lang` 的位置。
+const RPR_ORDER: &[&str] = &[
+    "rStyle",
+    "rFonts",
+    "b",
+    "bCs",
+    "i",
+    "iCs",
+    "caps",
+    "smallCaps",
+    "strike",
+    "dstrike",
+    "outline",
+    "shadow",
+    "emboss",
+    "imprint",
+    "noProof",
+    "snapToGrid",
+    "vanish",
+    "webHidden",
+    "color",
+    "spacing",
+    "w",
+    "kern",
+    "position",
+    "sz",
+    "szCs",
+    "highlight",
+    "u",
+    "effect",
+    "bdr",
+    "shd",
+    "fitText",
+    "vertAlign",
+    "rtl",
+    "cs",
+    "em",
+    "lang",
+    "eastAsianLayout",
+];
+
 pub struct ParaFormatPatch<'a> {
     pub align: Option<Option<&'a str>>,
     pub left: Option<Option<u32>>,
@@ -51,6 +126,20 @@ pub struct ParaFormatPatch<'a> {
     pub after: Option<Option<u32>>,
     pub line: Option<Option<u32>>,
     pub line_rule: Option<Option<&'a str>>,
+    pub kinsoku: Option<Option<bool>>,
+    pub overflow_punct: Option<Option<bool>>,
+    pub top_line_punct: Option<Option<bool>>,
+    pub auto_space_de: Option<Option<bool>>,
+    pub auto_space_dn: Option<Option<bool>>,
+}
+
+#[derive(Debug, Clone)]
+pub struct EastAsianLayout {
+    pub id: Option<i64>,
+    pub combine: Option<bool>,
+    pub combine_brackets: Option<String>,
+    pub vert: Option<bool>,
+    pub vert_compress: Option<bool>,
 }
 
 pub struct RunFormatPatch<'a> {
@@ -61,6 +150,8 @@ pub struct RunFormatPatch<'a> {
     pub color: Option<&'a str>,
     pub font: Option<&'a str>,
     pub east_asia_font: Option<&'a str>,
+    pub em: Option<Option<&'a str>>,
+    pub east_asian_layout: Option<Option<EastAsianLayout>>,
 }
 
 pub fn para_node(
@@ -177,13 +268,15 @@ pub fn apply_para(p: &mut Element, patch: ParaFormatPatch<'_>) {
         || patch.right.is_some()
         || patch.first_line.is_some()
         || patch.hanging.is_some()
-    {
-        ensure_ppr(p);
-    }
-    if patch.before.is_some()
+        || patch.before.is_some()
         || patch.after.is_some()
         || patch.line.is_some()
         || patch.line_rule.is_some()
+        || patch.kinsoku.is_some()
+        || patch.overflow_punct.is_some()
+        || patch.top_line_punct.is_some()
+        || patch.auto_space_de.is_some()
+        || patch.auto_space_dn.is_some()
     {
         ensure_ppr(p);
     }
@@ -215,6 +308,11 @@ pub fn apply_para(p: &mut Element, patch: ParaFormatPatch<'_>) {
     {
         apply_spacing(ppr, &patch);
     }
+    apply_on_off(ppr, "kinsoku", patch.kinsoku);
+    apply_on_off(ppr, "overflowPunct", patch.overflow_punct);
+    apply_on_off(ppr, "topLinePunct", patch.top_line_punct);
+    apply_on_off(ppr, "autoSpaceDE", patch.auto_space_de);
+    apply_on_off(ppr, "autoSpaceDN", patch.auto_space_dn);
 }
 
 pub fn apply_run(r: &mut Element, patch: RunFormatPatch<'_>) {
@@ -273,6 +371,22 @@ pub fn apply_run(r: &mut Element, patch: RunFormatPatch<'_>) {
             fonts.set_attr(&key, name);
         }
     }
+    if let Some(em) = patch.em {
+        match em {
+            Some(v) => {
+                let el = hf::ensure_child_in_order(rpr, "em", RPR_ORDER);
+                let key = el.prefixed("val");
+                el.set_attr(&key, v);
+            }
+            None => remove_child(rpr, "em"),
+        }
+    }
+    if let Some(layout) = patch.east_asian_layout {
+        match layout {
+            Some(spec) => write_east_asian_layout(rpr, &spec),
+            None => remove_child(rpr, "eastAsianLayout"),
+        }
+    }
 }
 
 pub fn find_run_mut(p: &mut Element, n: usize) -> Option<&mut Element> {
@@ -293,10 +407,11 @@ fn stamp_ppr(node: &mut Map<String, Value>, p: &Element) {
     insert_before(
         node,
         "text",
-        [
+        &[
             ("align", json!(align)),
             ("indent", json!(indent)),
             ("spacing", json!(spacing)),
+            ("eastAsia", east_asia_json(ppr)),
         ],
     );
 }
@@ -339,6 +454,11 @@ fn runs_json(p: &Element, para_id: &str) -> Vec<Value> {
                     .and_then(|e| e.child_by_local("rFonts"))
                     .and_then(|e| e.attr_local("eastAsia"))
                     .map(str::to_string),
+                "em": rpr
+                    .and_then(|e| e.child_by_local("em"))
+                    .and_then(|e| e.attr_local("val"))
+                    .map(str::to_string),
+                "eastAsianLayout": rpr.map(east_asian_layout_json).unwrap_or(Value::Null),
             })
         })
         .collect()
@@ -451,6 +571,63 @@ fn spacing_json(sp: &Element) -> Value {
         "line": int_attr(sp, "line"),
         "lineRule": sp.attr_local("lineRule"),
     })
+}
+
+fn east_asia_json(ppr: Option<&Element>) -> Value {
+    let Some(ppr) = ppr else {
+        return Value::Null;
+    };
+    let names = [
+        "kinsoku",
+        "overflowPunct",
+        "topLinePunct",
+        "autoSpaceDE",
+        "autoSpaceDN",
+    ];
+    if names.iter().all(|n| ppr.child_by_local(n).is_none()) {
+        return Value::Null;
+    }
+    json!({
+        "kinsoku": on_off_json(ppr, "kinsoku"),
+        "overflowPunct": on_off_json(ppr, "overflowPunct"),
+        "topLinePunct": on_off_json(ppr, "topLinePunct"),
+        "autoSpaceDE": on_off_json(ppr, "autoSpaceDE"),
+        "autoSpaceDN": on_off_json(ppr, "autoSpaceDN"),
+    })
+}
+
+fn on_off_json(ppr: &Element, local: &str) -> Value {
+    match ppr.child_by_local(local) {
+        Some(e) => json!(on_off(e)),
+        None => Value::Null,
+    }
+}
+
+fn east_asian_layout_json(rpr: &Element) -> Value {
+    let Some(el) = rpr.child_by_local("eastAsianLayout") else {
+        return Value::Null;
+    };
+    json!({
+        "id": el.attr_local("id").and_then(|s| s.parse::<i64>().ok()),
+        "combine": attr_on_off(el, "combine"),
+        "combineBrackets": el.attr_local("combineBrackets"),
+        "vert": attr_on_off(el, "vert"),
+        "vertCompress": attr_on_off(el, "vertCompress"),
+    })
+}
+
+fn attr_on_off(el: &Element, local: &str) -> Value {
+    match el.attr_local(local) {
+        None => Value::Null,
+        Some(v) => {
+            let lower = v.to_ascii_lowercase();
+            match lower.as_str() {
+                "1" | "true" | "on" => json!(true),
+                "0" | "false" | "off" => json!(false),
+                _ => Value::Null,
+            }
+        }
+    }
 }
 
 fn int_attr(el: &Element, local: &str) -> Option<u32> {
@@ -582,6 +759,49 @@ fn set_on_off(rpr: &mut Element, local: &str, on: bool) {
     }
 }
 
+fn apply_on_off(ppr: &mut Element, local: &str, val: Option<Option<bool>>) {
+    match val {
+        None => {}
+        Some(None) => remove_child(ppr, local),
+        Some(Some(on)) => {
+            let el = hf::ensure_child_in_order(ppr, local, PPR_ORDER);
+            let key = el.prefixed("val");
+            if on {
+                el.remove_attr(&key);
+            } else {
+                el.set_attr(&key, "0");
+            }
+        }
+    }
+}
+
+fn write_east_asian_layout(rpr: &mut Element, spec: &EastAsianLayout) {
+    remove_child(rpr, "eastAsianLayout");
+    let el = hf::ensure_child_in_order(rpr, "eastAsianLayout", RPR_ORDER);
+    if let Some(id) = spec.id {
+        let key = el.prefixed("id");
+        el.set_attr(&key, id.to_string());
+    }
+    if let Some(on) = spec.combine {
+        set_attr_on_off(el, "combine", on);
+    }
+    if let Some(ref b) = spec.combine_brackets {
+        let key = el.prefixed("combineBrackets");
+        el.set_attr(&key, b);
+    }
+    if let Some(on) = spec.vert {
+        set_attr_on_off(el, "vert", on);
+    }
+    if let Some(on) = spec.vert_compress {
+        set_attr_on_off(el, "vertCompress", on);
+    }
+}
+
+fn set_attr_on_off(el: &mut Element, local: &str, on: bool) {
+    let key = el.prefixed(local);
+    el.set_attr(&key, if on { "1" } else { "0" });
+}
+
 fn ensure_ppr(p: &mut Element) {
     if p.child_by_local("pPr").is_some() {
         return;
@@ -611,12 +831,12 @@ fn remove_child(parent: &mut Element, local: &str) {
         .retain(|n| !matches!(n, Node::Element(e) if e.local_name() == local));
 }
 
-fn insert_before(map: &mut Map<String, Value>, before: &str, pairs: [(&str, Value); 3]) {
+fn insert_before(map: &mut Map<String, Value>, before: &str, pairs: &[(&str, Value)]) {
     let mut out = Map::new();
     let mut done = false;
     for (k, v) in map.iter() {
         if k == before {
-            for (nk, nv) in &pairs {
+            for (nk, nv) in pairs {
                 out.insert((*nk).into(), nv.clone());
             }
             done = true;
@@ -625,7 +845,7 @@ fn insert_before(map: &mut Map<String, Value>, before: &str, pairs: [(&str, Valu
     }
     if !done {
         for (nk, nv) in pairs {
-            out.insert(nk.into(), nv);
+            out.insert((*nk).into(), nv.clone());
         }
     }
     *map = out;

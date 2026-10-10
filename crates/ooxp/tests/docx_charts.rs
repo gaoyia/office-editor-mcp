@@ -237,6 +237,7 @@ fn inspect_count_without_list() {
             "bibliographyCount",
             "docPartCount",
             "mathCount",
+            "rubyCount",
             "contentControlCount",
             "numberingCount",
             "styleCount",
@@ -251,7 +252,8 @@ fn inspect_count_without_list() {
             "protection",
             "theme",
             "fontEmbed",
-            "pageBackground"
+            "pageBackground",
+            "eastAsianSettings"
         ]
     );
     assert_eq!(tree["headers"], json!([]));

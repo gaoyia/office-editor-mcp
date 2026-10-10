@@ -552,6 +552,14 @@ pub(crate) enum IdReason {
     MathIndexFromOne,
     /// insertMath 必须是正文或页眉页脚段落 id，或 docx:document
     InsertMathNeedsPara,
+    /// 拼音 id 必须是 ruby:N 或 {容器}/ruby:N
+    RubyPrefix,
+    RubyIndexNotInt,
+    RubyIndexFromOne,
+    /// insertRuby 必须是正文或页眉页脚段落 id，或 docx:document
+    InsertRubyNeedsPara,
+    /// setEastAsianSettings 必须用 docx:document
+    SetEastAsianSettingsNeedsDocument,
     /// 内容控件 id 必须是 sdt:N 或 {容器}/sdt:N
     SdtPrefix,
     SdtIndexNotInt,
@@ -1013,6 +1021,7 @@ define_error_kinds! {
     InvalidDocPartBehavior => vec![Self::InvalidDocPartBehavior],
     EmptyDocPartText => vec![Self::EmptyDocPartText],
     MathNotFound { id: String } => vec![Self::MathNotFound { id: "math:1".into() }],
+    RubyNotFound { id: String } => vec![Self::RubyNotFound { id: "ruby:1".into() }],
     ContentControlNotFound { id: String } => vec![Self::ContentControlNotFound { id: "sdt:1".into() }],
     InvalidTocKind => vec![Self::InvalidTocKind],
     InvalidSeqIdentifier => vec![Self::InvalidSeqIdentifier],
@@ -1042,6 +1051,7 @@ define_error_kinds! {
     ContentControlHasTable => vec![Self::ContentControlHasTable],
     SetParaTextHasField => vec![Self::SetParaTextHasField],
     SetParaTextHasMath => vec![Self::SetParaTextHasMath],
+    SetParaTextHasRuby => vec![Self::SetParaTextHasRuby],
     SetParaTextHasSdt => vec![Self::SetParaTextHasSdt],
     EmptyFieldInstr => vec![Self::EmptyFieldInstr],
     FieldNeedInstrOrCode => vec![Self::FieldNeedInstrOrCode],
@@ -1064,6 +1074,18 @@ define_error_kinds! {
     NeedSetParaStyleStyle => vec![Self::NeedSetParaStyleStyle],
     NeedSetParaFormatField => vec![Self::NeedSetParaFormatField],
     NeedSetRunFormatField => vec![Self::NeedSetRunFormatField],
+    InvalidEm => vec![Self::InvalidEm],
+    NeedEastAsianLayoutField => vec![Self::NeedEastAsianLayoutField],
+    InvalidCombineBrackets => vec![Self::InvalidCombineBrackets],
+    EmptyRubyBase => vec![Self::EmptyRubyBase],
+    EmptyRubyRt => vec![Self::EmptyRubyRt],
+    EmptyRubyLid => vec![Self::EmptyRubyLid],
+    InvalidRubyAlign => vec![Self::InvalidRubyAlign],
+    NeedSetRubyField => vec![Self::NeedSetRubyField],
+    InvalidCharacterSpacing => vec![Self::InvalidCharacterSpacing],
+    NeedSetEastAsianSettingsField => vec![Self::NeedSetEastAsianSettingsField],
+    EmptyKinsokuLang => vec![Self::EmptyKinsokuLang],
+    EmptyKinsokuChars => vec![Self::EmptyKinsokuChars],
     NeedSetCellStyleField => vec![Self::NeedSetCellStyleField],
     InvalidCellStyle { field: String } => vec![Self::InvalidCellStyle { field: "numFmt".into() }],
     NeedSetColWidthField => vec![Self::NeedSetColWidthField],
@@ -1526,6 +1548,11 @@ impl IdReason {
             Self::MathIndexNotInt,
             Self::MathIndexFromOne,
             Self::InsertMathNeedsPara,
+            Self::RubyPrefix,
+            Self::RubyIndexNotInt,
+            Self::RubyIndexFromOne,
+            Self::InsertRubyNeedsPara,
+            Self::SetEastAsianSettingsNeedsDocument,
             Self::SdtPrefix,
             Self::SdtIndexNotInt,
             Self::SdtIndexFromOne,
@@ -1681,6 +1708,18 @@ impl ErrorKind {
             | Self::EmptyDocPartText
             | Self::InvalidMathKind
             | Self::EmptyMathText
+            | Self::InvalidEm
+            | Self::NeedEastAsianLayoutField
+            | Self::InvalidCombineBrackets
+            | Self::EmptyRubyBase
+            | Self::EmptyRubyRt
+            | Self::EmptyRubyLid
+            | Self::InvalidRubyAlign
+            | Self::NeedSetRubyField
+            | Self::InvalidCharacterSpacing
+            | Self::NeedSetEastAsianSettingsField
+            | Self::EmptyKinsokuLang
+            | Self::EmptyKinsokuChars
             | Self::MathNeedTextOrExpr
             | Self::EmptyMathExpr
             | Self::InvalidMathExprType { .. }
@@ -1983,6 +2022,7 @@ impl ErrorKind {
             | Self::DocPartNotFound { .. }
             | Self::FontNotFound { .. }
             | Self::MathNotFound { .. }
+            | Self::RubyNotFound { .. }
             | Self::ContentControlNotFound { .. }
             | Self::NumberingNotFound { .. }
             | Self::AbstractNumNotFound { .. }
@@ -2020,6 +2060,7 @@ impl ErrorKind {
             | Self::SetParaTextHasHyperlink
             | Self::SetParaTextHasField
             | Self::SetParaTextHasMath
+            | Self::SetParaTextHasRuby
             | Self::SetParaTextHasSdt
             | Self::ContentControlBound
             | Self::ContentControlRepeating

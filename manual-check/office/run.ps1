@@ -65,6 +65,7 @@ $order = @(
     'docx-numbering'
     'docx-style'
     'docx-format'
+    'docx-east-asia'
     'docx-insert-section'
     'docx-toc'
     'docx-math'

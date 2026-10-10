@@ -214,7 +214,7 @@ fn inspect_default_props_on_three_formats() {
     );
     assert_eq!(
         object_keys(&td)[object_keys(&td).len() - 1],
-        "pageBackground"
+        "eastAsianSettings"
     );
     assert_eq!(object_keys(&tp)[object_keys(&tp).len() - 2], "props");
     assert_eq!(object_keys(&tp)[object_keys(&tp).len() - 1], "slides");

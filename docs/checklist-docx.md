@@ -26,6 +26,7 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 同日补跑 `docx-emf.ps1`，Dem1–Dem6 通过。Word 行内 COM `Type=3`，无 Repair。
 同日补跑 `docx-model3d.ps1`，D3d1–D3d6 通过。Word 行内 COM `Type=19`，无 Repair。
 2026-10-10 补跑 `docx-charts-rare-remain.ps1`，Ccx1–Ccx5 通过。无 Repair。
+2026-10-10 补跑 `docx-east-asia.ps1`，Ea1–Ea8 通过。无 Repair。COM `FarEastLineBreakControl` / `HangingPunctuation` / `AddSpaceBetweenFarEastAndAlpha` 对得上，`EmphasisMark=1`。
 
 - **C1** ✅
   - Word 16.0 能打开 `manual-check/office/out/docx-create.docx`，标题栏无 Repair
@@ -268,6 +269,15 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
   - 对齐为居中
   - 第一 run 加粗后第二 run 红色还在
   - 段前 12 磅、段后 6 磅
+  - 标题栏无 Repair
+- **Ea1–Ea8** ✅
+  - Word 16.0：`docx-east-asia.ps1`，8 PASS / 0 FAIL
+  - 段禁则树上 `kinsoku` / `overflowPunct` / `autoSpaceDE` 对得上
+  - COM `FarEastLineBreakControl=-1`、`HangingPunctuation=-1`、`AddSpaceBetweenFarEastAndAlpha=0`
+  - 强调点 `em=dot`、`EmphasisMark=1`；两行合一 `combine=true`
+  - 拼音 `rubyCount=1`，改 `rt` 后树上对得上
+  - 整篇 `characterSpacingControl=compressPunctuation`
+  - xlsx / 空 `base` 为 `InvalidField`
   - 标题栏无 Repair
 - **Ol1–Ol5** ✅
   - Word 16.0：`docx-ole.ps1`，6 PASS / 0 FAIL
@@ -1033,6 +1043,22 @@ Word 跟踪修订下改表单元格底纹、插入空段、删除表行。`inspe
 | Pf4 | run 加粗 | `setRunFormat` 把第一段第一个 run 设为加粗后 Word 该 run 加粗，无修复 |
 | Pf5 | 未点名 | 同一段未点名的 run 颜色还在 |
 | Pf6 | 间距 | `setParaFormat` 写 `before` / `after` 后 Word 段前段后距对得上（允许 0.05 磅误差），无修复 |
+
+## 东亚排版
+
+段上禁则、run 强调与压缩、拼音、整篇压缩与自定义禁则字符。不算排版引擎。
+手测脚本 `manual-check/office/cases/docx-east-asia.ps1`。create 本期不写。框内 / 注内 / 批注内拼音不测。
+
+| 序号 | 检查 | 通过标准 |
+| --- | --- | --- |
+| Ea1 | 段禁则 | `setParaFormat` 写 `kinsoku` / `overflowPunct` / `autoSpaceDE` 后树上 `eastAsia` 对得上 |
+| Ea2 | 打开禁则 | Word 打开无修复。COM `FarEastLineBreakControl` / `HangingPunctuation` / `AddSpaceBetweenFarEastAndAlpha` 对得上 |
+| Ea3 | 强调点 | `setRunFormat` 写 `em: dot` 后树上 `em` 为 `dot`。Word 无修复。COM `EmphasisMark` 非 0 |
+| Ea4 | 两行合一 | `setRunFormat` 写 `eastAsianLayout.combine` 后树上 `combine` 为 `true`，无修复 |
+| Ea5 | 插拼音 | `insertRuby` 后 `rubyCount` 为 1，`scope.rubies` 能列出 `base` / `rt`。Word 无修复 |
+| Ea6 | 改拼音 | `setRuby` 改 `rt` 后树上对得上，无修复 |
+| Ea7 | 整篇 | `setEastAsianSettings` 写 `characterSpacingControl` 后根上对得上。Word 无修复 |
+| Ea8 | 拒错 | 对 xlsx 发 `insertRuby` 报 `InvalidField`。空 `base` 报 `InvalidField`。不强制开 Word |
 
 ## 插删节
 

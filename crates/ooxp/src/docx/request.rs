@@ -79,6 +79,8 @@ pub struct InspectScope {
     pub embedded_fonts: bool,
     /// 为 true 时列出公式。
     pub maths: bool,
+    /// 为 true 时列出拼音。
+    pub rubies: bool,
     /// 为 true 时列出内容控件。
     pub content_controls: bool,
     /// 为 true 时列出编号定义。
@@ -658,6 +660,11 @@ pub struct SetParaFormatOp {
     pub after: Option<Option<u32>>,
     pub line: Option<Option<u32>>,
     pub line_rule: Option<Option<String>>,
+    pub kinsoku: Option<Option<bool>>,
+    pub overflow_punct: Option<Option<bool>>,
+    pub top_line_punct: Option<Option<bool>>,
+    pub auto_space_de: Option<Option<bool>>,
+    pub auto_space_dn: Option<Option<bool>>,
 }
 
 #[derive(Debug, Clone)]
@@ -672,6 +679,8 @@ pub struct SetRunFormatOp {
     pub color: Option<String>,
     pub font: Option<String>,
     pub east_asia_font: Option<String>,
+    pub em: Option<Option<String>>,
+    pub east_asian_layout: Option<Option<super::format::EastAsianLayout>>,
 }
 
 #[derive(Debug, Clone)]
@@ -925,6 +934,52 @@ pub struct DeleteMathOp {
 }
 
 #[derive(Debug, Clone)]
+pub enum InsertRubyPlace {
+    After(ParaTarget),
+    EndOfDocument,
+}
+
+#[derive(Debug, Clone)]
+pub struct InsertRubyOp {
+    pub id: String,
+    pub place: InsertRubyPlace,
+    pub base: String,
+    pub rt: String,
+    pub align: String,
+    pub hps: u32,
+    pub hps_raise: u32,
+    pub hps_base_text: u32,
+    pub lid: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetRubyOp {
+    pub id: String,
+    pub target: super::ruby::RubyRef,
+    pub base: Option<String>,
+    pub rt: Option<String>,
+    pub align: Option<String>,
+    pub hps: Option<u32>,
+    pub hps_raise: Option<u32>,
+    pub hps_base_text: Option<u32>,
+    pub lid: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct DeleteRubyOp {
+    pub id: String,
+    pub target: super::ruby::RubyRef,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetEastAsianSettingsOp {
+    pub character_spacing: Option<Option<String>>,
+    pub strict: Option<Option<bool>>,
+    pub no_before: Option<Option<super::east_asia::KinsokuChars>>,
+    pub no_after: Option<Option<super::east_asia::KinsokuChars>>,
+}
+
+#[derive(Debug, Clone)]
 pub enum InsertSdtPlace {
     After(ParaTarget),
     EndOfDocument,
@@ -999,6 +1054,10 @@ pub enum DocxOp {
     InsertMath(InsertMathOp),
     SetMath(SetMathOp),
     DeleteMath(DeleteMathOp),
+    InsertRuby(InsertRubyOp),
+    SetRuby(SetRubyOp),
+    DeleteRuby(DeleteRubyOp),
+    SetEastAsianSettings(SetEastAsianSettingsOp),
     InsertContentControl(InsertContentControlOp),
     SetContentControl(SetContentControlOp),
     DeleteContentControl(DeleteContentControlOp),
@@ -1166,6 +1225,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
             "docParts",
             "embeddedFonts",
             "maths",
+            "rubies",
             "contentControls",
             "numbering",
             "styles",
@@ -1202,6 +1262,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
     let doc_parts = parse_bool_field(obj.get("docParts"), "docParts")?;
     let embedded_fonts = parse_bool_field(obj.get("embeddedFonts"), "embeddedFonts")?;
     let maths = parse_bool_field(obj.get("maths"), "maths")?;
+    let rubies = parse_bool_field(obj.get("rubies"), "rubies")?;
     let content_controls = parse_bool_field(obj.get("contentControls"), "contentControls")?;
     let numbering = parse_bool_field(obj.get("numbering"), "numbering")?;
     let styles = parse_bool_field(obj.get("styles"), "styles")?;
@@ -1248,6 +1309,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
                 && !obj.contains_key("docParts")
                 && !obj.contains_key("embeddedFonts")
                 && !obj.contains_key("maths")
+                && !obj.contains_key("rubies")
                 && !obj.contains_key("contentControls")
                 && !obj.contains_key("numbering")
                 && !obj.contains_key("styles")
@@ -1287,6 +1349,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
                 doc_parts,
                 embedded_fonts,
                 maths,
+                rubies,
                 content_controls,
                 numbering,
                 styles,
@@ -1363,6 +1426,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
                 doc_parts,
                 embedded_fonts,
                 maths,
+                rubies,
                 content_controls,
                 numbering,
                 styles,
@@ -1585,6 +1649,12 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<DocxOp>, Error> {
             "insertMath" => out.push(DocxOp::InsertMath(parse_insert_math(obj, i)?)),
             "setMath" => out.push(DocxOp::SetMath(parse_set_math(obj, i)?)),
             "deleteMath" => out.push(DocxOp::DeleteMath(parse_delete_math(obj, i)?)),
+            "insertRuby" => out.push(DocxOp::InsertRuby(parse_insert_ruby(obj, i)?)),
+            "setRuby" => out.push(DocxOp::SetRuby(parse_set_ruby(obj, i)?)),
+            "deleteRuby" => out.push(DocxOp::DeleteRuby(parse_delete_ruby(obj, i)?)),
+            "setEastAsianSettings" => out.push(DocxOp::SetEastAsianSettings(
+                parse_set_east_asian_settings(obj, i)?,
+            )),
             "insertContentControl" => {
                 out.push(DocxOp::InsertContentControl(parse_insert_sdt(obj, i)?))
             }
@@ -3197,6 +3267,344 @@ fn parse_delete_math(
     let id = require_op_id(obj, i)?;
     let target = super::math::parse_math_ref(&id, &format!("ops[{i}].id"))?;
     Ok(DeleteMathOp { id, target })
+}
+
+fn parse_insert_ruby(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<InsertRubyOp, Error> {
+    deny_keys(
+        obj,
+        i,
+        &[
+            "op",
+            "id",
+            "base",
+            "rt",
+            "align",
+            "hps",
+            "hpsRaise",
+            "hpsBaseText",
+            "lid",
+        ],
+    )?;
+    let id = require_op_id(obj, i)?;
+    let base = require_nonempty(obj, i, "insertRuby", "base", ErrorKind::EmptyRubyBase)?;
+    let rt = require_nonempty(obj, i, "insertRuby", "rt", ErrorKind::EmptyRubyRt)?;
+    let align = match obj.get("align") {
+        None => "distributeSpace".to_string(),
+        Some(Value::String(s)) => {
+            if !super::ruby::ALIGN_SET.contains(&s.as_str()) {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidRubyAlign,
+                    format!("ops[{i}].align"),
+                ));
+            }
+            s.clone()
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "align".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].align"),
+            ));
+        }
+    };
+    let hps = parse_opt_u32_range(obj, i, "hps", 2, 3276)?.unwrap_or(12);
+    let hps_raise = parse_opt_u32_range(obj, i, "hpsRaise", 2, 3276)?.unwrap_or(hps);
+    let hps_base_text = parse_opt_u32_range(obj, i, "hpsBaseText", 2, 3276)?.unwrap_or(24);
+    let lid = match obj.get("lid") {
+        None => "zh-CN".to_string(),
+        Some(Value::String(s)) => {
+            if s.is_empty() {
+                return Err(Error::with_path(
+                    ErrorKind::EmptyRubyLid,
+                    format!("ops[{i}].lid"),
+                ));
+            }
+            s.clone()
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "lid".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].lid"),
+            ));
+        }
+    };
+    let path = format!("ops[{i}].id");
+    let place = if id == "docx:document" {
+        InsertRubyPlace::EndOfDocument
+    } else {
+        InsertRubyPlace::After(parse_story_para_at(
+            &id,
+            &path,
+            IdReason::InsertRubyNeedsPara,
+        )?)
+    };
+    Ok(InsertRubyOp {
+        id,
+        place,
+        base,
+        rt,
+        align,
+        hps,
+        hps_raise,
+        hps_base_text,
+        lid,
+    })
+}
+
+fn parse_set_ruby(obj: &serde_json::Map<String, Value>, i: usize) -> Result<SetRubyOp, Error> {
+    deny_keys(
+        obj,
+        i,
+        &[
+            "op",
+            "id",
+            "base",
+            "rt",
+            "align",
+            "hps",
+            "hpsRaise",
+            "hpsBaseText",
+            "lid",
+        ],
+    )?;
+    let id = require_op_id(obj, i)?;
+    let target = super::ruby::parse_ruby_ref(&id, &format!("ops[{i}].id"))?;
+    let base = parse_opt_nonempty(obj, i, "base", ErrorKind::EmptyRubyBase)?;
+    let rt = parse_opt_nonempty(obj, i, "rt", ErrorKind::EmptyRubyRt)?;
+    let align = parse_opt_null_enum(
+        obj,
+        i,
+        "align",
+        super::ruby::ALIGN_SET,
+        ErrorKind::InvalidRubyAlign,
+    )?;
+    let align = match align {
+        Some(Some(s)) => Some(s),
+        Some(None) => {
+            return Err(Error::with_path(
+                ErrorKind::InvalidRubyAlign,
+                format!("ops[{i}].align"),
+            ));
+        }
+        None => None,
+    };
+    let hps = parse_opt_u32_range(obj, i, "hps", 2, 3276)?;
+    let hps_raise = parse_opt_u32_range(obj, i, "hpsRaise", 2, 3276)?;
+    let hps_base_text = parse_opt_u32_range(obj, i, "hpsBaseText", 2, 3276)?;
+    let lid = parse_opt_nonempty(obj, i, "lid", ErrorKind::EmptyRubyLid)?;
+    if base.is_none()
+        && rt.is_none()
+        && align.is_none()
+        && hps.is_none()
+        && hps_raise.is_none()
+        && hps_base_text.is_none()
+        && lid.is_none()
+    {
+        return Err(Error::with_path(
+            ErrorKind::NeedSetRubyField,
+            format!("ops[{i}]"),
+        ));
+    }
+    Ok(SetRubyOp {
+        id,
+        target,
+        base,
+        rt,
+        align,
+        hps,
+        hps_raise,
+        hps_base_text,
+        lid,
+    })
+}
+
+fn parse_delete_ruby(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<DeleteRubyOp, Error> {
+    deny_keys(obj, i, &["op", "id"])?;
+    let id = require_op_id(obj, i)?;
+    let target = super::ruby::parse_ruby_ref(&id, &format!("ops[{i}].id"))?;
+    Ok(DeleteRubyOp { id, target })
+}
+
+fn parse_set_east_asian_settings(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<SetEastAsianSettingsOp, Error> {
+    deny_keys(
+        obj,
+        i,
+        &[
+            "op",
+            "id",
+            "characterSpacingControl",
+            "strictFirstAndLastChars",
+            "noLineBreaksBefore",
+            "noLineBreaksAfter",
+        ],
+    )?;
+    let id = require_op_id(obj, i)?;
+    require_document_id(&id, i, IdReason::SetEastAsianSettingsNeedsDocument)?;
+    let character_spacing = parse_opt_null_enum(
+        obj,
+        i,
+        "characterSpacingControl",
+        super::east_asia::CHARACTER_SPACING_SET,
+        ErrorKind::InvalidCharacterSpacing,
+    )?;
+    let strict = parse_opt_null_bool(obj, i, "strictFirstAndLastChars")?;
+    let no_before = parse_opt_kinsoku(obj, i, "noLineBreaksBefore")?;
+    let no_after = parse_opt_kinsoku(obj, i, "noLineBreaksAfter")?;
+    if character_spacing.is_none() && strict.is_none() && no_before.is_none() && no_after.is_none()
+    {
+        return Err(Error::with_path(
+            ErrorKind::NeedSetEastAsianSettingsField,
+            format!("ops[{i}]"),
+        ));
+    }
+    Ok(SetEastAsianSettingsOp {
+        character_spacing,
+        strict,
+        no_before,
+        no_after,
+    })
+}
+
+fn parse_opt_kinsoku(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+    field: &str,
+) -> Result<Option<Option<super::east_asia::KinsokuChars>>, Error> {
+    match obj.get(field) {
+        None => Ok(None),
+        Some(Value::Null) => Ok(Some(None)),
+        Some(Value::Object(inner)) => {
+            for k in inner.keys() {
+                if !matches!(k.as_str(), "lang" | "chars") {
+                    return Err(Error::with_path(
+                        ErrorKind::UnknownField { field: k.clone() },
+                        format!("ops[{i}].{field}.{k}"),
+                    ));
+                }
+            }
+            let lang = match inner.get("lang") {
+                Some(Value::String(s)) if !s.is_empty() => s.clone(),
+                Some(Value::String(_)) => {
+                    return Err(Error::with_path(
+                        ErrorKind::EmptyKinsokuLang,
+                        format!("ops[{i}].{field}.lang"),
+                    ));
+                }
+                Some(_) => {
+                    return Err(Error::with_path(
+                        ErrorKind::WrongType {
+                            field: "lang".into(),
+                            expected: TypeName::String,
+                        },
+                        format!("ops[{i}].{field}.lang"),
+                    ));
+                }
+                None => {
+                    return Err(Error::with_path(
+                        ErrorKind::EmptyKinsokuLang,
+                        format!("ops[{i}].{field}.lang"),
+                    ));
+                }
+            };
+            let chars = match inner.get("chars") {
+                Some(Value::String(s)) if !s.is_empty() => s.clone(),
+                Some(Value::String(_)) => {
+                    return Err(Error::with_path(
+                        ErrorKind::EmptyKinsokuChars,
+                        format!("ops[{i}].{field}.chars"),
+                    ));
+                }
+                Some(_) => {
+                    return Err(Error::with_path(
+                        ErrorKind::WrongType {
+                            field: "chars".into(),
+                            expected: TypeName::String,
+                        },
+                        format!("ops[{i}].{field}.chars"),
+                    ));
+                }
+                None => {
+                    return Err(Error::with_path(
+                        ErrorKind::EmptyKinsokuChars,
+                        format!("ops[{i}].{field}.chars"),
+                    ));
+                }
+            };
+            Ok(Some(Some(super::east_asia::KinsokuChars { lang, chars })))
+        }
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::Object,
+            },
+            format!("ops[{i}].{field}"),
+        )),
+    }
+}
+
+fn require_nonempty(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+    op: &str,
+    field: &str,
+    empty: ErrorKind,
+) -> Result<String, Error> {
+    match obj.get(field) {
+        Some(Value::String(s)) if !s.is_empty() => Ok(s.clone()),
+        Some(Value::String(_)) => Err(Error::with_path(empty, format!("ops[{i}].{field}"))),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::String,
+            },
+            format!("ops[{i}].{field}"),
+        )),
+        None => Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: op.into(),
+                field: field.into(),
+            },
+            format!("ops[{i}].{field}"),
+        )),
+    }
+}
+
+fn parse_opt_nonempty(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+    field: &str,
+    empty: ErrorKind,
+) -> Result<Option<String>, Error> {
+    match obj.get(field) {
+        None => Ok(None),
+        Some(Value::String(s)) => {
+            if s.is_empty() {
+                return Err(Error::with_path(empty, format!("ops[{i}].{field}")));
+            }
+            Ok(Some(s.clone()))
+        }
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::String,
+            },
+            format!("ops[{i}].{field}"),
+        )),
+    }
 }
 
 fn parse_insert_sdt(
@@ -5026,6 +5434,11 @@ fn parse_set_para_format(
             "after",
             "line",
             "lineRule",
+            "kinsoku",
+            "overflowPunct",
+            "topLinePunct",
+            "autoSpaceDE",
+            "autoSpaceDN",
         ],
     )?;
     let id = require_op_id(obj, i)?;
@@ -5060,6 +5473,11 @@ fn parse_set_para_format(
         super::format::LINE_RULE_SET,
         ErrorKind::InvalidLineRule,
     )?;
+    let kinsoku = parse_opt_null_bool(obj, i, "kinsoku")?;
+    let overflow_punct = parse_opt_null_bool(obj, i, "overflowPunct")?;
+    let top_line_punct = parse_opt_null_bool(obj, i, "topLinePunct")?;
+    let auto_space_de = parse_opt_null_bool(obj, i, "autoSpaceDE")?;
+    let auto_space_dn = parse_opt_null_bool(obj, i, "autoSpaceDN")?;
     if align.is_none()
         && left.is_none()
         && right.is_none()
@@ -5069,6 +5487,11 @@ fn parse_set_para_format(
         && after.is_none()
         && line.is_none()
         && line_rule.is_none()
+        && kinsoku.is_none()
+        && overflow_punct.is_none()
+        && top_line_punct.is_none()
+        && auto_space_de.is_none()
+        && auto_space_dn.is_none()
     {
         return Err(Error::with_path(
             ErrorKind::NeedSetParaFormatField,
@@ -5087,6 +5510,11 @@ fn parse_set_para_format(
         after,
         line,
         line_rule,
+        kinsoku,
+        overflow_punct,
+        top_line_punct,
+        auto_space_de,
+        auto_space_dn,
     })
 }
 
@@ -5107,6 +5535,8 @@ fn parse_set_run_format(
             "color",
             "font",
             "eastAsiaFont",
+            "em",
+            "eastAsianLayout",
         ],
     )?;
     let id = require_op_id(obj, i)?;
@@ -5144,6 +5574,8 @@ fn parse_set_run_format(
     };
     let font = parse_nonempty_opt_string(obj, i, "font")?;
     let east_asia_font = parse_nonempty_opt_string(obj, i, "eastAsiaFont")?;
+    let em = parse_opt_null_enum(obj, i, "em", super::format::EM_SET, ErrorKind::InvalidEm)?;
+    let east_asian_layout = parse_opt_east_asian_layout(obj, i)?;
     if bold.is_none()
         && italic.is_none()
         && underline.is_none()
@@ -5151,6 +5583,8 @@ fn parse_set_run_format(
         && color.is_none()
         && font.is_none()
         && east_asia_font.is_none()
+        && em.is_none()
+        && east_asian_layout.is_none()
     {
         return Err(Error::with_path(
             ErrorKind::NeedSetRunFormatField,
@@ -5168,7 +5602,149 @@ fn parse_set_run_format(
         color,
         font,
         east_asia_font,
+        em,
+        east_asian_layout,
     })
+}
+
+fn parse_opt_null_bool(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+    field: &str,
+) -> Result<Option<Option<bool>>, Error> {
+    match obj.get(field) {
+        None => Ok(None),
+        Some(Value::Null) => Ok(Some(None)),
+        Some(Value::Bool(b)) => Ok(Some(Some(*b))),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::Boolean,
+            },
+            format!("ops[{i}].{field}"),
+        )),
+    }
+}
+
+fn parse_opt_east_asian_layout(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<Option<Option<super::format::EastAsianLayout>>, Error> {
+    match obj.get("eastAsianLayout") {
+        None => Ok(None),
+        Some(Value::Null) => Ok(Some(None)),
+        Some(Value::Object(inner)) => {
+            for k in inner.keys() {
+                if !matches!(
+                    k.as_str(),
+                    "id" | "combine" | "combineBrackets" | "vert" | "vertCompress"
+                ) {
+                    return Err(Error::with_path(
+                        ErrorKind::UnknownField { field: k.clone() },
+                        format!("ops[{i}].eastAsianLayout.{k}"),
+                    ));
+                }
+            }
+            let id = parse_layout_id(inner, i)?;
+            let combine = parse_inner_opt_bool(inner, i, "combine")?;
+            let vert = parse_inner_opt_bool(inner, i, "vert")?;
+            let vert_compress = parse_inner_opt_bool(inner, i, "vertCompress")?;
+            let combine_brackets = match inner.get("combineBrackets") {
+                None => None,
+                Some(Value::Null) => None,
+                Some(Value::String(s)) => {
+                    if !super::format::COMBINE_BRACKETS_SET.contains(&s.as_str()) {
+                        return Err(Error::with_path(
+                            ErrorKind::InvalidCombineBrackets,
+                            format!("ops[{i}].eastAsianLayout.combineBrackets"),
+                        ));
+                    }
+                    Some(s.clone())
+                }
+                Some(_) => {
+                    return Err(Error::with_path(
+                        ErrorKind::WrongType {
+                            field: "combineBrackets".into(),
+                            expected: TypeName::String,
+                        },
+                        format!("ops[{i}].eastAsianLayout.combineBrackets"),
+                    ));
+                }
+            };
+            if combine.is_none() && vert.is_none() {
+                return Err(Error::with_path(
+                    ErrorKind::NeedEastAsianLayoutField,
+                    format!("ops[{i}].eastAsianLayout"),
+                ));
+            }
+            if combine_brackets.is_some() && combine != Some(true) {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidCombineBrackets,
+                    format!("ops[{i}].eastAsianLayout.combineBrackets"),
+                ));
+            }
+            Ok(Some(Some(super::format::EastAsianLayout {
+                id,
+                combine,
+                combine_brackets,
+                vert,
+                vert_compress,
+            })))
+        }
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "eastAsianLayout".into(),
+                expected: TypeName::Object,
+            },
+            format!("ops[{i}].eastAsianLayout"),
+        )),
+    }
+}
+
+fn parse_layout_id(obj: &serde_json::Map<String, Value>, i: usize) -> Result<Option<i64>, Error> {
+    match obj.get("id") {
+        None | Some(Value::Null) => Ok(None),
+        Some(Value::Number(n)) => {
+            let v = n
+                .as_i64()
+                .or_else(|| n.as_u64().and_then(|u| i64::try_from(u).ok()))
+                .ok_or_else(|| {
+                    Error::with_path(
+                        ErrorKind::WrongType {
+                            field: "id".into(),
+                            expected: TypeName::Integer,
+                        },
+                        format!("ops[{i}].eastAsianLayout.id"),
+                    )
+                })?;
+            Ok(Some(v))
+        }
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "id".into(),
+                expected: TypeName::Integer,
+            },
+            format!("ops[{i}].eastAsianLayout.id"),
+        )),
+    }
+}
+
+fn parse_inner_opt_bool(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+    field: &str,
+) -> Result<Option<bool>, Error> {
+    match obj.get(field) {
+        None | Some(Value::Null) => Ok(None),
+        Some(Value::Bool(b)) => Ok(Some(*b)),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::Boolean,
+            },
+            format!("ops[{i}].eastAsianLayout.{field}"),
+        )),
+    }
 }
 
 fn parse_opt_bool(

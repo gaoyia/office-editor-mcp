@@ -10,6 +10,7 @@ use super::biblio;
 use super::charts;
 use super::comments;
 use super::connector;
+use super::east_asia;
 use super::field;
 use super::font_embed;
 use super::format;
@@ -30,26 +31,28 @@ use super::request::{
     DeleteBibliographyOp, DeleteBookmarkOp, DeleteCaptionOp, DeleteCitationOp, DeleteColOp,
     DeleteCommentOp, DeleteConnectorOp, DeleteContentControlOp, DeleteCrossRefOp, DeleteDocPartOp,
     DeleteFieldOp, DeleteHyperlinkOp, DeleteIndexEntryOp, DeleteIndexOp, DeleteMathOp,
-    DeleteNoteOp, DeleteParaOp, DeletePictureOp, DeleteRowOp, DeleteSectionOp, DeleteSourceOp,
-    DeleteTableOp, DeleteTextBoxOp, DeleteTocOp, DocxOp, GroupShapesOp, InsertBibliographyOp,
-    InsertBibliographyPlace, InsertBookmarkOp, InsertCaptionOp, InsertCaptionPlace,
-    InsertCitationOp, InsertColOp, InsertCommentOp, InsertConnectorOp, InsertContentControlOp,
-    InsertCrossRefOp, InsertDocPartContentOp, InsertDocPartContentPlace, InsertDocPartOp,
-    InsertFieldOp, InsertHeaderFooterOp, InsertHyperlinkOp, InsertIndexEntryOp, InsertIndexOp,
-    InsertIndexPlace, InsertMathOp, InsertMathPlace, InsertNoteOp, InsertNumberingOp, InsertParaOp,
-    InsertParaPlace, InsertPictureOp, InsertRowOp, InsertSdtPlace, InsertSectionOp,
-    InsertSectionPlace, InsertSourceOp, InsertTableOp, InsertTextBoxOp, InsertTocOp,
-    InsertTocPlace, MergeCellsOp, NoteNumberTarget, ReplacePictureOp, ReplyCommentOp, RevisionOp,
-    SetBookmarkOp, SetColumnsOp, SetCommentDoneOp, SetCommentMetaOp, SetCommentTextOp,
-    SetContentControlOp, SetDocGridOp, SetEvenAndOddHeadersOp, SetFieldOp, SetGutterAtTopOp,
-    SetHfDistanceOp, SetHfLinkOp, SetHyperlinkOp, SetLineNumberingOp, SetMathOp,
-    SetMirrorMarginsOp, SetNoteNumberingOp, SetNumberingOp, SetPageBordersOp, SetPageMarginOp,
-    SetPageSizeOp, SetParaFormatOp, SetParaNumberingOp, SetParaStyleOp, SetParaTextOp,
-    SetPictureSizeOp, SetPictureWrapOp, SetRtlGutterOp, SetRunFormatOp, SetStyleOp,
-    SetTextBoxDirectionOp, SetTextBoxFillOp, SetTextBoxLineOp, SetTextBoxLinkOp, SetTextBoxSizeOp,
-    SetTextBoxWrapOp, SetTitlePageOp, SetVerticalAlignOp, SplitCellsOp, UngroupOp,
+    DeleteNoteOp, DeleteParaOp, DeletePictureOp, DeleteRowOp, DeleteRubyOp, DeleteSectionOp,
+    DeleteSourceOp, DeleteTableOp, DeleteTextBoxOp, DeleteTocOp, DocxOp, GroupShapesOp,
+    InsertBibliographyOp, InsertBibliographyPlace, InsertBookmarkOp, InsertCaptionOp,
+    InsertCaptionPlace, InsertCitationOp, InsertColOp, InsertCommentOp, InsertConnectorOp,
+    InsertContentControlOp, InsertCrossRefOp, InsertDocPartContentOp, InsertDocPartContentPlace,
+    InsertDocPartOp, InsertFieldOp, InsertHeaderFooterOp, InsertHyperlinkOp, InsertIndexEntryOp,
+    InsertIndexOp, InsertIndexPlace, InsertMathOp, InsertMathPlace, InsertNoteOp,
+    InsertNumberingOp, InsertParaOp, InsertParaPlace, InsertPictureOp, InsertRowOp, InsertRubyOp,
+    InsertRubyPlace, InsertSdtPlace, InsertSectionOp, InsertSectionPlace, InsertSourceOp,
+    InsertTableOp, InsertTextBoxOp, InsertTocOp, InsertTocPlace, MergeCellsOp, NoteNumberTarget,
+    ReplacePictureOp, ReplyCommentOp, RevisionOp, SetBookmarkOp, SetColumnsOp, SetCommentDoneOp,
+    SetCommentMetaOp, SetCommentTextOp, SetContentControlOp, SetDocGridOp, SetEvenAndOddHeadersOp,
+    SetFieldOp, SetGutterAtTopOp, SetHfDistanceOp, SetHfLinkOp, SetHyperlinkOp, SetLineNumberingOp,
+    SetMathOp, SetMirrorMarginsOp, SetNoteNumberingOp, SetNumberingOp, SetPageBordersOp,
+    SetPageMarginOp, SetPageSizeOp, SetParaFormatOp, SetParaNumberingOp, SetParaStyleOp,
+    SetParaTextOp, SetPictureSizeOp, SetPictureWrapOp, SetRtlGutterOp, SetRubyOp, SetRunFormatOp,
+    SetStyleOp, SetTextBoxDirectionOp, SetTextBoxFillOp, SetTextBoxLineOp, SetTextBoxLinkOp,
+    SetTextBoxSizeOp, SetTextBoxWrapOp, SetTitlePageOp, SetVerticalAlignOp, SplitCellsOp,
+    UngroupOp,
 };
 use super::revision;
+use super::ruby;
 use super::sdt;
 use super::sect;
 use super::smartart;
@@ -217,6 +220,29 @@ pub fn apply(bytes: &[u8], ops: &[DocxOp]) -> Result<Vec<u8>, Error> {
             }
             DocxOp::DeleteMath(op) => {
                 apply_delete_math(&pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
+            }
+            DocxOp::InsertRuby(op) => {
+                apply_insert_ruby(&pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
+            }
+            DocxOp::SetRuby(op) => {
+                apply_set_ruby(&pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
+            }
+            DocxOp::DeleteRuby(op) => {
+                apply_delete_ruby(&pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
+            }
+            DocxOp::SetEastAsianSettings(op) => {
+                east_asia::apply_settings(
+                    &mut pkg,
+                    &mut docs,
+                    &mut dirty,
+                    &doc_part,
+                    east_asia::SettingsPatch {
+                        character_spacing: op.character_spacing.as_ref().map(|v| v.as_deref()),
+                        strict: op.strict,
+                        no_before: op.no_before.as_ref().map(|v| v.as_ref()),
+                        no_after: op.no_after.as_ref().map(|v| v.as_ref()),
+                    },
+                )?;
             }
             DocxOp::InsertContentControl(op) => {
                 apply_insert_sdt(&mut pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
@@ -656,6 +682,16 @@ fn refuse_set_text_if_math(root: &Element, para: &para::BodyPara, i: usize) -> R
     if math::para_blocks_set_text(root, para) {
         return Err(Error::with_path(
             ErrorKind::SetParaTextHasMath,
+            format!("ops[{i}].id"),
+        ));
+    }
+    Ok(())
+}
+
+fn refuse_set_text_if_ruby(root: &Element, para: &para::BodyPara, i: usize) -> Result<(), Error> {
+    if ruby::para_blocks_set_text(root, para) {
+        return Err(Error::with_path(
+            ErrorKind::SetParaTextHasRuby,
             format!("ops[{i}].id"),
         ));
     }
@@ -1301,6 +1337,11 @@ fn apply_set_para_format(
             after: op.after,
             line: op.line,
             line_rule: op.line_rule.as_ref().map(|v| v.as_deref()),
+            kinsoku: op.kinsoku,
+            overflow_punct: op.overflow_punct,
+            top_line_punct: op.top_line_punct,
+            auto_space_de: op.auto_space_de,
+            auto_space_dn: op.auto_space_dn,
         },
     );
     dirty.insert(part_name, ());
@@ -1335,6 +1376,16 @@ fn apply_set_run_format(
             color: op.color.as_deref(),
             font: op.font.as_deref(),
             east_asia_font: op.east_asia_font.as_deref(),
+            em: op.em.as_ref().map(|v| v.as_deref()),
+            east_asian_layout: op.east_asian_layout.as_ref().map(|v| {
+                v.as_ref().map(|s| format::EastAsianLayout {
+                    id: s.id,
+                    combine: s.combine,
+                    combine_brackets: s.combine_brackets.clone(),
+                    vert: s.vert,
+                    vert_compress: s.vert_compress,
+                })
+            }),
         },
     );
     dirty.insert(part_name, ());
@@ -1356,6 +1407,7 @@ fn apply_para_text(
             let doc = load_part(pkg, docs, doc_part)?;
             refuse_set_text_if_field(&doc.root, p, i)?;
             refuse_set_text_if_math(&doc.root, p, i)?;
+            refuse_set_text_if_ruby(&doc.root, p, i)?;
             refuse_set_text_if_sdt(&doc.root, p, i)?;
             let el = para::find_paragraph_mut(&mut doc.root, p).ok_or_else(|| {
                 Error::with_path(
@@ -1378,6 +1430,7 @@ fn apply_para_text(
             let doc = load_part(pkg, docs, &part_name)?;
             refuse_set_text_if_field(&doc.root, para, i)?;
             refuse_set_text_if_math(&doc.root, para, i)?;
+            refuse_set_text_if_ruby(&doc.root, para, i)?;
             refuse_set_text_if_sdt(&doc.root, para, i)?;
             let el = para::find_paragraph_mut(&mut doc.root, para).ok_or_else(|| {
                 Error::with_path(
@@ -2461,6 +2514,101 @@ fn apply_delete_math(
     })?;
     let doc = load_part(pkg, docs, &part_name)?;
     math::delete_math(&mut doc.root, op.target.n, &op.id, i)?;
+    dirty.insert(part_name, ());
+    Ok(())
+}
+
+fn apply_insert_ruby(
+    pkg: &Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &InsertRubyOp,
+    i: usize,
+) -> Result<(), Error> {
+    let spec = ruby::InsertSpec {
+        base: &op.base,
+        rt: &op.rt,
+        align: &op.align,
+        hps: op.hps,
+        hps_raise: op.hps_raise,
+        hps_base_text: op.hps_base_text,
+        lid: &op.lid,
+    };
+    match &op.place {
+        InsertRubyPlace::EndOfDocument => {
+            let doc = docs.get_mut(doc_part).unwrap();
+            ruby::insert_ruby(&mut doc.root, None, &spec, &op.id, i)?;
+            dirty.insert(doc_part.to_string(), ());
+        }
+        InsertRubyPlace::After(target) => {
+            let part_name = part_for_para(pkg, catalog, doc_part, target, &op.id, i)?;
+            let doc = load_part(pkg, docs, &part_name)?;
+            let para = match target {
+                ParaTarget::Body(p) | ParaTarget::HeaderFooter { para: p, .. } => p,
+                _ => {
+                    return Err(Error::with_path(
+                        ErrorKind::InvalidId {
+                            reason: crate::error::IdReason::InsertRubyNeedsPara,
+                        },
+                        format!("ops[{i}].id"),
+                    ));
+                }
+            };
+            ruby::insert_ruby(&mut doc.root, Some(para), &spec, &op.id, i)?;
+            dirty.insert(part_name, ());
+        }
+    }
+    Ok(())
+}
+
+fn apply_set_ruby(
+    pkg: &Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &SetRubyOp,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name = ruby::part_for_story(catalog, doc_part, &op.target.story, || {
+        ruby::missing_ruby_err(&op.id, i)
+    })?;
+    let doc = load_part(pkg, docs, &part_name)?;
+    ruby::set_ruby(
+        &mut doc.root,
+        op.target.n,
+        &ruby::SetPatch {
+            base: op.base.as_deref(),
+            rt: op.rt.as_deref(),
+            align: op.align.as_deref(),
+            hps: op.hps,
+            hps_raise: op.hps_raise,
+            hps_base_text: op.hps_base_text,
+            lid: op.lid.as_deref(),
+        },
+        &op.id,
+        i,
+    )?;
+    dirty.insert(part_name, ());
+    Ok(())
+}
+
+fn apply_delete_ruby(
+    pkg: &Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &DeleteRubyOp,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name = ruby::part_for_story(catalog, doc_part, &op.target.story, || {
+        ruby::missing_ruby_err(&op.id, i)
+    })?;
+    let doc = load_part(pkg, docs, &part_name)?;
+    ruby::delete_ruby(&mut doc.root, op.target.n, &op.id, i)?;
     dirty.insert(part_name, ());
     Ok(())
 }

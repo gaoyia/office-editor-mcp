@@ -2601,6 +2601,239 @@
         }
       }
     },
+    "eastAsianLayout": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "integer"
+        },
+        "combine": {
+          "type": "boolean"
+        },
+        "combineBrackets": {
+          "enum": [
+            "none",
+            "round",
+            "square",
+            "angle",
+            "curly"
+          ]
+        },
+        "vert": {
+          "type": "boolean"
+        },
+        "vertCompress": {
+          "type": "boolean"
+        }
+      }
+    },
+    "kinsokuChars": {
+      "type": "object",
+      "required": [
+        "lang",
+        "chars"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "lang": {
+          "type": "string",
+          "minLength": 1
+        },
+        "chars": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "insertRubyOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "base",
+        "rt"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "insertRuby"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "base": {
+          "type": "string",
+          "minLength": 1
+        },
+        "rt": {
+          "type": "string",
+          "minLength": 1
+        },
+        "align": {
+          "enum": [
+            "center",
+            "distributeLetter",
+            "distributeSpace",
+            "left",
+            "right",
+            "rightVertical"
+          ]
+        },
+        "hps": {
+          "type": "integer",
+          "minimum": 2,
+          "maximum": 3276
+        },
+        "hpsRaise": {
+          "type": "integer",
+          "minimum": 2,
+          "maximum": 3276
+        },
+        "hpsBaseText": {
+          "type": "integer",
+          "minimum": 2,
+          "maximum": 3276
+        },
+        "lid": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "setRubyOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setRuby"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "base": {
+          "type": "string",
+          "minLength": 1
+        },
+        "rt": {
+          "type": "string",
+          "minLength": 1
+        },
+        "align": {
+          "enum": [
+            "center",
+            "distributeLetter",
+            "distributeSpace",
+            "left",
+            "right",
+            "rightVertical"
+          ]
+        },
+        "hps": {
+          "type": "integer",
+          "minimum": 2,
+          "maximum": 3276
+        },
+        "hpsRaise": {
+          "type": "integer",
+          "minimum": 2,
+          "maximum": 3276
+        },
+        "hpsBaseText": {
+          "type": "integer",
+          "minimum": 2,
+          "maximum": 3276
+        },
+        "lid": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "deleteRubyOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "deleteRuby"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "setEastAsianSettingsOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setEastAsianSettings"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "characterSpacingControl": {
+          "oneOf": [
+            {
+              "enum": [
+                "doNotCompress",
+                "compressPunctuation",
+                "compressPunctuationAndJapaneseKana"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "strictFirstAndLastChars": {
+          "oneOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "noLineBreaksBefore": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/kinsokuChars"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "noLineBreaksAfter": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/kinsokuChars"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
     "deleteMathOp": {
       "type": "object",
       "required": [
@@ -3042,6 +3275,56 @@
               "type": "null"
             }
           ]
+        },
+        "kinsoku": {
+          "oneOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "overflowPunct": {
+          "oneOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "topLinePunct": {
+          "oneOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "autoSpaceDE": {
+          "oneOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "autoSpaceDN": {
+          "oneOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       }
     },
@@ -3112,6 +3395,33 @@
         "eastAsiaFont": {
           "type": "string",
           "minLength": 1
+        },
+        "em": {
+          "oneOf": [
+            {
+              "type": "string",
+              "enum": [
+                "none",
+                "dot",
+                "comma",
+                "circle",
+                "underDot"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "eastAsianLayout": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/eastAsianLayout"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       }
     },

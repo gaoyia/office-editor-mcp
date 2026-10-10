@@ -229,6 +229,7 @@ fn inspect_counts_without_list() {
             "bibliographyCount",
             "docPartCount",
             "mathCount",
+            "rubyCount",
             "contentControlCount",
             "numberingCount",
             "styleCount",
@@ -243,7 +244,8 @@ fn inspect_counts_without_list() {
             "protection",
             "theme",
             "fontEmbed",
-            "pageBackground"
+            "pageBackground",
+            "eastAsianSettings"
         ]
     );
 }
