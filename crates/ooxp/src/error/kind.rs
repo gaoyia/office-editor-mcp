@@ -107,6 +107,10 @@ pub(crate) enum IdReason {
     DocxCxnPrefix,
     /// 段落或容器 id，缺少 /cxn:…
     DocxCxnContainer,
+    /// docx 无框形状 id 必须是 {段落}/shape:…
+    DocxShapePrefix,
+    /// 段落或容器 id，缺少 /shape:…
+    DocxShapeContainer,
     /// docx 墨迹画布 id 必须是 {段落}/ink:…
     DocxInkPrefix,
     /// 段落或容器 id，缺少 /ink:…
@@ -725,6 +729,7 @@ define_error_kinds! {
     InvalidXlsxEditAs => vec![Self::InvalidXlsxEditAs],
     NotesSlideImage => vec![Self::NotesSlideImage],
     GraphicInRestrictedStory => vec![Self::GraphicInRestrictedStory],
+    DocxShapeNeedsAnchor => vec![Self::DocxShapeNeedsAnchor],
     NeedPropsField => vec![Self::NeedPropsField],
     NeedProtectionField => vec![Self::NeedProtectionField],
     InvalidProtectionEdit => vec![Self::InvalidProtectionEdit],
@@ -1282,6 +1287,8 @@ impl IdReason {
             Self::InsertNeedsHostPara,
             Self::DocxCxnPrefix,
             Self::DocxCxnContainer,
+            Self::DocxShapePrefix,
+            Self::DocxShapeContainer,
             Self::DocxInkPrefix,
             Self::DocxInkContainer,
             Self::DocxInkIndexNotInt,
@@ -1957,6 +1964,7 @@ impl ErrorKind {
             | Self::TwoCellSmartArtSize
             | Self::NotesSlideImage
             | Self::GraphicInRestrictedStory
+            | Self::DocxShapeNeedsAnchor
             | Self::NeedPropsField
             | Self::NeedProtectionField
             | Self::WatermarkNeedTextOrFile

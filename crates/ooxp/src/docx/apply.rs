@@ -33,29 +33,32 @@ use super::request::{
     DeleteCommentOp, DeleteConnectorOp, DeleteContentControlOp, DeleteCrossRefOp, DeleteDocPartOp,
     DeleteFieldOp, DeleteHyperlinkOp, DeleteIndexEntryOp, DeleteIndexOp, DeleteMathOp,
     DeleteNoteOp, DeleteParaOp, DeletePictureOp, DeleteRowOp, DeleteRubyOp, DeleteSectionOp,
-    DeleteSourceOp, DeleteTableOp, DeleteTextBoxOp, DeleteTocOp, DocxOp, GroupShapesOp,
-    HyperlinkTarget, InsertBibliographyOp, InsertBibliographyPlace, InsertBookmarkOp,
-    InsertCaptionOp, InsertCaptionPlace, InsertCitationOp, InsertColOp, InsertCommentOp,
-    InsertConnectorOp, InsertContentControlOp, InsertCrossRefOp, InsertDocPartContentOp,
-    InsertDocPartContentPlace, InsertDocPartOp, InsertFieldOp, InsertHeaderFooterOp,
-    InsertHyperlinkHost, InsertHyperlinkOp, InsertIndexEntryOp, InsertIndexOp, InsertIndexPlace,
-    InsertMathOp, InsertMathPlace, InsertNoteOp, InsertNumberingOp, InsertParaOp, InsertParaPlace,
-    InsertPictureOp, InsertRowOp, InsertRubyOp, InsertRubyPlace, InsertSdtPlace, InsertSectionOp,
-    InsertSectionPlace, InsertSourceOp, InsertTableOp, InsertTextBoxOp, InsertTocOp,
-    InsertTocPlace, MergeCellsOp, NoteNumberTarget, ReplacePictureOp, ReplyCommentOp, RevisionOp,
-    SetBookmarkOp, SetColumnsOp, SetCommentDoneOp, SetCommentMetaOp, SetCommentTextOp,
-    SetContentControlOp, SetDocGridOp, SetEvenAndOddHeadersOp, SetFieldOp, SetGutterAtTopOp,
-    SetHfDistanceOp, SetHfLinkOp, SetHyperlinkOp, SetLineNumberingOp, SetMathOp,
-    SetMirrorMarginsOp, SetNoteNumberingOp, SetNumberingOp, SetPageBordersOp, SetPageMarginOp,
-    SetPageSizeOp, SetParaFormatOp, SetParaNumberingOp, SetParaStyleOp, SetParaTextOp,
-    SetPictureSizeOp, SetPictureWrapOp, SetRtlGutterOp, SetRubyOp, SetRunFormatOp, SetStyleOp,
-    SetTextBoxDirectionOp, SetTextBoxFillOp, SetTextBoxLineOp, SetTextBoxLinkOp, SetTextBoxSizeOp,
-    SetTextBoxWrapOp, SetTitlePageOp, SetVerticalAlignOp, SplitCellsOp, UngroupOp,
+    DeleteShapeOp, DeleteSourceOp, DeleteTableOp, DeleteTextBoxOp, DeleteTocOp, DocxOp,
+    GroupShapesOp, HyperlinkTarget, InsertBibliographyOp, InsertBibliographyPlace,
+    InsertBookmarkOp, InsertCaptionOp, InsertCaptionPlace, InsertCitationOp, InsertColOp,
+    InsertCommentOp, InsertConnectorOp, InsertContentControlOp, InsertCrossRefOp,
+    InsertDocPartContentOp, InsertDocPartContentPlace, InsertDocPartOp, InsertFieldOp,
+    InsertHeaderFooterOp, InsertHyperlinkHost, InsertHyperlinkOp, InsertIndexEntryOp,
+    InsertIndexOp, InsertIndexPlace, InsertMathOp, InsertMathPlace, InsertNoteOp,
+    InsertNumberingOp, InsertParaOp, InsertParaPlace, InsertPictureOp, InsertRowOp, InsertRubyOp,
+    InsertRubyPlace, InsertSdtPlace, InsertSectionOp, InsertSectionPlace, InsertShapeOp,
+    InsertSourceOp, InsertTableOp, InsertTextBoxOp, InsertTocOp, InsertTocPlace, MergeCellsOp,
+    NoteNumberTarget, ReplacePictureOp, ReplyCommentOp, RevisionOp, SetBookmarkOp, SetColumnsOp,
+    SetCommentDoneOp, SetCommentMetaOp, SetCommentTextOp, SetContentControlOp, SetDocGridOp,
+    SetEvenAndOddHeadersOp, SetFieldOp, SetGutterAtTopOp, SetHfDistanceOp, SetHfLinkOp,
+    SetHyperlinkOp, SetLineNumberingOp, SetMathOp, SetMirrorMarginsOp, SetNoteNumberingOp,
+    SetNumberingOp, SetPageBordersOp, SetPageMarginOp, SetPageSizeOp, SetParaFormatOp,
+    SetParaNumberingOp, SetParaStyleOp, SetParaTextOp, SetPictureSizeOp, SetPictureWrapOp,
+    SetRtlGutterOp, SetRubyOp, SetRunFormatOp, SetShapeFillOp, SetShapeLineOp, SetShapePosOp,
+    SetShapeSizeOp, SetStyleOp, SetTextBoxDirectionOp, SetTextBoxFillOp, SetTextBoxLineOp,
+    SetTextBoxLinkOp, SetTextBoxSizeOp, SetTextBoxWrapOp, SetTitlePageOp, SetVerticalAlignOp,
+    SplitCellsOp, UngroupOp,
 };
 use super::revision;
 use super::ruby;
 use super::sdt;
 use super::sect;
+use super::shape;
 use super::smartart;
 use super::styles;
 use super::tbl;
@@ -334,6 +337,24 @@ pub fn apply(bytes: &[u8], ops: &[DocxOp]) -> Result<Vec<u8>, Error> {
                 apply_delete_connector(
                     &mut pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i,
                 )?;
+            }
+            DocxOp::InsertShape(op) => {
+                apply_insert_shape(&mut pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
+            }
+            DocxOp::DeleteShape(op) => {
+                apply_delete_shape(&mut pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
+            }
+            DocxOp::SetShapeSize(op) => {
+                apply_shape_size(&mut pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
+            }
+            DocxOp::SetShapePos(op) => {
+                apply_shape_pos(&mut pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
+            }
+            DocxOp::SetShapeFill(op) => {
+                apply_shape_fill(&mut pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
+            }
+            DocxOp::SetShapeLine(op) => {
+                apply_shape_line(&mut pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
             }
             DocxOp::GroupShapes(op) => {
                 apply_group_shapes(&mut pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
@@ -3980,6 +4001,161 @@ fn apply_delete_connector(
     Ok(())
 }
 
+fn shape_missing(id: &str, i: usize) -> Error {
+    Error::with_path(
+        ErrorKind::ShapeNotFound { id: id.to_string() },
+        format!("ops[{i}].id"),
+    )
+}
+
+fn apply_insert_shape(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &InsertShapeOp,
+    i: usize,
+) -> Result<(), Error> {
+    if matches!(
+        &op.host,
+        HostPara::InNote { .. } | HostPara::InComment { .. }
+    ) {
+        return Err(Error::with_path(
+            ErrorKind::GraphicInRestrictedStory,
+            format!("ops[{i}].id"),
+        ));
+    }
+    let part_name = part_for_host(pkg, catalog, doc_part, &op.host, &op.id, i)?;
+    let doc = load_part(pkg, docs, &part_name)?;
+    textbox::ensure_textbox_ns(&mut doc.root);
+    let doc_pr = picture::next_docpr_id(&doc.root);
+    let (cx, cy) = match (op.cx, op.cy) {
+        (Some(x), Some(y)) => (x, y),
+        _ => (shape::DEFAULT_CX, shape::DEFAULT_CY),
+    };
+    let p = para::find_paragraph_mut(&mut doc.root, op.host.body()).ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::ParaNotFound { id: op.id.clone() },
+            format!("ops[{i}].id"),
+        )
+    })?;
+    shape::insert_shape(p, doc_pr, cx, cy, &op.prst);
+    dirty.insert(part_name, ());
+    Ok(())
+}
+
+fn apply_delete_shape(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &DeleteShapeOp,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name = part_for_txbx(pkg, catalog, doc_part, &op.target, &op.id, i)?;
+    let doc = load_part(pkg, docs, &part_name)?;
+    let host = para::find_paragraph_mut(&mut doc.root, op.target.host.body())
+        .ok_or_else(|| shape_missing(&op.id, i))?;
+    if !shape::remove_shape(host, &op.target.key) {
+        return Err(shape_missing(&op.id, i));
+    }
+    dirty.insert(part_name, ());
+    Ok(())
+}
+
+fn apply_shape_size(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &SetShapeSizeOp,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name = part_for_txbx(pkg, catalog, doc_part, &op.target, &op.id, i)?;
+    let doc = load_part(pkg, docs, &part_name)?;
+    let host = para::find_paragraph_mut(&mut doc.root, op.target.host.body())
+        .ok_or_else(|| shape_missing(&op.id, i))?;
+    let drawing = shape::find_shape_drawing_mut(host, &op.target.key)
+        .ok_or_else(|| shape_missing(&op.id, i))?;
+    if !picture::set_extent(drawing, op.cx, op.cy) {
+        return Err(shape_missing(&op.id, i));
+    }
+    dirty.insert(part_name, ());
+    Ok(())
+}
+
+fn apply_shape_pos(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &SetShapePosOp,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name = part_for_txbx(pkg, catalog, doc_part, &op.target, &op.id, i)?;
+    let doc = load_part(pkg, docs, &part_name)?;
+    let host = para::find_paragraph_mut(&mut doc.root, op.target.host.body())
+        .ok_or_else(|| shape_missing(&op.id, i))?;
+    let drawing = shape::find_shape_drawing_mut(host, &op.target.key)
+        .ok_or_else(|| shape_missing(&op.id, i))?;
+    if !shape::set_pos(drawing, op.x, op.y) {
+        return Err(Error::with_path(
+            ErrorKind::DocxShapeNeedsAnchor,
+            format!("ops[{i}].id"),
+        ));
+    }
+    dirty.insert(part_name, ());
+    Ok(())
+}
+
+fn apply_shape_fill(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &SetShapeFillOp,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name = part_for_txbx(pkg, catalog, doc_part, &op.target, &op.id, i)?;
+    let doc = load_part(pkg, docs, &part_name)?;
+    textbox::ensure_textbox_ns(&mut doc.root);
+    let host = para::find_paragraph_mut(&mut doc.root, op.target.host.body())
+        .ok_or_else(|| shape_missing(&op.id, i))?;
+    shape::with_wsp_mut(host, &op.target.key, |wsp| {
+        textbox::set_fill(wsp, op.color.as_deref())
+    })
+    .ok_or_else(|| shape_missing(&op.id, i))??;
+    dirty.insert(part_name, ());
+    Ok(())
+}
+
+fn apply_shape_line(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &SetShapeLineOp,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name = part_for_txbx(pkg, catalog, doc_part, &op.target, &op.id, i)?;
+    let doc = load_part(pkg, docs, &part_name)?;
+    textbox::ensure_textbox_ns(&mut doc.root);
+    let host = para::find_paragraph_mut(&mut doc.root, op.target.host.body())
+        .ok_or_else(|| shape_missing(&op.id, i))?;
+    shape::with_wsp_mut(host, &op.target.key, |wsp| {
+        textbox::set_line(wsp, op.color.as_deref(), op.width)
+    })
+    .ok_or_else(|| shape_missing(&op.id, i))??;
+    dirty.insert(part_name, ());
+    Ok(())
+}
+
 fn apply_group_shapes(
     pkg: &mut Package,
     docs: &mut HashMap<String, Document>,
@@ -4039,7 +4215,7 @@ fn part_for_group_member(
 ) -> Result<String, Error> {
     match member {
         GroupMember::Picture(target) => part_for_pic(pkg, catalog, doc_part, target, id, i),
-        GroupMember::TextBox(t) | GroupMember::Connector(t) => {
+        GroupMember::TextBox(t) | GroupMember::Connector(t) | GroupMember::Shape(t) => {
             part_for_txbx(pkg, catalog, doc_part, t, id, i)
         }
     }

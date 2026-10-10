@@ -910,6 +910,7 @@ mod tests {
                 "pictureCount",
                 "textBoxCount",
                 "connectorCount",
+                "shapeCount",
                 "inkCanvasCount",
                 "footnoteCount",
                 "endnoteCount",
@@ -976,6 +977,7 @@ mod tests {
                 "pictureCount",
                 "textBoxCount",
                 "connectorCount",
+                "shapeCount",
                 "inkCanvasCount",
                 "model3dCount",
                 "runCount"
@@ -996,6 +998,7 @@ mod tests {
                 "pictureCount",
                 "textBoxCount",
                 "connectorCount",
+                "shapeCount",
                 "inkCanvasCount",
                 "model3dCount",
                 "runCount"

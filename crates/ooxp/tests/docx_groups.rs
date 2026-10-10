@@ -1,4 +1,4 @@
-//! docx 组合与连接线：inspect 计数、插删连接线、组合浮动框/图、xlsx / insertShape 拒绝。
+//! docx 组合与连接线：inspect 计数、插删连接线、组合浮动框/图、xlsx / setShapeGeom 拒绝。
 
 use std::io::{Cursor, Read};
 use std::path::{Path, PathBuf};
@@ -383,7 +383,7 @@ fn reject_inline_group_member_and_bad_ids() {
     );
     assert_eq!(err_cxn.code(), ErrorCode::IdNotFound);
 
-    let err_shape = apply_err(&src, json!([{ "op": "insertShape", "id": para }]));
+    let err_shape = apply_err(&src, json!([{ "op": "setShapeGeom", "id": para }]));
     assert_eq!(err_shape.code(), ErrorCode::InvalidField);
 }
 

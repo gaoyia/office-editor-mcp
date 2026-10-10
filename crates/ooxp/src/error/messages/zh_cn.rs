@@ -152,11 +152,15 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::TxbxIndexFromOne => "txbx:index 从 1 起".into(),
             IdReason::SetParaOnBox => "setParaText 的 id 必须是段落 id，不能是文本框 id".into(),
             IdReason::InsertNeedsHostPara => {
-                "insertTextBox / insertConnector / insertInkCanvas 的 id 必须是宿主段落 id".into()
+                "insertTextBox / insertConnector / insertShape / insertInkCanvas 的 id 必须是宿主段落 id".into()
             }
             IdReason::DocxCxnPrefix => "docx 连接线 id 必须是段落 id 加上 /cxn:…".into(),
             IdReason::DocxCxnContainer => {
                 "段落或容器 id 必须带 /cxn:…（该 id 本身不是连接线）".into()
+            }
+            IdReason::DocxShapePrefix => "docx 形状 id 必须是段落 id 加上 /shape:…".into(),
+            IdReason::DocxShapeContainer => {
+                "段落或容器 id 必须带 /shape:…（该 id 本身不是形状）".into()
             }
             IdReason::DocxInkPrefix => "docx 墨迹画布 id 必须是段落 id 加上 /ink:…".into(),
             IdReason::DocxInkContainer => {
@@ -1103,6 +1107,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::NotesSlideImage => "不能改 type 为 sldImg 的占位符".into(),
         ErrorKind::GraphicInRestrictedStory => {
             "不能把图形对象放到文本框、标注、批注、脚注或尾注中".into()
+        }
+        ErrorKind::DocxShapeNeedsAnchor => {
+            "docx 的 setShapePos 只能改浮动形状（需要 wp:anchor）".into()
         }
         ErrorKind::NeedPropsField => {
             "setProps 至少要给 title、subject、creator、description、keywords、category、company、manager 之一"

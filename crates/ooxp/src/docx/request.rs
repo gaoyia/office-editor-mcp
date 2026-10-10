@@ -29,6 +29,8 @@ pub struct InspectScope {
     pub text_boxes: bool,
     /// 为 true 时列出连接线。
     pub connectors: bool,
+    /// 为 true 时列出无框形状。
+    pub shapes: bool,
     /// 为 true 时列出墨迹画布。
     pub ink_canvases: bool,
     /// 为 true 时展开框内段落。
@@ -315,6 +317,52 @@ pub struct SetTextBoxDirectionOp {
     pub id: String,
     pub target: TxbxTarget,
     pub vertical: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct InsertShapeOp {
+    pub id: String,
+    pub host: para::HostPara,
+    pub cx: Option<i64>,
+    pub cy: Option<i64>,
+    pub prst: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct DeleteShapeOp {
+    pub id: String,
+    pub target: TxbxTarget,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetShapeSizeOp {
+    pub id: String,
+    pub target: TxbxTarget,
+    pub cx: Option<i64>,
+    pub cy: Option<i64>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetShapePosOp {
+    pub id: String,
+    pub target: TxbxTarget,
+    pub x: Option<i64>,
+    pub y: Option<i64>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetShapeFillOp {
+    pub id: String,
+    pub target: TxbxTarget,
+    pub color: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetShapeLineOp {
+    pub id: String,
+    pub target: TxbxTarget,
+    pub color: Option<String>,
+    pub width: Option<i64>,
 }
 
 #[derive(Debug, Clone)]
@@ -1099,6 +1147,12 @@ pub enum DocxOp {
     SetTextBoxDirection(SetTextBoxDirectionOp),
     InsertConnector(InsertConnectorOp),
     DeleteConnector(DeleteConnectorOp),
+    InsertShape(InsertShapeOp),
+    DeleteShape(DeleteShapeOp),
+    SetShapeSize(SetShapeSizeOp),
+    SetShapePos(SetShapePosOp),
+    SetShapeFill(SetShapeFillOp),
+    SetShapeLine(SetShapeLineOp),
     GroupShapes(GroupShapesOp),
     Ungroup(UngroupOp),
     InsertPara(InsertParaOp),
@@ -1213,6 +1267,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
             "pictures",
             "textBoxes",
             "connectors",
+            "shapes",
             "inkCanvases",
             "textBoxContent",
             "notes",
@@ -1250,6 +1305,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
     let pictures = parse_bool_field(obj.get("pictures"), "pictures")?;
     let text_boxes = parse_bool_field(obj.get("textBoxes"), "textBoxes")?;
     let connectors = parse_bool_field(obj.get("connectors"), "connectors")?;
+    let shapes = parse_bool_field(obj.get("shapes"), "shapes")?;
     let ink_canvases = parse_bool_field(obj.get("inkCanvases"), "inkCanvases")?;
     let text_box_content = parse_bool_field(obj.get("textBoxContent"), "textBoxContent")?;
     let notes = parse_bool_field(obj.get("notes"), "notes")?;
@@ -1297,6 +1353,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
                 && !obj.contains_key("pictures")
                 && !obj.contains_key("textBoxes")
                 && !obj.contains_key("connectors")
+                && !obj.contains_key("shapes")
                 && !obj.contains_key("inkCanvases")
                 && !obj.contains_key("textBoxContent")
                 && !obj.contains_key("notes")
@@ -1337,6 +1394,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
                 pictures,
                 text_boxes,
                 connectors,
+                shapes,
                 ink_canvases,
                 text_box_content,
                 notes,
@@ -1414,6 +1472,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
                 pictures,
                 text_boxes,
                 connectors,
+                shapes,
                 ink_canvases,
                 text_box_content,
                 notes,
@@ -1572,13 +1631,7 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<DocxOp>, Error> {
             || op_name == "deleteMaster"
             || op_name == "setSlideSize"
             || op_name == "setHandoutText"
-            || op_name == "insertShape"
-            || op_name == "deleteShape"
-            || op_name == "setShapePos"
-            || op_name == "setShapeSize"
-            || op_name == "setShapeFill"
             || op_name == "setShapeFormat"
-            || op_name == "setShapeLine"
             || op_name == "setShapeGeom"
             || op_name == "setConnector"
             || op_name == "setTableCellText"
@@ -1710,6 +1763,12 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<DocxOp>, Error> {
             }
             "insertConnector" => out.push(DocxOp::InsertConnector(parse_insert_connector(obj, i)?)),
             "deleteConnector" => out.push(DocxOp::DeleteConnector(parse_delete_connector(obj, i)?)),
+            "insertShape" => out.push(DocxOp::InsertShape(parse_insert_shape(obj, i)?)),
+            "deleteShape" => out.push(DocxOp::DeleteShape(parse_delete_shape(obj, i)?)),
+            "setShapeSize" => out.push(DocxOp::SetShapeSize(parse_set_shape_size(obj, i)?)),
+            "setShapePos" => out.push(DocxOp::SetShapePos(parse_set_shape_pos(obj, i)?)),
+            "setShapeFill" => out.push(DocxOp::SetShapeFill(parse_set_shape_fill(obj, i)?)),
+            "setShapeLine" => out.push(DocxOp::SetShapeLine(parse_set_shape_line(obj, i)?)),
             "groupShapes" => out.push(DocxOp::GroupShapes(parse_group_shapes(obj, i)?)),
             "ungroup" => out.push(DocxOp::Ungroup(parse_ungroup(obj, i)?)),
             "insertPara" => out.push(DocxOp::InsertPara(parse_insert_para(obj, i)?)),
@@ -6702,11 +6761,12 @@ fn parse_color_field(
     obj: &serde_json::Map<String, Value>,
     i: usize,
     required: bool,
+    op: &str,
 ) -> Result<Option<String>, Error> {
     match obj.get("color") {
         None if required => Err(Error::with_path(
             ErrorKind::OpRequiresField {
-                op: "setTextBoxFill".into(),
+                op: op.into(),
                 field: "color".into(),
             },
             format!("ops[{i}].color"),
@@ -6740,7 +6800,7 @@ fn parse_set_txbx_fill(
     deny_keys(obj, i, &["op", "id", "color"])?;
     let id = require_id(obj, i)?;
     let target = para::parse_txbx_id(&id, i)?;
-    let color = parse_color_field(obj, i, true)?;
+    let color = parse_color_field(obj, i, true, "setTextBoxFill")?;
     Ok(SetTextBoxFillOp { id, target, color })
 }
 
@@ -6760,7 +6820,7 @@ fn parse_set_txbx_line(
             format!("ops[{i}].color"),
         ));
     }
-    let color = parse_color_field(obj, i, false)?;
+    let color = parse_color_field(obj, i, false, "setTextBoxLine")?;
     let width = parse_emu_field(obj.get("width"), i, "width")?;
     if color.is_none() && width.is_some() {
         return Err(Error::with_path(
@@ -6877,6 +6937,152 @@ fn parse_delete_connector(
     let id = require_id(obj, i)?;
     let target = super::connector::parse_cxn_id(&id, i)?;
     Ok(DeleteConnectorOp { id, target })
+}
+
+fn parse_insert_shape(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<InsertShapeOp, Error> {
+    deny_keys(obj, i, &["op", "id", "prst", "cx", "cy"])?;
+    let id = require_id(obj, i)?;
+    let host = para::parse_host_para_id_at(&id, &format!("ops[{i}].id"))?;
+    let cx = parse_emu_field(obj.get("cx"), i, "cx")?;
+    let cy = parse_emu_field(obj.get("cy"), i, "cy")?;
+    if cx.is_some() != cy.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "insertShape".into(),
+                field: "cx and cy together".into(),
+            },
+            format!("ops[{i}]"),
+        ));
+    }
+    let prst = match obj.get("prst") {
+        None => "rect".to_string(),
+        Some(Value::String(s)) => {
+            if super::shape::is_writable_prst(s) {
+                s.clone()
+            } else {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidShapePrst,
+                    format!("ops[{i}].prst"),
+                ));
+            }
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "prst".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].prst"),
+            ));
+        }
+    };
+    Ok(InsertShapeOp {
+        id,
+        host,
+        cx,
+        cy,
+        prst,
+    })
+}
+
+fn parse_delete_shape(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<DeleteShapeOp, Error> {
+    deny_keys(obj, i, &["op", "id"])?;
+    let id = require_id(obj, i)?;
+    let target = super::shape::parse_shape_id(&id, i)?;
+    Ok(DeleteShapeOp { id, target })
+}
+
+fn parse_set_shape_size(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<SetShapeSizeOp, Error> {
+    deny_keys(obj, i, &["op", "id", "cx", "cy"])?;
+    let id = require_id(obj, i)?;
+    let target = super::shape::parse_shape_id(&id, i)?;
+    let cx = parse_emu_field(obj.get("cx"), i, "cx")?;
+    let cy = parse_emu_field(obj.get("cy"), i, "cy")?;
+    if cx.is_none() && cy.is_none() {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "setShapeSize".into(),
+                field: "cx or cy".into(),
+            },
+            format!("ops[{i}]"),
+        ));
+    }
+    Ok(SetShapeSizeOp { id, target, cx, cy })
+}
+
+fn parse_set_shape_pos(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<SetShapePosOp, Error> {
+    deny_keys(obj, i, &["op", "id", "x", "y"])?;
+    let id = require_id(obj, i)?;
+    let target = super::shape::parse_shape_id(&id, i)?;
+    let x = parse_i64_field(obj.get("x"), i, "x")?;
+    let y = parse_i64_field(obj.get("y"), i, "y")?;
+    if x.is_none() && y.is_none() {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "setShapePos".into(),
+                field: "x or y".into(),
+            },
+            format!("ops[{i}]"),
+        ));
+    }
+    Ok(SetShapePosOp { id, target, x, y })
+}
+
+fn parse_set_shape_fill(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<SetShapeFillOp, Error> {
+    deny_keys(obj, i, &["op", "id", "color"])?;
+    let id = require_id(obj, i)?;
+    let target = super::shape::parse_shape_id(&id, i)?;
+    let color = parse_color_field(obj, i, true, "setShapeFill")?;
+    Ok(SetShapeFillOp { id, target, color })
+}
+
+fn parse_set_shape_line(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<SetShapeLineOp, Error> {
+    deny_keys(obj, i, &["op", "id", "color", "width"])?;
+    let id = require_id(obj, i)?;
+    let target = super::shape::parse_shape_id(&id, i)?;
+    if !obj.contains_key("color") {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "setShapeLine".into(),
+                field: "color".into(),
+            },
+            format!("ops[{i}].color"),
+        ));
+    }
+    let color = parse_color_field(obj, i, false, "setShapeLine")?;
+    let width = parse_emu_field(obj.get("width"), i, "width")?;
+    if color.is_none() && width.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::UnknownField {
+                field: "width".into(),
+            },
+            format!("ops[{i}].width"),
+        ));
+    }
+    Ok(SetShapeLineOp {
+        id,
+        target,
+        color,
+        width,
+    })
 }
 
 fn parse_group_shapes(

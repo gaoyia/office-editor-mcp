@@ -689,15 +689,22 @@ pub fn remove_textbox(host: &mut Element, key: &TxbxKey) -> bool {
 pub fn set_fill(wsp: &mut Element, color: Option<&str>) -> Result<(), Error> {
     let sp = ensure_sp_pr(wsp);
     remove_named(sp, &["solidFill", "noFill", "gradFill", "pattFill"]);
-    match color {
+    let fill = match color {
         Some(c) => {
             check_hex(c)?;
             let mut fill = Element::new("a:solidFill");
             fill.push_element(Element::new("a:srgbClr").with_attr("val", c.to_ascii_uppercase()));
-            sp.push_element(fill);
+            fill
         }
-        None => sp.push_element(Element::new("a:noFill")),
-    }
+        None => Element::new("a:noFill"),
+    };
+    // DrawingML 里填充必须在 `ln` 之前，否则 Word 对无框形状会忽略填色。
+    let at = sp
+        .children
+        .iter()
+        .position(|n| matches!(n, Node::Element(e) if e.local_name() == "ln"))
+        .unwrap_or(sp.children.len());
+    sp.children.insert(at, Node::Element(fill));
     Ok(())
 }
 

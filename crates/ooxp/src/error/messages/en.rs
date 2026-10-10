@@ -165,13 +165,19 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::TxbxIndexFromOne => "txbx:index starts at 1".into(),
             IdReason::SetParaOnBox => "setParaText id must be a paragraph id, not a text box id".into(),
             IdReason::InsertNeedsHostPara => {
-                "insertTextBox / insertConnector / insertInkCanvas id must be a host paragraph id".into()
+                "insertTextBox / insertConnector / insertShape / insertInkCanvas id must be a host paragraph id".into()
             }
             IdReason::DocxCxnPrefix => {
                 "docx connector id must be a paragraph id plus /cxn:…".into()
             }
             IdReason::DocxCxnContainer => {
                 "paragraph or container id must include /cxn:… (that id alone is not a connector)".into()
+            }
+            IdReason::DocxShapePrefix => {
+                "docx shape id must be a paragraph id plus /shape:…".into()
+            }
+            IdReason::DocxShapeContainer => {
+                "paragraph or container id must include /shape:… (that id alone is not a shape)".into()
             }
             IdReason::DocxInkPrefix => {
                 "docx ink canvas id must be a paragraph id plus /ink:…".into()
@@ -1238,6 +1244,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::GraphicInRestrictedStory => {
             "Cannot place a graphic object in a text box, callout, comment, footnote, or endnote"
                 .into()
+        }
+        ErrorKind::DocxShapeNeedsAnchor => {
+            "docx setShapePos only applies to floating shapes (wp:anchor required)".into()
         }
         ErrorKind::NeedPropsField => {
             "setProps requires at least one of title, subject, creator, description, keywords, category, company, manager"

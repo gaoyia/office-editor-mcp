@@ -412,8 +412,8 @@
 - `setShapeFormat` 的 `textOutline` 缺 `color` 或 `width`，报 `InvalidField`
 - `setShapeFormat` 的 `sz` 大于 400000 报 `TruncatedLimit`
 - 非法六位十六进制 `color` 报 `InvalidField`
-- docx 认 `insertConnector` / `deleteConnector` / `groupShapes` / `ungroup`
-- docx 上发 `insertShape` / `deleteShape` / `setShapePos` / `setShapeSize` / `setShapeFill` / `setShapeLine` / `setShapeGeom` / `setConnector` / `setShapeFormat` 报 `InvalidField`
+- docx 认 `insertConnector` / `deleteConnector` / `insertShape` / `deleteShape` / `setShapePos` / `setShapeSize` / `setShapeFill` / `setShapeLine` / `groupShapes` / `ungroup`
+- docx 上发 `setShapeGeom` / `setConnector` / `setShapeFormat` 报 `InvalidField`
 - xlsx 上发 `groupShapes` / `ungroup` / `setShapePos` / `setShapeSize` / `setShapeFill` / `setShapeLine` / `setShapeGeom` / `setConnector` 报 `InvalidField`
 - xlsx 认 `insertShape` / `deleteShape` / `insertConnector` / `deleteConnector` / `setShapeFormat`
 - 找不到连接线时，`deleteConnector` / `setConnector` / 对连接线发的 `setShapePos` / `setShapeSize` / `setShapeLine` 报 `IdNotFound`

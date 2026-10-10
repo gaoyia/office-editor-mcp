@@ -33,6 +33,7 @@ mod revision;
 mod ruby;
 mod sdt;
 mod sect;
+mod shape;
 mod smartart;
 mod styles;
 mod tbl;

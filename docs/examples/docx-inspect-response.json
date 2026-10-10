@@ -5,6 +5,9 @@
   "paraCount": 2,
   "pictureCount": 0,
   "textBoxCount": 0,
+  "connectorCount": 0,
+  "shapeCount": 0,
+  "inkCanvasCount": 0,
   "footnoteCount": 0,
   "endnoteCount": 0,
   "commentCount": 0,
@@ -114,6 +117,9 @@
       "stable": true,
       "pictureCount": 0,
       "textBoxCount": 0,
+      "connectorCount": 0,
+      "shapeCount": 0,
+      "inkCanvasCount": 0,
       "runCount": 1
     },
     {
@@ -127,6 +133,9 @@
       "stable": true,
       "pictureCount": 0,
       "textBoxCount": 0,
+      "connectorCount": 0,
+      "shapeCount": 0,
+      "inkCanvasCount": 0,
       "runCount": 1
     }
   ]

@@ -183,6 +183,7 @@ pub fn parse_para_id_at(id: &str, path: &str) -> Result<ParaTarget, Error> {
     let path = path.to_string();
     if id.contains("/pic:")
         || id.contains("/cxn:")
+        || id.contains("/shape:")
         || id.contains("/ink:")
         || id.contains("/model3d:")
     {
@@ -291,6 +292,7 @@ pub fn parse_host_para_id_at(id: &str, path: &str) -> Result<HostPara, Error> {
     if id.contains("/txbx:")
         || id.contains("/pic:")
         || id.contains("/cxn:")
+        || id.contains("/shape:")
         || id.contains("/ink:")
         || id.contains("/model3d:")
     {
@@ -312,6 +314,7 @@ pub fn parse_txbx_id_at(id: &str, path: &str) -> Result<TxbxTarget, Error> {
     let path = path.to_string();
     if id.contains("/pic:")
         || id.contains("/cxn:")
+        || id.contains("/shape:")
         || id.contains("/ink:")
         || id.contains("/model3d:")
     {

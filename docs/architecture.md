@@ -139,15 +139,15 @@ create 到 `.xlsm` 时 workbook Override 用 macroEnabled Content Type，不建�
 
 主文档由根关系里 `/officeDocument` 指向，常见路径 `/word/document.xml`。
 inspect 读该部件里的 `w:p`，返回大纲和按范围截断的段落；并始终列出页眉、页脚容器、各节页面与页眉页脚属性，以及每节是否链接到前一节。
-文档根始终带正文 `pictureCount`、`textBoxCount`、`connectorCount`、`inkCanvasCount`、`footnoteCount`、`endnoteCount`、`commentCount`、`chartCount`、
+文档根始终带正文 `pictureCount`、`textBoxCount`、`connectorCount`、`shapeCount`、`inkCanvasCount`、`footnoteCount`、`endnoteCount`、`commentCount`、`chartCount`、
 `smartArtCount`、`oleObjectCount`、`model3dCount`、`tableCount`、`revisionCount`、`hyperlinkCount`、`bookmarkCount`、`fieldCount`、`tocCount`、
 `captionCount`、`crossRefCount`、`indexCount`、`indexEntryCount`、`sourceCount`、`citationCount`、`bibliographyCount`、
 `docPartCount`、`mathCount`、`contentControlCount`、`numberingCount`、`styleCount`、`embeddedFontCount`，
 以及整篇 `mirrorMargins` / `gutterAtTop`、`props`、`protection`、`theme` 与 `fontEmbed`、`pageBackground`。
-页眉页脚容器始终带前两项与 `connectorCount`、`inkCanvasCount`、`chartCount`、`smartArtCount`、`oleObjectCount`、`model3dCount`、`tableCount`、`revisionCount`、
+页眉页脚容器始终带前两项与 `connectorCount`、`shapeCount`、`inkCanvasCount`、`chartCount`、`smartArtCount`、`oleObjectCount`、`model3dCount`、`tableCount`、`revisionCount`、
 `hyperlinkCount`、`bookmarkCount`、`fieldCount`、`mathCount`、`contentControlCount`。
-`scope.pictures` / `scope.textBoxes` / `scope.connectors` / `scope.inkCanvases` / `scope.model3ds` 为 true 时列出页眉页脚图、框、连接线、墨迹画布或 3D 模型；同时给了正文切片则段落上也列出。
-组合本身不进树，组合里的图 / 框 / 连接线 / 墨迹画布展开。`scope.textBoxContent` 再展开框内段落。`scope.notes` 为 true 时列出用户脚注、尾注与分隔符；注内段落一次倒出。
+`scope.pictures` / `scope.textBoxes` / `scope.connectors` / `scope.shapes` / `scope.inkCanvases` / `scope.model3ds` 为 true 时列出页眉页脚图、框、连接线、无框形状、墨迹画布或 3D 模型；同时给了正文切片则段落上也列出。
+组合本身不进树，组合里的图 / 框 / 连接线 / 无框形状 / 墨迹画布展开。`scope.textBoxContent` 再展开框内段落。`scope.notes` 为 true 时列出用户脚注、尾注与分隔符；注内段落一次倒出。
 `scope.comments` 为 true 时列出批注；批注内段落一次倒出。`scope.charts` 为 true 时列出正文、页眉页脚、文本框、脚注、尾注与批注里的嵌入图表；系列一次倒出。
 `scope.smartArt` 为 true 时列出正文、页眉页脚、文本框、脚注、尾注与批注里的 SmartArt；可见点一次倒出。`scope.oleObjects` 为 true 时列出正文与页眉页脚里的嵌入对象。
 `scope.tables` 为 true 时列出正文与页眉页脚里的表；单元格段落一次倒出。`scope.revisions` 为 true 时列出正文与页眉页脚里的 run 级插入、删除与属性修订。
@@ -168,8 +168,9 @@ apply 可改被点名段落的可见文本（主文档、页眉页脚、框内�
 也可在正文段后插入分节符或删除非末节，也可插入或删除目录块，也可插入题注与交叉引用（不在库里求 SEQ / REF 的值），也可插入书目源、引文与书目块（不在库里按样式表排版），也可插删构建基块并把基块正文复制进主文档，也可插改删 OMML 公式，也可插改删内容控件。
 页眉、页脚、正文、注和批注里的 DrawingML 图片可换、插、删，并可改尺寸与绕排。
 文本框可插、删（不含注内、批注内与框内再套框；Word 16.0 不会把框写进另一个 `w:txbxContent`），可改尺寸、绕排、填色、描边、横竖排与链接。连接线可插、删（不含注内、批注内与框内）。
+无框形状可插、删、改位置、尺寸、填充与线（不含注内、批注内与框内）。
 墨迹画布可插、换、删（不含注内、批注内与框内），并可按 id 导出 InkML。
-浮动图 / 框 / 连接线可组合或解开。脚注、尾注可插、删，可改编号格式（整篇同时写 `settings.xml` 与各节 `sectPr`，Word 读节属性）。批注可插、删、回复、改字、改作者与完成标记。
+浮动图 / 框 / 连接线 / 无框形状可组合或解开。脚注、尾注可插、删，可改编号格式（整篇同时写 `settings.xml` 与各节 `sectPr`，Word 读节属性）。批注可插、删、回复、改字、改作者与完成标记。
 嵌入图表可插、删、改标题、改系列数据、改类型与图例，并可改宿主 drawing 的尺寸与绕排；宿主可以是正文、页眉页脚、框内、注内或批注内段落。圆环、雷达、气泡与组合图走同一套 op；透视图表只改标题、图例、标签、删除与尺寸绕排，不改数。
 股价（含 OHLC）、曲面（含线框与俯视）、复合饼可插、改类型；带成交量的股价按组合图写入。chartex 可 insert / create（须带 `layoutId`），已写入的 chartex 除删除与尺寸绕排外仍锁数据 op。次轴、趋势线、误差线（含 `cust`）可写。SmartArt 可插、删、改各点文字、增删点、改配色与快速样式，并可改宿主 drawing 的尺寸与绕排；宿主范围与图表相同。
 三种格式都可改文件属性。docx 还可开关无密码的限制编辑与只读推荐。`exportMedia` 按图 id 写出 `/word/media/…` 原字节，按 OLE id 写出 embeddings 原字节，
@@ -299,7 +300,7 @@ xlsx 也可改文件属性，脏 `docProps`。docx 可改被点名的段落，�
 可插改删内容控件（含复选、图片、组合外壳与公式外壳；
 不实现开发者模式 UI），可写入编号定义并把段落套上或去掉编号，可给段落换样式并改样式定义上的一批常见属性，可改段与 run 上的直接格式，可改节上页边距、纸张、分栏、垂直对齐、行号、文档网格与装订线侧，可改整篇镜像边距与装订线在上，
 可改节上页眉页脚距边界，也可改节上页眉页脚是否链接前节，也可为空白槽位新建页眉页脚，也可写 `titlePg` 与 `evenAndOddHeaders`，也可插入或删除节，
-也可改页眉、页脚、正文、注或批注里被点名的 DrawingML 图与文本框，也可插删连接线并把浮动图 / 框 / 连接线组合或解开，也可插删脚注尾注并改编号属性，也可插删回复批注并改完成标记，也可插删改嵌入图表（含框内、注内、批注内；
+也可改页眉、页脚、正文、注或批注里被点名的 DrawingML 图与文本框，也可插删连接线与无框形状并把浮动图 / 框 / 连接线 / 无框形状组合或解开，也可插删脚注尾注并改编号属性，也可插删回复批注并改完成标记，也可插删改嵌入图表（含框内、注内、批注内；
 含趋势线、误差线与次轴），也可插删改 SmartArt（宿主范围相同）。
 docx 也可插删嵌入对象，脏宿主 XML、`.rels`、embeddings 与占位预览图。
 docx 也可插删换 3D 模型，脏宿主 XML、`.rels`、GLB 与海报 PNG。

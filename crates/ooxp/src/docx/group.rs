@@ -1,4 +1,4 @@
-//! 把正文或页眉页脚里的浮动图 / 文本框 / 连接线包进或解开 `wpg:wgp`。组合本身不进树。
+//! 把正文或页眉页脚里的浮动图 / 文本框 / 连接线 / 无框形状包进或解开 `wpg:wgp`。组合本身不进树。
 
 use crate::error::{Error, ErrorKind, IdReason};
 use crate::xml::{Element, Node};
@@ -7,6 +7,7 @@ use super::connector;
 use super::hf::{HfKind, HfType};
 use super::para::{self, HostPara, TxbxKey, TxbxTarget};
 use super::picture::{self, PicKey, PicKind, PicTarget};
+use super::shape;
 use super::textbox::{self, WPG_NS, WPS_NS};
 use super::PIC_NS;
 
@@ -25,6 +26,7 @@ pub enum GroupMember {
     Picture(PicTarget),
     TextBox(TxbxTarget),
     Connector(TxbxTarget),
+    Shape(TxbxTarget),
 }
 
 #[derive(Clone, Copy)]
@@ -32,6 +34,7 @@ enum ChildKind {
     Picture,
     TextBox,
     Connector,
+    Shape,
 }
 
 struct Payload {
@@ -72,6 +75,9 @@ pub fn parse_member_id(id: &str, op_index: usize) -> Result<GroupMember, Error> 
         return Ok(GroupMember::Connector(connector::parse_cxn_id_at(
             id, &path,
         )?));
+    }
+    if shape::looks_like_shape_id(id) {
+        return Ok(GroupMember::Shape(shape::parse_shape_id_at(id, &path)?));
     }
     if id.contains("/txbx:") {
         let after = id.rsplit_once("/txbx:").map(|(_, a)| a).unwrap_or("");
@@ -197,11 +203,14 @@ fn check_host(member: &GroupMember, host: &GroupHost) -> Result<(), Error> {
                 n: hn,
             },
         ) => kind == hk && hf_type == ht && n == hn,
-        (GroupMember::TextBox(t) | GroupMember::Connector(t), GroupHost::Document) => {
+        (
+            GroupMember::TextBox(t) | GroupMember::Connector(t) | GroupMember::Shape(t),
+            GroupHost::Document,
+        ) => {
             matches!(t.host, HostPara::Body(_))
         }
         (
-            GroupMember::TextBox(t) | GroupMember::Connector(t),
+            GroupMember::TextBox(t) | GroupMember::Connector(t) | GroupMember::Shape(t),
             GroupHost::HeaderFooter {
                 kind, hf_type, n, ..
             },
@@ -234,6 +243,7 @@ fn member_key(member: &GroupMember) -> String {
         GroupMember::Picture(_) => "pic-other".into(),
         GroupMember::TextBox(t) => format!("txbx-{}", txbx_tag(&t.key)),
         GroupMember::Connector(t) => format!("cxn-{}", txbx_tag(&t.key)),
+        GroupMember::Shape(t) => format!("shape-{}", txbx_tag(&t.key)),
     }
 }
 
@@ -294,6 +304,13 @@ fn take_payload(
             GroupMember::Connector(t) => {
                 if host_para_matches(&t.host, p, i + 1) {
                     extract_cxn(p, &t.key)
+                } else {
+                    Extracted::Missing
+                }
+            }
+            GroupMember::Shape(t) => {
+                if host_para_matches(&t.host, p, i + 1) {
+                    extract_shape(p, &t.key)
                 } else {
                     Extracted::Missing
                 }
@@ -393,6 +410,30 @@ fn extract_cxn(host: &Element, key: &TxbxKey) -> Extracted {
     })
 }
 
+fn extract_shape(host: &Element, key: &TxbxKey) -> Extracted {
+    let Some(drawing) = shape::find_shape(host, key) else {
+        return Extracted::Missing;
+    };
+    if textbox::is_group(drawing) || drawing_kind(drawing) != PicKind::Anchor {
+        return Extracted::Nested;
+    }
+    let Some(wsp) = find_wsp(drawing) else {
+        return Extracted::Missing;
+    };
+    if !shape::is_shape_wsp(wsp) {
+        return Extracted::Missing;
+    }
+    let (cx, cy) = extent_of(drawing);
+    let (doc_pr, name) = doc_pr_of(drawing);
+    Extracted::Ok(Payload {
+        child: wsp.clone(),
+        cx: cx.unwrap_or(shape::DEFAULT_CX),
+        cy: cy.unwrap_or(shape::DEFAULT_CY),
+        doc_pr: doc_pr.unwrap_or_else(|| "1".into()),
+        name: name.unwrap_or_else(|| "形状".into()),
+    })
+}
+
 fn remove_member(root: &mut Element, member: &GroupMember) -> bool {
     match member {
         GroupMember::Picture(target) => remove_pic_target(root, target),
@@ -407,6 +448,13 @@ fn remove_member(root: &mut Element, member: &GroupMember) -> bool {
             let host = para::find_paragraph_mut(root, t.host.body());
             match host {
                 Some(p) => connector::remove_connector(p, &t.key),
+                None => false,
+            }
+        }
+        GroupMember::Shape(t) => {
+            let host = para::find_paragraph_mut(root, t.host.body());
+            match host {
+                Some(p) => shape::remove_shape(p, &t.key),
                 None => false,
             }
         }
@@ -480,6 +528,7 @@ fn slot_is_group_with_member(node: &Node, member: &GroupMember) -> bool {
         GroupMember::Picture(_) => false,
         GroupMember::TextBox(t) => grouped_txbx(drawing, &t.key),
         GroupMember::Connector(t) => connector::find_connector(drawing, &t.key).is_some(),
+        GroupMember::Shape(t) => shape::find_shape(drawing, &t.key).is_some(),
     }
 }
 
@@ -569,6 +618,10 @@ fn collect_group_children(el: &Element, out: &mut Vec<(Element, ChildKind)>) {
             out.push((el.clone(), ChildKind::TextBox));
             return;
         }
+        if shape::is_shape_wsp(el) {
+            out.push((el.clone(), ChildKind::Shape));
+            return;
+        }
     }
     if el.local_name() == "pic" {
         out.push((el.clone(), ChildKind::Picture));
@@ -589,12 +642,13 @@ fn wrap_independent(child: (Element, ChildKind), cx: i64, cy: i64, wrap: &str) -
         ChildKind::Picture => format!("图片 {id}"),
         ChildKind::TextBox => format!("文本框 {id}"),
         ChildKind::Connector => format!("连接线 {id}"),
+        ChildKind::Shape => format!("形状 {id}"),
     });
     let (child_cx, child_cy) = xfrm_of(&el).unwrap_or((cx, cy));
     set_child_off(&mut el, 0, 0, child_cx, child_cy);
     match kind {
         ChildKind::Picture => wrap_pic_drawing(el, &id, &name, child_cx, child_cy, wrap),
-        ChildKind::TextBox | ChildKind::Connector => {
+        ChildKind::TextBox | ChildKind::Connector | ChildKind::Shape => {
             wrap_wps_ac(el, &id, &name, child_cx, child_cy, wrap)
         }
     }
@@ -692,12 +746,14 @@ fn member_exists_ungrouped(root: &Element, member: &GroupMember) -> bool {
         GroupMember::Picture(PicTarget::HeaderFooter { key, .. }) => {
             picture::find_drawing(root, key).is_some_and(|d| !textbox::is_group(d))
         }
+        GroupMember::Picture(_) => false,
         GroupMember::TextBox(t) => para::find_paragraph(root, t.host.body())
             .is_some_and(|p| find_txbx_drawing(p, &t.key).is_some_and(|d| !textbox::is_group(d))),
         GroupMember::Connector(t) => para::find_paragraph(root, t.host.body()).is_some_and(|p| {
             connector::find_connector(p, &t.key).is_some_and(|d| !textbox::is_group(d))
         }),
-        _ => false,
+        GroupMember::Shape(t) => para::find_paragraph(root, t.host.body())
+            .is_some_and(|p| shape::find_shape(p, &t.key).is_some_and(|d| !textbox::is_group(d))),
     }
 }
 
@@ -717,6 +773,12 @@ fn missing_member(member: &GroupMember, path: &str) -> Error {
         ),
         GroupMember::Connector(_) => Error::with_path(
             ErrorKind::ConnectorNotFound {
+                id: path.to_string(),
+            },
+            path.to_string(),
+        ),
+        GroupMember::Shape(_) => Error::with_path(
+            ErrorKind::ShapeNotFound {
                 id: path.to_string(),
             },
             path.to_string(),

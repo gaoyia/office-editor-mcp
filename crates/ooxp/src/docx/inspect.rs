@@ -25,6 +25,7 @@ use super::request::InspectScope;
 use super::revision;
 use super::ruby;
 use super::sdt;
+use super::shape;
 use super::smartart;
 use super::styles;
 use super::tbl;
@@ -58,6 +59,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     let expand_pics = scope.as_ref().is_some_and(|s| s.pictures);
     let expand_txbx = scope.as_ref().is_some_and(|s| s.text_boxes);
     let expand_cxn = scope.as_ref().is_some_and(|s| s.connectors);
+    let expand_shapes = scope.as_ref().is_some_and(|s| s.shapes);
     let expand_ink = scope.as_ref().is_some_and(|s| s.ink_canvases);
     let expand_model3ds = scope.as_ref().is_some_and(|s| s.model3ds);
     let expand_txbx_content = scope.as_ref().is_some_and(|s| s.text_box_content);
@@ -78,6 +80,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         pictures: expand_pics,
         text_boxes: expand_txbx,
         connectors: expand_cxn,
+        shapes: expand_shapes,
         ink_canvases: expand_ink,
         model3ds: expand_model3ds,
         text_box_content: expand_txbx_content,
@@ -102,6 +105,8 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     let text_box_count = body_boxes.len();
     let body_cxns = collect_body_cxns(&paras)?;
     let connector_count = body_cxns.len();
+    let body_shapes = collect_body_shapes(&paras)?;
+    let shape_count = body_shapes.len();
     let mut ink_canvas_count = 0usize;
     let mut body_model3d_count = 0usize;
     for p in &paras {
@@ -180,6 +185,12 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     insert_json_after(
         tree.as_object_mut().unwrap(),
         "connectorCount",
+        "shapeCount",
+        json!(shape_count),
+    );
+    insert_json_after(
+        tree.as_object_mut().unwrap(),
+        "shapeCount",
         "inkCanvasCount",
         json!(ink_canvas_count),
     );
@@ -358,6 +369,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
                         expand_pics,
                         expand_txbx,
                         expand_cxn,
+                        expand_shapes,
                         expand_ink,
                         expand_model3ds,
                         expand_txbx_content,
@@ -366,6 +378,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
                         expand_runs,
                         &body_boxes,
                         &body_cxns,
+                        &body_shapes,
                     )?);
                 }
             }
@@ -477,11 +490,26 @@ fn cxns_for_para<'a>(all: &'a [connector::CxnInfo], para_id: &str) -> Vec<&'a co
     all.iter().filter(|c| c.id.starts_with(&prefix)).collect()
 }
 
+fn collect_body_shapes(paras: &[&crate::xml::Element]) -> Result<Vec<shape::ShapeInfo>, Error> {
+    let mut all = Vec::new();
+    for (i, p) in paras.iter().enumerate() {
+        let (id, _) = para::para_stable_id(p, i + 1);
+        all.extend(shape::collect_shapes(p, &id)?);
+    }
+    Ok(all)
+}
+
+fn shapes_for_para<'a>(all: &'a [shape::ShapeInfo], para_id: &str) -> Vec<&'a shape::ShapeInfo> {
+    let prefix = format!("{para_id}/shape:");
+    all.iter().filter(|c| c.id.starts_with(&prefix)).collect()
+}
+
 struct HfExpand {
     paragraphs: bool,
     pictures: bool,
     text_boxes: bool,
     connectors: bool,
+    shapes: bool,
     ink_canvases: bool,
     model3ds: bool,
     text_box_content: bool,
@@ -533,6 +561,11 @@ fn hf_node(pkg: &Package, item: &HfPart, expand: &HfExpand) -> Result<Value, Err
         let (id, _) = para::para_stable_id_in(&item.id, p, i + 1);
         cxns.extend(connector::collect_connectors(p, &id)?);
     }
+    let mut shapes = Vec::new();
+    for (i, p) in paras.iter().enumerate() {
+        let (id, _) = para::para_stable_id_in(&item.id, p, i + 1);
+        shapes.extend(shape::collect_shapes(p, &id)?);
+    }
     let mut chart_count = 0usize;
     let mut smart_art_count = 0usize;
     let mut ole_count = 0usize;
@@ -579,13 +612,19 @@ fn hf_node(pkg: &Package, item: &HfPart, expand: &HfExpand) -> Result<Value, Err
         "connectorCount",
         json!(cxns.len()),
     );
+    insert_json_after(
+        node.as_object_mut().unwrap(),
+        "connectorCount",
+        "shapeCount",
+        json!(shapes.len()),
+    );
     let mut ink_n = 0usize;
     for p in &paras {
         ink_n += ink::count_in(pkg, &item.part, p)?;
     }
     insert_json_after(
         node.as_object_mut().unwrap(),
-        "connectorCount",
+        "shapeCount",
         "inkCanvasCount",
         json!(ink_n),
     );
@@ -614,6 +653,9 @@ fn hf_node(pkg: &Package, item: &HfPart, expand: &HfExpand) -> Result<Value, Err
     }
     if expand.connectors {
         node["connectors"] = Value::Array(connector::connectors_json(&cxns));
+    }
+    if expand.shapes {
+        node["shapes"] = Value::Array(shape::shapes_json(&shapes));
     }
     if expand.ink_canvases {
         let mut listed = Vec::new();
@@ -701,6 +743,7 @@ fn body_para_json(
     expand_pics: bool,
     expand_txbx: bool,
     expand_cxn: bool,
+    expand_shapes: bool,
     expand_ink: bool,
     expand_model3ds: bool,
     expand_txbx_content: bool,
@@ -709,6 +752,7 @@ fn body_para_json(
     expand_runs: bool,
     all_boxes: &[textbox::TxbxInfo],
     all_cxns: &[connector::CxnInfo],
+    all_shapes: &[shape::ShapeInfo],
 ) -> Result<Value, Error> {
     let (id, _) = para::para_stable_id(p, index);
     let rels = Relationships::from_package(pkg, host_part)?;
@@ -718,6 +762,10 @@ fn body_para_json(
         .cloned()
         .collect();
     let mine_cxn: Vec<_> = cxns_for_para(all_cxns, &id).into_iter().cloned().collect();
+    let mine_shape: Vec<_> = shapes_for_para(all_shapes, &id)
+        .into_iter()
+        .cloned()
+        .collect();
     let inks = ink::collect(pkg, host_part, p, &id)?;
     let m3ds = super::model3d::collect(pkg, host_part, p, &id)?;
     let mut node = para_json(
@@ -732,6 +780,12 @@ fn body_para_json(
     insert_json_after(
         node.as_object_mut().unwrap(),
         "connectorCount",
+        "shapeCount",
+        json!(mine_shape.len()),
+    );
+    insert_json_after(
+        node.as_object_mut().unwrap(),
+        "shapeCount",
         "inkCanvasCount",
         json!(inks.len()),
     );
@@ -760,6 +814,9 @@ fn body_para_json(
     }
     if expand_cxn {
         node["connectors"] = Value::Array(connector::connectors_json(&mine_cxn));
+    }
+    if expand_shapes {
+        node["shapes"] = Value::Array(shape::shapes_json(&mine_shape));
     }
     if expand_ink {
         node["inkCanvases"] = Value::Array(ink::canvases_json(&inks));

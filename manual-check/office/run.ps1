@@ -105,6 +105,7 @@ $order = @(
     'docx-font-embed'
     'docx-page-bg'
     'docx-groups'
+    'docx-drawing-shape'
     'xlsx-docprops'
     'xlsx-sheets'
     'xlsx-cellstyle'

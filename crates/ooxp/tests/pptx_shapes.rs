@@ -488,5 +488,5 @@ fn foreign_format_rejects() {
         None,
     )
     .unwrap_err();
-    assert_eq!(err.code(), ErrorCode::InvalidField);
+    assert_eq!(err.code(), ErrorCode::InvalidId);
 }

@@ -327,7 +327,7 @@ $rawShape = Invoke-OoxpExpectFail @{
     schemaVersion = 1; action = 'apply'
     path = $src.Replace('\', '/')
     output = $failShape.Replace('\', '/')
-    ops = @(@{ op = 'insertShape'; id = $p2 })
+    ops = @(@{ op = 'setShapeGeom'; id = $p2 })
 } 'docx-dg-fail-shape'
 $codeShape = Get-FailCode $rawShape
 

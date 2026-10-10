@@ -28,6 +28,7 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 2026-10-10 补跑 `docx-charts-rare-remain.ps1`，Ccx1–Ccx5 通过。无 Repair。
 2026-10-10 补跑 `docx-east-asia.ps1`，Ea1–Ea8 通过。无 Repair。COM `FarEastLineBreakControl` / `HangingPunctuation` / `AddSpaceBetweenFarEastAndAlpha` 对得上，`EmphasisMark=1`。
 2026-10-10 补跑 `docx-drawing-hlink.ps1`，Dh1–Dh6 通过。无 Repair。COM 图上 `Hyperlink.Address` 对得上。`hyperlinkCount` 仍为 0。内部书签关系 `Target="#SrcBm"` 且无 `TargetMode`。
+2026-10-10 补跑 `docx-drawing-shape.ps1`，Ds1–Ds8 通过。无 Repair。COM 矩形 `AutoShapeType=1`，椭圆 `9`，填色红 `RGB=255`，描边蓝 `RGB=16711680`。
 
 - **C1** ✅
   - Word 16.0 能打开 `manual-check/office/out/docx-create.docx`，标题栏无 Repair
@@ -155,7 +156,7 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
   - 两框 / 两浮动图 `groupShapes` 后 COM `Type=6`、树上仍是两个成员
   - `ungroup` 后独立
   - 页眉连接线容器计数为 1、正文仍为 0
-  - 行内当成员 / `insertShape` / 错 id / xlsx 用段落 id 分别得 `InvalidField` / `IdNotFound` / `InvalidId`
+  - 行内当成员 / `setShapeGeom` / 错 id / xlsx 用段落 id 分别得 `InvalidField` / `IdNotFound` / `InvalidId`
   - 标题栏无 Repair
 - **Hb1–Hb7** ✅
   - Word 16.0：`docx-hyperlink.ps1`，7 PASS / 0 FAIL
@@ -168,6 +169,15 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
   - 文本框链 inspect 对得上
   - 内部书签 `kind=anchor`，关系 `Target="#SrcBm"` 且无 `TargetMode`
   - 图上带 `text`、框内图分别得 `InvalidField` / `InvalidId`
+  - 标题栏无 Repair
+- **Ds1–Ds8** ✅
+  - Word 16.0：`docx-drawing-shape.ps1`，8 PASS / 0 FAIL
+  - `insertShape` 矩形 `prst=rect`、COM `AutoShapeType=1`；椭圆 `prst=ellipse`、`AutoShapeType=9`
+  - `setShapeSize` 后 `cx` / `cy` 对得上
+  - `setShapeFill` 红、`setShapeLine` 蓝，COM RGB 对得上
+  - `deleteShape` 后 `shapeCount` 为 0
+  - 页眉插入后容器计数为 1、正文仍为 0
+  - 连接线几何名 / 带 `text` / `setShapeGeom` 分别得 `InvalidField`
   - 标题栏无 Repair
 - **Fd1–Fd7** ✅
   - Word 16.0：`docx-field.ps1`，7 PASS / 0 FAIL
@@ -1592,7 +1602,7 @@ Word 跟踪修订下改表单元格底纹、插入空段、删除表行。`inspe
 ## 组合与连接线
 
 正文与页眉页脚里的浮动图 / 文本框 / 连接线可组合、解开；Word 写成 `wps:wsp` 的连接线可插删。组合本身不进树。手测脚本 `manual-check/office/cases/docx-groups.ps1`。
-编号用 Dg。不要和 T、Tb、Rv、Rm、Pb、Ph 撞。不实现放映引擎。不做 `insertShape`。
+编号用 Dg。不要和 T、Tb、Rv、Rm、Pb、Ph 撞。不实现放映引擎。无框形状见 Ds。
 
 - **Dg1**
   - 项：名单
@@ -1618,8 +1628,39 @@ Word 跟踪修订下改表单元格底纹、插入空段、删除表行。`inspe
   - 无 Repair
 - **Dg8**
   - 项：拒写
-  - 期望：错 id / 行内当成员 / 对 docx 发 `insertShape` / 对 xlsx 用段落 id 发 `insertConnector` 分别得 `IdNotFound` 或 `InvalidField` / `InvalidId`
+  - 期望：错 id / 行内当成员 / 对 docx 发 `setShapeGeom` / 对 xlsx 用段落 id 发 `insertConnector` 分别得 `IdNotFound` 或 `InvalidField` / `InvalidId`
   - 均未写文件
+
+## 无框形状几何
+
+正文与页眉页脚里无文本框的 `wps:wsp`。不算排版引擎。不编辑 VML。注内 / 批注内 / 框内不插。用库 create 产物再 apply。
+手测脚本 `manual-check/office/cases/docx-drawing-shape.ps1`。编号用 Ds。不要和 Dg、Dh、B、T 撞。
+
+- **Ds1**
+  - 项：插矩形
+  - 期望：`insertShape` 后 Word 无 Repair，COM `AutoShapeType=1`，树上 `prst=rect`，id 带 `/shape:`
+- **Ds2**
+  - 项：插椭圆
+  - 期望：`prst=ellipse` 后 COM `AutoShapeType=9`，树上 `prst=ellipse`
+- **Ds3**
+  - 项：改尺寸
+  - 期望：`setShapeSize` 后 `cx` / `cy` 对得上，无 Repair
+- **Ds4**
+  - 项：改填充
+  - 期望：`setShapeFill` `color=FF0000` 后 COM 填充为红，无 Repair
+- **Ds5**
+  - 项：改线
+  - 期望：`setShapeLine` `color=0000FF` 后 COM 线条为蓝，无 Repair
+- **Ds6**
+  - 项：删除
+  - 期望：`deleteShape` 后 `shapeCount` 为 0
+- **Ds7**
+  - 项：页眉
+  - 期望：页眉 `insertShape` 后容器 `shapeCount=1`，根上正文计数仍为 0，无 Repair
+- **Ds8**
+  - 项：拒写
+  - 期望：连接线几何名给 `insertShape`、带 `text`、对形状 id 发 `setShapeGeom` 分别得 `InvalidField`，未写文件
+  - 不强制开 Word
 
 ## 嵌入 SVG
 

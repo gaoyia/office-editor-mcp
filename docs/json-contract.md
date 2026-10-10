@@ -27,7 +27,8 @@ apply 用 `insertConnector` / `deleteConnector` / `setConnector` / `groupShapes`
 以及 `insertShape` 的 `prst` / `geom`、`setShapeGeom`。
 xlsx 的 `groupShapes` / `ungroup` 认工作表文本框、无 `txBox` 形状与连接线。
 docx 的 `scope.connectors` 列出正文与页眉页脚里的 `wps` 连接线；
-apply 用 `insertConnector` / `deleteConnector` / `groupShapes` / `ungroup`。
+`scope.shapes` 列出无文本框的 `wps:wsp` 形状。
+apply 用 `insertConnector` / `deleteConnector` / `insertShape` / `deleteShape` / `setShapePos` / `setShapeSize` / `setShapeFill` / `setShapeLine` / `groupShapes` / `ungroup`。
 docx 的图与文本框节点带 `hyperlink`（DrawingML `a:hlinkClick`），不进 `hyperlinks` 名单，也不计入 `hyperlinkCount`。
 docx 的 `scope.inkCanvases` 列出正文与页眉页脚里的墨迹画布（`wpc` 画布加 `w14:contentPart` 加 InkML 部件）；
 apply 用 `insertInkCanvas` / `replaceInkCanvas` / `deleteInkCanvas`。xlsx / pptx 拒这些键与 op。
@@ -248,8 +249,9 @@ create 与 apply 落盘时先写入目标同目录的临时文件，再改名为
 docx 认 `setParaText`、`setHeaderFooterDistance`、`setPageMargin`、`setPageSize`、`setColumns`、`setVerticalAlign`、
 `setLineNumbering`、`setDocGrid`、`setRtlGutter`、`setMirrorMargins`、`setGutterAtTop`、`setHeaderFooterLink`、
 `insertHeaderFooter`、`setTitlePage`、`setEvenAndOddHeaders`、图片 op（含 `setPictureWrap`，
-不含 `setPictureAnchor`）、文本框 op、组合与连接线 op（`insertConnector`、`deleteConnector`、`groupShapes`、`ungroup`；
-不含 `insertShape`、`deleteShape`、`setShapePos`、`setShapeSize`、`setShapeFill`、`setShapeLine`、`setShapeGeom`、`setConnector`、`setShapeFormat`）、`insertPara` / `deletePara`、
+不含 `setPictureAnchor`）、文本框 op、组合与连接线 op（`insertConnector`、`deleteConnector`、`groupShapes`、`ungroup`）、
+无框形状 op（`insertShape`、`deleteShape`、`setShapePos`、`setShapeSize`、`setShapeFill`、`setShapeLine`；
+不含 `setShapeGeom`、`setConnector`、`setShapeFormat`）、`insertPara` / `deletePara`、
 表格 op（`insertTable`、`deleteTable`、`insertRow`、`deleteRow`、`insertCol`、`deleteCol`、`mergeCells`、`splitCells`）、
 修订 op（`acceptRevision`、`rejectRevision`）、超链接与书签 op（`insertHyperlink`、`setHyperlink`、`deleteHyperlink`、`insertBookmark`、
 `setBookmark`、`deleteBookmark`）、域 op（`insertField`、`setField`、`deleteField`）、目录 op（`insertToc`、`deleteToc`）、
@@ -316,7 +318,7 @@ pptx 认 `setShapeText`、`setShapeFormat`、形状管理 op（`insertShape`、`
  / `deleteMedia` / `setMedia` / `insertSlideSection` / `setSlideSectionName` / `deleteSlideSection` / `setSlideSection`
  / `insertCustomShow` / `setCustomShow` / `deleteCustomShow` / `insertZoom` / `setZoom` / `deleteZoom`）报 `InvalidField`。
 xlsx 上发 `insertTable` / `deleteTable` / `insertRow` / `deleteRow` / `insertCol` / `deleteCol` / `mergeCells` / `splitCells` 仍报 `InvalidField`。
-对 docx 发 `insertShape` / `deleteShape` / `setShapeFormat` 报 `InvalidField`。pptx 上发 `mergeCells` / `splitCells` 报 `InvalidField`。
+对 docx 发 `setShapeGeom` / `setConnector` / `setShapeFormat` 报 `InvalidField`。pptx 上发 `mergeCells` / `splitCells` 报 `InvalidField`。
 
 ### setProps
 

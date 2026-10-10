@@ -107,6 +107,7 @@ pub fn parse_cxn_id_at(id: &str, path: &str) -> Result<TxbxTarget, Error> {
         || id.contains("/txbx:")
         || id.contains("/ink:")
         || id.contains("/model3d:")
+        || id.contains("/shape:")
     {
         return Err(Error::with_path(
             ErrorKind::InvalidId {
@@ -145,7 +146,10 @@ pub fn parse_cxn_id_at(id: &str, path: &str) -> Result<TxbxTarget, Error> {
 }
 
 pub fn looks_like_cxn_id(id: &str) -> bool {
-    id.contains("/cxn:") && !id.contains("/pic:") && !id.contains("/txbx:")
+    id.contains("/cxn:")
+        && !id.contains("/pic:")
+        && !id.contains("/txbx:")
+        && !id.contains("/shape:")
 }
 
 pub fn insert_connector(p: &mut Element, doc_pr: u32, cx: i64, cy: i64, prst: &str) {
