@@ -642,6 +642,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::InsertNumberingNeedsDocument => {
                 "insertNumbering 的 id 必须是 docx:document".into()
             }
+            IdReason::InsertStyleNeedsDocument => {
+                "insertStyle 的 id 必须是 docx:document".into()
+            }
             IdReason::NumPrefix => "编号实例 id 必须是 num:N".into(),
             IdReason::NumIndexNotInt => "num 后面必须是正整数".into(),
             IdReason::NumIndexFromOne => "num 序号从 1 起".into(),
@@ -655,6 +658,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
                 "setParaStyle 的 id 必须是正文或页眉页脚段落 id".into()
             }
             IdReason::SetRunFormatNeedsRun => "setRunFormat 的 id 必须是段落 id 加上 /run:N".into(),
+            IdReason::SetRunStyleNeedsStoryRun => {
+                "setRunStyle 的 id 必须是正文或页眉页脚的 run id".into()
+            }
             IdReason::RunPrefix => "run id 必须是段落 id 加上 /run:N".into(),
             IdReason::RunIndexNotInt => "run 序号必须是整数".into(),
             IdReason::RunIndexFromOne => "run 序号从 1 起".into(),
@@ -1362,14 +1368,37 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             "setParaNumbering 必须有 num（num: 实例 id 或 null）".into()
         }
         ErrorKind::StyleNotFound { id } => format!("找不到样式：{id}"),
-        ErrorKind::SetStyleNeedsParagraph => "setStyle 与 setParaStyle 只接受段落样式".into(),
+        ErrorKind::SetStyleNeedsParagraph => "setParaStyle 只接受段落样式".into(),
+        ErrorKind::InvalidStyleType => "insertStyle 与 setStyle 不接受编号样式".into(),
+        ErrorKind::StyleIdTaken => "styleId 已被占用".into(),
+        ErrorKind::InvalidStyleIdToken => {
+            "styleId 必须是字母或下划线开头，其余只能是字母、数字、下划线或连字符".into()
+        }
+        ErrorKind::StyleNotCustom => "deleteStyle 只能删带 customStyle 的自定义样式".into(),
+        ErrorKind::NeedInsertStyleField => "insertStyle 必须有 styleId 与 type".into(),
+        ErrorKind::SetStyleSpacingNeedsParagraph => {
+            "字符样式上的 setStyle 不能写 before 或 after".into()
+        }
+        ErrorKind::SetRunStyleNeedsCharacter => "setRunStyle 只接受字符样式".into(),
+        ErrorKind::SetTableStyleNeedsTable => "setTableStyle 只接受表格样式".into(),
+        ErrorKind::NeedSetTableStyleField => "setTableStyle 至少要给 style 或 look 之一".into(),
+        ErrorKind::NeedSetTableFloatField => "setTableFloat 必须有 pos".into(),
+        ErrorKind::InvalidTblAnchor => {
+            "horzAnchor 与 vertAnchor 只能是 margin、page 或 text".into()
+        }
+        ErrorKind::NeedSetTableCellMarField => {
+            "setTableCellMar 至少要给 top、left、bottom 或 right 之一".into()
+        }
+        ErrorKind::NeedSetCellFormatField => {
+            "setCellFormat 至少要给 fill、边距或斜线之一".into()
+        }
         ErrorKind::NeedSetStyleField => {
             "setStyle 至少要给 font、eastAsiaFont、sz、bold、color、before 或 after 之一".into()
         }
         ErrorKind::EmptyStyleFont => "font 与 eastAsiaFont 不能为空".into(),
         ErrorKind::InvalidStyleColor => "color 必须是六位 RGB 十六进制".into(),
         ErrorKind::NeedSetParaStyleStyle => {
-            "setParaStyle 必须有 style（style: 样式 id 或 null）".into()
+            "setParaStyle / setRunStyle 必须有 style（style: 样式 id 或 null）".into()
         }
         ErrorKind::NeedSetParaFormatField => {
             "setParaFormat 至少要给 align、left、right、firstLine、hanging、before、after、line、lineRule、kinsoku、overflowPunct、topLinePunct、autoSpaceDE 或 autoSpaceDN 之一"

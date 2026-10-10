@@ -5,6 +5,24 @@
   "output": "C:\\data\\note-styled.docx",
   "ops": [
     {
+      "op": "insertStyle",
+      "id": "docx:document",
+      "styleId": "ooxpChar",
+      "type": "character",
+      "name": "强调红"
+    },
+    {
+      "op": "setStyle",
+      "id": "style:ooxpChar",
+      "color": "FF0000",
+      "bold": true
+    },
+    {
+      "op": "setRunStyle",
+      "id": "para:3F2A1B00/run:1",
+      "style": "style:ooxpChar"
+    },
+    {
       "op": "setParaStyle",
       "id": "para:3F2A1B00",
       "style": "style:Heading2"

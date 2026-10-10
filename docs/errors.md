@@ -757,7 +757,8 @@
 - `deleteWatermark` 的 id 不是水印 id 也不是 `docx:document` 报 `InvalidId`
 - `text` 与 `file` 不是恰好一个，或空 `text`，报 `InvalidField`
 - xlsx / pptx 上发 `insertWatermark` / `deleteWatermark` 报 `InvalidField`
-- 找不到表时，`deleteTable` / `insertRow` / `deleteRow` / `insertCol` / `deleteCol` / `mergeCells` / `splitCells` 报 `IdNotFound`
+- 找不到表时，`deleteTable` / `insertRow` / `deleteRow` / `insertCol` / `deleteCol` / `mergeCells` / `splitCells` / `setTableStyle` / `setTableFloat` / `setTableCellMar` 报 `IdNotFound`
+- 找不到单元格时，`setCellFormat` 报 `IdNotFound`
 - `insertTable` 的锚点找不到同样报 `IdNotFound`
 - id 形态不对报 `InvalidId`
 - 只剩一行时 `deleteRow`、只剩一列时 `deleteCol` 报 `InvalidField`
@@ -893,12 +894,23 @@
 - `num` 必须是 `num:{n}` 或 `null`
 - `kind` / `numFmt` / `ilvl` 不合法，或 `setNumbering` 三个改动字段一个都不给，报 `InvalidField`
 - xlsx / pptx 上发编号 op 报 `InvalidField`
-- 找不到样式时，`setStyle` / `setParaStyle` 报 `IdNotFound`
-- `setStyle` 的 `id` 必须是 `style:{styleId}`
+- 找不到样式时，`setStyle` / `setParaStyle` / `setRunStyle` / `deleteStyle` 报 `IdNotFound`
+- `insertStyle` 的 `id` 必须是 `docx:document`
+- `setStyle` / `deleteStyle` 的 `id` 必须是 `style:{styleId}`
 - `setParaStyle` 的 `id` 必须是正文或页眉页脚段落 id
+- `setRunStyle` 的 `id` 必须是正文或页眉页脚 run id
 - `style` 必须是 `style:{styleId}` 或 `null`
-- 目标不是段落样式、`sz` / `color` / `font` 不合法，或 `setStyle` 改动字段一个都不给，报 `InvalidField`
+- `insertStyle` 的 `styleId` 非法、已被占用、`type` 不是 `paragraph` / `character` / `table`，或缺 `styleId` / `type`，报 `InvalidField`
+- `deleteStyle` 删默认样式或没有 `customStyle` 的样式，报 `InvalidField`
+- 编号样式上的 `setStyle`、字符样式上写 `before` / `after`、`sz` / `color` / `font` 不合法，或 `setStyle` 改动字段一个都不给，报 `InvalidField`
+- `setParaStyle` 目标不是段落样式、`setRunStyle` 目标不是字符样式，报 `InvalidField`
+- 框内 / 注内 / 批注内 run 上发 `setRunStyle` 报 `InvalidId`
 - xlsx / pptx 上发样式 op 报 `InvalidField`
+- `setTableStyle` / `setTableFloat` / `setTableCellMar` 的 `id` 必须是表 id
+- `setCellFormat` 的 `id` 必须是单元格 id
+- `setTableStyle` 的 `style` 不是表格样式、`style` 与 `look` 一个都不给、锚点不合法、或外观字段一个都不给，报 `InvalidField`
+- 斜线 `val` / `color` 不合法报 `InvalidField`（与页面边框同一套）
+- xlsx / pptx 上发 `setTableStyle` / `setTableFloat` / `setTableCellMar` / `setCellFormat` 报 `InvalidField`
 - 找不到段落时，`setParaFormat` 报 `IdNotFound`
 - id 不是段落 id 报 `InvalidId`
 - 找不到 run 时，`setRunFormat` 报 `IdNotFound`

@@ -3150,6 +3150,349 @@
         }
       }
     },
+    "insertStyleOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "styleId",
+        "type"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "insertStyle"
+        },
+        "id": {
+          "const": "docx:document"
+        },
+        "styleId": {
+          "type": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_-]*$"
+        },
+        "type": {
+          "enum": [
+            "paragraph",
+            "character",
+            "table"
+          ]
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "basedOn": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "deleteStyleOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "deleteStyle"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "setRunStyleOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "style"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setRunStyle"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "style": {
+          "oneOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "tableLook": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "firstRow": {
+          "type": "boolean"
+        },
+        "lastRow": {
+          "type": "boolean"
+        },
+        "firstColumn": {
+          "type": "boolean"
+        },
+        "lastColumn": {
+          "type": "boolean"
+        },
+        "bandedRows": {
+          "type": "boolean"
+        },
+        "bandedColumns": {
+          "type": "boolean"
+        }
+      }
+    },
+    "setTableStyleOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setTableStyle"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "style": {
+          "oneOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "look": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/tableLook"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "tableFloatPos": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "horzAnchor": {
+          "enum": [
+            "margin",
+            "page",
+            "text"
+          ]
+        },
+        "vertAnchor": {
+          "enum": [
+            "margin",
+            "page",
+            "text"
+          ]
+        },
+        "x": {
+          "type": "integer"
+        },
+        "y": {
+          "type": "integer"
+        },
+        "leftFromText": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "rightFromText": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "topFromText": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "bottomFromText": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "setTableFloatOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "pos"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setTableFloat"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "pos": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/tableFloatPos"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "twipOrNull": {
+      "oneOf": [
+        {
+          "type": "integer",
+          "minimum": 0
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "setTableCellMarOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setTableCellMar"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "top": {
+          "$ref": "#/$defs/twipOrNull"
+        },
+        "left": {
+          "$ref": "#/$defs/twipOrNull"
+        },
+        "bottom": {
+          "$ref": "#/$defs/twipOrNull"
+        },
+        "right": {
+          "$ref": "#/$defs/twipOrNull"
+        }
+      }
+    },
+    "docxDiagonalBorder": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "val": {
+          "enum": [
+            "nil",
+            "none",
+            "single",
+            "dashed",
+            "dotted",
+            "double",
+            "thick",
+            "wave",
+            "dashSmallGap",
+            "dotDash",
+            "dotDotDash"
+          ]
+        },
+        "sz": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "color": {
+          "type": "string"
+        }
+      }
+    },
+    "setCellFormatOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setCellFormat"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "fill": {
+          "oneOf": [
+            {
+              "type": "string",
+              "pattern": "^[0-9A-Fa-f]{6}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "top": {
+          "$ref": "#/$defs/twipOrNull"
+        },
+        "left": {
+          "$ref": "#/$defs/twipOrNull"
+        },
+        "bottom": {
+          "$ref": "#/$defs/twipOrNull"
+        },
+        "right": {
+          "$ref": "#/$defs/twipOrNull"
+        },
+        "tl2br": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/docxDiagonalBorder"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "tr2bl": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/docxDiagonalBorder"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
     "setParaFormatOp": {
       "type": "object",
       "required": [

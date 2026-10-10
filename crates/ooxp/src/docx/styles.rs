@@ -1,12 +1,12 @@
-//! `styles.xml` 与段落 `w:pStyle`：inspect 名单与换绑、改定义。
+//! `styles.xml`：inspect 名单、增删自定义样式、改定义、给段落换 `pStyle`。
 
 use serde_json::{json, Value};
 
 use crate::error::{Error, ErrorKind, IdReason};
-use crate::opc::{self, Package, Relationships};
-use crate::xml::{Element, Node};
+use crate::opc::{self, ContentTypes, Package, Relationship, Relationships};
+use crate::xml::{self, Document, Element, Node};
 
-use super::REL_STYLES;
+use super::{CT_STYLES, REL_STYLES, WML_NS};
 
 pub fn styles_part(pkg: &Package, doc_part: &str) -> Result<Option<String>, Error> {
     let rels = Relationships::from_package(pkg, doc_part)?;
@@ -84,6 +84,68 @@ pub fn is_paragraph_style(el: &Element) -> bool {
     matches!(el.attr_local("type"), None | Some("paragraph"))
 }
 
+pub fn is_character_style(el: &Element) -> bool {
+    el.attr_local("type") == Some("character")
+}
+
+pub fn is_table_style(el: &Element) -> bool {
+    el.attr_local("type") == Some("table")
+}
+
+pub fn is_numbering_style(el: &Element) -> bool {
+    el.attr_local("type") == Some("numbering")
+}
+
+pub fn is_custom_style(el: &Element) -> bool {
+    matches!(
+        el.attr_local("customStyle").unwrap_or(""),
+        "1" | "true" | "on"
+    )
+}
+
+pub fn is_default_style(el: &Element) -> bool {
+    matches!(el.attr_local("default").unwrap_or(""), "1" | "true" | "on")
+}
+
+pub fn validate_style_id_token(raw: &str, path: &str) -> Result<(), Error> {
+    let mut chars = raw.chars();
+    let Some(first) = chars.next() else {
+        return Err(Error::with_path(
+            ErrorKind::InvalidStyleIdToken,
+            path.to_string(),
+        ));
+    };
+    if !first.is_ascii_alphabetic() && first != '_' {
+        return Err(Error::with_path(
+            ErrorKind::InvalidStyleIdToken,
+            path.to_string(),
+        ));
+    }
+    if chars.all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-') {
+        Ok(())
+    } else {
+        Err(Error::with_path(
+            ErrorKind::InvalidStyleIdToken,
+            path.to_string(),
+        ))
+    }
+}
+
+fn default_style_id_of_type(root: &Element, ty: &str) -> Option<String> {
+    collect_style_els(root).into_iter().find_map(|el| {
+        let matches_type = if ty == "paragraph" {
+            is_paragraph_style(el)
+        } else {
+            el.attr_local("type") == Some(ty)
+        };
+        if matches_type && is_default_style(el) {
+            el.attr_local("styleId").map(str::to_string)
+        } else {
+            None
+        }
+    })
+}
+
 pub fn find_style<'a>(root: &'a Element, style_id: &str) -> Option<&'a Element> {
     collect_style_els(root)
         .into_iter()
@@ -157,10 +219,17 @@ pub fn set_style_props(
     let Some(style) = find_style_mut(root, style_id) else {
         return Err(missing_style(id, i));
     };
-    if !is_paragraph_style(style) {
+    if is_numbering_style(style) {
         return Err(Error::with_path(
-            ErrorKind::SetStyleNeedsParagraph,
+            ErrorKind::InvalidStyleType,
             format!("ops[{i}].id"),
+        ));
+    }
+    let character = is_character_style(style);
+    if character && (patch.before.is_some() || patch.after.is_some()) {
+        return Err(Error::with_path(
+            ErrorKind::SetStyleSpacingNeedsParagraph,
+            format!("ops[{i}]"),
         ));
     }
     if patch.font.is_some()
@@ -184,7 +253,7 @@ pub fn set_style_props(
             set_color(rpr, color);
         }
     }
-    if patch.before.is_some() || patch.after.is_some() {
+    if !character && (patch.before.is_some() || patch.after.is_some()) {
         ensure_style_ppr(style);
         let ppr = style.child_by_local_mut("pPr").expect("刚写入 pPr");
         ensure_child(ppr, "spacing");
@@ -198,6 +267,108 @@ pub fn set_style_props(
             spacing.set_attr(&key, n.to_string());
         }
     }
+    Ok(())
+}
+
+pub fn ensure_part(
+    pkg: &mut Package,
+    docs: &mut std::collections::HashMap<String, Document>,
+    dirty: &mut std::collections::HashMap<String, ()>,
+    doc_part: &str,
+) -> Result<String, Error> {
+    if let Some(existing) = styles_part(pkg, doc_part)? {
+        return Ok(existing);
+    }
+    let target = "styles.xml";
+    let part = opc::resolve_rel_target(doc_part, target)?;
+    let xml = format!(
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:styles xmlns:w="{WML_NS}"/>"#
+    );
+    pkg.set(&part, xml.into_bytes())?;
+    let parsed = xml::parse(pkg.get(&part)?)?;
+    docs.insert(part.clone(), parsed);
+    dirty.insert(part.clone(), ());
+
+    let mut rels = Relationships::from_package(pkg, doc_part)?;
+    let rid = rels.next_rid();
+    rels.push(Relationship {
+        id: rid,
+        rel_type: REL_STYLES.to_string(),
+        target: target.into(),
+        target_mode: None,
+        extra: Vec::new(),
+    });
+    rels.write_to(pkg, doc_part)?;
+
+    let mut cts = ContentTypes::from_package(pkg)?;
+    cts.set_override(&part, CT_STYLES)?;
+    cts.write_to(pkg)?;
+    Ok(part)
+}
+
+pub fn insert_style(
+    root: &mut Element,
+    style_id: &str,
+    ty: &str,
+    name: &str,
+    based_on: Option<&str>,
+    i: usize,
+) -> Result<(), Error> {
+    if find_style(root, style_id).is_some() {
+        return Err(Error::with_path(
+            ErrorKind::StyleIdTaken,
+            format!("ops[{i}].styleId"),
+        ));
+    }
+    let inherit = based_on
+        .map(str::to_string)
+        .or_else(|| default_style_id_of_type(root, ty));
+    let mut style = Element::new(root.prefixed("style"));
+    let type_key = style.prefixed("type");
+    let id_key = style.prefixed("styleId");
+    let custom_key = style.prefixed("customStyle");
+    style.set_attr(&type_key, ty);
+    style.set_attr(&id_key, style_id);
+    style.set_attr(&custom_key, "1");
+    let mut name_el = Element::new(style.prefixed("name"));
+    let name_val = name_el.prefixed("val");
+    name_el.set_attr(&name_val, name);
+    style.push_element(name_el);
+    if let Some(base) = inherit {
+        if base != style_id {
+            let mut based = Element::new(style.prefixed("basedOn"));
+            let based_val = based.prefixed("val");
+            based.set_attr(&based_val, base);
+            style.push_element(based);
+        }
+    }
+    if ty == "table" {
+        style.push_element(Element::new(style.prefixed("tblPr")));
+    }
+    root.push_element(style);
+    Ok(())
+}
+
+pub fn delete_style(root: &mut Element, style_id: &str, id: &str, i: usize) -> Result<(), Error> {
+    let Some(idx) = root.children.iter().position(|n| {
+        matches!(
+            n,
+            Node::Element(e)
+                if e.local_name() == "style" && e.attr_local("styleId") == Some(style_id)
+        )
+    }) else {
+        return Err(missing_style(id, i));
+    };
+    let Node::Element(el) = &root.children[idx] else {
+        return Err(missing_style(id, i));
+    };
+    if is_default_style(el) || !is_custom_style(el) {
+        return Err(Error::with_path(
+            ErrorKind::StyleNotCustom,
+            format!("ops[{i}].id"),
+        ));
+    }
+    root.children.remove(idx);
     Ok(())
 }
 

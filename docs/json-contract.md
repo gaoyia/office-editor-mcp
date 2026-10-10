@@ -252,7 +252,8 @@ docx 认 `setParaText`、`setHeaderFooterDistance`、`setPageMargin`、`setPageS
 不含 `setPictureAnchor`）、文本框 op、组合与连接线 op（`insertConnector`、`deleteConnector`、`groupShapes`、`ungroup`）、
 无框形状 op（`insertShape`、`deleteShape`、`setShapePos`、`setShapeSize`、`setShapeFill`、`setShapeLine`；
 不含 `setShapeGeom`、`setConnector`、`setShapeFormat`）、`insertPara` / `deletePara`、
-表格 op（`insertTable`、`deleteTable`、`insertRow`、`deleteRow`、`insertCol`、`deleteCol`、`mergeCells`、`splitCells`）、
+表格 op（`insertTable`、`deleteTable`、`insertRow`、`deleteRow`、`insertCol`、`deleteCol`、`mergeCells`、`splitCells`、
+`setTableStyle`、`setTableFloat`、`setTableCellMar`、`setCellFormat`）、
 修订 op（`acceptRevision`、`rejectRevision`）、超链接与书签 op（`insertHyperlink`、`setHyperlink`、`deleteHyperlink`、`insertBookmark`、
 `setBookmark`、`deleteBookmark`）、域 op（`insertField`、`setField`、`deleteField`）、目录 op（`insertToc`、`deleteToc`）、
 题注与交叉引用 op（`insertCaption`、`deleteCaption`、`insertCrossRef`、`deleteCrossRef`）、索引 op（`insertIndex`、`deleteIndex`、
@@ -260,7 +261,8 @@ docx 认 `setParaText`、`setHeaderFooterDistance`、`setPageMargin`、`setPageS
 `insertBibliography`、`deleteBibliography`）、构建基块 op（`insertDocPart`、`deleteDocPart`、`insertDocPartContent`）、
 字体嵌入 op（`insertEmbeddedFont`、`deleteEmbeddedFont`、`setFontEmbed`）、页面背景与边框 op（`setPageBackground`、`setPageBorders`）、
 公式 op（`insertMath`、`setMath`、`deleteMath`）、拼音 op（`insertRuby`、`setRuby`、`deleteRuby`）、`setEastAsianSettings`、内容控件 op（`insertContentControl`、`setContentControl`、`deleteContentControl`）、
-编号 op（`insertNumbering`、`setNumbering`、`setParaNumbering`）、样式 op（`setStyle`、`setParaStyle`）、直接格式 op（`setParaFormat`、
+编号 op（`insertNumbering`、`setNumbering`、`setParaNumbering`）、
+样式 op（`insertStyle`、`deleteStyle`、`setStyle`、`setParaStyle`、`setRunStyle`）、直接格式 op（`setParaFormat`、
 `setRunFormat`）、节结构 op（`insertSection`、`deleteSection`）、脚注尾注 op（`insertFootnote`、`insertEndnote`、`deleteFootnote`、
 `deleteEndnote`、`setNoteNumbering`）、批注 op（`insertComment`、`deleteComment`、`replyComment`、`setCommentText`、
 `setCommentMeta`、`setCommentDone`）、图表 op（`insertChart`、`deleteChart`、`setChartTitle`、`setChartSeries`、`addChartSeries`、
@@ -319,6 +321,8 @@ pptx 认 `setShapeText`、`setShapeFormat`、形状管理 op（`insertShape`、`
  / `insertCustomShow` / `setCustomShow` / `deleteCustomShow` / `insertZoom` / `setZoom` / `deleteZoom`）报 `InvalidField`。
 xlsx 上发 `insertTable` / `deleteTable` / `insertRow` / `deleteRow` / `insertCol` / `deleteCol` / `mergeCells` / `splitCells` 仍报 `InvalidField`。
 对 docx 发 `setShapeGeom` / `setConnector` / `setShapeFormat` 报 `InvalidField`。pptx 上发 `mergeCells` / `splitCells` 报 `InvalidField`。
+xlsx / pptx 上发 `insertStyle` / `deleteStyle` / `setRunStyle` / `setTableStyle` / `setTableFloat` / `setTableCellMar` / `setCellFormat` 报 `InvalidField`。
+pptx 的 `setTablePos` 单位仍是 EMU，不要和 docx 的 `setTableFloat` 混。
 
 ### setProps
 

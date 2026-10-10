@@ -919,6 +919,27 @@
                 "$ref": "docx.schema.json#/$defs/setParaStyleOp"
               },
               {
+                "$ref": "docx.schema.json#/$defs/insertStyleOp"
+              },
+              {
+                "$ref": "docx.schema.json#/$defs/deleteStyleOp"
+              },
+              {
+                "$ref": "docx.schema.json#/$defs/setRunStyleOp"
+              },
+              {
+                "$ref": "docx.schema.json#/$defs/setTableStyleOp"
+              },
+              {
+                "$ref": "docx.schema.json#/$defs/setTableFloatOp"
+              },
+              {
+                "$ref": "docx.schema.json#/$defs/setTableCellMarOp"
+              },
+              {
+                "$ref": "docx.schema.json#/$defs/setCellFormatOp"
+              },
+              {
                 "$ref": "docx.schema.json#/$defs/setParaFormatOp"
               },
               {

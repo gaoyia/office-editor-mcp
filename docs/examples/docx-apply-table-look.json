@@ -1,0 +1,52 @@
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "note.docx",
+  "output": "note.table-look.docx",
+  "ops": [
+    {
+      "op": "insertStyle",
+      "id": "docx:document",
+      "styleId": "ooxpTbl",
+      "type": "table"
+    },
+    {
+      "op": "setTableStyle",
+      "id": "table:1",
+      "style": "style:ooxpTbl",
+      "look": {
+        "firstRow": true,
+        "bandedRows": true,
+        "bandedColumns": false
+      }
+    },
+    {
+      "op": "setTableFloat",
+      "id": "table:1",
+      "pos": {
+        "horzAnchor": "margin",
+        "vertAnchor": "text",
+        "x": 1440,
+        "y": 720
+      }
+    },
+    {
+      "op": "setTableCellMar",
+      "id": "table:1",
+      "top": 120,
+      "left": 160,
+      "bottom": 120,
+      "right": 160
+    },
+    {
+      "op": "setCellFormat",
+      "id": "table:1/r1c1",
+      "fill": "FF0000",
+      "tl2br": {
+        "val": "single",
+        "sz": 12,
+        "color": "0000FF"
+      }
+    }
+  ]
+}

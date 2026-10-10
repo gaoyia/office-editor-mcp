@@ -177,6 +177,7 @@ fn runs_list_with_scope() {
         [
             "id",
             "index",
+            "style",
             "text",
             "bold",
             "italic",

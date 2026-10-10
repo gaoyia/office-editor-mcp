@@ -160,7 +160,9 @@ inspect 读该部件里的 `w:p`，返回大纲和按范围截断的段落；并
 `scope.contentControls` 为 true 时列出正文与页眉页脚里被收入的 `w:sdt`。`scope.numbering` 为 true 时列出 `numbering.xml` 里的编号实例。
 `scope.styles` 为 true 时列出 `styles.xml` 里的样式定义。`scope.runs` 为 true 时已列出的段落带 run 名单。
 apply 可改被点名段落的可见文本（主文档、页眉页脚、框内、注内或批注内），可在主文档、页眉页脚与表格单元格插删 `w:p`，可插删 `w:tbl` 以及行与列，并可按 `gridSpan` / `vMerge` 合并与拆分，
-可接受或拒绝被点名的修订，可插、删、改超链接地址与显示文本，也可给正文与页眉页脚里的图、文本框写 DrawingML `a:hlinkClick`，可插、删、改书签名，可插、改指令、删域（不求值），可写入编号定义并把段落套上或去掉编号，可给段落换 `pStyle` 并改被点名段落样式的字体、字号、加粗、颜色与段前段后，
+可接受或拒绝被点名的修订，可插、删、改超链接地址与显示文本，也可给正文与页眉页脚里的图、文本框写 DrawingML `a:hlinkClick`，可插、删、改书签名，可插、改指令、删域（不求值），可写入编号定义并把段落套上或去掉编号，
+可增删自定义样式，可给段落换 `pStyle`，可给 run 套字符样式，并可改被点名段落、字符或表格样式的字体、字号、加粗、颜色与段前段后（字符样式不能写段距），
+可改表的 `tblStyle`、`tblLook`、浮动 `tblpPr`、表级 `tblCellMar`，以及单元格底纹、格边距与斜线，
 可改段上直接对齐、缩进与间距，可改被点名 run 的加粗、斜体、下划线、字号、颜色与字体，
 可改节上 `w:pgMar` / `w:pgSz` / `w:cols` / `w:vAlign` / `w:lnNumType` / `w:docGrid` / `w:rtlGutter` / `w:pgBorders`，
 可改整篇 `w:mirrorMargins` / `w:gutterAtTop`，可改整篇 `w:background` 与 `w:displayBackgroundShape`，可改节上页眉/页脚距离，

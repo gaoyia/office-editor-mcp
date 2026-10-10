@@ -22,7 +22,10 @@
 节上的页眉页脚距边界、页面边距、纸张、分栏、垂直对齐、行号、文档网格、装订线侧、页面边框，以及是否链接到前一节，都可以读写。
 整篇的镜像边距与装订线在上，写在 `settings.xml`。整篇页面背景色写在主文档 `w:background`，是否显示看 `settings.xml` 的 `w:displayBackgroundShape`。
 页眉、页脚、正文、注和批注里的 DrawingML 图片可查、换、插、删，并可改尺寸与绕排。正文与页眉页脚里的嵌入对象（OLE / 包）可查、插、删，并可按 id 导出嵌入部件；框内、注内、批注内的 OLE 本期不编。
-正文与页眉页脚里的 `w:tbl` 可查、插、删，并可插删行与列、合并与拆分单元格。正文与页眉页脚里的 run 级插入、删除与段落/run 属性修订可按范围列出，并可接受或拒绝被点名的一条。
+正文与页眉页脚里的 `w:tbl` 可查、插、删，并可插删行与列、合并与拆分单元格。
+也可改表格样式、`tblLook`、浮动定位、表级格边距，以及单元格底纹、格边距与斜线。
+正文与页眉页脚里的 run 级插入、删除与段落/run 属性修订可按范围列出，并可接受或拒绝被点名的一条。
+可用 `insertStyle` / `deleteStyle` 增删自定义样式，可用 `setRunStyle` 给 run 套字符样式。
 apply 可用 `insertHeaderFooter` 为某节某类型新建页眉或页脚部件，可用 `setTitlePage` 写本节 `w:titlePg`，
 可用 `setEvenAndOddHeaders` 写整篇 `w:evenAndOddHeaders`，可用 `insertSection` 在某段之后插入分节符，可用 `deleteSection` 删掉非末节并把内容并进下一节，
 可用 `insertToc` 插入目录域、用 `deleteToc` 删掉目录块，
@@ -248,7 +251,9 @@ OOXML 没有表级稳定 id，因此 `table:{n}` 在增删表之后会变，只�
 `insertTable` 的 `id` 可以是：正文或页眉页脚段落 id（插到该 `w:p` 之后，
 与该段同父）、`docx:document` 或页眉页脚容器 id（插到该故事末尾、`sectPr` 之前）、已有表 id（插到该 `w:tbl` 之后）、或单元格 id（作为嵌套表插到该格末尾，格末仍保留至少一个 `w:p`）。
 `deleteTable` 的 `id` 必须是表 id。`insertRow` 的 `id` 是表 id（追加一行）或行 id（插到该行之后）。`deleteRow` 的 `id` 必须是行 id。
-`insertCol` / `deleteCol` / `mergeCells` 的 `id` 必须是表 id。`splitCells` 的 `id` 必须是单元格 id。对不上的 id 形态报 `InvalidId`。
+`insertCol` / `deleteCol` / `mergeCells` 的 `id` 必须是表 id。`splitCells` 的 `id` 必须是单元格 id。
+`setTableStyle` / `setTableFloat` / `setTableCellMar` 的 `id` 必须是表 id。`setCellFormat` 的 `id` 必须是单元格 id。
+对框内、注内、批注内的表发这些外观 op 报 `InvalidId`。页眉页脚表与嵌套表可以改外观。对不上的 id 形态报 `InvalidId`。
 
 修订的 `{n}` 从 1 起，按该故事里被收入节点的文档顺序（遇 `w:txbxContent` 停住；`mc:AlternateContent` 只进 Choice）。
 OOXML 的 `w:id` 在拆 run 时会重复，因此不用它当树上的唯一键；树上另给 `xmlId` 存原文。`rev:{n}` 在增删修订之后会变，只够同一次 inspect 之后立刻 apply。
@@ -370,7 +375,9 @@ MS-DOCX `CT_SdtCheckbox`）、`picture`（`w:picture`）、`group`（`w:group`�
 样式定义在 `/word/styles.xml`（关系 `/styles`，ECMA-376 §17.7）。实例 id 用 `w:style/@w:styleId`：`style:{styleId}`。`styleId` 为空的不进树。
 这与 `table:{n}` 不同：样式 XML 本身有稳定字符串 id。不实现排版引擎，树上不出现算出来的字号或颜色。页眉页脚容器不挂样式计数（整篇共用一份定义）。
 段落上的 `style` 仍只读自己的 `w:pStyle/@w:val`，不解析 `basedOn`，也不把样式定义摊到段上。
-框内、注内、批注内的段若自带 `pStyle` 仍能看见 `style`，但样式 op 只接受正文或页眉页脚段落。
+run 上的 `style` 只读自己的 `w:rStyle/@w:val`。框内、注内、批注内的段若自带 `pStyle` 仍能看见 `style`。
+`setParaStyle` 只接受正文或页眉页脚段落。`setRunStyle` 只接受正文或页眉页脚 run。
+`insertStyle` / `deleteStyle` / `setStyle` 走 `styles.xml`，与段落 id 无关。
 
 直接格式写在该段自己的 `w:pPr` 或该 run 自己的 `w:rPr` 上，不改 `styles.xml`。run 的 `{n}` 从 1 起，按该段内被收入的 `w:r` 文档顺序。
 遇 `w:txbxContent` 停住；`mc:AlternateContent` 只进 Choice；`w:del` 里的 run 不编。`w:ins`、`w:hyperlink` 里的 run 要编。
@@ -383,7 +390,9 @@ MS-DOCX `CT_SdtCheckbox`）、`picture`（`w:picture`）、`group`（`w:group`�
 `insertBookmark` 的 `id` 必须是起始段落 id；可选 `end` 为同一故事里的结束段落 id。`setBookmark` / `deleteBookmark` 的 `id` 必须是书签 id。
 `insertField` 的 `id` 必须是段落 id（正文或页眉页脚）。`setField` / `deleteField` 的 `id` 必须是域 id。
 `insertNumbering` 的 `id` 必须是 `docx:document`。`setNumbering` 的 `id` 必须是抽象编号 id。
-`setParaNumbering` 的 `id` 必须是段落 id（正文或页眉页脚）。`setStyle` 的 `id` 必须是样式 id。`setParaStyle` 的 `id` 必须是段落 id（正文或页眉页脚）。
+`setParaNumbering` 的 `id` 必须是段落 id（正文或页眉页脚）。`setStyle` / `deleteStyle` 的 `id` 必须是样式 id。
+`insertStyle` 的 `id` 必须是 `docx:document`。`setParaStyle` 的 `id` 必须是段落 id（正文或页眉页脚）。
+`setRunStyle` 的 `id` 必须是正文或页眉页脚 run id。
 `setParaFormat` 的 `id` 必须是段落 id（正文、页眉页脚、框内、注内或批注内）。`setRunFormat` 的 `id` 必须是 run id。
 `insertSection` 的 `id` 必须是主文档 `w:body` 的直接子段落 id 或 `docx:document`。`deleteSection` 的 `id` 必须是 `section:{n}`。
 `insertToc` 的 `id` 必须是主文档 `w:body` 的直接子段落 id 或 `docx:document`。`deleteToc` 的 `id` 必须是 `toc:{n}`。
@@ -1281,11 +1290,26 @@ xlsx / pptx 的 `scope.tables` 不是同一件事：xlsx 仍拒绝；pptx 展开
   `text` 取该点 `dgm:t` 里 `a:t` 按文档顺序拼接；`a:br` 变成 `\n`；没有 `dgm:t` 则为 `""`。`parent` 规则见上文。
   缺少 `r:dm` 或 data 部件解析失败时该图示仍列出，`points` 为 `[]`，`layout` / `colors` / `style` 能读则读、不能则为 `null`，不报 `XmlBroken`。不读 Fallback 位图，不把图示画成图。
 - `scope.tables` 为 `true` 时，根上带 `tables`（正文），每个页眉、页脚容器带 `tables`。没有表时为空数组。按该故事里 `w:tbl` 的文档顺序，嵌套表也列出。
-  每张字段顺序：`id`、`index`、`rowCount`、`colCount`、`nested`、`rows`。`index` 与 id 里的 `{n}` 相同。`rowCount` 是 `w:tr` 个数。
+  每张字段顺序：`id`、`index`、`rowCount`、`colCount`、`nested`、`style`、`look`、`pos`、`cellMar`、`rows`。
+  `index` 与 id 里的 `{n}` 相同。`rowCount` 是 `w:tr` 个数。
   `colCount` 优先取 `tblGrid` 的 `gridCol` 个数；没有 `tblGrid` 则取第一行各格 `gridSpan` 之和（缺省 1）。
-  `nested` 在该表的直接父元素是 `w:tc` 时为 `true`，否则为 `false`。`rows` 按 `w:tr` 顺序。每行字段顺序：`id`、`index`、`cells`。
-  `cells` 按该行 `w:tc` 顺序，不是按空网格补格。每格字段顺序：`id`、`row`、`col`、`gridSpan`、`vMerge`、`paragraphs`。`row` / `col` 与 id 里的数字相同。
+  `nested` 在该表的直接父元素是 `w:tc` 时为 `true`，否则为 `false`。
+  `style` 取 `tblPr/tblStyle/@val` 原文，没有则为 `null`。
+  `look` 取 `tblLook`。没有该元素则为 `null`。有则对象字段顺序：`firstRow`、`lastRow`、`firstColumn`、`lastColumn`、`bandedRows`、`bandedColumns`。
+  六个开关优先读对应属性的 OnOff；缺属性时按 `val` 的十六进制位：`0x20` 首行、`0x40` 末行、`0x80` 首列、`0x100` 末列、`0x200` 为 `noHBand`、`0x400` 为 `noVBand`。
+  `bandedRows` 是 `noHBand` 的反相，`bandedColumns` 是 `noVBand` 的反相。
+  `pos` 取 `tblpPr`。没有该元素则为 `null`。有则对象字段顺序：`horzAnchor`、`vertAnchor`、`x`、`y`、`leftFromText`、`rightFromText`、`topFromText`、`bottomFromText`。
+  锚点取属性原文。`x` / `y` 取 `tblpX` / `tblpY`，能解析成整数则写整数，否则为 `null`。其余边距同样。单位 twip。不把 `tblOverlap` 摊进树。
+  `cellMar` 取表级 `tblCellMar`。没有该元素则为 `null`。有则对象字段顺序：`top`、`left`、`bottom`、`right`。各边取 `w:w`，能解析成整数则写整数，否则为 `null`。
+  `rows` 按 `w:tr` 顺序。每行字段顺序：`id`、`index`、`cells`。
+  `cells` 按该行 `w:tc` 顺序，不是按空网格补格。
+  每格字段顺序：`id`、`row`、`col`、`gridSpan`、`vMerge`、`fill`、`cellMar`、`tl2br`、`tr2bl`、`paragraphs`。
+  `row` / `col` 与 id 里的数字相同。
   `gridSpan` 为整数，缺元素则为 `1`。`vMerge` 为 `restart`、`continue` 或 `null`。
+  `fill` 取 `tcPr/shd/@fill` 原文，没有 `shd` 或没有 `fill` 则为 `null`。
+  格上 `cellMar` 取 `tcMar`，规则与表级相同。
+  `tl2br` / `tr2bl` 取 `tcBorders` 对应子元素。没有则为 `null`。有则对象字段顺序：`val`、`sz`、`color`。
+  `val` / `color` 取属性原文，缺则为 `null`。`sz` 能解析成整数则写整数，否则为 `null`。
   `paragraphs` 是该格内、遇嵌套 `w:tbl` 停住之后的 `w:p`（嵌套表自己的段挂在那张嵌套表上）。
   段落字段顺序与正文段落相同，id 仍是 `para:…` / `para:index:…`（页眉页脚带容器前缀），`index` 是该故事全部 `w:p` 的序号。
   给了 `scope.pictures` 时，这些段落同样带 `pictureCount` / `pictures`。xlsx 的 `scope` 里出现 `tables` 报 `InvalidField`。
@@ -1431,8 +1455,10 @@ xlsx / pptx 的 `scope.tables` 不是同一件事：xlsx 仍拒绝；pptx 展开
   五个子元素都没有则为 `null`。有任意一个则对象字段顺序：`kinsoku`、`overflowPunct`、`topLinePunct`、`autoSpaceDE`、`autoSpaceDN`。
   各键：没有该子元素为 `null`；有且 OnOff 为关为 `false`，否则为 `true`。不把 `styles.xml` 摊进来。不计算禁则断行。
 - `runCount` 始终出现在已列出的段落上（正文切片、页眉页脚段落、框内、注内、批注内、表格单元格）。计该段内被收入的 `w:r` 个数，规则与 run id 相同。
-- `scope.runs` 为 `true` 时，已列出的段落带 `runs`。每条字段顺序：`id`、`index`、`text`、`bold`、`italic`、`underline`、`sz`、`color`、`font`、`eastAsiaFont`、`em`、`eastAsianLayout`。
-  `id` 是 `{段落 id}/run:{n}`。`index` 与 `{n}` 相同。`text` 是该 run 内可见纯文本，规则与段上 `text` 相同，范围限于这个 `w:r`。
+- `scope.runs` 为 `true` 时，已列出的段落带 `runs`。每条字段顺序：`id`、`index`、`style`、`text`、`bold`、`italic`、`underline`、`sz`、`color`、`font`、`eastAsiaFont`、`em`、`eastAsianLayout`。
+  `id` 是 `{段落 id}/run:{n}`。`index` 与 `{n}` 相同。
+  `style` 取该 run 自己的 `w:rStyle/@w:val`，没有 `rStyle` 则为 `null`。不把 `styles.xml` 摊进来。
+  `text` 是该 run 内可见纯文本，规则与段上 `text` 相同，范围限于这个 `w:r`。
   `bold` / `italic` 只看该 run 自己的 `w:b` / `w:i`：没有元素为 `null`；有且 OnOff 为关为 `false`，否则为 `true`。
   `underline` 取 `w:u/@w:val`，没有 `u` 为 `null`，有元素却没有 `val` 则当作 `single`。`sz` 取 `w:sz/@w:val` 能解析成整数则写整数，否则为 `null`。
   `color` 取 `w:color/@w:val` 原文，缺则为 `null`；不解析 theme。`font` 取 `w:rFonts` 的 `ascii`，没有则取 `hAnsi`，再没有为 `null`。
@@ -1879,12 +1905,14 @@ create 写出 Transitional 最小包，见 [opc.md](opc.md)。
 给了 `document.numberings` 时按 `insertNumbering` 写 `/word/numbering.xml`，再按 `paragraphs[].num` 发 `setParaNumbering`。
 给了 `document.tocs` 时按 `insertToc` 在正文插入目录块。
 同一段上先写骨架里的文字 / 图 / 框 / SmartArt，再图表，再 OLE，再墨迹画布，再 3D 模型，再脚注，再尾注，再批注，再该条批注的回复，再书签，再超链接，再域，再公式，再内容控件，再绑编号。全部故事写完后再写 `tocs`。
-`numberings` 在任何段落绑定之前写入。不写修订痕迹。不写题注、交叉引用、索引、参考文献、构建基块、嵌入字体、theme、页面背景、页面边框、连接线或无框形状。也不写批注的回复再回复。
+`numberings` 在任何段落绑定之前写入。不写修订痕迹。不写题注、交叉引用、索引、参考文献、构建基块、嵌入字体、theme、页面背景、页面边框、连接线或无框形状。
+也不写批注的回复再回复。create 不写 `styles[]`。
+不写表上的 `tblLook` / `tblpPr` / `tblCellMar`，不写格上的底纹、`tcMar` 与斜线。
 给了 `document.props` 时按 `setProps` / `setCustomProp` 同一套规则写 core / app / custom；
 省略则仍写空的 `dc:title` 与 `dc:creator` 为 `ooxp`，不写 custom 部件。
 给了 `document.protection` 时按 `setProtection` 同一套规则写 `settings.xml`，窗体保护还可写各节 `w:formProt`。
 给了 `document.watermarks` 时按 `insertWatermark` 同一套规则写入页眉。不写 theme 部件。默认页眉页脚带框不在本期 create。
-给了 `tables` 时写出带单线边框的 `w:tbl`，每列 `gridCol` 宽 1440 twip，每格一段，带新的 `w14:paraId`。不写 `tblStyle`。不算列宽。框内、表内、注内本期 create 不写图表或注。
+给了 `tables` 时写出带单线边框的 `w:tbl`，每列 `gridCol` 宽 1440 twip，每格一段，带新的 `w14:paraId`。不写 `tblStyle`。不算列宽。框内、表内、注内本期 create 不写图表或注。表格外观与自定义样式定义见待做 52。
 
 
 ## apply
@@ -3401,6 +3429,36 @@ xlsx / pptx 上发此 op 报 `InvalidField`。create 给了 `document.numberings
 
 示例见 `docs/examples/docx-apply-numbering.json`。
 
+### insertStyle
+
+在 `/word/styles.xml` 末尾追加一条自定义样式。没有 styles 部件时新建最小部件，并补主文档关系与 `[Content_Types].xml`。
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"insertStyle"` |
+| `id` | 必须是 `docx:document` |
+| `styleId` | XML 令牌，写入 `w:styleId`。不是 `style:` 前缀 |
+| `type` | `paragraph`、`character` 或 `table` |
+| `name` | 可选。写入 `w:name/@w:val`。省略则与 `styleId` 相同 |
+| `basedOn` | 可选。`style:{id}`，写入 `w:basedOn` |
+
+`styleId` 必须匹配 `[A-Za-z_][A-Za-z0-9_-]*`，否则报 `InvalidField`。已存在报 `InvalidField`。
+`type` 为 `numbering` 或不认识时报 `InvalidField`。空 `name` 报 `InvalidField`。
+省略 `basedOn` 时绑到同类型 `w:default` 样式；没有默认样式、或默认就是自己，则不写 `basedOn`。给了 `basedOn` 时按原文写入，不先查目标是否存在。
+写入 `w:customStyle="1"`。表格样式另写空的 `w:tblPr`。不写 `tblStylePr`。
+id 不是 `docx:document` 报 `InvalidId`。xlsx / pptx 上发此 op 报 `InvalidField`。create 本期不写样式定义。
+
+### deleteStyle
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"deleteStyle"` |
+| `id` | 样式 id，例如 `style:ooxpChar` |
+
+只删 `w:customStyle` 为开（`1` / `true` / `on`）且不是 `w:default` 的样式。内置或没有 `customStyle` 的报 `InvalidField`。
+不扫描文档里的 `pStyle` / `rStyle` / `tblStyle` 引用。找不到样式报 `IdNotFound`。id 不是 `style:{styleId}` 报 `InvalidId`。
+xlsx / pptx 上发此 op 报 `InvalidField`。
+
 ### setStyle
 
 | 字段 | 含义 |
@@ -3415,9 +3473,12 @@ xlsx / pptx 上发此 op 报 `InvalidField`。create 给了 `document.numberings
 | `before` | 可选。段前距，单位 twip，非负整数 |
 | `after` | 可选。段后距，单位 twip，非负整数 |
 
-`font`、`eastAsiaFont`、`sz`、`bold`、`color`、`before`、`after` 至少给一个。只改被点名的段落样式（`w:type` 为 `paragraph` 或缺省）。
-字符 / 表格 / 编号样式报 `InvalidField`。空 `font` / `eastAsiaFont`、不是六位十六进制的 `color`、`sz` 越界报 `InvalidField`。
-不改 `outlineLvl`、`basedOn`、`name`。不新建样式。找不到样式报 `IdNotFound`。id 不是 `style:{styleId}` 报 `InvalidId`。xlsx / pptx 上发此 op 报 `InvalidField`。
+`font`、`eastAsiaFont`、`sz`、`bold`、`color`、`before`、`after` 至少给一个。
+段落、字符、表格样式都可改（`w:type` 为 `paragraph` / `character` / `table`，或缺省当段落）。编号样式报 `InvalidField`。
+`before` / `after` 只允许段落与表格样式；字符样式带这两项报 `InvalidField`。rPr 字段三种都可写。
+空 `font` / `eastAsiaFont`、不是六位十六进制的 `color`、`sz` 越界报 `InvalidField`。
+不改 `outlineLvl`、`basedOn`、`name`。不新建样式（新建用 `insertStyle`）。找不到样式报 `IdNotFound`。
+id 不是 `style:{styleId}` 报 `InvalidId`。xlsx / pptx 上发此 op 报 `InvalidField`。
 
 ### setParaStyle
 
@@ -3432,6 +3493,83 @@ xlsx / pptx 上发此 op 报 `InvalidField`。create 给了 `document.numberings
 id 不是正文或页眉页脚段落 id 报 `InvalidId`。xlsx / pptx 上发此 op 报 `InvalidField`。
 
 示例见 `docs/examples/docx-apply-style.json`。
+
+### setRunStyle
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"setRunStyle"` |
+| `id` | 正文或页眉页脚 run id |
+| `style` | `style:{styleId}`，或 `null` 表示去掉该 run 的 `w:rStyle` |
+
+`style` 为样式 id 时写入（或改写）`w:rStyle`，放在 `rPr` 子元素最前（`EG_RPrBase`）。目标必须已在 `styles.xml` 里，且是字符样式。段落 / 表格 / 编号样式报 `InvalidField`。
+找不到该样式报 `IdNotFound`。`style` 为 `null` 时去掉 `rStyle`，不要求 styles 部件存在。缺 `style` 报 `InvalidField`。
+找不到 run 报 `IdNotFound`。id 不是 run id 报 `InvalidId`。框内 / 注内 / 批注内 run 报 `InvalidId`。
+xlsx / pptx 上发此 op 报 `InvalidField`。
+
+### setTableStyle
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"setTableStyle"` |
+| `id` | 表 id，正文、页眉页脚或嵌套表 |
+| `style` | 可选。`style:{styleId}`，或 `null` 表示去掉 `tblStyle` |
+| `look` | 可选。对象写入 `tblLook`，或 `null` 表示去掉 `tblLook` |
+
+`style` 与 `look` 至少给一个。`style` 为样式 id 时目标必须是表格样式。段落 / 字符 / 编号样式报 `InvalidField`。找不到该样式报 `IdNotFound`。
+`look` 对象字段：`firstRow`、`lastRow`、`firstColumn`、`lastColumn`、`bandedRows`、`bandedColumns`，均为可选布尔。未点名的开关与已有 `tblLook` 合并。
+没有已有 `tblLook` 时缺省约 Word 的 `04A0`：首行开、末行关、首列开、末列关、行带开、列带关。
+写出六个属性与 `val`（四位大写十六进制）。位：`0x20` 首行、`0x40` 末行、`0x80` 首列、`0x100` 末列、`0x200` `noHBand`、`0x400` `noVBand`。
+`bandedRows` 为 `true` 写 `noHBand="0"`。不写 `tblStylePr`。
+找不到表报 `IdNotFound`。id 不是表 id 报 `InvalidId`。xlsx / pptx 上发此 op 报 `InvalidField`。pptx 的 `setTablePos` 语义不变。
+示例见 `docs/examples/docx-apply-table-look.json`。
+
+### setTableFloat
+
+不要复用 pptx 的 `setTablePos`（单位是 EMU）。
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"setTableFloat"` |
+| `id` | 表 id |
+| `pos` | 对象写入 `tblpPr`，或 `null` 去掉 `tblpPr` 与 `tblOverlap` |
+
+缺 `pos` 报 `InvalidField`。对象字段：
+
+- `horzAnchor` / `vertAnchor`：可选。只认 `margin` / `page` / `text`。省略则分别为 `margin` 与 `text`
+- `x` / `y`：可选。单位 twip，写入 `tblpX` / `tblpY`。省略为 `0`
+- `leftFromText` / `rightFromText`：可选。单位 twip。省略为 `180`
+- `topFromText` / `bottomFromText`：可选。单位 twip。省略则不写该属性
+
+不认识的锚点报 `InvalidField`。写入对象时同时写 `tblOverlap val="never"`。
+找不到表报 `IdNotFound`。id 不是表 id 报 `InvalidId`。xlsx / pptx 上发此 op 报 `InvalidField`。create 本期不写浮动表。
+
+### setTableCellMar
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"setTableCellMar"` |
+| `id` | 表 id |
+| `top` / `left` / `bottom` / `right` | 可选。twip 非负整数，或 `null` 去掉该边 |
+
+至少给一边。写入表级 `tblCellMar`，`type="dxa"`。四边都删光后去掉空的 `tblCellMar`。
+找不到表报 `IdNotFound`。id 不是表 id 报 `InvalidId`。xlsx / pptx 上发此 op 报 `InvalidField`。
+
+### setCellFormat
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"setCellFormat"` |
+| `id` | 单元格 id，例如 `table:1/r1c1` |
+| `fill` | 可选。六位 RGB，或 `null` 去掉 `shd` |
+| `top` / `left` / `bottom` / `right` | 可选。格级 `tcMar`，规则与 `setTableCellMar` 相同 |
+| `tl2br` / `tr2bl` | 可选。斜线对象，或 `null` 去掉该斜线 |
+
+`fill`、四边、两条斜线至少给一个。`fill` 写入 `shd val="clear" color="auto"`，并去掉 theme 填充属性。不是六位十六进制报 `InvalidField`。
+斜线对象字段：`val`（省略为 `single`）、`sz`（可选，八分之一磅）、`color`（省略为 `auto`）。写出 `space="0"`。
+`val` 与页面边框同一套：`nil` / `none` / `single` / `dashed` / `dotted` / `double` / `thick` / `wave` / `dashSmallGap` / `dotDash` / `dotDotDash`。
+不认识的 `val` 或非法 `color` 报 `InvalidField`。两条斜线都删光且没有其它边时去掉空的 `tcBorders`。
+找不到单元格报 `IdNotFound`。id 不是单元格 id 报 `InvalidId`。xlsx / pptx 上发此 op 报 `InvalidField`。create 本期不写格外观。
 
 ### setParaFormat
 
@@ -3841,7 +3979,7 @@ pptx 见 [pptx 分册](json-contract-pptx.md#ungroup)。
 
 允许变脏的部件：主文档 XML（通常是 `/word/document.xml`）及其 `.rels`，
 被 `setParaText`、`setParaFormat`、`setRunFormat`、图片 op、文本框 op、连接线与组合 op、无框形状 op、墨迹画布 op、图表 op、SmartArt op、OLE op、表格结构 op、修订 op、超链接与书签 op、
-域 op、公式 op、拼音 op、内容控件 op、`setParaNumbering` 或 `setParaStyle` 点名的页眉、页脚部件及其 `.rels`，
+域 op、公式 op、拼音 op、内容控件 op、`setParaNumbering`、`setParaStyle`、`setRunStyle` 或表格外观 op 点名的页眉、页脚部件及其 `.rels`，
 `setHeaderFooterLink` / `insertHeaderFooter` / `deleteSection` 改到的主文档关系、`[Content_Types].xml`、新建或删除的 header/footer 部件及其 `.rels`，
 脚注 / 尾注部件及其 `.rels`，批注部件 `/word/comments.xml`、`commentsExtended.xml`、`people.xml`，
 以及文件里已有的 `commentsIds.xml` / `commentsExtensible.xml`，图表部件 `/word/charts/…` 及其 `.rels`，embedding `/word/embeddings/…`，
@@ -3850,7 +3988,9 @@ SmartArt 四件套 `/word/diagrams/…` 及可选 drawing 缓存，`setNoteNumbe
 `setProtection` 打开或关掉窗体保护时还可以脏主文档各节 `w:formProt`，
 `insertWatermark` / `deleteWatermark` 改到的页眉部件及其 `.rels`、必要时新建的 `/word/headerN.xml`、主文档关系、
 `[Content_Types].xml` 与 `/word/media/…`，
-编号 op 改到的 `/word/numbering.xml`、主文档 `.rels` 与 `[Content_Types].xml`，`setStyle` 改到的 `/word/styles.xml`，以及新媒体或被删的 `/word/media/…`。
+编号 op 改到的 `/word/numbering.xml`、主文档 `.rels` 与 `[Content_Types].xml`，
+`insertStyle` / `deleteStyle` / `setStyle` 改到的 `/word/styles.xml`（缺则新建，并可脏主文档 `.rels` 与 `[Content_Types].xml`），
+以及新媒体或被删的 `/word/media/…`。
 OLE op 还可以脏 `/word/embeddings/…` 与预览图媒体。墨迹画布 op 还可以脏 `/word/ink/…`、宿主 `.rels` 与 `[Content_Types].xml`。
 图表 op、SmartArt op 与文本框 op 点名注内或批注内段落时，还可以脏对应 notes / comments 部件及其 `.rels`。
 `setHeaderFooterDistance`、`setPageMargin`、`setPageSize`、`setColumns`、`setVerticalAlign`、`setLineNumbering`、`setDocGrid`、
@@ -3870,7 +4010,9 @@ OLE op 还可以脏 `/word/embeddings/…` 与预览图媒体。墨迹画布 op 
 `insertContentControl`、`setContentControl` 与 `deleteContentControl` 只脏主文档（页眉页脚上的内容控件 op 另脏对应 header/footer 部件）。
 `deleteSection` 脏主文档，并可能删掉不再被引用的 header/footer 部件。
 正文图片 op、文本框 op、图表 op、SmartArt op、正文表格结构 op、正文修订 op、正文超链接 / 书签 op、正文域 op、正文公式 op、正文拼音 op、正文内容控件 op、正文 `setParaNumbering`、
-正文 `setParaStyle`、正文 `setParaFormat` 与正文 `setRunFormat` 脏主文档与主文档 `.rels`。
+正文 `setParaStyle`、正文 `setRunStyle`、正文 `setParaFormat` 与正文 `setRunFormat` 脏主文档与主文档 `.rels`。
+正文 `setTableStyle` / `setTableFloat` / `setTableCellMar` / `setCellFormat` 脏主文档。
+页眉页脚上的这些 op 另脏对应 header/footer 部件。
 一次 `ops` 可以混用 `setParaText`、`setHeaderFooterDistance`、`setPageMargin`、`setPageSize`、`setColumns`、`setVerticalAlign`、
 `setLineNumbering`、`setDocGrid`、`setRtlGutter`、`setPageBorders`、`setMirrorMargins`、`setGutterAtTop`、
 `setHeaderFooterLink`、`insertHeaderFooter`、`setTitlePage`、`setEvenAndOddHeaders`、`insertSection`、`deleteSection`、
@@ -3880,7 +4022,7 @@ OLE op 还可以脏 `/word/embeddings/…` 与预览图媒体。墨迹画布 op 
 `deleteEmbeddedFont`、`setFontEmbed`、`setPageBackground`、`insertMath`、`setMath`、`deleteMath`、`insertRuby`、`setRuby`、`deleteRuby`、`setEastAsianSettings`、`insertContentControl`、
 `setContentControl`、`deleteContentControl`、图片 op、文本框 op、
 `insertConnector` / `deleteConnector` / `insertShape` / `deleteShape` / `setShapePos` / `setShapeSize` / `setShapeFill` / `setShapeLine` / `groupShapes` / `ungroup`、墨迹画布 op、脚注尾注 op、批注 op、图表 op、SmartArt op、表格结构 op、修订 op、
-超链接 / 书签 op、域 op 与编号 op、样式 op、直接格式 op、以及 `setProtection`、以及 `insertWatermark` / `deleteWatermark`、
+超链接 / 书签 op、域 op 与编号 op、样式 op、表格外观 op、直接格式 op、以及 `setProtection`、以及 `insertWatermark` / `deleteWatermark`、
 以及 `setProps` / `setCustomProp` / `deleteCustomProp`。
 文件属性 op 还可以脏 `/docProps/core.xml`、`/docProps/app.xml`、`/docProps/custom.xml`、根 `.rels` 与 `[Content_Types].xml`。
 只改 core 字段时不要新建 custom。未点名的 `styles.xml`、未点名的页眉页脚、主题一律原样写回。未点名的 `numbering.xml` 也原样写回。未点名的 `settings.xml` 也原样写回。

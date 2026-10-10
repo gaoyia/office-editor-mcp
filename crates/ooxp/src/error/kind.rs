@@ -463,6 +463,8 @@ pub(crate) enum IdReason {
     InsertFieldNeedsShape,
     /// insertNumbering 必须用 docx:document
     InsertNumberingNeedsDocument,
+    /// insertStyle 必须用 docx:document
+    InsertStyleNeedsDocument,
     /// 编号实例 id 必须是 num:N
     NumPrefix,
     NumIndexNotInt,
@@ -478,6 +480,8 @@ pub(crate) enum IdReason {
     SetParaStyleNeedsPara,
     /// setRunFormat 必须用 {段落}/run:N
     SetRunFormatNeedsRun,
+    /// setRunStyle 必须用正文或页眉页脚 run id
+    SetRunStyleNeedsStoryRun,
     /// run id 必须是 {段落}/run:N
     RunPrefix,
     RunIndexNotInt,
@@ -1073,6 +1077,19 @@ define_error_kinds! {
     NeedSetParaNumberingNum => vec![Self::NeedSetParaNumberingNum],
     StyleNotFound { id: String } => vec![Self::StyleNotFound { id: "style:Normal".into() }],
     SetStyleNeedsParagraph => vec![Self::SetStyleNeedsParagraph],
+    InvalidStyleType => vec![Self::InvalidStyleType],
+    StyleIdTaken => vec![Self::StyleIdTaken],
+    InvalidStyleIdToken => vec![Self::InvalidStyleIdToken],
+    StyleNotCustom => vec![Self::StyleNotCustom],
+    NeedInsertStyleField => vec![Self::NeedInsertStyleField],
+    SetStyleSpacingNeedsParagraph => vec![Self::SetStyleSpacingNeedsParagraph],
+    SetRunStyleNeedsCharacter => vec![Self::SetRunStyleNeedsCharacter],
+    SetTableStyleNeedsTable => vec![Self::SetTableStyleNeedsTable],
+    NeedSetTableStyleField => vec![Self::NeedSetTableStyleField],
+    NeedSetTableFloatField => vec![Self::NeedSetTableFloatField],
+    InvalidTblAnchor => vec![Self::InvalidTblAnchor],
+    NeedSetTableCellMarField => vec![Self::NeedSetTableCellMarField],
+    NeedSetCellFormatField => vec![Self::NeedSetCellFormatField],
     NeedSetStyleField => vec![Self::NeedSetStyleField],
     EmptyStyleFont => vec![Self::EmptyStyleFont],
     InvalidStyleColor => vec![Self::InvalidStyleColor],
@@ -1495,6 +1512,7 @@ impl IdReason {
             Self::PptxFieldForm,
             Self::InsertFieldNeedsShape,
             Self::InsertNumberingNeedsDocument,
+            Self::InsertStyleNeedsDocument,
             Self::NumPrefix,
             Self::NumIndexNotInt,
             Self::NumIndexFromOne,
@@ -1504,6 +1522,7 @@ impl IdReason {
             Self::StylePrefix,
             Self::SetParaStyleNeedsPara,
             Self::SetRunFormatNeedsRun,
+            Self::SetRunStyleNeedsStoryRun,
             Self::RunPrefix,
             Self::RunIndexNotInt,
             Self::RunIndexFromOne,
@@ -1793,6 +1812,19 @@ impl ErrorKind {
             | Self::InvalidIlvl
             | Self::NeedSetParaNumberingNum
             | Self::SetStyleNeedsParagraph
+            | Self::InvalidStyleType
+            | Self::StyleIdTaken
+            | Self::InvalidStyleIdToken
+            | Self::StyleNotCustom
+            | Self::NeedInsertStyleField
+            | Self::SetStyleSpacingNeedsParagraph
+            | Self::SetRunStyleNeedsCharacter
+            | Self::SetTableStyleNeedsTable
+            | Self::NeedSetTableStyleField
+            | Self::NeedSetTableFloatField
+            | Self::InvalidTblAnchor
+            | Self::NeedSetTableCellMarField
+            | Self::NeedSetCellFormatField
             | Self::NeedSetStyleField
             | Self::EmptyStyleFont
             | Self::InvalidStyleColor

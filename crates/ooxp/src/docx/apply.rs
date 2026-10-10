@@ -33,8 +33,8 @@ use super::request::{
     DeleteCommentOp, DeleteConnectorOp, DeleteContentControlOp, DeleteCrossRefOp, DeleteDocPartOp,
     DeleteFieldOp, DeleteHyperlinkOp, DeleteIndexEntryOp, DeleteIndexOp, DeleteMathOp,
     DeleteNoteOp, DeleteParaOp, DeletePictureOp, DeleteRowOp, DeleteRubyOp, DeleteSectionOp,
-    DeleteShapeOp, DeleteSourceOp, DeleteTableOp, DeleteTextBoxOp, DeleteTocOp, DocxOp,
-    GroupShapesOp, HyperlinkTarget, InsertBibliographyOp, InsertBibliographyPlace,
+    DeleteShapeOp, DeleteSourceOp, DeleteStyleOp, DeleteTableOp, DeleteTextBoxOp, DeleteTocOp,
+    DocxOp, GroupShapesOp, HyperlinkTarget, InsertBibliographyOp, InsertBibliographyPlace,
     InsertBookmarkOp, InsertCaptionOp, InsertCaptionPlace, InsertCitationOp, InsertColOp,
     InsertCommentOp, InsertConnectorOp, InsertContentControlOp, InsertCrossRefOp,
     InsertDocPartContentOp, InsertDocPartContentPlace, InsertDocPartOp, InsertFieldOp,
@@ -42,15 +42,16 @@ use super::request::{
     InsertIndexOp, InsertIndexPlace, InsertMathOp, InsertMathPlace, InsertNoteOp,
     InsertNumberingOp, InsertParaOp, InsertParaPlace, InsertPictureOp, InsertRowOp, InsertRubyOp,
     InsertRubyPlace, InsertSdtPlace, InsertSectionOp, InsertSectionPlace, InsertShapeOp,
-    InsertSourceOp, InsertTableOp, InsertTextBoxOp, InsertTocOp, InsertTocPlace, MergeCellsOp,
-    NoteNumberTarget, ReplacePictureOp, ReplyCommentOp, RevisionOp, SetBookmarkOp, SetColumnsOp,
-    SetCommentDoneOp, SetCommentMetaOp, SetCommentTextOp, SetContentControlOp, SetDocGridOp,
-    SetEvenAndOddHeadersOp, SetFieldOp, SetGutterAtTopOp, SetHfDistanceOp, SetHfLinkOp,
-    SetHyperlinkOp, SetLineNumberingOp, SetMathOp, SetMirrorMarginsOp, SetNoteNumberingOp,
-    SetNumberingOp, SetPageBordersOp, SetPageMarginOp, SetPageSizeOp, SetParaFormatOp,
-    SetParaNumberingOp, SetParaStyleOp, SetParaTextOp, SetPictureSizeOp, SetPictureWrapOp,
-    SetRtlGutterOp, SetRubyOp, SetRunFormatOp, SetShapeFillOp, SetShapeLineOp, SetShapePosOp,
-    SetShapeSizeOp, SetStyleOp, SetTextBoxDirectionOp, SetTextBoxFillOp, SetTextBoxLineOp,
+    InsertSourceOp, InsertStyleOp, InsertTableOp, InsertTextBoxOp, InsertTocOp, InsertTocPlace,
+    MergeCellsOp, NoteNumberTarget, ReplacePictureOp, ReplyCommentOp, RevisionOp, SetBookmarkOp,
+    SetCellFormatOp, SetColumnsOp, SetCommentDoneOp, SetCommentMetaOp, SetCommentTextOp,
+    SetContentControlOp, SetDocGridOp, SetEvenAndOddHeadersOp, SetFieldOp, SetGutterAtTopOp,
+    SetHfDistanceOp, SetHfLinkOp, SetHyperlinkOp, SetLineNumberingOp, SetMathOp,
+    SetMirrorMarginsOp, SetNoteNumberingOp, SetNumberingOp, SetPageBordersOp, SetPageMarginOp,
+    SetPageSizeOp, SetParaFormatOp, SetParaNumberingOp, SetParaStyleOp, SetParaTextOp,
+    SetPictureSizeOp, SetPictureWrapOp, SetRtlGutterOp, SetRubyOp, SetRunFormatOp, SetRunStyleOp,
+    SetShapeFillOp, SetShapeLineOp, SetShapePosOp, SetShapeSizeOp, SetStyleOp, SetTableCellMarOp,
+    SetTableFloatOp, SetTableStyleOp, SetTextBoxDirectionOp, SetTextBoxFillOp, SetTextBoxLineOp,
     SetTextBoxLinkOp, SetTextBoxSizeOp, SetTextBoxWrapOp, SetTitlePageOp, SetVerticalAlignOp,
     SplitCellsOp, UngroupOp,
 };
@@ -649,6 +650,27 @@ pub fn apply(bytes: &[u8], ops: &[DocxOp]) -> Result<Vec<u8>, Error> {
             }
             DocxOp::SetParaStyle(op) => {
                 apply_set_para_style(&pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
+            }
+            DocxOp::InsertStyle(op) => {
+                apply_insert_style(&mut pkg, &mut docs, &mut dirty, &doc_part, op, i)?;
+            }
+            DocxOp::DeleteStyle(op) => {
+                apply_delete_style(&pkg, &mut docs, &mut dirty, &doc_part, op, i)?;
+            }
+            DocxOp::SetRunStyle(op) => {
+                apply_set_run_style(&pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
+            }
+            DocxOp::SetTableStyle(op) => {
+                apply_set_table_style(&pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
+            }
+            DocxOp::SetTableFloat(op) => {
+                apply_set_table_float(&pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
+            }
+            DocxOp::SetTableCellMar(op) => {
+                apply_set_table_cell_mar(&pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
+            }
+            DocxOp::SetCellFormat(op) => {
+                apply_set_cell_format(&pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
             }
             DocxOp::SetParaFormat(op) => {
                 apply_set_para_format(&pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
@@ -1615,6 +1637,195 @@ fn apply_set_para_style(
         Some(s) => styles::bind_para(el, s),
         None => styles::unbind_para(el),
     }
+    dirty.insert(part_name, ());
+    Ok(())
+}
+
+fn apply_insert_style(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    op: &InsertStyleOp,
+    i: usize,
+) -> Result<(), Error> {
+    let part = styles::ensure_part(pkg, docs, dirty, doc_part)?;
+    let doc = load_part(pkg, docs, &part)?;
+    styles::insert_style(
+        &mut doc.root,
+        &op.style_id,
+        &op.ty,
+        &op.name,
+        op.based_on.as_deref(),
+        i,
+    )?;
+    dirty.insert(part, ());
+    Ok(())
+}
+
+fn apply_delete_style(
+    pkg: &Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    op: &DeleteStyleOp,
+    i: usize,
+) -> Result<(), Error> {
+    let Some(part) = styles::styles_part(pkg, doc_part)? else {
+        return Err(styles::missing_style(&op.id, i));
+    };
+    let doc = load_part(pkg, docs, &part)?;
+    styles::delete_style(&mut doc.root, &op.style_id, &op.id, i)?;
+    dirty.insert(part, ());
+    Ok(())
+}
+
+fn apply_set_run_style(
+    pkg: &Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &SetRunStyleOp,
+    i: usize,
+) -> Result<(), Error> {
+    if let Some(style_id) = op.style.as_deref() {
+        let style_part = styles::styles_part(pkg, doc_part)?
+            .ok_or_else(|| styles::missing_para_style(&format!("style:{style_id}"), i))?;
+        {
+            let style_doc = load_part(pkg, docs, &style_part)?;
+            let Some(el) = styles::find_style(&style_doc.root, style_id) else {
+                return Err(styles::missing_para_style(&format!("style:{style_id}"), i));
+            };
+            if !styles::is_character_style(el) {
+                return Err(Error::with_path(
+                    ErrorKind::SetRunStyleNeedsCharacter,
+                    format!("ops[{i}].style"),
+                ));
+            }
+        }
+    }
+    let part_name = part_for_para(pkg, catalog, doc_part, &op.para, &op.id, i)?;
+    let doc = load_part(pkg, docs, &part_name)?;
+    let el = find_insert_para_mut(&mut doc.root, &op.para).ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::ParaNotFound { id: op.id.clone() },
+            format!("ops[{i}].id"),
+        )
+    })?;
+    let run = format::find_run_mut(el, op.run).ok_or_else(|| format::missing_run(&op.id, i))?;
+    match op.style.as_deref() {
+        Some(s) => format::bind_run_style(run, s),
+        None => format::unbind_run_style(run),
+    }
+    dirty.insert(part_name, ());
+    Ok(())
+}
+
+fn apply_set_table_style(
+    pkg: &Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &SetTableStyleOp,
+    i: usize,
+) -> Result<(), Error> {
+    if let Some(Some(style_id)) = op.style.as_ref() {
+        let style_part = styles::styles_part(pkg, doc_part)?
+            .ok_or_else(|| styles::missing_para_style(&format!("style:{style_id}"), i))?;
+        {
+            let style_doc = load_part(pkg, docs, &style_part)?;
+            let Some(el) = styles::find_style(&style_doc.root, style_id) else {
+                return Err(styles::missing_para_style(&format!("style:{style_id}"), i));
+            };
+            if !styles::is_table_style(el) {
+                return Err(Error::with_path(
+                    ErrorKind::SetTableStyleNeedsTable,
+                    format!("ops[{i}].style"),
+                ));
+            }
+        }
+    }
+    let part_name = tbl::part_for_story(catalog, doc_part, op.target.story(), &op.id, i)?;
+    let doc = load_part(pkg, docs, &part_name)?;
+    tbl::apply_set_table_style(
+        &mut doc.root,
+        &op.target,
+        op.style.as_ref().map(|s| s.as_deref()),
+        op.look.as_ref().map(|l| l.as_ref()),
+        &op.id,
+        i,
+    )?;
+    dirty.insert(part_name, ());
+    Ok(())
+}
+
+fn apply_set_table_float(
+    pkg: &Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &SetTableFloatOp,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name = tbl::part_for_story(catalog, doc_part, op.target.story(), &op.id, i)?;
+    let doc = load_part(pkg, docs, &part_name)?;
+    tbl::apply_set_table_float(&mut doc.root, &op.target, op.pos.as_ref(), &op.id, i)?;
+    dirty.insert(part_name, ());
+    Ok(())
+}
+
+fn apply_set_table_cell_mar(
+    pkg: &Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &SetTableCellMarOp,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name = tbl::part_for_story(catalog, doc_part, op.target.story(), &op.id, i)?;
+    let doc = load_part(pkg, docs, &part_name)?;
+    tbl::apply_set_table_cell_mar(
+        &mut doc.root,
+        &op.target,
+        op.top,
+        op.left,
+        op.bottom,
+        op.right,
+        &op.id,
+        i,
+    )?;
+    dirty.insert(part_name, ());
+    Ok(())
+}
+
+fn apply_set_cell_format(
+    pkg: &Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &SetCellFormatOp,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name = tbl::part_for_story(catalog, doc_part, op.target.story(), &op.id, i)?;
+    let doc = load_part(pkg, docs, &part_name)?;
+    tbl::apply_set_cell_format(
+        &mut doc.root,
+        &op.target,
+        op.fill.as_ref().map(|s| s.as_deref()),
+        op.top,
+        op.left,
+        op.bottom,
+        op.right,
+        op.tl2br.as_ref().map(|s| s.as_ref()),
+        op.tr2bl.as_ref().map(|s| s.as_ref()),
+        &op.id,
+        i,
+    )?;
     dirty.insert(part_name, ());
     Ok(())
 }

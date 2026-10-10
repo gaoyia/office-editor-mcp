@@ -251,11 +251,11 @@ fn style_ops_reject_bad_ids() {
     );
     assert_eq!(err_missing.code(), ErrorCode::IdNotFound);
 
-    let err_char = apply_err(
+    let err_char_spacing = apply_err(
         &path,
-        json!([{ "op": "setStyle", "id": "style:DefaultParagraphFont", "sz": 24 }]),
+        json!([{ "op": "setStyle", "id": "style:DefaultParagraphFont", "before": 100 }]),
     );
-    assert_eq!(err_char.code(), ErrorCode::InvalidField);
+    assert_eq!(err_char_spacing.code(), ErrorCode::InvalidField);
 
     let err_empty = apply_err(&path, json!([{ "op": "setStyle", "id": "style:Normal" }]));
     assert_eq!(err_empty.code(), ErrorCode::InvalidField);
@@ -348,4 +348,122 @@ fn styles_not_for_xlsx_or_pptx() {
     )
     .unwrap_err();
     assert_eq!(err_p.code(), ErrorCode::InvalidField);
+}
+
+#[test]
+fn insert_and_delete_character_style() {
+    let path = write_sample("ins-char");
+    let mid = tmp_dir().join("ins-char.docx");
+    apply(
+        &path,
+        &mid,
+        json!([{
+            "op": "insertStyle",
+            "id": "docx:document",
+            "styleId": "ooxpChar",
+            "type": "character"
+        }]),
+    );
+    let tree = listed(&mid);
+    assert_eq!(tree["styleCount"], 5);
+    let found = tree["styles"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|s| s["id"] == "style:ooxpChar")
+        .unwrap();
+    assert_eq!(found["type"], "character");
+    assert_eq!(found["name"], "ooxpChar");
+
+    apply(
+        &mid,
+        &tmp_dir().join("ins-char-sz.docx"),
+        json!([{ "op": "setStyle", "id": "style:ooxpChar", "color": "00FF00", "bold": true }]),
+    );
+    let xml = unzip_styles(&tmp_dir().join("ins-char-sz.docx"));
+    assert!(xml.contains("styleId=\"ooxpChar\""));
+    assert!(xml.contains("00FF00") || xml.contains("val=\"00FF00\""));
+
+    let out = tmp_dir().join("del-char.docx");
+    apply(
+        &mid,
+        &out,
+        json!([{ "op": "deleteStyle", "id": "style:ooxpChar" }]),
+    );
+    let after = listed(&out);
+    assert_eq!(after["styleCount"], 4);
+    assert!(after["styles"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|s| s["id"] != "style:ooxpChar"));
+
+    let err_normal = apply_err(
+        &path,
+        json!([{ "op": "deleteStyle", "id": "style:Normal" }]),
+    );
+    assert_eq!(err_normal.code(), ErrorCode::InvalidField);
+    let err_dup = apply_err(
+        &mid,
+        json!([{
+            "op": "insertStyle",
+            "id": "docx:document",
+            "styleId": "ooxpChar",
+            "type": "character"
+        }]),
+    );
+    assert_eq!(err_dup.code(), ErrorCode::InvalidField);
+    let err_num = apply_err(
+        &path,
+        json!([{
+            "op": "insertStyle",
+            "id": "docx:document",
+            "styleId": "n1",
+            "type": "numbering"
+        }]),
+    );
+    assert_eq!(err_num.code(), ErrorCode::InvalidField);
+}
+
+#[test]
+fn set_run_style_binds_rstyle() {
+    let path = write_sample("run-st");
+    let mid = tmp_dir().join("run-st-ins.docx");
+    apply(
+        &path,
+        &mid,
+        json!([{
+            "op": "insertStyle",
+            "id": "docx:document",
+            "styleId": "ooxpChar",
+            "type": "character"
+        }]),
+    );
+    let out = tmp_dir().join("run-st.docx");
+    apply(
+        &mid,
+        &out,
+        json!([{
+            "op": "setRunStyle",
+            "id": "para:AAAA0001/run:1",
+            "style": "style:ooxpChar"
+        }]),
+    );
+    let tree = inspect(&out, json!({ "from": 1, "maxParas": 20, "runs": true }));
+    let p = tree["paragraphs"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|p| p["id"] == "para:AAAA0001")
+        .unwrap();
+    assert_eq!(p["runs"][0]["style"], "ooxpChar");
+    let err_para = apply_err(
+        &out,
+        json!([{
+            "op": "setRunStyle",
+            "id": "para:AAAA0001/run:1",
+            "style": "style:Normal"
+        }]),
+    );
+    assert_eq!(err_para.code(), ErrorCode::InvalidField);
 }

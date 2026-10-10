@@ -590,6 +590,251 @@ pub fn apply_split(root: &mut Element, r: &TableRef, id: &str, i: usize) -> Resu
     Ok(())
 }
 
+pub const TBL_ANCHORS: &[&str] = &["margin", "page", "text"];
+
+const TBLPR_ORDER: &[&str] = &[
+    "tblStyle",
+    "tblpPr",
+    "tblOverlap",
+    "bidiVisual",
+    "tblStyleRowBandSize",
+    "tblStyleColBandSize",
+    "tblW",
+    "jc",
+    "tblCellSpacing",
+    "tblInd",
+    "tblBorders",
+    "shd",
+    "tblLayout",
+    "tblCellMar",
+    "tblLook",
+];
+
+const TCPR_ORDER: &[&str] = &[
+    "cnfStyle",
+    "tcW",
+    "gridSpan",
+    "vMerge",
+    "tcBorders",
+    "shd",
+    "noWrap",
+    "tcMar",
+    "textDirection",
+    "tcFitText",
+    "vAlign",
+    "hideMark",
+];
+
+const BORDER_ORDER: &[&str] = &[
+    "top", "start", "left", "bottom", "end", "right", "insideH", "insideV", "tl2br", "tr2bl",
+];
+
+const DIAGONAL_VALS: &[&str] = &[
+    "nil",
+    "none",
+    "single",
+    "dashed",
+    "dotted",
+    "double",
+    "thick",
+    "wave",
+    "dashSmallGap",
+    "dotDash",
+    "dotDotDash",
+];
+
+#[derive(Debug, Clone)]
+pub struct TableLookPatch {
+    pub first_row: Option<bool>,
+    pub last_row: Option<bool>,
+    pub first_column: Option<bool>,
+    pub last_column: Option<bool>,
+    pub banded_rows: Option<bool>,
+    pub banded_columns: Option<bool>,
+}
+
+#[derive(Debug, Clone)]
+pub struct TableFloat {
+    pub horz_anchor: Option<String>,
+    pub vert_anchor: Option<String>,
+    pub x: Option<i32>,
+    pub y: Option<i32>,
+    pub left_from_text: Option<u32>,
+    pub right_from_text: Option<u32>,
+    pub top_from_text: Option<u32>,
+    pub bottom_from_text: Option<u32>,
+}
+
+#[derive(Debug, Clone)]
+pub struct DiagonalBorder {
+    pub val: String,
+    pub sz: Option<u32>,
+    pub color: Option<String>,
+}
+
+pub fn apply_set_table_style(
+    root: &mut Element,
+    r: &TableRef,
+    style: Option<Option<&str>>,
+    look: Option<Option<&TableLookPatch>>,
+    id: &str,
+    i: usize,
+) -> Result<(), Error> {
+    let path = tbl_path(root, r.table_n(), id, i)?;
+    let tbl = para::element_at_mut(root, &path).ok_or_else(|| missing_table(id, i))?;
+    let pr = ensure_tbl_pr(tbl);
+    if let Some(st) = style {
+        match st {
+            Some(sid) => {
+                let el = hf::ensure_child_in_order(pr, "tblStyle", TBLPR_ORDER);
+                let key = el.prefixed("val");
+                el.set_attr(&key, sid);
+            }
+            None => remove_child(pr, "tblStyle"),
+        }
+    }
+    if let Some(lk) = look {
+        match lk {
+            Some(patch) => write_tbl_look(pr, patch),
+            None => remove_child(pr, "tblLook"),
+        }
+    }
+    Ok(())
+}
+
+pub fn apply_set_table_float(
+    root: &mut Element,
+    r: &TableRef,
+    pos: Option<&TableFloat>,
+    id: &str,
+    i: usize,
+) -> Result<(), Error> {
+    let path = tbl_path(root, r.table_n(), id, i)?;
+    let tbl = para::element_at_mut(root, &path).ok_or_else(|| missing_table(id, i))?;
+    let pr = ensure_tbl_pr(tbl);
+    match pos {
+        None => {
+            remove_child(pr, "tblpPr");
+            remove_child(pr, "tblOverlap");
+        }
+        Some(p) => {
+            let el = hf::ensure_child_in_order(pr, "tblpPr", TBLPR_ORDER);
+            el.attrs.clear();
+            set_attr(
+                el,
+                "horzAnchor",
+                p.horz_anchor.as_deref().unwrap_or("margin"),
+            );
+            set_attr(el, "vertAnchor", p.vert_anchor.as_deref().unwrap_or("text"));
+            set_attr(el, "tblpX", &p.x.unwrap_or(0).to_string());
+            set_attr(el, "tblpY", &p.y.unwrap_or(0).to_string());
+            set_attr(
+                el,
+                "leftFromText",
+                &p.left_from_text.unwrap_or(180).to_string(),
+            );
+            set_attr(
+                el,
+                "rightFromText",
+                &p.right_from_text.unwrap_or(180).to_string(),
+            );
+            if let Some(n) = p.top_from_text {
+                set_attr(el, "topFromText", &n.to_string());
+            }
+            if let Some(n) = p.bottom_from_text {
+                set_attr(el, "bottomFromText", &n.to_string());
+            }
+            let overlap = hf::ensure_child_in_order(pr, "tblOverlap", TBLPR_ORDER);
+            let key = overlap.prefixed("val");
+            overlap.set_attr(&key, "never");
+        }
+    }
+    Ok(())
+}
+
+pub fn apply_set_table_cell_mar(
+    root: &mut Element,
+    r: &TableRef,
+    top: Option<Option<u32>>,
+    left: Option<Option<u32>>,
+    bottom: Option<Option<u32>>,
+    right: Option<Option<u32>>,
+    id: &str,
+    i: usize,
+) -> Result<(), Error> {
+    let path = tbl_path(root, r.table_n(), id, i)?;
+    let tbl = para::element_at_mut(root, &path).ok_or_else(|| missing_table(id, i))?;
+    let pr = ensure_tbl_pr(tbl);
+    patch_cell_mar(pr, "tblCellMar", TBLPR_ORDER, top, left, bottom, right);
+    Ok(())
+}
+
+pub fn apply_set_cell_format(
+    root: &mut Element,
+    r: &TableRef,
+    fill: Option<Option<&str>>,
+    top: Option<Option<u32>>,
+    left: Option<Option<u32>>,
+    bottom: Option<Option<u32>>,
+    right: Option<Option<u32>>,
+    tl2br: Option<Option<&DiagonalBorder>>,
+    tr2bl: Option<Option<&DiagonalBorder>>,
+    id: &str,
+    i: usize,
+) -> Result<(), Error> {
+    let TableRef::Cell { n, row, col, .. } = r else {
+        unreachable!();
+    };
+    let path = tbl_path(root, *n, id, i)?;
+    let tbl = para::element_at_mut(root, &path).ok_or_else(|| missing_table(id, i))?;
+    let tc = tc_at_mut(tbl, *row, *col).ok_or_else(|| missing_table(id, i))?;
+    let pr = ensure_tc_pr(tc);
+    if let Some(fill) = fill {
+        match fill {
+            Some(hex) => {
+                let shd = hf::ensure_child_in_order(pr, "shd", TCPR_ORDER);
+                shd.attrs.retain(|(k, _)| {
+                    let local = k.rsplit(':').next().unwrap_or(k);
+                    !matches!(
+                        local,
+                        "themeFill" | "themeFillTint" | "themeFillShade" | "themeColor"
+                    )
+                });
+                set_attr(shd, "val", "clear");
+                set_attr(shd, "color", "auto");
+                set_attr(shd, "fill", &hex.to_ascii_uppercase());
+            }
+            None => remove_child(pr, "shd"),
+        }
+    }
+    if top.is_some() || left.is_some() || bottom.is_some() || right.is_some() {
+        patch_cell_mar(pr, "tcMar", TCPR_ORDER, top, left, bottom, right);
+    }
+    if tl2br.is_some() || tr2bl.is_some() {
+        {
+            let borders = hf::ensure_child_in_order(pr, "tcBorders", TCPR_ORDER);
+            if let Some(side) = tl2br {
+                write_diagonal(borders, "tl2br", side);
+            }
+            if let Some(side) = tr2bl {
+                write_diagonal(borders, "tr2bl", side);
+            }
+        }
+        let empty = pr
+            .child_by_local("tcBorders")
+            .map(|b| b.element_children().next().is_none())
+            .unwrap_or(true);
+        if empty {
+            remove_child(pr, "tcBorders");
+        }
+    }
+    Ok(())
+}
+
+pub fn is_diagonal_val(s: &str) -> bool {
+    DIAGONAL_VALS.contains(&s)
+}
+
 pub fn table_xml(cells: &[Vec<String>], para_ids: &[String]) -> String {
     let cols = cells.first().map(|r| r.len()).unwrap_or(1);
     let mut grid = String::new();
@@ -868,6 +1113,10 @@ fn table_node(
                     Some(VMerge::Continue) => Value::String("continue".into()),
                     None => Value::Null,
                 },
+                "fill": cell_fill(tc),
+                "cellMar": cell_mar_json(tc.child_by_local("tcPr").and_then(|p| p.child_by_local("tcMar"))),
+                "tl2br": diagonal_json(tc, "tl2br"),
+                "tr2bl": diagonal_json(tc, "tr2bl"),
                 "paragraphs": paras,
             }));
             col += span;
@@ -884,6 +1133,17 @@ fn table_node(
         "rowCount": trs.len(),
         "colCount": col_count,
         "nested": nested,
+        "style": tbl
+            .child_by_local("tblPr")
+            .and_then(|p| p.child_by_local("tblStyle"))
+            .and_then(|e| e.attr_local("val"))
+            .map(str::to_string),
+        "look": tbl_look_json(tbl),
+        "pos": tbl_pos_json(tbl),
+        "cellMar": cell_mar_json(
+            tbl.child_by_local("tblPr")
+                .and_then(|p| p.child_by_local("tblCellMar")),
+        ),
         "rows": rows,
     }))
 }
@@ -1840,6 +2100,240 @@ fn first_alt(el: &Element) -> Option<usize> {
 
 fn needs_space(text: &str) -> bool {
     text.starts_with(' ') || text.starts_with('\t') || text.ends_with(' ') || text.ends_with('\t')
+}
+
+fn cell_fill(tc: &Element) -> Value {
+    tc.child_by_local("tcPr")
+        .and_then(|p| p.child_by_local("shd"))
+        .and_then(|e| e.attr_local("fill"))
+        .map_or(Value::Null, |c| json!(c))
+}
+
+fn cell_mar_json(mar: Option<&Element>) -> Value {
+    let Some(mar) = mar else {
+        return Value::Null;
+    };
+    json!({
+        "top": mar_side(mar, "top"),
+        "left": mar_side(mar, "left"),
+        "bottom": mar_side(mar, "bottom"),
+        "right": mar_side(mar, "right"),
+    })
+}
+
+fn mar_side(mar: &Element, local: &str) -> Value {
+    mar.child_by_local(local)
+        .and_then(|e| e.attr_local("w"))
+        .and_then(|s| s.parse::<i64>().ok())
+        .map_or(Value::Null, Value::from)
+}
+
+fn diagonal_json(tc: &Element, local: &str) -> Value {
+    let Some(el) = tc
+        .child_by_local("tcPr")
+        .and_then(|p| p.child_by_local("tcBorders"))
+        .and_then(|b| b.child_by_local(local))
+    else {
+        return Value::Null;
+    };
+    json!({
+        "val": el.attr_local("val"),
+        "sz": el.attr_local("sz").and_then(|s| s.parse::<i64>().ok()),
+        "color": el.attr_local("color"),
+    })
+}
+
+fn tbl_look_json(tbl: &Element) -> Value {
+    let Some(look) = tbl
+        .child_by_local("tblPr")
+        .and_then(|p| p.child_by_local("tblLook"))
+    else {
+        return Value::Null;
+    };
+    let bits = look
+        .attr_local("val")
+        .and_then(|s| u32::from_str_radix(s, 16).ok())
+        .unwrap_or(0);
+    let flag = |attr: &str, bit: u32| match look.attr_local(attr) {
+        Some(s) => matches!(s, "1" | "true" | "on"),
+        None => bits & bit != 0,
+    };
+    json!({
+        "firstRow": flag("firstRow", 0x0020),
+        "lastRow": flag("lastRow", 0x0040),
+        "firstColumn": flag("firstColumn", 0x0080),
+        "lastColumn": flag("lastColumn", 0x0100),
+        "bandedRows": !flag("noHBand", 0x0200),
+        "bandedColumns": !flag("noVBand", 0x0400),
+    })
+}
+
+fn tbl_pos_json(tbl: &Element) -> Value {
+    let Some(p) = tbl
+        .child_by_local("tblPr")
+        .and_then(|pr| pr.child_by_local("tblpPr"))
+    else {
+        return Value::Null;
+    };
+    json!({
+        "horzAnchor": p.attr_local("horzAnchor"),
+        "vertAnchor": p.attr_local("vertAnchor"),
+        "x": p.attr_local("tblpX").and_then(|s| s.parse::<i64>().ok()),
+        "y": p.attr_local("tblpY").and_then(|s| s.parse::<i64>().ok()),
+        "leftFromText": p.attr_local("leftFromText").and_then(|s| s.parse::<i64>().ok()),
+        "rightFromText": p.attr_local("rightFromText").and_then(|s| s.parse::<i64>().ok()),
+        "topFromText": p.attr_local("topFromText").and_then(|s| s.parse::<i64>().ok()),
+        "bottomFromText": p.attr_local("bottomFromText").and_then(|s| s.parse::<i64>().ok()),
+    })
+}
+
+fn ensure_tbl_pr(tbl: &mut Element) -> &mut Element {
+    if tbl.child_by_local("tblPr").is_none() {
+        let pr = Element::new(tbl.prefixed("tblPr"));
+        tbl.children.insert(0, Node::Element(pr));
+    }
+    tbl.child_by_local_mut("tblPr").unwrap()
+}
+
+fn remove_child(parent: &mut Element, local: &str) {
+    parent
+        .children
+        .retain(|n| !matches!(n, Node::Element(e) if e.local_name() == local));
+}
+
+fn set_attr(el: &mut Element, local: &str, val: &str) {
+    let key = el.prefixed(local);
+    el.set_attr(&key, val);
+}
+
+fn write_tbl_look(pr: &mut Element, patch: &TableLookPatch) {
+    let (cur_first, cur_last, cur_fcol, cur_lcol, cur_h, cur_v) = {
+        let existing = pr.child_by_local("tblLook");
+        (
+            existing
+                .and_then(|e| on_off_attr(e, "firstRow"))
+                .unwrap_or(true),
+            existing
+                .and_then(|e| on_off_attr(e, "lastRow"))
+                .unwrap_or(false),
+            existing
+                .and_then(|e| on_off_attr(e, "firstColumn"))
+                .unwrap_or(true),
+            existing
+                .and_then(|e| on_off_attr(e, "lastColumn"))
+                .unwrap_or(false),
+            existing
+                .and_then(|e| on_off_attr(e, "noHBand"))
+                .unwrap_or(false),
+            existing
+                .and_then(|e| on_off_attr(e, "noVBand"))
+                .unwrap_or(true),
+        )
+    };
+    let first_row = patch.first_row.unwrap_or(cur_first);
+    let last_row = patch.last_row.unwrap_or(cur_last);
+    let first_col = patch.first_column.unwrap_or(cur_fcol);
+    let last_col = patch.last_column.unwrap_or(cur_lcol);
+    let no_h = match patch.banded_rows {
+        Some(b) => !b,
+        None => cur_h,
+    };
+    let no_v = match patch.banded_columns {
+        Some(b) => !b,
+        None => cur_v,
+    };
+    let mut bits = 0u32;
+    if first_row {
+        bits |= 0x0020;
+    }
+    if last_row {
+        bits |= 0x0040;
+    }
+    if first_col {
+        bits |= 0x0080;
+    }
+    if last_col {
+        bits |= 0x0100;
+    }
+    if no_h {
+        bits |= 0x0200;
+    }
+    if no_v {
+        bits |= 0x0400;
+    }
+    let look = hf::ensure_child_in_order(pr, "tblLook", TBLPR_ORDER);
+    look.attrs.clear();
+    set_attr(look, "val", &format!("{bits:04X}"));
+    set_attr(look, "firstRow", if first_row { "1" } else { "0" });
+    set_attr(look, "lastRow", if last_row { "1" } else { "0" });
+    set_attr(look, "firstColumn", if first_col { "1" } else { "0" });
+    set_attr(look, "lastColumn", if last_col { "1" } else { "0" });
+    set_attr(look, "noHBand", if no_h { "1" } else { "0" });
+    set_attr(look, "noVBand", if no_v { "1" } else { "0" });
+}
+
+fn on_off_attr(el: &Element, local: &str) -> Option<bool> {
+    match el.attr_local(local)? {
+        "1" | "true" | "on" => Some(true),
+        "0" | "false" | "off" => Some(false),
+        _ => None,
+    }
+}
+
+fn patch_cell_mar(
+    pr: &mut Element,
+    local: &str,
+    order: &[&str],
+    top: Option<Option<u32>>,
+    left: Option<Option<u32>>,
+    bottom: Option<Option<u32>>,
+    right: Option<Option<u32>>,
+) {
+    if top.is_none() && left.is_none() && bottom.is_none() && right.is_none() {
+        return;
+    }
+    {
+        let mar = hf::ensure_child_in_order(pr, local, order);
+        set_mar_side(mar, "top", top);
+        set_mar_side(mar, "left", left);
+        set_mar_side(mar, "bottom", bottom);
+        set_mar_side(mar, "right", right);
+    }
+    let empty = pr
+        .child_by_local(local)
+        .map(|m| m.element_children().next().is_none())
+        .unwrap_or(true);
+    if empty {
+        remove_child(pr, local);
+    }
+}
+
+fn set_mar_side(mar: &mut Element, local: &str, val: Option<Option<u32>>) {
+    match val {
+        None => {}
+        Some(None) => remove_child(mar, local),
+        Some(Some(n)) => {
+            let el = hf::ensure_child_in_order(mar, local, &["top", "left", "bottom", "right"]);
+            set_attr(el, "w", &n.to_string());
+            set_attr(el, "type", "dxa");
+        }
+    }
+}
+
+fn write_diagonal(borders: &mut Element, local: &str, side: Option<&DiagonalBorder>) {
+    match side {
+        None => remove_child(borders, local),
+        Some(b) => {
+            let el = hf::ensure_child_in_order(borders, local, BORDER_ORDER);
+            el.attrs.clear();
+            set_attr(el, "val", &b.val);
+            if let Some(sz) = b.sz {
+                set_attr(el, "sz", &sz.to_string());
+            }
+            set_attr(el, "space", "0");
+            set_attr(el, "color", b.color.as_deref().unwrap_or("auto"));
+        }
+    }
 }
 
 fn xml_broken(detail: &str) -> Error {

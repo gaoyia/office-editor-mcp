@@ -315,6 +315,21 @@ pub fn apply_para(p: &mut Element, patch: ParaFormatPatch<'_>) {
     apply_on_off(ppr, "autoSpaceDN", patch.auto_space_dn);
 }
 
+pub fn bind_run_style(r: &mut Element, style_id: &str) {
+    ensure_rpr(r);
+    let rpr = r.child_by_local_mut("rPr").expect("刚写入 rPr");
+    let el = hf::ensure_child_in_order(rpr, "rStyle", RPR_ORDER);
+    let key = el.prefixed("val");
+    el.set_attr(&key, style_id);
+}
+
+pub fn unbind_run_style(r: &mut Element) {
+    let Some(rpr) = r.child_by_local_mut("rPr") else {
+        return;
+    };
+    remove_child(rpr, "rStyle");
+}
+
 pub fn apply_run(r: &mut Element, patch: RunFormatPatch<'_>) {
     ensure_rpr(r);
     let rpr = r.child_by_local_mut("rPr").expect("刚写入 rPr");
@@ -440,6 +455,10 @@ fn runs_json(p: &Element, para_id: &str) -> Vec<Value> {
             json!({
                 "id": format!("{para_id}/run:{n}"),
                 "index": n,
+                "style": rpr
+                    .and_then(|e| e.child_by_local("rStyle"))
+                    .and_then(|e| e.attr_local("val"))
+                    .map(str::to_string),
                 "text": run_visible_text(r),
                 "bold": rpr.and_then(|e| on_off_of(e, "b")),
                 "italic": rpr.and_then(|e| on_off_of(e, "i")),

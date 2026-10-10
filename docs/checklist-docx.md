@@ -29,6 +29,7 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 2026-10-10 补跑 `docx-east-asia.ps1`，Ea1–Ea8 通过。无 Repair。COM `FarEastLineBreakControl` / `HangingPunctuation` / `AddSpaceBetweenFarEastAndAlpha` 对得上，`EmphasisMark=1`。
 2026-10-10 补跑 `docx-drawing-hlink.ps1`，Dh1–Dh6 通过。无 Repair。COM 图上 `Hyperlink.Address` 对得上。`hyperlinkCount` 仍为 0。内部书签关系 `Target="#SrcBm"` 且无 `TargetMode`。
 2026-10-10 补跑 `docx-drawing-shape.ps1`，Ds1–Ds8 通过。无 Repair。COM 矩形 `AutoShapeType=1`，椭圆 `9`，填色红 `RGB=255`，描边蓝 `RGB=16711680`。
+2026-10-10 补跑 `docx-style-table.ps1`，Sy1–Sy6、Tf1–Tf6 通过。无 Repair。COM 字符样式 `Color` RGB=255、`Bold=-1`。表 `WrapAroundText=True`，格底纹 `RGB=255`，斜线 `Borders.Item(-7)` 的 `LineStyle=1`。
 
 - **C1** ✅
   - Word 16.0 能打开 `manual-check/office/out/docx-create.docx`，标题栏无 Repair
@@ -140,6 +141,10 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
   - Word 16.0：`docx-table.ps1`，8 PASS / 0 FAIL
   - 名单、改字、增行增列、删表、create 2×2、合并、最后一行 `InvalidField`
   - 标题栏无 Repair
+- **Tf1–Tf6** ✅
+  - Word 16.0：`docx-style-table.ps1`，6 PASS / 0 FAIL
+  - 名单字段、浮动 `WrapAroundText`、表边距 6 磅、格底纹 RGB=255、斜线 `LineStyle=1`、表格样式与 `bandedRows`
+  - 标题栏无 Repair
 - **Rv1–Rv6** ✅
   - Word 16.0：`docx-revision.ps1`，6 PASS / 0 FAIL
   - 名单、接受删除、拒绝插入、接受插入、拒绝删除、带修订段 `setParaText` 得 `NotImplemented`
@@ -200,6 +205,10 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 - **St1–St6** ✅
   - Word 16.0：`docx-style.ps1`，6 PASS / 0 FAIL
   - 名单、换 Heading2、大纲对得上、改 Normal 为 24 磅、去掉 Heading1 加粗、解绑
+  - 标题栏无 Repair
+- **Sy1–Sy6** ✅
+  - Word 16.0：`docx-style-table.ps1`，6 PASS / 0 FAIL
+  - 插字符样式、COM 红加粗、run `style=ooxpChar`、删除自定义、拒删 Normal、xlsx / numbering 拒写
   - 标题栏无 Repair
 - **Sc1–Sc6** ✅
   - Word 16.0：`docx-insert-section.ps1`，6 PASS / 0 FAIL
@@ -917,6 +926,20 @@ Word COM 的 `PageSetup` 边距与纸张单位是磅，等于 twip ÷ 20。手�
 | Tb7 | 合并 | `mergeCells` 合并第一行两格后 Word 无修复；COM 第一行单元格数变为 1 |
 | Tb8 | 最后一行 | 对仅剩一行的表 `deleteRow` 得 `InvalidField`，文件未写坏 |
 
+## 表格外观
+
+表级样式、`tblLook`、浮动、默认格边距；单元格底纹、格边距与斜线。不算自动列宽。create 本期不写这些字段。
+手测脚本 `manual-check/office/cases/docx-style-table.ps1`。编号 Tf，不要和 Tb、T 撞。现有 Tb1–Tb8 继续过。
+
+| 序号 | 检查 | 通过标准 |
+| --- | --- | --- |
+| Tf1 | 名单字段 | 给了 `scope.tables` 后表上有 `style` / `look` / `pos` / `cellMar`，格上有 `fill` / `cellMar` / `tl2br` / `tr2bl` |
+| Tf2 | 浮动 | `setTableFloat` 后树上 `pos.x` 对得上。Word 无修复。COM `Rows.WrapAroundText` 为 true |
+| Tf3 | 表边距 | `setTableCellMar` 写 120/160 twip 后树上对得上。Word 无修复。COM 上边距约为 6 磅 |
+| Tf4 | 底纹 | `setCellFormat` 写 `fill: FF0000` 后树上为 `FF0000`。Word 无修复。COM 该格 `Shading.BackgroundPatternColor` 的 RGB 为 255 |
+| Tf5 | 斜线 | `setCellFormat` 写 `tl2br` 后树上 `val` 为 `single`。Word 无修复。COM `Borders.Item(-7)` 的 `LineStyle` 非 0 |
+| Tf6 | 表样式 | `insertStyle` 表格样式再 `setTableStyle` 后树上 `style` 与 `look.bandedRows` 对得上，无修复 |
+
 ## 修订痕迹
 
 准备一份带修订的样例：Word 打开跟踪修订后，一段里删几个字、另一段里插入几个字，另存。`inspect` 带 `scope.revisions: true`。
@@ -1075,6 +1098,20 @@ Word 跟踪修订下改表单元格底纹、插入空段、删除表行。`inspe
 | St4 | 改 Normal | `setStyle` 把 Normal 的 `sz` 改成 48 后，未点名段 Word 字号约为 24 磅，无修复 |
 | St5 | 改标题 | `setStyle` 去掉 Heading1 加粗后，标题段 Word 不再加粗，无修复 |
 | St6 | 去掉 | `setParaStyle` 且 `style` 为 `null` 后该段树上 `style` 为 `null`，无修复 |
+
+## 样式增删与字符样式
+
+增删自定义样式、改字符样式定义、给正文 run 套 `rStyle`。不扫描引用。create 本期不写 `styles[]`。
+手测脚本 `manual-check/office/cases/docx-style-table.ps1`。编号 Sy，不要和 St 撞。
+
+| 序号 | 检查 | 通过标准 |
+| --- | --- | --- |
+| Sy1 | 插字符样式 | `insertStyle` 后 `scope.styles` 能列出 `style:ooxpChar`，`type` 为 `character` |
+| Sy2 | 改定义 | `setStyle` 写 `color` / `bold` 后，套到 run 上 Word 该 run 为红且加粗，无修复 |
+| Sy3 | 套 run | `setRunStyle` 后树上该 run 的 `style` 为 `ooxpChar` |
+| Sy4 | 删除 | `deleteStyle` 后名单不再有 `ooxpChar`，Word 无修复 |
+| Sy5 | 拒删内置 | 对 `style:Normal` 发 `deleteStyle` 报 `InvalidField` |
+| Sy6 | 拒错 | 对 xlsx 发 `insertStyle` 报 `InvalidField`。`type` 为 `numbering` 报 `InvalidField`。不强制开 Word |
 
 ## 段落与 run 直接格式
 

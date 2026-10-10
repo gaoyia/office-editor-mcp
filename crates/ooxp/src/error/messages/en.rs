@@ -678,6 +678,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::InsertNumberingNeedsDocument => {
                 "insertNumbering id must be docx:document".into()
             }
+            IdReason::InsertStyleNeedsDocument => {
+                "insertStyle id must be docx:document".into()
+            }
             IdReason::NumPrefix => "Numbering instance id must be num:N".into(),
             IdReason::NumIndexNotInt => "num id must be a positive integer".into(),
             IdReason::NumIndexFromOne => "num id starts at 1".into(),
@@ -694,6 +697,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             }
             IdReason::SetRunFormatNeedsRun => {
                 "setRunFormat id must be a paragraph id plus /run:N".into()
+            }
+            IdReason::SetRunStyleNeedsStoryRun => {
+                "setRunStyle id must be a body or header/footer run id".into()
             }
             IdReason::RunPrefix => "Run id must be a paragraph id plus /run:N".into(),
             IdReason::RunIndexNotInt => "Run index must be an integer".into(),
@@ -1573,7 +1579,32 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             "setParaNumbering requires num (a num: id or null)".into()
         }
         ErrorKind::StyleNotFound { id } => format!("Style not found: {id}"),
-        ErrorKind::SetStyleNeedsParagraph => "setStyle and setParaStyle require a paragraph style".into(),
+        ErrorKind::SetStyleNeedsParagraph => "setParaStyle requires a paragraph style".into(),
+        ErrorKind::InvalidStyleType => "insertStyle and setStyle do not accept numbering styles".into(),
+        ErrorKind::StyleIdTaken => "styleId is already used".into(),
+        ErrorKind::InvalidStyleIdToken => {
+            "styleId must start with a letter or underscore, then letters, digits, underscores or hyphens".into()
+        }
+        ErrorKind::StyleNotCustom => "deleteStyle only deletes custom styles with customStyle".into(),
+        ErrorKind::NeedInsertStyleField => "insertStyle requires styleId and type".into(),
+        ErrorKind::SetStyleSpacingNeedsParagraph => {
+            "setStyle cannot set before or after on a character style".into()
+        }
+        ErrorKind::SetRunStyleNeedsCharacter => "setRunStyle requires a character style".into(),
+        ErrorKind::SetTableStyleNeedsTable => "setTableStyle requires a table style".into(),
+        ErrorKind::NeedSetTableStyleField => {
+            "setTableStyle requires at least one of style or look".into()
+        }
+        ErrorKind::NeedSetTableFloatField => "setTableFloat requires pos".into(),
+        ErrorKind::InvalidTblAnchor => {
+            "horzAnchor and vertAnchor must be margin, page, or text".into()
+        }
+        ErrorKind::NeedSetTableCellMarField => {
+            "setTableCellMar requires at least one of top, left, bottom, or right".into()
+        }
+        ErrorKind::NeedSetCellFormatField => {
+            "setCellFormat requires at least one of fill, cell margins, or diagonals".into()
+        }
         ErrorKind::NeedSetStyleField => {
             "setStyle requires at least one of font, eastAsiaFont, sz, bold, color, before, or after"
                 .into()
@@ -1581,7 +1612,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::EmptyStyleFont => "font and eastAsiaFont must not be empty".into(),
         ErrorKind::InvalidStyleColor => "color must be six hexadecimal RGB digits".into(),
         ErrorKind::NeedSetParaStyleStyle => {
-            "setParaStyle requires style (a style: id or null)".into()
+            "setParaStyle / setRunStyle requires style (a style: id or null)".into()
         }
         ErrorKind::NeedSetParaFormatField => {
             "setParaFormat requires at least one of align, left, right, firstLine, hanging, before, after, line, lineRule, kinsoku, overflowPunct, topLinePunct, autoSpaceDE, or autoSpaceDN"

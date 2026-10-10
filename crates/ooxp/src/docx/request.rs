@@ -709,6 +709,66 @@ pub struct SetParaStyleOp {
 }
 
 #[derive(Debug, Clone)]
+pub struct InsertStyleOp {
+    pub style_id: String,
+    pub ty: String,
+    pub name: String,
+    pub based_on: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct DeleteStyleOp {
+    pub id: String,
+    pub style_id: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetRunStyleOp {
+    pub id: String,
+    pub para: ParaTarget,
+    pub run: usize,
+    pub style: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetTableStyleOp {
+    pub id: String,
+    pub target: TableRef,
+    pub style: Option<Option<String>>,
+    pub look: Option<Option<super::tbl::TableLookPatch>>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetTableFloatOp {
+    pub id: String,
+    pub target: TableRef,
+    pub pos: Option<super::tbl::TableFloat>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetTableCellMarOp {
+    pub id: String,
+    pub target: TableRef,
+    pub top: Option<Option<u32>>,
+    pub left: Option<Option<u32>>,
+    pub bottom: Option<Option<u32>>,
+    pub right: Option<Option<u32>>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetCellFormatOp {
+    pub id: String,
+    pub target: TableRef,
+    pub fill: Option<Option<String>>,
+    pub top: Option<Option<u32>>,
+    pub left: Option<Option<u32>>,
+    pub bottom: Option<Option<u32>>,
+    pub right: Option<Option<u32>>,
+    pub tl2br: Option<Option<super::tbl::DiagonalBorder>>,
+    pub tr2bl: Option<Option<super::tbl::DiagonalBorder>>,
+}
+
+#[derive(Debug, Clone)]
 pub struct SetParaFormatOp {
     pub id: String,
     pub para: ParaTarget,
@@ -1181,6 +1241,13 @@ pub enum DocxOp {
     SetParaNumbering(SetParaNumberingOp),
     SetStyle(SetStyleOp),
     SetParaStyle(SetParaStyleOp),
+    InsertStyle(InsertStyleOp),
+    DeleteStyle(DeleteStyleOp),
+    SetRunStyle(SetRunStyleOp),
+    SetTableStyle(SetTableStyleOp),
+    SetTableFloat(SetTableFloatOp),
+    SetTableCellMar(SetTableCellMarOp),
+    SetCellFormat(SetCellFormatOp),
     SetParaFormat(SetParaFormatOp),
     SetRunFormat(SetRunFormatOp),
     SetTextBoxLink(SetTextBoxLinkOp),
@@ -1799,6 +1866,15 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<DocxOp>, Error> {
             }
             "setStyle" => out.push(DocxOp::SetStyle(parse_set_style(obj, i)?)),
             "setParaStyle" => out.push(DocxOp::SetParaStyle(parse_set_para_style(obj, i)?)),
+            "insertStyle" => out.push(DocxOp::InsertStyle(parse_insert_style(obj, i)?)),
+            "deleteStyle" => out.push(DocxOp::DeleteStyle(parse_delete_style(obj, i)?)),
+            "setRunStyle" => out.push(DocxOp::SetRunStyle(parse_set_run_style(obj, i)?)),
+            "setTableStyle" => out.push(DocxOp::SetTableStyle(parse_set_table_style(obj, i)?)),
+            "setTableFloat" => out.push(DocxOp::SetTableFloat(parse_set_table_float(obj, i)?)),
+            "setTableCellMar" => {
+                out.push(DocxOp::SetTableCellMar(parse_set_table_cell_mar(obj, i)?))
+            }
+            "setCellFormat" => out.push(DocxOp::SetCellFormat(parse_set_cell_format(obj, i)?)),
             "setParaFormat" => out.push(DocxOp::SetParaFormat(parse_set_para_format(obj, i)?)),
             "setRunFormat" => out.push(DocxOp::SetRunFormat(parse_set_run_format(obj, i)?)),
             "setTextBoxLink" => out.push(DocxOp::SetTextBoxLink(parse_set_txbx_link(obj, i)?)),
@@ -5557,6 +5633,359 @@ fn parse_set_para_style(
     Ok(SetParaStyleOp { id, para, style })
 }
 
+fn parse_insert_style(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<InsertStyleOp, Error> {
+    deny_keys(obj, i, &["op", "id", "styleId", "type", "name", "basedOn"])?;
+    let id = require_op_id(obj, i)?;
+    if id != "docx:document" {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::InsertStyleNeedsDocument,
+            },
+            format!("ops[{i}].id"),
+        ));
+    }
+    let style_id = match obj.get("styleId") {
+        Some(Value::String(s)) => {
+            super::styles::validate_style_id_token(s, &format!("ops[{i}].styleId"))?;
+            s.clone()
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "styleId".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].styleId"),
+            ));
+        }
+        None => {
+            return Err(Error::with_path(
+                ErrorKind::NeedInsertStyleField,
+                format!("ops[{i}].styleId"),
+            ));
+        }
+    };
+    let ty = match obj.get("type").and_then(Value::as_str) {
+        Some(t @ ("paragraph" | "character" | "table")) => t.to_string(),
+        Some("numbering") | Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::InvalidStyleType,
+                format!("ops[{i}].type"),
+            ));
+        }
+        None => {
+            return Err(Error::with_path(
+                ErrorKind::NeedInsertStyleField,
+                format!("ops[{i}].type"),
+            ));
+        }
+    };
+    let name = match obj.get("name") {
+        None => style_id.clone(),
+        Some(Value::String(s)) if !s.is_empty() => s.clone(),
+        Some(Value::String(_)) => {
+            return Err(Error::with_path(
+                ErrorKind::NeedInsertStyleField,
+                format!("ops[{i}].name"),
+            ));
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "name".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].name"),
+            ));
+        }
+    };
+    let based_on = match obj.get("basedOn") {
+        None | Some(Value::Null) => None,
+        Some(Value::String(s)) => Some(super::styles::parse_style_ref(
+            s,
+            &format!("ops[{i}].basedOn"),
+        )?),
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "basedOn".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].basedOn"),
+            ));
+        }
+    };
+    Ok(InsertStyleOp {
+        style_id,
+        ty,
+        name,
+        based_on,
+    })
+}
+
+fn parse_delete_style(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<DeleteStyleOp, Error> {
+    deny_keys(obj, i, &["op", "id"])?;
+    let id = require_op_id(obj, i)?;
+    let style_id = super::styles::parse_style_ref(&id, &format!("ops[{i}].id"))?;
+    Ok(DeleteStyleOp { id, style_id })
+}
+
+fn parse_set_run_style(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<SetRunStyleOp, Error> {
+    deny_keys(obj, i, &["op", "id", "style"])?;
+    let id = require_op_id(obj, i)?;
+    let (para, run) = super::format::parse_run_id(&id, &format!("ops[{i}].id"))?;
+    match &para {
+        ParaTarget::Body(_) | ParaTarget::HeaderFooter { .. } => {}
+        _ => {
+            return Err(Error::with_path(
+                ErrorKind::InvalidId {
+                    reason: IdReason::SetRunStyleNeedsStoryRun,
+                },
+                format!("ops[{i}].id"),
+            ));
+        }
+    }
+    let style = match obj.get("style") {
+        Some(Value::Null) => None,
+        Some(Value::String(s)) => Some(super::styles::parse_style_ref(
+            s,
+            &format!("ops[{i}].style"),
+        )?),
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "style".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].style"),
+            ));
+        }
+        None => {
+            return Err(Error::with_path(
+                ErrorKind::NeedSetParaStyleStyle,
+                format!("ops[{i}].style"),
+            ));
+        }
+    };
+    Ok(SetRunStyleOp {
+        id,
+        para,
+        run,
+        style,
+    })
+}
+
+fn parse_set_table_style(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<SetTableStyleOp, Error> {
+    deny_keys(obj, i, &["op", "id", "style", "look"])?;
+    let id = require_op_id(obj, i)?;
+    let target = tbl::parse_table_only(&id, i, IdReason::NeedTableId)?;
+    let style = match obj.get("style") {
+        None => None,
+        Some(Value::Null) => Some(None),
+        Some(Value::String(s)) => Some(Some(super::styles::parse_style_ref(
+            s,
+            &format!("ops[{i}].style"),
+        )?)),
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "style".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].style"),
+            ));
+        }
+    };
+    let look = match obj.get("look") {
+        None => None,
+        Some(Value::Null) => Some(None),
+        Some(Value::Object(m)) => {
+            deny_keys(
+                m,
+                i,
+                &[
+                    "firstRow",
+                    "lastRow",
+                    "firstColumn",
+                    "lastColumn",
+                    "bandedRows",
+                    "bandedColumns",
+                ],
+            )?;
+            Some(Some(super::tbl::TableLookPatch {
+                first_row: parse_opt_bool(m, i, "firstRow")?,
+                last_row: parse_opt_bool(m, i, "lastRow")?,
+                first_column: parse_opt_bool(m, i, "firstColumn")?,
+                last_column: parse_opt_bool(m, i, "lastColumn")?,
+                banded_rows: parse_opt_bool(m, i, "bandedRows")?,
+                banded_columns: parse_opt_bool(m, i, "bandedColumns")?,
+            }))
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "look".into(),
+                    expected: TypeName::Object,
+                },
+                format!("ops[{i}].look"),
+            ));
+        }
+    };
+    if style.is_none() && look.is_none() {
+        return Err(Error::with_path(
+            ErrorKind::NeedSetTableStyleField,
+            format!("ops[{i}]"),
+        ));
+    }
+    Ok(SetTableStyleOp {
+        id,
+        target,
+        style,
+        look,
+    })
+}
+
+fn parse_set_table_float(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<SetTableFloatOp, Error> {
+    deny_keys(obj, i, &["op", "id", "pos"])?;
+    let id = require_op_id(obj, i)?;
+    let target = tbl::parse_table_only(&id, i, IdReason::NeedTableId)?;
+    let pos = match obj.get("pos") {
+        Some(Value::Null) => None,
+        Some(Value::Object(m)) => {
+            deny_keys(
+                m,
+                i,
+                &[
+                    "horzAnchor",
+                    "vertAnchor",
+                    "x",
+                    "y",
+                    "leftFromText",
+                    "rightFromText",
+                    "topFromText",
+                    "bottomFromText",
+                ],
+            )?;
+            let horz = parse_opt_tbl_anchor(m, i, "horzAnchor")?;
+            let vert = parse_opt_tbl_anchor(m, i, "vertAnchor")?;
+            Some(super::tbl::TableFloat {
+                horz_anchor: horz,
+                vert_anchor: vert,
+                x: parse_opt_i32(m, i, "x")?,
+                y: parse_opt_i32(m, i, "y")?,
+                left_from_text: parse_opt_u32_min(m, i, "leftFromText", 0)?,
+                right_from_text: parse_opt_u32_min(m, i, "rightFromText", 0)?,
+                top_from_text: parse_opt_u32_min(m, i, "topFromText", 0)?,
+                bottom_from_text: parse_opt_u32_min(m, i, "bottomFromText", 0)?,
+            })
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "pos".into(),
+                    expected: TypeName::Object,
+                },
+                format!("ops[{i}].pos"),
+            ));
+        }
+        None => {
+            return Err(Error::with_path(
+                ErrorKind::NeedSetTableFloatField,
+                format!("ops[{i}].pos"),
+            ));
+        }
+    };
+    Ok(SetTableFloatOp { id, target, pos })
+}
+
+fn parse_set_table_cell_mar(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<SetTableCellMarOp, Error> {
+    deny_keys(obj, i, &["op", "id", "top", "left", "bottom", "right"])?;
+    let id = require_op_id(obj, i)?;
+    let target = tbl::parse_table_only(&id, i, IdReason::NeedTableId)?;
+    let top = parse_opt_null_u32(obj, i, "top")?;
+    let left = parse_opt_null_u32(obj, i, "left")?;
+    let bottom = parse_opt_null_u32(obj, i, "bottom")?;
+    let right = parse_opt_null_u32(obj, i, "right")?;
+    if top.is_none() && left.is_none() && bottom.is_none() && right.is_none() {
+        return Err(Error::with_path(
+            ErrorKind::NeedSetTableCellMarField,
+            format!("ops[{i}]"),
+        ));
+    }
+    Ok(SetTableCellMarOp {
+        id,
+        target,
+        top,
+        left,
+        bottom,
+        right,
+    })
+}
+
+fn parse_set_cell_format(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<SetCellFormatOp, Error> {
+    deny_keys(
+        obj,
+        i,
+        &[
+            "op", "id", "fill", "top", "left", "bottom", "right", "tl2br", "tr2bl",
+        ],
+    )?;
+    let id = require_op_id(obj, i)?;
+    let target = tbl::parse_cell_ref(&id, i)?;
+    let fill = parse_opt_null_rgb(obj, i, "fill")?;
+    let top = parse_opt_null_u32(obj, i, "top")?;
+    let left = parse_opt_null_u32(obj, i, "left")?;
+    let bottom = parse_opt_null_u32(obj, i, "bottom")?;
+    let right = parse_opt_null_u32(obj, i, "right")?;
+    let tl2br = parse_opt_null_diagonal(obj, i, "tl2br")?;
+    let tr2bl = parse_opt_null_diagonal(obj, i, "tr2bl")?;
+    if fill.is_none()
+        && top.is_none()
+        && left.is_none()
+        && bottom.is_none()
+        && right.is_none()
+        && tl2br.is_none()
+        && tr2bl.is_none()
+    {
+        return Err(Error::with_path(
+            ErrorKind::NeedSetCellFormatField,
+            format!("ops[{i}]"),
+        ));
+    }
+    Ok(SetCellFormatOp {
+        id,
+        target,
+        fill,
+        top,
+        left,
+        bottom,
+        right,
+        tl2br,
+        tr2bl,
+    })
+}
+
 fn parse_set_para_format(
     obj: &serde_json::Map<String, Value>,
     i: usize,
@@ -6033,6 +6462,152 @@ fn parse_opt_u32_range(
             ErrorKind::WrongType {
                 field: field.into(),
                 expected: TypeName::Integer,
+            },
+            format!("ops[{i}].{field}"),
+        )),
+    }
+}
+
+fn parse_opt_tbl_anchor(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+    field: &str,
+) -> Result<Option<String>, Error> {
+    match obj.get(field) {
+        None => Ok(None),
+        Some(Value::String(s)) if super::tbl::TBL_ANCHORS.contains(&s.as_str()) => {
+            Ok(Some(s.clone()))
+        }
+        Some(Value::String(_)) => Err(Error::with_path(
+            ErrorKind::InvalidTblAnchor,
+            format!("ops[{i}].{field}"),
+        )),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::String,
+            },
+            format!("ops[{i}].{field}"),
+        )),
+    }
+}
+
+fn parse_opt_i32(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+    field: &str,
+) -> Result<Option<i32>, Error> {
+    match obj.get(field) {
+        None => Ok(None),
+        Some(Value::Number(n)) => {
+            let v = n.as_i64().ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::WrongType {
+                        field: field.into(),
+                        expected: TypeName::Integer,
+                    },
+                    format!("ops[{i}].{field}"),
+                )
+            })?;
+            i32::try_from(v).map(Some).map_err(|_| {
+                Error::with_path(
+                    ErrorKind::WrongType {
+                        field: field.into(),
+                        expected: TypeName::Integer,
+                    },
+                    format!("ops[{i}].{field}"),
+                )
+            })
+        }
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::Integer,
+            },
+            format!("ops[{i}].{field}"),
+        )),
+    }
+}
+
+fn parse_opt_null_rgb(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+    field: &str,
+) -> Result<Option<Option<String>>, Error> {
+    match obj.get(field) {
+        None => Ok(None),
+        Some(Value::Null) => Ok(Some(None)),
+        Some(Value::String(s)) if is_rgb_hex(s) => Ok(Some(Some(s.to_ascii_uppercase()))),
+        Some(Value::String(_)) => Err(Error::with_path(
+            ErrorKind::InvalidStyleColor,
+            format!("ops[{i}].{field}"),
+        )),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::String,
+            },
+            format!("ops[{i}].{field}"),
+        )),
+    }
+}
+
+fn parse_opt_null_diagonal(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+    field: &str,
+) -> Result<Option<Option<super::tbl::DiagonalBorder>>, Error> {
+    match obj.get(field) {
+        None => Ok(None),
+        Some(Value::Null) => Ok(Some(None)),
+        Some(Value::Object(m)) => {
+            deny_keys(m, i, &["val", "sz", "color"])?;
+            let val = match m.get("val") {
+                None => "single".to_string(),
+                Some(Value::String(s)) if super::tbl::is_diagonal_val(s) => s.clone(),
+                Some(Value::String(_)) => {
+                    return Err(Error::with_path(
+                        ErrorKind::InvalidPageBorderVal,
+                        format!("ops[{i}].{field}.val"),
+                    ));
+                }
+                Some(_) => {
+                    return Err(Error::with_path(
+                        ErrorKind::WrongType {
+                            field: "val".into(),
+                            expected: TypeName::String,
+                        },
+                        format!("ops[{i}].{field}.val"),
+                    ));
+                }
+            };
+            let sz = parse_opt_u32_min(m, i, "sz", 0)?;
+            let color = match m.get("color") {
+                None => None,
+                Some(Value::String(s)) if s.eq_ignore_ascii_case("auto") => Some("auto".into()),
+                Some(Value::String(s)) if is_rgb_hex(s) => Some(s.to_ascii_uppercase()),
+                Some(Value::String(_)) => {
+                    return Err(Error::with_path(
+                        ErrorKind::InvalidPageBorderColor,
+                        format!("ops[{i}].{field}.color"),
+                    ));
+                }
+                Some(_) => {
+                    return Err(Error::with_path(
+                        ErrorKind::WrongType {
+                            field: "color".into(),
+                            expected: TypeName::String,
+                        },
+                        format!("ops[{i}].{field}.color"),
+                    ));
+                }
+            };
+            Ok(Some(Some(super::tbl::DiagonalBorder { val, sz, color })))
+        }
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::Object,
             },
             format!("ops[{i}].{field}"),
         )),
