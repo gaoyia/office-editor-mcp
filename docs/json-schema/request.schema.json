@@ -609,6 +609,12 @@
                 "$ref": "xlsx.schema.json#/$defs/setOutlineOp"
               },
               {
+                "$ref": "xlsx.schema.json#/$defs/setRowHiddenOp"
+              },
+              {
+                "$ref": "xlsx.schema.json#/$defs/setColHiddenOp"
+              },
+              {
                 "$ref": "xlsx.schema.json#/$defs/setHeaderFooterTextOp"
               },
               {

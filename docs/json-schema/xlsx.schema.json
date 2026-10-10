@@ -2654,6 +2654,13 @@
         "columnSort": {
           "type": "boolean"
         },
+        "sortMethod": {
+          "enum": [
+            "none",
+            "pinYin",
+            "stroke"
+          ]
+        },
         "columns": {
           "type": "array",
           "minItems": 1,
@@ -2670,6 +2677,33 @@
               },
               "descending": {
                 "type": "boolean"
+              },
+              "sortBy": {
+                "enum": [
+                  "value",
+                  "cellColor",
+                  "fontColor",
+                  "icon"
+                ]
+              },
+              "customList": {
+                "type": "string",
+                "minLength": 1
+              },
+              "dxfId": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "color": {
+                "$ref": "#/$defs/cellColor"
+              },
+              "iconSet": {
+                "type": "string",
+                "minLength": 1
+              },
+              "iconId": {
+                "type": "integer",
+                "minimum": 0
               }
             }
           }
@@ -2883,6 +2917,58 @@
           ]
         }
       ]
+    },
+    "setRowHiddenOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "rows",
+        "hidden"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setRowHidden"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "rows": {
+          "type": "string",
+          "minLength": 1
+        },
+        "hidden": {
+          "type": "boolean"
+        }
+      }
+    },
+    "setColHiddenOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "col",
+        "hidden"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setColHidden"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "col": {
+          "type": "string",
+          "minLength": 1
+        },
+        "hidden": {
+          "type": "boolean"
+        }
+      }
     },
     "setHeaderFooterTextOp": {
       "type": "object",

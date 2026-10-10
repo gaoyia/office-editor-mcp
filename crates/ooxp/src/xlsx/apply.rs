@@ -2,7 +2,10 @@
 
 use super::formula;
 use super::hyperlink;
-use super::request::{Patch, SetCellOp, SetCellValue, SetProtectionOp, XlsxOp};
+use super::request::{
+    DxfPatch, FillPatch, FontPatch, Patch, SetCellOp, SetCellValue, SetProtectionOp,
+    SetSortStateOp, XlsxOp,
+};
 use super::sparkline;
 use crate::error::{Error, ErrorKind, IdReason, RelSource};
 use crate::opc::{self, ContentTypes, Package, Relationships};
@@ -446,9 +449,11 @@ pub fn apply(bytes: &[u8], ops: &[XlsxOp]) -> Result<Vec<u8>, Error> {
                         format!("ops[{i}].id"),
                     ));
                 }
+                let mut op = op.clone();
+                intern_sort_dxfs(&mut pkg, &wb_part, &mut styles_doc, &mut op)?;
                 load_dirty(&pkg, &mut dirty_sheets, &part, false)?;
                 let doc = dirty_of(&mut dirty_sheets, &part);
-                super::view::apply_sort(&mut doc.root, kind, op, i)?;
+                super::view::apply_sort(&mut doc.root, kind, &op, i)?;
             }
             XlsxOp::InsertCustomView(op) => {
                 load_content_sheets(&pkg, &sheet_index, &mut dirty_sheets)?;
@@ -493,6 +498,18 @@ pub fn apply(bytes: &[u8], ops: &[XlsxOp]) -> Result<Vec<u8>, Error> {
                 load_dirty(&pkg, &mut dirty_sheets, &part, true)?;
                 let doc = dirty_of(&mut dirty_sheets, &part);
                 super::outline::apply_set_outline(&mut doc.root, op, i)?;
+            }
+            XlsxOp::SetRowHidden(op) => {
+                let part = require_outline_worksheet(&sheet_index, &op.sheet, i)?;
+                load_dirty(&pkg, &mut dirty_sheets, &part, true)?;
+                let doc = dirty_of(&mut dirty_sheets, &part);
+                super::outline::apply_set_row_hidden(&mut doc.root, op);
+            }
+            XlsxOp::SetColHidden(op) => {
+                let part = require_outline_worksheet(&sheet_index, &op.sheet, i)?;
+                load_dirty(&pkg, &mut dirty_sheets, &part, true)?;
+                let doc = dirty_of(&mut dirty_sheets, &part);
+                super::outline::apply_set_col_hidden(&mut doc.root, op);
             }
             XlsxOp::InsertComment(op) => {
                 let cell = a1::parse_cell(&op.a1)?;
@@ -2175,6 +2192,51 @@ pub(crate) fn remove_calc_chain(pkg: &mut Package, wb_part: &str) -> Result<(), 
     if changed_rels {
         types.write_to(pkg)?;
         rels.write_to(pkg, wb_part)?;
+    }
+    Ok(())
+}
+
+fn intern_sort_dxfs(
+    pkg: &mut Package,
+    wb_part: &str,
+    styles_doc: &mut Option<(String, Document)>,
+    op: &mut SetSortStateOp,
+) -> Result<(), Error> {
+    if !op.columns.iter().any(|c| c.color.is_some()) {
+        return Ok(());
+    }
+    for cond in &mut op.columns {
+        let Some(color) = cond.color.take() else {
+            continue;
+        };
+        let patch = if cond.sort_by.as_deref() == Some("fontColor") {
+            DxfPatch {
+                font: Some(FontPatch {
+                    name: None,
+                    sz: None,
+                    bold: None,
+                    italic: None,
+                    underline: None,
+                    color: Some(color),
+                }),
+                fill: None,
+                border: None,
+            }
+        } else {
+            DxfPatch {
+                font: None,
+                fill: Some(FillPatch {
+                    pattern: Some("solid".into()),
+                    fg: Some(color),
+                    bg: None,
+                }),
+                border: None,
+            }
+        };
+        let styles_root = style::ensure_styles(pkg, wb_part, styles_doc)?;
+        if let Some(id) = style::intern_dxf(styles_root, &patch) {
+            cond.dxf_id = Some(id as u32);
+        }
     }
     Ok(())
 }

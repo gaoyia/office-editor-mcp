@@ -8,6 +8,7 @@ use crate::xml::{Element, Node};
 use super::a1::{self, CellRef};
 use super::layout;
 use super::request::{SetAutoFilterOp, SetSheetViewOp, SetSortStateOp};
+use super::style;
 
 const DEF_ZOOM: u32 = 100;
 const DEF_CELL: &str = "A1";
@@ -44,7 +45,7 @@ pub(crate) fn inspect_filter(sheet: &Element) -> Value {
     }
 }
 
-pub(crate) fn inspect_sort(sheet: &Element) -> Value {
+pub(crate) fn inspect_sort(sheet: &Element, styles: &style::Stylebook) -> Value {
     let Some(st) = sheet.child_by_local("sortState") else {
         return Value::Null;
     };
@@ -73,6 +74,32 @@ pub(crate) fn inspect_sort(sheet: &Element) -> Value {
             "descending".into(),
             json!(xml_attr_true(cond, "descending")),
         );
+        let sort_by = cond.attr("sortBy").unwrap_or("");
+        let sort_by = match sort_by {
+            "cellColor" | "fontColor" | "icon" => Some(sort_by),
+            _ => None,
+        };
+        if let Some(by) = sort_by {
+            item.insert("sortBy".into(), json!(by));
+        }
+        if let Some(list) = cond.attr("customList") {
+            item.insert("customList".into(), json!(list));
+        }
+        let dxf_id = cond.attr("dxfId").and_then(|s| s.parse::<u32>().ok());
+        if let Some(id) = dxf_id {
+            item.insert("dxfId".into(), json!(id));
+        }
+        if let (Some(by), Some(id)) = (sort_by, dxf_id) {
+            if let Some(color) = sort_color_of(styles, by, id as usize) {
+                item.insert("color".into(), color);
+            }
+        }
+        if let Some(set) = cond.attr("iconSet") {
+            item.insert("iconSet".into(), json!(set));
+        }
+        if let Some(id) = cond.attr("iconId").and_then(|s| s.parse::<u32>().ok()) {
+            item.insert("iconId".into(), json!(id));
+        }
         columns.push(Value::Object(item));
     }
     let mut obj = Map::new();
@@ -82,8 +109,22 @@ pub(crate) fn inspect_sort(sheet: &Element) -> Value {
         json!(xml_attr_true(st, "caseSensitive")),
     );
     obj.insert("columnSort".into(), json!(xml_attr_true(st, "columnSort")));
+    if let Some(method) = st.attr("sortMethod") {
+        if method == "pinYin" || method == "stroke" {
+            obj.insert("sortMethod".into(), json!(method));
+        }
+    }
     obj.insert("columns".into(), Value::Array(columns));
     Value::Object(obj)
+}
+
+fn sort_color_of(styles: &style::Stylebook, sort_by: &str, dxf_id: usize) -> Option<Value> {
+    let dxf = styles.dxf_json(dxf_id)?;
+    match sort_by {
+        "cellColor" => dxf.get("fill")?.get("fg").cloned(),
+        "fontColor" => dxf.get("font")?.get("color").cloned(),
+        _ => None,
+    }
 }
 
 pub(crate) fn apply_view(
@@ -198,10 +239,28 @@ pub(crate) fn apply_sort(
     if op.column_sort {
         el = el.with_attr("columnSort", "1");
     }
+    if let Some(method) = op.sort_method.as_deref() {
+        el = el.with_attr("sortMethod", method);
+    }
     for cond in &op.columns {
         let mut child = Element::new("sortCondition").with_attr("ref", cond.refer.as_str());
         if cond.descending {
             child = child.with_attr("descending", "1");
+        }
+        if let Some(by) = cond.sort_by.as_deref() {
+            child = child.with_attr("sortBy", by);
+        }
+        if let Some(list) = cond.custom_list.as_deref() {
+            child = child.with_attr("customList", list);
+        }
+        if let Some(id) = cond.dxf_id {
+            child = child.with_attr("dxfId", id.to_string());
+        }
+        if let Some(set) = cond.icon_set.as_deref() {
+            child = child.with_attr("iconSet", set);
+        }
+        if let Some(id) = cond.icon_id {
+            child = child.with_attr("iconId", id.to_string());
         }
         el.push_element(child);
     }

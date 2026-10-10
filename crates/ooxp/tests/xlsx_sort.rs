@@ -295,3 +295,96 @@ fn create_rejects_sort_state_field() {
     assert_eq!(err.code(), ErrorCode::InvalidField);
     assert!(!path.exists());
 }
+
+#[test]
+fn custom_list_and_color_sort_fields() {
+    let src = create_book("fields");
+    let list_out = tmp("list-out");
+    apply(
+        &src,
+        &list_out,
+        json!([{
+            "op": "setSortState",
+            "id": "sheet:Sheet1",
+            "ref": "A1:A3",
+            "columns": [{ "ref": "A1:A3", "customList": "Low,Medium,High" }]
+        }]),
+    )
+    .unwrap();
+    let st = &inspect_tree(&list_out)["sheets"][0]["sortState"];
+    assert_eq!(st["columns"][0]["customList"], json!("Low,Medium,High"));
+    assert!(st["columns"][0].get("sortBy").is_none());
+    let cells = &inspect_tree(&list_out)["sheets"][0]["cells"];
+    let a1 = cells
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c["ref"] == "A1")
+        .expect("A1");
+    assert_eq!(a1["value"], json!(3));
+
+    let color_out = tmp("color-out");
+    apply(
+        &src,
+        &color_out,
+        json!([{
+            "op": "setSortState",
+            "id": "sheet:Sheet1",
+            "ref": "A1:A3",
+            "sortMethod": "stroke",
+            "columns": [{
+                "ref": "A1:A3",
+                "sortBy": "cellColor",
+                "color": { "rgb": "FFFF0000" }
+            }]
+        }]),
+    )
+    .unwrap();
+    let st = &inspect_tree(&color_out)["sheets"][0]["sortState"];
+    assert_eq!(st["sortMethod"], json!("stroke"));
+    assert_eq!(st["columns"][0]["sortBy"], json!("cellColor"));
+    assert_eq!(st["columns"][0]["color"]["rgb"], json!("FFFF0000"));
+    assert!(st["columns"][0]["dxfId"].as_u64().is_some());
+    let xml = part_text(&color_out, "xl/worksheets/sheet1.xml");
+    assert!(xml.contains(r#"sortBy="cellColor""#), "{xml}");
+    assert!(xml.contains(r#"sortMethod="stroke""#), "{xml}");
+    assert!(!xml.contains("xmlns:xlrd2"), "{xml}");
+}
+
+#[test]
+fn rejects_color_sort_without_color_and_icon_custom_list() {
+    let src = create_book("bad-fields");
+    let no_color = tmp("no-color");
+    let err = apply(
+        &src,
+        &no_color,
+        json!([{
+            "op": "setSortState",
+            "id": "sheet:Sheet1",
+            "ref": "A1:A3",
+            "columns": [{ "ref": "A1:A3", "sortBy": "cellColor" }]
+        }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+    assert!(!no_color.exists());
+
+    let icon_list = tmp("icon-list");
+    let err = apply(
+        &src,
+        &icon_list,
+        json!([{
+            "op": "setSortState",
+            "id": "sheet:Sheet1",
+            "ref": "A1:A3",
+            "columns": [{
+                "ref": "A1:A3",
+                "sortBy": "icon",
+                "customList": "Low,Medium,High"
+            }]
+        }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+    assert!(!icon_list.exists());
+}

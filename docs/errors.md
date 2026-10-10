@@ -158,6 +158,8 @@
     - `groupCols`
     - `ungroupCols`
     - `setOutline`
+    - `setRowHidden`
+    - `setColHidden`
   - `deletePara` 碰到跨段书签 / 批注范围 / 许可范围、段内修订标记、或非文档末的分节符
   - `setParaText` 碰到段内本期收入的修订节点
   - 段内本期收入的 `w:hyperlink`
@@ -213,8 +215,10 @@
 - 不是单一 A1、与表格 `ref` 相交，或对 `chartsheet` 发此 op，是 `InvalidField`
 - `setSortState` 必须给 `ref`
 - `ref` 非 null 时必须给非空 `columns`
-- 列范围越出 `ref`、出现 `customList` / `sortBy` / `sortMethod` / `dxfId`，或对 `chartsheet` 发此 op，是 `InvalidField`
-- 对 `dialogsheet` / `macrosheet` 发 `setSheetView` / `setAutoFilter` / `setSortState` 报 `NotImplemented`
+- 列范围越出 `ref`、`sortBy` / `sortMethod` / `iconSet` 不认识、颜色排序未给 `color` 或 `dxfId`、或对 `chartsheet` 发此 op，是 `InvalidField`
+- `setRowHidden` / `setColHidden` 必须给 `hidden` 与 `rows` / `col`
+- 对 `chartsheet` 发隐藏行列 op 报 `InvalidField`
+- 对 `dialogsheet` / `macrosheet` 发 `setSheetView` / `setAutoFilter` / `setSortState` / 分组 / 隐藏行列报 `NotImplemented`
 - `groupRows` / `ungroupRows` 必须给 `rows`
 - `groupCols` / `ungroupCols` 必须给 `col`
 - `setOutline` 除 op 与 id 外一个可写字段都不给、折叠未给 `collapsed`、汇总行 / 列越界、或 `outlineLevel` 将超过 7，是 `InvalidField`
@@ -575,6 +579,8 @@
   - `groupCols`
   - `ungroupCols`
   - `setOutline`
+  - `setRowHidden`
+  - `setColHidden`
 - xlsx 的 `exportMedia` 认工作表图 id、页眉页脚图 id、OLE id 与 3D 模型 id
 - pptx 的 `exportMedia` 认幻灯片图 id、备注图 id、批注内图 id、视频 id、音频 id、OLE id 与 3D 模型 id
 - docx 的 `exportMedia` 认图 id、OLE id、3D 模型 id、墨迹画布 id 与嵌入字体 id
@@ -616,6 +622,7 @@
   - 内容控件 op、编号 op、样式 op、直接格式 op 或节结构 op
 - xlsx 认下列 op
   - `setSortState` 与分组：`groupRows`、`ungroupRows`、`groupCols`、`ungroupCols`、`setOutline`
+  - 隐藏行列：`setRowHidden`、`setColHidden`
   - 批注 op
   - `setShapeText`
   - `setShapeFormat`

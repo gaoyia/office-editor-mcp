@@ -1459,6 +1459,8 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<DocxOp>, Error> {
             || op_name == "groupCols"
             || op_name == "ungroupCols"
             || op_name == "setOutline"
+            || op_name == "setRowHidden"
+            || op_name == "setColHidden"
             || op_name == "setPicturePos"
             || op_name == "setChartPos"
             || op_name == "setSmartArtPos"

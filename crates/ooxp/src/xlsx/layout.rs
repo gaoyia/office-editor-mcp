@@ -275,9 +275,45 @@ pub(crate) fn apply_col_flag(
     });
 }
 
+/// 写或去掉列的 `@hidden`。已有 `width` 不改成 0；取消隐藏时若宽度为 0 则改回缺省列宽。
+pub(crate) fn apply_col_hidden(worksheet: &mut Element, min_col: u32, max_col: u32, hidden: bool) {
+    map_col_span(worksheet, min_col, max_col, true, |piece| {
+        if hidden {
+            ensure_default_col_width(piece);
+            set_attr(&mut piece.attrs, "hidden", "1");
+        } else {
+            remove_attr(&mut piece.attrs, "hidden");
+            restore_zero_col_width(piece);
+        }
+    });
+}
+
 /// 新建 `<col>` 时补缺省列宽，避免 Excel 修复。已有 `width` 不改。
 fn ensure_default_col_width(piece: &mut ColPiece) {
     if piece.attrs.iter().any(|(k, _)| k == "width") {
+        return;
+    }
+    set_attr(
+        &mut piece.attrs,
+        "width",
+        fmt_num(chars_to_xml_width(DEFAULT_COL_CHARS)),
+    );
+}
+
+/// Excel 另存隐藏列常见 `width="0"`；去掉 hidden 后若不改宽，看起来仍是隐藏。
+fn restore_zero_col_width(piece: &mut ColPiece) {
+    let Some(raw) = piece
+        .attrs
+        .iter()
+        .find(|(k, _)| k == "width")
+        .map(|(_, v)| v.clone())
+    else {
+        return;
+    };
+    let Some(n) = parse_xml_f64(&raw) else {
+        return;
+    };
+    if n != 0.0 {
         return;
     }
     set_attr(

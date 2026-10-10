@@ -866,19 +866,29 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
 - `autoFilter` 取工作表级 `<autoFilter>/@ref`（§18.3.1.2）。能解析成单一 A1 时规范化成 `A1` 或 `A1:B2`；解析不了的原样留下；没有该元素则为 `null`。
   不算表格部件里的 `<autoFilter>`，也不报 `filterColumn`。
 - `sortState` 不要另给 scope 键。来源是该表工作表级 `<sortState>`（ECMA-376 §18.3.1.92）。没有该元素则为 `null`。不算表格部件里的排序，也不报 `x14` 扩展排序。
-  对象字段顺序：`ref`、`caseSensitive`、`columnSort`、`columns`。
+  对象字段顺序：`ref`、`caseSensitive`、`columnSort`，再按需跟 `sortMethod`，最后 `columns`。
   `ref` 取 `@ref`，能解析成单一 A1 时规范化成 `A1` 或 `A1:B2`；解析不了的原样留下；缺属性则为 `null`。
-  `caseSensitive` / `columnSort` 取同名属性：`1` / `true` / `TRUE` / `on` 为 `true`，缺省或其余为 `false`。不报 `sortMethod`。
-  `columns` 按 `<sortCondition>` 文档顺序。每项字段顺序：`ref`、`descending`。`ref` 取 `@ref`，能解析则规范化；缺属性的条件跳过。
-  `descending` 规则与上同，缺省 `false`。不报 `customList` / `dxfId` / `iconSet` / `iconId` / `sortBy`。
+  `caseSensitive` / `columnSort` 取同名属性：`1` / `true` / `TRUE` / `on` 为 `true`，缺省或其余为 `false`。
+  `sortMethod` 取 `@sortMethod`：`pinYin` / `stroke` 原样报；缺属性、`none` 或其余则省略该键。
+  `columns` 按 `<sortCondition>` 文档顺序。每项字段顺序：`ref`、`descending`，再按需跟 `sortBy`、`customList`、`dxfId`、`color`、`iconSet`、`iconId`。
+  `ref` 取 `@ref`，能解析则规范化；缺属性的条件跳过。
+  `descending` 规则与上同，缺省 `false`。
+  `sortBy` 取 `@sortBy`：`value` / `cellColor` / `fontColor` / `icon`；缺属性或 `value` 则省略。
+  `customList` 取 `@customList` 原文，缺则省略。
+  `dxfId` 取 `@dxfId` 非负整数；缺或解析失败则省略。
+  `color` 在 `sortBy` 为 `cellColor` 时取该 `dxf` 填充 `fg`，为 `fontColor` 时取该 `dxf` 字体 `color`；对不上或没有 styles 则省略。
+  `iconSet` 取 `@iconSet` 原文，缺则省略。`iconId` 取 `@iconId` 非负整数，缺则省略。
 - `outline` 不要另给 scope 键。来源是该表 `sheetPr/outlinePr`、
   各 `<row>/@outlineLevel` / `@hidden` / `@collapsed` 与 `<cols>/<col>` 的同名属性（ECMA-376 §18.3.1.61 / §18.3.1.73 / §18.3.1.13）。
   字段顺序：`summaryBelow`、`summaryRight`、`rows`、`cols`。
   `summaryBelow` / `summaryRight`：没有 `outlinePr` 或没有对应属性为 `true`；属性为 `0` / `false` / `FALSE` / `off` 则为 `false`。
-  `rows` 列出全部 `outlineLevel>0` 或 `collapsed` 为真的 `<row>`，按行号升序，不按 inspect 范围过滤。每项字段顺序：`r`、`level`、`hidden`、`collapsed`。
+  `rows` 列出全部 `outlineLevel>0`、或 `collapsed` 为真、或 `hidden` 为真的 `<row>`，按行号升序，不按 inspect 范围过滤。
+  每项字段顺序：`r`、`level`、`hidden`、`collapsed`。
   `r` 是行号（从 1 计）。`level` 取 `@outlineLevel`，缺省 0。
   `hidden` / `collapsed` 为布尔：属性为 `1` / `true` / `TRUE` / `on` 则为 `true`，缺省或其余为 `false`。
-  `cols` 列出全部带 `outlineLevel>0` 或 `collapsed` 为真的 `<col>`，按 `min` 升序。每项字段顺序：`min`、`max`、`level`、`hidden`、`collapsed`。
+  没有大纲级、只被手动隐藏的行也进这条名单，`level` 为 0、`collapsed` 为 `false`。
+  `cols` 列出全部带 `outlineLevel>0`、或 `collapsed` 为真、或 `hidden` 为真的 `<col>`，按 `min` 升序。
+  每项字段顺序：`min`、`max`、`level`、`hidden`、`collapsed`。
   `min` / `max` 是列字母。`level` 取 `@outlineLevel`，缺省 0。不报列宽。布局名单 `cols` / `rows` 仍不报隐藏与大纲。
   `groupCols` 新建 `<col>` 时会写缺省 `width`，因此布局 `cols` 可能列出这些列的列宽。
   不把 `sheetFormatPr/@outlineLevelRow` / `@outlineLevelCol` 放进树。
@@ -1287,7 +1297,7 @@ drawing 上那一张 `xdr:absoluteAnchor` 框和 `/xl/charts/chartN.xml`，数�
 图表工作表的 `dataFrom` 在该数据表 `charts[]` 之后写入，会覆盖同一格。`workbook.xml` 的 `<sheet>` 顺序与 `sheets[]` 一致。
 `app.xml` 的 HeadingPairs：普通表算 Worksheets，图表工作表算 Charts；TitlesOfParts 按 `sheets[]` 顺序。
 至少一张 `worksheet`，否则报 `InvalidField`。不要生成透视表、条件格式。
-create 本期不写列宽、行高、合并、数据验证、条件格式、工作表表格、透视表、定义名、打印设置、视图与筛选、排序、分组、拆分窗格、自定义视图、迷你图、OLE、切片器、外部数据连接、保护或组合，
+create 本期不写列宽、行高、合并、数据验证、条件格式、工作表表格、透视表、定义名、打印设置、视图与筛选、排序、分组、隐藏行 / 列、拆分窗格、自定义视图、迷你图、OLE、切片器、外部数据连接、保护或组合，
 也不写共享公式、数组公式或数据表公式（`cells[]` 出现 `shared` / `sharedRef` / `array` / `arrayRef` / `dataTable` / `dataTableRef` 报 `InvalidField`）。
 create 本期不写外部引用。`workbook` 根上或 `cells[]` 上出现 `pictures` / `charts` / `headerFooters` / `headerFooter`
  / `definedNames` / `connections` / `externalLinks` / `externalReferences` / `customViews` / `comments`
@@ -2057,10 +2067,10 @@ docx / pptx 上发此 op 报 `InvalidField`。不标重算。
 页眉文本只脏目标表 XML。`setPrintSetup` 脏目标表的 `pageMargins` / `pageSetup` / `printOptions` / `sheetPr` / `rowBreaks` / `colBreaks`；
 改打印区域时还脏 `/xl/workbook.xml` 的 `<definedNames>`。
 `setSheetView` 脏目标表的 `sheetViews`（含拆分）。`setAutoFilter` 脏目标表的工作表级 `autoFilter`，不改表格部件。
-`setSortState` 脏目标表的工作表级 `sortState`，不重排 `sheetData`，不改表格部件。
+`groupRows` / `ungroupRows` / `groupCols` / `ungroupCols` / `setOutline` / `setRowHidden` / `setColHidden` 脏目标表的 `sheetPr` / `sheetFormatPr` / `cols` / `sheetData` 行属性，不新建部件。
+`setSortState` 脏目标表的工作表级 `sortState`；给了 `color` 时还可脏 styles 的 `dxfs`。不重排 `sheetData`，不改表格部件。
 `insertCustomView` / `deleteCustomView` / `showCustomView` 脏 `/xl/workbook.xml` 的 `customWorkbookViews` 以及各表
 `customSheetViews` / 当前 `sheetViews` / 可选 `pageMargins`，不新建部件。
-`groupRows` / `ungroupRows` / `groupCols` / `ungroupCols` / `setOutline` 脏目标表的 `sheetPr` / `sheetFormatPr` / `cols` / `sheetData` 行属性，不新建部件。
 页眉图还可以脏 `drawingHF` 指向的 drawing、工作表 `.rels`、`/xl/media/…` 与 `[Content_Types].xml`。
 文本框、形状与连接线 op、`groupShapes` / `ungroup` 以及 `setShapeText` / `setShapeFormat` 还可以脏 worksheet drawing 及其 `.rels`。
 `insertOle` / `deleteOle` 还可以脏工作表 `oleObjects`、worksheet drawing、`legacyDrawing` VML、工作表 `.rels`、VML `.rels`、
@@ -2273,17 +2283,31 @@ id 不是工作表 id 报 `InvalidId`。对 `dialogsheet` / `macrosheet` 报 `No
 | `ref` | 必须。单一 A1，或 `null` 删除工作表级 `<sortState>` |
 | `caseSensitive` | 可选布尔。缺省 `false`。为真才写属性 |
 | `columnSort` | 可选布尔。缺省 `false`（按列、自上而下）。为真才写属性 |
-| `columns` | `ref` 非 `null` 时必须、且不能空。每项必须给 `ref`；`descending` 可选，缺省 `false` |
+| `sortMethod` | 可选。`none` / `pinYin` / `stroke`。缺省或 `none` 不写属性 |
+| `columns` | `ref` 非 `null` 时必须、且不能空。每项必须给 `ref`；其余见下 |
 
-缺 `ref` 报 `InvalidField`。`ref` 为 `null` 时不要出现 `columns` / `caseSensitive` / `columnSort`，出现报 `InvalidField`；并去掉 `<sortState>`。
+缺 `ref` 报 `InvalidField`。`ref` 为 `null` 时不要出现 `columns` / `caseSensitive` / `columnSort` / `sortMethod`，出现报 `InvalidField`；并去掉 `<sortState>`。
 `ref` 非 `null` 时缺 `columns` 或空数组报 `InvalidField`。每项 `ref` 必须能解析成单一 A1，且必须落在 `sortState/@ref` 内，否则报 `InvalidField`。
-出现 `customList` / `sortBy` / `sortMethod` / `dxfId` / `iconSet` / `iconId` 报 `InvalidField`。
+每项还可给：
+- `customList`：非空字符串。写入 `@customList`。空串报 `InvalidField`
+- `sortBy`：`value` / `cellColor` / `fontColor` / `icon`。缺省或 `value` 不写属性
+- `color`：颜色对象，规则与单元格 `color` 相同
+- `dxfId`：非负整数。指向已有 `dxfs` 下标
+- `iconSet`：`ST_IconSetType`（与条件格式相同那份名单）
+- `iconId`：非负整数
+
+`sortBy` 为 `value` 或缺省时：可给 `customList`；出现 `color` / `dxfId` / `iconSet` / `iconId` 报 `InvalidField`。
+`sortBy` 为 `cellColor` / `fontColor` 时：必须恰好给 `color` 或 `dxfId` 之一。
+给 `color` 时按条件格式同一套 intern 一条 `dxf`（填充或字体色）并写 `dxfId`。同时给 `customList` / `iconSet` / `iconId` 报 `InvalidField`。
+`sortBy` 为 `icon` 时：可给 `iconSet` / `iconId`；出现 `customList` / `color` / `dxfId` 报 `InvalidField`。
+`sortBy` / `sortMethod` / `iconSet` 不认识报 `InvalidField`。
 整段替换已有 `<sortState>`，不保留未点名的 `sortCondition` 或 `extLst`。没有则按 `CT_Worksheet` 插在 `autoFilter` 之后、`dataConsolidate` 之前。
-为真的 `caseSensitive` / `columnSort` / `descending` 写成 `"1"`。不写 `sortBy`（规范缺省 `value`）。不重排格子。只能改 `worksheet`。
+为真的 `caseSensitive` / `columnSort` / `descending` 写成 `"1"`。`sortMethod` 为 `pinYin` / `stroke` 才写属性。
+不写 `xmlns:xlrd2`。不重排格子。不算表格部件里的排序。只能改 `worksheet`。
 对 `chartsheet` 报 `InvalidField`。找不到该表报 `IdNotFound`。id 不是工作表 id 报 `InvalidId`。
 对 `dialogsheet` / `macrosheet` 报 `NotImplemented`。docx / pptx 上发此 op 报 `InvalidField`。不标重算。create 本期不写排序。
 
-示例见 `docs/examples/xlsx-apply-sort.json`。
+示例见 `docs/examples/xlsx-apply-sort.json` 与 `docs/examples/xlsx-apply-sort-fields.json`。
 
 ### insertCustomView
 
@@ -2447,6 +2471,74 @@ id 不是自定义视图 id 报 `InvalidId`。docx / pptx 上发此 op 报 `Inva
 新建仅含 `collapsed` 的汇总列时，若没有 `width` 则补缺省列宽。`outlinePr` 两个属性都缺省且没有子元素时去掉该元素。只能改 `worksheet`。
 对 `chartsheet` 报 `InvalidField`。找不到该表报 `IdNotFound`。id 不是工作表 id 报 `InvalidId`。
 对 `dialogsheet` / `macrosheet` 报 `NotImplemented`。docx / pptx 上发此 op 报 `InvalidField`。不标重算。create 本期不写分组。
+
+### setRowHidden
+
+写或去掉行的 `@hidden`。不改大纲级，不折叠汇总行。
+
+```json
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "C:\\data\\book.xlsx",
+  "output": "C:\\data\\book.hidden.xlsx",
+  "ops": [
+    {
+      "op": "setRowHidden",
+      "id": "sheet:Sheet1",
+      "rows": "3",
+      "hidden": true
+    }
+  ]
+}
+```
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"setRowHidden"` |
+| `id` | 工作表 id `sheet:{name}` |
+| `rows` | 必须。行号或闭区间，写法与 `groupRows` 的 `rows` 相同 |
+| `hidden` | 必须。布尔 |
+
+`true` 写 `@hidden="1"`；没有该行则新建只带 `r` 与 `hidden` 的 `<row>`。
+`false` 去掉 `@hidden`；若该行只剩 `r` 且没有格子则删掉该 `<row>`。
+不改 `ht`。只能改 `worksheet`。对 `chartsheet` 报 `InvalidField`。找不到该表报 `IdNotFound`。
+id 不是工作表 id 报 `InvalidId`。对 `dialogsheet` / `macrosheet` 报 `NotImplemented`。
+docx / pptx 上发此 op 报 `InvalidField`。不标重算。create 本期不写隐藏行。
+
+### setColHidden
+
+写或去掉列的 `@hidden`。不改大纲级。
+
+```json
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "C:\\data\\book.xlsx",
+  "output": "C:\\data\\book.hidden.xlsx",
+  "ops": [
+    {
+      "op": "setColHidden",
+      "id": "sheet:Sheet1",
+      "col": "B",
+      "hidden": true
+    }
+  ]
+}
+```
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"setColHidden"` |
+| `id` | 工作表 id `sheet:{name}` |
+| `col` | 必须。列字母或闭区间，写法与 `setColWidth` 的 `col` 相同 |
+| `hidden` | 必须。布尔 |
+
+`true` 写 `@hidden="1"`。没有对应 `<col>` 则新建，并按 `groupCols` 同一套规则补缺省 `width`。已有 `width` 不改成 0。
+`false` 去掉 `@hidden`。若 `width` 为 `0`（Excel 另存隐藏列常见），改回与 `setColWidth` 同一套缺省列宽，避免看起来仍是隐藏。
+只能改 `worksheet`。错误与 `setRowHidden` 相同。create 本期不写隐藏列。
+
+示例见 `docs/examples/xlsx-apply-hidden.json`。
 
 ### setPictureAnchor
 

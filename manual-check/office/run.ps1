@@ -117,6 +117,7 @@ $order = @(
     'xlsx-print'
     'xlsx-view'
     'xlsx-sort'
+    'xlsx-hidden-sort'
     'xlsx-comments'
     'xlsx-shapes'
     'xlsx-shape-format'

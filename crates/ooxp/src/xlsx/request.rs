@@ -898,6 +898,13 @@ pub struct SetAutoFilterOp {
 pub struct SortConditionOp {
     pub refer: String,
     pub descending: bool,
+    /// `None` 表示按值（不写 `@sortBy`）。
+    pub sort_by: Option<String>,
+    pub custom_list: Option<String>,
+    pub dxf_id: Option<u32>,
+    pub color: Option<ColorSpec>,
+    pub icon_set: Option<String>,
+    pub icon_id: Option<u32>,
 }
 
 #[derive(Debug, Clone)]
@@ -907,6 +914,8 @@ pub struct SetSortStateOp {
     pub refer: Option<String>,
     pub case_sensitive: bool,
     pub column_sort: bool,
+    /// `None` 不写属性。只存 `pinYin` / `stroke`。
+    pub sort_method: Option<String>,
     pub columns: Vec<SortConditionOp>,
 }
 
@@ -946,6 +955,22 @@ pub struct SetOutlineOp {
     pub collapse_rows: Option<(u32, u32)>,
     pub collapse_cols: Option<(u32, u32)>,
     pub collapsed: Option<bool>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetRowHiddenOp {
+    pub sheet: String,
+    pub row: u32,
+    pub to_row: u32,
+    pub hidden: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetColHiddenOp {
+    pub sheet: String,
+    pub min_col: u32,
+    pub max_col: u32,
+    pub hidden: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -1785,6 +1810,8 @@ pub enum XlsxOp {
     GroupCols(GroupColsOp),
     UngroupCols(UngroupColsOp),
     SetOutline(SetOutlineOp),
+    SetRowHidden(SetRowHiddenOp),
+    SetColHidden(SetColHiddenOp),
     InsertComment(InsertCommentOp),
     ReplyComment(ReplyCommentOp),
     DeleteComment(DeleteCommentOp),
@@ -2079,6 +2106,8 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<XlsxOp>, Error> {
             "groupCols" => XlsxOp::GroupCols(parse_group_cols(obj, i)?),
             "ungroupCols" => XlsxOp::UngroupCols(parse_ungroup_cols(obj, i)?),
             "setOutline" => XlsxOp::SetOutline(parse_set_outline(obj, i)?),
+            "setRowHidden" => XlsxOp::SetRowHidden(parse_set_row_hidden(obj, i)?),
+            "setColHidden" => XlsxOp::SetColHidden(parse_set_col_hidden(obj, i)?),
             "insertComment" => XlsxOp::InsertComment(parse_insert_comment(obj, i)?),
             "replyComment" => XlsxOp::ReplyComment(parse_reply_comment(obj, i)?),
             "deleteComment" => XlsxOp::DeleteComment(parse_delete_comment(obj, i)?),
@@ -4670,7 +4699,15 @@ fn parse_set_sort_state(
     deny_keys(
         obj,
         i,
-        &["op", "id", "ref", "caseSensitive", "columnSort", "columns"],
+        &[
+            "op",
+            "id",
+            "ref",
+            "caseSensitive",
+            "columnSort",
+            "sortMethod",
+            "columns",
+        ],
     )?;
     let id = require_id(obj, i)?;
     let sheet = parse_sheet_only_id(&id, i, "id", IdReason::SheetOpNeedsSheet)?;
@@ -4704,7 +4741,7 @@ fn parse_set_sort_state(
         }
     };
     let Some(raw_ref) = refer.as_deref() else {
-        for name in ["caseSensitive", "columnSort", "columns"] {
+        for name in ["caseSensitive", "columnSort", "sortMethod", "columns"] {
             if obj.contains_key(name) {
                 return Err(Error::with_path(
                     ErrorKind::InvalidSortState { field: name.into() },
@@ -4717,6 +4754,7 @@ fn parse_set_sort_state(
             refer: None,
             case_sensitive: false,
             column_sort: false,
+            sort_method: None,
             columns: Vec::new(),
         });
     };
@@ -4725,6 +4763,7 @@ fn parse_set_sort_state(
     let formatted = a1::format_range(outer_start, outer_end);
     let case_sensitive = parse_opt_bool(obj, i, "caseSensitive")?.unwrap_or(false);
     let column_sort = parse_opt_bool(obj, i, "columnSort")?.unwrap_or(false);
+    let sort_method = parse_sort_method(obj, i)?;
     let columns_v = obj
         .get("columns")
         .ok_or_else(|| Error::with_path(ErrorKind::NeedSetSortStateField, format!("ops[{i}]")))?;
@@ -4760,7 +4799,16 @@ fn parse_set_sort_state(
             item_obj,
             i,
             &format!("columns[{j}]"),
-            &["ref", "descending"],
+            &[
+                "ref",
+                "descending",
+                "sortBy",
+                "customList",
+                "dxfId",
+                "color",
+                "iconSet",
+                "iconId",
+            ],
         )?;
         let raw = item_obj
             .get("ref")
@@ -4797,18 +4845,236 @@ fn parse_set_sort_state(
                 ));
             }
         };
-        columns.push(SortConditionOp {
-            refer: a1::format_range(start, end),
+        columns.push(parse_sort_condition(
+            item_obj,
+            i,
+            j,
+            a1::format_range(start, end),
             descending,
-        });
+        )?);
     }
     Ok(SetSortStateOp {
         sheet,
         refer: Some(formatted),
         case_sensitive,
         column_sort,
+        sort_method,
         columns,
     })
+}
+
+fn parse_sort_method(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<Option<String>, Error> {
+    match obj.get("sortMethod") {
+        None => Ok(None),
+        Some(Value::String(s)) if s == "none" => Ok(None),
+        Some(Value::String(s)) if s == "pinYin" || s == "stroke" => Ok(Some(s.clone())),
+        Some(Value::String(_)) => Err(Error::with_path(
+            ErrorKind::InvalidSortState {
+                field: "sortMethod".into(),
+            },
+            format!("ops[{i}].sortMethod"),
+        )),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "sortMethod".into(),
+                expected: TypeName::String,
+            },
+            format!("ops[{i}].sortMethod"),
+        )),
+    }
+}
+
+fn parse_sort_condition(
+    item_obj: &serde_json::Map<String, Value>,
+    i: usize,
+    j: usize,
+    refer: String,
+    descending: bool,
+) -> Result<SortConditionOp, Error> {
+    let loc = format!("columns[{j}]");
+    let sort_by = match item_obj.get("sortBy") {
+        None => None,
+        Some(Value::String(s)) if s == "value" => None,
+        Some(Value::String(s)) if s == "cellColor" || s == "fontColor" || s == "icon" => {
+            Some(s.clone())
+        }
+        Some(Value::String(_)) => {
+            return Err(Error::with_path(
+                ErrorKind::InvalidSortState {
+                    field: "sortBy".into(),
+                },
+                format!("ops[{i}].{loc}.sortBy"),
+            ));
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "sortBy".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].{loc}.sortBy"),
+            ));
+        }
+    };
+    let custom_list = match item_obj.get("customList") {
+        None => None,
+        Some(Value::String(s)) if !s.is_empty() => Some(s.clone()),
+        Some(Value::String(_)) => {
+            return Err(Error::with_path(
+                ErrorKind::InvalidSortState {
+                    field: "customList".into(),
+                },
+                format!("ops[{i}].{loc}.customList"),
+            ));
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "customList".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].{loc}.customList"),
+            ));
+        }
+    };
+    let color = match item_obj.get("color") {
+        None => None,
+        Some(Value::Object(m)) => Some(parse_color_spec(m, i, &format!("{loc}.color"))?),
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "color".into(),
+                    expected: TypeName::Object,
+                },
+                format!("ops[{i}].{loc}.color"),
+            ));
+        }
+    };
+    let dxf_id = parse_opt_sort_u32(item_obj, i, &loc, "dxfId")?;
+    let icon_set = match item_obj.get("iconSet") {
+        None => None,
+        Some(Value::String(s)) if ICON_SETS.contains(&s.as_str()) => Some(s.clone()),
+        Some(Value::String(_)) => {
+            return Err(Error::with_path(
+                ErrorKind::InvalidSortState {
+                    field: "iconSet".into(),
+                },
+                format!("ops[{i}].{loc}.iconSet"),
+            ));
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "iconSet".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].{loc}.iconSet"),
+            ));
+        }
+    };
+    let icon_id = parse_opt_sort_u32(item_obj, i, &loc, "iconId")?;
+    match sort_by.as_deref() {
+        None => {
+            reject_sort_fields(
+                i,
+                &loc,
+                &[
+                    ("color", color.is_some()),
+                    ("dxfId", dxf_id.is_some()),
+                    ("iconSet", icon_set.is_some()),
+                    ("iconId", icon_id.is_some()),
+                ],
+            )?;
+        }
+        Some("cellColor") | Some("fontColor") => {
+            reject_sort_fields(
+                i,
+                &loc,
+                &[
+                    ("customList", custom_list.is_some()),
+                    ("iconSet", icon_set.is_some()),
+                    ("iconId", icon_id.is_some()),
+                ],
+            )?;
+            if color.is_some() == dxf_id.is_some() {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidSortState {
+                        field: "color".into(),
+                    },
+                    format!("ops[{i}].{loc}.color"),
+                ));
+            }
+        }
+        Some("icon") => {
+            reject_sort_fields(
+                i,
+                &loc,
+                &[
+                    ("customList", custom_list.is_some()),
+                    ("color", color.is_some()),
+                    ("dxfId", dxf_id.is_some()),
+                ],
+            )?;
+        }
+        Some(_) => unreachable!("sortBy 已在上面收窄"),
+    }
+    Ok(SortConditionOp {
+        refer,
+        descending,
+        sort_by,
+        custom_list,
+        dxf_id,
+        color,
+        icon_set,
+        icon_id,
+    })
+}
+
+fn reject_sort_fields(i: usize, loc: &str, fields: &[(&str, bool)]) -> Result<(), Error> {
+    for (name, hit) in fields {
+        if *hit {
+            return Err(Error::with_path(
+                ErrorKind::InvalidSortState {
+                    field: (*name).into(),
+                },
+                format!("ops[{i}].{loc}.{name}"),
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn parse_opt_sort_u32(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+    loc: &str,
+    field: &str,
+) -> Result<Option<u32>, Error> {
+    match obj.get(field) {
+        None => Ok(None),
+        Some(Value::Number(n)) => {
+            if let Some(u) = n.as_u64().filter(|v| *v <= u32::MAX as u64) {
+                Ok(Some(u as u32))
+            } else {
+                Err(Error::with_path(
+                    ErrorKind::InvalidSortState {
+                        field: field.into(),
+                    },
+                    format!("ops[{i}].{loc}.{field}"),
+                ))
+            }
+        }
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::Integer,
+            },
+            format!("ops[{i}].{loc}.{field}"),
+        )),
+    }
 }
 
 fn parse_group_rows(obj: &serde_json::Map<String, Value>, i: usize) -> Result<GroupRowsOp, Error> {
@@ -4914,6 +5180,40 @@ fn parse_set_outline(
         collapse_rows,
         collapse_cols,
         collapsed,
+    })
+}
+
+fn parse_set_row_hidden(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<SetRowHiddenOp, Error> {
+    deny_keys(obj, i, &["op", "id", "rows", "hidden"])?;
+    let id = require_id(obj, i)?;
+    let sheet = parse_sheet_only_id(&id, i, "id", IdReason::SheetOpNeedsSheet)?;
+    let (row, to_row) = parse_required_row_span(obj, i, "rows")?;
+    let hidden = parse_required_bool(obj.get("hidden"), i, "setRowHidden", "hidden")?;
+    Ok(SetRowHiddenOp {
+        sheet,
+        row,
+        to_row,
+        hidden,
+    })
+}
+
+fn parse_set_col_hidden(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<SetColHiddenOp, Error> {
+    deny_keys(obj, i, &["op", "id", "col", "hidden"])?;
+    let id = require_id(obj, i)?;
+    let sheet = parse_sheet_only_id(&id, i, "id", IdReason::SheetOpNeedsSheet)?;
+    let (min_col, max_col) = parse_required_col_span(obj, i, "col")?;
+    let hidden = parse_required_bool(obj.get("hidden"), i, "setColHidden", "hidden")?;
+    Ok(SetColHiddenOp {
+        sheet,
+        min_col,
+        max_col,
+        hidden,
     })
 }
 

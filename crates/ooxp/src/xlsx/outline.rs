@@ -5,7 +5,10 @@ use serde_json::{json, Map, Value};
 use super::a1;
 use super::apply;
 use super::layout;
-use super::request::{GroupColsOp, GroupRowsOp, SetOutlineOp, UngroupColsOp, UngroupRowsOp};
+use super::request::{
+    GroupColsOp, GroupRowsOp, SetColHiddenOp, SetOutlineOp, SetRowHiddenOp, UngroupColsOp,
+    UngroupRowsOp,
+};
 use crate::error::{Error, ErrorKind};
 use crate::xml::{Element, Node};
 
@@ -44,7 +47,8 @@ fn inspect_rows(sheet: &Element) -> Value {
         };
         let level = parse_level(row.attr("outlineLevel"));
         let collapsed = attr_true(row, "collapsed");
-        if level == 0 && !collapsed {
+        let hidden = attr_true(row, "hidden");
+        if level == 0 && !collapsed && !hidden {
             continue;
         }
         items.push((
@@ -76,7 +80,8 @@ fn inspect_cols(sheet: &Element) -> Value {
             }
             let level = parse_level(col.attr("outlineLevel"));
             let collapsed = attr_true(col, "collapsed");
-            if level == 0 && !collapsed {
+            let hidden = attr_true(col, "hidden");
+            if level == 0 && !collapsed && !hidden {
                 continue;
             }
             items.push(json!({
@@ -133,6 +138,17 @@ pub(crate) fn apply_ungroup_cols(
     layout::apply_col_outline_delta(sheet, op.min_col, op.max_col, -1, op_index)?;
     sync_sheet_format_outline(sheet);
     Ok(())
+}
+
+pub(crate) fn apply_set_row_hidden(sheet: &mut Element, op: &SetRowHiddenOp) {
+    let sheet_data = apply::ensure_sheet_data(sheet);
+    for r in op.row..=op.to_row {
+        set_row_flag(sheet_data, r, "hidden", op.hidden);
+    }
+}
+
+pub(crate) fn apply_set_col_hidden(sheet: &mut Element, op: &SetColHiddenOp) {
+    layout::apply_col_hidden(sheet, op.min_col, op.max_col, op.hidden);
 }
 
 pub(crate) fn apply_set_outline(

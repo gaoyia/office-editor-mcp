@@ -372,6 +372,13 @@ C、I、A、O、Xp、Xvg、Xem、X3d、Xom、Xtf、Xfl、Xc、Xh、Xfs、Xtl、X
   - COM `Sort.SortFields` 降序键 `$A$1:$A$3`、无 Repair
   - `ref: null` 后为 `null`
   - 缺 `ref` / 列越界得 `InvalidField`
+- **Xhd1–Xhd5** ✅
+  - Excel 16.0：`xlsx-hidden-sort.ps1`，5 PASS / 0 FAIL
+  - `setRowHidden` 行 3、`setColHidden` 列 B 后 inspect `outline` 含 `level=0` 的隐藏行 / 列
+  - COM 第 3 行与 B 列 Hidden，无 Repair
+  - `customList=Low,Medium,High` 后 inspect 对上，A1 仍为 `Low`
+  - `sortBy=cellColor` 且 `sortMethod=stroke` 后 inspect 对上，无 Repair
+  - `cellColor` 不给 `color`、`icon` 带 `customList` 得 `InvalidField`；`id=slide:1` 得 `InvalidId`，均未写文件
 - **图表工作表 Xs1–Xs4** ✅
   - Excel 16.0：`xlsx-chartsheet.ps1`，4 PASS / 0 FAIL
   - `insertChartSheet` 后 `kind=chartsheet`、`chartCount=1`，无 Repair
@@ -1035,6 +1042,34 @@ inspect 只读进树。create 不生成。apply 不新开编辑。脚本 `manual
 | Xsr3 | COM | COM `Sort.SortFields` 能看见对应列，降序；无修复 |
 | Xsr4 | 删除 | `ref: null` 后 `sortState` 为 `null`，无修复 |
 | Xsr5 | 拒写 | 缺 `ref`、列范围越出 `ref` 得 `InvalidField`，未写文件。不强制开 Excel |
+
+## 隐藏行列与排序字段
+
+用库 create 产物再 apply。脚本 `manual-check/office/cases/xlsx-hidden-sort.ps1`。编号用 **Xhd**。不要和 Xh、Xhl、Xsr、Xon 撞。不按值重排格子。不算排序引擎。
+
+- **Xhd1**
+  - 检查：inspect 隐藏
+  - 通过标准：`setRowHidden` 行 3、`setColHidden` 列 B 后
+  - `outline.rows` 含 `r=3`、`hidden=true`、`level=0`
+  - `outline.cols` 含 `min=B`、`hidden=true`、`level=0`
+- **Xhd2**
+  - 检查：Excel 打开隐藏
+  - 通过标准：无 Repair
+  - COM 第 3 行与 B 列 `Hidden` 为真
+- **Xhd3**
+  - 检查：自定义序列
+  - 通过标准：`customList=Low,Medium,High` 后 inspect 对上
+  - A1 仍为 `Low`（未重排）
+  - Excel 无 Repair
+- **Xhd4**
+  - 检查：颜色与笔画
+  - 通过标准：`sortBy=cellColor` 且 `sortMethod=stroke` 后 inspect 对上
+  - Excel 无 Repair
+- **Xhd5**
+  - 检查：拒写
+  - 通过标准：`cellColor` 不给 `color`、`icon` 带 `customList`、`id` 为 `slide:1` 得 `InvalidField` 或 `InvalidId`
+  - 均未写文件
+  - 不强制开 Excel
 
 ## 批注
 

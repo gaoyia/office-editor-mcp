@@ -179,7 +179,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
             );
             obj.insert(
                 "sortState".into(),
-                super::view::inspect_sort(&sheet_doc.root),
+                super::view::inspect_sort(&sheet_doc.root, &styles),
             );
             obj.insert("outline".into(), super::outline::inspect(&sheet_doc.root));
             obj.insert(

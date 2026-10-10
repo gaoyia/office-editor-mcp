@@ -269,9 +269,10 @@ xlsx 也可用 `setPrintSetup` 改工作表页边距、纸张、方向、缩放�
 xlsx 也可用 `setSheetView` 改默认视图的缩放、冻结与拆分，脏该表 `sheetViews`，不标重算。
 xlsx 也可列出、插入、删除自定义视图，并按快照把窗格写回当前视图，脏 workbook 的 `customWorkbookViews` 与各表 `customSheetViews` / 当前 `sheetViews`，不标重算，不恢复隐藏行 / 列。
 xlsx 也可用 `groupRows` / `ungroupRows` / `groupCols` / `ungroupCols` / `setOutline` 改行 / 列大纲与折叠，
+也可用 `setRowHidden` / `setColHidden` 写没有大纲级的隐藏行 / 列，
 脏该表 `sheetPr/outlinePr`、`sheetFormatPr`、`cols` 与 `sheetData` 行属性，不标重算。
 xlsx 也可用 `setAutoFilter` 改工作表级筛选范围，脏该表 `autoFilter`，不改表格部件，不隐藏行，不标重算。
-xlsx 也可用 `setSortState` 改工作表级排序条件，脏该表 `sortState`，不重排 `sheetData`，不标重算。
+xlsx 也可用 `setSortState` 改工作表级排序条件（含自定义序列、按颜色 / 图标、`sortMethod`），脏该表 `sortState`，给了 `color` 时还可脏 styles 的 `dxfs`，不重排 `sheetData`，不标重算。
 xlsx 也可插删回复并改线程化批注，脏 `/xl/threadedComments/`、`/xl/persons/person.xml`、占位 `/xl/commentsN.xml`、VML、工作表 `legacyDrawing`、关系与内容类型，不标重算。
 xlsx 也可插删改工作表文本框、形状、连接线与 SmartArt，可用 `setShapeFormat` 改 DrawingML 文字格式，脏 worksheet drawing、drawing `.rels`、`/xl/diagrams/` 与内容类型，不标重算。
 xlsx 也可插删改工作表单元格超链接，脏该表 XML 与工作表 `.rels`，不标重算。xlsx 也可插删改工作表迷你图组，脏该表 `extLst`，不新建部件，不标重算。

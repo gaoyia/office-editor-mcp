@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "C:\\data\\book.xlsx",
+  "output": "C:\\data\\book.hidden.xlsx",
+  "ops": [
+    {
+      "op": "setRowHidden",
+      "id": "sheet:Sheet1",
+      "rows": "3",
+      "hidden": true
+    },
+    {
+      "op": "setColHidden",
+      "id": "sheet:Sheet1",
+      "col": "B",
+      "hidden": true
+    }
+  ]
+}
