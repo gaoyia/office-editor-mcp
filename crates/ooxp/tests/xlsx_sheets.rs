@@ -241,6 +241,7 @@ fn inspect_lists_hidden() {
             "oleObjectCount",
             "model3dCount",
             "slicerCount",
+            "protectedRangeCount",
             "hasHeaderFooter",
             "print",
             "view",

@@ -374,6 +374,14 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::SetProtectionNeedsSheetOrWorkbook => {
                 "setProtection 的 id 必须是 sheet:工作表名 或 xlsx:workbook".into()
             }
+            IdReason::InsertProtectedRangeNeedsSheet => {
+                "insertProtectedRange 的 id 必须是 sheet:工作表名".into()
+            }
+            IdReason::SheetEditRangePrefix => {
+                "允许编辑区域 id 必须是 sheet:工作表名/editRange:n，n 从 1 起".into()
+            }
+            IdReason::EditRangeIndexNotInt => "editRange 后面必须是正整数".into(),
+            IdReason::EditRangeIndexFromOne => "editRange 序号从 1 起".into(),
             IdReason::SheetDvPrefix => {
                 "数据验证 id 必须是 sheet:工作表名/dv:n，n 从 1 起".into()
             }
@@ -1057,6 +1065,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::CommentsWorksheetOnly => "只能对工作表发批注 op".into(),
         ErrorKind::InsertHyperlinkWorksheetOnly => "只能对工作表发超链接 op".into(),
         ErrorKind::InsertSparklineWorksheetOnly => "只能对工作表发迷你图 op".into(),
+        ErrorKind::ProtectedRangeWorksheetOnly => "只能对工作表发允许编辑区域 op".into(),
         ErrorKind::DataSheetMustBeWorksheet => {
             "图表工作表的数据必须写到普通工作表上".into()
         }
@@ -1408,6 +1417,14 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             format!("定义名的 {field} 不合法")
         }
         ErrorKind::DefinedNameNotFound { id } => format!("找不到定义名：{id}"),
+        ErrorKind::NeedSetProtectedRangeField => {
+            "setProtectedRange 除 op 与 id 外至少要给一个字段".into()
+        }
+        ErrorKind::InvalidProtectedRangeName => {
+            "允许编辑区域名去掉首尾空白后须为 1 到 255 个字符".into()
+        }
+        ErrorKind::DuplicateProtectedRangeName => "同一张表内允许编辑区域名不能重复".into(),
+        ErrorKind::ProtectedRangeNotFound { id } => format!("找不到允许编辑区域：{id}"),
         ErrorKind::NeedSetPrintSetupField => {
             "setPrintSetup 除 op 与 id 外至少要给一个字段".into()
         }

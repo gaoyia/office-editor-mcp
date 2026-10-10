@@ -36,6 +36,7 @@ C、I、A、O、Xp、Xvg、Xem、X3d、Xom、Xtf、Xfl、Xc、Xh、Xfs、Xtl、X
 2026-10-10 补跑 `xlsx-cf-spark-style.ps1`，Xfs1–Xfs5 通过。无 Repair。
 2026-10-10 补跑 `xlsx-timelines.ps1`，Xtl1–Xtl5 通过。COM `SlicerCaches` 类型为 2，无 Repair。
 2026-10-10 补跑 `xlsx-extpath-datatable.ps1`，Xef1–Xef5 通过。无 Repair。
+2026-10-10 补跑 `xlsx-edit-range.ps1`，Xer1–Xer5 通过。无 Repair。COM `AllowEditRanges` 能看见区域，`.xlsm` 无 Repair。
 
 - **C1** ✅
   - Excel 16.0 打开 `manual-check/office/out/xlsx-create.xlsx`，标题栏无 Repair
@@ -277,6 +278,13 @@ C、I、A、O、Xp、Xvg、Xem、X3d、Xom、Xtf、Xfl、Xc、Xh、Xfs、Xtl、X
   - 工作簿 `ProtectStructure` 为真且能用同一口令解开
   - 对得上的口令 `enforced: false` 后无 Repair
   - 空口令 / 错口令为 `InvalidField`，不给口令改哈希为 `NotImplemented`
+- **Xer1–Xer5** ✅
+  - Excel 16.0：`xlsx-edit-range.ps1`，5 PASS / 0 FAIL
+  - `insertProtectedRange` 后 COM `AllowEditRanges` 能看见区域且无 Repair
+  - 带 `password` 后 `hasPassword=true`、树无哈希或明文，包内 SHA-512
+  - 改名与区域后 inspect 对得上，删除后计数为 0
+  - create 到 `.xlsm` 后 workbook Override 为 macroEnabled，inspect `format` 仍为 `xlsx`，注入的 `vbaProject.bin` 原字节留下
+  - 对 chartsheet、空名、重名、只给 `op` 与 `id`、不给口令改哈希，分别得 `InvalidField` 或 `NotImplemented`
 - **Xdm1–Xdm5** ✅
   - Excel 16.0：`xlsx-dialog-macro.ps1`，5 PASS / 0 FAIL
   - COM 对话框表 `kind=dialogsheet`
@@ -1511,6 +1519,35 @@ inspect 只读进树。create 不生成。apply 不新开编辑。脚本 `manual
 - **Xph5**
   - 检查：拒写
   - 通过标准：空 `password`、错口令解开、不给 `password` 改带 SHA-512 的表，分别得 `InvalidField` 或 `NotImplemented`
+  - 均未写文件
+  - 不强制为拒写开 Excel
+
+## 允许编辑区域与 xlsm
+
+用库 create 产物再 apply。脚本 `manual-check/office/cases/xlsx-edit-range.ps1`。编号用 **Xer**。不要和 Xpr、Xph 撞。不执行宏，不破解密码。
+
+- **Xer1** ✅
+  - 检查：无密码插入
+  - 通过标准：`insertProtectedRange` 后 inspect `protectedRangeCount=1`，名单 `name` / `sqref` / `hasPassword=false`
+  - Excel 无 Repair
+  - COM `AllowEditRanges` 能看到该区域
+- **Xer2** ✅
+  - 检查：带密码
+  - 通过标准：带 `password` 后 `hasPassword=true`，树里没有哈希或明文
+  - Excel 无 Repair
+  - 包内 `algorithmName="SHA-512"`、`spinCount="100000"`
+- **Xer3** ✅
+  - 检查：改删
+  - 通过标准：`setProtectedRange` 改名与区域后 inspect 对得上；`deleteProtectedRange` 后计数为 0
+  - 无 Repair
+- **Xer4** ✅
+  - 检查：打开 `.xlsm`
+  - 通过标准：create 到 `.xlsm` 后 workbook Override 为 macroEnabled，inspect `format` 仍为 `xlsx`
+  - 注入 `vbaProject.bin` 再 apply 后该部件原字节留下，Override 仍是 macroEnabled
+  - Excel 无 Repair
+- **Xer5** ✅
+  - 检查：拒写
+  - 通过标准：对 `chartsheet`、空 `name`、表内重名、只给 `op` 与 `id`、不给口令改带 SHA-512 的区域，分别得 `InvalidField` 或 `NotImplemented`
   - 均未写文件
   - 不强制为拒写开 Excel
 

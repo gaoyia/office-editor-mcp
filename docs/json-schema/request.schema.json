@@ -103,6 +103,7 @@
     "format": {
       "enum": [
         "xlsx",
+        "xlsm",
         "docx",
         "pptx"
       ]
@@ -191,6 +192,9 @@
           "type": "boolean"
         },
         "slicers": {
+          "type": "boolean"
+        },
+        "protectedRanges": {
           "type": "boolean"
         },
         "connections": {
@@ -1150,6 +1154,15 @@
               },
               {
                 "$ref": "#/$defs/setProtectionOp"
+              },
+              {
+                "$ref": "xlsx.schema.json#/$defs/insertProtectedRangeOp"
+              },
+              {
+                "$ref": "xlsx.schema.json#/$defs/setProtectedRangeOp"
+              },
+              {
+                "$ref": "xlsx.schema.json#/$defs/deleteProtectedRangeOp"
               },
               {
                 "$ref": "docx.schema.json#/$defs/insertWatermarkOp"

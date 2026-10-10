@@ -73,13 +73,15 @@ crates/ooxp-cli/             命令行，只依赖 ooxp。二进制名也是 oox
 读 `xl/workbook.xml` 拿工作表名单和关系。`dialogsheet` 与 `macrosheet`（含 Type 以 `/xlIntlMacrosheet` 结尾的国际宏表）进 `sheets`，
 字段只有 `id`、`name`、`kind`、`hidden`、`hasHeaderFooter`；
 给了 `scope.headerFooter` 再跟 `headerFooters`。
-不填单元格、图、保护、打印、视图。apply 仍拒写这两类表（`setHeaderFooterText` 对 `dialogsheet` 仍可改文本）。create 不生成这两类。`format` 只认 `.xlsx`。
+不填单元格、图、保护、打印、视图。apply 仍拒写这两类表（`setHeaderFooterText` 对 `dialogsheet` 仍可改文本）。create 不生成这两类。
+`format` 认 `.xlsx` 与 `.xlsm`，inspect 树的 `format` 仍为 `xlsx`。不执行宏。
 按范围读对应 `sheetN.xml`，需要时再读 `xl/sharedStrings.xml`。工作簿与每张 `worksheet` 始终带 `pictureCount`。
 工作簿、每张 `worksheet` 与每张 `chartsheet` 始终带 `chartCount`。每张表始终带 `hasHeaderFooter`。
 每张 `worksheet` 与 `chartsheet` 始终带 `print` 与 `view`。每张 `worksheet` 始终带 `autoFilter`。每张 `worksheet` 始终带 `sortState`。
 每张 `worksheet` 始终带 `outline`。每张 `worksheet` 始终带 `commentCount`（只计无 `parentId` 的顶层线程化批注）、
 `hyperlinkCount`（该表 `<hyperlinks>` 里 `<hyperlink>` 的条数）、`sparklineCount`（该表 `x14:sparklineGroup` 的组数）、
-`oleObjectCount`（该表被收入的嵌入对象个数）、`model3dCount`（该表被收入的 3D 模型个数）与 `slicerCount`（该表被收入的切片器个数，含时间线）。
+`oleObjectCount`（该表被收入的嵌入对象个数）、`model3dCount`（该表被收入的 3D 模型个数）、
+`slicerCount`（该表被收入的切片器个数，含时间线）与 `protectedRangeCount`（该表 `<protectedRange>` 的个数）。
 工作簿与每张 `worksheet` 始终带 `textBoxCount`、`mathCount`、`shapeCount`、`connectorCount` 与 `smartArtCount`。
 每张 `worksheet` 与 `chartsheet` 始终带 `sheetProtection`。
 工作簿根始终带 `commentCount`、`hyperlinkCount`、`sparklineCount`、`oleObjectCount`、`model3dCount` 与 `slicerCount`（各表之和）、`connectionCount`、
@@ -91,6 +93,7 @@ crates/ooxp-cli/             命令行，只依赖 ooxp。二进制名也是 oox
 `scope.model3ds` 为 true 时列出该表 drawing 里的 `am3d` AlternateContent，不把 GLB 或海报放进树。
 `scope.maths` 为 true 时列出该表 drawing 里的 `a14:m` 公式框，不把 OMML 原文放进树，也不进 `textBoxes`。
 `scope.slicers` 为 true 时列出该表 drawing 里的 slicer 与时间线 `graphicFrame`，不把 cache 选项或筛选状态倒进树。
+`scope.protectedRanges` 为 true 时列出该表 `<protectedRanges>`，不把哈希放进树。
 `scope.connections` 为 true 时列出工作簿 `/xl/connections.xml`，不刷新。
 `scope.externalLinks` 为 true 时列出 workbook `<externalReferences>`，不打开目标文件。
 `scope.pictures` 为 true 时读该表 `<drawing>` 指向的 drawing 部件，列出 `xdr:pic`，不读媒体字节。
@@ -126,9 +129,11 @@ insert / delete 线程化批注时只追加或去掉对应 Note `v:shape` 与占
 也可插、删、改工作表迷你图组：脏该表 `extLst` 里的 `x14:sparklineGroups`，可改颜色、标记与坐标轴，不新建部件，不标重算。
 也可用 `setProtection` 开关工作表 `sheetProtection` 与工作簿 `workbookProtection`：脏该表 XML 或 `workbook.xml`；
 无密码时不写哈希，给了 `password` 则写 Excel 16.0 的 SHA-512 哈希，不新建部件，不标重算。
+也可用 `insertProtectedRange` / `setProtectedRange` / `deleteProtectedRange` 写工作表 `<protectedRanges>`：只改 `worksheet`，不标重算，不新建部件。
 create 可写图、图表、图表工作表、页眉页脚、批注、超链接、文本框、公式框、形状、连接线、SmartArt 与 3D 模型，细则见下文 create。
 本期不写列宽、行高、合并、数据验证、条件格式、工作表表格、透视表或定义名。
-也不写打印、视图、筛选、排序、分组、自定义视图、迷你图、OLE、切片器、连接、外部引用、保护或组合。
+也不写打印、视图、筛选、排序、分组、自定义视图、迷你图、OLE、切片器、连接、外部引用、保护、允许编辑区域或组合。
+create 到 `.xlsm` 时 workbook Override 用 macroEnabled Content Type，不建空的 `vbaProject.bin`。
 也不写共享公式或数组公式。
 
 ### docx
@@ -287,6 +292,7 @@ workbook `extLst` 的 `slicerCaches` / `timelineCacheRefs`、workbook 的 `<defi
 xlsx 也可列出、插入并删除工作簿外部数据连接，脏 `/xl/connections.xml`、workbook `.rels` 与内容类型，不向数据源发请求，不把查询结果写进 `sheetData`，不标重算。
 xlsx 也可列出、插入、删除并改路径对其他工作簿的外部引用，脏 workbook `<externalReferences>`、`/xl/externalLinks/…` 及其 `.rels`、关系与内容类型；改路径只动该链 `.rels` 的 `Target`，不写 `xxl21:alternateUrls`，不打开目标文件，不求值，不标重算。
 xlsx 也可用 `setProtection` 改工作表 `sheetProtection` 或 workbook `workbookProtection`，可写 SHA-512 哈希，不标重算。
+xlsx 也可插、改、删工作表允许编辑区域，脏该表 `<protectedRanges>`，可写同一套 SHA-512，不标重算。
 xlsx 也可改工作表上的页眉页脚原文，并可对 `worksheet` 与 `chartsheet` 页眉槽位插换删 DrawingML 图，脏 `headerFooter` / `drawingHF` 与对应 drawing。
 xlsx 也可改文件属性，脏 `docProps`。docx 可改被点名的段落，可在主文档、页眉页脚与表格单元格插删段落，可插删表以及行与列并合并拆分单元格，可接受或拒绝 run 级、段落标记、表行与表属性修订，可插删改超链接与书签，可插改删域指令（不求值；
 可按 code 写常用域与窗体 ffData），可插入或删除目录块（不在库里算页码），可插入题注与交叉引用（不在库里求 SEQ / REF），可插删构建基块并把基块正文复制进主文档，

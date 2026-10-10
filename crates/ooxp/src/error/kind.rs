@@ -266,6 +266,12 @@ pub(crate) enum IdReason {
     SheetOpNeedsSheet,
     /// setProtection 必须用 sheet:工作表名 或 xlsx:workbook
     SetProtectionNeedsSheetOrWorkbook,
+    /// insertProtectedRange 必须用 sheet:工作表名
+    InsertProtectedRangeNeedsSheet,
+    /// setProtectedRange / deleteProtectedRange 必须用 sheet:工作表名/editRange:n
+    SheetEditRangePrefix,
+    EditRangeIndexNotInt,
+    EditRangeIndexFromOne,
     /// setDataValidation / deleteDataValidation 必须用 sheet:工作表名/dv:n
     SheetDvPrefix,
     DvIndexNotInt,
@@ -699,6 +705,7 @@ define_error_kinds! {
     CommentsWorksheetOnly => vec![Self::CommentsWorksheetOnly],
     InsertHyperlinkWorksheetOnly => vec![Self::InsertHyperlinkWorksheetOnly],
     InsertSparklineWorksheetOnly => vec![Self::InsertSparklineWorksheetOnly],
+    ProtectedRangeWorksheetOnly => vec![Self::ProtectedRangeWorksheetOnly],
     DataSheetMustBeWorksheet => vec![Self::DataSheetMustBeWorksheet],
     TwoCellPictureSize => vec![Self::TwoCellPictureSize],
     TwoCellChartSize => vec![Self::TwoCellChartSize],
@@ -1107,6 +1114,12 @@ define_error_kinds! {
     DefinedNameNotFound { id: String } => {
         vec![Self::DefinedNameNotFound { id: "name:1".into() }]
     },
+    NeedSetProtectedRangeField => vec![Self::NeedSetProtectedRangeField],
+    InvalidProtectedRangeName => vec![Self::InvalidProtectedRangeName],
+    DuplicateProtectedRangeName => vec![Self::DuplicateProtectedRangeName],
+    ProtectedRangeNotFound { id: String } => {
+        vec![Self::ProtectedRangeNotFound { id: "sheet:Sheet1/editRange:1".into() }]
+    },
     NeedSetPrintSetupField => vec![Self::NeedSetPrintSetupField],
     InvalidPrintSetup { field: String } => {
         vec![Self::InvalidPrintSetup { field: "left".into() }]
@@ -1339,6 +1352,10 @@ impl IdReason {
             Self::DeleteSheetNeedsWorksheet,
             Self::SheetOpNeedsSheet,
             Self::SetProtectionNeedsSheetOrWorkbook,
+            Self::InsertProtectedRangeNeedsSheet,
+            Self::SheetEditRangePrefix,
+            Self::EditRangeIndexNotInt,
+            Self::EditRangeIndexFromOne,
             Self::SheetDvPrefix,
             Self::DvIndexNotInt,
             Self::DvIndexFromOne,
@@ -1757,6 +1774,9 @@ impl ErrorKind {
             | Self::InvalidPivotTable { .. }
             | Self::NeedSetDefinedNameField
             | Self::InvalidDefinedName { .. }
+            | Self::NeedSetProtectedRangeField
+            | Self::InvalidProtectedRangeName
+            | Self::DuplicateProtectedRangeName
             | Self::NeedSetPrintSetupField
             | Self::InvalidPrintSetup { .. }
             | Self::NeedSetSheetViewField
@@ -1876,6 +1896,7 @@ impl ErrorKind {
             | Self::CommentsWorksheetOnly
             | Self::InsertHyperlinkWorksheetOnly
             | Self::InsertSparklineWorksheetOnly
+            | Self::ProtectedRangeWorksheetOnly
             | Self::HyperlinkOverlap
             | Self::SparklineOverlap
             | Self::SparklineHostNotCell
@@ -1972,7 +1993,8 @@ impl ErrorKind {
             | Self::ConditionalFormatNotFound { .. }
             | Self::SheetTableNotFound { .. }
             | Self::PivotTableNotFound { .. }
-            | Self::DefinedNameNotFound { .. } => IdNotFound,
+            | Self::DefinedNameNotFound { .. }
+            | Self::ProtectedRangeNotFound { .. } => IdNotFound,
             Self::ScopeRequired { .. } => ScopeRequired,
             Self::SharedFormulaMaster { .. }
             | Self::DataTableFormula { .. }

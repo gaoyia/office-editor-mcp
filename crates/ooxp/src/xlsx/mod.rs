@@ -38,7 +38,7 @@ mod validation;
 mod view;
 
 pub use apply::apply;
-pub use create::create;
+pub use create::{create, create_with_workbook_ct};
 pub use inspect::inspect;
 pub use picture::export_media;
 pub use request::{parse_ops, parse_scope};
@@ -78,6 +78,7 @@ pub const REL_APP: &str =
 
 pub const CT_WORKBOOK: &str =
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml";
+pub const CT_WORKBOOK_MACRO: &str = "application/vnd.ms-excel.sheet.macroEnabled.main+xml";
 pub const CT_WORKSHEET: &str =
     "application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml";
 pub const CT_CHARTSHEET: &str =

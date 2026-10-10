@@ -162,6 +162,7 @@ fn summary_without_scope() {
             "oleObjectCount",
             "model3dCount",
             "slicerCount",
+            "protectedRangeCount",
             "hasHeaderFooter",
             "print",
             "view",

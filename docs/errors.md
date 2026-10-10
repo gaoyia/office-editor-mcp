@@ -57,7 +57,7 @@
 - **`UnsupportedAction`**（退出码 2）
   - `action` 不是 `inspect` / `create` / `apply` / `exportMedia` / `exportChartData`
 - **`UnsupportedFormat`**（退出码 2）
-  - 扩展名或 `format` 不是 `xlsx` / `docx` / `pptx`
+  - 扩展名或 `format` 不是 `xlsx` / `xlsm` / `docx` / `pptx`
 - **`UnsupportedOp`**（退出码 2）
   - apply 遇到第一期不认识的 `op`
 - **`InvalidField`**（退出码 2）
@@ -110,6 +110,7 @@
     - 自定义视图
     - 自定义属性
     - 迷你图组
+    - 允许编辑区域
     - 自定义放映
     - Zoom
 - **`ScopeRequired`**（退出码 2）
@@ -261,6 +262,8 @@
 - `setEvenAndOddHeaders` / `setMirrorMargins` / `setGutterAtTop` / `setPageBackground` 的 id 不是 `docx:document` 报 `InvalidId`
 - docx 的 `setProtection` 的 id 不是 `docx:document` 报 `InvalidId`
 - xlsx 的 `setProtection` 的 id 不是 `sheet:{name}` 也不是 `xlsx:workbook` 报 `InvalidId`
+- `insertProtectedRange` 的 id 不是 `sheet:{name}` 报 `InvalidId`
+- `setProtectedRange` / `deleteProtectedRange` 的 id 不是 `sheet:{name}/editRange:{n}` 报 `InvalidId`
 - pptx 的 `setProtection` / `setShowPr` 的 id 不是 `pptx:presentation` 报 `InvalidId`
 - pptx 没有 presProps 时 `setShowPr` 报 `OpcPartMissing`
 - docx 没有 `settings.xml` 报 `OpcPartMissing`
@@ -846,6 +849,14 @@
 - 对 `dialogsheet` / `macrosheet` 报 `NotImplemented`
 - 空 `password` 或口令对不上已有 SHA-512 哈希报 `InvalidField`
 - 不给 `password` 却要改已有哈希，或哈希不是本期 SHA-512，报 `NotImplemented`
+- xlsx 的 `insertProtectedRange` 的 id 是工作表
+- 必须给 `name` 与 `sqref`
+- `name` 去掉首尾空白后为空、长于 255，或同一表内大小写不敏感重名，报 `InvalidField`
+- `setProtectedRange` / `deleteProtectedRange` 的 id 是 `sheet:{name}/editRange:{n}`
+- 序号不存在报 `IdNotFound`，不是允许编辑区域 id 报 `InvalidId`
+- 对 `chartsheet` 发允许编辑区域 op 报 `InvalidField`
+- 对 `dialogsheet` / `macrosheet` 报 `NotImplemented`
+- 已有 SHA-512 却不给或给错 `password` 的规则与 `setProtection` 相同
 - 找不到书签时，`setBookmark` / `deleteBookmark` 报 `IdNotFound`
 - id 不是书签 id 报 `InvalidId`
 - `insertBookmark` 的 `id` 必须是段落 id

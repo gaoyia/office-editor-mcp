@@ -103,7 +103,7 @@ pub fn infer_format(path: &str, format: Option<&str>) -> Result<Format, Error> {
         .unwrap_or("")
         .to_ascii_lowercase();
     match ext.as_str() {
-        "xlsx" => Ok(Format::Xlsx),
+        "xlsx" | "xlsm" => Ok(Format::Xlsx),
         "docx" => Ok(Format::Docx),
         "pptx" => Ok(Format::Pptx),
         _ => Err(Error::new(ErrorKind::CannotInferFormat {
@@ -114,7 +114,7 @@ pub fn infer_format(path: &str, format: Option<&str>) -> Result<Format, Error> {
 
 pub fn parse_format(s: &str) -> Result<Format, Error> {
     match s {
-        "xlsx" => Ok(Format::Xlsx),
+        "xlsx" | "xlsm" => Ok(Format::Xlsx),
         "docx" => Ok(Format::Docx),
         "pptx" => Ok(Format::Pptx),
         other => Err(Error::new(ErrorKind::UnsupportedFormat {

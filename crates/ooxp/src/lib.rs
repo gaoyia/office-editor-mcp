@@ -847,6 +847,7 @@ mod tests {
                 "oleObjectCount",
                 "model3dCount",
                 "slicerCount",
+                "protectedRangeCount",
                 "hasHeaderFooter",
                 "print",
                 "view",

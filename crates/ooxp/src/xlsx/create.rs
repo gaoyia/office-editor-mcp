@@ -61,6 +61,10 @@ struct NewSheet {
 }
 
 pub fn create(workbook: &Value) -> Result<Vec<u8>, Error> {
+    create_with_workbook_ct(workbook, CT_WORKBOOK)
+}
+
+pub fn create_with_workbook_ct(workbook: &Value, workbook_ct: &str) -> Result<Vec<u8>, Error> {
     let obj = workbook.as_object().ok_or_else(|| {
         Error::with_path(
             ErrorKind::WrongType {
@@ -174,7 +178,7 @@ pub fn create(workbook: &Value) -> Result<Vec<u8>, Error> {
             ("xml".into(), "application/xml".into()),
         ],
         overrides: vec![
-            ("/xl/workbook.xml".into(), CT_WORKBOOK.into()),
+            ("/xl/workbook.xml".into(), workbook_ct.into()),
             ("/xl/styles.xml".into(), CT_STYLES.into()),
             ("/docProps/core.xml".into(), CT_CORE.into()),
             ("/docProps/app.xml".into(), CT_APP.into()),

@@ -62,6 +62,7 @@
       "oleObjectCount": 0,
       "model3dCount": 0,
       "slicerCount": 0,
+      "protectedRangeCount": 0,
       "hasHeaderFooter": false,
       "print": {
         "left": 0.7,

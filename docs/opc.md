@@ -95,9 +95,13 @@ xlsx create 生成 Transitional 包，命名空间用 Office 默认的 2006 那�
 - **`/xl/diagrams/…`**
   - 仅当某张表声明了 `smartArts`，或 apply 插入了 SmartArt
 
-Workbook 的 Content Type：
+Workbook 的 Content Type（`.xlsx`）：
 
 `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml`
+
+create 到 `.xlsm` 时改成：
+
+`application/vnd.ms-excel.sheet.macroEnabled.main+xml`
 
 Worksheet：
 
@@ -135,7 +139,10 @@ macrosheet 关系 Type（inspect 认，create 不写；国际宏表不另开 `ki
 
 `application/vnd.ms-excel.intlmacrosheet+xml`
 
-Excel 16.0 另存 `.xlsx` 会丢掉宏表，对话框表能留下。本仓库不打开 `.xlsm`。
+Excel 16.0 另存 `.xlsx` 会丢掉宏表，对话框表能留下。本仓库可打开 `.xlsm`，不执行宏。
+未点名的 `vbaProject.bin` 原样写回。create 到 `.xlsm` 时 workbook Override 写成
+`application/vnd.ms-excel.sheet.macroEnabled.main+xml`，不建空的 `vbaProject.bin`。
+apply 不得改掉已有的 macroEnabled Override。
 
 SpreadsheetML 主命名空间：
 
@@ -219,6 +226,8 @@ apply 插入工作表 OLE 时，可能新建 `/xl/embeddings/…`（Office 文�
 apply 的 `setProtection` 改目标工作表或图表工作表 XML 的 `<sheetProtection>`（§18.3.1.85 / `CT_ChartsheetProtection`），
 或 `/xl/workbook.xml` 的 `<workbookProtection>`（§18.2.29），按子元素顺序插入，不新建部件。
 无密码时不写哈希。给了 `password` 则写 Excel 16.0 的 `algorithmName` / `hashValue` / `saltValue` / `spinCount`（工作簿为 `workbook*` 前缀），不写遗留 XOR `@password`。
+apply 的允许编辑区域 op 改目标工作表 XML 的 `<protectedRanges>`（§18.3.1.71 / §18.3.1.72），
+按 `CT_Worksheet` 插在 `sheetProtection` 之后，不新建部件。给了 `password` 则写与工作表保护相同的 SHA-512 属性。
 apply 插入工作表文本框时，可能新建或复用 `/xl/drawings/drawingN.xml`；锚点写入 `xdr:sp`（`txBox`）。
 apply 插入工作表 SmartArt 时，可能再新建 `/xl/diagrams/` 下 data / layout / colors
  / quickStyle（CT 分别为 `application/vnd.openxmlformats-officedocument.drawingml.diagramData+xml`、

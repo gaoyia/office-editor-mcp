@@ -94,6 +94,9 @@
 - **工作表切片器**
   - id：`sheet:{name}/slicer:{cNvPrId}` 或 `sheet:{name}/slicer:index:{k}`
   - 例子：`sheet:Sheet1/slicer:2`
+- **允许编辑区域**
+  - id：`sheet:{name}/editRange:{n}`
+  - 例子：`sheet:Sheet1/editRange:1`
 - **定义名**
   - id：`name:{n}`
   - 例子：`name:1`
@@ -308,6 +311,11 @@ OLAP、没有 drawing 的孤立 slicer / timeline 部件本期不进树。`inser
 
 xlsx 的 `setProtection` 的 `id` 必须是 `sheet:{name}`（该表 `sheetProtection`）或 `xlsx:workbook`（`workbookProtection`）。
 对单元格 id、迷你图 id 或图 id 发此 op 报 `InvalidId`。对 `dialogsheet` / `macrosheet` 报 `NotImplemented`。
+允许编辑区域挂在该 `worksheet` 上。`{n}` 从 1 起，按该表 `<protectedRanges>/<protectedRange>` 的文档顺序。
+增删之后旧的 `editRange:{n}` 会变，只够同一次 inspect 之后立刻 apply。不要用 `@name` 编树 id。
+`insertProtectedRange` 的 `id` 必须是 `sheet:{name}`。`setProtectedRange` / `deleteProtectedRange` 的 `id` 必须是允许编辑区域 id。
+对单元格 id、图 id、工作表 id 或 `xlsx:workbook` 发后两个 op 报 `InvalidId`。只能改 `worksheet`。
+对 `chartsheet` 发这些 op 报 `InvalidField`。对 `dialogsheet` / `macrosheet` 报 `NotImplemented`。
 docx 的 `setProtection` 仍只用 `docx:document`。
 pptx 的 `setProtection` 用 `pptx:presentation` 改 `p:modifyVerifier`，放映设置用 `setShowPr`。
 
@@ -509,6 +517,14 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   - 不依赖 `sheet` / `range` / 其它名单键
   - 不把 cache 选项、筛选区间或时间线 `level` 倒进树
   - OLAP 本期不进树
+- **`scope.protectedRanges`**（否）
+  - 为 `true` 时给每张 `worksheet` 填 `protectedRanges`
+  - 没有允许编辑区域时为空数组
+  - 省略或 `false` 则只有 `protectedRangeCount`，没有名单
+  - 不依赖 `sheet` / `range` / 其它名单键
+  - 不把哈希、盐、`algorithmName`、`spinCount`、明文或 `securityDescriptor` 放进树
+  - `chartsheet` / `dialogsheet` / `macrosheet` 没有此名单
+  - docx / pptx 的 `scope` 里出现 `protectedRanges` 报 `InvalidField`
 - **`scope.connections`**（否）
   - 为 `true` 时给工作簿根填 `connections`
   - 没有连接时为空数组
@@ -533,10 +549,11 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
 
 省略 `scope`、或只给空对象：返回工作簿节点和表名单，每张表不含 `cells`，
 也没有 `pictures` / `charts` / `headerFooters` / `textBoxes` / `maths` / `shapes` / `connectors` / `smartArts` / `comments`
- / `hyperlinks` / `sparklines` / `oleObjects` / `model3ds` / `slicers`。
+ / `hyperlinks` / `sparklines` / `oleObjects` / `model3ds` / `slicers` / `protectedRanges`。
 工作簿与每张 `worksheet` 仍有 `pictureCount`、`textBoxCount`、`mathCount`、`shapeCount`、`connectorCount`、`smartArtCount`。
 工作簿、每张 `worksheet` 与每张 `chartsheet` 仍有 `chartCount`。
 工作簿与每张 `worksheet` 仍有 `commentCount`、`hyperlinkCount`、`sparklineCount`、`oleObjectCount`、`model3dCount` 与 `slicerCount`。
+每张 `worksheet` 仍有 `protectedRangeCount`。
 工作簿仍有 `connectionCount`、`externalLinkCount`、`customViewCount`、`definedNameCount` 与 `definedNames`。
 没有 `connections` / `externalLinks` / `customViews` 名单。每张表仍有 `hasHeaderFooter`。
 每张 `worksheet` / `chartsheet` 仍有 `print` 与 `view`。每张 `worksheet` 仍有 `autoFilter`。每张 `worksheet` 仍有 `outline`。
@@ -548,7 +565,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
 只要想看连接线名单，就给 `connectors: true`。只要想看 SmartArt 名单，就给 `smartArt: true`。只要想看批注名单，就给 `comments: true`。
 只要想看超链接名单，就给 `hyperlinks: true`。只要想看迷你图名单，就给 `sparklines: true`。只要想看嵌入对象名单，就给 `oleObjects: true`。
 只要想看 3D 模型名单，就给 `model3ds: true`。
-只要想看切片器名单，就给 `slicers: true`。只要想看连接名单，就给 `connections: true`。只要想看外部引用名单，就给 `externalLinks: true`。
+只要想看切片器名单，就给 `slicers: true`。只要想看允许编辑区域名单，就给 `protectedRanges: true`。只要想看连接名单，就给 `connections: true`。只要想看外部引用名单，就给 `externalLinks: true`。
 只要想看自定义视图名单，就给 `customViews: true`。这些键彼此独立，可只开一边。页眉图名单出现在已展开的槽位上，须同时 `headerFooter: true` 与 `pictures: true`。
 
 
@@ -619,6 +636,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
       "oleObjectCount": 0,
       "model3dCount": 0,
       "slicerCount": 0,
+      "protectedRangeCount": 0,
       "hasHeaderFooter": false,
       "print": {
         "left": 0.7,
@@ -734,6 +752,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
       "oleObjectCount": 0,
       "model3dCount": 0,
       "slicerCount": 0,
+      "protectedRangeCount": 0,
       "hasHeaderFooter": false,
       "print": {
         "left": 0.7,
@@ -833,11 +852,12 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   `chartsheet` 没有 `autoFilter`，也没有 `sortState`，也没有 `outline`。
 - `worksheet` 字段顺序：`id`、`name`、`kind`、`hidden`、`pictureCount`、`chartCount`、`textBoxCount`、`mathCount`、`shapeCount`、`connectorCount`、
   `smartArtCount`、`dataValidationCount`、`conditionalFormatCount`、`tableCount`、`pivotCount`、`commentCount`、
-  `hyperlinkCount`、`sparklineCount`、`oleObjectCount`、`model3dCount`、`slicerCount`、`hasHeaderFooter`、`print`、`view`、`autoFilter`、
+  `hyperlinkCount`、`sparklineCount`、`oleObjectCount`、`model3dCount`、`slicerCount`、`protectedRangeCount`、`hasHeaderFooter`、`print`、`view`、`autoFilter`、
   `sortState`、`outline`、`sheetProtection`，
   有页眉名单时再跟 `headerFooters`，有图名单时再跟 `pictures`，有图表名单时再跟 `charts`，有文本框名单时再跟 `textBoxes`，有公式框名单时再跟 `maths`，有形状名单时再跟 `shapes`，
   有连接线名单时再跟 `connectors`，有 SmartArt 名单时再跟 `smartArts`，有批注名单时再跟 `comments`，有超链接名单时再跟 `hyperlinks`，有迷你图名单时再跟 `sparklines`，
   有嵌入对象名单时再跟 `oleObjects`，有 3D 模型名单时再跟 `model3ds`，有切片器名单时再跟 `slicers`，
+  有允许编辑区域名单时再跟 `protectedRanges`，
   有单元格切片时再跟 `truncated`、`range`、`cells`、`cols`、`rows`、`merges`、`dataValidations`、`conditionalFormats`、`tables`、`pivots`。
   `pictureCount` 始终出现，是该表 SpreadsheetDrawing 与 Chart Drawing 里被收入的 `pic` 个数（判定见上文 xlsx 图 id 那节），不含页眉图。没有图则为 `0`。
   `chartCount` 始终出现，是该表被收入的图表个数（判定见上文 xlsx 图表 id 那节）。没有图表则为 `0`。`textBoxCount` 始终出现，是该表被收入的文本框个数（判定见上文 xlsx 文本框 id 那节）。
@@ -854,10 +874,12 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   `sparklineCount` 始终出现，是该表 `extLst` 里 `x14:sparklineGroup` 的组数。没有则为 `0`。
   `oleObjectCount` 始终出现，是该表被收入的嵌入对象个数（判定见上文 xlsx OLE id 那节）。没有则为 `0`。
   `model3dCount` 始终出现，是该表被收入的 3D 模型个数（判定见上文 xlsx 3D 模型 id 那节）。没有则为 `0`。
-  `slicerCount` 始终出现，是该表被收入的切片器个数（判定见上文 xlsx 切片器 id 那节）。没有则为 `0`。`sheetProtection` 始终出现，规则见下文「工作表保护」。
+  `slicerCount` 始终出现，是该表被收入的切片器个数（判定见上文 xlsx 切片器 id 那节）。没有则为 `0`。
+  `protectedRangeCount` 始终出现，是该表 `<protectedRanges>` 里 `<protectedRange>` 的个数。没有则为 `0`。
+  `sheetProtection` 始终出现，规则见下文「工作表保护」。
   `chartsheet` 没有 `smartArtCount` / `smartArts`，也没有 `dataValidationCount`，
   也没有 `conditionalFormatCount`，也没有 `tableCount`，也没有 `pivotCount`，也没有 `commentCount`，也没有 `hyperlinkCount`，
-  也没有 `sparklineCount`，也没有 `oleObjectCount`，也没有 `model3dCount`，也没有 `autoFilter`，也没有 `sortState`，也没有 `outline`；
+  也没有 `sparklineCount`，也没有 `oleObjectCount`，也没有 `model3dCount`，也没有 `slicerCount`，也没有 `protectedRangeCount`，也没有 `autoFilter`，也没有 `sortState`，也没有 `outline`；
   字段顺序：`id`、`name`、`kind`、`hidden`、`pictureCount`、`chartCount`、`textBoxCount`、`mathCount`、`shapeCount`、`connectorCount`、
   `hasHeaderFooter`、`print`、`view`、`sheetProtection`，
   有页眉名单时再跟 `headerFooters`，有图名单时再跟 `pictures`，有图表名单时再跟 `charts`，有文本框名单时再跟 `textBoxes`，
@@ -867,7 +889,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   `dialogsheet` / `macrosheet` 没有 `pictureCount` / `pictures` / `chartCount` / `charts` / `textBoxCount` / `textBoxes`
    / `mathCount` / `maths` / `shapeCount` / `shapes` / `connectorCount` / `connectors` / `smartArtCount` / `smartArts` / `dataValidationCount`
    / `conditionalFormatCount` / `tableCount` / `pivotCount` / `commentCount` / `hyperlinkCount` / `sparklineCount`
-   / `oleObjectCount` / `model3dCount` / `print` / `view` / `autoFilter` / `sortState` / `outline` / `sheetProtection`；
+   / `oleObjectCount` / `model3dCount` / `slicerCount` / `protectedRangeCount` / `print` / `view` / `autoFilter` / `sortState` / `outline` / `sheetProtection`；
   字段顺序：`id`、`name`、`kind`、`hidden`、`hasHeaderFooter`，有页眉名单时再跟 `headerFooters`。
   判定 `kind` 只看 workbook 关系 Type：以 `/chartsheet` 结尾为 `chartsheet`；以 `/dialogsheet` 结尾为 `dialogsheet`；
   以 `/macrosheet`、`/xlMacrosheet` 或 `/xlIntlMacrosheet` 结尾为 `macrosheet`（国际宏表不另开 `kind`）；其余为 `worksheet`。
@@ -877,7 +899,8 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   `http://schemas.microsoft.com/office/2006/relationships/xlIntlMacrosheet`，
   CT `application/vnd.ms-excel.macrosheet+xml` / `application/vnd.ms-excel.intlmacrosheet+xml`，
   根 `<xm:macrosheet>`（`xmlns:xm="http://schemas.microsoft.com/office/excel/2006/main"`）。
-  本仓库 `format` 只认 `xlsx`，不打开 `.xlsm`；`.xlsx` 包里若已有这些部件，inspect 仍按 Type 列入。
+  本仓库 `format` 可写 `xlsx` 或 `xlsm`，路径 `.xlsm` 按同一套 SpreadsheetML 打开。inspect 树的 `format` 仍为 `xlsx`。
+  不执行宏。未点名的 `vbaProject.bin` 原样写回。`.xlsx` 包里若已有宏表部件，inspect 仍按 Type 列入。
 - `print` 字段顺序：`left`、`right`、`top`、`bottom`、`header`、`footer`、`paperSize`、`orientation`、`scale`、`fitToPage`、`fitToWidth`、
   `fitToHeight`、`gridLines`、`headings`、`hCenter`、`vCenter`、`printArea`、`rowBreaks`、`colBreaks`。
   边距是英寸数字，与 XML `pageMargins`（§18.3.1.62）相同；没有该元素时用缺省 `left`/`right` 0.7、`top`/`bottom` 0.75、`header`/`footer` 0.3。
@@ -943,6 +966,12 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   前三项取同名属性，缺省 `false`。`hasPassword` 在带非空 `workbookHashValue` / `workbookSaltValue` / `workbookAlgorithmName`
    / `revisionsHashValue` / `revisionsSaltValue` / `revisionsAlgorithmName`，
   或 `workbookPassword` / `revisionsPassword` / `password` 不是空且不是 `0` / `0000` 时为 `true`。不把哈希放进树。不报告 IRM 或 `fileSharing`。
+- `scope.protectedRanges` 为 `true` 时，每张 `worksheet` 带 `protectedRanges`。没有区域时为空数组。不依赖单元格切片。
+  按该表 `<protectedRanges>` 里 `<protectedRange>` 的文档顺序（ECMA-376 §18.3.1.71 / §18.3.1.72）。
+  每条字段顺序：`id`、`index`、`name`、`sqref`、`hasPassword`。`index` 与 id 里的 `{n}` 相同。
+  `name` 取 `@name`，没有则为 `""`。`sqref` 取 `@sqref`，能解析成一个或多个 A1 区域时规范化成空格分隔的 `A1` 或 `A1:B2`；解析不了或缺失则为 `null`。
+  `hasPassword` 在带非空 `hashValue` / `saltValue` / `algorithmName`，或 `password` 不是空且不是 `0` / `0000` 时为 `true`。
+  不把哈希、盐、算法、`spinCount`、明文或 `securityDescriptor` 放进树。`chartsheet` 没有此名单。
 - `scope.comments` 为 `true` 时，每张 `worksheet` 带 `comments`。没有线程化批注时为空数组。不依赖单元格切片。
   按该表 `ThreadedComments` 里无 `parentId` 的 `threadedComment` 的文档顺序。
   每条字段顺序：`id`、`commentId`、`author`、`initials`、`date`、`done`、`kind`、`ref`、`text`、`replies`。`commentId` 是 `@id` 原文。
@@ -1181,6 +1210,10 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
 
 ## create
 
+路径扩展名为 `.xlsm` 时，`/xl/workbook.xml` 的 Override 写成
+`application/vnd.ms-excel.sheet.macroEnabled.main+xml`，不建空的 `vbaProject.bin`。
+`format` 可写 `xlsm`。inspect 树的 `format` 仍为 `xlsx`。docx / pptx 图表 embedding 仍走非宏 Content Type。
+
 ```json
 {
   "schemaVersion": 1,
@@ -1342,13 +1375,13 @@ drawing 上那一张 `xdr:absoluteAnchor` 框和 `/xl/charts/chartN.xml`，数�
 图表工作表的 `dataFrom` 在该数据表 `charts[]` 之后写入，会覆盖同一格。`workbook.xml` 的 `<sheet>` 顺序与 `sheets[]` 一致。
 `app.xml` 的 HeadingPairs：普通表算 Worksheets，图表工作表算 Charts；TitlesOfParts 按 `sheets[]` 顺序。
 至少一张 `worksheet`，否则报 `InvalidField`。不要生成透视表、条件格式。
-create 本期不写列宽、行高、合并、数据验证、条件格式、工作表表格、透视表、定义名、打印设置、视图与筛选、排序、分组、隐藏行 / 列、拆分窗格、自定义视图、迷你图、OLE、切片器、外部数据连接、保护或组合，
+create 本期不写列宽、行高、合并、数据验证、条件格式、工作表表格、透视表、定义名、打印设置、视图与筛选、排序、分组、隐藏行 / 列、拆分窗格、自定义视图、迷你图、OLE、切片器、外部数据连接、保护、允许编辑区域或组合，
 也不写共享公式、数组公式或数据表公式（`cells[]` 出现 `shared` / `sharedRef` / `array` / `arrayRef` / `dataTable` / `dataTableRef` 报 `InvalidField`）。
 create 本期不写外部引用。`workbook` 根上或 `cells[]` 上出现 `pictures` / `charts` / `headerFooters` / `headerFooter`
  / `definedNames` / `connections` / `externalLinks` / `externalReferences` / `customViews` / `comments`
  / `hyperlinks` / `textBoxes` / `shapes` / `connectors` / `smartArts` / `workbookProtection` / `protection`，
 或 `sheets[]` 上出现 `wrap` / `sparklines` / `oleObjects` / `slicers` / `sheetProtection` / `protection` / `headerFooter`
- / `outline` / `sortState` / `sort`，报 `InvalidField`。
+ / `outline` / `sortState` / `sort` / `protectedRanges`，报 `InvalidField`。
 `kind` 只能是 `worksheet` 或 `chartsheet`。图表工作表上出现 `cells` / `pictures` / `charts` / `headerFooters` / `comments`
  / `hyperlinks` / `textBoxes` / `maths` / `shapes` / `connectors` / `smartArts` / `model3ds` / `from` / `to` / `anchor` / 偏移 / `wrap` / `id` 报 `InvalidField`。
 `comments[]` 上出现 `id` / `replies` / `start` / `end` / `x` / `y`，`hyperlinks[]` 上出现 `text` / `anchor` / `id`，
@@ -2085,6 +2118,72 @@ docx / pptx 上发此 op 报 `InvalidField`。不标重算。
 
 示例见 `docs/examples/xlsx-apply-defined-name.json`。
 
+### insertProtectedRange
+
+往工作表追加一条允许编辑区域（ECMA-376 §18.3.1.71）。区域在工作表保护打开且单元格锁定时生效。不标重算。
+
+```json
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "C:\\data\\book.xlsx",
+  "output": "C:\\data\\book.edit-range.xlsx",
+  "ops": [
+    {
+      "op": "insertProtectedRange",
+      "id": "sheet:Sheet1",
+      "name": "Range1",
+      "sqref": "A1:C5"
+    }
+  ]
+}
+```
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"insertProtectedRange"` |
+| `id` | 必须是 `sheet:{name}` |
+| `name` | 必须。写入 `@name` |
+| `sqref` | 必须。一个或多个 A1 区域，字符串或字符串数组 |
+| `password` | 可选。非空字符串。给了则写 Excel 16.0 的 SHA-512（`algorithmName` / `hashValue` / `saltValue` / `spinCount="100000"`） |
+
+`name` 去掉首尾空白后长度 1 到 255。同一张表内大小写不敏感唯一，否则报 `InvalidField`。空串或 `null` 报 `InvalidField`。
+`sqref` 非法报 `InvalidRange`。规范化后写入 `@sqref`（空格分隔，单格写成 `A1`，闭区间写成 `A1:C5`）。
+空 `password` 报 `InvalidField`。不写遗留 XOR `@password`，不写 `securityDescriptor`。
+`<protectedRanges>` 按 `CT_Worksheet` 插在 `sheetProtection` 之后、`scenarios` 之前。
+id 不是工作表 id 报 `InvalidId`。只能改 `worksheet`。对 `chartsheet` 报 `InvalidField`。对 `dialogsheet` / `macrosheet` 报 `NotImplemented`。
+docx / pptx 上发此 op 报 `InvalidField`。create 本期不写允许编辑区域。
+
+### setProtectedRange
+
+改已有允许编辑区域。只改给了的字段。
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"setProtectedRange"` |
+| `id` | 允许编辑区域 id `sheet:{name}/editRange:{n}` |
+| `name` | 可选。新的名，约束与 insert 相同。`null` 报 `InvalidField` |
+| `sqref` | 可选。新的区域，约束与 insert 相同。`null` 报 `InvalidField` |
+| `password` | 可选。非空字符串。给了则校验已有哈希并换新盐重写 SHA-512 |
+
+除 `op` 与 `id` 外至少给一个字段，否则报 `InvalidField`。`password` 算可写字段。改 `name` 时按该表做唯一性检查。
+已有 SHA-512 哈希：不给 `password` 报 `NotImplemented`，不删哈希。给了则校验；对不上报 `InvalidField`；对得上则可改名 / 区域，并换新盐重写哈希。
+已有遗留 XOR 或其它算法：即使给了 `password` 也报 `NotImplemented`。未点名的属性与 `securityDescriptor` 原样留。
+找不到该序号报 `IdNotFound`。id 不是允许编辑区域 id 报 `InvalidId`。docx / pptx 上发此 op 报 `InvalidField`。
+
+### deleteProtectedRange
+
+删掉一条允许编辑区域。
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"deleteProtectedRange"` |
+| `id` | 允许编辑区域 id |
+| `password` | 已有 SHA-512 时必须，且须对得上 |
+
+去掉该 `<protectedRange>`。删光则去掉 `<protectedRanges>`。已有哈希却不给或给错 `password` 的规则与 `setProtectedRange` 相同。
+找不到该序号报 `IdNotFound`。id 不是允许编辑区域 id 报 `InvalidId`。docx / pptx 上发此 op 报 `InvalidField`。
+
 ### 重算标记
 
 任意一条 `setCell` 成功之后，必须让打开文件的 Excel 重算。第一期用这两步，两步都做：
@@ -2114,6 +2213,7 @@ docx / pptx 上发此 op 报 `InvalidField`。不标重算。
 `setSheetView` 脏目标表的 `sheetViews`（含拆分）。`setAutoFilter` 脏目标表的工作表级 `autoFilter`，不改表格部件。
 `groupRows` / `ungroupRows` / `groupCols` / `ungroupCols` / `setOutline` / `setRowHidden` / `setColHidden` 脏目标表的 `sheetPr` / `sheetFormatPr` / `cols` / `sheetData` 行属性，不新建部件。
 `setSortState` 脏目标表的工作表级 `sortState`；给了 `color` 时还可脏 styles 的 `dxfs`。不重排 `sheetData`，不改表格部件。
+`insertProtectedRange` / `setProtectedRange` / `deleteProtectedRange` 只脏目标工作表 XML 的 `<protectedRanges>`，不标重算，不新建部件。
 `insertCustomView` / `deleteCustomView` / `showCustomView` 脏 `/xl/workbook.xml` 的 `customWorkbookViews` 以及各表
 `customSheetViews` / 当前 `sheetViews` / 可选 `pageMargins`，不新建部件。
 页眉图还可以脏 `drawingHF` 指向的 drawing、工作表 `.rels`、`/xl/media/…` 与 `[Content_Types].xml`。

@@ -70,7 +70,9 @@ xlsx 的 `scope.sparklines` 与迷你图 op 认工作表 `extLst` 里的 `x14:sp
 xlsx 的 `scope.connections` 与连接 op 认工作簿 `/xl/connections.xml`（ECMA-376 §18.13），不刷新、不把查询结果写进单元格。
 xlsx 的 `scope.externalLinks` 与外部引用 op 认工作簿 `<externalReferences>`（ECMA-376 §18.14），不打开目标文件，不求值。
 xlsx 的 `scope.customViews` 与自定义视图 op 认工作簿 `<customWorkbookViews>`（ECMA-376 §18.2.3 / §18.2.4），不按视图恢复隐藏行 / 列。
-xlsx 可用 `setProtection` 开关无密码的工作表 `sheetProtection` 与工作簿 `workbookProtection`。xlsx 的 `exportChartData` 仍拒绝。
+xlsx 可用 `setProtection` 开关工作表 `sheetProtection` 与工作簿 `workbookProtection`，给了 `password` 则写 SHA-512。
+xlsx 也可用 `insertProtectedRange` / `setProtectedRange` / `deleteProtectedRange` 写工作表允许编辑区域。
+路径 `.xlsm` 按同一套 SpreadsheetML 打开，inspect 树的 `format` 仍为 `xlsx`。xlsx 的 `exportChartData` 仍拒绝。
 人工打开只认 Microsoft Office，见三份 checklist。
 
 ## 信封
@@ -89,7 +91,8 @@ xlsx 可用 `setProtection` 开关无密码的工作表 `sheetProtection` 与工
 另外按动作需要 `path`、`format`、`scope`、`workbook`、`document`、`presentation`、`ops`、`id`、`output` 等字段，见下文。
 禁止在请求里放一整棵 inspect 树来表示「把文档改成这样」。create 的 xlsx 用 `workbook`，docx 用 `document`，pptx 用 `presentation`，三者不能同时出现。
 
-`format` 取值：`xlsx`、`docx`、`pptx`。不认 `.xlsm`。可省略，省略时从 `path` 的扩展名推断。推断不出就报 `UnsupportedFormat`。
+`format` 取值：`xlsx`、`xlsm`、`docx`、`pptx`。可省略，省略时从 `path` 的扩展名推断。推断不出就报 `UnsupportedFormat`。
+`xlsm` 与 `xlsx` 走同一套 SpreadsheetML：inspect 树的 `format` 仍为 `xlsx`。不执行宏，不把 `vbaProject.bin` 当对象编辑。不认 `.xls`。
 
 `path` 是本地文件系统路径。Windows 反斜杠和正斜杠都接受。
 
@@ -240,7 +243,7 @@ create 与 apply 落盘时先写入目标同目录的临时文件，再改名为
 `setSmartArtStyle`、`setSmartArtLayout`；
 不含 `setSmartArtPos`、`setSmartArtWrap`）、以及超链接 op（`insertHyperlink`、`setHyperlink`、`deleteHyperlink`）、
 以及迷你图 op（`insertSparkline`、`setSparkline`、`deleteSparkline`）、以及 OLE op（`insertOle`、`deleteOle`）、以及 3D 模型 op（`insertModel3d`、`replaceModel3d`、`deleteModel3d`）、以及公式 op（`insertMath`、`setMath`、`deleteMath`）、以及切片器 op（`insertSlicer`、
-`deleteSlicer`）、以及连接 op（`insertConnection`、`deleteConnection`）、以及外部引用 op（`insertExternalLink`、`setExternalLink`、`deleteExternalLink`）、以及 `setProtection`。
+`deleteSlicer`）、以及连接 op（`insertConnection`、`deleteConnection`）、以及外部引用 op（`insertExternalLink`、`setExternalLink`、`deleteExternalLink`）、以及 `setProtection`、以及允许编辑区域 op（`insertProtectedRange`、`setProtectedRange`、`deleteProtectedRange`）。
 docx 认 `setParaText`、`setHeaderFooterDistance`、`setPageMargin`、`setPageSize`、`setColumns`、`setVerticalAlign`、
 `setLineNumbering`、`setDocGrid`、`setRtlGutter`、`setMirrorMargins`、`setGutterAtTop`、`setHeaderFooterLink`、
 `insertHeaderFooter`、`setTitlePage`、`setEvenAndOddHeaders`、图片 op（含 `setPictureWrap`，
@@ -301,7 +304,7 @@ pptx 认 `setShapeText`、`setShapeFormat`、形状管理 op（`insertShape`、`
 `insertDefinedName` / `setDefinedName` / `deleteDefinedName`、`setPrintSetup`、`setSheetView`、`setAutoFilter`、
 `groupRows` / `ungroupRows` / `groupCols` / `ungroupCols` / `setOutline`、`insertSlicer` / `deleteSlicer`、
 `insertConnection` / `deleteConnection` / `insertExternalLink` / `setExternalLink` / `deleteExternalLink` / `insertCustomView`
- / `deleteCustomView` / `showCustomView`，
+ / `deleteCustomView` / `showCustomView` / `insertProtectedRange` / `setProtectedRange` / `deleteProtectedRange`，
 对 docx 发 `setPictureAnchor` / `setChartAnchor` / `setSmartArtPos` / `setNotesText`，
 对 pptx 发 `setPictureWrap` / `setPictureAnchor` / `setChartWrap` / `setChartAnchor` / `setSmartArtWrap`，
 对 docx / xlsx 发 `setPicturePos` / `setChartPos` / `setSmartArtPos` / `setNotesText` / `insertSlide` / `deleteSlide`

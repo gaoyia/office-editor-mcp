@@ -1,13 +1,17 @@
-//! 工作表 `sheetProtection` 与工作簿 `workbookProtection`。
+//! 工作表 `sheetProtection`、工作簿 `workbookProtection` 与允许编辑区域。
 //! 可写 Excel 16.0 的 SHA-512 哈希，不破解密码，不写遗留 XOR。
 
 use base64::engine::general_purpose::STANDARD;
 use base64::Engine;
 use serde_json::{json, Map, Value};
 
+use super::a1::{self, CellRef};
 use super::layout;
 use super::names;
-use super::request::{SetSheetProtectionOp, SetWorkbookProtectionOp};
+use super::request::{
+    DeleteProtectedRangeOp, InsertProtectedRangeOp, SetProtectedRangeOp, SetSheetProtectionOp,
+    SetWorkbookProtectionOp,
+};
 use crate::error::{Error, ErrorKind};
 use crate::password::sha512_spin;
 use crate::xml::{Element, Node};
@@ -384,4 +388,260 @@ fn remove_child(parent: &mut Element, local: &str) {
         Node::Element(e) => e.local_name() != local,
         _ => true,
     });
+}
+
+pub(crate) fn count_ranges(root: &Element) -> usize {
+    root.child_by_local("protectedRanges")
+        .map(|p| p.children_by_local("protectedRange").len())
+        .unwrap_or(0)
+}
+
+pub(crate) fn inspect_ranges(root: &Element, sheet: &str) -> Value {
+    let Some(parent) = root.child_by_local("protectedRanges") else {
+        return json!([]);
+    };
+    let mut out = Vec::new();
+    for (i, el) in parent
+        .children_by_local("protectedRange")
+        .into_iter()
+        .enumerate()
+    {
+        out.push(inspect_one_range(el, sheet, i + 1));
+    }
+    Value::Array(out)
+}
+
+fn inspect_one_range(el: &Element, sheet: &str, n: usize) -> Value {
+    let mut obj = Map::new();
+    obj.insert("id".into(), json!(format!("sheet:{sheet}/editRange:{n}")));
+    obj.insert("index".into(), json!(n));
+    obj.insert("name".into(), json!(el.attr("name").unwrap_or("")));
+    obj.insert("sqref".into(), inspect_range_sqref(el.attr("sqref")));
+    obj.insert("hasPassword".into(), json!(has_password(el)));
+    Value::Object(obj)
+}
+
+fn inspect_range_sqref(raw: Option<&str>) -> Value {
+    let Some(raw) = raw.filter(|s| !s.trim().is_empty()) else {
+        return Value::Null;
+    };
+    let mut parts = Vec::new();
+    for tok in raw.split_whitespace() {
+        match a1::parse_range(tok) {
+            Ok((a, b)) => parts.push(a1::format_range(a, b)),
+            Err(_) => return Value::Null,
+        }
+    }
+    if parts.is_empty() {
+        Value::Null
+    } else {
+        json!(parts.join(" "))
+    }
+}
+
+pub(crate) fn apply_insert_range(
+    sheet: &mut Element,
+    kind: &str,
+    op: &InsertProtectedRangeOp,
+    i: usize,
+) -> Result<(), Error> {
+    reject_range_kind(kind, i)?;
+    ensure_unique_name(sheet, &op.name, None, i)?;
+    let mut el = Element::new("protectedRange");
+    if let Some(pw) = &op.password {
+        write_sha512(&mut el, pw, false);
+    }
+    el.set_attr("sqref", format_sqref(&op.sqref));
+    el.set_attr("name", &op.name);
+    let parent = ensure_protected_ranges(sheet);
+    parent.push_element(el);
+    Ok(())
+}
+
+pub(crate) fn apply_set_range(
+    sheet: &mut Element,
+    kind: &str,
+    op: &SetProtectedRangeOp,
+    i: usize,
+) -> Result<(), Error> {
+    reject_range_kind(kind, i)?;
+    {
+        let el = nth_range(sheet, op.index, i, &op.sheet)?;
+        gate_existing_hash(Some(el), false, op.password.as_deref(), i)?;
+    }
+    if let Some(name) = &op.name {
+        ensure_unique_name(sheet, name, Some(op.index), i)?;
+    }
+    let el = nth_range_mut(sheet, op.index, i, &op.sheet)?;
+    if let Some(name) = &op.name {
+        el.set_attr("name", name);
+    }
+    if let Some(ranges) = &op.sqref {
+        el.set_attr("sqref", format_sqref(ranges));
+    }
+    if let Some(pw) = &op.password {
+        write_sha512(el, pw, false);
+    }
+    Ok(())
+}
+
+pub(crate) fn apply_delete_range(
+    sheet: &mut Element,
+    kind: &str,
+    op: &DeleteProtectedRangeOp,
+    i: usize,
+) -> Result<(), Error> {
+    reject_range_kind(kind, i)?;
+    {
+        let el = nth_range(sheet, op.index, i, &op.sheet)?;
+        gate_existing_hash(Some(el), false, op.password.as_deref(), i)?;
+    }
+    let empty = {
+        let Some(parent) = sheet.child_by_local_mut("protectedRanges") else {
+            return Err(range_not_found(&op.sheet, op.index, i));
+        };
+        let mut seen = 0usize;
+        let mut found = None;
+        for (idx, n) in parent.children.iter().enumerate() {
+            let Node::Element(e) = n else { continue };
+            if e.local_name() != "protectedRange" {
+                continue;
+            }
+            seen += 1;
+            if seen == op.index {
+                found = Some(idx);
+                break;
+            }
+        }
+        let Some(idx) = found else {
+            return Err(range_not_found(&op.sheet, op.index, i));
+        };
+        parent.children.remove(idx);
+        parent.children_by_local("protectedRange").is_empty()
+    };
+    if empty {
+        remove_child(sheet, "protectedRanges");
+    }
+    Ok(())
+}
+
+fn reject_range_kind(kind: &str, i: usize) -> Result<(), Error> {
+    if kind == "dialogsheet" || kind == "macrosheet" {
+        return Err(Error::with_path(
+            ErrorKind::DialogOrMacroSheet,
+            format!("ops[{i}].id"),
+        ));
+    }
+    if kind != "worksheet" {
+        return Err(Error::with_path(
+            ErrorKind::ProtectedRangeWorksheetOnly,
+            format!("ops[{i}].id"),
+        ));
+    }
+    Ok(())
+}
+
+fn ensure_unique_name(
+    sheet: &Element,
+    name: &str,
+    skip: Option<usize>,
+    i: usize,
+) -> Result<(), Error> {
+    let Some(parent) = sheet.child_by_local("protectedRanges") else {
+        return Ok(());
+    };
+    for (k, el) in parent
+        .children_by_local("protectedRange")
+        .into_iter()
+        .enumerate()
+    {
+        if skip == Some(k + 1) {
+            continue;
+        }
+        if el
+            .attr("name")
+            .is_some_and(|n| n.eq_ignore_ascii_case(name))
+        {
+            return Err(Error::with_path(
+                ErrorKind::DuplicateProtectedRangeName,
+                format!("ops[{i}].name"),
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn ensure_protected_ranges(worksheet: &mut Element) -> &mut Element {
+    if worksheet.child_by_local("protectedRanges").is_none() {
+        layout::insert_child_ordered(
+            worksheet,
+            Element::new("protectedRanges"),
+            "protectedRanges",
+        );
+    }
+    worksheet.child_by_local_mut("protectedRanges").unwrap()
+}
+
+fn format_sqref(ranges: &[(CellRef, CellRef)]) -> String {
+    ranges
+        .iter()
+        .map(|(a, b)| a1::format_range(*a, *b))
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn nth_range<'a>(
+    worksheet: &'a Element,
+    index: usize,
+    i: usize,
+    sheet: &str,
+) -> Result<&'a Element, Error> {
+    let Some(parent) = worksheet.child_by_local("protectedRanges") else {
+        return Err(range_not_found(sheet, index, i));
+    };
+    parent
+        .children_by_local("protectedRange")
+        .into_iter()
+        .nth(index.saturating_sub(1))
+        .ok_or_else(|| range_not_found(sheet, index, i))
+}
+
+fn nth_range_mut<'a>(
+    worksheet: &'a mut Element,
+    index: usize,
+    i: usize,
+    sheet: &str,
+) -> Result<&'a mut Element, Error> {
+    let Some(parent) = worksheet.child_by_local_mut("protectedRanges") else {
+        return Err(range_not_found(sheet, index, i));
+    };
+    let mut seen = 0usize;
+    let mut found = None;
+    for (idx, n) in parent.children.iter().enumerate() {
+        let Node::Element(e) = n else { continue };
+        if e.local_name() != "protectedRange" {
+            continue;
+        }
+        seen += 1;
+        if seen == index {
+            found = Some(idx);
+            break;
+        }
+    }
+    let Some(idx) = found else {
+        return Err(range_not_found(sheet, index, i));
+    };
+    match &mut parent.children[idx] {
+        Node::Element(e) => Ok(e),
+        _ => Err(range_not_found(sheet, index, i)),
+    }
+}
+
+fn range_not_found(sheet: &str, index: usize, i: usize) -> Error {
+    Error::with_path(
+        ErrorKind::ProtectedRangeNotFound {
+            id: format!("sheet:{sheet}/editRange:{index}"),
+        },
+        format!("ops[{i}].id"),
+    )
 }

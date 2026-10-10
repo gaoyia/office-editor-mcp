@@ -137,6 +137,7 @@ $order = @(
     'xlsx-sparklines'
     'xlsx-protect'
     'xlsx-protect-hash'
+    'xlsx-edit-range'
     'xlsx-dialog-macro'
     'xlsx-anchor'
     'pptx-docprops'

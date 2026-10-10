@@ -407,6 +407,16 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::SetProtectionNeedsSheetOrWorkbook => {
                 "setProtection id must be sheet:name or xlsx:workbook".into()
             }
+            IdReason::InsertProtectedRangeNeedsSheet => {
+                "insertProtectedRange id must be sheet:name".into()
+            }
+            IdReason::SheetEditRangePrefix => {
+                "protected range id must be sheet:name/editRange:n, n starting at 1".into()
+            }
+            IdReason::EditRangeIndexNotInt => {
+                "editRange must be followed by a positive integer".into()
+            }
+            IdReason::EditRangeIndexFromOne => "editRange index starts at 1".into(),
             IdReason::SheetDvPrefix => {
                 "data validation id must be sheet:name/dv:n, n starting at 1".into()
             }
@@ -1178,6 +1188,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::InsertSparklineWorksheetOnly => {
             "sparkline ops only apply to worksheets".into()
         }
+        ErrorKind::ProtectedRangeWorksheetOnly => {
+            "protected range ops only apply to worksheets".into()
+        }
         ErrorKind::DataSheetMustBeWorksheet => {
             "chart sheet data must be written to a worksheet".into()
         }
@@ -1627,6 +1640,18 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         }
         ErrorKind::DefinedNameNotFound { id } => {
             format!("Defined name not found: {id}")
+        }
+        ErrorKind::NeedSetProtectedRangeField => {
+            "setProtectedRange requires a field besides op and id".into()
+        }
+        ErrorKind::InvalidProtectedRangeName => {
+            "protected range name must be 1 to 255 characters after trim".into()
+        }
+        ErrorKind::DuplicateProtectedRangeName => {
+            "protected range name must be unique on this sheet".into()
+        }
+        ErrorKind::ProtectedRangeNotFound { id } => {
+            format!("Protected range not found: {id}")
         }
         ErrorKind::NeedSetPrintSetupField => {
             "setPrintSetup requires a field besides op and id".into()

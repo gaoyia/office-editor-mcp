@@ -88,6 +88,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     let want_model3ds = scope.as_ref().is_some_and(|s| s.model3ds);
     let want_maths = scope.as_ref().is_some_and(|s| s.maths);
     let want_slicers = scope.as_ref().is_some_and(|s| s.slicers);
+    let want_protected_ranges = scope.as_ref().is_some_and(|s| s.protected_ranges);
     let want_connections = scope.as_ref().is_some_and(|s| s.connections);
     let want_external_links = scope.as_ref().is_some_and(|s| s.external_links);
     let want_custom_views = scope.as_ref().is_some_and(|s| s.custom_views);
@@ -166,6 +167,8 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
             let n_slicer = slicer::count(&pkg, &sh.part)?;
             slicer_count += n_slicer;
             obj.insert("slicerCount".into(), json!(n_slicer));
+            let n_pr = super::protect::count_ranges(&sheet_doc.root);
+            obj.insert("protectedRangeCount".into(), json!(n_pr));
             let has_hf = hf::has_header_footer(&sheet_doc.root);
             obj.insert("hasHeaderFooter".into(), json!(has_hf));
             obj.insert(
@@ -266,6 +269,12 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
                 obj.insert(
                     "slicers".into(),
                     Value::Array(slicer::collect(&pkg, &sh.part, &sh.name)?),
+                );
+            }
+            if want_protected_ranges {
+                obj.insert(
+                    "protectedRanges".into(),
+                    super::protect::inspect_ranges(&sheet_doc.root, &sh.name),
                 );
             }
             if let Some(cs) = cells_scope {

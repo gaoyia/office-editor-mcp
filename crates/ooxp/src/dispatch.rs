@@ -116,7 +116,15 @@ fn run_create(req: &Request, cli_output: Option<&Path>) -> Result<RunOutput, Err
                     "workbook",
                 )
             })?;
-            xlsx::create(workbook)?
+            let xlsm = path
+                .extension()
+                .and_then(|e| e.to_str())
+                .is_some_and(|e| e.eq_ignore_ascii_case("xlsm"));
+            if xlsm {
+                xlsx::create_with_workbook_ct(workbook, xlsx::CT_WORKBOOK_MACRO)?
+            } else {
+                xlsx::create(workbook)?
+            }
         }
         Format::Docx => {
             if has_wb || has_pres {

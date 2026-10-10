@@ -667,6 +667,24 @@ pub fn apply(bytes: &[u8], ops: &[XlsxOp]) -> Result<Vec<u8>, Error> {
                     workbook_dirty = true;
                 }
             },
+            XlsxOp::InsertProtectedRange(op) => {
+                let (part, kind) = require_named_sheet(&sheet_index, &op.sheet, i)?;
+                load_dirty(&pkg, &mut dirty_sheets, &part, false)?;
+                let doc = dirty_of(&mut dirty_sheets, &part);
+                super::protect::apply_insert_range(&mut doc.root, kind, op, i)?;
+            }
+            XlsxOp::SetProtectedRange(op) => {
+                let (part, kind) = require_named_sheet(&sheet_index, &op.sheet, i)?;
+                load_dirty(&pkg, &mut dirty_sheets, &part, false)?;
+                let doc = dirty_of(&mut dirty_sheets, &part);
+                super::protect::apply_set_range(&mut doc.root, kind, op, i)?;
+            }
+            XlsxOp::DeleteProtectedRange(op) => {
+                let (part, kind) = require_named_sheet(&sheet_index, &op.sheet, i)?;
+                load_dirty(&pkg, &mut dirty_sheets, &part, false)?;
+                let doc = dirty_of(&mut dirty_sheets, &part);
+                super::protect::apply_delete_range(&mut doc.root, kind, op, i)?;
+            }
             XlsxOp::InsertTextBox(op) => {
                 let (part, kind) = require_ws_or_chartsheet(
                     &sheet_index,

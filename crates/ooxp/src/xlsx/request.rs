@@ -162,6 +162,7 @@ pub struct InspectScope {
     pub model3ds: bool,
     pub maths: bool,
     pub slicers: bool,
+    pub protected_ranges: bool,
     pub connections: bool,
     pub external_links: bool,
     pub custom_views: bool,
@@ -1266,6 +1267,36 @@ pub enum SetProtectionOp {
 }
 
 #[derive(Debug, Clone)]
+pub struct InsertProtectedRangeOp {
+    pub sheet: String,
+    pub name: String,
+    pub sqref: Vec<(a1::CellRef, a1::CellRef)>,
+    pub password: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetProtectedRangeOp {
+    pub sheet: String,
+    pub index: usize,
+    pub name: Option<String>,
+    pub sqref: Option<Vec<(a1::CellRef, a1::CellRef)>>,
+    pub password: Option<String>,
+}
+
+impl SetProtectedRangeOp {
+    fn has_patch(&self) -> bool {
+        self.name.is_some() || self.sqref.is_some() || self.password.is_some()
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct DeleteProtectedRangeOp {
+    pub sheet: String,
+    pub index: usize,
+    pub password: Option<String>,
+}
+
+#[derive(Debug, Clone)]
 pub struct SetHeaderFooterTextOp {
     #[allow(dead_code)]
     pub id: String,
@@ -1867,6 +1898,9 @@ pub enum XlsxOp {
     SetSparkline(SetSparklineOp),
     DeleteSparkline(DeleteSparklineOp),
     SetProtection(SetProtectionOp),
+    InsertProtectedRange(InsertProtectedRangeOp),
+    SetProtectedRange(SetProtectedRangeOp),
+    DeleteProtectedRange(DeleteProtectedRangeOp),
     DeleteChart(DeleteChartOp),
     SetChartTitle(SetChartTitleOp),
     SetChartSeries(SetChartSeriesOp),
@@ -1963,6 +1997,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
             "model3ds",
             "maths",
             "slicers",
+            "protectedRanges",
             "connections",
             "externalLinks",
             "customViews",
@@ -1982,6 +2017,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
     let model3ds = parse_bool_field(obj.get("model3ds"), "model3ds")?;
     let maths = parse_bool_field(obj.get("maths"), "maths")?;
     let slicers = parse_bool_field(obj.get("slicers"), "slicers")?;
+    let protected_ranges = parse_bool_field(obj.get("protectedRanges"), "protectedRanges")?;
     let connections = parse_bool_field(obj.get("connections"), "connections")?;
     let external_links = parse_bool_field(obj.get("externalLinks"), "externalLinks")?;
     let custom_views = parse_bool_field(obj.get("customViews"), "customViews")?;
@@ -2044,6 +2080,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
         && !model3ds
         && !maths
         && !slicers
+        && !protected_ranges
         && !connections
         && !external_links
         && !custom_views
@@ -2066,6 +2103,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
         model3ds,
         maths,
         slicers,
+        protected_ranges,
         connections,
         external_links,
         custom_views,
@@ -2163,6 +2201,13 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<XlsxOp>, Error> {
             "setSparkline" => XlsxOp::SetSparkline(parse_set_sparkline(obj, i)?),
             "deleteSparkline" => XlsxOp::DeleteSparkline(parse_delete_sparkline(obj, i)?),
             "setProtection" => XlsxOp::SetProtection(parse_set_protection(obj, i)?),
+            "insertProtectedRange" => {
+                XlsxOp::InsertProtectedRange(parse_insert_protected_range(obj, i)?)
+            }
+            "setProtectedRange" => XlsxOp::SetProtectedRange(parse_set_protected_range(obj, i)?),
+            "deleteProtectedRange" => {
+                XlsxOp::DeleteProtectedRange(parse_delete_protected_range(obj, i)?)
+            }
             "deleteChart" => XlsxOp::DeleteChart(parse_delete_chart(obj, i)?),
             "setChartTitle" => XlsxOp::SetChartTitle(parse_set_chart_title(obj, i)?),
             "setChartSeries" => XlsxOp::SetChartSeries(parse_set_chart_series(obj, i)?),
@@ -6054,6 +6099,109 @@ fn parse_set_protection(
     Ok(SetProtectionOp::Sheet(op))
 }
 
+fn parse_insert_protected_range(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<InsertProtectedRangeOp, Error> {
+    deny_keys(obj, i, &["op", "id", "name", "sqref", "password"])?;
+    let id = require_id(obj, i)?;
+    let sheet = parse_sheet_only_id(&id, i, "id", IdReason::InsertProtectedRangeNeedsSheet)?;
+    let name = parse_protected_range_name(obj.get("name"), i, true)?.ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::MissingField {
+                field: "name".into(),
+            },
+            format!("ops[{i}].name"),
+        )
+    })?;
+    let sqref = parse_sqref_field(obj.get("sqref"), i, true)?;
+    Ok(InsertProtectedRangeOp {
+        sheet,
+        name,
+        sqref,
+        password: parse_opt_password(obj, i)?,
+    })
+}
+
+fn parse_set_protected_range(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<SetProtectedRangeOp, Error> {
+    deny_keys(obj, i, &["op", "id", "name", "sqref", "password"])?;
+    let id = require_id(obj, i)?;
+    let (sheet, index) = parse_edit_range_id(&id, i)?;
+    let sqref = if obj.contains_key("sqref") {
+        Some(parse_sqref_field(obj.get("sqref"), i, true)?)
+    } else {
+        None
+    };
+    let op = SetProtectedRangeOp {
+        sheet,
+        index,
+        name: parse_protected_range_name(obj.get("name"), i, false)?,
+        sqref,
+        password: parse_opt_password(obj, i)?,
+    };
+    if !op.has_patch() {
+        return Err(Error::with_path(
+            ErrorKind::NeedSetProtectedRangeField,
+            format!("ops[{i}]"),
+        ));
+    }
+    Ok(op)
+}
+
+fn parse_delete_protected_range(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<DeleteProtectedRangeOp, Error> {
+    deny_keys(obj, i, &["op", "id", "password"])?;
+    let id = require_id(obj, i)?;
+    let (sheet, index) = parse_edit_range_id(&id, i)?;
+    Ok(DeleteProtectedRangeOp {
+        sheet,
+        index,
+        password: parse_opt_password(obj, i)?,
+    })
+}
+
+fn parse_protected_range_name(
+    v: Option<&Value>,
+    i: usize,
+    required: bool,
+) -> Result<Option<String>, Error> {
+    match v {
+        None if required => Err(Error::with_path(
+            ErrorKind::MissingField {
+                field: "name".into(),
+            },
+            format!("ops[{i}].name"),
+        )),
+        None => Ok(None),
+        Some(Value::Null) => Err(Error::with_path(
+            ErrorKind::InvalidProtectedRangeName,
+            format!("ops[{i}].name"),
+        )),
+        Some(Value::String(s)) => {
+            let t = s.trim();
+            if t.is_empty() || t.chars().count() > 255 {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidProtectedRangeName,
+                    format!("ops[{i}].name"),
+                ));
+            }
+            Ok(Some(t.to_string()))
+        }
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "name".into(),
+                expected: TypeName::String,
+            },
+            format!("ops[{i}].name"),
+        )),
+    }
+}
+
 fn parse_optional_text(obj: &serde_json::Map<String, Value>, i: usize) -> Result<String, Error> {
     match obj.get("text") {
         None => Ok(String::new()),
@@ -8029,6 +8177,58 @@ fn parse_dv_id(id: &str, op_index: usize) -> Result<(String, usize), Error> {
     Ok((name.to_string(), n))
 }
 
+fn parse_edit_range_id(id: &str, op_index: usize) -> Result<(String, usize), Error> {
+    let Some(rest) = id.strip_prefix("sheet:") else {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::SheetEditRangePrefix,
+            },
+            format!("ops[{op_index}].id"),
+        ));
+    };
+    let Some((name, nstr)) = rest.split_once("/editRange:") else {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::SheetEditRangePrefix,
+            },
+            format!("ops[{op_index}].id"),
+        ));
+    };
+    if name.is_empty() || name.contains('/') {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::SheetEditRangePrefix,
+            },
+            format!("ops[{op_index}].id"),
+        ));
+    }
+    if nstr.is_empty() || !nstr.bytes().all(|b| b.is_ascii_digit()) {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::EditRangeIndexNotInt,
+            },
+            format!("ops[{op_index}].id"),
+        ));
+    }
+    let n: usize = nstr.parse().map_err(|_| {
+        Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::EditRangeIndexNotInt,
+            },
+            format!("ops[{op_index}].id"),
+        )
+    })?;
+    if n == 0 {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::EditRangeIndexFromOne,
+            },
+            format!("ops[{op_index}].id"),
+        ));
+    }
+    Ok((name.to_string(), n))
+}
+
 fn parse_link_id(id: &str, op_index: usize) -> Result<(String, usize), Error> {
     let Some(rest) = id.strip_prefix("sheet:") else {
         return Err(Error::with_path(
@@ -9125,6 +9325,7 @@ fn parse_sheet_only_id(
         || id.contains("/model3d:")
         || id.contains("/math:")
         || id.contains("/slicer:")
+        || id.contains("/editRange:")
         || id.starts_with("cell:")
     {
         return Err(Error::with_path(
