@@ -186,6 +186,7 @@ pub fn parse_para_id_at(id: &str, path: &str) -> Result<ParaTarget, Error> {
         || id.contains("/shape:")
         || id.contains("/ink:")
         || id.contains("/model3d:")
+        || id.contains("/table:")
     {
         return Err(Error::with_path(
             ErrorKind::InvalidId {
@@ -317,6 +318,7 @@ pub fn parse_txbx_id_at(id: &str, path: &str) -> Result<TxbxTarget, Error> {
         || id.contains("/shape:")
         || id.contains("/ink:")
         || id.contains("/model3d:")
+        || id.contains("/table:")
     {
         return Err(Error::with_path(
             ErrorKind::InvalidId {
@@ -1154,6 +1156,22 @@ pub fn find_paragraph_path(root: &Element, target: &BodyPara) -> Option<Vec<usiz
     } else {
         None
     }
+}
+
+/// 从 `w:txbxContent` 走到目标 `w:p`。根就是框内容时不能走 `find_paragraph_path`。
+pub fn find_paragraph_path_in_txbx(content: &Element, target: &BodyPara) -> Option<Vec<usize>> {
+    let mut idx = 0usize;
+    let mut path = Vec::new();
+    for (i, n) in content.children.iter().enumerate() {
+        if let Node::Element(e) = n {
+            path.push(i);
+            if find_p_path_from(e, &mut idx, target, &mut path) {
+                return Some(path);
+            }
+            path.pop();
+        }
+    }
+    None
 }
 
 fn find_p_path_from(

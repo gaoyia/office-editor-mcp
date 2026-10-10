@@ -1,4 +1,4 @@
-//! 正文与页眉页脚里的 `w:tbl`：inspect 名单与结构 apply。
+//! 正文、页眉页脚与文本框里的 `w:tbl`：inspect 名单与结构 apply。
 
 use serde_json::{json, Value};
 
@@ -8,7 +8,8 @@ use crate::xml::{Element, Node};
 
 use super::format;
 use super::hf::{self, HfKind, HfPart, HfType};
-use super::para::{self, ParaTarget};
+use super::para::{self, HostPara, ParaTarget, TxbxKey};
+use super::textbox;
 
 const COL_W: u32 = 1440;
 const MAX_ROWS: u64 = 500;
@@ -21,6 +22,10 @@ pub enum TableStory {
         kind: HfKind,
         hf_type: HfType,
         n: u32,
+    },
+    TextBox {
+        host: HostPara,
+        key: TxbxKey,
     },
 }
 
@@ -65,6 +70,10 @@ pub enum InsertAnchor {
         hf_type: HfType,
         n: u32,
     },
+    TextBoxEnd {
+        host: HostPara,
+        key: TxbxKey,
+    },
     AfterPara(ParaTarget),
     AfterTable(TableRef),
     InCell(TableRef),
@@ -89,7 +98,11 @@ pub fn tables_json(
     expand_runs: bool,
 ) -> Result<Vec<Value>, Error> {
     let rels = Relationships::from_package(pkg, host_part)?;
-    let paras = para::collect_paragraphs(root);
+    let paras = if root.local_name() == "txbxContent" {
+        para::collect_paragraphs_in_txbx(root)
+    } else {
+        para::collect_paragraphs(root)
+    };
     let mut index_of: Vec<(*const Element, usize)> = Vec::new();
     for (i, p) in paras.iter().enumerate() {
         index_of.push((*p as *const Element, i + 1));
@@ -138,9 +151,28 @@ pub fn parse_insert_anchor(id: &str, i: usize) -> Result<InsertAnchor, Error> {
             )),
         };
     }
+    if let Ok(tx) = para::parse_txbx_id_at(id, &path) {
+        return match tx.host {
+            HostPara::Body(_) | HostPara::HeaderFooter { .. } => Ok(InsertAnchor::TextBoxEnd {
+                host: tx.host,
+                key: tx.key,
+            }),
+            HostPara::InNote { .. } | HostPara::InComment { .. } => Err(Error::with_path(
+                ErrorKind::InvalidId {
+                    reason: IdReason::InsertTableAnchor,
+                },
+                path,
+            )),
+        };
+    }
     let para = para::parse_para_id_at(id, &path)?;
     match para {
-        ParaTarget::Body(_) | ParaTarget::HeaderFooter { .. } => Ok(InsertAnchor::AfterPara(para)),
+        ParaTarget::Body(_)
+        | ParaTarget::HeaderFooter { .. }
+        | ParaTarget::InTextBox {
+            host: HostPara::Body(_) | HostPara::HeaderFooter { .. },
+            ..
+        } => Ok(InsertAnchor::AfterPara(para)),
         _ => Err(Error::with_path(
             ErrorKind::InvalidId {
                 reason: IdReason::InsertTableAnchor,
@@ -220,6 +252,38 @@ pub fn part_for_story(
             })?;
             Ok(item.part.clone())
         }
+        TableStory::TextBox { host, .. } => part_for_host(catalog, doc_part, host, id, i),
+    }
+}
+
+fn part_for_host(
+    catalog: &[HfPart],
+    doc_part: &str,
+    host: &HostPara,
+    id: &str,
+    i: usize,
+) -> Result<String, Error> {
+    match host {
+        HostPara::Body(_) => Ok(doc_part.to_string()),
+        HostPara::HeaderFooter {
+            kind, hf_type, n, ..
+        } => part_for_story(
+            catalog,
+            doc_part,
+            &TableStory::HeaderFooter {
+                kind: *kind,
+                hf_type: *hf_type,
+                n: *n,
+            },
+            id,
+            i,
+        ),
+        HostPara::InNote { .. } | HostPara::InComment { .. } => Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::TablePrefix,
+            },
+            format!("ops[{i}].id"),
+        )),
     }
 }
 
@@ -243,6 +307,7 @@ pub fn part_for_anchor(
             id,
             i,
         ),
+        InsertAnchor::TextBoxEnd { host, .. } => part_for_host(catalog, doc_part, host, id, i),
         InsertAnchor::AfterPara(p) => match p {
             ParaTarget::Body(_) => Ok(doc_part.to_string()),
             ParaTarget::HeaderFooter {
@@ -258,6 +323,7 @@ pub fn part_for_anchor(
                 id,
                 i,
             ),
+            ParaTarget::InTextBox { host, .. } => part_for_host(catalog, doc_part, host, id, i),
             _ => Err(Error::with_path(
                 ErrorKind::InvalidId {
                     reason: IdReason::InsertTableAnchor,
@@ -288,34 +354,53 @@ pub fn apply_insert_table(
         InsertAnchor::HeaderFooterEnd { .. } => {
             insert_before_sect_pr(root, tbl);
         }
-        InsertAnchor::AfterPara(p) => {
-            let body_para = match p {
-                ParaTarget::Body(b) | ParaTarget::HeaderFooter { para: b, .. } => b,
-                _ => {
-                    return Err(Error::with_path(
-                        ErrorKind::InvalidId {
-                            reason: IdReason::InsertTableAnchor,
-                        },
+        InsertAnchor::AfterPara(p) => match p {
+            ParaTarget::Body(b) | ParaTarget::HeaderFooter { para: b, .. } => {
+                let path = para::find_paragraph_path(root, b).ok_or_else(|| {
+                    Error::with_path(
+                        ErrorKind::ParaNotFound { id: id.to_string() },
                         format!("ops[{i}].id"),
-                    ));
-                }
-            };
-            let path = para::find_paragraph_path(root, body_para).ok_or_else(|| {
+                    )
+                })?;
+                let (parent, idx) = para::parent_and_index_mut(root, &path).ok_or_else(|| {
+                    Error::with_path(
+                        ErrorKind::ParaNotFound { id: id.to_string() },
+                        format!("ops[{i}].id"),
+                    )
+                })?;
+                parent.children.insert(idx + 1, Node::Element(tbl));
+            }
+            ParaTarget::InTextBox { host, key, para } => {
+                let path = txbx_para_path(root, host, key, para, id, i)?;
+                let (parent, idx) = para::parent_and_index_mut(root, &path).ok_or_else(|| {
+                    Error::with_path(
+                        ErrorKind::ParaNotFound { id: id.to_string() },
+                        format!("ops[{i}].id"),
+                    )
+                })?;
+                parent.children.insert(idx + 1, Node::Element(tbl));
+            }
+            _ => {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidId {
+                        reason: IdReason::InsertTableAnchor,
+                    },
+                    format!("ops[{i}].id"),
+                ));
+            }
+        },
+        InsertAnchor::TextBoxEnd { host, key } => {
+            let path = txbx_content_full_path(root, host, key, id, i)?;
+            let content = para::element_at_mut(root, &path).ok_or_else(|| {
                 Error::with_path(
-                    ErrorKind::ParaNotFound { id: id.to_string() },
+                    ErrorKind::TextBoxNotFound { id: id.to_string() },
                     format!("ops[{i}].id"),
                 )
             })?;
-            let (parent, idx) = para::parent_and_index_mut(root, &path).ok_or_else(|| {
-                Error::with_path(
-                    ErrorKind::ParaNotFound { id: id.to_string() },
-                    format!("ops[{i}].id"),
-                )
-            })?;
-            parent.children.insert(idx + 1, Node::Element(tbl));
+            insert_before_sect_pr(content, tbl);
         }
         InsertAnchor::AfterTable(r) => {
-            let path = tbl_path(root, r.table_n(), id, i)?;
+            let path = tbl_path(root, r, id, i)?;
             let (parent, idx) = para::parent_and_index_mut(root, &path).ok_or_else(|| {
                 Error::with_path(
                     ErrorKind::TableNotFound { id: id.to_string() },
@@ -325,11 +410,11 @@ pub fn apply_insert_table(
             parent.children.insert(idx + 1, Node::Element(tbl));
         }
         InsertAnchor::InCell(r) => {
-            let TableRef::Cell { n, row, col, .. } = r else {
+            let TableRef::Cell { row, col, .. } = r else {
                 unreachable!();
             };
             let pid = para::next_para_hex(root);
-            let path = tbl_path(root, *n, id, i)?;
+            let path = tbl_path(root, r, id, i)?;
             let tbl_el = para::element_at_mut(root, &path).ok_or_else(|| {
                 Error::with_path(
                     ErrorKind::TableNotFound { id: id.to_string() },
@@ -338,7 +423,9 @@ pub fn apply_insert_table(
             })?;
             reject_complex(tbl_el, i)?;
             let tc = find_tc_mut(tbl_el, *row, *col, id, i)?;
-            tc.children.push(Node::Element(tbl));
+            // Word 16.0 框内嵌套表另存：表在 tcPr 之后、原有段落之前。接到格尾会 Repair。
+            let at = after_tc_pr(tc);
+            tc.children.insert(at, Node::Element(tbl));
             ensure_trailing_p(tc, &pid);
         }
     }
@@ -351,7 +438,7 @@ pub fn apply_delete_table(
     id: &str,
     i: usize,
 ) -> Result<(), Error> {
-    let path = tbl_path(root, r.table_n(), id, i)?;
+    let path = tbl_path(root, r, id, i)?;
     {
         let tbl = para::element_at(root, &path).ok_or_else(|| {
             Error::with_path(
@@ -378,8 +465,7 @@ pub fn apply_delete_table(
 }
 
 pub fn apply_insert_row(root: &mut Element, r: &TableRef, id: &str, i: usize) -> Result<(), Error> {
-    let n = r.table_n();
-    let path = tbl_path(root, n, id, i)?;
+    let path = tbl_path(root, r, id, i)?;
     let (layout, src_idx) = {
         let tbl = para::element_at(root, &path).ok_or_else(|| missing_table(id, i))?;
         reject_complex(tbl, i)?;
@@ -410,10 +496,10 @@ pub fn apply_insert_row(root: &mut Element, r: &TableRef, id: &str, i: usize) ->
 }
 
 pub fn apply_delete_row(root: &mut Element, r: &TableRef, id: &str, i: usize) -> Result<(), Error> {
-    let TableRef::Row { n, row, .. } = r else {
+    let TableRef::Row { row, .. } = r else {
         unreachable!();
     };
-    let path = tbl_path(root, *n, id, i)?;
+    let path = tbl_path(root, r, id, i)?;
     let tbl = para::element_at_mut(root, &path).ok_or_else(|| missing_table(id, i))?;
     reject_complex(tbl, i)?;
     let trs = tr_indices(tbl);
@@ -437,7 +523,7 @@ pub fn apply_insert_col(
     id: &str,
     i: usize,
 ) -> Result<(), Error> {
-    let path = tbl_path(root, r.table_n(), id, i)?;
+    let path = tbl_path(root, r, id, i)?;
     let (cols, n_rows, pos) = {
         let tbl = para::element_at_mut(root, &path).ok_or_else(|| missing_table(id, i))?;
         reject_complex(tbl, i)?;
@@ -476,7 +562,7 @@ pub fn apply_delete_col(
     id: &str,
     i: usize,
 ) -> Result<(), Error> {
-    let path = tbl_path(root, r.table_n(), id, i)?;
+    let path = tbl_path(root, r, id, i)?;
     let tbl = para::element_at_mut(root, &path).ok_or_else(|| missing_table(id, i))?;
     reject_complex(tbl, i)?;
     reject_grid_mismatch(tbl, i)?;
@@ -519,7 +605,7 @@ pub fn apply_merge(
             format!("ops[{i}]"),
         ));
     }
-    let path = tbl_path(root, r.table_n(), id, i)?;
+    let path = tbl_path(root, r, id, i)?;
     let vertical = r2 > r1;
     {
         let tbl = para::element_at_mut(root, &path).ok_or_else(|| missing_table(id, i))?;
@@ -559,10 +645,10 @@ pub fn apply_merge(
 }
 
 pub fn apply_split(root: &mut Element, r: &TableRef, id: &str, i: usize) -> Result<(), Error> {
-    let TableRef::Cell { n, row, col, .. } = r else {
+    let TableRef::Cell { row, col, .. } = r else {
         unreachable!();
     };
-    let path = tbl_path(root, *n, id, i)?;
+    let path = tbl_path(root, r, id, i)?;
     let tbl = para::element_at_mut(root, &path).ok_or_else(|| missing_table(id, i))?;
     reject_complex(tbl, i)?;
     reject_grid_mismatch(tbl, i)?;
@@ -680,7 +766,7 @@ pub fn apply_set_table_style(
     id: &str,
     i: usize,
 ) -> Result<(), Error> {
-    let path = tbl_path(root, r.table_n(), id, i)?;
+    let path = tbl_path(root, r, id, i)?;
     let tbl = para::element_at_mut(root, &path).ok_or_else(|| missing_table(id, i))?;
     let pr = ensure_tbl_pr(tbl);
     if let Some(st) = style {
@@ -709,7 +795,7 @@ pub fn apply_set_table_float(
     id: &str,
     i: usize,
 ) -> Result<(), Error> {
-    let path = tbl_path(root, r.table_n(), id, i)?;
+    let path = tbl_path(root, r, id, i)?;
     let tbl = para::element_at_mut(root, &path).ok_or_else(|| missing_table(id, i))?;
     let pr = ensure_tbl_pr(tbl);
     match pos {
@@ -762,7 +848,7 @@ pub fn apply_set_table_cell_mar(
     id: &str,
     i: usize,
 ) -> Result<(), Error> {
-    let path = tbl_path(root, r.table_n(), id, i)?;
+    let path = tbl_path(root, r, id, i)?;
     let tbl = para::element_at_mut(root, &path).ok_or_else(|| missing_table(id, i))?;
     let pr = ensure_tbl_pr(tbl);
     patch_cell_mar(pr, "tblCellMar", TBLPR_ORDER, top, left, bottom, right);
@@ -782,10 +868,10 @@ pub fn apply_set_cell_format(
     id: &str,
     i: usize,
 ) -> Result<(), Error> {
-    let TableRef::Cell { n, row, col, .. } = r else {
+    let TableRef::Cell { row, col, .. } = r else {
         unreachable!();
     };
-    let path = tbl_path(root, *n, id, i)?;
+    let path = tbl_path(root, r, id, i)?;
     let tbl = para::element_at_mut(root, &path).ok_or_else(|| missing_table(id, i))?;
     let tc = tc_at_mut(tbl, *row, *col).ok_or_else(|| missing_table(id, i))?;
     let pr = ensure_tc_pr(tc);
@@ -1234,6 +1320,16 @@ fn collect_cell_ps<'a>(el: &'a Element, out: &mut Vec<&'a Element>) {
 fn collect_tbl_paths(root: &Element) -> Vec<(Vec<usize>, bool)> {
     let mut path = Vec::new();
     let mut out = Vec::new();
+    if root.local_name() == "txbxContent" {
+        for (i, n) in root.children.iter().enumerate() {
+            if let Node::Element(e) = n {
+                path.push(i);
+                walk_tbl(e, &mut path, false, &mut out);
+                path.pop();
+            }
+        }
+        return out;
+    }
     walk_tbl(root, &mut path, false, &mut out);
     out
 }
@@ -1284,6 +1380,23 @@ fn split_story<'a>(id: &'a str, path: &str) -> Result<(TableStory, &'a str), Err
     if let Some((pre, rest)) = id.split_once("/table:") {
         if let Some((kind, hf_type, n)) = para::parse_hf_container_id(pre) {
             return Ok((TableStory::HeaderFooter { kind, hf_type, n }, rest));
+        }
+        if let Ok(tx) = para::parse_txbx_id_at(pre, path) {
+            return match tx.host {
+                HostPara::Body(_) | HostPara::HeaderFooter { .. } => Ok((
+                    TableStory::TextBox {
+                        host: tx.host,
+                        key: tx.key,
+                    },
+                    rest,
+                )),
+                HostPara::InNote { .. } | HostPara::InComment { .. } => Err(Error::with_path(
+                    ErrorKind::InvalidId {
+                        reason: IdReason::TablePrefix,
+                    },
+                    path.to_string(),
+                )),
+            };
         }
     }
     Err(Error::with_path(
@@ -1351,12 +1464,92 @@ fn parse_n(s: &str, path: &str) -> Result<usize, Error> {
     Ok(n)
 }
 
-fn tbl_path(root: &Element, n: usize, id: &str, i: usize) -> Result<Vec<usize>, Error> {
-    let paths = collect_tbl_paths(root);
-    paths
-        .get(n - 1)
-        .map(|(p, _)| p.clone())
-        .ok_or_else(|| missing_table(id, i))
+fn tbl_path(root: &Element, r: &TableRef, id: &str, i: usize) -> Result<Vec<usize>, Error> {
+    match r.story() {
+        TableStory::Body | TableStory::HeaderFooter { .. } => collect_tbl_paths(root)
+            .get(r.table_n() - 1)
+            .map(|(p, _)| p.clone())
+            .ok_or_else(|| missing_table(id, i)),
+        TableStory::TextBox { host, key } => box_tbl_path(root, host, key, r.table_n(), id, i),
+    }
+}
+
+fn box_tbl_path(
+    root: &Element,
+    host: &HostPara,
+    key: &TxbxKey,
+    n: usize,
+    id: &str,
+    i: usize,
+) -> Result<Vec<usize>, Error> {
+    let content_full = txbx_content_full_path(root, host, key, id, i)?;
+    let content = para::element_at(root, &content_full).ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::TextBoxNotFound { id: id.to_string() },
+            format!("ops[{i}].id"),
+        )
+    })?;
+    let rel = collect_tbl_paths(content);
+    let (tpath, _) = rel.get(n - 1).ok_or_else(|| missing_table(id, i))?;
+    let mut full = content_full;
+    full.extend(tpath);
+    Ok(full)
+}
+
+fn txbx_content_full_path(
+    root: &Element,
+    host: &HostPara,
+    key: &TxbxKey,
+    id: &str,
+    i: usize,
+) -> Result<Vec<usize>, Error> {
+    let ppath = para::find_paragraph_path(root, host.body()).ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::ParaNotFound { id: id.to_string() },
+            format!("ops[{i}].id"),
+        )
+    })?;
+    let host_el = para::element_at(root, &ppath).ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::ParaNotFound { id: id.to_string() },
+            format!("ops[{i}].id"),
+        )
+    })?;
+    let cpath = textbox::content_path(host_el, key).ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::TextBoxNotFound { id: id.to_string() },
+            format!("ops[{i}].id"),
+        )
+    })?;
+    let mut full = ppath;
+    full.extend(cpath);
+    Ok(full)
+}
+
+fn txbx_para_path(
+    root: &Element,
+    host: &HostPara,
+    key: &TxbxKey,
+    para: &para::BodyPara,
+    id: &str,
+    i: usize,
+) -> Result<Vec<usize>, Error> {
+    let content_full = txbx_content_full_path(root, host, key, id, i)?;
+    let content = para::element_at(root, &content_full).ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::TextBoxNotFound { id: id.to_string() },
+            format!("ops[{i}].id"),
+        )
+    })?;
+    let ipath = para::find_paragraph_path_in_txbx(content, para).ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::ParaNotFound { id: id.to_string() },
+            format!("ops[{i}].id"),
+        )
+    })?;
+    let mut full = content_full;
+    full.extend(ipath);
+    Ok(full)
 }
 
 fn col_count(tbl: &Element) -> Result<usize, Error> {
@@ -1628,17 +1821,40 @@ fn has_block(parent: &Element) -> bool {
         .any(|e| matches!(e.local_name(), "p" | "tbl"))
 }
 
+/// 单元格最后一块必须是 `w:p`。只检查「有没有段落」会把嵌套表留在格尾，Word 会报无法读取。
 fn ensure_trailing_p(tc: &mut Element, fallback: &str) {
-    let has_p = tc.element_children().any(|e| e.local_name() == "p");
-    if !has_p {
-        let id = para::next_para_hex(tc);
-        let pid = if id == "00000001" {
-            fallback.to_string()
-        } else {
-            id
-        };
-        tc.push_element(para::new_paragraph(tc, &pid, ""));
+    if last_block_is_p(tc) {
+        return;
     }
+    let id = para::next_para_hex(tc);
+    let pid = if id == "00000001" {
+        fallback.to_string()
+    } else {
+        id
+    };
+    tc.push_element(para::new_paragraph(tc, &pid, ""));
+}
+
+fn last_block_is_p(tc: &Element) -> bool {
+    let mut last = None;
+    for e in tc.element_children() {
+        if matches!(e.local_name(), "p" | "tbl") {
+            last = Some(e.local_name() == "p");
+        }
+    }
+    last.unwrap_or(false)
+}
+
+fn after_tc_pr(tc: &Element) -> usize {
+    let mut at = 0usize;
+    for (j, n) in tc.children.iter().enumerate() {
+        if let Node::Element(e) = n {
+            if e.local_name() == "tcPr" {
+                at = j + 1;
+            }
+        }
+    }
+    at
 }
 
 fn find_tc_mut<'a>(

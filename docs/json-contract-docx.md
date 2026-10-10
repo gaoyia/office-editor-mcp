@@ -89,6 +89,9 @@ apply 用 `setHeaderFooterLink` 断开或重新链接；用 `insertHeaderFooter`
 | 框内图 | `{框内段落 id}/pic:{docPrId}` | `para:3F2A1B00/txbx:8/para:00FF00AA/pic:1` |
 | 框内图表 | `{框内段落 id}/chart:{docPrId}` | `para:3F2A1B00/txbx:8/para:00FF00AA/chart:1` |
 | 框内 SmartArt | `{框内段落 id}/smartdiagram:{docPrId}` | `para:3F2A1B00/txbx:8/para:00FF00AA/smartdiagram:1` |
+| 框内表 | `{框 id}/table:{n}` | `para:3F2A1B00/txbx:8/table:1` |
+| 框内表行 | `{框 id}/table:{n}/row:{r}` | `para:3F2A1B00/txbx:8/table:1/row:1` |
+| 框内单元格 | `{框 id}/table:{n}/r{r}c{c}` | `para:3F2A1B00/txbx:8/table:1/r1c1` |
 | 脚注 | `footnote:{id}` | `footnote:2` |
 | 尾注 | `endnote:{id}` | `endnote:2` |
 | 注内段落 | `{注 id}/para:{paraId}` 或 `{注 id}/para:index:{k}` | `footnote:2/para:3F2A1B00` |
@@ -248,17 +251,29 @@ Word 16.0 自己插入的水印通常是 VML；另存若把 DrawingML 改成 VML
 `insertWatermark` 的 `id` 必须是 `docx:document`。`deleteWatermark` 的 `id` 必须是水印 id 或 `docx:document`（删全部 DrawingML 水印）。
 对段落 id、图 id、框 id 或节 id 发这两个 op 报 `InvalidId`。
 
-表的 `{n}` 从 1 起，按该故事里 `w:tbl` 的文档顺序（遇 `w:txbxContent` 停住；`mc:AlternateContent` 只进 Choice）。嵌套在单元格里的表也编号，不另起前缀。
+正文与页眉页脚表的 `{n}` 从 1 起，按该故事里 `w:tbl` 的文档顺序（遇 `w:txbxContent` 停住；`mc:AlternateContent` 只进 Choice）。嵌套在单元格里的表也编号，不另起前缀。
 OOXML 没有表级稳定 id，因此 `table:{n}` 在增删表之后会变，只够同一次 inspect 之后立刻 apply。行号 `{r}` 是该表内 `w:tr` 的文档顺序，从 1 起。
 列号 `{c}` 是该 `w:tc` 在 `w:tblGrid` 上的起始列，从 1 起；`w:gridSpan` 缺省为 1（§17.4.17）。水平合并只出一个单元格节点，`gridSpan` 大于 1。
-垂直合并的继续格仍有 `w:tc`，树上 `vMerge` 为 `continue`。没有 `tblGrid` 时，`colCount` 取第一行各格 `gridSpan` 之和。框内、注内、批注内的 `w:tbl` 本期不编、不改。
+垂直合并的继续格仍有 `w:tc`，树上 `vMerge` 为 `continue`。没有 `tblGrid` 时，`colCount` 取第一行各格 `gridSpan` 之和。
 
-`insertTable` 的 `id` 可以是：正文或页眉页脚段落 id（插到该 `w:p` 之后，
-与该段同父）、`docx:document` 或页眉页脚容器 id（插到该故事末尾、`sectPr` 之前）、已有表 id（插到该 `w:tbl` 之后）、或单元格 id（作为嵌套表插到该格末尾，格末仍保留至少一个 `w:p`）。
+文本框里的表另编号：`{n}` 是该框 `w:txbxContent` 里 `w:tbl` 的文档顺序（再遇嵌套 `w:txbxContent` 停住；`mc:AlternateContent` 只进 Choice），id 为 `{框 id}/table:{n}`。
+嵌套在框内表格单元格里的表也编号，不另起前缀。单元格段落仍一次倒出，规则与正文表相同，段落 id 带框前缀。
+注内、批注内的 `w:tbl` 仍不编、不改。框内再套框保持 🚫。
+
+`insertTable` 的 `id` 可以是：
+
+- 正文、页眉页脚或框内段落 id：插到该 `w:p` 之后，与该段同父
+- `docx:document` 或页眉页脚容器 id：插到该故事末尾、`sectPr` 之前
+- 框 id：插到该框 `w:txbxContent` 末尾
+- 已有表 id（含框内表）：插到该 `w:tbl` 之后
+- 单元格 id（含框内单元格）：作为嵌套表插到该格 `tcPr` 之后、已有段落之前；格末仍保留至少一个 `w:p`
+
+对注内、批注内段落或注内 / 批注内框发 `insertTable` 报 `InvalidId`。
 `deleteTable` 的 `id` 必须是表 id。`insertRow` 的 `id` 是表 id（追加一行）或行 id（插到该行之后）。`deleteRow` 的 `id` 必须是行 id。
 `insertCol` / `deleteCol` / `mergeCells` 的 `id` 必须是表 id。`splitCells` 的 `id` 必须是单元格 id。
 `setTableStyle` / `setTableFloat` / `setTableCellMar` 的 `id` 必须是表 id。`setCellFormat` 的 `id` 必须是单元格 id。
-对框内、注内、批注内的表发这些外观 op 报 `InvalidId`。页眉页脚表与嵌套表可以改外观。对不上的 id 形态报 `InvalidId`。
+正文、页眉页脚与框内的表可以改结构与外观。对注内、批注内的表发这些 op 报 `InvalidId`。对不上的 id 形态报 `InvalidId`。
+框内表带修订痕迹时结构 op 仍报 `NotImplemented`。
 
 修订的 `{n}` 从 1 起，按该故事里被收入节点的文档顺序（遇 `w:txbxContent` 停住；`mc:AlternateContent` 只进 Choice）。
 OOXML 的 `w:id` 在拆 run 时会重复，因此不用它当树上的唯一键；树上另给 `xmlId` 存原文。`rev:{n}` 在增删修订之后会变，只够同一次 inspect 之后立刻 apply。
@@ -1099,7 +1114,7 @@ xlsx / pptx 的 `scope.tables` 不是同一件事：xlsx 仍拒绝；pptx 展开
   根上不挂 `watermarks`，除非给了 `scope.watermarks`。每条字段顺序：`id`、`kind`、`name`、`text`、`stable`。
   `kind` 为 `text`（含 `wps:txbx` / `w:txbxContent`）或 `picture`（含 `pic:pic` 与 `a:blip`）。`name` 取 `wp:docPr/@name`，缺则为 `null`。
   `text`：文字水印为框内可见文本，图片水印为 `null`。
-- 文档根上的 `tableCount` 始终出现，只计主文档里被收入的 `w:tbl` 个数（含嵌套表，判定见上文表 id 那节），不含页眉页脚，也不含框内、注内、批注内的表。没有表则为 `0`。根上不挂正文 `tables`，除非给了 `scope.tables`。
+- 文档根上的 `tableCount` 始终出现，只计主文档里被收入的 `w:tbl` 个数（含嵌套表，判定见上文表 id 那节），不含页眉页脚，也不含框内、注内、批注内的表。没有表则为 `0`。根上不挂正文 `tables`，除非给了 `scope.tables`。框节点另报自己的 `tableCount`。
 - 文档根上的 `revisionCount` 始终出现，只计主文档里被收入的修订节点个数（判定见上文修订 id 那节），不含页眉页脚，也不含框内、注内、批注内的修订。没有修订则为 `0`。
   根上不挂正文 `revisions`，除非给了 `scope.revisions`。
 - 文档根上的 `hyperlinkCount` 始终出现，只计主文档里被收入的 `w:hyperlink` 个数（判定见上文超链接 id 那节），不含页眉页脚，也不含框内、注内、批注内的链，也不含 DrawingML `a:hlinkClick`。没有链则为 `0`。
@@ -1207,10 +1222,12 @@ xlsx / pptx 的 `scope.tables` 不是同一件事：xlsx 仍拒绝；pptx 展开
   最后始终跟 `hyperlink`（`null` 或对象，字段顺序 `kind`、`rId`、`url`、`anchor`、`tooltip`），见上文 DrawingML 链。
 - `scope.textBoxes` 为 `true` 时，每个页眉、页脚节点带 `textBoxes`；若同时给了 `from` 与 `maxParas`，切片里每段也带 `textBoxes`。否则这些节点上都没有该字段。
   只给 `textBoxes`、不给 `from` / `maxParas`：只展开页眉页脚容器上的框。
-  每个框的字段顺序：`id`、`docPrId`、`name`、`kind`、`cx`、`cy`、`wrap`、`link`、`paraCount`、`pictureCount`、`chartCount`、`smartArtCount`、`stable`、`hyperlink`，
-  有框内段名单时再跟 `paragraphs`，有框内图名单时再跟 `pictures`，给了 `scope.charts` 时再跟 `charts`，给了 `scope.smartArt` 时再跟 `smartArts`。
+  每个框的字段顺序：`id`、`docPrId`、`name`、`kind`、`cx`、`cy`、`wrap`、`link`、`paraCount`、`pictureCount`、`chartCount`、`smartArtCount`、`tableCount`、`stable`、`hyperlink`，
+  有框内段名单时再跟 `paragraphs`，有框内图名单时再跟 `pictures`，给了 `scope.charts` 时再跟 `charts`，给了 `scope.smartArt` 时再跟 `smartArts`，给了 `scope.tables` 时再跟 `tables`。
   `hyperlink` 为 `null` 或对象（字段顺序 `kind`、`rId`、`url`、`anchor`、`tooltip`），见上文 DrawingML 链。
   `chartCount` / `smartArtCount` 始终出现，只计该框 `w:txbxContent` 内、再遇嵌套 `w:txbxContent` 停住之后的图表与 SmartArt。框内图表与 SmartArt 不挂到文档根，也不挂到宿主段落。
+  `tableCount` 始终出现，只计该框 `w:txbxContent` 内、再遇嵌套 `w:txbxContent` 停住之后的 `w:tbl`（含嵌套表）。
+  注内 / 批注内的框此项为 `0`，也不带 `tables`。框内表不挂到文档根，也不挂到宿主段落。
 - `scope.connectors` 为 `true` 时，每个页眉、页脚节点带 `connectors`；若同时给了 `from` 与 `maxParas`，切片里每段也带 `connectors`。否则这些节点上都没有该字段。
   只给 `connectors`、不给 `from` / `maxParas`：只展开页眉页脚容器上的连接线。
   每条字段顺序：`id`、`docPrId`、`name`、`kind`、`cx`、`cy`、`wrap`、`prst`、`stable`。
@@ -3766,7 +3783,7 @@ xlsx / pptx 上发此 op 报 `InvalidField`。
 | 字段 | 含义 |
 | --- | --- |
 | `op` | 必须是 `"setTableStyle"` |
-| `id` | 表 id，正文、页眉页脚或嵌套表 |
+| `id` | 表 id，正文、页眉页脚、框内或嵌套表 |
 | `style` | 可选。`style:{styleId}`，或 `null` 表示去掉 `tblStyle` |
 | `look` | 可选。对象写入 `tblLook`，或 `null` 表示去掉 `tblLook` |
 
@@ -3776,7 +3793,7 @@ xlsx / pptx 上发此 op 报 `InvalidField`。
 写出六个属性与 `val`（四位大写十六进制）。位：`0x20` 首行、`0x40` 末行、`0x80` 首列、`0x100` 末列、`0x200` `noHBand`、`0x400` `noVBand`。
 `bandedRows` 为 `true` 写 `noHBand="0"`。不写 `tblStylePr`。
 找不到表报 `IdNotFound`。id 不是表 id 报 `InvalidId`。xlsx / pptx 上发此 op 报 `InvalidField`。pptx 的 `setTablePos` 语义不变。
-示例见 `docs/examples/docx-apply-table-look.json`。
+示例见 `docs/examples/docx-apply-table-look.json`。框内表见 `docs/examples/docx-apply-box-table.json`。
 
 ### setTableFloat
 
@@ -4268,6 +4285,7 @@ OLE op 还可以脏 `/word/embeddings/…` 与预览图媒体。墨迹画布 op 
 正文图片 op、文本框 op、图表 op、SmartArt op、正文表格结构 op、正文修订 op、正文超链接 / 书签 op、正文域 op、正文公式 op、正文拼音 op、正文内容控件 op、正文 `setParaNumbering`、
 正文 `setParaStyle`、正文 `setRunStyle`、正文 `setParaFormat` 与正文 `setRunFormat` 脏主文档与主文档 `.rels`。
 正文 `setTableStyle` / `setTableFloat` / `setTableCellMar` / `setCellFormat` 脏主文档。
+框内表跟框所在故事走：正文框脏主文档，页眉页脚框脏对应 header/footer 部件。
 页眉页脚上的这些 op 另脏对应 header/footer 部件。
 一次 `ops` 可以混用 `setParaText`、`setHeaderFooterDistance`、`setPageMargin`、`setPageSize`、`setColumns`、`setVerticalAlign`、
 `setLineNumbering`、`setDocGrid`、`setRtlGutter`、`setPageBorders`、`setFormProt`、`setMirrorMargins`、`setGutterAtTop`、

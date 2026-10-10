@@ -10,6 +10,7 @@ use super::charts;
 use super::para::{self, BodyPara, TxbxKey, TxbxTarget};
 use super::picture::{self, PicKind, WrapKind};
 use super::smartart;
+use super::tbl;
 use super::{format, MC_NS, W14_NS, WP_NS};
 
 /// 现代文本框命名空间（MS-DOCX WordprocessingShape）。
@@ -30,6 +31,7 @@ pub struct TxbxInfo {
     pub picture_count: usize,
     pub chart_count: usize,
     pub smart_art_count: usize,
+    pub table_count: usize,
     pub story_id: Option<String>,
     pub seq: u32,
     pub prev: Option<String>,
@@ -97,6 +99,7 @@ pub fn textboxes_json(
     runs: bool,
     charts: bool,
     smart_art: bool,
+    tables: bool,
 ) -> Result<Vec<Value>, Error> {
     let mut out = Vec::new();
     for b in boxes {
@@ -116,6 +119,7 @@ pub fn textboxes_json(
             "pictureCount": b.picture_count,
             "chartCount": b.chart_count,
             "smartArtCount": b.smart_art_count,
+            "tableCount": b.table_count,
             "stable": b.stable,
         });
         let rels = Relationships::from_package(pkg, host_part)?;
@@ -147,6 +151,19 @@ pub fn textboxes_json(
                 host_para_id,
                 b,
             )?);
+        }
+        if tables && !is_note_or_comment_box(&b.id) {
+            node["tables"] = match find_txbx_content_for(host, host_para_id, &b.id)? {
+                Some(content) => Value::Array(tbl::tables_json(
+                    pkg,
+                    host_part,
+                    content,
+                    Some(&b.id),
+                    pictures,
+                    runs,
+                )?),
+                None => json!([]),
+            };
         }
         out.push(node);
     }
@@ -220,7 +237,8 @@ fn txbx_from_drawing(drawing: &Element, host: &str, index: usize) -> Result<Txbx
     let (doc_pr_id, name) = doc_pr(drawing);
     let (id, stable) = box_id(host, &doc_pr_id, index);
     let content = find_txbx_content(drawing);
-    let (para_count, picture_count, chart_count, smart_art_count) = content_counts(content, &id)?;
+    let (para_count, picture_count, chart_count, smart_art_count, table_count) =
+        content_counts(content, &id)?;
     let (story_id, seq) = story_of(drawing);
     Ok(TxbxInfo {
         id,
@@ -235,6 +253,7 @@ fn txbx_from_drawing(drawing: &Element, host: &str, index: usize) -> Result<Txbx
         picture_count,
         chart_count,
         smart_art_count,
+        table_count,
         story_id,
         seq,
         prev: None,
@@ -253,7 +272,8 @@ fn txbx_from_wsp(
     let (doc_pr_id, name) = cnv_pr(wsp);
     let (id, stable) = box_id(host, &doc_pr_id, index);
     let content = find_txbx_content(wsp);
-    let (para_count, picture_count, chart_count, smart_art_count) = content_counts(content, &id)?;
+    let (para_count, picture_count, chart_count, smart_art_count, table_count) =
+        content_counts(content, &id)?;
     let (story_id, seq) = story_of(wsp);
     Ok(TxbxInfo {
         id,
@@ -268,6 +288,7 @@ fn txbx_from_wsp(
         picture_count,
         chart_count,
         smart_art_count,
+        table_count,
         story_id,
         seq,
         prev: None,
@@ -285,9 +306,9 @@ fn box_id(host: &str, doc_pr_id: &Option<String>, index: usize) -> (String, bool
 fn content_counts(
     content: Option<&Element>,
     box_id: &str,
-) -> Result<(usize, usize, usize, usize), Error> {
+) -> Result<(usize, usize, usize, usize, usize), Error> {
     let Some(content) = content else {
-        return Ok((0, 0, 0, 0));
+        return Ok((0, 0, 0, 0, 0));
     };
     let paras = para::collect_paragraphs_in_txbx(content);
     let mut pics = 0usize;
@@ -299,7 +320,16 @@ fn content_counts(
         chart_n += charts::count_charts(p)?;
         smart_n += smartart::count_smartarts(p)?;
     }
-    Ok((paras.len(), pics, chart_n, smart_n))
+    let table_n = if is_note_or_comment_box(box_id) {
+        0
+    } else {
+        tbl::count_tables(content)
+    };
+    Ok((paras.len(), pics, chart_n, smart_n, table_n))
+}
+
+fn is_note_or_comment_box(id: &str) -> bool {
+    id.starts_with("footnote:") || id.starts_with("endnote:") || id.starts_with("comment:")
 }
 
 fn collect_inner_charts(
@@ -620,6 +650,40 @@ fn first_alt_child_index(el: &Element) -> Option<usize> {
 
 pub const DEFAULT_CX: i64 = 1_828_800;
 pub const DEFAULT_CY: i64 = 914_400;
+
+/// 从宿主段落走到该框的 `w:txbxContent`。链接后继框常常没有内容节点。
+pub fn content_path(host: &Element, key: &TxbxKey) -> Option<Vec<usize>> {
+    let mut path = wsp_path(host, key)?;
+    let wsp = para::element_at(host, &path)?;
+    let extra = txbx_content_rel(wsp)?;
+    path.extend(extra);
+    Some(path)
+}
+
+fn txbx_content_rel(el: &Element) -> Option<Vec<usize>> {
+    let mut path = Vec::new();
+    if txbx_content_rel_walk(el, &mut path) {
+        Some(path)
+    } else {
+        None
+    }
+}
+
+fn txbx_content_rel_walk(el: &Element, path: &mut Vec<usize>) -> bool {
+    for (i, n) in el.children.iter().enumerate() {
+        if let Node::Element(e) = n {
+            path.push(i);
+            if e.local_name() == "txbxContent" {
+                return true;
+            }
+            if txbx_content_rel_walk(e, path) {
+                return true;
+            }
+            path.pop();
+        }
+    }
+    false
+}
 
 pub fn find_txbx_content_by_key<'a>(host: &'a Element, key: &TxbxKey) -> Option<&'a Element> {
     let mut index = 0usize;

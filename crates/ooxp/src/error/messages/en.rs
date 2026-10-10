@@ -609,15 +609,16 @@ pub(super) fn render(kind: &ErrorKind) -> String {
                 "setMirrorMargins / setGutterAtTop / setProtection id must be docx:document".into()
             }
             IdReason::TablePrefix => {
-                "Table id must be table:N or a header/footer container id plus /table:N".into()
+                "Table id must be table:N, or a header/footer or text box id plus /table:N".into()
             }
             IdReason::TableIndexNotInt => "table index must be a positive integer".into(),
             IdReason::TableIndexFromOne => "table index starts at 1".into(),
             IdReason::TableCellForm => {
-                "Cell id must be table:N/rRcC; row id must be table:N/row:R".into()
+                "Cell id must be …/table:N/rRcC; row id must be …/table:N/row:R".into()
             }
             IdReason::InsertTableAnchor => {
-                "insertTable id must be a paragraph, document, header/footer, table, or cell".into()
+                "insertTable id must be a paragraph, document, header/footer, text box, table, or cell"
+                    .into()
             }
             IdReason::DeleteTableNeedsTable => "deleteTable id must be a table id".into(),
             IdReason::NeedTableId => "id must be a table id".into(),

@@ -574,15 +574,15 @@ pub(super) fn render(kind: &ErrorKind) -> String {
                 "setMirrorMargins / setGutterAtTop / setProtection 的 id 必须是 docx:document".into()
             }
             IdReason::TablePrefix => {
-                "表 id 必须是 table:N，或页眉页脚容器 id 加上 /table:N".into()
+                "表 id 必须是 table:N，或页眉页脚容器 / 文本框 id 加上 /table:N".into()
             }
             IdReason::TableIndexNotInt => "table 序号必须是正整数".into(),
             IdReason::TableIndexFromOne => "table 序号从 1 起".into(),
             IdReason::TableCellForm => {
-                "单元格 id 必须是 table:N/rRcC，行 id 必须是 table:N/row:R".into()
+                "单元格 id 必须是 …/table:N/rRcC，行 id 必须是 …/table:N/row:R".into()
             }
             IdReason::InsertTableAnchor => {
-                "insertTable 的 id 必须是段落、文档根、页眉页脚、表或单元格".into()
+                "insertTable 的 id 必须是段落、文档根、页眉页脚、文本框、表或单元格".into()
             }
             IdReason::DeleteTableNeedsTable => "deleteTable 的 id 必须是表 id".into(),
             IdReason::NeedTableId => "id 必须是表 id".into(),

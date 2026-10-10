@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "note.docx",
+  "output": "note.box-table.docx",
+  "ops": [
+    {
+      "op": "insertTable",
+      "id": "para:3F2A1B00/txbx:8",
+      "rows": 2,
+      "cols": 2,
+      "cells": [
+        ["A1", "B1"],
+        ["A2", "B2"]
+      ]
+    },
+    { "op": "insertRow", "id": "para:3F2A1B00/txbx:8/table:1" },
+    {
+      "op": "setCellFormat",
+      "id": "para:3F2A1B00/txbx:8/table:1/r1c1",
+      "fill": "FFFFFF00"
+    }
+  ]
+}

@@ -399,6 +399,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
                         expand_charts,
                         expand_smartart,
                         expand_runs,
+                        expand_tables,
                         &body_boxes,
                         &body_cxns,
                         &body_shapes,
@@ -681,6 +682,7 @@ fn hf_node(pkg: &Package, item: &HfPart, expand: &HfExpand) -> Result<Value, Err
                 expand.runs,
                 expand.charts,
                 expand.smart_art,
+                expand.tables,
             )?);
         }
         node["textBoxes"] = Value::Array(listed);
@@ -788,6 +790,7 @@ fn body_para_json(
     expand_charts: bool,
     expand_smartart: bool,
     expand_runs: bool,
+    expand_tables: bool,
     all_boxes: &[textbox::TxbxInfo],
     all_cxns: &[connector::CxnInfo],
     all_shapes: &[shape::ShapeInfo],
@@ -848,6 +851,7 @@ fn body_para_json(
             expand_runs,
             expand_charts,
             expand_smartart,
+            expand_tables,
         )?);
     }
     if expand_cxn {
@@ -941,6 +945,7 @@ fn notes_array(
             expand_charts,
             expand_smartart,
             expand_runs,
+            false,
         )?;
         let mut node = json!({
             "id": inspect_id,
@@ -1059,6 +1064,7 @@ fn comments_array(
             expand_charts,
             expand_smartart,
             expand_runs,
+            false,
         )?;
         let start = coverage
             .as_ref()
@@ -1129,6 +1135,7 @@ fn story_media(
     expand_charts: bool,
     expand_smartart: bool,
     expand_runs: bool,
+    expand_tables: bool,
 ) -> Result<StoryMedia, Error> {
     let paras = para::collect_paragraphs(story);
     let mut all_boxes = Vec::new();
@@ -1188,6 +1195,7 @@ fn story_media(
                 expand_runs,
                 expand_charts,
                 expand_smartart,
+                expand_tables,
             )?;
             node["textBoxes"] = Value::Array(json_boxes.clone());
             listed_boxes.extend(json_boxes);

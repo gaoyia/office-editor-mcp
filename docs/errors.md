@@ -767,6 +767,7 @@
 - 找不到单元格时，`setCellFormat` 报 `IdNotFound`
 - `insertTable` 的锚点找不到同样报 `IdNotFound`
 - id 形态不对报 `InvalidId`
+- docx 框内表 id 为 `{框 id}/table:{n}`；对注内 / 批注内框或段落发表格 op 报 `InvalidId`
 - 只剩一行时 `deleteRow`、只剩一列时 `deleteCol` 报 `InvalidField`
 - pptx 的 `insertTable` 的 id 必须是 `slide:{n}`、`slide:{n}/notes`、`master:{n}` 或 `master:{n}/layout:{k}`
 - 对表 id、备注容器或 `pptx:presentation` 发该 op 报 `InvalidId`

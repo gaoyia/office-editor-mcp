@@ -873,7 +873,7 @@ xlsx 规则与图相同：`oneCell` / `absolute` 改 `xdr:ext`，`twoCell` 改�
 - **`op`**
   - 必须是 `"insertTable"`
 - **`id`**
-  - 见 [docx 表 id](json-contract-docx.md#稳定-id) 与 [pptx 表 id](json-contract-pptx.md#稳定-id)：docx 为段落、`docx:document`、页眉页脚容器、表或单元格
+  - 见 [docx 表 id](json-contract-docx.md#稳定-id) 与 [pptx 表 id](json-contract-pptx.md#稳定-id)：docx 为段落（含框内）、`docx:document`、页眉页脚容器、文本框、表或单元格
   - pptx 必须是 `slide:{n}`、`slide:{n}/notes`、`master:{n}` 或 `master:{n}/layout:{k}`
 - **`rows`**
   - 行数
@@ -893,7 +893,9 @@ xlsx 规则与图相同：`oneCell` / `absolute` 改 `xdr:ext`，`twoCell` 改�
   - 成对规则见上
   - docx / xlsx 上出现报 `InvalidField`
 
-写出带单线边框的 `w:tbl`，每列宽 1440 twip，每格至少一段并带新的 `w14:paraId`。插在单元格末尾时，该格末尾仍保留一个 `w:p`（可在新表之后补空段）。
+写出带单线边框的 `w:tbl`，每列宽 1440 twip，每格至少一段并带新的 `w14:paraId`。
+docx 插在单元格时，嵌套表放在该格 `tcPr` 之后、已有段落之前。格末仍保留一个 `w:p`。
+Word 16.0 在文本框单元格里插表另存也是这个顺序；把等宽嵌套表接到格尾会报无法读取。
 `rows` / `cols` 越界或不是正整数报 `InvalidField`。id 形态不对报 `InvalidId`。找不到锚点报 `IdNotFound`。xlsx 上发此 op 报 `InvalidField`。
 pptx：`id` 必须是 `slide:{n}`、`slide:{n}/notes`、`master:{n}` 或 `master:{n}/layout:{k}`；对表 id、形状 id、图 id 或 `pptx:presentation` 发此 op 报 `InvalidId`。
 找不到该页报 `IdNotFound`。`rows` 为 1–500，`cols` 为 1–75，越界报 `InvalidField`。
