@@ -98,9 +98,12 @@ docx 见 [`roadmap/docx.md`](docx.md)。pptx 见 [`roadmap/pptx.md`](pptx.md)。
 | 41 | `.plan/2026年-10月-11日-❌-xlsx-切片器锚点.md` | 切片器、时间线已过 |
 | 42 | `.plan/2026年-10月-11日-❌-xlsx-切片器标题.md` | 切片器已过 |
 | 43 | `.plan/2026年-10月-11日-❌-xlsx-主题.md` | 无 |
+| 44 | `.plan/2026年-10月-11日-❌-xlsx-切片器筛选项.md` | 切片器、时间线已过 |
 | C12 | `.plan/2026年-10月-11日-❌-三家3D事后几何.md` | C7 已过 |
 | C13 | `.plan/2026年-10月-11日-❌-xlsx-pptx-公式框事后几何.md` | C8 已过 |
 | C14 | `.plan/2026年-10月-11日-❌-pptx-xlsx-形状行距与字距.md` | C9 已过 |
+| C15 | `.plan/2026年-10月-11日-❌-三家3D相机与灯光.md` | C7 已过 |
+| C16 | `.plan/2026年-10月-11日-❌-三家主题objectDefaults.md` | 主题已过 |
 
 ## 先探测再进待做
 
@@ -123,7 +126,7 @@ docx 见 [`roadmap/docx.md`](docx.md)。pptx 见 [`roadmap/pptx.md`](pptx.md)。
 | C10 | `.plan/2026年-10月-10日-✅-pptx-xlsx-字填充与轮廓.md` | 形状文字格式 C9；不要改 Word |
 | C11 | `.plan/2026年-10月-10日-✅-图表稀有剩余.md` | 图表稀有类型 C4 |
 
-xlsx 没有 Word / PowerPoint 那种墨迹批注计划；批注已过（序号 11）。主题见待做 43，不要和 pptx 16 / 46 / 47 合成一份。C4、C5、C6、C7、C8、C9、C10、C11 见已过表。C12、C13、C14 见待做。C5 与 pptx 同一份计划，不要拆成两家各做一套 `svgBlip`。C6、C7、C12 与 docx 同一份计划。C8、C13 与 pptx 同一份，不改 Word。C9、C10、C14 与 pptx 同一份，不改 Word。C11 三家同一份。
+xlsx 没有 Word / PowerPoint 那种墨迹批注计划；批注已过（序号 11）。主题见待做 43，不要和 pptx 16 / 46 / 47 / 48 合成一份。C4、C5、C6、C7、C8、C9、C10、C11 见已过表。C12、C13、C14、C15、C16 见待做。C5 与 pptx 同一份计划，不要拆成两家各做一套 `svgBlip`。C6、C7、C12、C15、C16 与 docx 同一份计划。C8、C13 与 pptx 同一份，不改 Word。C9、C10、C14 与 pptx 同一份，不改 Word。C11 三家同一份。
 
 ## 怎么算 Excel 全量做完
 

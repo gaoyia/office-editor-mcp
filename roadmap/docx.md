@@ -119,18 +119,22 @@ xlsx 见 [`roadmap/xlsx.md`](xlsx.md)。pptx 见 [`roadmap/pptx.md`](pptx.md)。
 | 64 | `.plan/2026年-10月-11日-❌-docx-格正交边框.md` | 表格外观已过 |
 | 65 | `.plan/2026年-10月-11日-❌-docx-字符缩放.md` | 段落与 run 剩余已过 |
 | 66 | `.plan/2026年-10月-11日-❌-docx-主题剩余.md` | 主题、主题与页面背景剩余已过 |
+| 67 | `.plan/2026年-10月-11日-❌-docx-格属性剩余.md` | 单元格垂直对齐 |
+| C15 | `.plan/2026年-10月-11日-❌-三家3D相机与灯光.md` | C7 已过 |
+| C16 | `.plan/2026年-10月-11日-❌-三家主题objectDefaults.md` | 主题剩余已过 |
 
 ## 先探测再进待做
 
 探测 Office 16.0 另存后再挂序号。未探测的不算欠账。
 
 - 多份 theme 部件、把 theme 关系挂到页眉。空白另存只有主文档 `/word/theme/theme1.xml`。需要带页眉独立 theme 的另存样例后再挂
+- DrawingML `a:hlinkHover`。Word 47 不搬 pptx 的 `event`。需要 COM 另存写出悬停链的样例后再挂
 
 不要把 Word 专用对象（水印、内容控件、编号、修订、参考文献、`wpc` 画布）搬到 xlsx / pptx。
 
 ## 跨格式（本类型要跟）
 
-会动 `crates/ooxp/src/chart/` 或批注墨迹，三种格式的契约可能一起改。xlsx / pptx 各有自己的表，不要只改 Word 就当三家都过。C4、C5、C6、C7、C8、C11 见已过表。C12 见待做。C9 / C10 不套本文。Word 44 已过，C5 只改了主契约里原先「xlsx / pptx 仍只认位图」那几句。C8 已过，未改 Word。C13 / C14 不套 Word。
+会动 `crates/ooxp/src/chart/` 或批注墨迹，三种格式的契约可能一起改。xlsx / pptx 各有自己的表，不要只改 Word 就当三家都过。C4、C5、C6、C7、C8、C11 见已过表。C12、C15、C16 见待做。C9 / C10 不套本文。Word 44 已过，C5 只改了主契约里原先「xlsx / pptx 仍只认位图」那几句。C8 已过，未改 Word。C13 / C14 不套 Word。
 
 ## 怎么算 Word 全量做完
 
