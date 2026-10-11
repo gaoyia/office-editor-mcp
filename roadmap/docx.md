@@ -112,6 +112,8 @@ xlsx 见 [`roadmap/xlsx.md`](xlsx.md)。pptx 见 [`roadmap/pptx.md`](pptx.md)。
 | 60 | `.plan/2026年-10月-11日-❌-docx-表级边框.md` | 表格外观已过 |
 | 61 | `.plan/2026年-10月-11日-❌-docx-DrawingML链剩余.md` | 图与形状超链接已过 |
 | C12 | `.plan/2026年-10月-11日-❌-三家3D事后几何.md` | C7 已过 |
+| 62 | `.plan/2026年-10月-11日-❌-docx-字符间距.md` | 段落与 run 剩余已过 |
+| 63 | `.plan/2026年-10月-11日-❌-docx-文本框内垂直对齐.md` | 文本框已过 |
 
 ## 先探测再进待做
 
@@ -121,7 +123,7 @@ xlsx 见 [`roadmap/xlsx.md`](xlsx.md)。pptx 见 [`roadmap/pptx.md`](pptx.md)。
 
 ## 跨格式（本类型要跟）
 
-会动 `crates/ooxp/src/chart/` 或批注墨迹，三种格式的契约可能一起改。xlsx / pptx 各有自己的表，不要只改 Word 就当三家都过。C4、C5、C6、C7、C8、C11 见已过表。C12 见待做。C9 / C10 不套本文。Word 44 已过，C5 只改了主契约里原先「xlsx / pptx 仍只认位图」那几句。C8 已过，未改 Word。C13 不套 Word 公式。
+会动 `crates/ooxp/src/chart/` 或批注墨迹，三种格式的契约可能一起改。xlsx / pptx 各有自己的表，不要只改 Word 就当三家都过。C4、C5、C6、C7、C8、C11 见已过表。C12 见待做。C9 / C10 不套本文。Word 44 已过，C5 只改了主契约里原先「xlsx / pptx 仍只认位图」那几句。C8 已过，未改 Word。C13 / C14 不套 Word。
 
 ## 怎么算 Word 全量做完
 

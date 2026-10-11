@@ -90,6 +90,7 @@ pptx 模块不要引用 `docx::` 或 `xlsx::`。`c:chart`（§21.2）用 `crates
 | 37 | `.plan/2026年-10月-10日-✅-pptx-自定义几何.md` | 形状几何剩余 |
 | 38 | `.plan/2026年-10月-10日-✅-pptx-create第四轮.md` | 28–37 对应 apply 已过 |
 | 39 | `.plan/2026年-10月-10日-✅-pptx-create第五轮.md` | 第四轮 create；图 / 表 / 图表 / SmartArt 链与备注公式 / 3D 的 apply 已过 |
+| 41 | `.plan/2026年-10月-11日-🚫-pptx-表单元格格式.md` | C9 已让 `setShapeFormat` 认表单元格；放弃 |
 
 0 与 2 不要合成一份。图是 `p:pic`，图表是 `p:graphicFrame`，位置是画布 `a:xfrm`。第一期页名单和 `setShapeText` 见总计划。
 
@@ -100,11 +101,11 @@ pptx 模块不要引用 `docx::` 或 `xlsx::`。`c:chart`（§21.2）用 `crates
 | 序 | 计划 | 前置 |
 | --- | --- | --- |
 | 40 | `.plan/2026年-10月-11日-❌-pptx-表内列宽与行高.md` | 表格已过 |
-| 41 | `.plan/2026年-10月-11日-❌-pptx-表单元格格式.md` | 表格、形状文字格式已过 |
 | 42 | `.plan/2026年-10月-11日-❌-pptx-媒体事后几何.md` | 媒体已过 |
 | 43 | `.plan/2026年-10月-11日-❌-pptx-Zoom画布几何.md` | Zoom 剩余已过 |
 | C12 | `.plan/2026年-10月-11日-❌-三家3D事后几何.md` | C7 已过 |
 | C13 | `.plan/2026年-10月-11日-❌-xlsx-pptx-公式框事后几何.md` | C8 已过 |
+| C14 | `.plan/2026年-10月-11日-❌-pptx-xlsx-形状行距与字距.md` | C9 已过 |
 
 ## 先探测再进待做
 
@@ -116,7 +117,7 @@ pptx 模块不要引用 `docx::` 或 `xlsx::`。`c:chart`（§21.2）用 `crates
 
 ## 跨格式（本类型要跟）
 
-C4、C5、C6、C7、C8、C9、C10、C11 见已过表。C12、C13 见待做。xlsx 批注墨迹不套本文。C5 与 xlsx 同一份计划，不要拆成两家各做一套 `svgBlip`。C6、C7、C12 与 docx 同一份计划。C8、C13 与 xlsx 同一份，不改 Word。C9 与 xlsx 同一份，不改 Word。C10 与 xlsx 同一份，不改 Word。C11 三家同一份。
+C4、C5、C6、C7、C8、C9、C10、C11 见已过表。C12、C13、C14 见待做。xlsx 批注墨迹不套本文。C5 与 xlsx 同一份计划，不要拆成两家各做一套 `svgBlip`。C6、C7、C12 与 docx 同一份计划。C8、C13 与 xlsx 同一份，不改 Word。C9、C10、C14 与 xlsx 同一份，不改 Word。C11 三家同一份。41 保持 🚫。
 
 ## 怎么算 PowerPoint 全量做完
 
