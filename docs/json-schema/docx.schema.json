@@ -213,6 +213,34 @@
             "bottomFromText": { "type": "integer", "minimum": 0 }
           }
         },
+        "align": {
+          "enum": ["left", "center", "right"]
+        },
+        "indent": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "width": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "type": { "enum": ["auto", "dxa", "pct"] },
+            "w": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "cols": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "rowHeights": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/docxTableRowHeightCreate"
+          }
+        },
         "cellMar": {
           "type": "object",
           "additionalProperties": false,
@@ -4068,6 +4096,122 @@
               "type": "null"
             }
           ]
+        }
+      }
+    },
+    "docxTableRowHeightCreate": {
+      "type": "object",
+      "required": [
+        "h"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "h": {
+          "oneOf": [
+            {
+              "type": "integer",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "rule": {
+          "enum": ["auto", "atLeast", "exact"]
+        }
+      }
+    },
+    "setTableWidthOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setTableWidth"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "type": {
+          "enum": ["auto", "dxa", "pct"]
+        },
+        "w": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "cols": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      }
+    },
+    "setTableAlignOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setTableAlign"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "align": {
+          "oneOf": [
+            {
+              "enum": ["left", "center", "right"]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "indent": {
+          "$ref": "#/$defs/twipOrNull"
+        }
+      }
+    },
+    "setTableRowHeightOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "h"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setTableRowHeight"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "h": {
+          "oneOf": [
+            {
+              "type": "integer",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "rule": {
+          "enum": ["auto", "atLeast", "exact"]
         }
       }
     },

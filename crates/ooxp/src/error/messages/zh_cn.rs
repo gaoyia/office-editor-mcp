@@ -590,6 +590,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
                 "insertRow 的 id 必须是表 id 或行 id".into()
             }
             IdReason::DeleteRowNeedsRow => "deleteRow 的 id 必须是行 id".into(),
+            IdReason::SetTableRowHeightNeedsRow => {
+                "setTableRowHeight 的 id 必须是行 id".into()
+            }
             IdReason::SplitNeedsCell => "splitCells 的 id 必须是单元格 id".into(),
             IdReason::RevPrefix => {
                 "修订 id 必须是 rev:N，或页眉页脚容器 id 加上 /rev:N".into()
@@ -1438,6 +1441,20 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::InvalidTblAnchor => {
             "horzAnchor 与 vertAnchor 只能是 margin、page 或 text".into()
         }
+        ErrorKind::NeedSetTableWidthField => {
+            "setTableWidth 至少要给 type、w 或 cols 之一".into()
+        }
+        ErrorKind::NeedSetTableAlignField => {
+            "setTableAlign 至少要给 align 或 indent 之一".into()
+        }
+        ErrorKind::NeedSetTableRowHeightField => "setTableRowHeight 必须有 h".into(),
+        ErrorKind::InvalidTblWidthType => {
+            "type 只能是 auto、dxa 或 pct；auto 时不要给大于 0 的 w".into()
+        }
+        ErrorKind::InvalidTblAlign => "align 必须是 left、center 或 right".into(),
+        ErrorKind::InvalidRowHeightRule => "rule 必须是 auto、atLeast 或 exact".into(),
+        ErrorKind::TableColsCount => "cols 长度必须等于列数".into(),
+        ErrorKind::TableRowHeightsCount => "rowHeights 长度必须等于行数".into(),
         ErrorKind::NeedSetTableCellMarField => {
             "setTableCellMar 至少要给 top、left、bottom 或 right 之一".into()
         }

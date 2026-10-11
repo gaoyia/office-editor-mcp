@@ -626,6 +626,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
                 "insertRow id must be a table id or a row id".into()
             }
             IdReason::DeleteRowNeedsRow => "deleteRow id must be a row id".into(),
+            IdReason::SetTableRowHeightNeedsRow => {
+                "setTableRowHeight id must be a row id".into()
+            }
             IdReason::SplitNeedsCell => "splitCells id must be a cell id".into(),
             IdReason::RevPrefix => {
                 "Revision id must be rev:N or a header/footer container id plus /rev:N".into()
@@ -1653,6 +1656,20 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::InvalidTblAnchor => {
             "horzAnchor and vertAnchor must be margin, page, or text".into()
         }
+        ErrorKind::NeedSetTableWidthField => {
+            "setTableWidth requires at least one of type, w, or cols".into()
+        }
+        ErrorKind::NeedSetTableAlignField => {
+            "setTableAlign requires at least one of align or indent".into()
+        }
+        ErrorKind::NeedSetTableRowHeightField => "setTableRowHeight requires h".into(),
+        ErrorKind::InvalidTblWidthType => {
+            "type must be auto, dxa, or pct; auto must not have w greater than 0".into()
+        }
+        ErrorKind::InvalidTblAlign => "align must be left, center, or right".into(),
+        ErrorKind::InvalidRowHeightRule => "rule must be auto, atLeast, or exact".into(),
+        ErrorKind::TableColsCount => "cols length must equal the column count".into(),
+        ErrorKind::TableRowHeightsCount => "rowHeights length must equal the row count".into(),
         ErrorKind::NeedSetTableCellMarField => {
             "setTableCellMar requires at least one of top, left, bottom, or right".into()
         }

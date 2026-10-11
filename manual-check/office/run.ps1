@@ -70,6 +70,7 @@ $order = @(
     'docx-numbering'
     'docx-style'
     'docx-style-table'
+    'docx-table-width'
     'docx-box-table'
     'docx-box-fields'
     'docx-format'

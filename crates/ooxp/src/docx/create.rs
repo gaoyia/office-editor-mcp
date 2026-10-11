@@ -33,8 +33,8 @@ use super::request::{
     InsertHyperlinkHost, InsertHyperlinkOp, InsertIndexEntryOp, InsertIndexOp, InsertIndexPlace,
     InsertMathOp, InsertMathPlace, InsertNoteOp, InsertNumberingOp, InsertRubyOp, InsertRubyPlace,
     InsertSdtPlace, InsertShapeOp, InsertTableOp, InsertTocOp, InsertTocPlace, ReplyCommentOp,
-    SetBibliographyStyleOp, SetCellFormatOp, SetParaNumberingOp, SetTableCellMarOp,
-    SetTableFloatOp, SetTableStyleOp,
+    SetBibliographyStyleOp, SetCellFormatOp, SetParaNumberingOp, SetTableAlignOp,
+    SetTableCellMarOp, SetTableFloatOp, SetTableRowHeightOp, SetTableStyleOp, SetTableWidthOp,
 };
 use super::sdt::SdtKind;
 use super::sect::SectionBreakType;
@@ -1403,7 +1403,18 @@ fn parse_tables(v: Option<&Value>, path: &str, para_n: usize) -> Result<Vec<NewT
         for k in obj.keys() {
             if !matches!(
                 k.as_str(),
-                "cells" | "after" | "style" | "look" | "pos" | "cellMar" | "cellFormats"
+                "cells"
+                    | "after"
+                    | "style"
+                    | "look"
+                    | "pos"
+                    | "align"
+                    | "indent"
+                    | "width"
+                    | "cols"
+                    | "rowHeights"
+                    | "cellMar"
+                    | "cellFormats"
             ) {
                 return Err(Error::with_path(
                     ErrorKind::UnknownField { field: k.clone() },
@@ -3559,53 +3570,7 @@ fn push_box_follow_ups(
                 },
                 n: ti + 1,
             };
-            if t.extra.style.is_some() || t.extra.look.is_some() {
-                ops.push(DocxOp::SetTableStyle(SetTableStyleOp {
-                    id: tbl_id.clone(),
-                    target: target.clone(),
-                    style: t.extra.style.clone().map(Some),
-                    look: t.extra.look.clone().map(Some),
-                }));
-            }
-            if let Some(pos) = t.extra.pos.clone() {
-                ops.push(DocxOp::SetTableFloat(SetTableFloatOp {
-                    id: tbl_id.clone(),
-                    target: target.clone(),
-                    pos: Some(pos),
-                }));
-            }
-            if let Some(mar) = &t.extra.cell_mar {
-                ops.push(DocxOp::SetTableCellMar(SetTableCellMarOp {
-                    id: tbl_id.clone(),
-                    target: target.clone(),
-                    top: mar.top,
-                    left: mar.left,
-                    bottom: mar.bottom,
-                    right: mar.right,
-                }));
-            }
-            for cf in &t.extra.cell_formats {
-                let cell_id = format!("{tbl_id}/r{}c{}", cf.r, cf.c);
-                ops.push(DocxOp::SetCellFormat(SetCellFormatOp {
-                    id: cell_id,
-                    target: TableRef::Cell {
-                        story: TableStory::TextBox {
-                            host: tx.host.clone(),
-                            key: tx.key.clone(),
-                        },
-                        n: ti + 1,
-                        row: cf.r as usize,
-                        col: cf.c as usize,
-                    },
-                    fill: cf.fill.clone(),
-                    top: cf.top,
-                    left: cf.left,
-                    bottom: cf.bottom,
-                    right: cf.right,
-                    tl2br: cf.tl2br.clone(),
-                    tr2bl: cf.tr2bl.clone(),
-                }));
-            }
+            push_one_table_extra(ops, &t.extra, tbl_id, target);
         }
     }
     for bm in &b.bookmarks {
@@ -3749,15 +3714,89 @@ fn story_table_ref(hf: Option<(HfKind, HfType)>, index: usize) -> TableRef {
     TableRef::Table { story, n }
 }
 
-fn story_cell_ref(hf: Option<(HfKind, HfType)>, index: usize, r: u32, c: u32) -> TableRef {
-    match story_table_ref(hf, index) {
-        TableRef::Table { story, n } => TableRef::Cell {
-            story,
-            n,
-            row: r as usize,
-            col: c as usize,
+fn row_ref_from_table(target: &TableRef, row: usize) -> TableRef {
+    match target {
+        TableRef::Table { story, n } => TableRef::Row {
+            story: story.clone(),
+            n: *n,
+            row,
         },
-        other => other,
+        other => other.clone(),
+    }
+}
+
+fn push_one_table_extra(ops: &mut Vec<DocxOp>, extra: &TableExtra, id: String, target: TableRef) {
+    if extra.style.is_some() || extra.look.is_some() {
+        ops.push(DocxOp::SetTableStyle(SetTableStyleOp {
+            id: id.clone(),
+            target: target.clone(),
+            style: extra.style.clone().map(Some),
+            look: extra.look.clone().map(Some),
+        }));
+    }
+    if let Some(pos) = extra.pos.clone() {
+        ops.push(DocxOp::SetTableFloat(SetTableFloatOp {
+            id: id.clone(),
+            target: target.clone(),
+            pos: Some(pos),
+        }));
+    }
+    if let Some(patch) = extra.width.clone() {
+        ops.push(DocxOp::SetTableWidth(SetTableWidthOp {
+            id: id.clone(),
+            target: target.clone(),
+            patch,
+        }));
+    }
+    if extra.align.is_some() || extra.indent.is_some() {
+        ops.push(DocxOp::SetTableAlign(SetTableAlignOp {
+            id: id.clone(),
+            target: target.clone(),
+            align: extra.align.clone().map(Some),
+            indent: extra.indent.map(Some),
+        }));
+    }
+    if let Some(mar) = &extra.cell_mar {
+        ops.push(DocxOp::SetTableCellMar(SetTableCellMarOp {
+            id: id.clone(),
+            target: target.clone(),
+            top: mar.top,
+            left: mar.left,
+            bottom: mar.bottom,
+            right: mar.right,
+        }));
+    }
+    for (ri, rh) in extra.row_heights.iter().enumerate() {
+        let row = ri + 1;
+        ops.push(DocxOp::SetTableRowHeight(SetTableRowHeightOp {
+            id: format!("{id}/row:{row}"),
+            target: row_ref_from_table(&target, row),
+            h: rh.h,
+            rule: rh.rule.clone(),
+        }));
+    }
+    for cf in &extra.cell_formats {
+        let cell_id = format!("{id}/r{}c{}", cf.r, cf.c);
+        let cell_target = match &target {
+            TableRef::Table { story, n } => TableRef::Cell {
+                story: story.clone(),
+                n: *n,
+                row: cf.r as usize,
+                col: cf.c as usize,
+            },
+            other => other.clone(),
+        };
+        ops.push(DocxOp::SetCellFormat(SetCellFormatOp {
+            id: cell_id,
+            target: cell_target,
+            fill: cf.fill.clone(),
+            top: cf.top,
+            left: cf.left,
+            bottom: cf.bottom,
+            right: cf.right,
+            tl2br: cf.tl2br.clone(),
+            tr2bl: cf.tr2bl.clone(),
+        }));
     }
 }
 
@@ -3769,45 +3808,7 @@ fn push_table_ops(
     for (i, t) in tables.iter().enumerate() {
         let id = story_table_id(hf, i);
         let target = story_table_ref(hf, i);
-        if t.extra.style.is_some() || t.extra.look.is_some() {
-            ops.push(DocxOp::SetTableStyle(SetTableStyleOp {
-                id: id.clone(),
-                target: target.clone(),
-                style: t.extra.style.clone().map(Some),
-                look: t.extra.look.clone().map(Some),
-            }));
-        }
-        if let Some(pos) = t.extra.pos.clone() {
-            ops.push(DocxOp::SetTableFloat(SetTableFloatOp {
-                id: id.clone(),
-                target: target.clone(),
-                pos: Some(pos),
-            }));
-        }
-        if let Some(mar) = &t.extra.cell_mar {
-            ops.push(DocxOp::SetTableCellMar(SetTableCellMarOp {
-                id: id.clone(),
-                target: target.clone(),
-                top: mar.top,
-                left: mar.left,
-                bottom: mar.bottom,
-                right: mar.right,
-            }));
-        }
-        for cf in &t.extra.cell_formats {
-            let cell_id = format!("{id}/r{}c{}", cf.r, cf.c);
-            ops.push(DocxOp::SetCellFormat(SetCellFormatOp {
-                id: cell_id,
-                target: story_cell_ref(hf, i, cf.r, cf.c),
-                fill: cf.fill.clone(),
-                top: cf.top,
-                left: cf.left,
-                bottom: cf.bottom,
-                right: cf.right,
-                tl2br: cf.tl2br.clone(),
-                tr2bl: cf.tr2bl.clone(),
-            }));
-        }
+        push_one_table_extra(ops, &t.extra, id, target);
     }
     Ok(())
 }

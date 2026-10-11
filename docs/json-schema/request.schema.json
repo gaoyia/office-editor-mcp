@@ -961,6 +961,15 @@
                 "$ref": "docx.schema.json#/$defs/setTableFloatOp"
               },
               {
+                "$ref": "docx.schema.json#/$defs/setTableWidthOp"
+              },
+              {
+                "$ref": "docx.schema.json#/$defs/setTableAlignOp"
+              },
+              {
+                "$ref": "docx.schema.json#/$defs/setTableRowHeightOp"
+              },
+              {
                 "$ref": "docx.schema.json#/$defs/setTableCellMarOp"
               },
               {

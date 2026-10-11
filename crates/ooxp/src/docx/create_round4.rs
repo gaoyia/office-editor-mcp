@@ -15,7 +15,9 @@ use super::request::{
     SetFontEmbedOp,
 };
 use super::styles;
-use super::tbl::{self, DiagonalBorder, TableFloat, TableLookPatch};
+use super::tbl::{
+    self, DiagonalBorder, TableFloat, TableLookPatch, TableRowHeightSpec, TableWidthPatch,
+};
 
 pub const ROOT_KEYS: &[&str] = &[
     "styles",
@@ -805,6 +807,10 @@ pub struct TableExtra {
     pub style: Option<String>,
     pub look: Option<TableLookPatch>,
     pub pos: Option<TableFloat>,
+    pub align: Option<String>,
+    pub indent: Option<u32>,
+    pub width: Option<TableWidthPatch>,
+    pub row_heights: Vec<TableRowHeightSpec>,
     pub cell_mar: Option<CellMarSpec>,
     pub cell_formats: Vec<CellFormatSpec>,
 }
@@ -814,6 +820,10 @@ impl TableExtra {
         self.style.is_some()
             || self.look.is_some()
             || self.pos.is_some()
+            || self.align.is_some()
+            || self.indent.is_some()
+            || self.width.is_some()
+            || !self.row_heights.is_empty()
             || self.cell_mar.is_some()
             || !self.cell_formats.is_empty()
     }
@@ -1231,6 +1241,80 @@ pub fn parse_table_extra(
             return Err(wrong_type("pos", TypeName::Object, &format!("{path}.pos")));
         }
     };
+    let align = match obj.get("align") {
+        None => None,
+        Some(Value::String(s)) => {
+            if !tbl::TBL_ALIGN_VALS.contains(&s.as_str()) {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidTblAlign,
+                    format!("{path}.align"),
+                ));
+            }
+            Some(s.clone())
+        }
+        Some(_) => {
+            return Err(wrong_type(
+                "align",
+                TypeName::String,
+                &format!("{path}.align"),
+            ));
+        }
+    };
+    let indent = match obj.get("indent") {
+        None => None,
+        Some(Value::Number(n)) => {
+            let u = n.as_u64().ok_or_else(|| {
+                wrong_type("indent", TypeName::Integer, &format!("{path}.indent"))
+            })?;
+            Some(u as u32)
+        }
+        Some(_) => {
+            return Err(wrong_type(
+                "indent",
+                TypeName::Integer,
+                &format!("{path}.indent"),
+            ));
+        }
+    };
+    let width_type = match obj.get("width") {
+        None => None,
+        Some(Value::Object(m)) => {
+            let p = format!("{path}.width");
+            deny_keys(m, &p, &["type", "w"])?;
+            Some((
+                tbl::parse_opt_width_type(m, &p)?,
+                tbl::parse_opt_twip(m, &p, "w")?,
+            ))
+        }
+        Some(_) => {
+            return Err(wrong_type(
+                "width",
+                TypeName::Object,
+                &format!("{path}.width"),
+            ));
+        }
+    };
+    let col_ws = tbl::parse_cols_array(obj.get("cols"), &format!("{path}.cols"))?;
+    if let Some(c) = col_ws.as_ref() {
+        if c.len() != cols {
+            return Err(Error::with_path(
+                ErrorKind::TableColsCount,
+                format!("{path}.cols"),
+            ));
+        }
+    }
+    let width = match (width_type, col_ws) {
+        (None, None) => None,
+        (Some((ty, w)), col_ws) => Some(tbl::finish_width_patch(
+            ty,
+            w,
+            col_ws,
+            &format!("{path}.width"),
+        )?),
+        (None, Some(col_ws)) => Some(tbl::finish_width_patch(None, None, Some(col_ws), path)?),
+    };
+    let row_heights =
+        tbl::parse_row_heights(obj.get("rowHeights"), &format!("{path}.rowHeights"), rows)?;
     let cell_mar = match obj.get("cellMar") {
         None => None,
         Some(Value::Object(m)) => {
@@ -1263,6 +1347,10 @@ pub fn parse_table_extra(
         style,
         look,
         pos,
+        align,
+        indent,
+        width,
+        row_heights,
         cell_mar,
         cell_formats,
     })

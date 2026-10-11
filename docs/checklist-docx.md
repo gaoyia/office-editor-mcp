@@ -37,6 +37,7 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 2026-10-11 补跑 `docx-box-fields.ps1`，Bf1–Bf5 通过。无 Repair。COM 框内 `TextFrame.TextRange.Hyperlinks.Count=1`。标题栏仍是 `docx-box-fields-link.docx`。
 2026-10-11 补跑 `docx-para-run-remain.ps1`，Bd1–Bd3、Rh1–Rh3 通过。无 Repair。COM 段底纹 RGB=65535、上边框 `LineStyle=1`。`HighlightColorIndex=7`，`StrikeThrough=-1`。标题栏仍是对应文件名。
 2026-10-11 补跑 `docx-create-round5.ps1`，Cz1–Cz7 通过。无 Repair。COM `Shapes` 有 `Type=6` 的组合。段底纹 RGB=65535。修改密码 `WriteReserved=True`。标题栏仍是 `docx-create-round5.docx`。
+2026-10-11 补跑 `docx-table-width.ps1`，Tw1–Tw6 通过。无 Repair。COM `Rows.Alignment=1`，`PreferredWidth=180`，行高 20 磅。标题栏仍是 `docx-table-width-apply.docx` / `docx-table-width-create.docx`。
 
 - **C1** ✅
   - Word 16.0 能打开 `manual-check/office/out/docx-create.docx`，标题栏无 Repair
@@ -151,6 +152,10 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 - **Tf1–Tf6** ✅
   - Word 16.0：`docx-style-table.ps1`，6 PASS / 0 FAIL
   - 名单字段、浮动 `WrapAroundText`、表边距 6 磅、格底纹 RGB=255、斜线 `LineStyle=1`、表格样式与 `bandedRows`
+  - 标题栏无 Repair
+- **Tw1–Tw6** ✅
+  - Word 16.0：`docx-table-width.ps1`，6 PASS / 0 FAIL
+  - 名单字段、居中 `Rows.Alignment=1`、`PreferredWidth=180`、行高 20 磅、create 对得上、段落 id 与 xlsx 拒写
   - 标题栏无 Repair
 - **Bx1–Bx5** ✅
   - Word 16.0：`docx-box-table.ps1`，5 PASS / 0 FAIL
@@ -967,6 +972,20 @@ Word COM 的 `PageSetup` 边距与纸张单位是磅，等于 twip ÷ 20。手�
 | Tf4 | 底纹 | `setCellFormat` 写 `fill: FF0000` 后树上为 `FF0000`。Word 无修复。COM 该格 `Shading.BackgroundPatternColor` 的 RGB 为 255 |
 | Tf5 | 斜线 | `setCellFormat` 写 `tl2br` 后树上 `val` 为 `single`。Word 无修复。COM `Borders.Item(-7)` 的 `LineStyle` 非 0 |
 | Tf6 | 表样式 | `insertStyle` 表格样式再 `setTableStyle` 后树上 `style` 与 `look.bandedRows` 对得上，无修复 |
+
+## 表格宽高与对齐
+
+行内表 `jc` / `tblInd`、首选宽度、网格列宽、行高。不算自动列宽。不要和 pptx 的 `setTablePos` / `setTableSize`、xlsx 的 `setColWidth` / `setRowHeight` 混。
+手测脚本 `manual-check/office/cases/docx-table-width.ps1`。编号 Tw，不要和 Tb、Tf、T、Bx 撞。现有 Tb1–Tb8、Tf1–Tf6 继续过。
+
+| 序号 | 检查 | 通过标准 |
+| --- | --- | --- |
+| Tw1 | 名单字段 | 给了 `scope.tables` 后表上有 `align` / `indent` / `width` / `layout` / `colWidths`，行上有 `height` |
+| Tw2 | 对齐 | `setTableAlign` 写 `center` 后树上 `align` 为 `center`。Word 无修复。COM `Rows.Alignment` 为 1 |
+| Tw3 | 宽度 | `setTableWidth` 写 `dxa` 与两列之和后树上 `width.w` 与 `colWidths` 对得上。Word 无修复。COM `PreferredWidth` 约为对应磅值 |
+| Tw4 | 行高 | `setTableRowHeight` 写 `h=400` 后树上 `height.h` 为 400。Word 无修复。COM 该行高约为 20 磅 |
+| Tw5 | create | create 带 `align` / `width` / `cols` / `rowHeights` 后树上对得上，无修复 |
+| Tw6 | 拒写 | 对段落 id 发 `setTableWidth` 得 `InvalidId`。xlsx 上发此 op 得 `InvalidField` |
 
 ## 框内表
 

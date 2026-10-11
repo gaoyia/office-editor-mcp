@@ -1,8 +1,8 @@
 //! 正文、页眉页脚与文本框里的 `w:tbl`：inspect 名单与结构 apply。
 
-use serde_json::{json, Value};
+use serde_json::{json, Map, Value};
 
-use crate::error::{Error, ErrorKind, IdReason, XmlIssue};
+use crate::error::{Error, ErrorKind, IdReason, TypeName, XmlIssue};
 use crate::opc::{Package, Relationships};
 use crate::xml::{Element, Node};
 
@@ -191,17 +191,12 @@ pub fn parse_table_only(id: &str, i: usize, reason: IdReason) -> Result<TableRef
     }
 }
 
-pub fn parse_row_ref(id: &str, i: usize) -> Result<TableRef, Error> {
+pub fn parse_row_ref(id: &str, i: usize, reason: IdReason) -> Result<TableRef, Error> {
     let path = format!("ops[{i}].id");
     let r = parse_table_ref(id, &path)?;
     match r {
         TableRef::Row { .. } => Ok(r),
-        _ => Err(Error::with_path(
-            ErrorKind::InvalidId {
-                reason: IdReason::DeleteRowNeedsRow,
-            },
-            path,
-        )),
+        _ => Err(Error::with_path(ErrorKind::InvalidId { reason }, path)),
     }
 }
 
@@ -678,6 +673,28 @@ pub fn apply_split(root: &mut Element, r: &TableRef, id: &str, i: usize) -> Resu
 
 pub const TBL_ANCHORS: &[&str] = &["margin", "page", "text"];
 
+pub const TBL_WIDTH_TYPES: &[&str] = &["auto", "dxa", "pct"];
+pub const TBL_ALIGN_VALS: &[&str] = &["left", "center", "right"];
+pub const ROW_HEIGHT_RULES: &[&str] = &["auto", "atLeast", "exact"];
+
+const TRPR_ORDER: &[&str] = &[
+    "cnfStyle",
+    "divId",
+    "gridBefore",
+    "gridAfter",
+    "wBefore",
+    "wAfter",
+    "cantSplit",
+    "trHeight",
+    "tblHeader",
+    "tblCellSpacing",
+    "jc",
+    "hidden",
+    "ins",
+    "del",
+    "trPrChange",
+];
+
 const TBLPR_ORDER: &[&str] = &[
     "tblStyle",
     "tblpPr",
@@ -737,6 +754,26 @@ pub struct TableLookPatch {
     pub last_column: Option<bool>,
     pub banded_rows: Option<bool>,
     pub banded_columns: Option<bool>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TblWidthKind {
+    Auto,
+    Dxa,
+    Pct,
+}
+
+#[derive(Debug, Clone)]
+pub struct TableWidthPatch {
+    pub kind: TblWidthKind,
+    pub w: Option<u32>,
+    pub cols: Option<Vec<u32>>,
+}
+
+#[derive(Debug, Clone)]
+pub struct TableRowHeightSpec {
+    pub h: Option<u32>,
+    pub rule: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -833,6 +870,419 @@ pub fn apply_set_table_float(
             let overlap = hf::ensure_child_in_order(pr, "tblOverlap", TBLPR_ORDER);
             let key = overlap.prefixed("val");
             overlap.set_attr(&key, "never");
+        }
+    }
+    Ok(())
+}
+
+pub fn finish_width_patch(
+    type_: Option<String>,
+    w: Option<u32>,
+    cols: Option<Vec<u32>>,
+    path: &str,
+) -> Result<TableWidthPatch, Error> {
+    if type_.is_none() && w.is_none() && cols.is_none() {
+        return Err(Error::with_path(
+            ErrorKind::NeedSetTableWidthField,
+            path.to_string(),
+        ));
+    }
+    let kind = match type_.as_deref() {
+        None => TblWidthKind::Dxa,
+        Some(s) if TBL_WIDTH_TYPES.contains(&s) => match s {
+            "auto" => TblWidthKind::Auto,
+            "pct" => TblWidthKind::Pct,
+            _ => TblWidthKind::Dxa,
+        },
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::InvalidTblWidthType,
+                format!("{path}.type"),
+            ));
+        }
+    };
+    match kind {
+        TblWidthKind::Auto => {
+            if w.is_some_and(|n| n > 0) {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidTblWidthType,
+                    format!("{path}.w"),
+                ));
+            }
+        }
+        TblWidthKind::Pct => {
+            let Some(n) = w else {
+                return Err(Error::with_path(
+                    ErrorKind::NeedSetTableWidthField,
+                    format!("{path}.w"),
+                ));
+            };
+            if !(1..=5000).contains(&n) {
+                return Err(Error::with_path(
+                    ErrorKind::OutOfRange {
+                        field: "w".into(),
+                        min: 1,
+                        max: 5000,
+                    },
+                    format!("{path}.w"),
+                ));
+            }
+        }
+        TblWidthKind::Dxa => {
+            if w.is_none() && cols.is_none() {
+                return Err(Error::with_path(
+                    ErrorKind::NeedSetTableWidthField,
+                    path.to_string(),
+                ));
+            }
+        }
+    }
+    Ok(TableWidthPatch { kind, w, cols })
+}
+
+pub fn parse_opt_width_type(obj: &Map<String, Value>, path: &str) -> Result<Option<String>, Error> {
+    match obj.get("type") {
+        None => Ok(None),
+        Some(Value::String(s)) => Ok(Some(s.clone())),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "type".into(),
+                expected: TypeName::String,
+            },
+            format!("{path}.type"),
+        )),
+    }
+}
+
+pub fn parse_opt_twip(
+    obj: &Map<String, Value>,
+    path: &str,
+    field: &str,
+) -> Result<Option<u32>, Error> {
+    match obj.get(field) {
+        None => Ok(None),
+        Some(Value::Number(n)) => {
+            let u = n.as_u64().ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::WrongType {
+                        field: field.into(),
+                        expected: TypeName::Integer,
+                    },
+                    format!("{path}.{field}"),
+                )
+            })?;
+            Ok(Some(u as u32))
+        }
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::Integer,
+            },
+            format!("{path}.{field}"),
+        )),
+    }
+}
+
+pub fn parse_cols_array(v: Option<&Value>, path: &str) -> Result<Option<Vec<u32>>, Error> {
+    let Some(v) = v else {
+        return Ok(None);
+    };
+    let arr = v.as_array().ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::WrongType {
+                field: "cols".into(),
+                expected: TypeName::Array,
+            },
+            path.to_string(),
+        )
+    })?;
+    if arr.is_empty() {
+        return Err(Error::with_path(
+            ErrorKind::EmptyArray {
+                field: "cols".into(),
+            },
+            path.to_string(),
+        ));
+    }
+    let mut out = Vec::with_capacity(arr.len());
+    for (i, item) in arr.iter().enumerate() {
+        let u = item.as_u64().ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::WrongType {
+                    field: "cols".into(),
+                    expected: TypeName::Integer,
+                },
+                format!("{path}[{i}]"),
+            )
+        })?;
+        if u < 1 {
+            return Err(Error::with_path(
+                ErrorKind::MinValue {
+                    field: "cols".into(),
+                    min: 1,
+                },
+                format!("{path}[{i}]"),
+            ));
+        }
+        out.push(u as u32);
+    }
+    Ok(Some(out))
+}
+
+pub fn parse_row_height_spec(
+    obj: &Map<String, Value>,
+    path: &str,
+) -> Result<TableRowHeightSpec, Error> {
+    let h = match obj.get("h") {
+        None => {
+            return Err(Error::with_path(
+                ErrorKind::NeedSetTableRowHeightField,
+                format!("{path}.h"),
+            ));
+        }
+        Some(Value::Null) => None,
+        Some(Value::Number(n)) => {
+            let u = n.as_u64().ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::WrongType {
+                        field: "h".into(),
+                        expected: TypeName::Integer,
+                    },
+                    format!("{path}.h"),
+                )
+            })?;
+            Some(u as u32)
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "h".into(),
+                    expected: TypeName::Integer,
+                },
+                format!("{path}.h"),
+            ));
+        }
+    };
+    let rule = match obj.get("rule") {
+        None => None,
+        Some(Value::String(s)) => {
+            if !ROW_HEIGHT_RULES.contains(&s.as_str()) {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidRowHeightRule,
+                    format!("{path}.rule"),
+                ));
+            }
+            Some(s.clone())
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "rule".into(),
+                    expected: TypeName::String,
+                },
+                format!("{path}.rule"),
+            ));
+        }
+    };
+    if h.is_none() && rule.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::MutuallyExclusive {
+                a: "h".into(),
+                b: "rule".into(),
+            },
+            path.to_string(),
+        ));
+    }
+    Ok(TableRowHeightSpec { h, rule })
+}
+
+pub fn parse_row_heights(
+    v: Option<&Value>,
+    path: &str,
+    rows: usize,
+) -> Result<Vec<TableRowHeightSpec>, Error> {
+    let Some(v) = v else {
+        return Ok(Vec::new());
+    };
+    let arr = v.as_array().ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::WrongType {
+                field: "rowHeights".into(),
+                expected: TypeName::Array,
+            },
+            path.to_string(),
+        )
+    })?;
+    if arr.len() != rows {
+        return Err(Error::with_path(
+            ErrorKind::TableRowHeightsCount,
+            path.to_string(),
+        ));
+    }
+    let mut out = Vec::with_capacity(arr.len());
+    for (i, item) in arr.iter().enumerate() {
+        let item_path = format!("{path}[{i}]");
+        let obj = item.as_object().ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::WrongType {
+                    field: "rowHeights".into(),
+                    expected: TypeName::Object,
+                },
+                item_path.clone(),
+            )
+        })?;
+        for k in obj.keys() {
+            if !matches!(k.as_str(), "h" | "rule") {
+                return Err(Error::with_path(
+                    ErrorKind::UnknownField { field: k.clone() },
+                    format!("{item_path}.{k}"),
+                ));
+            }
+        }
+        out.push(parse_row_height_spec(obj, &item_path)?);
+    }
+    Ok(out)
+}
+
+pub fn apply_set_table_width(
+    root: &mut Element,
+    r: &TableRef,
+    patch: &TableWidthPatch,
+    id: &str,
+    i: usize,
+) -> Result<(), Error> {
+    let path = tbl_path(root, r, id, i)?;
+    let tbl = para::element_at_mut(root, &path).ok_or_else(|| missing_table(id, i))?;
+    reject_complex(tbl, i)?;
+    let n = col_count(tbl)?;
+    if let Some(cols) = &patch.cols {
+        if cols.len() != n {
+            return Err(Error::with_path(
+                ErrorKind::TableColsCount,
+                format!("ops[{i}].cols"),
+            ));
+        }
+    }
+    let tbl_w = match patch.kind {
+        TblWidthKind::Auto => 0,
+        TblWidthKind::Pct => patch.w.unwrap_or(0),
+        TblWidthKind::Dxa => patch.w.unwrap_or_else(|| {
+            patch
+                .cols
+                .as_ref()
+                .map(|c| c.iter().copied().sum())
+                .unwrap_or(0)
+        }),
+    };
+    let type_attr = match patch.kind {
+        TblWidthKind::Auto => "auto",
+        TblWidthKind::Pct => "pct",
+        TblWidthKind::Dxa => "dxa",
+    };
+    let layout_attr = match patch.kind {
+        TblWidthKind::Dxa => "fixed",
+        TblWidthKind::Auto | TblWidthKind::Pct => "autofit",
+    };
+    {
+        let pr = ensure_tbl_pr(tbl);
+        let w_el = hf::ensure_child_in_order(pr, "tblW", TBLPR_ORDER);
+        set_attr(w_el, "w", &tbl_w.to_string());
+        set_attr(w_el, "type", type_attr);
+        let layout = hf::ensure_child_in_order(pr, "tblLayout", TBLPR_ORDER);
+        set_attr(layout, "type", layout_attr);
+    }
+    let widths = if let Some(cols) = &patch.cols {
+        cols.clone()
+    } else if patch.kind == TblWidthKind::Dxa {
+        if let Some(w) = patch.w {
+            let old = read_grid_widths(tbl);
+            if old.len() == n {
+                scale_to_total(&old, w)
+            } else {
+                even_split(n, w)
+            }
+        } else {
+            Vec::new()
+        }
+    } else {
+        Vec::new()
+    };
+    if !widths.is_empty() {
+        write_grid_widths(tbl, &widths);
+        sync_tc_widths(tbl, &widths)?;
+    }
+    Ok(())
+}
+
+pub fn apply_set_table_align(
+    root: &mut Element,
+    r: &TableRef,
+    align: Option<Option<&str>>,
+    indent: Option<Option<u32>>,
+    id: &str,
+    i: usize,
+) -> Result<(), Error> {
+    let path = tbl_path(root, r, id, i)?;
+    let tbl = para::element_at_mut(root, &path).ok_or_else(|| missing_table(id, i))?;
+    let pr = ensure_tbl_pr(tbl);
+    if let Some(al) = align {
+        match al {
+            Some(v) => {
+                let el = hf::ensure_child_in_order(pr, "jc", TBLPR_ORDER);
+                set_attr(el, "val", v);
+            }
+            None => remove_child(pr, "jc"),
+        }
+    }
+    if let Some(ind) = indent {
+        match ind {
+            Some(n) => {
+                let el = hf::ensure_child_in_order(pr, "tblInd", TBLPR_ORDER);
+                el.attrs.clear();
+                set_attr(el, "w", &n.to_string());
+                set_attr(el, "type", "dxa");
+            }
+            None => remove_child(pr, "tblInd"),
+        }
+    }
+    Ok(())
+}
+
+pub fn apply_set_table_row_height(
+    root: &mut Element,
+    r: &TableRef,
+    h: Option<u32>,
+    rule: Option<&str>,
+    id: &str,
+    i: usize,
+) -> Result<(), Error> {
+    let TableRef::Row { row, .. } = r else {
+        unreachable!();
+    };
+    let path = tbl_path(root, r, id, i)?;
+    let tbl = para::element_at_mut(root, &path).ok_or_else(|| missing_table(id, i))?;
+    let trs = tr_indices(tbl);
+    if *row < 1 || *row > trs.len() {
+        return Err(missing_table(id, i));
+    }
+    let tr = child_el_mut(tbl, trs[*row - 1]);
+    match h {
+        None => {
+            if let Some(pr) = tr.child_by_local_mut("trPr") {
+                remove_child(pr, "trHeight");
+            }
+        }
+        Some(val) => {
+            let pr = ensure_tr_pr(tr);
+            let el = hf::ensure_child_in_order(pr, "trHeight", TRPR_ORDER);
+            let rule_v = match rule {
+                Some(s) => s,
+                None if val == 0 => "auto",
+                None => "atLeast",
+            };
+            el.attrs.clear();
+            set_attr(el, "val", &val.to_string());
+            set_attr(el, "hRule", rule_v);
         }
     }
     Ok(())
@@ -1210,6 +1660,7 @@ fn table_node(
         rows.push(json!({
             "id": format!("{id}/row:{row_n}"),
             "index": row_n,
+            "height": row_height_json(tr),
             "cells": cells,
         }));
     }
@@ -1226,6 +1677,21 @@ fn table_node(
             .map(str::to_string),
         "look": tbl_look_json(tbl),
         "pos": tbl_pos_json(tbl),
+        "align": tbl
+            .child_by_local("tblPr")
+            .and_then(|p| p.child_by_local("jc"))
+            .and_then(|e| e.attr_local("val")),
+        "indent": tbl
+            .child_by_local("tblPr")
+            .and_then(|p| p.child_by_local("tblInd"))
+            .and_then(|e| e.attr_local("w"))
+            .and_then(|s| s.parse::<i64>().ok()),
+        "width": tbl_width_json(tbl),
+        "layout": tbl
+            .child_by_local("tblPr")
+            .and_then(|p| p.child_by_local("tblLayout"))
+            .and_then(|e| e.attr_local("type")),
+        "colWidths": col_widths_json(tbl),
         "cellMar": cell_mar_json(
             tbl.child_by_local("tblPr")
                 .and_then(|p| p.child_by_local("tblCellMar")),
@@ -1921,6 +2387,125 @@ fn grid_width_at(tbl: &Element, idx: usize) -> Option<u32> {
         .and_then(|s| s.parse().ok())
 }
 
+fn read_grid_widths(tbl: &Element) -> Vec<u32> {
+    let Some(grid) = tbl.child_by_local("tblGrid") else {
+        return Vec::new();
+    };
+    grid.element_children()
+        .filter(|e| e.local_name() == "gridCol")
+        .map(|e| {
+            e.attr_local("w")
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(COL_W)
+        })
+        .collect()
+}
+
+fn even_split(n: usize, target: u32) -> Vec<u32> {
+    if n == 0 {
+        return Vec::new();
+    }
+    if target < n as u32 {
+        return vec![1; n];
+    }
+    let base = target / n as u32;
+    let rem = target % n as u32;
+    let mut out = vec![base; n];
+    if let Some(last) = out.last_mut() {
+        *last = last.saturating_add(rem);
+    }
+    out
+}
+
+fn scale_to_total(old: &[u32], target: u32) -> Vec<u32> {
+    let n = old.len();
+    if n == 0 {
+        return Vec::new();
+    }
+    if target < n as u32 {
+        return vec![1; n];
+    }
+    let sum: u64 = old.iter().map(|&x| x.max(1) as u64).sum();
+    let mut out = vec![0u32; n];
+    let mut used = 0u32;
+    for i in 0..n {
+        if i + 1 == n {
+            out[i] = target.saturating_sub(used).max(1);
+        } else {
+            let v = ((old[i].max(1) as u64 * target as u64) / sum).max(1) as u32;
+            out[i] = v;
+            used = used.saturating_add(v);
+        }
+    }
+    out
+}
+
+fn write_grid_widths(tbl: &mut Element, widths: &[u32]) {
+    if widths.is_empty() {
+        return;
+    }
+    if tbl.child_by_local("tblGrid").is_none() {
+        ensure_tbl_grid(tbl, widths.len(), COL_W);
+    }
+    let grid = tbl.child_by_local_mut("tblGrid").unwrap();
+    let mut seen = 0usize;
+    for n in &mut grid.children {
+        if let Node::Element(e) = n {
+            if e.local_name() == "gridCol" {
+                if let Some(w) = widths.get(seen) {
+                    let key = e.prefixed("w");
+                    e.set_attr(&key, w.to_string());
+                }
+                seen += 1;
+            }
+        }
+    }
+    while seen < widths.len() {
+        let mut gc = Element::new(grid.prefixed("gridCol"));
+        gc.set_attr(&gc.prefixed("w"), widths[seen].to_string());
+        grid.push_element(gc);
+        seen += 1;
+    }
+}
+
+fn sync_tc_widths(tbl: &mut Element, widths: &[u32]) -> Result<(), Error> {
+    let trs = tr_indices(tbl);
+    for ti in trs {
+        let plan = {
+            let tr = child_el(tbl, ti);
+            let mut plan = Vec::new();
+            let mut col = 0usize;
+            for (j, n) in tr.children.iter().enumerate() {
+                if let Node::Element(tc) = n {
+                    if tc.local_name() == "tc" {
+                        let span = grid_span(tc)?;
+                        plan.push((j, col, span));
+                        col += span;
+                    }
+                }
+            }
+            plan
+        };
+        for (j, start, span) in plan {
+            let end = start.saturating_add(span).min(widths.len());
+            let sum: u32 = if start < widths.len() {
+                widths[start..end].iter().copied().sum()
+            } else {
+                COL_W
+            };
+            let tr = child_el_mut(tbl, ti);
+            let Node::Element(tc) = &mut tr.children[j] else {
+                continue;
+            };
+            let pr = ensure_tc_pr(tc);
+            let w = hf::ensure_child_in_order(pr, "tcW", TCPR_ORDER);
+            set_attr(w, "w", &sum.to_string());
+            set_attr(w, "type", "dxa");
+        }
+    }
+    Ok(())
+}
+
 fn insert_grid_col(tbl: &mut Element, pos: usize, w: u32) {
     let Some(grid) = tbl.child_by_local_mut("tblGrid") else {
         return;
@@ -2359,6 +2944,49 @@ fn diagonal_json(tc: &Element, local: &str) -> Value {
     })
 }
 
+fn tbl_width_json(tbl: &Element) -> Value {
+    let Some(w) = tbl
+        .child_by_local("tblPr")
+        .and_then(|p| p.child_by_local("tblW"))
+    else {
+        return Value::Null;
+    };
+    json!({
+        "type": w.attr_local("type"),
+        "w": w.attr_local("w").and_then(|s| s.parse::<i64>().ok()),
+    })
+}
+
+fn col_widths_json(tbl: &Element) -> Value {
+    let Some(grid) = tbl.child_by_local("tblGrid") else {
+        return json!([]);
+    };
+    Value::Array(
+        grid.element_children()
+            .filter(|e| e.local_name() == "gridCol")
+            .map(|e| {
+                e.attr_local("w")
+                    .and_then(|s| s.parse::<i64>().ok())
+                    .map(Value::from)
+                    .unwrap_or(Value::Null)
+            })
+            .collect(),
+    )
+}
+
+fn row_height_json(tr: &Element) -> Value {
+    let Some(h) = tr
+        .child_by_local("trPr")
+        .and_then(|p| p.child_by_local("trHeight"))
+    else {
+        return Value::Null;
+    };
+    json!({
+        "h": h.attr_local("val").and_then(|s| s.parse::<i64>().ok()),
+        "rule": h.attr_local("hRule"),
+    })
+}
+
 fn tbl_look_json(tbl: &Element) -> Value {
     let Some(look) = tbl
         .child_by_local("tblPr")
@@ -2409,6 +3037,14 @@ fn ensure_tbl_pr(tbl: &mut Element) -> &mut Element {
         tbl.children.insert(0, Node::Element(pr));
     }
     tbl.child_by_local_mut("tblPr").unwrap()
+}
+
+fn ensure_tr_pr(tr: &mut Element) -> &mut Element {
+    if tr.child_by_local("trPr").is_none() {
+        let pr = Element::new(tr.prefixed("trPr"));
+        tr.children.insert(0, Node::Element(pr));
+    }
+    tr.child_by_local_mut("trPr").unwrap()
 }
 
 fn remove_child(parent: &mut Element, local: &str) {

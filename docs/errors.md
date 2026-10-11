@@ -763,7 +763,8 @@
 - `deleteWatermark` 的 id 不是水印 id 也不是 `docx:document` 报 `InvalidId`
 - `text` 与 `file` 不是恰好一个，或空 `text`，报 `InvalidField`
 - xlsx / pptx 上发 `insertWatermark` / `deleteWatermark` 报 `InvalidField`
-- 找不到表时，`deleteTable` / `insertRow` / `deleteRow` / `insertCol` / `deleteCol` / `mergeCells` / `splitCells` / `setTableStyle` / `setTableFloat` / `setTableCellMar` 报 `IdNotFound`
+- 找不到表时，`deleteTable` / `insertRow` / `deleteRow` / `insertCol` / `deleteCol` / `mergeCells` / `splitCells` / `setTableStyle` / `setTableFloat` / `setTableWidth` / `setTableAlign` / `setTableCellMar` 报 `IdNotFound`
+- 找不到行时，`setTableRowHeight` 报 `IdNotFound`
 - 找不到单元格时，`setCellFormat` 报 `IdNotFound`
 - `insertTable` 的锚点找不到同样报 `IdNotFound`
 - id 形态不对报 `InvalidId`
@@ -932,11 +933,15 @@
 - `setParaStyle` 目标不是段落样式、`setRunStyle` 目标不是字符样式，报 `InvalidField`
 - 框内 / 注内 / 批注内 run 上发 `setRunStyle` 报 `InvalidId`
 - xlsx / pptx 上发样式 op 报 `InvalidField`
-- `setTableStyle` / `setTableFloat` / `setTableCellMar` 的 `id` 必须是表 id
+- `setTableStyle` / `setTableFloat` / `setTableWidth` / `setTableAlign` / `setTableCellMar` 的 `id` 必须是表 id
+- `setTableRowHeight` 的 `id` 必须是行 id
 - `setCellFormat` 的 `id` 必须是单元格 id
 - `setTableStyle` 的 `style` 不是表格样式、`style` 与 `look` 一个都不给、锚点不合法、或外观字段一个都不给，报 `InvalidField`
+- `setTableWidth` 的 `type` / `w` / `cols` 一个都不给、`cols` 长度对不上、或 `auto` 仍给大于 0 的 `w`，报 `InvalidField`
+- `setTableAlign` 的 `align` 不合法，或 `align` 与 `indent` 一个都不给，报 `InvalidField`
+- `setTableRowHeight` 缺 `h`、`h` 为 `null` 仍给 `rule`、或 `rule` 不合法，报 `InvalidField`
 - 斜线 `val` / `color` 不合法报 `InvalidField`（与页面边框同一套）
-- xlsx / pptx 上发 `setTableStyle` / `setTableFloat` / `setTableCellMar` / `setCellFormat` 报 `InvalidField`
+- xlsx / pptx 上发 `setTableStyle` / `setTableFloat` / `setTableWidth` / `setTableAlign` / `setTableRowHeight` / `setTableCellMar` / `setCellFormat` 报 `InvalidField`
 - 找不到段落时，`setParaFormat` 报 `IdNotFound`
 - id 不是段落 id 报 `InvalidId`
 - 找不到 run 时，`setRunFormat` 报 `IdNotFound`

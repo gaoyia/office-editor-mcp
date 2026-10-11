@@ -762,6 +762,29 @@ pub struct SetTableFloatOp {
 }
 
 #[derive(Debug, Clone)]
+pub struct SetTableWidthOp {
+    pub id: String,
+    pub target: TableRef,
+    pub patch: super::tbl::TableWidthPatch,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetTableAlignOp {
+    pub id: String,
+    pub target: TableRef,
+    pub align: Option<Option<String>>,
+    pub indent: Option<Option<u32>>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetTableRowHeightOp {
+    pub id: String,
+    pub target: TableRef,
+    pub h: Option<u32>,
+    pub rule: Option<String>,
+}
+
+#[derive(Debug, Clone)]
 pub struct SetTableCellMarOp {
     pub id: String,
     pub target: TableRef,
@@ -1288,6 +1311,9 @@ pub enum DocxOp {
     SetRunStyle(SetRunStyleOp),
     SetTableStyle(SetTableStyleOp),
     SetTableFloat(SetTableFloatOp),
+    SetTableWidth(SetTableWidthOp),
+    SetTableAlign(SetTableAlignOp),
+    SetTableRowHeight(SetTableRowHeightOp),
     SetTableCellMar(SetTableCellMarOp),
     SetCellFormat(SetCellFormatOp),
     SetParaFormat(SetParaFormatOp),
@@ -1933,6 +1959,11 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<DocxOp>, Error> {
             "setRunStyle" => out.push(DocxOp::SetRunStyle(parse_set_run_style(obj, i)?)),
             "setTableStyle" => out.push(DocxOp::SetTableStyle(parse_set_table_style(obj, i)?)),
             "setTableFloat" => out.push(DocxOp::SetTableFloat(parse_set_table_float(obj, i)?)),
+            "setTableWidth" => out.push(DocxOp::SetTableWidth(parse_set_table_width(obj, i)?)),
+            "setTableAlign" => out.push(DocxOp::SetTableAlign(parse_set_table_align(obj, i)?)),
+            "setTableRowHeight" => out.push(DocxOp::SetTableRowHeight(parse_set_table_row_height(
+                obj, i,
+            )?)),
             "setTableCellMar" => {
                 out.push(DocxOp::SetTableCellMar(parse_set_table_cell_mar(obj, i)?))
             }
@@ -4956,7 +4987,7 @@ fn parse_insert_row(obj: &serde_json::Map<String, Value>, i: usize) -> Result<In
 fn parse_delete_row(obj: &serde_json::Map<String, Value>, i: usize) -> Result<DeleteRowOp, Error> {
     deny_keys(obj, i, &["op", "id"])?;
     let id = require_op_id(obj, i)?;
-    let target = tbl::parse_row_ref(&id, i)?;
+    let target = tbl::parse_row_ref(&id, i, IdReason::DeleteRowNeedsRow)?;
     Ok(DeleteRowOp { id, target })
 }
 
@@ -6183,6 +6214,67 @@ fn parse_set_table_float(
         }
     };
     Ok(SetTableFloatOp { id, target, pos })
+}
+
+fn parse_set_table_width(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<SetTableWidthOp, Error> {
+    deny_keys(obj, i, &["op", "id", "type", "w", "cols"])?;
+    let id = require_op_id(obj, i)?;
+    let target = tbl::parse_table_only(&id, i, IdReason::NeedTableId)?;
+    let path = format!("ops[{i}]");
+    let type_ = tbl::parse_opt_width_type(obj, &path)?;
+    let w = tbl::parse_opt_twip(obj, &path, "w")?;
+    let cols = tbl::parse_cols_array(obj.get("cols"), &format!("{path}.cols"))?;
+    let patch = tbl::finish_width_patch(type_, w, cols, &path)?;
+    Ok(SetTableWidthOp { id, target, patch })
+}
+
+fn parse_set_table_align(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<SetTableAlignOp, Error> {
+    deny_keys(obj, i, &["op", "id", "align", "indent"])?;
+    let id = require_op_id(obj, i)?;
+    let target = tbl::parse_table_only(&id, i, IdReason::NeedTableId)?;
+    let align = parse_opt_null_enum(
+        obj,
+        i,
+        "align",
+        tbl::TBL_ALIGN_VALS,
+        ErrorKind::InvalidTblAlign,
+    )?;
+    let indent = parse_opt_null_u32(obj, i, "indent")?;
+    if align.is_none() && indent.is_none() {
+        return Err(Error::with_path(
+            ErrorKind::NeedSetTableAlignField,
+            format!("ops[{i}]"),
+        ));
+    }
+    Ok(SetTableAlignOp {
+        id,
+        target,
+        align,
+        indent,
+    })
+}
+
+fn parse_set_table_row_height(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<SetTableRowHeightOp, Error> {
+    deny_keys(obj, i, &["op", "id", "h", "rule"])?;
+    let id = require_op_id(obj, i)?;
+    let target = tbl::parse_row_ref(&id, i, IdReason::SetTableRowHeightNeedsRow)?;
+    let path = format!("ops[{i}]");
+    let spec = tbl::parse_row_height_spec(obj, &path)?;
+    Ok(SetTableRowHeightOp {
+        id,
+        target,
+        h: spec.h,
+        rule: spec.rule,
+    })
 }
 
 fn parse_set_table_cell_mar(

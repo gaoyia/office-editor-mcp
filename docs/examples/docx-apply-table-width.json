@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "note.docx",
+  "output": "note.table-width.docx",
+  "ops": [
+    {
+      "op": "setTableWidth",
+      "id": "table:1",
+      "type": "dxa",
+      "w": 2880,
+      "cols": [1440, 1440]
+    },
+    {
+      "op": "setTableAlign",
+      "id": "table:1",
+      "align": "center"
+    },
+    {
+      "op": "setTableRowHeight",
+      "id": "table:1/row:1",
+      "h": 400,
+      "rule": "atLeast"
+    }
+  ]
+}

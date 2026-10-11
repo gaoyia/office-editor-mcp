@@ -188,7 +188,7 @@ create 生成最小 Transitional 包，含 `styles.xml`（Normal 与 Heading1–
 给了 `document.tocs` 时复用 `insertToc`。不写修订痕迹。段落上可带文本框、DrawingML 图、SmartArt 与图表。
 给了 `document.tables` 时可在正文写表；页眉页脚可带 `tables`。
 给了 `document.headers` / `footers` 时可写 `default` / `even` / `first`（给了 even 则写 `evenAndOddHeaders`，给了 first 则写 `titlePg`）。
-不改注区怎么画，不改批注气泡怎么排，不画图表，不算 SmartArt 版式，不算表列宽。
+不改注区怎么画，不改批注气泡怎么排，不画图表，不算 SmartArt 版式。表宽、列宽、行高与行内对齐可按点名写入，不算自动列宽。
 
 ### pptx
 

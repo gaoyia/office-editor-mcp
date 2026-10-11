@@ -424,6 +424,7 @@ pub(crate) enum IdReason {
     NeedTableId,
     InsertRowNeedsTableOrRow,
     DeleteRowNeedsRow,
+    SetTableRowHeightNeedsRow,
     SplitNeedsCell,
     /// 修订 id 必须是 rev:N 或 {容器}/rev:N
     RevPrefix,
@@ -1118,6 +1119,14 @@ define_error_kinds! {
     NeedSetTableStyleField => vec![Self::NeedSetTableStyleField],
     NeedSetTableFloatField => vec![Self::NeedSetTableFloatField],
     InvalidTblAnchor => vec![Self::InvalidTblAnchor],
+    NeedSetTableWidthField => vec![Self::NeedSetTableWidthField],
+    NeedSetTableAlignField => vec![Self::NeedSetTableAlignField],
+    NeedSetTableRowHeightField => vec![Self::NeedSetTableRowHeightField],
+    InvalidTblWidthType => vec![Self::InvalidTblWidthType],
+    InvalidTblAlign => vec![Self::InvalidTblAlign],
+    InvalidRowHeightRule => vec![Self::InvalidRowHeightRule],
+    TableColsCount => vec![Self::TableColsCount],
+    TableRowHeightsCount => vec![Self::TableRowHeightsCount],
     NeedSetTableCellMarField => vec![Self::NeedSetTableCellMarField],
     NeedSetCellFormatField => vec![Self::NeedSetCellFormatField],
     NeedSetStyleField => vec![Self::NeedSetStyleField],
@@ -1522,6 +1531,7 @@ impl IdReason {
             Self::NeedTableId,
             Self::InsertRowNeedsTableOrRow,
             Self::DeleteRowNeedsRow,
+            Self::SetTableRowHeightNeedsRow,
             Self::SplitNeedsCell,
             Self::RevPrefix,
             Self::RevIndexNotInt,
@@ -1878,6 +1888,14 @@ impl ErrorKind {
             | Self::NeedSetTableStyleField
             | Self::NeedSetTableFloatField
             | Self::InvalidTblAnchor
+            | Self::NeedSetTableWidthField
+            | Self::NeedSetTableAlignField
+            | Self::NeedSetTableRowHeightField
+            | Self::InvalidTblWidthType
+            | Self::InvalidTblAlign
+            | Self::InvalidRowHeightRule
+            | Self::TableColsCount
+            | Self::TableRowHeightsCount
             | Self::NeedSetTableCellMarField
             | Self::NeedSetCellFormatField
             | Self::NeedSetStyleField

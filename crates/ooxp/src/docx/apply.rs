@@ -51,9 +51,10 @@ use super::request::{
     SetPageBordersOp, SetPageMarginOp, SetPageSizeOp, SetParaFormatOp, SetParaNumberingOp,
     SetParaStyleOp, SetParaTextOp, SetPictureSizeOp, SetPictureWrapOp, SetRtlGutterOp, SetRubyOp,
     SetRunFormatOp, SetRunStyleOp, SetShapeFillOp, SetShapeLineOp, SetShapePosOp, SetShapeSizeOp,
-    SetStyleOp, SetTableCellMarOp, SetTableFloatOp, SetTableStyleOp, SetTextBoxDirectionOp,
-    SetTextBoxFillOp, SetTextBoxLineOp, SetTextBoxLinkOp, SetTextBoxSizeOp, SetTextBoxWrapOp,
-    SetTitlePageOp, SetVerticalAlignOp, SplitCellsOp, UngroupOp,
+    SetStyleOp, SetTableAlignOp, SetTableCellMarOp, SetTableFloatOp, SetTableRowHeightOp,
+    SetTableStyleOp, SetTableWidthOp, SetTextBoxDirectionOp, SetTextBoxFillOp, SetTextBoxLineOp,
+    SetTextBoxLinkOp, SetTextBoxSizeOp, SetTextBoxWrapOp, SetTitlePageOp, SetVerticalAlignOp,
+    SplitCellsOp, UngroupOp,
 };
 use super::revision;
 use super::ruby;
@@ -691,6 +692,17 @@ pub fn apply(bytes: &[u8], ops: &[DocxOp]) -> Result<Vec<u8>, Error> {
             }
             DocxOp::SetTableFloat(op) => {
                 apply_set_table_float(&pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
+            }
+            DocxOp::SetTableWidth(op) => {
+                apply_set_table_width(&pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
+            }
+            DocxOp::SetTableAlign(op) => {
+                apply_set_table_align(&pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
+            }
+            DocxOp::SetTableRowHeight(op) => {
+                apply_set_table_row_height(
+                    &pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i,
+                )?;
             }
             DocxOp::SetTableCellMar(op) => {
                 apply_set_table_cell_mar(&pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
@@ -1921,6 +1933,68 @@ fn apply_set_table_float(
     let part_name = tbl::part_for_story(catalog, doc_part, op.target.story(), &op.id, i)?;
     let doc = load_part(pkg, docs, &part_name)?;
     tbl::apply_set_table_float(&mut doc.root, &op.target, op.pos.as_ref(), &op.id, i)?;
+    dirty.insert(part_name, ());
+    Ok(())
+}
+
+fn apply_set_table_width(
+    pkg: &Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &SetTableWidthOp,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name = tbl::part_for_story(catalog, doc_part, op.target.story(), &op.id, i)?;
+    let doc = load_part(pkg, docs, &part_name)?;
+    tbl::apply_set_table_width(&mut doc.root, &op.target, &op.patch, &op.id, i)?;
+    dirty.insert(part_name, ());
+    Ok(())
+}
+
+fn apply_set_table_align(
+    pkg: &Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &SetTableAlignOp,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name = tbl::part_for_story(catalog, doc_part, op.target.story(), &op.id, i)?;
+    let doc = load_part(pkg, docs, &part_name)?;
+    tbl::apply_set_table_align(
+        &mut doc.root,
+        &op.target,
+        op.align.as_ref().map(|a| a.as_deref()),
+        op.indent,
+        &op.id,
+        i,
+    )?;
+    dirty.insert(part_name, ());
+    Ok(())
+}
+
+fn apply_set_table_row_height(
+    pkg: &Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &SetTableRowHeightOp,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name = tbl::part_for_story(catalog, doc_part, op.target.story(), &op.id, i)?;
+    let doc = load_part(pkg, docs, &part_name)?;
+    tbl::apply_set_table_row_height(
+        &mut doc.root,
+        &op.target,
+        op.h,
+        op.rule.as_deref(),
+        &op.id,
+        i,
+    )?;
     dirty.insert(part_name, ());
     Ok(())
 }
