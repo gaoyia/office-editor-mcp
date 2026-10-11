@@ -27,6 +27,8 @@ xlsx 见 [`roadmap/xlsx.md`](xlsx.md)。pptx 见 [`roadmap/pptx.md`](pptx.md)。
 - `exportMedia` / `exportChartData`：跟图、图表走
 - 复制已有文件再 apply：不必新动作
 - 功能区艺术字：另存是 `wps:wsp` ，inspect 已进 `textBoxes`。不新开对象，不做字填充或弯曲切片
+- `fmtScheme` 渐变停点、效果参数、图片填充：主题树上已有 `fmt` 摘要。不够用时补进 `.plan/2026年-10月-10日-✅-docx-主题与页面背景剩余.md`
+- run / 底纹的 `themeColor`：跟 `setRunFormat` / 直接格式走。不够用时补进 `.plan/2026年-10月-10日-✅-docx-段落边框底纹与run剩余.md`
 
 ## 已过
 
@@ -116,10 +118,13 @@ xlsx 见 [`roadmap/xlsx.md`](xlsx.md)。pptx 见 [`roadmap/pptx.md`](pptx.md)。
 | 63 | `.plan/2026年-10月-11日-❌-docx-文本框内垂直对齐.md` | 文本框已过 |
 | 64 | `.plan/2026年-10月-11日-❌-docx-格正交边框.md` | 表格外观已过 |
 | 65 | `.plan/2026年-10月-11日-❌-docx-字符缩放.md` | 段落与 run 剩余已过 |
+| 66 | `.plan/2026年-10月-11日-❌-docx-主题剩余.md` | 主题、主题与页面背景剩余已过 |
 
 ## 先探测再进待做
 
-探测 Office 16.0 另存后再挂序号。未探测的不算欠账。当前没有待探测项。
+探测 Office 16.0 另存后再挂序号。未探测的不算欠账。
+
+- 多份 theme 部件、把 theme 关系挂到页眉。空白另存只有主文档 `/word/theme/theme1.xml`。需要带页眉独立 theme 的另存样例后再挂
 
 不要把 Word 专用对象（水印、内容控件、编号、修订、参考文献、`wpc` 画布）搬到 xlsx / pptx。
 
