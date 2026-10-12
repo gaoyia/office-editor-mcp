@@ -621,6 +621,7 @@
     - `setTextBoxFill`
     - `setTextBoxLine`
     - `setTextBoxDirection`
+    - `setTextBoxTextAnchor`
   - 脚注尾注 op
   - `setSmartArtPos` / `setSmartArtWrap`
   - `insertWatermark` / `deleteWatermark`
@@ -941,6 +942,8 @@
 - `setTableAlign` 的 `align` 不合法，或 `align` 与 `indent` 一个都不给，报 `InvalidField`
 - `setTableRowHeight` 缺 `h`、`h` 为 `null` 仍给 `rule`、或 `rule` 不合法，报 `InvalidField`
 - 斜线 `val` / `color` 不合法报 `InvalidField`（与页面边框同一套）
+- `setCellFormat` 的 `vAlign` 不是 `top` / `center` / `both` / `bottom`，或 fill、边距、斜线、`vAlign` 一个都不给，报 `InvalidField`
+- `setTextBoxTextAnchor` 的 `textAnchor` 不是 `t` / `ctr` / `b` / `just` / `dist` 且不是 `null`，报 `InvalidField`
 - xlsx / pptx 上发 `setTableStyle` / `setTableFloat` / `setTableWidth` / `setTableAlign` / `setTableRowHeight` / `setTableCellMar` / `setCellFormat` 报 `InvalidField`
 - 找不到段落时，`setParaFormat` 报 `IdNotFound`
 - id 不是段落 id 报 `InvalidId`

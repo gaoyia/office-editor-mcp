@@ -1855,6 +1855,7 @@ fn inspect_lists_body_textboxes() {
     assert_eq!(boxes[0]["id"], "para:CCCC3001/txbx:8");
     assert_eq!(boxes[0]["kind"], "anchor");
     assert_eq!(boxes[0]["wrap"], "square");
+    assert!(boxes[0]["textAnchor"].is_null());
     assert_eq!(boxes[0]["link"]["prev"], serde_json::Value::Null);
     assert_eq!(boxes[0]["link"]["next"], "para:CCCC3002/txbx:9");
     assert_eq!(boxes[0]["paraCount"], 1);
@@ -2000,6 +2001,109 @@ fn set_textbox_size_fill_direction() {
     let xml = part(&out, "word/document.xml");
     assert!(xml.contains("FF0000"));
     assert!(xml.contains("eaVert"));
+}
+
+#[test]
+fn set_textbox_text_anchor() {
+    let path = write_txbx_sample("txbx-anchor");
+    let out = tmp_dir().join("txbx-anchor-out.docx");
+    apply_ops(
+        &path,
+        &out,
+        json!([{
+            "op": "setTextBoxTextAnchor",
+            "id": "para:CCCC3001/txbx:8",
+            "textAnchor": "ctr"
+        }]),
+    )
+    .unwrap();
+    let tree = inspect_boxes(&out);
+    assert_eq!(tree["paragraphs"][0]["textBoxes"][0]["textAnchor"], "ctr");
+    let xml = part(&out, "word/document.xml");
+    assert!(xml.contains("anchor=\"ctr\""));
+
+    let out2 = tmp_dir().join("txbx-anchor-just.docx");
+    apply_ops(
+        &out,
+        &out2,
+        json!([{
+            "op": "setTextBoxTextAnchor",
+            "id": "para:CCCC3001/txbx:8",
+            "textAnchor": "just"
+        }]),
+    )
+    .unwrap();
+    let tree2 = inspect_boxes(&out2);
+    assert_eq!(tree2["paragraphs"][0]["textBoxes"][0]["textAnchor"], "just");
+
+    let out3 = tmp_dir().join("txbx-anchor-clear.docx");
+    apply_ops(
+        &out2,
+        &out3,
+        json!([{
+            "op": "setTextBoxTextAnchor",
+            "id": "para:CCCC3001/txbx:8",
+            "textAnchor": null
+        }]),
+    )
+    .unwrap();
+    let tree3 = inspect_boxes(&out3);
+    assert!(tree3["paragraphs"][0]["textBoxes"][0]["textAnchor"].is_null());
+    let xml3 = part(&out3, "word/document.xml");
+    assert!(!xml3.contains("anchor="));
+
+    let err = apply_ops(
+        &path,
+        &tmp_dir().join("txbx-anchor-bad.docx"),
+        json!([{
+            "op": "setTextBoxTextAnchor",
+            "id": "para:CCCC3001/txbx:8",
+            "textAnchor": "middle"
+        }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+    let err_id = apply_ops(
+        &path,
+        &tmp_dir().join("txbx-anchor-para.docx"),
+        json!([{
+            "op": "setTextBoxTextAnchor",
+            "id": "para:CCCC3001",
+            "textAnchor": "ctr"
+        }]),
+    )
+    .unwrap_err();
+    assert_eq!(err_id.code(), ErrorCode::InvalidId);
+
+    let xlsx = tmp_dir().join("txbx-anchor.xlsx");
+    run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "create",
+            "path": xlsx.to_string_lossy(),
+            "workbook": { "sheets": [{ "name": "Sheet1" }] }
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap();
+    let err_x = run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "apply",
+            "path": xlsx.to_string_lossy(),
+            "output": tmp_dir().join("txbx-anchor-out.xlsx").to_string_lossy(),
+            "ops": [{
+                "op": "setTextBoxTextAnchor",
+                "id": "sheet:Sheet1/sp:1",
+                "textAnchor": "ctr"
+            }]
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap_err();
+    assert_eq!(err_x.code(), ErrorCode::InvalidField);
 }
 
 #[test]
@@ -2884,6 +2988,7 @@ fn inspect_tables_lists_cell_paragraphs() {
     assert_eq!(cell["id"], "table:1/r1c1");
     assert_eq!(cell["gridSpan"], 1);
     assert!(cell["vMerge"].is_null());
+    assert!(cell["vAlign"].is_null());
     assert!(cell["fill"].is_null());
     assert!(cell["cellMar"].is_null());
     assert!(cell["tl2br"].is_null());

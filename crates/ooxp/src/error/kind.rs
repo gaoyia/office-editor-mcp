@@ -967,6 +967,7 @@ define_error_kinds! {
     InvalidTextUnderline => vec![Self::InvalidTextUnderline],
     EmptyShapeTypeface => vec![Self::EmptyShapeTypeface],
     InvalidTextBoxDirection => vec![Self::InvalidTextBoxDirection],
+    InvalidTextBoxTextAnchor => vec![Self::InvalidTextBoxTextAnchor],
     CannotLinkFirstSection => vec![Self::CannotLinkFirstSection],
     HfTypeInactive { kind: String, hf_type: String } => vec![Self::HfTypeInactive {
         kind: "header".into(),
@@ -2041,6 +2042,7 @@ impl ErrorKind {
             | Self::InvalidTextUnderline
             | Self::EmptyShapeTypeface
             | Self::InvalidTextBoxDirection
+            | Self::InvalidTextBoxTextAnchor
             | Self::InsertPictureWorksheetOnly
             | Self::InsertChartWorksheetOnly
             | Self::InsertTextBoxWorksheetOnly

@@ -801,6 +801,7 @@ pub struct CellFormatSpec {
     pub right: Option<Option<u32>>,
     pub tl2br: Option<Option<DiagonalBorder>>,
     pub tr2bl: Option<Option<DiagonalBorder>>,
+    pub v_align: Option<Option<String>>,
 }
 
 pub struct TableExtra {
@@ -1374,7 +1375,7 @@ fn parse_cell_formats(
             obj,
             &item_path,
             &[
-                "r", "c", "fill", "top", "left", "bottom", "right", "tl2br", "tr2bl",
+                "r", "c", "fill", "top", "left", "bottom", "right", "tl2br", "tr2bl", "vAlign",
             ],
         )?;
         let r = require_index1(obj, &item_path, "r", rows)?;
@@ -1386,6 +1387,15 @@ fn parse_cell_formats(
         let right = opt_null_u32(obj, &item_path, "right")?;
         let tl2br = opt_null_diagonal(obj, &item_path, "tl2br")?;
         let tr2bl = opt_null_diagonal(obj, &item_path, "tr2bl")?;
+        let v_align = opt_null_enum(
+            obj,
+            &item_path,
+            "vAlign",
+            tbl::CELL_VALIGN,
+            ErrorKind::InvalidSectValue {
+                field: "vAlign".into(),
+            },
+        )?;
         if fill.is_none()
             && top.is_none()
             && left.is_none()
@@ -1393,6 +1403,7 @@ fn parse_cell_formats(
             && right.is_none()
             && tl2br.is_none()
             && tr2bl.is_none()
+            && v_align.is_none()
         {
             return Err(Error::with_path(
                 ErrorKind::NeedSetCellFormatField,
@@ -1409,6 +1420,7 @@ fn parse_cell_formats(
             right,
             tl2br,
             tr2bl,
+            v_align,
         });
     }
     Ok(out)
@@ -1636,6 +1648,30 @@ fn opt_null_u32(
         Some(_) => Err(wrong_type(
             field,
             TypeName::Integer,
+            &format!("{path}.{field}"),
+        )),
+    }
+}
+
+fn opt_null_enum(
+    obj: &serde_json::Map<String, Value>,
+    path: &str,
+    field: &str,
+    allowed: &[&str],
+    bad: ErrorKind,
+) -> Result<Option<Option<String>>, Error> {
+    match obj.get(field) {
+        None => Ok(None),
+        Some(Value::Null) => Ok(Some(None)),
+        Some(Value::String(s)) => {
+            if !allowed.contains(&s.as_str()) {
+                return Err(Error::with_path(bad, format!("{path}.{field}")));
+            }
+            Ok(Some(Some(s.clone())))
+        }
+        Some(_) => Err(wrong_type(
+            field,
+            TypeName::String,
             &format!("{path}.{field}"),
         )),
     }

@@ -42,6 +42,7 @@
       "op": "setCellFormat",
       "id": "table:1/r1c1",
       "fill": "FF0000",
+      "vAlign": "center",
       "tl2br": {
         "val": "single",
         "sz": 12,

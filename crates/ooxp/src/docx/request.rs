@@ -322,6 +322,14 @@ pub struct SetTextBoxDirectionOp {
 }
 
 #[derive(Debug, Clone)]
+pub struct SetTextBoxTextAnchorOp {
+    pub id: String,
+    pub target: TxbxTarget,
+    /// `None` 表示 JSON `null`，去掉 `wps:bodyPr/@anchor`。
+    pub value: Option<String>,
+}
+
+#[derive(Debug, Clone)]
 pub struct InsertShapeOp {
     pub id: String,
     pub host: para::HostPara,
@@ -805,6 +813,7 @@ pub struct SetCellFormatOp {
     pub right: Option<Option<u32>>,
     pub tl2br: Option<Option<super::tbl::DiagonalBorder>>,
     pub tr2bl: Option<Option<super::tbl::DiagonalBorder>>,
+    pub v_align: Option<Option<String>>,
 }
 
 #[derive(Debug, Clone)]
@@ -1268,6 +1277,7 @@ pub enum DocxOp {
     SetTextBoxFill(SetTextBoxFillOp),
     SetTextBoxLine(SetTextBoxLineOp),
     SetTextBoxDirection(SetTextBoxDirectionOp),
+    SetTextBoxTextAnchor(SetTextBoxTextAnchorOp),
     InsertConnector(InsertConnectorOp),
     DeleteConnector(DeleteConnectorOp),
     InsertShape(InsertShapeOp),
@@ -1910,6 +1920,9 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<DocxOp>, Error> {
             "setTextBoxDirection" => {
                 out.push(DocxOp::SetTextBoxDirection(parse_set_txbx_dir(obj, i)?))
             }
+            "setTextBoxTextAnchor" => out.push(DocxOp::SetTextBoxTextAnchor(
+                parse_set_txbx_text_anchor(obj, i)?,
+            )),
             "insertConnector" => out.push(DocxOp::InsertConnector(parse_insert_connector(obj, i)?)),
             "deleteConnector" => out.push(DocxOp::DeleteConnector(parse_delete_connector(obj, i)?)),
             "insertShape" => out.push(DocxOp::InsertShape(parse_insert_shape(obj, i)?)),
@@ -6312,7 +6325,7 @@ fn parse_set_cell_format(
         obj,
         i,
         &[
-            "op", "id", "fill", "top", "left", "bottom", "right", "tl2br", "tr2bl",
+            "op", "id", "fill", "top", "left", "bottom", "right", "tl2br", "tr2bl", "vAlign",
         ],
     )?;
     let id = require_op_id(obj, i)?;
@@ -6324,6 +6337,15 @@ fn parse_set_cell_format(
     let right = parse_opt_null_u32(obj, i, "right")?;
     let tl2br = parse_opt_null_diagonal(obj, i, "tl2br")?;
     let tr2bl = parse_opt_null_diagonal(obj, i, "tr2bl")?;
+    let v_align = parse_opt_null_enum(
+        obj,
+        i,
+        "vAlign",
+        tbl::CELL_VALIGN,
+        ErrorKind::InvalidSectValue {
+            field: "vAlign".into(),
+        },
+    )?;
     if fill.is_none()
         && top.is_none()
         && left.is_none()
@@ -6331,6 +6353,7 @@ fn parse_set_cell_format(
         && right.is_none()
         && tl2br.is_none()
         && tr2bl.is_none()
+        && v_align.is_none()
     {
         return Err(Error::with_path(
             ErrorKind::NeedSetCellFormatField,
@@ -6347,6 +6370,7 @@ fn parse_set_cell_format(
         right,
         tl2br,
         tr2bl,
+        v_align,
     })
 }
 
@@ -8069,6 +8093,46 @@ fn parse_set_txbx_dir(
         target,
         vertical,
     })
+}
+
+fn parse_set_txbx_text_anchor(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<SetTextBoxTextAnchorOp, Error> {
+    deny_keys(obj, i, &["op", "id", "textAnchor"])?;
+    let id = require_id(obj, i)?;
+    let target = para::parse_txbx_id(&id, i)?;
+    let value = match obj.get("textAnchor") {
+        Some(Value::Null) => None,
+        Some(Value::String(s)) if super::textbox::TEXT_BOX_TEXT_ANCHORS.contains(&s.as_str()) => {
+            Some(s.clone())
+        }
+        Some(Value::String(_)) => {
+            return Err(Error::with_path(
+                ErrorKind::InvalidTextBoxTextAnchor,
+                format!("ops[{i}].textAnchor"),
+            ));
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "textAnchor".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].textAnchor"),
+            ));
+        }
+        None => {
+            return Err(Error::with_path(
+                ErrorKind::OpRequiresField {
+                    op: "setTextBoxTextAnchor".into(),
+                    field: "textAnchor".into(),
+                },
+                format!("ops[{i}].textAnchor"),
+            ));
+        }
+    };
+    Ok(SetTextBoxTextAnchorOp { id, target, value })
 }
 
 fn parse_insert_connector(

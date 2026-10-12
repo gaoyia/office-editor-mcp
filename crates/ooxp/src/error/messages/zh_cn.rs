@@ -1081,6 +1081,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::InvalidTextUnderline => "underline 必须是 sng、none 或 dbl".into(),
         ErrorKind::EmptyShapeTypeface => "font 与 eastAsiaFont 不能为空串".into(),
         ErrorKind::InvalidTextBoxDirection => "direction 必须是 horizontal 或 vertical".into(),
+        ErrorKind::InvalidTextBoxTextAnchor => {
+            "textAnchor 必须是 t、ctr、b、just 或 dist".into()
+        }
         ErrorKind::InvalidPicKind => "kind 必须是 inline 或 anchor".into(),
         ErrorKind::InvalidPicWrap => {
             "wrap 必须是 square、tight、through、topAndBottom 或 none".into()
@@ -1459,7 +1462,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             "setTableCellMar 至少要给 top、left、bottom 或 right 之一".into()
         }
         ErrorKind::NeedSetCellFormatField => {
-            "setCellFormat 至少要给 fill、边距或斜线之一".into()
+            "setCellFormat 至少要给 fill、边距、斜线或 vAlign 之一".into()
         }
         ErrorKind::NeedSetStyleField => {
             "setStyle 至少要给 font、eastAsiaFont、sz、bold、color、before 或 after 之一".into()

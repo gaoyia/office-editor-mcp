@@ -1597,6 +1597,7 @@ fn is_foreign_op(op_name: &str) -> bool {
             | "setTextBoxFill"
             | "setTextBoxLine"
             | "setTextBoxDirection"
+            | "setTextBoxTextAnchor"
             | "insertPara"
             | "deletePara"
             | "mergeCells"

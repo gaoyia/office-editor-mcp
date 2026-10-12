@@ -53,8 +53,8 @@ use super::request::{
     SetRunFormatOp, SetRunStyleOp, SetShapeFillOp, SetShapeLineOp, SetShapePosOp, SetShapeSizeOp,
     SetStyleOp, SetTableAlignOp, SetTableCellMarOp, SetTableFloatOp, SetTableRowHeightOp,
     SetTableStyleOp, SetTableWidthOp, SetTextBoxDirectionOp, SetTextBoxFillOp, SetTextBoxLineOp,
-    SetTextBoxLinkOp, SetTextBoxSizeOp, SetTextBoxWrapOp, SetTitlePageOp, SetVerticalAlignOp,
-    SplitCellsOp, UngroupOp,
+    SetTextBoxLinkOp, SetTextBoxSizeOp, SetTextBoxTextAnchorOp, SetTextBoxWrapOp, SetTitlePageOp,
+    SetVerticalAlignOp, SplitCellsOp, UngroupOp,
 };
 use super::revision;
 use super::ruby;
@@ -343,6 +343,11 @@ pub fn apply(bytes: &[u8], ops: &[DocxOp]) -> Result<Vec<u8>, Error> {
             }
             DocxOp::SetTextBoxDirection(op) => {
                 apply_txbx_dir(&mut pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
+            }
+            DocxOp::SetTextBoxTextAnchor(op) => {
+                apply_txbx_text_anchor(
+                    &mut pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i,
+                )?;
             }
             DocxOp::InsertConnector(op) => {
                 apply_insert_connector(
@@ -2045,6 +2050,7 @@ fn apply_set_cell_format(
         op.right,
         op.tl2br.as_ref().map(|s| s.as_ref()),
         op.tr2bl.as_ref().map(|s| s.as_ref()),
+        op.v_align.as_ref().map(|s| s.as_deref()),
         &op.id,
         i,
     )?;
@@ -4426,6 +4432,28 @@ fn apply_txbx_dir(
         .ok_or_else(|| txbx_missing(&op.id, i))?;
     textbox::with_wsp_mut(host, &op.target.key, |wsp| {
         textbox::set_direction(wsp, op.vertical);
+    })
+    .ok_or_else(|| txbx_missing(&op.id, i))?;
+    dirty.insert(part_name, ());
+    Ok(())
+}
+
+fn apply_txbx_text_anchor(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &SetTextBoxTextAnchorOp,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name = part_for_txbx(pkg, catalog, doc_part, &op.target, &op.id, i)?;
+    let doc = load_part(pkg, docs, &part_name)?;
+    textbox::ensure_textbox_ns(&mut doc.root);
+    let host = para::find_paragraph_mut(&mut doc.root, op.target.host.body())
+        .ok_or_else(|| txbx_missing(&op.id, i))?;
+    textbox::with_wsp_mut(host, &op.target.key, |wsp| {
+        textbox::set_text_anchor(wsp, op.value.as_deref());
     })
     .ok_or_else(|| txbx_missing(&op.id, i))?;
     dirty.insert(part_name, ());

@@ -212,3 +212,110 @@ fn table_look_not_for_xlsx() {
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);
 }
+
+#[test]
+fn cell_valign_inspect_apply_create_and_clear() {
+    let src = create_table("valign");
+    let tree0 = inspect_tables(&src);
+    let cell0 = &tree0["tables"][0]["rows"][0]["cells"][0];
+    assert!(cell0["vAlign"].is_null());
+    assert_eq!(cell0["vMerge"], Value::Null);
+
+    let out = tmp_dir().join("valign-out.docx");
+    apply(
+        &src,
+        &out,
+        json!([{
+            "op": "setCellFormat",
+            "id": "table:1/r1c1",
+            "vAlign": "center"
+        }]),
+    );
+    let tree = inspect_tables(&out);
+    assert_eq!(tree["tables"][0]["rows"][0]["cells"][0]["vAlign"], "center");
+    let xml = unzip_document(&out);
+    assert!(xml.contains("w:vAlign") || xml.contains("vAlign"));
+    assert!(xml.contains("center"));
+
+    let cleared = tmp_dir().join("valign-clear.docx");
+    apply(
+        &out,
+        &cleared,
+        json!([{
+            "op": "setCellFormat",
+            "id": "table:1/r1c1",
+            "vAlign": null
+        }]),
+    );
+    let tree_c = inspect_tables(&cleared);
+    assert!(tree_c["tables"][0]["rows"][0]["cells"][0]["vAlign"].is_null());
+    let xml_c = unzip_document(&cleared);
+    assert!(!xml_c.contains("vAlign"));
+
+    let created = tmp_dir().join("valign-create.docx");
+    run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "create",
+            "path": created.to_string_lossy(),
+            "format": "docx",
+            "document": {
+                "paragraphs": [{ "text": "前" }],
+                "tables": [{
+                    "cells": [["A1", "B1"], ["A2", "B2"]],
+                    "cellFormats": [{ "r": 1, "c": 1, "vAlign": "bottom" }]
+                }]
+            }
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap();
+    let tree_cr = inspect_tables(&created);
+    assert_eq!(
+        tree_cr["tables"][0]["rows"][0]["cells"][0]["vAlign"],
+        "bottom"
+    );
+
+    let err = apply_err(
+        &src,
+        json!([{ "op": "setCellFormat", "id": "table:1/r1c1", "vAlign": "middle" }]),
+    );
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+    let err_empty = apply_err(
+        &src,
+        json!([{ "op": "setCellFormat", "id": "table:1/r1c1" }]),
+    );
+    assert_eq!(err_empty.code(), ErrorCode::InvalidField);
+    let err_id = apply_err(
+        &src,
+        json!([{ "op": "setCellFormat", "id": "para:nope", "vAlign": "center" }]),
+    );
+    assert_eq!(err_id.code(), ErrorCode::InvalidId);
+
+    let xlsx = tmp_dir().join("valign.xlsx");
+    run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "create",
+            "path": xlsx.to_string_lossy(),
+            "workbook": { "sheets": [{ "name": "Sheet1" }] }
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap();
+    let err_x = run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "apply",
+            "path": xlsx.to_string_lossy(),
+            "output": tmp_dir().join("valign-out.xlsx").to_string_lossy(),
+            "ops": [{ "op": "setCellFormat", "id": "table:1/r1c1", "vAlign": "center" }]
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap_err();
+    assert_eq!(err_x.code(), ErrorCode::InvalidField);
+}

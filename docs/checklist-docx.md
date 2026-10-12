@@ -38,6 +38,8 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 2026-10-11 补跑 `docx-para-run-remain.ps1`，Bd1–Bd3、Rh1–Rh3 通过。无 Repair。COM 段底纹 RGB=65535、上边框 `LineStyle=1`。`HighlightColorIndex=7`，`StrikeThrough=-1`。标题栏仍是对应文件名。
 2026-10-11 补跑 `docx-create-round5.ps1`，Cz1–Cz7 通过。无 Repair。COM `Shapes` 有 `Type=6` 的组合。段底纹 RGB=65535。修改密码 `WriteReserved=True`。标题栏仍是 `docx-create-round5.docx`。
 2026-10-11 补跑 `docx-table-width.ps1`，Tw1–Tw6 通过。无 Repair。COM `Rows.Alignment=1`，`PreferredWidth=180`，行高 20 磅。标题栏仍是 `docx-table-width-apply.docx` / `docx-table-width-create.docx`。
+2026-10-12 补跑 `docx-cell-valign.ps1`，Va1–Va5 通过。无 Repair。COM `VerticalAlignment` 居中为 1、底对齐为 3。
+同日补跑 `docx-textbox-anchor.ps1`，Bta1–Bta5 通过。无 Repair。ZIP 有 `anchor="ctr"`，`just` / `dist` 树上对得上。
 
 - **C1** ✅
   - Word 16.0 能打开 `manual-check/office/out/docx-create.docx`，标题栏无 Repair
@@ -85,6 +87,10 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
   - Word 16.0：`docx-textbox.ps1`，13 PASS / 0 FAIL
   - 行内+浮动+链接+组合
   - 框内改字、插删框、尺寸 144 磅、绕排、红填蓝边、框内插删段与插图、断开再接上
+  - 标题栏无 Repair
+- **Bta1–Bta5** ✅
+  - Word 16.0：`docx-textbox-anchor.ps1`，5 PASS / 0 FAIL
+  - 框上有 `textAnchor`；apply `ctr` 后 ZIP 有 `anchor="ctr"`；去掉后无该属性；`just` / `dist` 树上对得上；段落 id 与 xlsx 拒写
   - 标题栏无 Repair
 - **Nt1** 🚫
   - Word 16.0 探测：框内再套框只写出故事级兄弟框，`inside-txbxContent` 无 `wps:wsp`
@@ -156,6 +162,10 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 - **Tw1–Tw6** ✅
   - Word 16.0：`docx-table-width.ps1`，6 PASS / 0 FAIL
   - 名单字段、居中 `Rows.Alignment=1`、`PreferredWidth=180`、行高 20 磅、create 对得上、段落 id 与 xlsx 拒写
+  - 标题栏无 Repair
+- **Va1–Va5** ✅
+  - Word 16.0：`docx-cell-valign.ps1`，5 PASS / 0 FAIL
+  - 格上有 `vAlign`；apply `center` 后 COM `VerticalAlignment=1`；create `bottom` 后 COM 为 3；`null` 去掉元素；段落 id 与 xlsx 拒写
   - 标题栏无 Repair
 - **Bx1–Bx5** ✅
   - Word 16.0：`docx-box-table.ps1`，5 PASS / 0 FAIL
@@ -688,6 +698,19 @@ Word COM 的 `PageSetup.HeaderDistance` / `FooterDistance` 单位是磅，等于
   - 检查：链接
   - 通过标准：`setTextBoxLink` 断开或接上后 Word 能继续编辑链条
 
+## 文本框内垂直锚点
+
+框内文字相对框的 `wps:bodyPr/@anchor`。不要和 `setTextBoxDirection`、格级 `vAlign`、xlsx `setTextBoxAnchor` 混。不算排版引擎。
+手测脚本 `manual-check/office/cases/docx-textbox-anchor.ps1`。编号 Bta，不要和 Tb、T、Bx 撞。现有 T1–T9 继续过。
+
+| 序号 | 检查 | 通过标准 |
+| --- | --- | --- |
+| Bta1 | 名单字段 | 给了 `scope.textBoxes` 后框上有 `textAnchor`，缺属性为 `null` |
+| Bta2 | apply | `setTextBoxTextAnchor` 写 `ctr` 后树上为 `ctr`。ZIP 有 `anchor="ctr"`。Word 无修复 |
+| Bta3 | 去掉 | `textAnchor: null` 后树上为 `null`，ZIP 无 `anchor=` |
+| Bta4 | just / dist | 写 `just` 与 `dist` 后树上对得上。Word 能打开无 Repair |
+| Bta5 | 拒写 | 对段落 id 发此 op 得 `InvalidId`。xlsx 上发此 op 得 `InvalidField` |
+
 ## 脚注与尾注
 
 准备一份 Word 亲手另存的样例：至少一条用户脚注、一条用户尾注。不要用库 `create` 产物当唯一样例；apply 手测仍用 Word 另存。
@@ -961,7 +984,7 @@ Word COM 的 `PageSetup` 边距与纸张单位是磅，等于 twip ÷ 20。手�
 
 ## 表格外观
 
-表级样式、`tblLook`、浮动、默认格边距；单元格底纹、格边距与斜线。不算自动列宽。create 本期不写这些字段。
+表级样式、`tblLook`、浮动、默认格边距；单元格底纹、格边距与斜线。格级 `vAlign` 见 Va。不算自动列宽。create 本期不写这些字段。
 手测脚本 `manual-check/office/cases/docx-style-table.ps1`。编号 Tf，不要和 Tb、T 撞。现有 Tb1–Tb8 继续过。
 
 | 序号 | 检查 | 通过标准 |
@@ -986,6 +1009,19 @@ Word COM 的 `PageSetup` 边距与纸张单位是磅，等于 twip ÷ 20。手�
 | Tw4 | 行高 | `setTableRowHeight` 写 `h=400` 后树上 `height.h` 为 400。Word 无修复。COM 该行高约为 20 磅 |
 | Tw5 | create | create 带 `align` / `width` / `cols` / `rowHeights` 后树上对得上，无修复 |
 | Tw6 | 拒写 | 对段落 id 发 `setTableWidth` 得 `InvalidId`。xlsx 上发此 op 得 `InvalidField` |
+
+## 单元格垂直对齐
+
+格级 `tcPr/w:vAlign`。不要和节上 `setVerticalAlign`、框内 `setTextBoxTextAnchor` 混。不算排版引擎。
+手测脚本 `manual-check/office/cases/docx-cell-valign.ps1`。编号 Va，不要和 Tf、Tw、T、Bx 撞。现有 Tf1–Tf6、Tw1–Tw6 继续过。
+
+| 序号 | 检查 | 通过标准 |
+| --- | --- | --- |
+| Va1 | 名单字段 | 给了 `scope.tables` 后格上有 `vAlign`，缺元素为 `null` |
+| Va2 | apply | `setCellFormat` 写 `vAlign: center` 后树上为 `center`。Word 无修复。COM 该格 `VerticalAlignment` 为 1 |
+| Va3 | create | create `cellFormats` 带 `vAlign: bottom` 后树上为 `bottom`。Word 无修复 |
+| Va4 | 去掉 | `vAlign: null` 后树上为 `null`，XML 无 `w:vAlign` |
+| Va5 | 拒写 | 对段落 id 发 `setCellFormat` 得 `InvalidId`。xlsx 上发此 op 得 `InvalidField` |
 
 ## 框内表
 

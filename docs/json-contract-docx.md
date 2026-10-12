@@ -1237,11 +1237,13 @@ xlsx / pptx 的 `scope.tables` 不是同一件事：xlsx 仍拒绝；pptx 展开
   最后始终跟 `hyperlink`（`null` 或对象，字段顺序 `kind`、`rId`、`url`、`anchor`、`tooltip`），见上文 DrawingML 链。
 - `scope.textBoxes` 为 `true` 时，每个页眉、页脚节点带 `textBoxes`；若同时给了 `from` 与 `maxParas`，切片里每段也带 `textBoxes`。否则这些节点上都没有该字段。
   只给 `textBoxes`、不给 `from` / `maxParas`：只展开页眉页脚容器上的框。
-  每个框的字段顺序：`id`、`docPrId`、`name`、`kind`、`cx`、`cy`、`wrap`、`link`、`paraCount`、`pictureCount`、`chartCount`、`smartArtCount`、`tableCount`、`hyperlinkCount`、`bookmarkCount`、`fieldCount`、`mathCount`、`rubyCount`、`contentControlCount`、`stable`、`hyperlink`，
+  每个框的字段顺序：`id`、`docPrId`、`name`、`kind`、`cx`、`cy`、`wrap`、`textAnchor`、`link`、
+  `paraCount`、`pictureCount`、`chartCount`、`smartArtCount`、`tableCount`、`hyperlinkCount`、`bookmarkCount`、`fieldCount`、`mathCount`、`rubyCount`、`contentControlCount`、`stable`、`hyperlink`，
   有框内段名单时再跟 `paragraphs`，有框内图名单时再跟 `pictures`，给了 `scope.charts` 时再跟 `charts`，给了 `scope.smartArt` 时再跟 `smartArts`，给了 `scope.tables` 时再跟 `tables`，
   给了 `scope.hyperlinks` 时再跟 `hyperlinks`，给了 `scope.bookmarks` 时再跟 `bookmarks`，给了 `scope.fields` 时再跟 `fields`，
   给了 `scope.maths` 时再跟 `maths`，给了 `scope.rubies` 时再跟 `rubies`，给了 `scope.contentControls` 时再跟 `contentControls`。
   `hyperlink` 为 `null` 或对象（字段顺序 `kind`、`rId`、`url`、`anchor`、`tooltip`），见上文 DrawingML 链。
+  `textAnchor` 取 `wps:bodyPr/@anchor`：`t` / `ctr` / `b` / `just` / `dist`。缺属性为 `null`。不认识报 `XmlBroken`。
   `chartCount` / `smartArtCount` 始终出现，只计该框 `w:txbxContent` 内、再遇嵌套 `w:txbxContent` 停住之后的图表与 SmartArt。框内图表与 SmartArt 不挂到文档根，也不挂到宿主段落。
   `tableCount` 始终出现，只计该框 `w:txbxContent` 内、再遇嵌套 `w:txbxContent` 停住之后的 `w:tbl`（含嵌套表）。
   `hyperlinkCount` / `bookmarkCount` / `fieldCount` / `mathCount` / `rubyCount` / `contentControlCount` 始终出现，只计该框内容，规则与正文同一套边界。
@@ -1370,9 +1372,10 @@ xlsx / pptx 的 `scope.tables` 不是同一件事：xlsx 仍拒绝；pptx 展开
   `height` 取 `trPr/trHeight`。没有则为 `null`。有则对象字段顺序：`h`、`rule`。
   `h` 取 `@w:val`，能解析成整数则写整数，否则为 `null`。`rule` 取 `@w:hRule` 原文，缺则为 `null`。单位 twip。
   `cells` 按该行 `w:tc` 顺序，不是按空网格补格。
-  每格字段顺序：`id`、`row`、`col`、`gridSpan`、`vMerge`、`fill`、`cellMar`、`tl2br`、`tr2bl`、`paragraphs`。
+  每格字段顺序：`id`、`row`、`col`、`gridSpan`、`vMerge`、`vAlign`、`fill`、`cellMar`、`tl2br`、`tr2bl`、`paragraphs`。
   `row` / `col` 与 id 里的数字相同。
   `gridSpan` 为整数，缺元素则为 `1`。`vMerge` 为 `restart`、`continue` 或 `null`。
+  `vAlign` 取 `tcPr/w:vAlign/@w:val`：`top` / `center` / `both` / `bottom`。没有该元素则为 `null`。不认识报 `XmlBroken`。
   `fill` 取 `tcPr/shd/@fill` 原文，没有 `shd` 或没有 `fill` 则为 `null`。
   格上 `cellMar` 取 `tcMar`，规则与表级相同。
   `tl2br` / `tr2bl` 取 `tcBorders` 对应子元素。没有则为 `null`。有则对象字段顺序：`val`、`sz`、`color`。
@@ -1382,6 +1385,7 @@ xlsx / pptx 的 `scope.tables` 不是同一件事：xlsx 仍拒绝；pptx 展开
   给了 `scope.pictures` 时，这些段落同样带 `pictureCount` / `pictures`。xlsx 的 `scope` 里出现 `tables` 报 `InvalidField`。
   pptx 的 `scope.tables` 展开幻灯片 DrawingML 表，见 [pptx 响应](json-contract-pptx.md#响应)，与本文 `w:tbl` 不是同一棵名单。
   `gridSpan` 或 `vMerge/@val` 不是正整数 / 不是 `restart` 或 `continue` 时报 `XmlBroken`。
+  `vAlign/@val` 不是 `top` / `center` / `both` / `bottom` 时报 `XmlBroken`。
   某行各格占的网格列之和对不上 `colCount` 时仍列出，结构 op 报 `NotImplemented`。
 - `scope.revisions` 为 `true` 时，根上带 `revisions`（正文），每个页眉、页脚容器带 `revisions`。没有修订时为空数组。按该故事里被收入节点的文档顺序。
   每条字段顺序：`id`、`index`、`kind`、`xmlId`、`author`、`date`、`host`、`text`。`index` 与 id 里的 `{n}` 相同。
@@ -2748,6 +2752,17 @@ pptx 改画布坐标请用 `setPicturePos`。
 
 `horizontal` 对应横排（去掉或写成从左到右）；`vertical` 对应竖排，写入 `wps:bodyPr/@vert` 为 `eaVert`。xlsx / pptx 上发此 op 报 `InvalidField`。
 
+### setTextBoxTextAnchor
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"setTextBoxTextAnchor"` |
+| `id` | 框 id |
+| `textAnchor` | `t` / `ctr` / `b` / `just` / `dist`，或 `null` 去掉属性 |
+
+写入该框 `wps:bodyPr/@anchor`。这是框内文字相对框的上下锚点，不是框相对页边的 `setPictureWrap.alignV`，也不是格级 `w:vAlign`。
+不要和 xlsx 的 `setTextBoxAnchor`（改绘图锚点）混。xlsx / pptx 上发此 op 报 `InvalidField`。xlsx / pptx 框内垂直仍用已有 `setShapeFormat.textAnchor`。
+
 ### insertPara / deletePara
 
 | 字段 | 含义 |
@@ -3979,8 +3994,10 @@ create 给了 `tables[].rowHeights` 时按行序写入。
 | `fill` | 可选。六位 RGB，或 `null` 去掉 `shd` |
 | `top` / `left` / `bottom` / `right` | 可选。格级 `tcMar`，规则与 `setTableCellMar` 相同 |
 | `tl2br` / `tr2bl` | 可选。斜线对象，或 `null` 去掉该斜线 |
+| `vAlign` | 可选。`top` / `center` / `both` / `bottom`，或 `null` 去掉 `w:vAlign` |
 
-`fill`、四边、两条斜线至少给一个。`fill` 写入 `shd val="clear" color="auto"`，并去掉 theme 填充属性。不是六位十六进制报 `InvalidField`。
+`fill`、四边、两条斜线、`vAlign` 至少给一个。`fill` 写入 `shd val="clear" color="auto"`，并去掉 theme 填充属性。不是六位十六进制报 `InvalidField`。
+`vAlign` 写入 `tcPr/w:vAlign/@w:val`。不认识报 `InvalidField`。不要和节上 `setVerticalAlign` 混。
 斜线对象字段：`val`（省略为 `single`）、`sz`（可选，八分之一磅）、`color`（省略为 `auto`）。写出 `space="0"`。
 `val` 与页面边框同一套：`nil` / `none` / `single` / `dashed` / `dotted` / `double` / `thick` / `wave` / `dashSmallGap` / `dotDash` / `dotDotDash`。
 不认识的 `val` 或非法 `color` 报 `InvalidField`。两条斜线都删光且没有其它边时去掉空的 `tcBorders`。

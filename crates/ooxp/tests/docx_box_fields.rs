@@ -142,6 +142,7 @@ fn box_fields_insert_inspect_and_refuse() {
             "cx",
             "cy",
             "wrap",
+            "textAnchor",
             "link",
             "paraCount",
             "pictureCount",

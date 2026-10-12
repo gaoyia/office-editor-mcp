@@ -3796,6 +3796,7 @@ fn push_one_table_extra(ops: &mut Vec<DocxOp>, extra: &TableExtra, id: String, t
             right: cf.right,
             tl2br: cf.tl2br.clone(),
             tr2bl: cf.tr2bl.clone(),
+            v_align: cf.v_align.clone(),
         }));
     }
 }

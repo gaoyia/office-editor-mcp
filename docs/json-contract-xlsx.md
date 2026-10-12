@@ -214,7 +214,7 @@ docx 见 [docx 分册](json-contract-docx.md#insertmath)。pptx 见 [pptx 分册
 对 `dialogsheet` / `macrosheet` 报 `NotImplemented`。
 `deleteTextBox` 的 `id` 必须是 xlsx 文本框 id。`setTextBoxSize` / `setTextBoxAnchor` 的 `id` 可以是文本框 id、形状 id 或连接线 id。
 `setShapeText` / `setShapeFormat` 的 `id` 必须是文本框 id 或形状 id；对连接线 id 报 `InvalidId`。
-`setTextBoxWrap` / `setTextBoxFill` / `setTextBoxLine` / `setTextBoxDirection` 是 Word 框属性，xlsx 上报 `InvalidField`。
+`setTextBoxWrap` / `setTextBoxFill` / `setTextBoxLine` / `setTextBoxDirection` / `setTextBoxTextAnchor` 是 Word 框属性，xlsx 上报 `InvalidField`。
 
 `insertShape` 的 `id` 必须是 `sheet:{name}`，且该表 `kind` 为 `worksheet` 或 `chartsheet`。
 对形状 id、文本框 id、连接线 id、图 id、单元格 id 或 `xlsx:workbook` 发 `insertShape` 报 `InvalidId`。

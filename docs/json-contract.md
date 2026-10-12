@@ -239,7 +239,7 @@ create 与 apply 落盘时先写入目标同目录的临时文件，再改名为
 `deleteCustomView`、`showCustomView`）、以及分组 op（`groupRows`、`ungroupRows`、`groupCols`、`ungroupCols`、`setOutline`）、
 以及批注 op（`insertComment`、`deleteComment`、`replyComment`、`setCommentText`、`setCommentMeta`、`setCommentDone`）、
 以及 `setShapeText`、`setShapeFormat`、以及文本框 op（`insertTextBox`、`deleteTextBox`、`setTextBoxSize`、`setTextBoxAnchor`；
-不含 `setTextBoxWrap`、`setTextBoxFill`、`setTextBoxLine`、`setTextBoxDirection`）、以及形状管理 op（`insertShape`、`deleteShape`、
+不含 `setTextBoxWrap`、`setTextBoxFill`、`setTextBoxLine`、`setTextBoxDirection`、`setTextBoxTextAnchor`）、以及形状管理 op（`insertShape`、`deleteShape`、
 `insertConnector`、`deleteConnector`、`groupShapes`、`ungroup`；
 不含 `setShapePos`、`setShapeSize`、`setShapeFill`、`setShapeLine`、`setShapeGeom`、`setConnector`）、以及 SmartArt op（`insertSmartArt`、`deleteSmartArt`、
 `setSmartArtText`、`addSmartArtPoint`、`deleteSmartArtPoint`、`setSmartArtSize`、`setSmartArtAnchor`、`setSmartArtColors`、
@@ -298,7 +298,7 @@ pptx 认 `setShapeText`、`setShapeFormat`、形状管理 op（`insertShape`、`
 对 xlsx 发 `setPictureWrap`、`setChartWrap` 或 `setHeaderFooterDistance` / `setPageMargin` / `setPageSize` / `setColumns`
  / `setVerticalAlign` / `setLineNumbering` / `setDocGrid` / `setRtlGutter` / `setPageBackground` / `setPageBorders` / `setFormProt`
  / `setMirrorMargins` / `setGutterAtTop` / `setHeaderFooterLink` / `insertHeaderFooter` / `setTitlePage` / `setEvenAndOddHeaders`、
-`setTextBoxWrap` / `setTextBoxFill` / `setTextBoxLine` / `setTextBoxDirection`、注、`setSmartArtPos` / `setSmartArtWrap`、
+`setTextBoxWrap` / `setTextBoxFill` / `setTextBoxLine` / `setTextBoxDirection` / `setTextBoxTextAnchor`、注、`setSmartArtPos` / `setSmartArtWrap`、
 `insertWatermark` / `deleteWatermark`、`insertInkCanvas` / `replaceInkCanvas` / `deleteInkCanvas`、表格 op、修订 op、书签 op、例外编辑区 op、域 op、题注与交叉引用 op、索引 op、参考文献 op、`setBibliographyStyle`、构建基块 op、字体嵌入 op、编号 op、样式 op、
 直接格式 op、拼音 op、`setEastAsianSettings`、节结构 op 或 `setNotesText`，
 对 docx / pptx 发 `setHeaderFooterText`、`insertChartSheet`、`deleteChartSheet`、`insertSheet`、`deleteSheet`、`renameSheet`、
@@ -840,7 +840,7 @@ xlsx 规则与图相同：`oneCell` / `absolute` 改 `xdr:ext`，`twoCell` 改�
 
 `setTextBoxAnchor` 见 [xlsx](json-contract-xlsx.md#settextboxanchor)。
 `setTextBoxWrap` / `setTextBoxFill` / `setTextBoxLine`
- / `setTextBoxDirection` 见 [docx 分册](json-contract-docx.md#settextboxwrap)。
+ / `setTextBoxDirection` / `setTextBoxTextAnchor` 见 [docx 分册](json-contract-docx.md#settextboxwrap)。
 
 ### insertTable
 

@@ -2312,6 +2312,7 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<XlsxOp>, Error> {
             | "setTextBoxFill"
             | "setTextBoxLine"
             | "setTextBoxDirection"
+            | "setTextBoxTextAnchor"
             | "insertPara"
             | "deletePara"
             | "insertTable"

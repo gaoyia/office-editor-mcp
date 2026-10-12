@@ -1197,6 +1197,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::InvalidTextUnderline => "underline must be sng, none, or dbl".into(),
         ErrorKind::EmptyShapeTypeface => "font and eastAsiaFont must not be empty".into(),
         ErrorKind::InvalidTextBoxDirection => "direction must be horizontal or vertical".into(),
+        ErrorKind::InvalidTextBoxTextAnchor => {
+            "textAnchor must be t, ctr, b, just, or dist".into()
+        }
         ErrorKind::InvalidPicKind => "kind must be inline or anchor".into(),
         ErrorKind::InvalidPicWrap => {
             "wrap must be square, tight, through, topAndBottom, or none".into()
@@ -1674,7 +1677,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             "setTableCellMar requires at least one of top, left, bottom, or right".into()
         }
         ErrorKind::NeedSetCellFormatField => {
-            "setCellFormat requires at least one of fill, cell margins, or diagonals".into()
+            "setCellFormat requires at least one of fill, cell margins, diagonals, or vAlign".into()
         }
         ErrorKind::NeedSetStyleField => {
             "setStyle requires at least one of font, eastAsiaFont, sz, bold, color, before, or after"

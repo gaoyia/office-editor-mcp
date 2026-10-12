@@ -2,7 +2,7 @@
 
 use serde_json::{json, Value};
 
-use crate::error::{Error, ErrorKind};
+use crate::error::{Error, ErrorKind, XmlIssue};
 use crate::opc::{Package, Relationships};
 use crate::xml::{Element, Node};
 
@@ -21,6 +21,9 @@ use super::{format, MC_NS, W14_NS, WP_NS};
 /// 现代文本框命名空间（MS-DOCX WordprocessingShape）。
 pub const WPS_NS: &str = "http://schemas.microsoft.com/office/word/2010/wordprocessingShape";
 pub const WPG_NS: &str = "http://schemas.microsoft.com/office/word/2010/wordprocessingGroup";
+
+/// 框内文字相对框的 `wps:bodyPr/@anchor`（ST_TextAnchoringType）。
+pub const TEXT_BOX_TEXT_ANCHORS: &[&str] = &["t", "ctr", "b", "just", "dist"];
 
 #[derive(Clone)]
 pub struct TxbxInfo {
@@ -125,6 +128,7 @@ pub fn textboxes_json(
 ) -> Result<Vec<Value>, Error> {
     let mut out = Vec::new();
     for b in boxes {
+        let text_anchor = text_anchor_json(host, b)?;
         let mut node = json!({
             "id": b.id,
             "docPrId": b.doc_pr_id,
@@ -133,6 +137,7 @@ pub fn textboxes_json(
             "cx": b.cx,
             "cy": b.cy,
             "wrap": b.wrap.map(WrapKind::as_str),
+            "textAnchor": text_anchor,
             "link": {
                 "prev": b.prev,
                 "next": b.next,
@@ -931,6 +936,14 @@ pub fn set_direction(wsp: &mut Element, vertical: bool) {
     }
 }
 
+pub fn set_text_anchor(wsp: &mut Element, value: Option<&str>) {
+    let body = ensure_body_pr(wsp);
+    match value {
+        Some(v) => set_attr_local(body, "anchor", v),
+        None => remove_attr_local(body, "anchor"),
+    }
+}
+
 pub fn story_id_at(root: &Element, t: &TxbxTarget) -> Option<String> {
     story_id_of_target(root, t)
 }
@@ -1310,6 +1323,40 @@ fn follow_path_mut<'a>(el: &'a mut Element, path: &[usize]) -> Option<&'a mut El
         };
     }
     Some(cur)
+}
+
+fn follow_path<'a>(el: &'a Element, path: &[usize]) -> Option<&'a Element> {
+    let mut cur = el;
+    for &i in path {
+        cur = match cur.children.get(i) {
+            Some(Node::Element(e)) => e,
+            _ => return None,
+        };
+    }
+    Some(cur)
+}
+
+fn text_anchor_json(host: &Element, b: &TxbxInfo) -> Result<Value, Error> {
+    let Some(key) = key_of_info(b) else {
+        return Ok(Value::Null);
+    };
+    let Some(path) = wsp_path(host, &key) else {
+        return Ok(Value::Null);
+    };
+    let Some(wsp) = follow_path(host, &path) else {
+        return Ok(Value::Null);
+    };
+    let Some(body) = wsp.child_by_local("bodyPr") else {
+        return Ok(Value::Null);
+    };
+    match body.attr_local("anchor") {
+        None => Ok(Value::Null),
+        Some(v) if TEXT_BOX_TEXT_ANCHORS.contains(&v) => Ok(Value::String(v.to_string())),
+        Some(raw) => Err(Error::xml_detail(
+            XmlIssue::Parse,
+            format!("bodyPr/@anchor not recognized: {raw}"),
+        )),
+    }
 }
 
 fn remove_textbox_walk(el: &mut Element, key: &TxbxKey, index: &mut usize) -> bool {

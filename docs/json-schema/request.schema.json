@@ -736,6 +736,9 @@
                 "$ref": "docx.schema.json#/$defs/setTextBoxDirectionOp"
               },
               {
+                "$ref": "docx.schema.json#/$defs/setTextBoxTextAnchorOp"
+              },
+              {
                 "$ref": "docx.schema.json#/$defs/insertParaOp"
               },
               {

@@ -728,6 +728,9 @@ const TCPR_ORDER: &[&str] = &[
     "hideMark",
 ];
 
+/// 格级 `w:vAlign/@w:val`（ST_VerticalJc）。
+pub const CELL_VALIGN: &[&str] = &["top", "center", "both", "bottom"];
+
 const BORDER_ORDER: &[&str] = &[
     "top", "start", "left", "bottom", "end", "right", "insideH", "insideV", "tl2br", "tr2bl",
 ];
@@ -1315,6 +1318,7 @@ pub fn apply_set_cell_format(
     right: Option<Option<u32>>,
     tl2br: Option<Option<&DiagonalBorder>>,
     tr2bl: Option<Option<&DiagonalBorder>>,
+    v_align: Option<Option<&str>>,
     id: &str,
     i: usize,
 ) -> Result<(), Error> {
@@ -1362,6 +1366,15 @@ pub fn apply_set_cell_format(
             .unwrap_or(true);
         if empty {
             remove_child(pr, "tcBorders");
+        }
+    }
+    if let Some(v_align) = v_align {
+        match v_align {
+            Some(v) => {
+                let el = hf::ensure_child_in_order(pr, "vAlign", TCPR_ORDER);
+                hf::set_local_attr(el, "val", v);
+            }
+            None => hf::remove_local(pr, "vAlign"),
         }
     }
     Ok(())
@@ -1637,6 +1650,7 @@ fn table_node(
         for tc in tr.children_by_local("tc") {
             let span = grid_span(tc)?;
             let vm = v_merge_of(tc)?;
+            let va = cell_v_align(tc)?;
             let cell_id = format!("{id}/r{row_n}c{col}");
             let paras = cell_paragraphs(tc, container, index_of, expand_pics, expand_runs, rels)?;
             cells.push(json!({
@@ -1649,6 +1663,7 @@ fn table_node(
                     Some(VMerge::Continue) => Value::String("continue".into()),
                     None => Value::Null,
                 },
+                "vAlign": va,
                 "fill": cell_fill(tc),
                 "cellMar": cell_mar_json(tc.child_by_local("tcPr").and_then(|p| p.child_by_local("tcMar"))),
                 "tl2br": diagonal_json(tc, "tl2br"),
@@ -2067,6 +2082,19 @@ fn v_merge_of(tc: &Element) -> Result<Option<VMerge>, Error> {
         Some("restart") => Ok(Some(VMerge::Restart)),
         Some("continue") => Ok(Some(VMerge::Continue)),
         Some(_) => Err(xml_broken("vMerge")),
+    }
+}
+
+fn cell_v_align(tc: &Element) -> Result<Value, Error> {
+    let Some(el) = tc
+        .child_by_local("tcPr")
+        .and_then(|p| p.child_by_local("vAlign"))
+    else {
+        return Ok(Value::Null);
+    };
+    match el.attr_local("val") {
+        Some(v) if CELL_VALIGN.contains(&v) => Ok(Value::String(v.to_string())),
+        _ => Err(xml_broken("vAlign")),
     }
 }
 
