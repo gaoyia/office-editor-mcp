@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "book.xlsx",
+  "ops": [
+    {
+      "op": "setSlicerView",
+      "id": "sheet:Sheet1/slicer:1",
+      "caption": "类别",
+      "columnCount": 2,
+      "showCaption": false,
+      "style": "SlicerStyleLight1"
+    }
+  ]
+}

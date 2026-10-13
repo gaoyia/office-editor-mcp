@@ -310,8 +310,8 @@ id 仍是 `sheet:{name}/slicer:{cNvPrId}`，时间线不另开前缀。
 - `a:graphicData/@uri` 为 `http://schemas.microsoft.com/office/drawing/2012/timeslicer`（可带尾斜杠），且 `tsle:timeslicer/@name` 对上 timelines 部件里的 `timeline/@name`
 
 OLAP、没有 drawing 的孤立 slicer / timeline 部件本期不进树。`insertSlicer` 的 `id` 必须是 `sheet:{name}`。
-`deleteSlicer` / `setSlicerSize` / `setSlicerAnchor` 的 `id` 必须是切片器 id（含时间线）。对不上的 id 形态报 `InvalidId`。
-不提供改筛选、样式或标题的 op。create 可写切片器与时间线。不在库里执行筛选或刷新透视。
+`deleteSlicer` / `setSlicerSize` / `setSlicerAnchor` / `setSlicerView` 的 `id` 必须是切片器 id（含时间线）。对不上的 id 形态报 `InvalidId`。
+不提供改筛选或 cache 选项的 op。视图标题、行高、列数、显示开关与样式名用 `setSlicerView`。create 可写切片器与时间线。不在库里执行筛选或刷新透视。
 
 xlsx 的 `setProtection` 的 `id` 必须是 `sheet:{name}`（该表 `sheetProtection`）或 `xlsx:workbook`（`workbookProtection`）。
 对单元格 id、迷你图 id 或图 id 发此 op 报 `InvalidId`。对 `dialogsheet` / `macrosheet` 报 `NotImplemented`。
@@ -1039,9 +1039,14 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   Fallback 海报不进 `pictures`。docx / pptx 见各自分册。
 - `scope.slicers` 为 `true` 时，每张 `worksheet` 带 `slicers`。没有切片器（含时间线）时为空数组。不依赖单元格切片。
   按该表 drawing 里被收入的 slicer / 时间线 `graphicFrame` 文档顺序。
-  每条字段顺序：`id`、`cNvPrId`、`name`、`caption`、`sourceKind`、`sourceName`、`field`、`anchor`，然后按锚点种类跟位置字段（规则与工作表图相同），最后 `stable`。
+  每条字段顺序：`id`、`cNvPrId`、`name`、`caption`，接着视图字段，再跟 `sourceKind`、`sourceName`、`field`、`anchor`，然后按锚点种类跟位置字段（规则与工作表图相同），最后 `stable`。
   `cNvPrId` 是 `xdr:cNvPr/@id` 原文，没有则为 `null`。`name` 取 slicer / timeline 部件 `@name`，没有则取 `cNvPr/@name`，都没有则为 `""`。
   `caption` 取 `@caption`，缺则为 `null`。
+  切片器在 `caption` 之后报：`rowHeight`、`columnCount`、`showCaption`、`startItem`、`lockedPosition`、`style`。
+  时间线在 `caption` 之后报：`showHeader`、`showSelectionLabel`、`showTimeLevel`、`showHorizontalScrollbar`、`level`、`selectionLevel`、`scrollPosition`、`style`。
+  缺属性按 schema 缺省报，与 `insertSlicer` 写入一致。`style` 缺则为 `null`。`scrollPosition` 缺则为 `null`。
+  `rowHeight` 缺则报 `381000`。切片器 `columnCount` 缺则报 `1`，`startItem` 缺则报 `0`，`showCaption` 缺则报 `true`，`lockedPosition` 缺则报 `false`。
+  时间线 `showHeader` / `showSelectionLabel` / `showTimeLevel` / `showHorizontalScrollbar` 缺则报 `true`。`level` / `selectionLevel` 缺则报 `2`。
   `sourceKind`：
 
   - `table`：slicerCache 带 `x15:tableSlicerCache`
@@ -1049,7 +1054,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   - `timeline`：timelineCache，drawing 为 `tsle:timeslicer`
 
   `sourceName` 取表格 `displayName` 或透视表 `@name`，对不上则为 `null`。`field` 取 cache `@sourceName`。
-  不把 cache 选项、筛选状态、样式、时间线 `level` / `scrollPosition` 或 `bounds` 放进树。
+  不把 cache 选项、筛选状态或 `bounds` 放进树。
   OLAP 不进本名单。docx / pptx 的 `scope` 里出现 `slicers` 报 `InvalidField`。
 - `scope.connections` 为 `true` 时，工作簿根带 `connections`。没有连接时为空数组。不依赖单元格切片。按 Connections 部件里被收入的 `connection` 文档顺序。
   每条字段顺序：`id`、`xmlId`、`name`、`kind`、`url`、`sourceFile`、`description`、`stable`。`xmlId` 是 `@id` 原文，没有则为 `null`。
@@ -2384,6 +2389,7 @@ docx / pptx 上发此 op 报 `InvalidField`。create 可写允许编辑区域。
 `insertModel3d` / `replaceModel3d` / `deleteModel3d` 还可以脏 worksheet drawing、drawing `.rels`、`/xl/media/…` 与 `[Content_Types].xml`。
 `setModel3dSize` / `setModel3dAnchor` 只脏 worksheet drawing。
 `setSlicerSize` / `setSlicerAnchor` 只脏 worksheet drawing。不改 slicer / timeline 部件，不改 cache，不执行筛选。
+`setSlicerView` 只脏 slicer 或 timeline 视图部件。不改 drawing 锚点，不改 cache，不执行筛选。
 `insertSlicer` / `deleteSlicer` 还可以脏 `/xl/slicers/…`、`/xl/slicerCaches/…`、worksheet drawing、工作表 `extLst` 的 `slicerList`、
 workbook `extLst` 的 `slicerCaches`、workbook 的 `<definedNames>`、工作表 / workbook `.rels` 与 `[Content_Types].xml`；
 透视源的 `insertSlicer` 还脏 `/xl/pivotCache/pivotCacheDefinitionN.xml` 的 `extLst`。
@@ -3280,6 +3286,19 @@ Fallback 是同一套纯文本框，字为该 `text`。不栅格化，不写 `a:
 | `cx` / `cy` | 可选。EMU 正整数，须成对。切片器缺省 `1905000` × `2540000`。时间线缺省 `5080000` × `1016000` |
 | `fromOffX` / `fromOffY` | 可选。缺省 `0`，不得为负 |
 | `toOffX` / `toOffY` | `twoCell` 时可选 |
+| `caption` | 可选。非空。省略则用 `field` |
+| `rowHeight` | 可选。只许切片器。EMU 正整数。省略则 `381000` |
+| `columnCount` | 可选。只许切片器。正整数，最大 `20000` |
+| `showCaption` | 可选。只许切片器。布尔 |
+| `startItem` | 可选。只许切片器。非负整数 |
+| `lockedPosition` | 可选。只许切片器。布尔 |
+| `style` | 可选。非空字符串，或 `null` 表示不写该属性 |
+| `showHeader` / `showSelectionLabel` / `showTimeLevel` / `showHorizontalScrollbar` | 可选。只许时间线。布尔 |
+| `selectionLevel` | 可选。只许时间线。`0`–`3`。省略则与 `level` 相同 |
+| `scrollPosition` | 可选。只许时间线。`dateTime` 原文，或 `null` 表示不写该属性。省略则写入 bounds 起始日 |
+
+对切片器给时间线专用字段、对时间线给切片器专用字段，报 `InvalidField`。
+`style` 只写视图上的样式名，不复制样式定义本体。
 
 `id` 不是工作表 id 报 `InvalidId`。找不到该表报 `IdNotFound`。对 `chartsheet` 报 `InvalidField`。
 对 `dialogsheet` / `macrosheet` 报 `NotImplemented`。`source` 不是该表上的表格 id 或透视表 id 报 `InvalidId`。找不到源报 `IdNotFound`。
@@ -3340,6 +3359,49 @@ docx / pptx 上发此 op 报 `InvalidField`。
 docx / pptx 上发此 op 报 `InvalidField`。
 
 改切片器尺寸与锚点的示例见 `docs/examples/xlsx-apply-slicer-anchor.json`。
+
+### setSlicerView
+
+改 slicer 或 timeline 视图部件上的标题、行高、列数、显示开关与样式名。不改 drawing 锚点，不改 cache，不执行筛选。
+
+```json
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "C:\\data\\book.xlsx",
+  "ops": [
+    {
+      "op": "setSlicerView",
+      "id": "sheet:Sheet1/slicer:1",
+      "caption": "类别",
+      "columnCount": 2,
+      "showCaption": false
+    }
+  ]
+}
+```
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"setSlicerView"` |
+| `id` | 必须是切片器 id（含时间线） |
+| `caption` | 可选。非空 |
+| `rowHeight` | 可选。只许切片器。EMU 正整数 |
+| `columnCount` | 可选。只许切片器。正整数，最大 `20000` |
+| `showCaption` | 可选。只许切片器。布尔 |
+| `startItem` | 可选。只许切片器。非负整数 |
+| `lockedPosition` | 可选。只许切片器。布尔 |
+| `style` | 可选。非空字符串，或 `null` 去掉属性 |
+| `showHeader` / `showSelectionLabel` / `showTimeLevel` / `showHorizontalScrollbar` | 可选。只许时间线。布尔 |
+| `level` / `selectionLevel` | 可选。只许时间线。`0`–`3` |
+| `scrollPosition` | 可选。只许时间线。`dateTime` 原文，或 `null` 去掉属性 |
+
+除 `op` 与 `id` 外至少给一个字段，否则报 `InvalidField`。
+对时间线发切片器专用字段、对切片器发时间线专用字段，报 `InvalidField`。
+找不到报 `IdNotFound`。id 不是切片器 id 报 `InvalidId`。
+docx / pptx 上发此 op 报 `InvalidField`。
+
+示例见 `docs/examples/xlsx-apply-slicer-view.json`。
 
 ### insertConnection
 

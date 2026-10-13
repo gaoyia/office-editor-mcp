@@ -969,6 +969,15 @@ pub fn apply(bytes: &[u8], ops: &[XlsxOp]) -> Result<Vec<u8>, Error> {
                 let doc = dirty_of(&mut dirty_sheets, &part);
                 slicer::set_anchor(&mut pkg, &doc.root, &part, op, i)?;
             }
+            XlsxOp::SetSlicerView(op) => {
+                let part = require_drawing_worksheet(
+                    &sheet_index,
+                    &op.target.sheet,
+                    i,
+                    ErrorKind::InsertTextBoxWorksheetOnly,
+                )?;
+                slicer::set_view(&mut pkg, &part, op, i)?;
+            }
             XlsxOp::InsertConnection(op) => {
                 connection::insert(&mut pkg, &wb_part, op, i)?;
             }

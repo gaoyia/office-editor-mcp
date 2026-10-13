@@ -1118,6 +1118,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             format!("Slicer field does not match the source: {name}")
         }
         ErrorKind::InvalidSlicer { field } => format!("invalid slicer field: {field}"),
+        ErrorKind::NeedSetSlicerViewField => {
+            "setSlicerView requires at least one field besides op and id".into()
+        }
         ErrorKind::ConnectionNotFound { id } => format!("Connection not found: {id}"),
         ErrorKind::InvalidConnection { field } => {
             format!("{field} is not a valid connection value")

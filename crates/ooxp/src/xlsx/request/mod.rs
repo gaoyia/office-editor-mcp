@@ -329,6 +329,7 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<XlsxOp>, Error> {
             "deleteSlicer" => XlsxOp::DeleteSlicer(parse_delete_slicer(obj, i)?),
             "setSlicerSize" => XlsxOp::SetSlicerSize(parse_set_slicer_size(obj, i)?),
             "setSlicerAnchor" => XlsxOp::SetSlicerAnchor(parse_set_slicer_anchor(obj, i)?),
+            "setSlicerView" => XlsxOp::SetSlicerView(parse_set_slicer_view(obj, i)?),
             "insertConnection" => XlsxOp::InsertConnection(parse_insert_connection(obj, i)?),
             "deleteConnection" => XlsxOp::DeleteConnection(parse_delete_connection(obj, i)?),
             "insertExternalLink" => XlsxOp::InsertExternalLink(parse_insert_external_link(obj, i)?),

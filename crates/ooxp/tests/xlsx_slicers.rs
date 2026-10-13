@@ -181,6 +181,12 @@ fn insert_table_slicer_lists_and_writes_parts() {
     assert_eq!(item["field"], "产品");
     assert_eq!(item["caption"], "产品");
     assert_eq!(item["name"], "产品");
+    assert_eq!(item["rowHeight"], 381000);
+    assert_eq!(item["columnCount"], 1);
+    assert_eq!(item["showCaption"], true);
+    assert_eq!(item["startItem"], 0);
+    assert_eq!(item["lockedPosition"], false);
+    assert_eq!(item["style"], serde_json::Value::Null);
     assert_eq!(item["anchor"], "twoCell");
     assert_eq!(item["from"], "F2");
     assert_eq!(item["stable"], true);
@@ -191,6 +197,12 @@ fn insert_table_slicer_lists_and_writes_parts() {
             "cNvPrId",
             "name",
             "caption",
+            "rowHeight",
+            "columnCount",
+            "showCaption",
+            "startItem",
+            "lockedPosition",
+            "style",
             "sourceKind",
             "sourceName",
             "field",
@@ -413,6 +425,15 @@ fn insert_timeline_on_date_pivot() {
     assert_eq!(item["sourceKind"], "timeline");
     assert_eq!(item["sourceName"], "DatePivot");
     assert_eq!(item["field"], "日期");
+    assert_eq!(item["caption"], "日期");
+    assert_eq!(item["showHeader"], true);
+    assert_eq!(item["showSelectionLabel"], true);
+    assert_eq!(item["showTimeLevel"], true);
+    assert_eq!(item["showHorizontalScrollbar"], true);
+    assert_eq!(item["level"], 2);
+    assert_eq!(item["selectionLevel"], 2);
+    assert_eq!(item["scrollPosition"], "2023-01-01T00:00:00");
+    assert_eq!(item["style"], serde_json::Value::Null);
     assert!(item["id"]
         .as_str()
         .unwrap()
@@ -688,5 +709,178 @@ fn reject_picture_op_on_slicer_and_slicer_op_on_pic() {
     )
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidId);
+    assert!(!fail.exists());
+}
+
+#[test]
+fn insert_slicer_view_fields_and_set_slicer_view() {
+    let src = with_table("view-src");
+    let inserted = tmp("view-ins");
+    apply(
+        &src,
+        &inserted,
+        json!([{
+            "op": "insertSlicer",
+            "id": "sheet:Sheet1",
+            "source": "sheet:Sheet1/table:1",
+            "field": "产品",
+            "from": "F2",
+            "caption": "类别",
+            "columnCount": 2,
+            "showCaption": false,
+            "style": "SlicerStyleLight1"
+        }]),
+    )
+    .unwrap();
+    let tree = inspect(&inserted, json!({ "slicers": true }));
+    let item = &tree["sheets"][0]["slicers"][0];
+    let id = item["id"].as_str().unwrap().to_string();
+    assert_eq!(item["caption"], "类别");
+    assert_eq!(item["columnCount"], 2);
+    assert_eq!(item["showCaption"], false);
+    assert_eq!(item["style"], "SlicerStyleLight1");
+    let xml = part_text(&inserted, "xl/slicers/slicer1.xml");
+    assert!(xml.contains("caption=\"类别\""), "{xml}");
+    assert!(xml.contains("columnCount=\"2\""), "{xml}");
+    assert!(xml.contains("showCaption=\"0\""), "{xml}");
+    assert!(xml.contains("style=\"SlicerStyleLight1\""), "{xml}");
+
+    let patched = tmp("view-set");
+    apply(
+        &inserted,
+        &patched,
+        json!([{
+            "op": "setSlicerView",
+            "id": id,
+            "caption": "产品线",
+            "rowHeight": 228600,
+            "startItem": 1,
+            "lockedPosition": true
+        }]),
+    )
+    .unwrap();
+    let after = inspect(&patched, json!({ "slicers": true }));
+    let item = &after["sheets"][0]["slicers"][0];
+    assert_eq!(item["caption"], "产品线");
+    assert_eq!(item["rowHeight"], 228600);
+    assert_eq!(item["startItem"], 1);
+    assert_eq!(item["lockedPosition"], true);
+    assert_eq!(item["columnCount"], 2);
+    let drawing = part_text(&patched, "xl/drawings/drawing1.xml");
+    assert!(drawing.contains("sle:slicer"), "{drawing}");
+
+    let cleared = tmp("view-style-null");
+    apply(
+        &patched,
+        &cleared,
+        json!([{ "op": "setSlicerView", "id": id, "style": null }]),
+    )
+    .unwrap();
+    let item = &inspect(&cleared, json!({ "slicers": true }))["sheets"][0]["slicers"][0];
+    assert_eq!(item["style"], serde_json::Value::Null);
+    let xml = part_text(&cleared, "xl/slicers/slicer1.xml");
+    assert!(!xml.contains("style="), "{xml}");
+}
+
+#[test]
+fn set_timeline_view_and_reject_cross_kind() {
+    let src = with_date_pivot("tl-view-src");
+    let inserted = tmp("tl-view-ins");
+    apply(
+        &src,
+        &inserted,
+        json!([{
+            "op": "insertSlicer",
+            "id": "sheet:Sheet1",
+            "source": "sheet:Sheet1/pivot:1",
+            "field": "日期",
+            "kind": "timeline",
+            "from": "H2",
+            "caption": "月份",
+            "showHeader": false,
+            "level": 1
+        }]),
+    )
+    .unwrap();
+    let tree = inspect(&inserted, json!({ "slicers": true }));
+    let item = &tree["sheets"][0]["slicers"][0];
+    let id = item["id"].as_str().unwrap().to_string();
+    assert_eq!(item["caption"], "月份");
+    assert_eq!(item["showHeader"], false);
+    assert_eq!(item["level"], 1);
+    assert_eq!(item["selectionLevel"], 1);
+
+    let patched = tmp("tl-view-set");
+    apply(
+        &inserted,
+        &patched,
+        json!([{
+            "op": "setSlicerView",
+            "id": id,
+            "showTimeLevel": false,
+            "selectionLevel": 3,
+            "scrollPosition": null
+        }]),
+    )
+    .unwrap();
+    let after = inspect(&patched, json!({ "slicers": true }));
+    let item = &after["sheets"][0]["slicers"][0];
+    assert_eq!(item["showTimeLevel"], false);
+    assert_eq!(item["selectionLevel"], 3);
+    assert_eq!(item["scrollPosition"], serde_json::Value::Null);
+    let xml = part_text(&patched, "xl/timelines/timeline1.xml");
+    assert!(!xml.contains("scrollPosition="), "{xml}");
+
+    let fail = tmp("tl-view-cross");
+    let err = apply(
+        &inserted,
+        &fail,
+        json!([{ "op": "setSlicerView", "id": id, "columnCount": 2 }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+    assert!(!fail.exists());
+}
+
+#[test]
+fn set_slicer_view_rejects_empty_and_wrong_kind_and_pic() {
+    let (src, id) = insert_table_slicer("view-rej");
+    let fail = tmp("view-empty");
+    let err = apply(&src, &fail, json!([{ "op": "setSlicerView", "id": id }])).unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+    assert!(!fail.exists());
+
+    let err = apply(
+        &src,
+        &fail,
+        json!([{ "op": "setSlicerView", "id": id, "showHeader": false }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+    assert!(!fail.exists());
+
+    let err = apply(
+        &src,
+        &fail,
+        json!([{ "op": "setSlicerView", "id": "sheet:Sheet1/pic:1", "caption": "x" }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidId);
+    assert!(!fail.exists());
+
+    let err = apply(
+        &src,
+        &fail,
+        json!([{
+            "op": "insertSlicer",
+            "id": "sheet:Sheet1",
+            "source": "sheet:Sheet1/table:1",
+            "field": "产品",
+            "from": "G2",
+            "showHeader": false
+        }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
     assert!(!fail.exists());
 }

@@ -1219,8 +1219,34 @@ pub(super) fn parse_insert_slicer(
         obj,
         i,
         &[
-            "op", "id", "source", "field", "kind", "level", "cx", "cy", "from", "to", "anchor",
-            "fromOffX", "fromOffY", "toOffX", "toOffY",
+            "op",
+            "id",
+            "source",
+            "field",
+            "kind",
+            "level",
+            "cx",
+            "cy",
+            "from",
+            "to",
+            "anchor",
+            "fromOffX",
+            "fromOffY",
+            "toOffX",
+            "toOffY",
+            "caption",
+            "rowHeight",
+            "columnCount",
+            "showCaption",
+            "startItem",
+            "lockedPosition",
+            "style",
+            "showHeader",
+            "showSelectionLabel",
+            "showTimeLevel",
+            "showHorizontalScrollbar",
+            "selectionLevel",
+            "scrollPosition",
         ],
     )?;
     let id = require_id(obj, i)?;
@@ -1398,6 +1424,24 @@ pub(super) fn parse_insert_slicer(
             ));
         }
     };
+    let view = parse_slicer_view_fields(obj, i)?;
+    if kind == slicer::SlicerKind::Slicer {
+        if let Some(field) = view.timeline_only_field() {
+            return Err(Error::with_path(
+                ErrorKind::InvalidSlicer {
+                    field: field.into(),
+                },
+                format!("ops[{i}].{field}"),
+            ));
+        }
+    } else if let Some(field) = view.slicer_only_field() {
+        return Err(Error::with_path(
+            ErrorKind::InvalidSlicer {
+                field: field.into(),
+            },
+            format!("ops[{i}].{field}"),
+        ));
+    }
     Ok(slicer::InsertSlicerOp {
         sheet,
         source,
@@ -1413,6 +1457,7 @@ pub(super) fn parse_insert_slicer(
         from_off_y: parse_off_field(obj.get("fromOffY"), i, "fromOffY")?.unwrap_or(0),
         to_off_x: parse_off_field(obj.get("toOffX"), i, "toOffX")?.unwrap_or(0),
         to_off_y: parse_off_field(obj.get("toOffY"), i, "toOffY")?.unwrap_or(0),
+        view,
     })
 }
 
@@ -1496,6 +1541,158 @@ pub(super) fn parse_set_slicer_anchor(
         cy: p.cy,
         rel: p.rel,
     })
+}
+
+pub(super) fn parse_set_slicer_view(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<slicer::SetSlicerViewOp, Error> {
+    deny_keys(
+        obj,
+        i,
+        &[
+            "op",
+            "id",
+            "caption",
+            "rowHeight",
+            "columnCount",
+            "showCaption",
+            "startItem",
+            "lockedPosition",
+            "style",
+            "showHeader",
+            "showSelectionLabel",
+            "showTimeLevel",
+            "showHorizontalScrollbar",
+            "level",
+            "selectionLevel",
+            "scrollPosition",
+        ],
+    )?;
+    let id = require_id(obj, i)?;
+    let target = slicer::parse_slicer_id(&id, &format!("ops[{i}].id"))?;
+    let view = parse_slicer_view_fields(obj, i)?;
+    let level = parse_slicer_opt_u32(obj, i, "level", 0, Some(3))?;
+    if !view.any_set() && level.is_none() {
+        return Err(Error::with_path(
+            ErrorKind::NeedSetSlicerViewField,
+            format!("ops[{i}]"),
+        ));
+    }
+    Ok(slicer::SetSlicerViewOp {
+        id,
+        target,
+        view,
+        level,
+    })
+}
+
+fn parse_slicer_view_fields(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<slicer::SlicerViewFields, Error> {
+    Ok(slicer::SlicerViewFields {
+        caption: parse_slicer_opt_text(obj, i, "caption")?,
+        row_height: parse_emu_field(obj.get("rowHeight"), i, "rowHeight")?,
+        column_count: parse_slicer_opt_u32(obj, i, "columnCount", 1, Some(20000))?,
+        show_caption: parse_opt_bool(obj, i, "showCaption")?,
+        start_item: parse_slicer_opt_u32(obj, i, "startItem", 0, None)?,
+        locked_position: parse_opt_bool(obj, i, "lockedPosition")?,
+        style: parse_slicer_opt_style(obj, i, "style")?,
+        show_header: parse_opt_bool(obj, i, "showHeader")?,
+        show_selection_label: parse_opt_bool(obj, i, "showSelectionLabel")?,
+        show_time_level: parse_opt_bool(obj, i, "showTimeLevel")?,
+        show_horizontal_scrollbar: parse_opt_bool(obj, i, "showHorizontalScrollbar")?,
+        selection_level: parse_slicer_opt_u32(obj, i, "selectionLevel", 0, Some(3))?,
+        scroll_position: parse_slicer_opt_style(obj, i, "scrollPosition")?,
+    })
+}
+
+fn parse_slicer_opt_text(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+    field: &str,
+) -> Result<Option<String>, Error> {
+    match obj.get(field) {
+        None => Ok(None),
+        Some(Value::String(s)) if !s.is_empty() => Ok(Some(s.clone())),
+        Some(Value::String(_)) => Err(Error::with_path(
+            ErrorKind::InvalidSlicer {
+                field: field.into(),
+            },
+            format!("ops[{i}].{field}"),
+        )),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::NonEmptyString,
+            },
+            format!("ops[{i}].{field}"),
+        )),
+    }
+}
+
+fn parse_slicer_opt_style(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+    field: &str,
+) -> Result<Option<Option<String>>, Error> {
+    match obj.get(field) {
+        None => Ok(None),
+        Some(Value::Null) => Ok(Some(None)),
+        Some(Value::String(s)) if !s.is_empty() => Ok(Some(Some(s.clone()))),
+        Some(Value::String(_)) => Err(Error::with_path(
+            ErrorKind::InvalidSlicer {
+                field: field.into(),
+            },
+            format!("ops[{i}].{field}"),
+        )),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::String,
+            },
+            format!("ops[{i}].{field}"),
+        )),
+    }
+}
+
+fn parse_slicer_opt_u32(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+    field: &str,
+    min: u32,
+    max: Option<u32>,
+) -> Result<Option<u32>, Error> {
+    match obj.get(field) {
+        None => Ok(None),
+        Some(Value::Number(n)) => {
+            let Some(u) = n.as_u64().and_then(|x| u32::try_from(x).ok()) else {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidSlicer {
+                        field: field.into(),
+                    },
+                    format!("ops[{i}].{field}"),
+                ));
+            };
+            if u < min || max.is_some_and(|m| u > m) {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidSlicer {
+                        field: field.into(),
+                    },
+                    format!("ops[{i}].{field}"),
+                ));
+            }
+            Ok(Some(u))
+        }
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::Integer,
+            },
+            format!("ops[{i}].{field}"),
+        )),
+    }
 }
 
 pub(super) fn parse_insert_custom_view(

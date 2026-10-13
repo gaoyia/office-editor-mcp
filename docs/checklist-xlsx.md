@@ -42,6 +42,7 @@ C、I、A、O、Xp、Xvg、Xem、X3d、Xom、Xtf、Xfl、Xc、Xh、Xfs、Xtl、X
 2026-10-10 补跑 `xlsx-create-round5.ps1`，C30–C32 通过。无 Repair。COM `Style.Name` 为 `OoxpNamed`，黄底 `Interior.Color=65535`，`CommentsThreaded` 能看见一层回复。
 2026-10-13 补跑 `xlsx-model3d-geom.ps1`，X3g1–X3g6 通过。无 Repair。COM `Width` / `Height` 288×144 磅。`from=C3`。`twoCell` `to=D8`。`replaceModel3d` 不改几何。
 2026-10-13 补跑 `xlsx-slicer-anchor.ps1`，Xsn1–Xsn6 通过。无 Repair。COM 288×144 磅。`from=G4`。`twoCell` `to=H12`。时间线 `from=I5`。
+2026-10-14 补跑 `xlsx-slicer-caption.ps1`，Xsc1–Xsc5 通过。无 Repair。COM `Caption` 对得上。`columnCount=2`。时间线 `showHeader=false`。
 
 - **C1** ✅
   - Excel 16.0 打开 `manual-check/office/out/xlsx-create.xlsx`，标题栏无 Repair
@@ -352,6 +353,14 @@ C、I、A、O、Xp、Xvg、Xem、X3d、Xom、Xtf、Xfl、Xc、Xh、Xfs、Xtl、X
   - 时间线改 `from=I5`
   - 对切片器 id 发 `setPictureSize` 得 `InvalidId`
   - `twoCell` 给 `cx` 得 `InvalidField`
+  - 标题栏无 Repair
+- **Xsc1–Xsc5** ✅
+  - Excel 16.0：`xlsx-slicer-caption.ps1`，5 PASS / 0 FAIL
+  - `insertSlicer` 带 `caption` 后树上对得上，缺省 `rowHeight=381000`、`columnCount=1`
+  - `setSlicerView` 改标题、列数、`showCaption` 后 COM `Caption` 对得上
+  - `style=SlicerStyleLight1` 再 `null` 后树上为 `null`
+  - 时间线改 `caption` 与 `showHeader=false`
+  - 空 op、对切片器给 `showHeader`、对图 id 均拒写
   - 标题栏无 Repair
 - **Xcn1–Xcn5** ✅
   - Excel 16.0：`xlsx-connections.ps1`，5 PASS / 0 FAIL
@@ -1405,6 +1414,28 @@ inspect 只读进树。create 不生成。apply 不新开编辑。脚本 `manual
 - **Xsn6**
   - 检查：拒错
   - 通过标准：`twoCell` 上给 `cx` 得 `InvalidField`。对 xlsx 发 `setSlicerSize` 给图 id 得 `InvalidId`。未写文件
+  - 不强制开 Excel
+
+## 切片器视图
+
+已有切片器（含时间线）改视图部件上的标题、行高、列数、显示开关与样式名。不改 drawing 锚点，不改 cache，不执行筛选。
+手测脚本 `manual-check/office/cases/xlsx-slicer-caption.ps1`。编号用 **Xsc**。不要和 Xsl、Xsn、Xtl 撞。
+
+- **Xsc1**
+  - 检查：insert 标题
+  - 通过标准：`insertSlicer` 带 `caption` 后树上 `caption` 对得上。缺省视图字段与 schema 缺省一致。Excel 无修复
+- **Xsc2**
+  - 检查：改视图
+  - 通过标准：`setSlicerView` 改 `caption`、`columnCount`、`showCaption` 后树上对得上。Excel 无修复。COM `Caption` 对得上
+- **Xsc3**
+  - 检查：样式名
+  - 通过标准：`style` 写成内置名后树上对得上。再给 `null` 则树上为 `null`。Excel 无修复
+- **Xsc4**
+  - 检查：时间线
+  - 通过标准：时间线 `setSlicerView` 改 `caption` 与 `showHeader` 后树上对得上。Excel 无修复
+- **Xsc5**
+  - 检查：拒写
+  - 通过标准：只给 `op` 与 `id` 得 `InvalidField`。对切片器给 `showHeader` 得 `InvalidField`。对图 id 发 `setSlicerView` 得 `InvalidId`。未写文件
   - 不强制开 Excel
 
 ## 时间线切片器

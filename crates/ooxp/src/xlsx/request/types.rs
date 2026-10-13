@@ -1941,6 +1941,7 @@ pub enum XlsxOp {
     DeleteSlicer(slicer::DeleteSlicerOp),
     SetSlicerSize(slicer::SetSlicerSizeOp),
     SetSlicerAnchor(slicer::SetSlicerAnchorOp),
+    SetSlicerView(slicer::SetSlicerViewOp),
     InsertConnection(connection::InsertConnectionOp),
     DeleteConnection(connection::DeleteConnectionOp),
     InsertExternalLink(extlink::InsertExternalLinkOp),

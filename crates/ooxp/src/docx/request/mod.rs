@@ -405,6 +405,7 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<DocxOp>, Error> {
             || op_name == "deleteSlicer"
             || op_name == "setSlicerSize"
             || op_name == "setSlicerAnchor"
+            || op_name == "setSlicerView"
             || op_name == "insertConnection"
             || op_name == "deleteConnection"
             || op_name == "insertExternalLink"

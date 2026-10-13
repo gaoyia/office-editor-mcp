@@ -56,7 +56,9 @@ const DEFAULT_CY: i64 = 2_540_000;
 /// Excel 16.0 时间线约 400×80 磅。
 const DEFAULT_TIMELINE_CX: i64 = 5_080_000;
 const DEFAULT_TIMELINE_CY: i64 = 1_016_000;
-const ROW_HEIGHT: &str = "381000";
+const DEFAULT_ROW_HEIGHT: i64 = 381_000;
+const DEFAULT_COLUMN_COUNT: u32 = 1;
+const DEFAULT_TIMELINE_LEVEL: u32 = 2;
 
 #[derive(Debug, Clone)]
 pub enum SlicerKey {
@@ -82,6 +84,66 @@ pub enum SlicerKind {
     Timeline,
 }
 
+#[derive(Debug, Clone, Default)]
+pub struct SlicerViewFields {
+    pub caption: Option<String>,
+    pub row_height: Option<i64>,
+    pub column_count: Option<u32>,
+    pub show_caption: Option<bool>,
+    pub start_item: Option<u32>,
+    pub locked_position: Option<bool>,
+    pub style: Option<Option<String>>,
+    pub show_header: Option<bool>,
+    pub show_selection_label: Option<bool>,
+    pub show_time_level: Option<bool>,
+    pub show_horizontal_scrollbar: Option<bool>,
+    pub selection_level: Option<u32>,
+    pub scroll_position: Option<Option<String>>,
+}
+
+impl SlicerViewFields {
+    pub(crate) fn slicer_only_field(&self) -> Option<&'static str> {
+        if self.row_height.is_some() {
+            Some("rowHeight")
+        } else if self.column_count.is_some() {
+            Some("columnCount")
+        } else if self.show_caption.is_some() {
+            Some("showCaption")
+        } else if self.start_item.is_some() {
+            Some("startItem")
+        } else if self.locked_position.is_some() {
+            Some("lockedPosition")
+        } else {
+            None
+        }
+    }
+
+    pub(crate) fn timeline_only_field(&self) -> Option<&'static str> {
+        if self.show_header.is_some() {
+            Some("showHeader")
+        } else if self.show_selection_label.is_some() {
+            Some("showSelectionLabel")
+        } else if self.show_time_level.is_some() {
+            Some("showTimeLevel")
+        } else if self.show_horizontal_scrollbar.is_some() {
+            Some("showHorizontalScrollbar")
+        } else if self.selection_level.is_some() {
+            Some("selectionLevel")
+        } else if self.scroll_position.is_some() {
+            Some("scrollPosition")
+        } else {
+            None
+        }
+    }
+
+    pub(crate) fn any_set(&self) -> bool {
+        self.caption.is_some()
+            || self.style.is_some()
+            || self.slicer_only_field().is_some()
+            || self.timeline_only_field().is_some()
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct InsertSlicerOp {
     pub sheet: String,
@@ -98,6 +160,7 @@ pub struct InsertSlicerOp {
     pub from_off_y: i64,
     pub to_off_x: i64,
     pub to_off_y: i64,
+    pub view: SlicerViewFields,
 }
 
 #[derive(Debug, Clone)]
@@ -134,6 +197,14 @@ pub struct SetSlicerAnchorOp {
     pub cx: Option<i64>,
     pub cy: Option<i64>,
     pub rel: Option<super::request::RelBoxPatch>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetSlicerViewOp {
+    pub id: String,
+    pub target: SlicerTarget,
+    pub view: SlicerViewFields,
+    pub level: Option<u32>,
 }
 
 #[derive(Clone)]
@@ -391,6 +462,57 @@ pub fn set_anchor(
     )
 }
 
+/// 改 slicer / timeline 视图部件属性。不改 drawing，不改 cache。
+pub fn set_view(
+    pkg: &mut Package,
+    sheet_part: &str,
+    op: &SetSlicerViewOp,
+    op_index: usize,
+) -> Result<(), Error> {
+    let path = format!("ops[{op_index}].id");
+    let hits = collect_hits(pkg, sheet_part)?;
+    let Some(hit) = hits
+        .iter()
+        .enumerate()
+        .find(|(i, h)| key_matches(&op.target.key, h, *i + 1))
+        .map(|(_, h)| h)
+    else {
+        return Err(Error::with_path(
+            ErrorKind::SlicerNotFound { id: op.id.clone() },
+            path,
+        ));
+    };
+    if hit.timeline {
+        if let Some(field) = op.view.slicer_only_field() {
+            return Err(Error::with_path(
+                ErrorKind::InvalidSlicer {
+                    field: field.into(),
+                },
+                format!("ops[{op_index}].{field}"),
+            ));
+        }
+    } else if let Some(field) = op.view.timeline_only_field().or(op.level.map(|_| "level")) {
+        return Err(Error::with_path(
+            ErrorKind::InvalidSlicer {
+                field: field.into(),
+            },
+            format!("ops[{op_index}].{field}"),
+        ));
+    }
+    patch_named_view(
+        pkg,
+        sheet_part,
+        hit.timeline,
+        &hit.sle_name,
+        &op.id,
+        op_index,
+        |el| {
+            apply_view_attrs(el, &op.view, op.level, hit.timeline);
+            Ok(())
+        },
+    )
+}
+
 fn insert_table(
     pkg: &mut Package,
     wb_doc: &mut Document,
@@ -424,7 +546,14 @@ fn insert_table(
     push_wb_cache(wb_doc, true, &cache_rid);
     push_cache_defined_name(wb_doc, &cache_name);
     let (slicer_part, slicer_rid, is_new) = ensure_slicers_part(pkg, sheet_doc, sheet_part)?;
-    append_slicer_view(pkg, &slicer_part, &view_name, &cache_name, &op.field)?;
+    append_slicer_view(
+        pkg,
+        &slicer_part,
+        &view_name,
+        &cache_name,
+        &op.field,
+        &op.view,
+    )?;
     if is_new {
         push_sheet_list(&mut sheet_doc.root, &slicer_rid);
     }
@@ -485,7 +614,14 @@ fn insert_pivot(
     push_wb_cache(wb_doc, false, &cache_rid);
     push_cache_defined_name(wb_doc, &cache_name);
     let (slicer_part, slicer_rid, is_new) = ensure_slicers_part(pkg, sheet_doc, sheet_part)?;
-    append_slicer_view(pkg, &slicer_part, &view_name, &cache_name, &op.field)?;
+    append_slicer_view(
+        pkg,
+        &slicer_part,
+        &view_name,
+        &cache_name,
+        &op.field,
+        &op.view,
+    )?;
     if is_new {
         push_sheet_list(&mut sheet_doc.root, &slicer_rid);
     }
@@ -558,6 +694,7 @@ fn insert_timeline(
         &op.field,
         op.level,
         &start,
+        &op.view,
     )?;
     if is_new {
         push_sheet_timeline_refs(&mut sheet_doc.root, &timeline_rid);
@@ -719,6 +856,7 @@ fn hit_json(
     for (k, v) in m {
         if k == "anchor" {
             out.insert("caption".into(), json!(caption));
+            insert_view_fields(&mut out, view, hit.timeline);
             out.insert(
                 "sourceKind".into(),
                 match source_kind {
@@ -733,6 +871,70 @@ fn hit_json(
     }
     out.insert("stable".into(), stable_v);
     Ok(Value::Object(out))
+}
+
+fn insert_view_fields(out: &mut Map<String, Value>, view: Option<&SlicerView>, timeline: bool) {
+    if timeline {
+        out.insert(
+            "showHeader".into(),
+            json!(view.and_then(|v| v.show_header).unwrap_or(true)),
+        );
+        out.insert(
+            "showSelectionLabel".into(),
+            json!(view.and_then(|v| v.show_selection_label).unwrap_or(true)),
+        );
+        out.insert(
+            "showTimeLevel".into(),
+            json!(view.and_then(|v| v.show_time_level).unwrap_or(true)),
+        );
+        out.insert(
+            "showHorizontalScrollbar".into(),
+            json!(view
+                .and_then(|v| v.show_horizontal_scrollbar)
+                .unwrap_or(true)),
+        );
+        out.insert(
+            "level".into(),
+            json!(view.and_then(|v| v.level).unwrap_or(DEFAULT_TIMELINE_LEVEL)),
+        );
+        out.insert(
+            "selectionLevel".into(),
+            json!(view
+                .and_then(|v| v.selection_level)
+                .unwrap_or(DEFAULT_TIMELINE_LEVEL)),
+        );
+        out.insert(
+            "scrollPosition".into(),
+            json!(view.and_then(|v| v.scroll_position.clone())),
+        );
+        out.insert("style".into(), json!(view.and_then(|v| v.style.clone())));
+        return;
+    }
+    out.insert(
+        "rowHeight".into(),
+        json!(view
+            .and_then(|v| v.row_height)
+            .unwrap_or(DEFAULT_ROW_HEIGHT)),
+    );
+    out.insert(
+        "columnCount".into(),
+        json!(view
+            .and_then(|v| v.column_count)
+            .unwrap_or(DEFAULT_COLUMN_COUNT)),
+    );
+    out.insert(
+        "showCaption".into(),
+        json!(view.and_then(|v| v.show_caption).unwrap_or(true)),
+    );
+    out.insert(
+        "startItem".into(),
+        json!(view.and_then(|v| v.start_item).unwrap_or(0)),
+    );
+    out.insert(
+        "lockedPosition".into(),
+        json!(view.and_then(|v| v.locked_position).unwrap_or(false)),
+    );
+    out.insert("style".into(), json!(view.and_then(|v| v.style.clone())));
 }
 
 fn is_slicer_uri(uri: &str) -> bool {
@@ -787,6 +989,202 @@ struct SlicerView {
     name: String,
     cache: String,
     caption: Option<String>,
+    row_height: Option<i64>,
+    column_count: Option<u32>,
+    show_caption: Option<bool>,
+    start_item: Option<u32>,
+    locked_position: Option<bool>,
+    style: Option<String>,
+    show_header: Option<bool>,
+    show_selection_label: Option<bool>,
+    show_time_level: Option<bool>,
+    show_horizontal_scrollbar: Option<bool>,
+    level: Option<u32>,
+    selection_level: Option<u32>,
+    scroll_position: Option<String>,
+}
+
+fn view_from_slicer_el(el: &Element) -> Option<SlicerView> {
+    let name = el.attr("name").unwrap_or("").to_string();
+    if name.is_empty() {
+        return None;
+    }
+    Some(SlicerView {
+        name,
+        cache: el.attr("cache").unwrap_or("").to_string(),
+        caption: el.attr("caption").map(str::to_string),
+        row_height: parse_attr_i64(el, "rowHeight"),
+        column_count: parse_attr_u32(el, "columnCount"),
+        show_caption: parse_attr_bool(el, "showCaption"),
+        start_item: parse_attr_u32(el, "startItem"),
+        locked_position: parse_attr_bool(el, "lockedPosition"),
+        style: el.attr("style").map(str::to_string),
+        show_header: None,
+        show_selection_label: None,
+        show_time_level: None,
+        show_horizontal_scrollbar: None,
+        level: None,
+        selection_level: None,
+        scroll_position: None,
+    })
+}
+
+fn view_from_timeline_el(el: &Element) -> Option<SlicerView> {
+    let name = el.attr("name").unwrap_or("").to_string();
+    if name.is_empty() {
+        return None;
+    }
+    Some(SlicerView {
+        name,
+        cache: el.attr("cache").unwrap_or("").to_string(),
+        caption: el.attr("caption").map(str::to_string),
+        row_height: None,
+        column_count: None,
+        show_caption: None,
+        start_item: None,
+        locked_position: None,
+        style: el.attr("style").map(str::to_string),
+        show_header: parse_attr_bool(el, "showHeader"),
+        show_selection_label: parse_attr_bool(el, "showSelectionLabel"),
+        show_time_level: parse_attr_bool(el, "showTimeLevel"),
+        show_horizontal_scrollbar: parse_attr_bool(el, "showHorizontalScrollbar"),
+        level: parse_attr_u32(el, "level"),
+        selection_level: parse_attr_u32(el, "selectionLevel"),
+        scroll_position: el.attr("scrollPosition").map(str::to_string),
+    })
+}
+
+fn parse_attr_u32(el: &Element, name: &str) -> Option<u32> {
+    el.attr(name)?.parse().ok()
+}
+
+fn parse_attr_i64(el: &Element, name: &str) -> Option<i64> {
+    el.attr(name)?.parse().ok()
+}
+
+fn parse_attr_bool(el: &Element, name: &str) -> Option<bool> {
+    match el.attr(name)? {
+        "1" | "true" | "TRUE" => Some(true),
+        "0" | "false" | "FALSE" => Some(false),
+        _ => None,
+    }
+}
+
+fn xml_bool(v: bool) -> &'static str {
+    if v {
+        "1"
+    } else {
+        "0"
+    }
+}
+
+fn set_opt_bool(el: &mut Element, name: &str, v: Option<bool>) {
+    if let Some(b) = v {
+        el.set_attr(name, xml_bool(b));
+    }
+}
+
+fn set_opt_u32(el: &mut Element, name: &str, v: Option<u32>) {
+    if let Some(n) = v {
+        el.set_attr(name, n.to_string());
+    }
+}
+
+fn set_opt_style(el: &mut Element, v: &Option<Option<String>>) {
+    match v {
+        None => {}
+        Some(None) => el.remove_attr("style"),
+        Some(Some(s)) => el.set_attr("style", s),
+    }
+}
+
+fn set_opt_scroll(el: &mut Element, v: &Option<Option<String>>) {
+    match v {
+        None => {}
+        Some(None) => el.remove_attr("scrollPosition"),
+        Some(Some(s)) => el.set_attr("scrollPosition", s),
+    }
+}
+
+fn apply_view_attrs(el: &mut Element, view: &SlicerViewFields, level: Option<u32>, timeline: bool) {
+    if let Some(ref c) = view.caption {
+        el.set_attr("caption", c);
+    }
+    set_opt_style(el, &view.style);
+    if timeline {
+        set_opt_bool(el, "showHeader", view.show_header);
+        set_opt_bool(el, "showSelectionLabel", view.show_selection_label);
+        set_opt_bool(el, "showTimeLevel", view.show_time_level);
+        set_opt_bool(
+            el,
+            "showHorizontalScrollbar",
+            view.show_horizontal_scrollbar,
+        );
+        set_opt_u32(el, "level", level);
+        set_opt_u32(el, "selectionLevel", view.selection_level);
+        set_opt_scroll(el, &view.scroll_position);
+        return;
+    }
+    if let Some(h) = view.row_height {
+        el.set_attr("rowHeight", h.to_string());
+    }
+    set_opt_u32(el, "columnCount", view.column_count);
+    set_opt_bool(el, "showCaption", view.show_caption);
+    set_opt_u32(el, "startItem", view.start_item);
+    set_opt_bool(el, "lockedPosition", view.locked_position);
+}
+
+fn patch_named_view(
+    pkg: &mut Package,
+    sheet_part: &str,
+    timeline: bool,
+    name: &str,
+    op_id: &str,
+    op_index: usize,
+    patch: impl FnOnce(&mut Element) -> Result<(), Error>,
+) -> Result<(), Error> {
+    let rel_suffix = if timeline { "/timeline" } else { "/slicer" };
+    let local = if timeline { "timeline" } else { "slicer" };
+    let rels = Relationships::from_package(pkg, sheet_part)?;
+    let mut found: Option<(String, Document)> = None;
+    for rel in &rels.rels {
+        if !rel.rel_type.ends_with(rel_suffix) {
+            continue;
+        }
+        let part = resolve_rel_target(sheet_part, &rel.target)?;
+        let doc = xml::parse(pkg.get(&part)?)?;
+        let hit = doc
+            .root
+            .element_children()
+            .any(|el| el.local_name() == local && el.attr("name") == Some(name));
+        if hit {
+            found = Some((part, doc));
+            break;
+        }
+    }
+    let Some((part, mut doc)) = found else {
+        return Err(Error::with_path(
+            ErrorKind::SlicerNotFound {
+                id: op_id.to_string(),
+            },
+            format!("ops[{op_index}].id"),
+        ));
+    };
+    let Some(el) = doc
+        .root
+        .element_children_mut()
+        .find(|el| el.local_name() == local && el.attr("name") == Some(name))
+    else {
+        return Err(Error::with_path(
+            ErrorKind::SlicerNotFound {
+                id: op_id.to_string(),
+            },
+            format!("ops[{op_index}].id"),
+        ));
+    };
+    patch(el)?;
+    pkg.set(&part, doc.to_bytes()?)?;
+    Ok(())
 }
 
 fn load_slicer_views(pkg: &Package, sheet_part: &str) -> Result<Vec<SlicerView>, Error> {
@@ -806,15 +1204,9 @@ fn load_slicer_views(pkg: &Package, sheet_part: &str) -> Result<Vec<SlicerView>,
             continue;
         };
         for el in doc.root.children_by_local("slicer") {
-            let name = el.attr("name").unwrap_or("").to_string();
-            if name.is_empty() {
-                continue;
+            if let Some(v) = view_from_slicer_el(el) {
+                out.push(v);
             }
-            out.push(SlicerView {
-                name,
-                cache: el.attr("cache").unwrap_or("").to_string(),
-                caption: el.attr("caption").map(str::to_string),
-            });
         }
     }
     Ok(out)
@@ -837,15 +1229,9 @@ fn load_timeline_views(pkg: &Package, sheet_part: &str) -> Result<Vec<SlicerView
             continue;
         };
         for el in doc.root.children_by_local("timeline") {
-            let name = el.attr("name").unwrap_or("").to_string();
-            if name.is_empty() {
-                continue;
+            if let Some(v) = view_from_timeline_el(el) {
+                out.push(v);
             }
-            out.push(SlicerView {
-                name,
-                cache: el.attr("cache").unwrap_or("").to_string(),
-                caption: el.attr("caption").map(str::to_string),
-            });
         }
     }
     Ok(out)
@@ -1505,20 +1891,27 @@ fn append_timeline_view(
     timeline_part: &str,
     name: &str,
     cache: &str,
-    caption: &str,
+    field: &str,
     level: u32,
     scroll: &str,
+    view: &SlicerViewFields,
 ) -> Result<(), Error> {
+    let caption = view.caption.as_deref().unwrap_or(field);
+    let sel = view.selection_level.unwrap_or(level);
+    let mut el = Element::new("timeline")
+        .with_attr("name", name)
+        .with_attr("cache", cache)
+        .with_attr("caption", caption)
+        .with_attr("level", level.to_string())
+        .with_attr("selectionLevel", sel.to_string());
+    match &view.scroll_position {
+        None => el.set_attr("scrollPosition", scroll),
+        Some(None) => {}
+        Some(Some(s)) => el.set_attr("scrollPosition", s),
+    }
+    apply_view_attrs(&mut el, view, None, true);
     let mut doc = xml::parse(pkg.get(timeline_part)?)?;
-    doc.root.push_element(
-        Element::new("timeline")
-            .with_attr("name", name)
-            .with_attr("cache", cache)
-            .with_attr("caption", caption)
-            .with_attr("level", level.to_string())
-            .with_attr("selectionLevel", level.to_string())
-            .with_attr("scrollPosition", scroll),
-    );
+    doc.root.push_element(el);
     pkg.set(timeline_part, doc.to_bytes()?)?;
     Ok(())
 }
@@ -1619,16 +2012,19 @@ fn append_slicer_view(
     slicer_part: &str,
     name: &str,
     cache: &str,
-    caption: &str,
+    field: &str,
+    view: &SlicerViewFields,
 ) -> Result<(), Error> {
+    let caption = view.caption.as_deref().unwrap_or(field);
+    let row_h = view.row_height.unwrap_or(DEFAULT_ROW_HEIGHT);
+    let mut el = Element::new("slicer")
+        .with_attr("name", name)
+        .with_attr("cache", cache)
+        .with_attr("caption", caption)
+        .with_attr("rowHeight", row_h.to_string());
+    apply_view_attrs(&mut el, view, None, false);
     let mut doc = xml::parse(pkg.get(slicer_part)?)?;
-    doc.root.push_element(
-        Element::new("slicer")
-            .with_attr("name", name)
-            .with_attr("cache", cache)
-            .with_attr("caption", caption)
-            .with_attr("rowHeight", ROW_HEIGHT),
-    );
+    doc.root.push_element(el);
     pkg.set(slicer_part, doc.to_bytes()?)?;
     Ok(())
 }
