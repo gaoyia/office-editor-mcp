@@ -503,6 +503,48 @@
         }
       ]
     },
+    "drawingTextSpacing": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "val"
+          ],
+          "properties": {
+            "type": {
+              "const": "pts"
+            },
+            "val": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 158400
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "val"
+          ],
+          "properties": {
+            "type": {
+              "const": "pct"
+            },
+            "val": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        }
+      ]
+    },
     "pptxShapeCreate": {
       "type": "object",
       "additionalProperties": false,
@@ -590,6 +632,31 @@
             "string",
             "null"
           ]
+        },
+        "spcBef": {
+          "$ref": "#/$defs/drawingTextSpacing"
+        },
+        "spcAft": {
+          "$ref": "#/$defs/drawingTextSpacing"
+        },
+        "lnSpc": {
+          "$ref": "#/$defs/drawingTextSpacing"
+        },
+        "spc": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": -400000,
+          "maximum": 400000
+        },
+        "kern": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 400000
         },
         "geom": {
           "$ref": "#/$defs/shapeGeom"
@@ -1439,6 +1506,31 @@
             "null"
           ]
         },
+        "spcBef": {
+          "$ref": "#/$defs/drawingTextSpacing"
+        },
+        "spcAft": {
+          "$ref": "#/$defs/drawingTextSpacing"
+        },
+        "lnSpc": {
+          "$ref": "#/$defs/drawingTextSpacing"
+        },
+        "spc": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": -400000,
+          "maximum": 400000
+        },
+        "kern": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 400000
+        },
         "geom": {
           "$ref": "#/$defs/shapeGeom"
         },
@@ -1788,6 +1880,31 @@
             "string",
             "null"
           ]
+        },
+        "spcBef": {
+          "$ref": "#/$defs/drawingTextSpacing"
+        },
+        "spcAft": {
+          "$ref": "#/$defs/drawingTextSpacing"
+        },
+        "lnSpc": {
+          "$ref": "#/$defs/drawingTextSpacing"
+        },
+        "spc": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": -400000,
+          "maximum": 400000
+        },
+        "kern": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 400000
         }
       },
       "anyOf": [
@@ -1834,6 +1951,31 @@
         {
           "required": [
             "textAnchor"
+          ]
+        },
+        {
+          "required": [
+            "spcBef"
+          ]
+        },
+        {
+          "required": [
+            "spcAft"
+          ]
+        },
+        {
+          "required": [
+            "lnSpc"
+          ]
+        },
+        {
+          "required": [
+            "spc"
+          ]
+        },
+        {
+          "required": [
+            "kern"
           ]
         },
         {

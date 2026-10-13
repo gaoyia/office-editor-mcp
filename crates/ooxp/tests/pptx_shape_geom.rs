@@ -144,6 +144,9 @@ fn insert_ellipse_has_prst_and_fill() {
             "eastAsiaFont",
             "align",
             "textAnchor",
+            "spcBef",
+            "spcAft",
+            "lnSpc",
             "runs",
             "stable"
         ]

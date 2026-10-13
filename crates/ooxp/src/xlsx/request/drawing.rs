@@ -87,6 +87,11 @@ pub(super) fn parse_insert_textbox(
             "eastAsiaFont",
             "align",
             "textAnchor",
+            "spcBef",
+            "spcAft",
+            "lnSpc",
+            "spc",
+            "kern",
         ],
     )?;
     let id = require_id(obj, i)?;
@@ -145,6 +150,11 @@ pub(super) fn parse_insert_shape(
             "eastAsiaFont",
             "align",
             "textAnchor",
+            "spcBef",
+            "spcAft",
+            "lnSpc",
+            "spc",
+            "kern",
         ],
     )?;
     let id = require_id(obj, i)?;
@@ -454,6 +464,11 @@ pub(super) fn parse_set_shape_format(
             "eastAsiaFont",
             "align",
             "textAnchor",
+            "spcBef",
+            "spcAft",
+            "lnSpc",
+            "spc",
+            "kern",
         ],
     )?;
     let id = require_id(obj, i)?;

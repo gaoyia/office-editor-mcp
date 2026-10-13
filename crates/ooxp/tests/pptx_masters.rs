@@ -363,6 +363,9 @@ fn inspect_and_edit_layout_placeholder() {
             "eastAsiaFont",
             "align",
             "textAnchor",
+            "spcBef",
+            "spcAft",
+            "lnSpc",
             "runs",
             "stable"
         ]

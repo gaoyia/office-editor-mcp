@@ -1079,14 +1079,15 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::TextBoxLinkCrossPart => "链接文本框必须在同一部件里".into(),
         ErrorKind::InvalidHexColor => "color 必须是六位 RGB 十六进制或 null".into(),
         ErrorKind::NeedShapeFormatField => {
-            "setShapeFormat 至少要给 sz、color、textFill、textOutline、bold、italic、underline、font、eastAsiaFont、align 或 textAnchor 之一".into()
+            "setShapeFormat 至少要给 sz、color、textFill、textOutline、bold、italic、underline、font、eastAsiaFont、align、textAnchor、spcBef、spcAft、lnSpc、spc 或 kern 之一".into()
         }
         ErrorKind::InvalidTextFillType => "textFill.type 必须是 none 或 gradient".into(),
         ErrorKind::NeedGradientStops => "textFill.stops 至少要有两项".into(),
         ErrorKind::DuplicateGradientPos => "textFill.stops 的 pos 不能重复".into(),
         ErrorKind::NeedTextOutlineField => "textOutline 必须有 color 与 width".into(),
         ErrorKind::InvalidTextAlign => "align 必须是 l、ctr、r 或 just".into(),
-        ErrorKind::InvalidTextAnchor => "textAnchor 必须是 t、ctr 或 b".into(),
+        ErrorKind::InvalidTextAnchor => "textAnchor 必须是 t、ctr、b、just 或 dist".into(),
+        ErrorKind::InvalidTextSpacing => "spcBef、spcAft 与 lnSpc 的 type 必须是 pts 或 pct".into(),
         ErrorKind::InvalidTextUnderline => "underline 必须是 sng、none 或 dbl".into(),
         ErrorKind::EmptyShapeTypeface => "font 与 eastAsiaFont 不能为空串".into(),
         ErrorKind::InvalidTextBoxDirection => "direction 必须是 horizontal 或 vertical".into(),

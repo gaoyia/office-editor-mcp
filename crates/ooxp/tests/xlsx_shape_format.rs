@@ -142,3 +142,77 @@ fn rejects_empty_format_and_anchor_name() {
     assert_eq!(err.code(), ErrorCode::InvalidField);
     assert!(!dest.exists());
 }
+
+#[test]
+fn set_textbox_spacing_and_kern() {
+    let src = create_book("spc");
+    let inserted = tmp("spc-ins");
+    apply(
+        &src,
+        &inserted,
+        json!([{
+            "op": "insertTextBox",
+            "id": "sheet:Sheet1",
+            "from": "B2",
+            "text": "你好",
+            "lnSpc": { "type": "pts", "val": 2400 },
+            "spc": 200
+        }]),
+    )
+    .unwrap();
+    let box0 = &inspect_boxes(&inserted)["sheets"][0]["textBoxes"][0];
+    assert_eq!(box0["lnSpc"]["type"], "pts");
+    assert_eq!(box0["lnSpc"]["val"], 2400);
+    assert_eq!(box0["runs"][0]["spc"], 200);
+    let id = box0["id"].clone();
+    let out = tmp("spc-out");
+    apply(
+        &inserted,
+        &out,
+        json!([{
+            "op": "setShapeFormat",
+            "id": id,
+            "spcBef": { "type": "pct", "val": 100000 },
+            "kern": 800,
+            "textAnchor": "b"
+        }]),
+    )
+    .unwrap();
+    let after = &inspect_boxes(&out)["sheets"][0]["textBoxes"][0];
+    assert_eq!(after["textAnchor"], "b");
+    assert_eq!(after["spcBef"]["type"], "pct");
+    assert_eq!(after["spcBef"]["val"], 100000);
+    assert_eq!(after["lnSpc"]["val"], 2400);
+    assert_eq!(after["runs"][0]["kern"], 800);
+}
+
+#[test]
+fn rejects_bad_spacing_type() {
+    let src = create_book("bad-spc");
+    let inserted = tmp("bad-spc-ins");
+    apply(
+        &src,
+        &inserted,
+        json!([{
+            "op": "insertTextBox",
+            "id": "sheet:Sheet1",
+            "from": "B2",
+            "text": "x"
+        }]),
+    )
+    .unwrap();
+    let id = inspect_boxes(&inserted)["sheets"][0]["textBoxes"][0]["id"].clone();
+    let dest = tmp("bad-type");
+    let err = apply(
+        &inserted,
+        &dest,
+        json!([{
+            "op": "setShapeFormat",
+            "id": id,
+            "lnSpc": { "type": "auto", "val": 0 }
+        }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+    assert!(!dest.exists());
+}

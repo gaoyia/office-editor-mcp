@@ -5,7 +5,7 @@
 检查前用 create 或 apply 在本机生成文件，不要用改过扩展名的 zip 目录冒充。
 本机若 `PowerPoint.Application` 被 WPS 抢走，直接启动 `POWERPNT.EXE` 再挂 COM，不要走被抢的 ProgID。Office 16 的对象模型在 `mdiClass` 上。
 
-C、I、A、Pp、Pvg、Pem、P3d、Pom、Pc、Psa、Pn、Pcm、Pm、Ps、Tf、Tfl、Sg、Pt、Tn、Tr、Td、Mt、Am、Aw、Mm、Mw、Md、Ts、Ho、Nh、Nm、Phl、Phr、Phx、Pcip、Pmd、Psc、Cs、Po、Cr、Cq、Ck、Pz、Pzr、Pw、Pph、
+C、I、A、Pp、Pvg、Pem、P3d、Pom、Pc、Psa、Pn、Pcm、Pm、Ps、Tf、Tfl、Pln、Sg、Pt、Tn、Tr、Td、Mt、Am、Aw、Mm、Mw、Md、Ts、Ho、Nh、Nm、Phl、Phr、Phx、Pcip、Pmd、Psc、Cs、Po、Cr、Cq、Ck、Pz、Pzr、Pw、Pph、
 Pf、Pcg、Pcx 各组由 `manual-check/office/cases/pptx-*.ps1` 自动判定，
 跑 `pwsh -File manual-check\office\run.ps1 -Case 'pptx-*'` 即可复现。O1 已放弃，与 xlsx / docx 相同。
 
@@ -46,6 +46,7 @@ Ps1–Ps5、Sg1–Sg5、Pt1–Pt6、Tn1–Tn5、Am1–Am5、Mm1–Mm5、Ho1–Ho
 2026-10-10 补跑 `pptx-charts-rare-remain.ps1`，Pcx1–Pcx5 通过。无 Repair。
 2026-10-13 补跑 `pptx-model3d-geom.ps1`，P3g1–P3g6 通过。无 Repair。COM `Width` / `Height` 288×144 磅。`x=914400` `y=457200`。备注 3D 可改尺寸，根上 `model3dCount` 仍为 0。`replaceModel3d` 不改几何。
 2026-10-14 补跑 `pptx-math-geom.ps1`，Pog1–Pog5 通过。无 Repair。`cx=1828800` `cy=914400`。`x=914400` `y=457200`。备注公式可改尺寸，根上 `mathCount` 仍为 0。`setMath` 不改几何。
+2026-10-14 补跑 `pptx-shape-spacing.ps1`，Pln1–Pln5 通过。无 Repair。COM `SpaceBefore=12`，`TextFrame2.Font.Spacing=2`。`textAnchor=just`。表单元格 `lnSpc` pts 2400。
 
 - **C1** ✅
   - PowerPoint 16.0 能打开 `manual-check/office/out/pptx-create.pptx`，标题栏无 Repair
@@ -142,6 +143,12 @@ Ps1–Ps5、Sg1–Sg5、Pt1–Pt6、Tn1–Tn5、Am1–Am5、Mm1–Mm5、Ho1–Ho
   - 备注公式改尺寸后根上 `mathCount` 仍为 0
   - `setMath` 不改几何。对公式框 id 发 `setShapePos` 得 `InvalidId`
   - 空 `x` / `y`、pptx 上 `setMathAnchor` 得 `InvalidField`
+- **Pln1–Pln5** ✅
+  - PowerPoint 16.0：`pptx-shape-spacing.ps1`，5 PASS / 0 FAIL
+  - `spcBef` pts 1200、`lnSpc` pts 2400，COM `SpaceBefore=12`
+  - `spc=200` `kern=1200`，COM `TextFrame2.Font.Spacing=2`
+  - `textAnchor=just`。表单元格 `lnSpc` pts 2400
+  - `lnSpc.type=lines` 得 `InvalidField`
 - **Pc1–Pc7** ✅
   - PowerPoint 16.0：无 `charts` 时 `chartCount=1`
   - 名单 id 为 `slide:1/chart:4`
@@ -1010,6 +1017,30 @@ OHLC、线框 / 俯视曲面、自定义误差线、chartex 写入。脚本 `man
 - **Tf5**
   - 检查：拒错
   - 通过标准：✅ 只给 `op` 与 `id`、或 `sz=1`，得 `InvalidField` 且未写文件
+
+## 形状行距与字距
+
+形状 / 文本框 / 表单元格的段落间距、字符间距与 kern。`textAnchor` 补全 `just` / `dist`。不算排版引擎。不改 Word。脚本 `manual-check/office/cases/pptx-shape-spacing.ps1`。编号用 **Pln**（不要跟 Ps、Tf、Ptf 混）。
+
+- **Pln1**
+  - 检查：改行距段前
+  - 通过标准：✅ `setShapeFormat` `spcBef` pts 1200、`lnSpc` pts 2400 后 inspect 对得上
+  - PowerPoint 无 Repair
+- **Pln2**
+  - 检查：字距与 kern
+  - 通过标准：✅ `spc=200` `kern=1200` 后 inspect `runs` 对得上
+  - COM `TextFrame2.Font.Spacing` 约为 2 磅
+  - 无 Repair
+- **Pln3**
+  - 检查：锚点
+  - 通过标准：✅ `textAnchor=just` 后 inspect 对得上，无 Repair
+- **Pln4**
+  - 检查：表单元格
+  - 通过标准：✅ 对单元格 id `setShapeFormat` `lnSpc` 后 inspect 对得上
+  - 无 Repair
+- **Pln5**
+  - 检查：拒错
+  - 通过标准：✅ `lnSpc.type` 不是 `pts` / `pct` 得 `InvalidField` 且未写文件
 
 ## 字填充与轮廓
 

@@ -971,6 +971,7 @@ define_error_kinds! {
     NeedTextOutlineField => vec![Self::NeedTextOutlineField],
     InvalidTextAlign => vec![Self::InvalidTextAlign],
     InvalidTextAnchor => vec![Self::InvalidTextAnchor],
+    InvalidTextSpacing => vec![Self::InvalidTextSpacing],
     InvalidTextUnderline => vec![Self::InvalidTextUnderline],
     EmptyShapeTypeface => vec![Self::EmptyShapeTypeface],
     InvalidTextBoxDirection => vec![Self::InvalidTextBoxDirection],
@@ -2049,6 +2050,7 @@ impl ErrorKind {
             | Self::NeedTextOutlineField
             | Self::InvalidTextAlign
             | Self::InvalidTextAnchor
+            | Self::InvalidTextSpacing
             | Self::InvalidTextUnderline
             | Self::EmptyShapeTypeface
             | Self::InvalidTextBoxDirection

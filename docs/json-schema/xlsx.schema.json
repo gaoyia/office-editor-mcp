@@ -682,6 +682,31 @@
             "string",
             "null"
           ]
+        },
+        "spcBef": {
+          "$ref": "pptx.schema.json#/$defs/drawingTextSpacing"
+        },
+        "spcAft": {
+          "$ref": "pptx.schema.json#/$defs/drawingTextSpacing"
+        },
+        "lnSpc": {
+          "$ref": "pptx.schema.json#/$defs/drawingTextSpacing"
+        },
+        "spc": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": -400000,
+          "maximum": 400000
+        },
+        "kern": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 400000
         }
       }
     },
@@ -788,6 +813,31 @@
             "string",
             "null"
           ]
+        },
+        "spcBef": {
+          "$ref": "pptx.schema.json#/$defs/drawingTextSpacing"
+        },
+        "spcAft": {
+          "$ref": "pptx.schema.json#/$defs/drawingTextSpacing"
+        },
+        "lnSpc": {
+          "$ref": "pptx.schema.json#/$defs/drawingTextSpacing"
+        },
+        "spc": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": -400000,
+          "maximum": 400000
+        },
+        "kern": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 400000
         }
       }
     },

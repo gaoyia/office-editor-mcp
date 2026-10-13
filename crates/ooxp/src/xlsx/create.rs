@@ -1081,6 +1081,11 @@ fn parse_textbox(v: &Value, prefix: &str, sheet: &str) -> Result<InsertTextBoxOp
             "eastAsiaFont",
             "align",
             "textAnchor",
+            "spcBef",
+            "spcAft",
+            "lnSpc",
+            "spc",
+            "kern",
         ],
     )?;
     let a = parse_create_anchor(obj, prefix)?;
@@ -1145,6 +1150,11 @@ fn parse_shape(v: &Value, prefix: &str, sheet: &str) -> Result<InsertShapeOp, Er
             "eastAsiaFont",
             "align",
             "textAnchor",
+            "spcBef",
+            "spcAft",
+            "lnSpc",
+            "spc",
+            "kern",
         ],
     )?;
     let a = parse_create_anchor(obj, prefix)?;

@@ -1195,14 +1195,15 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         }
         ErrorKind::InvalidHexColor => "color must be a 6-digit RGB hex value or null".into(),
         ErrorKind::NeedShapeFormatField => {
-            "setShapeFormat requires at least one of sz, color, textFill, textOutline, bold, italic, underline, font, eastAsiaFont, align, or textAnchor".into()
+            "setShapeFormat requires at least one of sz, color, textFill, textOutline, bold, italic, underline, font, eastAsiaFont, align, textAnchor, spcBef, spcAft, lnSpc, spc, or kern".into()
         }
         ErrorKind::InvalidTextFillType => "textFill.type must be none or gradient".into(),
         ErrorKind::NeedGradientStops => "textFill.stops must have at least two items".into(),
         ErrorKind::DuplicateGradientPos => "textFill.stops pos values must be unique".into(),
         ErrorKind::NeedTextOutlineField => "textOutline requires color and width".into(),
         ErrorKind::InvalidTextAlign => "align must be l, ctr, r, or just".into(),
-        ErrorKind::InvalidTextAnchor => "textAnchor must be t, ctr, or b".into(),
+        ErrorKind::InvalidTextAnchor => "textAnchor must be t, ctr, b, just, or dist".into(),
+        ErrorKind::InvalidTextSpacing => "spcBef, spcAft, and lnSpc type must be pts or pct".into(),
         ErrorKind::InvalidTextUnderline => "underline must be sng, none, or dbl".into(),
         ErrorKind::EmptyShapeTypeface => "font and eastAsiaFont must not be empty".into(),
         ErrorKind::InvalidTextBoxDirection => "direction must be horizontal or vertical".into(),

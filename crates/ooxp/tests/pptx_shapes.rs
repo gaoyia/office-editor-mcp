@@ -179,6 +179,9 @@ fn insert_shape_after_create() {
             "eastAsiaFont",
             "align",
             "textAnchor",
+            "spcBef",
+            "spcAft",
+            "lnSpc",
             "runs",
             "stable"
         ]

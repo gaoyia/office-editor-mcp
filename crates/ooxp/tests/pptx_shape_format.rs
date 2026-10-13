@@ -81,6 +81,11 @@ fn create_reports_default_run_format() {
     assert_eq!(sh["eastAsiaFont"], "宋体");
     assert_eq!(sh["align"], Value::Null);
     assert_eq!(sh["textAnchor"], Value::Null);
+    assert_eq!(sh["spcBef"], Value::Null);
+    assert_eq!(sh["spcAft"], Value::Null);
+    assert_eq!(sh["lnSpc"], Value::Null);
+    assert_eq!(sh["runs"][0]["spc"], Value::Null);
+    assert_eq!(sh["runs"][0]["kern"], Value::Null);
 }
 
 #[test]
@@ -264,4 +269,140 @@ fn rejects_missing_field_and_bad_sz_and_docx() {
     )
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);
+}
+
+#[test]
+fn set_shape_format_spacing_kern_and_anchor() {
+    let src = create_deck("spc");
+    let out = tmp("spc-out");
+    apply(
+        &src,
+        &out,
+        json!([{
+            "op": "setShapeFormat",
+            "id": "slide:1/shape:2",
+            "spcBef": { "type": "pts", "val": 1200 },
+            "spcAft": { "type": "pts", "val": 600 },
+            "lnSpc": { "type": "pct", "val": 200000 },
+            "spc": 200,
+            "kern": 1200,
+            "textAnchor": "just"
+        }]),
+    )
+    .unwrap();
+    let sh = &inspect_slide(&out)["slides"][0]["shapes"][0];
+    assert_eq!(sh["text"], "标题");
+    assert_eq!(sh["textAnchor"], "just");
+    assert_eq!(sh["spcBef"]["type"], "pts");
+    assert_eq!(sh["spcBef"]["val"], 1200);
+    assert_eq!(sh["spcAft"]["type"], "pts");
+    assert_eq!(sh["spcAft"]["val"], 600);
+    assert_eq!(sh["lnSpc"]["type"], "pct");
+    assert_eq!(sh["lnSpc"]["val"], 200000);
+    assert_eq!(sh["runs"][0]["spc"], 200);
+    assert_eq!(sh["runs"][0]["kern"], 1200);
+
+    let cleared = tmp("spc-clear");
+    apply(
+        &out,
+        &cleared,
+        json!([{
+            "op": "setShapeFormat",
+            "id": "slide:1/shape:2",
+            "spcBef": null,
+            "lnSpc": null,
+            "spc": null,
+            "textAnchor": "dist"
+        }]),
+    )
+    .unwrap();
+    let sh2 = &inspect_slide(&cleared)["slides"][0]["shapes"][0];
+    assert_eq!(sh2["textAnchor"], "dist");
+    assert_eq!(sh2["spcBef"], Value::Null);
+    assert_eq!(sh2["spcAft"]["val"], 600);
+    assert_eq!(sh2["lnSpc"], Value::Null);
+    assert_eq!(sh2["runs"][0]["spc"], Value::Null);
+    assert_eq!(sh2["runs"][0]["kern"], 1200);
+}
+
+#[test]
+fn table_cell_spacing() {
+    let src = create_deck("tbl-spc");
+    let with_tbl = tmp("tbl-spc-ins");
+    apply(
+        &src,
+        &with_tbl,
+        json!([{
+            "op": "insertTable",
+            "id": "slide:1",
+            "rows": 1,
+            "cols": 1,
+            "cells": [["格"]]
+        }]),
+    )
+    .unwrap();
+    let cell_id =
+        inspect_slide(&with_tbl)["slides"][0]["tables"][0]["rows"][0]["cells"][0]["id"].clone();
+    let out = tmp("tbl-spc-fmt");
+    apply(
+        &with_tbl,
+        &out,
+        json!([{
+            "op": "setShapeFormat",
+            "id": cell_id,
+            "lnSpc": { "type": "pts", "val": 2400 },
+            "spc": -100
+        }]),
+    )
+    .unwrap();
+    let cell = &inspect_slide(&out)["slides"][0]["tables"][0]["rows"][0]["cells"][0];
+    assert_eq!(cell["lnSpc"]["type"], "pts");
+    assert_eq!(cell["lnSpc"]["val"], 2400);
+    assert_eq!(cell["runs"][0]["spc"], -100);
+}
+
+#[test]
+fn rejects_bad_spacing_and_kern() {
+    let src = create_deck("bad-spc");
+    let dest = tmp("bad-type");
+    let err = apply(
+        &src,
+        &dest,
+        json!([{
+            "op": "setShapeFormat",
+            "id": "slide:1/shape:2",
+            "lnSpc": { "type": "lines", "val": 1 }
+        }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+    assert!(!dest.exists());
+
+    let dest = tmp("bad-kern");
+    let err = apply(
+        &src,
+        &dest,
+        json!([{
+            "op": "setShapeFormat",
+            "id": "slide:1/shape:2",
+            "kern": -1
+        }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+    assert!(!dest.exists());
+
+    let dest = tmp("big-pts");
+    let err = apply(
+        &src,
+        &dest,
+        json!([{
+            "op": "setShapeFormat",
+            "id": "slide:1/shape:2",
+            "spcBef": { "type": "pts", "val": 158401 }
+        }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::TruncatedLimit);
+    assert!(!dest.exists());
 }

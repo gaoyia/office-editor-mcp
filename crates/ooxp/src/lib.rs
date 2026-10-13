@@ -1191,6 +1191,9 @@ mod tests {
                 "eastAsiaFont",
                 "align",
                 "textAnchor",
+                "spcBef",
+                "spcAft",
+                "lnSpc",
                 "runs",
                 "stable"
             ]

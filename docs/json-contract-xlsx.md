@@ -1147,7 +1147,7 @@ Excel 16.0 另存通常不写该部件；自行写入后 Excel 仍能打开。
 - `scope.textBoxes` 为 `true` 时，每张 `worksheet` 与 `chartsheet` 带 `textBoxes`。没有文本框时为空数组。
   按该表 worksheet drawing 部件顺序、同一部件内按锚点文档顺序，组合里符合条件的框展开后仍按遇到的顺序。
   每张字段顺序：`id`、`cNvPrId`、`name`、`anchor`，然后按锚点种类跟位置字段（规则与工作表图相同），再跟 `text`，
-  然后 `sz`、`color`、`textFill`、`textOutline`、`bold`、`italic`、`underline`、`font`、`eastAsiaFont`、`align`、`textAnchor`、`runs`、`stable`、`hyperlink`。
+  然后 `sz`、`color`、`textFill`、`textOutline`、`bold`、`italic`、`underline`、`font`、`eastAsiaFont`、`align`、`textAnchor`、`spcBef`、`spcAft`、`lnSpc`、`runs`、`stable`、`hyperlink`。
   `cNvPrId` / `name` / `anchor` / 位置字段 / `stable` 规则与图相同。`text` 取 `xdr:txBody` 可见 `a:t`，规则对齐 pptx 形状 `text`。不把框内字做成段落树。
   Chart Drawing 上的框 `anchor` 为 `relSize` / `absSize`。框内垂直对齐是 `textAnchor`。格式键规则与 pptx 形状相同，见 [json-contract.md](json-contract.md#setshapeformat)。
 - `scope.maths` 为 `true` 时，每张 `worksheet` 带 `maths`。没有公式框时为空数组。不依赖单元格切片。
@@ -1158,7 +1158,7 @@ Excel 16.0 另存通常不写该部件；自行写入后 Excel 仍能打开。
   Fallback 文本框不进 `textBoxes`。docx / pptx 见各自分册。
 - `scope.shapes` 为 `true` 时，每张 `worksheet` 与 `chartsheet` 带 `shapes`。没有形状时为空数组。顺序与文本框相同。
   每张字段顺序：`id`、`cNvPrId`、`name`、`anchor`，然后按锚点种类跟位置字段（规则与工作表图相同），再跟 `prst`，有 `xdr:txBody` 再跟 `text`，
-  然后 `sz`、`color`、`textFill`、`textOutline`、`bold`、`italic`、`underline`、`font`、`eastAsiaFont`、`align`、`textAnchor`、`runs`，最后 `stable`、`hyperlink`。
+  然后 `sz`、`color`、`textFill`、`textOutline`、`bold`、`italic`、`underline`、`font`、`eastAsiaFont`、`align`、`textAnchor`、`spcBef`、`spcAft`、`lnSpc`、`runs`，最后 `stable`、`hyperlink`。
   `prst` 取 `a:prstGeom/@prst`，没有则为 `null`。`text` 规则与文本框相同。没有 `txBody` 则没有 `text` 与格式键。
   `hyperlink` 规则与图相同。连接线没有该字段。
 - `scope.connectors` 为 `true` 时，每张 `worksheet` 与 `chartsheet` 带 `connectors`。没有连接线时为空数组。顺序与文本框相同。
@@ -2973,7 +2973,7 @@ docx / pptx 上发此 op 报 `InvalidField`。pptx 改画布坐标请用 `setPic
 - **`text`**
   - 可选
   - 可见纯文本，省略则空 `txBody`
-- **`sz` / `color` / `textFill` / `textOutline` / `bold` / `italic` / `underline` / `font` / `eastAsiaFont` / `align` / `textAnchor`**
+- **`sz` / `color` / `textFill` / `textOutline` / `bold` / `italic` / `underline` / `font` / `eastAsiaFont` / `align` / `textAnchor` / `spcBef` / `spcAft` / `lnSpc` / `spc` / `kern`**
   - 可选
   - 规则与主契约 `setShapeFormat` 相同
   - `anchor` 仍是单元格锚点，不要用来表示框内垂直对齐

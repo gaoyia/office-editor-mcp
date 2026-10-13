@@ -18,6 +18,11 @@ pub const KEYS: &[&str] = &[
     "eastAsiaFont",
     "align",
     "textAnchor",
+    "spcBef",
+    "spcAft",
+    "lnSpc",
+    "spc",
+    "kern",
 ];
 
 pub const SZ_MIN: i64 = 100;
@@ -25,6 +30,10 @@ pub const SZ_MAX: i64 = 400_000;
 pub const ANG_DEFAULT: i64 = 5_400_000;
 pub const ANG_MAX: i64 = 21_600_000;
 pub const POS_MAX: i64 = 100_000;
+pub const SPC_PTS_MAX: i64 = 158_400;
+pub const SPC_CHAR_MIN: i64 = -400_000;
+pub const SPC_CHAR_MAX: i64 = 400_000;
+pub const KERN_MAX: i64 = 400_000;
 
 const FILL_LOCALS: &[&str] = &[
     "noFill",
@@ -36,7 +45,7 @@ const FILL_LOCALS: &[&str] = &[
 ];
 
 const ALIGN_OK: &[&str] = &["l", "ctr", "r", "just"];
-const ANCHOR_OK: &[&str] = &["t", "ctr", "b"];
+const ANCHOR_OK: &[&str] = &["t", "ctr", "b", "just", "dist"];
 const UNDERLINE_OK: &[&str] = &["sng", "none", "dbl"];
 
 /// 写入补丁。外层 `Option` 表示未点名；内层 `None` 表示去掉显式值。
@@ -53,6 +62,11 @@ pub struct TextFormat {
     pub east_asia_font: Option<String>,
     pub align: Option<Option<String>>,
     pub text_anchor: Option<Option<String>>,
+    pub spc_bef: Option<Option<TextSpacing>>,
+    pub spc_aft: Option<Option<TextSpacing>>,
+    pub ln_spc: Option<Option<TextSpacing>>,
+    pub spc: Option<Option<i64>>,
+    pub kern: Option<Option<i64>>,
 }
 
 impl TextFormat {
@@ -66,6 +80,8 @@ impl TextFormat {
             || self.underline.is_some()
             || self.font.is_some()
             || self.east_asia_font.is_some()
+            || self.spc.is_some()
+            || self.kern.is_some()
     }
 }
 
@@ -87,6 +103,28 @@ pub struct TextOutline {
     pub width: i64,
 }
 
+/// `a:spcPts` / `a:spcPct`。`pts` 是百分之一磅，`pct` 是百分之一百分点（100000 为 100%）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SpacingKind {
+    Pts,
+    Pct,
+}
+
+impl SpacingKind {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Pts => "pts",
+            Self::Pct => "pct",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TextSpacing {
+    pub kind: SpacingKind,
+    pub val: i64,
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 struct RunView {
     sz: Option<i64>,
@@ -98,6 +136,8 @@ struct RunView {
     underline: Option<String>,
     font: Option<String>,
     east_asia_font: Option<String>,
+    spc: Option<i64>,
+    kern: Option<i64>,
 }
 
 /// 从对象里读文字格式。`require_one` 为真时至少一个键，否则报 `NeedShapeFormatField`。
@@ -156,6 +196,18 @@ pub fn parse(
         ANCHOR_OK,
         ErrorKind::InvalidTextAnchor,
     )?;
+    fmt.spc_bef = parse_opt_spacing(obj.get("spcBef"), &format!("{prefix}.spcBef"), "spcBef")?;
+    fmt.spc_aft = parse_opt_spacing(obj.get("spcAft"), &format!("{prefix}.spcAft"), "spcAft")?;
+    fmt.ln_spc = parse_opt_spacing(obj.get("lnSpc"), &format!("{prefix}.lnSpc"), "lnSpc")?;
+    fmt.spc = parse_opt_i64_range(
+        obj.get("spc"),
+        "spc",
+        prefix,
+        SPC_CHAR_MIN,
+        SPC_CHAR_MAX,
+        false,
+    )?;
+    fmt.kern = parse_opt_i64_range(obj.get("kern"), "kern", prefix, 0, KERN_MAX, true)?;
     Ok(Some(fmt))
 }
 
@@ -173,6 +225,9 @@ pub fn insert_inspect(map: &mut Map<String, Value>, tx: Option<&Element>) {
     map.insert("eastAsiaFont".into(), opt_json_str(view.east_asia));
     map.insert("align".into(), opt_json_str(view.align));
     map.insert("textAnchor".into(), opt_json_str(view.anchor));
+    map.insert("spcBef".into(), json_spacing(view.spc_bef));
+    map.insert("spcAft".into(), json_spacing(view.spc_aft));
+    map.insert("lnSpc".into(), json_spacing(view.ln_spc));
     map.insert("runs".into(), Value::Array(view.runs));
 }
 
@@ -188,6 +243,9 @@ struct InspectView {
     east_asia: Option<String>,
     align: Option<String>,
     anchor: Option<String>,
+    spc_bef: Option<TextSpacing>,
+    spc_aft: Option<TextSpacing>,
+    ln_spc: Option<TextSpacing>,
     runs: Vec<Value>,
 }
 
@@ -198,8 +256,14 @@ fn summarize(tx: Option<&Element>) -> InspectView {
     let mut runs: Vec<RunView> = Vec::new();
     let mut run_jsons: Vec<Value> = Vec::new();
     let mut aligns: Vec<Option<String>> = Vec::new();
+    let mut befs: Vec<Option<TextSpacing>> = Vec::new();
+    let mut afts: Vec<Option<TextSpacing>> = Vec::new();
+    let mut lns: Vec<Option<TextSpacing>> = Vec::new();
     for_each_p(tx, &mut |p| {
         aligns.push(p_align(p));
+        befs.push(p_spacing(p, "spcBef"));
+        afts.push(p_spacing(p, "spcAft"));
+        lns.push(p_spacing(p, "lnSpc"));
         for_each_text_run(p, &mut |r| {
             let view = run_view(r.child_by_local("rPr"));
             run_jsons.push(run_json(r, &view));
@@ -283,7 +347,22 @@ fn summarize(tx: Option<&Element>) -> InspectView {
         east_asia: mixed_or(|r| r.east_asia_font.clone()),
         align,
         anchor: body_anchor(tx),
+        spc_bef: mixed_spacing(&befs),
+        spc_aft: mixed_spacing(&afts),
+        ln_spc: mixed_spacing(&lns),
         runs: run_jsons,
+    }
+}
+
+fn mixed_spacing(items: &[Option<TextSpacing>]) -> Option<TextSpacing> {
+    if items.is_empty() {
+        return None;
+    }
+    let first = items[0];
+    if items.iter().all(|a| *a == first) {
+        first
+    } else {
+        None
     }
 }
 
@@ -301,6 +380,9 @@ impl InspectView {
             east_asia: None,
             align: None,
             anchor: None,
+            spc_bef: None,
+            spc_aft: None,
+            ln_spc: None,
             runs: Vec::new(),
         }
     }
@@ -315,6 +397,15 @@ pub fn apply(tx: &mut Element, fmt: &TextFormat) {
     for_each_p_mut(tx, &mut |p| {
         if let Some(algn) = &fmt.align {
             patch_p_align(p, algn.as_deref());
+        }
+        if let Some(spc) = &fmt.spc_bef {
+            patch_p_spacing(p, "spcBef", spc.as_ref());
+        }
+        if let Some(spc) = &fmt.spc_aft {
+            patch_p_spacing(p, "spcAft", spc.as_ref());
+        }
+        if let Some(spc) = &fmt.ln_spc {
+            patch_p_spacing(p, "lnSpc", spc.as_ref());
         }
         if !run_needed {
             return;
@@ -806,6 +897,180 @@ fn parse_opt_enum(
     }
 }
 
+fn parse_opt_spacing(
+    v: Option<&Value>,
+    path: &str,
+    field: &str,
+) -> Result<Option<Option<TextSpacing>>, Error> {
+    match v {
+        None => Ok(None),
+        Some(Value::Null) => Ok(Some(None)),
+        Some(Value::Object(obj)) => Ok(Some(Some(parse_spacing_obj(obj, path)?))),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::Object,
+            },
+            path.to_string(),
+        )),
+    }
+}
+
+fn parse_spacing_obj(obj: &Map<String, Value>, path: &str) -> Result<TextSpacing, Error> {
+    deny_unknown(obj, path, &["type", "val"])?;
+    let type_name = match obj.get("type") {
+        Some(Value::String(s)) => s.as_str(),
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "type".into(),
+                    expected: TypeName::String,
+                },
+                format!("{path}.type"),
+            ));
+        }
+        None => {
+            return Err(Error::with_path(
+                ErrorKind::MissingField {
+                    field: "type".into(),
+                },
+                format!("{path}.type"),
+            ));
+        }
+    };
+    let kind = match type_name {
+        "pts" => SpacingKind::Pts,
+        "pct" => SpacingKind::Pct,
+        _ => {
+            return Err(Error::with_path(
+                ErrorKind::InvalidTextSpacing,
+                format!("{path}.type"),
+            ));
+        }
+    };
+    let val = match obj.get("val") {
+        Some(Value::Number(n)) => n
+            .as_i64()
+            .or_else(|| n.as_u64().and_then(|u| i64::try_from(u).ok()))
+            .ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::WrongType {
+                        field: "val".into(),
+                        expected: TypeName::Integer,
+                    },
+                    format!("{path}.val"),
+                )
+            })?,
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "val".into(),
+                    expected: TypeName::Integer,
+                },
+                format!("{path}.val"),
+            ));
+        }
+        None => {
+            return Err(Error::with_path(
+                ErrorKind::MissingField {
+                    field: "val".into(),
+                },
+                format!("{path}.val"),
+            ));
+        }
+    };
+    match kind {
+        SpacingKind::Pts => {
+            if val < 0 {
+                return Err(Error::with_path(
+                    ErrorKind::MinValue {
+                        field: "val".into(),
+                        min: 0,
+                    },
+                    format!("{path}.val"),
+                ));
+            }
+            if val > SPC_PTS_MAX {
+                return Err(Error::with_path(
+                    ErrorKind::OutOfRange {
+                        field: "val".into(),
+                        min: 0,
+                        max: SPC_PTS_MAX,
+                    },
+                    format!("{path}.val"),
+                ));
+            }
+        }
+        SpacingKind::Pct => {
+            if val < 0 {
+                return Err(Error::with_path(
+                    ErrorKind::MinValue {
+                        field: "val".into(),
+                        min: 0,
+                    },
+                    format!("{path}.val"),
+                ));
+            }
+        }
+    }
+    Ok(TextSpacing { kind, val })
+}
+
+fn parse_opt_i64_range(
+    v: Option<&Value>,
+    field: &str,
+    prefix: &str,
+    min: i64,
+    max: i64,
+    min_is_floor: bool,
+) -> Result<Option<Option<i64>>, Error> {
+    match v {
+        None => Ok(None),
+        Some(Value::Null) => Ok(Some(None)),
+        Some(Value::Number(n)) => {
+            let Some(n) = n
+                .as_i64()
+                .or_else(|| n.as_u64().and_then(|u| i64::try_from(u).ok()))
+            else {
+                return Err(Error::with_path(
+                    ErrorKind::WrongType {
+                        field: field.into(),
+                        expected: TypeName::Integer,
+                    },
+                    format!("{prefix}.{field}"),
+                ));
+            };
+            if min_is_floor && n < min {
+                return Err(Error::with_path(
+                    ErrorKind::MinValue {
+                        field: field.into(),
+                        min,
+                    },
+                    format!("{prefix}.{field}"),
+                ));
+            }
+            if n < min || n > max {
+                return Err(Error::with_path(
+                    ErrorKind::OutOfRange {
+                        field: field.into(),
+                        min,
+                        max,
+                    },
+                    format!("{prefix}.{field}"),
+                ));
+            }
+            Ok(Some(Some(n)))
+        }
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::Integer,
+            },
+            format!("{prefix}.{field}"),
+        )),
+    }
+}
+
 fn run_view(rpr: Option<&Element>) -> RunView {
     let Some(rpr) = rpr else {
         return RunView::default();
@@ -820,6 +1085,8 @@ fn run_view(rpr: Option<&Element>) -> RunView {
         underline: rpr.attr_local("u").map(str::to_string),
         font: typeface_of(rpr, "latin"),
         east_asia_font: typeface_of(rpr, "ea"),
+        spc: attr_i64(rpr, "spc"),
+        kern: attr_i64(rpr, "kern"),
     }
 }
 
@@ -841,6 +1108,8 @@ fn run_json(r: &Element, view: &RunView) -> Value {
         "eastAsiaFont".into(),
         opt_json_str(view.east_asia_font.clone()),
     );
+    m.insert("spc".into(), opt_json_i64(view.spc));
+    m.insert("kern".into(), opt_json_i64(view.kern));
     Value::Object(m)
 }
 
@@ -978,6 +1247,83 @@ fn patch_p_align(p: &mut Element, val: Option<&str>) {
     }
 }
 
+fn p_spacing(p: &Element, local: &str) -> Option<TextSpacing> {
+    let el = p.child_by_local("pPr")?.child_by_local(local)?;
+    let pts = el.child_by_local("spcPts");
+    let pct = el.child_by_local("spcPct");
+    match (pts, pct) {
+        (Some(pts), None) => {
+            let val: i64 = pts.attr_local("val")?.parse().ok()?;
+            Some(TextSpacing {
+                kind: SpacingKind::Pts,
+                val,
+            })
+        }
+        (None, Some(pct)) => {
+            let val: i64 = pct.attr_local("val")?.parse().ok()?;
+            Some(TextSpacing {
+                kind: SpacingKind::Pct,
+                val,
+            })
+        }
+        _ => None,
+    }
+}
+
+fn patch_p_spacing(p: &mut Element, local: &str, val: Option<&TextSpacing>) {
+    match val {
+        None => {
+            if let Some(ppr) = p.child_by_local_mut("pPr") {
+                ppr.children.retain(|n| match n {
+                    Node::Element(e) => e.local_name() != local,
+                    _ => true,
+                });
+            }
+        }
+        Some(spc) => {
+            let ppr = ensure_child_named(p, "pPr", 0);
+            let el = insert_or_get_spacing(ppr, local);
+            el.children.clear();
+            let child = match spc.kind {
+                SpacingKind::Pts => "spcPts",
+                SpacingKind::Pct => "spcPct",
+            };
+            el.push_element(Element::new(el.prefixed(child)).with_attr("val", spc.val.to_string()));
+        }
+    }
+}
+
+fn insert_or_get_spacing<'a>(ppr: &'a mut Element, local: &str) -> &'a mut Element {
+    if ppr.child_by_local(local).is_some() {
+        return ppr.child_by_local_mut(local).expect("刚查过");
+    }
+    let at = spacing_insert_index(ppr, local);
+    ppr.children.insert(
+        at.min(ppr.children.len()),
+        Node::Element(Element::new(ppr.prefixed(local))),
+    );
+    ppr.child_by_local_mut(local).expect("刚插入")
+}
+
+fn spacing_insert_index(ppr: &Element, local: &str) -> usize {
+    let after = match local {
+        "spcBef" => ppr
+            .children
+            .iter()
+            .position(|n| matches!(n, Node::Element(e) if e.local_name() == "lnSpc"))
+            .map(|i| i + 1),
+        "spcAft" => ppr
+            .children
+            .iter()
+            .rposition(|n| {
+                matches!(n, Node::Element(e) if e.local_name() == "spcBef" || e.local_name() == "lnSpc")
+            })
+            .map(|i| i + 1),
+        _ => None,
+    };
+    after.unwrap_or(0)
+}
+
 fn patch_rpr(rpr: &mut Element, fmt: &TextFormat) {
     if let Some(sz) = &fmt.sz {
         match sz {
@@ -1024,6 +1370,18 @@ fn patch_rpr(rpr: &mut Element, fmt: &TextFormat) {
     }
     if let Some(ea) = &fmt.east_asia_font {
         set_typeface(rpr, "ea", ea);
+    }
+    if let Some(spc) = &fmt.spc {
+        match spc {
+            Some(n) => set_attr_local(rpr, "spc", &n.to_string()),
+            None => remove_attr_local(rpr, "spc"),
+        }
+    }
+    if let Some(kern) = &fmt.kern {
+        match kern {
+            Some(n) => set_attr_local(rpr, "kern", &n.to_string()),
+            None => remove_attr_local(rpr, "kern"),
+        }
     }
 }
 
@@ -1252,6 +1610,13 @@ fn json_outline(v: Option<TextOutline>) -> Value {
             m.insert("width".into(), json!(o.width));
             Value::Object(m)
         }
+    }
+}
+
+fn json_spacing(v: Option<TextSpacing>) -> Value {
+    match v {
+        None => Value::Null,
+        Some(s) => json!({ "type": s.kind.as_str(), "val": s.val }),
     }
 }
 

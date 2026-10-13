@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "book.xlsx",
+  "output": "book.spc.xlsx",
+  "ops": [
+    {
+      "op": "insertTextBox",
+      "id": "sheet:Sheet1",
+      "from": "B2",
+      "text": "你好",
+      "lnSpc": { "type": "pts", "val": 2400 }
+    },
+    {
+      "op": "setShapeFormat",
+      "id": "sheet:Sheet1/sp:2",
+      "spcBef": { "type": "pts", "val": 1200 },
+      "spc": 200,
+      "kern": 1200,
+      "textAnchor": "just"
+    }
+  ]
+}

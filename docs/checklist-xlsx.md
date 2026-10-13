@@ -8,7 +8,7 @@
 
 Microsoft Excel 16.0 已打开，用户确认通过。本机若装了 WPS，`Excel.Application` 会被抢走，测试仍直接启动 `EXCEL.EXE` 再挂 COM。
 
-C、I、A、O、Xp、Xvg、Xem、X3d、Xom、Xtf、Xfl、Xc、Xh、Xfs、Xtl、Xef、Xns 这几组现在由 `manual-check/office/cases/xlsx-*.ps1` 自动判定，
+C、I、A、O、Xp、Xvg、Xem、X3d、Xom、Xtf、Xln、Xfl、Xc、Xh、Xfs、Xtl、Xef、Xns 这几组现在由 `manual-check/office/cases/xlsx-*.ps1` 自动判定，
 跑 `pwsh -File manual-check\office\run.ps1 -Case 'xlsx-*'` 即可复现，逐条结果落在 `manual-check/office/out/office-results.csv`。
 2026-09-27 补跑 `xlsx-pictures.ps1`，Xp1–Xp7 通过。同日补跑 `xlsx-charts.ps1`，Xc1–Xc7 通过。
 同日补跑 `xlsx-create-pictures.ps1`，C8–C10 通过。同日补跑 `xlsx-create-charts.ps1`，C11–C13 通过。
@@ -46,6 +46,7 @@ C、I、A、O、Xp、Xvg、Xem、X3d、Xom、Xtf、Xfl、Xc、Xh、Xfs、Xtl、X
 2026-10-14 补跑 `xlsx-theme.ps1`，Xth1–Xth5 通过。无 Repair。空白另存有 theme。`accent1=FF0000`。`majorLatin=Arial`。create 可写。省略为 null。
 2026-10-14 补跑 `xlsx-slicer-filter.ps1`，Xsi1–Xsi5 通过。无 Repair。表格 `selected=[]` 再 `乙`。透视勾选乙。时间线 `dateBetween` 再 `null`。
 2026-10-14 补跑 `xlsx-math-geom.ps1`，Xmg1–Xmg5 通过。无 Repair。`oneCell` `cx=1828800` `cy=914400`。`from=C3`。`twoCell` `to=D8`。`setMath` 不改几何。
+2026-10-14 补跑 `xlsx-shape-spacing.ps1`，Xln1–Xln5 通过。无 Repair。COM `SpaceBefore=12`，`Font.Spacing=2`。`textAnchor=just`。
 
 - **C1** ✅
   - Excel 16.0 打开 `manual-check/office/out/xlsx-create.xlsx`，标题栏无 Repair
@@ -114,6 +115,12 @@ C、I、A、O、Xp、Xvg、Xem、X3d、Xom、Xtf、Xfl、Xc、Xh、Xfs、Xtl、X
   - `twoCell` `setMathSize` 后 `to=D8`
   - `setMath` 不改几何。对公式框 id 发 `setTextBoxAnchor` 得 `InvalidId`
   - `twoCell` 给 `cx`、xlsx 上 `setMathPos` 得 `InvalidField`
+- **Xln1–Xln5** ✅
+  - Excel 16.0：`xlsx-shape-spacing.ps1`，5 PASS / 0 FAIL
+  - `insertTextBox` `lnSpc` pts 2400，无 Repair
+  - `spcBef` pts 1200、`spc=200` `kern=1200`
+  - COM `SpaceBefore=12`，`Font.Spacing=2`
+  - `textAnchor=just`。`lnSpc.type=lines` 得 `InvalidField`
 - **Xc1–Xc7** ✅
   - Excel 16.0：无 `charts` 时 `chartCount=1`、没有名单
   - 名单 id 为 `sheet:Sheet1/chart:2`，系列 10/20/30 与单元格一致
@@ -1304,6 +1311,29 @@ inspect 只读进树。create 不生成。apply 不新开编辑。脚本 `manual
 - **Xtf5**
   - 检查：缺字段
   - 通过标准：✅ 只给 `op` 与 `id` 的 `setShapeFormat` 得 `InvalidField`，未写文件
+  - 不强制开 Excel
+
+## 形状行距与字距
+
+工作表文本框 / 带 `txBody` 的形状的段落间距、字符间距与 kern。`textAnchor` 补全 `just` / `dist`。不算排版引擎。不改 Word。脚本 `manual-check/office/cases/xlsx-shape-spacing.ps1`。编号用 **Xln**。不要和 Xtf、Xfl 撞。
+
+- **Xln1**
+  - 检查：插入带行距
+  - 通过标准：✅ `insertTextBox` 带 `lnSpc` pts 2400 后 inspect 对得上
+  - Excel 无修复
+- **Xln2**
+  - 检查：改段前与字距
+  - 通过标准：✅ `setShapeFormat` 后 `spcBef` pts 1200、`spc` 200、`kern` 1200 对得上
+- **Xln3**
+  - 检查：COM
+  - 通过标准：✅ COM `SpaceBefore` 约为 12 磅，`Font.Spacing` 约为 2 磅
+  - 无修复
+- **Xln4**
+  - 检查：锚点
+  - 通过标准：✅ `textAnchor` 为 `just` 后 inspect 对得上，无修复
+- **Xln5**
+  - 检查：拒错
+  - 通过标准：✅ `lnSpc.type` 不是 `pts` / `pct` 得 `InvalidField`，未写文件
   - 不强制开 Excel
 
 ## 字填充与轮廓

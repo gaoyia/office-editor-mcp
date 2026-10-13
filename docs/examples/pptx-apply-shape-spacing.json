@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "deck.pptx",
+  "output": "deck.spc.pptx",
+  "ops": [
+    {
+      "op": "setShapeFormat",
+      "id": "slide:1/shape:2",
+      "spcBef": { "type": "pts", "val": 1200 },
+      "spcAft": { "type": "pts", "val": 600 },
+      "lnSpc": { "type": "pct", "val": 200000 },
+      "spc": 200,
+      "kern": 1200,
+      "textAnchor": "just"
+    }
+  ]
+}

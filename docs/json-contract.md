@@ -1968,7 +1968,7 @@ run 级链编进 `hyperlinks`，独立节点用 `insertHyperlink`（`on` 为 `ru
 
 ### setShapeFormat
 
-改 DrawingML 文本框的字号、字色、字填充、字轮廓、加粗、斜体、下划线、中英文字体、水平对齐与框内垂直锚点。不改可见字。不要用 Word 的半磅字号。
+改 DrawingML 文本框的字号、字色、字填充、字轮廓、加粗、斜体、下划线、中英文字体、水平对齐、框内垂直锚点、段落间距与字符间距。不改可见字。不要用 Word 的半磅字号。
 
 ```json
 {
@@ -2001,7 +2001,10 @@ run 级链编进 `hyperlinks`，独立节点用 `insertHyperlink`（`on` 为 `ru
 | `font` | 可选。西文 `a:latin/@typeface`。空串报错 |
 | `eastAsiaFont` | 可选。中文 `a:ea/@typeface`。空串报错 |
 | `align` | 可选。`l` / `ctr` / `r` / `just`，或 `null` 去掉属性 |
-| `textAnchor` | 可选。`t` / `ctr` / `b`，或 `null` 去掉 `bodyPr/@anchor`。不能叫 `anchor` |
+| `textAnchor` | 可选。`t` / `ctr` / `b` / `just` / `dist`（`ST_TextAnchoringType`），或 `null` 去掉 `bodyPr/@anchor`。不能叫 `anchor` |
+| `spcBef` / `spcAft` / `lnSpc` | 可选。段前、段后、行距。对象 `{ "type": "pts" 或 "pct", "val": 整数 }`，或 `null` 去掉对应子元。`pts` 写 `a:spcPts`（百分之一磅，0–158400）。`pct` 写 `a:spcPct`（整数，0 起；100000 为 100%） |
+| `spc` | 可选。字符间距 `a:rPr/@spc`，百分之一磅，可负（-400000–400000）。`null` 去掉属性 |
+| `kern` | 可选。字距调整 `a:rPr/@kern`，百分之一磅非负整数（0–400000）。`null` 去掉属性 |
 
 除 `op` 与 `id` 外至少给一个字段，否则报 `InvalidField`。
 `sz` 小于 100 报 `InvalidField`；大于 400000 报 `TruncatedLimit`。
@@ -2012,22 +2015,26 @@ run 级链编进 `hyperlinks`，独立节点用 `insertHyperlink`（`on` 为 `ru
 写入 `a:gradFill`：`flip="none"` `rotWithShape="1"`，`a:lin scaled="1"`，空 `a:tileRect`。不写 `a:path`。不写 theme 色。
 `textOutline` 为对象时必须有 `color`（六位 RGB）与 `width`（正整数 EMU）。
 写入 `a:ln/@w` 与 `a:ln/a:solidFill/a:srgbClr`，插在填充子元之前。不写 `prstDash` / `miter`。不写 `schemeClr`。
+`spcBef` / `spcAft` / `lnSpc` 为对象时必须有 `type` 与 `val`。`type` 不是 `pts` / `pct`、或 `pts` 的 `val` 越界，报 `InvalidField`。
+`spc` / `kern` 越界报 `InvalidField`（超出 schema 上限报 `TruncatedLimit`）。
 不写 `a:prstTxWarp`，不写 `a:effectLst`。功能区艺术字不新开对象。
-改该 `txBody` 里每个文本 `a:r` 的 `a:rPr`，并同步 `a:endParaRPr`。不改 `a:fld`。不重写 `a:lstStyle`。
-各 run 不一致时 inspect 对应字段为 `null`。
-inspect 在 `color` 之后始终带 `textFill`、`textOutline`；在 `textAnchor` 之后、`stable` 之前始终带 `runs`。
+改该 `txBody` 里每个文本 `a:r` 的 `a:rPr`，并同步 `a:endParaRPr`。段落间距写每个 `a:pPr`。不改 `a:fld`。不重写 `a:lstStyle`。
+各 run 不一致时 inspect 对应字段为 `null`。各段间距不一致时 `spcBef` / `spcAft` / `lnSpc` 为 `null`。
+inspect 在 `color` 之后始终带 `textFill`、`textOutline`；在 `textAnchor` 之后始终带 `spcBef`、`spcAft`、`lnSpc`，再跟 `runs`。
 `textFill`：各 run 都是 `a:noFill` 则为 `{ "type": "none" }`；都是可读的线性 `a:gradFill`（仅 `srgbClr`）则报该对象；否则为 `null`。
 `textOutline`：各 run 都有同一套 `a:ln/@w` 与 `srgbClr` 则报 `{ "color", "width" }`；否则为 `null`。
 `runs` 按文档顺序列出每个文本 `a:r`。每条字段顺序：`text`、`sz`、`color`、`textFill`、`textOutline`、
-`bold`、`italic`、`underline`、`font`、`eastAsiaFont`。
+`bold`、`italic`、`underline`、`font`、`eastAsiaFont`、`spc`、`kern`。
 `text` 取该 run 的 `a:t`。不进 `a:fld`。不算排版引擎。
 没有 `txBody` 报 `IdNotFound`。
 对连接线 id 报 `InvalidId`。对 `sldImg` 占位符报 `InvalidField`。docx 上发此 op 报 `InvalidField`。
+Word 行距仍走 `setParaFormat`。字距与 kern 见 docx 待做 62。
 create 的 pptx `shapes[]`、xlsx 的 `textBoxes[]` / `shapes[]`，以及 `insertShape`、xlsx `insertTextBox`，认同一套可选字段。
 pptx create 缺省仍是 18 磅黑字 Calibri / 宋体。xlsx 缺省仍是 `sz="1100"`。
 xlsx 的 `anchor` 仍是单元格锚点，框内垂直对齐只用 `textAnchor`。
 示例见 `docs/examples/pptx-apply-shape-format.json`、`docs/examples/xlsx-apply-shape-format.json`、
-`docs/examples/pptx-apply-text-fill.json` 与 `docs/examples/xlsx-apply-text-fill.json`。
+`docs/examples/pptx-apply-text-fill.json` 与 `docs/examples/xlsx-apply-text-fill.json`、
+`docs/examples/pptx-apply-shape-spacing.json` 与 `docs/examples/xlsx-apply-shape-spacing.json`。
 
 ## exportMedia
 

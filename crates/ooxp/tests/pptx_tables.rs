@@ -215,7 +215,10 @@ fn insert_inspect_cell_text_row_col_pos_delete() {
             "eastAsiaFont",
             "align",
             "textAnchor",
-            "runs"
+            "spcBef",
+            "spcAft",
+            "lnSpc",
+            "runs",
         ]
     );
     assert_eq!(t["rows"][0]["cells"][1]["text"], "乙");
