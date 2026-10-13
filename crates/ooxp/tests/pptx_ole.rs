@@ -153,6 +153,7 @@ fn empty_create_has_count_without_list() {
             "hasHandout",
             "sectionCount",
             "slideSize",
+            "notesSize",
             "customShowCount",
             "showPr",
             "modifyProtection",

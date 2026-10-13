@@ -313,6 +313,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::SetSlideSizeNeedsPresentation => {
                 "setSlideSize 的 id 必须是 pptx:presentation".into()
             }
+            IdReason::SetNotesSizeNeedsPresentation => {
+                "setNotesSize 的 id 必须是 pptx:presentation".into()
+            }
             IdReason::SetShowPrNeedsPresentation => {
                 "setShowPr 的 id 必须是 pptx:presentation".into()
             }

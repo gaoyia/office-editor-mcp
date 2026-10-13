@@ -135,6 +135,7 @@ fn table_count_without_list() {
             "hasHandout",
             "sectionCount",
             "slideSize",
+            "notesSize",
             "customShowCount",
             "showPr",
             "modifyProtection",

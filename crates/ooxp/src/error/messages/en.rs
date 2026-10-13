@@ -348,6 +348,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::SetSlideSizeNeedsPresentation => {
                 "setSlideSize id must be pptx:presentation".into()
             }
+            IdReason::SetNotesSizeNeedsPresentation => {
+                "setNotesSize id must be pptx:presentation".into()
+            }
             IdReason::SetShowPrNeedsPresentation => {
                 "setShowPr id must be pptx:presentation".into()
             }

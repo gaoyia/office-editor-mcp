@@ -1414,6 +1414,9 @@
                 "$ref": "pptx.schema.json#/$defs/setSlideSizeOp"
               },
               {
+                "$ref": "pptx.schema.json#/$defs/setNotesSizeOp"
+              },
+              {
                 "$ref": "pptx.schema.json#/$defs/setThemeColorsOp"
               },
               {

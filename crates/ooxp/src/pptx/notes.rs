@@ -20,8 +20,8 @@ pub const CT_NOTES_SLIDE: &str =
 pub const CT_NOTES_MASTER: &str =
     "application/vnd.openxmlformats-officedocument.presentationml.notesMaster+xml";
 
-const DEFAULT_NOTES_CX: i64 = 6_858_000;
-const DEFAULT_NOTES_CY: i64 = 9_144_000;
+pub(crate) const DEFAULT_NOTES_CX: i64 = 6_858_000;
+pub(crate) const DEFAULT_NOTES_CY: i64 = 9_144_000;
 
 /// 对照 PowerPoint 16.0 另存的 notesMaster，去掉 `p14:creationId`。
 const NOTES_MASTER_XML: &str = include_str!("notes_master.xml");

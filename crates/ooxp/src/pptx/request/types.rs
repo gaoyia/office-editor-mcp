@@ -309,6 +309,12 @@ pub struct SetSlideSizeOp {
 }
 
 #[derive(Debug, Clone)]
+pub struct SetNotesSizeOp {
+    pub cx: i64,
+    pub cy: i64,
+}
+
+#[derive(Debug, Clone)]
 pub struct SetThemeColorsOp {
     pub host: super::super::theme::ThemeHost,
     pub slots: Vec<(String, String)>,
@@ -1383,6 +1389,7 @@ pub enum PptxOp {
     InsertMaster(InsertMasterOp),
     DeleteMaster(DeleteMasterOp),
     SetSlideSize(SetSlideSizeOp),
+    SetNotesSize(SetNotesSizeOp),
     SetThemeColors(SetThemeColorsOp),
     SetThemeFonts(SetThemeFontsOp),
     SetThemeFmt(SetThemeFmtOp),

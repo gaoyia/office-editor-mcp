@@ -295,6 +295,99 @@ pub(super) fn parse_set_slide_size(
     Ok(SetSlideSizeOp { cx, cy, type_name })
 }
 
+pub(super) fn parse_set_notes_size(
+    obj: &Map<String, Value>,
+    i: usize,
+) -> Result<SetNotesSizeOp, Error> {
+    deny_keys(obj, i, &["op", "id", "cx", "cy"])?;
+    let id = require_id(obj, i)?;
+    if id != "pptx:presentation" {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::SetNotesSizeNeedsPresentation,
+            },
+            format!("ops[{i}].id"),
+        ));
+    }
+    let (cx, cy) = parse_notes_size_pair(obj.get("cx"), obj.get("cy"), i, "ops")?;
+    Ok(SetNotesSizeOp { cx, cy })
+}
+
+pub(crate) fn parse_create_notes_size(v: &Value) -> Result<(i64, i64), Error> {
+    let obj = v.as_object().ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::WrongType {
+                field: "notesSize".into(),
+                expected: TypeName::Object,
+            },
+            "presentation.notesSize",
+        )
+    })?;
+    for k in obj.keys() {
+        if !matches!(k.as_str(), "cx" | "cy") {
+            return Err(Error::with_path(
+                ErrorKind::UnknownField { field: k.clone() },
+                format!("presentation.notesSize.{k}"),
+            ));
+        }
+    }
+    parse_notes_size_pair(obj.get("cx"), obj.get("cy"), 0, "presentation.notesSize")
+}
+
+fn parse_notes_size_pair(
+    cx: Option<&Value>,
+    cy: Option<&Value>,
+    i: usize,
+    loc: &str,
+) -> Result<(i64, i64), Error> {
+    let (cx_path, cy_path, op_index) = if loc == "ops" {
+        (format!("ops[{i}].cx"), format!("ops[{i}].cy"), i)
+    } else {
+        (format!("{loc}.cx"), format!("{loc}.cy"), 0)
+    };
+    let cx = parse_emu_at(cx, &cx_path, "cx")?.ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: if loc == "ops" {
+                    "setNotesSize".into()
+                } else {
+                    "notesSize".into()
+                },
+                field: "cx".into(),
+            },
+            cx_path.clone(),
+        )
+    })?;
+    let cy = parse_emu_at(cy, &cy_path, "cy")?.ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: if loc == "ops" {
+                    "setNotesSize".into()
+                } else {
+                    "notesSize".into()
+                },
+                field: "cy".into(),
+            },
+            cy_path.clone(),
+        )
+    })?;
+    super::super::theme::check_size(cx, "cx", op_index).map_err(|e| {
+        if loc == "ops" {
+            e
+        } else {
+            Error::with_path(ErrorKind::SlideSizeOutOfRange, cx_path.clone())
+        }
+    })?;
+    super::super::theme::check_size(cy, "cy", op_index).map_err(|e| {
+        if loc == "ops" {
+            e
+        } else {
+            Error::with_path(ErrorKind::SlideSizeOutOfRange, cy_path.clone())
+        }
+    })?;
+    Ok((cx, cy))
+}
+
 pub(super) fn parse_transition_dur(v: &Value, i: usize) -> Result<u32, Error> {
     parse_transition_ms(v, i, "dur", ErrorKind::InvalidTransitionDur, 1, 60000)
 }

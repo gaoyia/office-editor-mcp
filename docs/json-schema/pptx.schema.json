@@ -32,6 +32,15 @@
             "$ref": "#/$defs/pptxCustomShowCreate"
           }
         },
+        "notesSize": {
+          "type": "object",
+          "required": ["cx", "cy"],
+          "additionalProperties": false,
+          "properties": {
+            "cx": { "type": "integer", "minimum": 914400, "maximum": 51206400 },
+            "cy": { "type": "integer", "minimum": 914400, "maximum": 51206400 }
+          }
+        },
         "handout": {
           "$ref": "#/$defs/pptxHandoutCreate"
         },
@@ -2937,6 +2946,17 @@
         "cx": { "type": "integer", "minimum": 914400, "maximum": 51206400 },
         "cy": { "type": "integer", "minimum": 914400, "maximum": 51206400 },
         "type": { "type": "string", "minLength": 1 }
+      }
+    },
+    "setNotesSizeOp": {
+      "type": "object",
+      "required": ["op", "id", "cx", "cy"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "setNotesSize" },
+        "id": { "type": "string", "minLength": 1 },
+        "cx": { "type": "integer", "minimum": 914400, "maximum": 51206400 },
+        "cy": { "type": "integer", "minimum": 914400, "maximum": 51206400 }
       }
     },
     "setThemeColorsOp": {

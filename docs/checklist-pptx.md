@@ -5,7 +5,7 @@
 检查前用 create 或 apply 在本机生成文件，不要用改过扩展名的 zip 目录冒充。
 本机若 `PowerPoint.Application` 被 WPS 抢走，直接启动 `POWERPNT.EXE` 再挂 COM，不要走被抢的 ProgID。Office 16 的对象模型在 `mdiClass` 上。
 
-C、I、A、Pp、Pvg、Pem、P3d、Pom、Pc、Psa、Pn、Pcm、Pm、Ps、Tf、Tfl、Pln、Sg、Pt、Pg、Ptb、Ptm、Tn、Tr、Td、Mt、Am、Aw、Mm、Mw、Md、Ts、Tfm、Tcm、Tnh、Ho、Nh、Nm、Phl、Phr、Phx、Pcip、Pmd、Pmg、Psc、Cs、Po、Cr、Cq、Ck、Pz、Pzr、Pzg、Pw、Pph、
+C、I、A、Pp、Pvg、Pem、P3d、Pom、Pc、Psa、Pn、Pcm、Pm、Ps、Tf、Tfl、Pln、Sg、Pt、Pg、Ptb、Ptm、Tn、Tr、Td、Mt、Am、Aw、Mm、Mw、Md、Ts、Tfm、Tcm、Tnh、Nsz、Ho、Nh、Nm、Phl、Phr、Phx、Pcip、Pmd、Pmg、Psc、Cs、Po、Cr、Cq、Ck、Pz、Pzr、Pzg、Pw、Pph、
 Pf、Pcg、Pcx 各组由 `manual-check/office/cases/pptx-*.ps1` 自动判定，
 跑 `pwsh -File manual-check\office\run.ps1 -Case 'pptx-*'` 即可复现。O1 已放弃，与 xlsx / docx 相同。
 
@@ -55,6 +55,7 @@ Ps1–Ps5、Sg1–Sg5、Pt1–Pt6、Tn1–Tn5、Am1–Am5、Mm1–Mm5、Ho1–Ho
 2026-10-14 补跑 `pptx-theme-remain.ps1`，Tfm1–Tfm5 通过。无 Repair。`theme` 字段 `name` / `colors` / `fonts` / `fmt` / `extraSchemes`。`setThemeFmt` 线宽 38100。方案名与 `majorScripts` 对上。`extraSchemes` 写一项后可清成 `[]`。
 2026-10-14 补跑 `pptx-theme-clrmap.ps1`，Tcm1–Tcm5 通过。无 Repair。`clrMap` 在 `theme` 之后，`bg1=lt1`。页 `clrMapOvr` 为 `master`。`setClrMap` 写母版 / 备注母版 / 讲义。`setClrMapOvr` 写页与版式后再回到 `master`。`setThemeOverride` `accent1=FF0000`，备注页 `00FF00`，`enabled: false` 后为 `null`。
 2026-10-14 补跑 `pptx-theme-notes-handout.ps1`，Tnh1–Tnh5 通过。无 Repair。`notesMaster.theme` / `handout.theme` 在 `id` 之后、`clrMap` 之前。对 `notesMaster` 写 `accent1=FF0000` 不影响 slideMaster。讲义 `00FF00`。`majorLatin=Arial`，`line.w=38100`。讲义 `extraSchemes` 一项。页 id 得 `InvalidId`，无备注母版得 `IdNotFound`。
+2026-10-14 补跑 `pptx-notes-size.ps1`，Nsz1–Nsz5 通过。无 Repair。`notesSize` 在 `slideSize` 之后，缺省 `6858000` × `9144000`。`setNotesSize` `cx=9144000` `cy=12192000` 后 `slideSize` 仍为原值，备注母版占位符几何不变。create `presentation.notesSize` 对上。页 id 得 `InvalidId`，缺 `cy` 得 `InvalidField`。
 
 - **C1** ✅
   - PowerPoint 16.0 能打开 `manual-check/office/out/pptx-create.pptx`，标题栏无 Repair
@@ -355,6 +356,13 @@ Ps1–Ps5、Sg1–Sg5、Pt1–Pt6、Tn1–Tn5、Am1–Am5、Mm1–Mm5、Ho1–Ho
   - `setThemeFonts` `majorLatin=Arial`、`setThemeFmt` `line.w=38100` 对上
   - `setThemeExtraSchemes` 讲义一项 `name=Extra` `accent1=0F6FC6`
   - 页 id 得 `InvalidId`，无 notesMaster 得 `IdNotFound`，xlsx 上 `notesMaster` 得 `InvalidId`，未写文件
+- **Nsz1–Nsz5** ✅
+  - PowerPoint 16.0：`pptx-notes-size.ps1`，5 PASS / 0 FAIL
+  - `notesSize` 紧跟 `slideSize`，缺省 `cx=6858000` `cy=9144000`
+  - `setNotesSize` `cx=9144000` `cy=12192000` 后树上对上，`slideSize` 仍为原值，无 Repair
+  - 备注母版占位符 `x` / `y` / `cx` / `cy` 仍是原值
+  - create `presentation.notesSize` 后树上对上，无 Repair
+  - 页 id 得 `InvalidId`，缺 `cy` 得 `InvalidField`，xlsx / docx 得 `InvalidField`，未写文件
 - **Ho1–Ho5** ✅
   - PowerPoint 16.0：`pptx-handout.ps1`，5 PASS / 0 FAIL
   - 无 `handout` 时只有 `hasHandout`
@@ -1540,6 +1548,35 @@ inspect 根上始终带 `slideSize`。`scope.masters` 时每份母版带 `theme`
   - 通过标准：对页 id 发 `setSlideSize` 得 `InvalidId`
   - `cx` 越界或 `type=other` 得 `InvalidField`
   - xlsx / docx 发 `setSlideSize` 得 `InvalidField`
+  - 均未写文件
+
+## 备注页尺寸
+
+inspect 根上始终带 `notesSize`，紧跟 `slideSize`。apply 用 `setNotesSize` 改 `p:notesSz`。
+不按新备注画布重排。不改 `p:sldSz`。脚本：`manual-check/office/cases/pptx-notes-size.ps1`。编号用 Nsz。不要和 Ts、Ns 撞。
+
+- **Nsz1**
+  - 检查：inspect
+  - 通过标准：create 产物 `notesSize` 在 `slideSize` 之后
+  - `cx=6858000` `cy=9144000`
+- **Nsz2**
+  - 检查：`setNotesSize`
+  - 通过标准：`cx=9144000` `cy=12192000` 后 inspect 对上
+  - `slideSize` 仍是原值
+  - PowerPoint 16.0 打开无 Repair
+- **Nsz3**
+  - 检查：形状不缩放
+  - 通过标准：create 带备注后改 `notesSize`，备注母版占位符 `x` / `y` / `cx` / `cy` 仍是原值
+  - 无 Repair
+- **Nsz4**
+  - 检查：create
+  - 通过标准：`presentation.notesSize` `cx=9144000` `cy=12192000` 后树上对上
+  - 无 Repair
+- **Nsz5**
+  - 检查：拒错
+  - 通过标准：对页 id 发 `setNotesSize` 得 `InvalidId`
+  - 缺 `cy` 或 `cx` 越界得 `InvalidField`
+  - xlsx / docx 发此 op 得 `InvalidField`
   - 均未写文件
 
 ## 主题剩余

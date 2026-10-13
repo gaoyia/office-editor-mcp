@@ -403,6 +403,7 @@ apply 不得把**未点名**的形状删掉再重建，以免 `cNvPr/@id` 变化
 自定义放映始终给出 `customShowCount`；`scope.customShows: true` 时展开根上 `customShows`。
 嵌入对象始终给出 `oleObjectCount`；`scope.oleObjects: true` 时展开各页 `oleObjects`。
 Zoom 始终给出 `zoomCount`；`scope.zooms: true` 时展开各页 `zooms`。根上始终给出 `showPr` 与 `modifyProtection`，不要另给 scope 键。
+根上始终给出 `slideSize` 与 `notesSize`。
 幻灯片母版与版式见下文 `scope.masters`。备注页始终给出 `hasNotes`；`scope.notes: true` 时展开该页 `notesSlide` 上的文本形状。
 xlsx 批注走 `cell:{name}!{A1}/comment:{guid}`，不走 docx 的 `comment:{w:id}`，也不走 pptx 的 `slide:{n}/comment:{guid}`。
 pptx 批注走 `slide:{n}/comment:{guid}`，不走 `comment:{w:id}`。
@@ -459,6 +460,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
     - `hasHandout`
     - `sectionCount`
     - `slideSize`
+    - `notesSize`
     - `customShowCount`
     - `showPr`
     - `modifyProtection`
@@ -669,6 +671,10 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
     "cy": 6858000,
     "type": null
   },
+  "notesSize": {
+    "cx": 6858000,
+    "cy": 9144000
+  },
   "customShowCount": 0,
   "showPr": {
     "type": "present",
@@ -799,7 +805,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   `scope.comments` 为 `true` 且该页有现代 comments 关系时再读该 comments 部件与 `/ppt/authors.xml`。
   始终读 `p:sldMasterIdLst` 以填 `masterCount` 与各页 `layoutId`。
   始终看 presentation `.rels` 是否有 Type 以 `/handoutMaster` 结尾的关系，以填 `hasHandout`。
-  始终看 Presentation 的 `p14:sectionLst` 以填 `sectionCount`。始终读 `p:sldSz` 以填 `slideSize`。
+  始终看 Presentation 的 `p14:sectionLst` 以填 `sectionCount`。始终读 `p:sldSz` 以填 `slideSize`。始终读 `p:notesSz` 以填 `notesSize`。
   始终看 `p:custShowLst` 以填 `customShowCount`。始终读 `/ppt/presProps.xml` 的 `p:showPr` 以填 `showPr`。
   始终看 Presentation 的 `p:modifyVerifier` 以填 `modifyProtection`。
   `scope.masters` 为 `true` 时再读各 slideMaster / slideLayout 部件，以及各母版的 theme 部件。
@@ -961,7 +967,9 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
 - `sectionCount` 在演示文稿根上始终出现，等于上述 `p14:sectionLst` 里 `p14:section` 的个数。没有该扩展则为 `0`。根上不挂 `sections`，除非给了 `scope.sections`。
   页顺序仍以 `p:sldIdLst` 为准；节只是分组元数据。
 - `slideSize` 在演示文稿根上始终出现。有 `p:sldSz` 则为对象，字段顺序：`cx`、`cy`、`type`。`cx` / `cy` 取属性的 EMU 整数；解析失败则为 `null`。
-  `type` 取 `@type` 原文，没有该属性则为 `null`。没有 `p:sldSz` 则 `slideSize` 为 `null`。不把 `p:notesSz` 放进树。xlsx / docx 根上没有此字段。
+  `type` 取 `@type` 原文，没有该属性则为 `null`。没有 `p:sldSz` 则 `slideSize` 为 `null`。xlsx / docx 根上没有此字段。
+- `notesSize` 在演示文稿根上始终出现，紧跟 `slideSize`。有 `p:notesSz` 则为对象，字段顺序：`cx`、`cy`。`cx` / `cy` 取属性的 EMU 整数；解析失败则为 `null`。
+  没有 `p:notesSz` 则 `notesSize` 为 `null`。不带 `type`。xlsx / docx 根上没有此字段。
 - `customShowCount` 在演示文稿根上始终出现，等于 `p:custShowLst` 里 `p:custShow` 的个数。没有该表则为 `0`。
   根上不挂 `customShows`，除非给了 `scope.customShows`。不算放映引擎。xlsx / docx 根上没有此字段。
 - `showPr` 在演示文稿根上始终出现。来源是 `/ppt/presProps.xml` 的 `p:showPr`（ECMA-376 §19.2.1.30）。
@@ -1127,7 +1135,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   再按需 `connectors`，再按需 `notes`，再按需 `comments`，再按需 `hyperlinks`，再按需 `fields`，再按需 `timing`，再按需 `truncated` 与 `shapes`。
   根对象字段顺序：`schemaVersion`、`format`、`id`、`slideCount`、`pictureCount`、`mathCount`、`videoCount`、`audioCount`、`chartCount`、
   `smartArtCount`、`commentCount`、`hyperlinkCount`、`fieldCount`、`tableCount`、`oleObjectCount`、`model3dCount`、`zoomCount`、`connectorCount`、
-  `animCount`、`masterCount`、`hasHandout`、`sectionCount`、`slideSize`、`customShowCount`、`showPr`、`modifyProtection`、`props`，
+  `animCount`、`masterCount`、`hasHandout`、`sectionCount`、`slideSize`、`notesSize`、`customShowCount`、`showPr`、`modifyProtection`、`props`，
   有 `scope.masters` 时再跟 `masters`，有 `scope.notesMaster` 时再跟 `notesMaster`，有 `scope.handout` 时再跟 `handout`，有 `scope.sections` 时再跟 `sections`，
   有 `scope.customShows` 时再跟 `customShows`，然后 `slides`。
   `props` 始终出现，规则见 [json-contract.md](json-contract.md#文档属性三格式共用)。
@@ -1219,6 +1227,10 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   - 可选
   - 自定义放映列表
   - 省略或空数组则不写 `p:custShowLst`
+- **`presentation.notesSize`**
+  - 可选
+  - 备注页画布 `p:notesSz`
+  - 省略则仍写缺省 `6858000` × `9144000`
 - **`presentation.handout`**
   - 可选
   - 讲义母版页眉页脚文字
@@ -1628,6 +1640,7 @@ create 本期不写批注内图。
 给了 `presentation.sections` 时按 `insertSlideSection` 同一套规则写 `p14:sectionLst`：先写第一项（`start` 为 1 则包住全部页；大于 1 则前面的页进空名节），再按数组顺序用 `start` 拆后续节。
 给了 `slides[].zooms` 时按 `insertZoom` 同一套规则写 Zoom。节缩放 / 摘要缩放在 `sections` 写完之后再写。
 给了 `presentation.customShows` 时按 `insertCustomShow` 同一套规则写 `p:custShowLst`。
+给了 `presentation.notesSize` 时按 `setNotesSize` 同一套规则写 `p:notesSz`（仍写在缺省 `sldSz` 之后）。
 给了 `presentation.handout` 时按 `setHandoutText` 同一套规则写讲义母版。
 给了 `presentation.showPr` 时按 `setShowPr` 同一套规则写 `p:showPr`。
 给了 `presentation.modifyProtection` 时按 `setProtection` 同一套规则写 `p:modifyVerifier`。
@@ -2144,6 +2157,38 @@ docx / xlsx 上发此 op 报 `InvalidField`。
 
 可写 `type`：`screen4x3`、`letter`、`A4`、`35mm`、`overhead`、`banner`、`custom`、`ledger`、`A3`、`B4ISO`、`B5ISO`、`B4JIS`、`B5JIS`、
 `hagakiCard`、`screen16x9`、`screen16x10`。
+
+### setNotesSize
+
+只改 `presentation.xml` 的 `p:notesSz`。不按新画布重排已有备注形状，不算排版引擎。不改 `p:sldSz`。
+
+```json
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "C:\\data\\deck.pptx",
+  "ops": [
+    {
+      "op": "setNotesSize",
+      "id": "pptx:presentation",
+      "cx": 9144000,
+      "cy": 12192000
+    }
+  ]
+}
+```
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"setNotesSize"` |
+| `id` | 必须是 `pptx:presentation` |
+| `cx` / `cy` | 必填。备注页画布宽 / 高，EMU 整数，范围与 `setSlideSize` 相同 |
+
+pptx：`id` 不是 `pptx:presentation` 报 `InvalidId`。缺 `cx` 或 `cy`、只给一个、或越界，报 `InvalidField`。
+已有 `p:notesSz` 则改属性；没有则新建，插在 `sldSz` 之后。没有 `sldSz` 则插在 `sldIdLst` 之后。
+不写 `type`。不改各页 XML、不改 notesSlide、不改母版 / 版式 / theme。
+docx / xlsx 上发此 op 报 `InvalidField`。
+示例见 `docs/examples/pptx-apply-notes-size.json`。
 
 ### setThemeColors
 
@@ -3637,6 +3682,7 @@ presentation 关系、新页或被删页及其 `.rels`、内容类型，
 `insertMaster` 脏 `presentation.xml` 及其 `.rels`、新 slideMaster / slideLayout / theme 及其 `.rels`、内容类型。
 `deleteMaster` 脏 `presentation.xml` 及其 `.rels`、被删母版及其版式与仅被它引用的 theme、内容类型。
 `setSlideSize` 只脏 `presentation.xml` 的 `p:sldSz`。
+`setNotesSize` 只脏 `presentation.xml` 的 `p:notesSz`。
 `setThemeColors` / `setThemeFonts` / `setThemeFmt` / `setThemeExtraSchemes` 只脏该宿主指向的 theme 部件（slideMaster、notesMaster 或 handoutMaster），不新建 theme，不新建母版。
 `setClrMap` 只脏被点名的 slideMaster、notesMaster 或 handoutMaster XML。
 `setClrMapOvr` 只脏被点名的幻灯片、slideLayout 或 notesSlide XML。
@@ -3649,7 +3695,7 @@ presentation 关系、新页或被删页及其 `.rels`、内容类型，
 其他页、未点名的幻灯片母版、未点名的版式、主题一律原样写回。未点名的 `presProps` 原样写回。
 一次 `ops` 可以混用 `setShapeText`、`setShapeFormat`、形状管理 op、表格 op、`setNotesText`、`setHandoutText`、批注 op、超链接 op、域 op（`insertField`、`setField`、
 `deleteField`）、图片 op、媒体 op（含 `setMedia`）、图表 op、SmartArt op、幻灯片管理 op（含 `setTransition`、`setSlideLayout`）、母版写入 op（`insertLayout`、
-`deleteLayout`、`insertPlaceholder`、`deletePlaceholder`、`insertMaster`、`deleteMaster`）、主题与尺寸 op（`setSlideSize`、
+`deleteLayout`、`insertPlaceholder`、`deletePlaceholder`、`insertMaster`、`deleteMaster`）、主题与尺寸 op（`setSlideSize`、`setNotesSize`、
 `setThemeColors`、`setThemeFonts`、`setThemeFmt`、`setThemeExtraSchemes`、`setClrMap`、`setClrMapOvr`、`setThemeOverride`）、动画 op（`insertAnim`、`setAnim`、`deleteAnim`、`moveAnim`）、幻灯片节 op、自定义放映 op（`insertCustomShow`、`setCustomShow`、
 `deleteCustomShow`）、OLE op（`insertOle`、`deleteOle`）、Zoom op（`insertZoom`、`setZoom`、`deleteZoom`）、公式几何 op（`setMathSize`、`setMathPos`）、`setShowPr`、
 `setProtection` 与 `setProps` / `setCustomProp` / `deleteCustomProp`。

@@ -138,6 +138,7 @@ fn create_defaults_and_root_key_order() {
             "hasHandout",
             "sectionCount",
             "slideSize",
+            "notesSize",
             "customShowCount",
             "showPr",
             "modifyProtection",

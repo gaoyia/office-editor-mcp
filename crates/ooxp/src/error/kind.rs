@@ -228,6 +228,8 @@ pub(crate) enum IdReason {
     DeleteMasterNeedsMaster,
     /// setSlideSize 必须用 pptx:presentation
     SetSlideSizeNeedsPresentation,
+    /// setNotesSize 必须用 pptx:presentation
+    SetNotesSizeNeedsPresentation,
     /// setShowPr 必须用 pptx:presentation
     SetShowPrNeedsPresentation,
     /// pptx 的 setProtection 必须用 pptx:presentation
@@ -1435,6 +1437,7 @@ impl IdReason {
             Self::InsertMasterNeedsPresentation,
             Self::DeleteMasterNeedsMaster,
             Self::SetSlideSizeNeedsPresentation,
+            Self::SetNotesSizeNeedsPresentation,
             Self::SetShowPrNeedsPresentation,
             Self::SetProtectionNeedsPresentation,
             Self::SetThemeNeedsMaster,

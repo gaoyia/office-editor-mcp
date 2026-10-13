@@ -1736,6 +1736,10 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                 theme::set_slide_size(&mut pres, op.cx, op.cy, op.type_name.as_deref(), i)?;
                 pkg.set(&pres_part, pres.to_bytes()?)?;
             }
+            PptxOp::SetNotesSize(op) => {
+                theme::set_notes_size(&mut pres, op.cx, op.cy, i)?;
+                pkg.set(&pres_part, pres.to_bytes()?)?;
+            }
             PptxOp::SetThemeColors(op) => {
                 theme::set_theme_colors(
                     &mut pkg,

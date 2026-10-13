@@ -112,6 +112,45 @@ pub fn theme_json(pkg: &Package, master_part: &str) -> Result<Value, Error> {
     Ok(crate::theme::inspect_full(&doc.root))
 }
 
+pub fn notes_size_json(pres_root: &Element) -> Value {
+    let Some(sz) = pres_root.child_by_local("notesSz") else {
+        return Value::Null;
+    };
+    json!({
+        "cx": parse_emu(sz.attr_local("cx")),
+        "cy": parse_emu(sz.attr_local("cy")),
+    })
+}
+
+pub fn set_notes_size(pres: &mut Document, cx: i64, cy: i64, op_index: usize) -> Result<(), Error> {
+    check_size(cx, "cx", op_index)?;
+    check_size(cy, "cy", op_index)?;
+    if let Some(sz) = pres.root.child_by_local_mut("notesSz") {
+        sz.set_attr("cx", cx.to_string());
+        sz.set_attr("cy", cy.to_string());
+        return Ok(());
+    }
+    let el = Element::new("p:notesSz")
+        .with_attr("cx", cx.to_string())
+        .with_attr("cy", cy.to_string());
+    let at = pres
+        .root
+        .children
+        .iter()
+        .position(|n| matches!(n, Node::Element(e) if e.local_name() == "sldSz"))
+        .map(|i| i + 1)
+        .or_else(|| {
+            pres.root
+                .children
+                .iter()
+                .position(|n| matches!(n, Node::Element(e) if e.local_name() == "sldIdLst"))
+                .map(|i| i + 1)
+        })
+        .unwrap_or(pres.root.children.len());
+    pres.root.children.insert(at, Node::Element(el));
+    Ok(())
+}
+
 pub fn set_theme_colors(
     pkg: &mut Package,
     pres_part: &str,
@@ -288,7 +327,7 @@ fn parse_emu(raw: Option<&str>) -> Value {
         .unwrap_or(Value::Null)
 }
 
-fn check_size(v: i64, field: &str, op_index: usize) -> Result<(), Error> {
+pub(crate) fn check_size(v: i64, field: &str, op_index: usize) -> Result<(), Error> {
     if (SLIDE_SIZE_MIN..=SLIDE_SIZE_MAX).contains(&v) {
         return Ok(());
     }

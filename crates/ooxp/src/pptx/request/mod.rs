@@ -13,6 +13,7 @@ mod shape;
 pub(crate) use shape::parse_create_connector;
 use shape::*;
 mod slides;
+pub(crate) use slides::parse_create_notes_size;
 pub(crate) use slides::parse_create_transition;
 use slides::*;
 mod timing;
@@ -347,6 +348,7 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<PptxOp>, Error> {
             "insertMaster" => PptxOp::InsertMaster(parse_insert_master(obj, i)?),
             "deleteMaster" => PptxOp::DeleteMaster(parse_delete_master(obj, i)?),
             "setSlideSize" => PptxOp::SetSlideSize(parse_set_slide_size(obj, i)?),
+            "setNotesSize" => PptxOp::SetNotesSize(parse_set_notes_size(obj, i)?),
             "setThemeColors" => PptxOp::SetThemeColors(parse_set_theme_colors(obj, i)?),
             "setThemeFonts" => PptxOp::SetThemeFonts(parse_set_theme_fonts(obj, i)?),
             "setThemeFmt" => PptxOp::SetThemeFmt(parse_set_theme_fmt(obj, i)?),

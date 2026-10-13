@@ -77,6 +77,7 @@ pub fn create(presentation: &Value) -> Result<Vec<u8>, Error> {
                 | "props"
                 | "sections"
                 | "customShows"
+                | "notesSize"
                 | "handout"
                 | "showPr"
                 | "modifyProtection"
@@ -105,6 +106,10 @@ pub fn create(presentation: &Value) -> Result<Vec<u8>, Error> {
         )
     })?;
 
+    let (notes_cx, notes_cy) = match obj.get("notesSize") {
+        None => (notes::DEFAULT_NOTES_CX, notes::DEFAULT_NOTES_CY),
+        Some(v) => request::parse_create_notes_size(v)?,
+    };
     let mut slides = Vec::new();
     for (i, s) in arr.iter().enumerate() {
         slides.push(parse_slide(s, i)?);
@@ -213,7 +218,7 @@ pub fn create(presentation: &Value) -> Result<Vec<u8>, Error> {
     pkg.set(ROOT_RELS_PART, root_rels.to_xml().into_bytes())?;
     pkg.set(
         "/ppt/presentation.xml",
-        presentation_xml(slides.len()).into_bytes(),
+        presentation_xml(slides.len(), notes_cx, notes_cy).into_bytes(),
     )?;
     pkg.set(
         "/ppt/_rels/presentation.xml.rels",
@@ -1959,7 +1964,7 @@ fn rel(id: &str, rel_type: &str, target: &str) -> Relationship {
     }
 }
 
-fn presentation_xml(slide_count: usize) -> String {
+fn presentation_xml(slide_count: usize, notes_cx: i64, notes_cy: i64) -> String {
     let mut ids = String::new();
     for i in 0..slide_count {
         let sid = 256 + i as u32;
@@ -1967,7 +1972,7 @@ fn presentation_xml(slide_count: usize) -> String {
         ids.push_str(&format!(r#"<p:sldId id="{sid}" r:id="rId{rid}"/>"#));
     }
     format!(
-        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><p:presentation xmlns:a="{DML_NS}" xmlns:r="{REL_NS}" xmlns:p="{PML_NS}"><p:sldMasterIdLst><p:sldMasterId id="2147483648" r:id="rId1"/></p:sldMasterIdLst><p:sldIdLst>{ids}</p:sldIdLst><p:sldSz cx="12192000" cy="6858000"/><p:notesSz cx="6858000" cy="9144000"/></p:presentation>"#
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><p:presentation xmlns:a="{DML_NS}" xmlns:r="{REL_NS}" xmlns:p="{PML_NS}"><p:sldMasterIdLst><p:sldMasterId id="2147483648" r:id="rId1"/></p:sldMasterIdLst><p:sldIdLst>{ids}</p:sldIdLst><p:sldSz cx="12192000" cy="6858000"/><p:notesSz cx="{notes_cx}" cy="{notes_cy}"/></p:presentation>"#
     )
 }
 

@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "C:\\data\\deck.pptx",
+  "ops": [
+    {
+      "op": "setNotesSize",
+      "id": "pptx:presentation",
+      "cx": 9144000,
+      "cy": 12192000
+    }
+  ]
+}

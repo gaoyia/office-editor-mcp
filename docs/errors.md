@@ -461,6 +461,7 @@
 - `insertMaster` 的 id 必须是 `pptx:presentation`
 - `deleteMaster` 的 id 必须是 `master:{n}`
 - `setSlideSize` 的 id 必须是 `pptx:presentation`
+- `setNotesSize` 的 id 必须是 `pptx:presentation`
 - `setThemeColors` / `setThemeFonts` / `setThemeFmt` / `setThemeExtraSchemes` 的 id：pptx 必须是 `master:{n}`、`notesMaster` 或 `handout`，docx 必须是 `docx:document`，xlsx 必须是 `xlsx:workbook`
 - `setClrMap` 的 id 必须是 `master:{n}`、`notesMaster` 或 `handout`
 - `setClrMapOvr` 的 id 必须是 `slide:{n}`、`slide:{n}/notes` 或 `master:{n}/layout:{k}`
@@ -480,10 +481,11 @@
   - `insertPlaceholder` 缺 `type`，或 `type` 不在白名单
   - 该母版只剩一份版式、最后一份母版、或仍有页占用时 `deleteLayout` / `deleteMaster`
   - `setSlideSize` 缺 `cx` / `cy`、越界、或 `type` 不在白名单
+  - `setNotesSize` 缺 `cx` / `cy` 或越界
   - `setThemeColors` / `setThemeFonts` / `setThemeFmt` / `setThemeExtraSchemes` / `setThemeOverride` / `setClrMap` / `setClrMapOvr` 一个可写字段都不给、非法十六进制、非法 theme 槽名、`majorLatin` / `minorLatin` 空串、名字空串、脚本项缺 `script` / `typeface`、或 `setThemeFmt` 的 `index` / `kind` / `w` 非法
 - `setHandoutText` 的 `id` 必须是 `handout`
 - `header` / `footer` / `date` / `sldNum` 一个都不给报 `InvalidField`
-- docx / xlsx 上发这些幻灯片管理 op、母版写入 op、`setSlideSize`、`setClrMap` / `setClrMapOvr`、`insertAnim` / `setAnim` / `deleteAnim` / `moveAnim`、`setHandoutText` 以及 `setShowPr` 报 `InvalidField`
+- docx / xlsx 上发这些幻灯片管理 op、母版写入 op、`setSlideSize`、`setNotesSize`、`setClrMap` / `setClrMapOvr`、`insertAnim` / `setAnim` / `deleteAnim` / `moveAnim`、`setHandoutText` 以及 `setShowPr` 报 `InvalidField`
 - xlsx 的 `scope` 里出现下列键报 `InvalidField`
   - `textBoxContent`
   - `notes`

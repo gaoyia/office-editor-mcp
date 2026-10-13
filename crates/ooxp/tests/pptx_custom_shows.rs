@@ -144,6 +144,7 @@ fn create_has_zero_custom_show_count_without_list() {
             "hasHandout",
             "sectionCount",
             "slideSize",
+            "notesSize",
             "customShowCount",
             "showPr",
             "modifyProtection",

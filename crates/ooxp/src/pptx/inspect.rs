@@ -354,6 +354,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     );
     root.insert("sectionCount".into(), json!(section::count(&pres.root)));
     root.insert("slideSize".into(), theme::slide_size_json(&pres.root));
+    root.insert("notesSize".into(), theme::notes_size_json(&pres.root));
     root.insert(
         "customShowCount".into(),
         json!(custom_show::count(&pres.root)),

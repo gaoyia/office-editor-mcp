@@ -159,6 +159,7 @@ fn bare_inspect_has_zero_field_count() {
             "hasHandout",
             "sectionCount",
             "slideSize",
+            "notesSize",
             "customShowCount",
             "showPr",
             "modifyProtection",

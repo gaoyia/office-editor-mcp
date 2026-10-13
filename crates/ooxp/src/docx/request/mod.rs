@@ -432,6 +432,7 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<DocxOp>, Error> {
             || op_name == "insertMaster"
             || op_name == "deleteMaster"
             || op_name == "setSlideSize"
+            || op_name == "setNotesSize"
             || op_name == "setClrMap"
             || op_name == "setClrMapOvr"
             || op_name == "setHandoutText"

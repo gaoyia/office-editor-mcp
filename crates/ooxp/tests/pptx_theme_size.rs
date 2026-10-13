@@ -127,6 +127,13 @@ fn inspect_slide_size_and_theme_keys() {
     assert_eq!(tree["slideSize"]["cy"], 6858000);
     assert!(tree["slideSize"]["type"].is_null());
     assert_eq!(object_keys(&tree["slideSize"]), ["cx", "cy", "type"]);
+    let keys = object_keys(&tree);
+    let slide = keys.iter().position(|k| *k == "slideSize").unwrap();
+    let notes = keys.iter().position(|k| *k == "notesSize").unwrap();
+    assert_eq!(notes, slide + 1);
+    assert_eq!(tree["notesSize"]["cx"], 6858000);
+    assert_eq!(tree["notesSize"]["cy"], 9144000);
+    assert_eq!(object_keys(&tree["notesSize"]), ["cx", "cy"]);
 
     let masters = inspect_scope(&path, Some(json!({ "masters": true })));
     let m = &masters["masters"][0];
