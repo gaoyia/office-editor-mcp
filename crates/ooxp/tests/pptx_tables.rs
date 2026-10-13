@@ -242,10 +242,20 @@ fn insert_inspect_cell_text_row_col_pos_delete() {
             "fill",
             "borders",
             "cellMar",
+            "vert",
+            "anchorCtr",
+            "horzOverflow",
+            "cell3D",
+            "headers",
         ]
     );
     assert_eq!(c["fill"], Value::Null);
     assert_eq!(c["cellMar"], Value::Null);
+    assert_eq!(c["vert"], Value::Null);
+    assert_eq!(c["anchorCtr"], Value::Null);
+    assert_eq!(c["horzOverflow"], Value::Null);
+    assert_eq!(c["cell3D"], Value::Null);
+    assert_eq!(c["headers"], json!([]));
     assert_eq!(
         object_keys(&c["borders"]),
         ["left", "right", "top", "bottom", "tl2br", "bl2tr"]
@@ -577,6 +587,18 @@ fn docx_and_xlsx_reject_pptx_table_ops() {
             "op": "setTableCellInset",
             "id": "slide:1/table:3/r:1/c:1",
             "top": 12700
+        }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+
+    let err = apply(
+        &xlsx,
+        &tmp("x-pr").with_extension("xlsx"),
+        json!([{
+            "op": "setTableCellPr",
+            "id": "slide:1/table:3/r:1/c:1",
+            "vert": "horz"
         }]),
     )
     .unwrap_err();

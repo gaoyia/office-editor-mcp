@@ -1222,6 +1222,13 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             "table cell fill.type must be solid, grad, patt or blip".into()
         }
         ErrorKind::InvalidPresetPatternVal => "prst must be ST_PresetPatternVal".into(),
+        ErrorKind::NeedSetTableCellPrField => {
+            "setTableCellPr requires at least one of vert, anchorCtr, horzOverflow, cell3D, or headers".into()
+        }
+        ErrorKind::InvalidTextVerticalType => "vert must be ST_TextVerticalType".into(),
+        ErrorKind::InvalidHorzOverflow => "horzOverflow must be overflow or clip".into(),
+        ErrorKind::InvalidBevelPreset => "bevel.prst must be ST_BevelPresetType".into(),
+        ErrorKind::InvalidPresetMaterial => "prstMaterial must be ST_PresetMaterialType".into(),
         ErrorKind::NeedGradientStops => "textFill.stops must have at least two items".into(),
         ErrorKind::DuplicateGradientPos => "textFill.stops pos values must be unique".into(),
         ErrorKind::NeedTextOutlineField => "textOutline requires color and width".into(),

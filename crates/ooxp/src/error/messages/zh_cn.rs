@@ -1106,6 +1106,13 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             "表单元格 fill.type 必须是 solid、grad、patt 或 blip".into()
         }
         ErrorKind::InvalidPresetPatternVal => "prst 必须是 ST_PresetPatternVal".into(),
+        ErrorKind::NeedSetTableCellPrField => {
+            "setTableCellPr 至少要给 vert、anchorCtr、horzOverflow、cell3D 或 headers 之一".into()
+        }
+        ErrorKind::InvalidTextVerticalType => "vert 必须是 ST_TextVerticalType".into(),
+        ErrorKind::InvalidHorzOverflow => "horzOverflow 必须是 overflow 或 clip".into(),
+        ErrorKind::InvalidBevelPreset => "bevel.prst 必须是 ST_BevelPresetType".into(),
+        ErrorKind::InvalidPresetMaterial => "prstMaterial 必须是 ST_PresetMaterialType".into(),
         ErrorKind::NeedGradientStops => "textFill.stops 至少要有两项".into(),
         ErrorKind::DuplicateGradientPos => "textFill.stops 的 pos 不能重复".into(),
         ErrorKind::NeedTextOutlineField => "textOutline 必须有 color 与 width".into(),

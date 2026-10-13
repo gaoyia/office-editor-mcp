@@ -8,10 +8,11 @@ use crate::xml::{Document, Element, Node};
 
 use super::picture;
 use super::request::{
-    CellBorderSide, CellBordersPatch, CellChrome, CellFillSpec, CellMarPatch, DeleteColOp,
-    DeleteRowOp, DeleteTableOp, InsertColOp, InsertRowOp, InsertTableOp, SetTableCellBordersOp,
-    SetTableCellFillOp, SetTableCellInsetOp, SetTableCellTextOp, SetTableColWidthsOp,
-    SetTablePosOp, SetTableSizeOp, SetTableTrHeightOp,
+    Cell3DSpec, CellBorderSide, CellBordersPatch, CellChrome, CellFillSpec, CellMarPatch,
+    DeleteColOp, DeleteRowOp, DeleteTableOp, InsertColOp, InsertRowOp, InsertTableOp,
+    SetTableCellBordersOp, SetTableCellFillOp, SetTableCellInsetOp, SetTableCellPrOp,
+    SetTableCellTextOp, SetTableColWidthsOp, SetTablePosOp, SetTableSizeOp, SetTableTrHeightOp,
+    TableCellPrPatch,
 };
 use super::shape;
 use super::{DML_NS, REL_NS};
@@ -626,6 +627,11 @@ fn table_json(frame: &Element, host: &str, index: usize, pkg: Option<(&Package, 
             cell.insert("fill".into(), inspect_cell_fill(tc_pr, pkg));
             cell.insert("borders".into(), inspect_cell_borders(tc_pr));
             cell.insert("cellMar".into(), inspect_cell_mar(tc_pr));
+            cell.insert("vert".into(), inspect_vert(tc_pr));
+            cell.insert("anchorCtr".into(), inspect_anchor_ctr(tc_pr));
+            cell.insert("horzOverflow".into(), inspect_horz_overflow(tc_pr));
+            cell.insert("cell3D".into(), inspect_cell3d(tc_pr));
+            cell.insert("headers".into(), inspect_headers(tc_pr));
             cells.push(Value::Object(cell));
         }
         rows.push(json!({
@@ -887,6 +893,83 @@ fn inspect_cell_mar(tc_pr: Option<&Element>) -> Value {
         right.map(|v| json!(v)).unwrap_or(Value::Null),
     );
     Value::Object(m)
+}
+
+fn inspect_vert(tc_pr: Option<&Element>) -> Value {
+    tc_pr
+        .and_then(|pr| pr.attr_local("vert"))
+        .map(|s| json!(s))
+        .unwrap_or(Value::Null)
+}
+
+fn inspect_anchor_ctr(tc_pr: Option<&Element>) -> Value {
+    let Some(pr) = tc_pr else {
+        return Value::Null;
+    };
+    if pr.attr_local("anchorCtr").is_none() {
+        return Value::Null;
+    }
+    json!(is_on(pr, "anchorCtr"))
+}
+
+fn inspect_horz_overflow(tc_pr: Option<&Element>) -> Value {
+    match tc_pr.and_then(|pr| pr.attr_local("horzOverflow")) {
+        Some(s) if s == "overflow" || s == "clip" => json!(s),
+        _ => Value::Null,
+    }
+}
+
+fn inspect_cell3d(tc_pr: Option<&Element>) -> Value {
+    let Some(el) = tc_pr.and_then(|pr| pr.child_by_local("cell3D")) else {
+        return Value::Null;
+    };
+    let mut m = Map::new();
+    m.insert(
+        "prstMaterial".into(),
+        el.attr_local("prstMaterial")
+            .map(|s| json!(s))
+            .unwrap_or(Value::Null),
+    );
+    m.insert(
+        "bevel".into(),
+        match el.child_by_local("bevel") {
+            None => Value::Null,
+            Some(b) => {
+                let mut bm = Map::new();
+                bm.insert(
+                    "prst".into(),
+                    b.attr_local("prst")
+                        .map(|s| json!(s))
+                        .unwrap_or(Value::Null),
+                );
+                bm.insert(
+                    "w".into(),
+                    parse_i64_attr(b, "w")
+                        .map(|v| json!(v))
+                        .unwrap_or(Value::Null),
+                );
+                bm.insert(
+                    "h".into(),
+                    parse_i64_attr(b, "h")
+                        .map(|v| json!(v))
+                        .unwrap_or(Value::Null),
+                );
+                Value::Object(bm)
+            }
+        },
+    );
+    Value::Object(m)
+}
+
+fn inspect_headers(tc_pr: Option<&Element>) -> Value {
+    let Some(hs) = tc_pr.and_then(|pr| pr.child_by_local("headers")) else {
+        return json!([]);
+    };
+    json!(hs
+        .children_by_local("header")
+        .into_iter()
+        .map(|h| h.text_content())
+        .collect::<Vec<_>>())
 }
 
 fn key_matches(frame: &Element, index: usize, key: &TableKey) -> bool {
@@ -1675,6 +1758,12 @@ pub fn set_cell_inset(
     Ok(())
 }
 
+pub fn set_cell_pr(slide_doc: &mut Document, op: &SetTableCellPrOp, i: usize) -> Result<(), Error> {
+    let tc = require_tc_mut(slide_doc, &op.target, &op.id, i)?;
+    apply_cell_pr_to_tc(tc, &op.pr);
+    Ok(())
+}
+
 pub fn set_cell_format(
     slide_doc: &mut Document,
     id: &str,
@@ -1730,6 +1819,9 @@ fn apply_chrome(
     if let Some(mar) = &chrome.cell_mar {
         apply_mar_to_tc(tc, mar);
     }
+    if !chrome.pr.is_empty() {
+        apply_cell_pr_to_tc(tc, &chrome.pr);
+    }
     Ok(())
 }
 
@@ -1747,6 +1839,118 @@ fn apply_mar_attr(pr: &mut Element, local: &str, field: &Option<Option<i64>>) {
         Some(None) => remove_attr_local(pr, local),
         Some(Some(v)) => picture::set_attr_local(pr, local, &v.to_string()),
     }
+}
+
+const LN_LOCALS: &[&str] = &["lnL", "lnR", "lnT", "lnB", "lnTlToBr", "lnBlToTr"];
+const HEADERS_AFTER: &[&str] = &[
+    "lnL",
+    "lnR",
+    "lnT",
+    "lnB",
+    "lnTlToBr",
+    "lnBlToTr",
+    "cell3D",
+    "noFill",
+    "solidFill",
+    "gradFill",
+    "blipFill",
+    "pattFill",
+    "grpFill",
+];
+const DEFAULT_BEVEL_EMU: i64 = 76200;
+
+fn apply_cell_pr_to_tc(tc: &mut Element, patch: &TableCellPrPatch) {
+    let pr = picture::ensure_child(tc, "tcPr");
+    apply_str_attr(pr, "vert", &patch.vert);
+    apply_bool_attr(pr, "anchorCtr", &patch.anchor_ctr);
+    apply_str_attr(pr, "horzOverflow", &patch.horz_overflow);
+    match &patch.cell_3d {
+        None => {}
+        Some(None) => remove_named(pr, &["cell3D"]),
+        Some(Some(spec)) => {
+            let el = build_cell3d(spec);
+            place_child(pr, "cell3D", el, LN_LOCALS, true);
+        }
+    }
+    match &patch.headers {
+        None => {}
+        Some(None) => remove_named(pr, &["headers"]),
+        Some(Some(items)) => {
+            let mut el = Element::new("a:headers");
+            for t in items {
+                el.push_element(Element::new("a:header").with_text(t));
+            }
+            place_child(pr, "headers", el, HEADERS_AFTER, false);
+        }
+    }
+}
+
+fn apply_str_attr(pr: &mut Element, local: &str, field: &Option<Option<String>>) {
+    match field {
+        None => {}
+        Some(None) => remove_attr_local(pr, local),
+        Some(Some(v)) => picture::set_attr_local(pr, local, v),
+    }
+}
+
+fn apply_bool_attr(pr: &mut Element, local: &str, field: &Option<Option<bool>>) {
+    match field {
+        None => {}
+        Some(None) => remove_attr_local(pr, local),
+        Some(Some(true)) => picture::set_attr_local(pr, local, "1"),
+        Some(Some(false)) => picture::set_attr_local(pr, local, "0"),
+    }
+}
+
+fn build_cell3d(spec: &Cell3DSpec) -> Element {
+    let mut el = Element::new("a:cell3D");
+    if let Some(m) = &spec.prst_material {
+        picture::set_attr_local(&mut el, "prstMaterial", m);
+    }
+    let bevel = spec.bevel.clone().unwrap_or_default();
+    let mut b = Element::new("a:bevel");
+    picture::set_attr_local(&mut b, "prst", bevel.prst.as_deref().unwrap_or("circle"));
+    picture::set_attr_local(
+        &mut b,
+        "w",
+        &bevel.w.unwrap_or(DEFAULT_BEVEL_EMU).to_string(),
+    );
+    picture::set_attr_local(
+        &mut b,
+        "h",
+        &bevel.h.unwrap_or(DEFAULT_BEVEL_EMU).to_string(),
+    );
+    el.push_element(b);
+    el
+}
+
+fn place_child(
+    parent: &mut Element,
+    local: &str,
+    el: Element,
+    after: &[&str],
+    fallback_start: bool,
+) {
+    remove_named(parent, &[local]);
+    let after_idx = parent
+        .children
+        .iter()
+        .enumerate()
+        .rev()
+        .find_map(|(i, n)| match n {
+            Node::Element(e) if after.contains(&e.local_name()) => Some(i + 1),
+            _ => None,
+        });
+    let i = match after_idx {
+        Some(i) => i,
+        None if fallback_start => 0,
+        None => parent
+            .children
+            .iter()
+            .position(|n| matches!(n, Node::Element(e) if e.local_name() == "extLst"))
+            .unwrap_or(parent.children.len()),
+    };
+    parent.children.insert(i, Node::Element(el));
 }
 
 fn apply_fill_to_tc(

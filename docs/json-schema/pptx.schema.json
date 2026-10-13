@@ -1202,6 +1202,14 @@
             },
             "cellMar": {
               "$ref": "#/$defs/tableCellMar"
+            },
+            "vert": { "$ref": "#/$defs/pptxTextVerticalType" },
+            "anchorCtr": { "type": "boolean" },
+            "horzOverflow": { "enum": ["overflow", "clip"] },
+            "cell3D": { "$ref": "#/$defs/pptxTableCell3D" },
+            "headers": {
+              "type": "array",
+              "items": { "type": "string" }
             }
           }
         }
@@ -2600,6 +2608,88 @@
           "minimum": 0
         }
       }
+    },
+    "setTableCellPrOp": {
+      "type": "object",
+      "required": ["op", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "setTableCellPr" },
+        "id": { "type": "string", "minLength": 1 },
+        "vert": { "oneOf": [{ "$ref": "#/$defs/pptxTextVerticalType" }, { "type": "null" }] },
+        "anchorCtr": { "type": ["boolean", "null"] },
+        "horzOverflow": { "oneOf": [{ "enum": ["overflow", "clip"] }, { "type": "null" }] },
+        "cell3D": { "oneOf": [{ "$ref": "#/$defs/pptxTableCell3D" }, { "type": "null" }] },
+        "headers": {
+          "oneOf": [
+            { "type": "array", "items": { "type": "string" } },
+            { "type": "null" }
+          ]
+        }
+      }
+    },
+    "pptxTableCell3D": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "prstMaterial": { "$ref": "#/$defs/pptxPresetMaterialType" },
+        "bevel": { "$ref": "#/$defs/pptxBevel" }
+      }
+    },
+    "pptxBevel": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "prst": { "$ref": "#/$defs/pptxBevelPresetType" },
+        "w": { "type": "integer", "minimum": 1 },
+        "h": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "pptxTextVerticalType": {
+      "enum": [
+        "horz",
+        "vert",
+        "vert270",
+        "wordArtVert",
+        "eaVert",
+        "mongolianVert",
+        "wordArtVertRtl"
+      ]
+    },
+    "pptxBevelPresetType": {
+      "enum": [
+        "relaxedInset",
+        "circle",
+        "slope",
+        "cross",
+        "angle",
+        "softRound",
+        "convex",
+        "coolSlant",
+        "divot",
+        "riblet",
+        "hardEdge",
+        "artDeco"
+      ]
+    },
+    "pptxPresetMaterialType": {
+      "enum": [
+        "legacyMatte",
+        "legacyPlastic",
+        "legacyMetal",
+        "legacyWireframe",
+        "matte",
+        "plastic",
+        "metal",
+        "warmMatte",
+        "translucentPowder",
+        "powder",
+        "dkEdge",
+        "softEdge",
+        "clear",
+        "flat",
+        "softmetal"
+      ]
     },
     "insertSlideOp": {
       "type": "object",

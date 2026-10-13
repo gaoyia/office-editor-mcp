@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "deck.pptx",
+  "ops": [
+    {
+      "op": "setTableCellPr",
+      "id": "slide:1/table:3/r:1/c:1",
+      "vert": "eaVert",
+      "anchorCtr": true,
+      "horzOverflow": "overflow",
+      "cell3D": {
+        "prstMaterial": "plastic",
+        "bevel": { "prst": "circle", "w": 76200, "h": 76200 }
+      },
+      "headers": ["列甲"]
+    }
+  ]
+}

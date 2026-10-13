@@ -802,7 +802,7 @@
 - pptx 的 `insertTable` 的 id 必须是 `slide:{n}`、`slide:{n}/notes`、`master:{n}` 或 `master:{n}/layout:{k}`
 - 对表 id、备注容器或 `pptx:presentation` 发该 op 报 `InvalidId`
 - `setTableCellText` 的 id 必须是 `slide:{n}/table:…/r:{r}/c:{c}`，缺 `text` 报 `InvalidField`，找不到该格报 `IdNotFound`
-- `setTableCellFill` / `setTableCellBorders` / `setTableCellInset` 的 id 必须是单元格 id
+- `setTableCellFill` / `setTableCellBorders` / `setTableCellInset` / `setTableCellPr` 的 id 必须是单元格 id
 - `setTableCellFill` 的 `fill` 与 `color` 必须恰好一个，否则报 `InvalidField`
 - `fill` 对象缺 `type`、或 `type` 不是 `solid` / `grad` / `patt` / `blip`，报 `InvalidField`
 - `solid` 缺 `color` 或不是六位十六进制，报 `InvalidField`
@@ -813,13 +813,15 @@
 - `exportMedia` 对表单元格 id 报 `InvalidId`
 - `setTableCellBorders` 六个边键一个都不给、边对象缺 `color` / `width`、或 `dash` 不是 `ST_PresetLineDashVal`，报 `InvalidField`
 - `setTableCellInset` 四个边键一个都不给、或值为负数，报 `InvalidField`
+- `setTableCellPr` 五个字段一个都不给、`vert` 不是 `ST_TextVerticalType`、`horzOverflow` 不是 `overflow` / `clip`、`prstMaterial` 不是 `ST_PresetMaterialType`、或 `bevel.prst` 不是 `ST_BevelPresetType`，报 `InvalidField`
+- `bevel` 的 `w` / `h` 不是正整数报 `InvalidField`
 - `setTablePos` / `setTableSize` / `setTableColWidths` 的 id 必须是 pptx 表 id
 - `setTableTrHeight` 的 id 必须是 pptx 行 id
 - 坐标或尺寸一个都不给报 `InvalidField`
 - `setTableColWidths` 的 `cols` 长度必须等于 `colCount`，每项 EMU 正整数
 - `setTableTrHeight` 的 `h` 必须是 EMU 正整数；`null` 报 `InvalidField`
 - create 的 `tables[].colWidths` / `tables[].rowHeights` 长度必须分别等于列数 / 行数
-- docx / xlsx 上发 `setTableCellText` / `setTableCellFill` / `setTableCellBorders` / `setTableCellInset` / `setTablePos` / `setTableSize` / `setTableColWidths` / `setTableTrHeight` 报 `InvalidField`
+- docx / xlsx 上发 `setTableCellText` / `setTableCellFill` / `setTableCellBorders` / `setTableCellInset` / `setTableCellPr` / `setTablePos` / `setTableSize` / `setTableColWidths` / `setTableTrHeight` 报 `InvalidField`
 - xlsx 上发 `insertTable` / `deleteTable` / `insertRow` / `deleteRow` / `insertCol` / `deleteCol` 仍报 `InvalidField`
 - pptx 上发 `mergeCells` / `splitCells` 报 `InvalidField`
 - 表、行或单元格带修订痕迹或网格变更标记（含 `tblPrExChange`），或某行占的列数对不上 `colCount`，结构 op 报 `NotImplemented`

@@ -984,6 +984,11 @@ define_error_kinds! {
     InvalidTextFillType => vec![Self::InvalidTextFillType],
     InvalidTableCellFillType => vec![Self::InvalidTableCellFillType],
     InvalidPresetPatternVal => vec![Self::InvalidPresetPatternVal],
+    NeedSetTableCellPrField => vec![Self::NeedSetTableCellPrField],
+    InvalidTextVerticalType => vec![Self::InvalidTextVerticalType],
+    InvalidHorzOverflow => vec![Self::InvalidHorzOverflow],
+    InvalidBevelPreset => vec![Self::InvalidBevelPreset],
+    InvalidPresetMaterial => vec![Self::InvalidPresetMaterial],
     NeedGradientStops => vec![Self::NeedGradientStops],
     DuplicateGradientPos => vec![Self::DuplicateGradientPos],
     NeedTextOutlineField => vec![Self::NeedTextOutlineField],
@@ -2075,6 +2080,11 @@ impl ErrorKind {
             | Self::InvalidTextFillType
             | Self::InvalidTableCellFillType
             | Self::InvalidPresetPatternVal
+            | Self::NeedSetTableCellPrField
+            | Self::InvalidTextVerticalType
+            | Self::InvalidHorzOverflow
+            | Self::InvalidBevelPreset
+            | Self::InvalidPresetMaterial
             | Self::NeedGradientStops
             | Self::DuplicateGradientPos
             | Self::NeedTextOutlineField

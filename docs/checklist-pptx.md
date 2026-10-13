@@ -5,7 +5,7 @@
 检查前用 create 或 apply 在本机生成文件，不要用改过扩展名的 zip 目录冒充。
 本机若 `PowerPoint.Application` 被 WPS 抢走，直接启动 `POWERPNT.EXE` 再挂 COM，不要走被抢的 ProgID。Office 16 的对象模型在 `mdiClass` 上。
 
-C、I、A、Pp、Pvg、Pem、P3d、Pom、Pc、Psa、Pn、Pcm、Pm、Ps、Tf、Tfl、Pln、Sg、Pt、Pg、Ptb、Ptm、Pgf、Tn、Tr、Td、Mt、Am、Aw、Mm、Mw、Md、Ts、Tfm、Tcm、Tnh、Nsz、Ho、Nh、Nm、Phl、Phr、Phx、Pcip、Pmd、Pmg、Psc、Cs、Po、Cr、Cq、Ck、Pz、Pzr、Pzg、Pw、Pph、
+C、I、A、Pp、Pvg、Pem、P3d、Pom、Pc、Psa、Pn、Pcm、Pm、Ps、Tf、Tfl、Pln、Sg、Pt、Pg、Ptb、Ptm、Pgf、P3c、Tn、Tr、Td、Mt、Am、Aw、Mm、Mw、Md、Ts、Tfm、Tcm、Tnh、Nsz、Ho、Nh、Nm、Phl、Phr、Phx、Pcip、Pmd、Pmg、Psc、Cs、Po、Cr、Cq、Ck、Pz、Pzr、Pzg、Pw、Pph、
 Pf、Pcg、Pcx 各组由 `manual-check/office/cases/pptx-*.ps1` 自动判定，
 跑 `pwsh -File manual-check\office\run.ps1 -Case 'pptx-*'` 即可复现。O1 已放弃，与 xlsx / docx 相同。
 
@@ -57,6 +57,7 @@ Ps1–Ps5、Sg1–Sg5、Pt1–Pt6、Tn1–Tn5、Am1–Am5、Mm1–Mm5、Ho1–Ho
 2026-10-14 补跑 `pptx-theme-notes-handout.ps1`，Tnh1–Tnh5 通过。无 Repair。`notesMaster.theme` / `handout.theme` 在 `id` 之后、`clrMap` 之前。对 `notesMaster` 写 `accent1=FF0000` 不影响 slideMaster。讲义 `00FF00`。`majorLatin=Arial`，`line.w=38100`。讲义 `extraSchemes` 一项。页 id 得 `InvalidId`，无备注母版得 `IdNotFound`。
 2026-10-14 补跑 `pptx-notes-size.ps1`，Nsz1–Nsz5 通过。无 Repair。`notesSize` 在 `slideSize` 之后，缺省 `6858000` × `9144000`。`setNotesSize` `cx=9144000` `cy=12192000` 后 `slideSize` 仍为原值，备注母版占位符几何不变。create `presentation.notesSize` 对上。页 id 得 `InvalidId`，缺 `cy` 得 `InvalidField`。
 2026-10-14 补跑 `pptx-table-cell-fill-ex.ps1`，Pgf1–Pgf5 通过。无 Repair。create 格 `fill.type=solid` `fill.color=FF0000`。`setTableCellFill` 后 `grad` 两停点、`patt=smCheck`、`blip` 的 `rId`/`contentType` 对上。对单元格 id 发 `exportMedia` 得 `InvalidId`。同日补跑 `pptx-table-cell-fill.ps1`，Ptb1–Ptb5 仍通过。
+2026-10-14 补跑 `pptx-table-cell-pr.ps1`，P3c1–P3c5 通过。无 Repair。create 格 `vert=eaVert`。`setTableCellPr` 后 `vert=vert` `anchorCtr=true` `horzOverflow=overflow`，`cell3D.prstMaterial=plastic` `bevel.prst=circle`，`headers=["列甲"]` 后再清成 `null` / `[]`。表 id 得 `InvalidId`。
 
 - **C1** ✅
   - PowerPoint 16.0 能打开 `manual-check/office/out/pptx-create.pptx`，标题栏无 Repair
@@ -1262,6 +1263,31 @@ DrawingML 表的 `a:gridCol/@w` 与 `a:tr/@h`。`setTableSize` 仍只改框。�
   - 检查：拒错
   - 通过标准：✅ 对表 id 发 `setTableCellInset` 得 `InvalidId`
   - 一边都不给、负数、xlsx 上发得 `InvalidField`
+  - 均未写文件
+
+## 表单元格 tcPr 剩余
+
+格上 `vert` / `anchorCtr` / `horzOverflow` / `cell3D` / `headers` 写在 `a:tcPr`。不要写 `tcPr/@anchor`。不要和 Ptb、Ptm、Pgf、P3g 撞。脚本：`manual-check/office/cases/pptx-table-cell-pr.ps1`。编号用 P3c。
+
+- **P3c1**
+  - 检查：inspect
+  - 通过标准：✅ create 格 `vert=eaVert` 后 inspect `vert` 为 `eaVert`，其余新字段为 `null` 或 `[]`
+- **P3c2**
+  - 检查：属性
+  - 通过标准：✅ `setTableCellPr` 写 `vert=vert` `anchorCtr=true` `horzOverflow=overflow` 后树上对上
+  - PowerPoint 16.0 打开无 Repair
+- **P3c3**
+  - 检查：三维
+  - 通过标准：✅ `cell3D.prstMaterial=plastic` 与 `bevel.prst=circle` 后树上对上
+  - 无 Repair
+- **P3c4**
+  - 检查：表头引用与清除
+  - 通过标准：✅ `headers=["列甲"]` 后树上对上；各字段 JSON `null` 后 `vert` / `anchorCtr` / `horzOverflow` / `cell3D` 为 `null`，`headers` 为 `[]`
+  - 无 Repair
+- **P3c5**
+  - 检查：拒错
+  - 通过标准：✅ 对表 id 发得 `InvalidId`
+  - 一个字段都不给、非法 `vert`、xlsx 上发得 `InvalidField`
   - 均未写文件
 
 ## 幻灯片切换

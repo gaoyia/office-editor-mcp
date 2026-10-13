@@ -1363,6 +1363,9 @@
                 "$ref": "pptx.schema.json#/$defs/setTableCellInsetOp"
               },
               {
+                "$ref": "pptx.schema.json#/$defs/setTableCellPrOp"
+              },
+              {
                 "$ref": "pptx.schema.json#/$defs/insertSlideOp"
               },
               {

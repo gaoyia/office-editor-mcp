@@ -1176,10 +1176,43 @@ pub enum CellFillSpec {
 }
 
 #[derive(Debug, Clone, Default)]
+pub struct BevelSpec {
+    pub prst: Option<String>,
+    pub w: Option<i64>,
+    pub h: Option<i64>,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct Cell3DSpec {
+    pub prst_material: Option<String>,
+    pub bevel: Option<BevelSpec>,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct TableCellPrPatch {
+    pub vert: Option<Option<String>>,
+    pub anchor_ctr: Option<Option<bool>>,
+    pub horz_overflow: Option<Option<String>>,
+    pub cell_3d: Option<Option<Cell3DSpec>>,
+    pub headers: Option<Option<Vec<String>>>,
+}
+
+impl TableCellPrPatch {
+    pub fn is_empty(&self) -> bool {
+        self.vert.is_none()
+            && self.anchor_ctr.is_none()
+            && self.horz_overflow.is_none()
+            && self.cell_3d.is_none()
+            && self.headers.is_none()
+    }
+}
+
+#[derive(Debug, Clone, Default)]
 pub struct CellChrome {
     pub fill: Option<Option<CellFillSpec>>,
     pub borders: Option<CellBordersPatch>,
     pub cell_mar: Option<CellMarPatch>,
+    pub pr: TableCellPrPatch,
 }
 
 #[derive(Debug, Clone)]
@@ -1201,6 +1234,13 @@ pub struct SetTableCellInsetOp {
     pub id: String,
     pub target: table::CellTarget,
     pub inset: CellMarPatch,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetTableCellPrOp {
+    pub id: String,
+    pub target: table::CellTarget,
+    pub pr: TableCellPrPatch,
 }
 
 #[derive(Debug, Clone)]
@@ -1385,6 +1425,7 @@ pub enum PptxOp {
     SetTableCellFill(SetTableCellFillOp),
     SetTableCellBorders(SetTableCellBordersOp),
     SetTableCellInset(SetTableCellInsetOp),
+    SetTableCellPr(SetTableCellPrOp),
     SetTablePos(SetTablePosOp),
     SetTableSize(SetTableSizeOp),
     SetTableColWidths(SetTableColWidthsOp),

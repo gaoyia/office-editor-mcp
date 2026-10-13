@@ -260,6 +260,29 @@ pub(super) fn parse_set_table_cell_inset(
     Ok(SetTableCellInsetOp { id, target, inset })
 }
 
+pub(super) fn parse_set_table_cell_pr(
+    obj: &Map<String, Value>,
+    i: usize,
+) -> Result<SetTableCellPrOp, Error> {
+    deny_keys(
+        obj,
+        i,
+        &[
+            "op",
+            "id",
+            "vert",
+            "anchorCtr",
+            "horzOverflow",
+            "cell3D",
+            "headers",
+        ],
+    )?;
+    let id = require_id(obj, i)?;
+    let target = table::parse_cell_id(&id, &format!("ops[{i}].id"))?;
+    let pr = parse_table_cell_pr_patch(obj, &format!("ops[{i}]"), true)?;
+    Ok(SetTableCellPrOp { id, target, pr })
+}
+
 pub(super) fn parse_set_table_pos(
     obj: &Map<String, Value>,
     i: usize,
@@ -554,8 +577,20 @@ pub(super) fn parse_create_table_cells(
                                 obj,
                                 &cell_path,
                                 &[
-                                    "text", "url", "file", "slide", "tooltip", "event", "fill",
-                                    "borders", "cellMar",
+                                    "text",
+                                    "url",
+                                    "file",
+                                    "slide",
+                                    "tooltip",
+                                    "event",
+                                    "fill",
+                                    "borders",
+                                    "cellMar",
+                                    "vert",
+                                    "anchorCtr",
+                                    "horzOverflow",
+                                    "cell3D",
+                                    "headers",
                                 ],
                             )?;
                             let text = match obj.get("text") {
@@ -678,10 +713,12 @@ fn parse_cell_chrome(obj: &Map<String, Value>, path: &str) -> Result<CellChrome,
             ));
         }
     };
+    let pr = parse_table_cell_pr_patch(obj, path, false)?;
     Ok(CellChrome {
         fill,
         borders,
         cell_mar,
+        pr,
     })
 }
 
@@ -1219,4 +1256,237 @@ fn parse_mar_field(
             None => Ok(None),
         },
     }
+}
+
+fn parse_table_cell_pr_patch(
+    obj: &Map<String, Value>,
+    path: &str,
+    require_one: bool,
+) -> Result<TableCellPrPatch, Error> {
+    let pr = TableCellPrPatch {
+        vert: parse_opt_enum_null(
+            obj.get("vert"),
+            &format!("{path}.vert"),
+            "vert",
+            is_text_vertical,
+            ErrorKind::InvalidTextVerticalType,
+        )?,
+        anchor_ctr: parse_opt_bool_null(
+            obj.get("anchorCtr"),
+            &format!("{path}.anchorCtr"),
+            "anchorCtr",
+        )?,
+        horz_overflow: parse_opt_enum_null(
+            obj.get("horzOverflow"),
+            &format!("{path}.horzOverflow"),
+            "horzOverflow",
+            is_horz_overflow,
+            ErrorKind::InvalidHorzOverflow,
+        )?,
+        cell_3d: parse_opt_cell3d(obj.get("cell3D"), &format!("{path}.cell3D"))?,
+        headers: parse_opt_headers(obj.get("headers"), &format!("{path}.headers"))?,
+    };
+    if require_one && pr.is_empty() {
+        return Err(Error::with_path(
+            ErrorKind::NeedSetTableCellPrField,
+            path.to_string(),
+        ));
+    }
+    Ok(pr)
+}
+
+fn parse_opt_enum_null(
+    v: Option<&Value>,
+    path: &str,
+    field: &str,
+    ok: fn(&str) -> bool,
+    bad: ErrorKind,
+) -> Result<Option<Option<String>>, Error> {
+    match v {
+        None => Ok(None),
+        Some(Value::Null) => Ok(Some(None)),
+        Some(Value::String(s)) if ok(s) => Ok(Some(Some(s.clone()))),
+        Some(Value::String(_)) => Err(Error::with_path(bad, path.to_string())),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::String,
+            },
+            path.to_string(),
+        )),
+    }
+}
+
+fn parse_opt_bool_null(
+    v: Option<&Value>,
+    path: &str,
+    field: &str,
+) -> Result<Option<Option<bool>>, Error> {
+    match v {
+        None => Ok(None),
+        Some(Value::Null) => Ok(Some(None)),
+        Some(Value::Bool(b)) => Ok(Some(Some(*b))),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::Boolean,
+            },
+            path.to_string(),
+        )),
+    }
+}
+
+fn parse_opt_headers(v: Option<&Value>, path: &str) -> Result<Option<Option<Vec<String>>>, Error> {
+    match v {
+        None => Ok(None),
+        Some(Value::Null) => Ok(Some(None)),
+        Some(Value::Array(items)) => {
+            let mut out = Vec::with_capacity(items.len());
+            for (i, item) in items.iter().enumerate() {
+                match item {
+                    Value::String(s) => out.push(s.clone()),
+                    _ => {
+                        return Err(Error::with_path(
+                            ErrorKind::WrongType {
+                                field: "headers".into(),
+                                expected: TypeName::String,
+                            },
+                            format!("{path}[{i}]"),
+                        ));
+                    }
+                }
+            }
+            Ok(Some(Some(out)))
+        }
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "headers".into(),
+                expected: TypeName::Array,
+            },
+            path.to_string(),
+        )),
+    }
+}
+
+fn parse_opt_cell3d(v: Option<&Value>, path: &str) -> Result<Option<Option<Cell3DSpec>>, Error> {
+    match v {
+        None => Ok(None),
+        Some(Value::Null) => Ok(Some(None)),
+        Some(Value::Object(obj)) => Ok(Some(Some(parse_cell3d_spec(obj, path)?))),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "cell3D".into(),
+                expected: TypeName::Object,
+            },
+            path.to_string(),
+        )),
+    }
+}
+
+fn parse_cell3d_spec(obj: &Map<String, Value>, path: &str) -> Result<Cell3DSpec, Error> {
+    deny_keys_at(obj, path, &["prstMaterial", "bevel"])?;
+    let prst_material = parse_opt_enum_null(
+        obj.get("prstMaterial"),
+        &format!("{path}.prstMaterial"),
+        "prstMaterial",
+        is_preset_material,
+        ErrorKind::InvalidPresetMaterial,
+    )?;
+    let bevel = match obj.get("bevel") {
+        None | Some(Value::Null) => None,
+        Some(Value::Object(b)) => Some(parse_bevel_spec(b, &format!("{path}.bevel"))?),
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "bevel".into(),
+                    expected: TypeName::Object,
+                },
+                format!("{path}.bevel"),
+            ));
+        }
+    };
+    Ok(Cell3DSpec {
+        prst_material: match prst_material {
+            None | Some(None) => None,
+            Some(Some(s)) => Some(s),
+        },
+        bevel,
+    })
+}
+
+fn parse_bevel_spec(obj: &Map<String, Value>, path: &str) -> Result<BevelSpec, Error> {
+    deny_keys_at(obj, path, &["prst", "w", "h"])?;
+    let prst = parse_opt_enum_null(
+        obj.get("prst"),
+        &format!("{path}.prst"),
+        "prst",
+        is_bevel_preset,
+        ErrorKind::InvalidBevelPreset,
+    )?;
+    let w = match obj.get("w") {
+        None | Some(Value::Null) => None,
+        Some(other) => parse_emu_at(Some(other), &format!("{path}.w"), "w")?,
+    };
+    let h = match obj.get("h") {
+        None | Some(Value::Null) => None,
+        Some(other) => parse_emu_at(Some(other), &format!("{path}.h"), "h")?,
+    };
+    Ok(BevelSpec {
+        prst: match prst {
+            None | Some(None) => None,
+            Some(Some(s)) => Some(s),
+        },
+        w,
+        h,
+    })
+}
+
+fn is_text_vertical(s: &str) -> bool {
+    matches!(
+        s,
+        "horz" | "vert" | "vert270" | "wordArtVert" | "eaVert" | "mongolianVert" | "wordArtVertRtl"
+    )
+}
+
+fn is_horz_overflow(s: &str) -> bool {
+    matches!(s, "overflow" | "clip")
+}
+
+fn is_bevel_preset(s: &str) -> bool {
+    matches!(
+        s,
+        "relaxedInset"
+            | "circle"
+            | "slope"
+            | "cross"
+            | "angle"
+            | "softRound"
+            | "convex"
+            | "coolSlant"
+            | "divot"
+            | "riblet"
+            | "hardEdge"
+            | "artDeco"
+    )
+}
+
+fn is_preset_material(s: &str) -> bool {
+    matches!(
+        s,
+        "legacyMatte"
+            | "legacyPlastic"
+            | "legacyMetal"
+            | "legacyWireframe"
+            | "matte"
+            | "plastic"
+            | "metal"
+            | "warmMatte"
+            | "translucentPowder"
+            | "powder"
+            | "dkEdge"
+            | "softEdge"
+            | "clear"
+            | "flat"
+            | "softmetal"
+    )
 }
