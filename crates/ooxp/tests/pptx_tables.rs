@@ -238,8 +238,20 @@ fn insert_inspect_cell_text_row_col_pos_delete() {
             "spcAft",
             "lnSpc",
             "runs",
+            "fill",
+            "borders",
         ]
     );
+    assert_eq!(c["fill"], Value::Null);
+    assert_eq!(
+        object_keys(&c["borders"]),
+        ["left", "right", "top", "bottom", "tl2br", "bl2tr"]
+    );
+    assert!(c["borders"]
+        .as_object()
+        .unwrap()
+        .values()
+        .all(|v| v.is_null()));
     assert_eq!(t["rows"][0]["cells"][1]["text"], "乙");
     assert_eq!(t["rows"][1]["cells"][0]["text"], "丙");
     assert_eq!(t["rows"][1]["cells"][1]["id"], "slide:1/table:3/r:2/c:2");
@@ -532,6 +544,30 @@ fn docx_and_xlsx_reject_pptx_table_ops() {
     assert_eq!(err.code(), ErrorCode::InvalidField);
 
     let err = apply(
+        &xlsx,
+        &tmp("x-fill").with_extension("xlsx"),
+        json!([{
+            "op": "setTableCellFill",
+            "id": "slide:1/table:3/r:1/c:1",
+            "color": "FF0000"
+        }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+
+    let err = apply(
+        &xlsx,
+        &tmp("x-borders").with_extension("xlsx"),
+        json!([{
+            "op": "setTableCellBorders",
+            "id": "slide:1/table:3/r:1/c:1",
+            "left": { "color": "000000", "width": 12700 }
+        }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+
+    let err = apply(
         &docx,
         &tmp("d-tr").with_extension("docx"),
         json!([{
@@ -648,4 +684,192 @@ fn table_grid_widths_and_heights() {
     )
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);
+}
+
+#[test]
+fn table_cell_fill_and_borders() {
+    let path = tmp("fill-create");
+    run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "create",
+            "path": path.to_string_lossy(),
+            "presentation": {
+                "slides": [{
+                    "shapes": [{ "text": "标题" }],
+                    "tables": [{
+                        "rows": 2,
+                        "cols": 2,
+                        "x": 914400,
+                        "y": 1828800,
+                        "cells": [
+                            [
+                                {
+                                    "text": "甲",
+                                    "fill": "ff0000",
+                                    "borders": {
+                                        "left": {
+                                            "color": "000000",
+                                            "width": 12700,
+                                            "dash": "dash"
+                                        }
+                                    }
+                                },
+                                "乙"
+                            ],
+                            ["丙", "丁"]
+                        ]
+                    }]
+                }]
+            }
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap();
+    let tree = inspect_tables(&path);
+    let c = &tree["slides"][0]["tables"][0]["rows"][0]["cells"][0];
+    assert_eq!(c["fill"], "FF0000");
+    assert_eq!(
+        c["borders"]["left"],
+        json!({ "color": "000000", "width": 12700, "dash": "dash" })
+    );
+    assert_eq!(c["borders"]["right"], Value::Null);
+    assert_eq!(
+        object_keys(&c["borders"]["left"]),
+        ["color", "width", "dash"]
+    );
+
+    let filled = tmp("fill-apply");
+    apply(
+        &path,
+        &filled,
+        json!([
+            {
+                "op": "setTableCellFill",
+                "id": "slide:1/table:3/r:1/c:1",
+                "color": "0000FF"
+            },
+            {
+                "op": "setTableCellBorders",
+                "id": "slide:1/table:3/r:1/c:1",
+                "top": { "color": "00FF00", "width": 25400 },
+                "right": { "color": "010101", "width": 12700, "dash": null }
+            }
+        ]),
+    )
+    .unwrap();
+    let tree = inspect_tables(&filled);
+    let c = &tree["slides"][0]["tables"][0]["rows"][0]["cells"][0];
+    assert_eq!(c["fill"], "0000FF");
+    assert_eq!(
+        c["borders"]["left"],
+        json!({ "color": "000000", "width": 12700, "dash": "dash" })
+    );
+    assert_eq!(
+        c["borders"]["top"],
+        json!({ "color": "00FF00", "width": 25400, "dash": Value::Null })
+    );
+    assert_eq!(
+        c["borders"]["right"],
+        json!({ "color": "010101", "width": 12700, "dash": Value::Null })
+    );
+
+    let cleared = tmp("fill-clear");
+    apply(
+        &filled,
+        &cleared,
+        json!([
+            {
+                "op": "setTableCellFill",
+                "id": "slide:1/table:3/r:1/c:1",
+                "color": null
+            },
+            {
+                "op": "setTableCellBorders",
+                "id": "slide:1/table:3/r:1/c:1",
+                "left": null
+            }
+        ]),
+    )
+    .unwrap();
+    let tree = inspect_tables(&cleared);
+    let c = &tree["slides"][0]["tables"][0]["rows"][0]["cells"][0];
+    assert_eq!(c["fill"], Value::Null);
+    assert_eq!(c["borders"]["left"], Value::Null);
+    assert_eq!(
+        c["borders"]["top"],
+        json!({ "color": "00FF00", "width": 25400, "dash": Value::Null })
+    );
+
+    let err = apply(
+        &path,
+        &tmp("fill-table-id"),
+        json!([{
+            "op": "setTableCellFill",
+            "id": "slide:1/table:3",
+            "color": "FF0000"
+        }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidId);
+
+    let err = apply(
+        &path,
+        &tmp("fill-miss-color"),
+        json!([{
+            "op": "setTableCellFill",
+            "id": "slide:1/table:3/r:1/c:1"
+        }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+
+    let err = apply(
+        &path,
+        &tmp("fill-unknown"),
+        json!([{
+            "op": "setTableCellFill",
+            "id": "slide:1/table:3/r:1/c:1",
+            "color": "FF0000",
+            "cx": 1
+        }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+
+    let err = apply(
+        &path,
+        &tmp("borders-empty"),
+        json!([{
+            "op": "setTableCellBorders",
+            "id": "slide:1/table:3/r:1/c:1"
+        }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+
+    let err = apply(
+        &path,
+        &tmp("borders-dash"),
+        json!([{
+            "op": "setTableCellBorders",
+            "id": "slide:1/table:3/r:1/c:1",
+            "left": { "color": "000000", "width": 12700, "dash": "foo" }
+        }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+
+    let err = apply(
+        &path,
+        &tmp("shape-fill-on-cell"),
+        json!([{
+            "op": "setShapeFill",
+            "id": "slide:1/table:3/r:1/c:1",
+            "color": "FF0000"
+        }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidId);
 }

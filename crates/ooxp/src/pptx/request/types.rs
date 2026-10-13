@@ -1015,6 +1015,7 @@ pub struct InsertTableOp {
     pub cy: Option<i64>,
     pub col_widths: Option<Vec<i64>>,
     pub row_heights: Option<Vec<i64>>,
+    pub chrome: Vec<Vec<CellChrome>>,
 }
 
 #[derive(Debug, Clone)]
@@ -1048,6 +1049,54 @@ pub struct DeleteColOp {
     pub id: String,
     pub target: table::TableTarget,
     pub col: u32,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct CellBorderSide {
+    pub color: String,
+    pub width: i64,
+    pub dash: Option<Option<String>>,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct CellBordersPatch {
+    pub left: Option<Option<CellBorderSide>>,
+    pub right: Option<Option<CellBorderSide>>,
+    pub top: Option<Option<CellBorderSide>>,
+    pub bottom: Option<Option<CellBorderSide>>,
+    pub tl2br: Option<Option<CellBorderSide>>,
+    pub bl2tr: Option<Option<CellBorderSide>>,
+}
+
+impl CellBordersPatch {
+    pub fn is_empty(&self) -> bool {
+        self.left.is_none()
+            && self.right.is_none()
+            && self.top.is_none()
+            && self.bottom.is_none()
+            && self.tl2br.is_none()
+            && self.bl2tr.is_none()
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct CellChrome {
+    pub fill: Option<Option<String>>,
+    pub borders: Option<CellBordersPatch>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetTableCellFillOp {
+    pub id: String,
+    pub target: table::CellTarget,
+    pub color: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetTableCellBordersOp {
+    pub id: String,
+    pub target: table::CellTarget,
+    pub borders: CellBordersPatch,
 }
 
 #[derive(Debug, Clone)]
@@ -1229,6 +1278,8 @@ pub enum PptxOp {
     InsertCol(InsertColOp),
     DeleteCol(DeleteColOp),
     SetTableCellText(SetTableCellTextOp),
+    SetTableCellFill(SetTableCellFillOp),
+    SetTableCellBorders(SetTableCellBordersOp),
     SetTablePos(SetTablePosOp),
     SetTableSize(SetTableSizeOp),
     SetTableColWidths(SetTableColWidthsOp),

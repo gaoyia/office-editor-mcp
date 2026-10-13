@@ -7,7 +7,8 @@ use crate::xml::{Document, Element, Node};
 
 use super::picture;
 use super::request::{
-    DeleteColOp, DeleteRowOp, DeleteTableOp, InsertColOp, InsertRowOp, InsertTableOp,
+    CellBorderSide, CellBordersPatch, CellChrome, DeleteColOp, DeleteRowOp, DeleteTableOp,
+    InsertColOp, InsertRowOp, InsertTableOp, SetTableCellBordersOp, SetTableCellFillOp,
     SetTableCellTextOp, SetTableColWidthsOp, SetTablePosOp, SetTableSizeOp, SetTableTrHeightOp,
 };
 use super::shape;
@@ -613,6 +614,9 @@ fn table_json(frame: &Element, host: &str, index: usize) -> Value {
             cell.insert("vMerge".into(), json!(v_merge));
             cell.insert("text".into(), json!(text));
             crate::drawing_text::insert_inspect(&mut cell, tc.child_by_local("txBody"));
+            let tc_pr = tc.child_by_local("tcPr");
+            cell.insert("fill".into(), inspect_cell_fill(tc_pr));
+            cell.insert("borders".into(), inspect_cell_borders(tc_pr));
             cells.push(Value::Object(cell));
         }
         rows.push(json!({
@@ -645,6 +649,73 @@ fn table_json(frame: &Element, host: &str, index: usize) -> Value {
     m.insert("rows".into(), json!(rows));
     m.insert("stable".into(), json!(stable));
     Value::Object(m)
+}
+
+const FILL_LOCALS: &[&str] = &[
+    "noFill",
+    "solidFill",
+    "gradFill",
+    "blipFill",
+    "pattFill",
+    "grpFill",
+];
+const BORDER_LOCALS: &[(&str, &str)] = &[
+    ("left", "lnL"),
+    ("right", "lnR"),
+    ("top", "lnT"),
+    ("bottom", "lnB"),
+    ("tl2br", "lnTlToBr"),
+    ("bl2tr", "lnBlToTr"),
+];
+
+fn inspect_cell_fill(tc_pr: Option<&Element>) -> Value {
+    let Some(pr) = tc_pr else {
+        return Value::Null;
+    };
+    if pr.child_by_local("noFill").is_some() {
+        return Value::Null;
+    }
+    pr.child_by_local("solidFill")
+        .and_then(|f| f.child_by_local("srgbClr"))
+        .and_then(|c| c.attr_local("val"))
+        .map(|s| json!(s.to_ascii_uppercase()))
+        .unwrap_or(Value::Null)
+}
+
+fn inspect_cell_borders(tc_pr: Option<&Element>) -> Value {
+    let mut m = Map::new();
+    for (key, local) in BORDER_LOCALS {
+        m.insert((*key).into(), inspect_border_side(tc_pr, local));
+    }
+    Value::Object(m)
+}
+
+fn inspect_border_side(tc_pr: Option<&Element>, local: &str) -> Value {
+    let Some(ln) = tc_pr.and_then(|pr| pr.child_by_local(local)) else {
+        return Value::Null;
+    };
+    if ln.child_by_local("noFill").is_some() {
+        return Value::Null;
+    }
+    let color = ln
+        .child_by_local("solidFill")
+        .and_then(|f| f.child_by_local("srgbClr"))
+        .and_then(|c| c.attr_local("val"))
+        .map(|s| Value::String(s.to_ascii_uppercase()))
+        .unwrap_or(Value::Null);
+    let width = parse_i64_attr(ln, "w")
+        .map(|w| json!(w))
+        .unwrap_or(Value::Null);
+    let dash = ln
+        .child_by_local("prstDash")
+        .and_then(|d| d.attr_local("val"))
+        .map(|s| json!(s))
+        .unwrap_or(Value::Null);
+    let mut side = Map::new();
+    side.insert("color".into(), color);
+    side.insert("width".into(), width);
+    side.insert("dash".into(), dash);
+    Value::Object(side)
 }
 
 fn key_matches(frame: &Element, index: usize, key: &TableKey) -> bool {
@@ -755,6 +826,7 @@ pub fn insert_table(
         &op.cells,
         op.col_widths.as_deref(),
         op.row_heights.as_deref(),
+        &op.chrome,
     );
     picture::insert_into_sp_tree(&mut slide_doc.root, frame)?;
     let _ = i;
@@ -772,6 +844,7 @@ fn build_table_frame(
     cells: &[Vec<String>],
     col_widths: Option<&[i64]>,
     row_heights: Option<&[i64]>,
+    chrome: &[Vec<CellChrome>],
 ) -> Element {
     let mut nv = Element::new("p:nvGraphicFramePr");
     nv.push_element(
@@ -821,7 +894,8 @@ fn build_table_frame(
                 .and_then(|row| row.get(c))
                 .map(|s| s.as_str())
                 .unwrap_or("");
-            tr.push_element(build_tc(text));
+            let ch = chrome.get(r).and_then(|row| row.get(c));
+            tr.push_element(build_tc(text, ch));
         }
         tbl.push_element(tr);
     }
@@ -850,7 +924,7 @@ fn split_emu(total: i64, n: usize) -> Vec<i64> {
     out
 }
 
-fn build_tc(text: &str) -> Element {
+fn build_tc(text: &str, chrome: Option<&CellChrome>) -> Element {
     let mut tc = Element::new("a:tc");
     let mut tx = empty_tx_body();
     if !text.is_empty() {
@@ -858,6 +932,9 @@ fn build_tc(text: &str) -> Element {
     }
     tc.push_element(tx);
     tc.push_element(Element::new("a:tcPr"));
+    if let Some(ch) = chrome {
+        apply_chrome(&mut tc, ch);
+    }
     tc
 }
 
@@ -1210,7 +1287,8 @@ fn insert_tc_in_row(tr: &mut Element, after: usize) {
         c += 1;
     }
     let insert_at = tc_insert_index(tr, after);
-    tr.children.insert(insert_at, Node::Element(build_tc("")));
+    tr.children
+        .insert(insert_at, Node::Element(build_tc("", None)));
 }
 
 fn tc_child_indices(tr: &Element) -> Vec<usize> {
@@ -1357,27 +1435,31 @@ pub fn set_cell_text(
     op: &SetTableCellTextOp,
     i: usize,
 ) -> Result<(), Error> {
-    let tbl = require_tbl(slide_doc, &op.target.table.key, &op.id, i)?;
-    let tr_pos = tr_child_indices(tbl);
-    if op.target.row < 1 || op.target.row > tr_pos.len() {
-        return Err(missing_table(&op.id, i));
-    }
-    let tr = match &mut tbl.children[tr_pos[op.target.row - 1]] {
-        Node::Element(e) => e,
-        _ => return Err(missing_table(&op.id, i)),
-    };
-    let tcs = tc_child_indices(tr);
-    if op.target.col < 1 || op.target.col > tcs.len() {
-        return Err(missing_table(&op.id, i));
-    }
-    let tc = match &mut tr.children[tcs[op.target.col - 1]] {
-        Node::Element(e) => e,
-        _ => return Err(missing_table(&op.id, i)),
-    };
+    let tc = require_tc_mut(slide_doc, &op.target, &op.id, i)?;
     let tx = tc
         .child_by_local_mut("txBody")
         .ok_or_else(|| missing_table(&op.id, i))?;
     shape::set_txbody_text(tx, &op.text);
+    Ok(())
+}
+
+pub fn set_cell_fill(
+    slide_doc: &mut Document,
+    op: &SetTableCellFillOp,
+    i: usize,
+) -> Result<(), Error> {
+    let tc = require_tc_mut(slide_doc, &op.target, &op.id, i)?;
+    apply_fill_to_tc(tc, op.color.as_deref());
+    Ok(())
+}
+
+pub fn set_cell_borders(
+    slide_doc: &mut Document,
+    op: &SetTableCellBordersOp,
+    i: usize,
+) -> Result<(), Error> {
+    let tc = require_tc_mut(slide_doc, &op.target, &op.id, i)?;
+    apply_borders_to_tc(tc, &op.borders);
     Ok(())
 }
 
@@ -1388,6 +1470,20 @@ pub fn set_cell_format(
     fmt: &crate::drawing_text::TextFormat,
     i: usize,
 ) -> Result<(), Error> {
+    let tc = require_tc_mut(slide_doc, target, id, i)?;
+    let tx = tc
+        .child_by_local_mut("txBody")
+        .ok_or_else(|| missing_table(id, i))?;
+    crate::drawing_text::apply(tx, fmt);
+    Ok(())
+}
+
+fn require_tc_mut<'a>(
+    slide_doc: &'a mut Document,
+    target: &CellTarget,
+    id: &str,
+    i: usize,
+) -> Result<&'a mut Element, Error> {
     let tbl = require_tbl(slide_doc, &target.table.key, id, i)?;
     let tr_pos = tr_child_indices(tbl);
     if target.row < 1 || target.row > tr_pos.len() {
@@ -1401,15 +1497,91 @@ pub fn set_cell_format(
     if target.col < 1 || target.col > tcs.len() {
         return Err(missing_table(id, i));
     }
-    let tc = match &mut tr.children[tcs[target.col - 1]] {
-        Node::Element(e) => e,
-        _ => return Err(missing_table(id, i)),
-    };
-    let tx = tc
-        .child_by_local_mut("txBody")
-        .ok_or_else(|| missing_table(id, i))?;
-    crate::drawing_text::apply(tx, fmt);
-    Ok(())
+    match &mut tr.children[tcs[target.col - 1]] {
+        Node::Element(e) => Ok(e),
+        _ => Err(missing_table(id, i)),
+    }
+}
+
+fn apply_chrome(tc: &mut Element, chrome: &CellChrome) {
+    if let Some(fill) = &chrome.fill {
+        apply_fill_to_tc(tc, fill.as_deref());
+    }
+    if let Some(borders) = &chrome.borders {
+        apply_borders_to_tc(tc, borders);
+    }
+}
+
+fn apply_fill_to_tc(tc: &mut Element, color: Option<&str>) {
+    let pr = picture::ensure_child(tc, "tcPr");
+    remove_named(pr, FILL_LOCALS);
+    match color {
+        Some(c) => {
+            let mut fill = Element::new("a:solidFill");
+            fill.push_element(Element::new("a:srgbClr").with_attr("val", c.to_ascii_uppercase()));
+            pr.push_element(fill);
+        }
+        None => pr.push_element(Element::new("a:noFill")),
+    }
+}
+
+fn apply_borders_to_tc(tc: &mut Element, patch: &CellBordersPatch) {
+    let sides = [
+        ("lnL", &patch.left),
+        ("lnR", &patch.right),
+        ("lnT", &patch.top),
+        ("lnB", &patch.bottom),
+        ("lnTlToBr", &patch.tl2br),
+        ("lnBlToTr", &patch.bl2tr),
+    ];
+    for (local, field) in sides {
+        apply_border_side(tc, local, field);
+    }
+}
+
+fn apply_border_side(tc: &mut Element, local: &str, field: &Option<Option<CellBorderSide>>) {
+    match field {
+        None => {}
+        Some(None) => {
+            let pr = picture::ensure_child(tc, "tcPr");
+            remove_named(pr, &[local]);
+        }
+        Some(Some(side)) => {
+            let keep_dash = match &side.dash {
+                Some(d) => d.clone(),
+                None => current_dash(tc, local),
+            };
+            let pr = picture::ensure_child(tc, "tcPr");
+            remove_named(pr, &[local]);
+            pr.push_element(build_ln(local, side, keep_dash.as_deref()));
+        }
+    }
+}
+
+fn current_dash(tc: &Element, local: &str) -> Option<String> {
+    tc.child_by_local("tcPr")
+        .and_then(|pr| pr.child_by_local(local))
+        .and_then(|ln| ln.child_by_local("prstDash"))
+        .and_then(|d| d.attr_local("val"))
+        .map(|s| s.to_string())
+}
+
+fn build_ln(local: &str, side: &CellBorderSide, dash: Option<&str>) -> Element {
+    let mut ln = Element::new(format!("a:{local}")).with_attr("w", side.width.to_string());
+    let mut fill = Element::new("a:solidFill");
+    fill.push_element(Element::new("a:srgbClr").with_attr("val", side.color.to_ascii_uppercase()));
+    ln.push_element(fill);
+    if let Some(d) = dash {
+        ln.push_element(Element::new("a:prstDash").with_attr("val", d));
+    }
+    ln
+}
+
+fn remove_named(parent: &mut Element, locals: &[&str]) {
+    parent.children.retain(|n| match n {
+        Node::Element(e) => !locals.contains(&e.local_name()),
+        _ => true,
+    });
 }
 
 pub fn apply_pos(slide_doc: &mut Document, op: &SetTablePosOp, i: usize) -> Result<(), Error> {

@@ -5,7 +5,7 @@
 检查前用 create 或 apply 在本机生成文件，不要用改过扩展名的 zip 目录冒充。
 本机若 `PowerPoint.Application` 被 WPS 抢走，直接启动 `POWERPNT.EXE` 再挂 COM，不要走被抢的 ProgID。Office 16 的对象模型在 `mdiClass` 上。
 
-C、I、A、Pp、Pvg、Pem、P3d、Pom、Pc、Psa、Pn、Pcm、Pm、Ps、Tf、Tfl、Pln、Sg、Pt、Pg、Tn、Tr、Td、Mt、Am、Aw、Mm、Mw、Md、Ts、Ho、Nh、Nm、Phl、Phr、Phx、Pcip、Pmd、Pmg、Psc、Cs、Po、Cr、Cq、Ck、Pz、Pzr、Pzg、Pw、Pph、
+C、I、A、Pp、Pvg、Pem、P3d、Pom、Pc、Psa、Pn、Pcm、Pm、Ps、Tf、Tfl、Pln、Sg、Pt、Pg、Ptb、Tn、Tr、Td、Mt、Am、Aw、Mm、Mw、Md、Ts、Ho、Nh、Nm、Phl、Phr、Phx、Pcip、Pmd、Pmg、Psc、Cs、Po、Cr、Cq、Ck、Pz、Pzr、Pzg、Pw、Pph、
 Pf、Pcg、Pcx 各组由 `manual-check/office/cases/pptx-*.ps1` 自动判定，
 跑 `pwsh -File manual-check\office\run.ps1 -Case 'pptx-*'` 即可复现。O1 已放弃，与 xlsx / docx 相同。
 
@@ -50,6 +50,7 @@ Ps1–Ps5、Sg1–Sg5、Pt1–Pt6、Tn1–Tn5、Am1–Am5、Mm1–Mm5、Ho1–Ho
 2026-10-14 补跑 `pptx-table-grid.ps1`，Pg1–Pg5 通过。无 Repair。COM 列宽 100 / 150 / 200 磅，行高 50 / 100 磅。`setTableSize` 不改格网。`h: null` 为 `InvalidField`。
 2026-10-14 补跑 `pptx-media-geom.ps1`，Pmg1–Pmg5 通过。无 Repair。COM Type=16 `Width` / `Height` 144×72 磅。`x=914400` `y=457200`。备注视频可改尺寸，根上 `videoCount` 仍为 0。`setMedia` 不改几何。
 2026-10-14 补跑 `pptx-zoom-geom.ps1`，Pzg1–Pzg5 通过。无 Repair。COM Type=-2 `Width` / `Height` 144×72 磅。`x=914400` `y=457200`。备注 Zoom 可改尺寸，根上 `zoomCount` 仍为 0。`setZoom` 改目标不改几何。
+2026-10-14 补跑 `pptx-table-cell-fill.ps1`，Ptb1–Ptb5 通过。无 Repair。create 格 `fill=FF0000`，COM RGB=255；`setTableCellFill` 后 `fill=0000FF`，COM RGB=16711680。六边 inspect 对上。`fill: null` 与某边 JSON `null` 后 inspect 为 `null`。
 
 - **C1** ✅
   - PowerPoint 16.0 能打开 `manual-check/office/out/pptx-create.pptx`，标题栏无 Repair
@@ -1150,6 +1151,32 @@ DrawingML 表的 `a:gridCol/@w` 与 `a:tr/@h`。`setTableSize` 仍只改框。�
 | Pg3 | 行高 | ✅ `setTableTrHeight` 后目标行 COM 行高对得上；无 Repair |
 | Pg4 | 框 | ✅ `setTableSize` 后格网宽高仍是 Pg2/Pg3 的值；框 `cx` / `cy` 已改；无 Repair |
 | Pg5 | 拒错 | ✅ `cols` 长度不对、对表 id 发 `setTableTrHeight`、`h: null`、xlsx 上发 `setTableColWidths` 得 `InvalidField` 或 `InvalidId`；均未写文件 |
+
+## 表单元格填充与边框
+
+格级实心填充与六边写在 `a:tcPr`。不要用 `setShapeFill` / `setShapeLine` / `setCellFormat`。不要和 Pt、Pg、Ptf、Tf 撞。脚本：`manual-check/office/cases/pptx-table-cell-fill.ps1`。编号用 Ptb。
+
+- **Ptb1**
+  - 检查：inspect
+  - 通过标准：✅ create 带格 `fill` / `borders` 后 inspect `fill` 为大写 RGB，六边 `color` / `width` / `dash` 对上
+- **Ptb2**
+  - 检查：填充
+  - 通过标准：✅ `setTableCellFill` 后 PowerPoint 无 Repair
+  - COM 单元格填充色对上（允许 RGB 读法差异）
+- **Ptb3**
+  - 检查：边框
+  - 通过标准：✅ `setTableCellBorders` 后 inspect 对上
+  - 无 Repair
+- **Ptb4**
+  - 检查：清除
+  - 通过标准：✅ `fill: null` 与某边 JSON `null` 后 inspect 为 `null`
+  - 无 Repair
+- **Ptb5**
+  - 检查：拒错
+  - 通过标准：✅ 对表 id 发 `setTableCellFill` 得 `InvalidId`
+  - 缺 `color`、只给 `cx` 式未知字段、xlsx 上发得 `InvalidField`
+  - 对单元格 id 发 `setShapeFill` 得 `InvalidId`
+  - 均未写文件
 
 ## 幻灯片切换
 

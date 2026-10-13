@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "deck.pptx",
+  "ops": [
+    {
+      "op": "setTableCellFill",
+      "id": "slide:1/table:3/r:1/c:1",
+      "color": "FF0000"
+    },
+    {
+      "op": "setTableCellBorders",
+      "id": "slide:1/table:3/r:1/c:1",
+      "left": { "color": "000000", "width": 12700, "dash": "dash" },
+      "right": null
+    }
+  ]
+}

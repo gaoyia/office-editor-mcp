@@ -1184,6 +1184,17 @@
                 "click",
                 "hover"
               ]
+            },
+            "fill": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "minLength": 6,
+              "maxLength": 6
+            },
+            "borders": {
+              "$ref": "#/$defs/tableCellBorders"
             }
           }
         }
@@ -2278,6 +2289,198 @@
         "h": {
           "type": "integer",
           "minimum": 1
+        }
+      }
+    },
+    "tableCellBorderSide": {
+      "type": "object",
+      "required": [
+        "color",
+        "width"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "color": {
+          "type": "string",
+          "minLength": 6,
+          "maxLength": 6
+        },
+        "width": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "dash": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "tableCellBorders": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "left": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/tableCellBorderSide"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "right": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/tableCellBorderSide"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "top": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/tableCellBorderSide"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "bottom": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/tableCellBorderSide"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "tl2br": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/tableCellBorderSide"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "bl2tr": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/tableCellBorderSide"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "setTableCellFillOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "color"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setTableCellFill"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "color": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "setTableCellBordersOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setTableCellBorders"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "left": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/tableCellBorderSide"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "right": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/tableCellBorderSide"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "top": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/tableCellBorderSide"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "bottom": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/tableCellBorderSide"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "tl2br": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/tableCellBorderSide"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "bl2tr": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/tableCellBorderSide"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       }
     },

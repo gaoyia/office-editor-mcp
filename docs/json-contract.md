@@ -282,7 +282,7 @@ docx 认 `setParaText`、`setHeaderFooterDistance`、`setPageMargin`、`setPageS
 以及 `setProps` / `setCustomProp` / `deleteCustomProp`。
 pptx 认 `setShapeText`、`setShapeFormat`、形状管理 op（`insertShape`、`insertConnector`、`deleteConnector`、`setConnector`、`groupShapes`、`ungroup`、`deleteShape`、
 `setShapePos`、`setShapeSize`、`setShapeFill`、`setShapeLine`、`setShapeGeom`）、表格 op（`insertTable`、`deleteTable`、`insertRow`、`deleteRow`、
-`insertCol`、`deleteCol`、`setTableCellText`、`setTablePos`、`setTableSize`、`setTableColWidths`、`setTableTrHeight`；
+`insertCol`、`deleteCol`、`setTableCellText`、`setTableCellFill`、`setTableCellBorders`、`setTablePos`、`setTableSize`、`setTableColWidths`、`setTableTrHeight`；
 不含 `mergeCells`、`splitCells`）、`setNotesText`、批注 op（`insertComment`、`deleteComment`、`replyComment`、`setCommentText`、
 `setCommentMeta`、`setCommentDone`）、`replacePicture`、`insertPicture`、`deletePicture`、`setPictureSize`、`setPicturePos`、
 以及图表 op（`insertChart`、`deleteChart`、`setChartTitle`、`setChartSeries`、`addChartSeries`、`deleteChartSeries`、
@@ -324,7 +324,7 @@ pptx 认 `setShapeText`、`setShapeFormat`、形状管理 op（`insertShape`、`
  / `moveSlide` / `setSlideHidden` / `setTransition` / `insertAnim` / `setAnim` / `deleteAnim` / `moveAnim` / `setSlideLayout` / `insertLayout`
  / `deleteLayout` / `insertPlaceholder` / `deletePlaceholder` / `insertMaster` / `deleteMaster` / `setSlideSize`
  / `setThemeColors` / `setThemeFonts` / `setHandoutText` / `setShapePos` / `setShapeSize` / `setShapeFill`
- / `setShapeLine` / `setShapeGeom` / `setConnector` / `setTableCellText` / `setTablePos` / `setTableSize` / `setTableColWidths` / `setTableTrHeight` / `insertVideo` / `insertAudio`
+ / `setShapeLine` / `setShapeGeom` / `setConnector` / `setTableCellText` / `setTableCellFill` / `setTableCellBorders` / `setTablePos` / `setTableSize` / `setTableColWidths` / `setTableTrHeight` / `insertVideo` / `insertAudio`
  / `deleteMedia` / `setMedia` / `insertSlideSection` / `setSlideSectionName` / `deleteSlideSection` / `setSlideSection`
  / `insertCustomShow` / `setCustomShow` / `deleteCustomShow` / `insertZoom` / `setZoom` / `deleteZoom`）报 `InvalidField`。
 xlsx 上发 `insertTable` / `deleteTable` / `insertRow` / `deleteRow` / `insertCol` / `deleteCol` / `mergeCells` / `splitCells` 仍报 `InvalidField`。

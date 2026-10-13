@@ -794,13 +794,16 @@
 - pptx 的 `insertTable` 的 id 必须是 `slide:{n}`、`slide:{n}/notes`、`master:{n}` 或 `master:{n}/layout:{k}`
 - 对表 id、备注容器或 `pptx:presentation` 发该 op 报 `InvalidId`
 - `setTableCellText` 的 id 必须是 `slide:{n}/table:…/r:{r}/c:{c}`，缺 `text` 报 `InvalidField`，找不到该格报 `IdNotFound`
+- `setTableCellFill` / `setTableCellBorders` 的 id 必须是单元格 id
+- `setTableCellFill` 缺 `color`、或不是六位十六进制，报 `InvalidField`
+- `setTableCellBorders` 六个边键一个都不给、边对象缺 `color` / `width`、或 `dash` 不是 `ST_PresetLineDashVal`，报 `InvalidField`
 - `setTablePos` / `setTableSize` / `setTableColWidths` 的 id 必须是 pptx 表 id
 - `setTableTrHeight` 的 id 必须是 pptx 行 id
 - 坐标或尺寸一个都不给报 `InvalidField`
 - `setTableColWidths` 的 `cols` 长度必须等于 `colCount`，每项 EMU 正整数
 - `setTableTrHeight` 的 `h` 必须是 EMU 正整数；`null` 报 `InvalidField`
 - create 的 `tables[].colWidths` / `tables[].rowHeights` 长度必须分别等于列数 / 行数
-- docx / xlsx 上发 `setTableCellText` / `setTablePos` / `setTableSize` / `setTableColWidths` / `setTableTrHeight` 报 `InvalidField`
+- docx / xlsx 上发 `setTableCellText` / `setTableCellFill` / `setTableCellBorders` / `setTablePos` / `setTableSize` / `setTableColWidths` / `setTableTrHeight` 报 `InvalidField`
 - xlsx 上发 `insertTable` / `deleteTable` / `insertRow` / `deleteRow` / `insertCol` / `deleteCol` 仍报 `InvalidField`
 - pptx 上发 `mergeCells` / `splitCells` 报 `InvalidField`
 - 表、行或单元格带修订痕迹或网格变更标记（含 `tblPrExChange`），或某行占的列数对不上 `colCount`，结构 op 报 `NotImplemented`

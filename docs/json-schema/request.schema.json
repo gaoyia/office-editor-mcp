@@ -1354,6 +1354,12 @@
                 "$ref": "pptx.schema.json#/$defs/setTableTrHeightOp"
               },
               {
+                "$ref": "pptx.schema.json#/$defs/setTableCellFillOp"
+              },
+              {
+                "$ref": "pptx.schema.json#/$defs/setTableCellBordersOp"
+              },
+              {
                 "$ref": "pptx.schema.json#/$defs/insertSlideOp"
               },
               {
