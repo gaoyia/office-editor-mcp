@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "deck.pptx",
+  "ops": [
+    {
+      "op": "setTableCellInset",
+      "id": "slide:1/table:3/r:1/c:1",
+      "top": 12700,
+      "left": 25400,
+      "bottom": null
+    }
+  ]
+}

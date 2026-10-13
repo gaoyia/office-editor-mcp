@@ -321,6 +321,7 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<PptxOp>, Error> {
             "setTableCellBorders" => {
                 PptxOp::SetTableCellBorders(parse_set_table_cell_borders(obj, i)?)
             }
+            "setTableCellInset" => PptxOp::SetTableCellInset(parse_set_table_cell_inset(obj, i)?),
             "setTablePos" => PptxOp::SetTablePos(parse_set_table_pos(obj, i)?),
             "setTableSize" => PptxOp::SetTableSize(parse_set_table_size(obj, i)?),
             "setTableColWidths" => PptxOp::SetTableColWidths(parse_set_table_col_widths(obj, i)?),

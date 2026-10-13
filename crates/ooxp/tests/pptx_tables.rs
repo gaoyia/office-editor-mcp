@@ -240,9 +240,11 @@ fn insert_inspect_cell_text_row_col_pos_delete() {
             "runs",
             "fill",
             "borders",
+            "cellMar",
         ]
     );
     assert_eq!(c["fill"], Value::Null);
+    assert_eq!(c["cellMar"], Value::Null);
     assert_eq!(
         object_keys(&c["borders"]),
         ["left", "right", "top", "bottom", "tl2br", "bl2tr"]
@@ -568,6 +570,18 @@ fn docx_and_xlsx_reject_pptx_table_ops() {
     assert_eq!(err.code(), ErrorCode::InvalidField);
 
     let err = apply(
+        &xlsx,
+        &tmp("x-inset").with_extension("xlsx"),
+        json!([{
+            "op": "setTableCellInset",
+            "id": "slide:1/table:3/r:1/c:1",
+            "top": 12700
+        }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+
+    let err = apply(
         &docx,
         &tmp("d-tr").with_extension("docx"),
         json!([{
@@ -872,4 +886,131 @@ fn table_cell_fill_and_borders() {
     )
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidId);
+}
+
+#[test]
+fn table_cell_inset() {
+    let path = tmp("mar-create");
+    run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "create",
+            "path": path.to_string_lossy(),
+            "presentation": {
+                "slides": [{
+                    "shapes": [{ "text": "标题" }],
+                    "tables": [{
+                        "rows": 2,
+                        "cols": 2,
+                        "x": 914400,
+                        "y": 1828800,
+                        "cells": [
+                            [
+                                {
+                                    "text": "甲",
+                                    "cellMar": {
+                                        "top": 12700,
+                                        "left": 25400,
+                                        "bottom": 0
+                                    }
+                                },
+                                "乙"
+                            ],
+                            ["丙", "丁"]
+                        ]
+                    }]
+                }]
+            }
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap();
+    let tree = inspect_tables(&path);
+    let c = &tree["slides"][0]["tables"][0]["rows"][0]["cells"][0];
+    assert_eq!(
+        c["cellMar"],
+        json!({ "top": 12700, "left": 25400, "bottom": 0, "right": Value::Null })
+    );
+    assert_eq!(
+        object_keys(&c["cellMar"]),
+        ["top", "left", "bottom", "right"]
+    );
+    assert_eq!(
+        tree["slides"][0]["tables"][0]["rows"][0]["cells"][1]["cellMar"],
+        Value::Null
+    );
+
+    let patched = tmp("mar-apply");
+    apply(
+        &path,
+        &patched,
+        json!([{
+            "op": "setTableCellInset",
+            "id": "slide:1/table:3/r:1/c:1",
+            "right": 38100,
+            "bottom": null
+        }]),
+    )
+    .unwrap();
+    let tree = inspect_tables(&patched);
+    let c = &tree["slides"][0]["tables"][0]["rows"][0]["cells"][0];
+    assert_eq!(
+        c["cellMar"],
+        json!({ "top": 12700, "left": 25400, "bottom": Value::Null, "right": 38100 })
+    );
+
+    let cleared = tmp("mar-clear");
+    apply(
+        &patched,
+        &cleared,
+        json!([{
+            "op": "setTableCellInset",
+            "id": "slide:1/table:3/r:1/c:1",
+            "top": null,
+            "left": null,
+            "right": null
+        }]),
+    )
+    .unwrap();
+    let tree = inspect_tables(&cleared);
+    assert_eq!(
+        tree["slides"][0]["tables"][0]["rows"][0]["cells"][0]["cellMar"],
+        Value::Null
+    );
+
+    let err = apply(
+        &path,
+        &tmp("mar-table-id"),
+        json!([{
+            "op": "setTableCellInset",
+            "id": "slide:1/table:3",
+            "top": 1
+        }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidId);
+
+    let err = apply(
+        &path,
+        &tmp("mar-empty"),
+        json!([{
+            "op": "setTableCellInset",
+            "id": "slide:1/table:3/r:1/c:1"
+        }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+
+    let err = apply(
+        &path,
+        &tmp("mar-neg"),
+        json!([{
+            "op": "setTableCellInset",
+            "id": "slide:1/table:3/r:1/c:1",
+            "top": -1
+        }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
 }

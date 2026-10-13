@@ -186,6 +186,7 @@ $order = @(
     'pptx-tables'
     'pptx-table-grid'
     'pptx-table-cell-fill'
+    'pptx-table-cell-mar'
     'pptx-transition'
     'pptx-transition-remain'
     'pptx-transition-sound'

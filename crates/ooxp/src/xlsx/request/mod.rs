@@ -516,6 +516,7 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<XlsxOp>, Error> {
             | "setTableCellText"
             | "setTableCellFill"
             | "setTableCellBorders"
+            | "setTableCellInset"
             | "setTablePos"
             | "setTableSize"
             | "setTableColWidths"

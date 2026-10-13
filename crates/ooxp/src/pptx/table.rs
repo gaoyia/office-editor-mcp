@@ -7,9 +7,10 @@ use crate::xml::{Document, Element, Node};
 
 use super::picture;
 use super::request::{
-    CellBorderSide, CellBordersPatch, CellChrome, DeleteColOp, DeleteRowOp, DeleteTableOp,
-    InsertColOp, InsertRowOp, InsertTableOp, SetTableCellBordersOp, SetTableCellFillOp,
-    SetTableCellTextOp, SetTableColWidthsOp, SetTablePosOp, SetTableSizeOp, SetTableTrHeightOp,
+    CellBorderSide, CellBordersPatch, CellChrome, CellMarPatch, DeleteColOp, DeleteRowOp,
+    DeleteTableOp, InsertColOp, InsertRowOp, InsertTableOp, SetTableCellBordersOp,
+    SetTableCellFillOp, SetTableCellInsetOp, SetTableCellTextOp, SetTableColWidthsOp,
+    SetTablePosOp, SetTableSizeOp, SetTableTrHeightOp,
 };
 use super::shape;
 use super::DML_NS;
@@ -617,6 +618,7 @@ fn table_json(frame: &Element, host: &str, index: usize) -> Value {
             let tc_pr = tc.child_by_local("tcPr");
             cell.insert("fill".into(), inspect_cell_fill(tc_pr));
             cell.insert("borders".into(), inspect_cell_borders(tc_pr));
+            cell.insert("cellMar".into(), inspect_cell_mar(tc_pr));
             cells.push(Value::Object(cell));
         }
         rows.push(json!({
@@ -716,6 +718,31 @@ fn inspect_border_side(tc_pr: Option<&Element>, local: &str) -> Value {
     side.insert("width".into(), width);
     side.insert("dash".into(), dash);
     Value::Object(side)
+}
+
+fn inspect_cell_mar(tc_pr: Option<&Element>) -> Value {
+    let Some(pr) = tc_pr else {
+        return Value::Null;
+    };
+    let top = parse_i64_attr(pr, "marT");
+    let left = parse_i64_attr(pr, "marL");
+    let bottom = parse_i64_attr(pr, "marB");
+    let right = parse_i64_attr(pr, "marR");
+    if top.is_none() && left.is_none() && bottom.is_none() && right.is_none() {
+        return Value::Null;
+    }
+    let mut m = Map::new();
+    m.insert("top".into(), top.map(|v| json!(v)).unwrap_or(Value::Null));
+    m.insert("left".into(), left.map(|v| json!(v)).unwrap_or(Value::Null));
+    m.insert(
+        "bottom".into(),
+        bottom.map(|v| json!(v)).unwrap_or(Value::Null),
+    );
+    m.insert(
+        "right".into(),
+        right.map(|v| json!(v)).unwrap_or(Value::Null),
+    );
+    Value::Object(m)
 }
 
 fn key_matches(frame: &Element, index: usize, key: &TableKey) -> bool {
@@ -1463,6 +1490,16 @@ pub fn set_cell_borders(
     Ok(())
 }
 
+pub fn set_cell_inset(
+    slide_doc: &mut Document,
+    op: &SetTableCellInsetOp,
+    i: usize,
+) -> Result<(), Error> {
+    let tc = require_tc_mut(slide_doc, &op.target, &op.id, i)?;
+    apply_mar_to_tc(tc, &op.inset);
+    Ok(())
+}
+
 pub fn set_cell_format(
     slide_doc: &mut Document,
     id: &str,
@@ -1509,6 +1546,25 @@ fn apply_chrome(tc: &mut Element, chrome: &CellChrome) {
     }
     if let Some(borders) = &chrome.borders {
         apply_borders_to_tc(tc, borders);
+    }
+    if let Some(mar) = &chrome.cell_mar {
+        apply_mar_to_tc(tc, mar);
+    }
+}
+
+fn apply_mar_to_tc(tc: &mut Element, patch: &CellMarPatch) {
+    let pr = picture::ensure_child(tc, "tcPr");
+    apply_mar_attr(pr, "marT", &patch.top);
+    apply_mar_attr(pr, "marL", &patch.left);
+    apply_mar_attr(pr, "marB", &patch.bottom);
+    apply_mar_attr(pr, "marR", &patch.right);
+}
+
+fn apply_mar_attr(pr: &mut Element, local: &str, field: &Option<Option<i64>>) {
+    match field {
+        None => {}
+        Some(None) => remove_attr_local(pr, local),
+        Some(Some(v)) => picture::set_attr_local(pr, local, &v.to_string()),
     }
 }
 

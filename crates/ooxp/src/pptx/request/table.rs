@@ -199,6 +199,21 @@ pub(super) fn parse_set_table_cell_borders(
     })
 }
 
+const MAR_JSON: &[&str] = &["top", "left", "bottom", "right"];
+
+pub(super) fn parse_set_table_cell_inset(
+    obj: &Map<String, Value>,
+    i: usize,
+) -> Result<SetTableCellInsetOp, Error> {
+    let mut allowed = vec!["op", "id"];
+    allowed.extend_from_slice(MAR_JSON);
+    deny_keys(obj, i, &allowed)?;
+    let id = require_id(obj, i)?;
+    let target = table::parse_cell_id(&id, &format!("ops[{i}].id"))?;
+    let inset = parse_cell_mar_patch(obj, &format!("ops[{i}]"), true, false)?;
+    Ok(SetTableCellInsetOp { id, target, inset })
+}
+
 pub(super) fn parse_set_table_pos(
     obj: &Map<String, Value>,
     i: usize,
@@ -494,7 +509,7 @@ pub(super) fn parse_create_table_cells(
                                 &cell_path,
                                 &[
                                     "text", "url", "file", "slide", "tooltip", "event", "fill",
-                                    "borders",
+                                    "borders", "cellMar",
                                 ],
                             )?;
                             let text = match obj.get("text") {
@@ -577,7 +592,40 @@ fn parse_cell_chrome(obj: &Map<String, Value>, path: &str) -> Result<CellChrome,
             ));
         }
     };
-    Ok(CellChrome { fill, borders })
+    let cell_mar = match obj.get("cellMar") {
+        None => None,
+        Some(Value::Null) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "cellMar".into(),
+                    expected: TypeName::Object,
+                },
+                format!("{path}.cellMar"),
+            ));
+        }
+        Some(Value::Object(m)) => {
+            let patch = parse_cell_mar_patch(m, &format!("{path}.cellMar"), false, true)?;
+            if patch.is_empty() {
+                None
+            } else {
+                Some(patch)
+            }
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "cellMar".into(),
+                    expected: TypeName::Object,
+                },
+                format!("{path}.cellMar"),
+            ));
+        }
+    };
+    Ok(CellChrome {
+        fill,
+        borders,
+        cell_mar,
+    })
 }
 
 fn parse_fill_at(v: Option<&Value>, path: &str) -> Result<Option<Option<String>>, Error> {
@@ -714,4 +762,53 @@ fn parse_border_side(obj: &Map<String, Value>, path: &str) -> Result<CellBorderS
         }
     };
     Ok(CellBorderSide { color, width, dash })
+}
+
+fn parse_cell_mar_patch(
+    obj: &Map<String, Value>,
+    path: &str,
+    require_one: bool,
+    deny_unknown: bool,
+) -> Result<CellMarPatch, Error> {
+    if deny_unknown {
+        for k in obj.keys() {
+            if !MAR_JSON.contains(&k.as_str()) {
+                return Err(Error::with_path(
+                    ErrorKind::UnknownField { field: k.clone() },
+                    format!("{path}.{k}"),
+                ));
+            }
+        }
+    }
+    let patch = CellMarPatch {
+        top: parse_mar_field(obj.get("top"), &format!("{path}.top"), "top")?,
+        left: parse_mar_field(obj.get("left"), &format!("{path}.left"), "left")?,
+        bottom: parse_mar_field(obj.get("bottom"), &format!("{path}.bottom"), "bottom")?,
+        right: parse_mar_field(obj.get("right"), &format!("{path}.right"), "right")?,
+    };
+    if require_one && patch.is_empty() {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "setTableCellInset".into(),
+                field: "top, left, bottom or right".into(),
+            },
+            path.to_string(),
+        ));
+    }
+    Ok(patch)
+}
+
+fn parse_mar_field(
+    v: Option<&Value>,
+    path: &str,
+    field: &str,
+) -> Result<Option<Option<i64>>, Error> {
+    match v {
+        None => Ok(None),
+        Some(Value::Null) => Ok(Some(None)),
+        Some(other) => match parse_off_at(Some(other), path, field)? {
+            Some(n) => Ok(Some(Some(n))),
+            None => Ok(None),
+        },
+    }
 }

@@ -1360,6 +1360,9 @@
                 "$ref": "pptx.schema.json#/$defs/setTableCellBordersOp"
               },
               {
+                "$ref": "pptx.schema.json#/$defs/setTableCellInsetOp"
+              },
+              {
                 "$ref": "pptx.schema.json#/$defs/insertSlideOp"
               },
               {

@@ -5,7 +5,7 @@
 检查前用 create 或 apply 在本机生成文件，不要用改过扩展名的 zip 目录冒充。
 本机若 `PowerPoint.Application` 被 WPS 抢走，直接启动 `POWERPNT.EXE` 再挂 COM，不要走被抢的 ProgID。Office 16 的对象模型在 `mdiClass` 上。
 
-C、I、A、Pp、Pvg、Pem、P3d、Pom、Pc、Psa、Pn、Pcm、Pm、Ps、Tf、Tfl、Pln、Sg、Pt、Pg、Ptb、Tn、Tr、Td、Mt、Am、Aw、Mm、Mw、Md、Ts、Ho、Nh、Nm、Phl、Phr、Phx、Pcip、Pmd、Pmg、Psc、Cs、Po、Cr、Cq、Ck、Pz、Pzr、Pzg、Pw、Pph、
+C、I、A、Pp、Pvg、Pem、P3d、Pom、Pc、Psa、Pn、Pcm、Pm、Ps、Tf、Tfl、Pln、Sg、Pt、Pg、Ptb、Ptm、Tn、Tr、Td、Mt、Am、Aw、Mm、Mw、Md、Ts、Ho、Nh、Nm、Phl、Phr、Phx、Pcip、Pmd、Pmg、Psc、Cs、Po、Cr、Cq、Ck、Pz、Pzr、Pzg、Pw、Pph、
 Pf、Pcg、Pcx 各组由 `manual-check/office/cases/pptx-*.ps1` 自动判定，
 跑 `pwsh -File manual-check\office\run.ps1 -Case 'pptx-*'` 即可复现。O1 已放弃，与 xlsx / docx 相同。
 
@@ -51,6 +51,7 @@ Ps1–Ps5、Sg1–Sg5、Pt1–Pt6、Tn1–Tn5、Am1–Am5、Mm1–Mm5、Ho1–Ho
 2026-10-14 补跑 `pptx-media-geom.ps1`，Pmg1–Pmg5 通过。无 Repair。COM Type=16 `Width` / `Height` 144×72 磅。`x=914400` `y=457200`。备注视频可改尺寸，根上 `videoCount` 仍为 0。`setMedia` 不改几何。
 2026-10-14 补跑 `pptx-zoom-geom.ps1`，Pzg1–Pzg5 通过。无 Repair。COM Type=-2 `Width` / `Height` 144×72 磅。`x=914400` `y=457200`。备注 Zoom 可改尺寸，根上 `zoomCount` 仍为 0。`setZoom` 改目标不改几何。
 2026-10-14 补跑 `pptx-table-cell-fill.ps1`，Ptb1–Ptb5 通过。无 Repair。create 格 `fill=FF0000`，COM RGB=255；`setTableCellFill` 后 `fill=0000FF`，COM RGB=16711680。六边 inspect 对上。`fill: null` 与某边 JSON `null` 后 inspect 为 `null`。
+2026-10-14 补跑 `pptx-table-cell-mar.ps1`，Ptm1–Ptm5 通过。无 Repair。create `cellMar.top=12700` `left=25400`，COM `MarginTop=1` `MarginLeft=2` 磅。四边 JSON `null` 后 `cellMar` 为 `null`。
 
 - **C1** ✅
   - PowerPoint 16.0 能打开 `manual-check/office/out/pptx-create.pptx`，标题栏无 Repair
@@ -1176,6 +1177,31 @@ DrawingML 表的 `a:gridCol/@w` 与 `a:tr/@h`。`setTableSize` 仍只改框。�
   - 通过标准：✅ 对表 id 发 `setTableCellFill` 得 `InvalidId`
   - 缺 `color`、只给 `cx` 式未知字段、xlsx 上发得 `InvalidField`
   - 对单元格 id 发 `setShapeFill` 得 `InvalidId`
+  - 均未写文件
+
+## 表单元格边距
+
+格内边距写在 `a:tcPr` 的 `marT` / `marL` / `marB` / `marR`，单位 EMU。不要用 docx 的 `setTableCellMar` / `setCellFormat`。不要和 Pt、Pg、Ptb 撞。脚本：`manual-check/office/cases/pptx-table-cell-mar.ps1`。编号用 Ptm。
+
+- **Ptm1**
+  - 检查：inspect
+  - 通过标准：✅ create 带格 `cellMar` 后 inspect `top` / `left` / `bottom` / `right` 对上
+- **Ptm2**
+  - 检查：改边距
+  - 通过标准：✅ `setTableCellInset` 后 inspect 对上
+  - 无 Repair
+- **Ptm3**
+  - 检查：COM
+  - 通过标准：✅ PowerPoint 单元格 `TextFrame` 边距（磅）与 EMU 对得上（12700 EMU = 1 磅）
+  - 无 Repair
+- **Ptm4**
+  - 检查：清除
+  - 通过标准：✅ 某边 JSON `null` 后 inspect 该边为 `null`；四边都清后 `cellMar` 为 `null`
+  - 无 Repair
+- **Ptm5**
+  - 检查：拒错
+  - 通过标准：✅ 对表 id 发 `setTableCellInset` 得 `InvalidId`
+  - 一边都不给、负数、xlsx 上发得 `InvalidField`
   - 均未写文件
 
 ## 幻灯片切换

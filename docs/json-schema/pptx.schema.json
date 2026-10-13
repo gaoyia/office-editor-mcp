@@ -1195,6 +1195,9 @@
             },
             "borders": {
               "$ref": "#/$defs/tableCellBorders"
+            },
+            "cellMar": {
+              "$ref": "#/$defs/tableCellMar"
             }
           }
         }
@@ -2481,6 +2484,85 @@
               "type": "null"
             }
           ]
+        }
+      }
+    },
+    "tableCellMar": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "top": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "left": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "bottom": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "right": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        }
+      }
+    },
+    "setTableCellInsetOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setTableCellInset"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "top": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "left": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "bottom": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "right": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
         }
       }
     },

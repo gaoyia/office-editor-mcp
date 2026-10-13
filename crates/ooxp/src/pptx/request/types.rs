@@ -1080,9 +1080,24 @@ impl CellBordersPatch {
 }
 
 #[derive(Debug, Clone, Default)]
+pub struct CellMarPatch {
+    pub top: Option<Option<i64>>,
+    pub left: Option<Option<i64>>,
+    pub bottom: Option<Option<i64>>,
+    pub right: Option<Option<i64>>,
+}
+
+impl CellMarPatch {
+    pub fn is_empty(&self) -> bool {
+        self.top.is_none() && self.left.is_none() && self.bottom.is_none() && self.right.is_none()
+    }
+}
+
+#[derive(Debug, Clone, Default)]
 pub struct CellChrome {
     pub fill: Option<Option<String>>,
     pub borders: Option<CellBordersPatch>,
+    pub cell_mar: Option<CellMarPatch>,
 }
 
 #[derive(Debug, Clone)]
@@ -1097,6 +1112,13 @@ pub struct SetTableCellBordersOp {
     pub id: String,
     pub target: table::CellTarget,
     pub borders: CellBordersPatch,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetTableCellInsetOp {
+    pub id: String,
+    pub target: table::CellTarget,
+    pub inset: CellMarPatch,
 }
 
 #[derive(Debug, Clone)]
@@ -1280,6 +1302,7 @@ pub enum PptxOp {
     SetTableCellText(SetTableCellTextOp),
     SetTableCellFill(SetTableCellFillOp),
     SetTableCellBorders(SetTableCellBordersOp),
+    SetTableCellInset(SetTableCellInsetOp),
     SetTablePos(SetTablePosOp),
     SetTableSize(SetTableSizeOp),
     SetTableColWidths(SetTableColWidthsOp),
