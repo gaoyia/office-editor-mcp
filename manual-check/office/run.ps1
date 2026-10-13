@@ -92,6 +92,7 @@ $order = @(
     'docx-emf'
     'docx-model3d'
     'docx-ink'
+    'docx-ink-geom'
     'docx-textbox'
     'docx-textbox-anchor'
     'docx-notes'

@@ -1183,6 +1183,12 @@
                 "$ref": "docx.schema.json#/$defs/deleteInkCanvasOp"
               },
               {
+                "$ref": "docx.schema.json#/$defs/setInkCanvasSizeOp"
+              },
+              {
+                "$ref": "docx.schema.json#/$defs/setInkCanvasWrapOp"
+              },
+              {
                 "$ref": "xlsx.schema.json#/$defs/insertModel3dOp"
               },
               {

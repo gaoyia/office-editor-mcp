@@ -46,7 +46,7 @@ docx 可用 `insertWatermark` / `deleteWatermark` 读写页眉里的 DrawingML �
 正文与页眉页脚里的浮动图 / 文本框 / 连接线 / 无框形状可用 `groupShapes` / `ungroup` 组合或解开；
 Word 写出的连接线可进 inspect，并可用 `insertConnector` / `deleteConnector` 增删。
 无文本框的 `wps:wsp` 形状可进 inspect，并可用 `insertShape` / `deleteShape` / `setShapePos` / `setShapeSize` / `setShapeFill` / `setShapeLine` 增删改。
-正文与页眉页脚里的墨迹画布（非批注）可进 inspect，并可用 `insertInkCanvas` / `replaceInkCanvas` / `deleteInkCanvas` 增删换，
+正文与页眉页脚里的墨迹画布（非批注）可进 inspect，并可用 `insertInkCanvas` / `replaceInkCanvas` / `deleteInkCanvas` / `setInkCanvasSize` / `setInkCanvasWrap` 增删换与改尺寸绕排，
 也可按墨迹 id `exportMedia`。不要和批注里的 `kind: ink` 混。
 正文与页眉页脚里的 3D 模型可进 inspect，并可用 `insertModel3d` / `replaceModel3d` / `deleteModel3d` 增删换，
 也可按 3D id `exportMedia`。不是图，不进 `pictures`。注内、批注内本期不插。
@@ -500,7 +500,7 @@ Word 16.0 把连接线写成 `wps:wsp`，不是独立 `cxnSp`。
 正文墨迹只收主文档段落的子孙，遇 `w:txbxContent` 停住。组合 `wpg:wgp` 本身不进树，里面符合条件的 contentPart 展开。
 `mc:AlternateContent` 只进 Choice。注内、批注内、框内本期不编。
 `insertInkCanvas` 的 `id` 必须是正文或页眉页脚段落 id；对注内或批注内段落报 `InvalidField`，对框内段落报 `InvalidId`。
-`replaceInkCanvas` / `deleteInkCanvas` 的 `id` 必须是墨迹画布 id。xlsx / pptx 上这些 op 与 `scope.inkCanvases` 报 `InvalidField`。
+`replaceInkCanvas` / `deleteInkCanvas` / `setInkCanvasSize` / `setInkCanvasWrap` 的 `id` 必须是墨迹画布 id。xlsx / pptx 上这些 op 与 `scope.inkCanvases` 报 `InvalidField`。
 写入只走 `wpc` 画布加 `w14:contentPart` 加 InkML 部件；独立 `wpi` / `wordprocessingInk` 不作为写入路径。
 inspect 若文件里已有这种 markup，仍认 `contentPart` 加 InkML。
 不把 InkML 原文摊进树。
@@ -1712,6 +1712,7 @@ Word 16.0 另存通常不写该部件；自行写入后 Word 仍能打开。xlsx
 带超链接、书签、域、目录、编号、公式、内容控件与批注回复的示例见 `docs/examples/docx-create-remain.json`。
 带 SVG 图的示例见 `docs/examples/docx-create-svg.json`。
 带墨迹画布的示例见 `docs/examples/docx-create-ink.json`。
+改墨迹画布尺寸与绕排的示例见 `docs/examples/docx-apply-ink-geom.json`。
 带 3D 模型的示例见 `docs/examples/docx-create-model3d.json`。
 带 theme 与页面背景的示例见 `docs/examples/docx-create-theme-bg.json`。
 带样式、表外观、形状、连接线、题注、索引、参考文献、构建基块、嵌入字体、拼音与 DrawingML 链的示例见 `docs/examples/docx-create-round4.json`。
@@ -4458,7 +4459,8 @@ SmartArt 四件套 `/word/diagrams/…` 及可选 drawing 缓存，`setNoteNumbe
 编号 op 改到的 `/word/numbering.xml`、主文档 `.rels` 与 `[Content_Types].xml`，
 `insertStyle` / `deleteStyle` / `setStyle` 改到的 `/word/styles.xml`（缺则新建，并可脏主文档 `.rels` 与 `[Content_Types].xml`），
 以及新媒体或被删的 `/word/media/…`。
-OLE op 还可以脏 `/word/embeddings/…` 与预览图媒体。墨迹画布 op 还可以脏 `/word/ink/…`、宿主 `.rels` 与 `[Content_Types].xml`。
+OLE op 还可以脏 `/word/embeddings/…` 与预览图媒体。`insertInkCanvas` / `replaceInkCanvas` / `deleteInkCanvas` 还可以脏 `/word/ink/…`、宿主 `.rels` 与 `[Content_Types].xml`。
+`setInkCanvasSize` / `setInkCanvasWrap` 只脏宿主 XML。
 图表 op、SmartArt op 与文本框 op 点名注内或批注内段落时，还可以脏对应 notes / comments 部件及其 `.rels`。
 `setHeaderFooterDistance`、`setPageMargin`、`setPageSize`、`setColumns`、`setVerticalAlign`、`setLineNumbering`、`setDocGrid`、
 `setRtlGutter`、`setPageBorders`、`setFormProt`、`setTitlePage`、`insertSection`、`insertToc`、`deleteToc`、`insertCaption`、`deleteCaption`、
@@ -4608,6 +4610,32 @@ InkML 部件路径 `/word/ink/inkN.xml`，Content Type `application/inkml+xml`�
 
 找不到报 `IdNotFound`。删掉该 `contentPart`；若宿主 `wpc` 只剩 `bg` / `whole` 则删整段 drawing / AlternateContent。
 关系无人引用则删部件与 Override。xlsx / pptx 上发此 op 报 `InvalidField`。
+
+### setInkCanvasSize
+
+字段与 `setPictureSize` 的 docx 一侧相同。`id` 必须是墨迹画布 id。
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"setInkCanvasSize"` |
+| `id` | 必须是墨迹画布 id |
+| `cx` | 可选。宽度，EMU，正整数 |
+| `cy` | 可选。高度，EMU，正整数 |
+
+- `cx` 与 `cy` 至少给一个，否则报 `InvalidField`
+- 只改被点名的那一侧，另一侧保持原值
+- 写入宿主 `wp:extent`；若 `a:ext` 存在，一并改
+- 不换 InkML，不改关系
+- 找不到报 `IdNotFound`
+- 不是墨迹 id 报 `InvalidId`
+- 对图 id 发此 op 报 `InvalidId`
+- 对墨迹 id 发 `setPictureSize` 仍报 `InvalidId`
+- xlsx / pptx 上发此 op 报 `InvalidField`
+
+### setInkCanvasWrap
+
+字段与 `setPictureWrap` 相同，`id` 必须是墨迹画布 id。行内 / 浮动与绕排规则同图片。
+位置只支持相对页边。`replaceInkCanvas` 仍不改几何。xlsx / pptx 上发此 op 报 `InvalidField`。
 
 ### insertModel3d
 

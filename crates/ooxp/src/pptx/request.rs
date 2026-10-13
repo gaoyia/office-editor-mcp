@@ -1734,6 +1734,8 @@ fn is_foreign_op(op_name: &str) -> bool {
             | "insertInkCanvas"
             | "replaceInkCanvas"
             | "deleteInkCanvas"
+            | "setInkCanvasSize"
+            | "setInkCanvasWrap"
     )
 }
 

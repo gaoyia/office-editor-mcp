@@ -1374,6 +1374,8 @@ pub enum DocxOp {
     InsertInkCanvas(super::ink::InsertInkCanvasOp),
     ReplaceInkCanvas(super::ink::ReplaceInkCanvasOp),
     DeleteInkCanvas(super::ink::DeleteInkCanvasOp),
+    SetInkCanvasSize(super::ink::SetInkCanvasSizeOp),
+    SetInkCanvasWrap(super::ink::SetInkCanvasWrapOp),
     InsertModel3d(super::model3d::InsertModel3dOp),
     ReplaceModel3d(super::model3d::ReplaceModel3dOp),
     DeleteModel3d(super::model3d::DeleteModel3dOp),
@@ -2080,6 +2082,12 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<DocxOp>, Error> {
             }
             "deleteInkCanvas" => {
                 out.push(DocxOp::DeleteInkCanvas(parse_delete_ink_canvas(obj, i)?))
+            }
+            "setInkCanvasSize" => {
+                out.push(DocxOp::SetInkCanvasSize(parse_set_ink_canvas_size(obj, i)?))
+            }
+            "setInkCanvasWrap" => {
+                out.push(DocxOp::SetInkCanvasWrap(parse_set_ink_canvas_wrap(obj, i)?))
             }
             "insertModel3d" => out.push(DocxOp::InsertModel3d(parse_insert_model3d(obj, i)?)),
             "replaceModel3d" => out.push(DocxOp::ReplaceModel3d(parse_replace_model3d(obj, i)?)),
@@ -9409,6 +9417,128 @@ fn parse_delete_ink_canvas(
     let id = require_id(obj, i)?;
     let target = super::ink::parse_ink_id(&id, i)?;
     Ok(super::ink::DeleteInkCanvasOp { id, target })
+}
+
+fn parse_set_ink_canvas_size(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<super::ink::SetInkCanvasSizeOp, Error> {
+    deny_keys(obj, i, &["op", "id", "cx", "cy"])?;
+    let id = require_id(obj, i)?;
+    let target = super::ink::parse_ink_id(&id, i)?;
+    let cx = parse_emu_field(obj.get("cx"), i, "cx")?;
+    let cy = parse_emu_field(obj.get("cy"), i, "cy")?;
+    if cx.is_none() && cy.is_none() {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "setInkCanvasSize".into(),
+                field: "cx or cy".into(),
+            },
+            format!("ops[{i}]"),
+        ));
+    }
+    Ok(super::ink::SetInkCanvasSizeOp { id, target, cx, cy })
+}
+
+fn parse_set_ink_canvas_wrap(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<super::ink::SetInkCanvasWrapOp, Error> {
+    deny_keys(
+        obj,
+        i,
+        &[
+            "op", "id", "kind", "wrap", "alignH", "alignV", "offsetX", "offsetY",
+        ],
+    )?;
+    let id = require_id(obj, i)?;
+    let target = super::ink::parse_ink_id(&id, i)?;
+    let kind = match obj.get("kind") {
+        Some(Value::String(s)) => picture::parse_pic_kind(s)
+            .ok_or_else(|| Error::with_path(ErrorKind::InvalidPicKind, format!("ops[{i}].kind")))?,
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "kind".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].kind"),
+            ));
+        }
+        None => {
+            return Err(Error::with_path(
+                ErrorKind::OpRequiresField {
+                    op: "setInkCanvasWrap".into(),
+                    field: "kind".into(),
+                },
+                format!("ops[{i}].kind"),
+            ));
+        }
+    };
+    let wrap = match obj.get("wrap") {
+        None | Some(Value::Null) => None,
+        Some(Value::String(s)) => Some(picture::parse_wrap(s).ok_or_else(|| {
+            Error::with_path(ErrorKind::InvalidPicWrap, format!("ops[{i}].wrap"))
+        })?),
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "wrap".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].wrap"),
+            ));
+        }
+    };
+    if kind == PicKind::Inline && wrap.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::InvalidPicWrap,
+            format!("ops[{i}].wrap"),
+        ));
+    }
+    if kind == PicKind::Anchor && wrap.is_none() {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "setInkCanvasWrap".into(),
+                field: "wrap".into(),
+            },
+            format!("ops[{i}].wrap"),
+        ));
+    }
+    let align_h = parse_align_h_field(obj.get("alignH"), i)?;
+    let align_v = parse_align_v_field(obj.get("alignV"), i)?;
+    let offset_x = parse_i64_field(obj.get("offsetX"), i, "offsetX")?;
+    let offset_y = parse_i64_field(obj.get("offsetY"), i, "offsetY")?;
+    if align_h.is_some() && offset_x.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::MutuallyExclusive {
+                a: "alignH".into(),
+                b: "offsetX".into(),
+            },
+            format!("ops[{i}]"),
+        ));
+    }
+    if align_v.is_some() && offset_y.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::MutuallyExclusive {
+                a: "alignV".into(),
+                b: "offsetY".into(),
+            },
+            format!("ops[{i}]"),
+        ));
+    }
+    Ok(super::ink::SetInkCanvasWrapOp {
+        id,
+        target,
+        kind,
+        wrap,
+        pos: WrapPos {
+            align_h,
+            align_v,
+            offset_x,
+            offset_y,
+        },
+    })
 }
 
 fn parse_insert_model3d(

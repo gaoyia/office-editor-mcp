@@ -5195,6 +5195,101 @@
         }
       }
     },
+    "setInkCanvasSizeOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setInkCanvasSize"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "cx": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "cy": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "anyOf": [
+        {
+          "required": [
+            "cx"
+          ]
+        },
+        {
+          "required": [
+            "cy"
+          ]
+        }
+      ]
+    },
+    "setInkCanvasWrapOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "kind"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setInkCanvasWrap"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "enum": [
+            "inline",
+            "anchor"
+          ]
+        },
+        "wrap": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "square",
+            "tight",
+            "through",
+            "topAndBottom",
+            "none",
+            null
+          ]
+        },
+        "alignH": {
+          "enum": [
+            "left",
+            "center",
+            "right"
+          ]
+        },
+        "alignV": {
+          "enum": [
+            "top",
+            "center",
+            "bottom"
+          ]
+        },
+        "offsetX": {
+          "type": "integer"
+        },
+        "offsetY": {
+          "type": "integer"
+        }
+      }
+    },
     "insertModel3dOp": {
       "type": "object",
       "required": [

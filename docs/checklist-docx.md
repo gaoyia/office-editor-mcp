@@ -1988,6 +1988,27 @@ Word 行内 COM 认 `Type=19`（`wdInlineShape3DModel`）。注内、批注内�
   - 检查：拒错
   - 通过标准：不是 InkML 的 `file` 报 `InvalidField`。不强制开 Word
 
+## 墨迹画布尺寸与绕排
+
+已有墨迹画布改 `wp:extent` 与行内 / 浮动绕排。不换 InkML。不写独立 `wpi` 画布。不算排版引擎。
+手测脚本 `manual-check/office/cases/docx-ink-geom.ps1`。编号用 Is，不要和 Ic 撞。
+
+- **Is1**
+  - 检查：改尺寸
+  - 通过标准：`setInkCanvasSize` 写 `cx` / `cy` 后树上对得上，ZIP 里 `wp:extent` 与 `a:ext` 同步。Word 无修复。COM `Width` / `Height` 对得上（允许 2 磅误差）
+- **Is2**
+  - 检查：改绕排
+  - 通过标准：`setInkCanvasWrap` 写成浮动 `square` 后树上 `kind` 为 `anchor`、`wrap` 为 `square`。Word 无修复
+- **Is3**
+  - 检查：改回行内
+  - 通过标准：再发 `kind: inline` 后树上 `kind` 为 `inline`，`wrap` 为 `null`。Word 无修复
+- **Is4**
+  - 检查：替换不改几何
+  - 通过标准：改过尺寸后再 `replaceInkCanvas`，树上 `cx` / `cy` 仍是新值。Word 无修复
+- **Is5**
+  - 检查：拒错
+  - 通过标准：`cx` / `cy` 都不给报 `InvalidField`。对 xlsx 发 `setInkCanvasSize` 报 `InvalidField`。不强制开 Word
+
 ## 原样保存（opc 验收）
 
 与 xlsx 清单相同：O1 第一期放弃；零脏写回在 OPC 层验收；O2 按 apply 看未改区域。

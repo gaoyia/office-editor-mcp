@@ -31,7 +31,7 @@ docx 的 `scope.connectors` 列出正文与页眉页脚里的 `wps` 连接线；
 apply 用 `insertConnector` / `deleteConnector` / `insertShape` / `deleteShape` / `setShapePos` / `setShapeSize` / `setShapeFill` / `setShapeLine` / `groupShapes` / `ungroup`。
 docx 的图与文本框节点带 `hyperlink`（DrawingML `a:hlinkClick`），不进 `hyperlinks` 名单，也不计入 `hyperlinkCount`。
 docx 的 `scope.inkCanvases` 列出正文与页眉页脚里的墨迹画布（`wpc` 画布加 `w14:contentPart` 加 InkML 部件）；
-apply 用 `insertInkCanvas` / `replaceInkCanvas` / `deleteInkCanvas`。xlsx / pptx 拒这些键与 op。
+apply 用 `insertInkCanvas` / `replaceInkCanvas` / `deleteInkCanvas` / `setInkCanvasSize` / `setInkCanvasWrap`。xlsx / pptx 拒这些键与 op。
 三种格式的 `scope.model3ds` 列出 3D 模型（`am3d:model3d`，GLB 部件）。
 apply 用 `insertModel3d` / `replaceModel3d` / `deleteModel3d`。不是图，不进 `pictures`。
 xlsx / pptx 的 `scope.maths` 列出 drawing 公式框（`a14:m` 包 OMML）。
@@ -271,7 +271,7 @@ docx 认 `setParaText`、`setHeaderFooterDistance`、`setPageMargin`、`setPageS
 `setTrendline`、`deleteTrendline`、`insertErrorBars`、`setErrorBars`、`deleteErrorBars`、`setChartSeriesAxis`、`setChartSize`、`setChartWrap`；
 不含 `setChartAnchor`、`insertChartSheet`、`deleteChartSheet`）、以及 SmartArt op（`insertSmartArt`、`deleteSmartArt`、
 `setSmartArtText`、`addSmartArtPoint`、`deleteSmartArtPoint`、`setSmartArtSize`、`setSmartArtWrap`、`setSmartArtColors`、
-`setSmartArtStyle`、`setSmartArtLayout`）、以及 OLE op（`insertOle`、`deleteOle`）、以及墨迹画布 op（`insertInkCanvas`、`replaceInkCanvas`、`deleteInkCanvas`）、以及 3D 模型 op（`insertModel3d`、`replaceModel3d`、`deleteModel3d`）、以及 `setProtection`、
+`setSmartArtStyle`、`setSmartArtLayout`）、以及 OLE op（`insertOle`、`deleteOle`）、以及墨迹画布 op（`insertInkCanvas`、`replaceInkCanvas`、`deleteInkCanvas`、`setInkCanvasSize`、`setInkCanvasWrap`）、以及 3D 模型 op（`insertModel3d`、`replaceModel3d`、`deleteModel3d`）、以及 `setProtection`、
 以及 `insertWatermark` / `deleteWatermark`、以及 `setThemeColors` / `setThemeFonts` / `setThemeFmt` / `setThemeOverride`、
 以及 `setProps` / `setCustomProp` / `deleteCustomProp`。
 pptx 认 `setShapeText`、`setShapeFormat`、形状管理 op（`insertShape`、`insertConnector`、`deleteConnector`、`setConnector`、`groupShapes`、`ungroup`、`deleteShape`、
@@ -299,7 +299,7 @@ pptx 认 `setShapeText`、`setShapeFormat`、形状管理 op（`insertShape`、`
  / `setVerticalAlign` / `setLineNumbering` / `setDocGrid` / `setRtlGutter` / `setPageBackground` / `setPageBorders` / `setFormProt`
  / `setMirrorMargins` / `setGutterAtTop` / `setHeaderFooterLink` / `insertHeaderFooter` / `setTitlePage` / `setEvenAndOddHeaders`、
 `setTextBoxWrap` / `setTextBoxFill` / `setTextBoxLine` / `setTextBoxDirection` / `setTextBoxTextAnchor`、注、`setSmartArtPos` / `setSmartArtWrap`、
-`insertWatermark` / `deleteWatermark`、`insertInkCanvas` / `replaceInkCanvas` / `deleteInkCanvas`、表格 op、修订 op、书签 op、例外编辑区 op、域 op、题注与交叉引用 op、索引 op、参考文献 op、`setBibliographyStyle`、构建基块 op、字体嵌入 op、编号 op、样式 op、
+`insertWatermark` / `deleteWatermark`、`insertInkCanvas` / `replaceInkCanvas` / `deleteInkCanvas` / `setInkCanvasSize` / `setInkCanvasWrap`、表格 op、修订 op、书签 op、例外编辑区 op、域 op、题注与交叉引用 op、索引 op、参考文献 op、`setBibliographyStyle`、构建基块 op、字体嵌入 op、编号 op、样式 op、
 直接格式 op、拼音 op、`setEastAsianSettings`、节结构 op 或 `setNotesText`，
 对 docx / pptx 发 `setHeaderFooterText`、`insertChartSheet`、`deleteChartSheet`、`insertSheet`、`deleteSheet`、`renameSheet`、
 `moveSheet`、`setSheetHidden`、`setCellStyle`、`setColWidth`、`setRowHeight`、`mergeRange` 或 `unmergeRange`、
@@ -777,6 +777,7 @@ docx / pptx 上出现 `to` / `toOffX` / `toOffY` 报 `InvalidField`。pptx：写
 `setPictureWrap` 见 [docx](json-contract-docx.md#setpicturewrap)。
 `setPictureAnchor` 见 [xlsx](json-contract-xlsx.md#setpictureanchor)。
 `setPicturePos` 见 [pptx](json-contract-pptx.md#setpicturepos)。
+`setInkCanvasSize` / `setInkCanvasWrap` 见 [docx](json-contract-docx.md#setinkcanvassize)。
 
 ### insertTextBox
 

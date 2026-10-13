@@ -1,4 +1,4 @@
-//! docx 墨迹画布：inspect、insert / replace / delete、create、exportMedia；xlsx / pptx 拒这些 op。
+//! docx 墨迹画布：inspect、insert / replace / delete、尺寸与绕排、create、exportMedia；xlsx / pptx 拒这些 op。
 
 use std::io::{Cursor, Read};
 use std::path::{Path, PathBuf};
@@ -268,6 +268,130 @@ fn insert_inspect_export_replace_delete() {
 }
 
 #[test]
+fn set_size_wrap_and_replace_keeps_geom() {
+    let src = create_docx("geom-host", json!({ "paragraphs": [{ "text": "hello" }] }));
+    let tree0 = inspect_tree(&src, json!({ "from": 1, "maxParas": 8 }));
+    let para = tree0["paragraphs"][0]["id"].as_str().unwrap();
+    let ink = write_ink("geom", INKML);
+    let inserted = seq_path("geom-ins", "docx");
+    apply(
+        &src,
+        &inserted,
+        json!([{
+            "op": "insertInkCanvas",
+            "id": para,
+            "file": ink.to_string_lossy()
+        }]),
+    );
+    let tree1 = inspect_tree(
+        &inserted,
+        json!({ "from": 1, "maxParas": 8, "inkCanvases": true }),
+    );
+    let ink_id = first_ink(&tree1)["id"].as_str().unwrap().to_string();
+    assert_eq!(first_ink(&tree1)["cx"], 1_828_800);
+    assert_eq!(first_ink(&tree1)["cy"], 914_400);
+    assert_eq!(first_ink(&tree1)["kind"], "inline");
+
+    let sized = seq_path("geom-size", "docx");
+    apply(
+        &inserted,
+        &sized,
+        json!([{
+            "op": "setInkCanvasSize",
+            "id": ink_id,
+            "cx": 3_657_600,
+            "cy": 1_828_800
+        }]),
+    );
+    let tree2 = inspect_tree(
+        &sized,
+        json!({ "from": 1, "maxParas": 8, "inkCanvases": true }),
+    );
+    let item2 = first_ink(&tree2);
+    assert_eq!(item2["cx"], 3_657_600);
+    assert_eq!(item2["cy"], 1_828_800);
+    let xml2 = part_text(&sized, "word/document.xml");
+    let extent_hits = xml2.matches("cx=\"3657600\"").count();
+    assert!(extent_hits >= 2, "wp:extent 与 a:ext 都应写入 cx：{xml2}");
+
+    let wrapped = seq_path("geom-wrap", "docx");
+    apply(
+        &sized,
+        &wrapped,
+        json!([{
+            "op": "setInkCanvasWrap",
+            "id": ink_id,
+            "kind": "anchor",
+            "wrap": "square",
+            "alignH": "left",
+            "alignV": "top"
+        }]),
+    );
+    let tree3 = inspect_tree(
+        &wrapped,
+        json!({ "from": 1, "maxParas": 8, "inkCanvases": true }),
+    );
+    let item3 = first_ink(&tree3);
+    assert_eq!(item3["kind"], "anchor");
+    assert_eq!(item3["wrap"], "square");
+    assert_eq!(item3["cx"], 3_657_600);
+
+    let inline = seq_path("geom-inline", "docx");
+    apply(
+        &wrapped,
+        &inline,
+        json!([{
+            "op": "setInkCanvasWrap",
+            "id": ink_id,
+            "kind": "inline"
+        }]),
+    );
+    let tree4 = inspect_tree(
+        &inline,
+        json!({ "from": 1, "maxParas": 8, "inkCanvases": true }),
+    );
+    let item4 = first_ink(&tree4);
+    assert_eq!(item4["kind"], "inline");
+    assert_eq!(item4["wrap"], Value::Null);
+
+    let ink_b = write_ink("geom-b", INKML_B);
+    let replaced = seq_path("geom-rep", "docx");
+    apply(
+        &sized,
+        &replaced,
+        json!([{
+            "op": "replaceInkCanvas",
+            "id": ink_id,
+            "file": ink_b.to_string_lossy()
+        }]),
+    );
+    let tree5 = inspect_tree(
+        &replaced,
+        json!({ "from": 1, "maxParas": 8, "inkCanvases": true }),
+    );
+    let item5 = first_ink(&tree5);
+    assert_eq!(item5["cx"], 3_657_600);
+    assert_eq!(item5["cy"], 1_828_800);
+    assert_eq!(item5["kind"], "inline");
+
+    let err = apply_err(
+        &inserted,
+        json!([{ "op": "setInkCanvasSize", "id": ink_id }]),
+    );
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+
+    let err = apply_err(
+        &inserted,
+        json!([{
+            "op": "setPictureSize",
+            "id": ink_id,
+            "cx": 1000
+        }]),
+    );
+    assert_eq!(err.code(), ErrorCode::InvalidId);
+}
+
+#[test]
 fn create_writes_ink_part() {
     let ink = write_ink("create", INKML);
     let path = create_docx(
@@ -376,9 +500,76 @@ fn reject_bad_inkml_and_foreign_ops() {
     let err = run(
         &json!({
             "schemaVersion": 1,
+            "action": "apply",
+            "path": xlsx.to_string_lossy(),
+            "output": seq_path("xlsx-size", "xlsx").to_string_lossy(),
+            "ops": [{
+                "op": "setInkCanvasSize",
+                "id": "sheet:Sheet1/ink:1",
+                "cx": 1000
+            }]
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+
+    let err = run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "apply",
+            "path": xlsx.to_string_lossy(),
+            "output": seq_path("xlsx-wrap", "xlsx").to_string_lossy(),
+            "ops": [{
+                "op": "setInkCanvasWrap",
+                "id": "sheet:Sheet1/ink:1",
+                "kind": "inline"
+            }]
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+
+    let err = run(
+        &json!({
+            "schemaVersion": 1,
             "action": "inspect",
             "path": xlsx.to_string_lossy(),
             "scope": { "inkCanvases": true }
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+
+    let pptx = seq_path("pptx", "pptx");
+    run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "create",
+            "path": pptx.to_string_lossy(),
+            "format": "pptx",
+            "presentation": { "slides": [{ "shapes": [{ "text": "hi" }] }] }
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap();
+    let err = run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "apply",
+            "path": pptx.to_string_lossy(),
+            "output": seq_path("pptx-size", "pptx").to_string_lossy(),
+            "ops": [{
+                "op": "setInkCanvasSize",
+                "id": "slide:1/ink:1",
+                "cx": 1000
+            }]
         })
         .to_string(),
         None,

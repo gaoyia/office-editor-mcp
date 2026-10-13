@@ -553,6 +553,12 @@ pub fn apply(bytes: &[u8], ops: &[DocxOp]) -> Result<Vec<u8>, Error> {
             DocxOp::DeleteInkCanvas(op) => {
                 ink::apply_delete(&mut pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
             }
+            DocxOp::SetInkCanvasSize(op) => {
+                ink::apply_set_size(&mut pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
+            }
+            DocxOp::SetInkCanvasWrap(op) => {
+                ink::apply_set_wrap(&mut pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
+            }
             DocxOp::InsertModel3d(op) => {
                 super::model3d::apply_insert(
                     &mut pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i,

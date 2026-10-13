@@ -625,7 +625,7 @@
   - 脚注尾注 op
   - `setSmartArtPos` / `setSmartArtWrap`
   - `insertWatermark` / `deleteWatermark`
-  - `insertInkCanvas` / `replaceInkCanvas` / `deleteInkCanvas`
+  - `insertInkCanvas` / `replaceInkCanvas` / `deleteInkCanvas` / `setInkCanvasSize` / `setInkCanvasWrap`
   - 表格结构 op、修订 op、书签 op、例外编辑区 op、域 op
   - `insertCaption` / `deleteCaption` / `insertCrossRef` / `deleteCrossRef`
   - `insertIndex` / `deleteIndex` / `insertIndexEntry` / `deleteIndexEntry`
@@ -677,7 +677,7 @@
   - `setPictureWrap`、`setPictureAnchor`、`setChartWrap`、`setChartAnchor`
   - `insertChartSheet`、`deleteChartSheet`
   - `insertWatermark` / `deleteWatermark`
-  - `insertInkCanvas` / `replaceInkCanvas` / `deleteInkCanvas`
+  - `insertInkCanvas` / `replaceInkCanvas` / `deleteInkCanvas` / `setInkCanvasSize` / `setInkCanvasWrap`
 - pptx 的 `insertComment` 的 `id` 必须是 `slide:{n}`
 - 对其余批注 op，id 必须是 `slide:{n}/comment:{guid}`（回复则再加 `/reply:{guid}`）
 - docx / pptx 上发 `setChartAnchor` 报 `InvalidField`
@@ -745,13 +745,15 @@
 - `deleteOle` 的 `id` 必须是 OLE id
 - 空 `file` 报 `InvalidField`
 - 读不到文件报 `Io`
-- 找不到墨迹画布时，`replaceInkCanvas` / `deleteInkCanvas` 报 `IdNotFound`
+- 找不到墨迹画布时，`replaceInkCanvas` / `deleteInkCanvas` / `setInkCanvasSize` / `setInkCanvasWrap` 报 `IdNotFound`
 - `insertInkCanvas` 的 `id` 必须是正文或页眉页脚段落 id
 - 对注内或批注内段落发该 op 报 `InvalidField`
 - 对框内段落、图 id、墨迹 id 或容器 id 发该 op 报 `InvalidId`
-- `replaceInkCanvas` / `deleteInkCanvas` 的 `id` 必须是墨迹画布 id
+- `replaceInkCanvas` / `deleteInkCanvas` / `setInkCanvasSize` / `setInkCanvasWrap` 的 `id` 必须是墨迹画布 id
 - 根本地名不是 `ink` 或命名空间不是 InkML 报 `InvalidField`
-- xlsx / pptx 上发 `insertInkCanvas` / `replaceInkCanvas` / `deleteInkCanvas` 报 `InvalidField`
+- `setInkCanvasSize` 的 `cx` / `cy` 一个都不给报 `InvalidField`
+- `setInkCanvasWrap` 的 `kind` / `wrap` 规则与 `setPictureWrap` 相同
+- xlsx / pptx 上发 `insertInkCanvas` / `replaceInkCanvas` / `deleteInkCanvas` / `setInkCanvasSize` / `setInkCanvasWrap` 报 `InvalidField`
 - 找不到 3D 模型时，`replaceModel3d` / `deleteModel3d` 报 `IdNotFound`
 - `insertModel3d` 的 `id`：docx 必须是正文或页眉页脚段落 id，xlsx 必须是 `sheet:{name}`，pptx 必须是 `slide:{n}`、`slide:{n}/notes`、`master:{n}` 或 `master:{n}/layout:{k}`
 - 对图 id、OLE id 发 3D op，或对 3D id 发图 op，报 `InvalidId`

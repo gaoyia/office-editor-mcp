@@ -1,4 +1,4 @@
-//! 正文与页眉页脚里的墨迹画布（非批注）：收集、导出、插删换。
+//! 正文与页眉页脚里的墨迹画布（非批注）：收集、导出、插删换、改尺寸与绕排。
 //! 不把手写识别成字，不把 InkML 原文塞进 inspect 树。
 
 use std::collections::HashMap;
@@ -15,7 +15,7 @@ use crate::xml::{self, Document, Element, Node};
 
 use super::hf::HfPart;
 use super::para::{self, HostPara, TxbxKey, TxbxTarget};
-use super::picture::{self, PicKind, WrapKind};
+use super::picture::{self, PicKind, WrapKind, WrapPos};
 use super::{A_NS, MC_NS, REL_NS, W14_NS, WP_NS};
 
 /// Word 16.0 另存的画布命名空间。
@@ -51,6 +51,23 @@ pub struct ReplaceInkCanvasOp {
 pub struct DeleteInkCanvasOp {
     pub id: String,
     pub target: TxbxTarget,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetInkCanvasSizeOp {
+    pub id: String,
+    pub target: TxbxTarget,
+    pub cx: Option<i64>,
+    pub cy: Option<i64>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetInkCanvasWrapOp {
+    pub id: String,
+    pub target: TxbxTarget,
+    pub kind: PicKind,
+    pub wrap: Option<WrapKind>,
+    pub pos: WrapPos,
 }
 
 pub struct InkInfo {
@@ -353,6 +370,60 @@ pub fn apply_delete(
     Ok(())
 }
 
+pub fn apply_set_size(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[HfPart],
+    op: &SetInkCanvasSizeOp,
+    i: usize,
+) -> Result<(), Error> {
+    let host = part_for_target(
+        catalog,
+        doc_part,
+        &op.target,
+        &op.id,
+        &format!("ops[{i}].id"),
+    )?;
+    let ctx = HostCtx::load(pkg, &host)?;
+    let doc = load_part(pkg, docs, &host)?;
+    let drawing = find_drawing_mut(&mut doc.root, &ctx, &op.target.key)
+        .ok_or_else(|| ink_missing(&op.id, i))?;
+    if !picture::set_extent(drawing, op.cx, op.cy) {
+        return Err(ink_missing(&op.id, i));
+    }
+    dirty.insert(host, ());
+    Ok(())
+}
+
+pub fn apply_set_wrap(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[HfPart],
+    op: &SetInkCanvasWrapOp,
+    i: usize,
+) -> Result<(), Error> {
+    let host = part_for_target(
+        catalog,
+        doc_part,
+        &op.target,
+        &op.id,
+        &format!("ops[{i}].id"),
+    )?;
+    let ctx = HostCtx::load(pkg, &host)?;
+    let doc = load_part(pkg, docs, &host)?;
+    ensure_ink_ns(&mut doc.root);
+    let drawing = find_drawing_mut(&mut doc.root, &ctx, &op.target.key)
+        .ok_or_else(|| ink_missing(&op.id, i))?;
+    picture::apply_wrap(drawing, op.kind, op.wrap, &op.pos)
+        .map_err(|e| e.at(format!("ops[{i}]")))?;
+    dirty.insert(host, ());
+    Ok(())
+}
+
 fn collect_in_drawing(
     ctx: &HostCtx<'_>,
     drawing: &Element,
@@ -385,6 +456,71 @@ fn collect_in_drawing(
             });
         }
     });
+}
+
+fn find_drawing_mut<'a>(
+    root: &'a mut Element,
+    ctx: &HostCtx<'_>,
+    key: &TxbxKey,
+) -> Option<&'a mut Element> {
+    find_drawing_walk(root, ctx, key, &mut 0)
+}
+
+fn find_drawing_walk<'a>(
+    el: &'a mut Element,
+    ctx: &HostCtx<'_>,
+    key: &TxbxKey,
+    index: &mut usize,
+) -> Option<&'a mut Element> {
+    if el.local_name() == "txbxContent" {
+        return None;
+    }
+    if el.local_name() == "AlternateContent" {
+        if let Some(i) = first_choice(el) {
+            if let Node::Element(child) = &mut el.children[i] {
+                return find_drawing_walk(child, ctx, key, index);
+            }
+        }
+        return None;
+    }
+    if el.local_name() == "drawing" {
+        if drawing_has_ink_key(el, ctx, key, index) {
+            return Some(el);
+        }
+        return None;
+    }
+    let children = el.children.as_mut_slice();
+    for child in children {
+        if let Node::Element(e) = child {
+            if let Some(found) = find_drawing_walk(e, ctx, key, index) {
+                return Some(found);
+            }
+        }
+    }
+    None
+}
+
+fn drawing_has_ink_key(
+    drawing: &Element,
+    ctx: &HostCtx<'_>,
+    key: &TxbxKey,
+    index: &mut usize,
+) -> bool {
+    let drawing_pr = doc_pr(drawing).0;
+    let mut hit = false;
+    walk_all(drawing, &mut |e| {
+        if hit {
+            return;
+        }
+        if e.local_name() == "contentPart" && ctx.is_ink(e) {
+            *index += 1;
+            let token = cnv_pr(e).0.or(drawing_pr.clone());
+            if matches_key(&token, *index, key) {
+                hit = true;
+            }
+        }
+    });
+    hit
 }
 
 fn find_rid(ctx: &HostCtx<'_>, root: &Element, key: &TxbxKey) -> Option<String> {
