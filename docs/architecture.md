@@ -58,6 +58,10 @@ crates/ooxp-cli/             命令行，只依赖 ooxp。二进制名也是 oox
 `ole` 可调用 `opc`；xlsx / docx / pptx 调用 `ole`，彼此不引用。`json` 不依赖格式模块。各模块只依赖 `error`，`error` 不反向依赖 `json`、`opc` 或任何格式模块。
 禁止格式模块直接操作 ZIP 字节而不走 `opc`。`SetCellOp`、工作表 `scope`、`setParaText` 这类类型放在对应格式模块里。
 
+每种格式的 `scope` 与 `ops` 解析放在该格式的 `request/` 目录。
+`parse_scope` 与 `parse_ops` 仍是入口；类型和解析函数按领域拆到子文件。
+对外仍从 `request` 再导出，apply / inspect / create 继续写 `use super::request::…`，路径不变。
+
 ### opc
 
 把 `.docx`、`.xlsx`、`.pptx` 都当成 OPC 包。负责打开、列出部件、按路径读字节、标记脏部件、保存。
