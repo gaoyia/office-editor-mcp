@@ -1641,6 +1641,7 @@ fn is_foreign_op(op_name: &str) -> bool {
             | "setTableRowHeight"
             | "setTableCellMar"
             | "setTableBorders"
+            | "setCellBorders"
             | "setCellFormat"
             | "setParaFormat"
             | "setRunFormat"

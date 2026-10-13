@@ -827,6 +827,13 @@ pub struct SetTableBordersOp {
 }
 
 #[derive(Debug, Clone)]
+pub struct SetCellBordersOp {
+    pub id: String,
+    pub target: TableRef,
+    pub borders: Option<super::tbl::TableBordersPatch>,
+}
+
+#[derive(Debug, Clone)]
 pub struct SetCellFormatOp {
     pub id: String,
     pub target: TableRef,
@@ -1352,6 +1359,7 @@ pub enum DocxOp {
     SetTableRowHeight(SetTableRowHeightOp),
     SetTableCellMar(SetTableCellMarOp),
     SetTableBorders(SetTableBordersOp),
+    SetCellBorders(SetCellBordersOp),
     SetCellFormat(SetCellFormatOp),
     SetParaFormat(SetParaFormatOp),
     SetRunFormat(SetRunFormatOp),
@@ -2016,6 +2024,7 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<DocxOp>, Error> {
             "setTableBorders" => {
                 out.push(DocxOp::SetTableBorders(parse_set_table_borders(obj, i)?))
             }
+            "setCellBorders" => out.push(DocxOp::SetCellBorders(parse_set_cell_borders(obj, i)?)),
             "setCellFormat" => out.push(DocxOp::SetCellFormat(parse_set_cell_format(obj, i)?)),
             "setParaFormat" => out.push(DocxOp::SetParaFormat(parse_set_para_format(obj, i)?)),
             "setRunFormat" => out.push(DocxOp::SetRunFormat(parse_set_run_format(obj, i)?)),
@@ -6439,6 +6448,32 @@ fn parse_set_table_borders(
         Some(v) => tbl::parse_table_borders_value(v, &format!("ops[{i}].borders"))?,
     };
     Ok(SetTableBordersOp {
+        id,
+        target,
+        borders,
+    })
+}
+
+fn parse_set_cell_borders(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<SetCellBordersOp, Error> {
+    deny_keys(obj, i, &["op", "id", "borders"])?;
+    let id = require_op_id(obj, i)?;
+    let target = tbl::parse_cell_ref(&id, i)?;
+    let borders = match obj.get("borders") {
+        None => {
+            return Err(Error::with_path(
+                ErrorKind::OpRequiresField {
+                    op: "setCellBorders".into(),
+                    field: "borders".into(),
+                },
+                format!("ops[{i}].borders"),
+            ));
+        }
+        Some(v) => tbl::parse_cell_borders_value(v, &format!("ops[{i}].borders"))?,
+    };
+    Ok(SetCellBordersOp {
         id,
         target,
         borders,

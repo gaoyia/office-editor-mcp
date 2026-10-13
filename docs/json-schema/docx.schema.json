@@ -4388,6 +4388,30 @@
         }
       }
     },
+    "setCellBordersOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "borders"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setCellBorders"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "borders": {
+          "anyOf": [
+            { "$ref": "#/$defs/tableBorders" },
+            { "type": "null" }
+          ]
+        }
+      }
+    },
     "docxDiagonalBorder": {
       "type": "object",
       "additionalProperties": false,
@@ -5946,6 +5970,12 @@
             {
               "type": "null"
             }
+          ]
+        },
+        "borders": {
+          "anyOf": [
+            { "$ref": "#/$defs/tableBorders" },
+            { "type": "null" }
           ]
         }
       }

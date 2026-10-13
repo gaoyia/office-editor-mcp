@@ -45,9 +45,9 @@ use super::request::{
     InsertRubyOp, InsertRubyPlace, InsertSdtPlace, InsertSectionOp, InsertSectionPlace,
     InsertShapeOp, InsertSourceOp, InsertStyleOp, InsertTableOp, InsertTextBoxOp, InsertTocOp,
     InsertTocPlace, MergeCellsOp, NoteNumberTarget, ReplacePictureOp, ReplyCommentOp, RevisionOp,
-    SetBookmarkOp, SetCellFormatOp, SetColumnsOp, SetCommentDoneOp, SetCommentMetaOp,
-    SetCommentTextOp, SetContentControlOp, SetDocGridOp, SetEvenAndOddHeadersOp, SetFieldOp,
-    SetFormProtOp, SetGutterAtTopOp, SetHfDistanceOp, SetHfLinkOp, SetHyperlinkOp,
+    SetBookmarkOp, SetCellBordersOp, SetCellFormatOp, SetColumnsOp, SetCommentDoneOp,
+    SetCommentMetaOp, SetCommentTextOp, SetContentControlOp, SetDocGridOp, SetEvenAndOddHeadersOp,
+    SetFieldOp, SetFormProtOp, SetGutterAtTopOp, SetHfDistanceOp, SetHfLinkOp, SetHyperlinkOp,
     SetLineNumberingOp, SetMathOp, SetMirrorMarginsOp, SetNoteNumberingOp, SetNumberingOp,
     SetPageBordersOp, SetPageMarginOp, SetPageSizeOp, SetParaFormatOp, SetParaNumberingOp,
     SetParaStyleOp, SetParaTextOp, SetPictureSizeOp, SetPictureWrapOp, SetRtlGutterOp, SetRubyOp,
@@ -731,6 +731,9 @@ pub fn apply(bytes: &[u8], ops: &[DocxOp]) -> Result<Vec<u8>, Error> {
             }
             DocxOp::SetTableBorders(op) => {
                 apply_set_table_borders(&pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
+            }
+            DocxOp::SetCellBorders(op) => {
+                apply_set_cell_borders(&pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
             }
             DocxOp::SetCellFormat(op) => {
                 apply_set_cell_format(&pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
@@ -2807,6 +2810,22 @@ fn apply_set_table_borders(
     let part_name = tbl::part_for_story(catalog, doc_part, op.target.story(), &op.id, i)?;
     let doc = load_part(pkg, docs, &part_name)?;
     tbl::apply_set_table_borders(&mut doc.root, &op.target, op.borders.as_ref(), &op.id, i)?;
+    dirty.insert(part_name, ());
+    Ok(())
+}
+
+fn apply_set_cell_borders(
+    pkg: &Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &SetCellBordersOp,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name = tbl::part_for_story(catalog, doc_part, op.target.story(), &op.id, i)?;
+    let doc = load_part(pkg, docs, &part_name)?;
+    tbl::apply_set_cell_borders(&mut doc.root, &op.target, op.borders.as_ref(), &op.id, i)?;
     dirty.insert(part_name, ());
     Ok(())
 }

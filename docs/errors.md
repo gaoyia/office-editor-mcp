@@ -779,7 +779,7 @@
 - xlsx / pptx 上发 `insertWatermark` / `deleteWatermark` 报 `InvalidField`
 - 找不到表时，`deleteTable` / `insertRow` / `deleteRow` / `insertCol` / `deleteCol` / `mergeCells` / `splitCells` / `setTableStyle` / `setTableFloat` / `setTableWidth` / `setTableAlign` / `setTableCellMar` / `setTableBorders` 报 `IdNotFound`
 - 找不到行时，`setTableRowHeight` 报 `IdNotFound`
-- 找不到单元格时，`setCellFormat` 报 `IdNotFound`
+- 找不到单元格时，`setCellFormat` / `setCellBorders` 报 `IdNotFound`
 - `insertTable` 的锚点找不到同样报 `IdNotFound`
 - id 形态不对报 `InvalidId`
 - docx 框内表 id 为 `{框 id}/table:{n}`；对注内 / 批注内框或段落发表格 op 报 `InvalidId`
@@ -949,16 +949,18 @@
 - xlsx / pptx 上发样式 op 报 `InvalidField`
 - `setTableStyle` / `setTableFloat` / `setTableWidth` / `setTableAlign` / `setTableCellMar` / `setTableBorders` 的 `id` 必须是表 id
 - `setTableRowHeight` 的 `id` 必须是行 id
-- `setCellFormat` 的 `id` 必须是单元格 id
+- `setCellFormat` / `setCellBorders` 的 `id` 必须是单元格 id
 - `setTableStyle` 的 `style` 不是表格样式、`style` 与 `look` 一个都不给、锚点不合法、或外观字段一个都不给，报 `InvalidField`
 - `setTableWidth` 的 `type` / `w` / `cols` 一个都不给、`cols` 长度对不上、或 `auto` 仍给大于 0 的 `w`，报 `InvalidField`
 - `setTableAlign` 的 `align` 不合法，或 `align` 与 `indent` 一个都不给，报 `InvalidField`
 - `setTableRowHeight` 缺 `h`、`h` 为 `null` 仍给 `rule`、或 `rule` 不合法，报 `InvalidField`
 - `setTableBorders` 缺 `borders`、对象一边都不给、或边的 `val` / `color` 不合法，报 `InvalidField`
+- `setCellBorders` 的 `id` 必须是单元格 id
+- `setCellBorders` 缺 `borders`、对象一边都不给、或边的 `val` / `color` 不合法，报 `InvalidField`
 - 斜线 `val` / `color` 不合法报 `InvalidField`（与页面边框同一套）
 - `setCellFormat` 的 `vAlign` 不是 `top` / `center` / `both` / `bottom`，或 fill、边距、斜线、`vAlign` 一个都不给，报 `InvalidField`
 - `setTextBoxTextAnchor` 的 `textAnchor` 不是 `t` / `ctr` / `b` / `just` / `dist` 且不是 `null`，报 `InvalidField`
-- xlsx / pptx 上发 `setTableStyle` / `setTableFloat` / `setTableWidth` / `setTableAlign` / `setTableRowHeight` / `setTableCellMar` / `setTableBorders` / `setCellFormat` 报 `InvalidField`
+- xlsx / pptx 上发 `setTableStyle` / `setTableFloat` / `setTableWidth` / `setTableAlign` / `setTableRowHeight` / `setTableCellMar` / `setTableBorders` / `setCellFormat` / `setCellBorders` 报 `InvalidField`
 - 找不到段落时，`setParaFormat` 报 `IdNotFound`
 - id 不是段落 id 报 `InvalidId`
 - 找不到 run 时，`setRunFormat` 报 `IdNotFound`

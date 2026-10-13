@@ -2992,6 +2992,7 @@ fn inspect_tables_lists_cell_paragraphs() {
     assert!(cell["vAlign"].is_null());
     assert!(cell["fill"].is_null());
     assert!(cell["cellMar"].is_null());
+    assert!(cell["borders"].is_null());
     assert!(cell["tl2br"].is_null());
     assert!(cell["tr2bl"].is_null());
     assert_eq!(cell["paragraphs"][0]["id"], "para:AAAA0005");

@@ -43,6 +43,7 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 2026-10-13 补跑 `docx-drawing-hlink-remain.ps1`，Dhr1–Dhr6 通过。无 Repair。框内图 COM `Hyperlink.Address` 对得上。`hyperlinkCount` 仍为 0。OLE id 仍报 `InvalidId`。
 同日补跑 `docx-model3d-geom.ps1`，D3g1–D3g6 通过。无 Repair。COM `Width` / `Height` 288×144 磅。浮动 `square` 后再改回 `inline`。页眉 3D 可改尺寸。`replaceModel3d` 不改几何。
 同日补跑 `docx-run-spacing.ps1`，Rcs1–Rcs6 通过。无 Repair。COM `Font.Spacing` 为 2 / -1 磅，`Font.Kerning` 为 14 磅。框内 run 可改间距。
+同日补跑 `docx-cell-borders.ps1`，Tcb1–Tcb6 通过。无 Repair。COM 该格上边 `LineStyle=7`。`null` 去掉正交边后斜线仍在。
 
 - **C1** ✅
   - Word 16.0 能打开 `manual-check/office/out/docx-create.docx`，标题栏无 Repair
@@ -169,6 +170,10 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 - **Va1–Va5** ✅
   - Word 16.0：`docx-cell-valign.ps1`，5 PASS / 0 FAIL
   - 格上有 `vAlign`；apply `center` 后 COM `VerticalAlignment=1`；create `bottom` 后 COM 为 3；`null` 去掉元素；段落 id 与 xlsx 拒写
+  - 标题栏无 Repair
+- **Tcb1–Tcb6** ✅
+  - Word 16.0：`docx-cell-borders.ps1`，6 PASS / 0 FAIL
+  - 格上有 `borders`；apply `double` 后 COM 上边 `LineStyle=7`；只改 `insideH` 后 `top` 仍在；`null` 去掉正交边、斜线留下；create `cellFormats[].borders` 对得上；缺 `borders`、表 id、xlsx 拒写
   - 标题栏无 Repair
 - **Bx1–Bx5** ✅
   - Word 16.0：`docx-box-table.ps1`，5 PASS / 0 FAIL
@@ -1072,6 +1077,20 @@ Word COM 的 `PageSetup` 边距与纸张单位是磅，等于 twip ÷ 20。手�
 | Va3 | create | create `cellFormats` 带 `vAlign: bottom` 后树上为 `bottom`。Word 无修复 |
 | Va4 | 去掉 | `vAlign: null` 后树上为 `null`，XML 无 `w:vAlign` |
 | Va5 | 拒写 | 对段落 id 发 `setCellFormat` 得 `InvalidId`。xlsx 上发此 op 得 `InvalidField` |
+
+## 格正交边框
+
+格级 `w:tcBorders` 的四边与格内内外框。不要和表级 `setTableBorders`、`setCellFormat` 的 `tcMar`、斜线混。不算自动套表样式。
+手测脚本 `manual-check/office/cases/docx-cell-borders.ps1`。编号 Tcb，不要和 Tc、Tb、Tf、Tbdr、Va 撞。
+
+| 序号 | 检查 | 通过标准 | 状态 |
+| --- | --- | --- | --- |
+| Tcb1 | 名单字段 | 给了 `scope.tables` 后格上有 `borders`。create 默认表的格 `borders` 为 `null` | ✅ |
+| Tcb2 | 改外边 | `setCellBorders` 写 `top.val` 为 `double` 后树上对得上。Word 无修复。COM 该格上边 `LineStyle` 非 0 | ✅ |
+| Tcb3 | 只改一边 | 只点名 `insideH` 后 `top.val` 仍为 `double`，`insideH.val` 为 `dashed`。Word 无修复 | ✅ |
+| Tcb4 | 去掉 | `borders` 为 `null` 后树上格 `borders` 为 `null`，斜线 `tl2br` 还在。Word 无修复 | ✅ |
+| Tcb5 | create | create `cellFormats` 带 `borders.top` 后树上对得上，无修复 | ✅ |
+| Tcb6 | 拒写 | 缺 `borders` 报 `InvalidField`。对表 id 发此 op 报 `InvalidId`。xlsx 上发此 op 报 `InvalidField`。不强制开 Word | ✅ |
 
 ## 框内表
 

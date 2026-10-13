@@ -804,6 +804,7 @@ pub struct CellFormatSpec {
     pub tl2br: Option<Option<DiagonalBorder>>,
     pub tr2bl: Option<Option<DiagonalBorder>>,
     pub v_align: Option<Option<String>>,
+    pub borders: Option<Option<TableBordersPatch>>,
 }
 
 pub struct TableExtra {
@@ -1396,6 +1397,7 @@ fn parse_cell_formats(
             &item_path,
             &[
                 "r", "c", "fill", "top", "left", "bottom", "right", "tl2br", "tr2bl", "vAlign",
+                "borders",
             ],
         )?;
         let r = require_index1(obj, &item_path, "r", rows)?;
@@ -1416,6 +1418,13 @@ fn parse_cell_formats(
                 field: "vAlign".into(),
             },
         )?;
+        let borders = match obj.get("borders") {
+            None => None,
+            Some(v) => Some(tbl::parse_cell_borders_value(
+                v,
+                &format!("{item_path}.borders"),
+            )?),
+        };
         if fill.is_none()
             && top.is_none()
             && left.is_none()
@@ -1424,6 +1433,7 @@ fn parse_cell_formats(
             && tl2br.is_none()
             && tr2bl.is_none()
             && v_align.is_none()
+            && borders.is_none()
         {
             return Err(Error::with_path(
                 ErrorKind::NeedSetCellFormatField,
@@ -1441,6 +1451,7 @@ fn parse_cell_formats(
             tl2br,
             tr2bl,
             v_align,
+            borders,
         });
     }
     Ok(out)

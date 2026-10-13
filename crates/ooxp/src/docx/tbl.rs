@@ -1355,13 +1355,26 @@ pub fn parse_table_borders_value(
     v: &Value,
     path: &str,
 ) -> Result<Option<TableBordersPatch>, Error> {
+    parse_borders_value(v, path, "setTableBorders")
+}
+
+/// 解析 `setCellBorders.borders`，字段与表级相同。
+pub fn parse_cell_borders_value(v: &Value, path: &str) -> Result<Option<TableBordersPatch>, Error> {
+    parse_borders_value(v, path, "setCellBorders")
+}
+
+fn parse_borders_value(
+    v: &Value,
+    path: &str,
+    op: &str,
+) -> Result<Option<TableBordersPatch>, Error> {
     if v.is_null() {
         return Ok(None);
     }
-    Ok(Some(parse_table_borders_patch(v, path)?))
+    Ok(Some(parse_table_borders_patch(v, path, op)?))
 }
 
-fn parse_table_borders_patch(v: &Value, path: &str) -> Result<TableBordersPatch, Error> {
+fn parse_table_borders_patch(v: &Value, path: &str, op: &str) -> Result<TableBordersPatch, Error> {
     let obj = v.as_object().ok_or_else(|| {
         Error::with_path(
             ErrorKind::WrongType {
@@ -1391,36 +1404,66 @@ fn parse_table_borders_patch(v: &Value, path: &str) -> Result<TableBordersPatch,
     {
         return Err(Error::with_path(
             ErrorKind::OpRequiresField {
-                op: "setTableBorders".into(),
+                op: op.into(),
                 field: "top, left, bottom, right, insideH, or insideV".into(),
             },
             path.to_string(),
         ));
     }
     Ok(TableBordersPatch {
-        top: page_bg::parse_opt_side(obj.get("top"), &format!("{path}.top"), "setTableBorders")?,
-        left: page_bg::parse_opt_side(obj.get("left"), &format!("{path}.left"), "setTableBorders")?,
-        bottom: page_bg::parse_opt_side(
-            obj.get("bottom"),
-            &format!("{path}.bottom"),
-            "setTableBorders",
-        )?,
-        right: page_bg::parse_opt_side(
-            obj.get("right"),
-            &format!("{path}.right"),
-            "setTableBorders",
-        )?,
-        inside_h: page_bg::parse_opt_side(
-            obj.get("insideH"),
-            &format!("{path}.insideH"),
-            "setTableBorders",
-        )?,
-        inside_v: page_bg::parse_opt_side(
-            obj.get("insideV"),
-            &format!("{path}.insideV"),
-            "setTableBorders",
-        )?,
+        top: page_bg::parse_opt_side(obj.get("top"), &format!("{path}.top"), op)?,
+        left: page_bg::parse_opt_side(obj.get("left"), &format!("{path}.left"), op)?,
+        bottom: page_bg::parse_opt_side(obj.get("bottom"), &format!("{path}.bottom"), op)?,
+        right: page_bg::parse_opt_side(obj.get("right"), &format!("{path}.right"), op)?,
+        inside_h: page_bg::parse_opt_side(obj.get("insideH"), &format!("{path}.insideH"), op)?,
+        inside_v: page_bg::parse_opt_side(obj.get("insideV"), &format!("{path}.insideV"), op)?,
     })
+}
+
+pub fn apply_set_cell_borders(
+    root: &mut Element,
+    r: &TableRef,
+    patch: Option<&TableBordersPatch>,
+    id: &str,
+    i: usize,
+) -> Result<(), Error> {
+    let TableRef::Cell { row, col, .. } = r else {
+        unreachable!();
+    };
+    let path = tbl_path(root, r, id, i)?;
+    let tbl = para::element_at_mut(root, &path).ok_or_else(|| missing_table(id, i))?;
+    let tc = tc_at_mut(tbl, *row, *col).ok_or_else(|| missing_table(id, i))?;
+    let pr = ensure_tc_pr(tc);
+    match patch {
+        None => {
+            if let Some(borders) = pr.child_by_local_mut("tcBorders") {
+                strip_ortho_borders(borders);
+            }
+            let empty = pr
+                .child_by_local("tcBorders")
+                .map(|b| b.element_children().next().is_none())
+                .unwrap_or(true);
+            if empty {
+                remove_child(pr, "tcBorders");
+            }
+        }
+        Some(p) => {
+            let empty = {
+                let borders = hf::ensure_child_in_order(pr, "tcBorders", TCPR_ORDER);
+                write_tbl_border(borders, "top", &[], p.top.as_ref());
+                write_tbl_border(borders, "left", &["start"], p.left.as_ref());
+                write_tbl_border(borders, "bottom", &[], p.bottom.as_ref());
+                write_tbl_border(borders, "right", &["end"], p.right.as_ref());
+                write_tbl_border(borders, "insideH", &[], p.inside_h.as_ref());
+                write_tbl_border(borders, "insideV", &[], p.inside_v.as_ref());
+                borders.element_children().next().is_none()
+            };
+            if empty {
+                remove_child(pr, "tcBorders");
+            }
+        }
+    }
+    Ok(())
 }
 
 pub fn apply_set_cell_format(
@@ -1781,6 +1824,7 @@ fn table_node(
                 "vAlign": va,
                 "fill": cell_fill(tc),
                 "cellMar": cell_mar_json(tc.child_by_local("tcPr").and_then(|p| p.child_by_local("tcMar"))),
+                "borders": tc_ortho_borders_json(tc),
                 "tl2br": diagonal_json(tc, "tl2br"),
                 "tr2bl": diagonal_json(tc, "tr2bl"),
                 "paragraphs": paras,
@@ -3066,6 +3110,38 @@ fn cell_mar_json(mar: Option<&Element>) -> Value {
     })
 }
 
+fn tc_ortho_borders_json(tc: &Element) -> Value {
+    let Some(b) = tc
+        .child_by_local("tcPr")
+        .and_then(|p| p.child_by_local("tcBorders"))
+    else {
+        return Value::Null;
+    };
+    let top = page_bg::side_json(b, "top");
+    let left = tbl_lr_json(b, "left", "start");
+    let bottom = page_bg::side_json(b, "bottom");
+    let right = tbl_lr_json(b, "right", "end");
+    let inside_h = page_bg::side_json(b, "insideH");
+    let inside_v = page_bg::side_json(b, "insideV");
+    if top.is_null()
+        && left.is_null()
+        && bottom.is_null()
+        && right.is_null()
+        && inside_h.is_null()
+        && inside_v.is_null()
+    {
+        return Value::Null;
+    }
+    json!({
+        "top": top,
+        "left": left,
+        "bottom": bottom,
+        "right": right,
+        "insideH": inside_h,
+        "insideV": inside_v,
+    })
+}
+
 fn tbl_borders_json(tbl: &Element) -> Value {
     let Some(b) = tbl
         .child_by_local("tblPr")
@@ -3355,6 +3431,14 @@ fn write_diagonal(borders: &mut Element, local: &str, side: Option<&DiagonalBord
             set_attr(el, "space", "0");
             set_attr(el, "color", b.color.as_deref().unwrap_or("auto"));
         }
+    }
+}
+
+fn strip_ortho_borders(borders: &mut Element) {
+    for name in [
+        "top", "start", "left", "bottom", "end", "right", "insideH", "insideV",
+    ] {
+        remove_child(borders, name);
     }
 }
 

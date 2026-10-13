@@ -36,7 +36,7 @@ use super::request::{
     InsertHyperlinkHost, InsertHyperlinkOp, InsertIndexEntryOp, InsertIndexOp, InsertIndexPlace,
     InsertMathOp, InsertMathPlace, InsertNoteOp, InsertNumberingOp, InsertRubyOp, InsertRubyPlace,
     InsertSdtPlace, InsertShapeOp, InsertTableOp, InsertTocOp, InsertTocPlace, ReplyCommentOp,
-    SetBibliographyStyleOp, SetCellFormatOp, SetParaNumberingOp, SetTableAlignOp,
+    SetBibliographyStyleOp, SetCellBordersOp, SetCellFormatOp, SetParaNumberingOp, SetTableAlignOp,
     SetTableBordersOp, SetTableCellMarOp, SetTableFloatOp, SetTableRowHeightOp, SetTableStyleOp,
     SetTableWidthOp,
 };
@@ -3875,18 +3875,35 @@ fn push_one_table_extra(ops: &mut Vec<DocxOp>, extra: &TableExtra, id: String, t
             },
             other => other.clone(),
         };
-        ops.push(DocxOp::SetCellFormat(SetCellFormatOp {
-            id: cell_id,
-            target: cell_target,
-            fill: cf.fill.clone(),
-            top: cf.top,
-            left: cf.left,
-            bottom: cf.bottom,
-            right: cf.right,
-            tl2br: cf.tl2br.clone(),
-            tr2bl: cf.tr2bl.clone(),
-            v_align: cf.v_align.clone(),
-        }));
+        let has_fmt = cf.fill.is_some()
+            || cf.top.is_some()
+            || cf.left.is_some()
+            || cf.bottom.is_some()
+            || cf.right.is_some()
+            || cf.tl2br.is_some()
+            || cf.tr2bl.is_some()
+            || cf.v_align.is_some();
+        if has_fmt {
+            ops.push(DocxOp::SetCellFormat(SetCellFormatOp {
+                id: cell_id.clone(),
+                target: cell_target.clone(),
+                fill: cf.fill.clone(),
+                top: cf.top,
+                left: cf.left,
+                bottom: cf.bottom,
+                right: cf.right,
+                tl2br: cf.tl2br.clone(),
+                tr2bl: cf.tr2bl.clone(),
+                v_align: cf.v_align.clone(),
+            }));
+        }
+        if let Some(borders) = &cf.borders {
+            ops.push(DocxOp::SetCellBorders(SetCellBordersOp {
+                id: cell_id,
+                target: cell_target,
+                borders: borders.clone(),
+            }));
+        }
     }
 }
 

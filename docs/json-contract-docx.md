@@ -277,7 +277,7 @@ OOXML 没有表级稳定 id，因此 `table:{n}` 在增删表之后会变，只�
 对注内、批注内段落或注内 / 批注内框发 `insertTable` 报 `InvalidId`。
 `deleteTable` 的 `id` 必须是表 id。`insertRow` 的 `id` 是表 id（追加一行）或行 id（插到该行之后）。`deleteRow` 的 `id` 必须是行 id。
 `insertCol` / `deleteCol` / `mergeCells` 的 `id` 必须是表 id。`splitCells` 的 `id` 必须是单元格 id。
-`setTableStyle` / `setTableFloat` / `setTableWidth` / `setTableAlign` / `setTableCellMar` / `setTableBorders` 的 `id` 必须是表 id。`setTableRowHeight` 的 `id` 必须是行 id。`setCellFormat` 的 `id` 必须是单元格 id。
+`setTableStyle` / `setTableFloat` / `setTableWidth` / `setTableAlign` / `setTableCellMar` / `setTableBorders` 的 `id` 必须是表 id。`setTableRowHeight` 的 `id` 必须是行 id。`setCellFormat` / `setCellBorders` 的 `id` 必须是单元格 id。
 正文、页眉页脚与框内的表可以改结构与外观。对注内、批注内的表发这些 op 报 `InvalidId`。对不上的 id 形态报 `InvalidId`。
 框内表带修订痕迹时结构 op 仍报 `NotImplemented`。
 
@@ -1384,12 +1384,16 @@ xlsx / pptx 的 `scope.tables` 不是同一件事：xlsx 仍拒绝；pptx 展开
   `height` 取 `trPr/trHeight`。没有则为 `null`。有则对象字段顺序：`h`、`rule`。
   `h` 取 `@w:val`，能解析成整数则写整数，否则为 `null`。`rule` 取 `@w:hRule` 原文，缺则为 `null`。单位 twip。
   `cells` 按该行 `w:tc` 顺序，不是按空网格补格。
-  每格字段顺序：`id`、`row`、`col`、`gridSpan`、`vMerge`、`vAlign`、`fill`、`cellMar`、`tl2br`、`tr2bl`、`paragraphs`。
+  每格字段顺序：`id`、`row`、`col`、`gridSpan`、`vMerge`、`vAlign`、`fill`、`cellMar`、`borders`、`tl2br`、`tr2bl`、`paragraphs`。
   `row` / `col` 与 id 里的数字相同。
   `gridSpan` 为整数，缺元素则为 `1`。`vMerge` 为 `restart`、`continue` 或 `null`。
   `vAlign` 取 `tcPr/w:vAlign/@w:val`：`top` / `center` / `both` / `bottom`。没有该元素则为 `null`。不认识报 `XmlBroken`。
   `fill` 取 `tcPr/shd/@fill` 原文，没有 `shd` 或没有 `fill` 则为 `null`。
   格上 `cellMar` 取 `tcMar`，规则与表级相同。
+  格上 `borders` 取 `tcBorders` 的正交四边与格内内外框。没有这些边则为 `null`。有则对象字段顺序：`top`、`left`、`bottom`、`right`、`insideH`、`insideV`。
+  每边与页面边框同一套：`val`、`sz`、`space`、`color`。缺该边则为 `null`。
+  `left` 先取 `w:left`，没有则取 `w:start`。`right` 先取 `w:right`，没有则取 `w:end`。
+  斜线不进这个对象。
   `tl2br` / `tr2bl` 取 `tcBorders` 对应子元素。没有则为 `null`。有则对象字段顺序：`val`、`sz`、`color`。
   `val` / `color` 取属性原文，缺则为 `null`。`sz` 能解析成整数则写整数，否则为 `null`。
   `paragraphs` 是该格内、遇嵌套 `w:tbl` 停住之后的 `w:p`（嵌套表自己的段挂在那张嵌套表上）。
@@ -2093,7 +2097,7 @@ Word 16.0 另存通常不写该部件；自行写入后 Word 仍能打开。xlsx
 | `tables[].rowHeights` | 可选。与行数相同。每项字段与 `setTableRowHeight` 相同（不要 `id`） |
 | `tables[].cellMar` | 可选。对象，字段 `top` / `left` / `bottom` / `right`，规则与 `setTableCellMar` 相同 |
 | `tables[].borders` | 可选。对象或 `null`，规则与 `setTableBorders` 相同 |
-| `tables[].cellFormats` | 可选。每项必须有 1 起的 `r` / `c`，其余字段与 `setCellFormat` 相同（不要 `id`） |
+| `tables[].cellFormats` | 可选。每项必须有 1 起的 `r` / `c`，其余字段与 `setCellFormat` 相同，并可带 `borders`（规则与 `setCellBorders` 相同，不要 `id`） |
 
 | `textBoxes[].text` | 框内第一段可见文本，可空。省略当作 `""` |
 | `textBoxes[].cx` | 可选。宽度，EMU。省略为 `1828800` |
@@ -4036,6 +4040,25 @@ create 给了 `tables[].rowHeights` 时按行序写入。
 create 给了 `tables[].borders` 时按同一套规则写入。
 示例见 `docs/examples/docx-apply-table-borders.json`。
 
+### setCellBorders
+
+格级 `w:tcBorders` 的正交四边与格内 `insideH` / `insideV`。不要和 `setCellFormat` 的 `tcMar`、斜线、表级 `setTableBorders` 混。不算自动套表样式。
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"setCellBorders"` |
+| `id` | 单元格 id，例如 `table:1/r1c1` |
+| `borders` | 必须。对象写入正交边与格内内外框，或 `null` 去掉这些边（斜线留下） |
+
+对象字段顺序：`top` / `left` / `bottom` / `right` / `insideH` / `insideV`。
+未点名的边留下。某边 JSON `null` 去掉该边。至少点名一边，否则报 `InvalidField`。
+每边对象与 `setTableBorders` 相同。写入 `left` / `right`，并去掉对应的 `start` / `end`。
+六边都删光后，若没有斜线则去掉空的 `tcBorders`。
+不要把 `setCellFormat` 的 `top` 等字段名当边框。
+找不到单元格报 `IdNotFound`。id 不是单元格 id 报 `InvalidId`。xlsx / pptx 上发此 op 报 `InvalidField`。
+create 给了 `tables[].cellFormats[].borders` 时按同一套规则写入。
+示例见 `docs/examples/docx-apply-cell-borders.json`。
+
 ### setCellFormat
 
 | 字段 | 含义 |
@@ -4547,7 +4570,7 @@ OLE op 还可以脏 `/word/embeddings/…` 与预览图媒体。`insertInkCanvas
 `deleteSection` 脏主文档，并可能删掉不再被引用的 header/footer 部件。
 正文图片 op、文本框 op、图表 op、SmartArt op、正文表格结构 op、正文修订 op、正文超链接 / 书签 op、正文域 op、正文公式 op、正文拼音 op、正文内容控件 op、正文 `setParaNumbering`、
 正文 `setParaStyle`、正文 `setRunStyle`、正文 `setParaFormat` 与正文 `setRunFormat` 脏主文档与主文档 `.rels`。
-正文 `setTableStyle` / `setTableFloat` / `setTableWidth` / `setTableAlign` / `setTableRowHeight` / `setTableCellMar` / `setTableBorders` / `setCellFormat` 脏主文档。
+正文 `setTableStyle` / `setTableFloat` / `setTableWidth` / `setTableAlign` / `setTableRowHeight` / `setTableCellMar` / `setTableBorders` / `setCellFormat` / `setCellBorders` 脏主文档。
 框内表跟框所在故事走：正文框脏主文档，页眉页脚框脏对应 header/footer 部件。
 页眉页脚上的这些 op 另脏对应 header/footer 部件。
 一次 `ops` 可以混用 `setParaText`、`setHeaderFooterDistance`、`setPageMargin`、`setPageSize`、`setColumns`、`setVerticalAlign`、
