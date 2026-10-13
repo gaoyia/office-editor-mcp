@@ -1247,6 +1247,21 @@
             },
             { "type": "null" }
           ]
+        },
+        "spacing": {
+          "oneOf": [
+            { "type": "integer" },
+            { "type": "null" }
+          ]
+        },
+        "kern": {
+          "oneOf": [
+            {
+              "type": "integer",
+              "minimum": 0
+            },
+            { "type": "null" }
+          ]
         }
       }
     },
@@ -4923,6 +4938,27 @@
                 "subscript",
                 "baseline"
               ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "spacing": {
+          "oneOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "kern": {
+          "oneOf": [
+            {
+              "type": "integer",
+              "minimum": 0
             },
             {
               "type": "null"

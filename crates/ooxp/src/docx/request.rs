@@ -881,6 +881,8 @@ pub struct SetRunFormatOp {
     pub strike: Option<Option<bool>>,
     pub dstrike: Option<Option<bool>>,
     pub vert_align: Option<Option<String>>,
+    pub spacing: Option<Option<i32>>,
+    pub kern: Option<Option<u32>>,
 }
 
 #[derive(Debug, Clone)]
@@ -6638,6 +6640,8 @@ fn parse_set_run_format(
             "strike",
             "dstrike",
             "vertAlign",
+            "spacing",
+            "kern",
         ],
     )?;
     let id = require_op_id(obj, i)?;
@@ -6693,6 +6697,8 @@ fn parse_set_run_format(
         super::format::VERT_ALIGN_SET,
         ErrorKind::InvalidVertAlign,
     )?;
+    let spacing = parse_opt_null_i32(obj, i, "spacing")?;
+    let kern = parse_opt_null_u32(obj, i, "kern")?;
     if bold.is_none()
         && italic.is_none()
         && underline.is_none()
@@ -6706,6 +6712,8 @@ fn parse_set_run_format(
         && strike.is_none()
         && dstrike.is_none()
         && vert_align.is_none()
+        && spacing.is_none()
+        && kern.is_none()
     {
         return Err(Error::with_path(
             ErrorKind::NeedSetRunFormatField,
@@ -6729,6 +6737,8 @@ fn parse_set_run_format(
         strike,
         dstrike,
         vert_align,
+        spacing,
+        kern,
     })
 }
 
@@ -7120,7 +7130,53 @@ fn parse_opt_null_u32(
                     format!("ops[{i}].{field}"),
                 )
             })?;
-            Ok(Some(Some(u as u32)))
+            u32::try_from(u).map(|v| Some(Some(v))).map_err(|_| {
+                Error::with_path(
+                    ErrorKind::WrongType {
+                        field: field.into(),
+                        expected: TypeName::Integer,
+                    },
+                    format!("ops[{i}].{field}"),
+                )
+            })
+        }
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::Integer,
+            },
+            format!("ops[{i}].{field}"),
+        )),
+    }
+}
+
+fn parse_opt_null_i32(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+    field: &str,
+) -> Result<Option<Option<i32>>, Error> {
+    match obj.get(field) {
+        None => Ok(None),
+        Some(Value::Null) => Ok(Some(None)),
+        Some(Value::Number(n)) => {
+            let v = n.as_i64().ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::WrongType {
+                        field: field.into(),
+                        expected: TypeName::Integer,
+                    },
+                    format!("ops[{i}].{field}"),
+                )
+            })?;
+            i32::try_from(v).map(|n| Some(Some(n))).map_err(|_| {
+                Error::with_path(
+                    ErrorKind::WrongType {
+                        field: field.into(),
+                        expected: TypeName::Integer,
+                    },
+                    format!("ops[{i}].{field}"),
+                )
+            })
         }
         Some(_) => Err(Error::with_path(
             ErrorKind::WrongType {

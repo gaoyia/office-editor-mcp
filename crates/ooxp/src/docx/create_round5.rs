@@ -44,6 +44,8 @@ pub struct RunFormatOwned {
     pub strike: Option<Option<bool>>,
     pub dstrike: Option<Option<bool>>,
     pub vert_align: Option<Option<String>>,
+    pub spacing: Option<Option<i32>>,
+    pub kern: Option<Option<u32>>,
 }
 
 pub struct RunSpec {
@@ -271,6 +273,8 @@ pub fn to_set_run_format(
         strike: fmt.strike,
         dstrike: fmt.dstrike,
         vert_align: fmt.vert_align.clone(),
+        spacing: fmt.spacing,
+        kern: fmt.kern,
     }
 }
 
@@ -306,6 +310,8 @@ const RUN_KEYS: &[&str] = &[
     "strike",
     "dstrike",
     "vertAlign",
+    "spacing",
+    "kern",
 ];
 
 fn parse_run_format(
@@ -363,6 +369,8 @@ fn parse_run_format(
         format::VERT_ALIGN_SET,
         ErrorKind::InvalidVertAlign,
     )?;
+    let spacing = parse_opt_null_i32(obj, path, "spacing")?;
+    let kern = parse_opt_null_u32_field(obj, path, "kern")?;
     if bold.is_none()
         && italic.is_none()
         && underline.is_none()
@@ -376,6 +384,8 @@ fn parse_run_format(
         && strike.is_none()
         && dstrike.is_none()
         && vert_align.is_none()
+        && spacing.is_none()
+        && kern.is_none()
     {
         return Ok(None);
     }
@@ -393,6 +403,8 @@ fn parse_run_format(
         strike,
         dstrike,
         vert_align,
+        spacing,
+        kern,
     }))
 }
 
@@ -959,6 +971,82 @@ fn parse_opt_u32(v: Option<&Value>, path: &str) -> Result<Option<u32>, Error> {
                 expected: TypeName::Integer,
             },
             path.to_string(),
+        )),
+    }
+}
+
+fn parse_opt_null_i32(
+    obj: &serde_json::Map<String, Value>,
+    path: &str,
+    field: &str,
+) -> Result<Option<Option<i32>>, Error> {
+    match obj.get(field) {
+        None => Ok(None),
+        Some(Value::Null) => Ok(Some(None)),
+        Some(Value::Number(n)) => {
+            let v = n.as_i64().ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::WrongType {
+                        field: field.into(),
+                        expected: TypeName::Integer,
+                    },
+                    format!("{path}.{field}"),
+                )
+            })?;
+            i32::try_from(v).map(|n| Some(Some(n))).map_err(|_| {
+                Error::with_path(
+                    ErrorKind::WrongType {
+                        field: field.into(),
+                        expected: TypeName::Integer,
+                    },
+                    format!("{path}.{field}"),
+                )
+            })
+        }
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::Integer,
+            },
+            format!("{path}.{field}"),
+        )),
+    }
+}
+
+fn parse_opt_null_u32_field(
+    obj: &serde_json::Map<String, Value>,
+    path: &str,
+    field: &str,
+) -> Result<Option<Option<u32>>, Error> {
+    match obj.get(field) {
+        None => Ok(None),
+        Some(Value::Null) => Ok(Some(None)),
+        Some(Value::Number(n)) => {
+            let u = n.as_u64().ok_or_else(|| {
+                Error::with_path(
+                    ErrorKind::WrongType {
+                        field: field.into(),
+                        expected: TypeName::Integer,
+                    },
+                    format!("{path}.{field}"),
+                )
+            })?;
+            u32::try_from(u).map(|v| Some(Some(v))).map_err(|_| {
+                Error::with_path(
+                    ErrorKind::WrongType {
+                        field: field.into(),
+                        expected: TypeName::Integer,
+                    },
+                    format!("{path}.{field}"),
+                )
+            })
+        }
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::Integer,
+            },
+            format!("{path}.{field}"),
         )),
     }
 }

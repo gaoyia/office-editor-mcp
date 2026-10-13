@@ -3087,6 +3087,8 @@ fn apply_set_run_format(
             strike: op.strike,
             dstrike: op.dstrike,
             vert_align: op.vert_align.as_ref().map(|v| v.as_deref()),
+            spacing: op.spacing,
+            kern: op.kern,
         },
     );
     dirty.insert(part_name, ());

@@ -42,6 +42,7 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 同日补跑 `docx-textbox-anchor.ps1`，Bta1–Bta5 通过。无 Repair。ZIP 有 `anchor="ctr"`，`just` / `dist` 树上对得上。
 2026-10-13 补跑 `docx-drawing-hlink-remain.ps1`，Dhr1–Dhr6 通过。无 Repair。框内图 COM `Hyperlink.Address` 对得上。`hyperlinkCount` 仍为 0。OLE id 仍报 `InvalidId`。
 同日补跑 `docx-model3d-geom.ps1`，D3g1–D3g6 通过。无 Repair。COM `Width` / `Height` 288×144 磅。浮动 `square` 后再改回 `inline`。页眉 3D 可改尺寸。`replaceModel3d` 不改几何。
+同日补跑 `docx-run-spacing.ps1`，Rcs1–Rcs6 通过。无 Repair。COM `Font.Spacing` 为 2 / -1 磅，`Font.Kerning` 为 14 磅。框内 run 可改间距。
 
 - **C1** ✅
   - Word 16.0 能打开 `manual-check/office/out/docx-create.docx`，标题栏无 Repair
@@ -357,6 +358,14 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
   - `highlight=yellow` 时 `HighlightColorIndex=7`，`StrikeThrough=-1`
   - 上下标与双删除线树上对得上
   - xlsx / 不认识的 `highlight` 为 `InvalidField`
+  - 标题栏无 Repair
+- **Rcs1–Rcs6** ✅
+  - Word 16.0：`docx-run-spacing.ps1`，6 PASS / 0 FAIL
+  - `setRunFormat` 写 `spacing` / `kern` 后树上对得上
+  - 负 `spacing` 可写
+  - `null` 去掉对应元素
+  - 框内 run 同样认
+  - 字符串 `spacing`、负 `kern`、xlsx 上发此 op 拒写
   - 标题栏无 Repair
 - **Ea1–Ea8** ✅
   - Word 16.0：`docx-east-asia.ps1`，8 PASS / 0 FAIL
@@ -1314,6 +1323,20 @@ Word 跟踪修订下改表单元格底纹、插入空段、删除表行。`inspe
 | Rh1 | 突出显示与删除线 | `setRunFormat` 写 `highlight: yellow` 与 `strike: true` 后树上对得上。Word 无 Repair。COM `HighlightColorIndex` 非 0，`StrikeThrough` 为真 |
 | Rh2 | 上下标与双删除线 | `setRunFormat` 写 `vertAlign: superscript` 与 `dstrike: true` 后树上对得上，无 Repair |
 | Rh3 | 拒错 | 对 xlsx 发带 `highlight` 的 `setRunFormat` 报 `InvalidField`。不认识的 `highlight` 报 `InvalidField`。不强制开 Word |
+
+## 字符间距
+
+run 上 `w:spacing`（字符间距）与 `w:kern`（字距调整）。只写该 run 直接格式，不摊 `styles.xml`，不写 `w:w`。不算排版引擎。
+手测脚本 `manual-check/office/cases/docx-run-spacing.ps1`。编号 Rcs，不要和 Bd、Rh、Ea 撞。
+
+| 序号 | 检查 | 通过标准 | 状态 |
+| --- | --- | --- | --- |
+| Rcs1 | 改间距 | `setRunFormat` 写 `spacing: 40` 后树上为 `40`。Word 无 Repair。COM `Font.Spacing` 约为 2 磅（允许 0.05 磅误差） | ✅ |
+| Rcs2 | 改 kern | 写 `kern: 28` 后树上为 `28`。无 Repair。COM `Font.Kerning` 约为 14 磅（允许 0.05 磅误差） | ✅ |
+| Rcs3 | 负间距 | 写 `spacing: -20` 后树上为 `-20`。无 Repair。COM `Font.Spacing` 约为 -1 磅（允许 0.05 磅误差） | ✅ |
+| Rcs4 | 去掉 | 把 `spacing` / `kern` 写成 `null` 后树上两项都是 `null`，无 Repair | ✅ |
+| Rcs5 | 框内 | 框内段落 run 写 `spacing` 后框内树上对得上，无 Repair | ✅ |
+| Rcs6 | 拒错 | `spacing` 给字符串、`kern` 给负数报 `InvalidField`。对 xlsx 发带 `spacing` 的 `setRunFormat` 报 `InvalidField`。未写文件。不强制开 Word | ✅ |
 
 ## 东亚排版
 

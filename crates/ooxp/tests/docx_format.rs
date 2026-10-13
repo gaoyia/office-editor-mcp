@@ -194,7 +194,9 @@ fn runs_list_with_scope() {
             "highlight",
             "strike",
             "dstrike",
-            "vertAlign"
+            "vertAlign",
+            "spacing",
+            "kern"
         ]
     );
     assert_eq!(runs[0]["id"], "para:AAAA0001/run:1");
@@ -460,6 +462,8 @@ fn para_borders_shd_tabs_and_run_remain() {
     assert!(r0["strike"].is_null());
     assert!(r0["dstrike"].is_null());
     assert!(r0["vertAlign"].is_null());
+    assert!(r0["spacing"].is_null());
+    assert!(r0["kern"].is_null());
 
     let out = tmp_dir().join("remain-out.docx");
     apply(
@@ -593,4 +597,108 @@ fn para_borders_shd_tabs_and_run_remain() {
     )
     .unwrap_err();
     assert_eq!(err_x.code(), ErrorCode::InvalidField);
+}
+
+#[test]
+fn set_run_format_spacing_and_kern() {
+    let path = write_sample("spacing");
+    let tree0 = inspect(&path, json!({ "from": 1, "maxParas": 20, "runs": true }));
+    let r0 = &para(&tree0, "para:AAAA0001")["runs"][0];
+    assert!(r0["spacing"].is_null());
+    assert!(r0["kern"].is_null());
+
+    let out = tmp_dir().join("spacing-out.docx");
+    apply(
+        &path,
+        &out,
+        json!([{
+            "op": "setRunFormat",
+            "id": "para:AAAA0001/run:1",
+            "spacing": 40,
+            "kern": 28
+        }]),
+    );
+    let tree = inspect(&out, json!({ "from": 1, "maxParas": 20, "runs": true }));
+    let r = &para(&tree, "para:AAAA0001")["runs"][0];
+    assert_eq!(r["spacing"], 40);
+    assert_eq!(r["kern"], 28);
+    let xml = unzip(&out, "word/document.xml");
+    assert!(xml.contains("w:spacing"), "{xml}");
+    assert!(xml.contains("w:kern"), "{xml}");
+    assert!(xml.contains(r#"w:val="40""#), "{xml}");
+    assert!(xml.contains(r#"w:val="28""#), "{xml}");
+
+    let neg = tmp_dir().join("spacing-neg.docx");
+    apply(
+        &out,
+        &neg,
+        json!([{
+            "op": "setRunFormat",
+            "id": "para:AAAA0001/run:1",
+            "spacing": -20
+        }]),
+    );
+    let tree_n = inspect(&neg, json!({ "from": 1, "maxParas": 20, "runs": true }));
+    let rn = &para(&tree_n, "para:AAAA0001")["runs"][0];
+    assert_eq!(rn["spacing"], -20);
+    assert_eq!(rn["kern"], 28);
+
+    let cleared = tmp_dir().join("spacing-clear.docx");
+    apply(
+        &neg,
+        &cleared,
+        json!([{
+            "op": "setRunFormat",
+            "id": "para:AAAA0001/run:1",
+            "spacing": null,
+            "kern": null
+        }]),
+    );
+    let tree2 = inspect(&cleared, json!({ "from": 1, "maxParas": 20, "runs": true }));
+    let r2 = &para(&tree2, "para:AAAA0001")["runs"][0];
+    assert!(r2["spacing"].is_null());
+    assert!(r2["kern"].is_null());
+    let xml2 = unzip(&cleared, "word/document.xml");
+    assert!(!xml2.contains("w:kern"), "{xml2}");
+
+    let err_s = apply_err(
+        &path,
+        json!([{
+            "op": "setRunFormat",
+            "id": "para:AAAA0001/run:1",
+            "spacing": "wide"
+        }]),
+    );
+    assert_eq!(err_s.code(), ErrorCode::InvalidField);
+    let err_k = apply_err(
+        &path,
+        json!([{
+            "op": "setRunFormat",
+            "id": "para:AAAA0001/run:1",
+            "kern": -1
+        }]),
+    );
+    assert_eq!(err_k.code(), ErrorCode::InvalidField);
+
+    let created = tmp_dir().join("spacing-create.docx");
+    run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "create",
+            "path": created.to_string_lossy(),
+            "format": "docx",
+            "document": {
+                "paragraphs": [{
+                    "runs": [{ "text": "字", "spacing": 40, "kern": 28 }]
+                }]
+            }
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap();
+    let tree_c = inspect(&created, json!({ "from": 1, "maxParas": 5, "runs": true }));
+    let rc = &tree_c["paragraphs"][0]["runs"][0];
+    assert_eq!(rc["spacing"], 40);
+    assert_eq!(rc["kern"], 28);
 }

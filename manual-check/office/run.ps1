@@ -79,6 +79,7 @@ $order = @(
     'docx-box-fields'
     'docx-format'
     'docx-para-run-remain'
+    'docx-run-spacing'
     'docx-east-asia'
     'docx-insert-section'
     'docx-toc'

@@ -199,6 +199,8 @@ pub struct RunFormatPatch<'a> {
     pub strike: Option<Option<bool>>,
     pub dstrike: Option<Option<bool>>,
     pub vert_align: Option<Option<&'a str>>,
+    pub spacing: Option<Option<i32>>,
+    pub kern: Option<Option<u32>>,
 }
 
 pub fn para_node(
@@ -459,6 +461,8 @@ pub fn apply_run(r: &mut Element, patch: RunFormatPatch<'_>) {
     apply_on_off_rpr(rpr, "strike", patch.strike);
     apply_on_off_rpr(rpr, "dstrike", patch.dstrike);
     apply_val_elem(rpr, "vertAlign", patch.vert_align);
+    apply_int_val(rpr, "spacing", patch.spacing.map(|v| v.map(i64::from)));
+    apply_int_val(rpr, "kern", patch.kern.map(|v| v.map(i64::from)));
 }
 
 pub fn find_run_mut(p: &mut Element, n: usize) -> Option<&mut Element> {
@@ -548,6 +552,8 @@ fn runs_json(p: &Element, para_id: &str) -> Vec<Value> {
                     .and_then(|e| e.child_by_local("vertAlign"))
                     .and_then(|e| e.attr_local("val"))
                     .map(str::to_string),
+                "spacing": rpr.and_then(|e| signed_int_val(e, "spacing")),
+                "kern": rpr.and_then(|e| int_val(e, "kern")),
             })
         })
         .collect()
@@ -769,6 +775,13 @@ fn int_attr(el: &Element, local: &str) -> Option<u32> {
 }
 
 fn int_val(parent: &Element, local: &str) -> Option<u32> {
+    parent
+        .child_by_local(local)
+        .and_then(|e| e.attr_local("val"))
+        .and_then(|s| s.parse().ok())
+}
+
+fn signed_int_val(parent: &Element, local: &str) -> Option<i32> {
     parent
         .child_by_local(local)
         .and_then(|e| e.attr_local("val"))
@@ -1009,6 +1022,18 @@ fn apply_val_elem(rpr: &mut Element, local: &str, patch: Option<Option<&str>>) {
             let el = hf::ensure_child_in_order(rpr, local, RPR_ORDER);
             let key = el.prefixed("val");
             el.set_attr(&key, v);
+        }
+    }
+}
+
+fn apply_int_val(rpr: &mut Element, local: &str, patch: Option<Option<i64>>) {
+    match patch {
+        None => {}
+        Some(None) => remove_child(rpr, local),
+        Some(Some(v)) => {
+            let el = hf::ensure_child_in_order(rpr, local, RPR_ORDER);
+            let key = el.prefixed("val");
+            el.set_attr(&key, v.to_string());
         }
     }
 }

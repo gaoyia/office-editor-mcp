@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "C:\\data\\note.docx",
+  "output": "C:\\data\\note-run-spacing.docx",
+  "ops": [
+    {
+      "op": "setRunFormat",
+      "id": "para:3F2A1B00/run:1",
+      "spacing": 40,
+      "kern": 28
+    }
+  ]
+}
