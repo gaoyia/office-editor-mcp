@@ -748,6 +748,7 @@ pub struct ShapeSpec {
     pub prst: String,
     pub cx: Option<i64>,
     pub cy: Option<i64>,
+    pub hyperlink: Option<DrawingHlink>,
 }
 
 #[derive(Clone)]
@@ -916,7 +917,7 @@ fn parse_preset_shapes(
     for (i, item) in arr.iter().enumerate() {
         let item_path = format!("{path}[{i}]");
         let obj = as_object(item, &item_path)?;
-        deny_keys(obj, &item_path, &["prst", "cx", "cy"])?;
+        deny_keys(obj, &item_path, &["prst", "cx", "cy", "hyperlink"])?;
         let cx = parse_emu(obj.get("cx"), &item_path, "cx")?;
         let cy = parse_emu(obj.get("cy"), &item_path, "cy")?;
         if cx.is_some() != cy.is_some() {
@@ -942,7 +943,15 @@ fn parse_preset_shapes(
                 ));
             }
         };
-        out.push(ShapeSpec { prst, cx, cy });
+        out.push(ShapeSpec {
+            prst,
+            cx,
+            cy,
+            hyperlink: parse_drawing_hlink(
+                obj.get("hyperlink"),
+                &format!("{item_path}.hyperlink"),
+            )?,
+        });
     }
     Ok(out)
 }

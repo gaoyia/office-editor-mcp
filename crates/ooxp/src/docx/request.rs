@@ -8,12 +8,17 @@ use crate::error::{Error, ErrorKind, IdReason, ScopeNeed, TypeName};
 use crate::json;
 
 use super::charts::{self, ChartType, NewSeries};
+use super::connector;
 use super::hf::{HfKind, HfType};
+use super::ink;
 use super::math_expr::MathBody;
+use super::model3d;
 use super::para::{
     self, BodyPara, CommentIdTarget, HostPara, NoteIdTarget, NoteKind, ParaTarget, TxbxTarget,
 };
 use super::picture::{self, AlignH, AlignV, PicKind, PicTarget, WrapKind, WrapPos};
+use super::shape;
+use super::smartart;
 use super::tbl::{self, InsertAnchor, TableRef};
 
 #[derive(Debug, Clone)]
@@ -597,6 +602,12 @@ pub enum InsertHyperlinkHost {
     Para { para: ParaTarget, text: String },
     Picture(PicTarget),
     TextBox(TxbxTarget),
+    Shape(TxbxTarget),
+    Connector(TxbxTarget),
+    Ink(TxbxTarget),
+    Model3d(TxbxTarget),
+    Chart(charts::ChartTarget),
+    SmartArt(smartart::DiagramTarget),
 }
 
 #[derive(Debug, Clone)]
@@ -604,6 +615,12 @@ pub enum HyperlinkTarget {
     Link(super::link::LinkRef),
     Picture(PicTarget),
     TextBox(TxbxTarget),
+    Shape(TxbxTarget),
+    Connector(TxbxTarget),
+    Ink(TxbxTarget),
+    Model3d(TxbxTarget),
+    Chart(charts::ChartTarget),
+    SmartArt(smartart::DiagramTarget),
 }
 
 #[derive(Debug, Clone)]
@@ -5163,16 +5180,16 @@ fn parse_insert_hyperlink(
 ) -> Result<InsertHyperlinkOp, Error> {
     let id = require_op_id(obj, i)?;
     let path = format!("ops[{i}].id");
-    let host = if looks_like_pic_hlink_id(&id) {
+    let host = if let Some(h) = parse_drawing_insert_host(&id, &path)? {
         deny_keys(obj, i, &["op", "id", "url", "anchor", "tooltip"])?;
-        let pic = picture::parse_pic_id_at(&id, &path)?;
-        reject_pic_for_hlink(&pic, &path)?;
-        InsertHyperlinkHost::Picture(pic)
-    } else if looks_like_txbx_hlink_id(&id) {
-        deny_keys(obj, i, &["op", "id", "url", "anchor", "tooltip"])?;
-        let box_t = para::parse_txbx_id_at(&id, &path)?;
-        reject_txbx_for_hlink(&box_t, &path)?;
-        InsertHyperlinkHost::TextBox(box_t)
+        h
+    } else if id.contains("/ole:") {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::InsertLinkNeedsPara,
+            },
+            path,
+        ));
     } else {
         deny_keys(obj, i, &["op", "id", "text", "url", "anchor", "tooltip"])?;
         let para = parse_story_or_box_para_at(&id, &path, IdReason::InsertLinkNeedsPara)?;
@@ -5246,7 +5263,7 @@ fn parse_set_hyperlink(
 ) -> Result<SetHyperlinkOp, Error> {
     let id = require_op_id(obj, i)?;
     let path = format!("ops[{i}].id");
-    let drawing = looks_like_pic_hlink_id(&id) || looks_like_txbx_hlink_id(&id);
+    let drawing = looks_like_drawing_hlink_id(&id);
     if drawing {
         deny_keys(obj, i, &["op", "id", "url", "anchor", "tooltip"])?;
     } else {
@@ -5331,43 +5348,101 @@ fn looks_like_txbx_hlink_id(id: &str) -> bool {
     !rest.contains('/') && !id.contains("/pic:")
 }
 
-fn parse_hyperlink_target(id: &str, path: &str) -> Result<HyperlinkTarget, Error> {
+fn looks_like_chart_hlink_id(id: &str) -> bool {
+    let Some(rest) = id.rsplit_once("/chart:").map(|(_, r)| r) else {
+        return false;
+    };
+    !id.contains("/series:") && !rest.contains('/')
+}
+
+fn looks_like_smartart_hlink_id(id: &str) -> bool {
+    let Some(rest) = id.rsplit_once("/smartdiagram:").map(|(_, r)| r) else {
+        return false;
+    };
+    !id.contains("/pt:") && !rest.contains('/')
+}
+
+fn looks_like_drawing_hlink_id(id: &str) -> bool {
+    looks_like_pic_hlink_id(id)
+        || looks_like_txbx_hlink_id(id)
+        || shape::looks_like_shape_id(id)
+        || connector::looks_like_cxn_id(id)
+        || ink::looks_like_ink_id(id)
+        || model3d::looks_like_id(id)
+        || looks_like_chart_hlink_id(id)
+        || looks_like_smartart_hlink_id(id)
+}
+
+fn parse_drawing_insert_host(id: &str, path: &str) -> Result<Option<InsertHyperlinkHost>, Error> {
+    Ok(parse_drawing_hlink_target(id, path)?.map(|t| match t {
+        HyperlinkTarget::Picture(p) => InsertHyperlinkHost::Picture(p),
+        HyperlinkTarget::TextBox(t) => InsertHyperlinkHost::TextBox(t),
+        HyperlinkTarget::Shape(t) => InsertHyperlinkHost::Shape(t),
+        HyperlinkTarget::Connector(t) => InsertHyperlinkHost::Connector(t),
+        HyperlinkTarget::Ink(t) => InsertHyperlinkHost::Ink(t),
+        HyperlinkTarget::Model3d(t) => InsertHyperlinkHost::Model3d(t),
+        HyperlinkTarget::Chart(t) => InsertHyperlinkHost::Chart(t),
+        HyperlinkTarget::SmartArt(t) => InsertHyperlinkHost::SmartArt(t),
+        HyperlinkTarget::Link(_) => unreachable!(),
+    }))
+}
+
+fn parse_drawing_hlink_target(id: &str, path: &str) -> Result<Option<HyperlinkTarget>, Error> {
     if looks_like_pic_hlink_id(id) {
-        let pic = picture::parse_pic_id_at(id, path)?;
-        reject_pic_for_hlink(&pic, path)?;
-        return Ok(HyperlinkTarget::Picture(pic));
+        return Ok(Some(HyperlinkTarget::Picture(picture::parse_pic_id_at(
+            id, path,
+        )?)));
     }
     if looks_like_txbx_hlink_id(id) {
-        let box_t = para::parse_txbx_id_at(id, path)?;
-        reject_txbx_for_hlink(&box_t, path)?;
-        return Ok(HyperlinkTarget::TextBox(box_t));
+        return Ok(Some(HyperlinkTarget::TextBox(para::parse_txbx_id_at(
+            id, path,
+        )?)));
+    }
+    if shape::looks_like_shape_id(id) {
+        return Ok(Some(HyperlinkTarget::Shape(shape::parse_shape_id_at(
+            id, path,
+        )?)));
+    }
+    if connector::looks_like_cxn_id(id) {
+        return Ok(Some(HyperlinkTarget::Connector(
+            connector::parse_cxn_id_at(id, path)?,
+        )));
+    }
+    if ink::looks_like_ink_id(id) {
+        return Ok(Some(HyperlinkTarget::Ink(ink::parse_ink_id_at(id, path)?)));
+    }
+    if model3d::looks_like_id(id) {
+        return Ok(Some(HyperlinkTarget::Model3d(model3d::parse_id_at(
+            id, path,
+        )?)));
+    }
+    if looks_like_chart_hlink_id(id) {
+        return Ok(Some(HyperlinkTarget::Chart(charts::parse_chart_id_at(
+            id, path,
+        )?)));
+    }
+    if looks_like_smartart_hlink_id(id) {
+        return Ok(Some(HyperlinkTarget::SmartArt(
+            smartart::parse_diagram_id_at(id, path)?,
+        )));
+    }
+    Ok(None)
+}
+
+fn parse_hyperlink_target(id: &str, path: &str) -> Result<HyperlinkTarget, Error> {
+    if id.contains("/ole:") {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::InsertLinkNeedsPara,
+            },
+            path.to_string(),
+        ));
+    }
+    if let Some(t) = parse_drawing_hlink_target(id, path)? {
+        return Ok(t);
     }
     let link = super::link::parse_link_ref(id, path)?;
     Ok(HyperlinkTarget::Link(link))
-}
-
-fn reject_pic_for_hlink(target: &PicTarget, path: &str) -> Result<(), Error> {
-    match target {
-        PicTarget::Body { .. } | PicTarget::HeaderFooter { .. } => Ok(()),
-        _ => Err(Error::with_path(
-            ErrorKind::InvalidId {
-                reason: IdReason::InsertLinkNeedsPara,
-            },
-            path.to_string(),
-        )),
-    }
-}
-
-fn reject_txbx_for_hlink(target: &TxbxTarget, path: &str) -> Result<(), Error> {
-    match &target.host {
-        HostPara::Body(_) | HostPara::HeaderFooter { .. } => Ok(()),
-        _ => Err(Error::with_path(
-            ErrorKind::InvalidId {
-                reason: IdReason::InsertLinkNeedsPara,
-            },
-            path.to_string(),
-        )),
-    }
 }
 
 fn parse_insert_bookmark(

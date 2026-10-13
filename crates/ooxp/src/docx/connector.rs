@@ -3,8 +3,10 @@
 use serde_json::{json, Value};
 
 use crate::error::{Error, ErrorKind, IdReason};
+use crate::opc::Relationships;
 use crate::xml::{Element, Node};
 
+use super::drawing_hlink;
 use super::para::{self, TxbxKey, TxbxTarget};
 use super::picture::{PicKind, WrapKind};
 use super::textbox::{self, WPS_NS};
@@ -25,6 +27,7 @@ pub struct CxnInfo {
     pub wrap: Option<WrapKind>,
     pub prst: Option<String>,
     pub stable: bool,
+    pub hyperlink: Value,
 }
 
 pub fn is_writable_prst(s: &str) -> bool {
@@ -61,7 +64,11 @@ pub fn is_connector_wsp(wsp: &Element) -> bool {
     prst_of(wsp).is_some_and(|p| is_connector_geom(&p))
 }
 
-pub fn collect_connectors(root: &Element, host_para_id: &str) -> Result<Vec<CxnInfo>, Error> {
+pub fn collect_connectors(
+    root: &Element,
+    host_para_id: &str,
+    rels: Option<&Relationships>,
+) -> Result<Vec<CxnInfo>, Error> {
     let mut out = Vec::new();
     let mut index = 0usize;
     walk_host(root, &mut |drawing| {
@@ -69,10 +76,10 @@ pub fn collect_connectors(root: &Element, host_para_id: &str) -> Result<Vec<CxnI
             return Ok(());
         }
         if textbox::is_group(drawing) {
-            collect_group_cxns(drawing, host_para_id, &mut index, &mut out)?;
+            collect_group_cxns(drawing, host_para_id, &mut index, &mut out, rels)?;
         } else if is_connector_drawing(drawing) {
             index += 1;
-            out.push(cxn_from_drawing(drawing, host_para_id, index)?);
+            out.push(cxn_from_drawing(drawing, host_para_id, index, rels)?);
         }
         Ok(())
     })?;
@@ -92,6 +99,7 @@ pub fn connectors_json(cxns: &[CxnInfo]) -> Vec<Value> {
                 "wrap": c.wrap.map(WrapKind::as_str),
                 "prst": c.prst,
                 "stable": c.stable,
+                "hyperlink": c.hyperlink,
             })
         })
         .collect()
@@ -166,18 +174,33 @@ pub fn find_connector<'a>(host: &'a Element, key: &TxbxKey) -> Option<&'a Elemen
     find_cxn_walk(host, key, &mut index)
 }
 
+/// 连接线上写 `a:hlinkClick` 的父节点。
+pub fn hlink_parent_mut<'a>(host: &'a mut Element, key: &TxbxKey) -> Option<&'a mut Element> {
+    let mut index = 0usize;
+    let wsp = find_cxn_wsp_mut(host, key, &mut index)?;
+    drawing_hlink::textbox_click_parent_mut(wsp)
+}
+
+/// 该连接线是否已有 `hlinkClick`。找不到为 `None`。
+pub fn has_click(host: &mut Element, key: &TxbxKey) -> Option<bool> {
+    let mut index = 0usize;
+    let wsp = find_cxn_wsp_mut(host, key, &mut index)?;
+    Some(drawing_hlink::textbox_has_click(wsp))
+}
+
 fn collect_group_cxns(
     drawing: &Element,
     host_para_id: &str,
     index: &mut usize,
     out: &mut Vec<CxnInfo>,
+    rels: Option<&Relationships>,
 ) -> Result<(), Error> {
     let kind = drawing_kind(drawing);
     let wrap = drawing_wrap(drawing, kind);
     walk_all(drawing, &mut |e| {
         if is_connector_wsp(e) {
             *index += 1;
-            if let Ok(info) = cxn_from_wsp(e, host_para_id, *index, kind, wrap, drawing) {
+            if let Ok(info) = cxn_from_wsp(e, host_para_id, *index, kind, wrap, drawing, rels) {
                 out.push(info);
             }
         }
@@ -185,7 +208,12 @@ fn collect_group_cxns(
     Ok(())
 }
 
-fn cxn_from_drawing(drawing: &Element, host: &str, index: usize) -> Result<CxnInfo, Error> {
+fn cxn_from_drawing(
+    drawing: &Element,
+    host: &str,
+    index: usize,
+    rels: Option<&Relationships>,
+) -> Result<CxnInfo, Error> {
     let kind = drawing_kind(drawing);
     let wrap = drawing_wrap(drawing, kind);
     let (cx, cy) = drawing_extent(drawing)?;
@@ -202,6 +230,7 @@ fn cxn_from_drawing(drawing: &Element, host: &str, index: usize) -> Result<CxnIn
         wrap,
         prst,
         stable,
+        hyperlink: drawing_hlink::inspect_textbox(drawing, rels),
     })
 }
 
@@ -212,6 +241,7 @@ fn cxn_from_wsp(
     kind: PicKind,
     wrap: Option<WrapKind>,
     drawing: &Element,
+    rels: Option<&Relationships>,
 ) -> Result<CxnInfo, Error> {
     let (mut doc_pr_id, name) = cnv_pr(wsp);
     if doc_pr_id.is_none() {
@@ -230,6 +260,7 @@ fn cxn_from_wsp(
             wrap,
             prst: prst_of(wsp),
             stable,
+            hyperlink: drawing_hlink::inspect_textbox(wsp, rels),
         });
     }
     let (id, stable) = cxn_id(host, &doc_pr_id, index);
@@ -244,6 +275,7 @@ fn cxn_from_wsp(
         wrap,
         prst: prst_of(wsp),
         stable,
+        hyperlink: drawing_hlink::inspect_textbox(wsp, rels),
     })
 }
 
@@ -377,6 +409,98 @@ fn find_cxn_walk<'a>(el: &'a Element, key: &TxbxKey, index: &mut usize) -> Optio
     for n in &el.children {
         if let Node::Element(e) = n {
             if let Some(found) = find_cxn_walk(e, key, index) {
+                return Some(found);
+            }
+        }
+    }
+    None
+}
+
+fn find_cxn_wsp_mut<'a>(
+    el: &'a mut Element,
+    key: &TxbxKey,
+    index: &mut usize,
+) -> Option<&'a mut Element> {
+    if el.local_name() == "txbxContent" {
+        return None;
+    }
+    if el.local_name() == "AlternateContent" {
+        if let Some(i) = first_choice(el) {
+            if let Node::Element(child) = &mut el.children[i] {
+                return find_cxn_wsp_mut(child, key, index);
+            }
+        }
+        return None;
+    }
+    if el.local_name() == "drawing" {
+        if textbox::is_group(el) {
+            let outer = doc_pr(el).0;
+            return find_group_cxn_wsp_in(el, key, index, &outer);
+        }
+        if is_connector_drawing(el) {
+            *index += 1;
+            let (doc_pr_id, _) = doc_pr(el);
+            if matches_key(&doc_pr_id, *index, key) {
+                return find_first_cxn_wsp_mut(el);
+            }
+        }
+        return None;
+    }
+    let children = el.children.as_mut_slice();
+    for child in children {
+        if let Node::Element(e) = child {
+            if let Some(found) = find_cxn_wsp_mut(e, key, index) {
+                return Some(found);
+            }
+        }
+    }
+    None
+}
+
+fn find_group_cxn_wsp_in<'a>(
+    el: &'a mut Element,
+    key: &TxbxKey,
+    index: &mut usize,
+    outer_doc_pr: &Option<String>,
+) -> Option<&'a mut Element> {
+    if el.local_name() == "txbxContent" {
+        return None;
+    }
+    if is_connector_wsp(el) {
+        *index += 1;
+        let (doc_pr_id, _) = cnv_pr(el);
+        let id = if doc_pr_id.is_some() {
+            doc_pr_id
+        } else {
+            outer_doc_pr.clone()
+        };
+        if matches_key(&id, *index, key) {
+            return Some(el);
+        }
+        return None;
+    }
+    let children = el.children.as_mut_slice();
+    for child in children {
+        if let Node::Element(e) = child {
+            if let Some(found) = find_group_cxn_wsp_in(e, key, index, outer_doc_pr) {
+                return Some(found);
+            }
+        }
+    }
+    None
+}
+
+fn find_first_cxn_wsp_mut(el: &mut Element) -> Option<&mut Element> {
+    if el.local_name() == "txbxContent" {
+        return None;
+    }
+    if is_connector_wsp(el) {
+        return Some(el);
+    }
+    let children = el.children.as_mut_slice();
+    for child in children {
+        if let Node::Element(e) = child {
+            if let Some(found) = find_first_cxn_wsp_mut(e) {
                 return Some(found);
             }
         }

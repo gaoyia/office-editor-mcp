@@ -152,7 +152,10 @@ fn round4_document(pic: &Path, with_font: bool) -> Value {
                     "file": pic.to_string_lossy(),
                     "hyperlink": { "url": "https://example.com" }
                 }],
-                "shapes": [{ "prst": "ellipse" }],
+                "shapes": [{
+                    "prst": "ellipse",
+                    "hyperlink": { "url": "https://example.com/shape" }
+                }],
                 "connectors": [{ "prst": "straightConnector1" }],
                 "rubies": [{ "base": "汉字", "rt": "hànzì" }],
                 "citations": [{ "tag": "Book1" }],
@@ -200,6 +203,10 @@ fn create_round4_writes_styles_table_shapes_ruby_biblio_and_drawing_link() {
 
     assert_eq!(tree["shapeCount"], 1);
     assert_eq!(tree["paragraphs"][1]["shapes"][0]["prst"], "ellipse");
+    assert_eq!(
+        tree["paragraphs"][1]["shapes"][0]["hyperlink"]["url"],
+        "https://example.com/shape"
+    );
     assert_eq!(tree["connectorCount"], 1);
     assert_eq!(
         tree["paragraphs"][1]["connectors"][0]["prst"],

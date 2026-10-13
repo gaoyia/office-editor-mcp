@@ -9,6 +9,7 @@ use crate::error::{Error, ErrorKind, IdReason};
 use crate::opc::{resolve_id, ContentTypes, Package, Relationship, Relationships};
 use crate::xml::{self, Document, Element, Node};
 
+use super::drawing_hlink;
 use super::hf::HfPart;
 use super::para::{self, HostPara, TxbxKey, TxbxTarget};
 use super::picture::{self, PicKind, WrapKind};
@@ -44,6 +45,7 @@ pub struct Model3dInfo {
     pub cy: Option<i64>,
     pub wrap: Option<WrapKind>,
     pub stable: bool,
+    pub hyperlink: Value,
 }
 
 pub fn looks_like_id(id: &str) -> bool {
@@ -159,18 +161,19 @@ pub fn count_in(pkg: &Package, host: &str, root: &Element) -> Result<usize, Erro
 }
 
 pub fn collect(
-    _pkg: &Package,
-    _host: &str,
+    pkg: &Package,
+    host: &str,
     root: &Element,
     host_para_id: &str,
 ) -> Result<Vec<Model3dInfo>, Error> {
+    let rels = Relationships::from_package(pkg, host).ok();
     let mut out = Vec::new();
     let mut index = 0usize;
     let mut frames = Vec::new();
     collect_frames(root, &mut frames);
     for frame in frames {
         index += 1;
-        out.push(info_of(frame, host_para_id, index));
+        out.push(info_of(frame, host_para_id, index, rels.as_ref()));
     }
     Ok(out)
 }
@@ -196,7 +199,12 @@ fn collect_frames<'a>(el: &'a Element, out: &mut Vec<&'a Element>) {
     }
 }
 
-fn info_of(frame: &Element, host_para_id: &str, index: usize) -> Model3dInfo {
+fn info_of(
+    frame: &Element,
+    host_para_id: &str,
+    index: usize,
+    rels: Option<&Relationships>,
+) -> Model3dInfo {
     let kind = if frame.local_name() == "anchor" {
         PicKind::Anchor
     } else {
@@ -235,6 +243,7 @@ fn info_of(frame: &Element, host_para_id: &str, index: usize) -> Model3dInfo {
         cy,
         wrap,
         stable,
+        hyperlink: drawing_hlink::inspect_picture(frame, rels),
     }
 }
 
@@ -251,6 +260,7 @@ pub fn list_json(items: &[Model3dInfo]) -> Vec<Value> {
                 "wrap": c.wrap.map(WrapKind::as_str),
                 "contentType": crate::model3d::CT_GLB,
                 "stable": c.stable,
+                "hyperlink": c.hyperlink,
             })
         })
         .collect()
@@ -294,6 +304,51 @@ fn find_frame<'a>(root: &'a Element, key: &TxbxKey) -> Option<&'a Element> {
             .map(str::to_string);
         if matches_key(&token, index, key) {
             return Some(frame);
+        }
+    }
+    None
+}
+
+pub(crate) fn find_frame_mut<'a>(root: &'a mut Element, key: &TxbxKey) -> Option<&'a mut Element> {
+    find_frame_walk_mut(root, key, &mut 0)
+}
+
+fn find_frame_walk_mut<'a>(
+    el: &'a mut Element,
+    key: &TxbxKey,
+    index: &mut usize,
+) -> Option<&'a mut Element> {
+    if el.local_name() == "txbxContent" {
+        return None;
+    }
+    if el.local_name() == "AlternateContent" {
+        if let Some(choice) = el.children.iter_mut().find_map(|n| match n {
+            Node::Element(c) if c.local_name() == "Choice" => Some(c),
+            _ => None,
+        }) {
+            if crate::model3d::choice_requires_am3d(choice) {
+                return find_frame_walk_mut(choice, key, index);
+            }
+        }
+        return None;
+    }
+    if matches!(el.local_name(), "inline" | "anchor") && crate::model3d::is_model3d_graphic(el) {
+        *index += 1;
+        let token = el
+            .child_by_local("docPr")
+            .and_then(|p| p.attr_local("id"))
+            .map(str::to_string);
+        if matches_key(&token, *index, key) {
+            return Some(el);
+        }
+        return None;
+    }
+    let children = el.children.as_mut_slice();
+    for child in children {
+        if let Node::Element(e) = child {
+            if let Some(found) = find_frame_walk_mut(e, key, index) {
+                return Some(found);
+            }
         }
     }
     None
@@ -678,7 +733,7 @@ fn part_for_host(
     }
 }
 
-fn part_for_target(
+pub(crate) fn part_for_target(
     catalog: &[HfPart],
     doc_part: &str,
     target: &TxbxTarget,

@@ -204,8 +204,19 @@ fn inspect_lists_points_and_parent() {
     assert_eq!(
         object_keys(d),
         [
-            "id", "docPrId", "name", "kind", "cx", "cy", "wrap", "layout", "colors", "style",
-            "points", "stable"
+            "id",
+            "docPrId",
+            "name",
+            "kind",
+            "cx",
+            "cy",
+            "wrap",
+            "layout",
+            "colors",
+            "style",
+            "points",
+            "stable",
+            "hyperlink"
         ]
     );
     let pts = d["points"].as_array().unwrap();

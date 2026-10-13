@@ -12,6 +12,7 @@ use crate::xml::{self, Element, Node};
 
 use super::apply;
 use super::charts::{self, ChartType, InsertChartOp, NewSeries};
+use super::connector;
 use super::create_round4::{
     self, CitationSpec, CrossRefSpec, DocExtra, DrawingHlink, EditRangeSpec, IndexEntrySpec,
     RubySpec, ShapeSpec, TableExtra,
@@ -19,9 +20,11 @@ use super::create_round4::{
 use super::create_round5::{self, GroupSpec, ParaRemain, RunSpec};
 use super::field;
 use super::hf::{HfKind, HfType};
+use super::ink;
 use super::ink::InsertInkCanvasOp;
 use super::math::MathKind;
 use super::math_expr::{self, MathBody};
+use super::model3d;
 use super::numbering::NumberingKind;
 use super::ole::InsertOleOp;
 use super::para::{self, ParaTarget};
@@ -39,6 +42,7 @@ use super::request::{
 };
 use super::sdt::SdtKind;
 use super::sect::SectionBreakType;
+use super::shape;
 use super::smartart::{self, InsertSpec};
 use super::tbl::{self, TableRef, TableStory};
 use super::textbox::{self, DEFAULT_CX, DEFAULT_CY, WPS_NS};
@@ -88,6 +92,11 @@ struct NewPic {
     hyperlink: Option<DrawingHlink>,
 }
 
+struct CreateSmartArt {
+    spec: InsertSpec,
+    hyperlink: Option<DrawingHlink>,
+}
+
 struct CreateChart {
     chart_type: ChartType,
     of_pie_type: Option<String>,
@@ -98,6 +107,7 @@ struct CreateChart {
     wrap: Option<WrapKind>,
     cx: i64,
     cy: i64,
+    hyperlink: Option<DrawingHlink>,
 }
 
 struct NewComment {
@@ -152,12 +162,14 @@ struct NewInkCanvas {
     file: String,
     cx: Option<i64>,
     cy: Option<i64>,
+    hyperlink: Option<DrawingHlink>,
 }
 
 struct NewModel3d {
     file: String,
     cx: Option<i64>,
     cy: Option<i64>,
+    hyperlink: Option<DrawingHlink>,
 }
 
 struct NewPara {
@@ -165,7 +177,7 @@ struct NewPara {
     style: Option<&'static str>,
     boxes: Vec<NewBox>,
     pictures: Vec<NewPic>,
-    smart_arts: Vec<InsertSpec>,
+    smart_arts: Vec<CreateSmartArt>,
     charts: Vec<CreateChart>,
     ole_objects: Vec<String>,
     ink_canvases: Vec<NewInkCanvas>,
@@ -263,6 +275,12 @@ impl NewPara {
                 .is_some_and(|rs| rs.iter().any(|r| r.format.is_some()))
             || self.boxes.iter().any(|b| b.has_follow_ups())
             || self.pictures.iter().any(|p| p.hyperlink.is_some())
+            || self.smart_arts.iter().any(|s| s.hyperlink.is_some())
+            || self.charts.iter().any(|c| c.hyperlink.is_some())
+            || self.ink_canvases.iter().any(|c| c.hyperlink.is_some())
+            || self.model3ds.iter().any(|m| m.hyperlink.is_some())
+            || self.shapes.iter().any(|s| s.hyperlink.is_some())
+            || self.connectors.iter().any(|s| s.hyperlink.is_some())
     }
 }
 
@@ -1490,7 +1508,7 @@ fn parse_table_after(v: Option<&Value>, path: &str, para_n: usize) -> Result<u32
     }
 }
 
-fn parse_smartarts(v: Option<&Value>, prefix: &str) -> Result<Vec<InsertSpec>, Error> {
+fn parse_smartarts(v: Option<&Value>, prefix: &str) -> Result<Vec<CreateSmartArt>, Error> {
     let Some(v) = v else {
         return Ok(Vec::new());
     };
@@ -1519,7 +1537,7 @@ fn parse_smartarts(v: Option<&Value>, prefix: &str) -> Result<Vec<InsertSpec>, E
         for k in obj.keys() {
             if !matches!(
                 k.as_str(),
-                "layout" | "points" | "kind" | "wrap" | "cx" | "cy"
+                "layout" | "points" | "kind" | "wrap" | "cx" | "cy" | "hyperlink"
             ) {
                 return Err(Error::with_path(
                     ErrorKind::UnknownField { field: k.clone() },
@@ -1527,7 +1545,13 @@ fn parse_smartarts(v: Option<&Value>, prefix: &str) -> Result<Vec<InsertSpec>, E
                 ));
             }
         }
-        out.push(smartart::parse_spec(obj, &item_path)?);
+        out.push(CreateSmartArt {
+            spec: smartart::parse_spec(obj, &item_path)?,
+            hyperlink: create_round4::parse_drawing_hlink(
+                obj.get("hyperlink"),
+                &format!("{item_path}.hyperlink"),
+            )?,
+        });
     }
     Ok(out)
 }
@@ -1538,8 +1562,8 @@ fn attach_smartarts(pkg: &mut Package, part: &str, paras: &[NewPara]) -> Result<
     }
     let mut doc = xml::parse(pkg.get(part)?)?;
     for (i, para) in paras.iter().enumerate() {
-        for spec in &para.smart_arts {
-            smartart::attach_to_para(pkg, part, &mut doc.root, i, spec)?;
+        for item in &para.smart_arts {
+            smartart::attach_to_para(pkg, part, &mut doc.root, i, &item.spec)?;
         }
     }
     pkg.set(part, doc.to_bytes()?)?;
@@ -1792,7 +1816,7 @@ fn parse_ink_canvases(v: Option<&Value>, prefix: &str) -> Result<Vec<NewInkCanva
             )
         })?;
         for k in obj.keys() {
-            if !matches!(k.as_str(), "file" | "cx" | "cy") {
+            if !matches!(k.as_str(), "file" | "cx" | "cy" | "hyperlink") {
                 return Err(Error::with_path(
                     ErrorKind::UnknownField { field: k.clone() },
                     format!("{item_path}.{k}"),
@@ -1829,7 +1853,15 @@ fn parse_ink_canvases(v: Option<&Value>, prefix: &str) -> Result<Vec<NewInkCanva
                 item_path.clone(),
             ));
         }
-        out.push(NewInkCanvas { file, cx, cy });
+        out.push(NewInkCanvas {
+            file,
+            cx,
+            cy,
+            hyperlink: create_round4::parse_drawing_hlink(
+                obj.get("hyperlink"),
+                &format!("{item_path}.hyperlink"),
+            )?,
+        });
     }
     Ok(out)
 }
@@ -1861,7 +1893,7 @@ fn parse_model3ds(v: Option<&Value>, prefix: &str) -> Result<Vec<NewModel3d>, Er
             )
         })?;
         for k in obj.keys() {
-            if !matches!(k.as_str(), "file" | "cx" | "cy") {
+            if !matches!(k.as_str(), "file" | "cx" | "cy" | "hyperlink") {
                 return Err(Error::with_path(
                     ErrorKind::UnknownField { field: k.clone() },
                     format!("{item_path}.{k}"),
@@ -1898,7 +1930,15 @@ fn parse_model3ds(v: Option<&Value>, prefix: &str) -> Result<Vec<NewModel3d>, Er
                 item_path.clone(),
             ));
         }
-        out.push(NewModel3d { file, cx, cy });
+        out.push(NewModel3d {
+            file,
+            cx,
+            cy,
+            hyperlink: create_round4::parse_drawing_hlink(
+                obj.get("hyperlink"),
+                &format!("{item_path}.hyperlink"),
+            )?,
+        });
     }
     Ok(out)
 }
@@ -1949,6 +1989,7 @@ fn parse_one_chart(v: &Value, path: &str) -> Result<CreateChart, Error> {
                 | "wrap"
                 | "cx"
                 | "cy"
+                | "hyperlink"
         ) {
             return Err(Error::with_path(
                 ErrorKind::UnknownField { field: k.clone() },
@@ -2090,6 +2131,10 @@ fn parse_one_chart(v: &Value, path: &str) -> Result<CreateChart, Error> {
         wrap,
         cx: cx.unwrap_or(charts::default_cx()),
         cy: cy.unwrap_or(charts::default_cy()),
+        hyperlink: create_round4::parse_drawing_hlink(
+            obj.get("hyperlink"),
+            &format!("{path}.hyperlink"),
+        )?,
     })
 }
 
@@ -3228,6 +3273,21 @@ fn push_instr_blocks<P: Clone>(
     Ok(())
 }
 
+fn push_drawing_hlink(
+    ops: &mut Vec<DocxOp>,
+    id: String,
+    host: InsertHyperlinkHost,
+    h: &DrawingHlink,
+) {
+    ops.push(DocxOp::InsertHyperlink(InsertHyperlinkOp {
+        id,
+        host,
+        url: h.url.clone(),
+        anchor: h.anchor.clone(),
+        tooltip: h.tooltip.clone(),
+    }));
+}
+
 fn push_story_ops(
     ops: &mut Vec<DocxOp>,
     paras: &[NewPara],
@@ -3238,7 +3298,7 @@ fn push_story_ops(
     for (i, p) in paras.iter().enumerate() {
         let id = story_para_id(hf, i);
         let host = para::parse_para_id_at(&id, "document")?;
-        for ch in &p.charts {
+        for (n, ch) in p.charts.iter().enumerate() {
             ops.push(DocxOp::InsertChart(InsertChartOp {
                 id: id.clone(),
                 para: host.clone(),
@@ -3253,6 +3313,11 @@ fn push_story_ops(
                 cx: ch.cx,
                 cy: ch.cy,
             }));
+            if let Some(h) = &ch.hyperlink {
+                let chart_id = format!("{id}/chart:index:{}", n + 1);
+                let t = charts::parse_chart_id_at(&chart_id, "document")?;
+                push_drawing_hlink(ops, chart_id, InsertHyperlinkHost::Chart(t), h);
+            }
         }
         for file in &p.ole_objects {
             ops.push(DocxOp::InsertOle(InsertOleOp {
@@ -3263,26 +3328,36 @@ fn push_story_ops(
         }
         if !p.ink_canvases.is_empty() {
             let ink_host = para::parse_host_para_id_at(&id, "document")?;
-            for ink in &p.ink_canvases {
+            for (n, ink_item) in p.ink_canvases.iter().enumerate() {
                 ops.push(DocxOp::InsertInkCanvas(InsertInkCanvasOp {
                     id: id.clone(),
                     host: ink_host.clone(),
-                    file: ink.file.clone(),
-                    cx: ink.cx,
-                    cy: ink.cy,
+                    file: ink_item.file.clone(),
+                    cx: ink_item.cx,
+                    cy: ink_item.cy,
                 }));
+                if let Some(h) = &ink_item.hyperlink {
+                    let ink_id = format!("{id}/ink:index:{}", n + 1);
+                    let t = ink::parse_ink_id_at(&ink_id, "document")?;
+                    push_drawing_hlink(ops, ink_id, InsertHyperlinkHost::Ink(t), h);
+                }
             }
         }
         if !p.model3ds.is_empty() {
-            let host = para::parse_host_para_id_at(&id, "document")?;
-            for m in &p.model3ds {
-                ops.push(DocxOp::InsertModel3d(super::model3d::InsertModel3dOp {
+            let host3d = para::parse_host_para_id_at(&id, "document")?;
+            for (n, m) in p.model3ds.iter().enumerate() {
+                ops.push(DocxOp::InsertModel3d(model3d::InsertModel3dOp {
                     id: id.clone(),
-                    host: host.clone(),
+                    host: host3d.clone(),
                     file: m.file.clone(),
                     cx: m.cx,
                     cy: m.cy,
                 }));
+                if let Some(h) = &m.hyperlink {
+                    let m_id = format!("{id}/model3d:index:{}", n + 1);
+                    let t = model3d::parse_id_at(&m_id, "document")?;
+                    push_drawing_hlink(ops, m_id, InsertHyperlinkHost::Model3d(t), h);
+                }
             }
         }
         if let Some(text) = &p.footnote {
@@ -3420,7 +3495,7 @@ fn push_story_ops(
         }
         if !p.shapes.is_empty() || !p.connectors.is_empty() {
             let shape_host = para::parse_host_para_id_at(&id, "document")?;
-            for s in &p.shapes {
+            for (n, s) in p.shapes.iter().enumerate() {
                 ops.push(DocxOp::InsertShape(InsertShapeOp {
                     id: id.clone(),
                     host: shape_host.clone(),
@@ -3428,8 +3503,13 @@ fn push_story_ops(
                     cy: s.cy,
                     prst: s.prst.clone(),
                 }));
+                if let Some(h) = &s.hyperlink {
+                    let sid = format!("{id}/shape:index:{}", n + 1);
+                    let t = shape::parse_shape_id_at(&sid, "document")?;
+                    push_drawing_hlink(ops, sid, InsertHyperlinkHost::Shape(t), h);
+                }
             }
-            for s in &p.connectors {
+            for (n, s) in p.connectors.iter().enumerate() {
                 ops.push(DocxOp::InsertConnector(InsertConnectorOp {
                     id: id.clone(),
                     host: shape_host.clone(),
@@ -3437,6 +3517,11 @@ fn push_story_ops(
                     cy: s.cy,
                     prst: s.prst.clone(),
                 }));
+                if let Some(h) = &s.hyperlink {
+                    let cid = format!("{id}/cxn:index:{}", n + 1);
+                    let t = connector::parse_cxn_id_at(&cid, "document")?;
+                    push_drawing_hlink(ops, cid, InsertHyperlinkHost::Connector(t), h);
+                }
             }
         }
         for r in &p.rubies {
@@ -3503,26 +3588,21 @@ fn push_story_ops(
             if let Some(h) = &pic.hyperlink {
                 let pic_id = format!("{id}/pic:{}", pic.doc_pr);
                 let pic_t = picture::parse_pic_id_at(&pic_id, "document")?;
-                ops.push(DocxOp::InsertHyperlink(InsertHyperlinkOp {
-                    id: pic_id,
-                    host: InsertHyperlinkHost::Picture(pic_t),
-                    url: h.url.clone(),
-                    anchor: h.anchor.clone(),
-                    tooltip: h.tooltip.clone(),
-                }));
+                push_drawing_hlink(ops, pic_id, InsertHyperlinkHost::Picture(pic_t), h);
             }
         }
         for b in &p.boxes {
             if let Some(h) = &b.hyperlink {
                 let box_id = format!("{id}/txbx:{}", b.doc_pr);
                 let box_t = para::parse_txbx_id_at(&box_id, "document")?;
-                ops.push(DocxOp::InsertHyperlink(InsertHyperlinkOp {
-                    id: box_id,
-                    host: InsertHyperlinkHost::TextBox(box_t),
-                    url: h.url.clone(),
-                    anchor: h.anchor.clone(),
-                    tooltip: h.tooltip.clone(),
-                }));
+                push_drawing_hlink(ops, box_id, InsertHyperlinkHost::TextBox(box_t), h);
+            }
+        }
+        for (n, sa) in p.smart_arts.iter().enumerate() {
+            if let Some(h) = &sa.hyperlink {
+                let sa_id = format!("{id}/smartdiagram:index:{}", n + 1);
+                let t = smartart::parse_diagram_id_at(&sa_id, "document")?;
+                push_drawing_hlink(ops, sa_id, InsertHyperlinkHost::SmartArt(t), h);
             }
         }
     }

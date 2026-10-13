@@ -185,7 +185,8 @@ fn insert_inspect_export_replace_delete() {
             "cy",
             "wrap",
             "contentType",
-            "stable"
+            "stable",
+            "hyperlink"
         ]
     );
     let names = zip_names(&inserted);

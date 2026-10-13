@@ -40,6 +40,7 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 2026-10-11 补跑 `docx-table-width.ps1`，Tw1–Tw6 通过。无 Repair。COM `Rows.Alignment=1`，`PreferredWidth=180`，行高 20 磅。标题栏仍是 `docx-table-width-apply.docx` / `docx-table-width-create.docx`。
 2026-10-12 补跑 `docx-cell-valign.ps1`，Va1–Va5 通过。无 Repair。COM `VerticalAlignment` 居中为 1、底对齐为 3。
 同日补跑 `docx-textbox-anchor.ps1`，Bta1–Bta5 通过。无 Repair。ZIP 有 `anchor="ctr"`，`just` / `dist` 树上对得上。
+2026-10-13 补跑 `docx-drawing-hlink-remain.ps1`，Dhr1–Dhr6 通过。无 Repair。框内图 COM `Hyperlink.Address` 对得上。`hyperlinkCount` 仍为 0。OLE id 仍报 `InvalidId`。
 
 - **C1** ✅
   - Word 16.0 能打开 `manual-check/office/out/docx-create.docx`，标题栏无 Repair
@@ -203,7 +204,14 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
   - `setHyperlink` 改 URL；`deleteHyperlink` 后 `hyperlink` 为 `null`、图还在
   - 文本框链 inspect 对得上
   - 内部书签 `kind=anchor`，关系 `Target="#SrcBm"` 且无 `TargetMode`
-  - 图上带 `text`、框内图分别得 `InvalidField` / `InvalidId`
+  - 图上带 `text` 得 `InvalidField`
+  - 标题栏无 Repair
+- **Dhr1–Dhr6** ✅
+  - Word 16.0：`docx-drawing-hlink-remain.ps1`，6 PASS / 0 FAIL
+  - 框内图、无框形状、连接线可写 DrawingML 链
+  - create `shapes[].hyperlink` 后树上对得上
+  - `deleteHyperlink` 后 `hyperlink` 为 `null`、对象还在
+  - OLE id 仍报 `InvalidId`
   - 标题栏无 Repair
 - **Ds1–Ds8** ✅
   - Word 16.0：`docx-drawing-shape.ps1`，8 PASS / 0 FAIL
@@ -1173,7 +1181,31 @@ Word 跟踪修订下改表单元格底纹、插入空段、删除表行。`inspe
   - 通过标准：图上 `insertHyperlink` 给 `anchor` 后 inspect `kind` 为 `anchor`，关系 Target 以 `#` 开头且无 `TargetMode`，无修复
 - **Dh6**
   - 检查：拒写
-  - 通过标准：对图发带 `text` 的 `insertHyperlink`、对框内图发 `insertHyperlink` 得 `InvalidField` / `InvalidId`，未写文件
+  - 通过标准：对图发带 `text` 的 `insertHyperlink` 得 `InvalidField`，未写文件
+  - 不强制开 Word
+
+## DrawingML 链剩余
+
+框内图、注内 / 批注内图或框、连接线、无框形状、SmartArt、图表、墨迹画布、3D 上的 `a:hlinkClick`。不进 `hyperlinks` 名单，不计入 `hyperlinkCount`。OLE 仍不写。脚本 `manual-check/office/cases/docx-drawing-hlink-remain.ps1`。编号用 **Dhr**。不要和 Dh、Dl 撞。现有 Dh1–Dh6 继续过。
+
+- **Dhr1**
+  - 检查：框内图
+  - 通过标准：框内图 `insertHyperlink` 后 inspect `hyperlink.url` 对得上。Word 无修复。COM 该图 `Hyperlink.Address` 对得上。`hyperlinkCount` 仍为 0
+- **Dhr2**
+  - 检查：无框形状
+  - 通过标准：`insertShape` 后再 `insertHyperlink` 点形状 id，inspect `hyperlink.url` 对得上，无修复
+- **Dhr3**
+  - 检查：连接线
+  - 通过标准：`insertConnector` 后再 `insertHyperlink` 点连接线 id，inspect `hyperlink.url` 对得上，无修复
+- **Dhr4**
+  - 检查：create
+  - 通过标准：create `shapes[].hyperlink` 后树上对得上，无修复
+- **Dhr5**
+  - 检查：删链
+  - 通过标准：对形状 `deleteHyperlink` 后 `hyperlink` 为 `null`、形状还在、无修复
+- **Dhr6**
+  - 检查：拒写
+  - 通过标准：对 OLE id 发 `insertHyperlink` 得 `InvalidId`，未写文件
   - 不强制开 Word
 
 ## 域

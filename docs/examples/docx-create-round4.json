@@ -51,7 +51,7 @@
             "hyperlink": { "url": "https://example.com" }
           }
         ],
-        "shapes": [{ "prst": "ellipse" }],
+        "shapes": [{ "prst": "ellipse", "hyperlink": { "url": "https://example.com/shape" } }],
         "connectors": [{ "prst": "straightConnector1" }],
         "rubies": [{ "base": "汉字", "rt": "hànzì" }],
         "citations": [{ "tag": "Book1" }],

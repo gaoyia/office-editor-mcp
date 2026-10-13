@@ -158,7 +158,18 @@ fn insert_rect_and_ellipse_then_delete() {
     assert!(id.contains("/shape:"));
     assert_eq!(
         object_keys(sh),
-        ["id", "docPrId", "name", "kind", "cx", "cy", "wrap", "prst", "stable"]
+        [
+            "id",
+            "docPrId",
+            "name",
+            "kind",
+            "cx",
+            "cy",
+            "wrap",
+            "prst",
+            "stable",
+            "hyperlink"
+        ]
     );
     let xml = part_text(&inserted, "word/document.xml");
     assert!(xml.contains("Requires=\"wps\""));
@@ -401,15 +412,10 @@ fn reject_connector_prst_text_geom_and_restricted_hosts() {
         &inserted,
         json!({ "from": 1, "maxParas": 10, "shapes": true }),
     );
-    let sid = listed["paragraphs"][1]["shapes"][0]["id"]
-        .as_str()
-        .unwrap()
-        .to_string();
-    let err_hlink = apply_err(
-        &inserted,
-        json!([{ "op": "insertHyperlink", "id": sid, "url": "https://example.com" }]),
+    assert_eq!(
+        listed["paragraphs"][1]["shapes"].as_array().unwrap().len(),
+        1
     );
-    assert_eq!(err_hlink.code(), ErrorCode::InvalidId);
 }
 
 #[test]

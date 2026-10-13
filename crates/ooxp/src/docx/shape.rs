@@ -3,8 +3,10 @@
 use serde_json::{json, Value};
 
 use crate::error::{Error, ErrorKind, IdReason};
+use crate::opc::Relationships;
 use crate::xml::{Element, Node};
 
+use super::drawing_hlink;
 use super::para::{self, TxbxKey, TxbxTarget};
 use super::picture::{PicKind, WrapKind};
 use super::textbox::{self, WPS_NS};
@@ -25,6 +27,7 @@ pub struct ShapeInfo {
     pub wrap: Option<WrapKind>,
     pub prst: Option<String>,
     pub stable: bool,
+    pub hyperlink: Value,
 }
 
 pub fn is_writable_prst(s: &str) -> bool {
@@ -42,7 +45,11 @@ pub fn is_shape_wsp(wsp: &Element) -> bool {
     !super::connector::is_connector_wsp(wsp)
 }
 
-pub fn collect_shapes(root: &Element, host_para_id: &str) -> Result<Vec<ShapeInfo>, Error> {
+pub fn collect_shapes(
+    root: &Element,
+    host_para_id: &str,
+    rels: Option<&Relationships>,
+) -> Result<Vec<ShapeInfo>, Error> {
     let mut out = Vec::new();
     let mut index = 0usize;
     walk_host(root, &mut |drawing| {
@@ -50,10 +57,10 @@ pub fn collect_shapes(root: &Element, host_para_id: &str) -> Result<Vec<ShapeInf
             return Ok(());
         }
         if textbox::is_group(drawing) {
-            collect_group_shapes(drawing, host_para_id, &mut index, &mut out)?;
+            collect_group_shapes(drawing, host_para_id, &mut index, &mut out, rels)?;
         } else if is_shape_drawing(drawing) {
             index += 1;
-            out.push(shape_from_drawing(drawing, host_para_id, index)?);
+            out.push(shape_from_drawing(drawing, host_para_id, index, rels)?);
         }
         Ok(())
     })?;
@@ -73,6 +80,7 @@ pub fn shapes_json(cxns: &[ShapeInfo]) -> Vec<Value> {
                 "wrap": c.wrap.map(WrapKind::as_str),
                 "prst": c.prst,
                 "stable": c.stable,
+                "hyperlink": c.hyperlink,
             })
         })
         .collect()
@@ -152,13 +160,14 @@ fn collect_group_shapes(
     host_para_id: &str,
     index: &mut usize,
     out: &mut Vec<ShapeInfo>,
+    rels: Option<&Relationships>,
 ) -> Result<(), Error> {
     let kind = drawing_kind(drawing);
     let wrap = drawing_wrap(drawing, kind);
     walk_all(drawing, &mut |e| {
         if is_shape_wsp(e) {
             *index += 1;
-            if let Ok(info) = shape_from_wsp(e, host_para_id, *index, kind, wrap, drawing) {
+            if let Ok(info) = shape_from_wsp(e, host_para_id, *index, kind, wrap, drawing, rels) {
                 out.push(info);
             }
         }
@@ -166,7 +175,12 @@ fn collect_group_shapes(
     Ok(())
 }
 
-fn shape_from_drawing(drawing: &Element, host: &str, index: usize) -> Result<ShapeInfo, Error> {
+fn shape_from_drawing(
+    drawing: &Element,
+    host: &str,
+    index: usize,
+    rels: Option<&Relationships>,
+) -> Result<ShapeInfo, Error> {
     let kind = drawing_kind(drawing);
     let wrap = drawing_wrap(drawing, kind);
     let (cx, cy) = drawing_extent(drawing)?;
@@ -183,6 +197,7 @@ fn shape_from_drawing(drawing: &Element, host: &str, index: usize) -> Result<Sha
         wrap,
         prst,
         stable,
+        hyperlink: drawing_hlink::inspect_textbox(drawing, rels),
     })
 }
 
@@ -193,6 +208,7 @@ fn shape_from_wsp(
     kind: PicKind,
     wrap: Option<WrapKind>,
     drawing: &Element,
+    rels: Option<&Relationships>,
 ) -> Result<ShapeInfo, Error> {
     let (mut doc_pr_id, name) = cnv_pr(wsp);
     if doc_pr_id.is_none() {
@@ -211,6 +227,7 @@ fn shape_from_wsp(
             wrap,
             prst: prst_of(wsp),
             stable,
+            hyperlink: drawing_hlink::inspect_textbox(wsp, rels),
         });
     }
     let (id, stable) = shape_id(host, &doc_pr_id, index);
@@ -225,6 +242,7 @@ fn shape_from_wsp(
         wrap,
         prst: prst_of(wsp),
         stable,
+        hyperlink: drawing_hlink::inspect_textbox(wsp, rels),
     })
 }
 
@@ -776,6 +794,20 @@ fn build_shape_wsp(doc_pr: u32, cx: i64, cy: i64, prst: &str) -> Element {
 pub fn find_shape_drawing_mut<'a>(host: &'a mut Element, key: &TxbxKey) -> Option<&'a mut Element> {
     let mut index = 0usize;
     find_shape_walk_mut(host, key, &mut index)
+}
+
+/// 无框形状上写 `a:hlinkClick` 的父节点（`wps:cNvPr` 或外层 `wp:docPr`）。
+pub fn hlink_parent_mut<'a>(host: &'a mut Element, key: &TxbxKey) -> Option<&'a mut Element> {
+    let mut index = 0usize;
+    let wsp = find_shape_wsp_mut(host, key, &mut index)?;
+    drawing_hlink::textbox_click_parent_mut(wsp)
+}
+
+/// 该形状是否已有 `hlinkClick`。找不到形状为 `None`。
+pub fn has_click(host: &mut Element, key: &TxbxKey) -> Option<bool> {
+    let mut index = 0usize;
+    let wsp = find_shape_wsp_mut(host, key, &mut index)?;
+    Some(drawing_hlink::textbox_has_click(wsp))
 }
 
 pub fn with_wsp_mut<T>(

@@ -103,11 +103,12 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     let sections = section_nodes(&pkg, &part, &doc.root)?;
     let (mirror_margins, gutter_at_top) = super::sect::document_flags(&pkg, &part)?;
     let picture_count = body_picture_count(&paras)?;
+    let body_rels = Relationships::from_package(&pkg, &part)?;
     let body_boxes = collect_body_boxes(&paras)?;
     let text_box_count = body_boxes.len();
-    let body_cxns = collect_body_cxns(&paras)?;
+    let body_cxns = collect_body_cxns(&paras, Some(&body_rels))?;
     let connector_count = body_cxns.len();
-    let body_shapes = collect_body_shapes(&paras)?;
+    let body_shapes = collect_body_shapes(&paras, Some(&body_rels))?;
     let shape_count = body_shapes.len();
     let mut ink_canvas_count = 0usize;
     let mut body_model3d_count = 0usize;
@@ -514,11 +515,14 @@ fn boxes_for_para<'a>(all: &'a [textbox::TxbxInfo], para_id: &str) -> Vec<&'a te
     all.iter().filter(|b| b.id.starts_with(&prefix)).collect()
 }
 
-fn collect_body_cxns(paras: &[&crate::xml::Element]) -> Result<Vec<connector::CxnInfo>, Error> {
+fn collect_body_cxns(
+    paras: &[&crate::xml::Element],
+    rels: Option<&Relationships>,
+) -> Result<Vec<connector::CxnInfo>, Error> {
     let mut all = Vec::new();
     for (i, p) in paras.iter().enumerate() {
         let (id, _) = para::para_stable_id(p, i + 1);
-        all.extend(connector::collect_connectors(p, &id)?);
+        all.extend(connector::collect_connectors(p, &id, rels)?);
     }
     Ok(all)
 }
@@ -528,11 +532,14 @@ fn cxns_for_para<'a>(all: &'a [connector::CxnInfo], para_id: &str) -> Vec<&'a co
     all.iter().filter(|c| c.id.starts_with(&prefix)).collect()
 }
 
-fn collect_body_shapes(paras: &[&crate::xml::Element]) -> Result<Vec<shape::ShapeInfo>, Error> {
+fn collect_body_shapes(
+    paras: &[&crate::xml::Element],
+    rels: Option<&Relationships>,
+) -> Result<Vec<shape::ShapeInfo>, Error> {
     let mut all = Vec::new();
     for (i, p) in paras.iter().enumerate() {
         let (id, _) = para::para_stable_id(p, i + 1);
-        all.extend(shape::collect_shapes(p, &id)?);
+        all.extend(shape::collect_shapes(p, &id, rels)?);
     }
     Ok(all)
 }
@@ -598,12 +605,12 @@ fn hf_node(pkg: &Package, item: &HfPart, expand: &HfExpand) -> Result<Value, Err
     let mut cxns = Vec::new();
     for (i, p) in paras.iter().enumerate() {
         let (id, _) = para::para_stable_id_in(&item.id, p, i + 1);
-        cxns.extend(connector::collect_connectors(p, &id)?);
+        cxns.extend(connector::collect_connectors(p, &id, Some(&rels))?);
     }
     let mut shapes = Vec::new();
     for (i, p) in paras.iter().enumerate() {
         let (id, _) = para::para_stable_id_in(&item.id, p, i + 1);
-        shapes.extend(shape::collect_shapes(p, &id)?);
+        shapes.extend(shape::collect_shapes(p, &id, Some(&rels))?);
     }
     let mut chart_count = 0usize;
     let mut smart_art_count = 0usize;
@@ -1156,12 +1163,13 @@ fn story_media(
     txbx: textbox::TxbxExpand,
 ) -> Result<StoryMedia, Error> {
     let paras = para::collect_paragraphs(story);
+    let rels = Relationships::from_package(pkg, host_part)?;
     let mut all_boxes = Vec::new();
     let mut all_cxns = Vec::new();
     for (i, p) in paras.iter().enumerate() {
         let (pid, _) = para::para_stable_id_in(container_id, p, i + 1);
         all_boxes.extend(textbox::collect_textboxes(p, &pid)?);
-        all_cxns.extend(connector::collect_connectors(p, &pid)?);
+        all_cxns.extend(connector::collect_connectors(p, &pid, Some(&rels))?);
     }
     textbox::resolve_links(&mut all_boxes);
     let mut pic_count = 0usize;
@@ -1172,7 +1180,6 @@ fn story_media(
     let mut smart_list = Vec::new();
     let mut listed_boxes = Vec::new();
     let mut listed_cxns = Vec::new();
-    let rels = Relationships::from_package(pkg, host_part)?;
     let mut para_nodes = Vec::new();
     for (i, p) in paras.iter().enumerate() {
         let index = i + 1;

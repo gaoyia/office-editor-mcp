@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "C:\\in\\src.docx",
+  "output": "C:\\out\\out.docx",
+  "ops": [
+    {
+      "op": "insertHyperlink",
+      "id": "para:00000001/txbx:1/para:00000002/pic:2",
+      "url": "https://example.com/inner"
+    },
+    {
+      "op": "insertHyperlink",
+      "id": "para:00000001/shape:3",
+      "url": "https://example.com/shape",
+      "tooltip": "形状"
+    },
+    {
+      "op": "deleteHyperlink",
+      "id": "para:00000001/cxn:4"
+    }
+  ]
+}

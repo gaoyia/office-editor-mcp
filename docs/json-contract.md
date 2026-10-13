@@ -29,7 +29,7 @@ xlsx 的 `groupShapes` / `ungroup` 认工作表文本框、无 `txBox` 形状与
 docx 的 `scope.connectors` 列出正文与页眉页脚里的 `wps` 连接线；
 `scope.shapes` 列出无文本框的 `wps:wsp` 形状。
 apply 用 `insertConnector` / `deleteConnector` / `insertShape` / `deleteShape` / `setShapePos` / `setShapeSize` / `setShapeFill` / `setShapeLine` / `groupShapes` / `ungroup`。
-docx 的图与文本框节点带 `hyperlink`（DrawingML `a:hlinkClick`），不进 `hyperlinks` 名单，也不计入 `hyperlinkCount`。
+docx 的图、文本框、连接线、无框形状、SmartArt、图表、墨迹画布与 3D 节点带 `hyperlink`（DrawingML `a:hlinkClick`），不进 `hyperlinks` 名单，也不计入 `hyperlinkCount`。OLE 不写这条链。
 docx 的 `scope.inkCanvases` 列出正文与页眉页脚里的墨迹画布（`wpc` 画布加 `w14:contentPart` 加 InkML 部件）；
 apply 用 `insertInkCanvas` / `replaceInkCanvas` / `deleteInkCanvas` / `setInkCanvasSize` / `setInkCanvasWrap`。xlsx / pptx 拒这些键与 op。
 三种格式的 `scope.model3ds` 列出 3D 模型（`am3d:model3d`，GLB 部件）。
@@ -975,12 +975,12 @@ pptx：删掉对应 `a:gridCol`。该列落在某格 `gridSpan` 内部时，`gri
 - **`op`**
   - 必须是 `"insertHyperlink"`
 - **`id`**
-  - docx：段落 id（正文、页眉页脚或框内）写 `w:hyperlink`；或正文 / 页眉页脚的图 id / 文本框 id 写 DrawingML `a:hlinkClick`
+  - docx：段落 id（正文、页眉页脚或框内）写 `w:hyperlink`；或图 / 文本框 / 连接线 / 无框形状 / SmartArt / 图表 / 墨迹画布 / 3D 的 id 写 DrawingML `a:hlinkClick`（含框内图、注内 / 批注内的图或框）
   - xlsx：工作表 id `sheet:{name}`（单元格链），或图 / 文本框 / 形状 / SmartArt 图示 id（DrawingML 链）
   - pptx：文本形状、图、表、图表、SmartArt 或表单元格 id（不含 `notesMaster` / `handout`）
 - **`text`**
   - docx 段落链必填，显示文本，字符串，可空
-  - docx 图 / 框上出现报未知字段
+  - docx DrawingML 对象上出现报未知字段
   - xlsx 上出现报 `InvalidField`（显示字走 `setCell`）
   - pptx 仅当 `on` 为 `run` 或 `cell` 时可选，写入新 `a:r` 的 `a:t`
   - 框级出现报未知字段
@@ -1033,13 +1033,14 @@ pptx：删掉对应 `a:gridCol`。该列落在某格 `gridSpan` 内部时，`gri
 docx：段落链在该段已有内容之后插入一个 `w:hyperlink`，内含一个带 `text` 的 run。
 外部链在该部件 `.rels` 上新建 Type 以 `/hyperlink` 结尾的关系，`TargetMode` 为 `External`，`Target` 为 `url` 原文。内部链写 `w:anchor`，不写关系。
 `url` 与 `anchor` 同时出现或一个都不给报 `InvalidField`。`url` 为空串报 `InvalidField`。`anchor` 为空串或以 `_` 开头报 `InvalidField`。
-找不到段落报 `IdNotFound`。id 不是段落 id 且不是正文 / 页眉页脚图 id / 文本框 id 报 `InvalidId`。
-DrawingML 链：`id` 是正文或页眉页脚的图 id / 文本框 id。禁止 `text`。`url` 与 `anchor` 必须恰好一个。
+找不到段落报 `IdNotFound`。id 不是段落 id 且不是本期 DrawingML 对象 id 报 `InvalidId`。
+DrawingML 链：`id` 是图、文本框、连接线、无框形状、SmartArt、图表、墨迹画布或 3D 的 id（含框内图、注内 / 批注内的图或框）。禁止 `text`。`url` 与 `anchor` 必须恰好一个。
 图写入 `wp:docPr/a:hlinkClick`（没有 `docPr` 则写该 `pic` 的 `cNvPr`；组合子图写该 `pic` 的 `cNvPr`）。
-文本框写入 `wps:cNvPr/a:hlinkClick`（没有则写外层 `wp:docPr`）。
+文本框、连接线、无框形状写入 `wps:cNvPr/a:hlinkClick`（没有则写外层 `wp:docPr`）。
+SmartArt、图表、墨迹画布、3D 写入该 drawing 的 `wp:docPr/a:hlinkClick`（没有 `docPr` 则写该对象的 `cNvPr`）。
 关系写在该**故事部件** `.rels`。外部链 `TargetMode=External`。内部书签 `Target` 为 `#{name}`，不写 `TargetMode`。
 同一对象已有 `hlinkClick` 时报 `InvalidField`（改地址请用 `setHyperlink`）。
-对框内图、注内 / 批注内的图或框、连接线、SmartArt、图表、墨迹、3D、OLE 报 `InvalidId`。
+对 OLE id 报 `InvalidId`。
 xlsx / pptx 字段 `location` / `ref` / `on` / `event` 在 docx 上出现报未知字段或 `InvalidField`。
 
 xlsx：单元格链在该表 `<hyperlinks>` 末尾追加一条 `<hyperlink>`。没有该元素则按 `CT_Worksheet` 顺序插在 `dataValidations` 之后、`printOptions` 之前。
@@ -1091,9 +1092,10 @@ create 上 `slide` 是页序整数，见 [json-contract-pptx.md](json-contract-p
 docx：段落链：`url`、`anchor`、`text`、`tooltip` 至少给一个。`url` 与 `anchor` 不能同时出现。
 给了 `url`：有已有 `r:id` 则改该关系 `Target`；没有则新建关系并写 `r:id`，去掉 `w:anchor`。给了 `anchor`：写 `w:anchor`，去掉 `r:id`，该关系无人引用则删除。
 `text` 只改该 `w:hyperlink` 内可见 `w:t`（规则与 `setParaText` 第 2–4 条相同，范围限于该元素）。`tooltip` 为字符串则写属性；为 `null` 则去掉属性。
-找不到报 `IdNotFound`。id 不是超链接 id 且不是图 / 文本框 id 报 `InvalidId`。
+找不到报 `IdNotFound`。id 不是超链接 id 且不是本期 DrawingML 对象 id 报 `InvalidId`。
 DrawingML 链：禁止 `text`。`url`、`anchor`、`tooltip` 至少给一个。`url` 与 `anchor` 不能同时出现。
 改 `a:hlinkClick` 的关系与 `tooltip`。`url` 与 `anchor` 都去掉后必须 `deleteHyperlink`。找不到对象或该对象没有链报 `IdNotFound`。
+对 OLE id 报 `InvalidId`。
 
 xlsx：单元格链：`url`、`location`、`tooltip`、`display`、`ref` 至少给一个。
 给了 `url` 字符串：有已有 `r:id` 且该关系 Type 以 `/hyperlink` 结尾则改 `Target`；否则新建关系并写 `r:id`。`url` 为 `null`：去掉 `r:id`，该关系无人引用则删除。
@@ -1117,8 +1119,9 @@ pptx：`url`、`file`、`slide`、`tooltip` 至少给一个。`url`、`file`、`
 | `id` | 超链接 id |
 
 docx：段落链拆掉 `w:hyperlink` 外壳，留下内部 `w:r`。该 `r:id` 在本部件 XML 里无人引用则删除关系。
-DrawingML 链去掉 `a:hlinkClick` 和无人引用的 hyperlink 关系，不删图或框。
-找不到报 `IdNotFound`。id 不是超链接 id 且不是带链的图 / 文本框 id 报 `InvalidId`。
+DrawingML 链去掉 `a:hlinkClick` 和无人引用的 hyperlink 关系，不删对象。
+找不到报 `IdNotFound`。id 不是超链接 id 且不是带链的本期 DrawingML 对象 id 报 `InvalidId`。
+对 OLE id 报 `InvalidId`。
 
 xlsx：单元格链去掉该 `<hyperlink>`。该 `r:id` 在本表其余链里无人引用则删除关系。删光则去掉 `<hyperlinks>`。不改单元格值。
 DrawingML 链去掉 `a:hlinkClick`，drawing `.rels` 无人引用则删除关系。不删图或形状。

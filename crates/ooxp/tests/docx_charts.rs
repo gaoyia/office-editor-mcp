@@ -304,7 +304,8 @@ fn inspect_lists_type_title_and_series() {
             "legend",
             "dataLabels",
             "flags",
-            "stable"
+            "stable",
+            "hyperlink"
         ]
     );
     let s0 = &c["series"][0];

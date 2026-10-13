@@ -652,6 +652,9 @@
         "cy": {
           "type": "integer",
           "minimum": 1
+        },
+        "hyperlink": {
+          "$ref": "#/$defs/docxDrawingHlinkCreate"
         }
       }
     },
@@ -673,6 +676,9 @@
         "cy": {
           "type": "integer",
           "minimum": 1
+        },
+        "hyperlink": {
+          "$ref": "#/$defs/docxDrawingHlinkCreate"
         }
       }
     },
@@ -748,6 +754,9 @@
         "cy": {
           "type": "integer",
           "minimum": 1
+        },
+        "hyperlink": {
+          "$ref": "#/$defs/docxDrawingHlinkCreate"
         }
       }
     },
@@ -1299,6 +1308,9 @@
         "cy": {
           "type": "integer",
           "minimum": 1
+        },
+        "hyperlink": {
+          "$ref": "#/$defs/docxDrawingHlinkCreate"
         }
       }
     },
@@ -5655,7 +5667,8 @@
       "properties": {
         "prst": { "type": "string" },
         "cx": { "type": "integer", "minimum": 1 },
-        "cy": { "type": "integer", "minimum": 1 }
+        "cy": { "type": "integer", "minimum": 1 },
+        "hyperlink": { "$ref": "#/$defs/docxDrawingHlinkCreate" }
       }
     },
     "docxConnectorCreate": {
@@ -5664,7 +5677,8 @@
       "properties": {
         "prst": { "type": "string" },
         "cx": { "type": "integer", "minimum": 1 },
-        "cy": { "type": "integer", "minimum": 1 }
+        "cy": { "type": "integer", "minimum": 1 },
+        "hyperlink": { "$ref": "#/$defs/docxDrawingHlinkCreate" }
       }
     },
     "docxRubyCreate": {

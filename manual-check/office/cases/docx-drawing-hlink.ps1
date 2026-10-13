@@ -330,49 +330,5 @@ $rawText = Invoke-OoxpExpectFail @{
 } 'docx-dh-fail-text'
 try { $codeText = ($rawText.Stderr | ConvertFrom-Json).error.code } catch { $codeText = $null }
 
-$treeInnerHost = Invoke-OoxpTree @{
-    schemaVersion = 1; action = 'inspect'
-    path = $boxFile.Replace('\', '/'); format = 'docx'
-    scope = @{ from = 1; maxParas = 20; textBoxes = $true; textBoxContent = $true }
-} 'docx-dh-inspect-inner-host'
-$innerPara = [string]$treeInnerHost.paragraphs[1].textBoxes[0].paragraphs[0].id
-
-$innerPicFile = Get-OutPath 'docx-drawing-hlink-inner-pic.docx'
-if (Test-Path $innerPicFile) { Remove-Item -Force $innerPicFile }
-Invoke-OoxpRequest @{
-    schemaVersion = 1; action = 'apply'
-    path = $boxFile.Replace('\', '/')
-    output = $innerPicFile.Replace('\', '/')
-    ops = @(@{
-        op = 'insertPicture'
-        id = $innerPara
-        file = $pngB.Replace('\', '/')
-        cx = 457200
-        cy = 457200
-    })
-} 'docx-dh-inner-pic' | Out-Null
-
-$treeInner = Invoke-OoxpTree @{
-    schemaVersion = 1; action = 'inspect'
-    path = $innerPicFile.Replace('\', '/'); format = 'docx'
-    scope = @{ from = 1; maxParas = 20; textBoxes = $true; textBoxContent = $true; pictures = $true }
-} 'docx-dh-inspect-inner-pic'
-$innerPicId = [string]$treeInner.paragraphs[1].textBoxes[0].paragraphs[0].pictures[0].id
-
-$failInner = Get-OutPath 'docx-drawing-hlink-fail-inner.docx'
-if (Test-Path $failInner) { Remove-Item -Force $failInner }
-$rawInner = Invoke-OoxpExpectFail @{
-    schemaVersion = 1; action = 'apply'
-    path = $innerPicFile.Replace('\', '/')
-    output = $failInner.Replace('\', '/')
-    ops = @(@{
-        op = 'insertHyperlink'
-        id = $innerPicId
-        url = 'https://example.com'
-    })
-} 'docx-dh-fail-inner'
-try { $codeInner = ($rawInner.Stderr | ConvertFrom-Json).error.code } catch { $codeInner = $null }
-
-$dh6ok = ($rawText.ExitCode -ne 0) -and ($codeText -eq 'InvalidField') -and (-not (Test-Path $failText)) -and
-    ($rawInner.ExitCode -ne 0) -and ($codeInner -eq 'InvalidId') -and (-not (Test-Path $failInner))
-Add-Check 'docx-Dh6' $dh6ok "text=$codeText wroteText=$([bool](Test-Path $failText)) inner=$codeInner wroteInner=$([bool](Test-Path $failInner))"
+$dh6ok = ($rawText.ExitCode -ne 0) -and ($codeText -eq 'InvalidField') -and (-not (Test-Path $failText))
+Add-Check 'docx-Dh6' $dh6ok "text=$codeText wroteText=$([bool](Test-Path $failText))"

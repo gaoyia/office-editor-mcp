@@ -78,9 +78,10 @@ pub struct InkInfo {
     pub cy: Option<i64>,
     pub wrap: Option<WrapKind>,
     pub stable: bool,
+    pub hyperlink: Value,
 }
 
-struct HostCtx<'a> {
+pub(crate) struct HostCtx<'a> {
     pkg: &'a Package,
     host: &'a str,
     rels: Relationships,
@@ -88,7 +89,7 @@ struct HostCtx<'a> {
 }
 
 impl<'a> HostCtx<'a> {
-    fn load(pkg: &'a Package, host: &'a str) -> Result<Self, Error> {
+    pub(crate) fn load(pkg: &'a Package, host: &'a str) -> Result<Self, Error> {
         Ok(Self {
             pkg,
             host,
@@ -155,6 +156,7 @@ pub fn canvases_json(items: &[InkInfo]) -> Vec<Value> {
                 "wrap": c.wrap.map(WrapKind::as_str),
                 "contentType": CT_INKML,
                 "stable": c.stable,
+                "hyperlink": c.hyperlink,
             })
         })
         .collect()
@@ -453,12 +455,13 @@ fn collect_in_drawing(
                 cy,
                 wrap,
                 stable,
+                hyperlink: super::drawing_hlink::inspect_picture(drawing, Some(&ctx.rels)),
             });
         }
     });
 }
 
-fn find_drawing_mut<'a>(
+pub(crate) fn find_drawing_mut<'a>(
     root: &'a mut Element,
     ctx: &HostCtx<'_>,
     key: &TxbxKey,
@@ -1025,7 +1028,7 @@ fn part_for_host(
     }
 }
 
-fn part_for_target(
+pub(crate) fn part_for_target(
     catalog: &[HfPart],
     doc_part: &str,
     target: &TxbxTarget,

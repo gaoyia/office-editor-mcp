@@ -992,6 +992,7 @@ fn smartart_json(
         },
         None => Vec::new(),
     };
+    let rels = Relationships::from_package(pkg, host_part).ok();
     Ok(json!({
         "id": id,
         "docPrId": doc_pr_id,
@@ -1005,6 +1006,7 @@ fn smartart_json(
         "style": style,
         "points": points,
         "stable": stable,
+        "hyperlink": super::drawing_hlink::inspect_picture(drawing, rels.as_ref()),
     }))
 }
 
@@ -1180,7 +1182,10 @@ fn find_target_para_mut<'a>(
     }
 }
 
-fn find_drawing_mut<'a>(root: &'a mut Element, target: &DiagramTarget) -> Option<&'a mut Element> {
+pub(crate) fn find_drawing_mut<'a>(
+    root: &'a mut Element,
+    target: &DiagramTarget,
+) -> Option<&'a mut Element> {
     match target {
         DiagramTarget::HeaderFooter {
             para,
@@ -1589,7 +1594,7 @@ fn part_for_host_para(
     }
 }
 
-fn part_for_target(
+pub(crate) fn part_for_target(
     pkg: &Package,
     catalog: &[HfPart],
     doc_part: &str,

@@ -1211,6 +1211,11 @@ fn chart_json(
     m.insert("dataLabels".into(), data_labels);
     m.insert("flags".into(), json!(flags));
     m.insert("stable".into(), json!(stable));
+    let rels = Relationships::from_package(pkg, host_part).ok();
+    m.insert(
+        "hyperlink".into(),
+        super::drawing_hlink::inspect_picture(drawing, rels.as_ref()),
+    );
     Ok(Value::Object(m))
 }
 
@@ -1841,7 +1846,10 @@ fn find_chart_walk<'a>(el: &'a Element, idx: &mut usize, key: &ChartKey) -> Opti
     None
 }
 
-fn find_drawing_mut<'a>(root: &'a mut Element, target: &ChartTarget) -> Option<&'a mut Element> {
+pub(crate) fn find_drawing_mut<'a>(
+    root: &'a mut Element,
+    target: &ChartTarget,
+) -> Option<&'a mut Element> {
     let p = find_target_para_mut(root, target)?;
     find_chart_mut_walk(p, &mut 0, target.key())
 }
@@ -2191,7 +2199,7 @@ fn part_for_host_para(
     }
 }
 
-fn part_for_target(
+pub(crate) fn part_for_target(
     pkg: &Package,
     catalog: &[HfPart],
     doc_part: &str,

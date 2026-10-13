@@ -356,15 +356,33 @@ fn drawing_hyperlink_rejects() {
         .as_str()
         .unwrap()
         .to_string();
-    let err_inner = apply_err(
+    let linked_inner = tmp("inner-link");
+    apply(
         &with_inner,
+        &linked_inner,
         json!([{
             "op": "insertHyperlink",
             "id": inner_pic,
-            "url": "https://example.com"
+            "url": "https://example.com/inner"
         }]),
     );
-    assert_eq!(err_inner.code(), ErrorCode::InvalidId);
+    let tree_inner = inspect(
+        &linked_inner,
+        json!({
+            "from": 1,
+            "maxParas": 20,
+            "pictures": true,
+            "textBoxes": true,
+            "textBoxContent": true,
+            "hyperlinks": true
+        }),
+    );
+    assert_eq!(tree_inner["hyperlinkCount"], 0);
+    assert_eq!(
+        tree_inner["paragraphs"][0]["textBoxes"][0]["paragraphs"][0]["pictures"][0]["hyperlink"]
+            ["url"],
+        "https://example.com/inner"
+    );
 
     let with_link = tmp("dup");
     apply(

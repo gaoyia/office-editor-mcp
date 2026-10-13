@@ -1,4 +1,4 @@
-//! 图与文本框上的 DrawingML `a:hlinkClick`。
+//! DrawingML 对象上的 `a:hlinkClick`。
 
 use serde_json::{json, Value};
 
@@ -198,12 +198,18 @@ fn write_click(parent: &mut Element, rid: &str, tooltip: Option<&str>) {
 }
 
 fn frame(drawing: &Element) -> Option<&Element> {
+    if drawing.local_name() == "inline" || drawing.local_name() == "anchor" {
+        return Some(drawing);
+    }
     drawing
         .element_children()
         .find(|e| e.local_name() == "inline" || e.local_name() == "anchor")
 }
 
 fn frame_mut(drawing: &mut Element) -> Option<&mut Element> {
+    if drawing.local_name() == "inline" || drawing.local_name() == "anchor" {
+        return Some(drawing);
+    }
     drawing
         .element_children_mut()
         .find(|e| e.local_name() == "inline" || e.local_name() == "anchor")

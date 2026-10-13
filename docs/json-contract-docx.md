@@ -311,18 +311,20 @@ run 级与 `*Change` 只动被点名的那一个 XML 节点，`rowIns` / `rowDel
   注内 / 批注内的 `w:hyperlink` 仍不进树；对注内 / 批注内段落或注内 / 批注内框发 `w:hyperlink` 超链接 op 报 `InvalidId`。
   有 `r:id` 时为外部链（规范说此时忽略 `w:anchor`）；只有 `w:anchor` 时为内部链，指向书签名。两者都没有仍列出，`kind` 为 `anchor`，`anchor` 为 `null`。
   根上 `hyperlinkCount` 与页眉页脚容器上的 `hyperlinkCount` 只计这一套。
-- DrawingML 链：写在正文或页眉页脚里图、文本框上的 `a:hlinkClick`。
+- DrawingML 链：写在图、文本框、连接线、无框形状、SmartArt、图表、墨迹画布、3D 上的 `a:hlinkClick`。
+  宿主可以是正文、页眉页脚、框内图、注内 / 批注内的图或框。注内 / 批注内不列出的墨迹与 3D 仍不能当链宿主。
   图读 `wp:docPr/a:hlinkClick`；没有则读该 `pic` 的 `cNvPr/a:hlinkClick`（组合子图）。
-  文本框读 `wps:cNvPr/a:hlinkClick`；没有则读外层 `wp:docPr/a:hlinkClick`。
-  外部链关系写在该**故事部件** `.rels`（`document.xml.rels` / `headerN.xml.rels`），Type 以 `/hyperlink` 结尾，`TargetMode` 为 `External`，`Target` 为 URL 原文。
+  文本框、连接线、无框形状读 `wps:cNvPr/a:hlinkClick`；没有则读外层 `wp:docPr/a:hlinkClick`。
+  SmartArt、图表、墨迹画布、3D 读该 drawing 的 `wp:docPr/a:hlinkClick`；没有则读该对象的 `cNvPr`。
+  外部链关系写在该**故事部件** `.rels`（`document.xml.rels` / `headerN.xml.rels` / 注或批注部件 `.rels`），Type 以 `/hyperlink` 结尾，`TargetMode` 为 `External`，`Target` 为 URL 原文。
   内部书签：无 `r:id` 时 `kind` 为 `anchor`；有 `r:id` 且关系 Target 以 `#` 开头时 `kind` 为 `anchor`，`anchor` 为去掉开头 `#` 的书签名。
   apply 写内部书签时在宿主 `.rels` 写关系，`Target` 为 `#{name}`，不写 `TargetMode`。
   `tooltip` 取 `a:hlinkClick/@tooltip`。不写 `hlinkHover`。
   inspect 时出现在该对象的 `hyperlink` 字段（对象；没有链则为 `null`），不进 `hyperlinks` 名单，也不计入 `hyperlinkCount`。
   `hyperlink` 对象字段顺序：`kind`、`rId`、`url`、`anchor`、`tooltip`。
   `kind` 为 `url`（有 `r:id` 且 Target 不以 `#` 开头）或 `anchor`。
-  框内图、注内 / 批注内的图或框、连接线、无框形状、SmartArt、图表、墨迹、3D、OLE 本期不写 DrawingML 链；对这些 id 发超链接 op 报 `InvalidId`。
-  create 给了 `pictures[].hyperlink` 或 `textBoxes[].hyperlink` 时按同一套规则写入。
+  对 OLE id 发超链接 op 报 `InvalidId`。
+  create 给了 `pictures[]` / `textBoxes[]` / `shapes[]` / `connectors[]` / `smartArts[]` / `charts[]` / `inkCanvases[]` / `model3ds[]` 的 `hyperlink` 时按同一套规则写入。
   xlsx / pptx 行为不变。docx 上出现 `location` / `ref` / `on` / `event` 报未知字段或 `InvalidField`（内部用 `anchor`）。
 
 书签的 `{n}` 从 1 起，按该故事里被收入的 `w:bookmarkStart` 的文档顺序（同一套边界）。只收起止都在同一故事里、且 `w:name` 不以 `_` 开头的配对（Word 隐藏书签含 `_GoBack` 不进树）。
@@ -423,10 +425,10 @@ run 上的 `style` 只读自己的 `w:rStyle/@w:val`。框内、注内、批注�
 遇 `w:txbxContent` 停住；`mc:AlternateContent` 只进 Choice；`w:del` 里的 run 不编。`w:ins`、`w:hyperlink` 里的 run 要编。
 增删 run 之后 `{n}` 会变，只够同一次 inspect 之后立刻 apply。对 run id 发 `setParaText` / `setParaFormat` 报 `InvalidId`。对段落 id 发 `setRunFormat` 报 `InvalidId`。
 
-`insertHyperlink` 的 `id` 必须是段落 id（正文、页眉页脚或框内，写 `w:hyperlink`），或正文 / 页眉页脚的图 id / 文本框 id（写 `a:hlinkClick`）。
-对图 / 框禁止 `text`。`url` 与 `anchor` 必须恰好一个。同一对象已有 `hlinkClick` 报 `InvalidField`（改地址用 `setHyperlink`）。
-`setHyperlink` / `deleteHyperlink` 的 `id` 必须是超链接 id（`link:{n}`，含页眉页脚前缀与框前缀），或带（或要改）DrawingML 链的图 id / 文本框 id。
-对 DrawingML 链禁止 `text`。对象上没有 `hlinkClick` 时 `set` / `delete` 报 `IdNotFound`。删 DrawingML 链时去掉 `a:hlinkClick` 和无人引用的 hyperlink 关系，不删图或框。
+`insertHyperlink` 的 `id` 必须是段落 id（正文、页眉页脚或框内，写 `w:hyperlink`），或图 / 文本框 / 连接线 / 无框形状 / SmartArt / 图表 / 墨迹画布 / 3D 的 id（写 `a:hlinkClick`，含框内图、注内 / 批注内的图或框）。
+对 DrawingML 对象禁止 `text`。`url` 与 `anchor` 必须恰好一个。同一对象已有 `hlinkClick` 报 `InvalidField`（改地址用 `setHyperlink`）。对 OLE id 报 `InvalidId`。
+`setHyperlink` / `deleteHyperlink` 的 `id` 必须是超链接 id（`link:{n}`，含页眉页脚前缀与框前缀），或带（或要改）DrawingML 链的上述对象 id。
+对 DrawingML 链禁止 `text`。对象上没有 `hlinkClick` 时 `set` / `delete` 报 `IdNotFound`。删 DrawingML 链时去掉 `a:hlinkClick` 和无人引用的 hyperlink 关系，不删对象。对 OLE id 报 `InvalidId`。
 `insertBookmark` 的 `id` 必须是起始段落 id（正文、页眉页脚或框内）；可选 `end` 为同一故事里的结束段落 id。`setBookmark` / `deleteBookmark` 的 `id` 必须是书签 id。
 `insertField` 的 `id` 必须是段落 id（正文、页眉页脚或框内）。`setField` / `deleteField` 的 `id` 必须是域 id。
 `insertNumbering` 的 `id` 必须是 `docx:document`。`setNumbering` 的 `id` 必须是抽象编号 id。
@@ -743,7 +745,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   - 为 `true` 时列出正文 `w:hyperlink`（根上 `hyperlinks`）以及每个页眉、页脚容器上的 `hyperlinks`
   - 不依赖 `from` / `maxParas`
   - 省略或 `false` 则只有 `hyperlinkCount`，没有名单
-  - DrawingML 链不进这份名单，而在图 / 文本框节点的 `hyperlink` 字段
+  - DrawingML 链不进这份名单，而在图 / 文本框 / 连接线 / 无框形状 / SmartArt / 图表 / 墨迹画布 / 3D 节点的 `hyperlink` 字段
 - **`scope.bookmarks`**（否）
   - 为 `true` 时列出正文书签（根上 `bookmarks`）以及每个页眉、页脚容器上的 `bookmarks`
   - 不依赖 `from` / `maxParas`
@@ -1250,23 +1252,27 @@ xlsx / pptx 的 `scope.tables` 不是同一件事：xlsx 仍拒绝；pptx 展开
   注内 / 批注内的框这几项计数为 `0`，也不带对应名单。框内这些对象不挂到文档根，也不挂到宿主段落。
 - `scope.connectors` 为 `true` 时，每个页眉、页脚节点带 `connectors`；若同时给了 `from` 与 `maxParas`，切片里每段也带 `connectors`。否则这些节点上都没有该字段。
   只给 `connectors`、不给 `from` / `maxParas`：只展开页眉页脚容器上的连接线。
-  每条字段顺序：`id`、`docPrId`、`name`、`kind`、`cx`、`cy`、`wrap`、`prst`、`stable`。
+  每条字段顺序：`id`、`docPrId`、`name`、`kind`、`cx`、`cy`、`wrap`、`prst`、`stable`、`hyperlink`。
   `kind` / `cx` / `cy` / `wrap` / `docPrId` / `name` / `stable` 规则与图相同。`prst` 取 `a:prstGeom/@prst`，没有则为 `null`。不报 `text`。组合里的连接线要展开。
+  `hyperlink` 为 `null` 或对象，见上文 DrawingML 链。
 - `scope.shapes` 为 `true` 时，每个页眉、页脚节点带 `shapes`；若同时给了 `from` 与 `maxParas`，切片里每段也带 `shapes`。否则这些节点上都没有该字段。
   只给 `shapes`、不给 `from` / `maxParas`：只展开页眉页脚容器上的无框形状。
-  每条字段顺序：`id`、`docPrId`、`name`、`kind`、`cx`、`cy`、`wrap`、`prst`、`stable`。
+  每条字段顺序：`id`、`docPrId`、`name`、`kind`、`cx`、`cy`、`wrap`、`prst`、`stable`、`hyperlink`。
   `kind` / `cx` / `cy` / `wrap` / `docPrId` / `name` / `stable` 规则与图相同。`prst` 取 `a:prstGeom/@prst`，没有则为 `null`。不报 `text`。不报 fill / line。
   组合里符合条件的子形状要展开。注内、批注内、框内不列出。
+  `hyperlink` 为 `null` 或对象，见上文 DrawingML 链。
 - `scope.inkCanvases` 为 `true` 时，每个页眉、页脚节点带 `inkCanvases`；若同时给了 `from` 与 `maxParas`，切片里每段也带 `inkCanvases`。否则这些节点上都没有该字段。
   只给 `inkCanvases`、不给 `from` / `maxParas`：只展开页眉页脚容器上的墨迹画布。
-  每条字段顺序：`id`、`name`、`kind`、`cx`、`cy`、`wrap`、`contentType`、`stable`。
+  每条字段顺序：`id`、`name`、`kind`、`cx`、`cy`、`wrap`、`contentType`、`stable`、`hyperlink`。
   `kind` / `cx` / `cy` / `wrap` / `name` / `stable` 规则与图相同。`contentType` 恒为 `application/inkml+xml`。不把 InkML 原文放进树。
   组合里符合条件的 contentPart 要展开。注内、批注内、框内不列出。
+  `hyperlink` 为 `null` 或对象，见上文 DrawingML 链。
 - `scope.model3ds` 为 `true` 时，每个页眉、页脚节点带 `model3ds`；若同时给了 `from` 与 `maxParas`，切片里每段也带 `model3ds`。否则这些节点上都没有该字段。
   只给 `model3ds`、不给 `from` / `maxParas`：只展开页眉页脚容器上的 3D 模型。
-  每条字段顺序：`id`、`name`、`kind`、`cx`、`cy`、`wrap`、`contentType`、`stable`。
+  每条字段顺序：`id`、`name`、`kind`、`cx`、`cy`、`wrap`、`contentType`、`stable`、`hyperlink`。
   `kind` / `cx` / `cy` / `wrap` / `name` / `stable` 规则与图相同。`contentType` 恒为 `model/gltf.binary`。不把 GLB 放进树。
   组合里符合条件的 graphicFrame / `wp:inline` 要展开。注内、批注内、框内不列出。
+  `hyperlink` 为 `null` 或对象，见上文 DrawingML 链。
 - `scope.notes` 为 `true` 时，根上带 `footnotes`、`endnotes`、`noteSeparators`。没有用户注时前两个为空数组；没有分隔符时 `noteSeparators` 为空数组。
   用户注按部件内文档顺序。每条用户注字段顺序：`id`、`noteId`、`type`、`host`、`paraCount`、`pictureCount`、`textBoxCount`、`connectorCount`、`chartCount`、`smartArtCount`，
   有图名单时再跟 `pictures`，有框名单时再跟 `textBoxes`，有连接线名单时再跟 `connectors`，有图表名单时再跟 `charts`，有 SmartArt 名单时再跟 `smartArts`，然后 `paragraphs`。
@@ -1296,8 +1302,9 @@ xlsx / pptx 的 `scope.tables` 不是同一件事：xlsx 仍拒绝；pptx 展开
   没有图表时为空数组。正文按主文档段落文档顺序，同一段内按 drawing 顺序。
   每张字段顺序：`id`、`docPrId`、`name`、`kind`、`cx`、`cy`、`wrap`、`type`，`type` 为 `ofPie` 时再跟 `ofPieType`，
   `type` 为 `stock` 时再跟 `stockKind`，`type` 为 `surface` 时再跟 `surfaceKind`，
-  `type` 为 `chartex` 时再跟 `layoutId`，然后 `title`、`catAxisTitle`、`valAxisTitle`、`series`、`legend`、`dataLabels`、`flags`、`stable`。
+  `type` 为 `chartex` 时再跟 `layoutId`，然后 `title`、`catAxisTitle`、`valAxisTitle`、`series`、`legend`、`dataLabels`、`flags`、`stable`、`hyperlink`。
   `kind` / `cx` / `cy` / `wrap` / `docPrId` / `name` / `stable` 规则与图相同。
+  `hyperlink` 为 `null` 或对象，见上文 DrawingML 链。
   `type` 为 `bar`、`col`、`line`、`pie`、`area`、`scatter`、`doughnut`、`radar`、`bubble`、`combo`、`stock`、`surface`、`ofPie`、`chartex` 或 `other`。
   `barChart` / `bar3DChart` 看 `c:barDir`：`bar` 为 `bar`，`col` 或缺省为 `col`。
   `lineChart` / `line3DChart` 为 `line`，`pieChart` / `pie3DChart` 为 `pie`，`areaChart` / `area3DChart` 为 `area`，
@@ -1342,8 +1349,9 @@ xlsx / pptx 的 `scope.tables` 不是同一件事：xlsx 仍拒绝；pptx 展开
 - `scope.smartArt` 为 `true` 时，根上带 `smartArts`（正文），每个页眉、页脚容器带 `smartArts`；
   若同时给了 `scope.notes` / `scope.comments`，每条用户注或批注也带 `smartArts`（只含该注或批注段落上的，不含框内）。
   没有图示时为空数组。正文按主文档段落文档顺序，同一段内按 drawing 顺序。
-  每张字段顺序：`id`、`docPrId`、`name`、`kind`、`cx`、`cy`、`wrap`、`layout`、`colors`、`style`、`points`、`stable`。
+  每张字段顺序：`id`、`docPrId`、`name`、`kind`、`cx`、`cy`、`wrap`、`layout`、`colors`、`style`、`points`、`stable`、`hyperlink`。
   `kind` / `cx` / `cy` / `wrap` / `docPrId` / `name` / `stable` 规则与图相同。
+  `hyperlink` 为 `null` 或对象，见上文 DrawingML 链。
   `layout` 取 layout 部件根元素 `dgm:layoutDef/@uniqueId` 的原文；没有该部件或没有该属性则为 `null`。
   `colors` 取 colors 部件 `dgm:colorsDef/@uniqueId`；`style` 取 quickStyle 部件 `dgm:styleDef/@uniqueId`；缺则为 `null`。
   `points` 按 data 部件 `ptLst` 文档顺序，只含可见点（判定见上文 SmartArt id 那节）。每条字段顺序：`id`、`modelId`、`role`、`text`、`parent`。
@@ -1720,6 +1728,7 @@ Word 16.0 另存通常不写该部件；自行写入后 Word 仍能打开。xlsx
 带 3D 模型的示例见 `docs/examples/docx-create-model3d.json`。
 带 theme 与页面背景的示例见 `docs/examples/docx-create-theme-bg.json`。
 带样式、表外观、形状、连接线、题注、索引、参考文献、构建基块、嵌入字体、拼音与 DrawingML 链的示例见 `docs/examples/docx-create-round4.json`。
+给框内图、无框形状写 DrawingML 链的示例见 `docs/examples/docx-apply-drawing-hlink-remain.json`。
 带框内表、框内链、段边框底纹制表位、`runs[]`、组合与 `writePassword` 的示例见 `docs/examples/docx-create-round5.json`。
 
 - **`path`**
@@ -1769,6 +1778,7 @@ Word 16.0 另存通常不写该部件；自行写入后 Word 仍能打开。xlsx
   - 该段上的 SmartArt 列表
   - 省略则不写图示
   - 字段与 `insertSmartArt` 相同，但不含 `id`
+  - 可选 `hyperlink`，规则与 `pictures[].hyperlink` 相同
 - **`paragraphs[].charts`**
   - 可选
   - 该段上的图表列表
@@ -1776,6 +1786,7 @@ Word 16.0 另存通常不写该部件；自行写入后 Word 仍能打开。xlsx
   - 字段与 `insertChart` 相同，但不含 `op` / `id`，也不含 `from` / `to` / `anchor` / `dataFrom` / `x` / `y`
   - 出现这些 xlsx / pptx 字段报 `InvalidField`
   - 缺省与 `insertChart` 相同：`kind` 为 `anchor`，`wrap` 为 `square`
+  - 可选 `hyperlink`，规则与 `pictures[].hyperlink` 相同
   - 页眉页脚段落同样允许
 - **`paragraphs[].oleObjects`**
   - 可选
@@ -1788,12 +1799,14 @@ Word 16.0 另存通常不写该部件；自行写入后 Word 仍能打开。xlsx
   - 该段上的墨迹画布列表
   - 省略则不写
   - 每项必须有 `file`，可选成对的 `cx` / `cy`，规则与 `insertInkCanvas` 相同
+  - 可选 `hyperlink`，规则与 `pictures[].hyperlink` 相同
   - 页眉页脚段落同样允许
 - **`paragraphs[].model3ds`**
   - 可选
   - 该段上的 3D 模型列表
   - 省略则不写
   - 每项必须有 `file`，可选成对的 `cx` / `cy`，规则与 `insertModel3d` 相同
+  - 可选 `hyperlink`，规则与 `pictures[].hyperlink` 相同
   - 页眉页脚段落同样允许
 - **`paragraphs[].footnote`**
   - 可选
@@ -1865,11 +1878,13 @@ Word 16.0 另存通常不写该部件；自行写入后 Word 仍能打开。xlsx
   - 可选
   - 该段上的无框形状列表
   - 字段与 `insertShape` 相同，不含 `op` / `id`
+  - 可选 `hyperlink`，规则与 `pictures[].hyperlink` 相同
   - 页眉页脚段落同样允许
 - **`paragraphs[].connectors`**
   - 可选
   - 该段上的连接线列表
   - 字段与 `insertConnector` 相同，不含 `op` / `id`
+  - 可选 `hyperlink`，规则与 `pictures[].hyperlink` 相同
   - 页眉页脚段落同样允许
 - **`paragraphs[].rubies`**
   - 可选
@@ -2113,11 +2128,13 @@ Word 16.0 另存通常不写该部件；自行写入后 Word 仍能打开。xlsx
 | `smartArts[].layout` | 必须。`list`、`org` 或 `cycle`，与 `insertSmartArt` 相同 |
 | `smartArts[].points` | 可选。与 `insertSmartArt` 相同；省略则用该版式的缺省占位点 |
 | `smartArts[].kind` / `wrap` / `cx` / `cy` | 可选。与 `insertSmartArt` 相同 |
+| `smartArts[].hyperlink` | 可选。规则与 `pictures[].hyperlink` 相同 |
 
 | `charts[].type` | 必须。与 `insertChart` 相同 |
 | `charts[].series` | 必须。非空。字段与 `insertChart` 相同 |
 | `charts[].title` | 可选 |
 | `charts[].kind` / `wrap` / `cx` / `cy` | 可选。与 docx `insertChart` 相同 |
+| `charts[].hyperlink` | 可选。规则与 `pictures[].hyperlink` 相同 |
 
 | `comments[].text` | 可选。新批注第一段可见文本，省略当作 `""` |
 | `comments[].author` | 可选。省略当作 `"ooxp"` |
@@ -2148,7 +2165,9 @@ Word 16.0 另存通常不写该部件；自行写入后 Word 仍能打开。xlsx
 | `maths[].kind` | 可选。`inline` 或 `display` |
 
 | `shapes[].prst` / `cx` / `cy` | 可选。与 `insertShape` 相同 |
+| `shapes[].hyperlink` | 可选。规则与 `pictures[].hyperlink` 相同 |
 | `connectors[].prst` / `cx` / `cy` | 可选。与 `insertConnector` 相同 |
+| `connectors[].hyperlink` | 可选。规则与 `pictures[].hyperlink` 相同 |
 | `rubies[].base` / `rt` | 必须非空。其余字段与 `insertRuby` 相同 |
 | `citations[].tag` | 必须。与 `insertCitation` 相同 |
 | `indexEntries[].entry` | 必须。与 `insertIndexEntry` 相同 |
@@ -2188,7 +2207,7 @@ create 写出 Transitional 最小包，见 [opc.md](opc.md)。
 给了 `comments[].replies` 时按 `replyComment` 写回复。
 给了 `hyperlinks` / `bookmarks` / `fields` / `maths` / `contentControls` 时按对应 insert 写入。
 给了 `shapes` / `connectors` / `rubies` / `citations` / `indexEntries` / `crossRefs` / `editRange` 时按对应 insert 写入。
-给了 `pictures[].hyperlink` 或 `textBoxes[].hyperlink` 时按 DrawingML `insertHyperlink` 写入。
+给了 `pictures[]` / `textBoxes[]` / `shapes[]` / `connectors[]` / `smartArts[]` / `charts[]` / `inkCanvases[]` / `model3ds[]` 的 `hyperlink` 时按 DrawingML `insertHyperlink` 写入。
 给了 `document.numberings` 时按 `insertNumbering` 写 `/word/numbering.xml`，再按 `paragraphs[].num` 发 `setParaNumbering`。
 给了 `document.styles` 时按 `insertStyle` 追加自定义样式。
 给了 `document.sources` 时按 `insertSource` 写入。给了 `document.bibliographyStyle` 时按 `setBibliographyStyle` 写入。
