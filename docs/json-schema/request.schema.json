@@ -1168,6 +1168,9 @@
                 "$ref": "xlsx.schema.json#/$defs/setSlicerViewOp"
               },
               {
+                "$ref": "xlsx.schema.json#/$defs/setSlicerFilterOp"
+              },
+              {
                 "$ref": "xlsx.schema.json#/$defs/insertConnectionOp"
               },
               {

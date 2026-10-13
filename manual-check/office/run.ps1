@@ -157,6 +157,7 @@ $order = @(
     'xlsx-timelines'
     'xlsx-slicer-anchor'
     'xlsx-slicer-caption'
+    'xlsx-slicer-filter'
     'xlsx-theme'
     'xlsx-connections'
     'xlsx-external-link'

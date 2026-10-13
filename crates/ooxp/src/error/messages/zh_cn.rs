@@ -1021,6 +1021,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::NeedSetSlicerViewField => {
             "setSlicerView 除 op 与 id 外至少要给一个字段".into()
         }
+        ErrorKind::NeedSetSlicerFilterField => {
+            "setSlicerFilter 必须给 selected 或 filter".into()
+        }
         ErrorKind::ConnectionNotFound { id } => format!("找不到连接：{id}"),
         ErrorKind::InvalidConnection { field } => {
             format!("连接的 {field} 不合法")

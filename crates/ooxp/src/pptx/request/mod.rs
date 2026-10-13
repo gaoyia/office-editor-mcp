@@ -414,6 +414,7 @@ fn is_foreign_op(op_name: &str) -> bool {
             | "setSlicerSize"
             | "setSlicerAnchor"
             | "setSlicerView"
+            | "setSlicerFilter"
             | "insertConnection"
             | "deleteConnection"
             | "insertExternalLink"

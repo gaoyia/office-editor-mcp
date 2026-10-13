@@ -932,6 +932,7 @@ define_error_kinds! {
     SlicerFieldNotFound { name: String } => vec![Self::SlicerFieldNotFound { name: "产品".into() }],
     InvalidSlicer { field: String } => vec![Self::InvalidSlicer { field: "kind".into() }],
     NeedSetSlicerViewField => vec![Self::NeedSetSlicerViewField],
+    NeedSetSlicerFilterField => vec![Self::NeedSetSlicerFilterField],
     ConnectionNotFound { id: String } => vec![Self::ConnectionNotFound { id: "connection:1".into() }],
     InvalidConnection { field: String } => {
         vec![Self::InvalidConnection { field: "type".into() }]
@@ -1953,6 +1954,7 @@ impl ErrorKind {
             | Self::SlicerFieldNotFound { .. }
             | Self::InvalidSlicer { .. }
             | Self::NeedSetSlicerViewField
+            | Self::NeedSetSlicerFilterField
             | Self::InvalidConnection { .. }
             | Self::InvalidExternalLink { .. }
             | Self::InvalidCustomView { .. }

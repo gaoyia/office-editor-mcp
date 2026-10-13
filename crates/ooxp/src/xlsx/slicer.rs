@@ -207,6 +207,21 @@ pub struct SetSlicerViewOp {
     pub level: Option<u32>,
 }
 
+#[derive(Debug, Clone)]
+pub struct TimelineFilter {
+    pub filter_type: String,
+    pub start_date: String,
+    pub end_date: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetSlicerFilterOp {
+    pub id: String,
+    pub target: SlicerTarget,
+    pub selected: Option<Vec<String>>,
+    pub filter: Option<Option<TimelineFilter>>,
+}
+
 #[derive(Clone)]
 struct Hit {
     cnv: Option<String>,
@@ -511,6 +526,60 @@ pub fn set_view(
             Ok(())
         },
     )
+}
+
+/// 改 slicerCache 勾选或 timelineCache 筛选区间。不改 drawing，不改视图标题。
+pub fn set_filter(
+    pkg: &mut Package,
+    sheet_part: &str,
+    op: &SetSlicerFilterOp,
+    op_index: usize,
+) -> Result<(), Error> {
+    let path = format!("ops[{op_index}].id");
+    let hits = collect_hits(pkg, sheet_part)?;
+    let Some(hit) = hits
+        .iter()
+        .enumerate()
+        .find(|(i, h)| key_matches(&op.target.key, h, *i + 1))
+        .map(|(_, h)| h)
+    else {
+        return Err(Error::with_path(
+            ErrorKind::SlicerNotFound { id: op.id.clone() },
+            path,
+        ));
+    };
+    if hit.timeline {
+        if op.selected.is_some() {
+            return Err(Error::with_path(
+                ErrorKind::InvalidSlicer {
+                    field: "selected".into(),
+                },
+                format!("ops[{op_index}].selected"),
+            ));
+        }
+        let Some(filter) = op.filter.as_ref() else {
+            return Err(Error::with_path(
+                ErrorKind::NeedSetSlicerFilterField,
+                format!("ops[{op_index}]"),
+            ));
+        };
+        return set_timeline_filter(pkg, sheet_part, &hit.sle_name, filter.as_ref(), op_index);
+    }
+    if op.filter.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::InvalidSlicer {
+                field: "filter".into(),
+            },
+            format!("ops[{op_index}].filter"),
+        ));
+    }
+    let Some(selected) = op.selected.as_ref() else {
+        return Err(Error::with_path(
+            ErrorKind::NeedSetSlicerFilterField,
+            format!("ops[{op_index}]"),
+        ));
+    };
+    set_slicer_selected(pkg, sheet_part, &hit.sle_name, selected, op_index)
 }
 
 fn insert_table(
@@ -826,7 +895,7 @@ fn hit_json(
     views: &[SlicerView],
     caches: &[CacheMeta],
 ) -> Result<Value, Error> {
-    let _ = (pkg, sheet_part);
+    let _ = sheet_part;
     let stable = hit.cnv.is_some();
     let id = match &hit.cnv {
         Some(v) => format!("sheet:{sheet_name}/slicer:{v}"),
@@ -857,6 +926,7 @@ fn hit_json(
         if k == "anchor" {
             out.insert("caption".into(), json!(caption));
             insert_view_fields(&mut out, view, hit.timeline);
+            insert_filter_fields(&mut out, pkg, cache, hit.timeline);
             out.insert(
                 "sourceKind".into(),
                 match source_kind {
@@ -935,6 +1005,19 @@ fn insert_view_fields(out: &mut Map<String, Value>, view: Option<&SlicerView>, t
         json!(view.and_then(|v| v.locked_position).unwrap_or(false)),
     );
     out.insert("style".into(), json!(view.and_then(|v| v.style.clone())));
+}
+
+fn insert_filter_fields(
+    out: &mut Map<String, Value>,
+    pkg: &Package,
+    cache: Option<&CacheMeta>,
+    timeline: bool,
+) {
+    if timeline {
+        out.insert("filter".into(), timeline_filter_json(pkg, cache));
+        return;
+    }
+    out.insert("selected".into(), json!(slicer_selected(pkg, cache)));
 }
 
 fn is_slicer_uri(uri: &str) -> bool {
@@ -1248,6 +1331,7 @@ struct CacheMeta {
     field: String,
     kind: &'static str,
     source_name: Option<String>,
+    part: String,
 }
 
 fn load_caches(pkg: &Package) -> Result<Vec<CacheMeta>, Error> {
@@ -1295,6 +1379,7 @@ fn load_caches(pkg: &Package) -> Result<Vec<CacheMeta>, Error> {
             field,
             kind,
             source_name,
+            part,
         });
     }
     for rel in &rels.rels {
@@ -1322,6 +1407,7 @@ fn load_caches(pkg: &Package) -> Result<Vec<CacheMeta>, Error> {
             name,
             kind: "timeline",
             source_name: pivot_name_of(&doc.root),
+            part,
         });
     }
     Ok(out)
@@ -2926,6 +3012,581 @@ fn source_id_err(op_index: usize) -> Error {
         },
         format!("ops[{op_index}].source"),
     )
+}
+
+fn slicer_selected(pkg: &Package, cache: Option<&CacheMeta>) -> Vec<String> {
+    let Some(cache) = cache else {
+        return Vec::new();
+    };
+    let Ok(bytes) = pkg.get(&cache.part) else {
+        return Vec::new();
+    };
+    let Ok(doc) = xml::parse(bytes) else {
+        return Vec::new();
+    };
+    if cache.kind == "table" {
+        return table_selected(pkg, &doc.root);
+    }
+    pivot_selected(pkg, &doc.root, &cache.field)
+}
+
+fn table_selected(pkg: &Package, cache_root: &Element) -> Vec<String> {
+    let Some(tid) = table_id_of(cache_root) else {
+        return Vec::new();
+    };
+    let col = table_column_id_of(cache_root);
+    let Some(loc) = table_loc(pkg, tid, col) else {
+        return Vec::new();
+    };
+    let Ok(bytes) = pkg.get(&loc.table_part) else {
+        return Vec::new();
+    };
+    let Ok(doc) = xml::parse(bytes) else {
+        return Vec::new();
+    };
+    filter_vals(&doc.root, loc.col_id)
+}
+
+fn pivot_selected(pkg: &Package, cache_root: &Element, field: &str) -> Vec<String> {
+    let names = pivot_item_names(pkg, cache_root, field);
+    let mut out = Vec::new();
+    let Some(items) = find_items(cache_root) else {
+        return out;
+    };
+    for i in items.children_by_local("i") {
+        if !attr_is_true(i, "s") {
+            continue;
+        }
+        let Some(x) = i.attr("x").and_then(|s| s.parse::<usize>().ok()) else {
+            continue;
+        };
+        if let Some(n) = names.get(x) {
+            out.push(n.clone());
+        }
+    }
+    out
+}
+
+fn timeline_filter_json(pkg: &Package, cache: Option<&CacheMeta>) -> Value {
+    let Some(cache) = cache else {
+        return Value::Null;
+    };
+    let Ok(bytes) = pkg.get(&cache.part) else {
+        return Value::Null;
+    };
+    let Ok(doc) = xml::parse(bytes) else {
+        return Value::Null;
+    };
+    let Some(state) = doc.root.child_by_local("state") else {
+        return Value::Null;
+    };
+    let filter_type = state.attr("filterType").unwrap_or("").to_string();
+    if !filter_type.starts_with("date") {
+        return Value::Null;
+    }
+    let (start, end) = if let Some(sel) = state.child_by_local("selection") {
+        (
+            sel.attr("startDate").unwrap_or("").to_string(),
+            sel.attr("endDate").unwrap_or("").to_string(),
+        )
+    } else {
+        custom_filter_dates(&doc.root)
+    };
+    json!({
+        "filterType": filter_type,
+        "startDate": start,
+        "endDate": end,
+    })
+}
+
+fn custom_filter_dates(root: &Element) -> (String, String) {
+    let mut vals = Vec::new();
+    picture::walk_all(root, &mut |e| {
+        if e.local_name() == "customFilter" {
+            if let Some(v) = e.attr("val") {
+                vals.push(v.to_string());
+            }
+        }
+    });
+    match vals.as_slice() {
+        [] => (String::new(), String::new()),
+        [a] => (a.clone(), a.clone()),
+        [a, b, ..] => (a.clone(), b.clone()),
+    }
+}
+
+fn set_slicer_selected(
+    pkg: &mut Package,
+    sheet_part: &str,
+    view_name: &str,
+    selected: &[String],
+    op_index: usize,
+) -> Result<(), Error> {
+    let views = load_slicer_views(pkg, sheet_part)?;
+    let Some(view) = views.iter().find(|v| v.name == view_name) else {
+        return Err(Error::with_path(
+            ErrorKind::SlicerNotFound {
+                id: format!("slicer:{view_name}"),
+            },
+            format!("ops[{op_index}].id"),
+        ));
+    };
+    let caches = load_caches(pkg)?;
+    let Some(cache) = caches.iter().find(|c| c.name == view.cache) else {
+        return Err(Error::with_path(
+            ErrorKind::SlicerNotFound {
+                id: format!("slicer:{view_name}"),
+            },
+            format!("ops[{op_index}].id"),
+        ));
+    };
+    if cache.kind == "table" {
+        return set_table_selected(pkg, cache, selected, op_index);
+    }
+    set_pivot_selected(pkg, cache, selected, op_index)
+}
+
+fn set_table_selected(
+    pkg: &mut Package,
+    cache: &CacheMeta,
+    selected: &[String],
+    op_index: usize,
+) -> Result<(), Error> {
+    let bytes = pkg.get(&cache.part)?;
+    let doc = xml::parse(bytes)?;
+    let Some(tid) = table_id_of(&doc.root) else {
+        return Err(unknown_selected(op_index));
+    };
+    let col = table_column_id_of(&doc.root);
+    let Some(loc) = table_loc(pkg, tid, col) else {
+        return Err(unknown_selected(op_index));
+    };
+    let allowed = table_column_values(pkg, &loc);
+    for (k, name) in selected.iter().enumerate() {
+        if !allowed.iter().any(|a| a == name) {
+            return Err(Error::with_path(
+                ErrorKind::InvalidSlicer {
+                    field: "selected".into(),
+                },
+                format!("ops[{op_index}].selected[{k}]"),
+            ));
+        }
+    }
+    let mut table = xml::parse(pkg.get(&loc.table_part)?)?;
+    write_table_filters(&mut table.root, loc.col_id, selected);
+    pkg.set(&loc.table_part, table.to_bytes()?)?;
+    Ok(())
+}
+
+fn set_pivot_selected(
+    pkg: &mut Package,
+    cache: &CacheMeta,
+    selected: &[String],
+    op_index: usize,
+) -> Result<(), Error> {
+    let mut doc = xml::parse(pkg.get(&cache.part)?)?;
+    let names = pivot_item_names(pkg, &doc.root, &cache.field);
+    let mut want = Vec::new();
+    for (k, name) in selected.iter().enumerate() {
+        let Some(x) = names.iter().position(|n| n == name) else {
+            return Err(Error::with_path(
+                ErrorKind::InvalidSlicer {
+                    field: "selected".into(),
+                },
+                format!("ops[{op_index}].selected[{k}]"),
+            ));
+        };
+        if !want.contains(&x) {
+            want.push(x);
+        }
+    }
+    let Some(items) = find_items_mut(&mut doc.root) else {
+        if selected.is_empty() {
+            return Ok(());
+        }
+        return Err(unknown_selected(op_index));
+    };
+    for el in items.element_children_mut() {
+        if el.local_name() != "i" {
+            continue;
+        }
+        let Some(x) = el.attr("x").and_then(|s| s.parse::<usize>().ok()) else {
+            continue;
+        };
+        if want.contains(&x) {
+            el.set_attr("s", "1");
+        } else {
+            el.remove_attr("s");
+        }
+    }
+    for x in &want {
+        let exists = items.element_children().any(|el| {
+            el.local_name() == "i" && el.attr("x").and_then(|s| s.parse::<usize>().ok()) == Some(*x)
+        });
+        if !exists {
+            items.push_element(
+                Element::new("i")
+                    .with_attr("x", x.to_string())
+                    .with_attr("s", "1"),
+            );
+        }
+    }
+    let n = items.children_by_local("i").len();
+    items.set_attr("count", n.to_string());
+    pkg.set(&cache.part, doc.to_bytes()?)?;
+    Ok(())
+}
+
+fn set_timeline_filter(
+    pkg: &mut Package,
+    sheet_part: &str,
+    view_name: &str,
+    filter: Option<&TimelineFilter>,
+    op_index: usize,
+) -> Result<(), Error> {
+    let views = load_timeline_views(pkg, sheet_part)?;
+    let Some(view) = views.iter().find(|v| v.name == view_name) else {
+        return Err(Error::with_path(
+            ErrorKind::SlicerNotFound {
+                id: format!("slicer:{view_name}"),
+            },
+            format!("ops[{op_index}].id"),
+        ));
+    };
+    let caches = load_caches(pkg)?;
+    let Some(cache) = caches.iter().find(|c| c.name == view.cache) else {
+        return Err(Error::with_path(
+            ErrorKind::SlicerNotFound {
+                id: format!("slicer:{view_name}"),
+            },
+            format!("ops[{op_index}].id"),
+        ));
+    };
+    let mut doc = xml::parse(pkg.get(&cache.part)?)?;
+    match filter {
+        None => clear_timeline_filter(&mut doc.root),
+        Some(f) => write_timeline_filter(&mut doc.root, f),
+    }
+    pkg.set(&cache.part, doc.to_bytes()?)?;
+    Ok(())
+}
+
+fn clear_timeline_filter(root: &mut Element) {
+    if let Some(state) = root.child_by_local_mut("state") {
+        state.set_attr("filterType", "unknown");
+        state.children.retain(|n| match n {
+            Node::Element(e) => e.local_name() != "selection",
+            _ => true,
+        });
+    }
+    root.children.retain(|n| match n {
+        Node::Element(e) => e.local_name() != "timelinePivotFilter",
+        _ => true,
+    });
+}
+
+fn write_timeline_filter(root: &mut Element, filter: &TimelineFilter) {
+    if let Some(state) = root.child_by_local_mut("state") {
+        state.set_attr("filterType", &filter.filter_type);
+        let sel_at = state
+            .children
+            .iter()
+            .position(|n| matches!(n, Node::Element(e) if e.local_name() == "selection"));
+        if let Some(i) = sel_at {
+            if let Node::Element(sel) = &mut state.children[i] {
+                sel.set_attr("startDate", &filter.start_date);
+                sel.set_attr("endDate", &filter.end_date);
+            }
+        } else {
+            let after = state
+                .children
+                .iter()
+                .position(|n| matches!(n, Node::Element(e) if e.local_name() == "bounds"));
+            let sel = Element::new("selection")
+                .with_attr("startDate", filter.start_date.clone())
+                .with_attr("endDate", filter.end_date.clone());
+            match after {
+                Some(i) => state.children.insert(i, Node::Element(sel)),
+                None => state.push_element(sel),
+            }
+        }
+    }
+    // Excel 16.0 另存日期筛选不写 timelinePivotFilter；写了会打不开。
+    root.children.retain(|n| match n {
+        Node::Element(e) => e.local_name() != "timelinePivotFilter",
+        _ => true,
+    });
+}
+
+fn unknown_selected(op_index: usize) -> Error {
+    Error::with_path(
+        ErrorKind::InvalidSlicer {
+            field: "selected".into(),
+        },
+        format!("ops[{op_index}].selected"),
+    )
+}
+
+fn table_column_id_of(root: &Element) -> Option<u32> {
+    let mut id = None;
+    picture::walk_all(root, &mut |e| {
+        if e.local_name() == "tableSlicerCache" && id.is_none() {
+            id = e.attr("column").and_then(|s| s.parse().ok());
+        }
+    });
+    id
+}
+
+struct TableLoc {
+    table_part: String,
+    sheet_part: String,
+    col_id: u32,
+    start: a1::CellRef,
+    end: a1::CellRef,
+}
+
+fn table_loc(pkg: &Package, table_id: u32, column: Option<u32>) -> Option<TableLoc> {
+    let wb_part = office_document_part(pkg).ok()?;
+    let wb = xml::parse(pkg.get(&wb_part).ok()?).ok()?;
+    let sheets = wb.root.child_by_local("sheets")?;
+    for sh in sheets.children_by_local("sheet") {
+        let rid = rid_attr(sh)?;
+        let Ok(sheet_part) = resolve_id(pkg, &wb_part, rid) else {
+            continue;
+        };
+        let Ok(sheet) = xml::parse(pkg.get(&sheet_part).ok()?) else {
+            continue;
+        };
+        let Some(parts) = sheet.root.child_by_local("tableParts") else {
+            continue;
+        };
+        let sheet_rels = Relationships::from_package(pkg, &sheet_part).ok()?;
+        for tp in parts.children_by_local("tablePart") {
+            let Some(rid) = tp.attr_local("id") else {
+                continue;
+            };
+            let Some(rel) = sheet_rels.find_by_id(rid) else {
+                continue;
+            };
+            let Ok(part) = resolve_rel_target(&sheet_part, &rel.target) else {
+                continue;
+            };
+            let Ok(doc) = xml::parse(pkg.get(&part).ok()?) else {
+                continue;
+            };
+            let got = doc.root.attr("id").and_then(|s| s.parse::<u32>().ok());
+            if got != Some(table_id) {
+                continue;
+            }
+            let refer = doc.root.attr("ref")?;
+            let (start, end) = a1::parse_range(refer).ok()?;
+            let cols = doc.root.child_by_local("tableColumns")?;
+            let list = cols.children_by_local("tableColumn");
+            let col_id = if let Some(want) = column {
+                list.iter()
+                    .position(|c| c.attr("id").and_then(|s| s.parse::<u32>().ok()) == Some(want))
+                    .unwrap_or(0) as u32
+            } else {
+                0
+            };
+            return Some(TableLoc {
+                table_part: part,
+                sheet_part,
+                col_id,
+                start,
+                end,
+            });
+        }
+    }
+    None
+}
+
+fn table_column_values(pkg: &Package, loc: &TableLoc) -> Vec<String> {
+    let Ok(wb_part) = office_document_part(pkg) else {
+        return Vec::new();
+    };
+    let Ok(rels) = Relationships::from_package(pkg, &wb_part) else {
+        return Vec::new();
+    };
+    let sst = super::inspect::load_shared_strings(pkg, &wb_part, &rels).unwrap_or_default();
+    let Ok(bytes) = pkg.get(&loc.sheet_part) else {
+        return Vec::new();
+    };
+    let Ok(sheet) = xml::parse(bytes) else {
+        return Vec::new();
+    };
+    let col = loc.start.col + loc.col_id;
+    let mut out = Vec::new();
+    for row in (loc.start.row + 1)..=loc.end.row {
+        let raw = sheet_cell_text(&sheet.root, a1::CellRef { col, row }, &sst);
+        if raw.is_empty() {
+            continue;
+        }
+        if !out.iter().any(|s| s == &raw) {
+            out.push(raw);
+        }
+    }
+    out
+}
+
+fn sheet_cell_text(root: &Element, cell: a1::CellRef, sst: &[String]) -> String {
+    let Some(sd) = root.child_by_local("sheetData") else {
+        return String::new();
+    };
+    let want = a1::format_cell(cell.col, cell.row);
+    for row in sd.children_by_local("row") {
+        for c in row.children_by_local("c") {
+            if c.attr("r") != Some(want.as_str()) {
+                continue;
+            }
+            return match c.attr("t").unwrap_or("n") {
+                "s" => c
+                    .child_by_local("v")
+                    .and_then(|v| v.text_content().parse::<usize>().ok())
+                    .and_then(|i| sst.get(i).cloned())
+                    .unwrap_or_default(),
+                "inlineStr" => c
+                    .child_by_local("is")
+                    .map(|is| is.text_content())
+                    .unwrap_or_default(),
+                _ => c
+                    .child_by_local("v")
+                    .map(|v| v.text_content())
+                    .unwrap_or_default(),
+            };
+        }
+    }
+    String::new()
+}
+
+fn filter_vals(table_root: &Element, col_id: u32) -> Vec<String> {
+    let Some(af) = table_root.child_by_local("autoFilter") else {
+        return Vec::new();
+    };
+    let want = col_id.to_string();
+    for fc in af.children_by_local("filterColumn") {
+        if fc.attr("colId") != Some(want.as_str()) {
+            continue;
+        }
+        let mut out = Vec::new();
+        if let Some(filters) = fc.child_by_local("filters") {
+            for f in filters.children_by_local("filter") {
+                if let Some(v) = f.attr("val") {
+                    out.push(v.to_string());
+                }
+            }
+        }
+        return out;
+    }
+    Vec::new()
+}
+
+fn write_table_filters(table_root: &mut Element, col_id: u32, selected: &[String]) {
+    let refer = table_root.attr("ref").unwrap_or("A1").to_string();
+    if table_root.child_by_local("autoFilter").is_none() {
+        table_root.push_element(Element::new("autoFilter").with_attr("ref", refer));
+    }
+    let Some(af) = table_root.child_by_local_mut("autoFilter") else {
+        return;
+    };
+    let want = col_id.to_string();
+    af.children.retain(|n| match n {
+        Node::Element(e) => {
+            !(e.local_name() == "filterColumn" && e.attr("colId") == Some(want.as_str()))
+        }
+        _ => true,
+    });
+    if selected.is_empty() {
+        return;
+    }
+    let mut filters = Element::new("filters");
+    for v in selected {
+        filters.push_element(Element::new("filter").with_attr("val", v.clone()));
+    }
+    let mut col = Element::new("filterColumn").with_attr("colId", want);
+    col.push_element(filters);
+    af.push_element(col);
+}
+
+fn pivot_item_names(pkg: &Package, cache_root: &Element, field: &str) -> Vec<String> {
+    let Ok(wb_part) = office_document_part(pkg) else {
+        return Vec::new();
+    };
+    let mut cache_id = String::new();
+    picture::walk_all(cache_root, &mut |e| {
+        if e.local_name() == "tabular" && cache_id.is_empty() {
+            if let Some(v) = e.attr("pivotCacheId") {
+                cache_id = v.to_string();
+            }
+        }
+    });
+    let Some(cf) = cache_field_by_x14(pkg, &wb_part, &cache_id, field)
+        .or_else(|| cache_field_el(pkg, &wb_part, &cache_id, field))
+    else {
+        return Vec::new();
+    };
+    let Some(shared) = cf.child_by_local("sharedItems") else {
+        return Vec::new();
+    };
+    shared
+        .element_children()
+        .filter(|c| c.local_name() != "extLst")
+        .map(shared_item_text)
+        .collect()
+}
+
+fn shared_item_text(el: &Element) -> String {
+    match el.local_name() {
+        "m" => String::new(),
+        _ => el.attr("v").unwrap_or("").to_string(),
+    }
+}
+
+fn cache_field_by_x14(pkg: &Package, wb_part: &str, x14_id: &str, field: &str) -> Option<Element> {
+    if x14_id.is_empty() {
+        return None;
+    }
+    let wb = xml::parse(pkg.get(wb_part).ok()?).ok()?;
+    let parent = wb.root.child_by_local("pivotCaches")?;
+    let rels = Relationships::from_package(pkg, wb_part).ok()?;
+    for el in parent.children_by_local("pivotCache") {
+        let rid = el.attr_local("id")?;
+        let rel = rels.find_by_id(rid)?;
+        let part = resolve_rel_target(wb_part, &rel.target).ok()?;
+        let doc = xml::parse(pkg.get(&part).ok()?).ok()?;
+        let mut found = false;
+        picture::walk_all(&doc.root, &mut |e| {
+            if e.local_name() == "pivotCacheDefinition" && e.attr("pivotCacheId") == Some(x14_id) {
+                found = true;
+            }
+        });
+        if !found {
+            continue;
+        }
+        let fields = doc.root.child_by_local("cacheFields")?;
+        for cf in fields.children_by_local("cacheField") {
+            if cf.attr("name") == Some(field) {
+                return Some(cf.clone());
+            }
+        }
+    }
+    None
+}
+
+fn find_items(root: &Element) -> Option<&Element> {
+    let data = root.child_by_local("data")?;
+    let tabular = data.child_by_local("tabular")?;
+    tabular.child_by_local("items")
+}
+
+fn find_items_mut(root: &mut Element) -> Option<&mut Element> {
+    let data = root.child_by_local_mut("data")?;
+    let tabular = data.child_by_local_mut("tabular")?;
+    tabular.child_by_local_mut("items")
+}
+
+fn attr_is_true(el: &Element, name: &str) -> bool {
+    matches!(el.attr(name), Some("1" | "true" | "TRUE"))
 }
 
 #[cfg(test)]

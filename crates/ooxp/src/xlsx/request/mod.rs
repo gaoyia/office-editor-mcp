@@ -330,6 +330,7 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<XlsxOp>, Error> {
             "setSlicerSize" => XlsxOp::SetSlicerSize(parse_set_slicer_size(obj, i)?),
             "setSlicerAnchor" => XlsxOp::SetSlicerAnchor(parse_set_slicer_anchor(obj, i)?),
             "setSlicerView" => XlsxOp::SetSlicerView(parse_set_slicer_view(obj, i)?),
+            "setSlicerFilter" => XlsxOp::SetSlicerFilter(parse_set_slicer_filter(obj, i)?),
             "setThemeColors" => XlsxOp::SetThemeColors(super::theme::parse_set_colors(obj, i)?),
             "setThemeFonts" => XlsxOp::SetThemeFonts(super::theme::parse_set_fonts(obj, i)?),
             "setThemeFmt" => XlsxOp::SetThemeFmt(super::theme::parse_set_fmt(obj, i)?),

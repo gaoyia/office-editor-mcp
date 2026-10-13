@@ -310,8 +310,9 @@ id 仍是 `sheet:{name}/slicer:{cNvPrId}`，时间线不另开前缀。
 - `a:graphicData/@uri` 为 `http://schemas.microsoft.com/office/drawing/2012/timeslicer`（可带尾斜杠），且 `tsle:timeslicer/@name` 对上 timelines 部件里的 `timeline/@name`
 
 OLAP、没有 drawing 的孤立 slicer / timeline 部件本期不进树。`insertSlicer` 的 `id` 必须是 `sheet:{name}`。
-`deleteSlicer` / `setSlicerSize` / `setSlicerAnchor` / `setSlicerView` 的 `id` 必须是切片器 id（含时间线）。对不上的 id 形态报 `InvalidId`。
-不提供改筛选或 cache 选项的 op。视图标题、行高、列数、显示开关与样式名用 `setSlicerView`。create 可写切片器与时间线。不在库里执行筛选或刷新透视。
+`deleteSlicer` / `setSlicerSize` / `setSlicerAnchor` / `setSlicerView` / `setSlicerFilter` 的 `id` 必须是切片器 id（含时间线）。对不上的 id 形态报 `InvalidId`。
+视图标题、行高、列数、显示开关与样式名用 `setSlicerView`。勾选与时间线筛选区间用 `setSlicerFilter`。
+create 可写切片器与时间线。不在库里执行筛选或刷新透视。
 
 xlsx 的 `setProtection` 的 `id` 必须是 `sheet:{name}`（该表 `sheetProtection`）或 `xlsx:workbook`（`workbookProtection`）。
 对单元格 id、迷你图 id 或图 id 发此 op 报 `InvalidId`。对 `dialogsheet` / `macrosheet` 报 `NotImplemented`。
@@ -524,7 +525,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   - 没有切片器（含时间线）时为空数组
   - 省略或 `false` 则只有 `slicerCount`，没有名单
   - 不依赖 `sheet` / `range` / 其它名单键
-  - 不把 cache 选项、筛选区间或时间线 `level` 倒进树
+  - 不把 cache 未选项整表倒进树。已勾选见 `selected`，时间线区间见 `filter`
   - OLAP 本期不进树
 - **`scope.protectedRanges`**（否）
   - 为 `true` 时给每张 `worksheet` 填 `protectedRanges`
@@ -1057,7 +1058,7 @@ Excel 16.0 另存通常不写该部件；自行写入后 Excel 仍能打开。
   Fallback 海报不进 `pictures`。docx / pptx 见各自分册。
 - `scope.slicers` 为 `true` 时，每张 `worksheet` 带 `slicers`。没有切片器（含时间线）时为空数组。不依赖单元格切片。
   按该表 drawing 里被收入的 slicer / 时间线 `graphicFrame` 文档顺序。
-  每条字段顺序：`id`、`cNvPrId`、`name`、`caption`，接着视图字段，再跟 `sourceKind`、`sourceName`、`field`、`anchor`，然后按锚点种类跟位置字段（规则与工作表图相同），最后 `stable`。
+  每条字段顺序：`id`、`cNvPrId`、`name`、`caption`，接着视图字段，再跟筛选字段，再跟 `sourceKind`、`sourceName`、`field`、`anchor`，然后按锚点种类跟位置字段（规则与工作表图相同），最后 `stable`。
   `cNvPrId` 是 `xdr:cNvPr/@id` 原文，没有则为 `null`。`name` 取 slicer / timeline 部件 `@name`，没有则取 `cNvPr/@name`，都没有则为 `""`。
   `caption` 取 `@caption`，缺则为 `null`。
   切片器在 `caption` 之后报：`rowHeight`、`columnCount`、`showCaption`、`startItem`、`lockedPosition`、`style`。
@@ -1065,6 +1066,15 @@ Excel 16.0 另存通常不写该部件；自行写入后 Excel 仍能打开。
   缺属性按 schema 缺省报，与 `insertSlicer` 写入一致。`style` 缺则为 `null`。`scrollPosition` 缺则为 `null`。
   `rowHeight` 缺则报 `381000`。切片器 `columnCount` 缺则报 `1`，`startItem` 缺则报 `0`，`showCaption` 缺则报 `true`，`lockedPosition` 缺则报 `false`。
   时间线 `showHeader` / `showSelectionLabel` / `showTimeLevel` / `showHorizontalScrollbar` 缺则报 `true`。`level` / `selectionLevel` 缺则报 `2`。
+  切片器在视图字段之后报 `selected`。字符串数组，已勾选项的显示名，按文档顺序。没有勾选则为 `[]`。不把未选项放进树。
+  表格切片器：Excel 16.0 另存把勾选写在该表 `autoFilter` 对应列的 `filters/filter/@val`，不写 slicerCache items。inspect 跟另存。没有该列筛选则为 `[]`。
+  透视切片器：取 slicerCache `tabular/items/i` 里 `s` 为真的项。显示名取透视缓存该字段 `sharedItems`。
+  时间线在视图字段之后报 `filter`，不报 `selected`。
+  没有日期筛选（`state/@filterType` 不以 `date` 开头）则为 `null`。
+  有则对象字段顺序：`filterType`、`startDate`、`endDate`。
+  `filterType` 取 `state/@filterType` 原文。
+  日期取 `state/selection` 的 `@startDate` / `@endDate` 原文；没有 selection 则取 `timelinePivotFilter` 里 `customFilter/@val` 原文（若有）。
+  不把 `bounds` 放进树。Excel 16.0 另存日期筛选只写 `state`，不写 `timelinePivotFilter`。
   `sourceKind`：
 
   - `table`：slicerCache 带 `x15:tableSlicerCache`
@@ -1072,7 +1082,6 @@ Excel 16.0 另存通常不写该部件；自行写入后 Excel 仍能打开。
   - `timeline`：timelineCache，drawing 为 `tsle:timeslicer`
 
   `sourceName` 取表格 `displayName` 或透视表 `@name`，对不上则为 `null`。`field` 取 cache `@sourceName`。
-  不把 cache 选项、筛选状态或 `bounds` 放进树。
   OLAP 不进本名单。docx / pptx 的 `scope` 里出现 `slicers` 报 `InvalidField`。
 - `scope.connections` 为 `true` 时，工作簿根带 `connections`。没有连接时为空数组。不依赖单元格切片。按 Connections 部件里被收入的 `connection` 文档顺序。
   每条字段顺序：`id`、`xmlId`、`name`、`kind`、`url`、`sourceFile`、`description`、`stable`。`xmlId` 是 `@id` 原文，没有则为 `null`。
@@ -3425,6 +3434,58 @@ docx / pptx 上发此 op 报 `InvalidField`。
 docx / pptx 上发此 op 报 `InvalidField`。
 
 示例见 `docs/examples/xlsx-apply-slicer-view.json`。
+
+### setSlicerFilter
+
+改切片器 cache 已勾选项，或时间线 cache 的筛选区间。不改 drawing，不改视图 `@caption`。不隐藏行。不重写透视缓存合计。不在库里执行筛选。
+
+```json
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "C:\\data\\book.xlsx",
+  "ops": [
+    {
+      "op": "setSlicerFilter",
+      "id": "sheet:Sheet1/slicer:1",
+      "selected": ["乙"]
+    }
+  ]
+}
+```
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"setSlicerFilter"` |
+| `id` | 必须是切片器 id（含时间线） |
+| `selected` | 切片器必须。字符串数组。整份替换勾选 |
+| `filter` | 时间线必须。对象或 `null` |
+
+`selected` 与 `filter` 必须恰好给一个，否则报 `InvalidField`。
+对时间线给 `selected`、对切片器给 `filter`，报 `InvalidField`。
+
+切片器 `selected`：
+
+- 数组元素必须是非空字符串
+- 点名的项必须能在源里对上，否则报 `InvalidField`
+- `[]`：透视切片器去掉所有 `i/@s`；表格切片器去掉该列 `autoFilter` 筛选（Excel 16.0 全选另存也是这样）
+- 表格写入该表 `autoFilter` 对应列的 `filters/filter/@val`，按数组顺序
+- 透视写入 slicerCache `i/@s`，显示名对透视缓存 `sharedItems`
+
+时间线 `filter`：
+
+- `null`：去掉 `timelinePivotFilter` 与 `state/selection`，`state/@filterType` 写回 `unknown`
+- 对象字段顺序：`filterType`、`startDate`、`endDate`，都必须是非空字符串
+- `filterType` 必须以 `date` 开头，否则报 `InvalidField`
+- 写入 `state/@filterType` 与 `state/selection` 日期原文
+- 不写 `timelinePivotFilter`（Excel 16.0 另存日期筛选也不写；写了会打不开）
+- 若包里已有 `timelinePivotFilter` 则去掉
+- 不改 `bounds`，不改透视表上的 filter 节点
+
+找不到报 `IdNotFound`。id 不是切片器 id 报 `InvalidId`。
+docx / pptx 上发此 op 报 `InvalidField`。
+
+示例见 `docs/examples/xlsx-apply-slicer-filter.json`。
 
 ### insertConnection
 

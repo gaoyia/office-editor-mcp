@@ -6042,6 +6042,82 @@
         }
       }
     },
+    "setSlicerFilterOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "oneOf": [
+        {
+          "required": [
+            "selected"
+          ],
+          "not": {
+            "required": [
+              "filter"
+            ]
+          }
+        },
+        {
+          "required": [
+            "filter"
+          ],
+          "not": {
+            "required": [
+              "selected"
+            ]
+          }
+        }
+      ],
+      "properties": {
+        "op": {
+          "const": "setSlicerFilter"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "selected": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "filter": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "filterType",
+                "startDate",
+                "endDate"
+              ],
+              "properties": {
+                "filterType": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "startDate": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "endDate": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
     "insertConnectionOp": {
       "type": "object",
       "required": [

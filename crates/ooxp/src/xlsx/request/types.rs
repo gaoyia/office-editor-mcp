@@ -1942,6 +1942,7 @@ pub enum XlsxOp {
     SetSlicerSize(slicer::SetSlicerSizeOp),
     SetSlicerAnchor(slicer::SetSlicerAnchorOp),
     SetSlicerView(slicer::SetSlicerViewOp),
+    SetSlicerFilter(slicer::SetSlicerFilterOp),
     SetThemeColors(super::super::theme::SetThemeColorsOp),
     SetThemeFonts(super::super::theme::SetThemeFontsOp),
     SetThemeFmt(super::super::theme::SetThemeFmtOp),

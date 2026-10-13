@@ -1587,6 +1587,136 @@ pub(super) fn parse_set_slicer_view(
     })
 }
 
+pub(super) fn parse_set_slicer_filter(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<slicer::SetSlicerFilterOp, Error> {
+    deny_keys(obj, i, &["op", "id", "selected", "filter"])?;
+    let id = require_id(obj, i)?;
+    let target = slicer::parse_slicer_id(&id, &format!("ops[{i}].id"))?;
+    let selected = parse_slicer_selected(obj.get("selected"), i)?;
+    let filter = parse_slicer_timeline_filter(obj.get("filter"), i)?;
+    if selected.is_none() && filter.is_none() {
+        return Err(Error::with_path(
+            ErrorKind::NeedSetSlicerFilterField,
+            format!("ops[{i}]"),
+        ));
+    }
+    if selected.is_some() && filter.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::InvalidSlicer {
+                field: "filter".into(),
+            },
+            format!("ops[{i}].filter"),
+        ));
+    }
+    Ok(slicer::SetSlicerFilterOp {
+        id,
+        target,
+        selected,
+        filter,
+    })
+}
+
+fn parse_slicer_selected(v: Option<&Value>, i: usize) -> Result<Option<Vec<String>>, Error> {
+    let Some(v) = v else {
+        return Ok(None);
+    };
+    let Value::Array(items) = v else {
+        return Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "selected".into(),
+                expected: TypeName::Array,
+            },
+            format!("ops[{i}].selected"),
+        ));
+    };
+    let mut out = Vec::with_capacity(items.len());
+    for (k, item) in items.iter().enumerate() {
+        let path = format!("ops[{i}].selected[{k}]");
+        match item {
+            Value::String(s) if !s.is_empty() => out.push(s.clone()),
+            Value::String(_) => {
+                return Err(Error::with_path(
+                    ErrorKind::InvalidSlicer {
+                        field: "selected".into(),
+                    },
+                    path,
+                ))
+            }
+            _ => {
+                return Err(Error::with_path(
+                    ErrorKind::WrongType {
+                        field: "selected".into(),
+                        expected: TypeName::NonEmptyString,
+                    },
+                    path,
+                ))
+            }
+        }
+    }
+    Ok(Some(out))
+}
+
+fn parse_slicer_timeline_filter(
+    v: Option<&Value>,
+    i: usize,
+) -> Result<Option<Option<slicer::TimelineFilter>>, Error> {
+    let Some(v) = v else {
+        return Ok(None);
+    };
+    if v.is_null() {
+        return Ok(Some(None));
+    }
+    let Value::Object(obj) = v else {
+        return Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "filter".into(),
+                expected: TypeName::Object,
+            },
+            format!("ops[{i}].filter"),
+        ));
+    };
+    deny_keys_at(obj, i, "filter", &["filterType", "startDate", "endDate"])?;
+    let filter_type = require_filter_text(obj, i, "filterType")?;
+    if !filter_type.starts_with("date") {
+        return Err(Error::with_path(
+            ErrorKind::InvalidSlicer {
+                field: "filterType".into(),
+            },
+            format!("ops[{i}].filter.filterType"),
+        ));
+    }
+    Ok(Some(Some(slicer::TimelineFilter {
+        filter_type,
+        start_date: require_filter_text(obj, i, "startDate")?,
+        end_date: require_filter_text(obj, i, "endDate")?,
+    })))
+}
+
+fn require_filter_text(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+    field: &str,
+) -> Result<String, Error> {
+    match obj.get(field) {
+        Some(Value::String(s)) if !s.is_empty() => Ok(s.clone()),
+        Some(Value::String(_)) | None => Err(Error::with_path(
+            ErrorKind::InvalidSlicer {
+                field: field.into(),
+            },
+            format!("ops[{i}].filter.{field}"),
+        )),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::NonEmptyString,
+            },
+            format!("ops[{i}].filter.{field}"),
+        )),
+    }
+}
+
 fn parse_slicer_view_fields(
     obj: &serde_json::Map<String, Value>,
     i: usize,

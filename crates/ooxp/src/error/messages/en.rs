@@ -1124,6 +1124,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::NeedSetSlicerViewField => {
             "setSlicerView requires at least one field besides op and id".into()
         }
+        ErrorKind::NeedSetSlicerFilterField => {
+            "setSlicerFilter requires selected or filter".into()
+        }
         ErrorKind::ConnectionNotFound { id } => format!("Connection not found: {id}"),
         ErrorKind::InvalidConnection { field } => {
             format!("{field} is not a valid connection value")

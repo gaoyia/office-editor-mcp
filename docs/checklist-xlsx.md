@@ -44,6 +44,7 @@ C、I、A、O、Xp、Xvg、Xem、X3d、Xom、Xtf、Xfl、Xc、Xh、Xfs、Xtl、X
 2026-10-13 补跑 `xlsx-slicer-anchor.ps1`，Xsn1–Xsn6 通过。无 Repair。COM 288×144 磅。`from=G4`。`twoCell` `to=H12`。时间线 `from=I5`。
 2026-10-14 补跑 `xlsx-slicer-caption.ps1`，Xsc1–Xsc5 通过。无 Repair。COM `Caption` 对得上。`columnCount=2`。时间线 `showHeader=false`。
 2026-10-14 补跑 `xlsx-theme.ps1`，Xth1–Xth5 通过。无 Repair。空白另存有 theme。`accent1=FF0000`。`majorLatin=Arial`。create 可写。省略为 null。
+2026-10-14 补跑 `xlsx-slicer-filter.ps1`，Xsi1–Xsi5 通过。无 Repair。表格 `selected=[]` 再 `乙`。透视勾选乙。时间线 `dateBetween` 再 `null`。
 
 - **C1** ✅
   - Excel 16.0 打开 `manual-check/office/out/xlsx-create.xlsx`，标题栏无 Repair
@@ -363,6 +364,13 @@ C、I、A、O、Xp、Xvg、Xem、X3d、Xom、Xtf、Xfl、Xc、Xh、Xfs、Xtl、X
   - 时间线改 `caption` 与 `showHeader=false`
   - 空 op、对切片器给 `showHeader`、对图 id 均拒写
   - 标题栏无 Repair
+- **Xsi1–Xsi5** ✅
+  - Excel 16.0：`xlsx-slicer-filter.ps1`，5 PASS / 0 FAIL
+  - 插入表格切片器后 `selected=[]`；透视切片器含源里各项；时间线 `filter=null`
+  - 表格 `selected=["乙"]` 后 autoFilter 含乙，无 Repair
+  - 透视切片器树上只有乙，无 Repair
+  - 时间线 `dateBetween` 起止日对得上，再 `null` 则为 null，无 Repair
+  - 空 op 与未知项得 `InvalidField`，图 id 得 `InvalidId`
 - **Xcn1–Xcn5** ✅
   - Excel 16.0：`xlsx-connections.ps1`，5 PASS / 0 FAIL
   - create 默认 `connectionCount=0`
@@ -1459,6 +1467,28 @@ inspect 只读进树。create 不生成。apply 不新开编辑。脚本 `manual
 - **Xth5** ✅
   - 检查：拒错
   - 通过标准：无 theme 发 `setThemeColors` 得 `IdNotFound`。错 id 得 `InvalidId`。只给 `op` 与 `id` 得 `InvalidField`。未写文件
+  - 不强制开 Excel
+
+## 切片器筛选项
+
+切片器 cache 已勾选项、时间线 cache 的筛选区间能 inspect、能 apply。打开后 Excel 自己按包内标记显示。库不算筛选结果，不刷新透视合计。
+手测脚本 `manual-check/office/cases/xlsx-slicer-filter.ps1`。编号用 **Xsi**。不要和 Xsl、Xsn、Xsc、Xtl 撞。
+
+- **Xsi1** ✅
+  - 检查：inspect 缺省
+  - 通过标准：插入表格切片器后树上 `selected` 为 `[]`。插入透视切片器后 `selected` 含源里各项。时间线 `filter` 为 `null`。Excel 无修复
+- **Xsi2** ✅
+  - 检查：表格勾选
+  - 通过标准：`setSlicerFilter` `selected=["乙"]` 后树上对得上。Excel 无修复。表格 autoFilter 含 `乙`
+- **Xsi3** ✅
+  - 检查：透视勾选
+  - 通过标准：透视切片器 `selected=["乙"]` 后树上只有乙。Excel 无修复
+- **Xsi4** ✅
+  - 检查：时间线
+  - 通过标准：时间线 `filter` 写成 `dateBetween` 与起止日后树上对得上。再给 `null` 则树上为 `null`。Excel 无修复
+- **Xsi5** ✅
+  - 检查：拒写
+  - 通过标准：只给 `op` 与 `id` 得 `InvalidField`。点名不存在的项得 `InvalidField`。对图 id 发此 op 得 `InvalidId`。未写文件
   - 不强制开 Excel
 
 ## 时间线切片器

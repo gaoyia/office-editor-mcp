@@ -187,6 +187,7 @@ fn insert_table_slicer_lists_and_writes_parts() {
     assert_eq!(item["startItem"], 0);
     assert_eq!(item["lockedPosition"], false);
     assert_eq!(item["style"], serde_json::Value::Null);
+    assert_eq!(item["selected"], json!([]));
     assert_eq!(item["anchor"], "twoCell");
     assert_eq!(item["from"], "F2");
     assert_eq!(item["stable"], true);
@@ -203,6 +204,7 @@ fn insert_table_slicer_lists_and_writes_parts() {
             "startItem",
             "lockedPosition",
             "style",
+            "selected",
             "sourceKind",
             "sourceName",
             "field",
@@ -263,6 +265,7 @@ fn insert_pivot_slicer_source_kind() {
     assert_eq!(item["sourceKind"], "pivot");
     assert_eq!(item["sourceName"], "SalesPivot");
     assert_eq!(item["field"], "产品");
+    assert_eq!(item["selected"], json!(["甲", "乙"]));
     let cache = part_text(&out, "xl/slicerCaches/slicerCache1.xml");
     assert!(cache.contains("tabular"), "{cache}");
     assert!(cache.contains("pivotCacheId=\"1\""), "{cache}");
@@ -434,6 +437,7 @@ fn insert_timeline_on_date_pivot() {
     assert_eq!(item["selectionLevel"], 2);
     assert_eq!(item["scrollPosition"], "2023-01-01T00:00:00");
     assert_eq!(item["style"], serde_json::Value::Null);
+    assert_eq!(item["filter"], serde_json::Value::Null);
     assert!(item["id"]
         .as_str()
         .unwrap()
@@ -882,5 +886,201 @@ fn set_slicer_view_rejects_empty_and_wrong_kind_and_pic() {
     )
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);
+    assert!(!fail.exists());
+}
+
+#[test]
+fn table_slicer_selected_writes_autofilter() {
+    let (src, id) = insert_table_slicer("sel-tbl");
+    let out = tmp("sel-tbl-out");
+    apply(
+        &src,
+        &out,
+        json!([{
+            "op": "setSlicerFilter",
+            "id": id,
+            "selected": ["乙"]
+        }]),
+    )
+    .unwrap();
+    let item = &inspect(&out, json!({ "slicers": true }))["sheets"][0]["slicers"][0];
+    assert_eq!(item["selected"], json!(["乙"]));
+    let table = part_text(&out, "xl/tables/table1.xml");
+    assert!(table.contains("val=\"乙\""), "{table}");
+    assert!(table.contains("filterColumn"), "{table}");
+
+    let cleared = tmp("sel-tbl-clear");
+    apply(
+        &out,
+        &cleared,
+        json!([{
+            "op": "setSlicerFilter",
+            "id": id,
+            "selected": []
+        }]),
+    )
+    .unwrap();
+    let item = &inspect(&cleared, json!({ "slicers": true }))["sheets"][0]["slicers"][0];
+    assert_eq!(item["selected"], json!([]));
+    let table = part_text(&cleared, "xl/tables/table1.xml");
+    assert!(!table.contains("filterColumn"), "{table}");
+}
+
+#[test]
+fn pivot_slicer_selected_writes_s_attr() {
+    let src = with_pivot("sel-pt");
+    let inserted = tmp("sel-pt-ins");
+    apply(
+        &src,
+        &inserted,
+        json!([{
+            "op": "insertSlicer",
+            "id": "sheet:Sheet1",
+            "source": "sheet:Sheet1/pivot:1",
+            "field": "产品",
+            "from": "H2"
+        }]),
+    )
+    .unwrap();
+    let tree = inspect(&inserted, json!({ "slicers": true }));
+    let id = tree["sheets"][0]["slicers"][0]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let out = tmp("sel-pt-out");
+    apply(
+        &inserted,
+        &out,
+        json!([{
+            "op": "setSlicerFilter",
+            "id": id,
+            "selected": ["乙"]
+        }]),
+    )
+    .unwrap();
+    let item = &inspect(&out, json!({ "slicers": true }))["sheets"][0]["slicers"][0];
+    assert_eq!(item["selected"], json!(["乙"]));
+    let cache = part_text(&out, "xl/slicerCaches/slicerCache1.xml");
+    assert!(cache.contains("s=\"1\""), "{cache}");
+}
+
+#[test]
+fn timeline_filter_roundtrip_and_clear() {
+    let src = with_date_pivot("sel-tl");
+    let inserted = tmp("sel-tl-ins");
+    apply(
+        &src,
+        &inserted,
+        json!([{
+            "op": "insertSlicer",
+            "id": "sheet:Sheet1",
+            "source": "sheet:Sheet1/pivot:1",
+            "field": "日期",
+            "kind": "timeline",
+            "from": "H2"
+        }]),
+    )
+    .unwrap();
+    let tree = inspect(&inserted, json!({ "slicers": true }));
+    let id = tree["sheets"][0]["slicers"][0]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    assert_eq!(
+        tree["sheets"][0]["slicers"][0]["filter"],
+        serde_json::Value::Null
+    );
+    let out = tmp("sel-tl-out");
+    apply(
+        &inserted,
+        &out,
+        json!([{
+            "op": "setSlicerFilter",
+            "id": id,
+            "filter": {
+                "filterType": "dateBetween",
+                "startDate": "2023-01-01T00:00:00",
+                "endDate": "2023-03-01T00:00:00"
+            }
+        }]),
+    )
+    .unwrap();
+    let item = &inspect(&out, json!({ "slicers": true }))["sheets"][0]["slicers"][0];
+    assert_eq!(
+        item["filter"],
+        json!({
+            "filterType": "dateBetween",
+            "startDate": "2023-01-01T00:00:00",
+            "endDate": "2023-03-01T00:00:00"
+        })
+    );
+    let cache = part_text(&out, "xl/timelineCaches/timelineCache1.xml");
+    assert!(!cache.contains("timelinePivotFilter"), "{cache}");
+    assert!(cache.contains("filterType=\"dateBetween\""), "{cache}");
+    assert!(cache.contains("selection"), "{cache}");
+
+    let cleared = tmp("sel-tl-clear");
+    apply(
+        &out,
+        &cleared,
+        json!([{ "op": "setSlicerFilter", "id": id, "filter": null }]),
+    )
+    .unwrap();
+    let item = &inspect(&cleared, json!({ "slicers": true }))["sheets"][0]["slicers"][0];
+    assert_eq!(item["filter"], serde_json::Value::Null);
+    let cache = part_text(&cleared, "xl/timelineCaches/timelineCache1.xml");
+    assert!(!cache.contains("timelinePivotFilter"), "{cache}");
+    assert!(cache.contains("filterType=\"unknown\""), "{cache}");
+}
+
+#[test]
+fn set_slicer_filter_rejects_empty_unknown_and_wrong_id() {
+    let (src, id) = insert_table_slicer("sel-rej");
+    let fail = tmp("sel-empty");
+    let err = apply(&src, &fail, json!([{ "op": "setSlicerFilter", "id": id }])).unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+    assert!(!fail.exists());
+
+    let err = apply(
+        &src,
+        &fail,
+        json!([{
+            "op": "setSlicerFilter",
+            "id": id,
+            "selected": ["不存在"]
+        }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+    assert!(!fail.exists());
+
+    let err = apply(
+        &src,
+        &fail,
+        json!([{
+            "op": "setSlicerFilter",
+            "id": id,
+            "filter": {
+                "filterType": "dateBetween",
+                "startDate": "2023-01-01T00:00:00",
+                "endDate": "2023-03-01T00:00:00"
+            }
+        }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+    assert!(!fail.exists());
+
+    let err = apply(
+        &src,
+        &fail,
+        json!([{
+            "op": "setSlicerFilter",
+            "id": "sheet:Sheet1/pic:1",
+            "selected": ["乙"]
+        }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidId);
     assert!(!fail.exists());
 }

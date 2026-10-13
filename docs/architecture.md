@@ -96,7 +96,7 @@ crates/ooxp-cli/             命令行，只依赖 ooxp。二进制名也是 oox
 `scope.oleObjects` 为 true 时列出该表 `<oleObjects>`，不把嵌入字节或预览图放进树。
 `scope.model3ds` 为 true 时列出该表 drawing 里的 `am3d` AlternateContent，不把 GLB 或海报放进树。
 `scope.maths` 为 true 时列出该表 drawing 里的 `a14:m` 公式框，不把 OMML 原文放进树，也不进 `textBoxes`。
-`scope.slicers` 为 true 时列出该表 drawing 里的 slicer 与时间线 `graphicFrame`，不把 cache 选项或筛选状态倒进树。
+`scope.slicers` 为 true 时列出该表 drawing 里的 slicer 与时间线 `graphicFrame`，已勾选进 `selected`，时间线区间进 `filter`，不把未选项名单摊开。
 `scope.protectedRanges` 为 true 时列出该表 `<protectedRanges>`，不把哈希放进树。
 `scope.connections` 为 true 时列出工作簿 `/xl/connections.xml`，不刷新。
 `scope.externalLinks` 为 true 时列出 workbook `<externalReferences>`，不打开目标文件。
@@ -294,10 +294,11 @@ xlsx 也可插删改工作表单元格超链接，脏该表 XML 与工作表 `.r
 xlsx 也可列出、导出、插入并删除工作表嵌入对象，脏 `oleObjects`、worksheet drawing、VML `legacyDrawing`、工作表 `.rels`、embeddings 与预览媒体，不把字节塞进 inspect 树，不标重算。
 xlsx 也可插、删、换工作表 3D 模型，并改已有 3D 的尺寸与锚点，脏 worksheet drawing、drawing `.rels`、GLB 与海报 PNG，不把 GLB 塞进 inspect 树，不标重算。
 xlsx 也可插改删工作表 drawing 公式框，脏 worksheet drawing，写 `a14:m` AlternateContent，不标重算。
-xlsx 也可列出、插入、删除工作表切片器与时间线，并改已有切片器（含时间线）的尺寸与锚点，脏 `/xl/slicers/…`、`/xl/slicerCaches/…`、`/xl/timelines/…`、`/xl/timelineCaches/…`、worksheet drawing、工作表 `extLst` 的 `slicerList` / `timelineRefs`、
+xlsx 也可列出、插入、删除工作表切片器与时间线，并改已有切片器（含时间线）的尺寸、锚点、视图属性与勾选，脏 `/xl/slicers/…`、`/xl/slicerCaches/…`、`/xl/timelines/…`、`/xl/timelineCaches/…`、worksheet drawing、工作表 `extLst` 的 `slicerList` / `timelineRefs`、
 workbook `extLst` 的 `slicerCaches` / `timelineCacheRefs`、workbook 的 `<definedNames>`、工作表 / workbook `.rels` 与内容类型；
+表格切片器的勾选还脏该表 `autoFilter`，不隐藏行。
 透视源的插入还脏 `/xl/pivotCache/pivotCacheDefinitionN.xml` 的 `extLst`（`x14:pivotCacheDefinition/@pivotCacheId`）。
-时间线还会把该透视表 `updatedVersion` 升到至少 8，不在库里执行筛选，不标重算。
+时间线还会把该透视表 `updatedVersion` 升到至少 8，不在库里执行筛选，不重写透视缓存合计，不标重算。
 xlsx 也可列出、插入并删除工作簿外部数据连接，脏 `/xl/connections.xml`、workbook `.rels` 与内容类型，不向数据源发请求，不把查询结果写进 `sheetData`，不标重算。
 xlsx 也可列出、插入、删除并改路径对其他工作簿的外部引用，脏 workbook `<externalReferences>`、`/xl/externalLinks/…` 及其 `.rels`、关系与内容类型；改路径只动该链 `.rels` 的 `Target`，不写 `xxl21:alternateUrls`，不打开目标文件，不求值，不标重算。
 xlsx 也可用 `setProtection` 改工作表 `sheetProtection` 或 workbook `workbookProtection`，可写 SHA-512 哈希，不标重算。

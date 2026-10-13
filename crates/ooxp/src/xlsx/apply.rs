@@ -978,6 +978,15 @@ pub fn apply(bytes: &[u8], ops: &[XlsxOp]) -> Result<Vec<u8>, Error> {
                 )?;
                 slicer::set_view(&mut pkg, &part, op, i)?;
             }
+            XlsxOp::SetSlicerFilter(op) => {
+                let part = require_drawing_worksheet(
+                    &sheet_index,
+                    &op.target.sheet,
+                    i,
+                    ErrorKind::InsertTextBoxWorksheetOnly,
+                )?;
+                slicer::set_filter(&mut pkg, &part, op, i)?;
+            }
             XlsxOp::SetThemeColors(op) => {
                 super::theme::set_colors(&mut pkg, &wb_part, op, i)?;
             }

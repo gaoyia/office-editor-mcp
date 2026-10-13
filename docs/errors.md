@@ -646,7 +646,7 @@
   - OLE：`insertOle`、`deleteOle`
   - 3D 模型：`insertModel3d`、`replaceModel3d`、`deleteModel3d`、`setModel3dSize`、`setModel3dAnchor`
   - 公式：`insertMath`、`setMath`、`deleteMath`
-  - 切片器：`insertSlicer`、`deleteSlicer`、`setSlicerSize`、`setSlicerAnchor`、`setSlicerView`
+  - 切片器：`insertSlicer`、`deleteSlicer`、`setSlicerSize`、`setSlicerAnchor`、`setSlicerView`、`setSlicerFilter`
   - 连接：`insertConnection`、`deleteConnection`
   - 外部引用：`insertExternalLink`、`setExternalLink`、`deleteExternalLink`
   - 自定义视图：`insertCustomView`、`deleteCustomView`、`showCustomView`
@@ -832,11 +832,15 @@
 - `kind` 不是 `slicer` / `timeline` 报 `InvalidField`
 - `kind` 为 `timeline` 却给了表格源、或字段没有日期共享项，报 `InvalidField`
 - `level` 出现在非时间线 op 上、或不是 0–3 的整数，报 `InvalidField`
-- `deleteSlicer` / `setSlicerSize` / `setSlicerAnchor` / `setSlicerView` 的 id 必须是切片器 id（含时间线）
+- `deleteSlicer` / `setSlicerSize` / `setSlicerAnchor` / `setSlicerView` / `setSlicerFilter` 的 id 必须是切片器 id（含时间线）
 - 找不到报 `IdNotFound`，不是切片器 id 报 `InvalidId`
 - xlsx `twoCell` 切片器的 `setSlicerSize` 出现 `cx` / `cy` 报 `InvalidField`
-- 对图 id 发切片器尺寸 / 锚点 / 视图 op、对切片器 id 发 `setPictureSize` / `setPictureAnchor`，报 `InvalidId`
+- 对图 id 发切片器尺寸 / 锚点 / 视图 / 筛选 op、对切片器 id 发 `setPictureSize` / `setPictureAnchor`，报 `InvalidId`
 - `setSlicerView` 除 `op` 与 `id` 外一个字段都不给报 `InvalidField`
+- `setSlicerFilter` 必须恰好给 `selected` 或 `filter`，否则报 `InvalidField`
+- 对切片器给 `filter`、对时间线给 `selected`，报 `InvalidField`
+- 点名的勾选项对不上源报 `InvalidField`
+- 时间线 `filterType` 不以 `date` 开头报 `InvalidField`
 - 对切片器发时间线专用字段、对时间线发切片器专用字段报 `InvalidField`
 - 对 `chartsheet` 发切片器 op 报 `InvalidField`
 - 对 `dialogsheet` / `macrosheet` 报 `NotImplemented`
@@ -876,6 +880,7 @@
   - `setSlicerSize`
   - `setSlicerAnchor`
   - `setSlicerView`
+  - `setSlicerFilter`
   - `insertConnection`
   - `deleteConnection`
   - `insertExternalLink`

@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "book.xlsx",
+  "ops": [
+    {
+      "op": "setSlicerFilter",
+      "id": "sheet:Sheet1/slicer:1",
+      "selected": ["乙"]
+    }
+  ]
+}
