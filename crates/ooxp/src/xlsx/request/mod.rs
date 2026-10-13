@@ -516,6 +516,8 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<XlsxOp>, Error> {
             | "setTableCellText"
             | "setTablePos"
             | "setTableSize"
+            | "setTableColWidths"
+            | "setTableTrHeight"
             | "insertVideo"
             | "insertAudio"
             | "deleteMedia"

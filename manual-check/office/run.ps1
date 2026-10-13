@@ -184,6 +184,7 @@ $order = @(
     'pptx-shape-geom'
     'pptx-custgeom'
     'pptx-tables'
+    'pptx-table-grid'
     'pptx-transition'
     'pptx-transition-remain'
     'pptx-transition-sound'

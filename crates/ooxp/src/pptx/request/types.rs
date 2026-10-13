@@ -984,6 +984,8 @@ pub struct InsertTableOp {
     pub y: Option<i64>,
     pub cx: Option<i64>,
     pub cy: Option<i64>,
+    pub col_widths: Option<Vec<i64>>,
+    pub row_heights: Option<Vec<i64>>,
 }
 
 #[derive(Debug, Clone)]
@@ -1040,6 +1042,21 @@ pub struct SetTableSizeOp {
     pub target: table::TableTarget,
     pub cx: Option<i64>,
     pub cy: Option<i64>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetTableColWidthsOp {
+    pub id: String,
+    pub target: table::TableTarget,
+    pub cols: Vec<i64>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetTableTrHeightOp {
+    pub id: String,
+    pub table: table::TableTarget,
+    pub row: usize,
+    pub h: i64,
 }
 
 #[derive(Debug, Clone)]
@@ -1185,6 +1202,8 @@ pub enum PptxOp {
     SetTableCellText(SetTableCellTextOp),
     SetTablePos(SetTablePosOp),
     SetTableSize(SetTableSizeOp),
+    SetTableColWidths(SetTableColWidthsOp),
+    SetTableTrHeight(SetTableTrHeightOp),
     InsertSlide(InsertSlideOp),
     DeleteSlide(DeleteSlideOp),
     MoveSlide(MoveSlideOp),

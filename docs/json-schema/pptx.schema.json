@@ -228,6 +228,20 @@
         "cy": {
           "type": "integer",
           "minimum": 1
+        },
+        "colWidths": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "rowHeights": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 1
+          }
         }
       }
     },
@@ -2215,6 +2229,53 @@
           "minimum": 1
         },
         "cy": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "setTableColWidthsOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "cols"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setTableColWidths"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "cols": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      }
+    },
+    "setTableTrHeightOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id",
+        "h"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setTableTrHeight"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "h": {
           "type": "integer",
           "minimum": 1
         }

@@ -5,7 +5,7 @@
 检查前用 create 或 apply 在本机生成文件，不要用改过扩展名的 zip 目录冒充。
 本机若 `PowerPoint.Application` 被 WPS 抢走，直接启动 `POWERPNT.EXE` 再挂 COM，不要走被抢的 ProgID。Office 16 的对象模型在 `mdiClass` 上。
 
-C、I、A、Pp、Pvg、Pem、P3d、Pom、Pc、Psa、Pn、Pcm、Pm、Ps、Tf、Tfl、Pln、Sg、Pt、Tn、Tr、Td、Mt、Am、Aw、Mm、Mw、Md、Ts、Ho、Nh、Nm、Phl、Phr、Phx、Pcip、Pmd、Psc、Cs、Po、Cr、Cq、Ck、Pz、Pzr、Pw、Pph、
+C、I、A、Pp、Pvg、Pem、P3d、Pom、Pc、Psa、Pn、Pcm、Pm、Ps、Tf、Tfl、Pln、Sg、Pt、Pg、Tn、Tr、Td、Mt、Am、Aw、Mm、Mw、Md、Ts、Ho、Nh、Nm、Phl、Phr、Phx、Pcip、Pmd、Psc、Cs、Po、Cr、Cq、Ck、Pz、Pzr、Pw、Pph、
 Pf、Pcg、Pcx 各组由 `manual-check/office/cases/pptx-*.ps1` 自动判定，
 跑 `pwsh -File manual-check\office\run.ps1 -Case 'pptx-*'` 即可复现。O1 已放弃，与 xlsx / docx 相同。
 
@@ -47,6 +47,7 @@ Ps1–Ps5、Sg1–Sg5、Pt1–Pt6、Tn1–Tn5、Am1–Am5、Mm1–Mm5、Ho1–Ho
 2026-10-13 补跑 `pptx-model3d-geom.ps1`，P3g1–P3g6 通过。无 Repair。COM `Width` / `Height` 288×144 磅。`x=914400` `y=457200`。备注 3D 可改尺寸，根上 `model3dCount` 仍为 0。`replaceModel3d` 不改几何。
 2026-10-14 补跑 `pptx-math-geom.ps1`，Pog1–Pog5 通过。无 Repair。`cx=1828800` `cy=914400`。`x=914400` `y=457200`。备注公式可改尺寸，根上 `mathCount` 仍为 0。`setMath` 不改几何。
 2026-10-14 补跑 `pptx-shape-spacing.ps1`，Pln1–Pln5 通过。无 Repair。COM `SpaceBefore=12`，`TextFrame2.Font.Spacing=2`。`textAnchor=just`。表单元格 `lnSpc` pts 2400。
+2026-10-14 补跑 `pptx-table-grid.ps1`，Pg1–Pg5 通过。无 Repair。COM 列宽 100 / 150 / 200 磅，行高 50 / 100 磅。`setTableSize` 不改格网。`h: null` 为 `InvalidField`。
 
 - **C1** ✅
   - PowerPoint 16.0 能打开 `manual-check/office/out/pptx-create.pptx`，标题栏无 Repair
@@ -1135,6 +1136,18 @@ DrawingML 表（`a:tbl` 包在 `p:graphicFrame` 里）。不要把表编进 `sha
 | Pt4 | 插入 | ✅ 对 create 产物 `insertTable` 后新表可见；inspect id 为 `slide:…/table:…` 且 `stable`；无 Repair |
 | Pt5 | 删除 | ✅ `deleteTable` 后该表消失；同页未删形状还在；无 Repair |
 | Pt6 | 拒错 | ✅ 对形状 id 发 `insertTable` 得 `InvalidId`；缺 `rows`、只剩一行时 `deleteRow` 得 `InvalidField`；均未写文件 |
+
+## 表内列宽与行高
+
+DrawingML 表的 `a:gridCol/@w` 与 `a:tr/@h`。`setTableSize` 仍只改框。不要和 Word `setTableWidth` / `setTableRowHeight`、xlsx `setColWidth` / `setRowHeight` 混。不要和 Pt 撞。脚本：`manual-check/office/cases/pptx-table-grid.ps1`。编号用 Pg。
+
+| 序号 | 检查 | 通过标准 |
+| --- | --- | --- |
+| Pg1 | inspect | ✅ create 带 `colWidths` / `rowHeights` 后 inspect `colWidths` 与各行 `height` 对得上；COM 列宽 / 行高对得上 |
+| Pg2 | 列宽 | ✅ `setTableColWidths` 后 inspect 与 COM 列宽对得上；框 `cx` 不变；无 Repair |
+| Pg3 | 行高 | ✅ `setTableTrHeight` 后目标行 COM 行高对得上；无 Repair |
+| Pg4 | 框 | ✅ `setTableSize` 后格网宽高仍是 Pg2/Pg3 的值；框 `cx` / `cy` 已改；无 Repair |
+| Pg5 | 拒错 | ✅ `cols` 长度不对、对表 id 发 `setTableTrHeight`、`h: null`、xlsx 上发 `setTableColWidths` 得 `InvalidField` 或 `InvalidId`；均未写文件 |
 
 ## 幻灯片切换
 

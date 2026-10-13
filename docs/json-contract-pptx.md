@@ -311,8 +311,8 @@ SmartArt id 的 `{cNvPrId}` 取该 `p:graphicFrame` 的 `p:nvGraphicFramePr/p:cN
 `insertSmartArt` 的 `id` 同样是 `slide:{n}`、`slide:{n}/notes`、`master:{n}` 或 `master:{n}/layout:{k}`。点 id、删整张与改点 op 认备注与母版 / 版式图示 id。
 
 `insertTable` 的 `id` 必须是 `slide:{n}`、`slide:{n}/notes`、`master:{n}` 或 `master:{n}/layout:{k}`。
-`deleteTable` / `setTablePos` / `setTableSize` / `insertCol` / `deleteCol` 的 `id` 必须是表 id（含备注表 id）。
-`insertRow` 的 `id` 是表 id（追加一行）或行 id（插到该行之后）。`deleteRow` 的 `id` 必须是行 id。`setTableCellText` 的 `id` 必须是单元格 id。
+`deleteTable` / `setTablePos` / `setTableSize` / `setTableColWidths` / `insertCol` / `deleteCol` 的 `id` 必须是表 id（含备注表 id）。
+`insertRow` 的 `id` 是表 id（追加一行）或行 id（插到该行之后）。`deleteRow` / `setTableTrHeight` 的 `id` 必须是行 id。`setTableCellText` 的 `id` 必须是单元格 id。
 对不上的 id 形态报 `InvalidId`。xlsx 上这些 op（除 Word 已认的结构名在 Word 上的语义外）见各节；pptx 上发 `mergeCells` / `splitCells` 仍报 `InvalidField`。
 
 嵌入对象 id 的 `{cNvPrId}` 取该 `p:graphicFrame` 的 `p:nvGraphicFramePr/p:cNvPr/@id` 原文（ECMA-376 §19.3.2.4：以 graphicFrame 为准，忽略预览 `p:pic` 的 id）。
@@ -913,9 +913,11 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   `cNvPrId` / `name` / `stable` 规则与图相同。`x` / `y` / `cx` / `cy` 取 graphicFrame 的 `p:xfrm`。
   `layout` / `colors` / `style` / `points` 规则与 docx SmartArt 相同。pptx 没有 `kind` / `wrap`。
 - `scope.tables` 为 `true` 时，每页带 `tables`。没有表时为空数组。不依赖 `scope.slide`。
-  每张字段顺序：`id`、`cNvPrId`、`name`、`x`、`y`、`cx`、`cy`、`rowCount`、`colCount`、`rows`、`stable`。
+  每张字段顺序：`id`、`cNvPrId`、`name`、`x`、`y`、`cx`、`cy`、`rowCount`、`colCount`、`colWidths`、`rows`、`stable`。
   `cNvPrId` / `name` / `stable` 规则与图相同。`x` / `y` / `cx` / `cy` 取 graphicFrame 的 `p:xfrm`。`rowCount` 是 `a:tr` 个数。
-  `colCount` 见上文表 id 那节。`rows` 按 `a:tr` 顺序。每行字段顺序：`id`、`index`、`cells`。`cells` 按该行 `a:tc` 文档顺序，不按空网格补格。
+  `colCount` 见上文表 id 那节。`colWidths` 取 `a:tblGrid` 各 `a:gridCol/@w`（EMU 整数）。没有网格则为 `[]`。缺 `@w` 或解析失败当作 `0`。
+  `rows` 按 `a:tr` 顺序。每行字段顺序：`id`、`index`、`height`、`cells`。`height` 取 `a:tr/@h`，缺则为 `null`。没有 `rule`。
+  `cells` 按该行 `a:tc` 文档顺序，不按空网格补格。
   每格字段顺序：`id`、`row`、`col`、`gridSpan`、`rowSpan`、`hMerge`、`vMerge`、`text`，
   然后 `sz`、`color`、`textFill`、`textOutline`、`bold`、`italic`、`underline`、`font`、`eastAsiaFont`、`align`、`textAnchor`、`spcBef`、`spcAft`、`lnSpc`、`runs`。
   `row` / `col` 与 id 里的数字相同。
@@ -1353,6 +1355,17 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
 - **`tables[].rows` / `tables[].cols`**
   - 必须
   - 正整数，规则与 pptx `insertTable` 相同
+  - `cols` 是列数，不是列宽数组
+- **`tables[].colWidths`**
+  - 可选
+  - EMU 正整数数组
+  - 长度必须等于 `tables[].cols`
+  - 省略则按框 `cx` 均分写入 `a:gridCol/@w`
+- **`tables[].rowHeights`**
+  - 可选
+  - 数组，长度必须等于 `tables[].rows`
+  - 每项为 EMU 正整数
+  - 省略则按框 `cy` 均分写入 `@h`
 - **`tables[].cells`**
   - 可选
   - 二维数组，行数与列数必须与 `rows` / `cols` 一致
@@ -2548,8 +2561,32 @@ id 不是表 id 报 `InvalidId`。`x` 与 `y` 一个都不给报 `InvalidField`�
 | `id` | 表 id |
 | `cx` / `cy` | 至少给一个。EMU，正整数 |
 
-写入该 `p:graphicFrame` 的 `p:xfrm/a:ext`。没有 `xfrm` 则补。只改框尺寸，不算自动列宽。找不到报表 `IdNotFound`。id 不是表 id 报 `InvalidId`。
+写入该 `p:graphicFrame` 的 `p:xfrm/a:ext`。没有 `xfrm` 则补。只改框尺寸，不算自动列宽，不重分配 `a:gridCol/@w` 与 `a:tr/@h`。找不到报表 `IdNotFound`。id 不是表 id 报 `InvalidId`。
 `cx` 与 `cy` 一个都不给报 `InvalidField`。docx / xlsx 上发此 op 报 `InvalidField`。
+
+### setTableColWidths
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"setTableColWidths"` |
+| `id` | 表 id |
+| `cols` | 必须。EMU 正整数数组，长度必须等于该表 `colCount` |
+
+只写 `a:tblGrid` 的 `a:gridCol/@w`。没有网格则补 `a:tblGrid`。不改 `p:xfrm`。不改各格 `tcW`。找不到报表 `IdNotFound`。id 不是表 id 报 `InvalidId`。
+缺 `cols`、不是数组、长度对不上 `colCount`、或某项不是正整数报 `InvalidField`。docx / xlsx 上发此 op 报 `InvalidField`。
+不要复用 Word 的 `setTableWidth`（单位是 twip）。不要复用 xlsx 的 `setColWidth`。
+
+### setTableTrHeight
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"setTableTrHeight"` |
+| `id` | 行 id |
+| `h` | 必须。EMU 正整数 |
+
+只改该行 `@h`。不改框 `p:xfrm`。找不到该行报 `IdNotFound`。id 不是行 id 报 `InvalidId`。缺 `h`、或不是正整数报 `InvalidField`。
+`a:tr/@h` 必填，`h: null` 报 `InvalidField`。inspect 缺 `@h` 仍报 `null`。
+docx / xlsx 上发此 op 报 `InvalidField`。不要复用 Word 的 `setTableRowHeight`（单位是 twip）。不要复用 xlsx 的 `setRowHeight`。
 
 ### setNotesText
 
@@ -3295,7 +3332,7 @@ notesSlide、被点名的 slideMaster 或 slideLayout、notesMaster 或 handoutM
 往母版 / 版式插只脏目标 slideMaster 或 slideLayout XML。
 `insertConnector` / `deleteConnector` / `setConnector` 脏该宿主 XML（幻灯片、notesSlide、slideMaster 或 slideLayout）。`groupShapes` / `ungroup` 只脏该页幻灯片 XML。
 `insertTable` / `deleteTable` / `insertRow` / `deleteRow` / `insertCol` / `deleteCol` / `setTableCellText`
- / `setTablePos` / `setTableSize` 脏该宿主 XML（幻灯片、notesSlide、slideMaster 或 slideLayout），不新建部件；
+ / `setTablePos` / `setTableSize` / `setTableColWidths` / `setTableTrHeight` 脏该宿主 XML（幻灯片、notesSlide、slideMaster 或 slideLayout），不新建部件；
 往备注插且还没有 notesSlide 时可脏 notesSlide、该页 `.rels`、notesMaster、presentation，与 `setNotesText` 相同。
 `setNotesText` 可脏 notesSlide、该页 `.rels`、notesMaster、presentation，以及新建 notesMaster 时复制的 theme 部件。图片 op 还可脏该宿主关系与媒体。
 图表 op 还可脏 chart 部件、embedding。SmartArt op 还可脏四件套与缓存。

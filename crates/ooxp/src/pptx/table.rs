@@ -8,7 +8,7 @@ use crate::xml::{Document, Element, Node};
 use super::picture;
 use super::request::{
     DeleteColOp, DeleteRowOp, DeleteTableOp, InsertColOp, InsertRowOp, InsertTableOp,
-    SetTableCellTextOp, SetTablePosOp, SetTableSizeOp,
+    SetTableCellTextOp, SetTableColWidthsOp, SetTablePosOp, SetTableSizeOp, SetTableTrHeightOp,
 };
 use super::shape;
 use super::DML_NS;
@@ -77,15 +77,23 @@ pub fn parse_table_or_row(id: &str, json_path: &str) -> Result<TableOrRow, Error
 }
 
 pub fn parse_row_id(id: &str, json_path: &str) -> Result<(TableTarget, usize), Error> {
+    parse_row_id_with(id, json_path, IdReason::DeleteRowNeedsRow)
+}
+
+pub fn parse_row_id_with(
+    id: &str,
+    json_path: &str,
+    wrong: IdReason,
+) -> Result<(TableTarget, usize), Error> {
     let (left, row) = split_suffix(id, "/row:").ok_or_else(|| {
         Error::with_path(
             ErrorKind::InvalidId {
-                reason: IdReason::DeleteRowNeedsRow,
+                reason: wrong.clone(),
             },
             json_path.to_string(),
         )
     })?;
-    let table = parse_table_id(left, json_path, IdReason::DeleteRowNeedsRow)?;
+    let table = parse_table_id(left, json_path, wrong)?;
     let row = parse_from_one(row, json_path, IdReason::SlideTableRowForm)?;
     Ok((table, row))
 }
@@ -532,6 +540,16 @@ fn col_count(tbl: &Element) -> usize {
         .unwrap_or(0)
 }
 
+fn col_widths(tbl: &Element) -> Vec<i64> {
+    let Some(grid) = tbl.child_by_local("tblGrid") else {
+        return Vec::new();
+    };
+    grid.children_by_local("gridCol")
+        .into_iter()
+        .map(|c| parse_i64_attr(c, "w").unwrap_or(0))
+        .collect()
+}
+
 fn is_on(el: &Element, name: &str) -> bool {
     matches!(
         el.attr_local(name).map(|s| s.to_ascii_lowercase()),
@@ -600,6 +618,7 @@ fn table_json(frame: &Element, host: &str, index: usize) -> Value {
         rows.push(json!({
             "id": format!("{id}/row:{row_n}"),
             "index": row_n,
+            "height": parse_i64_attr(tr, "h"),
             "cells": cells,
         }));
     }
@@ -619,6 +638,10 @@ fn table_json(frame: &Element, host: &str, index: usize) -> Value {
     m.insert("cy".into(), json!(cy));
     m.insert("rowCount".into(), json!(trs.len()));
     m.insert("colCount".into(), json!(cols));
+    m.insert(
+        "colWidths".into(),
+        json!(tbl.map(col_widths).unwrap_or_default()),
+    );
     m.insert("rows".into(), json!(rows));
     m.insert("stable".into(), json!(stable));
     Value::Object(m)
@@ -721,7 +744,18 @@ pub fn insert_table(
     };
     picture::ensure_xmlns(&mut slide_doc.root, "a", DML_NS);
     let cnv = picture::next_cnv_id(&slide_doc.root);
-    let frame = build_table_frame(cnv, x, y, cx, cy, op.rows, op.cols, &op.cells);
+    let frame = build_table_frame(
+        cnv,
+        x,
+        y,
+        cx,
+        cy,
+        op.rows,
+        op.cols,
+        &op.cells,
+        op.col_widths.as_deref(),
+        op.row_heights.as_deref(),
+    );
     picture::insert_into_sp_tree(&mut slide_doc.root, frame)?;
     let _ = i;
     Ok(())
@@ -736,6 +770,8 @@ fn build_table_frame(
     rows: usize,
     cols: usize,
     cells: &[Vec<String>],
+    col_widths: Option<&[i64]>,
+    row_heights: Option<&[i64]>,
 ) -> Element {
     let mut nv = Element::new("p:nvGraphicFramePr");
     nv.push_element(
@@ -758,8 +794,14 @@ fn build_table_frame(
             .with_attr("cx", cx.to_string())
             .with_attr("cy", cy.to_string()),
     );
-    let col_ws = split_emu(cx, cols);
-    let row_hs = split_emu(cy, rows);
+    let col_ws = match col_widths {
+        Some(ws) => ws.to_vec(),
+        None => split_emu(cx, cols),
+    };
+    let row_hs: Vec<i64> = match row_heights {
+        Some(hs) => hs.to_vec(),
+        None => split_emu(cy, rows),
+    };
     let mut grid = Element::new("a:tblGrid");
     for w in &col_ws {
         grid.push_element(Element::new("a:gridCol").with_attr("w", w.to_string()));
@@ -1396,6 +1438,83 @@ pub fn apply_size(slide_doc: &mut Document, op: &SetTableSizeOp, i: usize) -> Re
         picture::set_attr_local(ext, "cy", &cy.to_string());
     }
     Ok(())
+}
+
+pub fn apply_col_widths(
+    slide_doc: &mut Document,
+    op: &SetTableColWidthsOp,
+    i: usize,
+) -> Result<(), Error> {
+    let tbl = require_tbl(slide_doc, &op.target.key, &op.id, i)?;
+    let want = col_count(tbl);
+    if op.cols.len() != want {
+        return Err(Error::with_path(
+            ErrorKind::NeedTableColWidthsMatch,
+            format!("ops[{i}].cols"),
+        ));
+    }
+    set_grid_widths(tbl, &op.cols);
+    Ok(())
+}
+
+pub fn apply_tr_height(
+    slide_doc: &mut Document,
+    op: &SetTableTrHeightOp,
+    i: usize,
+) -> Result<(), Error> {
+    let tbl = require_tbl(slide_doc, &op.table.key, &op.id, i)?;
+    let tr_pos = tr_child_indices(tbl);
+    if op.row < 1 || op.row > tr_pos.len() {
+        return Err(missing_table(&op.id, i));
+    }
+    let tr = match &mut tbl.children[tr_pos[op.row - 1]] {
+        Node::Element(e) => e,
+        _ => return Err(missing_table(&op.id, i)),
+    };
+    picture::set_attr_local(tr, "h", &op.h.to_string());
+    Ok(())
+}
+
+fn set_grid_widths(tbl: &mut Element, widths: &[i64]) {
+    if tbl.child_by_local("tblGrid").is_none() {
+        let mut i = 0;
+        while i < tbl.children.len() {
+            if let Node::Element(e) = &tbl.children[i] {
+                if e.local_name() == "tblPr" {
+                    i += 1;
+                    continue;
+                }
+            }
+            break;
+        }
+        tbl.children
+            .insert(i, Node::Element(Element::new("a:tblGrid")));
+    }
+    let grid = tbl.child_by_local_mut("tblGrid").expect("刚补的 tblGrid");
+    let mut kept = Vec::new();
+    let mut wrote = false;
+    for n in std::mem::take(&mut grid.children) {
+        if matches!(&n, Node::Element(e) if e.local_name() == "gridCol") {
+            if !wrote {
+                for w in widths {
+                    kept.push(Node::Element(
+                        Element::new("a:gridCol").with_attr("w", w.to_string()),
+                    ));
+                }
+                wrote = true;
+            }
+        } else {
+            kept.push(n);
+        }
+    }
+    if !wrote {
+        for w in widths {
+            kept.push(Node::Element(
+                Element::new("a:gridCol").with_attr("w", w.to_string()),
+            ));
+        }
+    }
+    grid.children = kept;
 }
 
 fn ensure_frame_xfrm(frame: &mut Element) -> &mut Element {

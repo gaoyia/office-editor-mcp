@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "deck.pptx",
+  "output": "deck.grid.pptx",
+  "ops": [
+    {
+      "op": "setTableColWidths",
+      "id": "slide:1/table:3",
+      "cols": [1270000, 2540000]
+    },
+    {
+      "op": "setTableTrHeight",
+      "id": "slide:1/table:3/row:1",
+      "h": 635000
+    }
+  ]
+}

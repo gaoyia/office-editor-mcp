@@ -69,6 +69,8 @@ pub(super) fn parse_insert_table(
         y,
         cx,
         cy,
+        col_widths: None,
+        row_heights: None,
     })
 }
 
@@ -195,6 +197,87 @@ pub(super) fn parse_set_table_size(
     Ok(SetTableSizeOp { id, target, cx, cy })
 }
 
+fn parse_pos_emu_array(
+    v: Option<&Value>,
+    path: &str,
+    field: &str,
+) -> Result<Option<Vec<i64>>, Error> {
+    match v {
+        None => Ok(None),
+        Some(Value::Array(arr)) => {
+            let mut out = Vec::with_capacity(arr.len());
+            for (j, item) in arr.iter().enumerate() {
+                let n =
+                    parse_emu_at(Some(item), &format!("{path}[{j}]"), field)?.ok_or_else(|| {
+                        Error::with_path(
+                            ErrorKind::WrongType {
+                                field: field.into(),
+                                expected: TypeName::Integer,
+                            },
+                            format!("{path}[{j}]"),
+                        )
+                    })?;
+                out.push(n);
+            }
+            Ok(Some(out))
+        }
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::Array,
+            },
+            path.to_string(),
+        )),
+    }
+}
+
+fn parse_row_heights(v: Option<&Value>, path: &str) -> Result<Option<Vec<i64>>, Error> {
+    parse_pos_emu_array(v, path, "rowHeights")
+}
+
+pub(super) fn parse_set_table_col_widths(
+    obj: &Map<String, Value>,
+    i: usize,
+) -> Result<SetTableColWidthsOp, Error> {
+    deny_keys(obj, i, &["op", "id", "cols"])?;
+    let id = require_id(obj, i)?;
+    let target = table::parse_table_id(&id, &format!("ops[{i}].id"), IdReason::NeedTableId)?;
+    let cols = parse_pos_emu_array(obj.get("cols"), &format!("ops[{i}].cols"), "cols")?
+        .ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::OpRequiresField {
+                    op: "setTableColWidths".into(),
+                    field: "cols".into(),
+                },
+                format!("ops[{i}].cols"),
+            )
+        })?;
+    Ok(SetTableColWidthsOp { id, target, cols })
+}
+
+pub(super) fn parse_set_table_tr_height(
+    obj: &Map<String, Value>,
+    i: usize,
+) -> Result<SetTableTrHeightOp, Error> {
+    deny_keys(obj, i, &["op", "id", "h"])?;
+    let id = require_id(obj, i)?;
+    let (table, row) = table::parse_row_id_with(
+        &id,
+        &format!("ops[{i}].id"),
+        IdReason::SetTableTrHeightNeedsRow,
+    )?;
+    let h = parse_emu_field(obj.get("h"), i, "h")?.ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "setTableTrHeight".into(),
+                field: "h".into(),
+            },
+            format!("ops[{i}].h"),
+        )
+    })?;
+    Ok(SetTableTrHeightOp { id, table, row, h })
+}
+
 pub(crate) fn parse_create_table(
     v: &Value,
     prefix: &str,
@@ -212,7 +295,18 @@ pub(crate) fn parse_create_table(
     deny_keys_at(
         obj,
         prefix,
-        &["rows", "cols", "cells", "x", "y", "cx", "cy", "hyperlink"],
+        &[
+            "rows",
+            "cols",
+            "cells",
+            "x",
+            "y",
+            "cx",
+            "cy",
+            "hyperlink",
+            "colWidths",
+            "rowHeights",
+        ],
     )?;
     let rows = table::parse_dim(
         obj.get("rows"),
@@ -252,6 +346,28 @@ pub(crate) fn parse_create_table(
             prefix.to_string(),
         ));
     }
+    let col_widths = parse_pos_emu_array(
+        obj.get("colWidths"),
+        &format!("{prefix}.colWidths"),
+        "colWidths",
+    )?;
+    if let Some(ws) = &col_widths {
+        if ws.len() != cols {
+            return Err(Error::with_path(
+                ErrorKind::NeedTableColWidthsMatch,
+                format!("{prefix}.colWidths"),
+            ));
+        }
+    }
+    let row_heights = parse_row_heights(obj.get("rowHeights"), &format!("{prefix}.rowHeights"))?;
+    if let Some(hs) = &row_heights {
+        if hs.len() != rows {
+            return Err(Error::with_path(
+                ErrorKind::NeedTableRowHeightsMatch,
+                format!("{prefix}.rowHeights"),
+            ));
+        }
+    }
     let op = InsertTableOp {
         slide,
         on_notes: false,
@@ -263,6 +379,8 @@ pub(crate) fn parse_create_table(
         y,
         cx,
         cy,
+        col_widths,
+        row_heights,
     };
     let link = parse_create_opt_hyperlink(obj, prefix)?;
     Ok(CreateTable {

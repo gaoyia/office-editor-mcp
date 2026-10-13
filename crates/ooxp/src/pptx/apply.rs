@@ -1477,6 +1477,38 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                 table::apply_size(&mut doc, op, i)?;
                 pkg.set(&part, doc.to_bytes()?)?;
             }
+            PptxOp::SetTableColWidths(op) => {
+                let part = notes_or_slide_part(
+                    &pkg,
+                    &pres_part,
+                    &pres.root,
+                    &slides,
+                    op.target.slide,
+                    op.target.on_notes,
+                    op.target.master,
+                    ErrorKind::TableNotFound { id: op.id.clone() },
+                    format!("ops[{i}].id"),
+                )?;
+                let mut doc = xml::parse(pkg.get(&part)?)?;
+                table::apply_col_widths(&mut doc, op, i)?;
+                pkg.set(&part, doc.to_bytes()?)?;
+            }
+            PptxOp::SetTableTrHeight(op) => {
+                let part = notes_or_slide_part(
+                    &pkg,
+                    &pres_part,
+                    &pres.root,
+                    &slides,
+                    op.table.slide,
+                    op.table.on_notes,
+                    op.table.master,
+                    ErrorKind::TableNotFound { id: op.id.clone() },
+                    format!("ops[{i}].id"),
+                )?;
+                let mut doc = xml::parse(pkg.get(&part)?)?;
+                table::apply_tr_height(&mut doc, op, i)?;
+                pkg.set(&part, doc.to_bytes()?)?;
+            }
             PptxOp::InsertSlide(op) => {
                 slides::insert(&mut pkg, &pres_part, &mut pres, &slides, op, i)?;
                 slides = shape::list_slides(&pkg, &pres_part, &pres.root)?;

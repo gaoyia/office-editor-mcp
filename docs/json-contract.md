@@ -282,7 +282,7 @@ docx 认 `setParaText`、`setHeaderFooterDistance`、`setPageMargin`、`setPageS
 以及 `setProps` / `setCustomProp` / `deleteCustomProp`。
 pptx 认 `setShapeText`、`setShapeFormat`、形状管理 op（`insertShape`、`insertConnector`、`deleteConnector`、`setConnector`、`groupShapes`、`ungroup`、`deleteShape`、
 `setShapePos`、`setShapeSize`、`setShapeFill`、`setShapeLine`、`setShapeGeom`）、表格 op（`insertTable`、`deleteTable`、`insertRow`、`deleteRow`、
-`insertCol`、`deleteCol`、`setTableCellText`、`setTablePos`、`setTableSize`；
+`insertCol`、`deleteCol`、`setTableCellText`、`setTablePos`、`setTableSize`、`setTableColWidths`、`setTableTrHeight`；
 不含 `mergeCells`、`splitCells`）、`setNotesText`、批注 op（`insertComment`、`deleteComment`、`replyComment`、`setCommentText`、
 `setCommentMeta`、`setCommentDone`）、`replacePicture`、`insertPicture`、`deletePicture`、`setPictureSize`、`setPicturePos`、
 以及图表 op（`insertChart`、`deleteChart`、`setChartTitle`、`setChartSeries`、`addChartSeries`、`deleteChartSeries`、
@@ -324,13 +324,13 @@ pptx 认 `setShapeText`、`setShapeFormat`、形状管理 op（`insertShape`、`
  / `moveSlide` / `setSlideHidden` / `setTransition` / `insertAnim` / `setAnim` / `deleteAnim` / `moveAnim` / `setSlideLayout` / `insertLayout`
  / `deleteLayout` / `insertPlaceholder` / `deletePlaceholder` / `insertMaster` / `deleteMaster` / `setSlideSize`
  / `setThemeColors` / `setThemeFonts` / `setHandoutText` / `setShapePos` / `setShapeSize` / `setShapeFill`
- / `setShapeLine` / `setShapeGeom` / `setConnector` / `setTableCellText` / `setTablePos` / `setTableSize` / `insertVideo` / `insertAudio`
+ / `setShapeLine` / `setShapeGeom` / `setConnector` / `setTableCellText` / `setTablePos` / `setTableSize` / `setTableColWidths` / `setTableTrHeight` / `insertVideo` / `insertAudio`
  / `deleteMedia` / `setMedia` / `insertSlideSection` / `setSlideSectionName` / `deleteSlideSection` / `setSlideSection`
  / `insertCustomShow` / `setCustomShow` / `deleteCustomShow` / `insertZoom` / `setZoom` / `deleteZoom`）报 `InvalidField`。
 xlsx 上发 `insertTable` / `deleteTable` / `insertRow` / `deleteRow` / `insertCol` / `deleteCol` / `mergeCells` / `splitCells` 仍报 `InvalidField`。
 对 docx 发 `setShapeGeom` / `setConnector` / `setShapeFormat` 报 `InvalidField`。pptx 上发 `mergeCells` / `splitCells` 报 `InvalidField`。
 xlsx / pptx 上发 `insertStyle` / `deleteStyle` / `setRunStyle` / `setTableStyle` / `setTableFloat` / `setTableWidth` / `setTableAlign` / `setTableRowHeight` / `setTableCellMar` / `setTableBorders` / `setCellFormat` / `setCellBorders` 报 `InvalidField`。
-pptx 的 `setTablePos` / `setTableSize` 单位仍是 EMU，不要和 docx 的 `setTableFloat` / `setTableWidth` 混。
+pptx 的 `setTablePos` / `setTableSize` / `setTableColWidths` / `setTableTrHeight` 单位仍是 EMU，不要和 docx 的 `setTableFloat` / `setTableWidth` / `setTableRowHeight`、xlsx 的 `setColWidth` / `setRowHeight` 混。`setTableSize` 仍只改框，不重分配格网。
 
 ### setProps
 

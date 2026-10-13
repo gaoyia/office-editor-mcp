@@ -202,3 +202,50 @@ fn rejects_wrong_ids_and_xlsx() {
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);
 }
+
+#[test]
+fn notes_table_grid_widths() {
+    let src = create_deck("grid");
+    let with = tmp("grid").with_extension("pptx");
+    apply(
+        &src,
+        &with,
+        json!([{
+            "op": "insertTable",
+            "id": "slide:1/notes",
+            "rows": 1,
+            "cols": 2,
+            "cx": 2540000,
+            "cy": 635000,
+            "cells": [["甲", "乙"]]
+        }]),
+    )
+    .unwrap();
+    let tree = inspect(&with, json!({ "notes": true, "tables": true }));
+    let t = &tree["slides"][0]["notes"]["tables"][0];
+    let id = t["id"].as_str().unwrap().to_string();
+    assert_eq!(t["colWidths"], json!([1270000, 1270000]));
+    let out = tmp("grid-set").with_extension("pptx");
+    apply(
+        &with,
+        &out,
+        json!([
+            {
+                "op": "setTableColWidths",
+                "id": id,
+                "cols": [800000, 1740000]
+            },
+            {
+                "op": "setTableTrHeight",
+                "id": format!("{id}/row:1"),
+                "h": 400000
+            }
+        ]),
+    )
+    .unwrap();
+    let tree = inspect(&out, json!({ "notes": true, "tables": true }));
+    let t = &tree["slides"][0]["notes"]["tables"][0];
+    assert_eq!(t["colWidths"], json!([800000, 1740000]));
+    assert_eq!(t["rows"][0]["height"], 400000);
+    assert_eq!(t["cx"], 2540000);
+}

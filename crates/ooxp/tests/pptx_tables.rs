@@ -177,13 +177,32 @@ fn insert_inspect_cell_text_row_col_pos_delete() {
     assert_eq!(t["cy"], 3200400);
     assert_eq!(t["rowCount"], 2);
     assert_eq!(t["colCount"], 2);
+    assert_eq!(t["colWidths"], json!([2743200, 2743200]));
     assert_eq!(t["stable"], true);
     assert_eq!(
         object_keys(t),
-        ["id", "cNvPrId", "name", "x", "y", "cx", "cy", "rowCount", "colCount", "rows", "stable"]
+        [
+            "id",
+            "cNvPrId",
+            "name",
+            "x",
+            "y",
+            "cx",
+            "cy",
+            "rowCount",
+            "colCount",
+            "colWidths",
+            "rows",
+            "stable"
+        ]
     );
     assert_eq!(t["rows"][0]["id"], "slide:1/table:3/row:1");
     assert_eq!(t["rows"][0]["index"], 1);
+    assert_eq!(t["rows"][0]["height"], 1600200);
+    assert_eq!(
+        object_keys(&t["rows"][0]),
+        ["id", "index", "height", "cells"]
+    );
     let c = &t["rows"][0]["cells"][0];
     assert_eq!(c["id"], "slide:1/table:3/r:1/c:1");
     assert_eq!(c["row"], 1);
@@ -302,6 +321,10 @@ fn insert_inspect_cell_text_row_col_pos_delete() {
     assert_eq!(tree["slides"][0]["tables"][0]["y"], 200);
     assert_eq!(tree["slides"][0]["tables"][0]["cx"], 4000000);
     assert_eq!(tree["slides"][0]["tables"][0]["cy"], 2000000);
+    assert_eq!(
+        tree["slides"][0]["tables"][0]["colWidths"],
+        json!([2743200, 2743200, 2743200])
+    );
 
     let trimmed = tmp("del-row-col");
     apply(
@@ -492,6 +515,136 @@ fn docx_and_xlsx_reject_pptx_table_ops() {
         &xlsx,
         &tmp("x-out").with_extension("xlsx"),
         json!([{ "op": "setTablePos", "id": "slide:1/table:3", "x": 1 }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+
+    let err = apply(
+        &xlsx,
+        &tmp("x-grid").with_extension("xlsx"),
+        json!([{
+            "op": "setTableColWidths",
+            "id": "slide:1/table:3",
+            "cols": [1]
+        }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+
+    let err = apply(
+        &docx,
+        &tmp("d-tr").with_extension("docx"),
+        json!([{
+            "op": "setTableTrHeight",
+            "id": "slide:1/table:3/row:1",
+            "h": 1
+        }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+}
+
+#[test]
+fn table_grid_widths_and_heights() {
+    let path = tmp("grid-create");
+    run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "create",
+            "path": path.to_string_lossy(),
+            "presentation": {
+                "slides": [{
+                    "shapes": [{ "text": "标题" }],
+                    "tables": [{
+                        "rows": 2,
+                        "cols": 2,
+                        "x": 914400,
+                        "y": 1828800,
+                        "cx": 5486400,
+                        "cy": 3200400,
+                        "colWidths": [1270000, 2540000],
+                        "rowHeights": [635000, 1270000],
+                        "cells": [["甲", "乙"], ["丙", "丁"]]
+                    }]
+                }]
+            }
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap();
+    let tree = inspect_tables(&path);
+    let t = &tree["slides"][0]["tables"][0];
+    assert_eq!(t["colWidths"], json!([1270000, 2540000]));
+    assert_eq!(t["cx"], 5486400);
+    assert_eq!(t["rows"][0]["height"], 635000);
+    assert_eq!(t["rows"][1]["height"], 1270000);
+
+    let wide = tmp("grid-wide");
+    apply(
+        &path,
+        &wide,
+        json!([{
+            "op": "setTableColWidths",
+            "id": "slide:1/table:3",
+            "cols": [1000000, 2000000]
+        }]),
+    )
+    .unwrap();
+    let tree = inspect_tables(&wide);
+    let t = &tree["slides"][0]["tables"][0];
+    assert_eq!(t["colWidths"], json!([1000000, 2000000]));
+    assert_eq!(t["cx"], 5486400);
+
+    let tall = tmp("grid-tall");
+    apply(
+        &wide,
+        &tall,
+        json!([
+            { "op": "setTableTrHeight", "id": "slide:1/table:3/row:2", "h": 500000 },
+            { "op": "setTableSize", "id": "slide:1/table:3", "cx": 4000000, "cy": 2000000 }
+        ]),
+    )
+    .unwrap();
+    let tree = inspect_tables(&tall);
+    let t = &tree["slides"][0]["tables"][0];
+    assert_eq!(t["colWidths"], json!([1000000, 2000000]));
+    assert_eq!(t["cx"], 4000000);
+    assert_eq!(t["cy"], 2000000);
+    assert_eq!(t["rows"][1]["height"], 500000);
+
+    let err = apply(
+        &path,
+        &tmp("grid-len"),
+        json!([{
+            "op": "setTableColWidths",
+            "id": "slide:1/table:3",
+            "cols": [1000000]
+        }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+
+    let err = apply(
+        &path,
+        &tmp("grid-row-id"),
+        json!([{
+            "op": "setTableTrHeight",
+            "id": "slide:1/table:3",
+            "h": 1
+        }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidId);
+
+    let err = apply(
+        &path,
+        &tmp("grid-h-null"),
+        json!([{
+            "op": "setTableTrHeight",
+            "id": "slide:1/table:3/row:1",
+            "h": null
+        }]),
     )
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);

@@ -427,6 +427,8 @@ pub(crate) enum IdReason {
     InsertRowNeedsTableOrRow,
     DeleteRowNeedsRow,
     SetTableRowHeightNeedsRow,
+    /// pptx setTableTrHeight 必须用行 id
+    SetTableTrHeightNeedsRow,
     SplitNeedsCell,
     /// 修订 id 必须是 rev:N 或 {容器}/rev:N
     RevPrefix,
@@ -992,6 +994,8 @@ define_error_kinds! {
     TableGridMismatch => vec![Self::TableGridMismatch],
     MergeNotSimple => vec![Self::MergeNotSimple],
     NeedTableCellsMatch => vec![Self::NeedTableCellsMatch],
+    NeedTableColWidthsMatch => vec![Self::NeedTableColWidthsMatch],
+    NeedTableRowHeightsMatch => vec![Self::NeedTableRowHeightsMatch],
     RevisionNotFound { id: String } => vec![Self::RevisionNotFound { id: "rev:1".into() }],
     SetParaTextHasRevision => vec![Self::SetParaTextHasRevision],
     HyperlinkNotFound { id: String } => vec![Self::HyperlinkNotFound { id: "link:1".into() }],
@@ -1542,6 +1546,7 @@ impl IdReason {
             Self::InsertRowNeedsTableOrRow,
             Self::DeleteRowNeedsRow,
             Self::SetTableRowHeightNeedsRow,
+            Self::SetTableTrHeightNeedsRow,
             Self::SplitNeedsCell,
             Self::RevPrefix,
             Self::RevIndexNotInt,
@@ -1856,6 +1861,8 @@ impl ErrorKind {
             | Self::SplitContinueCell
             | Self::NothingToSplit
             | Self::NeedTableCellsMatch
+            | Self::NeedTableColWidthsMatch
+            | Self::NeedTableRowHeightsMatch
             | Self::HyperlinkNeedTarget
             | Self::EmptyHyperlinkUrl
             | Self::InvalidBookmarkName

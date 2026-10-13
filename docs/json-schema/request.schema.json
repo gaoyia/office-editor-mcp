@@ -1348,6 +1348,12 @@
                 "$ref": "pptx.schema.json#/$defs/setTableSizeOp"
               },
               {
+                "$ref": "pptx.schema.json#/$defs/setTableColWidthsOp"
+              },
+              {
+                "$ref": "pptx.schema.json#/$defs/setTableTrHeightOp"
+              },
+              {
                 "$ref": "pptx.schema.json#/$defs/insertSlideOp"
               },
               {

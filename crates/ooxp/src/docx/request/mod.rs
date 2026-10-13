@@ -439,6 +439,8 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<DocxOp>, Error> {
             || op_name == "setTableCellText"
             || op_name == "setTablePos"
             || op_name == "setTableSize"
+            || op_name == "setTableColWidths"
+            || op_name == "setTableTrHeight"
             || op_name == "insertVideo"
             || op_name == "insertAudio"
             || op_name == "deleteMedia"

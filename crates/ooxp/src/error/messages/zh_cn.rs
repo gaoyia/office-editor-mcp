@@ -596,6 +596,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::SetTableRowHeightNeedsRow => {
                 "setTableRowHeight 的 id 必须是行 id".into()
             }
+            IdReason::SetTableTrHeightNeedsRow => {
+                "setTableTrHeight 的 id 必须是行 id".into()
+            }
             IdReason::SplitNeedsCell => "splitCells 的 id 必须是单元格 id".into(),
             IdReason::RevPrefix => {
                 "修订 id 必须是 rev:N，或页眉页脚容器 id 加上 /rev:N".into()
@@ -1279,6 +1282,10 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::TableGridMismatch => "这一行占的网格列数对不上 colCount，不能改结构".into(),
         ErrorKind::MergeNotSimple => "mergeCells 需要一块尚未合并、对齐网格的矩形".into(),
         ErrorKind::NeedTableCellsMatch => "cells 必须是 rows×cols 的二维数组".into(),
+        ErrorKind::NeedTableColWidthsMatch => {
+            "colWidths / cols 的长度必须等于 colCount".into()
+        }
+        ErrorKind::NeedTableRowHeightsMatch => "rowHeights 的长度必须等于行数".into(),
         ErrorKind::RevisionNotFound { id } => format!("找不到修订：{id}"),
         ErrorKind::SetParaTextHasRevision => "不能改带修订痕迹的段落的可见文本".into(),
         ErrorKind::HyperlinkNotFound { id } => format!("找不到超链接：{id}"),

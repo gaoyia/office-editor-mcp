@@ -319,6 +319,8 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<PptxOp>, Error> {
             "setTableCellText" => PptxOp::SetTableCellText(parse_set_table_cell_text(obj, i)?),
             "setTablePos" => PptxOp::SetTablePos(parse_set_table_pos(obj, i)?),
             "setTableSize" => PptxOp::SetTableSize(parse_set_table_size(obj, i)?),
+            "setTableColWidths" => PptxOp::SetTableColWidths(parse_set_table_col_widths(obj, i)?),
+            "setTableTrHeight" => PptxOp::SetTableTrHeight(parse_set_table_tr_height(obj, i)?),
             "insertSlide" => PptxOp::InsertSlide(parse_insert_slide(obj, i)?),
             "deleteSlide" => PptxOp::DeleteSlide(parse_delete_slide(obj, i)?),
             "moveSlide" => PptxOp::MoveSlide(parse_move_slide(obj, i)?),

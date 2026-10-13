@@ -632,6 +632,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::SetTableRowHeightNeedsRow => {
                 "setTableRowHeight id must be a row id".into()
             }
+            IdReason::SetTableTrHeightNeedsRow => {
+                "setTableTrHeight id must be a row id".into()
+            }
             IdReason::SplitNeedsCell => "splitCells id must be a cell id".into(),
             IdReason::RevPrefix => {
                 "Revision id must be rev:N or a header/footer container id plus /rev:N".into()
@@ -1450,6 +1453,12 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             "mergeCells needs a rectangle of unmerged cells that line up on the grid".into()
         }
         ErrorKind::NeedTableCellsMatch => "cells must be a rows×cols 2D array".into(),
+        ErrorKind::NeedTableColWidthsMatch => {
+            "colWidths / cols length must equal colCount".into()
+        }
+        ErrorKind::NeedTableRowHeightsMatch => {
+            "rowHeights length must equal row count".into()
+        }
         ErrorKind::RevisionNotFound { id } => format!("Revision not found: {id}"),
         ErrorKind::SetParaTextHasRevision => {
             "Cannot change visible text in a paragraph that contains tracked revisions".into()
