@@ -148,7 +148,11 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         let n_fields = field::count(&doc.root);
         field_count += n_fields;
         let tables_list = if want_tables {
-            Some(table::collect_tables(&doc.root, &host))
+            Some(table::collect_tables(
+                &doc.root,
+                &host,
+                Some((&pkg, s.part.as_str())),
+            ))
         } else {
             None
         };

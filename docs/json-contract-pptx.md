@@ -930,7 +930,13 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   `row` / `col` 与 id 里的数字相同。
   `gridSpan` / `rowSpan` 为整数，缺属性则为 `1`。`hMerge` / `vMerge` 为布尔（属性为 `1` / `true` / `on` 则为 `true`）。
   `text` 取该格 `a:txBody` 可见纯文本，规则与形状 `text` 相同。没有 `txBody` 则为 `""`。不把单元格编成段落 id。
-  `fill` 取 `a:tcPr` 的 `a:solidFill/a:srgbClr/@val`，大写六位。`a:noFill` 或没有填充子元则为 `null`。读到渐变 / 图案 / 图片 / theme 填充时 `fill` 为 `null`，不报错。
+  `fill` 取 `a:tcPr` 的 `EG_FillProperties`，为对象或 `null`。`a:noFill` 或没有填充子元则为 `null`。
+  对象始终先有 `type`：`solid` / `grad` / `patt` / `blip` / `other`。
+  `solid`：再跟 `color`（`a:srgbClr/@val`，大写六位）。
+  `grad`：再跟 `ang`、`stops`。可读条件与 [json-contract.md](json-contract.md#setshapeformat) 的字渐变相同（仅线性 `a:lin`、停点只有无修饰 `srgbClr`，至少两项）。
+  `patt`：再跟 `prst`、`fg`、`bg`。`prst` 取 `@prst` 原文。`fg` / `bg` 取 `fgClr` / `bgClr` 的 `srgbClr`（大写六位）。
+  `blip`：再跟 `rId`、`contentType`。`rId` 取 `a:blip/@r:embed`。`contentType` 取该关系目标在 `[Content_Types].xml` 的 Default 或 Override，都没有则为 `null`。不把图片字节放进树。
+  只有 `schemeClr`、读不了的渐变停点、缺 `r:embed` 的 `blipFill`、或缺 `prst` / `fg` / `bg` 的图案，则为 `{ "type": "other" }`，不报错。
   `borders` 对象字段顺序：`left`、`right`、`top`、`bottom`、`tl2br`、`bl2tr`。对应 `lnL` / `lnR` / `lnT` / `lnB` / `lnTlToBr` / `lnBlToTr`。缺该边或该边是 `a:noFill` 则为 `null`。
   每边字段顺序：`color`、`width`、`dash`。`color` 取该线 `a:solidFill/a:srgbClr`（大写六位，没有则为 `null`）。`width` 取 `@w`（EMU 整数，缺或解析失败则为 `null`）。`dash` 取 `a:prstDash/@val`，缺则为 `null`。
   `cellMar`：四个 `marT` / `marL` / `marB` / `marR` 都缺则为 `null`。有则对象字段顺序：`top`、`left`、`bottom`、`right`，各取对应属性（EMU 整数，缺该属性则为 `null`）。
@@ -1409,7 +1415,9 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   - 二维数组，行数与列数必须与 `rows` / `cols` 一致
   - 每格可以是字符串，也可以是对象
   - 对象可有 `text`（省略当作 `""`）
-  - 对象可有可选 `fill`：六位 RGB 或 `null`（写成 `a:noFill`）。省略则不写填充子元
+  - 对象可有可选 `fill`：规则与 `setTableCellFill` 的 `fill` 相同（六位字符串、对象或 `null`）
+  - `null` 写成 `a:noFill`。省略则不写填充子元
+  - `type` 为 `blip` 时必须有 `file`（本地图片路径，规则与 `insertPicture` 相同）
   - 对象可有可选 `borders`：规则与 `setTableCellBorders` 相同
   - 对象可有可选 `cellMar`：规则与 `setTableCellInset` 相同（至少一边；省略则不写 `mar*`）
   - 对象上的 `url` / `file` / `slide` 有则写格内链，规则与 `insertHyperlink` 相同，三者必须恰好一个
@@ -2811,15 +2819,31 @@ docx / xlsx 上发此 op 报 `InvalidField`。xlsx 上改工作表格子请用 `
 
 ### setTableCellFill
 
-改某一格 `a:tcPr` 的实心填充。不要用 `setShapeFill`。不要用 docx 的 `setCellFormat`。
+改某一格 `a:tcPr` 的填充（`EG_FillProperties`）。不要用 `setShapeFill`。不要用 docx 的 `setCellFormat`。
+theme 色仍不展开成 RGB。备注表、母版表同样认。
 
 | 字段 | 含义 |
 | --- | --- |
 | `op` | 必须是 `"setTableCellFill"` |
 | `id` | 单元格 id |
-| `color` | 六位 RGB，或 `null` 写成 `a:noFill` |
+| `fill` | 填充。对象、六位 RGB 字符串，或 `null`（写成 `a:noFill`） |
+| `color` | 44 的写法。六位 RGB 或 `null`。等价于 `fill` 为该字符串或 `null` |
+| `file` | `type` 为 `blip` 时必须。本地图片路径 |
 
-缺 `color` 报 `InvalidField`。不是六位十六进制报 `InvalidField`。写入前去掉其它填充子元。渐变 / 图案 / 图片请见 50，本 op 不写。找不到该格报 `IdNotFound`。id 不是单元格 id 报 `InvalidId`。xlsx / docx 上发此 op 报 `InvalidField`。
+`fill` 与 `color` 必须恰好给一个，否则报 `InvalidField`。
+`fill` 为字符串时当作 `{ "type": "solid", "color": 该串 }`。
+`fill` 为对象时必须有 `type`：`solid` / `grad` / `patt` / `blip`。`other` 只出现在 inspect，写入报 `InvalidField`。
+`solid` 必须有 `color`（六位 RGB）。`grad` 必须有 `stops`（至少两项，每项 `pos` 与 `color`），规则与字渐变相同；可选 `ang`（0–21600000），省略则写 `5400000`。
+写入 `a:gradFill` 骨架与 C10 相同：`flip="none"` `rotWithShape="1"`，`a:lin scaled="1"`，空 `a:tileRect`。
+`patt` 必须有 `prst`、`fg`、`bg`。`prst` 必须是 `ST_PresetPatternVal`（§20.1.10.51）原文。`fg` / `bg` 为六位 RGB。
+写入 `a:pattFill/@prst` 与 `fgClr` / `bgClr` 的 `srgbClr`。
+`blip` 必须有 `file`，不得给 `rId`。空 `file`、读不到、或不是该格式认的图片报与 `insertPicture` 相同的错。
+写入 `a:blipFill/a:blip/@r:embed` 与 `a:stretch/a:fillRect`。已有 `r:embed` 则换该媒体部件字节；没有则新建 `/ppt/media/…` 与宿主 image 关系。
+`file` 出现在非 `blip` 上报 `InvalidField`。
+写入前去掉其它填充子元。换成非 `blip` 时不删无人引用的媒体部件。
+找不到该格报 `IdNotFound`。id 不是单元格 id 报 `InvalidId`。xlsx / docx 上发此 op 报 `InvalidField`。
+`exportMedia` 不认单元格 id。
+示例见 `docs/examples/pptx-apply-table-cell-fill.json` 与 `docs/examples/pptx-apply-table-cell-fill-ex.json`。
 
 ### setTableCellBorders
 
@@ -3647,7 +3671,8 @@ notesSlide、被点名的 slideMaster 或 slideLayout、notesMaster 或 handoutM
 往母版 / 版式插只脏目标 slideMaster 或 slideLayout XML。
 `insertConnector` / `deleteConnector` / `setConnector` 脏该宿主 XML（幻灯片、notesSlide、slideMaster 或 slideLayout）。`groupShapes` / `ungroup` 只脏该页幻灯片 XML。
 `insertTable` / `deleteTable` / `insertRow` / `deleteRow` / `insertCol` / `deleteCol` / `setTableCellText`
- / `setTablePos` / `setTableSize` / `setTableColWidths` / `setTableTrHeight` / `setTableCellFill` / `setTableCellBorders` / `setTableCellInset` 脏该宿主 XML（幻灯片、notesSlide、slideMaster 或 slideLayout），不新建部件；
+ / `setTablePos` / `setTableSize` / `setTableColWidths` / `setTableTrHeight` / `setTableCellBorders` / `setTableCellInset` 脏该宿主 XML（幻灯片、notesSlide、slideMaster 或 slideLayout），不新建部件。
+`setTableCellFill` 非 `blip` 同样只脏该宿主 XML；`type` 为 `blip` 时还可脏该宿主 `.rels`、`[Content_Types].xml` 与 `/ppt/media/…`；
 往备注插且还没有 notesSlide 时可脏 notesSlide、该页 `.rels`、notesMaster、presentation，与 `setNotesText` 相同。
 `setNotesText` 可脏 notesSlide、该页 `.rels`、notesMaster、presentation，以及新建 notesMaster 时复制的 theme 部件。图片 op 还可脏该宿主关系与媒体。
 图表 op 还可脏 chart 部件、embedding。SmartArt op 还可脏四件套与缓存。

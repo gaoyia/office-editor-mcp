@@ -1195,12 +1195,7 @@
               ]
             },
             "fill": {
-              "type": [
-                "string",
-                "null"
-              ],
-              "minLength": 6,
-              "maxLength": 6
+              "$ref": "#/$defs/pptxTableCellFill"
             },
             "borders": {
               "$ref": "#/$defs/tableCellBorders"
@@ -2397,27 +2392,58 @@
     },
     "setTableCellFillOp": {
       "type": "object",
-      "required": [
-        "op",
-        "id",
-        "color"
-      ],
+      "required": ["op", "id"],
       "additionalProperties": false,
       "properties": {
-        "op": {
-          "const": "setTableCellFill"
-        },
-        "id": {
-          "type": "string",
-          "minLength": 1
-        },
-        "color": {
-          "type": [
-            "string",
-            "null"
-          ]
-        }
+        "op": { "const": "setTableCellFill" },
+        "id": { "type": "string", "minLength": 1 },
+        "color": { "type": ["string", "null"] },
+        "fill": { "$ref": "#/$defs/pptxTableCellFill" },
+        "file": { "type": "string", "minLength": 1 }
       }
+    },
+    "pptxTableCellFill": {
+      "oneOf": [
+        { "type": "string", "minLength": 6, "maxLength": 6 },
+        { "type": "null" },
+        {
+          "type": "object",
+          "required": ["type"],
+          "additionalProperties": false,
+          "properties": {
+            "type": { "enum": ["solid", "grad", "patt", "blip"] },
+            "color": { "type": "string", "minLength": 6, "maxLength": 6 },
+            "ang": { "type": "integer", "minimum": 0, "maximum": 21600000 },
+            "stops": {
+              "type": "array",
+              "minItems": 2,
+              "items": {
+                "type": "object",
+                "required": ["pos", "color"],
+                "additionalProperties": false,
+                "properties": {
+                  "pos": { "type": "integer", "minimum": 0, "maximum": 100000 },
+                  "color": { "type": "string", "minLength": 6, "maxLength": 6 }
+                }
+              }
+            },
+            "prst": { "$ref": "#/$defs/pptxPresetPatternVal" },
+            "fg": { "type": "string", "minLength": 6, "maxLength": 6 },
+            "bg": { "type": "string", "minLength": 6, "maxLength": 6 },
+            "file": { "type": "string", "minLength": 1 }
+          }
+        }
+      ]
+    },
+    "pptxPresetPatternVal": {
+      "enum": [
+        "pct5", "pct10", "pct20", "pct25", "pct30", "pct40", "pct50", "pct60", "pct70", "pct75", "pct80", "pct90",
+        "horz", "vert", "ltHorz", "ltVert", "dkHorz", "dkVert", "narHorz", "narVert", "dashHorz", "dashVert",
+        "cross", "dnDiag", "upDiag", "ltDnDiag", "ltUpDiag", "dkDnDiag", "dkUpDiag", "wdDnDiag", "wdUpDiag",
+        "dashDnDiag", "dashUpDiag", "diagCross", "smCheck", "lgCheck", "smGrid", "lgGrid", "dotGrid",
+        "smConfetti", "lgConfetti", "horzBrick", "diagBrick", "solidDmnd", "openDmnd", "dotDmnd",
+        "plaid", "sphere", "weave", "divot", "shingle", "wave", "trellis", "zigZag"
+      ]
     },
     "setTableCellBordersOp": {
       "type": "object",

@@ -1349,7 +1349,7 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                     format!("ops[{i}].id"),
                 )?;
                 let mut doc = xml::parse(pkg.get(&part)?)?;
-                table::insert_table(&mut doc, &pres.root, op, i)?;
+                table::insert_table(&mut pkg, &part, &mut doc, &pres.root, op, i)?;
                 pkg.set(&part, doc.to_bytes()?)?;
             }
             PptxOp::DeleteTable(op) => {
@@ -1467,7 +1467,7 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                     format!("ops[{i}].id"),
                 )?;
                 let mut doc = xml::parse(pkg.get(&part)?)?;
-                table::set_cell_fill(&mut doc, op, i)?;
+                table::set_cell_fill(&mut pkg, &part, &mut doc, op, i)?;
                 pkg.set(&part, doc.to_bytes()?)?;
             }
             PptxOp::SetTableCellBorders(op) => {

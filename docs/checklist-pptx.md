@@ -5,7 +5,7 @@
 检查前用 create 或 apply 在本机生成文件，不要用改过扩展名的 zip 目录冒充。
 本机若 `PowerPoint.Application` 被 WPS 抢走，直接启动 `POWERPNT.EXE` 再挂 COM，不要走被抢的 ProgID。Office 16 的对象模型在 `mdiClass` 上。
 
-C、I、A、Pp、Pvg、Pem、P3d、Pom、Pc、Psa、Pn、Pcm、Pm、Ps、Tf、Tfl、Pln、Sg、Pt、Pg、Ptb、Ptm、Tn、Tr、Td、Mt、Am、Aw、Mm、Mw、Md、Ts、Tfm、Tcm、Tnh、Nsz、Ho、Nh、Nm、Phl、Phr、Phx、Pcip、Pmd、Pmg、Psc、Cs、Po、Cr、Cq、Ck、Pz、Pzr、Pzg、Pw、Pph、
+C、I、A、Pp、Pvg、Pem、P3d、Pom、Pc、Psa、Pn、Pcm、Pm、Ps、Tf、Tfl、Pln、Sg、Pt、Pg、Ptb、Ptm、Pgf、Tn、Tr、Td、Mt、Am、Aw、Mm、Mw、Md、Ts、Tfm、Tcm、Tnh、Nsz、Ho、Nh、Nm、Phl、Phr、Phx、Pcip、Pmd、Pmg、Psc、Cs、Po、Cr、Cq、Ck、Pz、Pzr、Pzg、Pw、Pph、
 Pf、Pcg、Pcx 各组由 `manual-check/office/cases/pptx-*.ps1` 自动判定，
 跑 `pwsh -File manual-check\office\run.ps1 -Case 'pptx-*'` 即可复现。O1 已放弃，与 xlsx / docx 相同。
 
@@ -56,6 +56,7 @@ Ps1–Ps5、Sg1–Sg5、Pt1–Pt6、Tn1–Tn5、Am1–Am5、Mm1–Mm5、Ho1–Ho
 2026-10-14 补跑 `pptx-theme-clrmap.ps1`，Tcm1–Tcm5 通过。无 Repair。`clrMap` 在 `theme` 之后，`bg1=lt1`。页 `clrMapOvr` 为 `master`。`setClrMap` 写母版 / 备注母版 / 讲义。`setClrMapOvr` 写页与版式后再回到 `master`。`setThemeOverride` `accent1=FF0000`，备注页 `00FF00`，`enabled: false` 后为 `null`。
 2026-10-14 补跑 `pptx-theme-notes-handout.ps1`，Tnh1–Tnh5 通过。无 Repair。`notesMaster.theme` / `handout.theme` 在 `id` 之后、`clrMap` 之前。对 `notesMaster` 写 `accent1=FF0000` 不影响 slideMaster。讲义 `00FF00`。`majorLatin=Arial`，`line.w=38100`。讲义 `extraSchemes` 一项。页 id 得 `InvalidId`，无备注母版得 `IdNotFound`。
 2026-10-14 补跑 `pptx-notes-size.ps1`，Nsz1–Nsz5 通过。无 Repair。`notesSize` 在 `slideSize` 之后，缺省 `6858000` × `9144000`。`setNotesSize` `cx=9144000` `cy=12192000` 后 `slideSize` 仍为原值，备注母版占位符几何不变。create `presentation.notesSize` 对上。页 id 得 `InvalidId`，缺 `cy` 得 `InvalidField`。
+2026-10-14 补跑 `pptx-table-cell-fill-ex.ps1`，Pgf1–Pgf5 通过。无 Repair。create 格 `fill.type=solid` `fill.color=FF0000`。`setTableCellFill` 后 `grad` 两停点、`patt=smCheck`、`blip` 的 `rId`/`contentType` 对上。对单元格 id 发 `exportMedia` 得 `InvalidId`。同日补跑 `pptx-table-cell-fill.ps1`，Ptb1–Ptb5 仍通过。
 
 - **C1** ✅
   - PowerPoint 16.0 能打开 `manual-check/office/out/pptx-create.pptx`，标题栏无 Repair
@@ -1191,7 +1192,7 @@ DrawingML 表的 `a:gridCol/@w` 与 `a:tr/@h`。`setTableSize` 仍只改框。�
 
 - **Ptb1**
   - 检查：inspect
-  - 通过标准：✅ create 带格 `fill` / `borders` 后 inspect `fill` 为大写 RGB，六边 `color` / `width` / `dash` 对上
+  - 通过标准：✅ create 带格 `fill` / `borders` 后 inspect `fill.type` 为 `solid`、`fill.color` 为大写 RGB，六边 `color` / `width` / `dash` 对上
 - **Ptb2**
   - 检查：填充
   - 通过标准：✅ `setTableCellFill` 后 PowerPoint 无 Repair
@@ -1207,8 +1208,35 @@ DrawingML 表的 `a:gridCol/@w` 与 `a:tr/@h`。`setTableSize` 仍只改框。�
 - **Ptb5**
   - 检查：拒错
   - 通过标准：✅ 对表 id 发 `setTableCellFill` 得 `InvalidId`
-  - 缺 `color`、只给 `cx` 式未知字段、xlsx 上发得 `InvalidField`
+  - 缺 `fill` 与 `color`、只给 `cx` 式未知字段、xlsx 上发得 `InvalidField`
   - 对单元格 id 发 `setShapeFill` 得 `InvalidId`
+  - 均未写文件
+
+## 表单元格非实心填充
+
+格上渐变、图案、图片填充写在 `a:tcPr` 的 `EG_FillProperties`。实心仍走 `setTableCellFill`。
+不要用 `setShapeFill`。不要和 Ptb、Tfl 撞。脚本：`manual-check/office/cases/pptx-table-cell-fill-ex.ps1`。编号用 Pgf。
+
+- **Pgf1**
+  - 检查：inspect
+  - 通过标准：✅ create 格 `fill=FF0000` 后 `fill.type` 为 `solid`、`fill.color` 为 `FF0000`
+- **Pgf2**
+  - 检查：渐变
+  - 通过标准：✅ `fill.type=grad` 两停点后 inspect `ang` / `stops` 对上
+  - PowerPoint 16.0 打开无 Repair
+- **Pgf3**
+  - 检查：图案
+  - 通过标准：✅ `prst=smCheck` `fg=FF0000` `bg=FFFFFF` 后树上对上
+  - 无 Repair
+- **Pgf4**
+  - 检查：图片
+  - 通过标准：✅ `type=blip` 与 `file` 后 inspect 有 `rId` 与 `contentType`
+  - 对单元格 id 发 `exportMedia` 得 `InvalidId`
+  - 无 Repair
+- **Pgf5**
+  - 检查：拒错
+  - 通过标准：✅ 缺 `type`、`fill` 与 `color` 同时给、对表 id 发得 `InvalidId` 或 `InvalidField`
+  - xlsx 上发得 `InvalidField`
   - 均未写文件
 
 ## 表单元格边距

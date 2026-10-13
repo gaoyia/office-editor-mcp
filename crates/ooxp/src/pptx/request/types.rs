@@ -1158,9 +1158,26 @@ impl CellMarPatch {
     }
 }
 
+#[derive(Debug, Clone)]
+pub enum CellFillSpec {
+    Solid(String),
+    Grad {
+        ang: i64,
+        stops: Vec<(i64, String)>,
+    },
+    Patt {
+        prst: String,
+        fg: String,
+        bg: String,
+    },
+    Blip {
+        file: String,
+    },
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct CellChrome {
-    pub fill: Option<Option<String>>,
+    pub fill: Option<Option<CellFillSpec>>,
     pub borders: Option<CellBordersPatch>,
     pub cell_mar: Option<CellMarPatch>,
 }
@@ -1169,7 +1186,7 @@ pub struct CellChrome {
 pub struct SetTableCellFillOp {
     pub id: String,
     pub target: table::CellTarget,
-    pub color: Option<String>,
+    pub fill: Option<CellFillSpec>,
 }
 
 #[derive(Debug, Clone)]

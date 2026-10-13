@@ -120,7 +120,11 @@ pub fn notes_json(
         .map(|c| c.len())
         .unwrap_or_else(|| super::smartart::count_smartarts(&doc.root));
     let tables_list = if want_tables {
-        Some(super::table::collect_tables(&doc.root, &host))
+        Some(super::table::collect_tables(
+            &doc.root,
+            &host,
+            Some((pkg, part.as_str())),
+        ))
     } else {
         None
     };

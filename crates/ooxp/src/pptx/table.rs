@@ -3,17 +3,18 @@
 use serde_json::{json, Map, Value};
 
 use crate::error::{Error, ErrorKind, IdReason, TypeName};
+use crate::opc::{ContentTypes, Package};
 use crate::xml::{Document, Element, Node};
 
 use super::picture;
 use super::request::{
-    CellBorderSide, CellBordersPatch, CellChrome, CellMarPatch, DeleteColOp, DeleteRowOp,
-    DeleteTableOp, InsertColOp, InsertRowOp, InsertTableOp, SetTableCellBordersOp,
+    CellBorderSide, CellBordersPatch, CellChrome, CellFillSpec, CellMarPatch, DeleteColOp,
+    DeleteRowOp, DeleteTableOp, InsertColOp, InsertRowOp, InsertTableOp, SetTableCellBordersOp,
     SetTableCellFillOp, SetTableCellInsetOp, SetTableCellTextOp, SetTableColWidthsOp,
     SetTablePosOp, SetTableSizeOp, SetTableTrHeightOp,
 };
 use super::shape;
-use super::DML_NS;
+use super::{DML_NS, REL_NS};
 
 pub const TABLE_URI: &str = "http://schemas.openxmlformats.org/drawingml/2006/table";
 const STYLE_ID: &str = "{5C22544A-7EE6-4342-B048-85BDC9FD1C3A}";
@@ -386,30 +387,36 @@ fn count_in(el: &Element, n: &mut usize) {
     }
 }
 
-pub fn collect_tables(root: &Element, host: &str) -> Vec<Value> {
+pub fn collect_tables(root: &Element, host: &str, pkg: Option<(&Package, &str)>) -> Vec<Value> {
     let mut out = Vec::new();
     let mut index = 0usize;
-    collect_in(root, host, &mut index, &mut out);
+    collect_in(root, host, pkg, &mut index, &mut out);
     out
 }
 
-fn collect_in(el: &Element, host: &str, index: &mut usize, out: &mut Vec<Value>) {
+fn collect_in(
+    el: &Element,
+    host: &str,
+    pkg: Option<(&Package, &str)>,
+    index: &mut usize,
+    out: &mut Vec<Value>,
+) {
     if el.local_name() == "AlternateContent" {
         if let Some(i) = shape::first_alt_child_index(el) {
             if let Node::Element(child) = &el.children[i] {
-                collect_in(child, host, index, out);
+                collect_in(child, host, pkg, index, out);
             }
         }
         return;
     }
     if is_table_frame(el) {
         *index += 1;
-        out.push(table_json(el, host, *index));
+        out.push(table_json(el, host, *index, pkg));
         return;
     }
     for n in &el.children {
         if let Node::Element(e) = n {
-            collect_in(e, host, index, out);
+            collect_in(e, host, pkg, index, out);
         }
     }
 }
@@ -573,7 +580,7 @@ fn row_span(tc: &Element) -> usize {
         .unwrap_or(1)
 }
 
-fn table_json(frame: &Element, host: &str, index: usize) -> Value {
+fn table_json(frame: &Element, host: &str, index: usize, pkg: Option<(&Package, &str)>) -> Value {
     let (raw_id, name) = cnv_of_frame(frame);
     let stable = raw_id.is_some();
     let id = match &raw_id {
@@ -616,7 +623,7 @@ fn table_json(frame: &Element, host: &str, index: usize) -> Value {
             cell.insert("text".into(), json!(text));
             crate::drawing_text::insert_inspect(&mut cell, tc.child_by_local("txBody"));
             let tc_pr = tc.child_by_local("tcPr");
-            cell.insert("fill".into(), inspect_cell_fill(tc_pr));
+            cell.insert("fill".into(), inspect_cell_fill(tc_pr, pkg));
             cell.insert("borders".into(), inspect_cell_borders(tc_pr));
             cell.insert("cellMar".into(), inspect_cell_mar(tc_pr));
             cells.push(Value::Object(cell));
@@ -670,18 +677,155 @@ const BORDER_LOCALS: &[(&str, &str)] = &[
     ("bl2tr", "lnBlToTr"),
 ];
 
-fn inspect_cell_fill(tc_pr: Option<&Element>) -> Value {
+fn inspect_cell_fill(tc_pr: Option<&Element>, pkg: Option<(&Package, &str)>) -> Value {
     let Some(pr) = tc_pr else {
         return Value::Null;
     };
-    if pr.child_by_local("noFill").is_some() {
+    let mut found: Option<(&str, &Element)> = None;
+    let mut n = 0usize;
+    for name in FILL_LOCALS {
+        if let Some(child) = pr.child_by_local(name) {
+            n += 1;
+            found = Some((*name, child));
+        }
+    }
+    if n == 0 {
         return Value::Null;
     }
-    pr.child_by_local("solidFill")
-        .and_then(|f| f.child_by_local("srgbClr"))
-        .and_then(|c| c.attr_local("val"))
-        .map(|s| json!(s.to_ascii_uppercase()))
-        .unwrap_or(Value::Null)
+    if n != 1 {
+        return fill_other();
+    }
+    let Some((name, el)) = found else {
+        return Value::Null;
+    };
+    match name {
+        "noFill" => Value::Null,
+        "solidFill" => inspect_solid_fill(el),
+        "gradFill" => inspect_grad_fill(el),
+        "pattFill" => inspect_patt_fill(el),
+        "blipFill" => inspect_blip_fill(el, pkg),
+        _ => fill_other(),
+    }
+}
+
+fn fill_other() -> Value {
+    json!({ "type": "other" })
+}
+
+fn inspect_srgb(el: Option<&Element>) -> Option<String> {
+    let c = el?.child_by_local("srgbClr")?;
+    if c.element_children().next().is_some() {
+        return None;
+    }
+    c.attr_local("val")
+        .filter(|s| s.len() == 6 && s.chars().all(|ch| ch.is_ascii_hexdigit()))
+        .map(|s| s.to_ascii_uppercase())
+}
+
+fn inspect_solid_fill(el: &Element) -> Value {
+    let Some(color) = inspect_srgb(Some(el)) else {
+        return fill_other();
+    };
+    let mut m = Map::new();
+    m.insert("type".into(), json!("solid"));
+    m.insert("color".into(), json!(color));
+    Value::Object(m)
+}
+
+fn inspect_grad_fill(el: &Element) -> Value {
+    if el.child_by_local("path").is_some() {
+        return fill_other();
+    }
+    let Some(lin) = el.child_by_local("lin") else {
+        return fill_other();
+    };
+    let Some(ang) = lin.attr_local("ang").and_then(|s| s.parse::<i64>().ok()) else {
+        return fill_other();
+    };
+    if !(0..=crate::drawing_text::ANG_MAX).contains(&ang) {
+        return fill_other();
+    }
+    let Some(gs_lst) = el.child_by_local("gsLst") else {
+        return fill_other();
+    };
+    let mut stops = Vec::new();
+    for gs in gs_lst.element_children() {
+        if gs.local_name() != "gs" {
+            continue;
+        }
+        let Some(pos) = gs.attr_local("pos").and_then(parse_gs_pos) else {
+            return fill_other();
+        };
+        let Some(color) = inspect_srgb(Some(gs)) else {
+            return fill_other();
+        };
+        let mut stop = Map::new();
+        stop.insert("pos".into(), json!(pos));
+        stop.insert("color".into(), json!(color));
+        stops.push(Value::Object(stop));
+    }
+    if stops.len() < 2 {
+        return fill_other();
+    }
+    let mut m = Map::new();
+    m.insert("type".into(), json!("grad"));
+    m.insert("ang".into(), json!(ang));
+    m.insert("stops".into(), Value::Array(stops));
+    Value::Object(m)
+}
+
+fn parse_gs_pos(raw: &str) -> Option<i64> {
+    let t = raw.trim();
+    if let Some(p) = t.strip_suffix('%') {
+        let n: i64 = p.parse().ok()?;
+        let v = n.checked_mul(1000)?;
+        (0..=crate::drawing_text::POS_MAX).contains(&v).then_some(v)
+    } else {
+        let n: i64 = t.parse().ok()?;
+        (0..=crate::drawing_text::POS_MAX).contains(&n).then_some(n)
+    }
+}
+
+fn inspect_patt_fill(el: &Element) -> Value {
+    let Some(prst) = el.attr_local("prst").filter(|s| !s.is_empty()) else {
+        return fill_other();
+    };
+    let Some(fg) = inspect_srgb(el.child_by_local("fgClr")) else {
+        return fill_other();
+    };
+    let Some(bg) = inspect_srgb(el.child_by_local("bgClr")) else {
+        return fill_other();
+    };
+    let mut m = Map::new();
+    m.insert("type".into(), json!("patt"));
+    m.insert("prst".into(), json!(prst));
+    m.insert("fg".into(), json!(fg));
+    m.insert("bg".into(), json!(bg));
+    Value::Object(m)
+}
+
+fn inspect_blip_fill(el: &Element, pkg: Option<(&Package, &str)>) -> Value {
+    let Some(blip) = el.child_by_local("blip") else {
+        return fill_other();
+    };
+    let Some(rid) = blip.attr_local("embed").filter(|s| !s.is_empty()) else {
+        return fill_other();
+    };
+    let content_type = match pkg {
+        Some((pkg, part)) => match crate::opc::resolve_id(pkg, part, rid) {
+            Ok(target) => ContentTypes::from_package(pkg)
+                .ok()
+                .and_then(|cts| cts.content_type_of(&target).map(|s| json!(s)))
+                .unwrap_or(Value::Null),
+            Err(_) => Value::Null,
+        },
+        None => Value::Null,
+    };
+    let mut m = Map::new();
+    m.insert("type".into(), json!("blip"));
+    m.insert("rId".into(), json!(rid));
+    m.insert("contentType".into(), content_type);
+    Value::Object(m)
 }
 
 fn inspect_cell_borders(tc_pr: Option<&Element>) -> Value {
@@ -818,6 +962,8 @@ fn reject_grid(tbl: &Element, i: usize) -> Result<(), Error> {
 }
 
 pub fn insert_table(
+    pkg: &mut Package,
+    part: &str,
     slide_doc: &mut Document,
     pres_root: &Element,
     op: &InsertTableOp,
@@ -841,8 +987,13 @@ pub fn insert_table(
         }
     };
     picture::ensure_xmlns(&mut slide_doc.root, "a", DML_NS);
+    if chrome_has_blip(&op.chrome) {
+        picture::ensure_xmlns(&mut slide_doc.root, "r", REL_NS);
+    }
     let cnv = picture::next_cnv_id(&slide_doc.root);
     let frame = build_table_frame(
+        pkg,
+        part,
         cnv,
         x,
         y,
@@ -854,13 +1005,22 @@ pub fn insert_table(
         op.col_widths.as_deref(),
         op.row_heights.as_deref(),
         &op.chrome,
-    );
+    )?;
     picture::insert_into_sp_tree(&mut slide_doc.root, frame)?;
     let _ = i;
     Ok(())
 }
 
+fn chrome_has_blip(chrome: &[Vec<CellChrome>]) -> bool {
+    chrome
+        .iter()
+        .flatten()
+        .any(|c| matches!(c.fill, Some(Some(CellFillSpec::Blip { .. }))))
+}
+
 fn build_table_frame(
+    pkg: &mut Package,
+    part: &str,
     cnv: u32,
     x: i64,
     y: i64,
@@ -872,7 +1032,7 @@ fn build_table_frame(
     col_widths: Option<&[i64]>,
     row_heights: Option<&[i64]>,
     chrome: &[Vec<CellChrome>],
-) -> Element {
+) -> Result<Element, Error> {
     let mut nv = Element::new("p:nvGraphicFramePr");
     nv.push_element(
         Element::new("p:cNvPr")
@@ -922,7 +1082,7 @@ fn build_table_frame(
                 .map(|s| s.as_str())
                 .unwrap_or("");
             let ch = chrome.get(r).and_then(|row| row.get(c));
-            tr.push_element(build_tc(text, ch));
+            tr.push_element(build_tc(pkg, part, text, ch)?);
         }
         tbl.push_element(tr);
     }
@@ -934,7 +1094,7 @@ fn build_table_frame(
     frame.push_element(nv);
     frame.push_element(xfrm);
     frame.push_element(graphic);
-    frame
+    Ok(frame)
 }
 
 fn split_emu(total: i64, n: usize) -> Vec<i64> {
@@ -951,7 +1111,12 @@ fn split_emu(total: i64, n: usize) -> Vec<i64> {
     out
 }
 
-fn build_tc(text: &str, chrome: Option<&CellChrome>) -> Element {
+fn build_tc(
+    pkg: &mut Package,
+    part: &str,
+    text: &str,
+    chrome: Option<&CellChrome>,
+) -> Result<Element, Error> {
     let mut tc = Element::new("a:tc");
     let mut tx = empty_tx_body();
     if !text.is_empty() {
@@ -960,8 +1125,15 @@ fn build_tc(text: &str, chrome: Option<&CellChrome>) -> Element {
     tc.push_element(tx);
     tc.push_element(Element::new("a:tcPr"));
     if let Some(ch) = chrome {
-        apply_chrome(&mut tc, ch);
+        apply_chrome(pkg, part, &mut tc, ch)?;
     }
+    Ok(tc)
+}
+
+fn empty_tc() -> Element {
+    let mut tc = Element::new("a:tc");
+    tc.push_element(empty_tx_body());
+    tc.push_element(Element::new("a:tcPr"));
     tc
 }
 
@@ -1314,8 +1486,7 @@ fn insert_tc_in_row(tr: &mut Element, after: usize) {
         c += 1;
     }
     let insert_at = tc_insert_index(tr, after);
-    tr.children
-        .insert(insert_at, Node::Element(build_tc("", None)));
+    tr.children.insert(insert_at, Node::Element(empty_tc()));
 }
 
 fn tc_child_indices(tr: &Element) -> Vec<usize> {
@@ -1471,13 +1642,17 @@ pub fn set_cell_text(
 }
 
 pub fn set_cell_fill(
+    pkg: &mut Package,
+    part: &str,
     slide_doc: &mut Document,
     op: &SetTableCellFillOp,
     i: usize,
 ) -> Result<(), Error> {
+    if matches!(&op.fill, Some(CellFillSpec::Blip { .. })) {
+        picture::ensure_xmlns(&mut slide_doc.root, "r", REL_NS);
+    }
     let tc = require_tc_mut(slide_doc, &op.target, &op.id, i)?;
-    apply_fill_to_tc(tc, op.color.as_deref());
-    Ok(())
+    apply_fill_to_tc(pkg, part, tc, op.fill.as_ref())
 }
 
 pub fn set_cell_borders(
@@ -1540,9 +1715,14 @@ fn require_tc_mut<'a>(
     }
 }
 
-fn apply_chrome(tc: &mut Element, chrome: &CellChrome) {
+fn apply_chrome(
+    pkg: &mut Package,
+    part: &str,
+    tc: &mut Element,
+    chrome: &CellChrome,
+) -> Result<(), Error> {
     if let Some(fill) = &chrome.fill {
-        apply_fill_to_tc(tc, fill.as_deref());
+        apply_fill_to_tc(pkg, part, tc, fill.as_ref())?;
     }
     if let Some(borders) = &chrome.borders {
         apply_borders_to_tc(tc, borders);
@@ -1550,6 +1730,7 @@ fn apply_chrome(tc: &mut Element, chrome: &CellChrome) {
     if let Some(mar) = &chrome.cell_mar {
         apply_mar_to_tc(tc, mar);
     }
+    Ok(())
 }
 
 fn apply_mar_to_tc(tc: &mut Element, patch: &CellMarPatch) {
@@ -1568,17 +1749,67 @@ fn apply_mar_attr(pr: &mut Element, local: &str, field: &Option<Option<i64>>) {
     }
 }
 
-fn apply_fill_to_tc(tc: &mut Element, color: Option<&str>) {
-    let pr = picture::ensure_child(tc, "tcPr");
-    remove_named(pr, FILL_LOCALS);
-    match color {
-        Some(c) => {
-            let mut fill = Element::new("a:solidFill");
-            fill.push_element(Element::new("a:srgbClr").with_attr("val", c.to_ascii_uppercase()));
-            pr.push_element(fill);
-        }
-        None => pr.push_element(Element::new("a:noFill")),
+fn apply_fill_to_tc(
+    pkg: &mut Package,
+    part: &str,
+    tc: &mut Element,
+    fill: Option<&CellFillSpec>,
+) -> Result<(), Error> {
+    {
+        let pr = picture::ensure_child(tc, "tcPr");
+        remove_named(pr, FILL_LOCALS);
     }
+    let el = match fill {
+        Some(CellFillSpec::Solid(c)) => {
+            let mut el = Element::new("a:solidFill");
+            el.push_element(Element::new("a:srgbClr").with_attr("val", c.to_ascii_uppercase()));
+            el
+        }
+        Some(CellFillSpec::Grad { ang, stops }) => {
+            let mut el = Element::new("a:gradFill")
+                .with_attr("flip", "none")
+                .with_attr("rotWithShape", "1");
+            let mut gs_lst = Element::new("a:gsLst");
+            for (pos, color) in stops {
+                let mut gs = Element::new("a:gs").with_attr("pos", pos.to_string());
+                gs.push_element(
+                    Element::new("a:srgbClr").with_attr("val", color.to_ascii_uppercase()),
+                );
+                gs_lst.push_element(gs);
+            }
+            el.push_element(gs_lst);
+            el.push_element(
+                Element::new("a:lin")
+                    .with_attr("ang", ang.to_string())
+                    .with_attr("scaled", "1"),
+            );
+            el.push_element(Element::new("a:tileRect"));
+            el
+        }
+        Some(CellFillSpec::Patt { prst, fg, bg }) => {
+            let mut el = Element::new("a:pattFill").with_attr("prst", prst);
+            let mut fg_el = Element::new("a:fgClr");
+            fg_el.push_element(Element::new("a:srgbClr").with_attr("val", fg.to_ascii_uppercase()));
+            let mut bg_el = Element::new("a:bgClr");
+            bg_el.push_element(Element::new("a:srgbClr").with_attr("val", bg.to_ascii_uppercase()));
+            el.push_element(fg_el);
+            el.push_element(bg_el);
+            el
+        }
+        Some(CellFillSpec::Blip { file }) => {
+            let image = picture::read_image(file)?;
+            let (rid, _) = picture::write_picture_media(pkg, part, &image)?;
+            let mut el = Element::new("a:blipFill");
+            el.push_element(Element::new("a:blip").with_attr("r:embed", rid));
+            let mut stretch = Element::new("a:stretch");
+            stretch.push_element(Element::new("a:fillRect"));
+            el.push_element(stretch);
+            el
+        }
+        None => Element::new("a:noFill"),
+    };
+    picture::ensure_child(tc, "tcPr").push_element(el);
+    Ok(())
 }
 
 fn apply_borders_to_tc(tc: &mut Element, patch: &CellBordersPatch) {

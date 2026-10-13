@@ -104,12 +104,13 @@ $rgb1 = Read-PptCellFillRgb $s1 1 1
 Release-Com $s1
 Close-PptPres $pres1
 $ptb1ok = ($cap1 -notmatch 'Repair') `
-    -and ([string]$c1.fill -eq 'FF0000') `
+    -and ([string]$c1.fill.type -eq 'solid') `
+    -and ([string]$c1.fill.color -eq 'FF0000') `
     -and ([string]$c1.borders.left.color -eq '000000') `
     -and ([int64]$c1.borders.left.width -eq 12700) `
     -and ([string]$c1.borders.left.dash -eq 'dash') `
     -and ($null -eq $c1.borders.right)
-Add-Check 'pptx-Ptb1' $ptb1ok "cap=$cap1 fill=$($c1.fill) left=$($c1.borders.left.color)/$($c1.borders.left.width)/$($c1.borders.left.dash) rgb=$rgb1"
+Add-Check 'pptx-Ptb1' $ptb1ok "cap=$cap1 fill=$($c1.fill.type)/$($c1.fill.color) left=$($c1.borders.left.color)/$($c1.borders.left.width)/$($c1.borders.left.dash) rgb=$rgb1"
 
 $fillOut = Get-OutPath 'pptx-table-cell-fill-apply.pptx'
 Close-PptPresByPath $ppt $fillOut
@@ -135,9 +136,10 @@ $rgb2 = Read-PptCellFillRgb $s2 1 1
 Release-Com $s2
 Close-PptPres $pres2
 $ptb2ok = ($cap2 -notmatch 'Repair') `
-    -and ([string]$c2.fill -eq '0000FF') `
+    -and ([string]$c2.fill.type -eq 'solid') `
+    -and ([string]$c2.fill.color -eq '0000FF') `
     -and ($null -ne $rgb2) -and ([int64]$rgb2 -eq 16711680)
-Add-Check 'pptx-Ptb2' $ptb2ok "cap=$cap2 fill=$($c2.fill) rgb=$rgb2"
+Add-Check 'pptx-Ptb2' $ptb2ok "cap=$cap2 fill=$($c2.fill.type)/$($c2.fill.color) rgb=$rgb2"
 
 $borderOut = Get-OutPath 'pptx-table-cell-fill-borders.pptx'
 Close-PptPresByPath $ppt $borderOut

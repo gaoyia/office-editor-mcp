@@ -982,6 +982,8 @@ define_error_kinds! {
     InvalidHexColor => vec![Self::InvalidHexColor],
     NeedShapeFormatField => vec![Self::NeedShapeFormatField],
     InvalidTextFillType => vec![Self::InvalidTextFillType],
+    InvalidTableCellFillType => vec![Self::InvalidTableCellFillType],
+    InvalidPresetPatternVal => vec![Self::InvalidPresetPatternVal],
     NeedGradientStops => vec![Self::NeedGradientStops],
     DuplicateGradientPos => vec![Self::DuplicateGradientPos],
     NeedTextOutlineField => vec![Self::NeedTextOutlineField],
@@ -2071,6 +2073,8 @@ impl ErrorKind {
             | Self::InvalidHexColor
             | Self::NeedShapeFormatField
             | Self::InvalidTextFillType
+            | Self::InvalidTableCellFillType
+            | Self::InvalidPresetPatternVal
             | Self::NeedGradientStops
             | Self::DuplicateGradientPos
             | Self::NeedTextOutlineField

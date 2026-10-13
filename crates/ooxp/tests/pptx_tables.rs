@@ -744,7 +744,8 @@ fn table_cell_fill_and_borders() {
     .unwrap();
     let tree = inspect_tables(&path);
     let c = &tree["slides"][0]["tables"][0]["rows"][0]["cells"][0];
-    assert_eq!(c["fill"], "FF0000");
+    assert_eq!(c["fill"], json!({ "type": "solid", "color": "FF0000" }));
+    assert_eq!(object_keys(&c["fill"]), ["type", "color"]);
     assert_eq!(
         c["borders"]["left"],
         json!({ "color": "000000", "width": 12700, "dash": "dash" })
@@ -776,7 +777,7 @@ fn table_cell_fill_and_borders() {
     .unwrap();
     let tree = inspect_tables(&filled);
     let c = &tree["slides"][0]["tables"][0]["rows"][0]["cells"][0];
-    assert_eq!(c["fill"], "0000FF");
+    assert_eq!(c["fill"], json!({ "type": "solid", "color": "0000FF" }));
     assert_eq!(
         c["borders"]["left"],
         json!({ "color": "000000", "width": 12700, "dash": "dash" })
@@ -835,6 +836,19 @@ fn table_cell_fill_and_borders() {
         json!([{
             "op": "setTableCellFill",
             "id": "slide:1/table:3/r:1/c:1"
+        }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+
+    let err = apply(
+        &path,
+        &tmp("fill-both"),
+        json!([{
+            "op": "setTableCellFill",
+            "id": "slide:1/table:3/r:1/c:1",
+            "color": "FF0000",
+            "fill": { "type": "solid", "color": "00FF00" }
         }]),
     )
     .unwrap_err();

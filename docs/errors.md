@@ -803,7 +803,14 @@
 - 对表 id、备注容器或 `pptx:presentation` 发该 op 报 `InvalidId`
 - `setTableCellText` 的 id 必须是 `slide:{n}/table:…/r:{r}/c:{c}`，缺 `text` 报 `InvalidField`，找不到该格报 `IdNotFound`
 - `setTableCellFill` / `setTableCellBorders` / `setTableCellInset` 的 id 必须是单元格 id
-- `setTableCellFill` 缺 `color`、或不是六位十六进制，报 `InvalidField`
+- `setTableCellFill` 的 `fill` 与 `color` 必须恰好一个，否则报 `InvalidField`
+- `fill` 对象缺 `type`、或 `type` 不是 `solid` / `grad` / `patt` / `blip`，报 `InvalidField`
+- `solid` 缺 `color` 或不是六位十六进制，报 `InvalidField`
+- `grad` 缺 `stops`、停点不足两项、`pos` 重复或越界、或 `ang` 越界，报 `InvalidField`
+- `patt` 缺 `prst` / `fg` / `bg`，或 `prst` 不在 `ST_PresetPatternVal`，报 `InvalidField`
+- `blip` 缺 `file`，或非 `blip` 时出现 `file`，报 `InvalidField`
+- 44 的 `color` 不是六位十六进制，报 `InvalidField`
+- `exportMedia` 对表单元格 id 报 `InvalidId`
 - `setTableCellBorders` 六个边键一个都不给、边对象缺 `color` / `width`、或 `dash` 不是 `ST_PresetLineDashVal`，报 `InvalidField`
 - `setTableCellInset` 四个边键一个都不给、或值为负数，报 `InvalidField`
 - `setTablePos` / `setTableSize` / `setTableColWidths` 的 id 必须是 pptx 表 id

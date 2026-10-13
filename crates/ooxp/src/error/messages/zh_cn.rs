@@ -1102,6 +1102,10 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             "setShapeFormat 至少要给 sz、color、textFill、textOutline、bold、italic、underline、font、eastAsiaFont、align、textAnchor、spcBef、spcAft、lnSpc、spc 或 kern 之一".into()
         }
         ErrorKind::InvalidTextFillType => "textFill.type 必须是 none 或 gradient".into(),
+        ErrorKind::InvalidTableCellFillType => {
+            "表单元格 fill.type 必须是 solid、grad、patt 或 blip".into()
+        }
+        ErrorKind::InvalidPresetPatternVal => "prst 必须是 ST_PresetPatternVal".into(),
         ErrorKind::NeedGradientStops => "textFill.stops 至少要有两项".into(),
         ErrorKind::DuplicateGradientPos => "textFill.stops 的 pos 不能重复".into(),
         ErrorKind::NeedTextOutlineField => "textOutline 必须有 color 与 width".into(),

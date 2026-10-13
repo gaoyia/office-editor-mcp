@@ -353,7 +353,7 @@ fn attach_object_lists(
     if want_tables {
         obj.insert(
             "tables".into(),
-            Value::Array(super::table::collect_tables(root, host)),
+            Value::Array(super::table::collect_tables(root, host, Some((pkg, part)))),
         );
     }
     if want_ole_objects {

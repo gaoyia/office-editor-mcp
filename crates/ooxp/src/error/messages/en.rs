@@ -1218,6 +1218,10 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             "setShapeFormat requires at least one of sz, color, textFill, textOutline, bold, italic, underline, font, eastAsiaFont, align, textAnchor, spcBef, spcAft, lnSpc, spc, or kern".into()
         }
         ErrorKind::InvalidTextFillType => "textFill.type must be none or gradient".into(),
+        ErrorKind::InvalidTableCellFillType => {
+            "table cell fill.type must be solid, grad, patt or blip".into()
+        }
+        ErrorKind::InvalidPresetPatternVal => "prst must be ST_PresetPatternVal".into(),
         ErrorKind::NeedGradientStops => "textFill.stops must have at least two items".into(),
         ErrorKind::DuplicateGradientPos => "textFill.stops pos values must be unique".into(),
         ErrorKind::NeedTextOutlineField => "textOutline requires color and width".into(),

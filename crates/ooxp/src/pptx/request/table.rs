@@ -175,11 +175,57 @@ pub(super) fn parse_set_table_cell_fill(
     obj: &Map<String, Value>,
     i: usize,
 ) -> Result<SetTableCellFillOp, Error> {
-    deny_keys(obj, i, &["op", "id", "color"])?;
+    deny_keys(obj, i, &["op", "id", "color", "fill", "file"])?;
     let id = require_id(obj, i)?;
     let target = table::parse_cell_id(&id, &format!("ops[{i}].id"))?;
-    let color = parse_color_field(obj, i, "setTableCellFill")?;
-    Ok(SetTableCellFillOp { id, target, color })
+    let has_color = obj.contains_key("color");
+    let has_fill = obj.contains_key("fill");
+    if has_color == has_fill {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "setTableCellFill".into(),
+                field: "fill or color".into(),
+            },
+            format!("ops[{i}]"),
+        ));
+    }
+    let fill = if has_color {
+        parse_color_field(obj, i, "setTableCellFill")?.map(CellFillSpec::Solid)
+    } else {
+        parse_fill_at(obj.get("fill"), &format!("ops[{i}].fill"))?.ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::OpRequiresField {
+                    op: "setTableCellFill".into(),
+                    field: "fill".into(),
+                },
+                format!("ops[{i}].fill"),
+            )
+        })?
+    };
+    let file = match obj.get("file") {
+        None => None,
+        Some(Value::String(s)) if !s.is_empty() => Some(s.clone()),
+        Some(Value::String(_)) => {
+            return Err(Error::with_path(
+                ErrorKind::OpRequiresField {
+                    op: "setTableCellFill".into(),
+                    field: "file".into(),
+                },
+                format!("ops[{i}].file"),
+            ));
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "file".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].file"),
+            ));
+        }
+    };
+    let fill = merge_blip_file(fill, file, &format!("ops[{i}]"))?;
+    Ok(SetTableCellFillOp { id, target, fill })
 }
 
 pub(super) fn parse_set_table_cell_borders(
@@ -563,6 +609,17 @@ pub(super) fn parse_create_table_cells(
 
 fn parse_cell_chrome(obj: &Map<String, Value>, path: &str) -> Result<CellChrome, Error> {
     let fill = parse_fill_at(obj.get("fill"), &format!("{path}.fill"))?;
+    if let Some(Some(CellFillSpec::Blip { file })) = &fill {
+        if file.is_empty() {
+            return Err(Error::with_path(
+                ErrorKind::OpRequiresField {
+                    op: "setTableCellFill".into(),
+                    field: "file".into(),
+                },
+                format!("{path}.fill.file"),
+            ));
+        }
+    }
     let borders = match obj.get("borders") {
         None => None,
         Some(Value::Null) => {
@@ -628,19 +685,370 @@ fn parse_cell_chrome(obj: &Map<String, Value>, path: &str) -> Result<CellChrome,
     })
 }
 
-fn parse_fill_at(v: Option<&Value>, path: &str) -> Result<Option<Option<String>>, Error> {
+fn parse_fill_at(v: Option<&Value>, path: &str) -> Result<Option<Option<CellFillSpec>>, Error> {
     match v {
         None => Ok(None),
         Some(Value::Null) => Ok(Some(None)),
-        Some(Value::String(s)) => Ok(Some(Some(parse_rgb(s, path)?))),
+        Some(Value::String(s)) => Ok(Some(Some(CellFillSpec::Solid(parse_rgb(s, path)?)))),
+        Some(Value::Object(obj)) => Ok(Some(Some(parse_fill_obj(obj, path)?))),
         Some(_) => Err(Error::with_path(
             ErrorKind::WrongType {
                 field: "fill".into(),
-                expected: TypeName::String,
+                expected: TypeName::Object,
             },
             path.to_string(),
         )),
     }
+}
+
+fn parse_fill_obj(obj: &Map<String, Value>, path: &str) -> Result<CellFillSpec, Error> {
+    let type_name = match obj.get("type") {
+        Some(Value::String(s)) => s.as_str(),
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "type".into(),
+                    expected: TypeName::String,
+                },
+                format!("{path}.type"),
+            ));
+        }
+        None => {
+            return Err(Error::with_path(
+                ErrorKind::MissingField {
+                    field: "type".into(),
+                },
+                format!("{path}.type"),
+            ));
+        }
+    };
+    match type_name {
+        "solid" => {
+            deny_fill_keys(obj, path, &["type", "color"])?;
+            let color = require_rgb(obj.get("color"), &format!("{path}.color"), "color")?;
+            Ok(CellFillSpec::Solid(color))
+        }
+        "grad" => {
+            deny_fill_keys(obj, path, &["type", "ang", "stops"])?;
+            let ang = parse_fill_ang(obj.get("ang"), &format!("{path}.ang"))?
+                .unwrap_or(crate::drawing_text::ANG_DEFAULT);
+            let stops = parse_fill_stops(obj.get("stops"), &format!("{path}.stops"))?;
+            Ok(CellFillSpec::Grad { ang, stops })
+        }
+        "patt" => {
+            deny_fill_keys(obj, path, &["type", "prst", "fg", "bg"])?;
+            let prst = match obj.get("prst") {
+                Some(Value::String(s)) if is_preset_pattern(s) => s.clone(),
+                Some(Value::String(_)) => {
+                    return Err(Error::with_path(
+                        ErrorKind::InvalidPresetPatternVal,
+                        format!("{path}.prst"),
+                    ));
+                }
+                Some(_) => {
+                    return Err(Error::with_path(
+                        ErrorKind::WrongType {
+                            field: "prst".into(),
+                            expected: TypeName::String,
+                        },
+                        format!("{path}.prst"),
+                    ));
+                }
+                None => {
+                    return Err(Error::with_path(
+                        ErrorKind::OpRequiresField {
+                            op: "setTableCellFill".into(),
+                            field: "prst".into(),
+                        },
+                        format!("{path}.prst"),
+                    ));
+                }
+            };
+            let fg = require_rgb(obj.get("fg"), &format!("{path}.fg"), "fg")?;
+            let bg = require_rgb(obj.get("bg"), &format!("{path}.bg"), "bg")?;
+            Ok(CellFillSpec::Patt { prst, fg, bg })
+        }
+        "blip" => {
+            deny_fill_keys(obj, path, &["type", "file"])?;
+            let file = match obj.get("file") {
+                None => String::new(),
+                Some(Value::String(s)) => s.clone(),
+                Some(_) => {
+                    return Err(Error::with_path(
+                        ErrorKind::WrongType {
+                            field: "file".into(),
+                            expected: TypeName::String,
+                        },
+                        format!("{path}.file"),
+                    ));
+                }
+            };
+            Ok(CellFillSpec::Blip { file })
+        }
+        _ => Err(Error::with_path(
+            ErrorKind::InvalidTableCellFillType,
+            format!("{path}.type"),
+        )),
+    }
+}
+
+fn deny_fill_keys(obj: &Map<String, Value>, path: &str, allowed: &[&str]) -> Result<(), Error> {
+    for k in obj.keys() {
+        if !allowed.contains(&k.as_str()) {
+            return Err(Error::with_path(
+                ErrorKind::UnknownField { field: k.clone() },
+                format!("{path}.{k}"),
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn require_rgb(v: Option<&Value>, path: &str, field: &str) -> Result<String, Error> {
+    match v {
+        Some(Value::String(s)) => parse_rgb(s, path),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::String,
+            },
+            path.to_string(),
+        )),
+        None => Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "setTableCellFill".into(),
+                field: field.into(),
+            },
+            path.to_string(),
+        )),
+    }
+}
+
+fn parse_fill_ang(v: Option<&Value>, path: &str) -> Result<Option<i64>, Error> {
+    match v {
+        None => Ok(None),
+        Some(Value::Number(n)) => {
+            let Some(n) = n
+                .as_i64()
+                .or_else(|| n.as_u64().and_then(|u| i64::try_from(u).ok()))
+            else {
+                return Err(Error::with_path(
+                    ErrorKind::WrongType {
+                        field: "ang".into(),
+                        expected: TypeName::Integer,
+                    },
+                    path.to_string(),
+                ));
+            };
+            if !(0..=crate::drawing_text::ANG_MAX).contains(&n) {
+                return Err(Error::with_path(
+                    ErrorKind::OutOfRange {
+                        field: "ang".into(),
+                        min: 0,
+                        max: crate::drawing_text::ANG_MAX,
+                    },
+                    path.to_string(),
+                ));
+            }
+            Ok(Some(n))
+        }
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "ang".into(),
+                expected: TypeName::Integer,
+            },
+            path.to_string(),
+        )),
+    }
+}
+
+fn parse_fill_stops(v: Option<&Value>, path: &str) -> Result<Vec<(i64, String)>, Error> {
+    let Some(Value::Array(items)) = v else {
+        return Err(Error::with_path(
+            if v.is_none() {
+                ErrorKind::NeedGradientStops
+            } else {
+                ErrorKind::WrongType {
+                    field: "stops".into(),
+                    expected: TypeName::Array,
+                }
+            },
+            path.to_string(),
+        ));
+    };
+    if items.len() < 2 {
+        return Err(Error::with_path(
+            ErrorKind::NeedGradientStops,
+            path.to_string(),
+        ));
+    }
+    let mut out = Vec::new();
+    let mut seen = Vec::new();
+    for (i, item) in items.iter().enumerate() {
+        let prefix = format!("{path}[{i}]");
+        let obj = item.as_object().ok_or_else(|| {
+            Error::with_path(
+                ErrorKind::WrongType {
+                    field: "stops".into(),
+                    expected: TypeName::Object,
+                },
+                prefix.clone(),
+            )
+        })?;
+        deny_fill_keys(obj, &prefix, &["pos", "color"])?;
+        let pos = match obj.get("pos") {
+            Some(Value::Number(n)) => n
+                .as_i64()
+                .or_else(|| n.as_u64().and_then(|u| i64::try_from(u).ok()))
+                .ok_or_else(|| {
+                    Error::with_path(
+                        ErrorKind::WrongType {
+                            field: "pos".into(),
+                            expected: TypeName::Integer,
+                        },
+                        format!("{prefix}.pos"),
+                    )
+                })?,
+            Some(_) => {
+                return Err(Error::with_path(
+                    ErrorKind::WrongType {
+                        field: "pos".into(),
+                        expected: TypeName::Integer,
+                    },
+                    format!("{prefix}.pos"),
+                ));
+            }
+            None => {
+                return Err(Error::with_path(
+                    ErrorKind::MissingField {
+                        field: "pos".into(),
+                    },
+                    format!("{prefix}.pos"),
+                ));
+            }
+        };
+        if !(0..=crate::drawing_text::POS_MAX).contains(&pos) {
+            return Err(Error::with_path(
+                ErrorKind::OutOfRange {
+                    field: "pos".into(),
+                    min: 0,
+                    max: crate::drawing_text::POS_MAX,
+                },
+                format!("{prefix}.pos"),
+            ));
+        }
+        if seen.contains(&pos) {
+            return Err(Error::with_path(
+                ErrorKind::DuplicateGradientPos,
+                format!("{prefix}.pos"),
+            ));
+        }
+        seen.push(pos);
+        let color = require_rgb(obj.get("color"), &format!("{prefix}.color"), "color")?;
+        out.push((pos, color));
+    }
+    Ok(out)
+}
+
+fn merge_blip_file(
+    fill: Option<CellFillSpec>,
+    file: Option<String>,
+    path: &str,
+) -> Result<Option<CellFillSpec>, Error> {
+    match (fill, file) {
+        (Some(CellFillSpec::Blip { file: inner }), outer) => {
+            let chosen = match (inner.is_empty(), outer) {
+                (true, Some(f)) => f,
+                (false, None) => inner,
+                (false, Some(_)) | (true, None) => {
+                    return Err(Error::with_path(
+                        ErrorKind::OpRequiresField {
+                            op: "setTableCellFill".into(),
+                            field: "file".into(),
+                        },
+                        format!("{path}.file"),
+                    ));
+                }
+            };
+            if chosen.is_empty() {
+                return Err(Error::with_path(
+                    ErrorKind::OpRequiresField {
+                        op: "setTableCellFill".into(),
+                        field: "file".into(),
+                    },
+                    format!("{path}.file"),
+                ));
+            }
+            Ok(Some(CellFillSpec::Blip { file: chosen }))
+        }
+        (_, Some(_)) => Err(Error::with_path(
+            ErrorKind::UnknownField {
+                field: "file".into(),
+            },
+            format!("{path}.file"),
+        )),
+        (fill, None) => Ok(fill),
+    }
+}
+
+fn is_preset_pattern(s: &str) -> bool {
+    matches!(
+        s,
+        "pct5"
+            | "pct10"
+            | "pct20"
+            | "pct25"
+            | "pct30"
+            | "pct40"
+            | "pct50"
+            | "pct60"
+            | "pct70"
+            | "pct75"
+            | "pct80"
+            | "pct90"
+            | "horz"
+            | "vert"
+            | "ltHorz"
+            | "ltVert"
+            | "dkHorz"
+            | "dkVert"
+            | "narHorz"
+            | "narVert"
+            | "dashHorz"
+            | "dashVert"
+            | "cross"
+            | "dnDiag"
+            | "upDiag"
+            | "ltDnDiag"
+            | "ltUpDiag"
+            | "dkDnDiag"
+            | "dkUpDiag"
+            | "wdDnDiag"
+            | "wdUpDiag"
+            | "dashDnDiag"
+            | "dashUpDiag"
+            | "diagCross"
+            | "smCheck"
+            | "lgCheck"
+            | "smGrid"
+            | "lgGrid"
+            | "dotGrid"
+            | "smConfetti"
+            | "lgConfetti"
+            | "horzBrick"
+            | "diagBrick"
+            | "solidDmnd"
+            | "openDmnd"
+            | "dotDmnd"
+            | "plaid"
+            | "sphere"
+            | "weave"
+            | "divot"
+            | "shingle"
+            | "wave"
+            | "trellis"
+            | "zigZag"
+    )
 }
 
 fn parse_rgb(s: &str, path: &str) -> Result<String, Error> {

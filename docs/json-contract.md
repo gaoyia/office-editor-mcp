@@ -2071,7 +2071,7 @@ xlsx 的 `anchor` 仍是单元格锚点，框内垂直对齐只用 `textAnchor`�
   - 可省略，从 `path` 扩展名推断
 
 `id` 必须是图 id，或 docx / xlsx / pptx 的 OLE id，或三种格式的 3D 模型 id，或 docx 的墨迹画布 id，或 pptx 的视频 / 音频 id，或 docx 的 `font:{n}`。
-对段落 id、工作表 id、单元格 id、页眉页脚容器 id、`section:{n}`、
+对段落 id、工作表 id、单元格 id、表单元格 id、页眉页脚容器 id、`section:{n}`、
 形状 id 或 `slide:{n}`（没有 `/pic:` / `/video:` / `/audio:` / `/ole:` / `/ink:` / `/model3d:`）报 `InvalidId`。
 xlsx / pptx 上发 `font:{n}` 仍按该格式原规则报 `InvalidId`。找不到该图、该嵌入对象、该 3D 模型、该墨迹画布、该媒体或该嵌入字体报 `IdNotFound`。
 图 id 优先走 `a:blip/@r:embed`；只有 `@r:link`、没有 embed 时按外部关系处理，报 `OpcPartMissing`，不下载 http。embed 指向外部关系同样报 `OpcPartMissing`。

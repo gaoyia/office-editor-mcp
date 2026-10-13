@@ -787,7 +787,7 @@ fn attach_tables(pkg: &mut Package, slides: &[NewSlide]) -> Result<(), Error> {
         let part = format!("/ppt/slides/slide{n}.xml");
         let mut doc = xml::parse(pkg.get(&part)?)?;
         for (j, table) in slide.tables.iter().enumerate() {
-            table::insert_table(&mut doc, &pres.root, &table.op, j)?;
+            table::insert_table(pkg, &part, &mut doc, &pres.root, &table.op, j)?;
         }
         pkg.set(&part, doc.to_bytes()?)?;
     }
@@ -1459,7 +1459,7 @@ fn attach_hyperlinks(pkg: &mut Package, slides: &[NewSlide]) -> Result<(), Error
             apply_create_object_link(pkg, &mut doc, &part, &metas, host, id, link, LinkOn::Pic)?;
             dirty = true;
         }
-        let tables = table::collect_tables(&doc.root, &host);
+        let tables = table::collect_tables(&doc.root, &host, Some((&*pkg, part.as_str())));
         for (j, tbl) in slide.tables.iter().enumerate() {
             if tbl.link.is_none() && tbl.cell_links.is_empty() {
                 continue;
@@ -1817,9 +1817,12 @@ fn resolve_anim_host(
                 .map(|p| p.id.clone())
                 .ok_or_else(|| anim_host_err(prefix, "audio"))
         }
-        CreateAnimHost::Table(n) => {
-            json_id(&table::collect_tables(root, &host_s), n, prefix, "table")
-        }
+        CreateAnimHost::Table(n) => json_id(
+            &table::collect_tables(root, &host_s, Some((pkg, part))),
+            n,
+            prefix,
+            "table",
+        ),
         CreateAnimHost::Chart(n) => json_id(
             &chart::collect_charts(pkg, root, &host_s, part)?,
             n,
