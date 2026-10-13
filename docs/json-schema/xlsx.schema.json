@@ -5589,6 +5589,150 @@
         }
       }
     },
+    "setMathSizeOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setMathSize"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "cx": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "cy": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "to": {
+          "type": "string",
+          "minLength": 1
+        },
+        "toOffX": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "toOffY": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "anyOf": [
+        {
+          "required": [
+            "cx"
+          ]
+        },
+        {
+          "required": [
+            "cy"
+          ]
+        },
+        {
+          "required": [
+            "to"
+          ]
+        }
+      ]
+    },
+    "setMathAnchorOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setMathAnchor"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "anchor": {
+          "enum": [
+            "oneCell",
+            "twoCell",
+            "absolute",
+            "relSize"
+          ]
+        },
+        "from": {
+          "type": "string",
+          "minLength": 1
+        },
+        "to": {
+          "type": "string",
+          "minLength": 1
+        },
+        "fromOffX": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "fromOffY": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "toOffX": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "toOffY": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "posX": {
+          "type": "integer"
+        },
+        "posY": {
+          "type": "integer"
+        },
+        "fromX": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "fromY": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "toX": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "toY": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "editAs": {
+          "enum": [
+            "twoCell",
+            "oneCell",
+            "absolute"
+          ]
+        },
+        "cx": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "cy": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
     "insertSlicerOp": {
       "type": "object",
       "required": [

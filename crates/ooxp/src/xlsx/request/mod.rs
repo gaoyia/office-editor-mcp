@@ -325,6 +325,8 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<XlsxOp>, Error> {
             "insertMath" => XlsxOp::InsertMath(parse_insert_math(obj, i)?),
             "setMath" => XlsxOp::SetMath(parse_set_math(obj, i)?),
             "deleteMath" => XlsxOp::DeleteMath(parse_delete_math(obj, i)?),
+            "setMathSize" => XlsxOp::SetMathSize(parse_set_math_size(obj, i)?),
+            "setMathAnchor" => XlsxOp::SetMathAnchor(parse_set_math_anchor(obj, i)?),
             "insertSlicer" => XlsxOp::InsertSlicer(parse_insert_slicer(obj, i)?),
             "deleteSlicer" => XlsxOp::DeleteSlicer(parse_delete_slicer(obj, i)?),
             "setSlicerSize" => XlsxOp::SetSlicerSize(parse_set_slicer_size(obj, i)?),
@@ -486,6 +488,7 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<XlsxOp>, Error> {
             | "setInkCanvasWrap"
             | "setModel3dWrap"
             | "setModel3dPos"
+            | "setMathPos"
             | "insertSlide"
             | "deleteSlide"
             | "moveSlide"

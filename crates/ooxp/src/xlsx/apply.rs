@@ -923,6 +923,28 @@ pub fn apply(bytes: &[u8], ops: &[XlsxOp]) -> Result<Vec<u8>, Error> {
                 let doc = dirty_of(&mut dirty_sheets, &part);
                 omml::delete(&mut pkg, doc, &part, op, i)?;
             }
+            XlsxOp::SetMathSize(op) => {
+                let part = require_drawing_worksheet(
+                    &sheet_index,
+                    &op.target.sheet,
+                    i,
+                    ErrorKind::InsertMathWorksheetOnly,
+                )?;
+                load_dirty(&pkg, &mut dirty_sheets, &part, false)?;
+                let doc = dirty_of(&mut dirty_sheets, &part);
+                omml::set_size(&mut pkg, &doc.root, &part, op, i)?;
+            }
+            XlsxOp::SetMathAnchor(op) => {
+                let part = require_drawing_worksheet(
+                    &sheet_index,
+                    &op.target.sheet,
+                    i,
+                    ErrorKind::InsertMathWorksheetOnly,
+                )?;
+                load_dirty(&pkg, &mut dirty_sheets, &part, false)?;
+                let doc = dirty_of(&mut dirty_sheets, &part);
+                omml::set_anchor(&mut pkg, &doc.root, &part, op, i)?;
+            }
             XlsxOp::InsertSlicer(op) => {
                 let part = require_drawing_worksheet(
                     &sheet_index,

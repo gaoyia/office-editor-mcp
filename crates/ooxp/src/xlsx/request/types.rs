@@ -1937,6 +1937,8 @@ pub enum XlsxOp {
     InsertMath(super::super::omml::InsertMathOp),
     SetMath(super::super::omml::SetMathOp),
     DeleteMath(super::super::omml::DeleteMathOp),
+    SetMathSize(super::super::omml::SetMathSizeOp),
+    SetMathAnchor(super::super::omml::SetMathAnchorOp),
     InsertSlicer(slicer::InsertSlicerOp),
     DeleteSlicer(slicer::DeleteSlicerOp),
     SetSlicerSize(slicer::SetSlicerSizeOp),

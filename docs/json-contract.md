@@ -37,7 +37,8 @@ apply 用 `insertModel3d` / `replaceModel3d` / `deleteModel3d` / `setModel3dSize
 docx 另认 `setModel3dWrap`。xlsx 另认 `setModel3dAnchor`。pptx 另认 `setModel3dPos`。
 不是图，不进 `pictures`。对 3D id 发图的 size / pos / wrap / anchor 仍报 `InvalidId`。
 xlsx / pptx 的 `scope.maths` 列出 drawing 公式框（`a14:m` 包 OMML）。
-apply 复用 `insertMath` / `setMath` / `deleteMath`。不是单元格 `f`，也不把 Word 的 `expr` 搬过去。
+apply 复用 `insertMath` / `setMath` / `deleteMath`。xlsx 另认 `setMathAnchor` / `setMathSize`。pptx 另认 `setMathPos` / `setMathSize`。
+`setMath` 仍只改字。不是单元格 `f`，也不把 Word 的 `expr` 搬过去。对公式框 id 发文本框 / 形状的锚点与尺寸 op 仍报 `InvalidId`。
 docx 的 `scope.maths` 仍是段落 `oMath`，见 [docx 分册](json-contract-docx.md#insertmath)。
 xlsx 的 `scope.oleObjects` 与 OLE op 认工作表 `<oleObject>`（ECMA-376 §18.3.1.59），不认 `@link` 与 ActiveX `controls`，不把嵌入字节或预览图塞进树。
 pptx 的 `scope.comments` 与批注 op 认该页 2018 线程化批注（`p188:cmLst`），不认 ECMA-376 §19.4 旧式部件。
@@ -249,7 +250,7 @@ create 与 apply 落盘时先写入目标同目录的临时文件，再改名为
 `setSmartArtText`、`addSmartArtPoint`、`deleteSmartArtPoint`、`setSmartArtSize`、`setSmartArtAnchor`、`setSmartArtColors`、
 `setSmartArtStyle`、`setSmartArtLayout`；
 不含 `setSmartArtPos`、`setSmartArtWrap`）、以及超链接 op（`insertHyperlink`、`setHyperlink`、`deleteHyperlink`）、
-以及迷你图 op（`insertSparkline`、`setSparkline`、`deleteSparkline`）、以及 OLE op（`insertOle`、`deleteOle`）、以及 3D 模型 op（`insertModel3d`、`replaceModel3d`、`deleteModel3d`、`setModel3dSize`、`setModel3dAnchor`；不含 `setModel3dWrap`、`setModel3dPos`）、以及公式 op（`insertMath`、`setMath`、`deleteMath`）、以及切片器 op（`insertSlicer`、
+以及迷你图 op（`insertSparkline`、`setSparkline`、`deleteSparkline`）、以及 OLE op（`insertOle`、`deleteOle`）、以及 3D 模型 op（`insertModel3d`、`replaceModel3d`、`deleteModel3d`、`setModel3dSize`、`setModel3dAnchor`；不含 `setModel3dWrap`、`setModel3dPos`）、以及公式 op（`insertMath`、`setMath`、`deleteMath`、`setMathSize`、`setMathAnchor`；不含 `setMathPos`）、以及切片器 op（`insertSlicer`、
 `deleteSlicer`、`setSlicerSize`、`setSlicerAnchor`、`setSlicerView`、`setSlicerFilter`）、以及连接 op（`insertConnection`、`deleteConnection`）、以及外部引用 op（`insertExternalLink`、`setExternalLink`、`deleteExternalLink`）、以及 `setProtection`、以及允许编辑区域 op（`insertProtectedRange`、`setProtectedRange`、`deleteProtectedRange`）、以及命名单元格样式 op（`insertCellStyle`、`deleteCellStyle`、`setCellNamedStyle`）、
 以及主题 op（`setThemeColors`、`setThemeFonts`、`setThemeFmt`、`setThemeExtraSchemes`、`setThemeOverride`）。
 docx 认 `setParaText`、`setHeaderFooterDistance`、`setPageMargin`、`setPageSize`、`setColumns`、`setVerticalAlign`、
@@ -296,7 +297,7 @@ pptx 认 `setShapeText`、`setShapeFormat`、形状管理 op（`insertShape`、`
 以及 `setHandoutText`、以及超链接 op（`insertHyperlink`、`setHyperlink`、`deleteHyperlink`）、以及域 op（`insertField`、`setField`、
 `deleteField`）、以及媒体 op（`insertVideo`、`insertAudio`、`deleteMedia`、`setMedia`）、以及幻灯片节 op（`insertSlideSection`、`setSlideSectionName`、
 `deleteSlideSection`、`setSlideSection`）、以及自定义放映 op（`insertCustomShow`、`setCustomShow`、`deleteCustomShow`）、
-以及 OLE op（`insertOle`、`deleteOle`）、以及 3D 模型 op（`insertModel3d`、`replaceModel3d`、`deleteModel3d`、`setModel3dSize`、`setModel3dPos`；不含 `setModel3dWrap`、`setModel3dAnchor`）、以及公式 op（`insertMath`、`setMath`、`deleteMath`）、以及 Zoom op（`insertZoom`、`setZoom`、`deleteZoom`）、以及 `setShowPr`、以及 `setProtection`、
+以及 OLE op（`insertOle`、`deleteOle`）、以及 3D 模型 op（`insertModel3d`、`replaceModel3d`、`deleteModel3d`、`setModel3dSize`、`setModel3dPos`；不含 `setModel3dWrap`、`setModel3dAnchor`）、以及公式 op（`insertMath`、`setMath`、`deleteMath`、`setMathSize`、`setMathPos`；不含 `setMathAnchor`）、以及 Zoom op（`insertZoom`、`setZoom`、`deleteZoom`）、以及 `setShowPr`、以及 `setProtection`、
 以及 `setProps` / `setCustomProp` / `deleteCustomProp`。
 不提供把整棵时间轴当 JSON 写入的 op；`setTiming` 仍报 `UnsupportedOp`。
 对不上格式的 op（例如对 pptx 发 `setCell` / `setCellStyle` / `setParaText` / `setProtection`，
@@ -317,9 +318,9 @@ pptx 认 `setShapeText`、`setShapeFormat`、形状管理 op（`insertShape`、`
 `insertConnection` / `deleteConnection` / `insertExternalLink` / `setExternalLink` / `deleteExternalLink` / `insertCustomView`
  / `deleteCustomView` / `showCustomView` / `insertProtectedRange` / `setProtectedRange` / `deleteProtectedRange`
  / `insertCellStyle` / `deleteCellStyle` / `setCellNamedStyle`，
-对 docx 发 `setPictureAnchor` / `setChartAnchor` / `setSmartArtPos` / `setNotesText` / `setModel3dAnchor` / `setSlicerAnchor` / `setSlicerSize` / `setSlicerView` / `setSlicerFilter`，
-对 pptx 发 `setPictureWrap` / `setPictureAnchor` / `setChartWrap` / `setChartAnchor` / `setSmartArtWrap` / `setModel3dWrap` / `setModel3dAnchor` / `setSlicerAnchor` / `setSlicerSize` / `setSlicerView` / `setSlicerFilter`，
-对 docx / xlsx 发 `setPicturePos` / `setChartPos` / `setSmartArtPos` / `setModel3dPos` / `setNotesText` / `insertSlide` / `deleteSlide`
+对 docx 发 `setPictureAnchor` / `setChartAnchor` / `setSmartArtPos` / `setNotesText` / `setModel3dAnchor` / `setSlicerAnchor` / `setSlicerSize` / `setSlicerView` / `setSlicerFilter` / `setMathAnchor` / `setMathPos` / `setMathSize`，
+对 pptx 发 `setPictureWrap` / `setPictureAnchor` / `setChartWrap` / `setChartAnchor` / `setSmartArtWrap` / `setModel3dWrap` / `setModel3dAnchor` / `setSlicerAnchor` / `setSlicerSize` / `setSlicerView` / `setSlicerFilter` / `setMathAnchor`，
+对 docx / xlsx 发 `setPicturePos` / `setChartPos` / `setSmartArtPos` / `setModel3dPos` / `setMathPos` / `setNotesText` / `insertSlide` / `deleteSlide`
  / `moveSlide` / `setSlideHidden` / `setTransition` / `insertAnim` / `setAnim` / `deleteAnim` / `moveAnim` / `setSlideLayout` / `insertLayout`
  / `deleteLayout` / `insertPlaceholder` / `deletePlaceholder` / `insertMaster` / `deleteMaster` / `setSlideSize`
  / `setThemeColors` / `setThemeFonts` / `setHandoutText` / `setShapePos` / `setShapeSize` / `setShapeFill`
@@ -796,6 +797,11 @@ pptx 写入 graphicFrame 的 `p:xfrm/a:ext`；Fallback 海报 `p:pic` 同步改�
 `setSlicerView` 改 slicer / timeline 视图部件上的标题、行高、列数、显示开关与样式名。docx / pptx 上发此 op 报 `InvalidField`。
 `setSlicerFilter` 改切片器勾选或时间线筛选区间。docx / pptx 上发此 op 报 `InvalidField`。
 见 [xlsx](json-contract-xlsx.md#setslicersize)。
+xlsx 的 `setMathSize` 字段与 `setPictureSize` 的 xlsx 一侧相同；`setMathAnchor` 字段与 `setPictureAnchor` 相同。
+pptx 的 `setMathSize` 字段与 `setShapeSize` 相同；`setMathPos` 字段与 `setShapePos` 相同。
+id 必须是公式框 id。`setMath` 仍禁止 `x` / `y` / `cx` / `cy` / `from` / `to`。
+docx 上 `setMathSize` / `setMathAnchor` / `setMathPos` 报 `InvalidField`。
+见 [xlsx](json-contract-xlsx.md#setmathsize)、[pptx](json-contract-pptx.md#setmathsize)。
 
 ### insertTextBox
 

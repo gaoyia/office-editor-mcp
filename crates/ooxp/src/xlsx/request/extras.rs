@@ -1211,6 +1211,59 @@ pub(super) fn parse_delete_math(
     Ok(super::super::omml::DeleteMathOp { id, target })
 }
 
+pub(super) fn parse_set_math_size(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<super::super::omml::SetMathSizeOp, Error> {
+    deny_keys(obj, i, &["op", "id", "cx", "cy", "to", "toOffX", "toOffY"])?;
+    let id = require_id(obj, i)?;
+    let target = super::super::omml::parse_id(&id, &format!("ops[{i}].id"))?;
+    let s = parse_drawing_size(obj, i, "setMathSize")?;
+    Ok(super::super::omml::SetMathSizeOp {
+        id,
+        target,
+        cx: s.cx,
+        cy: s.cy,
+        to: s.to,
+        to_off_x: s.to_off_x,
+        to_off_y: s.to_off_y,
+    })
+}
+
+pub(super) fn parse_set_math_anchor(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<super::super::omml::SetMathAnchorOp, Error> {
+    deny_keys(
+        obj,
+        i,
+        &[
+            "op", "id", "anchor", "from", "to", "fromOffX", "fromOffY", "toOffX", "toOffY", "posX",
+            "posY", "editAs", "cx", "cy", "fromX", "fromY", "toX", "toY",
+        ],
+    )?;
+    let id = require_id(obj, i)?;
+    let target = super::super::omml::parse_id(&id, &format!("ops[{i}].id"))?;
+    let p = parse_drawing_anchor_patch(obj, i, "setMathAnchor")?;
+    Ok(super::super::omml::SetMathAnchorOp {
+        id,
+        target,
+        anchor: p.anchor,
+        from: p.from,
+        to: p.to,
+        from_off_x: p.from_off_x,
+        from_off_y: p.from_off_y,
+        to_off_x: p.to_off_x,
+        to_off_y: p.to_off_y,
+        pos_x: p.pos_x,
+        pos_y: p.pos_y,
+        edit_as: p.edit_as,
+        cx: p.cx,
+        cy: p.cy,
+        rel: p.rel,
+    })
+}
+
 pub(super) fn parse_insert_slicer(
     obj: &serde_json::Map<String, Value>,
     i: usize,

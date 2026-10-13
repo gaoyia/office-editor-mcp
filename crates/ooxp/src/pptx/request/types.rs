@@ -1140,6 +1140,8 @@ pub enum PptxOp {
     InsertMath(super::super::omml::InsertMathOp),
     SetMath(super::super::omml::SetMathOp),
     DeleteMath(super::super::omml::DeleteMathOp),
+    SetMathSize(super::super::omml::SetMathSizeOp),
+    SetMathPos(super::super::omml::SetMathPosOp),
     InsertZoom(super::super::zoom::InsertZoomOp),
     DeleteZoom(super::super::zoom::DeleteZoomOp),
     SetZoom(super::super::zoom::SetZoomOp),

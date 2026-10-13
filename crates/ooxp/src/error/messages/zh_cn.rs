@@ -1149,6 +1149,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::TwoCellSlicerSize => {
             "twoCell 切片器请在 setSlicerSize 里给 to，不要给 cx / cy".into()
         }
+        ErrorKind::TwoCellMathSize => {
+            "twoCell 公式框请在 setMathSize 里给 to，不要给 cx / cy".into()
+        }
         ErrorKind::TwoCellChartSize => {
             "twoCell 图表请在 setChartSize 里给 to，不要给 cx / cy".into()
         }

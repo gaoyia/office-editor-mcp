@@ -232,3 +232,160 @@ fn reject_expr_and_empty_text() {
     assert_eq!(err_empty.code(), ErrorCode::InvalidField);
     assert!(!out.exists());
 }
+
+fn apply_err(path: &Path, out: &Path, ops: Value) -> ooxp::Error {
+    run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "apply",
+            "path": path.to_string_lossy(),
+            "output": out.to_string_lossy(),
+            "ops": ops
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap_err()
+}
+
+fn insert_one(tag: &str) -> (PathBuf, String) {
+    let src = create_deck(tag, json!([{ "shapes": [{ "text": "标题" }] }]));
+    let out = seq_path(&format!("{tag}-ins"), "pptx");
+    apply(
+        &src,
+        &out,
+        json!([{ "op": "insertMath", "id": "slide:1", "text": "E=mc^2" }]),
+    );
+    let tree = inspect(&out, json!({ "maths": true }));
+    let id = first_math(&tree)["id"].as_str().unwrap().to_string();
+    (out, id)
+}
+
+#[test]
+fn set_size_and_pos() {
+    let (src, id) = insert_one("geom");
+    let sized = seq_path("sized", "pptx");
+    apply(
+        &src,
+        &sized,
+        json!([{ "op": "setMathSize", "id": id, "cx": 1828800, "cy": 914400 }]),
+    );
+    let tree_s = inspect(&sized, json!({ "maths": true }));
+    let item_s = first_math(&tree_s);
+    assert_eq!(item_s["cx"], 1828800);
+    assert_eq!(item_s["cy"], 914400);
+    assert_eq!(item_s["text"], "E=mc^2");
+    let xml_s = part_text(&sized, "ppt/slides/slide1.xml");
+    assert!(xml_s.contains("cx=\"1828800\""), "{xml_s}");
+    assert!(xml_s.contains("cx=\"914400\""), "{xml_s}");
+
+    let moved = seq_path("moved", "pptx");
+    apply(
+        &sized,
+        &moved,
+        json!([{ "op": "setMathPos", "id": id, "x": 914400, "y": 457200 }]),
+    );
+    let tree_m = inspect(&moved, json!({ "maths": true }));
+    let item_m = first_math(&tree_m);
+    assert_eq!(item_m["x"], 914400);
+    assert_eq!(item_m["y"], 457200);
+    assert_eq!(item_m["cx"], 1828800);
+    assert_eq!(item_m["text"], "E=mc^2");
+}
+
+#[test]
+fn notes_size_not_in_root_count() {
+    let src = create_deck("notes-sz", json!([{ "shapes": [{ "text": "标题" }] }]));
+    let inserted = seq_path("notes-ins", "pptx");
+    apply(
+        &src,
+        &inserted,
+        json!([{ "op": "insertMath", "id": "slide:1/notes", "text": "E=mc^2" }]),
+    );
+    let tree0 = inspect(&inserted, json!({ "maths": true, "notes": true }));
+    let id = tree0["slides"][0]["notes"]["maths"][0]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let sized = seq_path("notes-sz", "pptx");
+    apply(
+        &inserted,
+        &sized,
+        json!([{ "op": "setMathSize", "id": id, "cx": 1828800, "cy": 914400 }]),
+    );
+    let tree = inspect(&sized, json!({ "maths": true, "notes": true }));
+    assert_eq!(tree["mathCount"], 0);
+    assert_eq!(tree["slides"][0]["notes"]["maths"][0]["cx"], 1828800);
+    assert_eq!(tree["slides"][0]["notes"]["maths"][0]["cy"], 914400);
+}
+
+#[test]
+fn set_math_keeps_geom_and_rejects_wrong_id() {
+    let (src, id) = insert_one("keep");
+    let sized = seq_path("keep-sz", "pptx");
+    apply(
+        &src,
+        &sized,
+        json!([{ "op": "setMathSize", "id": id, "cx": 1828800, "cy": 914400 }]),
+    );
+    let moved = seq_path("keep-pos", "pptx");
+    apply(
+        &sized,
+        &moved,
+        json!([{ "op": "setMathPos", "id": id, "x": 914400, "y": 457200 }]),
+    );
+    let replaced = seq_path("keep-set", "pptx");
+    apply(
+        &moved,
+        &replaced,
+        json!([{ "op": "setMath", "id": id, "text": "a^2+b^2=c^2" }]),
+    );
+    let tree = inspect(&replaced, json!({ "maths": true }));
+    let item = first_math(&tree);
+    assert_eq!(item["text"], "a^2+b^2=c^2");
+    assert_eq!(item["cx"], 1828800);
+    assert_eq!(item["cy"], 914400);
+    assert_eq!(item["x"], 914400);
+    assert_eq!(item["y"], 457200);
+
+    let fail = seq_path("sp-on-math", "pptx");
+    let err = apply_err(
+        &replaced,
+        &fail,
+        json!([{ "op": "setShapePos", "id": id, "x": 1000, "y": 1000 }]),
+    );
+    assert_eq!(err.code(), ErrorCode::InvalidId);
+    assert!(!fail.exists());
+}
+
+#[test]
+fn reject_empty_pos_and_pptx_anchor() {
+    let (src, id) = insert_one("rej-geom");
+    let fail_pos = seq_path("empty-pos", "pptx");
+    let err_pos = apply_err(&src, &fail_pos, json!([{ "op": "setMathPos", "id": id }]));
+    assert_eq!(err_pos.code(), ErrorCode::InvalidField);
+    assert!(!fail_pos.exists());
+
+    let fail_sz = seq_path("empty-sz", "pptx");
+    let err_sz = apply_err(&src, &fail_sz, json!([{ "op": "setMathSize", "id": id }]));
+    assert_eq!(err_sz.code(), ErrorCode::InvalidField);
+    assert!(!fail_sz.exists());
+
+    let fail_anchor = seq_path("pptx-anchor", "pptx");
+    let err_anchor = apply_err(
+        &src,
+        &fail_anchor,
+        json!([{ "op": "setMathAnchor", "id": id, "from": "C3" }]),
+    );
+    assert_eq!(err_anchor.code(), ErrorCode::InvalidField);
+    assert!(!fail_anchor.exists());
+
+    let fail_keys = seq_path("set-geom-keys", "pptx");
+    let err_keys = apply_err(
+        &src,
+        &fail_keys,
+        json!([{ "op": "setMath", "id": id, "text": "x", "x": 1000 }]),
+    );
+    assert_eq!(err_keys.code(), ErrorCode::InvalidField);
+    assert!(!fail_keys.exists());
+}

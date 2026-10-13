@@ -1286,6 +1286,10 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             "twoCell slicer size is defined by the to cell; give to on setSlicerSize, not cx / cy"
                 .into()
         }
+        ErrorKind::TwoCellMathSize => {
+            "twoCell math drawing size is defined by the to cell; give to on setMathSize, not cx / cy"
+                .into()
+        }
         ErrorKind::TwoCellChartSize => {
             "twoCell chart size is defined by the to cell; give to on setChartSize, not cx / cy"
                 .into()

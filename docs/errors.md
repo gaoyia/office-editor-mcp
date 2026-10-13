@@ -625,7 +625,7 @@
   - `setSmartArtPos` / `setSmartArtWrap`
   - `insertWatermark` / `deleteWatermark`
   - `insertInkCanvas` / `replaceInkCanvas` / `deleteInkCanvas` / `setInkCanvasSize` / `setInkCanvasWrap`
-  - `setModel3dWrap` / `setModel3dPos`
+  - `setModel3dWrap` / `setModel3dPos` / `setMathPos`
   - 表格结构 op、修订 op、书签 op、例外编辑区 op、域 op
   - `insertCaption` / `deleteCaption` / `insertCrossRef` / `deleteCrossRef`
   - `insertIndex` / `deleteIndex` / `insertIndexEntry` / `deleteIndexEntry`
@@ -645,7 +645,7 @@
   - 迷你图：`insertSparkline`、`setSparkline`、`deleteSparkline`
   - OLE：`insertOle`、`deleteOle`
   - 3D 模型：`insertModel3d`、`replaceModel3d`、`deleteModel3d`、`setModel3dSize`、`setModel3dAnchor`
-  - 公式：`insertMath`、`setMath`、`deleteMath`
+  - 公式：`insertMath`、`setMath`、`deleteMath`、`setMathSize`、`setMathAnchor`
   - 切片器：`insertSlicer`、`deleteSlicer`、`setSlicerSize`、`setSlicerAnchor`、`setSlicerView`、`setSlicerFilter`
   - 连接：`insertConnection`、`deleteConnection`
   - 外部引用：`insertExternalLink`、`setExternalLink`、`deleteExternalLink`
@@ -667,6 +667,7 @@
 - xlsx `twoCell` 文本框、形状、 连接线或 SmartArt 的 `setTextBoxSize` / `setSmartArtSize` 出现 `cx` / `cy` 报 `InvalidField`
 - xlsx `twoCell` 3D 的 `setModel3dSize` 出现 `cx` / `cy` 报 `InvalidField`
 - xlsx `twoCell` 切片器（含时间线）的 `setSlicerSize` 出现 `cx` / `cy` 报 `InvalidField`
+- xlsx `twoCell` 公式框的 `setMathSize` 出现 `cx` / `cy` 报 `InvalidField`
 - 改右下角请给 `to`
 - 对 pptx 发下列内容报 `InvalidField`
   - 文本框 op、脚注尾注 op
@@ -681,12 +682,12 @@
   - `insertChartSheet`、`deleteChartSheet`
   - `insertWatermark` / `deleteWatermark`
   - `insertInkCanvas` / `replaceInkCanvas` / `deleteInkCanvas` / `setInkCanvasSize` / `setInkCanvasWrap`
-  - `setModel3dWrap` / `setModel3dAnchor`
+  - `setModel3dWrap` / `setModel3dAnchor` / `setMathAnchor`
 - pptx 的 `insertComment` 的 `id` 必须是 `slide:{n}`
 - 对其余批注 op，id 必须是 `slide:{n}/comment:{guid}`（回复则再加 `/reply:{guid}`）
 - docx / pptx 上发 `setChartAnchor` 报 `InvalidField`
 - docx / pptx 上发 `setModel3dAnchor` 报 `InvalidField`
-- docx / xlsx 上发 `setPicturePos` / `setChartPos` / `setModel3dPos` 报 `InvalidField`
+- docx / xlsx 上发 `setPicturePos` / `setChartPos` / `setModel3dPos` / `setMathPos` 报 `InvalidField`
 - 找不到文本框时，框专用 op 报 `IdNotFound`
 - 对宿主段落 id 发框专用 op（`insertTextBox` 除外）报 `InvalidId`
 - 对框 id 发 `setParaText` 报 `InvalidId`
@@ -1052,12 +1053,20 @@
 - docx：id 不是公式 id 报 `InvalidId`
 - docx：`insertMath` 的 `id` 必须是正文、页眉页脚或框内段落 id 或 `docx:document`
 - xlsx：`insertMath` 的 `id` 必须是 `sheet:{name}`
-- xlsx：`setMath` / `deleteMath` 的 `id` 必须是公式框 id
+- xlsx：`setMath` / `deleteMath` / `setMathSize` / `setMathAnchor` 的 `id` 必须是公式框 id
 - pptx：`insertMath` 的 `id` 必须是 `slide:{n}`、`slide:{n}/notes`、`master:{n}` 或 `master:{n}/layout:{k}`
-- pptx：`setMath` / `deleteMath` 的 `id` 必须是公式框 id
+- pptx：`setMath` / `deleteMath` / `setMathSize` / `setMathPos` 的 `id` 必须是公式框 id
 - 对单元格 id、图 id、文本框 id 发公式 op 报 `InvalidId`
+- 对公式框 id 发 `setTextBoxSize` / `setTextBoxAnchor` / `setShapePos` / `setShapeSize` 报 `InvalidId`
+- 对文本框 / 形状 id 发 `setMathSize` / `setMathAnchor` / `setMathPos` 报 `InvalidId`
 - docx 空 `text` / 空 `expr` / 同时给 / 两个都不给且 `setMath` 也没有 `jc`、或不认识的 `kind` / `jc` / 行内带 `jc` 报 `InvalidField`
 - xlsx / pptx 空 `text`、出现 `expr` / `kind` 报 `InvalidField`
+- xlsx `setMathSize` 的 `cx` / `cy` 一个都不给报 `InvalidField`（`twoCell` 见上，须给 `to`）
+- pptx `setMathSize` 的 `cx` / `cy` 一个都不给、`setMathPos` 的 `x` / `y` 一个都不给报 `InvalidField`
+- `setMath` 出现 `x` / `y` / `cx` / `cy` / `from` / `to` 报未知字段
+- docx 上发 `setMathSize` / `setMathAnchor` / `setMathPos` 报 `InvalidField`
+- xlsx 上发 `setMathPos` 报 `InvalidField`
+- pptx 上发 `setMathAnchor` 报 `InvalidField`
 - 目标段落落在本期收入的 `oMath` 范围内时 `setParaText` 报 `NotImplemented`
 - 公式落在带分节符且删掉后该段会变空的段落上时，`deleteMath` 报 `NotImplemented`
 - 找不到 Zoom 时，`deleteZoom` / `setZoom` 报 `IdNotFound`

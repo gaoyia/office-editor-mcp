@@ -4,7 +4,7 @@
 use serde_json::{Map, Value};
 
 use crate::error::{Error, ErrorKind, TypeName};
-use crate::xml::Element;
+use crate::xml::{Element, Node};
 
 pub const A14_NS: &str = "http://schemas.microsoft.com/office/drawing/2010/main";
 pub const MATH_NS: &str = "http://schemas.openxmlformats.org/officeDocument/2006/math";
@@ -79,6 +79,32 @@ pub fn first_sp(el: &Element) -> Option<&Element> {
         if let Some(sp) = first_sp(c) {
             return Some(sp);
         }
+    }
+    None
+}
+
+fn contains_sp(el: &Element) -> bool {
+    el.local_name() == "sp" || el.element_children().any(contains_sp)
+}
+
+/// 找 Choice 里第一个 `sp`，给事后几何改 `xfrm`。
+pub fn first_sp_mut(el: &mut Element) -> Option<&mut Element> {
+    if el.local_name() == "sp" {
+        return Some(el);
+    }
+    let mut i = 0usize;
+    while i < el.children.len() {
+        let hit = match &el.children[i] {
+            Node::Element(e) => contains_sp(e),
+            _ => false,
+        };
+        if hit {
+            let Node::Element(child) = &mut el.children[i] else {
+                return None;
+            };
+            return first_sp_mut(child);
+        }
+        i += 1;
     }
     None
 }

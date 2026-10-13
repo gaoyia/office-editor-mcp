@@ -793,6 +793,38 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                 omml::delete(&mut pkg, &mut doc, &part, op, i)?;
                 pkg.set(&part, doc.to_bytes()?)?;
             }
+            PptxOp::SetMathSize(op) => {
+                let part = host_xml_part(
+                    &pkg,
+                    &pres_part,
+                    &pres.root,
+                    &slides,
+                    op.target.slide,
+                    op.target.on_notes,
+                    op.target.master,
+                    ErrorKind::MathDrawingNotFound { id: op.id.clone() },
+                    format!("ops[{i}].id"),
+                )?;
+                let mut doc = xml::parse(pkg.get(&part)?)?;
+                omml::set_size(&mut doc, op, i)?;
+                pkg.set(&part, doc.to_bytes()?)?;
+            }
+            PptxOp::SetMathPos(op) => {
+                let part = host_xml_part(
+                    &pkg,
+                    &pres_part,
+                    &pres.root,
+                    &slides,
+                    op.target.slide,
+                    op.target.on_notes,
+                    op.target.master,
+                    ErrorKind::MathDrawingNotFound { id: op.id.clone() },
+                    format!("ops[{i}].id"),
+                )?;
+                let mut doc = xml::parse(pkg.get(&part)?)?;
+                omml::set_pos(&mut doc, op, i)?;
+                pkg.set(&part, doc.to_bytes()?)?;
+            }
             PptxOp::InsertZoom(op) => {
                 let part = ensure_host_part(
                     &mut pkg,

@@ -270,6 +270,8 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<PptxOp>, Error> {
             "insertMath" => PptxOp::InsertMath(parse_insert_math(obj, i)?),
             "setMath" => PptxOp::SetMath(parse_set_math(obj, i)?),
             "deleteMath" => PptxOp::DeleteMath(parse_delete_math(obj, i)?),
+            "setMathSize" => PptxOp::SetMathSize(parse_set_math_size(obj, i)?),
+            "setMathPos" => PptxOp::SetMathPos(parse_set_math_pos(obj, i)?),
             "insertZoom" => PptxOp::InsertZoom(parse_insert_zoom(obj, i)?),
             "deleteZoom" => PptxOp::DeleteZoom(parse_delete_zoom(obj, i)?),
             "setZoom" => PptxOp::SetZoom(parse_set_zoom(obj, i)?),
@@ -392,6 +394,7 @@ fn is_foreign_op(op_name: &str) -> bool {
             | "setPictureAnchor"
             | "setModel3dWrap"
             | "setModel3dAnchor"
+            | "setMathAnchor"
             | "insertTextBox"
             | "deleteTextBox"
             | "setTextBoxSize"

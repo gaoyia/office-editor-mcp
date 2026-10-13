@@ -119,7 +119,7 @@ apply 可改目标单元格，也可换、插、删工作表图，并可改 `one
 也可往图表工作表的 Chart Drawing（`c:userShapes`）插图、形状、文本框与连接线，锚点用 0–1 分数。
 也可插、删、改工作表文本框（`xdr:sp` `txBox`）、无 `txBox` 的形状、
 连接线（`xdr:cxnSp`）与 SmartArt（diagram `graphicFrame`）：改字只动 `xdr:txBody` 或 data 部件可见点；文字格式走 `setShapeFormat`；几何走锚点。
-也可插改删工作表 drawing 公式框（`a14:m`），不进 `textBoxes`。
+也可插改删工作表 drawing 公式框（`a14:m`），并可改已有公式框的锚点与尺寸；`setMath` 仍只改字。不进 `textBoxes`。
 插 SmartArt 再新建 `/xl/diagrams/` 四件套，关系写在 drawing `.rels`。`insertChartSheet` 再新建 `/xl/chartsheets/sheetN.xml`。
 往页眉插图可能新建另一份 drawing 并写 `<drawingHF>`。改单元格值或公式之后，把工作簿标成打开时需要重算，必要时删掉 `xl/calcChain.xml`。
 `setCellStyle` 可改 `styles.xml`，不求值公式。也可用 `setColWidth` / `setRowHeight` / `mergeRange` / `unmergeRange` 写 `cols`、
@@ -228,7 +228,7 @@ apply 可改被点名形状的 `p:txBody` 可见文字（含备注形状、母�
 也可用 `setMedia` 改裁剪、书签与字幕轨（不写 fade）；
 也可用 `insertCustomShow` / `setCustomShow` / `deleteCustomShow` 读写 `p:custShowLst`（不算放映引擎）；
 也可插、删幻灯片、备注页与幻灯片母版 / 版式上的嵌入对象（`p:oleObj`，不激活 OLE 服务器），也可插、删、换幻灯片、备注页与幻灯片母版 / 版式上的 3D 模型（`am3d:model3d`，不栅格化），并可改已有 3D 的尺寸与画布坐标，
-也可插改删幻灯片、备注页与幻灯片母版 / 版式上的 drawing 公式框（`a14:m`，不实现排版引擎），也可插、删、改幻灯片、备注页与幻灯片母版 / 版式上的 Zoom（`sldZm` / `sectionZm` / `summaryZm`，不实现放映跳转）；也可改文件属性。
+也可插改删幻灯片、备注页与幻灯片母版 / 版式上的 drawing 公式框（`a14:m`，不实现排版引擎），并可改已有公式框的画布坐标与尺寸；`setMath` 仍只改字。也可插、删、改幻灯片、备注页与幻灯片母版 / 版式上的 Zoom（`sldZm` / `sectionZm` / `summaryZm`，不实现放映跳转）；也可改文件属性。
 插删重排不重写未点名页。`exportMedia` 按幻灯片、备注页、批注、母版 / 版式上的图 id、视频 id、音频 id、OLE id 或 3D 模型 id 写出 `/ppt/media/…` 或 `/ppt/embeddings/…`。
 `exportChartData` 按图表 id 写出 embedding。create 生成最小 Transitional 包，
 必含 theme、slideMaster、slideLayout、presentation、各页 slide、presProps。
@@ -293,7 +293,7 @@ xlsx 也可插删改工作表文本框、形状、连接线与 SmartArt，可用
 xlsx 也可插删改工作表单元格超链接，脏该表 XML 与工作表 `.rels`，不标重算。xlsx 也可插删改工作表迷你图组，脏该表 `extLst`，不新建部件，不标重算。
 xlsx 也可列出、导出、插入并删除工作表嵌入对象，脏 `oleObjects`、worksheet drawing、VML `legacyDrawing`、工作表 `.rels`、embeddings 与预览媒体，不把字节塞进 inspect 树，不标重算。
 xlsx 也可插、删、换工作表 3D 模型，并改已有 3D 的尺寸与锚点，脏 worksheet drawing、drawing `.rels`、GLB 与海报 PNG，不把 GLB 塞进 inspect 树，不标重算。
-xlsx 也可插改删工作表 drawing 公式框，脏 worksheet drawing，写 `a14:m` AlternateContent，不标重算。
+xlsx 也可插改删工作表 drawing 公式框，并可改已有公式框的锚点与尺寸，脏 worksheet drawing，写 `a14:m` AlternateContent，不标重算。`setMath` 仍只改字。
 xlsx 也可列出、插入、删除工作表切片器与时间线，并改已有切片器（含时间线）的尺寸、锚点、视图属性与勾选，脏 `/xl/slicers/…`、`/xl/slicerCaches/…`、`/xl/timelines/…`、`/xl/timelineCaches/…`、worksheet drawing、工作表 `extLst` 的 `slicerList` / `timelineRefs`、
 workbook `extLst` 的 `slicerCaches` / `timelineCacheRefs`、workbook 的 `<definedNames>`、工作表 / workbook `.rels` 与内容类型；
 表格切片器的勾选还脏该表 `autoFilter`，不隐藏行。
@@ -332,7 +332,7 @@ pptx 可改被点名形状的可见文字（含备注形状与母版 / 版式占
 也可用 `insertSlideSection` / `setSlideSectionName` / `deleteSlideSection` / `setSlideSection` 读写 `p14:sectionLst`（删节时页还在；
 把页划进某节时可重排 `sldIdLst`），也可用 `insertCustomShow` / `setCustomShow`
  / `deleteCustomShow` 读写 `p:custShowLst`（删页时按 `r:id` 清引用），
-也可插、删幻灯片、备注页与母版 / 版式上的嵌入对象（`p:oleObj`，不激活 OLE 服务器），也可插、删、换幻灯片、备注页与母版 / 版式上的 3D 模型（`am3d:model3d`，不栅格化），并可改已有 3D 的尺寸与画布坐标，也可插改删幻灯片、备注页与母版 / 版式上的 drawing 公式框（`a14:m`，不实现排版引擎），也可插、删幻灯片、备注页与母版 / 版式上的 Zoom（`sldZm` / `sectionZm`，不写摘要缩放，不实现放映跳转），
+也可插、删幻灯片、备注页与母版 / 版式上的嵌入对象（`p:oleObj`，不激活 OLE 服务器），也可插、删、换幻灯片、备注页与母版 / 版式上的 3D 模型（`am3d:model3d`，不栅格化），并可改已有 3D 的尺寸与画布坐标，也可插改删幻灯片、备注页与母版 / 版式上的 drawing 公式框（`a14:m`，不实现排版引擎），并可改已有公式框的画布坐标与尺寸，也可插、删幻灯片、备注页与母版 / 版式上的 Zoom（`sldZm` / `sectionZm`，不写摘要缩放，不实现放映跳转），
 也可用 `setShowPr` 改 `presProps` 的 `p:showPr`，也可用 `setProtection` 写出或删掉 `p:modifyVerifier`（给了 `password` 时写 PowerPoint 16.0 的 SHA-512 哈希），
 脏 `presentation.xml` 的 `sldIdLst`、presentation 关系、新页或被删页及其备注 / 现代批注、内容类型，以及若有则同步 `p14:sectionLst` 与 `p:custShowLst`。
 未点名页原字节写回。插删改图、图表、SmartArt、备注与批注时仍脏该页 XML、该页 `.rels`、notesSlide 及其 `.rels`、必要时 notesMaster 与 presentation、

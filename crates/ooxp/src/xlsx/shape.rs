@@ -1111,13 +1111,13 @@ pub(crate) fn find_drawing_for(
             }
             visit_payloads(anchor, &mut |el| {
                 if is_obj(el) {
-                    if let Some(id) = cnv_of_object(el).0 {
+                    if let Some(id) = payload_cnv(el) {
                         if dummies.contains(&id) {
                             return Ok(());
                         }
                     }
                     index += 1;
-                    if key_matches(key, &cnv_of_object(el).0, index) {
+                    if key_matches(key, &payload_cnv(el), index) {
                         hit = true;
                     }
                 }
@@ -1197,6 +1197,14 @@ pub(crate) fn cnv_of_object(el: &Element) -> (Option<String>, String) {
     (None, String::new())
 }
 
+fn payload_cnv(el: &Element) -> Option<String> {
+    if crate::drawing_math::is_math_ac(el) {
+        crate::drawing_math::cnv_of_ac(el).0
+    } else {
+        cnv_of_object(el).0
+    }
+}
+
 fn is_geom(local: &str) -> bool {
     matches!(local, "from" | "to" | "ext" | "pos" | "clientData")
 }
@@ -1229,7 +1237,7 @@ where
 {
     if el.local_name() == "AlternateContent" {
         if crate::drawing_math::is_math_ac(el) {
-            return Ok(());
+            return f(el);
         }
         if let Some(c) = first_choice(el) {
             for child in c.element_children() {
@@ -1260,7 +1268,7 @@ fn outer_contains(
     let _ = visit_payloads(anchor, &mut |el| {
         if is_obj(el) {
             *index += 1;
-            if key_matches(key, &cnv_of_object(el).0, *index) {
+            if key_matches(key, &payload_cnv(el), *index) {
                 hit = true;
             }
         }
@@ -1503,6 +1511,12 @@ fn find_object_in<'a>(
 ) -> Option<&'a mut Element> {
     if el.local_name() == "AlternateContent" {
         if crate::drawing_math::is_math_ac(el) {
+            if is_obj(el) {
+                *index += 1;
+                if key_matches(key, &payload_cnv(el), *index) {
+                    return Some(el);
+                }
+            }
             return None;
         }
         let i = el
@@ -1521,7 +1535,7 @@ fn find_object_in<'a>(
     }
     if is_obj(el) {
         *index += 1;
-        if key_matches(key, &cnv_of_object(el).0, *index) {
+        if key_matches(key, &payload_cnv(el), *index) {
             return Some(el);
         }
         return None;
@@ -1568,6 +1582,12 @@ fn find_object_immut<'a>(
 ) -> Option<&'a Element> {
     if el.local_name() == "AlternateContent" {
         if crate::drawing_math::is_math_ac(el) {
+            if is_obj(el) {
+                *index += 1;
+                if key_matches(key, &payload_cnv(el), *index) {
+                    return Some(el);
+                }
+            }
             return None;
         }
         if let Some(c) = first_choice(el) {
@@ -1577,7 +1597,7 @@ fn find_object_immut<'a>(
     }
     if is_obj(el) {
         *index += 1;
-        if key_matches(key, &cnv_of_object(el).0, *index) {
+        if key_matches(key, &payload_cnv(el), *index) {
             return Some(el);
         }
         return None;
@@ -1713,6 +1733,12 @@ fn peek_match(
 ) {
     if el.local_name() == "AlternateContent" {
         if crate::drawing_math::is_math_ac(el) {
+            if is_obj(el) {
+                *index += 1;
+                if key_matches(key, &payload_cnv(el), *index) {
+                    *found = true;
+                }
+            }
             return;
         }
         if let Some(c) = first_choice(el) {
@@ -1731,7 +1757,7 @@ fn peek_match(
     }
     if is_obj(el) {
         *index += 1;
-        if key_matches(key, &cnv_of_object(el).0, *index) {
+        if key_matches(key, &payload_cnv(el), *index) {
             *found = true;
         }
         return;

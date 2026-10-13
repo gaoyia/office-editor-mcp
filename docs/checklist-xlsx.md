@@ -45,6 +45,7 @@ C、I、A、O、Xp、Xvg、Xem、X3d、Xom、Xtf、Xfl、Xc、Xh、Xfs、Xtl、X
 2026-10-14 补跑 `xlsx-slicer-caption.ps1`，Xsc1–Xsc5 通过。无 Repair。COM `Caption` 对得上。`columnCount=2`。时间线 `showHeader=false`。
 2026-10-14 补跑 `xlsx-theme.ps1`，Xth1–Xth5 通过。无 Repair。空白另存有 theme。`accent1=FF0000`。`majorLatin=Arial`。create 可写。省略为 null。
 2026-10-14 补跑 `xlsx-slicer-filter.ps1`，Xsi1–Xsi5 通过。无 Repair。表格 `selected=[]` 再 `乙`。透视勾选乙。时间线 `dateBetween` 再 `null`。
+2026-10-14 补跑 `xlsx-math-geom.ps1`，Xmg1–Xmg5 通过。无 Repair。`oneCell` `cx=1828800` `cy=914400`。`from=C3`。`twoCell` `to=D8`。`setMath` 不改几何。
 
 - **C1** ✅
   - Excel 16.0 打开 `manual-check/office/out/xlsx-create.xlsx`，标题栏无 Repair
@@ -106,6 +107,13 @@ C、I、A、O、Xp、Xvg、Xem、X3d、Xom、Xtf、Xfl、Xc、Xh、Xfs、Xtl、X
   - create `sheets[].maths` 同样写出
   - `deleteMath` 后 `mathCount` 为 0
   - 出现 `expr` / 空 `text` 得 `InvalidField`
+- **Xmg1–Xmg5** ✅
+  - Excel 16.0：`xlsx-math-geom.ps1`，5 PASS / 0 FAIL
+  - `oneCell` `setMathSize` 后树上 `cx=1828800` `cy=914400`，无 Repair
+  - `setMathAnchor` 后 `from=C3`
+  - `twoCell` `setMathSize` 后 `to=D8`
+  - `setMath` 不改几何。对公式框 id 发 `setTextBoxAnchor` 得 `InvalidId`
+  - `twoCell` 给 `cx`、xlsx 上 `setMathPos` 得 `InvalidField`
 - **Xc1–Xc7** ✅
   - Excel 16.0：无 `charts` 时 `chartCount=1`、没有名单
   - 名单 id 为 `sheet:Sheet1/chart:2`，系列 10/20/30 与单元格一致
@@ -789,6 +797,28 @@ COM 认 `Type=30`（`mso3DModel`）。页眉槽本期不插。
 - **Xom6**
   - 检查：拒错
   - 通过标准：出现 `expr` 或空 `text` 得 `InvalidField`，未写文件
+  - 不强制开 Excel
+
+## 工作表公式框事后几何
+
+已有公式框能改锚点与尺寸。`setMath` 仍只改字。不进 `textBoxes`。不算公式排版引擎。
+手测脚本 `manual-check/office/cases/xlsx-math-geom.ps1`。编号用 **Xmg**。不要和 Xm、Xom 撞。
+
+- **Xmg1**
+  - 检查：改尺寸
+  - 通过标准：对 `oneCell` `setMathSize` 后树上 `cx` / `cy` 对得上。Excel 无修复
+- **Xmg2**
+  - 检查：改锚点
+  - 通过标准：`setMathAnchor` 把 `from` 改到另一格后，树上 `from` 对得上。Excel 无修复
+- **Xmg3**
+  - 检查：twoCell
+  - 通过标准：`anchor=twoCell` 且给 `to` 后，`setMathSize` 给 `to` 树上对得上。Excel 无修复
+- **Xmg4**
+  - 检查：改字不改几何；错 id
+  - 通过标准：`setMath` 后位置尺寸仍是改过的值。对公式框 id 发 `setTextBoxAnchor` 得 `InvalidId`
+- **Xmg5**
+  - 检查：拒错
+  - 通过标准：`twoCell` 上给 `cx` 得 `InvalidField`。对 xlsx 发 `setMathPos` 得 `InvalidField`。未写文件
   - 不强制开 Excel
 
 ## 工作表图表

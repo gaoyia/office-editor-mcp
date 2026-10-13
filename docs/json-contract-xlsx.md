@@ -201,8 +201,9 @@ VML 不进。`mc:AlternateContent` 只进第一个 `Choice`。
 只认 `mc:AlternateContent` 且 Choice `Requires` 含 `a14`，子孙有 `a14:m` 或 `m:oMath`。整段只进 `maths`。
 Choice 与 Fallback 都不进 `textBoxes` / `shapes`，也不计入 `textBoxCount` / `shapeCount`。
 组合里符合条件的公式框要展开，组合本身不进树。页眉不进树。`chartsheet` 的 SpreadsheetDrawing 里若有公式框则列出；不提供对 `chartsheet` 发 `insertMath`。
-不是单元格 `f`。`insertMath` 的 `id` 必须是 `sheet:{name}`。`setMath` / `deleteMath` 的 `id` 必须是公式框 id。
+不是单元格 `f`。`insertMath` 的 `id` 必须是 `sheet:{name}`。`setMath` / `deleteMath` / `setMathSize` / `setMathAnchor` 的 `id` 必须是公式框 id。
 对单元格 id、图 id、文本框 id、形状 id 或 `xlsx:workbook` 发公式 op 报 `InvalidId`。
+对文本框 / 形状 id 发 `setMathSize` / `setMathAnchor`，或对公式框 id 发 `setTextBoxSize` / `setTextBoxAnchor`，仍报 `InvalidId`。
 对 `chartsheet` 报 `InvalidField`。对 `dialogsheet` / `macrosheet` 报 `NotImplemented`。
 出现 `expr` / `kind` 报 `InvalidField`。不把 OMML 原文、不把 `expr` 放进树。create 可用 `sheets[].maths`。
 docx 见 [docx 分册](json-contract-docx.md#insertmath)。pptx 见 [pptx 分册](json-contract-pptx.md#insertmath)。
@@ -2420,6 +2421,7 @@ docx / pptx 上发此 op 报 `InvalidField`。create 可写允许编辑区域。
 `/xl/embeddings/…`、`/xl/media/…` 与 `[Content_Types].xml`。
 `insertModel3d` / `replaceModel3d` / `deleteModel3d` 还可以脏 worksheet drawing、drawing `.rels`、`/xl/media/…` 与 `[Content_Types].xml`。
 `setModel3dSize` / `setModel3dAnchor` 只脏 worksheet drawing。
+`setMathSize` / `setMathAnchor` 只脏 worksheet drawing。不改字，不标重算。
 `setSlicerSize` / `setSlicerAnchor` 只脏 worksheet drawing。不改 slicer / timeline 部件，不改 cache，不执行筛选。
 `setSlicerView` 只脏 slicer 或 timeline 视图部件。不改 drawing 锚点，不改 cache，不执行筛选。
 `insertSlicer` / `deleteSlicer` 还可以脏 `/xl/slicers/…`、`/xl/slicerCaches/…`、worksheet drawing、工作表 `extLst` 的 `slicerList`、
@@ -3268,6 +3270,7 @@ Fallback 是同一套纯文本框，字为该 `text`。不栅格化，不写 `a:
 | `text` | 必须。非空。用一条 `m:r` / `m:t` 替换该 `oMath` 子节点 |
 
 不改锚点与尺寸。出现 `expr` / `kind` 报 `InvalidField`。空 `text` 报 `InvalidField`。
+出现 `x` / `y` / `cx` / `cy` / `from` / `to` 报未知字段。
 找不到报 `IdNotFound`。id 不是公式框 id 报 `InvalidId`。docx / pptx 见各自分册。
 
 ### deleteMath
@@ -3280,6 +3283,21 @@ Fallback 是同一套纯文本框，字为该 `text`。不栅格化，不写 `a:
 找不到报 `IdNotFound`。id 不是公式框 id 报 `InvalidId`。
 摘该条 `mc:AlternateContent`；若锚点只剩 `from` / `to` / `ext` / `pos` / `clientData` 则删整个锚点。
 海报无人引用则删。docx / pptx 见各自分册。
+
+### setMathSize
+
+字段与 `setPictureSize` 的 xlsx 一侧相同。`id` 必须是公式框 id。
+`oneCell` / `absolute` 改外层 `xdr:ext`。`twoCell` 不认 `cx` / `cy`（出现报 `InvalidField`），必须给 `to`。
+不按列宽行高去换算 EMU。留下 AlternateContent 与 `xdr:clientData`。
+对文本框 id 发此 op、对公式框 id 发 `setTextBoxSize` 仍报 `InvalidId`。docx 上发此 op 报 `InvalidField`。pptx 见 [pptx 分册](json-contract-pptx.md#setmathsize)。
+
+### setMathAnchor
+
+字段与 `setPictureAnchor` 相同，`id` 必须是公式框 id。
+改包含该 `a14:m` AlternateContent 的外层锚点，规则与 `setPictureAnchor` 相同（留下 AlternateContent 与 `xdr:clientData`）。
+docx / pptx 上发此 op 报 `InvalidField`。对公式框 id 发 `setTextBoxAnchor` 仍报 `InvalidId`。
+
+改公式框尺寸与锚点的示例见 `docs/examples/xlsx-apply-math-geom.json`。
 
 ### insertSlicer
 

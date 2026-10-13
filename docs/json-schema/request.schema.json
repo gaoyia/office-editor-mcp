@@ -1255,6 +1255,12 @@
                 "$ref": "xlsx.schema.json#/$defs/deleteMathOp"
               },
               {
+                "$ref": "xlsx.schema.json#/$defs/setMathSizeOp"
+              },
+              {
+                "$ref": "xlsx.schema.json#/$defs/setMathAnchorOp"
+              },
+              {
                 "$ref": "pptx.schema.json#/$defs/insertMathOp"
               },
               {
@@ -1262,6 +1268,12 @@
               },
               {
                 "$ref": "pptx.schema.json#/$defs/deleteMathOp"
+              },
+              {
+                "$ref": "pptx.schema.json#/$defs/setMathSizeOp"
+              },
+              {
+                "$ref": "pptx.schema.json#/$defs/setMathPosOp"
               },
               {
                 "$ref": "#/$defs/setProtectionOp"

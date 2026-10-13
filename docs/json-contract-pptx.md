@@ -343,8 +343,9 @@ xlsx 见 [xlsx 分册](json-contract-xlsx.md#insertmodel3d)。docx 见 [json-con
 只认 `mc:AlternateContent` 且 Choice `Requires` 含 `a14`，子孙有 `a14:m` 或 `m:oMath`。整段只进 `maths`。
 Choice 与 Fallback 都不进 `shapes`，也不计入 `shapeCount`。组合里符合条件的公式框要展开，组合本身不进树。
 备注页上同样判定，id 带 `slide:{n}/notes/` 前缀。幻灯片母版 / 版式上同样判定，id 带 `master:{n}/` 或 `master:{n}/layout:{k}/` 前缀。批注、备注母版、讲义不进树。
-`insertMath` 的 `id` 必须是 `slide:{n}`、`slide:{n}/notes`、`master:{n}` 或 `master:{n}/layout:{k}`。`setMath` / `deleteMath` 的 `id` 必须是公式框 id。
-对形状 id、图 id、`pptx:presentation` 发公式 op 报 `InvalidId`。出现 `expr` / `kind` 报 `InvalidField`。
+`insertMath` 的 `id` 必须是 `slide:{n}`、`slide:{n}/notes`、`master:{n}` 或 `master:{n}/layout:{k}`。`setMath` / `deleteMath` / `setMathSize` / `setMathPos` 的 `id` 必须是公式框 id。
+对形状 id、图 id、`pptx:presentation` 发公式 op 报 `InvalidId`。
+对形状 id 发 `setMathSize` / `setMathPos`，或对公式框 id 发 `setShapeSize` / `setShapePos`，仍报 `InvalidId`。出现 `expr` / `kind` 报 `InvalidField`。
 不把 OMML 原文、不把 `expr` 放进树。create 可用 `slides[].maths`。
 `slides[].notes` 为对象时可带 `maths`，字段与页上 `maths[]` 相同。字符串形式的 `notes` 仍只表示备注文本。
 xlsx 见 [xlsx 分册](json-contract-xlsx.md#insertmath)。docx 见 [json-contract-docx.md](json-contract-docx.md#insertmath)。
@@ -3048,6 +3049,7 @@ xlsx / docx 见各自分册。
 | `text` | 必须。非空。用一条 `m:r` / `m:t` 替换该 `oMath` 子节点 |
 
 不改位置尺寸。出现 `expr` / `kind` 报 `InvalidField`。空 `text` 报 `InvalidField`。
+出现 `x` / `y` / `cx` / `cy` 报未知字段。
 找不到报 `IdNotFound`。id 不是公式框 id 报 `InvalidId`。xlsx / docx 见各自分册。
 
 ### deleteMath
@@ -3059,6 +3061,22 @@ xlsx / docx 见各自分册。
 
 找不到报 `IdNotFound`。id 不是公式框 id 报 `InvalidId`。摘整棵 AlternateContent。
 海报无人引用则删。xlsx / docx 见各自分册。
+
+### setMathSize
+
+字段与 `setShapeSize` 相同。`id` 必须是公式框 id。
+写入 Choice 里该 `p:sp` 的 `p:spPr/a:xfrm/a:ext`。没有 `xfrm` 则补。不改 Fallback。
+`cx` 与 `cy` 一个都不给报 `InvalidField`。对形状 id 发此 op、对公式框 id 发 `setShapeSize` 仍报 `InvalidId`。
+docx 上发此 op 报 `InvalidField`。xlsx 见 [xlsx 分册](json-contract-xlsx.md#setmathsize)。
+
+### setMathPos
+
+字段与 `setShapePos` 相同。`id` 必须是公式框 id。
+写入 Choice 里该 `p:sp` 的 `p:spPr/a:xfrm/a:off`。没有 `xfrm` 则补。不改 Fallback。
+`x` 与 `y` 一个都不给报 `InvalidField`。docx / xlsx 上发此 op 报 `InvalidField`。
+对公式框 id 发 `setShapePos` 仍报 `InvalidId`。
+
+改公式框尺寸与画布坐标的示例见 `docs/examples/pptx-apply-math-geom.json`。
 
 ### insertField
 
@@ -3291,6 +3309,7 @@ presentation 关系、新页或被删页及其 `.rels`、内容类型，
 以及新建或被删的 `/ppt/embeddings/…` 与预览 `/ppt/media/imageN.*`。
 `deleteOle` 还可清该页 `<p:timing>` 里对应 `tgtEl`。
 `setModel3dSize` / `setModel3dPos` 只脏该宿主 XML。
+`setMathSize` / `setMathPos` 只脏该宿主 XML。不改字。
 `insertZoom` / `setZoom` / `deleteZoom` 脏该宿主 XML 及其 `.rels`、`[Content_Types].xml`，以及新建或被删的预览 `/ppt/media/imageN.*`。
 `deleteZoom` 还可清该页 `<p:timing>` 里对应 `tgtEl`。`setShowPr` 只脏 `/ppt/presProps.xml` 的 `p:showPr`；没有该部件报 `OpcPartMissing`。
 `setProtection` 只脏 `presentation.xml` 的 `p:modifyVerifier`。`setSlideHidden` 只脏该页 `p:sld/@show`。
@@ -3317,7 +3336,7 @@ presentation 关系、新页或被删页及其 `.rels`、内容类型，
 `deleteField`）、图片 op、媒体 op（含 `setMedia`）、图表 op、SmartArt op、幻灯片管理 op（含 `setTransition`、`setSlideLayout`）、母版写入 op（`insertLayout`、
 `deleteLayout`、`insertPlaceholder`、`deletePlaceholder`、`insertMaster`、`deleteMaster`）、主题与尺寸 op（`setSlideSize`、
 `setThemeColors`、`setThemeFonts`）、动画 op（`insertAnim`、`setAnim`、`deleteAnim`、`moveAnim`）、幻灯片节 op、自定义放映 op（`insertCustomShow`、`setCustomShow`、
-`deleteCustomShow`）、OLE op（`insertOle`、`deleteOle`）、Zoom op（`insertZoom`、`setZoom`、`deleteZoom`）、`setShowPr`、
+`deleteCustomShow`）、OLE op（`insertOle`、`deleteOle`）、Zoom op（`insertZoom`、`setZoom`、`deleteZoom`）、公式几何 op（`setMathSize`、`setMathPos`）、`setShowPr`、
 `setProtection` 与 `setProps` / `setCustomProp` / `deleteCustomProp`。
 文件属性 op 还可以脏 `/docProps/core.xml`、`/docProps/app.xml`、`/docProps/custom.xml`、根 `.rels` 与 `[Content_Types].xml`。
 只改 core 字段时不要新建 custom。未点名的 `Slides` 留下。只改 SmartArt 点文字或增删点、且宿主 graphicFrame 未动时，该页 XML 按「drawing 未动」验收。

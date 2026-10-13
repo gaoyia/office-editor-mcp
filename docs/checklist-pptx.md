@@ -45,6 +45,7 @@ Ps1–Ps5、Sg1–Sg5、Pt1–Pt6、Tn1–Tn5、Am1–Am5、Mm1–Mm5、Ho1–Ho
 2026-10-10 补跑 `pptx-create-round5.ps1`，Ck1–Ck5 通过。无 Repair。
 2026-10-10 补跑 `pptx-charts-rare-remain.ps1`，Pcx1–Pcx5 通过。无 Repair。
 2026-10-13 补跑 `pptx-model3d-geom.ps1`，P3g1–P3g6 通过。无 Repair。COM `Width` / `Height` 288×144 磅。`x=914400` `y=457200`。备注 3D 可改尺寸，根上 `model3dCount` 仍为 0。`replaceModel3d` 不改几何。
+2026-10-14 补跑 `pptx-math-geom.ps1`，Pog1–Pog5 通过。无 Repair。`cx=1828800` `cy=914400`。`x=914400` `y=457200`。备注公式可改尺寸，根上 `mathCount` 仍为 0。`setMath` 不改几何。
 
 - **C1** ✅
   - PowerPoint 16.0 能打开 `manual-check/office/out/pptx-create.pptx`，标题栏无 Repair
@@ -134,6 +135,13 @@ Ps1–Ps5、Sg1–Sg5、Pt1–Pt6、Tn1–Tn5、Am1–Am5、Mm1–Mm5、Ho1–Ho
   - create `slides[].maths` 同样写出
   - 备注 `slide:1/notes` 插公式后根上 `mathCount` 仍为 0
   - 出现 `expr` / 空 `text` 得 `InvalidField`
+- **Pog1–Pog5** ✅
+  - PowerPoint 16.0：`pptx-math-geom.ps1`，5 PASS / 0 FAIL
+  - `setMathSize` 后树上 `cx=1828800` `cy=914400`，无 Repair
+  - `setMathPos` 后 `x=914400` `y=457200`
+  - 备注公式改尺寸后根上 `mathCount` 仍为 0
+  - `setMath` 不改几何。对公式框 id 发 `setShapePos` 得 `InvalidId`
+  - 空 `x` / `y`、pptx 上 `setMathAnchor` 得 `InvalidField`
 - **Pc1–Pc7** ✅
   - PowerPoint 16.0：无 `charts` 时 `chartCount=1`
   - 名单 id 为 `slide:1/chart:4`
@@ -685,6 +693,19 @@ COM 认 `Type=30`（`mso3DModel`）。批注内本期不插。
 | Pom4 | 删除 | `deleteMath` 后 `mathCount` 为 0，无修复 |
 | Pom5 | 备注 | 往 `slide:1/notes` 插公式后，备注 `maths` 末尾 `text` 对得上，根上 `mathCount` 仍为 0，无修复 |
 | Pom6 | 拒错 | 出现 `expr` 或空 `text` 得 `InvalidField`，未写文件。不强制开 PowerPoint |
+
+## 幻灯片公式框事后几何
+
+已有公式框能改画布坐标与尺寸。`setMath` 仍只改字。不进 `shapes`。不算公式排版引擎。
+手测脚本 `manual-check/office/cases/pptx-math-geom.ps1`。编号用 **Pog**。不要和 Pom、Pmg 撞。
+
+| 序号 | 检查 | 通过标准 |
+| --- | --- | --- |
+| Pog1 | 改尺寸 | `setMathSize` 后树上 `cx` / `cy` 对得上，无修复 |
+| Pog2 | 改位置 | `setMathPos` 后树上 `x` / `y` 对得上，无修复 |
+| Pog3 | 备注 | 备注公式 `setMathSize` 后备注树上对得上，根上 `mathCount` 仍为 0，无修复 |
+| Pog4 | 改字不改几何 | `setMath` 后位置尺寸仍是改过的值。对公式框 id 发 `setShapePos` 得 `InvalidId` |
+| Pog5 | 拒错 | `x` / `y` 都不给得 `InvalidField`。对 pptx 发 `setMathAnchor` 得 `InvalidField`。未写文件。不强制开 PowerPoint |
 
 ## 幻灯片图表
 

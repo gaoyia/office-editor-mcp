@@ -50,6 +50,22 @@ pub struct DeleteMathOp {
     pub target: MathTarget,
 }
 
+#[derive(Debug, Clone)]
+pub struct SetMathSizeOp {
+    pub id: String,
+    pub target: MathTarget,
+    pub cx: Option<i64>,
+    pub cy: Option<i64>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetMathPosOp {
+    pub id: String,
+    pub target: MathTarget,
+    pub x: Option<i64>,
+    pub y: Option<i64>,
+}
+
 pub struct MathInfo {
     pub id: String,
     pub cnv_pr_id: Option<String>,
@@ -310,6 +326,69 @@ pub fn set(slide_doc: &mut Document, op: &SetMathOp, op_index: usize) -> Result<
             path,
         ));
     }
+    Ok(())
+}
+
+fn find_ac_mut<'a>(
+    el: &'a mut Element,
+    key: &MathKey,
+    index: &mut usize,
+) -> Option<&'a mut Element> {
+    if el.local_name() == "AlternateContent" && crate::drawing_math::is_math_ac(el) {
+        *index += 1;
+        if key_matches(key, &crate::drawing_math::cnv_of_ac(el).0, *index) {
+            return Some(el);
+        }
+        return None;
+    }
+    for child in el.children.as_mut_slice() {
+        if let Node::Element(e) = child {
+            if let Some(found) = find_ac_mut(e, key, index) {
+                return Some(found);
+            }
+        }
+    }
+    None
+}
+
+fn choice_sp_mut(ac: &mut Element) -> Option<&mut Element> {
+    let choice = ac.child_by_local_mut("Choice")?;
+    crate::drawing_math::first_sp_mut(choice)
+}
+
+/// 写入 Choice 里该 `p:sp` 的 `a:xfrm/a:ext`。不改 Fallback。
+pub fn set_size(
+    slide_doc: &mut Document,
+    op: &SetMathSizeOp,
+    op_index: usize,
+) -> Result<(), Error> {
+    let path = format!("ops[{op_index}].id");
+    let ac = find_ac_mut(&mut slide_doc.root, &op.target.key, &mut 0).ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::MathDrawingNotFound { id: op.id.clone() },
+            path.clone(),
+        )
+    })?;
+    let sp = choice_sp_mut(ac).ok_or_else(|| {
+        Error::with_path(ErrorKind::MathDrawingNotFound { id: op.id.clone() }, path)
+    })?;
+    shape::set_sp_size(sp, op.cx, op.cy);
+    Ok(())
+}
+
+/// 写入 Choice 里该 `p:sp` 的 `a:xfrm/a:off`。不改 Fallback。
+pub fn set_pos(slide_doc: &mut Document, op: &SetMathPosOp, op_index: usize) -> Result<(), Error> {
+    let path = format!("ops[{op_index}].id");
+    let ac = find_ac_mut(&mut slide_doc.root, &op.target.key, &mut 0).ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::MathDrawingNotFound { id: op.id.clone() },
+            path.clone(),
+        )
+    })?;
+    let sp = choice_sp_mut(ac).ok_or_else(|| {
+        Error::with_path(ErrorKind::MathDrawingNotFound { id: op.id.clone() }, path)
+    })?;
+    shape::set_sp_pos(sp, op.x, op.y);
     Ok(())
 }
 

@@ -3189,6 +3189,80 @@
         }
       }
     },
+    "setMathSizeOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setMathSize"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "cx": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "cy": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "anyOf": [
+        {
+          "required": [
+            "cx"
+          ]
+        },
+        {
+          "required": [
+            "cy"
+          ]
+        }
+      ]
+    },
+    "setMathPosOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setMathPos"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "x": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "y": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "anyOf": [
+        {
+          "required": [
+            "x"
+          ]
+        },
+        {
+          "required": [
+            "y"
+          ]
+        }
+      ]
+    },
     "setShowPrOp": {
       "type": "object",
       "required": [

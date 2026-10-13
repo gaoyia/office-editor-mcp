@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "deck.pptx",
+  "ops": [
+    { "op": "setMathSize", "id": "slide:1/math:2", "cx": 1828800, "cy": 914400 },
+    { "op": "setMathPos", "id": "slide:1/math:2", "x": 914400, "y": 457200 }
+  ]
+}

@@ -9,6 +9,7 @@ use crate::xml::{self, Document, Element, Node};
 
 use super::a1;
 use super::picture::{self, AnchorKind, EditAs};
+use super::shape;
 use super::REL_NS;
 
 #[derive(Debug, Clone)]
@@ -49,6 +50,36 @@ pub struct SetMathOp {
 pub struct DeleteMathOp {
     pub id: String,
     pub target: MathTarget,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetMathSizeOp {
+    pub id: String,
+    pub target: MathTarget,
+    pub cx: Option<i64>,
+    pub cy: Option<i64>,
+    pub to: Option<a1::CellRef>,
+    pub to_off_x: Option<i64>,
+    pub to_off_y: Option<i64>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetMathAnchorOp {
+    pub id: String,
+    pub target: MathTarget,
+    pub anchor: Option<AnchorKind>,
+    pub from: Option<a1::CellRef>,
+    pub to: Option<a1::CellRef>,
+    pub from_off_x: Option<i64>,
+    pub from_off_y: Option<i64>,
+    pub to_off_x: Option<i64>,
+    pub to_off_y: Option<i64>,
+    pub pos_x: Option<i64>,
+    pub pos_y: Option<i64>,
+    pub edit_as: Option<EditAs>,
+    pub cx: Option<i64>,
+    pub cy: Option<i64>,
+    pub rel: Option<super::request::RelBoxPatch>,
 }
 
 pub struct MathInfo {
@@ -489,6 +520,78 @@ pub fn set(
     }
     pkg.set(&drawing_part, doc.to_bytes()?)?;
     Ok(())
+}
+
+fn draw_key(key: &MathKey) -> shape::DrawKey {
+    match key {
+        MathKey::Id(s) => shape::DrawKey::Cnv(s.clone()),
+        MathKey::Index(n) => shape::DrawKey::Index(*n),
+    }
+}
+
+/// 改外层 `xdr:ext` 或 `twoCell` 的 `to`。不改字。
+pub fn set_size(
+    pkg: &mut Package,
+    sheet_root: &Element,
+    sheet_part: &str,
+    op: &SetMathSizeOp,
+    op_index: usize,
+) -> Result<(), Error> {
+    shape::set_object_size(
+        pkg,
+        sheet_root,
+        sheet_part,
+        &draw_key(&op.target.key),
+        crate::drawing_math::is_math_ac,
+        picture::SizePatch {
+            cx: op.cx,
+            cy: op.cy,
+            to: op.to,
+            to_off_x: op.to_off_x,
+            to_off_y: op.to_off_y,
+        },
+        ErrorKind::TwoCellMathSize,
+        ErrorKind::MathDrawingNotFound { id: op.id.clone() },
+        "setMathSize",
+        op_index,
+    )
+}
+
+/// 改包含 AlternateContent 的外层锚点。留下 AlternateContent 与 clientData。
+pub fn set_anchor(
+    pkg: &mut Package,
+    sheet_root: &Element,
+    sheet_part: &str,
+    op: &SetMathAnchorOp,
+    op_index: usize,
+) -> Result<(), Error> {
+    shape::set_object_anchor(
+        pkg,
+        sheet_root,
+        sheet_part,
+        &draw_key(&op.target.key),
+        crate::drawing_math::is_math_ac,
+        shape::AnchorWrite {
+            op: "setMathAnchor",
+            anchor: op.anchor,
+            from: op.from,
+            to: op.to,
+            from_off_x: op.from_off_x,
+            from_off_y: op.from_off_y,
+            to_off_x: op.to_off_x,
+            to_off_y: op.to_off_y,
+            pos_x: op.pos_x,
+            pos_y: op.pos_y,
+            edit_as: op.edit_as,
+            cx: op.cx,
+            cy: op.cy,
+            default_cx: crate::drawing_math::DEFAULT_CX,
+            default_cy: crate::drawing_math::DEFAULT_CY,
+            rel: op.rel,
+        },
+        op_index,
+        ErrorKind::MathDrawingNotFound { id: op.id.clone() },
+    )
 }
 
 fn set_in(el: &mut Element, key: &MathKey, text: &str) -> bool {
