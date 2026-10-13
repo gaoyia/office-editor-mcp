@@ -742,6 +742,7 @@ define_error_kinds! {
     TwoCellChartSize => vec![Self::TwoCellChartSize],
     TwoCellTextBoxSize => vec![Self::TwoCellTextBoxSize],
     TwoCellSmartArtSize => vec![Self::TwoCellSmartArtSize],
+    TwoCellModel3dSize => vec![Self::TwoCellModel3dSize],
     DeleteChartsheetLast => vec![Self::DeleteChartsheetLast],
     ChartFormulaNotA1 => vec![Self::ChartFormulaNotA1],
     InvalidXlsxAnchor => vec![Self::InvalidXlsxAnchor],
@@ -2073,6 +2074,7 @@ impl ErrorKind {
             | Self::TwoCellChartSize
             | Self::TwoCellTextBoxSize
             | Self::TwoCellSmartArtSize
+            | Self::TwoCellModel3dSize
             | Self::NotesSlideImage
             | Self::GraphicInRestrictedStory
             | Self::DocxShapeNeedsAnchor

@@ -41,6 +41,7 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 2026-10-12 补跑 `docx-cell-valign.ps1`，Va1–Va5 通过。无 Repair。COM `VerticalAlignment` 居中为 1、底对齐为 3。
 同日补跑 `docx-textbox-anchor.ps1`，Bta1–Bta5 通过。无 Repair。ZIP 有 `anchor="ctr"`，`just` / `dist` 树上对得上。
 2026-10-13 补跑 `docx-drawing-hlink-remain.ps1`，Dhr1–Dhr6 通过。无 Repair。框内图 COM `Hyperlink.Address` 对得上。`hyperlinkCount` 仍为 0。OLE id 仍报 `InvalidId`。
+同日补跑 `docx-model3d-geom.ps1`，D3g1–D3g6 通过。无 Repair。COM `Width` / `Height` 288×144 磅。浮动 `square` 后再改回 `inline`。页眉 3D 可改尺寸。`replaceModel3d` 不改几何。
 
 - **C1** ✅
   - Word 16.0 能打开 `manual-check/office/out/docx-create.docx`，标题栏无 Repair
@@ -212,6 +213,14 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
   - create `shapes[].hyperlink` 后树上对得上
   - `deleteHyperlink` 后 `hyperlink` 为 `null`、对象还在
   - OLE id 仍报 `InvalidId`
+  - 标题栏无 Repair
+- **D3g1–D3g6** ✅
+  - Word 16.0：`docx-model3d-geom.ps1`，6 PASS / 0 FAIL
+  - `setModel3dSize` 后树上 `cx` / `cy` 对得上
+  - `setModel3dWrap` 浮动 `square` 后再改回 `inline`
+  - `replaceModel3d` 不改几何
+  - 页眉 3D 可改尺寸
+  - 空 `cx` / `cy`、对 3D id 发 `setPictureSize` 拒写
   - 标题栏无 Repair
 - **Ds1–Ds8** ✅
   - Word 16.0：`docx-drawing-shape.ps1`，8 PASS / 0 FAIL
@@ -2019,6 +2028,30 @@ Word 行内 COM 认 `Type=19`（`wdInlineShape3DModel`）。注内、批注内�
 - **D3d6**
   - 检查：拒错
   - 通过标准：不是 GLB 的 `file` 报 `InvalidField`。不强制开 Word
+
+## 3D 事后几何
+
+已有 3D 模型改 `wp:extent` 与行内 / 浮动绕排。不换 GLB。不算 3D 渲染。对 3D id 发 `setPictureSize` / `setPictureWrap` 仍报 `InvalidId`。
+手测脚本 `manual-check/office/cases/docx-model3d-geom.ps1`。编号用 D3g，不要和 D3d、Dh 撞。xlsx / pptx 见 X3g / P3g（C12）。
+
+- **D3g1**
+  - 检查：改尺寸
+  - 通过标准：`setModel3dSize` 写 `cx` / `cy` 后树上对得上。Word 无修复。COM `Width` / `Height` 对得上（允许 2 磅误差）
+- **D3g2**
+  - 检查：改绕排
+  - 通过标准：`setModel3dWrap` 写成浮动 `square` 后树上 `kind` 为 `anchor`、`wrap` 为 `square`。Word 无修复
+- **D3g3**
+  - 检查：改回行内
+  - 通过标准：再发 `kind: inline` 后树上 `kind` 为 `inline`，`wrap` 为 `null`。Word 无修复
+- **D3g4**
+  - 检查：替换不改几何
+  - 通过标准：改过尺寸后再 `replaceModel3d`，树上 `cx` / `cy` 仍是新值。Word 无修复
+- **D3g5**
+  - 检查：页眉
+  - 通过标准：页眉 3D `setModel3dSize` 后容器树上对得上。Word 无修复
+- **D3g6**
+  - 检查：拒错
+  - 通过标准：`cx` / `cy` 都不给报 `InvalidField`。对 3D id 发 `setPictureSize` 报 `InvalidId`。不强制开 Word
 
 ## 墨迹画布
 

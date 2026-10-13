@@ -44,6 +44,7 @@ Ps1–Ps5、Sg1–Sg5、Pt1–Pt6、Tn1–Tn5、Am1–Am5、Mm1–Mm5、Ho1–Ho
 2026-10-10 补跑 `pptx-create-round4.ps1`，Cq1–Cq5 通过。无 Repair。
 2026-10-10 补跑 `pptx-create-round5.ps1`，Ck1–Ck5 通过。无 Repair。
 2026-10-10 补跑 `pptx-charts-rare-remain.ps1`，Pcx1–Pcx5 通过。无 Repair。
+2026-10-13 补跑 `pptx-model3d-geom.ps1`，P3g1–P3g6 通过。无 Repair。COM `Width` / `Height` 288×144 磅。`x=914400` `y=457200`。备注 3D 可改尺寸，根上 `model3dCount` 仍为 0。`replaceModel3d` 不改几何。
 
 - **C1** ✅
   - PowerPoint 16.0 能打开 `manual-check/office/out/pptx-create.pptx`，标题栏无 Repair
@@ -119,6 +120,13 @@ Ps1–Ps5、Sg1–Sg5、Pt1–Pt6、Tn1–Tn5、Am1–Am5、Mm1–Mm5、Ho1–Ho
   - `replaceModel3d` 后 id 不变
   - 备注 `slide:1/notes` 插 3D 后根上 `model3dCount` 仍为 0
   - 非 GLB `file` 得 `InvalidField`
+- **P3g1–P3g6** ✅
+  - PowerPoint 16.0：`pptx-model3d-geom.ps1`，6 PASS / 0 FAIL
+  - 改尺寸、改位置、备注 3D 改尺寸
+  - `replaceModel3d` 不改几何
+  - 对 3D id 发 `setPictureSize` 得 `InvalidId`
+  - 空 `x` / `y`、pptx 上 `setModel3dWrap` 得 `InvalidField`
+  - 标题栏无 Repair
 - **Pom1–Pom6** ✅
   - PowerPoint 16.0：`pptx-omml.ps1`，6 PASS / 0 FAIL
   - `insertMath` 后树上 `text` 为 `E=mc^2`，不进 `shapes`，XML 含 `a14:m`，无 Repair
@@ -648,6 +656,20 @@ COM 认 `Type=30`（`mso3DModel`）。批注内本期不插。
 | P3d4 | 替换 | `replaceModel3d` 换成另一份 GLB 后 id 不变，导出是新字节，无修复 |
 | P3d5 | 备注 | 往 `slide:1/notes` 插 GLB 后，备注 `model3ds` 末尾 `contentType` 为 `model/gltf.binary`，根上 `model3dCount` 仍为 0，无修复 |
 | P3d6 | 拒错 | `file` 不是 GLB 得 `InvalidField`，未写文件。不强制开 PowerPoint |
+
+## 幻灯片 3D 事后几何
+
+已有 3D 改画布尺寸与坐标。不换 GLB。不算 3D 渲染。对 3D id 发 `setPictureSize` / `setPicturePos` 仍报 `InvalidId`。
+脚本 `manual-check/office/cases/pptx-model3d-geom.ps1`。编号用 P3g，不要和 P3d 撞。docx / xlsx 见 D3g / X3g（C12）。
+
+| 序号 | 检查 | 通过标准 | 状态 |
+| --- | --- | --- | --- |
+| P3g1 | 改尺寸 | `setModel3dSize` 后树上 `cx` / `cy` 对得上，无修复。COM 尺寸对得上（允许 2 磅误差） | ✅ |
+| P3g2 | 改位置 | `setModel3dPos` 后树上 `x` / `y` 对得上，无修复 | ✅ |
+| P3g3 | 备注 | 备注 3D `setModel3dSize` 后备注树上对得上，根上 `model3dCount` 仍为 0，无修复 | ✅ |
+| P3g4 | 替换不改几何 | 改过尺寸后再 `replaceModel3d`，树上尺寸仍是新值，无修复 | ✅ |
+| P3g5 | 图 op | 对 3D id 发 `setPictureSize` 得 `InvalidId`，未写文件。不强制开 PowerPoint | ✅ |
+| P3g6 | 拒错 | `x` / `y` 都不给得 `InvalidField`。对 pptx 发 `setModel3dWrap` 得 `InvalidField`。未写文件。不强制开 PowerPoint | ✅ |
 
 ## 幻灯片公式框
 

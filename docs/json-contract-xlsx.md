@@ -295,11 +295,11 @@ URI `{05C60535-1F16-4FD2-B633-F4F36F0B64E0}`，大小写不敏感）。
 `http://schemas.microsoft.com/office/drawing/2017/model3d`（可带尾斜杠）。
 只走 `Choice Requires="am3d"`。Fallback 海报 `pic` 与 `am3d:raster` 用的 PNG **不进** `pictures`，也不计入 `pictureCount`。
 组合里符合条件的 `graphicFrame` 要展开，组合本身不进树。页眉、`chartsheet` 本期不进树。
-`insertModel3d` 的 `id` 必须是 `sheet:{name}`。`replaceModel3d` / `deleteModel3d` 的 `id` 必须是 3D 模型 id。
+`insertModel3d` 的 `id` 必须是 `sheet:{name}`。`replaceModel3d` / `deleteModel3d` / `setModel3dSize` / `setModel3dAnchor` 的 `id` 必须是 3D 模型 id。
 对图 id、OLE id 或 `xlsx:workbook` 发这些 op 报 `InvalidId`。对 `chartsheet` 报 `InvalidField`。
 只认 GLB：文件头小端 `glTF`（`0x46546C67`），version=2。不是 GLB 报 `InvalidImageFile`（对外 `InvalidField`）。
 `contentType` 恒为 `model/gltf.binary`。不把 GLB、相机、灯光摊进树。create 可用 `sheets[].model3ds`。
-docx / pptx 见各自分册。
+页眉槽仍不插。工作表上已有 3D 可改尺寸与锚点。docx / pptx 见各自分册。
 
 工作表切片器挂在该 `worksheet` 上。`{cNvPrId}` 取 drawing 里 slicer 或时间线 `graphicFrame` 的 `cNvPr/@id` 原文。
 没有该属性时用 `slicer:index:{k}`，树上 `"stable": false`。`{k}` 只在该表被收入的切片器（含时间线）内从 1 计。
@@ -2380,6 +2380,8 @@ docx / pptx 上发此 op 报 `InvalidField`。create 可写允许编辑区域。
 文本框、形状与连接线 op、`groupShapes` / `ungroup` 以及 `setShapeText` / `setShapeFormat` 还可以脏 worksheet drawing 及其 `.rels`。
 `insertOle` / `deleteOle` 还可以脏工作表 `oleObjects`、worksheet drawing、`legacyDrawing` VML、工作表 `.rels`、VML `.rels`、
 `/xl/embeddings/…`、`/xl/media/…` 与 `[Content_Types].xml`。
+`insertModel3d` / `replaceModel3d` / `deleteModel3d` 还可以脏 worksheet drawing、drawing `.rels`、`/xl/media/…` 与 `[Content_Types].xml`。
+`setModel3dSize` / `setModel3dAnchor` 只脏 worksheet drawing。
 `insertSlicer` / `deleteSlicer` 还可以脏 `/xl/slicers/…`、`/xl/slicerCaches/…`、worksheet drawing、工作表 `extLst` 的 `slicerList`、
 workbook `extLst` 的 `slicerCaches`、workbook 的 `<definedNames>`、工作表 / workbook `.rels` 与 `[Content_Types].xml`；
 透视源的 `insertSlicer` 还脏 `/xl/pivotCache/pivotCacheDefinitionN.xml` 的 `extLst`。
@@ -3158,6 +3160,21 @@ id 不是 3D 模型 id 报 `InvalidId`。不是 GLB 报 `InvalidField`。docx / 
 找不到报 `IdNotFound`。id 不是 3D 模型 id 报 `InvalidId`。
 摘该条 `mc:AlternateContent`；若锚点只剩 `from` / `to` / `ext` / `pos` / `clientData` 则删整个锚点。
 GLB 与海报无人引用则删。docx / pptx 见各自分册。
+
+### setModel3dSize
+
+字段与 `setPictureSize` 的 xlsx 一侧相同。`id` 必须是 3D 模型 id。
+`oneCell` / `absolute` 改外层 `xdr:ext`。`twoCell` 不认 `cx` / `cy`（出现报 `InvalidField`），必须给 `to`。
+不按列宽行高去换算 EMU。留下 AlternateContent 与 `xdr:clientData`。
+对图 id 发此 op、对 3D id 发 `setPictureSize` 仍报 `InvalidId`。docx / pptx 见各自分册。
+
+### setModel3dAnchor
+
+字段与 `setPictureAnchor` 相同，`id` 必须是 xlsx 3D 模型 id。
+改包含该 `am3d` AlternateContent 的外层锚点，规则与 `setPictureAnchor` 相同（留下 AlternateContent 与 `xdr:clientData`）。
+docx / pptx 上发此 op 报 `InvalidField`。
+
+改 3D 尺寸与锚点的示例见 `docs/examples/xlsx-apply-model3d-geom.json`。
 
 ### insertMath
 

@@ -235,3 +235,136 @@ fn reject_junk() {
     assert_eq!(err.code(), ErrorCode::InvalidField);
     assert!(!out.exists());
 }
+
+fn apply_err(path: &Path, out: &Path, ops: Value) -> ooxp::Error {
+    run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "apply",
+            "path": path.to_string_lossy(),
+            "output": out.to_string_lossy(),
+            "ops": ops
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap_err()
+}
+
+fn insert_one(tag: &str) -> (PathBuf, String) {
+    let src = create_deck(tag, json!([{ "shapes": [{ "text": "标题" }] }]));
+    let glb = write_glb(tag, &sample_glb());
+    let out = seq_path(&format!("{tag}-ins"), "pptx");
+    apply(
+        &src,
+        &out,
+        json!([{
+            "op": "insertModel3d",
+            "id": "slide:1",
+            "file": glb.to_string_lossy()
+        }]),
+    );
+    let tree = inspect(&out, json!({ "model3ds": true }));
+    let id = first_model(&tree)["id"].as_str().unwrap().to_string();
+    (out, id)
+}
+
+#[test]
+fn set_size_and_pos() {
+    let (src, id) = insert_one("geom");
+    let sized = seq_path("sized", "pptx");
+    apply(
+        &src,
+        &sized,
+        json!([{ "op": "setModel3dSize", "id": id, "cx": 3657600, "cy": 1828800 }]),
+    );
+    let tree_s = inspect(&sized, json!({ "model3ds": true }));
+    let item_s = first_model(&tree_s);
+    assert_eq!(item_s["cx"], 3657600);
+    assert_eq!(item_s["cy"], 1828800);
+
+    let moved = seq_path("moved", "pptx");
+    apply(
+        &sized,
+        &moved,
+        json!([{ "op": "setModel3dPos", "id": id, "x": 914400, "y": 457200 }]),
+    );
+    let tree_m = inspect(&moved, json!({ "model3ds": true }));
+    let item_m = first_model(&tree_m);
+    assert_eq!(item_m["x"], 914400);
+    assert_eq!(item_m["y"], 457200);
+    assert_eq!(item_m["cx"], 3657600);
+
+    let glb2 = write_glb("geom-b", &glb_b());
+    let replaced = seq_path("geom-rep", "pptx");
+    apply(
+        &sized,
+        &replaced,
+        json!([{ "op": "replaceModel3d", "id": id, "file": glb2.to_string_lossy() }]),
+    );
+    let tree_r = inspect(&replaced, json!({ "model3ds": true }));
+    assert_eq!(first_model(&tree_r)["cx"], 3657600);
+    assert_eq!(first_model(&tree_r)["cy"], 1828800);
+}
+
+#[test]
+fn notes_set_size() {
+    let src = create_deck("notes", json!([{ "shapes": [{ "text": "标题" }] }]));
+    let glb = write_glb("notes", &sample_glb());
+    let inserted = seq_path("notes-ins", "pptx");
+    apply(
+        &src,
+        &inserted,
+        json!([{
+            "op": "insertModel3d",
+            "id": "slide:1/notes",
+            "file": glb.to_string_lossy()
+        }]),
+    );
+    let tree = inspect(&inserted, json!({ "model3ds": true, "notes": true }));
+    let id = tree["slides"][0]["notes"]["model3ds"][0]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    assert_eq!(tree["model3dCount"], 0);
+    let sized = seq_path("notes-sz", "pptx");
+    apply(
+        &inserted,
+        &sized,
+        json!([{ "op": "setModel3dSize", "id": id, "cx": 3657600, "cy": 1828800 }]),
+    );
+    let tree_s = inspect(&sized, json!({ "model3ds": true, "notes": true }));
+    assert_eq!(tree_s["slides"][0]["notes"]["model3ds"][0]["cx"], 3657600);
+    assert_eq!(tree_s["model3dCount"], 0);
+}
+
+#[test]
+fn reject_picture_op_and_wrap() {
+    let (src, id) = insert_one("rej-geom");
+    let out_pic = seq_path("pic-on-3d", "pptx");
+    let err_pic = apply_err(
+        &src,
+        &out_pic,
+        json!([{ "op": "setPictureSize", "id": id, "cx": 1000, "cy": 1000 }]),
+    );
+    assert_eq!(err_pic.code(), ErrorCode::InvalidId);
+    assert!(!out_pic.exists());
+
+    let out_empty = seq_path("empty-pos", "pptx");
+    let err_empty = apply_err(
+        &src,
+        &out_empty,
+        json!([{ "op": "setModel3dPos", "id": id }]),
+    );
+    assert_eq!(err_empty.code(), ErrorCode::InvalidField);
+    assert!(!out_empty.exists());
+
+    let out_w = seq_path("wrap-pptx", "pptx");
+    let err_w = apply_err(
+        &src,
+        &out_w,
+        json!([{ "op": "setModel3dWrap", "id": id, "kind": "inline" }]),
+    );
+    assert_eq!(err_w.code(), ErrorCode::InvalidField);
+    assert!(!out_w.exists());
+}

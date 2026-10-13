@@ -40,6 +40,7 @@ C、I、A、O、Xp、Xvg、Xem、X3d、Xom、Xtf、Xfl、Xc、Xh、Xfs、Xtl、X
 2026-10-10 补跑 `xlsx-create-round4.ps1`，C25–C29 通过。无 Repair。COM 能见表、AllowEditRanges、OutlineLevel，组合 `Type=6`。
 2026-10-10 补跑 `xlsx-named-style.ps1`，Xns1–Xns5 通过。无 Repair。COM `Styles` 能看见自定义名，套用后 `Style.Name` 对得上，黄底 `Interior.Color=65535`。
 2026-10-10 补跑 `xlsx-create-round5.ps1`，C30–C32 通过。无 Repair。COM `Style.Name` 为 `OoxpNamed`，黄底 `Interior.Color=65535`，`CommentsThreaded` 能看见一层回复。
+2026-10-13 补跑 `xlsx-model3d-geom.ps1`，X3g1–X3g6 通过。无 Repair。COM `Width` / `Height` 288×144 磅。`from=C3`。`twoCell` `to=D8`。`replaceModel3d` 不改几何。
 
 - **C1** ✅
   - Excel 16.0 打开 `manual-check/office/out/xlsx-create.xlsx`，标题栏无 Repair
@@ -87,6 +88,13 @@ C、I、A、O、Xp、Xvg、Xem、X3d、Xom、Xtf、Xfl、Xc、Xh、Xfs、Xtl、X
   - `replaceModel3d` 后 id 不变
   - `deleteModel3d` 后包内没有 `.glb`
   - 非 GLB `file` 得 `InvalidField`
+- **X3g1–X3g6** ✅
+  - Excel 16.0：`xlsx-model3d-geom.ps1`，6 PASS / 0 FAIL
+  - `oneCell` 改尺寸、改锚点、`twoCell` 给 `to`
+  - `replaceModel3d` 不改几何
+  - 对 3D id 发 `setPictureSize` 得 `InvalidId`
+  - `twoCell` 给 `cx`、xlsx 上 `setModel3dWrap` 得 `InvalidField`
+  - 标题栏无 Repair
 - **Xom1–Xom6** ✅
   - Excel 16.0：`xlsx-omml.ps1`，6 PASS / 0 FAIL
   - `insertMath` 后树上 `text` 为 `E=mc^2`，不进 `textBoxes`，XML 含 `a14:m`，无 Repair
@@ -701,6 +709,32 @@ COM 认 `Type=30`（`mso3DModel`）。页眉槽本期不插。
 - **X3d6**
   - 检查：拒错
   - 通过标准：`file` 不是 GLB 得 `InvalidField`，未写文件
+  - 不强制开 Excel
+
+## 工作表 3D 事后几何
+
+已有工作表 3D 改尺寸与锚点。不换 GLB。不算 3D 渲染。对 3D id 发 `setPictureSize` / `setPictureAnchor` 仍报 `InvalidId`。
+手测脚本 `manual-check/office/cases/xlsx-model3d-geom.ps1`。编号用 X3g，不要和 X3d 撞。docx / pptx 见 D3g / P3g（C12）。
+
+- **X3g1**
+  - 检查：改尺寸
+  - 通过标准：对 `oneCell` `setModel3dSize` 后树上 `cx` / `cy` 对得上。Excel 无修复。COM 尺寸对得上（允许 2 磅误差）
+- **X3g2**
+  - 检查：改锚点
+  - 通过标准：`setModel3dAnchor` 把 `from` 改到另一格后，树上 `from` 对得上。Excel 无修复
+- **X3g3**
+  - 检查：twoCell
+  - 通过标准：`anchor=twoCell` 且给 `to` 后，`setModel3dSize` 给 `to` 树上对得上。Excel 无修复
+- **X3g4**
+  - 检查：替换不改几何
+  - 通过标准：改过尺寸后再 `replaceModel3d`，树上尺寸仍是新值。Excel 无修复
+- **X3g5**
+  - 检查：图 op
+  - 通过标准：对 3D id 发 `setPictureSize` 得 `InvalidId`，未写文件
+  - 不强制开 Excel
+- **X3g6**
+  - 检查：拒错
+  - 通过标准：`twoCell` 上给 `cx` 得 `InvalidField`。对 xlsx 发 `setModel3dWrap` 得 `InvalidField`。未写文件
   - 不强制开 Excel
 
 ## 工作表公式框

@@ -626,6 +626,7 @@
   - `setSmartArtPos` / `setSmartArtWrap`
   - `insertWatermark` / `deleteWatermark`
   - `insertInkCanvas` / `replaceInkCanvas` / `deleteInkCanvas` / `setInkCanvasSize` / `setInkCanvasWrap`
+  - `setModel3dWrap` / `setModel3dPos`
   - 表格结构 op、修订 op、书签 op、例外编辑区 op、域 op
   - `insertCaption` / `deleteCaption` / `insertCrossRef` / `deleteCrossRef`
   - `insertIndex` / `deleteIndex` / `insertIndexEntry` / `deleteIndexEntry`
@@ -644,7 +645,7 @@
   - 超链接：`insertHyperlink`、`setHyperlink`、`deleteHyperlink`
   - 迷你图：`insertSparkline`、`setSparkline`、`deleteSparkline`
   - OLE：`insertOle`、`deleteOle`
-  - 3D 模型：`insertModel3d`、`replaceModel3d`、`deleteModel3d`
+  - 3D 模型：`insertModel3d`、`replaceModel3d`、`deleteModel3d`、`setModel3dSize`、`setModel3dAnchor`
   - 公式：`insertMath`、`setMath`、`deleteMath`
   - 切片器：`insertSlicer`、`deleteSlicer`
   - 连接：`insertConnection`、`deleteConnection`
@@ -664,6 +665,7 @@
 - 对 `dialogsheet` / `macrosheet` 发这些 insert 以及文本框 / 形状 / 连接线 / SmartArt 其它 op 报 `NotImplemented`
 - 找不到文本框、形状、连接线或 SmartArt 报 `IdNotFound`
 - xlsx `twoCell` 文本框、形状、 连接线或 SmartArt 的 `setTextBoxSize` / `setSmartArtSize` 出现 `cx` / `cy` 报 `InvalidField`
+- xlsx `twoCell` 3D 的 `setModel3dSize` 出现 `cx` / `cy` 报 `InvalidField`
 - 改右下角请给 `to`
 - 对 pptx 发下列内容报 `InvalidField`
   - 文本框 op、脚注尾注 op
@@ -678,10 +680,12 @@
   - `insertChartSheet`、`deleteChartSheet`
   - `insertWatermark` / `deleteWatermark`
   - `insertInkCanvas` / `replaceInkCanvas` / `deleteInkCanvas` / `setInkCanvasSize` / `setInkCanvasWrap`
+  - `setModel3dWrap` / `setModel3dAnchor`
 - pptx 的 `insertComment` 的 `id` 必须是 `slide:{n}`
 - 对其余批注 op，id 必须是 `slide:{n}/comment:{guid}`（回复则再加 `/reply:{guid}`）
 - docx / pptx 上发 `setChartAnchor` 报 `InvalidField`
-- docx / xlsx 上发 `setPicturePos` / `setChartPos` 报 `InvalidField`
+- docx / pptx 上发 `setModel3dAnchor` 报 `InvalidField`
+- docx / xlsx 上发 `setPicturePos` / `setChartPos` / `setModel3dPos` 报 `InvalidField`
 - 找不到文本框时，框专用 op 报 `IdNotFound`
 - 对宿主段落 id 发框专用 op（`insertTextBox` 除外）报 `InvalidId`
 - 对框 id 发 `setParaText` 报 `InvalidId`
@@ -754,13 +758,20 @@
 - `setInkCanvasSize` 的 `cx` / `cy` 一个都不给报 `InvalidField`
 - `setInkCanvasWrap` 的 `kind` / `wrap` 规则与 `setPictureWrap` 相同
 - xlsx / pptx 上发 `insertInkCanvas` / `replaceInkCanvas` / `deleteInkCanvas` / `setInkCanvasSize` / `setInkCanvasWrap` 报 `InvalidField`
-- 找不到 3D 模型时，`replaceModel3d` / `deleteModel3d` 报 `IdNotFound`
+- 找不到 3D 模型时，`replaceModel3d` / `deleteModel3d` / `setModel3dSize` / `setModel3dWrap` / `setModel3dAnchor` / `setModel3dPos` 报 `IdNotFound`
 - `insertModel3d` 的 `id`：docx 必须是正文或页眉页脚段落 id，xlsx 必须是 `sheet:{name}`，pptx 必须是 `slide:{n}`、`slide:{n}/notes`、`master:{n}` 或 `master:{n}/layout:{k}`
 - 对图 id、OLE id 发 3D op，或对 3D id 发图 op，报 `InvalidId`
-- `replaceModel3d` / `deleteModel3d` 的 `id` 必须是 3D 模型 id
+- `replaceModel3d` / `deleteModel3d` / `setModel3dSize` / `setModel3dWrap` / `setModel3dAnchor` / `setModel3dPos` 的 `id` 必须是 3D 模型 id
 - `file` 不是 GLB（文件头不是小端 `glTF` version=2）报 `InvalidField`（`InvalidImageFile`）
 - `insertModel3d` 的 `file` 不是 GLB 也走这个 kind，文案仍写「PNG、JPEG…TIFF」，不必另改图错误句
-- xlsx 对 `chartsheet` 发 `insertModel3d` 报 `InvalidField`
+- `setModel3dSize` 的 `cx` / `cy` 一个都不给报 `InvalidField`（xlsx `twoCell` 见下）
+- xlsx `twoCell` 3D 的 `setModel3dSize` 出现 `cx` / `cy` 报 `InvalidField`
+- 改右下角请给 `to`
+- `setModel3dWrap` 的 `kind` / `wrap` 规则与 `setPictureWrap` 相同
+- xlsx / pptx 上发 `setModel3dWrap` 报 `InvalidField`
+- docx / pptx 上发 `setModel3dAnchor` 报 `InvalidField`
+- docx / xlsx 上发 `setModel3dPos` 报 `InvalidField`
+- xlsx 对 `chartsheet` 发 `insertModel3d` / `setModel3dSize` / `setModel3dAnchor` 报 `InvalidField`
 - 找不到水印时，`deleteWatermark` 报 `IdNotFound`
 - `insertWatermark` 的 id 不是 `docx:document` 报 `InvalidId`
 - `deleteWatermark` 的 id 不是水印 id 也不是 `docx:document` 报 `InvalidId`

@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "deck.pptx",
+  "ops": [
+    { "op": "setModel3dSize", "id": "slide:1/model3d:2", "cx": 3657600, "cy": 1828800 },
+    { "op": "setModel3dPos", "id": "slide:1/model3d:2", "x": 914400, "y": 457200 }
+  ]
+}

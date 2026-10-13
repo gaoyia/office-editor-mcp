@@ -9,6 +9,7 @@ use crate::xml::{self, Document, Element, Node};
 
 use super::a1;
 use super::picture::{self, AnchorKind, EditAs};
+use super::shape;
 use super::{ExportedMedia, REL_NS};
 
 const MC_NS: &str = "http://schemas.openxmlformats.org/markup-compatibility/2006";
@@ -51,6 +52,35 @@ pub struct ReplaceModel3dOp {
 pub struct DeleteModel3dOp {
     pub id: String,
     pub target: Model3dTarget,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetModel3dSizeOp {
+    pub id: String,
+    pub target: Model3dTarget,
+    pub cx: Option<i64>,
+    pub cy: Option<i64>,
+    pub to: Option<a1::CellRef>,
+    pub to_off_x: Option<i64>,
+    pub to_off_y: Option<i64>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetModel3dAnchorOp {
+    pub id: String,
+    pub target: Model3dTarget,
+    pub anchor: Option<AnchorKind>,
+    pub from: Option<a1::CellRef>,
+    pub to: Option<a1::CellRef>,
+    pub from_off_x: Option<i64>,
+    pub from_off_y: Option<i64>,
+    pub to_off_x: Option<i64>,
+    pub to_off_y: Option<i64>,
+    pub pos_x: Option<i64>,
+    pub pos_y: Option<i64>,
+    pub edit_as: Option<EditAs>,
+    pub cx: Option<i64>,
+    pub cy: Option<i64>,
 }
 
 pub struct Model3dInfo {
@@ -670,6 +700,76 @@ pub fn delete(
     pkg.set(&drawing_part, doc.to_bytes()?)?;
     drop_rids(pkg, &drawing_part, &doc.root, &rids)?;
     Ok(())
+}
+
+fn draw_key(key: &Model3dKey) -> shape::DrawKey {
+    match key {
+        Model3dKey::Id(s) => shape::DrawKey::Cnv(s.clone()),
+        Model3dKey::Index(n) => shape::DrawKey::Index(*n),
+    }
+}
+
+pub fn set_size(
+    pkg: &mut Package,
+    sheet_root: &Element,
+    sheet_part: &str,
+    op: &SetModel3dSizeOp,
+    op_index: usize,
+) -> Result<(), Error> {
+    shape::set_object_size(
+        pkg,
+        sheet_root,
+        sheet_part,
+        &draw_key(&op.target.key),
+        crate::model3d::is_model3d_graphic,
+        picture::SizePatch {
+            cx: op.cx,
+            cy: op.cy,
+            to: op.to,
+            to_off_x: op.to_off_x,
+            to_off_y: op.to_off_y,
+        },
+        ErrorKind::TwoCellModel3dSize,
+        ErrorKind::Model3dNotFound { id: op.id.clone() },
+        "setModel3dSize",
+        op_index,
+    )
+}
+
+pub fn set_anchor(
+    pkg: &mut Package,
+    sheet_root: &Element,
+    sheet_part: &str,
+    op: &SetModel3dAnchorOp,
+    op_index: usize,
+) -> Result<(), Error> {
+    shape::set_object_anchor(
+        pkg,
+        sheet_root,
+        sheet_part,
+        &draw_key(&op.target.key),
+        crate::model3d::is_model3d_graphic,
+        shape::AnchorWrite {
+            op: "setModel3dAnchor",
+            anchor: op.anchor,
+            from: op.from,
+            to: op.to,
+            from_off_x: op.from_off_x,
+            from_off_y: op.from_off_y,
+            to_off_x: op.to_off_x,
+            to_off_y: op.to_off_y,
+            pos_x: op.pos_x,
+            pos_y: op.pos_y,
+            edit_as: op.edit_as,
+            cx: op.cx,
+            cy: op.cy,
+            default_cx: crate::model3d::DEFAULT_CX,
+            default_cy: crate::model3d::DEFAULT_CY,
+            rel: None,
+        },
+        op_index,
+        ErrorKind::Model3dNotFound { id: op.id.clone() },
+    )
 }
 
 fn remove_model3d(el: &mut Element, key: &Model3dKey) -> bool {

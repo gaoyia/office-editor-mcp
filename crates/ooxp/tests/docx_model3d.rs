@@ -284,3 +284,191 @@ fn reject_junk() {
     assert_eq!(err.code(), ErrorCode::InvalidField);
     assert!(!out.exists());
 }
+
+fn apply_err(path: &Path, out: &Path, ops: Value) -> ooxp::Error {
+    run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "apply",
+            "path": path.to_string_lossy(),
+            "output": out.to_string_lossy(),
+            "ops": ops
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap_err()
+}
+
+fn insert_one(tag: &str) -> (PathBuf, String) {
+    let src = create_docx(tag, json!({ "paragraphs": [{ "text": "hello" }] }));
+    let tree0 = inspect(&src, json!({ "from": 1, "maxParas": 8 }));
+    let para = tree0["paragraphs"][0]["id"].as_str().unwrap().to_string();
+    let glb = write_glb(tag, &sample_glb());
+    let inserted = seq_path(&format!("{tag}-ins"), "docx");
+    apply(
+        &src,
+        &inserted,
+        json!([{
+            "op": "insertModel3d",
+            "id": para,
+            "file": glb.to_string_lossy()
+        }]),
+    );
+    let tree = inspect(
+        &inserted,
+        json!({ "from": 1, "maxParas": 8, "model3ds": true }),
+    );
+    let id = first_model(&tree)["id"].as_str().unwrap().to_string();
+    (inserted, id)
+}
+
+#[test]
+fn set_size_and_wrap() {
+    let (src, id) = insert_one("geom");
+    let sized = seq_path("sized", "docx");
+    apply(
+        &src,
+        &sized,
+        json!([{ "op": "setModel3dSize", "id": id, "cx": 3657600, "cy": 1828800 }]),
+    );
+    let tree_s = inspect(
+        &sized,
+        json!({ "from": 1, "maxParas": 8, "model3ds": true }),
+    );
+    let item_s = first_model(&tree_s);
+    assert_eq!(item_s["cx"], 3657600);
+    assert_eq!(item_s["cy"], 1828800);
+    assert_eq!(item_s["kind"], "inline");
+
+    let wrapped = seq_path("wrapped", "docx");
+    apply(
+        &sized,
+        &wrapped,
+        json!([{
+            "op": "setModel3dWrap",
+            "id": id,
+            "kind": "anchor",
+            "wrap": "square",
+            "alignH": "left",
+            "alignV": "top"
+        }]),
+    );
+    let tree_w = inspect(
+        &wrapped,
+        json!({ "from": 1, "maxParas": 8, "model3ds": true }),
+    );
+    let item_w = first_model(&tree_w);
+    assert_eq!(item_w["kind"], "anchor");
+    assert_eq!(item_w["wrap"], "square");
+    assert_eq!(item_w["cx"], 3657600);
+
+    let inlined = seq_path("inlined", "docx");
+    apply(
+        &wrapped,
+        &inlined,
+        json!([{ "op": "setModel3dWrap", "id": id, "kind": "inline" }]),
+    );
+    let tree_i = inspect(
+        &inlined,
+        json!({ "from": 1, "maxParas": 8, "model3ds": true }),
+    );
+    let item_i = first_model(&tree_i);
+    assert_eq!(item_i["kind"], "inline");
+    assert!(item_i["wrap"].is_null());
+
+    let glb2 = write_glb("geom-b", &glb_b());
+    let replaced = seq_path("geom-rep", "docx");
+    apply(
+        &sized,
+        &replaced,
+        json!([{ "op": "replaceModel3d", "id": id, "file": glb2.to_string_lossy() }]),
+    );
+    let tree_r = inspect(
+        &replaced,
+        json!({ "from": 1, "maxParas": 8, "model3ds": true }),
+    );
+    let item_r = first_model(&tree_r);
+    assert_eq!(item_r["cx"], 3657600);
+    assert_eq!(item_r["cy"], 1828800);
+}
+
+#[test]
+fn header_set_size() {
+    let src = create_docx(
+        "hf",
+        json!({
+            "paragraphs": [{ "text": "body" }],
+            "headers": [{ "type": "default", "paragraphs": [{ "text": "hdr" }] }]
+        }),
+    );
+    let tree0 = inspect(&src, json!({ "headerFooter": true, "model3ds": true }));
+    let para = tree0["headers"][0]["paragraphs"][0]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let glb = write_glb("hf", &sample_glb());
+    let inserted = seq_path("hf-ins", "docx");
+    apply(
+        &src,
+        &inserted,
+        json!([{ "op": "insertModel3d", "id": para, "file": glb.to_string_lossy() }]),
+    );
+    let tree1 = inspect(&inserted, json!({ "headerFooter": true, "model3ds": true }));
+    let id = tree1["headers"][0]["model3ds"][0]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let sized = seq_path("hf-sz", "docx");
+    apply(
+        &inserted,
+        &sized,
+        json!([{ "op": "setModel3dSize", "id": id, "cx": 3657600, "cy": 1828800 }]),
+    );
+    let tree_s = inspect(&sized, json!({ "headerFooter": true, "model3ds": true }));
+    assert_eq!(tree_s["headers"][0]["model3ds"][0]["cx"], 3657600);
+    assert_eq!(tree_s["model3dCount"], 0);
+}
+
+#[test]
+fn reject_picture_op_and_empty_size() {
+    let (src, id) = insert_one("rej-geom");
+    let out_pic = seq_path("pic-on-3d", "docx");
+    let err_pic = apply_err(
+        &src,
+        &out_pic,
+        json!([{ "op": "setPictureSize", "id": id, "cx": 1000, "cy": 1000 }]),
+    );
+    assert_eq!(err_pic.code(), ErrorCode::InvalidId);
+    assert!(!out_pic.exists());
+
+    let out_empty = seq_path("empty-size", "docx");
+    let err_empty = apply_err(
+        &src,
+        &out_empty,
+        json!([{ "op": "setModel3dSize", "id": id }]),
+    );
+    assert_eq!(err_empty.code(), ErrorCode::InvalidField);
+    assert!(!out_empty.exists());
+
+    let xlsx = seq_path("xlsx-host", "xlsx");
+    run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "create",
+            "path": xlsx.to_string_lossy(),
+            "workbook": { "sheets": [{ "name": "Sheet1" }] }
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap();
+    let out_x = seq_path("xlsx-wrap", "xlsx");
+    let err_x = apply_err(
+        &xlsx,
+        &out_x,
+        json!([{ "op": "setModel3dWrap", "id": "sheet:Sheet1/model3d:1", "kind": "inline" }]),
+    );
+    assert_eq!(err_x.code(), ErrorCode::InvalidField);
+    assert!(!out_x.exists());
+}

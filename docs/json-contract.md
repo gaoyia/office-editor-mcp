@@ -33,7 +33,9 @@ docx 的图、文本框、连接线、无框形状、SmartArt、图表、墨迹�
 docx 的 `scope.inkCanvases` 列出正文与页眉页脚里的墨迹画布（`wpc` 画布加 `w14:contentPart` 加 InkML 部件）；
 apply 用 `insertInkCanvas` / `replaceInkCanvas` / `deleteInkCanvas` / `setInkCanvasSize` / `setInkCanvasWrap`。xlsx / pptx 拒这些键与 op。
 三种格式的 `scope.model3ds` 列出 3D 模型（`am3d:model3d`，GLB 部件）。
-apply 用 `insertModel3d` / `replaceModel3d` / `deleteModel3d`。不是图，不进 `pictures`。
+apply 用 `insertModel3d` / `replaceModel3d` / `deleteModel3d` / `setModel3dSize`。
+docx 另认 `setModel3dWrap`。xlsx 另认 `setModel3dAnchor`。pptx 另认 `setModel3dPos`。
+不是图，不进 `pictures`。对 3D id 发图的 size / pos / wrap / anchor 仍报 `InvalidId`。
 xlsx / pptx 的 `scope.maths` 列出 drawing 公式框（`a14:m` 包 OMML）。
 apply 复用 `insertMath` / `setMath` / `deleteMath`。不是单元格 `f`，也不把 Word 的 `expr` 搬过去。
 docx 的 `scope.maths` 仍是段落 `oMath`，见 [docx 分册](json-contract-docx.md#insertmath)。
@@ -245,7 +247,7 @@ create 与 apply 落盘时先写入目标同目录的临时文件，再改名为
 `setSmartArtText`、`addSmartArtPoint`、`deleteSmartArtPoint`、`setSmartArtSize`、`setSmartArtAnchor`、`setSmartArtColors`、
 `setSmartArtStyle`、`setSmartArtLayout`；
 不含 `setSmartArtPos`、`setSmartArtWrap`）、以及超链接 op（`insertHyperlink`、`setHyperlink`、`deleteHyperlink`）、
-以及迷你图 op（`insertSparkline`、`setSparkline`、`deleteSparkline`）、以及 OLE op（`insertOle`、`deleteOle`）、以及 3D 模型 op（`insertModel3d`、`replaceModel3d`、`deleteModel3d`）、以及公式 op（`insertMath`、`setMath`、`deleteMath`）、以及切片器 op（`insertSlicer`、
+以及迷你图 op（`insertSparkline`、`setSparkline`、`deleteSparkline`）、以及 OLE op（`insertOle`、`deleteOle`）、以及 3D 模型 op（`insertModel3d`、`replaceModel3d`、`deleteModel3d`、`setModel3dSize`、`setModel3dAnchor`；不含 `setModel3dWrap`、`setModel3dPos`）、以及公式 op（`insertMath`、`setMath`、`deleteMath`）、以及切片器 op（`insertSlicer`、
 `deleteSlicer`）、以及连接 op（`insertConnection`、`deleteConnection`）、以及外部引用 op（`insertExternalLink`、`setExternalLink`、`deleteExternalLink`）、以及 `setProtection`、以及允许编辑区域 op（`insertProtectedRange`、`setProtectedRange`、`deleteProtectedRange`）、以及命名单元格样式 op（`insertCellStyle`、`deleteCellStyle`、`setCellNamedStyle`）。
 docx 认 `setParaText`、`setHeaderFooterDistance`、`setPageMargin`、`setPageSize`、`setColumns`、`setVerticalAlign`、
 `setLineNumbering`、`setDocGrid`、`setRtlGutter`、`setMirrorMargins`、`setGutterAtTop`、`setHeaderFooterLink`、
@@ -271,7 +273,7 @@ docx 认 `setParaText`、`setHeaderFooterDistance`、`setPageMargin`、`setPageS
 `setTrendline`、`deleteTrendline`、`insertErrorBars`、`setErrorBars`、`deleteErrorBars`、`setChartSeriesAxis`、`setChartSize`、`setChartWrap`；
 不含 `setChartAnchor`、`insertChartSheet`、`deleteChartSheet`）、以及 SmartArt op（`insertSmartArt`、`deleteSmartArt`、
 `setSmartArtText`、`addSmartArtPoint`、`deleteSmartArtPoint`、`setSmartArtSize`、`setSmartArtWrap`、`setSmartArtColors`、
-`setSmartArtStyle`、`setSmartArtLayout`）、以及 OLE op（`insertOle`、`deleteOle`）、以及墨迹画布 op（`insertInkCanvas`、`replaceInkCanvas`、`deleteInkCanvas`、`setInkCanvasSize`、`setInkCanvasWrap`）、以及 3D 模型 op（`insertModel3d`、`replaceModel3d`、`deleteModel3d`）、以及 `setProtection`、
+`setSmartArtStyle`、`setSmartArtLayout`）、以及 OLE op（`insertOle`、`deleteOle`）、以及墨迹画布 op（`insertInkCanvas`、`replaceInkCanvas`、`deleteInkCanvas`、`setInkCanvasSize`、`setInkCanvasWrap`）、以及 3D 模型 op（`insertModel3d`、`replaceModel3d`、`deleteModel3d`、`setModel3dSize`、`setModel3dWrap`；不含 `setModel3dAnchor`、`setModel3dPos`）、以及 `setProtection`、
 以及 `insertWatermark` / `deleteWatermark`、以及 `setThemeColors` / `setThemeFonts` / `setThemeFmt` / `setThemeOverride`、
 以及 `setProps` / `setCustomProp` / `deleteCustomProp`。
 pptx 认 `setShapeText`、`setShapeFormat`、形状管理 op（`insertShape`、`insertConnector`、`deleteConnector`、`setConnector`、`groupShapes`、`ungroup`、`deleteShape`、
@@ -291,7 +293,7 @@ pptx 认 `setShapeText`、`setShapeFormat`、形状管理 op（`insertShape`、`
 以及 `setHandoutText`、以及超链接 op（`insertHyperlink`、`setHyperlink`、`deleteHyperlink`）、以及域 op（`insertField`、`setField`、
 `deleteField`）、以及媒体 op（`insertVideo`、`insertAudio`、`deleteMedia`、`setMedia`）、以及幻灯片节 op（`insertSlideSection`、`setSlideSectionName`、
 `deleteSlideSection`、`setSlideSection`）、以及自定义放映 op（`insertCustomShow`、`setCustomShow`、`deleteCustomShow`）、
-以及 OLE op（`insertOle`、`deleteOle`）、以及 3D 模型 op（`insertModel3d`、`replaceModel3d`、`deleteModel3d`）、以及公式 op（`insertMath`、`setMath`、`deleteMath`）、以及 Zoom op（`insertZoom`、`setZoom`、`deleteZoom`）、以及 `setShowPr`、以及 `setProtection`、
+以及 OLE op（`insertOle`、`deleteOle`）、以及 3D 模型 op（`insertModel3d`、`replaceModel3d`、`deleteModel3d`、`setModel3dSize`、`setModel3dPos`；不含 `setModel3dWrap`、`setModel3dAnchor`）、以及公式 op（`insertMath`、`setMath`、`deleteMath`）、以及 Zoom op（`insertZoom`、`setZoom`、`deleteZoom`）、以及 `setShowPr`、以及 `setProtection`、
 以及 `setProps` / `setCustomProp` / `deleteCustomProp`。
 不提供把整棵时间轴当 JSON 写入的 op；`setTiming` 仍报 `UnsupportedOp`。
 对不上格式的 op（例如对 pptx 发 `setCell` / `setCellStyle` / `setParaText` / `setProtection`，
@@ -299,7 +301,7 @@ pptx 认 `setShapeText`、`setShapeFormat`、形状管理 op（`insertShape`、`
  / `setVerticalAlign` / `setLineNumbering` / `setDocGrid` / `setRtlGutter` / `setPageBackground` / `setPageBorders` / `setFormProt`
  / `setMirrorMargins` / `setGutterAtTop` / `setHeaderFooterLink` / `insertHeaderFooter` / `setTitlePage` / `setEvenAndOddHeaders`、
 `setTextBoxWrap` / `setTextBoxFill` / `setTextBoxLine` / `setTextBoxDirection` / `setTextBoxTextAnchor`、注、`setSmartArtPos` / `setSmartArtWrap`、
-`insertWatermark` / `deleteWatermark`、`insertInkCanvas` / `replaceInkCanvas` / `deleteInkCanvas` / `setInkCanvasSize` / `setInkCanvasWrap`、表格 op、修订 op、书签 op、例外编辑区 op、域 op、题注与交叉引用 op、索引 op、参考文献 op、`setBibliographyStyle`、构建基块 op、字体嵌入 op、编号 op、样式 op、
+`insertWatermark` / `deleteWatermark`、`insertInkCanvas` / `replaceInkCanvas` / `deleteInkCanvas` / `setInkCanvasSize` / `setInkCanvasWrap`、`setModel3dWrap`、表格 op、修订 op、书签 op、例外编辑区 op、域 op、题注与交叉引用 op、索引 op、参考文献 op、`setBibliographyStyle`、构建基块 op、字体嵌入 op、编号 op、样式 op、
 直接格式 op、拼音 op、`setEastAsianSettings`、节结构 op 或 `setNotesText`，
 对 docx / pptx 发 `setHeaderFooterText`、`insertChartSheet`、`deleteChartSheet`、`insertSheet`、`deleteSheet`、`renameSheet`、
 `moveSheet`、`setSheetHidden`、`setCellStyle`、`setColWidth`、`setRowHeight`、`mergeRange` 或 `unmergeRange`、
@@ -312,9 +314,9 @@ pptx 认 `setShapeText`、`setShapeFormat`、形状管理 op（`insertShape`、`
 `insertConnection` / `deleteConnection` / `insertExternalLink` / `setExternalLink` / `deleteExternalLink` / `insertCustomView`
  / `deleteCustomView` / `showCustomView` / `insertProtectedRange` / `setProtectedRange` / `deleteProtectedRange`
  / `insertCellStyle` / `deleteCellStyle` / `setCellNamedStyle`，
-对 docx 发 `setPictureAnchor` / `setChartAnchor` / `setSmartArtPos` / `setNotesText`，
-对 pptx 发 `setPictureWrap` / `setPictureAnchor` / `setChartWrap` / `setChartAnchor` / `setSmartArtWrap`，
-对 docx / xlsx 发 `setPicturePos` / `setChartPos` / `setSmartArtPos` / `setNotesText` / `insertSlide` / `deleteSlide`
+对 docx 发 `setPictureAnchor` / `setChartAnchor` / `setSmartArtPos` / `setNotesText` / `setModel3dAnchor`，
+对 pptx 发 `setPictureWrap` / `setPictureAnchor` / `setChartWrap` / `setChartAnchor` / `setSmartArtWrap` / `setModel3dWrap` / `setModel3dAnchor`，
+对 docx / xlsx 发 `setPicturePos` / `setChartPos` / `setSmartArtPos` / `setModel3dPos` / `setNotesText` / `insertSlide` / `deleteSlide`
  / `moveSlide` / `setSlideHidden` / `setTransition` / `insertAnim` / `setAnim` / `deleteAnim` / `moveAnim` / `setSlideLayout` / `insertLayout`
  / `deleteLayout` / `insertPlaceholder` / `deletePlaceholder` / `insertMaster` / `deleteMaster` / `setSlideSize`
  / `setThemeColors` / `setThemeFonts` / `setHandoutText` / `setShapePos` / `setShapeSize` / `setShapeFill`
@@ -778,6 +780,14 @@ docx / pptx 上出现 `to` / `toOffX` / `toOffY` 报 `InvalidField`。pptx：写
 `setPictureAnchor` 见 [xlsx](json-contract-xlsx.md#setpictureanchor)。
 `setPicturePos` 见 [pptx](json-contract-pptx.md#setpicturepos)。
 `setInkCanvasSize` / `setInkCanvasWrap` 见 [docx](json-contract-docx.md#setinkcanvassize)。
+`setModel3dSize` 字段与 `setPictureSize` 相同，`id` 必须是 3D 模型 id。
+docx 改宿主 `wp:extent`（以及 `a:ext` 若有），规则与图相同；Fallback 海报 drawing 同步改尺寸。
+xlsx 规则与图相同：`oneCell` / `absolute` 改 `xdr:ext`，`twoCell` 改右下角 `to`。
+pptx 写入 graphicFrame 的 `p:xfrm/a:ext`；Fallback 海报 `p:pic` 同步改尺寸。
+`replaceModel3d` 仍不改几何。对图 id 发此 op、对 3D id 发 `setPictureSize` 仍报 `InvalidId`。
+`setModel3dWrap` 见 [docx](json-contract-docx.md#setmodel3dwrap)。
+`setModel3dAnchor` 见 [xlsx](json-contract-xlsx.md#setmodel3danchor)。
+`setModel3dPos` 见 [pptx](json-contract-pptx.md#setmodel3dpos)。
 
 ### insertTextBox
 

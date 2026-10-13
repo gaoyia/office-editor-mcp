@@ -1404,6 +1404,8 @@ pub enum DocxOp {
     InsertModel3d(super::model3d::InsertModel3dOp),
     ReplaceModel3d(super::model3d::ReplaceModel3dOp),
     DeleteModel3d(super::model3d::DeleteModel3dOp),
+    SetModel3dSize(super::model3d::SetModel3dSizeOp),
+    SetModel3dWrap(super::model3d::SetModel3dWrapOp),
     InsertWatermark(super::watermark::InsertWatermarkOp),
     DeleteWatermark(super::watermark::DeleteWatermarkOp),
     SetProtection(super::protect::SetProtectionOp),
@@ -1734,6 +1736,7 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<DocxOp>, Error> {
             || op_name == "setNotesText"
             || op_name == "setPictureAnchor"
             || op_name == "setChartAnchor"
+            || op_name == "setModel3dAnchor"
             || op_name == "setHeaderFooterText"
             || op_name == "insertChartSheet"
             || op_name == "deleteChartSheet"
@@ -1785,6 +1788,7 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<DocxOp>, Error> {
             || op_name == "setPicturePos"
             || op_name == "setChartPos"
             || op_name == "setSmartArtPos"
+            || op_name == "setModel3dPos"
             || op_name == "insertSparkline"
             || op_name == "setSparkline"
             || op_name == "deleteSparkline"
@@ -2120,6 +2124,8 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<DocxOp>, Error> {
             "insertModel3d" => out.push(DocxOp::InsertModel3d(parse_insert_model3d(obj, i)?)),
             "replaceModel3d" => out.push(DocxOp::ReplaceModel3d(parse_replace_model3d(obj, i)?)),
             "deleteModel3d" => out.push(DocxOp::DeleteModel3d(parse_delete_model3d(obj, i)?)),
+            "setModel3dSize" => out.push(DocxOp::SetModel3dSize(parse_set_model3d_size(obj, i)?)),
+            "setModel3dWrap" => out.push(DocxOp::SetModel3dWrap(parse_set_model3d_wrap(obj, i)?)),
             "insertWatermark" => out.push(DocxOp::InsertWatermark(super::watermark::parse_insert(
                 obj, i,
             )?)),
@@ -9700,6 +9706,128 @@ fn parse_delete_model3d(
     let id = require_id(obj, i)?;
     let target = super::model3d::parse_id(&id, i)?;
     Ok(super::model3d::DeleteModel3dOp { id, target })
+}
+
+fn parse_set_model3d_size(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<super::model3d::SetModel3dSizeOp, Error> {
+    deny_keys(obj, i, &["op", "id", "cx", "cy"])?;
+    let id = require_id(obj, i)?;
+    let target = super::model3d::parse_id(&id, i)?;
+    let cx = parse_emu_field(obj.get("cx"), i, "cx")?;
+    let cy = parse_emu_field(obj.get("cy"), i, "cy")?;
+    if cx.is_none() && cy.is_none() {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "setModel3dSize".into(),
+                field: "cx or cy".into(),
+            },
+            format!("ops[{i}]"),
+        ));
+    }
+    Ok(super::model3d::SetModel3dSizeOp { id, target, cx, cy })
+}
+
+fn parse_set_model3d_wrap(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<super::model3d::SetModel3dWrapOp, Error> {
+    deny_keys(
+        obj,
+        i,
+        &[
+            "op", "id", "kind", "wrap", "alignH", "alignV", "offsetX", "offsetY",
+        ],
+    )?;
+    let id = require_id(obj, i)?;
+    let target = super::model3d::parse_id(&id, i)?;
+    let kind = match obj.get("kind") {
+        Some(Value::String(s)) => picture::parse_pic_kind(s)
+            .ok_or_else(|| Error::with_path(ErrorKind::InvalidPicKind, format!("ops[{i}].kind")))?,
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "kind".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].kind"),
+            ));
+        }
+        None => {
+            return Err(Error::with_path(
+                ErrorKind::OpRequiresField {
+                    op: "setModel3dWrap".into(),
+                    field: "kind".into(),
+                },
+                format!("ops[{i}].kind"),
+            ));
+        }
+    };
+    let wrap = match obj.get("wrap") {
+        None | Some(Value::Null) => None,
+        Some(Value::String(s)) => Some(picture::parse_wrap(s).ok_or_else(|| {
+            Error::with_path(ErrorKind::InvalidPicWrap, format!("ops[{i}].wrap"))
+        })?),
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "wrap".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].wrap"),
+            ));
+        }
+    };
+    if kind == PicKind::Inline && wrap.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::InvalidPicWrap,
+            format!("ops[{i}].wrap"),
+        ));
+    }
+    if kind == PicKind::Anchor && wrap.is_none() {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "setModel3dWrap".into(),
+                field: "wrap".into(),
+            },
+            format!("ops[{i}].wrap"),
+        ));
+    }
+    let align_h = parse_align_h_field(obj.get("alignH"), i)?;
+    let align_v = parse_align_v_field(obj.get("alignV"), i)?;
+    let offset_x = parse_i64_field(obj.get("offsetX"), i, "offsetX")?;
+    let offset_y = parse_i64_field(obj.get("offsetY"), i, "offsetY")?;
+    if align_h.is_some() && offset_x.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::MutuallyExclusive {
+                a: "alignH".into(),
+                b: "offsetX".into(),
+            },
+            format!("ops[{i}]"),
+        ));
+    }
+    if align_v.is_some() && offset_y.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::MutuallyExclusive {
+                a: "alignV".into(),
+                b: "offsetY".into(),
+            },
+            format!("ops[{i}]"),
+        ));
+    }
+    Ok(super::model3d::SetModel3dWrapOp {
+        id,
+        target,
+        kind,
+        wrap,
+        pos: WrapPos {
+            align_h,
+            align_v,
+            offset_x,
+            offset_y,
+        },
+    })
 }
 
 fn parse_set_chart_title(

@@ -332,8 +332,9 @@ docx 上仍是段落 id / Word OLE id，见 [json-contract-docx.md](json-contrac
 `http://schemas.microsoft.com/office/drawing/2017/model3d`（可带尾斜杠）。
 只走 `Choice Requires="am3d"`。Fallback 海报 `p:pic` 不进 `pictures`。组合里符合条件的框要展开，组合本身不进树。
 备注页上同样判定，id 带 `slide:{n}/notes/` 前缀。幻灯片母版 / 版式上同样判定，id 带 `master:{n}/` 或 `master:{n}/layout:{k}/` 前缀。批注、备注母版、讲义上的 3D 不进树。
-`insertModel3d` 的 `id` 必须是 `slide:{n}`、`slide:{n}/notes`、`master:{n}` 或 `master:{n}/layout:{k}`。`replaceModel3d` / `deleteModel3d` 的 `id` 必须是 3D 模型 id。
+`insertModel3d` 的 `id` 必须是 `slide:{n}`、`slide:{n}/notes`、`master:{n}` 或 `master:{n}/layout:{k}`。`replaceModel3d` / `deleteModel3d` / `setModel3dSize` / `setModel3dPos` 的 `id` 必须是 3D 模型 id。
 只认 GLB。不是 GLB 报 `InvalidImageFile`（对外 `InvalidField`）。`contentType` 恒为 `model/gltf.binary`。
+批注内仍不插。幻灯片、备注页与母版 / 版式上已有 3D 可改尺寸与画布坐标。
 xlsx 见 [xlsx 分册](json-contract-xlsx.md#insertmodel3d)。docx 见 [json-contract-docx.md](json-contract-docx.md#insertmodel3d)。
 
 公式框 id 的 `{cNvPrId}` 取 Choice 里 `p:sp` 的 `p:nvSpPr/p:cNvPr/@id` 原文。
@@ -2989,6 +2990,20 @@ id 不是 3D 模型 id 报 `InvalidId`。xlsx / docx 见各自分册。
 找不到报 `IdNotFound`。id 不是 3D 模型 id 报 `InvalidId`。摘整棵 AlternateContent。
 清掉无人引用的关系与 GLB / 海报。xlsx / docx 见各自分册。
 
+### setModel3dSize
+
+字段与 `setPictureSize` 的 pptx 一侧相同。`id` 必须是 3D 模型 id。
+写入 graphicFrame 的 `p:xfrm/a:ext`。Fallback 海报 `p:pic` 同步改尺寸。
+对图 id 发此 op、对 3D id 发 `setPictureSize` 仍报 `InvalidId`。xlsx / docx 见各自分册。
+
+### setModel3dPos
+
+字段与 `setPicturePos` 相同，`id` 必须是 pptx 3D 模型 id。
+写入 graphicFrame 的 `p:xfrm/a:off`。Fallback 海报 `p:pic` 同步改位置。
+docx / xlsx 上发此 op 报 `InvalidField`。
+
+改 3D 尺寸与画布坐标的示例见 `docs/examples/pptx-apply-model3d-geom.json`。
+
 ### insertMath
 
 把一条线性公式写入目标幻灯片或备注页。不进 `shapes`。不实现排版引擎。不写 `<p:timing>`。
@@ -3275,6 +3290,7 @@ presentation 关系、新页或被删页及其 `.rels`、内容类型，
 `insertOle` / `deleteOle` 脏该宿主 XML 及其 `.rels`、`[Content_Types].xml`，
 以及新建或被删的 `/ppt/embeddings/…` 与预览 `/ppt/media/imageN.*`。
 `deleteOle` 还可清该页 `<p:timing>` 里对应 `tgtEl`。
+`setModel3dSize` / `setModel3dPos` 只脏该宿主 XML。
 `insertZoom` / `setZoom` / `deleteZoom` 脏该宿主 XML 及其 `.rels`、`[Content_Types].xml`，以及新建或被删的预览 `/ppt/media/imageN.*`。
 `deleteZoom` 还可清该页 `<p:timing>` 里对应 `tgtEl`。`setShowPr` 只脏 `/ppt/presProps.xml` 的 `p:showPr`；没有该部件报 `OpcPartMissing`。
 `setProtection` 只脏 `presentation.xml` 的 `p:modifyVerifier`。`setSlideHidden` 只脏该页 `p:sld/@show`。

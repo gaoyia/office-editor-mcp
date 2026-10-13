@@ -12,7 +12,7 @@ use crate::xml::{self, Document, Element, Node};
 use super::drawing_hlink;
 use super::hf::HfPart;
 use super::para::{self, HostPara, TxbxKey, TxbxTarget};
-use super::picture::{self, PicKind, WrapKind};
+use super::picture::{self, PicKind, WrapKind, WrapPos};
 use super::{A_NS, MC_NS, REL_IMAGE, REL_NS, WP_NS};
 
 #[derive(Debug, Clone)]
@@ -35,6 +35,23 @@ pub struct ReplaceModel3dOp {
 pub struct DeleteModel3dOp {
     pub id: String,
     pub target: TxbxTarget,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetModel3dSizeOp {
+    pub id: String,
+    pub target: TxbxTarget,
+    pub cx: Option<i64>,
+    pub cy: Option<i64>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetModel3dWrapOp {
+    pub id: String,
+    pub target: TxbxTarget,
+    pub kind: PicKind,
+    pub wrap: Option<WrapKind>,
+    pub pos: WrapPos,
 }
 
 pub struct Model3dInfo {
@@ -496,6 +513,142 @@ pub fn apply_delete(
         }
     }
     Ok(())
+}
+
+pub fn apply_set_size(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[HfPart],
+    op: &SetModel3dSizeOp,
+    i: usize,
+) -> Result<(), Error> {
+    let host = part_for_target(
+        catalog,
+        doc_part,
+        &op.target,
+        &op.id,
+        &format!("ops[{i}].id"),
+    )?;
+    let doc = load_part(pkg, docs, &host)?;
+    let ac = find_ac_mut(&mut doc.root, &op.target.key).ok_or_else(|| missing(&op.id, i))?;
+    let ok = each_host_drawing_mut(ac, |drawing| Ok(picture::set_extent(drawing, op.cx, op.cy)))?;
+    if !ok {
+        return Err(missing(&op.id, i));
+    }
+    dirty.insert(host, ());
+    Ok(())
+}
+
+pub fn apply_set_wrap(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[HfPart],
+    op: &SetModel3dWrapOp,
+    i: usize,
+) -> Result<(), Error> {
+    let host = part_for_target(
+        catalog,
+        doc_part,
+        &op.target,
+        &op.id,
+        &format!("ops[{i}].id"),
+    )?;
+    let doc = load_part(pkg, docs, &host)?;
+    ensure_ns(&mut doc.root);
+    let ac = find_ac_mut(&mut doc.root, &op.target.key).ok_or_else(|| missing(&op.id, i))?;
+    let ok = each_host_drawing_mut(ac, |drawing| {
+        picture::apply_wrap(drawing, op.kind, op.wrap, &op.pos)
+            .map_err(|e| e.at(format!("ops[{i}]")))?;
+        Ok(true)
+    })?;
+    if !ok {
+        return Err(missing(&op.id, i));
+    }
+    dirty.insert(host, ());
+    Ok(())
+}
+
+fn find_ac_mut<'a>(root: &'a mut Element, key: &TxbxKey) -> Option<&'a mut Element> {
+    find_ac_walk_mut(root, key, &mut 0)
+}
+
+fn find_ac_walk_mut<'a>(
+    el: &'a mut Element,
+    key: &TxbxKey,
+    index: &mut usize,
+) -> Option<&'a mut Element> {
+    if el.local_name() == "txbxContent" {
+        return None;
+    }
+    if el.local_name() == "AlternateContent" {
+        if ac_matches(el, key, index) {
+            return Some(el);
+        }
+        return None;
+    }
+    let children = el.children.as_mut_slice();
+    for child in children {
+        if let Node::Element(e) = child {
+            if let Some(found) = find_ac_walk_mut(e, key, index) {
+                return Some(found);
+            }
+        }
+    }
+    None
+}
+
+fn ac_matches(ac: &Element, key: &TxbxKey, index: &mut usize) -> bool {
+    let Some(choice) = ac.child_by_local("Choice") else {
+        return false;
+    };
+    if !crate::model3d::choice_requires_am3d(choice) {
+        return false;
+    }
+    let mut frames = Vec::new();
+    collect_frames(choice, &mut frames);
+    let mut hit = false;
+    for frame in frames {
+        *index += 1;
+        let token = frame
+            .child_by_local("docPr")
+            .and_then(|p| p.attr_local("id"))
+            .map(str::to_string);
+        if matches_key(&token, *index, key) {
+            hit = true;
+        }
+    }
+    hit
+}
+
+fn each_host_drawing_mut(
+    ac: &mut Element,
+    mut f: impl FnMut(&mut Element) -> Result<bool, Error>,
+) -> Result<bool, Error> {
+    let mut any = false;
+    for child in &mut ac.children {
+        let Node::Element(branch) = child else {
+            continue;
+        };
+        if !matches!(branch.local_name(), "Choice" | "Fallback") {
+            continue;
+        }
+        for node in &mut branch.children {
+            let Node::Element(drawing) = node else {
+                continue;
+            };
+            if drawing.local_name() != "drawing" {
+                continue;
+            }
+            if f(drawing)? {
+                any = true;
+            }
+        }
+    }
+    Ok(any)
 }
 
 fn write_media(pkg: &mut Package, host: &str, glb: Vec<u8>) -> Result<(String, String), Error> {

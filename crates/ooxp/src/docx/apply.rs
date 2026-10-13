@@ -573,6 +573,16 @@ pub fn apply(bytes: &[u8], ops: &[DocxOp]) -> Result<Vec<u8>, Error> {
                     &mut pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i,
                 )?;
             }
+            DocxOp::SetModel3dSize(op) => {
+                super::model3d::apply_set_size(
+                    &mut pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i,
+                )?;
+            }
+            DocxOp::SetModel3dWrap(op) => {
+                super::model3d::apply_set_wrap(
+                    &mut pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i,
+                )?;
+            }
             DocxOp::InsertWatermark(op) => {
                 watermark::apply_insert(&mut pkg, &mut docs, &mut dirty, &doc_part, op, i)?;
                 refresh_hf_catalog(&pkg, &docs, &doc_part, &mut catalog)?;

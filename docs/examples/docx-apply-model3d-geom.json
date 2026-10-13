@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "note.docx",
+  "ops": [
+    { "op": "setModel3dSize", "id": "para:3F2A1B00/model3d:2", "cx": 3657600, "cy": 1828800 },
+    {
+      "op": "setModel3dWrap",
+      "id": "para:3F2A1B00/model3d:2",
+      "kind": "anchor",
+      "wrap": "square",
+      "alignH": "left",
+      "alignV": "top"
+    }
+  ]
+}

@@ -48,7 +48,7 @@ Word 写出的连接线可进 inspect，并可用 `insertConnector` / `deleteCon
 无文本框的 `wps:wsp` 形状可进 inspect，并可用 `insertShape` / `deleteShape` / `setShapePos` / `setShapeSize` / `setShapeFill` / `setShapeLine` 增删改。
 正文与页眉页脚里的墨迹画布（非批注）可进 inspect，并可用 `insertInkCanvas` / `replaceInkCanvas` / `deleteInkCanvas` / `setInkCanvasSize` / `setInkCanvasWrap` 增删换与改尺寸绕排，
 也可按墨迹 id `exportMedia`。不要和批注里的 `kind: ink` 混。
-正文与页眉页脚里的 3D 模型可进 inspect，并可用 `insertModel3d` / `replaceModel3d` / `deleteModel3d` 增删换，
+正文与页眉页脚里的 3D 模型可进 inspect，并可用 `insertModel3d` / `replaceModel3d` / `deleteModel3d` / `setModel3dSize` / `setModel3dWrap` 增删换与改尺寸绕排，
 也可按 3D id `exportMedia`。不是图，不进 `pictures`。注内、批注内本期不插。
 组合本身不进树。docx 可用 `setThemeColors` / `setThemeFonts` / `setThemeFmt` 改主文档 theme 的配色、字体与 `fmtScheme` 常用槽，可用 `setThemeOverride` 读写主文档 `themeOverride` 部件。
 三种格式都可用 `setProps` / `setCustomProp` / `deleteCustomProp` 改文件属性。
@@ -243,9 +243,9 @@ Word 16.0 把嵌入的 xlsx 等 Office 文件写成 `package`；ECMA 与部分�
 只认 `mc:AlternateContent` 且 `Choice Requires` 含 `am3d`，Choice 里是 `w:drawing` / `wp:inline` 包 `am3d:model3d`，不是 `pic:pic`。
 只走 `Choice Requires="am3d"`。Fallback 海报不进 `pictures`。正文 3D 只收主文档段落的子孙，遇 `w:txbxContent` 停住。
 组合里符合条件的要展开，组合本身不进树。注内、批注内本期不编；对这些容器发 `insertModel3d` 报 `InvalidField`。
-`insertModel3d` 的 `id` 必须是正文或页眉页脚段落 id。`replaceModel3d` / `deleteModel3d` 的 `id` 必须是 3D 模型 id。
+`insertModel3d` 的 `id` 必须是正文或页眉页脚段落 id。`replaceModel3d` / `deleteModel3d` / `setModel3dSize` / `setModel3dWrap` 的 `id` 必须是 3D 模型 id。
 只认 GLB。不是 GLB 报 `InvalidImageFile`（对外 `InvalidField`）。`contentType` 恒为 `model/gltf.binary`。
-本期写入只做 `inline`。xlsx / pptx 见各自分册。
+`insertModel3d` 写入只做 `inline`。已有 3D 可用 `setModel3dWrap` 改成浮动。xlsx / pptx 见各自分册。
 
 水印只认页眉部件（`w:hdr`）里的 DrawingML `w:drawing`。
 `wp:docPr/@name` 以 `ooxpWatermark`、`PowerPlusWaterMarkObject` 或 `WordPictureWatermark` 开头，
@@ -4507,6 +4507,7 @@ SmartArt 四件套 `/word/diagrams/…` 及可选 drawing 缓存，`setNoteNumbe
 以及新媒体或被删的 `/word/media/…`。
 OLE op 还可以脏 `/word/embeddings/…` 与预览图媒体。`insertInkCanvas` / `replaceInkCanvas` / `deleteInkCanvas` 还可以脏 `/word/ink/…`、宿主 `.rels` 与 `[Content_Types].xml`。
 `setInkCanvasSize` / `setInkCanvasWrap` 只脏宿主 XML。
+`setModel3dSize` / `setModel3dWrap` 只脏宿主 XML。
 图表 op、SmartArt op 与文本框 op 点名注内或批注内段落时，还可以脏对应 notes / comments 部件及其 `.rels`。
 `setHeaderFooterDistance`、`setPageMargin`、`setPageSize`、`setColumns`、`setVerticalAlign`、`setLineNumbering`、`setDocGrid`、
 `setRtlGutter`、`setPageBorders`、`setFormProt`、`setTitlePage`、`insertSection`、`insertToc`、`deleteToc`、`insertCaption`、`deleteCaption`、
@@ -4682,6 +4683,36 @@ InkML 部件路径 `/word/ink/inkN.xml`，Content Type `application/inkml+xml`�
 
 字段与 `setPictureWrap` 相同，`id` 必须是墨迹画布 id。行内 / 浮动与绕排规则同图片。
 位置只支持相对页边。`replaceInkCanvas` 仍不改几何。xlsx / pptx 上发此 op 报 `InvalidField`。
+
+### setModel3dSize
+
+字段与 `setPictureSize` 的 docx 一侧相同。`id` 必须是 3D 模型 id。
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"setModel3dSize"` |
+| `id` | 必须是 3D 模型 id |
+| `cx` | 可选。宽度，EMU，正整数 |
+| `cy` | 可选。高度，EMU，正整数 |
+
+- `cx` 与 `cy` 至少给一个，否则报 `InvalidField`
+- 只改被点名的那一侧，另一侧保持原值
+- 写入 Choice 宿主 `wp:extent`；若 `a:ext` 存在，一并改
+- Fallback 海报 drawing 同步改尺寸
+- 不换 GLB，不改关系
+- 找不到报 `IdNotFound`
+- 不是 3D id 报 `InvalidId`
+- 对图 id 发此 op 报 `InvalidId`
+- 对 3D id 发 `setPictureSize` 仍报 `InvalidId`
+- xlsx / pptx 上的语义见各自分册
+
+### setModel3dWrap
+
+字段与 `setPictureWrap` 相同，`id` 必须是 3D 模型 id。行内 / 浮动与绕排规则同图片。
+位置只支持相对页边。Fallback 海报 drawing 同步改绕排。`replaceModel3d` 仍不改几何。
+xlsx / pptx 上发此 op 报 `InvalidField`。xlsx 改锚点请用 `setModel3dAnchor`。pptx 改画布坐标请用 `setModel3dPos`。
+
+改 3D 尺寸与绕排的示例见 `docs/examples/docx-apply-model3d-geom.json`。
 
 ### insertModel3d
 

@@ -1219,6 +1219,18 @@
                 "$ref": "pptx.schema.json#/$defs/deleteModel3dOp"
               },
               {
+                "$ref": "#/$defs/setModel3dSizeOp"
+              },
+              {
+                "$ref": "docx.schema.json#/$defs/setModel3dWrapOp"
+              },
+              {
+                "$ref": "xlsx.schema.json#/$defs/setModel3dAnchorOp"
+              },
+              {
+                "$ref": "pptx.schema.json#/$defs/setModel3dPosOp"
+              },
+              {
                 "$ref": "xlsx.schema.json#/$defs/insertMathOp"
               },
               {
@@ -1570,6 +1582,60 @@
       "properties": {
         "op": {
           "const": "setPictureSize"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "cx": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "cy": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "to": {
+          "type": "string",
+          "minLength": 1
+        },
+        "toOffX": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "toOffY": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "anyOf": [
+        {
+          "required": [
+            "cx"
+          ]
+        },
+        {
+          "required": [
+            "cy"
+          ]
+        },
+        {
+          "required": [
+            "to"
+          ]
+        }
+      ]
+    },
+    "setModel3dSizeOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setModel3dSize"
         },
         "id": {
           "type": "string",

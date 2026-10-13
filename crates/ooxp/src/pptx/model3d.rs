@@ -52,6 +52,22 @@ pub struct DeleteModel3dOp {
     pub target: Model3dTarget,
 }
 
+#[derive(Debug, Clone)]
+pub struct SetModel3dSizeOp {
+    pub id: String,
+    pub target: Model3dTarget,
+    pub cx: Option<i64>,
+    pub cy: Option<i64>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetModel3dPosOp {
+    pub id: String,
+    pub target: Model3dTarget,
+    pub x: Option<i64>,
+    pub y: Option<i64>,
+}
+
 pub struct Model3dInfo {
     pub id: String,
     pub cnv_pr_id: Option<String>,
@@ -514,6 +530,189 @@ pub fn delete(
         }
     }
     Ok(())
+}
+
+pub fn apply_size(slide_doc: &mut Document, op: &SetModel3dSizeOp, i: usize) -> Result<(), Error> {
+    let path = format!("ops[{i}].id");
+    let ac = find_ac_mut(&mut slide_doc.root, &op.target.key)
+        .ok_or_else(|| Error::with_path(ErrorKind::Model3dNotFound { id: op.id.clone() }, path))?;
+    patch_ac_geom(ac, op.cx, op.cy, None, None);
+    Ok(())
+}
+
+pub fn apply_pos(slide_doc: &mut Document, op: &SetModel3dPosOp, i: usize) -> Result<(), Error> {
+    let path = format!("ops[{i}].id");
+    let ac = find_ac_mut(&mut slide_doc.root, &op.target.key)
+        .ok_or_else(|| Error::with_path(ErrorKind::Model3dNotFound { id: op.id.clone() }, path))?;
+    patch_ac_geom(ac, None, None, op.x, op.y);
+    Ok(())
+}
+
+fn find_ac_mut<'a>(root: &'a mut Element, key: &Model3dKey) -> Option<&'a mut Element> {
+    find_ac_walk_mut(root, key, &mut 0)
+}
+
+fn find_ac_walk_mut<'a>(
+    el: &'a mut Element,
+    key: &Model3dKey,
+    index: &mut usize,
+) -> Option<&'a mut Element> {
+    if el.local_name() == "AlternateContent" {
+        if ac_matches(el, key, index) {
+            return Some(el);
+        }
+        return None;
+    }
+    let children = el.children.as_mut_slice();
+    for child in children {
+        if let Node::Element(e) = child {
+            if let Some(found) = find_ac_walk_mut(e, key, index) {
+                return Some(found);
+            }
+        }
+    }
+    None
+}
+
+fn ac_matches(ac: &Element, key: &Model3dKey, index: &mut usize) -> bool {
+    let Some(choice) = ac.child_by_local("Choice") else {
+        return false;
+    };
+    if !crate::model3d::choice_requires_am3d(choice) {
+        return false;
+    }
+    let mut frames = Vec::new();
+    collect_frames(choice, &mut frames);
+    let mut hit = false;
+    for frame in frames {
+        *index += 1;
+        if key_matches(key, &cnv_of(frame).0, *index) {
+            hit = true;
+        }
+    }
+    hit
+}
+
+fn patch_ac_geom(
+    ac: &mut Element,
+    cx: Option<i64>,
+    cy: Option<i64>,
+    x: Option<i64>,
+    y: Option<i64>,
+) {
+    for child in &mut ac.children {
+        let Node::Element(branch) = child else {
+            continue;
+        };
+        match branch.local_name() {
+            "Choice" => {
+                if let Some(frame) = branch.child_by_local_mut("graphicFrame") {
+                    patch_frame_xfrm(frame, cx, cy, x, y);
+                    patch_am3d_xfrm(frame, cx, cy, x, y);
+                }
+            }
+            "Fallback" => {
+                if let Some(pic) = branch.child_by_local_mut("pic") {
+                    patch_pic_xfrm(pic, cx, cy, x, y);
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+fn patch_frame_xfrm(
+    frame: &mut Element,
+    cx: Option<i64>,
+    cy: Option<i64>,
+    x: Option<i64>,
+    y: Option<i64>,
+) {
+    if frame.child_by_local("xfrm").is_none() {
+        frame.push_element(Element::new("p:xfrm"));
+    }
+    let xfrm = frame.child_by_local_mut("xfrm").expect("刚插入的 p:xfrm");
+    patch_off_ext(xfrm, cx, cy, x, y);
+}
+
+fn patch_pic_xfrm(
+    pic: &mut Element,
+    cx: Option<i64>,
+    cy: Option<i64>,
+    x: Option<i64>,
+    y: Option<i64>,
+) {
+    let sp_pr = picture::ensure_child(pic, "spPr");
+    let xfrm = picture::ensure_child(sp_pr, "xfrm");
+    patch_off_ext(xfrm, cx, cy, x, y);
+}
+
+fn patch_am3d_xfrm(
+    frame: &mut Element,
+    cx: Option<i64>,
+    cy: Option<i64>,
+    x: Option<i64>,
+    y: Option<i64>,
+) {
+    let Some(model) = find_local_mut(frame, "model3d") else {
+        return;
+    };
+    let Some(sp) = model.child_by_local_mut("spPr") else {
+        return;
+    };
+    let Some(xfrm) = sp.child_by_local_mut("xfrm") else {
+        return;
+    };
+    patch_off_ext(xfrm, cx, cy, x, y);
+}
+
+fn patch_off_ext(
+    xfrm: &mut Element,
+    cx: Option<i64>,
+    cy: Option<i64>,
+    x: Option<i64>,
+    y: Option<i64>,
+) {
+    if cx.is_some() || cy.is_some() {
+        let ext = ensure_a(xfrm, "ext");
+        if let Some(v) = cx {
+            picture::set_attr_local(ext, "cx", &v.to_string());
+        }
+        if let Some(v) = cy {
+            picture::set_attr_local(ext, "cy", &v.to_string());
+        }
+    }
+    if x.is_some() || y.is_some() {
+        let off = ensure_a(xfrm, "off");
+        if let Some(v) = x {
+            picture::set_attr_local(off, "x", &v.to_string());
+        }
+        if let Some(v) = y {
+            picture::set_attr_local(off, "y", &v.to_string());
+        }
+    }
+}
+
+fn ensure_a<'a>(parent: &'a mut Element, local: &str) -> &'a mut Element {
+    if parent.child_by_local(local).is_none() {
+        parent.push_element(Element::new(format!("a:{local}")));
+    }
+    parent.child_by_local_mut(local).expect("刚插入的 a 子元素")
+}
+
+fn find_local_mut<'a>(el: &'a mut Element, local: &str) -> Option<&'a mut Element> {
+    if el.local_name() == local {
+        return Some(el);
+    }
+    let children = el.children.as_mut_slice();
+    for child in children {
+        if let Node::Element(e) = child {
+            if let Some(found) = find_local_mut(e, local) {
+                return Some(found);
+            }
+        }
+    }
+    None
 }
 
 fn remove_model3d(el: &mut Element, key: &Model3dKey) -> bool {

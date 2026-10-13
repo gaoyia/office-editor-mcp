@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "book.xlsx",
+  "ops": [
+    { "op": "setModel3dSize", "id": "sheet:Sheet1/model3d:2", "cx": 3657600, "cy": 1828800 },
+    { "op": "setModel3dAnchor", "id": "sheet:Sheet1/model3d:2", "from": "C3" }
+  ]
+}

@@ -1937,6 +1937,8 @@ pub enum XlsxOp {
     InsertModel3d(super::model3d::InsertModel3dOp),
     ReplaceModel3d(super::model3d::ReplaceModel3dOp),
     DeleteModel3d(super::model3d::DeleteModel3dOp),
+    SetModel3dSize(super::model3d::SetModel3dSizeOp),
+    SetModel3dAnchor(super::model3d::SetModel3dAnchorOp),
     InsertMath(super::omml::InsertMathOp),
     SetMath(super::omml::SetMathOp),
     DeleteMath(super::omml::DeleteMathOp),
@@ -2253,6 +2255,8 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<XlsxOp>, Error> {
             "insertModel3d" => XlsxOp::InsertModel3d(parse_insert_model3d(obj, i)?),
             "replaceModel3d" => XlsxOp::ReplaceModel3d(parse_replace_model3d(obj, i)?),
             "deleteModel3d" => XlsxOp::DeleteModel3d(parse_delete_model3d(obj, i)?),
+            "setModel3dSize" => XlsxOp::SetModel3dSize(parse_set_model3d_size(obj, i)?),
+            "setModel3dAnchor" => XlsxOp::SetModel3dAnchor(parse_set_model3d_anchor(obj, i)?),
             "insertMath" => XlsxOp::InsertMath(parse_insert_math(obj, i)?),
             "setMath" => XlsxOp::SetMath(parse_set_math(obj, i)?),
             "deleteMath" => XlsxOp::DeleteMath(parse_delete_math(obj, i)?),
@@ -2401,6 +2405,8 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<XlsxOp>, Error> {
             | "deleteInkCanvas"
             | "setInkCanvasSize"
             | "setInkCanvasWrap"
+            | "setModel3dWrap"
+            | "setModel3dPos"
             | "insertSlide"
             | "deleteSlide"
             | "moveSlide"
@@ -10832,6 +10838,58 @@ fn parse_delete_model3d(
     let id = require_id(obj, i)?;
     let target = super::model3d::parse_id(&id, &format!("ops[{i}].id"))?;
     Ok(super::model3d::DeleteModel3dOp { id, target })
+}
+
+fn parse_set_model3d_size(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<super::model3d::SetModel3dSizeOp, Error> {
+    deny_keys(obj, i, &["op", "id", "cx", "cy", "to", "toOffX", "toOffY"])?;
+    let id = require_id(obj, i)?;
+    let target = super::model3d::parse_id(&id, &format!("ops[{i}].id"))?;
+    let s = parse_drawing_size(obj, i, "setModel3dSize")?;
+    Ok(super::model3d::SetModel3dSizeOp {
+        id,
+        target,
+        cx: s.cx,
+        cy: s.cy,
+        to: s.to,
+        to_off_x: s.to_off_x,
+        to_off_y: s.to_off_y,
+    })
+}
+
+fn parse_set_model3d_anchor(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<super::model3d::SetModel3dAnchorOp, Error> {
+    deny_keys(
+        obj,
+        i,
+        &[
+            "op", "id", "anchor", "from", "to", "fromOffX", "fromOffY", "toOffX", "toOffY", "posX",
+            "posY", "editAs", "cx", "cy",
+        ],
+    )?;
+    let id = require_id(obj, i)?;
+    let target = super::model3d::parse_id(&id, &format!("ops[{i}].id"))?;
+    let p = parse_drawing_anchor_patch(obj, i, "setModel3dAnchor")?;
+    Ok(super::model3d::SetModel3dAnchorOp {
+        id,
+        target,
+        anchor: p.anchor,
+        from: p.from,
+        to: p.to,
+        from_off_x: p.from_off_x,
+        from_off_y: p.from_off_y,
+        to_off_x: p.to_off_x,
+        to_off_y: p.to_off_y,
+        pos_x: p.pos_x,
+        pos_y: p.pos_y,
+        edit_as: p.edit_as,
+        cx: p.cx,
+        cy: p.cy,
+    })
 }
 
 fn parse_insert_math(

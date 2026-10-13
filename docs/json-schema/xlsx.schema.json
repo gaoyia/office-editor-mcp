@@ -5355,6 +5355,137 @@
         }
       }
     },
+    "setModel3dAnchorOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setModel3dAnchor"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "anchor": {
+          "enum": [
+            "oneCell",
+            "twoCell",
+            "absolute"
+          ]
+        },
+        "from": {
+          "type": "string",
+          "minLength": 1
+        },
+        "to": {
+          "type": "string",
+          "minLength": 1
+        },
+        "fromOffX": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "fromOffY": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "toOffX": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "toOffY": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "posX": {
+          "type": "integer"
+        },
+        "posY": {
+          "type": "integer"
+        },
+        "editAs": {
+          "enum": [
+            "twoCell",
+            "oneCell",
+            "absolute"
+          ]
+        },
+        "cx": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "cy": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "anyOf": [
+        {
+          "required": [
+            "anchor"
+          ]
+        },
+        {
+          "required": [
+            "from"
+          ]
+        },
+        {
+          "required": [
+            "to"
+          ]
+        },
+        {
+          "required": [
+            "fromOffX"
+          ]
+        },
+        {
+          "required": [
+            "fromOffY"
+          ]
+        },
+        {
+          "required": [
+            "toOffX"
+          ]
+        },
+        {
+          "required": [
+            "toOffY"
+          ]
+        },
+        {
+          "required": [
+            "posX"
+          ]
+        },
+        {
+          "required": [
+            "posY"
+          ]
+        },
+        {
+          "required": [
+            "editAs"
+          ]
+        },
+        {
+          "required": [
+            "cx"
+          ]
+        },
+        {
+          "required": [
+            "cy"
+          ]
+        }
+      ]
+    },
     "insertMathOp": {
       "type": "object",
       "required": [

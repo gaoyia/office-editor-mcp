@@ -1269,6 +1269,10 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             "twoCell SmartArt size is defined by the to cell; give to on setSmartArtSize, not cx / cy"
                 .into()
         }
+        ErrorKind::TwoCellModel3dSize => {
+            "twoCell 3D model size is defined by the to cell; give to on setModel3dSize, not cx / cy"
+                .into()
+        }
         ErrorKind::TwoCellChartSize => {
             "twoCell chart size is defined by the to cell; give to on setChartSize, not cx / cy"
                 .into()

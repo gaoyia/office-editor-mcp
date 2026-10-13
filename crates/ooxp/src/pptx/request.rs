@@ -1144,6 +1144,8 @@ pub enum PptxOp {
     InsertModel3d(super::model3d::InsertModel3dOp),
     ReplaceModel3d(super::model3d::ReplaceModel3dOp),
     DeleteModel3d(super::model3d::DeleteModel3dOp),
+    SetModel3dSize(super::model3d::SetModel3dSizeOp),
+    SetModel3dPos(super::model3d::SetModel3dPosOp),
     InsertMath(super::omml::InsertMathOp),
     SetMath(super::omml::SetMathOp),
     DeleteMath(super::omml::DeleteMathOp),
@@ -1467,6 +1469,8 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<PptxOp>, Error> {
             "insertModel3d" => PptxOp::InsertModel3d(parse_insert_model3d(obj, i)?),
             "replaceModel3d" => PptxOp::ReplaceModel3d(parse_replace_model3d(obj, i)?),
             "deleteModel3d" => PptxOp::DeleteModel3d(parse_delete_model3d(obj, i)?),
+            "setModel3dSize" => PptxOp::SetModel3dSize(parse_set_model3d_size(obj, i)?),
+            "setModel3dPos" => PptxOp::SetModel3dPos(parse_set_model3d_pos(obj, i)?),
             "insertMath" => PptxOp::InsertMath(parse_insert_math(obj, i)?),
             "setMath" => PptxOp::SetMath(parse_set_math(obj, i)?),
             "deleteMath" => PptxOp::DeleteMath(parse_delete_math(obj, i)?),
@@ -1590,6 +1594,8 @@ fn is_foreign_op(op_name: &str) -> bool {
             | "setHeaderFooterText"
             | "setPictureWrap"
             | "setPictureAnchor"
+            | "setModel3dWrap"
+            | "setModel3dAnchor"
             | "insertTextBox"
             | "deleteTextBox"
             | "setTextBoxSize"
@@ -5461,6 +5467,48 @@ fn parse_delete_model3d(
     let id = require_id(obj, i)?;
     let target = super::model3d::parse_id(&id, &format!("ops[{i}].id"))?;
     Ok(super::model3d::DeleteModel3dOp { id, target })
+}
+
+fn parse_set_model3d_size(
+    obj: &Map<String, Value>,
+    i: usize,
+) -> Result<super::model3d::SetModel3dSizeOp, Error> {
+    deny_keys(obj, i, &["op", "id", "cx", "cy"])?;
+    let id = require_id(obj, i)?;
+    let target = super::model3d::parse_id(&id, &format!("ops[{i}].id"))?;
+    let cx = parse_emu_field(obj.get("cx"), i, "cx")?;
+    let cy = parse_emu_field(obj.get("cy"), i, "cy")?;
+    if cx.is_none() && cy.is_none() {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "setModel3dSize".into(),
+                field: "cx or cy".into(),
+            },
+            format!("ops[{i}]"),
+        ));
+    }
+    Ok(super::model3d::SetModel3dSizeOp { id, target, cx, cy })
+}
+
+fn parse_set_model3d_pos(
+    obj: &Map<String, Value>,
+    i: usize,
+) -> Result<super::model3d::SetModel3dPosOp, Error> {
+    deny_keys(obj, i, &["op", "id", "x", "y"])?;
+    let id = require_id(obj, i)?;
+    let target = super::model3d::parse_id(&id, &format!("ops[{i}].id"))?;
+    let x = parse_off_field(obj.get("x"), i, "x")?;
+    let y = parse_off_field(obj.get("y"), i, "y")?;
+    if x.is_none() && y.is_none() {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "setModel3dPos".into(),
+                field: "x or y".into(),
+            },
+            format!("ops[{i}]"),
+        ));
+    }
+    Ok(super::model3d::SetModel3dPosOp { id, target, x, y })
 }
 
 fn parse_insert_math(
