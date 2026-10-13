@@ -325,7 +325,7 @@ docx 也可用 `setThemeColors` / `setThemeFonts` / `setThemeFmt` 改主文档 t
 也可用 `setThemeExtraSchemes` 整份替换补充色板；也可用 `setThemeOverride` 新建或改主文档 themeOverride 部件。
 pptx 可改被点名形状的可见文字（含备注形状与母版 / 版式占位符），可插入文本框与非矩形预设几何、写入自定义路径、插入连接线（幻灯片、备注页与母版 / 版式，可写 `stCxn` / `endCxn`）、组合与解开、删除被点名形状并清对应 timing `tgtEl`、改画布坐标与尺寸、填充描边与 DrawingML 文字格式，
 可用 `setNotesText` 按页改或新建演讲者备注，也可改被点名的幻灯片图、备注图与母版 / 版式图（换、插、删、改尺寸、改画布坐标），也可插删改幻灯片、备注页与母版 / 版式图表，也可插删改幻灯片、备注页与母版 / 版式 SmartArt，
-也可插删改幻灯片、备注页与母版 / 版式 DrawingML 表（含格网列宽与行高、格填充（实心/渐变/图案/图片）与六边、格边距、格 `vert` / `anchorCtr` / `horzOverflow` / `cell3D` / `headers`），也可插删回复并改现代批注，也可对批注或回复 id 插图并换、删批注内图（不改尺寸位置），也可按批注内图 id `exportMedia`，也可插入、删除、重排与隐藏幻灯片，
+也可插删改幻灯片、备注页与母版 / 版式 DrawingML 表（含格网列宽与行高、格填充（实心/渐变/图案/图片）与六边、格边距、格 `vert` / `anchorCtr` / `horzOverflow` / `cell3D` / `headers`、表样式 GUID 与 `tblLook`），也可插删回复并改现代批注，也可对批注或回复 id 插图并换、删批注内图（不改尺寸位置），也可按批注内图 id `exportMedia`，也可插入、删除、重排与隐藏幻灯片，
 也可用 `setTransition` 写或清除该页、母版或版式上的 `<p:transition>`（含自动进片、方向、切换声音、`split` 的 `orient`、`wheel` 的 `spokes` 与 `p15:prstTrans`），
 也可用 `insertAnim` / `setAnim` / `deleteAnim` / `moveAnim` 按模板增删改该宿主 `<p:timing>` 里的预设效果（不接受整棵时间轴树），也可用 `setSlideLayout` 只改该页 `.rels` 的版式关系，
 也可用 `insertLayout` / `deleteLayout` / `insertPlaceholder` / `deletePlaceholder` / `insertMaster` / `deleteMaster` 插删版式、占位符与母版，

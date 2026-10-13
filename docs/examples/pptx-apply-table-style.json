@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "deck.pptx",
+  "ops": [
+    {
+      "op": "setTableStyleRef",
+      "id": "slide:1/table:3",
+      "tableStyleId": "{5940675A-B579-460E-94D1-54222C63F5DA}",
+      "tblLook": {
+        "firstRow": true,
+        "firstCol": true
+      }
+    }
+  ]
+}

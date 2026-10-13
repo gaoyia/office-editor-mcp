@@ -444,6 +444,7 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<DocxOp>, Error> {
             || op_name == "setTableCellBorders"
             || op_name == "setTableCellInset"
             || op_name == "setTableCellPr"
+            || op_name == "setTableStyleRef"
             || op_name == "setTablePos"
             || op_name == "setTableSize"
             || op_name == "setTableColWidths"

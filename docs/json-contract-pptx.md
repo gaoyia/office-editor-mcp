@@ -312,7 +312,7 @@ SmartArt id 的 `{cNvPrId}` 取该 `p:graphicFrame` 的 `p:nvGraphicFramePr/p:cN
 `insertSmartArt` 的 `id` 同样是 `slide:{n}`、`slide:{n}/notes`、`master:{n}` 或 `master:{n}/layout:{k}`。点 id、删整张与改点 op 认备注与母版 / 版式图示 id。
 
 `insertTable` 的 `id` 必须是 `slide:{n}`、`slide:{n}/notes`、`master:{n}` 或 `master:{n}/layout:{k}`。
-`deleteTable` / `setTablePos` / `setTableSize` / `setTableColWidths` / `insertCol` / `deleteCol` 的 `id` 必须是表 id（含备注表 id）。
+`deleteTable` / `setTablePos` / `setTableSize` / `setTableColWidths` / `setTableStyleRef` / `insertCol` / `deleteCol` 的 `id` 必须是表 id（含备注表 id）。
 `insertRow` 的 `id` 是表 id（追加一行）或行 id（插到该行之后）。`deleteRow` / `setTableTrHeight` 的 `id` 必须是行 id。`setTableCellText` / `setTableCellFill` / `setTableCellBorders` / `setTableCellInset` / `setTableCellPr` 的 `id` 必须是单元格 id。
 对不上的 id 形态报 `InvalidId`。xlsx 上这些 op（除 Word 已认的结构名在 Word 上的语义外）见各节；pptx 上发 `mergeCells` / `splitCells` 仍报 `InvalidField`。
 
@@ -920,9 +920,13 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   `cNvPrId` / `name` / `stable` 规则与图相同。`x` / `y` / `cx` / `cy` 取 graphicFrame 的 `p:xfrm`。
   `layout` / `colors` / `style` / `points` 规则与 docx SmartArt 相同。pptx 没有 `kind` / `wrap`。
 - `scope.tables` 为 `true` 时，每页带 `tables`。没有表时为空数组。不依赖 `scope.slide`。
-  每张字段顺序：`id`、`cNvPrId`、`name`、`x`、`y`、`cx`、`cy`、`rowCount`、`colCount`、`colWidths`、`rows`、`stable`。
+  每张字段顺序：`id`、`cNvPrId`、`name`、`x`、`y`、`cx`、`cy`、`rowCount`、`colCount`、`colWidths`、`tableStyleId`、`tblLook`、`rows`、`stable`。
   `cNvPrId` / `name` / `stable` 规则与图相同。`x` / `y` / `cx` / `cy` 取 graphicFrame 的 `p:xfrm`。`rowCount` 是 `a:tr` 个数。
   `colCount` 见上文表 id 那节。`colWidths` 取 `a:tblGrid` 各 `a:gridCol/@w`（EMU 整数）。没有网格则为 `[]`。缺 `@w` 或解析失败当作 `0`。
+  `tableStyleId` 取 `a:tblPr/a:tableStyleId` 文本原文，没有该子元则为 `null`。不把 `a:tableStyle` 放进树。
+  `tblLook` 始终是对象，字段顺序：`firstRow`、`firstCol`、`lastRow`、`lastCol`、`bandRow`、`bandCol`。
+  各取 `a:tblPr` 对应属性的布尔（`1` / `true` / `on` 为 `true`），缺属性或没有 `tblPr` 则为 `null`。
+  不把 `@rtl` 放进树。
   `rows` 按 `a:tr` 顺序。每行字段顺序：`id`、`index`、`height`、`cells`。`height` 取 `a:tr/@h`，缺则为 `null`。没有 `rule`。
   `cells` 按该行 `a:tc` 文档顺序，不按空网格补格。
   每格字段顺序：`id`、`row`、`col`、`gridSpan`、`rowSpan`、`hMerge`、`vMerge`、`text`，
@@ -1419,6 +1423,17 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   - 数组，长度必须等于 `tables[].rows`
   - 每项为 EMU 正整数
   - 省略则按框 `cy` 均分写入 `@h`
+- **`tables[].tableStyleId`**
+  - 可选
+  - `ST_Guid` 或 `null`
+  - 省略则写入现有 insert 缺省 GUID `{5C22544A-7EE6-4342-B048-85BDC9FD1C3A}`
+  - `null` 不写 `a:tableStyleId`
+- **`tables[].tblLook`**
+  - 可选
+  - 对象或 `null`
+  - 规则与 `setTableStyleRef` 的 `tblLook` 相同
+  - 省略则写入 `firstRow=1` 与 `bandRow=1`
+  - `null` 不写那六个属性
 - **`tables[].cells`**
   - 可选
   - 二维数组，行数与列数必须与 `rows` / `cols` 一致
@@ -2914,6 +2929,26 @@ theme 色仍不展开成 RGB。备注表、母版表同样认。
 
 示例见 `docs/examples/pptx-apply-table-cell-pr.json`。
 
+### setTableStyleRef
+
+改某一张 DrawingML 表上的样式 GUID 与 `a:tblPr` 行列开关。不要用 docx 的 `setTableStyle`。不要读写 `/ppt/tableStyles.xml`。备注表、母版表同样认。
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"setTableStyleRef"` |
+| `id` | 表 id |
+| `tableStyleId` | 可选。`ST_Guid`，或 `null`（去掉 `a:tableStyleId`） |
+| `tblLook` | 可选。对象或 `null`（六个属性都去掉） |
+
+`tableStyleId` 与 `tblLook` 至少给一个，否则报 `InvalidField`。
+`tableStyleId` 不是 `{8-4-4-4-12}` 十六进制 GUID 报 `InvalidField`。
+写入 `tableStyleId` 时去掉同行的 `a:tableStyle`。
+`tblLook` 对象字段顺序：`firstRow`、`firstCol`、`lastRow`、`lastCol`、`bandRow`、`bandCol`。都可省略。
+未点名的开关留下。值为布尔。
+找不到该表报 `IdNotFound`。id 不是表 id 报 `InvalidId`。xlsx / docx 上发此 op 报 `InvalidField`。
+
+示例见 `docs/examples/pptx-apply-table-style.json`。
+
 ### setTablePos
 
 | 字段 | 含义 |
@@ -3709,7 +3744,7 @@ notesSlide、被点名的 slideMaster 或 slideLayout、notesMaster 或 handoutM
 往母版 / 版式插只脏目标 slideMaster 或 slideLayout XML。
 `insertConnector` / `deleteConnector` / `setConnector` 脏该宿主 XML（幻灯片、notesSlide、slideMaster 或 slideLayout）。`groupShapes` / `ungroup` 只脏该页幻灯片 XML。
 `insertTable` / `deleteTable` / `insertRow` / `deleteRow` / `insertCol` / `deleteCol` / `setTableCellText`
- / `setTablePos` / `setTableSize` / `setTableColWidths` / `setTableTrHeight` / `setTableCellBorders` / `setTableCellInset` / `setTableCellPr` 脏该宿主 XML（幻灯片、notesSlide、slideMaster 或 slideLayout），不新建部件。
+ / `setTablePos` / `setTableSize` / `setTableColWidths` / `setTableTrHeight` / `setTableCellBorders` / `setTableCellInset` / `setTableCellPr` / `setTableStyleRef` 脏该宿主 XML（幻灯片、notesSlide、slideMaster 或 slideLayout），不新建部件。
 `setTableCellFill` 非 `blip` 同样只脏该宿主 XML；`type` 为 `blip` 时还可脏该宿主 `.rels`、`[Content_Types].xml` 与 `/ppt/media/…`；
 往备注插且还没有 notesSlide 时可脏 notesSlide、该页 `.rels`、notesMaster、presentation，与 `setNotesText` 相同。
 `setNotesText` 可脏 notesSlide、该页 `.rels`、notesMaster、presentation，以及新建 notesMaster 时复制的 theme 部件。图片 op 还可脏该宿主关系与媒体。

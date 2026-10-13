@@ -11,8 +11,8 @@ use super::request::{
     Cell3DSpec, CellBorderSide, CellBordersPatch, CellChrome, CellFillSpec, CellMarPatch,
     DeleteColOp, DeleteRowOp, DeleteTableOp, InsertColOp, InsertRowOp, InsertTableOp,
     SetTableCellBordersOp, SetTableCellFillOp, SetTableCellInsetOp, SetTableCellPrOp,
-    SetTableCellTextOp, SetTableColWidthsOp, SetTablePosOp, SetTableSizeOp, SetTableTrHeightOp,
-    TableCellPrPatch,
+    SetTableCellTextOp, SetTableColWidthsOp, SetTablePosOp, SetTableSizeOp, SetTableStyleRefOp,
+    SetTableTrHeightOp, TableCellPrPatch, TblLookPatch,
 };
 use super::shape;
 use super::{DML_NS, REL_NS};
@@ -560,6 +560,46 @@ fn col_widths(tbl: &Element) -> Vec<i64> {
         .collect()
 }
 
+const LOOK_ATTRS: &[&str] = &[
+    "firstRow", "firstCol", "lastRow", "lastCol", "bandRow", "bandCol",
+];
+const TBL_PR_BEFORE_STYLE: &[&str] = &[
+    "noFill",
+    "solidFill",
+    "gradFill",
+    "blipFill",
+    "pattFill",
+    "grpFill",
+    "effectLst",
+    "effectDag",
+];
+
+fn inspect_table_style_id(tbl_pr: Option<&Element>) -> Value {
+    tbl_pr
+        .and_then(|pr| pr.child_by_local("tableStyleId"))
+        .map(|el| json!(el.text_content()))
+        .unwrap_or(Value::Null)
+}
+
+fn inspect_tbl_look(tbl_pr: Option<&Element>) -> Value {
+    let mut m = Map::new();
+    for name in LOOK_ATTRS {
+        m.insert((*name).into(), inspect_on_attr(tbl_pr, name));
+    }
+    Value::Object(m)
+}
+
+fn inspect_on_attr(pr: Option<&Element>, name: &str) -> Value {
+    let Some(pr) = pr else {
+        return Value::Null;
+    };
+    if pr.attr_local(name).is_none() {
+        Value::Null
+    } else {
+        json!(is_on(pr, name))
+    }
+}
+
 fn is_on(el: &Element, name: &str) -> bool {
     matches!(
         el.attr_local(name).map(|s| s.to_ascii_lowercase()),
@@ -661,6 +701,9 @@ fn table_json(frame: &Element, host: &str, index: usize, pkg: Option<(&Package, 
         "colWidths".into(),
         json!(tbl.map(col_widths).unwrap_or_default()),
     );
+    let tbl_pr = tbl.and_then(|t| t.child_by_local("tblPr"));
+    m.insert("tableStyleId".into(), inspect_table_style_id(tbl_pr));
+    m.insert("tblLook".into(), inspect_tbl_look(tbl_pr));
     m.insert("rows".into(), json!(rows));
     m.insert("stable".into(), json!(stable));
     Value::Object(m)
@@ -1088,6 +1131,8 @@ pub fn insert_table(
         op.col_widths.as_deref(),
         op.row_heights.as_deref(),
         &op.chrome,
+        op.style_id.as_ref().map(|v| v.as_deref()),
+        op.tbl_look.as_ref().map(|v| v.as_ref()),
     )?;
     picture::insert_into_sp_tree(&mut slide_doc.root, frame)?;
     let _ = i;
@@ -1115,6 +1160,8 @@ fn build_table_frame(
     col_widths: Option<&[i64]>,
     row_heights: Option<&[i64]>,
     chrome: &[Vec<CellChrome>],
+    style_id: Option<Option<&str>>,
+    tbl_look: Option<Option<&TblLookPatch>>,
 ) -> Result<Element, Error> {
     let mut nv = Element::new("p:nvGraphicFramePr");
     nv.push_element(
@@ -1150,11 +1197,7 @@ fn build_table_frame(
         grid.push_element(Element::new("a:gridCol").with_attr("w", w.to_string()));
     }
     let mut tbl = Element::new("a:tbl");
-    let mut tbl_pr = Element::new("a:tblPr")
-        .with_attr("firstRow", "1")
-        .with_attr("bandRow", "1");
-    tbl_pr.push_element(Element::new("a:tableStyleId").with_text(STYLE_ID));
-    tbl.push_element(tbl_pr);
+    tbl.push_element(build_tbl_pr(style_id, tbl_look));
     tbl.push_element(grid);
     for (r, h) in row_hs.iter().enumerate() {
         let mut tr = Element::new("a:tr").with_attr("h", h.to_string());
@@ -1764,6 +1807,16 @@ pub fn set_cell_pr(slide_doc: &mut Document, op: &SetTableCellPrOp, i: usize) ->
     Ok(())
 }
 
+pub fn set_table_style_ref(
+    slide_doc: &mut Document,
+    op: &SetTableStyleRefOp,
+    i: usize,
+) -> Result<(), Error> {
+    let tbl = require_tbl(slide_doc, &op.target.key, &op.id, i)?;
+    apply_style_to_tbl(tbl, &op.style_id, &op.tbl_look);
+    Ok(())
+}
+
 pub fn set_cell_format(
     slide_doc: &mut Document,
     id: &str,
@@ -1900,6 +1953,96 @@ fn apply_bool_attr(pr: &mut Element, local: &str, field: &Option<Option<bool>>) 
         Some(Some(true)) => picture::set_attr_local(pr, local, "1"),
         Some(Some(false)) => picture::set_attr_local(pr, local, "0"),
     }
+}
+
+fn apply_bool_set(pr: &mut Element, local: &str, field: Option<bool>) {
+    match field {
+        None => {}
+        Some(true) => picture::set_attr_local(pr, local, "1"),
+        Some(false) => picture::set_attr_local(pr, local, "0"),
+    }
+}
+
+fn build_tbl_pr(
+    style_id: Option<Option<&str>>,
+    tbl_look: Option<Option<&TblLookPatch>>,
+) -> Element {
+    let mut pr = Element::new("a:tblPr");
+    match tbl_look {
+        None => {
+            picture::set_attr_local(&mut pr, "firstRow", "1");
+            picture::set_attr_local(&mut pr, "bandRow", "1");
+        }
+        Some(None) => {}
+        Some(Some(look)) => apply_tbl_look(&mut pr, look),
+    }
+    match style_id {
+        None => {
+            pr.push_element(Element::new("a:tableStyleId").with_text(STYLE_ID));
+        }
+        Some(None) => {}
+        Some(Some(guid)) => {
+            pr.push_element(Element::new("a:tableStyleId").with_text(guid));
+        }
+    }
+    pr
+}
+
+fn apply_style_to_tbl(
+    tbl: &mut Element,
+    style_id: &Option<Option<String>>,
+    tbl_look: &Option<Option<TblLookPatch>>,
+) {
+    match style_id {
+        None => {}
+        Some(None) => {
+            if let Some(pr) = tbl.child_by_local_mut("tblPr") {
+                remove_named(pr, &["tableStyleId"]);
+            }
+        }
+        Some(Some(guid)) => {
+            let pr = ensure_tbl_pr(tbl);
+            remove_named(pr, &["tableStyle", "tableStyleId"]);
+            place_child(
+                pr,
+                "tableStyleId",
+                Element::new("a:tableStyleId").with_text(guid),
+                TBL_PR_BEFORE_STYLE,
+                false,
+            );
+        }
+    }
+    match tbl_look {
+        None => {}
+        Some(None) => {
+            if let Some(pr) = tbl.child_by_local_mut("tblPr") {
+                for name in LOOK_ATTRS {
+                    remove_attr_local(pr, name);
+                }
+            }
+        }
+        Some(Some(look)) => {
+            let pr = ensure_tbl_pr(tbl);
+            apply_tbl_look(pr, look);
+        }
+    }
+}
+
+fn apply_tbl_look(pr: &mut Element, look: &TblLookPatch) {
+    apply_bool_set(pr, "firstRow", look.first_row);
+    apply_bool_set(pr, "firstCol", look.first_col);
+    apply_bool_set(pr, "lastRow", look.last_row);
+    apply_bool_set(pr, "lastCol", look.last_col);
+    apply_bool_set(pr, "bandRow", look.band_row);
+    apply_bool_set(pr, "bandCol", look.band_col);
+}
+
+fn ensure_tbl_pr(tbl: &mut Element) -> &mut Element {
+    if tbl.child_by_local("tblPr").is_none() {
+        tbl.children
+            .insert(0, Node::Element(Element::new("a:tblPr")));
+    }
+    tbl.child_by_local_mut("tblPr").expect("刚补的 tblPr")
 }
 
 fn build_cell3d(spec: &Cell3DSpec) -> Element {

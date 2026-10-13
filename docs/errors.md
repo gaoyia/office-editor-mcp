@@ -815,13 +815,14 @@
 - `setTableCellInset` 四个边键一个都不给、或值为负数，报 `InvalidField`
 - `setTableCellPr` 五个字段一个都不给、`vert` 不是 `ST_TextVerticalType`、`horzOverflow` 不是 `overflow` / `clip`、`prstMaterial` 不是 `ST_PresetMaterialType`、或 `bevel.prst` 不是 `ST_BevelPresetType`，报 `InvalidField`
 - `bevel` 的 `w` / `h` 不是正整数报 `InvalidField`
-- `setTablePos` / `setTableSize` / `setTableColWidths` 的 id 必须是 pptx 表 id
+- `setTableStyleRef` 的 `tableStyleId` 与 `tblLook` 一个都不给、或 `tableStyleId` 不是 `ST_Guid`，报 `InvalidField`
+- `setTablePos` / `setTableSize` / `setTableColWidths` / `setTableStyleRef` 的 id 必须是 pptx 表 id
 - `setTableTrHeight` 的 id 必须是 pptx 行 id
 - 坐标或尺寸一个都不给报 `InvalidField`
 - `setTableColWidths` 的 `cols` 长度必须等于 `colCount`，每项 EMU 正整数
 - `setTableTrHeight` 的 `h` 必须是 EMU 正整数；`null` 报 `InvalidField`
 - create 的 `tables[].colWidths` / `tables[].rowHeights` 长度必须分别等于列数 / 行数
-- docx / xlsx 上发 `setTableCellText` / `setTableCellFill` / `setTableCellBorders` / `setTableCellInset` / `setTableCellPr` / `setTablePos` / `setTableSize` / `setTableColWidths` / `setTableTrHeight` 报 `InvalidField`
+- docx / xlsx 上发 `setTableCellText` / `setTableCellFill` / `setTableCellBorders` / `setTableCellInset` / `setTableCellPr` / `setTableStyleRef` / `setTablePos` / `setTableSize` / `setTableColWidths` / `setTableTrHeight` 报 `InvalidField`
 - xlsx 上发 `insertTable` / `deleteTable` / `insertRow` / `deleteRow` / `insertCol` / `deleteCol` 仍报 `InvalidField`
 - pptx 上发 `mergeCells` / `splitCells` 报 `InvalidField`
 - 表、行或单元格带修订痕迹或网格变更标记（含 `tblPrExChange`），或某行占的列数对不上 `colCount`，结构 op 报 `NotImplemented`

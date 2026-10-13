@@ -1081,6 +1081,26 @@ pub struct InsertTableOp {
     pub col_widths: Option<Vec<i64>>,
     pub row_heights: Option<Vec<i64>>,
     pub chrome: Vec<Vec<CellChrome>>,
+    pub style_id: Option<Option<String>>,
+    pub tbl_look: Option<Option<TblLookPatch>>,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct TblLookPatch {
+    pub first_row: Option<bool>,
+    pub first_col: Option<bool>,
+    pub last_row: Option<bool>,
+    pub last_col: Option<bool>,
+    pub band_row: Option<bool>,
+    pub band_col: Option<bool>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetTableStyleRefOp {
+    pub id: String,
+    pub target: table::TableTarget,
+    pub style_id: Option<Option<String>>,
+    pub tbl_look: Option<Option<TblLookPatch>>,
 }
 
 #[derive(Debug, Clone)]
@@ -1426,6 +1446,7 @@ pub enum PptxOp {
     SetTableCellBorders(SetTableCellBordersOp),
     SetTableCellInset(SetTableCellInsetOp),
     SetTableCellPr(SetTableCellPrOp),
+    SetTableStyleRef(SetTableStyleRefOp),
     SetTablePos(SetTablePosOp),
     SetTableSize(SetTableSizeOp),
     SetTableColWidths(SetTableColWidthsOp),

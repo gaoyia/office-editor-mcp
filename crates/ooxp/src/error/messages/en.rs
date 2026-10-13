@@ -1229,6 +1229,10 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::InvalidHorzOverflow => "horzOverflow must be overflow or clip".into(),
         ErrorKind::InvalidBevelPreset => "bevel.prst must be ST_BevelPresetType".into(),
         ErrorKind::InvalidPresetMaterial => "prstMaterial must be ST_PresetMaterialType".into(),
+        ErrorKind::NeedSetTableStyleRefField => {
+            "setTableStyleRef requires at least one of tableStyleId or tblLook".into()
+        }
+        ErrorKind::InvalidTableStyleId => "tableStyleId must be ST_Guid".into(),
         ErrorKind::NeedGradientStops => "textFill.stops must have at least two items".into(),
         ErrorKind::DuplicateGradientPos => "textFill.stops pos values must be unique".into(),
         ErrorKind::NeedTextOutlineField => "textOutline requires color and width".into(),

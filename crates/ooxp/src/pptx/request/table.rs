@@ -72,6 +72,8 @@ pub(super) fn parse_insert_table(
         col_widths: None,
         row_heights: None,
         chrome: Vec::new(),
+        style_id: None,
+        tbl_look: None,
     })
 }
 
@@ -283,6 +285,29 @@ pub(super) fn parse_set_table_cell_pr(
     Ok(SetTableCellPrOp { id, target, pr })
 }
 
+pub(super) fn parse_set_table_style_ref(
+    obj: &Map<String, Value>,
+    i: usize,
+) -> Result<SetTableStyleRefOp, Error> {
+    deny_keys(obj, i, &["op", "id", "tableStyleId", "tblLook"])?;
+    let id = require_id(obj, i)?;
+    let target = table::parse_table_id(&id, &format!("ops[{i}].id"), IdReason::NeedTableId)?;
+    let style_id = parse_opt_guid_null(obj.get("tableStyleId"), &format!("ops[{i}].tableStyleId"))?;
+    let tbl_look = parse_opt_tbl_look(obj.get("tblLook"), &format!("ops[{i}].tblLook"))?;
+    if style_id.is_none() && tbl_look.is_none() {
+        return Err(Error::with_path(
+            ErrorKind::NeedSetTableStyleRefField,
+            format!("ops[{i}]"),
+        ));
+    }
+    Ok(SetTableStyleRefOp {
+        id,
+        target,
+        style_id,
+        tbl_look,
+    })
+}
+
 pub(super) fn parse_set_table_pos(
     obj: &Map<String, Value>,
     i: usize,
@@ -434,6 +459,8 @@ pub(crate) fn parse_create_table(
             "hyperlink",
             "colWidths",
             "rowHeights",
+            "tableStyleId",
+            "tblLook",
         ],
     )?;
     let rows = table::parse_dim(
@@ -510,6 +537,8 @@ pub(crate) fn parse_create_table(
         col_widths,
         row_heights,
         chrome,
+        style_id: parse_opt_guid_null(obj.get("tableStyleId"), &format!("{prefix}.tableStyleId"))?,
+        tbl_look: parse_opt_tbl_look(obj.get("tblLook"), &format!("{prefix}.tblLook"))?,
     };
     let link = parse_create_opt_hyperlink(obj, prefix)?;
     Ok(CreateTable {
@@ -1489,4 +1518,97 @@ fn is_preset_material(s: &str) -> bool {
             | "flat"
             | "softmetal"
     )
+}
+
+fn parse_opt_guid_null(v: Option<&Value>, path: &str) -> Result<Option<Option<String>>, Error> {
+    match v {
+        None => Ok(None),
+        Some(Value::Null) => Ok(Some(None)),
+        Some(Value::String(s)) if is_st_guid(s) => Ok(Some(Some(s.clone()))),
+        Some(Value::String(_)) => Err(Error::with_path(
+            ErrorKind::InvalidTableStyleId,
+            path.to_string(),
+        )),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "tableStyleId".into(),
+                expected: TypeName::String,
+            },
+            path.to_string(),
+        )),
+    }
+}
+
+fn is_st_guid(s: &str) -> bool {
+    let b = s.as_bytes();
+    b.len() == 38
+        && b[0] == b'{'
+        && b[37] == b'}'
+        && b[9] == b'-'
+        && b[14] == b'-'
+        && b[19] == b'-'
+        && b[24] == b'-'
+        && b[1..9].iter().all(u8::is_ascii_hexdigit)
+        && b[10..14].iter().all(u8::is_ascii_hexdigit)
+        && b[15..19].iter().all(u8::is_ascii_hexdigit)
+        && b[20..24].iter().all(u8::is_ascii_hexdigit)
+        && b[25..37].iter().all(u8::is_ascii_hexdigit)
+}
+
+fn parse_opt_tbl_look(
+    v: Option<&Value>,
+    path: &str,
+) -> Result<Option<Option<TblLookPatch>>, Error> {
+    match v {
+        None => Ok(None),
+        Some(Value::Null) => Ok(Some(None)),
+        Some(Value::Object(obj)) => Ok(Some(Some(parse_tbl_look_patch(obj, path)?))),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "tblLook".into(),
+                expected: TypeName::Object,
+            },
+            path.to_string(),
+        )),
+    }
+}
+
+fn parse_tbl_look_patch(obj: &Map<String, Value>, path: &str) -> Result<TblLookPatch, Error> {
+    deny_keys_at(
+        obj,
+        path,
+        &[
+            "firstRow", "firstCol", "lastRow", "lastCol", "bandRow", "bandCol",
+        ],
+    )?;
+    Ok(TblLookPatch {
+        first_row: parse_opt_bool_set(
+            obj.get("firstRow"),
+            &format!("{path}.firstRow"),
+            "firstRow",
+        )?,
+        first_col: parse_opt_bool_set(
+            obj.get("firstCol"),
+            &format!("{path}.firstCol"),
+            "firstCol",
+        )?,
+        last_row: parse_opt_bool_set(obj.get("lastRow"), &format!("{path}.lastRow"), "lastRow")?,
+        last_col: parse_opt_bool_set(obj.get("lastCol"), &format!("{path}.lastCol"), "lastCol")?,
+        band_row: parse_opt_bool_set(obj.get("bandRow"), &format!("{path}.bandRow"), "bandRow")?,
+        band_col: parse_opt_bool_set(obj.get("bandCol"), &format!("{path}.bandCol"), "bandCol")?,
+    })
+}
+
+fn parse_opt_bool_set(v: Option<&Value>, path: &str, field: &str) -> Result<Option<bool>, Error> {
+    match v {
+        None => Ok(None),
+        Some(Value::Bool(b)) => Ok(Some(*b)),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::Boolean,
+            },
+            path.to_string(),
+        )),
+    }
 }

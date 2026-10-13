@@ -179,6 +179,18 @@ fn insert_inspect_cell_text_row_col_pos_delete() {
     assert_eq!(t["rowCount"], 2);
     assert_eq!(t["colCount"], 2);
     assert_eq!(t["colWidths"], json!([2743200, 2743200]));
+    assert_eq!(t["tableStyleId"], "{5C22544A-7EE6-4342-B048-85BDC9FD1C3A}");
+    assert_eq!(
+        t["tblLook"],
+        json!({
+            "firstRow": true,
+            "firstCol": null,
+            "lastRow": null,
+            "lastCol": null,
+            "bandRow": true,
+            "bandCol": null
+        })
+    );
     assert_eq!(t["stable"], true);
     assert_eq!(
         object_keys(t),
@@ -193,6 +205,8 @@ fn insert_inspect_cell_text_row_col_pos_delete() {
             "rowCount",
             "colCount",
             "colWidths",
+            "tableStyleId",
+            "tblLook",
             "rows",
             "stable"
         ]

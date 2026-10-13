@@ -5,7 +5,7 @@
 检查前用 create 或 apply 在本机生成文件，不要用改过扩展名的 zip 目录冒充。
 本机若 `PowerPoint.Application` 被 WPS 抢走，直接启动 `POWERPNT.EXE` 再挂 COM，不要走被抢的 ProgID。Office 16 的对象模型在 `mdiClass` 上。
 
-C、I、A、Pp、Pvg、Pem、P3d、Pom、Pc、Psa、Pn、Pcm、Pm、Ps、Tf、Tfl、Pln、Sg、Pt、Pg、Ptb、Ptm、Pgf、P3c、Tn、Tr、Td、Mt、Am、Aw、Mm、Mw、Md、Ts、Tfm、Tcm、Tnh、Nsz、Ho、Nh、Nm、Phl、Phr、Phx、Pcip、Pmd、Pmg、Psc、Cs、Po、Cr、Cq、Ck、Pz、Pzr、Pzg、Pw、Pph、
+C、I、A、Pp、Pvg、Pem、P3d、Pom、Pc、Psa、Pn、Pcm、Pm、Ps、Tf、Tfl、Pln、Sg、Pt、Pg、Ptb、Ptm、Pgf、P3c、Psty、Tn、Tr、Td、Mt、Am、Aw、Mm、Mw、Md、Ts、Tfm、Tcm、Tnh、Nsz、Ho、Nh、Nm、Phl、Phr、Phx、Pcip、Pmd、Pmg、Psc、Cs、Po、Cr、Cq、Ck、Pz、Pzr、Pzg、Pw、Pph、
 Pf、Pcg、Pcx 各组由 `manual-check/office/cases/pptx-*.ps1` 自动判定，
 跑 `pwsh -File manual-check\office\run.ps1 -Case 'pptx-*'` 即可复现。O1 已放弃，与 xlsx / docx 相同。
 
@@ -58,6 +58,7 @@ Ps1–Ps5、Sg1–Sg5、Pt1–Pt6、Tn1–Tn5、Am1–Am5、Mm1–Mm5、Ho1–Ho
 2026-10-14 补跑 `pptx-notes-size.ps1`，Nsz1–Nsz5 通过。无 Repair。`notesSize` 在 `slideSize` 之后，缺省 `6858000` × `9144000`。`setNotesSize` `cx=9144000` `cy=12192000` 后 `slideSize` 仍为原值，备注母版占位符几何不变。create `presentation.notesSize` 对上。页 id 得 `InvalidId`，缺 `cy` 得 `InvalidField`。
 2026-10-14 补跑 `pptx-table-cell-fill-ex.ps1`，Pgf1–Pgf5 通过。无 Repair。create 格 `fill.type=solid` `fill.color=FF0000`。`setTableCellFill` 后 `grad` 两停点、`patt=smCheck`、`blip` 的 `rId`/`contentType` 对上。对单元格 id 发 `exportMedia` 得 `InvalidId`。同日补跑 `pptx-table-cell-fill.ps1`，Ptb1–Ptb5 仍通过。
 2026-10-14 补跑 `pptx-table-cell-pr.ps1`，P3c1–P3c5 通过。无 Repair。create 格 `vert=eaVert`。`setTableCellPr` 后 `vert=vert` `anchorCtr=true` `horzOverflow=overflow`，`cell3D.prstMaterial=plastic` `bevel.prst=circle`，`headers=["列甲"]` 后再清成 `null` / `[]`。表 id 得 `InvalidId`。
+2026-10-14 补跑 `pptx-table-style.ps1`，Psty1–Psty5 通过。无 Repair。create 缺省 `tableStyleId={5C22544A-7EE6-4342-B048-85BDC9FD1C3A}`，`tblLook.firstRow` 与 `bandRow` 为 `true`。`setTableStyleRef` 写 `{5940675A-B579-460E-94D1-54222C63F5DA}` 后再补 `firstCol=true`。两字段 JSON `null` 后 GUID 与六个开关为 `null`。格 id 得 `InvalidId`。
 
 - **C1** ✅
   - PowerPoint 16.0 能打开 `manual-check/office/out/pptx-create.pptx`，标题栏无 Repair
@@ -1288,6 +1289,31 @@ DrawingML 表的 `a:gridCol/@w` 与 `a:tr/@h`。`setTableSize` 仍只改框。�
   - 检查：拒错
   - 通过标准：✅ 对表 id 发得 `InvalidId`
   - 一个字段都不给、非法 `vert`、xlsx 上发得 `InvalidField`
+  - 均未写文件
+
+## 表样式引用
+
+表上 `a:tableStyleId` 与 `a:tblPr` 的 `firstRow` / `firstCol` / `lastRow` / `lastCol` / `bandRow` / `bandCol`。不要用 docx 的 `setTableStyle`。不要改 `/ppt/tableStyles.xml`。不要和 Pt、Pg、Ts、Sy 撞。脚本：`manual-check/office/cases/pptx-table-style.ps1`。编号用 Psty。
+
+- **Psty1**
+  - 检查：inspect
+  - 通过标准：✅ create 缺省表 inspect `tableStyleId` 为 `{5C22544A-7EE6-4342-B048-85BDC9FD1C3A}`，`tblLook.firstRow` 与 `bandRow` 为 `true`
+- **Psty2**
+  - 检查：GUID
+  - 通过标准：✅ `setTableStyleRef` 写 `{5940675A-B579-460E-94D1-54222C63F5DA}` 后树上对上
+  - PowerPoint 16.0 打开无 Repair
+- **Psty3**
+  - 检查：开关
+  - 通过标准：✅ 只写 `tblLook.firstCol=true` 后 `firstRow` 仍在，`firstCol` 为 `true`
+  - 无 Repair
+- **Psty4**
+  - 检查：清除
+  - 通过标准：✅ `tableStyleId` 与 `tblLook` JSON `null` 后 `tableStyleId` 为 `null`，六个开关为 `null`
+  - 无 Repair
+- **Psty5**
+  - 检查：拒错
+  - 通过标准：✅ 对格 id 发得 `InvalidId`
+  - 一个字段都不给、非法 GUID、xlsx 上发得 `InvalidField`
   - 均未写文件
 
 ## 幻灯片切换

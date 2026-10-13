@@ -1518,6 +1518,22 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                 table::set_cell_pr(&mut doc, op, i)?;
                 pkg.set(&part, doc.to_bytes()?)?;
             }
+            PptxOp::SetTableStyleRef(op) => {
+                let part = notes_or_slide_part(
+                    &pkg,
+                    &pres_part,
+                    &pres.root,
+                    &slides,
+                    op.target.slide,
+                    op.target.on_notes,
+                    op.target.master,
+                    ErrorKind::TableNotFound { id: op.id.clone() },
+                    format!("ops[{i}].id"),
+                )?;
+                let mut doc = xml::parse(pkg.get(&part)?)?;
+                table::set_table_style_ref(&mut doc, op, i)?;
+                pkg.set(&part, doc.to_bytes()?)?;
+            }
             PptxOp::SetTablePos(op) => {
                 let part = notes_or_slide_part(
                     &pkg,

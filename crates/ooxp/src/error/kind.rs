@@ -989,6 +989,8 @@ define_error_kinds! {
     InvalidHorzOverflow => vec![Self::InvalidHorzOverflow],
     InvalidBevelPreset => vec![Self::InvalidBevelPreset],
     InvalidPresetMaterial => vec![Self::InvalidPresetMaterial],
+    NeedSetTableStyleRefField => vec![Self::NeedSetTableStyleRefField],
+    InvalidTableStyleId => vec![Self::InvalidTableStyleId],
     NeedGradientStops => vec![Self::NeedGradientStops],
     DuplicateGradientPos => vec![Self::DuplicateGradientPos],
     NeedTextOutlineField => vec![Self::NeedTextOutlineField],
@@ -2085,6 +2087,8 @@ impl ErrorKind {
             | Self::InvalidHorzOverflow
             | Self::InvalidBevelPreset
             | Self::InvalidPresetMaterial
+            | Self::NeedSetTableStyleRefField
+            | Self::InvalidTableStyleId
             | Self::NeedGradientStops
             | Self::DuplicateGradientPos
             | Self::NeedTextOutlineField
