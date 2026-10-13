@@ -161,6 +161,8 @@ fn inspect_has_notes_without_notes_object() {
             "layoutId",
             "hidden",
             "transition",
+            "clrMapOvr",
+            "themeOverride",
             "hasNotes",
             "pictureCount",
             "mathCount",
@@ -212,6 +214,8 @@ fn set_notes_text_creates_parts_and_inspects() {
         object_keys(notes),
         [
             "id",
+            "clrMapOvr",
+            "themeOverride",
             "pictureCount",
             "mathCount",
             "videoCount",
@@ -361,6 +365,8 @@ fn insert_picture_on_notes_does_not_join_slide_count() {
         object_keys(notes),
         [
             "id",
+            "clrMapOvr",
+            "themeOverride",
             "pictureCount",
             "mathCount",
             "videoCount",

@@ -328,6 +328,15 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::SetThemeNeedsWorkbook => {
                 "setThemeColors / setThemeFonts / setThemeFmt / setThemeOverride 的 id 必须是 xlsx:workbook".into()
             }
+            IdReason::SetClrMapNeedsHost => {
+                "setClrMap 的 id 必须是 master:N、notesMaster 或 handout".into()
+            }
+            IdReason::SetClrMapOvrNeedsHost => {
+                "setClrMapOvr 的 id 必须是 slide:N、slide:N/notes 或 master:N/layout:K".into()
+            }
+            IdReason::SetThemeOverrideNeedsSlide => {
+                "setThemeOverride 的 id 必须是 slide:N 或 slide:N/notes".into()
+            }
             IdReason::SetHandoutTextNeedsHandout => {
                 "setHandoutText 的 id 必须是 handout".into()
             }
@@ -814,6 +823,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::MasterNotFound { n } => format!("找不到幻灯片母版：master:{n}"),
         ErrorKind::ThemeNotFound { n } => format!("找不到该母版的 theme：master:{n}"),
         ErrorKind::DocumentThemeNotFound => "找不到文档 theme 部件".into(),
+        ErrorKind::NotesSlideNotFound { n } => format!("找不到备注页：slide:{n}/notes"),
+        ErrorKind::NotesMasterNotFound => "找不到备注母版".into(),
+        ErrorKind::HandoutMasterNotFound => "找不到讲义母版".into(),
         ErrorKind::LayoutNotFound { master, layout } => {
             format!("找不到版式：master:{master}/layout:{layout}")
         }
@@ -1386,6 +1398,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             "index 必须是 0、1 或 2，且 fmtScheme 列表里要有这一槽".into()
         }
         ErrorKind::InvalidThemeFmtKind => "kind 只能是 solid 或 grad".into(),
+        ErrorKind::InvalidColorSchemeIndex => {
+            "clrMap 槽值必须是 dk1、lt1、dk2、lt2、accent1–accent6、hlink 或 folHlink".into()
+        }
         ErrorKind::NeedThemeOverrideField => {
             "setThemeOverride 至少要给一个配色槽，或只给 enabled: false".into()
         }

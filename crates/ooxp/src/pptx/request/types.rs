@@ -341,6 +341,45 @@ pub struct SetThemeExtraSchemesOp {
 }
 
 #[derive(Debug, Clone)]
+pub enum ClrMapHost {
+    Master(usize),
+    NotesMaster,
+    Handout,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetClrMapOp {
+    pub host: ClrMapHost,
+    pub slots: Vec<(String, String)>,
+}
+
+#[derive(Debug, Clone)]
+pub enum ClrMapOvrHost {
+    Slide { slide: usize, on_notes: bool },
+    Layout { master: usize, layout: usize },
+}
+
+#[derive(Debug, Clone)]
+pub enum ClrMapOvrValue {
+    Master,
+    Slots(Vec<(String, String)>),
+}
+
+#[derive(Debug, Clone)]
+pub struct SetClrMapOvrOp {
+    pub host: ClrMapOvrHost,
+    pub value: ClrMapOvrValue,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetThemeOverrideOp {
+    pub slide: usize,
+    pub on_notes: bool,
+    pub enabled: bool,
+    pub slots: Vec<(String, String)>,
+}
+
+#[derive(Debug, Clone)]
 pub struct SetHandoutTextOp {
     pub header: Option<String>,
     pub footer: Option<String>,
@@ -1348,6 +1387,9 @@ pub enum PptxOp {
     SetThemeFonts(SetThemeFontsOp),
     SetThemeFmt(SetThemeFmtOp),
     SetThemeExtraSchemes(SetThemeExtraSchemesOp),
+    SetClrMap(SetClrMapOp),
+    SetClrMapOvr(SetClrMapOvrOp),
+    SetThemeOverride(SetThemeOverrideOp),
     SetHandoutText(SetHandoutTextOp),
     InsertHyperlink(InsertHyperlinkOp),
     SetHyperlink(SetHyperlinkOp),

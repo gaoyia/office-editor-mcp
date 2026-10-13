@@ -3884,5 +3884,5 @@ pptx 见 [pptx 分册](json-contract-pptx.md#setthemeextraschemes)，`id` 为 `m
 读写工作簿 `themeOverride` 部件的配色槽。字段与 [docx setThemeOverride](json-contract-docx.md#setthemeoverride) 相同。
 `id` 必须是 `xlsx:workbook`。没有部件时按 Office 默认十二槽新建 `/xl/theme/themeOverride1.xml`，再把点名槽换成 `srgbClr`。
 有工作簿 theme 时先抄它的 `clrScheme` 再打补丁。`enabled: false` 删掉该部件与 workbook 关系。
-docx / pptx 上此 op 的 id 规则不变。
+docx 见 [docx 分册](json-contract-docx.md#setthemeoverride)。pptx 见 [pptx 分册](json-contract-pptx.md#setthemeoverride)。
 

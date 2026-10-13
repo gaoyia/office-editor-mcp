@@ -22,6 +22,8 @@ mod master;
 use master::*;
 mod theme_remain;
 use theme_remain::*;
+mod theme_clrmap;
+use theme_clrmap::*;
 mod link;
 use link::*;
 mod comments;
@@ -351,6 +353,9 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<PptxOp>, Error> {
             "setThemeExtraSchemes" => {
                 PptxOp::SetThemeExtraSchemes(parse_set_theme_extra_schemes(obj, i)?)
             }
+            "setClrMap" => PptxOp::SetClrMap(parse_set_clr_map(obj, i)?),
+            "setClrMapOvr" => PptxOp::SetClrMapOvr(parse_set_clr_map_ovr(obj, i)?),
+            "setThemeOverride" => PptxOp::SetThemeOverride(parse_set_theme_override(obj, i)?),
             "setHandoutText" => PptxOp::SetHandoutText(parse_set_handout_text(obj, i)?),
             "insertHyperlink" => PptxOp::InsertHyperlink(parse_insert_hyperlink(obj, i)?),
             "setHyperlink" => PptxOp::SetHyperlink(parse_set_hyperlink(obj, i)?),
@@ -495,7 +500,6 @@ fn is_foreign_op(op_name: &str) -> bool {
             | "insertEditRange"
             | "deleteEditRange"
             | "setBibliographyStyle"
-            | "setThemeOverride"
             | "insertContentControl"
             | "setContentControl"
             | "deleteContentControl"

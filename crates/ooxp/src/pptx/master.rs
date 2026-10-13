@@ -208,6 +208,10 @@ pub fn masters_json(
             layout_obj.insert("name".into(), json!(l.name));
             layout_obj.insert("kind".into(), json!(l.kind));
             layout_obj.insert(
+                "clrMapOvr".into(),
+                super::theme_map::clr_map_ovr_json(&layout_doc.root),
+            );
+            layout_obj.insert(
                 "transition".into(),
                 super::transition::inspect(&layout_doc.root),
             );
@@ -252,6 +256,7 @@ pub fn masters_json(
         obj.insert("index".into(), json!(m.index));
         obj.insert("name".into(), json!(m.name));
         obj.insert("theme".into(), theme);
+        obj.insert("clrMap".into(), super::theme_map::clr_map_json(&doc.root));
         obj.insert("transition".into(), super::transition::inspect(&doc.root));
         obj.insert("animCount".into(), json!(master_anims.len()));
         if want_timing {

@@ -192,7 +192,7 @@ $failOv = Invoke-OoxpExpectFail @{
 $tfm5ok = ((Get-PptErrorCode $failSlide) -eq 'InvalidId') `
     -and ((Get-PptErrorCode $failEmpty) -eq 'InvalidField') `
     -and ((Get-PptErrorCode $failNotes) -eq 'InvalidId') `
-    -and ((Get-PptErrorCode $failOv) -eq 'InvalidField') `
+    -and ((Get-PptErrorCode $failOv) -eq 'InvalidId') `
     -and (-not (Test-Path $failSlideOut)) `
     -and (-not (Test-Path $failEmptyOut)) `
     -and (-not (Test-Path $failNotesOut)) `

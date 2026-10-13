@@ -506,6 +506,8 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<XlsxOp>, Error> {
             | "insertMaster"
             | "deleteMaster"
             | "setSlideSize"
+            | "setClrMap"
+            | "setClrMapOvr"
             | "setHandoutText"
             | "setShapePos"
             | "setShapeSize"

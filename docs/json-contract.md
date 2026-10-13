@@ -49,6 +49,7 @@ pptx 的 `scope.masters` 列出幻灯片母版与版式、占位符与装饰形�
 也可用 `insertLayout` / `deleteLayout` / `insertPlaceholder` / `deletePlaceholder` / `insertMaster` / `deleteMaster` 插删版式、占位符与母版，
 也可用 `insertShape` / `deleteShape` 插删母版 / 版式上没有 `p:ph` 的装饰形，
 也可用 `setSlideSize` / `setThemeColors` / `setThemeFonts` / `setThemeFmt` / `setThemeExtraSchemes` 改画布尺寸与该母版 theme，
+也可用 `setClrMap` / `setClrMapOvr` / `setThemeOverride` 改母版配色映射、页 / 版式覆盖与页级 themeOverride，
 也可用 `setShapeText` / `setShapeFormat` / `setShapePos` / `setShapeSize` 改占位符与装饰形。
 装饰形还可用 `setShapeGeom`。
 pptx 的 `scope.handout` 列出讲义母版页眉页脚槽位与占位符，apply 用 `setHandoutText` 改四个槽位的字，也可用 `insertPlaceholder` / `deletePlaceholder` / `setShapeText` 改讲义占位符。
@@ -293,7 +294,7 @@ pptx 认 `setShapeText`、`setShapeFormat`、形状管理 op（`insertShape`、`
 `setSmartArtColors`、`setSmartArtStyle`、`setSmartArtLayout`；
 不含 `setSmartArtWrap`）、以及幻灯片管理 op（`insertSlide`、`deleteSlide`、`moveSlide`、`setSlideHidden`、`setTransition`、
 `setSlideLayout`）、以及母版写入 op（`insertLayout`、`deleteLayout`、`insertPlaceholder`、`deletePlaceholder`、`insertMaster`、
-`deleteMaster`）、以及主题与尺寸 op（`setSlideSize`、`setThemeColors`、`setThemeFonts`、`setThemeFmt`、`setThemeExtraSchemes`）、以及动画 op（`insertAnim`、`setAnim`、`deleteAnim`、`moveAnim`）、
+`deleteMaster`）、以及主题与尺寸 op（`setSlideSize`、`setThemeColors`、`setThemeFonts`、`setThemeFmt`、`setThemeExtraSchemes`、`setClrMap`、`setClrMapOvr`、`setThemeOverride`）、以及动画 op（`insertAnim`、`setAnim`、`deleteAnim`、`moveAnim`）、
 以及 `setHandoutText`、以及超链接 op（`insertHyperlink`、`setHyperlink`、`deleteHyperlink`）、以及域 op（`insertField`、`setField`、
 `deleteField`）、以及媒体 op（`insertVideo`、`insertAudio`、`deleteMedia`、`setMedia`）、以及幻灯片节 op（`insertSlideSection`、`setSlideSectionName`、
 `deleteSlideSection`、`setSlideSection`）、以及自定义放映 op（`insertCustomShow`、`setCustomShow`、`deleteCustomShow`）、
@@ -323,7 +324,7 @@ pptx 认 `setShapeText`、`setShapeFormat`、形状管理 op（`insertShape`、`
 对 docx / xlsx 发 `setPicturePos` / `setChartPos` / `setSmartArtPos` / `setModel3dPos` / `setMathPos` / `setNotesText` / `insertSlide` / `deleteSlide`
  / `moveSlide` / `setSlideHidden` / `setTransition` / `insertAnim` / `setAnim` / `deleteAnim` / `moveAnim` / `setSlideLayout` / `insertLayout`
  / `deleteLayout` / `insertPlaceholder` / `deletePlaceholder` / `insertMaster` / `deleteMaster` / `setSlideSize`
- / `setHandoutText` / `setShapePos` / `setShapeSize` / `setShapeFill`
+ / `setClrMap` / `setClrMapOvr` / `setHandoutText` / `setShapePos` / `setShapeSize` / `setShapeFill`
  / `setShapeLine` / `setShapeGeom` / `setConnector` / `setTableCellText` / `setTableCellFill` / `setTableCellBorders` / `setTableCellInset` / `setTablePos` / `setTableSize` / `setTableColWidths` / `setTableTrHeight` / `insertVideo` / `insertAudio`
  / `deleteMedia` / `setMedia` / `insertSlideSection` / `setSlideSectionName` / `deleteSlideSection` / `setSlideSection`
  / `insertCustomShow` / `setCustomShow` / `deleteCustomShow` / `insertZoom` / `setZoom` / `deleteZoom`）报 `InvalidField`。

@@ -171,6 +171,14 @@ pub fn notes_json(
     }
     let mut obj = Map::new();
     obj.insert("id".into(), json!(host));
+    obj.insert(
+        "clrMapOvr".into(),
+        super::theme_map::clr_map_ovr_json(&doc.root),
+    );
+    obj.insert(
+        "themeOverride".into(),
+        super::theme_map::theme_override_json(pkg, &part)?,
+    );
     obj.insert("pictureCount".into(), json!(pics.len()));
     let maths = super::omml::collect(&doc.root, &host);
     obj.insert("mathCount".into(), json!(maths.len()));

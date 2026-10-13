@@ -5,7 +5,7 @@
 检查前用 create 或 apply 在本机生成文件，不要用改过扩展名的 zip 目录冒充。
 本机若 `PowerPoint.Application` 被 WPS 抢走，直接启动 `POWERPNT.EXE` 再挂 COM，不要走被抢的 ProgID。Office 16 的对象模型在 `mdiClass` 上。
 
-C、I、A、Pp、Pvg、Pem、P3d、Pom、Pc、Psa、Pn、Pcm、Pm、Ps、Tf、Tfl、Pln、Sg、Pt、Pg、Ptb、Ptm、Tn、Tr、Td、Mt、Am、Aw、Mm、Mw、Md、Ts、Tfm、Ho、Nh、Nm、Phl、Phr、Phx、Pcip、Pmd、Pmg、Psc、Cs、Po、Cr、Cq、Ck、Pz、Pzr、Pzg、Pw、Pph、
+C、I、A、Pp、Pvg、Pem、P3d、Pom、Pc、Psa、Pn、Pcm、Pm、Ps、Tf、Tfl、Pln、Sg、Pt、Pg、Ptb、Ptm、Tn、Tr、Td、Mt、Am、Aw、Mm、Mw、Md、Ts、Tfm、Tcm、Ho、Nh、Nm、Phl、Phr、Phx、Pcip、Pmd、Pmg、Psc、Cs、Po、Cr、Cq、Ck、Pz、Pzr、Pzg、Pw、Pph、
 Pf、Pcg、Pcx 各组由 `manual-check/office/cases/pptx-*.ps1` 自动判定，
 跑 `pwsh -File manual-check\office\run.ps1 -Case 'pptx-*'` 即可复现。O1 已放弃，与 xlsx / docx 相同。
 
@@ -53,6 +53,7 @@ Ps1–Ps5、Sg1–Sg5、Pt1–Pt6、Tn1–Tn5、Am1–Am5、Mm1–Mm5、Ho1–Ho
 2026-10-14 补跑 `pptx-table-cell-fill.ps1`，Ptb1–Ptb5 通过。无 Repair。create 格 `fill=FF0000`，COM RGB=255；`setTableCellFill` 后 `fill=0000FF`，COM RGB=16711680。六边 inspect 对上。`fill: null` 与某边 JSON `null` 后 inspect 为 `null`。
 2026-10-14 补跑 `pptx-table-cell-mar.ps1`，Ptm1–Ptm5 通过。无 Repair。create `cellMar.top=12700` `left=25400`，COM `MarginTop=1` `MarginLeft=2` 磅。四边 JSON `null` 后 `cellMar` 为 `null`。
 2026-10-14 补跑 `pptx-theme-remain.ps1`，Tfm1–Tfm5 通过。无 Repair。`theme` 字段 `name` / `colors` / `fonts` / `fmt` / `extraSchemes`。`setThemeFmt` 线宽 38100。方案名与 `majorScripts` 对上。`extraSchemes` 写一项后可清成 `[]`。
+2026-10-14 补跑 `pptx-theme-clrmap.ps1`，Tcm1–Tcm5 通过。无 Repair。`clrMap` 在 `theme` 之后，`bg1=lt1`。页 `clrMapOvr` 为 `master`。`setClrMap` 写母版 / 备注母版 / 讲义。`setClrMapOvr` 写页与版式后再回到 `master`。`setThemeOverride` `accent1=FF0000`，备注页 `00FF00`，`enabled: false` 后为 `null`。
 
 - **C1** ✅
   - PowerPoint 16.0 能打开 `manual-check/office/out/pptx-create.pptx`，标题栏无 Repair
@@ -338,7 +339,14 @@ Ps1–Ps5、Sg1–Sg5、Pt1–Pt6、Tn1–Tn5、Am1–Am5、Mm1–Mm5、Ho1–Ho
   - `setThemeFmt` `lines[0].w=38100`、`fills[0].kind=solid`，无 Repair
   - `themeName=Custom Theme`、`colors.name=Custom`、`fonts.name=CustomFonts`、`majorScripts[0].script=Jpan`
   - `extraSchemes[0].name=Extra` `accent1=0F6FC6`，`null` 后为 `[]`
-  - 页 id / `notesMaster` 得 `InvalidId`，空 `setThemeFmt` 与 `setThemeOverride` 得 `InvalidField`，未写文件
+  - 页 id / `notesMaster` 得 `InvalidId`，空 `setThemeFmt` 得 `InvalidField`，对 `master:1` 发 `setThemeOverride` 得 `InvalidId`，未写文件
+- **Tcm1–Tcm5** ✅
+  - PowerPoint 16.0：`pptx-theme-clrmap.ps1`，5 PASS / 0 FAIL
+  - `clrMap` 在 `theme` 之后，`bg1=lt1` `tx1=dk1`，页 `clrMapOvr` 为 `"master"`，`themeOverride` 为 `null`
+  - `setClrMap` 写 `master:1` / `notesMaster` / `handout` 后 inspect 对上，无 Repair
+  - `setClrMapOvr` 页 `bg1=dk1`、版式 `tx1=lt1`，再写成 `"master"` 后为 `"master"`
+  - `setThemeOverride` 页 `accent1=FF0000`、备注页 `00FF00`，`enabled: false` 后为 `null`
+  - 页 id 的 `setClrMap` 与 `master:1` 的 `setThemeOverride` 得 `InvalidId`，空槽 / `bg1=nope` 得 `InvalidField`，未写文件
 - **Ho1–Ho5** ✅
   - PowerPoint 16.0：`pptx-handout.ps1`，5 PASS / 0 FAIL
   - 无 `handout` 时只有 `hasHandout`
@@ -1557,7 +1565,43 @@ inspect `masters[].theme` 带 `fmt`、`extraSchemes` 与脚本字体。apply 用
   - 通过标准：对页 id 发 `setThemeFmt` 得 `InvalidId`
   - 只给 `op` 与 `id` 得 `InvalidField`
   - 对 `notesMaster` 发 `setThemeColors` 得 `InvalidId`
-  - 发 `setThemeOverride` 得 `InvalidField`
+  - 发 `setThemeOverride` 对 `master:1` 得 `InvalidId`
+  - 均未写文件
+
+## 配色映射与页级覆盖
+
+inspect 母版带 `clrMap`，页 / 版式 / 备注页带 `clrMapOvr`，页与备注页带 `themeOverride`。
+apply 用 `setClrMap` / `setClrMapOvr` / `setThemeOverride`。不把映射算成 RGB。不改备注 / 讲义 theme 部件。
+脚本：`manual-check/office/cases/pptx-theme-clrmap.ps1`。编号用 Tcm。不要和 Ts、Tfm、Pcm、Tc 撞。
+
+- **Tcm1**
+  - 检查：inspect
+  - 通过标准：create 产物 `scope.masters` 时 `clrMap` 在 `theme` 之后
+  - 十二键 `bg1` 为 `lt1`、`tx1` 为 `dk1`
+  - 第一页 `clrMapOvr` 为 `"master"`，`themeOverride` 为 `null`
+- **Tcm2**
+  - 检查：`setClrMap`
+  - 通过标准：`bg1=dk1` 后 inspect 该母版 `clrMap.bg1` 为 `dk1`
+  - 对 `notesMaster` / `handout` 可写（create 带备注与讲义）
+  - PowerPoint 16.0 打开无 Repair
+- **Tcm3**
+  - 检查：`setClrMapOvr`
+  - 通过标准：`clrMapOvr.bg1=dk1` 后该页为对象且 `bg1` 为 `dk1`
+  - 再写成 `"master"` 后为 `"master"`
+  - 版式 id 可写
+  - 无 Repair
+- **Tcm4**
+  - 检查：`setThemeOverride`
+  - 通过标准：`accent1=FF0000` 后该页 `themeOverride.colors.accent1` 为 `FF0000`
+  - `enabled: false` 后为 `null`，包内无无人引用的 themeOverride 部件
+  - 备注页 id 可写
+  - 无 Repair
+- **Tcm5**
+  - 检查：拒错
+  - 通过标准：对页 id 发 `setClrMap` 得 `InvalidId`
+  - 只给 `op` 与 `id` 得 `InvalidField`
+  - `bg1=nope` 得 `InvalidField`
+  - 对 `master:1` 发 `setThemeOverride` 得 `InvalidId`
   - 均未写文件
 
 ## 讲义

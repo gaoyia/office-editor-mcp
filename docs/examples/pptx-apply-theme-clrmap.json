@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "C:\\data\\deck.pptx",
+  "ops": [
+    {
+      "op": "setClrMap",
+      "id": "master:1",
+      "bg1": "dk1"
+    },
+    {
+      "op": "setClrMapOvr",
+      "id": "slide:1",
+      "clrMapOvr": {
+        "bg1": "dk1"
+      }
+    },
+    {
+      "op": "setThemeOverride",
+      "id": "slide:1",
+      "accent1": "FF0000"
+    }
+  ]
+}

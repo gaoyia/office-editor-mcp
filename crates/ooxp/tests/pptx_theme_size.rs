@@ -137,6 +137,7 @@ fn inspect_slide_size_and_theme_keys() {
             "index",
             "name",
             "theme",
+            "clrMap",
             "transition",
             "animCount",
             "placeholders",
@@ -614,6 +615,6 @@ fn reject_theme_remain_ids_and_empty() {
         json!([{ "op": "setThemeOverride", "id": "master:1", "accent1": "FF0000" }]),
     )
     .unwrap_err();
-    assert_eq!(err.code(), ErrorCode::InvalidField);
+    assert_eq!(err.code(), ErrorCode::InvalidId);
     assert!(!out.exists());
 }

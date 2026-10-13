@@ -1435,6 +1435,12 @@
                 "$ref": "docx.schema.json#/$defs/setThemeOverrideOp"
               },
               {
+                "$ref": "pptx.schema.json#/$defs/setClrMapOp"
+              },
+              {
+                "$ref": "pptx.schema.json#/$defs/setClrMapOvrOp"
+              },
+              {
                 "$ref": "pptx.schema.json#/$defs/setHandoutTextOp"
               },
               {

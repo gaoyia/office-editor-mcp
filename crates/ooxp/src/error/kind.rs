@@ -238,6 +238,12 @@ pub(crate) enum IdReason {
     SetThemeNeedsDocument,
     /// setThemeColors / setThemeFonts 必须用 xlsx:workbook
     SetThemeNeedsWorkbook,
+    /// setClrMap 必须用 master:N、notesMaster 或 handout
+    SetClrMapNeedsHost,
+    /// setClrMapOvr 必须用 slide:N、slide:N/notes 或 master:N/layout:K
+    SetClrMapOvrNeedsHost,
+    /// pptx 的 setThemeOverride 必须用 slide:N 或 slide:N/notes
+    SetThemeOverrideNeedsSlide,
     /// setHandoutText 必须用 handout
     SetHandoutTextNeedsHandout,
     /// insertDefinedName 必须用 xlsx:workbook
@@ -788,6 +794,10 @@ define_error_kinds! {
     SlideSizeOutOfRange => vec![Self::SlideSizeOutOfRange],
     ThemeNotFound { n: u32 } => vec![Self::ThemeNotFound { n: 9 }],
     DocumentThemeNotFound => vec![Self::DocumentThemeNotFound],
+    NotesSlideNotFound { n: u32 } => vec![Self::NotesSlideNotFound { n: 3 }],
+    NotesMasterNotFound => vec![Self::NotesMasterNotFound],
+    HandoutMasterNotFound => vec![Self::HandoutMasterNotFound],
+    InvalidColorSchemeIndex => vec![Self::InvalidColorSchemeIndex],
     LastVisibleSheet => vec![Self::LastVisibleSheet],
     MoveSheetAfterSelf => vec![Self::MoveSheetAfterSelf],
     MoveSlideAfterSelf => vec![Self::MoveSlideAfterSelf],
@@ -1428,6 +1438,9 @@ impl IdReason {
             Self::SetThemeNeedsMaster,
             Self::SetThemeNeedsDocument,
             Self::SetThemeNeedsWorkbook,
+            Self::SetClrMapNeedsHost,
+            Self::SetClrMapOvrNeedsHost,
+            Self::SetThemeOverrideNeedsSlide,
             Self::SetSlideSectionNeedsSlide,
             Self::SlideOpNeedsSlide,
             Self::SetTransitionNeedsHost,
@@ -1794,6 +1807,7 @@ impl ErrorKind {
             | Self::InvalidPageBackgroundFill
             | Self::InvalidThemeFmtIndex
             | Self::InvalidThemeFmtKind
+            | Self::InvalidColorSchemeIndex
             | Self::NeedThemeOverrideField
             | Self::NeedPageBordersField
             | Self::InvalidPageBorderVal
@@ -2119,6 +2133,9 @@ impl ErrorKind {
             | Self::MasterNotFound { .. }
             | Self::ThemeNotFound { .. }
             | Self::DocumentThemeNotFound
+            | Self::NotesSlideNotFound { .. }
+            | Self::NotesMasterNotFound
+            | Self::HandoutMasterNotFound
             | Self::LayoutNotFound { .. }
             | Self::ShapeNotFound { .. }
             | Self::ConnectorNotFound { .. }

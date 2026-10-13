@@ -2990,6 +2990,61 @@
         }
       }
     },
+    "clrMapSlots": {
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "bg1": { "type": "string", "minLength": 1 },
+        "tx1": { "type": "string", "minLength": 1 },
+        "bg2": { "type": "string", "minLength": 1 },
+        "tx2": { "type": "string", "minLength": 1 },
+        "accent1": { "type": "string", "minLength": 1 },
+        "accent2": { "type": "string", "minLength": 1 },
+        "accent3": { "type": "string", "minLength": 1 },
+        "accent4": { "type": "string", "minLength": 1 },
+        "accent5": { "type": "string", "minLength": 1 },
+        "accent6": { "type": "string", "minLength": 1 },
+        "hlink": { "type": "string", "minLength": 1 },
+        "folHlink": { "type": "string", "minLength": 1 }
+      }
+    },
+    "setClrMapOp": {
+      "type": "object",
+      "required": ["op", "id"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "setClrMap" },
+        "id": { "type": "string", "minLength": 1 },
+        "bg1": { "type": "string", "minLength": 1 },
+        "tx1": { "type": "string", "minLength": 1 },
+        "bg2": { "type": "string", "minLength": 1 },
+        "tx2": { "type": "string", "minLength": 1 },
+        "accent1": { "type": "string", "minLength": 1 },
+        "accent2": { "type": "string", "minLength": 1 },
+        "accent3": { "type": "string", "minLength": 1 },
+        "accent4": { "type": "string", "minLength": 1 },
+        "accent5": { "type": "string", "minLength": 1 },
+        "accent6": { "type": "string", "minLength": 1 },
+        "hlink": { "type": "string", "minLength": 1 },
+        "folHlink": { "type": "string", "minLength": 1 }
+      }
+    },
+    "setClrMapOvrOp": {
+      "type": "object",
+      "required": ["op", "id", "clrMapOvr"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "setClrMapOvr" },
+        "id": { "type": "string", "minLength": 1 },
+        "clrMapOvr": {
+          "oneOf": [
+            { "const": "master" },
+            { "$ref": "#/$defs/clrMapSlots" }
+          ]
+        }
+      }
+    },
     "setHandoutTextOp": {
       "type": "object",
       "required": [

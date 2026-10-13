@@ -28,6 +28,7 @@ use super::slides;
 use super::smartart;
 use super::table;
 use super::theme;
+use super::theme_map;
 use super::timing;
 use super::transition;
 use super::zoom;
@@ -1782,6 +1783,15 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                     &op.schemes,
                     i,
                 )?;
+            }
+            PptxOp::SetClrMap(op) => {
+                theme_map::set_clr_map(&mut pkg, &pres_part, &pres.root, op, i)?;
+            }
+            PptxOp::SetClrMapOvr(op) => {
+                theme_map::set_clr_map_ovr(&mut pkg, &pres_part, &pres.root, &slides, op, i)?;
+            }
+            PptxOp::SetThemeOverride(op) => {
+                theme_map::set_theme_override(&mut pkg, &slides, op, i)?;
             }
             PptxOp::SetHandoutText(op) => {
                 handout::set_text(&mut pkg, &pres_part, &mut pres, op, i)?;

@@ -363,6 +363,15 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::SetThemeNeedsWorkbook => {
                 "setThemeColors / setThemeFonts / setThemeFmt / setThemeOverride id must be xlsx:workbook".into()
             }
+            IdReason::SetClrMapNeedsHost => {
+                "setClrMap id must be master:N, notesMaster, or handout".into()
+            }
+            IdReason::SetClrMapOvrNeedsHost => {
+                "setClrMapOvr id must be slide:N, slide:N/notes, or master:N/layout:K".into()
+            }
+            IdReason::SetThemeOverrideNeedsSlide => {
+                "setThemeOverride id must be slide:N or slide:N/notes".into()
+            }
             IdReason::SetHandoutTextNeedsHandout => {
                 "setHandoutText id must be handout".into()
             }
@@ -867,6 +876,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::MasterNotFound { n } => format!("Slide master not found: master:{n}"),
         ErrorKind::ThemeNotFound { n } => format!("Theme not found for slide master: master:{n}"),
         ErrorKind::DocumentThemeNotFound => "Document theme part not found".into(),
+        ErrorKind::NotesSlideNotFound { n } => format!("Notes slide not found: slide:{n}/notes"),
+        ErrorKind::NotesMasterNotFound => "Notes master not found".into(),
+        ErrorKind::HandoutMasterNotFound => "Handout master not found".into(),
         ErrorKind::LayoutNotFound { master, layout } => {
             format!("Slide layout not found: master:{master}/layout:{layout}")
         }
@@ -1585,6 +1597,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             "index must be 0, 1, or 2 and the fmtScheme list must contain that slot".into()
         }
         ErrorKind::InvalidThemeFmtKind => "kind must be solid or grad".into(),
+        ErrorKind::InvalidColorSchemeIndex => {
+            "clrMap value must be dk1, lt1, dk2, lt2, accent1-accent6, hlink, or folHlink".into()
+        }
         ErrorKind::NeedThemeOverrideField => {
             "setThemeOverride requires a color slot, or enabled: false without color slots".into()
         }

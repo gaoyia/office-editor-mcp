@@ -28,6 +28,7 @@ use super::show;
 use super::smartart;
 use super::table;
 use super::theme;
+use super::theme_map;
 use super::timing;
 use super::transition;
 use super::zoom;
@@ -209,6 +210,11 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         );
         obj.insert("hidden".into(), json!(s.hidden));
         obj.insert("transition".into(), transition::inspect(&doc.root));
+        obj.insert("clrMapOvr".into(), theme_map::clr_map_ovr_json(&doc.root));
+        obj.insert(
+            "themeOverride".into(),
+            theme_map::theme_override_json(&pkg, &s.part)?,
+        );
         obj.insert("hasNotes".into(), json!(has));
         obj.insert("pictureCount".into(), json!(pics.len()));
         obj.insert("mathCount".into(), json!(n_math));
@@ -416,6 +422,7 @@ fn notes_master_tree(pkg: &Package, pres_part: &str, want_timing: bool) -> Resul
     let anims = timing::list(&doc.root, host, true);
     let mut obj = Map::new();
     obj.insert("id".into(), json!("notesMaster"));
+    obj.insert("clrMap".into(), super::theme_map::clr_map_json(&doc.root));
     obj.insert("animCount".into(), json!(anims.len()));
     if want_timing {
         obj.insert("timing".into(), Value::Array(anims));

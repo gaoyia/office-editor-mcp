@@ -976,19 +976,21 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   否则为 `false`。
   树上不出现哈希。xlsx / docx 根上不要带此对象。docx 仍用 `protection`，xlsx 用 `sheetProtection` / `workbookProtection`。
   `setProtection` 带 `password` 时按 [json-contract.md](json-contract.md#setprotection) 写 PowerPoint 16.0 的 `crypt*` SHA-512，不把口令或哈希写进树。
-- `scope.handout` 为 `true` 时，根上带 `handout`。没有讲义母版关系则为 `null`。有则为对象，字段顺序：`id`、`header`、`footer`、`date`、`sldNum`、`animCount`，
+- `scope.handout` 为 `true` 时，根上带 `handout`。没有讲义母版关系则为 `null`。有则为对象，字段顺序：`id`、`clrMap`、`header`、`footer`、`date`、`sldNum`、`animCount`，
   `scope.timing` 同开时再跟 `timing`，然后 `placeholders`。
   `id` 为 `handout`。四个槽位分别取 handoutMaster 上第一个 `p:ph/@type` 为 `hdr` / `ftr` / `dt` / `sldNum` 的 `p:sp` 的可见字。
   没有该类型占位符则为 `null`。有占位符但没有 `txBody` 则为 `""`。槽位文字把 `a:fld` 里的 `a:t` 也算进去（与幻灯片形状 `text` 跳过域缓存不同），以便看见日期与页码缓存。
   `placeholders` 收全部带 `p:nvPr/p:ph` 的 `p:sp`（含 `sldImg`，含组合里的），按文档顺序。
   字段顺序与幻灯片母版占位符相同。`id` 为 `handout/shape:{cNvPrId}`；没有 `cNvPr/@id` 则为 `handout/shape:index:{i}`，`{i}` 只在该宿主占位符内从 1 计。
   `animCount` 只计该 handoutMaster 的 `<p:timing>`。讲义 `timing` 的 id 为 `handout/anim:{k}`，`target` 对应该讲义占位符 id。
+  `clrMap` 规则与 `masters[].clrMap` 相同，读该 handoutMaster 的 `p:clrMap`。
   xlsx / docx 的 `scope` 里出现 `handout` 报 `InvalidField`。不算讲义打印布局。
-- `scope.notesMaster` 为 `true` 时，根上带 `notesMaster`。没有备注母版关系则为 `null`。有则为对象，字段顺序：`id`、`animCount`，
+- `scope.notesMaster` 为 `true` 时，根上带 `notesMaster`。没有备注母版关系则为 `null`。有则为对象，字段顺序：`id`、`clrMap`、`animCount`，
   `scope.timing` 同开时再跟 `timing`，然后 `placeholders`。
   `id` 为 `notesMaster`。`placeholders` 收全部带 `p:ph` 的 `p:sp`（含 `sldImg`），按文档顺序。
   `id` 为 `notesMaster/shape:{cNvPrId}`；没有则为 `notesMaster/shape:index:{i}`。
   `animCount` 只计该 notesMaster 的 `<p:timing>`。备注母版 `timing` 的 id 为 `notesMaster/anim:{k}`。
+  `clrMap` 规则与 `masters[].clrMap` 相同，读该 notesMaster 的 `p:clrMap`。
   不收没有 `p:ph` 的装饰形。xlsx / docx 的 `scope` 里出现 `notesMaster` 报 `InvalidField`。
   根上 `animCount` 仍只计幻灯片 XML，不含备注母版与讲义。
 - `scope.sections` 为 `true` 时，根上带 `sections`。没有节时为空数组。不依赖 `scope.slide`。按 `p14:section` 文档顺序。
@@ -1029,7 +1031,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   该宿主第一条效果 `trigger` 为 `with` 或 `after` 时，外层包装仍写 `delay="indefinite"`，并加 `evt="onBegin"` 指向 `mainSeq` 的 `cTn/@id`（进片自动播）。
   第一条 `click` 不加这条。`clickOn` 不走这条，写在 `interactiveSeq` 里。
 - `scope.masters` 为 `true` 时，根上带 `masters`。没有母版时为空数组。不依赖 `scope.slide`。不算母版排版引擎。不把母版装饰形抄进各页。
-  每份母版字段顺序：`id`、`index`、`name`、`theme`、`transition`、`animCount`、`placeholders`、`shapes`、`layouts`。
+  每份母版字段顺序：`id`、`index`、`name`、`theme`、`clrMap`、`transition`、`animCount`、`placeholders`、`shapes`、`layouts`。
   `transition` 规则与幻灯片相同，读该 slideMaster 的 `<p:transition>`。`scope.timing` 同开时在 `animCount` 之后、`placeholders` 之前带 `timing`。
   `id` 为 `master:{n}`。
   `animCount` 只计该 slideMaster 的 `<p:timing>`，不含其版式。
@@ -1046,10 +1048,13 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   其余取 `a:majorFont` / `a:minorFont` 下 `a:latin` / `a:ea` / `a:cs` 的 `typeface` 原文，没有该元素则为 `null`。
   `majorScripts` / `minorScripts`、`fmt`、`extraSchemes` 规则与 [docx 分册](json-contract-docx.md#响应) 相同。
   不算主题排版引擎，不把 `schemeClr` / `phClr` 展开成 RGB。
-  备注母版与讲义母版的独立 theme 副本不进这份 `masters[].theme`。页级 `themeOverride` / `clrMap` 不进树。
+  备注母版与讲义母版的独立 theme 副本不进这份 `masters[].theme`。
+  `clrMap` 取该 slideMaster 的 `p:clrMap`。对象十二键与属性同名：`bg1`、`tx1`、`bg2`、`tx2`、`accent1`–`accent6`、`hlink`、`folHlink`。
+  值为 theme 槽名原文。缺该元素则为 `null`。缺某个属性则为 `null`。不把映射结果算成 RGB。
   `placeholders` 只收带 `p:nvPr/p:ph` 的 `p:sp`（含组合里的），按文档顺序。
   `shapes` 只收没有 `p:ph` 的 `p:sp`（含组合里的，含无 `txBody`），按文档顺序。不收 `p:pic`、`p:cxnSp`、`p:graphicFrame`。
-  每份版式字段顺序：`id`、`index`、`name`、`kind`、`transition`、`animCount`、`placeholders`、`shapes`。
+  每份版式字段顺序：`id`、`index`、`name`、`kind`、`clrMapOvr`、`transition`、`animCount`、`placeholders`、`shapes`。
+  `clrMapOvr` 规则见下文幻灯片。读该 slideLayout 的 `p:clrMapOvr`。
   `transition` 规则与幻灯片相同，读该 slideLayout 的 `<p:transition>`。
   `scope.timing` 同开时在 `animCount` 之后、`placeholders` 之前带 `timing`。
   版式对象名单规则与母版相同，插在 `shapes` 之后。
@@ -1069,12 +1074,14 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   没有 `txBody` 则 `text` 为 `""`。不把这些 `p:sp` 抄进各页。
   xlsx / docx 的 `scope` 里出现 `masters` 报 `InvalidField`。
 - `scope.notes` 为 `true` 时，每页带 `notes`。没有 notesSlide 关系则为 `null`。
-  有则为对象，字段顺序：`id`、`pictureCount`、`mathCount`、`videoCount`、`audioCount`、`chartCount`、`smartArtCount`、`hyperlinkCount`、`fieldCount`、`tableCount`、`oleObjectCount`、`model3dCount`、`zoomCount`、`connectorCount`、`animCount`，
+  有则为对象，字段顺序：`id`、`clrMapOvr`、`themeOverride`、`pictureCount`、`mathCount`、`videoCount`、`audioCount`、`chartCount`、`smartArtCount`、`hyperlinkCount`、`fieldCount`、`tableCount`、`oleObjectCount`、`model3dCount`、`zoomCount`、`connectorCount`、`animCount`，
   有图名单时再跟 `pictures`，有公式框名单时再跟 `maths`，有媒体名单时再跟 `videos` 与 `audios`，有图表名单时再跟 `charts`，
   有 SmartArt 名单时再跟 `smartArts`，有表名单时再跟 `tables`，有 OLE 名单时再跟 `oleObjects`，有 3D 模型名单时再跟 `model3ds`，
   有 Zoom 名单时再跟 `zooms`，有连接线名单时再跟 `connectors`，有超链接名单时再跟 `hyperlinks`，有域名单时再跟 `fields`，
   `scope.timing` 同开时再跟 `timing`，然后 `shapes`。
-  `id` 为 `slide:{n}/notes`。`pictureCount` 只计该备注页上被收入的 `p:pic`，不并进幻灯片 `pictures`。
+  `id` 为 `slide:{n}/notes`。
+  `clrMapOvr` / `themeOverride` 规则与幻灯片相同，读该 notesSlide。
+  `pictureCount` 只计该备注页上被收入的 `p:pic`，不并进幻灯片 `pictures`。
   备注图字段顺序与幻灯片图相同，含末尾 `contentType`。
   备注上各 Count 只计该备注页，不并进幻灯片计数。根上各 Count 仍只计该页幻灯片 XML，不含备注与母版。
   备注 `timing` 的 id 为 `slide:{n}/notes/anim:{k}`，`target` 对该备注页对象。
@@ -1109,7 +1116,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   每条字段顺序：`id`、`type`、`host`、`text`。`type` 取 `@type` 原文，缺则为 `""`。inspect 不白名单；Office 自造类型原样回。`host` 是所在形状 id。
   `text` 是该域 `a:t` 缓存，不求值。xlsx 的 `scope` 里出现 `fields` 报 `InvalidField`。
   docx 见 [json-contract-docx.md](json-contract-docx.md#inspect)。
-- 页对象字段顺序：`id`、`index`、`name`、`layoutId`、`hidden`、`transition`、`hasNotes`、`pictureCount`、`mathCount`、`videoCount`、`audioCount`、
+- 页对象字段顺序：`id`、`index`、`name`、`layoutId`、`hidden`、`transition`、`clrMapOvr`、`themeOverride`、`hasNotes`、`pictureCount`、`mathCount`、`videoCount`、`audioCount`、
   `chartCount`、`smartArtCount`、`commentCount`、`hyperlinkCount`、`fieldCount`、`tableCount`、`oleObjectCount`、`model3dCount`、`zoomCount`、
   `connectorCount`、`animCount`，
   然后按需 `pictures`，再按需 `maths`，再按需 `videos`，再按需 `audios`，再按需 `charts`，再按需 `smartArts`，再按需 `tables`，再按需 `oleObjects`，再按需 `model3ds`，再按需 `zooms`，
@@ -1120,6 +1127,13 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   有 `scope.masters` 时再跟 `masters`，有 `scope.notesMaster` 时再跟 `notesMaster`，有 `scope.handout` 时再跟 `handout`，有 `scope.sections` 时再跟 `sections`，
   有 `scope.customShows` 时再跟 `customShows`，然后 `slides`。
   `props` 始终出现，规则见 [json-contract.md](json-contract.md#文档属性三格式共用)。
+  `clrMapOvr` 取该页（或版式、备注页）的 `p:clrMapOvr`。
+  有 `a:masterClrMapping` 则为字符串 `"master"`。
+  有 `a:overrideClrMapping` 则为对象，十二键与 `clrMap` 相同。
+  缺 `p:clrMapOvr`、或该元素下两种子元都没有，则为 `null`。
+  `themeOverride` 取该页或该备注页 `.rels` 里 Type 以 `/themeOverride` 结尾的部件。
+  没有该关系或部件不在包内则为 `null`。有则字段与 [docx themeOverride](json-contract-docx.md#响应) 相同。
+  版式不带 `themeOverride`。根上不要带 `themeOverride`。不把映射或覆盖色算成最终 RGB。
 - `shapeId` 是 `cNvPr/@id` 的原文。走 `shape:index:{k}` 时为 `null`。
   每条字段顺序：`id`、`shapeId`、`name`、`prst`，有 `a:custGeom` 时再跟 `geom`，然后 `x`、`y`、`cx`、`cy`、`text`，
   然后 `sz`、`color`、`textFill`、`textOutline`、`bold`、`italic`、`underline`、`font`、`eastAsiaFont`、`align`、`textAnchor`、`spcBef`、`spcAft`、`lnSpc`、`runs`、`stable`。
@@ -2272,6 +2286,102 @@ xlsx 见 [xlsx 分册](json-contract-xlsx.md#setthemefmt)。docx 见 [docx 分�
 pptx：`id` 不是母版 id 报 `InvalidId`。对页 id、`notesMaster`、`handout` 报 `InvalidId`。没有 theme 部件报 `IdNotFound`，不新建。
 缺 `extraSchemes`、不是数组 / `null`、项不是对象、或槽位不是六位十六进制，报 `InvalidField`。
 xlsx 见 [xlsx 分册](json-contract-xlsx.md#setthemeextraschemes)。docx 见 [docx 分册](json-contract-docx.md#setthemeextraschemes)。
+
+### setClrMap
+
+改 slideMaster、notesMaster 或 handoutMaster 上的 `p:clrMap`。不把映射算成 RGB。不改 theme 部件。
+
+```json
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "C:\\data\\deck.pptx",
+  "ops": [
+    {
+      "op": "setClrMap",
+      "id": "master:1",
+      "bg1": "dk1"
+    }
+  ]
+}
+```
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"setClrMap"` |
+| `id` | 必须是 `master:{n}`、`notesMaster` 或 `handout` |
+| `bg1` / `tx1` / `bg2` / `tx2` / `accent1`–`accent6` / `hlink` / `folHlink` | 可选。theme 槽名 |
+
+十二槽至少给一个。值为已有 theme 槽名：`dk1`、`lt1`、`dk2`、`lt2`、`accent1`–`accent6`、`hlink`、`folHlink`。
+不认识的令牌报 `InvalidField`。未点名属性留下。
+没有 `p:clrMap` 时按 Office 默认身份映射新建（`bg1=lt1` 那一套），再打补丁。
+id 不是这三种报 `InvalidId`。找不到该母版 / 备注母版 / 讲义母版报 `IdNotFound`。不新建 notesMaster 或 handoutMaster。
+docx / xlsx 上发此 op 报 `InvalidField`。
+示例见 `docs/examples/pptx-apply-theme-clrmap.json`。
+
+### setClrMapOvr
+
+改幻灯片、版式或备注页上的 `p:clrMapOvr`。
+
+```json
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "C:\\data\\deck.pptx",
+  "ops": [
+    {
+      "op": "setClrMapOvr",
+      "id": "slide:1",
+      "clrMapOvr": "master"
+    }
+  ]
+}
+```
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"setClrMapOvr"` |
+| `id` | 必须是 `slide:{n}`、`slide:{n}/notes` 或 `master:{n}/layout:{k}` |
+| `clrMapOvr` | 必须。`"master"` 或十二槽对象 |
+
+`"master"` 写成 `a:masterClrMapping`，去掉 `a:overrideClrMapping`。
+对象键与 `setClrMap` 相同，至少一槽。写成 `a:overrideClrMapping`；未点名槽用当前覆盖或默认身份映射补齐。
+值为 theme 槽名，规则与 `setClrMap` 相同。
+没有 `p:clrMapOvr` 时插在 `p:cSld` 之后。
+id 不是这三种报 `InvalidId`。找不到该页 / 版式报 `IdNotFound`。该页没有 notesSlide 时报 `IdNotFound`，不新建备注页。
+docx / xlsx 上发此 op 报 `InvalidField`。
+
+### setThemeOverride
+
+改该页或该备注页的 `themeOverride` 部件。根元素是 `a:themeOverride`，配色写在根下 `clrScheme`。
+
+```json
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "C:\\data\\deck.pptx",
+  "ops": [
+    {
+      "op": "setThemeOverride",
+      "id": "slide:1",
+      "accent1": "FF0000"
+    }
+  ]
+}
+```
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"setThemeOverride"` |
+| `id` | 必须是 `slide:{n}` 或 `slide:{n}/notes` |
+| `enabled` | 可选。只能是 `false`：删掉该宿主的 themeOverride 关系；无人引用则删部件 |
+| `dk1` / `lt1` / `dk2` / `lt2` / `accent1`–`accent6` / `hlink` / `folHlink` | 可选。六位 RGB 十六进制 |
+
+`enabled: false` 与配色槽不能同时出现。否则至少给一个槽位。
+没有部件时新建 `/ppt/theme/themeOverrideN.xml`，挂该宿主关系。有该页（或备注母版）能追到的 theme 时先抄它的 `clrScheme` 再打补丁。
+id 不是页 id 或备注页 id 报 `InvalidId`。对 `master:{n}`、`notesMaster`、`handout` 报 `InvalidId`。
+找不到该页报 `IdNotFound`。该页没有 notesSlide 时报 `IdNotFound`，不新建备注页。
+docx 见 [docx 分册](json-contract-docx.md#setthemeoverride)。xlsx 见 [xlsx 分册](json-contract-xlsx.md#setthemeoverride)。
 
 ### setChartPos
 
@@ -3519,6 +3629,10 @@ presentation 关系、新页或被删页及其 `.rels`、内容类型，
 `deleteMaster` 脏 `presentation.xml` 及其 `.rels`、被删母版及其版式与仅被它引用的 theme、内容类型。
 `setSlideSize` 只脏 `presentation.xml` 的 `p:sldSz`。
 `setThemeColors` / `setThemeFonts` / `setThemeFmt` / `setThemeExtraSchemes` 只脏该母版指向的 theme 部件，不新建 theme。
+`setClrMap` 只脏被点名的 slideMaster、notesMaster 或 handoutMaster XML。
+`setClrMapOvr` 只脏被点名的幻灯片、slideLayout 或 notesSlide XML。
+`setThemeOverride` 脏该页或该备注页 `.rels`、`/ppt/theme/themeOverrideN.xml` 与必要时 `[Content_Types].xml`。
+`enabled: false` 还可删掉无人引用的覆盖部件。
 `setHandoutText` 可脏 handoutMaster 及其 `.rels`、必要时 `presentation.xml` 及其 `.rels` 与 `[Content_Types].xml`，以及新建 handoutMaster 时复制的 theme 部件。
 超链接 op 脏该页幻灯片 XML 与该页 `.rels`（新建或删除 hyperlink / slide 关系）。域 op（`insertField` / `setField` / `deleteField`）只脏该页幻灯片 XML。
 媒体 op 还可脏该页 `.rels`、`[Content_Types].xml`，以及新建或被删的 `/ppt/media/mediaN.*` 与海报 `/ppt/media/imageN.*`。
@@ -3527,7 +3641,7 @@ presentation 关系、新页或被删页及其 `.rels`、内容类型，
 一次 `ops` 可以混用 `setShapeText`、`setShapeFormat`、形状管理 op、表格 op、`setNotesText`、`setHandoutText`、批注 op、超链接 op、域 op（`insertField`、`setField`、
 `deleteField`）、图片 op、媒体 op（含 `setMedia`）、图表 op、SmartArt op、幻灯片管理 op（含 `setTransition`、`setSlideLayout`）、母版写入 op（`insertLayout`、
 `deleteLayout`、`insertPlaceholder`、`deletePlaceholder`、`insertMaster`、`deleteMaster`）、主题与尺寸 op（`setSlideSize`、
-`setThemeColors`、`setThemeFonts`、`setThemeFmt`、`setThemeExtraSchemes`）、动画 op（`insertAnim`、`setAnim`、`deleteAnim`、`moveAnim`）、幻灯片节 op、自定义放映 op（`insertCustomShow`、`setCustomShow`、
+`setThemeColors`、`setThemeFonts`、`setThemeFmt`、`setThemeExtraSchemes`、`setClrMap`、`setClrMapOvr`、`setThemeOverride`）、动画 op（`insertAnim`、`setAnim`、`deleteAnim`、`moveAnim`）、幻灯片节 op、自定义放映 op（`insertCustomShow`、`setCustomShow`、
 `deleteCustomShow`）、OLE op（`insertOle`、`deleteOle`）、Zoom op（`insertZoom`、`setZoom`、`deleteZoom`）、公式几何 op（`setMathSize`、`setMathPos`）、`setShowPr`、
 `setProtection` 与 `setProps` / `setCustomProp` / `deleteCustomProp`。
 文件属性 op 还可以脏 `/docProps/core.xml`、`/docProps/app.xml`、`/docProps/custom.xml`、根 `.rels` 与 `[Content_Types].xml`。

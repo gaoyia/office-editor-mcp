@@ -1704,7 +1704,7 @@ Word 16.0 另存通常不写该部件；自行写入后 Word 仍能打开。pptx
 `latin` / `ea` / `cs` 取 `a:majorFont` / `a:minorFont` 下对应元素的 `typeface` 原文，没有该元素则为 `null`。
 `majorScripts` / `minorScripts` 取同一组里 `a:font` 的文档顺序。没有则为 `[]`。
 每项字段顺序：`script`、`typeface`，取对应属性原文；缺则为 `null`。
-pptx 母版 `theme.fonts` 同一套字段。
+pptx 母版 `theme.fonts` 同一套字段。pptx 页级 `themeOverride` 挂在幻灯片 / 备注页上，不在根上。
 
 ## create
 
@@ -5035,6 +5035,7 @@ pptx 见 [pptx 分册](json-contract-pptx.md#setthemeextraschemes)，`id` 为 `m
 | `dk1` / `lt1` / `dk2` / `lt2` / `accent1`–`accent6` / `hlink` / `folHlink` | 可选。六位 RGB 十六进制 |
 
 `enabled: false` 与配色槽不能同时出现。否则至少给一个槽位。没有部件时按 Office 默认十二槽新建 `/word/theme/themeOverride1.xml`，再把点名槽换成 `srgbClr`。有主文档 theme 时先抄它的 `clrScheme` 再打补丁。
-id 不是 `docx:document` 报 `InvalidId`。xlsx 见 [xlsx 分册](json-contract-xlsx.md#setthemeoverride)。pptx 上发此 op 报 `InvalidField`。
+pptx 见 [pptx 分册](json-contract-pptx.md#setthemeoverride)，`id` 为 `slide:{n}` 或 `slide:{n}/notes`。
+xlsx 见 [xlsx 分册](json-contract-xlsx.md#setthemeoverride)。
 示例见 `docs/examples/docx-apply-theme-override.json`。
 

@@ -11,6 +11,12 @@ use super::master;
 
 pub use crate::theme::{FontSlot, COLOR_SLOTS};
 
+/// `p:clrMap` / `a:overrideClrMapping` 的十二个键，与 ECMA-376 属性同名。
+pub const CLR_MAP_KEYS: &[&str] = &[
+    "bg1", "tx1", "bg2", "tx2", "accent1", "accent2", "accent3", "accent4", "accent5", "accent6",
+    "hlink", "folHlink",
+];
+
 pub const SLIDE_SIZE_MIN: i64 = 914_400;
 pub const SLIDE_SIZE_MAX: i64 = 51_206_400;
 
