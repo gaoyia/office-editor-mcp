@@ -1010,6 +1010,30 @@ Word COM 的 `PageSetup` 边距与纸张单位是磅，等于 twip ÷ 20。手�
 | Tw5 | create | create 带 `align` / `width` / `cols` / `rowHeights` 后树上对得上，无修复 |
 | Tw6 | 拒写 | 对段落 id 发 `setTableWidth` 得 `InvalidId`。xlsx 上发此 op 得 `InvalidField` |
 
+## 表级边框
+
+表级 `w:tblBorders` 的四边与内外框。不要和格斜线、页面边框、段边框混。不算自动套表样式。
+手测脚本 `manual-check/office/cases/docx-table-borders.ps1`。编号 Tbdr，不要和 Tb、Tf、Tw、Pb 撞。现有 Tf1–Tf6、Tw1–Tw6 继续过。
+
+- **Tbdr1**
+  - 检查：名单字段
+  - 通过标准：给了 `scope.tables` 后表上有 `borders`。create 默认表的 `borders.top.val` 为 `single`
+- **Tbdr2**
+  - 检查：改外边
+  - 通过标准：`setTableBorders` 写 `top.val` 为 `double` 后树上对得上。Word 无修复。COM 上边 `LineStyle` 非 0
+- **Tbdr3**
+  - 检查：只改一边
+  - 通过标准：只点名 `insideH` 后 `top.val` 仍为 `single`，`insideH.val` 为 `dashed`。Word 无修复
+- **Tbdr4**
+  - 检查：去掉
+  - 通过标准：`borders` 为 `null` 后树上 `borders` 为 `null`，ZIP 里没有 `tblBorders`。Word 无修复
+- **Tbdr5**
+  - 检查：create
+  - 通过标准：create 带 `tables[].borders.top` 后树上对得上，无修复
+- **Tbdr6**
+  - 检查：拒写
+  - 通过标准：缺 `borders` 报 `InvalidField`。xlsx 上发此 op 报 `InvalidField`。不强制开 Word
+
 ## 单元格垂直对齐
 
 格级 `tcPr/w:vAlign`。不要和节上 `setVerticalAlign`、框内 `setTextBoxTextAnchor` 混。不算排版引擎。

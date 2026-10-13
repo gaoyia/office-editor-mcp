@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "note.docx",
+  "ops": [
+    {
+      "op": "setTableBorders",
+      "id": "table:1",
+      "borders": {
+        "top": { "val": "double", "sz": 12, "space": 0, "color": "000000" },
+        "insideH": { "val": "dashed", "sz": 4, "space": 0, "color": "auto" }
+      }
+    }
+  ]
+}

@@ -8,6 +8,7 @@ use crate::xml::{Element, Node};
 
 use super::format;
 use super::hf::{self, HfKind, HfPart, HfType};
+use super::page_bg::{self, BorderSide};
 use super::para::{self, HostPara, ParaTarget, TxbxKey};
 use super::textbox;
 
@@ -792,6 +793,16 @@ pub struct TableFloat {
 }
 
 #[derive(Debug, Clone)]
+pub struct TableBordersPatch {
+    pub top: Option<Option<BorderSide>>,
+    pub left: Option<Option<BorderSide>>,
+    pub bottom: Option<Option<BorderSide>>,
+    pub right: Option<Option<BorderSide>>,
+    pub inside_h: Option<Option<BorderSide>>,
+    pub inside_v: Option<Option<BorderSide>>,
+}
+
+#[derive(Debug, Clone)]
 pub struct DiagonalBorder {
     pub val: String,
     pub sz: Option<u32>,
@@ -1308,6 +1319,110 @@ pub fn apply_set_table_cell_mar(
     Ok(())
 }
 
+pub fn apply_set_table_borders(
+    root: &mut Element,
+    r: &TableRef,
+    patch: Option<&TableBordersPatch>,
+    id: &str,
+    i: usize,
+) -> Result<(), Error> {
+    let path = tbl_path(root, r, id, i)?;
+    let tbl = para::element_at_mut(root, &path).ok_or_else(|| missing_table(id, i))?;
+    let pr = ensure_tbl_pr(tbl);
+    match patch {
+        None => remove_child(pr, "tblBorders"),
+        Some(p) => {
+            let empty = {
+                let borders = hf::ensure_child_in_order(pr, "tblBorders", TBLPR_ORDER);
+                write_tbl_border(borders, "top", &[], p.top.as_ref());
+                write_tbl_border(borders, "left", &["start"], p.left.as_ref());
+                write_tbl_border(borders, "bottom", &[], p.bottom.as_ref());
+                write_tbl_border(borders, "right", &["end"], p.right.as_ref());
+                write_tbl_border(borders, "insideH", &[], p.inside_h.as_ref());
+                write_tbl_border(borders, "insideV", &[], p.inside_v.as_ref());
+                tbl_borders_empty(borders)
+            };
+            if empty {
+                remove_child(pr, "tblBorders");
+            }
+        }
+    }
+    Ok(())
+}
+
+/// 解析 `setTableBorders.borders`：对象按边打补丁，JSON `null` 整段去掉。
+pub fn parse_table_borders_value(
+    v: &Value,
+    path: &str,
+) -> Result<Option<TableBordersPatch>, Error> {
+    if v.is_null() {
+        return Ok(None);
+    }
+    Ok(Some(parse_table_borders_patch(v, path)?))
+}
+
+fn parse_table_borders_patch(v: &Value, path: &str) -> Result<TableBordersPatch, Error> {
+    let obj = v.as_object().ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::WrongType {
+                field: "borders".into(),
+                expected: TypeName::Object,
+            },
+            path.to_string(),
+        )
+    })?;
+    for k in obj.keys() {
+        if !matches!(
+            k.as_str(),
+            "top" | "left" | "bottom" | "right" | "insideH" | "insideV"
+        ) {
+            return Err(Error::with_path(
+                ErrorKind::UnknownField { field: k.clone() },
+                format!("{path}.{k}"),
+            ));
+        }
+    }
+    if !obj.contains_key("top")
+        && !obj.contains_key("left")
+        && !obj.contains_key("bottom")
+        && !obj.contains_key("right")
+        && !obj.contains_key("insideH")
+        && !obj.contains_key("insideV")
+    {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "setTableBorders".into(),
+                field: "top, left, bottom, right, insideH, or insideV".into(),
+            },
+            path.to_string(),
+        ));
+    }
+    Ok(TableBordersPatch {
+        top: page_bg::parse_opt_side(obj.get("top"), &format!("{path}.top"), "setTableBorders")?,
+        left: page_bg::parse_opt_side(obj.get("left"), &format!("{path}.left"), "setTableBorders")?,
+        bottom: page_bg::parse_opt_side(
+            obj.get("bottom"),
+            &format!("{path}.bottom"),
+            "setTableBorders",
+        )?,
+        right: page_bg::parse_opt_side(
+            obj.get("right"),
+            &format!("{path}.right"),
+            "setTableBorders",
+        )?,
+        inside_h: page_bg::parse_opt_side(
+            obj.get("insideH"),
+            &format!("{path}.insideH"),
+            "setTableBorders",
+        )?,
+        inside_v: page_bg::parse_opt_side(
+            obj.get("insideV"),
+            &format!("{path}.insideV"),
+            "setTableBorders",
+        )?,
+    })
+}
+
 pub fn apply_set_cell_format(
     root: &mut Element,
     r: &TableRef,
@@ -1711,6 +1826,7 @@ fn table_node(
             tbl.child_by_local("tblPr")
                 .and_then(|p| p.child_by_local("tblCellMar")),
         ),
+        "borders": tbl_borders_json(tbl),
         "rows": rows,
     }))
 }
@@ -2950,6 +3066,32 @@ fn cell_mar_json(mar: Option<&Element>) -> Value {
     })
 }
 
+fn tbl_borders_json(tbl: &Element) -> Value {
+    let Some(b) = tbl
+        .child_by_local("tblPr")
+        .and_then(|p| p.child_by_local("tblBorders"))
+    else {
+        return Value::Null;
+    };
+    json!({
+        "top": page_bg::side_json(b, "top"),
+        "left": tbl_lr_json(b, "left", "start"),
+        "bottom": page_bg::side_json(b, "bottom"),
+        "right": tbl_lr_json(b, "right", "end"),
+        "insideH": page_bg::side_json(b, "insideH"),
+        "insideV": page_bg::side_json(b, "insideV"),
+    })
+}
+
+fn tbl_lr_json(parent: &Element, primary: &str, fallback: &str) -> Value {
+    let v = page_bg::side_json(parent, primary);
+    if v.is_null() {
+        page_bg::side_json(parent, fallback)
+    } else {
+        v
+    }
+}
+
 fn mar_side(mar: &Element, local: &str) -> Value {
     mar.child_by_local(local)
         .and_then(|e| e.attr_local("w"))
@@ -3214,6 +3356,51 @@ fn write_diagonal(borders: &mut Element, local: &str, side: Option<&DiagonalBord
             set_attr(el, "color", b.color.as_deref().unwrap_or("auto"));
         }
     }
+}
+
+fn write_tbl_border(
+    borders: &mut Element,
+    local: &str,
+    aliases: &[&str],
+    slot: Option<&Option<BorderSide>>,
+) {
+    let Some(slot) = slot else {
+        return;
+    };
+    match slot {
+        None => {
+            remove_child(borders, local);
+            for a in aliases {
+                remove_child(borders, a);
+            }
+        }
+        Some(b) => {
+            for a in aliases {
+                remove_child(borders, a);
+            }
+            let el = hf::ensure_child_in_order(borders, local, BORDER_ORDER);
+            el.attrs.clear();
+            set_attr(el, "val", &b.val);
+            if let Some(sz) = b.sz {
+                set_attr(el, "sz", &sz.to_string());
+            }
+            if let Some(space) = b.space {
+                set_attr(el, "space", &space.to_string());
+            }
+            if let Some(color) = &b.color {
+                set_attr(el, "color", color);
+            }
+        }
+    }
+}
+
+fn tbl_borders_empty(el: &Element) -> bool {
+    !el.element_children().any(|c| {
+        matches!(
+            c.local_name(),
+            "top" | "start" | "left" | "bottom" | "end" | "right" | "insideH" | "insideV"
+        )
+    })
 }
 
 fn xml_broken(detail: &str) -> Error {

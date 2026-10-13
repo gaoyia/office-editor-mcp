@@ -16,7 +16,8 @@ use super::request::{
 };
 use super::styles;
 use super::tbl::{
-    self, DiagonalBorder, TableFloat, TableLookPatch, TableRowHeightSpec, TableWidthPatch,
+    self, DiagonalBorder, TableBordersPatch, TableFloat, TableLookPatch, TableRowHeightSpec,
+    TableWidthPatch,
 };
 
 pub const ROOT_KEYS: &[&str] = &[
@@ -813,6 +814,7 @@ pub struct TableExtra {
     pub width: Option<TableWidthPatch>,
     pub row_heights: Vec<TableRowHeightSpec>,
     pub cell_mar: Option<CellMarSpec>,
+    pub borders: Option<Option<TableBordersPatch>>,
     pub cell_formats: Vec<CellFormatSpec>,
 }
 
@@ -826,6 +828,7 @@ impl TableExtra {
             || self.width.is_some()
             || !self.row_heights.is_empty()
             || self.cell_mar.is_some()
+            || self.borders.is_some()
             || !self.cell_formats.is_empty()
     }
 }
@@ -1343,6 +1346,13 @@ pub fn parse_table_extra(
             ));
         }
     };
+    let borders = match obj.get("borders") {
+        None => None,
+        Some(v) => Some(tbl::parse_table_borders_value(
+            v,
+            &format!("{path}.borders"),
+        )?),
+    };
     let cell_formats = parse_cell_formats(obj.get("cellFormats"), path, rows, cols)?;
     Ok(TableExtra {
         style,
@@ -1353,6 +1363,7 @@ pub fn parse_table_extra(
         width,
         row_heights,
         cell_mar,
+        borders,
         cell_formats,
     })
 }

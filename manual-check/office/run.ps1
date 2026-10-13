@@ -72,6 +72,7 @@ $order = @(
     'docx-style-table'
     'docx-table-width'
     'docx-cell-valign'
+    'docx-table-borders'
     'docx-box-table'
     'docx-box-fields'
     'docx-format'

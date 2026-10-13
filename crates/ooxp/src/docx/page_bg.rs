@@ -604,10 +604,18 @@ fn parse_create_enum(
 }
 
 fn parse_create_side(v: Option<&Value>, path: &str) -> Result<Option<Option<BorderSide>>, Error> {
+    parse_opt_side(v, path, "setPageBorders")
+}
+
+pub fn parse_opt_side(
+    v: Option<&Value>,
+    path: &str,
+    op: &str,
+) -> Result<Option<Option<BorderSide>>, Error> {
     match v {
         None => Ok(None),
         Some(Value::Null) => Ok(Some(None)),
-        Some(Value::Object(map)) => Ok(Some(Some(parse_side_obj(map, path)?))),
+        Some(Value::Object(map)) => Ok(Some(Some(parse_border_side(map, path, op)?))),
         Some(_) => Err(Error::with_path(
             ErrorKind::WrongType {
                 field: "side".into(),
@@ -618,7 +626,11 @@ fn parse_create_side(v: Option<&Value>, path: &str) -> Result<Option<Option<Bord
     }
 }
 
-fn parse_side_obj(map: &Map<String, Value>, path: &str) -> Result<BorderSide, Error> {
+pub fn parse_border_side(
+    map: &Map<String, Value>,
+    path: &str,
+    op: &str,
+) -> Result<BorderSide, Error> {
     for k in map.keys() {
         if !matches!(k.as_str(), "val" | "sz" | "space" | "color") {
             return Err(Error::with_path(
@@ -645,7 +657,7 @@ fn parse_side_obj(map: &Map<String, Value>, path: &str) -> Result<BorderSide, Er
         None => {
             return Err(Error::with_path(
                 ErrorKind::OpRequiresField {
-                    op: "setPageBorders".into(),
+                    op: op.into(),
                     field: "val".into(),
                 },
                 format!("{path}.val"),

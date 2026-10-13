@@ -2983,6 +2983,7 @@ fn inspect_tables_lists_cell_paragraphs() {
     assert!(t["look"].is_null());
     assert!(t["pos"].is_null());
     assert!(t["cellMar"].is_null());
+    assert!(t["borders"].is_null());
     assert_eq!(t["rows"][0]["id"], "table:1/row:1");
     let cell = &t["rows"][0]["cells"][0];
     assert_eq!(cell["id"], "table:1/r1c1");

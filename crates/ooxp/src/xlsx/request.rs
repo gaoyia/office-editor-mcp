@@ -2345,6 +2345,7 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<XlsxOp>, Error> {
             | "setTableAlign"
             | "setTableRowHeight"
             | "setTableCellMar"
+            | "setTableBorders"
             | "setCellFormat"
             | "setParaFormat"
             | "setRunFormat"

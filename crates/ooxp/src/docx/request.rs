@@ -803,6 +803,13 @@ pub struct SetTableCellMarOp {
 }
 
 #[derive(Debug, Clone)]
+pub struct SetTableBordersOp {
+    pub id: String,
+    pub target: TableRef,
+    pub borders: Option<super::tbl::TableBordersPatch>,
+}
+
+#[derive(Debug, Clone)]
 pub struct SetCellFormatOp {
     pub id: String,
     pub target: TableRef,
@@ -1325,6 +1332,7 @@ pub enum DocxOp {
     SetTableAlign(SetTableAlignOp),
     SetTableRowHeight(SetTableRowHeightOp),
     SetTableCellMar(SetTableCellMarOp),
+    SetTableBorders(SetTableBordersOp),
     SetCellFormat(SetCellFormatOp),
     SetParaFormat(SetParaFormatOp),
     SetRunFormat(SetRunFormatOp),
@@ -1981,6 +1989,9 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<DocxOp>, Error> {
             )?)),
             "setTableCellMar" => {
                 out.push(DocxOp::SetTableCellMar(parse_set_table_cell_mar(obj, i)?))
+            }
+            "setTableBorders" => {
+                out.push(DocxOp::SetTableBorders(parse_set_table_borders(obj, i)?))
             }
             "setCellFormat" => out.push(DocxOp::SetCellFormat(parse_set_cell_format(obj, i)?)),
             "setParaFormat" => out.push(DocxOp::SetParaFormat(parse_set_para_format(obj, i)?)),
@@ -6322,6 +6333,32 @@ fn parse_set_table_cell_mar(
         left,
         bottom,
         right,
+    })
+}
+
+fn parse_set_table_borders(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<SetTableBordersOp, Error> {
+    deny_keys(obj, i, &["op", "id", "borders"])?;
+    let id = require_op_id(obj, i)?;
+    let target = tbl::parse_table_only(&id, i, IdReason::NeedTableId)?;
+    let borders = match obj.get("borders") {
+        None => {
+            return Err(Error::with_path(
+                ErrorKind::OpRequiresField {
+                    op: "setTableBorders".into(),
+                    field: "borders".into(),
+                },
+                format!("ops[{i}].borders"),
+            ));
+        }
+        Some(v) => tbl::parse_table_borders_value(v, &format!("ops[{i}].borders"))?,
+    };
+    Ok(SetTableBordersOp {
+        id,
+        target,
+        borders,
     })
 }
 

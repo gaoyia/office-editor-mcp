@@ -254,7 +254,7 @@ docx 认 `setParaText`、`setHeaderFooterDistance`、`setPageMargin`、`setPageS
 无框形状 op（`insertShape`、`deleteShape`、`setShapePos`、`setShapeSize`、`setShapeFill`、`setShapeLine`；
 不含 `setShapeGeom`、`setConnector`、`setShapeFormat`）、`insertPara` / `deletePara`、
 表格 op（`insertTable`、`deleteTable`、`insertRow`、`deleteRow`、`insertCol`、`deleteCol`、`mergeCells`、`splitCells`、
-`setTableStyle`、`setTableFloat`、`setTableWidth`、`setTableAlign`、`setTableRowHeight`、`setTableCellMar`、`setCellFormat`）、
+`setTableStyle`、`setTableFloat`、`setTableWidth`、`setTableAlign`、`setTableRowHeight`、`setTableCellMar`、`setTableBorders`、`setCellFormat`）、
 修订 op（`acceptRevision`、`rejectRevision`）、超链接与书签 op（`insertHyperlink`、`setHyperlink`、`deleteHyperlink`、`insertBookmark`、
 `setBookmark`、`deleteBookmark`）、例外编辑区 op（`insertEditRange`、`deleteEditRange`）、域 op（`insertField`、`setField`、`deleteField`）、目录 op（`insertToc`、`deleteToc`）、
 题注与交叉引用 op（`insertCaption`、`deleteCaption`、`insertCrossRef`、`deleteCrossRef`）、索引 op（`insertIndex`、`deleteIndex`、
@@ -323,7 +323,7 @@ pptx 认 `setShapeText`、`setShapeFormat`、形状管理 op（`insertShape`、`
  / `insertCustomShow` / `setCustomShow` / `deleteCustomShow` / `insertZoom` / `setZoom` / `deleteZoom`）报 `InvalidField`。
 xlsx 上发 `insertTable` / `deleteTable` / `insertRow` / `deleteRow` / `insertCol` / `deleteCol` / `mergeCells` / `splitCells` 仍报 `InvalidField`。
 对 docx 发 `setShapeGeom` / `setConnector` / `setShapeFormat` 报 `InvalidField`。pptx 上发 `mergeCells` / `splitCells` 报 `InvalidField`。
-xlsx / pptx 上发 `insertStyle` / `deleteStyle` / `setRunStyle` / `setTableStyle` / `setTableFloat` / `setTableWidth` / `setTableAlign` / `setTableRowHeight` / `setTableCellMar` / `setCellFormat` 报 `InvalidField`。
+xlsx / pptx 上发 `insertStyle` / `deleteStyle` / `setRunStyle` / `setTableStyle` / `setTableFloat` / `setTableWidth` / `setTableAlign` / `setTableRowHeight` / `setTableCellMar` / `setTableBorders` / `setCellFormat` 报 `InvalidField`。
 pptx 的 `setTablePos` / `setTableSize` 单位仍是 EMU，不要和 docx 的 `setTableFloat` / `setTableWidth` 混。
 
 ### setProps

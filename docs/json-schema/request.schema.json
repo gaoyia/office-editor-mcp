@@ -976,6 +976,9 @@
                 "$ref": "docx.schema.json#/$defs/setTableCellMarOp"
               },
               {
+                "$ref": "docx.schema.json#/$defs/setTableBordersOp"
+              },
+              {
                 "$ref": "docx.schema.json#/$defs/setCellFormatOp"
               },
               {

@@ -34,7 +34,8 @@ use super::request::{
     InsertMathOp, InsertMathPlace, InsertNoteOp, InsertNumberingOp, InsertRubyOp, InsertRubyPlace,
     InsertSdtPlace, InsertShapeOp, InsertTableOp, InsertTocOp, InsertTocPlace, ReplyCommentOp,
     SetBibliographyStyleOp, SetCellFormatOp, SetParaNumberingOp, SetTableAlignOp,
-    SetTableCellMarOp, SetTableFloatOp, SetTableRowHeightOp, SetTableStyleOp, SetTableWidthOp,
+    SetTableBordersOp, SetTableCellMarOp, SetTableFloatOp, SetTableRowHeightOp, SetTableStyleOp,
+    SetTableWidthOp,
 };
 use super::sdt::SdtKind;
 use super::sect::SectionBreakType;
@@ -1414,6 +1415,7 @@ fn parse_tables(v: Option<&Value>, path: &str, para_n: usize) -> Result<Vec<NewT
                     | "cols"
                     | "rowHeights"
                     | "cellMar"
+                    | "borders"
                     | "cellFormats"
             ) {
                 return Err(Error::with_path(
@@ -3764,6 +3766,13 @@ fn push_one_table_extra(ops: &mut Vec<DocxOp>, extra: &TableExtra, id: String, t
             left: mar.left,
             bottom: mar.bottom,
             right: mar.right,
+        }));
+    }
+    if let Some(borders) = &extra.borders {
+        ops.push(DocxOp::SetTableBorders(SetTableBordersOp {
+            id: id.clone(),
+            target: target.clone(),
+            borders: borders.clone(),
         }));
     }
     for (ri, rh) in extra.row_heights.iter().enumerate() {

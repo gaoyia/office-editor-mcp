@@ -277,7 +277,7 @@ OOXML 没有表级稳定 id，因此 `table:{n}` 在增删表之后会变，只�
 对注内、批注内段落或注内 / 批注内框发 `insertTable` 报 `InvalidId`。
 `deleteTable` 的 `id` 必须是表 id。`insertRow` 的 `id` 是表 id（追加一行）或行 id（插到该行之后）。`deleteRow` 的 `id` 必须是行 id。
 `insertCol` / `deleteCol` / `mergeCells` 的 `id` 必须是表 id。`splitCells` 的 `id` 必须是单元格 id。
-`setTableStyle` / `setTableFloat` / `setTableWidth` / `setTableAlign` / `setTableCellMar` 的 `id` 必须是表 id。`setTableRowHeight` 的 `id` 必须是行 id。`setCellFormat` 的 `id` 必须是单元格 id。
+`setTableStyle` / `setTableFloat` / `setTableWidth` / `setTableAlign` / `setTableCellMar` / `setTableBorders` 的 `id` 必须是表 id。`setTableRowHeight` 的 `id` 必须是行 id。`setCellFormat` 的 `id` 必须是单元格 id。
 正文、页眉页脚与框内的表可以改结构与外观。对注内、批注内的表发这些 op 报 `InvalidId`。对不上的 id 形态报 `InvalidId`。
 框内表带修订痕迹时结构 op 仍报 `NotImplemented`。
 
@@ -1351,7 +1351,7 @@ xlsx / pptx 的 `scope.tables` 不是同一件事：xlsx 仍拒绝；pptx 展开
   `text` 取该点 `dgm:t` 里 `a:t` 按文档顺序拼接；`a:br` 变成 `\n`；没有 `dgm:t` 则为 `""`。`parent` 规则见上文。
   缺少 `r:dm` 或 data 部件解析失败时该图示仍列出，`points` 为 `[]`，`layout` / `colors` / `style` 能读则读、不能则为 `null`，不报 `XmlBroken`。不读 Fallback 位图，不把图示画成图。
 - `scope.tables` 为 `true` 时，根上带 `tables`（正文），每个页眉、页脚容器带 `tables`。没有表时为空数组。按该故事里 `w:tbl` 的文档顺序，嵌套表也列出。
-  每张字段顺序：`id`、`index`、`rowCount`、`colCount`、`nested`、`style`、`look`、`pos`、`align`、`indent`、`width`、`layout`、`colWidths`、`cellMar`、`rows`。
+  每张字段顺序：`id`、`index`、`rowCount`、`colCount`、`nested`、`style`、`look`、`pos`、`align`、`indent`、`width`、`layout`、`colWidths`、`cellMar`、`borders`、`rows`。
   `index` 与 id 里的 `{n}` 相同。`rowCount` 是 `w:tr` 个数。
   `colCount` 优先取 `tblGrid` 的 `gridCol` 个数；没有 `tblGrid` 则取第一行各格 `gridSpan` 之和（缺省 1）。
   `nested` 在该表的直接父元素是 `w:tc` 时为 `true`，否则为 `false`。
@@ -1368,6 +1368,10 @@ xlsx / pptx 的 `scope.tables` 不是同一件事：xlsx 仍拒绝；pptx 展开
   `layout` 取 `tblLayout/@type` 原文，没有则为 `null`。
   `colWidths` 按 `tblGrid/gridCol` 文档顺序。每项取 `@w:w`，能解析成整数则写整数，否则为 `null`。没有 `tblGrid` 则为 `[]`。
   `cellMar` 取表级 `tblCellMar`。没有该元素则为 `null`。有则对象字段顺序：`top`、`left`、`bottom`、`right`。各边取 `w:w`，能解析成整数则写整数，否则为 `null`。
+  `borders` 取表级 `tblBorders`。没有该元素则为 `null`。有则对象字段顺序：`top`、`left`、`bottom`、`right`、`insideH`、`insideV`。
+  每边与页面边框同一套：`val`、`sz`、`space`、`color`。缺该边则为 `null`。
+  `left` 先取 `w:left`，没有则取 `w:start`。`right` 先取 `w:right`，没有则取 `w:end`。
+  不要把样式里的边框摊进表节点。`CT_TblBorders` 没有斜线；格斜线仍在格上 `tl2br` / `tr2bl`。
   `rows` 按 `w:tr` 顺序。每行字段顺序：`id`、`index`、`height`、`cells`。
   `height` 取 `trPr/trHeight`。没有则为 `null`。有则对象字段顺序：`h`、`rule`。
   `h` 取 `@w:val`，能解析成整数则写整数，否则为 `null`。`rule` 取 `@w:hRule` 原文，缺则为 `null`。单位 twip。
@@ -2069,6 +2073,7 @@ Word 16.0 另存通常不写该部件；自行写入后 Word 仍能打开。xlsx
 | `tables[].cols` | 可选。正整数数组，规则与 `setTableWidth` 的 `cols` 相同 |
 | `tables[].rowHeights` | 可选。与行数相同。每项字段与 `setTableRowHeight` 相同（不要 `id`） |
 | `tables[].cellMar` | 可选。对象，字段 `top` / `left` / `bottom` / `right`，规则与 `setTableCellMar` 相同 |
+| `tables[].borders` | 可选。对象或 `null`，规则与 `setTableBorders` 相同 |
 | `tables[].cellFormats` | 可选。每项必须有 1 起的 `r` / `c`，其余字段与 `setCellFormat` 相同（不要 `id`） |
 
 | `textBoxes[].text` | 框内第一段可见文本，可空。省略当作 `""` |
@@ -2196,7 +2201,7 @@ create 写出 Transitional 最小包，见 [opc.md](opc.md)。
 全部故事写完后再写 `tocs` / `captions` / `indexes` / `bibliographies`，再写 `groups`。
 `numberings` 与 `styles` 在任何段落绑定之前写入。`sources` 在引文之前写入。不写修订痕迹。
 也不写批注的回复再回复。出现 `password` 仍报 `NotImplemented`。给了 `writePassword` 时按 `setProtection` 写入。
-给了 `tables[].style` / `look` / `pos` / `align` / `indent` / `width` / `cols` / `rowHeights` / `cellMar` / `cellFormats` 时按对应 set op 写入。框内表同样。
+给了 `tables[].style` / `look` / `pos` / `align` / `indent` / `width` / `cols` / `rowHeights` / `cellMar` / `borders` / `cellFormats` 时按对应 set op 写入。框内表同样。
 给了 `document.props` 时按 `setProps` / `setCustomProp` 同一套规则写 core / app / custom；
 省略则仍写空的 `dc:title` 与 `dc:creator` 为 `ooxp`，不写 custom 部件。
 给了 `document.protection` 时按 `setProtection` 同一套规则写 `settings.xml`，窗体保护还可写各节 `w:formProt`。
@@ -3986,6 +3991,28 @@ create 给了 `tables[].rowHeights` 时按行序写入。
 至少给一边。写入表级 `tblCellMar`，`type="dxa"`。四边都删光后去掉空的 `tblCellMar`。
 找不到表报 `IdNotFound`。id 不是表 id 报 `InvalidId`。xlsx / pptx 上发此 op 报 `InvalidField`。
 
+### setTableBorders
+
+表级 `w:tblBorders` 的四边与内外框。不要和格斜线、页面边框、段边框混。不算自动套表样式。
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"setTableBorders"` |
+| `id` | 表 id |
+| `borders` | 必须。对象写入 `tblBorders`，或 `null` 去掉整个 `tblBorders` |
+
+对象字段顺序：`top` / `left` / `bottom` / `right` / `insideH` / `insideV`。
+未点名的边留下。某边 JSON `null` 去掉该边。至少点名一边，否则报 `InvalidField`。
+每边对象与 `setPageBorders` 的边相同：必须有 `val`；可选 `sz` / `space` / `color`。
+`val` 认 ECMA-376 `ST_Border` 全套。不认识的令牌报 `InvalidField`。JSON 不要 `art` 字段。
+`sz` 为非负整数（八分之一磅）。`space` 为非负整数（磅）。`color` 为 `auto` 或六位十六进制。
+写入 `left` / `right`（与现有插表骨架一致），并去掉对应的 `start` / `end`。
+六边都删光后去掉空的 `tblBorders`。
+不要把样式里的边框摊进表节点。格斜线仍走 `setCellFormat`。
+找不到表报 `IdNotFound`。id 不是表 id 报 `InvalidId`。xlsx / pptx 上发此 op 报 `InvalidField`。
+create 给了 `tables[].borders` 时按同一套规则写入。
+示例见 `docs/examples/docx-apply-table-borders.json`。
+
 ### setCellFormat
 
 | 字段 | 含义 |
@@ -4482,7 +4509,7 @@ OLE op 还可以脏 `/word/embeddings/…` 与预览图媒体。`insertInkCanvas
 `deleteSection` 脏主文档，并可能删掉不再被引用的 header/footer 部件。
 正文图片 op、文本框 op、图表 op、SmartArt op、正文表格结构 op、正文修订 op、正文超链接 / 书签 op、正文域 op、正文公式 op、正文拼音 op、正文内容控件 op、正文 `setParaNumbering`、
 正文 `setParaStyle`、正文 `setRunStyle`、正文 `setParaFormat` 与正文 `setRunFormat` 脏主文档与主文档 `.rels`。
-正文 `setTableStyle` / `setTableFloat` / `setTableWidth` / `setTableAlign` / `setTableRowHeight` / `setTableCellMar` / `setCellFormat` 脏主文档。
+正文 `setTableStyle` / `setTableFloat` / `setTableWidth` / `setTableAlign` / `setTableRowHeight` / `setTableCellMar` / `setTableBorders` / `setCellFormat` 脏主文档。
 框内表跟框所在故事走：正文框脏主文档，页眉页脚框脏对应 header/footer 部件。
 页眉页脚上的这些 op 另脏对应 header/footer 部件。
 一次 `ops` 可以混用 `setParaText`、`setHeaderFooterDistance`、`setPageMargin`、`setPageSize`、`setColumns`、`setVerticalAlign`、

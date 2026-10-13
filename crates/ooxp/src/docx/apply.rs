@@ -51,10 +51,10 @@ use super::request::{
     SetPageBordersOp, SetPageMarginOp, SetPageSizeOp, SetParaFormatOp, SetParaNumberingOp,
     SetParaStyleOp, SetParaTextOp, SetPictureSizeOp, SetPictureWrapOp, SetRtlGutterOp, SetRubyOp,
     SetRunFormatOp, SetRunStyleOp, SetShapeFillOp, SetShapeLineOp, SetShapePosOp, SetShapeSizeOp,
-    SetStyleOp, SetTableAlignOp, SetTableCellMarOp, SetTableFloatOp, SetTableRowHeightOp,
-    SetTableStyleOp, SetTableWidthOp, SetTextBoxDirectionOp, SetTextBoxFillOp, SetTextBoxLineOp,
-    SetTextBoxLinkOp, SetTextBoxSizeOp, SetTextBoxTextAnchorOp, SetTextBoxWrapOp, SetTitlePageOp,
-    SetVerticalAlignOp, SplitCellsOp, UngroupOp,
+    SetStyleOp, SetTableAlignOp, SetTableBordersOp, SetTableCellMarOp, SetTableFloatOp,
+    SetTableRowHeightOp, SetTableStyleOp, SetTableWidthOp, SetTextBoxDirectionOp, SetTextBoxFillOp,
+    SetTextBoxLineOp, SetTextBoxLinkOp, SetTextBoxSizeOp, SetTextBoxTextAnchorOp, SetTextBoxWrapOp,
+    SetTitlePageOp, SetVerticalAlignOp, SplitCellsOp, UngroupOp,
 };
 use super::revision;
 use super::ruby;
@@ -717,6 +717,9 @@ pub fn apply(bytes: &[u8], ops: &[DocxOp]) -> Result<Vec<u8>, Error> {
             }
             DocxOp::SetTableCellMar(op) => {
                 apply_set_table_cell_mar(&pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
+            }
+            DocxOp::SetTableBorders(op) => {
+                apply_set_table_borders(&pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
             }
             DocxOp::SetCellFormat(op) => {
                 apply_set_cell_format(&pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i)?;
@@ -2006,6 +2009,22 @@ fn apply_set_table_row_height(
         &op.id,
         i,
     )?;
+    dirty.insert(part_name, ());
+    Ok(())
+}
+
+fn apply_set_table_borders(
+    pkg: &Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[hf::HfPart],
+    op: &SetTableBordersOp,
+    i: usize,
+) -> Result<(), Error> {
+    let part_name = tbl::part_for_story(catalog, doc_part, op.target.story(), &op.id, i)?;
+    let doc = load_part(pkg, docs, &part_name)?;
+    tbl::apply_set_table_borders(&mut doc.root, &op.target, op.borders.as_ref(), &op.id, i)?;
     dirty.insert(part_name, ());
     Ok(())
 }
