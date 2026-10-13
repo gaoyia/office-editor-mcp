@@ -254,8 +254,22 @@ pub(super) fn parse_set_theme_colors(
         obj,
         i,
         &[
-            "op", "id", "dk1", "lt1", "dk2", "lt2", "accent1", "accent2", "accent3", "accent4",
-            "accent5", "accent6", "hlink", "folHlink",
+            "op",
+            "id",
+            "name",
+            "themeName",
+            "dk1",
+            "lt1",
+            "dk2",
+            "lt2",
+            "accent1",
+            "accent2",
+            "accent3",
+            "accent4",
+            "accent5",
+            "accent6",
+            "hlink",
+            "folHlink",
         ],
     )?;
     let id = require_id(obj, i)?;
@@ -266,16 +280,23 @@ pub(super) fn parse_set_theme_colors(
             slots.push(((*slot).to_string(), parse_hex_slot(v, i, slot)?));
         }
     }
-    if slots.is_empty() {
+    let name = super::theme_remain::parse_opt_null_name(obj, i, "name")?;
+    let theme_name = super::theme_remain::parse_opt_null_name(obj, i, "themeName")?;
+    if slots.is_empty() && name.is_none() && theme_name.is_none() {
         return Err(Error::with_path(
             ErrorKind::OpRequiresField {
                 op: "setThemeColors".into(),
-                field: "a color slot".into(),
+                field: "a color slot, name, or themeName".into(),
             },
             format!("ops[{i}]"),
         ));
     }
-    Ok(SetThemeColorsOp { master, slots })
+    Ok(SetThemeColorsOp {
+        master,
+        slots,
+        name,
+        theme_name,
+    })
 }
 
 pub(super) fn parse_theme_face(
@@ -314,12 +335,15 @@ pub(super) fn parse_set_theme_fonts(
         &[
             "op",
             "id",
+            "name",
             "majorLatin",
             "minorLatin",
             "majorEa",
             "minorEa",
             "majorCs",
             "minorCs",
+            "majorScripts",
+            "minorScripts",
         ],
     )?;
     let id = require_id(obj, i)?;
@@ -343,16 +367,25 @@ pub(super) fn parse_set_theme_fonts(
     if let Some(s) = parse_theme_face(obj, i, "minorCs", true)? {
         fonts.push((super::super::theme::FontSlot::MinorCs, s));
     }
-    if fonts.is_empty() {
+    let name = super::theme_remain::parse_opt_null_name(obj, i, "name")?;
+    let major_scripts = super::theme_remain::parse_opt_scripts(obj, i, "majorScripts")?;
+    let minor_scripts = super::theme_remain::parse_opt_scripts(obj, i, "minorScripts")?;
+    if fonts.is_empty() && name.is_none() && major_scripts.is_none() && minor_scripts.is_none() {
         return Err(Error::with_path(
             ErrorKind::OpRequiresField {
                 op: "setThemeFonts".into(),
-                field: "a font slot".into(),
+                field: "a font slot, name, majorScripts, or minorScripts".into(),
             },
             format!("ops[{i}]"),
         ));
     }
-    Ok(SetThemeFontsOp { master, fonts })
+    Ok(SetThemeFontsOp {
+        master,
+        fonts,
+        name,
+        major_scripts,
+        minor_scripts,
+    })
 }
 
 pub(super) fn parse_set_handout_text(

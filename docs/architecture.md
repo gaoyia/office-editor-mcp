@@ -220,7 +220,7 @@ apply 可改被点名形状的 `p:txBody` 可见文字（含备注形状、母�
 也可用 `insertLayout` / `deleteLayout` / `insertPlaceholder` / `deletePlaceholder` / `insertMaster` / `deleteMaster` 插删空白版式、
 带 `p:ph` 的占位符与整份母版（不算母版排版引擎；`insertPlaceholder` 还可写备注母版与讲义）；
 也可用 `insertShape` / `deleteShape` 插删母版 / 版式上没有 `p:ph` 的装饰形（不抄进各页）；
-也可用 `setSlideSize` 只改 `p:sldSz`（不重排形状）；也可用 `setThemeColors` / `setThemeFonts` 改该母版 theme 的配色与字体（不重写 `fmtScheme`）；
+也可用 `setSlideSize` 只改 `p:sldSz`（不重排形状）；也可用 `setThemeColors` / `setThemeFonts` / `setThemeFmt` / `setThemeExtraSchemes` 改该母版 theme（不把 `schemeClr` 展开成 RGB）；
 也可用 `setHandoutText` 改讲义母版页眉、页脚、日期与页码占位符（没有 handoutMaster 则新建最小部件）；
 讲义与备注母版占位符也可绑同一套预设动画；
 也可插删改幻灯片、备注页与幻灯片母版 / 版式上的 `a:hlinkClick` / `a:hlinkHover` / `a:hlinkMouseOver`（URL / 文件 / 跳转到某页，含图、表、图表、SmartArt 与表单元格）；
@@ -241,7 +241,7 @@ apply 可改被点名形状的 `p:txBody` 可见文字（含备注形状、母�
 给了 `slides[].comments` 时复用 `insertComment`。给了 `slides[].anims` 时复用 `insertAnim`（白名单预设，可写 `delay` / `dur` / `repeat` / 声音 / 按段；第一条 `with` / `after` 进片自动播）。
 母版与版式进树（`scope.masters`），含占位符与装饰形。`setSlideLayout` 只换关系，写入用 `insertLayout` / `insertPlaceholder` / `insertMaster` / `insertShape` 等。
 动画效果摘要进树（`scope.timing`），写入用 `insertAnim` / `setAnim` / `deleteAnim` / `moveAnim`。切换进树，用 `setTransition` 改。幻灯片尺寸始终进树，写入用 `setSlideSize`。
-主题配色与字体挂在 `scope.masters` 的 `theme` 上，写入用 `setThemeColors` / `setThemeFonts`。`mc:AlternateContent` 只走第一个 `Choice`。
+主题配色、字体、`fmtScheme` 常用槽与补充色板挂在 `scope.masters` 的 `theme` 上，写入用 `setThemeColors` / `setThemeFonts` / `setThemeFmt` / `setThemeExtraSchemes`。`mc:AlternateContent` 只走第一个 `Choice`。
 
 ### cli
 
@@ -327,7 +327,7 @@ pptx 可改被点名形状的可见文字（含备注形状与母版 / 版式占
 也可用 `setTransition` 写或清除该页、母版或版式上的 `<p:transition>`（含自动进片、方向、切换声音、`split` 的 `orient`、`wheel` 的 `spokes` 与 `p15:prstTrans`），
 也可用 `insertAnim` / `setAnim` / `deleteAnim` / `moveAnim` 按模板增删改该宿主 `<p:timing>` 里的预设效果（不接受整棵时间轴树），也可用 `setSlideLayout` 只改该页 `.rels` 的版式关系，
 也可用 `insertLayout` / `deleteLayout` / `insertPlaceholder` / `deletePlaceholder` / `insertMaster` / `deleteMaster` 插删版式、占位符与母版，
-也可用 `setSlideSize` 只改 `p:sldSz`，也可用 `setThemeColors` / `setThemeFonts` 改该母版 theme，也可用 `setHandoutText` 改或新建讲义母版，
+也可用 `setSlideSize` 只改 `p:sldSz`，也可用 `setThemeColors` / `setThemeFonts` / `setThemeFmt` / `setThemeExtraSchemes` 改该母版 theme，也可用 `setHandoutText` 改或新建讲义母版，
 也可用 `insertField` / `setField` / `deleteField` 插删改幻灯片、备注页与母版 / 版式文本形状里的 `a:fld`（不求值），
 也可用 `insertSlideSection` / `setSlideSectionName` / `deleteSlideSection` / `setSlideSection` 读写 `p14:sectionLst`（删节时页还在；
 把页划进某节时可重排 `sldIdLst`），也可用 `insertCustomShow` / `setCustomShow`
@@ -342,7 +342,7 @@ pptx 可改被点名形状的可见文字（含备注形状与母版 / 版式占
 超链接 op 脏该宿主 XML（幻灯片、notesSlide、slideMaster 或 slideLayout）与该宿主 `.rels`。域 op（`insertField` / `setField` / `deleteField`）只脏该宿主 XML。`setSlideLayout` 只脏该页 `.rels`。
 `insertLayout` / `deleteLayout` / `insertMaster` / `deleteMaster` 还可脏母版 / 版式 / theme 部件、presentation 与内容类型；
 `insertPlaceholder` / `deletePlaceholder` 只脏目标母版或版式 XML。
-`setSlideSize` 只脏 `presentation.xml` 的 `p:sldSz`。`setThemeColors` / `setThemeFonts` 只脏该母版指向的 theme 部件。
+`setSlideSize` 只脏 `presentation.xml` 的 `p:sldSz`。`setThemeColors` / `setThemeFonts` / `setThemeFmt` / `setThemeExtraSchemes` 只脏该母版指向的 theme 部件。
 三种格式都可用 `setProps` / `setCustomProp` / `deleteCustomProp` 改 core / app / custom，脏对应 `docProps` 部件与必要时的根关系、内容类型。保存时只重写脏部件。
 
 ### create

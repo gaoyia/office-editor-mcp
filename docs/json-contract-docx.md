@@ -1678,7 +1678,7 @@ docx 根上始终带 `theme`，不要另给 scope 键。来源是主文档 `.rel
 ECMA-376 §14.2.7 / DrawingML `a:theme`）。
 没有该关系或部件不在包内时为 `null`，不报错。pptx 根上不要带此对象。pptx 的 theme 见 [pptx 响应](json-contract-pptx.md#响应) 的 `masters[].theme`。xlsx 见 [xlsx 响应](json-contract-xlsx.md#主题xlsx)。create 给了 `document.theme` 时写 theme 部件；省略则仍不写。
 
-有部件时字段顺序：`name`、`colors`、`fonts`、`fmt`、`extraSchemes`。配色与字体规则与 pptx 母版 `theme` 相同，不把段落 / run 上的 `themeColor` 展开成 RGB。pptx 母版 `theme` 仍不算 `fmtScheme`，也不带 `extraSchemes`。
+有部件时字段顺序：`name`、`colors`、`fonts`、`fmt`、`extraSchemes`。配色与字体规则与 pptx 母版 `theme` 相同，不把段落 / run 上的 `themeColor` 展开成 RGB。pptx 母版 `theme` 同一套字段，见 [pptx 分册](json-contract-pptx.md#响应)。
 
 `fmt` 取 `a:fmtScheme`。没有该元素时四项都是空数组，`name` 为 `null`。有则字段顺序：`name`、`fills`、`lines`、`effects`、`bgFills`。
 `name` 取 `@name`，缺则为 `null`。四个数组按 `fillStyleLst` / `lnStyleLst` / `effectStyleLst` / `bgFillStyleLst` 的直接子元素顺序。
@@ -1704,7 +1704,7 @@ Word 16.0 另存通常不写该部件；自行写入后 Word 仍能打开。pptx
 `latin` / `ea` / `cs` 取 `a:majorFont` / `a:minorFont` 下对应元素的 `typeface` 原文，没有该元素则为 `null`。
 `majorScripts` / `minorScripts` 取同一组里 `a:font` 的文档顺序。没有则为 `[]`。
 每项字段顺序：`script`、`typeface`，取对应属性原文；缺则为 `null`。
-pptx 母版 `theme.fonts` 不要带这两项。
+pptx 母版 `theme.fonts` 同一套字段。
 
 ## create
 
@@ -4891,7 +4891,6 @@ docx：`id` 不是 `docx:document` 报 `InvalidId`。没有 theme 关系或部�
 `name`、`themeName` 与十二个槽位一个都不给，或某槽位不是六位十六进制，或名字是空串，报 `InvalidField`。
 写入时把被点名槽位的子元素换成 `a:srgbClr`（原先若是 `sysClr` 也换成 `srgbClr`）。未点名槽位留下。
 未点名的 `fmtScheme` 槽留下。不改正文 XML。xlsx 见 [xlsx 分册](json-contract-xlsx.md#setthemecolors)。
-pptx 上给 `name` / `themeName` 报未知字段或 `InvalidField`。
 pptx 见 [pptx 分册](json-contract-pptx.md#setthemecolors)，`id` 为 `master:{n}`。
 示例见 `docs/examples/docx-apply-theme-remain.json`。
 
@@ -4931,8 +4930,8 @@ docx：`id` 不是 `docx:document` 报 `InvalidId`。找不到 theme 部件报 `
 `majorLatin` / `minorLatin` 空串报 `InvalidField`。`ea` / `cs` 允许空串。
 脚本每一项必须是对象，字段只认 `script`、`typeface`。`script` 必须是非空字符串。`typeface` 必须是字符串，允许空串。
 没有 `fontScheme` / `majorFont` / `minorFont` 或对应 `latin` / `ea` / `cs` 则按需补上。只改被点名槽的 `typeface`，其它属性（如 `panose`）留下。
-不改正文 XML。xlsx 见 [xlsx 分册](json-contract-xlsx.md#setthemefonts)。pptx 上给 `name` / `majorScripts` / `minorScripts` 报未知字段或 `InvalidField`。
-pptx 见 [pptx 分册](json-contract-pptx.md#setthemefonts)。
+不改正文 XML。xlsx 见 [xlsx 分册](json-contract-xlsx.md#setthemefonts)。
+pptx 见 [pptx 分册](json-contract-pptx.md#setthemefonts)，`id` 为 `master:{n}`。
 
 ### setThemeFmt
 
@@ -4965,7 +4964,8 @@ pptx 见 [pptx 分册](json-contract-pptx.md#setthemefonts)。
 
 `line` / `fill` / `bgFill` / `name` 至少给一个。写入时只替换被点名槽：线改 `@w`；填充写成带 `schemeClr phClr` 的 `solidFill` 或两停点 `gradFill`。未点名槽留下。
 `index` 超出该列表长度、缺少 `fmtScheme` 或对应列表，报 `InvalidField`。没有 theme 部件报 `IdNotFound`，不新建。
-id 不是 `docx:document` 报 `InvalidId`。xlsx 见 [xlsx 分册](json-contract-xlsx.md#setthemefmt)。pptx 上发此 op 报 `InvalidField`。pptx 上给 `name` 报未知字段或 `InvalidField`。
+id 不是 `docx:document` 报 `InvalidId`。xlsx 见 [xlsx 分册](json-contract-xlsx.md#setthemefmt)。
+pptx 见 [pptx 分册](json-contract-pptx.md#setthemefmt)，`id` 为 `master:{n}`。
 示例见 `docs/examples/docx-apply-theme-fmt.json`。
 
 ### setThemeExtraSchemes
@@ -5004,7 +5004,8 @@ id 不是 `docx:document` 报 `InvalidId`。xlsx 见 [xlsx 分册](json-contract
 未点名的配色槽用 Office 默认十二槽补齐，再把点名槽写成 `a:srgbClr`。每项写出身份映射的 `a:clrMap`（`bg1=lt1` 那一套），不把映射暴露进 JSON。
 docx：`id` 不是 `docx:document` 报 `InvalidId`。没有 theme 部件报 `IdNotFound`，不新建。
 缺 `extraSchemes`、不是数组 / `null`、项不是对象、或槽位不是六位十六进制，报 `InvalidField`。
-xlsx 见 [xlsx 分册](json-contract-xlsx.md#setthemeextraschemes)。pptx 上发此 op 报 `InvalidField`。create 给了 `document.theme.extraSchemes` 时按同一套规则写入。
+xlsx 见 [xlsx 分册](json-contract-xlsx.md#setthemeextraschemes)。
+pptx 见 [pptx 分册](json-contract-pptx.md#setthemeextraschemes)，`id` 为 `master:{n}`。create 给了 `document.theme.extraSchemes` 时按同一套规则写入。
 示例见 `docs/examples/docx-apply-theme-remain.json`。
 
 ### setThemeOverride

@@ -320,7 +320,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
                 "setProtection 的 id 必须是 pptx:presentation".into()
             }
             IdReason::SetThemeNeedsMaster => {
-                "setThemeColors / setThemeFonts 的 id 必须是 master:N".into()
+                "setThemeColors / setThemeFonts / setThemeFmt / setThemeExtraSchemes 的 id 必须是 master:N".into()
             }
             IdReason::SetThemeNeedsDocument => {
                 "setThemeColors / setThemeFonts / setThemeFmt / setThemeOverride 的 id 必须是 docx:document".into()

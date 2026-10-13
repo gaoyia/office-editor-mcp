@@ -1038,12 +1038,15 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   母版 `timing` 的 id 为 `master:{n}/anim:{k}`，`target` 对应该母版形状 id（占位符或装饰形）。
   占位符与装饰形都进名单。
   `name` 取该 slideMaster 的 `p:cSld/@name`，没有则为 `null`。`theme` 取该母版 `.rels` 里 Type 以 `/theme` 结尾的部件。没有该关系或部件不在包内则为 `null`。
-  有则为对象，字段顺序：`name`、`colors`、`fonts`。`theme.name` 取 `a:theme/@name`，没有则为 `null`。
+  有则为对象，字段顺序：`name`、`colors`、`fonts`、`fmt`、`extraSchemes`。`theme.name` 取 `a:theme/@name`，没有则为 `null`。
   `colors` 字段顺序：`name`、`dk1`、`lt1`、`dk2`、`lt2`、`accent1`、`accent2`、`accent3`、`accent4`、`accent5`、`accent6`、`hlink`、`folHlink`。
   `colors.name` 取 `a:clrScheme/@name`，没有则为 `null`。每个槽位：有 `a:srgbClr/@val` 取其原文；否则有 `a:sysClr/@lastClr` 取该原文；再没有则为 `null`。
-  `fonts` 字段顺序：`name`、`majorLatin`、`minorLatin`、`majorEa`、`minorEa`、`majorCs`、`minorCs`。
+  `fonts` 字段顺序：`name`、`majorLatin`、`minorLatin`、`majorEa`、`minorEa`、`majorCs`、`minorCs`、`majorScripts`、`minorScripts`。
   `fonts.name` 取 `a:fontScheme/@name`，没有则为 `null`。
-  其余取 `a:majorFont` / `a:minorFont` 下 `a:latin` / `a:ea` / `a:cs` 的 `typeface` 原文，没有该元素则为 `null`。不算主题排版引擎，不展开 `fmtScheme`。
+  其余取 `a:majorFont` / `a:minorFont` 下 `a:latin` / `a:ea` / `a:cs` 的 `typeface` 原文，没有该元素则为 `null`。
+  `majorScripts` / `minorScripts`、`fmt`、`extraSchemes` 规则与 [docx 分册](json-contract-docx.md#响应) 相同。
+  不算主题排版引擎，不把 `schemeClr` / `phClr` 展开成 RGB。
+  备注母版与讲义母版的独立 theme 副本不进这份 `masters[].theme`。页级 `themeOverride` / `clrMap` 不进树。
   `placeholders` 只收带 `p:nvPr/p:ph` 的 `p:sp`（含组合里的），按文档顺序。
   `shapes` 只收没有 `p:ph` 的 `p:sp`（含组合里的，含无 `txBody`），按文档顺序。不收 `p:pic`、`p:cxnSp`、`p:graphicFrame`。
   每份版式字段顺序：`id`、`index`、`name`、`kind`、`transition`、`animCount`、`placeholders`、`shapes`。
@@ -2126,7 +2129,7 @@ docx / xlsx 上发此 op 报 `InvalidField`。
 
 ### setThemeColors
 
-改该母版 theme 部件的 `a:clrScheme` 槽位。不重写 `fmtScheme`。不把未点名形状上的 `schemeClr` 展开成直接色。
+改该母版 theme 部件的 `a:clrScheme` 槽位，以及配色方案名、theme 根名。不改未点名的 `fmtScheme` 槽。不把未点名形状上的 `schemeClr` 展开成直接色。
 
 ```json
 {
@@ -2137,6 +2140,8 @@ docx / xlsx 上发此 op 报 `InvalidField`。
     {
       "op": "setThemeColors",
       "id": "master:1",
+      "name": "Office",
+      "themeName": "Office Theme",
       "accent1": "FF0000"
     }
   ]
@@ -2147,16 +2152,19 @@ docx / xlsx 上发此 op 报 `InvalidField`。
 | --- | --- |
 | `op` | 必须是 `"setThemeColors"` |
 | `id` | 必须是 `master:{n}` |
-| `dk1` / `lt1` / `dk2` / `lt2` / `accent1`–`accent6` / `hlink` / `folHlink` | 可选。六位 RGB 十六进制。至少给一个 |
+| `name` | 可选。`a:clrScheme/@name`。非空字符串；`null` 去掉该属性 |
+| `themeName` | 可选。`a:theme/@name`。非空字符串；`null` 去掉该属性 |
+| `dk1` / `lt1` / `dk2` / `lt2` / `accent1`–`accent6` / `hlink` / `folHlink` | 可选。六位 RGB 十六进制 |
 
-pptx：`id` 不是母版 id 报 `InvalidId`。找不到该母版报 `IdNotFound`。该母版没有 theme 关系或部件不在包内报 `IdNotFound`。
-除 op 与 id 外一个槽位都不给、或某槽位不是六位十六进制，报 `InvalidField`。写入时把被点名槽位的子元素换成 `a:srgbClr`（原先若是 `sysClr` 也换成 `srgbClr`）。未点名槽位留下。
-不改 `a:clrScheme/@name`、不改 `a:theme/@name`、不改 `fmtScheme`。不改各页 XML。xlsx 见 [xlsx 分册](json-contract-xlsx.md#setthemecolors)。
-docx 见 [docx 分册](json-contract-docx.md#setthemecolors)，`id` 为 `docx:document`。
+pptx：`id` 不是母版 id 报 `InvalidId`。对页 id、`notesMaster`、`handout` 报 `InvalidId`。找不到该母版报 `IdNotFound`。该母版没有 theme 关系或部件不在包内报 `IdNotFound`。
+`name`、`themeName` 与十二个槽位一个都不给，或某槽位不是六位十六进制，或名字是空串，报 `InvalidField`。
+写入时把被点名槽位的子元素换成 `a:srgbClr`（原先若是 `sysClr` 也换成 `srgbClr`）。未点名槽位留下。未点名的 `fmtScheme` 槽留下。不改各页 XML。
+xlsx 见 [xlsx 分册](json-contract-xlsx.md#setthemecolors)。docx 见 [docx 分册](json-contract-docx.md#setthemecolors)。
+示例见 `docs/examples/pptx-apply-theme-remain.json`。
 
 ### setThemeFonts
 
-改该母版 theme 部件的 `a:fontScheme`。不重写 `fmtScheme`。
+改该母版 theme 部件的 `a:fontScheme`。未点名的 `fmtScheme` 槽留下。
 
 ```json
 {
@@ -2167,7 +2175,11 @@ docx 见 [docx 分册](json-contract-docx.md#setthemecolors)，`id` 为 `docx:do
     {
       "op": "setThemeFonts",
       "id": "master:1",
-      "majorLatin": "Arial"
+      "name": "Office",
+      "majorLatin": "Arial",
+      "majorScripts": [
+        { "script": "Jpan", "typeface": "Yu Mincho" }
+      ]
     }
   ]
 }
@@ -2177,12 +2189,89 @@ docx 见 [docx 分册](json-contract-docx.md#setthemecolors)，`id` 为 `docx:do
 | --- | --- |
 | `op` | 必须是 `"setThemeFonts"` |
 | `id` | 必须是 `master:{n}` |
-| `majorLatin` / `minorLatin` / `majorEa` / `minorEa` / `majorCs` / `minorCs` | 可选。`typeface` 原文。至少给一个 |
+| `name` | 可选。`a:fontScheme/@name`。非空字符串；`null` 去掉该属性 |
+| `majorLatin` / `minorLatin` / `majorEa` / `minorEa` / `majorCs` / `minorCs` | 可选。`typeface` 原文 |
+| `majorScripts` / `minorScripts` | 可选。数组，整份替换对应组里的 `a:font`。`[]` 或 `null` 清掉全部 `a:font`。不改 `latin` / `ea` / `cs` |
 
-pptx：`id` 不是母版 id 报 `InvalidId`。找不到该母版或 theme 部件报 `IdNotFound`。一个字体字段都不给报 `InvalidField`。
+pptx：`id` 不是母版 id 报 `InvalidId`。对页 id、`notesMaster`、`handout` 报 `InvalidId`。找不到该母版或 theme 部件报 `IdNotFound`。
+`name`、六个字体槽与两份脚本列表一个都不给报 `InvalidField`。
 `majorLatin` / `minorLatin` 空串报 `InvalidField`。`ea` / `cs` 允许空串。
-没有 `fontScheme` / `majorFont` / `minorFont` 或对应 `latin` / `ea` / `cs` 则按需补上。不改 `a:fontScheme/@name`。不改各页 XML。
+脚本每一项必须是对象，字段只认 `script`、`typeface`。`script` 必须是非空字符串。`typeface` 必须是字符串，允许空串。
+没有 `fontScheme` / `majorFont` / `minorFont` 或对应 `latin` / `ea` / `cs` 则按需补上。只改被点名槽的 `typeface`，其它属性（如 `panose`）留下。不改各页 XML。
 xlsx 见 [xlsx 分册](json-contract-xlsx.md#setthemefonts)。docx 见 [docx 分册](json-contract-docx.md#setthemefonts)。
+
+### setThemeFmt
+
+改该母版 theme 部件 `a:fmtScheme` 的常用槽。不算主题排版引擎，不把 `phClr` 展开成 RGB。
+
+```json
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "C:\\data\\deck.pptx",
+  "ops": [
+    {
+      "op": "setThemeFmt",
+      "id": "master:1",
+      "line": { "index": 0, "w": 38100 },
+      "fill": { "index": 0, "kind": "solid" }
+    }
+  ]
+}
+```
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"setThemeFmt"` |
+| `id` | 必须是 `master:{n}` |
+| `line` | 可选。对象须有 `index`（0、1 或 2）与 `w`（非负整数，EMU） |
+| `fill` | 可选。对象须有 `index`（0、1 或 2）与 `kind`（`solid` 或 `grad`） |
+| `bgFill` | 可选。同 `fill`，改 `bgFillStyleLst` |
+| `name` | 可选。`a:fmtScheme/@name`。非空字符串；`null` 去掉该属性 |
+
+`line` / `fill` / `bgFill` / `name` 至少给一个。写入时只替换被点名槽：线改 `@w`；填充写成带 `schemeClr phClr` 的 `solidFill` 或两停点 `gradFill`。未点名槽留下。
+`index` 超出该列表长度、缺少 `fmtScheme` 或对应列表，报 `InvalidField`。没有 theme 部件报 `IdNotFound`，不新建。
+id 不是母版 id 报 `InvalidId`。对页 id、`notesMaster`、`handout` 报 `InvalidId`。
+xlsx 见 [xlsx 分册](json-contract-xlsx.md#setthemefmt)。docx 见 [docx 分册](json-contract-docx.md#setthemefmt)。
+示例见 `docs/examples/pptx-apply-theme-remain.json`。
+
+### setThemeExtraSchemes
+
+整份替换该母版 theme 部件的 `a:extraClrSchemeLst`。不算主题排版引擎。
+
+```json
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "C:\\data\\deck.pptx",
+  "ops": [
+    {
+      "op": "setThemeExtraSchemes",
+      "id": "master:1",
+      "extraSchemes": [
+        {
+          "name": "Extra",
+          "colors": { "accent1": "0F6FC6" }
+        }
+      ]
+    }
+  ]
+}
+```
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"setThemeExtraSchemes"` |
+| `id` | 必须是 `master:{n}` |
+| `extraSchemes` | 必须。数组或 `null` |
+
+`[]` 或 `null` 去掉 `extraClrSchemeLst`。否则按数组整份重写该列表。
+每一项必须是对象，字段只认 `name`、`colors`。`name` 为非空字符串或 `null`（`null` 或省略则不写 `@name`）。
+`colors` 规则与主 `clrScheme` 相同。项上 `name` 与 `colors.name` 都对应该项 `a:clrScheme/@name`；只给一个即可，两个都给则必须相同，否则报 `InvalidField`。
+未点名的配色槽用 Office 默认十二槽补齐，再把点名槽写成 `a:srgbClr`。每项写出身份映射的 `a:clrMap`（`bg1=lt1` 那一套），不把映射暴露进 JSON。
+pptx：`id` 不是母版 id 报 `InvalidId`。对页 id、`notesMaster`、`handout` 报 `InvalidId`。没有 theme 部件报 `IdNotFound`，不新建。
+缺 `extraSchemes`、不是数组 / `null`、项不是对象、或槽位不是六位十六进制，报 `InvalidField`。
+xlsx 见 [xlsx 分册](json-contract-xlsx.md#setthemeextraschemes)。docx 见 [docx 分册](json-contract-docx.md#setthemeextraschemes)。
 
 ### setChartPos
 
@@ -3428,7 +3517,8 @@ presentation 关系、新页或被删页及其 `.rels`、内容类型，
 往备注母版 / 讲义插且还没有该部件时，还可脏 `presentation.xml` 及其 `.rels`、新建的 notesMaster / handoutMaster 及其 `.rels`、内容类型与 theme 副本。
 `insertMaster` 脏 `presentation.xml` 及其 `.rels`、新 slideMaster / slideLayout / theme 及其 `.rels`、内容类型。
 `deleteMaster` 脏 `presentation.xml` 及其 `.rels`、被删母版及其版式与仅被它引用的 theme、内容类型。
-`setSlideSize` 只脏 `presentation.xml` 的 `p:sldSz`。`setThemeColors` / `setThemeFonts` 只脏该母版指向的 theme 部件。
+`setSlideSize` 只脏 `presentation.xml` 的 `p:sldSz`。
+`setThemeColors` / `setThemeFonts` / `setThemeFmt` / `setThemeExtraSchemes` 只脏该母版指向的 theme 部件，不新建 theme。
 `setHandoutText` 可脏 handoutMaster 及其 `.rels`、必要时 `presentation.xml` 及其 `.rels` 与 `[Content_Types].xml`，以及新建 handoutMaster 时复制的 theme 部件。
 超链接 op 脏该页幻灯片 XML 与该页 `.rels`（新建或删除 hyperlink / slide 关系）。域 op（`insertField` / `setField` / `deleteField`）只脏该页幻灯片 XML。
 媒体 op 还可脏该页 `.rels`、`[Content_Types].xml`，以及新建或被删的 `/ppt/media/mediaN.*` 与海报 `/ppt/media/imageN.*`。
@@ -3437,7 +3527,7 @@ presentation 关系、新页或被删页及其 `.rels`、内容类型，
 一次 `ops` 可以混用 `setShapeText`、`setShapeFormat`、形状管理 op、表格 op、`setNotesText`、`setHandoutText`、批注 op、超链接 op、域 op（`insertField`、`setField`、
 `deleteField`）、图片 op、媒体 op（含 `setMedia`）、图表 op、SmartArt op、幻灯片管理 op（含 `setTransition`、`setSlideLayout`）、母版写入 op（`insertLayout`、
 `deleteLayout`、`insertPlaceholder`、`deletePlaceholder`、`insertMaster`、`deleteMaster`）、主题与尺寸 op（`setSlideSize`、
-`setThemeColors`、`setThemeFonts`）、动画 op（`insertAnim`、`setAnim`、`deleteAnim`、`moveAnim`）、幻灯片节 op、自定义放映 op（`insertCustomShow`、`setCustomShow`、
+`setThemeColors`、`setThemeFonts`、`setThemeFmt`、`setThemeExtraSchemes`）、动画 op（`insertAnim`、`setAnim`、`deleteAnim`、`moveAnim`）、幻灯片节 op、自定义放映 op（`insertCustomShow`、`setCustomShow`、
 `deleteCustomShow`）、OLE op（`insertOle`、`deleteOle`）、Zoom op（`insertZoom`、`setZoom`、`deleteZoom`）、公式几何 op（`setMathSize`、`setMathPos`）、`setShowPr`、
 `setProtection` 与 `setProps` / `setCustomProp` / `deleteCustomProp`。
 文件属性 op 还可以脏 `/docProps/core.xml`、`/docProps/app.xml`、`/docProps/custom.xml`、根 `.rels` 与 `[Content_Types].xml`。

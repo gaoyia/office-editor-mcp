@@ -45,10 +45,10 @@ pptx 的 `scope.comments` 与批注 op 认该页 2018 线程化批注（`p188:cm
 pptx 的 `scope.timing` 列出该页 `<p:timing>` 效果摘要（含 `delay` / `dur` / `repeat` / 声音名 / 段落 / 点对象）；`scope.notes` 与 `scope.timing` 同开时备注对象带 `timing`；`scope.masters` 与 `scope.timing` 同开时母版 / 版式带 `timing`；`scope.notesMaster` / `scope.handout` 与 `scope.timing` 同开时备注母版 / 讲义带 `timing`。
 apply 用 `insertAnim` / `setAnim` / `deleteAnim` / `moveAnim` 按模板增删改预设效果，可写 delay、dur、repeat、效果声音与按段；第一条 `with` / `after` 进片自动播。不接受整棵时间轴树。
 `setTransition` 还可写自动进片、方向、`p15:prstTrans`、切换声音、`split` 的 `orient`、`wheel` 的 `spokes`，以及母版 / 版式上的切换。
-pptx 的 `scope.masters` 列出幻灯片母版与版式、占位符与装饰形（含该母版 theme 的配色与字体），根上始终带 `slideSize`，apply 可用 `setSlideLayout` 换页的版式关系，
+pptx 的 `scope.masters` 列出幻灯片母版与版式、占位符与装饰形（含该母版 theme 的配色、字体、`fmtScheme` 常用槽与补充色板），根上始终带 `slideSize`，apply 可用 `setSlideLayout` 换页的版式关系，
 也可用 `insertLayout` / `deleteLayout` / `insertPlaceholder` / `deletePlaceholder` / `insertMaster` / `deleteMaster` 插删版式、占位符与母版，
 也可用 `insertShape` / `deleteShape` 插删母版 / 版式上没有 `p:ph` 的装饰形，
-也可用 `setSlideSize` / `setThemeColors` / `setThemeFonts` 改画布尺寸与 theme 配色 / 字体，
+也可用 `setSlideSize` / `setThemeColors` / `setThemeFonts` / `setThemeFmt` / `setThemeExtraSchemes` 改画布尺寸与该母版 theme，
 也可用 `setShapeText` / `setShapeFormat` / `setShapePos` / `setShapeSize` 改占位符与装饰形。
 装饰形还可用 `setShapeGeom`。
 pptx 的 `scope.handout` 列出讲义母版页眉页脚槽位与占位符，apply 用 `setHandoutText` 改四个槽位的字，也可用 `insertPlaceholder` / `deletePlaceholder` / `setShapeText` 改讲义占位符。
@@ -293,7 +293,7 @@ pptx 认 `setShapeText`、`setShapeFormat`、形状管理 op（`insertShape`、`
 `setSmartArtColors`、`setSmartArtStyle`、`setSmartArtLayout`；
 不含 `setSmartArtWrap`）、以及幻灯片管理 op（`insertSlide`、`deleteSlide`、`moveSlide`、`setSlideHidden`、`setTransition`、
 `setSlideLayout`）、以及母版写入 op（`insertLayout`、`deleteLayout`、`insertPlaceholder`、`deletePlaceholder`、`insertMaster`、
-`deleteMaster`）、以及主题与尺寸 op（`setSlideSize`、`setThemeColors`、`setThemeFonts`）、以及动画 op（`insertAnim`、`setAnim`、`deleteAnim`、`moveAnim`）、
+`deleteMaster`）、以及主题与尺寸 op（`setSlideSize`、`setThemeColors`、`setThemeFonts`、`setThemeFmt`、`setThemeExtraSchemes`）、以及动画 op（`insertAnim`、`setAnim`、`deleteAnim`、`moveAnim`）、
 以及 `setHandoutText`、以及超链接 op（`insertHyperlink`、`setHyperlink`、`deleteHyperlink`）、以及域 op（`insertField`、`setField`、
 `deleteField`）、以及媒体 op（`insertVideo`、`insertAudio`、`deleteMedia`、`setMedia`）、以及幻灯片节 op（`insertSlideSection`、`setSlideSectionName`、
 `deleteSlideSection`、`setSlideSection`）、以及自定义放映 op（`insertCustomShow`、`setCustomShow`、`deleteCustomShow`）、
@@ -323,7 +323,7 @@ pptx 认 `setShapeText`、`setShapeFormat`、形状管理 op（`insertShape`、`
 对 docx / xlsx 发 `setPicturePos` / `setChartPos` / `setSmartArtPos` / `setModel3dPos` / `setMathPos` / `setNotesText` / `insertSlide` / `deleteSlide`
  / `moveSlide` / `setSlideHidden` / `setTransition` / `insertAnim` / `setAnim` / `deleteAnim` / `moveAnim` / `setSlideLayout` / `insertLayout`
  / `deleteLayout` / `insertPlaceholder` / `deletePlaceholder` / `insertMaster` / `deleteMaster` / `setSlideSize`
- / `setThemeColors` / `setThemeFonts` / `setHandoutText` / `setShapePos` / `setShapeSize` / `setShapeFill`
+ / `setHandoutText` / `setShapePos` / `setShapeSize` / `setShapeFill`
  / `setShapeLine` / `setShapeGeom` / `setConnector` / `setTableCellText` / `setTableCellFill` / `setTableCellBorders` / `setTableCellInset` / `setTablePos` / `setTableSize` / `setTableColWidths` / `setTableTrHeight` / `insertVideo` / `insertAudio`
  / `deleteMedia` / `setMedia` / `insertSlideSection` / `setSlideSectionName` / `deleteSlideSection` / `setSlideSection`
  / `insertCustomShow` / `setCustomShow` / `deleteCustomShow` / `insertZoom` / `setZoom` / `deleteZoom`）报 `InvalidField`。

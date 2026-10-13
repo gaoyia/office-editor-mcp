@@ -5,7 +5,7 @@
 检查前用 create 或 apply 在本机生成文件，不要用改过扩展名的 zip 目录冒充。
 本机若 `PowerPoint.Application` 被 WPS 抢走，直接启动 `POWERPNT.EXE` 再挂 COM，不要走被抢的 ProgID。Office 16 的对象模型在 `mdiClass` 上。
 
-C、I、A、Pp、Pvg、Pem、P3d、Pom、Pc、Psa、Pn、Pcm、Pm、Ps、Tf、Tfl、Pln、Sg、Pt、Pg、Ptb、Ptm、Tn、Tr、Td、Mt、Am、Aw、Mm、Mw、Md、Ts、Ho、Nh、Nm、Phl、Phr、Phx、Pcip、Pmd、Pmg、Psc、Cs、Po、Cr、Cq、Ck、Pz、Pzr、Pzg、Pw、Pph、
+C、I、A、Pp、Pvg、Pem、P3d、Pom、Pc、Psa、Pn、Pcm、Pm、Ps、Tf、Tfl、Pln、Sg、Pt、Pg、Ptb、Ptm、Tn、Tr、Td、Mt、Am、Aw、Mm、Mw、Md、Ts、Tfm、Ho、Nh、Nm、Phl、Phr、Phx、Pcip、Pmd、Pmg、Psc、Cs、Po、Cr、Cq、Ck、Pz、Pzr、Pzg、Pw、Pph、
 Pf、Pcg、Pcx 各组由 `manual-check/office/cases/pptx-*.ps1` 自动判定，
 跑 `pwsh -File manual-check\office\run.ps1 -Case 'pptx-*'` 即可复现。O1 已放弃，与 xlsx / docx 相同。
 
@@ -52,6 +52,7 @@ Ps1–Ps5、Sg1–Sg5、Pt1–Pt6、Tn1–Tn5、Am1–Am5、Mm1–Mm5、Ho1–Ho
 2026-10-14 补跑 `pptx-zoom-geom.ps1`，Pzg1–Pzg5 通过。无 Repair。COM Type=-2 `Width` / `Height` 144×72 磅。`x=914400` `y=457200`。备注 Zoom 可改尺寸，根上 `zoomCount` 仍为 0。`setZoom` 改目标不改几何。
 2026-10-14 补跑 `pptx-table-cell-fill.ps1`，Ptb1–Ptb5 通过。无 Repair。create 格 `fill=FF0000`，COM RGB=255；`setTableCellFill` 后 `fill=0000FF`，COM RGB=16711680。六边 inspect 对上。`fill: null` 与某边 JSON `null` 后 inspect 为 `null`。
 2026-10-14 补跑 `pptx-table-cell-mar.ps1`，Ptm1–Ptm5 通过。无 Repair。create `cellMar.top=12700` `left=25400`，COM `MarginTop=1` `MarginLeft=2` 磅。四边 JSON `null` 后 `cellMar` 为 `null`。
+2026-10-14 补跑 `pptx-theme-remain.ps1`，Tfm1–Tfm5 通过。无 Repair。`theme` 字段 `name` / `colors` / `fonts` / `fmt` / `extraSchemes`。`setThemeFmt` 线宽 38100。方案名与 `majorScripts` 对上。`extraSchemes` 写一项后可清成 `[]`。
 
 - **C1** ✅
   - PowerPoint 16.0 能打开 `manual-check/office/out/pptx-create.pptx`，标题栏无 Repair
@@ -331,6 +332,13 @@ Ps1–Ps5、Sg1–Sg5、Pt1–Pt6、Tn1–Tn5、Am1–Am5、Mm1–Mm5、Ho1–Ho
   - `setThemeColors` `accent1=FF0000` 对上
   - `setThemeFonts` `majorLatin=Arial` 对上
   - 页 id 得 `InvalidId`，`cx` 越界 / `type=other` / xlsx / docx 得 `InvalidField`，未写文件
+- **Tfm1–Tfm5** ✅
+  - PowerPoint 16.0：`pptx-theme-remain.ps1`，5 PASS / 0 FAIL
+  - `theme` 字段顺序 `name` / `colors` / `fonts` / `fmt` / `extraSchemes`
+  - `setThemeFmt` `lines[0].w=38100`、`fills[0].kind=solid`，无 Repair
+  - `themeName=Custom Theme`、`colors.name=Custom`、`fonts.name=CustomFonts`、`majorScripts[0].script=Jpan`
+  - `extraSchemes[0].name=Extra` `accent1=0F6FC6`，`null` 后为 `[]`
+  - 页 id / `notesMaster` 得 `InvalidId`，空 `setThemeFmt` 与 `setThemeOverride` 得 `InvalidField`，未写文件
 - **Ho1–Ho5** ✅
   - PowerPoint 16.0：`pptx-handout.ps1`，5 PASS / 0 FAIL
   - 无 `handout` 时只有 `hasHandout`
@@ -1516,6 +1524,40 @@ inspect 根上始终带 `slideSize`。`scope.masters` 时每份母版带 `theme`
   - 通过标准：对页 id 发 `setSlideSize` 得 `InvalidId`
   - `cx` 越界或 `type=other` 得 `InvalidField`
   - xlsx / docx 发 `setSlideSize` 得 `InvalidField`
+  - 均未写文件
+
+## 主题剩余
+
+inspect `masters[].theme` 带 `fmt`、`extraSchemes` 与脚本字体。apply 用 `setThemeFmt` / `setThemeExtraSchemes`，并为 `setThemeColors` / `setThemeFonts` 写方案名与脚本列表。
+不算主题排版引擎，不把 `schemeClr` 展开成 RGB。不改备注母版 / 讲义母版 theme，不写页级 `themeOverride`。
+脚本：`manual-check/office/cases/pptx-theme-remain.ps1`。编号用 Tfm。不要和 Ts、Tf、Tfl、Fm 撞。
+
+- **Tfm1**
+  - 检查：inspect
+  - 通过标准：create 产物 `scope.masters` 时 `theme` 字段顺序为 `name`、`colors`、`fonts`、`fmt`、`extraSchemes`
+  - `fonts` 含 `majorScripts` / `minorScripts`
+  - `fmt` 含 `name` / `fills` / `lines` / `effects` / `bgFills`
+  - `extraSchemes` 为 `[]`
+- **Tfm2**
+  - 检查：`setThemeFmt`
+  - 通过标准：`line.index=0` `w=38100`、`fill.index=0` `kind=solid` 后 inspect `fmt.lines[0].w` 为 38100、`fmt.fills[0].kind` 为 `solid`
+  - PowerPoint 16.0 打开无 Repair
+- **Tfm3**
+  - 检查：方案名与脚本字体
+  - 通过标准：`setThemeColors` `name=Custom` `themeName=Custom Theme` 后树上对得上
+  - `setThemeFonts` `name=CustomFonts` 与 `majorScripts` 一项后树上对得上
+  - 无 Repair
+- **Tfm4**
+  - 检查：补充色板
+  - 通过标准：`setThemeExtraSchemes` 写一项 `name=Extra` `accent1=0F6FC6` 后树上对得上
+  - `extraSchemes: null` 后为 `[]`
+  - 无 Repair
+- **Tfm5**
+  - 检查：拒错
+  - 通过标准：对页 id 发 `setThemeFmt` 得 `InvalidId`
+  - 只给 `op` 与 `id` 得 `InvalidField`
+  - 对 `notesMaster` 发 `setThemeColors` 得 `InvalidId`
+  - 发 `setThemeOverride` 得 `InvalidField`
   - 均未写文件
 
 ## 讲义

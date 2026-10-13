@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "C:\\data\\deck.pptx",
+  "ops": [
+    {
+      "op": "setThemeColors",
+      "id": "master:1",
+      "name": "Custom",
+      "themeName": "Custom Theme",
+      "accent1": "FF0000"
+    },
+    {
+      "op": "setThemeFonts",
+      "id": "master:1",
+      "name": "CustomFonts",
+      "majorScripts": [
+        { "script": "Jpan", "typeface": "Yu Mincho" }
+      ]
+    },
+    {
+      "op": "setThemeFmt",
+      "id": "master:1",
+      "name": "CustomFmt",
+      "line": { "index": 0, "w": 38100 },
+      "fill": { "index": 0, "kind": "solid" }
+    },
+    {
+      "op": "setThemeExtraSchemes",
+      "id": "master:1",
+      "extraSchemes": [
+        {
+          "name": "Extra",
+          "colors": { "accent1": "0F6FC6" }
+        }
+      ]
+    }
+  ]
+}

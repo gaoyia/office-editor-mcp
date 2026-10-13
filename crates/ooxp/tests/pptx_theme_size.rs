@@ -1,4 +1,4 @@
-//! 主题与幻灯片尺寸：inspect `slideSize` / `theme`，以及 `setSlideSize` / `setThemeColors` / `setThemeFonts`。
+//! 主题与幻灯片尺寸：inspect `slideSize` / `theme`，以及 `setSlideSize` / `setThemeColors` / `setThemeFonts` / `setThemeFmt` / `setThemeExtraSchemes`。
 
 use std::io::{Cursor, Read, Write};
 use std::path::{Path, PathBuf};
@@ -145,7 +145,10 @@ fn inspect_slide_size_and_theme_keys() {
         ]
     );
     let theme = &m["theme"];
-    assert_eq!(object_keys(theme), ["name", "colors", "fonts"]);
+    assert_eq!(
+        object_keys(theme),
+        ["name", "colors", "fonts", "fmt", "extraSchemes"]
+    );
     assert_eq!(theme["name"], "Office Theme");
     assert_eq!(
         object_keys(&theme["colors"]),
@@ -167,13 +170,22 @@ fn inspect_slide_size_and_theme_keys() {
             "majorEa",
             "minorEa",
             "majorCs",
-            "minorCs"
+            "minorCs",
+            "majorScripts",
+            "minorScripts"
         ]
     );
     assert_eq!(theme["fonts"]["name"], "Office");
     assert_eq!(theme["fonts"]["majorLatin"], "Calibri Light");
     assert_eq!(theme["fonts"]["minorLatin"], "Calibri");
     assert_eq!(theme["fonts"]["majorEa"], "");
+    assert_eq!(theme["fonts"]["majorScripts"], json!([]));
+    assert_eq!(theme["fonts"]["minorScripts"], json!([]));
+    assert_eq!(
+        object_keys(&theme["fmt"]),
+        ["name", "fills", "lines", "effects", "bgFills"]
+    );
+    assert_eq!(theme["extraSchemes"], json!([]));
 }
 
 #[test]
@@ -470,5 +482,138 @@ fn reject_bad_ids_range_and_other_formats() {
     )
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidId);
+    assert!(!out.exists());
+}
+
+#[test]
+fn set_theme_fmt_line_and_fill() {
+    let src = create_deck("fmt");
+    let out = tmp("fmt-out");
+    apply(
+        &src,
+        &out,
+        json!([{
+            "op": "setThemeFmt",
+            "id": "master:1",
+            "line": { "index": 0, "w": 38100 },
+            "fill": { "index": 0, "kind": "solid" }
+        }]),
+    )
+    .unwrap();
+    let tree = inspect_scope(&out, Some(json!({ "masters": true })));
+    assert_eq!(tree["masters"][0]["theme"]["fmt"]["lines"][0]["w"], 38100);
+    assert_eq!(
+        tree["masters"][0]["theme"]["fmt"]["fills"][0]["kind"],
+        "solid"
+    );
+}
+
+#[test]
+fn set_theme_names_scripts_and_extra() {
+    let src = create_deck("remain");
+    let out = tmp("remain-out");
+    apply(
+        &src,
+        &out,
+        json!([
+            {
+                "op": "setThemeColors",
+                "id": "master:1",
+                "name": "Custom",
+                "themeName": "Custom Theme"
+            },
+            {
+                "op": "setThemeFonts",
+                "id": "master:1",
+                "name": "CustomFonts",
+                "majorScripts": [{ "script": "Jpan", "typeface": "Yu Mincho" }]
+            },
+            {
+                "op": "setThemeFmt",
+                "id": "master:1",
+                "name": "CustomFmt"
+            },
+            {
+                "op": "setThemeExtraSchemes",
+                "id": "master:1",
+                "extraSchemes": [{
+                    "name": "Extra",
+                    "colors": { "accent1": "0F6FC6" }
+                }]
+            }
+        ]),
+    )
+    .unwrap();
+    let tree = inspect_scope(&out, Some(json!({ "masters": true })));
+    let theme = &tree["masters"][0]["theme"];
+    assert_eq!(theme["name"], "Custom Theme");
+    assert_eq!(theme["colors"]["name"], "Custom");
+    assert_eq!(theme["fonts"]["name"], "CustomFonts");
+    assert_eq!(theme["fmt"]["name"], "CustomFmt");
+    assert_eq!(theme["fonts"]["majorScripts"][0]["script"], "Jpan");
+    assert_eq!(theme["extraSchemes"][0]["name"], "Extra");
+    assert_eq!(theme["extraSchemes"][0]["colors"]["accent1"], "0F6FC6");
+    let xml = part(&out, "ppt/theme/theme1.xml");
+    assert!(xml.contains(r#"name="Custom Theme""#));
+    assert!(xml.contains(r#"<a:font script="Jpan" typeface="Yu Mincho"/>"#));
+    let cleared = tmp("remain-clear");
+    apply(
+        &out,
+        &cleared,
+        json!([
+            { "op": "setThemeFonts", "id": "master:1", "majorScripts": [] },
+            { "op": "setThemeExtraSchemes", "id": "master:1", "extraSchemes": null }
+        ]),
+    )
+    .unwrap();
+    let tree = inspect_scope(&cleared, Some(json!({ "masters": true })));
+    assert_eq!(
+        tree["masters"][0]["theme"]["fonts"]["majorScripts"],
+        json!([])
+    );
+    assert_eq!(tree["masters"][0]["theme"]["extraSchemes"], json!([]));
+}
+
+#[test]
+fn reject_theme_remain_ids_and_empty() {
+    let src = create_deck("remain-bad");
+    let out = tmp("fmt-slide");
+    let err = apply(
+        &src,
+        &out,
+        json!([{ "op": "setThemeFmt", "id": "slide:1", "name": "X" }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidId);
+    assert!(!out.exists());
+
+    let out = tmp("fmt-empty");
+    let err = apply(
+        &src,
+        &out,
+        json!([{ "op": "setThemeFmt", "id": "master:1" }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+    assert!(!out.exists());
+
+    let out = tmp("notes-theme");
+    let err = apply(
+        &src,
+        &out,
+        json!([{ "op": "setThemeColors", "id": "notesMaster", "accent1": "FF0000" }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidId);
+    assert!(!out.exists());
+
+    let out = tmp("override");
+    let err = apply(
+        &src,
+        &out,
+        json!([{ "op": "setThemeOverride", "id": "master:1", "accent1": "FF0000" }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
     assert!(!out.exists());
 }

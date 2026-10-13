@@ -2946,6 +2946,8 @@
       "properties": {
         "op": { "const": "setThemeColors" },
         "id": { "type": "string", "minLength": 1 },
+        "name": { "type": ["string", "null"] },
+        "themeName": { "type": ["string", "null"] },
         "dk1": { "type": "string", "minLength": 1 },
         "lt1": { "type": "string", "minLength": 1 },
         "dk2": { "type": "string", "minLength": 1 },
@@ -2967,12 +2969,25 @@
       "properties": {
         "op": { "const": "setThemeFonts" },
         "id": { "type": "string", "minLength": 1 },
+        "name": { "type": ["string", "null"] },
         "majorLatin": { "type": "string" },
         "minorLatin": { "type": "string" },
         "majorEa": { "type": "string" },
         "minorEa": { "type": "string" },
         "majorCs": { "type": "string" },
-        "minorCs": { "type": "string" }
+        "minorCs": { "type": "string" },
+        "majorScripts": {
+          "anyOf": [
+            { "type": "array", "items": { "$ref": "docx.schema.json#/$defs/themeScriptFont" } },
+            { "type": "null" }
+          ]
+        },
+        "minorScripts": {
+          "anyOf": [
+            { "type": "array", "items": { "$ref": "docx.schema.json#/$defs/themeScriptFont" } },
+            { "type": "null" }
+          ]
+        }
       }
     },
     "setHandoutTextOp": {

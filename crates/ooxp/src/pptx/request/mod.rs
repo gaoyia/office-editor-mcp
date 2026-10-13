@@ -20,6 +20,8 @@ pub(crate) use timing::parse_create_anim;
 use timing::*;
 mod master;
 use master::*;
+mod theme_remain;
+use theme_remain::*;
 mod link;
 use link::*;
 mod comments;
@@ -345,6 +347,10 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<PptxOp>, Error> {
             "setSlideSize" => PptxOp::SetSlideSize(parse_set_slide_size(obj, i)?),
             "setThemeColors" => PptxOp::SetThemeColors(parse_set_theme_colors(obj, i)?),
             "setThemeFonts" => PptxOp::SetThemeFonts(parse_set_theme_fonts(obj, i)?),
+            "setThemeFmt" => PptxOp::SetThemeFmt(parse_set_theme_fmt(obj, i)?),
+            "setThemeExtraSchemes" => {
+                PptxOp::SetThemeExtraSchemes(parse_set_theme_extra_schemes(obj, i)?)
+            }
             "setHandoutText" => PptxOp::SetHandoutText(parse_set_handout_text(obj, i)?),
             "insertHyperlink" => PptxOp::InsertHyperlink(parse_insert_hyperlink(obj, i)?),
             "setHyperlink" => PptxOp::SetHyperlink(parse_set_hyperlink(obj, i)?),
@@ -489,8 +495,6 @@ fn is_foreign_op(op_name: &str) -> bool {
             | "insertEditRange"
             | "deleteEditRange"
             | "setBibliographyStyle"
-            | "setThemeFmt"
-            | "setThemeExtraSchemes"
             | "setThemeOverride"
             | "insertContentControl"
             | "setContentControl"

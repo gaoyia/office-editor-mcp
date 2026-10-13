@@ -1,6 +1,6 @@
 //! DrawingML theme 部件：`clrScheme` / `fontScheme` / `fmtScheme` 的 inspect 与写入。
 //! 不算主题排版引擎，不把 `phClr` 展开成 RGB。
-//! `inspect` 仍只报 `name` / `colors` / `fonts`，pptx 母版不要带 `fmt`。
+//! `inspect` 只报 `name` / `colors` / `fonts`；母版 / 工作簿 / 主文档用 `inspect_full`。
 
 use serde_json::{json, Map, Value};
 
@@ -79,7 +79,7 @@ pub fn inspect(root: &Element) -> Value {
     })
 }
 
-/// 工作簿 / 主文档 theme：在 `inspect` 之上补 `fmt`、`extraSchemes` 与脚本字体。
+/// 工作簿 / 主文档 / 幻灯片母版 theme：在 `inspect` 之上补 `fmt`、`extraSchemes` 与脚本字体。
 pub fn inspect_full(root: &Element) -> Value {
     let mut v = inspect(root);
     if let Value::Object(m) = &mut v {

@@ -355,7 +355,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
                 "setProtection id must be pptx:presentation".into()
             }
             IdReason::SetThemeNeedsMaster => {
-                "setThemeColors / setThemeFonts id must be master:N".into()
+                "setThemeColors / setThemeFonts / setThemeFmt / setThemeExtraSchemes id must be master:N".into()
             }
             IdReason::SetThemeNeedsDocument => {
                 "setThemeColors / setThemeFonts / setThemeFmt / setThemeOverride id must be docx:document".into()

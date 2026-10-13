@@ -1,5 +1,5 @@
-//! 幻灯片尺寸与母版 theme：inspect `slideSize` / `theme`，改 `sldSz`、`clrScheme`、`fontScheme`。
-//! 不按新画布重排，不重写 `fmtScheme`。
+//! 幻灯片尺寸与母版 theme：inspect `slideSize` / `theme`，改 `sldSz`、配色、字体、`fmtScheme` 与补充色板。
+//! 不按新画布重排，不算主题排版引擎。
 
 use serde_json::{json, Value};
 
@@ -93,7 +93,7 @@ pub fn theme_json(pkg: &Package, master_part: &str) -> Result<Value, Error> {
         return Ok(Value::Null);
     };
     let doc = xml::parse(pkg.get(&part)?)?;
-    Ok(crate::theme::inspect(&doc.root))
+    Ok(crate::theme::inspect_full(&doc.root))
 }
 
 pub fn set_theme_colors(
@@ -102,16 +102,29 @@ pub fn set_theme_colors(
     pres_root: &Element,
     master: usize,
     slots: &[(String, String)],
+    name: Option<Option<&str>>,
+    theme_name: Option<Option<&str>>,
     op_index: usize,
 ) -> Result<(), Error> {
     let json_path = format!("ops[{op_index}].id");
     let part = theme_part_for_master(pkg, pres_part, pres_root, master, &json_path)?;
     let mut doc = xml::parse(pkg.get(&part)?)?;
-    if !crate::theme::patch_colors(&mut doc.root, slots) {
+    if !slots.is_empty() && !crate::theme::patch_colors(&mut doc.root, slots) {
         return Err(Error::with_path(
             ErrorKind::ThemeNotFound { n: master as u32 },
             json_path,
         ));
+    }
+    if let Some(name) = name {
+        if !crate::theme::patch_clr_scheme_name(&mut doc.root, name) {
+            return Err(Error::with_path(
+                ErrorKind::ThemeNotFound { n: master as u32 },
+                format!("ops[{op_index}].id"),
+            ));
+        }
+    }
+    if let Some(name) = theme_name {
+        crate::theme::patch_theme_name(&mut doc.root, name);
     }
     pkg.set(&part, doc.to_bytes()?)?;
     Ok(())
@@ -123,12 +136,95 @@ pub fn set_theme_fonts(
     pres_root: &Element,
     master: usize,
     patches: &[(FontSlot, String)],
+    name: Option<Option<&str>>,
+    major_scripts: Option<&[crate::theme::ScriptFont]>,
+    minor_scripts: Option<&[crate::theme::ScriptFont]>,
     op_index: usize,
 ) -> Result<(), Error> {
     let json_path = format!("ops[{op_index}].id");
     let part = theme_part_for_master(pkg, pres_part, pres_root, master, &json_path)?;
     let mut doc = xml::parse(pkg.get(&part)?)?;
     crate::theme::patch_fonts(&mut doc.root, patches, &json_path)?;
+    if let Some(name) = name {
+        if !crate::theme::patch_font_scheme_name(&mut doc.root, name) {
+            return Err(Error::with_path(
+                ErrorKind::ThemeNotFound { n: master as u32 },
+                json_path.clone(),
+            ));
+        }
+    }
+    if let Some(fonts) = major_scripts {
+        crate::theme::replace_script_fonts(&mut doc.root, true, fonts, &json_path)?;
+    }
+    if let Some(fonts) = minor_scripts {
+        crate::theme::replace_script_fonts(&mut doc.root, false, fonts, &json_path)?;
+    }
+    pkg.set(&part, doc.to_bytes()?)?;
+    Ok(())
+}
+
+pub fn set_theme_fmt(
+    pkg: &mut Package,
+    pres_part: &str,
+    pres_root: &Element,
+    master: usize,
+    line: Option<(usize, u32)>,
+    fill: Option<(usize, crate::theme::FmtFillKind)>,
+    bg_fill: Option<(usize, crate::theme::FmtFillKind)>,
+    name: Option<Option<&str>>,
+    op_index: usize,
+) -> Result<(), Error> {
+    let json_path = format!("ops[{op_index}].id");
+    let part = theme_part_for_master(pkg, pres_part, pres_root, master, &json_path)?;
+    let mut doc = xml::parse(pkg.get(&part)?)?;
+    if let Some((index, w)) = line {
+        if !crate::theme::patch_line_width(&mut doc.root, index, w) {
+            return Err(Error::with_path(
+                ErrorKind::InvalidThemeFmtIndex,
+                format!("ops[{op_index}].line.index"),
+            ));
+        }
+    }
+    if let Some((index, kind)) = fill {
+        if !crate::theme::patch_fill_slot(&mut doc.root, false, index, kind) {
+            return Err(Error::with_path(
+                ErrorKind::InvalidThemeFmtIndex,
+                format!("ops[{op_index}].fill.index"),
+            ));
+        }
+    }
+    if let Some((index, kind)) = bg_fill {
+        if !crate::theme::patch_fill_slot(&mut doc.root, true, index, kind) {
+            return Err(Error::with_path(
+                ErrorKind::InvalidThemeFmtIndex,
+                format!("ops[{op_index}].bgFill.index"),
+            ));
+        }
+    }
+    if let Some(name) = name {
+        if !crate::theme::patch_fmt_scheme_name(&mut doc.root, name) {
+            return Err(Error::with_path(
+                ErrorKind::InvalidThemeFmtIndex,
+                format!("ops[{op_index}].name"),
+            ));
+        }
+    }
+    pkg.set(&part, doc.to_bytes()?)?;
+    Ok(())
+}
+
+pub fn set_theme_extra_schemes(
+    pkg: &mut Package,
+    pres_part: &str,
+    pres_root: &Element,
+    master: usize,
+    schemes: &[crate::theme::ExtraScheme],
+    op_index: usize,
+) -> Result<(), Error> {
+    let json_path = format!("ops[{op_index}].id");
+    let part = theme_part_for_master(pkg, pres_part, pres_root, master, &json_path)?;
+    let mut doc = xml::parse(pkg.get(&part)?)?;
+    crate::theme::replace_extra_schemes(&mut doc.root, schemes);
     pkg.set(&part, doc.to_bytes()?)?;
     Ok(())
 }

@@ -312,12 +312,32 @@ pub struct SetSlideSizeOp {
 pub struct SetThemeColorsOp {
     pub master: usize,
     pub slots: Vec<(String, String)>,
+    pub name: Option<Option<String>>,
+    pub theme_name: Option<Option<String>>,
 }
 
 #[derive(Debug, Clone)]
 pub struct SetThemeFontsOp {
     pub master: usize,
     pub fonts: Vec<(super::super::theme::FontSlot, String)>,
+    pub name: Option<Option<String>>,
+    pub major_scripts: Option<Vec<crate::theme::ScriptFont>>,
+    pub minor_scripts: Option<Vec<crate::theme::ScriptFont>>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetThemeFmtOp {
+    pub master: usize,
+    pub line: Option<(usize, u32)>,
+    pub fill: Option<(usize, crate::theme::FmtFillKind)>,
+    pub bg_fill: Option<(usize, crate::theme::FmtFillKind)>,
+    pub name: Option<Option<String>>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetThemeExtraSchemesOp {
+    pub master: usize,
+    pub schemes: Vec<crate::theme::ExtraScheme>,
 }
 
 #[derive(Debug, Clone)]
@@ -1326,6 +1346,8 @@ pub enum PptxOp {
     SetSlideSize(SetSlideSizeOp),
     SetThemeColors(SetThemeColorsOp),
     SetThemeFonts(SetThemeFontsOp),
+    SetThemeFmt(SetThemeFmtOp),
+    SetThemeExtraSchemes(SetThemeExtraSchemesOp),
     SetHandoutText(SetHandoutTextOp),
     InsertHyperlink(InsertHyperlinkOp),
     SetHyperlink(SetHyperlinkOp),

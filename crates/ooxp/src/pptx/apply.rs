@@ -1736,10 +1736,52 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                 pkg.set(&pres_part, pres.to_bytes()?)?;
             }
             PptxOp::SetThemeColors(op) => {
-                theme::set_theme_colors(&mut pkg, &pres_part, &pres.root, op.master, &op.slots, i)?;
+                theme::set_theme_colors(
+                    &mut pkg,
+                    &pres_part,
+                    &pres.root,
+                    op.master,
+                    &op.slots,
+                    op.name.as_ref().map(|n| n.as_deref()),
+                    op.theme_name.as_ref().map(|n| n.as_deref()),
+                    i,
+                )?;
             }
             PptxOp::SetThemeFonts(op) => {
-                theme::set_theme_fonts(&mut pkg, &pres_part, &pres.root, op.master, &op.fonts, i)?;
+                theme::set_theme_fonts(
+                    &mut pkg,
+                    &pres_part,
+                    &pres.root,
+                    op.master,
+                    &op.fonts,
+                    op.name.as_ref().map(|n| n.as_deref()),
+                    op.major_scripts.as_deref(),
+                    op.minor_scripts.as_deref(),
+                    i,
+                )?;
+            }
+            PptxOp::SetThemeFmt(op) => {
+                theme::set_theme_fmt(
+                    &mut pkg,
+                    &pres_part,
+                    &pres.root,
+                    op.master,
+                    op.line,
+                    op.fill,
+                    op.bg_fill,
+                    op.name.as_ref().map(|n| n.as_deref()),
+                    i,
+                )?;
+            }
+            PptxOp::SetThemeExtraSchemes(op) => {
+                theme::set_theme_extra_schemes(
+                    &mut pkg,
+                    &pres_part,
+                    &pres.root,
+                    op.master,
+                    &op.schemes,
+                    i,
+                )?;
             }
             PptxOp::SetHandoutText(op) => {
                 handout::set_text(&mut pkg, &pres_part, &mut pres, op, i)?;

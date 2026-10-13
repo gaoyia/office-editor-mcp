@@ -263,7 +263,8 @@
 - 找不到段落时报 `IdNotFound`
 - 不认识的分节 `type` / `sectionType`，或 create 时最后一段带 `sectionType`，报 `InvalidField`
 - `setEvenAndOddHeaders` / `setMirrorMargins` / `setGutterAtTop` / `setPageBackground` / `setBibliographyStyle` 的 id 不是 `docx:document` 报 `InvalidId`
-- `setThemeFmt` / `setThemeExtraSchemes` / `setThemeOverride` 的 id：docx 不是 `docx:document`、xlsx 不是 `xlsx:workbook` 报 `InvalidId`
+- `setThemeFmt` / `setThemeExtraSchemes` 的 id：pptx 不是 `master:{n}`、docx 不是 `docx:document`、xlsx 不是 `xlsx:workbook` 报 `InvalidId`
+- `setThemeOverride` 的 id：docx 不是 `docx:document`、xlsx 不是 `xlsx:workbook` 报 `InvalidId`
 - docx 的 `setProtection` 的 id 不是 `docx:document` 报 `InvalidId`
 - xlsx 的 `setProtection` 的 id 不是 `sheet:{name}` 也不是 `xlsx:workbook` 报 `InvalidId`
 - `insertProtectedRange` 的 id 不是 `sheet:{name}` 报 `InvalidId`
@@ -458,7 +459,8 @@
 - `insertMaster` 的 id 必须是 `pptx:presentation`
 - `deleteMaster` 的 id 必须是 `master:{n}`
 - `setSlideSize` 的 id 必须是 `pptx:presentation`
-- `setThemeColors` / `setThemeFonts` / `setThemeFmt` / `setThemeExtraSchemes` / `setThemeOverride` 的 id：pptx 的前两条必须是 `master:{n}`，docx 必须是 `docx:document`，xlsx 必须是 `xlsx:workbook`
+- `setThemeColors` / `setThemeFonts` / `setThemeFmt` / `setThemeExtraSchemes` 的 id：pptx 必须是 `master:{n}`，docx 必须是 `docx:document`，xlsx 必须是 `xlsx:workbook`
+- `setThemeOverride` 的 id：docx 必须是 `docx:document`，xlsx 必须是 `xlsx:workbook`；pptx 上发此 op 报 `InvalidField`
 - 找不到该母版 / 版式 / 占位符 / theme 部件报 `IdNotFound`
 - 下列情况报 `InvalidField`
   - 删掉最后一页
