@@ -648,7 +648,7 @@
   - OLE：`insertOle`、`deleteOle`
   - 3D 模型：`insertModel3d`、`replaceModel3d`、`deleteModel3d`、`setModel3dSize`、`setModel3dAnchor`
   - 公式：`insertMath`、`setMath`、`deleteMath`
-  - 切片器：`insertSlicer`、`deleteSlicer`
+  - 切片器：`insertSlicer`、`deleteSlicer`、`setSlicerSize`、`setSlicerAnchor`
   - 连接：`insertConnection`、`deleteConnection`
   - 外部引用：`insertExternalLink`、`setExternalLink`、`deleteExternalLink`
   - 自定义视图：`insertCustomView`、`deleteCustomView`、`showCustomView`
@@ -667,6 +667,7 @@
 - 找不到文本框、形状、连接线或 SmartArt 报 `IdNotFound`
 - xlsx `twoCell` 文本框、形状、 连接线或 SmartArt 的 `setTextBoxSize` / `setSmartArtSize` 出现 `cx` / `cy` 报 `InvalidField`
 - xlsx `twoCell` 3D 的 `setModel3dSize` 出现 `cx` / `cy` 报 `InvalidField`
+- xlsx `twoCell` 切片器（含时间线）的 `setSlicerSize` 出现 `cx` / `cy` 报 `InvalidField`
 - 改右下角请给 `to`
 - 对 pptx 发下列内容报 `InvalidField`
   - 文本框 op、脚注尾注 op
@@ -767,6 +768,7 @@
 - `insertModel3d` 的 `file` 不是 GLB 也走这个 kind，文案仍写「PNG、JPEG…TIFF」，不必另改图错误句
 - `setModel3dSize` 的 `cx` / `cy` 一个都不给报 `InvalidField`（xlsx `twoCell` 见下）
 - xlsx `twoCell` 3D 的 `setModel3dSize` 出现 `cx` / `cy` 报 `InvalidField`
+- xlsx `twoCell` 切片器（含时间线）的 `setSlicerSize` 出现 `cx` / `cy` 报 `InvalidField`
 - 改右下角请给 `to`
 - `setModel3dWrap` 的 `kind` / `wrap` 规则与 `setPictureWrap` 相同
 - xlsx / pptx 上发 `setModel3dWrap` 报 `InvalidField`
@@ -831,8 +833,10 @@
 - `kind` 不是 `slicer` / `timeline` 报 `InvalidField`
 - `kind` 为 `timeline` 却给了表格源、或字段没有日期共享项，报 `InvalidField`
 - `level` 出现在非时间线 op 上、或不是 0–3 的整数，报 `InvalidField`
-- `deleteSlicer` 的 id 必须是切片器 id（含时间线）
+- `deleteSlicer` / `setSlicerSize` / `setSlicerAnchor` 的 id 必须是切片器 id（含时间线）
 - 找不到报 `IdNotFound`，不是切片器 id 报 `InvalidId`
+- xlsx `twoCell` 切片器的 `setSlicerSize` 出现 `cx` / `cy` 报 `InvalidField`
+- 对图 id 发切片器尺寸 / 锚点 op、对切片器 id 发 `setPictureSize` / `setPictureAnchor`，报 `InvalidId`
 - 对 `chartsheet` 发切片器 op 报 `InvalidField`
 - 对 `dialogsheet` / `macrosheet` 报 `NotImplemented`
 - xlsx 的 `insertConnection` 的 id 必须是 `xlsx:workbook`
@@ -868,6 +872,8 @@
 - docx / pptx 上发下列 op 报 `InvalidField`
   - `insertSlicer`
   - `deleteSlicer`
+  - `setSlicerSize`
+  - `setSlicerAnchor`
   - `insertConnection`
   - `deleteConnection`
   - `insertExternalLink`

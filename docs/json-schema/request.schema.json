@@ -1159,6 +1159,12 @@
                 "$ref": "xlsx.schema.json#/$defs/deleteSlicerOp"
               },
               {
+                "$ref": "xlsx.schema.json#/$defs/setSlicerSizeOp"
+              },
+              {
+                "$ref": "xlsx.schema.json#/$defs/setSlicerAnchorOp"
+              },
+              {
                 "$ref": "xlsx.schema.json#/$defs/insertConnectionOp"
               },
               {

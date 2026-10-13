@@ -106,6 +106,36 @@ pub struct DeleteSlicerOp {
     pub target: SlicerTarget,
 }
 
+#[derive(Debug, Clone)]
+pub struct SetSlicerSizeOp {
+    pub id: String,
+    pub target: SlicerTarget,
+    pub cx: Option<i64>,
+    pub cy: Option<i64>,
+    pub to: Option<a1::CellRef>,
+    pub to_off_x: Option<i64>,
+    pub to_off_y: Option<i64>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetSlicerAnchorOp {
+    pub id: String,
+    pub target: SlicerTarget,
+    pub anchor: Option<AnchorKind>,
+    pub from: Option<a1::CellRef>,
+    pub to: Option<a1::CellRef>,
+    pub from_off_x: Option<i64>,
+    pub from_off_y: Option<i64>,
+    pub to_off_x: Option<i64>,
+    pub to_off_y: Option<i64>,
+    pub pos_x: Option<i64>,
+    pub pos_y: Option<i64>,
+    pub edit_as: Option<EditAs>,
+    pub cx: Option<i64>,
+    pub cy: Option<i64>,
+    pub rel: Option<super::request::RelBoxPatch>,
+}
+
 #[derive(Clone)]
 struct Hit {
     cnv: Option<String>,
@@ -287,6 +317,78 @@ pub fn delete(
         drop_cache(pkg, wb_doc, wb_part, &cache_name)?;
     }
     Ok(())
+}
+
+fn draw_key(key: &SlicerKey) -> shape::DrawKey {
+    match key {
+        SlicerKey::Id(s) => shape::DrawKey::Cnv(s.clone()),
+        SlicerKey::Index(n) => shape::DrawKey::Index(*n),
+    }
+}
+
+/// 改外层 `xdr:ext` 或 `twoCell` 的 `to`。不改 cache。
+pub fn set_size(
+    pkg: &mut Package,
+    sheet_root: &Element,
+    sheet_part: &str,
+    op: &SetSlicerSizeOp,
+    op_index: usize,
+) -> Result<(), Error> {
+    shape::set_object_size(
+        pkg,
+        sheet_root,
+        sheet_part,
+        &draw_key(&op.target.key),
+        is_slicer_or_timeline_frame,
+        picture::SizePatch {
+            cx: op.cx,
+            cy: op.cy,
+            to: op.to,
+            to_off_x: op.to_off_x,
+            to_off_y: op.to_off_y,
+        },
+        ErrorKind::TwoCellSlicerSize,
+        ErrorKind::SlicerNotFound { id: op.id.clone() },
+        "setSlicerSize",
+        op_index,
+    )
+}
+
+/// 改包含 graphicFrame 的外层锚点。留下 AlternateContent 与 clientData。
+pub fn set_anchor(
+    pkg: &mut Package,
+    sheet_root: &Element,
+    sheet_part: &str,
+    op: &SetSlicerAnchorOp,
+    op_index: usize,
+) -> Result<(), Error> {
+    shape::set_object_anchor(
+        pkg,
+        sheet_root,
+        sheet_part,
+        &draw_key(&op.target.key),
+        is_slicer_or_timeline_frame,
+        shape::AnchorWrite {
+            op: "setSlicerAnchor",
+            anchor: op.anchor,
+            from: op.from,
+            to: op.to,
+            from_off_x: op.from_off_x,
+            from_off_y: op.from_off_y,
+            to_off_x: op.to_off_x,
+            to_off_y: op.to_off_y,
+            pos_x: op.pos_x,
+            pos_y: op.pos_y,
+            edit_as: op.edit_as,
+            cx: op.cx,
+            cy: op.cy,
+            default_cx: DEFAULT_CX,
+            default_cy: DEFAULT_CY,
+            rel: op.rel,
+        },
+        op_index,
+        ErrorKind::SlicerNotFound { id: op.id.clone() },
+    )
 }
 
 fn insert_table(
@@ -653,7 +755,7 @@ fn graphic_uri(el: &Element) -> Option<String> {
     found
 }
 
-fn is_slicer_or_timeline_frame(el: &Element) -> bool {
+pub(crate) fn is_slicer_or_timeline_frame(el: &Element) -> bool {
     if el.local_name() != "graphicFrame" {
         return false;
     }

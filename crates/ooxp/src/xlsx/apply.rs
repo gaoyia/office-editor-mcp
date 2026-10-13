@@ -947,6 +947,28 @@ pub fn apply(bytes: &[u8], ops: &[XlsxOp]) -> Result<Vec<u8>, Error> {
                 slicer::delete(&mut pkg, &mut wb_doc, &wb_part, doc, &part, op, i)?;
                 workbook_dirty = true;
             }
+            XlsxOp::SetSlicerSize(op) => {
+                let part = require_drawing_worksheet(
+                    &sheet_index,
+                    &op.target.sheet,
+                    i,
+                    ErrorKind::InsertTextBoxWorksheetOnly,
+                )?;
+                load_dirty(&pkg, &mut dirty_sheets, &part, false)?;
+                let doc = dirty_of(&mut dirty_sheets, &part);
+                slicer::set_size(&mut pkg, &doc.root, &part, op, i)?;
+            }
+            XlsxOp::SetSlicerAnchor(op) => {
+                let part = require_drawing_worksheet(
+                    &sheet_index,
+                    &op.target.sheet,
+                    i,
+                    ErrorKind::InsertTextBoxWorksheetOnly,
+                )?;
+                load_dirty(&pkg, &mut dirty_sheets, &part, false)?;
+                let doc = dirty_of(&mut dirty_sheets, &part);
+                slicer::set_anchor(&mut pkg, &doc.root, &part, op, i)?;
+            }
             XlsxOp::InsertConnection(op) => {
                 connection::insert(&mut pkg, &wb_part, op, i)?;
             }

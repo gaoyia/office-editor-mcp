@@ -1615,6 +1615,8 @@ fn is_foreign_op(op_name: &str) -> bool {
             | "deleteSparkline"
             | "insertSlicer"
             | "deleteSlicer"
+            | "setSlicerSize"
+            | "setSlicerAnchor"
             | "insertConnection"
             | "deleteConnection"
             | "insertExternalLink"

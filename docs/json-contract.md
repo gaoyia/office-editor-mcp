@@ -248,7 +248,7 @@ create 与 apply 落盘时先写入目标同目录的临时文件，再改名为
 `setSmartArtStyle`、`setSmartArtLayout`；
 不含 `setSmartArtPos`、`setSmartArtWrap`）、以及超链接 op（`insertHyperlink`、`setHyperlink`、`deleteHyperlink`）、
 以及迷你图 op（`insertSparkline`、`setSparkline`、`deleteSparkline`）、以及 OLE op（`insertOle`、`deleteOle`）、以及 3D 模型 op（`insertModel3d`、`replaceModel3d`、`deleteModel3d`、`setModel3dSize`、`setModel3dAnchor`；不含 `setModel3dWrap`、`setModel3dPos`）、以及公式 op（`insertMath`、`setMath`、`deleteMath`）、以及切片器 op（`insertSlicer`、
-`deleteSlicer`）、以及连接 op（`insertConnection`、`deleteConnection`）、以及外部引用 op（`insertExternalLink`、`setExternalLink`、`deleteExternalLink`）、以及 `setProtection`、以及允许编辑区域 op（`insertProtectedRange`、`setProtectedRange`、`deleteProtectedRange`）、以及命名单元格样式 op（`insertCellStyle`、`deleteCellStyle`、`setCellNamedStyle`）。
+`deleteSlicer`、`setSlicerSize`、`setSlicerAnchor`）、以及连接 op（`insertConnection`、`deleteConnection`）、以及外部引用 op（`insertExternalLink`、`setExternalLink`、`deleteExternalLink`）、以及 `setProtection`、以及允许编辑区域 op（`insertProtectedRange`、`setProtectedRange`、`deleteProtectedRange`）、以及命名单元格样式 op（`insertCellStyle`、`deleteCellStyle`、`setCellNamedStyle`）。
 docx 认 `setParaText`、`setHeaderFooterDistance`、`setPageMargin`、`setPageSize`、`setColumns`、`setVerticalAlign`、
 `setLineNumbering`、`setDocGrid`、`setRtlGutter`、`setMirrorMargins`、`setGutterAtTop`、`setHeaderFooterLink`、
 `insertHeaderFooter`、`setTitlePage`、`setEvenAndOddHeaders`、图片 op（含 `setPictureWrap`，
@@ -310,12 +310,12 @@ pptx 认 `setShapeText`、`setShapeFormat`、形状管理 op（`insertShape`、`
 `insertConditionalFormat` / `setConditionalFormat` / `deleteConditionalFormat`、
 `insertSheetTable` / `setSheetTable` / `deleteSheetTable`、`insertPivotTable` / `setPivotTable` / `deletePivotTable`、
 `insertDefinedName` / `setDefinedName` / `deleteDefinedName`、`setPrintSetup`、`setSheetView`、`setAutoFilter`、
-`groupRows` / `ungroupRows` / `groupCols` / `ungroupCols` / `setOutline`、`insertSlicer` / `deleteSlicer`、
+`groupRows` / `ungroupRows` / `groupCols` / `ungroupCols` / `setOutline`、`insertSlicer` / `deleteSlicer` / `setSlicerSize` / `setSlicerAnchor`、
 `insertConnection` / `deleteConnection` / `insertExternalLink` / `setExternalLink` / `deleteExternalLink` / `insertCustomView`
  / `deleteCustomView` / `showCustomView` / `insertProtectedRange` / `setProtectedRange` / `deleteProtectedRange`
  / `insertCellStyle` / `deleteCellStyle` / `setCellNamedStyle`，
-对 docx 发 `setPictureAnchor` / `setChartAnchor` / `setSmartArtPos` / `setNotesText` / `setModel3dAnchor`，
-对 pptx 发 `setPictureWrap` / `setPictureAnchor` / `setChartWrap` / `setChartAnchor` / `setSmartArtWrap` / `setModel3dWrap` / `setModel3dAnchor`，
+对 docx 发 `setPictureAnchor` / `setChartAnchor` / `setSmartArtPos` / `setNotesText` / `setModel3dAnchor` / `setSlicerAnchor` / `setSlicerSize`，
+对 pptx 发 `setPictureWrap` / `setPictureAnchor` / `setChartWrap` / `setChartAnchor` / `setSmartArtWrap` / `setModel3dWrap` / `setModel3dAnchor` / `setSlicerAnchor` / `setSlicerSize`，
 对 docx / xlsx 发 `setPicturePos` / `setChartPos` / `setSmartArtPos` / `setModel3dPos` / `setNotesText` / `insertSlide` / `deleteSlide`
  / `moveSlide` / `setSlideHidden` / `setTransition` / `insertAnim` / `setAnim` / `deleteAnim` / `moveAnim` / `setSlideLayout` / `insertLayout`
  / `deleteLayout` / `insertPlaceholder` / `deletePlaceholder` / `insertMaster` / `deleteMaster` / `setSlideSize`
@@ -788,6 +788,9 @@ pptx 写入 graphicFrame 的 `p:xfrm/a:ext`；Fallback 海报 `p:pic` 同步改�
 `setModel3dWrap` 见 [docx](json-contract-docx.md#setmodel3dwrap)。
 `setModel3dAnchor` 见 [xlsx](json-contract-xlsx.md#setmodel3danchor)。
 `setModel3dPos` 见 [pptx](json-contract-pptx.md#setmodel3dpos)。
+`setSlicerSize` 字段与 `setPictureSize` 的 xlsx 一侧相同，`id` 必须是切片器 id（含时间线）。
+`setSlicerAnchor` 字段与 `setPictureAnchor` 相同。docx / pptx 上发这两条报 `InvalidField`。
+见 [xlsx](json-contract-xlsx.md#setslicersize)。
 
 ### insertTextBox
 

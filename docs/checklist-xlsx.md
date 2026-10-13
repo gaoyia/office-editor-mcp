@@ -41,6 +41,7 @@ C、I、A、O、Xp、Xvg、Xem、X3d、Xom、Xtf、Xfl、Xc、Xh、Xfs、Xtl、X
 2026-10-10 补跑 `xlsx-named-style.ps1`，Xns1–Xns5 通过。无 Repair。COM `Styles` 能看见自定义名，套用后 `Style.Name` 对得上，黄底 `Interior.Color=65535`。
 2026-10-10 补跑 `xlsx-create-round5.ps1`，C30–C32 通过。无 Repair。COM `Style.Name` 为 `OoxpNamed`，黄底 `Interior.Color=65535`，`CommentsThreaded` 能看见一层回复。
 2026-10-13 补跑 `xlsx-model3d-geom.ps1`，X3g1–X3g6 通过。无 Repair。COM `Width` / `Height` 288×144 磅。`from=C3`。`twoCell` `to=D8`。`replaceModel3d` 不改几何。
+2026-10-13 补跑 `xlsx-slicer-anchor.ps1`，Xsn1–Xsn6 通过。无 Repair。COM 288×144 磅。`from=G4`。`twoCell` `to=H12`。时间线 `from=I5`。
 
 - **C1** ✅
   - Excel 16.0 打开 `manual-check/office/out/xlsx-create.xlsx`，标题栏无 Repair
@@ -344,6 +345,14 @@ C、I、A、O、Xp、Xvg、Xem、X3d、Xom、Xtf、Xfl、Xc、Xh、Xfs、Xtl、X
   - 透视源 `sourceKind=pivot`
   - 删除后计数为 0
   - 缺 `from` / `slide:1` / 不存在的 `field` 均拒写
+- **Xsn1–Xsn6** ✅
+  - Excel 16.0：`xlsx-slicer-anchor.ps1`，6 PASS / 0 FAIL
+  - `twoCell` 改 `from=G4`、给 `to=H12`
+  - 改成 `oneCell` 后树上 `cx` / `cy` 对得上，COM 288×144 磅
+  - 时间线改 `from=I5`
+  - 对切片器 id 发 `setPictureSize` 得 `InvalidId`
+  - `twoCell` 给 `cx` 得 `InvalidField`
+  - 标题栏无 Repair
 - **Xcn1–Xcn5** ✅
   - Excel 16.0：`xlsx-connections.ps1`，5 PASS / 0 FAIL
   - create 默认 `connectionCount=0`
@@ -1369,6 +1378,33 @@ inspect 只读进树。create 不生成。apply 不新开编辑。脚本 `manual
   - 检查：拒写
   - 通过标准：缺 `from`、`id` 为 `slide:1`、对不存在的 `field` 得 `InvalidField` 或 `InvalidId`
   - 均未写文件
+  - 不强制开 Excel
+
+## 切片器锚点
+
+已有切片器（含时间线）改外层锚点与 `oneCell` / `absolute` 尺寸。不改 cache，不执行筛选。
+对切片器 id 发 `setPictureSize` / `setPictureAnchor` 仍报 `InvalidId`。
+手测脚本 `manual-check/office/cases/xlsx-slicer-anchor.ps1`。编号用 **Xsn**。不要和 Xsl、Xsa、Xtl、Xsk 撞。
+
+- **Xsn1**
+  - 检查：改锚点
+  - 通过标准：`setSlicerAnchor` 把 `from` 改到另一格后，树上 `from` 对得上。Excel 无修复
+- **Xsn2**
+  - 检查：twoCell 尺寸
+  - 通过标准：`setSlicerSize` 给 `to` 后树上 `to` 对得上。Excel 无修复
+- **Xsn3**
+  - 检查：oneCell
+  - 通过标准：`anchor=oneCell` 且给 `cx` / `cy` 后，树上 `anchor` 与尺寸对得上。Excel 无修复。COM 尺寸对得上（允许 2 磅误差）
+- **Xsn4**
+  - 检查：时间线
+  - 通过标准：时间线 `setSlicerAnchor` 改 `from` 后树上对得上。Excel 无修复
+- **Xsn5**
+  - 检查：图 op
+  - 通过标准：对切片器 id 发 `setPictureSize` 得 `InvalidId`，未写文件
+  - 不强制开 Excel
+- **Xsn6**
+  - 检查：拒错
+  - 通过标准：`twoCell` 上给 `cx` 得 `InvalidField`。对 xlsx 发 `setSlicerSize` 给图 id 得 `InvalidId`。未写文件
   - 不强制开 Excel
 
 ## 时间线切片器

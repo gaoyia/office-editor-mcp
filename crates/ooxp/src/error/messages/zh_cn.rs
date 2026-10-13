@@ -1137,6 +1137,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::TwoCellModel3dSize => {
             "twoCell 3D 请在 setModel3dSize 里给 to，不要给 cx / cy".into()
         }
+        ErrorKind::TwoCellSlicerSize => {
+            "twoCell 切片器请在 setSlicerSize 里给 to，不要给 cx / cy".into()
+        }
         ErrorKind::TwoCellChartSize => {
             "twoCell 图表请在 setChartSize 里给 to，不要给 cx / cy".into()
         }

@@ -310,7 +310,8 @@ id 仍是 `sheet:{name}/slicer:{cNvPrId}`，时间线不另开前缀。
 - `a:graphicData/@uri` 为 `http://schemas.microsoft.com/office/drawing/2012/timeslicer`（可带尾斜杠），且 `tsle:timeslicer/@name` 对上 timelines 部件里的 `timeline/@name`
 
 OLAP、没有 drawing 的孤立 slicer / timeline 部件本期不进树。`insertSlicer` 的 `id` 必须是 `sheet:{name}`。
-`deleteSlicer` 的 `id` 必须是切片器 id（含时间线）。对不上的 id 形态报 `InvalidId`。不提供改筛选、样式或标题的 op。create 可写切片器与时间线。不在库里执行筛选或刷新透视。
+`deleteSlicer` / `setSlicerSize` / `setSlicerAnchor` 的 `id` 必须是切片器 id（含时间线）。对不上的 id 形态报 `InvalidId`。
+不提供改筛选、样式或标题的 op。create 可写切片器与时间线。不在库里执行筛选或刷新透视。
 
 xlsx 的 `setProtection` 的 `id` 必须是 `sheet:{name}`（该表 `sheetProtection`）或 `xlsx:workbook`（`workbookProtection`）。
 对单元格 id、迷你图 id 或图 id 发此 op 报 `InvalidId`。对 `dialogsheet` / `macrosheet` 报 `NotImplemented`。
@@ -2382,6 +2383,7 @@ docx / pptx 上发此 op 报 `InvalidField`。create 可写允许编辑区域。
 `/xl/embeddings/…`、`/xl/media/…` 与 `[Content_Types].xml`。
 `insertModel3d` / `replaceModel3d` / `deleteModel3d` 还可以脏 worksheet drawing、drawing `.rels`、`/xl/media/…` 与 `[Content_Types].xml`。
 `setModel3dSize` / `setModel3dAnchor` 只脏 worksheet drawing。
+`setSlicerSize` / `setSlicerAnchor` 只脏 worksheet drawing。不改 slicer / timeline 部件，不改 cache，不执行筛选。
 `insertSlicer` / `deleteSlicer` 还可以脏 `/xl/slicers/…`、`/xl/slicerCaches/…`、worksheet drawing、工作表 `extLst` 的 `slicerList`、
 workbook `extLst` 的 `slicerCaches`、workbook 的 `<definedNames>`、工作表 / workbook `.rels` 与 `[Content_Types].xml`；
 透视源的 `insertSlicer` 还脏 `/xl/pivotCache/pivotCacheDefinitionN.xml` 的 `extLst`。
@@ -3319,6 +3321,25 @@ drawing 写 `xdr:twoCellAnchor`，`mc:Choice` 只包 graphicFrame（不要把整
 找不到报 `IdNotFound`。id 不是切片器 id 报 `InvalidId`。摘 drawing 锚点、slicers 或 timelines 部件里对应视图。
 该 cache 已无视图则摘 slicerCache 或 timelineCache、workbook 关系，以及 `@name` 与 cache 名相同的那条定义名。
 slicers 部件删光则去掉该部件与工作表 `slicerList` 条目。timelines 部件删光则去掉该部件与工作表 `timelineRefs` 条目。
+
+### setSlicerSize
+
+字段与 `setPictureSize` 的 xlsx 一侧相同。`id` 必须是切片器 id（含时间线）。
+`oneCell` / `absolute` 改外层 `xdr:ext`。`twoCell` 不认 `cx` / `cy`（出现报 `InvalidField`），必须给 `to`。
+不按列宽行高去换算 EMU。留下 AlternateContent 与 `xdr:clientData`。
+对图 id 发此 op、对切片器 id 发 `setPictureSize` 仍报 `InvalidId`。
+docx / pptx 上发此 op 报 `InvalidField`。
+
+`insertSlicer` 写入的是 `xdr:twoCellAnchor`（Choice 只包 graphicFrame），因此缺省路径必须给 `to`，不能给 `cx` / `cy`。
+改成 `oneCell` 之后才认 `cx` / `cy`。
+
+### setSlicerAnchor
+
+字段与 `setPictureAnchor` 相同，`id` 必须是切片器 id（含时间线）。
+改包含该 `graphicFrame` 的外层锚点，规则与 `setPictureAnchor` 相同（留下 AlternateContent 与 `xdr:clientData`）。
+docx / pptx 上发此 op 报 `InvalidField`。
+
+改切片器尺寸与锚点的示例见 `docs/examples/xlsx-apply-slicer-anchor.json`。
 
 ### insertConnection
 

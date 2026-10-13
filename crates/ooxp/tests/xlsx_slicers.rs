@@ -514,3 +514,179 @@ fn timeline_rejects_table_source_and_text_field() {
     assert_eq!(err.code(), ErrorCode::InvalidField);
     assert!(!out.exists());
 }
+
+fn insert_table_slicer(tag: &str) -> (PathBuf, String) {
+    let src = with_table(tag);
+    let out = tmp(&format!("{tag}-ins"));
+    apply(
+        &src,
+        &out,
+        json!([{
+            "op": "insertSlicer",
+            "id": "sheet:Sheet1",
+            "source": "sheet:Sheet1/table:1",
+            "field": "产品",
+            "from": "F2"
+        }]),
+    )
+    .unwrap();
+    let tree = inspect(&out, json!({ "slicers": true }));
+    let id = tree["sheets"][0]["slicers"][0]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    (out, id)
+}
+
+#[test]
+fn set_slicer_size_and_anchor() {
+    let (src, id) = insert_table_slicer("geom");
+    let moved = tmp("geom-moved");
+    apply(
+        &src,
+        &moved,
+        json!([{ "op": "setSlicerAnchor", "id": id, "from": "G4" }]),
+    )
+    .unwrap();
+    let tree_m = inspect(&moved, json!({ "slicers": true }));
+    let item_m = &tree_m["sheets"][0]["slicers"][0];
+    assert_eq!(item_m["from"], "G4");
+    assert_eq!(item_m["anchor"], "twoCell");
+    let drawing_m = part_text(&moved, "xl/drawings/drawing1.xml");
+    assert!(drawing_m.contains("sle:slicer"), "{drawing_m}");
+    assert!(drawing_m.contains("mc:AlternateContent"), "{drawing_m}");
+    assert!(drawing_m.contains("xdr:clientData"), "{drawing_m}");
+
+    let sized = tmp("geom-sized");
+    apply(
+        &moved,
+        &sized,
+        json!([{ "op": "setSlicerSize", "id": id, "to": "H12" }]),
+    )
+    .unwrap();
+    let tree_s = inspect(&sized, json!({ "slicers": true }));
+    let item_s = &tree_s["sheets"][0]["slicers"][0];
+    assert_eq!(item_s["to"], "H12");
+    assert_eq!(item_s["from"], "G4");
+    let drawing_s = part_text(&sized, "xl/drawings/drawing1.xml");
+    assert!(drawing_s.contains("sle:slicer"), "{drawing_s}");
+    let i_anchor = drawing_s.find("xdr:twoCellAnchor").expect("twoCellAnchor");
+    let i_ac = drawing_s
+        .find("mc:AlternateContent")
+        .expect("AlternateContent");
+    assert!(i_anchor < i_ac, "{drawing_s}");
+}
+
+#[test]
+fn set_slicer_one_cell_then_size() {
+    let (src, id) = insert_table_slicer("one");
+    let one = tmp("one-cell");
+    apply(
+        &src,
+        &one,
+        json!([{
+            "op": "setSlicerAnchor",
+            "id": id,
+            "anchor": "oneCell",
+            "cx": 3657600,
+            "cy": 1828800
+        }]),
+    )
+    .unwrap();
+    let tree_o = inspect(&one, json!({ "slicers": true }));
+    let item_o = &tree_o["sheets"][0]["slicers"][0];
+    assert_eq!(item_o["anchor"], "oneCell");
+    assert_eq!(item_o["cx"], 3657600);
+    assert_eq!(item_o["cy"], 1828800);
+    assert!(item_o.get("to").is_none());
+
+    let sized = tmp("one-sz");
+    apply(
+        &one,
+        &sized,
+        json!([{ "op": "setSlicerSize", "id": id, "cx": 4572000, "cy": 2286000 }]),
+    )
+    .unwrap();
+    let tree_s = inspect(&sized, json!({ "slicers": true }));
+    let item_s = &tree_s["sheets"][0]["slicers"][0];
+    assert_eq!(item_s["cx"], 4572000);
+    assert_eq!(item_s["cy"], 2286000);
+    let drawing = part_text(&sized, "xl/drawings/drawing1.xml");
+    assert!(drawing.contains("xdr:oneCellAnchor"), "{drawing}");
+    assert!(drawing.contains("mc:AlternateContent"), "{drawing}");
+}
+
+#[test]
+fn set_timeline_anchor() {
+    let src = with_date_pivot("tl-an-src");
+    let inserted = tmp("tl-an-ins");
+    apply(
+        &src,
+        &inserted,
+        json!([{
+            "op": "insertSlicer",
+            "id": "sheet:Sheet1",
+            "source": "sheet:Sheet1/pivot:1",
+            "field": "日期",
+            "kind": "timeline",
+            "from": "H2"
+        }]),
+    )
+    .unwrap();
+    let tree = inspect(&inserted, json!({ "slicers": true }));
+    let id = tree["sheets"][0]["slicers"][0]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let moved = tmp("tl-an-moved");
+    apply(
+        &inserted,
+        &moved,
+        json!([{ "op": "setSlicerAnchor", "id": id, "from": "I5" }]),
+    )
+    .unwrap();
+    let after = inspect(&moved, json!({ "slicers": true }));
+    let item = &after["sheets"][0]["slicers"][0];
+    assert_eq!(item["from"], "I5");
+    assert_eq!(item["sourceKind"], "timeline");
+    let drawing = part_text(&moved, "xl/drawings/drawing1.xml");
+    assert!(drawing.contains("tsle:timeslicer"), "{drawing}");
+    assert!(drawing.contains("mc:AlternateContent"), "{drawing}");
+}
+
+#[test]
+fn two_cell_slicer_size_rejects_cx() {
+    let (src, id) = insert_table_slicer("tc-cx");
+    let fail = tmp("tc-cx-fail");
+    let err = apply(
+        &src,
+        &fail,
+        json!([{ "op": "setSlicerSize", "id": id, "cx": 1000 }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+    assert!(!fail.exists());
+}
+
+#[test]
+fn reject_picture_op_on_slicer_and_slicer_op_on_pic() {
+    let (src, id) = insert_table_slicer("rej");
+    let fail = tmp("rej-pic");
+    let err = apply(
+        &src,
+        &fail,
+        json!([{ "op": "setPictureSize", "id": id, "cx": 1000, "cy": 1000 }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidId);
+    assert!(!fail.exists());
+
+    let err = apply(
+        &src,
+        &fail,
+        json!([{ "op": "setSlicerSize", "id": "sheet:Sheet1/pic:1", "to": "H12" }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidId);
+    assert!(!fail.exists());
+}

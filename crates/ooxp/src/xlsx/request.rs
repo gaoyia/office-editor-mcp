@@ -1944,6 +1944,8 @@ pub enum XlsxOp {
     DeleteMath(super::omml::DeleteMathOp),
     InsertSlicer(slicer::InsertSlicerOp),
     DeleteSlicer(slicer::DeleteSlicerOp),
+    SetSlicerSize(slicer::SetSlicerSizeOp),
+    SetSlicerAnchor(slicer::SetSlicerAnchorOp),
     InsertConnection(connection::InsertConnectionOp),
     DeleteConnection(connection::DeleteConnectionOp),
     InsertExternalLink(extlink::InsertExternalLinkOp),
@@ -2262,6 +2264,8 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<XlsxOp>, Error> {
             "deleteMath" => XlsxOp::DeleteMath(parse_delete_math(obj, i)?),
             "insertSlicer" => XlsxOp::InsertSlicer(parse_insert_slicer(obj, i)?),
             "deleteSlicer" => XlsxOp::DeleteSlicer(parse_delete_slicer(obj, i)?),
+            "setSlicerSize" => XlsxOp::SetSlicerSize(parse_set_slicer_size(obj, i)?),
+            "setSlicerAnchor" => XlsxOp::SetSlicerAnchor(parse_set_slicer_anchor(obj, i)?),
             "insertConnection" => XlsxOp::InsertConnection(parse_insert_connection(obj, i)?),
             "deleteConnection" => XlsxOp::DeleteConnection(parse_delete_connection(obj, i)?),
             "insertExternalLink" => XlsxOp::InsertExternalLink(parse_insert_external_link(obj, i)?),
@@ -11248,6 +11252,59 @@ fn parse_delete_slicer(
     let id = require_id(obj, i)?;
     let target = slicer::parse_slicer_id(&id, &format!("ops[{i}].id"))?;
     Ok(slicer::DeleteSlicerOp { id, target })
+}
+
+fn parse_set_slicer_size(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<slicer::SetSlicerSizeOp, Error> {
+    deny_keys(obj, i, &["op", "id", "cx", "cy", "to", "toOffX", "toOffY"])?;
+    let id = require_id(obj, i)?;
+    let target = slicer::parse_slicer_id(&id, &format!("ops[{i}].id"))?;
+    let s = parse_drawing_size(obj, i, "setSlicerSize")?;
+    Ok(slicer::SetSlicerSizeOp {
+        id,
+        target,
+        cx: s.cx,
+        cy: s.cy,
+        to: s.to,
+        to_off_x: s.to_off_x,
+        to_off_y: s.to_off_y,
+    })
+}
+
+fn parse_set_slicer_anchor(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<slicer::SetSlicerAnchorOp, Error> {
+    deny_keys(
+        obj,
+        i,
+        &[
+            "op", "id", "anchor", "from", "to", "fromOffX", "fromOffY", "toOffX", "toOffY", "posX",
+            "posY", "editAs", "cx", "cy", "fromX", "fromY", "toX", "toY",
+        ],
+    )?;
+    let id = require_id(obj, i)?;
+    let target = slicer::parse_slicer_id(&id, &format!("ops[{i}].id"))?;
+    let p = parse_drawing_anchor_patch(obj, i, "setSlicerAnchor")?;
+    Ok(slicer::SetSlicerAnchorOp {
+        id,
+        target,
+        anchor: p.anchor,
+        from: p.from,
+        to: p.to,
+        from_off_x: p.from_off_x,
+        from_off_y: p.from_off_y,
+        to_off_x: p.to_off_x,
+        to_off_y: p.to_off_y,
+        pos_x: p.pos_x,
+        pos_y: p.pos_y,
+        edit_as: p.edit_as,
+        cx: p.cx,
+        cy: p.cy,
+        rel: p.rel,
+    })
 }
 
 fn parse_insert_custom_view(

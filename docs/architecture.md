@@ -288,7 +288,7 @@ xlsx 也可插删改工作表单元格超链接，脏该表 XML 与工作表 `.r
 xlsx 也可列出、导出、插入并删除工作表嵌入对象，脏 `oleObjects`、worksheet drawing、VML `legacyDrawing`、工作表 `.rels`、embeddings 与预览媒体，不把字节塞进 inspect 树，不标重算。
 xlsx 也可插、删、换工作表 3D 模型，并改已有 3D 的尺寸与锚点，脏 worksheet drawing、drawing `.rels`、GLB 与海报 PNG，不把 GLB 塞进 inspect 树，不标重算。
 xlsx 也可插改删工作表 drawing 公式框，脏 worksheet drawing，写 `a14:m` AlternateContent，不标重算。
-xlsx 也可列出、插入并删除工作表切片器与时间线，脏 `/xl/slicers/…`、`/xl/slicerCaches/…`、`/xl/timelines/…`、`/xl/timelineCaches/…`、worksheet drawing、工作表 `extLst` 的 `slicerList` / `timelineRefs`、
+xlsx 也可列出、插入、删除工作表切片器与时间线，并改已有切片器（含时间线）的尺寸与锚点，脏 `/xl/slicers/…`、`/xl/slicerCaches/…`、`/xl/timelines/…`、`/xl/timelineCaches/…`、worksheet drawing、工作表 `extLst` 的 `slicerList` / `timelineRefs`、
 workbook `extLst` 的 `slicerCaches` / `timelineCacheRefs`、workbook 的 `<definedNames>`、工作表 / workbook `.rels` 与内容类型；
 透视源的插入还脏 `/xl/pivotCache/pivotCacheDefinitionN.xml` 的 `extLst`（`x14:pivotCacheDefinition/@pivotCacheId`）。
 时间线还会把该透视表 `updatedVersion` 升到至少 8，不在库里执行筛选，不标重算。

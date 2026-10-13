@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "book.xlsx",
+  "ops": [
+    { "op": "setSlicerAnchor", "id": "sheet:Sheet1/slicer:1", "from": "G4" },
+    { "op": "setSlicerSize", "id": "sheet:Sheet1/slicer:1", "to": "H12" }
+  ]
+}
