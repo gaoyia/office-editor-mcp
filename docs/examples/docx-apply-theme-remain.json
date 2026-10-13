@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "C:\\data\\note.docx",
+  "output": "C:\\data\\note.theme-remain.docx",
+  "ops": [
+    {
+      "op": "setThemeColors",
+      "id": "docx:document",
+      "name": "Custom",
+      "themeName": "Custom Theme",
+      "accent1": "FF0000"
+    },
+    {
+      "op": "setThemeFonts",
+      "id": "docx:document",
+      "name": "Custom",
+      "majorScripts": [
+        { "script": "Jpan", "typeface": "Yu Mincho" }
+      ]
+    },
+    {
+      "op": "setThemeFmt",
+      "id": "docx:document",
+      "name": "Custom"
+    },
+    {
+      "op": "setThemeExtraSchemes",
+      "id": "docx:document",
+      "extraSchemes": [
+        {
+          "name": "Extra",
+          "colors": { "accent1": "0F6FC6" }
+        }
+      ]
+    },
+    {
+      "op": "setEastAsianSettings",
+      "id": "docx:document",
+      "themeFontLang": { "val": "ja-JP" }
+    }
+  ]
+}

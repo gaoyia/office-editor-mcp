@@ -18,7 +18,7 @@ const COLOR_KEYS: [&str; 13] = [
     "accent6", "hlink", "folHlink",
 ];
 
-const FONT_KEYS: [&str; 7] = [
+const FONT_KEYS: [&str; 9] = [
     "name",
     "majorLatin",
     "minorLatin",
@@ -26,6 +26,8 @@ const FONT_KEYS: [&str; 7] = [
     "minorEa",
     "majorCs",
     "minorCs",
+    "majorScripts",
+    "minorScripts",
 ];
 
 fn tmp_dir() -> PathBuf {
@@ -161,7 +163,10 @@ fn inspect_theme_slots_and_order() {
     let path = inject_theme(&create_docx("inspect"));
     let tree = inspect(&path);
     let theme = &tree["theme"];
-    assert_eq!(object_keys(theme), ["name", "colors", "fonts", "fmt"]);
+    assert_eq!(
+        object_keys(theme),
+        ["name", "colors", "fonts", "fmt", "extraSchemes"]
+    );
     assert_eq!(theme["name"], "Office Theme");
     assert_eq!(object_keys(&theme["colors"]), COLOR_KEYS);
     assert_eq!(object_keys(&theme["fonts"]), FONT_KEYS);
@@ -179,6 +184,9 @@ fn inspect_theme_slots_and_order() {
     assert_eq!(theme["fonts"]["majorLatin"], "Calibri Light");
     assert_eq!(theme["fonts"]["minorLatin"], "Calibri");
     assert_eq!(theme["fonts"]["majorEa"], "");
+    assert_eq!(theme["extraSchemes"], json!([]));
+    assert_eq!(theme["fonts"]["majorScripts"], json!([]));
+    assert_eq!(theme["fonts"]["minorScripts"], json!([]));
 }
 
 #[test]
@@ -313,7 +321,7 @@ fn set_theme_override_and_clear() {
     assert_eq!(tree["themeOverride"]["colors"]["accent2"], "C0504D");
     assert_eq!(
         object_keys(&tree["themeOverride"]),
-        ["name", "colors", "fonts", "fmt"]
+        ["name", "colors", "fonts", "fmt", "extraSchemes"]
     );
     let xml = part(&out, "word/theme/themeOverride1.xml");
     assert!(xml.contains("themeOverride"));
@@ -412,6 +420,168 @@ fn xlsx_rejects_theme_fmt_and_override() {
         &path,
         &out,
         json!([{ "op": "setThemeFmt", "id": "xlsx:workbook", "line": { "index": 0, "w": 1 } }]),
+    )
+    .unwrap_err();
+    assert_eq!(err_code(err), ErrorCode::InvalidField);
+    let err = apply(
+        &path,
+        &out,
+        json!([{ "op": "setThemeExtraSchemes", "id": "xlsx:workbook", "extraSchemes": [] }]),
+    )
+    .unwrap_err();
+    assert_eq!(err_code(err), ErrorCode::InvalidField);
+}
+
+#[test]
+fn set_theme_names_scripts_and_extra() {
+    let src = inject_theme(&create_docx("remain-src"));
+    let out = tmp("remain");
+    apply(
+        &src,
+        &out,
+        json!([
+            {
+                "op": "setThemeColors",
+                "id": "docx:document",
+                "name": "Custom",
+                "themeName": "Custom Theme"
+            },
+            {
+                "op": "setThemeFonts",
+                "id": "docx:document",
+                "name": "CustomFonts",
+                "majorScripts": [{ "script": "Jpan", "typeface": "Yu Mincho" }]
+            },
+            {
+                "op": "setThemeFmt",
+                "id": "docx:document",
+                "name": "CustomFmt"
+            },
+            {
+                "op": "setThemeExtraSchemes",
+                "id": "docx:document",
+                "extraSchemes": [{
+                    "name": "Extra",
+                    "colors": { "accent1": "0F6FC6" }
+                }]
+            }
+        ]),
+    )
+    .unwrap();
+    let tree = inspect(&out);
+    assert_eq!(tree["theme"]["name"], "Custom Theme");
+    assert_eq!(tree["theme"]["colors"]["name"], "Custom");
+    assert_eq!(tree["theme"]["fonts"]["name"], "CustomFonts");
+    assert_eq!(tree["theme"]["fmt"]["name"], "CustomFmt");
+    assert_eq!(tree["theme"]["fonts"]["majorScripts"][0]["script"], "Jpan");
+    assert_eq!(
+        tree["theme"]["fonts"]["majorScripts"][0]["typeface"],
+        "Yu Mincho"
+    );
+    assert_eq!(tree["theme"]["extraSchemes"][0]["name"], "Extra");
+    assert_eq!(
+        tree["theme"]["extraSchemes"][0]["colors"]["accent1"],
+        "0F6FC6"
+    );
+    let xml = part(&out, "word/theme/theme1.xml");
+    assert!(xml.contains(r#"name="Custom Theme""#));
+    assert!(xml.contains(r#"<a:font script="Jpan" typeface="Yu Mincho"/>"#));
+    assert!(xml.contains("extraClrSchemeLst"));
+    let cleared = tmp("remain-clear");
+    apply(
+        &out,
+        &cleared,
+        json!([
+            { "op": "setThemeFonts", "id": "docx:document", "majorScripts": [] },
+            { "op": "setThemeExtraSchemes", "id": "docx:document", "extraSchemes": null },
+            { "op": "setThemeColors", "id": "docx:document", "name": null }
+        ]),
+    )
+    .unwrap();
+    let tree = inspect(&cleared);
+    assert_eq!(tree["theme"]["fonts"]["majorScripts"], json!([]));
+    assert_eq!(tree["theme"]["extraSchemes"], json!([]));
+    assert!(tree["theme"]["colors"]["name"].is_null());
+    let xml = part(&cleared, "word/theme/theme1.xml");
+    assert!(!xml.contains("extraClrSchemeLst"));
+    assert!(!xml.contains(r#"<a:font "#));
+}
+
+#[test]
+fn create_theme_remain_fields() {
+    let path = tmp("create-remain");
+    run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "create",
+            "path": path.to_string_lossy(),
+            "format": "docx",
+            "document": {
+                "paragraphs": [{ "text": "hello" }],
+                "theme": {
+                    "name": "Office Theme",
+                    "colors": { "name": "Palette", "accent1": "112233" },
+                    "fonts": {
+                        "name": "Faces",
+                        "majorScripts": [{ "script": "Hang", "typeface": "Malgun Gothic" }]
+                    },
+                    "fmt": { "name": "Fmt" },
+                    "extraSchemes": [{ "name": "Extra", "colors": { "accent1": "ABCDEF" } }]
+                },
+                "eastAsianSettings": {
+                    "themeFontLang": { "val": "ja-JP", "eastAsia": "zh-CN" }
+                }
+            }
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap();
+    let tree = inspect(&path);
+    assert_eq!(tree["theme"]["colors"]["name"], "Palette");
+    assert_eq!(tree["theme"]["fonts"]["name"], "Faces");
+    assert_eq!(tree["theme"]["fmt"]["name"], "Fmt");
+    assert_eq!(tree["theme"]["fonts"]["majorScripts"][0]["script"], "Hang");
+    assert_eq!(tree["theme"]["extraSchemes"][0]["name"], "Extra");
+    assert_eq!(
+        tree["theme"]["extraSchemes"][0]["colors"]["accent1"],
+        "ABCDEF"
+    );
+    assert_eq!(tree["eastAsianSettings"]["themeFontLang"]["val"], "ja-JP");
+    assert_eq!(
+        tree["eastAsianSettings"]["themeFontLang"]["eastAsia"],
+        "zh-CN"
+    );
+    assert!(tree["eastAsianSettings"]["themeFontLang"]["bidi"].is_null());
+}
+
+#[test]
+fn extra_schemes_need_theme_and_field() {
+    let src = create_docx("extra-missing");
+    let out = tmp("extra-missing-out");
+    let err = apply(
+        &src,
+        &out,
+        json!([{ "op": "setThemeExtraSchemes", "id": "docx:document", "extraSchemes": [] }]),
+    )
+    .unwrap_err();
+    assert_eq!(err_code(err), ErrorCode::IdNotFound);
+    let themed = inject_theme(&create_docx("extra-empty"));
+    let err = apply(
+        &themed,
+        &out,
+        json!([{ "op": "setThemeExtraSchemes", "id": "docx:document" }]),
+    )
+    .unwrap_err();
+    assert_eq!(err_code(err), ErrorCode::InvalidField);
+    let err = apply(
+        &themed,
+        &out,
+        json!([{
+            "op": "setThemeExtraSchemes",
+            "id": "docx:document",
+            "extraSchemes": [{ "name": "A", "colors": { "name": "B" } }]
+        }]),
     )
     .unwrap_err();
     assert_eq!(err_code(err), ErrorCode::InvalidField);

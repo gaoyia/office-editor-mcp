@@ -118,6 +118,7 @@ $order = @(
     'docx-protect-rev-math'
     'docx-watermark'
     'docx-theme'
+    'docx-theme-remain'
     'docx-caption-xref'
     'docx-index'
     'docx-biblio'

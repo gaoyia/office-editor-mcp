@@ -137,10 +137,12 @@ fn inspect_always_has_ruby_count_and_settings() {
             "characterSpacingControl",
             "strictFirstAndLastChars",
             "noLineBreaksBefore",
-            "noLineBreaksAfter"
+            "noLineBreaksAfter",
+            "themeFontLang"
         ]
     );
     assert!(tree["eastAsianSettings"]["characterSpacingControl"].is_null());
+    assert!(tree["eastAsianSettings"]["themeFontLang"].is_null());
     let keys = object_keys(&tree);
     let math = keys.iter().position(|k| *k == "mathCount").unwrap();
     assert_eq!(keys[math + 1], "rubyCount");
@@ -324,6 +326,22 @@ fn set_east_asian_settings_creates_part() {
     let csc = xml.find("w:characterSpacingControl").unwrap();
     let strict = xml.find("w:strictFirstAndLastChars").unwrap();
     assert!(csc < strict, "{xml}");
+    let lang_out = tmp_dir().join("set-lang-out.docx");
+    apply(
+        &out,
+        &lang_out,
+        json!([{
+            "op": "setEastAsianSettings",
+            "id": "docx:document",
+            "themeFontLang": { "val": "ja-JP" }
+        }]),
+    );
+    let tree = inspect(&lang_out, json!({}));
+    assert_eq!(tree["eastAsianSettings"]["themeFontLang"]["val"], "ja-JP");
+    assert!(tree["eastAsianSettings"]["themeFontLang"]["eastAsia"].is_null());
+    let xml = unzip(&lang_out, "word/settings.xml");
+    assert!(xml.contains(r#"w:val="ja-JP""#));
+    assert!(xml.contains("w:themeFontLang"));
 }
 
 #[test]

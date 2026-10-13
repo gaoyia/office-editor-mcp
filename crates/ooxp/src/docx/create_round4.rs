@@ -6,7 +6,7 @@ use serde_json::Value;
 use crate::error::{Error, ErrorKind, TypeName};
 
 use super::biblio;
-use super::east_asia::{self, KinsokuChars};
+use super::east_asia::{self, KinsokuChars, ThemeFontLang};
 use super::field::{self, CrossRefKind};
 use super::font_embed::FontStyle;
 use super::glossary;
@@ -507,6 +507,7 @@ fn parse_east_asia(v: Option<&Value>) -> Result<Option<SetEastAsianSettingsOp>, 
             "strictFirstAndLastChars",
             "noLineBreaksBefore",
             "noLineBreaksAfter",
+            "themeFontLang",
         ],
     )?;
     let character_spacing = match obj.get("characterSpacingControl") {
@@ -532,7 +533,12 @@ fn parse_east_asia(v: Option<&Value>) -> Result<Option<SetEastAsianSettingsOp>, 
     let strict = opt_null_bool(obj, "document.eastAsianSettings", "strictFirstAndLastChars")?;
     let no_before = opt_kinsoku(obj, "document.eastAsianSettings", "noLineBreaksBefore")?;
     let no_after = opt_kinsoku(obj, "document.eastAsianSettings", "noLineBreaksAfter")?;
-    if character_spacing.is_none() && strict.is_none() && no_before.is_none() && no_after.is_none()
+    let theme_font_lang = opt_theme_font_lang(obj.get("themeFontLang"))?;
+    if character_spacing.is_none()
+        && strict.is_none()
+        && no_before.is_none()
+        && no_after.is_none()
+        && theme_font_lang.is_none()
     {
         return Err(Error::with_path(
             ErrorKind::NeedSetEastAsianSettingsField,
@@ -544,6 +550,7 @@ fn parse_east_asia(v: Option<&Value>) -> Result<Option<SetEastAsianSettingsOp>, 
         strict,
         no_before,
         no_after,
+        theme_font_lang,
     }))
 }
 
@@ -581,6 +588,60 @@ fn opt_kinsoku(
             field,
             TypeName::Object,
             &format!("{prefix}.{field}"),
+        )),
+    }
+}
+
+fn opt_theme_font_lang(v: Option<&Value>) -> Result<Option<Option<ThemeFontLang>>, Error> {
+    match v {
+        None => Ok(None),
+        Some(Value::Null) => Ok(Some(None)),
+        Some(Value::Object(inner)) => {
+            deny_keys(
+                inner,
+                "document.eastAsianSettings.themeFontLang",
+                &["val", "eastAsia", "bidi"],
+            )?;
+            Ok(Some(Some(ThemeFontLang {
+                val: opt_lang_attr(
+                    inner.get("val"),
+                    "document.eastAsianSettings.themeFontLang.val",
+                )?,
+                east_asia: opt_lang_attr(
+                    inner.get("eastAsia"),
+                    "document.eastAsianSettings.themeFontLang.eastAsia",
+                )?,
+                bidi: opt_lang_attr(
+                    inner.get("bidi"),
+                    "document.eastAsianSettings.themeFontLang.bidi",
+                )?,
+            })))
+        }
+        Some(_) => Err(wrong_type(
+            "themeFontLang",
+            TypeName::Object,
+            "document.eastAsianSettings.themeFontLang",
+        )),
+    }
+}
+
+fn opt_lang_attr(v: Option<&Value>, path: &str) -> Result<Option<String>, Error> {
+    match v {
+        None | Some(Value::Null) => Ok(None),
+        Some(Value::String(s)) if !s.is_empty() => Ok(Some(s.clone())),
+        Some(Value::String(_)) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "themeFontLang".into(),
+                expected: TypeName::NonEmptyString,
+            },
+            path.to_string(),
+        )),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "themeFontLang".into(),
+                expected: TypeName::String,
+            },
+            path.to_string(),
         )),
     }
 }

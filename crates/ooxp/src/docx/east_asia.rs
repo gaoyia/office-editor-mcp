@@ -24,11 +24,19 @@ pub struct KinsokuChars {
     pub chars: String,
 }
 
+#[derive(Debug, Clone)]
+pub struct ThemeFontLang {
+    pub val: Option<String>,
+    pub east_asia: Option<String>,
+    pub bidi: Option<String>,
+}
+
 pub struct SettingsPatch<'a> {
     pub character_spacing: Option<Option<&'a str>>,
     pub strict: Option<Option<bool>>,
     pub no_before: Option<Option<&'a KinsokuChars>>,
     pub no_after: Option<Option<&'a KinsokuChars>>,
+    pub theme_font_lang: Option<Option<&'a ThemeFontLang>>,
 }
 
 pub fn settings_json(pkg: &Package, doc_part: &str) -> Result<Value, Error> {
@@ -37,6 +45,7 @@ pub fn settings_json(pkg: &Package, doc_part: &str) -> Result<Value, Error> {
         "strictFirstAndLastChars": null,
         "noLineBreaksBefore": null,
         "noLineBreaksAfter": null,
+        "themeFontLang": null,
     });
     let Some(name) = notes::settings_part_name(pkg, doc_part)? else {
         return Ok(empty);
@@ -50,6 +59,7 @@ pub fn settings_json(pkg: &Package, doc_part: &str) -> Result<Value, Error> {
         "strictFirstAndLastChars": hf::on_off_opt(&doc.root, "strictFirstAndLastChars"),
         "noLineBreaksBefore": kinsoku_json(&doc.root, "noLineBreaksBefore"),
         "noLineBreaksAfter": kinsoku_json(&doc.root, "noLineBreaksAfter"),
+        "themeFontLang": theme_font_lang_json(&doc.root),
     }))
 }
 
@@ -67,7 +77,12 @@ pub fn apply_settings(
         .is_some()
         || matches!(patch.strict, Some(Some(_)))
         || patch.no_before.as_ref().and_then(|v| v.as_ref()).is_some()
-        || patch.no_after.as_ref().and_then(|v| v.as_ref()).is_some();
+        || patch.no_after.as_ref().and_then(|v| v.as_ref()).is_some()
+        || patch
+            .theme_font_lang
+            .as_ref()
+            .and_then(|v| v.as_ref())
+            .is_some();
     let settings = match notes::settings_part_name(pkg, doc_part)? {
         Some(p) => p,
         None if writes => page_bg::ensure_settings(pkg, docs, dirty, doc_part)?,
@@ -121,6 +136,9 @@ pub fn apply_settings(
     if let Some(v) = patch.no_after {
         apply_kinsoku(&mut doc.root, "noLineBreaksAfter", v);
     }
+    if let Some(v) = patch.theme_font_lang {
+        apply_theme_font_lang(&mut doc.root, v);
+    }
     dirty.insert(settings, ());
     Ok(())
 }
@@ -145,6 +163,39 @@ fn child_val(parent: &Element, local: &str) -> Value {
         .filter(|s| !s.is_empty())
         .map(|s| json!(s))
         .unwrap_or(Value::Null)
+}
+
+fn apply_theme_font_lang(root: &mut Element, val: Option<&ThemeFontLang>) {
+    match val {
+        Some(lang) => {
+            let el = hf::ensure_child_in_order(root, "themeFontLang", hf::SETTINGS_ORDER);
+            for key in ["val", "eastAsia", "bidi"] {
+                let attr = el.prefixed(key);
+                el.remove_attr(&attr);
+            }
+            let set = |el: &mut Element, local: &str, v: &Option<String>| {
+                if let Some(s) = v {
+                    let attr = el.prefixed(local);
+                    el.set_attr(&attr, s);
+                }
+            };
+            set(el, "val", &lang.val);
+            set(el, "eastAsia", &lang.east_asia);
+            set(el, "bidi", &lang.bidi);
+        }
+        None => hf::remove_local(root, "themeFontLang"),
+    }
+}
+
+fn theme_font_lang_json(parent: &Element) -> Value {
+    let Some(el) = parent.child_by_local("themeFontLang") else {
+        return Value::Null;
+    };
+    json!({
+        "val": el.attr_local("val"),
+        "eastAsia": el.attr_local("eastAsia"),
+        "bidi": el.attr_local("bidi"),
+    })
 }
 
 fn kinsoku_json(parent: &Element, local: &str) -> Value {

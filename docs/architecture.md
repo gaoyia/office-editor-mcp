@@ -310,8 +310,8 @@ docx 也可插删换 3D 模型，并可改已有 3D 的尺寸与绕排，脏宿�
 docx 也可用 `setProtection` 改 `settings.xml` 的保护标记（限制编辑哈希走遗留预处理，修改密码走 UTF-16LE SHA-512），窗体保护还可脏主文档各节 `w:formProt`，
 也可用 `setFormProt` 把某节改成例外，也可用 `insertEditRange` / `deleteEditRange` 读写 `w:permStart` / `w:permEnd`。
 docx 也可插删页眉 DrawingML 水印，无 default 页眉时会新建，并可脏页眉部件与媒体。
-docx 也可用 `setThemeColors` / `setThemeFonts` / `setThemeFmt` 改主文档 theme 部件的配色、字体与 `fmtScheme` 常用槽，只脏该 theme 部件；
-也可用 `setThemeOverride` 新建或改主文档 themeOverride 部件。
+docx 也可用 `setThemeColors` / `setThemeFonts` / `setThemeFmt` 改主文档 theme 部件的配色、字体、方案名与 `fmtScheme` 常用槽，只脏该 theme 部件；
+也可用 `setThemeExtraSchemes` 整份替换补充色板；也可用 `setThemeOverride` 新建或改主文档 themeOverride 部件。
 pptx 可改被点名形状的可见文字（含备注形状与母版 / 版式占位符），可插入文本框与非矩形预设几何、写入自定义路径、插入连接线（幻灯片、备注页与母版 / 版式，可写 `stCxn` / `endCxn`）、组合与解开、删除被点名形状并清对应 timing `tgtEl`、改画布坐标与尺寸、填充描边与 DrawingML 文字格式，
 可用 `setNotesText` 按页改或新建演讲者备注，也可改被点名的幻灯片图、备注图与母版 / 版式图（换、插、删、改尺寸、改画布坐标），也可插删改幻灯片、备注页与母版 / 版式图表，也可插删改幻灯片、备注页与母版 / 版式 SmartArt，
 也可插删改幻灯片、备注页与母版 / 版式 DrawingML 表，也可插删回复并改现代批注，也可对批注或回复 id 插图并换、删批注内图（不改尺寸位置），也可按批注内图 id `exportMedia`，也可插入、删除、重排与隐藏幻灯片，

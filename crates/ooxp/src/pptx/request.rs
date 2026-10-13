@@ -1680,6 +1680,7 @@ fn is_foreign_op(op_name: &str) -> bool {
             | "deleteEditRange"
             | "setBibliographyStyle"
             | "setThemeFmt"
+            | "setThemeExtraSchemes"
             | "setThemeOverride"
             | "insertContentControl"
             | "setContentControl"

@@ -40,7 +40,7 @@ apply 可用 `insertHeaderFooter` 为某节某类型新建页眉或页脚部件�
 可用 `setPageBackground` 写整篇页面背景色或 DrawingML / 图片填充、用 `setPageBorders` 写节上页面边框（含艺术型），可用 `insertMath` / `setMath` / `deleteMath` 插改删 OMML 公式，
 可用 `insertContentControl` / `setContentControl` / `deleteContentControl` 插改删内容控件，
 可用 `setParaFormat` / `setRunFormat` 写禁则、强调点、压缩排版、段边框、段底纹、制表位，以及 run 的突出显示、删除线、上下标、字符间距、字距调整与字符缩放，可用 `insertRuby` / `setRuby` / `deleteRuby` 插改删拼音，
-可用 `setEastAsianSettings` 写整篇压缩与自定义禁则字符。
+可用 `setEastAsianSettings` 写整篇压缩、自定义禁则字符与 `themeFontLang`。
 docx 可用 `setProtection` 开关无密码的限制编辑与只读推荐。xlsx 可用同一 `op` 开关工作表保护与工作簿结构保护（可写 SHA-512 哈希），不要复用 docx 根上那个 `protection` 对象。
 docx 可用 `insertWatermark` / `deleteWatermark` 读写页眉里的 DrawingML 水印。
 正文与页眉页脚里的浮动图 / 文本框 / 连接线 / 无框形状可用 `groupShapes` / `ungroup` 组合或解开；
@@ -50,7 +50,7 @@ Word 写出的连接线可进 inspect，并可用 `insertConnector` / `deleteCon
 也可按墨迹 id `exportMedia`。不要和批注里的 `kind: ink` 混。
 正文与页眉页脚里的 3D 模型可进 inspect，并可用 `insertModel3d` / `replaceModel3d` / `deleteModel3d` / `setModel3dSize` / `setModel3dWrap` 增删换与改尺寸绕排，
 也可按 3D id `exportMedia`。不是图，不进 `pictures`。注内、批注内本期不插。
-组合本身不进树。docx 可用 `setThemeColors` / `setThemeFonts` / `setThemeFmt` 改主文档 theme 的配色、字体与 `fmtScheme` 常用槽，可用 `setThemeOverride` 读写主文档 `themeOverride` 部件。
+组合本身不进树。docx 可用 `setThemeColors` / `setThemeFonts` / `setThemeFmt` 改主文档 theme 的配色、字体、方案名与 `fmtScheme` 常用槽，可用 `setThemeExtraSchemes` 整份替换补充色板，可用 `setThemeOverride` 读写主文档 `themeOverride` 部件。可用 `setEastAsianSettings` 写 `themeFontLang`。
 三种格式都可用 `setProps` / `setCustomProp` / `deleteCustomProp` 改文件属性。
 `create` 可在正文和页眉页脚上写 DrawingML 图，也可写文本框、SmartArt、图表、墨迹画布、3D 模型、脚注、尾注、批注与回复、超链接、书签、域、公式、内容控件、拼音、无框形状与连接线；
 根上可写编号定义、目录块、自定义样式、题注、交叉引用、索引、参考文献、构建基块、嵌入字体、东亚设置、theme 与页面背景 / 页面边框；
@@ -447,7 +447,7 @@ run 上的 `style` 只读自己的 `w:rStyle/@w:val`。框内、注内、批注�
 `insertBibliography` 的 `id` 必须是主文档 `w:body` 的直接子段落 id 或 `docx:document`。`deleteBibliography` 的 `id` 必须是 `biblio:{n}`。
 `insertDocPart` 的 `id` 必须是 `docx:document`。`deleteDocPart` 的 `id` 必须是 `docPart:{n}`。
 `insertDocPartContent` 的 `id` 必须是主文档 `w:body` 的直接子段落 id 或 `docx:document`。
-`insertEmbeddedFont` / `setFontEmbed` / `setPageBackground` / `setThemeFmt` / `setThemeOverride` 的 `id` 必须是 `docx:document`。
+`insertEmbeddedFont` / `setFontEmbed` / `setPageBackground` / `setThemeFmt` / `setThemeExtraSchemes` / `setThemeOverride` 的 `id` 必须是 `docx:document`。
 `deleteEmbeddedFont` 的 `id` 必须是 `font:{n}`。`setPageBorders` 的 `id` 必须是 `section:{n}`。
 `insertMath` 的 `id` 必须是段落 id（正文、页眉页脚或框内）或 `docx:document`。`setMath` / `deleteMath` 的 `id` 必须是公式 id。
 `insertRuby` 的 `id` 必须是段落 id（正文、页眉页脚或框内）或 `docx:document`。`setRuby` / `deleteRuby` 的 `id` 必须是拼音 id。
@@ -1051,7 +1051,8 @@ xlsx / pptx 的 `scope.tables` 不是同一件事：xlsx 仍拒绝；pptx 展开
     "characterSpacingControl": null,
     "strictFirstAndLastChars": null,
     "noLineBreaksBefore": null,
-    "noLineBreaksAfter": null
+    "noLineBreaksAfter": null,
+    "themeFontLang": null
   },
   "bibliographyStyle": null,
   "from": 1,
@@ -1492,12 +1493,13 @@ xlsx / pptx 的 `scope.tables` 不是同一件事：xlsx 仍拒绝；pptx 展开
   - VML 图片填（`frame` / `tile` / 带 `r:id`）为 `"picture"`
   - 其余 VML 为 `"gradient"`
   页眉页脚容器不出现 `pageBackground`。xlsx / pptx 根上不要带 `pageBackground`。create 给了 `document.pageBackground` 时按 `setPageBackground` 写入。
-- 文档根上的 `eastAsianSettings` 始终出现，对象字段顺序：`characterSpacingControl`、`strictFirstAndLastChars`、`noLineBreaksBefore`、`noLineBreaksAfter`。
+- 文档根上的 `eastAsianSettings` 始终出现，对象字段顺序：`characterSpacingControl`、`strictFirstAndLastChars`、`noLineBreaksBefore`、`noLineBreaksAfter`、`themeFontLang`。
   `characterSpacingControl` 取 `settings.xml` 的 `w:characterSpacingControl/@w:val`（§17.15.1.18），没有该元素或缺 `val` 则为 `null`。
   `strictFirstAndLastChars` 取 `w:strictFirstAndLastChars`（§17.15.1.82）：没有元素为 `null`；有且 OnOff 为开为 `true`，为关为 `false`。
   `noLineBreaksBefore` / `noLineBreaksAfter` 取 `w:noLineBreaksBefore` / `w:noLineBreaksAfter`（§17.15.1.59、§17.15.1.58）。
   没有该元素为 `null`。有则对象字段顺序：`lang`、`chars`，对应 `w:lang` / `w:val`，缺则为 `null`。
-  没有 settings 部件则四项都是 `null`。页眉页脚容器不出现 `eastAsianSettings`。xlsx / pptx 根上不要带此对象。create 给了 `document.eastAsianSettings` 时按 `setEastAsianSettings` 写入。
+  `themeFontLang` 取 `w:themeFontLang`（§17.15.1.86）。没有该元素为 `null`。有则对象字段顺序：`val`、`eastAsia`、`bidi`，取对应属性原文，缺则为 `null`。
+  没有 settings 部件则五项都是 `null`。页眉页脚容器不出现 `eastAsianSettings`。xlsx / pptx 根上不要带此对象。create 给了 `document.eastAsianSettings` 时按 `setEastAsianSettings` 写入。
 - 文档根上的 `bibliographyStyle` 始终出现。没有 bibliography customXml 为 `null`。有则对象字段顺序：`selectedStyle`、`styleName`、`version`。
   三者取 `b:Sources` 的 `SelectedStyle` / `StyleName` / `Version` 原文，缺为 `null`。不跑 XSL。
   页眉页脚容器不出现此对象。xlsx / pptx 根上不要带 `bibliographyStyle`。create 给了 `document.bibliographyStyle` 时按 `setBibliographyStyle` 写入。
@@ -1667,7 +1669,7 @@ docx 根上始终带 `theme`，不要另给 scope 键。来源是主文档 `.rel
 ECMA-376 §14.2.7 / DrawingML `a:theme`）。
 没有该关系或部件不在包内时为 `null`，不报错。xlsx / pptx 根上不要带此对象。pptx 的 theme 见 [pptx 响应](json-contract-pptx.md#响应) 的 `masters[].theme`。create 给了 `document.theme` 时写 theme 部件；省略则仍不写。
 
-有部件时字段顺序：`name`、`colors`、`fonts`、`fmt`。配色与字体规则与 pptx 母版 `theme` 相同，不把段落 / run 上的 `themeColor` 展开成 RGB。pptx 母版 `theme` 仍不算 `fmtScheme`。
+有部件时字段顺序：`name`、`colors`、`fonts`、`fmt`、`extraSchemes`。配色与字体规则与 pptx 母版 `theme` 相同，不把段落 / run 上的 `themeColor` 展开成 RGB。pptx 母版 `theme` 仍不算 `fmtScheme`，也不带 `extraSchemes`。
 
 `fmt` 取 `a:fmtScheme`。没有该元素时四项都是空数组，`name` 为 `null`。有则字段顺序：`name`、`fills`、`lines`、`effects`、`bgFills`。
 `name` 取 `@name`，缺则为 `null`。四个数组按 `fillStyleLst` / `lnStyleLst` / `effectStyleLst` / `bgFillStyleLst` 的直接子元素顺序。
@@ -1676,16 +1678,24 @@ ECMA-376 §14.2.7 / DrawingML `a:theme`）。
 `effects[]` 对象只有 `kind`：`effectLst` 为空或没有子元素为 `none`，否则取第一个效果的本地名（如 `outerShdw`）。
 不展开 `phClr`、渐变停点或效果参数。
 
+`extraSchemes` 取 `a:extraClrSchemeLst` 下按文档顺序的 `a:extraClrScheme`。没有该列表则为 `[]`。
+每项字段顺序：`name`、`colors`。`name` 取该项 `a:clrScheme/@name`，没有或空则为 `null`。
+`colors` 规则与主 `clrScheme` 相同。不把 `clrMap` 展开进树。
+
 根上始终有 `themeOverride`，放在 `theme` 之后。来源是主文档 `.rels` 里 Type 以 `/themeOverride` 结尾的部件（ECMA-376 §14.2.8 / DrawingML `a:themeOverride`）。
 没有该关系或部件不在包内时为 `null`。有则字段顺序与 `theme` 相同；配色 / 字体 / `fmt` 取根下的 `clrScheme` / `fontScheme` / `fmtScheme`，不经 `themeElements`。
+`themeOverride` 通常没有 `extraClrSchemeLst`，此时 `extraSchemes` 为 `[]`。
 Word 16.0 另存通常不写该部件；自行写入后 Word 仍能打开。xlsx / pptx 根上不要带此对象。
 
 `colors` 字段顺序：`name`、`dk1`、`lt1`、`dk2`、`lt2`、`accent1`、`accent2`、`accent3`、`accent4`、`accent5`、`accent6`、`hlink`、`folHlink`。
 `colors.name` 取 `a:clrScheme/@name`，没有则为 `null`。每个槽位：有 `a:srgbClr/@val` 取其原文；否则有 `a:sysClr/@lastClr` 取该原文；再没有则为 `null`。
 
-`fonts` 字段顺序：`name`、`majorLatin`、`minorLatin`、`majorEa`、`minorEa`、`majorCs`、`minorCs`。
+`fonts` 字段顺序：`name`、`majorLatin`、`minorLatin`、`majorEa`、`minorEa`、`majorCs`、`minorCs`、`majorScripts`、`minorScripts`。
 `fonts.name` 取 `a:fontScheme/@name`，没有则为 `null`。
-其余取 `a:majorFont` / `a:minorFont` 下 `a:latin` / `a:ea` / `a:cs` 的 `typeface` 原文，没有该元素则为 `null`。
+`latin` / `ea` / `cs` 取 `a:majorFont` / `a:minorFont` 下对应元素的 `typeface` 原文，没有该元素则为 `null`。
+`majorScripts` / `minorScripts` 取同一组里 `a:font` 的文档顺序。没有则为 `[]`。
+每项字段顺序：`script`、`typeface`，取对应属性原文；缺则为 `null`。
+xlsx / pptx 的母版 `theme.fonts` 不要带这两项。
 
 ## create
 
@@ -1752,9 +1762,11 @@ Word 16.0 另存通常不写该部件；自行写入后 Word 仍能打开。xlsx
   - 空则生成一个空的 `w:p`，否则 Word 可能打不开
 - **`document.theme`**
   - 可选对象
-  - 字段只认 `name`、`colors`、`fonts`
-  - 出现则写 `/word/theme/theme1.xml`；`fmtScheme` 用库内默认矩阵，不要在 JSON 里给 `fmt`
-  - `colors` / `fonts` 槽位与 `setThemeColors` / `setThemeFonts` 相同，省略的槽用 Office 默认
+  - 字段认 `name`、`colors`、`fonts`、`fmt`、`extraSchemes`
+  - 出现则写 `/word/theme/theme1.xml`
+  - `colors` / `fonts` / `fmt.name` / `extraSchemes` 与对应 apply 相同
+  - 省略的配色 / 字体槽与 `fmtScheme` 矩阵用 Office 默认
+  - `fmt` 只认 `name`，不要在 JSON 里给 `fills` / `lines` / `effects` / `bgFills`
 - **`document.pageBackground`**
   - 可选对象
   - 字段与 `setPageBackground` 相同（`color` 必填，`fill` 可选）
@@ -4296,8 +4308,11 @@ id 不是拼音 id 报 `InvalidId`。xlsx / pptx 上发此 op 报 `InvalidField`
 | `strictFirstAndLastChars` | 可选。布尔。`true` 写入空元素；`false` 写 `val="0"`；`null` 删掉该元素 |
 | `noLineBreaksBefore` | 可选。对象 `{ "lang", "chars" }` 或 `null`。`null` 删掉该元素 |
 | `noLineBreaksAfter` | 可选。对象 `{ "lang", "chars" }` 或 `null` |
+| `themeFontLang` | 可选。对象 `{ "val", "eastAsia", "bidi" }` 或 `null`。`null` 删掉该元素 |
 
-四个字段至少给一个。对象必须同时有非空 `lang` 与非空 `chars`。不认识的 `characterSpacingControl` 报 `InvalidField`。
+五个字段至少给一个。禁则对象必须同时有非空 `lang` 与非空 `chars`。
+`themeFontLang` 对象只认 `val` / `eastAsia` / `bidi`，值为字符串或 `null`。空串报 `InvalidField`。写入时整份替换该元素，只写出非 `null` 的属性。
+不认识的 `characterSpacingControl` 报 `InvalidField`。
 id 不是 `docx:document` 报 `InvalidId`。没有 settings 且要写入时新建 `/word/settings.xml` 与主文档 settings 关系。
 xlsx / pptx 上发此 op 报 `InvalidField`。create 给了 `document.eastAsianSettings` 时按同一套规则写入。
 
@@ -4573,7 +4588,7 @@ OLE op 还可以脏 `/word/embeddings/…` 与预览图媒体。`insertInkCanvas
 `insertDocPartContent` 只脏主文档。`insertEmbeddedFont` / `deleteEmbeddedFont` 还可以脏 `/word/fontTable.xml`、fontTable `.rels`、
 `/word/fonts/fontN.odttf`、主文档 `.rels`、`[Content_Types].xml` 与 `settings.xml`。
 `setFontEmbed` 只脏 `settings.xml`（缺则新建）。`setPageBackground` 脏主文档与 `settings.xml`（缺则新建），图片填充还可脏 `/word/media/…` 与主文档 `.rels`。
-`setThemeColors` / `setThemeFonts` / `setThemeFmt` 只脏已有 theme 部件。
+`setThemeColors` / `setThemeFonts` / `setThemeFmt` / `setThemeExtraSchemes` 只脏已有 theme 部件。
 `setThemeOverride` 脏 `/word/theme/themeOverride1.xml`、主文档 `.rels` 与 `[Content_Types].xml`；`enabled: false` 时删掉该部件。
 `setEastAsianSettings` 只脏 `settings.xml`（缺则新建）。
 `insertContentControl`、`setContentControl` 与 `deleteContentControl` 只脏主文档（页眉页脚上的内容控件 op 另脏对应 header/footer 部件）。
@@ -4589,7 +4604,7 @@ OLE op 还可以脏 `/word/embeddings/…` 与预览图媒体。`insertInkCanvas
 `insertToc`、`deleteToc`、`insertCaption`、`deleteCaption`、`insertCrossRef`、`deleteCrossRef`、`insertIndex`、`deleteIndex`、
 `insertIndexEntry`、`deleteIndexEntry`、`insertSource`、`deleteSource`、`setBibliographyStyle`、`insertCitation`、`deleteCitation`、
 `insertBibliography`、`deleteBibliography`、`insertDocPart`、`deleteDocPart`、`insertDocPartContent`、`insertEmbeddedFont`、
-`deleteEmbeddedFont`、`setFontEmbed`、`setPageBackground`、`setThemeFmt`、`setThemeOverride`、`insertMath`、`setMath`、`deleteMath`、`insertRuby`、`setRuby`、`deleteRuby`、`setEastAsianSettings`、`insertContentControl`、
+`deleteEmbeddedFont`、`setFontEmbed`、`setPageBackground`、`setThemeFmt`、`setThemeExtraSchemes`、`setThemeOverride`、`insertMath`、`setMath`、`deleteMath`、`insertRuby`、`setRuby`、`deleteRuby`、`setEastAsianSettings`、`insertContentControl`、
 `setContentControl`、`deleteContentControl`、图片 op、文本框 op、
 `insertConnector` / `deleteConnector` / `insertShape` / `deleteShape` / `setShapePos` / `setShapeSize` / `setShapeFill` / `setShapeLine` / `groupShapes` / `ungroup`、墨迹画布 op、脚注尾注 op、批注 op、图表 op、SmartArt op、表格结构 op、修订 op、
 超链接 / 书签 op、域 op 与编号 op、样式 op、表格外观 op、直接格式 op、以及 `setProtection`、以及 `insertWatermark` / `deleteWatermark`、
@@ -4826,7 +4841,7 @@ GLB 部件路径 `/word/media/model3dN.glb`，Content Type `model/gltf.binary`�
 
 ### setThemeColors
 
-改主文档 theme 部件的 `a:clrScheme` 槽位。不改未点名的 `fmtScheme` 槽。不把段落 / run 上的 `themeColor` 展开成直接色。
+改主文档 theme 部件的 `a:clrScheme` 槽位，以及配色方案名、theme 根名。不改未点名的 `fmtScheme` 槽。不把段落 / run 上的 `themeColor` 展开成直接色。
 
 ```json
 {
@@ -4837,6 +4852,8 @@ GLB 部件路径 `/word/media/model3dN.glb`，Content Type `model/gltf.binary`�
     {
       "op": "setThemeColors",
       "id": "docx:document",
+      "name": "Office",
+      "themeName": "Office Theme",
       "accent1": "FF0000"
     }
   ]
@@ -4847,12 +4864,17 @@ GLB 部件路径 `/word/media/model3dN.glb`，Content Type `model/gltf.binary`�
 | --- | --- |
 | `op` | 必须是 `"setThemeColors"` |
 | `id` | 必须是 `docx:document` |
-| `dk1` / `lt1` / `dk2` / `lt2` / `accent1`–`accent6` / `hlink` / `folHlink` | 可选。六位 RGB 十六进制。至少给一个 |
+| `name` | 可选。`a:clrScheme/@name`。非空字符串；`null` 去掉该属性 |
+| `themeName` | 可选。`a:theme/@name`。非空字符串；`null` 去掉该属性 |
+| `dk1` / `lt1` / `dk2` / `lt2` / `accent1`–`accent6` / `hlink` / `folHlink` | 可选。六位 RGB 十六进制 |
 
 docx：`id` 不是 `docx:document` 报 `InvalidId`。没有 theme 关系或部件不在包内报 `IdNotFound`。
-除 op 与 id 外一个槽位都不给、或某槽位不是六位十六进制，报 `InvalidField`。写入时把被点名槽位的子元素换成 `a:srgbClr`（原先若是 `sysClr` 也换成 `srgbClr`）。未点名槽位留下。
-不改 `a:clrScheme/@name`、不改 `a:theme/@name`。未点名的 `fmtScheme` 槽留下。不改正文 XML。xlsx 上发此 op 报 `InvalidField`。
+`name`、`themeName` 与十二个槽位一个都不给，或某槽位不是六位十六进制，或名字是空串，报 `InvalidField`。
+写入时把被点名槽位的子元素换成 `a:srgbClr`（原先若是 `sysClr` 也换成 `srgbClr`）。未点名槽位留下。
+未点名的 `fmtScheme` 槽留下。不改正文 XML。xlsx 上发此 op 报 `InvalidField`。
+xlsx / pptx 上给 `name` / `themeName` 报未知字段或 `InvalidField`。
 pptx 见 [pptx 分册](json-contract-pptx.md#setthemecolors)，`id` 为 `master:{n}`。
+示例见 `docs/examples/docx-apply-theme-remain.json`。
 
 ### setThemeFonts
 
@@ -4867,7 +4889,11 @@ pptx 见 [pptx 分册](json-contract-pptx.md#setthemecolors)，`id` 为 `master:
     {
       "op": "setThemeFonts",
       "id": "docx:document",
-      "majorLatin": "Arial"
+      "name": "Office",
+      "majorLatin": "Arial",
+      "majorScripts": [
+        { "script": "Jpan", "typeface": "Yu Mincho" }
+      ]
     }
   ]
 }
@@ -4877,12 +4903,17 @@ pptx 见 [pptx 分册](json-contract-pptx.md#setthemecolors)，`id` 为 `master:
 | --- | --- |
 | `op` | 必须是 `"setThemeFonts"` |
 | `id` | 必须是 `docx:document` |
-| `majorLatin` / `minorLatin` / `majorEa` / `minorEa` / `majorCs` / `minorCs` | 可选。`typeface` 原文。至少给一个 |
+| `name` | 可选。`a:fontScheme/@name`。非空字符串；`null` 去掉该属性 |
+| `majorLatin` / `minorLatin` / `majorEa` / `minorEa` / `majorCs` / `minorCs` | 可选。`typeface` 原文 |
+| `majorScripts` / `minorScripts` | 可选。数组，整份替换对应组里的 `a:font`。`[]` 或 `null` 清掉全部 `a:font`。不改 `latin` / `ea` / `cs` |
 
-docx：`id` 不是 `docx:document` 报 `InvalidId`。找不到 theme 部件报 `IdNotFound`。一个字体字段都不给报 `InvalidField`。
+docx：`id` 不是 `docx:document` 报 `InvalidId`。找不到 theme 部件报 `IdNotFound`。
+`name`、六个字体槽与两份脚本列表一个都不给报 `InvalidField`。
 `majorLatin` / `minorLatin` 空串报 `InvalidField`。`ea` / `cs` 允许空串。
-没有 `fontScheme` / `majorFont` / `minorFont` 或对应 `latin` / `ea` / `cs` 则按需补上。只改 `typeface`，其它属性（如 `panose`）留下。
-不改 `a:fontScheme/@name`。不改正文 XML。xlsx 上发此 op 报 `InvalidField`。pptx 见 [pptx 分册](json-contract-pptx.md#setthemefonts)。
+脚本每一项必须是对象，字段只认 `script`、`typeface`。`script` 必须是非空字符串。`typeface` 必须是字符串，允许空串。
+没有 `fontScheme` / `majorFont` / `minorFont` 或对应 `latin` / `ea` / `cs` 则按需补上。只改被点名槽的 `typeface`，其它属性（如 `panose`）留下。
+不改正文 XML。xlsx 上发此 op 报 `InvalidField`。xlsx / pptx 上给 `name` / `majorScripts` / `minorScripts` 报未知字段或 `InvalidField`。
+pptx 见 [pptx 分册](json-contract-pptx.md#setthemefonts)。
 
 ### setThemeFmt
 
@@ -4911,11 +4942,51 @@ docx：`id` 不是 `docx:document` 报 `InvalidId`。找不到 theme 部件报 `
 | `line` | 可选。对象须有 `index`（0、1 或 2）与 `w`（非负整数，EMU） |
 | `fill` | 可选。对象须有 `index`（0、1 或 2）与 `kind`（`solid` 或 `grad`） |
 | `bgFill` | 可选。同 `fill`，改 `bgFillStyleLst` |
+| `name` | 可选。`a:fmtScheme/@name`。非空字符串；`null` 去掉该属性 |
 
-`line` / `fill` / `bgFill` 至少给一个。写入时只替换被点名槽：线改 `@w`；填充写成带 `schemeClr phClr` 的 `solidFill` 或两停点 `gradFill`。未点名槽留下。
+`line` / `fill` / `bgFill` / `name` 至少给一个。写入时只替换被点名槽：线改 `@w`；填充写成带 `schemeClr phClr` 的 `solidFill` 或两停点 `gradFill`。未点名槽留下。
 `index` 超出该列表长度、缺少 `fmtScheme` 或对应列表，报 `InvalidField`。没有 theme 部件报 `IdNotFound`，不新建。
-id 不是 `docx:document` 报 `InvalidId`。xlsx / pptx 上发此 op 报 `InvalidField`。
+id 不是 `docx:document` 报 `InvalidId`。xlsx / pptx 上发此 op 报 `InvalidField`。xlsx / pptx 上给 `name` 报未知字段或 `InvalidField`。
 示例见 `docs/examples/docx-apply-theme-fmt.json`。
+
+### setThemeExtraSchemes
+
+整份替换主文档 theme 部件的 `a:extraClrSchemeLst`。不算主题排版引擎。
+
+```json
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "C:\\data\\note.docx",
+  "ops": [
+    {
+      "op": "setThemeExtraSchemes",
+      "id": "docx:document",
+      "extraSchemes": [
+        {
+          "name": "Extra",
+          "colors": { "accent1": "0F6FC6" }
+        }
+      ]
+    }
+  ]
+}
+```
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"setThemeExtraSchemes"` |
+| `id` | 必须是 `docx:document` |
+| `extraSchemes` | 必须。数组或 `null` |
+
+`[]` 或 `null` 去掉 `extraClrSchemeLst`。否则按数组整份重写该列表。
+每一项必须是对象，字段只认 `name`、`colors`。`name` 为非空字符串或 `null`（`null` 或省略则不写 `@name`）。
+`colors` 规则与主 `clrScheme` 相同。项上 `name` 与 `colors.name` 都对应该项 `a:clrScheme/@name`；只给一个即可，两个都给则必须相同，否则报 `InvalidField`。
+未点名的配色槽用 Office 默认十二槽补齐，再把点名槽写成 `a:srgbClr`。每项写出身份映射的 `a:clrMap`（`bg1=lt1` 那一套），不把映射暴露进 JSON。
+docx：`id` 不是 `docx:document` 报 `InvalidId`。没有 theme 部件报 `IdNotFound`，不新建。
+缺 `extraSchemes`、不是数组 / `null`、项不是对象、或槽位不是六位十六进制，报 `InvalidField`。
+xlsx / pptx 上发此 op 报 `InvalidField`。create 给了 `document.theme.extraSchemes` 时按同一套规则写入。
+示例见 `docs/examples/docx-apply-theme-remain.json`。
 
 ### setThemeOverride
 

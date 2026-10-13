@@ -827,6 +827,7 @@ pub const SETTINGS_ORDER: &[&str] = &[
     "noLineBreaksAfter",
     "noLineBreaksBefore",
     "compat",
+    "themeFontLang",
 ];
 
 pub fn set_on_off(parent: &mut Element, local: &str, on: bool, order: &[&str]) {

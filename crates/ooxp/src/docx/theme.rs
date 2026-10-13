@@ -5,7 +5,7 @@ use serde_json::{Map, Value};
 
 use crate::error::{Error, ErrorKind, IdReason, TypeName};
 use crate::opc::{self, ContentTypes, Package, Relationship, Relationships};
-use crate::theme::{FmtFillKind, FontSlot};
+use crate::theme::{ExtraScheme, FmtFillKind, FontSlot, ScriptFont};
 use crate::xml;
 
 use super::picture;
@@ -17,11 +17,16 @@ const OVERRIDE_PART: &str = "/word/theme/themeOverride1.xml";
 #[derive(Debug, Clone)]
 pub struct SetThemeColorsOp {
     pub slots: Vec<(String, String)>,
+    pub name: Option<Option<String>>,
+    pub theme_name: Option<Option<String>>,
 }
 
 #[derive(Debug, Clone)]
 pub struct SetThemeFontsOp {
     pub fonts: Vec<(FontSlot, String)>,
+    pub name: Option<Option<String>>,
+    pub major_scripts: Option<Vec<ScriptFont>>,
+    pub minor_scripts: Option<Vec<ScriptFont>>,
 }
 
 #[derive(Debug, Clone)]
@@ -29,6 +34,12 @@ pub struct SetThemeFmtOp {
     pub line: Option<(usize, u32)>,
     pub fill: Option<(usize, FmtFillKind)>,
     pub bg_fill: Option<(usize, FmtFillKind)>,
+    pub name: Option<Option<String>>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetThemeExtraSchemesOp {
+    pub schemes: Vec<ExtraScheme>,
 }
 
 #[derive(Debug, Clone)]
@@ -42,6 +53,24 @@ pub struct CreateTheme {
     pub name: String,
     pub slots: Vec<(String, String)>,
     pub fonts: Vec<(FontSlot, String)>,
+    pub colors_name: Option<String>,
+    pub fonts_name: Option<String>,
+    pub fmt_name: Option<String>,
+    pub major_scripts: Option<Vec<ScriptFont>>,
+    pub minor_scripts: Option<Vec<ScriptFont>>,
+    pub extra_schemes: Option<Vec<ExtraScheme>>,
+}
+
+struct NamedColorSlots {
+    name: Option<String>,
+    slots: Vec<(String, String)>,
+}
+
+struct CreateFonts {
+    name: Option<String>,
+    fonts: Vec<(FontSlot, String)>,
+    major_scripts: Option<Vec<ScriptFont>>,
+    minor_scripts: Option<Vec<ScriptFont>>,
 }
 
 pub fn inspect(pkg: &Package, doc_part: &str) -> Result<Value, Error> {
@@ -52,6 +81,17 @@ pub fn inspect(pkg: &Package, doc_part: &str) -> Result<Value, Error> {
     let mut v = crate::theme::inspect(&doc.root);
     if let Value::Object(m) = &mut v {
         m.insert("fmt".into(), crate::theme::fmt_from_theme(&doc.root));
+        m.insert(
+            "extraSchemes".into(),
+            crate::theme::extra_schemes_json(&doc.root),
+        );
+        if let Some(Value::Object(fonts)) = m.get_mut("fonts") {
+            let scheme = doc
+                .root
+                .child_by_local("themeElements")
+                .and_then(|e| e.child_by_local("fontScheme"));
+            crate::theme::attach_script_fonts(fonts, scheme);
+        }
     }
     Ok(v)
 }
@@ -61,7 +101,17 @@ pub fn inspect_override(pkg: &Package, doc_part: &str) -> Result<Value, Error> {
         return Ok(Value::Null);
     };
     let doc = xml::parse(pkg.get(&part)?)?;
-    Ok(crate::theme::inspect_override(&doc.root))
+    let mut v = crate::theme::inspect_override(&doc.root);
+    if let Value::Object(m) = &mut v {
+        m.insert(
+            "extraSchemes".into(),
+            crate::theme::extra_schemes_json(&doc.root),
+        );
+        if let Some(Value::Object(fonts)) = m.get_mut("fonts") {
+            crate::theme::attach_script_fonts(fonts, doc.root.child_by_local("fontScheme"));
+        }
+    }
+    Ok(v)
 }
 
 pub fn set_colors(
@@ -74,11 +124,22 @@ pub fn set_colors(
     let part = theme_part(pkg, doc_part)?
         .ok_or_else(|| Error::with_path(ErrorKind::DocumentThemeNotFound, json_path.clone()))?;
     let mut doc = xml::parse(pkg.get(&part)?)?;
-    if !crate::theme::patch_colors(&mut doc.root, &op.slots) {
+    if !op.slots.is_empty() && !crate::theme::patch_colors(&mut doc.root, &op.slots) {
         return Err(Error::with_path(
             ErrorKind::DocumentThemeNotFound,
-            json_path,
+            json_path.clone(),
         ));
+    }
+    if let Some(name) = &op.name {
+        if !crate::theme::patch_clr_scheme_name(&mut doc.root, name.as_deref()) {
+            return Err(Error::with_path(
+                ErrorKind::DocumentThemeNotFound,
+                json_path.clone(),
+            ));
+        }
+    }
+    if let Some(name) = &op.theme_name {
+        crate::theme::patch_theme_name(&mut doc.root, name.as_deref());
     }
     pkg.set(&part, doc.to_bytes()?)?;
     Ok(())
@@ -95,6 +156,20 @@ pub fn set_fonts(
         .ok_or_else(|| Error::with_path(ErrorKind::DocumentThemeNotFound, json_path.clone()))?;
     let mut doc = xml::parse(pkg.get(&part)?)?;
     crate::theme::patch_fonts(&mut doc.root, &op.fonts, &json_path)?;
+    if let Some(name) = &op.name {
+        if !crate::theme::patch_font_scheme_name(&mut doc.root, name.as_deref()) {
+            return Err(Error::with_path(
+                ErrorKind::DocumentThemeNotFound,
+                json_path.clone(),
+            ));
+        }
+    }
+    if let Some(fonts) = &op.major_scripts {
+        crate::theme::replace_script_fonts(&mut doc.root, true, fonts, &json_path)?;
+    }
+    if let Some(fonts) = &op.minor_scripts {
+        crate::theme::replace_script_fonts(&mut doc.root, false, fonts, &json_path)?;
+    }
     pkg.set(&part, doc.to_bytes()?)?;
     Ok(())
 }
@@ -133,6 +208,29 @@ pub fn set_fmt(
             ));
         }
     }
+    if let Some(name) = &op.name {
+        if !crate::theme::patch_fmt_scheme_name(&mut doc.root, name.as_deref()) {
+            return Err(Error::with_path(
+                ErrorKind::InvalidThemeFmtIndex,
+                format!("ops[{op_index}].name"),
+            ));
+        }
+    }
+    pkg.set(&part, doc.to_bytes()?)?;
+    Ok(())
+}
+
+pub fn set_extra_schemes(
+    pkg: &mut Package,
+    doc_part: &str,
+    op: &SetThemeExtraSchemesOp,
+    op_index: usize,
+) -> Result<(), Error> {
+    let json_path = format!("ops[{op_index}].id");
+    let part = theme_part(pkg, doc_part)?
+        .ok_or_else(|| Error::with_path(ErrorKind::DocumentThemeNotFound, json_path))?;
+    let mut doc = xml::parse(pkg.get(&part)?)?;
+    crate::theme::replace_extra_schemes(&mut doc.root, &op.schemes);
     pkg.set(&part, doc.to_bytes()?)?;
     Ok(())
 }
@@ -162,22 +260,42 @@ pub fn parse_set_colors(obj: &Map<String, Value>, i: usize) -> Result<SetThemeCo
         obj,
         i,
         &[
-            "op", "id", "dk1", "lt1", "dk2", "lt2", "accent1", "accent2", "accent3", "accent4",
-            "accent5", "accent6", "hlink", "folHlink",
+            "op",
+            "id",
+            "name",
+            "themeName",
+            "dk1",
+            "lt1",
+            "dk2",
+            "lt2",
+            "accent1",
+            "accent2",
+            "accent3",
+            "accent4",
+            "accent5",
+            "accent6",
+            "hlink",
+            "folHlink",
         ],
     )?;
     require_document_id(obj, i)?;
     let slots = parse_color_slots(obj, i)?;
-    if slots.is_empty() {
+    let name = parse_opt_null_name(obj, i, "name")?;
+    let theme_name = parse_opt_null_name(obj, i, "themeName")?;
+    if slots.is_empty() && name.is_none() && theme_name.is_none() {
         return Err(Error::with_path(
             ErrorKind::OpRequiresField {
                 op: "setThemeColors".into(),
-                field: "a color slot".into(),
+                field: "a color slot, name, or themeName".into(),
             },
             format!("ops[{i}]"),
         ));
     }
-    Ok(SetThemeColorsOp { slots })
+    Ok(SetThemeColorsOp {
+        slots,
+        name,
+        theme_name,
+    })
 }
 
 pub fn parse_set_fonts(obj: &Map<String, Value>, i: usize) -> Result<SetThemeFontsOp, Error> {
@@ -187,39 +305,51 @@ pub fn parse_set_fonts(obj: &Map<String, Value>, i: usize) -> Result<SetThemeFon
         &[
             "op",
             "id",
+            "name",
             "majorLatin",
             "minorLatin",
             "majorEa",
             "minorEa",
             "majorCs",
             "minorCs",
+            "majorScripts",
+            "minorScripts",
         ],
     )?;
     require_document_id(obj, i)?;
     let fonts = parse_font_slots(obj, i)?;
-    if fonts.is_empty() {
+    let name = parse_opt_null_name(obj, i, "name")?;
+    let major_scripts = parse_opt_scripts(obj, i, "majorScripts")?;
+    let minor_scripts = parse_opt_scripts(obj, i, "minorScripts")?;
+    if fonts.is_empty() && name.is_none() && major_scripts.is_none() && minor_scripts.is_none() {
         return Err(Error::with_path(
             ErrorKind::OpRequiresField {
                 op: "setThemeFonts".into(),
-                field: "a font slot".into(),
+                field: "a font slot, name, majorScripts, or minorScripts".into(),
             },
             format!("ops[{i}]"),
         ));
     }
-    Ok(SetThemeFontsOp { fonts })
+    Ok(SetThemeFontsOp {
+        fonts,
+        name,
+        major_scripts,
+        minor_scripts,
+    })
 }
 
 pub fn parse_set_fmt(obj: &Map<String, Value>, i: usize) -> Result<SetThemeFmtOp, Error> {
-    deny_keys(obj, i, &["op", "id", "line", "fill", "bgFill"])?;
+    deny_keys(obj, i, &["op", "id", "line", "fill", "bgFill", "name"])?;
     require_document_id(obj, i)?;
     let line = parse_fmt_line(obj.get("line"), i, "line")?;
     let fill = parse_fmt_fill(obj.get("fill"), i, "fill")?;
     let bg_fill = parse_fmt_fill(obj.get("bgFill"), i, "bgFill")?;
-    if line.is_none() && fill.is_none() && bg_fill.is_none() {
+    let name = parse_opt_null_name(obj, i, "name")?;
+    if line.is_none() && fill.is_none() && bg_fill.is_none() && name.is_none() {
         return Err(Error::with_path(
             ErrorKind::OpRequiresField {
                 op: "setThemeFmt".into(),
-                field: "line, fill, or bgFill".into(),
+                field: "line, fill, bgFill, or name".into(),
             },
             format!("ops[{i}]"),
         ));
@@ -228,7 +358,40 @@ pub fn parse_set_fmt(obj: &Map<String, Value>, i: usize) -> Result<SetThemeFmtOp
         line,
         fill,
         bg_fill,
+        name,
     })
+}
+
+pub fn parse_set_extra_schemes(
+    obj: &Map<String, Value>,
+    i: usize,
+) -> Result<SetThemeExtraSchemesOp, Error> {
+    deny_keys(obj, i, &["op", "id", "extraSchemes"])?;
+    require_document_id(obj, i)?;
+    let schemes = match obj.get("extraSchemes") {
+        None => {
+            return Err(Error::with_path(
+                ErrorKind::MissingField {
+                    field: "extraSchemes".into(),
+                },
+                format!("ops[{i}].extraSchemes"),
+            ));
+        }
+        Some(Value::Null) => Vec::new(),
+        Some(Value::Array(arr)) => {
+            parse_extra_scheme_array(arr, &format!("ops[{i}].extraSchemes"))?
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "extraSchemes".into(),
+                    expected: TypeName::Array,
+                },
+                format!("ops[{i}].extraSchemes"),
+            ));
+        }
+    };
+    Ok(SetThemeExtraSchemesOp { schemes })
 }
 
 pub fn parse_set_override(obj: &Map<String, Value>, i: usize) -> Result<SetThemeOverrideOp, Error> {
@@ -281,7 +444,10 @@ pub fn parse_create(v: &Value) -> Result<CreateTheme, Error> {
         )
     })?;
     for k in obj.keys() {
-        if !matches!(k.as_str(), "name" | "colors" | "fonts") {
+        if !matches!(
+            k.as_str(),
+            "name" | "colors" | "fonts" | "fmt" | "extraSchemes"
+        ) {
             return Err(Error::with_path(
                 ErrorKind::UnknownField { field: k.clone() },
                 format!("document.theme.{k}"),
@@ -290,7 +456,16 @@ pub fn parse_create(v: &Value) -> Result<CreateTheme, Error> {
     }
     let name = match obj.get("name") {
         None => "Office Theme".into(),
-        Some(Value::String(s)) => s.clone(),
+        Some(Value::String(s)) if !s.is_empty() => s.clone(),
+        Some(Value::String(_)) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "name".into(),
+                    expected: TypeName::NonEmptyString,
+                },
+                "document.theme.name",
+            ));
+        }
         Some(_) => {
             return Err(Error::with_path(
                 ErrorKind::WrongType {
@@ -301,9 +476,12 @@ pub fn parse_create(v: &Value) -> Result<CreateTheme, Error> {
             ));
         }
     };
-    let slots = match obj.get("colors") {
-        None => Vec::new(),
-        Some(Value::Object(m)) => parse_create_colors(m)?,
+    let (colors_name, slots) = match obj.get("colors") {
+        None => (None, Vec::new()),
+        Some(Value::Object(m)) => {
+            let parsed = parse_create_colors(m)?;
+            (parsed.name, parsed.slots)
+        }
         Some(_) => {
             return Err(Error::with_path(
                 ErrorKind::WrongType {
@@ -314,9 +492,17 @@ pub fn parse_create(v: &Value) -> Result<CreateTheme, Error> {
             ));
         }
     };
-    let fonts = match obj.get("fonts") {
-        None => Vec::new(),
-        Some(Value::Object(m)) => parse_create_fonts(m)?,
+    let (fonts_name, fonts, major_scripts, minor_scripts) = match obj.get("fonts") {
+        None => (None, Vec::new(), None, None),
+        Some(Value::Object(m)) => {
+            let parsed = parse_create_fonts(m)?;
+            (
+                parsed.name,
+                parsed.fonts,
+                parsed.major_scripts,
+                parsed.minor_scripts,
+            )
+        }
         Some(_) => {
             return Err(Error::with_path(
                 ErrorKind::WrongType {
@@ -327,7 +513,47 @@ pub fn parse_create(v: &Value) -> Result<CreateTheme, Error> {
             ));
         }
     };
-    Ok(CreateTheme { name, slots, fonts })
+    let fmt_name = match obj.get("fmt") {
+        None => None,
+        Some(Value::Object(m)) => parse_create_fmt_name(m)?,
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "fmt".into(),
+                    expected: TypeName::Object,
+                },
+                "document.theme.fmt",
+            ));
+        }
+    };
+    let extra_schemes = match obj.get("extraSchemes") {
+        None => None,
+        Some(Value::Null) => Some(Vec::new()),
+        Some(Value::Array(arr)) => Some(parse_extra_scheme_array(
+            arr,
+            "document.theme.extraSchemes",
+        )?),
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "extraSchemes".into(),
+                    expected: TypeName::Array,
+                },
+                "document.theme.extraSchemes",
+            ));
+        }
+    };
+    Ok(CreateTheme {
+        name,
+        slots,
+        fonts,
+        colors_name,
+        fonts_name,
+        fmt_name,
+        major_scripts,
+        minor_scripts,
+        extra_schemes,
+    })
 }
 
 pub fn write_create(pkg: &mut Package, spec: &CreateTheme) -> Result<(), Error> {
@@ -340,8 +566,37 @@ pub fn write_create(pkg: &mut Package, spec: &CreateTheme) -> Result<(), Error> 
     if !spec.slots.is_empty() {
         crate::theme::patch_colors(&mut doc.root, &spec.slots);
     }
+    if let Some(name) = &spec.colors_name {
+        crate::theme::patch_clr_scheme_name(&mut doc.root, Some(name));
+    }
     if !spec.fonts.is_empty() {
         crate::theme::patch_fonts(&mut doc.root, &spec.fonts, "document.theme.fonts")?;
+    }
+    if let Some(name) = &spec.fonts_name {
+        crate::theme::patch_fonts(&mut doc.root, &[], "document.theme.fonts")?;
+        crate::theme::patch_font_scheme_name(&mut doc.root, Some(name));
+    }
+    if let Some(fonts) = &spec.major_scripts {
+        crate::theme::replace_script_fonts(
+            &mut doc.root,
+            true,
+            fonts,
+            "document.theme.fonts.majorScripts",
+        )?;
+    }
+    if let Some(fonts) = &spec.minor_scripts {
+        crate::theme::replace_script_fonts(
+            &mut doc.root,
+            false,
+            fonts,
+            "document.theme.fonts.minorScripts",
+        )?;
+    }
+    if let Some(name) = &spec.fmt_name {
+        crate::theme::patch_fmt_scheme_name(&mut doc.root, Some(name));
+    }
+    if let Some(schemes) = &spec.extra_schemes {
+        crate::theme::replace_extra_schemes(&mut doc.root, schemes);
     }
     pkg.set(THEME_PART, doc.to_bytes()?)?;
     let mut rels = Relationships::from_package(pkg, &doc_part)?;
@@ -361,15 +616,37 @@ pub fn write_create(pkg: &mut Package, spec: &CreateTheme) -> Result<(), Error> 
     Ok(())
 }
 
-fn parse_create_colors(obj: &Map<String, Value>) -> Result<Vec<(String, String)>, Error> {
+fn parse_create_colors(obj: &Map<String, Value>) -> Result<NamedColorSlots, Error> {
     for k in obj.keys() {
-        if !crate::theme::COLOR_SLOTS.contains(&k.as_str()) {
+        if k != "name" && !crate::theme::COLOR_SLOTS.contains(&k.as_str()) {
             return Err(Error::with_path(
                 ErrorKind::UnknownField { field: k.clone() },
                 format!("document.theme.colors.{k}"),
             ));
         }
     }
+    let colors_name = match obj.get("name") {
+        None | Some(Value::Null) => None,
+        Some(Value::String(s)) if !s.is_empty() => Some(s.clone()),
+        Some(Value::String(_)) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "name".into(),
+                    expected: TypeName::NonEmptyString,
+                },
+                "document.theme.colors.name",
+            ));
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "name".into(),
+                    expected: TypeName::String,
+                },
+                "document.theme.colors.name",
+            ));
+        }
+    };
     let mut slots = Vec::new();
     for slot in crate::theme::COLOR_SLOTS {
         if let Some(v) = obj.get(*slot) {
@@ -379,14 +656,25 @@ fn parse_create_colors(obj: &Map<String, Value>) -> Result<Vec<(String, String)>
             ));
         }
     }
-    Ok(slots)
+    Ok(NamedColorSlots {
+        name: colors_name,
+        slots,
+    })
 }
 
-fn parse_create_fonts(obj: &Map<String, Value>) -> Result<Vec<(FontSlot, String)>, Error> {
+fn parse_create_fonts(obj: &Map<String, Value>) -> Result<CreateFonts, Error> {
     for k in obj.keys() {
         if !matches!(
             k.as_str(),
-            "majorLatin" | "minorLatin" | "majorEa" | "minorEa" | "majorCs" | "minorCs"
+            "name"
+                | "majorLatin"
+                | "minorLatin"
+                | "majorEa"
+                | "minorEa"
+                | "majorCs"
+                | "minorCs"
+                | "majorScripts"
+                | "minorScripts"
         ) {
             return Err(Error::with_path(
                 ErrorKind::UnknownField { field: k.clone() },
@@ -394,6 +682,28 @@ fn parse_create_fonts(obj: &Map<String, Value>) -> Result<Vec<(FontSlot, String)
             ));
         }
     }
+    let fonts_name = match obj.get("name") {
+        None | Some(Value::Null) => None,
+        Some(Value::String(s)) if !s.is_empty() => Some(s.clone()),
+        Some(Value::String(_)) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "name".into(),
+                    expected: TypeName::NonEmptyString,
+                },
+                "document.theme.fonts.name",
+            ));
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "name".into(),
+                    expected: TypeName::String,
+                },
+                "document.theme.fonts.name",
+            ));
+        }
+    };
     let mut fonts = Vec::new();
     if let Some(s) = parse_face_at(obj, "majorLatin", false, "document.theme.fonts")? {
         fonts.push((FontSlot::MajorLatin, s));
@@ -413,7 +723,45 @@ fn parse_create_fonts(obj: &Map<String, Value>) -> Result<Vec<(FontSlot, String)
     if let Some(s) = parse_face_at(obj, "minorCs", true, "document.theme.fonts")? {
         fonts.push((FontSlot::MinorCs, s));
     }
-    Ok(fonts)
+    let major_scripts =
+        parse_scripts_at(obj.get("majorScripts"), "document.theme.fonts.majorScripts")?;
+    let minor_scripts =
+        parse_scripts_at(obj.get("minorScripts"), "document.theme.fonts.minorScripts")?;
+    Ok(CreateFonts {
+        name: fonts_name,
+        fonts,
+        major_scripts,
+        minor_scripts,
+    })
+}
+
+fn parse_create_fmt_name(obj: &Map<String, Value>) -> Result<Option<String>, Error> {
+    for k in obj.keys() {
+        if k != "name" {
+            return Err(Error::with_path(
+                ErrorKind::UnknownField { field: k.clone() },
+                format!("document.theme.fmt.{k}"),
+            ));
+        }
+    }
+    match obj.get("name") {
+        None | Some(Value::Null) => Ok(None),
+        Some(Value::String(s)) if !s.is_empty() => Ok(Some(s.clone())),
+        Some(Value::String(_)) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "name".into(),
+                expected: TypeName::NonEmptyString,
+            },
+            "document.theme.fmt.name",
+        )),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "name".into(),
+                expected: TypeName::String,
+            },
+            "document.theme.fmt.name",
+        )),
+    }
 }
 
 fn parse_face_at(
@@ -721,6 +1069,226 @@ fn parse_theme_face(
             format!("ops[{i}].{field}"),
         )),
     }
+}
+
+fn parse_opt_null_name(
+    obj: &Map<String, Value>,
+    i: usize,
+    field: &str,
+) -> Result<Option<Option<String>>, Error> {
+    match obj.get(field) {
+        None => Ok(None),
+        Some(Value::Null) => Ok(Some(None)),
+        Some(Value::String(s)) if !s.is_empty() => Ok(Some(Some(s.clone()))),
+        Some(Value::String(_)) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::NonEmptyString,
+            },
+            format!("ops[{i}].{field}"),
+        )),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::String,
+            },
+            format!("ops[{i}].{field}"),
+        )),
+    }
+}
+
+fn parse_opt_scripts(
+    obj: &Map<String, Value>,
+    i: usize,
+    field: &str,
+) -> Result<Option<Vec<ScriptFont>>, Error> {
+    parse_scripts_at(obj.get(field), &format!("ops[{i}].{field}"))
+}
+
+fn parse_scripts_at(v: Option<&Value>, path: &str) -> Result<Option<Vec<ScriptFont>>, Error> {
+    match v {
+        None => Ok(None),
+        Some(Value::Null) => Ok(Some(Vec::new())),
+        Some(Value::Array(arr)) => {
+            let mut out = Vec::with_capacity(arr.len());
+            for (j, item) in arr.iter().enumerate() {
+                out.push(parse_script_item(item, &format!("{path}[{j}]"))?);
+            }
+            Ok(Some(out))
+        }
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "scripts".into(),
+                expected: TypeName::Array,
+            },
+            path.to_string(),
+        )),
+    }
+}
+
+fn parse_script_item(v: &Value, path: &str) -> Result<ScriptFont, Error> {
+    let obj = v.as_object().ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::WrongType {
+                field: "script font".into(),
+                expected: TypeName::Object,
+            },
+            path.to_string(),
+        )
+    })?;
+    for k in obj.keys() {
+        if !matches!(k.as_str(), "script" | "typeface") {
+            return Err(Error::with_path(
+                ErrorKind::UnknownField { field: k.clone() },
+                format!("{path}.{k}"),
+            ));
+        }
+    }
+    let script = match obj.get("script") {
+        Some(Value::String(s)) if !s.is_empty() => s.clone(),
+        Some(Value::String(_)) | None => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "script".into(),
+                    expected: TypeName::NonEmptyString,
+                },
+                format!("{path}.script"),
+            ));
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "script".into(),
+                    expected: TypeName::String,
+                },
+                format!("{path}.script"),
+            ));
+        }
+    };
+    let typeface = match obj.get("typeface") {
+        Some(Value::String(s)) => s.clone(),
+        None => {
+            return Err(Error::with_path(
+                ErrorKind::MissingField {
+                    field: "typeface".into(),
+                },
+                format!("{path}.typeface"),
+            ));
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "typeface".into(),
+                    expected: TypeName::String,
+                },
+                format!("{path}.typeface"),
+            ));
+        }
+    };
+    Ok(ScriptFont { script, typeface })
+}
+
+fn parse_extra_scheme_array(arr: &[Value], path: &str) -> Result<Vec<ExtraScheme>, Error> {
+    let mut out = Vec::with_capacity(arr.len());
+    for (j, item) in arr.iter().enumerate() {
+        out.push(parse_extra_scheme_item(item, &format!("{path}[{j}]"))?);
+    }
+    Ok(out)
+}
+
+fn parse_extra_scheme_item(v: &Value, path: &str) -> Result<ExtraScheme, Error> {
+    let obj = v.as_object().ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::WrongType {
+                field: "extraSchemes[]".into(),
+                expected: TypeName::Object,
+            },
+            path.to_string(),
+        )
+    })?;
+    for k in obj.keys() {
+        if !matches!(k.as_str(), "name" | "colors") {
+            return Err(Error::with_path(
+                ErrorKind::UnknownField { field: k.clone() },
+                format!("{path}.{k}"),
+            ));
+        }
+    }
+    let item_name = parse_scheme_name(obj.get("name"), &format!("{path}.name"))?;
+    let (colors_name, slots) = match obj.get("colors") {
+        None => (None, Vec::new()),
+        Some(Value::Object(m)) => {
+            let parsed = parse_extra_colors(m, &format!("{path}.colors"))?;
+            (parsed.name, parsed.slots)
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "colors".into(),
+                    expected: TypeName::Object,
+                },
+                format!("{path}.colors"),
+            ));
+        }
+    };
+    let name = match (item_name, colors_name) {
+        (Some(a), Some(b)) if a != b => {
+            return Err(Error::with_path(
+                ErrorKind::MutuallyExclusive {
+                    a: "name".into(),
+                    b: "colors.name".into(),
+                },
+                format!("{path}.name"),
+            ));
+        }
+        (Some(a), _) => Some(a),
+        (None, Some(b)) => Some(b),
+        (None, None) => None,
+    };
+    Ok(ExtraScheme { name, slots })
+}
+
+fn parse_scheme_name(v: Option<&Value>, path: &str) -> Result<Option<String>, Error> {
+    match v {
+        None | Some(Value::Null) => Ok(None),
+        Some(Value::String(s)) if !s.is_empty() => Ok(Some(s.clone())),
+        Some(Value::String(_)) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "name".into(),
+                expected: TypeName::NonEmptyString,
+            },
+            path.to_string(),
+        )),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "name".into(),
+                expected: TypeName::String,
+            },
+            path.to_string(),
+        )),
+    }
+}
+
+fn parse_extra_colors(obj: &Map<String, Value>, path: &str) -> Result<NamedColorSlots, Error> {
+    for k in obj.keys() {
+        if k != "name" && !crate::theme::COLOR_SLOTS.contains(&k.as_str()) {
+            return Err(Error::with_path(
+                ErrorKind::UnknownField { field: k.clone() },
+                format!("{path}.{k}"),
+            ));
+        }
+    }
+    let name = parse_scheme_name(obj.get("name"), &format!("{path}.name"))?;
+    let mut slots = Vec::new();
+    for slot in crate::theme::COLOR_SLOTS {
+        if let Some(v) = obj.get(*slot) {
+            slots.push((
+                (*slot).to_string(),
+                parse_hex_at(v, &format!("{path}.{slot}"))?,
+            ));
+        }
+    }
+    Ok(NamedColorSlots { name, slots })
 }
 
 fn deny_keys(obj: &Map<String, Value>, i: usize, allowed: &[&str]) -> Result<(), Error> {

@@ -262,7 +262,7 @@
 - 对页眉页脚、框内、注内、批注内、表格单元格内的段落或 `section:{n}` 发该 op 报 `InvalidId`
 - 找不到段落时报 `IdNotFound`
 - 不认识的分节 `type` / `sectionType`，或 create 时最后一段带 `sectionType`，报 `InvalidField`
-- `setEvenAndOddHeaders` / `setMirrorMargins` / `setGutterAtTop` / `setPageBackground` / `setThemeFmt` / `setThemeOverride` / `setBibliographyStyle` 的 id 不是 `docx:document` 报 `InvalidId`
+- `setEvenAndOddHeaders` / `setMirrorMargins` / `setGutterAtTop` / `setPageBackground` / `setThemeFmt` / `setThemeExtraSchemes` / `setThemeOverride` / `setBibliographyStyle` 的 id 不是 `docx:document` 报 `InvalidId`
 - docx 的 `setProtection` 的 id 不是 `docx:document` 报 `InvalidId`
 - xlsx 的 `setProtection` 的 id 不是 `sheet:{name}` 也不是 `xlsx:workbook` 报 `InvalidId`
 - `insertProtectedRange` 的 id 不是 `sheet:{name}` 报 `InvalidId`
@@ -453,7 +453,7 @@
 - `insertMaster` 的 id 必须是 `pptx:presentation`
 - `deleteMaster` 的 id 必须是 `master:{n}`
 - `setSlideSize` 的 id 必须是 `pptx:presentation`
-- `setThemeColors` / `setThemeFonts` / `setThemeFmt` / `setThemeOverride` 的 id：pptx 的前两条必须是 `master:{n}`，docx 必须是 `docx:document`
+- `setThemeColors` / `setThemeFonts` / `setThemeFmt` / `setThemeExtraSchemes` / `setThemeOverride` 的 id：pptx 的前两条必须是 `master:{n}`，docx 必须是 `docx:document`
 - 找不到该母版 / 版式 / 占位符 / theme 部件报 `IdNotFound`
 - 下列情况报 `InvalidField`
   - 删掉最后一页
@@ -469,7 +469,7 @@
   - `insertPlaceholder` 缺 `type`，或 `type` 不在白名单
   - 该母版只剩一份版式、最后一份母版、或仍有页占用时 `deleteLayout` / `deleteMaster`
   - `setSlideSize` 缺 `cx` / `cy`、越界、或 `type` 不在白名单
-  - `setThemeColors` / `setThemeFonts` / `setThemeFmt` / `setThemeOverride` 一个可写字段都不给、非法十六进制、`majorLatin` / `minorLatin` 空串、或 `setThemeFmt` 的 `index` / `kind` / `w` 非法
+  - `setThemeColors` / `setThemeFonts` / `setThemeFmt` / `setThemeExtraSchemes` / `setThemeOverride` 一个可写字段都不给、非法十六进制、`majorLatin` / `minorLatin` 空串、名字空串、脚本项缺 `script` / `typeface`、或 `setThemeFmt` 的 `index` / `kind` / `w` 非法
 - `setHandoutText` 的 `id` 必须是 `handout`
 - `header` / `footer` / `date` / `sldNum` 一个都不给报 `InvalidField`
 - docx / xlsx 上发这些幻灯片管理 op、母版写入 op、主题与尺寸 op、`insertAnim` / `setAnim` / `deleteAnim` / `moveAnim`、`setHandoutText` 以及 `setShowPr` 报 `InvalidField`
@@ -609,6 +609,7 @@
     - `setPageBackground`
     - `setPageBorders`
     - `setThemeFmt`
+    - `setThemeExtraSchemes`
     - `setThemeOverride`
     - `setMirrorMargins`
     - `setGutterAtTop`
@@ -974,7 +975,7 @@
 - 空 `base` / `rt` / `lid`、不认识的 `align`、或字号越界报 `InvalidField`
 - 目标段落落在本期收入的拼音范围内时 `setParaText` 报 `NotImplemented`
 - `setEastAsianSettings` 的 `id` 必须是 `docx:document`
-- 不认识的 `characterSpacingControl`、禁则字符对象缺 `lang` / `chars`、或四个字段一个都不给，报 `InvalidField`
+- 不认识的 `characterSpacingControl`、禁则字符对象缺 `lang` / `chars`、`themeFontLang` 空串、或五个字段一个都不给，报 `InvalidField`
 - xlsx / pptx 上发拼音 op 或 `setEastAsianSettings` 报 `InvalidField`
 - xlsx / pptx 上发 `insertSection` / `deleteSection` 报 `InvalidField`
 - 找不到目录时，`deleteToc` 报 `IdNotFound`

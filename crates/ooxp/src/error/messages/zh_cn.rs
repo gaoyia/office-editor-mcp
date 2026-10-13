@@ -1520,7 +1520,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
                 .into()
         }
         ErrorKind::NeedSetEastAsianSettingsField => {
-            "setEastAsianSettings 至少要给 characterSpacingControl、strictFirstAndLastChars、noLineBreaksBefore 或 noLineBreaksAfter 之一"
+            "setEastAsianSettings 至少要给 characterSpacingControl、strictFirstAndLastChars、noLineBreaksBefore、noLineBreaksAfter 或 themeFontLang 之一"
                 .into()
         }
         ErrorKind::EmptyKinsokuLang => "lang 不能为空".into(),

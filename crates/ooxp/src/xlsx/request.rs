@@ -2428,6 +2428,7 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<XlsxOp>, Error> {
             | "setThemeColors"
             | "setThemeFonts"
             | "setThemeFmt"
+            | "setThemeExtraSchemes"
             | "setThemeOverride"
             | "setHandoutText"
             | "setShapePos"

@@ -298,11 +298,11 @@ docx create 同样生成 Transitional 包，命名空间用 2006 那套。
   - 必须含 `compatibilityMode`，`val` 为 `15`（MS-DOCX §2.3.5），否则 Word 按兼容模式打开（默认 12）
   - 给了 `document.protection` 或 apply `setProtection` 时还可含 `documentProtection` / `writeProtection`
   - `setProtection` 带 `password` 时 `documentProtection` 另写 `crypt*` 与 `hash` / `salt`
-  - `setEastAsianSettings` 还可含 `characterSpacingControl` / `strictFirstAndLastChars` / `noLineBreaksBefore` / `noLineBreaksAfter`
+  - `setEastAsianSettings` 还可含 `characterSpacingControl` / `strictFirstAndLastChars` / `noLineBreaksBefore` / `noLineBreaksAfter` / `themeFontLang`
 
 inspect 认主文档 `.rels` 里 Type 以 `/theme` 结尾的部件（Word 16.0 另存常见 `/word/theme/theme1.xml`）。
 也认 Type 以 `/themeOverride` 结尾的部件。create 给了 `document.theme` 时写 theme；省略则不写。
-apply 的 `setThemeColors` / `setThemeFonts` / `setThemeFmt` 只改已有 theme，不新建。
+apply 的 `setThemeColors` / `setThemeFonts` / `setThemeFmt` / `setThemeExtraSchemes` 只改已有 theme，不新建。
 `setThemeOverride` 缺则新建 `/word/theme/themeOverride1.xml`。
 
 可选但 create 要写：

@@ -112,7 +112,8 @@
     "characterSpacingControl": null,
     "strictFirstAndLastChars": null,
     "noLineBreaksBefore": null,
-    "noLineBreaksAfter": null
+    "noLineBreaksAfter": null,
+    "themeFontLang": null
   },
   "bibliographyStyle": null,
   "from": 1,

@@ -262,6 +262,7 @@ pub fn apply(bytes: &[u8], ops: &[DocxOp]) -> Result<Vec<u8>, Error> {
                         strict: op.strict,
                         no_before: op.no_before.as_ref().map(|v| v.as_ref()),
                         no_after: op.no_after.as_ref().map(|v| v.as_ref()),
+                        theme_font_lang: op.theme_font_lang.as_ref().map(|v| v.as_ref()),
                     },
                 )?;
             }
@@ -601,6 +602,9 @@ pub fn apply(bytes: &[u8], ops: &[DocxOp]) -> Result<Vec<u8>, Error> {
             }
             DocxOp::SetThemeFmt(op) => {
                 super::theme::set_fmt(&mut pkg, &doc_part, op, i)?;
+            }
+            DocxOp::SetThemeExtraSchemes(op) => {
+                super::theme::set_extra_schemes(&mut pkg, &doc_part, op, i)?;
             }
             DocxOp::SetThemeOverride(op) => {
                 super::theme::set_override(&mut pkg, &doc_part, op, i)?;

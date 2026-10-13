@@ -47,6 +47,26 @@ pub enum FmtFillKind {
     Grad,
 }
 
+#[derive(Debug, Clone)]
+pub struct ScriptFont {
+    pub script: String,
+    pub typeface: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct ExtraScheme {
+    pub name: Option<String>,
+    pub slots: Vec<(String, String)>,
+}
+
+const THEME_ROOT_ORDER: &[&str] = &[
+    "themeElements",
+    "objectDefaults",
+    "extraClrSchemeLst",
+    "custClrLst",
+    "extLst",
+];
+
 pub fn inspect(root: &Element) -> Value {
     let name = root
         .attr_local("name")
@@ -143,6 +163,156 @@ pub fn patch_fonts(
         set_typeface(scheme, *slot, face);
     }
     Ok(())
+}
+
+pub fn patch_theme_name(root: &mut Element, name: Option<&str>) {
+    patch_name_attr(root, name);
+}
+
+pub fn patch_clr_scheme_name(root: &mut Element, name: Option<&str>) -> bool {
+    let Some(scheme) = root
+        .child_by_local_mut("themeElements")
+        .and_then(|e| e.child_by_local_mut("clrScheme"))
+    else {
+        return false;
+    };
+    patch_name_attr(scheme, name);
+    true
+}
+
+pub fn patch_font_scheme_name(root: &mut Element, name: Option<&str>) -> bool {
+    let Some(scheme) = root
+        .child_by_local_mut("themeElements")
+        .and_then(|e| e.child_by_local_mut("fontScheme"))
+    else {
+        return false;
+    };
+    patch_name_attr(scheme, name);
+    true
+}
+
+pub fn patch_fmt_scheme_name(root: &mut Element, name: Option<&str>) -> bool {
+    let Some(scheme) = fmt_scheme_mut(root) else {
+        return false;
+    };
+    patch_name_attr(scheme, name);
+    true
+}
+
+fn patch_name_attr(el: &mut Element, name: Option<&str>) {
+    match name {
+        Some(s) => el.set_attr("name", s),
+        None => el.remove_attr("name"),
+    }
+}
+
+pub fn replace_script_fonts(
+    root: &mut Element,
+    major: bool,
+    fonts: &[ScriptFont],
+    json_path: &str,
+) -> Result<(), Error> {
+    patch_fonts(root, &[], json_path)?;
+    let group = if major { "majorFont" } else { "minorFont" };
+    let elements = root.child_by_local_mut("themeElements").ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::XmlMissing {
+                parent: "theme".into(),
+                child: "themeElements".into(),
+            },
+            json_path.to_string(),
+        )
+    })?;
+    let scheme = elements.child_by_local_mut("fontScheme").ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::XmlMissing {
+                parent: "themeElements".into(),
+                child: "fontScheme".into(),
+            },
+            json_path.to_string(),
+        )
+    })?;
+    if scheme.child_by_local(group).is_none() {
+        scheme.push_element(Element::new(format!("a:{group}")));
+    }
+    let Some(g) = scheme.child_by_local_mut(group) else {
+        return Ok(());
+    };
+    g.children
+        .retain(|n| !matches!(n, Node::Element(e) if e.local_name() == "font"));
+    for font in fonts {
+        g.push_element(
+            Element::new("a:font")
+                .with_attr("script", &font.script)
+                .with_attr("typeface", &font.typeface),
+        );
+    }
+    Ok(())
+}
+
+pub fn replace_extra_schemes(root: &mut Element, schemes: &[ExtraScheme]) {
+    ensure_xmlns(root, "a", DML_NS);
+    root.children
+        .retain(|n| !matches!(n, Node::Element(e) if e.local_name() == "extraClrSchemeLst"));
+    if schemes.is_empty() {
+        return;
+    }
+    let mut lst = Element::new("a:extraClrSchemeLst");
+    for spec in schemes {
+        lst.push_element(extra_scheme_element(spec));
+    }
+    let dest = insert_index_by_order(root, "extraClrSchemeLst", THEME_ROOT_ORDER);
+    root.children.insert(dest, Node::Element(lst));
+}
+
+fn extra_scheme_element(spec: &ExtraScheme) -> Element {
+    let mut scheme = default_clr_scheme();
+    patch_name_attr(&mut scheme, spec.name.as_deref());
+    if !spec.slots.is_empty() {
+        patch_scheme_colors(&mut scheme, &spec.slots);
+    }
+    let mut extra = Element::new("a:extraClrScheme");
+    extra.push_element(scheme);
+    extra.push_element(identity_clr_map());
+    extra
+}
+
+fn identity_clr_map() -> Element {
+    Element::new("a:clrMap")
+        .with_attr("bg1", "lt1")
+        .with_attr("tx1", "dk1")
+        .with_attr("bg2", "lt2")
+        .with_attr("tx2", "dk2")
+        .with_attr("accent1", "accent1")
+        .with_attr("accent2", "accent2")
+        .with_attr("accent3", "accent3")
+        .with_attr("accent4", "accent4")
+        .with_attr("accent5", "accent5")
+        .with_attr("accent6", "accent6")
+        .with_attr("hlink", "hlink")
+        .with_attr("folHlink", "folHlink")
+}
+
+fn insert_index_by_order(parent: &Element, local: &str, order: &[&str]) -> usize {
+    let my = order
+        .iter()
+        .position(|&x| x == local)
+        .unwrap_or(order.len());
+    let mut after_lower = 0usize;
+    for (i, n) in parent.children.iter().enumerate() {
+        let Node::Element(e) = n else {
+            continue;
+        };
+        let Some(rank) = order.iter().position(|&x| x == e.local_name()) else {
+            continue;
+        };
+        if rank < my {
+            after_lower = i + 1;
+        } else if rank > my {
+            return i;
+        }
+    }
+    after_lower
 }
 
 pub fn patch_line_width(root: &mut Element, index: usize, w: u32) -> bool {
@@ -262,6 +432,50 @@ fn fonts_of(scheme: Option<&Element>) -> Value {
         json!(typeface_of(scheme, "minorFont", "cs")),
     );
     Value::Object(obj)
+}
+
+pub fn attach_script_fonts(fonts: &mut Map<String, Value>, scheme: Option<&Element>) {
+    fonts.insert("majorScripts".into(), script_fonts_of(scheme, "majorFont"));
+    fonts.insert("minorScripts".into(), script_fonts_of(scheme, "minorFont"));
+}
+
+pub fn extra_schemes_json(root: &Element) -> Value {
+    let Some(lst) = root.child_by_local("extraClrSchemeLst") else {
+        return json!([]);
+    };
+    Value::Array(
+        lst.element_children()
+            .filter(|e| e.local_name() == "extraClrScheme")
+            .map(extra_scheme_item)
+            .collect(),
+    )
+}
+
+fn extra_scheme_item(el: &Element) -> Value {
+    let scheme = el.child_by_local("clrScheme");
+    json!({
+        "name": scheme
+            .and_then(|s| s.attr_local("name"))
+            .filter(|s| !s.is_empty()),
+        "colors": colors_of(scheme),
+    })
+}
+
+fn script_fonts_of(scheme: Option<&Element>, group: &str) -> Value {
+    let Some(g) = scheme.and_then(|s| s.child_by_local(group)) else {
+        return json!([]);
+    };
+    Value::Array(
+        g.element_children()
+            .filter(|e| e.local_name() == "font")
+            .map(|e| {
+                json!({
+                    "script": e.attr_local("script"),
+                    "typeface": e.attr_local("typeface"),
+                })
+            })
+            .collect(),
+    )
 }
 
 fn fmt_of(scheme: Option<&Element>) -> Value {

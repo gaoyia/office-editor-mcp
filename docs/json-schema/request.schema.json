@@ -1378,10 +1378,19 @@
                 "$ref": "pptx.schema.json#/$defs/setThemeColorsOp"
               },
               {
+                "$ref": "docx.schema.json#/$defs/setThemeColorsOp"
+              },
+              {
                 "$ref": "pptx.schema.json#/$defs/setThemeFontsOp"
               },
               {
+                "$ref": "docx.schema.json#/$defs/setThemeFontsOp"
+              },
+              {
                 "$ref": "docx.schema.json#/$defs/setThemeFmtOp"
+              },
+              {
+                "$ref": "docx.schema.json#/$defs/setThemeExtraSchemesOp"
               },
               {
                 "$ref": "docx.schema.json#/$defs/setThemeOverrideOp"

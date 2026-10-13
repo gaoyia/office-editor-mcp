@@ -1202,6 +1202,7 @@ pub struct SetEastAsianSettingsOp {
     pub strict: Option<Option<bool>>,
     pub no_before: Option<Option<super::east_asia::KinsokuChars>>,
     pub no_after: Option<Option<super::east_asia::KinsokuChars>>,
+    pub theme_font_lang: Option<Option<super::east_asia::ThemeFontLang>>,
 }
 
 #[derive(Debug, Clone)]
@@ -1423,6 +1424,7 @@ pub enum DocxOp {
     SetThemeColors(super::theme::SetThemeColorsOp),
     SetThemeFonts(super::theme::SetThemeFontsOp),
     SetThemeFmt(super::theme::SetThemeFmtOp),
+    SetThemeExtraSchemes(super::theme::SetThemeExtraSchemesOp),
     SetThemeOverride(super::theme::SetThemeOverrideOp),
     SetProps(crate::props::SetPropsOp),
     SetCustomProp(crate::props::SetCustomPropOp),
@@ -2152,6 +2154,9 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<DocxOp>, Error> {
                 obj, i,
             )?)),
             "setThemeFmt" => out.push(DocxOp::SetThemeFmt(super::theme::parse_set_fmt(obj, i)?)),
+            "setThemeExtraSchemes" => out.push(DocxOp::SetThemeExtraSchemes(
+                super::theme::parse_set_extra_schemes(obj, i)?,
+            )),
             "setThemeOverride" => out.push(DocxOp::SetThemeOverride(
                 super::theme::parse_set_override(obj, i)?,
             )),
@@ -3857,6 +3862,7 @@ fn parse_set_east_asian_settings(
             "strictFirstAndLastChars",
             "noLineBreaksBefore",
             "noLineBreaksAfter",
+            "themeFontLang",
         ],
     )?;
     let id = require_op_id(obj, i)?;
@@ -3871,7 +3877,12 @@ fn parse_set_east_asian_settings(
     let strict = parse_opt_null_bool(obj, i, "strictFirstAndLastChars")?;
     let no_before = parse_opt_kinsoku(obj, i, "noLineBreaksBefore")?;
     let no_after = parse_opt_kinsoku(obj, i, "noLineBreaksAfter")?;
-    if character_spacing.is_none() && strict.is_none() && no_before.is_none() && no_after.is_none()
+    let theme_font_lang = parse_opt_theme_font_lang(obj, i)?;
+    if character_spacing.is_none()
+        && strict.is_none()
+        && no_before.is_none()
+        && no_after.is_none()
+        && theme_font_lang.is_none()
     {
         return Err(Error::with_path(
             ErrorKind::NeedSetEastAsianSettingsField,
@@ -3883,7 +3894,68 @@ fn parse_set_east_asian_settings(
         strict,
         no_before,
         no_after,
+        theme_font_lang,
     })
+}
+
+fn parse_opt_theme_font_lang(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<Option<Option<super::east_asia::ThemeFontLang>>, Error> {
+    parse_theme_font_lang_at(obj.get("themeFontLang"), &format!("ops[{i}].themeFontLang"))
+}
+
+fn parse_theme_font_lang_at(
+    v: Option<&Value>,
+    path: &str,
+) -> Result<Option<Option<super::east_asia::ThemeFontLang>>, Error> {
+    match v {
+        None => Ok(None),
+        Some(Value::Null) => Ok(Some(None)),
+        Some(Value::Object(inner)) => {
+            for k in inner.keys() {
+                if !matches!(k.as_str(), "val" | "eastAsia" | "bidi") {
+                    return Err(Error::with_path(
+                        ErrorKind::UnknownField { field: k.clone() },
+                        format!("{path}.{k}"),
+                    ));
+                }
+            }
+            Ok(Some(Some(super::east_asia::ThemeFontLang {
+                val: parse_opt_lang_attr(inner.get("val"), &format!("{path}.val"))?,
+                east_asia: parse_opt_lang_attr(inner.get("eastAsia"), &format!("{path}.eastAsia"))?,
+                bidi: parse_opt_lang_attr(inner.get("bidi"), &format!("{path}.bidi"))?,
+            })))
+        }
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "themeFontLang".into(),
+                expected: TypeName::Object,
+            },
+            path.to_string(),
+        )),
+    }
+}
+
+fn parse_opt_lang_attr(v: Option<&Value>, path: &str) -> Result<Option<String>, Error> {
+    match v {
+        None | Some(Value::Null) => Ok(None),
+        Some(Value::String(s)) if !s.is_empty() => Ok(Some(s.clone())),
+        Some(Value::String(_)) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "themeFontLang".into(),
+                expected: TypeName::NonEmptyString,
+            },
+            path.to_string(),
+        )),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "themeFontLang".into(),
+                expected: TypeName::String,
+            },
+            path.to_string(),
+        )),
+    }
 }
 
 fn parse_opt_kinsoku(
