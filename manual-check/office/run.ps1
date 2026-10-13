@@ -81,6 +81,7 @@ $order = @(
     'docx-format'
     'docx-para-run-remain'
     'docx-run-spacing'
+    'docx-run-scale'
     'docx-east-asia'
     'docx-insert-section'
     'docx-toc'

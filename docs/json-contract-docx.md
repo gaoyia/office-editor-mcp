@@ -39,7 +39,7 @@ apply 可用 `insertHeaderFooter` 为某节某类型新建页眉或页脚部件�
 可用 `insertEmbeddedFont` / `deleteEmbeddedFont` / `setFontEmbed` 读写嵌入字体，
 可用 `setPageBackground` 写整篇页面背景色或 DrawingML / 图片填充、用 `setPageBorders` 写节上页面边框（含艺术型），可用 `insertMath` / `setMath` / `deleteMath` 插改删 OMML 公式，
 可用 `insertContentControl` / `setContentControl` / `deleteContentControl` 插改删内容控件，
-可用 `setParaFormat` / `setRunFormat` 写禁则、强调点、压缩排版、段边框、段底纹、制表位，以及 run 的突出显示、删除线、上下标、字符间距与字距调整，可用 `insertRuby` / `setRuby` / `deleteRuby` 插改删拼音，
+可用 `setParaFormat` / `setRunFormat` 写禁则、强调点、压缩排版、段边框、段底纹、制表位，以及 run 的突出显示、删除线、上下标、字符间距、字距调整与字符缩放，可用 `insertRuby` / `setRuby` / `deleteRuby` 插改删拼音，
 可用 `setEastAsianSettings` 写整篇压缩与自定义禁则字符。
 docx 可用 `setProtection` 开关无密码的限制编辑与只读推荐。xlsx 可用同一 `op` 开关工作表保护与工作簿结构保护（可写 SHA-512 哈希），不要复用 docx 根上那个 `protection` 对象。
 docx 可用 `insertWatermark` / `deleteWatermark` 读写页眉里的 DrawingML 水印。
@@ -1569,7 +1569,7 @@ xlsx / pptx 的 `scope.tables` 不是同一件事：xlsx 仍拒绝；pptx 展开
   有则数组按 `w:tab` 文档顺序。每项字段顺序：`val`、`pos`。
   `val` 取 `@w:val` 原文，缺则为 `null`。`pos` 能解析成非负整数则写整数，否则为 `null`。单位 twip。不报 `leader`。
 - `runCount` 始终出现在已列出的段落上（正文切片、页眉页脚段落、框内、注内、批注内、表格单元格）。计该段内被收入的 `w:r` 个数，规则与 run id 相同。
-- `scope.runs` 为 `true` 时，已列出的段落带 `runs`。每条字段顺序：`id`、`index`、`style`、`text`、`bold`、`italic`、`underline`、`sz`、`color`、`font`、`eastAsiaFont`、`em`、`eastAsianLayout`、`highlight`、`strike`、`dstrike`、`vertAlign`、`spacing`、`kern`。
+- `scope.runs` 为 `true` 时，已列出的段落带 `runs`。每条字段顺序：`id`、`index`、`style`、`text`、`bold`、`italic`、`underline`、`sz`、`color`、`font`、`eastAsiaFont`、`em`、`eastAsianLayout`、`highlight`、`strike`、`dstrike`、`vertAlign`、`spacing`、`kern`、`scale`。
   `id` 是 `{段落 id}/run:{n}`。`index` 与 `{n}` 相同。
   `style` 取该 run 自己的 `w:rStyle/@w:val`，没有 `rStyle` 则为 `null`。不把 `styles.xml` 摊进来。
   `text` 是该 run 内可见纯文本，规则与段上 `text` 相同，范围限于这个 `w:r`。
@@ -1587,6 +1587,9 @@ xlsx / pptx 的 `scope.tables` 不是同一件事：xlsx 仍拒绝；pptx 展开
   `spacing` 取该 run 自己的 `w:rPr/w:spacing/@w:val`（§17.3.2.35），单位 twip，能解析成整数则写整数（可负），否则为 `null`。没有该元素为 `null`。
   这是整数，不是段上那个 `spacing` 对象。
   `kern` 取 `w:kern/@w:val`（§17.3.2.19），半磅，能解析成非负整数则写整数，否则为 `null`。没有该元素为 `null`。
+  `scale` 取 `w:rPr/w:w/@w:val`（§17.3.2.43，`ST_TextScale` §17.18.95），百分比整数。
+  属性可带或不带 `%` 后缀；能解析成整数则写整数，否则为 `null`。没有该元素为 `null`。
+  不要叫 `w`。不把样式里的缩放摊进来。
   不把 `styles.xml` 摊进来。不把文档级 `characterSpacingControl` 摊到 run 上。
 - `link` 始终出现。未链接则为 `{ "prev": null, "next": null }`。链接时 `prev` / `next` 是相邻框的 id，没有那一端则为 `null`。
 - 框内 `paragraphs` 的字段顺序与正文段落相同（含 `pictureCount`）。框内图的字段顺序与宿主图相同，id 带框前缀。
@@ -4207,22 +4210,29 @@ create 给了 `tables[].cellFormats[].borders` 时按同一套规则写入。
   - 整数，单位 twip，可负
   - 写入 `w:rPr/w:spacing/@w:val`（§17.3.2.35）
   - `null` 表示去掉该元素
-  - 不是段上 `setParaFormat` 的 `spacing` 对象，也不写 `w:w`（见 65）
+  - 不是段上 `setParaFormat` 的 `spacing` 对象，也不写 `w:w`
 - **`kern`**
   - 可选
   - 非负整数，单位半磅
   - 写入 `w:kern/@w:val`（§17.3.2.19）
   - `null` 表示去掉该元素
   - 不是文档级 `characterSpacingControl`
+- **`scale`**
+  - 可选
+  - 整数，1 到 600，单位百分比
+  - 写入 `w:rPr/w:w/@w:val`（§17.3.2.43）
+  - `null` 表示去掉该元素
+  - 不要叫 `w`，不要和 `kern`、run 上的 `spacing` 混
 
-`bold`、`italic`、`underline`、`sz`、`color`、`font`、`eastAsiaFont`、`em`、`eastAsianLayout`、`highlight`、`strike`、`dstrike`、`vertAlign`、`spacing`、`kern` 至少给一个。只改被点名的那一个 `w:r` 的 `w:rPr`，不拆 run，不改 `styles.xml`。
-不认识的 `underline` / `em` / `combineBrackets` / `highlight` / `vertAlign`、空 `font` / `eastAsiaFont`、不是六位十六进制的 `color`、`sz` 越界、`spacing` 不是整数、`kern` 不是非负整数，报 `InvalidField`。找不到 run 报 `IdNotFound`。
-id 不是 run id 报 `InvalidId`。xlsx / pptx 上发此 op 或这两字段报 `InvalidField`。
+`bold`、`italic`、`underline`、`sz`、`color`、`font`、`eastAsiaFont`、`em`、`eastAsianLayout`、`highlight`、`strike`、`dstrike`、`vertAlign`、`spacing`、`kern`、`scale` 至少给一个。只改被点名的那一个 `w:r` 的 `w:rPr`，不拆 run，不改 `styles.xml`。
+不认识的 `underline` / `em` / `combineBrackets` / `highlight` / `vertAlign`、空 `font` / `eastAsiaFont`、不是六位十六进制的 `color`、`sz` 越界、`spacing` 不是整数、`kern` 不是非负整数、`scale` 不在 1–600，报 `InvalidField`。找不到 run 报 `IdNotFound`。
+id 不是 run id 报 `InvalidId`。xlsx / pptx 上发此 op 或这些字段报 `InvalidField`。
 格内、框内、注内、批注内、页眉页脚段落的 run 同样认。
 
 示例见 `docs/examples/docx-apply-format.json`。
 段边框、底纹、制表位与 run 剩余见 `docs/examples/docx-apply-para-run-remain.json`。
 字符间距与字距调整见 `docs/examples/docx-apply-run-spacing.json`。
+字符缩放见 `docs/examples/docx-apply-run-scale.json`。
 
 ### insertRuby
 

@@ -196,7 +196,8 @@ fn runs_list_with_scope() {
             "dstrike",
             "vertAlign",
             "spacing",
-            "kern"
+            "kern",
+            "scale"
         ]
     );
     assert_eq!(runs[0]["id"], "para:AAAA0001/run:1");
@@ -464,6 +465,7 @@ fn para_borders_shd_tabs_and_run_remain() {
     assert!(r0["vertAlign"].is_null());
     assert!(r0["spacing"].is_null());
     assert!(r0["kern"].is_null());
+    assert!(r0["scale"].is_null());
 
     let out = tmp_dir().join("remain-out.docx");
     apply(
@@ -701,4 +703,117 @@ fn set_run_format_spacing_and_kern() {
     let rc = &tree_c["paragraphs"][0]["runs"][0];
     assert_eq!(rc["spacing"], 40);
     assert_eq!(rc["kern"], 28);
+}
+
+#[test]
+fn set_run_format_scale() {
+    let path = write_sample("scale");
+    let tree0 = inspect(&path, json!({ "from": 1, "maxParas": 20, "runs": true }));
+    let r0 = &para(&tree0, "para:AAAA0001")["runs"][0];
+    assert!(r0["scale"].is_null());
+
+    let out = tmp_dir().join("scale-out.docx");
+    apply(
+        &path,
+        &out,
+        json!([{
+            "op": "setRunFormat",
+            "id": "para:AAAA0001/run:1",
+            "scale": 200
+        }]),
+    );
+    let tree = inspect(&out, json!({ "from": 1, "maxParas": 20, "runs": true }));
+    let r = &para(&tree, "para:AAAA0001")["runs"][0];
+    assert_eq!(r["scale"], 200);
+    let xml = unzip(&out, "word/document.xml");
+    assert!(xml.contains(r#"<w:w w:val="200""#), "{xml}");
+
+    let half = tmp_dir().join("scale-50.docx");
+    apply(
+        &out,
+        &half,
+        json!([{
+            "op": "setRunFormat",
+            "id": "para:AAAA0001/run:1",
+            "scale": 50
+        }]),
+    );
+    let tree_h = inspect(&half, json!({ "from": 1, "maxParas": 20, "runs": true }));
+    assert_eq!(para(&tree_h, "para:AAAA0001")["runs"][0]["scale"], 50);
+
+    let cleared = tmp_dir().join("scale-clear.docx");
+    apply(
+        &half,
+        &cleared,
+        json!([{
+            "op": "setRunFormat",
+            "id": "para:AAAA0001/run:1",
+            "scale": null
+        }]),
+    );
+    let tree2 = inspect(&cleared, json!({ "from": 1, "maxParas": 20, "runs": true }));
+    assert!(para(&tree2, "para:AAAA0001")["runs"][0]["scale"].is_null());
+    let xml2 = unzip(&cleared, "word/document.xml");
+    assert!(!xml2.contains("<w:w w:val"), "{xml2}");
+
+    let err0 = apply_err(
+        &path,
+        json!([{ "op": "setRunFormat", "id": "para:AAAA0001/run:1", "scale": 0 }]),
+    );
+    assert_eq!(err0.code(), ErrorCode::InvalidField);
+    let err601 = apply_err(
+        &path,
+        json!([{ "op": "setRunFormat", "id": "para:AAAA0001/run:1", "scale": 601 }]),
+    );
+    assert_eq!(err601.code(), ErrorCode::InvalidField);
+
+    let created = tmp_dir().join("scale-create.docx");
+    run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "create",
+            "path": created.to_string_lossy(),
+            "format": "docx",
+            "document": {
+                "paragraphs": [{
+                    "runs": [{ "text": "字", "scale": 200 }]
+                }]
+            }
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap();
+    let tree_c = inspect(&created, json!({ "from": 1, "maxParas": 5, "runs": true }));
+    assert_eq!(tree_c["paragraphs"][0]["runs"][0]["scale"], 200);
+
+    let xlsx = tmp_dir().join("scale.xlsx");
+    run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "create",
+            "path": xlsx.to_string_lossy(),
+            "workbook": { "sheets": [{ "name": "Sheet1" }] }
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap();
+    let err_x = run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "apply",
+            "path": xlsx.to_string_lossy(),
+            "output": tmp_dir().join("scale-x-out.xlsx").to_string_lossy(),
+            "ops": [{
+                "op": "setRunFormat",
+                "id": "para:AAAA0001/run:1",
+                "scale": 200
+            }]
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap_err();
+    assert_eq!(err_x.code(), ErrorCode::InvalidField);
 }

@@ -201,6 +201,7 @@ pub struct RunFormatPatch<'a> {
     pub vert_align: Option<Option<&'a str>>,
     pub spacing: Option<Option<i32>>,
     pub kern: Option<Option<u32>>,
+    pub scale: Option<Option<u32>>,
 }
 
 pub fn para_node(
@@ -463,6 +464,7 @@ pub fn apply_run(r: &mut Element, patch: RunFormatPatch<'_>) {
     apply_val_elem(rpr, "vertAlign", patch.vert_align);
     apply_int_val(rpr, "spacing", patch.spacing.map(|v| v.map(i64::from)));
     apply_int_val(rpr, "kern", patch.kern.map(|v| v.map(i64::from)));
+    apply_int_val(rpr, "w", patch.scale.map(|v| v.map(i64::from)));
 }
 
 pub fn find_run_mut(p: &mut Element, n: usize) -> Option<&mut Element> {
@@ -554,6 +556,7 @@ fn runs_json(p: &Element, para_id: &str) -> Vec<Value> {
                     .map(str::to_string),
                 "spacing": rpr.and_then(|e| signed_int_val(e, "spacing")),
                 "kern": rpr.and_then(|e| int_val(e, "kern")),
+                "scale": rpr.and_then(scale_val),
             })
         })
         .collect()
@@ -779,6 +782,13 @@ fn int_val(parent: &Element, local: &str) -> Option<u32> {
         .child_by_local(local)
         .and_then(|e| e.attr_local("val"))
         .and_then(|s| s.parse().ok())
+}
+
+fn scale_val(rpr: &Element) -> Option<u32> {
+    let raw = rpr.child_by_local("w")?.attr_local("val")?;
+    let s = raw.trim();
+    let s = s.strip_suffix('%').unwrap_or(s);
+    s.parse().ok()
 }
 
 fn signed_int_val(parent: &Element, local: &str) -> Option<i32> {

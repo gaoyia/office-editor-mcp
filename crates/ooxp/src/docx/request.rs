@@ -890,6 +890,7 @@ pub struct SetRunFormatOp {
     pub vert_align: Option<Option<String>>,
     pub spacing: Option<Option<i32>>,
     pub kern: Option<Option<u32>>,
+    pub scale: Option<Option<u32>>,
 }
 
 #[derive(Debug, Clone)]
@@ -6677,6 +6678,7 @@ fn parse_set_run_format(
             "vertAlign",
             "spacing",
             "kern",
+            "scale",
         ],
     )?;
     let id = require_op_id(obj, i)?;
@@ -6734,6 +6736,7 @@ fn parse_set_run_format(
     )?;
     let spacing = parse_opt_null_i32(obj, i, "spacing")?;
     let kern = parse_opt_null_u32(obj, i, "kern")?;
+    let scale = parse_opt_null_u32_range(obj, i, "scale", 1, 600)?;
     if bold.is_none()
         && italic.is_none()
         && underline.is_none()
@@ -6749,6 +6752,7 @@ fn parse_set_run_format(
         && vert_align.is_none()
         && spacing.is_none()
         && kern.is_none()
+        && scale.is_none()
     {
         return Err(Error::with_path(
             ErrorKind::NeedSetRunFormatField,
@@ -6774,6 +6778,7 @@ fn parse_set_run_format(
         vert_align,
         spacing,
         kern,
+        scale,
     })
 }
 
@@ -7183,6 +7188,41 @@ fn parse_opt_null_u32(
             format!("ops[{i}].{field}"),
         )),
     }
+}
+
+fn parse_opt_null_u32_range(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+    field: &str,
+    min: u64,
+    max: u64,
+) -> Result<Option<Option<u32>>, Error> {
+    let Some(slot) = parse_opt_null_u32(obj, i, field)? else {
+        return Ok(None);
+    };
+    let Some(u) = slot else {
+        return Ok(Some(None));
+    };
+    let n = u as u64;
+    if n < min {
+        return Err(Error::with_path(
+            ErrorKind::MinValue {
+                field: field.into(),
+                min: min as i64,
+            },
+            format!("ops[{i}].{field}"),
+        ));
+    }
+    if n > max {
+        return Err(Error::with_path(
+            ErrorKind::CreateIndexOutOfRange {
+                field: field.into(),
+                max: max as i64,
+            },
+            format!("ops[{i}].{field}"),
+        ));
+    }
+    Ok(Some(Some(u)))
 }
 
 fn parse_opt_null_i32(

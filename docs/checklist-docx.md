@@ -44,6 +44,7 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 同日补跑 `docx-model3d-geom.ps1`，D3g1–D3g6 通过。无 Repair。COM `Width` / `Height` 288×144 磅。浮动 `square` 后再改回 `inline`。页眉 3D 可改尺寸。`replaceModel3d` 不改几何。
 同日补跑 `docx-run-spacing.ps1`，Rcs1–Rcs6 通过。无 Repair。COM `Font.Spacing` 为 2 / -1 磅，`Font.Kerning` 为 14 磅。框内 run 可改间距。
 同日补跑 `docx-cell-borders.ps1`，Tcb1–Tcb6 通过。无 Repair。COM 该格上边 `LineStyle=7`。`null` 去掉正交边后斜线仍在。
+同日补跑 `docx-run-scale.ps1`，Rsc1–Rsc6 通过。无 Repair。COM `Font.Scaling` 为 200 / 50。框内 run 可改缩放。
 
 - **C1** ✅
   - Word 16.0 能打开 `manual-check/office/out/docx-create.docx`，标题栏无 Repair
@@ -371,6 +372,14 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
   - `null` 去掉对应元素
   - 框内 run 同样认
   - 字符串 `spacing`、负 `kern`、xlsx 上发此 op 拒写
+  - 标题栏无 Repair
+- **Rsc1–Rsc6** ✅
+  - Word 16.0：`docx-run-scale.ps1`，6 PASS / 0 FAIL
+  - `setRunFormat` 写 `scale: 200` 后 COM `Font.Scaling=200`；`50` 后为 50
+  - `null` 去掉 `w:w`
+  - 框内 run 同样认
+  - create `runs[].scale` 对得上
+  - `0` / `601`、xlsx 拒写
   - 标题栏无 Repair
 - **Ea1–Ea8** ✅
   - Word 16.0：`docx-east-asia.ps1`，8 PASS / 0 FAIL
@@ -1356,6 +1365,20 @@ run 上 `w:spacing`（字符间距）与 `w:kern`（字距调整）。只写该 
 | Rcs4 | 去掉 | 把 `spacing` / `kern` 写成 `null` 后树上两项都是 `null`，无 Repair | ✅ |
 | Rcs5 | 框内 | 框内段落 run 写 `spacing` 后框内树上对得上，无 Repair | ✅ |
 | Rcs6 | 拒错 | `spacing` 给字符串、`kern` 给负数报 `InvalidField`。对 xlsx 发带 `spacing` 的 `setRunFormat` 报 `InvalidField`。未写文件。不强制开 Word | ✅ |
+
+## 字符缩放
+
+run 上 `w:w`（字符缩放百分比）。只写该 run 直接格式，不摊 `styles.xml`，不写 `spacing` / `kern`。不算排版引擎。
+手测脚本 `manual-check/office/cases/docx-run-scale.ps1`。编号 Rsc，不要和 Rcs、Rh、Ea 撞。
+
+| 序号 | 检查 | 通过标准 | 状态 |
+| --- | --- | --- | --- |
+| Rsc1 | 改缩放 | `setRunFormat` 写 `scale: 200` 后树上为 `200`。Word 无 Repair。COM `Font.Scaling` 为 200 | ✅ |
+| Rsc2 | 压缩 | 写 `scale: 50` 后树上为 `50`。无 Repair。COM `Font.Scaling` 为 50 | ✅ |
+| Rsc3 | 去掉 | 把 `scale` 写成 `null` 后树上为 `null`，XML 无 `w:w`。无 Repair | ✅ |
+| Rsc4 | 框内 | 框内段落 run 写 `scale` 后框内树上对得上，无 Repair | ✅ |
+| Rsc5 | create | create `runs[].scale` 为 200 后树上对得上，无 Repair | ✅ |
+| Rsc6 | 拒错 | `scale` 为 `0` 或 `601` 报 `InvalidField`。对 xlsx 发带 `scale` 的 `setRunFormat` 报 `InvalidField`。未写文件。不强制开 Word | ✅ |
 
 ## 东亚排版
 

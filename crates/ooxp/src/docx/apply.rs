@@ -3108,6 +3108,7 @@ fn apply_set_run_format(
             vert_align: op.vert_align.as_ref().map(|v| v.as_deref()),
             spacing: op.spacing,
             kern: op.kern,
+            scale: op.scale,
         },
     );
     dirty.insert(part_name, ());

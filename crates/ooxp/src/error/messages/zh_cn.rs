@@ -1480,7 +1480,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
                 .into()
         }
         ErrorKind::NeedSetRunFormatField => {
-            "setRunFormat 至少要给 bold、italic、underline、sz、color、font、eastAsiaFont、em、eastAsianLayout、highlight、strike、dstrike 或 vertAlign 之一"
+            "setRunFormat 至少要给 bold、italic、underline、sz、color、font、eastAsiaFont、em、eastAsianLayout、highlight、strike、dstrike、vertAlign、spacing、kern 或 scale 之一"
                 .into()
         }
         ErrorKind::NeedParaBordersField => {
