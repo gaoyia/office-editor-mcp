@@ -573,3 +573,102 @@ fn set_zoom_rejects_wrong_fields() {
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);
 }
+
+#[test]
+fn set_zoom_geom_pos_size_and_rejects() {
+    let src = create_deck("geom-host", 3);
+    let with = insert_slide_zoom(&src);
+    let listed = inspect(&with, json!({ "zooms": true }));
+    let id = listed["slides"][0]["zooms"][0]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let old_target = listed["slides"][0]["zooms"][0]["target"].clone();
+
+    let sized = tmp("geom-sz").with_extension("pptx");
+    apply(
+        &with,
+        &sized,
+        json!([{
+            "op": "setZoom",
+            "id": id,
+            "x": 914400,
+            "y": 457200,
+            "cx": 1828800,
+            "cy": 914400
+        }]),
+    )
+    .unwrap();
+    let tree = inspect(&sized, json!({ "zooms": true }));
+    let z = &tree["slides"][0]["zooms"][0];
+    assert_eq!(z["x"], 914400);
+    assert_eq!(z["y"], 457200);
+    assert_eq!(z["cx"], 1828800);
+    assert_eq!(z["cy"], 914400);
+    assert_eq!(z["target"], old_target);
+    assert_eq!(z["type"], "slide");
+    let xml =
+        String::from_utf8(zip_entry(&sized, "ppt/slides/slide1.xml").unwrap_or_default()).unwrap();
+    assert!(xml.contains("cx=\"1828800\""));
+    assert!(xml.contains("cy=\"914400\""));
+    assert!(xml.contains("x=\"914400\""));
+    assert!(!xml.contains("<p:timing"));
+
+    let retarget = tmp("geom-tgt").with_extension("pptx");
+    apply(
+        &sized,
+        &retarget,
+        json!([{ "op": "setZoom", "id": id, "target": "slide:3" }]),
+    )
+    .unwrap();
+    let after = inspect(&retarget, json!({ "zooms": true }));
+    let z2 = &after["slides"][0]["zooms"][0];
+    assert_eq!(z2["target"], "slide:3");
+    assert_eq!(z2["cx"], 1828800);
+    assert_eq!(z2["x"], 914400);
+
+    let notes_src = tmp("geom-notes").with_extension("pptx");
+    apply(
+        &src,
+        &notes_src,
+        json!([{
+            "op": "insertZoom",
+            "id": "slide:1/notes",
+            "type": "slide",
+            "target": "slide:2"
+        }]),
+    )
+    .unwrap();
+    let notes0 = inspect(&notes_src, json!({ "zooms": true, "notes": true }));
+    assert_eq!(notes0["zoomCount"], 0);
+    let n_id = notes0["slides"][0]["notes"]["zooms"][0]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let notes_sz = tmp("geom-notes-sz").with_extension("pptx");
+    apply(
+        &notes_src,
+        &notes_sz,
+        json!([{ "op": "setZoom", "id": n_id, "cx": 1828800, "cy": 914400 }]),
+    )
+    .unwrap();
+    let notes = inspect(&notes_sz, json!({ "zooms": true, "notes": true }));
+    assert_eq!(notes["zoomCount"], 0);
+    assert_eq!(notes["slides"][0]["notes"]["zooms"][0]["cx"], 1828800);
+    assert_eq!(notes["slides"][0]["notes"]["zooms"][0]["cy"], 914400);
+
+    let bad_empty = tmp("geom-empty").with_extension("pptx");
+    let err = apply(&with, &bad_empty, json!([{ "op": "setZoom", "id": id }])).unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+    assert!(!bad_empty.exists());
+
+    let bad_pair = tmp("geom-pair").with_extension("pptx");
+    let err = apply(
+        &with,
+        &bad_pair,
+        json!([{ "op": "setZoom", "id": id, "cx": 1828800 }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+    assert!(!bad_pair.exists());
+}

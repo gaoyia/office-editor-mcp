@@ -5,7 +5,7 @@
 检查前用 create 或 apply 在本机生成文件，不要用改过扩展名的 zip 目录冒充。
 本机若 `PowerPoint.Application` 被 WPS 抢走，直接启动 `POWERPNT.EXE` 再挂 COM，不要走被抢的 ProgID。Office 16 的对象模型在 `mdiClass` 上。
 
-C、I、A、Pp、Pvg、Pem、P3d、Pom、Pc、Psa、Pn、Pcm、Pm、Ps、Tf、Tfl、Pln、Sg、Pt、Pg、Tn、Tr、Td、Mt、Am、Aw、Mm、Mw、Md、Ts、Ho、Nh、Nm、Phl、Phr、Phx、Pcip、Pmd、Pmg、Psc、Cs、Po、Cr、Cq、Ck、Pz、Pzr、Pw、Pph、
+C、I、A、Pp、Pvg、Pem、P3d、Pom、Pc、Psa、Pn、Pcm、Pm、Ps、Tf、Tfl、Pln、Sg、Pt、Pg、Tn、Tr、Td、Mt、Am、Aw、Mm、Mw、Md、Ts、Ho、Nh、Nm、Phl、Phr、Phx、Pcip、Pmd、Pmg、Psc、Cs、Po、Cr、Cq、Ck、Pz、Pzr、Pzg、Pw、Pph、
 Pf、Pcg、Pcx 各组由 `manual-check/office/cases/pptx-*.ps1` 自动判定，
 跑 `pwsh -File manual-check\office\run.ps1 -Case 'pptx-*'` 即可复现。O1 已放弃，与 xlsx / docx 相同。
 
@@ -49,6 +49,7 @@ Ps1–Ps5、Sg1–Sg5、Pt1–Pt6、Tn1–Tn5、Am1–Am5、Mm1–Mm5、Ho1–Ho
 2026-10-14 补跑 `pptx-shape-spacing.ps1`，Pln1–Pln5 通过。无 Repair。COM `SpaceBefore=12`，`TextFrame2.Font.Spacing=2`。`textAnchor=just`。表单元格 `lnSpc` pts 2400。
 2026-10-14 补跑 `pptx-table-grid.ps1`，Pg1–Pg5 通过。无 Repair。COM 列宽 100 / 150 / 200 磅，行高 50 / 100 磅。`setTableSize` 不改格网。`h: null` 为 `InvalidField`。
 2026-10-14 补跑 `pptx-media-geom.ps1`，Pmg1–Pmg5 通过。无 Repair。COM Type=16 `Width` / `Height` 144×72 磅。`x=914400` `y=457200`。备注视频可改尺寸，根上 `videoCount` 仍为 0。`setMedia` 不改几何。
+2026-10-14 补跑 `pptx-zoom-geom.ps1`，Pzg1–Pzg5 通过。无 Repair。COM Type=-2 `Width` / `Height` 144×72 磅。`x=914400` `y=457200`。备注 Zoom 可改尺寸，根上 `zoomCount` 仍为 0。`setZoom` 改目标不改几何。
 
 - **C1** ✅
   - PowerPoint 16.0 能打开 `manual-check/office/out/pptx-create.pptx`，标题栏无 Repair
@@ -1794,6 +1795,33 @@ Fallback 预览 `p:pic` 不进 `pictures`。插入走 ooxp，不要 `ExecuteMso`
   - 对幻灯片缩放发 `targets` 得 `InvalidField`
   - 页 id 发 `setZoom` 得 `InvalidId`
   - xlsx 发 `setZoom` 得 `InvalidField`，未写文件
+
+## Zoom 画布几何
+
+已有 Zoom 改画布坐标与尺寸。不改种类。不算放映。脚本：`manual-check/office/cases/pptx-zoom-geom.ps1`。编号用 Pzg。不要和 Pz、Pzr 撞。
+
+- **Pzg1**
+  - 检查：尺寸
+  - 通过标准：对 create 两页产物 `insertZoom` 后再 `setZoom` 成对 `cx` / `cy`，inspect 对上
+  - PowerPoint 无 Repair
+  - COM Type=-2 的 `Width` / `Height` 对上（允许 EMU 换算误差）
+- **Pzg2**
+  - 检查：位置
+  - 通过标准：`setZoom` `x` / `y` 后 inspect 对上，尺寸仍是上一步的值
+  - 无 Repair
+- **Pzg3**
+  - 检查：备注
+  - 通过标准：备注 Zoom 可改尺寸，根上 `zoomCount` 仍为 0
+  - 无 Repair
+- **Pzg4**
+  - 检查：改目标
+  - 通过标准：再 `setZoom` `target` 后几何不变、目标变了
+  - 无 Repair
+- **Pzg5**
+  - 检查：拒错
+  - 通过标准：`setZoom` 一个可写字段都不给得 `InvalidField`
+  - 只给 `cx` 得 `InvalidField`
+  - 均未写文件
 
 ## 修改密码与放映保护
 

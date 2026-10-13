@@ -6,6 +6,7 @@
     { "op": "insertZoom", "id": "slide:1", "type": "slide", "target": "slide:2" },
     { "op": "insertZoom", "id": "slide:1", "type": "summary", "targets": ["section:1", "section:2"] },
     { "op": "setZoom", "id": "slide:1/zoom:3", "target": "slide:3" },
+    { "op": "setZoom", "id": "slide:1/zoom:3", "x": 914400, "y": 457200, "cx": 1828800, "cy": 914400 },
     { "op": "deleteZoom", "id": "slide:1/zoom:3" }
   ]
 }

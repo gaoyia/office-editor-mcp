@@ -1055,7 +1055,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             "type 必须是 slidenum、datetime 或 datetime1–datetime13".into()
         }
         ErrorKind::ZoomTargetSelf => "insertZoom 的 target 不能是宿主自己".into(),
-        ErrorKind::NeedZoomSetField => "setZoom 必须给 target、targets 或 file 之一".into(),
+        ErrorKind::NeedZoomSetField => "setZoom 必须给 target、targets、file 或几何之一".into(),
         ErrorKind::InvalidZoomTargets => {
             "target 与 targets 必须与 Zoom 种类一致，且 targets 不能为空或重复".into()
         }

@@ -555,7 +555,13 @@ pub(super) fn parse_delete_zoom(
 }
 
 pub(super) fn parse_set_zoom(obj: &Map<String, Value>, i: usize) -> Result<zoom::SetZoomOp, Error> {
-    deny_keys(obj, i, &["op", "id", "target", "targets", "file"])?;
+    deny_keys(
+        obj,
+        i,
+        &[
+            "op", "id", "target", "targets", "file", "x", "y", "cx", "cy",
+        ],
+    )?;
     let id = require_id(obj, i)?;
     let target = zoom::parse_zoom_id(&id, &format!("ops[{i}].id"))?;
     if obj.contains_key("target") && obj.contains_key("targets") {
@@ -622,7 +628,26 @@ pub(super) fn parse_set_zoom(obj: &Map<String, Value>, i: usize) -> Result<zoom:
             ));
         }
     };
-    if dest.is_none() && file.is_none() {
+    let x = parse_off_field(obj.get("x"), i, "x")?;
+    let y = parse_off_field(obj.get("y"), i, "y")?;
+    let cx = parse_emu_field(obj.get("cx"), i, "cx")?;
+    let cy = parse_emu_field(obj.get("cy"), i, "cy")?;
+    if cx.is_some() != cy.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "setZoom".into(),
+                field: "cx and cy".into(),
+            },
+            format!("ops[{i}]"),
+        ));
+    }
+    if dest.is_none()
+        && file.is_none()
+        && x.is_none()
+        && y.is_none()
+        && cx.is_none()
+        && cy.is_none()
+    {
         return Err(Error::with_path(
             ErrorKind::NeedZoomSetField,
             format!("ops[{i}]"),
@@ -633,6 +658,10 @@ pub(super) fn parse_set_zoom(obj: &Map<String, Value>, i: usize) -> Result<zoom:
         target,
         dest,
         file,
+        x,
+        y,
+        cx,
+        cy,
     })
 }
 

@@ -93,6 +93,10 @@ pub struct SetZoomOp {
     pub target: ZoomTarget,
     pub dest: Option<SetZoomDest>,
     pub file: Option<String>,
+    pub x: Option<i64>,
+    pub y: Option<i64>,
+    pub cx: Option<i64>,
+    pub cy: Option<i64>,
 }
 
 struct ZoomTile {
@@ -477,6 +481,7 @@ pub fn set(
         if let Some(file) = &op.file {
             replace_preview(pkg, slide_part, node, file, i)?;
         }
+        apply_xfrm(node, op.x, op.y, op.cx, op.cy);
     }
 
     let mut rels = Relationships::from_package(pkg, slide_part)?;
@@ -711,6 +716,56 @@ fn xfrm_from(xfrm: Option<&Element>) -> (Option<i64>, Option<i64>, Option<i64>, 
         ext.and_then(|e| parse_i64_attr(e, "cx")),
         ext.and_then(|e| parse_i64_attr(e, "cy")),
     )
+}
+
+fn apply_xfrm(
+    node: &mut Element,
+    x: Option<i64>,
+    y: Option<i64>,
+    cx: Option<i64>,
+    cy: Option<i64>,
+) {
+    if x.is_none() && y.is_none() && cx.is_none() && cy.is_none() {
+        return;
+    }
+    let Some(xfrm) = xfrm_mut(node) else {
+        return;
+    };
+    if x.is_some() || y.is_some() {
+        let off = picture::ensure_child(xfrm, "off");
+        if let Some(x) = x {
+            picture::set_attr_local(off, "x", &x.to_string());
+        }
+        if let Some(y) = y {
+            picture::set_attr_local(off, "y", &y.to_string());
+        }
+    }
+    if cx.is_some() || cy.is_some() {
+        let ext = picture::ensure_child(xfrm, "ext");
+        if let Some(cx) = cx {
+            picture::set_attr_local(ext, "cx", &cx.to_string());
+        }
+        if let Some(cy) = cy {
+            picture::set_attr_local(ext, "cy", &cy.to_string());
+        }
+    }
+}
+
+fn xfrm_mut(node: &mut Element) -> Option<&mut Element> {
+    if find_local(node, "graphicFrame").is_some() {
+        let frame = find_local_mut(node, "graphicFrame")?;
+        return Some(picture::ensure_child(frame, "xfrm"));
+    }
+    if find_local(node, "spPr").is_some() {
+        let sp = find_local_mut(node, "spPr")?;
+        return Some(picture::ensure_child(sp, "xfrm"));
+    }
+    if find_local(node, "pic").is_some() {
+        let pic = find_local_mut(node, "pic")?;
+        let sp = picture::ensure_child(pic, "spPr");
+        return Some(picture::ensure_child(sp, "xfrm"));
+    }
+    None
 }
 
 fn cnv_of(node: &Element) -> (Option<String>, String) {

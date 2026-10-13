@@ -1085,6 +1085,7 @@
 - `type=summary` 却给 `target`，或 `slide` / `section` 却给 `targets`，报 `InvalidField`
 - `targets` 为空或含重复节报 `InvalidField`
 - `setZoom` 除 op 与 id 外一个字段都不给、`target` 与 `targets` 同时出现、或字段与当前 Zoom 种类对不上，报 `InvalidField`
+- `setZoom` 的 `cx` / `cy` 只出现一侧报 `InvalidField`
 - `setZoom` 的 `file` 不是该格式认的图片报 `InvalidField`
 - xlsx / docx 上发 `insertZoom` / `setZoom` / `deleteZoom` 报 `InvalidField`
 - 找不到内容控件时，内容控件 op 报 `IdNotFound`（`insertContentControl` 除外）

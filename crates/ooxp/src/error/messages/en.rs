@@ -1163,7 +1163,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         }
         ErrorKind::ZoomTargetSelf => "insertZoom target cannot be the host slide".into(),
         ErrorKind::NeedZoomSetField => {
-            "setZoom requires at least one of target, targets, or file".into()
+            "setZoom requires at least one of target, targets, file, or geometry".into()
         }
         ErrorKind::InvalidZoomTargets => {
             "target and targets must match the Zoom kind, and targets cannot be empty or duplicated"

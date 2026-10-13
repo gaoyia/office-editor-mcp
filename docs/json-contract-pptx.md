@@ -362,7 +362,7 @@ Zoom id 的 `{cNvPrId}` 取 Choice 里 `p:graphicFrame` 的 `p:nvGraphicFramePr/
 无 AlternateContent、仅 `p:graphicFrame` 且 uri 对上上述三者，也收。整段 AlternateContent 算 1 个 Zoom；摘要缩放多个 `summaryZmObj` 仍是一条。
 组合里符合条件的要展开，组合本身不进树。Fallback 预览 `p:pic` 不进 `pictures`，也不计入 `pictureCount`。备注页、幻灯片母版、版式上的 Zoom 进树，id 带对应前缀。批注、备注母版、讲义上的 Zoom 不进树。
 `insertZoom` 的 `id` 必须是 `slide:{n}`、`slide:{n}/notes`、`master:{n}` 或 `master:{n}/layout:{k}`。`deleteZoom` / `setZoom` 的 `id` 必须是 Zoom id。对不上的 id 形态报 `InvalidId`。
-xlsx / docx 上发这三条报 `InvalidField`。`insertZoom` 可写 `type=summary`。`setZoom` 改已有 Zoom 的目标或预览。不写 `<p:timing>`。不算放映引擎。
+xlsx / docx 上发这三条报 `InvalidField`。`insertZoom` 可写 `type=summary`。`setZoom` 改已有 Zoom 的目标、预览或画布几何。不写 `<p:timing>`。不算放映引擎。
 
 同一页里若出现重复的 `cNvPr/@id`，inspect 照样列出每一处；apply 命中该页文档顺序中的第一处。
 
@@ -3304,7 +3304,8 @@ Fallback 是 `p:pic`，预览同一张 PNG，并带 `a:hlinkClick`（`action="pp
   "ops": [
     { "op": "setZoom", "id": "slide:1/zoom:3", "target": "slide:3" },
     { "op": "setZoom", "id": "slide:1/zoom:4", "targets": ["section:1", "section:2"] },
-    { "op": "setZoom", "id": "slide:1/zoom:3", "file": "C:\\img\\cover.png" }
+    { "op": "setZoom", "id": "slide:1/zoom:3", "file": "C:\\img\\cover.png" },
+    { "op": "setZoom", "id": "slide:1/zoom:3", "x": 914400, "y": 457200, "cx": 1828800, "cy": 914400 }
   ]
 }
 ```
@@ -3316,13 +3317,17 @@ Fallback 是 `p:pic`，预览同一张 PNG，并带 `a:hlinkClick`（`action="pp
 | `target` | 可选。幻灯片缩放改为 `slide:{m}`，节缩放改为 `section:{n}`。摘要缩放上出现报 `InvalidField` |
 | `targets` | 可选。摘要缩放改为这个节 id 数组。幻灯片缩放 / 节缩放上出现报 `InvalidField` |
 | `file` | 可选。本地图片路径。换成自定义封面 |
+| `x` / `y` | 可选。画布坐标，EMU，非负整数 |
+| `cx` / `cy` | 可选。画布尺寸，EMU，正整数。必须成对 |
 
-`target`、`targets`、`file` 至少给一个，否则报 `InvalidField`。`target` 与 `targets` 同时出现报 `InvalidField`。
+`target`、`targets`、`file`、几何至少给一类，否则报 `InvalidField`。只给几何也合法。`target` 与 `targets` 同时出现报 `InvalidField`。
+`cx` 与 `cy` 只出现一侧报 `InvalidField`。
 `targets` 为空或含重复节报 `InvalidField`。空 `file` 报 `InvalidField`。读不到 `file` 报 `Io`。不是该格式认的图片报 `InvalidField`。
 SVG 只写入 PNG 海报，不写 `svgBlip`。
 给了 `target` / `targets` 时改对应 `@sldId` / `@sectionId`，并改 Fallback `a:hlinkClick` 的 slide 关系。
 给了 `file` 时换该 Zoom 内全部 `a:blip/@r:embed`（含 Fallback `p:pic`），各 `zmPr` 写 `imageType="cover"`。
-不改 `type`。不改画布坐标。不写 `<p:timing>`。找不到报 `IdNotFound`。id 不是 Zoom id 报 `InvalidId`。
+给了几何时写入 Choice 里 graphicFrame 的 `p:xfrm`。没有 graphicFrame 则写 `spPr/a:xfrm` 或 Fallback `p:pic` 的 `xfrm`，与 inspect 取值同一条路径。
+不改 `type`。不写 `<p:timing>`。找不到报 `IdNotFound`。id 不是 Zoom id 报 `InvalidId`。
 xlsx / docx 上发此 op 报 `InvalidField`。
 
 示例见 `docs/examples/pptx-apply-zoom.json`。inspect 示例见 `docs/examples/pptx-inspect-zoom.json`。
@@ -3357,6 +3362,7 @@ presentation 关系、新页或被删页及其 `.rels`、内容类型，
 `setPicturePos` / `setPictureSize` 只脏该宿主 XML。视频 / 音频走同一套，不换媒体部件。
 `setMathSize` / `setMathPos` 只脏该宿主 XML。不改字。
 `insertZoom` / `setZoom` / `deleteZoom` 脏该宿主 XML 及其 `.rels`、`[Content_Types].xml`，以及新建或被删的预览 `/ppt/media/imageN.*`。
+只改几何时 `setZoom` 只脏该宿主 XML。
 `deleteZoom` 还可清该页 `<p:timing>` 里对应 `tgtEl`。`setShowPr` 只脏 `/ppt/presProps.xml` 的 `p:showPr`；没有该部件报 `OpcPartMissing`。
 `setProtection` 只脏 `presentation.xml` 的 `p:modifyVerifier`。`setSlideHidden` 只脏该页 `p:sld/@show`。
 `setTransition` 只脏被点名宿主 XML 的 `<p:transition>`（或包住它的 `mc:AlternateContent`），不脏 timing。
