@@ -262,7 +262,8 @@ Zoom Fallback 预览 `p:pic` 同样不进 `pictures`。`mc:AlternateContent` 只
 
 `insertVideo` / `insertAudio` 的 `id` 必须是 `slide:{n}`、`slide:{n}/notes`、`master:{n}` 或 `master:{n}/layout:{k}`。
 `deleteMedia` / `setMedia` 的 `id` 必须是视频 id 或音频 id。
-对图 id、形状 id 或 `pptx:presentation` 发这四条报 `InvalidId`。`id` 为 `slide:{n}/notes` 且该页还没有 notesSlide 时，按 `setNotesText` 同一套新建最小备注页再插入。
+`setPicturePos` / `setPictureSize` 的 id 也可以是视频 id 或音频 id。
+对图 id 发 `setMedia` / `insertVideo` / `insertAudio` / `deleteMedia` 报 `InvalidId`。`id` 为 `slide:{n}/notes` 且该页还没有 notesSlide 时，按 `setNotesText` 同一套新建最小备注页再插入。
 对 `notesMaster` / `handout` 发 `insertVideo` / `insertAudio` 报 `InvalidId`。
 
 节 `{n}` 从 1 起，按 Presentation 里 `p:extLst/p:ext[@uri="{521415D9-36F7-43E2-AB2F-B90AF26B5E84}"]/p14:sectionLst/p14:section`
@@ -1640,6 +1641,12 @@ create 仍只写一份 `type="blank"`、名为「空白」的版式，不按 JSO
       "id": "slide:1/pic:4",
       "x": 914400,
       "y": 914400
+    },
+    {
+      "op": "setPictureSize",
+      "id": "slide:1/video:3",
+      "cx": 1828800,
+      "cy": 914400
     }
   ]
 }
@@ -1648,12 +1655,12 @@ create 仍只写一份 `type="blank"`、名为「空白」的版式，不按 JSO
 | 字段 | 含义 |
 | --- | --- |
 | `op` | 必须是 `"setPicturePos"` |
-| `id` | pptx 图 id：`slide:{n}/pic:…`、`slide:{n}/notes/pic:…`、`master:{n}/pic:…` 或 `master:{n}/layout:{k}/pic:…`。批注内图 id 报 `InvalidId` |
+| `id` | pptx 图 id、视频 id 或音频 id（均可带 `notes/`、`master:{n}/` 或 `master:{n}/layout:{k}/` 前缀）。批注内图 id 报 `InvalidId` |
 | `x` | 可选。画布横坐标，EMU，非负整数 |
 | `y` | 可选。画布纵坐标，EMU，非负整数 |
 
-`x` 与 `y` 至少给一个，否则报 `InvalidField`。只改被点名的那一侧。写入 `p:spPr/a:xfrm/a:off`。找不到该图报 `IdNotFound`。
-`id` 不是合法图 id 报 `InvalidId`。批注内图没有画布坐标。docx / xlsx 上发此 op 报 `InvalidField`。
+`x` 与 `y` 至少给一个，否则报 `InvalidField`。只改被点名的那一侧。写入 `p:spPr/a:xfrm/a:off`。找不到该对象报 `IdNotFound`。
+`id` 不是合法图 id、视频 id 或音频 id 报 `InvalidId`。批注内图没有画布坐标。`setMedia` 仍不改几何。docx / xlsx 上发此 op 报 `InvalidField`。
 
 ### insertSlide
 
@@ -3347,6 +3354,7 @@ presentation 关系、新页或被删页及其 `.rels`、内容类型，
 以及新建或被删的 `/ppt/embeddings/…` 与预览 `/ppt/media/imageN.*`。
 `deleteOle` 还可清该页 `<p:timing>` 里对应 `tgtEl`。
 `setModel3dSize` / `setModel3dPos` 只脏该宿主 XML。
+`setPicturePos` / `setPictureSize` 只脏该宿主 XML。视频 / 音频走同一套，不换媒体部件。
 `setMathSize` / `setMathPos` 只脏该宿主 XML。不改字。
 `insertZoom` / `setZoom` / `deleteZoom` 脏该宿主 XML 及其 `.rels`、`[Content_Types].xml`，以及新建或被删的预览 `/ppt/media/imageN.*`。
 `deleteZoom` 还可清该页 `<p:timing>` 里对应 `tgtEl`。`setShowPr` 只脏 `/ppt/presProps.xml` 的 `p:showPr`；没有该部件报 `OpcPartMissing`。

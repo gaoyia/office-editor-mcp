@@ -303,6 +303,8 @@
   - `setPicturePos`
 - 对段落 id、工作表 id、页眉槽位 id、单元格 id、容器 id、`section:{n}` 或 `slide:{n}`（没有 `/pic:`）发这些 op 报 `InvalidId`
 - pptx 批注内图对 `setPictureSize` / `setPicturePos` 报 `InvalidId`
+- pptx 的 `setPictureSize` / `setPicturePos` 也认视频 id 与音频 id；找不到报 `IdNotFound`
+- 对图 id 发 `setMedia` 仍报 `InvalidId`
 - xlsx 上发 `setPictureWrap`、docx / pptx 上发 `setPictureAnchor`、docx / xlsx 上发 `setPicturePos` 报 `InvalidField`
 - xlsx `twoCell` 图的 `setPictureSize` 出现 `cx` / `cy`、或 `oneCell` / `absolute` 上出现 `to`，报 `InvalidField`
 - `setPictureAnchor` 互转缺 `posX` / `posY` / `from` / `to` / `cx` / `cy` 时报 `InvalidField`，不写文件

@@ -216,6 +216,7 @@ $order = @(
     'pptx-omml'
     'pptx-math-geom'
     'pptx-media'
+    'pptx-media-geom'
     'pptx-media-trim'
     'pptx-sections'
     'pptx-charts'

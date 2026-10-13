@@ -11,6 +11,18 @@
       "st": 100,
       "end": 200,
       "bookmarks": [{ "name": "MarkA", "time": 300 }]
+    },
+    {
+      "op": "setPictureSize",
+      "id": "slide:1/video:4",
+      "cx": 1828800,
+      "cy": 914400
+    },
+    {
+      "op": "setPicturePos",
+      "id": "slide:1/audio:5",
+      "x": 914400,
+      "y": 457200
     }
   ]
 }

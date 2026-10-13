@@ -5,7 +5,7 @@
 检查前用 create 或 apply 在本机生成文件，不要用改过扩展名的 zip 目录冒充。
 本机若 `PowerPoint.Application` 被 WPS 抢走，直接启动 `POWERPNT.EXE` 再挂 COM，不要走被抢的 ProgID。Office 16 的对象模型在 `mdiClass` 上。
 
-C、I、A、Pp、Pvg、Pem、P3d、Pom、Pc、Psa、Pn、Pcm、Pm、Ps、Tf、Tfl、Pln、Sg、Pt、Pg、Tn、Tr、Td、Mt、Am、Aw、Mm、Mw、Md、Ts、Ho、Nh、Nm、Phl、Phr、Phx、Pcip、Pmd、Psc、Cs、Po、Cr、Cq、Ck、Pz、Pzr、Pw、Pph、
+C、I、A、Pp、Pvg、Pem、P3d、Pom、Pc、Psa、Pn、Pcm、Pm、Ps、Tf、Tfl、Pln、Sg、Pt、Pg、Tn、Tr、Td、Mt、Am、Aw、Mm、Mw、Md、Ts、Ho、Nh、Nm、Phl、Phr、Phx、Pcip、Pmd、Pmg、Psc、Cs、Po、Cr、Cq、Ck、Pz、Pzr、Pw、Pph、
 Pf、Pcg、Pcx 各组由 `manual-check/office/cases/pptx-*.ps1` 自动判定，
 跑 `pwsh -File manual-check\office\run.ps1 -Case 'pptx-*'` 即可复现。O1 已放弃，与 xlsx / docx 相同。
 
@@ -48,6 +48,7 @@ Ps1–Ps5、Sg1–Sg5、Pt1–Pt6、Tn1–Tn5、Am1–Am5、Mm1–Mm5、Ho1–Ho
 2026-10-14 补跑 `pptx-math-geom.ps1`，Pog1–Pog5 通过。无 Repair。`cx=1828800` `cy=914400`。`x=914400` `y=457200`。备注公式可改尺寸，根上 `mathCount` 仍为 0。`setMath` 不改几何。
 2026-10-14 补跑 `pptx-shape-spacing.ps1`，Pln1–Pln5 通过。无 Repair。COM `SpaceBefore=12`，`TextFrame2.Font.Spacing=2`。`textAnchor=just`。表单元格 `lnSpc` pts 2400。
 2026-10-14 补跑 `pptx-table-grid.ps1`，Pg1–Pg5 通过。无 Repair。COM 列宽 100 / 150 / 200 磅，行高 50 / 100 磅。`setTableSize` 不改格网。`h: null` 为 `InvalidField`。
+2026-10-14 补跑 `pptx-media-geom.ps1`，Pmg1–Pmg5 通过。无 Repair。COM Type=16 `Width` / `Height` 144×72 磅。`x=914400` `y=457200`。备注视频可改尺寸，根上 `videoCount` 仍为 0。`setMedia` 不改几何。
 
 - **C1** ✅
   - PowerPoint 16.0 能打开 `manual-check/office/out/pptx-create.pptx`，标题栏无 Repair
@@ -1628,6 +1629,34 @@ apply 能插本地 MP4 / WAV、删除。`exportMedia` 写出媒体部件，不�
   - 检查：删除
   - 通过标准：`deleteMedia` 后该对象消失，无 Repair
   - 对页 id 发 `insertVideo` 得 `InvalidId`，WAV 当视频得 `InvalidField`，未写文件
+
+## 媒体事后几何
+
+已有视频 / 音频改画布坐标与尺寸。不换文件。不算放映。`setMedia` 仍不改几何。对图 id 发 `setMedia` 仍报 `InvalidId`。脚本：`manual-check/office/cases/pptx-media-geom.ps1`。编号用 Pmg。不要和 Pm、Pmd、Mt 撞。
+
+- **Pmg1**
+  - 检查：尺寸
+  - 通过标准：对 create 产物 `insertVideo` 后再 `setPictureSize`，inspect `cx` / `cy` 对上
+  - PowerPoint 无 Repair
+  - COM Type=16 的 `Width` / `Height` 对上（允许 EMU 换算误差）
+- **Pmg2**
+  - 检查：位置
+  - 通过标准：`setPicturePos` 后 inspect `x` / `y` 对上，尺寸仍是上一步的值
+  - 无 Repair
+- **Pmg3**
+  - 检查：备注
+  - 通过标准：备注视频可改尺寸，根上 `videoCount` 仍为 0
+  - 无 Repair
+- **Pmg4**
+  - 检查：`setMedia`
+  - 通过标准：`setMedia` 改裁剪后几何不变
+  - 无 Repair
+- **Pmg5**
+  - 检查：拒错
+  - 通过标准：`setPicturePos` 不给 `x` / `y` 得 `InvalidField`
+  - 对图 id 发 `setMedia` 得 `InvalidId`
+  - 对已删视频发 `setPictureSize` 得 `IdNotFound`
+  - 均未写文件
 
 ## 幻灯片节
 

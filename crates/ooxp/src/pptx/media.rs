@@ -1274,7 +1274,7 @@ fn collect_track_rids(media_el: &Element) -> Vec<String> {
     out
 }
 
-fn find_media_mut<'a>(
+pub(crate) fn find_media_mut<'a>(
     root: &'a mut Element,
     kind: MediaKind,
     key: &PicKey,

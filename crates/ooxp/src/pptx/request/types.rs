@@ -523,9 +523,38 @@ pub struct DeletePictureOp {
 }
 
 #[derive(Debug, Clone)]
+pub enum PicGeomTarget {
+    Picture(picture::PicTarget),
+    Media(media::MediaTarget),
+}
+
+impl PicGeomTarget {
+    pub fn slide(&self) -> usize {
+        match self {
+            Self::Picture(t) => t.slide,
+            Self::Media(t) => t.slide,
+        }
+    }
+
+    pub fn on_notes(&self) -> bool {
+        match self {
+            Self::Picture(t) => t.on_notes,
+            Self::Media(t) => t.on_notes,
+        }
+    }
+
+    pub fn master(&self) -> Option<(usize, Option<usize>)> {
+        match self {
+            Self::Picture(t) => t.master,
+            Self::Media(t) => t.master,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct SetPictureSizeOp {
     pub id: String,
-    pub target: picture::PicTarget,
+    pub target: PicGeomTarget,
     pub cx: Option<i64>,
     pub cy: Option<i64>,
 }
@@ -533,7 +562,7 @@ pub struct SetPictureSizeOp {
 #[derive(Debug, Clone)]
 pub struct SetPicturePosOp {
     pub id: String,
-    pub target: picture::PicTarget,
+    pub target: PicGeomTarget,
     pub x: Option<i64>,
     pub y: Option<i64>,
 }

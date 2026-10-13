@@ -11,7 +11,8 @@ use crate::opc::{
 use crate::xml::{Document, Element, Node};
 
 use super::request::{
-    DeletePictureOp, InsertPictureOp, ReplacePictureOp, SetPicturePosOp, SetPictureSizeOp,
+    DeletePictureOp, InsertPictureOp, PicGeomTarget, ReplacePictureOp, SetPicturePosOp,
+    SetPictureSizeOp,
 };
 use super::shape::{self, first_alt_child_index};
 use super::{ExportedMedia, DML_NS, REL_NS};
@@ -1089,14 +1090,28 @@ fn rid_still_on_slide(root: &Element, rid: &str) -> bool {
     used
 }
 
+fn find_pic_geom_mut<'a>(
+    root: &'a mut Element,
+    target: &PicGeomTarget,
+    id: &str,
+    path: String,
+) -> Result<&'a mut Element, Error> {
+    match target {
+        PicGeomTarget::Picture(t) => find_pic_mut(root, &t.key).ok_or_else(|| {
+            Error::with_path(ErrorKind::PictureNotFound { id: id.to_string() }, path)
+        }),
+        PicGeomTarget::Media(t) => super::media::find_media_mut(root, t.kind, &t.key)
+            .ok_or_else(|| Error::with_path(ErrorKind::MediaNotFound { id: id.to_string() }, path)),
+    }
+}
+
 pub fn set_picture_size(
     slide_doc: &mut Document,
     op: &SetPictureSizeOp,
     op_index: usize,
 ) -> Result<(), Error> {
     let path = format!("ops[{op_index}].id");
-    let pic = find_pic_mut(&mut slide_doc.root, &op.target.key)
-        .ok_or_else(|| Error::with_path(ErrorKind::PictureNotFound { id: op.id.clone() }, path))?;
+    let pic = find_pic_geom_mut(&mut slide_doc.root, &op.target, &op.id, path)?;
     let xfrm = ensure_xfrm(pic);
     let ext = ensure_child(xfrm, "ext");
     if let Some(cx) = op.cx {
@@ -1114,8 +1129,7 @@ pub fn set_picture_pos(
     op_index: usize,
 ) -> Result<(), Error> {
     let path = format!("ops[{op_index}].id");
-    let pic = find_pic_mut(&mut slide_doc.root, &op.target.key)
-        .ok_or_else(|| Error::with_path(ErrorKind::PictureNotFound { id: op.id.clone() }, path))?;
+    let pic = find_pic_geom_mut(&mut slide_doc.root, &op.target, &op.id, path)?;
     let xfrm = ensure_xfrm(pic);
     let off = ensure_child(xfrm, "off");
     if let Some(x) = op.x {

@@ -558,3 +558,164 @@ fn insert_video_clip_fields() {
     assert!(xml.contains("tracksInfo"));
     assert!(!xml.contains("<p:timing"));
 }
+
+fn inspect_notes_media(path: &Path) -> serde_json::Value {
+    let RunOutput::Inspect(tree) = run(
+        &json!({
+            "schemaVersion": 1,
+            "action": "inspect",
+            "path": path.to_string_lossy(),
+            "scope": { "media": true, "notes": true }
+        })
+        .to_string(),
+        None,
+    )
+    .unwrap() else {
+        panic!("inspect 应返回树");
+    };
+    tree
+}
+
+#[test]
+fn set_picture_geom_on_video_and_audio() {
+    let src = create_deck("geom");
+    let mp4 = write_mp4("clip-g");
+    let wav = write_wav("beep-g");
+    let inserted = tmp("ins-g").with_extension("pptx");
+    apply(
+        &src,
+        &inserted,
+        json!([
+            {
+                "op": "insertVideo",
+                "id": "slide:1",
+                "file": mp4.to_string_lossy()
+            },
+            {
+                "op": "insertAudio",
+                "id": "slide:1",
+                "file": wav.to_string_lossy()
+            }
+        ]),
+    )
+    .unwrap();
+    let tree0 = inspect_media(&inserted);
+    let vid = tree0["slides"][0]["videos"][0]["id"].as_str().unwrap();
+    let aud = tree0["slides"][0]["audios"][0]["id"].as_str().unwrap();
+    let old_cx = tree0["slides"][0]["videos"][0]["cx"].clone();
+    let old_cy = tree0["slides"][0]["videos"][0]["cy"].clone();
+
+    let sized = tmp("sz-g").with_extension("pptx");
+    apply(
+        &inserted,
+        &sized,
+        json!([
+            { "op": "setPictureSize", "id": vid, "cx": 1828800, "cy": 914400 },
+            { "op": "setPicturePos", "id": vid, "x": 914400, "y": 457200 },
+            { "op": "setPicturePos", "id": aud, "x": 1000, "y": 2000 }
+        ]),
+    )
+    .unwrap();
+    let tree = inspect_media(&sized);
+    let v = &tree["slides"][0]["videos"][0];
+    let a = &tree["slides"][0]["audios"][0];
+    assert_eq!(v["cx"], 1828800);
+    assert_eq!(v["cy"], 914400);
+    assert_eq!(v["x"], 914400);
+    assert_eq!(v["y"], 457200);
+    assert_eq!(a["x"], 1000);
+    assert_eq!(a["y"], 2000);
+    assert_ne!(old_cx, json!(1828800));
+    assert_ne!(old_cy, json!(914400));
+    let xml = String::from_utf8(part_bytes(&sized, "ppt/slides/slide1.xml")).unwrap();
+    assert!(xml.contains("cx=\"1828800\""));
+    assert!(xml.contains("cy=\"914400\""));
+    assert!(xml.contains("x=\"914400\""));
+    assert!(xml.contains("y=\"457200\""));
+    assert!(!xml.contains("<p:timing"));
+
+    let trimmed = tmp("trim-g").with_extension("pptx");
+    apply(
+        &sized,
+        &trimmed,
+        json!([{ "op": "setMedia", "id": vid, "st": 100, "end": 200 }]),
+    )
+    .unwrap();
+    let after = inspect_media(&trimmed);
+    let v2 = &after["slides"][0]["videos"][0];
+    assert_eq!(v2["cx"], 1828800);
+    assert_eq!(v2["cy"], 914400);
+    assert_eq!(v2["x"], 914400);
+    assert_eq!(v2["y"], 457200);
+    assert_eq!(v2["st"], 100);
+    assert_eq!(v2["end"], 200);
+
+    let notes_src = tmp("notes-g").with_extension("pptx");
+    apply(
+        &src,
+        &notes_src,
+        json!([{
+            "op": "insertVideo",
+            "id": "slide:1/notes",
+            "file": mp4.to_string_lossy()
+        }]),
+    )
+    .unwrap();
+    let notes_tree0 = inspect_notes_media(&notes_src);
+    assert_eq!(notes_tree0["videoCount"], 0);
+    let n_id = notes_tree0["slides"][0]["notes"]["videos"][0]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let notes_sz = tmp("notes-sz-g").with_extension("pptx");
+    apply(
+        &notes_src,
+        &notes_sz,
+        json!([{ "op": "setPictureSize", "id": n_id, "cx": 1828800, "cy": 914400 }]),
+    )
+    .unwrap();
+    let notes_tree = inspect_notes_media(&notes_sz);
+    assert_eq!(notes_tree["videoCount"], 0);
+    assert_eq!(notes_tree["slides"][0]["notes"]["videos"][0]["cx"], 1828800);
+    assert_eq!(notes_tree["slides"][0]["notes"]["videos"][0]["cy"], 914400);
+    let notes_xml =
+        String::from_utf8(part_bytes(&notes_sz, "ppt/notesSlides/notesSlide1.xml")).unwrap();
+    assert!(notes_xml.contains("cx=\"1828800\""));
+
+    let deleted = tmp("del-g").with_extension("pptx");
+    apply(
+        &inserted,
+        &deleted,
+        json!([{ "op": "deleteMedia", "id": vid }]),
+    )
+    .unwrap();
+    let missing = tmp("miss-g").with_extension("pptx");
+    let err = apply(
+        &deleted,
+        &missing,
+        json!([{ "op": "setPictureSize", "id": vid, "cx": 1000, "cy": 1000 }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::IdNotFound);
+    assert!(!missing.exists());
+
+    let bad_pos = tmp("bad-pos-g").with_extension("pptx");
+    let err = apply(
+        &inserted,
+        &bad_pos,
+        json!([{ "op": "setPicturePos", "id": vid }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+    assert!(!bad_pos.exists());
+
+    let bad_media = tmp("bad-media-g").with_extension("pptx");
+    let err = apply(
+        &src,
+        &bad_media,
+        json!([{ "op": "setMedia", "id": "slide:1/pic:3", "st": 1 }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidId);
+    assert!(!bad_media.exists());
+}

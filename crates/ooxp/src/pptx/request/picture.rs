@@ -5,6 +5,7 @@ use serde_json::{Map, Value};
 use crate::error::{Error, ErrorKind, TypeName};
 
 use super::super::comments;
+use super::super::media;
 use super::super::picture;
 
 use super::common::*;
@@ -92,14 +93,23 @@ pub(super) fn parse_delete_pic(
     Ok(DeletePictureOp { id, target })
 }
 
+fn parse_pic_geom_id(id: &str, path: &str) -> Result<PicGeomTarget, Error> {
+    if media::is_media_id(id) {
+        Ok(PicGeomTarget::Media(media::parse_media_id(id, path)?))
+    } else {
+        let target = picture::parse_pic_id(id, path)?;
+        picture::reject_comment_pic(&target, path)?;
+        Ok(PicGeomTarget::Picture(target))
+    }
+}
+
 pub(super) fn parse_set_pic_size(
     obj: &Map<String, Value>,
     i: usize,
 ) -> Result<SetPictureSizeOp, Error> {
     deny_keys(obj, i, &["op", "id", "cx", "cy"])?;
     let id = require_id(obj, i)?;
-    let target = picture::parse_pic_id(&id, &format!("ops[{i}].id"))?;
-    picture::reject_comment_pic(&target, &format!("ops[{i}].id"))?;
+    let target = parse_pic_geom_id(&id, &format!("ops[{i}].id"))?;
     let cx = parse_emu_field(obj.get("cx"), i, "cx")?;
     let cy = parse_emu_field(obj.get("cy"), i, "cy")?;
     if cx.is_none() && cy.is_none() {
@@ -120,8 +130,7 @@ pub(super) fn parse_set_pic_pos(
 ) -> Result<SetPicturePosOp, Error> {
     deny_keys(obj, i, &["op", "id", "x", "y"])?;
     let id = require_id(obj, i)?;
-    let target = picture::parse_pic_id(&id, &format!("ops[{i}].id"))?;
-    picture::reject_comment_pic(&target, &format!("ops[{i}].id"))?;
+    let target = parse_pic_geom_id(&id, &format!("ops[{i}].id"))?;
     let x = parse_off_field(obj.get("x"), i, "x")?;
     let y = parse_off_field(obj.get("y"), i, "y")?;
     if x.is_none() && y.is_none() {

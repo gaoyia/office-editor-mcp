@@ -20,7 +20,7 @@ use super::ole;
 use super::omml;
 use super::picture;
 use super::protect;
-use super::request::{InsertShapeHost, PptxOp, SetShapeFormatOp};
+use super::request::{InsertShapeHost, PicGeomTarget, PptxOp, SetShapeFormatOp};
 use super::section;
 use super::shape;
 use super::show;
@@ -506,15 +506,19 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                 pkg.set(&part, doc.to_bytes()?)?;
             }
             PptxOp::SetPictureSize(op) => {
+                let missing = match &op.target {
+                    PicGeomTarget::Picture(_) => ErrorKind::PictureNotFound { id: op.id.clone() },
+                    PicGeomTarget::Media(_) => ErrorKind::MediaNotFound { id: op.id.clone() },
+                };
                 let part = host_xml_part(
                     &pkg,
                     &pres_part,
                     &pres.root,
                     &slides,
-                    op.target.slide,
-                    op.target.on_notes,
-                    op.target.master,
-                    ErrorKind::PictureNotFound { id: op.id.clone() },
+                    op.target.slide(),
+                    op.target.on_notes(),
+                    op.target.master(),
+                    missing,
                     format!("ops[{i}].id"),
                 )?;
                 let mut doc = xml::parse(pkg.get(&part)?)?;
@@ -522,15 +526,19 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                 pkg.set(&part, doc.to_bytes()?)?;
             }
             PptxOp::SetPicturePos(op) => {
+                let missing = match &op.target {
+                    PicGeomTarget::Picture(_) => ErrorKind::PictureNotFound { id: op.id.clone() },
+                    PicGeomTarget::Media(_) => ErrorKind::MediaNotFound { id: op.id.clone() },
+                };
                 let part = host_xml_part(
                     &pkg,
                     &pres_part,
                     &pres.root,
                     &slides,
-                    op.target.slide,
-                    op.target.on_notes,
-                    op.target.master,
-                    ErrorKind::PictureNotFound { id: op.id.clone() },
+                    op.target.slide(),
+                    op.target.on_notes(),
+                    op.target.master(),
+                    missing,
                     format!("ops[{i}].id"),
                 )?;
                 let mut doc = xml::parse(pkg.get(&part)?)?;

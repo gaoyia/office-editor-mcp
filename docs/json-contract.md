@@ -767,7 +767,7 @@ SVG 时该 `a:blip` 仍指向 1×1 PNG 占位，再补一条 image 关系指向 
 | 字段 | 含义 |
 | --- | --- |
 | `op` | 必须是 `"setPictureSize"` |
-| `id` | 图 id |
+| `id` | 图 id。pptx 还可以是视频 id 或音频 id |
 | `cx` | 可选。宽度，EMU，正整数。xlsx `twoCell` 上出现报 `InvalidField` |
 | `cy` | 可选。高度，EMU，正整数。xlsx `twoCell` 上出现报 `InvalidField` |
 | `to` | xlsx `twoCell` 时必须。右下角 A1。`oneCell` / `absolute` 上出现报 `InvalidField` |
@@ -777,8 +777,8 @@ SVG 时该 `a:blip` 仍指向 1×1 PNG 占位，再补一条 image 关系指向 
 docx：写入 `wp:extent`；若 `pic:spPr/a:xfrm/a:ext` 存在，一并改。
 xlsx：`oneCell` 或 `absolute` 时写入 `xdr:ext`；若 `xdr:spPr/a:xfrm/a:ext` 存在，一并改。
 `twoCell` 不认 `cx` / `cy`（出现报 `InvalidField`），必须给 `to`（右下角 A1）；可选 `toOffX` / `toOffY`（EMU，非负，省略则留下当前偏移）。不按列宽行高去换算 EMU。
-docx / pptx 上出现 `to` / `toOffX` / `toOffY` 报 `InvalidField`。pptx：写入 `p:spPr/a:xfrm/a:ext`。找不到该图报 `IdNotFound`。
-批注内图没有画布 `xfrm`，对本 op 报 `InvalidId`。
+docx / pptx 上出现 `to` / `toOffX` / `toOffY` 报 `InvalidField`。pptx：写入 `p:spPr/a:xfrm/a:ext`。`id` 可以是图 id、视频 id 或音频 id。找不到该对象报 `IdNotFound`。
+批注内图没有画布 `xfrm`，对本 op 报 `InvalidId`。`setMedia` 仍不改几何。
 
 `setPictureWrap` 见 [docx](json-contract-docx.md#setpicturewrap)。
 `setPictureAnchor` 见 [xlsx](json-contract-xlsx.md#setpictureanchor)。

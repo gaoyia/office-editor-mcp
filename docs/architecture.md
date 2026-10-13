@@ -225,7 +225,7 @@ apply 可改被点名形状的 `p:txBody` 可见文字（含备注形状、母�
 讲义与备注母版占位符也可绑同一套预设动画；
 也可插删改幻灯片、备注页与幻灯片母版 / 版式上的 `a:hlinkClick` / `a:hlinkHover` / `a:hlinkMouseOver`（URL / 文件 / 跳转到某页，含图、表、图表、SmartArt 与表单元格）；
 也可插删改幻灯片、备注页与幻灯片母版 / 版式文本形状里的 `a:fld`（页码与日期域，不求值）；也可往幻灯片、备注页与幻灯片母版 / 版式插、删内嵌视频与音频（`p:pic` 上的 `a:videoFile` / `a:audioFile` 与 `p14:media`，不写 timing），
-也可用 `setMedia` 改裁剪、书签与字幕轨（不写 fade）；
+也可用 `setMedia` 改裁剪、书签与字幕轨（不写 fade），也可用 `setPicturePos` / `setPictureSize` 改已有视频 / 音频的画布坐标与尺寸；
 也可用 `insertCustomShow` / `setCustomShow` / `deleteCustomShow` 读写 `p:custShowLst`（不算放映引擎）；
 也可插、删幻灯片、备注页与幻灯片母版 / 版式上的嵌入对象（`p:oleObj`，不激活 OLE 服务器），也可插、删、换幻灯片、备注页与幻灯片母版 / 版式上的 3D 模型（`am3d:model3d`，不栅格化），并可改已有 3D 的尺寸与画布坐标，
 也可插改删幻灯片、备注页与幻灯片母版 / 版式上的 drawing 公式框（`a14:m`，不实现排版引擎），并可改已有公式框的画布坐标与尺寸；`setMath` 仍只改字。也可插、删、改幻灯片、备注页与幻灯片母版 / 版式上的 Zoom（`sldZm` / `sectionZm` / `summaryZm`，不实现放映跳转）；也可改文件属性。
