@@ -246,6 +246,20 @@ pub(super) fn parse_hex_slot(v: &Value, i: usize, field: &str) -> Result<String,
     }
 }
 
+pub(super) fn parse_theme_host(
+    id: &str,
+    i: usize,
+) -> Result<super::super::theme::ThemeHost, Error> {
+    if id == "notesMaster" {
+        return Ok(super::super::theme::ThemeHost::NotesMaster);
+    }
+    if id == "handout" {
+        return Ok(super::super::theme::ThemeHost::Handout);
+    }
+    let master = super::super::master::parse_master_only_id(id, i, IdReason::SetThemeNeedsMaster)?;
+    Ok(super::super::theme::ThemeHost::Master(master))
+}
+
 pub(super) fn parse_set_theme_colors(
     obj: &Map<String, Value>,
     i: usize,
@@ -273,7 +287,7 @@ pub(super) fn parse_set_theme_colors(
         ],
     )?;
     let id = require_id(obj, i)?;
-    let master = super::super::master::parse_master_only_id(&id, i, IdReason::SetThemeNeedsMaster)?;
+    let host = parse_theme_host(&id, i)?;
     let mut slots = Vec::new();
     for slot in super::super::theme::COLOR_SLOTS {
         if let Some(v) = obj.get(*slot) {
@@ -292,7 +306,7 @@ pub(super) fn parse_set_theme_colors(
         ));
     }
     Ok(SetThemeColorsOp {
-        master,
+        host,
         slots,
         name,
         theme_name,
@@ -347,7 +361,7 @@ pub(super) fn parse_set_theme_fonts(
         ],
     )?;
     let id = require_id(obj, i)?;
-    let master = super::super::master::parse_master_only_id(&id, i, IdReason::SetThemeNeedsMaster)?;
+    let host = parse_theme_host(&id, i)?;
     let mut fonts = Vec::new();
     if let Some(s) = parse_theme_face(obj, i, "majorLatin", false)? {
         fonts.push((super::super::theme::FontSlot::MajorLatin, s));
@@ -380,7 +394,7 @@ pub(super) fn parse_set_theme_fonts(
         ));
     }
     Ok(SetThemeFontsOp {
-        master,
+        host,
         fonts,
         name,
         major_scripts,

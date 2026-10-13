@@ -181,7 +181,7 @@ $failNotes = Invoke-OoxpExpectFail @{
     schemaVersion = 1; action = 'apply'
     path = $hostPath.Replace('\', '/')
     output = $failNotesOut.Replace('\', '/')
-    ops = @(@{ op = 'setThemeColors'; id = 'notesMaster'; accent1 = 'FF0000' })
+    ops = @(@{ op = 'setThemeColors'; id = 'pptx:presentation'; accent1 = 'FF0000' })
 } 'pptx-tfm-fail-notes'
 $failOv = Invoke-OoxpExpectFail @{
     schemaVersion = 1; action = 'apply'

@@ -177,6 +177,7 @@ fn set_handout_text_creates_and_sets_slots() {
         object_keys(&tree["handout"]),
         [
             "id",
+            "theme",
             "clrMap",
             "header",
             "footer",

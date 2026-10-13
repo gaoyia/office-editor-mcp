@@ -263,7 +263,7 @@
 - 找不到段落时报 `IdNotFound`
 - 不认识的分节 `type` / `sectionType`，或 create 时最后一段带 `sectionType`，报 `InvalidField`
 - `setEvenAndOddHeaders` / `setMirrorMargins` / `setGutterAtTop` / `setPageBackground` / `setBibliographyStyle` 的 id 不是 `docx:document` 报 `InvalidId`
-- `setThemeFmt` / `setThemeExtraSchemes` 的 id：pptx 不是 `master:{n}`、docx 不是 `docx:document`、xlsx 不是 `xlsx:workbook` 报 `InvalidId`
+- `setThemeFmt` / `setThemeExtraSchemes` 的 id：pptx 不是 `master:{n}`、`notesMaster` 或 `handout`、docx 不是 `docx:document`、xlsx 不是 `xlsx:workbook` 报 `InvalidId`
 - `setThemeOverride` 的 id：docx 不是 `docx:document`、xlsx 不是 `xlsx:workbook`、pptx 不是 `slide:{n}` 也不是 `slide:{n}/notes` 报 `InvalidId`
 - `setClrMap` 的 id 不是 `master:{n}`、`notesMaster` 或 `handout` 报 `InvalidId`
 - `setClrMapOvr` 的 id 不是 `slide:{n}`、`slide:{n}/notes` 或 `master:{n}/layout:{k}` 报 `InvalidId`
@@ -461,7 +461,7 @@
 - `insertMaster` 的 id 必须是 `pptx:presentation`
 - `deleteMaster` 的 id 必须是 `master:{n}`
 - `setSlideSize` 的 id 必须是 `pptx:presentation`
-- `setThemeColors` / `setThemeFonts` / `setThemeFmt` / `setThemeExtraSchemes` 的 id：pptx 必须是 `master:{n}`，docx 必须是 `docx:document`，xlsx 必须是 `xlsx:workbook`
+- `setThemeColors` / `setThemeFonts` / `setThemeFmt` / `setThemeExtraSchemes` 的 id：pptx 必须是 `master:{n}`、`notesMaster` 或 `handout`，docx 必须是 `docx:document`，xlsx 必须是 `xlsx:workbook`
 - `setClrMap` 的 id 必须是 `master:{n}`、`notesMaster` 或 `handout`
 - `setClrMapOvr` 的 id 必须是 `slide:{n}`、`slide:{n}/notes` 或 `master:{n}/layout:{k}`
 - `setThemeOverride` 的 id：docx 必须是 `docx:document`，xlsx 必须是 `xlsx:workbook`，pptx 必须是 `slide:{n}` 或 `slide:{n}/notes`

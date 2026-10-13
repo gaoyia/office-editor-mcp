@@ -355,7 +355,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
                 "setProtection id must be pptx:presentation".into()
             }
             IdReason::SetThemeNeedsMaster => {
-                "setThemeColors / setThemeFonts / setThemeFmt / setThemeExtraSchemes id must be master:N".into()
+                "setThemeColors / setThemeFonts / setThemeFmt / setThemeExtraSchemes id must be master:N, notesMaster, or handout".into()
             }
             IdReason::SetThemeNeedsDocument => {
                 "setThemeColors / setThemeFonts / setThemeFmt / setThemeOverride id must be docx:document".into()
@@ -876,6 +876,8 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::MasterNotFound { n } => format!("Slide master not found: master:{n}"),
         ErrorKind::ThemeNotFound { n } => format!("Theme not found for slide master: master:{n}"),
         ErrorKind::DocumentThemeNotFound => "Document theme part not found".into(),
+        ErrorKind::NotesThemeNotFound => "Theme not found for notes master".into(),
+        ErrorKind::HandoutThemeNotFound => "Theme not found for handout master".into(),
         ErrorKind::NotesSlideNotFound { n } => format!("Notes slide not found: slide:{n}/notes"),
         ErrorKind::NotesMasterNotFound => "Notes master not found".into(),
         ErrorKind::HandoutMasterNotFound => "Handout master not found".into(),

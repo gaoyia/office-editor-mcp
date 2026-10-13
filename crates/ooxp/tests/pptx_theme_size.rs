@@ -598,11 +598,11 @@ fn reject_theme_remain_ids_and_empty() {
     assert_eq!(err.code(), ErrorCode::InvalidField);
     assert!(!out.exists());
 
-    let out = tmp("notes-theme");
+    let out = tmp("pres-theme");
     let err = apply(
         &src,
         &out,
-        json!([{ "op": "setThemeColors", "id": "notesMaster", "accent1": "FF0000" }]),
+        json!([{ "op": "setThemeColors", "id": "pptx:presentation", "accent1": "FF0000" }]),
     )
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidId);

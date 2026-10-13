@@ -38,6 +38,7 @@ pub fn handout_json(pkg: &Package, pres_part: &str) -> Result<Value, Error> {
     let doc = xml::parse(pkg.get(&part)?)?;
     let mut obj = Map::new();
     obj.insert("id".into(), json!("handout"));
+    obj.insert("theme".into(), super::theme::theme_json(pkg, &part)?);
     obj.insert("clrMap".into(), super::theme_map::clr_map_json(&doc.root));
     for (field, ph) in SLOTS {
         obj.insert(field.into(), slot_json(&doc.root, ph));

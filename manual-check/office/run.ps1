@@ -198,6 +198,7 @@ $order = @(
     'pptx-theme-size'
     'pptx-theme-remain'
     'pptx-theme-clrmap'
+    'pptx-theme-notes-handout'
     'pptx-custom-show'
     'pptx-ole'
     'pptx-zoom'

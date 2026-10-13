@@ -422,6 +422,7 @@ fn notes_master_tree(pkg: &Package, pres_part: &str, want_timing: bool) -> Resul
     let anims = timing::list(&doc.root, host, true);
     let mut obj = Map::new();
     obj.insert("id".into(), json!("notesMaster"));
+    obj.insert("theme".into(), theme::theme_json(pkg, &part)?);
     obj.insert("clrMap".into(), super::theme_map::clr_map_json(&doc.root));
     obj.insert("animCount".into(), json!(anims.len()));
     if want_timing {

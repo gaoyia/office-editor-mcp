@@ -310,7 +310,7 @@ pub struct SetSlideSizeOp {
 
 #[derive(Debug, Clone)]
 pub struct SetThemeColorsOp {
-    pub master: usize,
+    pub host: super::super::theme::ThemeHost,
     pub slots: Vec<(String, String)>,
     pub name: Option<Option<String>>,
     pub theme_name: Option<Option<String>>,
@@ -318,7 +318,7 @@ pub struct SetThemeColorsOp {
 
 #[derive(Debug, Clone)]
 pub struct SetThemeFontsOp {
-    pub master: usize,
+    pub host: super::super::theme::ThemeHost,
     pub fonts: Vec<(super::super::theme::FontSlot, String)>,
     pub name: Option<Option<String>>,
     pub major_scripts: Option<Vec<crate::theme::ScriptFont>>,
@@ -327,7 +327,7 @@ pub struct SetThemeFontsOp {
 
 #[derive(Debug, Clone)]
 pub struct SetThemeFmtOp {
-    pub master: usize,
+    pub host: super::super::theme::ThemeHost,
     pub line: Option<(usize, u32)>,
     pub fill: Option<(usize, crate::theme::FmtFillKind)>,
     pub bg_fill: Option<(usize, crate::theme::FmtFillKind)>,
@@ -336,7 +336,7 @@ pub struct SetThemeFmtOp {
 
 #[derive(Debug, Clone)]
 pub struct SetThemeExtraSchemesOp {
-    pub master: usize,
+    pub host: super::super::theme::ThemeHost,
     pub schemes: Vec<crate::theme::ExtraScheme>,
 }
 

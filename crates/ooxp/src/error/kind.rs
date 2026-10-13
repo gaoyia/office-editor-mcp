@@ -232,7 +232,7 @@ pub(crate) enum IdReason {
     SetShowPrNeedsPresentation,
     /// pptx 的 setProtection 必须用 pptx:presentation
     SetProtectionNeedsPresentation,
-    /// setThemeColors / setThemeFonts 必须用 master:N
+    /// setThemeColors / setThemeFonts / setThemeFmt / setThemeExtraSchemes 必须用 master:N、notesMaster 或 handout
     SetThemeNeedsMaster,
     /// setThemeColors / setThemeFonts 必须用 docx:document
     SetThemeNeedsDocument,
@@ -794,6 +794,8 @@ define_error_kinds! {
     SlideSizeOutOfRange => vec![Self::SlideSizeOutOfRange],
     ThemeNotFound { n: u32 } => vec![Self::ThemeNotFound { n: 9 }],
     DocumentThemeNotFound => vec![Self::DocumentThemeNotFound],
+    NotesThemeNotFound => vec![Self::NotesThemeNotFound],
+    HandoutThemeNotFound => vec![Self::HandoutThemeNotFound],
     NotesSlideNotFound { n: u32 } => vec![Self::NotesSlideNotFound { n: 3 }],
     NotesMasterNotFound => vec![Self::NotesMasterNotFound],
     HandoutMasterNotFound => vec![Self::HandoutMasterNotFound],
@@ -2133,6 +2135,8 @@ impl ErrorKind {
             | Self::MasterNotFound { .. }
             | Self::ThemeNotFound { .. }
             | Self::DocumentThemeNotFound
+            | Self::NotesThemeNotFound
+            | Self::HandoutThemeNotFound
             | Self::NotesSlideNotFound { .. }
             | Self::NotesMasterNotFound
             | Self::HandoutMasterNotFound

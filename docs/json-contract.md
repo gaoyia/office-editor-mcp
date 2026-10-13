@@ -48,12 +48,12 @@ apply 用 `insertAnim` / `setAnim` / `deleteAnim` / `moveAnim` 按模板增删�
 pptx 的 `scope.masters` 列出幻灯片母版与版式、占位符与装饰形（含该母版 theme 的配色、字体、`fmtScheme` 常用槽与补充色板），根上始终带 `slideSize`，apply 可用 `setSlideLayout` 换页的版式关系，
 也可用 `insertLayout` / `deleteLayout` / `insertPlaceholder` / `deletePlaceholder` / `insertMaster` / `deleteMaster` 插删版式、占位符与母版，
 也可用 `insertShape` / `deleteShape` 插删母版 / 版式上没有 `p:ph` 的装饰形，
-也可用 `setSlideSize` / `setThemeColors` / `setThemeFonts` / `setThemeFmt` / `setThemeExtraSchemes` 改画布尺寸与该母版 theme，
+也可用 `setSlideSize` / `setThemeColors` / `setThemeFonts` / `setThemeFmt` / `setThemeExtraSchemes` 改画布尺寸与 slideMaster / notesMaster / handout 的 theme，
 也可用 `setClrMap` / `setClrMapOvr` / `setThemeOverride` 改母版配色映射、页 / 版式覆盖与页级 themeOverride，
 也可用 `setShapeText` / `setShapeFormat` / `setShapePos` / `setShapeSize` 改占位符与装饰形。
 装饰形还可用 `setShapeGeom`。
-pptx 的 `scope.handout` 列出讲义母版页眉页脚槽位与占位符，apply 用 `setHandoutText` 改四个槽位的字，也可用 `insertPlaceholder` / `deletePlaceholder` / `setShapeText` 改讲义占位符。
-pptx 的 `scope.notesMaster` 列出备注母版占位符，apply 用同一套占位符 op 与预设动画。
+pptx 的 `scope.handout` 列出讲义母版 theme、页眉页脚槽位与占位符，apply 用 `setHandoutText` 改四个槽位的字，也可用 `insertPlaceholder` / `deletePlaceholder` / `setShapeText` 改讲义占位符，也可用同一套 theme op 改讲义 theme。
+pptx 的 `scope.notesMaster` 列出备注母版 theme 与占位符，apply 用同一套占位符 op、预设动画与 theme op。
 pptx 的 `scope.hyperlinks` 与超链接 op 认幻灯片文本形状上的形状级 `p:cNvPr/a:hlinkClick` 与 run 级 `a:rPr/a:hlinkClick`（跳转 / 文件 / URL），不认图、表、图表、SmartArt、备注或母版上的链。
 pptx 的 `scope.fields` 列出幻灯片文本形状里的 `a:fld`；apply 用 `insertField` / `setField` / `deleteField` 写页码与日期域，不求值。
 xlsx 仍拒 `scope.fields` 与这三条。docx 仍写 `w:fldChar` / `instr`，并可按 `code` 写常用域与窗体 `ffData`。

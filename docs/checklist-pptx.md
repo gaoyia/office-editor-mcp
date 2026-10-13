@@ -5,7 +5,7 @@
 检查前用 create 或 apply 在本机生成文件，不要用改过扩展名的 zip 目录冒充。
 本机若 `PowerPoint.Application` 被 WPS 抢走，直接启动 `POWERPNT.EXE` 再挂 COM，不要走被抢的 ProgID。Office 16 的对象模型在 `mdiClass` 上。
 
-C、I、A、Pp、Pvg、Pem、P3d、Pom、Pc、Psa、Pn、Pcm、Pm、Ps、Tf、Tfl、Pln、Sg、Pt、Pg、Ptb、Ptm、Tn、Tr、Td、Mt、Am、Aw、Mm、Mw、Md、Ts、Tfm、Tcm、Ho、Nh、Nm、Phl、Phr、Phx、Pcip、Pmd、Pmg、Psc、Cs、Po、Cr、Cq、Ck、Pz、Pzr、Pzg、Pw、Pph、
+C、I、A、Pp、Pvg、Pem、P3d、Pom、Pc、Psa、Pn、Pcm、Pm、Ps、Tf、Tfl、Pln、Sg、Pt、Pg、Ptb、Ptm、Tn、Tr、Td、Mt、Am、Aw、Mm、Mw、Md、Ts、Tfm、Tcm、Tnh、Ho、Nh、Nm、Phl、Phr、Phx、Pcip、Pmd、Pmg、Psc、Cs、Po、Cr、Cq、Ck、Pz、Pzr、Pzg、Pw、Pph、
 Pf、Pcg、Pcx 各组由 `manual-check/office/cases/pptx-*.ps1` 自动判定，
 跑 `pwsh -File manual-check\office\run.ps1 -Case 'pptx-*'` 即可复现。O1 已放弃，与 xlsx / docx 相同。
 
@@ -54,6 +54,7 @@ Ps1–Ps5、Sg1–Sg5、Pt1–Pt6、Tn1–Tn5、Am1–Am5、Mm1–Mm5、Ho1–Ho
 2026-10-14 补跑 `pptx-table-cell-mar.ps1`，Ptm1–Ptm5 通过。无 Repair。create `cellMar.top=12700` `left=25400`，COM `MarginTop=1` `MarginLeft=2` 磅。四边 JSON `null` 后 `cellMar` 为 `null`。
 2026-10-14 补跑 `pptx-theme-remain.ps1`，Tfm1–Tfm5 通过。无 Repair。`theme` 字段 `name` / `colors` / `fonts` / `fmt` / `extraSchemes`。`setThemeFmt` 线宽 38100。方案名与 `majorScripts` 对上。`extraSchemes` 写一项后可清成 `[]`。
 2026-10-14 补跑 `pptx-theme-clrmap.ps1`，Tcm1–Tcm5 通过。无 Repair。`clrMap` 在 `theme` 之后，`bg1=lt1`。页 `clrMapOvr` 为 `master`。`setClrMap` 写母版 / 备注母版 / 讲义。`setClrMapOvr` 写页与版式后再回到 `master`。`setThemeOverride` `accent1=FF0000`，备注页 `00FF00`，`enabled: false` 后为 `null`。
+2026-10-14 补跑 `pptx-theme-notes-handout.ps1`，Tnh1–Tnh5 通过。无 Repair。`notesMaster.theme` / `handout.theme` 在 `id` 之后、`clrMap` 之前。对 `notesMaster` 写 `accent1=FF0000` 不影响 slideMaster。讲义 `00FF00`。`majorLatin=Arial`，`line.w=38100`。讲义 `extraSchemes` 一项。页 id 得 `InvalidId`，无备注母版得 `IdNotFound`。
 
 - **C1** ✅
   - PowerPoint 16.0 能打开 `manual-check/office/out/pptx-create.pptx`，标题栏无 Repair
@@ -339,7 +340,7 @@ Ps1–Ps5、Sg1–Sg5、Pt1–Pt6、Tn1–Tn5、Am1–Am5、Mm1–Mm5、Ho1–Ho
   - `setThemeFmt` `lines[0].w=38100`、`fills[0].kind=solid`，无 Repair
   - `themeName=Custom Theme`、`colors.name=Custom`、`fonts.name=CustomFonts`、`majorScripts[0].script=Jpan`
   - `extraSchemes[0].name=Extra` `accent1=0F6FC6`，`null` 后为 `[]`
-  - 页 id / `notesMaster` 得 `InvalidId`，空 `setThemeFmt` 得 `InvalidField`，对 `master:1` 发 `setThemeOverride` 得 `InvalidId`，未写文件
+  - 页 id 得 `InvalidId`，空 `setThemeFmt` 得 `InvalidField`，对 `master:1` 发 `setThemeOverride` 得 `InvalidId`，未写文件
 - **Tcm1–Tcm5** ✅
   - PowerPoint 16.0：`pptx-theme-clrmap.ps1`，5 PASS / 0 FAIL
   - `clrMap` 在 `theme` 之后，`bg1=lt1` `tx1=dk1`，页 `clrMapOvr` 为 `"master"`，`themeOverride` 为 `null`
@@ -347,6 +348,13 @@ Ps1–Ps5、Sg1–Sg5、Pt1–Pt6、Tn1–Tn5、Am1–Am5、Mm1–Mm5、Ho1–Ho
   - `setClrMapOvr` 页 `bg1=dk1`、版式 `tx1=lt1`，再写成 `"master"` 后为 `"master"`
   - `setThemeOverride` 页 `accent1=FF0000`、备注页 `00FF00`，`enabled: false` 后为 `null`
   - 页 id 的 `setClrMap` 与 `master:1` 的 `setThemeOverride` 得 `InvalidId`，空槽 / `bg1=nope` 得 `InvalidField`，未写文件
+- **Tnh1–Tnh5** ✅
+  - PowerPoint 16.0：`pptx-theme-notes-handout.ps1`，5 PASS / 0 FAIL
+  - `notesMaster` / `handout` 的 `theme` 在 `id` 之后、`clrMap` 之前，初始 `accent1` 与 slideMaster 相同
+  - `setThemeColors` 对 `notesMaster` 写 `FF0000`、对 `handout` 写 `00FF00` 后 slideMaster 仍为原值，无 Repair
+  - `setThemeFonts` `majorLatin=Arial`、`setThemeFmt` `line.w=38100` 对上
+  - `setThemeExtraSchemes` 讲义一项 `name=Extra` `accent1=0F6FC6`
+  - 页 id 得 `InvalidId`，无 notesMaster 得 `IdNotFound`，xlsx 上 `notesMaster` 得 `InvalidId`，未写文件
 - **Ho1–Ho5** ✅
   - PowerPoint 16.0：`pptx-handout.ps1`，5 PASS / 0 FAIL
   - 无 `handout` 时只有 `hasHandout`
@@ -1564,7 +1572,7 @@ inspect `masters[].theme` 带 `fmt`、`extraSchemes` 与脚本字体。apply 用
   - 检查：拒错
   - 通过标准：对页 id 发 `setThemeFmt` 得 `InvalidId`
   - 只给 `op` 与 `id` 得 `InvalidField`
-  - 对 `notesMaster` 发 `setThemeColors` 得 `InvalidId`
+  - 对 `pptx:presentation` 发 `setThemeColors` 得 `InvalidId`
   - 发 `setThemeOverride` 对 `master:1` 得 `InvalidId`
   - 均未写文件
 
@@ -1602,6 +1610,38 @@ apply 用 `setClrMap` / `setClrMapOvr` / `setThemeOverride`。不把映射算成
   - 只给 `op` 与 `id` 得 `InvalidField`
   - `bg1=nope` 得 `InvalidField`
   - 对 `master:1` 发 `setThemeOverride` 得 `InvalidId`
+  - 均未写文件
+
+## 备注与讲义主题
+
+inspect 备注母版与讲义母版带独立 `theme`，插在 `id` 之后、`clrMap` 之前。
+apply 用已有 `setThemeColors` / `setThemeFonts` / `setThemeFmt` / `setThemeExtraSchemes`，id 增加 `notesMaster` 与 `handout`。
+不新建母版，不新建 theme。不改 `clrMap`。不按新画布重排。
+脚本：`manual-check/office/cases/pptx-theme-notes-handout.ps1`。编号用 Tnh。不要和 Tfm、Tcm、Ts 撞。
+
+- **Tnh1**
+  - 检查：inspect
+  - 通过标准：create 带备注与讲义时 `notesMaster.theme` 在 `id` 之后、`clrMap` 之前
+  - `handout.theme` 同样
+  - 两份 `colors.accent1` 与 slideMaster 相同，但不是 `masters[].theme` 同一对象
+- **Tnh2**
+  - 检查：`setThemeColors`
+  - 通过标准：对 `notesMaster` 写 `accent1=FF0000` 后该对象对上，`masters[0].theme.colors.accent1` 仍是原值
+  - 对 `handout` 写 `accent1=00FF00` 后讲义对上
+  - PowerPoint 16.0 打开无 Repair
+- **Tnh3**
+  - 检查：字体与 fmt
+  - 通过标准：对 `notesMaster` 发 `setThemeFonts` `majorLatin=Arial` 与 `setThemeFmt` `line.w=38100` 后树上对上
+  - 无 Repair
+- **Tnh4**
+  - 检查：补充色板
+  - 通过标准：对 `handout` 发 `setThemeExtraSchemes` 写一项后树上对上
+  - 无 Repair
+- **Tnh5**
+  - 检查：拒错
+  - 通过标准：对页 id 发 `setThemeColors` 得 `InvalidId`
+  - 无 notesMaster 的 create 产物上发 `notesMaster` 得 `IdNotFound`
+  - xlsx 上 `id=notesMaster` 得 `InvalidId`
   - 均未写文件
 
 ## 讲义

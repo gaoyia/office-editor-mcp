@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "C:\\data\\deck.pptx",
+  "ops": [
+    {
+      "op": "setThemeColors",
+      "id": "notesMaster",
+      "accent1": "FF0000"
+    },
+    {
+      "op": "setThemeColors",
+      "id": "handout",
+      "accent1": "00FF00"
+    }
+  ]
+}

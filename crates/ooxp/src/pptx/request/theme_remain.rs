@@ -2,7 +2,7 @@
 
 use serde_json::{Map, Value};
 
-use crate::error::{Error, ErrorKind, IdReason, TypeName};
+use crate::error::{Error, ErrorKind, TypeName};
 use crate::theme::{ExtraScheme, FmtFillKind, ScriptFont};
 
 use super::common::*;
@@ -131,7 +131,7 @@ pub(super) fn parse_set_theme_fmt(
 ) -> Result<SetThemeFmtOp, Error> {
     deny_keys(obj, i, &["op", "id", "line", "fill", "bgFill", "name"])?;
     let id = require_id(obj, i)?;
-    let master = super::super::master::parse_master_only_id(&id, i, IdReason::SetThemeNeedsMaster)?;
+    let host = super::master::parse_theme_host(&id, i)?;
     let line = parse_fmt_line(obj.get("line"), i, "line")?;
     let fill = parse_fmt_fill(obj.get("fill"), i, "fill")?;
     let bg_fill = parse_fmt_fill(obj.get("bgFill"), i, "bgFill")?;
@@ -146,7 +146,7 @@ pub(super) fn parse_set_theme_fmt(
         ));
     }
     Ok(SetThemeFmtOp {
-        master,
+        host,
         line,
         fill,
         bg_fill,
@@ -160,7 +160,7 @@ pub(super) fn parse_set_theme_extra_schemes(
 ) -> Result<SetThemeExtraSchemesOp, Error> {
     deny_keys(obj, i, &["op", "id", "extraSchemes"])?;
     let id = require_id(obj, i)?;
-    let master = super::super::master::parse_master_only_id(&id, i, IdReason::SetThemeNeedsMaster)?;
+    let host = super::master::parse_theme_host(&id, i)?;
     let schemes = match obj.get("extraSchemes") {
         None => {
             return Err(Error::with_path(
@@ -184,7 +184,7 @@ pub(super) fn parse_set_theme_extra_schemes(
             ));
         }
     };
-    Ok(SetThemeExtraSchemesOp { master, schemes })
+    Ok(SetThemeExtraSchemesOp { host, schemes })
 }
 
 fn parse_fmt_line(v: Option<&Value>, i: usize, field: &str) -> Result<Option<(usize, u32)>, Error> {

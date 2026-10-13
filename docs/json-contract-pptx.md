@@ -397,8 +397,8 @@ apply 不得把**未点名**的形状删掉再重建，以免 `cNvPr/@id` 变化
 `deleteShape` 只摘被点名的那一个 `p:sp`，并清掉 `<p:timing>` 里对应的 `p:tgtEl`（`p:spTgt/@spid` 对该形状 `cNvPr/@id`）；未点名形状的 timing 节点留下，不要整节删掉 `<p:timing>`。
 插、删、重排页只改 `p:sldIdLst` 与被点名页的部件，未点名页 XML 原字节写回。
 
-讲义母版始终给出 `hasHandout`；`scope.handout: true` 时展开根上 `handout` 对象（页眉、页脚、日期、页码槽位与占位符名单）。
-`scope.notesMaster: true` 时展开根上 `notesMaster`（占位符名单）。
+讲义母版始终给出 `hasHandout`；`scope.handout: true` 时展开根上 `handout` 对象（theme、页眉、页脚、日期、页码槽位与占位符名单）。
+`scope.notesMaster: true` 时展开根上 `notesMaster`（theme 与占位符名单）。
 幻灯片节始终给出 `sectionCount`；`scope.sections: true` 时展开根上 `sections`。
 自定义放映始终给出 `customShowCount`；`scope.customShows: true` 时展开根上 `customShows`。
 嵌入对象始终给出 `oleObjectCount`；`scope.oleObjects: true` 时展开各页 `oleObjects`。
@@ -976,18 +976,22 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   否则为 `false`。
   树上不出现哈希。xlsx / docx 根上不要带此对象。docx 仍用 `protection`，xlsx 用 `sheetProtection` / `workbookProtection`。
   `setProtection` 带 `password` 时按 [json-contract.md](json-contract.md#setprotection) 写 PowerPoint 16.0 的 `crypt*` SHA-512，不把口令或哈希写进树。
-- `scope.handout` 为 `true` 时，根上带 `handout`。没有讲义母版关系则为 `null`。有则为对象，字段顺序：`id`、`clrMap`、`header`、`footer`、`date`、`sldNum`、`animCount`，
+- `scope.handout` 为 `true` 时，根上带 `handout`。没有讲义母版关系则为 `null`。有则为对象，字段顺序：`id`、`theme`、`clrMap`、`header`、`footer`、`date`、`sldNum`、`animCount`，
   `scope.timing` 同开时再跟 `timing`，然后 `placeholders`。
-  `id` 为 `handout`。四个槽位分别取 handoutMaster 上第一个 `p:ph/@type` 为 `hdr` / `ftr` / `dt` / `sldNum` 的 `p:sp` 的可见字。
+  `id` 为 `handout`。
+  `theme` 取该 handoutMaster `.rels` 里 Type 以 `/theme` 结尾的部件，规则与 `masters[].theme` 相同。没有该关系或部件不在包内则为 `null`。不和 slideMaster 共用同一份 `masters[].theme`。
+  四个槽位分别取 handoutMaster 上第一个 `p:ph/@type` 为 `hdr` / `ftr` / `dt` / `sldNum` 的 `p:sp` 的可见字。
   没有该类型占位符则为 `null`。有占位符但没有 `txBody` 则为 `""`。槽位文字把 `a:fld` 里的 `a:t` 也算进去（与幻灯片形状 `text` 跳过域缓存不同），以便看见日期与页码缓存。
   `placeholders` 收全部带 `p:nvPr/p:ph` 的 `p:sp`（含 `sldImg`，含组合里的），按文档顺序。
   字段顺序与幻灯片母版占位符相同。`id` 为 `handout/shape:{cNvPrId}`；没有 `cNvPr/@id` 则为 `handout/shape:index:{i}`，`{i}` 只在该宿主占位符内从 1 计。
   `animCount` 只计该 handoutMaster 的 `<p:timing>`。讲义 `timing` 的 id 为 `handout/anim:{k}`，`target` 对应该讲义占位符 id。
   `clrMap` 规则与 `masters[].clrMap` 相同，读该 handoutMaster 的 `p:clrMap`。
   xlsx / docx 的 `scope` 里出现 `handout` 报 `InvalidField`。不算讲义打印布局。
-- `scope.notesMaster` 为 `true` 时，根上带 `notesMaster`。没有备注母版关系则为 `null`。有则为对象，字段顺序：`id`、`clrMap`、`animCount`，
+- `scope.notesMaster` 为 `true` 时，根上带 `notesMaster`。没有备注母版关系则为 `null`。有则为对象，字段顺序：`id`、`theme`、`clrMap`、`animCount`，
   `scope.timing` 同开时再跟 `timing`，然后 `placeholders`。
-  `id` 为 `notesMaster`。`placeholders` 收全部带 `p:ph` 的 `p:sp`（含 `sldImg`），按文档顺序。
+  `id` 为 `notesMaster`。
+  `theme` 取该 notesMaster `.rels` 里 Type 以 `/theme` 结尾的部件，规则与 `masters[].theme` 相同。没有该关系或部件不在包内则为 `null`。不和 slideMaster 共用同一份 `masters[].theme`。
+  `placeholders` 收全部带 `p:ph` 的 `p:sp`（含 `sldImg`），按文档顺序。
   `id` 为 `notesMaster/shape:{cNvPrId}`；没有则为 `notesMaster/shape:index:{i}`。
   `animCount` 只计该 notesMaster 的 `<p:timing>`。备注母版 `timing` 的 id 为 `notesMaster/anim:{k}`。
   `clrMap` 规则与 `masters[].clrMap` 相同，读该 notesMaster 的 `p:clrMap`。
@@ -2165,16 +2169,18 @@ docx / xlsx 上发此 op 报 `InvalidField`。
 | 字段 | 含义 |
 | --- | --- |
 | `op` | 必须是 `"setThemeColors"` |
-| `id` | 必须是 `master:{n}` |
+| `id` | 必须是 `master:{n}`、`notesMaster` 或 `handout` |
 | `name` | 可选。`a:clrScheme/@name`。非空字符串；`null` 去掉该属性 |
 | `themeName` | 可选。`a:theme/@name`。非空字符串；`null` 去掉该属性 |
 | `dk1` / `lt1` / `dk2` / `lt2` / `accent1`–`accent6` / `hlink` / `folHlink` | 可选。六位 RGB 十六进制 |
 
-pptx：`id` 不是母版 id 报 `InvalidId`。对页 id、`notesMaster`、`handout` 报 `InvalidId`。找不到该母版报 `IdNotFound`。该母版没有 theme 关系或部件不在包内报 `IdNotFound`。
+pptx：`id` 不是 `master:{n}`、`notesMaster` 或 `handout` 报 `InvalidId`。对页 id 报 `InvalidId`。
+找不到该 slideMaster / notesMaster / handoutMaster 报 `IdNotFound`。该宿主没有 theme 关系或部件不在包内报 `IdNotFound`。不新建母版，不新建 theme。
 `name`、`themeName` 与十二个槽位一个都不给，或某槽位不是六位十六进制，或名字是空串，报 `InvalidField`。
 写入时把被点名槽位的子元素换成 `a:srgbClr`（原先若是 `sysClr` 也换成 `srgbClr`）。未点名槽位留下。未点名的 `fmtScheme` 槽留下。不改各页 XML。
+xlsx 上这些 pptx 宿主 id 报 `InvalidId`。docx 仍只认 `docx:document`。
 xlsx 见 [xlsx 分册](json-contract-xlsx.md#setthemecolors)。docx 见 [docx 分册](json-contract-docx.md#setthemecolors)。
-示例见 `docs/examples/pptx-apply-theme-remain.json`。
+示例见 `docs/examples/pptx-apply-theme-remain.json`。备注 / 讲义宿主见 `docs/examples/pptx-apply-theme-notes-handout.json`。
 
 ### setThemeFonts
 
@@ -2202,12 +2208,13 @@ xlsx 见 [xlsx 分册](json-contract-xlsx.md#setthemecolors)。docx 见 [docx �
 | 字段 | 含义 |
 | --- | --- |
 | `op` | 必须是 `"setThemeFonts"` |
-| `id` | 必须是 `master:{n}` |
+| `id` | 必须是 `master:{n}`、`notesMaster` 或 `handout` |
 | `name` | 可选。`a:fontScheme/@name`。非空字符串；`null` 去掉该属性 |
 | `majorLatin` / `minorLatin` / `majorEa` / `minorEa` / `majorCs` / `minorCs` | 可选。`typeface` 原文 |
 | `majorScripts` / `minorScripts` | 可选。数组，整份替换对应组里的 `a:font`。`[]` 或 `null` 清掉全部 `a:font`。不改 `latin` / `ea` / `cs` |
 
-pptx：`id` 不是母版 id 报 `InvalidId`。对页 id、`notesMaster`、`handout` 报 `InvalidId`。找不到该母版或 theme 部件报 `IdNotFound`。
+pptx：`id` 不是 `master:{n}`、`notesMaster` 或 `handout` 报 `InvalidId`。对页 id 报 `InvalidId`。
+找不到该宿主或 theme 部件报 `IdNotFound`。不新建。xlsx 上这些 pptx 宿主 id 报 `InvalidId`。docx 仍只认 `docx:document`。
 `name`、六个字体槽与两份脚本列表一个都不给报 `InvalidField`。
 `majorLatin` / `minorLatin` 空串报 `InvalidField`。`ea` / `cs` 允许空串。
 脚本每一项必须是对象，字段只认 `script`、`typeface`。`script` 必须是非空字符串。`typeface` 必须是字符串，允许空串。
@@ -2237,7 +2244,7 @@ xlsx 见 [xlsx 分册](json-contract-xlsx.md#setthemefonts)。docx 见 [docx 分
 | 字段 | 含义 |
 | --- | --- |
 | `op` | 必须是 `"setThemeFmt"` |
-| `id` | 必须是 `master:{n}` |
+| `id` | 必须是 `master:{n}`、`notesMaster` 或 `handout` |
 | `line` | 可选。对象须有 `index`（0、1 或 2）与 `w`（非负整数，EMU） |
 | `fill` | 可选。对象须有 `index`（0、1 或 2）与 `kind`（`solid` 或 `grad`） |
 | `bgFill` | 可选。同 `fill`，改 `bgFillStyleLst` |
@@ -2245,7 +2252,8 @@ xlsx 见 [xlsx 分册](json-contract-xlsx.md#setthemefonts)。docx 见 [docx 分
 
 `line` / `fill` / `bgFill` / `name` 至少给一个。写入时只替换被点名槽：线改 `@w`；填充写成带 `schemeClr phClr` 的 `solidFill` 或两停点 `gradFill`。未点名槽留下。
 `index` 超出该列表长度、缺少 `fmtScheme` 或对应列表，报 `InvalidField`。没有 theme 部件报 `IdNotFound`，不新建。
-id 不是母版 id 报 `InvalidId`。对页 id、`notesMaster`、`handout` 报 `InvalidId`。
+id 不是 `master:{n}`、`notesMaster` 或 `handout` 报 `InvalidId`。对页 id 报 `InvalidId`。
+找不到该宿主报 `IdNotFound`。xlsx 上这些 pptx 宿主 id 报 `InvalidId`。docx 仍只认 `docx:document`。
 xlsx 见 [xlsx 分册](json-contract-xlsx.md#setthemefmt)。docx 见 [docx 分册](json-contract-docx.md#setthemefmt)。
 示例见 `docs/examples/pptx-apply-theme-remain.json`。
 
@@ -2276,14 +2284,15 @@ xlsx 见 [xlsx 分册](json-contract-xlsx.md#setthemefmt)。docx 见 [docx 分�
 | 字段 | 含义 |
 | --- | --- |
 | `op` | 必须是 `"setThemeExtraSchemes"` |
-| `id` | 必须是 `master:{n}` |
+| `id` | 必须是 `master:{n}`、`notesMaster` 或 `handout` |
 | `extraSchemes` | 必须。数组或 `null` |
 
 `[]` 或 `null` 去掉 `extraClrSchemeLst`。否则按数组整份重写该列表。
 每一项必须是对象，字段只认 `name`、`colors`。`name` 为非空字符串或 `null`（`null` 或省略则不写 `@name`）。
 `colors` 规则与主 `clrScheme` 相同。项上 `name` 与 `colors.name` 都对应该项 `a:clrScheme/@name`；只给一个即可，两个都给则必须相同，否则报 `InvalidField`。
 未点名的配色槽用 Office 默认十二槽补齐，再把点名槽写成 `a:srgbClr`。每项写出身份映射的 `a:clrMap`（`bg1=lt1` 那一套），不把映射暴露进 JSON。
-pptx：`id` 不是母版 id 报 `InvalidId`。对页 id、`notesMaster`、`handout` 报 `InvalidId`。没有 theme 部件报 `IdNotFound`，不新建。
+pptx：`id` 不是 `master:{n}`、`notesMaster` 或 `handout` 报 `InvalidId`。对页 id 报 `InvalidId`。
+没有该宿主或 theme 部件报 `IdNotFound`，不新建。xlsx 上这些 pptx 宿主 id 报 `InvalidId`。docx 仍只认 `docx:document`。
 缺 `extraSchemes`、不是数组 / `null`、项不是对象、或槽位不是六位十六进制，报 `InvalidField`。
 xlsx 见 [xlsx 分册](json-contract-xlsx.md#setthemeextraschemes)。docx 见 [docx 分册](json-contract-docx.md#setthemeextraschemes)。
 
@@ -3628,7 +3637,7 @@ presentation 关系、新页或被删页及其 `.rels`、内容类型，
 `insertMaster` 脏 `presentation.xml` 及其 `.rels`、新 slideMaster / slideLayout / theme 及其 `.rels`、内容类型。
 `deleteMaster` 脏 `presentation.xml` 及其 `.rels`、被删母版及其版式与仅被它引用的 theme、内容类型。
 `setSlideSize` 只脏 `presentation.xml` 的 `p:sldSz`。
-`setThemeColors` / `setThemeFonts` / `setThemeFmt` / `setThemeExtraSchemes` 只脏该母版指向的 theme 部件，不新建 theme。
+`setThemeColors` / `setThemeFonts` / `setThemeFmt` / `setThemeExtraSchemes` 只脏该宿主指向的 theme 部件（slideMaster、notesMaster 或 handoutMaster），不新建 theme，不新建母版。
 `setClrMap` 只脏被点名的 slideMaster、notesMaster 或 handoutMaster XML。
 `setClrMapOvr` 只脏被点名的幻灯片、slideLayout 或 notesSlide XML。
 `setThemeOverride` 脏该页或该备注页 `.rels`、`/ppt/theme/themeOverrideN.xml` 与必要时 `[Content_Types].xml`。

@@ -146,7 +146,7 @@ fn insert_placeholder_on_notes_master() {
     assert_eq!(tree["notesMaster"]["id"], "notesMaster");
     assert_eq!(
         object_keys(&tree["notesMaster"]),
-        ["id", "clrMap", "animCount", "placeholders"]
+        ["id", "theme", "clrMap", "animCount", "placeholders"]
     );
     assert_eq!(tree["notesMaster"]["animCount"], 0);
     let ph = ph_by_text(&tree, "notesMaster", "母版备注");
@@ -259,6 +259,7 @@ fn insert_placeholder_on_handout_and_anim() {
         object_keys(&tree["handout"]),
         [
             "id",
+            "theme",
             "clrMap",
             "header",
             "footer",

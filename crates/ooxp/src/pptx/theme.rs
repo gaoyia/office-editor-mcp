@@ -7,9 +7,19 @@ use crate::error::{Error, ErrorKind};
 use crate::opc::{self, Package, Relationships};
 use crate::xml::{self, Document, Element, Node};
 
+use super::handout;
 use super::master;
+use super::notes;
 
 pub use crate::theme::{FontSlot, COLOR_SLOTS};
+
+/// `setThemeColors` 等 op 的宿主：slideMaster、备注母版或讲义母版。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ThemeHost {
+    Master(usize),
+    NotesMaster,
+    Handout,
+}
 
 /// `p:clrMap` / `a:overrideClrMapping` 的十二个键，与 ECMA-376 属性同名。
 pub const CLR_MAP_KEYS: &[&str] = &[
@@ -106,27 +116,21 @@ pub fn set_theme_colors(
     pkg: &mut Package,
     pres_part: &str,
     pres_root: &Element,
-    master: usize,
+    host: ThemeHost,
     slots: &[(String, String)],
     name: Option<Option<&str>>,
     theme_name: Option<Option<&str>>,
     op_index: usize,
 ) -> Result<(), Error> {
     let json_path = format!("ops[{op_index}].id");
-    let part = theme_part_for_master(pkg, pres_part, pres_root, master, &json_path)?;
+    let part = theme_part_for_host(pkg, pres_part, pres_root, host, &json_path)?;
     let mut doc = xml::parse(pkg.get(&part)?)?;
     if !slots.is_empty() && !crate::theme::patch_colors(&mut doc.root, slots) {
-        return Err(Error::with_path(
-            ErrorKind::ThemeNotFound { n: master as u32 },
-            json_path,
-        ));
+        return Err(missing_theme(host, &json_path));
     }
     if let Some(name) = name {
         if !crate::theme::patch_clr_scheme_name(&mut doc.root, name) {
-            return Err(Error::with_path(
-                ErrorKind::ThemeNotFound { n: master as u32 },
-                format!("ops[{op_index}].id"),
-            ));
+            return Err(missing_theme(host, &format!("ops[{op_index}].id")));
         }
     }
     if let Some(name) = theme_name {
@@ -140,7 +144,7 @@ pub fn set_theme_fonts(
     pkg: &mut Package,
     pres_part: &str,
     pres_root: &Element,
-    master: usize,
+    host: ThemeHost,
     patches: &[(FontSlot, String)],
     name: Option<Option<&str>>,
     major_scripts: Option<&[crate::theme::ScriptFont]>,
@@ -148,15 +152,12 @@ pub fn set_theme_fonts(
     op_index: usize,
 ) -> Result<(), Error> {
     let json_path = format!("ops[{op_index}].id");
-    let part = theme_part_for_master(pkg, pres_part, pres_root, master, &json_path)?;
+    let part = theme_part_for_host(pkg, pres_part, pres_root, host, &json_path)?;
     let mut doc = xml::parse(pkg.get(&part)?)?;
     crate::theme::patch_fonts(&mut doc.root, patches, &json_path)?;
     if let Some(name) = name {
         if !crate::theme::patch_font_scheme_name(&mut doc.root, name) {
-            return Err(Error::with_path(
-                ErrorKind::ThemeNotFound { n: master as u32 },
-                json_path.clone(),
-            ));
+            return Err(missing_theme(host, &json_path));
         }
     }
     if let Some(fonts) = major_scripts {
@@ -173,7 +174,7 @@ pub fn set_theme_fmt(
     pkg: &mut Package,
     pres_part: &str,
     pres_root: &Element,
-    master: usize,
+    host: ThemeHost,
     line: Option<(usize, u32)>,
     fill: Option<(usize, crate::theme::FmtFillKind)>,
     bg_fill: Option<(usize, crate::theme::FmtFillKind)>,
@@ -181,7 +182,7 @@ pub fn set_theme_fmt(
     op_index: usize,
 ) -> Result<(), Error> {
     let json_path = format!("ops[{op_index}].id");
-    let part = theme_part_for_master(pkg, pres_part, pres_root, master, &json_path)?;
+    let part = theme_part_for_host(pkg, pres_part, pres_root, host, &json_path)?;
     let mut doc = xml::parse(pkg.get(&part)?)?;
     if let Some((index, w)) = line {
         if !crate::theme::patch_line_width(&mut doc.root, index, w) {
@@ -223,42 +224,54 @@ pub fn set_theme_extra_schemes(
     pkg: &mut Package,
     pres_part: &str,
     pres_root: &Element,
-    master: usize,
+    host: ThemeHost,
     schemes: &[crate::theme::ExtraScheme],
     op_index: usize,
 ) -> Result<(), Error> {
     let json_path = format!("ops[{op_index}].id");
-    let part = theme_part_for_master(pkg, pres_part, pres_root, master, &json_path)?;
+    let part = theme_part_for_host(pkg, pres_part, pres_root, host, &json_path)?;
     let mut doc = xml::parse(pkg.get(&part)?)?;
     crate::theme::replace_extra_schemes(&mut doc.root, schemes);
     pkg.set(&part, doc.to_bytes()?)?;
     Ok(())
 }
 
-fn theme_part_for_master(
+fn theme_part_for_host(
     pkg: &Package,
     pres_part: &str,
     pres_root: &Element,
-    master: usize,
+    host: ThemeHost,
     json_path: &str,
 ) -> Result<String, Error> {
-    let cat = master::catalog(pkg, pres_part, pres_root)?;
-    let master_part = cat
-        .master_part(master)
-        .ok_or_else(|| {
-            Error::with_path(
-                ErrorKind::MasterNotFound { n: master as u32 },
-                json_path.to_string(),
-            )
-        })?
-        .to_string();
-    drop(cat);
-    theme_part(pkg, &master_part)?.ok_or_else(|| {
-        Error::with_path(
-            ErrorKind::ThemeNotFound { n: master as u32 },
-            json_path.to_string(),
-        )
-    })
+    let host_part = match host {
+        ThemeHost::Master(n) => {
+            let cat = master::catalog(pkg, pres_part, pres_root)?;
+            cat.master_part(n)
+                .ok_or_else(|| {
+                    Error::with_path(
+                        ErrorKind::MasterNotFound { n: n as u32 },
+                        json_path.to_string(),
+                    )
+                })?
+                .to_string()
+        }
+        ThemeHost::NotesMaster => notes::notes_master_part(pkg, pres_part)?.ok_or_else(|| {
+            Error::with_path(ErrorKind::NotesMasterNotFound, json_path.to_string())
+        })?,
+        ThemeHost::Handout => handout::handout_part(pkg, pres_part)?.ok_or_else(|| {
+            Error::with_path(ErrorKind::HandoutMasterNotFound, json_path.to_string())
+        })?,
+    };
+    theme_part(pkg, &host_part)?.ok_or_else(|| missing_theme(host, json_path))
+}
+
+fn missing_theme(host: ThemeHost, json_path: &str) -> Error {
+    let kind = match host {
+        ThemeHost::Master(n) => ErrorKind::ThemeNotFound { n: n as u32 },
+        ThemeHost::NotesMaster => ErrorKind::NotesThemeNotFound,
+        ThemeHost::Handout => ErrorKind::HandoutThemeNotFound,
+    };
+    Error::with_path(kind, json_path.to_string())
 }
 
 fn theme_part(pkg: &Package, master_part: &str) -> Result<Option<String>, Error> {

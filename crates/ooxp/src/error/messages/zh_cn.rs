@@ -320,7 +320,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
                 "setProtection 的 id 必须是 pptx:presentation".into()
             }
             IdReason::SetThemeNeedsMaster => {
-                "setThemeColors / setThemeFonts / setThemeFmt / setThemeExtraSchemes 的 id 必须是 master:N".into()
+                "setThemeColors / setThemeFonts / setThemeFmt / setThemeExtraSchemes 的 id 必须是 master:N、notesMaster 或 handout".into()
             }
             IdReason::SetThemeNeedsDocument => {
                 "setThemeColors / setThemeFonts / setThemeFmt / setThemeOverride 的 id 必须是 docx:document".into()
@@ -823,6 +823,8 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::MasterNotFound { n } => format!("找不到幻灯片母版：master:{n}"),
         ErrorKind::ThemeNotFound { n } => format!("找不到该母版的 theme：master:{n}"),
         ErrorKind::DocumentThemeNotFound => "找不到文档 theme 部件".into(),
+        ErrorKind::NotesThemeNotFound => "找不到备注母版的 theme".into(),
+        ErrorKind::HandoutThemeNotFound => "找不到讲义母版的 theme".into(),
         ErrorKind::NotesSlideNotFound { n } => format!("找不到备注页：slide:{n}/notes"),
         ErrorKind::NotesMasterNotFound => "找不到备注母版".into(),
         ErrorKind::HandoutMasterNotFound => "找不到讲义母版".into(),
