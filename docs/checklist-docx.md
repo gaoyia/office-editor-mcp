@@ -46,6 +46,7 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 同日补跑 `docx-cell-borders.ps1`，Tcb1–Tcb6 通过。无 Repair。COM 该格上边 `LineStyle=7`。`null` 去掉正交边后斜线仍在。
 同日补跑 `docx-run-scale.ps1`，Rsc1–Rsc6 通过。无 Repair。COM `Font.Scaling` 为 200 / 50。框内 run 可改缩放。
 同日补跑 `docx-theme-remain.ps1`，Thr1–Thr6 通过。无 Repair。空白另存 `extraSchemes=[]`，脚本列表在 `minorCs` 之后。改名 / 脚本 / 补充色板 / `themeFontLang` 树上对得上。
+同日补跑 `docx-cell-props.ps1`，Tcp1–Tcp6 通过。无 Repair。COM `WordWrap` 为 False，`Range.Orientation` 为 3，`FitText` 为 True。`headers=["A1"]`。xlsx 拒写 `setCellFormat`。
 
 - **C1** ✅
   - Word 16.0 能打开 `manual-check/office/out/docx-create.docx`，标题栏无 Repair
@@ -176,6 +177,10 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 - **Tcb1–Tcb6** ✅
   - Word 16.0：`docx-cell-borders.ps1`，6 PASS / 0 FAIL
   - 格上有 `borders`；apply `double` 后 COM 上边 `LineStyle=7`；只改 `insideH` 后 `top` 仍在；`null` 去掉正交边、斜线留下；create `cellFormats[].borders` 对得上；缺 `borders`、表 id、xlsx 拒写
+  - 标题栏无 Repair
+- **Tcp1–Tcp6** ✅
+  - Word 16.0：`docx-cell-props.ps1`，6 PASS / 0 FAIL
+  - 格上有 `noWrap` / `textDirection` / `fitText` / `hideMark` / `headers`；apply 不换行与竖排 COM `WordWrap=False`、`Range.Orientation=3`；适应文字 COM `FitText=True`；表头引用；`null` 去掉；create 与 xlsx 拒写
   - 标题栏无 Repair
 - **Bx1–Bx5** ✅
   - Word 16.0：`docx-box-table.ps1`，5 PASS / 0 FAIL
@@ -1109,6 +1114,20 @@ Word COM 的 `PageSetup` 边距与纸张单位是磅，等于 twip ÷ 20。手�
 | Tcb4 | 去掉 | `borders` 为 `null` 后树上格 `borders` 为 `null`，斜线 `tl2br` 还在。Word 无修复 | ✅ |
 | Tcb5 | create | create `cellFormats` 带 `borders.top` 后树上对得上，无修复 | ✅ |
 | Tcb6 | 拒写 | 缺 `borders` 报 `InvalidField`。对表 id 发此 op 报 `InvalidId`。xlsx 上发此 op 报 `InvalidField`。不强制开 Word | ✅ |
+
+## 格属性剩余
+
+格级 `tcPr` 上 `noWrap`、`textDirection`、`tcFitText`、`hideMark`、`headers`。不要和 59 的 `vAlign`、64 的边框混。不算排版引擎。
+手测脚本 `manual-check/office/cases/docx-cell-props.ps1`。编号 Tcp，不要和 Va、Tcb、Tf 撞。COM 竖排读 `Range.Orientation`，不是 `Cell.Orientation`。
+
+| 序号 | 检查 | 通过标准 | 状态 |
+| --- | --- | --- | --- |
+| Tcp1 | 名单字段 | 给了 `scope.tables` 后格上有 `noWrap`、`textDirection`、`fitText`、`hideMark`、`headers`。create 默认表缺元素为 `null` / `[]` | ✅ |
+| Tcp2 | 不换行与方向 | `setCellFormat` 写 `noWrap: true` 与 `textDirection: tbRl` 后树上对得上。Word 无修复。COM 该格 `WordWrap` 为 False，`Orientation` 非 0 | ✅ |
+| Tcp3 | 适应文字与隐藏标记 | 写 `fitText: true` 与 `hideMark: true` 后树上为 true。Word 无修复。COM `FitText` 为 True。XML 有 `w:hideMark` | ✅ |
+| Tcp4 | 表头引用 | 写 `headers: ["A1"]` 后树上为该数组。Word 无修复 | ✅ |
+| Tcp5 | 去掉 | 对应字段为 `null`、`headers` 为 `[]` 后树上为 `null` / `[]`，XML 无这些元素。Word 无修复 | ✅ |
+| Tcp6 | create 与拒写 | create `cellFormats` 带 `noWrap` 后树上为 true。xlsx 上发 `setCellFormat` 报 `InvalidField`。不强制开 Word | ✅ |
 
 ## 框内表
 

@@ -959,7 +959,7 @@
 - `setCellBorders` 的 `id` 必须是单元格 id
 - `setCellBorders` 缺 `borders`、对象一边都不给、或边的 `val` / `color` 不合法，报 `InvalidField`
 - 斜线 `val` / `color` 不合法报 `InvalidField`（与页面边框同一套）
-- `setCellFormat` 的 `vAlign` 不是 `top` / `center` / `both` / `bottom`，或 fill、边距、斜线、`vAlign` 一个都不给，报 `InvalidField`
+- `setCellFormat` 的 `vAlign` 不是 `top` / `center` / `both` / `bottom`，`textDirection` 不是六值之一，`headers` 含空串，或 fill、边距、斜线、`vAlign`、`noWrap`、`textDirection`、`fitText`、`hideMark`、`headers` 一个都不给，报 `InvalidField`
 - `setTextBoxTextAnchor` 的 `textAnchor` 不是 `t` / `ctr` / `b` / `just` / `dist` 且不是 `null`，报 `InvalidField`
 - xlsx / pptx 上发 `setTableStyle` / `setTableFloat` / `setTableWidth` / `setTableAlign` / `setTableRowHeight` / `setTableCellMar` / `setTableBorders` / `setCellFormat` / `setCellBorders` 报 `InvalidField`
 - 找不到段落时，`setParaFormat` 报 `IdNotFound`

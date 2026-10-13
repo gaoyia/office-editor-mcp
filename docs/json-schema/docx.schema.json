@@ -4556,6 +4556,51 @@
               "type": "null"
             }
           ]
+        },
+        "noWrap": {
+          "oneOf": [
+            { "type": "boolean" },
+            { "type": "null" }
+          ]
+        },
+        "textDirection": {
+          "oneOf": [
+            {
+              "enum": [
+                "lrTb",
+                "tbRl",
+                "btLr",
+                "lrTbV",
+                "tbRlV",
+                "tbLrV"
+              ]
+            },
+            { "type": "null" }
+          ]
+        },
+        "fitText": {
+          "oneOf": [
+            { "type": "boolean" },
+            { "type": "null" }
+          ]
+        },
+        "hideMark": {
+          "oneOf": [
+            { "type": "boolean" },
+            { "type": "null" }
+          ]
+        },
+        "headers": {
+          "oneOf": [
+            {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            { "type": "null" }
+          ]
         }
       }
     },
@@ -6032,6 +6077,41 @@
             {
               "type": "null"
             }
+          ]
+        },
+        "noWrap": {
+          "oneOf": [
+            { "type": "boolean" },
+            { "type": "null" }
+          ]
+        },
+        "textDirection": {
+          "oneOf": [
+            {
+              "enum": ["lrTb", "tbRl", "btLr", "lrTbV", "tbRlV", "tbLrV"]
+            },
+            { "type": "null" }
+          ]
+        },
+        "fitText": {
+          "oneOf": [
+            { "type": "boolean" },
+            { "type": "null" }
+          ]
+        },
+        "hideMark": {
+          "oneOf": [
+            { "type": "boolean" },
+            { "type": "null" }
+          ]
+        },
+        "headers": {
+          "oneOf": [
+            {
+              "type": "array",
+              "items": { "type": "string", "minLength": 1 }
+            },
+            { "type": "null" }
           ]
         },
         "borders": {

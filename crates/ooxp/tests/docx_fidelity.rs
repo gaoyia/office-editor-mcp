@@ -2990,6 +2990,11 @@ fn inspect_tables_lists_cell_paragraphs() {
     assert_eq!(cell["gridSpan"], 1);
     assert!(cell["vMerge"].is_null());
     assert!(cell["vAlign"].is_null());
+    assert!(cell["noWrap"].is_null());
+    assert!(cell["textDirection"].is_null());
+    assert!(cell["fitText"].is_null());
+    assert!(cell["hideMark"].is_null());
+    assert_eq!(cell["headers"], json!([]));
     assert!(cell["fill"].is_null());
     assert!(cell["cellMar"].is_null());
     assert!(cell["borders"].is_null());

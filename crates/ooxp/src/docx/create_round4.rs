@@ -787,6 +787,37 @@ fn opt_null_bool(
     }
 }
 
+fn opt_null_headers(
+    obj: &serde_json::Map<String, Value>,
+    path: &str,
+) -> Result<Option<Option<Vec<String>>>, Error> {
+    match obj.get("headers") {
+        None => Ok(None),
+        Some(Value::Null) => Ok(Some(None)),
+        Some(Value::Array(arr)) => {
+            let mut out = Vec::with_capacity(arr.len());
+            for (j, item) in arr.iter().enumerate() {
+                match item {
+                    Value::String(s) if !s.is_empty() => out.push(s.clone()),
+                    _ => {
+                        return Err(wrong_type(
+                            "headers",
+                            TypeName::NonEmptyString,
+                            &format!("{path}.headers[{j}]"),
+                        ));
+                    }
+                }
+            }
+            Ok(Some(Some(out)))
+        }
+        Some(_) => Err(wrong_type(
+            "headers",
+            TypeName::Array,
+            &format!("{path}.headers"),
+        )),
+    }
+}
+
 fn wrong_type(field: &str, expected: TypeName, path: &str) -> Error {
     Error::with_path(
         ErrorKind::WrongType {
@@ -865,6 +896,11 @@ pub struct CellFormatSpec {
     pub tl2br: Option<Option<DiagonalBorder>>,
     pub tr2bl: Option<Option<DiagonalBorder>>,
     pub v_align: Option<Option<String>>,
+    pub no_wrap: Option<Option<bool>>,
+    pub text_direction: Option<Option<String>>,
+    pub fit_text: Option<Option<bool>>,
+    pub hide_mark: Option<Option<bool>>,
+    pub headers: Option<Option<Vec<String>>>,
     pub borders: Option<Option<TableBordersPatch>>,
 }
 
@@ -1457,7 +1493,21 @@ fn parse_cell_formats(
             obj,
             &item_path,
             &[
-                "r", "c", "fill", "top", "left", "bottom", "right", "tl2br", "tr2bl", "vAlign",
+                "r",
+                "c",
+                "fill",
+                "top",
+                "left",
+                "bottom",
+                "right",
+                "tl2br",
+                "tr2bl",
+                "vAlign",
+                "noWrap",
+                "textDirection",
+                "fitText",
+                "hideMark",
+                "headers",
                 "borders",
             ],
         )?;
@@ -1479,6 +1529,19 @@ fn parse_cell_formats(
                 field: "vAlign".into(),
             },
         )?;
+        let no_wrap = opt_null_bool(obj, &item_path, "noWrap")?;
+        let text_direction = opt_null_enum(
+            obj,
+            &item_path,
+            "textDirection",
+            tbl::CELL_TEXT_DIR,
+            ErrorKind::InvalidSectValue {
+                field: "textDirection".into(),
+            },
+        )?;
+        let fit_text = opt_null_bool(obj, &item_path, "fitText")?;
+        let hide_mark = opt_null_bool(obj, &item_path, "hideMark")?;
+        let headers = opt_null_headers(obj, &item_path)?;
         let borders = match obj.get("borders") {
             None => None,
             Some(v) => Some(tbl::parse_cell_borders_value(
@@ -1494,6 +1557,11 @@ fn parse_cell_formats(
             && tl2br.is_none()
             && tr2bl.is_none()
             && v_align.is_none()
+            && no_wrap.is_none()
+            && text_direction.is_none()
+            && fit_text.is_none()
+            && hide_mark.is_none()
+            && headers.is_none()
             && borders.is_none()
         {
             return Err(Error::with_path(
@@ -1512,6 +1580,11 @@ fn parse_cell_formats(
             tl2br,
             tr2bl,
             v_align,
+            no_wrap,
+            text_direction,
+            fit_text,
+            hide_mark,
+            headers,
             borders,
         });
     }

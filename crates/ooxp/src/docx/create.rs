@@ -3882,7 +3882,12 @@ fn push_one_table_extra(ops: &mut Vec<DocxOp>, extra: &TableExtra, id: String, t
             || cf.right.is_some()
             || cf.tl2br.is_some()
             || cf.tr2bl.is_some()
-            || cf.v_align.is_some();
+            || cf.v_align.is_some()
+            || cf.no_wrap.is_some()
+            || cf.text_direction.is_some()
+            || cf.fit_text.is_some()
+            || cf.hide_mark.is_some()
+            || cf.headers.is_some();
         if has_fmt {
             ops.push(DocxOp::SetCellFormat(SetCellFormatOp {
                 id: cell_id.clone(),
@@ -3895,6 +3900,11 @@ fn push_one_table_extra(ops: &mut Vec<DocxOp>, extra: &TableExtra, id: String, t
                 tl2br: cf.tl2br.clone(),
                 tr2bl: cf.tr2bl.clone(),
                 v_align: cf.v_align.clone(),
+                no_wrap: cf.no_wrap,
+                text_direction: cf.text_direction.clone(),
+                fit_text: cf.fit_text,
+                hide_mark: cf.hide_mark,
+                headers: cf.headers.clone(),
             }));
         }
         if let Some(borders) = &cf.borders {

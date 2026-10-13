@@ -2881,6 +2881,11 @@ fn apply_set_cell_format(
         op.tl2br.as_ref().map(|s| s.as_ref()),
         op.tr2bl.as_ref().map(|s| s.as_ref()),
         op.v_align.as_ref().map(|s| s.as_deref()),
+        op.no_wrap,
+        op.text_direction.as_ref().map(|s| s.as_deref()),
+        op.fit_text,
+        op.hide_mark,
+        op.headers.as_ref().map(|s| s.as_deref()),
         &op.id,
         i,
     )?;

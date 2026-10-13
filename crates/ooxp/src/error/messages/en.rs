@@ -1681,7 +1681,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             "setTableCellMar requires at least one of top, left, bottom, or right".into()
         }
         ErrorKind::NeedSetCellFormatField => {
-            "setCellFormat requires at least one of fill, cell margins, diagonals, or vAlign".into()
+            "setCellFormat requires at least one of fill, cell margins, diagonals, vAlign, noWrap, textDirection, fitText, hideMark, or headers".into()
         }
         ErrorKind::NeedSetStyleField => {
             "setStyle requires at least one of font, eastAsiaFont, sz, bold, color, before, or after"

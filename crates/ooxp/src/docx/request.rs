@@ -845,6 +845,11 @@ pub struct SetCellFormatOp {
     pub tl2br: Option<Option<super::tbl::DiagonalBorder>>,
     pub tr2bl: Option<Option<super::tbl::DiagonalBorder>>,
     pub v_align: Option<Option<String>>,
+    pub no_wrap: Option<Option<bool>>,
+    pub text_direction: Option<Option<String>>,
+    pub fit_text: Option<Option<bool>>,
+    pub hide_mark: Option<Option<bool>>,
+    pub headers: Option<Option<Vec<String>>>,
 }
 
 #[derive(Debug, Clone)]
@@ -6561,7 +6566,21 @@ fn parse_set_cell_format(
         obj,
         i,
         &[
-            "op", "id", "fill", "top", "left", "bottom", "right", "tl2br", "tr2bl", "vAlign",
+            "op",
+            "id",
+            "fill",
+            "top",
+            "left",
+            "bottom",
+            "right",
+            "tl2br",
+            "tr2bl",
+            "vAlign",
+            "noWrap",
+            "textDirection",
+            "fitText",
+            "hideMark",
+            "headers",
         ],
     )?;
     let id = require_op_id(obj, i)?;
@@ -6582,6 +6601,19 @@ fn parse_set_cell_format(
             field: "vAlign".into(),
         },
     )?;
+    let no_wrap = parse_opt_null_bool(obj, i, "noWrap")?;
+    let text_direction = parse_opt_null_enum(
+        obj,
+        i,
+        "textDirection",
+        tbl::CELL_TEXT_DIR,
+        ErrorKind::InvalidSectValue {
+            field: "textDirection".into(),
+        },
+    )?;
+    let fit_text = parse_opt_null_bool(obj, i, "fitText")?;
+    let hide_mark = parse_opt_null_bool(obj, i, "hideMark")?;
+    let headers = parse_opt_null_headers(obj, i)?;
     if fill.is_none()
         && top.is_none()
         && left.is_none()
@@ -6590,6 +6622,11 @@ fn parse_set_cell_format(
         && tl2br.is_none()
         && tr2bl.is_none()
         && v_align.is_none()
+        && no_wrap.is_none()
+        && text_direction.is_none()
+        && fit_text.is_none()
+        && hide_mark.is_none()
+        && headers.is_none()
     {
         return Err(Error::with_path(
             ErrorKind::NeedSetCellFormatField,
@@ -6607,6 +6644,11 @@ fn parse_set_cell_format(
         tl2br,
         tr2bl,
         v_align,
+        no_wrap,
+        text_direction,
+        fit_text,
+        hide_mark,
+        headers,
     })
 }
 
@@ -7081,6 +7123,50 @@ fn parse_opt_null_bool(
                 expected: TypeName::Boolean,
             },
             format!("ops[{i}].{field}"),
+        )),
+    }
+}
+
+fn parse_opt_null_headers(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<Option<Option<Vec<String>>>, Error> {
+    match obj.get("headers") {
+        None => Ok(None),
+        Some(Value::Null) => Ok(Some(None)),
+        Some(Value::Array(arr)) => {
+            let mut out = Vec::with_capacity(arr.len());
+            for (j, item) in arr.iter().enumerate() {
+                match item {
+                    Value::String(s) if !s.is_empty() => out.push(s.clone()),
+                    Value::String(_) => {
+                        return Err(Error::with_path(
+                            ErrorKind::WrongType {
+                                field: "headers".into(),
+                                expected: TypeName::NonEmptyString,
+                            },
+                            format!("ops[{i}].headers[{j}]"),
+                        ));
+                    }
+                    _ => {
+                        return Err(Error::with_path(
+                            ErrorKind::WrongType {
+                                field: "headers".into(),
+                                expected: TypeName::NonEmptyString,
+                            },
+                            format!("ops[{i}].headers[{j}]"),
+                        ));
+                    }
+                }
+            }
+            Ok(Some(Some(out)))
+        }
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "headers".into(),
+                expected: TypeName::Array,
+            },
+            format!("ops[{i}].headers"),
         )),
     }
 }

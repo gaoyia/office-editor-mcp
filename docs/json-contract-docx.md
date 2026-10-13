@@ -1385,10 +1385,15 @@ xlsx / pptx 的 `scope.tables` 不是同一件事：xlsx 仍拒绝；pptx 展开
   `height` 取 `trPr/trHeight`。没有则为 `null`。有则对象字段顺序：`h`、`rule`。
   `h` 取 `@w:val`，能解析成整数则写整数，否则为 `null`。`rule` 取 `@w:hRule` 原文，缺则为 `null`。单位 twip。
   `cells` 按该行 `w:tc` 顺序，不是按空网格补格。
-  每格字段顺序：`id`、`row`、`col`、`gridSpan`、`vMerge`、`vAlign`、`fill`、`cellMar`、`borders`、`tl2br`、`tr2bl`、`paragraphs`。
+  每格字段顺序：`id`、`row`、`col`、`gridSpan`、`vMerge`、`vAlign`、`noWrap`、`textDirection`、`fitText`、`hideMark`、`headers`、`fill`、`cellMar`、`borders`、`tl2br`、`tr2bl`、`paragraphs`。
   `row` / `col` 与 id 里的数字相同。
   `gridSpan` 为整数，缺元素则为 `1`。`vMerge` 为 `restart`、`continue` 或 `null`。
   `vAlign` 取 `tcPr/w:vAlign/@w:val`：`top` / `center` / `both` / `bottom`。没有该元素则为 `null`。不认识报 `XmlBroken`。
+  `noWrap` 取 `tcPr/w:noWrap` 的 OnOff。没有该元素则为 `null`。有元素却没有 `val` 当作 `true`。
+  `textDirection` 取 `tcPr/w:textDirection/@w:val`：`lrTb` / `tbRl` / `btLr` / `lrTbV` / `tbRlV` / `tbLrV`。没有该元素则为 `null`。不认识报 `XmlBroken`。
+  `fitText` 取 `tcPr/w:tcFitText` 的 OnOff。没有该元素则为 `null`。有元素却没有 `val` 当作 `true`。
+  `hideMark` 取 `tcPr/w:hideMark` 的 OnOff。没有该元素则为 `null`。有元素却没有 `val` 当作 `true`。
+  `headers` 取 `tcPr/w:headers/w:header` 文本数组。没有 `w:headers` 则为 `[]`。
   `fill` 取 `tcPr/shd/@fill` 原文，没有 `shd` 或没有 `fill` 则为 `null`。
   格上 `cellMar` 取 `tcMar`，规则与表级相同。
   格上 `borders` 取 `tcBorders` 的正交四边与格内内外框。没有这些边则为 `null`。有则对象字段顺序：`top`、`left`、`bottom`、`right`、`insideH`、`insideV`。
@@ -1403,6 +1408,8 @@ xlsx / pptx 的 `scope.tables` 不是同一件事：xlsx 仍拒绝；pptx 展开
   pptx 的 `scope.tables` 展开幻灯片 DrawingML 表，见 [pptx 响应](json-contract-pptx.md#响应)，与本文 `w:tbl` 不是同一棵名单。
   `gridSpan` 或 `vMerge/@val` 不是正整数 / 不是 `restart` 或 `continue` 时报 `XmlBroken`。
   `vAlign/@val` 不是 `top` / `center` / `both` / `bottom` 时报 `XmlBroken`。
+  `textDirection/@val` 不是上述六值时报 `XmlBroken`。
+  `noWrap` / `tcFitText` / `hideMark` 的 OnOff 不认识时报 `XmlBroken`。
   某行各格占的网格列之和对不上 `colCount` 时仍列出，结构 op 报 `NotImplemented`。
 - `scope.revisions` 为 `true` 时，根上带 `revisions`（正文），每个页眉、页脚容器带 `revisions`。没有修订时为空数组。按该故事里被收入节点的文档顺序。
   每条字段顺序：`id`、`index`、`kind`、`xmlId`、`author`、`date`、`host`、`text`。`index` 与 id 里的 `{n}` 相同。
@@ -4084,13 +4091,23 @@ create 给了 `tables[].cellFormats[].borders` 时按同一套规则写入。
 | `top` / `left` / `bottom` / `right` | 可选。格级 `tcMar`，规则与 `setTableCellMar` 相同 |
 | `tl2br` / `tr2bl` | 可选。斜线对象，或 `null` 去掉该斜线 |
 | `vAlign` | 可选。`top` / `center` / `both` / `bottom`，或 `null` 去掉 `w:vAlign` |
+| `noWrap` | 可选。布尔，或 `null` 去掉 `w:noWrap` |
+| `textDirection` | 可选。`lrTb` / `tbRl` / `btLr` / `lrTbV` / `tbRlV` / `tbLrV`，或 `null` 去掉 `w:textDirection` |
+| `fitText` | 可选。布尔，或 `null` 去掉 `w:tcFitText` |
+| `hideMark` | 可选。布尔，或 `null` 去掉 `w:hideMark` |
+| `headers` | 可选。非空字符串数组，整份替换 `w:headers`。`[]` 或 `null` 去掉该元素 |
 
-`fill`、四边、两条斜线、`vAlign` 至少给一个。`fill` 写入 `shd val="clear" color="auto"`，并去掉 theme 填充属性。不是六位十六进制报 `InvalidField`。
+`fill`、四边、两条斜线、`vAlign`、`noWrap`、`textDirection`、`fitText`、`hideMark`、`headers` 至少给一个。
+`fill` 写入 `shd val="clear" color="auto"`，并去掉 theme 填充属性。不是六位十六进制报 `InvalidField`。
 `vAlign` 写入 `tcPr/w:vAlign/@w:val`。不认识报 `InvalidField`。不要和节上 `setVerticalAlign` 混。
+`noWrap` / `fitText` / `hideMark` 写入对应 OnOff：`true` 省略 `val`；`false` 写 `val="0"`。
+`textDirection` 不认识报 `InvalidField`。
+`headers` 每项不能为空串。框内表同样认。
 斜线对象字段：`val`（省略为 `single`）、`sz`（可选，八分之一磅）、`color`（省略为 `auto`）。写出 `space="0"`。
 `val` 与页面边框同一套：`nil` / `none` / `single` / `dashed` / `dotted` / `double` / `thick` / `wave` / `dashSmallGap` / `dotDash` / `dotDotDash`。
 不认识的 `val` 或非法 `color` 报 `InvalidField`。两条斜线都删光且没有其它边时去掉空的 `tcBorders`。
 找不到单元格报 `IdNotFound`。id 不是单元格 id 报 `InvalidId`。xlsx / pptx 上发此 op 报 `InvalidField`。create 给了 `tables[].cellFormats` 时按同一套规则写入。
+示例见 `docs/examples/docx-apply-cell-props.json`。
 
 ### setParaFormat
 

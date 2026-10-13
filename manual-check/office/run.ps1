@@ -76,6 +76,7 @@ $order = @(
     'docx-cell-valign'
     'docx-table-borders'
     'docx-cell-borders'
+    'docx-cell-props'
     'docx-box-table'
     'docx-box-fields'
     'docx-format'

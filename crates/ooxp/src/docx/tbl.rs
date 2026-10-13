@@ -727,10 +727,14 @@ const TCPR_ORDER: &[&str] = &[
     "tcFitText",
     "vAlign",
     "hideMark",
+    "headers",
 ];
 
 /// 格级 `w:vAlign/@w:val`（ST_VerticalJc）。
 pub const CELL_VALIGN: &[&str] = &["top", "center", "both", "bottom"];
+
+/// 格级 `w:textDirection/@w:val`（ST_TextDirection）。
+pub const CELL_TEXT_DIR: &[&str] = &["lrTb", "tbRl", "btLr", "lrTbV", "tbRlV", "tbLrV"];
 
 const BORDER_ORDER: &[&str] = &[
     "top", "start", "left", "bottom", "end", "right", "insideH", "insideV", "tl2br", "tr2bl",
@@ -1477,6 +1481,11 @@ pub fn apply_set_cell_format(
     tl2br: Option<Option<&DiagonalBorder>>,
     tr2bl: Option<Option<&DiagonalBorder>>,
     v_align: Option<Option<&str>>,
+    no_wrap: Option<Option<bool>>,
+    text_direction: Option<Option<&str>>,
+    fit_text: Option<Option<bool>>,
+    hide_mark: Option<Option<bool>>,
+    headers: Option<Option<&[String]>>,
     id: &str,
     i: usize,
 ) -> Result<(), Error> {
@@ -1533,6 +1542,32 @@ pub fn apply_set_cell_format(
                 hf::set_local_attr(el, "val", v);
             }
             None => hf::remove_local(pr, "vAlign"),
+        }
+    }
+    apply_tc_on_off(pr, "noWrap", no_wrap);
+    if let Some(dir) = text_direction {
+        match dir {
+            Some(v) => {
+                let el = hf::ensure_child_in_order(pr, "textDirection", TCPR_ORDER);
+                hf::set_local_attr(el, "val", v);
+            }
+            None => hf::remove_local(pr, "textDirection"),
+        }
+    }
+    apply_tc_on_off(pr, "tcFitText", fit_text);
+    apply_tc_on_off(pr, "hideMark", hide_mark);
+    if let Some(headers) = headers {
+        match headers {
+            Some(list) if !list.is_empty() => {
+                let el = hf::ensure_child_in_order(pr, "headers", TCPR_ORDER);
+                el.children.clear();
+                for h in list {
+                    let mut child = Element::new(el.prefixed("header"));
+                    child.set_text(h.clone());
+                    el.push_element(child);
+                }
+            }
+            _ => hf::remove_local(pr, "headers"),
         }
     }
     Ok(())
@@ -1809,6 +1844,11 @@ fn table_node(
             let span = grid_span(tc)?;
             let vm = v_merge_of(tc)?;
             let va = cell_v_align(tc)?;
+            let no_wrap = cell_on_off(tc, "noWrap")?;
+            let text_dir = cell_text_direction(tc)?;
+            let fit_text = cell_on_off(tc, "tcFitText")?;
+            let hide_mark = cell_on_off(tc, "hideMark")?;
+            let headers = cell_headers(tc);
             let cell_id = format!("{id}/r{row_n}c{col}");
             let paras = cell_paragraphs(tc, container, index_of, expand_pics, expand_runs, rels)?;
             cells.push(json!({
@@ -1822,6 +1862,11 @@ fn table_node(
                     None => Value::Null,
                 },
                 "vAlign": va,
+                "noWrap": no_wrap,
+                "textDirection": text_dir,
+                "fitText": fit_text,
+                "hideMark": hide_mark,
+                "headers": headers,
                 "fill": cell_fill(tc),
                 "cellMar": cell_mar_json(tc.child_by_local("tcPr").and_then(|p| p.child_by_local("tcMar"))),
                 "borders": tc_ortho_borders_json(tc),
@@ -2256,6 +2301,51 @@ fn cell_v_align(tc: &Element) -> Result<Value, Error> {
         Some(v) if CELL_VALIGN.contains(&v) => Ok(Value::String(v.to_string())),
         _ => Err(xml_broken("vAlign")),
     }
+}
+
+fn cell_on_off(tc: &Element, local: &str) -> Result<Value, Error> {
+    let Some(el) = tc
+        .child_by_local("tcPr")
+        .and_then(|p| p.child_by_local(local))
+    else {
+        return Ok(Value::Null);
+    };
+    match el.attr_local("val") {
+        None | Some("") => Ok(json!(true)),
+        Some(v) => match v.trim().to_ascii_lowercase().as_str() {
+            "1" | "true" | "on" => Ok(json!(true)),
+            "0" | "false" | "off" => Ok(json!(false)),
+            _ => Err(xml_broken(local)),
+        },
+    }
+}
+
+fn cell_text_direction(tc: &Element) -> Result<Value, Error> {
+    let Some(el) = tc
+        .child_by_local("tcPr")
+        .and_then(|p| p.child_by_local("textDirection"))
+    else {
+        return Ok(Value::Null);
+    };
+    match el.attr_local("val") {
+        Some(v) if CELL_TEXT_DIR.contains(&v) => Ok(Value::String(v.to_string())),
+        _ => Err(xml_broken("textDirection")),
+    }
+}
+
+fn cell_headers(tc: &Element) -> Value {
+    let Some(el) = tc
+        .child_by_local("tcPr")
+        .and_then(|p| p.child_by_local("headers"))
+    else {
+        return json!([]);
+    };
+    Value::Array(
+        el.children_by_local("header")
+            .into_iter()
+            .map(|h| json!(h.text_content()))
+            .collect(),
+    )
 }
 
 fn row_spans(tr: &Element) -> Result<Vec<usize>, Error> {
@@ -3375,6 +3465,22 @@ fn on_off_attr(el: &Element, local: &str) -> Option<bool> {
         "1" | "true" | "on" => Some(true),
         "0" | "false" | "off" => Some(false),
         _ => None,
+    }
+}
+
+fn apply_tc_on_off(pr: &mut Element, local: &str, val: Option<Option<bool>>) {
+    match val {
+        None => {}
+        Some(None) => hf::remove_local(pr, local),
+        Some(Some(on)) => {
+            let el = hf::ensure_child_in_order(pr, local, TCPR_ORDER);
+            let key = el.prefixed("val");
+            if on {
+                el.remove_attr(&key);
+            } else {
+                el.set_attr(&key, "0");
+            }
+        }
     }
 }
 

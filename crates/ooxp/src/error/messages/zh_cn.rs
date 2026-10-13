@@ -1465,7 +1465,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             "setTableCellMar 至少要给 top、left、bottom 或 right 之一".into()
         }
         ErrorKind::NeedSetCellFormatField => {
-            "setCellFormat 至少要给 fill、边距、斜线或 vAlign 之一".into()
+            "setCellFormat 至少要给 fill、边距、斜线、vAlign、noWrap、textDirection、fitText、hideMark 或 headers 之一".into()
         }
         ErrorKind::NeedSetStyleField => {
             "setStyle 至少要给 font、eastAsiaFont、sz、bold、color、before 或 after 之一".into()
