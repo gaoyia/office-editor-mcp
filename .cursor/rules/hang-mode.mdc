@@ -1,0 +1,15 @@
+---
+description: 用户交代挂机时按 roadmap 推进切片，不擅自猜必须用户决定的事
+alwaysApply: true
+---
+
+# 挂机
+
+用户离开并交代挂机时，按 `roadmap/` 待做序号自己往下做，一次只开一份 `.plan/` 切片。不要停下来等确认。
+
+- 一份计划一次 git 提交。提交前必须做完该切片手测，并执行 `cargo fmt --all` 与 `cargo clippy --all-targets --all-features -- -D warnings`，两者都过再提交。
+- 手测留下的 Office 进程（`WINWORD.EXE`、`EXCEL.EXE`、`POWERPNT.EXE`）自己结束。只动这些残留进程。
+- 碰到困难允许中断该切片并停下。不许强行处理系统问题：不改系统配置，不修环境，不强杀无关进程。
+- 用户回来后验收。无法决定的事项以 `.agents/rules/engineering-principles.md` 为准，不要猜。
+- 规格仍以 `docs/` 为真源：先改文档再写代码。挂机期间不等用户确认文档。
+- 需要决策时优先用工程原则辅助。必须用户拍板时：暂停该切片，或跳过，或把已有代码存下来再跳过。
