@@ -630,6 +630,8 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
     "lockRevision": false,
     "hasPassword": false
   },
+  "theme": null,
+  "themeOverride": null,
   "sheets": [
     {
       "id": "sheet:Sheet1",
@@ -837,7 +839,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
 
 - 工作簿字段顺序：`id`、`pictureCount`、`chartCount`、`textBoxCount`、`mathCount`、`shapeCount`、`connectorCount`、`smartArtCount`、`commentCount`、
   `hyperlinkCount`、`sparklineCount`、`oleObjectCount`、`model3dCount`、`slicerCount`、`connectionCount`、`externalLinkCount`、
-  `customViewCount`、`definedNameCount`、`cellStyleCount`、`props`、`workbookProtection`、`sheets`、`definedNames`，
+  `customViewCount`、`definedNameCount`、`cellStyleCount`、`props`、`workbookProtection`、`theme`、`themeOverride`、`sheets`、`definedNames`，
   有连接名单时再跟 `connections`，有外部引用名单时再跟 `externalLinks`，有自定义视图名单时再跟 `customViews`，
   有命名单元格样式名单时再跟 `cellStyles`。
   `pictureCount` 始终出现，等于各 `worksheet` 与 `chartsheet` 的 `pictureCount` 之和，不含 `dialogsheet` / `macrosheet`，也不含页眉图。
@@ -856,6 +858,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   create 最小样式表含一条内置 `Normal`，因此默认为 `1`。
   `definedNames` 始终列出，可为空数组，不另加 scope 键。`props` 始终出现，规则见 [json-contract.md](json-contract.md#文档属性三格式共用)。
   `workbookProtection` 始终出现，规则见下文「工作簿保护」。xlsx 根上不要带 docx 那个 `protection`。
+  `theme` 与 `themeOverride` 始终出现，规则见下文「主题」。
 - `definedNames` 每项字段顺序：`id`、`name`、`formula`、`hidden`、`localSheet`。`name` 取 `@name`，没有则为 `""`。
   `formula` 是元素文本，当字符串，不解析求值、不补 `=`。`hidden` 为布尔：`@hidden` 为 `1` / `true` / `TRUE` / `on` 则为 `true`，缺省或其余为 `false`。
   `localSheet` 有 `@localSheetId` 则按 0 基下标解成 `sheets` 里对应表的 `name`；解不出、缺属性或无法解析则为 `null`（簿级）。打印区域 `_xlnm.Print_Area` 与其它内置名同样列出。
@@ -986,6 +989,21 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   前三项取同名属性，缺省 `false`。`hasPassword` 在带非空 `workbookHashValue` / `workbookSaltValue` / `workbookAlgorithmName`
    / `revisionsHashValue` / `revisionsSaltValue` / `revisionsAlgorithmName`，
   或 `workbookPassword` / `revisionsPassword` / `password` 不是空且不是 `0` / `0000` 时为 `true`。不把哈希放进树。不报告 IRM 或 `fileSharing`。
+
+### 主题（xlsx）
+
+xlsx 根上始终带 `theme`，不要另给 scope 键。来源是 workbook `.rels` 里 Type 以 `/theme` 结尾的部件（Excel 16.0 另存常见 `/xl/theme/theme1.xml`，
+ECMA-376 §14.2.7 / DrawingML `a:theme`）。
+没有该关系或部件不在包内时为 `null`，不报错。create 省略 `workbook.theme` 时仍不写 theme 部件。
+不把格子上的 `theme` 指数、条件格式或 `schemeClr` 展开成 RGB。
+
+有部件时字段顺序：`name`、`colors`、`fonts`、`fmt`、`extraSchemes`。取值规则与 [docx 主题](json-contract-docx.md#主题仅-docx) 相同，含脚本字体与补充色板。
+xlsx 工作簿 `theme.fonts` 带 `majorScripts` / `minorScripts`。pptx 母版 `theme` 仍不算 `fmtScheme`，也不带这两项。
+
+根上始终有 `themeOverride`，放在 `theme` 之后。来源是 workbook `.rels` 里 Type 以 `/themeOverride` 结尾的部件。
+没有该关系或部件不在包内时为 `null`。有则字段顺序与 `theme` 相同；配色 / 字体 / `fmt` 取根下的 `clrScheme` / `fontScheme` / `fmtScheme`，不经 `themeElements`。
+Excel 16.0 另存通常不写该部件；自行写入后 Excel 仍能打开。
+
 - `scope.protectedRanges` 为 `true` 时，每张 `worksheet` 带 `protectedRanges`。没有区域时为空数组。不依赖单元格切片。
   按该表 `<protectedRanges>` 里 `<protectedRange>` 的文档顺序（ECMA-376 §18.3.1.71 / §18.3.1.72）。
   每条字段顺序：`id`、`index`、`name`、`sqref`、`hasPassword`。`index` 与 id 里的 `{n}` 相同。
@@ -1333,6 +1351,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
 | `workbook.customViews` | 可选。复用 `insertCustomView`。写在视图 / 打印 / 隐藏之后 |
 | `workbook.cellStyles` | 可选。复用 `insertCellStyle`。不要 `op` / `id`。写在格子 `namedStyle` 之前 |
 | `workbook.workbookProtection` | 可选。复用 `setProtection` 点 `xlsx:workbook` |
+| `workbook.theme` | 可选。字段认 `name`、`colors`、`fonts`、`fmt`、`extraSchemes`。出现则写 `/xl/theme/theme1.xml`。省略则仍不写 theme 部件 |
 | `sheets[].cols` | 可选。`col` 必须。有 `width` / `bestFit` 则走 `setColWidth`，有 `hidden` 再走 `setColHidden` |
 | `sheets[].rows` | 可选。`row` 必须。有 `height` 则走 `setRowHeight`，有 `hidden` 再走 `setRowHidden`。可给 `toRow` |
 | `sheets[].merges` | 可选。A1 闭区间字符串数组，复用 `mergeRange` |
@@ -1459,6 +1478,10 @@ drawing 上那一张 `xdr:absoluteAnchor` 框和 `/xl/charts/chartN.xml`，数�
 或 drawing 项上出现 `kind` / `wrap` / `x` / `y` / `id`，报 `InvalidField`。
 给了 `workbook.props` 时按 `setProps` / `setCustomProp` 同一套规则写 core / app / custom；
 省略则仍写空的 `dc:title` 与 `dc:creator` 为 `ooxp`，不写 custom 部件。
+给了 `workbook.theme` 时写 `/xl/theme/theme1.xml`；省略则仍不写 theme 部件。
+`colors` / `fonts` / `fmt.name` / `extraSchemes` 与对应 apply 相同。省略的配色 / 字体槽与 `fmtScheme` 矩阵用 Office 默认。
+`fmt` 只认 `name`，不要在 JSON 里给 `fills` / `lines` / `effects` / `bgFills`。
+示例见 `docs/examples/xlsx-create-theme.json`。
 
 
 ## apply
@@ -3749,4 +3772,34 @@ docx / pptx 上发此 op 报 `InvalidField`。
 ### setSmartArtAnchor
 
 字段与 `setChartAnchor` 相同，`id` 必须是 xlsx 图示 id。改包含该 `xdr:graphicFrame` 的外层锚点，规则与 `setChartAnchor` 相同。docx / pptx 上发此 op 报 `InvalidField`。
+
+### setThemeColors
+
+改工作簿 theme 部件的 `a:clrScheme`。字段与 [docx setThemeColors](json-contract-docx.md#setthemecolors) 相同，含可选 `name` / `themeName`。
+`id` 必须是 `xlsx:workbook`。没有 theme 关系或部件不在包内报 `IdNotFound`，不新建。
+id 不是 `xlsx:workbook` 报 `InvalidId`。不改 `styles.xml` 里格子的 theme 指数。
+示例见 `docs/examples/xlsx-apply-theme.json`。
+
+### setThemeFonts
+
+改工作簿 theme 部件的 `a:fontScheme`。字段与 [docx setThemeFonts](json-contract-docx.md#setthemefonts) 相同，含可选 `name` 与脚本列表。
+`id` 必须是 `xlsx:workbook`。找不到 theme 部件报 `IdNotFound`，不新建。
+
+### setThemeFmt
+
+改工作簿 theme 部件 `a:fmtScheme` 的常用槽。字段与 [docx setThemeFmt](json-contract-docx.md#setthemefmt) 相同。
+`id` 必须是 `xlsx:workbook`。没有 theme 部件报 `IdNotFound`，不新建。不算主题排版引擎。
+
+### setThemeExtraSchemes
+
+整份替换工作簿 theme 部件的 `a:extraClrSchemeLst`。字段与 [docx setThemeExtraSchemes](json-contract-docx.md#setthemeextraschemes) 相同。
+`id` 必须是 `xlsx:workbook`。没有 theme 部件报 `IdNotFound`，不新建。
+`[]` 或 `null` 去掉该列表。create 给了 `workbook.theme.extraSchemes` 时按同一套规则写入。
+
+### setThemeOverride
+
+读写工作簿 `themeOverride` 部件的配色槽。字段与 [docx setThemeOverride](json-contract-docx.md#setthemeoverride) 相同。
+`id` 必须是 `xlsx:workbook`。没有部件时按 Office 默认十二槽新建 `/xl/theme/themeOverride1.xml`，再把点名槽换成 `srgbClr`。
+有工作簿 theme 时先抄它的 `clrScheme` 再打补丁。`enabled: false` 删掉该部件与 workbook 关系。
+docx / pptx 上此 op 的 id 规则不变。
 

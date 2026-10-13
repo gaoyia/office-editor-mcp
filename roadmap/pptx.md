@@ -129,7 +129,7 @@ pptx 模块不要引用 `docx::` 或 `xlsx::`。`c:chart`（§21.2）用 `crates
 
 ## 跨格式（本类型要跟）
 
-C4、C5、C6、C7、C8、C9、C10、C11、C12 见已过表。C13、C14、C16 见待做。C15 见先探测。xlsx 批注墨迹不套本文。C5 与 xlsx 同一份计划，不要拆成两家各做一套 `svgBlip`。C6、C7、C12、C16 与 docx 同一份计划。C8、C13 与 xlsx 同一份，不改 Word。C9、C10、C14 与 xlsx 同一份，不改 Word。C11 三家同一份。41 保持 🚫。xlsx 主题见 xlsx 43，不要和 16 / 46 / 47 / 48 合成一份。
+C4、C5、C6、C7、C8、C9、C10、C11、C12 见已过表。C13、C14、C16 见待做。C15 见先探测。xlsx 批注墨迹不套本文。C5 与 xlsx 同一份计划，不要拆成两家各做一套 `svgBlip`。C6、C7、C12、C16 与 docx 同一份计划。C8、C13 与 xlsx 同一份，不改 Word。C9、C10、C14 与 xlsx 同一份，不改 Word。C11 三家同一份。41 保持 🚫。xlsx 主题见已过 xlsx 43，不要和 16 / 46 / 47 / 48 合成一份。C16 仍等 pptx 46。
 
 ## 怎么算 PowerPoint 全量做完
 

@@ -2122,7 +2122,7 @@ docx / xlsx 上发此 op 报 `InvalidField`。
 
 pptx：`id` 不是母版 id 报 `InvalidId`。找不到该母版报 `IdNotFound`。该母版没有 theme 关系或部件不在包内报 `IdNotFound`。
 除 op 与 id 外一个槽位都不给、或某槽位不是六位十六进制，报 `InvalidField`。写入时把被点名槽位的子元素换成 `a:srgbClr`（原先若是 `sysClr` 也换成 `srgbClr`）。未点名槽位留下。
-不改 `a:clrScheme/@name`、不改 `a:theme/@name`、不改 `fmtScheme`。不改各页 XML。xlsx 上发此 op 报 `InvalidField`。
+不改 `a:clrScheme/@name`、不改 `a:theme/@name`、不改 `fmtScheme`。不改各页 XML。xlsx 见 [xlsx 分册](json-contract-xlsx.md#setthemecolors)。
 docx 见 [docx 分册](json-contract-docx.md#setthemecolors)，`id` 为 `docx:document`。
 
 ### setThemeFonts
@@ -2153,7 +2153,7 @@ docx 见 [docx 分册](json-contract-docx.md#setthemecolors)，`id` 为 `docx:do
 pptx：`id` 不是母版 id 报 `InvalidId`。找不到该母版或 theme 部件报 `IdNotFound`。一个字体字段都不给报 `InvalidField`。
 `majorLatin` / `minorLatin` 空串报 `InvalidField`。`ea` / `cs` 允许空串。
 没有 `fontScheme` / `majorFont` / `minorFont` 或对应 `latin` / `ea` / `cs` 则按需补上。不改 `a:fontScheme/@name`。不改各页 XML。
-xlsx 上发此 op 报 `InvalidField`。docx 见 [docx 分册](json-contract-docx.md#setthemefonts)。
+xlsx 见 [xlsx 分册](json-contract-xlsx.md#setthemefonts)。docx 见 [docx 分册](json-contract-docx.md#setthemefonts)。
 
 ### setChartPos
 

@@ -465,6 +465,11 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         "workbookProtection".into(),
         super::protect::inspect_workbook(&wb.root),
     );
+    root.insert("theme".into(), super::theme::inspect(&pkg, &wb_part)?);
+    root.insert(
+        "themeOverride".into(),
+        super::theme::inspect_override(&pkg, &wb_part)?,
+    );
     root.insert("sheets".into(), Value::Array(sheet_json));
     let sheet_names: Vec<String> = sheets.iter().map(|s| s.name.clone()).collect();
     root.insert(

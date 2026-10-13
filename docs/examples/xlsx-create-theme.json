@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "action": "create",
+  "path": "C:\\out\\theme.xlsx",
+  "format": "xlsx",
+  "workbook": {
+    "sheets": [
+      {
+        "name": "Sheet1",
+        "cells": [{ "ref": "A1", "value": "hello" }]
+      }
+    ],
+    "theme": {
+      "name": "Office Theme",
+      "colors": { "accent1": "FF0000" },
+      "fonts": { "majorLatin": "Arial" }
+    }
+  }
+}

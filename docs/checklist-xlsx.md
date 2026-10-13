@@ -43,6 +43,7 @@ C、I、A、O、Xp、Xvg、Xem、X3d、Xom、Xtf、Xfl、Xc、Xh、Xfs、Xtl、X
 2026-10-13 补跑 `xlsx-model3d-geom.ps1`，X3g1–X3g6 通过。无 Repair。COM `Width` / `Height` 288×144 磅。`from=C3`。`twoCell` `to=D8`。`replaceModel3d` 不改几何。
 2026-10-13 补跑 `xlsx-slicer-anchor.ps1`，Xsn1–Xsn6 通过。无 Repair。COM 288×144 磅。`from=G4`。`twoCell` `to=H12`。时间线 `from=I5`。
 2026-10-14 补跑 `xlsx-slicer-caption.ps1`，Xsc1–Xsc5 通过。无 Repair。COM `Caption` 对得上。`columnCount=2`。时间线 `showHeader=false`。
+2026-10-14 补跑 `xlsx-theme.ps1`，Xth1–Xth5 通过。无 Repair。空白另存有 theme。`accent1=FF0000`。`majorLatin=Arial`。create 可写。省略为 null。
 
 - **C1** ✅
   - Excel 16.0 打开 `manual-check/office/out/xlsx-create.xlsx`，标题栏无 Repair
@@ -1436,6 +1437,28 @@ inspect 只读进树。create 不生成。apply 不新开编辑。脚本 `manual
 - **Xsc5**
   - 检查：拒写
   - 通过标准：只给 `op` 与 `id` 得 `InvalidField`。对切片器给 `showHeader` 得 `InvalidField`。对图 id 发 `setSlicerView` 得 `InvalidId`。未写文件
+  - 不强制开 Excel
+
+## 工作簿主题
+
+工作簿 theme / themeOverride 能 inspect，能改配色、字体、fmt、名字、脚本字体与补充色板。create 可写。不把格子上的 theme 指数算成 RGB。
+手测脚本 `manual-check/office/cases/xlsx-theme.ps1`。编号用 **Xth**。不要和 Th、Ts、Xtf 撞。
+
+- **Xth1** ✅
+  - 检查：inspect
+  - 通过标准：Excel 空白另存后根上有 `theme`，`colors.accent1` 为六位十六进制。无 Repair
+- **Xth2** ✅
+  - 检查：改配色
+  - 通过标准：`setThemeColors` 写 `accent1=FF0000` 后树上对得上。Excel 无修复
+- **Xth3** ✅
+  - 检查：改字体与补充色板
+  - 通过标准：`setThemeFonts` 写 `majorLatin=Arial` 后树上对得上。`setThemeExtraSchemes` 写入一份后树上对得上。Excel 无修复
+- **Xth4** ✅
+  - 检查：override 与 create
+  - 通过标准：`setThemeOverride` 写 `accent1` 后树上不是 null。create 给了 `workbook.theme` 后树上对得上；省略则为 null。Excel 无修复
+- **Xth5** ✅
+  - 检查：拒错
+  - 通过标准：无 theme 发 `setThemeColors` 得 `IdNotFound`。错 id 得 `InvalidId`。只给 `op` 与 `id` 得 `InvalidField`。未写文件
   - 不强制开 Excel
 
 ## 时间线切片器

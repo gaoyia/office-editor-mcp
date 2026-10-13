@@ -101,7 +101,7 @@ const SKELETON_CHARTSHEET_KEYS: &[&str] = &[
 ];
 
 pub(crate) fn is_workbook_key(k: &str) -> bool {
-    matches!(k, "sheets" | "props") || WORKBOOK_REMAIN_KEYS.contains(&k)
+    matches!(k, "sheets" | "props" | "theme") || WORKBOOK_REMAIN_KEYS.contains(&k)
 }
 
 pub(crate) fn is_sheet_key(k: &str) -> bool {

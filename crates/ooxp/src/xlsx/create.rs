@@ -283,6 +283,9 @@ pub fn create_with_workbook_ct(workbook: &Value, workbook_ct: &str) -> Result<Ve
     attach_hyperlinks(&mut pkg, &sheets)?;
     attach_header_footers(&mut pkg, &sheets)?;
     attach_chartsheets(&mut pkg, &sheets)?;
+    if let Some(v) = obj.get("theme") {
+        super::theme::write_create(&mut pkg, &super::theme::parse_create(v)?)?;
+    }
     let bytes = pkg.save_to_vec()?;
     super::create_remain::apply_remain(bytes, obj)
 }

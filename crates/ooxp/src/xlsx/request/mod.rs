@@ -330,6 +330,15 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<XlsxOp>, Error> {
             "setSlicerSize" => XlsxOp::SetSlicerSize(parse_set_slicer_size(obj, i)?),
             "setSlicerAnchor" => XlsxOp::SetSlicerAnchor(parse_set_slicer_anchor(obj, i)?),
             "setSlicerView" => XlsxOp::SetSlicerView(parse_set_slicer_view(obj, i)?),
+            "setThemeColors" => XlsxOp::SetThemeColors(super::theme::parse_set_colors(obj, i)?),
+            "setThemeFonts" => XlsxOp::SetThemeFonts(super::theme::parse_set_fonts(obj, i)?),
+            "setThemeFmt" => XlsxOp::SetThemeFmt(super::theme::parse_set_fmt(obj, i)?),
+            "setThemeExtraSchemes" => {
+                XlsxOp::SetThemeExtraSchemes(super::theme::parse_set_extra_schemes(obj, i)?)
+            }
+            "setThemeOverride" => {
+                XlsxOp::SetThemeOverride(super::theme::parse_set_override(obj, i)?)
+            }
             "insertConnection" => XlsxOp::InsertConnection(parse_insert_connection(obj, i)?),
             "deleteConnection" => XlsxOp::DeleteConnection(parse_delete_connection(obj, i)?),
             "insertExternalLink" => XlsxOp::InsertExternalLink(parse_insert_external_link(obj, i)?),
@@ -493,11 +502,6 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<XlsxOp>, Error> {
             | "insertMaster"
             | "deleteMaster"
             | "setSlideSize"
-            | "setThemeColors"
-            | "setThemeFonts"
-            | "setThemeFmt"
-            | "setThemeExtraSchemes"
-            | "setThemeOverride"
             | "setHandoutText"
             | "setShapePos"
             | "setShapeSize"

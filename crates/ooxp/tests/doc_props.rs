@@ -209,6 +209,8 @@ fn inspect_default_props_on_three_formats() {
             "cellStyleCount",
             "props",
             "workbookProtection",
+            "theme",
+            "themeOverride",
             "sheets",
             "definedNames"
         ]

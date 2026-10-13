@@ -280,7 +280,7 @@ fn xlsx_rejects_theme_ops() {
         json!([{ "op": "setThemeColors", "id": "xlsx:workbook", "accent1": "FF0000" }]),
     )
     .unwrap_err();
-    assert_eq!(err_code(err), ErrorCode::InvalidField);
+    assert_eq!(err_code(err), ErrorCode::IdNotFound);
 }
 
 #[test]
@@ -412,24 +412,17 @@ fn xlsx_rejects_theme_fmt_and_override() {
     let err = apply(
         &path,
         &out,
-        json!([{ "op": "setThemeOverride", "id": "xlsx:workbook", "accent1": "FF0000" }]),
-    )
-    .unwrap_err();
-    assert_eq!(err_code(err), ErrorCode::InvalidField);
-    let err = apply(
-        &path,
-        &out,
         json!([{ "op": "setThemeFmt", "id": "xlsx:workbook", "line": { "index": 0, "w": 1 } }]),
     )
     .unwrap_err();
-    assert_eq!(err_code(err), ErrorCode::InvalidField);
+    assert_eq!(err_code(err), ErrorCode::IdNotFound);
     let err = apply(
         &path,
         &out,
         json!([{ "op": "setThemeExtraSchemes", "id": "xlsx:workbook", "extraSchemes": [] }]),
     )
     .unwrap_err();
-    assert_eq!(err_code(err), ErrorCode::InvalidField);
+    assert_eq!(err_code(err), ErrorCode::IdNotFound);
 }
 
 #[test]

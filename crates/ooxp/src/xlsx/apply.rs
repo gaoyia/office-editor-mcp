@@ -978,6 +978,21 @@ pub fn apply(bytes: &[u8], ops: &[XlsxOp]) -> Result<Vec<u8>, Error> {
                 )?;
                 slicer::set_view(&mut pkg, &part, op, i)?;
             }
+            XlsxOp::SetThemeColors(op) => {
+                super::theme::set_colors(&mut pkg, &wb_part, op, i)?;
+            }
+            XlsxOp::SetThemeFonts(op) => {
+                super::theme::set_fonts(&mut pkg, &wb_part, op, i)?;
+            }
+            XlsxOp::SetThemeFmt(op) => {
+                super::theme::set_fmt(&mut pkg, &wb_part, op, i)?;
+            }
+            XlsxOp::SetThemeExtraSchemes(op) => {
+                super::theme::set_extra_schemes(&mut pkg, &wb_part, op, i)?;
+            }
+            XlsxOp::SetThemeOverride(op) => {
+                super::theme::set_override(&mut pkg, &wb_part, op, i)?;
+            }
             XlsxOp::InsertConnection(op) => {
                 connection::insert(&mut pkg, &wb_part, op, i)?;
             }

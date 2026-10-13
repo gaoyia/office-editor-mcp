@@ -76,6 +76,8 @@ xlsx 的 `scope.externalLinks` 与外部引用 op 认工作簿 `<externalReferen
 xlsx 的 `scope.customViews` 与自定义视图 op 认工作簿 `<customWorkbookViews>`（ECMA-376 §18.2.3 / §18.2.4），不按视图恢复隐藏行 / 列。
 xlsx 的 `scope.cellStyles` 与命名单元格样式 op 认 `/xl/styles.xml` 的 `<cellStyles>`（ECMA-376 §18.8.7），不改主题，不把 `cellStyleXfs` 摊进名单。
 xlsx 可用 `setProtection` 开关工作表 `sheetProtection` 与工作簿 `workbookProtection`，给了 `password` 则写 SHA-512。
+xlsx 也可用 `setThemeColors` / `setThemeFonts` / `setThemeFmt` / `setThemeExtraSchemes` / `setThemeOverride` 改工作簿 theme，
+id 必须是 `xlsx:workbook`。不把格子上的 theme 指数算成 RGB。
 xlsx 也可用 `insertProtectedRange` / `setProtectedRange` / `deleteProtectedRange` 写工作表允许编辑区域。
 路径 `.xlsm` 按同一套 SpreadsheetML 打开，inspect 树的 `format` 仍为 `xlsx`。xlsx 的 `exportChartData` 仍拒绝。
 人工打开只认 Microsoft Office，见三份 checklist。
@@ -248,7 +250,8 @@ create 与 apply 落盘时先写入目标同目录的临时文件，再改名为
 `setSmartArtStyle`、`setSmartArtLayout`；
 不含 `setSmartArtPos`、`setSmartArtWrap`）、以及超链接 op（`insertHyperlink`、`setHyperlink`、`deleteHyperlink`）、
 以及迷你图 op（`insertSparkline`、`setSparkline`、`deleteSparkline`）、以及 OLE op（`insertOle`、`deleteOle`）、以及 3D 模型 op（`insertModel3d`、`replaceModel3d`、`deleteModel3d`、`setModel3dSize`、`setModel3dAnchor`；不含 `setModel3dWrap`、`setModel3dPos`）、以及公式 op（`insertMath`、`setMath`、`deleteMath`）、以及切片器 op（`insertSlicer`、
-`deleteSlicer`、`setSlicerSize`、`setSlicerAnchor`、`setSlicerView`）、以及连接 op（`insertConnection`、`deleteConnection`）、以及外部引用 op（`insertExternalLink`、`setExternalLink`、`deleteExternalLink`）、以及 `setProtection`、以及允许编辑区域 op（`insertProtectedRange`、`setProtectedRange`、`deleteProtectedRange`）、以及命名单元格样式 op（`insertCellStyle`、`deleteCellStyle`、`setCellNamedStyle`）。
+`deleteSlicer`、`setSlicerSize`、`setSlicerAnchor`、`setSlicerView`）、以及连接 op（`insertConnection`、`deleteConnection`）、以及外部引用 op（`insertExternalLink`、`setExternalLink`、`deleteExternalLink`）、以及 `setProtection`、以及允许编辑区域 op（`insertProtectedRange`、`setProtectedRange`、`deleteProtectedRange`）、以及命名单元格样式 op（`insertCellStyle`、`deleteCellStyle`、`setCellNamedStyle`）、
+以及主题 op（`setThemeColors`、`setThemeFonts`、`setThemeFmt`、`setThemeExtraSchemes`、`setThemeOverride`）。
 docx 认 `setParaText`、`setHeaderFooterDistance`、`setPageMargin`、`setPageSize`、`setColumns`、`setVerticalAlign`、
 `setLineNumbering`、`setDocGrid`、`setRtlGutter`、`setMirrorMargins`、`setGutterAtTop`、`setHeaderFooterLink`、
 `insertHeaderFooter`、`setTitlePage`、`setEvenAndOddHeaders`、图片 op（含 `setPictureWrap`，

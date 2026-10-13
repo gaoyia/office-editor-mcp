@@ -262,7 +262,8 @@
 - 对页眉页脚、框内、注内、批注内、表格单元格内的段落或 `section:{n}` 发该 op 报 `InvalidId`
 - 找不到段落时报 `IdNotFound`
 - 不认识的分节 `type` / `sectionType`，或 create 时最后一段带 `sectionType`，报 `InvalidField`
-- `setEvenAndOddHeaders` / `setMirrorMargins` / `setGutterAtTop` / `setPageBackground` / `setThemeFmt` / `setThemeExtraSchemes` / `setThemeOverride` / `setBibliographyStyle` 的 id 不是 `docx:document` 报 `InvalidId`
+- `setEvenAndOddHeaders` / `setMirrorMargins` / `setGutterAtTop` / `setPageBackground` / `setBibliographyStyle` 的 id 不是 `docx:document` 报 `InvalidId`
+- `setThemeFmt` / `setThemeExtraSchemes` / `setThemeOverride` 的 id：docx 不是 `docx:document`、xlsx 不是 `xlsx:workbook` 报 `InvalidId`
 - docx 的 `setProtection` 的 id 不是 `docx:document` 报 `InvalidId`
 - xlsx 的 `setProtection` 的 id 不是 `sheet:{name}` 也不是 `xlsx:workbook` 报 `InvalidId`
 - `insertProtectedRange` 的 id 不是 `sheet:{name}` 报 `InvalidId`
@@ -453,7 +454,7 @@
 - `insertMaster` 的 id 必须是 `pptx:presentation`
 - `deleteMaster` 的 id 必须是 `master:{n}`
 - `setSlideSize` 的 id 必须是 `pptx:presentation`
-- `setThemeColors` / `setThemeFonts` / `setThemeFmt` / `setThemeExtraSchemes` / `setThemeOverride` 的 id：pptx 的前两条必须是 `master:{n}`，docx 必须是 `docx:document`
+- `setThemeColors` / `setThemeFonts` / `setThemeFmt` / `setThemeExtraSchemes` / `setThemeOverride` 的 id：pptx 的前两条必须是 `master:{n}`，docx 必须是 `docx:document`，xlsx 必须是 `xlsx:workbook`
 - 找不到该母版 / 版式 / 占位符 / theme 部件报 `IdNotFound`
 - 下列情况报 `InvalidField`
   - 删掉最后一页
@@ -472,7 +473,7 @@
   - `setThemeColors` / `setThemeFonts` / `setThemeFmt` / `setThemeExtraSchemes` / `setThemeOverride` 一个可写字段都不给、非法十六进制、`majorLatin` / `minorLatin` 空串、名字空串、脚本项缺 `script` / `typeface`、或 `setThemeFmt` 的 `index` / `kind` / `w` 非法
 - `setHandoutText` 的 `id` 必须是 `handout`
 - `header` / `footer` / `date` / `sldNum` 一个都不给报 `InvalidField`
-- docx / xlsx 上发这些幻灯片管理 op、母版写入 op、主题与尺寸 op、`insertAnim` / `setAnim` / `deleteAnim` / `moveAnim`、`setHandoutText` 以及 `setShowPr` 报 `InvalidField`
+- docx / xlsx 上发这些幻灯片管理 op、母版写入 op、`setSlideSize`、`insertAnim` / `setAnim` / `deleteAnim` / `moveAnim`、`setHandoutText` 以及 `setShowPr` 报 `InvalidField`
 - xlsx 的 `scope` 里出现下列键报 `InvalidField`
   - `textBoxContent`
   - `notes`
@@ -608,9 +609,6 @@
     - `setRtlGutter`
     - `setPageBackground`
     - `setPageBorders`
-    - `setThemeFmt`
-    - `setThemeExtraSchemes`
-    - `setThemeOverride`
     - `setMirrorMargins`
     - `setGutterAtTop`
     - `setHeaderFooterLink`
@@ -653,6 +651,7 @@
   - 外部引用：`insertExternalLink`、`setExternalLink`、`deleteExternalLink`
   - 自定义视图：`insertCustomView`、`deleteCustomView`、`showCustomView`
   - `setProtection`
+  - 主题：`setThemeColors`、`setThemeFonts`、`setThemeFmt`、`setThemeExtraSchemes`、`setThemeOverride`
 - xlsx 的 `insertComment` 的 `id` 必须是单元格 id
 - 对其余批注 op，id 必须是 `cell:{name}!{A1}/comment:{guid}`（回复则再加 `/reply:{guid}`）
 - 对工作表 id、页 id 或 `xlsx:workbook` 发这些 op 报 `InvalidId`

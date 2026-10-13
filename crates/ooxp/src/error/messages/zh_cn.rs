@@ -325,6 +325,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::SetThemeNeedsDocument => {
                 "setThemeColors / setThemeFonts / setThemeFmt / setThemeOverride 的 id 必须是 docx:document".into()
             }
+            IdReason::SetThemeNeedsWorkbook => {
+                "setThemeColors / setThemeFonts / setThemeFmt / setThemeOverride 的 id 必须是 xlsx:workbook".into()
+            }
             IdReason::SetHandoutTextNeedsHandout => {
                 "setHandoutText 的 id 必须是 handout".into()
             }

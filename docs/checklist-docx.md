@@ -394,7 +394,7 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
   - 改脚本字体后树上对得上
   - 补充色板写入后树上对得上，`null` 清掉列表
   - `themeFontLang` 写入后树上对得上
-  - 无 theme / 错 id / xlsx 拒写
+  - 无 theme / 错 id / xlsx 无 theme 同样 `IdNotFound`
 - **Ea1–Ea8** ✅
   - Word 16.0：`docx-east-asia.ps1`，8 PASS / 0 FAIL
   - 段禁则树上 `kinsoku` / `overflowPunct` / `autoSpaceDE` 对得上
@@ -1995,7 +1995,7 @@ theme 与配色 / 字体方案的 `name`、补充色板、脚本字体、以及 
 | Thr3 | 脚本 | `setThemeFonts` 写 `majorScripts` 一项 `Jpan` / `Yu Mincho` 后树上对得上。Word 无修复 | ✅ |
 | Thr4 | 补充色板 | `setThemeExtraSchemes` 写入一份 `Extra` 后树上 `name` 与 `accent1` 对得上；再 `null` 后为 `[]`。Word 无修复 | ✅ |
 | Thr5 | 主题语言 | `setEastAsianSettings` 写 `themeFontLang.val=ja-JP` 后树上对得上。Word 无修复 | ✅ |
-| Thr6 | 拒错 | 无 theme 发名字 / 补充色板得 `IdNotFound`；xlsx 上发 `setThemeExtraSchemes` 得 `InvalidField`。未写文件 | ✅ |
+| Thr6 | 拒错 | 无 theme 发名字 / 补充色板得 `IdNotFound`；xlsx 无 theme 发 `setThemeExtraSchemes` 同样得 `IdNotFound`。未写文件 | ✅ |
 
 ## 组合与连接线
 

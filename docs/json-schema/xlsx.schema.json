@@ -53,6 +53,9 @@
         },
         "workbookProtection": {
           "$ref": "#/$defs/xlsxCreateWorkbookProtection"
+        },
+        "theme": {
+          "$ref": "docx.schema.json#/$defs/docxThemeCreate"
         }
       }
     },

@@ -360,6 +360,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::SetThemeNeedsDocument => {
                 "setThemeColors / setThemeFonts / setThemeFmt / setThemeOverride id must be docx:document".into()
             }
+            IdReason::SetThemeNeedsWorkbook => {
+                "setThemeColors / setThemeFonts / setThemeFmt / setThemeOverride id must be xlsx:workbook".into()
+            }
             IdReason::SetHandoutTextNeedsHandout => {
                 "setHandoutText id must be handout".into()
             }

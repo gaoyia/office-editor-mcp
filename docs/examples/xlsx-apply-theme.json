@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "C:\\data\\book.xlsx",
+  "ops": [
+    {
+      "op": "setThemeColors",
+      "id": "xlsx:workbook",
+      "name": "Office",
+      "themeName": "Office Theme",
+      "accent1": "FF0000"
+    },
+    {
+      "op": "setThemeFonts",
+      "id": "xlsx:workbook",
+      "majorLatin": "Arial"
+    },
+    {
+      "op": "setThemeFmt",
+      "id": "xlsx:workbook",
+      "line": { "index": 0, "w": 38100 }
+    },
+    {
+      "op": "setThemeExtraSchemes",
+      "id": "xlsx:workbook",
+      "extraSchemes": [
+        {
+          "name": "Extra",
+          "colors": { "accent1": "0F6FC6" }
+        }
+      ]
+    },
+    {
+      "op": "setThemeOverride",
+      "id": "xlsx:workbook",
+      "accent1": "00FF00"
+    }
+  ]
+}

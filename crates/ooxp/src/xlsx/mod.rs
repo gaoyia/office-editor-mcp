@@ -35,6 +35,7 @@ mod smartart;
 mod sparkline;
 mod style;
 mod table;
+mod theme;
 mod validation;
 mod view;
 
@@ -76,6 +77,10 @@ pub const REL_CORE: &str =
     "http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties";
 pub const REL_APP: &str =
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties";
+pub const REL_THEME: &str =
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme";
+pub const REL_THEME_OVERRIDE: &str =
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/themeOverride";
 
 pub const CT_WORKBOOK: &str =
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml";
@@ -90,3 +95,6 @@ pub const CT_SHARED_STRINGS: &str =
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml";
 pub const CT_CORE: &str = "application/vnd.openxmlformats-package.core-properties+xml";
 pub const CT_APP: &str = "application/vnd.openxmlformats-officedocument.extended-properties+xml";
+pub const CT_THEME: &str = "application/vnd.openxmlformats-officedocument.theme+xml";
+pub const CT_THEME_OVERRIDE: &str =
+    "application/vnd.openxmlformats-officedocument.themeOverride+xml";

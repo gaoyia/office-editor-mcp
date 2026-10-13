@@ -89,7 +89,7 @@ crates/ooxp-cli/             命令行，只依赖 ooxp。二进制名也是 oox
 工作簿与每张 `worksheet` 始终带 `textBoxCount`、`mathCount`、`shapeCount`、`connectorCount` 与 `smartArtCount`。
 每张 `worksheet` 与 `chartsheet` 始终带 `sheetProtection`。
 工作簿根始终带 `commentCount`、`hyperlinkCount`、`sparklineCount`、`oleObjectCount`、`model3dCount` 与 `slicerCount`（各表之和）、`connectionCount`、
-`externalLinkCount`、`customViewCount`、`workbookProtection` 与 `props`（core / app / custom，规则见契约「文档属性」）。
+`externalLinkCount`、`customViewCount`、`workbookProtection`、`theme`、`themeOverride` 与 `props`（core / app / custom，规则见契约「文档属性」）。
 `scope.comments` 为 true 时列出该表线程化批注名单，不读作者不以 `tc=` 开头的旧式 VML 批注。
 `scope.hyperlinks` 为 true 时列出该表 `<hyperlinks>`，不把 `HYPERLINK()` 公式或图上的链算进来。
 `scope.sparklines` 为 true 时列出该表 `x14:sparklineGroups`，数据范围当字符串，不把折线画进树。
@@ -111,7 +111,8 @@ apply 可改目标单元格，也可换、插、删工作表图，并可改 `one
 也可新建或删除图表工作表：数据仍写在点名的普通表上，图表工作表本身没有 `sheetData`。也可插入、删除、改名、重排与隐藏普通工作表，脏 `workbook.xml` 的 `sheets` 与对应 worksheet 部件。
 对 `dialogsheet` / `macrosheet` 这些 op 仍报 `NotImplemented`。
 也可用 `setCellStyle` 写单元格数字格式、字体、填充、边框与对齐：复用或追加 `styles.xml` 里的 `xf`，只改被点名格子的 `s`。边框含对角线，对齐可写缩进、旋转与缩小字体。
-也可用 `insertCellStyle` / `deleteCellStyle` / `setCellNamedStyle` 读写 `cellStyles`：insert 写入 `cellStyleXfs` 再挂名，套用时把格子的 `s` 指到引用该 `xfId` 的 `cellXfs`。不改主题。
+也可用 `insertCellStyle` / `deleteCellStyle` / `setCellNamedStyle` 读写 `cellStyles`：insert 写入 `cellStyleXfs` 再挂名，套用时把格子的 `s` 指到引用该 `xfId` 的 `cellXfs`。不改主题色板。
+也可用 `setThemeColors` / `setThemeFonts` / `setThemeFmt` / `setThemeExtraSchemes` / `setThemeOverride` 读写工作簿 theme / themeOverride 部件，不把格子上的 theme 指数算成 RGB。
 也可插、删、改工作表单元格超链接：脏该表 XML 的 `<hyperlinks>` 与工作表 `.rels`（Type 以 `/hyperlink` 结尾、`TargetMode` 为 `External`），不标重算，不改单元格值。
 也可插、删、改图 / 文本框 / 形状 / SmartArt 上的 DrawingML 链：脏 drawing 的 `a:hlinkClick` 与 drawing `.rels`。
 也可按槽位改页眉页脚原文，并可对 `worksheet` 与 `chartsheet` 的页眉槽位插、换、删 DrawingML 图。
@@ -137,6 +138,7 @@ insert / delete 线程化批注时只追加或去掉对应 Note `v:shape` 与占
 也可用 `insertProtectedRange` / `setProtectedRange` / `deleteProtectedRange` 写工作表 `<protectedRanges>`：只改 `worksheet`，不标重算，不新建部件。
 create 可写图、图表、图表工作表、页眉页脚、批注、超链接、文本框、公式框、形状、连接线、SmartArt 与 3D 模型，
 也可按已有 apply 写出列宽、行高、合并、数据验证、条件格式、表格、透视、定义名、打印、视图、筛选、排序、分组、隐藏行列、拆分、自定义视图、迷你图、OLE、切片器、连接、外部引用、保护、允许编辑区域、组合，以及单元格样式与共享 / 数组公式。
+给了 `workbook.theme` 时写 theme 部件。
 不新建数据表公式。细则见 create。
 create 到 `.xlsm` 时 workbook Override 用 macroEnabled Content Type，不建空的 `vbaProject.bin`。
 
@@ -255,7 +257,7 @@ xlsx 默认不读完全部单元格，也不展开 `pictures`、`charts`、`text
 批注名单、超链接名单、迷你图名单、嵌入对象名单、切片器名单、连接名单、外部引用名单或自定义视图名单（仍返回 `pictureCount`、`chartCount`、`textBoxCount`、`mathCount`、`shapeCount`、
 `connectorCount`、`smartArtCount`、`dataValidationCount`、`conditionalFormatCount`、`tableCount`、`pivotCount`、
 `commentCount`、`hyperlinkCount`、`sparklineCount`、`oleObjectCount`、`model3dCount`、`slicerCount`、`connectionCount`、`externalLinkCount`、
-`customViewCount`、`hasHeaderFooter`、`print`、`view`、`sheetProtection` 与根上 `props`、`workbookProtection`、`definedNameCount`、`definedNames`）。
+`customViewCount`、`hasHeaderFooter`、`print`、`view`、`sheetProtection` 与根上 `props`、`workbookProtection`、`theme`、`themeOverride`、`definedNameCount`、`definedNames`）。
 xlsx 的 `worksheet` 还返回 `autoFilter` 与 `sortState`。
 docx 默认不返回正文 `paragraphs` 也不展开页眉页脚段落、任何 `pictures`、`textBoxes`、`connectors`、注名单、批注名单、图表名单、SmartArt 名单、OLE 名单、水印名单、表名单、
 修订名单、超链接名单、书签名单、域名单、目录名单、题注名单、交叉引用名单、构建基块名单、公式名单、内容控件名单、编号名单、样式名单或 run 名单（仍返回根上 `props` 与 `protection`、`theme`、`themeOverride`、`fontEmbed`、`pageBackground`，
@@ -300,6 +302,8 @@ xlsx 也可列出、插入并删除工作簿外部数据连接，脏 `/xl/connec
 xlsx 也可列出、插入、删除并改路径对其他工作簿的外部引用，脏 workbook `<externalReferences>`、`/xl/externalLinks/…` 及其 `.rels`、关系与内容类型；改路径只动该链 `.rels` 的 `Target`，不写 `xxl21:alternateUrls`，不打开目标文件，不求值，不标重算。
 xlsx 也可用 `setProtection` 改工作表 `sheetProtection` 或 workbook `workbookProtection`，可写 SHA-512 哈希，不标重算。
 xlsx 也可插、改、删工作表允许编辑区域，脏该表 `<protectedRanges>`，可写同一套 SHA-512，不标重算。
+xlsx 也可用 `setThemeColors` / `setThemeFonts` / `setThemeFmt` 改工作簿 theme 部件的配色、字体、方案名与 `fmtScheme` 常用槽，只脏该 theme 部件；
+也可用 `setThemeExtraSchemes` 整份替换补充色板；也可用 `setThemeOverride` 新建或改 `/xl/theme/themeOverride1.xml`。不把格子上的 theme 指数算成 RGB。
 xlsx 也可改工作表上的页眉页脚原文，并可对 `worksheet` 与 `chartsheet` 页眉槽位插换删 DrawingML 图，脏 `headerFooter` / `drawingHF` 与对应 drawing。
 xlsx 也可改文件属性，脏 `docProps`。docx 可改被点名的段落，可在主文档、页眉页脚与表格单元格插删段落，可插删表以及行与列并合并拆分单元格，可接受或拒绝 run 级、段落标记、表行与表属性修订，可插删改超链接与书签，可插改删域指令（不求值；
 可按 code 写常用域与窗体 ffData），可插入或删除目录块（不在库里算页码），可插入题注与交叉引用（不在库里求 SEQ / REF），可插删构建基块并把基块正文复制进主文档，
@@ -349,6 +353,7 @@ xlsx 的 `sheets[].pictures` 复用 `insertPicture`，`sheets[].charts` 复用 `
 `sheets[].comments` 复用 `insertComment`，`comments[].replies` 复用 `replyComment`（只一层），`sheets[].hyperlinks` 复用 `insertHyperlink`，
 `sheets[].textBoxes` / `maths` / `shapes` / `connectors` / `smartArts` / `model3ds` 复用对应 insert。
 `workbook.cellStyles` 复用 `insertCellStyle`，`cells[].namedStyle` 复用 `setCellNamedStyle`。
+给了 `workbook.theme` 时写 `/xl/theme/theme1.xml`；省略则仍不写 theme 部件。
 其余第四轮字段（列宽、表格、保护、迷你图、OLE、切片器等）复用对应 apply，见 [json-contract-xlsx.md](json-contract-xlsx.md#create)。
 docx 段落与页眉页脚上的 `pictures` 同样复用插图，`charts` 复用 `insertChart`（数据写 embedding），`oleObjects` 复用 `insertOle`，
 `inkCanvases` 复用 `insertInkCanvas`，

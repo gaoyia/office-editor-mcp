@@ -268,7 +268,7 @@ $xlsx = Invoke-OoxpExpectFail @{
 Add-Check 'docx-Thr6' (
     ((Get-FailCode $miss) -eq 'IdNotFound') -and
     ((Get-FailCode $miss2) -eq 'IdNotFound') -and
-    ((Get-FailCode $xlsx) -eq 'InvalidField') -and
+    ((Get-FailCode $xlsx) -eq 'IdNotFound') -and
     -not (Test-Path $failMissing) -and
     -not (Test-Path $missExtra) -and
     -not (Test-Path $failXlsx)

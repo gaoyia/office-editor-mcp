@@ -66,6 +66,11 @@ xlsx create 生成 Transitional 包，命名空间用 Office 默认的 2006 那�
 | `/xl/chartsheets/sheetN.xml` | 仅当某张表 `kind` 为 `chartsheet` |
 | `/xl/styles.xml` | 最小样式表。默认字体颜色写 `<color rgb="FF000000"/>`，不写 `theme`，也不生成 theme 部件 |
 
+inspect 认 workbook `.rels` 里 Type 以 `/theme` 结尾的部件（Excel 16.0 另存常见 `/xl/theme/theme1.xml`）。
+也认 Type 以 `/themeOverride` 结尾的部件。create 给了 `workbook.theme` 时写 `/xl/theme/theme1.xml`；省略则不写。
+apply 的 `setThemeColors` / `setThemeFonts` / `setThemeFmt` / `setThemeExtraSchemes` 只改已有 theme，不新建。
+`setThemeOverride` 缺则新建 `/xl/theme/themeOverride1.xml`。
+
 可选但 create 要写：
 
 - **`/docProps/core.xml`**

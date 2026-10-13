@@ -236,6 +236,8 @@ pub(crate) enum IdReason {
     SetThemeNeedsMaster,
     /// setThemeColors / setThemeFonts 必须用 docx:document
     SetThemeNeedsDocument,
+    /// setThemeColors / setThemeFonts 必须用 xlsx:workbook
+    SetThemeNeedsWorkbook,
     /// setHandoutText 必须用 handout
     SetHandoutTextNeedsHandout,
     /// insertDefinedName 必须用 xlsx:workbook
@@ -1418,6 +1420,7 @@ impl IdReason {
             Self::SetProtectionNeedsPresentation,
             Self::SetThemeNeedsMaster,
             Self::SetThemeNeedsDocument,
+            Self::SetThemeNeedsWorkbook,
             Self::SetSlideSectionNeedsSlide,
             Self::SlideOpNeedsSlide,
             Self::SetTransitionNeedsHost,

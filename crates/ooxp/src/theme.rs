@@ -79,6 +79,34 @@ pub fn inspect(root: &Element) -> Value {
     })
 }
 
+/// 工作簿 / 主文档 theme：在 `inspect` 之上补 `fmt`、`extraSchemes` 与脚本字体。
+pub fn inspect_full(root: &Element) -> Value {
+    let mut v = inspect(root);
+    if let Value::Object(m) = &mut v {
+        m.insert("fmt".into(), fmt_from_theme(root));
+        m.insert("extraSchemes".into(), extra_schemes_json(root));
+        if let Some(Value::Object(fonts)) = m.get_mut("fonts") {
+            let scheme = root
+                .child_by_local("themeElements")
+                .and_then(|e| e.child_by_local("fontScheme"));
+            attach_script_fonts(fonts, scheme);
+        }
+    }
+    v
+}
+
+/// `a:themeOverride` 全套字段，含脚本字体与补充色板。
+pub fn inspect_override_full(root: &Element) -> Value {
+    let mut v = inspect_override(root);
+    if let Value::Object(m) = &mut v {
+        m.insert("extraSchemes".into(), extra_schemes_json(root));
+        if let Some(Value::Object(fonts)) = m.get_mut("fonts") {
+            attach_script_fonts(fonts, root.child_by_local("fontScheme"));
+        }
+    }
+    v
+}
+
 /// `a:themeOverride`：配色 / 字体 / fmt 在根下，不经 `themeElements`。
 pub fn inspect_override(root: &Element) -> Value {
     let name = root

@@ -126,6 +126,8 @@ fn inspect_empty_on_create() {
             "cellStyleCount",
             "props",
             "workbookProtection",
+            "theme",
+            "themeOverride",
             "sheets",
             "definedNames"
         ]
