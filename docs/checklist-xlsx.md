@@ -45,6 +45,7 @@ C、I、A、O、Xp、Xvg、Xem、X3d、Xom、Xtf、Xln、Xfl、Xc、Xh、Xfs、X
 2026-10-14 补跑 `xlsx-slicer-caption.ps1`，Xsc1–Xsc5 通过。无 Repair。COM `Caption` 对得上。`columnCount=2`。时间线 `showHeader=false`。
 2026-10-14 补跑 `xlsx-theme.ps1`，Xth1–Xth5 通过。无 Repair。空白另存有 theme。`accent1=FF0000`。`majorLatin=Arial`。create 可写。省略为 null。
 2026-10-14 补跑 `xlsx-theme-defaults.ps1`，Xdf1–Xdf5 通过。无 Repair。create 后 `objectDefaults` 为 `null`。`lnW=38100`。`lnRef=1` `fontRef=minor`。`null` 清掉。
+同日补跑 `xlsx-model3d-camera.ps1`，X3c1–X3c5 通过。无 Repair。缺省 `pos.z=66519324` `fov=2700000`，`rot` 三轴 `null`，`lightRig` `null`。改后 `pos.x=50400000` `fov=1892375` `rev=18000000`。`lightRig` 可清。对 3D id 发 `setPictureSize` 得 `InvalidId`。
 2026-10-14 补跑 `xlsx-slicer-filter.ps1`，Xsi1–Xsi5 通过。无 Repair。表格 `selected=[]` 再 `乙`。透视勾选乙。时间线 `dateBetween` 再 `null`。
 2026-10-14 补跑 `xlsx-math-geom.ps1`，Xmg1–Xmg5 通过。无 Repair。`oneCell` `cx=1828800` `cy=914400`。`from=C3`。`twoCell` `to=D8`。`setMath` 不改几何。
 2026-10-14 补跑 `xlsx-shape-spacing.ps1`，Xln1–Xln5 通过。无 Repair。COM `SpaceBefore=12`，`Font.Spacing=2`。`textAnchor=just`。
@@ -101,6 +102,14 @@ C、I、A、O、Xp、Xvg、Xem、X3d、Xom、Xtf、Xln、Xfl、Xc、Xh、Xfs、X
   - `replaceModel3d` 不改几何
   - 对 3D id 发 `setPictureSize` 得 `InvalidId`
   - `twoCell` 给 `cx`、xlsx 上 `setModel3dWrap` 得 `InvalidField`
+  - 标题栏无 Repair
+- **X3c1–X3c5** ✅
+  - Excel 16.0：`xlsx-model3d-camera.ps1`，5 PASS / 0 FAIL
+  - 缺省相机 / 旋转 / 光源对得上
+  - `setModel3dCamera` 写位移、视野、三轴与 `lightRig.rev`
+  - `lightRig` 为 `null` 后树上为 `null`
+  - 对 3D id 发 `setPictureSize` 得 `InvalidId`
+  - 空字段与负 `fov` 拒写
   - 标题栏无 Repair
 - **Xom1–Xom6** ✅
   - Excel 16.0：`xlsx-omml.ps1`，6 PASS / 0 FAIL
@@ -777,7 +786,30 @@ COM 认 `Type=30`（`mso3DModel`）。页眉槽本期不插。
   - 不强制开 Excel
 - **X3g6**
   - 检查：拒错
-  - 通过标准：`twoCell` 上给 `cx` 得 `InvalidField`。对 xlsx 发 `setModel3dWrap` 得 `InvalidField`。未写文件
+  - 通过标准：`twoCell` 给 `cx` 得 `InvalidField`。xlsx 上 `setModel3dWrap` 得 `InvalidField`。未写文件
+  - 不强制开 Excel
+
+## 工作表 3D 相机与灯光
+
+已有工作表 3D 改 `am3d:camera`、`am3d:rot` 与 `spPr` 里的 `a:scene3d/a:lightRig`。不换 GLB。不算 3D 渲染。
+手测脚本 `manual-check/office/cases/xlsx-model3d-camera.ps1`。编号用 X3c，不要和 X3d / X3g 撞。docx / pptx 见 D3c / P3k。
+
+- **X3c1** ✅
+  - 检查：缺省
+  - 通过标准：`insertModel3d` 后树上 `camera.pos.z` 为 `66519324`，`fov` 为 `2700000`，`rot` 三轴 `null`，`lightRig` 为 `null`。Excel 无修复
+- **X3c2** ✅
+  - 检查：改相机 / 旋转 / 光源
+  - 通过标准：`setModel3dCamera` 写 `pos.x=50400000`、`fov=1892375`、旋转三轴与 `lightRig.rev=18000000` 后树上对得上。Excel 无修复
+- **X3c3** ✅
+  - 检查：去掉光源
+  - 通过标准：`lightRig` 为 `null` 后树上 `lightRig` 为 `null`。Excel 无修复
+- **X3c4** ✅
+  - 检查：图 op
+  - 通过标准：对 3D id 发 `setPictureSize` 得 `InvalidId`，未写文件
+  - 不强制开 Excel
+- **X3c5** ✅
+  - 检查：拒错
+  - 通过标准：三个字段都不给报 `InvalidField`。`fov` 为负报 `InvalidField`。未写文件
   - 不强制开 Excel
 
 ## 工作表公式框

@@ -272,6 +272,7 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<PptxOp>, Error> {
             "deleteModel3d" => PptxOp::DeleteModel3d(parse_delete_model3d(obj, i)?),
             "setModel3dSize" => PptxOp::SetModel3dSize(parse_set_model3d_size(obj, i)?),
             "setModel3dPos" => PptxOp::SetModel3dPos(parse_set_model3d_pos(obj, i)?),
+            "setModel3dCamera" => PptxOp::SetModel3dCamera(parse_set_model3d_camera(obj, i)?),
             "insertMath" => PptxOp::InsertMath(parse_insert_math(obj, i)?),
             "setMath" => PptxOp::SetMath(parse_set_math(obj, i)?),
             "deleteMath" => PptxOp::DeleteMath(parse_delete_math(obj, i)?),

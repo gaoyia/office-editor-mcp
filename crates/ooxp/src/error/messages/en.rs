@@ -1236,6 +1236,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::NeedSetThemeObjectDefaultsField => {
             "setThemeObjectDefaults requires at least one of sp, ln, or tx".into()
         }
+        ErrorKind::NeedSetModel3dCameraField => {
+            "setModel3dCamera requires at least one of camera, rot, or lightRig".into()
+        }
         ErrorKind::InvalidFontRefIdx => "fontRef must be major, minor, or none".into(),
         ErrorKind::NeedGradientStops => "textFill.stops must have at least two items".into(),
         ErrorKind::DuplicateGradientPos => "textFill.stops pos values must be unique".into(),

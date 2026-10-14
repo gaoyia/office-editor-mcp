@@ -1237,6 +1237,9 @@
                 "$ref": "#/$defs/setModel3dSizeOp"
               },
               {
+                "$ref": "#/$defs/setModel3dCameraOp"
+              },
+              {
                 "$ref": "docx.schema.json#/$defs/setModel3dWrapOp"
               },
               {
@@ -1748,6 +1751,128 @@
           ]
         }
       ]
+    },
+    "setModel3dCameraOp": {
+      "type": "object",
+      "required": [
+        "op",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "setModel3dCamera"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "camera": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "pos": {
+              "$ref": "#/$defs/model3dXyz"
+            },
+            "up": {
+              "$ref": "#/$defs/model3dUp"
+            },
+            "lookAt": {
+              "$ref": "#/$defs/model3dXyz"
+            },
+            "fov": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        },
+        "rot": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "ax": {
+              "type": "integer"
+            },
+            "ay": {
+              "type": "integer"
+            },
+            "az": {
+              "type": "integer"
+            }
+          }
+        },
+        "lightRig": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "rig": {
+              "type": "string"
+            },
+            "dir": {
+              "type": "string"
+            },
+            "lat": {
+              "type": "integer"
+            },
+            "lon": {
+              "type": "integer"
+            },
+            "rev": {
+              "type": "integer"
+            }
+          }
+        }
+      },
+      "anyOf": [
+        {
+          "required": [
+            "camera"
+          ]
+        },
+        {
+          "required": [
+            "rot"
+          ]
+        },
+        {
+          "required": [
+            "lightRig"
+          ]
+        }
+      ]
+    },
+    "model3dXyz": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "x": {
+          "type": "integer"
+        },
+        "y": {
+          "type": "integer"
+        },
+        "z": {
+          "type": "integer"
+        }
+      }
+    },
+    "model3dUp": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "dx": {
+          "type": "integer"
+        },
+        "dy": {
+          "type": "integer"
+        },
+        "dz": {
+          "type": "integer"
+        }
+      }
     },
     "insertTextBoxOp": {
       "type": "object",

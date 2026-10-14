@@ -992,6 +992,7 @@ define_error_kinds! {
     NeedSetTableStyleRefField => vec![Self::NeedSetTableStyleRefField],
     InvalidTableStyleId => vec![Self::InvalidTableStyleId],
     NeedSetThemeObjectDefaultsField => vec![Self::NeedSetThemeObjectDefaultsField],
+    NeedSetModel3dCameraField => vec![Self::NeedSetModel3dCameraField],
     InvalidFontRefIdx => vec![Self::InvalidFontRefIdx],
     NeedGradientStops => vec![Self::NeedGradientStops],
     DuplicateGradientPos => vec![Self::DuplicateGradientPos],
@@ -2092,6 +2093,7 @@ impl ErrorKind {
             | Self::NeedSetTableStyleRefField
             | Self::InvalidTableStyleId
             | Self::NeedSetThemeObjectDefaultsField
+            | Self::NeedSetModel3dCameraField
             | Self::InvalidFontRefIdx
             | Self::NeedGradientStops
             | Self::DuplicateGradientPos

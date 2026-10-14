@@ -1410,6 +1410,7 @@ pub enum DocxOp {
     DeleteModel3d(super::super::model3d::DeleteModel3dOp),
     SetModel3dSize(super::super::model3d::SetModel3dSizeOp),
     SetModel3dWrap(super::super::model3d::SetModel3dWrapOp),
+    SetModel3dCamera(super::super::model3d::SetModel3dCameraOp),
     InsertWatermark(super::super::watermark::InsertWatermarkOp),
     DeleteWatermark(super::super::watermark::DeleteWatermarkOp),
     SetProtection(super::super::protect::SetProtectionOp),

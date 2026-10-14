@@ -48,6 +48,7 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 同日补跑 `docx-theme-remain.ps1`，Thr1–Thr6 通过。无 Repair。空白另存 `extraSchemes=[]`，脚本列表在 `minorCs` 之后。改名 / 脚本 / 补充色板 / `themeFontLang` 树上对得上。
 2026-10-14 补跑 `docx-theme-defaults.ps1`，Tdf1–Tdf5 通过。无 Repair。create 后 `objectDefaults` 为 `null`。`lnW=38100`。`lnRef=1` `fontRef=minor`。`null` 清掉。
 同日补跑 `docx-cell-props.ps1`，Tcp1–Tcp6 通过。无 Repair。COM `WordWrap` 为 False，`Range.Orientation` 为 3，`FitText` 为 True。`headers=["A1"]`。xlsx 拒写 `setCellFormat`。
+同日补跑 `docx-model3d-camera.ps1`，D3c1–D3c5 通过。无 Repair。缺省 `pos.z=66519324` `fov=2700000`，`rot` 三轴 `null`，`lightRig` `null`。改后 `pos.x=50400000` `fov=1892375` `rev=18000000`。`lightRig` 可清。页眉可改 `fov`。
 
 - **C1** ✅
   - Word 16.0 能打开 `manual-check/office/out/docx-create.docx`，标题栏无 Repair
@@ -235,6 +236,14 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
   - `replaceModel3d` 不改几何
   - 页眉 3D 可改尺寸
   - 空 `cx` / `cy`、对 3D id 发 `setPictureSize` 拒写
+  - 标题栏无 Repair
+- **D3c1–D3c5** ✅
+  - Word 16.0：`docx-model3d-camera.ps1`，5 PASS / 0 FAIL
+  - 缺省相机 / 旋转 / 光源对得上
+  - `setModel3dCamera` 写位移、视野、三轴与 `lightRig.rev`
+  - `lightRig` 为 `null` 后树上为 `null`
+  - 页眉 3D 可改 `fov`
+  - 空字段与负 `fov` 拒写
   - 标题栏无 Repair
 - **Ds1–Ds8** ✅
   - Word 16.0：`docx-drawing-shape.ps1`，8 PASS / 0 FAIL
@@ -2180,6 +2189,27 @@ Word 行内 COM 认 `Type=19`（`wdInlineShape3DModel`）。注内、批注内�
 - **D3g6**
   - 检查：拒错
   - 通过标准：`cx` / `cy` 都不给报 `InvalidField`。对 3D id 发 `setPictureSize` 报 `InvalidId`。不强制开 Word
+
+## 3D 相机与灯光
+
+已有 3D 改 `am3d:camera`、`am3d:rot` 与 `spPr` 里的 `a:scene3d/a:lightRig`。不换 GLB。不算 3D 渲染。不把 `ambientLight` / `ptLight` 放进树。
+手测脚本 `manual-check/office/cases/docx-model3d-camera.ps1`。编号用 D3c，不要和 D3d、D3g 撞。xlsx / pptx 见 X3c / P3k（pptx 格属性已占用 P3c）。
+
+- **D3c1** ✅
+  - 检查：缺省
+  - 通过标准：`insertModel3d` 后树上 `camera.pos.z` 为 `66519324`，`fov` 为 `2700000`，`rot` 三轴 `null`，`lightRig` 为 `null`。Word 无修复
+- **D3c2** ✅
+  - 检查：改相机 / 旋转 / 光源
+  - 通过标准：`setModel3dCamera` 写 `pos.x=50400000`、`fov=1892375`、旋转三轴与 `lightRig.rev=18000000` 后树上对得上。Word 无修复
+- **D3c3** ✅
+  - 检查：去掉光源
+  - 通过标准：`lightRig` 为 `null` 后树上 `lightRig` 为 `null`。Word 无修复
+- **D3c4** ✅
+  - 检查：页眉
+  - 通过标准：页眉 3D 可改 `fov`，容器树上对得上。Word 无修复
+- **D3c5** ✅
+  - 检查：拒错
+  - 通过标准：三个字段都不给报 `InvalidField`。`fov` 为负报 `InvalidField`。不强制开 Word
 
 ## 墨迹画布
 

@@ -890,6 +890,17 @@ pub fn apply(bytes: &[u8], ops: &[XlsxOp]) -> Result<Vec<u8>, Error> {
                 let doc = dirty_of(&mut dirty_sheets, &part);
                 model3d::set_anchor(&mut pkg, &doc.root, &part, op, i)?;
             }
+            XlsxOp::SetModel3dCamera(op) => {
+                let part = require_drawing_worksheet(
+                    &sheet_index,
+                    &op.target.sheet,
+                    i,
+                    ErrorKind::InsertModel3dWorksheetOnly,
+                )?;
+                load_dirty(&pkg, &mut dirty_sheets, &part, false)?;
+                let doc = dirty_of(&mut dirty_sheets, &part);
+                model3d::set_camera(&mut pkg, &doc.root, &part, op, i)?;
+            }
             XlsxOp::InsertMath(op) => {
                 let part = require_drawing_worksheet(
                     &sheet_index,

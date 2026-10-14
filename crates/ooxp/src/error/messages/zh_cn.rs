@@ -1120,6 +1120,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::NeedSetThemeObjectDefaultsField => {
             "setThemeObjectDefaults 至少要给 sp、ln 或 tx 之一".into()
         }
+        ErrorKind::NeedSetModel3dCameraField => {
+            "setModel3dCamera 至少要给 camera、rot 或 lightRig 之一".into()
+        }
         ErrorKind::InvalidFontRefIdx => "fontRef 必须是 major、minor 或 none".into(),
         ErrorKind::NeedGradientStops => "textFill.stops 至少要有两项".into(),
         ErrorKind::DuplicateGradientPos => "textFill.stops 的 pos 不能重复".into(),

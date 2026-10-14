@@ -1934,6 +1934,7 @@ pub enum XlsxOp {
     DeleteModel3d(super::super::model3d::DeleteModel3dOp),
     SetModel3dSize(super::super::model3d::SetModel3dSizeOp),
     SetModel3dAnchor(super::super::model3d::SetModel3dAnchorOp),
+    SetModel3dCamera(super::super::model3d::SetModel3dCameraOp),
     InsertMath(super::super::omml::InsertMathOp),
     SetMath(super::super::omml::SetMathOp),
     DeleteMath(super::super::omml::DeleteMathOp),

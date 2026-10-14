@@ -584,6 +584,11 @@ pub fn apply(bytes: &[u8], ops: &[DocxOp]) -> Result<Vec<u8>, Error> {
                     &mut pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i,
                 )?;
             }
+            DocxOp::SetModel3dCamera(op) => {
+                super::model3d::apply_set_camera(
+                    &mut pkg, &mut docs, &mut dirty, &doc_part, &catalog, op, i,
+                )?;
+            }
             DocxOp::InsertWatermark(op) => {
                 watermark::apply_insert(&mut pkg, &mut docs, &mut dirty, &doc_part, op, i)?;
                 refresh_hf_catalog(&pkg, &docs, &doc_part, &mut catalog)?;

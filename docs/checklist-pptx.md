@@ -54,6 +54,7 @@ Ps1–Ps5、Sg1–Sg5、Pt1–Pt6、Tn1–Tn5、Am1–Am5、Mm1–Mm5、Ho1–Ho
 2026-10-14 补跑 `pptx-table-cell-mar.ps1`，Ptm1–Ptm5 通过。无 Repair。create `cellMar.top=12700` `left=25400`，COM `MarginTop=1` `MarginLeft=2` 磅。四边 JSON `null` 后 `cellMar` 为 `null`。
 2026-10-14 补跑 `pptx-theme-remain.ps1`，Tfm1–Tfm5 通过。无 Repair。`theme` 字段 `name` / `colors` / `fonts` / `fmt` / `extraSchemes`。`setThemeFmt` 线宽 38100。方案名与 `majorScripts` 对上。`extraSchemes` 写一项后可清成 `[]`。
 2026-10-14 补跑 `pptx-theme-defaults.ps1`，Pdf1–Pdf5 通过。无 Repair。create 后 `objectDefaults` 为 `null`。`lnW=38100`。`lnRef=1` `fontRef=minor`。`null` 清掉。页 id 得 `InvalidId`。
+同日补跑 `pptx-model3d-camera.ps1`，P3k1–P3k5 通过。无 Repair。缺省 `pos.z=66519324` `fov=2700000`，`rot` 三轴 `null`，`lightRig` `null`。改后 `pos.x=50400000` `fov=1892375` `rev=18000000`。`lightRig` 可清。备注可改 `fov`，根上 `model3dCount` 仍为 0。
 2026-10-14 补跑 `pptx-theme-clrmap.ps1`，Tcm1–Tcm5 通过。无 Repair。`clrMap` 在 `theme` 之后，`bg1=lt1`。页 `clrMapOvr` 为 `master`。`setClrMap` 写母版 / 备注母版 / 讲义。`setClrMapOvr` 写页与版式后再回到 `master`。`setThemeOverride` `accent1=FF0000`，备注页 `00FF00`，`enabled: false` 后为 `null`。
 2026-10-14 补跑 `pptx-theme-notes-handout.ps1`，Tnh1–Tnh5 通过。无 Repair。`notesMaster.theme` / `handout.theme` 在 `id` 之后、`clrMap` 之前。对 `notesMaster` 写 `accent1=FF0000` 不影响 slideMaster。讲义 `00FF00`。`majorLatin=Arial`，`line.w=38100`。讲义 `extraSchemes` 一项。页 id 得 `InvalidId`，无备注母版得 `IdNotFound`。
 2026-10-14 补跑 `pptx-notes-size.ps1`，Nsz1–Nsz5 通过。无 Repair。`notesSize` 在 `slideSize` 之后，缺省 `6858000` × `9144000`。`setNotesSize` `cx=9144000` `cy=12192000` 后 `slideSize` 仍为原值，备注母版占位符几何不变。create `presentation.notesSize` 对上。页 id 得 `InvalidId`，缺 `cy` 得 `InvalidField`。
@@ -141,6 +142,14 @@ Ps1–Ps5、Sg1–Sg5、Pt1–Pt6、Tn1–Tn5、Am1–Am5、Mm1–Mm5、Ho1–Ho
   - `replaceModel3d` 不改几何
   - 对 3D id 发 `setPictureSize` 得 `InvalidId`
   - 空 `x` / `y`、pptx 上 `setModel3dWrap` 得 `InvalidField`
+  - 标题栏无 Repair
+- **P3k1–P3k5** ✅
+  - PowerPoint 16.0：`pptx-model3d-camera.ps1`，5 PASS / 0 FAIL
+  - 缺省相机 / 旋转 / 光源对得上
+  - `setModel3dCamera` 写位移、视野、三轴与 `lightRig.rev`
+  - `lightRig` 为 `null` 后树上为 `null`
+  - 备注 3D 可改 `fov`，根上 `model3dCount` 仍为 0
+  - 空字段与负 `fov` 拒写
   - 标题栏无 Repair
 - **Pom1–Pom6** ✅
   - PowerPoint 16.0：`pptx-omml.ps1`，6 PASS / 0 FAIL
@@ -733,6 +742,19 @@ COM 认 `Type=30`（`mso3DModel`）。批注内本期不插。
 | P3g4 | 替换不改几何 | 改过尺寸后再 `replaceModel3d`，树上尺寸仍是新值，无修复 | ✅ |
 | P3g5 | 图 op | 对 3D id 发 `setPictureSize` 得 `InvalidId`，未写文件。不强制开 PowerPoint | ✅ |
 | P3g6 | 拒错 | `x` / `y` 都不给得 `InvalidField`。对 pptx 发 `setModel3dWrap` 得 `InvalidField`。未写文件。不强制开 PowerPoint | ✅ |
+
+## 幻灯片 3D 相机与灯光
+
+已有 3D 改 `am3d:camera`、`am3d:rot` 与 `spPr` 里的 `a:scene3d/a:lightRig`。不换 GLB。不算 3D 渲染。
+脚本 `manual-check/office/cases/pptx-model3d-camera.ps1`。编号用 P3k，不要和 P3d / P3g / P3c 撞。docx / xlsx 见 D3c / X3c。
+
+| 序号 | 检查 | 通过标准 | 状态 |
+| --- | --- | --- | --- |
+| P3k1 | 缺省 | `insertModel3d` 后树上 `camera.pos.z` 为 `66519324`，`fov` 为 `2700000`，`rot` 三轴 `null`，`lightRig` 为 `null`，无修复 | ✅ |
+| P3k2 | 改相机 / 旋转 / 光源 | `setModel3dCamera` 写 `pos.x=50400000`、`fov=1892375`、旋转三轴与 `lightRig.rev=18000000` 后树上对得上，无修复 | ✅ |
+| P3k3 | 去掉光源 | `lightRig` 为 `null` 后树上 `lightRig` 为 `null`，无修复 | ✅ |
+| P3k4 | 备注 | 备注 3D 可改 `fov`，根上 `model3dCount` 仍为 0，无修复 | ✅ |
+| P3k5 | 拒错 | 三个字段都不给得 `InvalidField`。`fov` 为负得 `InvalidField`。未写文件。不强制开 PowerPoint | ✅ |
 
 ## 幻灯片公式框
 

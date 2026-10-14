@@ -753,6 +753,9 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<DocxOp>, Error> {
             "deleteModel3d" => out.push(DocxOp::DeleteModel3d(parse_delete_model3d(obj, i)?)),
             "setModel3dSize" => out.push(DocxOp::SetModel3dSize(parse_set_model3d_size(obj, i)?)),
             "setModel3dWrap" => out.push(DocxOp::SetModel3dWrap(parse_set_model3d_wrap(obj, i)?)),
+            "setModel3dCamera" => {
+                out.push(DocxOp::SetModel3dCamera(parse_set_model3d_camera(obj, i)?))
+            }
             "insertWatermark" => out.push(DocxOp::InsertWatermark(super::watermark::parse_insert(
                 obj, i,
             )?)),

@@ -333,9 +333,10 @@ docx 上仍是段落 id / Word OLE id，见 [json-contract-docx.md](json-contrac
 `http://schemas.microsoft.com/office/drawing/2017/model3d`（可带尾斜杠）。
 只走 `Choice Requires="am3d"`。Fallback 海报 `p:pic` 不进 `pictures`。组合里符合条件的框要展开，组合本身不进树。
 备注页上同样判定，id 带 `slide:{n}/notes/` 前缀。幻灯片母版 / 版式上同样判定，id 带 `master:{n}/` 或 `master:{n}/layout:{k}/` 前缀。批注、备注母版、讲义上的 3D 不进树。
-`insertModel3d` 的 `id` 必须是 `slide:{n}`、`slide:{n}/notes`、`master:{n}` 或 `master:{n}/layout:{k}`。`replaceModel3d` / `deleteModel3d` / `setModel3dSize` / `setModel3dPos` 的 `id` 必须是 3D 模型 id。
+`insertModel3d` 的 `id` 必须是 `slide:{n}`、`slide:{n}/notes`、`master:{n}` 或 `master:{n}/layout:{k}`。`replaceModel3d` / `deleteModel3d` / `setModel3dSize` / `setModel3dPos` / `setModel3dCamera` 的 `id` 必须是 3D 模型 id。
 只认 GLB。不是 GLB 报 `InvalidImageFile`（对外 `InvalidField`）。`contentType` 恒为 `model/gltf.binary`。
-批注内仍不插。幻灯片、备注页与母版 / 版式上已有 3D 可改尺寸与画布坐标。
+`camera` / `rot` / `lightRig` 规则与 [docx](json-contract-docx.md#setmodel3dcamera) 相同。不把 `am3d:ambientLight` / `ptLight` 放进树。
+批注内仍不插。幻灯片、备注页与母版 / 版式上已有 3D 可改尺寸、画布坐标与相机 / 旋转 / 光源。
 xlsx 见 [xlsx 分册](json-contract-xlsx.md#insertmodel3d)。docx 见 [json-contract-docx.md](json-contract-docx.md#insertmodel3d)。
 
 公式框 id 的 `{cNvPrId}` 取 Choice 里 `p:sp` 的 `p:nvSpPr/p:cNvPr/@id` 原文。
@@ -961,8 +962,9 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   `showAsIcon`：`p:oleObj/@showAsIcon` 为 `1` / `true` / `True` 则为 `true`，否则为 `false`。
   xlsx 认 `scope.oleObjects`，见 [xlsx 分册](json-contract-xlsx.md#scope)。
 - `scope.model3ds` 为 `true` 时，每页带 `model3ds`。没有 3D 模型时为空数组。不依赖 `scope.slide`。
-  每条字段顺序：`id`、`cNvPrId`、`name`、`x`、`y`、`cx`、`cy`、`contentType`、`stable`。`id` 为 `slide:{n}/model3d:…`。
+  每条字段顺序：`id`、`cNvPrId`、`name`、`x`、`y`、`cx`、`cy`、`contentType`、`stable`、`camera`、`rot`、`lightRig`。`id` 为 `slide:{n}/model3d:…`。
   `cNvPrId` / `name` / `x` / `y` / `cx` / `cy` / `stable` 规则与图相同。`contentType` 恒为 `model/gltf.binary`。
+  `camera` / `rot` / `lightRig` 规则与 [docx](json-contract-docx.md#setmodel3dcamera) 相同。不把 `am3d:ambientLight` / `ptLight` 放进树。
   几何取 graphicFrame 的 `p:xfrm`。不把 GLB 或海报放进树。xlsx / docx 见各自分册。
 - `scope.zooms` 为 `true` 时，每页带 `zooms`。没有 Zoom 时为空数组。不依赖 `scope.slide`。
   每条字段顺序：`id`、`type`，然后 slide / section 有 `target`，summary 有 `targets`，然后 `x`、`y`、`cx`、`cy`、`stable`。
@@ -3486,6 +3488,12 @@ docx / xlsx 上发此 op 报 `InvalidField`。
 
 改 3D 尺寸与画布坐标的示例见 `docs/examples/pptx-apply-model3d-geom.json`。
 
+### setModel3dCamera
+
+字段与 [docx `setModel3dCamera`](json-contract-docx.md#setmodel3dcamera) 相同。`id` 必须是 pptx 3D 模型 id。
+改 Choice 里 `am3d:camera`、`am3d:rot` 与 `am3d:spPr` 里的 `a:scene3d/a:lightRig`。不换 GLB。不改画布坐标。
+docx / xlsx 上同一套字段。示例见 `docs/examples/pptx-apply-model3d-camera.json`。
+
 ### insertMath
 
 把一条线性公式写入目标幻灯片或备注页。不进 `shapes`。不实现排版引擎。不写 `<p:timing>`。
@@ -3795,7 +3803,7 @@ presentation 关系、新页或被删页及其 `.rels`、内容类型，
 `insertOle` / `deleteOle` 脏该宿主 XML 及其 `.rels`、`[Content_Types].xml`，
 以及新建或被删的 `/ppt/embeddings/…` 与预览 `/ppt/media/imageN.*`。
 `deleteOle` 还可清该页 `<p:timing>` 里对应 `tgtEl`。
-`setModel3dSize` / `setModel3dPos` 只脏该宿主 XML。
+`setModel3dSize` / `setModel3dPos` / `setModel3dCamera` 只脏该宿主 XML。
 `setPicturePos` / `setPictureSize` 只脏该宿主 XML。视频 / 音频走同一套，不换媒体部件。
 `setMathSize` / `setMathPos` 只脏该宿主 XML。不改字。
 `insertZoom` / `setZoom` / `deleteZoom` 脏该宿主 XML 及其 `.rels`、`[Content_Types].xml`，以及新建或被删的预览 `/ppt/media/imageN.*`。

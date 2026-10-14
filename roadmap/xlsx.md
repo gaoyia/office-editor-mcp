@@ -96,17 +96,19 @@ docx 见 [`roadmap/docx.md`](docx.md)。pptx 见 [`roadmap/pptx.md`](pptx.md)。
 | 43 | `.plan/2026年-10月-11日-✅-xlsx-主题.md` | 无 |
 | 44 | `.plan/2026年-10月-11日-✅-xlsx-切片器筛选项.md` | 切片器、时间线已过 |
 | C16 | `.plan/2026年-10月-11日-✅-三家主题objectDefaults.md` | 主题已过 |
+| C15 | `.plan/2026年-10月-11日-✅-三家3D相机与灯光.md` | C7、C12 已过 |
 
 ## 待做
 
-待做表已空。公式求值仍永不做。墨迹未挂不算欠账。Power Query 一等公民仍不挂。OLE 事后改尺寸不挂。C15 见先探测，未探测不算欠账。
+公式求值仍永不做。墨迹未挂不算欠账。Power Query 一等公民仍不挂。OLE 事后改尺寸不挂。
+
+当期无待做序号。
 
 ## 先探测再进待做
 
 探测 Office 16.0 另存后再挂序号。未探测的不算欠账。
 
 - 工作表墨迹（不是批注墨迹，也不是 Word `wpc` 画布）。16.0 没有 `AddInk` / `AddInkComment`，`ExecuteMso('InkStartInking')` 失败。需要 Draw 手写另存样例后再挂
-- 3D 相机与灯光（C15，`.plan/2026年-10月-11日-💤-三家3D相机与灯光.md`）。C7 只证明插入缺省。需要在 Office 里旋转模型、改灯光后另存，再锁字段
 
 不要自动挂：Power Query / `queryTables` 结果区。不要把 Word 水印、内容控件、编号、修订、参考文献、`wpc` 画布搬过来。
 
@@ -126,8 +128,8 @@ docx 见 [`roadmap/docx.md`](docx.md)。pptx 见 [`roadmap/pptx.md`](pptx.md)。
 | C13 | `.plan/2026年-10月-11日-✅-xlsx-pptx-公式框事后几何.md` | C8 已过 |
 | C14 | `.plan/2026年-10月-11日-✅-pptx-xlsx-形状行距与字距.md` | C9 已过；不改 Word |
 
-xlsx 没有 Word / PowerPoint 那种墨迹批注计划；批注已过（序号 11）。主题见已过 43，不要和 pptx 16 / 46 / 47 / 48 合成一份。C4、C5、C6、C7、C8、C9、C10、C11、C12、C13、C14、C16 见已过表。C15 见先探测。C5 与 pptx 同一份计划，不要拆成两家各做一套 `svgBlip`。C6、C7、C12、C16 与 docx 同一份计划。C8、C13 与 pptx 同一份，不改 Word。C9、C10、C14 与 pptx 同一份，不改 Word。C11 三家同一份。
+xlsx 没有 Word / PowerPoint 那种墨迹批注计划；批注已过（序号 11）。主题见已过 43，不要和 pptx 16 / 46 / 47 / 48 合成一份。C4、C5、C6、C7、C8、C9、C10、C11、C12、C13、C14、C16、C15 见已过表。C5 与 pptx 同一份计划，不要拆成两家各做一套 `svgBlip`。C6、C7、C12、C16 与 docx 同一份计划。C8、C13 与 pptx 同一份，不改 Word。C9、C10、C14 与 pptx 同一份，不改 Word。C11 三家同一份。
 
 ## 怎么算 Excel 全量做完
 
-已过表保持 ✅。第五轮待做（40）已过。第六轮 41–44、C16 已过。墨迹未挂不算欠账。永不做的条目不算欠账。公式求值保持 🚫。OLE 事后改尺寸不挂。
+已过表保持 ✅。第五轮待做（40）已过。第六轮 41–44、C16、C15 已过。墨迹未挂不算欠账。永不做的条目不算欠账。公式求值保持 🚫。OLE 事后改尺寸不挂。

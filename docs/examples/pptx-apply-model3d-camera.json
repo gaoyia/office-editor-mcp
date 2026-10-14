@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "deck.pptx",
+  "ops": [
+    {
+      "op": "setModel3dCamera",
+      "id": "slide:1/model3d:2",
+      "camera": { "pos": { "x": 50400000 }, "fov": 1892375 },
+      "rot": { "ax": 1060962, "ay": -532862, "az": -169045 },
+      "lightRig": { "rig": "freezing", "dir": "t", "rev": 18000000 }
+    }
+  ]
+}

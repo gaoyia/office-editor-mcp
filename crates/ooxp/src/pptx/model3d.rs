@@ -68,6 +68,13 @@ pub struct SetModel3dPosOp {
     pub y: Option<i64>,
 }
 
+#[derive(Debug, Clone)]
+pub struct SetModel3dCameraOp {
+    pub id: String,
+    pub target: Model3dTarget,
+    pub patch: crate::model3d::Model3dCameraPatch,
+}
+
 pub struct Model3dInfo {
     pub id: String,
     pub cnv_pr_id: Option<String>,
@@ -77,6 +84,9 @@ pub struct Model3dInfo {
     pub cx: Option<i64>,
     pub cy: Option<i64>,
     pub stable: bool,
+    pub camera: Value,
+    pub rot: Value,
+    pub light_rig: Value,
 }
 
 pub fn looks_like_id(id: &str) -> bool {
@@ -184,6 +194,7 @@ fn info_of(frame: &Element, host: &str, index: usize) -> Model3dInfo {
         Some(ext) => (parse_i64(ext, "cx"), parse_i64(ext, "cy")),
         None => (None, None),
     };
+    let (camera, rot, light_rig) = crate::model3d::inspect_view(frame);
     Model3dInfo {
         id,
         cnv_pr_id: raw.filter(|s| !s.is_empty()),
@@ -193,6 +204,9 @@ fn info_of(frame: &Element, host: &str, index: usize) -> Model3dInfo {
         cx,
         cy,
         stable,
+        camera,
+        rot,
+        light_rig,
     }
 }
 
@@ -227,6 +241,9 @@ fn info_json(p: &Model3dInfo) -> Value {
     m.insert("cy".into(), json!(p.cy));
     m.insert("contentType".into(), json!(crate::model3d::CT_GLB));
     m.insert("stable".into(), json!(p.stable));
+    m.insert("camera".into(), p.camera.clone());
+    m.insert("rot".into(), p.rot.clone());
+    m.insert("lightRig".into(), p.light_rig.clone());
     Value::Object(m)
 }
 
@@ -545,6 +562,36 @@ pub fn apply_pos(slide_doc: &mut Document, op: &SetModel3dPosOp, i: usize) -> Re
     let ac = find_ac_mut(&mut slide_doc.root, &op.target.key)
         .ok_or_else(|| Error::with_path(ErrorKind::Model3dNotFound { id: op.id.clone() }, path))?;
     patch_ac_geom(ac, None, None, op.x, op.y);
+    Ok(())
+}
+
+pub fn apply_camera(
+    slide_doc: &mut Document,
+    op: &SetModel3dCameraOp,
+    i: usize,
+) -> Result<(), Error> {
+    let path = format!("ops[{i}].id");
+    let ac = find_ac_mut(&mut slide_doc.root, &op.target.key)
+        .ok_or_else(|| Error::with_path(ErrorKind::Model3dNotFound { id: op.id.clone() }, path))?;
+    let mut ok = false;
+    for child in &mut ac.children {
+        let Node::Element(branch) = child else {
+            continue;
+        };
+        if branch.local_name() != "Choice" {
+            continue;
+        }
+        if let Some(model) = crate::model3d::model3d_in_mut(branch) {
+            crate::model3d::apply_camera_patch(model, &op.patch)?;
+            ok = true;
+        }
+    }
+    if !ok {
+        return Err(Error::with_path(
+            ErrorKind::Model3dNotFound { id: op.id.clone() },
+            format!("ops[{i}].id"),
+        ));
+    }
     Ok(())
 }
 

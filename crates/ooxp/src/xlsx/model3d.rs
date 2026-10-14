@@ -83,6 +83,13 @@ pub struct SetModel3dAnchorOp {
     pub cy: Option<i64>,
 }
 
+#[derive(Debug, Clone)]
+pub struct SetModel3dCameraOp {
+    pub id: String,
+    pub target: Model3dTarget,
+    pub patch: crate::model3d::Model3dCameraPatch,
+}
+
 pub struct Model3dInfo {
     pub id: String,
     pub cnv_pr_id: Option<String>,
@@ -100,6 +107,9 @@ pub struct Model3dInfo {
     pub pos_x: Option<i64>,
     pub pos_y: Option<i64>,
     pub stable: bool,
+    pub camera: Value,
+    pub rot: Value,
+    pub light_rig: Value,
 }
 
 pub fn looks_like_id(id: &str) -> bool {
@@ -246,6 +256,7 @@ fn info_of(
     } else {
         None
     };
+    let (camera, rot, light_rig) = crate::model3d::inspect_view(frame);
     Model3dInfo {
         id,
         cnv_pr_id: raw,
@@ -279,6 +290,9 @@ fn info_of(
         pos_x,
         pos_y,
         stable,
+        camera,
+        rot,
+        light_rig,
     }
 }
 
@@ -334,6 +348,9 @@ fn info_json(p: &Model3dInfo) -> Value {
     }
     m.insert("contentType".into(), json!(crate::model3d::CT_GLB));
     m.insert("stable".into(), json!(p.stable));
+    m.insert("camera".into(), p.camera.clone());
+    m.insert("rot".into(), p.rot.clone());
+    m.insert("lightRig".into(), p.light_rig.clone());
     Value::Object(m)
 }
 
@@ -770,6 +787,73 @@ pub fn set_anchor(
         op_index,
         ErrorKind::Model3dNotFound { id: op.id.clone() },
     )
+}
+
+pub fn set_camera(
+    pkg: &mut Package,
+    sheet_root: &Element,
+    sheet_part: &str,
+    op: &SetModel3dCameraOp,
+    op_index: usize,
+) -> Result<(), Error> {
+    let path = format!("ops[{op_index}].id");
+    let drawing_part = drawing_for(pkg, sheet_part, sheet_root, &op.target.key, &op.id, &path)?;
+    let mut doc = xml::parse(pkg.get(&drawing_part)?)?;
+    let frame = find_frame_mut(&mut doc.root, &op.target.key).ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::Model3dNotFound { id: op.id.clone() },
+            path.clone(),
+        )
+    })?;
+    let model = crate::model3d::model3d_in_mut(frame).ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::Model3dNotFound { id: op.id.clone() },
+            path.clone(),
+        )
+    })?;
+    crate::model3d::apply_camera_patch(model, &op.patch)?;
+    pkg.set(&drawing_part, doc.to_bytes()?)?;
+    Ok(())
+}
+
+fn find_frame_mut<'a>(root: &'a mut Element, key: &Model3dKey) -> Option<&'a mut Element> {
+    find_frame_walk_mut(root, key, &mut 0)
+}
+
+fn find_frame_walk_mut<'a>(
+    el: &'a mut Element,
+    key: &Model3dKey,
+    index: &mut usize,
+) -> Option<&'a mut Element> {
+    if el.local_name() == "AlternateContent" {
+        let children = el.children.as_mut_slice();
+        for child in children {
+            if let Node::Element(e) = child {
+                if e.local_name() == "Choice" && crate::model3d::choice_requires_am3d(e) {
+                    if let Some(found) = find_frame_walk_mut(e, key, index) {
+                        return Some(found);
+                    }
+                }
+            }
+        }
+        return None;
+    }
+    if el.local_name() == "graphicFrame" && crate::model3d::is_model3d_graphic(el) {
+        *index += 1;
+        if key_matches(key, &cnv_of(el).0, *index) {
+            return Some(el);
+        }
+        return None;
+    }
+    let children = el.children.as_mut_slice();
+    for child in children {
+        if let Node::Element(e) = child {
+            if let Some(found) = find_frame_walk_mut(e, key, index) {
+                return Some(found);
+            }
+        }
+    }
+    None
 }
 
 fn remove_model3d(el: &mut Element, key: &Model3dKey) -> bool {

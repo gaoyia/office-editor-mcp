@@ -322,6 +322,7 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<XlsxOp>, Error> {
             "deleteModel3d" => XlsxOp::DeleteModel3d(parse_delete_model3d(obj, i)?),
             "setModel3dSize" => XlsxOp::SetModel3dSize(parse_set_model3d_size(obj, i)?),
             "setModel3dAnchor" => XlsxOp::SetModel3dAnchor(parse_set_model3d_anchor(obj, i)?),
+            "setModel3dCamera" => XlsxOp::SetModel3dCamera(parse_set_model3d_camera(obj, i)?),
             "insertMath" => XlsxOp::InsertMath(parse_insert_math(obj, i)?),
             "setMath" => XlsxOp::SetMath(parse_set_math(obj, i)?),
             "deleteMath" => XlsxOp::DeleteMath(parse_delete_math(obj, i)?),

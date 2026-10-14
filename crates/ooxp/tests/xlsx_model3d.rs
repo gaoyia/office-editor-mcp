@@ -171,7 +171,7 @@ fn insert_inspect_export_replace_delete() {
         .map(|k| k.as_str())
         .collect();
     assert!(keys.contains(&"contentType"));
-    assert_eq!(keys.last(), Some(&"stable"));
+    assert_eq!(keys.last(), Some(&"lightRig"));
     let names = zip_names(&out);
     assert!(names.iter().any(|n| n.ends_with(".glb")), "{names:?}");
     let drawing = part_text(&out, "xl/drawings/drawing1.xml");
@@ -394,4 +394,82 @@ fn reject_picture_op_and_wrap() {
     );
     assert_eq!(err_w.code(), ErrorCode::InvalidField);
     assert!(!out_w.exists());
+}
+
+fn camera_ops(id: &str) -> Value {
+    json!([{
+        "op": "setModel3dCamera",
+        "id": id,
+        "camera": { "pos": { "x": 50400000 }, "fov": 1892375 },
+        "rot": { "ax": 1060962, "ay": -532862, "az": -169045 },
+        "lightRig": { "rig": "freezing", "dir": "t", "rev": 18000000 }
+    }])
+}
+
+fn assert_default_view(item: &Value) {
+    assert_eq!(item["camera"]["pos"]["z"], 66519324);
+    assert_eq!(item["camera"]["fov"], 2700000);
+    assert!(item["rot"]["ax"].is_null());
+    assert!(item["rot"]["ay"].is_null());
+    assert!(item["rot"]["az"].is_null());
+    assert!(item["lightRig"].is_null());
+}
+
+fn assert_patched_view(item: &Value) {
+    assert_eq!(item["camera"]["pos"]["x"], 50400000);
+    assert_eq!(item["camera"]["pos"]["z"], 66519324);
+    assert_eq!(item["camera"]["fov"], 1892375);
+    assert_eq!(item["rot"]["ax"], 1060962);
+    assert_eq!(item["rot"]["ay"], -532862);
+    assert_eq!(item["rot"]["az"], -169045);
+    assert_eq!(item["lightRig"]["rig"], "freezing");
+    assert_eq!(item["lightRig"]["dir"], "t");
+    assert_eq!(item["lightRig"]["lat"], 0);
+    assert_eq!(item["lightRig"]["rev"], 18000000);
+}
+
+#[test]
+fn set_camera_rot_and_light() {
+    let (src, id) = insert_one("cam");
+    let tree0 = inspect(&src, json!({ "model3ds": true }));
+    assert_default_view(first_model(&tree0));
+
+    let patched = seq_path("cam-set", "xlsx");
+    apply(&src, &patched, camera_ops(&id));
+    let tree = inspect(&patched, json!({ "model3ds": true }));
+    assert_patched_view(first_model(&tree));
+    assert!(part_text(&patched, "xl/drawings/drawing1.xml").contains("rev=\"18000000\""));
+
+    let cleared = seq_path("cam-clear", "xlsx");
+    apply(
+        &patched,
+        &cleared,
+        json!([{ "op": "setModel3dCamera", "id": id, "lightRig": null }]),
+    );
+    let tree_c = inspect(&cleared, json!({ "model3ds": true }));
+    let item_c = first_model(&tree_c);
+    assert!(item_c["lightRig"].is_null());
+    assert_eq!(item_c["camera"]["fov"], 1892375);
+}
+
+#[test]
+fn reject_empty_camera_and_neg_fov() {
+    let (src, id) = insert_one("rej-cam");
+    let out_empty = seq_path("empty-cam", "xlsx");
+    let err_empty = apply_err(
+        &src,
+        &out_empty,
+        json!([{ "op": "setModel3dCamera", "id": id }]),
+    );
+    assert_eq!(err_empty.code(), ErrorCode::InvalidField);
+    assert!(!out_empty.exists());
+
+    let out_fov = seq_path("neg-fov", "xlsx");
+    let err_fov = apply_err(
+        &src,
+        &out_fov,
+        json!([{ "op": "setModel3dCamera", "id": id, "camera": { "fov": -1 } }]),
+    );
+    assert_eq!(err_fov.code(), ErrorCode::InvalidField);
+    assert!(!out_fov.exists());
 }

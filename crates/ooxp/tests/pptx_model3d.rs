@@ -368,3 +368,114 @@ fn reject_picture_op_and_wrap() {
     assert_eq!(err_w.code(), ErrorCode::InvalidField);
     assert!(!out_w.exists());
 }
+
+fn camera_ops(id: &str) -> Value {
+    json!([{
+        "op": "setModel3dCamera",
+        "id": id,
+        "camera": { "pos": { "x": 50400000 }, "fov": 1892375 },
+        "rot": { "ax": 1060962, "ay": -532862, "az": -169045 },
+        "lightRig": { "rig": "freezing", "dir": "t", "rev": 18000000 }
+    }])
+}
+
+fn assert_default_view(item: &Value) {
+    assert_eq!(item["camera"]["pos"]["z"], 66519324);
+    assert_eq!(item["camera"]["fov"], 2700000);
+    assert!(item["rot"]["ax"].is_null());
+    assert!(item["rot"]["ay"].is_null());
+    assert!(item["rot"]["az"].is_null());
+    assert!(item["lightRig"].is_null());
+}
+
+fn assert_patched_view(item: &Value) {
+    assert_eq!(item["camera"]["pos"]["x"], 50400000);
+    assert_eq!(item["camera"]["pos"]["z"], 66519324);
+    assert_eq!(item["camera"]["fov"], 1892375);
+    assert_eq!(item["rot"]["ax"], 1060962);
+    assert_eq!(item["rot"]["ay"], -532862);
+    assert_eq!(item["rot"]["az"], -169045);
+    assert_eq!(item["lightRig"]["rig"], "freezing");
+    assert_eq!(item["lightRig"]["dir"], "t");
+    assert_eq!(item["lightRig"]["lat"], 0);
+    assert_eq!(item["lightRig"]["rev"], 18000000);
+}
+
+#[test]
+fn set_camera_rot_and_light() {
+    let (src, id) = insert_one("cam");
+    let tree0 = inspect(&src, json!({ "model3ds": true }));
+    assert_default_view(first_model(&tree0));
+
+    let patched = seq_path("cam-set", "pptx");
+    apply(&src, &patched, camera_ops(&id));
+    let tree = inspect(&patched, json!({ "model3ds": true }));
+    assert_patched_view(first_model(&tree));
+    assert!(part_text(&patched, "ppt/slides/slide1.xml").contains("rev=\"18000000\""));
+
+    let cleared = seq_path("cam-clear", "pptx");
+    apply(
+        &patched,
+        &cleared,
+        json!([{ "op": "setModel3dCamera", "id": id, "lightRig": null }]),
+    );
+    let tree_c = inspect(&cleared, json!({ "model3ds": true }));
+    let item_c = first_model(&tree_c);
+    assert!(item_c["lightRig"].is_null());
+    assert_eq!(item_c["camera"]["fov"], 1892375);
+}
+
+#[test]
+fn notes_set_camera() {
+    let src = create_deck("notes-cam", json!([{ "shapes": [{ "text": "标题" }] }]));
+    let glb = write_glb("notes-cam", &sample_glb());
+    let inserted = seq_path("notes-cam-ins", "pptx");
+    apply(
+        &src,
+        &inserted,
+        json!([{
+            "op": "insertModel3d",
+            "id": "slide:1/notes",
+            "file": glb.to_string_lossy()
+        }]),
+    );
+    let tree = inspect(&inserted, json!({ "model3ds": true, "notes": true }));
+    let id = tree["slides"][0]["notes"]["model3ds"][0]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let out = seq_path("notes-cam-fov", "pptx");
+    apply(
+        &inserted,
+        &out,
+        json!([{ "op": "setModel3dCamera", "id": id, "camera": { "fov": 1892375 } }]),
+    );
+    let tree_s = inspect(&out, json!({ "model3ds": true, "notes": true }));
+    assert_eq!(
+        tree_s["slides"][0]["notes"]["model3ds"][0]["camera"]["fov"],
+        1892375
+    );
+    assert_eq!(tree_s["model3dCount"], 0);
+}
+
+#[test]
+fn reject_empty_camera_and_neg_fov() {
+    let (src, id) = insert_one("rej-cam");
+    let out_empty = seq_path("empty-cam", "pptx");
+    let err_empty = apply_err(
+        &src,
+        &out_empty,
+        json!([{ "op": "setModel3dCamera", "id": id }]),
+    );
+    assert_eq!(err_empty.code(), ErrorCode::InvalidField);
+    assert!(!out_empty.exists());
+
+    let out_fov = seq_path("neg-fov", "pptx");
+    let err_fov = apply_err(
+        &src,
+        &out_fov,
+        json!([{ "op": "setModel3dCamera", "id": id, "camera": { "fov": -1 } }]),
+    );
+    assert_eq!(err_fov.code(), ErrorCode::InvalidField);
+    assert!(!out_fov.exists());
+}

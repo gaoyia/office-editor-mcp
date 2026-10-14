@@ -48,7 +48,7 @@ Word 写出的连接线可进 inspect，并可用 `insertConnector` / `deleteCon
 无文本框的 `wps:wsp` 形状可进 inspect，并可用 `insertShape` / `deleteShape` / `setShapePos` / `setShapeSize` / `setShapeFill` / `setShapeLine` 增删改。
 正文与页眉页脚里的墨迹画布（非批注）可进 inspect，并可用 `insertInkCanvas` / `replaceInkCanvas` / `deleteInkCanvas` / `setInkCanvasSize` / `setInkCanvasWrap` 增删换与改尺寸绕排，
 也可按墨迹 id `exportMedia`。不要和批注里的 `kind: ink` 混。
-正文与页眉页脚里的 3D 模型可进 inspect，并可用 `insertModel3d` / `replaceModel3d` / `deleteModel3d` / `setModel3dSize` / `setModel3dWrap` 增删换与改尺寸绕排，
+正文与页眉页脚里的 3D 模型可进 inspect，并可用 `insertModel3d` / `replaceModel3d` / `deleteModel3d` / `setModel3dSize` / `setModel3dWrap` / `setModel3dCamera` 增删换、改尺寸绕排与改相机 / 旋转 / 光源，
 也可按 3D id `exportMedia`。不是图，不进 `pictures`。注内、批注内本期不插。
 组合本身不进树。docx 可用 `setThemeColors` / `setThemeFonts` / `setThemeFmt` 改主文档 theme 的配色、字体、方案名与 `fmtScheme` 常用槽，可用 `setThemeExtraSchemes` 整份替换补充色板，可用 `setThemeObjectDefaults` 改默认形状 / 线 / 文本框样式，可用 `setThemeOverride` 读写主文档 `themeOverride` 部件。可用 `setEastAsianSettings` 写 `themeFontLang`。
 三种格式都可用 `setProps` / `setCustomProp` / `deleteCustomProp` 改文件属性。
@@ -243,8 +243,15 @@ Word 16.0 把嵌入的 xlsx 等 Office 文件写成 `package`；ECMA 与部分�
 只认 `mc:AlternateContent` 且 `Choice Requires` 含 `am3d`，Choice 里是 `w:drawing` / `wp:inline` 包 `am3d:model3d`，不是 `pic:pic`。
 只走 `Choice Requires="am3d"`。Fallback 海报不进 `pictures`。正文 3D 只收主文档段落的子孙，遇 `w:txbxContent` 停住。
 组合里符合条件的要展开，组合本身不进树。注内、批注内本期不编；对这些容器发 `insertModel3d` 报 `InvalidField`。
-`insertModel3d` 的 `id` 必须是正文或页眉页脚段落 id。`replaceModel3d` / `deleteModel3d` / `setModel3dSize` / `setModel3dWrap` 的 `id` 必须是 3D 模型 id。
+`insertModel3d` 的 `id` 必须是正文或页眉页脚段落 id。`replaceModel3d` / `deleteModel3d` / `setModel3dSize` / `setModel3dWrap` / `setModel3dCamera` 的 `id` 必须是 3D 模型 id。
 只认 GLB。不是 GLB 报 `InvalidImageFile`（对外 `InvalidField`）。`contentType` 恒为 `model/gltf.binary`。
+`camera` 始终是对象，字段顺序：`pos`、`up`、`lookAt`、`fov`。
+`pos` / `lookAt` 字段顺序 `x`、`y`、`z`，取 `am3d:camera` 下对应元素属性，能解析成整数则写整数，否则 `null`。
+`up` 字段顺序 `dx`、`dy`、`dz`，规则相同。
+`fov` 取 `am3d:perspective/@fov` 非负整数，缺或解析失败为 `null`。
+`rot` 始终是对象，字段顺序：`ax`、`ay`、`az`。取 `am3d:rot` 对应属性；缺属性或没有该元素则为 `null`。
+`lightRig` 取 `am3d:spPr/a:scene3d/a:lightRig`。没有则为 `null`。有则字段顺序：`rig`、`dir`、`lat`、`lon`、`rev`。
+`rig` / `dir` 取属性原文，缺则为 `null`。`lat` / `lon` / `rev` 取子元 `a:rot` 对应属性整数，缺则为 `null`。
 `insertModel3d` 写入只做 `inline`。已有 3D 可用 `setModel3dWrap` 改成浮动。xlsx / pptx 见各自分册。
 
 水印只认页眉部件（`w:hdr`）里的 DrawingML `w:drawing`。
@@ -1272,8 +1279,9 @@ xlsx / pptx 的 `scope.tables` 不是同一件事：xlsx 仍拒绝；pptx 展开
   `hyperlink` 为 `null` 或对象，见上文 DrawingML 链。
 - `scope.model3ds` 为 `true` 时，每个页眉、页脚节点带 `model3ds`；若同时给了 `from` 与 `maxParas`，切片里每段也带 `model3ds`。否则这些节点上都没有该字段。
   只给 `model3ds`、不给 `from` / `maxParas`：只展开页眉页脚容器上的 3D 模型。
-  每条字段顺序：`id`、`name`、`kind`、`cx`、`cy`、`wrap`、`contentType`、`stable`、`hyperlink`。
+  每条字段顺序：`id`、`name`、`kind`、`cx`、`cy`、`wrap`、`contentType`、`stable`、`camera`、`rot`、`lightRig`、`hyperlink`。
   `kind` / `cx` / `cy` / `wrap` / `name` / `stable` 规则与图相同。`contentType` 恒为 `model/gltf.binary`。不把 GLB 放进树。
+  `camera` / `rot` / `lightRig` 规则与上文 3D 模型 id 那节相同。不把 `am3d:ambientLight` / `ptLight` 放进树。
   组合里符合条件的 graphicFrame / `wp:inline` 要展开。注内、批注内、框内不列出。
   `hyperlink` 为 `null` 或对象，见上文 DrawingML 链。
 - `scope.notes` 为 `true` 时，根上带 `footnotes`、`endnotes`、`noteSeparators`。没有用户注时前两个为空数组；没有分隔符时 `noteSeparators` 为空数组。
@@ -4602,7 +4610,7 @@ SmartArt 四件套 `/word/diagrams/…` 及可选 drawing 缓存，`setNoteNumbe
 以及新媒体或被删的 `/word/media/…`。
 OLE op 还可以脏 `/word/embeddings/…` 与预览图媒体。`insertInkCanvas` / `replaceInkCanvas` / `deleteInkCanvas` 还可以脏 `/word/ink/…`、宿主 `.rels` 与 `[Content_Types].xml`。
 `setInkCanvasSize` / `setInkCanvasWrap` 只脏宿主 XML。
-`setModel3dSize` / `setModel3dWrap` 只脏宿主 XML。
+`setModel3dSize` / `setModel3dWrap` / `setModel3dCamera` 只脏宿主 XML。
 图表 op、SmartArt op 与文本框 op 点名注内或批注内段落时，还可以脏对应 notes / comments 部件及其 `.rels`。
 `setHeaderFooterDistance`、`setPageMargin`、`setPageSize`、`setColumns`、`setVerticalAlign`、`setLineNumbering`、`setDocGrid`、
 `setRtlGutter`、`setPageBorders`、`setFormProt`、`setTitlePage`、`insertSection`、`insertToc`、`deleteToc`、`insertCaption`、`deleteCaption`、
@@ -4809,6 +4817,46 @@ xlsx / pptx 上发此 op 报 `InvalidField`。xlsx 改锚点请用 `setModel3dAn
 
 改 3D 尺寸与绕排的示例见 `docs/examples/docx-apply-model3d-geom.json`。
 
+### setModel3dCamera
+
+改该 3D 模型的相机、模型旋转与界面「光源」。不算 3D 渲染。不换 GLB。不改画布尺寸。
+
+```json
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "C:\\data\\note.docx",
+  "ops": [
+    {
+      "op": "setModel3dCamera",
+      "id": "para:3F2A1B00/model3d:1",
+      "camera": { "pos": { "x": 50400000 }, "fov": 1892375 },
+      "rot": { "ax": 1060962, "ay": -532862, "az": -169045 },
+      "lightRig": { "rig": "freezing", "dir": "t", "rev": 18000000 }
+    }
+  ]
+}
+```
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"setModel3dCamera"` |
+| `id` | 必须是 3D 模型 id |
+| `camera` | 可选。对象 |
+| `rot` | 可选。对象 |
+| `lightRig` | 可选。对象或 `null` |
+
+`camera` / `rot` / `lightRig` 至少给一个。未点名留下。
+`camera` 可给 `pos` / `up` / `lookAt` / `fov`。子对象只写点名的轴。`fov` 为非负整数。
+`rot` 可给 `ax` / `ay` / `az`，值为整数。没有 `am3d:rot` 时先补空元素。
+`lightRig` 为 `null` 时去掉 `a:scene3d`。对象可给 `rig` / `dir` / `lat` / `lon` / `rev`。
+写任一项时若还没有 `a:scene3d`，补 `a:camera prst="orthographicFront"` 再写 `a:lightRig`。
+新建 lightRig 时：未给的 `rig` 为 `freezing`，未给的 `dir` 为 `t`，未给的 `a:rot` 轴为 `0`。
+create / insert 不增加这些 JSON 字段。缺省 XML 仍抄 C7。inspect 得到缺省 `camera`（`pos.z` 为 `66519324`，`fov` 为 `2700000`）、`rot` 三轴 `null`、`lightRig` `null`。
+id 不是 3D 模型 id 报 `InvalidId`。找不到报 `IdNotFound`。一个可写字段都不给、或 `fov` 为负，报 `InvalidField`。
+xlsx / pptx 同一套字段，见各自分册。
+示例见 `docs/examples/docx-apply-model3d-camera.json`。
+
 ### insertModel3d
 
 把本地 GLB 作为 3D 模型写入目标段落。不进 `pictures`。不栅格化模型。海报用 1×1 PNG 占位。本期只写 `wp:inline`。
@@ -4846,7 +4894,7 @@ xlsx / pptx 上发此 op 报 `InvalidField`。xlsx 改锚点请用 `setModel3dAn
 写入 `mc:AlternateContent`（`Requires="am3d"`），Choice 里是 `w:drawing` / `wp:inline` 包 `am3d:model3d`，Fallback 为海报 `pic`。
 GLB 部件路径 `/word/media/model3dN.glb`，Content Type `model/gltf.binary`，关系 Type 为
 `http://schemas.microsoft.com/office/2017/06/relationships/model3d`。
-相机、灯光、`am3d:trans` 抄 Office 16.0 默认值，不进 inspect。
+相机、`am3d:trans` 与 `am3d` 点光源抄 Office 16.0 默认值。inspect 给出 `camera` / `rot`；缺省 `lightRig` 为 `null`。不把 `ambientLight` / `ptLight` 放进树。
 
 ### replaceModel3d
 

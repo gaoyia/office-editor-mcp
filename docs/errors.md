@@ -656,7 +656,7 @@
   - 超链接：`insertHyperlink`、`setHyperlink`、`deleteHyperlink`
   - 迷你图：`insertSparkline`、`setSparkline`、`deleteSparkline`
   - OLE：`insertOle`、`deleteOle`
-  - 3D 模型：`insertModel3d`、`replaceModel3d`、`deleteModel3d`、`setModel3dSize`、`setModel3dAnchor`
+  - 3D 模型：`insertModel3d`、`replaceModel3d`、`deleteModel3d`、`setModel3dSize`、`setModel3dAnchor`、`setModel3dCamera`
   - 公式：`insertMath`、`setMath`、`deleteMath`、`setMathSize`、`setMathAnchor`
   - 切片器：`insertSlicer`、`deleteSlicer`、`setSlicerSize`、`setSlicerAnchor`、`setSlicerView`、`setSlicerFilter`
   - 连接：`insertConnection`、`deleteConnection`
@@ -772,10 +772,10 @@
 - `setInkCanvasSize` 的 `cx` / `cy` 一个都不给报 `InvalidField`
 - `setInkCanvasWrap` 的 `kind` / `wrap` 规则与 `setPictureWrap` 相同
 - xlsx / pptx 上发 `insertInkCanvas` / `replaceInkCanvas` / `deleteInkCanvas` / `setInkCanvasSize` / `setInkCanvasWrap` 报 `InvalidField`
-- 找不到 3D 模型时，`replaceModel3d` / `deleteModel3d` / `setModel3dSize` / `setModel3dWrap` / `setModel3dAnchor` / `setModel3dPos` 报 `IdNotFound`
+- 找不到 3D 模型时，`replaceModel3d` / `deleteModel3d` / `setModel3dSize` / `setModel3dWrap` / `setModel3dAnchor` / `setModel3dPos` / `setModel3dCamera` 报 `IdNotFound`
 - `insertModel3d` 的 `id`：docx 必须是正文或页眉页脚段落 id，xlsx 必须是 `sheet:{name}`，pptx 必须是 `slide:{n}`、`slide:{n}/notes`、`master:{n}` 或 `master:{n}/layout:{k}`
 - 对图 id、OLE id 发 3D op，或对 3D id 发图 op，报 `InvalidId`
-- `replaceModel3d` / `deleteModel3d` / `setModel3dSize` / `setModel3dWrap` / `setModel3dAnchor` / `setModel3dPos` 的 `id` 必须是 3D 模型 id
+- `replaceModel3d` / `deleteModel3d` / `setModel3dSize` / `setModel3dWrap` / `setModel3dAnchor` / `setModel3dPos` / `setModel3dCamera` 的 `id` 必须是 3D 模型 id
 - `file` 不是 GLB（文件头不是小端 `glTF` version=2）报 `InvalidField`（`InvalidImageFile`）
 - `insertModel3d` 的 `file` 不是 GLB 也走这个 kind，文案仍写「PNG、JPEG…TIFF」，不必另改图错误句
 - `setModel3dSize` 的 `cx` / `cy` 一个都不给报 `InvalidField`（xlsx `twoCell` 见下）
@@ -786,7 +786,8 @@
 - xlsx / pptx 上发 `setModel3dWrap` 报 `InvalidField`
 - docx / pptx 上发 `setModel3dAnchor` 报 `InvalidField`
 - docx / xlsx 上发 `setModel3dPos` 报 `InvalidField`
-- xlsx 对 `chartsheet` 发 `insertModel3d` / `setModel3dSize` / `setModel3dAnchor` 报 `InvalidField`
+- `setModel3dCamera` 的 `camera` / `rot` / `lightRig` 一个都不给、或 `fov` 为负，报 `InvalidField`
+- xlsx 对 `chartsheet` 发 `insertModel3d` / `setModel3dSize` / `setModel3dAnchor` / `setModel3dCamera` 报 `InvalidField`
 - 找不到水印时，`deleteWatermark` 报 `IdNotFound`
 - `insertWatermark` 的 id 不是 `docx:document` 报 `InvalidId`
 - `deleteWatermark` 的 id 不是水印 id 也不是 `docx:document` 报 `InvalidId`

@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "note.docx",
+  "ops": [
+    {
+      "op": "setModel3dCamera",
+      "id": "para:3F2A1B00/model3d:1",
+      "camera": { "pos": { "x": 50400000 }, "fov": 1892375 },
+      "rot": { "ax": 1060962, "ay": -532862, "az": -169045 },
+      "lightRig": { "rig": "freezing", "dir": "t", "rev": 18000000 }
+    }
+  ]
+}

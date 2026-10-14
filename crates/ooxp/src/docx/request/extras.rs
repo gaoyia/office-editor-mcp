@@ -610,6 +610,17 @@ pub(super) fn parse_set_model3d_wrap(
     })
 }
 
+pub(super) fn parse_set_model3d_camera(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<super::super::model3d::SetModel3dCameraOp, Error> {
+    deny_keys(obj, i, &["op", "id", "camera", "rot", "lightRig"])?;
+    let id = require_id(obj, i)?;
+    let target = super::super::model3d::parse_id(&id, i)?;
+    let patch = crate::model3d::parse_camera_patch(obj, i)?;
+    Ok(super::super::model3d::SetModel3dCameraOp { id, target, patch })
+}
+
 pub(super) fn parse_set_chart_title(
     obj: &serde_json::Map<String, Value>,
     i: usize,

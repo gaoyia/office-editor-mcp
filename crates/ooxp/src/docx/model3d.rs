@@ -54,6 +54,13 @@ pub struct SetModel3dWrapOp {
     pub pos: WrapPos,
 }
 
+#[derive(Debug, Clone)]
+pub struct SetModel3dCameraOp {
+    pub id: String,
+    pub target: TxbxTarget,
+    pub patch: crate::model3d::Model3dCameraPatch,
+}
+
 pub struct Model3dInfo {
     pub id: String,
     pub name: Option<String>,
@@ -62,6 +69,9 @@ pub struct Model3dInfo {
     pub cy: Option<i64>,
     pub wrap: Option<WrapKind>,
     pub stable: bool,
+    pub camera: Value,
+    pub rot: Value,
+    pub light_rig: Value,
     pub hyperlink: Value,
 }
 
@@ -252,6 +262,7 @@ fn info_of(
         Some(v) if !v.is_empty() => format!("{host_para_id}/model3d:{v}"),
         _ => format!("{host_para_id}/model3d:index:{index}"),
     };
+    let (camera, rot, light_rig) = crate::model3d::inspect_view(frame);
     Model3dInfo {
         id,
         name,
@@ -260,6 +271,9 @@ fn info_of(
         cy,
         wrap,
         stable,
+        camera,
+        rot,
+        light_rig,
         hyperlink: drawing_hlink::inspect_picture(frame, rels),
     }
 }
@@ -277,6 +291,9 @@ pub fn list_json(items: &[Model3dInfo]) -> Vec<Value> {
                 "wrap": c.wrap.map(WrapKind::as_str),
                 "contentType": crate::model3d::CT_GLB,
                 "stable": c.stable,
+                "camera": c.camera,
+                "rot": c.rot,
+                "lightRig": c.light_rig,
                 "hyperlink": c.hyperlink,
             })
         })
@@ -565,6 +582,44 @@ pub fn apply_set_wrap(
             .map_err(|e| e.at(format!("ops[{i}]")))?;
         Ok(true)
     })?;
+    if !ok {
+        return Err(missing(&op.id, i));
+    }
+    dirty.insert(host, ());
+    Ok(())
+}
+
+pub fn apply_set_camera(
+    pkg: &mut Package,
+    docs: &mut HashMap<String, Document>,
+    dirty: &mut HashMap<String, ()>,
+    doc_part: &str,
+    catalog: &[HfPart],
+    op: &SetModel3dCameraOp,
+    i: usize,
+) -> Result<(), Error> {
+    let host = part_for_target(
+        catalog,
+        doc_part,
+        &op.target,
+        &op.id,
+        &format!("ops[{i}].id"),
+    )?;
+    let doc = load_part(pkg, docs, &host)?;
+    let ac = find_ac_mut(&mut doc.root, &op.target.key).ok_or_else(|| missing(&op.id, i))?;
+    let mut ok = false;
+    for child in &mut ac.children {
+        let Node::Element(branch) = child else {
+            continue;
+        };
+        if branch.local_name() != "Choice" {
+            continue;
+        }
+        if let Some(model) = crate::model3d::model3d_in_mut(branch) {
+            crate::model3d::apply_camera_patch(model, &op.patch)?;
+            ok = true;
+        }
+    }
     if !ok {
         return Err(missing(&op.id, i));
     }

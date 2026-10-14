@@ -296,11 +296,12 @@ URI `{05C60535-1F16-4FD2-B633-F4F36F0B64E0}`，大小写不敏感）。
 `http://schemas.microsoft.com/office/drawing/2017/model3d`（可带尾斜杠）。
 只走 `Choice Requires="am3d"`。Fallback 海报 `pic` 与 `am3d:raster` 用的 PNG **不进** `pictures`，也不计入 `pictureCount`。
 组合里符合条件的 `graphicFrame` 要展开，组合本身不进树。页眉、`chartsheet` 本期不进树。
-`insertModel3d` 的 `id` 必须是 `sheet:{name}`。`replaceModel3d` / `deleteModel3d` / `setModel3dSize` / `setModel3dAnchor` 的 `id` 必须是 3D 模型 id。
+`insertModel3d` 的 `id` 必须是 `sheet:{name}`。`replaceModel3d` / `deleteModel3d` / `setModel3dSize` / `setModel3dAnchor` / `setModel3dCamera` 的 `id` 必须是 3D 模型 id。
 对图 id、OLE id 或 `xlsx:workbook` 发这些 op 报 `InvalidId`。对 `chartsheet` 报 `InvalidField`。
 只认 GLB：文件头小端 `glTF`（`0x46546C67`），version=2。不是 GLB 报 `InvalidImageFile`（对外 `InvalidField`）。
-`contentType` 恒为 `model/gltf.binary`。不把 GLB、相机、灯光摊进树。create 可用 `sheets[].model3ds`。
-页眉槽仍不插。工作表上已有 3D 可改尺寸与锚点。docx / pptx 见各自分册。
+`contentType` 恒为 `model/gltf.binary`。不把 GLB 或海报摊进树。
+`camera` / `rot` / `lightRig` 规则与 [docx](json-contract-docx.md#setmodel3dcamera) 相同。不把 `am3d:ambientLight` / `ptLight` 放进树。
+create 可用 `sheets[].model3ds`。页眉槽仍不插。工作表上已有 3D 可改尺寸、锚点与相机 / 旋转 / 光源。docx / pptx 见各自分册。
 
 工作表切片器挂在该 `worksheet` 上。`{cNvPrId}` 取 drawing 里 slicer 或时间线 `graphicFrame` 的 `cNvPr/@id` 原文。
 没有该属性时用 `slicer:index:{k}`，树上 `"stable": false`。`{k}` 只在该表被收入的切片器（含时间线）内从 1 计。
@@ -1055,9 +1056,10 @@ Excel 16.0 另存通常不写该部件；自行写入后 Excel 仍能打开。
   `showAsIcon`：`@dvAspect` 为 `DVASPECT_ICON` 则为 `true`，否则为 `false`。不把嵌入字节或预览图放进树。与 `shapeId` 相同的隐藏 `xdr:sp` 不进 `shapes`。docx / pptx 见各自分册。
 - `scope.model3ds` 为 `true` 时，每张 `worksheet` 带 `model3ds`。没有 3D 模型时为空数组。不依赖单元格切片。
   按该表 worksheet drawing 里被收入的 `am3d` AlternateContent 文档顺序。
-  每条字段顺序：`id`、`cNvPrId`、`name`、`anchor`，然后按锚点种类跟位置字段（规则与工作表图相同），再跟 `contentType`、`stable`。
+  每条字段顺序：`id`、`cNvPrId`、`name`、`anchor`，然后按锚点种类跟位置字段（规则与工作表图相同），再跟 `contentType`、`stable`、`camera`、`rot`、`lightRig`。
   `cNvPrId` 是 Choice 里 `xdr:cNvPr/@id` 原文，没有则为 `null`。`name` 取 `cNvPr/@name`，没有则为 `""`。
-  `contentType` 恒为 `model/gltf.binary`。不把 GLB、相机、灯光或海报放进树。
+  `contentType` 恒为 `model/gltf.binary`。不把 GLB 或海报放进树。
+  `camera` / `rot` / `lightRig` 规则与 [docx](json-contract-docx.md#setmodel3dcamera) 相同。不把 `am3d:ambientLight` / `ptLight` 放进树。
   Fallback 海报不进 `pictures`。docx / pptx 见各自分册。
 - `scope.slicers` 为 `true` 时，每张 `worksheet` 带 `slicers`。没有切片器（含时间线）时为空数组。不依赖单元格切片。
   按该表 drawing 里被收入的 slicer / 时间线 `graphicFrame` 文档顺序。
@@ -2422,7 +2424,7 @@ docx / pptx 上发此 op 报 `InvalidField`。create 可写允许编辑区域。
 `insertOle` / `deleteOle` 还可以脏工作表 `oleObjects`、worksheet drawing、`legacyDrawing` VML、工作表 `.rels`、VML `.rels`、
 `/xl/embeddings/…`、`/xl/media/…` 与 `[Content_Types].xml`。
 `insertModel3d` / `replaceModel3d` / `deleteModel3d` 还可以脏 worksheet drawing、drawing `.rels`、`/xl/media/…` 与 `[Content_Types].xml`。
-`setModel3dSize` / `setModel3dAnchor` 只脏 worksheet drawing。
+`setModel3dSize` / `setModel3dAnchor` / `setModel3dCamera` 只脏 worksheet drawing。
 `setMathSize` / `setMathAnchor` 只脏 worksheet drawing。不改字，不标重算。
 `setSlicerSize` / `setSlicerAnchor` 只脏 worksheet drawing。不改 slicer / timeline 部件，不改 cache，不执行筛选。
 `setSlicerView` 只脏 slicer 或 timeline 视图部件。不改 drawing 锚点，不改 cache，不执行筛选。
@@ -3219,6 +3221,12 @@ GLB 与海报无人引用则删。docx / pptx 见各自分册。
 docx / pptx 上发此 op 报 `InvalidField`。
 
 改 3D 尺寸与锚点的示例见 `docs/examples/xlsx-apply-model3d-geom.json`。
+
+### setModel3dCamera
+
+字段与 [docx `setModel3dCamera`](json-contract-docx.md#setmodel3dcamera) 相同。`id` 必须是 xlsx 3D 模型 id。
+改 Choice 里 `am3d:camera`、`am3d:rot` 与 `am3d:spPr` 里的 `a:scene3d/a:lightRig`。不换 GLB。不改锚点。
+docx / pptx 上同一套字段。示例见 `docs/examples/xlsx-apply-model3d-camera.json`。
 
 ### insertMath
 
