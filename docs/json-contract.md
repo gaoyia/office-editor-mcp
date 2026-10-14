@@ -48,7 +48,7 @@ apply 用 `insertAnim` / `setAnim` / `deleteAnim` / `moveAnim` 按模板增删�
 pptx 的 `scope.masters` 列出幻灯片母版与版式、占位符与装饰形（含该母版 theme 的配色、字体、`fmtScheme` 常用槽与补充色板），根上始终带 `slideSize` 与 `notesSize`，apply 可用 `setSlideLayout` 换页的版式关系，
 也可用 `insertLayout` / `deleteLayout` / `insertPlaceholder` / `deletePlaceholder` / `insertMaster` / `deleteMaster` 插删版式、占位符与母版，
 也可用 `insertShape` / `deleteShape` 插删母版 / 版式上没有 `p:ph` 的装饰形，
-也可用 `setSlideSize` / `setNotesSize` / `setThemeColors` / `setThemeFonts` / `setThemeFmt` / `setThemeExtraSchemes` 改幻灯片画布、备注页画布与 slideMaster / notesMaster / handout 的 theme，
+也可用 `setSlideSize` / `setNotesSize` / `setThemeColors` / `setThemeFonts` / `setThemeFmt` / `setThemeExtraSchemes` / `setThemeObjectDefaults` 改幻灯片画布、备注页画布与 slideMaster / notesMaster / handout 的 theme，
 也可用 `setClrMap` / `setClrMapOvr` / `setThemeOverride` 改母版配色映射、页 / 版式覆盖与页级 themeOverride，
 也可用 `setShapeText` / `setShapeFormat` / `setShapePos` / `setShapeSize` 改占位符与装饰形。
 装饰形还可用 `setShapeGeom`。
@@ -78,7 +78,7 @@ xlsx 的 `scope.externalLinks` 与外部引用 op 认工作簿 `<externalReferen
 xlsx 的 `scope.customViews` 与自定义视图 op 认工作簿 `<customWorkbookViews>`（ECMA-376 §18.2.3 / §18.2.4），不按视图恢复隐藏行 / 列。
 xlsx 的 `scope.cellStyles` 与命名单元格样式 op 认 `/xl/styles.xml` 的 `<cellStyles>`（ECMA-376 §18.8.7），不改主题，不把 `cellStyleXfs` 摊进名单。
 xlsx 可用 `setProtection` 开关工作表 `sheetProtection` 与工作簿 `workbookProtection`，给了 `password` 则写 SHA-512。
-xlsx 也可用 `setThemeColors` / `setThemeFonts` / `setThemeFmt` / `setThemeExtraSchemes` / `setThemeOverride` 改工作簿 theme，
+xlsx 也可用 `setThemeColors` / `setThemeFonts` / `setThemeFmt` / `setThemeExtraSchemes` / `setThemeObjectDefaults` / `setThemeOverride` 改工作簿 theme，
 id 必须是 `xlsx:workbook`。不把格子上的 theme 指数算成 RGB。
 xlsx 也可用 `insertProtectedRange` / `setProtectedRange` / `deleteProtectedRange` 写工作表允许编辑区域。
 路径 `.xlsm` 按同一套 SpreadsheetML 打开，inspect 树的 `format` 仍为 `xlsx`。xlsx 的 `exportChartData` 仍拒绝。
@@ -253,7 +253,7 @@ create 与 apply 落盘时先写入目标同目录的临时文件，再改名为
 不含 `setSmartArtPos`、`setSmartArtWrap`）、以及超链接 op（`insertHyperlink`、`setHyperlink`、`deleteHyperlink`）、
 以及迷你图 op（`insertSparkline`、`setSparkline`、`deleteSparkline`）、以及 OLE op（`insertOle`、`deleteOle`）、以及 3D 模型 op（`insertModel3d`、`replaceModel3d`、`deleteModel3d`、`setModel3dSize`、`setModel3dAnchor`；不含 `setModel3dWrap`、`setModel3dPos`）、以及公式 op（`insertMath`、`setMath`、`deleteMath`、`setMathSize`、`setMathAnchor`；不含 `setMathPos`）、以及切片器 op（`insertSlicer`、
 `deleteSlicer`、`setSlicerSize`、`setSlicerAnchor`、`setSlicerView`、`setSlicerFilter`）、以及连接 op（`insertConnection`、`deleteConnection`）、以及外部引用 op（`insertExternalLink`、`setExternalLink`、`deleteExternalLink`）、以及 `setProtection`、以及允许编辑区域 op（`insertProtectedRange`、`setProtectedRange`、`deleteProtectedRange`）、以及命名单元格样式 op（`insertCellStyle`、`deleteCellStyle`、`setCellNamedStyle`）、
-以及主题 op（`setThemeColors`、`setThemeFonts`、`setThemeFmt`、`setThemeExtraSchemes`、`setThemeOverride`）。
+以及主题 op（`setThemeColors`、`setThemeFonts`、`setThemeFmt`、`setThemeExtraSchemes`、`setThemeObjectDefaults`、`setThemeOverride`）。
 docx 认 `setParaText`、`setHeaderFooterDistance`、`setPageMargin`、`setPageSize`、`setColumns`、`setVerticalAlign`、
 `setLineNumbering`、`setDocGrid`、`setRtlGutter`、`setMirrorMargins`、`setGutterAtTop`、`setHeaderFooterLink`、
 `insertHeaderFooter`、`setTitlePage`、`setEvenAndOddHeaders`、图片 op（含 `setPictureWrap`，
@@ -279,7 +279,7 @@ docx 认 `setParaText`、`setHeaderFooterDistance`、`setPageMargin`、`setPageS
 不含 `setChartAnchor`、`insertChartSheet`、`deleteChartSheet`）、以及 SmartArt op（`insertSmartArt`、`deleteSmartArt`、
 `setSmartArtText`、`addSmartArtPoint`、`deleteSmartArtPoint`、`setSmartArtSize`、`setSmartArtWrap`、`setSmartArtColors`、
 `setSmartArtStyle`、`setSmartArtLayout`）、以及 OLE op（`insertOle`、`deleteOle`）、以及墨迹画布 op（`insertInkCanvas`、`replaceInkCanvas`、`deleteInkCanvas`、`setInkCanvasSize`、`setInkCanvasWrap`）、以及 3D 模型 op（`insertModel3d`、`replaceModel3d`、`deleteModel3d`、`setModel3dSize`、`setModel3dWrap`；不含 `setModel3dAnchor`、`setModel3dPos`）、以及 `setProtection`、
-以及 `insertWatermark` / `deleteWatermark`、以及 `setThemeColors` / `setThemeFonts` / `setThemeFmt` / `setThemeExtraSchemes` / `setThemeOverride`、
+以及 `insertWatermark` / `deleteWatermark`、以及 `setThemeColors` / `setThemeFonts` / `setThemeFmt` / `setThemeExtraSchemes` / `setThemeObjectDefaults` / `setThemeOverride`、
 以及 `setProps` / `setCustomProp` / `deleteCustomProp`。
 pptx 认 `setShapeText`、`setShapeFormat`、形状管理 op（`insertShape`、`insertConnector`、`deleteConnector`、`setConnector`、`groupShapes`、`ungroup`、`deleteShape`、
 `setShapePos`、`setShapeSize`、`setShapeFill`、`setShapeLine`、`setShapeGeom`）、表格 op（`insertTable`、`deleteTable`、`insertRow`、`deleteRow`、
@@ -294,7 +294,7 @@ pptx 认 `setShapeText`、`setShapeFormat`、形状管理 op（`insertShape`、`
 `setSmartArtColors`、`setSmartArtStyle`、`setSmartArtLayout`；
 不含 `setSmartArtWrap`）、以及幻灯片管理 op（`insertSlide`、`deleteSlide`、`moveSlide`、`setSlideHidden`、`setTransition`、
 `setSlideLayout`）、以及母版写入 op（`insertLayout`、`deleteLayout`、`insertPlaceholder`、`deletePlaceholder`、`insertMaster`、
-`deleteMaster`）、以及主题与尺寸 op（`setSlideSize`、`setNotesSize`、`setThemeColors`、`setThemeFonts`、`setThemeFmt`、`setThemeExtraSchemes`、`setClrMap`、`setClrMapOvr`、`setThemeOverride`）、以及动画 op（`insertAnim`、`setAnim`、`deleteAnim`、`moveAnim`）、
+`deleteMaster`）、以及主题与尺寸 op（`setSlideSize`、`setNotesSize`、`setThemeColors`、`setThemeFonts`、`setThemeFmt`、`setThemeExtraSchemes`、`setThemeObjectDefaults`、`setClrMap`、`setClrMapOvr`、`setThemeOverride`）、以及动画 op（`insertAnim`、`setAnim`、`deleteAnim`、`moveAnim`）、
 以及 `setHandoutText`、以及超链接 op（`insertHyperlink`、`setHyperlink`、`deleteHyperlink`）、以及域 op（`insertField`、`setField`、
 `deleteField`）、以及媒体 op（`insertVideo`、`insertAudio`、`deleteMedia`、`setMedia`）、以及幻灯片节 op（`insertSlideSection`、`setSlideSectionName`、
 `deleteSlideSection`、`setSlideSection`）、以及自定义放映 op（`insertCustomShow`、`setCustomShow`、`deleteCustomShow`）、

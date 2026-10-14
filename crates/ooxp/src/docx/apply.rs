@@ -606,6 +606,9 @@ pub fn apply(bytes: &[u8], ops: &[DocxOp]) -> Result<Vec<u8>, Error> {
             DocxOp::SetThemeExtraSchemes(op) => {
                 super::theme::set_extra_schemes(&mut pkg, &doc_part, op, i)?;
             }
+            DocxOp::SetThemeObjectDefaults(op) => {
+                super::theme::set_object_defaults(&mut pkg, &doc_part, op, i)?;
+            }
             DocxOp::SetThemeOverride(op) => {
                 super::theme::set_override(&mut pkg, &doc_part, op, i)?;
             }

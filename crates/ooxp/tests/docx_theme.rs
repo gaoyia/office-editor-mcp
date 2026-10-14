@@ -165,7 +165,14 @@ fn inspect_theme_slots_and_order() {
     let theme = &tree["theme"];
     assert_eq!(
         object_keys(theme),
-        ["name", "colors", "fonts", "fmt", "extraSchemes"]
+        [
+            "name",
+            "colors",
+            "fonts",
+            "fmt",
+            "extraSchemes",
+            "objectDefaults"
+        ]
     );
     assert_eq!(theme["name"], "Office Theme");
     assert_eq!(object_keys(&theme["colors"]), COLOR_KEYS);
@@ -185,6 +192,7 @@ fn inspect_theme_slots_and_order() {
     assert_eq!(theme["fonts"]["minorLatin"], "Calibri");
     assert_eq!(theme["fonts"]["majorEa"], "");
     assert_eq!(theme["extraSchemes"], json!([]));
+    assert!(theme["objectDefaults"].is_null());
     assert_eq!(theme["fonts"]["majorScripts"], json!([]));
     assert_eq!(theme["fonts"]["minorScripts"], json!([]));
 }
@@ -365,6 +373,7 @@ fn create_writes_theme_and_keeps_default_without() {
     assert_eq!(tree["theme"]["fonts"]["majorLatin"], "Arial");
     assert_eq!(tree["theme"]["fmt"]["name"], "Office");
     assert_eq!(tree["theme"]["fmt"]["fills"].as_array().unwrap().len(), 3);
+    assert!(tree["theme"]["objectDefaults"].is_null());
     let bare = create_docx("still-null");
     assert!(inspect(&bare)["theme"].is_null());
 }
@@ -574,6 +583,130 @@ fn extra_schemes_need_theme_and_field() {
             "op": "setThemeExtraSchemes",
             "id": "docx:document",
             "extraSchemes": [{ "name": "A", "colors": { "name": "B" } }]
+        }]),
+    )
+    .unwrap_err();
+    assert_eq!(err_code(err), ErrorCode::InvalidField);
+}
+
+#[test]
+fn set_theme_object_defaults_round_trip() {
+    let src = inject_theme(&create_docx("od-src"));
+    let out = tmp("od");
+    apply(
+        &src,
+        &out,
+        json!([{
+            "op": "setThemeObjectDefaults",
+            "id": "docx:document",
+            "objectDefaults": {
+                "sp": {
+                    "style": { "lnRef": 1, "fontRef": "minor" },
+                    "lnW": 38100
+                }
+            }
+        }]),
+    )
+    .unwrap();
+    let tree = inspect(&out);
+    let od = &tree["theme"]["objectDefaults"];
+    assert_eq!(object_keys(od), ["sp", "ln", "tx"]);
+    assert_eq!(object_keys(&od["sp"]), ["style", "lnW"]);
+    assert_eq!(od["sp"]["lnW"], 38100);
+    assert_eq!(od["sp"]["style"]["lnRef"], 1);
+    assert_eq!(od["sp"]["style"]["fillRef"], 0);
+    assert_eq!(od["sp"]["style"]["effectRef"], 0);
+    assert_eq!(od["sp"]["style"]["fontRef"], "minor");
+    assert!(od["ln"].is_null());
+    assert!(od["tx"].is_null());
+    let xml = part(&out, "word/theme/theme1.xml");
+    assert!(xml.contains("<a:objectDefaults>"));
+    assert!(xml.contains(r#"<a:lnRef idx="1">"#));
+    assert!(xml.contains(r#"<a:fontRef idx="minor">"#));
+    assert!(xml.contains(r#"<a:schemeClr val="phClr"/>"#));
+    assert!(xml.contains(r#"w="38100""#));
+    assert!(!xml.contains("<a:lnDef"));
+    let cleared = tmp("od-clear");
+    apply(
+        &out,
+        &cleared,
+        json!([{
+            "op": "setThemeObjectDefaults",
+            "id": "docx:document",
+            "objectDefaults": null
+        }]),
+    )
+    .unwrap();
+    let tree = inspect(&cleared);
+    assert!(tree["theme"]["objectDefaults"].is_null());
+    let xml = part(&cleared, "word/theme/theme1.xml");
+    assert!(!xml.contains("objectDefaults"));
+}
+
+#[test]
+fn set_theme_object_defaults_rejects() {
+    let src = create_docx("od-missing");
+    let out = tmp("od-missing-out");
+    let err = apply(
+        &src,
+        &out,
+        json!([{
+            "op": "setThemeObjectDefaults",
+            "id": "docx:document",
+            "objectDefaults": { "sp": { "lnW": 1 } }
+        }]),
+    )
+    .unwrap_err();
+    assert_eq!(err_code(err), ErrorCode::IdNotFound);
+    assert!(!out.exists());
+    let themed = inject_theme(&create_docx("od-bad"));
+    let err = apply(
+        &themed,
+        &out,
+        json!([{
+            "op": "setThemeObjectDefaults",
+            "id": "para:index:1",
+            "objectDefaults": { "sp": { "lnW": 1 } }
+        }]),
+    )
+    .unwrap_err();
+    assert_eq!(err_code(err), ErrorCode::InvalidId);
+    let err = apply(
+        &themed,
+        &out,
+        json!([{ "op": "setThemeObjectDefaults", "id": "docx:document" }]),
+    )
+    .unwrap_err();
+    assert_eq!(err_code(err), ErrorCode::InvalidField);
+    let err = apply(
+        &themed,
+        &out,
+        json!([{
+            "op": "setThemeObjectDefaults",
+            "id": "docx:document",
+            "objectDefaults": {}
+        }]),
+    )
+    .unwrap_err();
+    assert_eq!(err_code(err), ErrorCode::InvalidField);
+    let err = apply(
+        &themed,
+        &out,
+        json!([{
+            "op": "setThemeObjectDefaults",
+            "id": "docx:document",
+            "objectDefaults": { "sp": { "style": { "fontRef": "latin" } } }
+        }]),
+    )
+    .unwrap_err();
+    assert_eq!(err_code(err), ErrorCode::InvalidField);
+    let err = apply(
+        &themed,
+        &out,
+        json!([{
+            "op": "setThemeObjectDefaults",
+            "id": "docx:document",
+            "objectDefaults": { "sp": { "lnW": -1 } }
         }]),
     )
     .unwrap_err();

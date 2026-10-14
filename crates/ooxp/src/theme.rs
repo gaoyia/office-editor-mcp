@@ -4,7 +4,7 @@
 
 use serde_json::{json, Map, Value};
 
-use crate::error::{Error, ErrorKind};
+use crate::error::{Error, ErrorKind, TypeName};
 use crate::xml::{self, Element, Node};
 
 pub const DML_NS: &str = "http://schemas.openxmlformats.org/drawingml/2006/main";
@@ -59,6 +59,35 @@ pub struct ExtraScheme {
     pub slots: Vec<(String, String)>,
 }
 
+/// `setThemeObjectDefaults` 的 `style` 补丁：未点名的 idx 留下。
+#[derive(Debug, Clone, Default)]
+pub struct StylePatch {
+    pub ln_ref: Option<u32>,
+    pub fill_ref: Option<u32>,
+    pub effect_ref: Option<u32>,
+    pub font_ref: Option<String>,
+}
+
+/// `sp` / `ln` / `tx` 子对象。`style` / `ln_w` 为 `Some(None)` 表示写成 `null`。
+#[derive(Debug, Clone, Default)]
+pub struct DefPatch {
+    pub style: Option<Option<StylePatch>>,
+    pub ln_w: Option<Option<u32>>,
+}
+
+/// `objectDefaults` 对象。外层 `Option` 在 op 上：`None` 去掉整个元素。
+#[derive(Debug, Clone, Default)]
+pub struct ObjectDefaultsPatch {
+    pub sp: Option<Option<DefPatch>>,
+    pub ln: Option<Option<DefPatch>>,
+    pub tx: Option<Option<DefPatch>>,
+}
+
+const OBJECT_DEF_ORDER: &[&str] = &["spDef", "lnDef", "txDef", "extLst"];
+const DEF_CHILD_ORDER: &[&str] = &["spPr", "bodyPr", "lstStyle", "style", "extLst"];
+const STYLE_REF_ORDER: &[&str] = &["lnRef", "fillRef", "effectRef", "fontRef"];
+const FONT_REF_IDX: &[&str] = &["major", "minor", "none"];
+
 const THEME_ROOT_ORDER: &[&str] = &[
     "themeElements",
     "objectDefaults",
@@ -79,12 +108,13 @@ pub fn inspect(root: &Element) -> Value {
     })
 }
 
-/// 工作簿 / 主文档 / 幻灯片母版 theme：在 `inspect` 之上补 `fmt`、`extraSchemes` 与脚本字体。
+/// 工作簿 / 主文档 / 幻灯片母版 theme：在 `inspect` 之上补 `fmt`、`extraSchemes`、`objectDefaults` 与脚本字体。
 pub fn inspect_full(root: &Element) -> Value {
     let mut v = inspect(root);
     if let Value::Object(m) = &mut v {
         m.insert("fmt".into(), fmt_from_theme(root));
         m.insert("extraSchemes".into(), extra_schemes_json(root));
+        m.insert("objectDefaults".into(), inspect_object_defaults(root));
         if let Some(Value::Object(fonts)) = m.get_mut("fonts") {
             let scheme = root
                 .child_by_local("themeElements")
@@ -293,6 +323,185 @@ pub fn replace_extra_schemes(root: &mut Element, schemes: &[ExtraScheme]) {
     root.children.insert(dest, Node::Element(lst));
 }
 
+/// `patch` 为 `None` 时去掉整个 `a:objectDefaults`。
+pub fn patch_object_defaults(root: &mut Element, patch: Option<&ObjectDefaultsPatch>) {
+    ensure_xmlns(root, "a", DML_NS);
+    let Some(patch) = patch else {
+        remove_named(root, "objectDefaults");
+        return;
+    };
+    if root.child_by_local("objectDefaults").is_none() {
+        let dest = insert_index_by_order(root, "objectDefaults", THEME_ROOT_ORDER);
+        root.children
+            .insert(dest, Node::Element(Element::new("a:objectDefaults")));
+    }
+    let Some(od) = root.child_by_local_mut("objectDefaults") else {
+        return;
+    };
+    apply_named_def(od, "spDef", &patch.sp);
+    apply_named_def(od, "lnDef", &patch.ln);
+    apply_named_def(od, "txDef", &patch.tx);
+}
+
+fn apply_named_def(od: &mut Element, local: &str, spec: &Option<Option<DefPatch>>) {
+    match spec {
+        None => {}
+        Some(None) => remove_named(od, local),
+        Some(Some(patch)) => {
+            ensure_def(od, local);
+            if let Some(def) = od.child_by_local_mut(local) {
+                apply_def(def, patch);
+            }
+        }
+    }
+}
+
+fn ensure_def(od: &mut Element, local: &str) {
+    if od.child_by_local(local).is_some() {
+        return;
+    }
+    let mut def = Element::new(format!("a:{local}"));
+    def.push_element(Element::new("a:spPr"));
+    def.push_element(Element::new("a:bodyPr"));
+    def.push_element(Element::new("a:lstStyle"));
+    let dest = insert_index_by_order(od, local, OBJECT_DEF_ORDER);
+    od.children.insert(dest, Node::Element(def));
+}
+
+fn apply_def(def: &mut Element, patch: &DefPatch) {
+    match &patch.style {
+        None => {}
+        Some(None) => remove_named(def, "style"),
+        Some(Some(style)) => apply_style(def, style),
+    }
+    match patch.ln_w {
+        None => {}
+        Some(None) => {
+            if let Some(sp_pr) = def.child_by_local_mut("spPr") {
+                if let Some(ln) = sp_pr.child_by_local_mut("ln") {
+                    remove_attr_local(ln, "w");
+                }
+            }
+        }
+        Some(Some(w)) => {
+            if def.child_by_local("spPr").is_none() {
+                let dest = insert_index_by_order(def, "spPr", DEF_CHILD_ORDER);
+                def.children
+                    .insert(dest, Node::Element(Element::new("a:spPr")));
+            }
+            let Some(sp_pr) = def.child_by_local_mut("spPr") else {
+                return;
+            };
+            if sp_pr.child_by_local("ln").is_none() {
+                sp_pr.push_element(Element::new("a:ln"));
+            }
+            if let Some(ln) = sp_pr.child_by_local_mut("ln") {
+                set_attr_local(ln, "w", w.to_string());
+            }
+        }
+    }
+}
+
+fn apply_style(def: &mut Element, patch: &StylePatch) {
+    if !style_has_idx(patch) && def.child_by_local("style").is_none() {
+        return;
+    }
+    if def.child_by_local("style").is_none() {
+        let dest = insert_index_by_order(def, "style", DEF_CHILD_ORDER);
+        def.children.insert(dest, Node::Element(new_style(patch)));
+        return;
+    }
+    let Some(style) = def.child_by_local_mut("style") else {
+        return;
+    };
+    if let Some(idx) = patch.ln_ref {
+        set_style_ref(style, "lnRef", &idx.to_string());
+    }
+    if let Some(idx) = patch.fill_ref {
+        set_style_ref(style, "fillRef", &idx.to_string());
+    }
+    if let Some(idx) = patch.effect_ref {
+        set_style_ref(style, "effectRef", &idx.to_string());
+    }
+    if let Some(face) = &patch.font_ref {
+        set_style_ref(style, "fontRef", face);
+    }
+}
+
+fn style_has_idx(patch: &StylePatch) -> bool {
+    patch.ln_ref.is_some()
+        || patch.fill_ref.is_some()
+        || patch.effect_ref.is_some()
+        || patch.font_ref.is_some()
+}
+
+fn new_style(patch: &StylePatch) -> Element {
+    let mut style = Element::new("a:style");
+    style.push_element(style_ref_element(
+        "lnRef",
+        &patch.ln_ref.unwrap_or(0).to_string(),
+    ));
+    style.push_element(style_ref_element(
+        "fillRef",
+        &patch.fill_ref.unwrap_or(0).to_string(),
+    ));
+    style.push_element(style_ref_element(
+        "effectRef",
+        &patch.effect_ref.unwrap_or(0).to_string(),
+    ));
+    style.push_element(style_ref_element(
+        "fontRef",
+        patch.font_ref.as_deref().unwrap_or("minor"),
+    ));
+    style
+}
+
+fn style_ref_element(local: &str, idx: &str) -> Element {
+    let mut el = Element::new(format!("a:{local}")).with_attr("idx", idx);
+    el.push_element(Element::new("a:schemeClr").with_attr("val", "phClr"));
+    el
+}
+
+fn set_style_ref(style: &mut Element, local: &str, idx: &str) {
+    if style.child_by_local(local).is_none() {
+        let dest = insert_index_by_order(style, local, STYLE_REF_ORDER);
+        style
+            .children
+            .insert(dest, Node::Element(style_ref_element(local, idx)));
+        return;
+    }
+    if let Some(el) = style.child_by_local_mut(local) {
+        set_attr_local(el, "idx", idx);
+    }
+}
+
+fn remove_named(parent: &mut Element, local: &str) {
+    parent
+        .children
+        .retain(|n| !matches!(n, Node::Element(e) if e.local_name() == local));
+}
+
+fn set_attr_local(el: &mut Element, local: &str, value: impl Into<String>) {
+    let value = value.into();
+    if let Some((_, v)) = el
+        .attrs
+        .iter_mut()
+        .find(|(k, _)| attr_local_name(k) == local)
+    {
+        *v = value;
+        return;
+    }
+    el.attrs.push((local.to_string(), value));
+}
+
+fn remove_attr_local(el: &mut Element, local: &str) {
+    el.attrs.retain(|(k, _)| attr_local_name(k) != local);
+}
+
+fn attr_local_name(name: &str) -> &str {
+    name.rsplit(':').next().unwrap_or(name)
+}
+
 fn extra_scheme_element(spec: &ExtraScheme) -> Element {
     let mut scheme = default_clr_scheme();
     patch_name_attr(&mut scheme, spec.name.as_deref());
@@ -477,6 +686,56 @@ pub fn extra_schemes_json(root: &Element) -> Value {
             .map(extra_scheme_item)
             .collect(),
     )
+}
+
+pub fn inspect_object_defaults(root: &Element) -> Value {
+    let Some(od) = root.child_by_local("objectDefaults") else {
+        return Value::Null;
+    };
+    json!({
+        "sp": inspect_def(od, "spDef"),
+        "ln": inspect_def(od, "lnDef"),
+        "tx": inspect_def(od, "txDef"),
+    })
+}
+
+fn inspect_def(parent: &Element, local: &str) -> Value {
+    let Some(def) = parent.child_by_local(local) else {
+        return Value::Null;
+    };
+    let style = def
+        .child_by_local("style")
+        .map(inspect_style)
+        .unwrap_or(Value::Null);
+    let ln_w = def
+        .child_by_local("spPr")
+        .and_then(|s| s.child_by_local("ln"))
+        .and_then(|ln| ln.attr_local("w"))
+        .and_then(s_to_u32)
+        .map_or(Value::Null, |n| json!(n));
+    json!({ "style": style, "lnW": ln_w })
+}
+
+fn inspect_style(style: &Element) -> Value {
+    json!({
+        "lnRef": matrix_idx(style.child_by_local("lnRef")),
+        "fillRef": matrix_idx(style.child_by_local("fillRef")),
+        "effectRef": matrix_idx(style.child_by_local("effectRef")),
+        "fontRef": font_ref_idx(style.child_by_local("fontRef")),
+    })
+}
+
+fn matrix_idx(el: Option<&Element>) -> Value {
+    el.and_then(|e| e.attr_local("idx"))
+        .and_then(s_to_u32)
+        .map_or(Value::Null, |n| json!(n))
+}
+
+fn font_ref_idx(el: Option<&Element>) -> Value {
+    match el.and_then(|e| e.attr_local("idx")) {
+        Some(s) if FONT_REF_IDX.contains(&s) => json!(s),
+        _ => Value::Null,
+    }
 }
 
 fn extra_scheme_item(el: &Element) -> Value {
@@ -695,4 +954,182 @@ pub(crate) fn ensure_xmlns(el: &mut Element, prefix: &str, uri: &str) {
     if el.attr(&key).is_none() {
         el.set_attr(&key, uri);
     }
+}
+
+/// 解析 `ops[i].objectDefaults`：对象或 `null`。
+pub fn parse_object_defaults_field(
+    v: Option<&Value>,
+    i: usize,
+) -> Result<Option<ObjectDefaultsPatch>, Error> {
+    match v {
+        None => Err(Error::with_path(
+            ErrorKind::MissingField {
+                field: "objectDefaults".into(),
+            },
+            format!("ops[{i}].objectDefaults"),
+        )),
+        Some(Value::Null) => Ok(None),
+        Some(Value::Object(obj)) => {
+            deny_keys_path(
+                obj,
+                &format!("ops[{i}].objectDefaults"),
+                &["sp", "ln", "tx"],
+            )?;
+            let sp = parse_opt_def(obj.get("sp"), "sp", &format!("ops[{i}].objectDefaults.sp"))?;
+            let ln = parse_opt_def(obj.get("ln"), "ln", &format!("ops[{i}].objectDefaults.ln"))?;
+            let tx = parse_opt_def(obj.get("tx"), "tx", &format!("ops[{i}].objectDefaults.tx"))?;
+            if sp.is_none() && ln.is_none() && tx.is_none() {
+                return Err(Error::with_path(
+                    ErrorKind::NeedSetThemeObjectDefaultsField,
+                    format!("ops[{i}].objectDefaults"),
+                ));
+            }
+            Ok(Some(ObjectDefaultsPatch { sp, ln, tx }))
+        }
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "objectDefaults".into(),
+                expected: TypeName::Object,
+            },
+            format!("ops[{i}].objectDefaults"),
+        )),
+    }
+}
+
+fn parse_opt_def(
+    v: Option<&Value>,
+    field: &str,
+    path: &str,
+) -> Result<Option<Option<DefPatch>>, Error> {
+    match v {
+        None => Ok(None),
+        Some(Value::Null) => Ok(Some(None)),
+        Some(Value::Object(obj)) => {
+            deny_keys_path(obj, path, &["style", "lnW"])?;
+            let style = parse_opt_style(obj.get("style"), &format!("{path}.style"))?;
+            let ln_w = parse_opt_ln_w(obj.get("lnW"), &format!("{path}.lnW"))?;
+            Ok(Some(Some(DefPatch { style, ln_w })))
+        }
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::Object,
+            },
+            path.to_string(),
+        )),
+    }
+}
+
+fn parse_opt_style(v: Option<&Value>, path: &str) -> Result<Option<Option<StylePatch>>, Error> {
+    match v {
+        None => Ok(None),
+        Some(Value::Null) => Ok(Some(None)),
+        Some(Value::Object(obj)) => {
+            deny_keys_path(obj, path, &["lnRef", "fillRef", "effectRef", "fontRef"])?;
+            Ok(Some(Some(StylePatch {
+                ln_ref: parse_opt_u32(obj.get("lnRef"), "lnRef", &format!("{path}.lnRef"))?,
+                fill_ref: parse_opt_u32(obj.get("fillRef"), "fillRef", &format!("{path}.fillRef"))?,
+                effect_ref: parse_opt_u32(
+                    obj.get("effectRef"),
+                    "effectRef",
+                    &format!("{path}.effectRef"),
+                )?,
+                font_ref: parse_opt_font_ref(obj.get("fontRef"), &format!("{path}.fontRef"))?,
+            })))
+        }
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "style".into(),
+                expected: TypeName::Object,
+            },
+            path.to_string(),
+        )),
+    }
+}
+
+fn parse_opt_ln_w(v: Option<&Value>, path: &str) -> Result<Option<Option<u32>>, Error> {
+    match v {
+        None => Ok(None),
+        Some(Value::Null) => Ok(Some(None)),
+        Some(n) => Ok(Some(Some(parse_nonneg_u32(n, "lnW", path)?))),
+    }
+}
+
+fn parse_opt_u32(v: Option<&Value>, field: &str, path: &str) -> Result<Option<u32>, Error> {
+    match v {
+        None => Ok(None),
+        Some(n) => Ok(Some(parse_nonneg_u32(n, field, path)?)),
+    }
+}
+
+fn parse_opt_font_ref(v: Option<&Value>, path: &str) -> Result<Option<String>, Error> {
+    match v {
+        None => Ok(None),
+        Some(Value::String(s)) if FONT_REF_IDX.contains(&s.as_str()) => Ok(Some(s.clone())),
+        Some(Value::String(_)) => Err(Error::with_path(
+            ErrorKind::InvalidFontRefIdx,
+            path.to_string(),
+        )),
+        Some(_) => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: "fontRef".into(),
+                expected: TypeName::String,
+            },
+            path.to_string(),
+        )),
+    }
+}
+
+fn parse_nonneg_u32(v: &Value, field: &str, path: &str) -> Result<u32, Error> {
+    match v {
+        Value::Number(n) => {
+            if let Some(u) = n.as_u64() {
+                if u > u32::MAX as u64 {
+                    return Err(Error::with_path(
+                        ErrorKind::MinValue {
+                            field: field.into(),
+                            min: 0,
+                        },
+                        path.to_string(),
+                    ));
+                }
+                return Ok(u as u32);
+            }
+            if n.as_i64().is_some_and(|x| x < 0) {
+                return Err(Error::with_path(
+                    ErrorKind::MinValue {
+                        field: field.into(),
+                        min: 0,
+                    },
+                    path.to_string(),
+                ));
+            }
+            Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: field.into(),
+                    expected: TypeName::Integer,
+                },
+                path.to_string(),
+            ))
+        }
+        _ => Err(Error::with_path(
+            ErrorKind::WrongType {
+                field: field.into(),
+                expected: TypeName::Integer,
+            },
+            path.to_string(),
+        )),
+    }
+}
+
+fn deny_keys_path(obj: &Map<String, Value>, path: &str, allowed: &[&str]) -> Result<(), Error> {
+    for k in obj.keys() {
+        if !allowed.contains(&k.as_str()) {
+            return Err(Error::with_path(
+                ErrorKind::UnknownField { field: k.clone() },
+                format!("{path}.{k}"),
+            ));
+        }
+    }
+    Ok(())
 }

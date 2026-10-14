@@ -5,7 +5,7 @@ use serde_json::{Map, Value};
 
 use crate::error::{Error, ErrorKind, IdReason, TypeName};
 use crate::opc::{self, ContentTypes, Package, Relationship, Relationships};
-use crate::theme::{ExtraScheme, FmtFillKind, FontSlot, ScriptFont};
+use crate::theme::{ExtraScheme, FmtFillKind, FontSlot, ObjectDefaultsPatch, ScriptFont};
 use crate::xml;
 
 use super::picture;
@@ -40,6 +40,11 @@ pub struct SetThemeFmtOp {
 #[derive(Debug, Clone)]
 pub struct SetThemeExtraSchemesOp {
     pub schemes: Vec<ExtraScheme>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SetThemeObjectDefaultsOp {
+    pub defaults: Option<ObjectDefaultsPatch>,
 }
 
 #[derive(Debug, Clone)]
@@ -210,6 +215,21 @@ pub fn set_extra_schemes(
     Ok(())
 }
 
+pub fn set_object_defaults(
+    pkg: &mut Package,
+    doc_part: &str,
+    op: &SetThemeObjectDefaultsOp,
+    op_index: usize,
+) -> Result<(), Error> {
+    let json_path = format!("ops[{op_index}].id");
+    let part = theme_part(pkg, doc_part)?
+        .ok_or_else(|| Error::with_path(ErrorKind::DocumentThemeNotFound, json_path))?;
+    let mut doc = xml::parse(pkg.get(&part)?)?;
+    crate::theme::patch_object_defaults(&mut doc.root, op.defaults.as_ref());
+    pkg.set(&part, doc.to_bytes()?)?;
+    Ok(())
+}
+
 pub fn set_override(
     pkg: &mut Package,
     doc_part: &str,
@@ -367,6 +387,16 @@ pub fn parse_set_extra_schemes(
         }
     };
     Ok(SetThemeExtraSchemesOp { schemes })
+}
+
+pub fn parse_set_object_defaults(
+    obj: &Map<String, Value>,
+    i: usize,
+) -> Result<SetThemeObjectDefaultsOp, Error> {
+    deny_keys(obj, i, &["op", "id", "objectDefaults"])?;
+    require_workbook_id(obj, i)?;
+    let defaults = crate::theme::parse_object_defaults_field(obj.get("objectDefaults"), i)?;
+    Ok(SetThemeObjectDefaultsOp { defaults })
 }
 
 pub fn parse_set_override(obj: &Map<String, Value>, i: usize) -> Result<SetThemeOverrideOp, Error> {

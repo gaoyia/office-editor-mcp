@@ -1071,13 +1071,13 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   母版 `timing` 的 id 为 `master:{n}/anim:{k}`，`target` 对应该母版形状 id（占位符或装饰形）。
   占位符与装饰形都进名单。
   `name` 取该 slideMaster 的 `p:cSld/@name`，没有则为 `null`。`theme` 取该母版 `.rels` 里 Type 以 `/theme` 结尾的部件。没有该关系或部件不在包内则为 `null`。
-  有则为对象，字段顺序：`name`、`colors`、`fonts`、`fmt`、`extraSchemes`。`theme.name` 取 `a:theme/@name`，没有则为 `null`。
+  有则为对象，字段顺序：`name`、`colors`、`fonts`、`fmt`、`extraSchemes`、`objectDefaults`。`theme.name` 取 `a:theme/@name`，没有则为 `null`。
   `colors` 字段顺序：`name`、`dk1`、`lt1`、`dk2`、`lt2`、`accent1`、`accent2`、`accent3`、`accent4`、`accent5`、`accent6`、`hlink`、`folHlink`。
   `colors.name` 取 `a:clrScheme/@name`，没有则为 `null`。每个槽位：有 `a:srgbClr/@val` 取其原文；否则有 `a:sysClr/@lastClr` 取该原文；再没有则为 `null`。
   `fonts` 字段顺序：`name`、`majorLatin`、`minorLatin`、`majorEa`、`minorEa`、`majorCs`、`minorCs`、`majorScripts`、`minorScripts`。
   `fonts.name` 取 `a:fontScheme/@name`，没有则为 `null`。
   其余取 `a:majorFont` / `a:minorFont` 下 `a:latin` / `a:ea` / `a:cs` 的 `typeface` 原文，没有该元素则为 `null`。
-  `majorScripts` / `minorScripts`、`fmt`、`extraSchemes` 规则与 [docx 分册](json-contract-docx.md#响应) 相同。
+  `majorScripts` / `minorScripts`、`fmt`、`extraSchemes`、`objectDefaults` 规则与 [docx 分册](json-contract-docx.md#响应) 相同。
   不算主题排版引擎，不把 `schemeClr` / `phClr` 展开成 RGB。
   备注母版与讲义母版的独立 theme 副本不进这份 `masters[].theme`。
   `clrMap` 取该 slideMaster 的 `p:clrMap`。对象十二键与属性同名：`bg1`、`tx1`、`bg2`、`tx2`、`accent1`–`accent6`、`hlink`、`folHlink`。
@@ -2373,6 +2373,42 @@ pptx：`id` 不是 `master:{n}`、`notesMaster` 或 `handout` 报 `InvalidId`。
 没有该宿主或 theme 部件报 `IdNotFound`，不新建。xlsx 上这些 pptx 宿主 id 报 `InvalidId`。docx 仍只认 `docx:document`。
 缺 `extraSchemes`、不是数组 / `null`、项不是对象、或槽位不是六位十六进制，报 `InvalidField`。
 xlsx 见 [xlsx 分册](json-contract-xlsx.md#setthemeextraschemes)。docx 见 [docx 分册](json-contract-docx.md#setthemeextraschemes)。
+
+### setThemeObjectDefaults
+
+改该母版 theme 部件的 `a:objectDefaults`。不算主题排版引擎。
+
+```json
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "C:\\data\\deck.pptx",
+  "ops": [
+    {
+      "op": "setThemeObjectDefaults",
+      "id": "master:1",
+      "objectDefaults": {
+        "sp": {
+          "style": { "lnRef": 1, "fontRef": "minor" },
+          "lnW": 38100
+        }
+      }
+    }
+  ]
+}
+```
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"setThemeObjectDefaults"` |
+| `id` | 必须是 `master:{n}`、`notesMaster` 或 `handout` |
+| `objectDefaults` | 必须。对象或 `null` |
+
+字段规则与 [docx setThemeObjectDefaults](json-contract-docx.md#setthemeobjectdefaults) 相同。
+pptx：`id` 不是 `master:{n}`、`notesMaster` 或 `handout` 报 `InvalidId`。对页 id 报 `InvalidId`。
+没有该宿主或 theme 部件报 `IdNotFound`，不新建。xlsx 上这些 pptx 宿主 id 报 `InvalidId`。docx 仍只认 `docx:document`。
+xlsx 见 [xlsx 分册](json-contract-xlsx.md#setthemeobjectdefaults)。docx 见 [docx 分册](json-contract-docx.md#setthemeobjectdefaults)。
+示例见 `docs/examples/pptx-apply-theme-defaults.json`。
 
 ### setClrMap
 
@@ -3781,7 +3817,7 @@ presentation 关系、新页或被删页及其 `.rels`、内容类型，
 `deleteMaster` 脏 `presentation.xml` 及其 `.rels`、被删母版及其版式与仅被它引用的 theme、内容类型。
 `setSlideSize` 只脏 `presentation.xml` 的 `p:sldSz`。
 `setNotesSize` 只脏 `presentation.xml` 的 `p:notesSz`。
-`setThemeColors` / `setThemeFonts` / `setThemeFmt` / `setThemeExtraSchemes` 只脏该宿主指向的 theme 部件（slideMaster、notesMaster 或 handoutMaster），不新建 theme，不新建母版。
+`setThemeColors` / `setThemeFonts` / `setThemeFmt` / `setThemeExtraSchemes` / `setThemeObjectDefaults` 只脏该宿主指向的 theme 部件（slideMaster、notesMaster 或 handoutMaster），不新建 theme，不新建母版。
 `setClrMap` 只脏被点名的 slideMaster、notesMaster 或 handoutMaster XML。
 `setClrMapOvr` 只脏被点名的幻灯片、slideLayout 或 notesSlide XML。
 `setThemeOverride` 脏该页或该备注页 `.rels`、`/ppt/theme/themeOverrideN.xml` 与必要时 `[Content_Types].xml`。
@@ -3794,7 +3830,7 @@ presentation 关系、新页或被删页及其 `.rels`、内容类型，
 一次 `ops` 可以混用 `setShapeText`、`setShapeFormat`、形状管理 op、表格 op、`setNotesText`、`setHandoutText`、批注 op、超链接 op、域 op（`insertField`、`setField`、
 `deleteField`）、图片 op、媒体 op（含 `setMedia`）、图表 op、SmartArt op、幻灯片管理 op（含 `setTransition`、`setSlideLayout`）、母版写入 op（`insertLayout`、
 `deleteLayout`、`insertPlaceholder`、`deletePlaceholder`、`insertMaster`、`deleteMaster`）、主题与尺寸 op（`setSlideSize`、`setNotesSize`、
-`setThemeColors`、`setThemeFonts`、`setThemeFmt`、`setThemeExtraSchemes`、`setClrMap`、`setClrMapOvr`、`setThemeOverride`）、动画 op（`insertAnim`、`setAnim`、`deleteAnim`、`moveAnim`）、幻灯片节 op、自定义放映 op（`insertCustomShow`、`setCustomShow`、
+`setThemeColors`、`setThemeFonts`、`setThemeFmt`、`setThemeExtraSchemes`、`setThemeObjectDefaults`、`setClrMap`、`setClrMapOvr`、`setThemeOverride`）、动画 op（`insertAnim`、`setAnim`、`deleteAnim`、`moveAnim`）、幻灯片节 op、自定义放映 op（`insertCustomShow`、`setCustomShow`、
 `deleteCustomShow`）、OLE op（`insertOle`、`deleteOle`）、Zoom op（`insertZoom`、`setZoom`、`deleteZoom`）、公式几何 op（`setMathSize`、`setMathPos`）、`setShowPr`、
 `setProtection` 与 `setProps` / `setCustomProp` / `deleteCustomProp`。
 文件属性 op 还可以脏 `/docProps/core.xml`、`/docProps/app.xml`、`/docProps/custom.xml`、根 `.rels` 与 `[Content_Types].xml`。

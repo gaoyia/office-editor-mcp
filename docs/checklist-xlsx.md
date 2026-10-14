@@ -8,7 +8,7 @@
 
 Microsoft Excel 16.0 已打开，用户确认通过。本机若装了 WPS，`Excel.Application` 会被抢走，测试仍直接启动 `EXCEL.EXE` 再挂 COM。
 
-C、I、A、O、Xp、Xvg、Xem、X3d、Xom、Xtf、Xln、Xfl、Xc、Xh、Xfs、Xtl、Xef、Xns 这几组现在由 `manual-check/office/cases/xlsx-*.ps1` 自动判定，
+C、I、A、O、Xp、Xvg、Xem、X3d、Xom、Xtf、Xln、Xfl、Xc、Xh、Xfs、Xtl、Xef、Xns、Xdf 这几组现在由 `manual-check/office/cases/xlsx-*.ps1` 自动判定，
 跑 `pwsh -File manual-check\office\run.ps1 -Case 'xlsx-*'` 即可复现，逐条结果落在 `manual-check/office/out/office-results.csv`。
 2026-09-27 补跑 `xlsx-pictures.ps1`，Xp1–Xp7 通过。同日补跑 `xlsx-charts.ps1`，Xc1–Xc7 通过。
 同日补跑 `xlsx-create-pictures.ps1`，C8–C10 通过。同日补跑 `xlsx-create-charts.ps1`，C11–C13 通过。
@@ -44,6 +44,7 @@ C、I、A、O、Xp、Xvg、Xem、X3d、Xom、Xtf、Xln、Xfl、Xc、Xh、Xfs、X
 2026-10-13 补跑 `xlsx-slicer-anchor.ps1`，Xsn1–Xsn6 通过。无 Repair。COM 288×144 磅。`from=G4`。`twoCell` `to=H12`。时间线 `from=I5`。
 2026-10-14 补跑 `xlsx-slicer-caption.ps1`，Xsc1–Xsc5 通过。无 Repair。COM `Caption` 对得上。`columnCount=2`。时间线 `showHeader=false`。
 2026-10-14 补跑 `xlsx-theme.ps1`，Xth1–Xth5 通过。无 Repair。空白另存有 theme。`accent1=FF0000`。`majorLatin=Arial`。create 可写。省略为 null。
+2026-10-14 补跑 `xlsx-theme-defaults.ps1`，Xdf1–Xdf5 通过。无 Repair。create 后 `objectDefaults` 为 `null`。`lnW=38100`。`lnRef=1` `fontRef=minor`。`null` 清掉。
 2026-10-14 补跑 `xlsx-slicer-filter.ps1`，Xsi1–Xsi5 通过。无 Repair。表格 `selected=[]` 再 `乙`。透视勾选乙。时间线 `dateBetween` 再 `null`。
 2026-10-14 补跑 `xlsx-math-geom.ps1`，Xmg1–Xmg5 通过。无 Repair。`oneCell` `cx=1828800` `cy=914400`。`from=C3`。`twoCell` `to=D8`。`setMath` 不改几何。
 2026-10-14 补跑 `xlsx-shape-spacing.ps1`，Xln1–Xln5 通过。无 Repair。COM `SpaceBefore=12`，`Font.Spacing=2`。`textAnchor=just`。
@@ -1527,6 +1528,28 @@ inspect 只读进树。create 不生成。apply 不新开编辑。脚本 `manual
 - **Xth5** ✅
   - 检查：拒错
   - 通过标准：无 theme 发 `setThemeColors` 得 `IdNotFound`。错 id 得 `InvalidId`。只给 `op` 与 `id` 得 `InvalidField`。未写文件
+  - 不强制开 Excel
+
+## 主题 objectDefaults
+
+工作簿 theme 的 `a:objectDefaults`。不算主题排版引擎。不改 Word。
+手测脚本 `manual-check/office/cases/xlsx-theme-defaults.ps1`。编号用 **Xdf**。不要和 Xth、Xtf、Th 撞。
+
+- **Xdf1** ✅
+  - 检查：inspect
+  - 通过标准：create 给了 `workbook.theme` 后 `objectDefaults` 为 `null`。无 Repair
+- **Xdf2** ✅
+  - 检查：线宽
+  - 通过标准：`setThemeObjectDefaults` 写 `sp.lnW=38100` 后树上对得上。Excel 无修复
+- **Xdf3** ✅
+  - 检查：样式
+  - 通过标准：写 `sp.style.lnRef=1` `fontRef=minor` 后树上对得上。无 Repair
+- **Xdf4** ✅
+  - 检查：清除
+  - 通过标准：`objectDefaults: null` 后为 `null`。无 Repair
+- **Xdf5** ✅
+  - 检查：拒错
+  - 通过标准：错 id 得 `InvalidId`。缺字段、非法 `fontRef`、无 theme 得 `InvalidField` / `IdNotFound`。未写文件
   - 不强制开 Excel
 
 ## 切片器筛选项

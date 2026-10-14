@@ -1949,6 +1949,7 @@ pub enum XlsxOp {
     SetThemeFonts(super::super::theme::SetThemeFontsOp),
     SetThemeFmt(super::super::theme::SetThemeFmtOp),
     SetThemeExtraSchemes(super::super::theme::SetThemeExtraSchemesOp),
+    SetThemeObjectDefaults(super::super::theme::SetThemeObjectDefaultsOp),
     SetThemeOverride(super::super::theme::SetThemeOverrideOp),
     InsertConnection(connection::InsertConnectionOp),
     DeleteConnection(connection::DeleteConnectionOp),

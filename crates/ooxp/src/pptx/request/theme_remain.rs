@@ -187,6 +187,17 @@ pub(super) fn parse_set_theme_extra_schemes(
     Ok(SetThemeExtraSchemesOp { host, schemes })
 }
 
+pub(super) fn parse_set_theme_object_defaults(
+    obj: &Map<String, Value>,
+    i: usize,
+) -> Result<SetThemeObjectDefaultsOp, Error> {
+    deny_keys(obj, i, &["op", "id", "objectDefaults"])?;
+    let id = require_id(obj, i)?;
+    let host = super::master::parse_theme_host(&id, i)?;
+    let defaults = crate::theme::parse_object_defaults_field(obj.get("objectDefaults"), i)?;
+    Ok(SetThemeObjectDefaultsOp { host, defaults })
+}
+
 fn parse_fmt_line(v: Option<&Value>, i: usize, field: &str) -> Result<Option<(usize, u32)>, Error> {
     let Some(v) = v else {
         return Ok(None);

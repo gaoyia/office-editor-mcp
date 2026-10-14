@@ -50,7 +50,7 @@ Word 写出的连接线可进 inspect，并可用 `insertConnector` / `deleteCon
 也可按墨迹 id `exportMedia`。不要和批注里的 `kind: ink` 混。
 正文与页眉页脚里的 3D 模型可进 inspect，并可用 `insertModel3d` / `replaceModel3d` / `deleteModel3d` / `setModel3dSize` / `setModel3dWrap` 增删换与改尺寸绕排，
 也可按 3D id `exportMedia`。不是图，不进 `pictures`。注内、批注内本期不插。
-组合本身不进树。docx 可用 `setThemeColors` / `setThemeFonts` / `setThemeFmt` 改主文档 theme 的配色、字体、方案名与 `fmtScheme` 常用槽，可用 `setThemeExtraSchemes` 整份替换补充色板，可用 `setThemeOverride` 读写主文档 `themeOverride` 部件。可用 `setEastAsianSettings` 写 `themeFontLang`。
+组合本身不进树。docx 可用 `setThemeColors` / `setThemeFonts` / `setThemeFmt` 改主文档 theme 的配色、字体、方案名与 `fmtScheme` 常用槽，可用 `setThemeExtraSchemes` 整份替换补充色板，可用 `setThemeObjectDefaults` 改默认形状 / 线 / 文本框样式，可用 `setThemeOverride` 读写主文档 `themeOverride` 部件。可用 `setEastAsianSettings` 写 `themeFontLang`。
 三种格式都可用 `setProps` / `setCustomProp` / `deleteCustomProp` 改文件属性。
 `create` 可在正文和页眉页脚上写 DrawingML 图，也可写文本框、SmartArt、图表、墨迹画布、3D 模型、脚注、尾注、批注与回复、超链接、书签、域、公式、内容控件、拼音、无框形状与连接线；
 根上可写编号定义、目录块、自定义样式、题注、交叉引用、索引、参考文献、构建基块、嵌入字体、东亚设置、theme 与页面背景 / 页面边框；
@@ -447,7 +447,7 @@ run 上的 `style` 只读自己的 `w:rStyle/@w:val`。框内、注内、批注�
 `insertBibliography` 的 `id` 必须是主文档 `w:body` 的直接子段落 id 或 `docx:document`。`deleteBibliography` 的 `id` 必须是 `biblio:{n}`。
 `insertDocPart` 的 `id` 必须是 `docx:document`。`deleteDocPart` 的 `id` 必须是 `docPart:{n}`。
 `insertDocPartContent` 的 `id` 必须是主文档 `w:body` 的直接子段落 id 或 `docx:document`。
-`insertEmbeddedFont` / `setFontEmbed` / `setPageBackground` / `setThemeFmt` / `setThemeExtraSchemes` / `setThemeOverride` 的 `id` 必须是 `docx:document`。
+`insertEmbeddedFont` / `setFontEmbed` / `setPageBackground` / `setThemeFmt` / `setThemeExtraSchemes` / `setThemeObjectDefaults` / `setThemeOverride` 的 `id` 必须是 `docx:document`。
 `deleteEmbeddedFont` 的 `id` 必须是 `font:{n}`。`setPageBorders` 的 `id` 必须是 `section:{n}`。
 `insertMath` 的 `id` 必须是段落 id（正文、页眉页脚或框内）或 `docx:document`。`setMath` / `deleteMath` 的 `id` 必须是公式 id。
 `insertRuby` 的 `id` 必须是段落 id（正文、页眉页脚或框内）或 `docx:document`。`setRuby` / `deleteRuby` 的 `id` 必须是拼音 id。
@@ -1678,7 +1678,7 @@ docx 根上始终带 `theme`，不要另给 scope 键。来源是主文档 `.rel
 ECMA-376 §14.2.7 / DrawingML `a:theme`）。
 没有该关系或部件不在包内时为 `null`，不报错。pptx 根上不要带此对象。pptx 的 theme 见 [pptx 响应](json-contract-pptx.md#响应) 的 `masters[].theme`。xlsx 见 [xlsx 响应](json-contract-xlsx.md#主题xlsx)。create 给了 `document.theme` 时写 theme 部件；省略则仍不写。
 
-有部件时字段顺序：`name`、`colors`、`fonts`、`fmt`、`extraSchemes`。配色与字体规则与 pptx 母版 `theme` 相同，不把段落 / run 上的 `themeColor` 展开成 RGB。pptx 母版 `theme` 同一套字段，见 [pptx 分册](json-contract-pptx.md#响应)。
+有部件时字段顺序：`name`、`colors`、`fonts`、`fmt`、`extraSchemes`、`objectDefaults`。配色与字体规则与 pptx 母版 `theme` 相同，不把段落 / run 上的 `themeColor` 展开成 RGB。pptx 母版 `theme` 同一套字段，见 [pptx 分册](json-contract-pptx.md#响应)。
 
 `fmt` 取 `a:fmtScheme`。没有该元素时四项都是空数组，`name` 为 `null`。有则字段顺序：`name`、`fills`、`lines`、`effects`、`bgFills`。
 `name` 取 `@name`，缺则为 `null`。四个数组按 `fillStyleLst` / `lnStyleLst` / `effectStyleLst` / `bgFillStyleLst` 的直接子元素顺序。
@@ -1691,8 +1691,18 @@ ECMA-376 §14.2.7 / DrawingML `a:theme`）。
 每项字段顺序：`name`、`colors`。`name` 取该项 `a:clrScheme/@name`，没有或空则为 `null`。
 `colors` 规则与主 `clrScheme` 相同。不把 `clrMap` 展开进树。
 
+`objectDefaults` 取 `a:objectDefaults`。没有该元素则为 `null`。有则字段顺序：`sp`、`ln`、`tx`。
+每一项取对应 `a:spDef` / `a:lnDef` / `a:txDef`。没有该子元为 `null`。有则对象字段顺序：`style`、`lnW`。
+没有 `a:style` 则 `style` 为 `null`。有则对象字段顺序：`lnRef`、`fillRef`、`effectRef`、`fontRef`。
+`lnRef` / `fillRef` / `effectRef` 取 `@idx` 非负整数；缺或解析失败为 `null`。
+`fontRef` 取 `@idx`：`major` / `minor` / `none`；缺或不在白名单为 `null`。
+`lnW` 取 `spPr/a:ln/@w` 非负整数（EMU）；缺为 `null`。
+不展开填充、效果或 `schemeClr`。
+
 根上始终有 `themeOverride`，放在 `theme` 之后。来源是主文档 `.rels` 里 Type 以 `/themeOverride` 结尾的部件（ECMA-376 §14.2.8 / DrawingML `a:themeOverride`）。
-没有该关系或部件不在包内时为 `null`。有则字段顺序与 `theme` 相同；配色 / 字体 / `fmt` 取根下的 `clrScheme` / `fontScheme` / `fmtScheme`，不经 `themeElements`。
+没有该关系或部件不在包内时为 `null`。有则字段顺序：`name`、`colors`、`fonts`、`fmt`、`extraSchemes`。
+配色 / 字体 / `fmt` 取根下的 `clrScheme` / `fontScheme` / `fmtScheme`，不经 `themeElements`。
+`themeOverride` 不要 `objectDefaults`。
 `themeOverride` 通常没有 `extraClrSchemeLst`，此时 `extraSchemes` 为 `[]`。
 Word 16.0 另存通常不写该部件；自行写入后 Word 仍能打开。pptx 根上不要带此对象。xlsx 见 [xlsx 分册](json-contract-xlsx.md#主题xlsx)。
 
@@ -4607,7 +4617,7 @@ OLE op 还可以脏 `/word/embeddings/…` 与预览图媒体。`insertInkCanvas
 `insertDocPartContent` 只脏主文档。`insertEmbeddedFont` / `deleteEmbeddedFont` 还可以脏 `/word/fontTable.xml`、fontTable `.rels`、
 `/word/fonts/fontN.odttf`、主文档 `.rels`、`[Content_Types].xml` 与 `settings.xml`。
 `setFontEmbed` 只脏 `settings.xml`（缺则新建）。`setPageBackground` 脏主文档与 `settings.xml`（缺则新建），图片填充还可脏 `/word/media/…` 与主文档 `.rels`。
-`setThemeColors` / `setThemeFonts` / `setThemeFmt` / `setThemeExtraSchemes` 只脏已有 theme 部件。
+`setThemeColors` / `setThemeFonts` / `setThemeFmt` / `setThemeExtraSchemes` / `setThemeObjectDefaults` 只脏已有 theme 部件。
 `setThemeOverride` 脏 `/word/theme/themeOverride1.xml`、主文档 `.rels` 与 `[Content_Types].xml`；`enabled: false` 时删掉该部件。
 `setEastAsianSettings` 只脏 `settings.xml`（缺则新建）。
 `insertContentControl`、`setContentControl` 与 `deleteContentControl` 只脏主文档（页眉页脚上的内容控件 op 另脏对应 header/footer 部件）。
@@ -4623,7 +4633,7 @@ OLE op 还可以脏 `/word/embeddings/…` 与预览图媒体。`insertInkCanvas
 `insertToc`、`deleteToc`、`insertCaption`、`deleteCaption`、`insertCrossRef`、`deleteCrossRef`、`insertIndex`、`deleteIndex`、
 `insertIndexEntry`、`deleteIndexEntry`、`insertSource`、`deleteSource`、`setBibliographyStyle`、`insertCitation`、`deleteCitation`、
 `insertBibliography`、`deleteBibliography`、`insertDocPart`、`deleteDocPart`、`insertDocPartContent`、`insertEmbeddedFont`、
-`deleteEmbeddedFont`、`setFontEmbed`、`setPageBackground`、`setThemeFmt`、`setThemeExtraSchemes`、`setThemeOverride`、`insertMath`、`setMath`、`deleteMath`、`insertRuby`、`setRuby`、`deleteRuby`、`setEastAsianSettings`、`insertContentControl`、
+`deleteEmbeddedFont`、`setFontEmbed`、`setPageBackground`、`setThemeFmt`、`setThemeExtraSchemes`、`setThemeObjectDefaults`、`setThemeOverride`、`insertMath`、`setMath`、`deleteMath`、`insertRuby`、`setRuby`、`deleteRuby`、`setEastAsianSettings`、`insertContentControl`、
 `setContentControl`、`deleteContentControl`、图片 op、文本框 op、
 `insertConnector` / `deleteConnector` / `insertShape` / `deleteShape` / `setShapePos` / `setShapeSize` / `setShapeFill` / `setShapeLine` / `groupShapes` / `ungroup`、墨迹画布 op、脚注尾注 op、批注 op、图表 op、SmartArt op、表格结构 op、修订 op、
 超链接 / 书签 op、域 op 与编号 op、样式 op、表格外观 op、直接格式 op、以及 `setProtection`、以及 `insertWatermark` / `deleteWatermark`、
@@ -5007,6 +5017,49 @@ docx：`id` 不是 `docx:document` 报 `InvalidId`。没有 theme 部件报 `IdN
 xlsx 见 [xlsx 分册](json-contract-xlsx.md#setthemeextraschemes)。
 pptx 见 [pptx 分册](json-contract-pptx.md#setthemeextraschemes)，`id` 为 `master:{n}`。create 给了 `document.theme.extraSchemes` 时按同一套规则写入。
 示例见 `docs/examples/docx-apply-theme-remain.json`。
+
+### setThemeObjectDefaults
+
+改主文档 theme 部件的 `a:objectDefaults`。不算主题排版引擎，不把 `phClr` 展开成 RGB。
+
+```json
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "C:\\data\\note.docx",
+  "ops": [
+    {
+      "op": "setThemeObjectDefaults",
+      "id": "docx:document",
+      "objectDefaults": {
+        "sp": {
+          "style": { "lnRef": 1, "fontRef": "minor" },
+          "lnW": 38100
+        }
+      }
+    }
+  ]
+}
+```
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"setThemeObjectDefaults"` |
+| `id` | 必须是 `docx:document` |
+| `objectDefaults` | 必须。对象或 `null` |
+
+`null` 去掉整个 `a:objectDefaults`。对象可给 `sp` / `ln` / `tx`，至少给一个。
+子值为对象或 `null`（去掉对应 `spDef` / `lnDef` / `txDef`）。未点名的定义留下。
+子对象可给 `style` 与 `lnW`。`style` 为对象或 `null`（去掉 `a:style`）。
+`lnW` 为非负整数（EMU）或 `null`（去掉 `spPr/a:ln/@w`）。
+`style` 对象字段：`lnRef` / `fillRef` / `effectRef` 为非负整数；`fontRef` 为 `major` / `minor` / `none`。未点名留下。
+写某个 idx 时若还没有 `a:style`，补齐四个 ref：缺的矩阵 idx 为 `0`，`fontRef` 为 `minor`，颜色子元为 `schemeClr val="phClr"`。
+新建 Def 时补空的 `spPr` / `bodyPr` / `lstStyle`。
+docx：`id` 不是 `docx:document` 报 `InvalidId`。没有 theme 部件报 `IdNotFound`，不新建。
+缺 `objectDefaults`、不是对象 / `null`、对象一个 Def 都不给、非法 `fontRef`、或 `lnW` / 矩阵 idx 非法，报 `InvalidField`。
+xlsx 见 [xlsx 分册](json-contract-xlsx.md#setthemeobjectdefaults)。
+pptx 见 [pptx 分册](json-contract-pptx.md#setthemeobjectdefaults)，`id` 为 `master:{n}`。
+示例见 `docs/examples/docx-apply-theme-defaults.json`。
 
 ### setThemeOverride
 

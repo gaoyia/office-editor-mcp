@@ -999,11 +999,13 @@ ECMA-376 §14.2.7 / DrawingML `a:theme`）。
 没有该关系或部件不在包内时为 `null`，不报错。create 省略 `workbook.theme` 时仍不写 theme 部件。
 不把格子上的 `theme` 指数、条件格式或 `schemeClr` 展开成 RGB。
 
-有部件时字段顺序：`name`、`colors`、`fonts`、`fmt`、`extraSchemes`。取值规则与 [docx 主题](json-contract-docx.md#主题仅-docx) 相同，含脚本字体与补充色板。
+有部件时字段顺序：`name`、`colors`、`fonts`、`fmt`、`extraSchemes`、`objectDefaults`。取值规则与 [docx 主题](json-contract-docx.md#主题仅-docx) 相同，含脚本字体、补充色板与 `objectDefaults`。
 xlsx 工作簿 `theme.fonts` 带 `majorScripts` / `minorScripts`。pptx 母版 `theme` 同一套字段，见 [pptx 分册](json-contract-pptx.md#响应)。
 
 根上始终有 `themeOverride`，放在 `theme` 之后。来源是 workbook `.rels` 里 Type 以 `/themeOverride` 结尾的部件。
-没有该关系或部件不在包内时为 `null`。有则字段顺序与 `theme` 相同；配色 / 字体 / `fmt` 取根下的 `clrScheme` / `fontScheme` / `fmtScheme`，不经 `themeElements`。
+没有该关系或部件不在包内时为 `null`。有则字段顺序：`name`、`colors`、`fonts`、`fmt`、`extraSchemes`。
+配色 / 字体 / `fmt` 取根下的 `clrScheme` / `fontScheme` / `fmtScheme`，不经 `themeElements`。
+`themeOverride` 不要 `objectDefaults`。
 Excel 16.0 另存通常不写该部件；自行写入后 Excel 仍能打开。
 
 - `scope.protectedRanges` 为 `true` 时，每张 `worksheet` 带 `protectedRanges`。没有区域时为空数组。不依赖单元格切片。
@@ -3878,6 +3880,12 @@ pptx 见 [pptx 分册](json-contract-pptx.md#setthemefmt)，`id` 为 `master:{n}
 `id` 必须是 `xlsx:workbook`。没有 theme 部件报 `IdNotFound`，不新建。
 `[]` 或 `null` 去掉该列表。create 给了 `workbook.theme.extraSchemes` 时按同一套规则写入。
 pptx 见 [pptx 分册](json-contract-pptx.md#setthemeextraschemes)，`id` 为 `master:{n}`。
+
+### setThemeObjectDefaults
+
+改工作簿 theme 部件的 `a:objectDefaults`。字段与 [docx setThemeObjectDefaults](json-contract-docx.md#setthemeobjectdefaults) 相同。
+`id` 必须是 `xlsx:workbook`。没有 theme 部件报 `IdNotFound`，不新建。
+pptx 见 [pptx 分册](json-contract-pptx.md#setthemeobjectdefaults)，`id` 为 `master:{n}`。
 
 ### setThemeOverride
 

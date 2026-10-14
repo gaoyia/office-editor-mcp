@@ -234,11 +234,11 @@ pub(crate) enum IdReason {
     SetShowPrNeedsPresentation,
     /// pptx 的 setProtection 必须用 pptx:presentation
     SetProtectionNeedsPresentation,
-    /// setThemeColors / setThemeFonts / setThemeFmt / setThemeExtraSchemes 必须用 master:N、notesMaster 或 handout
+    /// setThemeColors / setThemeFonts / setThemeFmt / setThemeExtraSchemes / setThemeObjectDefaults 必须用 master:N、notesMaster 或 handout
     SetThemeNeedsMaster,
-    /// setThemeColors / setThemeFonts 必须用 docx:document
+    /// setThemeColors / setThemeFonts / setThemeFmt / setThemeExtraSchemes / setThemeObjectDefaults 必须用 docx:document
     SetThemeNeedsDocument,
-    /// setThemeColors / setThemeFonts 必须用 xlsx:workbook
+    /// setThemeColors / setThemeFonts / setThemeFmt / setThemeExtraSchemes / setThemeObjectDefaults 必须用 xlsx:workbook
     SetThemeNeedsWorkbook,
     /// setClrMap 必须用 master:N、notesMaster 或 handout
     SetClrMapNeedsHost,
@@ -991,6 +991,8 @@ define_error_kinds! {
     InvalidPresetMaterial => vec![Self::InvalidPresetMaterial],
     NeedSetTableStyleRefField => vec![Self::NeedSetTableStyleRefField],
     InvalidTableStyleId => vec![Self::InvalidTableStyleId],
+    NeedSetThemeObjectDefaultsField => vec![Self::NeedSetThemeObjectDefaultsField],
+    InvalidFontRefIdx => vec![Self::InvalidFontRefIdx],
     NeedGradientStops => vec![Self::NeedGradientStops],
     DuplicateGradientPos => vec![Self::DuplicateGradientPos],
     NeedTextOutlineField => vec![Self::NeedTextOutlineField],
@@ -2089,6 +2091,8 @@ impl ErrorKind {
             | Self::InvalidPresetMaterial
             | Self::NeedSetTableStyleRefField
             | Self::InvalidTableStyleId
+            | Self::NeedSetThemeObjectDefaultsField
+            | Self::InvalidFontRefIdx
             | Self::NeedGradientStops
             | Self::DuplicateGradientPos
             | Self::NeedTextOutlineField

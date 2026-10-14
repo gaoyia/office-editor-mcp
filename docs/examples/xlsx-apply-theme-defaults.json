@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "book.xlsx",
+  "ops": [
+    {
+      "op": "setThemeObjectDefaults",
+      "id": "xlsx:workbook",
+      "objectDefaults": {
+        "sp": {
+          "style": { "lnRef": 1, "fontRef": "minor" },
+          "lnW": 38100
+        }
+      }
+    }
+  ]
+}

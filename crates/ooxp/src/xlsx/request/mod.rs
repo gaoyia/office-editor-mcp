@@ -339,6 +339,9 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<XlsxOp>, Error> {
             "setThemeExtraSchemes" => {
                 XlsxOp::SetThemeExtraSchemes(super::theme::parse_set_extra_schemes(obj, i)?)
             }
+            "setThemeObjectDefaults" => {
+                XlsxOp::SetThemeObjectDefaults(super::theme::parse_set_object_defaults(obj, i)?)
+            }
             "setThemeOverride" => {
                 XlsxOp::SetThemeOverride(super::theme::parse_set_override(obj, i)?)
             }

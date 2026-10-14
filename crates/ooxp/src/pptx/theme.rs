@@ -275,6 +275,22 @@ pub fn set_theme_extra_schemes(
     Ok(())
 }
 
+pub fn set_theme_object_defaults(
+    pkg: &mut Package,
+    pres_part: &str,
+    pres_root: &Element,
+    host: ThemeHost,
+    defaults: Option<&crate::theme::ObjectDefaultsPatch>,
+    op_index: usize,
+) -> Result<(), Error> {
+    let json_path = format!("ops[{op_index}].id");
+    let part = theme_part_for_host(pkg, pres_part, pres_root, host, &json_path)?;
+    let mut doc = xml::parse(pkg.get(&part)?)?;
+    crate::theme::patch_object_defaults(&mut doc.root, defaults);
+    pkg.set(&part, doc.to_bytes()?)?;
+    Ok(())
+}
+
 fn theme_part_for_host(
     pkg: &Package,
     pres_part: &str,

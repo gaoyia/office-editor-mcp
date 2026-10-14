@@ -1441,6 +1441,9 @@
                 "$ref": "docx.schema.json#/$defs/setThemeExtraSchemesOp"
               },
               {
+                "$ref": "docx.schema.json#/$defs/setThemeObjectDefaultsOp"
+              },
+              {
                 "$ref": "docx.schema.json#/$defs/setThemeOverrideOp"
               },
               {

@@ -155,7 +155,14 @@ fn inspect_slide_size_and_theme_keys() {
     let theme = &m["theme"];
     assert_eq!(
         object_keys(theme),
-        ["name", "colors", "fonts", "fmt", "extraSchemes"]
+        [
+            "name",
+            "colors",
+            "fonts",
+            "fmt",
+            "extraSchemes",
+            "objectDefaults"
+        ]
     );
     assert_eq!(theme["name"], "Office Theme");
     assert_eq!(
@@ -194,6 +201,7 @@ fn inspect_slide_size_and_theme_keys() {
         ["name", "fills", "lines", "effects", "bgFills"]
     );
     assert_eq!(theme["extraSchemes"], json!([]));
+    assert!(theme["objectDefaults"].is_null());
 }
 
 #[test]
@@ -623,5 +631,91 @@ fn reject_theme_remain_ids_and_empty() {
     )
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidId);
+    assert!(!out.exists());
+}
+
+#[test]
+fn set_theme_object_defaults_round_trip() {
+    let src = create_deck("od");
+    let out = tmp("od-out");
+    apply(
+        &src,
+        &out,
+        json!([{
+            "op": "setThemeObjectDefaults",
+            "id": "master:1",
+            "objectDefaults": {
+                "sp": {
+                    "style": { "lnRef": 1, "fontRef": "minor" },
+                    "lnW": 38100
+                }
+            }
+        }]),
+    )
+    .unwrap();
+    let tree = inspect_scope(&out, Some(json!({ "masters": true })));
+    let od = &tree["masters"][0]["theme"]["objectDefaults"];
+    assert_eq!(object_keys(od), ["sp", "ln", "tx"]);
+    assert_eq!(od["sp"]["lnW"], 38100);
+    assert_eq!(od["sp"]["style"]["lnRef"], 1);
+    assert_eq!(od["sp"]["style"]["fillRef"], 0);
+    assert_eq!(od["sp"]["style"]["fontRef"], "minor");
+    assert!(od["ln"].is_null());
+    let xml = part(&out, "ppt/theme/theme1.xml");
+    assert!(xml.contains("<a:objectDefaults>"));
+    assert!(xml.contains(r#"<a:lnRef idx="1">"#));
+    assert!(xml.contains(r#"w="38100""#));
+    let cleared = tmp("od-clear");
+    apply(
+        &out,
+        &cleared,
+        json!([{
+            "op": "setThemeObjectDefaults",
+            "id": "master:1",
+            "objectDefaults": null
+        }]),
+    )
+    .unwrap();
+    let tree = inspect_scope(&cleared, Some(json!({ "masters": true })));
+    assert!(tree["masters"][0]["theme"]["objectDefaults"].is_null());
+}
+
+#[test]
+fn set_theme_object_defaults_rejects() {
+    let src = create_deck("od-bad");
+    let out = tmp("od-slide");
+    let err = apply(
+        &src,
+        &out,
+        json!([{
+            "op": "setThemeObjectDefaults",
+            "id": "slide:1",
+            "objectDefaults": { "sp": { "lnW": 1 } }
+        }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidId);
+    assert!(!out.exists());
+    let out = tmp("od-empty");
+    let err = apply(
+        &src,
+        &out,
+        json!([{ "op": "setThemeObjectDefaults", "id": "master:1" }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
+    assert!(!out.exists());
+    let out = tmp("od-font");
+    let err = apply(
+        &src,
+        &out,
+        json!([{
+            "op": "setThemeObjectDefaults",
+            "id": "master:1",
+            "objectDefaults": { "sp": { "style": { "fontRef": "latin" } } }
+        }]),
+    )
+    .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidField);
     assert!(!out.exists());
 }

@@ -1417,6 +1417,7 @@ pub enum DocxOp {
     SetThemeFonts(super::super::theme::SetThemeFontsOp),
     SetThemeFmt(super::super::theme::SetThemeFmtOp),
     SetThemeExtraSchemes(super::super::theme::SetThemeExtraSchemesOp),
+    SetThemeObjectDefaults(super::super::theme::SetThemeObjectDefaultsOp),
     SetThemeOverride(super::super::theme::SetThemeOverrideOp),
     SetProps(crate::props::SetPropsOp),
     SetCustomProp(crate::props::SetCustomPropOp),

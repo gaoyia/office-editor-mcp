@@ -323,13 +323,13 @@ pub(super) fn render(kind: &ErrorKind) -> String {
                 "setProtection 的 id 必须是 pptx:presentation".into()
             }
             IdReason::SetThemeNeedsMaster => {
-                "setThemeColors / setThemeFonts / setThemeFmt / setThemeExtraSchemes 的 id 必须是 master:N、notesMaster 或 handout".into()
+                "setThemeColors / setThemeFonts / setThemeFmt / setThemeExtraSchemes / setThemeObjectDefaults 的 id 必须是 master:N、notesMaster 或 handout".into()
             }
             IdReason::SetThemeNeedsDocument => {
-                "setThemeColors / setThemeFonts / setThemeFmt / setThemeOverride 的 id 必须是 docx:document".into()
+                "setThemeColors / setThemeFonts / setThemeFmt / setThemeExtraSchemes / setThemeObjectDefaults / setThemeOverride 的 id 必须是 docx:document".into()
             }
             IdReason::SetThemeNeedsWorkbook => {
-                "setThemeColors / setThemeFonts / setThemeFmt / setThemeOverride 的 id 必须是 xlsx:workbook".into()
+                "setThemeColors / setThemeFonts / setThemeFmt / setThemeExtraSchemes / setThemeObjectDefaults / setThemeOverride 的 id 必须是 xlsx:workbook".into()
             }
             IdReason::SetClrMapNeedsHost => {
                 "setClrMap 的 id 必须是 master:N、notesMaster 或 handout".into()
@@ -1117,6 +1117,10 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             "setTableStyleRef 至少要给 tableStyleId 或 tblLook 之一".into()
         }
         ErrorKind::InvalidTableStyleId => "tableStyleId 必须是 ST_Guid".into(),
+        ErrorKind::NeedSetThemeObjectDefaultsField => {
+            "setThemeObjectDefaults 至少要给 sp、ln 或 tx 之一".into()
+        }
+        ErrorKind::InvalidFontRefIdx => "fontRef 必须是 major、minor 或 none".into(),
         ErrorKind::NeedGradientStops => "textFill.stops 至少要有两项".into(),
         ErrorKind::DuplicateGradientPos => "textFill.stops 的 pos 不能重复".into(),
         ErrorKind::NeedTextOutlineField => "textOutline 必须有 color 与 width".into(),

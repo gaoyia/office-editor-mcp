@@ -347,6 +347,12 @@ pub struct SetThemeExtraSchemesOp {
 }
 
 #[derive(Debug, Clone)]
+pub struct SetThemeObjectDefaultsOp {
+    pub host: super::super::theme::ThemeHost,
+    pub defaults: Option<crate::theme::ObjectDefaultsPatch>,
+}
+
+#[derive(Debug, Clone)]
 pub enum ClrMapHost {
     Master(usize),
     NotesMaster,
@@ -1473,6 +1479,7 @@ pub enum PptxOp {
     SetThemeFonts(SetThemeFontsOp),
     SetThemeFmt(SetThemeFmtOp),
     SetThemeExtraSchemes(SetThemeExtraSchemesOp),
+    SetThemeObjectDefaults(SetThemeObjectDefaultsOp),
     SetClrMap(SetClrMapOp),
     SetClrMapOvr(SetClrMapOvrOp),
     SetThemeOverride(SetThemeOverrideOp),

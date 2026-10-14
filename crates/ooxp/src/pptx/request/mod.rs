@@ -357,6 +357,9 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<PptxOp>, Error> {
             "setThemeExtraSchemes" => {
                 PptxOp::SetThemeExtraSchemes(parse_set_theme_extra_schemes(obj, i)?)
             }
+            "setThemeObjectDefaults" => {
+                PptxOp::SetThemeObjectDefaults(parse_set_theme_object_defaults(obj, i)?)
+            }
             "setClrMap" => PptxOp::SetClrMap(parse_set_clr_map(obj, i)?),
             "setClrMapOvr" => PptxOp::SetClrMapOvr(parse_set_clr_map_ovr(obj, i)?),
             "setThemeOverride" => PptxOp::SetThemeOverride(parse_set_theme_override(obj, i)?),

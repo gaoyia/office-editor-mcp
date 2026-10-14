@@ -6231,6 +6231,69 @@
           ]
         }
       }
+    },
+    "setThemeObjectDefaultsOp": {
+      "type": "object",
+      "required": ["op", "id", "objectDefaults"],
+      "additionalProperties": false,
+      "properties": {
+        "op": { "const": "setThemeObjectDefaults" },
+        "id": { "type": "string", "minLength": 1 },
+        "objectDefaults": {
+          "oneOf": [
+            { "$ref": "#/$defs/themeObjectDefaults" },
+            { "type": "null" }
+          ]
+        }
+      }
+    },
+    "themeObjectDefaults": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": false,
+      "properties": {
+        "sp": {
+          "oneOf": [
+            { "$ref": "#/$defs/themeObjectDef" },
+            { "type": "null" }
+          ]
+        },
+        "ln": {
+          "oneOf": [
+            { "$ref": "#/$defs/themeObjectDef" },
+            { "type": "null" }
+          ]
+        },
+        "tx": {
+          "oneOf": [
+            { "$ref": "#/$defs/themeObjectDef" },
+            { "type": "null" }
+          ]
+        }
+      }
+    },
+    "themeObjectDef": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "style": {
+          "oneOf": [
+            { "$ref": "#/$defs/themeObjectStyle" },
+            { "type": "null" }
+          ]
+        },
+        "lnW": { "type": ["integer", "null"], "minimum": 0 }
+      }
+    },
+    "themeObjectStyle": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "lnRef": { "type": "integer", "minimum": 0 },
+        "fillRef": { "type": "integer", "minimum": 0 },
+        "effectRef": { "type": "integer", "minimum": 0 },
+        "fontRef": { "enum": ["major", "minor", "none"] }
+      }
     }
   }
 }

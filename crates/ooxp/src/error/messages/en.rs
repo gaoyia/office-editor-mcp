@@ -358,13 +358,13 @@ pub(super) fn render(kind: &ErrorKind) -> String {
                 "setProtection id must be pptx:presentation".into()
             }
             IdReason::SetThemeNeedsMaster => {
-                "setThemeColors / setThemeFonts / setThemeFmt / setThemeExtraSchemes id must be master:N, notesMaster, or handout".into()
+                "setThemeColors / setThemeFonts / setThemeFmt / setThemeExtraSchemes / setThemeObjectDefaults id must be master:N, notesMaster, or handout".into()
             }
             IdReason::SetThemeNeedsDocument => {
-                "setThemeColors / setThemeFonts / setThemeFmt / setThemeOverride id must be docx:document".into()
+                "setThemeColors / setThemeFonts / setThemeFmt / setThemeExtraSchemes / setThemeObjectDefaults / setThemeOverride id must be docx:document".into()
             }
             IdReason::SetThemeNeedsWorkbook => {
-                "setThemeColors / setThemeFonts / setThemeFmt / setThemeOverride id must be xlsx:workbook".into()
+                "setThemeColors / setThemeFonts / setThemeFmt / setThemeExtraSchemes / setThemeObjectDefaults / setThemeOverride id must be xlsx:workbook".into()
             }
             IdReason::SetClrMapNeedsHost => {
                 "setClrMap id must be master:N, notesMaster, or handout".into()
@@ -1233,6 +1233,10 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             "setTableStyleRef requires at least one of tableStyleId or tblLook".into()
         }
         ErrorKind::InvalidTableStyleId => "tableStyleId must be ST_Guid".into(),
+        ErrorKind::NeedSetThemeObjectDefaultsField => {
+            "setThemeObjectDefaults requires at least one of sp, ln, or tx".into()
+        }
+        ErrorKind::InvalidFontRefIdx => "fontRef must be major, minor, or none".into(),
         ErrorKind::NeedGradientStops => "textFill.stops must have at least two items".into(),
         ErrorKind::DuplicateGradientPos => "textFill.stops pos values must be unique".into(),
         ErrorKind::NeedTextOutlineField => "textOutline requires color and width".into(),

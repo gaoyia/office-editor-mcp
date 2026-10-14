@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "deck.pptx",
+  "ops": [
+    {
+      "op": "setThemeObjectDefaults",
+      "id": "master:1",
+      "objectDefaults": {
+        "sp": {
+          "style": { "lnRef": 1, "fontRef": "minor" },
+          "lnW": 38100
+        }
+      }
+    }
+  ]
+}

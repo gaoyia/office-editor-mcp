@@ -1820,6 +1820,16 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                     i,
                 )?;
             }
+            PptxOp::SetThemeObjectDefaults(op) => {
+                theme::set_theme_object_defaults(
+                    &mut pkg,
+                    &pres_part,
+                    &pres.root,
+                    op.host,
+                    op.defaults.as_ref(),
+                    i,
+                )?;
+            }
             PptxOp::SetClrMap(op) => {
                 theme_map::set_clr_map(&mut pkg, &pres_part, &pres.root, op, i)?;
             }

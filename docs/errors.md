@@ -263,7 +263,7 @@
 - 找不到段落时报 `IdNotFound`
 - 不认识的分节 `type` / `sectionType`，或 create 时最后一段带 `sectionType`，报 `InvalidField`
 - `setEvenAndOddHeaders` / `setMirrorMargins` / `setGutterAtTop` / `setPageBackground` / `setBibliographyStyle` 的 id 不是 `docx:document` 报 `InvalidId`
-- `setThemeFmt` / `setThemeExtraSchemes` 的 id：pptx 不是 `master:{n}`、`notesMaster` 或 `handout`、docx 不是 `docx:document`、xlsx 不是 `xlsx:workbook` 报 `InvalidId`
+- `setThemeFmt` / `setThemeExtraSchemes` / `setThemeObjectDefaults` 的 id：pptx 不是 `master:{n}`、`notesMaster` 或 `handout`、docx 不是 `docx:document`、xlsx 不是 `xlsx:workbook` 报 `InvalidId`
 - `setThemeOverride` 的 id：docx 不是 `docx:document`、xlsx 不是 `xlsx:workbook`、pptx 不是 `slide:{n}` 也不是 `slide:{n}/notes` 报 `InvalidId`
 - `setClrMap` 的 id 不是 `master:{n}`、`notesMaster` 或 `handout` 报 `InvalidId`
 - `setClrMapOvr` 的 id 不是 `slide:{n}`、`slide:{n}/notes` 或 `master:{n}/layout:{k}` 报 `InvalidId`
@@ -462,7 +462,7 @@
 - `deleteMaster` 的 id 必须是 `master:{n}`
 - `setSlideSize` 的 id 必须是 `pptx:presentation`
 - `setNotesSize` 的 id 必须是 `pptx:presentation`
-- `setThemeColors` / `setThemeFonts` / `setThemeFmt` / `setThemeExtraSchemes` 的 id：pptx 必须是 `master:{n}`、`notesMaster` 或 `handout`，docx 必须是 `docx:document`，xlsx 必须是 `xlsx:workbook`
+- `setThemeColors` / `setThemeFonts` / `setThemeFmt` / `setThemeExtraSchemes` / `setThemeObjectDefaults` 的 id：pptx 必须是 `master:{n}`、`notesMaster` 或 `handout`，docx 必须是 `docx:document`，xlsx 必须是 `xlsx:workbook`
 - `setClrMap` 的 id 必须是 `master:{n}`、`notesMaster` 或 `handout`
 - `setClrMapOvr` 的 id 必须是 `slide:{n}`、`slide:{n}/notes` 或 `master:{n}/layout:{k}`
 - `setThemeOverride` 的 id：docx 必须是 `docx:document`，xlsx 必须是 `xlsx:workbook`，pptx 必须是 `slide:{n}` 或 `slide:{n}/notes`
@@ -482,7 +482,7 @@
   - 该母版只剩一份版式、最后一份母版、或仍有页占用时 `deleteLayout` / `deleteMaster`
   - `setSlideSize` 缺 `cx` / `cy`、越界、或 `type` 不在白名单
   - `setNotesSize` 缺 `cx` / `cy` 或越界
-  - `setThemeColors` / `setThemeFonts` / `setThemeFmt` / `setThemeExtraSchemes` / `setThemeOverride` / `setClrMap` / `setClrMapOvr` 一个可写字段都不给、非法十六进制、非法 theme 槽名、`majorLatin` / `minorLatin` 空串、名字空串、脚本项缺 `script` / `typeface`、或 `setThemeFmt` 的 `index` / `kind` / `w` 非法
+  - `setThemeColors` / `setThemeFonts` / `setThemeFmt` / `setThemeExtraSchemes` / `setThemeObjectDefaults` / `setThemeOverride` / `setClrMap` / `setClrMapOvr` 一个可写字段都不给、非法十六进制、非法 theme 槽名、`majorLatin` / `minorLatin` 空串、名字空串、脚本项缺 `script` / `typeface`、或 `setThemeFmt` 的 `index` / `kind` / `w` 非法、或 `setThemeObjectDefaults` 的 `fontRef` / `lnW` / 矩阵 idx 非法
 - `setHandoutText` 的 `id` 必须是 `handout`
 - `header` / `footer` / `date` / `sldNum` 一个都不给报 `InvalidField`
 - docx / xlsx 上发这些幻灯片管理 op、母版写入 op、`setSlideSize`、`setNotesSize`、`setClrMap` / `setClrMapOvr`、`insertAnim` / `setAnim` / `deleteAnim` / `moveAnim`、`setHandoutText` 以及 `setShowPr` 报 `InvalidField`
@@ -663,7 +663,7 @@
   - 外部引用：`insertExternalLink`、`setExternalLink`、`deleteExternalLink`
   - 自定义视图：`insertCustomView`、`deleteCustomView`、`showCustomView`
   - `setProtection`
-  - 主题：`setThemeColors`、`setThemeFonts`、`setThemeFmt`、`setThemeExtraSchemes`、`setThemeOverride`
+  - 主题：`setThemeColors`、`setThemeFonts`、`setThemeFmt`、`setThemeExtraSchemes`、`setThemeObjectDefaults`、`setThemeOverride`
 - xlsx 的 `insertComment` 的 `id` 必须是单元格 id
 - 对其余批注 op，id 必须是 `cell:{name}!{A1}/comment:{guid}`（回复则再加 `/reply:{guid}`）
 - 对工作表 id、页 id 或 `xlsx:workbook` 发这些 op 报 `InvalidId`

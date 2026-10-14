@@ -168,7 +168,14 @@ fn inspect_theme_slots_and_order() {
     let theme = &tree["theme"];
     assert_eq!(
         object_keys(theme),
-        ["name", "colors", "fonts", "fmt", "extraSchemes"]
+        [
+            "name",
+            "colors",
+            "fonts",
+            "fmt",
+            "extraSchemes",
+            "objectDefaults"
+        ]
     );
     assert_eq!(theme["name"], "Office Theme");
     assert_eq!(object_keys(&theme["colors"]), COLOR_KEYS);
@@ -184,6 +191,7 @@ fn inspect_theme_slots_and_order() {
     assert_eq!(theme["colors"]["accent1"], "4F81BD");
     assert_eq!(theme["fonts"]["majorLatin"], "Calibri Light");
     assert_eq!(theme["extraSchemes"], json!([]));
+    assert!(theme["objectDefaults"].is_null());
     assert_eq!(theme["fonts"]["majorScripts"], json!([]));
 }
 
@@ -312,6 +320,7 @@ fn create_writes_theme_and_keeps_default_without() {
     assert_eq!(tree["theme"]["colors"]["accent1"], "FF0000");
     assert_eq!(tree["theme"]["fonts"]["majorLatin"], "Arial");
     assert_eq!(tree["theme"]["fmt"]["name"], "Office");
+    assert!(tree["theme"]["objectDefaults"].is_null());
     let bare = create_xlsx("still-null");
     assert!(inspect(&bare)["theme"].is_null());
 }
@@ -379,4 +388,97 @@ fn set_theme_names_scripts_and_extra() {
     let tree = inspect(&cleared);
     assert_eq!(tree["theme"]["fonts"]["majorScripts"], json!([]));
     assert_eq!(tree["theme"]["extraSchemes"], json!([]));
+}
+
+#[test]
+fn set_theme_object_defaults_round_trip() {
+    let src = inject_theme(&create_xlsx("od-src"));
+    let out = tmp("od");
+    apply(
+        &src,
+        &out,
+        json!([{
+            "op": "setThemeObjectDefaults",
+            "id": "xlsx:workbook",
+            "objectDefaults": {
+                "sp": {
+                    "style": { "lnRef": 1, "fontRef": "minor" },
+                    "lnW": 38100
+                }
+            }
+        }]),
+    )
+    .unwrap();
+    let tree = inspect(&out);
+    let od = &tree["theme"]["objectDefaults"];
+    assert_eq!(object_keys(od), ["sp", "ln", "tx"]);
+    assert_eq!(od["sp"]["lnW"], 38100);
+    assert_eq!(od["sp"]["style"]["lnRef"], 1);
+    assert_eq!(od["sp"]["style"]["fillRef"], 0);
+    assert_eq!(od["sp"]["style"]["fontRef"], "minor");
+    assert!(od["ln"].is_null());
+    let xml = part(&out, "xl/theme/theme1.xml");
+    assert!(xml.contains("<a:objectDefaults>"));
+    assert!(xml.contains(r#"<a:lnRef idx="1">"#));
+    assert!(xml.contains(r#"w="38100""#));
+    let cleared = tmp("od-clear");
+    apply(
+        &out,
+        &cleared,
+        json!([{
+            "op": "setThemeObjectDefaults",
+            "id": "xlsx:workbook",
+            "objectDefaults": null
+        }]),
+    )
+    .unwrap();
+    assert!(inspect(&cleared)["theme"]["objectDefaults"].is_null());
+}
+
+#[test]
+fn set_theme_object_defaults_rejects() {
+    let src = create_xlsx("od-missing");
+    let out = tmp("od-missing-out");
+    let err = apply(
+        &src,
+        &out,
+        json!([{
+            "op": "setThemeObjectDefaults",
+            "id": "xlsx:workbook",
+            "objectDefaults": { "sp": { "lnW": 1 } }
+        }]),
+    )
+    .unwrap_err();
+    assert_eq!(err_code(err), ErrorCode::IdNotFound);
+    assert!(!out.exists());
+    let themed = inject_theme(&create_xlsx("od-bad"));
+    let err = apply(
+        &themed,
+        &out,
+        json!([{
+            "op": "setThemeObjectDefaults",
+            "id": "sheet:Sheet1",
+            "objectDefaults": { "sp": { "lnW": 1 } }
+        }]),
+    )
+    .unwrap_err();
+    assert_eq!(err_code(err), ErrorCode::InvalidId);
+    let err = apply(
+        &themed,
+        &out,
+        json!([{ "op": "setThemeObjectDefaults", "id": "xlsx:workbook" }]),
+    )
+    .unwrap_err();
+    assert_eq!(err_code(err), ErrorCode::InvalidField);
+    let err = apply(
+        &themed,
+        &out,
+        json!([{
+            "op": "setThemeObjectDefaults",
+            "id": "xlsx:workbook",
+            "objectDefaults": { "sp": { "style": { "fontRef": "latin" } } }
+        }]),
+    )
+    .unwrap_err();
+    assert_eq!(err_code(err), ErrorCode::InvalidField);
 }

@@ -50,12 +50,13 @@ try {
     $fmtKeys = @($theme0.fmt.PSObject.Properties.Name)
     $extra0 = @($theme0.extraSchemes)
 } catch {}
-$tfm1ok = ($themeKeys.Count -eq 5) `
+$tfm1ok = ($themeKeys.Count -eq 6) `
     -and ($themeKeys[0] -eq 'name') `
     -and ($themeKeys[1] -eq 'colors') `
     -and ($themeKeys[2] -eq 'fonts') `
     -and ($themeKeys[3] -eq 'fmt') `
     -and ($themeKeys[4] -eq 'extraSchemes') `
+    -and ($themeKeys[5] -eq 'objectDefaults') `
     -and ($fontKeys -contains 'majorScripts') `
     -and ($fontKeys -contains 'minorScripts') `
     -and ($fmtKeys -contains 'name') `

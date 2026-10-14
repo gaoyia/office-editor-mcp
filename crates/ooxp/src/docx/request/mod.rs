@@ -770,6 +770,9 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<DocxOp>, Error> {
             "setThemeExtraSchemes" => out.push(DocxOp::SetThemeExtraSchemes(
                 super::theme::parse_set_extra_schemes(obj, i)?,
             )),
+            "setThemeObjectDefaults" => out.push(DocxOp::SetThemeObjectDefaults(
+                super::theme::parse_set_object_defaults(obj, i)?,
+            )),
             "setThemeOverride" => out.push(DocxOp::SetThemeOverride(
                 super::theme::parse_set_override(obj, i)?,
             )),

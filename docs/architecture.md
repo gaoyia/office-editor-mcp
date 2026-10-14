@@ -112,7 +112,7 @@ apply 可改目标单元格，也可换、插、删工作表图，并可改 `one
 对 `dialogsheet` / `macrosheet` 这些 op 仍报 `NotImplemented`。
 也可用 `setCellStyle` 写单元格数字格式、字体、填充、边框与对齐：复用或追加 `styles.xml` 里的 `xf`，只改被点名格子的 `s`。边框含对角线，对齐可写缩进、旋转与缩小字体。
 也可用 `insertCellStyle` / `deleteCellStyle` / `setCellNamedStyle` 读写 `cellStyles`：insert 写入 `cellStyleXfs` 再挂名，套用时把格子的 `s` 指到引用该 `xfId` 的 `cellXfs`。不改主题色板。
-也可用 `setThemeColors` / `setThemeFonts` / `setThemeFmt` / `setThemeExtraSchemes` / `setThemeOverride` 读写工作簿 theme / themeOverride 部件，不把格子上的 theme 指数算成 RGB。
+也可用 `setThemeColors` / `setThemeFonts` / `setThemeFmt` / `setThemeExtraSchemes` / `setThemeObjectDefaults` / `setThemeOverride` 读写工作簿 theme / themeOverride 部件，不把格子上的 theme 指数算成 RGB。
 也可插、删、改工作表单元格超链接：脏该表 XML 的 `<hyperlinks>` 与工作表 `.rels`（Type 以 `/hyperlink` 结尾、`TargetMode` 为 `External`），不标重算，不改单元格值。
 也可插、删、改图 / 文本框 / 形状 / SmartArt 上的 DrawingML 链：脏 drawing 的 `a:hlinkClick` 与 drawing `.rels`。
 也可按槽位改页眉页脚原文，并可对 `worksheet` 与 `chartsheet` 的页眉槽位插、换、删 DrawingML 图。
@@ -220,7 +220,7 @@ apply 可改被点名形状的 `p:txBody` 可见文字（含备注形状、母�
 也可用 `insertLayout` / `deleteLayout` / `insertPlaceholder` / `deletePlaceholder` / `insertMaster` / `deleteMaster` 插删空白版式、
 带 `p:ph` 的占位符与整份母版（不算母版排版引擎；`insertPlaceholder` 还可写备注母版与讲义）；
 也可用 `insertShape` / `deleteShape` 插删母版 / 版式上没有 `p:ph` 的装饰形（不抄进各页）；
-也可用 `setSlideSize` 只改 `p:sldSz`（不重排形状）；也可用 `setNotesSize` 只改 `p:notesSz`（不重排备注形状）；也可用 `setThemeColors` / `setThemeFonts` / `setThemeFmt` / `setThemeExtraSchemes` 改 slideMaster、notesMaster 或 handout 的 theme（不把 `schemeClr` 展开成 RGB）；
+也可用 `setSlideSize` 只改 `p:sldSz`（不重排形状）；也可用 `setNotesSize` 只改 `p:notesSz`（不重排备注形状）；也可用 `setThemeColors` / `setThemeFonts` / `setThemeFmt` / `setThemeExtraSchemes` / `setThemeObjectDefaults` 改 slideMaster、notesMaster 或 handout 的 theme（不把 `schemeClr` 展开成 RGB）；
 也可用 `setClrMap` / `setClrMapOvr` / `setThemeOverride` 读写 `p:clrMap`、页 / 版式 / 备注页 `p:clrMapOvr` 与页级 themeOverride 部件；
 也可用 `setHandoutText` 改讲义母版页眉、页脚、日期与页码占位符（没有 handoutMaster 则新建最小部件）；
 讲义与备注母版占位符也可绑同一套预设动画；
@@ -242,7 +242,7 @@ apply 可改被点名形状的 `p:txBody` 可见文字（含备注形状、母�
 给了 `slides[].comments` 时复用 `insertComment`。给了 `slides[].anims` 时复用 `insertAnim`（白名单预设，可写 `delay` / `dur` / `repeat` / 声音 / 按段；第一条 `with` / `after` 进片自动播）。
 母版与版式进树（`scope.masters`），含占位符与装饰形。`setSlideLayout` 只换关系，写入用 `insertLayout` / `insertPlaceholder` / `insertMaster` / `insertShape` 等。
 动画效果摘要进树（`scope.timing`），写入用 `insertAnim` / `setAnim` / `deleteAnim` / `moveAnim`。切换进树，用 `setTransition` 改。幻灯片尺寸始终进树，写入用 `setSlideSize`。备注页尺寸始终进树，写入用 `setNotesSize`。
-主题配色、字体、`fmtScheme` 常用槽与补充色板挂在 `scope.masters`、`scope.notesMaster` 与 `scope.handout` 的 `theme` 上，写入用 `setThemeColors` / `setThemeFonts` / `setThemeFmt` / `setThemeExtraSchemes`。
+主题配色、字体、`fmtScheme` 常用槽、补充色板与 `objectDefaults` 挂在 `scope.masters`、`scope.notesMaster` 与 `scope.handout` 的 `theme` 上，写入用 `setThemeColors` / `setThemeFonts` / `setThemeFmt` / `setThemeExtraSchemes` / `setThemeObjectDefaults`。
 母版 `clrMap`、页 / 版式 `clrMapOvr` 与页级 `themeOverride` 进树，写入用 `setClrMap` / `setClrMapOvr` / `setThemeOverride`。`mc:AlternateContent` 只走第一个 `Choice`。
 
 ### cli
@@ -306,7 +306,7 @@ xlsx 也可列出、插入、删除并改路径对其他工作簿的外部引用
 xlsx 也可用 `setProtection` 改工作表 `sheetProtection` 或 workbook `workbookProtection`，可写 SHA-512 哈希，不标重算。
 xlsx 也可插、改、删工作表允许编辑区域，脏该表 `<protectedRanges>`，可写同一套 SHA-512，不标重算。
 xlsx 也可用 `setThemeColors` / `setThemeFonts` / `setThemeFmt` 改工作簿 theme 部件的配色、字体、方案名与 `fmtScheme` 常用槽，只脏该 theme 部件；
-也可用 `setThemeExtraSchemes` 整份替换补充色板；也可用 `setThemeOverride` 新建或改 `/xl/theme/themeOverride1.xml`。不把格子上的 theme 指数算成 RGB。
+也可用 `setThemeExtraSchemes` 整份替换补充色板；也可用 `setThemeObjectDefaults` 改默认形状 / 线 / 文本框样式；也可用 `setThemeOverride` 新建或改 `/xl/theme/themeOverride1.xml`。不把格子上的 theme 指数算成 RGB。
 xlsx 也可改工作表上的页眉页脚原文，并可对 `worksheet` 与 `chartsheet` 页眉槽位插换删 DrawingML 图，脏 `headerFooter` / `drawingHF` 与对应 drawing。
 xlsx 也可改文件属性，脏 `docProps`。docx 可改被点名的段落，可在主文档、页眉页脚与表格单元格插删段落，可插删表以及行与列并合并拆分单元格，可接受或拒绝 run 级、段落标记、表行与表属性修订，可插删改超链接与书签，可插改删域指令（不求值；
 可按 code 写常用域与窗体 ffData），可插入或删除目录块（不在库里算页码），可插入题注与交叉引用（不在库里求 SEQ / REF），可插删构建基块并把基块正文复制进主文档，
@@ -322,14 +322,14 @@ docx 也可用 `setProtection` 改 `settings.xml` 的保护标记（限制编辑
 也可用 `setFormProt` 把某节改成例外，也可用 `insertEditRange` / `deleteEditRange` 读写 `w:permStart` / `w:permEnd`。
 docx 也可插删页眉 DrawingML 水印，无 default 页眉时会新建，并可脏页眉部件与媒体。
 docx 也可用 `setThemeColors` / `setThemeFonts` / `setThemeFmt` 改主文档 theme 部件的配色、字体、方案名与 `fmtScheme` 常用槽，只脏该 theme 部件；
-也可用 `setThemeExtraSchemes` 整份替换补充色板；也可用 `setThemeOverride` 新建或改主文档 themeOverride 部件。
+也可用 `setThemeExtraSchemes` 整份替换补充色板；也可用 `setThemeObjectDefaults` 改默认形状 / 线 / 文本框样式；也可用 `setThemeOverride` 新建或改主文档 themeOverride 部件。
 pptx 可改被点名形状的可见文字（含备注形状与母版 / 版式占位符），可插入文本框与非矩形预设几何、写入自定义路径、插入连接线（幻灯片、备注页与母版 / 版式，可写 `stCxn` / `endCxn`）、组合与解开、删除被点名形状并清对应 timing `tgtEl`、改画布坐标与尺寸、填充描边与 DrawingML 文字格式，
 可用 `setNotesText` 按页改或新建演讲者备注，也可改被点名的幻灯片图、备注图与母版 / 版式图（换、插、删、改尺寸、改画布坐标），也可插删改幻灯片、备注页与母版 / 版式图表，也可插删改幻灯片、备注页与母版 / 版式 SmartArt，
 也可插删改幻灯片、备注页与母版 / 版式 DrawingML 表（含格网列宽与行高、格填充（实心/渐变/图案/图片）与六边、格边距、格 `vert` / `anchorCtr` / `horzOverflow` / `cell3D` / `headers`、表样式 GUID 与 `tblLook`），也可插删回复并改现代批注，也可对批注或回复 id 插图并换、删批注内图（不改尺寸位置），也可按批注内图 id `exportMedia`，也可插入、删除、重排与隐藏幻灯片，
 也可用 `setTransition` 写或清除该页、母版或版式上的 `<p:transition>`（含自动进片、方向、切换声音、`split` 的 `orient`、`wheel` 的 `spokes` 与 `p15:prstTrans`），
 也可用 `insertAnim` / `setAnim` / `deleteAnim` / `moveAnim` 按模板增删改该宿主 `<p:timing>` 里的预设效果（不接受整棵时间轴树），也可用 `setSlideLayout` 只改该页 `.rels` 的版式关系，
 也可用 `insertLayout` / `deleteLayout` / `insertPlaceholder` / `deletePlaceholder` / `insertMaster` / `deleteMaster` 插删版式、占位符与母版，
-也可用 `setSlideSize` 只改 `p:sldSz`，也可用 `setNotesSize` 只改 `p:notesSz`，也可用 `setThemeColors` / `setThemeFonts` / `setThemeFmt` / `setThemeExtraSchemes` 改 slideMaster、notesMaster 或 handout 的 theme，
+也可用 `setSlideSize` 只改 `p:sldSz`，也可用 `setNotesSize` 只改 `p:notesSz`，也可用 `setThemeColors` / `setThemeFonts` / `setThemeFmt` / `setThemeExtraSchemes` / `setThemeObjectDefaults` 改 slideMaster、notesMaster 或 handout 的 theme，
 也可用 `setClrMap` / `setClrMapOvr` / `setThemeOverride` 改配色映射与页级覆盖，也可用 `setHandoutText` 改或新建讲义母版，
 也可用 `insertField` / `setField` / `deleteField` 插删改幻灯片、备注页与母版 / 版式文本形状里的 `a:fld`（不求值），
 也可用 `insertSlideSection` / `setSlideSectionName` / `deleteSlideSection` / `setSlideSection` 读写 `p14:sectionLst`（删节时页还在；
@@ -345,7 +345,7 @@ pptx 可改被点名形状的可见文字（含备注形状与母版 / 版式占
 超链接 op 脏该宿主 XML（幻灯片、notesSlide、slideMaster 或 slideLayout）与该宿主 `.rels`。域 op（`insertField` / `setField` / `deleteField`）只脏该宿主 XML。`setSlideLayout` 只脏该页 `.rels`。
 `insertLayout` / `deleteLayout` / `insertMaster` / `deleteMaster` 还可脏母版 / 版式 / theme 部件、presentation 与内容类型；
 `insertPlaceholder` / `deletePlaceholder` 只脏目标母版或版式 XML。
-`setSlideSize` 只脏 `presentation.xml` 的 `p:sldSz`。`setNotesSize` 只脏 `presentation.xml` 的 `p:notesSz`。`setThemeColors` / `setThemeFonts` / `setThemeFmt` / `setThemeExtraSchemes` 只脏该母版指向的 theme 部件。
+`setSlideSize` 只脏 `presentation.xml` 的 `p:sldSz`。`setNotesSize` 只脏 `presentation.xml` 的 `p:notesSz`。`setThemeColors` / `setThemeFonts` / `setThemeFmt` / `setThemeExtraSchemes` / `setThemeObjectDefaults` 只脏该母版指向的 theme 部件。
 `setClrMap` 只脏被点名母版 XML。`setClrMapOvr` 只脏被点名页 / 版式 / 备注页 XML。
 `setThemeOverride` 脏该宿主 `.rels` 与 `/ppt/theme/themeOverrideN.xml`。
 三种格式都可用 `setProps` / `setCustomProp` / `deleteCustomProp` 改 core / app / custom，脏对应 `docProps` 部件与必要时的根关系、内容类型。保存时只重写脏部件。

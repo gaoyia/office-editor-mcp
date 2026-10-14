@@ -1021,6 +1021,9 @@ pub fn apply(bytes: &[u8], ops: &[XlsxOp]) -> Result<Vec<u8>, Error> {
             XlsxOp::SetThemeExtraSchemes(op) => {
                 super::theme::set_extra_schemes(&mut pkg, &wb_part, op, i)?;
             }
+            XlsxOp::SetThemeObjectDefaults(op) => {
+                super::theme::set_object_defaults(&mut pkg, &wb_part, op, i)?;
+            }
             XlsxOp::SetThemeOverride(op) => {
                 super::theme::set_override(&mut pkg, &wb_part, op, i)?;
             }

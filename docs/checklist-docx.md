@@ -46,6 +46,7 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
 同日补跑 `docx-cell-borders.ps1`，Tcb1–Tcb6 通过。无 Repair。COM 该格上边 `LineStyle=7`。`null` 去掉正交边后斜线仍在。
 同日补跑 `docx-run-scale.ps1`，Rsc1–Rsc6 通过。无 Repair。COM `Font.Scaling` 为 200 / 50。框内 run 可改缩放。
 同日补跑 `docx-theme-remain.ps1`，Thr1–Thr6 通过。无 Repair。空白另存 `extraSchemes=[]`，脚本列表在 `minorCs` 之后。改名 / 脚本 / 补充色板 / `themeFontLang` 树上对得上。
+2026-10-14 补跑 `docx-theme-defaults.ps1`，Tdf1–Tdf5 通过。无 Repair。create 后 `objectDefaults` 为 `null`。`lnW=38100`。`lnRef=1` `fontRef=minor`。`null` 清掉。
 同日补跑 `docx-cell-props.ps1`，Tcp1–Tcp6 通过。无 Repair。COM `WordWrap` 为 False，`Range.Orientation` 为 3，`FitText` 为 True。`headers=["A1"]`。xlsx 拒写 `setCellFormat`。
 
 - **C1** ✅
@@ -395,6 +396,13 @@ C、I、A 三组现在由 `manual-check/office/cases/docx-*.ps1` 自动判定，
   - 补充色板写入后树上对得上，`null` 清掉列表
   - `themeFontLang` 写入后树上对得上
   - 无 theme / 错 id / xlsx 无 theme 同样 `IdNotFound`
+- **Tdf1–Tdf5** ✅
+  - Word 16.0：`docx-theme-defaults.ps1`，5 PASS / 0 FAIL
+  - create 给了 `document.theme` 后 `objectDefaults` 为 `null`
+  - `sp.lnW=38100` 后树上对得上
+  - `sp.style.lnRef=1` `fontRef=minor` 后树上对得上
+  - `objectDefaults: null` 后为 `null`
+  - 段落 id / 缺字段 / 非法 `fontRef` / 无 theme 拒写
 - **Ea1–Ea8** ✅
   - Word 16.0：`docx-east-asia.ps1`，8 PASS / 0 FAIL
   - 段禁则树上 `kinsoku` / `overflowPunct` / `autoSpaceDE` 对得上
@@ -1996,6 +2004,19 @@ theme 与配色 / 字体方案的 `name`、补充色板、脚本字体、以及 
 | Thr4 | 补充色板 | `setThemeExtraSchemes` 写入一份 `Extra` 后树上 `name` 与 `accent1` 对得上；再 `null` 后为 `[]`。Word 无修复 | ✅ |
 | Thr5 | 主题语言 | `setEastAsianSettings` 写 `themeFontLang.val=ja-JP` 后树上对得上。Word 无修复 | ✅ |
 | Thr6 | 拒错 | 无 theme 发名字 / 补充色板得 `IdNotFound`；xlsx 无 theme 发 `setThemeExtraSchemes` 同样得 `IdNotFound`。未写文件 | ✅ |
+
+## 主题 objectDefaults
+
+theme 上的 `a:objectDefaults`。不算主题排版引擎。不把 `phClr` 展开成 RGB。
+手测脚本 `manual-check/office/cases/docx-theme-defaults.ps1`。编号用 Tdf。不要和 Th、Thr、Fm 撞。
+
+| 编号 | 项 | 期望 | 状态 |
+| --- | --- | --- | --- |
+| Tdf1 | inspect | create 给了 `document.theme` 后 `objectDefaults` 为 `null`。无 Repair | ✅ |
+| Tdf2 | 线宽 | `setThemeObjectDefaults` 写 `sp.lnW=38100` 后树上对得上。Word 无修复 | ✅ |
+| Tdf3 | 样式 | 写 `sp.style.lnRef=1` `fontRef=minor` 后树上对得上。无 Repair | ✅ |
+| Tdf4 | 清除 | `objectDefaults: null` 后为 `null`。无 Repair | ✅ |
+| Tdf5 | 拒错 | 对段落 id 发得 `InvalidId`。缺字段、非法 `fontRef`、无 theme 得 `InvalidField` / `IdNotFound`。未写文件 | ✅ |
 
 ## 组合与连接线
 
