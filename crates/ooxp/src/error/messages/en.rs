@@ -550,6 +550,11 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::SheetOleContainer => {
                 "Sheet id must include /ole:… (that id alone is not an embedded object)".into()
             }
+            IdReason::InsertInkNeedsSheet => "xlsx insertInk id must be sheet:name".into(),
+            IdReason::SheetInkPrefix => "xlsx ink id must be sheet:name/ink:…".into(),
+            IdReason::SheetInkContainer => {
+                "Sheet id must include /ink:… (that id alone is not ink)".into()
+            }
             IdReason::InsertModel3dNeedsSheet => "xlsx insertModel3d id must be sheet:name".into(),
             IdReason::SheetModel3dPrefix => "xlsx 3D model id must be sheet:name/model3d:…".into(),
             IdReason::SheetModel3dContainer => {
@@ -1129,7 +1134,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         }
         ErrorKind::SmartArtNotFound { id } => format!("SmartArt not found: {id}"),
         ErrorKind::OleNotFound { id } => format!("Embedded object not found: {id}"),
-        ErrorKind::InkNotFound { id } => format!("Ink canvas not found: {id}"),
+        ErrorKind::InkNotFound { id } => format!("Ink not found: {id}"),
         ErrorKind::Model3dNotFound { id } => format!("3D model not found: {id}"),
         ErrorKind::MathDrawingNotFound { id } => format!("math drawing not found: {id}"),
         ErrorKind::MathDrawingNoExpr => {
@@ -1292,6 +1297,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::InsertModel3dWorksheetOnly => {
             "insertModel3d only applies to worksheets".into()
         }
+        ErrorKind::InsertInkWorksheetOnly => "insertInk only applies to worksheets".into(),
         ErrorKind::InsertMathWorksheetOnly => "insertMath only applies to worksheets".into(),
         ErrorKind::InsertSmartArtWorksheetOnly => {
             "insertSmartArt and SmartArt ops only apply to worksheets".into()
@@ -1324,6 +1330,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::TwoCellModel3dSize => {
             "twoCell 3D model size is defined by the to cell; give to on setModel3dSize, not cx / cy"
                 .into()
+        }
+        ErrorKind::TwoCellInkSize => {
+            "twoCell ink size is defined by the to cell; give to on setInkSize, not cx / cy".into()
         }
         ErrorKind::TwoCellSlicerSize => {
             "twoCell slicer size is defined by the to cell; give to on setSlicerSize, not cx / cy"

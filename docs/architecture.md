@@ -24,8 +24,8 @@ ECMA-376 示例里常见的 Strict 命名空间（`http://purl.oclc.org/ooxml/..
 禁止把 inspect 树当成完整文档模型，改完之后整包重新生成。apply 的入参只能是操作列表，不能是整棵树。
 
 xlsx 另有只读动作 `exportMedia`：按图 id 把媒体部件原字节写到本地。
-xlsx 的 `exportMedia` 认工作表图 id、页眉页脚图 id、OLE id 与 3D 模型 id：图 id 写出 `/xl/media/…`，OLE id 写出 `/xl/embeddings/…`，
-3D 模型 id 写出 `/xl/media/…` 的 GLB。
+xlsx 的 `exportMedia` 认工作表图 id、页眉页脚图 id、OLE id、3D 模型 id 与工作表墨迹 id：图 id 写出 `/xl/media/…`，OLE id 写出 `/xl/embeddings/…`，
+3D 模型 id 写出 `/xl/media/…` 的 GLB，墨迹 id 写出 `/xl/ink/…` 的 InkML。
 pptx 的 `exportMedia` 认幻灯片图 id、备注图 id、批注内图 id、母版 / 版式图 id、视频 id、音频 id、OLE id 与 3D 模型 id：图 / 视频 / 音频写出 `/ppt/media/…`，OLE 写出 `/ppt/embeddings/…`，
 3D 模型 id 写出 `/ppt/media/…` 的 GLB。
 docx 的 `exportMedia` 认图 id、OLE id、墨迹画布 id、3D 模型 id 与嵌入字体 id：图写出 `/word/media/…`，OLE 写出 embeddings 部件，
@@ -85,16 +85,18 @@ crates/ooxp-cli/             命令行，只依赖 ooxp。二进制名也是 oox
 每张 `worksheet` 始终带 `outline`。每张 `worksheet` 始终带 `commentCount`（只计无 `parentId` 的顶层线程化批注）、
 `hyperlinkCount`（该表 `<hyperlinks>` 里 `<hyperlink>` 的条数）、`sparklineCount`（该表 `x14:sparklineGroup` 的组数）、
 `oleObjectCount`（该表被收入的嵌入对象个数）、`model3dCount`（该表被收入的 3D 模型个数）、
+`inkCount`（该表被收入的工作表墨迹个数，一笔一个对象）、
 `slicerCount`（该表被收入的切片器个数，含时间线）与 `protectedRangeCount`（该表 `<protectedRange>` 的个数）。
 工作簿与每张 `worksheet` 始终带 `textBoxCount`、`mathCount`、`shapeCount`、`connectorCount` 与 `smartArtCount`。
 每张 `worksheet` 与 `chartsheet` 始终带 `sheetProtection`。
-工作簿根始终带 `commentCount`、`hyperlinkCount`、`sparklineCount`、`oleObjectCount`、`model3dCount` 与 `slicerCount`（各表之和）、`connectionCount`、
+工作簿根始终带 `commentCount`、`hyperlinkCount`、`sparklineCount`、`oleObjectCount`、`model3dCount`、`inkCount` 与 `slicerCount`（各表之和）、`connectionCount`、
 `externalLinkCount`、`customViewCount`、`workbookProtection`、`theme`、`themeOverride` 与 `props`（core / app / custom，规则见契约「文档属性」）。
 `scope.comments` 为 true 时列出该表线程化批注名单，不读作者不以 `tc=` 开头的旧式 VML 批注。
 `scope.hyperlinks` 为 true 时列出该表 `<hyperlinks>`，不把 `HYPERLINK()` 公式或图上的链算进来。
 `scope.sparklines` 为 true 时列出该表 `x14:sparklineGroups`，数据范围当字符串，不把折线画进树。
 `scope.oleObjects` 为 true 时列出该表 `<oleObjects>`，不把嵌入字节或预览图放进树。
 `scope.model3ds` 为 true 时列出该表 drawing 里的 `am3d` AlternateContent，不把 GLB 或海报放进树。
+`scope.inks` 为 true 时列出该表 drawing 里 `Requires="xdr14"` 的 `xdr:contentPart`，不把 InkML 或海报放进树。Fallback 海报不进 `pictures`。
 `scope.maths` 为 true 时列出该表 drawing 里的 `a14:m` 公式框，不把 OMML 原文放进树，也不进 `textBoxes`。
 `scope.slicers` 为 true 时列出该表 drawing 里的 slicer 与时间线 `graphicFrame`，已勾选进 `selected`，时间线区间进 `filter`，不把未选项名单摊开。
 `scope.protectedRanges` 为 true 时列出该表 `<protectedRanges>`，不把哈希放进树。

@@ -57,6 +57,7 @@ struct NewSheet {
     connectors: Vec<InsertConnectorOp>,
     smartarts: Vec<InsertSmartArtOp>,
     model3ds: Vec<super::model3d::InsertModel3dOp>,
+    inks: Vec<super::ink::InsertInkOp>,
     maths: Vec<super::omml::InsertMathOp>,
 }
 
@@ -277,6 +278,7 @@ pub fn create_with_workbook_ct(workbook: &Value, workbook_ct: &str) -> Result<Ve
     }
     attach_pictures(&mut pkg, &sheets)?;
     attach_model3ds(&mut pkg, &sheets)?;
+    attach_inks(&mut pkg, &sheets)?;
     attach_charts(&mut pkg, &sheets)?;
     attach_drawings(&mut pkg, &sheets)?;
     attach_comments(&mut pkg, &sheets)?;
@@ -350,6 +352,7 @@ fn parse_sheet(v: &Value, i: usize) -> Result<NewSheet, Error> {
     let connectors = parse_connectors(obj.get("connectors"), i, name)?;
     let smartarts = parse_smartarts(obj.get("smartArts"), i, name)?;
     let model3ds = parse_model3ds(obj.get("model3ds"), i, name)?;
+    let inks = parse_inks(obj.get("inks"), i, name)?;
     let maths = parse_maths(obj.get("maths"), i, name)?;
     Ok(NewSheet {
         name: name.to_string(),
@@ -365,6 +368,7 @@ fn parse_sheet(v: &Value, i: usize) -> Result<NewSheet, Error> {
         connectors,
         smartarts,
         model3ds,
+        inks,
         maths,
     })
 }
@@ -452,6 +456,7 @@ fn parse_chartsheet_sheet(
         connectors: Vec::new(),
         smartarts: Vec::new(),
         model3ds: Vec::new(),
+        inks: Vec::new(),
         maths: Vec::new(),
     })
 }
@@ -565,6 +570,26 @@ fn attach_model3ds(pkg: &mut Package, sheets: &[NewSheet]) -> Result<(), Error> 
                 &part,
                 op,
                 &format!("workbook.sheets[{i}].model3ds[{j}].file"),
+            )?;
+        }
+        pkg.set(&part, doc.to_bytes()?)?;
+    }
+    Ok(())
+}
+
+fn attach_inks(pkg: &mut Package, sheets: &[NewSheet]) -> Result<(), Error> {
+    for (i, part, sh) in each_worksheet(sheets) {
+        if sh.inks.is_empty() {
+            continue;
+        }
+        let mut doc = xml::parse(pkg.get(&part)?)?;
+        for (j, op) in sh.inks.iter().enumerate() {
+            super::ink::insert(
+                pkg,
+                &mut doc,
+                &part,
+                op,
+                &format!("workbook.sheets[{i}].inks[{j}].file"),
             )?;
         }
         pkg.set(&part, doc.to_bytes()?)?;
@@ -1592,6 +1617,35 @@ fn parse_model3ds(
     let mut out = Vec::new();
     for (j, item) in arr.iter().enumerate() {
         out.push(parse_create_model3d(
+            item,
+            &format!("{prefix}[{j}]"),
+            sheet,
+        )?);
+    }
+    Ok(out)
+}
+
+fn parse_inks(
+    v: Option<&Value>,
+    sheet_i: usize,
+    sheet: &str,
+) -> Result<Vec<super::ink::InsertInkOp>, Error> {
+    let Some(v) = v else {
+        return Ok(Vec::new());
+    };
+    let prefix = format!("workbook.sheets[{sheet_i}].inks");
+    let arr = v.as_array().ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::WrongType {
+                field: "inks".into(),
+                expected: TypeName::Array,
+            },
+            prefix.clone(),
+        )
+    })?;
+    let mut out = Vec::new();
+    for (j, item) in arr.iter().enumerate() {
+        out.push(super::ink::parse_create(
             item,
             &format!("{prefix}[{j}]"),
             sheet,

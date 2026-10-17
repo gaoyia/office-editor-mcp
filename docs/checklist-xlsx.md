@@ -763,6 +763,31 @@ COM 认 `Type=30`（`mso3DModel`）。页眉槽本期不插。
   - 通过标准：`file` 不是 GLB 得 `InvalidField`，未写文件
   - 不强制开 Excel
 
+## 工作表墨迹
+
+工作表 drawing 里 `Requires="xdr14"` 的 `xdr:contentPart`。一笔一个对象。只认 InkML。不进 `pictures`。Fallback 海报不进 `pictures`。不算手写识别。
+库测试 `crates/ooxp/tests/xlsx_ink.rs`。Excel 16.0 打开桌面上的 `ooxp-工作表墨迹.xlsx`（两笔 `twoCell`），没有弹出修复。编号用 Xink。
+
+- **Xink1**
+  - 检查：插入
+  - 通过标准：`insertInk` 把本地 InkML 写入工作表后，树上 `contentType` 为 `application/inkml+xml`，不进 `pictures`，Excel 无修复
+- **Xink2**
+  - 检查：导出
+  - 通过标准：对该墨迹 id `exportMedia` 得到 InkML 原字节，`contentType` 为 `application/inkml+xml`
+- **Xink3**
+  - 检查：两笔
+  - 通过标准：两次 `insertInk` 后 `inkCount` 为 2，两个 id 不同，Excel 无修复
+- **Xink4**
+  - 检查：替换与删除
+  - 通过标准：`replaceInk` 后 id 不变、导出是新字节；`deleteInk` 后 `inkCount` 为 0，包内没有 `/xl/ink/`，Excel 无修复
+- **Xink5**
+  - 检查：锚点
+  - 通过标准：`setInkAnchor` 把 `oneCell` 改成 `twoCell` 后树上 `to` 为给定单元格，Excel 无修复
+- **Xink6**
+  - 检查：拒错
+  - 通过标准：`file` 不是 InkML 得 `InvalidField`，未写文件
+  - 不强制开 Excel
+
 ## 工作表 3D 事后几何
 
 已有工作表 3D 改尺寸与锚点。不换 GLB。不算 3D 渲染。对 3D id 发 `setPictureSize` / `setPictureAnchor` 仍报 `InvalidId`。

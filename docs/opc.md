@@ -209,6 +209,10 @@ apply 或 create 插入工作表 3D 模型时，可能新建 `/xl/media/model3dN
 关系写在 **drawing** `.rels`：一条 Type `http://schemas.microsoft.com/office/2017/06/relationships/model3d` 指向 GLB，一条 image 指向海报。
 drawing 写 `mc:AlternateContent`，Choice `Requires="am3d"`，Choice 里是 `xdr:graphicFrame` 包 `am3d:model3d`，Fallback 是海报 `xdr:pic`。
 `xdr:xfrm` 写 `0×0`。不写 `a16:creationId`。不把 GLB 当 `insertPicture`。create 给了 `sheets[].model3ds` 时同样写入。
+apply 或 create 插入工作表墨迹时，可能新建 `/xl/ink/inkN.xml`（Override `application/inkml+xml`）以及海报 `/xl/media/imageN.png`。
+关系写在 **drawing** `.rels`：一条 Type 以 `/customXml` 结尾指向 InkML，一条 image 指向海报。
+drawing 写 `mc:AlternateContent`，Choice `Requires="xdr14"`，Choice 里是 `xdr:contentPart`（`xdr14:nvContentPartPr`），Fallback 是海报 `xdr:pic`。
+一笔一个锚点。不把笔画放进 inspect 树。不把海报当 `insertPicture`。create 给了 `sheets[].inks` 时同样写入。
 apply 或 create 插入工作表公式框时，只改 worksheet drawing XML，不新建部件。
 drawing 根补 `xmlns:a14` 与 `xmlns:m`。写 `mc:AlternateContent`，Choice `Requires="a14"`，Choice 里是 `xdr:sp`（`txBox="1"`）包 `a14:m` / `m:oMathPara`。
 Fallback 是同一套纯文本框，字为调用方 `text`。不栅格化，不写海报。create 给了 `sheets[].maths` 时同样写入。

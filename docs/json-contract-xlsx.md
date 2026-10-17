@@ -303,6 +303,19 @@ URI `{05C60535-1F16-4FD2-B633-F4F36F0B64E0}`，大小写不敏感）。
 `camera` / `rot` / `lightRig` 规则与 [docx](json-contract-docx.md#setmodel3dcamera) 相同。不把 `am3d:ambientLight` / `ptLight` 放进树。
 create 可用 `sheets[].model3ds`。页眉槽仍不插。工作表上已有 3D 可改尺寸、锚点与相机 / 旋转 / 光源。docx / pptx 见各自分册。
 
+工作表墨迹挂在该 `worksheet` 上。一笔一个对象，不把多笔收进同一份 InkML。
+`{cNvPrId}` 取 Choice 里 `xdr:contentPart` 的 `xdr14:cNvPr/@id` 原文。
+没有该属性时用 `ink:index:{k}`，树上 `"stable": false`。`{k}` 只在该表被收入的墨迹内从 1 计。
+id 是 `sheet:{name}/ink:{cNvPrId}`。
+只认 `mc:AlternateContent` 且 `Choice Requires` 含 `xdr14`，Choice 里有 `xdr:contentPart`。
+Fallback 海报 `pic` **不进** `pictures`，也不计入 `pictureCount`。
+页眉、`chartsheet`、批注墨迹本期不进这份名单。不要用 Word 的 `inkCanvases` / `insertInkCanvas`。
+`insertInk` 的 `id` 必须是 `sheet:{name}`。`replaceInk` / `deleteInk` / `setInkSize` / `setInkAnchor` 的 `id` 必须是墨迹 id。
+对图 id、OLE id 或 `xlsx:workbook` 发这些 op 报 `InvalidId`。对 `chartsheet` 报 `InvalidField`。
+`file` 必须是 InkML：根元素 `ink`，默认命名空间或某个 `xmlns` 为 `http://www.w3.org/2003/InkML`。不是 InkML 报 `InvalidField`。
+`contentType` 恒为 `application/inkml+xml`。不把笔画或海报摊进树。
+create 可用 `sheets[].inks`。页眉槽仍不插。
+
 工作表切片器挂在该 `worksheet` 上。`{cNvPrId}` 取 drawing 里 slicer 或时间线 `graphicFrame` 的 `cNvPr/@id` 原文。
 没有该属性时用 `slicer:index:{k}`，树上 `"stable": false`。`{k}` 只在该表被收入的切片器（含时间线）内从 1 计。
 id 仍是 `sheet:{name}/slicer:{cNvPrId}`，时间线不另开前缀。
@@ -522,6 +535,14 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   - 不把 GLB 或海报放进树
   - 页眉、`chartsheet` 本期不进树
   - docx / pptx 见各自分册
+- **`scope.inks`**（否）
+  - 为 `true` 时给每张 `worksheet` 填 `inks`
+  - 没有墨迹时为空数组
+  - 省略或 `false` 则只有 `inkCount`，没有名单
+  - 不依赖 `sheet` / `range` / 其它名单键
+  - 不把 InkML 或海报放进树
+  - 页眉、`chartsheet` 本期不进树
+  - docx / pptx 的 `scope` 里出现 `inks` 报 `InvalidField`
 - **`scope.slicers`**（否）
   - 为 `true` 时给每张 `worksheet` 填 `slicers`
   - 没有切片器（含时间线）时为空数组
@@ -568,10 +589,10 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
 
 省略 `scope`、或只给空对象：返回工作簿节点和表名单，每张表不含 `cells`，
 也没有 `pictures` / `charts` / `headerFooters` / `textBoxes` / `maths` / `shapes` / `connectors` / `smartArts` / `comments`
- / `hyperlinks` / `sparklines` / `oleObjects` / `model3ds` / `slicers` / `protectedRanges`。
+ / `hyperlinks` / `sparklines` / `oleObjects` / `model3ds` / `inks` / `slicers` / `protectedRanges`。
 工作簿与每张 `worksheet` 仍有 `pictureCount`、`textBoxCount`、`mathCount`、`shapeCount`、`connectorCount`、`smartArtCount`。
 工作簿、每张 `worksheet` 与每张 `chartsheet` 仍有 `chartCount`。
-工作簿与每张 `worksheet` 仍有 `commentCount`、`hyperlinkCount`、`sparklineCount`、`oleObjectCount`、`model3dCount` 与 `slicerCount`。
+工作簿与每张 `worksheet` 仍有 `commentCount`、`hyperlinkCount`、`sparklineCount`、`oleObjectCount`、`model3dCount`、`inkCount` 与 `slicerCount`。
 每张 `worksheet` 仍有 `protectedRangeCount`。
 工作簿仍有 `connectionCount`、`externalLinkCount`、`customViewCount`、`definedNameCount`、`cellStyleCount` 与 `definedNames`。
 没有 `connections` / `externalLinks` / `customViews` / `cellStyles` 名单。每张表仍有 `hasHeaderFooter`。
@@ -583,7 +604,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
 只要想看图表名单，就给 `charts: true`。只要想看页眉原文，就给 `headerFooter: true`。只要想看文本框名单，就给 `textBoxes: true`。只要想看公式框名单，就给 `maths: true`。只要想看形状名单，就给 `shapes: true`。
 只要想看连接线名单，就给 `connectors: true`。只要想看 SmartArt 名单，就给 `smartArt: true`。只要想看批注名单，就给 `comments: true`。
 只要想看超链接名单，就给 `hyperlinks: true`。只要想看迷你图名单，就给 `sparklines: true`。只要想看嵌入对象名单，就给 `oleObjects: true`。
-只要想看 3D 模型名单，就给 `model3ds: true`。
+只要想看 3D 模型名单，就给 `model3ds: true`。只要想看工作表墨迹名单，就给 `inks: true`。
 只要想看切片器名单，就给 `slicers: true`。只要想看允许编辑区域名单，就给 `protectedRanges: true`。只要想看连接名单，就给 `connections: true`。只要想看外部引用名单，就给 `externalLinks: true`。
 只要想看自定义视图名单，就给 `customViews: true`。只要想看命名单元格样式名单，就给 `cellStyles: true`。这些键彼此独立，可只开一边。页眉图名单出现在已展开的槽位上，须同时 `headerFooter: true` 与 `pictures: true`。
 
@@ -607,6 +628,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   "sparklineCount": 0,
   "oleObjectCount": 0,
   "model3dCount": 0,
+  "inkCount": 0,
   "slicerCount": 0,
   "connectionCount": 0,
   "externalLinkCount": 0,
@@ -657,6 +679,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
       "sparklineCount": 0,
       "oleObjectCount": 0,
       "model3dCount": 0,
+      "inkCount": 0,
       "slicerCount": 0,
       "protectedRangeCount": 0,
       "hasHeaderFooter": false,
@@ -773,6 +796,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
       "sparklineCount": 0,
       "oleObjectCount": 0,
       "model3dCount": 0,
+      "inkCount": 0,
       "slicerCount": 0,
       "protectedRangeCount": 0,
       "hasHeaderFooter": false,
@@ -841,7 +865,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
 规则：
 
 - 工作簿字段顺序：`id`、`pictureCount`、`chartCount`、`textBoxCount`、`mathCount`、`shapeCount`、`connectorCount`、`smartArtCount`、`commentCount`、
-  `hyperlinkCount`、`sparklineCount`、`oleObjectCount`、`model3dCount`、`slicerCount`、`connectionCount`、`externalLinkCount`、
+  `hyperlinkCount`、`sparklineCount`、`oleObjectCount`、`model3dCount`、`inkCount`、`slicerCount`、`connectionCount`、`externalLinkCount`、
   `customViewCount`、`definedNameCount`、`cellStyleCount`、`props`、`workbookProtection`、`theme`、`themeOverride`、`sheets`、`definedNames`，
   有连接名单时再跟 `connections`，有外部引用名单时再跟 `externalLinks`，有自定义视图名单时再跟 `customViews`，
   有命名单元格样式名单时再跟 `cellStyles`。
@@ -852,6 +876,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   `commentCount` 始终出现，等于各 `worksheet` 的 `commentCount` 之和。`hyperlinkCount` 始终出现，等于各 `worksheet` 的 `hyperlinkCount` 之和。
   `sparklineCount` 始终出现，等于各 `worksheet` 的 `sparklineCount` 之和。`oleObjectCount` 始终出现，等于各 `worksheet` 的 `oleObjectCount` 之和。
   `model3dCount` 始终出现，等于各 `worksheet` 的 `model3dCount` 之和。
+  `inkCount` 始终出现，等于各 `worksheet` 的 `inkCount` 之和。
   `slicerCount` 始终出现，等于各 `worksheet` 的 `slicerCount` 之和。
   `connectionCount` 始终出现，是 `/xl/connections.xml` 里被收入的 `connection` 个数（判定见上文外部数据连接 id 那节）。没有则为 `0`。
   `externalLinkCount` 始终出现，是 workbook `<externalReferences>` 里 `<externalReference>` 的个数。没有则为 `0`。
@@ -878,11 +903,11 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   `chartsheet` 没有 `autoFilter`，也没有 `sortState`，也没有 `outline`。
 - `worksheet` 字段顺序：`id`、`name`、`kind`、`hidden`、`pictureCount`、`chartCount`、`textBoxCount`、`mathCount`、`shapeCount`、`connectorCount`、
   `smartArtCount`、`dataValidationCount`、`conditionalFormatCount`、`tableCount`、`pivotCount`、`commentCount`、
-  `hyperlinkCount`、`sparklineCount`、`oleObjectCount`、`model3dCount`、`slicerCount`、`protectedRangeCount`、`hasHeaderFooter`、`print`、`view`、`autoFilter`、
+  `hyperlinkCount`、`sparklineCount`、`oleObjectCount`、`model3dCount`、`inkCount`、`slicerCount`、`protectedRangeCount`、`hasHeaderFooter`、`print`、`view`、`autoFilter`、
   `sortState`、`outline`、`sheetProtection`，
   有页眉名单时再跟 `headerFooters`，有图名单时再跟 `pictures`，有图表名单时再跟 `charts`，有文本框名单时再跟 `textBoxes`，有公式框名单时再跟 `maths`，有形状名单时再跟 `shapes`，
   有连接线名单时再跟 `connectors`，有 SmartArt 名单时再跟 `smartArts`，有批注名单时再跟 `comments`，有超链接名单时再跟 `hyperlinks`，有迷你图名单时再跟 `sparklines`，
-  有嵌入对象名单时再跟 `oleObjects`，有 3D 模型名单时再跟 `model3ds`，有切片器名单时再跟 `slicers`，
+  有嵌入对象名单时再跟 `oleObjects`，有 3D 模型名单时再跟 `model3ds`，有墨迹名单时再跟 `inks`，有切片器名单时再跟 `slicers`，
   有允许编辑区域名单时再跟 `protectedRanges`，
   有单元格切片时再跟 `truncated`、`range`、`cells`、`cols`、`rows`、`merges`、`dataValidations`、`conditionalFormats`、`tables`、`pivots`。
   `pictureCount` 始终出现，是该表 SpreadsheetDrawing 与 Chart Drawing 里被收入的 `pic` 个数（判定见上文 xlsx 图 id 那节），不含页眉图。没有图则为 `0`。
@@ -900,12 +925,13 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   `sparklineCount` 始终出现，是该表 `extLst` 里 `x14:sparklineGroup` 的组数。没有则为 `0`。
   `oleObjectCount` 始终出现，是该表被收入的嵌入对象个数（判定见上文 xlsx OLE id 那节）。没有则为 `0`。
   `model3dCount` 始终出现，是该表被收入的 3D 模型个数（判定见上文 xlsx 3D 模型 id 那节）。没有则为 `0`。
+  `inkCount` 始终出现，是该表被收入的工作表墨迹个数（判定见上文工作表墨迹那节）。没有则为 `0`。
   `slicerCount` 始终出现，是该表被收入的切片器个数（判定见上文 xlsx 切片器 id 那节）。没有则为 `0`。
   `protectedRangeCount` 始终出现，是该表 `<protectedRanges>` 里 `<protectedRange>` 的个数。没有则为 `0`。
   `sheetProtection` 始终出现，规则见下文「工作表保护」。
   `chartsheet` 没有 `smartArtCount` / `smartArts`，也没有 `dataValidationCount`，
   也没有 `conditionalFormatCount`，也没有 `tableCount`，也没有 `pivotCount`，也没有 `commentCount`，也没有 `hyperlinkCount`，
-  也没有 `sparklineCount`，也没有 `oleObjectCount`，也没有 `model3dCount`，也没有 `slicerCount`，也没有 `protectedRangeCount`，也没有 `autoFilter`，也没有 `sortState`，也没有 `outline`；
+  也没有 `sparklineCount`，也没有 `oleObjectCount`，也没有 `model3dCount`，也没有 `inkCount`，也没有 `slicerCount`，也没有 `protectedRangeCount`，也没有 `autoFilter`，也没有 `sortState`，也没有 `outline`；
   字段顺序：`id`、`name`、`kind`、`hidden`、`pictureCount`、`chartCount`、`textBoxCount`、`mathCount`、`shapeCount`、`connectorCount`、
   `hasHeaderFooter`、`print`、`view`、`sheetProtection`，
   有页眉名单时再跟 `headerFooters`，有图名单时再跟 `pictures`，有图表名单时再跟 `charts`，有文本框名单时再跟 `textBoxes`，
@@ -915,7 +941,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   `dialogsheet` / `macrosheet` 没有 `pictureCount` / `pictures` / `chartCount` / `charts` / `textBoxCount` / `textBoxes`
    / `mathCount` / `maths` / `shapeCount` / `shapes` / `connectorCount` / `connectors` / `smartArtCount` / `smartArts` / `dataValidationCount`
    / `conditionalFormatCount` / `tableCount` / `pivotCount` / `commentCount` / `hyperlinkCount` / `sparklineCount`
-   / `oleObjectCount` / `model3dCount` / `slicerCount` / `protectedRangeCount` / `print` / `view` / `autoFilter` / `sortState` / `outline` / `sheetProtection`；
+   / `oleObjectCount` / `model3dCount` / `inkCount` / `slicerCount` / `protectedRangeCount` / `print` / `view` / `autoFilter` / `sortState` / `outline` / `sheetProtection`；
   字段顺序：`id`、`name`、`kind`、`hidden`、`hasHeaderFooter`，有页眉名单时再跟 `headerFooters`。
   判定 `kind` 只看 workbook 关系 Type：以 `/chartsheet` 结尾为 `chartsheet`；以 `/dialogsheet` 结尾为 `dialogsheet`；
   以 `/macrosheet`、`/xlMacrosheet` 或 `/xlIntlMacrosheet` 结尾为 `macrosheet`（国际宏表不另开 `kind`）；其余为 `worksheet`。
@@ -1055,6 +1081,7 @@ Excel 16.0 另存通常不写该部件；自行写入后 Excel 仍能打开。
   `contentType` 取 embeddings 部件在 `[Content_Types].xml` 里的 Default 或 Override，都没有则为 `null`。
   `showAsIcon`：`@dvAspect` 为 `DVASPECT_ICON` 则为 `true`，否则为 `false`。不把嵌入字节或预览图放进树。与 `shapeId` 相同的隐藏 `xdr:sp` 不进 `shapes`。docx / pptx 见各自分册。
 - `scope.model3ds` 为 `true` 时，每张 `worksheet` 带 `model3ds`。没有 3D 模型时为空数组。不依赖单元格切片。
+- `scope.inks` 为 `true` 时，每张 `worksheet` 带 `inks`。没有墨迹时为空数组。不依赖单元格切片。
   按该表 worksheet drawing 里被收入的 `am3d` AlternateContent 文档顺序。
   每条字段顺序：`id`、`cNvPrId`、`name`、`anchor`，然后按锚点种类跟位置字段（规则与工作表图相同），再跟 `contentType`、`stable`、`camera`、`rot`、`lightRig`。
   `cNvPrId` 是 Choice 里 `xdr:cNvPr/@id` 原文，没有则为 `null`。`name` 取 `cNvPr/@name`，没有则为 `""`。
@@ -1359,6 +1386,7 @@ Excel 16.0 另存通常不写该部件；自行写入后 Excel 仍能打开。
 | `sheets[].connectors` | 可选。该表 `xdr:cxnSp` 列表。省略或空数组则不写 |
 | `sheets[].smartArts` | 可选。该表 SmartArt 列表。省略或空数组则不写 |
 | `sheets[].model3ds` | 可选。该表工作表 drawing 上的 3D 模型。省略或空数组则不写。图表工作表上出现报 `InvalidField` |
+| `sheets[].inks` | 可选。该表工作表 drawing 上的墨迹。省略或空数组则不写。图表工作表上出现报 `InvalidField` |
 | `workbook.definedNames` | 可选。复用 `insertDefinedName`。不要 `op` / `id` |
 | `workbook.connections` | 可选。复用 `insertConnection` |
 | `workbook.externalLinks` | 可选。复用 `insertExternalLink` |
@@ -1458,10 +1486,11 @@ Excel 16.0 另存通常不写该部件；自行写入后 Excel 仍能打开。
 给了 `sheets[].pictures` 时按 `insertPicture` 同一套规则写 worksheet drawing 与 media。
 给了 `sheets[].charts` 时按 `insertChart` 同一套规则写 `/xl/charts/chartN.xml`、`xdr:graphicFrame` 和 `dataFrom` 一带单元格，不写 embedding。
 给了 `sheets[].textBoxes` / `shapes` / `connectors` / `smartArts` 时按对应 insert 同一套规则写入同一份 worksheet drawing：先写 `pictures`，
-再写 `model3ds`，再写 `charts`，再按 `textBoxes`、`maths`、`shapes`、`connectors`、`smartArts` 数组顺序写入。
+再写 `model3ds`，再写 `inks`，再写 `charts`，再按 `textBoxes`、`maths`、`shapes`、`connectors`、`smartArts` 数组顺序写入。
 给了 `sheets[].maths` 时按 `insertMath` 同一套规则写 `a14:m` AlternateContent。不写进 `textBoxes[]`。
 带公式框的示例见 `docs/examples/xlsx-create-math-drawing.json`。
 给了 `sheets[].model3ds` 时按 `insertModel3d` 同一套规则写 GLB、海报 PNG 与 `am3d` AlternateContent。
+给了 `sheets[].inks` 时按 `insertInk` 同一套规则写 InkML、海报 PNG 与 `xdr14` AlternateContent。
 带 3D 模型的示例见 `docs/examples/xlsx-create-model3d.json`。
 给了 `sheets[].comments` 时按 `insertComment` 同一套规则写线程化批注、占位 `comments.xml` 与 Note `v:shape`；给了 `replies` 再按 `replyComment` 写一层回复。
 给了 `sheets[].hyperlinks` 时按 `insertHyperlink` 同一套规则写 `<hyperlinks>` 与外部链关系。
@@ -1487,7 +1516,7 @@ drawing 上那一张 `xdr:absoluteAnchor` 框和 `/xl/charts/chartN.xml`，数�
  / `comments` / `hyperlinks` / `textBoxes` / `shapes` / `connectors` / `smartArts` / `protection`
  / `externalReferences`，或 `sheets[]` 上出现 `wrap` / `protection` / `headerFooter` / `sort`，报 `InvalidField`。
 `kind` 只能是 `worksheet` 或 `chartsheet`。图表工作表上出现 `cells` / `pictures` / `charts` / `headerFooters` / `comments`
- / `hyperlinks` / `textBoxes` / `maths` / `shapes` / `connectors` / `smartArts` / `model3ds` / `from` / `to` / `anchor` / 偏移 / `wrap` / `id` 报 `InvalidField`。
+ / `hyperlinks` / `textBoxes` / `maths` / `shapes` / `connectors` / `smartArts` / `model3ds` / `inks` / `from` / `to` / `anchor` / 偏移 / `wrap` / `id` 报 `InvalidField`。
 `comments[]` 上出现 `id` / `start` / `end` / `x` / `y`，`hyperlinks[]` 上出现 `text` / `anchor` / `id`，
 或 drawing 项上出现 `kind` / `wrap` / `x` / `y` / `id`，报 `InvalidField`。
 给了 `workbook.props` 时按 `setProps` / `setCustomProp` 同一套规则写 core / app / custom；
@@ -2424,6 +2453,8 @@ docx / pptx 上发此 op 报 `InvalidField`。create 可写允许编辑区域。
 `insertOle` / `deleteOle` 还可以脏工作表 `oleObjects`、worksheet drawing、`legacyDrawing` VML、工作表 `.rels`、VML `.rels`、
 `/xl/embeddings/…`、`/xl/media/…` 与 `[Content_Types].xml`。
 `insertModel3d` / `replaceModel3d` / `deleteModel3d` 还可以脏 worksheet drawing、drawing `.rels`、`/xl/media/…` 与 `[Content_Types].xml`。
+`insertInk` / `replaceInk` / `deleteInk` 还可以脏 worksheet drawing、drawing `.rels`、`/xl/ink/…`、`/xl/media/…` 与 `[Content_Types].xml`。
+`setInkSize` / `setInkAnchor` 只脏 worksheet drawing。
 `setModel3dSize` / `setModel3dAnchor` / `setModel3dCamera` 只脏 worksheet drawing。
 `setMathSize` / `setMathAnchor` 只脏 worksheet drawing。不改字，不标重算。
 `setSlicerSize` / `setSlicerAnchor` 只脏 worksheet drawing。不改 slicer / timeline 部件，不改 cache，不执行筛选。
@@ -3227,6 +3258,81 @@ docx / pptx 上发此 op 报 `InvalidField`。
 字段与 [docx `setModel3dCamera`](json-contract-docx.md#setmodel3dcamera) 相同。`id` 必须是 xlsx 3D 模型 id。
 改 Choice 里 `am3d:camera`、`am3d:rot` 与 `am3d:spPr` 里的 `a:scene3d/a:lightRig`。不换 GLB。不改锚点。
 docx / pptx 上同一套字段。示例见 `docs/examples/xlsx-apply-model3d-camera.json`。
+
+### insertInk
+
+把本地 InkML 作为一笔墨迹写入目标工作表。不进 `pictures`。不把手写识别成字。海报用 1×1 PNG 占位。
+
+```json
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "C:\\data\\book.xlsx",
+  "ops": [
+    {
+      "op": "insertInk",
+      "id": "sheet:Sheet1",
+      "file": "C:\\\\data\\\\stroke.xml"
+    }
+  ]
+}
+```
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"insertInk"` |
+| `id` | 必须是 `sheet:{name}` |
+| `file` | 必须。本地 InkML 路径 |
+| `from` | 可选。左上角单元格，A1。省略当作 `A1` |
+| `to` | `anchor` 为 `twoCell` 时必填。右下角单元格，A1 |
+| `anchor` | 可选。`oneCell`（缺省）或 `twoCell`。不认 `absolute` |
+| `cx` / `cy` | 可选。EMU 正整数，须成对。缺省 `914400` × `914400` |
+| `fromOffX` / `fromOffY` | 可选。相对 `from` 的 EMU 偏移，缺省 `0`，不得为负 |
+| `toOffX` / `toOffY` | `twoCell` 时可选。相对 `to` 的 EMU 偏移，缺省 `0`，不得为负 |
+
+`id` 不是工作表 id 报 `InvalidId`。找不到该表报 `IdNotFound`。对 `chartsheet` 报 `InvalidField`。
+对 `dialogsheet` / `macrosheet` 报 `NotImplemented`。`from` / `to` 不是合法 A1 报 `InvalidRange`。
+`anchor` 为 `twoCell` 却没有 `to` 报 `InvalidField`。`oneCell` 出现 `to` 报未知字段。
+`cx` / `cy` 只给一个报 `InvalidField`。找不到 `file` 报 `Io`。空路径或不是 InkML 报 `InvalidField`。
+
+关系写在 **drawing** `.rels`：一条 `customXml` 指向 `/xl/ink/inkN.xml`，一条 image 指向海报 PNG。
+`[Content_Types].xml` 为该 InkML 写 Override `application/inkml+xml`。
+`twoCell` 锚点的 `editAs` 写 `oneCell`，与 Excel 16.0 另存一致。
+整个 `mc:AlternateContent` 放进锚点，Choice `Requires="xdr14"`，Fallback 是海报 `xdr:pic`。
+多笔要多次 `insertInk`，不要往同一份 InkML 里追加 trace。
+
+### replaceInk
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"replaceInk"` |
+| `id` | 必须是墨迹 id |
+| `file` | 必须。本地 InkML 路径 |
+
+换 InkML 字节，保留 `contentPart` 与关系 id。不改海报，不改位置尺寸。找不到报 `IdNotFound`。
+id 不是墨迹 id 报 `InvalidId`。不是 InkML 报 `InvalidField`。
+
+### deleteInk
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"deleteInk"` |
+| `id` | 必须是墨迹 id |
+
+找不到报 `IdNotFound`。id 不是墨迹 id 报 `InvalidId`。
+摘该条 `mc:AlternateContent`；若锚点只剩 `from` / `to` / `ext` / `pos` / `clientData` 则删整个锚点。
+InkML 与海报无人引用则删。
+
+### setInkSize
+
+字段与 `setPictureSize` 的 xlsx 一侧相同。`id` 必须是墨迹 id。
+`oneCell` / `absolute` 改外层 `xdr:ext`。`twoCell` 不认 `cx` / `cy`（出现报 `InvalidField`），必须给 `to`。
+对图 id 发此 op、对墨迹 id 发 `setPictureSize` 仍报 `InvalidId`。
+
+### setInkAnchor
+
+字段与 `setPictureAnchor` 相同，`id` 必须是 xlsx 墨迹 id。
+改包含该 `xdr14` AlternateContent 的外层锚点。docx / pptx 上发此 op 报 `InvalidField`。
 
 ### insertMath
 

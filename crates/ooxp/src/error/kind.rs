@@ -364,6 +364,12 @@ pub(crate) enum IdReason {
     SheetOlePrefix,
     /// xlsx 工作表 id，缺少 /ole:…
     SheetOleContainer,
+    /// xlsx 的 insertInk 必须用 sheet:工作表名
+    InsertInkNeedsSheet,
+    /// xlsx 墨迹 id 必须是 sheet:{name}/ink:…
+    SheetInkPrefix,
+    /// 工作表 id，缺少 /ink:…
+    SheetInkContainer,
     /// xlsx 的 insertModel3d 必须用 sheet:工作表名
     InsertModel3dNeedsSheet,
     /// xlsx 3D 模型 id 必须是 sheet:{name}/model3d:…
@@ -739,6 +745,7 @@ define_error_kinds! {
     InsertChartWorksheetOnly => vec![Self::InsertChartWorksheetOnly],
     InsertTextBoxWorksheetOnly => vec![Self::InsertTextBoxWorksheetOnly],
     InsertModel3dWorksheetOnly => vec![Self::InsertModel3dWorksheetOnly],
+    InsertInkWorksheetOnly => vec![Self::InsertInkWorksheetOnly],
     InsertMathWorksheetOnly => vec![Self::InsertMathWorksheetOnly],
     InsertSmartArtWorksheetOnly => vec![Self::InsertSmartArtWorksheetOnly],
     CommentsWorksheetOnly => vec![Self::CommentsWorksheetOnly],
@@ -751,6 +758,7 @@ define_error_kinds! {
     TwoCellTextBoxSize => vec![Self::TwoCellTextBoxSize],
     TwoCellSmartArtSize => vec![Self::TwoCellSmartArtSize],
     TwoCellModel3dSize => vec![Self::TwoCellModel3dSize],
+    TwoCellInkSize => vec![Self::TwoCellInkSize],
     TwoCellSlicerSize => vec![Self::TwoCellSlicerSize],
     TwoCellMathSize => vec![Self::TwoCellMathSize],
     DeleteChartsheetLast => vec![Self::DeleteChartsheetLast],
@@ -1531,6 +1539,9 @@ impl IdReason {
             Self::InsertOleNeedsSheet,
             Self::SheetOlePrefix,
             Self::SheetOleContainer,
+            Self::InsertInkNeedsSheet,
+            Self::SheetInkPrefix,
+            Self::SheetInkContainer,
             Self::InsertModel3dNeedsSheet,
             Self::SheetModel3dPrefix,
             Self::SheetModel3dContainer,
@@ -2105,6 +2116,7 @@ impl ErrorKind {
             | Self::InsertChartWorksheetOnly
             | Self::InsertTextBoxWorksheetOnly
             | Self::InsertModel3dWorksheetOnly
+            | Self::InsertInkWorksheetOnly
             | Self::InsertMathWorksheetOnly
             | Self::MathDrawingNoExpr
             | Self::InsertSmartArtWorksheetOnly
@@ -2132,6 +2144,7 @@ impl ErrorKind {
             | Self::TwoCellTextBoxSize
             | Self::TwoCellSmartArtSize
             | Self::TwoCellModel3dSize
+            | Self::TwoCellInkSize
             | Self::TwoCellSlicerSize
             | Self::TwoCellMathSize
             | Self::NotesSlideImage

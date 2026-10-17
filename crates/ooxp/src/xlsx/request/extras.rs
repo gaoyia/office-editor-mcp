@@ -1100,6 +1100,178 @@ pub(super) fn parse_set_model3d_camera(
     Ok(super::super::model3d::SetModel3dCameraOp { id, target, patch })
 }
 
+pub(super) fn parse_insert_ink(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<super::super::ink::InsertInkOp, Error> {
+    deny_keys(
+        obj,
+        i,
+        &[
+            "op", "id", "file", "cx", "cy", "from", "to", "anchor", "fromOffX", "fromOffY",
+            "toOffX", "toOffY",
+        ],
+    )?;
+    let id = require_id(obj, i)?;
+    let sheet = parse_sheet_only_id(&id, i, "id", IdReason::InsertInkNeedsSheet)?;
+    let file = require_file(obj, i, "insertInk")?;
+    let cx = parse_emu_field(obj.get("cx"), i, "cx")?;
+    let cy = parse_emu_field(obj.get("cy"), i, "cy")?;
+    if cx.is_some() != cy.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "insertInk".into(),
+                field: "cx and cy together".into(),
+            },
+            format!("ops[{i}]"),
+        ));
+    }
+    let from = match obj.get("from") {
+        Some(Value::String(s)) => a1::parse_cell(s).map_err(|e| e.at(format!("ops[{i}].from")))?,
+        None => a1::CellRef { col: 1, row: 1 },
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "from".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].from"),
+            ));
+        }
+    };
+    let anchor = match obj.get("anchor") {
+        None => picture::AnchorKind::OneCell,
+        Some(Value::String(s)) => picture::AnchorKind::parse_insert(s).ok_or_else(|| {
+            Error::with_path(ErrorKind::InvalidXlsxAnchor, format!("ops[{i}].anchor"))
+        })?,
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "anchor".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].anchor"),
+            ));
+        }
+    };
+    let to = match obj.get("to") {
+        None => None,
+        Some(Value::String(s)) => {
+            Some(a1::parse_cell(s).map_err(|e| e.at(format!("ops[{i}].to")))?)
+        }
+        Some(_) => {
+            return Err(Error::with_path(
+                ErrorKind::WrongType {
+                    field: "to".into(),
+                    expected: TypeName::String,
+                },
+                format!("ops[{i}].to"),
+            ));
+        }
+    };
+    if anchor == picture::AnchorKind::TwoCell && to.is_none() {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "insertInk".into(),
+                field: "to".into(),
+            },
+            format!("ops[{i}].to"),
+        ));
+    }
+    if anchor == picture::AnchorKind::OneCell && to.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::UnknownField { field: "to".into() },
+            format!("ops[{i}].to"),
+        ));
+    }
+    Ok(super::super::ink::InsertInkOp {
+        sheet,
+        file,
+        cx,
+        cy,
+        from,
+        to,
+        anchor,
+        from_off_x: parse_off_field(obj.get("fromOffX"), i, "fromOffX")?.unwrap_or(0),
+        from_off_y: parse_off_field(obj.get("fromOffY"), i, "fromOffY")?.unwrap_or(0),
+        to_off_x: parse_off_field(obj.get("toOffX"), i, "toOffX")?.unwrap_or(0),
+        to_off_y: parse_off_field(obj.get("toOffY"), i, "toOffY")?.unwrap_or(0),
+    })
+}
+
+pub(super) fn parse_replace_ink(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<super::super::ink::ReplaceInkOp, Error> {
+    deny_keys(obj, i, &["op", "id", "file"])?;
+    let id = require_id(obj, i)?;
+    let target = super::super::ink::parse_id(&id, &format!("ops[{i}].id"))?;
+    let file = require_file(obj, i, "replaceInk")?;
+    Ok(super::super::ink::ReplaceInkOp { id, target, file })
+}
+
+pub(super) fn parse_delete_ink(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<super::super::ink::DeleteInkOp, Error> {
+    deny_keys(obj, i, &["op", "id"])?;
+    let id = require_id(obj, i)?;
+    let target = super::super::ink::parse_id(&id, &format!("ops[{i}].id"))?;
+    Ok(super::super::ink::DeleteInkOp { id, target })
+}
+
+pub(super) fn parse_set_ink_size(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<super::super::ink::SetInkSizeOp, Error> {
+    deny_keys(obj, i, &["op", "id", "cx", "cy", "to", "toOffX", "toOffY"])?;
+    let id = require_id(obj, i)?;
+    let target = super::super::ink::parse_id(&id, &format!("ops[{i}].id"))?;
+    let s = parse_drawing_size(obj, i, "setInkSize")?;
+    Ok(super::super::ink::SetInkSizeOp {
+        id,
+        target,
+        cx: s.cx,
+        cy: s.cy,
+        to: s.to,
+        to_off_x: s.to_off_x,
+        to_off_y: s.to_off_y,
+    })
+}
+
+pub(super) fn parse_set_ink_anchor(
+    obj: &serde_json::Map<String, Value>,
+    i: usize,
+) -> Result<super::super::ink::SetInkAnchorOp, Error> {
+    deny_keys(
+        obj,
+        i,
+        &[
+            "op", "id", "anchor", "from", "to", "fromOffX", "fromOffY", "toOffX", "toOffY", "posX",
+            "posY", "editAs", "cx", "cy",
+        ],
+    )?;
+    let id = require_id(obj, i)?;
+    let target = super::super::ink::parse_id(&id, &format!("ops[{i}].id"))?;
+    let p = parse_drawing_anchor_patch(obj, i, "setInkAnchor")?;
+    Ok(super::super::ink::SetInkAnchorOp {
+        id,
+        target,
+        anchor: p.anchor,
+        from: p.from,
+        to: p.to,
+        from_off_x: p.from_off_x,
+        from_off_y: p.from_off_y,
+        to_off_x: p.to_off_x,
+        to_off_y: p.to_off_y,
+        pos_x: p.pos_x,
+        pos_y: p.pos_y,
+        edit_as: p.edit_as,
+        cx: p.cx,
+        cy: p.cy,
+    })
+}
+
 pub(super) fn parse_insert_math(
     obj: &serde_json::Map<String, Value>,
     i: usize,

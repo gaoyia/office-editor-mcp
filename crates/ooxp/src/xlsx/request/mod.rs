@@ -67,6 +67,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
             "sparklines",
             "oleObjects",
             "model3ds",
+            "inks",
             "maths",
             "slicers",
             "protectedRanges",
@@ -88,6 +89,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
     let sparklines = parse_bool_field(obj.get("sparklines"), "sparklines")?;
     let ole_objects = parse_bool_field(obj.get("oleObjects"), "oleObjects")?;
     let model3ds = parse_bool_field(obj.get("model3ds"), "model3ds")?;
+    let inks = parse_bool_field(obj.get("inks"), "inks")?;
     let maths = parse_bool_field(obj.get("maths"), "maths")?;
     let slicers = parse_bool_field(obj.get("slicers"), "slicers")?;
     let protected_ranges = parse_bool_field(obj.get("protectedRanges"), "protectedRanges")?;
@@ -152,6 +154,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
         && !sparklines
         && !ole_objects
         && !model3ds
+        && !inks
         && !maths
         && !slicers
         && !protected_ranges
@@ -176,6 +179,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
         sparklines,
         ole_objects,
         model3ds,
+        inks,
         maths,
         slicers,
         protected_ranges,
@@ -323,6 +327,11 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<XlsxOp>, Error> {
             "setModel3dSize" => XlsxOp::SetModel3dSize(parse_set_model3d_size(obj, i)?),
             "setModel3dAnchor" => XlsxOp::SetModel3dAnchor(parse_set_model3d_anchor(obj, i)?),
             "setModel3dCamera" => XlsxOp::SetModel3dCamera(parse_set_model3d_camera(obj, i)?),
+            "insertInk" => XlsxOp::InsertInk(parse_insert_ink(obj, i)?),
+            "replaceInk" => XlsxOp::ReplaceInk(parse_replace_ink(obj, i)?),
+            "deleteInk" => XlsxOp::DeleteInk(parse_delete_ink(obj, i)?),
+            "setInkSize" => XlsxOp::SetInkSize(parse_set_ink_size(obj, i)?),
+            "setInkAnchor" => XlsxOp::SetInkAnchor(parse_set_ink_anchor(obj, i)?),
             "insertMath" => XlsxOp::InsertMath(parse_insert_math(obj, i)?),
             "setMath" => XlsxOp::SetMath(parse_set_math(obj, i)?),
             "deleteMath" => XlsxOp::DeleteMath(parse_delete_math(obj, i)?),

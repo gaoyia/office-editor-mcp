@@ -240,6 +240,7 @@ fn inspect_lists_hidden() {
             "sparklineCount",
             "oleObjectCount",
             "model3dCount",
+            "inkCount",
             "slicerCount",
             "protectedRangeCount",
             "hasHeaderFooter",

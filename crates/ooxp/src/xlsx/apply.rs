@@ -19,6 +19,7 @@ use super::connection;
 use super::custom_view;
 use super::extlink;
 use super::hf;
+use super::ink;
 use super::inspect;
 use super::layout;
 use super::model3d;
@@ -889,6 +890,60 @@ pub fn apply(bytes: &[u8], ops: &[XlsxOp]) -> Result<Vec<u8>, Error> {
                 load_dirty(&pkg, &mut dirty_sheets, &part, false)?;
                 let doc = dirty_of(&mut dirty_sheets, &part);
                 model3d::set_anchor(&mut pkg, &doc.root, &part, op, i)?;
+            }
+            XlsxOp::InsertInk(op) => {
+                let part = require_drawing_worksheet(
+                    &sheet_index,
+                    &op.sheet,
+                    i,
+                    ErrorKind::InsertInkWorksheetOnly,
+                )?;
+                load_dirty(&pkg, &mut dirty_sheets, &part, false)?;
+                let doc = dirty_of(&mut dirty_sheets, &part);
+                ink::insert(&mut pkg, doc, &part, op, &format!("ops[{i}].file"))?;
+            }
+            XlsxOp::ReplaceInk(op) => {
+                let part = require_drawing_worksheet(
+                    &sheet_index,
+                    &op.target.sheet,
+                    i,
+                    ErrorKind::InsertInkWorksheetOnly,
+                )?;
+                load_dirty(&pkg, &mut dirty_sheets, &part, false)?;
+                ink::replace(&mut pkg, &part, op, i)?;
+            }
+            XlsxOp::DeleteInk(op) => {
+                let part = require_drawing_worksheet(
+                    &sheet_index,
+                    &op.target.sheet,
+                    i,
+                    ErrorKind::InsertInkWorksheetOnly,
+                )?;
+                load_dirty(&pkg, &mut dirty_sheets, &part, false)?;
+                let doc = dirty_of(&mut dirty_sheets, &part);
+                ink::delete(&mut pkg, doc, &part, op, i)?;
+            }
+            XlsxOp::SetInkSize(op) => {
+                let part = require_drawing_worksheet(
+                    &sheet_index,
+                    &op.target.sheet,
+                    i,
+                    ErrorKind::InsertInkWorksheetOnly,
+                )?;
+                load_dirty(&pkg, &mut dirty_sheets, &part, false)?;
+                let doc = dirty_of(&mut dirty_sheets, &part);
+                ink::set_size(&mut pkg, &doc.root, &part, op, i)?;
+            }
+            XlsxOp::SetInkAnchor(op) => {
+                let part = require_drawing_worksheet(
+                    &sheet_index,
+                    &op.target.sheet,
+                    i,
+                    ErrorKind::InsertInkWorksheetOnly,
+                )?;
+                load_dirty(&pkg, &mut dirty_sheets, &part, false)?;
+                let doc = dirty_of(&mut dirty_sheets, &part);
+                ink::set_anchor(&mut pkg, &doc.root, &part, op, i)?;
             }
             XlsxOp::SetModel3dCamera(op) => {
                 let part = require_drawing_worksheet(

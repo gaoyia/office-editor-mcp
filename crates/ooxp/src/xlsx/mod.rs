@@ -16,6 +16,7 @@ mod formula;
 mod group;
 mod hf;
 mod hyperlink;
+mod ink;
 mod inspect;
 mod layout;
 mod model3d;

@@ -161,6 +161,7 @@ fn summary_without_scope() {
             "sparklineCount",
             "oleObjectCount",
             "model3dCount",
+            "inkCount",
             "slicerCount",
             "protectedRangeCount",
             "hasHeaderFooter",

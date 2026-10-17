@@ -81,6 +81,7 @@ const SKELETON_SHEET_KEYS: &[&str] = &[
     "connectors",
     "smartArts",
     "model3ds",
+    "inks",
     "maths",
 ];
 

@@ -507,6 +507,13 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::SheetOleContainer => {
                 "工作表 id 必须带 /ole:…（该 id 本身不是嵌入对象）".into()
             }
+            IdReason::InsertInkNeedsSheet => {
+                "xlsx 的 insertInk 的 id 必须是 sheet:工作表名".into()
+            }
+            IdReason::SheetInkPrefix => "xlsx 墨迹 id 必须是 sheet:工作表名/ink:…".into(),
+            IdReason::SheetInkContainer => {
+                "工作表 id 必须带 /ink:…（该 id 本身不是墨迹）".into()
+            }
             IdReason::InsertModel3dNeedsSheet => {
                 "xlsx 的 insertModel3d 的 id 必须是 sheet:工作表名".into()
             }
@@ -1027,7 +1034,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         }
         ErrorKind::SmartArtNotFound { id } => format!("找不到 SmartArt：{id}"),
         ErrorKind::OleNotFound { id } => format!("找不到嵌入对象：{id}"),
-        ErrorKind::InkNotFound { id } => format!("找不到墨迹画布：{id}"),
+        ErrorKind::InkNotFound { id } => format!("找不到墨迹：{id}"),
         ErrorKind::Model3dNotFound { id } => format!("找不到 3D 模型：{id}"),
         ErrorKind::MathDrawingNotFound { id } => format!("找不到公式框：{id}"),
         ErrorKind::MathDrawingNoExpr => {
@@ -1168,6 +1175,7 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         ErrorKind::InsertChartWorksheetOnly => "只能往工作表 insertChart".into(),
         ErrorKind::InsertTextBoxWorksheetOnly => "只能往工作表插入或改文本框、形状与连接线".into(),
         ErrorKind::InsertModel3dWorksheetOnly => "只能往工作表插入 3D 模型".into(),
+        ErrorKind::InsertInkWorksheetOnly => "只能往工作表插入墨迹".into(),
         ErrorKind::InsertMathWorksheetOnly => "只能往工作表插入公式框".into(),
         ErrorKind::InsertSmartArtWorksheetOnly => "只能往工作表 insertSmartArt / 改图示".into(),
         ErrorKind::CommentsWorksheetOnly => "只能对工作表发批注 op".into(),
@@ -1188,6 +1196,9 @@ pub(super) fn render(kind: &ErrorKind) -> String {
         }
         ErrorKind::TwoCellModel3dSize => {
             "twoCell 3D 请在 setModel3dSize 里给 to，不要给 cx / cy".into()
+        }
+        ErrorKind::TwoCellInkSize => {
+            "twoCell 墨迹请在 setInkSize 里给 to，不要给 cx / cy".into()
         }
         ErrorKind::TwoCellSlicerSize => {
             "twoCell 切片器请在 setSlicerSize 里给 to，不要给 cx / cy".into()

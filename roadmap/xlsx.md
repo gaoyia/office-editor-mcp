@@ -97,18 +97,17 @@ docx 见 [`roadmap/docx.md`](docx.md)。pptx 见 [`roadmap/pptx.md`](pptx.md)。
 | 44 | `.plan/2026年-10月-11日-✅-xlsx-切片器筛选项.md` | 切片器、时间线已过 |
 | C16 | `.plan/2026年-10月-11日-✅-三家主题objectDefaults.md` | 主题已过 |
 | C15 | `.plan/2026年-10月-11日-✅-三家3D相机与灯光.md` | C7、C12 已过 |
+| 45 | `.plan/2026年-10月-18日-✅-xlsx-工作表墨迹.md` | 工作表图。Excel 16.0 打开无修复 |
 
 ## 待做
 
-公式求值仍永不做。墨迹未挂不算欠账。Power Query 一等公民仍不挂。OLE 事后改尺寸不挂。
+公式求值仍永不做。Power Query 一等公民仍不挂。OLE 事后改尺寸不挂。
 
 当期无待做序号。
 
 ## 先探测再进待做
 
 探测 Office 16.0 另存后再挂序号。未探测的不算欠账。
-
-- 工作表墨迹（不是批注墨迹，也不是 Word `wpc` 画布）。16.0 没有 `AddInk` / `AddInkComment`，`ExecuteMso('InkStartInking')` 失败。需要 Draw 手写另存样例后再挂
 
 不要自动挂：Power Query / `queryTables` 结果区。不要把 Word 水印、内容控件、编号、修订、参考文献、`wpc` 画布搬过来。
 

@@ -227,6 +227,9 @@
         "model3ds": {
           "type": "boolean"
         },
+        "inks": {
+          "type": "boolean"
+        },
         "timing": {
           "type": "boolean"
         },
@@ -1214,6 +1217,21 @@
               },
               {
                 "$ref": "xlsx.schema.json#/$defs/deleteModel3dOp"
+              },
+              {
+                "$ref": "xlsx.schema.json#/$defs/insertInkOp"
+              },
+              {
+                "$ref": "xlsx.schema.json#/$defs/replaceInkOp"
+              },
+              {
+                "$ref": "xlsx.schema.json#/$defs/deleteInkOp"
+              },
+              {
+                "$ref": "xlsx.schema.json#/$defs/setInkSizeOp"
+              },
+              {
+                "$ref": "xlsx.schema.json#/$defs/setInkAnchorOp"
               },
               {
                 "$ref": "docx.schema.json#/$defs/insertModel3dOp"

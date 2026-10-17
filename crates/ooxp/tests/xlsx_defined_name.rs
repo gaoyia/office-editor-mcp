@@ -118,6 +118,7 @@ fn inspect_empty_on_create() {
             "sparklineCount",
             "oleObjectCount",
             "model3dCount",
+            "inkCount",
             "slicerCount",
             "connectionCount",
             "externalLinkCount",

@@ -16,6 +16,7 @@ use super::custom_view;
 use super::extlink;
 use super::formula;
 use super::hf;
+use super::ink;
 use super::model3d;
 use super::names;
 use super::ole;
@@ -86,6 +87,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     let want_sparklines = scope.as_ref().is_some_and(|s| s.sparklines);
     let want_ole = scope.as_ref().is_some_and(|s| s.ole_objects);
     let want_model3ds = scope.as_ref().is_some_and(|s| s.model3ds);
+    let want_inks = scope.as_ref().is_some_and(|s| s.inks);
     let want_maths = scope.as_ref().is_some_and(|s| s.maths);
     let want_slicers = scope.as_ref().is_some_and(|s| s.slicers);
     let want_protected_ranges = scope.as_ref().is_some_and(|s| s.protected_ranges);
@@ -112,6 +114,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     let mut sparkline_count = 0usize;
     let mut ole_object_count = 0usize;
     let mut model3d_count = 0usize;
+    let mut ink_count = 0usize;
     let mut slicer_count = 0usize;
     for (sheet_id, sh) in sheets.iter().enumerate() {
         let mut obj = Map::new();
@@ -165,6 +168,9 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
             let n_m3d = model3d::count(&pkg, &sh.part, &sheet_doc.root)?;
             model3d_count += n_m3d;
             obj.insert("model3dCount".into(), json!(n_m3d));
+            let n_ink = ink::count(&pkg, &sh.part, &sheet_doc.root)?;
+            ink_count += n_ink;
+            obj.insert("inkCount".into(), json!(n_ink));
             let n_slicer = slicer::count(&pkg, &sh.part)?;
             slicer_count += n_slicer;
             obj.insert("slicerCount".into(), json!(n_slicer));
@@ -264,6 +270,12 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
                         &sheet_doc.root,
                         &sh.name,
                     )?)),
+                );
+            }
+            if want_inks {
+                obj.insert(
+                    "inks".into(),
+                    Value::Array(ink::collect(&pkg, &sh.part, &sheet_doc.root, &sh.name)?),
                 );
             }
             if want_slicers {
@@ -448,6 +460,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     root.insert("sparklineCount".into(), json!(sparkline_count));
     root.insert("oleObjectCount".into(), json!(ole_object_count));
     root.insert("model3dCount".into(), json!(model3d_count));
+    root.insert("inkCount".into(), json!(ink_count));
     root.insert("slicerCount".into(), json!(slicer_count));
     root.insert(
         "connectionCount".into(),

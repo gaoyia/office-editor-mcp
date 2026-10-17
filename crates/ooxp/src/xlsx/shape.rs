@@ -1183,7 +1183,8 @@ pub(crate) fn cnv_of_object(el: &Element) -> (Option<String>, String) {
     let nv = el
         .child_by_local("nvSpPr")
         .or_else(|| el.child_by_local("nvCxnSpPr"))
-        .or_else(|| el.child_by_local("nvGraphicFramePr"));
+        .or_else(|| el.child_by_local("nvGraphicFramePr"))
+        .or_else(|| el.child_by_local("nvContentPartPr"));
     if let Some(nv) = nv {
         if let Some(pr) = nv.child_by_local("cNvPr") {
             let raw = pr
