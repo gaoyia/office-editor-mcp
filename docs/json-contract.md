@@ -16,8 +16,8 @@ docx 的 `exportMedia` 认图 id、OLE id、墨迹画布 id、3D 模型 id 与�
 `font:{n}` 写出 `/word/fonts/…` 的 odttf 原字节（仍是混淆后的，不还原）。
 xlsx 的 `exportMedia` 认工作表图 id、页眉页脚图 id、OLE id、3D 模型 id 与工作表墨迹 id：图 id 写出 `/xl/media/…`，OLE id 写出 embeddings 部件，
 3D 模型 id 写出 `/xl/media/…` 的 GLB 原字节，墨迹 id 写出 `/xl/ink/…` 的 InkML 原字节。
-pptx 的 `exportMedia` 认幻灯片图 id、备注图 id、批注内图 id、母版 / 版式图 id、视频 id、音频 id、OLE id 与 3D 模型 id：图 / 视频 / 音频写出 `/ppt/media/…`，OLE 写出 embeddings 部件，
-3D 模型 id 写出 `/ppt/media/…` 的 GLB 原字节。
+pptx 的 `exportMedia` 认幻灯片图 id、备注图 id、批注内图 id、母版 / 版式图 id、视频 id、音频 id、OLE id、3D 模型 id 与幻灯片墨迹 id：图 / 视频 / 音频写出 `/ppt/media/…`，OLE 写出 embeddings 部件，
+3D 模型 id 写出 `/ppt/media/…` 的 GLB 原字节，墨迹 id 写出 `/ppt/ink/…` 的 InkML 原字节。
 xlsx 的 `scope.charts` 与图表 op 认工作表 / 图表工作表上的图；`scope.headerFooter` 展开工作表上的页眉页脚槽位。
 pptx 的 `scope.charts` 与图表 op 认幻灯片、备注页与幻灯片母版 / 版式上的图表 `p:graphicFrame`；`exportChartData` 认这些图表 id，写出 embedding。
 pptx 的 `scope.smartArt` 与 SmartArt op 认幻灯片、备注页与幻灯片母版 / 版式上的 diagram `p:graphicFrame`。
@@ -37,6 +37,9 @@ apply 用 `insertModel3d` / `replaceModel3d` / `deleteModel3d` / `setModel3dSize
 docx 另认 `setModel3dWrap`。xlsx 另认 `setModel3dAnchor`。pptx 另认 `setModel3dPos`。
 `setModel3dCamera` 改 `am3d:camera`、`am3d:rot` 与 `spPr` 里的 `a:scene3d/a:lightRig`。不把 `ambientLight` / `ptLight` 放进树。
 不是图，不进 `pictures`。对 3D id 发图的 size / pos / wrap / anchor 仍报 `InvalidId`。
+pptx 的 `scope.inks` 列出幻灯片墨迹（一笔一个 `p:contentPart`，InkML 在 `/ppt/ink/…`）。位置是画布 EMU，不是单元格。
+apply 用 `insertInk` / `replaceInk` / `deleteInk` / `setInkSize` / `setInkPos`。
+不是图，不进 `pictures`。不把笔画放进树。xlsx 的 `insertInk` 仍是工作表锚点，字段不同。docx 不认这些 op。
 xlsx / pptx 的 `scope.maths` 列出 drawing 公式框（`a14:m` 包 OMML）。
 apply 复用 `insertMath` / `setMath` / `deleteMath`。xlsx 另认 `setMathAnchor` / `setMathSize`。pptx 另认 `setMathPos` / `setMathSize`。
 `setMath` 仍只改字。不是单元格 `f`，也不把 Word 的 `expr` 搬过去。对公式框 id 发文本框 / 形状的锚点与尺寸 op 仍报 `InvalidId`。
@@ -299,7 +302,7 @@ pptx 认 `setShapeText`、`setShapeFormat`、形状管理 op（`insertShape`、`
 以及 `setHandoutText`、以及超链接 op（`insertHyperlink`、`setHyperlink`、`deleteHyperlink`）、以及域 op（`insertField`、`setField`、
 `deleteField`）、以及媒体 op（`insertVideo`、`insertAudio`、`deleteMedia`、`setMedia`）、以及幻灯片节 op（`insertSlideSection`、`setSlideSectionName`、
 `deleteSlideSection`、`setSlideSection`）、以及自定义放映 op（`insertCustomShow`、`setCustomShow`、`deleteCustomShow`）、
-以及 OLE op（`insertOle`、`deleteOle`）、以及 3D 模型 op（`insertModel3d`、`replaceModel3d`、`deleteModel3d`、`setModel3dSize`、`setModel3dPos`、`setModel3dCamera`；不含 `setModel3dWrap`、`setModel3dAnchor`）、以及公式 op（`insertMath`、`setMath`、`deleteMath`、`setMathSize`、`setMathPos`；不含 `setMathAnchor`）、以及 Zoom op（`insertZoom`、`setZoom`、`deleteZoom`）、以及 `setShowPr`、以及 `setProtection`、
+以及 OLE op（`insertOle`、`deleteOle`）、以及 3D 模型 op（`insertModel3d`、`replaceModel3d`、`deleteModel3d`、`setModel3dSize`、`setModel3dPos`、`setModel3dCamera`；不含 `setModel3dWrap`、`setModel3dAnchor`）、以及墨迹 op（`insertInk`、`replaceInk`、`deleteInk`、`setInkSize`、`setInkPos`；不含 `setInkAnchor`）、以及公式 op（`insertMath`、`setMath`、`deleteMath`、`setMathSize`、`setMathPos`；不含 `setMathAnchor`）、以及 Zoom op（`insertZoom`、`setZoom`、`deleteZoom`）、以及 `setShowPr`、以及 `setProtection`、
 以及 `setProps` / `setCustomProp` / `deleteCustomProp`。
 不提供把整棵时间轴当 JSON 写入的 op；`setTiming` 仍报 `UnsupportedOp`。
 对不上格式的 op（例如对 pptx 发 `setCell` / `setCellStyle` / `setParaText` / `setProtection`，

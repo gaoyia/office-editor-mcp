@@ -13,6 +13,7 @@ use super::custom_show;
 use super::field;
 use super::handout;
 use super::hyperlink;
+use super::ink;
 use super::master;
 use super::media;
 use super::model3d;
@@ -57,6 +58,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     let want_custom_shows = scope.as_ref().is_some_and(|s| s.custom_shows);
     let want_ole_objects = scope.as_ref().is_some_and(|s| s.ole_objects);
     let want_model3ds = scope.as_ref().is_some_and(|s| s.model3ds);
+    let want_inks = scope.as_ref().is_some_and(|s| s.inks);
     let want_maths = scope.as_ref().is_some_and(|s| s.maths);
     let want_zooms = scope.as_ref().is_some_and(|s| s.zooms);
     let catalog = master::catalog(&pkg, &pres_part, &pres.root)?;
@@ -74,6 +76,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     let mut table_count = 0usize;
     let mut ole_object_count = 0usize;
     let mut model3d_count = 0usize;
+    let mut ink_count = 0usize;
     let mut zoom_count = 0usize;
     let mut connector_count = 0usize;
     let mut anim_count = 0usize;
@@ -181,6 +184,16 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
             .map(|c| c.len())
             .unwrap_or_else(|| model3d::count(&doc.root));
         model3d_count += n_m3d;
+        let ink_list = if want_inks {
+            Some(ink::collect(&doc.root, &host))
+        } else {
+            None
+        };
+        let n_ink = ink_list
+            .as_ref()
+            .map(|c| c.len())
+            .unwrap_or_else(|| ink::count(&doc.root));
+        ink_count += n_ink;
         let zooms_list = if want_zooms {
             Some(zoom::collect(&doc.root, &host, &slides, &pres.root))
         } else {
@@ -232,6 +245,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         obj.insert("tableCount".into(), json!(n_tables));
         obj.insert("oleObjectCount".into(), json!(n_ole));
         obj.insert("model3dCount".into(), json!(n_m3d));
+        obj.insert("inkCount".into(), json!(n_ink));
         obj.insert("zoomCount".into(), json!(n_zoom));
         obj.insert("connectorCount".into(), json!(n_cxn));
         obj.insert("animCount".into(), json!(n_anims));
@@ -263,6 +277,9 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
         if let Some(items) = model3d_list {
             obj.insert("model3ds".into(), Value::Array(model3d::list_json(&items)));
         }
+        if let Some(items) = ink_list {
+            obj.insert("inks".into(), Value::Array(ink::list_json(&items)));
+        }
         if let Some(zooms) = zooms_list {
             obj.insert("zooms".into(), Value::Array(zooms));
         }
@@ -281,6 +298,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
                     want_smartarts,
                     want_tables,
                     want_model3ds,
+                    want_inks,
                     want_maths,
                     want_timing,
                     want_media,
@@ -348,6 +366,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
     root.insert("tableCount".into(), json!(table_count));
     root.insert("oleObjectCount".into(), json!(ole_object_count));
     root.insert("model3dCount".into(), json!(model3d_count));
+    root.insert("inkCount".into(), json!(ink_count));
     root.insert("zoomCount".into(), json!(zoom_count));
     root.insert("connectorCount".into(), json!(connector_count));
     root.insert("animCount".into(), json!(anim_count));
@@ -380,6 +399,7 @@ pub fn inspect(bytes: &[u8], scope: Option<InspectScope>) -> Result<Value, Error
                 want_tables,
                 want_ole_objects,
                 want_model3ds,
+                want_inks,
                 want_maths,
                 want_zooms,
                 want_connectors,

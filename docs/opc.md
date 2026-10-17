@@ -555,6 +555,10 @@ apply 或 create 插入幻灯片或备注 3D 模型时，可能新建 `/ppt/medi
 该页或 notesSlide `.rels` 补一条 Type `http://schemas.microsoft.com/office/2017/06/relationships/model3d` 指向 GLB，再补一条 image 指向海报。
 宿主是 `p:graphicFrame`，包在 `mc:AlternateContent` 的 Choice 里（`Requires="am3d"`）。Fallback 是海报 `p:pic`。
 create 给了 `slides[].model3ds` 时同样写入。备注 apply 可往 `slide:{n}/notes` 插；create 本期不在 `slides[].notes` 上写 3D。不把 GLB 当 `insertPicture`。
+apply 或 create 插入幻灯片或备注墨迹时，可能新建 `/ppt/ink/inkN.xml`（Override `application/inkml+xml`）以及海报 `/ppt/media/imageN.png`。
+该页或 notesSlide `.rels` 补一条 Type 以 `/customXml` 结尾的关系指向 InkML，再补一条 image 指向海报。
+宿主是 `p:contentPart`（`p14:bwMode="auto"`），包在 `mc:AlternateContent` 的 Choice 里（`Requires="p14"`）。`p14:xfrm` 写画布 EMU。Fallback 是海报 `p:pic`。
+create 给了 `slides[].inks` 时同样写入。备注对象可写 `inks`。不把 InkML 当 `insertPicture`。不写 `a16:creationId`。
 apply 或 create 插入幻灯片或备注公式框时，只改该页或 notesSlide XML，不新建部件。
 宿主根补 `xmlns:a14` 与 `xmlns:m`。写 `mc:AlternateContent`，Choice `Requires="a14"`，Choice 里是 `p:sp`（`txBox="1"`）包 `a14:m` / `m:oMathPara`。
 Fallback 是同一套纯文本框，字为调用方 `text`。不栅格化，不写海报。create 给了 `slides[].maths` 时同样写入。

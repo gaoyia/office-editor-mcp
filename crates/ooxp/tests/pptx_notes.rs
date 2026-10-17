@@ -176,6 +176,7 @@ fn inspect_has_notes_without_notes_object() {
             "tableCount",
             "oleObjectCount",
             "model3dCount",
+            "inkCount",
             "zoomCount",
             "connectorCount",
             "animCount"
@@ -227,6 +228,7 @@ fn set_notes_text_creates_parts_and_inspects() {
             "tableCount",
             "oleObjectCount",
             "model3dCount",
+            "inkCount",
             "zoomCount",
             "connectorCount",
             "animCount",
@@ -378,6 +380,7 @@ fn insert_picture_on_notes_does_not_join_slide_count() {
             "tableCount",
             "oleObjectCount",
             "model3dCount",
+            "inkCount",
             "zoomCount",
             "connectorCount",
             "animCount",

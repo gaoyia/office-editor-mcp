@@ -91,6 +91,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
             "customShows",
             "oleObjects",
             "model3ds",
+            "inks",
             "maths",
             "zooms",
         ],
@@ -113,6 +114,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
     let custom_shows = parse_bool_field(obj.get("customShows"), "customShows")?;
     let ole_objects = parse_bool_field(obj.get("oleObjects"), "oleObjects")?;
     let model3ds = parse_bool_field(obj.get("model3ds"), "model3ds")?;
+    let inks = parse_bool_field(obj.get("inks"), "inks")?;
     let maths = parse_bool_field(obj.get("maths"), "maths")?;
     let zooms = parse_bool_field(obj.get("zooms"), "zooms")?;
     let slide = match obj.get("slide") {
@@ -193,6 +195,7 @@ pub fn parse_scope(v: Option<&Value>) -> Result<Option<InspectScope>, Error> {
         custom_shows,
         ole_objects,
         model3ds,
+        inks,
         maths,
         zooms,
     }))
@@ -273,6 +276,11 @@ pub fn parse_ops(ops: &[Value]) -> Result<Vec<PptxOp>, Error> {
             "setModel3dSize" => PptxOp::SetModel3dSize(parse_set_model3d_size(obj, i)?),
             "setModel3dPos" => PptxOp::SetModel3dPos(parse_set_model3d_pos(obj, i)?),
             "setModel3dCamera" => PptxOp::SetModel3dCamera(parse_set_model3d_camera(obj, i)?),
+            "insertInk" => PptxOp::InsertInk(parse_insert_ink(obj, i)?),
+            "replaceInk" => PptxOp::ReplaceInk(parse_replace_ink(obj, i)?),
+            "deleteInk" => PptxOp::DeleteInk(parse_delete_ink(obj, i)?),
+            "setInkSize" => PptxOp::SetInkSize(parse_set_ink_size(obj, i)?),
+            "setInkPos" => PptxOp::SetInkPos(parse_set_ink_pos(obj, i)?),
             "insertMath" => PptxOp::InsertMath(parse_insert_math(obj, i)?),
             "setMath" => PptxOp::SetMath(parse_set_math(obj, i)?),
             "deleteMath" => PptxOp::DeleteMath(parse_delete_math(obj, i)?),

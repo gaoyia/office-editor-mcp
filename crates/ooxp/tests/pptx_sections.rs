@@ -125,6 +125,7 @@ fn create_has_zero_section_count_without_list() {
             "tableCount",
             "oleObjectCount",
             "model3dCount",
+            "inkCount",
             "zoomCount",
             "connectorCount",
             "animCount",

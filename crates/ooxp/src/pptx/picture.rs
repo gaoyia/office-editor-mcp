@@ -904,6 +904,9 @@ pub fn export_media(bytes: &[u8], id: &str) -> Result<ExportedMedia, Error> {
     if super::ole::is_ole_id(id) {
         return super::ole::export(bytes, id);
     }
+    if super::ink::looks_like_id(id) {
+        return super::ink::export(bytes, id);
+    }
     if super::model3d::looks_like_id(id) {
         return super::model3d::export(bytes, id);
     }

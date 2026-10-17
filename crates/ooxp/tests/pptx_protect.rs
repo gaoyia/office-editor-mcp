@@ -131,6 +131,7 @@ fn create_defaults_and_root_key_order() {
             "tableCount",
             "oleObjectCount",
             "model3dCount",
+            "inkCount",
             "zoomCount",
             "connectorCount",
             "animCount",

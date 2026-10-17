@@ -77,6 +77,7 @@ pub fn notes_json(
     want_smartarts: bool,
     want_tables: bool,
     want_model3ds: bool,
+    want_inks: bool,
     want_maths: bool,
     want_timing: bool,
     want_media: bool,
@@ -196,6 +197,8 @@ pub fn notes_json(
     obj.insert("oleObjectCount".into(), json!(n_ole));
     let m3ds = super::model3d::collect(&doc.root, &host);
     obj.insert("model3dCount".into(), json!(m3ds.len()));
+    let inks = super::ink::collect(&doc.root, &host);
+    obj.insert("inkCount".into(), json!(inks.len()));
     obj.insert("zoomCount".into(), json!(n_zoom));
     obj.insert("connectorCount".into(), json!(n_cxn));
     let anims = super::timing::list(&doc.root, &host, false);
@@ -236,6 +239,9 @@ pub fn notes_json(
             "model3ds".into(),
             Value::Array(super::model3d::list_json(&m3ds)),
         );
+    }
+    if want_inks {
+        obj.insert("inks".into(), Value::Array(super::ink::list_json(&inks)));
     }
     if let Some(zooms) = zooms_list {
         obj.insert("zooms".into(), Value::Array(zooms));

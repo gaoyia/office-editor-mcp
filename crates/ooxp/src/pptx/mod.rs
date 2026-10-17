@@ -12,6 +12,7 @@ pub(crate) mod geom;
 mod group;
 mod handout;
 mod hyperlink;
+mod ink;
 mod inspect;
 mod master;
 mod media;

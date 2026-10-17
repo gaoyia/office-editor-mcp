@@ -569,6 +569,15 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::SlideModel3dContainer => {
                 "Slide id must include /model3d:… (that id alone is not a 3D model)".into()
             }
+            IdReason::InsertInkNeedsSlide => {
+                "pptx insertInk id must be slide:N, slide:N/notes, master:N or master:N/layout:K".into()
+            }
+            IdReason::SlideInkPrefix => {
+                "pptx ink id must be slide:N/ink:…, slide:N/notes/ink:…, master:N/ink:… or master:N/layout:K/ink:…".into()
+            }
+            IdReason::SlideInkContainer => {
+                "Slide id must include /ink:… (that id alone is not ink)".into()
+            }
             IdReason::InsertMathNeedsSheet => "xlsx insertMath id must be sheet:name".into(),
             IdReason::SheetMathPrefix => "xlsx math drawing id must be sheet:name/math:…".into(),
             IdReason::SheetMathContainer => {

@@ -756,6 +756,31 @@ COM 认 `Type=30`（`mso3DModel`）。批注内本期不插。
 | P3k4 | 备注 | 备注 3D 可改 `fov`，根上 `model3dCount` 仍为 0，无修复 | ✅ |
 | P3k5 | 拒错 | 三个字段都不给得 `InvalidField`。`fov` 为负得 `InvalidField`。未写文件。不强制开 PowerPoint | ✅ |
 
+## 幻灯片墨迹
+
+幻灯片、备注页、母版与版式上 `Requires="p14"` 的 `p:contentPart`。一笔一个对象。只认 InkML。不进 `pictures`。Fallback 海报不进 `pictures`。位置是画布 EMU。不是批注墨迹，也不是 Word `wpc` 画布。
+库测试 `crates/ooxp/tests/pptx_ink.rs`。PowerPoint 16.0 打开桌面上的 `ooxp-幻灯片墨迹.pptx`（create 写出的两笔），没有弹出修复。编号用 Pink。
+
+- **Pink1**
+  - 检查：插入
+  - 通过标准：`insertInk` 把本地 InkML 写入第一页后，树上 `contentType` 为 `application/inkml+xml`，不进 `pictures`
+- **Pink2**
+  - 检查：导出
+  - 通过标准：对该墨迹 id `exportMedia` 得到 InkML 原字节，`contentType` 为 `application/inkml+xml`
+- **Pink3**
+  - 检查：create
+  - 通过标准：`slides[].inks[].file` 指向 InkML 后，树上坐标与 `contentType` 对得上，不进 `pictures`，PowerPoint 无修复
+- **Pink4**
+  - 检查：位置尺寸
+  - 通过标准：`setInkPos` / `setInkSize` 后 `p14:xfrm` 与 Fallback `p:pic` 同步
+- **Pink5**
+  - 检查：备注
+  - 通过标准：往 `slide:1/notes` 插墨迹后备注 `inkCount` 为 1，根上 `inkCount` 仍为 0
+- **Pink6**
+  - 检查：拒错
+  - 通过标准：不是 InkML 得 `InvalidField`。页 id 不带 `/ink:` 得 `InvalidId`
+  - 不强制开 PowerPoint
+
 ## 幻灯片公式框
 
 幻灯片与备注页上的 `a14:m` AlternateContent。不进 `shapes`。不算公式排版引擎。

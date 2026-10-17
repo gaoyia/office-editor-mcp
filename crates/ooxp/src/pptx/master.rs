@@ -184,6 +184,7 @@ pub fn masters_json(
     want_tables: bool,
     want_ole_objects: bool,
     want_model3ds: bool,
+    want_inks: bool,
     want_maths: bool,
     want_zooms: bool,
     want_connectors: bool,
@@ -240,6 +241,7 @@ pub fn masters_json(
                 want_tables,
                 want_ole_objects,
                 want_model3ds,
+                want_inks,
                 want_maths,
                 want_zooms,
                 want_connectors,
@@ -280,6 +282,7 @@ pub fn masters_json(
             want_tables,
             want_ole_objects,
             want_model3ds,
+            want_inks,
             want_maths,
             want_zooms,
             want_connectors,
@@ -307,6 +310,7 @@ fn attach_object_lists(
     want_tables: bool,
     want_ole_objects: bool,
     want_model3ds: bool,
+    want_inks: bool,
     want_maths: bool,
     want_zooms: bool,
     want_connectors: bool,
@@ -368,6 +372,10 @@ fn attach_object_lists(
             "model3ds".into(),
             Value::Array(super::model3d::list_json(&m3ds)),
         );
+    }
+    if want_inks {
+        let inks = super::ink::collect(root, host);
+        obj.insert("inks".into(), Value::Array(super::ink::list_json(&inks)));
     }
     if want_zooms {
         obj.insert(

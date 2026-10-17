@@ -1267,6 +1267,21 @@
                 "$ref": "pptx.schema.json#/$defs/setModel3dPosOp"
               },
               {
+                "$ref": "pptx.schema.json#/$defs/insertInkOp"
+              },
+              {
+                "$ref": "pptx.schema.json#/$defs/replaceInkOp"
+              },
+              {
+                "$ref": "pptx.schema.json#/$defs/deleteInkOp"
+              },
+              {
+                "$ref": "pptx.schema.json#/$defs/setInkSizeOp"
+              },
+              {
+                "$ref": "pptx.schema.json#/$defs/setInkPosOp"
+              },
+              {
                 "$ref": "xlsx.schema.json#/$defs/insertMathOp"
               },
               {

@@ -571,6 +571,16 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   - 不把 GLB 或海报放进树
   - 备注里的 3D 不进幻灯片 `model3ds`，只在 `scope.notes` 时出现在 `notes` 上
   - xlsx / docx 见各自分册
+- **`scope.inks`**（否）
+  - 为 `true` 时给每页填 `inks`
+  - 省略或 `false` 则只有 `inkCount`，没有名单
+  - 不依赖 `scope.slide`
+  - 不把 InkML 或海报放进树
+  - 一笔一个对象。位置是画布 EMU，不是单元格
+  - 备注里的墨迹不进幻灯片 `inks`，只在 `scope.notes` 时出现在 `notes` 上
+  - 若同时 `masters: true`，母版 / 版式上也填 `inks`
+  - xlsx 的 `scope.inks` 是工作表墨迹，见 [xlsx 分册](json-contract-xlsx.md)
+  - docx 的 `scope` 里出现 `inks` 报 `InvalidField`
 - **`scope.zooms`**（否）
   - 为 `true` 时给每页填 `zooms`
   - 省略或 `false` 则只有 `zoomCount`，没有名单
@@ -661,6 +671,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   "tableCount": 0,
   "oleObjectCount": 0,
   "model3dCount": 0,
+  "inkCount": 0,
   "zoomCount": 0,
   "connectorCount": 0,
   "animCount": 0,
@@ -722,6 +733,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
       "tableCount": 0,
       "oleObjectCount": 0,
       "model3dCount": 0,
+      "inkCount": 0,
       "zoomCount": 0,
       "connectorCount": 0,
       "animCount": 0,
@@ -791,6 +803,7 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
       "tableCount": 0,
       "oleObjectCount": 0,
       "model3dCount": 0,
+      "inkCount": 0,
       "zoomCount": 0,
       "connectorCount": 0,
       "animCount": 0
@@ -834,6 +847,8 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   根上不挂 `oleObjects`，除非给了 `scope.oleObjects`。不把嵌入字节或预览图放进树。
 - `model3dCount` 在演示文稿根上始终出现，等于各页被收入的 3D 模型之和，不含备注。每页始终有自己的 `model3dCount`。没有则为 `0`。
   根上不挂 `model3ds`，除非给了 `scope.model3ds`。不把 GLB 或海报放进树。
+- `inkCount` 在演示文稿根上始终出现，等于各页被收入的墨迹之和，不含备注。每页始终有自己的 `inkCount`。没有则为 `0`。
+  根上不挂 `inks`，除非给了 `scope.inks`。不把 InkML 或海报放进树。一笔一个对象。
 - `zoomCount` 在演示文稿根上始终出现，等于各页被收入的 Zoom 之和。每页始终有自己的 `zoomCount`。没有则为 `0`。根上不挂 `zooms`，除非给了 `scope.zooms`。不把预览图放进树。
 - `connectorCount` 在演示文稿根上始终出现，等于各页被收入的 `p:cxnSp` 之和。每页始终有自己的 `connectorCount`。没有则为 `0`。
   根上不挂 `connectors`，除非给了 `scope.connectors`。
@@ -1107,9 +1122,9 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   没有 `txBody` 则 `text` 为 `""`。不把这些 `p:sp` 抄进各页。
   xlsx / docx 的 `scope` 里出现 `masters` 报 `InvalidField`。
 - `scope.notes` 为 `true` 时，每页带 `notes`。没有 notesSlide 关系则为 `null`。
-  有则为对象，字段顺序：`id`、`clrMapOvr`、`themeOverride`、`pictureCount`、`mathCount`、`videoCount`、`audioCount`、`chartCount`、`smartArtCount`、`hyperlinkCount`、`fieldCount`、`tableCount`、`oleObjectCount`、`model3dCount`、`zoomCount`、`connectorCount`、`animCount`，
+  有则为对象，字段顺序：`id`、`clrMapOvr`、`themeOverride`、`pictureCount`、`mathCount`、`videoCount`、`audioCount`、`chartCount`、`smartArtCount`、`hyperlinkCount`、`fieldCount`、`tableCount`、`oleObjectCount`、`model3dCount`、`inkCount`、`zoomCount`、`connectorCount`、`animCount`，
   有图名单时再跟 `pictures`，有公式框名单时再跟 `maths`，有媒体名单时再跟 `videos` 与 `audios`，有图表名单时再跟 `charts`，
-  有 SmartArt 名单时再跟 `smartArts`，有表名单时再跟 `tables`，有 OLE 名单时再跟 `oleObjects`，有 3D 模型名单时再跟 `model3ds`，
+  有 SmartArt 名单时再跟 `smartArts`，有表名单时再跟 `tables`，有 OLE 名单时再跟 `oleObjects`，有 3D 模型名单时再跟 `model3ds`，有墨迹名单时再跟 `inks`，
   有 Zoom 名单时再跟 `zooms`，有连接线名单时再跟 `connectors`，有超链接名单时再跟 `hyperlinks`，有域名单时再跟 `fields`，
   `scope.timing` 同开时再跟 `timing`，然后 `shapes`。
   `id` 为 `slide:{n}/notes`。
@@ -1150,12 +1165,12 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   `text` 是该域 `a:t` 缓存，不求值。xlsx 的 `scope` 里出现 `fields` 报 `InvalidField`。
   docx 见 [json-contract-docx.md](json-contract-docx.md#inspect)。
 - 页对象字段顺序：`id`、`index`、`name`、`layoutId`、`hidden`、`transition`、`clrMapOvr`、`themeOverride`、`hasNotes`、`pictureCount`、`mathCount`、`videoCount`、`audioCount`、
-  `chartCount`、`smartArtCount`、`commentCount`、`hyperlinkCount`、`fieldCount`、`tableCount`、`oleObjectCount`、`model3dCount`、`zoomCount`、
+  `chartCount`、`smartArtCount`、`commentCount`、`hyperlinkCount`、`fieldCount`、`tableCount`、`oleObjectCount`、`model3dCount`、`inkCount`、`zoomCount`、
   `connectorCount`、`animCount`，
-  然后按需 `pictures`，再按需 `maths`，再按需 `videos`，再按需 `audios`，再按需 `charts`，再按需 `smartArts`，再按需 `tables`，再按需 `oleObjects`，再按需 `model3ds`，再按需 `zooms`，
+  然后按需 `pictures`，再按需 `maths`，再按需 `videos`，再按需 `audios`，再按需 `charts`，再按需 `smartArts`，再按需 `tables`，再按需 `oleObjects`，再按需 `model3ds`，再按需 `inks`，再按需 `zooms`，
   再按需 `connectors`，再按需 `notes`，再按需 `comments`，再按需 `hyperlinks`，再按需 `fields`，再按需 `timing`，再按需 `truncated` 与 `shapes`。
   根对象字段顺序：`schemaVersion`、`format`、`id`、`slideCount`、`pictureCount`、`mathCount`、`videoCount`、`audioCount`、`chartCount`、
-  `smartArtCount`、`commentCount`、`hyperlinkCount`、`fieldCount`、`tableCount`、`oleObjectCount`、`model3dCount`、`zoomCount`、`connectorCount`、
+  `smartArtCount`、`commentCount`、`hyperlinkCount`、`fieldCount`、`tableCount`、`oleObjectCount`、`model3dCount`、`inkCount`、`zoomCount`、`connectorCount`、
   `animCount`、`masterCount`、`hasHandout`、`sectionCount`、`slideSize`、`notesSize`、`customShowCount`、`showPr`、`modifyProtection`、`props`，
   有 `scope.masters` 时再跟 `masters`，有 `scope.notesMaster` 时再跟 `notesMaster`，有 `scope.handout` 时再跟 `handout`，有 `scope.sections` 时再跟 `sections`，
   有 `scope.customShows` 时再跟 `customShows`，然后 `slides`。
@@ -1303,6 +1318,11 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   - 该页上的 3D 模型列表
   - 省略或空数组则不写
   - 每项必须有 `file`，可选 `x` / `y` / `cx` / `cy`，规则与 `insertModel3d` 相同
+- **`slides[].inks`**
+  - 可选
+  - 该页上的墨迹列表。一笔一个对象
+  - 省略或空数组则不写
+  - 每项必须有 `file`，可选 `x` / `y` / `cx` / `cy`，规则与 `insertInk` 相同
 - **`slides[].oleObjects`**
   - 可选
   - 该页嵌入对象
@@ -1319,10 +1339,10 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   - 可选
   - 该页演讲者备注
   - 可以是字符串，可空
-  - 也可以是对象：`text` 加可选 `anims`、`maths`、`model3ds`
+  - 也可以是对象：`text` 加可选 `anims`、`maths`、`model3ds`、`inks`
   - 省略则不写 notesSlide
   - 字符串或对象出现（含空串）则按 `setNotesText` 写该页 `body` 占位符
-  - 字符串形式仍只表示备注文本，不能带公式或 3D
+  - 字符串形式仍只表示备注文本，不能带公式、3D 或墨迹
 - **`slides[].comments`**
   - 可选
   - 该页现代批注列表
@@ -1605,6 +1625,12 @@ xlsx、docx、pptx 共用请求字段名 `scope`，里面的键按格式分，�
   - 每项字段与 `slides[].model3ds` 相同
   - 不要 `op` / `id`
   - 省略或空数组则不写
+- **`notes.inks`**
+  - `notes` 为对象时可选
+  - 备注页墨迹。一笔一个对象
+  - 每项字段与 `slides[].inks` 相同
+  - 不要 `op` / `id`
+  - 省略或空数组则不写
 - **`customShows[].name`**
   - 必须
   - 规则与 `insertCustomShow` 的 `name` 相同
@@ -1658,6 +1684,7 @@ create 写出 Transitional 最小包，见 [opc.md](opc.md)。
 给了 `slides[].smartArts` 时按 `insertSmartArt` 同一套规则写 `/ppt/diagrams/…` 与图示 `p:graphicFrame`。
 给了 `slides[].tables` 时按 `insertTable` 同一套规则写表 `p:graphicFrame`（`a:tbl`）。
 给了 `slides[].model3ds` 时按 `insertModel3d` 同一套规则写 GLB、海报 PNG 与 `am3d` AlternateContent。
+给了 `slides[].inks` 时按 `insertInk` 同一套规则写 InkML、海报 PNG 与 `p14` AlternateContent。不写进 `pictures`。
 给了 `shapes[].geom` 时按 `setShapeGeom` 同一套规则把该文本框改成 `a:custGeom`。不要另写一套 XML。
 给了 `shapes[].fields` 时按 `insertField` 同一套规则往该文本框写 `a:fld`。
 给了 `slides[].oleObjects` 时按 `insertOle` 同一套规则写 embedding 与 `p:oleObj`。
@@ -1666,6 +1693,7 @@ create 写出 Transitional 最小包，见 [opc.md](opc.md)。
 `notes` 为对象且给了 `anims` 时，按 `insertAnim` 同一套规则写到该页备注页，不算放映引擎。
 `notes` 为对象且给了 `maths` 时，按 `insertMath` 同一套规则写到该页备注页。
 `notes` 为对象且给了 `model3ds` 时，按 `insertModel3d` 同一套规则写到该页备注页。
+`notes` 为对象且给了 `inks` 时，按 `insertInk` 同一套规则写到该页备注页。
 给了 `slides[].comments` 时按 `insertComment` 同一套规则写该页现代批注（`p188:cmLst`、`/ppt/authors.xml`）。
 给了形状上的 `url` / `file` / `slide` 时按 `insertHyperlink` 同一套规则写链（可 `on=run`，可 `event=hover`）。
 给了 `pictures[].hyperlink` / `tables[].hyperlink` / `charts[].hyperlink` / `smartArts[].hyperlink` 时按 `insertHyperlink` 同一套规则写到对应对象上。
@@ -1679,8 +1707,8 @@ create 本期不写批注内图。
 给了 `presentation.handout` 时按 `setHandoutText` 同一套规则写讲义母版。
 给了 `presentation.showPr` 时按 `setShowPr` 同一套规则写 `p:showPr`。
 给了 `presentation.modifyProtection` 时按 `setProtection` 同一套规则写 `p:modifyVerifier`。
-先写该页 `shapes`（含 `geom` 与 `fields`），再按数组顺序写 `pictures`，再写 `maths`，再写 `model3ds`，再写 `videos`，再写 `audios`，再写 `charts`，再写 `smartArts`，再写 `tables`，
-再写 `oleObjects`，再写 `connectors`，再写 `notes`，再写 `notes.maths`，再写 `notes.model3ds`，
+先写该页 `shapes`（含 `geom` 与 `fields`），再按数组顺序写 `pictures`，再写 `maths`，再写 `model3ds`，再写 `inks`，再写 `videos`，再写 `audios`，再写 `charts`，再写 `smartArts`，再写 `tables`，
+再写 `oleObjects`，再写 `connectors`，再写 `notes`，再写 `notes.maths`，再写 `notes.model3ds`，再写 `notes.inks`，
 再按数组顺序写 `comments`，再写形状超链接，再写图 / 表框 / 表单元格 / 图表 / SmartArt 超链接，再写 `transition`，再按数组顺序写 `anims`，再写 `notes.anims`。
 全部页写完后再写 `sections`，再写 `zooms`，再写 `customShows`，再写 `handout`，再写 `showPr`，再写 `modifyProtection`。
 `p:cNvPr/@id` 取该页已有全部 `cNvPr` 的最大整数加 1，至少为 2。
@@ -3418,6 +3446,76 @@ docx 上仍用段落 id，见 [json-contract-docx.md](json-contract-docx.md#inse
 xlsx 见 [xlsx 分册](json-contract-xlsx.md#deleteole)。
 
 示例见 `docs/examples/pptx-apply-ole.json`。inspect 示例见 `docs/examples/pptx-inspect-ole.json`。
+
+### insertInk
+
+把本地 InkML 作为一笔墨迹写入目标幻灯片、备注页、母版或版式。不进 `pictures`。不把笔画放进树。海报用 1×1 PNG 占位。不写 `<p:timing>`。位置是画布 EMU。
+
+```json
+{
+  "schemaVersion": 1,
+  "action": "apply",
+  "path": "C:\\data\\deck.pptx",
+  "ops": [
+    {
+      "op": "insertInk",
+      "id": "slide:1",
+      "file": "C:\\\\data\\\\ink.xml"
+    }
+  ]
+}
+```
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"insertInk"` |
+| `id` | 必须是 `slide:{n}`、`slide:{n}/notes`、`master:{n}` 或 `master:{n}/layout:{k}` |
+| `file` | 必须。本地 InkML 路径。根元素本地名为 `ink`，且声明 InkML 命名空间 |
+| `x` / `y` | 可选。画布 EMU。省略为 `0`。显式 `0` 报 `InvalidField` |
+| `cx` / `cy` | 成对可选。EMU。都省则 `914400` × `914400` |
+
+`id` 不是页、备注、母版或版式容器报 `InvalidId`。找不到该页报 `IdNotFound`。
+`cx` / `cy` 只给一个报 `InvalidField`。找不到 `file` 报 `Io`。空路径或不是 InkML 报 `InvalidField`。
+批注内不插。名称写成 `墨迹 {已有笔数+1}`，不跟占位符序号。
+`cNvPr/@id` 仍取该页已有全部 `cNvPr` 的最大整数加 1。
+inspect id 为 `slide:{n}/ink:{cNvPrId}`，备注为 `slide:{n}/notes/ink:{cNvPrId}`，母版 / 版式同理。没有 `cNvPr/@id` 则为 `…/ink:index:{k}`，`stable` 为 `false`。
+节点字段顺序：`id`、`cNvPrId`、`name`、`x`、`y`、`cx`、`cy`、`contentType`、`stable`。`contentType` 为 `application/inkml+xml`。
+根上 `inkCount` 只加各页幻灯片，不含备注。
+
+AlternateContent 放进 `p:spTree`。Choice `Requires="p14"`，里面是 `p:contentPart`。关系写在该页或 notesSlide `.rels`：customXml 指向 `/ppt/ink/inkN.xml`，image 指向海报。
+`[Content_Types].xml` 为该 InkML 写 Override `application/inkml+xml`。xlsx 的 `insertInk` 是单元格锚点，见 [xlsx 分册](json-contract-xlsx.md#insertink)。
+
+### replaceInk
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"replaceInk"` |
+| `id` | 必须是墨迹 id |
+| `file` | 必须。本地 InkML 路径 |
+
+换 InkML 字节，保留 `contentPart` 与关系 id。不改位置尺寸。找不到报 `IdNotFound`。id 不是墨迹 id 报 `InvalidId`。
+
+### deleteInk
+
+| 字段 | 含义 |
+| --- | --- |
+| `op` | 必须是 `"deleteInk"` |
+| `id` | 必须是墨迹 id |
+
+找不到报 `IdNotFound`。id 不是墨迹 id 报 `InvalidId`。摘整棵 AlternateContent。
+清掉无人引用的关系、InkML 与海报。按 `deleteShape` 同一套规则清该 `cNvPr/@id` 的 timing `tgtEl`。
+
+### setInkSize
+
+字段与 `setPictureSize` 的 pptx 一侧相同。`id` 必须是墨迹 id。
+写入 `p14:xfrm/a:ext`。Fallback 海报 `p:pic` 同步改尺寸。
+对图 id 发此 op、对墨迹 id 发 `setPictureSize` 仍报 `InvalidId`。xlsx 用 `setInkSize` 改单元格锚点，见 xlsx 分册。
+
+### setInkPos
+
+字段与 `setPicturePos` 相同。`id` 必须是墨迹 id。
+写入 `p14:xfrm/a:off`。Fallback 海报 `p:pic` 同步改位置。
+`x` 与 `y` 一个都不给报 `InvalidField`。显式 `0` 可以。xlsx 不认此 op。
 
 ### insertModel3d
 

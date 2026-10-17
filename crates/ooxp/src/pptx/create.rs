@@ -39,6 +39,7 @@ struct NewNotes {
     anims: Vec<CreateAnim>,
     maths: Vec<super::omml::InsertMathOp>,
     model3ds: Vec<super::model3d::InsertModel3dOp>,
+    inks: Vec<super::ink::InsertInkOp>,
 }
 
 struct NewSlide {
@@ -54,6 +55,7 @@ struct NewSlide {
     transition: Option<SetTransitionOp>,
     anims: Vec<CreateAnim>,
     model3ds: Vec<super::model3d::InsertModel3dOp>,
+    inks: Vec<super::ink::InsertInkOp>,
     maths: Vec<super::omml::InsertMathOp>,
     ole_objects: Vec<ole::InsertOleOp>,
     connectors: Vec<CreateConnector>,
@@ -264,6 +266,7 @@ pub fn create(presentation: &Value) -> Result<Vec<u8>, Error> {
     attach_pictures(&mut pkg, &slides)?;
     attach_maths(&mut pkg, &slides)?;
     attach_model3ds(&mut pkg, &slides)?;
+    attach_inks(&mut pkg, &slides)?;
     attach_media(&mut pkg, &slides, media::MediaKind::Video)?;
     attach_media(&mut pkg, &slides, media::MediaKind::Audio)?;
     attach_charts(&mut pkg, &slides)?;
@@ -318,6 +321,7 @@ fn parse_slide(v: &Value, i: usize) -> Result<NewSlide, Error> {
                 | "transition"
                 | "anims"
                 | "model3ds"
+                | "inks"
                 | "maths"
                 | "oleObjects"
                 | "connectors"
@@ -360,6 +364,12 @@ fn parse_slide(v: &Value, i: usize) -> Result<NewSlide, Error> {
         format!("presentation.slides[{i}].model3ds"),
         false,
     )?;
+    let inks = parse_inks(
+        obj.get("inks"),
+        i,
+        format!("presentation.slides[{i}].inks"),
+        false,
+    )?;
     let maths = parse_maths(
         obj.get("maths"),
         i,
@@ -382,6 +392,7 @@ fn parse_slide(v: &Value, i: usize) -> Result<NewSlide, Error> {
         transition,
         anims,
         model3ds,
+        inks,
         maths,
         ole_objects,
         connectors,
@@ -435,6 +446,36 @@ fn parse_model3ds(
     let mut out = Vec::new();
     for (j, item) in arr.iter().enumerate() {
         out.push(super::model3d::parse_create(
+            item,
+            &format!("{prefix}[{j}]"),
+            slide_i + 1,
+            on_notes,
+        )?);
+    }
+    Ok(out)
+}
+
+fn parse_inks(
+    v: Option<&Value>,
+    slide_i: usize,
+    prefix: String,
+    on_notes: bool,
+) -> Result<Vec<super::ink::InsertInkOp>, Error> {
+    let Some(v) = v else {
+        return Ok(Vec::new());
+    };
+    let arr = v.as_array().ok_or_else(|| {
+        Error::with_path(
+            ErrorKind::WrongType {
+                field: "inks".into(),
+                expected: TypeName::Array,
+            },
+            prefix.clone(),
+        )
+    })?;
+    let mut out = Vec::new();
+    for (j, item) in arr.iter().enumerate() {
+        out.push(super::ink::parse_create(
             item,
             &format!("{prefix}[{j}]"),
             slide_i + 1,
@@ -634,10 +675,11 @@ fn parse_notes(v: Option<&Value>, slide_i: usize) -> Result<Option<NewNotes>, Er
             anims: Vec::new(),
             maths: Vec::new(),
             model3ds: Vec::new(),
+            inks: Vec::new(),
         })),
         Value::Object(obj) => {
             for k in obj.keys() {
-                if k != "text" && k != "anims" && k != "maths" && k != "model3ds" {
+                if k != "text" && k != "anims" && k != "maths" && k != "model3ds" && k != "inks" {
                     return Err(Error::with_path(
                         ErrorKind::UnknownField { field: k.clone() },
                         format!("{prefix}.{k}"),
@@ -665,11 +707,13 @@ fn parse_notes(v: Option<&Value>, slide_i: usize) -> Result<Option<NewNotes>, Er
                 format!("{prefix}.model3ds"),
                 true,
             )?;
+            let inks = parse_inks(obj.get("inks"), slide_i, format!("{prefix}.inks"), true)?;
             Ok(Some(NewNotes {
                 text,
                 anims,
                 maths,
                 model3ds,
+                inks,
             }))
         }
         _ => Err(Error::with_path(
@@ -1003,7 +1047,7 @@ fn attach_notes_drawings(pkg: &mut Package, slides: &[NewSlide]) -> Result<(), E
     if slides.iter().all(|s| {
         s.notes
             .as_ref()
-            .map(|n| n.maths.is_empty() && n.model3ds.is_empty())
+            .map(|n| n.maths.is_empty() && n.model3ds.is_empty() && n.inks.is_empty())
             .unwrap_or(true)
     }) {
         return Ok(());
@@ -1012,7 +1056,7 @@ fn attach_notes_drawings(pkg: &mut Package, slides: &[NewSlide]) -> Result<(), E
         let Some(notes) = &slide.notes else {
             continue;
         };
-        if notes.maths.is_empty() && notes.model3ds.is_empty() {
+        if notes.maths.is_empty() && notes.model3ds.is_empty() && notes.inks.is_empty() {
             continue;
         }
         let n = i + 1;
@@ -1037,6 +1081,15 @@ fn attach_notes_drawings(pkg: &mut Package, slides: &[NewSlide]) -> Result<(), E
                 &notes_part,
                 op,
                 &format!("presentation.slides[{i}].notes.model3ds[{j}].file"),
+            )?;
+        }
+        for (j, op) in notes.inks.iter().enumerate() {
+            super::ink::insert(
+                pkg,
+                &mut doc,
+                &notes_part,
+                op,
+                &format!("presentation.slides[{i}].notes.inks[{j}].file"),
             )?;
         }
         pkg.set(&notes_part, doc.to_bytes()?)?;
@@ -1089,6 +1142,7 @@ fn empty_slide() -> NewSlide {
         transition: None,
         anims: Vec::new(),
         model3ds: Vec::new(),
+        inks: Vec::new(),
         maths: Vec::new(),
         ole_objects: Vec::new(),
         connectors: Vec::new(),
@@ -1317,6 +1371,30 @@ fn attach_model3ds(pkg: &mut Package, slides: &[NewSlide]) -> Result<(), Error> 
                 &part,
                 op,
                 &format!("presentation.slides[{i}].model3ds[{j}].file"),
+            )?;
+        }
+        pkg.set(&part, doc.to_bytes()?)?;
+    }
+    Ok(())
+}
+
+fn attach_inks(pkg: &mut Package, slides: &[NewSlide]) -> Result<(), Error> {
+    if slides.iter().all(|s| s.inks.is_empty()) {
+        return Ok(());
+    }
+    for (i, slide) in slides.iter().enumerate() {
+        if slide.inks.is_empty() {
+            continue;
+        }
+        let part = format!("/ppt/slides/slide{}.xml", i + 1);
+        let mut doc = xml::parse(pkg.get(&part)?)?;
+        for (j, op) in slide.inks.iter().enumerate() {
+            super::ink::insert(
+                pkg,
+                &mut doc,
+                &part,
+                op,
+                &format!("presentation.slides[{i}].inks[{j}].file"),
             )?;
         }
         pkg.set(&part, doc.to_bytes()?)?;

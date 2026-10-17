@@ -202,10 +202,10 @@ create 生成最小 Transitional 包，含 `styles.xml`（Normal 与 Heading1–
 
 入口由根关系里 `/officeDocument` 指向，常见路径 `/ppt/presentation.xml`。幻灯片顺序跟 `p:sldIdLst`，不跟文件名。
 inspect 默认只返回页名单与各页 `pictureCount`、`mathCount`、`videoCount`、`audioCount`、`chartCount`、`smartArtCount`、`commentCount`、
-`hyperlinkCount`、`fieldCount`、`tableCount`、`oleObjectCount`、`model3dCount`、`zoomCount`、`connectorCount`、`animCount`、`layoutId`、`hasNotes`、`transition`，
+`hyperlinkCount`、`fieldCount`、`tableCount`、`oleObjectCount`、`model3dCount`、`inkCount`、`zoomCount`、`connectorCount`、`animCount`、`layoutId`、`hasNotes`、`transition`，
 以及根上 `masterCount`、`hasHandout`、`sectionCount`、`slideSize`、`customShowCount`、`showPr`、`modifyProtection` 与 `props`；
 要图名单必须给 `scope.pictures`，要公式框名单必须给 `scope.maths`，要视频 / 音频名单必须给 `scope.media`，要图表名单必须给 `scope.charts`，
-要 SmartArt 名单必须给 `scope.smartArt`，要表名单必须给 `scope.tables`，要嵌入对象名单必须给 `scope.oleObjects`，要 3D 模型名单必须给 `scope.model3ds`，要 Zoom 名单必须给 `scope.zooms`，
+要 SmartArt 名单必须给 `scope.smartArt`，要表名单必须给 `scope.tables`，要嵌入对象名单必须给 `scope.oleObjects`，要 3D 模型名单必须给 `scope.model3ds`，要墨迹名单必须给 `scope.inks`，要 Zoom 名单必须给 `scope.zooms`，
 要连接线名单必须给 `scope.connectors`，要备注形状必须给 `scope.notes`，要批注名单必须给 `scope.comments`，要超链接名单必须给 `scope.hyperlinks`，
 要域名单必须给 `scope.fields`，要动画摘要必须给 `scope.timing`，要母版与版式名单必须给 `scope.masters`，要备注母版占位符必须给 `scope.notesMaster`，要讲义母版槽位必须给 `scope.handout`，
 要幻灯片节名单必须给 `scope.sections`，要自定义放映名单必须给 `scope.customShows`。
@@ -230,14 +230,15 @@ apply 可改被点名形状的 `p:txBody` 可见文字（含备注形状、母�
 也可插删改幻灯片、备注页与幻灯片母版 / 版式文本形状里的 `a:fld`（页码与日期域，不求值）；也可往幻灯片、备注页与幻灯片母版 / 版式插、删内嵌视频与音频（`p:pic` 上的 `a:videoFile` / `a:audioFile` 与 `p14:media`，不写 timing），
 也可用 `setMedia` 改裁剪、书签与字幕轨（不写 fade），也可用 `setPicturePos` / `setPictureSize` 改已有视频 / 音频的画布坐标与尺寸；
 也可用 `insertCustomShow` / `setCustomShow` / `deleteCustomShow` 读写 `p:custShowLst`（不算放映引擎）；
-也可插、删幻灯片、备注页与幻灯片母版 / 版式上的嵌入对象（`p:oleObj`，不激活 OLE 服务器），也可插、删、换幻灯片、备注页与幻灯片母版 / 版式上的 3D 模型（`am3d:model3d`，不栅格化），并可改已有 3D 的尺寸、画布坐标与相机 / 旋转 / 光源，
+也可插、删幻灯片、备注页与幻灯片母版 / 版式上的嵌入对象（`p:oleObj`，不激活 OLE 服务器），也可插、删、换幻灯片、备注页与幻灯片母版 / 版式上的 3D 模型（`am3d:model3d`，不栅格化），并可改已有 3D 的尺寸、画布坐标与相机 / 旋转 / 光源，也可插、换、删幻灯片、备注页与幻灯片母版 / 版式上的墨迹（一笔一个 `p:contentPart`，不进 `pictures`），并可改已有墨迹的画布坐标与尺寸，
 也可插改删幻灯片、备注页与幻灯片母版 / 版式上的 drawing 公式框（`a14:m`，不实现排版引擎），并可改已有公式框的画布坐标与尺寸；`setMath` 仍只改字。也可插、删、改幻灯片、备注页与幻灯片母版 / 版式上的 Zoom（`sldZm` / `sectionZm` / `summaryZm`，不实现放映跳转），并可改已有 Zoom 的画布坐标与尺寸；也可改文件属性。
-插删重排不重写未点名页。`exportMedia` 按幻灯片、备注页、批注、母版 / 版式上的图 id、视频 id、音频 id、OLE id 或 3D 模型 id 写出 `/ppt/media/…` 或 `/ppt/embeddings/…`。
+插删重排不重写未点名页。`exportMedia` 按幻灯片、备注页、批注、母版 / 版式上的图 id、视频 id、音频 id、OLE id、3D 模型 id 或墨迹 id 写出 `/ppt/media/…`、`/ppt/embeddings/…` 或 `/ppt/ink/…`。
 `exportChartData` 按图表 id 写出 embedding。create 生成最小 Transitional 包，
 必含 theme、slideMaster、slideLayout、presentation、各页 slide、presProps。
 给了 `slides[].pictures` 时复用 `insertPicture`，写入 `/ppt/media/…` 与该页 `p:pic`。
 给了 `slides[].maths` 时复用 `insertMath`，写入 `a14:m` AlternateContent。
 给了 `slides[].model3ds` 时复用 `insertModel3d`，写入 GLB、海报 PNG 与 `am3d` AlternateContent。
+给了 `slides[].inks` 时复用 `insertInk`，写入 InkML、海报 PNG 与 `p14` AlternateContent。
 给了 `slides[].charts` 时复用 `insertChart`，写入 `/ppt/charts/…`、embedding 与 `p:graphicFrame`。
 给了 `slides[].smartArts` 时复用 `insertSmartArt`，写入 `/ppt/diagrams/…` 与图示 `p:graphicFrame`。
 给了 `slides[].tables` 时复用 `insertTable`，写入表 `p:graphicFrame`。给了 `slides[].notes` 时复用 `setNotesText`。
@@ -266,9 +267,9 @@ xlsx 的 `worksheet` 还返回 `autoFilter` 与 `sortState`。
 docx 默认不返回正文 `paragraphs` 也不展开页眉页脚段落、任何 `pictures`、`textBoxes`、`connectors`、注名单、批注名单、图表名单、SmartArt 名单、OLE 名单、水印名单、表名单、
 修订名单、超链接名单、书签名单、域名单、目录名单、题注名单、交叉引用名单、构建基块名单、公式名单、内容控件名单、编号名单、样式名单或 run 名单（仍返回根上 `props` 与 `protection`、`theme`、`themeOverride`、`fontEmbed`、`pageBackground`，
 以及 `watermarkCount`），pptx 默认不返回 `shapes`，
-也不展开 `pictures` / `maths` / `charts` / `smartArts` / `tables` / `oleObjects` / `model3ds` / `zooms` / `connectors` / `notes` / `comments`
+也不展开 `pictures` / `maths` / `charts` / `smartArts` / `tables` / `oleObjects` / `model3ds` / `inks` / `zooms` / `connectors` / `notes` / `comments`
  / `hyperlinks` / `fields` / `timing` / `masters` / `notesMaster` / `handout` / `sections` / `customShows`（仍返回根与各页 `pictureCount`、`mathCount`、
-`chartCount`、`smartArtCount`、`commentCount`、`hyperlinkCount`、`fieldCount`、`tableCount`、`oleObjectCount`、`model3dCount`、`zoomCount`、
+`chartCount`、`smartArtCount`、`commentCount`、`hyperlinkCount`、`fieldCount`、`tableCount`、`oleObjectCount`、`model3dCount`、`inkCount`、`zoomCount`、
 `connectorCount`、`animCount`、`masterCount`、`hasHandout`、`sectionCount`、`slideSize`、`customShowCount`，
 以及各页 `layoutId`、`hasNotes`、`transition` 与根上 `props`）。包不写回。
 
@@ -371,13 +372,13 @@ docx 段落与页眉页脚上的 `pictures` 同样复用插图，`charts` 复用
 docx create 第四轮同样复用已有 apply：`styles` / `sources` / `bibliographyStyle` / `bibliographies` / `captions` / `indexes` / `docParts` / `embeddedFonts` / `fontEmbed` / `eastAsianSettings`，以及段上 `shapes` / `connectors` / `rubies` / `citations` / `indexEntries` / `crossRefs` / `editRange`、图与框的 DrawingML 链、表外观。不写修订痕迹。
 docx create 第五轮复用已有 apply：框内表与框内链 / 书签 / 域 / 公式 / 控件 / 拼音、段 `borders` / `shd` / `tabs`、`runs[]` 的 `setRunFormat`、`groups[]` 的 `groupShapes`，以及 `protection.writePassword`。不写修订痕迹。限制编辑口令 `password` 仍报 `NotImplemented`。
 create 不写修订痕迹。pptx 的 `slides[].pictures` 复用 `insertPicture`，
-`slides[].maths` 复用 `insertMath`，`slides[].model3ds` 复用 `insertModel3d`，
+`slides[].maths` 复用 `insertMath`，`slides[].model3ds` 复用 `insertModel3d`，`slides[].inks` 复用 `insertInk`，
 `slides[].videos` / `slides[].audios` 复用 `insertVideo` / `insertAudio`，
 `slides[].charts` 复用 `insertChart`（数据写 embedding），`slides[].smartArts` 复用 `insertSmartArt`，
 `slides[].tables` 复用 `insertTable`，`slides[].oleObjects` 复用 `insertOle`，
 `slides[].connectors` 复用 `insertConnector`，`slides[].zooms` 复用 `insertZoom`，
 `slides[].notes` 复用 `setNotesText`（对象形态的 `anims` 复用 `insertAnim` 写到备注页，
-`maths` / `model3ds` 复用 `insertMath` / `insertModel3d` 写到备注页），
+`maths` / `model3ds` / `inks` 复用 `insertMath` / `insertModel3d` / `insertInk` 写到备注页），
 `slides[].comments` 复用 `insertComment`，
 形状上的 `url` / `file` / `slide` 复用 `insertHyperlink`（可 `on=run`），
 `pictures[].hyperlink` / `tables[].hyperlink` / `charts[].hyperlink` / `smartArts[].hyperlink` 以及表单元格链字段同样复用 `insertHyperlink`，

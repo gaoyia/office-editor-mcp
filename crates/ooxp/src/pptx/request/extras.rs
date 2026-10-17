@@ -270,6 +270,101 @@ pub(super) fn parse_set_model3d_camera(
     Ok(super::super::model3d::SetModel3dCameraOp { id, target, patch })
 }
 
+pub(super) fn parse_insert_ink(
+    obj: &Map<String, Value>,
+    i: usize,
+) -> Result<super::super::ink::InsertInkOp, Error> {
+    deny_keys(obj, i, &["op", "id", "file", "x", "y", "cx", "cy"])?;
+    let id = require_id(obj, i)?;
+    let (slide, on_notes, master) =
+        picture::parse_insert_host(&id, i, IdReason::InsertInkNeedsSlide)?.parts();
+    let file = require_file(obj, i, "insertInk")?;
+    let cx = parse_emu_field(obj.get("cx"), i, "cx")?;
+    let cy = parse_emu_field(obj.get("cy"), i, "cy")?;
+    if cx.is_some() != cy.is_some() {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "insertInk".into(),
+                field: "cx and cy together".into(),
+            },
+            format!("ops[{i}]"),
+        ));
+    }
+    Ok(super::super::ink::InsertInkOp {
+        slide,
+        on_notes,
+        master,
+        file,
+        x: parse_emu_field(obj.get("x"), i, "x")?,
+        y: parse_emu_field(obj.get("y"), i, "y")?,
+        cx,
+        cy,
+    })
+}
+
+pub(super) fn parse_replace_ink(
+    obj: &Map<String, Value>,
+    i: usize,
+) -> Result<super::super::ink::ReplaceInkOp, Error> {
+    deny_keys(obj, i, &["op", "id", "file"])?;
+    let id = require_id(obj, i)?;
+    let target = super::super::ink::parse_id(&id, &format!("ops[{i}].id"))?;
+    let file = require_file(obj, i, "replaceInk")?;
+    Ok(super::super::ink::ReplaceInkOp { id, target, file })
+}
+
+pub(super) fn parse_delete_ink(
+    obj: &Map<String, Value>,
+    i: usize,
+) -> Result<super::super::ink::DeleteInkOp, Error> {
+    deny_keys(obj, i, &["op", "id"])?;
+    let id = require_id(obj, i)?;
+    let target = super::super::ink::parse_id(&id, &format!("ops[{i}].id"))?;
+    Ok(super::super::ink::DeleteInkOp { id, target })
+}
+
+pub(super) fn parse_set_ink_size(
+    obj: &Map<String, Value>,
+    i: usize,
+) -> Result<super::super::ink::SetInkSizeOp, Error> {
+    deny_keys(obj, i, &["op", "id", "cx", "cy"])?;
+    let id = require_id(obj, i)?;
+    let target = super::super::ink::parse_id(&id, &format!("ops[{i}].id"))?;
+    let cx = parse_emu_field(obj.get("cx"), i, "cx")?;
+    let cy = parse_emu_field(obj.get("cy"), i, "cy")?;
+    if cx.is_none() && cy.is_none() {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "setInkSize".into(),
+                field: "cx or cy".into(),
+            },
+            format!("ops[{i}]"),
+        ));
+    }
+    Ok(super::super::ink::SetInkSizeOp { id, target, cx, cy })
+}
+
+pub(super) fn parse_set_ink_pos(
+    obj: &Map<String, Value>,
+    i: usize,
+) -> Result<super::super::ink::SetInkPosOp, Error> {
+    deny_keys(obj, i, &["op", "id", "x", "y"])?;
+    let id = require_id(obj, i)?;
+    let target = super::super::ink::parse_id(&id, &format!("ops[{i}].id"))?;
+    let x = parse_off_field(obj.get("x"), i, "x")?;
+    let y = parse_off_field(obj.get("y"), i, "y")?;
+    if x.is_none() && y.is_none() {
+        return Err(Error::with_path(
+            ErrorKind::OpRequiresField {
+                op: "setInkPos".into(),
+                field: "x or y".into(),
+            },
+            format!("ops[{i}]"),
+        ));
+    }
+    Ok(super::super::ink::SetInkPosOp { id, target, x, y })
+}
+
 pub(super) fn parse_insert_math(
     obj: &Map<String, Value>,
     i: usize,

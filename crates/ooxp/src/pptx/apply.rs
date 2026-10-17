@@ -12,6 +12,7 @@ use super::field;
 use super::group;
 use super::handout;
 use super::hyperlink;
+use super::ink;
 use super::master;
 use super::media;
 use super::model3d;
@@ -753,6 +754,84 @@ pub fn apply(bytes: &[u8], ops: &[PptxOp]) -> Result<Vec<u8>, Error> {
                 )?;
                 let mut doc = xml::parse(pkg.get(&part)?)?;
                 model3d::apply_pos(&mut doc, op, i)?;
+                pkg.set(&part, doc.to_bytes()?)?;
+            }
+            PptxOp::InsertInk(op) => {
+                let part = ensure_host_part(
+                    &mut pkg,
+                    &pres_part,
+                    &mut pres,
+                    &slides,
+                    op.slide,
+                    op.on_notes,
+                    op.master,
+                    format!("ops[{i}].id"),
+                )?;
+                let mut doc = xml::parse(pkg.get(&part)?)?;
+                ink::insert(&mut pkg, &mut doc, &part, op, &format!("ops[{i}].file"))?;
+                pkg.set(&part, doc.to_bytes()?)?;
+            }
+            PptxOp::ReplaceInk(op) => {
+                let part = host_xml_part(
+                    &pkg,
+                    &pres_part,
+                    &pres.root,
+                    &slides,
+                    op.target.slide,
+                    op.target.on_notes,
+                    op.target.master,
+                    ErrorKind::InkNotFound { id: op.id.clone() },
+                    format!("ops[{i}].id"),
+                )?;
+                let doc = xml::parse(pkg.get(&part)?)?;
+                ink::replace(&mut pkg, &part, &doc.root, op, i)?;
+            }
+            PptxOp::DeleteInk(op) => {
+                let part = host_xml_part(
+                    &pkg,
+                    &pres_part,
+                    &pres.root,
+                    &slides,
+                    op.target.slide,
+                    op.target.on_notes,
+                    op.target.master,
+                    ErrorKind::InkNotFound { id: op.id.clone() },
+                    format!("ops[{i}].id"),
+                )?;
+                let mut doc = xml::parse(pkg.get(&part)?)?;
+                ink::delete(&mut pkg, &mut doc, &part, op, i)?;
+                pkg.set(&part, doc.to_bytes()?)?;
+            }
+            PptxOp::SetInkSize(op) => {
+                let part = host_xml_part(
+                    &pkg,
+                    &pres_part,
+                    &pres.root,
+                    &slides,
+                    op.target.slide,
+                    op.target.on_notes,
+                    op.target.master,
+                    ErrorKind::InkNotFound { id: op.id.clone() },
+                    format!("ops[{i}].id"),
+                )?;
+                let mut doc = xml::parse(pkg.get(&part)?)?;
+                ink::apply_size(&mut doc, op, i)?;
+                pkg.set(&part, doc.to_bytes()?)?;
+            }
+            PptxOp::SetInkPos(op) => {
+                let part = host_xml_part(
+                    &pkg,
+                    &pres_part,
+                    &pres.root,
+                    &slides,
+                    op.target.slide,
+                    op.target.on_notes,
+                    op.target.master,
+                    ErrorKind::InkNotFound { id: op.id.clone() },
+                    format!("ops[{i}].id"),
+                )?;
+                let mut doc = xml::parse(pkg.get(&part)?)?;
+                ink::apply_pos(&mut doc, op, i)?;
                 pkg.set(&part, doc.to_bytes()?)?;
             }
             PptxOp::SetModel3dCamera(op) => {

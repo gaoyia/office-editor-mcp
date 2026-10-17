@@ -382,6 +382,12 @@ pub(crate) enum IdReason {
     SlideModel3dPrefix,
     /// 页 id，缺少 /model3d:…
     SlideModel3dContainer,
+    /// pptx 的 insertInk 必须用 slide:N 或备注容器
+    InsertInkNeedsSlide,
+    /// pptx 墨迹 id 必须是 slide:N/ink:… 或备注
+    SlideInkPrefix,
+    /// 页 id，缺少 /ink:…
+    SlideInkContainer,
     /// xlsx 的 insertMath 必须用 sheet:工作表名
     InsertMathNeedsSheet,
     /// xlsx 公式框 id 必须是 sheet:{name}/math:…
@@ -1548,6 +1554,9 @@ impl IdReason {
             Self::InsertModel3dNeedsSlide,
             Self::SlideModel3dPrefix,
             Self::SlideModel3dContainer,
+            Self::InsertInkNeedsSlide,
+            Self::SlideInkPrefix,
+            Self::SlideInkContainer,
             Self::InsertMathNeedsSheet,
             Self::SheetMathPrefix,
             Self::SheetMathContainer,

@@ -532,6 +532,15 @@ pub(super) fn render(kind: &ErrorKind) -> String {
             IdReason::SlideModel3dContainer => {
                 "页 id 必须带 /model3d:…（该 id 本身不是 3D 模型）".into()
             }
+            IdReason::InsertInkNeedsSlide => {
+                "pptx 的 insertInk 的 id 必须是 slide:N、slide:N/notes、master:N 或 master:N/layout:K".into()
+            }
+            IdReason::SlideInkPrefix => {
+                "pptx 墨迹 id 必须是 slide:N/ink:…、slide:N/notes/ink:…、master:N/ink:… 或 master:N/layout:K/ink:…".into()
+            }
+            IdReason::SlideInkContainer => {
+                "页 id 必须带 /ink:…（该 id 本身不是墨迹）".into()
+            }
             IdReason::InsertMathNeedsSheet => {
                 "xlsx 的 insertMath 的 id 必须是 sheet:工作表名".into()
             }
