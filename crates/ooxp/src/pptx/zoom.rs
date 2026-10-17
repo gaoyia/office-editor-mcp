@@ -163,6 +163,14 @@ fn parse_slide_ref(
 }
 
 pub fn parse_zoom_id(id: &str, json_path: &str) -> Result<ZoomTarget, Error> {
+    if picture::is_bare_host(id) {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::SlideZoomContainer,
+            },
+            json_path.to_string(),
+        ));
+    }
     let (host, after) = picture::parse_object_id(id, json_path, "zoom", IdReason::SlideZoomPrefix)?;
     if after.is_empty() {
         return Err(Error::with_path(

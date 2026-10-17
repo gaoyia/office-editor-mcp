@@ -1095,48 +1095,50 @@ pub fn insert_table(
     op: &InsertTableOp,
     i: usize,
 ) -> Result<(), Error> {
-    let cx = op.cx.unwrap_or(DEFAULT_CX);
-    let cy = op.cy.unwrap_or(DEFAULT_CY);
-    let (x, y) = match (op.x, op.y) {
-        (Some(px), Some(py)) => (px, py),
-        _ => {
-            if op.on_notes {
-                picture::vacant_pos_canvas(
-                    super::notes::notes_size(pres_root),
-                    &slide_doc.root,
-                    cx,
-                    cy,
-                )
-            } else {
-                picture::vacant_pos(pres_root, &slide_doc.root, cx, cy)
+    (|| -> Result<(), Error> {
+        let cx = op.cx.unwrap_or(DEFAULT_CX);
+        let cy = op.cy.unwrap_or(DEFAULT_CY);
+        let (x, y) = match (op.x, op.y) {
+            (Some(px), Some(py)) => (px, py),
+            _ => {
+                if op.on_notes {
+                    picture::vacant_pos_canvas(
+                        super::notes::notes_size(pres_root),
+                        &slide_doc.root,
+                        cx,
+                        cy,
+                    )
+                } else {
+                    picture::vacant_pos(pres_root, &slide_doc.root, cx, cy)
+                }
             }
+        };
+        picture::ensure_xmlns(&mut slide_doc.root, "a", DML_NS);
+        if chrome_has_blip(&op.chrome) {
+            picture::ensure_xmlns(&mut slide_doc.root, "r", REL_NS);
         }
-    };
-    picture::ensure_xmlns(&mut slide_doc.root, "a", DML_NS);
-    if chrome_has_blip(&op.chrome) {
-        picture::ensure_xmlns(&mut slide_doc.root, "r", REL_NS);
-    }
-    let cnv = picture::next_cnv_id(&slide_doc.root);
-    let frame = build_table_frame(
-        pkg,
-        part,
-        cnv,
-        x,
-        y,
-        cx,
-        cy,
-        op.rows,
-        op.cols,
-        &op.cells,
-        op.col_widths.as_deref(),
-        op.row_heights.as_deref(),
-        &op.chrome,
-        op.style_id.as_ref().map(|v| v.as_deref()),
-        op.tbl_look.as_ref().map(|v| v.as_ref()),
-    )?;
-    picture::insert_into_sp_tree(&mut slide_doc.root, frame)?;
-    let _ = i;
-    Ok(())
+        let cnv = picture::next_cnv_id(&slide_doc.root);
+        let frame = build_table_frame(
+            pkg,
+            part,
+            cnv,
+            x,
+            y,
+            cx,
+            cy,
+            op.rows,
+            op.cols,
+            &op.cells,
+            op.col_widths.as_deref(),
+            op.row_heights.as_deref(),
+            &op.chrome,
+            op.style_id.as_ref().map(|v| v.as_deref()),
+            op.tbl_look.as_ref().map(|v| v.as_ref()),
+        )?;
+        picture::insert_into_sp_tree(&mut slide_doc.root, frame)?;
+        Ok(())
+    })()
+    .map_err(|e| e.or_at(format!("ops[{i}]")))
 }
 
 fn chrome_has_blip(chrome: &[Vec<CellChrome>]) -> bool {

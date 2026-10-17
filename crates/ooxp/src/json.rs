@@ -208,13 +208,15 @@ pub fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), Error> {
     }
     if let Err(e) = fs::rename(&tmp, path) {
         if had_dest {
-            let _ = fs::rename(&bak, path);
+            if let Err(restore) = fs::rename(&bak, path) {
+                return Err(io_path(restore, path.to_path_buf()));
+            }
         }
         let _ = fs::remove_file(&tmp);
         return Err(io_path(e, path.to_path_buf()));
     }
     if had_dest {
-        let _ = fs::remove_file(&bak);
+        fs::remove_file(&bak).map_err(|err| io_path(err, bak))?;
     }
     Ok(())
 }
@@ -239,5 +241,24 @@ pub fn written_json(
         serde_json::to_string_pretty(&body).unwrap()
     } else {
         serde_json::to_string(&body).unwrap()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::write_atomic;
+
+    #[test]
+    fn write_atomic_replaces_and_drops_backup() {
+        let dir = std::env::temp_dir().join(format!("ooxp-atomic-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("a.xlsx");
+        std::fs::write(&path, b"old").unwrap();
+        write_atomic(&path, b"new").unwrap();
+        assert_eq!(std::fs::read(&path).unwrap(), b"new");
+        assert!(!dir.join("a.xlsx.ooxp.bak").exists());
+        assert!(!dir.join("a.xlsx.ooxp.tmp").exists());
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

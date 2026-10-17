@@ -55,6 +55,14 @@ pub fn parse_insert_slide_id(id: &str, op_index: usize) -> Result<picture::TreeH
 }
 
 pub fn parse_ole_id(id: &str, json_path: &str) -> Result<OleTarget, Error> {
+    if picture::is_bare_host(id) {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::SlideOleContainer,
+            },
+            json_path.to_string(),
+        ));
+    }
     let (host, after) = picture::parse_object_id(id, json_path, "ole", IdReason::SlideOlePrefix)?;
     if after.is_empty() {
         return Err(Error::with_path(

@@ -234,6 +234,18 @@ fn reject_junk() {
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidField);
     assert!(!out.exists());
+
+    let err = apply_err(
+        &src,
+        &out,
+        json!([{ "op": "deleteModel3d", "id": "slide:1" }]),
+    );
+    assert_eq!(err.code(), ErrorCode::InvalidId);
+    let msg = err.to_json(ooxp::Lang::ZhCn)["error"]["message"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    assert!(msg.contains("必须带 /model3d"), "{msg}");
 }
 
 fn apply_err(path: &Path, out: &Path, ops: Value) -> ooxp::Error {

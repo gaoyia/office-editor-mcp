@@ -917,7 +917,7 @@ fn ensure_vml_part(
 
 fn ensure_legacy_drawing(
     sheet: &mut Element,
-    pkg: &Package,
+    pkg: &mut Package,
     sheet_part: &str,
     vml: &str,
 ) -> Result<(), Error> {
@@ -931,10 +931,18 @@ fn ensure_legacy_drawing(
     let rid = rels
         .rels
         .iter()
-        .find(|r| r.rel_type == REL_VML)
-        .map(|r| r.id.clone())
-        .unwrap_or_else(|| "rId1".into());
-    let _ = vml;
+        .find(|r| {
+            r.rel_type == REL_VML
+                && opc::resolve_rel_target(sheet_part, &r.target)
+                    .ok()
+                    .as_deref()
+                    == Some(vml)
+        })
+        .map(|r| r.id.clone());
+    let rid = match rid {
+        Some(id) => id,
+        None => add_rel(pkg, sheet_part, REL_VML, vml)?,
+    };
     layout::insert_child_ordered(
         sheet,
         Element::new("legacyDrawing").with_attr("r:id", rid),

@@ -227,7 +227,7 @@ apply 的入参是操作列表，不是树。下面这种写法非法，必须�
 | `output` | 否 | 省略则覆盖 `path` |
 | `ops` | 是 | 非空数组。按数组顺序执行，中途失败则整次 apply 不写文件。空数组不是原样保存，报 `EmptyArray`。零脏写回只在 OPC 层，见 [opc.md](opc.md) |
 
-create 与 apply 落盘时先写入目标同目录的临时文件，再改名为目标路径。这样写到一半失败时，原文件还在。
+create 与 apply 落盘时先写入目标同目录的临时文件，再改名为目标路径。临时文件改名失败时，先把备份改回原路径；改回失败则报 `Io`，错误路径是目标文件。改名成功后删除备份；删除失败也报 `Io`，此时目标文件已经是新内容，错误路径是备份文件。
 
 只属于某一种格式的 op 正文见 [xlsx](json-contract-xlsx.md#apply)、[docx](json-contract-docx.md#apply)、[pptx](json-contract-pptx.md#apply)。
 跨格式 op（图、图表、SmartArt、批注、超链接、文本框、表格插删行列、`setProps`、`setProtection`、`setShapeText` 等）仍写在本文。

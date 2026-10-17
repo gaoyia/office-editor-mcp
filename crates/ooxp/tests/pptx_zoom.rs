@@ -299,6 +299,11 @@ fn wrong_ids_and_foreign_reject() {
     )
     .unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidId);
+    let msg = err.to_json(ooxp::Lang::ZhCn)["error"]["message"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    assert!(msg.contains("必须带 /zoom"), "{msg}");
     assert!(!out.exists());
 
     let err = apply(

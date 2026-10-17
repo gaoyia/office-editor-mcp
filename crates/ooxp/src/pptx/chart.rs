@@ -547,96 +547,98 @@ pub fn insert_chart(
     op: &InsertChartOp,
     i: usize,
 ) -> Result<(), Error> {
-    let series = chart::normalize_insert_series(op.chart_type, &op.series);
-    let cats = chart::shared_categories(&series);
-    let embed = chart::embed::build(op.chart_type, &series, &cats)?;
-    let embed_part =
-        chart::embed::next_part(pkg, "/ppt/embeddings", "Microsoft_Excel_Worksheet", ".xlsx");
-    let chart_part =
-        chart::embed::next_part(pkg, "/ppt/charts", chart::part_stem(op.chart_type), ".xml");
-    pkg.set(&embed_part, embed)?;
-    let xml = chart::build_chart_xml(
-        op.chart_type,
-        op.title.as_deref(),
-        &series,
-        &cats,
-        chart::embed::SHEET,
-        chart::embed::origin(),
-        true,
-        op.of_pie_type.as_deref(),
-        &op.extra,
-    );
-    pkg.set(&chart_part, xml.into_bytes())?;
+    (|| -> Result<(), Error> {
+        let series = chart::normalize_insert_series(op.chart_type, &op.series);
+        let cats = chart::shared_categories(&series);
+        let embed = chart::embed::build(op.chart_type, &series, &cats)?;
+        let embed_part =
+            chart::embed::next_part(pkg, "/ppt/embeddings", "Microsoft_Excel_Worksheet", ".xlsx");
+        let chart_part =
+            chart::embed::next_part(pkg, "/ppt/charts", chart::part_stem(op.chart_type), ".xml");
+        pkg.set(&embed_part, embed)?;
+        let xml = chart::build_chart_xml(
+            op.chart_type,
+            op.title.as_deref(),
+            &series,
+            &cats,
+            chart::embed::SHEET,
+            chart::embed::origin(),
+            true,
+            op.of_pie_type.as_deref(),
+            &op.extra,
+        );
+        pkg.set(&chart_part, xml.into_bytes())?;
 
-    let mut chart_rels = Relationships { rels: Vec::new() };
-    chart_rels.push(Relationship {
-        id: "rId1".into(),
-        rel_type: chart::embed::REL_PACKAGE.into(),
-        target: picture::rel_target_from(&chart_part, &embed_part),
-        target_mode: None,
-        extra: Vec::new(),
-    });
+        let mut chart_rels = Relationships { rels: Vec::new() };
+        chart_rels.push(Relationship {
+            id: "rId1".into(),
+            rel_type: chart::embed::REL_PACKAGE.into(),
+            target: picture::rel_target_from(&chart_part, &embed_part),
+            target_mode: None,
+            extra: Vec::new(),
+        });
 
-    let (rel_ty, ct, _) = chart::rel_and_ct(op.chart_type);
-    let mut slide_rels = Relationships::from_package(pkg, slide_part)?;
-    let chart_rid = slide_rels.next_rid();
-    slide_rels.push(Relationship {
-        id: chart_rid.clone(),
-        rel_type: rel_ty.into(),
-        target: picture::rel_target_from(slide_part, &chart_part),
-        target_mode: None,
-        extra: Vec::new(),
-    });
-    slide_rels.write_to(pkg, slide_part)?;
+        let (rel_ty, ct, _) = chart::rel_and_ct(op.chart_type);
+        let mut slide_rels = Relationships::from_package(pkg, slide_part)?;
+        let chart_rid = slide_rels.next_rid();
+        slide_rels.push(Relationship {
+            id: chart_rid.clone(),
+            rel_type: rel_ty.into(),
+            target: picture::rel_target_from(slide_part, &chart_part),
+            target_mode: None,
+            extra: Vec::new(),
+        });
+        slide_rels.write_to(pkg, slide_part)?;
 
-    let mut cts = ContentTypes::from_package(pkg)?;
-    cts.set_override(&chart_part, ct)?;
-    cts.set_override(&embed_part, chart::embed::CT_EMBED_XLSX)?;
-    if op.chart_type == ChartType::Chartex {
-        chart::chartex::attach_style(pkg, &chart_part, &mut chart_rels, &mut cts)?;
-    }
-    chart_rels.write_to(pkg, &chart_part)?;
-    cts.write_to(pkg)?;
-
-    let (cx, cy) = (
-        op.cx.unwrap_or(chart::DEFAULT_CX),
-        op.cy.unwrap_or(chart::DEFAULT_CY),
-    );
-    let (x, y) = match (op.x, op.y) {
-        (Some(px), Some(py)) => (px, py),
-        _ => {
-            if op.on_notes {
-                picture::vacant_pos_canvas(
-                    super::notes::notes_size(pres_root),
-                    &slide_doc.root,
-                    cx,
-                    cy,
-                )
-            } else {
-                picture::vacant_pos(pres_root, &slide_doc.root, cx, cy)
-            }
+        let mut cts = ContentTypes::from_package(pkg)?;
+        cts.set_override(&chart_part, ct)?;
+        cts.set_override(&embed_part, chart::embed::CT_EMBED_XLSX)?;
+        if op.chart_type == ChartType::Chartex {
+            chart::chartex::attach_style(pkg, &chart_part, &mut chart_rels, &mut cts)?;
         }
-    };
-    picture::ensure_xmlns(&mut slide_doc.root, "r", REL_NS);
-    picture::ensure_xmlns(&mut slide_doc.root, "a", DML_NS);
-    picture::ensure_xmlns(&mut slide_doc.root, "c", CHART_NS);
-    if op.chart_type == ChartType::Chartex {
-        picture::ensure_xmlns(&mut slide_doc.root, "cx", CHARTEX_NS);
-    }
-    let cnv = picture::next_cnv_id(&slide_doc.root);
-    let frame = build_graphic_frame(
-        cnv,
-        &format!("图表 {cnv}"),
-        &chart_rid,
-        x,
-        y,
-        cx,
-        cy,
-        op.chart_type == ChartType::Chartex,
-    );
-    picture::insert_into_sp_tree(&mut slide_doc.root, frame)?;
-    let _ = i;
-    Ok(())
+        chart_rels.write_to(pkg, &chart_part)?;
+        cts.write_to(pkg)?;
+
+        let (cx, cy) = (
+            op.cx.unwrap_or(chart::DEFAULT_CX),
+            op.cy.unwrap_or(chart::DEFAULT_CY),
+        );
+        let (x, y) = match (op.x, op.y) {
+            (Some(px), Some(py)) => (px, py),
+            _ => {
+                if op.on_notes {
+                    picture::vacant_pos_canvas(
+                        super::notes::notes_size(pres_root),
+                        &slide_doc.root,
+                        cx,
+                        cy,
+                    )
+                } else {
+                    picture::vacant_pos(pres_root, &slide_doc.root, cx, cy)
+                }
+            }
+        };
+        picture::ensure_xmlns(&mut slide_doc.root, "r", REL_NS);
+        picture::ensure_xmlns(&mut slide_doc.root, "a", DML_NS);
+        picture::ensure_xmlns(&mut slide_doc.root, "c", CHART_NS);
+        if op.chart_type == ChartType::Chartex {
+            picture::ensure_xmlns(&mut slide_doc.root, "cx", CHARTEX_NS);
+        }
+        let cnv = picture::next_cnv_id(&slide_doc.root);
+        let frame = build_graphic_frame(
+            cnv,
+            &format!("图表 {cnv}"),
+            &chart_rid,
+            x,
+            y,
+            cx,
+            cy,
+            op.chart_type == ChartType::Chartex,
+        );
+        picture::insert_into_sp_tree(&mut slide_doc.root, frame)?;
+        Ok(())
+    })()
+    .map_err(|e| e.or_at(format!("ops[{i}]")))
 }
 
 fn build_graphic_frame(

@@ -320,6 +320,11 @@ pub fn parse_insert_slide_or_notes(
     Ok((slide, on_notes))
 }
 
+/// 只有页宿主、没有对象段：`slide:N`、`slide:N/notes`、`master:N`、`master:N/layout:K`。
+pub fn is_bare_host(id: &str) -> bool {
+    parse_insert_host(id, 0, IdReason::SlideIndexNotInt).is_ok()
+}
+
 /// 解析 `slide:N`、`slide:N/notes`、`master:N`、`master:N/layout:K`。
 /// `notesMaster` 与 `handout` 仍报 `bad`。
 pub fn parse_insert_host(id: &str, op_index: usize, bad: IdReason) -> Result<TreeHost, Error> {

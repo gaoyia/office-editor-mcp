@@ -319,6 +319,11 @@ fn wrong_ids_and_xlsx_reject() {
 
     let err = apply(&deck, &out, json!([{ "op": "deleteOle", "id": "slide:1" }])).unwrap_err();
     assert_eq!(err.code(), ErrorCode::InvalidId);
+    let msg = err.to_json(ooxp::Lang::ZhCn)["error"]["message"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    assert!(msg.contains("必须带 /ole"), "{msg}");
     assert!(!out.exists());
 
     let book = tmp("xlsx-ole").with_extension("xlsx");

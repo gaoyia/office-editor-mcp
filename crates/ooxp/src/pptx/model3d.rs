@@ -94,6 +94,14 @@ pub fn looks_like_id(id: &str) -> bool {
 }
 
 pub fn parse_id(id: &str, json_path: &str) -> Result<Model3dTarget, Error> {
+    if picture::is_bare_host(id) {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::SlideModel3dContainer,
+            },
+            json_path.to_string(),
+        ));
+    }
     let (host, after) =
         picture::parse_object_id(id, json_path, "model3d", IdReason::SlideModel3dPrefix)?;
     if after.is_empty() {

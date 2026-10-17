@@ -388,4 +388,18 @@ fn reject_empty_pos_and_pptx_anchor() {
     );
     assert_eq!(err_keys.code(), ErrorCode::InvalidField);
     assert!(!fail_keys.exists());
+
+    let fail_host = seq_path("bare-host", "pptx");
+    let err_host = apply_err(
+        &src,
+        &fail_host,
+        json!([{ "op": "deleteMath", "id": "slide:1" }]),
+    );
+    assert_eq!(err_host.code(), ErrorCode::InvalidId);
+    let msg = err_host.to_json(ooxp::Lang::ZhCn)["error"]["message"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    assert!(msg.contains("必须带 /math"), "{msg}");
+    assert!(!fail_host.exists());
 }

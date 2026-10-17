@@ -83,6 +83,14 @@ pub fn looks_like_id(id: &str) -> bool {
 }
 
 pub fn parse_id(id: &str, json_path: &str) -> Result<MathTarget, Error> {
+    if picture::is_bare_host(id) {
+        return Err(Error::with_path(
+            ErrorKind::InvalidId {
+                reason: IdReason::SlideMathContainer,
+            },
+            json_path.to_string(),
+        ));
+    }
     let (host, after) = picture::parse_object_id(id, json_path, "math", IdReason::SlideMathPrefix)?;
     if after.is_empty() {
         return Err(Error::with_path(

@@ -156,6 +156,14 @@ impl Error {
         }
     }
 
+    /// 还没有 JSON 路径时补上。已有路径或 I/O 错误保持原样。
+    pub(crate) fn or_at(self, path: impl Into<String>) -> Self {
+        match self.inner {
+            Inner::App { path: None, kind } => Self::with_path(kind, path),
+            other => Self { inner: other },
+        }
+    }
+
     pub(crate) fn xml(issue: XmlIssue) -> Self {
         Self::new(ErrorKind::XmlBroken {
             issue,
