@@ -16,6 +16,7 @@ xlsx 见 [`roadmap/xlsx.md`](xlsx.md)。pptx 见 [`roadmap/pptx.md`](pptx.md)。
 - 框内再套框：Word 16.0 另存只写出故事级兄弟框，不手写嵌套 XML（见已过 39）
 - 执行宏、邮件合并、打印本身
 - `.doc`
+- DrawingML 悬停链 `a:hlinkHover`。PowerPoint 16.0 另存写在形状 `cNvPr`；Word 只写单击链，不搬 `event`
 
 `vbaProject.bin` 未点名则原样写回。
 
@@ -128,7 +129,6 @@ xlsx 见 [`roadmap/xlsx.md`](xlsx.md)。pptx 见 [`roadmap/pptx.md`](pptx.md)。
 探测 Office 16.0 另存后再挂序号。未探测的不算欠账。
 
 - 多份 theme 部件、把 theme 关系挂到页眉。空白另存只有主文档 `/word/theme/theme1.xml`。需要带页眉独立 theme 的另存样例后再挂
-- DrawingML `a:hlinkHover`。Word 47 不搬 pptx 的 `event`。需要 COM 另存写出悬停链的样例后再挂
 
 不要把 Word 专用对象（水印、内容控件、编号、修订、参考文献、`wpc` 画布）搬到 xlsx / pptx。
 
@@ -138,4 +138,4 @@ xlsx 见 [`roadmap/xlsx.md`](xlsx.md)。pptx 见 [`roadmap/pptx.md`](pptx.md)。
 
 ## 怎么算 Word 全量做完
 
-已过表保持 ✅。第五轮待做（53–56）已过。第六轮 57、58、59、60、61、62、63、64、65、66、67、68、C12、C16、C15 已过。39 保持 🚫。永不做的条目不算欠账。排版引擎保持 🚫。68 OLE 事后改尺寸已过，Office 16.0 打开无修复。
+已过表保持 ✅。第五轮待做（53–56）已过。第六轮 57、58、59、60、61、62、63、64、65、66、67、68、C12、C16、C15 已过。39 保持 🚫。悬停链保持 🚫。永不做的条目不算欠账。排版引擎保持 🚫。68 OLE 事后改尺寸已过，Office 16.0 打开无修复。

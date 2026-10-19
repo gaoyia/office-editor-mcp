@@ -31,7 +31,7 @@
 ## 不做
 
 - OLE 上的 DrawingML 链（Word 另存走 `w:object`，不手写 OLE 的 `a:hlinkClick`）
-- `a:hlinkHover`：Word 47 不搬 pptx 的 `event`。另存是否写出未探测，见路线图先探测，未探测不算欠账
+- `a:hlinkHover`：悬停链只做 PowerPoint。Word 不搬 `event`。2026-10-19 标 🚫，见路线图永不做
 - 打开浏览器
 
 ## 确认后要改的文档

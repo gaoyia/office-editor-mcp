@@ -1171,7 +1171,7 @@ DrawingML 链去掉 `a:hlinkClick`，drawing `.rels` 无人引用则删除关系
 找不到报 `IdNotFound`。id 不是单元格超链接 id 且不是带链的图 / 文本框 / 形状 / SmartArt id 报 `InvalidId`。
 单元格链只能改 `worksheet`。
 
-pptx：去掉该条 `a:hlinkClick`。形状级从 `p:cNvPr` 摘掉；run 级从 `a:rPr` 摘掉，`a:r` 与 `a:t` 留下。该 `r:id` 在本页 XML 里无人引用则删除关系。不改可见文字。
+pptx：去掉该条链元素（`a:hlinkClick`、`a:hlinkHover` 或 `a:hlinkMouseOver`）。形状级从 `p:cNvPr` 摘掉；run 级从 `a:rPr` 摘掉，`a:r` 与 `a:t` 留下。该 `r:id` 在本页 XML 里无人引用则删除关系。不改可见文字。
 找不到报 `IdNotFound`。id 不是超链接 id 报 `InvalidId`。
 
 示例见 `docs/examples/docx-apply-hyperlink.json`、`docs/examples/docx-apply-drawing-hlink.json`、`docs/examples/pptx-apply-hyperlink.json`。

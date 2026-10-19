@@ -327,7 +327,9 @@ run 级与 `*Change` 只动被点名的那一个 XML 节点，`rowIns` / `rowDel
   外部链关系写在该**故事部件** `.rels`（`document.xml.rels` / `headerN.xml.rels` / 注或批注部件 `.rels`），Type 以 `/hyperlink` 结尾，`TargetMode` 为 `External`，`Target` 为 URL 原文。
   内部书签：无 `r:id` 时 `kind` 为 `anchor`；有 `r:id` 且关系 Target 以 `#` 开头时 `kind` 为 `anchor`，`anchor` 为去掉开头 `#` 的书签名。
   apply 写内部书签时在宿主 `.rels` 写关系，`Target` 为 `#{name}`，不写 `TargetMode`。
-  `tooltip` 取 `a:hlinkClick/@tooltip`。不写 `hlinkHover`。
+  `tooltip` 取 `a:hlinkClick/@tooltip`。
+  悬停链只做 PowerPoint：框级 `a:hlinkHover`，run 级 `a:hlinkMouseOver`。
+  Word 只认单击 `a:hlinkClick`，不认 `event`。
   inspect 时出现在该对象的 `hyperlink` 字段（对象；没有链则为 `null`），不进 `hyperlinks` 名单，也不计入 `hyperlinkCount`。
   `hyperlink` 对象字段顺序：`kind`、`rId`、`url`、`anchor`、`tooltip`。
   `kind` 为 `url`（有 `r:id` 且 Target 不以 `#` 开头）或 `anchor`。
